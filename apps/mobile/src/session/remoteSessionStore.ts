@@ -418,6 +418,32 @@ function isPersistedAssistantMessage(message: RemoteMessage): boolean {
     && Boolean(message.id || message.clientId);
 }
 
+function findPendingGeneratedStreamingFallbackIndex(
+  sessionId: string,
+  existing: readonly RemoteMessage[],
+): number {
+  const pendingIds = pendingLiveAssistantClientIds.get(sessionId);
+  if (!pendingIds || pendingIds.size === 0) return -1;
+  for (let index = existing.length - 1; index >= 0; index -= 1) {
+    const message = existing[index];
+    if (
+      message.role === 'assistant'
+      && isGeneratedStreamingClientId(message.id)
+      && pendingIds.has(message.id)
+    ) {
+      return index;
+    }
+    if (
+      message.role === 'assistant'
+      && isGeneratedStreamingClientId(message.clientId)
+      && pendingIds.has(message.clientId)
+    ) {
+      return index;
+    }
+  }
+  return -1;
+}
+
 interface StreamingClientIdResolution {
   clientId: string;
   changed: boolean;
@@ -477,6 +503,19 @@ function streamingClientIdFor(sessionId: string, persistId: string | undefined):
 function upsertMessage(sessionId: string, message: RemoteMessage): boolean {
   const existing = messages.get(sessionId) ?? [];
   const index = existing.findIndex((item) => messageIdentityMatches(item, message));
+  if (index < 0 && isPersistedAssistantMessage(message)) {
+    const fallbackIndex = findPendingGeneratedStreamingFallbackIndex(sessionId, existing);
+    if (fallbackIndex >= 0) {
+      // A producer without persistId creates a temporary mobile-stream-* row. The
+      // first DB create is authoritative even though its id cannot match that row.
+      const next = existing.slice();
+      next[fallbackIndex] = message;
+      messages.set(sessionId, normalizeMessages(next));
+      retireGeneratedStreamingFallback(sessionId);
+      bumpMessageVersion();
+      return true;
+    }
+  }
   if (index < 0) {
     messages.set(sessionId, normalizeMessages([...existing, message]));
     if (isPersistedAssistantMessage(message)) retireGeneratedStreamingFallback(sessionId);
@@ -535,7 +574,15 @@ function applyRemoteTextEvent(
 
   const currentText = existing ? contentToPreview(existing.content) : '';
   const nextText = isFinal
-    ? (finalTextWasTruncated && existing ? currentText : text)
+    ? (finalTextWasTruncated && existing
+      ? currentText
+      : existing && currentText
+        ? (text.startsWith(currentText)
+          ? text
+          : currentText.startsWith(text)
+            ? currentText
+            : `${currentText}${text}`)
+        : text)
     : currentText + text;
   const nextMeta = isFinal
     ? (isRecord(event.agentMeta)
@@ -1074,7 +1121,16 @@ export const remoteSessionStore = {
     emit();
   },
 
-  setPendingInteractions(sessionId: string, list: readonly PendingInteraction[]): void {
+  setPendingInteractions(
+    sessionId: string,
+    list: readonly PendingInteraction[],
+    options: { finalizeStreaming?: boolean } = {},
+  ): void {
+    // Only the reconnect snapshot is allowed to finalize here. Ordinary push / UI
+    // callers may publish a pending card while the current turn is still streaming.
+    const streamingChanged = options.finalizeStreaming === true
+      ? flushAndFinalizeRemoteStreamingMessages(sessionId)
+      : false;
     // 已确认 dismiss 的延长抑制条目按「缺席即过期」回收:本轮快照不含该
     // requestId = 被控端已确认移除,慢的旧快照此后不可能再带着它(权威读取按
     // 请求序返回),条目可以安全解除;仍含 = 这是 resolve 前发出的旧快照,保留
@@ -1090,7 +1146,10 @@ export const remoteSessionStore = {
     // 全量快照也要过在途抑制:决定已乐观提交、被控端还没确认时,快照仍会带着
     // 这张卡,不过滤就闪回。
     const next = dedupeInteractions(list.filter((item) => !isInteractionResolveSuppressed(sessionId, item)));
-    if (deepValueEqual(pendingInteractions.get(sessionId) ?? emptyPendingInteractions, next)) return;
+    if (deepValueEqual(pendingInteractions.get(sessionId) ?? emptyPendingInteractions, next)) {
+      if (streamingChanged) emit();
+      return;
+    }
     pendingInteractions.set(sessionId, next);
     emit();
   },

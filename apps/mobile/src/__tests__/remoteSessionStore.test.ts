@@ -237,6 +237,24 @@ describe('remoteSessionStore', () => {
     expect(remoteSessionStore.getMessages('s1')[0].agentMeta).toEqual({ model: 'claude' });
   });
 
+  it('appends a fallback-tail final event to the accumulated streaming text', () => {
+    vi.useFakeTimers();
+    try {
+      pushMakerText('s1', 'persist-1', 'already visible ', false);
+      vi.runOnlyPendingTimers();
+
+      pushMakerText('s1', 'persist-1', 'recovered tail', true);
+
+      expect(remoteSessionStore.getMessages('s1')).toMatchObject([{
+        clientId: 'persist-1',
+        content: 'already visible recovered tail',
+        agentMeta: { isStreaming: true },
+      }]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('emits once when done flushes text and closes the running turn', () => {
     vi.useFakeTimers();
     const notify = vi.fn();
@@ -297,6 +315,41 @@ describe('remoteSessionStore', () => {
     }
   });
 
+  it('reconciles a generated fallback row when DB create has a new identity', () => {
+    vi.useFakeTimers();
+    try {
+      pushMakerText('s1', undefined, 'partial answer', false);
+      vi.runOnlyPendingTimers();
+
+      const temporary = remoteSessionStore.getMessages('s1')[0];
+      expect(temporary.clientId).toMatch(/^mobile-stream-/);
+
+      remoteSessionStore.applyRemotePush('dev-1', 'local-db:messages:created', {
+        sessionId: 's1',
+        message: {
+          id: 'persisted-1',
+          clientId: 'persisted-1',
+          sessionId: 's1',
+          role: 'assistant',
+          content: 'partial answer and complete',
+          toolUseId: null,
+          agentMeta: null,
+          createdAt: '2026-01-01T00:00:01.000Z',
+        },
+      });
+
+      expect(remoteSessionStore.getMessages('s1')).toMatchObject([{
+        id: 'persisted-1',
+        clientId: 'persisted-1',
+        content: 'partial answer and complete',
+        agentMeta: null,
+      }]);
+      expect(remoteSessionStore.getMessages('s1')).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('migrates a fallback streaming row when a later event carries persistId', () => {
     pushMakerText('s1', undefined, 'partial ', false);
     pushMakerText('s1', 'persist-1', 'partial and complete', true);
@@ -348,6 +401,29 @@ describe('remoteSessionStore', () => {
         content: 'still streaming',
         agentMeta: null,
       }]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('finalizes live text when a reconnect snapshot restores a pending interaction', () => {
+    vi.useFakeTimers();
+    try {
+      pushMakerText('s1', 'persist-1', 'waiting for approval', false);
+      vi.runOnlyPendingTimers();
+
+      remoteSessionStore.setPendingInteractions(
+        's1',
+        [pending('permission', 'req-1')],
+        { finalizeStreaming: true },
+      );
+
+      expect(remoteSessionStore.getMessages('s1')).toMatchObject([{
+        clientId: 'persist-1',
+        content: 'waiting for approval',
+        agentMeta: null,
+      }]);
+      expect(remoteSessionStore.getPendingInteractions('s1')).toHaveLength(1);
     } finally {
       vi.useRealTimers();
     }
