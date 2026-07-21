@@ -65,6 +65,7 @@ import {
   captureImAccountGeneration,
   deactivateImAccountBoundary,
   isImAccountGenerationCurrent,
+  waitForImAccountGenerationIdle,
 } from './accountBoundary';
 import { configureImAccountScope } from './accountScopeBridge';
 import type { ImOrchestratorConfig } from './shared/types';
@@ -306,7 +307,7 @@ const connectionLifecycle = createSerializedConnectionLifecycle({
     } finally {
       for (const orchestrator of listImOrchestrators()) {
         try {
-          orchestrator.disposeAllSessions();
+          await orchestrator.disposeAllSessions();
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
           log.warn(`disposeAllSessions channel=${orchestrator.channel} failed: ${msg}`);
@@ -382,6 +383,13 @@ export async function stopImConnection(reason: string): Promise<void> {
   log.info(`stopImConnection: reason=${reason}`);
   // This is intentionally synchronous and happens before the serialized
   // transport stop: queued/late SDK callbacks are dropped immediately.
+  const closingGeneration = captureImAccountGeneration();
   deactivateImAccountBoundary();
+  if (closingGeneration !== null) {
+    // Handlers that passed ingress may still be awaiting DB/session work.
+    // Drain their complete account scope before runtime caches and DbClient
+    // are released, so old-account work cannot resume against a new account.
+    await waitForImAccountGenerationIdle(closingGeneration);
+  }
   await connectionLifecycle.stop();
 }

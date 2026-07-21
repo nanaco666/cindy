@@ -36,7 +36,11 @@ import {
 } from '../../maker-ipc/register';
 import { applyRuntimeSetModelChange } from '../../maker-ipc/runtimeSetModel';
 import { getDesktopCcPrefs, type DesktopCcPrefs } from '../index';
-import { captureImAccountGeneration, isImAccountGenerationCurrent } from '../accountBoundary';
+import {
+  captureImAccountGeneration,
+  isImAccountScopeClosedError,
+  runInImAccountGeneration,
+} from '../accountBoundary';
 import { FBOT_DRAFT_TITLE } from './fbotTitle';
 import { resolvePending, lookupPending } from './pendingInteractions';
 import {
@@ -85,7 +89,8 @@ export function createCardActionHandler(
   const threadUi = ui.thread;
 
   function requireThreadUi() {
-    if (!threadUi) throw new Error(`${channel} thread UI is required for thread-scoped control cards`);
+    if (!threadUi)
+      throw new Error(`${channel} thread UI is required for thread-scoped control cards`);
     return threadUi;
   }
 
@@ -280,7 +285,8 @@ export function createCardActionHandler(
           await liveForRollback.setEffort(previousRoute.effort);
         }
       } catch (rollbackErr) {
-        const rollbackMsg = rollbackErr instanceof Error ? rollbackErr.message : String(rollbackErr);
+        const rollbackMsg =
+          rollbackErr instanceof Error ? rollbackErr.message : String(rollbackErr);
         log.warn(`model:pick live rollback after ${reason} failed (non-fatal): ${rollbackMsg}`);
       }
     };
@@ -346,10 +352,7 @@ export function createCardActionHandler(
     }
   }
 
-  async function handlePermissionModePick(
-    im: ChannelIM,
-    event: IMCardActionEvent,
-  ): Promise<void> {
+  async function handlePermissionModePick(im: ChannelIM, event: IMCardActionEvent): Promise<void> {
     const sessionId = String(event.payload.sessionId ?? '');
     const mode = String(event.payload.mode ?? '') as PermissionMode;
     const modeLabel = String(event.payload.modeLabel ?? mode);
@@ -476,10 +479,7 @@ export function createCardActionHandler(
     }
   }
 
-  async function handleControlSessionPick(
-    im: ChannelIM,
-    event: IMCardActionEvent,
-  ): Promise<void> {
+  async function handleControlSessionPick(im: ChannelIM, event: IMCardActionEvent): Promise<void> {
     // Terminal: 把 binding 写入, 之后该 (bot, owner) 在渠道发的消息会被 turnRunner
     // 入口的 binding.resolve 路由到这个 desktop sessionId。无论 attach 成败都解锁
     // controlState (失败时用户至少能继续别的操作)。
@@ -497,9 +497,7 @@ export function createCardActionHandler(
       log.warn('control:session-pick missing sessionId/botAppId — ignoring');
       return;
     }
-    log.info(
-      `control:session-pick sessionId=...${sessionId.slice(-8)} displayName=${displayName}`,
-    );
+    log.info(`control:session-pick sessionId=...${sessionId.slice(-8)} displayName=${displayName}`);
 
     // ── threadScoped(thread = session)接管分支 ─────────────────────────────
     // 顶层发"已接管"root 卡 → 卡 ts 即 scopeKey → attach(identity+scope) →
@@ -532,11 +530,7 @@ export function createCardActionHandler(
         // 旧锚点卡收口 — 仅同渠道(跨渠道的旧卡片这个 im 实例 patch 不动);
         // 旧锚点就是本次锚点(同 thread 重复选)时跳过, 后面 morph 会覆盖。
         const anchorIdInPayload = String(event.payload.anchorMessageId ?? '');
-        if (
-          oldAnchorId &&
-          existing.channel === channel &&
-          oldAnchorId !== anchorIdInPayload
-        ) {
+        if (oldAnchorId && existing.channel === channel && oldAnchorId !== anchorIdInPayload) {
           try {
             await im.updateInteractiveCard(
               oldAnchorId,
@@ -597,9 +591,7 @@ export function createCardActionHandler(
       try {
         await im.updateInteractiveCard(
           event.messageId,
-          cards.buildResolvedCard(
-            ui.cards.control.resolvedSessionPick(sessionTitle, displayName),
-          ),
+          cards.buildResolvedCard(ui.cards.control.resolvedSessionPick(sessionTitle, displayName)),
         );
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
@@ -627,11 +619,7 @@ export function createCardActionHandler(
 
       // prewire(带 scope): 切 interaction listener + 迁移 desktop pending 卡片
       try {
-        await turnRunner.prewireAttachedSession(
-          botContextId,
-          event.senderId,
-          established.scopeKey,
-        );
+        await turnRunner.prewireAttachedSession(botContextId, event.senderId, established.scopeKey);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         log.warn(`session-pick prewire failed (non-fatal): ${msg}`);
@@ -726,10 +714,7 @@ export function createCardActionHandler(
     exitControl(botContextId, event.senderId);
   }
 
-  async function handleControlNewSession(
-    im: ChannelIM,
-    event: IMCardActionEvent,
-  ): Promise<void> {
+  async function handleControlNewSession(im: ChannelIM, event: IMCardActionEvent): Promise<void> {
     // Terminal: 在指定 workingDir 下用 desktop 默认参数新建一个 session,
     // 然后 attach binding 把后续渠道消息路由到这个新 session。
     // session 创建参数:
@@ -925,19 +910,14 @@ export function createCardActionHandler(
    * thread root 卡上的"退出接管"按钮 — 解除该 thread(scopeKey = 卡自身 ts)
    * 的 binding, root 卡 patch 为已退出。幂等: 已退出时也 patch(双击安全)。
    */
-  async function handleControlThreadExit(
-    im: ChannelIM,
-    event: IMCardActionEvent,
-  ): Promise<void> {
+  async function handleControlThreadExit(im: ChannelIM, event: IMCardActionEvent): Promise<void> {
     const botContextId = String(event.payload.botAppId ?? '');
     const scopeKey = event.scopeKey;
     if (!botContextId || !scopeKey || !threadUi) {
       log.warn('control:thread-exit missing botAppId/scopeKey — ignoring');
       return;
     }
-    log.info(
-      `control:thread-exit scope=${scopeKey} sender=...${event.senderId.slice(-8)}`,
-    );
+    log.info(`control:thread-exit scope=${scopeKey} sender=...${event.senderId.slice(-8)}`);
     let exitedSessionId: string | null = null;
     try {
       const r = await executeDetach(
@@ -1098,93 +1078,100 @@ export function createCardActionHandler(
   return function attachCardActionHandler(im: ChannelIM): () => void {
     return im.onCardAction(async (event: IMCardActionEvent) => {
       const accountGeneration = captureImAccountGeneration();
-      if (accountGeneration === null || !isImAccountGenerationCurrent(accountGeneration)) {
+      if (accountGeneration === null) {
         log.info(`drop card action after account boundary closed channel=${channel}`);
         return;
       }
-      log.info(
-        `card action sender=...${event.senderId.slice(-8)} button=${event.buttonId} payload=${JSON.stringify(event.payload).slice(0, 200)}`,
-      );
-
-      // model:pick is NOT an InteractionRequest reply — it's a direct command
-      // triggered by the /model slash command's picker card. Handle it
-      // separately: update DB + live session, patch card to "已切换".
-      if (event.buttonId === 'model:pick') {
-        await handleModelPick(im, event);
-        return;
-      }
-
-      // Same shape as model:pick — direct command from /permission picker card.
-      if (event.buttonId === 'permmode:pick') {
-        await handlePermissionModePick(im, event);
-        return;
-      }
-
-      // /ctr picker —
-      //   pick (workspace) → 替换为 session picker
-      //   back            → 替换回 workspace picker
-      //   session-pick    → attach binding + 接力 brief
-      //   new             → 新建 session + attach
-      //   exit            → patch 为 resolved 卡片, 不动 session
-      if (event.buttonId === 'control:pick') {
-        await handleControlPick(im, event);
-        return;
-      }
-      if (event.buttonId === 'control:back') {
-        await handleControlBack(im, event);
-        return;
-      }
-      if (event.buttonId === 'control:session-pick') {
-        await handleControlSessionPick(im, event);
-        return;
-      }
-      if (event.buttonId === 'control:new') {
-        await handleControlNewSession(im, event);
-        return;
-      }
-      if (event.buttonId === 'control:exit') {
-        await handleControlExit(im, event);
-        return;
-      }
-      if (event.buttonId === 'control:thread-exit') {
-        await handleControlThreadExit(im, event);
-        return;
-      }
-      if (event.buttonId === 'control:start') {
-        await handleControlStart(im, event);
-        return;
-      }
-
-      const decision = decisionFromPress(event);
-      if (!decision) {
-        log.warn(`unknown buttonId=${event.buttonId} — ignoring`);
-        return;
-      }
-
-      const requestId = String(event.payload.requestId ?? '');
-      if (!requestId) {
-        log.warn('no requestId in payload — ignoring');
-        return;
-      }
-
-      const resolved = resolvePending(requestId, decision);
-      if (!resolved) {
-        log.warn(
-          `no pending interaction for requestId=...${requestId.slice(-8)} (already resolved? user double-tapped?)`,
-        );
-        return;
-      }
-
-      // Patch the card to a resolved state so the user sees their choice took.
-      const resolvedLabel = describeDecision(decision);
       try {
-        await im.updateInteractiveCard(
-          event.messageId,
-          cards.buildResolvedCard(resolvedLabel),
-        );
+        await runInImAccountGeneration(accountGeneration, async () => {
+          log.info(
+            `card action sender=...${event.senderId.slice(-8)} button=${event.buttonId} payload=${JSON.stringify(event.payload).slice(0, 200)}`,
+          );
+
+          // model:pick is NOT an InteractionRequest reply — it's a direct command
+          // triggered by the /model slash command's picker card. Handle it
+          // separately: update DB + live session, patch card to "已切换".
+          if (event.buttonId === 'model:pick') {
+            await handleModelPick(im, event);
+            return;
+          }
+
+          // Same shape as model:pick — direct command from /permission picker card.
+          if (event.buttonId === 'permmode:pick') {
+            await handlePermissionModePick(im, event);
+            return;
+          }
+
+          // /ctr picker —
+          //   pick (workspace) → 替换为 session picker
+          //   back            → 替换回 workspace picker
+          //   session-pick    → attach binding + 接力 brief
+          //   new             → 新建 session + attach
+          //   exit            → patch 为 resolved 卡片, 不动 session
+          if (event.buttonId === 'control:pick') {
+            await handleControlPick(im, event);
+            return;
+          }
+          if (event.buttonId === 'control:back') {
+            await handleControlBack(im, event);
+            return;
+          }
+          if (event.buttonId === 'control:session-pick') {
+            await handleControlSessionPick(im, event);
+            return;
+          }
+          if (event.buttonId === 'control:new') {
+            await handleControlNewSession(im, event);
+            return;
+          }
+          if (event.buttonId === 'control:exit') {
+            await handleControlExit(im, event);
+            return;
+          }
+          if (event.buttonId === 'control:thread-exit') {
+            await handleControlThreadExit(im, event);
+            return;
+          }
+          if (event.buttonId === 'control:start') {
+            await handleControlStart(im, event);
+            return;
+          }
+
+          const decision = decisionFromPress(event);
+          if (!decision) {
+            log.warn(`unknown buttonId=${event.buttonId} — ignoring`);
+            return;
+          }
+
+          const requestId = String(event.payload.requestId ?? '');
+          if (!requestId) {
+            log.warn('no requestId in payload — ignoring');
+            return;
+          }
+
+          const resolved = resolvePending(requestId, decision);
+          if (!resolved) {
+            log.warn(
+              `no pending interaction for requestId=...${requestId.slice(-8)} (already resolved? user double-tapped?)`,
+            );
+            return;
+          }
+
+          // Patch the card to a resolved state so the user sees their choice took.
+          const resolvedLabel = describeDecision(decision);
+          try {
+            await im.updateInteractiveCard(event.messageId, cards.buildResolvedCard(resolvedLabel));
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            log.warn(`updateInteractiveCard failed (non-fatal): ${msg}`);
+          }
+        });
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        log.warn(`updateInteractiveCard failed (non-fatal): ${msg}`);
+        if (isImAccountScopeClosedError(err)) {
+          log.info(`drop card action from stale account generation channel=${channel}`);
+          return;
+        }
+        throw err;
       }
     });
   };

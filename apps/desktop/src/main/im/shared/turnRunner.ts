@@ -263,7 +263,7 @@ export interface ImTurnRunner {
   ): Promise<void>;
   /** 接管 detach 清理(原 detachFeishuFromSession)— binding cleanup hook 调用。 */
   detachFromSession(sessionId: string): void;
-  disposeAllSessions(): void;
+  disposeAllSessions(): Promise<void>;
   disposeOneSession(sessionId: string): Promise<void>;
   /** Get the live Maker Session for a given DB session id, or null. */
   getMakerSessionById(sessionId: string): MakerSession | null;
@@ -2004,15 +2004,29 @@ export function createTurnRunner(
     log.info(`detached ${channel} hook from session=${sessionId.slice(-8)}`);
   }
 
-  function disposeAllSessions(): void {
+  function disposeAllSessions(): Promise<void> {
+    const aborts: Promise<void>[] = [];
     for (const [, state] of sessionStates) {
+      // `queue` only contains turns dispatched by this IM orchestrator. An
+      // attached desktop-originated turn may make isTurnRunning() true while
+      // queue stays empty; logout must not abort that desktop-owned work.
+      const hasImTurnInFlight = state.queue.length > 0;
       cleanupSessionState(state);
+      if (hasImTurnInFlight) {
+        aborts.push(
+          state.makerSession.abort().catch((err) => {
+            const msg = err instanceof Error ? err.message : String(err);
+            log.warn(`disposeAllSessions abort failed (non-fatal): ${msg}`);
+          }),
+        );
+      }
     }
     sessionStates.clear();
     unsubscribeMakerEvents?.();
     unsubscribeMakerEvents = null;
     subscribedMaker = null;
     rejectAllPending('session disposed');
+    return Promise.all(aborts).then(() => undefined);
   }
 
   function getMakerSessionById(sessionId: string): MakerSession | null {

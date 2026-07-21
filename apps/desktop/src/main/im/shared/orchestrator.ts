@@ -29,8 +29,8 @@ export interface ImOrchestrator {
   readonly turnRunner: ImTurnRunner;
   /** 接管 detach 清理 — binding cleanup hook 调用。 */
   detachFromSession(sessionId: string): void;
-  /** App 退出清理。 */
-  disposeAllSessions(): void;
+  /** Stop IM-owned turns and release all account-scoped session hooks. */
+  disposeAllSessions(): Promise<void>;
 }
 
 /** 渠道名 → orchestrator 注册表 — composition root (im/index.ts) 查询用。 */
