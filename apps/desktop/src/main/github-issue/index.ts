@@ -10,7 +10,7 @@ import os from 'node:os';
 
 import { app } from 'electron';
 
-import { getAuthState } from '../authManager';
+import { getCurrentMembershipDisplayName } from '../authManager';
 import { serverApiFetch } from '../serverApiClient';
 import { getClientEndpoint } from '../clientEndpointsService';
 import type { IssueConfirmBridge } from './issueConfirmBridge';
@@ -61,7 +61,7 @@ export async function submitGithubIssueForSession(
         osVersion: os.release(),
       }),
       getFallbackLocale: () => app.getLocale(),
-      getSubmitterName: () => getAuthState().user?.name,
+      getSubmitterName: getCurrentMembershipDisplayName,
     },
     req,
   );

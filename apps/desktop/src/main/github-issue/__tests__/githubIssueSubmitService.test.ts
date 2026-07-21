@@ -107,6 +107,13 @@ describe('submitGithubIssueWithConfirm', () => {
     expect(postIssue.mock.calls[0]![0].description).toContain('**界面语言**: en');
   });
 
+  it('membership 没有展示名时省略 userName,由 server 回退到 membership id', async () => {
+    const { deps, postIssue } = makeDeps({ getSubmitterName: () => undefined });
+    const res = await submitGithubIssueWithConfirm(deps, REQ);
+    expect(res).toMatchObject({ ok: true });
+    expect(postIssue.mock.calls[0]![0]).not.toHaveProperty('userName');
+  });
+
   it('clamp: 超长 body 被裁但 env 块完整保留;超长 title 裁到 200', async () => {
     const longBody = 'x'.repeat(6000);
     const longTitle = 't'.repeat(300);

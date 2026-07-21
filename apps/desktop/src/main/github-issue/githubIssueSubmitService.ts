@@ -112,6 +112,7 @@ export async function submitGithubIssueWithConfirm(
   // env 块必须完整保留,clamp 只裁用户正文部分。
   const bodyBudget = SERVER_DESC_MAX - envBlock.length;
   const description = decision.body.slice(0, Math.max(0, bodyBudget)) + envBlock;
+  const submitterName = deps.getSubmitterName()?.trim();
 
   try {
     const result = await deps.postIssue({
@@ -119,7 +120,7 @@ export async function submitGithubIssueWithConfirm(
       description,
       type: decision.type,
       appVersion: env.appVersion,
-      userName: deps.getSubmitterName(),
+      ...(submitterName ? { userName: submitterName } : {}),
     });
     return {
       ok: true,
