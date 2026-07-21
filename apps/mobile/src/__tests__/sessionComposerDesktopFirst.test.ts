@@ -453,7 +453,10 @@ describe('mobile session composer desktop-first surface', () => {
     expect(source).toContain('takePrewarmedMobileVoiceAsr(deviceId) ?? Promise.resolve(null),');
     expect(source).toContain('?? createMobileCindyVoiceCredential(deviceId);');
     expect(source).toContain('onPressIn={handleVoiceButtonPressIn}');
-    expect(source).toContain('prewarmMobileVoiceStart(deviceId, { getAccessToken: () => auth.getAccessToken() });');
+    expect(source).toContain(`prewarmMobileVoiceStart(deviceId, {
+      getAccessToken: () => auth.getAccessToken(),
+      apiFetch: auth.apiFetch,
+    });`);
     expect(source).toContain('connectionProvider: (providerId) => voiceContext.createAsrConnection(providerId),');
     expect(source).toContain('refinerTargetProvider: (providerId) => voiceContext.createRefinerTarget(providerId),');
     expect(source).toContain('getMobileVoiceInputHistoryForHost(deviceId),');
