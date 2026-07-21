@@ -1704,6 +1704,52 @@ describe('AgentIslandService native publishing', () => {
     expect(playSound).toHaveBeenNthCalledWith(2, customSound('complete.wav'));
   });
 
+  it('keeps the error card and does not play completion sound for a failed turn', async () => {
+    const { AgentIslandService } = await import('../service.js');
+    const publish = vi.fn((state: AgentIslandDisplayState, frameOrFrames: AgentIslandNativeFrame | AgentIslandNativeFrame[]) => {
+      void state;
+      void frameOrFrames;
+      return true;
+    });
+    const playSound = vi.fn<(sound: AgentIslandSoundChoice) => boolean>(() => true);
+    const service = new AgentIslandService({
+      getMainWindow: () => null,
+      nativeHost: { failed: false, publish, playSound },
+    });
+    syncEnabledForTest(service, publish);
+    service.setSoundSettings({
+      enabled: true,
+      sounds: {
+        ...DEFAULT_AGENT_ISLAND_SOUND_SETTINGS.sounds,
+        error: customSound('error.wav'),
+        complete: customSound('complete.wav'),
+      },
+    });
+    service.handleUserPrompt({ sessionId: 's1', agentKind: 'claude-code' }, 'run tests');
+    playSound.mockClear();
+
+    service.handleAgentEvent(
+      { sessionId: 's1', agentKind: 'claude-code' },
+      terminalErrorEvent('upstream unreachable'),
+    );
+    service.handleAgentEvent(
+      { sessionId: 's1', agentKind: 'claude-code' },
+      { type: 'status', source: 'claude-code', data: { isRunning: false, status: 'Done' } },
+    );
+    service.handleAgentEvent(
+      { sessionId: 's1', agentKind: 'claude-code' },
+      doneEvent(),
+    );
+
+    expect(playSound).toHaveBeenCalledTimes(1);
+    expect(playSound).toHaveBeenCalledWith(customSound('error.wav'));
+    expect(publish.mock.calls.at(-1)?.[0].sessions[0]).toMatchObject({
+      sessionId: 's1',
+      phase: 'error',
+      detail: 'upstream unreachable',
+    });
+  });
+
   it('does not play task start sound for a silent scheduler run', async () => {
     const { AgentIslandService } = await import('../service.js');
     const publish = vi.fn((state: AgentIslandDisplayState, frameOrFrames: AgentIslandNativeFrame | AgentIslandNativeFrame[]) => {

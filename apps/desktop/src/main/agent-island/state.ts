@@ -101,6 +101,8 @@ interface AgentIslandSessionState {
   running: boolean;
   completedUntil: number | null;
   errorUntil: number | null;
+  /** Stable terminal-error reason used to distinguish planned shutdown convergence. */
+  terminalErrorReason: string | null;
   revealUntil: number | null;
   visibleInteractionSuppressedUntil: number | null;
   interactionRevealDismissed: boolean;
@@ -558,7 +560,6 @@ export function applyAgentIslandEvent(
     session.permissionCanAllowForSession = false;
     session.currentToolUseId = null;
     session.toolDetailUntil = null;
-    session.detailSource = null;
     completeAgentIslandSession(state, session, now, {
       suppressAttention: options.suppressCompletionAttention === true,
       preserveAttention: options.preserveCompletionAttention === true,
@@ -591,6 +592,9 @@ export function applyAgentIslandEvent(
     session.detailSource = session.detail ? 'status' : null;
     if (session.detail) appendActivityLine(session, 'status', session.detail);
     session.errorUntil = now + AGENT_ISLAND_ERROR_DWELL_MS;
+    session.terminalErrorReason = typeof data?.reason === 'string' && data.reason.trim()
+      ? data.reason.trim()
+      : null;
     session.completedUntil = null;
     // 报错必须挂未读:smart suppress(用户正停在该会话)只抑制自动展开,不代表
     // 用户真的看到了报错内容。unread 只能由显式已读 ack(renderer 确认报错 UI
@@ -614,6 +618,7 @@ export function applyAgentIslandInteractionRequest(
   session.pendingInteractionKinds.set(request.requestId, request.kind);
   session.pendingInteractionDetails.set(request.requestId, detailForInteraction(request, state.strings));
   session.running = true;
+  session.terminalErrorReason = null;
   const activateRequest = request.kind !== 'permission' || session.permissionRequestId === null;
   if (request.kind === 'permission') {
     const canAllowForSession = hasSessionScopedPermissionSuggestion(request.suggestions);
@@ -781,7 +786,6 @@ export function completeAgentIslandSessionWithoutAttention(
   session.permissionCanAllowForSession = false;
   session.currentToolUseId = null;
   session.toolDetailUntil = null;
-  session.detailSource = null;
   completeAgentIslandSession(state, session, now, {
     suppressAttention: true,
     preserveAttention: options.preserveAttention,
@@ -1138,6 +1142,7 @@ function markSessionRunning(state: AgentIslandState, session: AgentIslandSession
   session.running = true;
   session.completedUntil = null;
   session.errorUntil = null;
+  session.terminalErrorReason = null;
   session.revealUntil = null;
   if (session.pendingInteractionIds.size === 0) {
     session.interactionRevealDismissed = false;
@@ -1157,6 +1162,12 @@ function completeAgentIslandSession(
   now: number,
   options: { suppressAttention: boolean; preserveAttention: boolean },
 ): void {
+  // Failed turns deliberately keep their trailing status Done + done so usage
+  // and cost accounting can close. Those bookkeeping events must not replace
+  // the user-visible terminal error. A remote daemon shutdown is the one planned
+  // error→done sequence and remains explicitly allowed to converge to completed.
+  if (session.phase === 'error' && session.terminalErrorReason !== 'remote_daemon_closed') return;
+
   session.phase = 'completed';
   session.interactionKind = undefined;
   session.interactionRevealDismissed = false;
@@ -1164,6 +1175,7 @@ function completeAgentIslandSession(
   session.detailSource = null;
   appendCompletionPlaceholderIfNeeded(session, state.strings);
   session.errorUntil = null;
+  session.terminalErrorReason = null;
 
   if (options.suppressAttention) {
     session.completedUntil = null;
@@ -1894,6 +1906,7 @@ function getOrCreateSession(
     running: false,
     completedUntil: null,
     errorUntil: null,
+    terminalErrorReason: null,
     revealUntil: null,
     visibleInteractionSuppressedUntil: null,
     interactionRevealDismissed: false,
