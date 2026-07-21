@@ -2992,22 +2992,8 @@ struct ExpandedSessionsView: View {
   @State private var lastReportedContentHeight: CGFloat = 0
 
   private var allSessions: [AgentIslandSession] {
-    let base = sessions.isEmpty ? [current] : sessions
-    return base.sorted { lhs, rhs in
-      let lg = sessionSortGroup(lhs)
-      let rg = sessionSortGroup(rhs)
-      if lg != rg { return lg < rg }
-      if lhs.lastActivityAt != rhs.lastActivityAt {
-        return lhs.lastActivityAt > rhs.lastActivityAt
-      }
-      return false
-    }
-  }
-
-  private func sessionSortGroup(_ session: AgentIslandSession) -> Int {
-    if session.sessionId == current.sessionId { return 0 }
-    if session.phase == "running" || session.phase == "needs-interaction" { return 1 }
-    return 2
+    // The main process owns session priority and freezes this order while expanded.
+    sessions.isEmpty ? [current] : sessions
   }
 
   private var sessionListNeedsScroll: Bool {
