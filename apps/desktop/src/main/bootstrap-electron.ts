@@ -438,7 +438,10 @@ import {
   noteManualXdKeyRemoved,
 } from './model-access/index.js';
 import { effectiveXdGatewayBaseUrl } from './model-access/effectiveEndpoint.js';
-import type { ApplicationMenuCommand } from '../shared/applicationMenuCommands.js';
+import {
+  resolveNewMakerMenuCommand,
+  type ApplicationMenuCommand,
+} from '../shared/applicationMenuCommands.js';
 import {
   comboToElectronAccelerator,
   matchesElectronInput,
@@ -1212,7 +1215,11 @@ function installApplicationMenu(
           label: labels.newMaker,
           accelerator: menuAcceleratorFor('new-maker'),
           registerAccelerator: registerMenuAccelerators,
-          click: () => dispatchApplicationMenuCommand(mainWindow, 'new-maker-shortcut'),
+          click: (_item, _window, event) =>
+            dispatchApplicationMenuCommand(
+              mainWindow,
+              resolveNewMakerMenuCommand(event.triggeredByAccelerator),
+            ),
         },
       ],
     },

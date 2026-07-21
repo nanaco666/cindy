@@ -27,6 +27,13 @@ export const APPLICATION_MENU_COMMANDS = [
 
 export type ApplicationMenuCommand = (typeof APPLICATION_MENU_COMMANDS)[number];
 
+/** Mouse menu clicks keep the semantic New Maker action; only its accelerator is contextual. */
+export function resolveNewMakerMenuCommand(
+  triggeredByAccelerator: boolean | undefined,
+): Extract<ApplicationMenuCommand, 'new-maker' | 'new-maker-shortcut'> {
+  return triggeredByAccelerator ? 'new-maker-shortcut' : 'new-maker';
+}
+
 export function isApplicationMenuCommand(value: unknown): value is ApplicationMenuCommand {
   return (
     typeof value === 'string' &&

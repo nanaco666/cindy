@@ -65,7 +65,7 @@ export function OrcaWorkerPanel({
     activeWorkerCount,
     softLimit,
     hardLimit,
-    refresh,
+    refreshCreationState,
     selectedWorkerRecord,
     selectedWorkerId,
     workerSessionId,
@@ -89,14 +89,14 @@ export function OrcaWorkerPanel({
     if (!viewVisible) return;
     let active = true;
     const unsubscribe = subscribeNewWorkerShortcut(async () => {
-      // Match the visible create control's hard-limit semantics, but refresh worker status first
-      // so a stale cache cannot make the shortcut bypass a newly reached limit.
-      const result = await refresh();
+      // Refresh both worker status and authoritative collaboration settings so the shortcut
+      // cannot bypass a newly reached or newly lowered hard limit.
+      const result = await refreshCreationState();
       if (!active || result?.status !== 'applied') return true;
       const activeCount = result.workers.filter((worker) =>
         isActiveWorkerStatus(worker.status),
       ).length;
-      if (activeCount < hardLimit) setCreateOpen(true);
+      if (result.hardLimit !== null && activeCount < result.hardLimit) setCreateOpen(true);
       return true;
     });
     return () => {
@@ -105,7 +105,7 @@ export function OrcaWorkerPanel({
       active = false;
       unsubscribe();
     };
-  }, [hardLimit, refresh, setCreateOpen, viewVisible]);
+  }, [refreshCreationState, setCreateOpen, viewVisible]);
 
   useEffect(() => {
     if (!isAgentIslandSupported()) return;

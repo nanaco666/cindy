@@ -8,7 +8,7 @@ import { requestNewWorkerFromShortcut } from '../lib/newWorkerShortcut';
 
 const mocks = vi.hoisted(() => ({
   hardLimit: 2,
-  refresh: vi.fn(),
+  refreshCreationState: vi.fn(),
   setCreateOpen: vi.fn(),
 }));
 
@@ -26,7 +26,8 @@ vi.mock('../hooks/useOrcaWorkerSelection', () => ({
     activeWorkerCount: 0,
     softLimit: 1,
     hardLimit: mocks.hardLimit,
-    refresh: mocks.refresh,
+    refresh: vi.fn(),
+    refreshCreationState: mocks.refreshCreationState,
     selectedWorkerRecord: null,
     selectedWorkerId: null,
     workerSessionId: null,
@@ -49,7 +50,7 @@ function deferred<T>() {
 describe('OrcaWorkerPanel New Maker shortcut', () => {
   beforeEach(() => {
     mocks.hardLimit = 2;
-    mocks.refresh.mockReset();
+    mocks.refreshCreationState.mockReset();
     mocks.setCreateOpen.mockReset();
   });
 
@@ -58,19 +59,36 @@ describe('OrcaWorkerPanel New Maker shortcut', () => {
   });
 
   it('opens the existing create dialog only from the visible collaboration panel', async () => {
-    mocks.refresh.mockResolvedValue({ status: 'applied', workers: [] });
+    mocks.refreshCreationState.mockResolvedValue({
+      status: 'applied',
+      workers: [],
+      hardLimit: 2,
+    });
     render(<OrcaWorkerPanel leadSessionId="lead-1" viewVisible />);
 
     await expect(requestNewWorkerFromShortcut()).resolves.toBe(true);
-    expect(mocks.refresh).toHaveBeenCalledOnce();
+    expect(mocks.refreshCreationState).toHaveBeenCalledOnce();
     expect(mocks.setCreateOpen).toHaveBeenCalledWith(true);
   });
 
   it('consumes the shortcut without opening when the refreshed team is at the hard limit', async () => {
     mocks.hardLimit = 1;
-    mocks.refresh.mockResolvedValue({
+    mocks.refreshCreationState.mockResolvedValue({
       status: 'applied',
       workers: [{ status: 'running' }],
+      hardLimit: 1,
+    });
+    render(<OrcaWorkerPanel leadSessionId="lead-1" viewVisible />);
+
+    await expect(requestNewWorkerFromShortcut()).resolves.toBe(true);
+    expect(mocks.setCreateOpen).not.toHaveBeenCalled();
+  });
+
+  it('does not open when authoritative creation state cannot be refreshed', async () => {
+    mocks.refreshCreationState.mockResolvedValue({
+      status: 'failed',
+      workers: [],
+      hardLimit: null,
     });
     render(<OrcaWorkerPanel leadSessionId="lead-1" viewVisible />);
 
@@ -79,14 +97,14 @@ describe('OrcaWorkerPanel New Maker shortcut', () => {
   });
 
   it('does not retain an in-flight shortcut after the visible panel unmounts', async () => {
-    const pending = deferred<{ status: 'applied'; workers: [] }>();
-    mocks.refresh.mockReturnValue(pending.promise);
+    const pending = deferred<{ status: 'applied'; workers: []; hardLimit: number }>();
+    mocks.refreshCreationState.mockReturnValue(pending.promise);
     const panel = render(<OrcaWorkerPanel leadSessionId="lead-1" viewVisible />);
 
     const request = requestNewWorkerFromShortcut();
-    await waitFor(() => expect(mocks.refresh).toHaveBeenCalledOnce());
+    await waitFor(() => expect(mocks.refreshCreationState).toHaveBeenCalledOnce());
     panel.unmount();
-    await act(async () => pending.resolve({ status: 'applied', workers: [] }));
+    await act(async () => pending.resolve({ status: 'applied', workers: [], hardLimit: 2 }));
 
     await expect(request).resolves.toBe(true);
     expect(mocks.setCreateOpen).not.toHaveBeenCalled();
