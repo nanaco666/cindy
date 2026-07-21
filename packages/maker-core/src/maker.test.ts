@@ -755,6 +755,58 @@ describe('Session turn send guard', () => {
     expect(session.isTurnRunning()).toBe(false);
   });
 
+  it('keeps the session open when closeIfIdle loses to an accepting send', async () => {
+    let releaseAccepted!: () => void;
+    const acceptedReady = new Promise<void>((resolve) => {
+      releaseAccepted = resolve;
+    });
+    const handle = createHandle({ id: 'thread-1' });
+    handle.send = vi.fn(async () => undefined);
+    handle.close = vi.fn(async () => undefined);
+    const session = new Session({
+      id: 'session-1',
+      agentKind: 'codex',
+      workDir: '/repo',
+      handle,
+      capabilities: createAgent(async () => handle).capabilities,
+      logger: createLogger(),
+    });
+
+    const send = session.send('first', { onAccepted: () => acceptedReady });
+    await Promise.resolve();
+
+    await expect(session.closeIfIdle()).resolves.toBe(false);
+    expect(handle.close).not.toHaveBeenCalled();
+
+    releaseAccepted();
+    await expect(send).resolves.toEqual({ accepted: true });
+  });
+
+  it('rejects a send that starts after closeIfIdle reserves the session close', async () => {
+    let releaseClose!: () => void;
+    const handle = createHandle({ id: 'thread-1' });
+    handle.send = vi.fn(async () => undefined);
+    handle.close = vi.fn(() => new Promise<void>((resolve) => {
+      releaseClose = resolve;
+    }));
+    const session = new Session({
+      id: 'session-1',
+      agentKind: 'codex',
+      workDir: '/repo',
+      handle,
+      capabilities: createAgent(async () => handle).capabilities,
+      logger: createLogger(),
+    });
+
+    const close = session.closeIfIdle();
+
+    await expect(session.send('late send')).rejects.toThrow('is closing');
+    expect(handle.send).not.toHaveBeenCalled();
+
+    releaseClose();
+    await expect(close).resolves.toBe(true);
+  });
+
   it('releases the reservation when handle.send fails before a turn starts', async () => {
     const handle = createHandle({ id: 'thread-1' });
     const firstError = new Error('boom');

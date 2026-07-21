@@ -51,7 +51,19 @@ vi.mock('@/lib/toast', () => ({
   },
 }));
 
-import { useOrcaWorkerSelection } from '../useOrcaWorkerSelection';
+import { useOrcaWorkerSelection as useOrcaWorkerSelectionImpl } from '../useOrcaWorkerSelection';
+
+type TestSelectionOptions = Parameters<typeof useOrcaWorkerSelectionImpl>[0];
+
+/** Most hook tests render an active worker pane; visibility-specific cases override this default. */
+function useOrcaWorkerSelection(
+  options: Omit<TestSelectionOptions, 'viewVisible'> & { viewVisible?: boolean },
+) {
+  return useOrcaWorkerSelectionImpl({
+    ...options,
+    viewVisible: options.viewVisible ?? true,
+  });
+}
 
 function makeWorker(
   workerId: string,

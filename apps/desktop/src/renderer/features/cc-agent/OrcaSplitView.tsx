@@ -64,6 +64,7 @@ export function OrcaSplitView({
     workerSessionId,
   } = useOrcaWorkerSelection({
     leadSessionId,
+    viewVisible: togglePane === 'worker' && reportAgentIslandVisibility,
   });
   const leadSession = useMemo(
     () => sessions.find((s) => s.id === leadSessionId) ?? null,

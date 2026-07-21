@@ -186,6 +186,10 @@ export interface OrcaTeamServiceDeps {
   markWorkerIdle(workerId: string): Promise<void>;
   markWorkerIdleIfStatus(workerId: string, expectedStatus: 'done'): Promise<boolean>;
   closeWorkerSession(sessionId: string): Promise<void>;
+  /** 与 Session.send reservation 原子互斥；false 表示 direct send/turn 已先取得会话。 */
+  closeWorkerSessionIfIdle(sessionId: string): Promise<boolean>;
+  /** pending / dispatch-boundary / recovery 输入任一存在时返回 true。 */
+  hasPendingWorkerInput(sessionId: string): boolean;
   archiveWorkerSession(sessionId: string): Promise<void>;
   getManualInterrupt(sessionId: string): OrcaManualInterruptSnapshot | null;
   clearManualInterrupt(sessionId: string): void;
@@ -716,6 +720,13 @@ export function createOrcaTeamService(deps: OrcaTeamServiceDeps): OrcaTeamServic
           message: `worker ${params.workerId} has an active turn`,
         };
       }
+      if (params.expectedStatus && deps.hasPendingWorkerInput(worker.sessionId)) {
+        return {
+          ok: false,
+          errorCode: 'WORKER_STATE_CHANGED',
+          message: `worker ${params.workerId} has queued input`,
+        };
+      }
 
       const didIdle = params.expectedStatus
         ? await deps.markWorkerIdleIfStatus(worker.id, params.expectedStatus)
@@ -727,17 +738,29 @@ export function createOrcaTeamService(deps: OrcaTeamServiceDeps): OrcaTeamServic
           message: `worker ${params.workerId} is no longer ${params.expectedStatus}`,
         };
       }
-      // The DB CAS awaits I/O, so a direct pane turn can start after the pre-CAS check.
-      // Re-check the authoritative live session before aborting/closing that new turn.
-      if (params.expectedStatus && deps.getLiveSession(worker.sessionId)?.isTurnRunning()) {
+      // Queue state can change while the DB CAS awaits I/O. Preserve newly queued
+      // follow-ups before close, then use Session.closeIfIdle for atomic send/close ordering.
+      if (params.expectedStatus && deps.hasPendingWorkerInput(worker.sessionId)) {
         return {
           ok: false,
           errorCode: 'WORKER_STATE_CHANGED',
-          message: `worker ${params.workerId} has an active turn`,
+          message: `worker ${params.workerId} has queued input`,
         };
       }
+      if (params.expectedStatus) {
+        const didClose = await closeWorkerSessionIfIdleBestEffort(worker.sessionId, 'idleWorker');
+        if (!didClose) {
+          return {
+            ok: false,
+            errorCode: 'WORKER_STATE_CHANGED',
+            message: `worker ${params.workerId} has an active turn`,
+          };
+        }
+      }
       clearRuntimeState(worker.sessionId);
-      await closeWorkerSessionBestEffort(worker.sessionId, 'idleWorker');
+      if (!params.expectedStatus) {
+        await closeWorkerSessionBestEffort(worker.sessionId, 'idleWorker');
+      }
       deps.broadcastOrcaWorkerChanged(link.leadSessionId);
       return { ok: true, workerId: worker.id };
     };
@@ -926,6 +949,18 @@ export function createOrcaTeamService(deps: OrcaTeamServiceDeps): OrcaTeamServic
         sessionId,
         err: err instanceof Error ? err.message : String(err),
       });
+    }
+  }
+
+  async function closeWorkerSessionIfIdleBestEffort(sessionId: string, owner: string): Promise<boolean> {
+    try {
+      return await deps.closeWorkerSessionIfIdle(sessionId);
+    } catch (err) {
+      deps.log.warn(`${owner}: close idle worker session failed`, {
+        sessionId,
+        err: err instanceof Error ? err.message : String(err),
+      });
+      return true;
     }
   }
 

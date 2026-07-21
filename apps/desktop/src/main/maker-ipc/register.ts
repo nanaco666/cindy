@@ -4797,6 +4797,13 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
       }
       await maker.closeSession(sessionId);
     },
+    closeWorkerSessionIfIdle: async (sessionId) => {
+      const sess = maker.getSession(sessionId);
+      return sess ? sess.closeIfIdle() : true;
+    },
+    hasPendingWorkerInput: (sessionId) =>
+      inputCoordinator.hasPendingQueuedWork(sessionId) ||
+      inputCoordinator.hasQueuedItemWhere(sessionId, () => true, { includeRecovery: true }),
     archiveWorkerSession: archiveSingleWorkerSession,
     getManualInterrupt,
     clearManualInterrupt,

@@ -27,7 +27,7 @@ export interface UseOrcaWorkerSelectionOptions {
   leadSessionId: string;
   deviceId?: string;
   /** Whether the worker conversation is actually visible to the user. */
-  viewVisible?: boolean;
+  viewVisible: boolean;
   focusWorkerSessionId?: string | null;
   focusWorkerHintRevision?: number;
   searchJump?: ConversationSearchJump | null;
@@ -38,7 +38,7 @@ export interface UseOrcaWorkerSelectionOptions {
 export function useOrcaWorkerSelection({
   leadSessionId,
   deviceId,
-  viewVisible = true,
+  viewVisible,
   focusWorkerSessionId,
   focusWorkerHintRevision,
   searchJump: searchJumpProp,

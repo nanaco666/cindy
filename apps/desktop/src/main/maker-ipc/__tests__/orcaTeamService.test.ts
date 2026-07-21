@@ -147,6 +147,11 @@ function createDeps(overrides: Partial<OrcaTeamServiceDeps> = {}) {
     closeWorkerSession: vi.fn(async (sessionId) => {
       calls.push(`closeWorkerSession:${sessionId}`);
     }),
+    closeWorkerSessionIfIdle: vi.fn(async (sessionId) => {
+      calls.push(`closeWorkerSessionIfIdle:${sessionId}`);
+      return true;
+    }),
+    hasPendingWorkerInput: vi.fn(() => false),
     archiveWorkerSession: vi.fn(async (sessionId) => {
       calls.push(`archiveWorkerSession:${sessionId}`);
     }),
@@ -952,7 +957,7 @@ describe('OrcaTeamService', () => {
 
     expect(calls).toEqual([
       'markWorkerIdleIfStatus',
-      'closeWorkerSession:worker-session-1',
+      'closeWorkerSessionIfIdle:worker-session-1',
       'broadcastOrcaWorkerChanged',
     ]);
   });
@@ -975,6 +980,7 @@ describe('OrcaTeamService', () => {
 
     expect(calls).toEqual([]);
     expect(deps.closeWorkerSession).not.toHaveBeenCalled();
+    expect(deps.closeWorkerSessionIfIdle).not.toHaveBeenCalled();
     expect(deps.markWorkerIdle).not.toHaveBeenCalled();
   });
 
@@ -1025,6 +1031,7 @@ describe('OrcaTeamService', () => {
     });
     expect(deps.markWorkerIdleIfStatus).not.toHaveBeenCalled();
     expect(deps.closeWorkerSession).not.toHaveBeenCalled();
+    expect(deps.closeWorkerSessionIfIdle).not.toHaveBeenCalled();
 
     releaseDispatch();
     await expect(dispatch).resolves.toMatchObject({ dispatched: true });
@@ -1050,17 +1057,14 @@ describe('OrcaTeamService', () => {
     expect(deps.getLiveSession).toHaveBeenCalledWith('worker-session-1');
     expect(deps.markWorkerIdleIfStatus).not.toHaveBeenCalled();
     expect(deps.closeWorkerSession).not.toHaveBeenCalled();
+    expect(deps.closeWorkerSessionIfIdle).not.toHaveBeenCalled();
     expect(calls).toEqual([]);
   });
 
-  it('does not close a direct turn that starts while the done-status CAS is awaiting I/O', async () => {
-    let turnRunning = false;
+  it('does not close a direct send that wins the atomic idle-close reservation after the CAS', async () => {
     const { deps, service, setWorker } = createDeps({
-      getLiveSession: vi.fn(() => ({ isTurnRunning: () => turnRunning })),
-      markWorkerIdleIfStatus: vi.fn(async () => {
-        turnRunning = true;
-        return true;
-      }),
+      getLiveSession: vi.fn(() => ({ isTurnRunning: () => false })),
+      closeWorkerSessionIfIdle: vi.fn(async () => false),
     });
     setWorker(createWorker({ status: 'done' }));
 
@@ -1074,8 +1078,54 @@ describe('OrcaTeamService', () => {
       message: 'worker worker-1 has an active turn',
     });
 
-    expect(deps.getLiveSession).toHaveBeenCalledTimes(2);
+    expect(deps.getLiveSession).toHaveBeenCalledTimes(1);
+    expect(deps.closeWorkerSessionIfIdle).toHaveBeenCalledWith('worker-session-1');
     expect(deps.closeWorkerSession).not.toHaveBeenCalled();
+    expect(deps.broadcastOrcaWorkerChanged).not.toHaveBeenCalled();
+  });
+
+  it('preserves queued worker input before acknowledging a done worker', async () => {
+    const { deps, service, setWorker } = createDeps({
+      hasPendingWorkerInput: vi.fn(() => true),
+    });
+    setWorker(createWorker({ status: 'done' }));
+
+    await expect(service.idleWorker({
+      callerLeadSessionId: 'lead-1',
+      workerId: 'worker-1',
+      expectedStatus: 'done',
+    })).resolves.toEqual({
+      ok: false,
+      errorCode: 'WORKER_STATE_CHANGED',
+      message: 'worker worker-1 has queued input',
+    });
+
+    expect(deps.markWorkerIdleIfStatus).not.toHaveBeenCalled();
+    expect(deps.closeWorkerSessionIfIdle).not.toHaveBeenCalled();
+  });
+
+  it('preserves worker input queued while the done-status CAS is awaiting I/O', async () => {
+    let queueChecks = 0;
+    const { deps, service, setWorker } = createDeps({
+      hasPendingWorkerInput: vi.fn(() => {
+        queueChecks += 1;
+        return queueChecks === 2;
+      }),
+    });
+    setWorker(createWorker({ status: 'done' }));
+
+    await expect(service.idleWorker({
+      callerLeadSessionId: 'lead-1',
+      workerId: 'worker-1',
+      expectedStatus: 'done',
+    })).resolves.toEqual({
+      ok: false,
+      errorCode: 'WORKER_STATE_CHANGED',
+      message: 'worker worker-1 has queued input',
+    });
+
+    expect(deps.markWorkerIdleIfStatus).toHaveBeenCalledWith('worker-1', 'done');
+    expect(deps.closeWorkerSessionIfIdle).not.toHaveBeenCalled();
     expect(deps.broadcastOrcaWorkerChanged).not.toHaveBeenCalled();
   });
 
