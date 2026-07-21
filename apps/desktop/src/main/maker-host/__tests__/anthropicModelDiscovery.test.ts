@@ -206,16 +206,17 @@ describe('mapAnthropicHttpModels', () => {
 });
 
 describe('isDegenerateModelListShrink(退化快照护栏,纯函数)', () => {
-  it('骤减(不足现值一半且低于 2 条下限)判退化;增长 / 持平 / 首次 / 逐个下架放行', () => {
+  it('骤减(一次少 2 条以上且掉到不足现值一半)判退化;增长 / 持平 / 首次 / 单步递减放行', () => {
     // 事故形态:7 条被单条家族级响应打塌。
     expect(isDegenerateModelListShrink(7, 1)).toBe(true);
     expect(isDegenerateModelListShrink(5, 2)).toBe(true);
-    expect(isDegenerateModelListShrink(2, 1)).toBe(true);
-    // 合法演进:首次发现 / 增长 / 持平 / 逐个下架 / 恰好半数。
+    expect(isDegenerateModelListShrink(3, 1)).toBe(true);
+    // 合法演进:首次发现 / 增长 / 持平 / 单步递减(含 2→1,review P1) / 恰好半数。
     expect(isDegenerateModelListShrink(0, 1)).toBe(false);
     expect(isDegenerateModelListShrink(3, 7)).toBe(false);
     expect(isDegenerateModelListShrink(7, 7)).toBe(false);
     expect(isDegenerateModelListShrink(7, 6)).toBe(false);
+    expect(isDegenerateModelListShrink(2, 1)).toBe(false);
     expect(isDegenerateModelListShrink(4, 2)).toBe(false);
   });
 });

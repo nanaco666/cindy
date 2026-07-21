@@ -108,13 +108,15 @@ function toEfforts(raw: unknown): Effort[] | null {
 
 /**
  * 退化快照判定(2026-07-21「Anthropic 只剩单条 Fable」事故回归):上游返回**成功但
- * 骤减**的清单——不足现值一半、且低于 2 条下限——视为退化响应,保留现值不覆盖。
- * 这是「失败保留现值」之外的质量下限:清单唯一来源是动态发现、无静态兜底,一次
- * 退化响应会把整个供应商清单打塌。合法的逐个下架(7→6→5)不受影响;上游真一次
- * 腰斩时清单暂时偏旧(多出的条目发请求时报错暴露),后续正常快照自愈。纯函数。
+ * 骤减**的清单——一次少掉 2 条以上、且掉到不足现值一半——视为退化响应,保留现值
+ * 不覆盖。这是「失败保留现值」之外的质量下限:清单唯一来源是动态发现、无静态兜底,
+ * 一次退化响应会把整个供应商清单打塌。**逐个下架(含 2→1)永远合法**——真实下架是
+ * 渐进的,单步递减不许被永久拦死(review P1);上游真一次腰斩时清单暂时偏旧(多出的
+ * 条目发请求时报错暴露),后续正常快照自愈。纯函数。
  */
 export function isDegenerateModelListShrink(prevCount: number, nextCount: number): boolean {
   if (prevCount === 0 || nextCount >= prevCount) return false;
+  if (prevCount - nextCount <= 1) return false;
   return nextCount < Math.max(2, Math.ceil(prevCount / 2));
 }
 
@@ -421,6 +423,14 @@ export function refreshAnthropicModelsFromHttp(): Promise<void> {
       log.warn('anthropic /v1/models returned no usable models; keeping current list');
       return;
     }
+    // 退化判定必须先于任何状态写入:被拒快照连 explicitWindows 也不许污染,
+    // 否则后续 SDK 捕获会把退化响应带来的窗口值用作精确记账(review P2)。
+    if (isDegenerateModelListShrink(lastApplied.length, mapped.length)) {
+      log.warn(
+        `anthropic /v1/models response looks degenerate (${lastApplied.length} -> ${mapped.length}); keeping current list`,
+      );
+      return;
+    }
     for (const { model, explicitContextWindow } of mapped) {
       if (explicitContextWindow != null) explicitWindows.set(model.id, explicitContextWindow);
     }
@@ -436,12 +446,6 @@ export function refreshAnthropicModelsFromHttp(): Promise<void> {
         supportsFastMode: prev.supportsFastMode,
       };
     });
-    if (isDegenerateModelListShrink(lastApplied.length, models.length)) {
-      log.warn(
-        `anthropic /v1/models response looks degenerate (${lastApplied.length} -> ${models.length}); keeping current list`,
-      );
-      return;
-    }
     log.info(`anthropic models refreshed via HTTP: ${models.length}`);
     await applyModels(models, true, gen);
   })().finally(() => {
