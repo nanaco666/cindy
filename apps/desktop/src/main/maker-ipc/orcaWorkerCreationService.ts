@@ -59,6 +59,7 @@ export type OrcaWorkerCreationErrorCode =
   | 'INVALID_PARAMS'
   | 'NOT_FOUND'
   | 'DUPLICATE_LABEL'
+  | 'WORKER_CREATION_IN_PROGRESS'
   | 'WORKER_LIMIT_HARD_EXCEEDED'
   | 'BUDGET_MODEL_REQUIRES_API_MODE'
   | 'NO_PROVIDER_FOR_AGENT'
@@ -133,7 +134,7 @@ export interface OrcaWorkerCreationDeps {
     leaseMs: number;
   }): Promise<
     | { ok: true; occupiedSlotsBefore: number }
-    | { ok: false; errorCode: 'DUPLICATE_LABEL' | 'WORKER_LIMIT_HARD_EXCEEDED' }
+    | { ok: false; errorCode: 'DUPLICATE_LABEL' | 'WORKER_CREATION_IN_PROGRESS' | 'WORKER_LIMIT_HARD_EXCEEDED' }
   >;
   renewWorkerCreationReservation(reservationId: string, leaseMs: number): Promise<boolean>;
   releaseWorkerCreationReservation(reservationId: string): Promise<void>;
@@ -405,7 +406,7 @@ export function createOrcaWorkerCreationService(deps: OrcaWorkerCreationDeps): O
     const workerId = deps.createId();
     let reservation:
       | { ok: true; occupiedSlotsBefore: number }
-      | { ok: false; errorCode: 'DUPLICATE_LABEL' | 'WORKER_LIMIT_HARD_EXCEEDED' };
+      | { ok: false; errorCode: 'DUPLICATE_LABEL' | 'WORKER_CREATION_IN_PROGRESS' | 'WORKER_LIMIT_HARD_EXCEEDED' };
     try {
       reservation = await deps.reserveWorkerCreation({
         reservationId: workerId,
@@ -418,9 +419,13 @@ export function createOrcaWorkerCreationService(deps: OrcaWorkerCreationDeps): O
       return toInternalFailure(err);
     }
     if (!reservation.ok) {
-      return reservation.errorCode === 'DUPLICATE_LABEL'
-        ? { ok: false, errorCode: 'DUPLICATE_LABEL', message: `label "${label.value}" already used in this team` }
-        : { ok: false, errorCode: 'WORKER_LIMIT_HARD_EXCEEDED', message: `hard limit ${settings.workerHardLimit} reached` };
+      if (reservation.errorCode === 'DUPLICATE_LABEL') {
+        return { ok: false, errorCode: 'DUPLICATE_LABEL', message: `label "${label.value}" already used in this team` };
+      }
+      if (reservation.errorCode === 'WORKER_CREATION_IN_PROGRESS') {
+        return { ok: false, errorCode: 'WORKER_CREATION_IN_PROGRESS', message: `label "${label.value}" is currently being created` };
+      }
+      return { ok: false, errorCode: 'WORKER_LIMIT_HARD_EXCEEDED', message: `hard limit ${settings.workerHardLimit} reached` };
     }
     const softLimitExceeded = reservation.occupiedSlotsBefore >= settings.workerSoftLimit;
     let reservationValid = true;

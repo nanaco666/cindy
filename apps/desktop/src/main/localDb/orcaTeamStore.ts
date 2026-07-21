@@ -81,7 +81,7 @@ export interface OrcaWorkerLinkRecord {
 
 export type OrcaWorkerCreationReservationResult =
   | { ok: true; occupiedSlotsBefore: number }
-  | { ok: false; errorCode: 'DUPLICATE_LABEL' | 'WORKER_LIMIT_HARD_EXCEEDED' };
+  | { ok: false; errorCode: 'DUPLICATE_LABEL' | 'WORKER_CREATION_IN_PROGRESS' | 'WORKER_LIMIT_HARD_EXCEEDED' };
 
 export async function reserveWorkerCreation(input: {
   reservationId: string;

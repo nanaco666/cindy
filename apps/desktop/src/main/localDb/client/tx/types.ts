@@ -160,7 +160,7 @@ export interface OrcaReserveWorkerCreationArgs {
 
 export type OrcaReserveWorkerCreationResult =
   | { ok: true; occupiedSlotsBefore: number }
-  | { ok: false; errorCode: 'DUPLICATE_LABEL' | 'WORKER_LIMIT_HARD_EXCEEDED' };
+  | { ok: false; errorCode: 'DUPLICATE_LABEL' | 'WORKER_CREATION_IN_PROGRESS' | 'WORKER_LIMIT_HARD_EXCEEDED' };
 
 export interface OrcaReleaseWorkerCreationReservationArgs {
   reservationId: string;

@@ -52,7 +52,7 @@ function createDeps(overrides: Partial<OrcaWorkerCreationDeps> = {}) {
     reserveWorkerCreation: vi.fn(async ({ label }) => {
       const canonical = label.toLowerCase();
       if (reservations.has(canonical)) {
-        return { ok: false as const, errorCode: 'DUPLICATE_LABEL' as const };
+        return { ok: false as const, errorCode: 'WORKER_CREATION_IN_PROGRESS' as const };
       }
       reservations.add(canonical);
       return { ok: true as const, occupiedSlotsBefore: 0 };
@@ -220,7 +220,7 @@ describe('OrcaWorkerCreationService', () => {
     ]);
 
     expect(results.filter((result) => result.ok)).toHaveLength(1);
-    expect(results.filter((result) => !result.ok && result.errorCode === 'DUPLICATE_LABEL')).toHaveLength(1);
+    expect(results.filter((result) => !result.ok && result.errorCode === 'WORKER_CREATION_IN_PROGRESS')).toHaveLength(1);
     expect(deps.bootstrapSession).toHaveBeenCalledTimes(1);
     expect(deps.addOrUpdateWorker).toHaveBeenCalledTimes(1);
     expect(deps.markOrcaRoleIfNeeded).toHaveBeenCalledTimes(1);
@@ -734,6 +734,28 @@ describe('OrcaWorkerCreationService', () => {
     ]);
     expect(deps.markOrcaRoleIfNeeded).not.toHaveBeenCalled();
     expect(deps.dispatchWorkerTask).not.toHaveBeenCalled();
+  });
+
+  it('recognizes SQLite expression-index conflicts regardless of quote style', async () => {
+    const { deps, service } = createDeps({
+      addOrUpdateWorker: vi.fn(async () => {
+        throw new Error("UNIQUE constraint failed: index 'uniq_orca_workers_team_label'");
+      }),
+    });
+
+    await expect(
+      service.createWorker({
+        leadSessionId: 'lead-1',
+        role: 'reviewer',
+        agent: 'codex',
+        label: 'reviewer',
+      }),
+    ).resolves.toMatchObject({
+      ok: false,
+      errorCode: 'DUPLICATE_LABEL',
+    });
+
+    expect(deps.archiveWorkerSession).toHaveBeenCalledWith(WORKER_SESSION_ID);
   });
 
   it('removes the worker link when role marking fails after persistence', async () => {

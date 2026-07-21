@@ -146,6 +146,29 @@ describe('useOrcaWorkerSelection', () => {
     ]);
   });
 
+  it('does not create a suffixed worker while the same label is still being created', async () => {
+    mocks.workers = [];
+    mocks.createWorker.mockRejectedValueOnce(
+      new Error('[WORKER_CREATION_IN_PROGRESS] label is currently being created'),
+    );
+    const { result } = renderHook(
+      () => useOrcaWorkerSelection({ leadSessionId: 'lead-1' }),
+      { wrapper },
+    );
+
+    await act(async () => {
+      await result.current.handleCreateWorker({
+        role: 'tester',
+        agent: 'codex',
+        model: 'gpt-5.4',
+        initialTask: 'run once',
+      });
+    });
+
+    expect(mocks.createWorker).toHaveBeenCalledTimes(1);
+    expect(mocks.createWorker).toHaveBeenCalledWith(expect.objectContaining({ label: 'tester' }));
+  });
+
   it('keeps a missing focusWorkerSessionId pending until the worker list refreshes', async () => {
     mocks.workers = [makeWorker('worker-a', 'session-a', true)];
     let resolveRefresh!: (value: unknown) => void;

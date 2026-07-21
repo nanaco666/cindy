@@ -709,7 +709,7 @@ describe('db worker tx handlers', () => {
         }),
       ]);
       expect(results).toContainEqual({ ok: true, occupiedSlotsBefore: 0 });
-      expect(results).toContainEqual({ ok: false, errorCode: 'DUPLICATE_LABEL' });
+      expect(results).toContainEqual({ ok: false, errorCode: 'WORKER_CREATION_IN_PROGRESS' });
     });
   });
 
