@@ -1,0 +1,82 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+function createStorage(initial?: boolean): Storage {
+  const values = new Map<string, string>();
+  if (initial !== undefined) {
+    values.set('memorySettings.makerEnabled', initial ? 'true' : 'false');
+  }
+  return {
+    get length() {
+      return values.size;
+    },
+    clear: () => values.clear(),
+    getItem: (key) => values.get(key) ?? null,
+    key: (index) => Array.from(values.keys())[index] ?? null,
+    removeItem: (key) => values.delete(key),
+    setItem: (key, value) => values.set(key, value),
+  };
+}
+
+describe('memorySettingsStore', () => {
+  beforeEach(() => {
+    vi.resetModules();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('defaults to enabled when no renderer value exists', async () => {
+    vi.stubGlobal('localStorage', createStorage());
+    const { getMakerMemoryEnabled } = await import('@/lib/memorySettingsStore');
+
+    expect(getMakerMemoryEnabled()).toBe(true);
+  });
+
+  it('keeps a user toggle in memory when localStorage is unavailable', async () => {
+    vi.stubGlobal('localStorage', {
+      getItem: () => {
+        throw new Error('blocked');
+      },
+      setItem: () => {
+        throw new Error('blocked');
+      },
+    });
+    const { getMakerMemoryEnabled, setMakerMemoryEnabled } = await import(
+      '@/lib/memorySettingsStore'
+    );
+
+    expect(getMakerMemoryEnabled()).toBe(true);
+    setMakerMemoryEnabled(false);
+    expect(getMakerMemoryEnabled()).toBe(false);
+  });
+
+  it('migrates a legacy false marker before syncing the new main default', async () => {
+    vi.stubGlobal('localStorage', createStorage(false));
+    const preserveLegacy = vi.fn().mockResolvedValue({
+      maker: false,
+      claudeCode: true,
+      codex: true,
+    });
+    vi.stubGlobal('window', {
+      electronAPI: {
+        maker: {
+          memoryGetSettings: vi.fn().mockResolvedValue({
+            maker: true,
+            claudeCode: true,
+            codex: true,
+          }),
+          memoryPreserveLegacyMakerDisabled: preserveLegacy,
+        },
+      },
+    });
+    const { bootstrapMemorySettingsFromMain, getMakerMemoryEnabled } = await import(
+      '@/lib/memorySettingsStore'
+    );
+
+    await bootstrapMemorySettingsFromMain();
+
+    expect(preserveLegacy).toHaveBeenCalledOnce();
+    expect(getMakerMemoryEnabled()).toBe(false);
+  });
+});

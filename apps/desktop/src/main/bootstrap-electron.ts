@@ -305,7 +305,11 @@ import {
   setGoalAskAnswerObserver,
 } from './maker-ipc/register.js';
 import { MAKER_INVOKE as MAKER_IPC_INVOKE, MAKER_PUSH } from './maker-ipc/channels.js';
-import { readMemorySettings, readMemorySettingsState } from './maker-host/memory-settings-store.js';
+import {
+  preserveLegacyMakerMemoryDisabled,
+  readMemorySettings,
+  readMemorySettingsState,
+} from './maker-host/memory-settings-store.js';
 import {
   readImDefaultSettingsState,
   resetImDefaultSettings,
@@ -2079,6 +2083,9 @@ ipcMain.on('theme:apply-vibrancy', (_event, payload: { familyId: string; isDark:
   });
   ipcMain.handle(MAKER_IPC_INVOKE.MEMORY_GET_SETTINGS_STATE, async () => {
     return memorySettingsWire();
+  });
+  ipcMain.handle(MAKER_IPC_INVOKE.MEMORY_PRESERVE_LEGACY_MAKER_DISABLED, async () => {
+    return preserveLegacyMakerMemoryDisabled();
   });
   ipcMain.handle(MAKER_IPC_INVOKE.IM_DEFAULT_SETTINGS_GET, async () => {
     return imDefaultSettingsWire();

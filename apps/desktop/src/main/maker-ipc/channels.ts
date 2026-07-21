@@ -216,6 +216,8 @@ export const MAKER_INVOKE = {
    */
   MEMORY_GET_SETTINGS: 'maker:memory:get-settings',
   MEMORY_GET_SETTINGS_STATE: 'maker:memory:get-settings-state',
+  /** 一次性把旧 renderer localStorage 中的明确关闭意图迁移为 main 端 maker:false override。 */
+  MEMORY_PRESERVE_LEGACY_MAKER_DISABLED: 'maker:memory:preserve-legacy-maker-disabled',
   MEMORY_RESET_SETTINGS: 'maker:memory:reset-settings',
   /** IM 普通会话默认 agent/model/effort/provider；仅影响新 IM session 和 Feishu `/new`。 */
   IM_DEFAULT_SETTINGS_GET: 'maker:im-default-settings:get',

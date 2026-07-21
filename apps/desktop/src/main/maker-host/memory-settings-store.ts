@@ -88,6 +88,19 @@ export function writeMemorySetting<K extends keyof MemorySettings>(
   return store.readState();
 }
 
+/**
+ * 旧默认值为 false 时，用户把 Maker Memory 关回默认会删除 main override，但 renderer
+ * localStorage 会保留明确的 `false`。新默认切到 true 后，由启动期 renderer 只在检测到
+ * 该 legacy marker 时调用这里，把 opt-out 固化为新默认下的 `maker:false` override。
+ *
+ * 已存在 maker override 时保持 main 端事实源，不覆盖用户更新后的选择。
+ */
+export function preserveLegacyMakerMemoryDisabled(): MemorySettings {
+  const state = store.readState();
+  if (state.customizedKeys.includes('maker')) return state.value;
+  return writeMemorySetting('maker', false).value;
+}
+
 export function resetMemorySettings(): MemorySettings {
   return store.reset();
 }

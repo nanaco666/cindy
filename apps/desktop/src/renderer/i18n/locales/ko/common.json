@@ -1379,10 +1379,10 @@
     },
     "subagentModels": {
       "title": "하위 에이전트 모델",
-      "description": "Claude와 Codex 하위 에이전트의 기본 모델을 각각 지정합니다.",
+      "description": "Claude Code와 Codex가 하위 작업을 실행할 때 사용할 기본 모델을 설정합니다. 설정은 진입점별로 적용되며 모델별로 저장되지 않습니다.",
       "unspecified": "지정 안 함(기본 동작 사용)",
       "codexUnavailable": "현재 Codex 버전에서는 안전한 재정의를 지원하지 않습니다",
-      "hint": "지정하지 않으면 재정의를 주입하지 않습니다. Claude 변경 사항은 새 세션부터 적용되며, Codex 전체 컨텍스트 fork는 현재 모델 재정의를 지원하지 않습니다.",
+      "hint": "선택 가능한 모델은 연결된 모델 소스에 따라 달라집니다. 지정하지 않으면 Agent의 기본 설정을 사용합니다. Claude Code 변경 사항은 새 세션부터 적용되며, 현재 Codex 버전은 하위 에이전트 모델 재정의를 지원하지 않습니다.",
       "saveFailed": "하위 에이전트 모델 저장 실패"
     },
     "compaction": {

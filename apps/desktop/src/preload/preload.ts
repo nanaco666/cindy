@@ -3760,6 +3760,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
       defaults: { maker: boolean; claudeCode: boolean; codex: boolean };
     }> =>
       ipcRenderer.invoke('maker:memory:get-settings-state'),
+    /** 启动期一次性迁移旧版 localStorage 中明确关闭 Maker Memory 的用户意图。 */
+    memoryPreserveLegacyMakerDisabled: (): Promise<{
+      maker: boolean;
+      claudeCode: boolean;
+      codex: boolean;
+    }> => ipcRenderer.invoke('maker:memory:preserve-legacy-maker-disabled'),
     memoryResetSettings: (): Promise<{
       maker: boolean;
       claudeCode: boolean;

@@ -477,7 +477,8 @@ export interface StartSessionOptions {
    * 是否启用 Maker Memory (本次 session 内). 跟 userPrompt 同模式 — renderer 启 session
    * 时透传当前 memoryMode='maker' → true, 'native' / 'off' → false。main 不持久化。
    *
-   * 缺省 / undefined → fallback 到 runtimeConfig.makerMemoryEnabled (host 静态配置, 默认开启)。
+   * 缺省 / undefined → fallback 到 runtimeConfig.makerMemoryEnabled (host 静态配置, 一般为
+   * undefined / false), 实际效果就是不启用 maker memory。
    *
    * 启用时 agent.startSession 会:
    *   1. 调 deps.makerMemory.enable() 联动关闭原生 auto-memory

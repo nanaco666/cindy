@@ -30,6 +30,29 @@ describe('memory-settings-store', () => {
     expect(readMemorySettings()).toEqual({ maker: true, claudeCode: true, codex: true });
   });
 
+  it('persists a legacy renderer opt-out under the new enabled default', async () => {
+    const { preserveLegacyMakerMemoryDisabled, readMemorySettingsState } = await import(
+      '../memory-settings-store.js'
+    );
+
+    expect(preserveLegacyMakerMemoryDisabled().maker).toBe(false);
+    expect(readMemorySettingsState()).toMatchObject({
+      value: { maker: false, claudeCode: true, codex: true },
+      customizedKeys: ['maker'],
+    });
+  });
+
+  it('does not overwrite an existing maker override during legacy migration', async () => {
+    fs.writeFileSync(
+      path.join(userDataDir, 'memory-settings.json'),
+      JSON.stringify({ maker: true }),
+      'utf-8',
+    );
+    const { preserveLegacyMakerMemoryDisabled } = await import('../memory-settings-store.js');
+
+    expect(preserveLegacyMakerMemoryDisabled().maker).toBe(true);
+  });
+
   it('returns uncustomized state when a setting is manually changed back to default', async () => {
     const { writeMemorySetting } = await import('../memory-settings-store.js');
 

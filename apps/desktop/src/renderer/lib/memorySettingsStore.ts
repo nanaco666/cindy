@@ -22,22 +22,32 @@ const STORAGE_KEY = 'memorySettings.makerEnabled';
 
 type Subscriber = (value: boolean) => void;
 const subscribers = new Set<Subscriber>();
+let inMemoryValue = true;
+
+/** localStorage 中只接受显式 boolean 字符串；缺失/坏值不伪装成用户选择。 */
+function readStoredMakerMemoryEnabled(): boolean | undefined {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored === 'true') return true;
+    if (stored === 'false') return false;
+    return undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 /**
  * 同步读 — 给 hook 之外路径用 (ChatInput 启 session 时透传等)。
  * 坏数据 / localStorage 不可用 / 没存过 → 兜底 true (正式功能默认开)。
  */
 export function getMakerMemoryEnabled(): boolean {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    return stored === null ? true : stored === 'true';
-  } catch {
-    return true;
-  }
+  return readStoredMakerMemoryEnabled() ?? inMemoryValue;
 }
 
 /** 同步写 — 落盘 + 通知本 tab 内所有 subscriber */
 export function setMakerMemoryEnabled(next: boolean): void {
+  // localStorage 不可用时仍须在当前 renderer 生命周期内保留用户选择。
+  inMemoryValue = next;
   try {
     localStorage.setItem(STORAGE_KEY, next ? 'true' : 'false');
   } catch {
@@ -74,7 +84,13 @@ export function subscribeMakerMemoryEnabled(cb: Subscriber): () => void {
  */
 export async function bootstrapMemorySettingsFromMain(): Promise<void> {
   try {
-    const settings = await window.electronAPI.maker.memoryGetSettings();
+    const legacyRendererValue = readStoredMakerMemoryEnabled();
+    let settings = await window.electronAPI.maker.memoryGetSettings();
+    // 旧版默认 false 时，用户明确关闭会只留下 renderer 的 false marker。必须先把它
+    // 迁成 main 端 override，再进行 main → renderer 同步，否则升级会静默重新开启记忆。
+    if (legacyRendererValue === false && settings.maker) {
+      settings = await window.electronAPI.maker.memoryPreserveLegacyMakerDisabled();
+    }
     const current = getMakerMemoryEnabled();
     if (current === settings.maker) return;
     setMakerMemoryEnabled(settings.maker);
