@@ -19,8 +19,8 @@
  */
 
 import type Database from 'better-sqlite3';
-import { getTableColumns, getTableName, isTable } from 'drizzle-orm';
-import type { Column, SQL } from 'drizzle-orm';
+import { getTableColumns, getTableName, is, isTable, SQL } from 'drizzle-orm';
+import type { Column } from 'drizzle-orm';
 import { getTableConfig, SQLiteSyncDialect } from 'drizzle-orm/sqlite-core';
 import type { SQLiteTableWithColumns, TableConfig } from 'drizzle-orm/sqlite-core';
 
@@ -218,9 +218,32 @@ function planIndexRepairs(
     const idxName: string = idx.config.name;
     if (existing.has(idxName)) continue;
 
-    const cols = (idx.config.columns as { name: string }[])
-      .map((c) => `\`${c.name}\``)
-      .join(', ');
+    const serializedColumns: string[] = [];
+    let unsupportedExpression = false;
+    for (const columnOrExpression of idx.config.columns) {
+      if (!is(columnOrExpression, SQL)) {
+        serializedColumns.push(`\`${columnOrExpression.name}\``);
+        continue;
+      }
+
+      const q = sqliteDialect.sqlToQuery(columnOrExpression);
+      if (q.params.length > 0) {
+        residual.push({
+          table: tableName,
+          kind: 'missing-index',
+          detail: `${idxName} skipped because indexed expression contains bound parameters`,
+        });
+        unsupportedExpression = true;
+        break;
+      }
+
+      // SQLite 的 CREATE INDEX 表达式禁止带表限定符；Drizzle 会把
+      // sql`lower(${table.column})` 序列化成 lower("table"."column")。
+      const tableQualifier = `${sqliteDialect.escapeName(tableName)}.`;
+      serializedColumns.push(q.sql.replaceAll(tableQualifier, ''));
+    }
+    if (unsupportedExpression) continue;
+    const cols = serializedColumns.join(', ');
     const unique = idx.config.unique ? 'UNIQUE ' : '';
 
     // partial index 必须带回 WHERE 子句,否则会被错建成全表索引。

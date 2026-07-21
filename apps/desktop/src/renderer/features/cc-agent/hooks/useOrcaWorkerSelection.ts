@@ -240,30 +240,46 @@ export function useOrcaWorkerSelection({
   }, [normalizedFocusWorkerHintRevision, onSelectionIntentCleared]);
 
   const handleCreateWorker = useCallback(
-    (form: CreateWorkerForm) => {
+    async (form: CreateWorkerForm) => {
       const existingLabels = workers
         .map((w) => w.label)
         .filter((label): label is string => label !== null);
-      void orcaWorkflowsFor(leadSessionId)
-        .createWorker({
-          leadSessionId,
-          role: form.role,
-          agent: form.agent,
-          model: form.model,
-          effort: form.effort,
-          fast: form.fast,
-          label: createWorkerLabel(form.role, existingLabels),
-          initialTask: form.initialTask || undefined,
-        })
-        .then(() => {
+      const allocatedLabels = [...existingLabels];
+      for (let attempt = 0; attempt < 1000; attempt += 1) {
+        const label = createWorkerLabel(form.role, allocatedLabels);
+        try {
+          await orcaWorkflowsFor(leadSessionId).createWorker({
+            leadSessionId,
+            role: form.role,
+            agent: form.agent,
+            model: form.model,
+            effort: form.effort,
+            fast: form.fast,
+            label,
+            initialTask: form.initialTask || undefined,
+          });
           setCreateOpen(false);
-          refresh();
-        })
-        .catch((err: unknown) => {
+          await refresh();
+          return;
+        } catch (err) {
+          if (err instanceof Error && err.message.includes('DUPLICATE_LABEL')) {
+            // archived worker 不在可见列表，但 label 在 team 生命周期内永久占用。
+            allocatedLabels.push(label);
+            continue;
+          }
           toast.error(
             getCollaborationStartErrorMessage(err, t, { remoteDevice: Boolean(deviceId) }),
           );
-        });
+          return;
+        }
+      }
+      toast.error(
+        getCollaborationStartErrorMessage(
+          new Error('[DUPLICATE_LABEL] no unique worker label available'),
+          t,
+          { remoteDevice: Boolean(deviceId) },
+        ),
+      );
     },
     [deviceId, leadSessionId, refresh, t, workers],
   );

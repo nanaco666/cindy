@@ -79,6 +79,42 @@ export interface OrcaWorkerLinkRecord {
   };
 }
 
+export type OrcaWorkerCreationReservationResult =
+  | { ok: true; occupiedSlotsBefore: number }
+  | { ok: false; errorCode: 'DUPLICATE_LABEL' | 'WORKER_CREATION_IN_PROGRESS' | 'WORKER_LIMIT_HARD_EXCEEDED' };
+
+export async function reserveWorkerCreation(input: {
+  reservationId: string;
+  teamId: string;
+  label: string;
+  hardLimit: number;
+  leaseMs: number;
+}): Promise<OrcaWorkerCreationReservationResult> {
+  const now = Date.now();
+  return getDbClient().tx('orca.reserveWorkerCreation', {
+    ...input,
+    label: input.label.toLowerCase(),
+    now,
+    expiresAt: now + input.leaseMs,
+  });
+}
+
+export async function renewWorkerCreationReservation(
+  reservationId: string,
+  leaseMs: number,
+): Promise<boolean> {
+  const now = Date.now();
+  return getDbClient().tx('orca.renewWorkerCreationReservation', {
+    reservationId,
+    now,
+    expiresAt: now + leaseMs,
+  });
+}
+
+export async function releaseWorkerCreationReservation(reservationId: string): Promise<void> {
+  await getDbClient().tx('orca.releaseWorkerCreationReservation', { reservationId });
+}
+
 export async function createOrGetTeamForLead(input: {
   id?: string;
   leadSessionId: string;
@@ -331,7 +367,7 @@ export async function addOrUpdateWorker(input: {
     teamId: team.id,
     sessionId: input.sessionId,
     status: input.status,
-    label: input.label,
+    label: input.label?.toLowerCase() ?? input.label,
     worktreeBranch: input.worktreeBranch,
     role: input.role,
     focused: input.focused,

@@ -262,10 +262,9 @@ describeMigrationReplay('migration replay', () => {
         currentVersion: 73,
       });
 
-      // 0074 桥接 legacy lineage 后,0075(schedule_runs 前置检查)、0076(run 费用)
-      // 与 session-agent-switch 的 0077(messages.agent_kind,守卫脚本对无 messages
-      // 表的 fixture no-op)也在同一次 replay 里补上。
-      expect(result.applied.map((migration) => migration.seq)).toEqual([74, 75, 76, 77]);
+      expect(result.applied.map((migration) => migration.seq)).toEqual(
+        listMigrations(drizzleDir()).filter((migration) => migration.seq > 73).map((migration) => migration.seq),
+      );
       expect(
         db
           .prepare(`SELECT permission_mode, plan_mode_enabled FROM sessions WHERE id = ?`)
@@ -290,7 +289,7 @@ describeMigrationReplay('migration replay', () => {
           .prepare(
             `SELECT seq, file_name
            FROM migration_history
-           WHERE seq IN (47, 60, 62, 63, 64, 74, 75, 76)
+           WHERE seq IN (47, 60, 62, 63, 64, 74, 75, 76, 77, 78)
            ORDER BY seq`,
           )
           .all(),
@@ -303,8 +302,56 @@ describeMigrationReplay('migration replay', () => {
         { seq: 74, file_name: '0074_bridge_legacy_migration_lineage.sql' },
         { seq: 75, file_name: '0075_complex_strong_guy.sql' },
         { seq: 76, file_name: '0076_melted_post.sql' },
+        { seq: 77, file_name: '0077_nebulous_veda.sql' },
+        { seq: 78, file_name: '0078_same_juggernaut.sql' },
       ]);
     } finally {
+      cleanup();
+    }
+  });
+
+  it('normalizes duplicate worker labels deterministically before enforcing uniqueness', () => {
+    const { db, cleanup } = createTempDb();
+    const stagedDir = mkdtempSync(path.join(tmpdir(), 'xdmaker-drizzle-pre0078-'));
+    try {
+      for (const migration of listMigrations(drizzleDir())) {
+        if (migration.seq >= 78) continue;
+        copyFileSync(migration.sqlPath, path.join(stagedDir, migration.fileName));
+        if (migration.tsScriptPath) {
+          mkdirSync(path.join(stagedDir, 'scripts'), { recursive: true });
+          copyFileSync(
+            migration.tsScriptPath,
+            path.join(stagedDir, 'scripts', path.basename(migration.tsScriptPath)),
+          );
+        }
+      }
+      runMigrationReplay(db, { drizzleDir: stagedDir });
+      const now = Date.now();
+      for (const id of ['lead', 'worker-1', 'worker-2', 'worker-3', 'worker-4']) {
+        db.prepare('INSERT INTO sessions (id, created_at, updated_at) VALUES (?, ?, ?)').run(id, now, now);
+      }
+      db.prepare(`INSERT INTO orca_teams
+        (id, lead_session_id, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`)
+        .run('team-1', 'lead', 'active', now, now);
+      const insertWorker = db.prepare(`INSERT INTO orca_workers
+        (id, team_id, session_id, status, label, role, focused, created_at, updated_at)
+        VALUES (?, 'team-1', ?, 'idle', ?, 'tester', 0, ?, ?)`);
+      insertWorker.run('worker-row-1', 'worker-1', 'Tester', 1, 1);
+      insertWorker.run('worker-row-2', 'worker-2', 'tester', 2, 2);
+      insertWorker.run('worker-row-3', 'worker-3', 'tester-2', 3, 3);
+
+      runMigrationReplay(db, { drizzleDir: drizzleDir() });
+
+      expect(db.prepare('SELECT label FROM orca_workers ORDER BY created_at').pluck().all()).toEqual([
+        'tester',
+        'tester-3',
+        'tester-2',
+      ]);
+      expect(tableExists(db, 'orca_worker_creation_reservations')).toBe(true);
+      expect(indexExists(db, 'uniq_orca_workers_team_label')).toBe(true);
+      expect(() => insertWorker.run('worker-row-4', 'worker-4', 'TESTER', 4, 4)).toThrow();
+    } finally {
+      rmSync(stagedDir, { recursive: true, force: true });
       cleanup();
     }
   });

@@ -633,6 +633,12 @@ export function WorkerListToolbar({
         <span className="min-w-0 flex-1 select-none truncate text-[11px] font-medium text-muted-foreground">
           {t('orca.rolePill.worker')}
         </span>
+        <CreateWorkerTabButton
+          activeCount={activeCount}
+          softLimit={softLimit}
+          hardLimit={hardLimit}
+          onOpenCreate={onOpenCreate}
+        />
         <WorkerLayoutMenu layout={layout} onLayoutChange={handleLayoutChange} />
         {trailingActions}
       </div>
