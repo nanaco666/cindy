@@ -102,7 +102,7 @@ export function UserInfoSection({ isCollapsed, onOpenUpdateNotice }: UserInfoSec
 
   return (
     <div className="mt-auto px-3 pb-3 pt-2">
-      <div className="flex h-10 items-center rounded-full border border-[var(--sidebar-user-card-border)] bg-[var(--sidebar-user-card-bg)] px-[7px] transition-colors hover:bg-[linear-gradient(hsl(var(--sidebar-item-hover)),hsl(var(--sidebar-item-hover)))]">
+      <div className="flex h-10 items-center rounded-full border border-[var(--sidebar-user-card-border)] bg-[var(--sidebar-user-card-bg)] px-[7px] hover:bg-[linear-gradient(hsl(var(--sidebar-item-hover)),hsl(var(--sidebar-item-hover)))]">
         <button
           onClick={handleClick}
           role="link"
