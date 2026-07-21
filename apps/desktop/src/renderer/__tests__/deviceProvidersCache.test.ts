@@ -108,7 +108,7 @@ describe('useDeviceProviders deviceId-aware cache', () => {
     const off2 = mod.subscribeDeviceProviders('dev-2', dev2);
 
     await mod.prefetchDeviceProviders('dev-1');
-    expect(dev1).toHaveBeenCalledWith([{ id: 'dev-1-xd' }]);
+    expect(dev1).toHaveBeenCalledWith({ status: 'ready', providers: [{ id: 'dev-1-xd' }] });
     expect(dev2).not.toHaveBeenCalled();
 
     off1();
@@ -132,7 +132,10 @@ describe('useDeviceProviders deviceId-aware cache', () => {
     resolvers[0](result('stale'));
     await stale;
 
-    expect(listener).toHaveBeenCalledTimes(1);
-    expect(listener).toHaveBeenLastCalledWith([{ id: 'fresh-xd' }]);
+    expect(listener).toHaveBeenNthCalledWith(1, { status: 'loading' });
+    expect(listener).toHaveBeenNthCalledWith(2, {
+      status: 'ready',
+      providers: [{ id: 'fresh-xd' }],
+    });
   });
 });

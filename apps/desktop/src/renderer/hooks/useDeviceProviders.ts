@@ -24,9 +24,11 @@ interface DeviceLinkShape {
 }
 
 function getDeviceLink(): DeviceLinkShape | null {
-  const dl = (window as unknown as {
-    electronAPI?: { deviceLink?: DeviceLinkShape };
-  }).electronAPI?.deviceLink;
+  const dl = (
+    window as unknown as {
+      electronAPI?: { deviceLink?: DeviceLinkShape };
+    }
+  ).electronAPI?.deviceLink;
   return dl ?? null;
 }
 
@@ -34,18 +36,22 @@ function getDeviceLink(): DeviceLinkShape | null {
 const cache = new Map<string, ProviderView[]>();
 const inflight = new Map<string, Promise<ProviderView[]>>();
 const deviceGen = new Map<string, number>();
-const listeners = new Map<string, Set<(providers: ProviderView[]) => void>>();
+export type DeviceProvidersEvent =
+  | { status: 'loading' }
+  | { status: 'ready'; providers: ProviderView[] }
+  | { status: 'error'; error: string };
+const listeners = new Map<string, Set<(event: DeviceProvidersEvent) => void>>();
 
-function notifyDeviceProviders(deviceId: string, providers: ProviderView[]): void {
-  for (const listener of listeners.get(deviceId) ?? []) listener(providers);
+function notifyDeviceProviders(deviceId: string, event: DeviceProvidersEvent): void {
+  for (const listener of listeners.get(deviceId) ?? []) listener(event);
 }
 
 /** 订阅某设备缓存的新快照；live provider push 后已挂载 hook 也能无空白帧地更新。 */
 export function subscribeDeviceProviders(
   deviceId: string,
-  listener: (providers: ProviderView[]) => void,
+  listener: (event: DeviceProvidersEvent) => void,
 ): () => void {
-  const bucket = listeners.get(deviceId) ?? new Set<(providers: ProviderView[]) => void>();
+  const bucket = listeners.get(deviceId) ?? new Set<(event: DeviceProvidersEvent) => void>();
   bucket.add(listener);
   listeners.set(deviceId, bucket);
   return () => {
@@ -66,18 +72,26 @@ async function fetchDeviceProviders(deviceId: string): Promise<ProviderView[]> {
 
   const dl = getDeviceLink();
   if (!dl) throw new Error('device-link IPC not available');
-  const p = (dl.invoke(deviceId, 'maker:provider:list', []) as Promise<{ providers: ProviderView[] }>)
+  const p = (
+    dl.invoke(deviceId, 'maker:provider:list', []) as Promise<{ providers: ProviderView[] }>
+  )
     .then((res) => {
       const providers = res?.providers ?? [];
       if (isCurrent()) {
         cache.set(deviceId, providers);
         inflight.delete(deviceId);
-        notifyDeviceProviders(deviceId, providers);
+        notifyDeviceProviders(deviceId, { status: 'ready', providers });
       }
       return providers;
     })
     .catch((e) => {
-      if (isCurrent()) inflight.delete(deviceId);
+      if (isCurrent()) {
+        inflight.delete(deviceId);
+        notifyDeviceProviders(deviceId, {
+          status: 'error',
+          error: e instanceof Error ? e.message : String(e),
+        });
+      }
       throw e;
     });
   inflight.set(deviceId, p);
@@ -93,7 +107,7 @@ export interface UseDeviceProvidersResult {
 
 export function useDeviceProviders(deviceId?: string): UseDeviceProvidersResult {
   const [providers, setProviders] = useState<ProviderView[]>(
-    deviceId ? cache.get(deviceId) ?? [] : [],
+    deviceId ? (cache.get(deviceId) ?? []) : [],
   );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -105,9 +119,20 @@ export function useDeviceProviders(deviceId?: string): UseDeviceProvidersResult 
       return;
     }
     let cancelled = false;
-    const unsubscribe = subscribeDeviceProviders(deviceId, (next) => {
+    const unsubscribe = subscribeDeviceProviders(deviceId, (event) => {
       if (cancelled) return;
-      setProviders(next);
+      if (event.status === 'loading') {
+        // 保留上一份完整列表避免视觉跳变，但让模型选择逻辑等待同轮新快照。
+        setLoading(true);
+        setError(null);
+        return;
+      }
+      if (event.status === 'error') {
+        setLoading(false);
+        setError(event.error);
+        return;
+      }
+      setProviders(event.providers);
       setError(null);
       setLoading(false);
     });
@@ -122,13 +147,16 @@ export function useDeviceProviders(deviceId?: string): UseDeviceProvidersResult 
     setProviders([]);
     setLoading(true);
     setError(null);
+    const remoteGeneration = deviceGen.get(deviceId) ?? 0;
     fetchDeviceProviders(deviceId)
       .catch((e: unknown) => {
         if (cancelled) return;
+        if ((deviceGen.get(deviceId) ?? 0) !== remoteGeneration) return;
         setError(e instanceof Error ? e.message : String(e));
       })
       .finally(() => {
-        if (!cancelled) setLoading(false);
+        if (cancelled || (deviceGen.get(deviceId) ?? 0) !== remoteGeneration) return;
+        setLoading(false);
       });
     return () => {
       cancelled = true;
@@ -157,4 +185,5 @@ export function evictDeviceProviders(deviceId: string): void {
   cache.delete(deviceId);
   inflight.delete(deviceId);
   deviceGen.set(deviceId, (deviceGen.get(deviceId) ?? 0) + 1);
+  notifyDeviceProviders(deviceId, { status: 'loading' });
 }
