@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { BrowserWindow } from 'electron';
 import { SESSION_ACTIVITY_CHANNEL } from '@lizi/device-link';
 import type { AgentEvent, InteractionRequest } from '@lizi/maker-core';
+import { BRAND_NAME } from '@lizi/maker-shared/branding';
 
 import { computeAgentIslandWindowBounds, type AgentIslandLayoutPreference } from '../geometry.js';
 import {
@@ -1098,6 +1099,7 @@ describe('AgentIslandService native publishing', () => {
       projectName: null,
     }));
     expect(publish.mock.calls.at(-1)?.[0].strings).toMatchObject({
+      appName: BRAND_NAME,
       newMessage: 'New message',
       needsInput: 'Needs input',
       running: 'Running',

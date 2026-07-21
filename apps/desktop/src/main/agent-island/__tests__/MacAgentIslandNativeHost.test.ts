@@ -70,6 +70,16 @@ afterEach(() => {
 });
 
 describe('MacAgentIslandNativeHost', () => {
+  it('renders the idle brand from main-provided display strings', () => {
+    const source = fs.readFileSync(
+      new URL('../../../../native/agent-island/macos-agent-island-helper.swift', import.meta.url),
+      'utf8',
+    );
+
+    expect(source).toContain('Text(strings.displayAppName)');
+    expect(source).not.toContain('Text("XD Maker")');
+  });
+
   it('restarts the helper when it exits before ready', async () => {
     const children: FakeNativeProcess[] = [];
     h.spawn.mockImplementation(() => {
