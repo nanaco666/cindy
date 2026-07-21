@@ -1,9 +1,9 @@
 /**
  * main / renderer 共用的 worker 状态枚举与"占用槽位"判定。
  *
- * 单一事实源: 加新状态(如未来的 paused)只改这里; main 的 orcaTeamStore
- * 与 renderer 的 useWorkers 都从此 import, 不再各自手写 `idle || running`,
- * 避免 F6 那种"前后端计数算法漂移导致 UI 卡死/虚高"。
+ * renderer 与 main 创建前检查共用这里的判定，不再各自手写状态集合。
+ * 数据库原子预留另以 `sessions.status = 'active'` 判断是否占槽，确保终态 Worker
+ * 归档前仍计数；若未来新增不占槽状态，需要同时更新此处与两份预留 SQL。
  *
  * 必须保持 renderer-safe: 不允许 import 任何 electron / drizzle / better-sqlite3,
  * 否则 renderer bundle 会把它们拖进来。
@@ -11,7 +11,7 @@
 
 export type OrcaWorkerStatus = 'idle' | 'running' | 'done' | 'error';
 
-/** active team 内尚未归档、会占用软/硬上限槽位的 Worker 状态集合。 */
+/** 当前所有合法 Worker 状态在 session 归档前都占用软/硬上限槽位。 */
 export const ACTIVE_WORKER_STATUSES = [
   'idle',
   'running',

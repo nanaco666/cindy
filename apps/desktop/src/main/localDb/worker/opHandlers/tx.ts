@@ -872,6 +872,7 @@ function orcaReserveWorkerCreation(db: Database.Database, args: unknown): unknow
     ).get(teamId, label);
     if (duplicateWorker) return { ok: false, errorCode: 'DUPLICATE_LABEL' };
     if (duplicateReservation) return { ok: false, errorCode: 'WORKER_CREATION_IN_PROGRESS' };
+    // Worker 进入终态仍占槽，只有关联 session 归档后才释放。
     const occupiedWorkerCount = Number(db.prepare(`SELECT COUNT(*)
       FROM orca_workers w INNER JOIN sessions s ON s.id = w.session_id
       WHERE w.team_id = ? AND s.status = 'active'`).pluck().get(teamId) || 0);
