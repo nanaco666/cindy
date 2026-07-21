@@ -2467,6 +2467,13 @@ function CollapsedView({
 const RAIL_PANEL_KEEPALIVE_SELECTOR =
   '[data-rail-panel],[data-rail-panel-trigger],[data-radix-popper-content-wrapper],[role="dialog"],[role="alertdialog"]';
 
+/** 三级(项目会话)面板专属的保活白名单:三级面板本体与可能源自其行内的
+ *  菜单/对话框浮层。一级面板的非项目区(头部/未分类/「显示全部」)**不在**
+ *  其中——指针移出项目行后 projectCloseTimer 要照常走完收三级面板,否则
+ *  上一个项目的三级面板会悬留到 hover 下一个项目为止(review P2)。 */
+const RAIL_PROJECT_KEEPALIVE_SELECTOR =
+  '[data-rail-panel-level="2"],[data-radix-popper-content-wrapper],[role="dialog"],[role="alertdialog"]';
+
 /** rail 面板容器:portal + fixed + 视口钳制。mouseleave 时若指针落入 Radix
  *  popper / 对话框(行内右键菜单、移动子菜单、确认弹窗)不视为离开。 */
 function RailPanelShell({
@@ -2499,6 +2506,7 @@ function RailPanelShell({
       ref={ref}
       role="menu"
       data-rail-panel="true"
+      data-rail-panel-level={level}
       onMouseEnter={onEnter}
       onMouseLeave={(e) => {
         const next = e.relatedTarget instanceof Element ? e.relatedTarget : null;
@@ -2621,11 +2629,14 @@ function RailPanels({
     const onPointerMove = (event: PointerEvent) => {
       const el = event.target instanceof Element ? event.target : null;
       if (el?.closest(RAIL_PANEL_KEEPALIVE_SELECTOR)) {
-        // 两级计时器都要取消:指针停在右键菜单(Radix 浮层)上时,三级面板的
-        // projectCloseTimer 若已被行 mouseleave 启动,不取消会在 120ms 后收掉
-        // 菜单的来源面板(review P1)。
         railPanelStore.cancelClose();
-        railPanelStore.cancelProjectClose();
+        // 三级计时器只对三级面板本体与菜单/对话框浮层保活(指针停在右键菜单上
+        // 时,行 mouseleave 排下的 projectCloseTimer 不能收掉菜单的来源面板,
+        // review P1);一级面板的非项目区不算——否则移出项目行后三级面板悬留
+        // (review P2)。项目行自身经 mouseenter → openProject 清计时器。
+        if (el.closest(RAIL_PROJECT_KEEPALIVE_SELECTOR)) {
+          railPanelStore.cancelProjectClose();
+        }
       } else {
         railPanelStore.scheduleClose();
       }
@@ -2727,9 +2738,13 @@ function RailPanels({
         disableCollapse: false,
         isFiltering: false,
         isActiveEntry: (p) => p.sessions.some((s) => s.id === activeSessionId),
-        hasAttentionEntry: (p) => p.sessions.some((s) => panelNotifications.has(s.id)),
+        // 豁免并入本地 running:第 20 名开外的项目若有会话在跑,rail 段灯已在
+        // 呼吸,面板不能把它折进「显示全部」(codex review;远程 running 已随
+        // panelNotifications 的远程条目并集覆盖)。
+        hasAttentionEntry: (p) =>
+          p.sessions.some((s) => panelNotifications.has(s.id) || runningSessionIds.has(s.id)),
       }),
-    [projects, showAllProjects, activeSessionId, panelNotifications],
+    [projects, showAllProjects, activeSessionId, panelNotifications, runningSessionIds],
   );
 
   const entryListShared = {
