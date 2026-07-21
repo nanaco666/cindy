@@ -9,7 +9,7 @@
  *   │ └─────────────────────────────────────┘  │
  *   └─────────────────────────────────────────┘
  *
- * - 列表在下拉打开瞬间才调 `listAvailableShells()`（main 端 memo,不会反复 probe）。
+ * - mount 时并行读取偏好和 shell 列表,两者齐备后再渲染完整控件。
  * - `'auto'` 永远是第一项;后面是当前机器实际装了的 shell（zsh / bash / pwsh / cmd / ...)，
  *   未装的不展示。
  * - 用户选 `'auto'` 之外 = 已 customize（rule 20），右侧出现「恢复默认」按钮 → 一键回 auto。
@@ -17,7 +17,8 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ChevronDown } from 'lucide-react';
+import * as Select from '@radix-ui/react-select';
+import { Check, ChevronDown } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { cn } from '@/lib/utils';
@@ -32,29 +33,30 @@ export function TerminalShellSection() {
   const [shells, setShells] = useState<AvailableShell[] | null>(null);
   const [resetting, setResetting] = useState(false);
 
-  // 首次 mount 拉 pref;shell 列表懒加载(用户聚焦下拉时再拉)
+  // 原生 <select> 的弹层打开后再异步追加 <option>,Windows 上不会可靠地
+  // 重算内容/高度。Electron 也记录过同类原生弹层渲染问题:
+  // https://github.com/electron/electron/issues/29665
+  // https://github.com/electron/electron/issues/33110
+  // 因此这里并行预取全部数据,齐备后才一次性渲染 Radix Select;不要把加载
+  // 重新挪回 pointer/focus 事件里。
   useEffect(() => {
     let cancelled = false;
-    void window.electronAPI.terminal
+    const prefRequest = window.electronAPI.terminal
       .getDefaultShellPref()
-      .then((value) => {
-        if (!cancelled) setPref(value);
-      })
-      .catch(() => {
-        if (!cancelled) setPref('auto');
-      });
+      .catch((): ShellId => 'auto');
+    const shellsRequest = window.electronAPI.terminal
+      .listAvailableShells()
+      .catch((): AvailableShell[] => []);
+
+    void Promise.all([prefRequest, shellsRequest]).then(([nextPref, nextShells]) => {
+      if (cancelled) return;
+      setPref(nextPref);
+      setShells(nextShells);
+    });
     return () => {
       cancelled = true;
     };
   }, []);
-
-  const ensureShellsLoaded = useCallback(() => {
-    if (shells != null) return;
-    void window.electronAPI.terminal
-      .listAvailableShells()
-      .then((list) => setShells(list))
-      .catch(() => setShells([]));
-  }, [shells]);
 
   const autoTargetLabel = useMemo(() => {
     return shells?.find((s) => s.isAutoDetectTarget)?.displayName ?? '';
@@ -66,12 +68,10 @@ export function TerminalShellSection() {
     (value: ShellId) => {
       const prev = pref;
       setPref(value); // 乐观更新
-      void window.electronAPI.terminal
-        .setDefaultShellPref(value)
-        .catch((err) => {
-          setPref(prev);
-          toast.error(err instanceof Error ? err.message : String(err));
-        });
+      void window.electronAPI.terminal.setDefaultShellPref(value).catch((err) => {
+        setPref(prev);
+        toast.error(err instanceof Error ? err.message : String(err));
+      });
     },
     [pref],
   );
@@ -92,7 +92,13 @@ export function TerminalShellSection() {
     }
   }, [resetting, pref, t]);
 
-  if (pref === null) return null; // 加载中,不闪空 UI
+  if (pref === null || shells === null) return null; // 数据齐备后再一次性显示,避免跳变
+
+  const autoLabel = autoTargetLabel
+    ? t('settings.terminalShell.autoWithTarget', { target: autoTargetLabel })
+    : t('settings.terminalShell.auto');
+  const unavailablePref =
+    pref !== 'auto' && !shells.some((shell) => shell.id === pref) ? pref : null;
 
   return (
     <div className="flex flex-col gap-[14px]">
@@ -121,41 +127,70 @@ export function TerminalShellSection() {
           {t('settings.terminalShell.card.description')}
         </p>
 
-        <div className="relative min-w-0">
-          <select
-            value={pref}
-            onFocus={ensureShellsLoaded}
-            onMouseDown={ensureShellsLoaded}
-            onChange={(e) => onChange(e.target.value as ShellId)}
+        <Select.Root
+          value={pref}
+          onValueChange={(value) => onChange(value as ShellId)}
+          disabled={resetting}
+        >
+          <Select.Trigger
+            aria-label={t('settings.terminalShell.card.selectAria')}
             className={cn(
-              'h-9 w-full min-w-0 appearance-none rounded-full border py-0 pl-3 pr-9 text-12 outline-none',
+              'flex h-9 w-full min-w-0 items-center justify-between gap-2 rounded-full border px-3 text-12 outline-none',
               'bg-[var(--settings-input-bg)] text-[var(--settings-input-text)]',
               'border-[var(--settings-input-border)] focus:ring-2 focus:ring-[var(--focus-ring-soft)]',
+              'data-[disabled]:cursor-not-allowed data-[disabled]:opacity-60',
             )}
-            aria-label={t('settings.terminalShell.card.selectAria')}
           >
-            <option value="auto">
-              {autoTargetLabel
-                ? t('settings.terminalShell.autoWithTarget', { target: autoTargetLabel })
-                : t('settings.terminalShell.auto')}
-            </option>
-            {shells?.map((shell) => (
-              <option key={shell.id} value={shell.id}>
-                {shell.displayName}
-              </option>
-            ))}
-            {/* 用户上次选的 shell 当前不可用(卸了)时,仍要显示让用户可以切回 auto */}
-            {pref !== 'auto' && shells != null && !shells.some((s) => s.id === pref) && (
-              <option value={pref}>{pref}</option>
-            )}
-          </select>
-          <ChevronDown
-            size={15}
-            className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-[var(--settings-input-text)] opacity-75"
-            aria-hidden="true"
-          />
-        </div>
+            <span className="min-w-0 truncate text-left">
+              <Select.Value />
+            </span>
+            <Select.Icon asChild>
+              <ChevronDown size={15} className="shrink-0 opacity-75" />
+            </Select.Icon>
+          </Select.Trigger>
+          <Select.Portal>
+            <Select.Content
+              position="popper"
+              side="bottom"
+              align="start"
+              sideOffset={4}
+              className={cn(
+                'z-[10010] w-[var(--radix-select-trigger-width)] overflow-hidden rounded-xl border p-1',
+                'border-[var(--cmd-palette-border)] bg-[var(--cmd-palette-bg)]',
+              )}
+            >
+              <Select.Viewport>
+                <ShellOption value="auto" label={autoLabel} />
+                {shells.map((shell) => (
+                  <ShellOption key={shell.id} value={shell.id} label={shell.displayName} />
+                ))}
+                {/* 用户上次选的 shell 当前不可用(卸了)时,仍要显示让用户可以切回 auto */}
+                {unavailablePref ? (
+                  <ShellOption value={unavailablePref} label={unavailablePref} />
+                ) : null}
+              </Select.Viewport>
+            </Select.Content>
+          </Select.Portal>
+        </Select.Root>
       </div>
     </div>
+  );
+}
+
+/** Radix shell option row;统一键盘高亮、选中指示和主题 token。 */
+function ShellOption({ value, label }: { value: ShellId; label: string }) {
+  return (
+    <Select.Item
+      value={value}
+      className={cn(
+        'flex w-full cursor-pointer select-none items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-12 outline-none',
+        'text-[var(--settings-input-text)] data-[highlighted]:bg-[var(--surface-hover)]',
+      )}
+    >
+      <Select.ItemText>{label}</Select.ItemText>
+      <Select.ItemIndicator>
+        <Check size={14} strokeWidth={2.25} />
+      </Select.ItemIndicator>
+    </Select.Item>
   );
 }
