@@ -1433,11 +1433,11 @@ export function ChatInput({
         showOnlyCurrent: false,
       }),
       MentionChipNode,
+      ComposerQuoteNode,
       PastedTextChipNode,
       WindowsSelectionReplacement.configure({
         enabled: window.electronAPI.platform === 'win32',
       }),
-      ComposerQuoteNode,
       CjkPunctDecoration,
       VoiceInputDraftDecoration,
       MentionDragCaretDecoration,
