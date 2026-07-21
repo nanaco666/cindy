@@ -3,9 +3,9 @@
   "dataLicense": "CC0-1.0",
   "SPDXID": "SPDXRef-DOCUMENT",
   "name": "cindy-mobile-ios",
-  "documentNamespace": "https://cindy.app/spdx/mobile-ios/f7209e7c96aaae80a026cf34c1cb1a5aa4a07268b68f8f64032e3edc04c4c502",
+  "documentNamespace": "https://cindy.app/spdx/mobile-ios/775fe17b551a9c20ce61596168475a65f8992ba112bb93b755c33df553f4f3e8",
   "creationInfo": {
-    "created": "2026-07-17T05:10:01Z",
+    "created": "2026-07-21T09:03:48Z",
     "creators": [
       "Tool: scripts/generate-third-party-notices.mjs"
     ]
@@ -1988,8 +1988,8 @@
     },
     {
       "name": "@legendapp/list",
-      "SPDXID": "SPDXRef-Package-5a7e2876aace06d4",
-      "versionInfo": "3.3.2",
+      "SPDXID": "SPDXRef-Package-0c68eb85c54800d9",
+      "versionInfo": "3.3.3",
       "downloadLocation": "https://github.com/LegendApp/legend-list",
       "filesAnalyzed": false,
       "licenseConcluded": "MIT",
@@ -1999,7 +1999,7 @@
         {
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
-          "referenceLocator": "pkg:npm/%40legendapp/list@3.3.2"
+          "referenceLocator": "pkg:npm/%40legendapp/list@3.3.3"
         }
       ]
     },
@@ -5264,6 +5264,23 @@
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
           "referenceLocator": "pkg:npm/expo-sharing@56.0.22"
+        }
+      ]
+    },
+    {
+      "name": "expo-splash-screen",
+      "SPDXID": "SPDXRef-Package-e2848901cb956a1c",
+      "versionInfo": "56.0.13",
+      "downloadLocation": "https://github.com/expo/expo",
+      "filesAnalyzed": false,
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "NOASSERTION",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/expo-splash-screen@56.0.13"
         }
       ]
     },
@@ -10804,7 +10821,7 @@
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-5a7e2876aace06d4"
+      "relatedSpdxElement": "SPDXRef-Package-0c68eb85c54800d9"
     },
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
@@ -11765,6 +11782,11 @@
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
       "relatedSpdxElement": "SPDXRef-Package-a76d5fff827e3e52"
+    },
+    {
+      "spdxElementId": "SPDXRef-DOCUMENT",
+      "relationshipType": "DESCRIBES",
+      "relatedSpdxElement": "SPDXRef-Package-e2848901cb956a1c"
     },
     {
       "spdxElementId": "SPDXRef-DOCUMENT",

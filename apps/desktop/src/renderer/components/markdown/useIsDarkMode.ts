@@ -2,12 +2,12 @@
  * useIsDarkMode — observe the live `dark` class on <html>.
  *
  * The app's ThemeProvider toggles `<html class="dark">` based on the user's
- * theme preference (or OS preference when set to 'system'). MDXEditor needs
- * a boolean to switch its theme class, and the value must stay in sync if
- * the user flips the toggle while the editor is mounted.
+ * theme preference (or OS preference when set to 'system'). Editor surfaces
+ * need a boolean theme signal, and the value must stay in sync if the user
+ * flips the toggle while a surface is mounted.
  *
  * MutationObserver on the `class` attribute is the simplest way to track
- * this without coupling MDXEditor to the project's specific theme store.
+ * this without coupling editor surfaces to the project's specific theme store.
  */
 
 import { useEffect, useState } from 'react';

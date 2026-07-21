@@ -1110,7 +1110,7 @@ function installApplicationMenu(
   const labels = APPLICATION_MENU_LABELS[locale];
   // Toggle Sidebar: 用 registerAccelerator: false —— 菜单显示 ⌘B 标签且可点击,
   // 但不向 OS 注册热键。真正按键由 MainLayout 里的 renderer keydown 处理 (那段
-  // 会跳过非 Tiptap 的 contenteditable, 保留 mdxeditor 等编辑器自己的 Bold 能力)。
+  // 会跳过非 Tiptap 的 contenteditable, 保留富文本编辑器自己的 Bold 能力)。
   const toggleSidebarItem: Electron.MenuItemConstructorOptions = {
     label: labels.toggleSidebar,
     accelerator: menuAcceleratorFor('toggle-sidebar'),

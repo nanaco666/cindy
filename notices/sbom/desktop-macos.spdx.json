@@ -3,9 +3,9 @@
   "dataLicense": "CC0-1.0",
   "SPDXID": "SPDXRef-DOCUMENT",
   "name": "cindy-desktop-macos",
-  "documentNamespace": "https://cindy.app/spdx/desktop-macos/3ff221eb29a920d5e6128de8dfdd862c5d456376c8db1509d1c82de95848bd67",
+  "documentNamespace": "https://cindy.app/spdx/desktop-macos/debc8302428f8af0ce80a59007c8f2e4d535aa245f25f37d623dc68a1c540bb8",
   "creationInfo": {
-    "created": "2026-07-17T05:10:01Z",
+    "created": "2026-07-21T09:03:48Z",
     "creators": [
       "Tool: scripts/generate-third-party-notices.mjs"
     ]
@@ -53,8 +53,8 @@
     },
     {
       "name": "OpenAI Codex CLI (bundled binary)",
-      "SPDXID": "SPDXRef-Package-fa18e2979236ef63",
-      "versionInfo": "0.144.1",
+      "SPDXID": "SPDXRef-Package-f6898d2a0f197785",
+      "versionInfo": "0.144.6",
       "downloadLocation": "https://github.com/openai/codex",
       "filesAnalyzed": false,
       "licenseConcluded": "Apache-2.0",
@@ -265,23 +265,6 @@
       ]
     },
     {
-      "name": "@codemirror/lang-angular",
-      "SPDXID": "SPDXRef-Package-2d170b668c351128",
-      "versionInfo": "0.1.4",
-      "downloadLocation": "https://github.com/codemirror/lang-angular",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/%40codemirror/lang-angular@0.1.4"
-        }
-      ]
-    },
-    {
       "name": "@codemirror/lang-cpp",
       "SPDXID": "SPDXRef-Package-9a6a542ba776d483",
       "versionInfo": "6.0.3",
@@ -384,23 +367,6 @@
       ]
     },
     {
-      "name": "@codemirror/lang-jinja",
-      "SPDXID": "SPDXRef-Package-c3736a157287ee11",
-      "versionInfo": "6.0.1",
-      "downloadLocation": "https://code.haverbeke.berlin/codemirror/lang-jinja",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/%40codemirror/lang-jinja@6.0.1"
-        }
-      ]
-    },
-    {
       "name": "@codemirror/lang-json",
       "SPDXID": "SPDXRef-Package-54c1ffee35c227fd",
       "versionInfo": "6.0.2",
@@ -414,40 +380,6 @@
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
           "referenceLocator": "pkg:npm/%40codemirror/lang-json@6.0.2"
-        }
-      ]
-    },
-    {
-      "name": "@codemirror/lang-less",
-      "SPDXID": "SPDXRef-Package-233e3e2c48df875e",
-      "versionInfo": "6.0.2",
-      "downloadLocation": "https://github.com/codemirror/lang-less",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/%40codemirror/lang-less@6.0.2"
-        }
-      ]
-    },
-    {
-      "name": "@codemirror/lang-liquid",
-      "SPDXID": "SPDXRef-Package-b4206c5f319db4b2",
-      "versionInfo": "6.3.2",
-      "downloadLocation": "https://github.com/codemirror/lang-liquid",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/%40codemirror/lang-liquid@6.3.2"
         }
       ]
     },
@@ -520,23 +452,6 @@
       ]
     },
     {
-      "name": "@codemirror/lang-sass",
-      "SPDXID": "SPDXRef-Package-7eb0a27ed3b3ef6c",
-      "versionInfo": "6.0.2",
-      "downloadLocation": "https://github.com/codemirror/lang-sass",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/%40codemirror/lang-sass@6.0.2"
-        }
-      ]
-    },
-    {
       "name": "@codemirror/lang-sql",
       "SPDXID": "SPDXRef-Package-ed2b0b013639acdc",
       "versionInfo": "6.10.0",
@@ -550,40 +465,6 @@
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
           "referenceLocator": "pkg:npm/%40codemirror/lang-sql@6.10.0"
-        }
-      ]
-    },
-    {
-      "name": "@codemirror/lang-vue",
-      "SPDXID": "SPDXRef-Package-e97f055b45da754c",
-      "versionInfo": "0.1.3",
-      "downloadLocation": "https://github.com/codemirror/lang-vue",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/%40codemirror/lang-vue@0.1.3"
-        }
-      ]
-    },
-    {
-      "name": "@codemirror/lang-wast",
-      "SPDXID": "SPDXRef-Package-48d39ae3cadf081c",
-      "versionInfo": "6.0.2",
-      "downloadLocation": "https://github.com/codemirror/lang-wast",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/%40codemirror/lang-wast@6.0.2"
         }
       ]
     },
@@ -639,23 +520,6 @@
       ]
     },
     {
-      "name": "@codemirror/language-data",
-      "SPDXID": "SPDXRef-Package-94317b091c4b117f",
-      "versionInfo": "6.5.2",
-      "downloadLocation": "https://github.com/codemirror/language-data",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/%40codemirror/language-data@6.5.2"
-        }
-      ]
-    },
-    {
       "name": "@codemirror/legacy-modes",
       "SPDXID": "SPDXRef-Package-dffcdb61797bb9f2",
       "versionInfo": "6.5.3",
@@ -686,23 +550,6 @@
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
           "referenceLocator": "pkg:npm/%40codemirror/lint@6.9.7"
-        }
-      ]
-    },
-    {
-      "name": "@codemirror/merge",
-      "SPDXID": "SPDXRef-Package-983fd6cc587921be",
-      "versionInfo": "6.12.2",
-      "downloadLocation": "https://code.haverbeke.berlin/codemirror/merge",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/%40codemirror/merge@6.12.2"
         }
       ]
     },
@@ -754,40 +601,6 @@
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
           "referenceLocator": "pkg:npm/%40codemirror/view@6.43.6"
-        }
-      ]
-    },
-    {
-      "name": "@codesandbox/sandpack-client",
-      "SPDXID": "SPDXRef-Package-c898053f66f78d69",
-      "versionInfo": "2.19.8",
-      "downloadLocation": "https://github.com/codesandbox/sandpack",
-      "filesAnalyzed": false,
-      "licenseConcluded": "Apache-2.0",
-      "licenseDeclared": "Apache-2.0",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/%40codesandbox/sandpack-client@2.19.8"
-        }
-      ]
-    },
-    {
-      "name": "@codesandbox/sandpack-react",
-      "SPDXID": "SPDXRef-Package-91804de6ef4bd390",
-      "versionInfo": "2.20.0",
-      "downloadLocation": "https://github.com/codesandbox/sandpack",
-      "filesAnalyzed": false,
-      "licenseConcluded": "Apache-2.0",
-      "licenseDeclared": "Apache-2.0",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/%40codesandbox/sandpack-react@2.20.0"
         }
       ]
     },
@@ -941,23 +754,6 @@
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
           "referenceLocator": "pkg:npm/%40floating-ui/dom@1.8.0"
-        }
-      ]
-    },
-    {
-      "name": "@floating-ui/react",
-      "SPDXID": "SPDXRef-Package-df6e8bc61aa83a52",
-      "versionInfo": "0.27.20",
-      "downloadLocation": "https://github.com/floating-ui/floating-ui",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/%40floating-ui/react@0.27.20"
         }
       ]
     },
@@ -1302,363 +1098,6 @@
       ]
     },
     {
-      "name": "@lexical/clipboard",
-      "SPDXID": "SPDXRef-Package-13ea983f5e396be7",
-      "versionInfo": "0.35.0",
-      "downloadLocation": "https://github.com/facebook/lexical",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/%40lexical/clipboard@0.35.0"
-        }
-      ]
-    },
-    {
-      "name": "@lexical/code",
-      "SPDXID": "SPDXRef-Package-f860f879e4e355d0",
-      "versionInfo": "0.35.0",
-      "downloadLocation": "https://github.com/facebook/lexical",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/%40lexical/code@0.35.0"
-        }
-      ]
-    },
-    {
-      "name": "@lexical/devtools-core",
-      "SPDXID": "SPDXRef-Package-e365f3db3dc537a4",
-      "versionInfo": "0.35.0",
-      "downloadLocation": "https://github.com/facebook/lexical",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/%40lexical/devtools-core@0.35.0"
-        }
-      ]
-    },
-    {
-      "name": "@lexical/dragon",
-      "SPDXID": "SPDXRef-Package-f2d4b5076730c897",
-      "versionInfo": "0.35.0",
-      "downloadLocation": "https://github.com/facebook/lexical",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/%40lexical/dragon@0.35.0"
-        }
-      ]
-    },
-    {
-      "name": "@lexical/hashtag",
-      "SPDXID": "SPDXRef-Package-eeb9266182c9f5bb",
-      "versionInfo": "0.35.0",
-      "downloadLocation": "https://github.com/facebook/lexical",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/%40lexical/hashtag@0.35.0"
-        }
-      ]
-    },
-    {
-      "name": "@lexical/history",
-      "SPDXID": "SPDXRef-Package-d17b1737bdd42195",
-      "versionInfo": "0.35.0",
-      "downloadLocation": "https://github.com/facebook/lexical",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/%40lexical/history@0.35.0"
-        }
-      ]
-    },
-    {
-      "name": "@lexical/html",
-      "SPDXID": "SPDXRef-Package-b042723373c435ac",
-      "versionInfo": "0.35.0",
-      "downloadLocation": "https://github.com/facebook/lexical",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/%40lexical/html@0.35.0"
-        }
-      ]
-    },
-    {
-      "name": "@lexical/link",
-      "SPDXID": "SPDXRef-Package-de4e9f394ad77445",
-      "versionInfo": "0.35.0",
-      "downloadLocation": "https://github.com/facebook/lexical",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/%40lexical/link@0.35.0"
-        }
-      ]
-    },
-    {
-      "name": "@lexical/list",
-      "SPDXID": "SPDXRef-Package-be05ea815a076ebf",
-      "versionInfo": "0.35.0",
-      "downloadLocation": "https://github.com/facebook/lexical",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/%40lexical/list@0.35.0"
-        }
-      ]
-    },
-    {
-      "name": "@lexical/mark",
-      "SPDXID": "SPDXRef-Package-d8ea43ab41bd3b67",
-      "versionInfo": "0.35.0",
-      "downloadLocation": "https://github.com/facebook/lexical",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/%40lexical/mark@0.35.0"
-        }
-      ]
-    },
-    {
-      "name": "@lexical/markdown",
-      "SPDXID": "SPDXRef-Package-9c01e8b4d2c84c20",
-      "versionInfo": "0.35.0",
-      "downloadLocation": "https://github.com/facebook/lexical",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/%40lexical/markdown@0.35.0"
-        }
-      ]
-    },
-    {
-      "name": "@lexical/offset",
-      "SPDXID": "SPDXRef-Package-1ff4ba2564861d77",
-      "versionInfo": "0.35.0",
-      "downloadLocation": "https://github.com/facebook/lexical",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/%40lexical/offset@0.35.0"
-        }
-      ]
-    },
-    {
-      "name": "@lexical/overflow",
-      "SPDXID": "SPDXRef-Package-f922debfc0ea235a",
-      "versionInfo": "0.35.0",
-      "downloadLocation": "https://github.com/facebook/lexical",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/%40lexical/overflow@0.35.0"
-        }
-      ]
-    },
-    {
-      "name": "@lexical/plain-text",
-      "SPDXID": "SPDXRef-Package-46937ee866f7c117",
-      "versionInfo": "0.35.0",
-      "downloadLocation": "https://github.com/facebook/lexical",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/%40lexical/plain-text@0.35.0"
-        }
-      ]
-    },
-    {
-      "name": "@lexical/react",
-      "SPDXID": "SPDXRef-Package-f928d02052df1340",
-      "versionInfo": "0.35.0",
-      "downloadLocation": "https://github.com/facebook/lexical",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/%40lexical/react@0.35.0"
-        }
-      ]
-    },
-    {
-      "name": "@lexical/rich-text",
-      "SPDXID": "SPDXRef-Package-060d9bd51a071d08",
-      "versionInfo": "0.35.0",
-      "downloadLocation": "https://github.com/facebook/lexical",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/%40lexical/rich-text@0.35.0"
-        }
-      ]
-    },
-    {
-      "name": "@lexical/selection",
-      "SPDXID": "SPDXRef-Package-d99f7e33cebcc871",
-      "versionInfo": "0.35.0",
-      "downloadLocation": "https://github.com/facebook/lexical",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/%40lexical/selection@0.35.0"
-        }
-      ]
-    },
-    {
-      "name": "@lexical/table",
-      "SPDXID": "SPDXRef-Package-8e9d3cfe8879a882",
-      "versionInfo": "0.35.0",
-      "downloadLocation": "https://github.com/facebook/lexical",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/%40lexical/table@0.35.0"
-        }
-      ]
-    },
-    {
-      "name": "@lexical/text",
-      "SPDXID": "SPDXRef-Package-54df0b83bdd31757",
-      "versionInfo": "0.35.0",
-      "downloadLocation": "https://github.com/facebook/lexical",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/%40lexical/text@0.35.0"
-        }
-      ]
-    },
-    {
-      "name": "@lexical/utils",
-      "SPDXID": "SPDXRef-Package-fc551e73b64a8b59",
-      "versionInfo": "0.35.0",
-      "downloadLocation": "https://github.com/facebook/lexical",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/%40lexical/utils@0.35.0"
-        }
-      ]
-    },
-    {
-      "name": "@lexical/yjs",
-      "SPDXID": "SPDXRef-Package-88682e19a33a92e7",
-      "versionInfo": "0.35.0",
-      "downloadLocation": "https://github.com/facebook/lexical",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/%40lexical/yjs@0.35.0"
-        }
-      ]
-    },
-    {
       "name": "@lezer/common",
       "SPDXID": "SPDXRef-Package-4abc19b2db84d371",
       "versionInfo": "1.5.2",
@@ -1897,23 +1336,6 @@
       ]
     },
     {
-      "name": "@lezer/sass",
-      "SPDXID": "SPDXRef-Package-f8f9761da085cfbf",
-      "versionInfo": "1.1.0",
-      "downloadLocation": "https://github.com/lezer-parser/sass",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/%40lezer/sass@1.1.0"
-        }
-      ]
-    },
-    {
       "name": "@lezer/xml",
       "SPDXID": "SPDXRef-Package-afa38e299b5eb250",
       "versionInfo": "1.0.6",
@@ -1995,40 +1417,6 @@
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
           "referenceLocator": "pkg:npm/%40marijn/find-cluster-break@1.0.3"
-        }
-      ]
-    },
-    {
-      "name": "@mdxeditor/editor",
-      "SPDXID": "SPDXRef-Package-a9811103a1d63783",
-      "versionInfo": "3.55.0",
-      "downloadLocation": "https://github.com/mdx-editor/editor",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/%40mdxeditor/editor@3.55.0"
-        }
-      ]
-    },
-    {
-      "name": "@mdxeditor/gurx",
-      "SPDXID": "SPDXRef-Package-f90a8cdd5a85c5d8",
-      "versionInfo": "1.2.4",
-      "downloadLocation": "https://github.com/mdx-editor/gurx",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/%40mdxeditor/gurx@1.2.4"
         }
       ]
     },
@@ -2199,23 +1587,6 @@
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
           "referenceLocator": "pkg:npm/%40noble/hashes@1.8.0"
-        }
-      ]
-    },
-    {
-      "name": "@open-draft/deferred-promise",
-      "SPDXID": "SPDXRef-Package-527f8b547f4369c8",
-      "versionInfo": "2.2.0",
-      "downloadLocation": "https://github.com/open-draft/deferred-promise",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/%40open-draft/deferred-promise@2.2.0"
         }
       ]
     },
@@ -2458,23 +1829,6 @@
       ]
     },
     {
-      "name": "@radix-ui/colors",
-      "SPDXID": "SPDXRef-Package-1914d84ce4c5a04e",
-      "versionInfo": "3.0.0",
-      "downloadLocation": "NOASSERTION",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/%40radix-ui/colors@3.0.0"
-        }
-      ]
-    },
-    {
       "name": "@radix-ui/number",
       "SPDXID": "SPDXRef-Package-fc29d26ea6f02592",
       "versionInfo": "1.1.2",
@@ -2696,23 +2050,6 @@
       ]
     },
     {
-      "name": "@radix-ui/react-icons",
-      "SPDXID": "SPDXRef-Package-ef790d8d6d97d5e5",
-      "versionInfo": "1.3.2",
-      "downloadLocation": "NOASSERTION",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/%40radix-ui/react-icons@1.3.2"
-        }
-      ]
-    },
-    {
       "name": "@radix-ui/react-id",
       "SPDXID": "SPDXRef-Package-1383fb9f1a666b51",
       "versionInfo": "1.1.2",
@@ -2866,23 +2203,6 @@
       ]
     },
     {
-      "name": "@radix-ui/react-separator",
-      "SPDXID": "SPDXRef-Package-b21ff9b1e5de6f84",
-      "versionInfo": "1.1.11",
-      "downloadLocation": "https://github.com/radix-ui/primitives",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/%40radix-ui/react-separator@1.1.11"
-        }
-      ]
-    },
-    {
       "name": "@radix-ui/react-slider",
       "SPDXID": "SPDXRef-Package-4214af804741eff0",
       "versionInfo": "1.4.3",
@@ -2930,57 +2250,6 @@
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
           "referenceLocator": "pkg:npm/%40radix-ui/react-switch@1.3.3"
-        }
-      ]
-    },
-    {
-      "name": "@radix-ui/react-toggle",
-      "SPDXID": "SPDXRef-Package-4a9b1eed43773d26",
-      "versionInfo": "1.1.14",
-      "downloadLocation": "https://github.com/radix-ui/primitives",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/%40radix-ui/react-toggle@1.1.14"
-        }
-      ]
-    },
-    {
-      "name": "@radix-ui/react-toggle-group",
-      "SPDXID": "SPDXRef-Package-8d481963301649d0",
-      "versionInfo": "1.1.15",
-      "downloadLocation": "https://github.com/radix-ui/primitives",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/%40radix-ui/react-toggle-group@1.1.15"
-        }
-      ]
-    },
-    {
-      "name": "@radix-ui/react-toolbar",
-      "SPDXID": "SPDXRef-Package-230f2d71cf449f43",
-      "versionInfo": "1.1.15",
-      "downloadLocation": "https://github.com/radix-ui/primitives",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/%40radix-ui/react-toolbar@1.1.15"
         }
       ]
     },
@@ -3172,40 +2441,6 @@
       ]
     },
     {
-      "name": "@react-hook/intersection-observer",
-      "SPDXID": "SPDXRef-Package-f4563817215ff0ef",
-      "versionInfo": "3.1.2",
-      "downloadLocation": "https://github.com/jaredLunde/react-hook",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/%40react-hook/intersection-observer@3.1.2"
-        }
-      ]
-    },
-    {
-      "name": "@react-hook/passive-layout-effect",
-      "SPDXID": "SPDXRef-Package-879c10a2f7e7fd4e",
-      "versionInfo": "1.2.1",
-      "downloadLocation": "https://github.com/jaredLunde/react-hook",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/%40react-hook/passive-layout-effect@1.2.1"
-        }
-      ]
-    },
-    {
       "name": "@replit/codemirror-lang-csharp",
       "SPDXID": "SPDXRef-Package-33c2e99d0e34a9ac",
       "versionInfo": "6.2.0",
@@ -3270,23 +2505,6 @@
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
           "referenceLocator": "pkg:npm/%40sapphire/snowflake@3.5.5"
-        }
-      ]
-    },
-    {
-      "name": "@stitches/core",
-      "SPDXID": "SPDXRef-Package-9d569640aa8f8d73",
-      "versionInfo": "1.2.8",
-      "downloadLocation": "https://github.com/modulz/stitches",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/%40stitches/core@1.2.8"
         }
       ]
     },
@@ -4413,40 +3631,6 @@
       ]
     },
     {
-      "name": "acorn",
-      "SPDXID": "SPDXRef-Package-863f64282bd14065",
-      "versionInfo": "8.17.0",
-      "downloadLocation": "https://github.com/acornjs/acorn",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/acorn@8.17.0"
-        }
-      ]
-    },
-    {
-      "name": "acorn-jsx",
-      "SPDXID": "SPDXRef-Package-33ead1ed596447bf",
-      "versionInfo": "5.3.2",
-      "downloadLocation": "https://github.com/acornjs/acorn-jsx",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/acorn-jsx@5.3.2"
-        }
-      ]
-    },
-    {
       "name": "agent-base",
       "SPDXID": "SPDXRef-Package-18a6e55e7cac55d3",
       "versionInfo": "6.0.2",
@@ -4545,23 +3729,6 @@
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
           "referenceLocator": "pkg:npm/ajv-formats@3.0.1"
-        }
-      ]
-    },
-    {
-      "name": "anser",
-      "SPDXID": "SPDXRef-Package-d30ec1f21880dae2",
-      "versionInfo": "2.3.5",
-      "downloadLocation": "https://github.com/IonicaBizau/anser",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/anser@2.3.5"
         }
       ]
     },
@@ -4940,23 +4107,6 @@
       ]
     },
     {
-      "name": "buffer",
-      "SPDXID": "SPDXRef-Package-6efe38400da663a8",
-      "versionInfo": "6.0.3",
-      "downloadLocation": "https://github.com/feross/buffer",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/buffer@6.0.3"
-        }
-      ]
-    },
-    {
       "name": "buffer-equal-constant-time",
       "SPDXID": "SPDXRef-Package-2f4ce0cccb4ed6f4",
       "versionInfo": "1.0.1",
@@ -5195,40 +4345,6 @@
       ]
     },
     {
-      "name": "classnames",
-      "SPDXID": "SPDXRef-Package-d422b6c61c0bda21",
-      "versionInfo": "2.5.1",
-      "downloadLocation": "https://github.com/JedWatson/classnames",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/classnames@2.5.1"
-        }
-      ]
-    },
-    {
-      "name": "clean-set",
-      "SPDXID": "SPDXRef-Package-2c4b58f57db280f7",
-      "versionInfo": "1.1.2",
-      "downloadLocation": "https://github.com/fwilkerson/clean-set",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/clean-set@1.1.2"
-        }
-      ]
-    },
-    {
       "name": "cliui",
       "SPDXID": "SPDXRef-Package-7cdb26942c297af3",
       "versionInfo": "6.0.0",
@@ -5263,23 +4379,6 @@
       ]
     },
     {
-      "name": "cm6-theme-basic-light",
-      "SPDXID": "SPDXRef-Package-5cfb6a8dafa4957e",
-      "versionInfo": "0.2.0",
-      "downloadLocation": "https://github.com/craftzdog/cm6-themes",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/cm6-theme-basic-light@0.2.0"
-        }
-      ]
-    },
-    {
       "name": "cn-font-split",
       "SPDXID": "SPDXRef-Package-e4a5a8118922d90b",
       "versionInfo": "6.0.3",
@@ -5293,23 +4392,6 @@
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
           "referenceLocator": "pkg:npm/cn-font-split@6.0.3"
-        }
-      ]
-    },
-    {
-      "name": "codemirror",
-      "SPDXID": "SPDXRef-Package-48f50d9d7f94df99",
-      "versionInfo": "6.0.2",
-      "downloadLocation": "https://github.com/codemirror/basic-setup",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/codemirror@6.0.2"
         }
       ]
     },
@@ -5412,23 +4494,6 @@
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
           "referenceLocator": "pkg:npm/commander@8.3.0"
-        }
-      ]
-    },
-    {
-      "name": "compute-scroll-into-view",
-      "SPDXID": "SPDXRef-Package-2913cbbe789389e0",
-      "versionInfo": "2.0.4",
-      "downloadLocation": "https://github.com/scroll-into-view/compute-scroll-into-view",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/compute-scroll-into-view@2.0.4"
         }
       ]
     },
@@ -5735,23 +4800,6 @@
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
           "referenceLocator": "pkg:npm/cytoscape-fcose@2.2.0"
-        }
-      ]
-    },
-    {
-      "name": "d",
-      "SPDXID": "SPDXRef-Package-73464ed038ac919d",
-      "versionInfo": "1.0.2",
-      "downloadLocation": "https://github.com/medikoo/d",
-      "filesAnalyzed": false,
-      "licenseConcluded": "ISC",
-      "licenseDeclared": "ISC",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/d@1.0.2"
         }
       ]
     },
@@ -6658,23 +5706,6 @@
     },
     {
       "name": "diff",
-      "SPDXID": "SPDXRef-Package-ad3b253c1b9451f7",
-      "versionInfo": "5.2.2",
-      "downloadLocation": "https://github.com/kpdecker/jsdiff",
-      "filesAnalyzed": false,
-      "licenseConcluded": "BSD-3-Clause",
-      "licenseDeclared": "BSD-3-Clause",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/diff@5.2.2"
-        }
-      ]
-    },
-    {
-      "name": "diff",
       "SPDXID": "SPDXRef-Package-78513b8a93c15171",
       "versionInfo": "8.0.4",
       "downloadLocation": "https://github.com/kpdecker/jsdiff",
@@ -6772,40 +5803,6 @@
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
           "referenceLocator": "pkg:npm/dot-prop@6.0.1"
-        }
-      ]
-    },
-    {
-      "name": "dotenv",
-      "SPDXID": "SPDXRef-Package-55a09c11de197ec1",
-      "versionInfo": "16.6.1",
-      "downloadLocation": "https://github.com/motdotla/dotenv",
-      "filesAnalyzed": false,
-      "licenseConcluded": "BSD-2-Clause",
-      "licenseDeclared": "BSD-2-Clause",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/dotenv@16.6.1"
-        }
-      ]
-    },
-    {
-      "name": "downshift",
-      "SPDXID": "SPDXRef-Package-5693c780886b7dff",
-      "versionInfo": "7.6.2",
-      "downloadLocation": "https://github.com/downshift-js/downshift",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/downshift@7.6.2"
         }
       ]
     },
@@ -7133,74 +6130,6 @@
       ]
     },
     {
-      "name": "es5-ext",
-      "SPDXID": "SPDXRef-Package-168a0e8d522c0693",
-      "versionInfo": "0.10.64",
-      "downloadLocation": "https://github.com/medikoo/es5-ext",
-      "filesAnalyzed": false,
-      "licenseConcluded": "ISC",
-      "licenseDeclared": "ISC",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/es5-ext@0.10.64"
-        }
-      ]
-    },
-    {
-      "name": "es6-iterator",
-      "SPDXID": "SPDXRef-Package-089ecabc1eceb2b2",
-      "versionInfo": "2.0.3",
-      "downloadLocation": "https://github.com/medikoo/es6-iterator",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/es6-iterator@2.0.3"
-        }
-      ]
-    },
-    {
-      "name": "es6-symbol",
-      "SPDXID": "SPDXRef-Package-5bbfcea632b19cc0",
-      "versionInfo": "3.1.4",
-      "downloadLocation": "https://github.com/medikoo/es6-symbol",
-      "filesAnalyzed": false,
-      "licenseConcluded": "ISC",
-      "licenseDeclared": "ISC",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/es6-symbol@3.1.4"
-        }
-      ]
-    },
-    {
-      "name": "escape-carriage",
-      "SPDXID": "SPDXRef-Package-1379e5e6a88ebbd4",
-      "versionInfo": "1.3.1",
-      "downloadLocation": "https://github.com/lgeiger/escape-carriage",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/escape-carriage@1.3.1"
-        }
-      ]
-    },
-    {
       "name": "escape-html",
       "SPDXID": "SPDXRef-Package-671c4b279d871fe3",
       "versionInfo": "1.0.3",
@@ -7231,23 +6160,6 @@
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
           "referenceLocator": "pkg:npm/escape-string-regexp@5.0.0"
-        }
-      ]
-    },
-    {
-      "name": "esniff",
-      "SPDXID": "SPDXRef-Package-6c2a4c77e19dc906",
-      "versionInfo": "2.0.1",
-      "downloadLocation": "https://github.com/medikoo/esniff",
-      "filesAnalyzed": false,
-      "licenseConcluded": "ISC",
-      "licenseDeclared": "ISC",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/esniff@2.0.1"
         }
       ]
     },
@@ -7286,23 +6198,6 @@
       ]
     },
     {
-      "name": "estree-util-visit",
-      "SPDXID": "SPDXRef-Package-29fd7ca913ad1cee",
-      "versionInfo": "2.0.0",
-      "downloadLocation": "https://github.com/syntax-tree/estree-util-visit",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/estree-util-visit@2.0.0"
-        }
-      ]
-    },
-    {
       "name": "etag",
       "SPDXID": "SPDXRef-Package-51fac920df3d7558",
       "versionInfo": "1.8.1",
@@ -7316,23 +6211,6 @@
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
           "referenceLocator": "pkg:npm/etag@1.8.1"
-        }
-      ]
-    },
-    {
-      "name": "event-emitter",
-      "SPDXID": "SPDXRef-Package-361c4ad2b2f3391a",
-      "versionInfo": "0.3.5",
-      "downloadLocation": "https://github.com/medikoo/event-emitter",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/event-emitter@0.3.5"
         }
       ]
     },
@@ -7456,23 +6334,6 @@
       ]
     },
     {
-      "name": "ext",
-      "SPDXID": "SPDXRef-Package-891fbde0ab5b9f72",
-      "versionInfo": "1.7.0",
-      "downloadLocation": "https://github.com/medikoo/es5-ext#ext",
-      "filesAnalyzed": false,
-      "licenseConcluded": "ISC",
-      "licenseDeclared": "ISC",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/ext@1.7.0"
-        }
-      ]
-    },
-    {
       "name": "extend",
       "SPDXID": "SPDXRef-Package-15be1d884066c547",
       "versionInfo": "3.0.2",
@@ -7554,23 +6415,6 @@
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
           "referenceLocator": "pkg:npm/fast-uri@3.1.3"
-        }
-      ]
-    },
-    {
-      "name": "fault",
-      "SPDXID": "SPDXRef-Package-82b04450ecb2f6eb",
-      "versionInfo": "2.0.1",
-      "downloadLocation": "https://github.com/wooorm/fault",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/fault@2.0.1"
         }
       ]
     },
@@ -7724,23 +6568,6 @@
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
           "referenceLocator": "pkg:npm/form-data@4.0.6"
-        }
-      ]
-    },
-    {
-      "name": "format",
-      "SPDXID": "SPDXRef-Package-3700904d647968f4",
-      "versionInfo": "0.2.2",
-      "downloadLocation": "https://github.com/samsonjs/format",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/format@0.2.2"
         }
       ]
     },
@@ -8544,6 +7371,23 @@
       ]
     },
     {
+      "name": "html-to-image",
+      "SPDXID": "SPDXRef-Package-8d11c26a5810a2b7",
+      "versionInfo": "1.11.13",
+      "downloadLocation": "https://github.com/bubkoo/html-to-image",
+      "filesAnalyzed": false,
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "NOASSERTION",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/html-to-image@1.11.13"
+        }
+      ]
+    },
+    {
       "name": "html-url-attributes",
       "SPDXID": "SPDXRef-Package-eb87bd090173100b",
       "versionInfo": "3.0.1",
@@ -8846,23 +7690,6 @@
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
           "referenceLocator": "pkg:npm/internmap@2.0.3"
-        }
-      ]
-    },
-    {
-      "name": "intersection-observer",
-      "SPDXID": "SPDXRef-Package-16310c723428f31e",
-      "versionInfo": "0.10.0",
-      "downloadLocation": "https://github.com/w3c/IntersectionObserver",
-      "filesAnalyzed": false,
-      "licenseConcluded": "W3C-20150513",
-      "licenseDeclared": "W3C-20150513",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/intersection-observer@0.10.0"
         }
       ]
     },
@@ -9258,23 +8085,6 @@
       ]
     },
     {
-      "name": "js-tokens",
-      "SPDXID": "SPDXRef-Package-4817c3f4b616dbb2",
-      "versionInfo": "4.0.0",
-      "downloadLocation": "https://github.com/lydell/js-tokens",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/js-tokens@4.0.0"
-        }
-      ]
-    },
-    {
       "name": "js-yaml",
       "SPDXID": "SPDXRef-Package-98f88ff4e5a3d486",
       "versionInfo": "3.15.0",
@@ -9530,23 +8340,6 @@
       ]
     },
     {
-      "name": "kleur",
-      "SPDXID": "SPDXRef-Package-2de818d3f1216ac4",
-      "versionInfo": "4.1.5",
-      "downloadLocation": "https://github.com/lukeed/kleur",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/kleur@4.1.5"
-        }
-      ]
-    },
-    {
       "name": "layout-base",
       "SPDXID": "SPDXRef-Package-effcbf26318db2fd",
       "versionInfo": "1.0.2",
@@ -9594,23 +8387,6 @@
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
           "referenceLocator": "pkg:npm/lcid@3.1.1"
-        }
-      ]
-    },
-    {
-      "name": "lexical",
-      "SPDXID": "SPDXRef-Package-3e9ba6394517af84",
-      "versionInfo": "0.35.0",
-      "downloadLocation": "https://github.com/facebook/lexical",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/lexical@0.35.0"
         }
       ]
     },
@@ -9853,23 +8629,6 @@
       ]
     },
     {
-      "name": "loose-envify",
-      "SPDXID": "SPDXRef-Package-01926e7a94d706ff",
-      "versionInfo": "1.4.0",
-      "downloadLocation": "https://github.com/zertosh/loose-envify",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/loose-envify@1.4.0"
-        }
-      ]
-    },
-    {
       "name": "loudness",
       "SPDXID": "SPDXRef-Package-907648a7d1d857c9",
       "versionInfo": "0.4.2",
@@ -9934,23 +8693,6 @@
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
           "referenceLocator": "pkg:npm/lucide-react@0.468.0"
-        }
-      ]
-    },
-    {
-      "name": "lz-string",
-      "SPDXID": "SPDXRef-Package-dc327355b76a99c3",
-      "versionInfo": "1.5.0",
-      "downloadLocation": "https://github.com/pieroxy/lz-string",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/lz-string@1.5.0"
         }
       ]
     },
@@ -10057,23 +8799,6 @@
       ]
     },
     {
-      "name": "mdast-util-directive",
-      "SPDXID": "SPDXRef-Package-926cd867c828a53a",
-      "versionInfo": "3.1.0",
-      "downloadLocation": "https://github.com/syntax-tree/mdast-util-directive",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/mdast-util-directive@3.1.0"
-        }
-      ]
-    },
-    {
       "name": "mdast-util-find-and-replace",
       "SPDXID": "SPDXRef-Package-31c6d20a14f11b96",
       "versionInfo": "3.0.2",
@@ -10104,23 +8829,6 @@
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
           "referenceLocator": "pkg:npm/mdast-util-from-markdown@2.0.3"
-        }
-      ]
-    },
-    {
-      "name": "mdast-util-frontmatter",
-      "SPDXID": "SPDXRef-Package-a4b2f7a7bf7bdece",
-      "versionInfo": "2.0.1",
-      "downloadLocation": "https://github.com/syntax-tree/mdast-util-frontmatter",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/mdast-util-frontmatter@2.0.1"
         }
       ]
     },
@@ -10227,23 +8935,6 @@
       ]
     },
     {
-      "name": "mdast-util-highlight-mark",
-      "SPDXID": "SPDXRef-Package-073f1308b20c3e7a",
-      "versionInfo": "1.2.2",
-      "downloadLocation": "https://github.com/shlroland/remark-highlight-mark",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/mdast-util-highlight-mark@1.2.2"
-        }
-      ]
-    },
-    {
       "name": "mdast-util-math",
       "SPDXID": "SPDXRef-Package-85c519e32dd8706c",
       "versionInfo": "3.0.0",
@@ -10257,23 +8948,6 @@
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
           "referenceLocator": "pkg:npm/mdast-util-math@3.0.0"
-        }
-      ]
-    },
-    {
-      "name": "mdast-util-mdx",
-      "SPDXID": "SPDXRef-Package-22afc352c0a82b30",
-      "versionInfo": "3.0.0",
-      "downloadLocation": "https://github.com/syntax-tree/mdast-util-mdx",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/mdast-util-mdx@3.0.0"
         }
       ]
     },
@@ -10499,40 +9173,6 @@
       ]
     },
     {
-      "name": "micromark-extension-directive",
-      "SPDXID": "SPDXRef-Package-4dfc1d1f75e4dc52",
-      "versionInfo": "3.0.2",
-      "downloadLocation": "https://github.com/micromark/micromark-extension-directive",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/micromark-extension-directive@3.0.2"
-        }
-      ]
-    },
-    {
-      "name": "micromark-extension-frontmatter",
-      "SPDXID": "SPDXRef-Package-d8036e8201779b02",
-      "versionInfo": "2.0.0",
-      "downloadLocation": "https://github.com/micromark/micromark-extension-frontmatter",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/micromark-extension-frontmatter@2.0.0"
-        }
-      ]
-    },
-    {
       "name": "micromark-extension-gfm",
       "SPDXID": "SPDXRef-Package-ea529e9996cf6309",
       "versionInfo": "3.0.0",
@@ -10652,23 +9292,6 @@
       ]
     },
     {
-      "name": "micromark-extension-highlight-mark",
-      "SPDXID": "SPDXRef-Package-d8efd832cecd292a",
-      "versionInfo": "1.2.0",
-      "downloadLocation": "https://github.com/shlroland/remark-highlight-mark",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/micromark-extension-highlight-mark@1.2.0"
-        }
-      ]
-    },
-    {
       "name": "micromark-extension-math",
       "SPDXID": "SPDXRef-Package-d3fdd345d3b40caf",
       "versionInfo": "3.1.0",
@@ -10682,91 +9305,6 @@
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
           "referenceLocator": "pkg:npm/micromark-extension-math@3.1.0"
-        }
-      ]
-    },
-    {
-      "name": "micromark-extension-mdx-expression",
-      "SPDXID": "SPDXRef-Package-69f8c7f961545c7d",
-      "versionInfo": "3.0.1",
-      "downloadLocation": "https://github.com/micromark/micromark-extension-mdx-expression/tree/main/packages/micromark-extension-mdx-expression",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/micromark-extension-mdx-expression@3.0.1"
-        }
-      ]
-    },
-    {
-      "name": "micromark-extension-mdx-jsx",
-      "SPDXID": "SPDXRef-Package-44c22fd3f6e0b580",
-      "versionInfo": "3.0.2",
-      "downloadLocation": "https://github.com/micromark/micromark-extension-mdx-jsx",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/micromark-extension-mdx-jsx@3.0.2"
-        }
-      ]
-    },
-    {
-      "name": "micromark-extension-mdx-md",
-      "SPDXID": "SPDXRef-Package-64171eb6182a6360",
-      "versionInfo": "2.0.0",
-      "downloadLocation": "https://github.com/micromark/micromark-extension-mdx-md",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/micromark-extension-mdx-md@2.0.0"
-        }
-      ]
-    },
-    {
-      "name": "micromark-extension-mdxjs",
-      "SPDXID": "SPDXRef-Package-87027553675f002f",
-      "versionInfo": "3.0.0",
-      "downloadLocation": "https://github.com/micromark/micromark-extension-mdxjs",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/micromark-extension-mdxjs@3.0.0"
-        }
-      ]
-    },
-    {
-      "name": "micromark-extension-mdxjs-esm",
-      "SPDXID": "SPDXRef-Package-c91bbb02eeae2ae3",
-      "versionInfo": "3.0.0",
-      "downloadLocation": "https://github.com/micromark/micromark-extension-mdxjs-esm",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/micromark-extension-mdxjs-esm@3.0.0"
         }
       ]
     },
@@ -10801,23 +9339,6 @@
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
           "referenceLocator": "pkg:npm/micromark-factory-label@2.0.1"
-        }
-      ]
-    },
-    {
-      "name": "micromark-factory-mdx-expression",
-      "SPDXID": "SPDXRef-Package-3ab884e9fd486b28",
-      "versionInfo": "2.0.3",
-      "downloadLocation": "https://github.com/micromark/micromark-extension-mdx-expression/tree/main/packages/micromark-factory-mdx-expression",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/micromark-factory-mdx-expression@2.0.3"
         }
       ]
     },
@@ -10988,23 +9509,6 @@
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
           "referenceLocator": "pkg:npm/micromark-util-encode@2.0.1"
-        }
-      ]
-    },
-    {
-      "name": "micromark-util-events-to-acorn",
-      "SPDXID": "SPDXRef-Package-50acbda32cfa6ec6",
-      "versionInfo": "2.0.3",
-      "downloadLocation": "https://github.com/micromark/micromark-extension-mdx-expression/tree/main/packages/micromark-util-events-to-acorn",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/micromark-util-events-to-acorn@2.0.3"
         }
       ]
     },
@@ -11434,23 +9938,6 @@
       ]
     },
     {
-      "name": "next-tick",
-      "SPDXID": "SPDXRef-Package-2c4497ae4cd39fc1",
-      "versionInfo": "1.1.0",
-      "downloadLocation": "https://github.com/medikoo/next-tick",
-      "filesAnalyzed": false,
-      "licenseConcluded": "ISC",
-      "licenseDeclared": "ISC",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/next-tick@1.1.0"
-        }
-      ]
-    },
-    {
       "name": "node-abi",
       "SPDXID": "SPDXRef-Package-28d476c4cc7bcb2a",
       "versionInfo": "3.94.0",
@@ -11685,23 +10172,6 @@
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
           "referenceLocator": "pkg:npm/os-locale@6.0.2"
-        }
-      ]
-    },
-    {
-      "name": "outvariant",
-      "SPDXID": "SPDXRef-Package-724e622bbd03438e",
-      "versionInfo": "1.4.0",
-      "downloadLocation": "https://github.com/open-draft/outvariant",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/outvariant@1.4.0"
         }
       ]
     },
@@ -12131,23 +10601,6 @@
       ]
     },
     {
-      "name": "prismjs",
-      "SPDXID": "SPDXRef-Package-987d5bfa20285a18",
-      "versionInfo": "1.30.0",
-      "downloadLocation": "https://github.com/PrismJS/prism",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/prismjs@1.30.0"
-        }
-      ]
-    },
-    {
       "name": "process-nextick-args",
       "SPDXID": "SPDXRef-Package-45dc5a08f20eb56a",
       "versionInfo": "2.0.1",
@@ -12178,23 +10631,6 @@
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
           "referenceLocator": "pkg:npm/promise-worker-transferable@1.0.4"
-        }
-      ]
-    },
-    {
-      "name": "prop-types",
-      "SPDXID": "SPDXRef-Package-8214ff4f8b474d34",
-      "versionInfo": "15.8.1",
-      "downloadLocation": "https://github.com/facebook/prop-types",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/prop-types@15.8.1"
         }
       ]
     },
@@ -12624,23 +11060,6 @@
       ]
     },
     {
-      "name": "react-devtools-inline",
-      "SPDXID": "SPDXRef-Package-82c6bdf3d7f1f700",
-      "versionInfo": "4.4.0",
-      "downloadLocation": "https://github.com/facebook/react",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/react-devtools-inline@4.4.0"
-        }
-      ]
-    },
-    {
       "name": "react-dom",
       "SPDXID": "SPDXRef-Package-97eeb41b9e0e0420",
       "versionInfo": "19.2.3",
@@ -12658,40 +11077,6 @@
       ]
     },
     {
-      "name": "react-error-boundary",
-      "SPDXID": "SPDXRef-Package-d1126d8a53c34f0e",
-      "versionInfo": "3.1.4",
-      "downloadLocation": "https://github.com/bvaughn/react-error-boundary",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/react-error-boundary@3.1.4"
-        }
-      ]
-    },
-    {
-      "name": "react-hook-form",
-      "SPDXID": "SPDXRef-Package-aa8f0b6325fd13d4",
-      "versionInfo": "7.81.0",
-      "downloadLocation": "https://github.com/react-hook-form/react-hook-form",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/react-hook-form@7.81.0"
-        }
-      ]
-    },
-    {
       "name": "react-i18next",
       "SPDXID": "SPDXRef-Package-ce0aebab76b41ddf",
       "versionInfo": "17.0.10",
@@ -12705,40 +11090,6 @@
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
           "referenceLocator": "pkg:npm/react-i18next@17.0.10"
-        }
-      ]
-    },
-    {
-      "name": "react-is",
-      "SPDXID": "SPDXRef-Package-6a89229fd526bb86",
-      "versionInfo": "16.13.1",
-      "downloadLocation": "https://github.com/facebook/react",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/react-is@16.13.1"
-        }
-      ]
-    },
-    {
-      "name": "react-is",
-      "SPDXID": "SPDXRef-Package-eb58534c6431c36c",
-      "versionInfo": "17.0.2",
-      "downloadLocation": "https://github.com/facebook/react",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/react-is@17.0.2"
         }
       ]
     },
@@ -13164,23 +11515,6 @@
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
           "referenceLocator": "pkg:npm/rw@1.3.3"
-        }
-      ]
-    },
-    {
-      "name": "sade",
-      "SPDXID": "SPDXRef-Package-252b4215f2b525e9",
-      "versionInfo": "1.8.1",
-      "downloadLocation": "https://github.com/lukeed/sade",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/sade@1.8.1"
         }
       ]
     },
@@ -13729,23 +12063,6 @@
       ]
     },
     {
-      "name": "static-browser-server",
-      "SPDXID": "SPDXRef-Package-91383da64b33f1fd",
-      "versionInfo": "1.0.3",
-      "downloadLocation": "https://github.com/codesandbox/static-browser-server",
-      "filesAnalyzed": false,
-      "licenseConcluded": "Apache-2.0",
-      "licenseDeclared": "Apache-2.0",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/static-browser-server@1.0.3"
-        }
-      ]
-    },
-    {
       "name": "statuses",
       "SPDXID": "SPDXRef-Package-7b5519865822cb8d",
       "versionInfo": "2.0.2",
@@ -13759,23 +12076,6 @@
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
           "referenceLocator": "pkg:npm/statuses@2.0.2"
-        }
-      ]
-    },
-    {
-      "name": "strict-event-emitter",
-      "SPDXID": "SPDXRef-Package-f84fdbe2c9e17f63",
-      "versionInfo": "0.4.6",
-      "downloadLocation": "https://github.com/open-draft/strict-event-emitter",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/strict-event-emitter@0.4.6"
         }
       ]
     },
@@ -14018,23 +12318,6 @@
       ]
     },
     {
-      "name": "tabbable",
-      "SPDXID": "SPDXRef-Package-49fde3479792d6b6",
-      "versionInfo": "6.5.0",
-      "downloadLocation": "https://github.com/focus-trap/tabbable",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/tabbable@6.5.0"
-        }
-      ]
-    },
-    {
       "name": "tailwind-merge",
       "SPDXID": "SPDXRef-Package-4cbda8c0d09b29ab",
       "versionInfo": "2.6.1",
@@ -14273,23 +12556,6 @@
       ]
     },
     {
-      "name": "type",
-      "SPDXID": "SPDXRef-Package-6750d97c7395e152",
-      "versionInfo": "2.7.3",
-      "downloadLocation": "https://github.com/medikoo/type",
-      "filesAnalyzed": false,
-      "licenseConcluded": "ISC",
-      "licenseDeclared": "ISC",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/type@2.7.3"
-        }
-      ]
-    },
-    {
       "name": "type-fest",
       "SPDXID": "SPDXRef-Package-387011d33cd1bf23",
       "versionInfo": "0.20.2",
@@ -14392,23 +12658,6 @@
       ]
     },
     {
-      "name": "unidiff",
-      "SPDXID": "SPDXRef-Package-30865e2eb89173c1",
-      "versionInfo": "1.0.4",
-      "downloadLocation": "https://github.com/mvoss9000/unidiff",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/unidiff@1.0.4"
-        }
-      ]
-    },
-    {
       "name": "unified",
       "SPDXID": "SPDXRef-Package-09f2497b4a243e26",
       "versionInfo": "11.0.5",
@@ -14473,23 +12722,6 @@
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
           "referenceLocator": "pkg:npm/unist-util-position@5.0.0"
-        }
-      ]
-    },
-    {
-      "name": "unist-util-position-from-estree",
-      "SPDXID": "SPDXRef-Package-04d04ce61bfab58b",
-      "versionInfo": "2.0.0",
-      "downloadLocation": "https://github.com/syntax-tree/unist-util-position-from-estree",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/unist-util-position-from-estree@2.0.0"
         }
       ]
     },
@@ -14711,23 +12943,6 @@
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
           "referenceLocator": "pkg:npm/uuid@14.0.1"
-        }
-      ]
-    },
-    {
-      "name": "uvu",
-      "SPDXID": "SPDXRef-Package-90ca6ba7fd042db1",
-      "versionInfo": "0.5.6",
-      "downloadLocation": "https://github.com/lukeed/uvu",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/uvu@0.5.6"
         }
       ]
     },
@@ -15130,7 +13345,7 @@
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-fa18e2979236ef63"
+      "relatedSpdxElement": "SPDXRef-Package-f6898d2a0f197785"
     },
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
@@ -15205,11 +13420,6 @@
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-2d170b668c351128"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
       "relatedSpdxElement": "SPDXRef-Package-9a6a542ba776d483"
     },
     {
@@ -15240,22 +13450,7 @@
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-c3736a157287ee11"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
       "relatedSpdxElement": "SPDXRef-Package-54c1ffee35c227fd"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-233e3e2c48df875e"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-b4206c5f319db4b2"
     },
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
@@ -15280,22 +13475,7 @@
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-7eb0a27ed3b3ef6c"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
       "relatedSpdxElement": "SPDXRef-Package-ed2b0b013639acdc"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-e97f055b45da754c"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-48d39ae3cadf081c"
     },
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
@@ -15315,22 +13495,12 @@
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-94317b091c4b117f"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
       "relatedSpdxElement": "SPDXRef-Package-dffcdb61797bb9f2"
     },
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
       "relatedSpdxElement": "SPDXRef-Package-adb3a1bf3648bdb5"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-983fd6cc587921be"
     },
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
@@ -15346,16 +13516,6 @@
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
       "relatedSpdxElement": "SPDXRef-Package-f44eb3ad1d510406"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-c898053f66f78d69"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-91804de6ef4bd390"
     },
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
@@ -15401,11 +13561,6 @@
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
       "relatedSpdxElement": "SPDXRef-Package-5609a1079879dda5"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-df6e8bc61aa83a52"
     },
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
@@ -15510,111 +13665,6 @@
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-13ea983f5e396be7"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-f860f879e4e355d0"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-e365f3db3dc537a4"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-f2d4b5076730c897"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-eeb9266182c9f5bb"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-d17b1737bdd42195"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-b042723373c435ac"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-de4e9f394ad77445"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-be05ea815a076ebf"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-d8ea43ab41bd3b67"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-9c01e8b4d2c84c20"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-1ff4ba2564861d77"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-f922debfc0ea235a"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-46937ee866f7c117"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-f928d02052df1340"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-060d9bd51a071d08"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-d99f7e33cebcc871"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-8e9d3cfe8879a882"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-54df0b83bdd31757"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-fc551e73b64a8b59"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-88682e19a33a92e7"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
       "relatedSpdxElement": "SPDXRef-Package-4abc19b2db84d371"
     },
     {
@@ -15685,11 +13735,6 @@
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-f8f9761da085cfbf"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
       "relatedSpdxElement": "SPDXRef-Package-afa38e299b5eb250"
     },
     {
@@ -15711,16 +13756,6 @@
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
       "relatedSpdxElement": "SPDXRef-Package-41e68f4a94acc140"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-a9811103a1d63783"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-f90a8cdd5a85c5d8"
     },
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
@@ -15771,11 +13806,6 @@
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
       "relatedSpdxElement": "SPDXRef-Package-25ee07bb1d0db01a"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-527f8b547f4369c8"
     },
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
@@ -15850,11 +13880,6 @@
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-1914d84ce4c5a04e"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
       "relatedSpdxElement": "SPDXRef-Package-fc29d26ea6f02592"
     },
     {
@@ -15920,11 +13945,6 @@
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-ef790d8d6d97d5e5"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
       "relatedSpdxElement": "SPDXRef-Package-1383fb9f1a666b51"
     },
     {
@@ -15970,11 +13990,6 @@
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-b21ff9b1e5de6f84"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
       "relatedSpdxElement": "SPDXRef-Package-4214af804741eff0"
     },
     {
@@ -15986,21 +14001,6 @@
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
       "relatedSpdxElement": "SPDXRef-Package-e5581495d63b9c67"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-4a9b1eed43773d26"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-8d481963301649d0"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-230f2d71cf449f43"
     },
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
@@ -16060,16 +14060,6 @@
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-f4563817215ff0ef"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-879c10a2f7e7fd4e"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
       "relatedSpdxElement": "SPDXRef-Package-33c2e99d0e34a9ac"
     },
     {
@@ -16086,11 +14076,6 @@
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
       "relatedSpdxElement": "SPDXRef-Package-3ee3f1badee79adf"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-9d569640aa8f8d73"
     },
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
@@ -16425,16 +14410,6 @@
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-863f64282bd14065"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-33ead1ed596447bf"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
       "relatedSpdxElement": "SPDXRef-Package-18a6e55e7cac55d3"
     },
     {
@@ -16461,11 +14436,6 @@
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
       "relatedSpdxElement": "SPDXRef-Package-9897b11c552e1042"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-d30ec1f21880dae2"
     },
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
@@ -16580,11 +14550,6 @@
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-6efe38400da663a8"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
       "relatedSpdxElement": "SPDXRef-Package-2f4ce0cccb4ed6f4"
     },
     {
@@ -16655,16 +14620,6 @@
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-d422b6c61c0bda21"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-2c4b58f57db280f7"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
       "relatedSpdxElement": "SPDXRef-Package-7cdb26942c297af3"
     },
     {
@@ -16675,17 +14630,7 @@
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-5cfb6a8dafa4957e"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
       "relatedSpdxElement": "SPDXRef-Package-e4a5a8118922d90b"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-48f50d9d7f94df99"
     },
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
@@ -16716,11 +14661,6 @@
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
       "relatedSpdxElement": "SPDXRef-Package-e71c15049f457979"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-2913cbbe789389e0"
     },
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
@@ -16811,11 +14751,6 @@
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
       "relatedSpdxElement": "SPDXRef-Package-96e653c93ada5311"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-73464ed038ac919d"
     },
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
@@ -17085,11 +15020,6 @@
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-ad3b253c1b9451f7"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
       "relatedSpdxElement": "SPDXRef-Package-78513b8a93c15171"
     },
     {
@@ -17116,16 +15046,6 @@
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
       "relatedSpdxElement": "SPDXRef-Package-71218ddd0850df48"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-55a09c11de197ec1"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-5693c780886b7dff"
     },
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
@@ -17225,37 +15145,12 @@
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-168a0e8d522c0693"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-089ecabc1eceb2b2"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-5bbfcea632b19cc0"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-1379e5e6a88ebbd4"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
       "relatedSpdxElement": "SPDXRef-Package-671c4b279d871fe3"
     },
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
       "relatedSpdxElement": "SPDXRef-Package-770e945024e86a9b"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-6c2a4c77e19dc906"
     },
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
@@ -17270,17 +15165,7 @@
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-29fd7ca913ad1cee"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
       "relatedSpdxElement": "SPDXRef-Package-51fac920df3d7558"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-361c4ad2b2f3391a"
     },
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
@@ -17320,11 +15205,6 @@
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-891fbde0ab5b9f72"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
       "relatedSpdxElement": "SPDXRef-Package-15be1d884066c547"
     },
     {
@@ -17346,11 +15226,6 @@
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
       "relatedSpdxElement": "SPDXRef-Package-7e8bf6f9c38edd41"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-82b04450ecb2f6eb"
     },
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
@@ -17396,11 +15271,6 @@
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
       "relatedSpdxElement": "SPDXRef-Package-fd51939e232ab9ff"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-3700904d647968f4"
     },
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
@@ -17640,6 +15510,11 @@
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
+      "relatedSpdxElement": "SPDXRef-Package-8d11c26a5810a2b7"
+    },
+    {
+      "spdxElementId": "SPDXRef-DOCUMENT",
+      "relationshipType": "DESCRIBES",
       "relatedSpdxElement": "SPDXRef-Package-eb87bd090173100b"
     },
     {
@@ -17726,11 +15601,6 @@
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
       "relatedSpdxElement": "SPDXRef-Package-d42f3a87ebda9e26"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-16310c723428f31e"
     },
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
@@ -17850,11 +15720,6 @@
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-4817c3f4b616dbb2"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
       "relatedSpdxElement": "SPDXRef-Package-98f88ff4e5a3d486"
     },
     {
@@ -17930,11 +15795,6 @@
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-2de818d3f1216ac4"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
       "relatedSpdxElement": "SPDXRef-Package-effcbf26318db2fd"
     },
     {
@@ -17946,11 +15806,6 @@
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
       "relatedSpdxElement": "SPDXRef-Package-dc65c95b58f6df34"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-3e9ba6394517af84"
     },
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
@@ -18025,11 +15880,6 @@
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-01926e7a94d706ff"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
       "relatedSpdxElement": "SPDXRef-Package-907648a7d1d857c9"
     },
     {
@@ -18046,11 +15896,6 @@
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
       "relatedSpdxElement": "SPDXRef-Package-47ceb7850b57349d"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-dc327355b76a99c3"
     },
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
@@ -18085,22 +15930,12 @@
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-926cd867c828a53a"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
       "relatedSpdxElement": "SPDXRef-Package-31c6d20a14f11b96"
     },
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
       "relatedSpdxElement": "SPDXRef-Package-22c2ff8a538ca83c"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-a4b2f7a7bf7bdece"
     },
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
@@ -18135,17 +15970,7 @@
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-073f1308b20c3e7a"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
       "relatedSpdxElement": "SPDXRef-Package-85c519e32dd8706c"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-22afc352c0a82b30"
     },
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
@@ -18215,16 +16040,6 @@
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-4dfc1d1f75e4dc52"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-d8036e8201779b02"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
       "relatedSpdxElement": "SPDXRef-Package-ea529e9996cf6309"
     },
     {
@@ -18260,37 +16075,7 @@
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-d8efd832cecd292a"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
       "relatedSpdxElement": "SPDXRef-Package-d3fdd345d3b40caf"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-69f8c7f961545c7d"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-44c22fd3f6e0b580"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-64171eb6182a6360"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-87027553675f002f"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-c91bbb02eeae2ae3"
     },
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
@@ -18301,11 +16086,6 @@
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
       "relatedSpdxElement": "SPDXRef-Package-7f8c2ffb345620ed"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-3ab884e9fd486b28"
     },
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
@@ -18356,11 +16136,6 @@
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
       "relatedSpdxElement": "SPDXRef-Package-6b5297eec47ea928"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-50acbda32cfa6ec6"
     },
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
@@ -18490,11 +16265,6 @@
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-2c4497ae4cd39fc1"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
       "relatedSpdxElement": "SPDXRef-Package-28d476c4cc7bcb2a"
     },
     {
@@ -18561,11 +16331,6 @@
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
       "relatedSpdxElement": "SPDXRef-Package-80c13b76622554c7"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-724e622bbd03438e"
     },
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
@@ -18695,22 +16460,12 @@
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-987d5bfa20285a18"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
       "relatedSpdxElement": "SPDXRef-Package-45dc5a08f20eb56a"
     },
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
       "relatedSpdxElement": "SPDXRef-Package-d6bbe598c48f7c70"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-8214ff4f8b474d34"
     },
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
@@ -18840,37 +16595,12 @@
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-82c6bdf3d7f1f700"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
       "relatedSpdxElement": "SPDXRef-Package-97eeb41b9e0e0420"
     },
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-d1126d8a53c34f0e"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-aa8f0b6325fd13d4"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
       "relatedSpdxElement": "SPDXRef-Package-ce0aebab76b41ddf"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-6a89229fd526bb86"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-eb58534c6431c36c"
     },
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
@@ -18996,11 +16726,6 @@
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
       "relatedSpdxElement": "SPDXRef-Package-56721cba590e69c7"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-252b4215f2b525e9"
     },
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
@@ -19165,17 +16890,7 @@
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-91383da64b33f1fd"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
       "relatedSpdxElement": "SPDXRef-Package-7b5519865822cb8d"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-f84fdbe2c9e17f63"
     },
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
@@ -19250,11 +16965,6 @@
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-49fde3479792d6b6"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
       "relatedSpdxElement": "SPDXRef-Package-4cbda8c0d09b29ab"
     },
     {
@@ -19325,11 +17035,6 @@
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-6750d97c7395e152"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
       "relatedSpdxElement": "SPDXRef-Package-387011d33cd1bf23"
     },
     {
@@ -19360,11 +17065,6 @@
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-30865e2eb89173c1"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
       "relatedSpdxElement": "SPDXRef-Package-09f2497b4a243e26"
     },
     {
@@ -19381,11 +17081,6 @@
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
       "relatedSpdxElement": "SPDXRef-Package-463b64b09b0ab606"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-04d04ce61bfab58b"
     },
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
@@ -19451,11 +17146,6 @@
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
       "relatedSpdxElement": "SPDXRef-Package-0ba81ad163d7682e"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-90ca6ba7fd042db1"
     },
     {
       "spdxElementId": "SPDXRef-DOCUMENT",

@@ -60,15 +60,17 @@ const PACKAGE_POLICIES = {
   jszip: { license: "MIT" },
   "node-forge": { license: "BSD-3-Clause" },
   "pause-stream": { license: "MIT" },
-  // Sustainable Use License 不是开源协议,必须从开源清单剥离。
-  "@codesandbox/nodebox": {
-    category: "restricted",
-    license: "LicenseRef-Sustainable-Use-1.0",
-    note: "仅允许内部业务使用或非商业用途;对外分发需确认符合其限制条款。",
-  },
   "@anthropic-ai/claude-agent-sdk": {
     category: "proprietary",
     license: "LicenseRef-Anthropic-Commercial-Terms",
+  },
+};
+
+/** 商业发行明确禁止进入生产依赖闭包的包。 */
+const FORBIDDEN_PACKAGE_POLICIES = {
+  "@codesandbox/nodebox": {
+    license: "LicenseRef-Sustainable-Use-1.0",
+    reason: "仅允许内部业务使用或非商业用途,不允许 Cindy 商业版本对外分发。",
   },
 };
 
@@ -297,6 +299,13 @@ function collectClosure(entryDirs, target = null) {
 
       const key = `${depJson.name}@${depJson.version}`;
       if (collected.has(key)) continue;
+
+      const forbiddenPolicy = FORBIDDEN_PACKAGE_POLICIES[depJson.name];
+      if (forbiddenPolicy) {
+        throw new Error(
+          `forbidden production dependency: ${key} (${forbiddenPolicy.license}) — ${forbiddenPolicy.reason}`,
+        );
+      }
 
       const policy = PACKAGE_POLICIES[depJson.name];
       if (policy?.category) {
@@ -1273,7 +1282,7 @@ const restrictedManualEntries = [
     license: "NOASSERTION",
     category: "restricted-review-required",
     url: "https://developers.weixin.qq.com/doc/oplatform/Mobile_App/Access_Guide/iOS.html",
-    note: "上游 CocoaPod 声明为 Copyright 且未提供标准开源许可证；发布前需确认微信开放平台 SDK 分发条款。",
+    note: "上游 CocoaPod 声明为 Copyright 且未提供标准开源许可证；按 docs/legal/wechat-open-sdk-compliance.md 完成条款、隐私披露和用户同意复核。官方合规指南：https://developers.weixin.qq.com/doc/oplatform/Mobile_App/agreement/sdk.html",
     artifacts: ["mobile-ios"],
   },
   {
@@ -1283,7 +1292,7 @@ const restrictedManualEntries = [
     license: "NOASSERTION",
     category: "restricted-review-required",
     url: "https://developers.weixin.qq.com/doc/oplatform/Mobile_App/Access_Guide/Android.html",
-    note: "上游 Maven SDK 未提供标准开源许可证；发布前需确认微信开放平台 SDK 分发条款。",
+    note: "上游 Maven SDK 未提供标准开源许可证；按 docs/legal/wechat-open-sdk-compliance.md 完成条款、隐私披露和用户同意复核。官方合规指南：https://developers.weixin.qq.com/doc/oplatform/Mobile_App/agreement/sdk.html",
     artifacts: ["mobile-android"],
   },
 ];
