@@ -110,7 +110,10 @@ async function createRoundedMaster() {
     .toBuffer();
 }
 
-/** 默认生成时同步主应用 PNG 与 updater 的 PNG/ICO 资源。 */
+/**
+ * 默认生成时同步主应用 PNG 与 updater 的 PNG/ICO 资源。
+ * cindy-updater 属于高风险模块，合入涉及其资源的 PR 前必须保留 owner 确认。
+ */
 async function syncDefaultCompanionIcons(roundedMaster) {
   const png = await sharp(roundedMaster).resize(512, 512).png().toBuffer();
   const updaterIcoPath = path.join(updaterIconsDir, 'icon.ico');
