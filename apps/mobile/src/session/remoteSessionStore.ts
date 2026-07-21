@@ -120,6 +120,7 @@ const sessionTaskUpdates = new Map<string, ReadonlyMap<string, AgentTaskUpdate>>
 const streamingAssistantClientIds = new Map<string, string>();
 const pendingLiveAssistantClientIds = new Map<string, Set<string>>();
 let streamingFallbackSequence = 0;
+const GENERATED_FALLBACK_MIN_PREFIX_LENGTH = 12;
 const TEXT_DELTA_BATCH_INTERVAL_MS = 32;
 const DEVICE_LINK_TRUNCATED_FLAG = '__deviceLinkTruncated';
 const pendingTextDeltaBatches = new Map<string, {
@@ -457,7 +458,13 @@ function generatedFallbackMatchesPersistedMessage(
   const liveText = contentToPreview(fallback.content);
   const persistedText = contentToPreview(persisted.content);
   if (!liveText || !persistedText) return false;
-  return persistedText.startsWith(liveText) || liveText.startsWith(persistedText);
+  // A short common prefix is not enough evidence: a delayed row from an older
+  // assistant block can easily start with the same token (for example `Sure`).
+  // Only let a persisted row retire a generated fallback when the DB row is an
+  // authoritative continuation with enough accumulated text to make the prefix
+  // unambiguous. Never replace a longer live row with a shorter persisted prefix.
+  return liveText.length >= GENERATED_FALLBACK_MIN_PREFIX_LENGTH
+    && persistedText.startsWith(liveText);
 }
 
 interface StreamingClientIdResolution {
@@ -676,9 +683,12 @@ function flushPendingTextDelta(sessionId: string): boolean {
   );
 }
 
-function flushAndFinalizeRemoteStreamingMessages(sessionId: string): boolean {
+function flushAndFinalizeRemoteStreamingMessages(
+  sessionId: string,
+  boundaryAgentMeta?: Record<string, unknown> | null,
+): boolean {
   let changed = flushPendingTextDelta(sessionId);
-  changed = finalizeRemoteStreamingMessages(sessionId) || changed;
+  changed = finalizeRemoteStreamingMessages(sessionId, boundaryAgentMeta) || changed;
   return changed;
 }
 
@@ -718,7 +728,10 @@ function discardPendingTextDelta(sessionId: string): void {
   if (pendingTextDeltaBatches.size === 0) clearTextDeltaFlushTimer();
 }
 
-function finalizeRemoteStreamingMessages(sessionId: string): boolean {
+function finalizeRemoteStreamingMessages(
+  sessionId: string,
+  boundaryAgentMeta?: Record<string, unknown> | null,
+): boolean {
   streamingAssistantClientIds.delete(sessionId);
   const existing = messages.get(sessionId);
   if (!existing) return false;
@@ -726,7 +739,13 @@ function finalizeRemoteStreamingMessages(sessionId: string): boolean {
   const next = existing.map((message) => {
     if (message.role !== 'assistant' || message.agentMeta?.isStreaming !== true) return message;
     changed = true;
-    return { ...message, agentMeta: clearStreamingMeta(message.agentMeta) };
+    // Match desktop persistence semantics: metadata already observed on the
+    // streaming block wins, while metadata carried only by the boundary event
+    // fills missing fields (parentUuid/uuid are needed for rewind/fork).
+    const mergedMeta = boundaryAgentMeta
+      ? { ...boundaryAgentMeta, ...(message.agentMeta ?? {}) }
+      : message.agentMeta;
+    return { ...message, agentMeta: clearStreamingMeta(mergedMeta) };
   });
   if (!changed) return false;
   messages.set(sessionId, next);
@@ -1017,6 +1036,29 @@ export const remoteSessionStore = {
       }
     }
     for (const item of latestWindow) {
+      if (isPersistedAssistantMessage(item)) {
+        const fallbackIndex = findPendingGeneratedStreamingFallbackIndex(sessionId, existing);
+        const fallback = fallbackIndex >= 0 ? existing[fallbackIndex] : undefined;
+        if (fallback && generatedFallbackMatchesPersistedMessage(fallback, item)) {
+          // History sync may be the first place the authoritative DB identity
+          // arrives. Remove the generated key before inserting the persisted row;
+          // otherwise the newer temporary row is kept as a tail and the DB row
+          // becomes a duplicate assistant bubble.
+          byKey.delete(messageKey(fallback));
+          const directKey = messageKey(item);
+          const existingMatch = byKey.get(directKey) ?? findMessageByIdentity(existing, item);
+          byKey.set(directKey, preferCompleteMessage(existingMatch, item));
+          forgetPendingLiveAssistantMessageIdentity(
+            sessionId,
+            fallback.id,
+            fallback.clientId,
+            item.id,
+            item.clientId,
+          );
+          retireGeneratedStreamingFallback(sessionId);
+          continue;
+        }
+      }
       const directKey = messageKey(item);
       const identityKey = findMessageMergeKey(byKey, item);
       const key = identityKey ?? directKey;
@@ -1148,11 +1190,6 @@ export const remoteSessionStore = {
     list: readonly PendingInteraction[],
     options: { finalizeStreaming?: boolean } = {},
   ): void {
-    // Only the reconnect snapshot is allowed to finalize here. Ordinary push / UI
-    // callers may publish a pending card while the current turn is still streaming.
-    const streamingChanged = options.finalizeStreaming === true && list.length > 0
-      ? flushAndFinalizeRemoteStreamingMessages(sessionId)
-      : false;
     // 已确认 dismiss 的延长抑制条目按「缺席即过期」回收:本轮快照不含该
     // requestId = 被控端已确认移除,慢的旧快照此后不可能再带着它(权威读取按
     // 请求序返回),条目可以安全解除;仍含 = 这是 resolve 前发出的旧快照,保留
@@ -1168,6 +1205,12 @@ export const remoteSessionStore = {
     // 全量快照也要过在途抑制:决定已乐观提交、被控端还没确认时,快照仍会带着
     // 这张卡,不过滤就闪回。
     const next = dedupeInteractions(list.filter((item) => !isInteractionResolveSuppressed(sessionId, item)));
+    // Only a reconnect snapshot that actually restores a visible pending card may
+    // finalize streaming. A snapshot containing only an already-dismissed stale
+    // request must not close the current assistant row.
+    const streamingChanged = options.finalizeStreaming === true && next.length > 0
+      ? flushAndFinalizeRemoteStreamingMessages(sessionId)
+      : false;
     if (deepValueEqual(pendingInteractions.get(sessionId) ?? emptyPendingInteractions, next)) {
       if (streamingChanged) emit();
       return;
@@ -1183,13 +1226,19 @@ export const remoteSessionStore = {
     emit();
   },
 
-  setSessionRunning(sessionId: string, running: boolean): void {
+  setSessionRunning(
+    sessionId: string,
+    running: boolean,
+    boundaryAgentMeta?: Record<string, unknown> | null,
+  ): void {
     if (!sessionId) return;
     // 本方法只被 maker 权威信号调用(done / terminal error / status-changed closed),
     // 与 maker turn 边界同步;activity / 快照流走 writeSessionRunStatus,不经过这里。
     // 边界变化必须独立参与 emit 判定:activity 流可能已把宽 run status 置 false,此时
     // writeSessionRunStatus 无变化,若不 emit,useSessionMakerTurnRunning 的订阅者会卡旧值。
-    const streamingChanged = running ? false : flushAndFinalizeRemoteStreamingMessages(sessionId);
+    const streamingChanged = running
+      ? false
+      : flushAndFinalizeRemoteStreamingMessages(sessionId, boundaryAgentMeta);
     const turnBoundaryChanged = writeMakerTurnRunning(sessionId, running);
     const current = readSessionRunStatus(sessionId);
     const next: RemoteSessionRunStatus = {
@@ -1202,40 +1251,27 @@ export const remoteSessionStore = {
   },
 
   setActiveSessionSnapshots(deviceId: string, list: readonly unknown[]): void {
-    const nextRunning = new Map<string, boolean>();
+    // `maker:list-active` returns only currently active sessions. Absence is not
+    // an idle assertion: the request can have started before a turn and complete
+    // after a live delta, or a stale reconnect response can race a newer push.
+    // Only explicit boolean states in the snapshot may change a session's run
+    // state; terminal maker/activity events remain the idle authority.
+    const snapshotStates = new Map<string, boolean>();
     for (const item of list) {
       if (!isRecord(item)) continue;
       const sessionId = readString(item, 'sessionId');
-      if (sessionId && item.isTurnRunning === true) nextRunning.set(sessionId, true);
-    }
-    const scopedRunning = new Map<string, boolean>();
-    for (const [sessionId, running] of sessionRunning) {
-      if (sessionDeviceIndex.get(sessionId) !== deviceId) scopedRunning.set(sessionId, running);
-    }
-    for (const [sessionId, running] of nextRunning) {
-      if (running) scopedRunning.set(sessionId, true);
-    }
-    let changed = false;
-    const sessionIds = new Set([...sessionRunning.keys(), ...scopedRunning.keys()]);
-    // A session may have a live text row even when the broad running map has not changed.
-    // Idle snapshots must still flush/finalize that row.
-    for (const [sessionId, indexedDeviceId] of sessionDeviceIndex) {
-      if (indexedDeviceId === deviceId) sessionIds.add(sessionId);
-    }
-    for (const sessionId of sessionIds) {
-      if (scopedRunning.get(sessionId) !== true) {
-        changed = flushAndFinalizeRemoteStreamingMessages(sessionId) || changed;
+      if (sessionId && typeof item.isTurnRunning === 'boolean') {
+        const indexedDeviceId = sessionDeviceIndex.get(sessionId);
+        if (indexedDeviceId && indexedDeviceId !== deviceId) continue;
+        snapshotStates.set(sessionId, item.isTurnRunning);
       }
     }
-    if (runningMapsEqual(sessionRunning, scopedRunning)) {
-      if (changed) emit();
-      return;
-    }
-    for (const sessionId of sessionIds) {
-      const running = scopedRunning.get(sessionId) === true;
-      // 权威快照报 idle 时同步关闭 maker turn 边界(只关不开):后台/断连错过终态事件后,
-      // 边界会卡在 true、孤儿渲染 gate 常开;打开边界仍只归 maker status(打开必先 sweep)。
-      if (!running) changed = writeMakerTurnRunning(sessionId, false) || changed;
+    let changed = false;
+    for (const [sessionId, running] of snapshotStates) {
+      if (!running) {
+        changed = flushAndFinalizeRemoteStreamingMessages(sessionId) || changed;
+        changed = writeMakerTurnRunning(sessionId, false) || changed;
+      }
       const current = readSessionRunStatus(sessionId);
       const next: RemoteSessionRunStatus = {
         ...current,
@@ -1526,7 +1562,11 @@ export const remoteSessionStore = {
     // setSessionRunning owns the final flush/finalize and run-state transition;
     // keeping the done path in one call avoids notifying subscribers twice.
     if (type === 'done' || isTerminalMakerErrorEvent(event)) {
-      this.setSessionRunning(sessionId, false);
+      this.setSessionRunning(
+        sessionId,
+        false,
+        isRecord(event.agentMeta) ? event.agentMeta : null,
+      );
       return;
     }
 
@@ -1534,7 +1574,10 @@ export const remoteSessionStore = {
     if (type === 'tool_use') {
       // Finalize before applying update_plan so its row update and the streaming
       // row transition are published in one snapshot notification.
-      const streamingChanged = finalizeRemoteStreamingMessages(sessionId);
+      const streamingChanged = finalizeRemoteStreamingMessages(
+        sessionId,
+        isRecord(event.agentMeta) ? event.agentMeta : null,
+      );
       const livePlan = applyLivePlanToolUseMessage(sessionId, event, persistId);
       if (livePlan.handled) {
         if (textFlushed || streamingChanged || livePlan.changed) emit();
@@ -1626,7 +1669,10 @@ export const remoteSessionStore = {
       }
       let streamingChanged = false;
       if (!isRunning) {
-        streamingChanged = finalizeRemoteStreamingMessages(sessionId);
+        streamingChanged = finalizeRemoteStreamingMessages(
+          sessionId,
+          isRecord(event.agentMeta) ? event.agentMeta : null,
+        );
       }
       const next: RemoteSessionRunStatus = {
         isRunning,
@@ -1824,14 +1870,6 @@ function remoteSessionEqual(a: RemoteSession, b: RemoteSession): boolean {
 
 function remoteMessageEqual(a: RemoteMessage, b: RemoteMessage): boolean {
   return shallowRecordEqual(a as unknown as Record<string, unknown>, b as unknown as Record<string, unknown>);
-}
-
-function runningMapsEqual(a: ReadonlyMap<string, boolean>, b: ReadonlyMap<string, boolean>): boolean {
-  if (a.size !== b.size) return false;
-  for (const [key, value] of a) {
-    if (b.get(key) !== value) return false;
-  }
-  return true;
 }
 
 function deviceListsEqual(

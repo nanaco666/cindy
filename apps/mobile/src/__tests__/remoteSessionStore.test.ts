@@ -350,6 +350,64 @@ describe('remoteSessionStore', () => {
     }
   });
 
+  it('reconciles a generated fallback row when history sync is the first DB identity', () => {
+    vi.useFakeTimers();
+    try {
+      pushMakerText('s1', undefined, 'partial answer', false);
+      vi.runOnlyPendingTimers();
+
+      remoteSessionStore.setLatestMessageWindow('s1', [{
+        id: 'history-persisted-1',
+        clientId: 'history-persisted-1',
+        sessionId: 's1',
+        role: 'assistant',
+        content: 'partial answer and complete',
+        toolUseId: null,
+        agentMeta: null,
+        createdAt: '2026-01-01T00:00:01.000Z',
+      }]);
+
+      expect(remoteSessionStore.getMessages('s1')).toMatchObject([{
+        id: 'history-persisted-1',
+        clientId: 'history-persisted-1',
+        content: 'partial answer and complete',
+      }]);
+      expect(remoteSessionStore.getMessages('s1')).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not retire a generated fallback on a short ambiguous prefix', () => {
+    vi.useFakeTimers();
+    try {
+      pushMakerText('s1', undefined, 'Sure', false);
+      vi.runOnlyPendingTimers();
+
+      remoteSessionStore.applyRemotePush('dev-1', 'local-db:messages:created', {
+        sessionId: 's1',
+        message: {
+          id: 'old-persisted-2',
+          clientId: 'old-persisted-2',
+          sessionId: 's1',
+          role: 'assistant',
+          content: 'Sure, that was the previous turn',
+          toolUseId: null,
+          agentMeta: null,
+          createdAt: '2026-01-01T00:00:01.000Z',
+        },
+      });
+
+      expect(remoteSessionStore.getMessages('s1')).toHaveLength(2);
+      expect(remoteSessionStore.getMessages('s1').find((row) => row.clientId.startsWith('mobile-stream-'))).toMatchObject({
+        content: 'Sure',
+        agentMeta: { isStreaming: true },
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('does not replace a live fallback row with an unrelated delayed DB message', () => {
     vi.useFakeTimers();
     try {
@@ -996,9 +1054,31 @@ describe('remoteSessionStore', () => {
     expect(remoteSessionStore.isSessionRunning('s1')).toBe(true);
     expect(remoteSessionStore.isSessionRunning('s2')).toBe(true);
 
-    remoteSessionStore.setActiveSessionSnapshots('dev-1', []);
+    remoteSessionStore.setActiveSessionSnapshots('dev-1', [{ sessionId: 's1', isTurnRunning: false }]);
     expect(remoteSessionStore.isSessionRunning('s1')).toBe(false);
     expect(remoteSessionStore.isSessionRunning('s2')).toBe(true);
+  });
+
+  it('does not treat an absent active-session row as an idle assertion', () => {
+    vi.useFakeTimers();
+    try {
+      remoteSessionStore.setDeviceSessions('dev-1', 'Mac', [session('s1')]);
+      pushMakerStatus('s1', { isRunning: true });
+      pushMakerText('s1', undefined, 'still generating', false);
+      vi.runOnlyPendingTimers();
+
+      // This response may have started before the turn and completed after the
+      // live push. Absence must not finalize the current streaming row.
+      remoteSessionStore.setActiveSessionSnapshots('dev-1', []);
+
+      expect(remoteSessionStore.isSessionRunning('s1')).toBe(true);
+      expect(remoteSessionStore.getMessages('s1')).toMatchObject([{
+        content: 'still generating',
+        agentMeta: { isStreaming: true },
+      }]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('tracks session running state from maker event push boundaries', () => {
@@ -1204,7 +1284,7 @@ describe('remoteSessionStore', () => {
     remoteSessionStore.setDeviceSessions('dev-1', 'MacBook', [session('s1')]);
     pushMakerStatus('s1', { isRunning: true });
     expect(remoteSessionStore.isSessionMakerTurnRunning('s1')).toBe(true);
-    remoteSessionStore.setActiveSessionSnapshots('dev-1', []);
+    remoteSessionStore.setActiveSessionSnapshots('dev-1', [{ sessionId: 's1', isTurnRunning: false }]);
     expect(remoteSessionStore.isSessionMakerTurnRunning('s1')).toBe(false);
 
     // Neither idle path may OPEN the gate — that stays maker-status-only.
@@ -1226,6 +1306,31 @@ describe('remoteSessionStore', () => {
       event: { type: 'done', data: {} },
     });
     expect(remoteSessionStore.isSessionMakerTurnRunning('s1')).toBe(false);
+  });
+
+  it('preserves boundary agent metadata when finalizing a streaming row', () => {
+    vi.useFakeTimers();
+    try {
+      pushMakerText('s1', 'persist-1', 'sub-agent answer', false);
+      vi.runOnlyPendingTimers();
+
+      remoteSessionStore.applyRemotePush('dev-1', 'maker:event', {
+        sessionId: 's1',
+        event: {
+          type: 'done',
+          agentMeta: { parentUuid: 'parent-1', uuid: 'child-1' },
+          data: {},
+        },
+      });
+
+      expect(remoteSessionStore.getMessages('s1')).toMatchObject([{
+        clientId: 'persist-1',
+        content: 'sub-agent answer',
+        agentMeta: { parentUuid: 'parent-1', uuid: 'child-1' },
+      }]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('stores and clears list-level live activity from the sessions stream', () => {
@@ -1430,6 +1535,30 @@ describe('remoteSessionStore', () => {
       'ask-persist',
       'issue-1',
     ]);
+  });
+
+  it('does not finalize streaming for a reconnect snapshot containing only a suppressed interaction', () => {
+    vi.useFakeTimers();
+    try {
+      remoteSessionStore.beginOptimisticInteractionDismiss('s1', 'req-stale');
+      remoteSessionStore.settleOptimisticInteractionDismiss('s1', 'req-stale', { kind: 'confirmed' });
+      pushMakerText('s1', 'persist-1', 'still generating', false);
+      vi.runOnlyPendingTimers();
+
+      remoteSessionStore.setPendingInteractions(
+        's1',
+        [pending('permission', 'req-stale')],
+        { finalizeStreaming: true },
+      );
+
+      expect(remoteSessionStore.getPendingInteractions('s1')).toHaveLength(0);
+      expect(remoteSessionStore.getMessages('s1')).toMatchObject([{
+        content: 'still generating',
+        agentMeta: { isStreaming: true },
+      }]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('dismisses one pending interaction by requestId without clearing same-session siblings', () => {
