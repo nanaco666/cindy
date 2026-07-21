@@ -2836,6 +2836,7 @@ export default function SessionScreen() {
       const voiceContext = prewarmedVoice?.voiceContext
         ?? new MobileCindyVoiceRunContext(
           () => auth.getAccessToken(),
+          auth.apiFetch,
           credential.settings?.language,
           credential.refiner.provider,
         );
@@ -3046,7 +3047,10 @@ export default function SessionScreen() {
     if (voiceIsProcessing) return;
     if (voiceRecordingActiveRef.current || voiceState === 'listening') return;
     if (!deviceId || !isMobileRealtimeAudioAvailable()) return;
-    prewarmMobileVoiceStart(deviceId, { getAccessToken: () => auth.getAccessToken() });
+    prewarmMobileVoiceStart(deviceId, {
+      getAccessToken: () => auth.getAccessToken(),
+      apiFetch: auth.apiFetch,
+    });
   }, [deviceId, voiceIsProcessing, voiceState]);
 
   const renderComposerVoiceButton = (buttonStyle?: StyleProp<ViewStyle>) => (

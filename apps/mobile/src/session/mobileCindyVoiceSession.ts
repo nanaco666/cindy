@@ -1,5 +1,6 @@
 import Constants from 'expo-constants';
 
+import type { ApiFetchOptions } from '@/api/client';
 import { VOICE_API_BASE_URL } from '@/config/env';
 import type { StoredMobileVoiceCredential } from '@/session/mobileVoiceCredentialStore';
 import { createMobileVoiceCredentialFromLiteLlmSettings } from '@/session/mobileVoiceLiteLlmSettings';
@@ -7,6 +8,10 @@ import { createMobileVoiceCredentialFromLiteLlmSettings } from '@/session/mobile
 const VOICE_SESSION_REQUEST_TIMEOUT_MS = 10_000;
 
 type AccessTokenProvider = () => Promise<string | null>;
+type AuthenticatedApiFetch = <T>(
+  path: string,
+  options: Omit<ApiFetchOptions, 'token'>,
+) => Promise<T>;
 
 type VoiceSessionResponse = {
   sessionId: string;
@@ -26,6 +31,7 @@ export class MobileCindyVoiceRunContext {
 
   constructor(
     private readonly getAccessToken: AccessTokenProvider,
+    private readonly apiFetch: AuthenticatedApiFetch,
     private readonly sourceLanguage: string | undefined,
     private readonly refinerProvider: string | undefined,
   ) {}
@@ -34,32 +40,19 @@ export class MobileCindyVoiceRunContext {
     websocketUrl: string;
     authorizationToken: string;
   }> {
-    const token = await this.requireAccessToken();
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), VOICE_SESSION_REQUEST_TIMEOUT_MS);
-    let response: Response;
-    try {
-      response = await fetch(`${requireVoiceBaseUrl()}/api/voice/sessions`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          mode: 'dictation',
-          language: this.sourceLanguage,
-          client: 'mobile',
-          clientVersion: Constants.nativeAppVersion ?? Constants.expoConfig?.version,
-          asrProvider,
-          refinerProvider: this.refinerProvider,
-        }),
-        signal: controller.signal,
-      });
-    } finally {
-      clearTimeout(timeoutId);
-    }
-    if (!response.ok) throw new Error(await voiceHttpError('创建语音会话失败', response));
-    const session = await response.json() as VoiceSessionResponse;
+    const session = await this.apiFetch<VoiceSessionResponse>('/api/voice/sessions', {
+      baseUrl: requireVoiceBaseUrl(),
+      method: 'POST',
+      body: {
+        mode: 'dictation',
+        language: this.sourceLanguage,
+        client: 'mobile',
+        clientVersion: Constants.nativeAppVersion ?? Constants.expoConfig?.version,
+        asrProvider,
+        refinerProvider: this.refinerProvider,
+      },
+      timeoutMs: VOICE_SESSION_REQUEST_TIMEOUT_MS,
+    });
     if (
       !session.sessionId
       || !session.ticket
@@ -105,9 +98,4 @@ export function createMobileCindyVoiceCredential(hostDeviceId: string): StoredMo
 function requireVoiceBaseUrl(): string {
   if (!VOICE_API_BASE_URL) throw new Error('当前区域未配置 Cindy 语音服务。');
   return VOICE_API_BASE_URL.replace(/\/+$/, '');
-}
-
-async function voiceHttpError(prefix: string, response: Response): Promise<string> {
-  const payload = await response.json().catch(() => null) as { error?: { message?: string } } | null;
-  return `${prefix}: ${payload?.error?.message || `HTTP ${response.status}`}`;
 }

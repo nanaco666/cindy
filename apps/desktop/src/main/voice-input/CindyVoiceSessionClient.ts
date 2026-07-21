@@ -46,14 +46,17 @@ export class CindyVoiceRunContext {
     return { websocketUrl: session.asr.websocketUrl, authorizationToken: session.ticket };
   }
 
-  async createRefinerTarget(refinerProvider: string): Promise<{
+  async createRefinerTarget(
+    refinerProvider: string,
+    options?: { forceRefresh?: boolean },
+  ): Promise<{
     url: string;
     authorization: string;
   }> {
     const sessionId = this.latestSessionId;
     if (!sessionId) throw new Error('Voice ASR session is not connected yet.');
     let token = authManager.getAccessToken();
-    if (!token) {
+    if (!token || options?.forceRefresh) {
       await authManager.refresh();
       token = authManager.getAccessToken();
     }

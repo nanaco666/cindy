@@ -1,4 +1,5 @@
 import type { AsrProvider } from '@lizi/voice-input-core';
+import type { ApiFetchOptions } from '@/api/client';
 import type { StoredMobileVoiceCredential } from '@/session/mobileVoiceCredentialStore';
 import { createMobileAsrProvider } from '@/session/mobileRealtimeAsrProvider';
 import { prewarmMobileRealtimeAudio } from '@/session/mobileRealtimeAudio';
@@ -47,7 +48,10 @@ let pendingPrewarm: PendingPrewarm | null = null;
  */
 export function prewarmMobileVoiceStart(
   deviceId: string,
-  options?: { getAccessToken: () => Promise<string | null> },
+  options?: {
+    getAccessToken: () => Promise<string | null>;
+    apiFetch: <T>(path: string, options: Omit<ApiFetchOptions, 'token'>) => Promise<T>;
+  },
 ): void {
   prewarmMobileRealtimeAudio();
   if (
@@ -58,7 +62,7 @@ export function prewarmMobileVoiceStart(
     return;
   }
   discardPendingPrewarm();
-  const promise = buildPrewarm(deviceId, options?.getAccessToken);
+  const promise = buildPrewarm(deviceId, options);
   const entry: PendingPrewarm = {
     deviceId,
     createdAt: Date.now(),
@@ -101,15 +105,19 @@ export function discardPendingPrewarm(): void {
 
 async function buildPrewarm(
   deviceId: string,
-  getAccessToken?: () => Promise<string | null>,
+  auth?: {
+    getAccessToken: () => Promise<string | null>;
+    apiFetch: <T>(path: string, options: Omit<ApiFetchOptions, 'token'>) => Promise<T>;
+  },
 ): Promise<PrewarmedMobileVoiceAsr | null> {
   try {
-    const credential = getAccessToken
+    const credential = auth
       ? createMobileCindyVoiceCredential(deviceId)
       : await resolveMobileVoiceCredentialFromLiteLlmSettings(deviceId);
-    const voiceContext = getAccessToken
+    const voiceContext = auth
       ? new MobileCindyVoiceRunContext(
-        getAccessToken,
+        auth.getAccessToken,
+        auth.apiFetch,
         credential.settings?.language,
         credential.refiner.provider,
       )

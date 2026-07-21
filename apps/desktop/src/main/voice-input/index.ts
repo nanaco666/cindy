@@ -742,7 +742,10 @@ function createVoiceInputTextModelClient(
 ): TextModelClient {
   if (options?.voiceContext) {
     return new LiteLlmTextModelClient({
-      requestTargetProvider: () => options.voiceContext!.createRefinerTarget(profile.id),
+      requestTargetProvider: (targetOptions) => options.voiceContext!.createRefinerTarget(
+        profile.id,
+        targetOptions,
+      ),
       onUsage: options.onUsage,
       timeoutMs: options.timeoutMs,
     });

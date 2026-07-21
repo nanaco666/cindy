@@ -1331,6 +1331,7 @@ export default function NewRemoteSessionScreen() {
       const voiceContext = prewarmedVoice?.voiceContext
         ?? new MobileCindyVoiceRunContext(
           () => auth.getAccessToken(),
+          auth.apiFetch,
           credential.settings?.language,
           credential.refiner.provider,
         );
@@ -1473,7 +1474,10 @@ export default function NewRemoteSessionScreen() {
     if (creating || voiceIsProcessing) return;
     if (voiceRecordingActiveRef.current || voiceState === 'listening') return;
     if (!selectedDeviceId || !isMobileRealtimeAudioAvailable()) return;
-    prewarmMobileVoiceStart(selectedDeviceId, { getAccessToken: () => auth.getAccessToken() });
+    prewarmMobileVoiceStart(selectedDeviceId, {
+      getAccessToken: () => auth.getAccessToken(),
+      apiFetch: auth.apiFetch,
+    });
   }, [creating, selectedDeviceId, voiceIsProcessing, voiceState]);
 
   useEffect(() => {

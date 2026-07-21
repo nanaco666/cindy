@@ -140,6 +140,39 @@ describe('LiteLlmTextModelClient', () => {
     expect(isRefinerModelOutputError(error)).toBe(false);
   });
 
+  it('refreshes a managed request target and retries once after HTTP 401', async () => {
+    const requestTargetProvider = vi.fn(async (options?: { forceRefresh?: boolean }) => ({
+      url: 'https://voice.example.com/api/voice/sessions/session-1/refine',
+      authorization: options?.forceRefresh ? 'Bearer fresh-token' : 'Bearer stale-token',
+    }));
+    undiciFetchMock
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        error: { code: 'TOKEN_EXPIRED', message: 'expired' },
+      }), { status: 401 }))
+      .mockResolvedValueOnce(makeChatCompletionSseResponse([
+        { choices: [{ delta: { content: '{"text":"refined"}' } }] },
+      ]));
+
+    const client = new LiteLlmTextModelClient({ requestTargetProvider });
+
+    await expect(client.requestJson<{ text: string }>({
+      model: 'm',
+      schemaName: 's',
+      system: 'sys',
+      user: {},
+    })).resolves.toEqual({ text: 'refined' });
+
+    expect(requestTargetProvider).toHaveBeenNthCalledWith(1, undefined);
+    expect(requestTargetProvider).toHaveBeenNthCalledWith(2, { forceRefresh: true });
+    expect(undiciFetchMock).toHaveBeenCalledTimes(2);
+    expect(undiciFetchMock.mock.calls[0]?.[1]).toMatchObject({
+      headers: expect.objectContaining({ Authorization: 'Bearer stale-token' }),
+    });
+    expect(undiciFetchMock.mock.calls[1]?.[1]).toMatchObject({
+      headers: expect.objectContaining({ Authorization: 'Bearer fresh-token' }),
+    });
+  });
+
   it('uses stream-idle timeout instead of total request duration', async () => {
     vi.useFakeTimers();
     const encoder = new TextEncoder();
