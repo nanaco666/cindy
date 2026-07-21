@@ -2552,7 +2552,11 @@ function RailPanels({
     const onPointerMove = (event: PointerEvent) => {
       const el = event.target instanceof Element ? event.target : null;
       if (el?.closest(RAIL_PANEL_KEEPALIVE_SELECTOR)) {
+        // 两级计时器都要取消:指针停在右键菜单(Radix 浮层)上时,三级面板的
+        // projectCloseTimer 若已被行 mouseleave 启动,不取消会在 120ms 后收掉
+        // 菜单的来源面板(review P1)。
         railPanelStore.cancelClose();
+        railPanelStore.cancelProjectClose();
       } else {
         railPanelStore.scheduleClose();
       }

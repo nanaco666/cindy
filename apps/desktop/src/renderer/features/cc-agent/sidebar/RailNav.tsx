@@ -25,6 +25,7 @@ import type { Session } from '@/lib/ccAgent.types';
 import type { AttentionKind } from '@/lib/sessionAttentionStore';
 import { AttentionDot } from '@/components/sidebar/AttentionDot';
 import { isOrcaWorkerSession, resolveSessionRoute } from '@/lib/orcaSessionIdentity';
+import { projectIdentityKeyForSession } from '../lib/projectGrouping';
 import { SessionStatusIcon } from './SessionStatusIcon';
 import { formatSidebarTime } from '../lib/formatSidebarTime';
 import { sessionActivityMs } from '../lib/dateSessionGrouping';
@@ -210,11 +211,17 @@ export function RailNav({
   // 项目段聚合灯从 sessions(sessionsWithRemote,已按机器切换过滤)派生 ——
   // 与置顶/对话灯同一数据口径,也与面板主过滤一致;不用全量搜索 universe
   // (那是跨机器全集,会为面板里看不到的项目点灯,review P1)。
+  // 且仅统计**可归组**会话(projectIdentityKeyForSession 非 null,与面板
+  // ProjectNode 集合同一判定)——workingDir 无法归一的项目会话面板里不存在,
+  // 不该让入口点灯(review P1)。
   const projectLampSessions = useMemo(
     () =>
       sessions.filter(
         (s) =>
-          s.workspaceKind === 'project' && s.status !== 'archived' && !isOrcaWorkerSession(s),
+          s.workspaceKind === 'project' &&
+          s.status !== 'archived' &&
+          !isOrcaWorkerSession(s) &&
+          projectIdentityKeyForSession(s) != null,
       ),
     [sessions],
   );
