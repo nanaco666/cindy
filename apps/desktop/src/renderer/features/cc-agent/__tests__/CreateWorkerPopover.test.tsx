@@ -1,24 +1,55 @@
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { CreateWorkerPopover } from '../CreateWorkerPopover';
+
+const mocks = vi.hoisted(() => ({
+  modelsByAgent: {
+    codex: [] as Array<{
+      id: string;
+      efforts: string[];
+      defaultEffort: string | null;
+      supportsFastMode?: boolean;
+    }>,
+    'claude-code': [] as Array<{
+      id: string;
+      efforts: string[];
+      defaultEffort: string | null;
+      supportsFastMode?: boolean;
+    }>,
+  },
+  capabilitiesByAgent: {
+    codex: null as { availableModels: Array<{ id: string }> } | null,
+    'claude-code': null as { availableModels: Array<{ id: string }> } | null,
+  },
+  capabilitiesLoading: false,
+  providersLoading: false,
+}));
+
+function model(id: string, efforts = ['high'], defaultEffort = 'high') {
+  return { id, efforts, defaultEffort, supportsFastMode: true };
+}
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
 
 vi.mock('@/hooks/useAgentCapabilities', () => ({
-  useAgentCapabilities: () => ({ capabilities: {} }),
+  useAgentCapabilities: (agent: 'codex' | 'claude-code') => ({
+    capabilities: mocks.capabilitiesByAgent[agent],
+    loading: mocks.capabilitiesLoading,
+    error: null,
+  }),
 }));
 
 vi.mock('@/hooks/useProviders', () => ({
-  useProviders: () => ({ providers: [] }),
+  useProviders: () => ({ providers: [], loading: mocks.providersLoading }),
 }));
 
 vi.mock('@/hooks/useDeviceProviders', () => ({
-  useDeviceProviders: () => ({ providers: [], loading: false, error: null }),
+  useDeviceProviders: () => ({ providers: [], loading: mocks.providersLoading, error: null }),
 }));
 
 vi.mock('@/components/new-chat/FastModeToggle', () => ({
@@ -26,22 +57,32 @@ vi.mock('@/components/new-chat/FastModeToggle', () => ({
 }));
 
 vi.mock('@/components/new-chat/ModelSelector', () => ({
-  ModelSelector: () => <div data-testid="model-selector" />,
+  ModelSelector: ({ modelId }: { modelId: string }) => (
+    <div data-testid="model-selector">{modelId}</div>
+  ),
 }));
 
 vi.mock('../workerModelAvailability', () => ({
-  selectWorkerModels: () => [
-    {
-      id: 'codex/gpt-5.5',
-      efforts: ['high'],
-      defaultEffort: 'high',
-      supportsFastMode: true,
-    },
-  ],
+  selectWorkerModels: ({ agent }: { agent: 'codex' | 'claude-code' }) => mocks.modelsByAgent[agent],
 }));
 
-describe('CreateWorkerPopover submission guard', () => {
-  afterEach(() => cleanup());
+describe('CreateWorkerPopover', () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+    mocks.modelsByAgent.codex = [model('codex/gpt-5.5')];
+    mocks.modelsByAgent['claude-code'] = [model('claude-opus-4-7')];
+    mocks.capabilitiesByAgent.codex = { availableModels: [{ id: 'codex/gpt-5.5' }] };
+    mocks.capabilitiesByAgent['claude-code'] = {
+      availableModels: [{ id: 'claude-opus-4-7' }],
+    };
+    mocks.capabilitiesLoading = false;
+    mocks.providersLoading = false;
+  });
+
+  afterEach(() => {
+    cleanup();
+    window.localStorage.clear();
+  });
 
   it('disables immediately and collapses repeated click events into one request', async () => {
     let finishCreate!: () => void;
@@ -64,5 +105,121 @@ describe('CreateWorkerPopover submission guard', () => {
     finishCreate();
     await waitFor(() => expect((submit as HTMLButtonElement).disabled).toBe(false));
     expect(submit.getAttribute('aria-busy')).toBe('false');
+  });
+
+  it('replaces a provider-gated local preference with the first available model and valid effort', async () => {
+    window.localStorage.setItem(
+      'workerCreationPrefs',
+      JSON.stringify({
+        lastAgent: 'codex',
+        codex: { model: 'codex/removed', effort: 'high', fast: true },
+      }),
+    );
+    mocks.modelsByAgent.codex = [model('gpt-5.5', ['medium'], 'medium')];
+    mocks.capabilitiesByAgent.codex = {
+      availableModels: [{ id: 'codex/removed' }, { id: 'gpt-5.5' }],
+    };
+    const onCreate = vi.fn();
+
+    render(<CreateWorkerPopover open onClose={vi.fn()} onCreate={onCreate} />);
+
+    await waitFor(() => expect(screen.getByTestId('model-selector').textContent).toBe('gpt-5.5'));
+    const submit = screen.getByRole('button', { name: 'orca.createWorker.submit' });
+    expect((submit as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(submit);
+
+    await waitFor(() =>
+      expect(onCreate).toHaveBeenCalledWith(
+        expect.objectContaining({ agent: 'codex', model: 'gpt-5.5', effort: 'medium' }),
+      ),
+    );
+  });
+
+  it('waits for the provider catalog before replacing a stale local preference', async () => {
+    window.localStorage.setItem(
+      'workerCreationPrefs',
+      JSON.stringify({
+        lastAgent: 'codex',
+        codex: { model: 'codex/removed', effort: 'high', fast: false },
+      }),
+    );
+    mocks.modelsByAgent.codex = [model('gpt-5.5')];
+    mocks.capabilitiesByAgent.codex = { availableModels: [{ id: 'gpt-5.5' }] };
+    mocks.providersLoading = true;
+    const view = render(<CreateWorkerPopover open onClose={vi.fn()} onCreate={vi.fn()} />);
+
+    await waitFor(() =>
+      expect(screen.getByTestId('model-selector').textContent).toBe('codex/removed'),
+    );
+    expect(
+      (screen.getByRole('button', { name: 'orca.createWorker.submit' }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+
+    mocks.providersLoading = false;
+    view.rerender(<CreateWorkerPopover open onClose={vi.fn()} onCreate={vi.fn()} />);
+    await waitFor(() => expect(screen.getByTestId('model-selector').textContent).toBe('gpt-5.5'));
+  });
+
+  it('does not replace a remote model during a provider/capabilities snapshot mismatch', async () => {
+    mocks.modelsByAgent.codex = [model('gpt-5.5')];
+    mocks.capabilitiesByAgent.codex = { availableModels: [{ id: 'codex/gpt-5.5' }] };
+    const view = render(
+      <CreateWorkerPopover open deviceId="device-a" onClose={vi.fn()} onCreate={vi.fn()} />,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByTestId('model-selector').textContent).toBe('codex/gpt-5.5'),
+    );
+
+    mocks.capabilitiesByAgent.codex = { availableModels: [{ id: 'gpt-5.5' }] };
+    view.rerender(
+      <CreateWorkerPopover open deviceId="device-a" onClose={vi.fn()} onCreate={vi.fn()} />,
+    );
+    await waitFor(() => expect(screen.getByTestId('model-selector').textContent).toBe('gpt-5.5'));
+  });
+
+  it('converges each agent preference independently after switching agents', async () => {
+    window.localStorage.setItem(
+      'workerCreationPrefs',
+      JSON.stringify({
+        lastAgent: 'codex',
+        codex: { model: 'codex/gpt-5.5', effort: 'high', fast: false },
+        'claude-code': { model: 'claude-removed', effort: 'high', fast: false },
+      }),
+    );
+    mocks.modelsByAgent['claude-code'] = [model('claude-sonnet-4-6')];
+    mocks.capabilitiesByAgent['claude-code'] = {
+      availableModels: [{ id: 'claude-sonnet-4-6' }],
+    };
+
+    render(<CreateWorkerPopover open onClose={vi.fn()} onCreate={vi.fn()} />);
+    await waitFor(() =>
+      expect(screen.getByTestId('model-selector').textContent).toBe('codex/gpt-5.5'),
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Claude Code' }));
+
+    await waitFor(() =>
+      expect(screen.getByTestId('model-selector').textContent).toBe('claude-sonnet-4-6'),
+    );
+    expect(
+      (screen.getByRole('button', { name: 'orca.createWorker.submit' }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(false);
+  });
+
+  it('explains why creation stays disabled when no local model is available', async () => {
+    mocks.modelsByAgent.codex = [];
+    mocks.capabilitiesByAgent.codex = { availableModels: [] };
+
+    render(<CreateWorkerPopover open onClose={vi.fn()} onCreate={vi.fn()} />);
+
+    expect((await screen.findByRole('status')).textContent).toContain(
+      'orca.createWorker.noAvailableModels',
+    );
+    expect(
+      (screen.getByRole('button', { name: 'orca.createWorker.submit' }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
   });
 });

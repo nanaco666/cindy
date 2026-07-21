@@ -6214,6 +6214,7 @@
       "customRolePredefinedError": "カスタムロールには既定ロール名を使用できません",
       "agentLabel": "Agent",
       "modelLabel": "モデル",
+      "noAvailableModels": "利用可能な {{agent}} モデルがありません。設定でプロバイダーの接続と認証情報を確認してください。",
       "effortLabel": "Effort",
       "initialTaskLabel": "初期タスク",
       "optional": "（任意）",

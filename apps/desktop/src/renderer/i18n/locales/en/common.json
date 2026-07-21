@@ -6223,6 +6223,7 @@
       "customRolePredefinedError": "Custom role cannot use a predefined role name",
       "agentLabel": "Agent",
       "modelLabel": "Model",
+      "noAvailableModels": "No available {{agent}} model. Check the provider connection and credentials in Settings.",
       "effortLabel": "Effort",
       "initialTaskLabel": "Initial Task",
       "optional": "(optional)",

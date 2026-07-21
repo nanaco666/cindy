@@ -111,7 +111,8 @@ export function CreateWorkerPopover({
   const providers = deviceId ? remoteProviders.providers : localProviders.providers;
   const providersLoading = deviceId ? remoteProviders.loading : localProviders.loading;
   const providersError = deviceId ? remoteProviders.error : null;
-  const activeCaps = agent === 'codex' ? codexCaps.capabilities : ccCaps.capabilities;
+  const activeCapabilitiesState = agent === 'codex' ? codexCaps : ccCaps;
+  const activeCaps = activeCapabilitiesState.capabilities;
   const activeModels = useMemo(() => {
     return selectWorkerModels({
       agent,
@@ -126,6 +127,12 @@ export function CreateWorkerPopover({
   const currentModelSupportsFast = Boolean(
     agent === 'codex' && activeCaps?.hasFastMode && currentModel?.supportsFastMode,
   );
+  const noAvailableLocalModels =
+    !deviceId &&
+    !activeCapabilitiesState.loading &&
+    (activeCaps !== null || activeCapabilitiesState.error !== null) &&
+    !(agent === 'codex' && providersLoading) &&
+    activeModels.length === 0;
 
   // 打开弹窗时恢复上次选择；initial task 不记忆，避免把旧任务误带到下一次创建。
   useEffect(() => {
@@ -142,17 +149,34 @@ export function CreateWorkerPopover({
 
   // capabilities 可能尚未加载或模型被移除；加载后把当前选择收敛到可用模型和 effort。
   useEffect(() => {
-    if (agent === 'codex' && providersLoading) return;
+    if (!open || activeCapabilitiesState.loading || (agent === 'codex' && providersLoading)) return;
     const models = activeModels;
     if (models.length === 0) return;
-    const selected = models.find((m) => m.id === model);
-    // 显式模型可能刚由 provider catalog 发现，而 capabilities 快照仍在联合刷新。
-    // 不得把它静默替换成 models[0]；只有真正找到 descriptor 后才校准 effort。
-    if (!selected) return;
+    let selected = models.find((m) => m.id === model);
+    if (!selected) {
+      // 本地 providers + capabilities 是原子快照,缺失即代表历史偏好已经失效。
+      // 远端两份快照独立推送:provider 先到时可能暂时过滤掉仍有效的模型。只有被控端
+      // capabilities 也确认模型不存在后才回退,避免刷新窗口静默改掉用户选择。
+      const pendingRemoteProviderSnapshot =
+        Boolean(deviceId) && Boolean(activeCaps?.availableModels.some((item) => item.id === model));
+      if (pendingRemoteProviderSnapshot) return;
+      selected = models[0];
+      setModel(selected.id);
+    }
     if (selected.efforts.length > 0 && !selected.efforts.includes(effort)) {
       setEffort(selected.defaultEffort ?? selected.efforts[selected.efforts.length - 1]);
     }
-  }, [activeModels, agent, providersLoading, effort, model]);
+  }, [
+    activeCapabilitiesState.loading,
+    activeCaps,
+    activeModels,
+    agent,
+    deviceId,
+    effort,
+    model,
+    open,
+    providersLoading,
+  ]);
 
   useEffect(() => {
     if (currentModel && !currentModelSupportsFast && fast) {
@@ -195,7 +219,11 @@ export function CreateWorkerPopover({
       ? t('orca.createWorker.customRolePredefinedError')
       : null;
   const canCreate =
-    !isSubmitting && activeRole.length >= 1 && activeRole.length <= 32 && !customRoleError && !!currentModel;
+    !isSubmitting &&
+    activeRole.length >= 1 &&
+    activeRole.length <= 32 &&
+    !customRoleError &&
+    !!currentModel;
   const resolvedTitle = title ?? t('orca.createWorker.title');
   const resolvedSubmitLabel = submitLabel ?? t('orca.createWorker.submit');
 
@@ -339,6 +367,13 @@ export function CreateWorkerPopover({
               popoverSide="bottom"
             />
           </div>
+          {noAvailableLocalModels ? (
+            <p className="mt-1.5 text-11 leading-snug text-[var(--error-fg)]" role="status">
+              {t('orca.createWorker.noAvailableModels', {
+                agent: agent === 'codex' ? 'Codex' : 'Claude Code',
+              })}
+            </p>
+          ) : null}
         </div>
 
         <div className="mb-5">
