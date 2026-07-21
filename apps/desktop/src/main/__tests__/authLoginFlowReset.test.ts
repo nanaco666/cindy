@@ -75,6 +75,18 @@ describe('auth login-flow reset', () => {
     expect(getterBody).not.toContain('accountAccessToken');
   });
 
+  it('keeps account recovery non-blocking for an already authenticated resource session', () => {
+    const initializeStart = source.indexOf('export async function initialize(');
+    const initializeEnd = source.indexOf('\n}\n\n/**\n * 冷启动 refresh 流程本体', initializeStart);
+    const initializeBody = source.slice(initializeStart, initializeEnd);
+    const authenticatedFastPath = initializeBody.indexOf('if (accessToken && currentUser)');
+    const accountRecovery = initializeBody.indexOf('void accountSession.refresh();');
+
+    expect(authenticatedFastPath).toBeGreaterThan(-1);
+    expect(accountRecovery).toBeGreaterThan(authenticatedFastPath);
+    expect(initializeBody).not.toContain('await accountSession.refresh()');
+  });
+
   it('drops a runtime refresh result after logout or a newer login changes auth generation', () => {
     const refreshStart = source.indexOf('export async function refresh(): Promise<boolean> {');
     const refreshEnd = source.indexOf('\n}\n\nexport async function logout()', refreshStart);

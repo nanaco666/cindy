@@ -47,6 +47,10 @@ import {
   type RefreshFetchResult,
 } from './authRefreshFailure';
 import { awaitWithStartupTimeout } from './authStartupGate';
+import {
+  DesktopAccountSession,
+  restoreAccountMembershipsWithinTimeout,
+} from './accountSession';
 import { syncCanaryFlagAfterAuth } from './canaryFlagSync';
 import {
   createAuthBrowserAuthorizationSlot,
@@ -80,6 +84,7 @@ function authServerUrl(): string {
 const REFRESH_TOKEN_KEY = 'cindy_auth_refresh_token';
 const ACCOUNT_REFRESH_TOKEN_KEY = 'cindy_auth_account_refresh_token';
 const LEGACY_REFRESH_TOKEN_KEY = 'refresh_token';
+const ACCOUNT_REFRESH_TOKEN_REPLACEMENT_RECHECK_DELAYS_MS = [100, 250] as const;
 const DEFAULT_MODEL = 'claude-sonnet-4-6';
 const DEFAULT_EFFORT = 'medium';
 
@@ -159,12 +164,9 @@ let accountSwitchTeardown: AccountSwitchTeardown | null = null;
 // ── Module-level state ──────────────────────────────────────────────────────
 
 let accessToken: string | null = null;
-let accountAccessToken: string | null = null;
 let currentUser: CurrentUser | null = null;
 let refreshTimer: ReturnType<typeof setTimeout> | null = null;
 let refreshPromise: Promise<boolean> | null = null;
-let accountRefreshPromise: Promise<boolean> | null = null;
-let accountSessionGeneration = 0;
 /**
  * 设备标识。默认绑定物理机(machineIdSync)。
  *
@@ -233,18 +235,6 @@ function removeSafe(key: string): void {
   }
 }
 
-function clearAccountSession(): void {
-  accountSessionGeneration += 1;
-  accountAccessToken = null;
-  removeSafe(ACCOUNT_REFRESH_TOKEN_KEY);
-}
-
-function installAccountSession(pair: AccountTokenPair): void {
-  accountSessionGeneration += 1;
-  accountAccessToken = pair.accountToken;
-  writeSafe(ACCOUNT_REFRESH_TOKEN_KEY, pair.accountRefreshToken);
-}
-
 function accountPairFromOutcome(outcome: LoginOutcome): AccountTokenPair | null {
   if (
     (outcome.status === 'ok' || outcome.status === 'select_account') &&
@@ -270,61 +260,29 @@ function isJwtExpiring(token: string, skewSeconds = 300): boolean {
   }
 }
 
-async function refreshAccountSession(): Promise<boolean> {
-  if (accountRefreshPromise) return accountRefreshPromise;
-  const generation = accountSessionGeneration;
-  const storedToken = readSafe(ACCOUNT_REFRESH_TOKEN_KEY);
-  if (!storedToken) return false;
-
-  accountRefreshPromise = (async () => {
-    try {
-      const pair = await createAuthClient().refreshAccount(storedToken);
-      if (accountSessionGeneration !== generation) return false;
-      accountAccessToken = pair.accountToken;
-      writeSafe(ACCOUNT_REFRESH_TOKEN_KEY, pair.accountRefreshToken);
-      return true;
-    } catch (error) {
-      if (
-        accountSessionGeneration === generation &&
-        error instanceof AuthApiError &&
-        error.statusCode === 401
-      ) {
-        clearAccountSession();
-      }
-      return false;
-    }
-  })();
-  try {
-    return await accountRefreshPromise;
-  } finally {
-    accountRefreshPromise = null;
-  }
-}
-
-async function getAccountAccessToken(): Promise<string | null> {
-  if (accountAccessToken && !isJwtExpiring(accountAccessToken)) return accountAccessToken;
-  accountAccessToken = null;
-  return (await refreshAccountSession()) ? accountAccessToken : null;
-}
+const accountSession = new DesktopAccountSession({
+  readRefreshToken: () => readSafe(ACCOUNT_REFRESH_TOKEN_KEY),
+  writeRefreshToken: (refreshToken) => {
+    writeSafe(ACCOUNT_REFRESH_TOKEN_KEY, refreshToken);
+  },
+  removeRefreshToken: () => removeSafe(ACCOUNT_REFRESH_TOKEN_KEY),
+  refreshAccount: (refreshToken) => createAuthClient().refreshAccount(refreshToken),
+  isAccessTokenExpiring: (accessToken) => isJwtExpiring(accessToken),
+  replacementRecheckDelaysMs: ACCOUNT_REFRESH_TOKEN_REPLACEMENT_RECHECK_DELAYS_MS,
+});
 
 async function restoreAccountSelection(): Promise<AuthFlowState | null> {
-  let token = await getAccountAccessToken();
-  if (!token) return null;
-  try {
-    const memberships = await createAuthClient().getAccountMemberships(token);
-    if (memberships.length === 0) return null;
-    loginFlowState = { step: 'account-selection', accounts: memberships };
-    return loginFlowState;
-  } catch (error) {
-    if (!(error instanceof AuthApiError) || error.statusCode !== 401) return null;
-    accountAccessToken = null;
-    token = await getAccountAccessToken();
-    if (!token) return null;
-    const memberships = await createAuthClient().getAccountMemberships(token);
-    if (memberships.length === 0) return null;
-    loginFlowState = { step: 'account-selection', accounts: memberships };
-    return loginFlowState;
-  }
+  const memberships = await restoreAccountMembershipsWithinTimeout(
+    {
+      getAccessToken: () => accountSession.getAccessToken(),
+      invalidateAccessToken: () => accountSession.invalidateAccessToken(),
+      listMemberships: (accessToken) => createAuthClient().getAccountMemberships(accessToken),
+      isUnauthorized: (error) => error instanceof AuthApiError && error.statusCode === 401,
+    },
+    COLD_START_AUTH_GATE_TIMEOUT_MS,
+  );
+  if (!memberships || memberships.length === 0) return null;
+  return { step: 'account-selection', accounts: memberships };
 }
 
 // ── PKCE (Node.js native crypto) ────────────────────────────────────────────
@@ -888,7 +846,7 @@ function clearAuth(opts: { notify?: boolean } = {}): void {
   const notify = opts.notify ?? true;
   authStateEpoch += 1; // 迟到的冷启动流程从此作废(见 authStateEpoch 注释)
   accessToken = null;
-  clearAccountSession();
+  accountSession.clear();
   currentUser = null;
   resetLoginFlowState();
   persistedRefreshTokenNeedsIdentityCheck = false;
@@ -1041,7 +999,7 @@ export async function initialize(options: AuthInitializeOptions = {}): Promise<A
     );
     lastAcceptedRefreshToken = null;
     removeSafe(REFRESH_TOKEN_KEY);
-    clearAccountSession();
+    accountSession.clear();
     removeSafe(LEGACY_REFRESH_TOKEN_KEY);
     clearReloginFlag();
     return { user: null, isAuthenticated: false, isCanary: false, deviceId };
@@ -1052,7 +1010,7 @@ export async function initialize(options: AuthInitializeOptions = {}): Promise<A
   const storedToken = readSafe(REFRESH_TOKEN_KEY);
   // Account 与 resource 会话独立轮换。账号会话只用于身份列表/交换，绝不替代
   // 当前 resource token；后台恢复不阻塞已有资源会话冷启动。
-  if (readSafe(ACCOUNT_REFRESH_TOKEN_KEY)) void refreshAccountSession();
+  if (accountSession.hasRecoverableSession()) void accountSession.refresh();
   if (!storedToken) {
     return { user: null, isAuthenticated: false, isCanary: false, deviceId };
   }
@@ -1212,10 +1170,14 @@ export async function getLoginState(): Promise<DesktopLoginActionResult> {
   try {
     if (loginFlowState) return { success: true, state: loginFlowState };
     // 若上次在“已认证账号、尚未选择资源身份”时退出，可直接恢复身份选择。
-    // 后台 account refresh 尚未完成时不阻塞登录页，回落到常规登录入口。
-    if (accountAccessToken && !isJwtExpiring(accountAccessToken)) {
+    // Account refresh 是轮换端点，不能 abort；这里最多等待与 resource 冷启动
+    // 相同的等待上限。已有 resource 会话不进入登录页，不受这段等待影响。
+    if (accountSession.hasRecoverableSession()) {
       const restored = await restoreAccountSelection();
-      if (restored) return { success: true, state: restored };
+      if (restored) {
+        loginFlowState = restored;
+        return { success: true, state: loginFlowState };
+      }
     }
     return { success: true, state: await loadLoginProviders() };
   } catch (error) {
@@ -1266,8 +1228,8 @@ async function completeLogin(
 
 async function acceptLoginOutcome(outcome: LoginOutcome): Promise<AuthFlowState> {
   const accountPair = accountPairFromOutcome(outcome);
-  if (accountPair) installAccountSession(accountPair);
-  else clearAccountSession();
+  if (accountPair) accountSession.install(accountPair);
+  else accountSession.clear();
 
   if (outcome.status === 'ok') return completeLogin(outcome);
   if (outcome.status === 'select_account') {
@@ -1399,7 +1361,7 @@ async function runLoginAction(action: DesktopLoginAction): Promise<DesktopLoginA
     }
 
     if (action.type === 'select-account') {
-      const accountToken = await getAccountAccessToken();
+      const accountToken = await accountSession.getAccessToken();
       if (accountToken) {
         const pair = await client.exchangeAccountMembership(accountToken, action.accountId);
         return {
@@ -1681,7 +1643,7 @@ export async function refresh(): Promise<boolean> {
 
 export async function logout(): Promise<void> {
   const currentAccessToken = accessToken;
-  const currentAccountAccessToken = accountAccessToken;
+  const currentAccountAccessToken = accountSession.peekAccessToken();
   // 注意:真实登出入口(bootstrap auth:logout handler)在调用本函数**之前**已
   // dispose DbClient 并释放 device-link 持有权(releaseDeviceLinkOwnershipBeforeLogout);
   // 需要在 DB 关闭前收尾写入的逻辑应挂在那条链路上,而不是本函数内(此时已太晚)。
