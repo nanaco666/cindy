@@ -1,11 +1,11 @@
 /**
  * xdt-helper/get_chat_history.ts —— history 类工具 3/3。
  *
- * 按 sessionIds / workdir / 时间段 / agentKind / roles 任意组合过滤拉 messages,
+ * 按 session_ids / workdir / 时间段 / agent_kind / roles 任意组合过滤拉 messages,
  * 原样返回(包含 raw role + JSON.parse 后的 content + agentMeta)。
  *
  * 设计:
- *  - 必须至少提供一种主要 filter(sessionIds / workdir / from / to), 否则一次性
+ *  - 必须至少提供一种主要 filter(session_ids / workdir / from / to), 否则一次性
  *    扫全表风险大, 返 INVALID_FILTER 引导调用方先用 list_sessions 缩范围
  *  - JOIN sessions 拿 workingDir / agentKind / title 元数据带在 message 行里,
  *    方便调用方区分跨 session 结果
@@ -49,12 +49,12 @@ const DEFAULT_WORKDIR_WINDOW_MS = DEFAULT_WORKDIR_WINDOW_DAYS * 24 * 60 * 60 * 1
 
 const DESCRIPTION = [
   '拉取本地数据库里的原始 message 数据 (raw role + JSON.parse 后的 content + agentMeta),',
-  '按 sessionIds / workdir / 时间段 / agentKind / roles 任意组合过滤。',
+  '按 session_ids / workdir / 时间段 / agent_kind / roles 任意组合过滤。',
   '',
   '【何时调用】用户想"看某个 session 的完整聊天 / 总结某个 workdir 某段时间的对话 /',
   '帮我把昨天和 agent 的讨论整理成 memory 条目"等需要原始对话数据的场景。',
   '',
-  '【必须至少满足一个主过滤】sessionIds / workdir / from / to 至少传一个, 否则返',
+  '【必须至少满足一个主过滤】session_ids / workdir / from / to 至少传一个, 否则返',
   'INVALID_FILTER。这是为了防止误调用一次性拉全库。要"全量"语义请用游标分页串联。',
   '',
   '【workdir 模式自带 180 天默认窗口】只带 workdir(不带 session_ids / from)调用时,',
