@@ -6215,7 +6215,7 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
     const result = enabled ? await maker.makerMemory.enable() : await maker.makerMemory.disable();
     let settingsState = readMemorySettingsState();
     try {
-      settingsState = writeMemorySetting('maker', enabled);
+      settingsState = writeMemorySetting('maker', enabled, { preserveDefault: enabled });
     } catch (err) {
       log.warn('maker-memory:set-enabled persistence failed (in-session change still applied)', {
         enabled,

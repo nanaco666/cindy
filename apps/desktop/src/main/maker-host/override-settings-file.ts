@@ -15,7 +15,7 @@ export interface OverrideSettingsState<T> {
 export interface OverrideSettingsFile<T> {
   read(): T;
   readState(): OverrideSettingsState<T>;
-  writePatch(patch: Partial<T>): void;
+  writePatch(patch: Partial<T>, options?: { preserveDefaults?: boolean }): void;
   reset(): T;
   /**
    * 文件被进程外修改(用户/agent 手改配置)时失效缓存,下次 read 现读。
@@ -111,7 +111,7 @@ export function createOverrideSettingsFile<T>(options: {
     }
   }
 
-  function writePatch(patch: Partial<T>): void {
+  function writePatch(patch: Partial<T>, writeOptions?: { preserveDefaults?: boolean }): void {
     const current = readState();
     const next = options.normalize({ ...current.value, ...patch });
     const currentDefaults = defaults();
@@ -127,7 +127,7 @@ export function createOverrideSettingsFile<T>(options: {
           const overrides = { ...currentOverrides };
           for (const key of Object.keys(patch) as Array<keyof T>) {
             const normalizedValue = next[key];
-            if (isEqual(normalizedValue, currentDefaults[key])) {
+            if (!writeOptions?.preserveDefaults && isEqual(normalizedValue, currentDefaults[key])) {
               delete overrides[String(key)];
             } else {
               overrides[String(key)] = normalizedValue;

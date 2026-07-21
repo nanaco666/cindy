@@ -101,7 +101,22 @@ describe('memory-settings-store', () => {
     );
 
     expect(preserveLegacyMakerMemoryDisabled(true).maker).toBe(true);
-    expect(readMemorySettingsState().customizedKeys).toEqual(['claudeCode', 'codex']);
+    expect(readMemorySettingsState().customizedKeys).toEqual(['claudeCode', 'codex', 'maker']);
+  });
+
+  it('persists an explicit Maker opt-in even though it matches the new default', async () => {
+    const { preserveLegacyMakerMemoryDisabled, readMemorySettingsState } = await import(
+      '../memory-settings-store.js'
+    );
+
+    expect(preserveLegacyMakerMemoryDisabled(true).maker).toBe(true);
+    expect(readMemorySettingsState()).toMatchObject({
+      value: { maker: true, claudeCode: true, codex: true },
+      customizedKeys: ['maker'],
+    });
+    expect(JSON.parse(fs.readFileSync(path.join(userDataDir, 'memory-settings.json'), 'utf8'))).toEqual({
+      maker: true,
+    });
   });
 
   it('returns uncustomized state when a setting is manually changed back to default', async () => {

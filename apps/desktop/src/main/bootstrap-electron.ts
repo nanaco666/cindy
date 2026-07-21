@@ -2098,14 +2098,21 @@ ipcMain.on('theme:apply-vibrancy', (_event, payload: { familyId: string; isDark:
     async (_e, legacyRendererValue: unknown) => {
       const parsedLegacyRendererValue =
         legacyRendererValue === true ? true : legacyRendererValue === false ? false : null;
-      const settings = preserveLegacyMakerMemoryDisabled(parsedLegacyRendererValue);
-      // renderer migration 可能晚于 splash 创建 Maker。持久化为 false 后必须立即同步
-      // 已存在的 manager，避免当前进程继续按旧的 enabled=true 启动新 Session。
-      const maker = getMakerIfReady();
-      if (!settings.maker && maker?.makerMemory?.isEnabled()) {
-        await maker.makerMemory.disable();
+      try {
+        const settings = preserveLegacyMakerMemoryDisabled(parsedLegacyRendererValue);
+        // renderer migration 可能晚于 splash 创建 Maker。持久化为 false 后必须立即同步
+        // 已存在的 manager，避免当前进程继续按旧的 enabled=true 启动新 Session。
+        const maker = getMakerIfReady();
+        if (!settings.maker && maker?.makerMemory?.isEnabled()) {
+          await maker.makerMemory.disable();
+        }
+        return settings;
+      } catch (err) {
+        throwIpcError(
+          'INTERNAL',
+          `memory settings migration failed: ${err instanceof Error ? err.message : String(err)}`,
+        );
       }
-      return settings;
     },
   );
   ipcMain.handle(MAKER_IPC_INVOKE.IM_DEFAULT_SETTINGS_GET, async () => {

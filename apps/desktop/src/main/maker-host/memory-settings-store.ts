@@ -82,8 +82,11 @@ export function readMemorySettingsState(): OverrideSettingsState<MemorySettings>
 export function writeMemorySetting<K extends keyof MemorySettings>(
   key: K,
   value: MemorySettings[K],
+  options?: { preserveDefault?: boolean },
 ): OverrideSettingsState<MemorySettings> {
-  store.writePatch({ [key]: value } as Partial<MemorySettings>);
+  store.writePatch({ [key]: value } as Partial<MemorySettings>, {
+    preserveDefaults: options?.preserveDefault === true,
+  });
   log.info('memory setting written', { key, value });
   return store.readState();
 }
@@ -104,6 +107,10 @@ export function preserveLegacyMakerMemoryDisabled(
 ): MemorySettings {
   const state = store.readState();
   if (state.customizedKeys.includes('maker')) return state.value;
+  if (legacyRendererValue === true) {
+    // The new default is true, so keep an explicit legacy opt-in durable.
+    return writeMemorySetting('maker', true, { preserveDefault: true }).value;
+  }
   const nativeMemoryWasExplicitlyDisabled =
     legacyRendererValue === null &&
     (state.value.claudeCode === false || state.value.codex === false);

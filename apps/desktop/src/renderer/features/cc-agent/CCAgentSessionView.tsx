@@ -1813,7 +1813,7 @@ export function CCAgentSessionView({
           fastMode,
           permissionMode: session.permissionMode,
           userPrompt: getUserPrompt(),
-          makerMemoryEnabled: getMakerMemoryEnabled(),
+          ...(session.remoteHostId ? {} : { makerMemoryEnabled: getMakerMemoryEnabled() }),
           extraDirs: session.extraDirs ?? [],
           displayReasoning: 'summarized' as const,
           ...(session.remoteHostId ? { remoteHostId: session.remoteHostId } : {}),
