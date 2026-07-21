@@ -137,6 +137,7 @@ function baseSchedule(overrides: Partial<Schedule> = {}): Schedule {
 }
 
 function createFireContext(): FireContext & {
+  controller: AbortController;
   removeAbortListener: ReturnType<typeof vi.spyOn>;
 } {
   const abortController = new AbortController();
@@ -145,6 +146,7 @@ function createFireContext(): FireContext & {
     runId: 'run-1',
     firedAt: 1_700_000_000_100,
     signal: abortController.signal,
+    controller: abortController,
     onSessionBound: vi.fn(async () => undefined),
     removeAbortListener,
   };
@@ -265,6 +267,35 @@ describe('MakerScheduleRunner send outcome policy', () => {
     expect(h.session.close).not.toHaveBeenCalled();
   });
 
+  it('treats a cancelled send result as an abort when the fire is cancelled', async () => {
+    const ctx = createFireContext();
+    const h = createSessionHarness(async () => {
+      ctx.controller.abort();
+      return { accepted: false, reason: 'cancelled-before-dispatch' };
+    });
+    const { runner, notifier } = createRunnerHarness(h.session);
+
+    await expect(runner.fire(baseSchedule(), ctx)).rejects.toThrow(/schedule fire aborted/);
+    expect(notifier.notify).not.toHaveBeenCalled();
+    expect(h.off).toHaveBeenCalledTimes(1);
+    expect(ctx.removeAbortListener).toHaveBeenCalledTimes(1);
+  });
+
+  it('closes an accepted ephemeral turn before propagating an abort', async () => {
+    const ctx = createFireContext();
+    const h = createSessionHarness(async (_message, opts) => {
+      await opts?.onAccepted?.();
+      ctx.controller.abort();
+      throw new Error('send interrupted by abort');
+    });
+    const { runner, maker, notifier } = createRunnerHarness(h.session);
+
+    await expect(runner.fire(baseSchedule(), ctx)).rejects.toThrow(/send interrupted by abort/);
+    expect(maker.closeSession).toHaveBeenCalledTimes(1);
+    expect(maker.closeSession).toHaveBeenCalledWith('scheduler-session');
+    expect(notifier.notify).not.toHaveBeenCalled();
+  });
+
   it('applies a deferred switch before heartbeat meta lookup and creates the target engine session', async () => {
     const h = createSessionHarness(async () => ({
       accepted: false,
@@ -292,6 +323,7 @@ describe('MakerScheduleRunner send outcome policy', () => {
       userSendAt: null,
       providerId: null,
     });
+    const ctx = createFireContext();
 
     await expect(
       runner.fire(
@@ -300,11 +332,12 @@ describe('MakerScheduleRunner send outcome policy', () => {
           agentKind: 'claude-code',
           model: undefined,
         }),
-        createFireContext(),
+        ctx,
       ),
     ).rejects.toThrow(/cancelled-before-dispatch/);
 
     expect(order.slice(0, 2)).toEqual(['apply', 'meta']);
+    expect(applyPendingAgentSwitch).toHaveBeenCalledWith('scheduler-session', ctx.signal);
     expect(maker.createSession).toHaveBeenCalledWith(
       expect.objectContaining({
         id: 'scheduler-session',
