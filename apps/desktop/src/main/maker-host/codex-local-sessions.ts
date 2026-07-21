@@ -706,6 +706,14 @@ interface LocalCodexRecoverySession {
   workingDir: string;
   model: string | null;
   createdAt: number;
+  updatedAt: number;
+}
+
+/** 一条可用于合成 rollout 的 Cindy 会话及其已过滤历史。 */
+interface LocalCodexRecoverySource {
+  session: LocalCodexRecoverySession;
+  messages: SyntheticRolloutMessage[];
+  recoveryCreatedAt: number;
 }
 
 /**
@@ -716,14 +724,13 @@ async function synthesizeRolloutForMissingThreadState(
   threadId: string,
   targetHome: string,
 ): Promise<string | null> {
-  const session = await readLocalCodexRecoverySession(threadId);
-  if (!session) return null;
-  const messages = await readXdtMessagesBySessionId(session.id);
-  if (messages.length === 0) return null;
+  const source = await readBestLocalCodexRecoverySource(threadId);
+  if (!source) return null;
+  const { session, messages, recoveryCreatedAt } = source;
 
-  const rolloutPath = recoveredRolloutPath(targetHome, threadId, session.createdAt);
+  const rolloutPath = recoveredRolloutPath(targetHome, threadId, recoveryCreatedAt);
   const row: SqlRow = {
-    created_at_ms: session.createdAt,
+    created_at_ms: recoveryCreatedAt,
     cwd: session.workingDir,
     originator: 'xdt-maker',
     source: 'cli',
@@ -740,22 +747,57 @@ async function synthesizeRolloutForMissingThreadState(
   return rolloutPath;
 }
 
-async function readLocalCodexRecoverySession(threadId: string): Promise<LocalCodexRecoverySession | null> {
-  return (await getDbClient().queryOne<LocalCodexRecoverySession>(`
+/**
+ * 同一 Codex thread 可能被复制或 rewind 成多条 Cindy 会话。恢复时逐条读取可见历史，
+ * 优先选择消息最完整的一条；其余字段只负责确定性打破平局，不合并可能分叉的历史。
+ */
+async function readBestLocalCodexRecoverySource(threadId: string): Promise<LocalCodexRecoverySource | null> {
+  const sessions = await getDbClient().query<LocalCodexRecoverySession>(`
     SELECT
       id,
       working_dir AS workingDir,
       model,
-      created_at AS createdAt
+      created_at AS createdAt,
+      updated_at AS updatedAt
     FROM sessions
     WHERE agent_kind = 'codex' AND sdk_session_id = ? AND status <> 'deleted'
-    ORDER BY updated_at DESC
-    LIMIT 1
-  `, [threadId])) ?? null;
+  `, [threadId]);
+
+  let best: LocalCodexRecoverySource | null = null;
+  for (const session of sessions) {
+    const messages = await readXdtMessagesBySessionId(session.id);
+    if (messages.length === 0) continue;
+    const sessionCreatedAt = numberValue(session.createdAt);
+    const firstPositiveMessageAt = messages.find((message) => message.createdAt > 0)?.createdAt ?? 0;
+    const candidate: LocalCodexRecoverySource = {
+      session,
+      messages,
+      recoveryCreatedAt: sessionCreatedAt > 0 ? sessionCreatedAt : firstPositiveMessageAt,
+    };
+    if (!best || isPreferredRecoverySource(candidate, best)) best = candidate;
+  }
+  return best;
+}
+
+function isPreferredRecoverySource(
+  candidate: LocalCodexRecoverySource,
+  current: LocalCodexRecoverySource,
+): boolean {
+  if (candidate.messages.length !== current.messages.length) {
+    return candidate.messages.length > current.messages.length;
+  }
+  const candidateUpdatedAt = numberValue(candidate.session.updatedAt);
+  const currentUpdatedAt = numberValue(current.session.updatedAt);
+  if (candidateUpdatedAt !== currentUpdatedAt) return candidateUpdatedAt > currentUpdatedAt;
+
+  const candidateCreatedAt = numberValue(candidate.session.createdAt);
+  const currentCreatedAt = numberValue(current.session.createdAt);
+  if (candidateCreatedAt !== currentCreatedAt) return candidateCreatedAt > currentCreatedAt;
+  return candidate.session.id < current.session.id;
 }
 
 function recoveredRolloutPath(targetHome: string, threadId: string, createdAt: number): string {
-  const created = new Date(Number.isFinite(createdAt) && createdAt > 0 ? createdAt : Date.now());
+  const created = new Date(Number.isFinite(createdAt) && createdAt > 0 ? createdAt : 0);
   const year = String(created.getUTCFullYear()).padStart(4, '0');
   const month = String(created.getUTCMonth() + 1).padStart(2, '0');
   const day = String(created.getUTCDate()).padStart(2, '0');
@@ -820,15 +862,7 @@ interface SyntheticRolloutMessage {
  * 跳过 thinking/tool —— 合成 rollout 不重建 codex 内部 reasoning/tool 项)。
  */
 async function readXdtMessagesByThreadId(threadId: string): Promise<SyntheticRolloutMessage[]> {
-  const session = await getDbClient().queryOne<{ id: string }>(`
-    SELECT id
-    FROM sessions
-    WHERE agent_kind = 'codex' AND sdk_session_id = ?
-    ORDER BY updated_at DESC
-    LIMIT 1
-  `, [threadId]);
-  if (!session) return [];
-  return readXdtMessagesBySessionId(session.id);
+  return (await readBestLocalCodexRecoverySource(threadId))?.messages ?? [];
 }
 
 async function readXdtMessagesBySessionId(sessionId: string): Promise<SyntheticRolloutMessage[]> {
@@ -836,7 +870,7 @@ async function readXdtMessagesBySessionId(sessionId: string): Promise<SyntheticR
     SELECT role, content, created_at AS createdAt
     FROM messages
     WHERE session_id = ? AND rewind_at IS NULL AND role IN ('user', 'assistant')
-    ORDER BY created_at ASC
+    ORDER BY created_at ASC, id ASC
   `, [sessionId]);
   const out: SyntheticRolloutMessage[] = [];
   for (const r of rows) {

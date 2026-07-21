@@ -924,7 +924,11 @@ describe('prepareExternalCodexSessionForResume orphan rollout synthesis', () => 
   const desktopHome = () => path.join(targetUserData, 'codex-home');
 
   /** 在桌面端 localDb 插一条 codex 会话(sdk_session_id=threadId)。 */
-  function insertLocalCodexSession(sessionId: string, sdkSessionId: string): void {
+  function insertLocalCodexSession(
+    sessionId: string,
+    sdkSessionId: string,
+    opts: { createdAt?: number; updatedAt?: number } = {},
+  ): void {
     currentTestDb().prepare(`
       INSERT INTO sessions (
         id, title, working_dir, model, effort, permission_mode, status,
@@ -937,9 +941,9 @@ describe('prepareExternalCodexSessionForResume orphan rollout synthesis', () => 
       VALUES (
         ?, 'Orphan', '/tmp/project', 'gpt-5.5', 'high', 'ask', 'active',
         ?, 0, 0, 0, 0, 0, NULL, NULL, 1,
-        'codex', NULL, NULL, NULL, 'desktop', NULL, NULL, 0, '[]', 1000, 2000
+        'codex', NULL, NULL, NULL, 'desktop', NULL, NULL, 0, '[]', ?, ?
       )
-    `).run(sessionId, sdkSessionId);
+    `).run(sessionId, sdkSessionId, opts.createdAt ?? 1_000, opts.updatedAt ?? 2_000);
   }
 
   function insertLocalMessage(
@@ -1162,6 +1166,62 @@ describe('prepareExternalCodexSessionForResume orphan rollout synthesis', () => 
     expect(fs.readFileSync(rolloutPath, 'utf-8')).toBe(originalContents);
   });
 
+  it('prefers the fullest readable history when duplicate Cindy sessions share a Codex thread', async () => {
+    createStateDb(desktopHome());
+    const fullerSessionId = `local-fuller-${threadId}`;
+    const partialSessionId = `local-partial-${threadId}`;
+    insertLocalCodexSession(fullerSessionId, threadId, { createdAt: 1_000, updatedAt: 2_000 });
+    insertLocalCodexSession(partialSessionId, threadId, { createdAt: 1_500, updatedAt: 3_000 });
+    insertLocalMessage(fullerSessionId, 'full-1', 'user', JSON.stringify({ text: 'full start' }), 1_000);
+    insertLocalMessage(fullerSessionId, 'full-2', 'assistant', 'full answer', 1_100);
+    insertLocalMessage(fullerSessionId, 'full-3', 'user', JSON.stringify({ text: 'full continuation' }), 1_200);
+    insertLocalMessage(partialSessionId, 'partial-1', 'user', JSON.stringify({ text: 'partial only' }), 1_500);
+
+    await prepareExternalCodexSessionForResume(threadId);
+
+    const rolloutPath = path.join(
+      desktopHome(),
+      'sessions',
+      '1970',
+      '01',
+      '01',
+      `rollout-1970-01-01T00-00-01-${threadId}.jsonl`,
+    );
+    const lines = fs.readFileSync(rolloutPath, 'utf-8').trim().split('\n').map((line) => JSON.parse(line));
+    expect(lines.slice(1).map((line) => line.payload.content[0].text)).toEqual([
+      'full start',
+      'full answer',
+      'full continuation',
+    ]);
+  });
+
+  it('uses the first positive message timestamp for concurrent recovery when session created_at is invalid', async () => {
+    createStateDb(desktopHome());
+    const sessionId = `local-zero-created-${threadId}`;
+    insertLocalCodexSession(sessionId, threadId, { createdAt: 0, updatedAt: 2_000 });
+    insertLocalMessage(sessionId, 'c0', 'user', JSON.stringify({ text: 'zero timestamp' }), 0);
+    insertLocalMessage(sessionId, 'c1', 'assistant', 'stable timestamp', 5_000);
+
+    await Promise.all([
+      prepareExternalCodexSessionForResume(threadId),
+      prepareExternalCodexSessionForResume(threadId),
+    ]);
+
+    const rolloutPath = path.join(
+      desktopHome(),
+      'sessions',
+      '1970',
+      '01',
+      '01',
+      `rollout-1970-01-01T00-00-05-${threadId}.jsonl`,
+    );
+    expect(fs.existsSync(rolloutPath)).toBe(true);
+    expect(fs.readdirSync(path.dirname(rolloutPath))).toEqual([path.basename(rolloutPath)]);
+    const meta = JSON.parse(fs.readFileSync(rolloutPath, 'utf-8').split('\n')[0]);
+    expect(meta.timestamp).toBe('1970-01-01T00:00:05.000Z');
+    expect(meta.payload.timestamp).toBe('1970-01-01T00:00:05.000Z');
+  });
+
   it('does not synthesize missing Codex state for a deleted local session', async () => {
     createStateDb(desktopHome());
     const sessionId = `local-deleted-${threadId}`;
@@ -1186,6 +1246,15 @@ describe('prepareExternalCodexSessionForResume orphan rollout synthesis', () => 
     insertLocalMessage(sessionId, 'c2', 'thinking', JSON.stringify({ kind: 'thinking', text: 'internal' }), 1500);
     insertLocalMessage(sessionId, 'c3', 'assistant', '我没看懂你的意思。', 1600);
     insertLocalMessage(sessionId, 'c4', 'user', JSON.stringify({ text: '444', images: [], files: [] }), 1700);
+    const newerPartialSessionId = `local-orphan-partial-${threadId}`;
+    insertLocalCodexSession(newerPartialSessionId, threadId, { createdAt: 1_500, updatedAt: 3_000 });
+    insertLocalMessage(
+      newerPartialSessionId,
+      'partial-1',
+      'user',
+      JSON.stringify({ text: 'newer partial history' }),
+      1_800,
+    );
 
     expect(fs.existsSync(missingRollout)).toBe(false);
     await prepareExternalCodexSessionForResume(threadId);
