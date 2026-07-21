@@ -188,7 +188,7 @@ export function InstallTargetPicker({ open, skill, onClose, onInstallComplete }:
             className={cn(
               'flex shrink-0 items-center gap-[6px] rounded-full transition-colors',
               'border border-[var(--confirm-btn-secondary-border)] bg-[var(--cmd-palette-bg)] text-[var(--settings-btn-secondary-text)]',
-              'hover:bg-[var(--update-btn-hover)]',
+              'hover:bg-[var(--surface-hover)]',
               'disabled:opacity-50 disabled:cursor-not-allowed',
             )}
             style={{ height: '32px', padding: '0 12px', fontSize: '12px', fontWeight: 500 }}

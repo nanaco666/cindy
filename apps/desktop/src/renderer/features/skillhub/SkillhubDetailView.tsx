@@ -896,7 +896,7 @@ function FileTreeRow({ entry, parentDir, depth, currentPath, onSelectFile }: Fil
           'transition-colors',
           isSelected
             ? 'bg-[var(--settings-btn-secondary-bg)]'
-            : 'hover:bg-[var(--update-btn-hover)]',
+            : 'hover:bg-[var(--surface-hover)]',
         )}
         title={fullPath}
       >
@@ -1855,7 +1855,7 @@ export function SkillhubDetailView() {
             onClick={goBack}
             className={cn(
               'flex h-9 w-9 items-center justify-center rounded-full',
-              'text-[var(--settings-section-desc)] hover:bg-[var(--update-btn-hover)]',
+              'text-[var(--settings-section-desc)] hover:bg-[var(--surface-hover)]',
             )}
             style={WINDOW_NO_DRAG_STYLE}
             aria-label={backLabel}
@@ -1956,7 +1956,7 @@ export function SkillhubDetailView() {
                 'flex h-9 shrink-0 items-center gap-2 rounded-full border px-[18px]',
                 'text-sm font-medium',
                 'border-[var(--confirm-btn-secondary-border)] bg-transparent text-[var(--settings-btn-secondary-text)]',
-                'hover:bg-[var(--update-btn-hover)]',
+                'hover:bg-[var(--surface-hover)]',
                 'disabled:opacity-50 disabled:cursor-not-allowed',
                 'transition-colors',
               )}
@@ -1995,7 +1995,7 @@ export function SkillhubDetailView() {
                     'flex h-9 shrink-0 items-center gap-2 rounded-full border px-[18px]',
                     'text-sm font-medium',
                     'border-[var(--confirm-btn-secondary-border)] bg-transparent text-[var(--settings-btn-secondary-text)]',
-                    'hover:bg-[var(--update-btn-hover)]',
+                    'hover:bg-[var(--surface-hover)]',
                     'disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent',
                     'transition-colors',
                   )}
@@ -2019,7 +2019,7 @@ export function SkillhubDetailView() {
                   'flex h-9 shrink-0 items-center gap-2 rounded-full border px-[18px]',
                   'text-sm font-medium',
                   'border-[var(--confirm-btn-secondary-border)] bg-transparent text-[var(--settings-btn-secondary-text)]',
-                  'hover:bg-[var(--update-btn-hover)]',
+                  'hover:bg-[var(--surface-hover)]',
                   'disabled:opacity-50 disabled:cursor-not-allowed',
                   'transition-colors',
                 )}
@@ -2039,7 +2039,7 @@ export function SkillhubDetailView() {
                     'flex h-9 shrink-0 items-center gap-2 rounded-full border px-[18px]',
                     'text-sm font-medium',
                     'border-[var(--confirm-btn-secondary-border)] bg-transparent text-[var(--settings-btn-secondary-text)]',
-                    'hover:bg-[var(--update-btn-hover)]',
+                    'hover:bg-[var(--surface-hover)]',
                     'disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent',
                     'transition-colors',
                   )}
@@ -2134,7 +2134,7 @@ export function SkillhubDetailView() {
                       'flex h-[35px] shrink-0 items-center gap-2 rounded-full border px-[18px]',
                       'text-sm font-medium',
                       'border-[var(--confirm-btn-secondary-border)] bg-transparent text-[var(--settings-btn-secondary-text)]',
-                      'hover:bg-[var(--update-btn-hover)]',
+                      'hover:bg-[var(--surface-hover)]',
                       'disabled:opacity-50 disabled:cursor-not-allowed',
                       'transition-colors',
                     )}

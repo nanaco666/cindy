@@ -8,7 +8,7 @@
  *   - variant='rail'(78px 折叠态 rail):h-9 w-9 / rounded-full,保留 rail 既有
  *     圆钮形状,仅统一配色。
  * 配色三态(两 variant 共用,均取自 HorizontalTabbar / themes/colors.ts):
- *   - idle :  icon text-[hsl(var(--titlebar-icon))],hover bg-[var(--update-btn-hover)]
+ *   - idle :  icon text-[hsl(var(--titlebar-icon))],hover bg-sidebar-item-hover(侧栏玻璃面同款,2026-07-21 修正 update-btn-hover 误用)
  *   - active:  bg-[var(--chat-input-chip-bg)] + icon text-[var(--msg-assistant-text)]
  * icon 固定 size 18;showDot 在右上角画一个 attention 状态点(自动化未读,
  * dotTone 按全端统一色表:done 绿 / error 红)。
@@ -28,7 +28,7 @@ import { AttentionDot, type DotTone } from './AttentionDot';
 const BTN_BASE = 'relative flex shrink-0 items-center justify-center transition-colors duration-150';
 const GRID_GEOMETRY = 'h-[34px] w-[34px] rounded-[6px]';
 const RAIL_GEOMETRY = 'h-9 w-9 rounded-full';
-const IDLE = 'text-[hsl(var(--titlebar-icon))] hover:bg-[var(--update-btn-hover)]';
+const IDLE = 'text-[hsl(var(--titlebar-icon))] hover:bg-sidebar-item-hover';
 const ACTIVE = 'bg-[var(--chat-input-chip-bg)] text-[var(--msg-assistant-text)]';
 
 /**

@@ -51,7 +51,7 @@ function OptionRow({
       className={cn(
         'flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-sm',
         'text-[var(--msg-assistant-text)] transition-colors',
-        !disabled && !locked && 'hover:bg-[var(--update-btn-hover)]',
+        !disabled && !locked && 'hover:bg-[var(--surface-hover)]',
         disabled && 'cursor-not-allowed opacity-60',
         locked && 'cursor-default opacity-80',
       )}
