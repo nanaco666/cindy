@@ -29,6 +29,7 @@ export function WindowControls({
   const [showWindowsCloseBehaviorDialog, setShowWindowsCloseBehaviorDialog] = useState(false);
   const [savingWindowsCloseBehavior, setSavingWindowsCloseBehavior] = useState(false);
   const savingWindowsCloseBehaviorRef = useRef(false);
+  const windowsCloseBehaviorDialogVisibleRef = useRef(false);
   // 点 X 后 (无论走确认框还是直接关) 进入不可取消的 closing 态:
   //   - 有 in-flight turn 路径: ConfirmDialog 显示 loading spinner + 锁住关闭
   //   - 无 in-flight 路径:      全屏 ClosingOverlay 显示 spinner + "正在关闭…"
@@ -42,9 +43,20 @@ export function WindowControls({
   useEffect(() => {
     if (window.electronAPI.platform !== 'win32') return;
     return window.electronAPI.windowBehavior.onWindowsCloseBehaviorRequested(() => {
+      if (windowsCloseBehaviorDialogVisibleRef.current) {
+        window.electronAPI.windowBehavior.notifyWindowsCloseBehaviorPromptShown();
+        return;
+      }
       setShowWindowsCloseBehaviorDialog(true);
     });
   }, []);
+
+  useEffect(() => {
+    windowsCloseBehaviorDialogVisibleRef.current = showWindowsCloseBehaviorDialog;
+    if (showWindowsCloseBehaviorDialog && window.electronAPI.platform === 'win32') {
+      window.electronAPI.windowBehavior.notifyWindowsCloseBehaviorPromptShown();
+    }
+  }, [showWindowsCloseBehaviorDialog]);
 
   const controlBase = cn(
     'flex items-center justify-center',

@@ -17,6 +17,7 @@ function installWindowsApi(closeBehavior: 'quit' | 'tray' | null) {
     closeBehaviorRequested = callback;
     return vi.fn();
   });
+  const notifyWindowsCloseBehaviorPromptShown = vi.fn();
   const anySessionInTurn = vi.fn(async () => false);
   const windowClose = vi.fn();
   Object.defineProperty(window, 'electronAPI', {
@@ -27,6 +28,7 @@ function installWindowsApi(closeBehavior: 'quit' | 'tray' | null) {
         getWindowsCloseBehavior,
         setWindowsCloseBehavior,
         onWindowsCloseBehaviorRequested,
+        notifyWindowsCloseBehaviorPromptShown,
       },
       anySessionInTurn,
       windowClose,
@@ -38,6 +40,7 @@ function installWindowsApi(closeBehavior: 'quit' | 'tray' | null) {
     getWindowsCloseBehavior,
     setWindowsCloseBehavior,
     onWindowsCloseBehaviorRequested,
+    notifyWindowsCloseBehaviorPromptShown,
     anySessionInTurn,
     windowClose,
     requestCloseBehavior: () => closeBehaviorRequested?.(),
@@ -96,6 +99,7 @@ describe('Windows close behavior', () => {
     act(() => api.requestCloseBehavior());
 
     expect(await screen.findByText('settings.windowBehavior.closePrompt.title')).toBeTruthy();
+    await waitFor(() => expect(api.notifyWindowsCloseBehaviorPromptShown).toHaveBeenCalledOnce());
     fireEvent.click(
       screen.getByRole('button', { name: 'settings.windowBehavior.closeBehavior.quit' }),
     );
@@ -103,5 +107,18 @@ describe('Windows close behavior', () => {
     await waitFor(() => expect(api.setWindowsCloseBehavior).toHaveBeenCalledWith('quit'));
     await waitFor(() => expect(api.anySessionInTurn).toHaveBeenCalledTimes(1));
     expect(api.windowClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('acknowledges another native close request while the custom dialog is already visible', async () => {
+    const api = installWindowsApi(null);
+    render(<WindowControls />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'titleBar.close' }));
+    expect(await screen.findByText('settings.windowBehavior.closePrompt.title')).toBeTruthy();
+    await waitFor(() => expect(api.notifyWindowsCloseBehaviorPromptShown).toHaveBeenCalledOnce());
+
+    act(() => api.requestCloseBehavior());
+
+    expect(api.notifyWindowsCloseBehaviorPromptShown).toHaveBeenCalledTimes(2);
   });
 });
