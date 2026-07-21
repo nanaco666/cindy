@@ -640,6 +640,20 @@ describe('远程交互接线不变式', () => {
   it('ChatInput 的 setPermissionMode 远程经隧道(makerApiFor),本机才走本机 IPC', () => {
     const src = read('components/new-chat/ChatInput.tsx');
     expect(src).toContain('makerApiFor(sessionId).setPermissionMode');
+    const runtimeSet = src.indexOf(
+      'await window.electronAPI.maker.setPermissionMode(sessionId, newMode);',
+    );
+    const persistSet = src.indexOf(
+      'await sessionService.update(sessionId, { permissionMode: newMode });',
+    );
+    expect(runtimeSet).toBeGreaterThan(-1);
+    expect(persistSet).toBeGreaterThan(runtimeSet);
+    expect(src).toContain(
+      'await window.electronAPI.maker.setPermissionMode(sessionId, previousMode);',
+    );
+    expect(src).toContain('requiresFullAccessConfirmation(previousMode, newMode)');
+    expect(src).toContain('if (!confirmed) return;');
+    expect(src).toContain("toast.error(t('newChat.chatInput.permissionSwitchFailed'))");
   });
 
   it('ChatInput 的 Fast 草稿默认同步必须等 onFastModeChange 成功后才执行', () => {

@@ -270,17 +270,9 @@ function mapPermissionToCodex(permissionMode?: string): CodexPermissionConfig {
     case 'bypassPermissions':
       return { approvalPolicy: 'never', sandbox: 'danger-full-access' };
     case 'auto':
-      // auto 的产品语义是「不弹审批,自动执行」。此前这里用 on-request + workspace-write,
-      // 再由 awaitApprovalDecision 自动 accept server 发来的提权请求；但 Codex app-server 在
-      // on-request 路径会先走内部安全判断模型。该模型短暂不可用时,即使用户已选 auto,
-      // Feishu / WebFetch / Bash 等工具也会被阻断,且重试不会恢复。
-      //
-      // 因此 auto 直接对齐 bypass 的底层权限形态:不触发 app-server 审批 / 安全判断通道,
-      // 避免辅助判断模型故障连带阻断工具调用。真正必须逐次确认的高风险内置 MCP action
-      // 仍由 mcpServerElicitation 的 prompt-each-time + forcePrompt 分支兜住。
-      // 运行中收紧 (auto/bypass → ask) 由 setPermissionMode 的 turn/interrupt 兜底:
-      // never 档 turn 内 server 不再发审批请求, 本地拦不住, 只能中断当前 turn。
-      return { approvalPolicy: 'never', sandbox: 'danger-full-access' };
+      // Codex 原生 untrusted 策略就是它的 Auto-review:可信命令集自动执行，
+      // 非可信命令升级给用户确认。保持 workspace sandbox，绝不等同 Full access。
+      return { approvalPolicy: 'untrusted', sandbox: 'workspace-write' };
     default:
       return { approvalPolicy: 'on-request', sandbox: 'workspace-write' };
   }
@@ -590,7 +582,7 @@ const CODEX_EFFORTS: EffortDescriptor[] = [
 
 const CODEX_PERMISSION_MODES: PermissionModeDescriptor[] = [
   { id: 'ask', displayName: 'Default permissions', description: '工作区内可读写,需要更多权限时询问' },
-  { id: 'auto', displayName: 'Auto-review', description: '工作区内可读写,自动审批提权请求(可能出错)' },
+  { id: 'auto', displayName: 'Auto-review', description: '可信命令自动执行,非可信命令询问' },
   { id: 'bypassPermissions', displayName: 'Full access', description: '可改任意文件、跑联网命令,免询问;风险高' },
 ];
 
@@ -2515,17 +2507,13 @@ export class CodexAgent extends BaseAgent {
       req: InteractionRequest,
       opts?: { forcePrompt?: boolean },
     ): Promise<ApprovalDecision> {
-      // auto / bypass 这类宽松模式：自动放行审批请求，不弹 UI。二者现均映射
-      // never + danger-full-access（见 mapPermissionToCodex），server 侧不再发
-      // 命令 / 文件审批 —— 这条代答分支实际只对 MCP elicitation、以及 ask 策略
-      // 发射的存量 turn（收紧 / 放宽切换前已在飞的审批请求）生效，一并兜底放行，
-      // 与 dismissAllPending 的 moreOpen 语义一致。ask 模式继续走
-      // dispatchInteraction 弹给用户决策。
+      // 只有用户显式选择 Full access 才自动放行审批请求。Auto-review 由 app-server
+      // 的 untrusted 策略先筛可信命令；它仍发出的非可信审批必须交给用户，不能代答。
       // 例外: forcePrompt(prompt-each-time 高风险 MCP inner tool, 如 contacts delete/merge/
       // 系统回写)在任何模式下都必须拿到用户的逐次确认, 宽松模式不代答。
       if (
         !opts?.forcePrompt &&
-        (mutablePermissionMode === 'auto' || mutablePermissionMode === 'bypassPermissions')
+        mutablePermissionMode === 'bypassPermissions'
       ) {
         return Promise.resolve('accept');
       }
@@ -2557,8 +2545,8 @@ export class CodexAgent extends BaseAgent {
     /**
      * 强制 resolve 所有挂起的 approval, emit interaction_dismissed 让 UI 关 dialog。
      * 调用场景: setPermissionMode 切换 / close session。
-     *   - resolveAs='allow' (mode 切到 auto/bypass 之类宽松模式): codex decision='accept'
-     *   - resolveAs='deny'  (mode 切到 ask 等严格模式 / close): codex decision='decline'
+     *   - resolveAs='allow' (mode 切到 bypass): codex decision='accept'
+     *   - resolveAs='deny'  (mode 切到 ask/auto 或 close): codex decision='decline'
      */
     function dismissAllPending(reason: string, resolveAs: 'allow' | 'deny'): void {
       if (pendingApprovals.size === 0) return;
@@ -2620,7 +2608,7 @@ export class CodexAgent extends BaseAgent {
     }
 
     /**
-     * 权限收紧 (auto/bypass → ask) 的 fail-safe 中断: 宽松档 turn 在 server 侧是
+     * 权限收紧 (bypass → ask/auto) 的 fail-safe 中断: Full access turn 在 server 侧是
      * approvalPolicy=never + danger-full-access, turn 内 server 不再发审批请求,
      * 本地 awaitApprovalDecision 无从拦截 —— 中断该 turn 是唯一能立即兑现
      * 「从现在起要问我」的机制。语义与用户手动 stop 一致 (interrupted 不算失败)。
@@ -2862,8 +2850,8 @@ export class CodexAgent extends BaseAgent {
               ? codexSessionApprovalSuggestions()
               : undefined,
         },
-        // prompt-each-time: auto/bypass 宽松模式也必须逐次弹 UI, 否则高风险 inner tool
-        // (contacts delete/merge/系统回写)在自动模式下会被 awaitApprovalDecision 首分支静默放行。
+        // prompt-each-time:Full access 也必须逐次弹 UI,否则高风险 inner tool
+        // (contacts delete/merge/系统回写)会被 awaitApprovalDecision 首分支静默放行。
         { forcePrompt: approvalPolicy === 'prompt-each-time' },
       );
 
@@ -4097,16 +4085,16 @@ export class CodexAgent extends BaseAgent {
 
       async setPermissionMode(newMode: PermissionMode) {
         log.debug('setPermissionMode', { from: mutablePermissionMode, to: newMode });
-        // 切到更宽松 mode (auto/bypass) → 挂起的 ask 自动 allow; 严格 mode → deny。
+        // 只有显式 Full access 是宽松 mode → 挂起的 ask 自动 allow; 其它 mode → deny。
         // 与 Claude 的 dismissAllPending 行为对齐 (apps/desktop/src/main/agentManager.ts
         // 老逻辑同款), UI 上挂着的 PermissionPrompt 自动关。
-        const moreOpen = newMode === 'auto' || newMode === 'bypassPermissions';
+        const moreOpen = newMode === 'bypassPermissions';
         dismissAllPending(`permission_mode_changed_to_${newMode}`, moreOpen ? 'allow' : 'deny');
-        const wasOpen = mutablePermissionMode === 'auto' || mutablePermissionMode === 'bypassPermissions';
+        const wasOpen = mutablePermissionMode === 'bypassPermissions';
         mutablePermissionMode = newMode;
         // 下一 turn 通过 TurnStartParams.approvalPolicy + sandbox 透传。
         //
-        // 收紧兜底 (auto/bypass → ask): 见 interruptTurnForPermissionTighten 顶注。
+        // 收紧兜底 (bypass → ask/auto): 见 interruptTurnForPermissionTighten 顶注。
         // turn id 已知 → 立即中断; turn/start 在飞 (id 未回) → 置标记, 由
         // handleTurnStartResp / turnStarted 在拿到 id 的瞬间补中断。放宽则清标记
         // (收紧后又切回宽松档, 在飞的 turn 无需再中断)。

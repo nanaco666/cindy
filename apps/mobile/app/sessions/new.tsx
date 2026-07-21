@@ -129,6 +129,7 @@ import {
 } from '@/session/composerPalette';
 import {
   DEFAULT_NEW_SESSION_DRAFT,
+  defaultPermissionModeForNewSessionAgent,
   buildRemoteCreateSessionOptions,
   buildRecentWorkspaceOptions,
   normalizeCreateSessionResult,
@@ -157,6 +158,7 @@ import { remoteSessionStore, useRemoteSessions } from '@/session/remoteSessionSt
 import { buildSessionComposerLayout } from '@/session/sessionComposerLayout';
 import type { RemoteSerializedAttachment, RemoteSession } from '@/session/types';
 import { permissionAccentColor, permissionPresentation } from '@/session/permissionPresentation';
+import { confirmFullAccessChange } from '@/session/fullAccessConfirmation';
 import { MobileVendorIcon } from '@/components/MobileVendorIcon';
 import { PlanModeChip } from '@/session/PlanModeChip';
 import {
@@ -597,9 +599,10 @@ export default function NewRemoteSessionScreen() {
         agentKind: next.agentKind,
         model: next.model,
         effort: next.effort,
-        // 权限跟随该 agent 的记忆(对齐桌面 lastByVendor);没记忆保持当前(种子 auto)。
+        // 权限跟随该 agent 的记忆；没记忆回落该 agent 的安全种子默认。
         permissionMode:
-          newSessionPreferences?.permissionModeByAgent[storedAgentKind] ?? current.permissionMode,
+          newSessionPreferences?.permissionModeByAgent[storedAgentKind] ??
+          defaultPermissionModeForNewSessionAgent(storedAgentKind),
         providerId: null,
       };
     });
@@ -644,8 +647,17 @@ export default function NewRemoteSessionScreen() {
     });
     if (!result) return;
     autoDefaultDeviceRef.current = result.appliedDeviceId;
-    setDraft((current) => ({ ...current, ...result.patch }));
-  }, [draft.effort, modelRows, newSessionPreferencesLoaded, selectedDeviceId, sessions]);
+    setDraft((current) => {
+      const nextAgentKind = result.patch.agentKind ?? current.agentKind;
+      return {
+        ...current,
+        ...result.patch,
+        permissionMode:
+          newSessionPreferences?.permissionModeByAgent[nextAgentKind] ??
+          defaultPermissionModeForNewSessionAgent(nextAgentKind),
+      };
+    });
+  }, [draft.effort, modelRows, newSessionPreferences, newSessionPreferencesLoaded, selectedDeviceId, sessions]);
   const draftContent = useMemo(
     // pending(乐观上传中)也算数:拍完照立刻点创建是常见路径,create() 里会等它们落定。
     () => ({ attachmentCount: attachments.length + pendingUploads.length }),
@@ -1705,9 +1717,10 @@ export default function NewRemoteSessionScreen() {
         agentKind: next.agentKind,
         model: next.model,
         effort: next.effort,
-        // 权限=目标 agent 的记忆档,没记忆回种子默认 auto(对齐桌面切 vendor 语义;
-        // 目标 agent 不支持的档由 capabilities reconcile 兜底归一)。
-        permissionMode: newSessionPreferences?.permissionModeByAgent[nextKind] ?? 'auto',
+        // 权限=目标 agent 的记忆档；没记忆时两种 agent 都保留 Auto-review。
+        permissionMode:
+          newSessionPreferences?.permissionModeByAgent[nextKind] ??
+          defaultPermissionModeForNewSessionAgent(nextKind),
         providerId: null,
       };
     });
@@ -2721,18 +2734,21 @@ export default function NewRemoteSessionScreen() {
         onClose={() => setModelSheetOpen(false)}
         onSelectFlatModel={selectFlatModel}
         onSelectPermissionMode={(mode) => {
-          patchDraft({ permissionMode: mode });
-          if (mode === 'plan') return; // 老被控端兼容档,不入记忆
-          // 同步进本地 state:本次会话内切走再切回也能拿到最新记忆(落盘不回写 state)。
-          setNewSessionPreferences((prev) => prev
-            ? {
-                ...prev,
-                permissionModeByAgent: { ...prev.permissionModeByAgent, [draft.agentKind]: mode },
-              }
-            : prev);
-          void saveNewSessionPreferences({
-            permissionModeForAgent: { agentKind: draft.agentKind, mode },
-          });
+          void (async () => {
+            if (!await confirmFullAccessChange(draft.permissionMode, mode)) return;
+            patchDraft({ permissionMode: mode });
+            if (mode === 'plan') return; // 老被控端兼容档,不入记忆
+            // 同步进本地 state:本次会话内切走再切回也能拿到最新记忆(落盘不回写 state)。
+            setNewSessionPreferences((prev) => prev
+              ? {
+                  ...prev,
+                  permissionModeByAgent: { ...prev.permissionModeByAgent, [draft.agentKind]: mode },
+                }
+              : prev);
+            void saveNewSessionPreferences({
+              permissionModeForAgent: { agentKind: draft.agentKind, mode },
+            });
+          })();
         }}
         onSelectProviderRow={selectProviderModelRow}
         permissionDisabled={creating}

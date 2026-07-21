@@ -160,7 +160,6 @@ export function useCCSessions(options?: UseCCSessionsOptions): UseCCSessionsRetu
       providerId?: string | null;
     }): Promise<Session | null> => {
       try {
-        // 新会话默认 auto(自动审批,2026-07 全端对齐;不覆盖调用方显式传入的值)
         const newSession = await sessionService.create({
           permissionMode: 'auto',
           fastMode: false,

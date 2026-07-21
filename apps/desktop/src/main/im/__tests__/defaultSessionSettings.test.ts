@@ -163,6 +163,7 @@ describe('resolveImSessionDefaults', () => {
       model: 'gpt-5.5',
       effort: 'high',
       providerId: 'openai',
+      permissionMode: 'auto',
     });
   });
 

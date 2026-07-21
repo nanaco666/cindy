@@ -364,6 +364,17 @@ async function nextEvent(iterator: AsyncIterator<AgentEvent>): Promise<AgentEven
   return result.value;
 }
 
+describe('CodexAgent permissions', () => {
+  it('advertises distinct Ask, Auto-review, and Full access modes', () => {
+    const agent = new CodexAgent(createDeps());
+    expect(agent.capabilities.permissionModes?.map((mode) => mode.id)).toEqual([
+      'ask',
+      'auto',
+      'bypassPermissions',
+    ]);
+  });
+});
+
 describe('CodexAgent.listCustomizations', () => {
   it('uses filesystem scanning without starting the Codex app-server', async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), 'xdt-codex-customizations-'));
@@ -2868,19 +2879,19 @@ describe('CodexAgent MCP thread context hooks', () => {
     await handle.close();
   });
 
-  it('still prompts for prompt-each-time inner MCP calls in auto/bypass permission modes', async () => {
-    // 回归: awaitApprovalDecision 的 auto/bypass 首分支曾无条件 accept, 让高风险
-    // inner tool(contacts_delete 等)在自动模式下绕过逐次确认。
+  it('still prompts for prompt-each-time inner MCP calls in Full access mode', async () => {
+    // 回归:宽松档曾无条件 accept, 让高风险 inner tool(contacts_delete 等)
+    // 绕过逐次确认；Full access 也必须保留 forcePrompt 护栏。
     const agent = new CodexAgent(createDeps({}, {
       getMcpToolApprovalPolicy: () => 'prompt-each-time',
     }));
     const host = installFakeHost(agent);
 
     const handle = await agent.startSession({
-      sessionId: 'session-high-risk-auto-mode',
+      sessionId: 'session-high-risk-full-access-mode',
       model: 'gpt-5.4',
       workingDir: '/repo',
-      permissionMode: 'auto',
+      permissionMode: 'bypassPermissions',
     });
     const handlers = host.getThreadHandlers();
     if (!handlers?.mcpServerElicitation) throw new Error('expected mcpServerElicitation handler');
@@ -2909,7 +2920,7 @@ describe('CodexAgent MCP thread context hooks', () => {
   });
 
   it('declines pending prompt-each-time approvals when permission mode switches to auto', async () => {
-    // 切到宽松模式的 dismissAllPending('allow') 不得替用户放行高风险审批 — fail-closed。
+    // Auto-review 不是 Full access，切入时必须 fail-closed 关闭挂起的高风险审批。
     const agent = new CodexAgent(createDeps({}, {
       getMcpToolApprovalPolicy: () => 'prompt-each-time',
     }));
@@ -2955,7 +2966,7 @@ describe('CodexAgent MCP thread context hooks', () => {
     await handle.close();
   });
 
-  it('maps auto permission mode to no app-server approval gate', async () => {
+  it('maps auto permission mode to native trusted-command review', async () => {
     const agent = new CodexAgent(createDeps());
     const host = installFakeHost(agent, (method) => {
       if (method === Method.TurnStart) {
@@ -2976,8 +2987,8 @@ describe('CodexAgent MCP thread context hooks', () => {
       sandbox?: string;
     };
     expect(startParams).toMatchObject({
-      approvalPolicy: 'never',
-      sandbox: 'danger-full-access',
+      approvalPolicy: 'untrusted',
+      sandbox: 'workspace-write',
     });
 
     await handle.send({ type: 'user', content: 'hello' });
@@ -2986,8 +2997,8 @@ describe('CodexAgent MCP thread context hooks', () => {
       sandboxPolicy?: { type?: string };
     };
     expect(turnParams).toMatchObject({
-      approvalPolicy: 'never',
-      sandboxPolicy: { type: 'dangerFullAccess' },
+      approvalPolicy: 'untrusted',
+      sandboxPolicy: { type: 'workspaceWrite' },
     });
 
     await handle.close();
@@ -3013,7 +3024,7 @@ describe('CodexAgent MCP thread context hooks', () => {
       sessionId: 'session-tighten-interrupt-hangs',
       model: 'gpt-5.5',
       workingDir: '/repo',
-      permissionMode: 'auto',
+      permissionMode: 'bypassPermissions',
     });
     const iterator = handle.events()[Symbol.asyncIterator]();
     await handle.send({ type: 'user', content: 'do work' });
@@ -3062,7 +3073,7 @@ describe('CodexAgent MCP thread context hooks', () => {
       sessionId: 'session-tighten-interrupt-fails',
       model: 'gpt-5.5',
       workingDir: '/repo',
-      permissionMode: 'auto',
+      permissionMode: 'bypassPermissions',
     });
     const iterator = handle.events()[Symbol.asyncIterator]();
     await handle.send({ type: 'user', content: 'do work' });
@@ -3084,8 +3095,8 @@ describe('CodexAgent MCP thread context hooks', () => {
     await handle.close();
   });
 
-  it('interrupts the running turn when tightening from auto to ask', async () => {
-    // 收紧兜底: auto 档 turn 在 server 侧是 never + danger-full-access, turn 内不会
+  it('interrupts the running turn when tightening from Full access to ask', async () => {
+    // 收紧兜底: Full access turn 在 server 侧是 never + danger-full-access, turn 内不会
     // 再有审批请求流经本地 —— 切回 ask 时必须 interrupt 当前 turn, 否则已撤销的
     // 宽松授权会在 turn 剩余部分继续免审执行 (review #969 Greptile P1)。
     const agent = new CodexAgent(createDeps());
@@ -3103,7 +3114,7 @@ describe('CodexAgent MCP thread context hooks', () => {
       sessionId: 'session-tighten-interrupt',
       model: 'gpt-5.5',
       workingDir: '/repo',
-      permissionMode: 'auto',
+      permissionMode: 'bypassPermissions',
     });
     await handle.send({ type: 'user', content: 'do work' });
 
@@ -3138,7 +3149,7 @@ describe('CodexAgent MCP thread context hooks', () => {
       sessionId: 'session-pending-tighten',
       model: 'gpt-5.5',
       workingDir: '/repo',
-      permissionMode: 'auto',
+      permissionMode: 'bypassPermissions',
     });
     const sendPromise = handle.send({ type: 'user', content: 'do work' });
     // turn/start 已发出但 id 未回的窗口内收紧。
@@ -3178,7 +3189,7 @@ describe('CodexAgent MCP thread context hooks', () => {
       sessionId: 'session-tombstone-race',
       model: 'gpt-5.5',
       workingDir: '/repo',
-      permissionMode: 'auto',
+      permissionMode: 'bypassPermissions',
     });
     const sendPromise = handle.send({ type: 'user', content: 'do work' });
     if (!handle.setPermissionMode) throw new Error('expected setPermissionMode');
@@ -3202,8 +3213,8 @@ describe('CodexAgent MCP thread context hooks', () => {
     await handle.close();
   });
 
-  it('does not interrupt an ask-launched pending turn after a transient auto toggle', async () => {
-    // ask 策略发射的 turn 审批请求照常流经本地; 在飞期间 UI 短暂切 auto 又切回
+  it('does not interrupt an ask-launched pending turn after a transient Full access toggle', async () => {
+    // ask 策略发射的 turn 审批请求照常流经本地; 在飞期间 UI 短暂切 Full access 又切回
     // ask, 不得误杀该正常 turn (review #969 第三轮 Codex P2)。
     const agent = new CodexAgent(createDeps());
     const turnStartGate = deferred<{ turn: { id: string } }>();
@@ -3222,7 +3233,7 @@ describe('CodexAgent MCP thread context hooks', () => {
     });
     const sendPromise = handle.send({ type: 'user', content: 'do work' });
     if (!handle.setPermissionMode) throw new Error('expected setPermissionMode');
-    await handle.setPermissionMode('auto');
+    await handle.setPermissionMode('bypassPermissions');
     await handle.setPermissionMode('ask');
 
     turnStartGate.resolve({ turn: { id: 'turn-ask-launched' } });
@@ -3233,7 +3244,7 @@ describe('CodexAgent MCP thread context hooks', () => {
     await handle.close();
   });
 
-  it('does not interrupt an ask-launched running turn after a transient auto toggle', async () => {
+  it('does not interrupt an ask-launched running turn after a transient Full access toggle', async () => {
     const agent = new CodexAgent(createDeps());
     const host = installFakeHost(agent, (method) => {
       if (method === Method.TurnStart) {
@@ -3250,7 +3261,7 @@ describe('CodexAgent MCP thread context hooks', () => {
     });
     await handle.send({ type: 'user', content: 'do work' });
     if (!handle.setPermissionMode) throw new Error('expected setPermissionMode');
-    await handle.setPermissionMode('auto');
+    await handle.setPermissionMode('bypassPermissions');
     await handle.setPermissionMode('ask');
 
     expect(host.request.mock.calls.filter(([method]) => method === Method.TurnInterrupt)).toHaveLength(0);
@@ -3273,12 +3284,12 @@ describe('CodexAgent MCP thread context hooks', () => {
       sessionId: 'session-pending-tighten-undo',
       model: 'gpt-5.5',
       workingDir: '/repo',
-      permissionMode: 'auto',
+      permissionMode: 'bypassPermissions',
     });
     const sendPromise = handle.send({ type: 'user', content: 'do work' });
     if (!handle.setPermissionMode) throw new Error('expected setPermissionMode');
     await handle.setPermissionMode('ask');
-    await handle.setPermissionMode('auto');
+    await handle.setPermissionMode('bypassPermissions');
 
     turnStartGate.resolve({ turn: { id: 'turn-undo-id' } });
     await sendPromise;
@@ -3302,17 +3313,17 @@ describe('CodexAgent MCP thread context hooks', () => {
       sessionId: 'session-no-interrupt',
       model: 'gpt-5.5',
       workingDir: '/repo',
-      permissionMode: 'auto',
+      permissionMode: 'bypassPermissions',
     });
     if (!handle.setPermissionMode) throw new Error('expected setPermissionMode');
     await handle.setPermissionMode('ask');
 
-    // 宽松档之间切换 (auto ↔ bypass) 带运行中 turn: 不发 interrupt。
-    await handle.setPermissionMode('auto');
+    // ask → Full access 后启动 turn，再重复设置 Full access：不发 interrupt。
+    await handle.setPermissionMode('bypassPermissions');
     await handle.send({ type: 'user', content: 'do work' });
     await handle.setPermissionMode('bypassPermissions');
 
-    // ask 起步的放宽 (ask → auto): 同样不触发。
+    // ask 起步的放宽同样不触发。
     expect(host.request.mock.calls.filter(([method]) => method === Method.TurnInterrupt)).toHaveLength(0);
 
     await handle.close();
@@ -3617,13 +3628,14 @@ describe('CodexAgent MCP thread context hooks', () => {
     await handle.close();
   });
 
-  it('uses displayCommand for Windows Codex command approval prompts', async () => {
+  it('routes Auto-review command approvals through UI and uses displayCommand on Windows', async () => {
     const agent = new CodexAgent(createDeps());
     const host = installFakeHost(agent);
     const handle = await agent.startSession({
       sessionId: 'session-command-approval-display-command',
       model: 'gpt-5.4',
       workingDir: '/repo',
+      permissionMode: 'auto',
     });
     const handlers = host.getThreadHandlers();
     if (!handlers?.commandExecutionApproval) throw new Error('expected commandExecutionApproval handler');

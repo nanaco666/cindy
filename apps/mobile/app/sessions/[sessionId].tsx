@@ -162,6 +162,8 @@ import { flushComposerDraftWrites, readComposerDraft, readComposerDraftSync, sav
 import { appendQuote, clearQuotes, getQuotes, hydrateQuotes, setQuotes, truncateQuoteText, useSessionQuotes } from '@/session/chatQuoteStore';
 import { QuoteCapsule } from '@/session/QuoteCapsule';
 import { formatQuotesForSend } from '@lizi/maker-shared/chat-quotes';
+import { permissionModeOrAsk } from '@lizi/maker-shared/permission-mode';
+import { confirmFullAccessChange } from '@/session/fullAccessConfirmation';
 import {
   drainComposerAnnotationSubmissions,
   drainComposerAttachments,
@@ -3448,7 +3450,7 @@ export default function SessionScreen() {
         }
         // plan 一次性语义:权限档快照进条目(派发按快照发),chip 立即恢复——
         // 不等附件上传完,与「消息已发出」的乐观语义一致。
-        const permissionModeAtSend = currentSession.permissionMode || 'bypassPermissions';
+        const permissionModeAtSend = permissionModeOrAsk(currentSession.permissionMode);
         if (permissionModeAtSend === 'plan') {
           const fallback = runtimeOptions?.permissionOptions.find((option) => option.id !== 'plan')?.id ?? 'ask';
           const remembered = prePlanPermissionModeRef.current;
@@ -5417,7 +5419,15 @@ export default function SessionScreen() {
             onChangeSelectedFastMode={(enabled) => void runControlAction(() => maker.setFastMode(sessionId, enabled), { fastMode: enabled })}
             onClose={() => setModelSheetOpen(false)}
             onSelectFlatModel={selectComposerFlatModel}
-            onSelectPermissionMode={(mode) => void runControlAction(() => maker.setPermissionMode(sessionId, mode), { permissionMode: mode })}
+            onSelectPermissionMode={(mode) => {
+              void (async () => {
+                if (!await confirmFullAccessChange(currentSession.permissionMode, mode)) return;
+                await runControlAction(
+                  () => maker.setPermissionMode(sessionId, mode),
+                  { permissionMode: mode },
+                );
+              })();
+            }}
             onSelectProviderRow={selectComposerModelRow}
             permissionDisabled={controlBusy || !canUseComposer}
             permissionOptions={runtimeOptions.permissionOptions}

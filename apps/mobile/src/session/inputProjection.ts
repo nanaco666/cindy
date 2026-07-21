@@ -4,6 +4,7 @@ import {
 } from '@/session/attachments';
 import type { InputProjection, QueuedRemoteMessage, RemoteImageRef, RemoteSession } from '@/session/types';
 import type { RemoteSerializedAttachment } from '@/session/types';
+import { permissionModeOrAsk } from '@lizi/maker-shared/permission-mode';
 export {
   buildQueuePanelSummary,
   buildQueueRowPresentation,
@@ -77,7 +78,7 @@ export function buildQueuedTextMessage(
   const persistedFileRefs = buildAttachmentPersistFileRefs(attachments);
   const workingDir = session.workingDir || '';
   const effort = session.effort || '';
-  const permissionMode = session.permissionMode || 'bypassPermissions';
+  const permissionMode = permissionModeOrAsk(session.permissionMode);
   const agentKind = session.agentKind === 'codex' ? 'codex' : 'claude-code';
   const persistedContent = stringifyUserContent(trimmed, persistedImageRefs, persistedFileRefs);
   const createdAt = now.toISOString();

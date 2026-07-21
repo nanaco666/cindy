@@ -3430,7 +3430,7 @@
           },
           "auto": {
             "label": "자동 리뷰",
-            "description": "모든 작업을 개별 확인 없이 자동으로 실행합니다. 권한 범위는 '전체 접근'과 동일합니다. 삭제·병합 같은 고위험 내장 작업은 매번 확인합니다."
+            "description": "신뢰된 명령은 자동 실행합니다. 신뢰되지 않은 명령, 권한 상승 요청, 고위험 내장 작업은 계속 확인합니다. '전체 접근'과는 다릅니다."
           },
           "bypassPermissions": {
             "label": "전체 접근",
@@ -3570,6 +3570,13 @@
       },
       "remoteSwitchFailed": "원격 설정 변경 실패: 적용되지 않음",
       "switchFailed": "설정 변경 실패: 적용되지 않음",
+      "permissionSwitchFailed": "권한 모드 변경에 실패해 이전 설정을 유지했습니다",
+      "fullAccessConfirmation": {
+        "title": "Full access를 활성화할까요?",
+        "description": "Full access는 작업 공간 샌드박스를 비활성화하고 일반 승인을 건너뜁니다. Cindy가 작업 공간 밖의 파일을 수정하고 네트워크 명령을 묻지 않고 실행할 수 있습니다. 기본 제공 고위험 작업은 계속 확인을 요청합니다.",
+        "confirm": "Full access 활성화",
+        "cancel": "현재 권한 유지"
+      },
       "attachmentRejection": {
         "dismiss": "닫기"
       },

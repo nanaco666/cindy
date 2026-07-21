@@ -34,6 +34,7 @@
     "./mobile-home": "./src/mobileHome.ts",
     "./payload-summary": "./src/payloadSummary.ts",
     "./path-text": "./src/pathText.ts",
+    "./permission-mode": "./src/permissionMode.ts",
     "./queue": "./src/queue.ts",
     "./schedule-delete": "./src/scheduleDelete.ts",
     "./schedule-events": "./src/scheduleEvents.ts",

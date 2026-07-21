@@ -48,7 +48,7 @@ export interface NewSessionStoredPreferences {
   device: NewSessionDeviceOption | null;
   /**
    * 每个 agent 上次在新建页显式选过的权限档(对齐桌面 lastByVendor 的权限记忆语义);
-   * 没选过 = 缺失,回落种子默认 'auto'。'plan' 不入记忆(计划模式是独立开关)。
+   * 没选过 = 缺失,回落该 agent 的安全种子默认。'plan' 不入记忆(计划模式是独立开关)。
    */
   permissionModeByAgent: Partial<Record<NewSessionAgentKind, string>>;
 }
@@ -113,8 +113,8 @@ export const DEFAULT_NEW_SESSION_DRAFT: NewSessionDraft = {
   model: 'claude-sonnet-4-6',
   providerId: null,
   effort: 'medium',
-  // 种子默认 auto(自动审批,与桌面 / codex 对齐);用户上次在新建页选过的档走
-  // newSessionPreferenceStore 的 per-agent 记忆恢复,codex 不支持的档由 reconcile 兜底。
+  // Claude 保留 Auto-review 种子默认；用户上次在新建页选过的档走
+  // newSessionPreferenceStore 的 per-agent 记忆恢复。
   permissionMode: 'auto',
   fastMode: false,
   firstMessage: '',
@@ -125,6 +125,11 @@ const DEFAULT_MODELS: Record<NewSessionAgentKind, string> = {
   codex: 'gpt-5.4',
 };
 
+/** 新建交互式会话的权限种子默认；两种 agent 都保留 Auto-review。 */
+export function defaultPermissionModeForNewSessionAgent(_agentKind: NewSessionAgentKind): string {
+  return 'auto';
+}
+
 export function withAgentDefaults(
   draft: NewSessionDraft,
   agentKind: NewSessionAgentKind,
@@ -134,6 +139,7 @@ export function withAgentDefaults(
     ...draft,
     agentKind,
     model: DEFAULT_MODELS[agentKind],
+    permissionMode: defaultPermissionModeForNewSessionAgent(agentKind),
     // 换 agent → 来源选择作废(各 agent 的供应商集不同),回到默认路由由被控端定。
     providerId: null,
     fastMode: agentKind === 'codex' ? draft.fastMode : false,
@@ -348,6 +354,7 @@ export function resolveNewSessionAutoDefault(input: {
         effort: sectionModel
           ? reconcileEffortForModel(sectionModel, recent.effort || currentEffort)
           : recent.effort || currentEffort,
+        permissionMode: defaultPermissionModeForNewSessionAgent(recent.agentKind),
         providerId: null,
       },
     };
