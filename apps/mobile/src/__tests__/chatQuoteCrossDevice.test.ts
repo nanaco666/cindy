@@ -15,6 +15,8 @@ describe('mobile cross-device quote wiring', () => {
     );
     expect(bubbleSource).toContain("segment.kind === 'quote' ? [segment.quote] : []");
     expect(bubbleSource).toContain("segment.kind === 'text' ? [segment.text] : []");
+    expect(bubbleSource).toContain('actions.onPreviewRewind?.(clientId, {');
+    expect(bubbleSource).toContain('? { text: bubbleBody, quotes: messageQuotes }');
   });
 
   it('propagates quote metadata through direct and attachment-outbox sends', () => {
@@ -23,5 +25,13 @@ describe('mobile cross-device quote wiring', () => {
     expect(source).toContain('quotesEncoded: quotesAtSend.length > 0');
     expect(source).toContain('quotesEncoded: item.quotesEncoded');
     expect(source).toContain('quotesEncoded: queuedMessageHasEncodedQuotes(original)');
+  });
+
+  it('restores structured quote drafts for mobile fork and rewind actions', () => {
+    const source = readFileSync(resolve(process.cwd(), 'app/sessions/[sessionId].tsx'), 'utf8');
+
+    expect(source).toContain('saveComposerDraft(forked.id, draft?.text);');
+    expect(source).toContain('setQuotes(forked.id, draft?.quotes ?? []);');
+    expect(source).toContain('setQuotes(sessionId, state.draftQuotes);');
   });
 });

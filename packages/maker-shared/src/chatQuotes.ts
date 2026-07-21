@@ -55,6 +55,19 @@ const SOURCE_LINE_PREFIX = '— source: ';
 const QUOTE_BLOCK_MARKER = '<!-- cindy-composer-quote -->';
 const QUOTE_BLOCK_MARKER_LINE = `> ${QUOTE_BLOCK_MARKER}`;
 
+/**
+ * Remove the private product marker from user-facing plain text while keeping
+ * the readable Markdown blockquote, source line, and every other line intact.
+ * Callers must gate this to messages whose persisted `quotesEncoded` flag is
+ * true so an identical line typed by the user is never rewritten.
+ */
+export function stripChatQuoteMarkerLines(content: string): string {
+  return content
+    .split('\n')
+    .filter((line) => line !== QUOTE_BLOCK_MARKER_LINE)
+    .join('\n');
+}
+
 function isValidLine(line: number | undefined): line is number {
   return typeof line === 'number' && Number.isInteger(line) && line > 0;
 }

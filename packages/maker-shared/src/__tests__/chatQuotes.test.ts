@@ -6,6 +6,7 @@ import {
   parseLeadingBlockquotes,
   quoteSourceBasename,
   quoteSourceDisplayLabel,
+  stripChatQuoteMarkerLines,
 } from '../chatQuotes';
 
 describe('formatQuotesForSend', () => {
@@ -185,6 +186,32 @@ describe('parseChatQuoteSegments', () => {
     expect(parseChatQuoteSegments('plain\ntext')).toEqual([
       { kind: 'text', text: 'plain\ntext' },
     ]);
+  });
+});
+
+describe('stripChatQuoteMarkerLines', () => {
+  it('removes only exact private marker lines from copied quote Markdown', () => {
+    const content = [
+      '> <!-- cindy-composer-quote -->',
+      '> selected text',
+      '> — source: docs/spec.md#L4-L6',
+      '',
+      'reply',
+      '> <!-- cindy-composer-quote --> suffix',
+    ].join('\n');
+
+    expect(stripChatQuoteMarkerLines(content)).toBe([
+      '> selected text',
+      '> — source: docs/spec.md#L4-L6',
+      '',
+      'reply',
+      '> <!-- cindy-composer-quote --> suffix',
+    ].join('\n'));
+  });
+
+  it('leaves ordinary Markdown untouched', () => {
+    const content = '> handwritten quote\n\nbody';
+    expect(stripChatQuoteMarkerLines(content)).toBe(content);
   });
 });
 

@@ -71,7 +71,7 @@ import { useMobileMakerTransport } from '@/device-link/useMobileMakerTransport';
 import { startFocusedTopicSubscription } from '@/device-link/focusedTopicSubscription';
 import { useObserve } from '@/observability/observe';
 import { InteractionPanel, type MobilePlanViewerState } from '@/session/InteractionPanel';
-import { MessageRenderer } from '@/session/MessageRenderer';
+import { MessageRenderer, type MobileMessageDraft } from '@/session/MessageRenderer';
 import { InlineQueueSection } from '@/session/InlineQueueSection';
 import { RewindPreviewPanel } from '@/session/RewindPreviewPanel';
 import { BlurBackdrop } from '@/session/BlurBackdrop';
@@ -5025,24 +5025,30 @@ export default function SessionScreen() {
     })();
   }, [currentSession, deviceId, goBackToHome, invoke, maker, sessionId]);
 
-  const previewRewindAtMessage = useCallback(async (clientId: string, draftText: string) => {
+  const previewRewindAtMessage = useCallback(async (clientId: string, draft: MobileMessageDraft) => {
     if (messageActionBusy) return;
     const seq = ++rewindRequestSeqRef.current;
     setMessageActionBusy(clientId);
     setError(null);
-    setRewindState({ kind: 'loading', clientId, draftText });
+    setRewindState({
+      kind: 'loading',
+      clientId,
+      draftText: draft.text,
+      draftQuotes: draft.quotes,
+    });
     try {
       const preview = await maker.rewindPreview(sessionId, clientId);
       // 请求往返期间切走 session(甚至切走又切回)或另发起了新请求 → 代际已变,丢弃这个 stale 预览,
       // 别把它画到当前在屏的 session 上。
       if (rewindRequestSeqRef.current !== seq) return;
-      setRewindState(buildRewindPreviewState(clientId, draftText, preview));
+      setRewindState(buildRewindPreviewState(clientId, draft.text, preview, draft.quotes));
     } catch (err) {
       if (rewindRequestSeqRef.current !== seq) return;
       setRewindState({
         kind: 'error',
         clientId,
-        draftText,
+        draftText: draft.text,
+        draftQuotes: draft.quotes,
         errorText: formatRemoteError(err),
       });
     } finally {
@@ -5051,14 +5057,15 @@ export default function SessionScreen() {
     }
   }, [maker, messageActionBusy, sessionId]);
 
-  const forkAtMessage = useCallback(async (clientId: string, draftText?: string) => {
+  const forkAtMessage = useCallback(async (clientId: string, draft?: MobileMessageDraft) => {
     if (!deviceId || messageActionBusy) return;
     setMessageActionBusy(clientId);
     setError(null);
     try {
       const forked = await maker.fork(sessionId, clientId);
       remoteSessionStore.upsertDeviceSession(deviceId, deviceName, forked);
-      saveComposerDraft(forked.id, draftText);
+      saveComposerDraft(forked.id, draft?.text);
+      setQuotes(forked.id, draft?.quotes ?? []);
       router.push({
         pathname: '/sessions/[sessionId]',
         params: { sessionId: forked.id, deviceId, deviceName },
@@ -5168,6 +5175,7 @@ export default function SessionScreen() {
         return;
       }
       setComposerDraft(state.draftText);
+      setQuotes(sessionId, state.draftQuotes);
       setRewindState({ kind: 'idle' });
       await syncSession({ replaceMessages: true });
     } catch (err) {
@@ -5177,6 +5185,7 @@ export default function SessionScreen() {
         kind: 'error',
         clientId: state.clientId,
         draftText: state.draftText,
+        draftQuotes: state.draftQuotes,
         errorText: formatRemoteError(err),
       });
     } finally {

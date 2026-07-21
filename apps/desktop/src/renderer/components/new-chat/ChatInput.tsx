@@ -836,7 +836,10 @@ function detectTrigger(editor: Editor): TriggerState {
   parent.forEach((child) => {
     if (consumed >= offsetInParent) return;
     const size = child.nodeSize;
-    if (child.type.name === 'mentionChip') {
+    if (
+      child.type.name === 'mentionChip' ||
+      child.type.name === COMPOSER_QUOTE_NODE_TYPE
+    ) {
       textSoFar = ''; // chips reset the @ / slash run
       consumed += size;
       return;

@@ -53,7 +53,10 @@ import { UITextView } from 'react-native-uitextview';
 import { LegendList, type LegendListRef } from '@legendapp/list/react-native';
 import { buildComposerTouchLayout } from '@/session/composerTouchLayout';
 import { useFoldableExpandedState } from '@/session/expandedBlockMemory';
-import { parseChatQuoteSegments } from '@lizi/maker-shared/chat-quotes';
+import {
+  parseChatQuoteSegments,
+  type ChatQuote,
+} from '@lizi/maker-shared/chat-quotes';
 import { QuoteCapsule } from '@/session/QuoteCapsule';
 import {
   SELECTION_QUOTE_MENU_LABEL,
@@ -362,6 +365,12 @@ function MarkdownSelectableSpan(props: ComponentProps<typeof Text>) {
   return <UITextView maxFontSizeMultiplier={MAX_FONT_SIZE_MULTIPLIER} {...props} />;
 }
 
+/** Composer-ready user message body with product quotes kept out of raw text. */
+export interface MobileMessageDraft {
+  text: string;
+  quotes: readonly ChatQuote[];
+}
+
 interface MessageActions {
   /** 长按/操作条「复制消息链接」:复制该消息的会话深链(带 ?message= 锚点)。 */
   onCopyMessageLink?: (clientId: string) => void;
@@ -371,13 +380,13 @@ interface MessageActions {
    * 只读宿主零开销)。当前仅 iOS 16+ 生效(Android RN Text 无系统菜单扩展点)。
    */
   onQuoteSelection?: (quote: { text: string }) => void;
-  onForkMessage?: (clientId: string, draftText?: string) => void;
+  onForkMessage?: (clientId: string, draft?: MobileMessageDraft) => void;
   onLoadEarlier?: () => void | Promise<void>;
   onOpenForkOrigin?: () => void;
   onOpenPayload?: (payload: MessagePayload) => void;
   /** 正文里会话深链 chip(xdt-maker://session/…)点击回调,app 内跳转。 */
   onOpenSessionLink?: (url: string) => void;
-  onPreviewRewind?: (clientId: string, draftText: string) => void;
+  onPreviewRewind?: (clientId: string, draft: MobileMessageDraft) => void;
   onReadTextFilePreview?: (filePath: string) => Promise<RemoteTextFilePreviewResult>;
   onReleaseRemoteMedia?: (sourceUrl: string, media: MobileResolvedRemoteMedia) => void;
   onResolveRemoteMedia?: ResolveRemoteMediaFn;
@@ -1489,16 +1498,21 @@ function MessageBubble({
       return;
     }
     if (id === 'rewind' && clientId) {
-      actions.onPreviewRewind?.(clientId, item.message.body);
+      actions.onPreviewRewind?.(clientId, {
+        text: bubbleBody,
+        quotes: messageQuotes,
+      });
       return;
     }
     if (id === 'fork' && clientId) {
       actions.onForkMessage?.(
         clientId,
-        item.message.kind === 'user' ? item.message.body : undefined,
+        item.message.kind === 'user'
+          ? { text: bubbleBody, quotes: messageQuotes }
+          : undefined,
       );
     }
-  }, [actions, clientId, copyMessage, item.message.body, item.message.kind]);
+  }, [actions, bubbleBody, clientId, copyMessage, item.message.kind, messageQuotes]);
   // 时间文本兼任「复制消息链接」入口:点按复制该消息的会话深链(带 ?message=
   // 锚点),复制成功后短暂换成「链接已复制」。不单独占一个操作按钮位。
   const timeText = relativeTime ? (

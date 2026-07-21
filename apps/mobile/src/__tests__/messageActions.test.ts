@@ -43,6 +43,37 @@ describe('messageActions', () => {
     }))).toBe('Tool input\n\nTool output');
   });
 
+  it('keeps copied quote Markdown readable without exposing private marker lines', () => {
+    expect(buildMobileMessageCopyText(normalizedMessage({
+      body: [
+        '> <!-- cindy-composer-quote -->',
+        '> first quote',
+        '',
+        'first reply',
+        '',
+        '> <!-- cindy-composer-quote -->',
+        '> second quote',
+        '',
+        'second reply',
+      ].join('\n'),
+      quotesEncoded: true,
+    }))).toBe([
+      '> first quote',
+      '',
+      'first reply',
+      '',
+      '> second quote',
+      '',
+      'second reply',
+    ].join('\n'));
+
+    const handwritten = '> <!-- cindy-composer-quote -->\n> handwritten';
+    expect(buildMobileMessageCopyText(normalizedMessage({
+      body: handwritten,
+      quotesEncoded: false,
+    }))).toBe(handwritten);
+  });
+
   it('returns explicit copy statuses', async () => {
     await expect(copyMessageText('  ')).resolves.toBe('empty');
     await expect(copyMessageText('hello', async () => undefined)).resolves.toBe('copied');

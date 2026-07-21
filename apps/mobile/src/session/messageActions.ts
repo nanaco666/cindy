@@ -1,4 +1,5 @@
 import type { NormalizedRemoteMessage } from '@/session/messageNormalize';
+import { stripChatQuoteMarkerLines } from '@lizi/maker-shared/chat-quotes';
 
 export type CopyMessageStatus = 'copied' | 'empty' | 'failed';
 
@@ -18,7 +19,10 @@ type ClipboardNavigator = {
 };
 
 export function buildMobileMessageCopyText(message: NormalizedRemoteMessage): string {
-  const parts = [message.body];
+  const body = message.quotesEncoded
+    ? stripChatQuoteMarkerLines(message.body)
+    : message.body;
+  const parts = [body];
   if (message.secondaryBody) parts.push(message.secondaryBody);
   const attachments = message.attachments?.map((item) => item.name).filter(Boolean) ?? [];
   if (attachments.length > 0) {
