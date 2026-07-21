@@ -713,9 +713,10 @@ describe('db worker tx handlers', () => {
     });
   });
 
-  it('does not count errored workers toward the creation hard limit', async () => {
+  it('counts terminal workers until their sessions are archived', async () => {
     await withClient(async (client) => {
       await seedSession(client, 'lead');
+      await seedSession(client, 'done-worker', { orcaRole: 'worker' });
       await seedSession(client, 'errored-worker', { orcaRole: 'worker' });
       await client.exec(
         'INSERT INTO orca_teams (id, lead_session_id, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
@@ -725,12 +726,24 @@ describe('db worker tx handlers', () => {
         `INSERT INTO orca_workers (
           id, team_id, session_id, status, label, role, created_at, updated_at
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        ['worker-1', 'team-1', 'errored-worker', 'error', 'errored', 'tester', 1, 1],
+        ['worker-1', 'team-1', 'done-worker', 'done', 'done', 'tester', 1, 1],
+      );
+      await client.exec(
+        `INSERT INTO orca_workers (
+          id, team_id, session_id, status, label, role, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        ['worker-2', 'team-1', 'errored-worker', 'error', 'errored', 'reviewer', 1, 1],
       );
 
       await expect(client.tx('orca.reserveWorkerCreation', {
-        reservationId: 'replacement', teamId: 'team-1', label: 'replacement', hardLimit: 1, now: 100, expiresAt: 200,
-      })).resolves.toEqual({ ok: true, occupiedSlotsBefore: 0 });
+        reservationId: 'blocked', teamId: 'team-1', label: 'blocked', hardLimit: 2, now: 100, expiresAt: 200,
+      })).resolves.toEqual({ ok: false, errorCode: 'WORKER_LIMIT_HARD_EXCEEDED' });
+
+      await client.exec("UPDATE sessions SET status = 'archived' WHERE id = ?", ['done-worker']);
+
+      await expect(client.tx('orca.reserveWorkerCreation', {
+        reservationId: 'replacement', teamId: 'team-1', label: 'replacement', hardLimit: 2, now: 100, expiresAt: 200,
+      })).resolves.toEqual({ ok: true, occupiedSlotsBefore: 1 });
     });
   });
 });

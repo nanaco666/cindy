@@ -610,13 +610,14 @@ function orcaReserveWorkerCreation(readyDb, args) {
     ).get(teamId, label);
     if (duplicateWorker) return { ok: false, errorCode: 'DUPLICATE_LABEL' };
     if (duplicateReservation) return { ok: false, errorCode: 'WORKER_CREATION_IN_PROGRESS' };
-    const activeWorkerCount = Number(readyDb.prepare(\`SELECT COUNT(*)
+    // Worker 进入终态仍占槽，只有关联 session 归档后才释放。
+    const occupiedWorkerCount = Number(readyDb.prepare(\`SELECT COUNT(*)
       FROM orca_workers w INNER JOIN sessions s ON s.id = w.session_id
-      WHERE w.team_id = ? AND w.status IN ('idle', 'running') AND s.status = 'active'\`).pluck().get(teamId) || 0);
+      WHERE w.team_id = ? AND s.status = 'active'\`).pluck().get(teamId) || 0);
     const reservationCount = Number(readyDb.prepare(
       'SELECT COUNT(*) FROM orca_worker_creation_reservations WHERE team_id = ?',
     ).pluck().get(teamId) || 0);
-    const occupiedSlotsBefore = activeWorkerCount + reservationCount;
+    const occupiedSlotsBefore = occupiedWorkerCount + reservationCount;
     if (occupiedSlotsBefore >= hardLimit) return { ok: false, errorCode: 'WORKER_LIMIT_HARD_EXCEEDED' };
     readyDb.prepare(\`INSERT INTO orca_worker_creation_reservations
       (id, team_id, label, created_at, expires_at) VALUES (?, ?, ?, ?, ?)\`)
