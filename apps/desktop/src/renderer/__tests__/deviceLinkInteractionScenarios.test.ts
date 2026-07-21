@@ -639,8 +639,9 @@ describe('远程交互接线不变式', () => {
 
   it('makerChatStore 不向 device-link 远程 session 透传本地 Maker Memory 开关', () => {
     const src = read('lib/makerChatStore.ts');
-    expect(src).toContain('const remoteTarget = Boolean(current.remoteHostId) || isRemoteSession(sessionId);');
-    expect(src).toContain('...(remoteTarget ? {} : { makerMemoryEnabled: getMakerMemoryEnabled() })');
+    expect(src).toContain('const deviceLinkRemote = isRemoteSession(sessionId);');
+    expect(src).toContain('const sshRemote = Boolean(current.remoteHostId);');
+    expect(src).toContain('...(deviceLinkRemote ? {} : { makerMemoryEnabled: sshRemote ? false : getMakerMemoryEnabled() })');
   });
 
   it('ChatInput 的 setPermissionMode 远程经隧道(makerApiFor),本机才走本机 IPC', () => {

@@ -19,11 +19,31 @@
  */
 
 const STORAGE_KEY = 'memorySettings.makerEnabled';
+const LEGACY_MIGRATION_KEY = 'memorySettings.makerLegacyMigrationV1';
 
 type Subscriber = (value: boolean) => void;
 const subscribers = new Set<Subscriber>();
 let inMemoryValue = true;
 let localWriteRevision = 0;
+let legacyMigrationCompletedInMemory = false;
+
+function hasCompletedLegacyMigration(): boolean {
+  if (legacyMigrationCompletedInMemory) return true;
+  try {
+    return localStorage.getItem(LEGACY_MIGRATION_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function markLegacyMigrationCompleted(): void {
+  legacyMigrationCompletedInMemory = true;
+  try {
+    localStorage.setItem(LEGACY_MIGRATION_KEY, '1');
+  } catch {
+    // localStorage 不可用时保留进程内标记；下次启动仍会安全重试。
+  }
+}
 
 /** localStorage 中只接受显式 boolean 字符串；缺失/坏值不伪装成用户选择。 */
 function readStoredMakerMemoryEnabled(): boolean | undefined {
@@ -88,13 +108,14 @@ export function subscribeMakerMemoryEnabled(cb: Subscriber): () => void {
 export async function bootstrapMemorySettingsFromMain(): Promise<void> {
   try {
     const revisionAtStart = localWriteRevision;
-    const legacyRendererValue = readStoredMakerMemoryEnabled() ?? null;
+    const migrationCompleted = hasCompletedLegacyMigration();
+    const legacyRendererValue = migrationCompleted ? undefined : readStoredMakerMemoryEnabled();
     let settings = await window.electronAPI.maker.memoryGetSettings();
     // 用户或其它窗口已在请求期间写入时，旧快照不再有资格触发迁移或覆盖本地镜像。
     if (localWriteRevision !== revisionAtStart) return;
-    // 旧版 opt-out 可能是 renderer false marker，也可能只在 main 留下两种原生记忆
-    // 都关闭的状态。marker 非 true 时交给 main 统一判定，再进行 main → renderer 同步。
-    if (settings.maker) {
+    // 仅首次启动迁移旧版 Maker 专属 marker。Claude/Codex 原生开关是独立设置，
+    // 没有 renderer marker 时不能把它们的 false 推断成 Cindy opt-out。
+    if (!migrationCompleted && settings.maker && legacyRendererValue !== undefined) {
       try {
         settings = await window.electronAPI.maker.memoryPreserveLegacyMakerDisabled(
           legacyRendererValue,
@@ -104,9 +125,7 @@ export async function bootstrapMemorySettingsFromMain(): Promise<void> {
         // failure prevent the main renderer tree from mounting.
         if (
           localWriteRevision === revisionAtStart &&
-          (legacyRendererValue === false ||
-            (legacyRendererValue === null &&
-              (settings.claudeCode === false || settings.codex === false)))
+          legacyRendererValue === false
         ) {
           // Keep the legacy opt-out in the process-local mirror even when the
           // main profile cannot be written, so sessions stay disabled now.
@@ -116,6 +135,7 @@ export async function bootstrapMemorySettingsFromMain(): Promise<void> {
       }
     }
     if (localWriteRevision !== revisionAtStart) return;
+    if (!migrationCompleted) markLegacyMigrationCompleted();
     const current = getMakerMemoryEnabled();
     if (current === settings.maker) return;
     setMakerMemoryEnabled(settings.maker);

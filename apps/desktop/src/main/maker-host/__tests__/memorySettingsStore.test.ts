@@ -56,7 +56,7 @@ describe('memory-settings-store', () => {
     expect(preserveLegacyMakerMemoryDisabled(false).maker).toBe(true);
   });
 
-  it('preserves a legacy native-all-off profile without a renderer marker', async () => {
+  it('does not infer a Maker opt-out from native settings without a renderer marker', async () => {
     fs.writeFileSync(
       path.join(userDataDir, 'memory-settings.json'),
       JSON.stringify({ claudeCode: false, codex: false }),
@@ -66,14 +66,14 @@ describe('memory-settings-store', () => {
       '../memory-settings-store.js'
     );
 
-    expect(preserveLegacyMakerMemoryDisabled(null).maker).toBe(false);
+    expect(preserveLegacyMakerMemoryDisabled(null).maker).toBe(true);
     expect(readMemorySettingsState()).toMatchObject({
-      value: { maker: false, claudeCode: false, codex: false },
-      customizedKeys: ['claudeCode', 'codex', 'maker'],
+      value: { maker: true, claudeCode: false, codex: false },
+      customizedKeys: ['claudeCode', 'codex'],
     });
   });
 
-  it('preserves a legacy per-entry opt-out without a renderer marker', async () => {
+  it('keeps a per-entry native opt-out independent without a renderer marker', async () => {
     fs.writeFileSync(
       path.join(userDataDir, 'memory-settings.json'),
       JSON.stringify({ claudeCode: false }),
@@ -83,10 +83,10 @@ describe('memory-settings-store', () => {
       '../memory-settings-store.js'
     );
 
-    expect(preserveLegacyMakerMemoryDisabled(null).maker).toBe(false);
+    expect(preserveLegacyMakerMemoryDisabled(null).maker).toBe(true);
     expect(readMemorySettingsState()).toMatchObject({
-      value: { maker: false, claudeCode: false, codex: true },
-      customizedKeys: ['claudeCode', 'maker'],
+      value: { maker: true, claudeCode: false, codex: true },
+      customizedKeys: ['claudeCode'],
     });
   });
 

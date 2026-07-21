@@ -4777,7 +4777,8 @@ function buildCreateOptsForCurrentSession(
   opts?: { vendorOptions?: Record<string, unknown> },
 ): AgentInputCreateOpts {
   const current = getOrCreateState(sessionId);
-  const remoteTarget = Boolean(current.remoteHostId) || isRemoteSession(sessionId);
+  const deviceLinkRemote = isRemoteSession(sessionId);
+  const sshRemote = Boolean(current.remoteHostId);
   return {
     agentKind: current.agentKind,
     workingDir,
@@ -4788,7 +4789,10 @@ function buildCreateOptsForCurrentSession(
     planMode: current.planModeEnabled,
     displayReasoning: 'summarized',
     userPrompt: getUserPrompt(),
-    ...(remoteTarget ? {} : { makerMemoryEnabled: getMakerMemoryEnabled() }),
+    // device-link routes to the target desktop, so omit the controller setting;
+    // SSH still starts the agent through this process and must not inherit the
+    // controller's default-enabled Maker Memory for a remote working directory.
+    ...(deviceLinkRemote ? {} : { makerMemoryEnabled: sshRemote ? false : getMakerMemoryEnabled() }),
     ...(current.remoteHostId ? { remoteHostId: current.remoteHostId } : {}),
     ...(opts?.vendorOptions ? { vendorOptions: opts.vendorOptions } : {}),
     ...(current.sdkSessionId ? { resumeSessionId: current.sdkSessionId } : {}),
