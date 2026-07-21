@@ -29,11 +29,14 @@ const authState = vi.hoisted(() => ({ loggedIn: true }));
 vi.mock('../claude-credentials-store.js', () => ({
   hasClaudeAiOAuth: () => authState.loggedIn,
 }));
-vi.mock('../claude-oauth-refresh.js', () => ({
-  getValidClaudeAiOAuth: async () => null,
+const oauthRefreshMock = vi.hoisted(() => ({
+  getValidClaudeAiOAuth: vi.fn(async () => null as unknown),
 }));
+vi.mock('../claude-oauth-refresh.js', () => oauthRefreshMock);
 
 import {
+  evaluateHttpShrink,
+  isDegenerateModelListShrink,
   mapAnthropicSdkModels,
   mapAnthropicHttpModels,
   noteAnthropicSdkSupportedModels,
@@ -204,6 +207,92 @@ describe('mapAnthropicHttpModels', () => {
   });
 });
 
+describe('isDegenerateModelListShrink(退化快照护栏,纯函数)', () => {
+  it('骤减(一次少 2 条以上且掉到不足现值一半)判退化;增长 / 持平 / 首次 / 单步递减放行', () => {
+    // 事故形态:7 条被单条家族级响应打塌。
+    expect(isDegenerateModelListShrink(7, 1)).toBe(true);
+    expect(isDegenerateModelListShrink(5, 2)).toBe(true);
+    expect(isDegenerateModelListShrink(3, 1)).toBe(true);
+    // 合法演进:首次发现 / 增长 / 持平 / 单步递减(含 2→1,review P1) / 恰好半数。
+    expect(isDegenerateModelListShrink(0, 1)).toBe(false);
+    expect(isDegenerateModelListShrink(3, 7)).toBe(false);
+    expect(isDegenerateModelListShrink(7, 7)).toBe(false);
+    expect(isDegenerateModelListShrink(7, 6)).toBe(false);
+    expect(isDegenerateModelListShrink(2, 1)).toBe(false);
+    expect(isDegenerateModelListShrink(4, 2)).toBe(false);
+  });
+});
+
+describe('evaluateHttpShrink(HTTP 骤减收敛,review P2)', () => {
+  beforeEach(() => {
+    resetAnthropicDiscoveryForTest();
+    authState.loggedIn = true;
+  });
+
+  afterEach(async () => {
+    await waitForAnthropicDiscoveryIdleForTest();
+    resetAnthropicDiscoveryForTest();
+    await fsp.rm(TEST_USER_DATA, { recursive: true, force: true });
+  });
+
+  it('连续 3 次相同的骤减快照 = 确认真实下架,第 3 次放行;之前一直拒绝', () => {
+    expect(evaluateHttpShrink(7, ['claude-a', 'claude-b'])).toBe('reject');
+    expect(evaluateHttpShrink(7, ['claude-b', 'claude-a'])).toBe('reject'); // 顺序无关,签名相同
+    expect(evaluateHttpShrink(7, ['claude-a', 'claude-b'])).toBe('accept');
+  });
+
+  it('签名变化(上游还在抖)重新计数;非骤减快照清零 streak', () => {
+    expect(evaluateHttpShrink(7, ['claude-a'])).toBe('reject');
+    expect(evaluateHttpShrink(7, ['claude-b'])).toBe('reject'); // 换了内容,streak 重回 1
+    expect(evaluateHttpShrink(7, ['claude-b'])).toBe('reject');
+    // 中间来了一次正常快照 → streak 清零,再骤减要重新累计。
+    expect(evaluateHttpShrink(7, ['1', '2', '3', '4', '5', '6', '7'].map((n) => `claude-${n}`))).toBe('accept');
+    expect(evaluateHttpShrink(7, ['claude-b'])).toBe('reject');
+  });
+
+  it('记账跨重启持久化:落盘进缓存 pendingShrink,重启加载后继续累计(review P2 二轮回归)', async () => {
+    const cacheDir = path.join(TEST_USER_DATA, 'model-discovery');
+    const cacheFile = path.join(cacheDir, 'anthropic-models.json');
+    const cachedModel = {
+      id: 'claude-opus-4-8',
+      name: 'Opus 4.8',
+      group: 'anthropic',
+      sortOrder: 0,
+      contextWindow: 1_000_000,
+      efforts: ['low', 'medium', 'high'],
+      defaultEffort: 'high',
+      supportsFastMode: false,
+      status: 'active',
+    };
+    await fsp.mkdir(cacheDir, { recursive: true });
+    await fsp.writeFile(
+      cacheFile,
+      JSON.stringify({ fetchedAt: '2026-07-21T00:00:00.000Z', models: [cachedModel] }),
+      'utf-8',
+    );
+
+    // 进程 1:两次相同骤减被拒,记账落盘。
+    expect(evaluateHttpShrink(7, ['claude-x'])).toBe('reject');
+    expect(evaluateHttpShrink(7, ['claude-x'])).toBe('reject');
+    await waitForAnthropicDiscoveryIdleForTest();
+    const persisted = JSON.parse(await fsp.readFile(cacheFile, 'utf-8')) as {
+      pendingShrink?: { signature: string; streak: number };
+    };
+    expect(persisted.pendingShrink).toEqual({ signature: 'claude-x', streak: 2 });
+
+    // 「重启」:清内存态 → 从缓存恢复 → 第 3 次相同骤减即确认放行。
+    resetAnthropicDiscoveryForTest();
+    await loadAnthropicModelsFromDiskCache();
+    expect(evaluateHttpShrink(7, ['claude-x'])).toBe('accept');
+    // 确认放行后记账清零并落盘(缓存里不再有 pendingShrink)。
+    await waitForAnthropicDiscoveryIdleForTest();
+    const cleared = JSON.parse(await fsp.readFile(cacheFile, 'utf-8')) as {
+      pendingShrink?: unknown;
+    };
+    expect(cleared.pendingShrink).toBeUndefined();
+  });
+});
+
 describe('noteAnthropicSdkSupportedModels(登录态门控 + 合并纪律)', () => {
   beforeEach(() => {
     resetAnthropicDiscoveryForTest();
@@ -279,6 +368,28 @@ describe('noteAnthropicSdkSupportedModels(登录态门控 + 合并纪律)', () =
       releaseWrite();
       writeSpy.mockRestore();
     }
+  });
+
+  it('退化捕获(骤减到单条)不覆盖现值;正常演进照常生效(2026-07-21 事故回归)', () => {
+    noteAnthropicSdkSupportedModels([
+      { value: 'claude-fable-5', displayName: 'Fable 5' },
+      { value: 'claude-opus-4-8', displayName: 'Opus 4.8' },
+      { value: 'claude-sonnet-5', displayName: 'Sonnet 5' },
+      { value: 'claude-haiku-4-5', displayName: 'Haiku 4.5' },
+    ]);
+    expect(anthropicIds()).toHaveLength(4);
+    // 上游抽风只回一条家族级条目:清单不塌,保留 4 条现值,并主动请 HTTP 权威通道仲裁。
+    oauthRefreshMock.getValidClaudeAiOAuth.mockClear();
+    noteAnthropicSdkSupportedModels([{ value: 'claude-fable-5', displayName: 'Fable' }]);
+    expect(anthropicIds()).toHaveLength(4);
+    expect(oauthRefreshMock.getValidClaudeAiOAuth).toHaveBeenCalled();
+    // 逐个下架(4→3)是合法演进,照常生效。
+    noteAnthropicSdkSupportedModels([
+      { value: 'claude-fable-5', displayName: 'Fable 5' },
+      { value: 'claude-opus-4-8', displayName: 'Opus 4.8' },
+      { value: 'claude-sonnet-5', displayName: 'Sonnet 5' },
+    ]);
+    expect(anthropicIds()).toHaveLength(3);
   });
 
   it('无能力信息的捕获不打回已精化条目的档位 / fast(合并纪律)', () => {
