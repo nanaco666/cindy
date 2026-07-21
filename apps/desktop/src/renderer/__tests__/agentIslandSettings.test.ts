@@ -311,4 +311,28 @@ describe('agent island settings', () => {
       bounds: { x: 0, y: 0, width: 1512, height: 982 },
     }]);
   });
+
+  it('persists the display target resolved by main after display re-enumeration', async () => {
+    const getDisplayOptions = vi.fn(async () => ({
+      ok: true as const,
+      options: [],
+      target: {
+        mode: 'display' as const,
+        displayId: 7,
+        displayName: 'Studio Display',
+        displayIndex: 2,
+        displayInternal: false,
+        displayBounds: { x: 0, y: 0, width: 1512, height: 982 },
+      },
+    }));
+    installElectronApi({ getDisplayOptions });
+
+    await loadAgentIslandDisplayOptions();
+
+    expect(getAgentIslandDisplayTarget()).toMatchObject({
+      mode: 'display',
+      displayId: 7,
+      displayName: 'Studio Display',
+    });
+  });
 });

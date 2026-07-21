@@ -1346,7 +1346,11 @@ interface ElectronAPI {
     setSoundSettings: (settings: AgentIslandSoundSettings) => Promise<{ ok: true }>;
     setMascotSkin: (skin: AgentIslandMascotSkin) => Promise<{ ok: true }>;
     setDisplayTarget: (target: AgentIslandDisplayTarget) => Promise<{ ok: true }>;
-    getDisplayOptions: () => Promise<{ ok: true; options: AgentIslandDisplayOption[] }>;
+    getDisplayOptions: () => Promise<{
+      ok: true;
+      options: AgentIslandDisplayOption[];
+      target?: AgentIslandDisplayTarget;
+    }>;
     previewSound: (sound: AgentIslandSoundChoice) => Promise<{ ok: true }>;
     selectSoundFile: () => Promise<{ ok: true; path: string | null; name: string | null }>;
     onSessionActivity: (cb: (list: AgentIslandSessionActivity[]) => void) => () => void;

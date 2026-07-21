@@ -2554,6 +2554,14 @@ describe('AgentIslandService native publishing', () => {
           bounds: secondaryDisplay.bounds,
         },
       ],
+      target: {
+        mode: 'display',
+        displayId: 2,
+        displayName: 'Studio Display',
+        displayIndex: 2,
+        displayInternal: true,
+        displayBounds: secondaryDisplay.bounds,
+      },
     });
   });
 
@@ -2575,6 +2583,49 @@ describe('AgentIslandService native publishing', () => {
     service.handleUserPrompt({ sessionId: 's1', agentKind: 'codex' }, 'run tests');
 
     expect(latestNativeFrames(publish).map((frame) => frame.displayId)).toEqual([1]);
+
+    const options = await registeredIpcHandler(AGENT_ISLAND_GET_DISPLAY_OPTIONS_CHANNEL)(null);
+    expect(options).toMatchObject({ target: { mode: 'display', displayId: 1 } });
+  });
+
+  it('remaps a selected display by its persisted name after display ids change', async () => {
+    const { AgentIslandService } = await import('../service.js');
+    const publish = vi.fn((state: AgentIslandDisplayState, frameOrFrames: AgentIslandNativeFrame | AgentIslandNativeFrame[]) => {
+      void state;
+      void frameOrFrames;
+      return true;
+    });
+    const reenumeratedDisplay = {
+      id: 7,
+      label: 'Studio Display',
+      bounds: { x: 1728, y: 0, width: 1512, height: 982 },
+      internal: false,
+    };
+    mocks.displays.splice(0, mocks.displays.length, mocks.primaryDisplay, reenumeratedDisplay);
+    const service = new AgentIslandService({
+      getMainWindow: () => null,
+      nativeHost: { failed: false, publish },
+    });
+    syncEnabledForTest(service, publish);
+    service.registerIpc();
+
+    await registeredIpcHandler(AGENT_ISLAND_SET_DISPLAY_TARGET_CHANNEL)(null, {
+      mode: 'display',
+      displayId: 2,
+      displayName: 'Studio Display',
+      displayIndex: 2,
+    });
+    service.handleUserPrompt({ sessionId: 's1', agentKind: 'codex' }, 'run tests');
+
+    expect(latestNativeFrames(publish).map((frame) => frame.displayId)).toEqual([7]);
+    const options = await registeredIpcHandler(AGENT_ISLAND_GET_DISPLAY_OPTIONS_CHANNEL)(null);
+    expect(options).toMatchObject({
+      target: {
+        mode: 'display',
+        displayId: 7,
+        displayName: 'Studio Display',
+      },
+    });
   });
 
   it('stores and applies layout preferences independently per display', async () => {

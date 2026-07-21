@@ -69,7 +69,20 @@ export type AgentIslandMascotSkin =
 export type AgentIslandSoundEvent = 'start' | 'attention' | 'complete' | 'error' | 'select';
 export type AgentIslandDisplayTarget =
   | { mode: 'all' }
-  | { mode: 'display'; displayId: number };
+  | {
+      mode: 'display';
+      displayId: number;
+      /** Best-effort identity used to remap Electron display ids after reboot. */
+      displayName?: string;
+      displayIndex?: number;
+      displayInternal?: boolean;
+      displayBounds?: {
+        x: number;
+        y: number;
+        width: number;
+        height: number;
+      };
+    };
 export type AgentIslandSoundId =
   | 'none'
   | 'gameboy-startup'
@@ -228,7 +241,14 @@ export function isAgentIslandSoundEvent(value: unknown): value is AgentIslandSou
 
 export function cloneAgentIslandDisplayTarget(target: AgentIslandDisplayTarget): AgentIslandDisplayTarget {
   return target.mode === 'display'
-    ? { mode: 'display', displayId: target.displayId }
+    ? {
+        mode: 'display',
+        displayId: target.displayId,
+        ...(typeof target.displayName === 'string' ? { displayName: target.displayName } : {}),
+        ...(typeof target.displayIndex === 'number' ? { displayIndex: target.displayIndex } : {}),
+        ...(typeof target.displayInternal === 'boolean' ? { displayInternal: target.displayInternal } : {}),
+        ...(target.displayBounds ? { displayBounds: { ...target.displayBounds } } : {}),
+      }
     : { mode: 'all' };
 }
 
@@ -236,7 +256,38 @@ export function normalizeAgentIslandDisplayTarget(raw: unknown): AgentIslandDisp
   if (typeof raw !== 'object' || raw === null) return cloneAgentIslandDisplayTarget(DEFAULT_AGENT_ISLAND_DISPLAY_TARGET);
   const record = raw as Record<string, unknown>;
   if (record.mode === 'display' && typeof record.displayId === 'number' && Number.isFinite(record.displayId)) {
-    return { mode: 'display', displayId: record.displayId };
+    const rawBounds = record.displayBounds;
+    const displayBounds = typeof rawBounds === 'object' && rawBounds !== null
+      ? rawBounds as Record<string, unknown>
+      : null;
+    const hasBounds = displayBounds
+      && typeof displayBounds.x === 'number'
+      && typeof displayBounds.y === 'number'
+      && typeof displayBounds.width === 'number'
+      && typeof displayBounds.height === 'number';
+    return cloneAgentIslandDisplayTarget({
+      mode: 'display',
+      displayId: record.displayId,
+      ...(typeof record.displayName === 'string' && record.displayName.trim()
+        ? { displayName: record.displayName.trim() }
+        : {}),
+      ...(typeof record.displayIndex === 'number' && Number.isFinite(record.displayIndex)
+        ? { displayIndex: record.displayIndex }
+        : {}),
+      ...(typeof record.displayInternal === 'boolean'
+        ? { displayInternal: record.displayInternal }
+        : {}),
+      ...(hasBounds
+        ? {
+            displayBounds: {
+              x: displayBounds.x as number,
+              y: displayBounds.y as number,
+              width: displayBounds.width as number,
+              height: displayBounds.height as number,
+            },
+          }
+        : {}),
+    });
   }
   if (record.mode === 'all') {
     return { mode: 'all' };

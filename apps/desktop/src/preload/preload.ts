@@ -1039,7 +1039,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke(AGENT_ISLAND_SET_MASCOT_SKIN_CHANNEL, skin),
     setDisplayTarget: (target: AgentIslandDisplayTarget): Promise<{ ok: true }> =>
       ipcRenderer.invoke(AGENT_ISLAND_SET_DISPLAY_TARGET_CHANNEL, target),
-    getDisplayOptions: (): Promise<{ ok: true; options: AgentIslandDisplayOption[] }> =>
+    getDisplayOptions: (): Promise<{
+      ok: true;
+      options: AgentIslandDisplayOption[];
+      target?: AgentIslandDisplayTarget;
+    }> =>
       ipcRenderer.invoke(AGENT_ISLAND_GET_DISPLAY_OPTIONS_CHANNEL),
     previewSound: (sound: AgentIslandSoundChoice): Promise<{ ok: true }> =>
       ipcRenderer.invoke(AGENT_ISLAND_PREVIEW_SOUND_CHANNEL, sound),
