@@ -322,6 +322,25 @@ describe('forkSessionAtMessage', () => {
     expect(result.parentSessionId).toBe('src-session');
   });
 
+  it('codex path: maps preparation or thread/fork failures to a diagnosable error', async () => {
+    const target = makeMessageRow({ id: 'target-user', role: 'user', createdAt: 3000 });
+    selectQueue.push([makeSourceRow({
+      agentKind: 'codex',
+      sdkSessionId: 'imported-codex-thread',
+    })]);
+    selectQueue.push([target]);
+    selectQueue.push([{ value: 1 }]);
+    forkSdkSessionMock.mockRejectedValueOnce(new Error('thread not found in current Codex home'));
+
+    await expect(
+      forkSessionAtMessage('src-session', 'target-user'),
+    ).rejects.toMatchObject({
+      code: 'CODEX_FORK_STATE_UNAVAILABLE',
+      message: expect.stringContaining('thread not found in current Codex home'),
+    });
+    expect(txCalls).toHaveLength(0);
+  });
+
   it('strip encrypted fork: codex-only path forks with strip flag and copies all messages', async () => {
     const source = makeSourceRow({
       agentKind: 'codex',
@@ -559,6 +578,46 @@ describe('forkSessionAtMessage', () => {
       ['4652fd61-a4df-411a-87e7-cdc0b311cc39', 'new-real-assistant-uuid'],
       ['4652fd61-a4df-411a-87e7-000000000001', 'new-real-assistant-uuid'],
     ]));
+  });
+
+  it('assistant target (claude): repairs legacy imported parentUuid using the transcript index', async () => {
+    await writeClaudeJsonl('sdk-uuid-source', '/work', [
+      {
+        type: 'assistant',
+        uuid: 'real-imported-assistant-uuid',
+        parentUuid: 'preceding-user-record',
+        sessionId: 'sdk-uuid-source',
+        message: { id: 'msg_imported_real', content: [{ type: 'text', text: 'hi' }] },
+      },
+    ]);
+    const target = makeMessageRow({
+      id: 'asst-imported',
+      clientId: 'asst-imported-cid',
+      role: 'assistant',
+      agentMeta: JSON.stringify({
+        uuid: 'real-imported-assistant-uuid',
+        parentUuid: 'preceding-user-record',
+        requestId: 'msg_imported_real',
+      }),
+      createdAt: 2500,
+    });
+    const priorUser = makeMessageRow({ id: 'user-1', role: 'user', createdAt: 2000 });
+
+    selectQueue.push([makeSourceRow()]);
+    selectQueue.push([target]);
+    selectQueue.push([]);
+    selectQueue.push([target]);
+    selectQueue.push([priorUser, target]);
+    selectQueue.push([makeSourceRow({ sdkSessionId: 'sdk-new-session-uuid' })]);
+
+    await forkSessionAtMessage('src-session', 'asst-imported-cid');
+
+    expect(forkSdkSessionMock).toHaveBeenCalledWith('claude-code', {
+      sourceSdkSessionId: 'sdk-uuid-source',
+      upToMessageId: 'real-imported-assistant-uuid',
+      title: '[Fork] Project A',
+      workingDir: '/work',
+    });
   });
 
   it('claude path: locates JSONL under XDT_USER_DATA_DIR claude-home when main env has no CLAUDE_CONFIG_DIR', async () => {

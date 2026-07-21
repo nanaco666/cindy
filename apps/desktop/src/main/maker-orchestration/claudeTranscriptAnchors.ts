@@ -215,12 +215,20 @@ export function resolveClaudeForkAssistantAnchor(
   meta: ClaudeTranscriptAnchorMeta,
   index: ClaudeTranscriptAnchorIndex | null,
 ): string | undefined {
-  if (meta.parentUuid) return undefined;
   if (index) {
+    // The transcript is authoritative when available. Older imports wrote the
+    // JSONL transcript parent into agentMeta.parentUuid, so checking that field
+    // first incorrectly rejects every ordinary imported assistant. The index's
+    // assistant maps already exclude entries with a real toolParentUuid, which
+    // preserves the subagent guard while repairing existing SQLite rows without
+    // a data migration or re-import.
     if (meta.uuid && index.assistantByUuid.has(meta.uuid)) return meta.uuid;
     if (meta.requestId) return index.assistantByRequestId.get(meta.requestId)?.uuid;
     return undefined;
   }
+  // Without the source transcript we cannot safely distinguish a legacy
+  // transcript parent from a real tool parent. Keep the conservative behavior.
+  if (meta.parentUuid) return undefined;
   return isSyntheticClaudeBlockUuid(meta.uuid) ? undefined : meta.uuid;
 }
 

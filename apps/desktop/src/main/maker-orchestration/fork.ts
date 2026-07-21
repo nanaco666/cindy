@@ -33,6 +33,7 @@ export type ForkErrorCode =
   | 'REMOTE_NOT_SUPPORTED'
   | 'SOURCE_NEVER_RAN'
   | 'NO_PRIOR_ASSISTANT'
+  | 'CODEX_FORK_STATE_UNAVAILABLE'
   | 'UNSUPPORTED_HISTORY';
 
 function forkError(code: ForkErrorCode, message: string): Error {
@@ -243,13 +244,21 @@ export async function forkSessionAtMessage(
   // （部分前缀同时覆盖 forkSessionStripEncrypted 产出的 [Fork·已剥离] 变体）。
   const newTitle = source.title.startsWith('[Fork') ? source.title : `[Fork] ${source.title}`;
   const agentKind = isCodex ? 'codex' : 'claude-code';
-  const { newSdkSessionId, uuidMap, initialContextTokens } = await getMaker().forkSdkSession(agentKind, {
+  const forkResult = await getMaker().forkSdkSession(agentKind, {
     sourceSdkSessionId: source.sdkSessionId,
     upToMessageId: assistantUuid,
     ...(tailTurnsToDrop !== undefined ? { tailTurnsToDrop } : {}),
     title: newTitle,
     workingDir: source.workingDir ?? undefined,
+  }).catch((err: unknown) => {
+    if (!isCodex) throw err;
+    const detail = err instanceof Error ? err.message : String(err);
+    throw forkError(
+      'CODEX_FORK_STATE_UNAVAILABLE',
+      `Codex 外部会话状态或 rollout 不可用：${detail}`,
+    );
   });
+  const { newSdkSessionId, uuidMap, initialContextTokens } = forkResult;
   const forkContextTokens = normalizePositiveInt(initialContextTokens);
   const forkContextWindow = normalizePositiveInt(source.contextWindow);
 
@@ -371,6 +380,12 @@ export async function forkSessionStripEncrypted(sourceSessionId: string): Promis
     title: newTitle,
     workingDir: source.workingDir ?? undefined,
     stripEncryptedReasoning: true,
+  }).catch((err: unknown) => {
+    const detail = err instanceof Error ? err.message : String(err);
+    throw forkError(
+      'CODEX_FORK_STATE_UNAVAILABLE',
+      `Codex 外部会话状态或 rollout 不可用：${detail}`,
+    );
   });
 
   const now = Date.now();

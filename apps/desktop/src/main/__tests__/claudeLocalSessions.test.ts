@@ -241,6 +241,49 @@ describe('parseClaudeCodeMessageLine', () => {
     });
   });
 
+  it('keeps transcript parentage separate from tool/subagent parentage', () => {
+    const rows = parseClaudeCodeMessageLine(line({
+      type: 'assistant',
+      uuid: 'assistant-imported',
+      parentUuid: 'preceding-user-record',
+      message: {
+        id: 'msg_imported',
+        model: 'claude-sonnet-4-6',
+        content: [{ type: 'text', text: 'Imported answer' }],
+      },
+    }), 10, sdkSessionId, 'claude-sonnet-4-6');
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0].agentMeta).toMatchObject({
+      uuid: 'assistant-imported',
+      transcriptParentUuid: 'preceding-user-record',
+      sdkSessionId,
+    });
+    expect(rows[0].agentMeta).not.toHaveProperty('parentUuid');
+  });
+
+  it('preserves real tool parent metadata while also recording the transcript parent', () => {
+    const rows = parseClaudeCodeMessageLine(line({
+      type: 'assistant',
+      uuid: 'assistant-tool-owned',
+      parent_uuid: 'preceding-tool-result-record',
+      parent_tool_use_id: 'toolu_agent_1',
+      message: {
+        id: 'msg_tool_owned',
+        model: 'claude-sonnet-4-6',
+        content: [{ type: 'text', text: 'Subagent answer' }],
+      },
+    }), 11, sdkSessionId, 'claude-sonnet-4-6');
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0].agentMeta).toMatchObject({
+      uuid: 'assistant-tool-owned',
+      transcriptParentUuid: 'preceding-tool-result-record',
+      parentUuid: 'toolu_agent_1',
+      sdkSessionId,
+    });
+  });
+
   it('normalizes opus-4-8 full model id to short form', () => {
     const rows = parseClaudeCodeMessageLine(line({
       type: 'assistant',

@@ -4299,6 +4299,11 @@ export class CodexAgent extends BaseAgent {
     try {
       const { host } = await this.getUtilityHost();
       await host.ensureStarted();
+      // Imported Codex threads may still live under another CODEX_HOME. Resume
+      // already asks the desktop host to link/adopt their state and rollout;
+      // fork must cross the same preparation boundary before thread/fork or the
+      // utility app-server cannot resolve a freshly imported thread.
+      await this.deps.prepareCodexResumeSession?.(opts.sourceSdkSessionId);
       // 选项名沿用历史语义;安全副本同时会丢弃会让 Responses fork/retry 失败的坏历史 payload。
       if (opts.stripEncryptedReasoning) {
         stripCopyPath = await this.createSafeForkRolloutCopy(opts.sourceSdkSessionId);

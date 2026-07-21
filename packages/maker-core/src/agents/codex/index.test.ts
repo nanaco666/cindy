@@ -4035,6 +4035,44 @@ describe('CodexAgent steer', () => {
 });
 
 describe('CodexAgent.forkSdkSession', () => {
+  it('prepares an imported source thread before thread/fork', async () => {
+    const order: string[] = [];
+    const prepareCodexResumeSession = vi.fn(async () => {
+      order.push('prepare');
+    });
+    const agent = new CodexAgent(createDeps({}, { prepareCodexResumeSession }));
+    const host = installFakeHost(agent, (method) => {
+      if (method === Method.ThreadFork) order.push('fork');
+      return undefined;
+    });
+
+    await agent.forkSdkSession({
+      sourceSdkSessionId: 'imported-source-thread',
+      upToMessageId: undefined,
+    });
+
+    expect(prepareCodexResumeSession).toHaveBeenCalledWith('imported-source-thread');
+    expect(order).toEqual(['prepare', 'fork']);
+    expect(host.request).toHaveBeenCalledWith(Method.ThreadFork, expect.objectContaining({
+      threadId: 'imported-source-thread',
+    }));
+  });
+
+  it('does not call thread/fork when source-thread preparation fails', async () => {
+    const prepareCodexResumeSession = vi.fn(async () => {
+      throw new Error('rollout copy failed');
+    });
+    const agent = new CodexAgent(createDeps({}, { prepareCodexResumeSession }));
+    const host = installFakeHost(agent);
+
+    await expect(agent.forkSdkSession({
+      sourceSdkSessionId: 'imported-source-thread',
+      upToMessageId: undefined,
+    })).rejects.toThrow('rollout copy failed');
+
+    expect(host.request).not.toHaveBeenCalled();
+  });
+
   it('forks the source thread, then rolls back the forked thread by tail turns', async () => {
     const agent = new CodexAgent(createDeps());
     const host = installFakeHost(agent);

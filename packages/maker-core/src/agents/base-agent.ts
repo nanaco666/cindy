@@ -253,9 +253,9 @@ export interface AgentDeps {
   getMcpToolApprovalPolicy?: (context: McpToolApprovalContext) => McpToolApprovalPolicy;
 
   /**
-   * Codex 专用钩子：resume 外部本地 thread 前由 host 准备底层 session state。
+   * Codex 专用钩子：resume / fork 外部本地 thread 前由 host 准备底层 session state。
    *
-   * maker-core 只知道 "即将 resume 某个 Codex threadId" 这个生命周期点；
+   * maker-core 只知道 "即将读取某个 Codex threadId" 这个生命周期点；
    * 具体如何从本机 Codex CLI / App 的 CODEX_HOME 发现并同步 state_*.sqlite / rollout
    * 文件，是 desktop host 的文件系统适配职责。
    *
