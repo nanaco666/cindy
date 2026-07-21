@@ -70,7 +70,7 @@ import {
   artifactBaseName,
   buildBuildInfo,
 } from './ci/package-lib.mjs';
-import { applyMacSigningConfigToEnv } from './ci/release-regions.mjs';
+import { applyMacSigningConfigToEnv, applyReleaseCdnBaseUrlToEnv } from './ci/release-regions.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -106,9 +106,12 @@ function collectBuildMeta() {
 
 // ── CDN 基线(仅 --version major/minor/patch 时调用,只读)─────────────────────
 
-async function fetchCdnBaselineVersion(platformKey) {
+async function fetchCdnBaselineVersion(platformKey, region) {
+  // 打包不发布,env 里通常没有 CDN 配置——按 region 从 release-regions.json
+  // 只注入 cdnBaseUrl(env 显式值优先),满足这次只读拉取即可。
+  applyReleaseCdnBaseUrlToEnv(region);
   // mac 双架构 manifest 同版本,任一即可;win/linux 用各自 key。
-  const manifest = await fetchExistingManifestIfAvailable(platformKey);
+  const manifest = await fetchExistingManifestIfAvailable(platformKey, region);
   if (!manifest) {
     throw new Error(`CDN 上没有 ${platformKey} 的 manifest,无法计算 bump 基线;请显式传 --version x.y.z`);
   }
@@ -341,7 +344,7 @@ async function main() {
 
   // 版本号只解析一次,mac 双架构共用(canary 发布要求两 arch 同版本)。
   const { version, versionless } = await resolvePackageVersion(versionSpec, () =>
-    fetchCdnBaselineVersion(platform === 'darwin' ? 'darwin-arm64' : `${platform}-${archs[0]}`),
+    fetchCdnBaselineVersion(platform === 'darwin' ? 'darwin-arm64' : `${platform}-${archs[0]}`, region),
   );
 
   console.log('='.repeat(60));

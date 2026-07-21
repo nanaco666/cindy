@@ -159,6 +159,34 @@ export function validateReleaseRegions(value, options = {}) {
  * @param {string} region cn | global
  * @param {{ filePath?: string }} [options]
  */
+/**
+ * 只把本次 region 的 cdnBaseUrl 合并进 env(env 显式值优先),供只读的 CDN
+ * manifest 拉取(如打包阶段的版本 bump 基线)使用——不要求 bucket/AK 等发布
+ * 四件套,打包机不必具备发布配置的其余部分。
+ * @param {string} region cn | global | dev
+ * @param {{ filePath?: string }} [options]
+ */
+export function applyReleaseCdnBaseUrlToEnv(region, options = {}) {
+  const normalized = resolveReleaseRegion(region);
+  const envName = RELEASE_REGION_ENV_NAMES[normalized].cdnBaseUrl;
+  if (process.env[envName]?.trim()) return { source: 'env' };
+  const configPath = resolveReleaseRegionsPath(options.filePath);
+  if (!fs.existsSync(configPath)) {
+    throw new Error(
+      `缺少 ${normalized} 渠道 CDN 基址(版本 bump 需要拉线上 manifest 算基线)。二选一:\n` +
+        `  1) 复制 ${RELEASE_REGIONS_EXAMPLE_PATH} 为 release-regions.json 并填入 ${normalized}.oss.cdnBaseUrl;\n` +
+        `  2) 设置环境变量 ${envName};\n` +
+        `  或显式传 --version x.y.z 完全离线打包。`,
+    );
+  }
+  const block = loadReleaseRegions({ filePath: options.filePath })[normalized].oss;
+  if (!block.cdnBaseUrl) {
+    throw new Error(`${configPath} 的 ${normalized}.oss.cdnBaseUrl 为空(或改设 env ${envName},或显式传 --version x.y.z)`);
+  }
+  process.env[envName] = block.cdnBaseUrl;
+  return { source: 'file' };
+}
+
 export function applyReleaseRegionConfigToEnv(region, options = {}) {
   const normalized = resolveReleaseRegion(region);
   const envNames = RELEASE_REGION_ENV_NAMES[normalized];

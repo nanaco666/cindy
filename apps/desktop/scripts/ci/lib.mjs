@@ -208,8 +208,8 @@ function restorePackageJson() {
 // no-cache 不一定被 CDN 尊重),客户端 manifestService 与 promote-canary-* 都带了,
 // 唯独发布脚本此前漏了——2026-07-03 事故的直接诱因就是发版时读到陈旧基线,误判
 // "版本变了" 而对已存在的版本化路径做了字节不同的覆盖上传。
-export async function fetchExistingManifestIfAvailable(platformKey) {
-  const cdnBase = resolveReleaseCdnBaseUrl();
+export async function fetchExistingManifestIfAvailable(platformKey, region = 'cn') {
+  const cdnBase = resolveReleaseCdnBaseUrl(region);
   const canaryUrl = `${cdnBase}/manifest-${platformKey}-canary.json?t=${Date.now()}`;
   const canaryRes = await fetch(canaryUrl);
   if (canaryRes.ok) {
