@@ -78,6 +78,7 @@ import { resolveSessionRoute } from '@/lib/orcaSessionIdentity';
 import * as sessionService from '@/lib/sessionService';
 import { routeNewMakerCommand } from '@/lib/newMakerCommandRouting';
 import { revealOrcaWorkersTab } from '@/features/right-sidebar/plugins/orca-workers/actions';
+import { revealOrcaWorkersWithRetry } from '@/features/cc-agent/lib/orcaWorkersRevealRetry';
 import { remoteProjectsStore } from '@/features/device-link/remoteProjectsStore';
 import {
   isAgentIslandVisibleSessionOwnedByWorkdirBrowseRoute,
@@ -848,7 +849,18 @@ export function MainLayout() {
         applicationMenuLog.info(
           'new-maker invoked in collaboration context, opening Worker dialog',
         );
-        await revealOrcaWorkersTab(id, { openCreateWorker: true });
+        const routeResult = await revealOrcaWorkersWithRetry({
+          reveal: () => revealOrcaWorkersTab(id, { openCreateWorker: true }),
+        });
+        if (routeResult === 'stale-context') {
+          applicationMenuLog.warn(
+            'new-maker Worker dialog routing remained stale after bounded retries',
+            { sessionId: id },
+          );
+          return false;
+        }
+        // queued is an accepted handoff to a sidebar window that is still opening.
+        return true;
       },
       openNewMaker: () => {
         applicationMenuLog.info('new-maker invoked, navigating to /cc-agent/new');

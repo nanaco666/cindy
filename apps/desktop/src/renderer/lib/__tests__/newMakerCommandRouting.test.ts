@@ -4,7 +4,7 @@ import { canOpenWorkerFromShortcut, routeNewMakerCommand } from '../newMakerComm
 
 describe('routeNewMakerCommand', () => {
   it('opens the Worker dialog for the current Orca Lead without navigating', async () => {
-    const openCreateWorker = vi.fn(async () => undefined);
+    const openCreateWorker = vi.fn(async () => true);
     const openNewMaker = vi.fn();
 
     await expect(
@@ -25,7 +25,7 @@ describe('routeNewMakerCommand', () => {
   it.each([null, 'worker'] as const)(
     'keeps the global new-session behavior outside a Lead context (%s)',
     async (orcaRole) => {
-      const openCreateWorker = vi.fn(async () => undefined);
+      const openCreateWorker = vi.fn(async () => true);
       const openNewMaker = vi.fn();
 
       await expect(
@@ -44,7 +44,7 @@ describe('routeNewMakerCommand', () => {
   );
 
   it('drops a command when the route changes during session lookup', async () => {
-    const openCreateWorker = vi.fn(async () => undefined);
+    const openCreateWorker = vi.fn(async () => true);
     const openNewMaker = vi.fn();
 
     await expect(
@@ -58,6 +58,25 @@ describe('routeNewMakerCommand', () => {
     ).resolves.toBe('stale');
 
     expect(openCreateWorker).not.toHaveBeenCalled();
+    expect(openNewMaker).not.toHaveBeenCalled();
+  });
+
+  it('reports stale when the detached sidebar never accepts the create intent', async () => {
+    const openCreateWorker = vi.fn(async () => false);
+    const openNewMaker = vi.fn();
+
+    await expect(
+      routeNewMakerCommand({
+        sessionId: 'lead-1',
+        loadSession: async () => ({ orcaRole: 'lead' }),
+        isCurrentSession: () => true,
+        openCreateWorker,
+        openNewMaker,
+      }),
+    ).resolves.toBe('stale');
+
+    expect(openCreateWorker).toHaveBeenCalledOnce();
+    // A failed Worker intent must not regress Issue #197 by opening a normal session.
     expect(openNewMaker).not.toHaveBeenCalled();
   });
 });

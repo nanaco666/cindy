@@ -8,7 +8,8 @@ export interface NewMakerCommandRoutingOptions {
   sessionId: string | null;
   loadSession: (sessionId: string) => Promise<Pick<Session, 'orcaRole'> | null>;
   isCurrentSession: (sessionId: string | null) => boolean;
-  openCreateWorker: (sessionId: string) => Promise<void>;
+  /** Returns false when the collaboration sidebar could not accept the create intent. */
+  openCreateWorker: (sessionId: string) => Promise<boolean>;
   openNewMaker: () => void;
 }
 
@@ -40,7 +41,7 @@ export async function routeNewMakerCommand({
   const session = await loadSession(sessionId).catch(() => null);
   if (!isCurrentSession(sessionId)) return 'stale';
   if (session && isOrcaLeadSession(session)) {
-    await openCreateWorker(sessionId);
+    if (!(await openCreateWorker(sessionId))) return 'stale';
     return 'create-worker';
   }
 
