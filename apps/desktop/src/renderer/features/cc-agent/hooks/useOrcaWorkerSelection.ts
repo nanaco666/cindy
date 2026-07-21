@@ -3,7 +3,9 @@ import { useTranslation } from 'react-i18next';
 import { useLocation, useSearchParams } from 'react-router-dom';
 
 import { toast } from '@/lib/toast';
+import { createLogger } from '@/lib/logger';
 import { orcaWorkflowsFor } from '@/lib/makerTransport';
+import { extractIpcError } from '@/utils/ipcError';
 import {
   parseConversationSearchJump,
   type ConversationSearchJump,
@@ -13,6 +15,8 @@ import { getCollaborationStartErrorMessage } from '../collaborationErrors';
 import { createWorkerLabel } from '../workerLabel';
 import { useWorkers } from './useWorkers';
 import { clearWorkerAttention } from '../lib/workerAttentionStore';
+
+const log = createLogger('OrcaWorkerSelection');
 
 function parseSearchJump(state: unknown): ConversationSearchJump | null {
   if (!state || typeof state !== 'object') return null;
@@ -249,6 +253,12 @@ export function useOrcaWorkerSelection({
         await orcaWorkflowsFor(leadSessionId).idleWorker(leadSessionId, workerId, 'done');
         clearWorkerAttention(workerId);
         return true;
+      } catch (err) {
+        if (extractIpcError(err)?.code === 'WORKER_STATE_CHANGED') {
+          log.debug('done acknowledgement skipped after worker state changed', { workerId });
+          return false;
+        }
+        throw err;
       } finally {
         acknowledgingDoneWorkerIdsRef.current.delete(workerId);
       }
@@ -335,7 +345,12 @@ export function useOrcaWorkerSelection({
           });
           let acknowledged = false;
           if (acknowledgeDone) {
-            acknowledged = await acknowledgeDoneWorker(workerId);
+            try {
+              acknowledged = await acknowledgeDoneWorker(workerId);
+            } catch (err: unknown) {
+              const msg = err instanceof Error ? err.message : String(err);
+              toast.error(msg);
+            }
           }
           if (!acknowledgeDone || acknowledged) clearWorkerAttention(workerId);
           await refresh();

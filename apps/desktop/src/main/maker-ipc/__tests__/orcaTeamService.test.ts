@@ -978,6 +978,59 @@ describe('OrcaTeamService', () => {
     expect(deps.markWorkerIdle).not.toHaveBeenCalled();
   });
 
+  it('does not acknowledge or close a done worker while a new dispatch is in flight', async () => {
+    let releaseDispatch!: () => void;
+    let markDispatchStarted!: () => void;
+    const dispatchStarted = new Promise<void>((resolve) => {
+      markDispatchStarted = resolve;
+    });
+    const { calls, deps, service, setWorker } = createDeps({
+      dispatchWorkerMessage: vi.fn(async (params) => {
+        markDispatchStarted();
+        await new Promise<void>((resolve) => {
+          releaseDispatch = resolve;
+        });
+        await params.onAccepted?.();
+        return {
+          ok: true,
+          mode: 'dispatched',
+          clientId: 'client-race',
+          dispatchOutcome: {
+            kind: 'session-dispatch',
+            source: params.dispatchMeta.source,
+            dispatched: true,
+          },
+          targetTitle: 'Worker',
+          targetLastUserSendAt: null,
+        } satisfies DispatchWorkerMessageResult;
+      }),
+    });
+    setWorker(createWorker({ status: 'done' }));
+
+    const dispatch = service.dispatchWorkerTask({
+      targetSessionId: 'worker-session-1',
+      message: 'new task',
+      dispatchMeta: { source: 'test-source', context: 'done-ack-race' },
+    });
+    await dispatchStarted;
+
+    await expect(service.idleWorker({
+      callerLeadSessionId: 'lead-1',
+      workerId: 'worker-1',
+      expectedStatus: 'done',
+    })).resolves.toEqual({
+      ok: false,
+      errorCode: 'WORKER_STATE_CHANGED',
+      message: 'worker worker-1 has a dispatch in progress',
+    });
+    expect(deps.markWorkerIdleIfStatus).not.toHaveBeenCalled();
+    expect(deps.closeWorkerSession).not.toHaveBeenCalled();
+
+    releaseDispatch();
+    await expect(dispatch).resolves.toMatchObject({ dispatched: true });
+    expect(calls).toContain('updateWorkerStatus:running');
+  });
+
   it('rejects a viewed-status idle request when the worker became running', async () => {
     const { calls, service, setWorker } = createDeps();
     setWorker(createWorker({ status: 'running' }));

@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
   createWorker: vi.fn<(input: Record<string, unknown>) => Promise<void>>(async () => undefined),
   switchFocus: vi.fn(async () => undefined),
   idleWorker: vi.fn(async () => ({ ok: true as const, workerId: 'worker-b' })),
+  toastError: vi.fn(),
 }));
 
 vi.mock('../useWorkers', () => ({
@@ -46,7 +47,7 @@ vi.mock('react-i18next', () => ({
 
 vi.mock('@/lib/toast', () => ({
   toast: {
-    error: vi.fn(),
+    error: mocks.toastError,
   },
 }));
 
@@ -92,6 +93,7 @@ describe('useOrcaWorkerSelection', () => {
     mocks.switchFocus.mockClear();
     mocks.idleWorker.mockClear();
     mocks.idleWorker.mockResolvedValue({ ok: true, workerId: 'worker-b' });
+    mocks.toastError.mockClear();
     __resetWorkerAttentionStoreForTest();
     mocks.createWorker.mockReset().mockResolvedValue(undefined);
   });
@@ -116,12 +118,14 @@ describe('useOrcaWorkerSelection', () => {
     expect(mocks.refresh).toHaveBeenCalled();
   });
 
-  it('keeps done attention when the main state transition fails', async () => {
+  it('silently keeps done attention and refreshes when acknowledgement loses a state race', async () => {
     mocks.workers = [
       makeWorker('worker-a', 'session-a', true),
       makeWorker('worker-b', 'session-b', false, 'done'),
     ];
-    mocks.idleWorker.mockRejectedValueOnce(new Error('worker state changed'));
+    mocks.idleWorker.mockRejectedValueOnce(
+      new Error('[WORKER_STATE_CHANGED] worker worker-b has a dispatch in progress'),
+    );
     markWorkerAttention('worker-b');
     const { result } = renderHook(
       () => useOrcaWorkerSelection({ leadSessionId: 'lead-1' }),
@@ -134,6 +138,27 @@ describe('useOrcaWorkerSelection', () => {
       expect(mocks.idleWorker).toHaveBeenCalledWith('lead-1', 'worker-b', 'done');
     });
     expect(hasWorkerAttention('worker-b')).toBe(true);
+    expect(mocks.refresh).toHaveBeenCalled();
+    expect(mocks.toastError).not.toHaveBeenCalled();
+  });
+
+  it('refreshes after switch focus even when done acknowledgement fails unexpectedly', async () => {
+    mocks.workers = [
+      makeWorker('worker-a', 'session-a', true),
+      makeWorker('worker-b', 'session-b', false, 'done'),
+    ];
+    mocks.idleWorker.mockRejectedValueOnce(new Error('idle store unavailable'));
+    markWorkerAttention('worker-b');
+    const { result } = renderHook(
+      () => useOrcaWorkerSelection({ leadSessionId: 'lead-1' }),
+      { wrapper },
+    );
+
+    act(() => result.current.handleSwitchFocus('worker-b'));
+
+    await waitFor(() => expect(mocks.refresh).toHaveBeenCalled());
+    expect(hasWorkerAttention('worker-b')).toBe(true);
+    expect(mocks.toastError).toHaveBeenCalledWith('idle store unavailable');
   });
 
   it('does not idle a running worker when switching focus', async () => {
