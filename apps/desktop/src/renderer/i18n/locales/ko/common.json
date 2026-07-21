@@ -4149,6 +4149,7 @@
         "unsupportedHistory": "이 지점은 에이전트 전환 경계를 지나므로 분기할 수 없습니다",
         "noPriorAssistant": "AI 응답 뒤의 메시지에서 분기하세요",
         "sourceNeverRan": "원본 세션이 아직 실행되지 않아 분기할 수 없습니다",
+        "codexStateUnavailable": "Codex 세션 상태를 사용할 수 없어 분기할 수 없습니다. {{detail}}",
         "generic": "분기 실패, 다시 시도하세요"
       }
     },

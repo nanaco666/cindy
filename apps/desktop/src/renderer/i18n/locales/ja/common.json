@@ -4149,6 +4149,7 @@
         "unsupportedHistory": "この位置はエージェント切替境界をまたぐため、分岐できません",
         "noPriorAssistant": "AI の返信より後のメッセージで分岐してください",
         "sourceNeverRan": "元のセッションがまだ実行されていないため分岐できません",
+        "codexStateUnavailable": "Codex セッションの状態を利用できないため分岐できません。{{detail}}",
         "generic": "分岐に失敗しました。再試行してください"
       }
     },

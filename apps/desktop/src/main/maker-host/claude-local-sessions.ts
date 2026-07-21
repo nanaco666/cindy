@@ -924,13 +924,32 @@ function agentMetaFromRecord(
 ): Record<string, unknown> {
   const meta: Record<string, unknown> = {};
   const uuid = stringValue(obj.uuid);
-  const parentUuid = firstNonEmpty(
+  const isAssistant = stringValue(obj.type) === 'assistant';
+  const sourceToolAssistantUuid = stringValue(obj.sourceToolAssistantUUID);
+  // Claude transcript parentage and tool/subagent parentage are different graphs:
+  // `parentUuid` / `parent_uuid` links adjacent JSONL records, while
+  // `parent_tool_use_id` (and legacy sourceToolAssistantUUID) marks tool-owned
+  // assistant output. Fork/rewind must not treat every transcript child as a
+  // subagent message, so persist the two meanings separately.
+  const transcriptParentUuid = firstNonEmpty(
     stringValue(obj.parentUuid),
     stringValue(obj.parent_uuid),
-    stringValue(obj.sourceToolAssistantUUID),
+    stringValue(obj.logicalParentUuid),
+    stringValue(obj.logical_parent_uuid),
+    // Claude uses sourceToolAssistantUUID as the transcript-chain parent for
+    // user/tool_result records, but as the tool-owned assistant marker for
+    // assistant records. Keep those meanings separate in agentMeta.
+    !isAssistant ? sourceToolAssistantUuid : '',
+  );
+  const parentUuid = firstNonEmpty(
+    stringValue(obj.parent_tool_use_id),
+    stringValue(obj.parentToolUseId),
+    stringValue(obj.parentToolUseID),
+    isAssistant ? sourceToolAssistantUuid : '',
   );
   const sdkSessionId = firstNonEmpty(stringValue(obj.sessionId), stringValue(obj.session_id), fallbackSessionId);
   if (uuid) meta.uuid = uuid;
+  if (transcriptParentUuid) meta.transcriptParentUuid = transcriptParentUuid;
   if (parentUuid) meta.parentUuid = parentUuid;
   if (sdkSessionId) meta.sdkSessionId = sdkSessionId;
   return meta;

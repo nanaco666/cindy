@@ -7,7 +7,7 @@
  * 错误码映射 (与老 local-db:sessions:fork 一致):
  *   SOURCE_NOT_FOUND / MESSAGE_NOT_FOUND  → NOT_FOUND
  *   NOT_USER_MESSAGE                       → INVALID_PARAMS
- *   SOURCE_NEVER_RAN / NO_PRIOR_ASSISTANT → 同名透传
+ *   SOURCE_NEVER_RAN / NO_PRIOR_ASSISTANT / CODEX_FORK_STATE_UNAVAILABLE → 同名透传
  *
  * fork 点支持 user / assistant 消息 (语义区别见 forkSessionAtMessage doc)。
  */
@@ -73,6 +73,9 @@ export function registerMakerForkIpc(): void {
           case 'NO_PRIOR_ASSISTANT':
             throwIpcError('NO_PRIOR_ASSISTANT', '请在 AI 回复之后的提问上 fork');
             break;
+          case 'CODEX_FORK_STATE_UNAVAILABLE':
+            throwIpcError('CODEX_FORK_STATE_UNAVAILABLE', msg);
+            break;
           case 'UNSUPPORTED_HISTORY':
             throwIpcError('FORK_UNSUPPORTED_HISTORY', msg);
             break;
@@ -105,6 +108,9 @@ export function registerMakerForkIpc(): void {
             break;
           case 'SOURCE_NEVER_RAN':
             throwIpcError('SOURCE_NEVER_RAN', '原会话尚未运行，无法 fork');
+            break;
+          case 'CODEX_FORK_STATE_UNAVAILABLE':
+            throwIpcError('CODEX_FORK_STATE_UNAVAILABLE', msg);
             break;
           case 'UNSUPPORTED_HISTORY':
             throwIpcError('FORK_UNSUPPORTED_HISTORY', msg);

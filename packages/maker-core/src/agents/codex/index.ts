@@ -4237,7 +4237,16 @@ export class CodexAgent extends BaseAgent {
    * opts.upToMessageId 在 Codex 这里被忽略。uuidMap 返回空 — Codex agentMeta 不存
    * message uuid, maker 那边也找不到东西可 remap, 不会 break。
    */
-  private async findRolloutPath(threadId: string): Promise<string> {
+  private async findRolloutPath(threadId: string, preferredPath?: string): Promise<string> {
+    if (preferredPath && !isRemoteLikePath(preferredPath)) {
+      try {
+        const stat = await fs.stat(preferredPath);
+        if (stat.isFile()) return preferredPath;
+      } catch {
+        // Fall through to the normal CODEX_HOME scan when preparation only
+        // returned a stale state-db pointer.
+      }
+    }
     const codexHome = this.codexHome;
     if (!codexHome || isRemoteLikePath(codexHome)) {
       throw new Error('Codex rollout path is unavailable for this session');
@@ -4282,8 +4291,8 @@ export class CodexAgent extends BaseAgent {
     return bestPath;
   }
 
-  private async createSafeForkRolloutCopy(threadId: string): Promise<string> {
-    const sourcePath = await this.findRolloutPath(threadId);
+  private async createSafeForkRolloutCopy(threadId: string, preferredPath?: string): Promise<string> {
+    const sourcePath = await this.findRolloutPath(threadId, preferredPath);
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'xdt-codex-fork-'));
     const copyPath = path.join(tempDir, path.basename(sourcePath));
     const text = await fs.readFile(sourcePath, 'utf8');
@@ -4309,9 +4318,20 @@ export class CodexAgent extends BaseAgent {
     try {
       const { host } = await this.getUtilityHost();
       await host.ensureStarted();
+      // Imported Codex threads may still live under another CODEX_HOME. Resume
+      // already asks the desktop host to link/adopt their state and rollout;
+      // fork must cross the same preparation boundary before thread/fork or the
+      // utility app-server cannot resolve a freshly imported thread.
+      const preparedRolloutResult = await this.deps.prepareCodexResumeSession?.(opts.sourceSdkSessionId);
+      const preparedRolloutPath = typeof preparedRolloutResult === 'string'
+        ? preparedRolloutResult
+        : undefined;
       // 选项名沿用历史语义;安全副本同时会丢弃会让 Responses fork/retry 失败的坏历史 payload。
       if (opts.stripEncryptedReasoning) {
-        stripCopyPath = await this.createSafeForkRolloutCopy(opts.sourceSdkSessionId);
+        stripCopyPath = await this.createSafeForkRolloutCopy(
+          opts.sourceSdkSessionId,
+          preparedRolloutPath,
+        );
       }
       const params: ThreadForkParams = {
         threadId: opts.sourceSdkSessionId,

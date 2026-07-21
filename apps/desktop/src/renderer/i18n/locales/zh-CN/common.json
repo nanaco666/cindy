@@ -4149,6 +4149,7 @@
         "unsupportedHistory": "目标位置跨过了引擎切换边界，无法从这里分叉",
         "noPriorAssistant": "请在 AI 回复之后的消息上分叉",
         "sourceNeverRan": "原会话尚未运行，无法分叉",
+        "codexStateUnavailable": "Codex 会话状态不可用，无法分叉。{{detail}}",
         "generic": "分叉失败，请重试"
       }
     },

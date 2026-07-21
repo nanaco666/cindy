@@ -4149,6 +4149,7 @@
         "unsupportedHistory": "This point crosses an agent-switch boundary and cannot be forked",
         "noPriorAssistant": "Please fork from a message that follows an AI reply",
         "sourceNeverRan": "Source session has not run yet, cannot fork",
+        "codexStateUnavailable": "The Codex session state is unavailable and cannot be forked. {{detail}}",
         "generic": "Fork failed, please retry"
       }
     },

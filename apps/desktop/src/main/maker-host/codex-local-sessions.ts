@@ -166,7 +166,7 @@ export async function importExternalCodexSessions(threadIds: string[]): Promise<
 }
 
 /** Ensure a Codex thread from another local CODEX_HOME is visible to xdt-maker's app-server. */
-export async function prepareExternalCodexSessionForResume(threadId: string): Promise<void> {
+export async function prepareExternalCodexSessionForResume(threadId: string): Promise<string | undefined> {
   if (!isLikelyThreadId(threadId)) return;
   const targetHome = getDesktopCodexHome();
   const targetDbPath = findLatestStateDb(targetHome);
@@ -186,7 +186,7 @@ export async function prepareExternalCodexSessionForResume(threadId: string): Pr
       isPathInside(targetHome, targetRollout)
       || !isLegacyBrandedCodexLocation(targetHome, targetRollout)
     )
-  ) return;
+  ) return targetRollout;
 
   // state 行可能已经丢失,但标准 sessions/ 下的 rollout 仍在。app-server 的
   // thread/resume 会自己扫描并重新 hydrate state;这里只需避免再合成一份重复文件。
@@ -257,7 +257,7 @@ export async function prepareExternalCodexSessionForResume(threadId: string): Pr
       });
     }
     targetRollout = readThreadRolloutPath(targetDbPath, threadId);
-    if (targetRollout && fs.existsSync(targetRollout)) return;
+    if (targetRollout && fs.existsSync(targetRollout)) return targetRollout;
   }
 
   // 孤儿兜底: state DB 有 threads 行、但 rollout 文件已缺失(典型成因: 旧版 codex logout
@@ -290,6 +290,8 @@ export async function prepareExternalCodexSessionForResume(threadId: string): Pr
       });
     }
   }
+  const preparedRollout = readThreadRolloutPath(targetDbPath, threadId);
+  return preparedRollout && fs.existsSync(preparedRollout) ? preparedRollout : undefined;
 }
 
 /** 为外部 thread 派生当前 Codex HOME 内的稳定 rollout 路径。 */
