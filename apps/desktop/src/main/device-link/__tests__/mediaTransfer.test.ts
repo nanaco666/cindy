@@ -373,6 +373,33 @@ describe('integrity regression coverage', () => {
     );
   });
 
+  it('deletes the OSS object when a streamed PUT fails mid-transfer', async () => {
+    const size = __testing.STREAM_THRESHOLD + 1;
+    statMock.mockResolvedValue({ isFile: () => true, size });
+    createReadStreamMock.mockImplementation(() => Readable.from([Buffer.alloc(1024, 0x62)]));
+    fetchMock.mockRejectedValue(new Error('socket reset'));
+
+    await expect(uploadLocalFile('/tmp/interrupted.mp4')).rejects.toThrow('socket reset');
+    expect(apiFetch).toHaveBeenCalledWith(
+      DEL_PATH,
+      expect.objectContaining({ method: 'DELETE', body: { key: KEY } }),
+    );
+  });
+
+  it('deletes the OSS object when the source stream errors while being read', async () => {
+    const size = __testing.STREAM_THRESHOLD + 1;
+    statMock.mockResolvedValue({ isFile: () => true, size });
+    createReadStreamMock.mockImplementation(() => {
+      throw new Error('source read failed');
+    });
+
+    await expect(uploadLocalFile('/tmp/source-error.mp4')).rejects.toThrow('source read failed');
+    expect(apiFetch).toHaveBeenCalledWith(
+      DEL_PATH,
+      expect.objectContaining({ method: 'DELETE', body: { key: KEY } }),
+    );
+  });
+
   it('reports progress while bytes are written to the random part file', async () => {
     const bytes = Uint8Array.from([1, 2, 3]);
     fetchMock.mockResolvedValue({ ok: true, status: 200, body: webBody(bytes) });

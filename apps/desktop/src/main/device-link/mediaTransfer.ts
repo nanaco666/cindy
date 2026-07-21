@@ -1,4 +1,3 @@
-
 /**
  * mediaTransfer.ts — device-link 双向媒体「OSS 中转」的 main 侧传输 client。
  * ---------------------------------------------------------------------------
@@ -185,37 +184,43 @@ export async function uploadLocalFile(
   const { putUrl, key } = await presignPut(size, ext, contentType);
   let sha256: string;
 
-  if (size <= STREAM_THRESHOLD) {
-    // 小媒体:读进 Buffer 整体 PUT(成熟稳定路径)。整体 PUT 无中间粒度,
-    // 完成时一次性回调。
-    const buf = await readFile(localPath);
-    if (buf.byteLength !== size) {
-      throw new Error(`文件在上传前发生变化:预期 ${size} 字节,实际 ${buf.byteLength} 字节`);
+  try {
+    if (size <= STREAM_THRESHOLD) {
+      // 小媒体:读进 Buffer 整体 PUT(成熟稳定路径)。整体 PUT 无中间粒度,
+      // 完成时一次性回调。
+      const buf = await readFile(localPath);
+      if (buf.byteLength !== size) {
+        throw new Error(`文件在上传前发生变化:预期 ${size} 字节,实际 ${buf.byteLength} 字节`);
+      }
+      sha256 = createHash('sha256').update(buf).digest('hex');
+      await putBytesToOss(putUrl, exactArrayBuffer(buf), contentType);
+      opts.onProgress?.(size);
+    } else {
+      // 大媒体:磁盘流式 PUT,避免整文件进内存;经计数 Transform 上报进度。
+      let sent = 0;
+      const hasher = createHash('sha256');
+      const counter = new Transform({
+        transform(chunk: Buffer, _enc, cb) {
+          sent += chunk.length;
+          hasher.update(chunk);
+          opts.onProgress?.(sent);
+          cb(null, chunk);
+        },
+      });
+      const webStream = Readable.toWeb(
+        createReadStream(localPath).pipe(counter),
+      ) as unknown as ReadableStream;
+      await putBytesToOss(putUrl, webStream, contentType);
+      if (sent !== size) {
+        // Cleanup is centralized below so transport and source-stream errors use the same path.
+        throw new Error(`文件在上传期间发生变化:预期 ${size} 字节,实际 ${sent} 字节`);
+      }
+      sha256 = hasher.digest('hex');
     }
-    sha256 = createHash('sha256').update(buf).digest('hex');
-    await putBytesToOss(putUrl, exactArrayBuffer(buf), contentType);
-    opts.onProgress?.(size);
-  } else {
-    // 大媒体:磁盘流式 PUT,避免整文件进内存;经计数 Transform 上报进度。
-    let sent = 0;
-    const hasher = createHash('sha256');
-    const counter = new Transform({
-      transform(chunk: Buffer, _enc, cb) {
-        sent += chunk.length;
-        hasher.update(chunk);
-        opts.onProgress?.(sent);
-        cb(null, chunk);
-      },
-    });
-    const webStream = Readable.toWeb(
-      createReadStream(localPath).pipe(counter),
-    ) as unknown as ReadableStream;
-    await putBytesToOss(putUrl, webStream, contentType);
-    if (sent !== size) {
-      await removeRemote(key);
-      throw new Error(`文件在上传期间发生变化:预期 ${size} 字节,实际 ${sent} 字节`);
-    }
-    sha256 = hasher.digest('hex');
+  } catch (error) {
+    // Cleanup is best-effort after every post-presign transfer failure.
+    await removeRemote(key);
+    throw error;
   }
   log.debug(`uploaded key=${key} size=${size} ct=${contentType} integrity=sha256`);
   return { key, size, contentType, sha256 };
