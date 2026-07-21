@@ -3,9 +3,11 @@ import type { JSONContent } from '@tiptap/core';
 
 import type { AttachedFile } from '@/lib/fileTypes';
 import {
+  appendQuoteToDraft,
   clearDraft,
   clearDraftAndNotify,
   draftHasContent,
+  getDraft,
   getDraftPresence,
   saveDraft,
   subscribeDraft,
@@ -67,6 +69,74 @@ describe('draftHasContent', () => {
 
   it('counts attachments alone (no text) as content', () => {
     expect(draftHasContent(draft({ text: emptyDoc, attachments: [fakeAttachment] }))).toBe(true);
+  });
+
+  it('counts an inline composer quote as content', () => {
+    expect(
+      draftHasContent(
+        draft({
+          text: { type: 'doc', content: [{ type: 'composerQuote', attrs: { text: 'quoted' } }] },
+        }),
+      ),
+    ).toBe(true);
+  });
+});
+
+describe('appendQuoteToDraft', () => {
+  it('lifts legacy quote arrays into leading inline nodes', () => {
+    const id = 'session-legacy-quote';
+    saveDraft(
+      id,
+      draft({
+        text: textDoc,
+        quotes: [{ text: 'legacy quote', sourcePath: 'legacy.ts' }],
+      }),
+    );
+
+    expect(getDraft(id)?.text?.content).toEqual([
+      {
+        type: 'composerQuote',
+        attrs: {
+          text: 'legacy quote',
+          sourcePath: 'legacy.ts',
+          startLine: null,
+          endLine: null,
+        },
+      },
+      { type: 'paragraph', content: [{ type: 'text', text: 'hello' }] },
+    ]);
+    expect(getDraft(id)?.quotes).toEqual([]);
+    clearDraft(id);
+  });
+
+  it('preserves the ordered body while appending a new inline quote', () => {
+    const id = 'session-append-quote';
+    saveDraft(id, draft({ text: textDoc }));
+
+    appendQuoteToDraft(id, { text: 'new quote', startLine: 4, endLine: 5 });
+
+    expect(getDraft(id)).toEqual({
+      text: {
+        type: 'doc',
+        content: [
+          { type: 'paragraph', content: [{ type: 'text', text: 'hello' }] },
+          {
+            type: 'composerQuote',
+            attrs: {
+              text: 'new quote',
+              sourcePath: null,
+              startLine: 4,
+              endLine: 5,
+            },
+          },
+          { type: 'paragraph' },
+        ],
+      },
+      attachments: [],
+      quotes: [],
+      browserComments: [],
+    });
+    clearDraft(id);
   });
 });
 

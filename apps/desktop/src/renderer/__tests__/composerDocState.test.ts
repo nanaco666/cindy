@@ -10,6 +10,7 @@ import {
   composerDocIsEmpty,
   docContainsAtomChip,
 } from '@/components/new-chat/composerDocState';
+import { ComposerQuoteNode } from '@/components/new-chat/ComposerQuoteNode';
 import { MentionChipNode } from '@/components/new-chat/MentionChipNode';
 import { PastedTextChipNode } from '@/components/new-chat/PastedTextChipNode';
 
@@ -22,7 +23,7 @@ afterEach(() => {
 
 function makeEditor(): Editor {
   const editor = new Editor({
-    extensions: [Document, Paragraph, Text, MentionChipNode, PastedTextChipNode],
+    extensions: [Document, Paragraph, Text, MentionChipNode, PastedTextChipNode, ComposerQuoteNode],
     content: { type: 'doc', content: [{ type: 'paragraph', content: [] }] },
   });
   editors.push(editor);
@@ -63,5 +64,24 @@ describe('composerDocState', () => {
     });
     expect(docContainsAtomChip(mention.state.doc)).toBe(true);
     expect(composerDocIsEmpty(mention.state.doc)).toBe(false);
+
+    const quote = makeEditor();
+    quote.commands.setContent({
+      type: 'doc',
+      content: [
+        {
+          type: 'composerQuote',
+          attrs: {
+            text: 'quoted',
+            sourcePath: null,
+            startLine: null,
+            endLine: null,
+          },
+        },
+        { type: 'paragraph' },
+      ],
+    });
+    expect(docContainsAtomChip(quote.state.doc)).toBe(true);
+    expect(composerDocIsEmpty(quote.state.doc)).toBe(false);
   });
 });

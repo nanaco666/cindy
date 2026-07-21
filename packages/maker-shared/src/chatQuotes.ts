@@ -1,20 +1,19 @@
 /**
  * chatQuotes — 聊天/文件选中文字引用(chat-text-quote)的纯函数层。
  *
- * 数据契约:引用以 markdown blockquote 形态存在于消息 content 的**开头**——
- * 发送时 `formatQuotesForSend` 把引用列表拼成 `> ` 前缀块 + 空行 + 正文;
- * 渲染时 `parseLeadingBlockquotes` 做精确逆解析,把引用块还原成列表供
- * 两端消息气泡以 Codex 风格("N 处引用" 胶囊 + 预览)展示。
+ * 数据契约:引用以 markdown blockquote 形态存在于消息 content。新 composer
+ * 把引用作为正文 block atom,因此可按「引用 A → 回复 A → 引用 B → 回复 B」
+ * 交错序列化;`parseChatQuoteSegments` 按原顺序还原。`formatQuotesForSend` /
+ * `parseLeadingBlockquotes` 继续服务旧的「引用列表前置」调用方与历史消息。
  *
  * 来源文件(file-quote):从文件浏览器选中的引用带 `sourcePath`(workdir
- * 相对路径),编码为条目内最后一行 `> — source: <path>`。模型对引注体例的
- * "— source:" 天然理解,且拿路径可 Read 完整上下文 / 精准编辑;引用文本
- * 本身就是最强的定位锚点(grep 即达),因此不带行号。
+ * 相对路径),编码为条目内最后一行 `> — source: <path>`;能拿到选区行号时
+ * 再附 `#Lx-Ly`。模型对引注体例天然理解,可据此 Read 完整上下文 / 精准编辑。
  *
  * 为什么选 blockquote 而不是结构化字段:引用是模型的母语格式(零 wire /
  * 持久化 schema 改动),手机端 / 远端 / 导出的纯文本视图天然可读;渲染美化
- * 只是本端的展示层解析。用户手打的开头 blockquote 也会被同样样式化——
- * 这本来就是 markdown 的引用语义,视觉化合理。
+ * 只是本端的展示层解析。解析只对持久化了 `quotesEncoded` 标志的消息启用,
+ * 用户普通手打的 markdown 引用保持原样。
  *
  * apps/desktop 的 `renderer/lib/chatQuotes.ts` re-export 本模块,避免 wire format
  * 双实现漂移。
@@ -27,6 +26,11 @@ export interface ChatQuote {
   startLine?: number;
   endLine?: number;
 }
+
+/** 按消息正文顺序排列的引用 / 用户文字段。 */
+export type ChatQuoteSegment =
+  | { kind: 'text'; text: string }
+  | { kind: 'quote'; quote: ChatQuote };
 
 /** 来源行前缀(条目内最后一行)。 */
 const SOURCE_LINE_PREFIX = '— source: ';
@@ -77,17 +81,90 @@ function stripOuterNewlines(text: string): string {
   return text.slice(start, end);
 }
 
+/** 单条引用 → 可独立插入正文任意位置的 Markdown blockquote。 */
+export function formatQuoteForSend(quote: ChatQuote): string {
+  const lines = stripOuterNewlines(quote.text).split('\n');
+  const sourceLine = formatSourceLine(quote);
+  if (sourceLine) lines.push(`${SOURCE_LINE_PREFIX}${sourceLine}`);
+  return lines.map((line) => (line ? `> ${line}` : '>')).join('\n');
+}
+
 export function formatQuotesForSend(quotes: readonly ChatQuote[], body: string): string {
   if (quotes.length === 0) return body;
-  const block = quotes
-    .map((q) => {
-      const lines = stripOuterNewlines(q.text).split('\n');
-      const sourceLine = formatSourceLine(q);
-      if (sourceLine) lines.push(`${SOURCE_LINE_PREFIX}${sourceLine}`);
-      return lines.map((line) => (line ? `> ${line}` : '>')).join('\n');
-    })
-    .join('\n\n');
+  const block = quotes.map(formatQuoteForSend).join('\n\n');
   return `${block}\n\n${body}`.trimEnd();
+}
+
+function quoteFromLines(lines: string[]): ChatQuote {
+  const last = lines[lines.length - 1];
+  if (last?.startsWith(SOURCE_LINE_PREFIX) && lines.length > 1) {
+    return {
+      text: lines.slice(0, -1).join('\n'),
+      ...parseSourceLine(last.slice(SOURCE_LINE_PREFIX.length)),
+    };
+  }
+  return { text: lines.join('\n') };
+}
+
+function stripOuterEmptyLines(lines: string[]): string[] {
+  let start = 0;
+  while (start < lines.length && lines[start] === '') start += 1;
+  let end = lines.length;
+  while (end > start && lines[end - 1] === '') end -= 1;
+  return lines.slice(start, end);
+}
+
+/**
+ * 解析 quotesEncoded 消息里的全部引用块,同时保留它们与用户文字的顺序。
+ * 调用方必须先用持久化标志门控,避免把普通手写 markdown 当成产品引用。
+ */
+export function parseChatQuoteSegments(content: string): ChatQuoteSegment[] {
+  if (!content.includes('> ')) {
+    return content ? [{ kind: 'text', text: content }] : [];
+  }
+
+  const lines = content.split('\n');
+  const segments: ChatQuoteSegment[] = [];
+  let textLines: string[] = [];
+
+  const flushText = () => {
+    const normalized = stripOuterEmptyLines(textLines);
+    textLines = [];
+    if (normalized.length > 0) {
+      segments.push({ kind: 'text', text: normalized.join('\n') });
+    }
+  };
+
+  let index = 0;
+  while (index < lines.length) {
+    const line = lines[index];
+    if (!line.startsWith('> ')) {
+      textLines.push(line);
+      index += 1;
+      continue;
+    }
+
+    flushText();
+    const quoteLines: string[] = [];
+    while (index < lines.length) {
+      const quoteLine = lines[index];
+      if (quoteLine.startsWith('> ')) {
+        quoteLines.push(quoteLine.slice(2));
+        index += 1;
+        continue;
+      }
+      if (quoteLine === '>') {
+        quoteLines.push('');
+        index += 1;
+        continue;
+      }
+      break;
+    }
+    segments.push({ kind: 'quote', quote: quoteFromLines(quoteLines) });
+  }
+
+  flushText();
+  return segments;
 }
 
 /**
@@ -114,15 +191,7 @@ export function parseLeadingBlockquotes(content: string): {
 
   const flush = () => {
     if (current.length === 0) return;
-    const last = current[current.length - 1];
-    if (last.startsWith(SOURCE_LINE_PREFIX) && current.length > 1) {
-      quotes.push({
-        text: current.slice(0, -1).join('\n'),
-        ...parseSourceLine(last.slice(SOURCE_LINE_PREFIX.length)),
-      });
-    } else {
-      quotes.push({ text: current.join('\n') });
-    }
+    quotes.push(quoteFromLines(current));
     current = [];
   };
 

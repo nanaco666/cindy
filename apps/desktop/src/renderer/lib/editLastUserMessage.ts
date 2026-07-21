@@ -36,7 +36,9 @@ import {
   saveDraft as saveComposerDraft,
   plainTextToTiptapDoc,
 } from '@/lib/composerDraftStore';
-import { parseLeadingBlockquotes, type ChatQuote } from '@/lib/chatQuotes';
+import { parseChatQuoteSegments } from '@/lib/chatQuotes';
+import { quoteSegmentsToComposerDocument } from '@/lib/composerQuoteDocument';
+import type { JSONContent } from '@tiptap/core';
 import { expandGhostCommand } from '@/cindy-brain/ghostCommand';
 import { filterGhostsForWorkdir } from '@/cindy-brain/ghostWorkdirFilter';
 import {
@@ -59,9 +61,8 @@ export interface CommitEditAndResendOptions {
   /** Fallback workingDir (UserMessage prop) — session 行缺失时兜底。 */
   fallbackWorkingDir: string;
   /**
-   * 原消息带「选中引用」编码标志时重发同样携带——引用胶囊渲染以该标志门控,
-   * 丢掉会让重发出的那行把前导 `>` 块渲染成裸文本。编辑若删光了引用块也无害:
-   * 解析端对无引用前缀的文本原样返回。
+   * 原消息带「选中引用」编码标志时重发同样携带——正文内引用块的解析以该
+   * 标志门控,丢掉会让 markdown blockquote 退回普通文本展示。
    */
   quotesEncoded?: boolean;
 }
@@ -72,13 +73,11 @@ export interface CommitEditAndResendDeps {
   emitPatch: typeof emitSessionPatch;
   dropMessagesFromClientId: (sessionId: string, clientId: string) => void;
   sendMessage: typeof makerChatStore.sendMessage;
-  /** 重发入队失败时的文本兜底:编辑文本 + 附件落 composer 草稿;quoted 消息
-   *  的引用以草稿态(quotes 字段)还原,不作为裸 `>` 文本落进输入框。 */
+  /** 重发入队失败时的正文兜底:编辑文档 + 附件落 composer 草稿。 */
   saveDraftFallback: (
     sessionId: string,
-    text: string,
+    document: JSONContent | null,
     attachments: AttachedFile[],
-    quotes?: ChatQuote[],
   ) => void;
   /** 会话是否有排队中的未派发消息(pendingQueue 非空)。 */
   hasPendingQueue: (sessionId: string) => boolean;
@@ -117,11 +116,10 @@ const defaultDeps: CommitEditAndResendDeps = {
   dropMessagesFromClientId: (sessionId, clientId) =>
     makerChatStore.dropMessagesFromClientId(sessionId, clientId),
   sendMessage: (...args) => makerChatStore.sendMessage(...args),
-  saveDraftFallback: (sessionId, text, attachments, quotes) =>
+  saveDraftFallback: (sessionId, document, attachments) =>
     saveComposerDraft(sessionId, {
-      text: text.trim() ? plainTextToTiptapDoc(text) : null,
+      text: document,
       attachments,
-      ...(quotes && quotes.length > 0 ? { quotes } : {}),
     }),
   hasPendingQueue: (sessionId) =>
     makerChatStore.getSnapshot(sessionId).pendingQueue.length > 0,
@@ -246,19 +244,12 @@ export async function commitEditAndResend(
   if (!dispatched) {
     // rewind 已 commit(旧消息已软删)但重发没送达:文本落草稿,用户在输入框
     // 找回可重发。错误提示由 sendMessage 内部写入 store 的 error banner。
-    // quoted 消息把编辑文本拆回 quotes + body 落草稿(bot review P2):裸 `>`
-    // 文本进输入框会让重试发送丢 quotesEncoded、渲染回裸 blockquote;还原成
-    // 草稿态胶囊后,重试由 ChatInput 重新编码并带标志。编辑中删光引用块也
-    // 无害——解析对无引用前缀的文本原样返回。
-    const { quotes, body } = opts.quotesEncoded
-      ? parseLeadingBlockquotes(opts.text)
-      : { quotes: [] as ChatQuote[], body: opts.text };
-    deps.saveDraftFallback(
-      opts.sessionId,
-      body,
-      attachments,
-      quotes.length > 0 ? quotes : undefined,
-    );
+    const document = opts.quotesEncoded
+      ? quoteSegmentsToComposerDocument(parseChatQuoteSegments(opts.text))
+      : opts.text.trim()
+        ? plainTextToTiptapDoc(opts.text)
+        : null;
+    deps.saveDraftFallback(opts.sessionId, document, attachments);
   }
 }
 

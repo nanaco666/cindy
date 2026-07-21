@@ -1,12 +1,20 @@
 import { describe, expect, it } from 'vitest';
 import {
+  formatQuoteForSend,
   formatQuotesForSend,
+  parseChatQuoteSegments,
   parseLeadingBlockquotes,
   quoteSourceBasename,
   quoteSourceDisplayLabel,
 } from '../chatQuotes';
 
 describe('formatQuotesForSend', () => {
+  it('encodes one standalone quote for inline composer serialization', () => {
+    expect(formatQuoteForSend({ text: 'a\n\nb', sourcePath: 'docs/x.md' })).toBe(
+      '> a\n>\n> b\n> — source: docs/x.md',
+    );
+  });
+
   it('prefixes each quote line and separates quotes with a blank line (markdown semantics)', () => {
     expect(formatQuotesForSend([{ text: 'a\nb' }, { text: 'c' }], 'hello')).toBe(
       '> a\n> b\n\n> c\n\nhello',
@@ -50,6 +58,50 @@ describe('formatQuotesForSend', () => {
 
   it('trims the trailing gap for quote-only sends', () => {
     expect(formatQuotesForSend([{ text: 'a' }], '')).toBe('> a');
+  });
+});
+
+describe('parseChatQuoteSegments', () => {
+  it('preserves alternating quote and prose order', () => {
+    const content = [
+      '> first quote',
+      '',
+      'first response',
+      '',
+      '> second quote',
+      '> — source: docs/spec.md#L8-L9',
+      '',
+      'second response',
+    ].join('\n');
+
+    expect(parseChatQuoteSegments(content)).toEqual([
+      { kind: 'quote', quote: { text: 'first quote' } },
+      { kind: 'text', text: 'first response' },
+      {
+        kind: 'quote',
+        quote: {
+          text: 'second quote',
+          sourcePath: 'docs/spec.md',
+          startLine: 8,
+          endLine: 9,
+        },
+      },
+      { kind: 'text', text: 'second response' },
+    ]);
+  });
+
+  it('keeps internal quote and prose blank lines', () => {
+    expect(parseChatQuoteSegments('before\n\n> a\n>\n> b\n\nafter\n\nstill after')).toEqual([
+      { kind: 'text', text: 'before' },
+      { kind: 'quote', quote: { text: 'a\n\nb' } },
+      { kind: 'text', text: 'after\n\nstill after' },
+    ]);
+  });
+
+  it('returns ordinary text unchanged', () => {
+    expect(parseChatQuoteSegments('plain\ntext')).toEqual([
+      { kind: 'text', text: 'plain\ntext' },
+    ]);
   });
 });
 

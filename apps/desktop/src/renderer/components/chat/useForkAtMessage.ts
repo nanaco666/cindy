@@ -18,7 +18,7 @@ import { toast } from '@/lib/toast';
 import { ApiError } from '@/lib/httpClient';
 import { forkAtMessage } from '@/lib/sessionService';
 import { saveDraft as saveComposerDraft } from '@/lib/composerDraftStore';
-import type { ChatQuote } from '@/lib/chatQuotes';
+import type { JSONContent } from '@tiptap/core';
 import { emitRefresh as emitSessionsRefresh } from '@/lib/sessionsBus';
 import { getSessionDeviceId } from '@/features/device-link/remoteProjectsStore';
 import { refreshRemoteDeviceSessions } from '@/features/device-link/refreshRemoteSessions';
@@ -55,9 +55,8 @@ interface UseForkAtMessageOptions {
   /** fork 成功后预填到新会话 composer 的纯文本（user 消息分叉用——
    *  "改写提问"流；assistant 消息分叉不传 = 不预填）。 */
   draftText?: string;
-  /** 原消息解析出的「选中引用」——随预填一起还原成引用草稿态(胶囊),
-   *  否则 quotesEncoded 消息 fork 后重发会丢标志、渲染回裸 blockquote。 */
-  draftQuotes?: readonly ChatQuote[];
+  /** 已按正文顺序建好的 Tiptap 文档。inline quote 消息用它保留交错顺序。 */
+  draftDocument?: JSONContent | null;
 }
 
 export function useForkAtMessage({
@@ -65,7 +64,7 @@ export function useForkAtMessage({
   messageClientId,
   forkBlocked,
   draftText,
-  draftQuotes,
+  draftDocument,
 }: UseForkAtMessageOptions): () => Promise<void> {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -90,13 +89,13 @@ export function useForkAtMessage({
       // (image/file attachments intentionally skipped — fork-and-edit is
       // typically a "rephrase the question" flow; carry them forward later
       // if real usage shows we need it.)
-      const draftDoc = textToTiptapDoc(draftText ?? '');
-      // 纯引用消息(正文空、引用非空)同样要预填——只判 draftDoc 会丢引用。
-      if (draftDoc || (draftQuotes?.length ?? 0) > 0) {
+      const draftDoc = draftDocument === undefined
+        ? textToTiptapDoc(draftText ?? '')
+        : draftDocument;
+      if (draftDoc) {
         saveComposerDraft(newSession.id, {
           text: draftDoc,
           attachments: [],
-          ...(draftQuotes && draftQuotes.length > 0 ? { quotes: [...draftQuotes] } : {}),
         });
       }
       // Tell sidebar instances to refetch so the new session appears in the
@@ -132,7 +131,7 @@ export function useForkAtMessage({
     navigationMode,
     forkBlocked,
     draftText,
-    draftQuotes,
+    draftDocument,
     navigate,
     t,
   ]);

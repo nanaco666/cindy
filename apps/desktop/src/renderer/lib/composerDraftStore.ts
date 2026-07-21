@@ -33,6 +33,11 @@
 import type { AttachedFile } from '@/lib/fileTypes';
 import type { BrowserCommentDraftItem } from '@/lib/browserComments';
 import type { ChatQuote } from '@/lib/chatQuotes';
+import {
+  appendQuoteToComposerDocument,
+  prependLegacyQuotesToComposerDocument,
+  COMPOSER_QUOTE_NODE_TYPE,
+} from '@/lib/composerQuoteDocument';
 import type { JSONContent } from '@tiptap/core';
 import { createLogger } from '@/lib/logger';
 
@@ -51,19 +56,14 @@ export interface ComposerDraft {
    * later ordinary remount does not steal focus.
    */
   focusAtEnd?: boolean;
-  /**
-   * 选中文字引用(chat-text-quote):待随下一条消息发送的引用片段(聊天
-   * 消息或文件浏览器来源,后者带 sourcePath)。发送时拼成 markdown
-   * blockquote 前置在用户文字前。可选,旧写入点不带该字段时视为无引用——
-   * 所有 saveDraft 调用方负责保留已有值。
-   */
+  /** @deprecated 旧 renderer 的独立引用数组;saveDraft 会提升为正文节点。 */
   quotes?: ChatQuote[];
   /**
    * 内置浏览器页面评论(browser-comment-chip):待随下一条消息发送的评论列表,
    * composer 渲染为「N 条注释」胶囊,发送时序列化为 `# Browser comments:` 段
    * 拼在正文后、截图并入附件。可选,旧写入点不带该字段时视为无评论——
-   * 会**覆写同会话草稿**的 saveDraft 调用方负责保留已有值(与 quotes 同款
-   * 义务);为新会话整体预填(fork / rewind / skillhub)的写入点属有意重置,
+   * 会**覆写同会话草稿**的 saveDraft 调用方负责保留已有值;为新会话整体
+   * 预填(fork / rewind / skillhub)的写入点属有意重置,
    * 不需要带。
    */
   browserComments?: BrowserCommentDraftItem[];
@@ -117,7 +117,11 @@ const presenceCache = new Map<string, boolean>();
  */
 function tiptapDocHasContent(node: JSONContent | null | undefined): boolean {
   if (!node) return false;
-  if (node.type === 'mentionChip' || node.type === 'pastedTextChip') return true;
+  if (
+    node.type === 'mentionChip' ||
+    node.type === 'pastedTextChip' ||
+    node.type === COMPOSER_QUOTE_NODE_TYPE
+  ) return true;
   if (typeof node.text === 'string' && node.text.trim().length > 0) return true;
   if (Array.isArray(node.content)) {
     return node.content.some(tiptapDocHasContent);
@@ -216,7 +220,14 @@ export function saveDraft(
   draft: ComposerDraft,
   opts?: { silent?: boolean },
 ): void {
-  drafts.set(sessionId, draft);
+  const normalized = draft.quotes && draft.quotes.length > 0
+    ? {
+        ...draft,
+        text: prependLegacyQuotesToComposerDocument(draft.text, draft.quotes),
+        quotes: [],
+      }
+    : draft;
+  drafts.set(sessionId, normalized);
   if (!opts?.silent) {
     const set = listeners.get(sessionId);
     if (set) for (const fn of set) {
@@ -315,15 +326,20 @@ function syncDraftUrlsToMain(): void {
 }
 
 /**
- * chat-text-quote:向会话草稿追加一条引用(非 silent——挂载中的 ChatInput 经
- * subscribeDraft 立即刷新引用条并聚焦输入框)。消息流的选中文字浮动按钮调用。
+ * chat-text-quote:向会话草稿正文末尾追加一条引用(非 silent——挂载中的
+ * ChatInput 立即刷新正文并把光标放到引用后的空段落)。
  */
 export function appendQuoteToDraft(sessionId: string, quote: ChatQuote): void {
   const existing = drafts.get(sessionId);
+  const currentDocument = prependLegacyQuotesToComposerDocument(
+    existing?.text,
+    existing?.quotes ?? [],
+  );
   saveDraft(sessionId, {
-    text: existing?.text ?? null,
+    ...existing,
+    text: appendQuoteToComposerDocument(currentDocument, quote),
     attachments: existing?.attachments ?? [],
-    quotes: [...(existing?.quotes ?? []), quote],
+    quotes: [],
     browserComments: existing?.browserComments ?? [],
   });
 }

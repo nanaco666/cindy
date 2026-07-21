@@ -112,14 +112,27 @@ describe('useForkAtMessage', () => {
     expect(toastError).not.toHaveBeenCalled();
   });
 
-  it('carries parsed quotes into the prefilled draft (quote capsule restored)', async () => {
-    const quotes = [{ text: 'quoted line', sourcePath: 'src/a.ts' }];
+  it('carries parsed quotes into the prefilled draft as inline blocks', async () => {
+    const draftDocument = {
+      type: 'doc',
+      content: [
+        {
+          type: 'composerQuote',
+          attrs: {
+            text: 'quoted line',
+            sourcePath: 'src/a.ts',
+            startLine: null,
+            endLine: null,
+          },
+        },
+        { type: 'paragraph', content: [{ type: 'text', text: 'body' }] },
+      ],
+    };
     const { result } = renderHook(() =>
       useForkAtMessage({
         sessionId: 'source-session',
         messageClientId: 'message-1',
-        draftText: 'body',
-        draftQuotes: quotes,
+        draftDocument,
       }),
     );
 
@@ -127,17 +140,33 @@ describe('useForkAtMessage', () => {
       await result.current();
     });
 
-    expect(saveDraft).toHaveBeenCalledWith('forked-session', expect.objectContaining({ quotes }));
+    expect(saveDraft).toHaveBeenCalledWith('forked-session', {
+      text: draftDocument,
+      attachments: [],
+    });
   });
 
   it('prefills quote-only messages (empty body must not skip saveDraft)', async () => {
-    const quotes = [{ text: 'only quote' }];
+    const draftDocument = {
+      type: 'doc',
+      content: [
+        {
+          type: 'composerQuote',
+          attrs: {
+            text: 'only quote',
+            sourcePath: null,
+            startLine: null,
+            endLine: null,
+          },
+        },
+        { type: 'paragraph' },
+      ],
+    };
     const { result } = renderHook(() =>
       useForkAtMessage({
         sessionId: 'source-session',
         messageClientId: 'message-1',
-        draftText: '',
-        draftQuotes: quotes,
+        draftDocument,
       }),
     );
 
@@ -145,10 +174,10 @@ describe('useForkAtMessage', () => {
       await result.current();
     });
 
-    expect(saveDraft).toHaveBeenCalledWith(
-      'forked-session',
-      expect.objectContaining({ text: null, quotes }),
-    );
+    expect(saveDraft).toHaveBeenCalledWith('forked-session', {
+      text: draftDocument,
+      attachments: [],
+    });
   });
 
   it('blocks when the target message itself is unstable', async () => {

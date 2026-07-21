@@ -229,37 +229,53 @@ describe('commitEditAndResend', () => {
       deps,
     );
     expect(calls).toEqual(['rewindCommit', 'emitPatch', 'drop', 'send', 'saveDraftFallback']);
-    const [sid, text, attachments] = (deps.saveDraftFallback as unknown as Mock).mock.calls[0] as [
+    const [sid, document, attachments] = (deps.saveDraftFallback as unknown as Mock).mock.calls[0] as [
       string,
-      string,
+      Record<string, unknown>,
       Array<Record<string, unknown>>,
     ];
     expect(sid).toBe(SESSION_ID);
-    expect(text).toBe('precious edit');
+    expect(document).toEqual({ type: 'doc', text: 'precious edit' });
     expect(attachments).toHaveLength(1);
     expect(attachments[0]).toMatchObject({ name: 'notes.md', path: '/repo/notes.md' });
   });
 
-  it('quoted 消息重发失败:兜底草稿以 quotes + body 还原(不落裸 > 文本)', async () => {
+  it('quoted 消息重发失败:兜底草稿按正文顺序还原 quote block', async () => {
     const { deps } = makeDeps(fakeSession(), { dispatchResult: false });
     await commitEditAndResend(
       {
         sessionId: SESSION_ID,
         clientId: CLIENT_ID,
-        text: '> quoted line\n> — source: src/a.ts\n\nedited body',
+        text: '> quoted line\n> — source: src/a.ts\n\nedited body\n\n> second\n\nsecond reply',
         fallbackWorkingDir: '/repo',
         quotesEncoded: true,
       },
       deps,
     );
-    const [, body, , quotes] = (deps.saveDraftFallback as unknown as Mock).mock.calls[0] as [
+    const [, document] = (deps.saveDraftFallback as unknown as Mock).mock.calls[0] as [
       string,
-      string,
-      unknown,
-      Array<Record<string, unknown>> | undefined,
+      Record<string, unknown>,
     ];
-    expect(body).toBe('edited body');
-    expect(quotes).toEqual([{ text: 'quoted line', sourcePath: 'src/a.ts' }]);
+    expect(document).toEqual({
+      type: 'doc',
+      content: [
+        {
+          type: 'composerQuote',
+          attrs: {
+            text: 'quoted line',
+            sourcePath: 'src/a.ts',
+            startLine: null,
+            endLine: null,
+          },
+        },
+        { type: 'paragraph', content: [{ type: 'text', text: 'edited body' }] },
+        {
+          type: 'composerQuote',
+          attrs: { text: 'second', sourcePath: null, startLine: null, endLine: null },
+        },
+        { type: 'paragraph', content: [{ type: 'text', text: 'second reply' }] },
+      ],
+    });
   });
 
   it('非 quoted 消息重发失败:兜底不注入 quotes(第 4 参 undefined)', async () => {
@@ -269,8 +285,8 @@ describe('commitEditAndResend', () => {
       deps,
     );
     const args = (deps.saveDraftFallback as unknown as Mock).mock.calls[0];
-    expect(args[1]).toBe('> manual md\n\nbody');
-    expect(args[3]).toBeUndefined();
+    expect(args[1]).toEqual({ type: 'doc', text: '> manual md\n\nbody' });
+    expect(args).toHaveLength(3);
   });
 
   it('排队消息非空:在 rewindCommit 之前拦下(EDIT_QUEUE_NOT_EMPTY),整体未发生', async () => {
@@ -413,7 +429,7 @@ describe('意识发送期展开(ghost-summon-card:编辑重发不叠双份指令
     expect(sendArgs[1]).toBe('$画图 一只猫\n\n[意识指令] fake-directive');
     // 派发失败 → 草稿兜底必须是未展开原文(草稿重发经 ChatInput 再展开)
     const draftArgs = (deps.saveDraftFallback as unknown as Mock).mock.calls[0];
-    expect(draftArgs[1]).toBe('$画图 一只猫');
+    expect(draftArgs[1]).toEqual({ type: 'doc', text: '$画图 一只猫' });
   });
 
   it('未注入 expandForSend(默认实现)在无 electronAPI 环境安全退化为原文', async () => {
