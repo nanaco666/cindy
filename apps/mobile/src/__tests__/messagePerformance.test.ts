@@ -1,6 +1,7 @@
 import { performance } from 'node:perf_hooks';
 import { describe, expect, it } from 'vitest';
-import { buildMobileMessageRenderItems } from '@/session/messageRenderModel';
+import { buildMobileMessageRenderItems, type MobileMessageRenderItem } from '@/session/messageRenderModel';
+import { reconcileMobileMessageRenderItems } from '@/session/messageRenderReconcile';
 import type { RemoteMessage } from '@/session/types';
 
 const BASE_TIME = Date.UTC(2026, 0, 1, 0, 0, 0);
@@ -117,5 +118,47 @@ describe('message render performance', () => {
       'work-thinking-1',
       'message-assistant-1',
     ]);
+  });
+
+  it('keeps historical row references stable across 250 streaming tail updates', () => {
+    const messages: RemoteMessage[] = [];
+    for (let turn = 0; turn < 100; turn += 1) {
+      const offset = turn * 2;
+      messages.push(
+        message({
+          id: `user-${turn}`,
+          role: 'user',
+          content: { text: `Request ${turn}`, images: [], files: [] },
+          createdAt: timestamp(offset),
+        }),
+        message({
+          id: `assistant-${turn}`,
+          role: 'assistant',
+          content: [{ type: 'text', text: `Answer ${turn}` }],
+          agentMeta: { isStreaming: turn === 99 },
+          createdAt: timestamp(offset + 1),
+        }),
+      );
+    }
+
+    let previous: readonly MobileMessageRenderItem[] = buildMobileMessageRenderItems(
+      messages,
+      { isSessionStreaming: true },
+    );
+    for (let delta = 1; delta <= 250; delta += 1) {
+      const nextMessages = messages.slice();
+      nextMessages[nextMessages.length - 1] = {
+        ...nextMessages[nextMessages.length - 1],
+        content: [{ type: 'text', text: `Answer 99 ${delta}` }],
+      };
+      const next = buildMobileMessageRenderItems(nextMessages, { isSessionStreaming: true });
+      const reconciled = reconcileMobileMessageRenderItems(previous, next);
+      const changedRows = reconciled.reduce(
+        (count, item, index) => count + (item === previous[index] ? 0 : 1),
+        0,
+      );
+      expect(changedRows).toBe(1);
+      previous = reconciled;
+    }
   });
 });
