@@ -281,9 +281,10 @@ const MAX_CAPTURED_TEXT = 8192;
 export function findFocusTargetWorker<
   T extends { id: string; sessionId: string; label: string | null },
 >(workers: readonly T[], ref: string): T | null {
+  const canonicalLabel = ref.toLowerCase();
   return (
     workers.find((w) => w.id === ref || w.sessionId === ref) ??
-    workers.find((w) => w.label === ref) ??
+    workers.find((w) => w.label?.toLowerCase() === canonicalLabel) ??
     null
   );
 }
