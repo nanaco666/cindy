@@ -131,7 +131,7 @@ export function TerminalTabBody({ state, ctx, active }: Props) {
         cwd: fallbackCwd,
         cols,
         rows,
-        // 不传 shellPref → main 端 PtyManager 走 resolveShellForCreate(null) = auto
+        // 不传 shellPref → main 端读取 Settings 中持久化的默认 shell。
       })
       .then((result) => {
         if (cancelled || !aliveRef.current) return;

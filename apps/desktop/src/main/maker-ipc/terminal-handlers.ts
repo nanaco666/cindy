@@ -76,8 +76,17 @@ export function registerTerminalHandlers(options?: TerminalHandlersOptions): Pty
 
   ipcMain.handle(TERMINAL_INVOKE.CREATE, (event: IpcMainInvokeEvent, params: unknown) => {
     const opts = parseCreateParams(params, event.sender);
+    // Renderer callers normally omit shellPref. Resolve the persisted default
+    // once at the main-process create boundary so the session snapshots the
+    // choice and restart keeps using the same preference even if Settings
+    // changes later. Explicit `auto`, a concrete shell, and `null` keep their
+    // existing caller-provided semantics.
+    const resolvedOpts: CreateOptions = {
+      ...opts,
+      shellPref: opts.shellPref === undefined ? getDefaultShellPref() : opts.shellPref,
+    };
     try {
-      const result = manager.create(opts);
+      const result = manager.create(resolvedOpts);
       return result satisfies CreateResult;
     } catch (err) {
       // 区分 shell not found vs 通用 spawn 失败。shellResolver 永远返回 ResolvedShell，
