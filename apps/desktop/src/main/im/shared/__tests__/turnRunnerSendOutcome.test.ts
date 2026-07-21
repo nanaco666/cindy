@@ -1398,6 +1398,35 @@ describe('turnRunner send outcome policy (feishu adapter characterization)', () 
       );
     });
 
+    it('registers title generation as background work without delaying turn dispatch', async () => {
+      const titleGate = deferred<string | null>();
+      mocks.generateAndPersistFbotTitle.mockImplementationOnce(async () => titleGate.promise);
+      setupSession(async () => ({ accepted: false, reason: 'cancelled-before-dispatch' }));
+      const prefixedRunner = makePrefixedRunner();
+      const backgroundTasks: Promise<void>[] = [];
+      const trackBackgroundTask = vi.fn((operation: () => Promise<void>) => {
+        backgroundTasks.push(operation());
+      });
+
+      try {
+        await prefixedRunner.runAgentTurn({
+          botContextId: 'cli_test_bot',
+          userId: 'ou_user',
+          userMessageId: 'msg-user',
+          text: '帮我修个 bug',
+          attachments: [],
+          trackBackgroundTask,
+        });
+
+        expect(trackBackgroundTask).toHaveBeenCalledOnce();
+        expect(backgroundTasks).toHaveLength(1);
+        titleGate.resolve('[飞书·DM] 修复问题');
+        await Promise.all(backgroundTasks);
+      } finally {
+        await prefixedRunner.disposeAllSessions();
+      }
+    });
+
     it('sdkSessionId 非空(上下文进行中)不重复起名', async () => {
       mocks.findActiveSession.mockResolvedValue({
         id: 'feishu-session',

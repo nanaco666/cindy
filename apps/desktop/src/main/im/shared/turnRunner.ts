@@ -249,6 +249,8 @@ export interface ImTurnRunner {
     outputCardMessageId?: string;
     outputCardPrefix?: string;
     onTurnComplete?: () => void;
+    /** Keep fire-and-forget work inside the ingress account's drain boundary. */
+    trackBackgroundTask?: (operation: () => Promise<void>) => void;
   }): Promise<void>;
   resolveRouteTarget(
     botContextId: string,
@@ -414,6 +416,7 @@ export function createTurnRunner(
     outputCardMessageId?: string;
     outputCardPrefix?: string;
     onTurnComplete?: () => void;
+    trackBackgroundTask?: (operation: () => Promise<void>) => void;
   }): Promise<void> {
     const { botContextId, userId, userMessageId, text, attachments, scopeKey } = args;
 
@@ -512,13 +515,20 @@ export function createTurnRunner(
     //   - 当前 title === FBOT_DRAFT_TITLE: title 还是草稿占位 → 这是首条消息
     //     (per-(bot,user) lock 保证不会有并发 turn, 检查 title 等价于 wasFirst)
     // 失败 swallow, 不阻塞主流程 (跟 desktop generateTitle 一致)。
-    if (target.attached && text.trim().length > 0) {
-      void maybeGenerateFbotTitleOnFirstMessage(row.id, text, {
-        botContextId,
-        userId,
-        scopeKey: target.scopeKey,
-        workingDir: row.workingDir,
+    const startBackgroundTask =
+      args.trackBackgroundTask ??
+      ((operation: () => Promise<void>): void => {
+        void operation();
       });
+    if (target.attached && text.trim().length > 0) {
+      startBackgroundTask(() =>
+        maybeGenerateFbotTitleOnFirstMessage(row.id, text, {
+          botContextId,
+          userId,
+          scopeKey: target.scopeKey,
+          workingDir: row.workingDir,
+        }),
+      );
     } else if (
       text.trim().length > 0 &&
       (adapter.threadScoped
@@ -530,7 +540,7 @@ export function createTurnRunner(
       // 非 threadScoped 渠道(feishu/discord, 一 (bot,user) 一行长期复用):
       // 每条"新对话"的首条消息重新起名 —— sdkSessionId == null 即新上下文
       // (首次建行 / /new 重置后), 标题跟随当前话题而不是永远停在第一次。
-      void maybeGenerateImSessionTitle(row.id, text, threadHeaderCardId);
+      startBackgroundTask(() => maybeGenerateImSessionTitle(row.id, text, threadHeaderCardId));
     }
 
     const item: QueuedSend = {

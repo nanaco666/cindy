@@ -23,6 +23,7 @@ import {
   captureImAccountGeneration,
   isImAccountScopeClosedError,
   runInImAccountGeneration,
+  type ImAccountGeneration,
 } from '../accountBoundary';
 
 import { getControlScope, isInControl } from './controlState';
@@ -52,7 +53,11 @@ export function createMessageHandler(
   /** Per-user serial lock — same shape as legacy messageRouter.turnLocks. */
   const userLocks = new Map<string, Promise<void>>();
 
-  async function processOne(im: ChannelIM, event: IMMessageEvent): Promise<void> {
+  async function processOne(
+    im: ChannelIM,
+    event: IMMessageEvent,
+    accountGeneration: ImAccountGeneration,
+  ): Promise<void> {
     log.info(
       `processOne sender=...${event.senderId.slice(-8)} chat=...${event.chatId.slice(-8)} ` +
         `textLen=${event.text.length} att=${event.attachments.length} unsupported=${event.unsupported.length}`,
@@ -171,6 +176,18 @@ export function createMessageHandler(
         attachments: event.attachments,
         // threadScoped 渠道: scopeKey = thread root ts(thread = session 路由键)
         scopeKey: threadScoped ? event.scopeKey : undefined,
+        // Title generation and similar detached work must stay visible to the
+        // same account drain without delaying the foreground message dispatch.
+        trackBackgroundTask: (operation) => {
+          void runInImAccountGeneration(accountGeneration, operation).catch((err) => {
+            if (isImAccountScopeClosedError(err)) {
+              log.info(`drop background task from stale account generation channel=${channel}`);
+              return;
+            }
+            const msg = err instanceof Error ? err.message : String(err);
+            log.warn(`account-scoped background task failed (non-fatal): ${msg}`);
+          });
+        },
       });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -203,7 +220,9 @@ export function createMessageHandler(
           /* prior turn failure should not block subsequent messages */
         })
         .then(() =>
-          runInImAccountGeneration(accountGeneration, () => processOne(im, event)).catch((err) => {
+          runInImAccountGeneration(accountGeneration, () =>
+            processOne(im, event, accountGeneration),
+          ).catch((err) => {
             if (isImAccountScopeClosedError(err)) {
               log.info(`drop inbound message from stale account generation channel=${channel}`);
               return;

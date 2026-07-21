@@ -185,6 +185,32 @@ describe('messageHandler !stop routing', () => {
     expect(drained).toBe(true);
   });
 
+  it('keeps detached turn background work inside the closing account scope', async () => {
+    const background = deferred();
+    runAgentTurn.mockImplementationOnce(
+      async (args: Parameters<ImTurnRunner['runAgentTurn']>[0]) => {
+        args.trackBackgroundTask?.(() => background.promise);
+      },
+    );
+    const accountGeneration = captureImAccountGeneration();
+    expect(accountGeneration).not.toBeNull();
+
+    deliver(makeEvent({ messageId: 'old-title', text: 'generate a title' }));
+    await vi.waitFor(() => expect(runAgentTurn).toHaveBeenCalledTimes(1));
+    deactivateImAccountBoundary();
+
+    let drained = false;
+    const draining = waitForImAccountGenerationIdle(accountGeneration!).then(() => {
+      drained = true;
+    });
+    await Promise.resolve();
+    expect(drained).toBe(false);
+
+    background.resolve();
+    await draining;
+    expect(drained).toBe(true);
+  });
+
   it('routes !stop to stopActiveTurn with the thread scopeKey and replies stopDone', async () => {
     deliver(makeEvent());
     await flushMicrotasks();
