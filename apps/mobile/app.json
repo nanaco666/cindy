@@ -54,6 +54,7 @@
       "./plugins/with-third-party-notices",
       "./plugins/with-google-signin-modular-headers",
       "./plugins/with-wechat-opensdk-modulemap",
+      "./plugins/with-android-splash-no-icon",
       [
         "expo-splash-screen",
         {
