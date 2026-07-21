@@ -174,7 +174,8 @@ export interface ProxyOptions {
    */
   upstream: string | null | undefined | (() => string | null | undefined);
   /**
-   * 请求 transform 链。不传时 = [stripNonAnthropicFields](默认行为)。
+   * 请求 transform 链。不传时 = [stripToolUseProviderSpecificFields, stripNonAnthropicFields]
+   *（默认行为）。
    * 传空数组 [] = 显式禁用所有 transform,纯透传。
    */
   transformRequest?: RequestTransform[];

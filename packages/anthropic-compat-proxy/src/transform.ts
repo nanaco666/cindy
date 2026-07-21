@@ -52,6 +52,57 @@ function deepDeleteKeys(node: unknown, keys: ReadonlySet<string>): void {
 }
 
 /**
+ * 删除 Anthropic `tool_use` content block 上由 provider adapter 附加的
+ * `provider_specific_fields`。只处理 tool_use 自身的字段，不触碰工具 input
+ * 内同名的业务字段，避免把用户传给工具的参数误删。
+ */
+function deepDeleteToolUseProviderSpecificFields(node: unknown): number {
+  let removed = 0;
+  if (Array.isArray(node)) {
+    for (const item of node) removed += deepDeleteToolUseProviderSpecificFields(item);
+    return removed;
+  }
+  if (!isPlainObject(node)) return 0;
+
+  if (node.type === 'tool_use' && 'provider_specific_fields' in node) {
+    delete node.provider_specific_fields;
+    removed += 1;
+  }
+  for (const key of Object.keys(node)) {
+    removed += deepDeleteToolUseProviderSpecificFields(node[key]);
+  }
+  return removed;
+}
+
+/**
+ * 递归删除请求历史中 `tool_use.provider_specific_fields`，供主动 transform
+ * 和 400 recovery 共用同一份字段清理逻辑。
+ */
+export function stripToolUseProviderSpecificFieldsFromBody(rawBody: Buffer): Buffer | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(rawBody.toString('utf8'));
+  } catch {
+    return null;
+  }
+  if (deepDeleteToolUseProviderSpecificFields(parsed) === 0) return null;
+  try {
+    return Buffer.from(JSON.stringify(parsed), 'utf8');
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 请求 transform 版本：body 已经由 proxy 解析为 plain object。
+ * 无命中时返回 null，保持 clean request 的字节级透传语义。
+ */
+export const stripToolUseProviderSpecificFields: RequestTransform = (body) => {
+  if (!isPlainObject(body)) return null;
+  return deepDeleteToolUseProviderSpecificFields(body) > 0 ? body : null;
+};
+
+/**
  * 递归删除 body 里所有 `encrypted_content` 键, 返回删掉的个数。
  * 用于 invalid_encrypted_content 报错后的透明重试 (见 stripEncryptedContentFromBody)。
  */
@@ -355,6 +406,9 @@ const EMPTY_THINKING_RE = /each thinking block must contain thinking/i;
 const IMAGE_GENERATION_WITHOUT_ID_RE =
   /image generation items without [`']?id[`']? are not supported/i;
 
+const TOOL_USE_PROVIDER_SPECIFIC_FIELDS_RE =
+  /provider_specific_fields[\s\S]*extra inputs are not permitted|extra inputs are not permitted[\s\S]*provider_specific_fields/i;
+
 /**
  * invalid_encrypted_content 恢复规则: 剥掉请求体里所有 encrypted_content 重发。
  * 受 enabled() gate(由 host 接 silentEncryptedRetry 设置,默认关)。
@@ -388,6 +442,26 @@ export function createImageGenerationIdRecoveryRule(opts: {
     enabled: opts.enabled ?? (() => true),
     match: (text) => IMAGE_GENERATION_WITHOUT_ID_RE.test(text),
     strip: stripImageGenerationItemsWithoutIdFromBody,
+    onRetry: opts.onRetry,
+    threadIdHeaders: opts.threadIdHeaders,
+  };
+}
+
+/**
+ * `tool_use.provider_specific_fields` 400 恢复规则：清理历史后透明重试一次。
+ * 主动 transform 通常会先移除该字段；该规则覆盖 transform 未接入、旧会话
+ * 或其它兼容链路绕过主动清理的情况。
+ */
+export function createToolUseProviderSpecificFieldsRecoveryRule(opts: {
+  enabled?: () => boolean;
+  onRetry?: (threadId: string, model: string) => void;
+  threadIdHeaders?: readonly string[];
+} = {}): RecoveryRule {
+  return {
+    id: 'tool_use_provider_specific_fields',
+    enabled: opts.enabled ?? (() => true),
+    match: (text) => TOOL_USE_PROVIDER_SPECIFIC_FIELDS_RE.test(text),
+    strip: stripToolUseProviderSpecificFieldsFromBody,
     onRetry: opts.onRetry,
     threadIdHeaders: opts.threadIdHeaders,
   };

@@ -3,7 +3,12 @@ import { gzipSync } from 'node:zlib';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { createAnthropicCompatProxy, isFetchBlockedPort } from './server.js';
-import { createEmptyThinkingRecoveryRule, createEncryptedContentRecoveryRule, createImageGenerationIdRecoveryRule } from './transform.js';
+import {
+  createEmptyThinkingRecoveryRule,
+  createEncryptedContentRecoveryRule,
+  createImageGenerationIdRecoveryRule,
+  createToolUseProviderSpecificFieldsRecoveryRule,
+} from './transform.js';
 import type { ProxyHandle } from './types.js';
 
 function startFakeUpstream(
@@ -54,6 +59,13 @@ const IMAGE_GENERATION_ID_ERROR_BODY = JSON.stringify({
   },
 });
 
+const TOOL_USE_PROVIDER_SPECIFIC_FIELDS_ERROR_BODY = JSON.stringify({
+  error: {
+    message: 'messages.2.content.0.tool_use.provider_specific_fields: Extra inputs are not permitted',
+    type: 'invalid_request_error',
+  },
+});
+
 let proxy: ProxyHandle | null = null;
 let upstreamClose: (() => Promise<void>) | null = null;
 
@@ -100,6 +112,68 @@ describe('anthropic-compat-proxy loopback port guard', () => {
 
     const result = await post(proxy.url, { model: 'test-model' });
     expect(result).toEqual({ status: 200, text: JSON.stringify({ ok: true }) });
+  });
+});
+
+describe('anthropic-compat-proxy tool_use provider field compatibility', () => {
+  const bodyWithProviderSpecificFields = {
+    model: 'claude-fable-5',
+    messages: [
+      {
+        role: 'assistant',
+        content: [
+          {
+            type: 'tool_use',
+            id: 'toolu_1',
+            name: 'Bash',
+            input: { command: 'Get-ChildItem' },
+            provider_specific_fields: null,
+          },
+        ],
+      },
+      { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'toolu_1', content: 'ok' }] },
+    ],
+  };
+
+  it('strips tool_use.provider_specific_fields before forwarding by default', async () => {
+    const upstream = await startFakeUpstream((_idx, body, res) => {
+      expect(body).not.toContain('provider_specific_fields');
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ ok: true }));
+    });
+    upstreamClose = upstream.close;
+
+    proxy = await createAnthropicCompatProxy({ upstream: upstream.url });
+
+    const r = await post(proxy.url, bodyWithProviderSpecificFields);
+
+    expect(r.status).toBe(200);
+    expect(upstream.bodies).toHaveLength(1);
+  });
+
+  it('strips and retries once when LiteLLM rejects the provider field', async () => {
+    const upstream = await startFakeUpstream((idx, body, res) => {
+      if (idx === 0) {
+        expect(body).toContain('provider_specific_fields');
+        res.writeHead(400, { 'content-type': 'application/json' });
+        res.end(TOOL_USE_PROVIDER_SPECIFIC_FIELDS_ERROR_BODY);
+        return;
+      }
+      expect(body).not.toContain('provider_specific_fields');
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ ok: true }));
+    });
+    upstreamClose = upstream.close;
+    proxy = await createAnthropicCompatProxy({
+      upstream: upstream.url,
+      transformRequest: [],
+      recoveryRules: [createToolUseProviderSpecificFieldsRecoveryRule()],
+    });
+
+    const r = await post(proxy.url, bodyWithProviderSpecificFields);
+
+    expect(r.status).toBe(200);
+    expect(upstream.bodies).toHaveLength(2);
   });
 });
 
