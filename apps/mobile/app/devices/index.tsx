@@ -2316,6 +2316,7 @@ function HomeSessionRowInner({
         <AutomationGroupChildren
           group={group}
           inBlock={blockMode}
+          suppressTrailingDivider={hideDivider}
           onOpenGroup={onOpenAutomationGroup}
           onOpenSession={onOpenSession}
           swipe={swipe}
@@ -2336,6 +2337,9 @@ function HomeSessionRowInner({
 function AutomationGroupChildren({
   group,
   inBlock = false,
+  // 宿主行已被上层声明"尾线由外层块提供"(如项目块内最后一个元素)时,
+  // 展开子列表的尾缘线(末条运行 / 查看全部行)一并抑制,避免与块收尾线叠双(PR-266 greptile P2)。
+  suppressTrailingDivider = false,
   onOpenGroup,
   onOpenSession,
   swipe,
@@ -2343,6 +2347,7 @@ function AutomationGroupChildren({
   variant = 'legacy',
 }: {
   group: RemoteAutomationSessionGroup;
+  suppressTrailingDivider?: boolean;
   /** 组行处于块模式(上下全宽线):块内最后一个元素不画自己的缩进线,避免与块底线叠成粗线。 */
   inBlock?: boolean;
   onOpenGroup?: (group: RemoteAutomationSessionGroup) => void;
@@ -2369,7 +2374,7 @@ function AutomationGroupChildren({
         const row = (
           <HomeSessionRow
             deepIndented
-            hideDivider={variant === 'cindyList' ? !hasViewAllRow && index === visibleItems.length - 1 : inBlock && !hasViewAllRow && index === visibleItems.length - 1}
+            hideDivider={variant === 'cindyList' ? !hasViewAllRow && index === visibleItems.length - 1 : (inBlock || suppressTrailingDivider) && !hasViewAllRow && index === visibleItems.length - 1}
             item={child}
             onOpenSession={onOpenSession}
             testID={`${testID}.automationChild`}
@@ -2399,7 +2404,7 @@ function AutomationGroupChildren({
           style={({ pressed }) => [
             styles.automationViewAllRow,
             variant === 'cindyList' && styles.automationViewAllRowCindy,
-            !inBlock && styles.automationViewAllRowDivider,
+            !inBlock && !suppressTrailingDivider && styles.automationViewAllRowDivider,
             pressed && styles.pressed,
           ]}
           testID={`${testID}.automationViewAll`}
