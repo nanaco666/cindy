@@ -7,14 +7,14 @@ Pod::Spec.new do |s|
   s.version        = package['version']
   s.summary        = 'TapDB mobile analytics bridge for XDMaker mobile.'
   s.description    = 'Expo module that initializes TapTapSDK Core TapDB analytics for XDMaker mobile.'
-  s.license        = 'UNLICENSED'
+  s.license        = { :type => 'Apache-2.0', :file => '../../../../../LICENSE' }
   s.author         = 'XDMaker'
-  s.homepage       = 'https://xdt-maker.local'
+  s.homepage       = 'https://github.com/xindong/cindy-moved'
   s.platforms      = {
     :ios => '15.1'
   }
   s.swift_version  = '5.9'
-  s.source         = { git: 'https://xdt-maker.local/xdt-maker.git' }
+  s.source         = { git: 'https://github.com/xindong/cindy-moved.git' }
   s.static_framework = true
 
   s.dependency 'ExpoModulesCore'

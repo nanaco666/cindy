@@ -1117,6 +1117,33 @@ function assertNativeDeclarations() {
     throw new Error("TapTapSDK Android version changed; update notice policy");
 }
 
+/**
+ * Project-owned Expo modules are part of the Apache-2.0 source tree. Keep
+ * their CocoaPods metadata aligned with the repository license so native
+ * tooling cannot silently publish them as UNLICENSED/private pods.
+ */
+function assertProjectPodspecLicenses() {
+  const podspecs = [
+    "xdt-wechat-login/ios/XdtWechatLogin.podspec",
+    "xdt-tapdb/ios/XdtTapdb.podspec",
+    "xdt-mobile-realtime-audio/ios/XdtMobileRealtimeAudio.podspec",
+    "xdt-ios-app-distribution/ios/XdtIosAppDistribution.podspec",
+  ];
+  for (const relativePath of podspecs) {
+    const file = path.join(MOBILE_DIR, "modules", relativePath);
+    const text = fs.readFileSync(file, "utf8");
+    if (!/s\.license\s*=\s*\{[^}]*:type\s*=>\s*['\"]Apache-2\.0['\"]/s.test(text)) {
+      throw new Error(`project podspec must declare Apache-2.0: ${relativePath}`);
+    }
+    if (/UNLICENSED/i.test(text)) {
+      throw new Error(`project podspec must not declare UNLICENSED: ${relativePath}`);
+    }
+    if (!/https:\/\/github\.com\/xindong\/cindy-moved\.git/.test(text)) {
+      throw new Error(`project podspec must point to the public source repository: ${relativePath}`);
+    }
+  }
+}
+
 function assertTrackedBinariesRegistered() {
   const binaryExtensions = new Set([
     ".exe",
@@ -1162,6 +1189,7 @@ function assertTrackedBinariesRegistered() {
 // ---------------------------------------------------------------------------
 
 assertNativeDeclarations();
+assertProjectPodspecLicenses();
 assertTrackedBinariesRegistered();
 if (!fs.existsSync(path.join(path.dirname(CARGO_MANIFEST), "Cargo.lock"))) {
   throw new Error(

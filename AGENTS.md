@@ -5,14 +5,14 @@
 
 ## 本仓边界与迁移差异（先读）
 
-本仓由原 `XDMaker` 单仓迁出，**只负责 desktop、mobile 及其共享 packages**；服务端位于独立的 `cindy-server` 仓库，除非用户明确要求，不要跨仓修改服务端。与原单仓相比的差异与新增约束：
+本仓由原 `XDMaker` 单仓迁出，**只负责 desktop、mobile 及其共享 packages**；服务端位于独立仓库，除非用户明确要求，不要跨仓修改服务端。与原单仓相比的差异与新增约束：
 
-- **本仓没有 `apps/server` / `apps/heartbeat-server`**。下文规则 17 的 server（Prisma）段与规则 19（docker compose 白名单）仅在 `cindy-server` 仓工作时适用，保留在此作为同一套工程口径的参照。
-- **本地 server 由相邻的 `cindy-server` checkout 提供**：`pnpm dev:server` 会定位 `../cindy-server`（或 `XDT_SERVER_REPO` 指定的路径）并执行其 `dev:server`；server 侧 `.env` 配置以该仓文档为准。原单仓的 `pnpm dev:all` 在本仓不存在。
+- **本仓不包含服务端目录**。服务端专属的数据库和部署规则不适用于本仓。
+- **本地 server 由开发者配置的相邻服务端 checkout 提供**：`pnpm dev:server` 会定位外部服务端仓并执行其开发命令；server 侧 `.env` 配置以对应仓库文档为准。原单仓的 `pnpm dev:all` 在本仓不存在。
 - **工作流与发布**：尊重宿主和开发者选择的 Git 隔离方式。cwd 已是会话级 / 任务级 worktree 时直接复用，禁止再嵌套创建；cwd 不是任务 worktree 时按开发者或宿主 Git workflow 决定是否另建；未配置该 workflow 时先确认隔离方式，不要直接修改不明确的 checkout。不要把新任务混进已有脏 checkout，也不要用破坏性 Git 命令覆盖他人改动。功能完成后跑与风险匹配的验证、提交前对整体 diff review 一次。本仓代码和文档改动默认从非默认分支通过 PR 进入 `main`；只有具备 ruleset bypass 权限的仓库维护者明确选择例外时，才允许按「提 PR」节的额外门禁直推主干。commit / push 的授权时机由开发者或宿主 workflow 决定，不在本仓规定个人确认流程。
 - **SQLite migration 迁移基线**：从旧仓迁入的 SQL 由 `drizzle/migration-baseline.json` 固定 SHA256；已经进入 `main` 的 SQL 与同名 companion TS runtime script 都永久不可改名、改内容、增删或换序号，数据库变化只能在最新 `origin/main` 之后追加新 migration，并运行 `pnpm --filter desktop db:validate` 与 migration replay。多人分支撞号时必须先基于最新主干重新编号，未合入主干的 migration 禁止连接共享 Cindy userData 运行，只能使用显式 `--isolated[=<名字>]` 沙箱。本地数据库查询必须使用异步 API；不要对异步 DB client 使用同步 `.all()`。
 - **main 进程禁止运行时动态 `import()`**；依赖使用顶层静态 import。
-- **协议 submodule**：`cindy-protocol` 是协议权威来源。desktop 使用 `@cindy/slack-hook-protocol`，客户端 device-link 包复用 `@cindy/device-link-protocol` 的 relay 层定义；客户端重连、IPC allowlist 与隧道 payload 留在 `packages/device-link`。**升级 submodule 指针前必须确认 `cindy-server` 同步升级**，避免两端 wire protocol 漂移。
+- **协议 submodule**：`cindy-protocol` 是协议权威来源。desktop 使用 `@cindy/slack-hook-protocol`，客户端 device-link 包复用 `@cindy/device-link-protocol` 的 relay 层定义；客户端重连、IPC allowlist 与隧道 payload 留在 `packages/device-link`。**升级 submodule 指针前必须确认服务端同步升级**，避免两端 wire protocol 漂移。
 - **dev 数据目录为 `Cindy` userData**（2026-07-17 身份翻转起由 `productName: Cindy` 派生；从空开始，不再沿用老 `xdt-maker` 目录的历史数据）；用户未明确要求隔离时，不加 `--isolated`、不设置 `XDT_USER_DATA_DIR`（参数语义见下文启动参数表）。
 
 ## Architecture Index
@@ -21,8 +21,8 @@
 
 ## 外部关联
 
-- **Slack 频道**：`#xd-maker`（channel_id `C0B3D62NPTQ`, workspace `xindong.slack.com`）。项目相关的 Slack 讨论、通知、搜索默认走该频道；用户说「发到 Slack / 搜一下 Slack / Slack 上的讨论」而未指定频道时，默认定位到 `#xd-maker`，可直接以 `C0B3D62NPTQ` 作为 `channel_id` 调用 Slack 工具，无需再查。
-- **Slack 发消息规范(避免刷屏)**:往 `#xd-maker`(以及任何项目频道)发消息时,**频道正文只发一句话总结**(1-2 行,给个能扫到的标题),详情、链接、日志、截图说明、长列表全部走 thread 回复。具体做法:先调 `slack_send_message` 发一句话总结拿到返回的 `ts`,再调 `slack_send_message` 传 `thread_ts=<上一步的 ts>` 把详情作为 thread 回复贴上去(需要发到频道正文也让所有人看到时才加 `reply_broadcast=true`,默认不要开)。除非用户明确说「就一条正文发出来 / 不要开 thread」,否则一律按这个模式发。
+- **外部沟通**：项目讨论、通知和搜索使用维护者指定的官方渠道；不要在本文件记录内部 workspace、频道 ID 或人员信息。
+- **消息规范**：公共项目频道正文保持简洁，详细日志、链接和长列表放在 thread 中；除非明确要求，否则不要刷屏。
 
 ## Quick Start
 
@@ -111,7 +111,7 @@ restart 脚本会在非交互式 agent（Claude / Codex）终端里自动打开�
 | `pnpm desktop:whoami` | 只读核对当前 worktree 的 desktop 运行来源；输出 PID、root、commit、userData、remote/local、passive/isolated 与 ready 状态，只有存在 commit 精确匹配且已 ready 的实例时返回 0；`-- --all` 可列出本仓全部活跃 dev 实例 |
 | `pnpm dev:desktop:remote` | ⚠️ human-only；**agent 禁止直接调**（无 TTY 兜底、不杀旧进程、不补 `.env`，agent 环境下必失败）——agent 走 `restart:desktop:remote` |
 | `pnpm dev:desktop` | ⚠️ human-only；连本地 server 的底层命令，**agent 禁止直接调**——agent 走 `restart:desktop:local` |
-| `pnpm dev:server` | ⚠️ human-only；到相邻 `cindy-server` checkout（或 `XDT_SERVER_REPO`）启动本地 server，**agent 禁止** |
+| `pnpm dev:server` | ⚠️ human-only；到相邻服务端 checkout 启动本地 server，**agent 禁止** |
 | `pnpm build` | 打包 Electron app |
 
 ### 可选启动参数 `--region` / `--passive` / `--isolated` / `--preserve-running`
@@ -139,7 +139,7 @@ restart 脚本会在非交互式 agent（Claude / Codex）终端里自动打开�
 `restart:desktop:local` **只起客户端**——即便用户提到"服务器"，也不要因此去跑 `dev:server` / `dev:all` / 起 Postgres，本地 server 始终由用户自己起。Remote 跑不通时先排查 `.env` 和登录态，不要自动升级到本地。
 
 - **运行期端点来源(2026-07 端点清单重构)**:业务端点不再走 `.env` / 构建期烘焙——remote dev 默认 region `cn`，读仓内 `config/endpoint.json`；`--region=global` 时读 `config/endpoint.global.json`（两份均与各自 CDN 上 `<hotfix base>/endpoint.json` 同格式）。local 模式(`pnpm dev:desktop` 脚本链里的 `apps/desktop/scripts/dev-local-env.mjs`)自动生成并读 `config/endpoint.local.json`(gitignored,api/auth/device-link 指 localhost,每次启动整文件重写);packaged 与 `--endpoints-cdn` 从对应 region 清单的 `cdnBaseUrl` 烘焙自举基址并阻断式拉取。`apps/desktop/.env` 仍是 gitignored、per checkout/worktree 的,但构建身份只剩 `VITE_CINDY_AUTH_REGION`;飞书登录与 `VITE_FEISHU_APP_ID` 已退役。remote 模式由 `scripts/dev-remote-env.mjs` 注入 region 身份、不看 `.env`。
-- 本地 server 位于相邻的 `cindy-server` 仓（`pnpm dev:server` 会定位并启动它），其 `.env` 与启动要求以该仓文档为准。
++ 本地 server 位于相邻的服务端仓（`pnpm dev:server` 会定位并启动它），其 `.env` 与启动要求以对应仓库文档为准。
 
 ### 启动 → 测试 → 结束
 
@@ -172,7 +172,7 @@ restart 脚本会在非交互式 agent（Claude / Codex）终端里自动打开�
 - **命令通过 release 脚本调用 pinned `eas-cli`**；开发机通常已登录 EAS，先 `npx eas-cli whoami` 确认登录态。
 - **先用脚本判热更 vs 冷更**：`pnpm mobile:release:check -- --target production|staging|beta --dev <name>`。纯 JS / TS 且 runtime 匹配才可 OTA；动了原生层或 fingerprint 变化必须冷更。
 - **不要手拼写操作命令**：Beta 走 `pnpm mobile:release:beta -- --dev <name> --message "..."`；正式服走 `pnpm mobile:release:prod -- --message "..."`。脚本默认 dry-run，只有 `--execute` 才会调用 EAS 写操作。
-- **冷更版本号由脚本保证单调**：自建线冷更脚本读线上基线后,检测到 iOS `buildNumber` / Android `versionCode` 未大于基线时**自动自增写回版本文件**(`app.json` / `android-version.json`,`--execute` 才写盘;`--ipa` / `--apk` 复用现成包时跳过自动 bump、落回单调断言报错;发布完成后把 bump 改动 commit 回 main);Android 不上 Google Play,自签 APK 直传自有 OSS 分发(不经 NPKG;iOS 企业重签仍借 NPKG,重签后 ipa 也转传 OSS)。
++ **冷更版本号由脚本保证单调**：自建线冷更脚本读线上基线后,检测到 iOS `buildNumber` / Android `versionCode` 未大于基线时**自动自增写回版本文件**(`app.json` / `android-version.json`,`--execute` 才写盘;`--ipa` / `--apk` 复用现成包时跳过自动 bump、落回单调断言报错;发布完成后把 bump 改动 commit 回 main);Android 不上公开应用商店,自签 APK 直传发布存储;iOS 企业重签后 ipa 也转传发布存储。
 
 ## 设计实现规范
 
@@ -245,7 +245,7 @@ restart 脚本会在非交互式 agent（Claude / Codex）终端里自动打开�
     - **desktop(Drizzle/SQLite)**:改 `apps/desktop/src/main/localDb/schema.ts` → 在 `apps/desktop` 跑 `pnpm db:generate` 产出 `.sql` + snapshot + journal 条目,再 `pnpm db:check` 自检。**绝不手改** `drizzle/meta/_journal.json` 与 `*_snapshot.json`、绝不手动新建 / 改名 / 捏序号 `.sql`。只允许在**尚未合入 main 的本 PR 新 migration**里补 `IF EXISTS` 幂等与注释(参考 `0036`);一旦进入 main 即按下方 append-only 规则冻结,后续不得再改内容。
     - **desktop 配套迁移脚本 `drizzle/scripts/NNNN_*.ts` 必须是 CommonJS**:用 `function run(db){...}` + 末尾 `module.exports = { run }`,依赖只用 `import type`。**禁止**顶层 ESM `export` / value `import`——这些脚本不经编译、以 raw 形式随包发出(forge extraResource),生产 Electron 用 `require()` 当 CommonJS 加载,ESM 语法会让用户端炸 `Unexpected token 'export'`,而 dev / vitest 走 import 不复现(只在生产暴露的静默坑,2026-06 由 0040 触发)。参考 `0038_add_session_remote_host_id.ts`;`pnpm db:validate` 已加 step 5 自动拦截顶层 `export` / value `import`。
     - **desktop migration / 配套脚本新增或修改后必须跑回放测试**：在 `apps/desktop` 跑 `pnpm test:migration-replay`（或仓库根 `pnpm --filter desktop test:migration-replay`），确保空库与历史 fixture 能真实升级到 HEAD；新增高风险历史迁移时同步补 fixture，不只依赖静态 `db:validate`。
-    - **server(Prisma/PostgreSQL)**(服务端已拆至 `cindy-server` 仓,本条在该仓工作时适用):改 `prisma/schema.prisma` → 跑 `pnpm db:migrate`。**绝不**手写 migration.sql、改 `migration_lock.toml`、捏时间戳前缀(前缀决定执行顺序)。
+    - **server 数据库迁移**(服务端专属,本仓不适用):请遵循对应服务端仓库的数据库迁移文档,不要在客户端仓库修改服务端 migration。
     - migration 是 **append-only**:别改历史已合入的,要改就再生成一条。
 
 18. **任何 UI 文案的新增 / 修改 / 删除都必须同步走多语言(i18n)体系,禁止在界面里硬编码裸文案,禁止只改一种语言**。i18n 资源在 `apps/desktop/src/renderer/i18n/locales/<locale>/common.json`,支持的语言由 `apps/desktop/src/shared/locale.ts` 的 `SUPPORTED_LOCALES` 定义(当前 4 种:`zh-CN` / `en` / `ja` / `ko`),renderer 通过 `react-i18next` 的 `t('<嵌套.key>')` 消费,单 namespace `common`。**为什么容易遗漏**:`fallbackLng = 'en'`,某语言缺 key 时会**静默回退英文、不报错、没有任何校验脚本拦截**,漏翻在开发期几乎发现不了,只有对应语言用户才会撞见夹生英文——所以只能靠改动者自觉对齐。**怎么做**:
@@ -255,7 +255,7 @@ restart 脚本会在非交互式 agent（Claude / Codex）终端里自动打开�
     - **四语言必须全部翻准**:`zh-CN` / `en` / `ja` / `ko` 4 个 `common.json` 都必须补齐对应 key 并给出**准确**翻译,绝不允许留空、占位或留"待校对"半成品(留空会触发英文回退,等于没翻);ja / ko 没把握时先查证可靠译法再写,不要硬凑。
     - **校对**:改完手动确认 key 在 4 个文件都存在、无遗漏(没有自动校验脚本,这步只能手核)。
 
-19. **server 新增环境变量必须同步 docker compose 的 `environment:` 白名单**(服务端已拆至 `cindy-server` 仓,本条在该仓工作时适用):`apps/server` 的部署 compose 是**白名单式透传**——容器只能拿到 `docker-compose.prod.yaml` 的 `environment:` 里显式列出的变量,宿主机 `.env` 配了但 compose 没列的变量在容器内永远是空。因此凡在 server 代码里新增 `process.env.XXX` 读取(典型入口 `apps/server/src/config.ts`),必须同步在 `apps/server/docker-compose.prod.yaml` 的 `environment:` 加对应透传条目(有合理默认值的写 `${XXX:-default}`,纯凭证类直接 `${XXX}`)。`apps/server/release/docker-compose.yaml` 由 `release.sh` 从 prod.yaml 拷贝生成,正常走 release 流程会自动同步;若 PR 里直接更新 release 产物,需保持两份一致。`apps/heartbeat-server` 的 compose 同理。**为什么容易踩**:这类遗漏不报错——功能开关类变量(如 `SLACK_ENABLED`)在容器内拿不到值会静默走"未启用"分支,部署后表现为"配了但不生效",typecheck / 单测 / 启动日志都拦不住,只有上线后对应功能不工作才暴露(2026-06 Slack 接入实踩:`config.ts` 加了 6 个 `SLACK_*` 变量但 compose 没透传)。自查方法:改完 `config.ts` 后 diff 一下新增的 `process.env.*` 键名是否都出现在 prod.yaml 的 `environment:` 里。
+19. **服务端部署环境变量**(服务端专属,本仓不适用):新增服务端环境变量时,请遵循对应服务端仓库的 compose / deployment 白名单规则,不要在客户端仓库维护服务端部署配置。
 
 20. **配置设计遵守 `docs/configuration-design-principles.md`**：Cindy 允许用户高度定制，但默认配置承载创作者品味，是产品体验的一部分。新增 / 修改任何用户可配置项时，必须先判断它属于常规设置、高级设置、隐藏配置还是内部常量；不要因为技术上能配置就放进 Settings 外层，只有大多数用户需要看到和理解的选项才默认可见，其它应收进高级设置、配置文件或允许用户通过自然语言让 agent 修改本地配置。每个配置项都必须区分系统默认值和用户 override，能判断是否被用户显式自定义；未自定义的用户应随版本吃到新的系统默认值，已自定义的用户保留自己的选择。Settings 中恢复默认的语义是清除 override、重新跟随当前版本默认值，而不是写入一份静态默认值快照。实现或 PR 说明里要讲清：默认值、可见性层级、override 如何记录、默认值未来变更时如何迁移、恢复默认清除什么。完整原则见 `docs/configuration-design-principles.md`。
 
@@ -282,7 +282,7 @@ restart 脚本会在非交互式 agent（Claude / Codex）终端里自动打开�
 
 本仓默认采用 PR-first：正常情况下，所有代码和文档改动都先进入非默认分支，再通过 GitHub PR 合入 `main`。GitHub ruleset 只为指定维护角色保留受控 bypass；这只提供紧急 / 明确例外能力，不改变所有贡献者的默认流程。直推 `main` 必须由具备 bypass 权限的仓库维护者明确选择，并执行下面的额外门禁；不得仅凭权限存在、测试通过或历史习惯自行直推。发布前必须重新读取本文件的工作流与本节，避免长会话继续使用启动时的旧规则快照。
 
-提 PR 到 `github.com:xindong/cindy-moved` 时，**Description 规范以 `.github/PULL_REQUEST_TEMPLATE.md` 为准**（本仓模板三节：这次改了什么 / 怎么验证的 / 风险——涉及 SQLite migration、system prompt、协议、原生层或跨平台差异时必须在「风险」里说明）。Reviewer 只看 Title + Description 决定要不要 review、怎么 review，写不清楚直接退回。
+提 PR 到本仓 GitHub 地址时，**Description 规范以 `.github/PULL_REQUEST_TEMPLATE.md` 为准**（本仓模板三节：这次改了什么 / 怎么验证的 / 风险——涉及 SQLite migration、system prompt、协议、原生层或跨平台差异时必须在「风险」里说明）。Reviewer 只看 Title + Description 决定要不要 review、怎么 review，写不清楚直接退回。
 
 **提交 PR 前、以及直接推送 commit 到 `main` 前，都必须在仓库根跑一次 `pnpm test:unit` 并确认全部通过——这是硬性门禁，没跑或没通过就不许提 PR / 直推主干**。具体约束:
 - 有失败必须**先在本地修复到绿灯**再提交，不许带着红灯开 PR 或 push `main`，也不许用 skip / 注释 / 删用例的方式"制造"绿灯。

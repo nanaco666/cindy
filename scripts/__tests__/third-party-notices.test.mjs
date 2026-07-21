@@ -58,6 +58,22 @@ test("commercial distributions do not resolve forbidden Sustainable Use dependen
   assert.doesNotMatch(lockfile, /@codesandbox\/sandpack-(?:client|react)/);
 });
 
+test("project-owned iOS podspecs declare the repository Apache-2.0 license", () => {
+  const podspecs = [
+    "xdt-wechat-login/ios/XdtWechatLogin.podspec",
+    "xdt-tapdb/ios/XdtTapdb.podspec",
+    "xdt-mobile-realtime-audio/ios/XdtMobileRealtimeAudio.podspec",
+    "xdt-ios-app-distribution/ios/XdtIosAppDistribution.podspec",
+  ];
+  for (const relativePath of podspecs) {
+    const podspec = read(path.join("apps/mobile/modules", relativePath));
+    assert.match(podspec, /:type\s*=>\s*['\"]Apache-2\.0['\"]/);
+    assert.match(podspec, /:file\s*=>\s*['\"]\.\.\/\.\.\/\.\.\/\.\.\/\.\.\/LICENSE['\"]/);
+    assert.doesNotMatch(podspec, /UNLICENSED/i);
+    assert.match(podspec, /https:\/\/github\.com\/xindong\/cindy-moved\.git/);
+  }
+});
+
 test("every SPDX document is structurally consistent and has valid license expressions", () => {
   for (const artifact of artifactNames) {
     const file = path.join(noticesDir, "sbom", `${artifact}.spdx.json`);
