@@ -317,6 +317,40 @@ describe('worktree restore', () => {
     expect(storeSetMock).not.toHaveBeenCalled();
   });
 
+  it('send-time check applies a pending snapshot even when the existing worktree is registered', async () => {
+    fsSync.mkdirSync(wtPath, { recursive: true });
+    storeGetMock.mockReturnValue({ sessionId: 's1', path: wtPath });
+    gitExecMock.mockImplementation(async (args: string[]) => {
+      if (args[0] === 'rev-parse' && args.includes('refs/xdt/snapshots/s1')) {
+        return { stdout: `${SHA}\n`, stderr: '' };
+      }
+      return { stdout: '', stderr: '' };
+    });
+
+    await expect(
+      mod.restoreMissingManagedWorktreeForSession('s1', wtPath),
+    ).resolves.toBe(true);
+
+    const calls = gitExecMock.mock.calls.map(argsOf);
+    expect(calls).toContainEqual(['stash', 'apply', SHA]);
+    expect(calls).toContainEqual(['update-ref', '-d', 'refs/xdt/snapshots/s1']);
+  });
+
+  it('send-time check only probes snapshot state once for a registered ready worktree', async () => {
+    fsSync.mkdirSync(wtPath, { recursive: true });
+    storeGetMock.mockReturnValue({ sessionId: 's1', path: wtPath });
+
+    await expect(
+      mod.restoreMissingManagedWorktreeForSession('s1', wtPath),
+    ).resolves.toBe(true);
+    const callsAfterFirstSend = gitExecMock.mock.calls.length;
+    await expect(
+      mod.restoreMissingManagedWorktreeForSession('s1', wtPath),
+    ).resolves.toBe(true);
+
+    expect(gitExecMock.mock.calls).toHaveLength(callsAfterFirstSend);
+  });
+
   it('send-time restore rebuilds the exact missing worktree from origin', async () => {
     let localBranchCreated = false;
     gitExecMock.mockImplementation(async (args: string[]) => {

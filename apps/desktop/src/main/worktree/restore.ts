@@ -34,6 +34,7 @@ import type { WorktreeMeta } from './types';
 
 const log = createLogger('worktreeRestore');
 const restoreInFlight = new Map<string, Promise<WorktreeRestoreResult>>();
+const sendReadyWorktrees = new Set<string>();
 
 export type WorktreeRestoreStatus =
   /** worktree 目录还在，无需恢复。 */
@@ -285,6 +286,12 @@ async function restoreWorktreeForSessionOnce(sessionId: string): Promise<Worktre
   if (status.state === 'present') {
     const parsed = parseManagedWorktreePath(status.worktreePath);
     if (!parsed) return { ok: true, snapshotApplied: true };
+    if (!status.hasSnapshot) {
+      if (!store.get(sessionId)) {
+        await finishRestoredWorktree(sessionId, parsed, status.worktreePath);
+      }
+      return { ok: true, snapshotApplied: true };
+    }
     const snapshotApplied = await applyPendingSnapshot(
       parsed.baseRepo,
       status.worktreePath,
@@ -375,23 +382,35 @@ export async function restoreMissingManagedWorktreeForSession(
   if (pathKey(binding?.worktreePath) !== expectedKey) {
     return await pathExists(expectedWorktreePath);
   }
+  const readinessKey = `${sessionId}\0${expectedKey}`;
 
   // `git worktree add` creates the directory before a pending snapshot is applied. A second
   // send in that window must join the same mutation instead of treating the directory as ready.
   const inFlight = restoreInFlight.get(sessionId);
   if (inFlight) {
     const result = await inFlight;
-    return result.ok
+    const ready = result.ok
       && result.snapshotApplied !== false
       && await pathExists(expectedWorktreePath);
+    if (ready) sendReadyWorktrees.add(readinessKey);
+    return ready;
   }
 
-  // A registered, existing worktree is the normal fast path. Failed snapshot application
-  // removes the registration, so later sends retry the pending snapshot and remain blocked.
-  if (await pathExists(expectedWorktreePath) && store.get(sessionId)) return true;
+  // The first send in this process reconciles legacy states where a pending snapshot and store
+  // registration both survived an interrupted cleanup. WorktreeManager now unregisters as soon
+  // as it snapshots, so later sends use this zero-Git fast path until that registration changes.
+  if (
+    await pathExists(expectedWorktreePath)
+    && store.get(sessionId)
+    && sendReadyWorktrees.has(readinessKey)
+  ) {
+    return true;
+  }
 
   const result = await restoreWorktreeForSession(sessionId);
-  return result.ok
+  const ready = result.ok
     && result.snapshotApplied !== false
     && await pathExists(expectedWorktreePath);
+  if (ready) sendReadyWorktrees.add(readinessKey);
+  return ready;
 }

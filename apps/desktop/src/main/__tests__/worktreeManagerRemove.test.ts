@@ -18,6 +18,7 @@ const autoStashMock = vi.fn();
 const restoreAutoStashMock = vi.fn();
 const clearSnapshotRefMock = vi.fn();
 const changedIncludeFilesMock = vi.fn();
+const storeSetMock = vi.fn();
 const storeMap = new Map<string, WorktreeMeta>();
 const liveSessionRows: Array<{
   id: string;
@@ -47,7 +48,7 @@ vi.mock('../worktree/worktreeStore', () => ({
   get: (sessionId: string) => storeMap.get(sessionId) ?? null,
   getAll: () => [...storeMap.values()],
   getAllPaths: () => [...storeMap.values()].map((m) => m.path),
-  set: vi.fn(),
+  set: (...args: unknown[]) => storeSetMock(...args),
   del: vi.fn((sessionId: string) => storeMap.delete(sessionId)),
 }));
 
@@ -93,6 +94,9 @@ describe('removeWorktreeForSession', () => {
     restoreAutoStashMock.mockReset().mockResolvedValue(true);
     clearSnapshotRefMock.mockReset().mockResolvedValue(undefined);
     changedIncludeFilesMock.mockReset().mockResolvedValue([]);
+    storeSetMock.mockReset().mockImplementation(async (sessionId: string, meta: WorktreeMeta) => {
+      storeMap.set(sessionId, meta);
+    });
     manager = await import('../worktree/WorktreeManager');
   });
 
@@ -198,6 +202,36 @@ describe('removeWorktreeForSession', () => {
     expect(autoStashMock).toHaveBeenCalledWith(meta.path, 's1');
     expect(restoreAutoStashMock).toHaveBeenCalledWith(meta.path, 's1');
     expect(gitExecMock).not.toHaveBeenCalled();
+    expect(storeMap.has('s1')).toBe(true);
+    expect(storeSetMock).toHaveBeenCalledWith('s1', meta);
+  });
+
+  it('keeps a preserved worktree unregistered when cancelled snapshot reapply fails', async () => {
+    const meta = makeMeta('s1');
+    storeMap.set('s1', meta);
+    isWorktreeDirtyMock.mockResolvedValue(true);
+    autoStashMock.mockResolvedValue(true);
+    restoreAutoStashMock.mockResolvedValue(false);
+    const canRemove = vi.fn().mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+
+    await manager.removeWorktreeForSession('s1', { canRemove });
+
+    expect(restoreAutoStashMock).toHaveBeenCalledWith(meta.path, 's1');
+    expect(storeSetMock).not.toHaveBeenCalled();
+    expect(storeMap.has('s1')).toBe(false);
+  });
+
+  it('reapplies and re-registers a snapshot when worktree removal fails', async () => {
+    const meta = makeMeta('s1');
+    storeMap.set('s1', meta);
+    isWorktreeDirtyMock.mockResolvedValue(true);
+    autoStashMock.mockResolvedValue(true);
+    gitExecMock.mockRejectedValueOnce(new Error('worktree locked'));
+
+    await manager.removeWorktreeForSession('s1');
+
+    expect(restoreAutoStashMock).toHaveBeenCalledWith(meta.path, 's1');
+    expect(storeSetMock).toHaveBeenCalledWith('s1', meta);
     expect(storeMap.has('s1')).toBe(true);
   });
 
