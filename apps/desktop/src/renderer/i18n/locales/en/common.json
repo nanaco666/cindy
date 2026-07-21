@@ -3365,7 +3365,12 @@
         "budget": "Budget GPT",
         "grok": "xAI",
         "google": "Google",
-        "china": "Domestic"
+        "china": "Domestic",
+        "image": "Image",
+        "audio": "Audio & Speech",
+        "video": "Video",
+        "embedding": "Embeddings",
+        "other": "Other"
       },
       "search": {
         "placeholder": "Search {{source}} models...",

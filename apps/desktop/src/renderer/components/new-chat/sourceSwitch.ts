@@ -20,9 +20,34 @@ import {
 import { CHATGPT_MODEL_PREFIX, XAI_MODEL_PREFIX } from '../../../shared/subscriptionModels';
 
 // 仅用于二级菜单分组展示, 不参与持久化或 onModelChange 数据流。
-export type ModelCategory = 'anthropic' | 'gpt' | 'gpt-budget' | 'grok' | 'google' | 'china';
+// 对话厂商组(anthropic..china)在前;非对话类型组(image/audio/video/embedding/other)在后——
+// 后者收纳网关多出的图像 / 语音 / 视频 / 向量等模型(它们默认关、不能当 agent 用,仅分类展示)。
+export type ModelCategory =
+  | 'anthropic'
+  | 'gpt'
+  | 'gpt-budget'
+  | 'grok'
+  | 'google'
+  | 'china'
+  | 'image'
+  | 'audio'
+  | 'video'
+  | 'embedding'
+  | 'other';
 
-export const CATEGORY_ORDER: ModelCategory[] = ['anthropic', 'gpt-budget', 'gpt', 'grok', 'google', 'china'];
+export const CATEGORY_ORDER: ModelCategory[] = [
+  'anthropic',
+  'gpt-budget',
+  'gpt',
+  'grok',
+  'google',
+  'china',
+  'image',
+  'audio',
+  'video',
+  'embedding',
+  'other',
+];
 
 /**
  * 厂商分组小标题的 i18n key 表(规则 18)。多处复用:ModelSelector 右栏分组标题、
@@ -36,12 +61,26 @@ export const CATEGORY_LABEL_KEY: Record<ModelCategory, string> = {
   grok: 'newChat.modelSelector.category.grok',
   google: 'newChat.modelSelector.category.google',
   china: 'newChat.modelSelector.category.china',
+  image: 'newChat.modelSelector.category.image',
+  audio: 'newChat.modelSelector.category.audio',
+  video: 'newChat.modelSelector.category.video',
+  embedding: 'newChat.modelSelector.category.embedding',
+  other: 'newChat.modelSelector.category.other',
 };
 
 // 按 model.id 前缀粗分类: claude-* → Anthropic, gpt-* → GPT, codex/* → 骨折GPT (gateway 低价路由),
 // gemini-* → Google, 其余 (moonshotai/qwen/glm/...) 一律落到 China。新增国产模型不需要改这里。
 export function categorize(id: string): ModelCategory {
   if (id.startsWith('claude-')) return 'anthropic';
+  // 非对话类型(向量/图像/音频语音/视频)必须在通用 gpt- / gemini- 厂商规则**之前**判定,
+  // 否则 gpt-image-2 / gemini-3-pro-image / gpt-4o-transcribe 会被误归到 gpt / google。
+  // 这些是网关多返回的、不能当 agent 用的模型,默认关、仅按类型归类展示。
+  if (/embedding/.test(id) || id.startsWith('voyage/')) return 'embedding';
+  if (/image/.test(id)) return 'image';
+  if (id.startsWith('elevenlabs/') || /transcribe|realtime|whisper|asr|gemini-omni/.test(id))
+    return 'audio';
+  if (/seedance|happyhorse|video|-t2v|-i2v|-r2v/.test(id)) return 'video';
+  if (id === 'ai-gateway-doc') return 'other';
   // 订阅直连 GPT(chatgpt/ 前缀,经 responses-bridge)与网关 gpt- 同归 GPT 组;前缀常量走
   // shared/subscriptionModels 单一入口,防与路由 / 记账 gate 漂移。
   if (id.startsWith('gpt-') || id.startsWith(CHATGPT_MODEL_PREFIX)) return 'gpt';

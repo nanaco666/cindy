@@ -3365,7 +3365,12 @@
         "budget": "割引版GPT",
         "grok": "xAI",
         "google": "Google",
-        "china": "国内"
+        "china": "国内",
+        "image": "画像",
+        "audio": "音声",
+        "video": "動画",
+        "embedding": "埋め込み",
+        "other": "その他"
       },
       "search": {
         "placeholder": "{{source}} のモデルを検索...",
