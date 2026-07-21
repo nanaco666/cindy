@@ -611,7 +611,7 @@ function orcaReserveWorkerCreation(readyDb, args) {
     if (duplicateWorker || duplicateReservation) return { ok: false, errorCode: 'DUPLICATE_LABEL' };
     const activeWorkerCount = Number(readyDb.prepare(\`SELECT COUNT(*)
       FROM orca_workers w INNER JOIN sessions s ON s.id = w.session_id
-      WHERE w.team_id = ? AND w.status IN ('idle', 'running', 'error') AND s.status = 'active'\`).pluck().get(teamId) || 0);
+      WHERE w.team_id = ? AND w.status IN ('idle', 'running') AND s.status = 'active'\`).pluck().get(teamId) || 0);
     const reservationCount = Number(readyDb.prepare(
       'SELECT COUNT(*) FROM orca_worker_creation_reservations WHERE team_id = ?',
     ).pluck().get(teamId) || 0);

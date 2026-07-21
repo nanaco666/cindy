@@ -22,7 +22,7 @@ function createDeps(overrides: Partial<OrcaWorkerCreationDeps> = {}) {
       leadSessionId === 'lead-1' ? { id: 'team-1', leadSessionId: 'lead-1' } : null
     )),
     listWorkersByLead: vi.fn(async () => []),
-    isActiveWorkerStatus: vi.fn((status) => status === 'idle' || status === 'running' || status === 'error'),
+    isActiveWorkerStatus: vi.fn((status) => status === 'idle' || status === 'running'),
     readCollaborationSettings: vi.fn(() => ({ workerSoftLimit: 3, workerHardLimit: 5 })),
     getLeadSessionRow: vi.fn(async () => ({
       id: 'lead-1',
