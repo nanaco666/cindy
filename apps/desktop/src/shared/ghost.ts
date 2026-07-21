@@ -2188,7 +2188,7 @@ export interface GhostPipeToolCall {
 /** 上行:工具调用交卷。 */
 export type GhostPipeToolResult =
   | { type: 'tool-result'; callId: string; ok: true; result: unknown }
-  | { type: 'tool-result'; callId: string; ok: false; message: string };
+  | { type: 'tool-result'; callId: string; ok: false; errorCode?: string; message: string };
 
 /** 主机公开给意识的构建区域。与 desktop CURRENT_CINDY_REGION 同口径。 */
 export type GhostAppRegion = 'cn' | 'global';
@@ -2878,10 +2878,31 @@ export type GhostToolCallErrorCode =
   | 'DIR_INVALID'
   | 'INTERNAL';
 
+/** 主机错误码不能被插件结果覆盖；其余格式合法的码作为业务错误码透传。 */
+const GHOST_HOST_ERROR_CODES: ReadonlySet<string> = new Set([
+  'GHOST_NOT_FOUND',
+  'GHOST_ASLEEP',
+  'GHOST_DISABLED_IN_WORKDIR',
+  'TOOL_NOT_FOUND',
+  'GHOST_CRASHED',
+  'TIMEOUT',
+  'ATTACHMENT_INVALID',
+  'DIR_INVALID',
+  'INTERNAL',
+]);
+
+export function isGhostPluginErrorCode(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    /^[A-Z][A-Z0-9_]{0,63}$/.test(value) &&
+    !GHOST_HOST_ERROR_CODES.has(value)
+  );
+}
+
 /** 工具调用结果(主机侧;ghost 总机 MCP 原样透传给 agent)。 */
 export type GhostToolCallResult =
   | { ok: true; result: unknown }
-  | { ok: false; errorCode: GhostToolCallErrorCode; message: string };
+  | { ok: false; errorCode: GhostToolCallErrorCode | (string & {}); message: string };
 
 /**
  * ghost_call 的工具全名。两套 agent 的 MCP toolName 形态不同:
