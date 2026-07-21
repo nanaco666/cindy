@@ -28,6 +28,8 @@ import {
   useRemoteSessionActivityRevision,
 } from '@/features/device-link/remoteSessionActivityStore';
 import { AttentionDot } from '@/components/sidebar/AttentionDot';
+import { SortableList } from '@/components/sidebar/SortableList';
+import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { isOrcaWorkerSession, resolveSessionRoute } from '@/lib/orcaSessionIdentity';
 import { projectIdentityKeyForSession } from '../lib/projectGrouping';
 import { SessionStatusIcon } from './SessionStatusIcon';
@@ -53,6 +55,8 @@ export interface RailNavProps {
   urgentSessionIds: ReadonlySet<string>;
   /** /ctr 接管中的会话集合。 */
   attachedSessionIds: ReadonlySet<string>;
+  /** 置顶瓷砖拖拽落定(与展开态 Pinned 段写同一份 manualPinnedOrder)。 */
+  onReorderPinned: (newOrderIds: string[]) => void;
 }
 
 const TONE_RANK: Record<AttentionKind, number> = { error: 3, awaiting: 2, done: 1 };
@@ -179,8 +183,10 @@ export function RailNav({
   attentionKinds,
   urgentSessionIds,
   attachedSessionIds,
+  onReorderPinned,
 }: RailNavProps) {
   const { t } = useTranslation();
+  const reducedMotion = useReducedMotion();
   const panelState = useSyncExternalStore(railPanelStore.subscribe, railPanelStore.getSnapshot);
 
   // ── 数据切片(与展开态同口径) ──
@@ -296,7 +302,18 @@ export function RailNav({
       {/* ── 置顶:平铺瓷砖(顶层直达)= 功能钮同款圆钮 + 下方 2~4 字简介。
           圆钮几何/配色镜像 SIDEBAR_RAIL_ICON_BUTTON_CLASS(hover 改挂 group:
           指针落在标签上也要点亮圆底,官方 class 的 hover 只作用于自身)。 ── */}
-      {pinnedSessions.map((session) => {
+      {/* 拖拽排序:与展开态 Pinned 段同一 SortableList / manualPinnedOrder 持久化
+          (旧折叠 rail 已支持,平铺瓷砖不能丢,codex review)。瓷砖是 <button>,
+          SortableList 默认 filter 会把按钮排除出拖拽起手——覆写为不含 button 的
+          白名单,click 与拖拽由 fallbackTolerance(4px)区分。 */}
+      <SortableList
+        items={pinnedSessions}
+        getId={(s) => s.id}
+        onReorder={onReorderPinned}
+        reducedMotion={reducedMotion}
+        className="flex w-full shrink-0 flex-col items-center gap-[3px]"
+        filter="input, textarea, select, a, [data-no-drag]"
+        renderItem={(session) => {
         const isActive = session.id === activeSessionId;
         // 置顶瓷砖与聚合灯同口径:远程会话的 running/未读并入远程活动镜像。
         const remoteLamp = remoteLampOf(session.id);
@@ -359,7 +376,8 @@ export function RailNav({
             </span>
           </button>
         );
-      })}
+        }}
+      />
 
       {pinnedSessions.length > 0 && (
         <div className="my-[7px] h-px w-[22px] shrink-0 bg-sidebar-border" aria-hidden />

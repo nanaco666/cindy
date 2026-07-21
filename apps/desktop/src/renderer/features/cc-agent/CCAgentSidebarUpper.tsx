@@ -349,6 +349,24 @@ export function CCAgentSidebarUpper() {
 
   useOrcaWorkerAttentionWatcher(sessionsHook.sessions, activeSessionId);
 
+  // rail 置顶瓷砖拖拽:与展开态 handlePinnedReorder 同一持久化语义(全量
+  // baseline GC + 可见子集原位 merge)。rail 可见子集按机器切换过滤
+  // (sessionsWithRemote),merge 保证其它机器的置顶不丢位、不被挪去末尾。
+  const handleRailPinnedReorder = useCallback(
+    (visibleNewOrder: string[]) => {
+      const fullActivePinnedIds = pinnedSessionIdsInDisplayOrder([
+        ...sessionsHook.sessions,
+        ...remoteProjectSessions,
+      ]);
+      const merged = mergeVisibleReorder(
+        normalizeManualPinnedOrder(filter.manualPinnedOrder, fullActivePinnedIds),
+        visibleNewOrder,
+      );
+      filter.setManualPinnedOrder(merged, fullActivePinnedIds);
+    },
+    [sessionsHook.sessions, remoteProjectSessions, filter],
+  );
+
   return (
     // F-PJ-7 Tooltip.Provider 顶层包一次：所有 SessionItem / ProjectNode / Toggle 共享 500ms delay。
     // skipDelayDuration 放宽到 1500ms(默认 200):tip 弹出过之后在列表行间移动
@@ -425,6 +443,7 @@ export function CCAgentSidebarUpper() {
             activeSessionId={activeSessionId}
             notifications={railNotifications}
             manualPinnedOrder={filter.manualPinnedOrder}
+            onReorderPinned={handleRailPinnedReorder}
           />
         </div>
 
@@ -2346,6 +2365,8 @@ interface CollapsedProps {
   notifications: ReadonlySet<string>;
   /** 与展开态共用的置顶顺序(置顶面板同序)。 */
   manualPinnedOrder: readonly string[];
+  /** 置顶瓷砖拖拽落定(写回 manualPinnedOrder,与展开态同一持久化语义)。 */
+  onReorderPinned: (newOrderIds: string[]) => void;
 }
 
 /**
@@ -2362,6 +2383,7 @@ function CollapsedView({
   activeSessionId,
   notifications,
   manualPinnedOrder,
+  onReorderPinned,
 }: CollapsedProps) {
   const { t } = useTranslation();
   // 只读 running 快照——**不传 options**：通知副作用（onSessionDone 等）由
@@ -2394,11 +2416,24 @@ function CollapsedView({
   // 接管中的会话(/ctr)——面板行沿用 SessionStatusIcon 的 RadioTower 表达。
   const attachedSessionIds = useAttachedSessionIds();
 
-  // rail 运行集 = agent running ∪ 后台意识活动(与展开态呼吸口径一致)。
+  // rail 运行集 = agent running ∪ 后台意识活动,再做 Orca lead 晋升(worker 在跑
+  // → lead 点亮)——与展开态 displayRunningSessionIds 同口径。RailNav 会滤掉
+  // worker 行、只聚合 lead,不晋升会出现「面板里 lead 在跑、段灯与置顶瓷砖
+  // 却不亮」(codex review)。
+  const orcaLeadWorkerMap = useOrcaLeadWorkerMap(sessions);
   const railRunningIds = useMemo(() => {
-    if (backgroundActivitySessionIds.size === 0) return runningSessionIds;
-    return new Set([...runningSessionIds, ...backgroundActivitySessionIds]);
-  }, [runningSessionIds, backgroundActivitySessionIds]);
+    const next = new Set([...runningSessionIds, ...backgroundActivitySessionIds]);
+    for (const [leadSessionId, workerSessionIds] of orcaLeadWorkerMap) {
+      if (next.has(leadSessionId)) continue;
+      for (const workerSessionId of workerSessionIds) {
+        if (next.has(workerSessionId)) {
+          next.add(leadSessionId);
+          break;
+        }
+      }
+    }
+    return next;
+  }, [runningSessionIds, backgroundActivitySessionIds, orcaLeadWorkerMap]);
 
   return (
     <div
@@ -2455,6 +2490,7 @@ function CollapsedView({
         attentionKinds={attentionKinds}
         urgentSessionIds={urgentSet}
         attachedSessionIds={attachedSessionIds}
+        onReorderPinned={onReorderPinned}
       />
     </div>
   );
@@ -2836,6 +2872,12 @@ function RailPanels({
                     aria-haspopup="menu"
                     aria-expanded={isOpen}
                     onMouseEnter={(e) => {
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      railPanelStore.openProject(p.projectKey, { right: rect.right, top: rect.top });
+                    }}
+                    // 键盘可达:Tab 聚焦后 Enter/Space(原生 click)走与 hover
+                    // 同一条 openProject 路径,否则三级面板只有鼠标能打开(codex review)。
+                    onClick={(e) => {
                       const rect = e.currentTarget.getBoundingClientRect();
                       railPanelStore.openProject(p.projectKey, { right: rect.right, top: rect.top });
                     }}
