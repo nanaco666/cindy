@@ -142,38 +142,32 @@ async function request(method, path) {
   return requestOnce(method, path);
 }
 
-/* ── ip-guard 静态模板(源:workers.xd.team openapi.json x-libs,2026-05-19 抓取;
- *    与 lizi-mcps xd-service/pages/templates.ts 同步维护)──────────────── */
-var IP_GUARD_SOURCE = 'const ALLOWED = [\n' +
-  '  "127.0.0.1", "::1",\n' +
-  '  // 电信\n' +
-  '  "180.169.125.48/29", "101.230.12.112/28", "180.166.92.32/28",\n' +
-  '  // 移动\n' +
-  '  "120.253.194.64/26", "120.253.216.128/26",\n' +
-  '  // 新加坡\n' +
-  '  "115.108.62.173", "115.108.62.177", "115.108.62.180",\n' +
-  '  "115.108.62.18", "115.108.62.184", "115.108.62.186",\n' +
-  '  // 香港\n' +
-  '  "103.86.76.192/29", "43.135.55.6", "43.135.40.186",\n' +
-  '  // 新加坡服务器\n' +
-  '  "8.214.95.148",\n' +
-  '];\n' +
+/* ── ip-guard 模板(与 workers.xd.team openapi.json x-libs 契约同步)──────── */
+var IP_GUARD_SOURCE = 'function getAllowed(env) {\n' +
+  '  return String(env.IP_ALLOWLIST || "")\n' +
+  '    .split(",")\n' +
+  '    .map((entry) => entry.trim())\n' +
+  '    .filter(Boolean);\n' +
+  '}\n' +
   '\n' +
   'function ipToInt(ip) {\n' +
   '  return ip.split(".").reduce((acc, oct) => (acc << 8) + Number(oct), 0) >>> 0;\n' +
   '}\n' +
   '\n' +
-  'const rules = ALLOWED.map((entry) => {\n' +
-  '  if (entry.includes(":")) return { type: "exact6", value: entry };\n' +
-  '  if (entry.includes("/")) {\n' +
-  '    const [base, bits] = entry.split("/");\n' +
-  '    const mask = ~((1 << (32 - Number(bits))) - 1) >>> 0;\n' +
-  '    return { type: "cidr", network: ipToInt(base) & mask, mask };\n' +
-  '  }\n' +
-  '  return { type: "exact4", value: ipToInt(entry) };\n' +
-  '});\n' +
+  'function toRules(allowed) {\n' +
+  '  return allowed.map((entry) => {\n' +
+  '    if (entry.includes(":")) return { type: "exact6", value: entry };\n' +
+  '    if (entry.includes("/")) {\n' +
+  '      const [base, bits] = entry.split("/");\n' +
+  '      const mask = ~((1 << (32 - Number(bits))) - 1) >>> 0;\n' +
+  '      return { type: "cidr", network: ipToInt(base) & mask, mask };\n' +
+  '    }\n' +
+  '    return { type: "exact4", value: ipToInt(entry) };\n' +
+  '  });\n' +
+  '}\n' +
   '\n' +
-  'function checkIP(request) {\n' +
+  'function checkIP(request, env) {\n' +
+  '  const rules = toRules(getAllowed(env));\n' +
   '  const ip = request.headers.get("CF-Connecting-IP");\n' +
   '  if (!ip) return null;\n' +
   '  if (ip.includes(":")) {\n' +
@@ -194,11 +188,11 @@ var TEMPLATES = {
   'ip-guard': {
     type: 'ip-guard',
     description:
-      'IP 内网限制代码。在 Worker fetch handler 开头调用 checkIP(request), 返回非 null 则直接 return (403)。' +
-      '直接粘贴到 _worker.js 顶部即可, 再在 fetch handler 第一行调 checkIP。',
-    usage: 'const blocked = checkIP(request); if (blocked) return blocked;',
+      'IP 内网限制代码。在 Worker fetch handler 开头调用 checkIP(request, env), 返回非 null 则直接 return (403)。' +
+      '直接粘贴到 _worker.js 顶部即可, 再在 fetch handler 第一行调 checkIP(request, env)。',
+    usage: 'const blocked = checkIP(request, env); if (blocked) return blocked;',
     source: IP_GUARD_SOURCE,
-    sourced_at: '2026-05-19',
+    sourced_at: '2026-07-21',
   },
 };
 
@@ -263,7 +257,17 @@ async function pagesDeploy(args) {
     presetReason = detected.reason;
     presetNeedsConfirm = detected.needsUserConfirm === true;
   }
-  var ipRestrict = !(args && args.public === true);
+  // 当前 Pages API 固定开启 IP 限制; public=true 会被服务端拒绝。
+  // Worker 是否真的执行限制取决于用户是否在 _worker.js 中调用 ip-guard。
+  if (args && args.public === true) {
+    return {
+      ok: false,
+      errorCode: 'INVALID_ARGS',
+      message: '当前 Pages API 固定开启 IP 限制, 不支持 public=true。worker 站点如需公网访问, 请不要在 _worker.js 中调用 ip-guard。',
+      hint: 'static/spa 会由服务端自动注入 IP 检查; worker 需要在 _worker.js 中自行决定是否调用 ip-guard。',
+    };
+  }
+  var ipRestrict = true;
 
   // 凭票上传:主机代读盘代组 multipart(file-N filename=相对路径,服务端按
   // filename 还原目录结构)。票据单次消费,失败重试要主 agent 重新过户。
@@ -288,30 +292,41 @@ async function pagesDeploy(args) {
     return mapError(r.status, parsed);
   }
 
-  var siteUrl = 'https://' + name + '.workers.xd.team';
-  var accessScope = ipRestrict ? '仅公司内网可访问' : '已开启公网访问';
-  var workerNote =
-    preset === 'worker' && ipRestrict
-      ? '⚠️ worker preset 不会自动注入 IP 检查, 请在 _worker.js 内自行集成 ip-guard(调 pages_get_worker_template({ type: "ip-guard" }) 拿模板), 否则站点实际为公网可访问。'
-      : undefined;
+  var responseIpRestrict = parsed && typeof parsed.ipRestrict === 'boolean' ? parsed.ipRestrict : ipRestrict;
+  var siteUrl = parsed && typeof parsed.url === 'string' ? parsed.url : 'https://' + name + '.workers.xd.team';
+  var accessScope;
+  if (preset === 'worker') {
+    accessScope = responseIpRestrict
+      ? 'Worker 代码自行决定(请确认 _worker.js 已调用 ip-guard)'
+      : '已开启公网访问';
+  } else {
+    accessScope = responseIpRestrict ? '仅公司内网可访问' : '已开启公网访问';
+  }
+  var serverWarning = parsed && typeof parsed.warning === 'string' && parsed.warning ? parsed.warning : undefined;
+  var warningNote = serverWarning || (preset === 'worker' && responseIpRestrict
+    ? 'worker preset 不会自动注入 IP 检查, 请在 _worker.js 内自行集成 ip-guard(调 pages_get_worker_template({ type: "ip-guard" }) 拿模板), 否则站点实际可能为公网可访问。'
+    : undefined);
+  var fileCount = parsed && typeof parsed.fileCount === 'number'
+    ? parsed.fileCount
+    : (typeof deposit.file_count === 'number' ? deposit.file_count : relPaths.length);
   var lines = [
     '部署成功 ✅',
     '',
     '- 站点地址: ' + siteUrl,
     '- 访问范围: ' + accessScope,
     '- preset: ' + preset + '(' + presetReason + ')',
-    '- 文件数: ' + (typeof deposit.file_count === 'number' ? deposit.file_count : relPaths.length),
+    '- 文件数: ' + fileCount,
     '',
     '提示: 新站点 DNS 首次部署后可能需要 1-3 分钟生效, 立刻打不开是正常现象;更新部署后页面没刷新通常是 CDN 缓存, 可在 URL 后加 ?v=<时间戳> 验证。',
   ];
-  if (workerNote) lines.push('', workerNote);
+  if (warningNote) lines.push('', '⚠️ ' + warningNote);
 
   var out = {
     ok: true,
     data: parsed || {},
     meta: {
       preset_decision: { used: preset, reason: presetReason },
-      file_count: typeof deposit.file_count === 'number' ? deposit.file_count : relPaths.length,
+      file_count: fileCount,
       total_bytes: typeof deposit.total_bytes === 'number' ? deposit.total_bytes : undefined,
     },
     user_facing_markdown: lines.join('\n'),
@@ -321,7 +336,8 @@ async function pagesDeploy(args) {
     out.meta.preset_decision.confirm_hint =
       '自动检测不确定, 建议跟用户复述一句: "这个网站是固定内容还是有页面跳转的单页应用?" 前者保持 static, 后者重新部署时传 preset:"spa"(需重新过户目录)';
   }
-  if (workerNote) out.meta.worker_note = workerNote;
+  if (serverWarning) out.meta.warning = serverWarning;
+  if (preset === 'worker' && !serverWarning && warningNote) out.meta.worker_note = warningNote;
   return out;
 }
 
