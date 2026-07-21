@@ -336,7 +336,7 @@ describe('forkSessionAtMessage', () => {
       forkSessionAtMessage('src-session', 'target-user'),
     ).rejects.toMatchObject({
       code: 'CODEX_FORK_STATE_UNAVAILABLE',
-      message: expect.stringContaining('thread not found in current Codex home'),
+      message: 'thread not found in current Codex home',
     });
     expect(txCalls).toHaveLength(0);
   });

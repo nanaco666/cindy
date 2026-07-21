@@ -255,7 +255,7 @@ export async function forkSessionAtMessage(
     const detail = err instanceof Error ? err.message : String(err);
     throw forkError(
       'CODEX_FORK_STATE_UNAVAILABLE',
-      `Codex 外部会话状态或 rollout 不可用：${detail}`,
+      detail,
     );
   });
   const { newSdkSessionId, uuidMap, initialContextTokens } = forkResult;
@@ -384,7 +384,7 @@ export async function forkSessionStripEncrypted(sourceSessionId: string): Promis
     const detail = err instanceof Error ? err.message : String(err);
     throw forkError(
       'CODEX_FORK_STATE_UNAVAILABLE',
-      `Codex 外部会话状态或 rollout 不可用：${detail}`,
+      detail,
     );
   });
 

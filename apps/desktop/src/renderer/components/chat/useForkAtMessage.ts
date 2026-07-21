@@ -120,7 +120,7 @@ export function useForkAtMessage({
               ? t('chat.userMessage.forkErrors.codexStateUnavailable', {
                   detail: err instanceof Error ? err.message : String(err),
                 })
-            : t('chat.userMessage.forkErrors.generic');
+              : t('chat.userMessage.forkErrors.generic');
       toast.error(msg);
       // Re-throw so MessageActionBar's `forking` state knows to clear via
       // its finally{} (it doesn't actually re-throw further — just resets).
