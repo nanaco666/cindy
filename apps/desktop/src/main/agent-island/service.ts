@@ -386,11 +386,14 @@ export class AgentIslandService {
     ipcMain.handle(AGENT_ISLAND_GET_DISPLAY_OPTIONS_CHANNEL, () => {
       this.nativeHost.prepare?.();
       const displays = this.getAvailableDisplays();
-      const resolvedTarget = this.resolveDisplayTarget(displays);
-      if (!sameAgentIslandDisplayTarget(this.displayTarget, resolvedTarget)) {
-        // Electron display ids are runtime-scoped. Keep the persisted renderer
-        // selection aligned with the display actually used after a re-enumeration.
-        this.displayTarget = resolvedTarget;
+      const selectedDisplay = this.resolveSelectedDisplay(displays);
+      if (selectedDisplay) {
+        const resolvedTarget = this.displayTargetForDisplay(displays, selectedDisplay);
+        if (!sameAgentIslandDisplayTarget(this.displayTarget, resolvedTarget)) {
+          // Electron display ids are runtime-scoped. Only rewrite the persisted
+          // target after its saved identity resolves to a current display.
+          this.displayTarget = resolvedTarget;
+        }
       }
       return {
         ok: true,
@@ -1323,24 +1326,35 @@ export class AgentIslandService {
   private getTargetDisplays(): Display[] {
     const displays = this.getAvailableDisplays();
     if (this.displayTarget.mode === 'display') {
-      const resolvedTarget = this.resolveDisplayTarget(displays);
+      const selectedDisplay = this.resolveSelectedDisplay(displays);
+      if (!selectedDisplay) {
+        // A temporary disconnect uses the current fallback for rendering only;
+        // keep the saved identity so reconnecting restores the user's choice.
+        return [this.getTargetDisplay(displays)];
+      }
+      const resolvedTarget = this.displayTargetForDisplay(displays, selectedDisplay);
       if (!sameAgentIslandDisplayTarget(this.displayTarget, resolvedTarget)) {
         this.displayTarget = resolvedTarget;
       }
-      const selectedDisplay = resolvedTarget.mode === 'display'
-        ? this.displayById(displays, resolvedTarget.displayId)
-        : null;
-      return selectedDisplay ? [selectedDisplay] : [this.getTargetDisplay(displays)];
+      return [selectedDisplay];
     }
     return displays;
   }
 
-  private resolveDisplayTarget(displays: Display[]): AgentIslandDisplayTarget {
-    if (this.displayTarget.mode !== 'display') return DEFAULT_AGENT_ISLAND_DISPLAY_TARGET;
+  private resolveSelectedDisplay(displays: Display[]): Display | null {
+    if (this.displayTarget.mode !== 'display') return null;
+    if (hasPersistedDisplayIdentity(this.displayTarget)) {
+      // Runtime ids can be reassigned to a different physical monitor after a
+      // reboot, so a saved identity must win over an apparently valid old id.
+      return this.findDisplayByPersistedIdentity(displays, this.displayTarget);
+    }
+    return this.displayById(displays, this.displayTarget.displayId);
+  }
 
-    const selectedDisplay = this.displayById(displays, this.displayTarget.displayId)
-      ?? this.findDisplayByPersistedIdentity(displays, this.displayTarget);
-    const display = selectedDisplay ?? this.getTargetDisplay(displays);
+  private displayTargetForDisplay(
+    displays: Display[],
+    display: Display,
+  ): Extract<AgentIslandDisplayTarget, { mode: 'display' }> {
     return {
       mode: 'display',
       displayId: display.id,
@@ -1357,25 +1371,44 @@ export class AgentIslandService {
     displays: Display[],
     target: Extract<AgentIslandDisplayTarget, { mode: 'display' }>,
   ): Display | null {
+    let candidates = displays;
     const name = target.displayName?.trim();
     if (name) {
-      const byName = displays.find((display) => (
+      candidates = candidates.filter((display) => (
         typeof display.label === 'string' && display.label.trim() === name
       ));
-      if (byName) return byName;
+    }
+
+    if (typeof target.displayInternal === 'boolean') {
+      candidates = candidates.filter((display) => (
+        Boolean(display.internal) === target.displayInternal
+      ));
+    }
+
+    const persistedBounds = target.displayBounds;
+    if (persistedBounds) {
+      const exactBounds = candidates.filter((display) => (
+        sameDisplayBounds(display.bounds, persistedBounds)
+      ));
+      if (exactBounds.length === 1) return exactBounds[0] ?? null;
+      if (exactBounds.length > 1) {
+        candidates = exactBounds;
+      } else {
+        const sameSize = candidates.filter((display) => (
+          display.bounds.width === persistedBounds.width
+          && display.bounds.height === persistedBounds.height
+        ));
+        if (sameSize.length === 1) return sameSize[0] ?? null;
+        if (sameSize.length > 1) candidates = sameSize;
+      }
     }
 
     if (typeof target.displayIndex === 'number' && target.displayIndex >= 1) {
       const byIndex = displays[target.displayIndex - 1];
-      if (byIndex && (
-        typeof target.displayInternal !== 'boolean'
-        || Boolean(byIndex.internal) === target.displayInternal
-      )) {
-        return byIndex;
-      }
+      if (byIndex && candidates.includes(byIndex)) return byIndex;
     }
 
-    return null;
+    return candidates.length === 1 ? (candidates[0] ?? null) : null;
   }
 
   private normalizePreferredContentWidth(input: {
@@ -1656,6 +1689,25 @@ function getVisibleSessionIdsForReadAck(sessionId: string | string[] | null): st
     if (next) normalized.add(next);
   }
   return Array.from(normalized);
+}
+
+function hasPersistedDisplayIdentity(
+  target: Extract<AgentIslandDisplayTarget, { mode: 'display' }>,
+): boolean {
+  return Boolean(target.displayName?.trim())
+    || typeof target.displayIndex === 'number'
+    || typeof target.displayInternal === 'boolean'
+    || target.displayBounds !== undefined;
+}
+
+function sameDisplayBounds(
+  a: { x: number; y: number; width: number; height: number },
+  b: { x: number; y: number; width: number; height: number },
+): boolean {
+  return a.x === b.x
+    && a.y === b.y
+    && a.width === b.width
+    && a.height === b.height;
 }
 
 function sameAgentIslandDisplayTarget(a: AgentIslandDisplayTarget, b: AgentIslandDisplayTarget): boolean {

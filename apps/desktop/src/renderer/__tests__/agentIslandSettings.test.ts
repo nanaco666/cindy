@@ -335,4 +335,27 @@ describe('agent island settings', () => {
       displayName: 'Studio Display',
     });
   });
+
+  it('does not rewrite or notify when main returns the unchanged display target', async () => {
+    const target = {
+      mode: 'display' as const,
+      displayId: 7,
+      displayName: 'Studio Display',
+      displayIndex: 2,
+      displayInternal: false,
+      displayBounds: { x: 0, y: 0, width: 1512, height: 982 },
+    };
+    localStorage.setItem('notifications.agentIslandDisplayTarget', JSON.stringify(target));
+    const setItem = vi.spyOn(Storage.prototype, 'setItem');
+    const getDisplayOptions = vi.fn(async () => ({
+      ok: true as const,
+      options: [],
+      target,
+    }));
+    installElectronApi({ getDisplayOptions });
+
+    await loadAgentIslandDisplayOptions();
+
+    expect(setItem).not.toHaveBeenCalled();
+  });
 });
