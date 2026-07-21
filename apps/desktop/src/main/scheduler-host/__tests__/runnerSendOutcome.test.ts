@@ -137,6 +137,7 @@ function baseSchedule(overrides: Partial<Schedule> = {}): Schedule {
 }
 
 function createFireContext(): FireContext & {
+  controller: AbortController;
   removeAbortListener: ReturnType<typeof vi.spyOn>;
 } {
   const abortController = new AbortController();
@@ -145,6 +146,7 @@ function createFireContext(): FireContext & {
     runId: 'run-1',
     firedAt: 1_700_000_000_100,
     signal: abortController.signal,
+    controller: abortController,
     onSessionBound: vi.fn(async () => undefined),
     removeAbortListener,
   };
@@ -263,6 +265,20 @@ describe('MakerScheduleRunner send outcome policy', () => {
     expect(h.off).toHaveBeenCalledTimes(1);
     expect(ctx.removeAbortListener).toHaveBeenCalledTimes(1);
     expect(h.session.close).not.toHaveBeenCalled();
+  });
+
+  it('treats a cancelled send result as an abort when the fire is cancelled', async () => {
+    const ctx = createFireContext();
+    const h = createSessionHarness(async () => {
+      ctx.controller.abort();
+      return { accepted: false, reason: 'cancelled-before-dispatch' };
+    });
+    const { runner, notifier } = createRunnerHarness(h.session);
+
+    await expect(runner.fire(baseSchedule(), ctx)).rejects.toThrow(/schedule fire aborted/);
+    expect(notifier.notify).not.toHaveBeenCalled();
+    expect(h.off).toHaveBeenCalledTimes(1);
+    expect(ctx.removeAbortListener).toHaveBeenCalledTimes(1);
   });
 
   it('applies a deferred switch before heartbeat meta lookup and creates the target engine session', async () => {

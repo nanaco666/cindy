@@ -16,10 +16,10 @@ describe('withScheduleLock', () => {
     const queued = withScheduleLock('schedule-1', queuedController.signal, queuedCallback);
 
     queuedController.abort();
+    await expect(queued).rejects.toThrow(/aborted while waiting for schedule lock/);
+    expect(queuedCallback).not.toHaveBeenCalled();
     releaseFirst();
 
     await expect(first).resolves.toBeUndefined();
-    await expect(queued).rejects.toThrow(/aborted before acquiring schedule lock/);
-    expect(queuedCallback).not.toHaveBeenCalled();
   });
 });

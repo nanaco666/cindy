@@ -67,6 +67,7 @@ import {
   type SanitizedSendOutcomeError,
 } from '../maker-host/send-outcome.js';
 import { resolveWorkingDir } from './workdir-resolver';
+import { WorktreePool } from '../worktree';
 import type { SchedulerDrizzleDb } from './storage';
 import { backfillSessionMeta } from './runners/_shared';
 import { buildSkipResultText, executePreRunHook, formatPreRunHookFailure } from './pre-run-hook';
@@ -274,6 +275,14 @@ export class MakerScheduleRunner implements ScheduleRunner {
           });
         }
       }
+      if (holder.worktreeSessionId && !holder.sessionId) {
+        await WorktreePool.releaseWorktree(holder.worktreeSessionId).catch((err) => {
+          this.deps.logger.warn?.('[runner] cancelled worktree release failed (non-fatal)', {
+            sessionId: holder.worktreeSessionId,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        });
+      }
     }
   }
 
@@ -394,7 +403,9 @@ export class MakerScheduleRunner implements ScheduleRunner {
     if (isHeartbeat) {
       // 直发路径不经过 makerSendTransaction。先落实 pending switch,再读取 meta/row,
       // 才能让本轮 createSession 与 send 都指向切换后的 live engine。
+      throwIfFireAborted(ctx.signal, 'credential switch setup');
       await this.deps.applyPendingAgentSwitch?.(sessionId);
+      throwIfFireAborted(ctx.signal, 'credential switch setup');
       const [meta, row] = await Promise.all([
         this.deps.maker.getSessionMeta(sessionId).catch(() => null),
         getSessionRowSnapshot(sessionId),
@@ -511,6 +522,7 @@ export class MakerScheduleRunner implements ScheduleRunner {
         throw new Error(errMsg);
       }
       workingDir = wt.path;
+      holder.worktreeSessionId = wt.worktreeSessionId ?? sessionId;
     }
     if (!workingDir) {
       const errMsg = isHeartbeat
@@ -572,6 +584,7 @@ export class MakerScheduleRunner implements ScheduleRunner {
           return this.failOrDeferSessionRunning(schedule, ctx, sessionId, true);
         }
         try {
+          throwIfFireAborted(ctx.signal, 'credential mode switch');
           if (liveSession.agentKind === 'codex') {
             await prepareLocalCodexCredentialModeSwitch({
               maker: this.deps.maker,
@@ -584,6 +597,7 @@ export class MakerScheduleRunner implements ScheduleRunner {
               isSessionInTurn,
             });
           }
+          throwIfFireAborted(ctx.signal, 'credential mode switch');
         } catch (err) {
           if (err instanceof CredentialModeSwitchBusyError) {
             return this.failOrDeferSessionRunning(schedule, ctx, sessionId, isHeartbeat);
@@ -853,6 +867,10 @@ export class MakerScheduleRunner implements ScheduleRunner {
           });
         },
       });
+      // Session.send may report a cancelled-before-dispatch outcome instead of
+      // throwing.  Once the fire is aborted, preserve the abort path so the
+      // scheduler does not emit a spurious failure notification.
+      throwIfFireAborted(ctx.signal, 'agent turn dispatch');
       if (pendingHandoff && sendResult.accepted) {
         agentHandoffPending.consume(session.id);
       }
@@ -1463,7 +1481,9 @@ type FireAbortStage =
   | 'runner entry'
   | 'workspace allocation'
   | 'session creation'
-  | 'agent turn dispatch';
+  | 'agent turn dispatch'
+  | 'credential switch setup'
+  | 'credential mode switch';
 
 function throwIfFireAborted(signal: AbortSignal, stage: FireAbortStage): void {
   if (signal.aborted) {
@@ -1478,6 +1498,7 @@ function throwIfFireAborted(signal: AbortSignal, stage: FireAbortStage): void {
  */
 interface EphemeralSessionHolder {
   sessionId?: string;
+  worktreeSessionId?: string;
   /** true = heartbeat 复用会话或持续会话,收尾时不关闭。 */
   keepAlive?: boolean;
 }
