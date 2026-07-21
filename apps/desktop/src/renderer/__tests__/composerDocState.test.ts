@@ -70,15 +70,19 @@ describe('composerDocState', () => {
       type: 'doc',
       content: [
         {
-          type: 'composerQuote',
-          attrs: {
-            text: 'quoted',
-            sourcePath: null,
-            startLine: null,
-            endLine: null,
-          },
+          type: 'paragraph',
+          content: [
+            {
+              type: 'composerQuote',
+              attrs: {
+                text: 'quoted',
+                sourcePath: null,
+                startLine: null,
+                endLine: null,
+              },
+            },
+          ],
         },
-        { type: 'paragraph' },
       ],
     });
     expect(docContainsAtomChip(quote.state.doc)).toBe(true);

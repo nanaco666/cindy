@@ -660,8 +660,25 @@ function serializeEditorContent(editor: Editor): {
     }
     if (pNode.type.name !== 'paragraph') return;
     let buf = '';
+    let emittedInlineSegment = false;
+    const flushText = (force = false) => {
+      if (!force && !buf) return;
+      blocks.push({ kind: 'text', text: buf });
+      buf = '';
+      emittedInlineSegment = true;
+    };
     pNode.forEach((child) => {
-      if (child.type.name === 'mentionChip') {
+      if (child.type.name === COMPOSER_QUOTE_NODE_TYPE) {
+        flushText();
+        hasQuotes = true;
+        blocks.push({
+          kind: 'quote',
+          text: formatQuoteForSend(
+            composerQuoteAttrsToChatQuote(child.attrs as ComposerQuoteAttrs),
+          ),
+        });
+        emittedInlineSegment = true;
+      } else if (child.type.name === 'mentionChip') {
         const attrs = child.attrs as MentionChipAttrs;
         addMention(attrs);
         if (attrs.kind === 'slash') {
@@ -715,7 +732,9 @@ function serializeEditorContent(editor: Editor): {
         buf += child.text ?? '';
       }
     });
-    blocks.push({ kind: 'text', text: buf });
+    // Preserve truly empty paragraphs as line breaks, but do not synthesize an
+    // empty text segment after a quote chip at the end of a paragraph.
+    flushText(!emittedInlineSegment);
   });
 
   let serialized = '';

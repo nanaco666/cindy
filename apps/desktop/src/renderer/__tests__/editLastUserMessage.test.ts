@@ -240,7 +240,7 @@ describe('commitEditAndResend', () => {
     expect(attachments[0]).toMatchObject({ name: 'notes.md', path: '/repo/notes.md' });
   });
 
-  it('quoted 消息重发失败:兜底草稿按正文顺序还原 quote block', async () => {
+  it('quoted 消息重发失败:兜底草稿按正文顺序还原 inline quote chip', async () => {
     const { deps } = makeDeps(fakeSession(), { dispatchResult: false });
     await commitEditAndResend(
       {
@@ -260,20 +260,25 @@ describe('commitEditAndResend', () => {
       type: 'doc',
       content: [
         {
-          type: 'composerQuote',
-          attrs: {
-            text: 'quoted line',
-            sourcePath: 'src/a.ts',
-            startLine: null,
-            endLine: null,
-          },
+          type: 'paragraph',
+          content: [
+            {
+              type: 'composerQuote',
+              attrs: {
+                text: 'quoted line',
+                sourcePath: 'src/a.ts',
+                startLine: null,
+                endLine: null,
+              },
+            },
+            { type: 'text', text: 'edited body' },
+            {
+              type: 'composerQuote',
+              attrs: { text: 'second', sourcePath: null, startLine: null, endLine: null },
+            },
+            { type: 'text', text: 'second reply' },
+          ],
         },
-        { type: 'paragraph', content: [{ type: 'text', text: 'edited body' }] },
-        {
-          type: 'composerQuote',
-          attrs: { text: 'second', sourcePath: null, startLine: null, endLine: null },
-        },
-        { type: 'paragraph', content: [{ type: 'text', text: 'second reply' }] },
       ],
     });
   });

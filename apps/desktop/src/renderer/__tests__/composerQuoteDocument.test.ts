@@ -27,12 +27,9 @@ function makeEditor(): Editor {
 }
 
 describe('composerQuoteDocument', () => {
-  it('appends quotes after authored prose and leaves a paragraph for the reply', () => {
+  it('appends quotes inline so each reply can continue directly beside its quote', () => {
     const first = appendQuoteToComposerDocument(null, { text: 'quote one' });
-    first.content![1] = {
-      type: 'paragraph',
-      content: [{ type: 'text', text: 'response one' }],
-    };
+    first.content![0].content!.push({ type: 'text', text: 'response one' });
     const second = appendQuoteToComposerDocument(first, {
       text: 'quote two',
       sourcePath: 'docs/spec.md',
@@ -44,22 +41,46 @@ describe('composerQuoteDocument', () => {
       type: 'doc',
       content: [
         {
-          type: 'composerQuote',
-          attrs: { text: 'quote one', sourcePath: null, startLine: null, endLine: null },
+          type: 'paragraph',
+          content: [
+            {
+              type: 'composerQuote',
+              attrs: { text: 'quote one', sourcePath: null, startLine: null, endLine: null },
+            },
+            { type: 'text', text: 'response one' },
+            {
+              type: 'composerQuote',
+              attrs: {
+                text: 'quote two',
+                sourcePath: 'docs/spec.md',
+                startLine: 4,
+                endLine: 5,
+              },
+            },
+          ],
         },
-        { type: 'paragraph', content: [{ type: 'text', text: 'response one' }] },
-        {
-          type: 'composerQuote',
-          attrs: {
-            text: 'quote two',
-            sourcePath: 'docs/spec.md',
-            startLine: 4,
-            endLine: 5,
-          },
-        },
-        { type: 'paragraph' },
       ],
     });
+  });
+
+  it('lets the editor insert reply text immediately after a quote atom', () => {
+    const editor = makeEditor();
+    editor.commands.setContent(appendQuoteToComposerDocument(null, { text: 'quote' }));
+    editor.commands.focus('end');
+    editor.commands.insertContent('reply');
+
+    expect(editor.getJSON().content).toEqual([
+      {
+        type: 'paragraph',
+        content: [
+          {
+            type: 'composerQuote',
+            attrs: { text: 'quote', sourcePath: null, startLine: null, endLine: null },
+          },
+          { type: 'text', text: 'reply' },
+        ],
+      },
+    ]);
   });
 
   it('lifts legacy leading quote arrays into the document once', () => {
@@ -75,10 +96,15 @@ describe('composerQuoteDocument', () => {
       type: 'doc',
       content: [
         {
-          type: 'composerQuote',
-          attrs: { text: 'legacy', sourcePath: null, startLine: null, endLine: null },
+          type: 'paragraph',
+          content: [
+            {
+              type: 'composerQuote',
+              attrs: { text: 'legacy', sourcePath: null, startLine: null, endLine: null },
+            },
+            { type: 'text', text: 'body' },
+          ],
         },
-        { type: 'paragraph', content: [{ type: 'text', text: 'body' }] },
       ],
     });
   });
@@ -95,15 +121,20 @@ describe('composerQuoteDocument', () => {
       type: 'doc',
       content: [
         {
-          type: 'composerQuote',
-          attrs: { text: 'q1', sourcePath: null, startLine: null, endLine: null },
+          type: 'paragraph',
+          content: [
+            {
+              type: 'composerQuote',
+              attrs: { text: 'q1', sourcePath: null, startLine: null, endLine: null },
+            },
+            { type: 'text', text: 'a1' },
+            {
+              type: 'composerQuote',
+              attrs: { text: 'q2', sourcePath: null, startLine: null, endLine: null },
+            },
+            { type: 'text', text: 'a2' },
+          ],
         },
-        { type: 'paragraph', content: [{ type: 'text', text: 'a1' }] },
-        {
-          type: 'composerQuote',
-          attrs: { text: 'q2', sourcePath: null, startLine: null, endLine: null },
-        },
-        { type: 'paragraph', content: [{ type: 'text', text: 'a2' }] },
       ],
     });
   });
@@ -114,21 +145,25 @@ describe('composerQuoteDocument', () => {
       type: 'doc',
       content: [
         {
-          type: 'composerQuote',
-          attrs: {
-            text: 'quoted <value>\nsecond line',
-            sourcePath: 'src/example.ts',
-            startLine: 7,
-            endLine: 9,
-          },
+          type: 'paragraph',
+          content: [
+            {
+              type: 'composerQuote',
+              attrs: {
+                text: 'quoted <value>\nsecond line',
+                sourcePath: 'src/example.ts',
+                startLine: 7,
+                endLine: 9,
+              },
+            },
+          ],
         },
-        { type: 'paragraph' },
       ],
     });
 
     const restored = makeEditor();
     restored.commands.setContent(editor.getHTML());
-    expect(restored.getJSON().content?.[0]).toEqual({
+    expect(restored.getJSON().content?.[0]?.content?.[0]).toEqual({
       type: 'composerQuote',
       attrs: {
         text: 'quoted <value>\nsecond line',

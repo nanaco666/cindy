@@ -75,7 +75,15 @@ describe('draftHasContent', () => {
     expect(
       draftHasContent(
         draft({
-          text: { type: 'doc', content: [{ type: 'composerQuote', attrs: { text: 'quoted' } }] },
+          text: {
+            type: 'doc',
+            content: [
+              {
+                type: 'paragraph',
+                content: [{ type: 'composerQuote', attrs: { text: 'quoted' } }],
+              },
+            ],
+          },
         }),
       ),
     ).toBe(true);
@@ -95,15 +103,20 @@ describe('appendQuoteToDraft', () => {
 
     expect(getDraft(id)?.text?.content).toEqual([
       {
-        type: 'composerQuote',
-        attrs: {
-          text: 'legacy quote',
-          sourcePath: 'legacy.ts',
-          startLine: null,
-          endLine: null,
-        },
+        type: 'paragraph',
+        content: [
+          {
+            type: 'composerQuote',
+            attrs: {
+              text: 'legacy quote',
+              sourcePath: 'legacy.ts',
+              startLine: null,
+              endLine: null,
+            },
+          },
+          { type: 'text', text: 'hello' },
+        ],
       },
-      { type: 'paragraph', content: [{ type: 'text', text: 'hello' }] },
     ]);
     expect(getDraft(id)?.quotes).toEqual([]);
     clearDraft(id);
@@ -119,17 +132,21 @@ describe('appendQuoteToDraft', () => {
       text: {
         type: 'doc',
         content: [
-          { type: 'paragraph', content: [{ type: 'text', text: 'hello' }] },
           {
-            type: 'composerQuote',
-            attrs: {
-              text: 'new quote',
-              sourcePath: null,
-              startLine: 4,
-              endLine: 5,
-            },
+            type: 'paragraph',
+            content: [
+              { type: 'text', text: 'hello' },
+              {
+                type: 'composerQuote',
+                attrs: {
+                  text: 'new quote',
+                  sourcePath: null,
+                  startLine: 4,
+                  endLine: 5,
+                },
+              },
+            ],
           },
-          { type: 'paragraph' },
         ],
       },
       attachments: [],

@@ -112,20 +112,25 @@ describe('useForkAtMessage', () => {
     expect(toastError).not.toHaveBeenCalled();
   });
 
-  it('carries parsed quotes into the prefilled draft as inline blocks', async () => {
+  it('carries parsed quotes into the prefilled draft as inline chips', async () => {
     const draftDocument = {
       type: 'doc',
       content: [
         {
-          type: 'composerQuote',
-          attrs: {
-            text: 'quoted line',
-            sourcePath: 'src/a.ts',
-            startLine: null,
-            endLine: null,
-          },
+          type: 'paragraph',
+          content: [
+            {
+              type: 'composerQuote',
+              attrs: {
+                text: 'quoted line',
+                sourcePath: 'src/a.ts',
+                startLine: null,
+                endLine: null,
+              },
+            },
+            { type: 'text', text: 'body' },
+          ],
         },
-        { type: 'paragraph', content: [{ type: 'text', text: 'body' }] },
       ],
     };
     const { result } = renderHook(() =>
@@ -151,15 +156,19 @@ describe('useForkAtMessage', () => {
       type: 'doc',
       content: [
         {
-          type: 'composerQuote',
-          attrs: {
-            text: 'only quote',
-            sourcePath: null,
-            startLine: null,
-            endLine: null,
-          },
+          type: 'paragraph',
+          content: [
+            {
+              type: 'composerQuote',
+              attrs: {
+                text: 'only quote',
+                sourcePath: null,
+                startLine: null,
+                endLine: null,
+              },
+            },
+          ],
         },
-        { type: 'paragraph' },
       ],
     };
     const { result } = renderHook(() =>

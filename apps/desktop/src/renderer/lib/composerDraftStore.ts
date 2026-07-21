@@ -327,7 +327,7 @@ function syncDraftUrlsToMain(): void {
 
 /**
  * chat-text-quote:向会话草稿正文末尾追加一条引用(非 silent——挂载中的
- * ChatInput 立即刷新正文并把光标放到引用后的空段落)。
+ * ChatInput 立即刷新正文并把光标放到引用右侧)。
  */
 export function appendQuoteToDraft(sessionId: string, quote: ChatQuote): void {
   const existing = drafts.get(sessionId);
