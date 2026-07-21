@@ -257,6 +257,14 @@ const fakeAdapter: ImChannelAdapter = {
 let runner: ImTurnRunner | null = null;
 let makerEventListeners: Array<(event: MakerEvent) => void> = [];
 
+function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
 function createMakerHarness(session: Session) {
   return {
     createSession: vi.fn(async () => session),
@@ -446,8 +454,8 @@ describe('turnRunner send outcome policy (feishu adapter characterization)', () 
     mocks.checkDestructiveToolCall.mockReturnValue({ destructive: false });
   });
 
-  afterEach(() => {
-    runner?.disposeAllSessions();
+  afterEach(async () => {
+    await runner?.disposeAllSessions();
     runner = null;
   });
 
@@ -1286,6 +1294,25 @@ describe('turnRunner send outcome policy (feishu adapter characterization)', () 
     expect(mocks.persistUserMessage).toHaveBeenCalledTimes(1);
   });
 
+  it('disposeAllSessions aborts and awaits an IM-owned in-flight turn', async () => {
+    const h = setupSession(async () => ({ accepted: true }));
+    const abortGate = deferred<void>();
+    h.abort.mockImplementationOnce(async () => abortGate.promise);
+    await runDefaultTurn();
+
+    let disposed = false;
+    const disposing = runner!.disposeAllSessions().then(() => {
+      disposed = true;
+    });
+    expect(h.abort).toHaveBeenCalledOnce();
+    await Promise.resolve();
+    expect(disposed).toBe(false);
+
+    abortGate.resolve(undefined);
+    await disposing;
+    expect(disposed).toBe(true);
+  });
+
   it('stopActiveTurn reports idle when nothing is running or queued', async () => {
     const h = setupSession(async () => ({ accepted: true }));
     await runDefaultTurn();
@@ -1403,7 +1430,7 @@ describe('turnRunner send outcome policy (feishu adapter characterization)', () 
         });
         await flushMicrotasks();
       } finally {
-        prefixedRunner.disposeAllSessions();
+        await prefixedRunner.disposeAllSessions();
       }
     }
 
@@ -1416,6 +1443,35 @@ describe('turnRunner send outcome policy (feishu adapter characterization)', () 
         '帮我修个 bug',
         '[飞书·DM] ',
       );
+    });
+
+    it('registers title generation as background work without delaying turn dispatch', async () => {
+      const titleGate = deferred<string | null>();
+      mocks.generateAndPersistFbotTitle.mockImplementationOnce(async () => titleGate.promise);
+      setupSession(async () => ({ accepted: false, reason: 'cancelled-before-dispatch' }));
+      const prefixedRunner = makePrefixedRunner();
+      const backgroundTasks: Promise<void>[] = [];
+      const trackBackgroundTask = vi.fn((operation: () => Promise<void>) => {
+        backgroundTasks.push(operation());
+      });
+
+      try {
+        await prefixedRunner.runAgentTurn({
+          botContextId: 'cli_test_bot',
+          userId: 'ou_user',
+          userMessageId: 'msg-user',
+          text: '帮我修个 bug',
+          attachments: [],
+          trackBackgroundTask,
+        });
+
+        expect(trackBackgroundTask).toHaveBeenCalledOnce();
+        expect(backgroundTasks).toHaveLength(1);
+        titleGate.resolve('[飞书·DM] 修复问题');
+        await Promise.all(backgroundTasks);
+      } finally {
+        await prefixedRunner.disposeAllSessions();
+      }
     });
 
     it('sdkSessionId 非空(上下文进行中)不重复起名', async () => {

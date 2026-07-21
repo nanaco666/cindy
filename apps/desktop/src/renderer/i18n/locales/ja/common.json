@@ -1225,6 +1225,7 @@
         "appIdLabel": "App ID",
         "ownerLabel": "Owner",
         "ownerWaiting": "初回プライベートメッセージのバインドを待機中",
+        "reconnect": "Feishu ボットを再接続",
         "clear": "連携解除"
       },
       "appIdLabel": "App ID",
@@ -6083,6 +6084,8 @@
       "googleConnected": "Google に接続しました",
       "codexConnected": "ChatGPT アカウントに接続しました",
       "feishuBotConnected": "Feishu ボットに接続しました",
+      "feishuBotReconnected": "Feishu ボットを再接続しました",
+      "feishuBotReconnectFailed": "再接続に失敗しました。Feishu の設定を確認して再試行してください",
       "feishuBotConflict": "この App は既に使用されています。同僚が同じ App ID を使用している可能性があります",
       "feishuBotConnectFailed": "接続に失敗しました。App ID / Secret を確認してください",
       "feishuBotSaveFailed": "保存に失敗しました：{{message}}",

@@ -119,7 +119,7 @@ import { RendererBootGuard } from './renderer-boot-guard';
 import yaml from 'js-yaml';
 import matter from 'gray-matter';
 import type { Maker } from '@lizi/maker-core';
-import { im, feishuIm, startImOrchestrators, startImConnection } from './im';
+import { im, feishuIm, startImOrchestrators, startImConnection, stopImConnection } from './im';
 import * as authManager from './authManager';
 import * as profileEdit from './profileEdit';
 import { uploadPublicAsset } from './ossPublicUpload';
@@ -676,6 +676,15 @@ async function ensureLifecycleDbClient(userId: string) {
 
 async function teardownAuthAccountBoundary(reason: string): Promise<void> {
   skillhubAutoSyncService.cancelInFlight();
+  // IM owns long-lived transports plus account-scoped session/binding caches.
+  // Stop it before any service or DbClient teardown so late Feishu/Discord
+  // callbacks cannot enter the old account boundary. Relogin restarts it via
+  // app:ready-for-bot after the new DbClient is ready.
+  try {
+    await stopImConnection(reason);
+  } catch (err) {
+    authBoundaryLog.error(`stopImConnection on ${reason} failed (non-fatal):`, err);
+  }
   // Phase 4 切账号:teardown 顺序很关键,分两步 ① readiness holder → ② scheduler。
   // ① 先清 readiness holder,**必须在 await resetScheduler() 之前**。
   // resetScheduler() 内部 await _scheduler.stop() 是异步的;若先 await 它,在
@@ -4926,7 +4935,7 @@ onQuit('provider-access-auth-listener', () => {
 //  recovery 兜底, 详见 localDb/index.ts 文件头 ADR-FE7 修订说明。)
 onQuit('shutdown-maker', shutdownMaker, 'async');
 onQuit('orca-idle-watcher', () => stopOrcaIdleWatcher(), 'sync');
-onQuit('im', () => im.dispose(), 'async');
+onQuit('im', () => stopImConnection('quit'), 'async');
 onQuit('codex-env', () => shutdownCodexEnvironment(), 'async');
 // embedding-host: abort 语义 —— 立刻让出 SQLite 写连接, 不等当前 tick (那批 job 保持
 // pending 下次续跑, 写事务同步原子无中断)。

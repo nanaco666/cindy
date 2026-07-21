@@ -1,11 +1,12 @@
 import { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Eye, EyeOff, Trash2, Check } from 'lucide-react';
+import { Eye, EyeOff, Trash2, Check, RefreshCw } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import { useFeishuBot, type FeishuBotStatus } from '@/hooks/useFeishuBot';
 import { useConfirmDialog } from '@/components/ui/confirm-dialog-provider';
 import { Spinner } from '@/components/ui/spinner';
+import { Tip } from '@/components/ui/tooltip';
 
 const FEISHU_LAUNCHER_URL = 'https://open.feishu.cn/page/launcher?from=backend_oneclick';
 
@@ -52,7 +53,9 @@ export function FeishuBotSection() {
     validationError,
     isSaving,
     isClearing,
+    isReconnecting,
     save,
+    reconnect,
     clear,
   } = useFeishuBot();
 
@@ -61,7 +64,7 @@ export function FeishuBotSection() {
   const { t } = useTranslation();
 
   const canSave = appId.trim().length > 0 && appSecret.trim().length > 0 && !isSaving;
-  const showConnectedCard = status === 'connected' || (hasSavedCreds && isSaving);
+  const showConnectedCard = status === 'connected' || (hasSavedCreds && (isSaving || isReconnecting));
 
   const handleClearClick = useCallback(async () => {
     const confirmed = await confirm({
@@ -115,6 +118,8 @@ export function FeishuBotSection() {
           appId={appId}
           ownerOpenId={ownerOpenId}
           isClearing={isClearing}
+          isReconnecting={isReconnecting}
+          onReconnect={reconnect}
           onClear={handleClearClick}
         />
       ) : (
@@ -144,6 +149,8 @@ function ConnectedCard(props: {
   appId: string;
   ownerOpenId: string | null;
   isClearing: boolean;
+  isReconnecting: boolean;
+  onReconnect: () => Promise<boolean>;
   onClear: () => void;
 }) {
   const { t } = useTranslation();
@@ -160,8 +167,30 @@ function ConnectedCard(props: {
           <Check size={16} />
         </div>
         <div className="min-w-0 flex-1">
-          <div className="text-13 font-medium text-[var(--settings-section-title)]">
-            {t('settings.feishuBot.connected.heading')}
+          <div className="flex items-center gap-1.5">
+            <div className="text-13 font-medium text-[var(--settings-section-title)]">
+              {t('settings.feishuBot.connected.heading')}
+            </div>
+            <Tip text={t('settings.feishuBot.connected.reconnect')} side="top" delay={200}>
+              {/* Keep the trigger hoverable while the inner button is disabled. */}
+              <span className="inline-flex shrink-0">
+                <button
+                  type="button"
+                  onClick={() => void props.onReconnect()}
+                  disabled={props.isReconnecting || props.isClearing}
+                  aria-label={t('settings.feishuBot.connected.reconnect')}
+                  className={cn(
+                    'inline-flex h-7 w-7 select-none items-center justify-center rounded-full',
+                    'text-[var(--settings-section-desc)] transition-colors',
+                    'hover:bg-[var(--surface-hover)] hover:text-[var(--settings-section-title)]',
+                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]',
+                    (props.isReconnecting || props.isClearing) && 'cursor-not-allowed opacity-40',
+                  )}
+                >
+                  <Spinner icon={RefreshCw} size={14} strokeWidth={2} spinning={props.isReconnecting} />
+                </button>
+              </span>
+            </Tip>
           </div>
           <div className="mt-1 text-12 leading-[1.6] text-[var(--settings-section-desc)]">
             {t('settings.feishuBot.connected.note')}

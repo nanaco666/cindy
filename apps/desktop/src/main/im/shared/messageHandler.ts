@@ -19,6 +19,12 @@
 import type { ChannelIM, IMMessageEvent } from 'lizi-im';
 
 import { createLogger } from '../../logger';
+import {
+  captureImAccountGeneration,
+  isImAccountScopeClosedError,
+  runInImAccountGeneration,
+  type ImAccountGeneration,
+} from '../accountBoundary';
 
 import { getControlScope, isInControl } from './controlState';
 import type { ImSlashHandlers } from './slashCommands';
@@ -47,7 +53,11 @@ export function createMessageHandler(
   /** Per-user serial lock — same shape as legacy messageRouter.turnLocks. */
   const userLocks = new Map<string, Promise<void>>();
 
-  async function processOne(im: ChannelIM, event: IMMessageEvent): Promise<void> {
+  async function processOne(
+    im: ChannelIM,
+    event: IMMessageEvent,
+    accountGeneration: ImAccountGeneration,
+  ): Promise<void> {
     log.info(
       `processOne sender=...${event.senderId.slice(-8)} chat=...${event.chatId.slice(-8)} ` +
         `textLen=${event.text.length} att=${event.attachments.length} unsupported=${event.unsupported.length}`,
@@ -63,8 +73,7 @@ export function createMessageHandler(
     // 到各自独立 session, 与选择流程的原子性无关, 放行。
     const blockedByControl = threadScoped
       ? isInControl(event.contextId, event.senderId) &&
-        (!event.threadTs ||
-          event.threadTs === getControlScope(event.contextId, event.senderId))
+        (!event.threadTs || event.threadTs === getControlScope(event.contextId, event.senderId))
       : isInControl(event.contextId, event.senderId);
     if (blockedByControl) {
       log.info(
@@ -112,11 +121,7 @@ export function createMessageHandler(
     }
 
     // ── slash command (only on plain text, no attachments) ──────────────────
-    if (
-      event.text &&
-      event.attachments.length === 0 &&
-      looksLikeSlashCommand(event.text)
-    ) {
+    if (event.text && event.attachments.length === 0 && looksLikeSlashCommand(event.text)) {
       try {
         await slash.handleSlashCommand(event.text, {
           botContextId: event.contextId,
@@ -171,6 +176,18 @@ export function createMessageHandler(
         attachments: event.attachments,
         // threadScoped 渠道: scopeKey = thread root ts(thread = session 路由键)
         scopeKey: threadScoped ? event.scopeKey : undefined,
+        // Title generation and similar detached work must stay visible to the
+        // same account drain without delaying the foreground message dispatch.
+        trackBackgroundTask: (operation) => {
+          void runInImAccountGeneration(accountGeneration, operation).catch((err) => {
+            if (isImAccountScopeClosedError(err)) {
+              log.info(`drop background task from stale account generation channel=${channel}`);
+              return;
+            }
+            const msg = err instanceof Error ? err.message : String(err);
+            log.warn(`account-scoped background task failed (non-fatal): ${msg}`);
+          });
+        },
       });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -187,6 +204,13 @@ export function createMessageHandler(
 
   return function attachMessageHandler(im: ChannelIM): () => void {
     return im.onMessage((event) => {
+      // Capture synchronously, before entering the per-user queue. A boolean
+      // check at execution time could accept old-account work after relogin.
+      const accountGeneration = captureImAccountGeneration();
+      if (accountGeneration === null) {
+        log.info(`drop inbound message after account boundary closed channel=${channel}`);
+        return;
+      }
       // threadScoped 渠道: 同 thread 串行、跨 thread 并行(scopeKey 进锁键);
       // feishu scopeKey 恒 undefined — 键多一个冒号后缀, 行为不变。
       const key = `${event.contextId}:${event.senderId}:${threadScoped ? (event.scopeKey ?? '') : ''}`;
@@ -196,7 +220,13 @@ export function createMessageHandler(
           /* prior turn failure should not block subsequent messages */
         })
         .then(() =>
-          processOne(im, event).catch((err) => {
+          runInImAccountGeneration(accountGeneration, () =>
+            processOne(im, event, accountGeneration),
+          ).catch((err) => {
+            if (isImAccountScopeClosedError(err)) {
+              log.info(`drop inbound message from stale account generation channel=${channel}`);
+              return;
+            }
             const msg = err instanceof Error ? err.message : String(err);
             log.error(`processOne threw: ${msg}`);
           }),

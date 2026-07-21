@@ -86,6 +86,19 @@ class SqliteBindingStore implements BindingStore<string> {
     log.info(`preload loaded ${rows.length} im_bindings`);
   }
 
+  /**
+   * Drop account-scoped in-memory indexes without touching persisted rows.
+   * The next logged-in account must preload from its own DbClient rather than
+   * inheriting the previous account's bindings or the `preloaded` sentinel.
+   */
+  resetRuntime(): void {
+    this.forward.clear();
+    this.reverse.clear();
+    this.attachCardIds.clear();
+    this.preloaded = false;
+    log.info('runtime binding indexes reset');
+  }
+
   get(identity: IdentityKey): string | null {
     return this.forward.get(keyOf(identity)) ?? null;
   }

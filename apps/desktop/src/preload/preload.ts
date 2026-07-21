@@ -1141,6 +1141,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     save: (payload: { appId: string; appSecret: string }): Promise<{
       verdict: 'connected' | 'conflict' | 'error';
     }> => ipcRenderer.invoke('feishuBot:save', payload),
+    reconnect: (): Promise<{ verdict: 'connected' | 'conflict' | 'error' }> =>
+      ipcRenderer.invoke('feishuBot:reconnect'),
     clear: (): Promise<{ ok: true }> => ipcRenderer.invoke('feishuBot:clear'),
     setLifecycleAnnouncement: (enabled: boolean): Promise<{ ok: true }> =>
       ipcRenderer.invoke('feishuBot:set-lifecycle-announcement', { enabled }),

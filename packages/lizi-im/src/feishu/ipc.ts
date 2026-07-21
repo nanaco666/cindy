@@ -29,6 +29,40 @@ import type { FeishuPublicState } from './internal-types.js';
 let registered = false;
 let registrationRunId = 0;
 
+interface CapturedAccountScope {
+  guarded: boolean;
+  token: unknown | null;
+}
+
+function captureAccountScope(): CapturedAccountScope {
+  const accountScope = getHost().accountScope;
+  return accountScope
+    ? { guarded: true, token: accountScope.capture() }
+    : { guarded: false, token: null };
+}
+
+function isAccountScopeCurrent(scope: CapturedAccountScope): boolean {
+  if (!scope.guarded) return true;
+  return scope.token !== null && Boolean(getHost().accountScope?.isCurrent(scope.token));
+}
+
+async function runInAccountScope<T>(
+  scope: CapturedAccountScope,
+  operation: () => Promise<T>,
+): Promise<T> {
+  if (!scope.guarded) return operation();
+  const accountScope = getHost().accountScope;
+  if (!accountScope || scope.token === null) {
+    throw new Error('[IM_NOT_READY] IM account is not active');
+  }
+  return accountScope.run(scope.token, operation);
+}
+
+/** Invalidate any background registration before account transport shutdown. */
+export function cancelAppRegistration(): void {
+  registrationRunId += 1;
+}
+
 export function registerFeishuIpc(): void {
   if (registered) return;
   registered = true;
@@ -49,7 +83,10 @@ export function registerFeishuIpc(): void {
     ) {
       throw new Error('[INVALID_PAYLOAD] appId and appSecret required');
     }
-    return saveAndConnect(p.appId.trim(), p.appSecret.trim());
+    const appId = p.appId.trim();
+    const appSecret = p.appSecret.trim();
+    const accountScope = captureAccountScope();
+    return runInAccountScope(accountScope, () => saveAndConnect(appId, appSecret));
   });
 
   host.ipc.handle('feishuBot:clear', async () => {
@@ -68,9 +105,25 @@ export function registerFeishuIpc(): void {
   host.ipc.handle('feishuBot:registration-begin', async () => {
     registrationRunId++;
     const runId = registrationRunId;
+    const accountScope = captureAccountScope();
+    if (!isAccountScopeCurrent(accountScope)) {
+      return { ok: false, error: '[IM_NOT_READY] IM account is not active' };
+    }
     try {
       const begin = await requestAppRegistration(host.httpPostForm, 'feishu');
-      pollRegistrationInBackground(runId, begin.deviceCode, begin.interval, begin.expiresIn);
+      if (runId !== registrationRunId || !isAccountScopeCurrent(accountScope)) {
+        return {
+          ok: false,
+          error: '[IM_NOT_READY] IM account changed during registration',
+        };
+      }
+      pollRegistrationInBackground(
+        runId,
+        begin.deviceCode,
+        begin.interval,
+        begin.expiresIn,
+        accountScope,
+      );
       return { ok: true, ...begin };
     } catch (err) {
       const error = err instanceof Error ? err.message : String(err);
@@ -80,8 +133,10 @@ export function registerFeishuIpc(): void {
   });
 
   host.ipc.handle('feishuBot:registration-cancel', async () => {
-    registrationRunId++;
-    host.ipc.broadcast('feishuBot:registration-status', { status: 'cancelled' });
+    cancelAppRegistration();
+    host.ipc.broadcast('feishuBot:registration-status', {
+      status: 'cancelled',
+    });
     return { ok: true };
   });
 
@@ -124,38 +179,65 @@ export async function saveAndConnect(
   return { verdict };
 }
 
+/** Restart the saved WebSocket connection without changing credentials or owner binding. */
+export async function reconnectSavedCredentials(): Promise<{
+  verdict: 'connected' | 'conflict' | 'error';
+}> {
+  const creds = storage.readCredentials();
+  if (!creds) {
+    throw new Error('[NO_CREDENTIALS] Feishu bot credentials are not configured');
+  }
+  await wsClient.stop();
+  const verdict = await wsClient.start(creds);
+  return { verdict };
+}
+
 async function pollRegistrationInBackground(
   runId: number,
   deviceCode: string,
   interval: number,
   expiresIn: number,
+  accountScope: CapturedAccountScope,
 ): Promise<void> {
   const host = getHost();
   const log = getLog();
   const deadline = Date.now() + expiresIn * 1000;
   let currentInterval = Math.max(interval, 1);
 
-  while (Date.now() < deadline && runId === registrationRunId) {
+  while (
+    Date.now() < deadline &&
+    runId === registrationRunId &&
+    isAccountScopeCurrent(accountScope)
+  ) {
     await delay(currentInterval * 1000);
-    if (runId !== registrationRunId) return;
+    if (runId !== registrationRunId || !isAccountScopeCurrent(accountScope)) return;
 
     let result: AppRegistrationPollResult;
     try {
       result = await pollAppRegistration(host.httpPostForm, 'feishu', deviceCode, currentInterval);
     } catch (err) {
+      if (runId !== registrationRunId || !isAccountScopeCurrent(accountScope)) return;
       const error = err instanceof Error ? err.message : String(err);
-      host.ipc.broadcast('feishuBot:registration-status', { status: 'error', error });
+      host.ipc.broadcast('feishuBot:registration-status', {
+        status: 'error',
+        error,
+      });
       return;
     }
+    if (runId !== registrationRunId || !isAccountScopeCurrent(accountScope)) return;
 
     if (result.status === 'pending') {
-      host.ipc.broadcast('feishuBot:registration-status', { status: 'pending' });
+      host.ipc.broadcast('feishuBot:registration-status', {
+        status: 'pending',
+      });
       continue;
     }
 
     if (result.status === 'slow_down') {
       currentInterval = result.interval;
-      host.ipc.broadcast('feishuBot:registration-status', { status: 'pending' });
+      host.ipc.broadcast('feishuBot:registration-status', {
+        status: 'pending',
+      });
       continue;
     }
 
@@ -179,11 +261,24 @@ async function pollRegistrationInBackground(
         return;
       }
 
-      if (success.ownerOpenId) {
-        storage.writeOwnerOpenId(success.ownerOpenId);
-        ownerGuard.loadFromDisk();
+      let verdict: 'connected' | 'conflict' | 'error';
+      try {
+        ({ verdict } = await runInAccountScope(accountScope, async () => {
+          if (success.ownerOpenId) {
+            storage.writeOwnerOpenId(success.ownerOpenId);
+            ownerGuard.loadFromDisk();
+          }
+          return saveAndConnect(success.clientId, success.clientSecret);
+        }));
+      } catch (err) {
+        if (!isAccountScopeCurrent(accountScope)) return;
+        const error = err instanceof Error ? err.message : String(err);
+        host.ipc.broadcast('feishuBot:registration-status', {
+          status: 'error',
+          error,
+        });
+        return;
       }
-      const { verdict } = await saveAndConnect(success.clientId, success.clientSecret);
       host.ipc.broadcast('feishuBot:registration-status', {
         status: 'success',
         appId: success.clientId,
@@ -210,7 +305,7 @@ async function pollRegistrationInBackground(
     }
   }
 
-  if (runId === registrationRunId) {
+  if (runId === registrationRunId && isAccountScopeCurrent(accountScope)) {
     log.info('[feishu/ipc] registration expired');
     host.ipc.broadcast('feishuBot:registration-status', { status: 'expired' });
   }
@@ -221,6 +316,7 @@ function delay(ms: number): Promise<void> {
 }
 
 export async function clearAndDisconnect(): Promise<void> {
+  cancelAppRegistration();
   await wsClient.stop();
   ownerGuard.clear();
   storage.clearAll();
