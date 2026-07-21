@@ -17,7 +17,7 @@ import { eq, ne } from 'drizzle-orm';
 import {
   clearSnapshotRef,
   getRestorableAutoStashSha,
-  getSnapshotSha,
+  getRestorableSnapshotSha,
   markSnapshotConsumed,
 } from './dirty';
 import { gitExec, GitExecError } from './gitExec';
@@ -136,8 +136,6 @@ async function readWorktreeOwnerSessionId(worktreePath: string): Promise<string 
   if (!worktreeKey) return null;
 
   const registeredOwner = store.getAll().find((meta) => pathKey(meta.path) === worktreeKey);
-  if (registeredOwner) return registeredOwner.sessionId;
-
   const db = getDbClient().drizzle;
   const rows = await db
     .select({
@@ -147,6 +145,11 @@ async function readWorktreeOwnerSessionId(worktreePath: string): Promise<string 
     })
     .from(sessions)
     .where(ne(sessions.status, 'deleted'));
+  if (registeredOwner && rows.some((row) => (
+    row.id === registeredOwner.sessionId && row.status !== 'deleted'
+  ))) {
+    return registeredOwner.sessionId;
+  }
   const matchingRows = rows.filter((row) => (
     row.status !== 'deleted' && pathKey(row.worktreePath) === worktreeKey
   ));
@@ -229,7 +232,7 @@ async function findPendingSnapshot(
   sessionId: string,
   worktreeName: string,
 ): Promise<{ sha: string; source: 'snapshot' | 'stash' } | null> {
-  const snapshotSha = await getSnapshotSha(baseRepo, sessionId);
+  const snapshotSha = await getRestorableSnapshotSha(baseRepo, sessionId);
   if (snapshotSha) return { sha: snapshotSha, source: 'snapshot' };
   const fallbackStashSha = await getRestorableAutoStashSha(baseRepo, sessionId, worktreeName);
   if (fallbackStashSha) return { sha: fallbackStashSha, source: 'stash' };

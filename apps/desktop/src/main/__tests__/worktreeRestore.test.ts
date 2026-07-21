@@ -121,6 +121,7 @@ describe('worktree restore', () => {
     const meta = { sessionId: 'owner', path: wtPath };
     storeGetMock.mockImplementation((sessionId: string) => sessionId === 'owner' ? meta : null);
     storeGetAllMock.mockReturnValue([meta]);
+    dbOwnerRows = [{ id: 'owner', worktreePath: null, status: 'active' }];
     gitExecMock.mockImplementation(async (args: string[]) => {
       if (args[0] === 'rev-parse' && args.includes('refs/xdt/snapshots/owner')) {
         return { stdout: `${SHA}\n`, stderr: '' };
@@ -188,6 +189,32 @@ describe('worktree restore', () => {
       's1',
       expect.objectContaining({ sessionId: 's1', path: wtPath, branch: 'xdt/wt1' }),
     );
+  });
+
+  it('present directory ignores a consumed snapshot ref left behind after apply', async () => {
+    fsSync.mkdirSync(wtPath, { recursive: true });
+    gitExecMock.mockImplementation(async (args: string[]) => {
+      if (args[0] === 'rev-parse' && (
+        args.includes('refs/xdt/snapshots/s1')
+        || args.includes('refs/xdt/snapshots-consumed/s1')
+      )) {
+        return { stdout: `${SHA}\n`, stderr: '' };
+      }
+      return { stdout: '', stderr: '' };
+    });
+
+    await expect(mod.getWorktreeRestoreStatus('s1')).resolves.toEqual({
+      state: 'present',
+      worktreePath: wtPath,
+      hasSnapshot: false,
+    });
+    await expect(mod.restoreWorktreeForSession('s1')).resolves.toEqual({
+      ok: true,
+      snapshotApplied: true,
+    });
+
+    const calls = gitExecMock.mock.calls.map(argsOf);
+    expect(calls.some((args) => args[0] === 'stash' && args[1] === 'apply')).toBe(false);
   });
 
   it('local and origin tracking branches missing → gone', async () => {
@@ -389,6 +416,9 @@ describe('worktree restore', () => {
   it('send-time check ignores deleted historical owners for a reused managed path', async () => {
     fsSync.mkdirSync(wtPath, { recursive: true });
     dbWorktreePath = null;
+    const deletedMeta = { sessionId: 'deleted-owner', path: wtPath };
+    storeGetMock.mockImplementation((sessionId: string) => sessionId === 'deleted-owner' ? deletedMeta : null);
+    storeGetAllMock.mockReturnValue([deletedMeta]);
     dbOwnerRows = [{ id: 'deleted-owner', worktreePath: wtPath, status: 'deleted' }];
     gitExecMock.mockImplementation(async (args: string[]) => {
       if (args[0] === 'rev-parse' && args.includes('refs/xdt/snapshots/deleted-owner')) {
