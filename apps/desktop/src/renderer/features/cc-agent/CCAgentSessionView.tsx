@@ -1843,7 +1843,7 @@ export function CCAgentSessionView({
         });
       });
     return true;
-  }, [fastMode, insertSystemCard, session, sessionId, t, updateSystemCardData]);
+  }, [fastMode, insertSystemCard, remoteDeviceId, session, sessionId, t, updateSystemCardData]);
 
   const handleSend = useCallback(
     async (

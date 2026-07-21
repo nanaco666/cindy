@@ -6225,6 +6225,7 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
     if (!settingsState.value.maker) {
       await applyNativeMemorySettingsToRuntime(maker, settingsState.value);
     }
+    await restartCodexAfterAuthModeChange();
     return {
       ...result,
       isCustomized: settingsState.isCustomized,
