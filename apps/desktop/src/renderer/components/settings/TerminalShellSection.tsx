@@ -18,7 +18,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import * as Select from '@radix-ui/react-select';
-import { Check, ChevronDown } from 'lucide-react';
+import { Check, ChevronDown, ChevronUp } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { cn } from '@/lib/utils';
@@ -156,9 +156,13 @@ export function TerminalShellSection() {
               sideOffset={4}
               className={cn(
                 'z-[10010] w-[var(--radix-select-trigger-width)] overflow-hidden rounded-xl border p-1',
+                'max-h-[min(15rem,var(--radix-select-content-available-height))]',
                 'border-[var(--cmd-palette-border)] bg-[var(--cmd-palette-bg)]',
               )}
             >
+              <Select.ScrollUpButton className="flex h-5 items-center justify-center text-[var(--settings-section-desc)]">
+                <ChevronUp size={14} />
+              </Select.ScrollUpButton>
               <Select.Viewport>
                 <ShellOption value="auto" label={autoLabel} />
                 {shells.map((shell) => (
@@ -166,9 +170,16 @@ export function TerminalShellSection() {
                 ))}
                 {/* 用户上次选的 shell 当前不可用(卸了)时,仍要显示让用户可以切回 auto */}
                 {unavailablePref ? (
-                  <ShellOption value={unavailablePref} label={unavailablePref} />
+                  <ShellOption
+                    value={unavailablePref}
+                    label={t('settings.terminalShell.unavailable', { shell: unavailablePref })}
+                    unavailable
+                  />
                 ) : null}
               </Select.Viewport>
+              <Select.ScrollDownButton className="flex h-5 items-center justify-center text-[var(--settings-section-desc)]">
+                <ChevronDown size={14} />
+              </Select.ScrollDownButton>
             </Select.Content>
           </Select.Portal>
         </Select.Root>
@@ -177,14 +188,23 @@ export function TerminalShellSection() {
   );
 }
 
-/** Radix shell option row;统一键盘高亮、选中指示和主题 token。 */
-function ShellOption({ value, label }: { value: ShellId; label: string }) {
+/** Radix shell option row;统一键盘高亮、选中指示、失效提示和主题 token。 */
+function ShellOption({
+  value,
+  label,
+  unavailable = false,
+}: {
+  value: ShellId;
+  label: string;
+  unavailable?: boolean;
+}) {
   return (
     <Select.Item
       value={value}
       className={cn(
         'flex w-full cursor-pointer select-none items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-12 outline-none',
         'text-[var(--settings-input-text)] data-[highlighted]:bg-[var(--surface-hover)]',
+        unavailable && 'text-[var(--settings-section-desc)]',
       )}
     >
       <Select.ItemText>{label}</Select.ItemText>

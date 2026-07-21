@@ -1437,6 +1437,7 @@
       "description": "Use this shell when opening a new sidebar terminal tab.",
       "auto": "Automatic",
       "autoWithTarget": "Automatic ({{target}})",
+      "unavailable": "{{shell}} (Unavailable)",
       "card": {
         "label": "Default shell",
         "description": "Changing the default only applies to new terminal tabs. Existing terminals are not affected.",

@@ -1402,6 +1402,7 @@
       "description": "新建侧栏终端 tab 时使用此 shell。",
       "auto": "自动选择",
       "autoWithTarget": "自动选择 ({{target}})",
+      "unavailable": "{{shell}} (不可用)",
       "card": {
         "label": "默认 shell",
         "description": "修改默认只影响新建的终端 tab,已有 tab 不受影响。",

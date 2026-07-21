@@ -7,8 +7,10 @@ import type { AvailableShell, ShellId } from '../../../../shared/terminal-bridge
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
-    t: (key: string, params?: { target?: string }) =>
-      params?.target ? `${key}:${params.target}` : key,
+    t: (key: string, params?: { target?: string; shell?: string }) => {
+      const value = params?.target ?? params?.shell;
+      return value ? `${key}:${value}` : key;
+    },
   }),
 }));
 
@@ -143,9 +145,13 @@ describe('TerminalShellSection', () => {
 
     render(<TerminalShellSection />);
 
-    expect((await screen.findByRole('combobox')).textContent).toContain('fish');
+    expect((await screen.findByRole('combobox')).textContent).toContain(
+      'settings.terminalShell.unavailable:fish',
+    );
     await openSelect();
-    expect(screen.getByRole('option', { name: 'fish' })).toBeTruthy();
+    expect(
+      screen.getByRole('option', { name: 'settings.terminalShell.unavailable:fish' }),
+    ).toBeTruthy();
   });
 
   it('persists a shell selected from the Radix menu', async () => {

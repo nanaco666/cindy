@@ -1437,6 +1437,7 @@
       "description": "사이드바에서 새 터미널 탭을 열 때 이 셸을 사용합니다.",
       "auto": "자동 선택",
       "autoWithTarget": "자동 선택 ({{target}})",
+      "unavailable": "{{shell}} (사용 불가)",
       "card": {
         "label": "기본 셸",
         "description": "기본값을 변경해도 새 터미널 탭에만 적용되며 기존 터미널은 영향을 받지 않습니다.",
