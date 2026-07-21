@@ -64,9 +64,14 @@ function deepDeleteToolUseProviderSpecificFields(node: unknown): number {
   }
   if (!isPlainObject(node)) return 0;
 
-  if (node.type === 'tool_use' && 'provider_specific_fields' in node) {
-    delete node.provider_specific_fields;
-    removed += 1;
+  if (node.type === 'tool_use') {
+    if ('provider_specific_fields' in node) {
+      delete node.provider_specific_fields;
+      removed += 1;
+    }
+    // tool input is opaque user data. It may itself contain objects shaped like
+    // Anthropic content blocks, so never recurse below an actual tool_use block.
+    return removed;
   }
   for (const key of Object.keys(node)) {
     removed += deepDeleteToolUseProviderSpecificFields(node[key]);
@@ -407,7 +412,7 @@ const IMAGE_GENERATION_WITHOUT_ID_RE =
   /image generation items without [`']?id[`']? are not supported/i;
 
 const TOOL_USE_PROVIDER_SPECIFIC_FIELDS_RE =
-  /provider_specific_fields[\s\S]*extra inputs are not permitted|extra inputs are not permitted[\s\S]*provider_specific_fields/i;
+  /\.tool_use\.provider_specific_fields[^"\r\n|]*extra inputs are not permitted|extra inputs are not permitted[^"\r\n|]*\.tool_use\.provider_specific_fields/i;
 
 /**
  * invalid_encrypted_content 恢复规则: 剥掉请求体里所有 encrypted_content 重发。

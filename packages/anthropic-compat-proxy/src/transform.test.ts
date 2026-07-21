@@ -77,7 +77,13 @@ describe('stripToolUseProviderSpecificFieldsFromBody', () => {
               type: 'tool_use',
               id: 'toolu_1',
               name: 'Bash',
-              input: { provider_specific_fields: 'keep-as-tool-input' },
+              input: {
+                provider_specific_fields: 'keep-as-tool-input',
+                serializedBlock: {
+                  type: 'tool_use',
+                  provider_specific_fields: 'keep-nested-business-value',
+                },
+              },
               provider_specific_fields: null,
             },
           ],
@@ -93,7 +99,13 @@ describe('stripToolUseProviderSpecificFieldsFromBody', () => {
       type: 'tool_use',
       id: 'toolu_1',
       name: 'Bash',
-      input: { provider_specific_fields: 'keep-as-tool-input' },
+      input: {
+        provider_specific_fields: 'keep-as-tool-input',
+        serializedBlock: {
+          type: 'tool_use',
+          provider_specific_fields: 'keep-nested-business-value',
+        },
+      },
     });
   });
 
@@ -410,6 +422,10 @@ describe('recovery rule factories', () => {
     expect(rule.enabled()).toBe(true);
     expect(rule.match('messages.2.content.0.tool_use.provider_specific_fields: Extra inputs are not permitted')).toBe(true);
     expect(rule.match('messages.2.content.0.tool_use.name: Extra inputs are not permitted')).toBe(false);
+    expect(rule.match(JSON.stringify([
+      { message: 'messages.2.content.0.tool_use.provider_specific_fields: unexpected value' },
+      { message: 'messages.2.content.1.name: Extra inputs are not permitted' },
+    ]))).toBe(false);
     expect(
       rule.strip(buf({ messages: [{ role: 'assistant', content: [{ type: 'tool_use', provider_specific_fields: null }] }] })),
     ).not.toBeNull();
