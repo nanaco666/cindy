@@ -395,6 +395,10 @@ import {
   writeWindowsCloseBehavior,
 } from './window-behavior-settings-store.js';
 import {
+  hideWindowToWindowsTray,
+  requestWindowsTrayQuit,
+} from './windowsTrayLifecycle.js';
+import {
   isWindowsCloseBehavior,
   WINDOW_BEHAVIOR_CHOOSE_WINDOWS_CLOSE_BEHAVIOR_CHANNEL,
   WINDOW_BEHAVIOR_GET_WINDOWS_CLOSE_BEHAVIOR_CHANNEL,
@@ -1411,10 +1415,37 @@ function updateWindowsTrayMenu(): void {
       { type: 'separator' },
       {
         label: t('settings.windowBehavior.trayMenu.quit'),
-        click: () => app.quit(),
+        click: () => quitFromWindowsTray(),
       },
     ]),
   );
+}
+
+function quitFromWindowsTray(): void {
+  requestWindowsTrayQuit({
+    hasActiveTurn: () => {
+      try {
+        return anySessionInTurn(getMakerCore());
+      } catch {
+        // A failed busy probe must not turn the tray into an unguarded exit path.
+        return true;
+      }
+    },
+    confirmQuit: () => dialog.showMessageBoxSync({
+      type: 'warning',
+      title: t('titleBar.closeConfirm.title'),
+      message: t('titleBar.closeConfirm.title'),
+      detail: t('titleBar.closeConfirm.description'),
+      buttons: [
+        t('titleBar.closeConfirm.cancel'),
+        t('titleBar.closeConfirm.confirm'),
+      ],
+      defaultId: 0,
+      cancelId: 0,
+      noLink: true,
+    }) === 1,
+    quit: () => app.quit(),
+  });
 }
 
 function destroyWindowsTray(): void {
@@ -1450,7 +1481,7 @@ function ensureWindowsTray(): boolean {
 
 function hideMainWindowToWindowsTray(mainWindow: BrowserWindow): void {
   if (ensureWindowsTray()) {
-    mainWindow.hide();
+    hideWindowToWindowsTray(mainWindow);
     return;
   }
   dialog.showMessageBoxSync(mainWindow, {
@@ -2511,9 +2542,11 @@ ipcMain.on('theme:apply-vibrancy', (_event, payload: { familyId: string; isDark:
     windowManualDrag.stop(win);
   });
   // 关闭语义按窗口区分:
-  //  - 主窗(或解析不到 sender 的兜底): 自定义 X 语义是"退出 app", 走 app.quit() 才能
-  //    trigger before-quit → disposer chain, 把 codex 子进程 / im / db 等都收掉; 否则
-  //    voice overlay 这种 hidden BrowserWindow 还活着, window-all-closed 不 fire, 残留进程。
+  //  - 主窗(Windows): 走 win.close() 触发 close handler,由 handler 决定托盘隐藏或退出。
+  //  - 主窗(或解析不到 sender 的兜底,Windows 之外): 自定义 X 语义是"退出 app",
+  //    走 app.quit() 才能 trigger before-quit → disposer chain,把 codex 子进程 / im / db
+  //    等都收掉;否则 voice overlay 这种 hidden BrowserWindow 还活着,window-all-closed
+  //    不 fire,残留进程。
   //  - 「在新窗口打开」的副窗: 只关自己, 不退出 app(会话活在主进程, 不受影响)。
   ipcMain.on('window-close', (event) => {
     const win = BrowserWindow.fromWebContents(event.sender);
