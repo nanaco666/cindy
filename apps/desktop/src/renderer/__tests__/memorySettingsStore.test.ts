@@ -110,6 +110,31 @@ describe('memorySettingsStore', () => {
     expect(getMakerMemoryEnabled()).toBe(false);
   });
 
+  it('syncs a persisted Maker opt-out before the main view can create sessions', async () => {
+    vi.stubGlobal('localStorage', createStorage());
+    const preserveLegacy = vi.fn();
+    vi.stubGlobal('window', {
+      electronAPI: {
+        maker: {
+          memoryGetSettings: vi.fn().mockResolvedValue({
+            maker: false,
+            claudeCode: true,
+            codex: true,
+          }),
+          memoryPreserveLegacyMakerDisabled: preserveLegacy,
+        },
+      },
+    });
+    const { bootstrapMemorySettingsFromMain, getMakerMemoryEnabled } = await import(
+      '@/lib/memorySettingsStore'
+    );
+
+    await bootstrapMemorySettingsFromMain();
+
+    expect(preserveLegacy).not.toHaveBeenCalled();
+    expect(getMakerMemoryEnabled()).toBe(false);
+  });
+
   it('does not overwrite a user write that happens while bootstrap is pending', async () => {
     vi.stubGlobal('localStorage', createStorage(true));
     let resolveSettings!: (settings: {

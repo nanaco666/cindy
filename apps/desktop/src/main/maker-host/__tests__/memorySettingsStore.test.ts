@@ -73,6 +73,23 @@ describe('memory-settings-store', () => {
     });
   });
 
+  it('preserves a legacy per-entry opt-out without a renderer marker', async () => {
+    fs.writeFileSync(
+      path.join(userDataDir, 'memory-settings.json'),
+      JSON.stringify({ claudeCode: false }),
+      'utf-8',
+    );
+    const { preserveLegacyMakerMemoryDisabled, readMemorySettingsState } = await import(
+      '../memory-settings-store.js'
+    );
+
+    expect(preserveLegacyMakerMemoryDisabled(null).maker).toBe(false);
+    expect(readMemorySettingsState()).toMatchObject({
+      value: { maker: false, claudeCode: false, codex: true },
+      customizedKeys: ['claudeCode', 'maker'],
+    });
+  });
+
   it('does not treat native memories as legacy opt-out after Maker was enabled', async () => {
     fs.writeFileSync(
       path.join(userDataDir, 'memory-settings.json'),

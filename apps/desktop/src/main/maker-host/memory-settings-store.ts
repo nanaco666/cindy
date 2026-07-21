@@ -89,14 +89,14 @@ export function writeMemorySetting<K extends keyof MemorySettings>(
 }
 
 /**
- * 把旧版“所有记忆均关闭”的用户意图迁成新默认下的 `maker:false` override。
+ * 把旧版任一入口明确关闭记忆的用户意图迁成新默认下的 `maker:false` override。
  *
  * 旧默认值为 false 时有两种合法遗留态:
  *  - renderer localStorage 明确保留 `false`;
- *  - 用户从未切换 Maker，但把 Claude/Codex 原生记忆都关闭，磁盘仅有两个 false。
+ *  - 用户从未切换 Maker，但关闭了 Claude/Codex 任一原生记忆，磁盘至少有一个 false。
  *
- * `legacyRendererValue=null` 表示旧 renderer marker 缺失。只有此时才用原生记忆双关
- * 作为 legacy 证据；marker=true 表示用户曾明确开启 Maker，不能被双关状态覆盖。
+ * `legacyRendererValue=null` 表示旧 renderer marker 缺失。只有此时才用任一原生记忆
+ * 关闭作为 legacy 证据；marker=true 表示用户曾明确开启 Maker，不能被原生设置覆盖。
  * 已存在 maker override 时始终保持 main 端事实源。
  */
 export function preserveLegacyMakerMemoryDisabled(
@@ -104,11 +104,10 @@ export function preserveLegacyMakerMemoryDisabled(
 ): MemorySettings {
   const state = store.readState();
   if (state.customizedKeys.includes('maker')) return state.value;
-  const nativeMemoriesWereExplicitlyDisabled =
+  const nativeMemoryWasExplicitlyDisabled =
     legacyRendererValue === null &&
-    state.value.claudeCode === false &&
-    state.value.codex === false;
-  if (legacyRendererValue !== false && !nativeMemoriesWereExplicitlyDisabled) {
+    (state.value.claudeCode === false || state.value.codex === false);
+  if (legacyRendererValue !== false && !nativeMemoryWasExplicitlyDisabled) {
     return state.value;
   }
   return writeMemorySetting('maker', false).value;
