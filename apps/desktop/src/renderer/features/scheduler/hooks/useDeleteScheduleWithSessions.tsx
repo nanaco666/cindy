@@ -328,7 +328,7 @@ function DeleteScheduleWithSessionsDialog({
                     'transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring-soft)]',
                     selected
                       ? 'border-[var(--settings-source-meta)] bg-[var(--chat-input-chip-bg)]'
-                      : 'border-[var(--cmd-palette-border)] bg-transparent hover:bg-[var(--update-btn-hover)]',
+                      : 'border-[var(--cmd-palette-border)] bg-transparent hover:bg-[var(--surface-hover)]',
                     loading && 'cursor-default opacity-70',
                   )}
                 >

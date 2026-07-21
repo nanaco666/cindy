@@ -100,7 +100,7 @@ function WhitePillButton({
         'text-sm font-normal',
         'border bg-[var(--cmd-palette-bg)]',
         'border-[var(--confirm-btn-secondary-border)] text-[var(--settings-btn-secondary-text)]',
-        'hover:bg-[var(--update-btn-hover)]',
+        'hover:bg-[var(--surface-hover)]',
         'transition-colors',
       )}
     >

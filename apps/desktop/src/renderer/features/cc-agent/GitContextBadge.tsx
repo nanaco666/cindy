@@ -114,7 +114,7 @@ function PrChip({ prRef, status }: { prRef: SessionPrRef; status: PrStatusResult
           className={cn(
             'inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5',
             'text-xs text-[var(--cmd-palette-item-meta)]',
-            'hover:bg-[var(--update-btn-hover)] hover:text-foreground',
+            'hover:bg-titlebar-button-hover hover:text-foreground',
             'transition-colors focus-visible:outline-none',
           )}
         >
