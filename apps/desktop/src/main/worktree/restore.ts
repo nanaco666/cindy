@@ -12,7 +12,7 @@
 
 import path from 'node:path';
 import fs from 'node:fs/promises';
-import { and, eq, ne } from 'drizzle-orm';
+import { eq, ne } from 'drizzle-orm';
 
 import {
   clearSnapshotRef,
@@ -146,10 +146,7 @@ async function readWorktreeOwnerSessionId(worktreePath: string): Promise<string 
       status: sessions.status,
     })
     .from(sessions)
-    .where(and(
-      eq(sessions.worktreePath, worktreePath),
-      ne(sessions.status, 'deleted'),
-    ));
+    .where(ne(sessions.status, 'deleted'));
   const matchingRows = rows.filter((row) => (
     row.status !== 'deleted' && pathKey(row.worktreePath) === worktreeKey
   ));
@@ -311,7 +308,9 @@ async function finishRestoredWorktree(
 export async function getWorktreeRestoreStatus(sessionId: string): Promise<WorktreeRestoreStatus> {
   let worktreePath: string | null = null;
   try {
-    worktreePath = (await readSessionWorktreeBinding(sessionId))?.worktreePath ?? null;
+    worktreePath = store.get(sessionId)?.path
+      ?? (await readSessionWorktreeBinding(sessionId))?.worktreePath
+      ?? null;
   } catch (err) {
     log.warn(`[restore] session lookup failed for ${sessionId}:`, err instanceof Error ? err.message : String(err));
     return { state: 'no-worktree' };

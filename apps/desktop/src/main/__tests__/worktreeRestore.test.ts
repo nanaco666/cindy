@@ -19,6 +19,7 @@ const { MockGitExecError } = vi.hoisted(() => ({
 }));
 const storeSetMock = vi.fn();
 const storeGetMock = vi.fn();
+const storeGetAllMock = vi.fn();
 const storeDelMock = vi.fn();
 const applyIncludeMock = vi.fn();
 const copyClaudeSiviDirsMock = vi.fn();
@@ -43,7 +44,7 @@ vi.mock('../worktree/worktreeStore', () => ({
   set: (...args: unknown[]) => storeSetMock(...args),
   get: (...args: unknown[]) => storeGetMock(...args),
   del: (...args: unknown[]) => storeDelMock(...args),
-  getAll: () => [],
+  getAll: (...args: unknown[]) => storeGetAllMock(...args),
 }));
 
 vi.mock('../worktree/includePatternsEngine', () => ({
@@ -98,6 +99,7 @@ describe('worktree restore', () => {
     gitExecMock.mockReset().mockResolvedValue({ stdout: '', stderr: '' });
     storeSetMock.mockReset().mockResolvedValue(undefined);
     storeGetMock.mockReset().mockReturnValue(null);
+    storeGetAllMock.mockReset().mockReturnValue([]);
     storeDelMock.mockReset();
     applyIncludeMock.mockReset().mockResolvedValue([]);
     copyClaudeSiviDirsMock.mockReset().mockResolvedValue(undefined);
@@ -111,6 +113,28 @@ describe('worktree restore', () => {
   it('no worktree_path in DB → no-worktree', async () => {
     dbWorktreePath = null;
     await expect(mod.getWorktreeRestoreStatus('s1')).resolves.toEqual({ state: 'no-worktree' });
+  });
+
+  it('send-time owner restore uses the store path when its best-effort DB sync is missing', async () => {
+    dbWorktreePath = null;
+    fsSync.mkdirSync(wtPath, { recursive: true });
+    const meta = { sessionId: 'owner', path: wtPath };
+    storeGetMock.mockImplementation((sessionId: string) => sessionId === 'owner' ? meta : null);
+    storeGetAllMock.mockReturnValue([meta]);
+    gitExecMock.mockImplementation(async (args: string[]) => {
+      if (args[0] === 'rev-parse' && args.includes('refs/xdt/snapshots/owner')) {
+        return { stdout: `${SHA}\n`, stderr: '' };
+      }
+      return { stdout: '', stderr: '' };
+    });
+
+    await expect(
+      mod.restoreMissingManagedWorktreeForSession('borrower', wtPath),
+    ).resolves.toBe(true);
+
+    const calls = gitExecMock.mock.calls.map(argsOf);
+    expect(calls).toContainEqual(['stash', 'apply', SHA]);
+    expect(calls).toContainEqual(['update-ref', '-d', 'refs/xdt/snapshots/owner']);
   });
 
   it('non-managed path shape → no-worktree (never touches git)', async () => {
@@ -325,11 +349,12 @@ describe('worktree restore', () => {
 
   it('send-time check applies the owning session snapshot before allowing a non-owner', async () => {
     fsSync.mkdirSync(wtPath, { recursive: true });
+    const equivalentOwnerPath = path.join(path.dirname(wtPath), 'nested', '..', path.basename(wtPath));
     dbBindingRows = [
       { workingDir: wtPath, worktreePath: null },
-      { workingDir: wtPath, worktreePath: wtPath },
+      { workingDir: wtPath, worktreePath: equivalentOwnerPath },
     ];
-    dbOwnerRows = [{ id: 'owner', worktreePath: wtPath, status: 'active' }];
+    dbOwnerRows = [{ id: 'owner', worktreePath: equivalentOwnerPath, status: 'active' }];
     gitExecMock.mockImplementation(async (args: string[]) => {
       if (args[0] === 'rev-parse' && args.includes('refs/xdt/snapshots/owner')) {
         return { stdout: `${SHA}\n`, stderr: '' };
