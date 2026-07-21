@@ -24,14 +24,12 @@ function createCandidate(
 function createDeps(overrides: Partial<OrcaIdleReleaseWatcherDeps> = {}) {
   const session = {
     isTurnRunning: vi.fn(() => false),
-    abort: vi.fn(async () => undefined),
   };
   const deps: OrcaIdleReleaseWatcherDeps = {
     readIdleReleaseMinutes: vi.fn(() => 1),
     listCandidates: vi.fn(async () => [createCandidate()]),
     getSession: vi.fn(() => session),
-    claimRelease: vi.fn(async () => true),
-    rollbackRelease: vi.fn(async () => undefined),
+    markReleased: vi.fn(async () => true),
     touchWorker: vi.fn(async () => undefined),
     closeSession: vi.fn(async () => undefined),
     broadcastWorkerChanged: vi.fn(),
@@ -59,23 +57,22 @@ describe('createOrcaIdleReleaseWatcher', () => {
     await watcher.scanNow();
 
     expect(deps.listCandidates).not.toHaveBeenCalled();
-    expect(deps.claimRelease).not.toHaveBeenCalled();
+    expect(deps.markReleased).not.toHaveBeenCalled();
   });
 
   it.each(ORCA_IDLE_RELEASE_STATUSES)(
     'releases an inactive %s worker and broadcasts once',
     async (status) => {
       const candidate = createCandidate({ status });
-      const { deps, session, watcher } = createDeps({
+      const { deps, watcher } = createDeps({
         listCandidates: vi.fn(async () => [candidate]),
       });
 
       await watcher.scanNow();
 
       expect(deps.listCandidates).toHaveBeenCalledWith(60_000);
-      expect(deps.claimRelease).toHaveBeenCalledWith(candidate, 120_000);
-      expect(session.abort).toHaveBeenCalledOnce();
       expect(deps.closeSession).toHaveBeenCalledWith(candidate.sessionId);
+      expect(deps.markReleased).toHaveBeenCalledWith(candidate, 120_000);
       expect(deps.broadcastWorkerChanged).toHaveBeenCalledOnce();
       expect(deps.broadcastWorkerChanged).toHaveBeenCalledWith(candidate.leadSessionId);
       expect(deps.log.info).toHaveBeenCalledWith(
@@ -92,13 +89,12 @@ describe('createOrcaIdleReleaseWatcher', () => {
     await watcher.scanNow();
 
     expect(deps.touchWorker).toHaveBeenCalledWith('worker-1', 120_000);
-    expect(deps.claimRelease).not.toHaveBeenCalled();
-    expect(session.abort).not.toHaveBeenCalled();
+    expect(deps.markReleased).not.toHaveBeenCalled();
     expect(deps.closeSession).not.toHaveBeenCalled();
     expect(deps.broadcastWorkerChanged).not.toHaveBeenCalled();
   });
 
-  it('rolls back the claim when a turn starts during release', async () => {
+  it('delays release when a turn starts after candidate selection', async () => {
     const { deps, session, watcher } = createDeps();
     session.isTurnRunning
       .mockReturnValueOnce(false)
@@ -106,40 +102,36 @@ describe('createOrcaIdleReleaseWatcher', () => {
 
     await watcher.scanNow();
 
-    expect(deps.claimRelease).toHaveBeenCalledOnce();
-    expect(deps.rollbackRelease).toHaveBeenCalledOnce();
     expect(deps.touchWorker).toHaveBeenCalledOnce();
-    expect(session.abort).not.toHaveBeenCalled();
     expect(deps.closeSession).not.toHaveBeenCalled();
+    expect(deps.markReleased).not.toHaveBeenCalled();
     expect(deps.broadcastWorkerChanged).not.toHaveBeenCalled();
   });
 
   it('skips workers that already have a release marker', async () => {
-    const { deps, session, watcher } = createDeps({
+    const { deps, watcher } = createDeps({
       listCandidates: vi.fn(async () => [createCandidate({ idleSince: 90_000 })]),
     });
 
     await watcher.scanNow();
 
-    expect(deps.claimRelease).not.toHaveBeenCalled();
-    expect(session.abort).not.toHaveBeenCalled();
+    expect(deps.markReleased).not.toHaveBeenCalled();
     expect(deps.closeSession).not.toHaveBeenCalled();
     expect(deps.broadcastWorkerChanged).not.toHaveBeenCalled();
   });
 
-  it('does not close or broadcast when another scan already claimed the worker', async () => {
-    const { deps, session, watcher } = createDeps({
-      claimRelease: vi.fn(async () => false),
+  it('does not broadcast when worker state changes before the release marker is written', async () => {
+    const { deps, watcher } = createDeps({
+      markReleased: vi.fn(async () => false),
     });
 
     await watcher.scanNow();
 
-    expect(session.abort).not.toHaveBeenCalled();
-    expect(deps.closeSession).not.toHaveBeenCalled();
+    expect(deps.closeSession).toHaveBeenCalledOnce();
     expect(deps.broadcastWorkerChanged).not.toHaveBeenCalled();
   });
 
-  it('rolls back a claimed release when closing the runtime fails', async () => {
+  it('leaves the worker unmarked and retryable when closing the runtime fails', async () => {
     const { deps, watcher } = createDeps({
       closeSession: vi.fn(async () => {
         throw new Error('close failed');
@@ -148,7 +140,7 @@ describe('createOrcaIdleReleaseWatcher', () => {
 
     await watcher.scanNow();
 
-    expect(deps.rollbackRelease).toHaveBeenCalledOnce();
+    expect(deps.markReleased).not.toHaveBeenCalled();
     expect(deps.broadcastWorkerChanged).not.toHaveBeenCalled();
     expect(deps.log.warn).toHaveBeenCalledWith(
       'idleWatcher: release worker failed',

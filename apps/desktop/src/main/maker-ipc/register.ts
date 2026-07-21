@@ -5146,7 +5146,7 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
         ));
     },
     getSession: (sessionId) => maker.getSession(sessionId) ?? null,
-    claimRelease: async (candidate, releasedAt) => {
+    markReleased: async (candidate, releasedAt) => {
       const claimed = await getDbClient().drizzle
         .update(orcaWorkers)
         .set({ status: 'idle', idleSince: releasedAt, updatedAt: releasedAt })
@@ -5158,20 +5158,6 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
         ))
         .returning({ id: orcaWorkers.id });
       return claimed.length === 1;
-    },
-    rollbackRelease: async (candidate, releasedAt) => {
-      await getDbClient().drizzle
-        .update(orcaWorkers)
-        .set({
-          status: candidate.status,
-          idleSince: null,
-          updatedAt: candidate.updatedAt,
-        })
-        .where(and(
-          eq(orcaWorkers.id, candidate.id),
-          eq(orcaWorkers.status, 'idle'),
-          eq(orcaWorkers.idleSince, releasedAt),
-        ));
     },
     touchWorker: async (workerId, updatedAt) => {
       await getDbClient().drizzle

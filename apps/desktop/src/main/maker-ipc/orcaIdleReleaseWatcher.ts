@@ -16,7 +16,6 @@ export interface OrcaIdleReleaseCandidate {
 /** Runtime session surface used to protect a live turn from background release. */
 export interface OrcaIdleReleaseSession {
   isTurnRunning(): boolean;
-  abort(): Promise<void>;
 }
 
 /** Timer handle abstraction keeps the watcher deterministic under fake timers. */
@@ -30,8 +29,7 @@ export interface OrcaIdleReleaseWatcherDeps {
   readIdleReleaseMinutes(): number;
   listCandidates(updatedBefore: number): Promise<readonly OrcaIdleReleaseCandidate[]>;
   getSession(sessionId: string): OrcaIdleReleaseSession | null;
-  claimRelease(candidate: OrcaIdleReleaseCandidate, releasedAt: number): Promise<boolean>;
-  rollbackRelease(candidate: OrcaIdleReleaseCandidate, releasedAt: number): Promise<void>;
+  markReleased(candidate: OrcaIdleReleaseCandidate, releasedAt: number): Promise<boolean>;
   touchWorker(workerId: string, updatedAt: number): Promise<void>;
   closeSession(sessionId: string): Promise<void>;
   broadcastWorkerChanged(leadSessionId: string): void;
@@ -57,8 +55,8 @@ function isReleaseStatus(status: string): status is OrcaIdleReleaseStatus {
 
 /**
  * Creates the process-level Worker idle watcher. A scan is single-flight, and each
- * candidate is atomically claimed before its runtime is closed so duplicate scans
- * cannot close or broadcast the same release twice.
+ * release marker is written atomically after the runtime closes so failed teardown
+ * remains retryable and duplicate scans cannot broadcast the same release twice.
  */
 export function createOrcaIdleReleaseWatcher(
   deps: OrcaIdleReleaseWatcherDeps,
@@ -85,23 +83,20 @@ export function createOrcaIdleReleaseWatcher(
           continue;
         }
 
-        const releasedAt = deps.now();
-        let claimed = false;
         try {
-          claimed = await deps.claimRelease(candidate, releasedAt);
-          if (!claimed) continue;
-
-          // A turn can start while the DB claim is awaiting; never close that live runtime.
+          // A turn can start while the candidate query is awaiting; never close that live runtime.
           if (session?.isTurnRunning()) {
-            await deps.rollbackRelease(candidate, releasedAt);
             await deps.touchWorker(candidate.id, deps.now());
             continue;
           }
 
           if (session) {
-            await session.abort();
             await deps.closeSession(candidate.sessionId);
           }
+
+          const releasedAt = deps.now();
+          const marked = await deps.markReleased(candidate, releasedAt);
+          if (!marked) continue;
 
           deps.log.info('idleWatcher: released worker', {
             workerId: candidate.id,
@@ -110,9 +105,6 @@ export function createOrcaIdleReleaseWatcher(
           });
           deps.broadcastWorkerChanged(candidate.leadSessionId);
         } catch (err) {
-          if (claimed) {
-            await deps.rollbackRelease(candidate, releasedAt).catch(() => undefined);
-          }
           deps.log.warn('idleWatcher: release worker failed', {
             workerId: candidate.id,
             err: err instanceof Error ? err.message : String(err),
