@@ -18,7 +18,9 @@
  *   - HTTP 明说的 max_input_tokens 单独记账(explicitWindows,随缓存持久化),SDK
  *     通道覆盖时不许把精确窗口打回 1M/200k 猜测值;
  *   - 同一授权世代内失败不清列表(上一次成功结果 + 磁盘缓存是「陈旧的真数据」,
- *     可溯源);登出 / 直接换号都会先清空并删缓存,旧账号结果不得跨世代继承。
+ *     可溯源);登出 / 直接换号都会先清空并删缓存,旧账号结果不得跨世代继承;
+ *   - 成功但**骤减**的快照同样不生效(isDegenerateModelListShrink,质量下限护栏):
+ *     清单无静态兜底,一次退化响应不允许把整个供应商清单打塌。
  *
  * 登录态门控(2026-07-19 对抗性 review P1):两条通道的 apply 都必须以「当前确有
  * Claude.ai OAuth」为前提——SDK 捕获来自本地 CLI 注册表,不需要 Anthropic 凭证也能
@@ -102,6 +104,99 @@ function toEfforts(raw: unknown): Effort[] | null {
   if (!Array.isArray(raw)) return null;
   const out = raw.filter((e): e is Effort => typeof e === 'string' && VALID_EFFORTS.has(e));
   return out;
+}
+
+/**
+ * 退化快照判定(2026-07-21「Anthropic 只剩单条 Fable」事故回归):上游返回**成功但
+ * 骤减**的清单——一次少掉 2 条以上、且掉到不足现值一半——视为退化响应,保留现值
+ * 不覆盖。这是「失败保留现值」之外的质量下限:清单唯一来源是动态发现、无静态兜底,
+ * 一次退化响应会把整个供应商清单打塌。**逐个下架(含 2→1)永远合法**——真实下架是
+ * 渐进的,单步递减不许被永久拦死(review P1);上游真一次腰斩时清单暂时偏旧(多出的
+ * 条目发请求时报错暴露),后续正常快照自愈。纯函数。
+ */
+export function isDegenerateModelListShrink(prevCount: number, nextCount: number): boolean {
+  if (prevCount === 0 || nextCount >= prevCount) return false;
+  if (prevCount - nextCount <= 1) return false;
+  return nextCount < Math.max(2, Math.ceil(prevCount / 2));
+}
+
+/** 连续多少次相同的 HTTP 骤减快照 = 确认为真实下架(收敛放行,防护栏永久卡死)。 */
+const CONFIRMED_SHRINK_STREAK = 3;
+/** 待确认骤减快照的签名(排序 id 集)与连续命中次数。 */
+let httpShrinkSignature: string | null = null;
+let httpShrinkStreak = 0;
+
+function resetHttpShrinkStreak(): void {
+  httpShrinkSignature = null;
+  httpShrinkStreak = 0;
+}
+
+/**
+ * 待确认骤减记账落盘(review P2 二轮:HTTP 刷新只在启动 / OAuth 登录各跑一次,
+ * 记账若只在内存,用户每次重启 streak 都归零,3 次确认永远凑不齐)。写进现有磁盘
+ * 缓存文件的 `pendingShrink` 字段(read-modify-write + 原子 rename,与其它缓存
+ * 写删同队列串行);缓存文件不存在 = 无已确认清单,重启后护栏本就不触发,无需记账。
+ */
+function persistPendingShrink(): void {
+  const state =
+    httpShrinkSignature !== null ? { signature: httpShrinkSignature, streak: httpShrinkStreak } : null;
+  const generation = authGeneration;
+  void enqueueCacheMutation(async () => {
+    if (generation !== authGeneration || !hasClaudeAiOAuth()) return;
+    const file = cacheFilePath();
+    let raw: Record<string, unknown> | null = null;
+    try {
+      const parsed: unknown = JSON.parse(await fsp.readFile(file, 'utf-8'));
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        raw = parsed as Record<string, unknown>;
+      }
+    } catch {
+      /* 缓存缺失 / 损坏:不为记账凭空造缓存 */
+    }
+    if (!raw) return;
+    if (state) raw.pendingShrink = state;
+    else if (raw.pendingShrink === undefined) return; // 无变化不写盘
+    else delete raw.pendingShrink;
+    const temp = `${file}.${process.pid}.${cacheTempSequence += 1}.tmp`;
+    try {
+      await fsp.writeFile(temp, JSON.stringify(raw, null, 2), 'utf-8');
+      if (generation !== authGeneration || !hasClaudeAiOAuth()) return;
+      await fsp.rename(temp, file);
+    } finally {
+      await fsp.rm(temp, { force: true }).catch(() => undefined);
+    }
+  });
+}
+
+/**
+ * HTTP `/v1/models` 快照的骤减收敛记账(review P2:护栏不能把真实批量下架永久拦死):
+ *   - 非骤减 → 直接放行并清零 streak;
+ *   - 骤减 → 记签名(排序 id 集);**连续 CONFIRMED_SHRINK_STREAK 次相同**的骤减快照
+ *     视为上游真实下架,放行收敛;签名变化(上游还在抖)则重新计数。
+ * 记账随磁盘缓存持久化(persistPendingShrink):HTTP 刷新每进程只有启动 / 登录两个
+ * 触发点,跨重启不累计的话收敛永远不会发生——重启后由 loadAnthropicModelsFromDiskCache
+ * 恢复,登出 / 换号随缓存文件一起清除。
+ * 只有 HTTP 通道参与收敛:它是 Anthropic 官方列模型端点,连续一致可作可用性证据;
+ * SDK 捕获(本地 CLI 注册表,正是打塌事故的退化来源)永不收敛,等 HTTP 纠正。
+ */
+export function evaluateHttpShrink(prevCount: number, nextIds: readonly string[]): 'accept' | 'reject' {
+  let verdict: 'accept' | 'reject';
+  if (!isDegenerateModelListShrink(prevCount, nextIds.length)) {
+    resetHttpShrinkStreak();
+    verdict = 'accept';
+  } else {
+    const signature = [...nextIds].sort().join('\n');
+    httpShrinkStreak = signature === httpShrinkSignature ? httpShrinkStreak + 1 : 1;
+    httpShrinkSignature = signature;
+    if (httpShrinkStreak >= CONFIRMED_SHRINK_STREAK) {
+      resetHttpShrinkStreak();
+      verdict = 'accept';
+    } else {
+      verdict = 'reject';
+    }
+  }
+  persistPendingShrink();
+  return verdict;
 }
 
 /** SDK 映射结果:能力字段是条目明说的还是合成默认的(决定合并时是否覆盖已精化条目)。 */
@@ -262,6 +357,10 @@ async function applyModels(
         fetchedAt: new Date().toISOString(),
         models,
         explicitWindows: Object.fromEntries(explicitWindows),
+        // 整份重写不得抹掉跨重启的待确认骤减记账(SDK 每会话都会持久化一次)。
+        ...(httpShrinkSignature !== null
+          ? { pendingShrink: { signature: httpShrinkSignature, streak: httpShrinkStreak } }
+          : {}),
       },
       null,
       2,
@@ -301,6 +400,21 @@ export async function loadAnthropicModelsFromDiskCache(): Promise<void> {
     if (windows && typeof windows === 'object' && !Array.isArray(windows)) {
       for (const [id, win] of Object.entries(windows as Record<string, unknown>)) {
         if (typeof win === 'number' && win > 0) explicitWindows.set(id, win);
+      }
+    }
+    // 恢复待确认骤减记账(跨重启累计,见 persistPendingShrink;坏字段静默忽略)。
+    const pending = (raw as { pendingShrink?: unknown }).pendingShrink;
+    if (pending && typeof pending === 'object' && !Array.isArray(pending)) {
+      const p = pending as { signature?: unknown; streak?: unknown };
+      if (
+        typeof p.signature === 'string' &&
+        p.signature.length > 0 &&
+        typeof p.streak === 'number' &&
+        Number.isInteger(p.streak) &&
+        p.streak > 0
+      ) {
+        httpShrinkSignature = p.signature;
+        httpShrinkStreak = Math.min(p.streak, CONFIRMED_SHRINK_STREAK);
       }
     }
     // 缓存内容出自本模块 mapper,仍做最小结构校验防手改坏文件。
@@ -345,6 +459,19 @@ export function noteAnthropicSdkSupportedModels(raw: unknown): void {
       supportsFastMode: prev.supportsFastMode,
     };
   });
+  // SDK 通道骤减恒拒绝、**不参与收敛**:持续一致的退化 SDK 快照正是打塌事故的形态,
+  // 给 SDK 开 streak 收敛等于把事故门重新打开(真退化会一直一致,streak 必然凑齐)。
+  // 真实批量下架的收敛只认 HTTP 权威通道(evaluateHttpShrink);为了不依赖「下次重启 /
+  // 登录」才仲裁,这里在拒绝的同时主动触发一次 HTTP 刷新(单飞防抖):HTTP 可达时要么
+  // 纠正要么推进收敛 streak;HTTP 持续不可达时保留陈旧超集(fail-visible:多出的条目
+  // 发请求时报错,不会静默丢模型)——两难下的取舍,review P1 讨论定案。
+  if (isDegenerateModelListShrink(lastApplied.length, models.length)) {
+    log.warn(
+      `anthropic SDK capture looks degenerate (${lastApplied.length} -> ${models.length}); keeping current list and consulting HTTP`,
+    );
+    void refreshAnthropicModelsFromHttp().catch(() => undefined);
+    return;
+  }
   log.info(`anthropic models captured from SDK init: ${models.length}`);
   void applyModels(models, true, generation).catch((err) => {
     log.warn('apply anthropic SDK models failed', { error: String(err) });
@@ -401,6 +528,15 @@ export function refreshAnthropicModelsFromHttp(): Promise<void> {
       log.warn('anthropic /v1/models returned no usable models; keeping current list');
       return;
     }
+    // 退化判定必须先于任何状态写入:被拒快照连 explicitWindows 也不许污染,
+    // 否则后续 SDK 捕获会把退化响应带来的窗口值用作精确记账(review P2)。
+    // 连续多次相同的骤减快照经 evaluateHttpShrink 收敛放行(真实批量下架自愈)。
+    if (evaluateHttpShrink(lastApplied.length, mapped.map((m) => m.model.id)) === 'reject') {
+      log.warn(
+        `anthropic /v1/models response looks degenerate (${lastApplied.length} -> ${mapped.length}); keeping current list (streak ${httpShrinkStreak}/${CONFIRMED_SHRINK_STREAK})`,
+      );
+      return;
+    }
     for (const { model, explicitContextWindow } of mapped) {
       if (explicitContextWindow != null) explicitWindows.set(model.id, explicitContextWindow);
     }
@@ -435,6 +571,7 @@ export async function clearAnthropicDiscoveredModels(): Promise<void> {
   const generation = authGeneration + 1;
   authGeneration = generation;
   explicitWindows.clear();
+  resetHttpShrinkStreak();
   await applyModels([], false, generation);
   await enqueueCacheMutation(async () => {
     await fsp.rm(cacheFilePath(), { force: true });
@@ -450,6 +587,7 @@ export function waitForAnthropicDiscoveryIdleForTest(): Promise<void> {
 export function resetAnthropicDiscoveryForTest(): void {
   lastApplied = [];
   explicitWindows.clear();
+  resetHttpShrinkStreak();
   // 不回拨世代:即便测试误留异步任务,旧任务也不会重新获得生效资格。
   authGeneration += 1;
   httpRefreshInflight = null;

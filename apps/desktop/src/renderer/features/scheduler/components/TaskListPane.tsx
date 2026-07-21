@@ -151,7 +151,7 @@ export function TaskListPane({
                 className={cn(
                   'flex h-8 items-center gap-1.5 rounded-md px-1.5',
                   'cursor-pointer text-xs font-medium text-[var(--msg-assistant-text)] transition-colors',
-                  'hover:bg-[var(--update-btn-hover)]',
+                  'hover:bg-[var(--surface-hover)]',
                 )}
                 onClick={() => toggleCollapsed(group.workingDir)}
               >

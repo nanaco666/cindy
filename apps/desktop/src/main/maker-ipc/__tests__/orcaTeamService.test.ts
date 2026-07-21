@@ -51,6 +51,10 @@ describe('findFocusTargetWorker', () => {
     expect(findFocusTargetWorker(workers, 'dev')).toBe(b);
   });
 
+  it('matches the canonical worker label case-insensitively', () => {
+    expect(findFocusTargetWorker(workers, 'DEV')).toBe(b);
+  });
+
   it('prefers id/session_id over a colliding label', () => {
     // label of `a` happens to equal worker_id of `b` → id match wins, no wrong focus.
     const collide = createWorker({ id: 'wid-x', sessionId: 'sid-x', label: 'wid-a' });

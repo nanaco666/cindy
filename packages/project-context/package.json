@@ -4,6 +4,7 @@
   "description": "Agent-maintained project knowledge layer (commit-driven, markdown + frontmatter, generic CLI)",
   "type": "module",
   "private": true,
+  "license": "Apache-2.0",
   "bin": {
     "project-context": "dist/cli.js"
   },

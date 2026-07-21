@@ -10,7 +10,12 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { BUNDLED_CATALOG, type Catalog, type CatalogModel } from '@lizi/model-providers';
 
-import { getActiveCatalog, setActiveCatalog, setDiscoveredCodexModels } from '../active-catalog.js';
+import {
+  getActiveCatalog,
+  setActiveCatalog,
+  setAnthropicDiscoveredModels,
+  setDiscoveredCodexModels,
+} from '../active-catalog.js';
 
 function openaiIds(agent: 'claude-code' | 'codex'): string[] {
   const openai = getActiveCatalog().providers.find((p) => p.id === 'openai');
@@ -115,5 +120,78 @@ describe('active-catalog discovered augment', () => {
     setDiscoveredCodexModels([]);
     expect(openaiIds('codex')).toEqual([]);
     expect(openaiIds('claude-code')).toEqual([]);
+  });
+});
+
+/** anthropic 发现条目 fixture(模拟订阅通道返回的家族级命名 + 捕获序 sortOrder)。 */
+const anthro = (id: string, name: string, sortOrder: number): CatalogModel => ({
+  id,
+  name,
+  group: 'anthropic',
+  sortOrder,
+  contextWindow: 1_000_000,
+  efforts: ['low', 'medium', 'high'],
+  defaultEffort: 'high',
+  status: 'active',
+});
+
+function anthropicList(): CatalogModel[] {
+  const p = getActiveCatalog().providers.find((x) => x.id === 'anthropic');
+  return p?.models['claude-code'] ?? [];
+}
+
+describe('anthropic 发现条目的 cindyModelMeta 展示元数据基线(2026-07-21 三层合并)', () => {
+  afterEach(() => {
+    setActiveCatalog(BUNDLED_CATALOG);
+    setAnthropicDiscoveredModels([]);
+  });
+
+  it('基线覆盖名字与排序:上游家族级命名("Fable")归位产品命名("Fable 5"),按 meta sortOrder 重排', () => {
+    setActiveCatalog(BUNDLED_CATALOG); // bundled cindyModelMeta:claude-fable-5 → "Fable 5" (sortOrder 0)
+    setAnthropicDiscoveredModels([
+      anthro('claude-opus-4-8', 'Opus', 0),
+      anthro('claude-fable-5', 'Fable', 1),
+    ]);
+    expect(anthropicList().map((m) => [m.id, m.name])).toEqual([
+      ['claude-fable-5', 'Fable 5'],
+      ['claude-opus-4-8', 'Opus 4.8'],
+    ]);
+  });
+
+  it('meta 没有的 id 保留上游名字;能力字段(efforts/contextWindow)不被 meta 覆盖', () => {
+    const catalog = JSON.parse(JSON.stringify(BUNDLED_CATALOG)) as Catalog;
+    catalog.cindyModelMeta = {
+      version: 1,
+      models: {
+        'claude-known': { name: 'Known Pro', defaultEnabled: false, contextWindow: 123, efforts: ['max'] },
+      },
+    };
+    setActiveCatalog(catalog);
+    setAnthropicDiscoveredModels([
+      anthro('claude-known', 'known raw', 0),
+      anthro('claude-unknown', 'Unknown Raw', 1),
+    ]);
+    const known = anthropicList().find((m) => m.id === 'claude-known');
+    // 展示字段覆盖;能力字段仍以发现为准(meta 的 contextWindow/efforts 不消费)。
+    expect(known).toMatchObject({
+      name: 'Known Pro',
+      defaultEnabled: false,
+      contextWindow: 1_000_000,
+      efforts: ['low', 'medium', 'high'],
+    });
+    expect(anthropicList().find((m) => m.id === 'claude-unknown')?.name).toBe('Unknown Raw');
+  });
+
+  it('版本门禁:cindyModelMeta.version !== 1 整段忽略;坏信封安全跳过', () => {
+    const catalog = JSON.parse(JSON.stringify(BUNDLED_CATALOG)) as Catalog;
+    catalog.cindyModelMeta = { version: 2, models: { 'claude-fable-5': { name: 'V2 Name' } } };
+    setActiveCatalog(catalog);
+    setAnthropicDiscoveredModels([anthro('claude-fable-5', 'Fable', 0)]);
+    expect(anthropicList()[0]?.name).toBe('Fable');
+
+    catalog.cindyModelMeta = 'not-an-object';
+    setActiveCatalog(JSON.parse(JSON.stringify(catalog)) as Catalog);
+    setAnthropicDiscoveredModels([anthro('claude-fable-5', 'Fable', 0)]);
+    expect(anthropicList()[0]?.name).toBe('Fable');
   });
 });

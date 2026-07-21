@@ -1,3 +1,5 @@
+import { BRAND_NAME } from '@lizi/maker-shared/branding';
+
 export type AgentIslandSessionPhase = 'running' | 'needs-interaction' | 'completed' | 'error';
 
 export type AgentIslandInteractionKind = 'permission' | 'ask_user_question' | 'plan_review';
@@ -309,6 +311,7 @@ export function createEmptyAgentIslandPillSnapshot(): AgentIslandPillSnapshot {
  * so the Swift helper can stay renderer-agnostic.
  */
 export interface AgentIslandStrings {
+  appName: string;
   newConversationTitle: string;
   newConversationHint: string;
   muteSound: string;
@@ -334,6 +337,7 @@ export interface AgentIslandStrings {
 }
 
 export const DEFAULT_AGENT_ISLAND_STRINGS: AgentIslandStrings = {
+  appName: BRAND_NAME,
   newConversationTitle: 'New Maker',
   newConversationHint: 'Start a new conversation',
   muteSound: 'Mute Agent Island',

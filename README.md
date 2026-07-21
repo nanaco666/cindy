@@ -105,3 +105,27 @@ GitHub 仓库需要配置 Actions secret `CINDY_PROTOCOL_DEPLOY_KEY`，内容为
 `xindong/cindy-protocol` 的 SSH deploy key。
 
 旧仓的发版 CI、签名凭据和自托管 runner 没有迁入。本仓发布线后续单独建设。
+
+## 许可证 / License
+
+除非另有说明，本仓库的源代码依据 [Apache License 2.0](LICENSE) 授权。
+
+模型权重、数据集、提示词、商标，以及其他单独标识的材料，可能适用各自的许可条款，
+不因根目录的 Apache-2.0 而被自动覆盖。第三方开源组件保留各自的版权与许可，其归属
+声明汇总在根目录 [`THIRD-PARTY-NOTICES.txt`](THIRD-PARTY-NOTICES.txt) 与
+[`notices/`](notices/) 目录（说明见 [`notices/README.md`](notices/README.md)）。
+
+本项目的版权与归属信息见 [`NOTICE`](NOTICE)。
+
+---
+
+Except as otherwise noted, the source code in this repository is licensed under
+the [Apache License, Version 2.0](LICENSE).
+
+Model weights, datasets, prompts, trademarks, and other separately identified
+materials may be subject to their own license terms and are not automatically
+covered by the repository-level Apache-2.0 grant. Third-party open-source
+components retain their own copyright and license; their attribution notices are
+collected in [`THIRD-PARTY-NOTICES.txt`](THIRD-PARTY-NOTICES.txt) and the
+[`notices/`](notices/) directory. See [`NOTICE`](NOTICE) for this project's
+copyright and attribution information.

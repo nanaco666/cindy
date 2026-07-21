@@ -4,7 +4,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { WorkerInfo } from '../hooks/useWorkers';
-import { RolePillDropdown } from '../RolePillDropdown';
+import { RolePillDropdown, WorkerListToolbar } from '../RolePillDropdown';
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key }),
@@ -61,5 +61,26 @@ describe('RolePillDropdown collaboration settings entry', () => {
     fireEvent.click(screen.getByRole('button', { name: /developer/ }));
 
     expect(screen.queryByText('orca.rolePill.settingsCollaboration')).toBeNull();
+  });
+
+  it('keeps create worker available after the last worker is archived', () => {
+    const onOpenCreate = vi.fn();
+    render(
+      <WorkerListToolbar
+        worker={null}
+        workers={[]}
+        selectedWorkerId={null}
+        activeWorkerCount={0}
+        softLimit={5}
+        hardLimit={8}
+        onSwitchFocus={vi.fn()}
+        onOpenCreate={onOpenCreate}
+        onOpenSettings={vi.fn()}
+        onArchiveWorker={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'orca.rolePill.createWorker' }));
+    expect(onOpenCreate).toHaveBeenCalledTimes(1);
   });
 });

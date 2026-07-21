@@ -32,6 +32,12 @@ export function tx(db: Database.Database, args: unknown): unknown {
       return embeddingRecordFailures(db, txArgs);
     case 'embedding.enqueue':
       return embeddingEnqueue(db, txArgs);
+    case 'orca.reserveWorkerCreation':
+      return orcaReserveWorkerCreation(db, txArgs);
+    case 'orca.renewWorkerCreationReservation':
+      return orcaRenewWorkerCreationReservation(db, txArgs);
+    case 'orca.releaseWorkerCreationReservation':
+      return orcaReleaseWorkerCreationReservation(db, txArgs);
     case 'orca.upsertWorker':
       return orcaUpsertWorker(db, txArgs);
     case 'orca.setWorkerFocus':
@@ -845,6 +851,61 @@ function orcaUpsertWorker(db: Database.Database, args: unknown): void {
       now,
     );
   })();
+}
+
+function orcaReserveWorkerCreation(db: Database.Database, args: unknown): unknown {
+  const payload = asRecord(args, 'orca.reserveWorkerCreation args');
+  const reservationId = expectString(payload.reservationId, 'reservationId');
+  const teamId = expectString(payload.teamId, 'teamId');
+  const label = expectString(payload.label, 'label').toLowerCase();
+  const hardLimit = expectNumber(payload.hardLimit, 'hardLimit');
+  const now = expectNumber(payload.now, 'now');
+  const expiresAt = expectNumber(payload.expiresAt, 'expiresAt');
+  return db.transaction(() => {
+    // DELETE 即使没有命中也会先取得 writer lock，后续检查与 INSERT 因而跨连接串行。
+    db.prepare('DELETE FROM orca_worker_creation_reservations WHERE expires_at <= ?').run(now);
+    const duplicateWorker = db.prepare(
+      'SELECT 1 FROM orca_workers WHERE team_id = ? AND label = ? COLLATE NOCASE LIMIT 1',
+    ).get(teamId, label);
+    const duplicateReservation = db.prepare(
+      'SELECT 1 FROM orca_worker_creation_reservations WHERE team_id = ? AND label = ? COLLATE NOCASE LIMIT 1',
+    ).get(teamId, label);
+    if (duplicateWorker) return { ok: false, errorCode: 'DUPLICATE_LABEL' };
+    if (duplicateReservation) return { ok: false, errorCode: 'WORKER_CREATION_IN_PROGRESS' };
+    const activeWorkerCount = Number(db.prepare(`SELECT COUNT(*)
+      FROM orca_workers w INNER JOIN sessions s ON s.id = w.session_id
+      WHERE w.team_id = ? AND w.status IN ('idle', 'running') AND s.status = 'active'`).pluck().get(teamId) || 0);
+    const reservationCount = Number(db.prepare(
+      'SELECT COUNT(*) FROM orca_worker_creation_reservations WHERE team_id = ?',
+    ).pluck().get(teamId) || 0);
+    const occupiedSlotsBefore = activeWorkerCount + reservationCount;
+    if (occupiedSlotsBefore >= hardLimit) {
+      return { ok: false, errorCode: 'WORKER_LIMIT_HARD_EXCEEDED' };
+    }
+    db.prepare(`INSERT INTO orca_worker_creation_reservations
+      (id, team_id, label, created_at, expires_at) VALUES (?, ?, ?, ?, ?)`)
+      .run(reservationId, teamId, label, now, expiresAt);
+    return { ok: true, occupiedSlotsBefore };
+  })();
+}
+
+function orcaRenewWorkerCreationReservation(db: Database.Database, args: unknown): boolean {
+  const payload = asRecord(args, 'orca.renewWorkerCreationReservation args');
+  const result = db.prepare(
+    'UPDATE orca_worker_creation_reservations SET expires_at = ? WHERE id = ? AND expires_at > ?',
+  ).run(
+    expectNumber(payload.expiresAt, 'expiresAt'),
+    expectString(payload.reservationId, 'reservationId'),
+    expectNumber(payload.now, 'now'),
+  );
+  return result.changes === 1;
+}
+
+function orcaReleaseWorkerCreationReservation(db: Database.Database, args: unknown): void {
+  const payload = asRecord(args, 'orca.releaseWorkerCreationReservation args');
+  db.prepare('DELETE FROM orca_worker_creation_reservations WHERE id = ?').run(
+    expectString(payload.reservationId, 'reservationId'),
+  );
 }
 
 function readExistingImportedClientIds(

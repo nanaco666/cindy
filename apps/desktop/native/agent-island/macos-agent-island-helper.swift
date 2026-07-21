@@ -1306,6 +1306,7 @@ struct AgentIslandPillSnapshot: Codable {
 }
 
 struct AgentIslandStrings: Codable {
+  let appName: String?
   let newConversationTitle: String
   let newConversationHint: String
   let muteSound: String
@@ -1328,7 +1329,11 @@ struct AgentIslandStrings: Codable {
   let alwaysAllowForSession: String
   let deny: String
 
+  // Older main-process payloads do not contain appName; keep their idle view brand-current.
+  var displayAppName: String { appName ?? "Cindy" }
+
   static let fallback = AgentIslandStrings(
+    appName: "Cindy",
     newConversationTitle: "New Maker",
     newConversationHint: "Start a new conversation",
     muteSound: "Mute Agent Island",
@@ -2625,7 +2630,7 @@ struct IdleIslandView: View {
     HStack(spacing: 5) {
       AgentIslandMascotView(skin: mascotSkin, state: .idle, size: 16)
         .frame(width: 16, height: 16)
-      Text("XD Maker")
+      Text(strings.displayAppName)
         .font(.system(size: 10, weight: .semibold, design: .monospaced))
         .foregroundColor(Color.white.opacity(0.24))
         .opacity(textOpacity)

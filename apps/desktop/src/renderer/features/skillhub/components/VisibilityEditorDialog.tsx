@@ -353,7 +353,7 @@ export function VisibilityEditorDialog({
                 'inline-flex h-8 items-center justify-center rounded-full px-4',
                 'text-sm font-normal border bg-[var(--cmd-palette-bg)]',
                 'border-[var(--confirm-btn-secondary-border)] text-[var(--settings-btn-secondary-text)]',
-                'hover:bg-[var(--update-btn-hover)] transition-colors',
+                'hover:bg-[var(--surface-hover)] transition-colors',
               )}
             >
               {t('skillhub.publishDialog.cancel')}

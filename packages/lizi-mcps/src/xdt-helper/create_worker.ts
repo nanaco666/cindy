@@ -37,7 +37,7 @@ export interface CreateWorkerDeps {
         dispatchOutcome?: ControlDispatchOutcome;
         queuedMessageId?: string;
       },
-      'INVALID_PARAMS' | 'NOT_FOUND' | 'WORKER_LIMIT_HARD_EXCEEDED' | 'DUPLICATE_LABEL' | 'BUDGET_MODEL_REQUIRES_API_MODE' | 'NO_PROVIDER_FOR_AGENT'
+      'INVALID_PARAMS' | 'NOT_FOUND' | 'WORKER_LIMIT_HARD_EXCEEDED' | 'DUPLICATE_LABEL' | 'WORKER_CREATION_IN_PROGRESS' | 'BUDGET_MODEL_REQUIRES_API_MODE' | 'NO_PROVIDER_FOR_AGENT'
     >
   >;
 }
@@ -59,6 +59,7 @@ const DESCRIPTION = [
   '- worker 数量达软上限 → 创建仍成功, payload.warning = WORKER_LIMIT_SOFT_EXCEEDED',
   '- worker 数量达硬上限 → 返 WORKER_LIMIT_HARD_EXCEEDED (拒绝创建)',
   '- label 在同 workflow 内重复 → 返 DUPLICATE_LABEL',
+  '- 同 label 的另一个 Worker 正在创建 → 返 WORKER_CREATION_IN_PROGRESS',
   '- 当前 lead session 不存在或没有 active team → 返 NOT_FOUND',
   '- role / label / model 等参数不合法 → 返 INVALID_PARAMS',
   '- 选了骨折版 (codex/ 前缀模型) 但当前 Codex 不在 API key 模式 → 返 BUDGET_MODEL_REQUIRES_API_MODE: 应如实告知用户「当前无法开启骨折版, 需切换到 API key 模式」, 不要擅自改用官方版顶替 (除非用户明确同意)。',

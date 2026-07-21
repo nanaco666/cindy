@@ -276,11 +276,36 @@ export const orcaWorkers = sqliteTable(
   },
   (t) => ({
     uniqSessionId: uniqueIndex('uniq_orca_workers_session_id').on(t.sessionId),
+    uniqTeamLabel: uniqueIndex('uniq_orca_workers_team_label').on(t.teamId, sql`lower(${t.label})`),
     uniqFocusedPerTeam: uniqueIndex('uniq_orca_workers_focused_per_team')
       .on(t.teamId)
       .where(sql`${t.focused} = true`),
     idxTeamId: index('idx_orca_workers_team_id').on(t.teamId),
     idxStatus: index('idx_orca_workers_status').on(t.status),
+  }),
+);
+
+/**
+ * 跨 renderer/main 创建 worker 的短租约。SQLite 写事务负责原子占用 label 与并发 slot；
+ * 创建完成或失败后立即释放，崩溃遗留项由 expiresAt 回收。
+ */
+export const orcaWorkerCreationReservations = sqliteTable(
+  'orca_worker_creation_reservations',
+  {
+    id: text('id').primaryKey(),
+    teamId: text('team_id')
+      .notNull()
+      .references(() => orcaTeams.id, { onDelete: 'cascade' }),
+    label: text('label').notNull(),
+    createdAt: integer('created_at').notNull(),
+    expiresAt: integer('expires_at').notNull(),
+  },
+  (t) => ({
+    uniqTeamLabel: uniqueIndex('uniq_orca_worker_creation_reservations_team_label').on(
+      t.teamId,
+      sql`lower(${t.label})`,
+    ),
+    idxExpiresAt: index('idx_orca_worker_creation_reservations_expires_at').on(t.expiresAt),
   }),
 );
 

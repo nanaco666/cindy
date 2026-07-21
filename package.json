@@ -1,6 +1,7 @@
 {
   "name": "cindy-moved",
   "private": true,
+  "license": "Apache-2.0",
   "engines": {
     "pnpm": ">=10.7 <11"
   },
