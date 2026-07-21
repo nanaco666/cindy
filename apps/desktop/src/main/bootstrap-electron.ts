@@ -14,7 +14,11 @@ import {
   shouldRequestSingleInstanceLock,
   resolveSingleInstanceLockUserDataDir,
 } from './devCliFlags.js';
-import { markDesktopDevReady, markDesktopDevStartupFailed } from './devStartupStatus';
+import {
+  recordDesktopDevAuthStartupResult,
+  markDesktopDevStartupFailed,
+  markDesktopDevWindowReady,
+} from './devStartupStatus';
 
 const PROCESS_STARTED_AT_MS = Date.now();
 
@@ -1802,7 +1806,7 @@ const createWindow = () => {
   // Show window only after content is rendered — eliminates theme flash
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
-    if (!app.isPackaged) markDesktopDevReady();
+    if (!app.isPackaged) markDesktopDevWindowReady();
     // `open` may successfully start the updated process while macOS refuses
     // frontmost activation at the lock/login window. Presentation is not an
     // installation-health signal; retain a one-shot focus grant for unlock.
@@ -2799,7 +2803,27 @@ ipcMain.on('theme:apply-vibrancy', (_event, payload: { familyId: string; isDark:
   // ── Auth IPC handlers (delegated to authManager) ──
 
   ipcMain.handle('auth:initialize', async () => {
-    return authManager.initialize();
+    try {
+      let pendingCompletion: Promise<authManager.AuthState> | null = null;
+      const state = await authManager.initialize({
+        onColdStartPending: (completion) => {
+          pendingCompletion = completion;
+        },
+      });
+      if (!app.isPackaged) {
+        recordDesktopDevAuthStartupResult(state, pendingCompletion, () => authManager.getAuthState());
+      }
+      return state;
+    } catch (err) {
+      if (!app.isPackaged) {
+        markDesktopDevStartupFailed(
+          'AUTH_INIT_FAILED',
+          err instanceof Error ? err.message : String(err),
+          { phase: 'auth:initialize' },
+        );
+      }
+      throw err;
+    }
   });
 
   ipcMain.handle('auth:get-login-state', async () => authManager.getLoginState());

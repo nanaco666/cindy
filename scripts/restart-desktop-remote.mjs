@@ -551,7 +551,7 @@ export function formatDesktopStartupFailure(status) {
   const code = typeof status?.code === 'string' ? status.code : 'DEV_PROCESS_EXITED';
   const message = typeof status?.message === 'string'
     ? status.message
-    : 'Desktop dev exited before the main window became ready.';
+    : 'Desktop dev exited before window/auth/database startup completed.';
   const detail = status?.detail && typeof status.detail === 'object'
     ? Object.entries(status.detail)
       .map(([key, value]) => `${key}=${String(value)}`)
@@ -579,7 +579,7 @@ export async function waitForDesktopStartup(statusPath, timeoutMs = startupReady
   while (Date.now() < deadline) {
     const status = readDesktopStartupStatus(statusPath);
     if (status?.state === 'ready') {
-      console.log(`==> Desktop dev is ready (main window ready-to-show, pid ${status.pid ?? 'unknown'}).`);
+      console.log(`==> Desktop dev is ready (window + auth/local database, pid ${status.pid ?? 'unknown'}).`);
       fs.rmSync(statusPath, { force: true });
       return;
     }
@@ -591,11 +591,11 @@ export async function waitForDesktopStartup(statusPath, timeoutMs = startupReady
     }
     await sleep(pollIntervalMs);
   }
-  // Keep a tombstone so a late Electron ready-to-show cannot recreate a stale
+  // Keep a tombstone so a late Electron startup signal cannot recreate a stale
   // status file after this waiter has already reported timeout to its caller.
   writeDesktopStartupStatus(statusPath, { state: 'abandoned', at: Date.now() });
   throw new Error(
-    `Desktop dev did not reach main-window readiness within ${Math.round(timeoutMs / 1000)}s. Check the dev terminal and apps/desktop/logs/.`,
+    `Desktop dev did not finish window/auth/database startup within ${Math.round(timeoutMs / 1000)}s. Check the dev terminal and apps/desktop/logs/.`,
   );
 }
 

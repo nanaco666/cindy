@@ -8,6 +8,9 @@ import {
   beginDesktopDevInstance,
   markDesktopDevReady,
   markDesktopDevStartupFailed,
+  markDesktopDevWindowReady,
+  recordDesktopDevAuthStartupResult,
+  recordDesktopDevLocalDbStartupResult,
 } from '../devStartupStatus.js';
 
 describe('devStartupStatus', () => {
@@ -28,7 +31,7 @@ describe('devStartupStatus', () => {
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
 
-  it('persists source metadata and marks both records ready', () => {
+  it('marks startup ready only after both the window and application are ready', () => {
     fs.writeFileSync(statusPath, '{"state":"pending"}\n');
     cleanup = beginDesktopDevInstance({
       userDataDir: tempDir,
@@ -41,6 +44,16 @@ describe('devStartupStatus', () => {
       instanceId: 'test-owner',
       startedAtMs: 100,
     });
+
+    markDesktopDevWindowReady();
+
+    expect(JSON.parse(fs.readFileSync(statusPath, 'utf8'))).toMatchObject({
+      state: 'window-ready',
+    });
+    expect(JSON.parse(fs.readFileSync(
+      path.join(tempDir, '.dev-instances', '4242.json'),
+      'utf8',
+    ))).toMatchObject({ state: 'starting' });
 
     markDesktopDevReady();
 
@@ -55,6 +68,88 @@ describe('devStartupStatus', () => {
       rootDir: path.join(tempDir, 'repo'),
       mode: 'remote',
       passive: true,
+    });
+  });
+
+  it('supports application readiness arriving before ready-to-show', () => {
+    fs.writeFileSync(statusPath, '{"state":"pending"}\n');
+    cleanup = beginDesktopDevInstance({
+      userDataDir: tempDir,
+      rootDir: tempDir,
+      passive: false,
+      isolated: false,
+      pid: 4245,
+    });
+
+    markDesktopDevReady();
+    expect(JSON.parse(fs.readFileSync(statusPath, 'utf8'))).toMatchObject({ state: 'pending' });
+
+    markDesktopDevWindowReady();
+    expect(JSON.parse(fs.readFileSync(statusPath, 'utf8'))).toMatchObject({ state: 'ready' });
+  });
+
+  it('keeps restart pending when logged-out is only the auth timeout fallback', async () => {
+    fs.writeFileSync(statusPath, '{"state":"pending"}\n');
+    cleanup = beginDesktopDevInstance({
+      userDataDir: tempDir,
+      rootDir: tempDir,
+      passive: false,
+      isolated: false,
+      pid: 4248,
+    });
+    markDesktopDevWindowReady();
+
+    let settleAuth!: (state: { isAuthenticated: boolean; user: unknown | null }) => void;
+    const pendingAuth = new Promise<{ isAuthenticated: boolean; user: unknown | null }>((resolve) => {
+      settleAuth = resolve;
+    });
+    recordDesktopDevAuthStartupResult(
+      { isAuthenticated: false, user: null },
+      pendingAuth,
+      () => ({ isAuthenticated: false, user: null }),
+    );
+    expect(JSON.parse(fs.readFileSync(statusPath, 'utf8'))).toMatchObject({
+      state: 'window-ready',
+    });
+
+    settleAuth({ isAuthenticated: false, user: null });
+    await pendingAuth;
+    await Promise.resolve();
+    expect(JSON.parse(fs.readFileSync(statusPath, 'utf8'))).toMatchObject({ state: 'ready' });
+  });
+
+  it('waits for localDb when manual login supersedes the timed-out refresh', async () => {
+    fs.writeFileSync(statusPath, '{"state":"pending"}\n');
+    cleanup = beginDesktopDevInstance({
+      userDataDir: tempDir,
+      rootDir: tempDir,
+      passive: false,
+      isolated: false,
+      pid: 4249,
+    });
+    markDesktopDevWindowReady();
+
+    // The stale background flow resolves as logged out after authStateEpoch changes,
+    // while authManager's live state already contains the manually logged-in user.
+    const pendingAuth = Promise.resolve({ isAuthenticated: false, user: null });
+    recordDesktopDevAuthStartupResult(
+      { isAuthenticated: false, user: null },
+      pendingAuth,
+      () => ({ isAuthenticated: true, user: { id: 'manual-user' } }),
+    );
+    await pendingAuth;
+    await Promise.resolve();
+    expect(JSON.parse(fs.readFileSync(statusPath, 'utf8'))).toMatchObject({
+      state: 'window-ready',
+    });
+
+    recordDesktopDevLocalDbStartupResult({
+      ready: false,
+      error: { code: 'MIGRATE_FAILED', message: 'late migration failure' },
+    });
+    expect(JSON.parse(fs.readFileSync(statusPath, 'utf8'))).toMatchObject({
+      state: 'failed',
+      code: 'MIGRATE_FAILED',
     });
   });
 
@@ -87,6 +182,54 @@ describe('devStartupStatus', () => {
       state: 'failed',
       failure: { code: 'SINGLE_INSTANCE_OWNED' },
     });
+  });
+
+  it('forwards the localDb migration code and message to the restart waiter', () => {
+    fs.writeFileSync(statusPath, '{"state":"pending"}\n');
+    cleanup = beginDesktopDevInstance({
+      userDataDir: tempDir,
+      rootDir: tempDir,
+      passive: false,
+      isolated: false,
+      pid: 4247,
+    });
+
+    markDesktopDevWindowReady();
+    recordDesktopDevLocalDbStartupResult({
+      ready: false,
+      error: {
+        code: 'MIGRATE_FAILED',
+        message: 'applied migration runtime identity changed at seq 77 (0077_nebulous_veda.sql)',
+      },
+    });
+
+    expect(JSON.parse(fs.readFileSync(statusPath, 'utf8'))).toMatchObject({
+      state: 'failed',
+      code: 'MIGRATE_FAILED',
+      message: expect.stringContaining('seq 77 (0077_nebulous_veda.sql)'),
+      detail: { phase: 'local-db:ensure-ready' },
+    });
+  });
+
+  it('does not replace a completed startup with a later runtime failure', () => {
+    fs.writeFileSync(statusPath, '{"state":"pending"}\n');
+    cleanup = beginDesktopDevInstance({
+      userDataDir: tempDir,
+      rootDir: tempDir,
+      passive: false,
+      isolated: false,
+      pid: 4246,
+    });
+
+    markDesktopDevWindowReady();
+    markDesktopDevReady();
+    markDesktopDevStartupFailed('MIGRATE_FAILED', 'late failure');
+
+    expect(JSON.parse(fs.readFileSync(statusPath, 'utf8'))).toMatchObject({ state: 'ready' });
+    expect(JSON.parse(fs.readFileSync(
+      path.join(tempDir, '.dev-instances', '4246.json'),
+      'utf8',
+    ))).toMatchObject({ state: 'ready' });
   });
 
   it('cleanup never deletes a record that has been replaced by another owner', () => {
