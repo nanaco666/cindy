@@ -132,27 +132,71 @@ function resetHttpShrinkStreak(): void {
 }
 
 /**
+ * 待确认骤减记账落盘(review P2 二轮:HTTP 刷新只在启动 / OAuth 登录各跑一次,
+ * 记账若只在内存,用户每次重启 streak 都归零,3 次确认永远凑不齐)。写进现有磁盘
+ * 缓存文件的 `pendingShrink` 字段(read-modify-write + 原子 rename,与其它缓存
+ * 写删同队列串行);缓存文件不存在 = 无已确认清单,重启后护栏本就不触发,无需记账。
+ */
+function persistPendingShrink(): void {
+  const state =
+    httpShrinkSignature !== null ? { signature: httpShrinkSignature, streak: httpShrinkStreak } : null;
+  const generation = authGeneration;
+  void enqueueCacheMutation(async () => {
+    if (generation !== authGeneration || !hasClaudeAiOAuth()) return;
+    const file = cacheFilePath();
+    let raw: Record<string, unknown> | null = null;
+    try {
+      const parsed: unknown = JSON.parse(await fsp.readFile(file, 'utf-8'));
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        raw = parsed as Record<string, unknown>;
+      }
+    } catch {
+      /* 缓存缺失 / 损坏:不为记账凭空造缓存 */
+    }
+    if (!raw) return;
+    if (state) raw.pendingShrink = state;
+    else if (raw.pendingShrink === undefined) return; // 无变化不写盘
+    else delete raw.pendingShrink;
+    const temp = `${file}.${process.pid}.${cacheTempSequence += 1}.tmp`;
+    try {
+      await fsp.writeFile(temp, JSON.stringify(raw, null, 2), 'utf-8');
+      if (generation !== authGeneration || !hasClaudeAiOAuth()) return;
+      await fsp.rename(temp, file);
+    } finally {
+      await fsp.rm(temp, { force: true }).catch(() => undefined);
+    }
+  });
+}
+
+/**
  * HTTP `/v1/models` 快照的骤减收敛记账(review P2:护栏不能把真实批量下架永久拦死):
  *   - 非骤减 → 直接放行并清零 streak;
  *   - 骤减 → 记签名(排序 id 集);**连续 CONFIRMED_SHRINK_STREAK 次相同**的骤减快照
- *     视为上游真实下架,放行收敛(每次登录/启动各拉一次,3 次 ≈ 持续多个进程世代仍如此);
- *     签名变化(上游还在抖)则重新计数。
+ *     视为上游真实下架,放行收敛;签名变化(上游还在抖)则重新计数。
+ * 记账随磁盘缓存持久化(persistPendingShrink):HTTP 刷新每进程只有启动 / 登录两个
+ * 触发点,跨重启不累计的话收敛永远不会发生——重启后由 loadAnthropicModelsFromDiskCache
+ * 恢复,登出 / 换号随缓存文件一起清除。
  * 只有 HTTP 通道参与收敛:它是 Anthropic 官方列模型端点,连续一致可作可用性证据;
  * SDK 捕获(本地 CLI 注册表,正是打塌事故的退化来源)永不收敛,等 HTTP 纠正。
  */
 export function evaluateHttpShrink(prevCount: number, nextIds: readonly string[]): 'accept' | 'reject' {
+  let verdict: 'accept' | 'reject';
   if (!isDegenerateModelListShrink(prevCount, nextIds.length)) {
     resetHttpShrinkStreak();
-    return 'accept';
+    verdict = 'accept';
+  } else {
+    const signature = [...nextIds].sort().join('\n');
+    httpShrinkStreak = signature === httpShrinkSignature ? httpShrinkStreak + 1 : 1;
+    httpShrinkSignature = signature;
+    if (httpShrinkStreak >= CONFIRMED_SHRINK_STREAK) {
+      resetHttpShrinkStreak();
+      verdict = 'accept';
+    } else {
+      verdict = 'reject';
+    }
   }
-  const signature = [...nextIds].sort().join('\n');
-  httpShrinkStreak = signature === httpShrinkSignature ? httpShrinkStreak + 1 : 1;
-  httpShrinkSignature = signature;
-  if (httpShrinkStreak >= CONFIRMED_SHRINK_STREAK) {
-    resetHttpShrinkStreak();
-    return 'accept';
-  }
-  return 'reject';
+  persistPendingShrink();
+  return verdict;
 }
 
 /** SDK 映射结果:能力字段是条目明说的还是合成默认的(决定合并时是否覆盖已精化条目)。 */
@@ -313,6 +357,10 @@ async function applyModels(
         fetchedAt: new Date().toISOString(),
         models,
         explicitWindows: Object.fromEntries(explicitWindows),
+        // 整份重写不得抹掉跨重启的待确认骤减记账(SDK 每会话都会持久化一次)。
+        ...(httpShrinkSignature !== null
+          ? { pendingShrink: { signature: httpShrinkSignature, streak: httpShrinkStreak } }
+          : {}),
       },
       null,
       2,
@@ -352,6 +400,21 @@ export async function loadAnthropicModelsFromDiskCache(): Promise<void> {
     if (windows && typeof windows === 'object' && !Array.isArray(windows)) {
       for (const [id, win] of Object.entries(windows as Record<string, unknown>)) {
         if (typeof win === 'number' && win > 0) explicitWindows.set(id, win);
+      }
+    }
+    // 恢复待确认骤减记账(跨重启累计,见 persistPendingShrink;坏字段静默忽略)。
+    const pending = (raw as { pendingShrink?: unknown }).pendingShrink;
+    if (pending && typeof pending === 'object' && !Array.isArray(pending)) {
+      const p = pending as { signature?: unknown; streak?: unknown };
+      if (
+        typeof p.signature === 'string' &&
+        p.signature.length > 0 &&
+        typeof p.streak === 'number' &&
+        Number.isInteger(p.streak) &&
+        p.streak > 0
+      ) {
+        httpShrinkSignature = p.signature;
+        httpShrinkStreak = Math.min(p.streak, CONFIRMED_SHRINK_STREAK);
       }
     }
     // 缓存内容出自本模块 mapper,仍做最小结构校验防手改坏文件。

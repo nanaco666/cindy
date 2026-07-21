@@ -225,6 +225,13 @@ describe('isDegenerateModelListShrink(退化快照护栏,纯函数)', () => {
 describe('evaluateHttpShrink(HTTP 骤减收敛,review P2)', () => {
   beforeEach(() => {
     resetAnthropicDiscoveryForTest();
+    authState.loggedIn = true;
+  });
+
+  afterEach(async () => {
+    await waitForAnthropicDiscoveryIdleForTest();
+    resetAnthropicDiscoveryForTest();
+    await fsp.rm(TEST_USER_DATA, { recursive: true, force: true });
   });
 
   it('连续 3 次相同的骤减快照 = 确认真实下架,第 3 次放行;之前一直拒绝', () => {
@@ -240,6 +247,48 @@ describe('evaluateHttpShrink(HTTP 骤减收敛,review P2)', () => {
     // 中间来了一次正常快照 → streak 清零,再骤减要重新累计。
     expect(evaluateHttpShrink(7, ['1', '2', '3', '4', '5', '6', '7'].map((n) => `claude-${n}`))).toBe('accept');
     expect(evaluateHttpShrink(7, ['claude-b'])).toBe('reject');
+  });
+
+  it('记账跨重启持久化:落盘进缓存 pendingShrink,重启加载后继续累计(review P2 二轮回归)', async () => {
+    const cacheDir = path.join(TEST_USER_DATA, 'model-discovery');
+    const cacheFile = path.join(cacheDir, 'anthropic-models.json');
+    const cachedModel = {
+      id: 'claude-opus-4-8',
+      name: 'Opus 4.8',
+      group: 'anthropic',
+      sortOrder: 0,
+      contextWindow: 1_000_000,
+      efforts: ['low', 'medium', 'high'],
+      defaultEffort: 'high',
+      supportsFastMode: false,
+      status: 'active',
+    };
+    await fsp.mkdir(cacheDir, { recursive: true });
+    await fsp.writeFile(
+      cacheFile,
+      JSON.stringify({ fetchedAt: '2026-07-21T00:00:00.000Z', models: [cachedModel] }),
+      'utf-8',
+    );
+
+    // 进程 1:两次相同骤减被拒,记账落盘。
+    expect(evaluateHttpShrink(7, ['claude-x'])).toBe('reject');
+    expect(evaluateHttpShrink(7, ['claude-x'])).toBe('reject');
+    await waitForAnthropicDiscoveryIdleForTest();
+    const persisted = JSON.parse(await fsp.readFile(cacheFile, 'utf-8')) as {
+      pendingShrink?: { signature: string; streak: number };
+    };
+    expect(persisted.pendingShrink).toEqual({ signature: 'claude-x', streak: 2 });
+
+    // 「重启」:清内存态 → 从缓存恢复 → 第 3 次相同骤减即确认放行。
+    resetAnthropicDiscoveryForTest();
+    await loadAnthropicModelsFromDiskCache();
+    expect(evaluateHttpShrink(7, ['claude-x'])).toBe('accept');
+    // 确认放行后记账清零并落盘(缓存里不再有 pendingShrink)。
+    await waitForAnthropicDiscoveryIdleForTest();
+    const cleared = JSON.parse(await fsp.readFile(cacheFile, 'utf-8')) as {
+      pendingShrink?: unknown;
+    };
+    expect(cleared.pendingShrink).toBeUndefined();
   });
 });
 
