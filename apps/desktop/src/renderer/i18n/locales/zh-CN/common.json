@@ -3364,6 +3364,9 @@
         "emptyTitle": "暂无可用来源",
         "emptyDesc": "连接一个支持当前模型的来源后即可选择",
         "disconnected": "已断开"
+      },
+      "agentSwitch": {
+        "hint": "选择切换到 {{agent}} 后使用的模型"
       }
     },
     "permissionSelector": {
@@ -3547,6 +3550,18 @@
         "overflowDescription": "当前会话已使用 {{used}} 上下文，超出目标模型窗口（{{total}}，约 {{pct}}%）。切换后回复和压缩都可能失败，建议先点击上下文圆环压缩会话，或新建会话使用该模型。仍要切换吗？",
         "confirmSwitch": "仍然切换模型",
         "cancelSwitch": "取消切换"
+      },
+      "agentSwitch": {
+        "engineNotReady": "引擎已切换,但新引擎启动失败;发送消息时会自动重试",
+        "failed": "引擎切换失败,未生效",
+        "deferred": "已登记切换:下一条消息发出时将切换到 {{agent}} · {{model}}",
+        "confirmation": {
+          "title": "切换 Agent？",
+          "description": "新 Agent 引擎会通过交接摘要续接,思考内容等不能保证完美继承;切回时仍可继续原引擎会话。切换还会让 prompt 缓存中断一次,可能造成 Token 消耗的增加。",
+          "confirm": "切换 Agent",
+          "cancel": "保留当前 Agent",
+          "dontShowAgain": "下次不再提醒"
+        }
       }
     },
     "atMention": {
@@ -4040,6 +4055,12 @@
       },
       "autoResume": {
         "label": "连接中断，已自动继续"
+      },
+      "agentSwitch": {
+        "label": "已从 {{from}} 切换到 {{to}}",
+        "toggleHint": "查看交接内容",
+        "handoffTitle": "交接内容——切换时发送给新引擎的上下文摘要(不会出现在你的消息里)",
+        "resumedBadge": "已续接原会话"
       }
     },
     "markdownRenderer": {
@@ -4103,6 +4124,7 @@
       "editSend": "发送",
       "editRollbackHint": "发送将撤销上一轮对 {{count}} 个文件的改动",
       "forkErrors": {
+        "unsupportedHistory": "目标位置跨过了引擎切换边界，无法从这里分叉",
         "noPriorAssistant": "请在 AI 回复之后的消息上分叉",
         "sourceNeverRan": "原会话尚未运行，无法分叉",
         "generic": "分叉失败，请重试"

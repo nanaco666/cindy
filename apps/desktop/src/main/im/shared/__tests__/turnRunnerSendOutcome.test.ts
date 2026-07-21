@@ -483,6 +483,53 @@ describe('turnRunner send outcome policy (feishu adapter characterization)', () 
     );
   });
 
+  it('applies a deferred switch and sends the first queued IM message through the refreshed session', async () => {
+    const oldSession = createSessionHarness(async () => ({
+      accepted: false,
+      reason: 'cancelled-before-dispatch',
+    }));
+    const switchedSession = createSessionHarness(async () => ({
+      accepted: false,
+      reason: 'cancelled-before-dispatch',
+    }));
+    let live: Session | undefined = oldSession.session;
+    const maker = {
+      createSession: vi.fn(async () => oldSession.session),
+      getSession: vi.fn(() => live),
+      on: vi.fn((listener: (event: MakerEvent) => void) => {
+        makerEventListeners.push(listener);
+        return () => {
+          makerEventListeners = makerEventListeners.filter((candidate) => candidate !== listener);
+        };
+      }),
+    };
+    mocks.getMaker.mockReturnValue(maker);
+    const applyPendingAgentSwitch = vi.fn(async () => {
+      live = switchedSession.session;
+      emitMakerEvent({ type: 'session:closed', sessionId: 'feishu-session' });
+    });
+    const localRunner = createTurnRunner(fakeAdapter, fakeRepo, fakeCards, {
+      applyPendingAgentSwitch,
+    });
+
+    try {
+      await localRunner.runAgentTurn({
+        botContextId: 'cli_test_bot',
+        userId: 'ou_user',
+        userMessageId: 'msg-agent-switch',
+        text: 'send after switch',
+        attachments: [],
+      });
+
+      expect(applyPendingAgentSwitch).toHaveBeenCalledWith('feishu-session');
+      expect(oldSession.send).not.toHaveBeenCalled();
+      expect(switchedSession.send).toHaveBeenCalledTimes(1);
+      expect(mocks.wireSessionToIpcExternal).toHaveBeenLastCalledWith(switchedSession.session);
+    } finally {
+      localRunner.disposeAllSessions();
+    }
+  });
+
   it('treats accepted:false as pre-dispatch failure with exactly-once cleanup and user notification', async () => {
     const h = setupSession(async () => ({
       accepted: false,

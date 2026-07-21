@@ -296,11 +296,38 @@ function dispatchTx(readyDb, payload) {
       return sessionsRenameTitles(readyDb, request.args);
     case 'sessions.setStatus':
       return sessionsSetStatus(readyDb, request.args);
+    case 'session.agentSwitchFallback':
+      return sessionAgentSwitchFallback(readyDb, request.args);
     case 'session.importShare':
       return sessionImportShare(readyDb, request.args);
     default:
       throw Object.assign(new Error('unknown tx: ' + name), { code: 'UNKNOWN_TX' });
   }
+}
+
+// ⚠️ 与 worker/opHandlers/tx.ts 的同名事务保持一致。
+function sessionAgentSwitchFallback(readyDb, args) {
+  const payload = asRecord(args, 'session.agentSwitchFallback args');
+  const sessionId = expectString(payload.sessionId, 'sessionId');
+  const boundaryClientId = expectString(payload.boundaryClientId, 'boundaryClientId');
+  const boundaryContent = expectString(payload.boundaryContent, 'boundaryContent');
+  const updatedAt = expectNumber(payload.updatedAt, 'updatedAt');
+  return readyDb.transaction(() => {
+    const sessionResult = readyDb.prepare(
+      'UPDATE sessions SET sdk_session_id = NULL, updated_at = ? WHERE id = ?',
+    ).run(updatedAt, sessionId);
+    if (sessionResult.changes !== 1) {
+      throw Object.assign(new Error('Session 不存在: ' + sessionId), { code: 'NOT_FOUND' });
+    }
+    const boundaryResult = readyDb.prepare(
+      "UPDATE messages SET content = ? WHERE session_id = ? AND client_id = ? AND role = 'agent_switch' AND rewind_at IS NULL",
+    ).run(boundaryContent, sessionId, boundaryClientId);
+    if (boundaryResult.changes !== 1) {
+      throw Object.assign(new Error('Agent switch boundary 不存在: ' + boundaryClientId), {
+        code: 'NOT_FOUND',
+      });
+    }
+  })();
 }
 
 function sessionsRenameTitles(readyDb, args) {
@@ -403,7 +430,7 @@ function sessionImportShare(readyDb, args) {
   const messages = expectArray(payload.messages, 'messages');
   const sessionId = expectString(session.id, 'session.id');
   const insertMessage = readyDb.prepare(
-    'INSERT INTO messages (id, client_id, session_id, role, content, tool_use_id, agent_meta, created_at, rewind_at) VALUES (?,?,?,?,?,?,?,?,?)',
+    'INSERT INTO messages (id, client_id, session_id, role, content, tool_use_id, agent_meta, agent_kind, created_at, rewind_at) VALUES (?,?,?,?,?,?,?,?,?,?)',
   );
   const messageCount = readyDb.transaction(() => {
     const existing = readyDb.prepare('SELECT id FROM sessions WHERE id = ? LIMIT 1').get(sessionId);
@@ -449,6 +476,7 @@ function sessionImportShare(readyDb, args) {
         expectString(m.content, 'message.content'),
         nullableString(m.toolUseId),
         nullableString(m.agentMeta),
+        nullableString(m.agentKind),
         expectNumber(m.createdAt, 'message.createdAt'),
         nullableNumber(m.rewindAt),
       );
@@ -762,13 +790,13 @@ function forkSession(readyDb, args) {
   const uuidMap = normalizeUuidMap(payload.uuidMap);
   const newMessageIds = normalizeNewMessageIds(payload.newMessageIds);
   const sourceMessages = readyDb.prepare(
-    'SELECT role, content, tool_use_id, agent_meta, created_at FROM messages WHERE session_id = ? AND created_at < ? AND rewind_at IS NULL ORDER BY created_at ASC',
+    'SELECT role, content, tool_use_id, agent_meta, agent_kind, created_at FROM messages WHERE session_id = ? AND created_at < ? AND rewind_at IS NULL ORDER BY created_at ASC',
   ).all(sourceSessionId, targetCreatedAt);
   if (newMessageIds.length !== sourceMessages.length) {
     throw invalidArgs('newMessageIds length mismatch: expected ' + sourceMessages.length + ', got ' + newMessageIds.length);
   }
   const insertMessage = readyDb.prepare(
-    'INSERT INTO messages (id, client_id, session_id, role, content, tool_use_id, agent_meta, created_at, rewind_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL)',
+    'INSERT INTO messages (id, client_id, session_id, role, content, tool_use_id, agent_meta, agent_kind, created_at, rewind_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)',
   );
   readyDb.transaction(() => {
     readyDb.prepare(
@@ -802,7 +830,7 @@ function forkSession(readyDb, args) {
     for (let i = 0; i < sourceMessages.length; i += 1) {
       const message = sourceMessages[i];
       const ids = newMessageIds[i];
-      insertMessage.run(ids.id, ids.clientId, expectString(newSession.id, 'newSession.id'), message.role, message.content, message.tool_use_id, remapAgentMetaUuid(message.agent_meta, uuidMap), message.created_at);
+      insertMessage.run(ids.id, ids.clientId, expectString(newSession.id, 'newSession.id'), message.role, message.content, message.tool_use_id, remapAgentMetaUuid(message.agent_meta, uuidMap), message.agent_kind, message.created_at);
     }
   })();
   return { messageCount: sourceMessages.length };

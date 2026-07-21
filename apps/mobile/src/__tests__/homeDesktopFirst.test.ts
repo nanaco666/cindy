@@ -104,7 +104,7 @@ describe('mobile home desktop-first surface', () => {
     expect(homeSource).toContain("tone={status === 'online' ? 'ready' : 'off'}");
   });
 
-  it('mirrors the desktop sidebar vendor icon slot and running treatment', () => {
+  it('mirrors the desktop sidebar Agent identity slot and running treatment', () => {
     const homeSource = readSource('app/devices/index.tsx');
     const vendorIconSource = readSource('src/components/MobileVendorIcon.tsx');
     // 品牌 path 常量已抽到 vendorIconPaths.ts(供 MobileVendorIcon 与 MobileProviderMark 共用)。
@@ -113,7 +113,9 @@ describe('mobile home desktop-first surface', () => {
       '../../apps/desktop/src/renderer/components/sidebar/VendorIcon.tsx',
     );
 
-    expect(desktopVendorIconSource).toContain('VendorIcon — sidebar session 行的 vendor + running 状态指示器');
+    expect(desktopVendorIconSource).toContain(
+      'VendorIcon — sidebar session 行的 Agent 身份 + running 状态指示器',
+    );
     // 2026-07-19 撤销 D4-1:双端恢复厂商 glyph(Claude AA 字标 / Codex 六瓣),按 vendor 分支渲染
     // ——箭头统一后依赖图标区分 agent 类型的场景(创建自动化 chips / 侧栏混排)全部失效。
     expect(desktopVendorIconSource).toContain('ClaudeMark');

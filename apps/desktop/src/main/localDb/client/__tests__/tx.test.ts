@@ -73,6 +73,7 @@ CREATE TABLE messages (
   content TEXT NOT NULL,
   tool_use_id TEXT,
   agent_meta TEXT,
+  agent_kind TEXT,
   created_at INTEGER NOT NULL,
   rewind_at INTEGER,
   UNIQUE(session_id, client_id)
@@ -424,7 +425,7 @@ describe('db worker tx handlers', () => {
     await withClient(async (client) => {
       await seedSession(client, 'src');
       await client.exec(
-        'INSERT INTO messages (id, client_id, session_id, role, content, agent_meta, created_at) VALUES (?, ?, ?, ?, ?, ?, ?), (?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO messages (id, client_id, session_id, role, content, agent_meta, agent_kind, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?), (?, ?, ?, ?, ?, ?, ?, ?)',
         [
           'm1',
           'c1',
@@ -432,6 +433,7 @@ describe('db worker tx handlers', () => {
           'assistant',
           'copy',
           JSON.stringify({ uuid: 'old', parentUuid: 'parent', transcriptParentUuid: 'old-parent' }),
+          'cc',
           100,
           'm2',
           'c2',
@@ -439,6 +441,7 @@ describe('db worker tx handlers', () => {
           'user',
           'skip',
           null,
+          'codex',
           300,
         ],
       );
@@ -464,12 +467,13 @@ describe('db worker tx handlers', () => {
         forked_at_message_id: 'c2',
         provider_id: 'xd',
       });
-      const copied = await client.queryOne<{ id: string; client_id: string; agent_meta: string }>(
-        'SELECT id, client_id, agent_meta FROM messages WHERE session_id = ?',
+      const copied = await client.queryOne<{ id: string; client_id: string; agent_meta: string; agent_kind: string }>(
+        'SELECT id, client_id, agent_meta, agent_kind FROM messages WHERE session_id = ?',
         ['forked'],
       );
       expect(copied?.id).toBe('copy-id-1');
       expect(copied?.client_id).toBe('copy-client-1');
+      expect(copied?.agent_kind).toBe('cc');
       expect(JSON.parse(copied?.agent_meta ?? '{}')).toEqual({
         uuid: 'new',
         parentUuid: 'new-parent-tool',
@@ -493,6 +497,48 @@ describe('db worker tx handlers', () => {
         uuidMap: [],
         newMessageIds: [],
       })).rejects.toMatchObject({ code: 'INVALID_ARGS' });
+    });
+  });
+
+  it('session.agentSwitchFallback atomically clears sdk id and rewrites boundary', async () => {
+    await withClient(async (client) => {
+      await seedSession(client, 's1');
+      await client.exec('UPDATE sessions SET sdk_session_id = ? WHERE id = ?', ['stale-sdk', 's1']);
+      await client.exec(
+        'INSERT INTO messages (id, client_id, session_id, role, content, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+        ['sw', 'sw-client', 's1', 'agent_switch', '{"handoff":"delta"}', 100],
+      );
+      await client.tx('session.agentSwitchFallback', {
+        sessionId: 's1',
+        boundaryClientId: 'sw-client',
+        boundaryContent: '{"handoff":"full","resumed":false}',
+        updatedAt: 500,
+      });
+      await expect(client.queryOne(
+        'SELECT sdk_session_id, updated_at FROM sessions WHERE id = ?',
+        ['s1'],
+      )).resolves.toEqual({ sdk_session_id: null, updated_at: 500 });
+      await expect(client.queryOne(
+        'SELECT content FROM messages WHERE session_id = ? AND client_id = ?',
+        ['s1', 'sw-client'],
+      )).resolves.toEqual({ content: '{"handoff":"full","resumed":false}' });
+    });
+  });
+
+  it('session.agentSwitchFallback missing boundary rolls back sdk id clear', async () => {
+    await withClient(async (client) => {
+      await seedSession(client, 's1');
+      await client.exec('UPDATE sessions SET sdk_session_id = ? WHERE id = ?', ['stale-sdk', 's1']);
+      await expect(client.tx('session.agentSwitchFallback', {
+        sessionId: 's1',
+        boundaryClientId: 'missing',
+        boundaryContent: '{}',
+        updatedAt: 500,
+      })).rejects.toMatchObject({ code: 'NOT_FOUND' });
+      await expect(client.queryOne(
+        'SELECT sdk_session_id FROM sessions WHERE id = ?',
+        ['s1'],
+      )).resolves.toEqual({ sdk_session_id: 'stale-sdk' });
     });
   });
 

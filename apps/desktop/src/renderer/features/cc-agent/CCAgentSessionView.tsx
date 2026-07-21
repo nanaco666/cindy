@@ -936,22 +936,8 @@ export function CCAgentSessionView({
     refreshSessions();
   }, [refreshSessions]);
 
-  // 协议归一化后, useCCAgentChat 同时服务 Claude / Codex —— maker-core 翻译层把两边
-  // SDK 事件统一翻成同一套 AgentEvent, makerChatStore 走单一 handleStreamEvent reducer。
-  // isCodex 仅保留用于 UI 行为分流 (如 vendor-specific model/permission 列表)。
-  const isCodex = session?.agentKind === 'codex';
-  // live 供应商目录(含内置 + 自定义,按 agent 挂模型)—— vendor↔model 一致性校验的真源,
-  // 与模型选择器同源(见下方 M35 vendor fallback effect)。本地 IPC 极快返回,有模块级缓存。
-  // device-link 远程会话用被控端经隧道带来的 providers(per-provider,fast 判定与本地同口径)。
-  const { providers: localProviders } = useProviders();
-  const { providers: deviceProviders } = useDeviceProviders(remoteDeviceId);
-  const providers = remoteDeviceId ? deviceProviders : localProviders;
-  // 该会话 agent 的能力(agent 级 hasFastMode + 旧被控端拍平回退用 availableModels);按 remoteDeviceId 作用域。
-  const { capabilities: sessionCaps } = useAgentCapabilities(
-    session?.agentKind === 'codex' ? 'codex' : 'claude-code',
-    remoteDeviceId,
-  );
   const {
+    agentSwitchIntent,
     messages, taskUpdates, agentStatus, isStreaming, isAgentBusy, sendMessage, compactSession, steerMessage, steerQueuedMessage, stopSession, clearSession, clearError, retryLastError, continueAfterSilentStop, errorReason, insertSystemCard, updateSystemCardData, error, errorIsRecoverable, errorRetryText, credentialSwitchWait,
     loadOlderMessages, isLoadingMore, hasMoreMessages,
     pendingPermission, respondToPermission,
@@ -970,6 +956,18 @@ export function CCAgentSessionView({
     resumeQueue, moveQueueItem, setQueueInteractionLock, setQueueEditLock, removeFromQueue, updateQueueItem,
     chatDisplaySnapshot,
   } = useCCAgentChat(sessionId, handleTitleUpdate, { chatRealtime });
+  // 展示引擎可乐观跟随 intent；真实 event reducer 仍只读 store.agentKind。
+  const displayAgentKind = agentSwitchIntent?.target ??
+    (session?.agentKind === 'codex' ? 'codex' : 'claude-code');
+  const isCodex = displayAgentKind === 'codex';
+  // live 供应商目录(含内置 + 自定义,按 agent 挂模型)—— vendor↔model 一致性校验的真源,
+  // 与模型选择器同源(见下方 M35 vendor fallback effect)。本地 IPC 极快返回,有模块级缓存。
+  // device-link 远程会话用被控端经隧道带来的 providers(per-provider,fast 判定与本地同口径)。
+  const { providers: localProviders } = useProviders();
+  const { providers: deviceProviders } = useDeviceProviders(remoteDeviceId);
+  const providers = remoteDeviceId ? deviceProviders : localProviders;
+  // 该会话 agent 的能力(agent 级 hasFastMode + 旧被控端拍平回退用 availableModels);按 remoteDeviceId 作用域。
+  const { capabilities: sessionCaps } = useAgentCapabilities(displayAgentKind, remoteDeviceId);
   // 报错「真实已读」:终止错误的 ErrorBanner 在本视图内固定展示,视图真实可见 +
   // 窗口聚焦驻留后经 badge 桥接 ack 灵动岛 / 清红角标。`error` 合并了 recoverable
   // 错误(agent 仍在跑,不算已读),再用 store 的 terminal 判定过滤;渲染由同一
@@ -2088,11 +2086,15 @@ export function CCAgentSessionView({
       navigate(`/cc-agent/${newSession.id}`);
     } catch (err) {
       const ipcError = extractIpcError(err);
-      toast.error(ipcError?.message || (err instanceof Error ? err.message : String(err)));
+      toast.error(
+        ipcError?.code === 'FORK_UNSUPPORTED_HISTORY'
+          ? t('chat.userMessage.forkErrors.unsupportedHistory')
+          : ipcError?.message || (err instanceof Error ? err.message : String(err)),
+      );
     } finally {
       setForkStripEncryptedRunning(false);
     }
-  }, [navigate, ownsWindowRoute, refreshServerSession, session?.agentKind, sessionId]);
+  }, [navigate, ownsWindowRoute, refreshServerSession, session?.agentKind, sessionId, t]);
 
   // M35: Vendor fallback —— 会话的 model 与它(固定不变的)agent vendor 明确错配时,
   // 回退到该 vendor 的默认模型。守的是「绕过模型选择器写入 session.model」的脏数据路径
@@ -2935,9 +2937,9 @@ export function CCAgentSessionView({
                   </Tip>
                 )}
                 <TodaySpendChip
-                  vendorKey={session?.agentKind ?? 'cc'}
-                  modelId={session?.model ?? null}
-                  providerId={session?.providerId ?? null}
+                  vendorKey={displayAgentKind === 'codex' ? 'codex' : 'cc'}
+                  modelId={agentSwitchIntent?.model ?? session?.model ?? null}
+                  providerId={agentSwitchIntent ? agentSwitchIntent.providerId : (session?.providerId ?? null)}
                   sessionId={sessionId}
                   sessionInitialCostUsd={session?.totalCostUsd ?? null}
                   sessionInitialTokens={session?.totalTokenUsage ?? null}
@@ -2946,8 +2948,8 @@ export function CCAgentSessionView({
                 />
                 <ContextCapacityRing
                   contextTokens={agentStatus.contextTokens}
-                  model={session?.model ?? ''}
-                  vendorKey={session?.agentKind ?? 'cc'}
+                  model={agentSwitchIntent?.model ?? session?.model ?? ''}
+                  vendorKey={displayAgentKind === 'codex' ? 'codex' : 'cc'}
                   sdkContextWindow={agentStatus.contextWindow}
                   deviceId={remoteDeviceId}
                   onCompact={

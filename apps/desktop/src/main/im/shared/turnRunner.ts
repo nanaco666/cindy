@@ -76,6 +76,8 @@ import {
   noteSilentStopSessionReset,
   onSilentStopSettled,
 } from '../../maker-ipc/register';
+import { agentHandoffPending } from '../../maker-ipc/agentHandoffPendingSingleton';
+import { prependHandoffToUserMessage } from '../../maker-ipc/agentHandoff';
 import {
   registerPending,
   registerPendingExternal,
@@ -282,10 +284,16 @@ export interface ImTurnRunner {
   }): Promise<{ stopped: boolean; droppedQueued: number }>;
 }
 
+export interface ImTurnRunnerDeps {
+  /** IM 直发前落实 deferred agent switch,并 bootstrap 新 live session。 */
+  applyPendingAgentSwitch?: (sessionId: string) => Promise<void>;
+}
+
 export function createTurnRunner(
   adapter: ImChannelAdapter,
   repo: ImSessionRepo,
   cards: ImCardBuilders,
+  deps: ImTurnRunnerDeps = {},
 ): ImTurnRunner {
   const { im, ui, channel } = adapter;
   /** 过程区耗时显示的低频刷新(5s)— 单个长工具调用期间状态行不冻结。 */
@@ -306,6 +314,8 @@ export function createTurnRunner(
    *  the cache, both spawn a maker session, and the second clobbers the first
    *  in `sessionStates`. */
   const wiringInFlight = new Map<string, Promise<SessionState>>();
+  /** agent switch 主动 close 旧引擎时保留 IM 队列,待新 live session 原地接管。 */
+  const agentSwitchCloseSuppressed = new Set<string>();
   type MakerInstance = ReturnType<typeof getMaker>;
   let subscribedMaker: MakerInstance | null = null;
   let unsubscribeMakerEvents: (() => void) | null = null;
@@ -316,6 +326,7 @@ export function createTurnRunner(
     subscribedMaker = maker;
     unsubscribeMakerEvents = maker.on((event) => {
       if (event.type !== 'session:closed') return;
+      if (agentSwitchCloseSuppressed.has(event.sessionId)) return;
       forgetClosedSession(event.sessionId, 'maker session closed');
     });
   }
@@ -598,7 +609,20 @@ export function createTurnRunner(
     );
 
     try {
-      const sendResult = await state.makerSession.send(item.userMessage, {
+      // deferred 切换会关闭旧 session。apply 成功后重新读取 maker 里的 live
+      // session 并原地换绑 IM listener,确保当前这条消息发给目标引擎且队列不丢。
+      await refreshSessionAfterPendingAgentSwitch(state, rowId, userId);
+      // session-agent-switch:本路径直发 session.send(不经 makerSendTransaction),
+      // 交接注入自己接——切换后首条消息若来自 IM 渠道,新引擎同样需要交接上下文
+      // (2026-07-20 审计)。落库(persistUserMessage)仍是渠道原文。
+      const pendingHandoff = await agentHandoffPending.peek(rowId);
+      const outgoingMessage = pendingHandoff
+        ? prependHandoffToUserMessage(
+            item.userMessage as Parameters<typeof prependHandoffToUserMessage>[0],
+            pendingHandoff,
+          )
+        : item.userMessage;
+      const sendResult = await state.makerSession.send(outgoingMessage as typeof item.userMessage, {
         planMode: false,
         // B' 阶段: 把渠道用户消息也写本地 messages 表 — 跟 desktop renderer
         // 写自己 user message 等价 (renderer 走 IPC, 我们 main 端直接调函数)。
@@ -615,6 +639,9 @@ export function createTurnRunner(
           });
         },
       });
+      if (pendingHandoff && sendResult.accepted) {
+        agentHandoffPending.consume(rowId);
+      }
       const outcome = toDesktopSessionDispatchOutcome(sendResult, {
         source: `${channel}-runner`,
         context: buildSendContext(rowId),
@@ -647,6 +674,69 @@ export function createTurnRunner(
         context: buildSendContext(rowId),
         error: normalized.error,
       });
+    }
+  }
+
+  async function refreshSessionAfterPendingAgentSwitch(
+    state: SessionState,
+    sessionId: string,
+    userId: string,
+  ): Promise<void> {
+    if (!deps.applyPendingAgentSwitch) return;
+    const previous = state.makerSession;
+    agentSwitchCloseSuppressed.add(sessionId);
+    try {
+      await deps.applyPendingAgentSwitch(sessionId);
+      const maker = getMaker();
+      let current = maker.getSession(sessionId);
+      // apply 已提交 DB 但 bootstrap 失败时,直发路径也要像 makerSendTransaction 的
+      // lazy-create 一样按最新 DB 行自愈,不能退回已关闭的 previous.send()。
+      if (!current) {
+        const [row] = await getDbClient()
+          .drizzle.select()
+          .from(sessionsTable)
+          .where(eq(sessionsTable.id, sessionId))
+          .limit(1);
+        if (!row?.workingDir) {
+          throw new Error(`session ${sessionId} missing after deferred agent switch`);
+        }
+        const agentKind = toCoreAgentKind(row.agentKind);
+        hydrateSessionProvider(sessionId, row.providerId ?? null);
+        if (row.effort) setSessionEffort(sessionId, row.effort);
+        setSessionFastMode(sessionId, !!row.fastMode);
+        current = await maker.createSession({
+          id: sessionId,
+          agentKind,
+          workingDir: row.workingDir,
+          model: row.model,
+          effort: row.effort,
+          permissionMode: row.permissionMode,
+          fastMode: row.fastMode,
+          providerId: row.providerId ?? undefined,
+          resumeSessionId: row.sdkSessionId ?? undefined,
+          vendorOptions: state.attached
+            ? undefined
+            : adapter.buildVendorOptions(userId, state.scopeKey),
+        });
+      }
+      if (current === previous) return;
+
+      for (const unsubscribe of state.unsubscribers) {
+        try {
+          unsubscribe();
+        } catch {
+          /* closed old session listener */
+        }
+      }
+      state.unsubscribers = [];
+      previous.setInteractionListener(null);
+      state.makerSession = current;
+      wireSessionToIpcExternal(current);
+      state.unsubscribers.push(current.onEvent(handleEventFor(sessionId, userId)));
+      current.setInteractionListener(handleInteractionFor(sessionId, userId, state.scopeKey));
+      sessionStates.set(sessionId, state);
+    } finally {
+      agentSwitchCloseSuppressed.delete(sessionId);
     }
   }
 

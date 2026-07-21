@@ -242,6 +242,7 @@ interface BundleMessageRow {
   content: string;
   toolUseId: string | null;
   agentMeta: string | null;
+  agentKind: string | null;
   createdAt: number;
   rewindAt: number | null;
 }
@@ -519,6 +520,7 @@ export async function commitShareImport(
       content: rewriteMediaUrls(m.content, rewriteRules),
       toolUseId: m.toolUseId,
       agentMeta: m.agentMeta,
+      agentKind: m.agentKind,
       createdAt: m.createdAt,
       rewindAt: m.rewindAt,
     }));
@@ -610,6 +612,7 @@ async function readMessagesJsonl(zip: JSZip): Promise<BundleMessageRow[]> {
       content: m.content,
       toolUseId: typeof m.toolUseId === 'string' ? m.toolUseId : null,
       agentMeta: typeof m.agentMeta === 'string' ? m.agentMeta : null,
+      agentKind: typeof m.agentKind === 'string' ? m.agentKind : null,
       createdAt: m.createdAt,
       rewindAt: typeof m.rewindAt === 'number' ? m.rewindAt : null,
     });

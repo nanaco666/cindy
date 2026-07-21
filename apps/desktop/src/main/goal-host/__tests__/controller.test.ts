@@ -402,6 +402,75 @@ describe('GoalController', () => {
     expect(h.persistedLimits).toHaveLength(0);
   });
 
+  it('applies a deferred agent switch before Goal sends and uses the refreshed live session', async () => {
+    const oldSession = new FakeSession('s1', 'claude-code');
+    const switchedSession = new FakeSession('s1', 'codex');
+    let live = oldSession;
+    const applyPendingAgentSwitch = vi.fn(async () => {
+      live = switchedSession;
+    });
+    const local = makeController({
+      getSession: () => live,
+      ensureSession: async () => live,
+      applyPendingAgentSwitch,
+    });
+
+    await local.controller.setGoal({
+      sessionId: 's1',
+      objective: 'continue on the selected engine',
+      agentKind: 'claude-code',
+    });
+
+    expect(applyPendingAgentSwitch).toHaveBeenCalledWith('s1');
+    expect(oldSession.sends).toHaveLength(0);
+    expect(switchedSession.sends).toHaveLength(1);
+    expect(switchedSession.sends[0].originKind).toBe('goal');
+  });
+
+  it('migrates the Goal listener to the switched session so the new engine turn can finalize (reviewer P1)', async () => {
+    const oldSession = new FakeSession('s1', 'claude-code');
+    const switchedSession = new FakeSession('s1', 'codex');
+    let live: FakeSession = oldSession;
+    // deferred switch commit:关旧 live session + spawn 目标引擎 → maker.getSession 换新对象。
+    const applyPendingAgentSwitch = vi.fn(async () => {
+      live = switchedSession;
+    });
+    const local = makeController({
+      getSession: () => live,
+      ensureSession: async () => live,
+      applyPendingAgentSwitch,
+    });
+
+    // setGoal 先在 oldSession 上挂 listener,首轮 fireTurn 落实切换 → listener 必须迁到 switchedSession。
+    await local.controller.setGoal({
+      sessionId: 's1',
+      objective: 'finish on the new engine',
+      agentKind: 'claude-code',
+    });
+    expect(switchedSession.sends).toHaveLength(1);
+
+    // 旧引擎已关闭并 detach:往旧 session 发终止事件不应再推进目标(否则说明 listener 没迁走)。
+    oldSession.emitGoalTurn({
+      toolUse: true,
+      verdictJson: '```json\n{"goal_status":"complete","reason":"stale"}\n```',
+      tokens: 7,
+    });
+    await tick();
+    expect(local.completions).toHaveLength(0);
+    expect(await local.storage.get('s1')).not.toBeNull();
+
+    // 新引擎 turn 的 done 事件必须进 finalizeTurn → 目标正常收口,不再永远卡在 active。
+    switchedSession.emitGoalTurn({
+      toolUse: true,
+      verdictJson: '```json\n{"goal_status":"complete","reason":"green"}\n```',
+      tokens: 42,
+    });
+    await tick();
+    expect(local.completions).toHaveLength(1);
+    expect(local.completions[0].summary.reason).toBe('green');
+    expect(await local.storage.get('s1')).toBeNull();
+  });
+
   it('aborts the git baseline when a goal continuation send is not accepted', async () => {
     const order: string[] = [];
     const beforeDispatchUserTurn = vi.fn(async () => {

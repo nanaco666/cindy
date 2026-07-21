@@ -36,7 +36,11 @@ vi.mock('../../client/current', () => ({
   getDbClient: () => ({ drizzle: h.db }),
 }));
 
-import { readPriorUserRoundCost, registerMessageIpc } from '../messages';
+import {
+  findPendingAgentSwitchHandoff,
+  readPriorUserRoundCost,
+  registerMessageIpc,
+} from '../messages';
 
 function createDb(): Database.Database {
   const sqlite = new Database(':memory:');
@@ -53,6 +57,7 @@ function createDb(): Database.Database {
       content TEXT NOT NULL,
       tool_use_id TEXT,
       agent_meta TEXT,
+      agent_kind TEXT,
       created_at INTEGER NOT NULL,
       rewind_at INTEGER
     );
@@ -232,6 +237,53 @@ describe('local-db:messages:list cursor', () => {
     // list/session + one visibility scan (plus the direct storage assertion);
     // never one SQLite query set per SDK segment.
     expect(prepareSpy).toHaveBeenCalledTimes(5);
+  });
+});
+
+describe('findPendingAgentSwitchHandoff 持久消费位', () => {
+  function insertBoundary(
+    sqlite: Database.Database,
+    content: Record<string, unknown>,
+    createdAt = 1_000,
+  ): void {
+    sqlite.prepare(`
+      INSERT INTO messages (
+        id, client_id, session_id, role, content, tool_use_id, agent_meta,
+        agent_kind, created_at, rewind_at
+      ) VALUES ('sw', 'sw', 's1', 'agent_switch', ?, NULL, NULL, 'cc', ?, NULL)
+    `).run(JSON.stringify(content), createdAt);
+  }
+
+  function insertUser(sqlite: Database.Database, createdAt = 2_000): void {
+    sqlite.prepare(`
+      INSERT INTO messages (
+        id, client_id, session_id, role, content, tool_use_id, agent_meta,
+        agent_kind, created_at, rewind_at
+      ) VALUES ('user-after', 'user-after', 's1', 'user', '"失败首发"', NULL, NULL, 'codex', ?, NULL)
+    `).run(createdAt);
+  }
+
+  it('失败首发已落 user 行但 consumed=false,重启重建仍返回 handoff', async () => {
+    const sqlite = createDb();
+    sqlite.prepare('INSERT INTO sessions (id, cleared_at) VALUES (?, NULL)').run('s1');
+    insertBoundary(sqlite, { handoff: 'HANDOFF', consumed: false });
+    insertUser(sqlite);
+    await expect(findPendingAgentSwitchHandoff('s1')).resolves.toBe('HANDOFF');
+  });
+
+  it('consumed=true 即使没有 user 行也不再恢复', async () => {
+    const sqlite = createDb();
+    sqlite.prepare('INSERT INTO sessions (id, cleared_at) VALUES (?, NULL)').run('s1');
+    insertBoundary(sqlite, { handoff: 'HANDOFF', consumed: true });
+    await expect(findPendingAgentSwitchHandoff('s1')).resolves.toBeNull();
+  });
+
+  it('v1 老边界缺 consumed 时保留 user 行启发式', async () => {
+    const sqlite = createDb();
+    sqlite.prepare('INSERT INTO sessions (id, cleared_at) VALUES (?, NULL)').run('s1');
+    insertBoundary(sqlite, { handoff: 'HANDOFF' });
+    insertUser(sqlite);
+    await expect(findPendingAgentSwitchHandoff('s1')).resolves.toBeNull();
   });
 });
 

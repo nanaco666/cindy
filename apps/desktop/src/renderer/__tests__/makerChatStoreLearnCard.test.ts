@@ -4,6 +4,10 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+const transportMocks = vi.hoisted(() => ({
+  listMessages: vi.fn(async () => []),
+}));
+
 vi.mock('@/lib/messageService', () => ({
   list: vi.fn(async () => []),
   around: vi.fn(async () => []),
@@ -35,6 +39,40 @@ vi.mock('@/lib/composerDraftStore', () => ({
     type: 'doc',
     content: [{ type: 'paragraph', content: [{ type: 'text', text: s }] }],
   }),
+}));
+vi.mock('@/lib/makerTransport', () => ({
+  makerApiFor: () => ({
+    input: {
+      getProjection: vi.fn(async (sessionId: string) => ({
+        sessionId,
+        pendingQueue: [],
+        steeringQueueClientIds: [],
+        queuePaused: false,
+        queueExpanded: false,
+        queueInteractionLocks: [],
+        queueEditLocks: [],
+        queueAbortPending: false,
+        error: null,
+        recovery: null,
+        errorRetryText: null,
+      })),
+    },
+    getPendingInteractions: vi.fn(async () => []),
+  }),
+  getSessionFor: vi.fn(async () => ({
+    agentKind: 'cc',
+    remoteHostId: null,
+    sdkSessionId: null,
+    fastMode: false,
+    contextTokens: 0,
+    contextWindow: 0,
+    totalCostUsd: 0,
+  })),
+  listMessagesFor: transportMocks.listMessages,
+  aroundMessagesFor: vi.fn(async () => []),
+  aroundMessagesByClientIdFor: vi.fn(async () => []),
+  dismissErrorMessageFor: vi.fn(async () => undefined),
+  isRemoteSession: () => false,
 }));
 
 import { makerChatStore } from '@/lib/makerChatStore';
@@ -81,5 +119,38 @@ describe('learn 状态卡 store 行为', () => {
     makerChatStore.moveLearnCardToEnd(id, 'r-missing');
     msgs = makerChatStore.getSnapshot(id).messages;
     expect(msgs.at(-1)?.systemCardType).toBe('learn');
+  });
+});
+
+describe('agent switch 历史投影', () => {
+  it('保留 resumed=true,让桌面端显示已续接原生会话', async () => {
+    const id = sid('agent-switch-resumed');
+    transportMocks.listMessages.mockResolvedValueOnce([
+      {
+        id: 'row-agent-switch',
+        clientId: 'agent-switch:1',
+        sessionId: id,
+        role: 'agent_switch',
+        content: {
+          fromAgentKind: 'cc',
+          toAgentKind: 'codex',
+          fromModel: 'claude-sonnet-5',
+          toModel: 'gpt-5.5-codex',
+          handoff: 'handoff',
+          resumed: true,
+        },
+        createdAt: Date.now(),
+      },
+    ] as never);
+
+    makerChatStore.ensureInitialMessages(id);
+    await vi.waitFor(() => {
+      expect(makerChatStore.getSnapshot(id).historyLoaded).toBe(true);
+    });
+
+    const card = makerChatStore
+      .getSnapshot(id)
+      .messages.find((message) => message.systemCardType === 'agent-switch');
+    expect(card?.systemCardData).toMatchObject({ resumed: true });
   });
 });

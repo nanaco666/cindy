@@ -193,6 +193,8 @@ interface BundleOverrides {
   blob?: { bytes: Buffer; urlHash?: string };
   /** 加一条媒体类 loose 条目(xdt-audio mp3,测第 4 步入仓重写)。 */
   looseAudio?: { bytes: Buffer };
+  /** v1 旧包没有逐消息 agentKind。 */
+  omitMessageAgentKind?: boolean;
 }
 
 async function buildBundle(overrides: BundleOverrides = {}): Promise<Buffer> {
@@ -216,6 +218,7 @@ async function buildBundle(overrides: BundleOverrides = {}): Promise<Buffer> {
       content: JSON.stringify([{ type: 'text', text: `图 ${IMAGE_URL} 文件 ${FILE_URL}${extraImageText}${blobText}${looseAudioText}` }]),
       toolUseId: null,
       agentMeta: null,
+      ...(overrides.omitMessageAgentKind ? {} : { agentKind: 'cc' }),
       createdAt: 1700000000100,
       rewindAt: null,
     },
@@ -226,6 +229,7 @@ async function buildBundle(overrides: BundleOverrides = {}): Promise<Buffer> {
       content: '"ok"',
       toolUseId: null,
       agentMeta: `{"sdkSessionId":"${SID}"}`,
+      ...(overrides.omitMessageAgentKind ? {} : { agentKind: 'codex' }),
       createdAt: 1700000000200,
       rewindAt: null,
     },
@@ -356,12 +360,13 @@ describe('sessionShareImport', () => {
     expect(dbMock.txCalls).toHaveLength(1);
     const txArgs = dbMock.txCalls[0].args as {
       session: { id: string; source: string; sdkSessionId: string; workingDir: string };
-      messages: Array<{ content: string; clientId: string }>;
+      messages: Array<{ content: string; clientId: string; agentKind: string | null }>;
     };
     expect(txArgs.session.source).toBe('shared');
     expect(txArgs.session.sdkSessionId).toBe(SID);
     expect(txArgs.session.workingDir).toBe(newWorkdir);
     expect(txArgs.session.id).toBe(result.sessionId);
+    expect(txArgs.messages.map((m) => m.agentKind)).toEqual(['cc', 'codex']);
     const content0 = txArgs.messages[0].content;
     expect(content0).toContain(blobUrlOf(IMG1_BYTES));
     expect(content0).not.toContain('xdt-image://');
@@ -374,6 +379,22 @@ describe('sessionShareImport', () => {
     expect(imgIngest?.refs).toEqual([{ refKind: 'import', refId: result.sessionId, originKind: 'user' }]);
     expect(fs.existsSync(path.join(tmpRoot, 'cc-agent', 'images', result.sessionId, 'img-1.png'))).toBe(false);
     expect(fs.existsSync(path.join(sharedMediaRoot, result.sessionId, '2-doc.pdf'))).toBe(true);
+  });
+
+  it('legacy bundle without message agentKind imports rows as NULL', async () => {
+    const filePath = await writeBundleFile(await buildBundle({ omitMessageAgentKind: true }));
+    const inspect = await inspectShareFile(filePath);
+    if (inspect.encrypted) return;
+    await commitShareImport({
+      draftId: inspect.draftId,
+      workingDir: newWorkdir,
+      projectsRootOverride: projectsRoot,
+      sharedMediaRootOverride: sharedMediaRoot,
+    });
+    const txArgs = dbMock.txCalls[0].args as {
+      messages: Array<{ agentKind: string | null }>;
+    };
+    expect(txArgs.messages.map((m) => m.agentKind)).toEqual([null, null]);
   });
 
   it('loose 媒体(mp3)入总仓:?path= 重写为仓内绝对路径,shared-media 零落盘(第 4 步)', async () => {

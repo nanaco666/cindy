@@ -40,6 +40,7 @@ import {
   listInterruptedPendingSessionIds,
   setOnSessionTurnEndedPersisted,
 } from '../sessionActiveTurn';
+import { rebroadcastAgentSwitchBoundary } from './messages';
 
 const log = createLogger('sessions');
 const DEFAULT_DRAFT_SESSION_TITLE = 'New Maker';
@@ -131,6 +132,86 @@ const REMOTE_PERSIST_FIELDS = new Set([
  * (两路按「本机 vs 远程会话」互斥)。故意**不暴露 IPC handler** —— 这不是远程可调 channel,
  * 只是 dispatch 的内部回流,不开放新的远程裸写面。
  */
+/**
+ * session-agent-switch:切换 agent 引擎的 DB 提交(单点,只被
+ * sessionAgentSwitchHandler 调用,不暴露 IPC handler——agent_kind 不进任何
+ * 通用 update 白名单,防裸写)。语义:
+ *  - agent_kind / model 落新引擎值;providerId undefined = 不动,null = 显式清除;
+ *  - sdk_session_id:缺省 / null = 清空,新引擎从全新原生会话开始(全量交接注入
+ *    承接上下文);Phase 2 切回停泊引擎时传停泊的原生 session id,随后的
+ *    bootstrap / lazy-create 走标准 resume 路径续接(增量交接补齐离开期间进展)。
+ *    旧引擎的原生会话 id 绝不能原样残留——resume 会以错误引擎解释它(离场值
+ *    快照存在边界行 fromSdkSessionId,即停泊绑定)。
+ *  - 广播 sessions:patched:本机各窗口 sessionsStore/会话视图收敛 + device-link
+ *    tap 让控制端镜像同步(agentKind 翻转驱动 capabilities 缓存按新 key 重取)。
+ */
+export async function applyAgentSwitchToSessionRow(
+  sessionId: string,
+  patch: {
+    agentKind: 'cc' | 'codex';
+    model: string;
+    providerId: string | null | undefined;
+    sdkSessionId?: string | null;
+    /** 目标引擎下的 effort / fastMode(意图登记时 renderer 按目标目录解析,apply 一并落库)。 */
+    effort?: string;
+    fastMode?: boolean;
+  },
+): Promise<void> {
+  const db = getDbClient().drizzle;
+  const nextSdkSessionId = patch.sdkSessionId ?? null;
+  const setObj: Partial<typeof sessions.$inferInsert> = {
+    agentKind: patch.agentKind,
+    model: patch.model,
+    sdkSessionId: nextSdkSessionId,
+    updatedAt: Date.now(),
+  };
+  if (patch.providerId !== undefined) setObj.providerId = patch.providerId;
+  // effort 值域由 renderer 按目标引擎 capabilities 解析(schema 列是字面量联合,
+  // 跨层传输后此处以 string 到达;非法值与直改 DB 同级,运行时由引擎侧收敛)。
+  if (patch.effort !== undefined) {
+    setObj.effort = patch.effort as (typeof sessions.$inferInsert)['effort'];
+  }
+  if (patch.fastMode !== undefined) setObj.fastMode = patch.fastMode;
+  await db.update(sessions).set(setObj).where(eq(sessions.id, sessionId));
+  broadcastSessionPatched(sessionId, {
+    agentKind: patch.agentKind,
+    model: patch.model,
+    sdkSessionId: nextSdkSessionId,
+    ...(patch.providerId !== undefined ? { providerId: patch.providerId } : {}),
+    ...(patch.effort !== undefined ? { effort: patch.effort } : {}),
+    ...(patch.fastMode !== undefined ? { fastMode: patch.fastMode } : {}),
+  });
+}
+
+/** resume 停泊失败的原子 DB 回落,提交成功后再把 session 与边界新状态广播。 */
+export async function applyAgentSwitchResumeFallbackAtomically(
+  sessionId: string,
+  boundaryClientId: string,
+  content: unknown,
+): Promise<void> {
+  let boundaryContent: string;
+  try {
+    boundaryContent = JSON.stringify(content);
+  } catch {
+    throwIpcError('INVALID_PARAMS', 'agent switch boundary content must be JSON serializable');
+  }
+  await getDbClient().tx('session.agentSwitchFallback', {
+    sessionId,
+    boundaryClientId,
+    boundaryContent,
+    updatedAt: Date.now(),
+  });
+  broadcastSessionPatched(sessionId, { sdkSessionId: null });
+  await rebroadcastAgentSwitchBoundary(sessionId, boundaryClientId).catch((err) => {
+    // DB 事务已提交，广播失败不能让上层误判为“原子回落失败”并重复事务。
+    log.warn('agent-switch fallback boundary broadcast failed', {
+      sessionId,
+      boundaryClientId,
+      err: err instanceof Error ? err.message : String(err),
+    });
+  });
+}
+
 /**
  * Auto 权限分类器降级专用的条件持久化:仅当持久态仍为 'auto' 时把 permissionMode
  * 写成 'ask'(SQL 级 compare-and-swap)。用户在降级过程中并发手动切档时 UPDATE 不
