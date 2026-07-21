@@ -840,7 +840,7 @@ describe('new session composer surface', () => {
     expect(newSource).toContain('takePrewarmedMobileVoiceAsr(selectedDeviceId) ?? Promise.resolve(null),');
     expect(newSource).toContain('?? createMobileCindyVoiceCredential(selectedDeviceId);');
     expect(newSource).toContain('connectionProvider: (providerId) => voiceContext.createAsrConnection(providerId),');
-    expect(newSource).toContain('refinerTargetProvider: (providerId) => voiceContext.createRefinerTarget(providerId),');
+    expect(newSource).toContain('refinerTargetProvider: (providerId, options) => voiceContext.createRefinerTarget(providerId, options),');
     expect(newSource).toContain('const composerVoicePlacement = resolveMobileComposerVoiceButtonPlacement({');
     expect(newSource).toContain('hasTrailingAction: composerShowCreateButton');
     expect(newSource).toContain('const voiceStatusVisible = Boolean(voiceError);');

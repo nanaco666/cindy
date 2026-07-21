@@ -459,7 +459,7 @@ describe('mobile session composer desktop-first surface', () => {
       apiFetch: auth.apiFetch,
     });`);
     expect(source).toContain('connectionProvider: (providerId) => voiceContext.createAsrConnection(providerId),');
-    expect(source).toContain('refinerTargetProvider: (providerId) => voiceContext.createRefinerTarget(providerId),');
+    expect(source).toContain('refinerTargetProvider: (providerId, options) => voiceContext.createRefinerTarget(providerId, options),');
     expect(source).toContain('getMobileVoiceInputHistoryForHost(deviceId),');
     // Device link is opened non-blocking (not awaited): dictation goes through the
     // cloud ASR proxy and does not need the link, so it must not gate mic start.

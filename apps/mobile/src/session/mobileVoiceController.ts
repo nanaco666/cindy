@@ -57,7 +57,7 @@ type MobileVoiceControllerOptions = {
     websocketUrl: string;
     authorizationToken: string;
   }>;
-  refinerTargetProvider?: (provider: string) => Promise<{
+  refinerTargetProvider?: (provider: string, options?: { refreshAccessToken?: boolean }) => Promise<{
     url: string;
     authorization: string;
   }>;
@@ -589,7 +589,7 @@ function createMobileRefiner(
   options: {
     refinementContext?: DictationRefinementContext;
     localVoiceInputHistory?: readonly string[];
-    refinerTargetProvider?: (provider: string) => Promise<{
+    refinerTargetProvider?: (provider: string, options?: { refreshAccessToken?: boolean }) => Promise<{
       url: string;
       authorization: string;
     }>;

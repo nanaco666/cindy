@@ -2864,7 +2864,7 @@ export default function SessionScreen() {
           credential,
           ...(prewarmedVoice ? { asr: prewarmedVoice.asr } : {}),
           connectionProvider: (providerId) => voiceContext.createAsrConnection(providerId),
-          refinerTargetProvider: (providerId) => voiceContext.createRefinerTarget(providerId),
+          refinerTargetProvider: (providerId, options) => voiceContext.createRefinerTarget(providerId, options),
           initialDraft: draft,
           refinementContext: buildMobileVoiceSessionRefinementContext(draft, renderItems),
           localVoiceInputHistory,

@@ -1356,7 +1356,7 @@ export default function NewRemoteSessionScreen() {
         credential,
         ...(prewarmedVoice ? { asr: prewarmedVoice.asr } : {}),
         connectionProvider: (providerId) => voiceContext.createAsrConnection(providerId),
-        refinerTargetProvider: (providerId) => voiceContext.createRefinerTarget(providerId),
+        refinerTargetProvider: (providerId, options) => voiceContext.createRefinerTarget(providerId, options),
         initialDraft: currentDraft,
         refinementContext: selectionBefore ? { selectionBefore } : undefined,
         localVoiceInputHistory,
