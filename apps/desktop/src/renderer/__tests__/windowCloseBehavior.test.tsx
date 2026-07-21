@@ -50,10 +50,20 @@ function installWindowsApi(closeBehavior: 'quit' | 'tray' | null) {
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  window.history.replaceState({}, '', '/');
   delete (window as Partial<Window>).electronAPI;
 });
 
 describe('Windows close behavior', () => {
+  it('does not subscribe to main-window close requests from a secondary window', () => {
+    window.history.replaceState({}, '', '/?secondaryWindow=1');
+    const api = installWindowsApi(null);
+
+    render(<WindowControls />);
+
+    expect(api.onWindowsCloseBehaviorRequested).not.toHaveBeenCalled();
+  });
+
   it('closes to the tray without showing the quit protection flow', async () => {
     const api = installWindowsApi('tray');
     render(<WindowControls />);

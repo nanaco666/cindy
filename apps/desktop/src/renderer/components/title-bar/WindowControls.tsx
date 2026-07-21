@@ -41,7 +41,7 @@ export function WindowControls({
   const { t } = useTranslation();
 
   useEffect(() => {
-    if (window.electronAPI.platform !== 'win32') return;
+    if (window.electronAPI.platform !== 'win32' || isSecondaryWindow() || isSidebarWindow()) return;
     return window.electronAPI.windowBehavior.onWindowsCloseBehaviorRequested(() => {
       if (windowsCloseBehaviorDialogVisibleRef.current) {
         window.electronAPI.windowBehavior.notifyWindowsCloseBehaviorPromptShown();
@@ -104,8 +104,7 @@ export function WindowControls({
       setShowWindowsCloseBehaviorDialog(false);
       await continueCloseWithBehavior(behavior);
     } catch {
-      // 持久化失败就继续保留选择弹窗，不带着未知行为进入关闭流程。
-      setShowWindowsCloseBehaviorDialog(true);
+      // 弹窗尚未关闭；持久化失败时保留它，不带着未知行为进入关闭流程。
     } finally {
       savingWindowsCloseBehaviorRef.current = false;
       setSavingWindowsCloseBehavior(false);
