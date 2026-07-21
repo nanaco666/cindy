@@ -63,15 +63,23 @@ describe('内置意识 XD Pages 部署访问范围', () => {
       preset: 'worker',
       ipRestrict: true,
       warning: 'worker preset 需要自行调用 ip-guard',
+      fileCount: 42,
     });
 
     const result = await harness.call('pages_deploy', { name: 'demo', dir_deposit: deposit });
     expect(result.ok).toBe(true);
-    const payload = result.result as unknown as { user_facing_markdown?: string };
+    const payload = result.result as unknown as {
+      user_facing_markdown?: string;
+      meta?: { file_count?: number; warning?: string; worker_note?: string };
+    };
     const markdown = String(payload.user_facing_markdown);
     expect(markdown).toContain('Worker 代码自行决定');
     expect(markdown).not.toContain('访问范围: 仅公司内网可访问');
     expect(markdown).toContain('worker preset 需要自行调用 ip-guard');
+    expect(markdown).toContain('文件数: 42');
+    expect(payload.meta?.file_count).toBe(42);
+    expect(payload.meta?.warning).toBe('worker preset 需要自行调用 ip-guard');
+    expect(payload.meta?.worker_note).toBeUndefined();
   });
 
   it('static 使用服务端返回的 IP 限制状态', async () => {

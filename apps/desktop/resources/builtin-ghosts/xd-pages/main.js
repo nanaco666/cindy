@@ -255,15 +255,16 @@ async function pagesDeploy(args) {
   var warningNote = serverWarning || (preset === 'worker' && responseIpRestrict
     ? 'worker preset 不会自动注入 IP 检查, 请在 _worker.js 内自行集成 ip-guard(调 pages_get_worker_template({ type: "ip-guard" }) 拿模板), 否则站点实际可能为公网可访问。'
     : undefined);
+  var fileCount = parsed && typeof parsed.fileCount === 'number'
+    ? parsed.fileCount
+    : (typeof deposit.file_count === 'number' ? deposit.file_count : relPaths.length);
   var lines = [
     '部署成功 ✅',
     '',
     '- 站点地址: ' + siteUrl,
     '- 访问范围: ' + accessScope,
     '- preset: ' + preset + '(' + presetReason + ')',
-    '- 文件数: ' + (parsed && typeof parsed.fileCount === 'number'
-      ? parsed.fileCount
-      : (typeof deposit.file_count === 'number' ? deposit.file_count : relPaths.length)),
+    '- 文件数: ' + fileCount,
     '',
     '提示: 新站点 DNS 首次部署后可能需要 1-3 分钟生效, 立刻打不开是正常现象;更新部署后页面没刷新通常是 CDN 缓存, 可在 URL 后加 ?v=<时间戳> 验证。',
   ];
@@ -274,7 +275,7 @@ async function pagesDeploy(args) {
     data: parsed || {},
     meta: {
       preset_decision: { used: preset, reason: presetReason },
-      file_count: typeof deposit.file_count === 'number' ? deposit.file_count : relPaths.length,
+      file_count: fileCount,
       total_bytes: typeof deposit.total_bytes === 'number' ? deposit.total_bytes : undefined,
     },
     user_facing_markdown: lines.join('\n'),
@@ -285,7 +286,7 @@ async function pagesDeploy(args) {
       '自动检测不确定, 建议跟用户复述一句: "这个网站是固定内容还是有页面跳转的单页应用?" 前者保持 static, 后者重新部署时传 preset:"spa"(需重新过户目录)';
   }
   if (serverWarning) out.meta.warning = serverWarning;
-  if (preset === 'worker' && warningNote) out.meta.worker_note = warningNote;
+  if (preset === 'worker' && !serverWarning && warningNote) out.meta.worker_note = warningNote;
   return out;
 }
 
