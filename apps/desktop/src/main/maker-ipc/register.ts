@@ -514,7 +514,14 @@ async function applyNativeMemorySettingsToRuntime(maker: Maker, settings: Memory
  * main and renderer holding different values; the next Codex spawn still reads the new setting.
  */
 async function applyMemoryChangeWithCodexRestart<T>(change: () => Promise<T>): Promise<T> {
-  await prepareCodexForAuthModeChange();
+  try {
+    await prepareCodexForAuthModeChange();
+  } catch (err) {
+    throwIpcError(
+      'CREDENTIAL_SWITCH_BUSY',
+      err instanceof Error ? err.message : String(err),
+    );
+  }
   let changed = false;
   try {
     const result = await change();

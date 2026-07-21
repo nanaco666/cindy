@@ -2010,11 +2010,13 @@ export class CodexAgent extends BaseAgent {
     // memory 覆盖只在 host 起来后能 push (RPC); 第一次 startSession 触发, 后续 setMemory 自己 push。
     // 失败 → warn + 继续, 不让 memory 配置阻塞主对话。
     assertCurrentHost('memory override');
-    await this.ensureMemoryOverridePushed(host, currentHostKey).catch((e) => {
-      log.warn('ensureMemoryOverridePushed failed, continuing without memory override', {
-        error: e instanceof Error ? e.message : String(e),
+    if (!opts.remoteHostId) {
+      await this.ensureMemoryOverridePushed(host, currentHostKey).catch((e) => {
+        log.warn('ensureMemoryOverridePushed failed, continuing without memory override', {
+          error: e instanceof Error ? e.message : String(e),
+        });
       });
-    });
+    }
 
     const registerCodexMcpContext = (threadId: string): void => {
       if (!sid || opts.remoteHostId) return;
@@ -4534,7 +4536,9 @@ export class CodexAgent extends BaseAgent {
         log.info('setMemory ◀ no live app-server, will apply on next session');
         return { effective: 'next-session' };
       }
-      await Promise.all(Array.from(this.hosts.entries()).map(async ([key, host]) => {
+      await Promise.all(Array.from(this.hosts.entries()).filter(([key]) => !key.startsWith('remote:')).map(async ([key, host]) => {
+        // Remote hosts do not receive Maker Memory, so their native setting is
+        // owned by the target rather than this local manager.
         await host.request(Method.ExperimentalFeatureEnablementSet, {
           enablement: { memories: enabled },
         });
