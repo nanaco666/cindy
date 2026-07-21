@@ -71,10 +71,14 @@ afterEach(() => {
 
 describe('MacAgentIslandNativeHost', () => {
   it('renders the idle brand from main-provided display strings', () => {
-    const source = fs.readFileSync(
-      new URL('../../../../native/agent-island/macos-agent-island-helper.swift', import.meta.url),
-      'utf8',
+    const sourceUrl = new URL(
+      '../../../../native/agent-island/macos-agent-island-helper.swift',
+      import.meta.url,
     );
+    if (!fs.existsSync(sourceUrl)) {
+      throw new Error(`macos-agent-island-helper.swift 未找到: ${sourceUrl.pathname}`);
+    }
+    const source = fs.readFileSync(sourceUrl, 'utf8');
 
     expect(source).toContain('Text(strings.displayAppName)');
     expect(source).not.toContain('Text("XD Maker")');
