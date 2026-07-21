@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { BrowserWindow } from 'electron';
 import { SESSION_ACTIVITY_CHANNEL } from '@lizi/device-link';
 import type { AgentEvent, InteractionRequest } from '@lizi/maker-core';
+import { REMOTE_DAEMON_CLOSED_REASON } from '@lizi/maker-core/events';
 import { BRAND_NAME } from '@lizi/maker-shared/branding';
 
 import { computeAgentIslandWindowBounds, type AgentIslandLayoutPreference } from '../geometry.js';
@@ -146,11 +147,11 @@ function latestNativeStatesByDisplayId(publish: {
     : undefined;
 }
 
-function terminalErrorEvent(message: string): AgentEvent {
+function terminalErrorEvent(message: string, reason?: string): AgentEvent {
   return {
     type: 'error',
     source: 'claude-code',
-    data: { message, isTerminal: true },
+    data: { message, isTerminal: true, ...(reason ? { reason } : {}) },
   };
 }
 
@@ -1704,7 +1705,7 @@ describe('AgentIslandService native publishing', () => {
     expect(playSound).toHaveBeenNthCalledWith(2, customSound('complete.wav'));
   });
 
-  it('keeps the error card and does not play completion sound for a failed turn', async () => {
+  it('keeps an unplanned remote daemon close in error and does not play completion sound', async () => {
     const { AgentIslandService } = await import('../service.js');
     const publish = vi.fn((state: AgentIslandDisplayState, frameOrFrames: AgentIslandNativeFrame | AgentIslandNativeFrame[]) => {
       void state;
@@ -1712,9 +1713,11 @@ describe('AgentIslandService native publishing', () => {
       return true;
     });
     const playSound = vi.fn<(sound: AgentIslandSoundChoice) => boolean>(() => true);
+    const isPlannedRemoteDaemonClose = vi.fn(() => false);
     const service = new AgentIslandService({
       getMainWindow: () => null,
       nativeHost: { failed: false, publish, playSound },
+      isPlannedRemoteDaemonClose,
     });
     syncEnabledForTest(service, publish);
     service.setSoundSettings({
@@ -1730,7 +1733,7 @@ describe('AgentIslandService native publishing', () => {
 
     service.handleAgentEvent(
       { sessionId: 's1', agentKind: 'claude-code' },
-      terminalErrorEvent('upstream unreachable'),
+      terminalErrorEvent('remote daemon closed', REMOTE_DAEMON_CLOSED_REASON),
     );
     service.handleAgentEvent(
       { sessionId: 's1', agentKind: 'claude-code' },
@@ -1743,10 +1746,42 @@ describe('AgentIslandService native publishing', () => {
 
     expect(playSound).toHaveBeenCalledTimes(1);
     expect(playSound).toHaveBeenCalledWith(customSound('error.wav'));
+    expect(isPlannedRemoteDaemonClose).toHaveBeenCalledWith('s1');
     expect(publish.mock.calls.at(-1)?.[0].sessions[0]).toMatchObject({
       sessionId: 's1',
       phase: 'error',
-      detail: 'upstream unreachable',
+      detail: 'remote daemon closed',
+    });
+  });
+
+  it('allows a remote daemon close inside the upgrade window to converge to completed', async () => {
+    const { AgentIslandService } = await import('../service.js');
+    const publish = vi.fn((state: AgentIslandDisplayState, frameOrFrames: AgentIslandNativeFrame | AgentIslandNativeFrame[]) => {
+      void state;
+      void frameOrFrames;
+      return true;
+    });
+    const isPlannedRemoteDaemonClose = vi.fn(() => true);
+    const service = new AgentIslandService({
+      getMainWindow: () => null,
+      nativeHost: { failed: false, publish },
+      isPlannedRemoteDaemonClose,
+    });
+    syncEnabledForTest(service, publish);
+
+    service.handleAgentEvent(
+      { sessionId: 'upgrade', agentKind: 'claude-code' },
+      terminalErrorEvent('remote daemon closed', REMOTE_DAEMON_CLOSED_REASON),
+    );
+    service.handleAgentEvent(
+      { sessionId: 'upgrade', agentKind: 'claude-code' },
+      { type: 'done', source: 'claude-code', data: { reason: REMOTE_DAEMON_CLOSED_REASON } },
+    );
+
+    expect(isPlannedRemoteDaemonClose).toHaveBeenCalledWith('upgrade');
+    expect(publish.mock.calls.at(-1)?.[0].sessions[0]).toMatchObject({
+      sessionId: 'upgrade',
+      phase: 'completed',
     });
   });
 

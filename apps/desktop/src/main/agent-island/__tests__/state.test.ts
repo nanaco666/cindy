@@ -1,9 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import {
-  REMOTE_DAEMON_CLOSED_REASON,
-  type AgentEvent,
-  type InteractionRequest,
-} from '@lizi/maker-core';
+import type { AgentEvent, InteractionRequest } from '@lizi/maker-core';
+import { REMOTE_DAEMON_CLOSED_REASON } from '@lizi/maker-core/events';
 import { DEFAULT_AGENT_ISLAND_STRINGS } from '../../../shared/agentIsland.js';
 
 import {
@@ -1878,6 +1875,23 @@ describe('Agent Island error read semantics (已读以 App 内真实展示为准
     });
   });
 
+  it('keeps an unplanned remote daemon close in error when its paired done arrives', () => {
+    const state = createAgentIslandState();
+    applyAgentIslandEvent(
+      state,
+      { sessionId: 'remote', title: 'Remote' },
+      terminalErrorEvent('[REMOTE_DAEMON_CLOSED] ...', REMOTE_DAEMON_CLOSED_REASON),
+      2_000,
+    );
+    applyAgentIslandEvent(state, { sessionId: 'remote', title: 'Remote' }, doneEvent(), 2_001);
+
+    expect(buildAgentIslandDisplayState(state, 2_100).sessions[0]).toMatchObject({
+      sessionId: 'remote',
+      phase: 'error',
+      attention: true,
+    });
+  });
+
   it('converges to completed when a paired done follows a planned remote daemon close', () => {
     // cc-mgr 计划升级:maker-core 对 remote_daemon_closed 先 push error 再成对
     // push done(claude-code/index.ts)。done 会把 phase 收敛为 completed 并按
@@ -1890,6 +1904,7 @@ describe('Agent Island error read semantics (已读以 App 内真实展示为准
       { sessionId: 'up', title: 'Upgrade' },
       terminalErrorEvent('[REMOTE_DAEMON_CLOSED] ...', REMOTE_DAEMON_CLOSED_REASON),
       2_000,
+      { allowCompletionAfterTerminalError: true },
     );
     applyAgentIslandEvent(state, { sessionId: 'up', title: 'Upgrade' }, doneEvent(), 2_001);
 

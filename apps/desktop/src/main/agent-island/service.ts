@@ -3,6 +3,7 @@ import path from 'node:path';
 import { release as getOsRelease } from 'node:os';
 import { SESSION_ACTIVITY_CHANNEL } from '@lizi/device-link';
 import type { AgentEvent, InteractionDecision, InteractionRequest } from '@lizi/maker-core';
+import { REMOTE_DAEMON_CLOSED_REASON } from '@lizi/maker-core/events';
 import type { SchedulerEvent } from '@lizi/maker-scheduler';
 import { BRAND_NAME } from '@lizi/maker-shared/branding';
 import type { ApplicationMenuCommand } from '../../shared/applicationMenuCommands.js';
@@ -129,6 +130,8 @@ interface AgentIslandUserPromptDebugMeta {
 export interface AgentIslandServiceDeps {
   getMainWindow: () => BrowserWindow | null;
   nativeHost?: AgentIslandNativeRenderer;
+  /** Main-process upgrade window used to classify remote daemon shutdowns. */
+  isPlannedRemoteDaemonClose?: (sessionId: string) => boolean;
 }
 
 interface AgentIslandNativeRenderer {
@@ -558,6 +561,9 @@ export class AgentIslandService {
     const changed = applyAgentIslandEvent(this.state, hydrated, event, now, {
       suppressCompletionAttention,
       preserveCompletionAttention: suppressCompletionAttention && this.hadAttentionBeforeSilencedRun(hydrated.sessionId),
+      allowCompletionAfterTerminalError:
+        isRemoteDaemonClosedErrorEvent(event) &&
+        this.deps.isPlannedRemoteDaemonClose?.(hydrated.sessionId) === true,
     });
     if (suppressCompletionAttention) {
       this.mutedCompletionSoundSessionIds.add(hydrated.sessionId);
@@ -1760,6 +1766,12 @@ function isCompletionDoneEvent(event: AgentEvent): boolean {
   if (event.type !== 'status') return false;
   const data = event.data as { isRunning?: unknown; status?: unknown } | undefined;
   return data?.isRunning === false && data.status === 'Done';
+}
+
+function isRemoteDaemonClosedErrorEvent(event: AgentEvent): boolean {
+  if (event.type !== 'error') return false;
+  const data = event.data as { reason?: unknown } | undefined;
+  return data?.reason === REMOTE_DAEMON_CLOSED_REASON;
 }
 
 function isStreamingPreviewEvent(event: AgentEvent): boolean {

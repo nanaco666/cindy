@@ -233,7 +233,12 @@ import { registerGitReviewIpc } from './git-review';
 import { registerSidebarSettingsIpc } from './sidebarSettingsStore';
 import { registerTerminalHandlers } from './maker-ipc/terminal-handlers';
 import { registerLocalThemesIpc } from './local-themes/register';
-import { registerRemoteSshIpc, disposeRemoteSshPool, startAutoConnectHostsBackground } from './remote-ssh';
+import {
+  registerRemoteSshIpc,
+  disposeRemoteSshPool,
+  startAutoConnectHostsBackground,
+  isCcMgrUpgradeInFlight,
+} from './remote-ssh';
 import { registerHookControlIpc, disposeHookControl } from './hook-control';
 import { registerSkillhubIpc } from './skillhub/registerIpc';
 import { SkillhubMarketService } from './skillhub/marketService';
@@ -2191,6 +2196,7 @@ const registerIpcHandlers = () => {
   });
   initAgentIslandService({
     getMainWindow: () => getWindow() ?? null,
+    isPlannedRemoteDaemonClose: isCcMgrUpgradeInFlight,
   })?.setAppFocused(hasFocusedAppWindow());
   setSessionsSubscribedListener(() => {
     getAgentIslandService()?.replaySessionActivity();

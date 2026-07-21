@@ -22,7 +22,7 @@
  */
 
 import type { MessageRole, Message, MessageAutomationOrigin } from '@/lib/ccAgent.types';
-import { REMOTE_DAEMON_CLOSED_REASON } from '@lizi/maker-core';
+import { REMOTE_DAEMON_CLOSED_REASON } from '@lizi/maker-core/events';
 import type { AttachedFile, MentionedResource, SerializedAttachedFile } from '@/lib/fileTypes';
 import type {
   AgentInputCreateOpts,

@@ -22,7 +22,6 @@ import {
 import { randomUUID } from 'node:crypto';
 
 import {
-  REMOTE_DAEMON_CLOSED_REASON,
   type AgentEvent,
   type AgentKind,
   type ContextUsageData,
@@ -34,6 +33,7 @@ import {
   type SessionSendResult,
   type UserMessage,
 } from '@lizi/maker-core';
+import { REMOTE_DAEMON_CLOSED_REASON } from '@lizi/maker-core/events';
 import { createId } from '@paralleldrive/cuid2';
 import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { BrowserWindow, ipcMain } from 'electron';
