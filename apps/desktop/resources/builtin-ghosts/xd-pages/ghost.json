@@ -29,13 +29,13 @@
   "tools": [
     {
       "name": "pages_deploy",
-      "description": "把本地目录部署到 {name}.workers.xd.team 内部站点托管。**必须把部署目录的绝对路径放在 ghost_call 顶层 dir 参数**(不是 args;目录须在当前会话工作目录内,主机会过户并注入票据)。name 必须符合 /^[a-z0-9][a-z0-9-]{0,48}[a-z0-9]$/。preset 不传 = 按文件清单自动识别(_worker.js → worker,SPA 构建产物 → spa,其他 → static;识别不确定时返回 needs_user_confirm,请跟用户确认后显式传 preset 重试;你也可以先自行读目录判断后直接传)。public=true 关闭默认 IP 限制允许公网访问,默认仅公司内网。部署成功返回 user_facing_markdown,回复用户时直接整段引用,不要自己拼 URL。常见错误:DIR_INVALID(目录过户失败,按 message 处理)/ INVALID_SITE_NAME / SITE_NAME_TAKEN(换名字)/ DEPOSIT_MISSING(没在 ghost_call 顶层传 dir)。",
+      "description": "把本地目录部署到 {name}.workers.xd.team 内部站点托管。**必须把部署目录的绝对路径放在 ghost_call 顶层 dir 参数**(不是 args;目录须在当前会话工作目录内,主机会过户并注入票据)。name 必须符合 /^[a-z0-9][a-z0-9-]{0,48}[a-z0-9]$/。preset 不传 = 按文件清单自动识别(_worker.js → worker,SPA 构建产物 → spa,其他 → static;识别不确定时返回 needs_user_confirm,请跟用户确认后显式传 preset 重试;你也可以先自行读目录判断后直接传)。当前 Pages API 固定开启 IP 限制,public=true 会被拒绝;static/spa 由服务端自动注入检查,worker 必须在 _worker.js 中自行调用 ip-guard。部署成功返回 user_facing_markdown,回复用户时直接整段引用,不要自己拼 URL。常见错误:DIR_INVALID(目录过户失败,按 message 处理)/ INVALID_SITE_NAME / SITE_NAME_TAKEN(换名字)/ DEPOSIT_MISSING(没在 ghost_call 顶层传 dir)。",
       "parameters": {
         "type": "object",
         "properties": {
           "name": { "type": "string", "description": "站点名(URL 前缀);必须符合命名规则" },
           "preset": { "type": "string", "enum": ["static", "spa", "worker"], "description": "部署类型;不传 = 自动识别" },
-          "public": { "type": "boolean", "description": "true = 关闭 IP 限制允许公网访问;默认 false(仅公司内网)" }
+          "public": { "type": "boolean", "description": "已废弃;传 true 会被拒绝。当前 API 固定开启 IP 限制;worker 是否实际限制取决于 _worker.js 是否调用 ip-guard。" }
         },
         "required": ["name"]
       }
