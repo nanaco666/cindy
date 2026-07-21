@@ -4800,12 +4800,19 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
       await maker.closeSession(sessionId);
     },
     closeWorkerSessionIfIdle: async (sessionId) => {
+      if (sendToSessionLocks.has(sessionId)) return false;
       const sess = maker.getSession(sessionId);
       return sess ? sess.closeIfIdle() : true;
     },
-    hasPendingWorkerInput: (sessionId) =>
-      inputCoordinator.hasPendingQueuedWork(sessionId) ||
-      inputCoordinator.hasQueuedItemWhere(sessionId, () => true, { includeRecovery: true }),
+    hasPendingWorkerInput: async (sessionId) => {
+      await inputCoordinator.ensureQueueRestored(sessionId).catch(() => undefined);
+      // A failed restore is itself a pending condition: never close a worker while
+      // its durable follow-up snapshot is still unavailable.
+      if (!inputCoordinator.isQueueRestored(sessionId)) return true;
+      return inputCoordinator.hasPendingQueuedWork(sessionId) ||
+        inputCoordinator.hasQueuedItemWhere(sessionId, () => true, { includeRecovery: true });
+    },
+    hasSendToSessionLock: (sessionId) => sendToSessionLocks.has(sessionId),
     archiveWorkerSession: archiveSingleWorkerSession,
     getManualInterrupt,
     clearManualInterrupt,

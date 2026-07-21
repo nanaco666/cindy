@@ -190,7 +190,9 @@ export interface OrcaTeamServiceDeps {
   /** 与 Session.send reservation 原子互斥；false 表示 direct send/turn 已先取得会话。 */
   closeWorkerSessionIfIdle(sessionId: string): Promise<boolean>;
   /** pending / dispatch-boundary / recovery 输入任一存在时返回 true。 */
-  hasPendingWorkerInput(sessionId: string): boolean;
+  hasPendingWorkerInput(sessionId: string): Promise<boolean>;
+  /** send_to_session 的恢复/直发锁覆盖 bootstrap 到 Session.send reservation 的窗口。 */
+  hasSendToSessionLock(sessionId: string): boolean;
   archiveWorkerSession(sessionId: string): Promise<void>;
   getManualInterrupt(sessionId: string): OrcaManualInterruptSnapshot | null;
   clearManualInterrupt(sessionId: string): void;
@@ -721,7 +723,14 @@ export function createOrcaTeamService(deps: OrcaTeamServiceDeps): OrcaTeamServic
           message: `worker ${params.workerId} has an active turn`,
         };
       }
-      if (params.expectedStatus && deps.hasPendingWorkerInput(worker.sessionId)) {
+      if (params.expectedStatus && deps.hasSendToSessionLock(worker.sessionId)) {
+        return {
+          ok: false,
+          errorCode: 'WORKER_STATE_CHANGED',
+          message: `worker ${params.workerId} has a send in progress`,
+        };
+      }
+      if (params.expectedStatus && await deps.hasPendingWorkerInput(worker.sessionId)) {
         return {
           ok: false,
           errorCode: 'WORKER_STATE_CHANGED',
@@ -745,7 +754,7 @@ export function createOrcaTeamService(deps: OrcaTeamServiceDeps): OrcaTeamServic
       };
       // Queue state can change while the DB CAS awaits I/O. Preserve newly queued
       // follow-ups before close, then use Session.closeIfIdle for atomic send/close ordering.
-      if (params.expectedStatus && deps.hasPendingWorkerInput(worker.sessionId)) {
+      if (params.expectedStatus && await deps.hasPendingWorkerInput(worker.sessionId)) {
         await rollbackDoneAcknowledgement();
         return {
           ok: false,

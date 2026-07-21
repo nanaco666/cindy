@@ -166,7 +166,8 @@ function createDeps(overrides: Partial<OrcaTeamServiceDeps> = {}) {
       calls.push(`closeWorkerSessionIfIdle:${sessionId}`);
       return true;
     }),
-    hasPendingWorkerInput: vi.fn(() => false),
+    hasPendingWorkerInput: vi.fn(async () => false),
+    hasSendToSessionLock: vi.fn(() => false),
     archiveWorkerSession: vi.fn(async (sessionId) => {
       calls.push(`archiveWorkerSession:${sessionId}`);
     }),
@@ -1053,6 +1054,27 @@ describe('OrcaTeamService', () => {
     expect(calls).toContain('updateWorkerStatus:running');
   });
 
+  it('does not acknowledge a done worker while a resumed send-to-session lock is active', async () => {
+    const { calls, deps, service, setWorker } = createDeps({
+      hasSendToSessionLock: vi.fn(() => true),
+    });
+    setWorker(createWorker({ status: 'done' }));
+
+    await expect(service.idleWorker({
+      callerLeadSessionId: 'lead-1',
+      workerId: 'worker-1',
+      expectedStatus: 'done',
+    })).resolves.toEqual({
+      ok: false,
+      errorCode: 'WORKER_STATE_CHANGED',
+      message: 'worker worker-1 has a send in progress',
+    });
+
+    expect(deps.hasSendToSessionLock).toHaveBeenCalledWith('worker-session-1');
+    expect(deps.markWorkerIdleIfStatus).not.toHaveBeenCalled();
+    expect(calls).toEqual([]);
+  });
+
   it('does not acknowledge or close a done worker while its live session has a direct turn', async () => {
     const { calls, deps, service, setWorker } = createDeps({
       getLiveSession: vi.fn(() => ({ isTurnRunning: () => true })),
@@ -1104,7 +1126,7 @@ describe('OrcaTeamService', () => {
 
   it('preserves queued worker input before acknowledging a done worker', async () => {
     const { deps, service, setWorker } = createDeps({
-      hasPendingWorkerInput: vi.fn(() => true),
+      hasPendingWorkerInput: vi.fn(async () => true),
     });
     setWorker(createWorker({ status: 'done' }));
 
@@ -1125,7 +1147,7 @@ describe('OrcaTeamService', () => {
   it('preserves worker input queued while the done-status CAS is awaiting I/O', async () => {
     let queueChecks = 0;
     const { deps, getWorker, service, setWorker } = createDeps({
-      hasPendingWorkerInput: vi.fn(() => {
+      hasPendingWorkerInput: vi.fn(async () => {
         queueChecks += 1;
         return queueChecks === 2;
       }),

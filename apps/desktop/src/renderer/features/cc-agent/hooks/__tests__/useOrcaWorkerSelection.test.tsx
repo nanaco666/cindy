@@ -154,6 +154,30 @@ describe('useOrcaWorkerSelection', () => {
     expect(mocks.toastError).not.toHaveBeenCalled();
   });
 
+  it('silently keeps done attention when the remote target lacks automatic-ack support', async () => {
+    mocks.workers = [
+      makeWorker('worker-a', 'session-a', true),
+      makeWorker('worker-b', 'session-b', false, 'done'),
+    ];
+    mocks.idleWorker.mockRejectedValueOnce(
+      new Error('[DEVICE_LINK_CHANNEL_NOT_ALLOWED] automatic done acknowledgement is unsupported'),
+    );
+    markWorkerAttention('worker-b');
+    const { result } = renderHook(
+      () => useOrcaWorkerSelection({ leadSessionId: 'lead-1' }),
+      { wrapper },
+    );
+
+    act(() => result.current.handleSwitchFocus('worker-b'));
+
+    await waitFor(() => {
+      expect(mocks.idleWorker).toHaveBeenCalledWith('lead-1', 'worker-b', 'done');
+    });
+    expect(hasWorkerAttention('worker-b')).toBe(true);
+    expect(mocks.refresh).toHaveBeenCalled();
+    expect(mocks.toastError).not.toHaveBeenCalled();
+  });
+
   it('refreshes after switch focus even when done acknowledgement fails unexpectedly', async () => {
     mocks.workers = [
       makeWorker('worker-a', 'session-a', true),

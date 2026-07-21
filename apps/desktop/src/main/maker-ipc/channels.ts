@@ -442,6 +442,8 @@ export const MAKER_INVOKE = {
   WORKER_LIST: 'maker:worker:list',
   WORKER_SWITCH_FOCUS: 'maker:worker:switch-focus',
   WORKER_IDLE: 'maker:worker:idle',
+  /** New wire contract for automatic done acknowledgements; old peers reject it safely. */
+  WORKER_ACKNOWLEDGE_DONE: 'maker:worker:acknowledge-done',
   WORKER_ARCHIVE: 'maker:worker:archive',
   TEAM_END: 'maker:team:end',
   COLLABORATION_SETTINGS_GET: 'maker:collaboration-settings:get',

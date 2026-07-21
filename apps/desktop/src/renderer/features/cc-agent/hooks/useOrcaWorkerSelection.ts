@@ -257,7 +257,8 @@ export function useOrcaWorkerSelection({
         clearWorkerAttention(workerId);
         return true;
       } catch (err) {
-        if (extractIpcError(err)?.code === 'WORKER_STATE_CHANGED') {
+        const errorCode = extractIpcError(err)?.code;
+        if (errorCode === 'WORKER_STATE_CHANGED' || errorCode === 'DEVICE_LINK_CHANNEL_NOT_ALLOWED') {
           log.debug('done acknowledgement skipped after worker state changed', { workerId });
           return false;
         }

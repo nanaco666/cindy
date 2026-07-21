@@ -138,6 +138,23 @@ describe('Orca worker control IPC handlers', () => {
     ).rejects.toMatchObject({ code: 'WORKER_STATE_CHANGED' });
   });
 
+  it('uses the dedicated automatic done acknowledgement channel', async () => {
+    const harness = new IpcHarness();
+    const deps = createDeps();
+    registerOrcaWorkerControlHandlers(harness, deps);
+
+    await harness.invoke(MAKER_INVOKE.WORKER_ACKNOWLEDGE_DONE, {
+      leadSessionId: 'lead-1',
+      workerId: 'worker-1',
+    });
+
+    expect(deps.idleWorker).toHaveBeenCalledWith({
+      callerLeadSessionId: 'lead-1',
+      workerId: 'worker-1',
+      expectedStatus: 'done',
+    });
+  });
+
   it('maps archive service not-found failures to stable IPC error codes', async () => {
     const harness = new IpcHarness();
     const deps = createDeps();

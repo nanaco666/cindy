@@ -3120,12 +3120,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.invoke('maker:worker:create', input),
       switchFocus: (input: Record<string, unknown>): Promise<unknown> =>
         ipcRenderer.invoke('maker:worker:switch-focus', input),
-      idleWorker: (leadSessionId: string, workerId: string, expectedStatus?: 'done'): Promise<unknown> =>
-        ipcRenderer.invoke('maker:worker:idle', {
+      idleWorker: (leadSessionId: string, workerId: string, expectedStatus?: 'done'): Promise<unknown> => {
+        if (expectedStatus === 'done') {
+          return ipcRenderer.invoke('maker:worker:acknowledge-done', { leadSessionId, workerId });
+        }
+        return ipcRenderer.invoke('maker:worker:idle', {
           leadSessionId,
           workerId,
           ...(expectedStatus ? { expectedStatus } : {}),
-        }),
+        });
+      },
       archiveWorker: (leadSessionId: string, workerId: string): Promise<unknown> =>
         ipcRenderer.invoke('maker:worker:archive', { leadSessionId, workerId }),
       endTeam: (leadSessionId: string): Promise<unknown> =>

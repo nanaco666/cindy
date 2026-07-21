@@ -358,12 +358,16 @@ function remoteOrcaWorkflows(deviceId: string): RoutableOrcaWorkflows {
     listWorkersByLead: t('local-db:orca-workflows:list-workers-by-lead') as FullOrca['listWorkersByLead'],
     createWorker: t('maker:worker:create') as FullOrca['createWorker'],
     switchFocus: t('maker:worker:switch-focus') as FullOrca['switchFocus'],
-    idleWorker: ((leadSessionId: string, workerId: string, expectedStatus?: 'done') =>
-      invokeRemote(deviceId, 'maker:worker:idle', [{
+    idleWorker: ((leadSessionId: string, workerId: string, expectedStatus?: 'done') => {
+      if (expectedStatus === 'done') {
+        return invokeRemote(deviceId, 'maker:worker:acknowledge-done', [{ leadSessionId, workerId }]);
+      }
+      return invokeRemote(deviceId, 'maker:worker:idle', [{
         leadSessionId,
         workerId,
         ...(expectedStatus ? { expectedStatus } : {}),
-      }])) as FullOrca['idleWorker'],
+      }]);
+    }) as FullOrca['idleWorker'],
     archiveWorker: ((leadSessionId: string, workerId: string) =>
       invokeRemote(deviceId, 'maker:worker:archive', [{ leadSessionId, workerId }])) as FullOrca['archiveWorker'],
     endTeam: t('maker:team:end') as FullOrca['endTeam'],
