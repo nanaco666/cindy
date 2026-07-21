@@ -10,7 +10,7 @@ import { z } from 'zod';
 import { SCHEDULE_STATUS } from './_enums.js';
 import { withScheduler } from './_shared.js';
 import type { SchedulerMcpDeps } from '../types.js';
-import type { SchedulerToolRegistry } from '../lizi_schedulerToolRegistry.js';
+import type { SchedulerToolRegistry } from '../cindy_schedulerToolRegistry.js';
 
 export function registerScheduleListTool(
   registry: SchedulerToolRegistry,

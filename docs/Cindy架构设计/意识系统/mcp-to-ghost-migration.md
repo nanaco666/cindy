@@ -88,7 +88,7 @@
 
 - [x] **lizi_computer** — 24;host 外部 computer-use 驱动(deps.callComputerTool)→ 本机驱动,不迁
 - [x] **lizi_orca** — 12(直注册);主进程 Orca team 控制器 IPC → 主机本体,不迁
-- [x] **lizi_scheduler** — 12;主进程 Scheduler 引擎 → 主机本体,不迁
+- [x] **cindy_scheduler** — 12;主进程 Scheduler 引擎 → 主机本体,不迁
 - [x] **cindy_helper** — 12;本地 SQLite 聊天库 + 主进程 IPC/状态回调 → 主机本体,不迁
 - [x] **lizi_android** — 8;本机 adb 驱动 → 本机驱动,不迁
 - [x] **lizi_memory** — 8;workdir 域内 memory 文件 + 本地会话 DB → 本地文件,不迁

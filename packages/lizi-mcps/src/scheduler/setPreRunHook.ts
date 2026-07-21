@@ -14,14 +14,14 @@
  * (修改流覆写同一文件),安装成功后直接把命令挂载到任务上——上下文继承与
  * 挂载都是代码确定性完成,不依赖 agent 传对参数。
  *
- * host 未注入 hookScript 服务时本工具不注册(见 lizi_schedulerMcpServer.ts)。
+ * host 未注入 hookScript 服务时本工具不注册(见 cindy_schedulerMcpServer.ts)。
  */
 
 import { z } from 'zod';
 
 import { withScheduler } from './_shared.js';
 import type { SchedulerMcpDeps } from '../types.js';
-import type { SchedulerToolRegistry } from '../lizi_schedulerToolRegistry.js';
+import type { SchedulerToolRegistry } from '../cindy_schedulerToolRegistry.js';
 
 /** 返回给 agent 的脚本内容上限:自测结果与命令才是关键,正文超长截断防刷上下文。 */
 const CONTENT_PREVIEW_CAP = 4000;
