@@ -170,4 +170,28 @@ describe('memorySettingsStore', () => {
 
     expect(getMakerMemoryEnabled()).toBe(false);
   });
+
+  it('does not reject when legacy migration persistence fails', async () => {
+    vi.stubGlobal('localStorage', createStorage());
+    vi.stubGlobal('window', {
+      electronAPI: {
+        maker: {
+          memoryGetSettings: vi.fn().mockResolvedValue({
+            maker: true,
+            claudeCode: false,
+            codex: true,
+          }),
+          memoryPreserveLegacyMakerDisabled: vi.fn().mockRejectedValue(
+            Object.assign(new Error('disk full'), { code: 'INTERNAL' }),
+          ),
+        },
+      },
+    });
+    const { bootstrapMemorySettingsFromMain, getMakerMemoryEnabled } = await import(
+      '@/lib/memorySettingsStore'
+    );
+
+    await expect(bootstrapMemorySettingsFromMain()).resolves.toBeUndefined();
+    expect(getMakerMemoryEnabled()).toBe(true);
+  });
 });

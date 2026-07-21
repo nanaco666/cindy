@@ -95,9 +95,15 @@ export async function bootstrapMemorySettingsFromMain(): Promise<void> {
     // 旧版 opt-out 可能是 renderer false marker，也可能只在 main 留下两种原生记忆
     // 都关闭的状态。marker 非 true 时交给 main 统一判定，再进行 main → renderer 同步。
     if (legacyRendererValue !== true && settings.maker) {
-      settings = await window.electronAPI.maker.memoryPreserveLegacyMakerDisabled(
-        legacyRendererValue ?? null,
-      );
+      try {
+        settings = await window.electronAPI.maker.memoryPreserveLegacyMakerDisabled(
+          legacyRendererValue ?? null,
+        );
+      } catch {
+        // Migration persistence is best-effort. Never let a structured IPC
+        // failure prevent the main renderer tree from mounting.
+        return;
+      }
     }
     if (localWriteRevision !== revisionAtStart) return;
     const current = getMakerMemoryEnabled();
