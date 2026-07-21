@@ -9,7 +9,7 @@ import { z } from 'zod';
 
 import { withScheduler } from './_shared.js';
 import type { SchedulerMcpDeps } from '../types.js';
-import type { SchedulerToolRegistry } from '../lizi_schedulerToolRegistry.js';
+import type { SchedulerToolRegistry } from '../cindy_schedulerToolRegistry.js';
 
 export function registerScheduleRunNowTool(
   registry: SchedulerToolRegistry,

@@ -19,10 +19,22 @@ vi.mock('../../logger', () => ({
 import { rewriteOutboundMedia, __testing } from '../outboundMedia';
 import { parseAttachmentOssRef, isAttachmentOssRef } from '../../../shared/attachmentOssRef';
 
+const SHA256 = 'a'.repeat(64);
+
 beforeEach(() => {
   vi.clearAllMocks();
-  uploadLocalFile.mockResolvedValue({ key: 'cindy/device-link/u/x.png', size: 10, contentType: 'image/png' });
-  uploadBuffer.mockResolvedValue({ key: 'cindy/device-link/u/b.png', size: 5, contentType: 'image/png' });
+  uploadLocalFile.mockResolvedValue({
+    key: 'cindy/device-link/u/x.png',
+    size: 10,
+    contentType: 'image/png',
+    sha256: SHA256,
+  });
+  uploadBuffer.mockResolvedValue({
+    key: 'cindy/device-link/u/b.png',
+    size: 5,
+    contentType: 'image/png',
+    sha256: SHA256,
+  });
 });
 
 describe('rewriteOutboundMedia — channel gating', () => {
@@ -40,7 +52,10 @@ describe('rewriteOutboundMedia — channel gating', () => {
   });
 
   it('send 无附件 content → 不上传', async () => {
-    await rewriteOutboundMedia('maker:send', ['sess', { type: 'user', content: [{ type: 'text', text: 'hi' }] }]);
+    await rewriteOutboundMedia('maker:send', [
+      'sess',
+      { type: 'user', content: [{ type: 'text', text: 'hi' }] },
+    ]);
     expect(uploadLocalFile).not.toHaveBeenCalled();
     expect(uploadBuffer).not.toHaveBeenCalled();
   });
@@ -50,8 +65,18 @@ describe('rewriteQueued — persistedContent 同批改写 + 去重单上传', ()
   it('files[] 与 persistedContent 的同一附件用同一 OSS 引用,只上传一次', async () => {
     resolveSafe.mockReturnValue({ absPath: '/abs/a.png', mimeType: 'image/png' });
     uploadLocalFile
-      .mockResolvedValueOnce({ key: 'cindy/device-link/u/img.png', size: 1, contentType: 'image/png' })
-      .mockResolvedValueOnce({ key: 'cindy/device-link/u/doc.pdf', size: 1, contentType: 'application/pdf' });
+       .mockResolvedValueOnce({
+         key: 'cindy/device-link/u/img.png',
+        size: 1,
+        contentType: 'image/png',
+        sha256: SHA256,
+      })
+      .mockResolvedValueOnce({
+         key: 'cindy/device-link/u/doc.pdf',
+        size: 1,
+        contentType: 'application/pdf',
+        sha256: SHA256,
+      });
 
     const item = {
       clientId: 'c1',
@@ -66,7 +91,10 @@ describe('rewriteQueued — persistedContent 同批改写 + 去重单上传', ()
       }),
     };
 
-    const out = (await __testing.rewriteQueued(item)) as { files: Array<{ url: string; path: string }>; persistedContent: string };
+    const out = (await __testing.rewriteQueued(item)) as {
+      files: Array<{ url: string; path: string; size: number; sha256: string }>;
+      persistedContent: string;
+    };
 
     // 两个附件各只上传一次(persistedContent 复用 refMap,不再额外上传)。
     expect(uploadLocalFile).toHaveBeenCalledTimes(2);
@@ -75,17 +103,33 @@ describe('rewriteQueued — persistedContent 同批改写 + 去重单上传', ()
     const fileRef = out.files[1].url;
     expect(isAttachmentOssRef(imgRef)).toBe(true);
     expect(isAttachmentOssRef(fileRef)).toBe(true);
+    expect(out.files[0]).toMatchObject({ size: 1, sha256: SHA256 });
+    expect(out.files[1]).toMatchObject({ size: 1, sha256: SHA256 });
 
     // persistedContent 用同一批引用(images→url、files→path),与 files[] 对齐。
-    const pc = JSON.parse(out.persistedContent) as { images: Array<{ url: string }>; files: Array<{ path: string }> };
-    expect(pc.images[0].url).toBe(imgRef);
-    expect(pc.files[0].path).toBe(fileRef);
+    const pc = JSON.parse(out.persistedContent) as {
+      images: Array<{ url: string; size: number; sha256: string }>;
+      files: Array<{ path: string; size: number; sha256: string }>;
+    };
+    expect(pc.images[0]).toMatchObject({ url: imgRef, size: 1, sha256: SHA256 });
+    expect(pc.files[0]).toMatchObject({ path: fileRef, size: 1, sha256: SHA256 });
   });
 
   it('persistedContent 解析失败 → 原样保留(降级),files[] 仍照常改写', async () => {
-    uploadLocalFile.mockResolvedValue({ key: 'cindy/device-link/u/x.png', size: 1, contentType: 'image/png' });
-    const item = { files: [{ path: '/abs/x.png', mimeType: 'image/png' }], persistedContent: 'not-json{' };
-    const out = (await __testing.rewriteQueued(item)) as { files: Array<{ url: string }>; persistedContent: string };
+     uploadLocalFile.mockResolvedValue({
+       key: 'cindy/device-link/u/x.png',
+      size: 1,
+      contentType: 'image/png',
+      sha256: SHA256,
+    });
+    const item = {
+      files: [{ path: '/abs/x.png', mimeType: 'image/png' }],
+      persistedContent: 'not-json{',
+    };
+    const out = (await __testing.rewriteQueued(item)) as {
+      files: Array<{ url: string }>;
+      persistedContent: string;
+    };
     expect(isAttachmentOssRef(out.files[0].url)).toBe(true);
     expect(out.persistedContent).toBe('not-json{'); // 解析失败原样
   });
@@ -96,7 +140,13 @@ describe('rewriteOutboundMedia — send/steer content-block 形态', () => {
     resolveSafe.mockReturnValue({ absPath: '/cache/a.png', mimeType: 'image/png' });
     const out = await rewriteOutboundMedia('maker:send', [
       'sess',
-      { type: 'user', content: [{ type: 'text', text: 'hi' }, { type: 'image', path: 'xdt-image://s/a.png', mimeType: 'image/png' }] },
+      {
+        type: 'user',
+        content: [
+          { type: 'text', text: 'hi' },
+          { type: 'image', path: 'xdt-image://s/a.png', mimeType: 'image/png' },
+        ],
+      },
     ]);
     expect(resolveSafe).toHaveBeenCalledWith('xdt-image://s/a.png');
     expect(uploadLocalFile).toHaveBeenCalledWith('/cache/a.png', { contentType: 'image/png' });
@@ -108,7 +158,12 @@ describe('rewriteOutboundMedia — send/steer content-block 形态', () => {
   it('base64 块 → uploadBuffer', async () => {
     const out = await rewriteOutboundMedia('maker:steer', [
       'sess',
-      { type: 'user', content: [{ type: 'image', base64: Buffer.from([1, 2]).toString('base64'), mimeType: 'image/png' }] },
+      {
+        type: 'user',
+        content: [
+          { type: 'image', base64: Buffer.from([1, 2]).toString('base64'), mimeType: 'image/png' },
+        ],
+      },
     ]);
     expect(uploadBuffer).toHaveBeenCalled();
     const block = (out[1] as { content: Array<{ path?: string; base64?: string }> }).content[0];
@@ -119,9 +174,14 @@ describe('rewriteOutboundMedia — send/steer content-block 形态', () => {
   it('绝对路径块 → uploadLocalFile(原路径)', async () => {
     await rewriteOutboundMedia('maker:send', [
       'sess',
-      { type: 'user', content: [{ type: 'file', path: '/abs/doc.pdf', mimeType: 'application/pdf' }] },
+      {
+        type: 'user',
+        content: [{ type: 'file', path: '/abs/doc.pdf', mimeType: 'application/pdf' }],
+      },
     ]);
-    expect(uploadLocalFile).toHaveBeenCalledWith('/abs/doc.pdf', { contentType: 'application/pdf' });
+    expect(uploadLocalFile).toHaveBeenCalledWith('/abs/doc.pdf', {
+      contentType: 'application/pdf',
+    });
   });
 });
 
@@ -132,7 +192,13 @@ describe('rewriteOutboundMedia — enqueue files 形态', () => {
       {
         text: 'hi',
         files: [
-          { id: '1', name: 'a.png', category: 'image', mimeType: 'image/png', base64: Buffer.from([9]).toString('base64') },
+          {
+            id: '1',
+            name: 'a.png',
+            category: 'image',
+            mimeType: 'image/png',
+            base64: Buffer.from([9]).toString('base64'),
+          },
         ],
       },
     ]);
@@ -152,7 +218,12 @@ describe('rewriteOutboundMedia — enqueue files 形态', () => {
   it('maker:input:steer 同 enqueue 形态(steer 带附件也必须改写)', async () => {
     const out = await rewriteOutboundMedia('maker:input:steer', [
       'sess',
-      { text: 'hi', files: [{ id: '1', name: 'a.png', category: 'image', mimeType: 'image/png', path: '/abs/a.png' }] },
+      {
+        text: 'hi',
+        files: [
+          { id: '1', name: 'a.png', category: 'image', mimeType: 'image/png', path: '/abs/a.png' },
+        ],
+      },
     ]);
     expect(uploadLocalFile).toHaveBeenCalledWith('/abs/a.png', { contentType: 'image/png' });
     const f = (out[1] as { files: Array<{ url?: string }> }).files[0];

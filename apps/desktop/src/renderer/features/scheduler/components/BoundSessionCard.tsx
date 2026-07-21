@@ -80,7 +80,7 @@ export function BoundSessionCard({ sessionId, onUnbind, onOpen }: BoundSessionCa
         title={t('scheduler.editor.runSession.card.open')}
         className={cn(
           'inline-flex h-7 shrink-0 items-center gap-1 rounded-full px-2.5 text-xs font-medium',
-          'text-[var(--settings-btn-secondary-text)] hover:bg-[var(--update-btn-hover)]',
+          'text-[var(--settings-btn-secondary-text)] hover:bg-[var(--surface-hover)]',
           'transition-colors focus:outline-none',
         )}
       >
@@ -94,7 +94,7 @@ export function BoundSessionCard({ sessionId, onUnbind, onOpen }: BoundSessionCa
           title={t('scheduler.editor.runSession.card.unbind')}
           className={cn(
             'inline-flex h-7 shrink-0 items-center gap-1 rounded-full px-2.5 text-xs font-medium',
-            'text-[var(--settings-btn-secondary-text)] hover:bg-[var(--update-btn-hover)]',
+            'text-[var(--settings-btn-secondary-text)] hover:bg-[var(--surface-hover)]',
             'transition-colors focus:outline-none',
           )}
         >

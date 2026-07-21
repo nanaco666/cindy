@@ -276,7 +276,7 @@ export function TaskListCell({
         'focus-visible:ring-2 focus-visible:ring-[var(--focus-ring-soft)]',
         selected
           ? 'bg-[var(--chat-input-chip-bg)]'
-          : 'hover:bg-[var(--update-btn-hover)] dark:hover:bg-[var(--settings-btn-secondary-hover-bg)]',
+          : 'hover:bg-[var(--surface-hover)] dark:hover:bg-[var(--settings-btn-secondary-hover-bg)]',
       )}
     >
       {/* 悬浮/选中时露出的「立即运行」按钮:runNow 是 force-fire,paused/expired 也可用,不做 status 门控;

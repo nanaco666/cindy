@@ -38,6 +38,7 @@ import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { BrowserWindow, ipcMain } from 'electron';
 import type { AgentMeta } from '../../renderer/lib/ccAgent.types';
 import type { AgentInputCreateOpts, AgentInputQueuedMessage } from '../../shared/agentInputQueue.js';
+import { getManagedWorktreeBasePath } from '../../shared/managedWorktreePaths.js';
 import { buildTurnUsageDetails } from '../../shared/turnUsageDetails.js';
 import type { DesktopCommandContext } from '../commands/index.js';
 import { getDesktopCommandRegistry } from '../commands/index.js';
@@ -103,7 +104,10 @@ import {
   markTeamEnded,
   markWorkersStatusByTeam,
   reconcileInactiveTeamWorkersForLead,
+  releaseWorkerCreationReservation,
   removeWorker,
+  renewWorkerCreationReservation,
+  reserveWorkerCreation,
   setSessionOrcaRole,
   setWorkerFocus,
   updateWorkerStatus,
@@ -224,7 +228,11 @@ import { createElectronIpcHandlerRegistry } from './electronIpcRegistry.js';
 import { validateExtraDirs } from './extraDirsValidator.js';
 import { prepareHandoffWorktree, shouldRecycleHandoffWorktreeOnFailure } from './handoffWorktree.js';
 import { registerProjectPluginPolicyHandlers } from './projectPluginPolicyHandlers.js';
-import { WorktreeManager as worktreeManager, worktreeStore } from '../worktree/index.js';
+import {
+  restoreMissingManagedWorktreeForSession,
+  WorktreeManager as worktreeManager,
+  worktreeStore,
+} from '../worktree/index.js';
 import type { WorktreeMeta } from '../worktree/types.js';
 import {
   createOrcaInterAgentDispatcher,
@@ -1253,7 +1261,7 @@ const rewindInputSessions = new Set<string>();
 const SESSION_REWIND_INPUT_LOCK_ID = 'session-rewind';
 const SESSION_REWIND_STOP_TIMEOUT_MS = 15_000;
 let pendingCredentialSwitchHolder: PendingCredentialSwitchService | null = null;
-let pendingAgentSwitchApplyHolder: ((sessionId: string) => Promise<void>) | null = null;
+let pendingAgentSwitchApplyHolder: ((sessionId: string, signal?: AbortSignal) => Promise<void>) | null = null;
 let gitSnapshotCoordinator: GitSnapshotCoordinator | null = null;
 const sessionTurnActivityTracker = new SessionTurnActivityTracker();
 
@@ -1355,8 +1363,11 @@ export function isSessionInTurn(sessionId: string): boolean {
  * holder 因此要求 apply 成功时同步 bootstrap 新引擎,调用方再重新读取 live session。
  * 启动期 holder 尚未就绪时不可能已有进程内 pending intent,no-op 即可。
  */
-export async function applyPendingAgentSwitchForDirectSend(sessionId: string): Promise<void> {
-  await pendingAgentSwitchApplyHolder?.(sessionId);
+export async function applyPendingAgentSwitchForDirectSend(
+  sessionId: string,
+  signal?: AbortSignal,
+): Promise<void> {
+  await pendingAgentSwitchApplyHolder?.(sessionId, signal);
 }
 
 /**
@@ -3812,8 +3823,11 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
     log,
   };
   registerMakerSessionAgentSwitchHandler(makerSessionRegistry, agentSwitchDeps);
-  pendingAgentSwitchApplyHolder = (sessionId) =>
-    applyPendingAgentSwitchIfIdle(agentSwitchDeps, sessionId, { bootstrapAfterSwitch: true });
+  pendingAgentSwitchApplyHolder = (sessionId, signal) =>
+    applyPendingAgentSwitchIfIdle(agentSwitchDeps, sessionId, {
+      bootstrapAfterSwitch: true,
+      signal,
+    });
 
   ipcMain.handle(MAKER_INVOKE.MARK_ORCA_ROLE, async (_e, sessionId: unknown, role: unknown) => {
     if (typeof sessionId !== 'string') throwIpcError('INVALID_PARAMS', 'sessionId required');
@@ -4894,6 +4908,9 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
       };
     },
     readClaudeApiKey,
+    reserveWorkerCreation,
+    renewWorkerCreationReservation,
+    releaseWorkerCreationReservation,
     createId,
     createSessionId: createBusinessSessionId,
     buildCreateOptsWithStderr,
@@ -6553,6 +6570,21 @@ async function checkWorkDirExists(
       }
       return false;
     }
+    // Managed worktrees need a stronger readiness check than directory existence: another send
+    // may observe `git worktree add` before snapshot apply finishes, and a previous apply conflict
+    // deliberately leaves the directory present while keeping the session blocked.
+    const normalizedWorkingDir = path.resolve(workingDir).replace(/\\/g, '/');
+    if (getManagedWorktreeBasePath(normalizedWorkingDir) !== null) {
+      const ready = await restoreMissingManagedWorktreeForSession(sessionId, workingDir);
+      if (!ready) {
+        if (suppress) {
+          log.warn('send: managed worktree not ready (broadcast suppressed, caller has fallback)', { sessionId, workingDir });
+        } else {
+          emitWorkDirMissingError(sessionId, workingDir, source, 'not-exist');
+        }
+        return false;
+      }
+    }
     return true;
   } catch {
     // app 托管的 dialogue 工作目录(<userData>/dialogues/<日期>/<id>)本来就是
@@ -6561,6 +6593,14 @@ async function checkWorkDirExists(
     const healed = await healMissingDialogueWorkdir(workingDir, dialogueWorkspaceRootDir());
     if (healed) {
       log.info('send: recreated missing dialogue workdir', { sessionId, workingDir });
+      return true;
+    }
+    // Cindy 托管 worktree 被外部 PR cleanup / 手动 git 命令移除时，先按 DB 中
+    // 的精确 worktree_path 从本地或 origin tracking 分支重建。普通用户目录绝不
+    // 猜测 fallback；快照冲突也保持阻断，交给恢复横幅显式处理。
+    const restored = await restoreMissingManagedWorktreeForSession(sessionId, workingDir);
+    if (restored) {
+      log.info('send: restored missing managed worktree', { sessionId, workingDir });
       return true;
     }
     if (suppress) {

@@ -409,6 +409,26 @@
     },
     "windowBehavior": {
       "title": "앱 동작",
+      "closeBehavior": {
+        "label": "기본 창을 닫을 때",
+        "hint": "처음 닫을 때 묻습니다. 나중에 여기에서 변경할 수 있습니다.",
+        "aria": "기본 창을 닫을 때 동작 선택",
+        "tray": "트레이로 최소화",
+        "quit": "Cindy 종료"
+      },
+      "closePrompt": {
+        "title": "Cindy 닫기",
+        "message": "기본 창을 닫을 때 어떻게 할까요?",
+        "detail": "시스템 트레이로 최소화하면 작업이 계속 실행됩니다. 나중에 설정에서 변경할 수 있습니다."
+      },
+      "trayMenu": {
+        "show": "Cindy 열기",
+        "quit": "Cindy 종료"
+      },
+      "trayError": {
+        "title": "트레이로 최소화할 수 없음",
+        "message": "시스템 트레이 아이콘을 만들지 못해 창을 열린 상태로 유지합니다."
+      },
       "swallowActivationClickLabel": "백그라운드 창을 처음 왼쪽 클릭할 때 활성화만 하고 페이지로 전달하지 않기",
       "swallowActivationClickHint": "켜져 있으면 백그라운드에서 돌아온 첫 왼쪽 클릭은 창을 앞으로 가져오기만 하며, 페이지 버튼이 눌리거나 텍스트가 선택되지 않습니다.\n끄면 한 번의 클릭으로 바로 작업을 이어갈 수 있어 듀얼 모니터 환경에서 편리하지만 버튼을 실수로 누를 수 있습니다.",
       "swallowActivationClickAria": "백그라운드 창에 대한 첫 왼쪽 클릭을 삼킬지 여부 전환",
@@ -1437,6 +1457,7 @@
       "description": "사이드바에서 새 터미널 탭을 열 때 이 셸을 사용합니다.",
       "auto": "자동 선택",
       "autoWithTarget": "자동 선택 ({{target}})",
+      "unavailable": "{{shell}} (사용 불가)",
       "card": {
         "label": "기본 셸",
         "description": "기본값을 변경해도 새 터미널 탭에만 적용되며 기존 터미널은 영향을 받지 않습니다.",
@@ -2625,6 +2646,10 @@
     "sessionCostLabel": "세션 {{cost}}",
     "codex": {
       "waiting": "Codex --",
+      "noUsageLabel": "아직 사용량 없음",
+      "noUsageDetail": "이 세션에는 아직 사용량이 없습니다.",
+      "unavailableLabel": "사용량을 사용할 수 없음",
+      "unavailableDetail": "사용량 데이터를 일시적으로 사용할 수 없습니다.",
       "waitingDetail": "Codex 사용량은 다음 턴이 완료된 후 업데이트됩니다.",
       "sessionTokensLine": "이 세션에서 {{tokens}} token 사용",
       "sessionValueLabel": "세션 가치 {{cost}}",
@@ -3345,7 +3370,12 @@
         "budget": "할인형 GPT",
         "grok": "xAI",
         "google": "Google",
-        "china": "국내"
+        "china": "국내",
+        "image": "이미지",
+        "audio": "오디오·음성",
+        "video": "비디오",
+        "embedding": "임베딩",
+        "other": "기타"
       },
       "search": {
         "placeholder": "{{source}} 모델 검색...",
@@ -4128,6 +4158,7 @@
         "unsupportedHistory": "이 지점은 에이전트 전환 경계를 지나므로 분기할 수 없습니다",
         "noPriorAssistant": "AI 응답 뒤의 메시지에서 분기하세요",
         "sourceNeverRan": "원본 세션이 아직 실행되지 않아 분기할 수 없습니다",
+        "codexStateUnavailable": "Codex 세션 상태를 사용할 수 없어 분기할 수 없습니다. {{detail}}",
         "generic": "분기 실패, 다시 시도하세요"
       }
     },
@@ -6194,6 +6225,7 @@
       "customRolePredefinedError": "사용자 지정 역할에는 기본 역할 이름을 사용할 수 없습니다",
       "agentLabel": "Agent",
       "modelLabel": "모델",
+      "noAvailableModels": "사용 가능한 {{agent}} 모델이 없습니다. 설정에서 공급자 연결과 자격 증명을 확인하세요.",
       "effortLabel": "Effort",
       "initialTaskLabel": "초기 작업",
       "optional": "(선택)",

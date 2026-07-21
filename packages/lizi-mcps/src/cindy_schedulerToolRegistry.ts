@@ -1,5 +1,5 @@
 /**
- * lizi_schedulerToolRegistry.ts
+ * cindy_schedulerToolRegistry.ts
  * ---------------------------------------------------------------------------
  * Mirrors FeishuBotToolRegistry / FeishuToolRegistry — fine-grained scheduler
  * tools register here, NOT directly on the McpServer. The MCP server only
@@ -57,7 +57,7 @@ export class SchedulerToolRegistry {
     handler: SchedulerToolHandler<{ [K in keyof T]: z.infer<T[K]> }>;
   }): void {
     if (this.tools.has(def.name)) {
-      throw new Error(`[lizi_schedulerToolRegistry] duplicate tool name: ${def.name}`);
+      throw new Error(`[cindy_schedulerToolRegistry] duplicate tool name: ${def.name}`);
     }
     this.tools.set(def.name, def as unknown as SchedulerToolDef);
   }

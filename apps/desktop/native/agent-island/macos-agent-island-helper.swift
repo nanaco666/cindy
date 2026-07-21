@@ -1306,6 +1306,7 @@ struct AgentIslandPillSnapshot: Codable {
 }
 
 struct AgentIslandStrings: Codable {
+  let appName: String?
   let newConversationTitle: String
   let newConversationHint: String
   let muteSound: String
@@ -1328,7 +1329,11 @@ struct AgentIslandStrings: Codable {
   let alwaysAllowForSession: String
   let deny: String
 
+  // Older main-process payloads do not contain appName; keep their idle view brand-current.
+  var displayAppName: String { appName ?? "Cindy" }
+
   static let fallback = AgentIslandStrings(
+    appName: "Cindy",
     newConversationTitle: "New Maker",
     newConversationHint: "Start a new conversation",
     muteSound: "Mute Agent Island",
@@ -2625,7 +2630,7 @@ struct IdleIslandView: View {
     HStack(spacing: 5) {
       AgentIslandMascotView(skin: mascotSkin, state: .idle, size: 16)
         .frame(width: 16, height: 16)
-      Text("XD Maker")
+      Text(strings.displayAppName)
         .font(.system(size: 10, weight: .semibold, design: .monospaced))
         .foregroundColor(Color.white.opacity(0.24))
         .opacity(textOpacity)
@@ -2987,22 +2992,8 @@ struct ExpandedSessionsView: View {
   @State private var lastReportedContentHeight: CGFloat = 0
 
   private var allSessions: [AgentIslandSession] {
-    let base = sessions.isEmpty ? [current] : sessions
-    return base.sorted { lhs, rhs in
-      let lg = sessionSortGroup(lhs)
-      let rg = sessionSortGroup(rhs)
-      if lg != rg { return lg < rg }
-      if lhs.lastActivityAt != rhs.lastActivityAt {
-        return lhs.lastActivityAt > rhs.lastActivityAt
-      }
-      return false
-    }
-  }
-
-  private func sessionSortGroup(_ session: AgentIslandSession) -> Int {
-    if session.sessionId == current.sessionId { return 0 }
-    if session.phase == "running" || session.phase == "needs-interaction" { return 1 }
-    return 2
+    // The main process owns session priority and freezes this order while expanded.
+    sessions.isEmpty ? [current] : sessions
   }
 
   private var sessionListNeedsScroll: Bool {

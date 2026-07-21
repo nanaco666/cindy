@@ -247,7 +247,7 @@ export interface SlackHookMcpDeps {
 }
 
 /**
- * Host injects a `getScheduler()` accessor — the lizi_scheduler MCP server
+ * Host injects a `getScheduler()` accessor — the cindy_scheduler MCP server
  * never holds a long-lived Scheduler reference because the host may
  * `resetScheduler()` on logout / 切账号. Each tool call dereferences
  * fresh; reset-window calls throw `'scheduler not started'` which the MCP
@@ -494,7 +494,7 @@ export type LiziMcpId =
   | 'computer'
   | 'lizi_feishu_bot'
   | 'lizi_slack'
-  | 'lizi_scheduler'
+  | 'cindy_scheduler'
   | 'lizi_ssh'
   | 'lizi_memory'
   | 'lizi_contacts'

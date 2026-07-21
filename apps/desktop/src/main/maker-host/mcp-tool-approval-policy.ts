@@ -19,7 +19,7 @@ const DESKTOP_CLAUDE_READ_ONLY_ALLOWED_TOOLS = [
   'mcp__lizi_android__list_tools',
   'mcp__lizi_computer__list_tools',
   'mcp__lizi_feishu_bot__list_tools',
-  'mcp__lizi_scheduler__list_tools',
+  'mcp__cindy_scheduler__list_tools',
   'mcp__lizi_ssh__list_tools',
   'mcp__cindy_helper__list_tools',
   'mcp__lizi_memory__list_tools',
@@ -46,7 +46,10 @@ export function getDesktopMcpToolApprovalPolicy(
   }
   // `<平台>_lizi` 显式白名单分支已随 gitlab_lizi 于 2026-07-14 退役清空
   // (github_lizi / gitlab_lizi 先后迁入内置意识 cindy-github / cindy-gitlab)。
-  if (serverName.startsWith('lizi_') && serverName !== 'lizi_ssh') {
+  if (
+    serverName === 'cindy_scheduler'
+    || (serverName.startsWith('lizi_') && serverName !== 'lizi_ssh')
+  ) {
     return 'auto-approve';
   }
   return 'prompt';

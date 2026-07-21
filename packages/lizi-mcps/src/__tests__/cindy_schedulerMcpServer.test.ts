@@ -1,5 +1,5 @@
 /**
- * lizi_schedulerMcpServer smoke test.
+ * cindy_schedulerMcpServer smoke test.
  *
  * 用 MCP SDK 真实 Client + InMemoryTransport pair（@modelcontextprotocol/sdk
  * 提供的 in-process transport）连真 `createSchedulerMcpServer`，端到端验证：
@@ -15,7 +15,7 @@
  *       * SCHEDULER_NOT_READY — getScheduler() 抛 'scheduler not started'
  *
  * 不 cover 的边界（plan §Phase 5 验收 user 仍需在 desktop 上跑）：
- *   - cc / codex agent 把 lizi_scheduler provider 拼进 mcpServers config 的 spawn 链
+ *   - cc / codex agent 把 cindy_scheduler provider 拼进 mcpServers config 的 spawn 链
  *   - 真 LLM 模型在对话里能 discovery 并调用这些 tool
  *   - GUI 列表 onEvent 推送实时刷新
  */
@@ -34,8 +34,8 @@ import type {
 import type { ScheduleStorage } from '@lizi/maker-scheduler';
 import type { FireContext, ScheduleRunner } from '@lizi/maker-scheduler';
 
-import { createSchedulerMcpServer } from '../lizi_schedulerMcpServer.js';
-import { SchedulerToolRegistry } from '../lizi_schedulerToolRegistry.js';
+import { createSchedulerMcpServer } from '../cindy_schedulerMcpServer.js';
+import { SchedulerToolRegistry } from '../cindy_schedulerToolRegistry.js';
 import { registerScheduleDeleteTool } from '../scheduler/delete.js';
 import { registerScheduleNotifyCurrentRunTool } from '../scheduler/notifyCurrentRun.js';
 import { registerSchedulePauseTool } from '../scheduler/pause.js';
@@ -214,7 +214,7 @@ function parseToolResult(result: { content: unknown[]; isError?: boolean }): {
 
 // ── Tests ────────────────────────────────────────────────────────────────────
 
-describe('lizi_scheduler MCP server (in-process smoke)', () => {
+describe('cindy_scheduler MCP server (in-process smoke)', () => {
   let h: Harness;
 
   beforeEach(async () => {
@@ -727,7 +727,7 @@ describe('lizi_scheduler MCP server (in-process smoke)', () => {
   });
 });
 
-describe('lizi_scheduler MCP server — SCHEDULER_NOT_READY', () => {
+describe('cindy_scheduler MCP server — SCHEDULER_NOT_READY', () => {
   it('returns SCHEDULER_NOT_READY when getScheduler() throws "scheduler not started"', async () => {
     const h = await makeHarness({ schedulerNotReady: true });
     const result = await h.client.callTool({

@@ -62,7 +62,7 @@
     "name": "Lizi",
     "email": "jiali@magiclizi.com"
   },
-  "license": "UNLICENSED",
+  "license": "Apache-2.0",
   "devDependencies": {
     "@eslint/js": "^9.0.0",
     "@types/node": "*",

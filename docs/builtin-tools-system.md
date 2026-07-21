@@ -6,7 +6,7 @@ xdt-maker 内置 MCP 工具的项目级开关架构与 Phase 1 实施计划。
 
 ## Problem
 
-Cindy 在 desktop main 进程里硬编码注入了一批内置 MCP（`lizi_jira` / `lizi_feishu` / `lizi_confluence` / `lizi_google` / `lizi_scheduler` / `lizi_memory` / `cindy_helper` / `lizi_xd_service` / `lizi_feishu_bot` / `art`）。当下游项目（如 work23）已经为某个外部系统建立了自有通道（本地脚本 + skill + 强流程）时，无法关闭对应的内置 MCP，导致：
+Cindy 在 desktop main 进程里硬编码注入了一批内置 MCP（`lizi_jira` / `lizi_feishu` / `lizi_confluence` / `lizi_google` / `cindy_scheduler` / `lizi_memory` / `cindy_helper` / `lizi_xd_service` / `lizi_feishu_bot` / `art`）。当下游项目（如 work23）已经为某个外部系统建立了自有通道（本地脚本 + skill + 强流程）时，无法关闭对应的内置 MCP，导致：
 
 - **流程语义丢失**：模型偏向更"轻"的 MCP 路径，绕过 skill 里定义的强流程（如 Jira 状态变化必须同步 WebUI、附件必须看完再下结论、Art Subtask 必须三步走等）。表现为"调用看似成功但单子状态不对/前端不更新"。
 - **鉴权身份分裂**：MCP 走 xdt-maker 内 OAuth 身份，skill 走本地 token；同一项目两条通道往同一实例写不同人的操作记录。
@@ -159,7 +159,7 @@ packages/maker-core/                                      ← 不动
 
 - `memory` —— 跨 agent 长期记忆，禁用会破坏 memory 子系统（MCP namespace: `lizi_memory`）
 - `xdt_helper`（兼容设置 ID）—— Cindy host 能力宣告与 team / history 工具入口，agent 通过它查 host 提供了什么能力（MCP namespace: `cindy_helper`）
-- `scheduler` —— `ScheduleWakeup` / `/loop` 等核心调度依赖（MCP namespace: `lizi_scheduler`）
+- `scheduler` —— `ScheduleWakeup` / `/loop` 等核心调度依赖（MCP namespace: `cindy_scheduler`）
 
 **xdt_helper / orca 拆分**：`send_to_session`(session handoff 原语)已迁入 essential 的 `cindy_helper` 常开(skill 永不断)；9 个 team 工具拆到独立的 `lizi_orca` server 成为非 essential 可关插件("协同模式"开关 gate 它)。旧 `lizi_collab` server 已删除。理由:team 工具是功能性协同,可关;`send_to_session` 是 skill 基础设施,不可关。
 

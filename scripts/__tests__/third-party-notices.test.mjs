@@ -39,13 +39,39 @@ test("generated artifact notices are platform-scoped and disclose restricted com
   assert.match(macos, /@img\/sharp-darwin-/);
   assert.doesNotMatch(macos, /Android SDK Platform-Tools/);
   assert.match(linux, /@img\/sharp-linux-x64@/);
-  assert.match(windowsRestricted, /@codesandbox\/nodebox@0\.1\.8/);
-  assert.match(windowsRestricted, /Sustainable Use License/);
+  assert.doesNotMatch(windowsRestricted, /@codesandbox\/nodebox/);
+  assert.doesNotMatch(windowsRestricted, /Sustainable Use License/);
   assert.match(iosRestricted, /WeChat OpenSDK for iOS@2\.0\.5/);
+  assert.match(iosRestricted, /docs\/legal\/wechat-open-sdk-compliance\.md/);
+  assert.match(iosRestricted, /Mobile_App\/agreement\/sdk\.html/);
   assert.doesNotMatch(iosRestricted, /WeChat OpenSDK for Android@6\.8\.38/);
   assert.match(androidRestricted, /WeChat OpenSDK for Android@6\.8\.38/);
+  assert.match(androidRestricted, /docs\/legal\/wechat-open-sdk-compliance\.md/);
+  assert.match(androidRestricted, /Mobile_App\/agreement\/sdk\.html/);
   assert.doesNotMatch(androidRestricted, /Claude Code CLI@/);
   assert.doesNotMatch(windows, /@codesandbox\/nodebox@0\.1\.8 —/);
+});
+
+test("commercial distributions do not resolve forbidden Sustainable Use dependencies", () => {
+  const lockfile = read("pnpm-lock.yaml");
+  assert.doesNotMatch(lockfile, /@codesandbox\/nodebox/);
+  assert.doesNotMatch(lockfile, /@codesandbox\/sandpack-(?:client|react)/);
+});
+
+test("project-owned iOS podspecs declare the repository Apache-2.0 license", () => {
+  const podspecs = [
+    "xdt-wechat-login/ios/XdtWechatLogin.podspec",
+    "xdt-tapdb/ios/XdtTapdb.podspec",
+    "xdt-mobile-realtime-audio/ios/XdtMobileRealtimeAudio.podspec",
+    "xdt-ios-app-distribution/ios/XdtIosAppDistribution.podspec",
+  ];
+  for (const relativePath of podspecs) {
+    const podspec = read(path.join("apps/mobile/modules", relativePath));
+    assert.match(podspec, /:type\s*=>\s*['\"]Apache-2\.0['\"]/);
+    assert.match(podspec, /:file\s*=>\s*['\"]\.\.\/\.\.\/\.\.\/\.\.\/\.\.\/LICENSE['\"]/);
+    assert.doesNotMatch(podspec, /UNLICENSED/i);
+    assert.match(podspec, /https:\/\/github\.com\/xindong\/cindy-moved\.git/);
+  }
 });
 
 test("every SPDX document is structurally consistent and has valid license expressions", () => {

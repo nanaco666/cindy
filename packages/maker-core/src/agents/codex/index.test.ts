@@ -4035,6 +4035,44 @@ describe('CodexAgent steer', () => {
 });
 
 describe('CodexAgent.forkSdkSession', () => {
+  it('prepares an imported source thread before thread/fork', async () => {
+    const order: string[] = [];
+    const prepareCodexResumeSession = vi.fn(async () => {
+      order.push('prepare');
+    });
+    const agent = new CodexAgent(createDeps({}, { prepareCodexResumeSession }));
+    const host = installFakeHost(agent, (method) => {
+      if (method === Method.ThreadFork) order.push('fork');
+      return undefined;
+    });
+
+    await agent.forkSdkSession({
+      sourceSdkSessionId: 'imported-source-thread',
+      upToMessageId: undefined,
+    });
+
+    expect(prepareCodexResumeSession).toHaveBeenCalledWith('imported-source-thread');
+    expect(order).toEqual(['prepare', 'fork']);
+    expect(host.request).toHaveBeenCalledWith(Method.ThreadFork, expect.objectContaining({
+      threadId: 'imported-source-thread',
+    }));
+  });
+
+  it('does not call thread/fork when source-thread preparation fails', async () => {
+    const prepareCodexResumeSession = vi.fn(async () => {
+      throw new Error('rollout copy failed');
+    });
+    const agent = new CodexAgent(createDeps({}, { prepareCodexResumeSession }));
+    const host = installFakeHost(agent);
+
+    await expect(agent.forkSdkSession({
+      sourceSdkSessionId: 'imported-source-thread',
+      upToMessageId: undefined,
+    })).rejects.toThrow('rollout copy failed');
+
+    expect(host.request).not.toHaveBeenCalled();
+  });
+
   it('forks the source thread, then rolls back the forked thread by tail turns', async () => {
     const agent = new CodexAgent(createDeps());
     const host = installFakeHost(agent);
@@ -4127,6 +4165,44 @@ describe('CodexAgent.forkSdkSession', () => {
       expect(copied).not.toContain('"call_id"');
     } finally {
       await fs.rm(codexHome, { recursive: true, force: true });
+    }
+  });
+
+  it('uses the rollout path returned by imported-thread preparation when stripping', async () => {
+    const externalHome = await fs.mkdtemp(path.join(os.tmpdir(), 'xdt-codex-external-'));
+    const sourceRollout = path.join(externalHome, 'rollout-imported-thread.jsonl');
+    await fs.writeFile(sourceRollout, [
+      JSON.stringify({ payload: { type: 'message', role: 'user' } }),
+      JSON.stringify({ payload: { type: 'reasoning', encrypted_content: 'gAAA' } }),
+      JSON.stringify({ payload: { type: 'message', role: 'assistant' } }),
+    ].join('\n') + '\n', 'utf8');
+    try {
+      const prepareCodexResumeSession = vi.fn(async () => sourceRollout);
+      const agent = new CodexAgent(createDeps({}, { prepareCodexResumeSession }));
+      let copied = '';
+      const host = installFakeHost(agent, async (method, params) => {
+        if (method === Method.ThreadFork) {
+          const forkPath = (params as { path?: string }).path;
+          if (forkPath) copied = await fs.readFile(forkPath, 'utf8');
+        }
+        return undefined;
+      });
+      // The normal CODEX_HOME scan cannot see the external path; the prepared
+      // path must still be used for the stripped fork.
+      (agent as unknown as { codexHome: string }).codexHome = path.join(externalHome, 'empty-home');
+      await agent.forkSdkSession({
+        sourceSdkSessionId: 'imported-thread',
+        upToMessageId: undefined,
+        stripEncryptedReasoning: true,
+      });
+      expect(prepareCodexResumeSession).toHaveBeenCalledWith('imported-thread');
+      expect(copied).toContain('"message"');
+      expect(copied).not.toContain('encrypted_content');
+      expect(host.request).toHaveBeenCalledWith(Method.ThreadFork, expect.objectContaining({
+        path: expect.any(String),
+      }));
+    } finally {
+      await fs.rm(externalHome, { recursive: true, force: true });
     }
   });
 });
@@ -5014,6 +5090,113 @@ describe('CodexAgent turn lifecycle', () => {
       data: { status: 'Done', isRunning: false },
     });
     expect(await nextEvent(iterator)).toMatchObject({ type: 'done' });
+    await handle.close();
+  });
+
+  it('ignores turn-scoped events that arrive after a normally completed turn', async () => {
+    const agent = new CodexAgent(createDeps());
+    const host = installFakeHost(agent);
+    const handle = await agent.startSession({
+      sessionId: 'session-late-events-after-normal-complete',
+      model: 'gpt-5.4',
+      workingDir: '/repo',
+    });
+    const subscribeCalls = host.subscribeThread.mock.calls as unknown as Array<[string, ThreadEventHandlers]>;
+    const handlers = subscribeCalls[0]?.[1];
+    expect(handlers).toBeDefined();
+    const iterator = handle.events()[Symbol.asyncIterator]();
+
+    handlers.turnStarted?.({
+      threadId: 'start-thread-id',
+      turn: { id: 'turn-completed' },
+    });
+    handlers.turnCompleted?.({
+      threadId: 'start-thread-id',
+      turn: { id: 'turn-completed', status: 'completed' },
+    });
+    expect(await nextEvent(iterator)).toMatchObject({
+      type: 'status',
+      data: { status: 'Done', isRunning: false },
+    });
+    expect(await nextEvent(iterator)).toMatchObject({ type: 'done' });
+    expect(handle.isTurnRunning?.()).toBe(false);
+
+    handlers.itemStarted?.({
+      threadId: 'start-thread-id',
+      turnId: 'turn-completed',
+      item: {
+        id: 'late-tool',
+        type: 'mcpToolCall',
+        server: 'functions',
+        tool: 'exec',
+        status: 'inProgress',
+        arguments: {},
+      },
+    });
+    handlers.itemUpdated?.({
+      threadId: 'start-thread-id',
+      turnId: 'turn-completed',
+      item: {
+        id: 'late-message',
+        type: 'agentMessage',
+        text: 'late text',
+      },
+    });
+    handlers.itemCompleted?.({
+      threadId: 'start-thread-id',
+      turnId: 'turn-completed',
+      item: {
+        id: 'late-message',
+        type: 'agentMessage',
+        text: 'late final text',
+      },
+    });
+    handlers.reasoningSummaryTextDelta?.({
+      threadId: 'start-thread-id',
+      turnId: 'turn-completed',
+      itemId: 'late-reasoning',
+      summaryIndex: 0,
+      delta: 'late thought',
+    });
+    handlers.turnStarted?.({
+      threadId: 'start-thread-id',
+      turn: { id: 'turn-completed' },
+    });
+
+    await expect(nextEvent(iterator)).rejects.toThrow('timed out waiting for event');
+    expect(handle.isTurnRunning?.()).toBe(false);
+    await handle.close();
+  });
+
+  it('emits the terminal boundary only once for duplicate turnCompleted notifications', async () => {
+    const agent = new CodexAgent(createDeps());
+    const host = installFakeHost(agent);
+    const handle = await agent.startSession({
+      sessionId: 'session-duplicate-normal-complete',
+      model: 'gpt-5.4',
+      workingDir: '/repo',
+    });
+    const subscribeCalls = host.subscribeThread.mock.calls as unknown as Array<[string, ThreadEventHandlers]>;
+    const handlers = subscribeCalls[0]?.[1];
+    expect(handlers).toBeDefined();
+    const iterator = handle.events()[Symbol.asyncIterator]();
+    const completed = {
+      threadId: 'start-thread-id',
+      turn: { id: 'turn-completed', status: 'completed' as const },
+    };
+
+    handlers.turnStarted?.({
+      threadId: 'start-thread-id',
+      turn: { id: 'turn-completed' },
+    });
+    handlers.turnCompleted?.(completed);
+    expect(await nextEvent(iterator)).toMatchObject({ type: 'status' });
+    expect(await nextEvent(iterator)).toMatchObject({ type: 'done' });
+
+    handlers.turnCompleted?.(completed);
+
+    await expect(nextEvent(iterator)).rejects.toThrow('timed out waiting for event');
+    expect(handle.isTurnRunning?.()).toBe(false);
     await handle.close();
   });
 

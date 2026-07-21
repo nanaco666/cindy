@@ -17,7 +17,7 @@
     "name": "Lizi",
     "email": "jiali@magiclizi.com"
   },
-  "license": "MIT",
+  "license": "Apache-2.0",
   "dependencies": {
     "@cindy/device-link-protocol": "workspace:*"
   },

@@ -351,10 +351,10 @@ describe('mobile home desktop-first surface', () => {
     expect(source).toContain('{showRemoteGuide ? null : (');
 
     const guideSource = readSource('src/components/RemoteAccessGuide.tsx');
-    // 步骤三的开关名必须与桌面端设置页 devices.allowControl 文案一致,避免用户按指引找不到开关。
+    // 步骤三的路径和开关名必须与桌面端设置页一致,避免用户按指引找不到开关。
     expect(guideSource).toContain('在电脑上安装并打开 Cindy');
     expect(guideSource).toContain('用与手机相同的账号登录');
-    expect(guideSource).toContain('「设置 → 设备互联」');
+    expect(guideSource).toContain('「设置 → 远程连接」');
     expect(guideSource).toContain('允许同账号设备控制本机');
     // 分场景交互:离线/开关未开可手动重新检查,被撤销访问有重试 CTA(Lock 图标对齐设备列表语义)。
     expect(guideSource).toContain("reason === 'firstRun'");

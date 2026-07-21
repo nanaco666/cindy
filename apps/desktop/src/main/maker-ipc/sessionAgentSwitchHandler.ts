@@ -37,6 +37,12 @@ import {
 } from './agentHandoff.js';
 import { throwIpcError } from '../utils/ipcValidate.js';
 
+function throwIfAgentSwitchAborted(signal: AbortSignal | undefined): void {
+  if (signal?.aborted) {
+    throw new Error('agent switch aborted');
+  }
+}
+
 /** Phase 2:目标引擎的停泊原生会话绑定(localDb findParkedEngineSession 的投影)。 */
 export interface ParkedEngineSessionRef {
   sdkSessionId: string;
@@ -245,9 +251,12 @@ export async function performSessionAgentSwitch(
      * applyPendingAgentSwitchIfIdle 以 applyNow=true 执行一次。
      */
     applyNow?: boolean;
+    /** Abort signal for direct scheduler/IM sends; checked at side-effect boundaries. */
+    signal?: AbortSignal;
   },
 ): Promise<SessionAgentSwitchResult> {
-  const { sessionId, targetAgentKind, model, providerId } = params;
+  const { sessionId, targetAgentKind, model, providerId, signal } = params;
+  throwIfAgentSwitchAborted(signal);
   if (typeof sessionId !== 'string' || sessionId.length === 0) {
     throwIpcError('INVALID_PARAMS', 'sessionId required');
   }
@@ -262,6 +271,7 @@ export async function performSessionAgentSwitch(
   }
 
   const row = await deps.getSessionRow(sessionId);
+  throwIfAgentSwitchAborted(signal);
   if (!row || row.status === 'deleted') {
     throwIpcError('NOT_FOUND', `Session ${sessionId} not found`);
   }
@@ -315,6 +325,7 @@ export async function performSessionAgentSwitch(
     ? await deps.findParkedEngineSession(sessionId, toDbKind)
     : null;
   const fullSourceMessages = await deps.listMessagesForHandoff(sessionId);
+  throwIfAgentSwitchAborted(signal);
   const handoffOptsBase = {
     fromLabel: agentEngineLabel(fromDbKind),
     toLabel: agentEngineLabel(toDbKind),
@@ -338,6 +349,7 @@ export async function performSessionAgentSwitch(
   }
 
   return deps.withCloseSuppressed(sessionId, async () => {
+    throwIfAgentSwitchAborted(signal);
     if (live) {
       await deps.closeSession(sessionId);
     }
@@ -512,13 +524,16 @@ const pendingAgentSwitchApplyInFlight = new Map<string, Promise<void>>();
 export function applyPendingAgentSwitchIfIdle(
   deps: MakerSessionAgentSwitchHandlerDeps,
   sessionId: string,
-  opts?: { bootstrapAfterSwitch?: boolean },
+  opts?: { bootstrapAfterSwitch?: boolean; signal?: AbortSignal },
 ): Promise<void> {
   const existing = pendingAgentSwitchApplyInFlight.get(sessionId);
   if (existing) return existing;
 
+  // `run` is captured by its own finally handler to clear the in-flight map.
   let run: Promise<void>;
+  // eslint-disable-next-line prefer-const
   run = (async () => {
+    throwIfAgentSwitchAborted(opts?.signal);
     const intent = deps.pendingSwitches?.get(sessionId);
     if (!intent) return;
     const live = deps.getLiveSession(sessionId);
@@ -526,6 +541,7 @@ export function applyPendingAgentSwitchIfIdle(
     try {
       if (intent.resumeFallbackRecovery) {
         const recovery = intent.resumeFallbackRecovery;
+        throwIfAgentSwitchAborted(opts?.signal);
         const boundaryClientId = recovery.boundaryClientId ??
           await deps.insertBoundaryMessage(sessionId, recovery.boundaryContent);
         // 边界补写成功、原子事务仍失败时记住 id；下次只重试事务，不重复插边界。
@@ -553,11 +569,16 @@ export function applyPendingAgentSwitchIfIdle(
         // bootstrap 好再拿 live session 发送,否则会继续持有已关闭的旧 session。
         skipBootstrap: opts?.bootstrapAfterSwitch !== true,
         applyNow: true,
+        signal: opts?.signal,
       });
       // CAS 语义:执行期间用户可能又选了另一个目标,不能把新意图一起清掉。
       if (!result.retryPending && deps.pendingSwitches?.get(sessionId) === intent) {
         deps.pendingSwitches.clear(sessionId);
       }
+      // Once the switch has committed, the intent has been consumed even if
+      // cancellation arrived during the final bootstrap step.  The caller's
+      // post-apply guard will still abort the fire without replaying it.
+      throwIfAgentSwitchAborted(opts?.signal);
     } catch (err) {
       // 失败(包括 pre-check 后 running guard 的竞态)保留原 intent,下一次发送重试。
       deps.log.warn('agent-switch: pending apply failed; intent retained for next send', {

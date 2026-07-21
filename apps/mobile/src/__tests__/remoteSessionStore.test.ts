@@ -66,6 +66,24 @@ function pushMakerTaskUpdate(
   });
 }
 
+function pushMakerText(
+  sessionId: string,
+  persistId: string | undefined,
+  text: string,
+  isFinal: boolean,
+  agentMeta?: Record<string, unknown>,
+): void {
+  remoteSessionStore.applyRemotePush('dev-1', 'maker:event', {
+    sessionId,
+    ...(persistId ? { persistId } : {}),
+    event: {
+      type: 'text',
+      data: { text, isFinal },
+      ...(agentMeta ? { agentMeta } : {}),
+    },
+  });
+}
+
 function projection(sessionId: string, clientId = 'q-1'): InputProjection {
   return {
     sessionId,
@@ -173,6 +191,395 @@ describe('remoteSessionStore', () => {
     expect(remoteSessionStore.getMessageVersion()).toBeGreaterThan(versionAfterCreate);
   });
 
+  it('batches maker text deltas into one streaming assistant row', () => {
+    vi.useFakeTimers();
+    const notify = vi.fn();
+    const unsubscribe = remoteSessionStore.subscribe(notify);
+    try {
+      pushMakerText('s1', 'persist-1', 'hello', false);
+      pushMakerText('s1', 'persist-1', ' world', false);
+
+      expect(remoteSessionStore.getMessages('s1')).toHaveLength(0);
+      expect(notify).not.toHaveBeenCalled();
+
+      vi.runOnlyPendingTimers();
+
+      expect(remoteSessionStore.getMessages('s1')).toHaveLength(1);
+      expect(remoteSessionStore.getMessages('s1')[0]).toMatchObject({
+        id: 'persist-1',
+        clientId: 'persist-1',
+        role: 'assistant',
+        content: 'hello world',
+        agentMeta: { isStreaming: true },
+      });
+      expect(notify).toHaveBeenCalledTimes(1);
+    } finally {
+      unsubscribe();
+      vi.useRealTimers();
+    }
+  });
+
+  it('treats final text as a complete block and clears streaming at done', () => {
+    pushMakerText('s1', 'persist-1', 'hello', false);
+    pushMakerText('s1', 'persist-1', 'hello world', true, { model: 'claude' });
+
+    expect(remoteSessionStore.getMessages('s1')).toMatchObject([{
+      clientId: 'persist-1',
+      content: 'hello world',
+      agentMeta: { isStreaming: true, model: 'claude' },
+    }]);
+
+    remoteSessionStore.applyRemotePush('dev-1', 'maker:event', {
+      sessionId: 's1',
+      event: { type: 'done', data: {} },
+    });
+
+    expect(remoteSessionStore.getMessages('s1')[0].agentMeta).toEqual({ model: 'claude' });
+  });
+
+  it('appends a fallback-tail final event to the accumulated streaming text', () => {
+    vi.useFakeTimers();
+    try {
+      pushMakerText('s1', 'persist-1', 'already visible ', false);
+      vi.runOnlyPendingTimers();
+
+      pushMakerText('s1', 'persist-1', 'recovered tail', true);
+
+      expect(remoteSessionStore.getMessages('s1')).toMatchObject([{
+        clientId: 'persist-1',
+        content: 'already visible recovered tail',
+        agentMeta: { isStreaming: true },
+      }]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('emits once when done flushes text and closes the running turn', () => {
+    vi.useFakeTimers();
+    const notify = vi.fn();
+    const unsubscribe = remoteSessionStore.subscribe(notify);
+    try {
+      pushMakerStatus('s1', { isRunning: true });
+      notify.mockClear();
+
+      pushMakerText('s1', 'persist-1', 'complete on done', false);
+      remoteSessionStore.applyRemotePush('dev-1', 'maker:event', {
+        sessionId: 's1',
+        event: { type: 'done', data: {} },
+      });
+
+      expect(notify).toHaveBeenCalledTimes(1);
+      expect(remoteSessionStore.getMessages('s1')).toMatchObject([{
+        clientId: 'persist-1',
+        content: 'complete on done',
+        agentMeta: null,
+      }]);
+      expect(remoteSessionStore.isSessionRunning('s1')).toBe(false);
+      expect(remoteSessionStore.isSessionMakerTurnRunning('s1')).toBe(false);
+    } finally {
+      unsubscribe();
+      vi.useRealTimers();
+    }
+  });
+
+  it('replaces the temporary streaming row when the persisted message arrives', () => {
+    vi.useFakeTimers();
+    try {
+      pushMakerText('s1', 'persist-1', 'partial', false);
+      vi.runOnlyPendingTimers();
+
+      remoteSessionStore.applyRemotePush('dev-1', 'local-db:messages:created', {
+        sessionId: 's1',
+        message: {
+          id: 'message-1',
+          clientId: 'persist-1',
+          sessionId: 's1',
+          role: 'assistant',
+          content: 'partial and complete',
+          toolUseId: null,
+          agentMeta: { model: 'claude' },
+          createdAt: '2026-01-01T00:00:01.000Z',
+        },
+      });
+      vi.runOnlyPendingTimers();
+
+      expect(remoteSessionStore.getMessages('s1')).toMatchObject([{
+        id: 'message-1',
+        clientId: 'persist-1',
+        content: 'partial and complete',
+        agentMeta: { model: 'claude' },
+      }]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('reconciles a generated fallback row when DB create has a new identity', () => {
+    vi.useFakeTimers();
+    try {
+      pushMakerText('s1', undefined, 'partial answer', false);
+      vi.runOnlyPendingTimers();
+
+      const temporary = remoteSessionStore.getMessages('s1')[0];
+      expect(temporary.clientId).toMatch(/^mobile-stream-/);
+
+      remoteSessionStore.applyRemotePush('dev-1', 'local-db:messages:created', {
+        sessionId: 's1',
+        message: {
+          id: 'persisted-1',
+          clientId: 'persisted-1',
+          sessionId: 's1',
+          role: 'assistant',
+          content: 'partial answer and complete',
+          toolUseId: null,
+          agentMeta: null,
+          createdAt: '2026-01-01T00:00:01.000Z',
+        },
+      });
+
+      expect(remoteSessionStore.getMessages('s1')).toMatchObject([{
+        id: 'persisted-1',
+        clientId: 'persisted-1',
+        content: 'partial answer and complete',
+        agentMeta: null,
+      }]);
+      expect(remoteSessionStore.getMessages('s1')).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('reconciles a generated fallback row when history sync is the first DB identity', () => {
+    vi.useFakeTimers();
+    try {
+      pushMakerText('s1', undefined, 'partial answer', false);
+      vi.runOnlyPendingTimers();
+
+      remoteSessionStore.setLatestMessageWindow('s1', [{
+        id: 'history-persisted-1',
+        clientId: 'history-persisted-1',
+        sessionId: 's1',
+        role: 'assistant',
+        content: 'partial answer and complete',
+        toolUseId: null,
+        agentMeta: null,
+        createdAt: '2026-01-01T00:00:01.000Z',
+      }]);
+
+      expect(remoteSessionStore.getMessages('s1')).toMatchObject([{
+        id: 'history-persisted-1',
+        clientId: 'history-persisted-1',
+        content: 'partial answer and complete',
+      }]);
+      expect(remoteSessionStore.getMessages('s1')).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not retire a generated fallback on a short ambiguous prefix', () => {
+    vi.useFakeTimers();
+    try {
+      pushMakerText('s1', undefined, 'Sure', false);
+      vi.runOnlyPendingTimers();
+
+      remoteSessionStore.applyRemotePush('dev-1', 'local-db:messages:created', {
+        sessionId: 's1',
+        message: {
+          id: 'old-persisted-2',
+          clientId: 'old-persisted-2',
+          sessionId: 's1',
+          role: 'assistant',
+          content: 'Sure, that was the previous turn',
+          toolUseId: null,
+          agentMeta: null,
+          createdAt: '2026-01-01T00:00:01.000Z',
+        },
+      });
+
+      expect(remoteSessionStore.getMessages('s1')).toHaveLength(2);
+      expect(remoteSessionStore.getMessages('s1').find((row) => row.clientId.startsWith('mobile-stream-'))).toMatchObject({
+        content: 'Sure',
+        agentMeta: { isStreaming: true },
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not replace a live fallback row with an unrelated delayed DB message', () => {
+    vi.useFakeTimers();
+    try {
+      pushMakerText('s1', undefined, 'new turn partial', false);
+      vi.runOnlyPendingTimers();
+
+      remoteSessionStore.applyRemotePush('dev-1', 'local-db:messages:created', {
+        sessionId: 's1',
+        message: {
+          id: 'old-persisted-1',
+          clientId: 'old-persisted-1',
+          sessionId: 's1',
+          role: 'assistant',
+          content: 'old turn answer',
+          toolUseId: null,
+          agentMeta: null,
+          createdAt: '2026-01-01T00:00:01.000Z',
+        },
+      });
+
+      const rows = remoteSessionStore.getMessages('s1');
+      expect(rows).toHaveLength(2);
+      expect(rows.find((row) => row.clientId.startsWith('mobile-stream-'))).toMatchObject({
+        content: 'new turn partial',
+        agentMeta: { isStreaming: true },
+      });
+      expect(rows.find((row) => row.id === 'old-persisted-1')).toMatchObject({ content: 'old turn answer' });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('migrates a fallback streaming row when a later event carries persistId', () => {
+    pushMakerText('s1', undefined, 'partial ', false);
+    pushMakerText('s1', 'persist-1', 'partial and complete', true);
+
+    expect(remoteSessionStore.getMessages('s1')).toMatchObject([{
+      id: 'persist-1',
+      clientId: 'persist-1',
+      content: 'partial and complete',
+      agentMeta: { isStreaming: true },
+    }]);
+  });
+
+  it('ends the current streaming block at a tool boundary', () => {
+    vi.useFakeTimers();
+    try {
+      pushMakerText('s1', 'persist-1', 'before tool', false);
+      remoteSessionStore.applyRemotePush('dev-1', 'maker:event', {
+        sessionId: 's1',
+        event: { type: 'tool_use', data: { toolUseId: 'tool-1' } },
+      });
+
+      expect(remoteSessionStore.getMessages('s1')[0].agentMeta).toBeNull();
+
+      pushMakerText('s1', 'persist-2', 'after tool', false);
+      vi.runOnlyPendingTimers();
+      expect(remoteSessionStore.getMessages('s1')).toMatchObject([
+        { clientId: 'persist-1', content: 'before tool', agentMeta: null },
+        { clientId: 'persist-2', content: 'after tool', agentMeta: { isStreaming: true } },
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('finalizes live text on idle recovery and does not erase it from an empty window', () => {
+    vi.useFakeTimers();
+    try {
+      pushMakerText('s1', 'persist-1', 'still streaming', false);
+      remoteSessionStore.applyRemotePush('dev-1', 'local-db:sessions:activity', {
+        sessionId: 's1',
+        phase: 'completed',
+        compactDetail: '',
+      });
+      vi.runOnlyPendingTimers();
+
+      remoteSessionStore.setLatestMessageWindow('s1', []);
+      expect(remoteSessionStore.getMessages('s1')).toMatchObject([{
+        clientId: 'persist-1',
+        content: 'still streaming',
+        agentMeta: null,
+      }]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('finalizes live text when a reconnect snapshot restores a pending interaction', () => {
+    vi.useFakeTimers();
+    try {
+      pushMakerText('s1', 'persist-1', 'waiting for approval', false);
+      vi.runOnlyPendingTimers();
+
+      remoteSessionStore.setPendingInteractions(
+        's1',
+        [pending('permission', 'req-1')],
+        { finalizeStreaming: true },
+      );
+
+      expect(remoteSessionStore.getMessages('s1')).toMatchObject([{
+        clientId: 'persist-1',
+        content: 'waiting for approval',
+        agentMeta: null,
+      }]);
+      expect(remoteSessionStore.getPendingInteractions('s1')).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not finalize streaming when the reconnect pending snapshot is empty', () => {
+    vi.useFakeTimers();
+    try {
+      pushMakerText('s1', 'persist-1', 'still generating', false);
+      vi.runOnlyPendingTimers();
+
+      remoteSessionStore.setPendingInteractions('s1', [], { finalizeStreaming: true });
+
+      expect(remoteSessionStore.getMessages('s1')).toMatchObject([{
+        clientId: 'persist-1',
+        content: 'still generating',
+        agentMeta: { isStreaming: true },
+      }]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('matches persisted rows by clientId without content-prefix guesses', () => {
+    vi.useFakeTimers();
+    try {
+      pushMakerText('s1', 'persist-1', 'partial', false);
+      vi.runOnlyPendingTimers();
+
+      remoteSessionStore.setLatestMessageWindow('s1', [{
+        ...messageAt('message-1', 's1', '2026-01-01T00:00:01.000Z'),
+        clientId: 'persist-1',
+        content: 'partial and complete',
+        agentMeta: { model: 'claude' },
+      }]);
+
+      expect(remoteSessionStore.getMessages('s1')).toMatchObject([{
+        id: 'message-1',
+        clientId: 'persist-1',
+        content: 'partial and complete',
+        agentMeta: { model: 'claude' },
+      }]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps accumulated text when the final event is device-link truncated', () => {
+    pushMakerText('s1', 'persist-1', '前半段', false);
+    pushMakerText('s1', 'persist-1', '后半段', false);
+    remoteSessionStore.applyRemotePush('dev-1', 'maker:event', {
+      sessionId: 's1',
+      persistId: 'persist-1',
+      event: {
+        type: 'text',
+        __deviceLinkTruncated: true,
+        data: { text: '前半段\n[device-link truncated]', isFinal: true, __deviceLinkTruncated: true },
+      },
+    });
+
+    expect(remoteSessionStore.getMessages('s1')[0]).toMatchObject({
+      content: '前半段后半段',
+      agentMeta: { isStreaming: true },
+    });
+  });
+
   it('applies live update_plan snapshots to the persisted task row', () => {
     const initialPlan = {
       ...message('plan-row-1', 's1'),
@@ -224,6 +631,50 @@ describe('remoteSessionStore', () => {
         },
       },
     });
+  });
+
+  it('coalesces update_plan with streaming finalization into one notification', () => {
+    vi.useFakeTimers();
+    const notify = vi.fn();
+    try {
+      remoteSessionStore.setMessages('s1', [{
+        ...message('plan-row-1', 's1'),
+        role: 'tool_use',
+        toolUseId: 'plan:turn-1',
+        content: {
+          toolUseId: 'plan:turn-1',
+          toolName: 'update_plan',
+          input: { plan: [{ step: 'Inspect', status: 'pending' }] },
+        },
+      }]);
+      pushMakerText('s1', 'assistant-1', 'before plan', false);
+      vi.runOnlyPendingTimers();
+      const unsubscribe = remoteSessionStore.subscribe(notify);
+      try {
+        remoteSessionStore.applyMakerEvent('s1', {
+          type: 'tool_use',
+          data: {
+            toolUseId: 'plan:turn-1',
+            toolName: 'update_plan',
+            input: { plan: [{ step: 'Inspect', status: 'completed' }] },
+          },
+        }, 'plan-row-1');
+      } finally {
+        unsubscribe();
+      }
+
+      expect(notify).toHaveBeenCalledTimes(1);
+      const rows = remoteSessionStore.getMessages('s1');
+      expect(rows).toHaveLength(2);
+      expect(rows.find((row) => row.clientId === 'assistant-1')).toMatchObject({ agentMeta: null });
+      expect(rows.find((row) => row.id === 'plan-row-1')).toMatchObject({
+        content: {
+          input: { plan: [{ step: 'Inspect', status: 'completed' }] },
+        },
+      });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('falls back to the stable update_plan toolUseId when a live push has no persistId', () => {
@@ -603,9 +1054,31 @@ describe('remoteSessionStore', () => {
     expect(remoteSessionStore.isSessionRunning('s1')).toBe(true);
     expect(remoteSessionStore.isSessionRunning('s2')).toBe(true);
 
-    remoteSessionStore.setActiveSessionSnapshots('dev-1', []);
+    remoteSessionStore.setActiveSessionSnapshots('dev-1', [{ sessionId: 's1', isTurnRunning: false }]);
     expect(remoteSessionStore.isSessionRunning('s1')).toBe(false);
     expect(remoteSessionStore.isSessionRunning('s2')).toBe(true);
+  });
+
+  it('does not treat an absent active-session row as an idle assertion', () => {
+    vi.useFakeTimers();
+    try {
+      remoteSessionStore.setDeviceSessions('dev-1', 'Mac', [session('s1')]);
+      pushMakerStatus('s1', { isRunning: true });
+      pushMakerText('s1', undefined, 'still generating', false);
+      vi.runOnlyPendingTimers();
+
+      // This response may have started before the turn and completed after the
+      // live push. Absence must not finalize the current streaming row.
+      remoteSessionStore.setActiveSessionSnapshots('dev-1', []);
+
+      expect(remoteSessionStore.isSessionRunning('s1')).toBe(true);
+      expect(remoteSessionStore.getMessages('s1')).toMatchObject([{
+        content: 'still generating',
+        agentMeta: { isStreaming: true },
+      }]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('tracks session running state from maker event push boundaries', () => {
@@ -811,7 +1284,7 @@ describe('remoteSessionStore', () => {
     remoteSessionStore.setDeviceSessions('dev-1', 'MacBook', [session('s1')]);
     pushMakerStatus('s1', { isRunning: true });
     expect(remoteSessionStore.isSessionMakerTurnRunning('s1')).toBe(true);
-    remoteSessionStore.setActiveSessionSnapshots('dev-1', []);
+    remoteSessionStore.setActiveSessionSnapshots('dev-1', [{ sessionId: 's1', isTurnRunning: false }]);
     expect(remoteSessionStore.isSessionMakerTurnRunning('s1')).toBe(false);
 
     // Neither idle path may OPEN the gate — that stays maker-status-only.
@@ -833,6 +1306,31 @@ describe('remoteSessionStore', () => {
       event: { type: 'done', data: {} },
     });
     expect(remoteSessionStore.isSessionMakerTurnRunning('s1')).toBe(false);
+  });
+
+  it('preserves boundary agent metadata when finalizing a streaming row', () => {
+    vi.useFakeTimers();
+    try {
+      pushMakerText('s1', 'persist-1', 'sub-agent answer', false);
+      vi.runOnlyPendingTimers();
+
+      remoteSessionStore.applyRemotePush('dev-1', 'maker:event', {
+        sessionId: 's1',
+        event: {
+          type: 'done',
+          agentMeta: { parentUuid: 'parent-1', uuid: 'child-1' },
+          data: {},
+        },
+      });
+
+      expect(remoteSessionStore.getMessages('s1')).toMatchObject([{
+        clientId: 'persist-1',
+        content: 'sub-agent answer',
+        agentMeta: { parentUuid: 'parent-1', uuid: 'child-1' },
+      }]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('stores and clears list-level live activity from the sessions stream', () => {
@@ -1037,6 +1535,30 @@ describe('remoteSessionStore', () => {
       'ask-persist',
       'issue-1',
     ]);
+  });
+
+  it('does not finalize streaming for a reconnect snapshot containing only a suppressed interaction', () => {
+    vi.useFakeTimers();
+    try {
+      remoteSessionStore.beginOptimisticInteractionDismiss('s1', 'req-stale');
+      remoteSessionStore.settleOptimisticInteractionDismiss('s1', 'req-stale', { kind: 'confirmed' });
+      pushMakerText('s1', 'persist-1', 'still generating', false);
+      vi.runOnlyPendingTimers();
+
+      remoteSessionStore.setPendingInteractions(
+        's1',
+        [pending('permission', 'req-stale')],
+        { finalizeStreaming: true },
+      );
+
+      expect(remoteSessionStore.getPendingInteractions('s1')).toHaveLength(0);
+      expect(remoteSessionStore.getMessages('s1')).toMatchObject([{
+        content: 'still generating',
+        agentMeta: { isStreaming: true },
+      }]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('dismisses one pending interaction by requestId without clearing same-session siblings', () => {

@@ -409,6 +409,26 @@
     },
     "windowBehavior": {
       "title": "アプリの動作",
+      "closeBehavior": {
+        "label": "メインウィンドウを閉じるとき",
+        "hint": "初回に確認します。後からここで変更できます。",
+        "aria": "メインウィンドウを閉じるときの動作を選択",
+        "tray": "トレイに最小化",
+        "quit": "Cindy を終了"
+      },
+      "closePrompt": {
+        "title": "Cindy を閉じる",
+        "message": "メインウィンドウを閉じるときの動作を選択してください。",
+        "detail": "システムトレイに最小化すると、タスクは実行を続けます。後から設定で変更できます。"
+      },
+      "trayMenu": {
+        "show": "Cindy を開く",
+        "quit": "Cindy を終了"
+      },
+      "trayError": {
+        "title": "トレイに最小化できません",
+        "message": "システムトレイアイコンを作成できなかったため、ウィンドウを開いたままにします。"
+      },
       "swallowActivationClickLabel": "バックグラウンドウィンドウへの最初の左クリックはアクティブ化のみで貫通させない",
       "swallowActivationClickHint": "有効時、バックグラウンドから戻ってきた最初の左クリックはウィンドウを前面に出すだけで、ページ内のボタンは押されずテキストも選択されません。\n無効にすると 1 回のクリックで作業を続けられ、デュアルモニター利用時に便利ですが、ボタンを誤って押す可能性があります。",
       "swallowActivationClickAria": "バックグラウンドウィンドウへの最初の左クリックを飲み込むかどうかを切り替え",
@@ -1437,6 +1457,7 @@
       "description": "サイドバーに新しいターミナルタブを開くときに使用するシェルです。",
       "auto": "自動選択",
       "autoWithTarget": "自動選択 ({{target}})",
+      "unavailable": "{{shell}} (利用不可)",
       "card": {
         "label": "デフォルトシェル",
         "description": "デフォルトの変更は新しいターミナルタブにのみ反映されます。既存のターミナルには影響しません。",
@@ -2625,6 +2646,10 @@
     "sessionCostLabel": "セッション {{cost}}",
     "codex": {
       "waiting": "Codex --",
+      "noUsageLabel": "使用量なし",
+      "noUsageDetail": "このセッションにはまだ使用量がありません。",
+      "unavailableLabel": "使用量を取得できません",
+      "unavailableDetail": "使用量データは一時的に利用できません。",
       "waitingDetail": "Codex の使用量は次回のターン完了後に更新されます。",
       "sessionTokensLine": "このセッションで {{tokens}} token 使用",
       "sessionValueLabel": "このセッションの価値 {{cost}}",
@@ -3345,7 +3370,12 @@
         "budget": "割引版GPT",
         "grok": "xAI",
         "google": "Google",
-        "china": "国内"
+        "china": "国内",
+        "image": "画像",
+        "audio": "音声",
+        "video": "動画",
+        "embedding": "埋め込み",
+        "other": "その他"
       },
       "search": {
         "placeholder": "{{source}} のモデルを検索...",
@@ -4128,6 +4158,7 @@
         "unsupportedHistory": "この位置はエージェント切替境界をまたぐため、分岐できません",
         "noPriorAssistant": "AI の返信より後のメッセージで分岐してください",
         "sourceNeverRan": "元のセッションがまだ実行されていないため分岐できません",
+        "codexStateUnavailable": "Codex セッションの状態を利用できないため分岐できません。{{detail}}",
         "generic": "分岐に失敗しました。再試行してください"
       }
     },
@@ -6194,6 +6225,7 @@
       "customRolePredefinedError": "カスタムロールには既定ロール名を使用できません",
       "agentLabel": "Agent",
       "modelLabel": "モデル",
+      "noAvailableModels": "利用可能な {{agent}} モデルがありません。設定でプロバイダーの接続と認証情報を確認してください。",
       "effortLabel": "Effort",
       "initialTaskLabel": "初期タスク",
       "optional": "（任意）",

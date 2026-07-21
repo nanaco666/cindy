@@ -409,6 +409,26 @@
     },
     "windowBehavior": {
       "title": "App Behavior",
+      "closeBehavior": {
+        "label": "When closing the main window",
+        "hint": "You will be asked the first time. You can change the choice here later.",
+        "aria": "Choose what happens when the main window closes",
+        "tray": "Minimize to tray",
+        "quit": "Quit Cindy"
+      },
+      "closePrompt": {
+        "title": "Close Cindy",
+        "message": "What should happen when you close the main window?",
+        "detail": "Tasks keep running when Cindy is minimized to the system tray. You can change this later in Settings."
+      },
+      "trayMenu": {
+        "show": "Open Cindy",
+        "quit": "Quit Cindy"
+      },
+      "trayError": {
+        "title": "Could not minimize to tray",
+        "message": "The system tray icon could not be created, so the window will stay open."
+      },
       "swallowActivationClickLabel": "First left-click on a background window only activates, doesn't fall through",
       "swallowActivationClickHint": "When on, the first left-click that brings the window back from background only raises it — page buttons don't fire and no text is selected.\nTurn off to continue working with a single click (better for dual-monitor setups), at the cost of possibly triggering buttons unintentionally.",
       "swallowActivationClickAria": "Toggle whether the first left-click on a background window is swallowed",
@@ -1437,6 +1457,7 @@
       "description": "Use this shell when opening a new sidebar terminal tab.",
       "auto": "Automatic",
       "autoWithTarget": "Automatic ({{target}})",
+      "unavailable": "{{shell}} (Unavailable)",
       "card": {
         "label": "Default shell",
         "description": "Changing the default only applies to new terminal tabs. Existing terminals are not affected.",
@@ -2625,6 +2646,10 @@
     "sessionCostLabel": "Session {{cost}}",
     "codex": {
       "waiting": "Codex --",
+      "noUsageLabel": "No usage yet",
+      "noUsageDetail": "No usage has been recorded for this session yet.",
+      "unavailableLabel": "Usage unavailable",
+      "unavailableDetail": "Usage data is temporarily unavailable.",
       "waitingDetail": "Codex usage will update after the next turn completes.",
       "sessionTokensLine": "Session used {{tokens}} tokens",
       "sessionValueLabel": "Session value {{cost}}",
@@ -3345,7 +3370,12 @@
         "budget": "Budget GPT",
         "grok": "xAI",
         "google": "Google",
-        "china": "Domestic"
+        "china": "Domestic",
+        "image": "Image",
+        "audio": "Audio & Speech",
+        "video": "Video",
+        "embedding": "Embeddings",
+        "other": "Other"
       },
       "search": {
         "placeholder": "Search {{source}} models...",
@@ -4128,6 +4158,7 @@
         "unsupportedHistory": "This point crosses an agent-switch boundary and cannot be forked",
         "noPriorAssistant": "Please fork from a message that follows an AI reply",
         "sourceNeverRan": "Source session has not run yet, cannot fork",
+        "codexStateUnavailable": "The Codex session state is unavailable and cannot be forked. {{detail}}",
         "generic": "Fork failed, please retry"
       }
     },
@@ -6203,6 +6234,7 @@
       "customRolePredefinedError": "Custom role cannot use a predefined role name",
       "agentLabel": "Agent",
       "modelLabel": "Model",
+      "noAvailableModels": "No available {{agent}} model. Check the provider connection and credentials in Settings.",
       "effortLabel": "Effort",
       "initialTaskLabel": "Initial Task",
       "optional": "(optional)",

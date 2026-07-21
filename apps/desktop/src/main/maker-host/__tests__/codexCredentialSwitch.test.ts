@@ -224,6 +224,28 @@ describe('prepareLocalSessionCredentialModeSwitch', () => {
     })).rejects.toThrow(/busy-claude/);
     expect(closeSession).not.toHaveBeenCalled();
   });
+
+  it('does not close the target session when the switch is already aborted', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const closeSession = vi.fn(async () => undefined);
+    const maker: PrepareLocalCodexCredentialModeSwitchInput['maker'] = {
+      listActiveSessions: () => [{
+        id: 'aborted-claude',
+        agentKind: 'claude-code',
+        remoteHostId: null,
+        isTurnRunning: () => false,
+      }],
+      closeSession,
+    };
+
+    await expect(prepareLocalSessionCredentialModeSwitch({
+      maker,
+      sessionId: 'aborted-claude',
+      signal: controller.signal,
+    })).rejects.toThrow(/aborted/);
+    expect(closeSession).not.toHaveBeenCalled();
+  });
 });
 
 describe('prepareLocalCodexCredentialModeSwitch', () => {
@@ -282,6 +304,27 @@ describe('prepareLocalCodexCredentialModeSwitch', () => {
       maker,
       isSessionInTurn: (sessionId) => sessionId === 'busy-codex-1',
     })).rejects.toThrow(/busy-codex-1/);
+    expect(closeSession).not.toHaveBeenCalled();
+  });
+
+  it('does not close local Codex sessions when the switch is already aborted', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const closeSession = vi.fn(async () => undefined);
+    const maker: PrepareLocalCodexCredentialModeSwitchInput['maker'] = {
+      listActiveSessions: () => [{
+        id: 'aborted-codex',
+        agentKind: 'codex',
+        remoteHostId: null,
+        isTurnRunning: () => false,
+      }],
+      closeSession,
+    };
+
+    await expect(prepareLocalCodexCredentialModeSwitch({
+      maker,
+      signal: controller.signal,
+    })).rejects.toThrow(/aborted/);
     expect(closeSession).not.toHaveBeenCalled();
   });
 

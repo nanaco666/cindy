@@ -7,6 +7,9 @@ export type DbTxName =
   | 'embedding.commit'
   | 'embedding.recordFailures'
   | 'embedding.enqueue'
+  | 'orca.reserveWorkerCreation'
+  | 'orca.renewWorkerCreationReservation'
+  | 'orca.releaseWorkerCreationReservation'
   | 'orca.upsertWorker'
   | 'orca.setWorkerFocus'
   | 'orca.removeWorker'
@@ -92,6 +95,10 @@ export interface ForkSessionArgs {
     updatedAt: number;
   };
   uuidMap: Array<[string, string]> | Record<string, string>;
+  /** Legacy Claude imports may have stored transcript parentage in parentUuid. */
+  legacyTranscriptParentUuids?: string[];
+  /** Imported Claude assistant rows may retain an external tool-use parent id. */
+  toolParentUuids?: string[];
   /**
    * main 侧预生成的新 message id 列表,顺序对应 source 消息按 created_at ASC 的遍历顺序。
    * 长度必须等于 source message 数。
@@ -144,6 +151,29 @@ export interface OrcaUpsertWorkerArgs {
   focused?: boolean;
   idleSince?: number | null;
   now: number;
+}
+
+export interface OrcaReserveWorkerCreationArgs {
+  reservationId: string;
+  teamId: string;
+  label: string;
+  hardLimit: number;
+  now: number;
+  expiresAt: number;
+}
+
+export type OrcaReserveWorkerCreationResult =
+  | { ok: true; occupiedSlotsBefore: number }
+  | { ok: false; errorCode: 'DUPLICATE_LABEL' | 'WORKER_CREATION_IN_PROGRESS' | 'WORKER_LIMIT_HARD_EXCEEDED' };
+
+export interface OrcaReleaseWorkerCreationReservationArgs {
+  reservationId: string;
+}
+
+export interface OrcaRenewWorkerCreationReservationArgs {
+  reservationId: string;
+  now: number;
+  expiresAt: number;
 }
 
 /** F-COLLAB: 原子切换 team 内 focused worker(清旧 + set 新)。 */
@@ -270,6 +300,9 @@ export type DbTxArgsByName = {
   'embedding.commit': EmbeddingCommitArgs;
   'embedding.recordFailures': EmbeddingRecordFailuresArgs;
   'embedding.enqueue': EmbeddingEnqueueArgs;
+  'orca.reserveWorkerCreation': OrcaReserveWorkerCreationArgs;
+  'orca.renewWorkerCreationReservation': OrcaRenewWorkerCreationReservationArgs;
+  'orca.releaseWorkerCreationReservation': OrcaReleaseWorkerCreationReservationArgs;
   'orca.upsertWorker': OrcaUpsertWorkerArgs;
   'orca.setWorkerFocus': OrcaSetWorkerFocusArgs;
   'orca.removeWorker': OrcaRemoveWorkerArgs;
@@ -289,6 +322,9 @@ export type DbTxResultByName = {
   'embedding.commit': undefined;
   'embedding.recordFailures': { failCount: number };
   'embedding.enqueue': { inserted: number; skipped: number };
+  'orca.reserveWorkerCreation': OrcaReserveWorkerCreationResult;
+  'orca.renewWorkerCreationReservation': boolean;
+  'orca.releaseWorkerCreationReservation': undefined;
   'orca.upsertWorker': undefined;
   'orca.setWorkerFocus': undefined;
   'orca.removeWorker': string | null;

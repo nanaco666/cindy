@@ -684,27 +684,6 @@ cindy-light 用黑字版(`cindy-logo-light.png`)、cindy-dark 用白字版(`cind
 - 覆盖数组 115→116(`cindyDecisionData` 注明 D2 期新增,源自 §7 必炸点方案);
 - 消费点(`ContactsListPane:150`)从 `accent-pure-cta-fg` 切到 `status-badge-fg`;红 CTA 上的 `surface-on-card` 消费者(`RolePillDropdown:543/544`、`SkillhubDetailView:504`)迁到 `accent-pure-cta-fg`(白),`surface-on-card` 保留中性反相(Fast toggle thumb)。
 
-### 15.9 markdown-editor.css CINDY 覆盖(B 裁决 2026-07-17)
-
-`[data-theme="cindy-light/dark"] .mdxeditor-host` 覆盖 MDXEditor 色阶用 CINDY token(var 引用,light/dark 自动解析)。锚点按文件顶部 Token map 注释,中间档按序:①语义对上决策表插值 token 的复用;②对不上的 sRGB `round(A+(B-A)*t)` 从相邻锚点算(本映射中间档均复用 token,无 sRGB 插值)。文本档实算对比度 ≥4.5:1。
-
-| --blue-* | CINDY token | 规则 |
-|---|---|---|
-| --blue-1 | `var(--surface)` | 锚点(Surface) |
-| --blue-2 | `var(--surface-hover-soft)` | ①复用插值 token |
-| --blue-3 | `var(--surface-elevated)` | 锚点(Card) |
-| --blue-4 | `var(--surface-hover)` | ①复用 |
-| --blue-5 | `var(--surface-chip)` | ①复用(Chip) |
-| --blue-6 | `var(--border-default)` | 锚点(Board) |
-| --blue-7 | `var(--border-default)` | ①复用(同 6) |
-| --blue-8 | `var(--text-tertiary)` | ①复用(中间灰) |
-| --blue-9 | `var(--text-primary)` | 锚点(primary) |
-| --blue-10 | `var(--text-primary-emphasis)` | ①复用(深字) |
-| --blue-11 | `var(--text-primary)` | ①复用(文字档,× surface-elevated ≥4.5:light #3C3F43×#F8F8F8=9.97,dark #D4D4D4×#312F2F=8.98) |
-| --blue-12 | `var(--text-primary-emphasis)` | ①复用(文字档) |
-
-`--slate-*` 同理对应中性档。`--base*`/`--accent*` 按 Token map。`:root`/`.dark` 原两套一字不动。
-
 ### 15.10 E1D 红色体系重构(用户批准 2026-07-17)
 
 常规主操作不再用品牌红,改反相中性(light 底 `#3C3F43`/字 `#FCFCFC`,dark 底 `#EEEEEE`/字 `#252222`;WCAG 10.32/13.60:1)。红色仅限语义例外:
@@ -750,6 +729,18 @@ cindy-light 用黑字版(`cindy-logo-light.png`)、cindy-dark 用白字版(`cind
 - **running 呼吸图标一律 Thinking Orange**(`--warning-accent` `#EA6B17`,全主题同值):VendorIcon、SessionStatusIcon(Puzzle/RadioTower)、AutomationSessionGroupItem(Clock);选中态也橙,优先级 running > 选中反相前景 > 普通态。移动端 `statusAccent` 同值同规则(glyphColor 同优先级)。
 - **协同按钮 ON 态橙**:CollaborationModeToggle 开启态文字+Puzzle 图标 `warning-accent`(覆盖 2026-07-17「composer pill 去橙中性」规范,仅 ON 态;OFF 入口态保持中性)。
 - **SVG 常驻动画红线**:呼吸类常驻动画一律挂 HTML wrapper(span),SVG 保持静态。
+
+### 15.15 新建页内容区定位 + 顶栏 hover 消费纪律(用户拍板 2026-07-21)
+
+- **新建页(CREATE AGENT)内容组垂直定位**:距**窗口顶**恒为 `max(96px, 28vh) + 46px`。
+  实现 = 路由容器 `pt-[calc(max(96px,28vh)+46px-var(--content-header-h,46px))]`:
+  - 268px 封顶已废(Figma 定稿画框高度遗留,大窗口下内容"偏高"的根因);28% 为用户实机调参定稿(原 25.5%);
+  - `--content-header-h` 由 `ContentHeaderSlot`(FeatureSidebarSlotProvider 内)经 display:contents 包裹层广播(顶栏渲染 46px / 隐藏 0px,与 ContentHeader `h-[46px]` 同源)——选中项目引发顶栏显隐时内容区**零跳动**,恒定在"有顶栏时"位置;
+  - 顶栏显隐判定单一决策源 = `useContentHeaderHidden`(mac + Sidebar 展开 + 无注入内容 + 无右栏开关,沿用 2026-06-11"空 header 隐藏"决策);
+  - 守卫:`newMakerCreateAgentVisualContract` 锁定位公式 + 防回退断言。
+- **hover token 消费纪律**:`--update-btn-hover` 是升级按钮(反相深色 CTA)专用 hover,**禁止**用于普通 ghost 按钮/徽章(CINDY light 下近黑 `#2E3237`,吞字吞图标;2026-07-21 清理 6 处误用)。正确选型:
+  - 顶栏(ContentHeader 一带)ghost 元素 → `titlebar-button-hover`(与 ChromeActions 窗口按钮组同款);
+  - 内容区通用浅 hover → `--surface-hover`。
 
 ### 15.13 CINDY 双端换肤定稿规则(2026-07-18)
 

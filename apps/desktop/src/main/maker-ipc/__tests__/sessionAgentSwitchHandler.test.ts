@@ -365,6 +365,21 @@ describe('deferred switch (turn running)', () => {
     expect(store.has('s1')).toBe(true);
     expect(deps.applyAgentSwitchToDb).not.toHaveBeenCalled();
   });
+  it('applyPendingAgentSwitchIfIdle completes the switch when abort arrives during close', async () => {
+    const controller = new AbortController();
+    const { deps, store, calls } = makeDepsWithPending({
+      closeSession: vi.fn(async () => {
+        calls.push('close');
+        controller.abort();
+      }),
+    });
+    store.set('s1', { targetAgentKind: 'codex', model: 'gpt-5.5', providerId: null });
+
+    await applyPendingAgentSwitchIfIdle(deps, 's1', { signal: controller.signal });
+
+    expect(calls).toEqual(['close', 'db', 'boundary', 'pending']);
+    expect(store.has('s1')).toBe(false);
+  });
 });
 
 describe('SET_MODEL cancels agent switch intent only after success', () => {

@@ -35,10 +35,22 @@ vi.mock('../../logger', () => ({
 import { rewriteOutboundMedia } from '../outboundMedia';
 import { isAttachmentOssRef } from '../../../shared/attachmentOssRef';
 
+const SHA256 = 'a'.repeat(64);
+
 beforeEach(() => {
   vi.clearAllMocks();
-  uploadLocalFile.mockResolvedValue({ key: 'cindy/device-link/u/x.png', size: 10, contentType: 'image/png' });
-  uploadBuffer.mockResolvedValue({ key: 'cindy/device-link/u/b.jpg', size: 5, contentType: 'image/jpeg' });
+  uploadLocalFile.mockResolvedValue({
+    key: 'cindy/device-link/u/x.png',
+    size: 10,
+    contentType: 'image/png',
+    sha256: SHA256,
+  });
+  uploadBuffer.mockResolvedValue({
+    key: 'cindy/device-link/u/b.jpg',
+    size: 5,
+    contentType: 'image/jpeg',
+    sha256: SHA256,
+  });
   // 与真实实现同口径:png/jpeg 可能压,其它 mime 直通不读盘。
   mayCompressOutboundImage.mockImplementation(
     (mime: string | undefined) => mime === 'image/png' || mime === 'image/jpeg',
@@ -50,16 +62,26 @@ beforeEach(() => {
 describe('base64 来源', () => {
   it('压缩命中 → uploadBuffer 收到压缩字节与压缩后的 contentType/ext', async () => {
     const compressedBytes = Buffer.from([9, 9]);
-    compressOutboundImage.mockResolvedValue({ bytes: compressedBytes, contentType: 'image/jpeg', ext: 'jpg' });
+    compressOutboundImage.mockResolvedValue({
+      bytes: compressedBytes,
+      contentType: 'image/jpeg',
+      ext: 'jpg',
+    });
     const raw = Buffer.alloc(64, 1);
     const out = await rewriteOutboundMedia('maker:send', [
       'sess',
-      { type: 'user', content: [{ type: 'image', base64: raw.toString('base64'), mimeType: 'image/jpeg' }] },
+      {
+        type: 'user',
+        content: [{ type: 'image', base64: raw.toString('base64'), mimeType: 'image/jpeg' }],
+      },
     ]);
     expect(compressOutboundImage).toHaveBeenCalledTimes(1);
     expect(compressOutboundImage.mock.calls[0][0].equals(raw)).toBe(true);
     expect(compressOutboundImage.mock.calls[0][1]).toBe('image/jpeg');
-    expect(uploadBuffer).toHaveBeenCalledWith(compressedBytes, { ext: 'jpg', contentType: 'image/jpeg' });
+    expect(uploadBuffer).toHaveBeenCalledWith(compressedBytes, {
+      ext: 'jpg',
+      contentType: 'image/jpeg',
+    });
     const block = (out[1] as { content: Array<{ path?: string }> }).content[0];
     expect(isAttachmentOssRef(block.path!)).toBe(true);
   });
@@ -69,12 +91,15 @@ describe('base64 来源', () => {
     const raw = Buffer.alloc(16, 2);
     await rewriteOutboundMedia('maker:send', [
       'sess',
-      { type: 'user', content: [{ type: 'image', base64: raw.toString('base64'), mimeType: 'image/png' }] },
+      {
+        type: 'user',
+        content: [{ type: 'image', base64: raw.toString('base64'), mimeType: 'image/png' }],
+      },
     ]);
-    expect(uploadBuffer).toHaveBeenCalledWith(
-      expect.any(Buffer),
-      { ext: 'png', contentType: 'image/png' },
-    );
+    expect(uploadBuffer).toHaveBeenCalledWith(expect.any(Buffer), {
+      ext: 'png',
+      contentType: 'image/png',
+    });
     expect((uploadBuffer.mock.calls[0][0] as Buffer).equals(raw)).toBe(true);
   });
 
@@ -82,13 +107,16 @@ describe('base64 来源', () => {
     const raw = Buffer.alloc(48 * 1024 * 1024 + 1, 3);
     await rewriteOutboundMedia('maker:send', [
       'sess',
-      { type: 'user', content: [{ type: 'image', base64: raw.toString('base64'), mimeType: 'image/jpeg' }] },
+      {
+        type: 'user',
+        content: [{ type: 'image', base64: raw.toString('base64'), mimeType: 'image/jpeg' }],
+      },
     ]);
     expect(compressOutboundImage).not.toHaveBeenCalled();
-    expect(uploadBuffer).toHaveBeenCalledWith(
-      expect.any(Buffer),
-      { ext: 'jpg', contentType: 'image/jpeg' },
-    );
+    expect(uploadBuffer).toHaveBeenCalledWith(expect.any(Buffer), {
+      ext: 'jpg',
+      contentType: 'image/jpeg',
+    });
     expect((uploadBuffer.mock.calls[0][0] as Buffer).byteLength).toBe(raw.byteLength);
   });
 });
@@ -97,13 +125,23 @@ describe('xdt-image:// 来源', () => {
   it('读文件 → 压缩命中 → uploadBuffer,不再走 uploadLocalFile', async () => {
     resolveSafe.mockReturnValue({ absPath: '/cache/a.png', mimeType: 'image/png' });
     readFile.mockResolvedValue(Buffer.alloc(128, 3));
-    compressOutboundImage.mockResolvedValue({ bytes: Buffer.from([1]), contentType: 'image/png', ext: 'png' });
+    compressOutboundImage.mockResolvedValue({
+      bytes: Buffer.from([1]),
+      contentType: 'image/png',
+      ext: 'png',
+    });
     await rewriteOutboundMedia('maker:send', [
       'sess',
-      { type: 'user', content: [{ type: 'image', path: 'xdt-image://s/a.png', mimeType: 'image/png' }] },
+      {
+        type: 'user',
+        content: [{ type: 'image', path: 'xdt-image://s/a.png', mimeType: 'image/png' }],
+      },
     ]);
     expect(readFile).toHaveBeenCalledWith('/cache/a.png');
-    expect(uploadBuffer).toHaveBeenCalledWith(Buffer.from([1]), { ext: 'png', contentType: 'image/png' });
+    expect(uploadBuffer).toHaveBeenCalledWith(Buffer.from([1]), {
+      ext: 'png',
+      contentType: 'image/png',
+    });
     expect(uploadLocalFile).not.toHaveBeenCalled();
   });
 
@@ -124,7 +162,10 @@ describe('xdt-image:// 来源', () => {
     readFile.mockRejectedValue(new Error('ENOENT'));
     await rewriteOutboundMedia('maker:send', [
       'sess',
-      { type: 'user', content: [{ type: 'image', path: 'xdt-image://s/gone.png', mimeType: 'image/png' }] },
+      {
+        type: 'user',
+        content: [{ type: 'image', path: 'xdt-image://s/gone.png', mimeType: 'image/png' }],
+      },
     ]);
     expect(compressOutboundImage).not.toHaveBeenCalled();
     expect(uploadLocalFile).toHaveBeenCalledWith('/cache/gone.png', { contentType: 'image/png' });
@@ -136,8 +177,21 @@ describe('xdt-image:// 来源', () => {
       'sess',
       {
         text: '',
-        files: [{ id: '1', name: 'design.png', category: 'image', mimeType: 'image/png', url: 'xdt-image://s/design.png', path: '/abs/design.png' }],
-        persistedContent: JSON.stringify({ text: '', images: [{ url: 'xdt-image://s/design.png' }], files: [] }),
+        files: [
+          {
+            id: '1',
+            name: 'design.png',
+            category: 'image',
+            mimeType: 'image/png',
+            url: 'xdt-image://s/design.png',
+            path: '/abs/design.png',
+          },
+        ],
+        persistedContent: JSON.stringify({
+          text: '',
+          images: [{ url: 'xdt-image://s/design.png' }],
+          files: [],
+        }),
       },
     ]);
     expect(readFile).not.toHaveBeenCalled();
@@ -151,18 +205,26 @@ describe('xdt-image:// 来源', () => {
     statFile.mockResolvedValue({ size: 48 * 1024 * 1024 + 1 });
     await rewriteOutboundMedia('maker:send', [
       'sess',
-      { type: 'user', content: [{ type: 'image', path: 'xdt-image://s/monster.png', mimeType: 'image/png' }] },
+      {
+        type: 'user',
+        content: [{ type: 'image', path: 'xdt-image://s/monster.png', mimeType: 'image/png' }],
+      },
     ]);
     expect(readFile).not.toHaveBeenCalled();
     expect(compressOutboundImage).not.toHaveBeenCalled();
-    expect(uploadLocalFile).toHaveBeenCalledWith('/cache/monster.png', { contentType: 'image/png' });
+    expect(uploadLocalFile).toHaveBeenCalledWith('/cache/monster.png', {
+      contentType: 'image/png',
+    });
   });
 
   it('不可压格式(gif)不整读进内存,直接流式上传', async () => {
     resolveSafe.mockReturnValue({ absPath: '/cache/anim.gif', mimeType: 'image/gif' });
     await rewriteOutboundMedia('maker:send', [
       'sess',
-      { type: 'user', content: [{ type: 'image', path: 'xdt-image://s/anim.gif', mimeType: 'image/gif' }] },
+      {
+        type: 'user',
+        content: [{ type: 'image', path: 'xdt-image://s/anim.gif', mimeType: 'image/gif' }],
+      },
     ]);
     expect(mayCompressOutboundImage).toHaveBeenCalledWith('image/gif');
     expect(readFile).not.toHaveBeenCalled();
@@ -175,7 +237,10 @@ describe('磁盘路径来源(字节精确语义)', () => {
   it('绝对路径附件不压缩,原样 uploadLocalFile', async () => {
     await rewriteOutboundMedia('maker:send', [
       'sess',
-      { type: 'user', content: [{ type: 'image', path: '/abs/design.png', mimeType: 'image/png' }] },
+      {
+        type: 'user',
+        content: [{ type: 'image', path: '/abs/design.png', mimeType: 'image/png' }],
+      },
     ]);
     expect(compressOutboundImage).not.toHaveBeenCalled();
     expect(uploadLocalFile).toHaveBeenCalledWith('/abs/design.png', { contentType: 'image/png' });

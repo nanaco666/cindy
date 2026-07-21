@@ -1,5 +1,5 @@
 /**
- * lizi_schedulerMcpServer.ts
+ * cindy_schedulerMcpServer.ts
  * ---------------------------------------------------------------------------
  * In-process MCP server exposing xdt-maker's local Scheduler to cc / codex
  * agents. Mirrors the shape of `lizi_feishuBotMcpServer.ts` /
@@ -9,7 +9,7 @@
  *  - fine-grained tools live in scheduler/*.ts and register on a registry
  *
  * Phase 5 hard rules satisfied here:
- *  - server name is **lizi_scheduler**（独立，不复用 lizi_feishu_bot）
+ *  - server name is **cindy_scheduler**（独立，不复用 lizi_feishu_bot）
  *  - 没有 import any maker-core agent code（cc/codex 文件零修改 — 加 provider
  *    自动被 host:63&73 注入）
  *  - 只通过 `deps.getScheduler()` 操作，不直接 new 引擎类（plan §C.6 硬规则）
@@ -24,7 +24,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { jsonObjectArg } from './json-object-arg.js';
 
-import { SchedulerToolRegistry } from './lizi_schedulerToolRegistry.js';
+import { SchedulerToolRegistry } from './cindy_schedulerToolRegistry.js';
 import {
   registerScheduleCreateTool,
   registerScheduleDeleteTool,
@@ -65,12 +65,12 @@ export interface SchedulerMcpSessionCtx {
 // 不需要。
 
 const D_LIST_TOOLS =
-  '探索 lizi_scheduler 可用工具（渐进式发现入口）。不传 category → 返回所有类目+每个类目工具数量。' +
+  '探索 cindy_scheduler 可用工具（渐进式发现入口）。不传 category → 返回所有类目+每个类目工具数量。' +
   '传 category=scheduler → 返回该类目下所有工具的名称和简介。' +
   '获取工具名后用 call_tool({name, args}) 执行；参数错误会返回完整 JSON Schema。';
 
 const D_CALL_TOOL =
-  '调用 lizi_scheduler 中的某个具体工具。先用 list_tools 拿工具名 + 简介，再用本工具执行。' +
+  '调用 cindy_scheduler 中的某个具体工具。先用 list_tools 拿工具名 + 简介，再用本工具执行。' +
   '错误码：' +
   '`SCHEDULER_NOT_READY` = scheduler 未启动（用户登出或切账号窗口期），可重试或提示用户登录；' +
   '`NOT_FOUND` = 指定 schedule id 不存在；' +
@@ -160,7 +160,7 @@ export function createSchedulerMcpServer(
   sessionCtx?: SchedulerMcpSessionCtx,
 ): McpServer {
   const server = new McpServer({
-    name: 'lizi_scheduler',
+    name: 'cindy_scheduler',
     version: '1.0.0',
   });
 

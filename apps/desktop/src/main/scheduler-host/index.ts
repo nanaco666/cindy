@@ -88,7 +88,7 @@ export async function startScheduler(deps: StartSchedulerDeps): Promise<Schedule
   });
   const runner: ScheduleRunner = {
     fire: (schedule, ctx) =>
-      withScheduleLock(schedule.id, () =>
+      withScheduleLock(schedule.id, ctx.signal, () =>
         schedule.executionMode === 'script'
           ? scriptRunner.fire(schedule, ctx)
           : promptRunner.fire(schedule, ctx),

@@ -9,6 +9,7 @@ import {
 import type { DispatchWorkerTaskResult, OrcaWorkerStatus } from '../orcaTeamService';
 import type { MakerSessionCreateOpts } from '../sessionRequest';
 import { CredentialModeSwitchBusyError } from '../../maker-host/codex-credential-switch';
+import { isActiveWorkerStatus } from '../../../shared/orca-worker-status';
 
 const UUID_V4_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const WORKER_SESSION_ID = '123e4567-e89b-42d3-a456-426614174000';
@@ -16,12 +17,13 @@ const WORKER_SESSION_ID = '123e4567-e89b-42d3-a456-426614174000';
 function createDeps(overrides: Partial<OrcaWorkerCreationDeps> = {}) {
   const calls: string[] = [];
   const ids = ['worker-1'];
+  const reservations = new Set<string>();
   const deps: OrcaWorkerCreationDeps = {
     getActiveTeamByLead: vi.fn(async (leadSessionId) => (
       leadSessionId === 'lead-1' ? { id: 'team-1', leadSessionId: 'lead-1' } : null
     )),
     listWorkersByLead: vi.fn(async () => []),
-    isActiveWorkerStatus: vi.fn((status) => status === 'idle' || status === 'running' || status === 'error'),
+    isActiveWorkerStatus: vi.fn(isActiveWorkerStatus),
     readCollaborationSettings: vi.fn(() => ({ workerSoftLimit: 3, workerHardLimit: 5 })),
     getLeadSessionRow: vi.fn(async () => ({
       id: 'lead-1',
@@ -48,6 +50,16 @@ function createDeps(overrides: Partial<OrcaWorkerCreationDeps> = {}) {
       codex: ['XD Gateway'],
     })),
     readClaudeApiKey: vi.fn((): string | null => 'sk-test'),
+    reserveWorkerCreation: vi.fn(async ({ label }) => {
+      const canonical = label.toLowerCase();
+      if (reservations.has(canonical)) {
+        return { ok: false as const, errorCode: 'WORKER_CREATION_IN_PROGRESS' as const };
+      }
+      reservations.add(canonical);
+      return { ok: true as const, occupiedSlotsBefore: 0 };
+    }),
+    renewWorkerCreationReservation: vi.fn(async () => true),
+    releaseWorkerCreationReservation: vi.fn(async () => undefined),
     createId: vi.fn(() => ids.shift() ?? `id-${ids.length}`),
     createSessionId: vi.fn(() => WORKER_SESSION_ID),
     buildCreateOptsWithStderr: vi.fn((opts: MakerSessionCreateOpts) => opts),
@@ -187,7 +199,7 @@ describe('OrcaWorkerCreationService', () => {
         leadSessionId: 'lead-1',
         role: 'reviewer',
         agent: 'codex',
-        label: ' reviewer_1 ',
+        label: ' Reviewer_1 ',
       }),
     ).resolves.toMatchObject({
       ok: true,
@@ -201,12 +213,28 @@ describe('OrcaWorkerCreationService', () => {
     }));
   });
 
-  it('rejects hard-limit overflow before bootstrapping a worker session', async () => {
+  it('allows only one full create lifecycle for concurrent case-insensitive labels', async () => {
+    const { deps, service } = createDeps();
+    const results = await Promise.all([
+      service.createWorker({ leadSessionId: 'lead-1', role: 'tester', agent: 'codex', label: 'tester' }),
+      service.createWorker({ leadSessionId: 'lead-1', role: 'tester', agent: 'codex', label: 'TESTER' }),
+    ]);
+
+    expect(results.filter((result) => result.ok)).toHaveLength(1);
+    expect(results.filter((result) => !result.ok && result.errorCode === 'WORKER_CREATION_IN_PROGRESS')).toHaveLength(1);
+    expect(deps.bootstrapSession).toHaveBeenCalledTimes(1);
+    expect(deps.addOrUpdateWorker).toHaveBeenCalledTimes(1);
+    expect(deps.markOrcaRoleIfNeeded).toHaveBeenCalledTimes(1);
+  });
+
+  it('counts terminal workers toward the hard limit before any creation side effects', async () => {
     const { deps, service } = createDeps({
-      readCollaborationSettings: vi.fn(() => ({ workerSoftLimit: 1, workerHardLimit: 2 })),
+      readCollaborationSettings: vi.fn(() => ({ workerSoftLimit: 2, workerHardLimit: 4 })),
       listWorkersByLead: vi.fn(async () => [
         { id: 'worker-1', label: 'one', status: workerStatus('idle') },
         { id: 'worker-2', label: 'two', status: workerStatus('running') },
+        { id: 'worker-3', label: 'three', status: workerStatus('done') },
+        { id: 'worker-4', label: 'four', status: workerStatus('error') },
       ]),
     });
 
@@ -222,6 +250,10 @@ describe('OrcaWorkerCreationService', () => {
       errorCode: 'WORKER_LIMIT_HARD_EXCEEDED',
     });
 
+    expect(deps.getAvailableModels).not.toHaveBeenCalled();
+    expect(deps.getProviderAvailability).not.toHaveBeenCalled();
+    expect(deps.getLeadSessionRow).not.toHaveBeenCalled();
+    expect(deps.reserveWorkerCreation).not.toHaveBeenCalled();
     expect(deps.bootstrapSession).not.toHaveBeenCalled();
     expect(deps.addOrUpdateWorker).not.toHaveBeenCalled();
     expect(deps.dispatchWorkerTask).not.toHaveBeenCalled();
@@ -636,6 +668,7 @@ describe('OrcaWorkerCreationService', () => {
     const { deps, service } = createDeps({
       readCollaborationSettings: vi.fn(() => ({ workerSoftLimit: 1, workerHardLimit: 3 })),
       listWorkersByLead: vi.fn(async () => [{ id: 'worker-existing', label: 'existing', status: workerStatus('idle') }]),
+      reserveWorkerCreation: vi.fn(async () => ({ ok: true as const, occupiedSlotsBefore: 1 })),
     });
 
     await expect(
@@ -708,6 +741,28 @@ describe('OrcaWorkerCreationService', () => {
     ]);
     expect(deps.markOrcaRoleIfNeeded).not.toHaveBeenCalled();
     expect(deps.dispatchWorkerTask).not.toHaveBeenCalled();
+  });
+
+  it('recognizes SQLite expression-index conflicts regardless of quote style', async () => {
+    const { deps, service } = createDeps({
+      addOrUpdateWorker: vi.fn(async () => {
+        throw new Error("UNIQUE constraint failed: index 'uniq_orca_workers_team_label'");
+      }),
+    });
+
+    await expect(
+      service.createWorker({
+        leadSessionId: 'lead-1',
+        role: 'reviewer',
+        agent: 'codex',
+        label: 'reviewer',
+      }),
+    ).resolves.toMatchObject({
+      ok: false,
+      errorCode: 'DUPLICATE_LABEL',
+    });
+
+    expect(deps.archiveWorkerSession).toHaveBeenCalledWith(WORKER_SESSION_ID);
   });
 
   it('removes the worker link when role marking fails after persistence', async () => {

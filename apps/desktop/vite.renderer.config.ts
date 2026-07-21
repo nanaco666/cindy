@@ -28,21 +28,6 @@ const TIPTAP_AND_PROSEMIRROR_OPTIMIZE_EXCLUDES = TIPTAP_AND_PROSEMIRROR_PACKAGES
   (pkg) => pkg !== '@tiptap/react',
 );
 
-const CODEMIRROR_LANGUAGE_DATA_REACHABLE_PACKAGES = [
-  // Not directly imported by app source today. MDXEditor's codeMirrorPlugin
-  // depends on @codemirror/language-data, which can reach these parsers when
-  // the parked MDXEditor branch is re-enabled. Keep them in the runtime group
-  // so that path cannot reintroduce a second @codemirror/state instance.
-  '@codemirror/lang-angular',
-  '@codemirror/lang-jinja',
-  '@codemirror/lang-less',
-  '@codemirror/lang-liquid',
-  '@codemirror/lang-sass',
-  '@codemirror/lang-vue',
-  '@codemirror/lang-wast',
-  '@codemirror/language-data',
-];
-
 const CODEMIRROR_RUNTIME_PACKAGES = [
   '@codemirror/autocomplete',
   '@codemirror/commands',
@@ -63,7 +48,6 @@ const CODEMIRROR_RUNTIME_PACKAGES = [
   '@codemirror/language',
   '@codemirror/legacy-modes',
   '@codemirror/lint',
-  '@codemirror/merge',
   '@codemirror/search',
   '@codemirror/state',
   '@codemirror/view',
@@ -84,7 +68,6 @@ const CODEMIRROR_RUNTIME_PACKAGES = [
   '@lezer/yaml',
   '@replit/codemirror-lang-csharp',
   'cm6-theme-basic-light',
-  ...CODEMIRROR_LANGUAGE_DATA_REACHABLE_PACKAGES,
 ];
 
 const CODEMIRROR_OPTIMIZE_EXCLUDES = [

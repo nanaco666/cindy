@@ -41,7 +41,9 @@ describe('useAgentCapabilities deviceId-aware cache', () => {
     expect(getCapabilities).toHaveBeenCalledWith('claude-code');
     expect(getCapabilities).toHaveBeenCalledWith('codex');
     expect(invoke).not.toHaveBeenCalled();
-    expect(mod.getCachedCapabilities('claude-code')?.availableModels[0].displayName).toBe('local:claude-code');
+    expect(mod.getCachedCapabilities('claude-code')?.availableModels[0].displayName).toBe(
+      'local:claude-code',
+    );
   });
 
   it('本机目录热刷新会原子替换两个 agent 的缓存快照', async () => {
@@ -81,14 +83,21 @@ describe('useAgentCapabilities deviceId-aware cache', () => {
     await mod.prefetchDeviceCapabilities('dev-1');
     await mod.prefetchDeviceCapabilities('dev-2');
     expect(mod.getCachedCapabilities('codex')?.availableModels[0].displayName).toBe('local:codex');
-    expect(mod.getCachedCapabilities('codex', 'dev-1')?.availableModels[0].displayName).toBe('dev-1:codex');
-    expect(mod.getCachedCapabilities('codex', 'dev-2')?.availableModels[0].displayName).toBe('dev-2:codex');
+    expect(mod.getCachedCapabilities('codex', 'dev-1')?.availableModels[0].displayName).toBe(
+      'dev-1:codex',
+    );
+    expect(mod.getCachedCapabilities('codex', 'dev-2')?.availableModels[0].displayName).toBe(
+      'dev-2:codex',
+    );
   });
 
   it('inflight 去重:同 key 并发只发一次请求', async () => {
     const { invoke } = stubElectron();
     const mod = await import('@/hooks/useAgentCapabilities');
-    await Promise.all([mod.prefetchDeviceCapabilities('dev-1'), mod.prefetchDeviceCapabilities('dev-1')]);
+    await Promise.all([
+      mod.prefetchDeviceCapabilities('dev-1'),
+      mod.prefetchDeviceCapabilities('dev-1'),
+    ]);
     // cc + codex 各一次 = 2 次,而非 4 次
     expect(invoke).toHaveBeenCalledTimes(2);
   });
@@ -111,7 +120,9 @@ describe('useAgentCapabilities deviceId-aware cache', () => {
     const resolvers: Array<(v: Caps) => void> = [];
     const invoke = vi.fn(() => new Promise<Caps>((r) => resolvers.push(r)));
     const getCapabilities = vi.fn(async (k: string) => caps(`local:${k}`));
-    vi.stubGlobal('window', { electronAPI: { maker: { getCapabilities }, deviceLink: { invoke } } });
+    vi.stubGlobal('window', {
+      electronAPI: { maker: { getCapabilities }, deviceLink: { invoke } },
+    });
     const mod = await import('@/hooks/useAgentCapabilities');
 
     const p = mod.prefetchDeviceCapabilities('dev-1'); // 在途(deps.invoke 未 resolve)
@@ -129,7 +140,9 @@ describe('useAgentCapabilities deviceId-aware cache', () => {
     const resolvers: Array<(v: Caps) => void> = [];
     const invoke = vi.fn(() => new Promise<Caps>((r) => resolvers.push(r)));
     const getCapabilities = vi.fn(async (k: string) => caps(`local:${k}`));
-    vi.stubGlobal('window', { electronAPI: { maker: { getCapabilities }, deviceLink: { invoke } } });
+    vi.stubGlobal('window', {
+      electronAPI: { maker: { getCapabilities }, deviceLink: { invoke } },
+    });
     const mod = await import('@/hooks/useAgentCapabilities');
 
     const p1 = mod.prefetchDeviceCapabilities('dev-1'); // 第一轮在途
@@ -139,7 +152,9 @@ describe('useAgentCapabilities deviceId-aware cache', () => {
     await Promise.all([p1, p2]);
 
     // 第二轮(当前代际)结果正常落缓存;第一轮(旧代际)被丢弃,不覆盖。
-    expect(mod.getCachedCapabilities('claude-code', 'dev-1')?.availableModels[0].displayName).toBe('dev-1:fresh');
+    expect(mod.getCachedCapabilities('claude-code', 'dev-1')?.availableModels[0].displayName).toBe(
+      'dev-1:fresh',
+    );
   });
 
   it('provider revision 后两个 agent 的新快照都会通知已挂载订阅者', async () => {
@@ -152,19 +167,27 @@ describe('useAgentCapabilities deviceId-aware cache', () => {
 
     await mod.prefetchDeviceCapabilities('dev-1');
 
-    expect(claudeListener).toHaveBeenCalledWith(
-      expect.objectContaining({ availableModels: [expect.objectContaining({ displayName: 'dev-1:claude-code' })] }),
-    );
-    expect(codexListener).toHaveBeenCalledWith(
-      expect.objectContaining({ availableModels: [expect.objectContaining({ displayName: 'dev-1:codex' })] }),
-    );
+    expect(claudeListener).toHaveBeenCalledWith({
+      status: 'ready',
+      capabilities: expect.objectContaining({
+        availableModels: [expect.objectContaining({ displayName: 'dev-1:claude-code' })],
+      }),
+    });
+    expect(codexListener).toHaveBeenCalledWith({
+      status: 'ready',
+      capabilities: expect.objectContaining({
+        availableModels: [expect.objectContaining({ displayName: 'dev-1:codex' })],
+      }),
+    });
   });
 
   it('revision 后新能力先完成、旧能力后完成时只通知并保留新快照', async () => {
     const resolvers: Array<(v: Caps) => void> = [];
     const invoke = vi.fn(() => new Promise<Caps>((resolve) => resolvers.push(resolve)));
     const getCapabilities = vi.fn(async (k: string) => caps(`local:${k}`));
-    vi.stubGlobal('window', { electronAPI: { maker: { getCapabilities }, deviceLink: { invoke } } });
+    vi.stubGlobal('window', {
+      electronAPI: { maker: { getCapabilities }, deviceLink: { invoke } },
+    });
     const mod = await import('@/hooks/useAgentCapabilities');
     const claudeListener = vi.fn();
     const codexListener = vi.fn();
@@ -181,8 +204,20 @@ describe('useAgentCapabilities deviceId-aware cache', () => {
     resolvers[1](caps('stale:codex'));
     await stale;
 
-    expect(claudeListener).toHaveBeenCalledTimes(1);
-    expect(codexListener).toHaveBeenCalledTimes(1);
+    expect(claudeListener).toHaveBeenNthCalledWith(1, { status: 'loading' });
+    expect(codexListener).toHaveBeenNthCalledWith(1, { status: 'loading' });
+    expect(claudeListener).toHaveBeenNthCalledWith(2, {
+      status: 'ready',
+      capabilities: expect.objectContaining({
+        availableModels: [expect.objectContaining({ displayName: 'fresh:claude' })],
+      }),
+    });
+    expect(codexListener).toHaveBeenNthCalledWith(2, {
+      status: 'ready',
+      capabilities: expect.objectContaining({
+        availableModels: [expect.objectContaining({ displayName: 'fresh:codex' })],
+      }),
+    });
     expect(mod.getCachedCapabilities('claude-code', 'dev-1')?.availableModels[0].displayName).toBe(
       'fresh:claude',
     );

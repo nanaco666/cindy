@@ -369,6 +369,9 @@ export function createMakerSendTransaction(deps: MakerSendTransactionDeps): Make
       // 让下方走 lazy-create 按 DB 新值 spawn 新引擎。
       await deps.applyPendingAgentSwitch?.(sessionId);
       let sess = deps.getSession(sessionId);
+      if (sess?.isTurnRunning()) {
+        throwIpcError('SESSION_RUNNING', `Session ${sessionId} is already running a turn`);
+      }
       await deps.ensureRemoteReadyForSessionStart({ session: sess, createOpts });
 
       if (sess) {

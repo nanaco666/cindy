@@ -130,6 +130,6 @@ export const BUNDLED_CATALOG: Catalog = {
   version: catalogFile.version,
   providers: BUILTIN_PROVIDERS,
   ...(catalogFile.presets && catalogFile.presets.length > 0 ? { presets: catalogFile.presets } : {}),
-  // cindyModelMeta 随目录透传(dev 本地覆盖用;packaged 客户端不消费,见 types.ts)。
+  // cindyModelMeta 随目录透传(消费点见 types.ts:服务端 + 客户端展示元数据基线)。
   ...(catalogFile.cindyModelMeta !== undefined ? { cindyModelMeta: catalogFile.cindyModelMeta } : {}),
 };

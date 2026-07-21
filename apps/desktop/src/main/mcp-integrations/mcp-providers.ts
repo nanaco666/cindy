@@ -174,13 +174,13 @@ export function createDesktopMcpProviders(deps: DesktopMcpProvidersDeps): LiziMc
             {
               maker,
               fallbackDir: pathJoin(app.getPath('userData'), 'schedule-hooks'),
-              logger: createLogger('mcp/lizi_scheduler:hook-script'),
+              logger: createLogger('mcp/cindy_scheduler:hook-script'),
             },
             input,
           );
         },
       },
-      logger: createLogger('mcp/lizi_scheduler'),
+      logger: createLogger('mcp/cindy_scheduler'),
     },
     // lizi_ssh: agent 直接在已配置 SSH 主机上执行命令(远端零安装)。
     // ⚠️ 必须 lazy await import():静态 import remote-ssh 会形成

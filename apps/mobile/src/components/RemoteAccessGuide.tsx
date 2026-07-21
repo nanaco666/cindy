@@ -20,7 +20,7 @@ import {
  *
  * 按「手机版官网 landing」的编辑排版承担首次使用的产品说明(排版语系对齐 login 品牌块:
  * 大写 eyebrow / 大标题 / 宽松副标,左对齐、不加外框),并按 emptyNoDevice.reason 分场景引导:
- * - firstRun:完整产品说明 + 「开始使用」三步卡(开关名与桌面端「设置 → 设备互联」逐字一致);
+ * - firstRun:完整产品说明 + 「开始使用」三步卡(设置路径与开关名与桌面端逐字一致);
  * - offline:列出连接过的电脑与状态,引导去电脑上打开 Cindy,可手动重新检查;
  * - remoteDisabled:电脑在线只差开关,给精确路径 + 重新检查;
  * - accessRevoked:指名撤销访问的电脑(Lock 图标,对齐设备列表语义),主 CTA 重试访问。
@@ -34,7 +34,7 @@ import {
 const CONNECT_STEPS = [
   '在电脑上安装并打开 Cindy',
   '用与手机相同的账号登录',
-  '在「设置 → 设备互联」中开启「允许同账号设备控制本机」',
+  '在「设置 → 远程连接」中开启「允许同账号设备控制本机」',
 ] as const;
 
 const BRAND_EYEBROW = 'CINDY 手机版';

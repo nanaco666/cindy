@@ -12,6 +12,8 @@ import { buildMobileUploadedAttachment } from '@/session/attachments';
 import { parseAttachmentOssRef } from '@/session/attachmentOssRef';
 import type { RemoteSession } from '@/session/types';
 
+const ATTACHMENT_SHA256 = 'a'.repeat(64);
+
 function session(patch: Partial<RemoteSession> = {}): RemoteSession {
   return {
     id: 's1',
@@ -143,6 +145,7 @@ describe('inputProjection', () => {
       ossKey: 'cindy/device-link/user-1/spec.pdf',
       name: 'spec.pdf',
       size: 2048,
+      sha256: ATTACHMENT_SHA256,
       mimeType: 'application/pdf',
     });
     expect(attachment).not.toBeNull();
@@ -155,8 +158,15 @@ describe('inputProjection', () => {
     expect(parseAttachmentOssRef(queued.files?.[0]?.path ?? '')).toMatchObject({
       ossKey: 'cindy/device-link/user-1/spec.pdf',
     });
-    expect(persisted.files).toEqual([{ name: 'spec.pdf', path: attachment!.path }]);
-    expect(queued.chatMessage.files).toEqual([{ name: 'spec.pdf', path: attachment!.path }]);
+    expect(persisted.files).toEqual([
+      {
+        name: 'spec.pdf',
+        path: attachment!.path,
+        size: 2048,
+        sha256: ATTACHMENT_SHA256,
+      },
+    ]);
+    expect(queued.chatMessage.files).toEqual(persisted.files);
   });
 
   it('persists image attachments in images[] while keeping files[] for desktop materialization', () => {
@@ -165,6 +175,7 @@ describe('inputProjection', () => {
       ossKey: 'cindy/device-link/user-1/photo.png',
       name: 'photo.png',
       size: 1024,
+      sha256: ATTACHMENT_SHA256,
       mimeType: 'image/png',
     });
     expect(attachment).not.toBeNull();
@@ -182,11 +193,15 @@ describe('inputProjection', () => {
     });
     // originalName(而非 name)是桌面 ImageRef schema 的字段;写错字段名
     // 会让桌面 renderer 静默丢弃图片引用(手机贴图桌面不显示,2026-07 实踩)。
-    expect(persisted.images).toEqual([{
-      url: attachment!.url,
-      originalName: 'photo.png',
-      mimeType: 'image/png',
-    }]);
+    expect(persisted.images).toEqual([
+      {
+        url: attachment!.url,
+        originalName: 'photo.png',
+        mimeType: 'image/png',
+        size: 1024,
+        sha256: ATTACHMENT_SHA256,
+      },
+    ]);
     expect(persisted.files).toEqual([]);
     expect(queued.chatMessage.images).toEqual(persisted.images);
     expect(queued.chatMessage.files).toBeUndefined();
