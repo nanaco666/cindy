@@ -103,6 +103,38 @@ describe('chatQuoteStore', () => {
     expect(getQuotes('s1')).toEqual([]);
   });
 
+  it('preserves an ordered fork/rewind body only while visible text and quotes are unchanged', async () => {
+    vi.useFakeTimers();
+    const {
+      __testing,
+      hydrateQuotes,
+      resolveOrderedQuoteDraft,
+      setOrderedQuoteDraft,
+      setQuotes,
+    } = await import('@/session/chatQuoteStore');
+    const quotes = [{ text: 'A' }, { text: 'B', sourcePath: 'docs/b.md' }];
+    const orderedDraft = {
+      encodedBody: '<!-- body with quote A / reply A / quote B / reply B -->',
+      projectedText: 'reply A\n\nreply B',
+    };
+
+    setOrderedQuoteDraft('s1', quotes, orderedDraft);
+    expect(resolveOrderedQuoteDraft('s1', orderedDraft.projectedText, quotes)).toEqual(orderedDraft);
+    expect(resolveOrderedQuoteDraft('s1', 'edited', quotes)).toBeNull();
+    expect(resolveOrderedQuoteDraft('s1', orderedDraft.projectedText, [quotes[1], quotes[0]])).toBeNull();
+
+    vi.advanceTimersByTime(__testing.persistDebounceMs + 10);
+    vi.useRealTimers();
+    await flushMicrotasks();
+    __testing.reset();
+    await hydrateQuotes('s1');
+    expect(resolveOrderedQuoteDraft('s1', orderedDraft.projectedText, quotes)).toEqual(orderedDraft);
+
+    // 普通引用更新明确让旧顺序基线失效。
+    setQuotes('s1', quotes);
+    expect(resolveOrderedQuoteDraft('s1', orderedDraft.projectedText, quotes)).toBeNull();
+  });
+
   it('drops malformed persisted payloads on hydrate', async () => {
     const { __testing, getQuotes, hydrateQuotes } = await import('@/session/chatQuoteStore');
     store.set(__testing.storageKeyForSession('s1'), '{"not":"an array"}');

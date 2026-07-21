@@ -85,6 +85,7 @@ export interface MobileOutboxThumb {
 export interface MobileOutboxDisplayItem {
   clientId: string;
   text: string;
+  quotesEncoded: boolean;
   attachmentCount: number;
   uploadedCount: number;
   /** 图片槽缩略格(按槽序);非图片附件走 fileCount 计数行。 */
@@ -234,6 +235,7 @@ export function outboxDisplayItem(item: MobileOutboxItem): MobileOutboxDisplayIt
   return {
     clientId: item.clientId,
     text: item.text,
+    quotesEncoded: item.quotesEncoded,
     attachmentCount,
     uploadedCount,
     thumbnails,

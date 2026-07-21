@@ -14,6 +14,7 @@ describe('rewindPreview model', () => {
         deletions: 1,
       },
       draftQuotes,
+      'ordered marked body',
     );
 
     expect(state).toEqual({
@@ -21,6 +22,7 @@ describe('rewindPreview model', () => {
       clientId: 'm2',
       draftText: 'retry this',
       draftQuotes,
+      draftOrderedBody: 'ordered marked body',
       filesChanged: ['apps/mobile/App.tsx'],
       insertions: 3,
       deletions: 1,

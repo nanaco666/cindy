@@ -49,6 +49,11 @@ interface UserMessageEditBoxProps {
   messageClientId: string;
   /** 原消息文本 — 预填进 textarea。 */
   initialText: string;
+  /**
+   * 可见文本未编辑时实际提交的原文。引用消息用它保留私有 marker / 交错顺序，
+   * 同时 textarea 只展示剥过 marker 的 initialText。
+   */
+  initialSubmitText?: string;
   /** 原消息附件 — 只透传给编排层重建重发,本组件不渲染。 */
   images?: readonly RewindDraftImage[];
   files?: readonly FileRef[];
@@ -78,6 +83,7 @@ export function UserMessageEditBox({
   sessionId,
   messageClientId,
   initialText,
+  initialSubmitText,
   images,
   files,
   workingDir,
@@ -147,14 +153,15 @@ export function UserMessageEditBox({
   // 毫秒级尾差由 WithRunningRetry 内部有限重试消化)。
   const doCommit = useCallback(async () => {
     try {
+      const submitText = text === initialText ? (initialSubmitText ?? text) : text;
       if (onCommitOverride) {
         // 被拦消息:普通重发(不 rewind)。失败抛错落入下方 catch 保留编辑态。
-        await onCommitOverride(text);
+        await onCommitOverride(submitText);
       } else {
       await commitEditAndResendWithRunningRetry({
         sessionId,
         clientId: messageClientId,
-        text,
+        text: submitText,
         images,
         files,
         fallbackWorkingDir: workingDir,
@@ -185,7 +192,7 @@ export function UserMessageEditBox({
       submittingRef.current = false;
       setSubmitting(false);
     }
-  }, [sessionId, messageClientId, text, images, files, workingDir, quotesEncoded, onSent, onCommitOverride, t]);
+  }, [sessionId, messageClientId, text, initialText, initialSubmitText, images, files, workingDir, quotesEncoded, onSent, onCommitOverride, t]);
 
   const handleSend = useCallback(() => {
     if (!canSend || submittingRef.current) return;

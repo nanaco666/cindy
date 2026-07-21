@@ -159,7 +159,17 @@ import {
 } from '@/session/composerPalette';
 import { buildComposerTouchLayout } from '@/session/composerTouchLayout';
 import { flushComposerDraftWrites, readComposerDraft, readComposerDraftSync, saveComposerDraft } from '@/session/composerDraftStore';
-import { appendQuote, clearQuotes, getQuotes, hydrateQuotes, setQuotes, truncateQuoteText, useSessionQuotes } from '@/session/chatQuoteStore';
+import {
+  appendQuote,
+  clearQuotes,
+  getQuotes,
+  hydrateQuotes,
+  resolveOrderedQuoteDraft,
+  setOrderedQuoteDraft,
+  setQuotes,
+  truncateQuoteText,
+  useSessionQuotes,
+} from '@/session/chatQuoteStore';
 import { QuoteCapsule } from '@/session/QuoteCapsule';
 import { formatQuotesForSend } from '@lizi/maker-shared/chat-quotes';
 import {
@@ -3368,12 +3378,19 @@ export default function SessionScreen() {
       await finishVoiceRecording({ sendAfterTranscribe: true });
       return;
     }
-    const body = (options.draftOverride ?? draft).trim();
+    const visibleDraft = options.draftOverride ?? draft;
+    const body = visibleDraft.trim();
     // chat-text-quote:排队编辑是「替换原条目内容」语义,不注入引用;正常发送把
     // 引用块前置在正文前(与桌面 ChatInput 的 formatQuotesForSend 对偶)。命令
     // 判定(下方)用 body,命中命令时引用保留在胶囊里不消费。
     const quotesAtSend = queueEditingRef.current ? [] : [...getQuotes(sessionId)];
-    const text = formatQuotesForSend(quotesAtSend, body);
+    // fork / rewind 恢复的交错消息带一份隐藏 ordered body。仅当可见正文与引用
+    // 列表都完全没变时复用，保证「引用 A → 回复 A → 引用 B → 回复 B」默认
+    // 重发不改 prompt 顺序；任一处被编辑就显式失效并安全回落到引用前置格式。
+    const orderedDraftAtSend = queueEditingRef.current
+      ? null
+      : resolveOrderedQuoteDraft(sessionId, visibleDraft, quotesAtSend);
+    const text = orderedDraftAtSend?.encodedBody ?? formatQuotesForSend(quotesAtSend, body);
     if (!canUseComposer) {
       if (options.draftOverride !== undefined) setComposerDraft(options.draftOverride);
       return;
@@ -3403,7 +3420,12 @@ export default function SessionScreen() {
       // 新采集的引用跟在后面原样保留;标记复位防止多个失败分支重复回填。
       if (quotesConsumed) {
         quotesConsumed = false;
-        setQuotes(sessionId, [...quotesAtSend, ...getQuotes(sessionId)]);
+        const restoredQuotes = [...quotesAtSend, ...getQuotes(sessionId)];
+        if (orderedDraftAtSend) {
+          setOrderedQuoteDraft(sessionId, restoredQuotes, orderedDraftAtSend);
+        } else {
+          setQuotes(sessionId, restoredQuotes);
+        }
       }
     };
     if (body) setComposerDraft('');
@@ -5035,13 +5057,20 @@ export default function SessionScreen() {
       clientId,
       draftText: draft.text,
       draftQuotes: draft.quotes,
+      ...(draft.orderedBody ? { draftOrderedBody: draft.orderedBody } : {}),
     });
     try {
       const preview = await maker.rewindPreview(sessionId, clientId);
       // 请求往返期间切走 session(甚至切走又切回)或另发起了新请求 → 代际已变,丢弃这个 stale 预览,
       // 别把它画到当前在屏的 session 上。
       if (rewindRequestSeqRef.current !== seq) return;
-      setRewindState(buildRewindPreviewState(clientId, draft.text, preview, draft.quotes));
+      setRewindState(buildRewindPreviewState(
+        clientId,
+        draft.text,
+        preview,
+        draft.quotes,
+        draft.orderedBody,
+      ));
     } catch (err) {
       if (rewindRequestSeqRef.current !== seq) return;
       setRewindState({
@@ -5049,6 +5078,7 @@ export default function SessionScreen() {
         clientId,
         draftText: draft.text,
         draftQuotes: draft.quotes,
+        ...(draft.orderedBody ? { draftOrderedBody: draft.orderedBody } : {}),
         errorText: formatRemoteError(err),
       });
     } finally {
@@ -5065,7 +5095,14 @@ export default function SessionScreen() {
       const forked = await maker.fork(sessionId, clientId);
       remoteSessionStore.upsertDeviceSession(deviceId, deviceName, forked);
       saveComposerDraft(forked.id, draft?.text);
-      setQuotes(forked.id, draft?.quotes ?? []);
+      if (draft?.orderedBody && draft.quotes.length > 0) {
+        setOrderedQuoteDraft(forked.id, draft.quotes, {
+          encodedBody: draft.orderedBody,
+          projectedText: draft.text,
+        });
+      } else {
+        setQuotes(forked.id, draft?.quotes ?? []);
+      }
       router.push({
         pathname: '/sessions/[sessionId]',
         params: { sessionId: forked.id, deviceId, deviceName },
@@ -5175,7 +5212,14 @@ export default function SessionScreen() {
         return;
       }
       setComposerDraft(state.draftText);
-      setQuotes(sessionId, state.draftQuotes);
+      if (state.draftOrderedBody && state.draftQuotes.length > 0) {
+        setOrderedQuoteDraft(sessionId, state.draftQuotes, {
+          encodedBody: state.draftOrderedBody,
+          projectedText: state.draftText,
+        });
+      } else {
+        setQuotes(sessionId, state.draftQuotes);
+      }
       setRewindState({ kind: 'idle' });
       await syncSession({ replaceMessages: true });
     } catch (err) {
@@ -5186,6 +5230,7 @@ export default function SessionScreen() {
         clientId: state.clientId,
         draftText: state.draftText,
         draftQuotes: state.draftQuotes,
+        ...(state.draftOrderedBody ? { draftOrderedBody: state.draftOrderedBody } : {}),
         errorText: formatRemoteError(err),
       });
     } finally {

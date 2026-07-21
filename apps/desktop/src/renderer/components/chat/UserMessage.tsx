@@ -990,7 +990,8 @@ export function UserMessage({
           <UserMessageEditBox
             sessionId={sessionId}
             messageClientId={messageClientId}
-            initialText={ghostBody}
+            initialText={copyBody}
+            initialSubmitText={quotesEncoded ? ghostBody : undefined}
             images={images}
             files={files}
             workingDir={workingDir}

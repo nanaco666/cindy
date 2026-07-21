@@ -16,6 +16,18 @@ import type { ChatQuote } from '@lizi/maker-shared/chat-quotes';
 
 export type { ChatQuote };
 
+/**
+ * fork / rewind 从已发送消息恢复草稿时保存的无损顺序基线。
+ *
+ * composer 仍只展示普通正文 + 引用胶囊，不把私有 marker 暴露给用户；发送前
+ * 只有在正文和引用列表都与该基线完全一致时才复用 encodedBody。用户一旦改过
+ * 任一部分，resolveOrderedQuoteDraft 会明确失效并回落到引用前置格式。
+ */
+export interface OrderedQuoteDraft {
+  encodedBody: string;
+  projectedText: string;
+}
+
 /** 单条引用长度上限(与桌面 SelectionQuoteButton 一致,防误选长文撑爆 prompt)。 */
 export const QUOTE_MAX_CHARS = 4000;
 
@@ -29,6 +41,7 @@ const PERSIST_DEBOUNCE_MS = 400;
 const EMPTY_QUOTES: readonly ChatQuote[] = Object.freeze([]);
 
 const quotesBySession = new Map<string, readonly ChatQuote[]>();
+const orderedDraftBySession = new Map<string, OrderedQuoteDraft>();
 const clearedSessions = new Set<string>();
 const hydratedSessions = new Set<string>();
 const listenersBySession = new Map<string, Set<() => void>>();
@@ -58,6 +71,38 @@ export function setQuotes(sessionId: string, quotes: readonly ChatQuote[]): void
     return;
   }
   setQuotesInternal(normalized, [...quotes]);
+}
+
+/** 原子恢复引用列表与其原始交错正文，供 mobile fork / rewind 使用。 */
+export function setOrderedQuoteDraft(
+  sessionId: string,
+  quotes: readonly ChatQuote[],
+  draft: OrderedQuoteDraft,
+): void {
+  const normalized = normalizeSessionId(sessionId);
+  if (!normalized) return;
+  if (quotes.length === 0 || !draft.encodedBody) {
+    setQuotes(normalized, quotes);
+    return;
+  }
+  setQuotesInternal(normalized, [...quotes], draft);
+}
+
+/**
+ * 当前可见草稿仍与恢复基线一致时返回原始 marked body；否则返回 null，调用方
+ * 安全降级为 formatQuotesForSend，绝不拿过期位置静默重排用户的新输入。
+ */
+export function resolveOrderedQuoteDraft(
+  sessionId: string,
+  projectedText: string,
+  quotes: readonly ChatQuote[],
+): OrderedQuoteDraft | null {
+  const normalized = normalizeSessionId(sessionId);
+  const draft = normalized ? orderedDraftBySession.get(normalized) : undefined;
+  if (!draft || draft.projectedText !== projectedText) return null;
+  const storedQuotes = quotesBySession.get(normalized) ?? EMPTY_QUOTES;
+  if (!sameQuotes(storedQuotes, quotes)) return null;
+  return draft;
 }
 
 export function clearQuotes(sessionId: string): void {
@@ -94,9 +139,12 @@ export async function hydrateQuotes(sessionId: string): Promise<void> {
   const stored = await AsyncStorage.getItem(storageKeyForSession(normalized)).catch(() => null);
   if (!stored) return;
   if (quotesBySession.has(normalized) || clearedSessions.has(normalized)) return;
-  const parsed = parseStoredQuotes(stored);
-  if (parsed.length === 0) return;
-  quotesBySession.set(normalized, Object.freeze(parsed));
+  const parsed = parseStoredState(stored);
+  if (parsed.quotes.length === 0) return;
+  quotesBySession.set(normalized, Object.freeze(parsed.quotes));
+  if (parsed.orderedDraft) {
+    orderedDraftBySession.set(normalized, Object.freeze(parsed.orderedDraft));
+  }
   notify(normalized);
 }
 
@@ -114,17 +162,25 @@ export function useSessionQuotes(sessionId: string | null | undefined): readonly
   return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 }
 
-function setQuotesInternal(normalized: string, quotes: ChatQuote[]): void {
+function setQuotesInternal(
+  normalized: string,
+  quotes: ChatQuote[],
+  orderedDraft?: OrderedQuoteDraft,
+): void {
   const frozen = Object.freeze(quotes);
   quotesBySession.set(normalized, frozen);
+  const frozenDraft = orderedDraft ? Object.freeze({ ...orderedDraft }) : undefined;
+  if (frozenDraft) orderedDraftBySession.set(normalized, frozenDraft);
+  else orderedDraftBySession.delete(normalized);
   clearedSessions.delete(normalized);
-  schedulePersist(normalized, frozen);
+  schedulePersist(normalized, frozen, frozenDraft);
   notify(normalized);
 }
 
 function clearQuotesInternal(normalized: string): void {
   cancelPendingPersist(normalized);
   const hadValue = quotesBySession.delete(normalized);
+  orderedDraftBySession.delete(normalized);
   clearedSessions.add(normalized);
   enqueueStorageOperation(normalized, () =>
     AsyncStorage.removeItem(storageKeyForSession(normalized)),
@@ -138,21 +194,52 @@ function notify(normalized: string): void {
   for (const listener of [...set]) listener();
 }
 
-function parseStoredQuotes(stored: string): ChatQuote[] {
+function parseStoredState(stored: string): {
+  quotes: ChatQuote[];
+  orderedDraft: OrderedQuoteDraft | null;
+} {
   try {
     const raw: unknown = JSON.parse(stored);
-    if (!Array.isArray(raw)) return [];
-    return raw.filter(
-      (item): item is ChatQuote =>
-        !!item &&
-        typeof item === 'object' &&
-        typeof (item as { text?: unknown }).text === 'string' &&
-        ((item as { sourcePath?: unknown }).sourcePath === undefined ||
-          typeof (item as { sourcePath?: unknown }).sourcePath === 'string'),
-    );
+    if (Array.isArray(raw)) return { quotes: readStoredQuotes(raw), orderedDraft: null };
+    if (!raw || typeof raw !== 'object') return { quotes: [], orderedDraft: null };
+    const record = raw as { quotes?: unknown; orderedDraft?: unknown };
+    const quotes = readStoredQuotes(record.quotes);
+    const ordered = record.orderedDraft;
+    const orderedDraft = ordered && typeof ordered === 'object'
+      && typeof (ordered as { encodedBody?: unknown }).encodedBody === 'string'
+      && typeof (ordered as { projectedText?: unknown }).projectedText === 'string'
+      ? {
+          encodedBody: (ordered as { encodedBody: string }).encodedBody,
+          projectedText: (ordered as { projectedText: string }).projectedText,
+        }
+      : null;
+    return { quotes, orderedDraft };
   } catch {
-    return [];
+    return { quotes: [], orderedDraft: null };
   }
+}
+
+function readStoredQuotes(value: unknown): ChatQuote[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter(
+    (item): item is ChatQuote =>
+      !!item &&
+      typeof item === 'object' &&
+      typeof (item as { text?: unknown }).text === 'string' &&
+      ((item as { sourcePath?: unknown }).sourcePath === undefined ||
+        typeof (item as { sourcePath?: unknown }).sourcePath === 'string'),
+  );
+}
+
+function sameQuotes(left: readonly ChatQuote[], right: readonly ChatQuote[]): boolean {
+  return left.length === right.length && left.every((quote, index) => {
+    const other = right[index];
+    return !!other
+      && quote.text === other.text
+      && quote.sourcePath === other.sourcePath
+      && quote.startLine === other.startLine
+      && quote.endLine === other.endLine;
+  });
 }
 
 function normalizeSessionId(sessionId: string): string {
@@ -163,11 +250,15 @@ function storageKeyForSession(normalized: string): string {
   return `${STORAGE_KEY_PREFIX}.${encodeURIComponent(normalized)}`;
 }
 
-function schedulePersist(normalized: string, quotes: readonly ChatQuote[]): void {
+function schedulePersist(
+  normalized: string,
+  quotes: readonly ChatQuote[],
+  orderedDraft?: OrderedQuoteDraft,
+): void {
   cancelPendingPersist(normalized);
   const timer = setTimeout(() => {
     pendingPersistTimers.delete(normalized);
-    void persistIfCurrent(normalized, quotes);
+    void persistIfCurrent(normalized, quotes, orderedDraft);
   }, PERSIST_DEBOUNCE_MS);
   pendingPersistTimers.set(normalized, timer);
 }
@@ -179,11 +270,19 @@ function cancelPendingPersist(normalized: string): void {
   pendingPersistTimers.delete(normalized);
 }
 
-async function persistIfCurrent(normalized: string, quotes: readonly ChatQuote[]): Promise<void> {
+async function persistIfCurrent(
+  normalized: string,
+  quotes: readonly ChatQuote[],
+  orderedDraft?: OrderedQuoteDraft,
+): Promise<void> {
   if (clearedSessions.has(normalized)) return;
   if (quotesBySession.get(normalized) !== quotes) return;
+  if (orderedDraftBySession.get(normalized) !== orderedDraft) return;
+  const storedValue = orderedDraft
+    ? { version: 2, quotes, orderedDraft }
+    : quotes;
   await enqueueStorageOperation(normalized, () =>
-    AsyncStorage.setItem(storageKeyForSession(normalized), JSON.stringify(quotes)),
+    AsyncStorage.setItem(storageKeyForSession(normalized), JSON.stringify(storedValue)),
   );
 }
 
@@ -214,6 +313,7 @@ export const __testing = {
     pendingPersistTimers.clear();
     pendingStorageOperations.clear();
     quotesBySession.clear();
+    orderedDraftBySession.clear();
     clearedSessions.clear();
     hydratedSessions.clear();
     listenersBySession.clear();

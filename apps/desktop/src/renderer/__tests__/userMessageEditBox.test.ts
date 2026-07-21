@@ -97,6 +97,25 @@ describe('UserMessageEditBox — idle 发送', () => {
     expect(props.onRequestStop).not.toHaveBeenCalled();
   });
 
+  it('引用编辑框隐藏 marker，未修改时仍提交保序原文，修改后只提交可见文本', async () => {
+    const encoded = '> <!-- cindy-composer-quote -->\n> quoted\n\nreply';
+    const visible = '> quoted\n\nreply';
+    const first = renderBox({ initialText: visible, initialSubmitText: encoded, quotesEncoded: true });
+    expect(first.textarea.value).toBe(visible);
+    expect(first.textarea.value).not.toContain('cindy-composer-quote');
+    fireEvent.click(first.sendBtn);
+    await waitFor(() => expect(commitMock).toHaveBeenCalledTimes(1));
+    expect(commitMock.mock.calls[0][0].text).toBe(encoded);
+    first.unmount();
+
+    vi.clearAllMocks();
+    const second = renderBox({ initialText: visible, initialSubmitText: encoded, quotesEncoded: true });
+    fireEvent.change(second.textarea, { target: { value: 'edited reply' } });
+    fireEvent.click(second.sendBtn);
+    await waitFor(() => expect(commitMock).toHaveBeenCalledTimes(1));
+    expect(commitMock.mock.calls[0][0].text).toBe('edited reply');
+  });
+
   it('提交挂起期间重复点发送不会二次提交(同步 ref 防重入)', async () => {
     let release: () => void = () => {};
     commitMock.mockImplementationOnce(

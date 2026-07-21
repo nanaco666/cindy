@@ -10,13 +10,12 @@ describe('mobile cross-device quote wiring', () => {
     const bubbleSource = source.slice(bubbleStart, bubbleEnd);
 
     expect(bubbleSource).toContain('parseChatQuoteSegments(item.message.body');
-    expect(bubbleSource).toContain(
-      'allowLegacyInterleavedQuotes: item.message.quotesEncoded === true',
-    );
+    expect(bubbleSource).toContain('item.message.quotesEncoded === true');
+    expect(bubbleSource).toContain('allowLegacyInterleavedQuotes: true');
     expect(bubbleSource).toContain("segment.kind === 'quote' ? [segment.quote] : []");
     expect(bubbleSource).toContain("segment.kind === 'text' ? [segment.text] : []");
     expect(bubbleSource).toContain('actions.onPreviewRewind?.(clientId, {');
-    expect(bubbleSource).toContain('? { text: bubbleBody, quotes: messageQuotes }');
+    expect(bubbleSource).toContain('{ orderedBody: item.message.body }');
   });
 
   it('propagates quote metadata through direct and attachment-outbox sends', () => {
@@ -31,7 +30,15 @@ describe('mobile cross-device quote wiring', () => {
     const source = readFileSync(resolve(process.cwd(), 'app/sessions/[sessionId].tsx'), 'utf8');
 
     expect(source).toContain('saveComposerDraft(forked.id, draft?.text);');
-    expect(source).toContain('setQuotes(forked.id, draft?.quotes ?? []);');
-    expect(source).toContain('setQuotes(sessionId, state.draftQuotes);');
+    expect(source).toContain('setOrderedQuoteDraft(forked.id, draft.quotes');
+    expect(source).toContain('setOrderedQuoteDraft(sessionId, state.draftQuotes');
+    expect(source).toContain('resolveOrderedQuoteDraft(sessionId, visibleDraft, quotesAtSend)');
+  });
+
+  it('strips private markers from queued and outbox raw-text bubbles', () => {
+    const source = readFileSync(resolve(process.cwd(), 'src/session/InlineQueueSection.tsx'), 'utf8');
+    expect(source).toContain('stripChatQuoteMarkerLines(item.text)');
+    expect(source).toContain('item.chatMessage.quotesEncoded === true');
+    expect(source).toContain('item.quotesEncoded ? stripChatQuoteMarkerLines(item.text)');
   });
 });

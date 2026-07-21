@@ -369,6 +369,8 @@ function MarkdownSelectableSpan(props: ComponentProps<typeof Text>) {
 export interface MobileMessageDraft {
   text: string;
   quotes: readonly ChatQuote[];
+  /** marker 不进入可见输入框；未编辑时用这份原文保证 quote / prose 顺序不变。 */
+  orderedBody?: string;
 }
 
 interface MessageActions {
@@ -1348,14 +1350,20 @@ function MessageBubble({
   const styles = useThemedStyles(makeStyles);
   const { colors } = useTheme();
   const [copyState, setCopyState] = useState<CopyMessageStatus | 'idle' | 'copying'>('idle');
-  // chat-text-quote:解析 desktop 的交错 marker 块、mobile 的前置引用和
+  // chat-text-quote:只解析持久化 quotesEncoded 明确标记的产品引用消息，避免
+  // 把用户手写的 Markdown blockquote 误当产品引用。兼容 desktop 的交错
+  // marker 块、mobile 的前置引用和
   // marker 上线前带 quotesEncoded 的交错历史消息。手机版仍把引用聚合成
   // 「N 处引用」胶囊,但正文不再泄露内部 marker/source 行。copy / rewind /
-  // fork 继续使用完整 body。orca 协同消息已走 orcaCard 分支,不进本路径。
+  // fork 额外携带完整 ordered body，在可见草稿未编辑时无损重发。orca 协同
+  // 消息已走 orcaCard 分支,不进本路径。
   const quoteSegments = useMemo(
-    () => (item.message.kind === 'user' && !item.message.systemCardType && item.message.body
+    () => (item.message.kind === 'user'
+      && item.message.quotesEncoded === true
+      && !item.message.systemCardType
+      && item.message.body
       ? parseChatQuoteSegments(item.message.body, {
-          allowLegacyInterleavedQuotes: item.message.quotesEncoded === true,
+          allowLegacyInterleavedQuotes: true,
         })
       : []),
     [
@@ -1501,6 +1509,7 @@ function MessageBubble({
       actions.onPreviewRewind?.(clientId, {
         text: bubbleBody,
         quotes: messageQuotes,
+        ...(item.message.quotesEncoded === true ? { orderedBody: item.message.body } : {}),
       });
       return;
     }
@@ -1508,11 +1517,24 @@ function MessageBubble({
       actions.onForkMessage?.(
         clientId,
         item.message.kind === 'user'
-          ? { text: bubbleBody, quotes: messageQuotes }
+          ? {
+              text: bubbleBody,
+              quotes: messageQuotes,
+              ...(item.message.quotesEncoded === true ? { orderedBody: item.message.body } : {}),
+            }
           : undefined,
       );
     }
-  }, [actions, bubbleBody, clientId, copyMessage, item.message.kind, messageQuotes]);
+  }, [
+    actions,
+    bubbleBody,
+    clientId,
+    copyMessage,
+    item.message.body,
+    item.message.kind,
+    item.message.quotesEncoded,
+    messageQuotes,
+  ]);
   // 时间文本兼任「复制消息链接」入口:点按复制该消息的会话深链(带 ?message=
   // 锚点),复制成功后短暂换成「链接已复制」。不单独占一个操作按钮位。
   const timeText = relativeTime ? (
