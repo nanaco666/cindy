@@ -3,6 +3,7 @@ import {
   buildMessageActionBarPresentation,
   countMessageRenderItemDiffs,
   isToolErrorLike,
+  summarizeToolUseText,
   summarizeMessageBubblePresentation,
   summarizeTodoCardPresentation,
   summarizeToolGroupPresentation,
@@ -36,6 +37,19 @@ function message(id: string, patch: Partial<TestMessage> = {}): TestMessage {
 }
 
 describe('messagePresentation', () => {
+  it('exposes the same compact tool wording to remote channel previews', () => {
+    expect(summarizeToolUseText('Read', { file_path: '/repo/src/app.ts' })).toEqual({
+      label: '读取 app.ts',
+      detail: '/repo/src/app.ts',
+    });
+    expect(summarizeToolUseText('exec', {
+      command: 'git status --short',
+    })).toEqual({
+      label: '查看工作区状态',
+      detail: 'git status --short',
+    });
+  });
+
   it('summarizes message bubble density without adding mobile-only role labels', () => {
     expect(summarizeMessageBubblePresentation({
       align: 'user',
