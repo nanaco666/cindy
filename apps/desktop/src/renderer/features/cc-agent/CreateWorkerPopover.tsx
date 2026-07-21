@@ -101,6 +101,7 @@ export function CreateWorkerPopover({
   const [fast, setFast] = useState(DEFAULT_PREFS.codex.fast);
   const [initialTask, setInitialTask] = useState('');
   const [prefs, setPrefs] = useState<WorkerPrefs>(DEFAULT_PREFS);
+  const [prefsRestored, setPrefsRestored] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const submittingRef = useRef(false);
 
@@ -131,12 +132,16 @@ export function CreateWorkerPopover({
     !deviceId &&
     !activeCapabilitiesState.loading &&
     (activeCaps !== null || activeCapabilitiesState.error !== null) &&
+    // Local Claude models come straight from capabilities; provider loading only gates Codex.
     !(agent === 'codex' && providersLoading) &&
     activeModels.length === 0;
 
   // 打开弹窗时恢复上次选择；initial task 不记忆，避免把旧任务误带到下一次创建。
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      setPrefsRestored(false);
+      return;
+    }
     const stored = readWorkerPrefs();
     const agentPrefs = stored[stored.lastAgent];
     setPrefs(stored);
@@ -145,11 +150,18 @@ export function CreateWorkerPopover({
     setEffort(agentPrefs.effort);
     setFast(agentPrefs.fast);
     setInitialTask('');
+    setPrefsRestored(true);
   }, [open]);
 
   // capabilities 可能尚未加载或模型被移除；加载后把当前选择收敛到可用模型和 effort。
   useEffect(() => {
-    if (!open || activeCapabilitiesState.loading || (agent === 'codex' && providersLoading)) return;
+    if (
+      !open ||
+      !prefsRestored ||
+      activeCapabilitiesState.loading ||
+      (agent === 'codex' && providersLoading)
+    )
+      return;
     const models = activeModels;
     if (models.length === 0) return;
     let selected = models.find((m) => m.id === model);
@@ -175,6 +187,7 @@ export function CreateWorkerPopover({
     effort,
     model,
     open,
+    prefsRestored,
     providersLoading,
   ]);
 

@@ -135,6 +135,36 @@ describe('CreateWorkerPopover', () => {
     );
   });
 
+  it('restores an available stored preference before converging a stale default model', async () => {
+    window.localStorage.setItem(
+      'workerCreationPrefs',
+      JSON.stringify({
+        lastAgent: 'codex',
+        codex: { model: 'gpt-remembered', effort: 'medium', fast: false },
+      }),
+    );
+    mocks.modelsByAgent.codex = [
+      model('gpt-fallback', ['high'], 'high'),
+      model('gpt-remembered', ['medium'], 'medium'),
+    ];
+    mocks.capabilitiesByAgent.codex = {
+      availableModels: [{ id: 'gpt-fallback' }, { id: 'gpt-remembered' }],
+    };
+    const onCreate = vi.fn();
+
+    render(<CreateWorkerPopover open onClose={vi.fn()} onCreate={onCreate} />);
+
+    await waitFor(() =>
+      expect(screen.getByTestId('model-selector').textContent).toBe('gpt-remembered'),
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'orca.createWorker.submit' }));
+    await waitFor(() =>
+      expect(onCreate).toHaveBeenCalledWith(
+        expect.objectContaining({ model: 'gpt-remembered', effort: 'medium' }),
+      ),
+    );
+  });
+
   it('waits for the provider catalog before replacing a stale local preference', async () => {
     window.localStorage.setItem(
       'workerCreationPrefs',
