@@ -141,24 +141,28 @@ async function ensureOrcaWorkersTabLocal(
   const bucket = getBucket(leadSessionId);
   const existing = bucket.tabs.find((candidate) => candidate.kind === 'orca-workers');
   if (existing) {
-    if (
+    const shouldPatchIntent =
       opts.focusWorkerSessionId !== undefined ||
       opts.searchJump !== undefined ||
-      opts.openCreateWorker === true
-    ) {
-      // No await may sit between this check and patchTabState: its patch callback commits the
-      // optimistic state synchronously before the first IPC await.
-      if (opts.shouldCommit?.() === false) return false;
-      await patchTabState(leadSessionId, existing.id, (state) => withWorkerOpenIntent(state, opts));
+      opts.openCreateWorker === true;
+    const shouldFocusTab = opts.focusTab && bucket.activeTabId !== existing.id;
+    if (!shouldPatchIntent && !shouldFocusTab) return true;
+
+    // The live-context decision immediately after hydration owns both optimistic mutations.
+    // patchTabState/setActiveTab update the local bucket synchronously before their first IPC
+    // await, so starting both without an intervening await makes the commit atomic with respect
+    // to a host-context change and cannot leave only the pending create intent behind.
+    const mutations: Promise<void>[] = [];
+    if (shouldPatchIntent) {
+      mutations.push(
+        patchTabState(leadSessionId, existing.id, (state) => withWorkerOpenIntent(state, opts)),
+      );
     }
-    if (opts.focusTab && bucket.activeTabId !== existing.id) {
-      if (opts.shouldCommit?.() === false) return false;
-      await setActiveTab(leadSessionId, existing.id);
-    }
+    if (shouldFocusTab) mutations.push(setActiveTab(leadSessionId, existing.id));
+    await Promise.all(mutations);
     return true;
   }
 
-  if (opts.shouldCommit?.() === false) return false;
   await addTab(leadSessionId, 'orca-workers', withWorkerOpenIntent({}, opts));
   return true;
 }
@@ -277,4 +281,17 @@ export async function consumeOrcaWorkersCreateIntent(
       createWorkerRequestRevision: revision,
     };
   });
+}
+
+/**
+ * Cancel the currently pending add-Worker intent for a session, if one exists.
+ * The captured revision makes a delayed persistence completion unable to clear a newer request.
+ */
+export async function cancelPendingOrcaWorkersCreateIntent(leadSessionId: string): Promise<void> {
+  const tab = getBucket(leadSessionId).tabs.find((candidate) => candidate.kind === 'orca-workers');
+  if (!tab) return;
+  const state = hydrateOrcaWorkersState(tab.state);
+  const revision = state.createWorkerRequestRevision ?? 0;
+  if (!state.createWorkerRequestPending || revision <= 0) return;
+  await consumeOrcaWorkersCreateIntent(leadSessionId, tab.id, revision);
 }

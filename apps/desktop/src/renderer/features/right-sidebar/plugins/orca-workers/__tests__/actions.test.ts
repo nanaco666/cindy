@@ -18,6 +18,7 @@ import {
 } from '../../../lib/sidebarCommands';
 import { _resetStore, addTab, getBucket, setActiveTab } from '../../../store';
 import {
+  cancelPendingOrcaWorkersCreateIntent,
   clearOrcaWorkersSelectionIntent,
   closeOrcaWorkersTabAfterTeamEnd,
   consumeOrcaWorkersCreateIntent,
@@ -154,6 +155,24 @@ describe('orca-workers tab actions', () => {
     expect(tabsIpc.upsert).not.toHaveBeenCalled();
   });
 
+  it('uses one commit decision for intent patch and tab focus', async () => {
+    const review = await addTab('s1', 'review', {});
+    const orca = await addTab('s1', 'orca-workers', {});
+    await setActiveTab('s1', review.id);
+    const shouldCommit = vi.fn(() => true);
+
+    await expect(
+      revealOrcaWorkersTab('s1', { openCreateWorker: true, shouldCommit }),
+    ).resolves.toBe('attached');
+
+    expect(shouldCommit).toHaveBeenCalledOnce();
+    expect(getBucket('s1').activeTabId).toBe(orca.id);
+    expect(getBucket('s1').tabs.find((candidate) => candidate.id === orca.id)?.state).toMatchObject({
+      createWorkerRequestPending: true,
+      createWorkerRequestRevision: 1,
+    });
+  });
+
   it('consumes only the matching create-Worker intent revision', async () => {
     await revealOrcaWorkersTab('s1', { openCreateWorker: true });
     await revealOrcaWorkersTab('s1', { openCreateWorker: true });
@@ -169,6 +188,19 @@ describe('orca-workers tab actions', () => {
     await consumeOrcaWorkersCreateIntent('s1', tab.id, 2);
     expect(getBucket('s1').tabs.find((candidate) => candidate.id === tab.id)?.state).toMatchObject({
       createWorkerRequestPending: false,
+      createWorkerRequestRevision: 2,
+    });
+  });
+
+  it('cancels a detached-host create intent without clearing a later request', async () => {
+    await revealOrcaWorkersTab('s1', { openCreateWorker: true });
+    const cancelOldIntent = cancelPendingOrcaWorkersCreateIntent('s1');
+    await revealOrcaWorkersTab('s1', { openCreateWorker: true });
+    await cancelOldIntent;
+
+    const tab = getBucket('s1').tabs.find((candidate) => candidate.kind === 'orca-workers');
+    expect(tab?.state).toMatchObject({
+      createWorkerRequestPending: true,
       createWorkerRequestRevision: 2,
     });
   });

@@ -32,6 +32,7 @@ import { RightSidebarShell } from '@/features/right-sidebar/RightSidebarShell';
 import { useDeviceLinkRemoteProjects } from '@/features/device-link/useDeviceLinkRemoteProjects';
 import { onRequestRightSidebarVisibility } from '@/features/right-sidebar/lib/sidebarCommands';
 import { executeSidebarCommand } from '@/features/right-sidebar/lib/executeSidebarCommand';
+import { cancelPendingOrcaWorkersCreateIntent } from '@/features/right-sidebar/plugins/orca-workers/actions';
 import {
   closeTab,
   getBucket,
@@ -55,6 +56,8 @@ export function SidebarWindowLayout() {
   useDeviceLinkRemoteProjects();
   const isMac = window.electronAPI?.platform === 'darwin';
   const [ctx, setCtx] = useState<SidebarWindowContext | null>(null);
+  const commandSessionIdRef = useRef<string | null>(null);
+  const commandContextGenerationRef = useRef(0);
 
   // mount:拉一次 context + 订阅跟随推送 + ready 握手。
   useEffect(() => {
@@ -63,10 +66,29 @@ export function SidebarWindowLayout() {
       .getContext()
       .then((initial) => {
         // 订阅推送里可能先到更新 —— 已有值时不用 stale 的 getContext 结果覆盖
-        if (!cancelled) setCtx((prev) => prev ?? initial);
+        if (!cancelled) {
+          setCtx((prev) => {
+            if (prev) return prev;
+            commandSessionIdRef.current = initial?.available ? initial.sessionId : null;
+            return initial;
+          });
+        }
       })
       .catch((err) => log.warn('getContext failed', err));
     const offCtx = window.electronAPI.rightSidebarWindow.onContextChanged((next) => {
+      const nextSessionId = next.available ? next.sessionId : null;
+      const previousSessionId = commandSessionIdRef.current;
+      if (previousSessionId !== nextSessionId) {
+        // Context updates are the detached host's cancellation boundary. Incrementing the
+        // generation invalidates commands that were accepted on A even after a fast A→B→A.
+        commandContextGenerationRef.current += 1;
+        commandSessionIdRef.current = nextSessionId;
+        if (previousSessionId) {
+          void cancelPendingOrcaWorkersCreateIntent(previousSessionId).catch((err) => {
+            log.warn('cancel stale create-Worker intent failed', err);
+          });
+        }
+      }
       setCtx(next);
     });
     void window.electronAPI.rightSidebarWindow.ready().catch((err) => {
@@ -79,8 +101,6 @@ export function SidebarWindowLayout() {
   }, []);
 
   const sessionId = ctx?.available ? ctx.sessionId : null;
-  const sessionIdRef = useRef(sessionId);
-  sessionIdRef.current = sessionId;
 
   // agent tab-op 触发的可见性请求(本窗口内 rsbBrowserBridge 派发):
   //  - 'close'(最后一个 tab 被关)且目标是当前会话 → 收起 = 关本窗口
@@ -105,8 +125,11 @@ export function SidebarWindowLayout() {
   //   renderer 的 store 消费;远程会话走 memory-only,不能靠主窗 store/SQLite 同步。
   useEffect(() => {
     return window.electronAPI.rightSidebarWindow.onCommand((cmd) => {
+      const acceptedGeneration = commandContextGenerationRef.current;
       void executeSidebarCommand(cmd, {
-        isCurrentSession: (commandSessionId) => sessionIdRef.current === commandSessionId,
+        isCurrentSession: (commandSessionId) =>
+          commandContextGenerationRef.current === acceptedGeneration &&
+          commandSessionIdRef.current === commandSessionId,
       }).catch((err) => log.warn('sidebar command failed', err));
     });
   }, []);
