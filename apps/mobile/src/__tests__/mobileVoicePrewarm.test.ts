@@ -120,7 +120,7 @@ describe('mobileVoicePrewarm', () => {
     expect(__testing.hasPending()).toBe(true);
   });
 
-  it('discard closes the speculative connection once its connect settles', async () => {
+  it('discard immediately propagates cancellation to an in-flight speculative connection', async () => {
     const provider = new FakeProvider();
     resolveCredential.mockResolvedValue(CREDENTIAL);
     createProvider.mockReturnValue(provider);
@@ -128,9 +128,8 @@ describe('mobileVoicePrewarm', () => {
     prewarmMobileVoiceStart('device-1');
     await settle();
     discardPendingPrewarm();
-    // Not yet closed: the socket is still opening and cannot be closed early.
     await settle();
-    expect(provider.stopCalls).toBe(0);
+    expect(provider.stopCalls).toBe(1);
 
     provider.resolveStart();
     await settle();

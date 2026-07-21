@@ -142,13 +142,13 @@ async function buildPrewarm(
  * Makes the speculative start() call transparent to the eventual consumer:
  * the first start() joins the already in-flight connect (and reports its
  * outcome) instead of restarting the provider; later start() calls — a new run
- * reusing the same session — behave normally. stop() before the speculative
- * connect settles must not block (and cannot close a socket that isn't open
- * yet), so it defers the inner teardown until the connect settles.
+ * reusing the same session — behave normally. stop() is passed to the inner
+ * provider immediately, including while a managed provider is still waiting
+ * for its ticket, so a discarded prewarm cannot open a socket or continue to
+ * the next fallback candidate after it has been cancelled.
  */
 function withPrewarmedStart(provider: AsrProvider, startPromise: Promise<void>): AsrProvider {
   let firstStartConsumed = false;
-  let startSettled = false;
   // Sentinel listener for the parked window (pressIn → claim): providers
   // replace their event callback on onEvent and do not buffer past events, so
   // a transport death AFTER the speculative connect succeeded would otherwise
@@ -162,14 +162,6 @@ function withPrewarmedStart(provider: AsrProvider, startPromise: Promise<void>):
       transportDroppedWhileParked = true;
     }
   });
-  startPromise.then(
-    () => {
-      startSettled = true;
-    },
-    () => {
-      startSettled = true;
-    },
-  );
   return {
     start(): Promise<void> {
       if (!firstStartConsumed) {
@@ -193,13 +185,6 @@ function withPrewarmedStart(provider: AsrProvider, startPromise: Promise<void>):
       return provider.start();
     },
     async stop(): Promise<void> {
-      if (!startSettled) {
-        void startPromise
-          .catch(() => undefined)
-          .then(() => provider.stop())
-          .catch(() => undefined);
-        return;
-      }
       await provider.stop();
     },
     appendAudio(chunk, trace): void {

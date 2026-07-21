@@ -131,7 +131,9 @@ class MobileFallbackAsrProvider implements AsrProvider {
   private readonly candidates: MobileAsrCandidate[];
   private readonly callbacks: Array<(event: AsrEvent) => void> = [];
   private active: AsrProvider | null = null;
+  private pending: AsrProvider | null = null;
   private activeProvider = '';
+  private stopped = false;
 
   recover?: () => Promise<void>;
 
@@ -141,18 +143,28 @@ class MobileFallbackAsrProvider implements AsrProvider {
   }
 
   async start(): Promise<void> {
+    this.stopped = false;
     let lastError: unknown = null;
     for (const candidate of this.candidates) {
+      if (this.stopped) throw new Error('Mobile ASR fallback provider stopped.');
       const provider = candidate.create();
+      this.pending = provider;
       provider.onEvent((event) => {
         if (this.active === provider) this.callbacks.forEach((callback) => callback(event));
       });
       try {
         await provider.start();
       } catch (err) {
+        if (this.pending === provider) this.pending = null;
         lastError = err;
         await provider.dispose?.().catch(() => undefined);
+        if (this.stopped) throw err;
         continue;
+      }
+      if (this.pending === provider) this.pending = null;
+      if (this.stopped) {
+        await provider.stop().catch(() => undefined);
+        throw new Error('Mobile ASR fallback provider stopped.');
       }
       this.active = provider;
       this.activeProvider = candidate.provider;
@@ -171,11 +183,15 @@ class MobileFallbackAsrProvider implements AsrProvider {
   }
 
   async stop(): Promise<void> {
-    await this.active?.stop();
+    this.stopped = true;
+    const providers = new Set([this.pending, this.active]);
+    await Promise.all([...providers].map((provider) => provider?.stop()));
   }
 
   async dispose(): Promise<void> {
-    await this.active?.dispose?.();
+    await this.stop();
+    const providers = new Set([this.pending, this.active]);
+    await Promise.all([...providers].map((provider) => provider?.dispose?.()));
   }
 
   onEvent(callback: (event: AsrEvent) => void): void {
