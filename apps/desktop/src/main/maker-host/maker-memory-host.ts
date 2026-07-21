@@ -53,7 +53,7 @@ export function createDesktopMakerMemoryManager(): MakerMemoryManager {
     sqliteFactory,
     agents: {}, // 占位, attachAgents 补上
     logger: desktopMakerLogger.child('maker-memory'),
-    // 持久化 store 读 — 重启后保持用户上次设置, 默认 false (实验阶段)
+    // 持久化 store 读 — 重启后保持用户上次设置，新用户默认开启。
     initialEnabled: readMemorySettings().maker,
     reviewAgent: 'claude-code', // memory_review 用 claude haiku 最便宜
   });

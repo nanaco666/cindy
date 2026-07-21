@@ -24,14 +24,20 @@ describe('memory-settings-store', () => {
     fs.rmSync(userDataDir, { recursive: true, force: true });
   });
 
+  it('enables Maker Memory by default for a new user', async () => {
+    const { readMemorySettings } = await import('../memory-settings-store.js');
+
+    expect(readMemorySettings()).toEqual({ maker: true, claudeCode: true, codex: true });
+  });
+
   it('returns uncustomized state when a setting is manually changed back to default', async () => {
     const { writeMemorySetting } = await import('../memory-settings-store.js');
 
-    const customized = writeMemorySetting('maker', true);
+    const customized = writeMemorySetting('maker', false);
     expect(customized.isCustomized).toBe(true);
     expect(customized.customizedKeys).toEqual(['maker']);
 
-    const restored = writeMemorySetting('maker', false);
+    const restored = writeMemorySetting('maker', true);
     expect(restored.isCustomized).toBe(false);
     expect(restored.customizedKeys).toEqual([]);
     expect(fs.existsSync(path.join(userDataDir, 'memory-settings.json'))).toBe(false);

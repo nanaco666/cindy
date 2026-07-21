@@ -52,7 +52,7 @@ export interface MakerMemoryManagerDeps {
   config?: Partial<MemoryConfig>;
   /**
    * 启动时初值. 来自 settings (host 透传 runtimeConfig.makerMemoryEnabled).
-   * 默认 false — maker memory 实验阶段, 用户主动开启才生效。
+   * 默认 true — maker memory 已是正式功能；用户仍可主动关闭。
    */
   initialEnabled?: boolean;
 }
@@ -84,7 +84,7 @@ export class MakerMemoryManager {
   private readonly logger: Logger;
 
   constructor(private readonly deps: MakerMemoryManagerDeps) {
-    this.enabled = deps.initialEnabled ?? false;
+    this.enabled = deps.initialEnabled ?? true;
     this.logger = deps.logger;
     this.logger.info('MakerMemoryManager initialized', {
       enabled: this.enabled,

@@ -15,7 +15,7 @@
  *   - true  : Maker Memory 启用 (写 prompt 注入 + 关闭原生 auto-memory + 暴露 lizi_memory MCP)
  *   - false : Maker Memory 关闭, 各 agent 原生 auto-memory 各自由 Claude / Codex 行控制
  *
- * **默认 false** — Maker Memory 实验阶段, 不影响现有用户行为。
+ * **默认 true** — Maker Memory 已是正式功能；已有用户的明确设置仍以 main 端为准。
  */
 
 const STORAGE_KEY = 'memorySettings.makerEnabled';
@@ -25,13 +25,14 @@ const subscribers = new Set<Subscriber>();
 
 /**
  * 同步读 — 给 hook 之外路径用 (ChatInput 启 session 时透传等)。
- * 坏数据 / localStorage 不可用 / 没存过 → 兜底 false (实验阶段默认关)。
+ * 坏数据 / localStorage 不可用 / 没存过 → 兜底 true (正式功能默认开)。
  */
 export function getMakerMemoryEnabled(): boolean {
   try {
-    return localStorage.getItem(STORAGE_KEY) === 'true';
+    const stored = localStorage.getItem(STORAGE_KEY);
+    return stored === null ? true : stored === 'true';
   } catch {
-    return false;
+    return true;
   }
 }
 

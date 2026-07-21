@@ -61,7 +61,7 @@ const INITIAL: MemorySlotState = { enabled: undefined, pending: false };
 export function MemorySection() {
   const { confirm } = useConfirmDialog();
   const { t } = useTranslation();
-  // Maker Memory 启用时, 下方 Claude / Codex 原生 toggle 强制 disable + 视觉变灰
+  // Maker Memory 启用时，下方 Claude Code / Codex 运行时的原生 toggle 强制 disable + 视觉变灰。
   // (manager.enable() 在 maker-core 层会自动调 setMemory(false), 这里 UI 防止用户
   // 在状态不同步的窗口里点击 toggle 引发误解)。
   const { makerEnabled, setMakerEnabled } = useMemorySettings();

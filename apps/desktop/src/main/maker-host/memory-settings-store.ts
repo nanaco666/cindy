@@ -8,10 +8,10 @@
  *  三者都不持久化, 重启后用户上次设置丢失 → 这里收口落 JSON。
  *
  * 文件: <userData>/memory-settings.json
- *   { "maker": false, "claudeCode": true, "codex": true }
+ *   { "maker": true, "claudeCode": true, "codex": true }
  *
  * 默认值跟原 runtime-configs.ts / maker-memory-host.ts 的硬编码对齐:
- *  - maker      : false (实验阶段默认关)
+ *  - maker      : true (默认开启，用户可以关闭)
  *  - claudeCode : true  (Claude SDK autoMemoryEnabled 默认 true, host 跟随)
  *  - codex      : true  (host 强制开 to match Claude — 跟原 runtime-configs.ts:95 一致)
  *
@@ -37,7 +37,7 @@ export interface MemorySettings {
 }
 
 const DEFAULTS: MemorySettings = {
-  maker: false,
+  maker: true,
   claudeCode: true,
   codex: true,
 };

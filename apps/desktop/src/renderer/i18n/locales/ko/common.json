@@ -1328,7 +1328,7 @@
       "description": "워크스페이스 단위 메모리를 구현합니다. 설정 변경 후에는 일반적으로 새 Session을 시작해야 적용됩니다. 메모리에 문제가 있다면 Reset하거나 끄세요.",
       "maker": {
         "label": "Maker",
-        "description": "동일 작업 디렉터리에서(Claude / Codex) 다중 Agent의 모든 Session 메모리를 실제로 공유합니다 (Beta 기능)",
+        "description": "동일 작업 디렉터리에서 Claude Code와 Codex의 모든 Agent Session 메모리를 공유합니다",
         "toggleAria": "Maker 메모리 전환",
         "resetAria": "Maker 메모리 재설정",
         "resetConfirm": {
@@ -1348,12 +1348,12 @@
       },
       "agents": {
         "claude-code": {
-          "label": "Claude",
-          "description": "동일 작업 디렉터리에서 Claude Agent의 모든 Session이 메모리를 공유합니다 (Official)"
+          "label": "Claude Code",
+          "description": "Claude Code 입구를 통해 사용하는 모든 모델이 같은 메모리를 공유합니다"
         },
         "codex": {
           "label": "Codex",
-          "description": "동일 작업 디렉터리에서 Codex Agent의 모든 Session이 메모리를 공유합니다 (Official)"
+          "description": "Codex 입구를 통해 사용하는 모든 모델이 같은 메모리를 공유합니다"
         }
       },
       "agent": {
