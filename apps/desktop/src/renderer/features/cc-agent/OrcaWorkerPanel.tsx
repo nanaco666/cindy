@@ -90,6 +90,8 @@ export function OrcaWorkerPanel({
   });
   const lastAgentIslandPayloadRef = useRef<string | string[] | null>(null);
   const handledCreateWorkerRevisionRef = useRef(0);
+  const hardLimitRef = useRef(hardLimit);
+  hardLimitRef.current = hardLimit;
 
   useEffect(() => {
     handledCreateWorkerRevisionRef.current = 0;
@@ -99,19 +101,35 @@ export function OrcaWorkerPanel({
     if (!viewVisible || !createWorkerRequestPending || createWorkerRequestRevision <= 0) return;
     if (handledCreateWorkerRevisionRef.current >= createWorkerRequestRevision) return;
     handledCreateWorkerRevisionRef.current = createWorkerRequestRevision;
-    onCreateWorkerRequestConsumed?.(createWorkerRequestRevision);
+    let active = true;
+    let settled = false;
 
     // Refresh before checking the hard limit: a cold/stale worker cache must never let the
     // keyboard path open a dialog that the visible create button would disable.
     void refresh().then((result) => {
-      if (!result || result.status !== 'applied') return;
-      if (!canOpenWorkerFromShortcut(result.workers, hardLimit)) return;
-      setCreateOpen(true);
+      if (!active) return;
+      settled = true;
+      if (
+        result?.status === 'applied' &&
+        canOpenWorkerFromShortcut(result.workers, hardLimitRef.current)
+      ) {
+        setCreateOpen(true);
+      }
+      // Keep the intent pending while refresh is in flight. If this panel unmounts, the next
+      // owner can retry the same revision instead of losing the shortcut in a stale callback.
+      onCreateWorkerRequestConsumed?.(createWorkerRequestRevision);
     });
+
+    return () => {
+      active = false;
+      if (!settled && handledCreateWorkerRevisionRef.current === createWorkerRequestRevision) {
+        handledCreateWorkerRevisionRef.current = createWorkerRequestRevision - 1;
+      }
+    };
   }, [
     createWorkerRequestPending,
     createWorkerRequestRevision,
-    hardLimit,
+    leadSessionId,
     onCreateWorkerRequestConsumed,
     refresh,
     setCreateOpen,
