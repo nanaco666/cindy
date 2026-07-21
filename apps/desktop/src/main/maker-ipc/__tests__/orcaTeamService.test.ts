@@ -296,7 +296,8 @@ describe('OrcaTeamService', () => {
   });
 
   it('resolves sendToWorker worker id to session id before dispatching', async () => {
-    const { calls, deps, service } = createDeps();
+    const { calls, deps, getWorker, service, setWorker } = createDeps();
+    setWorker(createWorker({ status: 'idle', idleSince: '2026-07-21T10:00:00.000Z' }));
 
     await expect(
       service.sendToWorker({ callerLeadSessionId: 'lead-1', targetSessionId: 'worker-1', message: '继续' }),
@@ -307,6 +308,8 @@ describe('OrcaTeamService', () => {
 
     expect(deps.getWorkerLinkBySessionId).toHaveBeenCalledWith('worker-session-1');
     expect(deps.getWorkerLinkBySessionId).not.toHaveBeenCalledWith('worker-1');
+    expect(deps.resumeWorkerSession).toHaveBeenCalledOnce();
+    expect(getWorker().idleSince).toBeNull();
     expect(deps.dispatchWorkerMessage).toHaveBeenCalledWith(expect.objectContaining({
       targetSessionId: 'worker-session-1',
       workerId: 'worker-1',
