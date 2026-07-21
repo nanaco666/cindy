@@ -13,7 +13,7 @@ import {
   truncateToolText,
   type ToolUseDescriptor,
 } from './toolUseDescriptor';
-import type { CommandIntentAction } from './commandIntent';
+import type { CommandIntent, CommandIntentAction } from './commandIntent';
 
 export type MessageFoldHeaderChevronPosition = 'leading' | 'trailing';
 
@@ -57,6 +57,10 @@ export interface ToolRowPresentation {
 
 export interface ToolRowPresentationOptions {
   isSessionStreaming?: boolean;
+  /** Structured sub-action when one Codex command execution expands into several rows. */
+  intentOverride?: CommandIntent;
+  /** Shared work projection owns status when rendering a split command row. */
+  statusOverride?: ToolRowStatus;
 }
 
 export interface TodoStatusPresentation {
@@ -371,7 +375,10 @@ export function summarizeToolGroupPresentation<
 export function summarizeToolRowPresentation<
   TMessage extends MessagePresentationToolLike,
 >(tool: TMessage, options: ToolRowPresentationOptions = {}): ToolRowPresentation {
-  const descriptor = toolRowDescriptor(tool);
+  const sourceDescriptor = toolRowDescriptor(tool);
+  const descriptor = sourceDescriptor.kind === 'command' && options.intentOverride
+    ? { ...sourceDescriptor, intent: options.intentOverride }
+    : sourceDescriptor;
   // 读文件 / 搜索 / 网页类工具的结果正文是「内容」而非执行状态,全文错误关键词匹配
   // 必然误报(文件里出现 error / 失败 字样 ≠ 工具失败);但真实失败也常以纯文本落盘
   // (持久化链路无 is_error 标志),所以对这类工具改用锚定判定而非整段关闭检测。
@@ -384,7 +391,7 @@ export function summarizeToolRowPresentation<
     hasError,
     label: text.label || tool.label || 'tool',
     ...(text.detail ? { detail: text.detail } : {}),
-    status: toolRowStatus(tool, options),
+    status: options.statusOverride ?? toolRowStatus(tool, options),
   };
 }
 
@@ -563,7 +570,11 @@ export function todoStatusPresentation(status: MessageRenderTodoItem['status']):
 export function summarizeWorkGroupPresentation<
   TMessage extends MessagePresentationToolLike,
 >(item: MessageRenderWorkGroupItem<TMessage>): WorkGroupPresentation {
-  const title = item.durationMs !== undefined ? `已工作 ${formatDuration(item.durationMs)}` : '工作过程';
+  const title = item.isStreaming
+    ? '正在工作…'
+    : item.durationMs !== undefined
+      ? `已工作 ${formatDuration(item.durationMs)}`
+      : '工作过程';
 
   return {
     header: desktopPlainFoldHeader({ title }),

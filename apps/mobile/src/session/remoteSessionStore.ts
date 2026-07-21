@@ -55,6 +55,12 @@ interface SessionMessageSyncMarker {
   updatedAt: string;
 }
 
+interface LivePlanSnapshot {
+  content: Record<string, unknown>;
+  persistId?: string;
+  toolUseId: string;
+}
+
 const EMPTY_SESSION_RUN_STATUS: RemoteSessionRunStatus = Object.freeze({
   isRunning: false,
   sideTaskRunning: false,
@@ -65,6 +71,10 @@ const EMPTY_SESSION_RUN_STATUS: RemoteSessionRunStatus = Object.freeze({
 
 const shards = new Map<string, DeviceShard>();
 const messages = new Map<string, RemoteMessage[]>();
+// The maker event is broadcast before its async DB create/update completes. Keep the latest
+// plan snapshot briefly in the session mirror so a late initial `messages:created` row cannot
+// overwrite a newer live state with the first stale 0/N snapshot.
+const livePlanSnapshots = new Map<string, Map<string, LivePlanSnapshot>>();
 const pendingInteractions = new Map<string, PendingInteraction[]>();
 /**
  * 乐观 resolve 在途抑制集合:交互卡批准 / 拒绝已在本地乐观撤卡、被控端还没有
@@ -202,6 +212,83 @@ function normalizeMessages(list: readonly RemoteMessage[]): RemoteMessage[] {
 
 function messageKey(message: RemoteMessage): string {
   return message.id || message.clientId || `${message.role}:${message.createdAt}`;
+}
+
+function rememberLivePlanSnapshot(sessionId: string, snapshot: LivePlanSnapshot): void {
+  let sessionSnapshots = livePlanSnapshots.get(sessionId);
+  if (!sessionSnapshots) {
+    sessionSnapshots = new Map();
+    livePlanSnapshots.set(sessionId, sessionSnapshots);
+  }
+  sessionSnapshots.set(`tool:${snapshot.toolUseId}`, snapshot);
+  if (snapshot.persistId) sessionSnapshots.set(`persist:${snapshot.persistId}`, snapshot);
+}
+
+function overlayLivePlanSnapshot(sessionId: string, message: RemoteMessage): RemoteMessage {
+  if (message.role !== 'tool_use') return message;
+  const sessionSnapshots = livePlanSnapshots.get(sessionId);
+  if (!sessionSnapshots) return message;
+  const contentToolUseId = readString(message.content, 'toolUseId');
+  const snapshot = sessionSnapshots.get(`persist:${message.id}`)
+    ?? sessionSnapshots.get(`persist:${message.clientId}`)
+    ?? (message.toolUseId ? sessionSnapshots.get(`tool:${message.toolUseId}`) : undefined)
+    ?? (contentToolUseId ? sessionSnapshots.get(`tool:${contentToolUseId}`) : undefined);
+  return snapshot
+    ? { ...message, content: snapshot.content, toolUseId: snapshot.toolUseId }
+    : message;
+}
+
+/** End any pre-compaction streaming rows without changing the overall running turn. */
+function finishMessageStreamingAtCompactBoundary(message: RemoteMessage): RemoteMessage {
+  let agentMeta = message.agentMeta;
+  let content = message.content;
+  let changed = false;
+  if (agentMeta?.isStreaming === true || agentMeta?.streaming === true) {
+    agentMeta = { ...agentMeta, isStreaming: false, streaming: false };
+    changed = true;
+  }
+  if (isRecord(content) && (content.isStreaming === true || content.streaming === true)) {
+    content = { ...content, isStreaming: false, streaming: false };
+    changed = true;
+  }
+  return changed ? { ...message, agentMeta, content } : message;
+}
+
+/** Apply a repeated Codex plan snapshot to the one persisted tool row used by desktop. */
+function applyLivePlanToolUseMessage(
+  sessionId: string,
+  event: Record<string, unknown>,
+  persistId?: string,
+): boolean {
+  const data = isRecord(event.data) ? event.data : {};
+  if (readString(data, 'toolName') !== 'update_plan') return false;
+
+  const toolUseId = readString(data, 'toolUseId');
+  if (!toolUseId) return true;
+  const content = {
+    toolUseId,
+    toolName: 'update_plan',
+    input: data.input,
+  };
+  rememberLivePlanSnapshot(sessionId, { content, persistId, toolUseId });
+  const existing = messages.get(sessionId) ?? [];
+  const targetIndex = existing.findIndex((message) => {
+    if (message.role !== 'tool_use') return false;
+    if (persistId && (message.id === persistId || message.clientId === persistId)) return true;
+    if (message.toolUseId === toolUseId) return true;
+    return readString(message.content, 'toolUseId') === toolUseId;
+  });
+  if (targetIndex < 0) return true;
+
+  const current = existing[targetIndex];
+  if (current.toolUseId === toolUseId && deepValueEqual(current.content, content)) return true;
+
+  const next = [...existing];
+  next[targetIndex] = { ...current, content, toolUseId };
+  messages.set(sessionId, next);
+  bumpMessageVersion();
+  emit();
+  return true;
 }
 
 /**
@@ -531,9 +618,21 @@ export const remoteSessionStore = {
   },
 
   appendMessage(sessionId: string, message: RemoteMessage): void {
+    const incoming = overlayLivePlanSnapshot(sessionId, message);
     const existing = messages.get(sessionId) ?? [];
-    if (existing.some((m) => (message.id && m.id === message.id) || (message.clientId && m.clientId === message.clientId))) return;
-    messages.set(sessionId, normalizeMessages([...existing, message]));
+    const existingIndex = existing.findIndex(
+      (item) => (incoming.id && item.id === incoming.id)
+        || (incoming.clientId && item.clientId === incoming.clientId),
+    );
+    if (existingIndex >= 0) {
+      const replacement = preferCompleteMessage(existing[existingIndex], incoming);
+      if (remoteMessageEqual(existing[existingIndex], replacement)) return;
+      const next = [...existing];
+      next[existingIndex] = replacement;
+      messages.set(sessionId, normalizeMessages(next));
+    } else {
+      messages.set(sessionId, normalizeMessages([...existing, incoming]));
+    }
     bumpMessageVersion();
     emit();
   },
@@ -770,7 +869,8 @@ export const remoteSessionStore = {
     if (channel === 'maker:event' && isRecord(payload)) {
       const sessionId = readString(payload, 'sessionId');
       const event = isRecord(payload.event) ? payload.event : null;
-      if (sessionId && event) this.applyMakerEvent(sessionId, event);
+      const persistId = readString(payload, 'persistId') ?? undefined;
+      if (sessionId && event) this.applyMakerEvent(sessionId, event, persistId);
       return;
     }
     if (channel === 'maker:status-changed' && isRecord(payload)) {
@@ -906,8 +1006,9 @@ export const remoteSessionStore = {
     if (changed) emit();
   },
 
-  applyMakerEvent(sessionId: string, event: Record<string, unknown>): void {
+  applyMakerEvent(sessionId: string, event: Record<string, unknown>, persistId?: string): void {
     const type = readString(event, 'type');
+    if (type === 'tool_use' && applyLivePlanToolUseMessage(sessionId, event, persistId)) return;
     if (type === 'agent_task_update') {
       const rawSource = readString(event, 'source');
       const source = rawSource === 'codex' || rawSource === 'claude-code' ? rawSource : undefined;
@@ -921,6 +1022,39 @@ export const remoteSessionStore = {
         sessionTaskUpdates.set(sessionId, next);
         emit();
       }
+      return;
+    }
+    if (type === 'compact_boundary') {
+      const data = isRecord(event.data) ? event.data : {};
+      const boundaryId = readString(data, 'boundaryId');
+      // 新 producer 都会给 provider boundaryId；兼容旧事件时以完整 data 的 canonical
+      // fingerprint 生成可重放身份，不能再用随机 id（同一 replay 会错误结束新工作）。
+      const clientId = boundaryId
+        ? `mobile-system-compact:${boundaryId}`
+        : `mobile-system-compact:fallback:${compactBoundaryFingerprint(data)}`;
+      const existing = messages.get(sessionId) ?? [];
+      // Transcript replay and the live stream may forward the same provider boundary.
+      // De-duplicate before finalizing, otherwise a replay could end post-compact work.
+      if (existing.some((message) => messageKey(message) === clientId)) return;
+      const finalized = existing.map(finishMessageStreamingAtCompactBoundary);
+      const createdAt = new Date().toISOString();
+      messages.set(sessionId, normalizeMessages([
+        ...finalized,
+        {
+          id: clientId,
+          clientId,
+          sessionId,
+          role: 'assistant',
+          content: '',
+          toolUseId: null,
+          agentMeta: null,
+          createdAt,
+          systemCardType: 'compact',
+          systemCardData: data,
+        },
+      ]));
+      bumpMessageVersion();
+      emit();
       return;
     }
     if (type === 'status') {
@@ -971,6 +1105,7 @@ export const remoteSessionStore = {
     for (const [sessionId, indexedDeviceId] of sessionDeviceIndex) {
       if (indexedDeviceId === deviceId) {
         messages.delete(sessionId);
+        livePlanSnapshots.delete(sessionId);
         pendingInteractions.delete(sessionId);
         inputProjections.delete(sessionId);
         sessionLiveActivity.delete(sessionId);
@@ -992,6 +1127,7 @@ export const remoteSessionStore = {
   clear(): void {
     shards.clear();
     messages.clear();
+    livePlanSnapshots.clear();
     pendingInteractions.clear();
     inFlightInteractionResolves.clear();
     confirmedInteractionDismissals.clear();
@@ -1252,6 +1388,32 @@ function safeStableStringify(value: unknown): string {
   } catch {
     return String(value);
   }
+}
+
+/** 旧 compact_boundary 没有 provider id 时的确定性 replay identity。 */
+function compactBoundaryFingerprint(data: Record<string, unknown>): string {
+  const canonical = canonicalJson(data);
+  return `${fnv1aHex(canonical, 0x811c9dc5)}${fnv1aHex(canonical, 0x9e3779b9)}`;
+}
+
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
+  if (isRecord(value)) {
+    return `{${Object.keys(value)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`)
+      .join(',')}}`;
+  }
+  return JSON.stringify(value) ?? String(value);
+}
+
+function fnv1aHex(value: string, seed: number): string {
+  let hash = seed >>> 0;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return hash.toString(16).padStart(8, '0');
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

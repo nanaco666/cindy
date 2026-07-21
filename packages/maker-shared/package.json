@@ -49,7 +49,9 @@
     "./session-selection": "./src/sessionSelection.ts",
     "./synthetic-trigger": "./src/syntheticTrigger.ts",
     "./system-card": "./src/systemCard.ts",
-    "./tool-use-descriptor": "./src/toolUseDescriptor.ts"
+    "./thinking-text": "./src/thinkingText.ts",
+    "./tool-use-descriptor": "./src/toolUseDescriptor.ts",
+    "./work-activity-projection": "./src/workActivityProjection.ts"
   },
   "scripts": {
     "build": "tsc --noEmit",
