@@ -730,4 +730,82 @@ describe('session-agent-switch handoff injection', () => {
     expect(bootstrapOpts.agentKind).toBe('codex');
     expect(bootstrapOpts.resumeSessionId).toBeUndefined();
   });
+
+  it('排队 drain 端到端:切换在派发时刻落实(关旧引擎)→ createOpts 按 DB 对齐新引擎 → 交接注入新引擎首条 + scheduler origin 透传', async () => {
+    // 复刻 coordinator drain 一条排队 scheduler 心跳时对 sendToAgentAccepted 的调用:
+    // 入队的是裸 prompt(不含交接)+ 旧引擎(claude-code)createOpts。drain 时会话已
+    // 空闲 → applyPendingAgentSwitch 落实切换关掉旧引擎 live session(getSession 为空)
+    // → reconcileCreateOptsWithDb 把 createOpts 对齐到新引擎(codex)→ lazy-create 出新
+    // 引擎 → pending 交接前缀注入发往新引擎的首条消息。证明排队路径不跳过交接。
+    const callOrder: string[] = [];
+    const consumePendingHandoff = vi.fn(() => {
+      callOrder.push('consume');
+    });
+    let newEngineSession: MakerSendTransactionSession | null = null;
+    const { deps } = createDeps({
+      // 切换已关闭旧引擎 live session → drain 时拿不到,走 lazy-create。
+      getSession: vi.fn(() => {
+        callOrder.push('getSession');
+        return undefined;
+      }),
+      applyPendingAgentSwitch: vi.fn(async () => {
+        callOrder.push('applySwitch');
+      }),
+      // DB 真源:切换后 agentKind=codex,旧引擎原生会话 id 作废。
+      reconcileCreateOptsWithDb: vi.fn(async (_sid: string, co: MakerSessionCreateOpts) => {
+        callOrder.push('reconcile');
+        co.agentKind = 'codex';
+        co.resumeSessionId = undefined;
+      }),
+      bootstrapSession: vi.fn(async (opts: MakerSessionCreateOpts) => {
+        newEngineSession = createSession({
+          id: opts.id ?? 'session-1',
+          agentKind: opts.agentKind as AgentKind,
+          workDir: opts.workingDir,
+        });
+        return { session: newEngineSession, didInjectOrcaInstructions: false, didInjectProjectContext: false };
+      }),
+      peekPendingHandoff: vi.fn(async () => '[切换交接] 之前在 claude-code 的进展摘要'),
+      consumePendingHandoff,
+    });
+    const transaction = createMakerSendTransaction(deps);
+
+    const schedulerOrigin = {
+      kind: 'scheduler',
+      scheduleId: 's1',
+      scheduleName: 'PR #193 心跳',
+      runId: 'r1',
+    } as const;
+    await transaction.sendToAgentAccepted(
+      'session-1',
+      { type: 'user', content: 'PR #193 heartbeat prompt' },
+      // 入队时刻捕获的旧引擎 createOpts(stale)。
+      { agentKind: 'claude-code', workingDir: '/tmp/w', resumeSessionId: 'stale-claude-sdk' },
+      {
+        origin: schedulerOrigin,
+        persistUserMessage: { clientId: 'q-client-1', content: 'PR #193 heartbeat prompt' },
+      },
+    );
+
+    // 1. 切换在拿 session 之前落实(关旧引擎),而非发送后才切。
+    expect(callOrder.indexOf('applySwitch')).toBeGreaterThanOrEqual(0);
+    expect(callOrder.indexOf('applySwitch')).toBeLessThan(callOrder.indexOf('getSession'));
+    // 2. lazy-create 前按 DB 对齐 → 新引擎是 codex、旧原生会话 id 作废。
+    const bootstrapOpts = vi.mocked(deps.bootstrapSession).mock.calls[0][0];
+    expect(bootstrapOpts.agentKind).toBe('codex');
+    expect(bootstrapOpts.resumeSessionId).toBeUndefined();
+    // 3. 交接前缀注入发往新引擎的首条 wire 消息,且 scheduler origin 透传。
+    expect(newEngineSession).not.toBeNull();
+    const newSend = vi.mocked((newEngineSession as unknown as MakerSendTransactionSession).send);
+    expect(newSend).toHaveBeenCalledTimes(1);
+    const [sentMessage, sentOpts] = newSend.mock.calls[0];
+    expect((sentMessage as { content: string }).content.startsWith('[切换交接]')).toBe(true);
+    expect((sentMessage as { content: string }).content).toContain('PR #193 heartbeat prompt');
+    expect((sentOpts as { origin?: unknown })?.origin).toEqual(schedulerOrigin);
+    // 4. 落库是用户原文,不含交接段(display 与 sent 分离)。
+    const persisted = vi.mocked(deps.createDbMessage).mock.calls[0]?.[1];
+    expect(persisted?.content).toBe('PR #193 heartbeat prompt');
+    // 5. accepted 之后才消费交接(未派发则保留下次重试)。
+    expect(consumePendingHandoff).toHaveBeenCalledWith('session-1');
+  });
 });
