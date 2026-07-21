@@ -39,6 +39,8 @@ export type RsbWindowCommand =
       focusWorkerSessionId?: string | null;
       searchJump?: ConversationSearchJump | null;
       focusTab?: boolean;
+      /** Global new-maker command should open the add-Worker dialog in this Lead context. */
+      openCreateWorker?: boolean;
     }
   | { type: 'close-orca-workers-tab'; sessionId: string }
   | {

@@ -20,6 +20,7 @@ import { _resetStore, addTab, getBucket, setActiveTab } from '../../../store';
 import {
   clearOrcaWorkersSelectionIntent,
   closeOrcaWorkersTabAfterTeamEnd,
+  consumeOrcaWorkersCreateIntent,
   consumeOrcaWorkersFocusHint,
   consumeOrcaWorkersSearchJump,
   ensureOrcaWorkersTab,
@@ -118,6 +119,36 @@ describe('orca-workers tab actions', () => {
 
     expect(requests).toEqual([{ visibility: 'open', opts: { sessionId: 's1', animate: false } }]);
     off();
+  });
+
+  it('stores a revisioned create-Worker intent while revealing the collaboration tab', async () => {
+    await revealOrcaWorkersTab('s1', { openCreateWorker: true });
+    const tab = getBucket('s1').tabs.find((candidate) => candidate.kind === 'orca-workers');
+
+    expect(tab?.state).toEqual({
+      createWorkerRequestPending: true,
+      createWorkerRequestRevision: 1,
+    });
+    expect(getBucket('s1').activeTabId).toBe(tab?.id);
+  });
+
+  it('consumes only the matching create-Worker intent revision', async () => {
+    await revealOrcaWorkersTab('s1', { openCreateWorker: true });
+    await revealOrcaWorkersTab('s1', { openCreateWorker: true });
+    const tab = getBucket('s1').tabs.find((candidate) => candidate.kind === 'orca-workers');
+    if (!tab) throw new Error('missing collaboration tab');
+
+    await consumeOrcaWorkersCreateIntent('s1', tab.id, 1);
+    expect(getBucket('s1').tabs.find((candidate) => candidate.id === tab.id)?.state).toMatchObject({
+      createWorkerRequestPending: true,
+      createWorkerRequestRevision: 2,
+    });
+
+    await consumeOrcaWorkersCreateIntent('s1', tab.id, 2);
+    expect(getBucket('s1').tabs.find((candidate) => candidate.id === tab.id)?.state).toMatchObject({
+      createWorkerRequestPending: false,
+      createWorkerRequestRevision: 2,
+    });
   });
 
   it('patches a worker focus hint into the singleton tab state', async () => {

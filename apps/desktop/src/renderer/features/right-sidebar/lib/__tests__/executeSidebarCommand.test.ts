@@ -70,6 +70,7 @@ describe('executeSidebarCommand', () => {
       focusWorkerSessionId: 'worker-1',
       searchJump,
       focusTab: false,
+      openCreateWorker: true,
     });
     await executeSidebarCommand({ type: 'close-orca-workers-tab', sessionId: 's1' });
 
@@ -83,6 +84,7 @@ describe('executeSidebarCommand', () => {
       focusWorkerSessionId: 'worker-1',
       searchJump,
       focusTab: false,
+      openCreateWorker: true,
     });
     expect(closeOrcaWorkersTabAfterTeamEnd).toHaveBeenCalledWith('s1');
   });

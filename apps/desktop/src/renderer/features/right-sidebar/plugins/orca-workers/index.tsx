@@ -27,6 +27,7 @@ import { hasTabCloseInterceptor } from '../../store';
 import type { TabKindPlugin } from '../../types';
 import {
   clearOrcaWorkersSelectionIntent,
+  consumeOrcaWorkersCreateIntent,
   consumeOrcaWorkersFocusHint,
   consumeOrcaWorkersSearchJump,
   hydrateOrcaWorkersState,
@@ -134,6 +135,14 @@ function OrcaWorkersTabBody({
     },
     [ctx],
   );
+  const handleCreateWorkerIntentConsumed = useCallback(
+    (revision: number) => {
+      void consumeOrcaWorkersCreateIntent(ctx.sessionId, ctx.tabId, revision).catch((err) => {
+        log.warn('consume create worker intent failed', err);
+      });
+    },
+    [ctx],
+  );
 
   return (
     <OrcaWorkerPanel
@@ -144,9 +153,12 @@ function OrcaWorkersTabBody({
       focusWorkerSessionId={state.focusWorkerSessionId}
       focusWorkerHintRevision={state.focusWorkerHintRevision}
       searchJump={state.searchJump}
+      createWorkerRequestPending={state.createWorkerRequestPending}
+      createWorkerRequestRevision={state.createWorkerRequestRevision}
       onFocusWorkerSessionIdConsumed={handleFocusWorkerSessionIdConsumed}
       onSelectionIntentCleared={handleSelectionIntentCleared}
       onSearchJumpConsumed={handleSearchJumpConsumed}
+      onCreateWorkerRequestConsumed={handleCreateWorkerIntentConsumed}
     />
   );
 }

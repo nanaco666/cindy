@@ -34,6 +34,7 @@ export async function executeSidebarCommand(command: RsbWindowCommand): Promise<
       focusWorkerSessionId: command.focusWorkerSessionId,
       searchJump: command.searchJump,
       focusTab: command.focusTab === true,
+      openCreateWorker: command.openCreateWorker === true,
     });
     return;
   }

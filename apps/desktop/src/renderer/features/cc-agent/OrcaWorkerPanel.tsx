@@ -12,6 +12,7 @@ import { useTranslation } from 'react-i18next';
 
 import { isAgentIslandSupported } from '@/hooks/useAgentIslandSettings';
 import { isSidebarWindow } from '@/lib/sidebarWindow';
+import { canOpenWorkerFromShortcut } from '@/lib/newMakerCommandRouting';
 import { CCAgentSessionView } from './CCAgentSessionView';
 import { CreateWorkerPopover } from './CreateWorkerPopover';
 import { WorkerListToolbar } from './RolePillDropdown';
@@ -29,9 +30,12 @@ export interface OrcaWorkerPanelProps {
   focusWorkerSessionId?: string | null;
   focusWorkerHintRevision?: number;
   searchJump?: ConversationSearchJump | null;
+  createWorkerRequestPending?: boolean;
+  createWorkerRequestRevision?: number;
   onFocusWorkerSessionIdConsumed?: (revision: number) => void;
   onSelectionIntentCleared?: (revision: number) => void;
   onSearchJumpConsumed?: () => void;
+  onCreateWorkerRequestConsumed?: (revision: number) => void;
 }
 
 function sameVisibleSessionPayload(
@@ -51,9 +55,12 @@ export function OrcaWorkerPanel({
   focusWorkerSessionId,
   focusWorkerHintRevision,
   searchJump,
+  createWorkerRequestPending = false,
+  createWorkerRequestRevision = 0,
   onFocusWorkerSessionIdConsumed,
   onSelectionIntentCleared,
   onSearchJumpConsumed,
+  onCreateWorkerRequestConsumed,
 }: OrcaWorkerPanelProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -63,6 +70,7 @@ export function OrcaWorkerPanel({
     activeWorkerCount,
     softLimit,
     hardLimit,
+    refresh,
     selectedWorkerRecord,
     selectedWorkerId,
     workerSessionId,
@@ -81,6 +89,34 @@ export function OrcaWorkerPanel({
     onSelectionIntentCleared,
   });
   const lastAgentIslandPayloadRef = useRef<string | string[] | null>(null);
+  const handledCreateWorkerRevisionRef = useRef(0);
+
+  useEffect(() => {
+    handledCreateWorkerRevisionRef.current = 0;
+  }, [leadSessionId]);
+
+  useEffect(() => {
+    if (!viewVisible || !createWorkerRequestPending || createWorkerRequestRevision <= 0) return;
+    if (handledCreateWorkerRevisionRef.current >= createWorkerRequestRevision) return;
+    handledCreateWorkerRevisionRef.current = createWorkerRequestRevision;
+    onCreateWorkerRequestConsumed?.(createWorkerRequestRevision);
+
+    // Refresh before checking the hard limit: a cold/stale worker cache must never let the
+    // keyboard path open a dialog that the visible create button would disable.
+    void refresh().then((result) => {
+      if (!result || result.status !== 'applied') return;
+      if (!canOpenWorkerFromShortcut(result.workers, hardLimit)) return;
+      setCreateOpen(true);
+    });
+  }, [
+    createWorkerRequestPending,
+    createWorkerRequestRevision,
+    hardLimit,
+    onCreateWorkerRequestConsumed,
+    refresh,
+    setCreateOpen,
+    viewVisible,
+  ]);
 
   useEffect(() => {
     if (!isAgentIslandSupported()) return;

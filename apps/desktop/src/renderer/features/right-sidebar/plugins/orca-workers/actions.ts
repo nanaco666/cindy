@@ -29,6 +29,9 @@ export interface OrcaWorkersState {
   /** 显式 string/null intent 的单调版本；消费清 state 时不递增。 */
   focusWorkerHintRevision?: number;
   searchJump?: ConversationSearchJump | null;
+  /** Pending add-Worker shortcut intent; revision makes consumption CAS-safe. */
+  createWorkerRequestPending?: boolean;
+  createWorkerRequestRevision?: number;
 }
 
 export function hydrateOrcaWorkersState(raw: unknown): OrcaWorkersState {
@@ -54,6 +57,16 @@ export function hydrateOrcaWorkersState(raw: unknown): OrcaWorkersState {
   if (Object.prototype.hasOwnProperty.call(source, 'searchJump')) {
     state.searchJump = parseConversationSearchJump(source.searchJump);
   }
+  if (source.createWorkerRequestPending === true) {
+    state.createWorkerRequestPending = true;
+  }
+  if (
+    typeof source.createWorkerRequestRevision === 'number' &&
+    Number.isSafeInteger(source.createWorkerRequestRevision) &&
+    source.createWorkerRequestRevision >= 0
+  ) {
+    state.createWorkerRequestRevision = source.createWorkerRequestRevision;
+  }
   return state;
 }
 
@@ -62,20 +75,24 @@ export interface OrcaWorkersTabOptions {
   searchJump?: ConversationSearchJump | null;
   focusTab?: boolean;
   animate?: boolean;
+  openCreateWorker?: boolean;
 }
 
 function withWorkerOpenIntent(
   current: unknown,
-  opts: Pick<OrcaWorkersTabOptions, 'focusWorkerSessionId' | 'searchJump'>,
+  opts: Pick<OrcaWorkersTabOptions, 'focusWorkerSessionId' | 'searchJump' | 'openCreateWorker'>,
 ): OrcaWorkersState {
   const state = hydrateOrcaWorkersState(current);
   const hasFocusIntent = opts.focusWorkerSessionId !== undefined;
   const hasSearchJump = opts.searchJump !== undefined;
-  if (!hasFocusIntent && !hasSearchJump) return state;
+  const hasCreateWorkerIntent = opts.openCreateWorker === true;
+  if (!hasFocusIntent && !hasSearchJump && !hasCreateWorkerIntent) return state;
 
   const next: OrcaWorkersState = { ...state };
   // focus / search 都是同一个 worker-open intent；同次 patch 只递增一次。
-  next.focusWorkerHintRevision = (state.focusWorkerHintRevision ?? 0) + 1;
+  if (hasFocusIntent || hasSearchJump) {
+    next.focusWorkerHintRevision = (state.focusWorkerHintRevision ?? 0) + 1;
+  }
   if (hasFocusIntent) {
     next.focusWorkerSessionId = opts.focusWorkerSessionId ?? null;
     // 显式 null 是“清 worker open intent”，不能遗留上一条消息定位意图。
@@ -87,6 +104,10 @@ function withWorkerOpenIntent(
     if (!hasFocusIntent && next.searchJump) {
       next.focusWorkerSessionId = next.searchJump.sessionId;
     }
+  }
+  if (hasCreateWorkerIntent) {
+    next.createWorkerRequestPending = true;
+    next.createWorkerRequestRevision = (state.createWorkerRequestRevision ?? 0) + 1;
   }
   return next;
 }
@@ -100,6 +121,7 @@ async function routeDetachedOrcaWorkersCommand(
     type: 'ensure-orca-workers-tab',
     sessionId: leadSessionId,
     focusTab: opts.focusTab === true,
+    ...(opts.openCreateWorker === true ? { openCreateWorker: true } : {}),
   };
   if (opts.focusWorkerSessionId !== undefined) {
     command.focusWorkerSessionId = opts.focusWorkerSessionId;
@@ -116,7 +138,11 @@ async function ensureOrcaWorkersTabLocal(
   const bucket = getBucket(leadSessionId);
   const existing = bucket.tabs.find((candidate) => candidate.kind === 'orca-workers');
   if (existing) {
-    if (opts.focusWorkerSessionId !== undefined || opts.searchJump !== undefined) {
+    if (
+      opts.focusWorkerSessionId !== undefined ||
+      opts.searchJump !== undefined ||
+      opts.openCreateWorker === true
+    ) {
       await patchTabState(leadSessionId, existing.id, (state) => withWorkerOpenIntent(state, opts));
     }
     if (opts.focusTab && bucket.activeTabId !== existing.id) {
@@ -225,4 +251,21 @@ export async function clearOrcaWorkersSelectionIntent(
     focusWorkerHintRevision: revision,
     searchJump: null,
   }));
+}
+
+/** Consume one add-Worker shortcut intent without clearing a newer request. */
+export async function consumeOrcaWorkersCreateIntent(
+  leadSessionId: string,
+  tabId: string,
+  revision: number,
+): Promise<void> {
+  await patchTabState(leadSessionId, tabId, (raw) => {
+    const state = hydrateOrcaWorkersState(raw);
+    if ((state.createWorkerRequestRevision ?? 0) !== revision) return raw;
+    return {
+      ...state,
+      createWorkerRequestPending: false,
+      createWorkerRequestRevision: revision,
+    };
+  });
 }
