@@ -59,6 +59,24 @@ describe('Orca worker control IPC handlers', () => {
     });
   });
 
+  it('passes the done-state guard to the idle service boundary', async () => {
+    const harness = new IpcHarness();
+    const deps = createDeps();
+    registerOrcaWorkerControlHandlers(harness, deps);
+
+    await harness.invoke(MAKER_INVOKE.WORKER_IDLE, {
+      leadSessionId: 'lead-1',
+      workerId: 'worker-1',
+      expectedStatus: 'done',
+    });
+
+    expect(deps.idleWorker).toHaveBeenCalledWith({
+      callerLeadSessionId: 'lead-1',
+      workerId: 'worker-1',
+      expectedStatus: 'done',
+    });
+  });
+
   it('passes caller lead and worker id to the archive service boundary', async () => {
     const harness = new IpcHarness();
     const deps = createDeps();

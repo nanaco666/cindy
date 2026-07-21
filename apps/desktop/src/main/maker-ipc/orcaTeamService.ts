@@ -228,7 +228,7 @@ export interface OrcaTeamService {
   /** 外部调用边界：按 caller lead 校验 worker 可见性。内部可信派活请用 dispatchWorkerTask。 */
   sendToWorker(params: { callerLeadSessionId: string; targetSessionId: string; message: string }): Promise<SendToWorkerResult>;
   /** 外部调用边界：按 caller lead 校验 worker 可见性。 */
-  idleWorker(params: { callerLeadSessionId: string; workerId: string }): Promise<OrcaOkResult>;
+  idleWorker(params: { callerLeadSessionId: string; workerId: string; expectedStatus?: 'done' }): Promise<OrcaOkResult>;
   /** 外部调用边界：按 caller lead 校验 worker 可见性。 */
   archiveWorker(params: { callerLeadSessionId: string; workerId: string }): Promise<OrcaOkResult>;
   /** 外部调用边界：列出目标 worker 输入队列中的排队消息(lead 自己的条目含正文)。 */
@@ -648,10 +648,17 @@ export function createOrcaTeamService(deps: OrcaTeamServiceDeps): OrcaTeamServic
     };
   }
 
-  async function idleWorker(params: { callerLeadSessionId: string; workerId: string }): Promise<OrcaOkResult> {
+  async function idleWorker(params: { callerLeadSessionId: string; workerId: string; expectedStatus?: 'done' }): Promise<OrcaOkResult> {
     const found = await resolveWorkerRef(params.callerLeadSessionId, params.workerId);
     if (!found.ok) return workerRefFailureForControl(params.workerId, found);
     const { link, worker } = found;
+    if (params.expectedStatus && worker.status !== params.expectedStatus) {
+      return {
+        ok: false,
+        errorCode: 'WORKER_STATE_CHANGED',
+        message: `worker ${params.workerId} is ${worker.status}, expected ${params.expectedStatus}`,
+      };
+    }
     if (worker.status === 'idle') {
       return { ok: false, errorCode: 'ALREADY_IDLE', message: `worker ${params.workerId} is already idle` };
     }

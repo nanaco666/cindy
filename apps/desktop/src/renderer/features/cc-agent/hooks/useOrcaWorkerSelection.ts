@@ -12,6 +12,7 @@ import type { CreateWorkerForm } from '../CreateWorkerPopover';
 import { getCollaborationStartErrorMessage } from '../collaborationErrors';
 import { createWorkerLabel } from '../workerLabel';
 import { useWorkers } from './useWorkers';
+import { clearWorkerAttention } from '../lib/workerAttentionStore';
 
 function parseSearchJump(state: unknown): ConversationSearchJump | null {
   if (!state || typeof state !== 'object') return null;
@@ -50,6 +51,7 @@ export function useOrcaWorkerSelection({
   const activeFocusWorkerHintRevisionRef = useRef(0);
   const selectionIntentGenerationRef = useRef(0);
   const pendingFocusTimeoutRef = useRef<number | null>(null);
+  const acknowledgingDoneWorkerIdsRef = useRef<Set<string>>(new Set());
   const focusWorkerSessionIdRef = useRef(focusWorkerSessionId);
   focusWorkerSessionIdRef.current = focusWorkerSessionId;
   const onFocusWorkerSessionIdConsumedRef = useRef(onFocusWorkerSessionIdConsumed);
@@ -271,16 +273,29 @@ export function useOrcaWorkerSelection({
   const handleSwitchFocus = useCallback(
     (workerId: string) => {
       clearSelectionHints();
-      void orcaWorkflowsFor(leadSessionId)
-        .switchFocus({
-          leadSessionId,
-          workerIdOrLabel: workerId,
-        })
-        .then(() => refresh())
-        .catch((err: unknown) => {
+      const worker = workersRef.current.find((item) => item.workerId === workerId);
+      const acknowledgeDone = worker?.status === 'done';
+      if (acknowledgeDone && acknowledgingDoneWorkerIdsRef.current.has(workerId)) return;
+      if (acknowledgeDone) acknowledgingDoneWorkerIdsRef.current.add(workerId);
+      void (async () => {
+        try {
+          const workflows = orcaWorkflowsFor(leadSessionId);
+          await workflows.switchFocus({
+            leadSessionId,
+            workerIdOrLabel: workerId,
+          });
+          if (acknowledgeDone) {
+            await workflows.idleWorker(leadSessionId, workerId, 'done');
+          }
+          clearWorkerAttention(workerId);
+          await refresh();
+        } catch (err: unknown) {
           const msg = err instanceof Error ? err.message : String(err);
           toast.error(msg);
-        });
+        } finally {
+          if (acknowledgeDone) acknowledgingDoneWorkerIdsRef.current.delete(workerId);
+        }
+      })();
     },
     [clearSelectionHints, leadSessionId, refresh],
   );

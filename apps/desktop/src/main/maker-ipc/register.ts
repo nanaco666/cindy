@@ -735,7 +735,7 @@ interface OrcaCollabService {
   listWorkerQueuedMessages: (params: { callerLeadSessionId: string; workerRef: string }) => Promise<ListWorkerQueuedMessagesResult>;
   updateWorkerQueuedMessage: (params: { callerLeadSessionId: string; workerRef: string; queuedMessageId: string; message: string }) => Promise<WorkerQueuedMessageControlResult>;
   cancelWorkerQueuedMessage: (params: { callerLeadSessionId: string; workerRef: string; queuedMessageId: string }) => Promise<WorkerQueuedMessageControlResult>;
-  idleWorker: (params: { callerLeadSessionId: string; workerId: string }) => Promise<
+  idleWorker: (params: { callerLeadSessionId: string; workerId: string; expectedStatus?: 'done' }) => Promise<
     { ok: true; workerId?: string } | { ok: false; errorCode: string; message: string }
   >;
   endTeam: (params: { leadSessionId: string }) => Promise<
@@ -5199,9 +5199,9 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
         return { ok: false, errorCode: 'INTERNAL', message: err instanceof Error ? err.message : String(err) };
       }
     },
-    idleWorker: async ({ callerLeadSessionId, workerId }) => {
+    idleWorker: async ({ callerLeadSessionId, workerId, expectedStatus }) => {
       try {
-        return await orcaTeamService.idleWorker({ callerLeadSessionId, workerId });
+        return await orcaTeamService.idleWorker({ callerLeadSessionId, workerId, expectedStatus });
       } catch (err) {
         return { ok: false, errorCode: 'INTERNAL', message: err instanceof Error ? err.message : String(err) };
       }

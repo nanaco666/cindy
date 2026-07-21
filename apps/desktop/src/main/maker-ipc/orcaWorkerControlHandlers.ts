@@ -6,9 +6,10 @@ import { throwOrcaServiceFailure } from './orcaServiceFailure.js';
 type OrcaWorkerControlResult =
   | { ok: true; workerId?: string }
   | { ok: false; errorCode: string; message: string };
+type IdleWorkerExpectedStatus = 'done';
 
 export interface OrcaWorkerControlHandlerDeps {
-  idleWorker(params: { callerLeadSessionId: string; workerId: string }): Promise<OrcaWorkerControlResult>;
+  idleWorker(params: { callerLeadSessionId: string; workerId: string; expectedStatus?: IdleWorkerExpectedStatus }): Promise<OrcaWorkerControlResult>;
   archiveWorker(params: { callerLeadSessionId: string; workerId: string }): Promise<OrcaWorkerControlResult>;
   logInfo(message: string, fields?: Record<string, unknown>): void;
 }
@@ -26,6 +27,7 @@ export function registerOrcaWorkerControlHandlers(
       result = await deps.idleWorker({
         callerLeadSessionId: b.leadSessionId,
         workerId: b.workerId,
+        ...(b.expectedStatus ? { expectedStatus: b.expectedStatus } : {}),
       });
     } catch (err) {
       throwIpcError('INTERNAL', err instanceof Error ? err.message : String(err));
@@ -53,9 +55,20 @@ export function registerOrcaWorkerControlHandlers(
   });
 }
 
-function readWorkerControlPayload(body: unknown): { leadSessionId: string; workerId: string } {
+function readWorkerControlPayload(body: unknown): {
+  leadSessionId: string;
+  workerId: string;
+  expectedStatus?: IdleWorkerExpectedStatus;
+} {
   const b = body as Record<string, unknown> | null | undefined;
   if (!b || typeof b.workerId !== 'string') throwIpcError('INVALID_PARAMS', 'workerId required');
   if (typeof b.leadSessionId !== 'string') throwIpcError('INVALID_PARAMS', 'leadSessionId required');
-  return { leadSessionId: b.leadSessionId, workerId: b.workerId };
+  if (b.expectedStatus !== undefined && b.expectedStatus !== 'done') {
+    throwIpcError('INVALID_PARAMS', 'expectedStatus must be done');
+  }
+  return {
+    leadSessionId: b.leadSessionId,
+    workerId: b.workerId,
+    ...(b.expectedStatus === 'done' ? { expectedStatus: 'done' } : {}),
+  };
 }

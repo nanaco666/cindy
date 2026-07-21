@@ -6,11 +6,17 @@ import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { WorkerInfo } from '../useWorkers';
+import {
+  __resetWorkerAttentionStoreForTest,
+  hasWorkerAttention,
+  markWorkerAttention,
+} from '../../lib/workerAttentionStore';
 
 const mocks = vi.hoisted(() => ({
   workers: [] as WorkerInfo[],
   refresh: vi.fn(),
   switchFocus: vi.fn(async () => undefined),
+  idleWorker: vi.fn(async () => ({ ok: true as const, workerId: 'worker-b' })),
 }));
 
 vi.mock('../useWorkers', () => ({
@@ -28,6 +34,7 @@ vi.mock('@/lib/makerTransport', () => ({
   orcaWorkflowsFor: () => ({
     createWorker: vi.fn(async () => undefined),
     switchFocus: mocks.switchFocus,
+    idleWorker: mocks.idleWorker,
     archiveWorker: vi.fn(async () => undefined),
   }),
 }));
@@ -40,7 +47,12 @@ vi.mock('@/lib/toast', () => ({
 
 import { useOrcaWorkerSelection } from '../useOrcaWorkerSelection';
 
-function makeWorker(workerId: string, sessionId: string, focused = false): WorkerInfo {
+function makeWorker(
+  workerId: string,
+  sessionId: string,
+  focused = false,
+  status: WorkerInfo['status'] = 'idle',
+): WorkerInfo {
   return {
     workerId,
     sessionId,
@@ -49,7 +61,7 @@ function makeWorker(workerId: string, sessionId: string, focused = false): Worke
     model: 'gpt-5.4',
     effort: null,
     label: null,
-    status: 'idle',
+    status,
     focused,
     idleSince: null,
   };
@@ -73,6 +85,90 @@ describe('useOrcaWorkerSelection', () => {
       workers: mocks.workers,
     });
     mocks.switchFocus.mockClear();
+    mocks.idleWorker.mockClear();
+    mocks.idleWorker.mockResolvedValue({ ok: true, workerId: 'worker-b' });
+    __resetWorkerAttentionStoreForTest();
+  });
+
+  it('acknowledges a done worker after switching focus and clears attention after success', async () => {
+    mocks.workers = [
+      makeWorker('worker-a', 'session-a', true),
+      makeWorker('worker-b', 'session-b', false, 'done'),
+    ];
+    markWorkerAttention('worker-b');
+    const { result } = renderHook(
+      () => useOrcaWorkerSelection({ leadSessionId: 'lead-1' }),
+      { wrapper },
+    );
+
+    act(() => result.current.handleSwitchFocus('worker-b'));
+
+    await waitFor(() => {
+      expect(mocks.idleWorker).toHaveBeenCalledWith('lead-1', 'worker-b', 'done');
+    });
+    expect(hasWorkerAttention('worker-b')).toBe(false);
+    expect(mocks.refresh).toHaveBeenCalled();
+  });
+
+  it('keeps done attention when the main state transition fails', async () => {
+    mocks.workers = [
+      makeWorker('worker-a', 'session-a', true),
+      makeWorker('worker-b', 'session-b', false, 'done'),
+    ];
+    mocks.idleWorker.mockRejectedValueOnce(new Error('worker state changed'));
+    markWorkerAttention('worker-b');
+    const { result } = renderHook(
+      () => useOrcaWorkerSelection({ leadSessionId: 'lead-1' }),
+      { wrapper },
+    );
+
+    act(() => result.current.handleSwitchFocus('worker-b'));
+
+    await waitFor(() => {
+      expect(mocks.idleWorker).toHaveBeenCalledWith('lead-1', 'worker-b', 'done');
+    });
+    expect(hasWorkerAttention('worker-b')).toBe(true);
+  });
+
+  it('does not idle a running worker when switching focus', async () => {
+    mocks.workers = [
+      makeWorker('worker-a', 'session-a', true),
+      makeWorker('worker-b', 'session-b', false, 'running'),
+    ];
+    const { result } = renderHook(
+      () => useOrcaWorkerSelection({ leadSessionId: 'lead-1' }),
+      { wrapper },
+    );
+
+    act(() => result.current.handleSwitchFocus('worker-b'));
+
+    await waitFor(() => expect(mocks.refresh).toHaveBeenCalled());
+    expect(mocks.idleWorker).not.toHaveBeenCalled();
+  });
+
+  it('does not issue duplicate done acknowledgements while the first one is pending', async () => {
+    mocks.workers = [
+      makeWorker('worker-a', 'session-a', true),
+      makeWorker('worker-b', 'session-b', false, 'done'),
+    ];
+    let resolveIdle!: (value: { ok: true; workerId: string }) => void;
+    mocks.idleWorker.mockReturnValueOnce(
+      new Promise<{ ok: true; workerId: string }>((resolve) => {
+        resolveIdle = resolve;
+      }),
+    );
+    const { result } = renderHook(
+      () => useOrcaWorkerSelection({ leadSessionId: 'lead-1' }),
+      { wrapper },
+    );
+
+    act(() => {
+      result.current.handleSwitchFocus('worker-b');
+      result.current.handleSwitchFocus('worker-b');
+    });
+
+    await waitFor(() => expect(mocks.idleWorker).toHaveBeenCalledTimes(1));
+    await act(async () => resolveIdle({ ok: true, workerId: 'worker-b' }));
   });
 
   it('pins an explicit focusWorkerSessionId ahead of the current focused worker until the user switches', async () => {

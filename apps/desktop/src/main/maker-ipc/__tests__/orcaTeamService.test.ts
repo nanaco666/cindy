@@ -922,6 +922,40 @@ describe('OrcaTeamService', () => {
     ]);
   });
 
+  it('marks a done worker idle when the caller confirms the viewed status', async () => {
+    const { calls, service, setWorker } = createDeps();
+    setWorker(createWorker({ status: 'done' }));
+
+    await expect(service.idleWorker({
+      callerLeadSessionId: 'lead-1',
+      workerId: 'worker-1',
+      expectedStatus: 'done',
+    })).resolves.toEqual({ ok: true, workerId: 'worker-1' });
+
+    expect(calls).toEqual([
+      'markWorkerIdle',
+      'closeWorkerSession:worker-session-1',
+      'broadcastOrcaWorkerChanged',
+    ]);
+  });
+
+  it('rejects a viewed-status idle request when the worker became running', async () => {
+    const { calls, service, setWorker } = createDeps();
+    setWorker(createWorker({ status: 'running' }));
+
+    await expect(service.idleWorker({
+      callerLeadSessionId: 'lead-1',
+      workerId: 'worker-1',
+      expectedStatus: 'done',
+    })).resolves.toEqual({
+      ok: false,
+      errorCode: 'WORKER_STATE_CHANGED',
+      message: 'worker worker-1 is running, expected done',
+    });
+
+    expect(calls).toEqual([]);
+  });
+
   it.each([
     ['worker id', 'worker-1'],
     ['worker session id', 'worker-session-1'],
