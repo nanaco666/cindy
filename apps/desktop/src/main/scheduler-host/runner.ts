@@ -261,6 +261,7 @@ export class MakerScheduleRunner implements ScheduleRunner {
   async fire(schedule: Schedule, ctx: FireContext): Promise<FireResult> {
     const holder: EphemeralSessionHolder = {};
     try {
+      throwIfFireAborted(ctx.signal);
       return await this.fireInner(schedule, ctx, holder);
     } finally {
       if (holder.sessionId && !holder.keepAlive && !isSessionInTurn(holder.sessionId)) {
@@ -473,6 +474,9 @@ export class MakerScheduleRunner implements ScheduleRunner {
     }
 
     // 3. workingDir 解析（heartbeat 模式不允许自己建 worktree —— 已有 session 的 workDir 是权威）
+    // The heartbeat metadata lookup above can take time.  Check again before
+    // allocating a dialogue directory or creating an ephemeral worktree.
+    throwIfFireAborted(ctx.signal);
     let workingDir = isHeartbeat ? heartbeatWorkingDir : schedule.workingDir;
     // 未指定目录且不要 worktree → 回退 dialogue 语义(分配 app 管理的工作区)。
     // MCP/对话路径创建的任务经常不带 workingDir,而引擎 create() 默认
@@ -597,6 +601,9 @@ export class MakerScheduleRunner implements ScheduleRunner {
         });
       }
     }
+    // The worktree path can also await filesystem work, so cancellation may
+    // have arrived after the preceding guard.  Never create a late session.
+    throwIfFireAborted(ctx.signal);
     let session: Awaited<ReturnType<Maker['createSession']>>;
     try {
       session = await this.deps.maker.createSession({
@@ -804,6 +811,10 @@ export class MakerScheduleRunner implements ScheduleRunner {
       const outgoingMessage = pendingHandoff
         ? prependHandoffToUserMessage({ type: 'user', content: promptToSend }, pendingHandoff)
         : { type: 'user' as const, content: promptToSend };
+      // session.abort() is best-effort when no turn has started yet.  The
+      // explicit guard prevents a cancellation racing the setup above from
+      // dispatching a new agent turn.
+      throwIfFireAborted(ctx.signal);
       const sendResult = await session.send(outgoingMessage as never, {
         origin,
         planMode: false,
@@ -1436,6 +1447,17 @@ function extractErr(data: unknown): string {
     return String((data as { message: unknown }).message);
   }
   return String(data);
+}
+
+/**
+ * Stops a cancelled run at a side-effect boundary. Scheduler derives the final
+ * run status from the signal; this guard prevents late session or turn creation
+ * after a delete/pause won the race.
+ */
+function throwIfFireAborted(signal: AbortSignal): void {
+  if (signal.aborted) {
+    throw new Error('schedule fire aborted before dispatch');
+  }
 }
 
 /**
