@@ -28,8 +28,12 @@ export interface ChatFilePathTarget {
 
 export interface ChatFilePathContextValue {
   deviceId: string;
+  /** 当前会话 id；SSH 媒体取件由被控端据此反查可信 host/workdir。 */
+  sessionId: string;
   /** 被控端会话 workdir(host-native 绝对路径,Windows 被控端为反斜杠形态)。 */
   workdir: string;
+  /** SSH 会话的远端 host id；本地会话为空。媒体取件必须据此避免把远端路径当桌面本地路径。 */
+  remoteHostId?: string;
   /** 远端 stat 执行体(会话屏包装 openLink + transport)。 */
   statPath: RemotePathStatFn;
   /** chip 点击导航(会话屏 router.push 到文件预览 / 文件浏览器)。 */

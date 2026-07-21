@@ -8,11 +8,12 @@
  *
  * 安全:本函数仅由 dispatch.runInvoke 在三道 gate(remoteControlEnabled + 未撤销 + allowlist)
  * 之后调用 —— 调用方已是「同账号 + 显式 opt-in 被控 + 未撤销」的受信控制端。
- * 仅放行 5 个本机媒体 scheme(4 个 xdt 系 + 媒体总仓 cindy-media);file/audio
- * 的 ?path= 强制绝对路径,且与 xdt-file
- * 协议 handler 共用同一份敏感目录黑名单(realpath 后校验,realpath 结果用于
- * 后续 stat/上传,关 TOCTOU 窗口)——取件 URL 可能来自 agent 渲染的内容,
- * 不能只信控制端意图,敏感边界必须与本地 xdt-file 渲染一致。
+ * 仅放行 5 个媒体 scheme(4 个 xdt 系 + 媒体总仓 cindy-media)。file/audio
+ * 的本机 ?path= 强制绝对路径,且与 xdt-file 协议 handler 共用同一份
+ * 敏感目录黑名单(realpath 后校验,并用 realpath 结果关 TOCTOU 窗口);
+ * 携带 remoteHostId + workdir 的 SSH 路径则走 file-service workdir 限界与磁盘缓存,
+ * 绝不进入被控桌面的本机 realpath。取件 URL 可能来自 agent 渲染的内容,
+ * 不能只信控制端意图,两条路径都必须在服务端重新校验边界。
  *
  * 上传去重(仅图片):控制端(手机缩略图 / 桌面查看)可能在短时间窗内对同一 url 反复
  * 取件,而每次取件都是一次真实 OSS 上传。对 xdt-image:// 按 url 缓存上次上传的 ossKey,
@@ -29,6 +30,8 @@ import * as imageCacheStore from '../imageCacheStore.js';
 import * as videoCacheStore from '../videoCacheStore.js';
 import * as cindyMediaBlobStore from '../cindy-media/blobStore.js';
 import { getSensitiveMediaBlocklist, isPathAllowedAgainst } from '../filePathPolicy.js';
+import { materializeSshRemoteMedia } from '../file-browser/ssh-media.js';
+import { getSessionFsSnapshot } from '../localDb/ipc/sessions.js';
 import { uploadLocalFile } from './mediaTransfer.js';
 import { createLogger } from '../logger.js';
 
@@ -148,6 +151,38 @@ function parsePathQuery(url: string): string {
   return path.resolve(p);
 }
 
+/**
+ * xdt-file/audio URL 上的 SSH 取件上下文。URL 只作声明，真正的 host/workdir
+ * 必须按 sessionId 从本地会话库反查，并与 URL 声明逐项一致后才可使用。
+ */
+async function parseSshMediaOrigin(url: string): Promise<{ remoteHostId: string; workdir: string } | null> {
+  const params = new URL(url).searchParams;
+  const hasSessionId = params.has('sessionId');
+  const hasRemoteHostId = params.has('remoteHostId');
+  const hasWorkdir = params.has('workdir');
+  if (!hasSessionId && !hasRemoteHostId && !hasWorkdir) return null;
+
+  const sessionId = params.get('sessionId') ?? '';
+  const remoteHostId = params.get('remoteHostId') ?? '';
+  const workdir = params.get('workdir') ?? '';
+  if (!hasSessionId || !hasRemoteHostId || !hasWorkdir
+    || !sessionId.trim() || !remoteHostId.trim() || !workdir.trim()) {
+    throw new Error('SSH 媒体参数不完整：sessionId、remoteHostId 和 workdir 必须同时提供');
+  }
+
+  const snapshot = await getSessionFsSnapshot(sessionId);
+  if (!snapshot) throw new Error('SSH 媒体会话不存在');
+  const trustedRemoteHostId = snapshot.remoteHostId ?? '';
+  const trustedWorkdir = snapshot.workingDir ?? '';
+  if (!trustedRemoteHostId.trim() || !trustedWorkdir.trim()) {
+    throw new Error('SSH 媒体会话不是有效的 SSH 会话');
+  }
+  if (remoteHostId !== trustedRemoteHostId || workdir !== trustedWorkdir) {
+    throw new Error('SSH 媒体上下文与会话记录不一致');
+  }
+  return { remoteHostId: trustedRemoteHostId, workdir: trustedWorkdir };
+}
+
 /** 原始媒体 URL → { absPath, mimeType? }(按 scheme 选解析器)。 */
 function resolveLocalMedia(url: string): { absPath: string; mimeType?: string } {
   if (url.startsWith('xdt-image://')) return imageCacheStore.resolveSafe(url);
@@ -205,7 +240,20 @@ export async function fetchLocalMediaToOss(arg: unknown): Promise<MediaFetchResu
   const url = record.url;
   if (typeof url !== 'string' || !url) throw new Error('media:fetch 缺少 url');
   const skipCache = record.skipCache === true;
-  let { absPath, mimeType } = resolveLocalMedia(url);
+  const isPathMedia = url.startsWith('xdt-file://') || url.startsWith('xdt-audio://');
+  const sshOrigin = isPathMedia ? await parseSshMediaOrigin(url) : null;
+  let absPath: string;
+  let mimeType: string | undefined;
+  if (sshOrigin) {
+    const materialized = await materializeSshRemoteMedia(sshOrigin, url);
+    if (!materialized.ok) {
+      throw new Error(`SSH 媒体取回失败（${materialized.status}）：${materialized.message}`);
+    }
+    absPath = materialized.cachePath;
+    mimeType = materialized.mime;
+  } else {
+    ({ absPath, mimeType } = resolveLocalMedia(url));
+  }
   // For file/audio schemes the requested URL path carries the semantic
   // extension; if it resolves through a symlink whose target has a different
   // (or no) extension, uploads must still name/type by the requested ext so
@@ -217,7 +265,7 @@ export async function fetchLocalMediaToOss(arg: unknown): Promise<MediaFetchResu
   // handler 同一份敏感目录黑名单;xdt-image/xdt-video 解析自 app 缓存目录,
   // 由 resolveSafe 保证不出缓存根,无需重复校验。realpath 先行(挡 symlink
   // 逃逸),其结果用于后续 stat/上传(关 check→open 的 TOCTOU 窗口)。
-  if (url.startsWith('xdt-file://') || url.startsWith('xdt-audio://')) {
+  if (isPathMedia && !sshOrigin) {
     // 字面路径 blocklist 先查(在 realpath 之前):敏感请求路径确定性拒绝,
     // 不因 realpath 的权限失败(EACCES/EPERM)漏判(同 xdt-file/xdt-audio handler)。
     if (!isPathAllowedAgainst(absPath, getSensitiveMediaBlocklist())) {
@@ -302,6 +350,7 @@ export async function fetchLocalMediaToOss(arg: unknown): Promise<MediaFetchResu
 export const __testing = {
   resolveLocalMedia,
   parsePathQuery,
+  parseSshMediaOrigin,
   uploadCache,
   UPLOAD_CACHE_TTL_MS,
   UPLOAD_CACHE_MAX,

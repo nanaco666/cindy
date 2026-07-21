@@ -1,5 +1,5 @@
 import { normalizeMathDelimiters } from '@lizi/maker-shared/math-markdown';
-import { classifyChatPathLinkTarget } from '@/session/chatPathCandidate';
+import { classifyChatPathLinkTarget, resolveChatAbsPath } from '@/session/chatPathCandidate';
 import { DEEP_LINK_SCHEME_GROUP } from '@/session/sessionLinks';
 
 export type MobileMarkdownInline =
@@ -16,7 +16,8 @@ export type MobileMarkdownInline =
   | MobileMarkdownImageInline;
 
 // 正文图片:来自 ![alt](url) 或模型常用的 raw HTML <img src="..." width="150">(见桌面端 remarkHtmlImages)。
-// 只接受 http(s) URL;width/height 是可选的展示提示(像素),渲染端仍会按容器宽度收缩。
+// Markdown 图片还可保留桌面本地/相对路径;会话渲染时再结合被控端 workdir
+// 转成 xdt-file 取件 URL。width/height 是可选的展示提示(像素)。
 export interface MobileMarkdownImageInline {
   type: 'image';
   alt: string;
@@ -334,6 +335,61 @@ export function collectMobileMarkdownImages(input: string): MobileMarkdownImageI
     }
   }
   return images;
+}
+
+/**
+ * Markdown 图片地址 → 手机可消费地址。本地相对路径必须在消费点结合被控端
+ * workdir 解析,再复用既有 xdt-file/media:fetch 链路;不让手机尝试读取 file://。
+ * 原始路径只在这里解包一次,避免空格、%20 与字面百分号被二次编码。cacheKey
+ * 用消息身份区分同一路径的后续引用,让手机端按 URL 缓存的 resolver 不复用旧图。
+ * SSH 会话额外携带 sessionId + remoteHostId + workdir；被控端必须按 sessionId
+ * 反查可信 SSH 上下文后再走 file-service，绝不能只信 Markdown URL 里的路径边界。
+ */
+export function mobileMarkdownImageUrlForWorkdir(
+  url: string,
+  workdir?: string,
+  cacheKey?: string,
+  remoteHostId?: string,
+  sessionId?: string,
+): string | null {
+  if (SAFE_IMAGE_SRC_RE.test(url)) {
+    const normalized = normalizeImageUrlScheme(url);
+    if (!normalized.startsWith('xdt-file://')) return normalized;
+    try {
+      const parsed = new URL(normalized);
+      if (!parsed.searchParams.get('path')) return null;
+      // 旧 cache key 同样来自 Markdown，不得影响当前消息的资源身份；统一在上下文后重建。
+      parsed.searchParams.delete('v');
+      if (remoteHostId) {
+        if (!workdir || !sessionId) return null;
+        // 必须覆盖而非 append：Markdown 来源不可信，旧参数不得选择其它 SSH 会话/host/workdir。
+        parsed.searchParams.delete('sessionId');
+        parsed.searchParams.delete('remoteHostId');
+        parsed.searchParams.delete('workdir');
+        parsed.searchParams.set('sessionId', sessionId);
+        parsed.searchParams.set('remoteHostId', remoteHostId);
+        parsed.searchParams.set('workdir', workdir);
+      } else {
+        // 本地会话同样不能信任 Markdown 自带的 SSH context，否则会把本机取件导向任意 SSH host。
+        parsed.searchParams.delete('sessionId');
+        parsed.searchParams.delete('remoteHostId');
+        parsed.searchParams.delete('workdir');
+      }
+      if (cacheKey) parsed.searchParams.set('v', cacheKey);
+      return parsed.toString();
+    } catch {
+      return null;
+    }
+  }
+  if (!workdir || !classifyChatPathLinkTarget(url)) return null;
+  const absPath = resolveChatAbsPath(url, workdir);
+  const base = `xdt-file://open?path=${encodeURIComponent(absPath)}`;
+  if (remoteHostId && !sessionId) return null;
+  const sshContext = remoteHostId && sessionId
+    ? `&sessionId=${encodeURIComponent(sessionId)}&remoteHostId=${encodeURIComponent(remoteHostId)}&workdir=${encodeURIComponent(workdir)}`
+    : '';
+  const version = cacheKey ? `&v=${encodeURIComponent(cacheKey)}` : '';
+  return `${base}${sshContext}${version}`;
 }
 
 // 流式(native)路径下正文图片的缩略图尺寸:默认宽 150,宽高都封顶 220。有声明宽高时按比例
@@ -857,6 +913,25 @@ function normalizeImageUrlScheme(url: string): string {
 // URL 由 ")" 定界,支持一层平衡括号(![x](https://e.com/shot(1).png),CommonMark 语义);
 // 不做尾部标点裁剪——那是裸 URL 场景的规则,这里边界已由定界符明确。
 const MARKDOWN_IMAGE_RE = /!\[([^\]]*)\]\(((?:https?|xdt-image|xdt-file|cindy-media):\/\/(?:[^()\s]|\([^()\s]*\))+)\)/gi;
+// 本地图片目标允许空格(模型常直接输出 `![图](docs/a b.png)`),但只在路径
+// classifier 通过时接纳,不会把 javascript/mailto 等任意 scheme 变成图片。
+// 尖括号是 CommonMark 对含空格 destination 的无歧义写法,产出的 url 去掉括号。
+const LOCAL_MARKDOWN_IMAGE_RE = /!\[([^\]]*)\]\((<[^>\n]+>|(?:[^()\n]|\([^()\n]*\))+)\)/g;
+
+/**
+ * 本地 Markdown 图片 destination → 路径。保留模型常输出的裸空格路径，
+ * 只剥离由空白分隔、位于末尾的标准可选 title（双引号 / 单引号 / 括号）。
+ */
+function parseLocalMarkdownImageDestination(raw: string): string {
+  let destination = raw.trim();
+  const quotedTitle = destination.match(/^(.*\S)[ \t]+(["'])(?:[^\n]|\\.)*\2$/);
+  const parenthesizedTitle = destination.match(/^(.*\S)[ \t]+\([^()\n]*\)$/);
+  destination = (quotedTitle?.[1] ?? parenthesizedTitle?.[1] ?? destination).trim();
+  if (destination.startsWith('<') && destination.endsWith('>')) {
+    return destination.slice(1, -1).trim();
+  }
+  return destination;
+}
 
 // HTML 注释里的 Markdown 图片是被注释掉的内容,不渲染(桌面端 skipHtml 同样留字面/丢弃);
 // 只压制落在注释 span 内的匹配,注释之外的合法图片不受影响(与 matchHtmlImage 的整段拒转不同,
@@ -895,19 +970,34 @@ function matchMarkdownImage(
   // 标签守卫,注释里的 <div> 不触发整段拒转),注释外合法图不受影响。
   const guardedNoComments = blankBenignInlineTags(blankHtmlComments(guarded, startsInsideHtmlComment));
   if (NON_IMG_HTML_TAG_RE.test(guardedNoComments) || NON_COMMENT_MARKUP_RE.test(guardedNoComments)) return null;
-  MARKDOWN_IMAGE_RE.lastIndex = from;
-  let match: RegExpExecArray | null;
-  while ((match = MARKDOWN_IMAGE_RE.exec(input)) !== null) {
-    if (isInsideHtmlComment(guarded, match.index, startsInsideHtmlComment)) continue;
-    // CommonMark 反斜杠转义:\![alt](url) 是在示范语法、应保持字面(review 实捉)。
-    if (isBackslashEscaped(input, match.index)) continue;
+  const matchers: Array<{ re: RegExp; local: boolean }> = [
+    { re: MARKDOWN_IMAGE_RE, local: false },
+    { re: LOCAL_MARKDOWN_IMAGE_RE, local: true },
+  ];
+  const matches: Array<{ match: RegExpExecArray; url: string }> = [];
+  for (const matcher of matchers) {
+    matcher.re.lastIndex = from;
+    let candidate: RegExpExecArray | null;
+    while ((candidate = matcher.re.exec(input)) !== null) {
+      const rawUrl = matcher.local ? parseLocalMarkdownImageDestination(candidate[2]) : candidate[2];
+      if (matcher.local && !classifyChatPathLinkTarget(rawUrl)) continue;
+      // 当前 matcher 的第一个正则命中可能只是注释/转义里的示例;必须继续 exec,
+      // 否则同段后面的合法图片会被丢掉(review P2)。
+      if (isInsideHtmlComment(guarded, candidate.index, startsInsideHtmlComment)) continue;
+      if (isBackslashEscaped(input, candidate.index)) continue;
+      matches.push({ match: candidate, url: rawUrl });
+      break;
+    }
+  }
+  matches.sort((a, b) => a.match.index - b.match.index || a.match[0].length - b.match[0].length);
+  for (const { match, url } of matches) {
     return {
       index: match.index,
       end: match.index + match[0].length,
       inline: {
         type: 'image',
         alt: match[1],
-        url: normalizeImageUrlScheme(match[2]),
+        url: SAFE_IMAGE_SRC_RE.test(url) ? normalizeImageUrlScheme(url) : url,
       },
     };
   }

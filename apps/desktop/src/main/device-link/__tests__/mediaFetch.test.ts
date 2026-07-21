@@ -15,6 +15,12 @@ vi.mock('../../videoCacheStore.js', () => ({ resolveSafe: videoResolve }));
 const uploadLocalFile = vi.hoisted(() => vi.fn());
 vi.mock('../mediaTransfer.js', () => ({ uploadLocalFile }));
 
+const materializeSshRemoteMedia = vi.hoisted(() => vi.fn());
+vi.mock('../../file-browser/ssh-media.js', () => ({ materializeSshRemoteMedia }));
+
+const getSessionFsSnapshot = vi.hoisted(() => vi.fn());
+vi.mock('../../localDb/ipc/sessions.js', () => ({ getSessionFsSnapshot }));
+
 vi.mock('../../logger.js', () => ({
   createLogger: () => ({ info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() }),
 }));
@@ -45,9 +51,23 @@ beforeEach(() => {
     size: 42,
     contentType: opts?.contentType ?? 'application/octet-stream',
   }));
+  materializeSshRemoteMedia.mockResolvedValue({
+    ok: true,
+    cachePath: '/cache/ssh/plot.png',
+    size: 42,
+    mime: 'image/png',
+    relPath: 'artifacts/plot.png',
+  });
+  getSessionFsSnapshot.mockResolvedValue({
+    workingDir: '/home/u/proj',
+    permissionMode: 'default',
+    planModeEnabled: false,
+    remoteHostId: 'host-1',
+  });
 });
 
 afterEach(() => {
+  __testing.setThumbnailRenderer(null);
   vi.useRealTimers();
 });
 
@@ -80,6 +100,38 @@ describe('fetchLocalMediaToOss — scheme 路由', () => {
     await fetchLocalMediaToOss({ url: 'xdt-audio://local/?path=%2Ftmp%2Fs.mp3' });
     expect(uploadLocalFile).toHaveBeenCalledWith(audioPath, { extHint: '.mp3' });
   });
+
+  it('SSH xdt-file → 远程磁盘缓存→上传，不触发本机 realpath', async () => {
+    const url = 'xdt-file://open?path=%2Fhome%2Fu%2Fproj%2Fartifacts%2Fplot.png'
+      + '&sessionId=session-ssh&remoteHostId=host-1&workdir=%2Fhome%2Fu%2Fproj&v=message-1';
+    const result = await fetchLocalMediaToOss({ url });
+
+    expect(getSessionFsSnapshot).toHaveBeenCalledWith('session-ssh');
+    expect(materializeSshRemoteMedia).toHaveBeenCalledWith(
+      { remoteHostId: 'host-1', workdir: '/home/u/proj' },
+      url,
+    );
+    expect(realpathMock).not.toHaveBeenCalled();
+    expect(uploadLocalFile).toHaveBeenCalledWith('/cache/ssh/plot.png', { contentType: 'image/png' });
+    expect(result).toEqual({
+      ossKey: 'cindy/device-link/u/uuid.ext',
+      mimeType: 'image/png',
+      size: 42,
+    });
+  });
+
+  it('SSH 远程图片复用本地缓存文件生成 inline 缩略图', async () => {
+    __testing.setThumbnailRenderer(async (p) => {
+      expect(p).toBe('/cache/ssh/plot.png');
+      return Buffer.from([7, 8]);
+    });
+    const url = 'xdt-file://open?path=%2Fhome%2Fu%2Fproj%2Fartifacts%2Fplot.png'
+      + '&sessionId=session-ssh&remoteHostId=host-1&workdir=%2Fhome%2Fu%2Fproj';
+    const result = await fetchLocalMediaToOss({ url, thumbnail: true });
+
+    expect(result.inlineBase64).toBe(Buffer.from([7, 8]).toString('base64'));
+    expect(uploadLocalFile).not.toHaveBeenCalled();
+  });
 });
 
 describe('fetchLocalMediaToOss — 校验', () => {
@@ -97,6 +149,58 @@ describe('fetchLocalMediaToOss — 校验', () => {
   });
   it('file 缺 path → 抛错', async () => {
     expect(await codeOf(() => fetchLocalMediaToOss({ url: 'xdt-file://local/' }))).toMatch(/缺少 path/);
+  });
+  it.each([
+    'xdt-file://open?path=%2Fhome%2Fu%2Fproj%2Fa.png&remoteHostId=host-1',
+    'xdt-file://open?path=%2Fhome%2Fu%2Fproj%2Fa.png&workdir=%2Fhome%2Fu%2Fproj',
+    'xdt-file://open?path=%2Fhome%2Fu%2Fproj%2Fa.png&sessionId=session-ssh&remoteHostId=&workdir=',
+    'xdt-file://open?path=%2Fhome%2Fu%2Fproj%2Fa.png&remoteHostId=host-1&workdir=%2Fhome%2Fu%2Fproj',
+  ])('SSH 参数缺失或为空 → 拒绝且不回落本机路径（%s）', async (url) => {
+    expect(await codeOf(() => fetchLocalMediaToOss({ url }))).toMatch(/SSH 媒体参数不完整/);
+    expect(materializeSshRemoteMedia).not.toHaveBeenCalled();
+    expect(realpathMock).not.toHaveBeenCalled();
+    expect(uploadLocalFile).not.toHaveBeenCalled();
+  });
+  it('SSH session 不存在 → 拒绝且不触碰远端文件服务', async () => {
+    getSessionFsSnapshot.mockResolvedValueOnce(null);
+    const url = 'xdt-file://open?path=%2Fhome%2Fu%2Fproj%2Fa.png'
+      + '&sessionId=missing&remoteHostId=host-1&workdir=%2Fhome%2Fu%2Fproj';
+    expect(await codeOf(() => fetchLocalMediaToOss({ url }))).toMatch(/会话不存在/);
+    expect(materializeSshRemoteMedia).not.toHaveBeenCalled();
+  });
+  it('本地 session 不能授权 SSH 媒体取件', async () => {
+    getSessionFsSnapshot.mockResolvedValueOnce({
+      workingDir: '/repo',
+      permissionMode: 'default',
+      planModeEnabled: false,
+      remoteHostId: null,
+    });
+    const url = 'xdt-file://open?path=%2Frepo%2Fa.png'
+      + '&sessionId=session-local&remoteHostId=host-1&workdir=%2Frepo';
+    expect(await codeOf(() => fetchLocalMediaToOss({ url }))).toMatch(/不是有效的 SSH 会话/);
+    expect(materializeSshRemoteMedia).not.toHaveBeenCalled();
+  });
+  it.each([
+    ['other-host', '/home/u/proj'],
+    ['host-1', '/'],
+  ])('SSH URL host/workdir 与会话记录不一致 → 拒绝（%s, %s）', async (remoteHostId, workdir) => {
+    const url = 'xdt-file://open?path=%2Fhome%2Fu%2Fproj%2Fa.png'
+      + `&sessionId=session-ssh&remoteHostId=${encodeURIComponent(remoteHostId)}`
+      + `&workdir=${encodeURIComponent(workdir)}`;
+    expect(await codeOf(() => fetchLocalMediaToOss({ url }))).toMatch(/上下文与会话记录不一致/);
+    expect(materializeSshRemoteMedia).not.toHaveBeenCalled();
+  });
+  it('SSH materialize 拒绝 → 保留状态语义且不上传', async () => {
+    materializeSshRemoteMedia.mockResolvedValueOnce({
+      ok: false,
+      status: 403,
+      message: '媒体路径不在 SSH 会话工作目录内',
+    });
+    const url = 'xdt-file://open?path=%2Ftmp%2Fa.png'
+      + '&sessionId=session-ssh&remoteHostId=host-1&workdir=%2Fhome%2Fu%2Fproj';
+    expect(await codeOf(() => fetchLocalMediaToOss({ url }))).toMatch(/SSH 媒体取回失败（403）/);
+    expect(realpathMock).not.toHaveBeenCalled();
+    expect(uploadLocalFile).not.toHaveBeenCalled();
   });
 });
 
