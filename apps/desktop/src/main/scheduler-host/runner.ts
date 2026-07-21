@@ -593,12 +593,14 @@ export class MakerScheduleRunner implements ScheduleRunner {
             await prepareLocalCodexCredentialModeSwitch({
               maker: this.deps.maker,
               isSessionInTurn,
+              signal: ctx.signal,
             });
           } else {
             await prepareLocalSessionCredentialModeSwitch({
               maker: this.deps.maker,
               sessionId,
               isSessionInTurn,
+              signal: ctx.signal,
             });
           }
           throwIfFireAborted(ctx.signal, 'credential mode switch');

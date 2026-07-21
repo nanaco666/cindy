@@ -365,7 +365,7 @@ describe('deferred switch (turn running)', () => {
     expect(store.has('s1')).toBe(true);
     expect(deps.applyAgentSwitchToDb).not.toHaveBeenCalled();
   });
-  it('applyPendingAgentSwitchIfIdle stops before DB mutation when aborted', async () => {
+  it('applyPendingAgentSwitchIfIdle completes the switch when abort arrives during close', async () => {
     const controller = new AbortController();
     const { deps, store, calls } = makeDepsWithPending({
       closeSession: vi.fn(async () => {
@@ -377,9 +377,8 @@ describe('deferred switch (turn running)', () => {
 
     await applyPendingAgentSwitchIfIdle(deps, 's1', { signal: controller.signal });
 
-    expect(calls).toEqual(['close']);
-    expect(deps.applyAgentSwitchToDb).not.toHaveBeenCalled();
-    expect(store.has('s1')).toBe(true);
+    expect(calls).toEqual(['close', 'db', 'boundary', 'pending']);
+    expect(store.has('s1')).toBe(false);
   });
 });
 

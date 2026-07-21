@@ -353,7 +353,6 @@ export async function performSessionAgentSwitch(
     if (live) {
       await deps.closeSession(sessionId);
     }
-    throwIfAgentSwitchAborted(signal);
 
     // ---- commit point:此后切换生效 ----
     await deps.applyAgentSwitchToDb(sessionId, {
@@ -393,7 +392,7 @@ export async function performSessionAgentSwitch(
     // resume 模式无视 skipBootstrap:只有 eager spawn 才能确定性观测 resume 失败
     // 并在同一事务内回落全量交接;交给 lazy-create 的话,失效的停泊 id 会让之后
     // 每次发送反复失败且无人回落。
-    if (!signal?.aborted && (parked || !params.skipBootstrap)) {
+    if (parked || !params.skipBootstrap) {
       try {
         await deps.bootstrapSwitchedSession(sessionId);
       } catch (err) {
