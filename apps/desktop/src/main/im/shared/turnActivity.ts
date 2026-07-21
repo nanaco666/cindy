@@ -32,22 +32,36 @@ export interface TurnActivityState {
   startedAt: number;
   /** True only when the most recent visible event is assistant progress text. */
   writing: boolean;
-  /** Internal replay/delta state; never serialized or exposed to the channel. */
+}
+
+/** Replay/delta bookkeeping stays private and is never serialized with card state. */
+interface TurnActivityInternalState {
   seenKeys: Set<string>;
   thinkingTextByBlockId: Map<string, string>;
   sequence: number;
 }
 
+const internalStateByActivity = new WeakMap<TurnActivityState, TurnActivityInternalState>();
+
+function getInternalState(activity: TurnActivityState): TurnActivityInternalState {
+  const internal = internalStateByActivity.get(activity);
+  if (!internal) throw new Error('Turn activity must be created with createTurnActivity()');
+  return internal;
+}
+
 export function createTurnActivity(startedAt: number): TurnActivityState {
-  return {
+  const activity: TurnActivityState = {
     recentSteps: [],
     totalSteps: 0,
     startedAt,
     writing: false,
+  };
+  internalStateByActivity.set(activity, {
     seenKeys: new Set(),
     thinkingTextByBlockId: new Map(),
     sequence: 0,
-  };
+  });
+  return activity;
 }
 
 function truncate(text: string, max: number): string {
@@ -56,8 +70,9 @@ function truncate(text: string, max: number): string {
 }
 
 function appendStep(activity: TurnActivityState, step: TurnActivityStep): boolean {
-  if (activity.seenKeys.has(step.key)) return false;
-  activity.seenKeys.add(step.key);
+  const internal = getInternalState(activity);
+  if (internal.seenKeys.has(step.key)) return false;
+  internal.seenKeys.add(step.key);
   activity.totalSteps += 1;
   activity.recentSteps.push(step);
   if (activity.recentSteps.length > MAX_VISIBLE_STEPS) activity.recentSteps.shift();
@@ -79,8 +94,9 @@ export function pushToolStep(
   input: unknown,
   toolUseId?: string,
 ): boolean {
-  const key = toolUseId ? `tool:${toolUseId}` : `tool:auto:${++activity.sequence}`;
-  if (activity.seenKeys.has(key)) return false;
+  const internal = getInternalState(activity);
+  const key = toolUseId ? `tool:${toolUseId}` : `tool:auto:${++internal.sequence}`;
+  if (internal.seenKeys.has(key)) return false;
   activity.writing = false;
   return appendStep(activity, {
     key,
@@ -115,23 +131,25 @@ export function pushThinkingStep(activity: TurnActivityState, data: unknown): bo
   const blockId = typeof record.blockId === 'string' && record.blockId
     ? record.blockId
     : 'current';
-  const previous = activity.thinkingTextByBlockId.get(blockId) ?? '';
+  const internal = getInternalState(activity);
+  const previous = internal.thinkingTextByBlockId.get(blockId) ?? '';
   const next = record.stage === 'final' ? text : `${previous}${text}`;
   if (next === previous) return false;
-  activity.thinkingTextByBlockId.set(blockId, next);
+  internal.thinkingTextByBlockId.set(blockId, next);
 
   const label = formatThinkingStep(next);
   if (!label) return false;
-  activity.writing = false;
   const key = `thinking:${blockId}`;
   const existing = activity.recentSteps.find((step) => step.key === key);
   if (existing) {
+    activity.writing = false;
     existing.label = label;
     return true;
   }
   // A final replay for a row that already rolled out should not pull old work
   // back into the latest-five window.
-  if (activity.seenKeys.has(key)) return false;
+  if (internal.seenKeys.has(key)) return false;
+  activity.writing = false;
   return appendStep(activity, { key, kind: 'thinking', label });
 }
 

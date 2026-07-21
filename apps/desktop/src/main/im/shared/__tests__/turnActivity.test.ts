@@ -96,6 +96,37 @@ describe('rolling window and replay de-duplication', () => {
     expect(activity.recentSteps.some((step) => step.label === '读取 a.ts')).toBe(false);
     expect(activity.writing).toBe(true);
   });
+
+  it('keeps writing active when a replayed thought has already rolled out', () => {
+    const activity = createTurnActivity(0);
+    pushThinkingStep(activity, { stage: 'delta', blockId: 'old-thought', text: '先检查状态' });
+    for (let index = 0; index < MAX_VISIBLE_STEPS; index += 1) {
+      pushToolStep(activity, 'Grep', { pattern: `p${index}` }, `grep-${index}`);
+    }
+    markActivityWriting(activity);
+
+    expect(pushThinkingStep(activity, {
+      stage: 'final',
+      blockId: 'old-thought',
+      text: '先检查状态，再继续处理',
+    })).toBe(false);
+    expect(activity.writing).toBe(true);
+    expect(activity.recentSteps.some((step) => step.kind === 'thinking')).toBe(false);
+  });
+
+  it('keeps replay bookkeeping out of the serializable card state', () => {
+    const activity = createTurnActivity(0);
+    pushThinkingStep(activity, { stage: 'final', blockId: 't1', text: '检查状态' });
+    pushToolStep(activity, 'Read', { file_path: '/repo/a.ts' }, 'read-a');
+
+    expect(Object.keys(activity).sort()).toEqual([
+      'recentSteps',
+      'startedAt',
+      'totalSteps',
+      'writing',
+    ]);
+    expect(JSON.parse(JSON.stringify(activity))).toEqual(activity);
+  });
 });
 
 describe('renderActivity', () => {
