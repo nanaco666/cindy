@@ -3,9 +3,9 @@
   "dataLicense": "CC0-1.0",
   "SPDXID": "SPDXRef-DOCUMENT",
   "name": "cindy-desktop-macos",
-  "documentNamespace": "https://cindy.app/spdx/desktop-macos/debc8302428f8af0ce80a59007c8f2e4d535aa245f25f37d623dc68a1c540bb8",
+  "documentNamespace": "https://cindy.app/spdx/desktop-macos/694fc149055fe30cb6891c90160796c9faf5631c3efb3850b9d7d30a1df1c631",
   "creationInfo": {
-    "created": "2026-07-21T09:03:48Z",
+    "created": "2026-07-21T12:23:21Z",
     "creators": [
       "Tool: scripts/generate-third-party-notices.mjs"
     ]
@@ -46,6 +46,16 @@
       "SPDXID": "SPDXRef-Package-6ad95b8cfcf52b4e",
       "versionInfo": "vendored",
       "downloadLocation": "https://github.com/larksuite/lark-openapi-mcp",
+      "filesAnalyzed": false,
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "NOASSERTION"
+    },
+    {
+      "name": "Lobe Icons SVG paths (vendored)",
+      "SPDXID": "SPDXRef-Package-82458194310410e0",
+      "versionInfo": "5.14.0",
+      "downloadLocation": "https://github.com/lobehub/lobe-icons/tree/v5.14.0",
       "filesAnalyzed": false,
       "licenseConcluded": "MIT",
       "licenseDeclared": "MIT",
@@ -13341,6 +13351,11 @@
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
       "relatedSpdxElement": "SPDXRef-Package-6ad95b8cfcf52b4e"
+    },
+    {
+      "spdxElementId": "SPDXRef-DOCUMENT",
+      "relationshipType": "DESCRIBES",
+      "relatedSpdxElement": "SPDXRef-Package-82458194310410e0"
     },
     {
       "spdxElementId": "SPDXRef-DOCUMENT",

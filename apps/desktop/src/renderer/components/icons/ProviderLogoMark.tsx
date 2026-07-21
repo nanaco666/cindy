@@ -84,17 +84,21 @@ export function resolveProviderLogoKind(
   const byId = PROVIDER_LOGO_KIND_BY_ID[providerId];
   if (byId) return byId;
 
+  let routedKind: ProviderLogoKind | null = null;
   for (const descriptor of Object.values(routing ?? {})) {
     if (!descriptor) continue;
     try {
       const hostname = new URL(descriptor.upstream).hostname.toLowerCase();
       const match = PROVIDER_LOGO_KIND_BY_HOST.find(([host]) => hostMatches(hostname, host));
-      if (match) return match[1];
+      if (!match) continue;
+      // 跨 agent 指向不同品牌时不存在唯一的 provider 品牌，确定性回落 monogram。
+      if (routedKind && routedKind !== match[1]) return null;
+      routedKind = match[1];
     } catch {
       // 非法 URL 会在 provider 配置校验处报错；图标层只安全回落 monogram。
     }
   }
-  return null;
+  return routedKind;
 }
 
 /** 当前客户端是否内置了该供应商的官方 Logo。 */

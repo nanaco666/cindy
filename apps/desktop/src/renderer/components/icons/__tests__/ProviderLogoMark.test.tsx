@@ -51,6 +51,18 @@ describe('ProviderLogoMark', () => {
         codex: { upstream: 'https://openrouter.ai.evil.example/v1' },
       }),
     ).toBe(false);
+    expect(
+      hasProviderLogo('mixed-brands', {
+        codex: { upstream: 'https://api.openai.com/v1' },
+        'claude-code': { upstream: 'https://api.anthropic.com/v1' },
+      }),
+    ).toBe(false);
+    expect(
+      hasProviderLogo('mixed-brands-reversed', {
+        'claude-code': { upstream: 'https://api.anthropic.com/v1' },
+        codex: { upstream: 'https://api.openai.com/v1' },
+      }),
+    ).toBe(false);
   });
 
   it('returns no mark for an unknown future provider id', () => {

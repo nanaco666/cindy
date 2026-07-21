@@ -96,6 +96,7 @@ function ProviderCardName({ name }: { name: string }) {
     }
     const observer = new ResizeObserver(measure);
     observer.observe(element);
+    // Tip 启停会改变子树并重挂 span，truncated 变化时必须把 observer 绑定到新节点。
     return () => observer.disconnect();
   }, [name, truncated]);
 
@@ -113,7 +114,7 @@ function ProviderCardName({ name }: { name: string }) {
     <Tip
       text={name}
       delay={250}
-      contentClassName="max-w-[320px] [word-break:normal]"
+      contentClassName="z-[10001] max-w-[320px] [word-break:normal]"
     >
       {text}
     </Tip>

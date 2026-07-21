@@ -698,6 +698,17 @@ function buildDesktopCommonEntries(apacheText, sharpPackageName) {
     }),
   );
 
+  // ProviderLogoMark 中随桌面包分发的 xAI / 智谱 SVG 路径。
+  entries.push(
+    bundledComponent({
+      name: "Lobe Icons SVG paths (vendored)",
+      version: "5.14.0",
+      license: "MIT",
+      url: "https://github.com/lobehub/lobe-icons/tree/v5.14.0",
+      licenseText: MIT_TEXT("MIT License\n\nCopyright (c) 2023 LobeHub"),
+    }),
+  );
+
   return entries;
 }
 

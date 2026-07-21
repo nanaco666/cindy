@@ -116,6 +116,10 @@ test("desktop resources include both open-source and restricted disclosures", ()
     read("apps/desktop/resources/THIRD-PARTY-NOTICES.txt"),
     /sqlite-vec/,
   );
+  assert.match(
+    read("apps/desktop/resources/THIRD-PARTY-NOTICES.txt"),
+    /Lobe Icons SVG paths \(vendored\).*Copyright \(c\) 2023 LobeHub/s,
+  );
   assert.ok(
     fs.existsSync(
       path.join(repoRoot, "apps/desktop/cindy-updater/src-tauri/Cargo.lock"),
