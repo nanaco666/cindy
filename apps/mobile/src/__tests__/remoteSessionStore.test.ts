@@ -237,6 +237,34 @@ describe('remoteSessionStore', () => {
     expect(remoteSessionStore.getMessages('s1')[0].agentMeta).toEqual({ model: 'claude' });
   });
 
+  it('emits once when done flushes text and closes the running turn', () => {
+    vi.useFakeTimers();
+    const notify = vi.fn();
+    const unsubscribe = remoteSessionStore.subscribe(notify);
+    try {
+      pushMakerStatus('s1', { isRunning: true });
+      notify.mockClear();
+
+      pushMakerText('s1', 'persist-1', 'complete on done', false);
+      remoteSessionStore.applyRemotePush('dev-1', 'maker:event', {
+        sessionId: 's1',
+        event: { type: 'done', data: {} },
+      });
+
+      expect(notify).toHaveBeenCalledTimes(1);
+      expect(remoteSessionStore.getMessages('s1')).toMatchObject([{
+        clientId: 'persist-1',
+        content: 'complete on done',
+        agentMeta: null,
+      }]);
+      expect(remoteSessionStore.isSessionRunning('s1')).toBe(false);
+      expect(remoteSessionStore.isSessionMakerTurnRunning('s1')).toBe(false);
+    } finally {
+      unsubscribe();
+      vi.useRealTimers();
+    }
+  });
+
   it('replaces the temporary streaming row when the persisted message arrives', () => {
     vi.useFakeTimers();
     try {

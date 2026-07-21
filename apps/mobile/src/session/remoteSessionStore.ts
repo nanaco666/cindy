@@ -339,9 +339,22 @@ function findMessageMergeKey(byKey: ReadonlyMap<string, RemoteMessage>, target: 
 }
 
 function messageWindowsOverlap(a: readonly RemoteMessage[], b: readonly RemoteMessage[]): boolean {
-  return a.some((left) => b.some((right) => (
-    messageIdentityMatches(left, right) || messageKey(left) === messageKey(right)
-  )));
+  // Keep the overlap probe linear even when the cached history contains many pages.
+  // `messageKey` is the common path; the separate identity sets preserve the
+  // clientId/id migration case without falling back to an O(n×m) nested scan.
+  const keys = new Set<string>();
+  const ids = new Set<string>();
+  const clientIds = new Set<string>();
+  for (const message of a) {
+    keys.add(messageKey(message));
+    if (message.id) ids.add(message.id);
+    if (message.clientId) clientIds.add(message.clientId);
+  }
+  return b.some((message) => (
+    keys.has(messageKey(message))
+      || (message.id ? ids.has(message.id) : false)
+      || (message.clientId ? clientIds.has(message.clientId) : false)
+  ));
 }
 
 function streamingMeta(meta: Record<string, unknown> | null | undefined): Record<string, unknown> {
@@ -1429,6 +1442,13 @@ export const remoteSessionStore = {
       return;
     }
 
+    // setSessionRunning owns the final flush/finalize and run-state transition;
+    // keeping the done path in one call avoids notifying subscribers twice.
+    if (type === 'done' || isTerminalMakerErrorEvent(event)) {
+      this.setSessionRunning(sessionId, false);
+      return;
+    }
+
     const textFlushed = flushPendingTextDelta(sessionId);
     if (type === 'tool_use' && applyLivePlanToolUseMessage(sessionId, event, persistId)) {
       const streamingChanged = finalizeRemoteStreamingMessages(sessionId);
@@ -1540,13 +1560,6 @@ export const remoteSessionStore = {
         || textFlushed
         || streamingChanged
       ) emit();
-      return;
-    }
-    if (type === 'done' || isTerminalMakerErrorEvent(event)) {
-      let changed = textFlushed;
-      changed = finalizeRemoteStreamingMessages(sessionId) || changed;
-      if (changed) emit();
-      this.setSessionRunning(sessionId, false);
       return;
     }
     if (textFlushed) emit();
