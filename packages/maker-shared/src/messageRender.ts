@@ -47,8 +47,6 @@ export interface MessageRenderNormalizedMessage<
   secondaryBody?: string;
   createdAt: string;
   isStreaming?: boolean;
-  /** tool 消息专用:对应 tool_result 是否已经到达。 */
-  toolSettled?: boolean;
   /** tool 消息专用:配对 tool_result 提取出的产出媒体(驱动 tool_media 独立渲染项)。 */
   media?: readonly MessageRenderToolMediaLike[];
 }
@@ -199,7 +197,6 @@ export function buildMessageRenderItems<
       messages,
       taskUpdates,
       options.renderOrphanTaskUpdates ?? (options.isSessionStreaming === true),
-      options.isSessionStreaming === true,
     ),
     options.isSessionStreaming === true,
   );
@@ -211,7 +208,6 @@ function buildLinearItems<
   messages: readonly TMessage[],
   taskUpdates?: ReadonlyMap<string, AgentTaskUpdate>,
   includeOrphanTaskUpdates = false,
-  isSessionStreaming = false,
 ): MessageRenderItem<TMessage>[] {
   const sourceMessages = messages.map((message) => message.source);
   const todoInsertAt = findMessageTodoInsertions(sourceMessages);
@@ -277,7 +273,7 @@ function buildLinearItems<
             key: insertion.key,
             todos: insertion.todos,
             createdAt: message.createdAt,
-            isStreaming: isSessionStreaming && message.toolSettled === false,
+            isStreaming: false,
           });
         }
         continue;
@@ -890,7 +886,9 @@ function groupActiveWorkRuns<TMessage extends MessageRenderNormalizedMessage>(
       runLastIndex = index;
     } else {
       flushRun(item);
-      out.push(item);
+      out.push(item.type === 'todo'
+        ? { ...item, isStreaming: index > lastCompletedBoundaryIndex }
+        : item);
     }
   }
   flushRun();

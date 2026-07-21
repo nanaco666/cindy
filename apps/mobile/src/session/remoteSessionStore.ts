@@ -1027,10 +1027,11 @@ export const remoteSessionStore = {
     if (type === 'compact_boundary') {
       const data = isRecord(event.data) ? event.data : {};
       const boundaryId = readString(data, 'boundaryId');
-      // 无稳定边界标识就无法区分 live 与 replay；fail closed，避免重复事件结束
-      // 边界之后的新工作并插入无法去重的系统卡。
-      if (!boundaryId) return;
-      const clientId = `mobile-system-compact:${boundaryId}`;
+      // 新 producer 都会给 provider boundaryId；兼容旧事件时以完整 data 的 canonical
+      // fingerprint 生成可重放身份，不能再用随机 id（同一 replay 会错误结束新工作）。
+      const clientId = boundaryId
+        ? `mobile-system-compact:${boundaryId}`
+        : `mobile-system-compact:fallback:${compactBoundaryFingerprint(data)}`;
       const existing = messages.get(sessionId) ?? [];
       // Transcript replay and the live stream may forward the same provider boundary.
       // De-duplicate before finalizing, otherwise a replay could end post-compact work.
@@ -1387,6 +1388,32 @@ function safeStableStringify(value: unknown): string {
   } catch {
     return String(value);
   }
+}
+
+/** 旧 compact_boundary 没有 provider id 时的确定性 replay identity。 */
+function compactBoundaryFingerprint(data: Record<string, unknown>): string {
+  const canonical = canonicalJson(data);
+  return `${fnv1aHex(canonical, 0x811c9dc5)}${fnv1aHex(canonical, 0x9e3779b9)}`;
+}
+
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
+  if (isRecord(value)) {
+    return `{${Object.keys(value)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`)
+      .join(',')}}`;
+  }
+  return JSON.stringify(value) ?? String(value);
+}
+
+function fnv1aHex(value: string, seed: number): string {
+  let hash = seed >>> 0;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return hash.toString(16).padStart(8, '0');
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

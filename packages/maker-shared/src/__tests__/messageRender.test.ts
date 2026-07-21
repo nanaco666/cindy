@@ -850,20 +850,26 @@ describe('message render todo grouping', () => {
     });
   });
 
-  it('marks only an unsettled plan in a streaming session as live', () => {
-    const livePlan = normalized(tool('plan-live', 'update_plan', { text: '1. Inspect\n2. Patch' }));
-    livePlan.toolSettled = false;
-    const settledPlan = normalized(tool('plan-settled', 'update_plan', { text: '1. Inspect\n2. Patch' }));
-    settledPlan.toolSettled = true;
+  it('marks only the plan card in the active tail work segment as live', () => {
+    const items = buildMessageRenderItems([
+      normalized(tool('plan-before-answer', 'update_plan', {
+        plan: [{ step: 'Old task', status: 'completed' }],
+      })),
+      normalized({
+        clientId: 'progress-boundary',
+        role: 'assistant',
+        content: 'Finished that step.',
+        createdAt: '2026-01-01T00:00:07.000Z',
+      }, 'assistant'),
+      normalized(tool('plan-after-answer', 'update_plan', {
+        plan: [{ step: 'Current task', status: 'in_progress' }],
+      })),
+    ], { isSessionStreaming: true });
 
-    expect(buildMessageRenderItems([livePlan], { isSessionStreaming: true })[0]).toMatchObject({
-      type: 'todo',
-      isStreaming: true,
-    });
-    expect(buildMessageRenderItems([settledPlan], { isSessionStreaming: true })[0]).toMatchObject({
-      type: 'todo',
-      isStreaming: false,
-    });
+    const todos = items.filter((item) => item.type === 'todo');
+    expect(todos).toHaveLength(2);
+    expect(todos[0]).toMatchObject({ key: 'todo-plan-before-answer', isStreaming: false });
+    expect(todos[1]).toMatchObject({ key: 'todo-plan-after-answer', isStreaming: true });
   });
 
   it('buildMessageRenderItems hides plan tool results after rendering the todo card', () => {

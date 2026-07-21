@@ -335,27 +335,37 @@ describe('remoteSessionStore', () => {
     }
   });
 
-  it('ignores compact boundaries without a stable id instead of ending current work', () => {
+  it('de-duplicates a replayed id-less compact boundary before it can end newer work', () => {
+    const firstData = { trigger: 'auto', preTokens: 100, postTokens: 20, durationMs: 50 };
     remoteSessionStore.setMessages('s1', [{
-      ...messageAt('active', 's1', '2026-01-01T00:00:01.000Z'),
-      content: { text: 'working', isStreaming: true },
+      ...messageAt('before-compact', 's1', '2026-01-01T00:00:01.000Z'),
       agentMeta: { isStreaming: true },
     }]);
-    const versionBefore = remoteSessionStore.getMessageVersion();
+    remoteSessionStore.applyMakerEvent('s1', { type: 'compact_boundary', data: firstData });
+    remoteSessionStore.appendMessage('s1', {
+      ...messageAt('after-compact', 's1', '2026-01-01T00:00:02.000Z'),
+      agentMeta: { isStreaming: true },
+    });
+    const versionBeforeReplay = remoteSessionStore.getMessageVersion();
+
+    // 相同数据换 key 顺序，仍应映射到同一个 canonical fallback identity。
+    remoteSessionStore.applyMakerEvent('s1', {
+      type: 'compact_boundary',
+      data: { durationMs: 50, postTokens: 20, preTokens: 100, trigger: 'auto' },
+    });
+
+    const afterReplay = remoteSessionStore.getMessages('s1');
+    expect(afterReplay.filter((item) => item.systemCardType === 'compact')).toHaveLength(1);
+    expect(afterReplay.find((item) => item.id === 'after-compact')?.agentMeta?.isStreaming).toBe(true);
+    expect(remoteSessionStore.getMessageVersion()).toBe(versionBeforeReplay);
 
     remoteSessionStore.applyMakerEvent('s1', {
       type: 'compact_boundary',
-      data: { trigger: 'auto' },
+      data: { ...firstData, preTokens: 180 },
     });
-
-    expect(remoteSessionStore.getMessages('s1')).toEqual([
-      expect.objectContaining({
-        id: 'active',
-        content: { text: 'working', isStreaming: true },
-        agentMeta: { isStreaming: true },
-      }),
-    ]);
-    expect(remoteSessionStore.getMessageVersion()).toBe(versionBefore);
+    const afterDistinctBoundary = remoteSessionStore.getMessages('s1');
+    expect(afterDistinctBoundary.filter((item) => item.systemCardType === 'compact')).toHaveLength(2);
+    expect(afterDistinctBoundary.find((item) => item.id === 'after-compact')?.agentMeta?.isStreaming).toBe(false);
   });
 
   it('treats a new compact boundary as the end of the current post-compact activity segment', () => {

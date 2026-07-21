@@ -5468,7 +5468,7 @@ export default function SessionScreen() {
                     loadingEarlier={loadingEarlier}
                     onCopyMessageLink={copyMessageLink}
                     onForkMessage={collaborationReadOnlyReason ? undefined : forkAtMessage}
-                    onLoadEarlier={() => void loadEarlierMessages()}
+                    onLoadEarlier={loadEarlierMessages}
                     onOpenForkOrigin={forkOrigin ? openForkOrigin : undefined}
                     onOpenSessionLink={openSessionLink}
                     onPreviewRewind={collaborationReadOnlyReason ? undefined : previewRewindAtMessage}

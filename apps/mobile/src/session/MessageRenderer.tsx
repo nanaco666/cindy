@@ -371,7 +371,7 @@ interface MessageActions {
    */
   onQuoteSelection?: (quote: { text: string }) => void;
   onForkMessage?: (clientId: string, draftText?: string) => void;
-  onLoadEarlier?: () => void;
+  onLoadEarlier?: () => void | Promise<void>;
   onOpenForkOrigin?: () => void;
   onOpenPayload?: (payload: MessagePayload) => void;
   /** 正文里会话深链 chip(xdt-maker://session/…)点击回调,app 内跳转。 */
@@ -480,6 +480,8 @@ export function MessageRenderer({
   // load-earlier 的 prepend 撑高会被误当成底部增长 → scrollToEnd 把用户从刚加载的历史拽回最新(review P1)。
   // 用户重新拖动 / 主动跳底 / 切会话时解除。
   const readingOlderRef = useRef(false);
+  // 每次补页分配 generation：旧会话 / 旧请求的异步 settle 不得清掉新请求的抑制态。
+  const readingOlderRequestGenerationRef = useRef(0);
   const previousFollowLatestRequestKeyRef = useRef(followLatestRequestKey);
   const previousItemKeysRef = useRef<readonly string[]>([]);
   const scrollMetricsRef = useRef<MessageScrollMetrics>({
@@ -518,6 +520,7 @@ export function MessageRenderer({
     initialHistoryAutofillRemainingRef.current = MAX_INITIAL_HISTORY_AUTOFILL_PAGES;
     lastAutoLoadEarlierKeyRef.current = null;
     readingOlderRef.current = false;
+    readingOlderRequestGenerationRef.current += 1;
     previousItemKeysRef.current = [];
     scrollMetricsRef.current = { contentHeight: 0, offsetY: 0, viewportHeight: 0 };
     followEndPinStateRef.current = createMobileFollowEndPinState();
@@ -734,6 +737,28 @@ export function MessageRenderer({
   // prepend 防跳由内置 maintainVisibleContentPosition 处理,无需手动开 maintain。
   // 冷开初始布局允许有界补三页,把短初窗上方的上下文补齐；真实上翻意图则继续沿用
   // 不限页的近顶预取。两条路径都受首项进展去重保护,失败/重复页不会循环打 host。
+  const requestLoadEarlier = useCallback(() => {
+    if (!onLoadEarlier) return;
+    const generation = readingOlderRequestGenerationRef.current + 1;
+    readingOlderRequestGenerationRef.current = generation;
+    readingOlderRef.current = true;
+    const releaseReadingOlder = () => {
+      // Promise settle 后再让 LegendList 完成一帧 prepend / mVCP 布局；成功、空页、
+      // 失败都必须释放，且旧请求不能干扰切会话后或后发的新请求。
+      requestAnimationFrame(() => {
+        if (readingOlderRequestGenerationRef.current === generation) {
+          readingOlderRef.current = false;
+        }
+      });
+    };
+    try {
+      const result = onLoadEarlier();
+      void Promise.resolve(result).then(releaseReadingOlder, releaseReadingOlder);
+    } catch {
+      releaseReadingOlder();
+    }
+  }, [onLoadEarlier]);
+
   const attemptAutoLoadEarlier = useCallback(() => {
     if (!onLoadEarlier) return;
     // 热路径前置短路(滚动事件每 16ms 评估一次,getState() 每次新建状态对象):没有用户浏览意图
@@ -759,11 +784,8 @@ export function MessageRenderer({
     if (!eligible) return;
     lastAutoLoadEarlierKeyRef.current = firstItemKey;
     if (initialAutoFillAllowed) initialHistoryAutofillRemainingRef.current -= 1;
-    // 冷开补页只补齐初窗,失败/空页时也不能把会话永久留在「阅读历史」态；
-    // 只有用户真实上翻触发的补页才需要抑制后续贴底。
-    readingOlderRef.current = userScrolledForOlder;
-    onLoadEarlier();
-  }, [firstItemKey, loadEarlierAction.disabled, loadEarlierAction.visible, onLoadEarlier]);
+    requestLoadEarlier();
+  }, [firstItemKey, loadEarlierAction.disabled, loadEarlierAction.visible, onLoadEarlier, requestLoadEarlier]);
 
   // 近底/跟随态迁移 + 「跳到底部」浮标与新消息红点;metrics 也供 DEV harness 读取。
   // 「解除跟随」的主路径是拖动意图(shouldUnpinMobileFollowOnDrag):拖动中相对起点
@@ -1002,10 +1024,8 @@ export function MessageRenderer({
   }, [focusedItemKey, itemKeys]);
 
   const handleLoadEarlierPress = useCallback(() => {
-    // readingOlderRef 挡住 handleContentSize 的贴底补滚,prepend 撑高不再拽回底部。
-    readingOlderRef.current = true;
-    onLoadEarlier?.();
-  }, [onLoadEarlier]);
+    requestLoadEarlier();
+  }, [requestLoadEarlier]);
 
   const renderMessageItem = useCallback(({ item }: { item: MobileMessageRenderItem }) => (
     <RenderItemView
