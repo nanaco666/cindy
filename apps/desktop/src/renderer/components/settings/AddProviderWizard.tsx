@@ -14,18 +14,18 @@
  * 上探测式灰态)。
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Check, Info, Plus, Search, X } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import { toast } from '@/lib/toast';
 import { Spinner } from '@/components/ui/spinner';
+import { Tip } from '@/components/ui/tooltip';
 import { createCustomProvider, type RuntimeKeys } from '@/lib/customProviders';
 import { providerMonogram } from '@/lib/providerModels';
 import { isChatGptConnectionConnected, useCodexAuth } from '@/hooks/useCodexAuth';
-import { ClaudeMark } from '@/components/icons/ClaudeMark';
-import { CodexMark } from '@/components/icons/CodexMark';
+import { hasProviderLogo, ProviderLogoMark } from '@/components/icons/ProviderLogoMark';
 
 import { sortPresetsForLocale } from '@lizi/model-providers';
 import type { AgentKind, CustomProviderConfig, ProviderPreset, ProviderView } from '@lizi/model-providers';
@@ -74,9 +74,50 @@ function uniqueId(name: string, existing: ReadonlySet<string>): string {
 
 /** 供应商卡片图标。 */
 function cardIcon(sel: { providerId?: string; name: string }): React.ReactNode {
-  if (sel.providerId === 'anthropic') return <ClaudeMark size={15} />;
-  if (sel.providerId === 'openai') return <CodexMark size={15} />;
+  if (sel.providerId && hasProviderLogo(sel.providerId)) {
+    return <ProviderLogoMark providerId={sel.providerId} size={15} />;
+  }
   return <span className="text-12 font-semibold leading-none">{providerMonogram(sel.name)}</span>;
+}
+
+/** 单行供应商名；只有实际发生截断时才在 hover 后展示完整名称。 */
+function ProviderCardName({ name }: { name: string }) {
+  const nameRef = useRef<HTMLSpanElement>(null);
+  const [truncated, setTruncated] = useState(false);
+
+  useLayoutEffect(() => {
+    const element = nameRef.current;
+    if (!element) return;
+    const measure = () => setTruncated(element.scrollWidth > element.clientWidth + 1);
+    measure();
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', measure);
+      return () => window.removeEventListener('resize', measure);
+    }
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [name, truncated]);
+
+  const text = (
+    <span
+      ref={nameRef}
+      className="min-w-0 truncate text-13 font-medium"
+      style={{ color: 'var(--settings-section-title)' }}
+    >
+      {name}
+    </span>
+  );
+
+  return truncated ? (
+    <Tip
+      text={name}
+      delay={250}
+      contentClassName="max-w-[320px] [word-break:normal]"
+    >
+      {text}
+    </Tip>
+  ) : text;
 }
 
 function ProviderCard({
@@ -111,12 +152,7 @@ function ProviderCard({
         >
           {icon}
         </span>
-        <span
-          className="min-w-0 truncate text-13 font-medium"
-          style={{ color: 'var(--settings-section-title)' }}
-        >
-          {name}
-        </span>
+        <ProviderCardName name={name} />
       </span>
       <span className="truncate text-11" style={{ color: 'var(--text-tertiary)' }}>
         {meta}
@@ -560,7 +596,7 @@ export function AddProviderWizard({
                     {filteredPresets.map((p) => (
                       <ProviderCard
                         key={p.id}
-                        icon={cardIcon({ name: p.name })}
+                        icon={cardIcon({ providerId: p.id, name: p.name })}
                         name={p.name}
                         meta={t('settings.providers.wizard.metaApiKey')}
                         onClick={() => pickPreset(p)}

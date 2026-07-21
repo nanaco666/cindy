@@ -7,6 +7,7 @@ import { AnthropicMark } from '@/components/icons/AnthropicMark';
 import { ClaudeMark } from '@/components/icons/ClaudeMark';
 import { CodexMark } from '@/components/icons/CodexMark';
 import { OpenAIMark } from '@/components/icons/OpenAIMark';
+import { ProviderLogoMark } from '@/components/icons/ProviderLogoMark';
 import { ModelIconMark, ProviderMark } from '@/components/new-chat/ModelSelector';
 
 function firstPath(ui: React.ReactNode): string | null {
@@ -33,6 +34,9 @@ describe('model mark semantics', () => {
 
     expect(firstPath(<ProviderMark providerId="anthropic" />)).toBe(anthropicPath);
     expect(firstPath(<ProviderMark providerId="openai" />)).toBe(openaiPath);
+    expect(firstPath(<ProviderMark providerId="xai" />)).toBe(
+      firstPath(<ProviderLogoMark providerId="xai" />),
+    );
     expect(firstPath(<ModelIconMark icon="claude" providerId="xd" />)).toBe(anthropicPath);
     expect(firstPath(<ModelIconMark icon="openai" providerId="xd" />)).toBe(openaiPath);
 
