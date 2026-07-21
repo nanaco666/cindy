@@ -35,13 +35,14 @@ function ComposerQuoteNodeView({ node, deleteNode, selected }: NodeViewProps) {
       as="span"
       data-composer-quote=""
       contentEditable={false}
-      className="mx-1 inline-block max-w-[min(240px,55vw)] select-none align-middle"
+      className="mx-2 inline-block max-w-[min(240px,55vw)] select-none align-middle"
     >
       <Tooltip.Provider delayDuration={300}>
         <Tooltip.Root>
           <Tooltip.Trigger asChild>
             <span
               aria-label={quote.text}
+              onMouseDown={(event) => event.preventDefault()}
               className="relative inline-flex w-full select-none items-center gap-1.5 rounded-full border py-0.5 pl-2 pr-6 text-[12px] leading-5"
               style={{
                 backgroundColor: 'var(--surface-chip)',

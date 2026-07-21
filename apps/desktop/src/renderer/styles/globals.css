@@ -76,6 +76,14 @@
     user-select: text;
   }
 
+  /* Inline quote atoms live inside contenteditable, whose broad rule above
+     otherwise re-enables native text selection on every chip descendant. */
+  [contenteditable='true'] [data-composer-quote],
+  [contenteditable='true'] [data-composer-quote] * {
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
   input,
   textarea,
   [contenteditable='true'],
