@@ -1327,23 +1327,23 @@
       "title": "记忆",
       "description": "用于帮助用户实现基于工作区的记忆，改变设置之后理论上需要新建会话才会生效，如果觉得记忆系统出现问题可以点击 Reset 或者关闭。",
       "maker": {
-        "label": "Maker",
+        "label": "Cindy",
         "description": "真正实现同工作目录下（Claude / Codex）多 Agent 的所有会话记忆共享（Beta 功能）",
-        "toggleAria": "切换 Maker 记忆",
-        "resetAria": "重置 Maker 记忆",
+        "toggleAria": "切换 Cindy 记忆",
+        "resetAria": "重置 Cindy 记忆",
         "resetConfirm": {
-          "title": "重置 Maker 记忆？",
-          "description": "将永久删除所有项目下的 Maker 记忆（存放在 user-data 目录下，不在你的代码仓库里）。此操作不可撤销。",
+          "title": "重置 Cindy 记忆？",
+          "description": "将永久删除所有项目下的 Cindy 记忆（存放在 user-data 目录下，不在你的代码仓库里）。此操作不可撤销。",
           "confirm": "重置",
           "cancel": "取消"
         },
         "toast": {
-          "enabled": "Maker 记忆已启用",
-          "disabled": "Maker 记忆已禁用",
-          "toggleFailed": "切换 Maker 记忆失败",
-          "resetSuccess_one": "Maker 记忆已重置 — 已移除 {{count}} 个工作目录",
-          "resetSuccess_other": "Maker 记忆已重置 — 已移除 {{count}} 个工作目录",
-          "resetFailed": "重置 Maker 记忆失败"
+          "enabled": "Cindy 记忆已启用",
+          "disabled": "Cindy 记忆已禁用",
+          "toggleFailed": "切换 Cindy 记忆失败",
+          "resetSuccess_one": "Cindy 记忆已重置 — 已移除 {{count}} 个工作目录",
+          "resetSuccess_other": "Cindy 记忆已重置 — 已移除 {{count}} 个工作目录",
+          "resetFailed": "重置 Cindy 记忆失败"
         }
       },
       "agents": {
@@ -1684,7 +1684,7 @@
           "description": "任务调度 —— cron 周期任务 + 一次性提醒"
         },
         "memory": {
-          "name": "Maker 记忆",
+          "name": "Cindy 记忆",
           "description": "跨 agent 的长期记忆，让上下文在会话之间持续"
         },
         "xdt_helper": {

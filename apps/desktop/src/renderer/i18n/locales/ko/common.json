@@ -1327,23 +1327,23 @@
       "title": "메모리",
       "description": "워크스페이스 단위 메모리를 구현합니다. 설정 변경 후에는 일반적으로 새 Session을 시작해야 적용됩니다. 메모리에 문제가 있다면 Reset하거나 끄세요.",
       "maker": {
-        "label": "Maker",
+        "label": "Cindy",
         "description": "동일 작업 디렉터리에서(Claude / Codex) 다중 Agent의 모든 Session 메모리를 실제로 공유합니다 (Beta 기능)",
-        "toggleAria": "Maker 메모리 전환",
-        "resetAria": "Maker 메모리 재설정",
+        "toggleAria": "Cindy 메모리 전환",
+        "resetAria": "Cindy 메모리 재설정",
         "resetConfirm": {
-          "title": "Maker 메모리를 재설정하시겠습니까?",
-          "description": "모든 프로젝트의 Maker 메모리를 영구적으로 삭제합니다(user-data 아래에 저장되며 리포지토리 안에는 없습니다). 이 작업은 취소할 수 없습니다.",
+          "title": "Cindy 메모리를 재설정하시겠습니까?",
+          "description": "모든 프로젝트의 Cindy 메모리를 영구적으로 삭제합니다(user-data 아래에 저장되며 리포지토리 안에는 없습니다). 이 작업은 취소할 수 없습니다.",
           "confirm": "재설정",
           "cancel": "취소"
         },
         "toast": {
-          "enabled": "Maker 메모리가 활성화되었습니다",
-          "disabled": "Maker 메모리가 비활성화되었습니다",
-          "toggleFailed": "Maker 메모리 전환 실패",
-          "resetSuccess_one": "Maker 메모리가 재설정되었습니다 — {{count}}개의 작업 디렉터리가 제거됨",
-          "resetSuccess_other": "Maker 메모리가 재설정되었습니다 — {{count}}개의 작업 디렉터리가 제거됨",
-          "resetFailed": "Maker 메모리 재설정 실패"
+          "enabled": "Cindy 메모리가 활성화되었습니다",
+          "disabled": "Cindy 메모리가 비활성화되었습니다",
+          "toggleFailed": "Cindy 메모리 전환 실패",
+          "resetSuccess_one": "Cindy 메모리가 재설정되었습니다 — {{count}}개의 작업 디렉터리가 제거됨",
+          "resetSuccess_other": "Cindy 메모리가 재설정되었습니다 — {{count}}개의 작업 디렉터리가 제거됨",
+          "resetFailed": "Cindy 메모리 재설정 실패"
         }
       },
       "agents": {
@@ -1684,7 +1684,7 @@
           "description": "작업 스케줄링 — cron 반복 작업과 일회성 리마인더"
         },
         "memory": {
-          "name": "Maker 메모리",
+          "name": "Cindy 메모리",
           "description": "세션 간 컨텍스트를 유지하는 agent 공통 장기 메모리"
         },
         "xdt_helper": {
