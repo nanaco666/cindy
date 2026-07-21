@@ -53,7 +53,7 @@ const RIGHT_PANEL_WIDTH = BUTTON_GAP * 3 + BUTTON_SIZE * 2;
 const FULL_SWIPE_RATIO = 0.55;
 /** 「归档」按钮越过全滑阈值时扩展盖满右侧面板的过渡时长。 */
 const ARM_ANIMATION_MS = 150;
-const ICON_SIZE = 23;
+const ICON_SIZE = iconSize.swipeAction;
 
 /**
  * 页面级滑动控制 bundle:registry + 三个动作回调打包成一个稳定引用(useMemo),

@@ -368,6 +368,8 @@ export const iconSize = {
   action: 20,
   listGlyph: 21,
   xl: 22,
+  /** 滑动操作圆钮(56px)内 glyph 的 XD-Maker 原档考古值,通栏回退用户实机验收锁定(2026-07-21)。 */
+  swipeAction: 23,
   xxl: 26,
   display: 32,
   hero: 44,
