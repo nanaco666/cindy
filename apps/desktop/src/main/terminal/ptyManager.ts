@@ -349,6 +349,7 @@ export class PtyManager {
     id: string;
     exit: ExitInfo | null;
     shellId: string;
+    shellPref: ShellId | null;
     cols: number;
     rows: number;
   }> {
@@ -356,6 +357,7 @@ export class PtyManager {
       id: s.id,
       exit: s.exit,
       shellId: s.resolved.id,
+      shellPref: s.shellPref,
       cols: s.cols,
       rows: s.rows,
     }));
