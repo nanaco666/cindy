@@ -13,6 +13,7 @@ import {
 
 export type RealtimeAsrWebSocketProviderOptions = {
   accessTokenProvider: () => Promise<string | null>;
+  connectionProvider?: () => Promise<{ websocketUrl: string; authorizationToken: string }>;
   sourceLanguage?: string;
   model?: string;
   realtimeUrl?: string;
@@ -520,9 +521,11 @@ function buildRealtimeEventId(prefix: string): string {
  */
 export class RealtimeAsrWebSocketProvider implements AsrProvider {
   private readonly accessTokenProvider: () => Promise<string | null>;
+  private readonly connectionProvider?: () => Promise<{ websocketUrl: string; authorizationToken: string }>;
   private readonly sourceLanguage: string;
   private readonly model: string;
   private readonly realtimeUrl: string;
+  private activeRealtimeUrl: string;
   private readonly extraHeaders: Record<string, string>;
   private readonly connectionKey: string;
   private readonly pcmSampleRate: number;
@@ -588,6 +591,7 @@ export class RealtimeAsrWebSocketProvider implements AsrProvider {
 
   constructor(options: RealtimeAsrWebSocketProviderOptions) {
     this.accessTokenProvider = options.accessTokenProvider;
+    this.connectionProvider = options.connectionProvider;
     this.sourceLanguage = options.sourceLanguage ?? 'auto';
     this.model = options.model ?? OPENAI_REALTIME_WHISPER_MODEL;
     this.pcmSampleRate = options.pcmSampleRate ?? DEFAULT_REALTIME_PCM_SAMPLE_RATE;
@@ -595,6 +599,7 @@ export class RealtimeAsrWebSocketProvider implements AsrProvider {
     this.connectTimeoutMs = options.connectTimeoutMs ?? CONNECT_TIMEOUT_MS;
     const connection = resolveRealtimeConnectionConfig(options);
     this.realtimeUrl = connection.realtimeUrl;
+    this.activeRealtimeUrl = connection.realtimeUrl;
     this.extraHeaders = connection.extraHeaders;
     this.connectionKey = connection.connectionKey;
     this.providerKind = options.providerKind ?? 'openai-realtime-whisper';
@@ -622,12 +627,18 @@ export class RealtimeAsrWebSocketProvider implements AsrProvider {
   }
 
   async start(options?: { recovering?: boolean }): Promise<void> {
-    const accessToken = await this.accessTokenProvider();
-    if (!accessToken) throw new Error(this.missingCredentialMessage);
     if (!options?.recovering) this.stopRequested = false;
+    const dynamicConnection = this.connectionProvider
+      ? await this.connectionProvider()
+      : null;
+    if (this.stopRequested) throw new Error('Realtime ASR connection stopped.');
+    const accessToken = dynamicConnection?.authorizationToken ?? await this.accessTokenProvider();
+    if (!accessToken) throw new Error(this.missingCredentialMessage);
+    const realtimeUrl = dynamicConnection?.websocketUrl ?? this.realtimeUrl;
+    this.activeRealtimeUrl = realtimeUrl;
     this.resetTranscriptState();
 
-    const warm = takeWarmRealtimeSession(
+    const warm = dynamicConnection ? null : takeWarmRealtimeSession(
       this.connectionKey,
       this.model,
       this.sourceLanguage,
@@ -654,7 +665,7 @@ export class RealtimeAsrWebSocketProvider implements AsrProvider {
       return;
     }
 
-    const socket = new WebSocket(this.realtimeUrl, {
+    const socket = new WebSocket(realtimeUrl, {
       headers: realtimeHeaders(accessToken, this.extraHeaders),
     });
     this.socket = socket;
@@ -775,7 +786,7 @@ export class RealtimeAsrWebSocketProvider implements AsrProvider {
         // against a gateway missing the ASR passthrough route is otherwise
         // indistinguishable from an upstream failure (issue #220).
         const traceId = describeAsrHandshakeTraceId(response.headers);
-        const target = describeAsrWebSocketTarget(this.realtimeUrl);
+        const target = describeAsrWebSocketTarget(this.activeRealtimeUrl);
         fail(new Error(
           `Realtime ASR handshake failed: HTTP ${statusCode}${statusMessage} (${target}${traceId ? `, ${traceId}` : ''})`,
         ), true);

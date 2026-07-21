@@ -102,7 +102,7 @@ export function UserInfoSection({ isCollapsed, onOpenUpdateNotice }: UserInfoSec
 
   return (
     <div className="mt-auto px-3 pb-3 pt-2">
-      <div className="flex h-10 items-center rounded-full border border-[var(--sidebar-user-card-border)] bg-[var(--sidebar-user-card-bg)] px-[7px]">
+      <div className="flex h-10 items-center rounded-full border border-[var(--sidebar-user-card-border)] bg-[var(--sidebar-user-card-bg)] px-[7px] hover:bg-[linear-gradient(hsl(var(--sidebar-item-hover)),hsl(var(--sidebar-item-hover)))]">
         <button
           onClick={handleClick}
           role="link"
@@ -111,7 +111,7 @@ export function UserInfoSection({ isCollapsed, onOpenUpdateNotice }: UserInfoSec
         >
           {/* Avatar — admin 用户加 1.5px 反色描边 + 右下角盾牌角标 */}
           <div
-            className="relative h-[25px] w-[25px] shrink-0"
+            className="relative h-[27px] w-[27px] shrink-0"
             title={isCanary ? t('sidebar.user.canaryBadge') : undefined}
           >
             {user.avatar && !avatarError ? (
@@ -119,14 +119,14 @@ export function UserInfoSection({ isCollapsed, onOpenUpdateNotice }: UserInfoSec
                 src={user.avatar}
                 alt={user.name}
                 className={cn(
-                  'h-[25px] w-[25px] rounded-full object-cover',
+                  'h-[27px] w-[27px] rounded-full object-cover',
                 )}
                 onError={() => setAvatarError(true)}
               />
             ) : (
               <div
                 className={cn(
-                  'flex h-[25px] w-[25px] items-center justify-center rounded-full',
+                  'flex h-[27px] w-[27px] items-center justify-center rounded-full',
                   'border border-[var(--sidebar-user-card-border)] bg-[var(--sidebar-user-card-bg)] text-[14px] font-medium text-[var(--sidebar-user-card-text)]',
                 )}
               >
@@ -191,7 +191,7 @@ export function UserInfoSection({ isCollapsed, onOpenUpdateNotice }: UserInfoSec
             }
             className={cn(
               'flame-btn',
-              'flex h-[19px] w-[19px] shrink-0 items-center justify-center rounded-full',
+              'flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full',
               'border border-[var(--sidebar-user-card-border)] bg-[var(--sidebar-user-card-bg)]',
               'transition-colors hover:bg-sidebar-item-hover',
               'transition-opacity duration-200 ease-in-out',

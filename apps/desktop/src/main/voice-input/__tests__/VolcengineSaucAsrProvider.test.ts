@@ -1,6 +1,6 @@
 import { gzipSync } from 'node:zlib';
 import { WebSocketServer, type WebSocket } from 'ws';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   decodeVolcengineMessage,
@@ -152,6 +152,84 @@ describe('VolcengineSaucAsrProvider protocol helpers', () => {
       for (const socket of sockets) {
         socket.terminate();
       }
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
+  it('requests a fresh one-shot connection ticket when transport recovery reconnects', async () => {
+    const server = new WebSocketServer({ port: 0 });
+    const sockets: WebSocket[] = [];
+    const authorizations: Array<string | undefined> = [];
+    let provider: VolcengineSaucAsrProvider | undefined;
+    server.on('connection', (socket, request) => {
+      sockets.push(socket);
+      authorizations.push(request.headers.authorization);
+    });
+
+    try {
+      await waitFor(() => server.address() !== null);
+      const address = server.address();
+      if (!address || typeof address === 'string') throw new Error('Expected local test server address.');
+      let ticketNumber = 0;
+      provider = new VolcengineSaucAsrProvider({
+        connectionProvider: async () => ({
+          websocketUrl: `ws://127.0.0.1:${address.port}/api/voice/asr`,
+          authorizationToken: `ticket-${++ticketNumber}`,
+        }),
+        resourceId: 'volc.test',
+      });
+      const events: string[] = [];
+      provider.onEvent((event) => events.push(event.type));
+
+      await provider.start();
+      await waitFor(() => sockets.length === 1);
+      sockets[0].close(1011, 'drop');
+      await waitFor(() => events.includes('disconnected'));
+      await provider.recover();
+      await waitFor(() => sockets.length === 2);
+
+      expect(authorizations).toEqual(['Bearer ticket-1', 'Bearer ticket-2']);
+    } finally {
+      await provider?.stop();
+      for (const socket of sockets) socket.terminate();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
+  it('does not open a managed socket when stopped during session allocation', async () => {
+    const server = new WebSocketServer({ port: 0 });
+    const sockets: WebSocket[] = [];
+    server.on('connection', (socket) => sockets.push(socket));
+    let allocationStarted = false;
+    let releaseAllocation: ((value: { websocketUrl: string; authorizationToken: string }) => void) | undefined;
+    const connectionProvider = vi.fn(() => new Promise<{ websocketUrl: string; authorizationToken: string }>((resolve) => {
+      allocationStarted = true;
+      releaseAllocation = resolve;
+    }));
+    let provider: VolcengineSaucAsrProvider | undefined;
+
+    try {
+      await waitFor(() => server.address() !== null);
+      const address = server.address();
+      if (!address || typeof address === 'string') throw new Error('Expected local test server address.');
+      provider = new VolcengineSaucAsrProvider({
+        connectionProvider,
+        resourceId: 'volc.test',
+      });
+
+      const started = provider.start();
+      await waitFor(() => allocationStarted);
+      await provider.stop();
+      releaseAllocation?.({
+        websocketUrl: `ws://127.0.0.1:${address.port}/api/voice/asr`,
+        authorizationToken: 'stale-ticket',
+      });
+
+      await expect(started).rejects.toThrow('stopped');
+      expect(sockets).toHaveLength(0);
+    } finally {
+      await provider?.stop();
+      for (const socket of sockets) socket.terminate();
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }
   });

@@ -4777,6 +4777,8 @@ function buildCreateOptsForCurrentSession(
   opts?: { vendorOptions?: Record<string, unknown> },
 ): AgentInputCreateOpts {
   const current = getOrCreateState(sessionId);
+  const deviceLinkRemote = isRemoteSession(sessionId);
+  const sshRemote = Boolean(current.remoteHostId);
   return {
     agentKind: current.agentKind,
     workingDir,
@@ -4787,7 +4789,10 @@ function buildCreateOptsForCurrentSession(
     planMode: current.planModeEnabled,
     displayReasoning: 'summarized',
     userPrompt: getUserPrompt(),
-    makerMemoryEnabled: getMakerMemoryEnabled(),
+    // device-link routes to the target desktop, so omit the controller setting;
+    // SSH still starts the agent through this process and must not inherit the
+    // controller's default-enabled Maker Memory for a remote working directory.
+    ...(deviceLinkRemote ? {} : { makerMemoryEnabled: sshRemote ? false : getMakerMemoryEnabled() }),
     ...(current.remoteHostId ? { remoteHostId: current.remoteHostId } : {}),
     ...(opts?.vendorOptions ? { vendorOptions: opts.vendorOptions } : {}),
     ...(current.sdkSessionId ? { resumeSessionId: current.sdkSessionId } : {}),
@@ -6390,6 +6395,7 @@ function sendUiTrigger(sessionId: string, prompt: string): Promise<void> {
         session.permissionMode,
         session.workingDir,
       );
+      const deviceLinkRemote = isRemoteSession(sessionId);
       queued.createOpts = {
         ...queued.createOpts,
         agentKind: dbAgentKindToMakerKind(session.agentKind, state.agentKind),
@@ -6399,6 +6405,10 @@ function sendUiTrigger(sessionId: string, prompt: string): Promise<void> {
         ...((session.sdkSessionId ?? state.sdkSessionId)
           ? { resumeSessionId: (session.sdkSessionId ?? state.sdkSessionId) as string }
           : {}),
+        // buildQueuedMessage may have used a pre-hydration store snapshot.
+        // The DB row is authoritative here: SSH lazy-create must not inherit
+        // controller-local Cindy Memory. Device-link keeps target ownership.
+        ...(session.remoteHostId && !deviceLinkRemote ? { makerMemoryEnabled: false } : {}),
         // 远端 SSH 会话:重启后 lazy-create 缺它会把远端 workingDir 当本地路径。
         ...(session.remoteHostId ? { remoteHostId: session.remoteHostId } : {}),
       };

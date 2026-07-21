@@ -81,6 +81,8 @@ export const CLIENT_ENDPOINT_KEYS = [
   'websiteUrl',
   // model-access-server(登录后自动下发 LLM 网关凭据)的 API 基址。
   'modelAccessApiBaseUrl',
+  // voice-server（一期开通免费语音输入的数据面）API 基址。
+  'voiceApiBaseUrl',
   // github-server(用户反馈 → 官方仓 GitHub issue 的薄代理)的 API 基址。
   'githubApiBaseUrl',
   // skillhub-server(SkillHub 技能市场/发布 → XD hub 的 S2S 代理)的 API 基址。
@@ -133,6 +135,7 @@ const FIELD_PROTOCOLS: Record<ClientEndpointKey, readonly string[]> = {
   slackHookWsUrl: ['wss:'],
   websiteUrl: ['https:'],
   modelAccessApiBaseUrl: ['https:'],
+  voiceApiBaseUrl: ['https:'],
   githubApiBaseUrl: ['https:'],
   skillhubApiBaseUrl: ['https:'],
   cdnBaseUrl: ['https:'],

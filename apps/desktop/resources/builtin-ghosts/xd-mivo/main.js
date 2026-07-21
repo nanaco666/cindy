@@ -82,6 +82,17 @@ function toolError(errorCode, message, extra) {
   return e;
 }
 
+function formatToolFailureMessage(payload) {
+  var message = payload && typeof payload.message === 'string' ? payload.message : '插件执行失败';
+  var guidance =
+    payload && typeof payload.guidance === 'string' && payload.guidance
+      ? payload.guidance
+      : payload && typeof payload.hint === 'string' && payload.hint
+        ? payload.hint
+        : '';
+  return guidance && message.indexOf(guidance) < 0 ? message + '\n恢复指引: ' + guidance : message;
+}
+
 /**
  * 主机代发失败(白名单/凭证/网络)→ 结构化错误。凭证未配置的 message 带
  * 主机的填写指引,识别后转 MIVO_API_KEY_MISSING 并叮嘱不要 fallback 到
@@ -2106,7 +2117,7 @@ cindy.onHostMessage(async function (msg) {
       type: 'tool-result',
       callId: msg.callId,
       ok: false,
-      message: JSON.stringify({ ok: false, errorCode: 'UNKNOWN_TOOL', message: '未知工具:' + msg.tool }),
+      message: '未知工具:' + msg.tool,
     });
     return;
   }
@@ -2115,11 +2126,17 @@ cindy.onHostMessage(async function (msg) {
     var r = await handler(args, msg.callId);
     cindy.send({ type: 'tool-result', callId: msg.callId, ok: true, result: r });
   } catch (err) {
-    // 结构化错误(toolError)整体 JSON 交卷:errorCode/hint 一并给 AI 走分支;
-    // 意外异常收敛为 INTERNAL。
+    // 结构化错误码单独交卷，意外异常仍收敛为 INTERNAL。
     var payload = err && err.ghost
       ? err.ghost
       : { ok: false, errorCode: 'INTERNAL', message: '执行失败:' + (err && err.message ? err.message : String(err)) };
-    cindy.send({ type: 'tool-result', callId: msg.callId, ok: false, message: JSON.stringify(payload) });
+    var failure = {
+      type: 'tool-result',
+      callId: msg.callId,
+      ok: false,
+      message: formatToolFailureMessage(payload),
+    };
+    if (payload.errorCode && payload.errorCode !== 'INTERNAL') failure.errorCode = payload.errorCode;
+    cindy.send(failure);
   }
 });

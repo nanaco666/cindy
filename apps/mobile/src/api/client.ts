@@ -28,28 +28,40 @@ export async function apiFetchRaw<T>(
   if (opts.token) headers.Authorization = `Bearer ${opts.token}`;
 
   let response: Response;
+  let data: unknown = null;
   let timeoutId: ReturnType<typeof setTimeout> | null = null;
   const timeoutMs = opts.timeoutMs ?? DEFAULT_API_TIMEOUT_MS;
   const controller = timeoutMs > 0 ? new AbortController() : null;
   try {
-    const fetchPromise = fetch(opts.baseUrl + path, {
-      method: opts.method ?? 'GET',
-      headers,
-      body: opts.body === undefined ? undefined : JSON.stringify(opts.body),
-      signal: controller?.signal,
-    });
-    response = timeoutMs > 0
+    const requestPromise = (async (): Promise<{ response: Response; data: unknown }> => {
+      const nextResponse = await fetch(opts.baseUrl + path, {
+        method: opts.method ?? 'GET',
+        headers,
+        body: opts.body === undefined ? undefined : JSON.stringify(opts.body),
+        signal: controller?.signal,
+      });
+      let nextData: unknown = null;
+      try {
+        nextData = await nextResponse.json();
+      } catch {
+        nextData = null;
+      }
+      return { response: nextResponse, data: nextData };
+    })();
+    const result = timeoutMs > 0
       ? await Promise.race([
-        fetchPromise,
-        new Promise<Response>((_, reject) => {
+        requestPromise,
+        new Promise<never>((_, reject) => {
           timeoutId = setTimeout(() => {
-            void fetchPromise.catch(() => undefined);
-            controller?.abort();
+            void requestPromise.catch(() => undefined);
             reject(new ApiError('REQUEST_TIMEOUT', 0, '请求超时，请稍后重试'));
+            controller?.abort();
           }, timeoutMs);
         }),
       ])
-      : await fetchPromise;
+      : await requestPromise;
+    response = result.response;
+    data = result.data;
   } catch (err) {
     if (err instanceof ApiError) throw err;
     if (isAbortError(err)) {
@@ -67,13 +79,6 @@ export async function apiFetchRaw<T>(
     throw err;
   } finally {
     if (timeoutId) clearTimeout(timeoutId);
-  }
-
-  let data: unknown = null;
-  try {
-    data = await response.json();
-  } catch {
-    data = null;
   }
 
   if (!response.ok) {

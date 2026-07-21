@@ -481,9 +481,9 @@ export interface StartSessionOptions {
    * undefined / false), 实际效果就是不启用 maker memory。
    *
    * 启用时 agent.startSession 会:
-   *   1. 调 deps.makerMemory.enable() 联动关闭原生 auto-memory
-   *   2. 拼 system prompt 时注入 memory rules + MEMORY.md 索引
-   *   3. 创建 MemoryFlushController 监听 token usage
+   *   1. 拼 system prompt 时注入 memory rules + MEMORY.md 索引
+   *   2. 创建 MemoryFlushController 监听 token usage
+   * 共享 manager 的 enablement 由 host setting 控制，不由 session flag 改写。
    */
   makerMemoryEnabled?: boolean;
   permissionMode?: PermissionMode;

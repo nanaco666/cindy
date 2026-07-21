@@ -76,6 +76,31 @@ describe('apiFetchRaw', () => {
     await assertion;
   });
 
+  it('keeps the timeout active while a response body is still being parsed', async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn(async () => new Response(new ReadableStream({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('{"devices":'));
+      },
+    }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const request = apiFetchRaw('/api/device-link/devices', {
+      baseUrl: 'https://relay.example.com',
+      timeoutMs: 100,
+    });
+
+    const assertion = expect(request).rejects.toMatchObject({
+      code: 'REQUEST_TIMEOUT',
+      status: 0,
+    });
+    await vi.advanceTimersByTimeAsync(100);
+    await assertion;
+  });
+
   it('parses top-level device-link relay errors', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => ({
       ok: false,

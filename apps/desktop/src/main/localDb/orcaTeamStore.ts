@@ -469,6 +469,33 @@ export async function updateWorkerStatus(
     .where(eq(orcaWorkers.id, workerId));
 }
 
+/** Atomically marks a worker idle only while it still has the expected status. */
+export async function markWorkerIdleIfStatus(
+  workerId: string,
+  expectedStatus: OrcaWorkerStatus,
+): Promise<boolean> {
+  const db = getDbClient().drizzle;
+  const now = Date.now();
+  const result = await db
+    .update(orcaWorkers)
+    .set({ status: 'idle', idleSince: now, updatedAt: now })
+    .where(and(eq(orcaWorkers.id, workerId), eq(orcaWorkers.status, expectedStatus)))
+    .run();
+  return result.changes > 0;
+}
+
+/** Restores a raced done acknowledgement only while the worker is still idle. */
+export async function restoreWorkerDoneIfIdle(workerId: string): Promise<boolean> {
+  const db = getDbClient().drizzle;
+  const now = Date.now();
+  const result = await db
+    .update(orcaWorkers)
+    .set({ status: 'done', idleSince: null, updatedAt: now })
+    .where(and(eq(orcaWorkers.id, workerId), eq(orcaWorkers.status, 'idle')))
+    .run();
+  return result.changes > 0;
+}
+
 /**
  * create_worker 派发失败补偿：移除尚未成功 dispatch 的 worker link，并归档对应 session。
  * 这条路径只服务失败清理，不影响正常协同结束时保留历史 worker link 的语义。

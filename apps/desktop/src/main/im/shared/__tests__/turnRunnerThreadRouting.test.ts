@@ -503,7 +503,7 @@ describe('turnRunner 自动任务转播(scheduler turn → 远程控制 thread)'
       // 卡片正文含任务名 + 工具步骤 + 结果文本
       const lastReplace = stub.replace.mock.calls.at(-1)?.[0] as string;
       expect(lastReplace).toContain('🤖 自动任务「PR #118 跟进」');
-      expect(lastReplace).toContain('Read a.ts');
+      expect(lastReplace).toContain('读取 a.ts');
       expect(lastReplace).toContain('检查完毕,无新变化');
     });
 
@@ -513,7 +513,7 @@ describe('turnRunner 自动任务转播(scheduler turn → 远程控制 thread)'
       const finalBody = (stub.finalize.mock.calls.at(-1) as unknown[] | undefined)?.[0] as string;
       expect(finalBody).toContain('🤖 自动任务「PR #118 跟进」');
       expect(finalBody).toContain('检查完毕,无新变化');
-      expect(finalBody).not.toContain('第 1 步'); // 步骤已去掉
+      expect(finalBody).not.toContain('工作中'); // 过程区已去掉
     });
   });
 

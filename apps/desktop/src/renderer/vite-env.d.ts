@@ -1293,7 +1293,8 @@ interface ElectronAPI {
     setSwallowActivationClick: (enabled: boolean) => Promise<{ ok: true }>;
     getWindowsCloseBehavior: () => Promise<'quit' | 'tray' | null>;
     setWindowsCloseBehavior: (behavior: 'quit' | 'tray') => Promise<'quit' | 'tray'>;
-    chooseWindowsCloseBehavior: () => Promise<'quit' | 'tray'>;
+    onWindowsCloseBehaviorRequested: (callback: () => void) => () => void;
+    notifyWindowsCloseBehaviorPromptShown: () => void;
   };
 
   // ── 右侧栏独立子窗口(RSB window)──────────────────────────────────────
@@ -3066,7 +3067,7 @@ interface ElectronAPI {
       onOrcaWorkerChanged: (cb: (payload: unknown) => void) => () => void;
       createWorker: (input: Record<string, unknown>) => Promise<unknown>;
       switchFocus: (input: Record<string, unknown>) => Promise<unknown>;
-      idleWorker: (leadSessionId: string, workerId: string) => Promise<unknown>;
+      idleWorker: (leadSessionId: string, workerId: string, expectedStatus?: 'done') => Promise<unknown>;
       archiveWorker: (leadSessionId: string, workerId: string) => Promise<unknown>;
       endTeam: (leadSessionId: string) => Promise<unknown>;
       getCollaborationSettings: () => Promise<unknown>;
@@ -3753,6 +3754,12 @@ interface ElectronAPI {
       isCustomized: boolean;
       customizedKeys: string[];
       defaults: { maker: boolean; claudeCode: boolean; codex: boolean };
+    }>;
+    /** 启动期迁移旧版 renderer/native memory opt-out；null 表示 renderer marker 缺失。 */
+    memoryPreserveLegacyMakerDisabled: (legacyRendererValue: boolean | null) => Promise<{
+      maker: boolean;
+      claudeCode: boolean;
+      codex: boolean;
     }>;
     memoryResetSettings: () => Promise<{
       maker: boolean;

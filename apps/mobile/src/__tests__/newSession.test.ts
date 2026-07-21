@@ -791,7 +791,7 @@ describe('new session composer surface', () => {
     expect(selectDeviceSource).toContain('cancelVoiceForDeviceSwitch();');
     expect(newSource).toContain('voiceStartupInFlightRef.current = false;');
     expect(newSource).toContain('createMobileVoiceControllerSession({');
-    expect(newSource).toContain('resolveMobileVoiceCredentialFromLiteLlmSettings(selectedDeviceId)');
+    expect(newSource).toContain('createMobileCindyVoiceCredential(selectedDeviceId)');
     expect(newSource).toContain('readNewSessionPreferences');
     expect(newSource).toContain('saveNewSessionPreferences');
     expect(newSource).toContain('pickNewSessionDefaultDevice({');
@@ -832,10 +832,15 @@ describe('new session composer surface', () => {
     // Touch-down warm-up: the mic button prewarms the audio session + ASR
     // connection at pressIn, and voice startup claims that connection when fresh.
     expect(newSource).toContain('onPressIn={handleVoiceButtonPressIn}');
-    expect(newSource).toContain('prewarmMobileVoiceStart(selectedDeviceId);');
+    expect(newSource).toContain('prewarmMobileVoiceStart(selectedDeviceId, {');
+    expect(newSource).toContain('getAccessToken: () => auth.getAccessToken(),');
+    expect(newSource).toContain('refreshAccessToken: () => auth.refreshAccessToken(),');
+    expect(newSource).toContain('apiFetch: auth.apiFetch,');
     expect(newSource).toContain('const [prewarmedVoice, localVoiceInputHistory] = await Promise.all([');
     expect(newSource).toContain('takePrewarmedMobileVoiceAsr(selectedDeviceId) ?? Promise.resolve(null),');
-    expect(newSource).toContain('?? await resolveMobileVoiceCredentialFromLiteLlmSettings(selectedDeviceId);');
+    expect(newSource).toContain('?? createMobileCindyVoiceCredential(selectedDeviceId);');
+    expect(newSource).toContain('connectionProvider: (providerId) => voiceContext.createAsrConnection(providerId),');
+    expect(newSource).toContain('refinerTargetProvider: (providerId, options) => voiceContext.createRefinerTarget(providerId, options),');
     expect(newSource).toContain('const composerVoicePlacement = resolveMobileComposerVoiceButtonPlacement({');
     expect(newSource).toContain('hasTrailingAction: composerShowCreateButton');
     expect(newSource).toContain('const voiceStatusVisible = Boolean(voiceError);');

@@ -13,6 +13,10 @@ type MobileRealtimeAsrProviderOptions = {
   websocketFactory?: WebSocketFactory;
   connectTimeoutMs?: number;
   flushTimeoutMs?: number;
+  connectionProvider?: (provider: string) => Promise<{
+    websocketUrl: string;
+    authorizationToken: string;
+  }>;
 };
 
 type WebSocketFactory = new (
@@ -127,7 +131,9 @@ class MobileFallbackAsrProvider implements AsrProvider {
   private readonly candidates: MobileAsrCandidate[];
   private readonly callbacks: Array<(event: AsrEvent) => void> = [];
   private active: AsrProvider | null = null;
+  private pending: AsrProvider | null = null;
   private activeProvider = '';
+  private stopped = false;
 
   recover?: () => Promise<void>;
 
@@ -137,18 +143,28 @@ class MobileFallbackAsrProvider implements AsrProvider {
   }
 
   async start(): Promise<void> {
+    this.stopped = false;
     let lastError: unknown = null;
     for (const candidate of this.candidates) {
+      if (this.stopped) throw new Error('Mobile ASR fallback provider stopped.');
       const provider = candidate.create();
+      this.pending = provider;
       provider.onEvent((event) => {
         if (this.active === provider) this.callbacks.forEach((callback) => callback(event));
       });
       try {
         await provider.start();
       } catch (err) {
+        if (this.pending === provider) this.pending = null;
         lastError = err;
         await provider.dispose?.().catch(() => undefined);
+        if (this.stopped) throw err;
         continue;
+      }
+      if (this.pending === provider) this.pending = null;
+      if (this.stopped) {
+        await provider.stop().catch(() => undefined);
+        throw new Error('Mobile ASR fallback provider stopped.');
       }
       this.active = provider;
       this.activeProvider = candidate.provider;
@@ -167,11 +183,15 @@ class MobileFallbackAsrProvider implements AsrProvider {
   }
 
   async stop(): Promise<void> {
-    await this.active?.stop();
+    this.stopped = true;
+    const providers = new Set([this.pending, this.active]);
+    await Promise.all([...providers].map((provider) => provider?.stop()));
   }
 
   async dispose(): Promise<void> {
-    await this.active?.dispose?.();
+    await this.stop();
+    const providers = new Set([this.pending, this.active]);
+    await Promise.all([...providers].map((provider) => provider?.dispose?.()));
   }
 
   onEvent(callback: (event: AsrEvent) => void): void {
@@ -205,6 +225,7 @@ export class MobileRealtimeAsrProvider implements AsrProvider {
   private readonly flushTimeoutMs: number;
   private readonly protocolProfile: MobileRealtimeProtocolProfile;
   private readonly pcmSampleRate: number;
+  private readonly connectionProvider?: MobileRealtimeAsrProviderOptions['connectionProvider'];
   private callback: (event: AsrEvent) => void = () => {};
   private socket: WebSocketLike | null = null;
   private sessionReady = false;
@@ -236,6 +257,7 @@ export class MobileRealtimeAsrProvider implements AsrProvider {
     this.flushTimeoutMs = options.flushTimeoutMs ?? DEFAULT_FLUSH_TIMEOUT_MS;
     this.protocolProfile = readRealtimeProtocolProfile(this.credential);
     this.pcmSampleRate = this.credential.asr.pcmSampleRate ?? 16_000;
+    this.connectionProvider = options.connectionProvider;
   }
 
   onEvent(callback: (event: AsrEvent) => void): void {
@@ -249,10 +271,10 @@ export class MobileRealtimeAsrProvider implements AsrProvider {
     if (this.credential.asr.auth !== 'api-key') {
       throw new Error(`手机版实时语音暂不支持 ${this.credential.asr.auth} ASR 鉴权。`);
     }
-    if (!this.credential.asr.endpointPath) {
+    if (!this.connectionProvider && !this.credential.asr.endpointPath) {
       throw new Error('实时语音 ASR 配置缺少 endpointPath。');
     }
-    if (!this.credential.proxyApiKey) {
+    if (!this.connectionProvider && !this.credential.proxyApiKey) {
       throw new Error('缺少 XD Proxy API key。');
     }
     this.resetTranscriptState();
@@ -263,15 +285,23 @@ export class MobileRealtimeAsrProvider implements AsrProvider {
 
   private async connect(): Promise<void> {
     const endpointPath = this.credential.asr.endpointPath;
-    if (!endpointPath) {
+    if (!this.connectionProvider && !endpointPath) {
       throw new Error('实时语音 ASR 配置缺少 endpointPath。');
     }
+    const dynamicConnection = this.connectionProvider
+      ? await this.connectionProvider(this.credential.asr.provider)
+      : null;
+    if (this.stopped) throw new Error('Realtime ASR connection stopped.');
+    const websocketUrl = dynamicConnection?.websocketUrl
+      ?? toWebSocketUrl(this.credential.proxyBaseUrl, endpointPath!);
+    const authorizationToken = dynamicConnection?.authorizationToken
+      ?? this.credential.proxyApiKey;
 
     await new Promise<void>((resolve, reject) => {
       const socket = new this.websocketFactory(
-        toWebSocketUrl(this.credential.proxyBaseUrl, endpointPath),
+        websocketUrl,
         null,
-        { headers: this.buildHeaders() },
+        { headers: this.buildHeaders(authorizationToken, !dynamicConnection) },
       );
       this.socket = socket;
       let settled = false;
@@ -339,6 +369,7 @@ export class MobileRealtimeAsrProvider implements AsrProvider {
             event,
             'Realtime ASR connection closed before it was ready.',
             pendingConnectError?.message,
+            Boolean(this.connectionProvider),
           ))));
         } else if (!this.stopped) this.callback({ type: 'disconnected', at: Date.now() });
       };
@@ -410,10 +441,10 @@ export class MobileRealtimeAsrProvider implements AsrProvider {
     return this.recoveryPromise;
   }
 
-  private buildHeaders(): Record<string, string> {
+  private buildHeaders(authorizationToken: string, includeModel: boolean): Record<string, string> {
     return {
-      Authorization: `Bearer ${this.credential.proxyApiKey}`,
-      ...(this.credential.asr.litellmHeaderModel
+      Authorization: `Bearer ${authorizationToken}`,
+      ...(includeModel && this.credential.asr.litellmHeaderModel
         ? { 'x-litellm-model': this.credential.asr.litellmHeaderModel }
         : {}),
     };
@@ -772,6 +803,7 @@ export class MobileVolcengineSaucAsrProvider implements AsrProvider {
   private readonly connectTimeoutMs: number;
   private readonly flushTimeoutMs: number;
   private readonly pcmSampleRate: number;
+  private readonly connectionProvider?: MobileRealtimeAsrProviderOptions['connectionProvider'];
   private callback: (event: AsrEvent) => void = () => {};
   private socket: WebSocketLike | null = null;
   private connected = false;
@@ -799,6 +831,7 @@ export class MobileVolcengineSaucAsrProvider implements AsrProvider {
     this.connectTimeoutMs = options.connectTimeoutMs ?? DEFAULT_CONNECT_TIMEOUT_MS;
     this.flushTimeoutMs = options.flushTimeoutMs ?? DEFAULT_FLUSH_TIMEOUT_MS;
     this.pcmSampleRate = this.credential.asr.pcmSampleRate ?? 16_000;
+    this.connectionProvider = options.connectionProvider;
   }
 
   onEvent(callback: (event: AsrEvent) => void): void {
@@ -819,13 +852,21 @@ export class MobileVolcengineSaucAsrProvider implements AsrProvider {
   }
 
   private async openSocket(endpointPath: string, resourceId: string): Promise<void> {
+    const dynamicConnection = this.connectionProvider
+      ? await this.connectionProvider(this.credential.asr.provider)
+      : null;
+    if (this.stopped) throw new Error('Volcengine SAUC ASR connection stopped.');
+    const websocketUrl = dynamicConnection?.websocketUrl
+      ?? toWebSocketUrl(this.credential.proxyBaseUrl, endpointPath);
+    const authorizationToken = dynamicConnection?.authorizationToken
+      ?? this.credential.proxyApiKey;
     await new Promise<void>((resolve, reject) => {
       const socket = new this.websocketFactory(
-        toWebSocketUrl(this.credential.proxyBaseUrl, endpointPath),
+        websocketUrl,
         null,
         {
           headers: {
-            Authorization: `Bearer ${this.credential.proxyApiKey}`,
+            Authorization: `Bearer ${authorizationToken}`,
             'X-Api-Resource-Id': resourceId,
             'X-Api-Connect-Id': buildConnectId(),
           },
@@ -897,6 +938,7 @@ export class MobileVolcengineSaucAsrProvider implements AsrProvider {
             event,
             'Volcengine SAUC ASR connection closed before it was ready.',
             pendingConnectError?.message,
+            Boolean(this.connectionProvider),
           ))));
         } else if (!this.stopped) this.callback({ type: 'disconnected', at: Date.now() });
       };
@@ -1599,9 +1641,13 @@ function webSocketCloseBeforeReadyMessage(
   event: { code?: number; reason?: string },
   fallbackMessage: string,
   pendingMessage?: string,
+  managedService = false,
 ): string {
   const closeStatus = webSocketAuthStatus(event);
   if (closeStatus) {
+    if (managedService) {
+      return `Cindy 语音会话已失效或没有权限（WebSocket ${closeStatus}）。请确认登录状态后重试。`;
+    }
     return `LiteLLM Key 无效或没有语音识别权限（WebSocket ${closeStatus}）。请在设置里更新 LiteLLM Key 后重试。`;
   }
   if (event.reason?.trim()) return `${fallbackMessage} (${event.reason.trim()})`;

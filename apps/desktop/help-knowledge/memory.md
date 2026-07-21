@@ -1,7 +1,7 @@
 ---
 id: memory
 title: Memory across conversations
-summary: Toggle Maker Memory globally, enable / disable per agent, and reset what's remembered — in Settings > Personalization.
+summary: Toggle Maker Memory globally, enable / disable per agent entry, and reset what's remembered — in Settings > Personalization.
 tab: personalization
 status: draft
 ---
@@ -14,9 +14,9 @@ Memory lets the agents carry context across your conversations — facts about y
 **Controls:**
 
 - **Maker Memory** — the master toggle. Off = no agent uses memory.
-- **Per-agent toggles** — enable / disable memory independently for Claude Code and Codex. Each agent has its own memory store.
-- **Status** — the section shows each agent's memory state at a glance.
-- **Reset** — clears what's been remembered for that agent. Asks for confirmation first; reset is not undoable.
+- **Per-agent-entry toggles** — enable / disable native memory independently for Claude Code and Codex. Models from other providers use the setting of the entry they run through.
+- **Status** — the section shows each agent entry's memory state at a glance.
+- **Reset** — clears what's been remembered for that agent entry. Asks for confirmation first; reset is not undoable.
 
 **What memory is, what it isn't:**
 

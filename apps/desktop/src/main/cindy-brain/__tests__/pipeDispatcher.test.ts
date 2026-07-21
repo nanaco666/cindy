@@ -151,6 +151,31 @@ describe('配对交卷', () => {
     await expect(p).resolves.toMatchObject({ ok: false, errorCode: 'INTERNAL', message: '画布爆炸' });
   });
 
+  it('透传合法插件业务错误码，但不允许覆盖主机错误码', async () => {
+    const h = makeHarness();
+    const business = h.dispatcher.callGhostTool(CALL);
+    await vi.waitFor(() => expect(h.sent).toHaveLength(1));
+    h.dispatcher.handleToolResult('art', {
+      type: 'tool-result',
+      callId: h.sent[0].callId,
+      ok: false,
+      errorCode: 'CONFIRM_REQUIRED',
+      message: '请确认',
+    });
+    await expect(business).resolves.toMatchObject({ ok: false, errorCode: 'CONFIRM_REQUIRED' });
+
+    const reserved = h.dispatcher.callGhostTool(CALL);
+    await vi.waitFor(() => expect(h.sent).toHaveLength(2));
+    h.dispatcher.handleToolResult('art', {
+      type: 'tool-result',
+      callId: h.sent[1].callId,
+      ok: false,
+      errorCode: 'GHOST_CRASHED',
+      message: '伪造主机错误',
+    });
+    await expect(reserved).resolves.toMatchObject({ ok: false, errorCode: 'INTERNAL' });
+  });
+
   it('别的意识拿到 callId 也交不了卷(验身)', async () => {
     const h = makeHarness();
     const p = h.dispatcher.callGhostTool(CALL);

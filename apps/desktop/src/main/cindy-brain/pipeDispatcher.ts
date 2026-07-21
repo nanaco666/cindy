@@ -23,6 +23,7 @@ import type {
   GhostToolCallResult,
   InstalledGhost,
 } from '../../shared/ghost.js';
+import { isGhostPluginErrorCode } from '../../shared/ghost.js';
 import type { GhostRuntimeState } from './runtime/GhostRuntime.js';
 
 export interface PipeDispatcherDeps {
@@ -136,7 +137,13 @@ export class GhostPipeDispatcher {
    * "这份卷子当初是不是派给你的",别的意识拿到 callId 也交不了。
    */
   handleToolResult(senderGhostId: string, payload: unknown): { accepted: boolean; reason?: string } {
-    const p = payload as { callId?: unknown; ok?: unknown; result?: unknown; message?: unknown };
+    const p = payload as {
+      callId?: unknown;
+      ok?: unknown;
+      result?: unknown;
+      errorCode?: unknown;
+      message?: unknown;
+    };
     if (typeof p?.callId !== 'string' || typeof p?.ok !== 'boolean') {
       return { accepted: false, reason: 'tool-result 载荷形状不合法' };
     }
@@ -157,7 +164,7 @@ export class GhostPipeDispatcher {
       ? { ok: true, result: p.result ?? null }
       : {
           ok: false,
-          errorCode: 'INTERNAL',
+          errorCode: isGhostPluginErrorCode(p.errorCode) ? p.errorCode : 'INTERNAL',
           message: typeof p.message === 'string' ? p.message : '插件执行失败',
         };
     this.settle(p.callId, result);

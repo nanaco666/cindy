@@ -52,7 +52,7 @@ export interface MakerMemoryManagerDeps {
   config?: Partial<MemoryConfig>;
   /**
    * 启动时初值. 来自 settings (host 透传 runtimeConfig.makerMemoryEnabled).
-   * 默认 false — maker memory 实验阶段, 用户主动开启才生效。
+   * 默认 false — host 必须明确开启，避免未接入设置系统的宿主意外改变行为。
    */
   initialEnabled?: boolean;
 }

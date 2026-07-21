@@ -64,6 +64,7 @@ export function OrcaSplitView({
     workerSessionId,
   } = useOrcaWorkerSelection({
     leadSessionId,
+    viewVisible: togglePane === 'worker' && reportAgentIslandVisibility,
   });
   const leadSession = useMemo(
     () => sessions.find((s) => s.id === leadSessionId) ?? null,
@@ -111,10 +112,21 @@ export function OrcaSplitView({
   }, [syncAgentIslandVisibleSession]);
 
   useLayoutEffect(() => {
-    if (togglePane === 'worker' && selectedWorkerId) {
+    if (
+      togglePane === 'worker' &&
+      reportAgentIslandVisibility &&
+      selectedWorkerId &&
+      selectedWorkerRecord?.status !== 'done'
+    ) {
       clearWorkerAttention(selectedWorkerId);
     }
-  }, [attention, selectedWorkerId, togglePane]);
+  }, [
+    attention,
+    reportAgentIslandVisibility,
+    selectedWorkerId,
+    selectedWorkerRecord?.status,
+    togglePane,
+  ]);
 
   const activePane = togglePane;
   const tabBase = 'inline-flex items-center gap-1.5 text-xs leading-none transition-colors outline-none';

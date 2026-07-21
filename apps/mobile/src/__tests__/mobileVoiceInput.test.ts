@@ -577,6 +577,35 @@ describe('mobileVoiceInput', () => {
     );
   });
 
+  it('refreshes the managed voice access token once after a 401 refinement response', async () => {
+    const fetchCloud = vi.fn()
+      .mockResolvedValueOnce({ ok: false, status: 401, statusText: 'Unauthorized', text: async () => '' } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        body: undefined,
+        json: async () => ({ choices: [{ message: { content: JSON.stringify({ text: 'refined' }) } }] }),
+      } as unknown as Response);
+    const requestTargetProvider = vi.fn()
+      .mockResolvedValueOnce({ url: 'https://voice.example.com/refine', authorization: 'Bearer stale-token' })
+      .mockResolvedValueOnce({ url: 'https://voice.example.com/refine', authorization: 'Bearer fresh-token' });
+    const client = new MobileLiteLlmTextModelClient({
+      deps: { fetch: fetchCloud as unknown as typeof fetch },
+      requestTargetProvider,
+    });
+
+    await expect(client.requestJson<{ text: string }>({
+      model: 'gpt-5.4-mini',
+      system: 'Return JSON.',
+      user: { text: 'raw' },
+      schemaName: 'VoiceRefinement',
+    })).resolves.toEqual({ text: 'refined' });
+    expect(requestTargetProvider).toHaveBeenNthCalledWith(1, { refreshAccessToken: false });
+    expect(requestTargetProvider).toHaveBeenNthCalledWith(2, { refreshAccessToken: true });
+    expect(fetchCloud).toHaveBeenCalledTimes(2);
+  });
+
   it('parses buffered LiteLLM SSE text when React Native fetch has no readable body', async () => {
     const fetchCloud = vi.fn(async (url: string) => {
       if (url.endsWith('/v1/audio/transcriptions')) {

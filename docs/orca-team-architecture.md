@@ -181,19 +181,22 @@ Worktree 现状：Orca 与普通 session 对齐，worktree 是可选项，不强
 1. **worker 终态不被失败回滚覆盖（状态：不变量）**<br>
    派活 accepted 后如果后续失败，rollback 只允许把仍处于 `running` 的 worker 恢复到旧状态；已经进入 `done/error/idle` 的 worker 不得被回滚覆盖。实现指针：`orcaTeamService.ts` 的 `rollbackAcceptedDispatchState` 与 `handleWorkerTerminalTurn`。
 
-2. **idle worker 恢复必须保留 extraDirs（状态：不变量）**<br>
+2. **done 确认与派活必须互斥（状态：不变量）**<br>
+   `done` worker 的隐式 `idle_worker(expectedStatus='done')` 确认不得与同一 worker 的派活交错：派活从 pre-resume reservation 起至 host dispatch settle 期间持有 active dispatch 计数，done 确认必须在每 worker transition 队列中串行执行，并在计数非零时拒绝。确认还必须在 DB CAS 前后检查 live turn、`send_to_session` 锁与 pending 输入；close 必须使用 `Session.closeIfIdle` 原子地与 send reservation 互斥。任一检查失败或 close 失败时，若已 CAS 为 `idle`，必须只恢复仍为 `idle` 的记录到 `done`，不得覆盖新终态。实现指针：`orcaTeamService.ts` 的 `withWorkerTransition`、`activeWorkerDispatches`、`dispatchWorkerTask`、`idleWorker`。
+
+3. **idle worker 恢复必须保留 extraDirs（状态：不变量）**<br>
    idle worker 被 `switch_focus` 或 `send_to_worker` 唤醒时，要从 DB 读取 `extra_dirs` 并带回 `bootstrapSession`，否则恢复后的 worker 会丢附加目录上下文。实现指针：`register.ts` 的 idle worker resume helper。
 
-3. **worker 状态变更必须广播给 renderer（状态：不变量）**  
+4. **worker 状态变更必须广播给 renderer（状态：不变量）**
    创建 worker、`enableOrca` 创建首个 worker、任意真实 worker turn 开始后的 running、idle、archive、terminal done/error 都必须广播 `ORCA_WORKER_CHANGED`。worker DB `status` 跟随真实 turn 生命周期：Lead 派活或用户直接对话 worker 时，只有真实 turn 开始才置 `running`，terminal 才置 `done/error`；`switch_focus` / resume / restore 只能恢复可访问性，不能凭空置 `running`。实现指针：`orcaLifecycleService.ts` 的 `createWorker` / `enableTeam`、`orcaWorkerCreationService.ts` 的 `createWorkerInTeam`、`orcaTeamService.ts` 的 `dispatchWorkerTask` / `handleWorkerTurnStarted` / `handleWorkerTerminalTurn`、`register.ts` 的 status event adapter、`useWorkers.ts` 的 `useWorkers`。
 
-4. **切换 session 不重置 worker 未读状态（状态：不变量）**  
+5. **切换 session 不重置 worker 未读状态（状态：不变量）**
    worker done 的红点由 renderer 进程级 edge-trigger attention store 维护，而不是跟随组件切换重置的局部 state。worker 状态跳变进 `done` 才标 attention；正在查看该 worker 时清除 attention；只切走 / 切回不应让同一轮 done 重新变未读。实现指针：`useOrcaWorkerAttentionWatcher.ts` 的 `computeWorkerAttentionUpdates`，`RolePillDropdown.tsx` 的 selected worker clear effect，`workerAttentionStore.ts` 的 `attentionWorkerIds`。
 
-5. **重启后对 known worker 懒登记（状态：不变量）**  
+6. **重启后对 known worker 懒登记（状态：不变量）**
    app 重启后内存里的 known worker / vendorOptions 都会丢。恢复时不能只信内存 cache，必须通过 DB 的 `sessions.orca_role`、`orca_workers`、`orca_teams` 懒合成 Orca vendorOptions / worker link，保证手动 stop、terminal turn、worker 列表仍能识别已存在 worker；手动中断跟踪只能作为运行时优化，不能作为唯一事实源。刚开启协同但 worker 尚未对话时，也必须先写出可恢复的 agent 侧历史；当前通过 ready placeholder 触发 worker 首次 send，避免 Codex worker 因 rollout 缺失在重启后无法 resume。实现指针：`register.ts` 的 `synthesizeOrcaVendorOptionsFromDb`、`sessionCreateHandler.ts` 的 `sendWorkerReadyMessage`、`orcaLifecycleService.ts` 的 `enableTeam` / `sendWorkerReadyPlaceholder` 依赖、`orcaTeamStore.ts` 的 `listWorkersByLead` / `getWorkerLink`、`orcaManualInterrupt.ts` 的 known worker / manual interrupt store。
 
-6. **重启后 Lead↔Worker 互访 / resume 不随开启路径变化（状态：不变量）**  
+7. **重启后 Lead↔Worker 互访 / resume 不随开启路径变化（状态：不变量）**
    无论协同通过 `enableTeam` 自动创建首个 worker、MCP `start_team` + `create_worker`，还是 renderer 的协同按钮开启；也无论重启发生在对话中途，还是初始化完毕但 worker 尚未接过真实任务，maker 重启后 Lead 与 Worker 都必须能继续互访。`send_to_worker`、`send_to_lead`、`switch_focus` / idle resume 不能因为内存态丢失、worker link 懒登记缺失或空 worker rollout 缺失而失败。实现指针：`CCAgentSessionView.tsx` 的 `requestEnableCollab`、`packages/lizi-mcps/src/orca/server.ts` 的 `start_team` / `create_worker` 顶层注册、`xdt-helper/start_team.ts` / `create_worker.ts`、`orcaLifecycleService.ts` 的 `startTeam` / `createWorker` / `enableTeam`、`register.ts` 的 `synthesizeOrcaVendorOptionsFromDb` / `resumeOrcaWorkerSessionIfMissing`、`orcaTeamService.ts` 的 `sendToWorker`、`orca-bridge-mcp.ts` 的 worker `send_to_lead` handler。
 
 ### 测试与回归清单

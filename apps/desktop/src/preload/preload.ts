@@ -17,10 +17,11 @@ import {
   type AgentIslandSoundSettings,
 } from '../shared/agentIsland';
 import {
-  WINDOW_BEHAVIOR_CHOOSE_WINDOWS_CLOSE_BEHAVIOR_CHANNEL,
   WINDOW_BEHAVIOR_GET_WINDOWS_CLOSE_BEHAVIOR_CHANNEL,
   WINDOW_BEHAVIOR_SET_SWALLOW_ACTIVATION_CLICK_CHANNEL,
   WINDOW_BEHAVIOR_SET_WINDOWS_CLOSE_BEHAVIOR_CHANNEL,
+  WINDOW_BEHAVIOR_WINDOWS_CLOSE_BEHAVIOR_REQUESTED_CHANNEL,
+  WINDOW_BEHAVIOR_WINDOWS_CLOSE_BEHAVIOR_SHOWN_CHANNEL,
   type WindowsCloseBehavior,
 } from '../shared/windowBehavior';
 import { SELECTION_CONTEXT_MENU_ADD_TO_CHAT_CHANNEL } from '../shared/selectionContextMenu';
@@ -986,8 +987,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
       behavior: WindowsCloseBehavior,
     ): Promise<WindowsCloseBehavior> =>
       ipcRenderer.invoke(WINDOW_BEHAVIOR_SET_WINDOWS_CLOSE_BEHAVIOR_CHANNEL, behavior),
-    chooseWindowsCloseBehavior: (): Promise<WindowsCloseBehavior> =>
-      ipcRenderer.invoke(WINDOW_BEHAVIOR_CHOOSE_WINDOWS_CLOSE_BEHAVIOR_CHANNEL),
+    onWindowsCloseBehaviorRequested: (callback: () => void): (() => void) => {
+      const listener = (): void => callback();
+      ipcRenderer.on(WINDOW_BEHAVIOR_WINDOWS_CLOSE_BEHAVIOR_REQUESTED_CHANNEL, listener);
+      return () => ipcRenderer.removeListener(
+        WINDOW_BEHAVIOR_WINDOWS_CLOSE_BEHAVIOR_REQUESTED_CHANNEL,
+        listener,
+      );
+    },
+    notifyWindowsCloseBehaviorPromptShown: (): void =>
+      ipcRenderer.send(WINDOW_BEHAVIOR_WINDOWS_CLOSE_BEHAVIOR_SHOWN_CHANNEL),
   },
 
   // ── 右侧栏独立子窗口(RSB window)──────────────────────────────────────
@@ -3120,8 +3129,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.invoke('maker:worker:create', input),
       switchFocus: (input: Record<string, unknown>): Promise<unknown> =>
         ipcRenderer.invoke('maker:worker:switch-focus', input),
-      idleWorker: (leadSessionId: string, workerId: string): Promise<unknown> =>
-        ipcRenderer.invoke('maker:worker:idle', { leadSessionId, workerId }),
+      idleWorker: (leadSessionId: string, workerId: string, expectedStatus?: 'done'): Promise<unknown> => {
+        if (expectedStatus === 'done') {
+          return ipcRenderer.invoke('maker:worker:acknowledge-done', { leadSessionId, workerId });
+        }
+        return ipcRenderer.invoke('maker:worker:idle', {
+          leadSessionId,
+          workerId,
+          ...(expectedStatus ? { expectedStatus } : {}),
+        });
+      },
       archiveWorker: (leadSessionId: string, workerId: string): Promise<unknown> =>
         ipcRenderer.invoke('maker:worker:archive', { leadSessionId, workerId }),
       endTeam: (leadSessionId: string): Promise<unknown> =>
@@ -3791,6 +3808,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
       defaults: { maker: boolean; claudeCode: boolean; codex: boolean };
     }> =>
       ipcRenderer.invoke('maker:memory:get-settings-state'),
+    /** 启动期迁移旧版 renderer/native memory opt-out；null 表示 renderer marker 缺失。 */
+    memoryPreserveLegacyMakerDisabled: (legacyRendererValue: boolean | null): Promise<{
+      maker: boolean;
+      claudeCode: boolean;
+      codex: boolean;
+    }> =>
+      ipcRenderer.invoke('maker:memory:preserve-legacy-maker-disabled', legacyRendererValue),
     memoryResetSettings: (): Promise<{
       maker: boolean;
       claudeCode: boolean;

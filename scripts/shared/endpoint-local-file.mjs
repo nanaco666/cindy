@@ -22,6 +22,7 @@ const LOCAL_AUTH_BASE_URL = 'http://localhost:3344';
 const LOCAL_DEVICE_LINK_BASE_URL = 'http://localhost:3335';
 const LOCAL_OSS_BASE_URL = 'http://localhost:3340';
 const LOCAL_MODEL_ACCESS_BASE_URL = 'http://localhost:3339';
+const LOCAL_VOICE_BASE_URL = 'http://localhost:3342';
 const LOCAL_GITHUB_BASE_URL = 'http://localhost:3336';
 const LOCAL_SKILLHUB_BASE_URL = 'http://localhost:3341';
 
@@ -43,6 +44,7 @@ export function generateEndpointLocalFile({ repoRoot }) {
     deviceLinkApiBaseUrl: LOCAL_DEVICE_LINK_BASE_URL,
     ossApiBaseUrl: LOCAL_OSS_BASE_URL,
     modelAccessApiBaseUrl: LOCAL_MODEL_ACCESS_BASE_URL,
+    voiceApiBaseUrl: LOCAL_VOICE_BASE_URL,
     githubApiBaseUrl: LOCAL_GITHUB_BASE_URL,
     skillhubApiBaseUrl: LOCAL_SKILLHUB_BASE_URL,
   };

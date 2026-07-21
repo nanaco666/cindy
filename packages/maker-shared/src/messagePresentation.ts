@@ -55,6 +55,12 @@ export interface ToolRowPresentation {
   status: ToolRowStatus;
 }
 
+/** Compact human-readable tool text shared by mobile and remote IM surfaces. */
+export interface ToolUseTextPresentation {
+  label: string;
+  detail?: string;
+}
+
 export interface ToolRowPresentationOptions {
   isSessionStreaming?: boolean;
   /** Structured sub-action when one Codex command execution expands into several rows. */
@@ -396,6 +402,23 @@ export function summarizeToolRowPresentation<
 }
 
 /**
+ * Present a raw tool_use event with the same Chinese wording as expanded
+ * desktop/mobile tool rows. Remote channels use only `label` in their live
+ * latest-N preview; `detail` remains available for surfaces that can expand.
+ */
+export function summarizeToolUseText(
+  toolName: string,
+  input: unknown,
+  options: Pick<ToolRowPresentationOptions, 'intentOverride'> = {},
+): ToolUseTextPresentation {
+  const sourceDescriptor = describeToolUse(toolName, input);
+  const descriptor = sourceDescriptor.kind === 'command' && options.intentOverride
+    ? { ...sourceDescriptor, intent: options.intentOverride }
+    : sourceDescriptor;
+  return formatToolRowText(descriptor);
+}
+
+/**
  * 从 normalize 消息解出工具描述符：source 上 toolName / input 走 content 透传
  * （mobile 的 RemoteMessage 形态），残缺时退化 generic（describeToolUse 自身防御）。
  */
@@ -418,7 +441,7 @@ function toolRowDescriptor(tool: MessagePresentationToolLike): ToolUseDescriptor
  * - MCP / dynamic / collab → `调用 server · tool`；
  * - 无法分类的命令显示「运行命令」，真实命令保留在 detail；其它工具按类型回退。
  */
-function formatToolRowText(descriptor: ToolUseDescriptor): { label: string; detail?: string } {
+function formatToolRowText(descriptor: ToolUseDescriptor): ToolUseTextPresentation {
   switch (descriptor.kind) {
     case 'command': {
       if (descriptor.description) {

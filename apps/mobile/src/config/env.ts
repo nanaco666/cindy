@@ -207,6 +207,12 @@ export let DEVICE_LINK_API_BASE_URL = resolveDeviceLinkApiBaseUrl(
   configuredValue('EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL'),
 );
 
+/** voice-server 数据面；正式包由启动端点清单回填。 */
+export let VOICE_API_BASE_URL = normalizeBaseUrlWithDefault(
+  configuredValue('EXPO_PUBLIC_CINDY_VOICE_API_BASE_URL'),
+  DEV_MANIFEST.voiceApiBaseUrl ?? '',
+);
+
 // 二进制版本号:审核模式匹配基准。优先原生层版本(iOS CFBundleShortVersionString /
 // Android versionName,OTA 热更后不漂移),expoConfig.version 兜底(dev / 测试环境
 // 拿不到原生值)。与 mobileTapdb 的版本上报取值口径一致。
@@ -273,6 +279,7 @@ export function applyResolvedClientEndpoints(resolved: {
   authApiBaseUrl?: string;
   oauthBrokerApiBaseUrl?: string;
   deviceLinkApiBaseUrl?: string;
+  voiceApiBaseUrl?: string;
   mobileUpdateBaseUrl?: string;
   /** 审核模式送审版本号(parser 产出,null = 清单未填;undefined = 不改动)。 */
   reviewVersion?: string | null;
@@ -287,6 +294,9 @@ export function applyResolvedClientEndpoints(resolved: {
   }
   if (resolved.deviceLinkApiBaseUrl !== undefined) {
     DEVICE_LINK_API_BASE_URL = resolved.deviceLinkApiBaseUrl.replace(/\/$/, '');
+  }
+  if (resolved.voiceApiBaseUrl !== undefined) {
+    VOICE_API_BASE_URL = resolved.voiceApiBaseUrl.replace(/\/$/, '');
   }
   // 仅自建变体吃清单覆写,保住「非自建 ⇒ OTA_SERVER_BASE_URL 恒空串」不变量
   // (调用点虽都有 IS_OTA_SELFHOST 门控,这里再挡一层,变体身份始终由烧包决定)。

@@ -244,6 +244,7 @@ import { rehydrateCloseSuppression } from './maker-host/rehydrateCloseSuppressio
 // 静态 import 不会触发 Maker / Agent 的实例化。
 import {
   getMaker as getMakerCore,
+  getMakerIfReady,
   shutdownLspServerPool,
   prepareCodexForAuthModeChange,
   cancelCodexAuthModeChange,
@@ -305,7 +306,11 @@ import {
   setGoalAskAnswerObserver,
 } from './maker-ipc/register.js';
 import { MAKER_INVOKE as MAKER_IPC_INVOKE, MAKER_PUSH } from './maker-ipc/channels.js';
-import { readMemorySettings, readMemorySettingsState } from './maker-host/memory-settings-store.js';
+import {
+  preserveLegacyMakerMemoryDisabled,
+  readMemorySettings,
+  readMemorySettingsState,
+} from './maker-host/memory-settings-store.js';
 import {
   readImDefaultSettingsState,
   resetImDefaultSettings,
@@ -396,14 +401,17 @@ import {
 } from './window-behavior-settings-store.js';
 import {
   hideWindowToWindowsTray,
+  requestWindowsCloseBehavior,
   requestWindowsTrayQuit,
 } from './windowsTrayLifecycle.js';
+import { createWindowsClosePromptFallbackController } from './windowsClosePromptFallback.js';
 import {
   isWindowsCloseBehavior,
-  WINDOW_BEHAVIOR_CHOOSE_WINDOWS_CLOSE_BEHAVIOR_CHANNEL,
   WINDOW_BEHAVIOR_GET_WINDOWS_CLOSE_BEHAVIOR_CHANNEL,
   WINDOW_BEHAVIOR_SET_SWALLOW_ACTIVATION_CLICK_CHANNEL,
   WINDOW_BEHAVIOR_SET_WINDOWS_CLOSE_BEHAVIOR_CHANNEL,
+  WINDOW_BEHAVIOR_WINDOWS_CLOSE_BEHAVIOR_REQUESTED_CHANNEL,
+  WINDOW_BEHAVIOR_WINDOWS_CLOSE_BEHAVIOR_SHOWN_CHANNEL,
   type WindowsCloseBehavior,
 } from '../shared/windowBehavior.js';
 import { getDesktopCommandRegistry, registerBuiltinDesktopCommands } from './commands/index.js';
@@ -1387,31 +1395,7 @@ const updatePresentationRecovery = isUpdateRelaunchCandidate
 // 让窗口 close handler 放行真正的销毁。
 let isQuitting = false;
 let windowsTray: Tray | null = null;
-
-function getOrPromptWindowsCloseBehavior(parentWindow?: BrowserWindow): WindowsCloseBehavior {
-  const configured = readWindowBehaviorSettings().windowsCloseBehavior;
-  if (configured) return configured;
-
-  const options = {
-    type: 'question' as const,
-    title: t('settings.windowBehavior.closePrompt.title'),
-    message: t('settings.windowBehavior.closePrompt.message'),
-    detail: t('settings.windowBehavior.closePrompt.detail'),
-    buttons: [
-      t('settings.windowBehavior.closeBehavior.tray'),
-      t('settings.windowBehavior.closeBehavior.quit'),
-    ],
-    defaultId: 0,
-    cancelId: 0,
-    noLink: true,
-  };
-  const choice = parentWindow
-    ? dialog.showMessageBoxSync(parentWindow, options)
-    : dialog.showMessageBoxSync(options);
-  const behavior: WindowsCloseBehavior = choice === 1 ? 'quit' : 'tray';
-  writeWindowsCloseBehavior(behavior);
-  return behavior;
-}
+const WINDOWS_CLOSE_PROMPT_FALLBACK_DELAY_MS = 2_000;
 
 function updateWindowsTrayMenu(): void {
   if (!windowsTray || windowsTray.isDestroyed()) return;
@@ -1500,8 +1484,68 @@ function hideMainWindowToWindowsTray(mainWindow: BrowserWindow): void {
   });
 }
 
+function applyWindowsCloseBehavior(
+  mainWindow: BrowserWindow,
+  behavior: WindowsCloseBehavior,
+): void {
+  if (behavior === 'tray') {
+    hideMainWindowToWindowsTray(mainWindow);
+  } else {
+    app.quit();
+  }
+}
+
+function showNativeWindowsCloseBehaviorPrompt(): WindowsCloseBehavior {
+  const options = {
+    type: 'question' as const,
+    title: t('settings.windowBehavior.closePrompt.title'),
+    message: t('settings.windowBehavior.closePrompt.message'),
+    detail: t('settings.windowBehavior.closePrompt.detail'),
+    buttons: [
+      t('settings.windowBehavior.closeBehavior.tray'),
+      t('settings.windowBehavior.closeBehavior.quit'),
+    ],
+    defaultId: 0,
+    cancelId: 0,
+    noLink: true,
+  };
+  const mainWindow = mainWindowRef;
+  const choice = mainWindow && !mainWindow.isDestroyed()
+    ? dialog.showMessageBoxSync(mainWindow, options)
+    : dialog.showMessageBoxSync(options);
+  return choice === 1 ? 'quit' : 'tray';
+}
+
+const windowsClosePromptFallback = createWindowsClosePromptFallbackController(
+  {
+    readBehavior: () => readWindowBehaviorSettings().windowsCloseBehavior,
+    showRendererPrompt: () => {
+      const mainWindow = mainWindowRef;
+      if (!mainWindow) return;
+      requestWindowsCloseBehavior(
+        mainWindow,
+        WINDOW_BEHAVIOR_WINDOWS_CLOSE_BEHAVIOR_REQUESTED_CHANNEL,
+      );
+    },
+    showNativePrompt: showNativeWindowsCloseBehaviorPrompt,
+    persistBehavior: writeWindowsCloseBehavior,
+    applyBehavior: (behavior) => {
+      const mainWindow = mainWindowRef;
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        applyWindowsCloseBehavior(mainWindow, behavior);
+      } else {
+        app.quit();
+      }
+    },
+    schedule: (callback, delayMs) => setTimeout(callback, delayMs),
+    cancel: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>),
+  },
+  WINDOWS_CLOSE_PROMPT_FALLBACK_DELAY_MS,
+);
+
 app.on('before-quit', () => {
   isQuitting = true;
+  windowsClosePromptFallback.dispose();
   destroyWindowsTray();
   disposeUpdatePresentationRecovery();
 });
@@ -1911,12 +1955,12 @@ const createWindow = () => {
     // alive in the system tray. Linux keeps the historical quit behavior.
     event.preventDefault();
     if (process.platform === 'win32') {
-      const behavior = getOrPromptWindowsCloseBehavior(mainWindow);
-      if (behavior === 'tray') {
-        hideMainWindowToWindowsTray(mainWindow);
-      } else {
-        app.quit();
+      const behavior = readWindowBehaviorSettings().windowsCloseBehavior;
+      if (!behavior) {
+        windowsClosePromptFallback.request();
+        return;
       }
+      applyWindowsCloseBehavior(mainWindow, behavior);
       return;
     }
     app.quit();
@@ -2213,18 +2257,41 @@ ipcMain.on('theme:apply-vibrancy', (_event, payload: { familyId: string; isDark:
     },
   );
 
-  // Maker memory settings 只读 IPC —— renderer/index.tsx 在 React mount 前就会
-  // 调一次 (bootstrapMemorySettingsFromMain 同步本地 localStorage 镜像), 远早于
-  // splash check-environment 完成时才注册的 maker:* handler。这里独立提前挂上,
-  // 因为 readMemorySettings 只摸 <userData>/memory-settings.json, 跟 Maker 单例
-  // 完全无关。注意: 写入路径 (set-enabled / reset) 仍在 register.ts 里, 因为它们
-  // 要操作 maker.makerMemory 实例, 必须等 splash 完成后再注册。
+  // Maker memory 启动 IPC —— renderer/index.tsx 在 React mount 前调用，用 main 真值
+  // 同步 localStorage 并迁移旧 opt-out；时机远早于 splash 后才注册的交互式 maker:*
+  // handler，因此独立提前挂载。迁移只会写持久化值，并在 Maker 已被其它启动路径构造
+  // 时顺带 disable 现有 manager；不会为迁移而主动构造 Maker。正常 toggle/reset 仍在
+  // register.ts 中注册，因为它们依赖 splash 完成后的完整 agent runtime。
   ipcMain.handle(MAKER_IPC_INVOKE.MEMORY_GET_SETTINGS, async () => {
     return readMemorySettings();
   });
   ipcMain.handle(MAKER_IPC_INVOKE.MEMORY_GET_SETTINGS_STATE, async () => {
     return memorySettingsWire();
   });
+  ipcMain.handle(
+    MAKER_IPC_INVOKE.MEMORY_PRESERVE_LEGACY_MAKER_DISABLED,
+    async (_e, legacyRendererValue: unknown) => {
+      const parsedLegacyRendererValue =
+        legacyRendererValue === true ? true : legacyRendererValue === false ? false : null;
+      try {
+        const settings = preserveLegacyMakerMemoryDisabled(parsedLegacyRendererValue);
+        // renderer migration 可能晚于 splash 创建 Maker。持久化为 false 后必须立即同步
+        // 已存在的 manager，避免当前进程继续按旧的 enabled=true 启动新 Session。
+        const maker = getMakerIfReady();
+        if (!settings.maker && maker?.makerMemory?.isEnabled()) {
+          await maker.makerMemory.disable();
+          await maker.setAgentMemory('claude-code', settings.claudeCode);
+          await maker.setAgentMemory('codex', settings.codex);
+        }
+        return settings;
+      } catch (err) {
+        throwIpcError(
+          'INTERNAL',
+          `memory settings migration failed: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    },
+  );
   ipcMain.handle(MAKER_IPC_INVOKE.IM_DEFAULT_SETTINGS_GET, async () => {
     return imDefaultSettingsWire();
   });
@@ -2310,17 +2377,17 @@ ipcMain.on('theme:apply-vibrancy', (_event, payload: { familyId: string; isDark:
       if (!isWindowsCloseBehavior(behavior)) {
         throwIpcError('INVALID_PARAMS', 'Windows close behavior required (quit|tray)');
       }
+      windowsClosePromptFallback.acknowledge();
       writeWindowsCloseBehavior(behavior);
       if (behavior === 'quit') destroyWindowsTray();
       return behavior;
     },
   );
-  ipcMain.handle(WINDOW_BEHAVIOR_CHOOSE_WINDOWS_CLOSE_BEHAVIOR_CHANNEL, async (event) => {
-    if (process.platform !== 'win32') return 'quit' satisfies WindowsCloseBehavior;
-    const parentWindow = BrowserWindow.fromWebContents(event.sender) ?? undefined;
-    return getOrPromptWindowsCloseBehavior(parentWindow);
+  ipcMain.on(WINDOW_BEHAVIOR_WINDOWS_CLOSE_BEHAVIOR_SHOWN_CHANNEL, (event) => {
+    if (BrowserWindow.fromWebContents(event.sender) === mainWindowRef) {
+      windowsClosePromptFallback.acknowledge();
+    }
   });
-
   // LSP Beta 开关 IPC —— 同 compat-mode 模式:
   // GET 给 renderer 启动期同步 localStorage 镜像; SET 落 JSON 文件 + 更新 cache,
   // mcp providers isEnabled 下次 session.start 时读到新值。已开 session 不变。

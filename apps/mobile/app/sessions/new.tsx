@@ -195,8 +195,11 @@ import {
 } from '@/session/mobileVoicePrewarm';
 import {
   isMobileVoiceLiteLlmSettingsError,
-  resolveMobileVoiceCredentialFromLiteLlmSettings,
 } from '@/session/mobileVoiceLiteLlmSettings';
+import {
+  createMobileCindyVoiceCredential,
+  MobileCindyVoiceRunContext,
+} from '@/session/mobileCindyVoiceSession';
 import {
   getMobileVoiceInputHistoryForHost,
   recordMobileVoiceInputHistoryForHost,
@@ -1324,7 +1327,15 @@ export default function NewRemoteSessionScreen() {
       ]);
       claimedPrewarm = prewarmedVoice;
       const credential = prewarmedVoice?.credential
-        ?? await resolveMobileVoiceCredentialFromLiteLlmSettings(selectedDeviceId);
+        ?? createMobileCindyVoiceCredential(selectedDeviceId);
+      const voiceContext = prewarmedVoice?.voiceContext
+        ?? new MobileCindyVoiceRunContext(
+          () => auth.getAccessToken(),
+          () => auth.refreshAccessToken(),
+          auth.apiFetch,
+          credential.settings?.language,
+          credential.refiner.provider,
+        );
       if (voiceStartupSeqRef.current !== startupSeq) {
         // Superseded while we awaited: close the claimed connection, and undo
         // the recording audio mode this startup enabled — but audio mode is
@@ -1344,6 +1355,8 @@ export default function NewRemoteSessionScreen() {
       const controller = createMobileVoiceControllerSession({
         credential,
         ...(prewarmedVoice ? { asr: prewarmedVoice.asr } : {}),
+        connectionProvider: (providerId) => voiceContext.createAsrConnection(providerId),
+        refinerTargetProvider: (providerId, options) => voiceContext.createRefinerTarget(providerId, options),
         initialDraft: currentDraft,
         refinementContext: selectionBefore ? { selectionBefore } : undefined,
         localVoiceInputHistory,
@@ -1462,7 +1475,11 @@ export default function NewRemoteSessionScreen() {
     if (creating || voiceIsProcessing) return;
     if (voiceRecordingActiveRef.current || voiceState === 'listening') return;
     if (!selectedDeviceId || !isMobileRealtimeAudioAvailable()) return;
-    prewarmMobileVoiceStart(selectedDeviceId);
+    prewarmMobileVoiceStart(selectedDeviceId, {
+      getAccessToken: () => auth.getAccessToken(),
+      refreshAccessToken: () => auth.refreshAccessToken(),
+      apiFetch: auth.apiFetch,
+    });
   }, [creating, selectedDeviceId, voiceIsProcessing, voiceState]);
 
   useEffect(() => {

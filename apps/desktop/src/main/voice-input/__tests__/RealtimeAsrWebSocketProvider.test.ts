@@ -330,6 +330,48 @@ describe('RealtimeAsrWebSocketProvider helpers', () => {
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }
   });
+
+  it('does not open a managed socket when stopped during session allocation', async () => {
+    const server = new WebSocketServer({ port: 0 });
+    const sockets: WebSocket[] = [];
+    server.on('connection', (socket) => sockets.push(socket));
+    let allocationStarted = false;
+    let releaseAllocation: ((value: { websocketUrl: string; authorizationToken: string }) => void) | undefined;
+    const connectionProvider = vi.fn(() => new Promise<{ websocketUrl: string; authorizationToken: string }>((resolve) => {
+      allocationStarted = true;
+      releaseAllocation = resolve;
+    }));
+    let provider: RealtimeAsrWebSocketProvider | undefined;
+
+    try {
+      await waitFor(() => server.address() !== null);
+      const address = server.address();
+      if (!address || typeof address === 'string') throw new Error('Expected local test server address.');
+      provider = new RealtimeAsrWebSocketProvider({
+        accessTokenProvider: async () => 'unused',
+        connectionProvider,
+        realtimeUrl: `ws://127.0.0.1:${address.port}/v1/realtime`,
+        model: 'qwen3-asr-flash-realtime',
+        protocolProfile: 'qwen-asr-server-vad',
+        providerKind: 'managed-qwen3-asr-flash-realtime',
+      });
+
+      const started = provider.start();
+      await waitFor(() => allocationStarted);
+      await provider.stop();
+      releaseAllocation?.({
+        websocketUrl: `ws://127.0.0.1:${address.port}/v1/realtime`,
+        authorizationToken: 'stale-ticket',
+      });
+
+      await expect(started).rejects.toThrow('stopped');
+      expect(sockets).toHaveLength(0);
+    } finally {
+      await provider?.stop();
+      for (const socket of sockets) socket.terminate();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
 });
 
 function makePcmChunk(): ArrayBuffer {

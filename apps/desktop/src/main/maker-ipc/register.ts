@@ -103,6 +103,8 @@ import {
   listWorkersByLead,
   markTeamEnded,
   markWorkersStatusByTeam,
+  markWorkerIdleIfStatus,
+  restoreWorkerDoneIfIdle,
   reconcileInactiveTeamWorkersForLead,
   releaseWorkerCreationReservation,
   removeWorker,
@@ -124,7 +126,13 @@ import {
   writeCollaborationSetting,
 } from '../maker-host/collaboration-settings-store.js';
 import { createGitSnapshotCoordinator } from '../maker-host/git-snapshot-host.js';
-import { getPluginRegistry, restartCodexAfterAuthModeChange } from '../maker-host/index.js';
+import {
+  cancelCodexAuthModeChange,
+  finalizeCodexAfterAuthModeChange,
+  getPluginRegistry,
+  prepareCodexForAuthModeChange,
+  restartCodexAfterAuthModeChange,
+} from '../maker-host/index.js';
 import {
   readMemorySettingsState,
   resetMemorySettings,
@@ -510,6 +518,39 @@ async function applyNativeMemorySettingsToRuntime(maker: Maker, settings: Memory
   await maker.setAgentMemory('codex', settings.codex);
 }
 
+/**
+ * Validate that local Codex sessions can be restarted before committing a memory setting change.
+ * Once the setting is committed, a finalize failure is logged instead of rejecting the IPC with
+ * main and renderer holding different values; the next Codex spawn still reads the new setting.
+ */
+async function applyMemoryChangeWithCodexRestart<T>(change: () => Promise<T>): Promise<T> {
+  try {
+    await prepareCodexForAuthModeChange();
+  } catch (err) {
+    throwIpcError(
+      'CREDENTIAL_SWITCH_BUSY',
+      err instanceof Error ? err.message : String(err),
+    );
+  }
+  let changed = false;
+  try {
+    const result = await change();
+    changed = true;
+    try {
+      await finalizeCodexAfterAuthModeChange();
+    } catch (err) {
+      log.warn('Codex restart failed after memory setting change', {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+    return result;
+  } finally {
+    if (!changed) {
+      cancelCodexAuthModeChange();
+    }
+  }
+}
+
 // ─── Sessions push helpers ────────────────────────────────────────────────
 // 同 cardActionHandler.ts / maker-host/index.ts:308 — 之所以重复一份是因为
 // 跨 module 提取一个 sessions-broadcast helper 不在本次范围内。所有 caller
@@ -743,7 +784,7 @@ interface OrcaCollabService {
   listWorkerQueuedMessages: (params: { callerLeadSessionId: string; workerRef: string }) => Promise<ListWorkerQueuedMessagesResult>;
   updateWorkerQueuedMessage: (params: { callerLeadSessionId: string; workerRef: string; queuedMessageId: string; message: string }) => Promise<WorkerQueuedMessageControlResult>;
   cancelWorkerQueuedMessage: (params: { callerLeadSessionId: string; workerRef: string; queuedMessageId: string }) => Promise<WorkerQueuedMessageControlResult>;
-  idleWorker: (params: { callerLeadSessionId: string; workerId: string }) => Promise<
+  idleWorker: (params: { callerLeadSessionId: string; workerId: string; expectedStatus?: 'done' }) => Promise<
     { ok: true; workerId?: string } | { ok: false; errorCode: string; message: string }
   >;
   endTeam: (params: { leadSessionId: string }) => Promise<
@@ -3644,6 +3685,12 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
     const remoteHostIdToEnsure = sessRemoteHostId ?? coRemoteHostId;
     if (!remoteHostIdToEnsure) return;
 
+    if (createOpts && typeof createOpts === 'object') {
+      const mutableCreateOpts = createOpts as { remoteHostId?: string; makerMemoryEnabled?: boolean };
+      mutableCreateOpts.remoteHostId = remoteHostIdToEnsure;
+      mutableCreateOpts.makerMemoryEnabled = false;
+    }
+
     await ensureRemoteHostReady(remoteHostIdToEnsure);
     const ensureAgentKind: 'claude-code' | 'codex' | null =
       session?.agentKind === 'codex' || session?.agentKind === 'claude-code'
@@ -4799,6 +4846,8 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
         .set({ status: 'idle', idleSince: now, updatedAt: now })
         .where(eq(orcaWorkers.id, workerId));
     },
+    markWorkerIdleIfStatus,
+    restoreWorkerDoneIfIdle,
     closeWorkerSession: async (sessionId) => {
       const sess = maker.getSession(sessionId);
       if (sess) {
@@ -4806,6 +4855,20 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
       }
       await maker.closeSession(sessionId);
     },
+    closeWorkerSessionIfIdle: async (sessionId) => {
+      if (sendToSessionLocks.has(sessionId)) return false;
+      const sess = maker.getSession(sessionId);
+      return sess ? sess.closeIfIdle() : true;
+    },
+    hasPendingWorkerInput: async (sessionId) => {
+      await inputCoordinator.ensureQueueRestored(sessionId).catch(() => undefined);
+      // A failed restore is itself a pending condition: never close a worker while
+      // its durable follow-up snapshot is still unavailable.
+      if (!inputCoordinator.isQueueRestored(sessionId)) return true;
+      return inputCoordinator.hasPendingQueuedWork(sessionId) ||
+        inputCoordinator.hasQueuedItemWhere(sessionId, () => true, { includeRecovery: true });
+    },
+    hasSendToSessionLock: (sessionId) => sendToSessionLocks.has(sessionId),
     archiveWorkerSession: archiveSingleWorkerSession,
     getManualInterrupt,
     clearManualInterrupt,
@@ -5216,9 +5279,9 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
         return { ok: false, errorCode: 'INTERNAL', message: err instanceof Error ? err.message : String(err) };
       }
     },
-    idleWorker: async ({ callerLeadSessionId, workerId }) => {
+    idleWorker: async ({ callerLeadSessionId, workerId, expectedStatus }) => {
       try {
-        return await orcaTeamService.idleWorker({ callerLeadSessionId, workerId });
+        return await orcaTeamService.idleWorker({ callerLeadSessionId, workerId, expectedStatus });
       } catch (err) {
         return { ok: false, errorCode: 'INTERNAL', message: err instanceof Error ? err.message : String(err) };
       }
@@ -6225,38 +6288,37 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
     if (typeof enabled !== 'boolean') {
       throwIpcError('INVALID_PARAMS', 'enabled required (boolean)');
     }
-    if (!maker.makerMemory) {
+    const makerMemory = maker.makerMemory;
+    if (!makerMemory) {
       throwIpcError('MAKER_MEMORY_NOT_READY', 'maker memory not initialized');
     }
     log.info('maker-memory:set-enabled', { enabled });
-    const result = enabled ? await maker.makerMemory.enable() : await maker.makerMemory.disable();
-    let settingsState = readMemorySettingsState();
-    try {
-      settingsState = writeMemorySetting('maker', enabled);
-    } catch (err) {
-      log.warn('maker-memory:set-enabled persistence failed (in-session change still applied)', {
-        enabled,
-        error: err instanceof Error ? err.message : String(err),
-      });
-    }
-    if (!settingsState.value.maker) {
-      await applyNativeMemorySettingsToRuntime(maker, settingsState.value);
-    }
-    return {
-      ...result,
-      isCustomized: settingsState.isCustomized,
-      customizedKeys: settingsState.customizedKeys,
-      defaults: settingsState.defaults,
-    };
+    return applyMemoryChangeWithCodexRestart(async () => {
+      // Persist before changing the manager. A failed maker:false write must reject the toggle
+      // instead of presenting an opt-out that silently disappears after restart.
+      const settingsState = writeMemorySetting('maker', enabled, { preserveDefault: enabled });
+      const result = enabled ? await makerMemory.enable() : await makerMemory.disable();
+      if (!settingsState.value.maker) {
+        await applyNativeMemorySettingsToRuntime(maker, settingsState.value);
+      }
+      return {
+        ...result,
+        isCustomized: settingsState.isCustomized,
+        customizedKeys: settingsState.customizedKeys,
+        defaults: settingsState.defaults,
+      };
+    });
   });
 
   // MEMORY_GET_SETTINGS 故意不在这里注册 —— renderer/index.tsx 在 React mount
   // 之前 (远早于 splash 完成) 就会调一次, 所以挂在 bootstrap-electron 的早期
   // registerIpcHandlers() 里, 见那里的注释。
   ipcMain.handle(MAKER_INVOKE.MEMORY_RESET_SETTINGS, async () => {
-    const settings = resetMemorySettings();
-    await applyMemorySettingsToRuntime(maker, settings);
-    return memorySettingsWire();
+    return applyMemoryChangeWithCodexRestart(async () => {
+      const settings = resetMemorySettings();
+      await applyMemorySettingsToRuntime(maker, settings);
+      return memorySettingsWire();
+    });
   });
 
   ipcMain.handle(MAKER_INVOKE.MAKER_MEMORY_RESET, async () => {

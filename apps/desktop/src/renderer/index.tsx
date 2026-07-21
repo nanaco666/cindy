@@ -55,10 +55,6 @@ const disposeRenderLoopWatchdog = installRenderLoopWatchdog();
 // Codex maker 化后, codex 事件流走 makerChatStore 内部的 maker:event 监听器,
 // 不再需要专门的 codex progress dispatcher。
 
-// 把 main 持久化的 maker memory 开关同步到 renderer localStorage 镜像 — fire-and-forget,
-// settings UI 第一次渲染前 99% 已 resolve, 即便没赶上也只是 UI 短暂显示旧值, 用户 toggle
-// 仍会通过 IPC 写到 main, 不影响正确性。
-void bootstrapMemorySettingsFromMain();
 migrateLegacyVoiceInputRendererStorage();
 void syncVoiceInputGlobalShortcut(getVoiceInputSettings().shortcut);
 void bootstrapSilentEncryptedRetryFromMain();
@@ -151,6 +147,10 @@ void (async () => {
     );
     return;
   }
+
+  // 主视图挂载前完成 memory 真值同步与旧配置迁移，确保用户可交互的 toggle 不会和
+  // 启动快照并发。浮窗不消费该设置，跳过同步以免多个 renderer 争写共享 localStorage。
+  await bootstrapMemorySettingsFromMain();
 
   // TapDB 在线活跃上报 — 只在主视图启用,避免 voice-input 浮窗的弹出被算成 PV。
   initTapdb();

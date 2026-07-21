@@ -24,31 +24,29 @@ import { claudeUpstreamEndpoint } from '../maker-host/runtime-configs.js';
 import { throwIpcError } from '../utils/ipcValidate.js';
 import {
   CodexResponsesTextModelClient,
-  prewarmCodexResponsesEndpoint,
 } from './CodexResponsesTextModelClient.js';
-import { ElevenLabsScribeProvider } from './ElevenLabsScribeProvider.js';
 import { FallbackAsrProvider } from './FallbackAsrProvider.js';
 import {
   FallbackTextModelClient,
   type FallbackTextModelAttempt,
 } from './FallbackTextModelClient.js';
 import {
-  LiteLlmTranscriptionProvider,
   transcribeLiteLlmAudioFile,
 } from './LiteLlmTranscriptionProvider.js';
 import {
   LiteLlmTextModelClient,
-  prewarmLiteLlmRefinerEndpoint,
 } from './LiteLlmTextModelClient.js';
 import {
   RealtimeAsrWebSocketProvider,
-  prewarmRealtimeAsrWebSocketSession,
   type RealtimeAsrWebSocketProviderOptions,
 } from './RealtimeAsrWebSocketProvider.js';
 import { VolcengineSaucAsrProvider } from './VolcengineSaucAsrProvider.js';
+import {
+  CindyVoiceRunContext,
+  isCindyVoiceServiceReady,
+} from './CindyVoiceSessionClient.js';
 import { orderVoiceInputProvidersByHealth } from './VoiceInputProviderHealth.js';
 import {
-  collectRefinerPrewarmTransports,
   orderVoiceInputRefinerChainForRuntime,
 } from './VoiceInputRefinerRouting.js';
 import {
@@ -104,6 +102,22 @@ import {
 } from '../../shared/voiceInputRefinerProfiles.js';
 
 const log = createLogger('voice-input');
+
+// The built-in realtime voice path is a Cindy service, not a hidden BYOK
+// consumer. A voice-server outage must never spend the user's general model
+// credential as an implicit ASR or refiner fallback.
+const CINDY_VOICE_SERVICE_UNAVAILABLE_MESSAGE =
+  '语音服务暂时不可用，请稍后重试。';
+
+/**
+ * ASR candidates that are allowed to use the managed voice-server data plane.
+ * Direct Codex / ElevenLabs profiles are deliberately excluded from this set:
+ * they require credentials owned by the user and must never become an
+ * implicit fallback when a managed ASR provider fails.
+ */
+function isManagedVoiceAsrProfile(profile: VoiceInputAsrProfile): boolean {
+  return profile.id.startsWith('litellm-') && profile.mode !== 'batch-http';
+}
 
 type StartResult =
   | { ok: true; runId: string }
@@ -616,11 +630,18 @@ function resolveVoiceInputRefinerChainProfiles(
   });
 }
 
-async function resolveVoiceInputRefinerChainForRuntime(): Promise<VoiceInputRefinerChainRuntimeResolution> {
+async function resolveVoiceInputRefinerChainForRuntime(
+  useCindyVoiceService = false,
+): Promise<VoiceInputRefinerChainRuntimeResolution> {
   const selection = readActiveVoiceInputModelSelection('resolve-refiner-chain-runtime');
-  const configuredProfiles = resolveVoiceInputRefinerChainProfiles(selection);
+  // Gateway mode routes by allowlisted provider id and intentionally ignores
+  // the legacy arbitrary model override. Keep the canonical client profile in
+  // sync with the server-side provider -> model mapping and usage reporting.
+  const configuredProfiles = useCindyVoiceService
+    ? selection.refinerProviderChain.map((kind) => getVoiceInputRefinerProfile(kind))
+    : resolveVoiceInputRefinerChainProfiles(selection);
   const configuredReadinessList = await Promise.all(
-    configuredProfiles.map((profile) => getVoiceInputRefinerReadiness(profile)),
+    configuredProfiles.map((profile) => getVoiceInputRefinerReadiness(profile, useCindyVoiceService)),
   );
   const profilesByProvider = new Map(
     configuredProfiles.map((profile) => [profile.id as VoiceInputRefinerProviderKind, profile]),
@@ -631,10 +652,16 @@ async function resolveVoiceInputRefinerChainForRuntime(): Promise<VoiceInputRefi
   const orderedProviders = orderVoiceInputRefinerChainForRuntime(selection, configuredReadinessList);
   const refinerChainProfiles: VoiceInputRefinerProfile[] = [];
   const refinerReadinessList: VoiceInputRefinerReadiness[] = [];
+  const gatewayModels = new Set<string>();
   for (const provider of orderedProviders) {
     const profile = profilesByProvider.get(provider);
     const readiness = readinessByProvider.get(provider);
     if (!profile || !readiness) continue;
+    // In GatewayProvider mode Codex-GPT and LiteLLM-GPT both resolve to the
+    // same server-side project model. Do not spend the two-attempt budget on
+    // an identical retry; keep the next distinct model as the real fallback.
+    if (useCindyVoiceService && gatewayModels.has(profile.model)) continue;
+    if (useCindyVoiceService) gatewayModels.add(profile.model);
     refinerChainProfiles.push(profile);
     refinerReadinessList.push(readiness);
   }
@@ -643,22 +670,6 @@ async function resolveVoiceInputRefinerChainForRuntime(): Promise<VoiceInputRefi
     refinerReadinessList,
     readyRefinerProfiles: refinerChainProfiles.filter((_, index) => refinerReadinessList[index].ok),
   };
-}
-
-function readEnvSecret(...names: string[]): string | null {
-  for (const name of names) {
-    const value = process.env[name]?.trim();
-    if (value) return value;
-  }
-  return null;
-}
-
-function readElevenLabsApiKey(): string | null {
-  return readEnvSecret('XDT_ELEVENLABS_API_KEY', 'ELEVENLABS_API_KEY');
-}
-
-function readElevenLabsBaseUrl(): string | undefined {
-  return process.env.XDT_ELEVENLABS_BASE_URL?.trim() || process.env.ELEVENLABS_BASE_URL?.trim() || undefined;
 }
 
 function readLiteLlmProxyConfig(): { proxyApiKey: string | null; proxyBaseUrl: string } {
@@ -674,7 +685,27 @@ function readLiteLlmProxyConfig(): { proxyApiKey: string | null; proxyBaseUrl: s
 
 async function getVoiceInputRefinerReadiness(
   profile: VoiceInputRefinerProfile,
+  useCindyVoiceService = false,
 ): Promise<VoiceInputRefinerReadiness> {
+  if (useCindyVoiceService) {
+    if (isCindyVoiceServiceReady()) {
+      return {
+        ok: true,
+        provider: profile.id as VoiceInputRefinerProviderKind,
+        model: profile.model,
+        auth: profile.auth,
+        settingsTab: profile.settingsTab,
+      };
+    }
+    return {
+      ok: false,
+      provider: profile.id as VoiceInputRefinerProviderKind,
+      model: profile.model,
+      auth: profile.auth,
+      settingsTab: profile.settingsTab,
+      error: CINDY_VOICE_SERVICE_UNAVAILABLE_MESSAGE,
+    };
+  }
   if (profile.auth === 'codex') {
     const codexAuthState = await desktopCodexAuthAdapter.getState();
     return {
@@ -706,8 +737,19 @@ function createVoiceInputTextModelClient(
     onUsage?: (usage: { promptTokens?: number; completionTokens?: number; cachedTokens?: number }) => void;
     /** Idle watchdog per attempt; both clients re-arm it on every stream chunk. */
     timeoutMs?: number;
+    voiceContext?: CindyVoiceRunContext;
   },
 ): TextModelClient {
+  if (options?.voiceContext) {
+    return new LiteLlmTextModelClient({
+      requestTargetProvider: (targetOptions) => options.voiceContext!.createRefinerTarget(
+        profile.id,
+        targetOptions,
+      ),
+      onUsage: options.onUsage,
+      timeoutMs: options.timeoutMs,
+    });
+  }
   if (profile.transport === 'codex-responses') {
     return new CodexResponsesTextModelClient({
       accessTokenProvider: () => desktopCodexAuthAdapter.getAccessToken(),
@@ -734,21 +776,14 @@ function createVoiceInputTextModelClient(
   throw new Error(`Unsupported voice input refiner transport ${profile.transport}`);
 }
 
-// Warms every transport in the refiner chain, not just the head: the fallback
-// attempt runs inside the same per-attempt idle watchdog as the primary, so a
-// cold TLS handshake on the rescue path eats directly into its budget (see
-// collectRefinerPrewarmTransports).
+// Voice-server refinement sessions are created lazily together with ASR, so
+// prewarming must not open a direct user-credential transport.
 async function prewarmVoiceInputRefiner(profiles: readonly VoiceInputRefinerProfile[]): Promise<void> {
-  const warmups: Array<Promise<void>> = [];
-  for (const transport of collectRefinerPrewarmTransports(profiles)) {
-    if (transport === 'codex-responses') {
-      warmups.push(prewarmCodexResponsesEndpoint());
-    } else if (transport === 'litellm-chat-completions') {
-      const { proxyBaseUrl } = readLiteLlmProxyConfig();
-      if (proxyBaseUrl) warmups.push(prewarmLiteLlmRefinerEndpoint(proxyBaseUrl));
-    }
-  }
-  await Promise.all(warmups);
+  // The free voice data plane creates a metered session only on actual use;
+  // do not spend a ticket/refine allowance merely to prewarm.
+  // Voice-server sessions are ticketed lazily on actual use; never prewarm a
+  // direct refiner transport with a user credential.
+  void profiles;
 }
 
 function buildRealtimeAsrProviderOptions(
@@ -756,6 +791,7 @@ function buildRealtimeAsrProviderOptions(
   sourceLanguage: string | undefined,
   accessTokenProvider: () => Promise<string | null>,
   proxyBaseUrl?: string,
+  connectionProvider?: () => Promise<{ websocketUrl: string; authorizationToken: string }>,
 ): RealtimeAsrWebSocketProviderOptions {
   if (profile.mode !== 'realtime-websocket' || !profile.realtime) {
     throw new Error(`Voice input provider ${profile.id} is not a realtime ASR provider.`);
@@ -769,8 +805,9 @@ function buildRealtimeAsrProviderOptions(
     providerKind: profile.id,
     missingCredentialMessage: profile.missingCredentialMessage,
     errorFallbackMessage: profile.errorFallbackMessage,
+    connectionProvider,
   };
-  if (profile.realtime.endpointPath) {
+  if (profile.realtime.endpointPath && !connectionProvider) {
     if (!proxyBaseUrl) throw new Error(`Proxy base URL is required for voice input provider ${profile.id}.`);
     options.realtimeUrl = buildLiteLlmRealtimeWebSocketUrl(proxyBaseUrl, profile.realtime.endpointPath);
     options.extraHeaders = liteLlmRealtimeHeaders(profile);
@@ -795,25 +832,28 @@ let inFlightPrewarmKey = '';
 let lastPrewarmAt = 0;
 let lastPrewarmKey = '';
 const PREWARM_THROTTLE_MS = 5_000;
-const disableRealtimePreconnect = process.env.XDT_VOICE_INPUT_DISABLE_PRECONNECT === '1';
 
 export async function prewarmVoiceInputProvider(options?: { sourceLanguage?: string; refinementEnabled?: boolean }): Promise<void> {
   const now = Date.now();
-  // Warm the effective chain head (cooldown-aware), not the raw user
-  // selection: while the primary is in failover cooldown the next dictation
-  // will start on the backup, so that is the session worth warming.
+  // Resolve the effective chain head so refiner prewarm/cache keys follow the
+  // same cooldown-aware route as the next dictation session.
   const provider = resolveVoiceInputAsrChain()[0] ?? resolveVoiceInputProviderKind();
   const profile = getVoiceInputAsrProfile(provider);
+  if (!isManagedVoiceAsrProfile(profile)) {
+    // Direct/user-key ASR profiles are not part of the managed voice path and
+    // must not be prewarmed as if they were an eligible fallback.
+    return;
+  }
   const sourceLanguage = options?.sourceLanguage;
   const refinementEnabled = options?.refinementEnabled !== false;
   let refinerProfile = resolveVoiceInputRefinerProfile();
-  // Warm every transport in the chain, not just the head profile: the rescue
-  // attempt after a head failure must not pay a cold TLS handshake inside its
-  // idle watchdog. The head profile still drives the prewarm key below.
+  // Warm every refiner transport in the chain, not just the head profile: the
+  // rescue attempt after a head failure must not pay a cold TLS handshake
+  // inside its idle watchdog. The head profile still drives the key below.
   let refinerPrewarmProfiles: readonly VoiceInputRefinerProfile[] = [refinerProfile];
   if (refinementEnabled) {
     try {
-      const resolution = await resolveVoiceInputRefinerChainForRuntime();
+      const resolution = await resolveVoiceInputRefinerChainForRuntime(true);
       refinerProfile = resolution.readyRefinerProfiles[0]
         ?? resolution.refinerChainProfiles[0]
         ?? refinerProfile;
@@ -855,37 +895,9 @@ export async function prewarmVoiceInputProvider(options?: { sourceLanguage?: str
       const refinerPrewarm = refinementEnabled
         ? prewarmVoiceInputRefiner(refinerPrewarmProfiles)
         : Promise.resolve();
-      if (profile.mode === 'realtime-websocket' && profile.realtime?.prewarmable && !disableRealtimePreconnect) {
-        if (profile.auth === 'codex') {
-          const token = await desktopCodexAuthAdapter.getAccessToken();
-          if (token) {
-            await prewarmRealtimeAsrWebSocketSession(buildRealtimeAsrProviderOptions(
-              profile,
-              asrLanguageHint,
-              () => Promise.resolve(token),
-            ));
-          }
-        } else if (profile.realtime.endpointPath) {
-          const { proxyApiKey, proxyBaseUrl } = readLiteLlmProxyConfig();
-          if (proxyApiKey && proxyBaseUrl) {
-            await prewarmRealtimeAsrWebSocketSession(buildRealtimeAsrProviderOptions(
-              profile,
-              asrLanguageHint,
-              () => Promise.resolve(proxyApiKey),
-              proxyBaseUrl,
-            ));
-          }
-        }
-      }
-      // LiteLLM batch / ElevenLabs direct read env-var keys synchronously —
-      // nothing to warm at their provider layer. Provider-native websocket
-      // models must opt in only when their protocol can keep an initialized
-      // session idle without sending user audio. Volcengine SAUC cannot: the
-      // gateway closes sessions that have already sent the initial request but
-      // then idle for several seconds, so it relies on the normal keydown-time
-      // parallel start path instead of a long-lived warm session. The LiteLLM
-      // batch transcription provider happens to share the same proxy origin as
-      // refinerPrewarm above, so its TLS pool is implicitly populated.
+      // ASR sessions are ticketed by voice-server at actual start; do not open
+      // a direct websocket during prewarm because that would require a user
+      // credential and could accidentally become a hidden fallback.
       await refinerPrewarm;
     } catch (error) {
       log.debug('prewarm failed (non-fatal)', {
@@ -911,29 +923,14 @@ type AsrCredentialReadiness = {
 };
 
 async function getAsrProfileCredentialReadiness(profile: VoiceInputAsrProfile): Promise<AsrCredentialReadiness> {
-  if (profile.auth === 'codex') {
-    const codexAuthState = await desktopCodexAuthAdapter.getState();
-    return {
-      ok: codexAuthState.authenticated,
-      error: codexAuthState.authenticated ? undefined : profile.missingCredentialMessage,
-      authErrorReason: codexAuthState.authenticated ? undefined : codexAuthState.errorReason,
-    };
+  if (isManagedVoiceAsrProfile(profile)) {
+    if (isCindyVoiceServiceReady()) return { ok: true };
+    return { ok: false, error: CINDY_VOICE_SERVICE_UNAVAILABLE_MESSAGE };
   }
-
-  if (profile.mode === 'elevenlabs-realtime') {
-    const hasDirectElevenLabs = Boolean(readElevenLabsApiKey());
-    return {
-      ok: hasDirectElevenLabs,
-      error: hasDirectElevenLabs ? undefined : profile.missingCredentialMessage,
-    };
-  }
-
-  const { proxyApiKey, proxyBaseUrl } = readLiteLlmProxyConfig();
-  const hasProxy = Boolean(proxyApiKey && proxyBaseUrl);
-  return {
-    ok: hasProxy,
-    error: hasProxy ? undefined : profile.missingCredentialMessage,
-  };
+  // Direct Codex / ElevenLabs / batch profiles are intentionally never
+  // considered for inline voice input. Their credentials belong to the user
+  // and must not be spent as an automatic fallback.
+  return { ok: false, error: CINDY_VOICE_SERVICE_UNAVAILABLE_MESSAGE };
 }
 
 function toVoiceInputReadiness(
@@ -974,6 +971,7 @@ async function resolveStartableAsrChain(): Promise<VoiceInputProviderKind[]> {
   const startable: VoiceInputProviderKind[] = [];
   for (const kind of resolveVoiceInputAsrChain()) {
     const profile = getVoiceInputAsrProfile(kind);
+    if (!isManagedVoiceAsrProfile(profile)) continue;
     const credential = await getAsrProfileCredentialReadiness(profile);
     if (credential.ok) startable.push(kind);
   }
@@ -1144,8 +1142,12 @@ async function buildVoiceInputModelSelectionIpcResult(
 async function createVoiceInputProvider(
   provider: VoiceInputProviderKind,
   sourceLanguage: string | undefined,
+  voiceContext?: CindyVoiceRunContext,
 ): Promise<AsrProvider> {
   const profile = getVoiceInputAsrProfile(provider);
+  if (voiceContext && !isManagedVoiceAsrProfile(profile)) {
+    throw new Error(CINDY_VOICE_SERVICE_UNAVAILABLE_MESSAGE);
+  }
   if (profile.mode === 'realtime-websocket') {
     const realtimeConfig = profile.realtime;
     if (!realtimeConfig) throw new Error(`Voice input provider ${provider} is missing realtime config.`);
@@ -1157,14 +1159,16 @@ async function createVoiceInputProvider(
       ));
     }
     if (realtimeConfig.endpointPath) {
-      const { proxyApiKey, proxyBaseUrl } = readLiteLlmProxyConfig();
-      if (!proxyApiKey || !proxyBaseUrl) throw new Error(profile.missingCredentialMessage);
-      return new RealtimeAsrWebSocketProvider(buildRealtimeAsrProviderOptions(
-        profile,
-        sourceLanguage,
-        () => Promise.resolve(proxyApiKey),
-        proxyBaseUrl,
-      ));
+      if (voiceContext) {
+        return new RealtimeAsrWebSocketProvider(buildRealtimeAsrProviderOptions(
+          profile,
+          sourceLanguage,
+          () => Promise.resolve(null),
+          undefined,
+          () => voiceContext.createAsrConnection(provider),
+        ));
+      }
+      throw new Error(CINDY_VOICE_SERVICE_UNAVAILABLE_MESSAGE);
     }
     throw new Error(`Unsupported realtime ASR provider ${provider}.`);
   }
@@ -1173,41 +1177,27 @@ async function createVoiceInputProvider(
     const nativeConfig = profile.nativeWebSocket;
     if (!nativeConfig) throw new Error(`Voice input provider ${provider} is missing native WebSocket config.`);
     if (nativeConfig.protocolProfile === 'volcengine-sauc-duration') {
-      const { proxyApiKey, proxyBaseUrl } = readLiteLlmProxyConfig();
-      if (!proxyApiKey || !proxyBaseUrl) throw new Error(profile.missingCredentialMessage);
-      return new VolcengineSaucAsrProvider({
-        proxyApiKey,
-        baseUrl: proxyBaseUrl,
-        endpointPath: nativeConfig.endpointPath,
-        resourceId: nativeConfig.resourceId,
-        pcmSampleRate: nativeConfig.pcmSampleRate,
-        sourceLanguage,
-        missingCredentialMessage: profile.missingCredentialMessage,
-        errorFallbackMessage: profile.errorFallbackMessage,
-      });
+      if (voiceContext) {
+        return new VolcengineSaucAsrProvider({
+          connectionProvider: () => voiceContext.createAsrConnection(provider),
+          resourceId: nativeConfig.resourceId,
+          pcmSampleRate: nativeConfig.pcmSampleRate,
+          sourceLanguage,
+          missingCredentialMessage: profile.missingCredentialMessage,
+          errorFallbackMessage: profile.errorFallbackMessage,
+        });
+      }
+      throw new Error(CINDY_VOICE_SERVICE_UNAVAILABLE_MESSAGE);
     }
     throw new Error(`Unsupported native ASR protocol ${nativeConfig.protocolProfile}.`);
   }
 
   if (profile.mode === 'batch-http') {
-    const { proxyApiKey, proxyBaseUrl } = readLiteLlmProxyConfig();
-    if (!proxyApiKey || !proxyBaseUrl) throw new Error(profile.missingCredentialMessage);
-    return new LiteLlmTranscriptionProvider({
-      proxyApiKey,
-      baseUrl: proxyBaseUrl,
-      model: profile.model,
-      sourceLanguage,
-    });
+    throw new Error(CINDY_VOICE_SERVICE_UNAVAILABLE_MESSAGE);
   }
 
   if (profile.mode === 'elevenlabs-realtime') {
-    const directApiKey = readElevenLabsApiKey();
-    if (!directApiKey) throw new Error(profile.missingCredentialMessage);
-    return new ElevenLabsScribeProvider({
-      apiKey: directApiKey,
-      baseUrl: readElevenLabsBaseUrl(),
-      sourceLanguage,
-    });
+    throw new Error(CINDY_VOICE_SERVICE_UNAVAILABLE_MESSAGE);
   }
 
   throw new Error(`Unsupported voice input ASR provider ${provider}.`);
@@ -1436,7 +1426,7 @@ export function registerVoiceInputIpc(): void {
       refinerReadinessList,
       readyRefinerProfiles,
     } = shouldRefine
-      ? await resolveVoiceInputRefinerChainForRuntime()
+      ? await resolveVoiceInputRefinerChainForRuntime(true)
       : { refinerChainProfiles: [], refinerReadinessList: [], readyRefinerProfiles: [] };
     const primaryRefinerProfile = refinerChainProfiles[0] ?? null;
     const primaryRefinerReadiness = refinerReadinessList[0] ?? null;
@@ -1470,11 +1460,23 @@ export function registerVoiceInputIpc(): void {
     // chain. Construction is lazy — providers beyond the first are only
     // instantiated when an earlier candidate fails to connect.
     const startableAsrChain = await resolveStartableAsrChain();
+    const effectiveRefinerProfile = readyRefinerProfiles[0] ?? null;
+    const voiceContext = isCindyVoiceServiceReady()
+      ? new CindyVoiceRunContext(
+          asrLanguageHint,
+          canRefine ? effectiveRefinerProfile?.id : undefined,
+        )
+      : undefined;
+    if (startableAsrChain.length === 0) {
+      log.warn('no managed ASR provider is available');
+      unregisterActiveInlineVoiceInputWebContents(event.sender.id);
+      return { ok: false, error: CINDY_VOICE_SERVICE_UNAVAILABLE_MESSAGE };
+    }
     let provider: FallbackAsrProvider;
     try {
       provider = new FallbackAsrProvider(startableAsrChain.map((kind) => ({
         kind,
-        create: () => createVoiceInputProvider(kind, asrLanguageHint),
+        create: () => createVoiceInputProvider(kind, asrLanguageHint, voiceContext),
       })));
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -1488,7 +1490,6 @@ export function registerVoiceInputIpc(): void {
       event.sender.send('voice-input:event', message);
     };
     let refiner: DictationRefiner | undefined;
-    const effectiveRefinerProfile = readyRefinerProfiles[0] ?? null;
     if (canRefine && effectiveRefinerProfile) {
       const customCacheScope = payload?.refinementCacheScope;
       try {
@@ -1497,6 +1498,7 @@ export function registerVoiceInputIpc(): void {
           model: profile.model,
           client: createVoiceInputTextModelClient(profile, {
             timeoutMs: VOICE_INPUT_REFINER_IDLE_TIMEOUT_MS,
+            voiceContext,
             onUsage: (usage) => {
               if (!runId) return;
               emit({ type: 'usage', runId, refinement: { ...usage, refinerProvider: profile.id } });
@@ -1633,7 +1635,10 @@ export function registerVoiceInputIpc(): void {
       log.warn('start failed', { error: message });
       unregisterActiveInlineVoiceInputWebContents(event.sender.id);
       await cleanupVoiceInputProvider(provider, 'start_failed');
-      return { ok: false, error: message };
+      return {
+        ok: false,
+        error: voiceContext ? CINDY_VOICE_SERVICE_UNAVAILABLE_MESSAGE : message,
+      };
     }
   });
 

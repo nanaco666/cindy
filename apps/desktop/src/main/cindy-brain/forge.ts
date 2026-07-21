@@ -379,7 +379,16 @@ cindy.send({ type: 'tool-result', callId: msg.callId, ok: true, result: {
   // 生成类意识(画图/做视频)不要用它:生成产物走卡片语义体验才对。
   note: "干完了"
 }});
-// 失败交卷:{ type: 'tool-result', callId, ok: false, message: '原因' }
+// 失败交卷：errorCode 是可选的插件业务错误码；主机保留码
+// (GHOST_NOT_FOUND / GHOST_ASLEEP / GHOST_CRASHED / TIMEOUT / INTERNAL 等)不可由插件写入。
+// message 必须包含用户可执行的恢复指引；不要把失败对象 JSON.stringify 到 message。
+cindy.send({
+  type: 'tool-result',
+  callId: msg.callId,
+  ok: false,
+  errorCode: 'CONFIRM_REQUIRED',
+  message: '删除需要确认，请传 confirm:true 后重试',
+});
 
 // Cindy 代办(需声明 cindy 槽 + 能力详单;主机出图、落仓、记账,你只拿到指纹字符串):
 // 由 tool-call 触发的代办**务必带上收到的 callId**(归因号:让用户在日志/账单里

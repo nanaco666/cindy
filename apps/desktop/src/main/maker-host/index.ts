@@ -547,6 +547,9 @@ export function getMaker(): Maker {
       'claude-code': claudeAgent,
       codex: codexAgent,
     });
+    if (makerMemoryManager.isEnabled()) {
+      void makerMemoryManager.enable();
+    }
 
     // logout 后强制 dispose 本地 host —— local app-server 子进程内存里仍持有旧 token,
     // 不收割切账号时会拿旧 token 跑请求(撞 401, 或更糟: 把老账号的 session 暴露给新账号)。

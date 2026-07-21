@@ -130,9 +130,44 @@ function createDeps(overrides: Partial<OrcaTeamServiceDeps> = {}) {
           : worker
       ));
     }),
+    markWorkerIdleIfStatus: vi.fn(async (workerId, expectedStatus) => {
+      const worker = workers.find((item) => item.id === workerId);
+      if (!worker || worker.status !== expectedStatus) return false;
+      calls.push('markWorkerIdleIfStatus');
+      workers = workers.map((item) => (
+        item.id === workerId
+          ? {
+              ...item,
+              status: 'idle',
+            }
+          : item
+      ));
+      return true;
+    }),
+    restoreWorkerDoneIfIdle: vi.fn(async (workerId) => {
+      const worker = workers.find((item) => item.id === workerId);
+      if (!worker || worker.status !== 'idle') return false;
+      calls.push('restoreWorkerDoneIfIdle');
+      workers = workers.map((item) => (
+        item.id === workerId
+          ? {
+              ...item,
+              status: 'done',
+              idleSince: null,
+            }
+          : item
+      ));
+      return true;
+    }),
     closeWorkerSession: vi.fn(async (sessionId) => {
       calls.push(`closeWorkerSession:${sessionId}`);
     }),
+    closeWorkerSessionIfIdle: vi.fn(async (sessionId) => {
+      calls.push(`closeWorkerSessionIfIdle:${sessionId}`);
+      return true;
+    }),
+    hasPendingWorkerInput: vi.fn(async () => false),
+    hasSendToSessionLock: vi.fn(() => false),
     archiveWorkerSession: vi.fn(async (sessionId) => {
       calls.push(`archiveWorkerSession:${sessionId}`);
     }),
@@ -924,6 +959,233 @@ describe('OrcaTeamService', () => {
       'closeWorkerSession:worker-session-1',
       'broadcastOrcaWorkerChanged',
     ]);
+  });
+
+  it('marks a done worker idle when the caller confirms the viewed status', async () => {
+    const { calls, service, setWorker } = createDeps();
+    setWorker(createWorker({ status: 'done' }));
+
+    await expect(service.idleWorker({
+      callerLeadSessionId: 'lead-1',
+      workerId: 'worker-1',
+      expectedStatus: 'done',
+    })).resolves.toEqual({ ok: true, workerId: 'worker-1' });
+
+    expect(calls).toEqual([
+      'markWorkerIdleIfStatus',
+      'closeWorkerSessionIfIdle:worker-session-1',
+      'broadcastOrcaWorkerChanged',
+    ]);
+  });
+
+  it('does not clear runtime or close a done worker when the conditional idle update loses a race', async () => {
+    const { calls, deps, service, setWorker } = createDeps({
+      markWorkerIdleIfStatus: vi.fn(async () => false),
+    });
+    setWorker(createWorker({ status: 'done' }));
+
+    await expect(service.idleWorker({
+      callerLeadSessionId: 'lead-1',
+      workerId: 'worker-1',
+      expectedStatus: 'done',
+    })).resolves.toEqual({
+      ok: false,
+      errorCode: 'WORKER_STATE_CHANGED',
+      message: 'worker worker-1 is no longer done',
+    });
+
+    expect(calls).toEqual([]);
+    expect(deps.closeWorkerSession).not.toHaveBeenCalled();
+    expect(deps.closeWorkerSessionIfIdle).not.toHaveBeenCalled();
+    expect(deps.markWorkerIdle).not.toHaveBeenCalled();
+  });
+
+  it('does not acknowledge or close a done worker while a new dispatch is in flight', async () => {
+    let releaseDispatch!: () => void;
+    let markDispatchStarted!: () => void;
+    const dispatchStarted = new Promise<void>((resolve) => {
+      markDispatchStarted = resolve;
+    });
+    const { calls, deps, service, setWorker } = createDeps({
+      dispatchWorkerMessage: vi.fn(async (params) => {
+        markDispatchStarted();
+        await new Promise<void>((resolve) => {
+          releaseDispatch = resolve;
+        });
+        await params.onAccepted?.();
+        return {
+          ok: true,
+          mode: 'dispatched',
+          clientId: 'client-race',
+          dispatchOutcome: {
+            kind: 'session-dispatch',
+            source: params.dispatchMeta.source,
+            dispatched: true,
+          },
+          targetTitle: 'Worker',
+          targetLastUserSendAt: null,
+        } satisfies DispatchWorkerMessageResult;
+      }),
+    });
+    setWorker(createWorker({ status: 'done' }));
+
+    const dispatch = service.dispatchWorkerTask({
+      targetSessionId: 'worker-session-1',
+      message: 'new task',
+      dispatchMeta: { source: 'test-source', context: 'done-ack-race' },
+    });
+    await dispatchStarted;
+
+    await expect(service.idleWorker({
+      callerLeadSessionId: 'lead-1',
+      workerId: 'worker-1',
+      expectedStatus: 'done',
+    })).resolves.toEqual({
+      ok: false,
+      errorCode: 'WORKER_STATE_CHANGED',
+      message: 'worker worker-1 has a dispatch in progress',
+    });
+    expect(deps.markWorkerIdleIfStatus).not.toHaveBeenCalled();
+    expect(deps.closeWorkerSession).not.toHaveBeenCalled();
+    expect(deps.closeWorkerSessionIfIdle).not.toHaveBeenCalled();
+
+    releaseDispatch();
+    await expect(dispatch).resolves.toMatchObject({ dispatched: true });
+    expect(calls).toContain('updateWorkerStatus:running');
+  });
+
+  it('does not acknowledge a done worker while a resumed send-to-session lock is active', async () => {
+    const { calls, deps, service, setWorker } = createDeps({
+      hasSendToSessionLock: vi.fn(() => true),
+    });
+    setWorker(createWorker({ status: 'done' }));
+
+    await expect(service.idleWorker({
+      callerLeadSessionId: 'lead-1',
+      workerId: 'worker-1',
+      expectedStatus: 'done',
+    })).resolves.toEqual({
+      ok: false,
+      errorCode: 'WORKER_STATE_CHANGED',
+      message: 'worker worker-1 has a send in progress',
+    });
+
+    expect(deps.hasSendToSessionLock).toHaveBeenCalledWith('worker-session-1');
+    expect(deps.markWorkerIdleIfStatus).not.toHaveBeenCalled();
+    expect(calls).toEqual([]);
+  });
+
+  it('does not acknowledge or close a done worker while its live session has a direct turn', async () => {
+    const { calls, deps, service, setWorker } = createDeps({
+      getLiveSession: vi.fn(() => ({ isTurnRunning: () => true })),
+    });
+    setWorker(createWorker({ status: 'done' }));
+
+    await expect(service.idleWorker({
+      callerLeadSessionId: 'lead-1',
+      workerId: 'worker-1',
+      expectedStatus: 'done',
+    })).resolves.toEqual({
+      ok: false,
+      errorCode: 'WORKER_STATE_CHANGED',
+      message: 'worker worker-1 has an active turn',
+    });
+
+    expect(deps.getLiveSession).toHaveBeenCalledWith('worker-session-1');
+    expect(deps.markWorkerIdleIfStatus).not.toHaveBeenCalled();
+    expect(deps.closeWorkerSession).not.toHaveBeenCalled();
+    expect(deps.closeWorkerSessionIfIdle).not.toHaveBeenCalled();
+    expect(calls).toEqual([]);
+  });
+
+  it('does not close a direct send that wins the atomic idle-close reservation after the CAS', async () => {
+    const { calls, deps, getWorker, service, setWorker } = createDeps({
+      getLiveSession: vi.fn(() => ({ isTurnRunning: () => false })),
+      closeWorkerSessionIfIdle: vi.fn(async () => false),
+    });
+    setWorker(createWorker({ status: 'done' }));
+
+    await expect(service.idleWorker({
+      callerLeadSessionId: 'lead-1',
+      workerId: 'worker-1',
+      expectedStatus: 'done',
+    })).resolves.toEqual({
+      ok: false,
+      errorCode: 'WORKER_STATE_CHANGED',
+      message: 'worker worker-1 has an active turn',
+    });
+
+    expect(deps.getLiveSession).toHaveBeenCalledTimes(1);
+    expect(deps.closeWorkerSessionIfIdle).toHaveBeenCalledWith('worker-session-1');
+    expect(deps.closeWorkerSession).not.toHaveBeenCalled();
+    expect(deps.restoreWorkerDoneIfIdle).toHaveBeenCalledWith('worker-1');
+    expect(deps.broadcastOrcaWorkerChanged).toHaveBeenCalledTimes(1);
+    expect(getWorker().status).toBe('done');
+    expect(calls).toContain('restoreWorkerDoneIfIdle');
+  });
+
+  it('preserves queued worker input before acknowledging a done worker', async () => {
+    const { deps, service, setWorker } = createDeps({
+      hasPendingWorkerInput: vi.fn(async () => true),
+    });
+    setWorker(createWorker({ status: 'done' }));
+
+    await expect(service.idleWorker({
+      callerLeadSessionId: 'lead-1',
+      workerId: 'worker-1',
+      expectedStatus: 'done',
+    })).resolves.toEqual({
+      ok: false,
+      errorCode: 'WORKER_STATE_CHANGED',
+      message: 'worker worker-1 has queued input',
+    });
+
+    expect(deps.markWorkerIdleIfStatus).not.toHaveBeenCalled();
+    expect(deps.closeWorkerSessionIfIdle).not.toHaveBeenCalled();
+  });
+
+  it('preserves worker input queued while the done-status CAS is awaiting I/O', async () => {
+    let queueChecks = 0;
+    const { deps, getWorker, service, setWorker } = createDeps({
+      hasPendingWorkerInput: vi.fn(async () => {
+        queueChecks += 1;
+        return queueChecks === 2;
+      }),
+    });
+    setWorker(createWorker({ status: 'done' }));
+
+    await expect(service.idleWorker({
+      callerLeadSessionId: 'lead-1',
+      workerId: 'worker-1',
+      expectedStatus: 'done',
+    })).resolves.toEqual({
+      ok: false,
+      errorCode: 'WORKER_STATE_CHANGED',
+      message: 'worker worker-1 has queued input',
+    });
+
+    expect(deps.markWorkerIdleIfStatus).toHaveBeenCalledWith('worker-1', 'done');
+    expect(deps.restoreWorkerDoneIfIdle).toHaveBeenCalledWith('worker-1');
+    expect(deps.closeWorkerSessionIfIdle).not.toHaveBeenCalled();
+    expect(deps.broadcastOrcaWorkerChanged).toHaveBeenCalledTimes(1);
+    expect(getWorker().status).toBe('done');
+  });
+
+  it('rejects a viewed-status idle request when the worker became running', async () => {
+    const { calls, service, setWorker } = createDeps();
+    setWorker(createWorker({ status: 'running' }));
+
+    await expect(service.idleWorker({
+      callerLeadSessionId: 'lead-1',
+      workerId: 'worker-1',
+      expectedStatus: 'done',
+    })).resolves.toEqual({
+      ok: false,
+      errorCode: 'WORKER_STATE_CHANGED',
+      message: 'worker worker-1 is running, expected done',
+    });
+
+    expect(calls).toEqual([]);
   });
 
   it.each([

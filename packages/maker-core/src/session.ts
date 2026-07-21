@@ -265,6 +265,19 @@ export class Session {
     return this.closePromise;
   }
 
+  /**
+   * Close only when no send reservation or agent turn is active. The check and
+   * close reservation are synchronous, so a concurrent send either wins first
+   * and keeps the session open, or observes closePromise and is rejected.
+   */
+  closeIfIdle(): Promise<boolean> {
+    if (this.status !== 'active' || this.closePromise || this.isTurnRunning()) {
+      return Promise.resolve(false);
+    }
+    this.closePromise = this.performClose();
+    return this.closePromise.then(() => true);
+  }
+
   private async performClose(): Promise<void> {
     try {
       this.cancelSendReservation(this.sendReservation);
@@ -525,6 +538,9 @@ export class Session {
   private ensureActive(): void {
     if (this.status === 'closed') {
       throw new Error(`Session ${this.id} is closed`);
+    }
+    if (this.closePromise) {
+      throw new Error(`Session ${this.id} is closing`);
     }
     if (this.status === 'error') {
       throw new Error(`Session ${this.id} is in error state`);

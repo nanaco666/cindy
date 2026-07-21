@@ -394,7 +394,7 @@ describe('进度快照(turn.progress 链路)', () => {
     for (let i = 0; i < times; i++) await Promise.resolve();
   }
 
-  it('tool_use/text 驱动过程区快照, 节流发射; done 后不再发射', async () => {
+  it('thinking/tool_use/text 驱动友好快照,过程文字持续保留;done 后停止', async () => {
     vi.useFakeTimers();
     try {
       fakeMaker.createSession.mockImplementationOnce(async (opts: { id?: string }) =>
@@ -409,22 +409,44 @@ describe('进度快照(turn.progress 链路)', () => {
       expect(cb).toBeTypeOf('function');
 
       // 第一步工具调用 -> 首帧快照(节流窗口内立即发射)
-      cb({ type: 'tool_use', data: { toolName: 'Bash', input: { command: 'pnpm test' } } });
+      cb({
+        type: 'tool_use',
+        data: { toolUseId: 'test-1', toolName: 'Bash', input: { command: 'pnpm test' } },
+      });
       await vi.advanceTimersByTimeAsync(0);
       expect(emitted).toHaveLength(1);
-      expect(emitted[0]).toContain('第 1 步');
-      expect(emitted[0]).toContain('Bash pnpm test');
+      expect(emitted[0]).toContain('工作中 · 1 项');
+      expect(emitted[0]).toContain('运行测试');
+      expect(emitted[0]).not.toContain('Bash pnpm test');
 
-      // 节流窗口内的密集事件合并成一帧: 第二步 + 正文 delta
-      cb({ type: 'tool_use', data: { toolName: 'Read', input: { file_path: 'D:/repo/a.ts' } } });
+      // 节流窗口内的密集事件合并成一帧:思考 + 第二步 + 正文 delta。
+      cb({
+        type: 'thinking',
+        data: { stage: 'final', blockId: 'thinking-1', text: '**检查实现**' },
+      });
+      cb({
+        type: 'tool_use',
+        data: { toolUseId: 'read-1', toolName: 'Read', input: { file_path: 'D:/repo/a.ts' } },
+      });
       cb({ type: 'text', data: { text: '结论是……', isFinal: false } });
       expect(emitted).toHaveLength(1); // 还没到 1.5s, 不发
       await vi.advanceTimersByTimeAsync(1500);
       expect(emitted).toHaveLength(2);
-      expect(emitted[1]).toContain('第 2 步');
+      expect(emitted[1]).toContain('工作中 · 3 项');
+      expect(emitted[1]).toContain('✦ 检查实现');
+      expect(emitted[1]).toContain('读取 a.ts');
       expect(emitted[1]).toContain('结论是……');
-      // 有正文在写 -> 时间线追加"正在书写回复"行
-      expect(emitted[1]).toContain('正在书写回复');
+      expect(emitted[1]).not.toContain('正在书写回复');
+
+      // 曾输出过程文字不应让后来的工具被误标成已完成;文字也不能被裁掉。
+      cb({
+        type: 'tool_use',
+        data: { toolUseId: 'grep-1', toolName: 'Grep', input: { pattern: 'onProgress' } },
+      });
+      await vi.advanceTimersByTimeAsync(1500);
+      expect(emitted).toHaveLength(3);
+      expect(emitted[2]).toContain('> ▸ 搜索 onProgress');
+      expect(emitted[2]).toContain('结论是……');
 
       // 收口: done 之后即使时间继续流逝也不再发射
       cb({ type: 'done', data: null });
@@ -432,7 +454,7 @@ describe('进度快照(turn.progress 链路)', () => {
       const outcome = await p;
       expect(outcome.status).toBe('ok');
       expect(outcome.finalText).toBe('结论是……');
-      expect(emitted).toHaveLength(2);
+      expect(emitted).toHaveLength(3);
     } finally {
       vi.useRealTimers();
     }

@@ -1,12 +1,18 @@
 import type { AsrProvider } from '@lizi/voice-input-core';
+import type { ApiFetchOptions } from '@/api/client';
 import type { StoredMobileVoiceCredential } from '@/session/mobileVoiceCredentialStore';
 import { createMobileAsrProvider } from '@/session/mobileRealtimeAsrProvider';
 import { prewarmMobileRealtimeAudio } from '@/session/mobileRealtimeAudio';
+import {
+  createMobileCindyVoiceCredential,
+  MobileCindyVoiceRunContext,
+} from '@/session/mobileCindyVoiceSession';
 import { resolveMobileVoiceCredentialFromLiteLlmSettings } from '@/session/mobileVoiceLiteLlmSettings';
 
 export type PrewarmedMobileVoiceAsr = {
   credential: StoredMobileVoiceCredential;
   asr: AsrProvider;
+  voiceContext?: MobileCindyVoiceRunContext;
 };
 
 type PendingPrewarm = {
@@ -40,7 +46,14 @@ let pendingPrewarm: PendingPrewarm | null = null;
  * Fire-and-forget and never throws: a failed prewarm just means the recording
  * falls back to the regular startup path and surfaces errors there.
  */
-export function prewarmMobileVoiceStart(deviceId: string): void {
+export function prewarmMobileVoiceStart(
+  deviceId: string,
+  options?: {
+    getAccessToken: () => Promise<string | null>;
+    refreshAccessToken: () => Promise<string | null>;
+    apiFetch: <T>(path: string, options: Omit<ApiFetchOptions, 'token'>) => Promise<T>;
+  },
+): void {
   prewarmMobileRealtimeAudio();
   if (
     pendingPrewarm
@@ -50,7 +63,7 @@ export function prewarmMobileVoiceStart(deviceId: string): void {
     return;
   }
   discardPendingPrewarm();
-  const promise = buildPrewarm(deviceId);
+  const promise = buildPrewarm(deviceId, options);
   const entry: PendingPrewarm = {
     deviceId,
     createdAt: Date.now(),
@@ -91,15 +104,35 @@ export function discardPendingPrewarm(): void {
     .catch(() => undefined);
 }
 
-async function buildPrewarm(deviceId: string): Promise<PrewarmedMobileVoiceAsr | null> {
+async function buildPrewarm(
+  deviceId: string,
+  auth?: {
+    getAccessToken: () => Promise<string | null>;
+    refreshAccessToken: () => Promise<string | null>;
+    apiFetch: <T>(path: string, options: Omit<ApiFetchOptions, 'token'>) => Promise<T>;
+  },
+): Promise<PrewarmedMobileVoiceAsr | null> {
   try {
-    const credential = await resolveMobileVoiceCredentialFromLiteLlmSettings(deviceId);
-    const provider = createMobileAsrProvider(credential);
+    const credential = auth
+      ? createMobileCindyVoiceCredential(deviceId)
+      : await resolveMobileVoiceCredentialFromLiteLlmSettings(deviceId);
+    const voiceContext = auth
+      ? new MobileCindyVoiceRunContext(
+        auth.getAccessToken,
+        auth.refreshAccessToken,
+        auth.apiFetch,
+        credential.settings?.language,
+        credential.refiner.provider,
+      )
+      : undefined;
+    const provider = createMobileAsrProvider(credential, voiceContext
+      ? { connectionProvider: (providerId) => voiceContext.createAsrConnection(providerId) }
+      : {});
     const startPromise = provider.start();
     // Parked until claimed: don't let a failed speculative connect become an
     // unhandled rejection. The claiming run re-observes the outcome via start().
     startPromise.catch(() => undefined);
-    return { credential, asr: withPrewarmedStart(provider, startPromise) };
+    return { credential, ...(voiceContext ? { voiceContext } : {}), asr: withPrewarmedStart(provider, startPromise) };
   } catch {
     return null;
   }
@@ -109,13 +142,13 @@ async function buildPrewarm(deviceId: string): Promise<PrewarmedMobileVoiceAsr |
  * Makes the speculative start() call transparent to the eventual consumer:
  * the first start() joins the already in-flight connect (and reports its
  * outcome) instead of restarting the provider; later start() calls — a new run
- * reusing the same session — behave normally. stop() before the speculative
- * connect settles must not block (and cannot close a socket that isn't open
- * yet), so it defers the inner teardown until the connect settles.
+ * reusing the same session — behave normally. stop() is passed to the inner
+ * provider immediately, including while a managed provider is still waiting
+ * for its ticket, so a discarded prewarm cannot open a socket or continue to
+ * the next fallback candidate after it has been cancelled.
  */
 function withPrewarmedStart(provider: AsrProvider, startPromise: Promise<void>): AsrProvider {
   let firstStartConsumed = false;
-  let startSettled = false;
   // Sentinel listener for the parked window (pressIn → claim): providers
   // replace their event callback on onEvent and do not buffer past events, so
   // a transport death AFTER the speculative connect succeeded would otherwise
@@ -129,14 +162,6 @@ function withPrewarmedStart(provider: AsrProvider, startPromise: Promise<void>):
       transportDroppedWhileParked = true;
     }
   });
-  startPromise.then(
-    () => {
-      startSettled = true;
-    },
-    () => {
-      startSettled = true;
-    },
-  );
   return {
     start(): Promise<void> {
       if (!firstStartConsumed) {
@@ -160,13 +185,6 @@ function withPrewarmedStart(provider: AsrProvider, startPromise: Promise<void>):
       return provider.start();
     },
     async stop(): Promise<void> {
-      if (!startSettled) {
-        void startPromise
-          .catch(() => undefined)
-          .then(() => provider.stop())
-          .catch(() => undefined);
-        return;
-      }
       await provider.stop();
     },
     appendAudio(chunk, trace): void {

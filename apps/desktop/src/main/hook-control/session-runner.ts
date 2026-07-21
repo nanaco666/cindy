@@ -72,6 +72,8 @@ import { getDesktopProviderService } from '../maker-host/createDesktopProviderSe
 import { getModelVisibilityOverride } from '../maker-host/model-visibility-mirror.js';
 import {
   createTurnActivity,
+  markActivityWriting,
+  pushThinkingStep,
   pushToolStep,
   renderActivity,
 } from '../im/shared/turnActivity.js';
@@ -523,7 +525,7 @@ export function createMakerHookSessionRunner(deps: {
       const activity = createTurnActivity(Date.now());
       const progress = req.onProgress
         ? createProgressEmitter(req.onProgress, () => {
-            const act = renderActivity(activity, Date.now(), assistantText.length > 0);
+            const act = renderActivity(activity, Date.now());
             if (!act) return assistantText;
             return assistantText ? `${act}\n\n${assistantText}` : act;
           })
@@ -572,6 +574,14 @@ export function createMakerHookSessionRunner(deps: {
             if (data && typeof data.text === 'string') {
               if (data.isFinal) assistantText = data.text;
               else assistantText += data.text;
+              markActivityWriting(activity);
+              progress?.schedule();
+            }
+            return;
+          }
+          if (ev.type === 'thinking') {
+            if (pushThinkingStep(activity, ev.data)) {
+              progress?.ensureTicker();
               progress?.schedule();
             }
             return;
@@ -579,9 +589,18 @@ export function createMakerHookSessionRunner(deps: {
           if (ev.type === 'tool_use') {
             // 过程展示: 与 IM 流式卡同款滚动时间线(turnActivity), 让 Slack 侧
             // 在长 agentic turn 里看到"正在干什么", 而不是盯着 👀 表情干等
-            const data = ev.data as { toolName?: unknown; input?: unknown } | null;
+            const data = ev.data as {
+              toolName?: unknown;
+              toolUseId?: unknown;
+              input?: unknown;
+            } | null;
             if (data && typeof data.toolName === 'string') {
-              pushToolStep(activity, data.toolName, data.input);
+              pushToolStep(
+                activity,
+                data.toolName,
+                data.input,
+                typeof data.toolUseId === 'string' ? data.toolUseId : undefined,
+              );
               progress?.ensureTicker();
               progress?.schedule();
             }
