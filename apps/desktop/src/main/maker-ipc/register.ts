@@ -103,6 +103,8 @@ import {
   listWorkersByLead,
   markTeamEnded,
   markWorkersStatusByTeam,
+  markWorkerIdleIfStatus,
+  restoreWorkerDoneIfIdle,
   reconcileInactiveTeamWorkersForLead,
   releaseWorkerCreationReservation,
   removeWorker,
@@ -743,7 +745,7 @@ interface OrcaCollabService {
   listWorkerQueuedMessages: (params: { callerLeadSessionId: string; workerRef: string }) => Promise<ListWorkerQueuedMessagesResult>;
   updateWorkerQueuedMessage: (params: { callerLeadSessionId: string; workerRef: string; queuedMessageId: string; message: string }) => Promise<WorkerQueuedMessageControlResult>;
   cancelWorkerQueuedMessage: (params: { callerLeadSessionId: string; workerRef: string; queuedMessageId: string }) => Promise<WorkerQueuedMessageControlResult>;
-  idleWorker: (params: { callerLeadSessionId: string; workerId: string }) => Promise<
+  idleWorker: (params: { callerLeadSessionId: string; workerId: string; expectedStatus?: 'done' }) => Promise<
     { ok: true; workerId?: string } | { ok: false; errorCode: string; message: string }
   >;
   endTeam: (params: { leadSessionId: string }) => Promise<
@@ -4799,6 +4801,8 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
         .set({ status: 'idle', idleSince: now, updatedAt: now })
         .where(eq(orcaWorkers.id, workerId));
     },
+    markWorkerIdleIfStatus,
+    restoreWorkerDoneIfIdle,
     closeWorkerSession: async (sessionId) => {
       const sess = maker.getSession(sessionId);
       if (sess) {
@@ -4806,6 +4810,20 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
       }
       await maker.closeSession(sessionId);
     },
+    closeWorkerSessionIfIdle: async (sessionId) => {
+      if (sendToSessionLocks.has(sessionId)) return false;
+      const sess = maker.getSession(sessionId);
+      return sess ? sess.closeIfIdle() : true;
+    },
+    hasPendingWorkerInput: async (sessionId) => {
+      await inputCoordinator.ensureQueueRestored(sessionId).catch(() => undefined);
+      // A failed restore is itself a pending condition: never close a worker while
+      // its durable follow-up snapshot is still unavailable.
+      if (!inputCoordinator.isQueueRestored(sessionId)) return true;
+      return inputCoordinator.hasPendingQueuedWork(sessionId) ||
+        inputCoordinator.hasQueuedItemWhere(sessionId, () => true, { includeRecovery: true });
+    },
+    hasSendToSessionLock: (sessionId) => sendToSessionLocks.has(sessionId),
     archiveWorkerSession: archiveSingleWorkerSession,
     getManualInterrupt,
     clearManualInterrupt,
@@ -5216,9 +5234,9 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
         return { ok: false, errorCode: 'INTERNAL', message: err instanceof Error ? err.message : String(err) };
       }
     },
-    idleWorker: async ({ callerLeadSessionId, workerId }) => {
+    idleWorker: async ({ callerLeadSessionId, workerId, expectedStatus }) => {
       try {
-        return await orcaTeamService.idleWorker({ callerLeadSessionId, workerId });
+        return await orcaTeamService.idleWorker({ callerLeadSessionId, workerId, expectedStatus });
       } catch (err) {
         return { ok: false, errorCode: 'INTERNAL', message: err instanceof Error ? err.message : String(err) };
       }

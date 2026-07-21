@@ -59,6 +59,24 @@ describe('Orca worker control IPC handlers', () => {
     });
   });
 
+  it('passes the done-state guard to the idle service boundary', async () => {
+    const harness = new IpcHarness();
+    const deps = createDeps();
+    registerOrcaWorkerControlHandlers(harness, deps);
+
+    await harness.invoke(MAKER_INVOKE.WORKER_IDLE, {
+      leadSessionId: 'lead-1',
+      workerId: 'worker-1',
+      expectedStatus: 'done',
+    });
+
+    expect(deps.idleWorker).toHaveBeenCalledWith({
+      callerLeadSessionId: 'lead-1',
+      workerId: 'worker-1',
+      expectedStatus: 'done',
+    });
+  });
+
   it('passes caller lead and worker id to the archive service boundary', async () => {
     const harness = new IpcHarness();
     const deps = createDeps();
@@ -90,6 +108,11 @@ describe('Orca worker control IPC handlers', () => {
       errorCode: 'ALREADY_IDLE',
       message: 'already idle',
     });
+    deps.idleWorker.mockResolvedValueOnce({
+      ok: false,
+      errorCode: 'WORKER_STATE_CHANGED',
+      message: 'worker state changed',
+    });
     registerOrcaWorkerControlHandlers(harness, deps);
 
     await expect(
@@ -105,6 +128,31 @@ describe('Orca worker control IPC handlers', () => {
         workerId: 'worker-1',
       }),
     ).rejects.toMatchObject({ code: 'ALREADY_IDLE' });
+
+    await expect(
+      harness.invoke(MAKER_INVOKE.WORKER_IDLE, {
+        leadSessionId: 'lead-1',
+        workerId: 'worker-1',
+        expectedStatus: 'done',
+      }),
+    ).rejects.toMatchObject({ code: 'WORKER_STATE_CHANGED' });
+  });
+
+  it('uses the dedicated automatic done acknowledgement channel', async () => {
+    const harness = new IpcHarness();
+    const deps = createDeps();
+    registerOrcaWorkerControlHandlers(harness, deps);
+
+    await harness.invoke(MAKER_INVOKE.WORKER_ACKNOWLEDGE_DONE, {
+      leadSessionId: 'lead-1',
+      workerId: 'worker-1',
+    });
+
+    expect(deps.idleWorker).toHaveBeenCalledWith({
+      callerLeadSessionId: 'lead-1',
+      workerId: 'worker-1',
+      expectedStatus: 'done',
+    });
   });
 
   it('maps archive service not-found failures to stable IPC error codes', async () => {

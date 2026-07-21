@@ -436,7 +436,7 @@ describe('sendToSession ordering', () => {
     const switchFocusMcpBlock = extractBetween(
       source,
       'switchFocus: async ({ leadSessionId, workerIdOrLabel }) => {',
-      'idleWorker: async ({ callerLeadSessionId, workerId }) => {',
+      'idleWorker: async ({ callerLeadSessionId, workerId, expectedStatus }) => {',
     );
 
     expect(resumeBranch).toContain('const extraDirs = await readSessionExtraDirsFromDb(target.sessionId);');
@@ -531,17 +531,29 @@ describe('sendToSession ordering', () => {
   it('marks worker idle and clears auto-bridge state before aborting worker sessions', () => {
     const serviceIdleBlock = extractBetween(
       orcaTeamServiceSource,
-      'async function idleWorker(params: { callerLeadSessionId: string; workerId: string }): Promise<OrcaOkResult> {',
+      "async function idleWorker(params: { callerLeadSessionId: string; workerId: string; expectedStatus?: 'done' }): Promise<OrcaOkResult> {",
       'async function archiveWorker',
+    );
+    const serviceDepsBlock = extractBetween(
+      source,
+      'const orcaTeamService = createOrcaTeamService({',
+      '  });\n  orcaTeamServiceForEvents = orcaTeamService;',
     );
 
     expect(source).toContain('registerOrcaWorkerControlHandlers(createElectronIpcHandlerRegistry(), {');
     expect(source).toContain('idleWorker: (params) => orcaTeamService.idleWorker(params),');
     expect(serviceIdleBlock).toContain('clearRuntimeState(worker.sessionId);');
-    expect(serviceIdleBlock).toContain('await deps.markWorkerIdle(worker.id);');
+    expect(serviceIdleBlock).toContain('await deps.markWorkerIdleIfStatus(worker.id, params.expectedStatus)');
+    expect(serviceIdleBlock).toContain('await deps.markWorkerIdle(worker.id)');
+    expect(serviceIdleBlock).toContain('await deps.hasPendingWorkerInput(worker.sessionId)');
+    expect(serviceIdleBlock).toContain('deps.hasSendToSessionLock(worker.sessionId)');
     expect(serviceIdleBlock).toContain("await closeWorkerSessionBestEffort(worker.sessionId, 'idleWorker');");
-    expectOrder(serviceIdleBlock, 'clearRuntimeState(worker.sessionId);', 'await deps.markWorkerIdle(worker.id);');
-    expectOrder(serviceIdleBlock, 'await deps.markWorkerIdle(worker.id);', "await closeWorkerSessionBestEffort(worker.sessionId, 'idleWorker');");
+    expectOrder(serviceIdleBlock, 'await deps.markWorkerIdleIfStatus(worker.id, params.expectedStatus)', 'clearRuntimeState(worker.sessionId);');
+    expectOrder(serviceIdleBlock, 'clearRuntimeState(worker.sessionId);', "await closeWorkerSessionBestEffort(worker.sessionId, 'idleWorker');");
+
+    expect(serviceDepsBlock).toContain('if (sendToSessionLocks.has(sessionId)) return false;');
+    expect(serviceDepsBlock).toContain('await inputCoordinator.ensureQueueRestored(sessionId).catch(() => undefined);');
+    expect(serviceDepsBlock).toContain('if (!inputCoordinator.isQueueRestored(sessionId)) return true;');
   });
 
   it('clears pending auto-bridge state before archive and end-team abort paths', () => {
@@ -570,8 +582,9 @@ describe('sendToSession ordering', () => {
   });
 
   it('keeps worker idle/archive adapters passing the caller lead session id', () => {
-    expect(preloadSource).toContain("idleWorker: (leadSessionId: string, workerId: string): Promise<unknown> =>");
-    expect(preloadSource).toContain("ipcRenderer.invoke('maker:worker:idle', { leadSessionId, workerId })");
+    expect(preloadSource).toContain("idleWorker: (leadSessionId: string, workerId: string, expectedStatus?: 'done'): Promise<unknown> =>");
+    expect(preloadSource).toContain("ipcRenderer.invoke('maker:worker:idle', {");
+    expect(preloadSource).toContain("ipcRenderer.invoke('maker:worker:acknowledge-done', {");
     expect(preloadSource).toContain("archiveWorker: (leadSessionId: string, workerId: string): Promise<unknown> =>");
     expect(preloadSource).toContain("ipcRenderer.invoke('maker:worker:archive', { leadSessionId, workerId })");
     // device-link:归档入口(现居 useOrcaWorkerSelection)经 orcaWorkflowsFor 按 lead 来源路由

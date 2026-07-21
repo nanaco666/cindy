@@ -3067,7 +3067,7 @@ interface ElectronAPI {
       onOrcaWorkerChanged: (cb: (payload: unknown) => void) => () => void;
       createWorker: (input: Record<string, unknown>) => Promise<unknown>;
       switchFocus: (input: Record<string, unknown>) => Promise<unknown>;
-      idleWorker: (leadSessionId: string, workerId: string) => Promise<unknown>;
+      idleWorker: (leadSessionId: string, workerId: string, expectedStatus?: 'done') => Promise<unknown>;
       archiveWorker: (leadSessionId: string, workerId: string) => Promise<unknown>;
       endTeam: (leadSessionId: string) => Promise<unknown>;
       getCollaborationSettings: () => Promise<unknown>;
