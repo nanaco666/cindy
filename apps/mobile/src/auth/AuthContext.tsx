@@ -15,7 +15,6 @@ import {
   CindyAuthClient,
   reduceAuthFlow,
   ssoOrgDiscoveryToMethods,
-  type AccountTokenPair,
   type AuthFlowState,
   type AuthMembership,
   type LoginOutcome,
@@ -65,7 +64,8 @@ import {
 WebBrowser.maybeCompleteAuthSession();
 
 const REFRESH_TOKEN_KEY = 'cindy.mobile.auth.refreshToken';
-const ACCOUNT_REFRESH_TOKEN_KEY = 'cindy.mobile.auth.accountRefreshToken';
+const LEGACY_ACCOUNT_REFRESH_TOKEN_KEY =
+  'cindy.mobile.auth.accountRefreshToken';
 const LEGACY_REFRESH_TOKEN_KEY = 'xdt.mobile.refreshToken';
 const USER_PROFILE_KEY = 'cindy.mobile.auth.userProfile';
 const LEGACY_USER_PROFILE_KEY = 'xdt.mobile.userProfile';
@@ -163,7 +163,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const deviceIdRef = useRef<string | null>(null);
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const accessTokenRef = useRef<string | null>(null);
-  const accountAccessTokenRef = useRef<string | null>(null);
+  // Account token 只在本次登录的 Membership 选择阶段存活；成功兑换
+  // resource token 后清空，不写 SecureStore、不续期、不参与业务请求或登出。
+  const pendingAccountTokenRef = useRef<string | null>(null);
   const [user, setUser] = useState<MobileUser | null>(null);
   const userRef = useRef<MobileUser | null>(null);
   const [loginState, setLoginState] = useState<AuthFlowState | null>(null);
@@ -176,14 +178,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const browserCompletionRef = useRef<Promise<void> | null>(null);
   // auth-server rotates refresh tokens, so every caller must share one request.
   const refreshInFlightRef = useRef<Promise<string | null> | null>(null);
-  const accountRefreshInFlightRef = useRef<Promise<string | null> | null>(null);
   // Logout bumps this generation so a late refresh cannot resurrect the session.
   const authGenerationRef = useRef(0);
-  const accountGenerationRef = useRef(0);
   // SecureStore operations are asynchronous. Serialize mutations so logout always
   // wins over a refresh/login write that was already inside the native storage call.
   const refreshTokenMutationRef = useRef<Promise<void>>(Promise.resolve());
-  const accountTokenMutationRef = useRef<Promise<void>>(Promise.resolve());
   const userProfileMutationRef = useRef<Promise<void>>(Promise.resolve());
 
   /** 登录态落地后异步刷新灰度标记；失败保留旧值，迟到响应按 auth generation 丢弃。 */
@@ -232,18 +231,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [],
   );
 
-  const serializeAccountTokenMutation = useCallback(
-    <T,>(operation: () => Promise<T>): Promise<T> => {
-      const run = accountTokenMutationRef.current.then(operation, operation);
-      accountTokenMutationRef.current = run.then(
-        () => undefined,
-        () => undefined,
-      );
-      return run;
-    },
-    [],
-  );
-
   const updateLoginState = useCallback((next: AuthFlowState | null) => {
     loginStateRef.current = next;
     setLoginState(next);
@@ -253,89 +240,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     accessTokenRef.current = token;
     setAccessToken(token);
   }, []);
-
-  const installAccountSession = useCallback(
-    async (pair: AccountTokenPair): Promise<void> => {
-      const generation = ++accountGenerationRef.current;
-      const persisted = await serializeAccountTokenMutation(async () => {
-        if (accountGenerationRef.current !== generation) return false;
-        await setSecureItem(
-          ACCOUNT_REFRESH_TOKEN_KEY,
-          pair.accountRefreshToken,
-        );
-        return accountGenerationRef.current === generation;
-      });
-      if (!persisted) throw authCodeError('AUTH_FLOW_SUPERSEDED');
-      accountAccessTokenRef.current = pair.accountToken;
-    },
-    [serializeAccountTokenMutation],
-  );
-
-  const clearAccountSession = useCallback(async (): Promise<void> => {
-    accountGenerationRef.current += 1;
-    accountAccessTokenRef.current = null;
-    accountRefreshInFlightRef.current = null;
-    await serializeAccountTokenMutation(() =>
-      deleteSecureItem(ACCOUNT_REFRESH_TOKEN_KEY).catch(() => undefined),
-    );
-  }, [serializeAccountTokenMutation]);
-
-  const refreshAccountSession = useCallback(
-    (knownDeviceId?: string): Promise<string | null> => {
-      if (accountRefreshInFlightRef.current)
-        return accountRefreshInFlightRef.current;
-      const generation = accountGenerationRef.current;
-      let run: Promise<string | null>;
-      const clearIfCurrent = () => {
-        if (accountRefreshInFlightRef.current === run)
-          accountRefreshInFlightRef.current = null;
-      };
-      run = (async () => {
-        const did =
-          knownDeviceId ?? deviceIdRef.current ?? (await ensureDeviceId());
-        const refreshToken = await serializeAccountTokenMutation(() =>
-          getSecureItem(ACCOUNT_REFRESH_TOKEN_KEY).catch(() => null),
-        );
-        if (!refreshToken) return null;
-        try {
-          const pair = await authClientFor(did).refreshAccount(refreshToken);
-          if (accountGenerationRef.current !== generation) return null;
-          const persisted = await serializeAccountTokenMutation(async () => {
-            if (accountGenerationRef.current !== generation) return false;
-            await setSecureItem(
-              ACCOUNT_REFRESH_TOKEN_KEY,
-              pair.accountRefreshToken,
-            );
-            return accountGenerationRef.current === generation;
-          });
-          if (!persisted) return null;
-          accountAccessTokenRef.current = pair.accountToken;
-          return pair.accountToken;
-        } catch (error) {
-          if (
-            accountGenerationRef.current === generation &&
-            isRejectedRefresh(error)
-          ) {
-            await clearAccountSession();
-          }
-          return null;
-        }
-      })();
-      accountRefreshInFlightRef.current = run;
-      run.then(clearIfCurrent, clearIfCurrent);
-      return run;
-    },
-    [clearAccountSession, serializeAccountTokenMutation],
-  );
-
-  const getAccountAccessToken = useCallback(async (): Promise<
-    string | null
-  > => {
-    const cached = accountAccessTokenRef.current;
-    if (cached && !isAccessTokenExpiring(cached)) return cached;
-    accountAccessTokenRef.current = null;
-    return refreshAccountSession();
-  }, [refreshAccountSession]);
 
   // 用户资料的唯一写入口:同步 state + 持久化快照。快照让弱网冷启动能先以
   // 缓存资料恢复“已登录”视图,token 由后台刷新补齐。
@@ -378,16 +282,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const acceptOutcome = useCallback(
-    async (
-      outcome: LoginOutcome,
-      did: string,
-      options: { preserveAccountSession?: boolean } = {},
-    ): Promise<void> => {
+    async (outcome: LoginOutcome, did: string): Promise<void> => {
       await deleteSecureItem(PENDING_OAUTH_KEY).catch(() => undefined);
 
-      const accountPair = accountPairFromOutcome(outcome);
-      if (accountPair) await installAccountSession(accountPair);
-      else if (!options.preserveAccountSession) await clearAccountSession();
+      pendingAccountTokenRef.current =
+        outcome.status === 'select_account'
+          ? (outcome.accountToken ?? null)
+          : null;
 
       if (outcome.status === 'select_account') {
         pendingLoginTicketRef.current = outcome.loginTicket;
@@ -445,8 +346,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     },
     [
       applyUser,
-      clearAccountSession,
-      installAccountSession,
       loadMe,
       scheduleCanaryChannelSync,
       serializeRefreshTokenMutation,
@@ -535,11 +434,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (cancelled) return;
         deviceIdRef.current = did;
         setDeviceId(did);
-        // Account 会话只负责列身份/兑换 resource token，与当前资源会话独立恢复。
-        void refreshAccountSession(did);
         // Old Feishu refresh tokens are not valid in auth-server. Purge them explicitly
         // instead of sending them to the new endpoint or restoring an unrelated profile.
         await Promise.all([
+          // 早期测试版曾持久化 account refresh token；现在仅保留登录期内存 token。
+          deleteSecureItem(LEGACY_ACCOUNT_REFRESH_TOKEN_KEY).catch(
+            () => undefined,
+          ),
           deleteSecureItem(LEGACY_REFRESH_TOKEN_KEY).catch(() => undefined),
           deleteSecureItem(LEGACY_PENDING_OAUTH_KEY).catch(() => undefined),
           deleteSecureItem(LEGACY_USER_PROFILE_KEY).catch(() => undefined),
@@ -574,7 +475,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [refresh, refreshAccountSession]);
+  }, [refresh]);
 
   // 降级会话自愈:有缓存用户但尚未取得 access token 时,以退避节奏和回前台时机重试。
   useEffect(() => {
@@ -711,6 +612,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           const client = authClientFor(did);
 
           if (action.type === 'reset') {
+            pendingAccountTokenRef.current = null;
             pendingLoginTicketRef.current = null;
             pendingBindTicketRef.current = null;
             pendingSsoVerificationTicketRef.current = null;
@@ -824,15 +726,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             throw authCodeError('USER_CANCELLED');
           }
           if (action.type === 'select-account') {
-            const accountToken = await getAccountAccessToken();
+            const accountToken = pendingAccountTokenRef.current;
             if (accountToken) {
               const pair = await client.exchangeAccountMembership(
                 accountToken,
                 action.accountId,
               );
-              await acceptOutcome({ status: 'ok', ...pair }, did, {
-                preserveAccountSession: true,
-              });
+              pendingAccountTokenRef.current = null;
+              await acceptOutcome({ status: 'ok', ...pair }, did);
               return true;
             }
             const ticket = pendingLoginTicketRef.current;
@@ -908,8 +809,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (
             code === 'INVALID_LOGIN_TICKET' ||
             code === 'INVALID_BIND_TICKET' ||
-            code === 'INVALID_SSO_VERIFICATION_TICKET'
+            code === 'INVALID_SSO_VERIFICATION_TICKET' ||
+            code === 'INVALID_TOKEN' ||
+            code === 'TOKEN_EXPIRED'
           ) {
+            pendingAccountTokenRef.current = null;
             pendingLoginTicketRef.current = null;
             pendingBindTicketRef.current = null;
             pendingSsoVerificationTicketRef.current = null;
@@ -925,23 +829,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       run.then(clearIfCurrent, clearIfCurrent);
       return run;
     },
-    [
-      acceptOutcome,
-      completeOAuthCallback,
-      getAccountAccessToken,
-      updateLoginState,
-    ],
+    [acceptOutcome, completeOAuthCallback, updateLoginState],
   );
 
   const logout = useCallback(async () => {
     authGenerationRef.current += 1;
     refreshInFlightRef.current = null;
     const token = accessTokenRef.current;
-    const accountToken = accountAccessTokenRef.current;
     const did = deviceIdRef.current;
     setToken(null);
     applyUser(null);
     updateLoginState(null);
+    pendingAccountTokenRef.current = null;
     pendingLoginTicketRef.current = null;
     pendingBindTicketRef.current = null;
     pendingSsoVerificationTicketRef.current = null;
@@ -957,12 +856,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await serializeRefreshTokenMutation(() =>
       deleteSecureItem(REFRESH_TOKEN_KEY).catch(() => undefined),
     );
-    await clearAccountSession();
     await Promise.all([
       serializeUserProfileMutation(() =>
         deleteSecureItem(USER_PROFILE_KEY).catch(() => undefined),
       ),
       deleteSecureItem(LEGACY_REFRESH_TOKEN_KEY).catch(() => undefined),
+      deleteSecureItem(LEGACY_ACCOUNT_REFRESH_TOKEN_KEY).catch(() => undefined),
       deleteSecureItem(PENDING_OAUTH_KEY).catch(() => undefined),
       deleteSecureItem(LEGACY_PENDING_OAUTH_KEY).catch(() => undefined),
       deleteSecureItem(LEGACY_USER_PROFILE_KEY).catch(() => undefined),
@@ -971,13 +870,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await authClientFor(did)
         .logout(token)
         .catch(() => undefined);
-    if (accountToken && did)
-      await authClientFor(did)
-        .logoutAccount(accountToken)
-        .catch(() => undefined);
   }, [
     applyUser,
-    clearAccountSession,
     serializeRefreshTokenMutation,
     serializeUserProfileMutation,
     setToken,
@@ -1065,22 +959,6 @@ function authClientFor(deviceId: string): CindyAuthClient {
     locale: getAuthLocale(),
     fetch: async (input, init) => fetch(input, init),
   });
-}
-
-function accountPairFromOutcome(
-  outcome: LoginOutcome,
-): AccountTokenPair | null {
-  if (
-    (outcome.status === 'ok' || outcome.status === 'select_account') &&
-    outcome.accountToken &&
-    outcome.accountRefreshToken
-  ) {
-    return {
-      accountToken: outcome.accountToken,
-      accountRefreshToken: outcome.accountRefreshToken,
-    };
-  }
-  return null;
 }
 
 // mapMembershipToMobileUser / mergeMembershipWithExisting

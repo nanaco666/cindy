@@ -6,7 +6,6 @@ export type {
 } from "./client.js";
 export {
   accountMembershipSchema,
-  accountTokenPairSchema,
   authRegionSchema,
   loginMethodSchema,
   loginOutcomeSchema,
@@ -22,7 +21,6 @@ export {
 } from "./types.js";
 export type {
   AccountMembership,
-  AccountTokenPair,
   AuthClientType,
   AuthFlowAction,
   AuthFlowState,

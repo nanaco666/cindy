@@ -83,11 +83,6 @@ export const tokenPairSchema = z.object({
   membership: membershipSchema,
 });
 export type AuthTokenPair = z.infer<typeof tokenPairSchema>;
-export const accountTokenPairSchema = z.object({
-  accountToken: z.string().min(1),
-  accountRefreshToken: z.string().min(1),
-});
-export type AccountTokenPair = z.infer<typeof accountTokenPairSchema>;
 
 const optionalAccountTokenFields = {
   accountToken: z.string().min(1).optional(),

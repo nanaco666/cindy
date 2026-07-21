@@ -106,7 +106,7 @@ describe('mobile auth-server login', () => {
     );
   });
 
-  it('uses account tokens for membership exchange and keeps all private tickets off screen', () => {
+  it('keeps account tokens inside membership selection and private tickets off screen', () => {
     const authSource = readFileSync(
       resolve(process.cwd(), 'src/auth/AuthContext.tsx'),
       'utf8',
@@ -119,6 +119,7 @@ describe('mobile auth-server login', () => {
     expect(authSource).toContain('pendingLoginTicketRef');
     expect(authSource).toContain('pendingBindTicketRef');
     expect(authSource).toContain('pendingSsoVerificationTicketRef');
+    expect(authSource).toContain('pendingAccountTokenRef');
     expect(authSource).toContain('client.exchangeAccountMembership(');
     expect(authSource).toContain(
       'client.selectAccount(ticket, action.accountId)',
@@ -131,6 +132,11 @@ describe('mobile auth-server login', () => {
     expect(authSource).toContain(
       'client.verifySsoVerification(ticket, action.code)',
     );
+    expect(authSource).not.toContain('.logoutAccount(');
+    expect(authSource).not.toContain('.refreshAccount(');
+    expect(authSource).not.toContain(
+      'setSecureItem(LEGACY_ACCOUNT_REFRESH_TOKEN_KEY',
+    );
 
     const apiFetchStart = authSource.indexOf('const apiFetch = useCallback(');
     const apiFetchEnd = authSource.indexOf(
@@ -139,7 +145,7 @@ describe('mobile auth-server login', () => {
     );
     const apiFetchBody = authSource.slice(apiFetchStart, apiFetchEnd);
     expect(apiFetchBody).toContain('const token = await getAccessToken();');
-    expect(apiFetchBody).not.toContain('accountAccessTokenRef');
+    expect(apiFetchBody).not.toContain('pendingAccountTokenRef');
   });
 
   it('serializes rotated-token writes and keeps identity on auth-server only', () => {
@@ -149,10 +155,11 @@ describe('mobile auth-server login', () => {
     );
 
     expect(authSource).toContain('serializeRefreshTokenMutation');
-    expect(authSource).toContain('serializeAccountTokenMutation');
-    expect(authSource).toContain(
-      "const ACCOUNT_REFRESH_TOKEN_KEY = 'cindy.mobile.auth.accountRefreshToken';",
+    expect(authSource).toMatch(
+      /const LEGACY_ACCOUNT_REFRESH_TOKEN_KEY\s*=\s*'cindy\.mobile\.auth\.accountRefreshToken';/,
     );
+    expect(authSource).not.toContain('serializeAccountTokenMutation');
+    expect(authSource).not.toContain('accountRefreshInFlightRef');
     expect(authSource).toMatch(
       /if \(authGenerationRef\.current !== generation\)\s+throw authCodeError\('AUTH_FLOW_SUPERSEDED'\)/,
     );

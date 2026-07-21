@@ -150,6 +150,8 @@ describe("CindyAuthClient", () => {
         }),
       );
     const auth = client(fetch);
+    expect(auth).not.toHaveProperty("refreshAccount");
+    expect(auth).not.toHaveProperty("logoutAccount");
     await expect(
       auth.getAccountMemberships("account-access"),
     ).resolves.toHaveLength(1);

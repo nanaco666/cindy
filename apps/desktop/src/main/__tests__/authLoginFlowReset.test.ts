@@ -16,6 +16,7 @@ describe('auth login-flow reset', () => {
     expect(resetBody).toContain('loginFlowState = null;');
     expect(resetBody).toContain('providerConfig = null;');
     expect(resetBody).toContain('discoveredMethods = [];');
+    expect(resetBody).toContain('pendingAccountToken = null;');
     expect(resetBody).toContain('pendingLoginTicket = null;');
     expect(resetBody).toContain('pendingBindTicket = null;');
     expect(resetBody).toContain('pendingSsoVerificationTicket = null;');
@@ -58,15 +59,26 @@ describe('auth login-flow reset', () => {
     expect(source).toContain("? { step: 'error', code, recoverTo: 'identifier' }");
   });
 
-  it('keeps account credentials in main and exchanges the selected membership into a resource token', () => {
+  it('keeps the account token in the login flow only and exchanges a resource token', () => {
     expect(source).toContain(
-      "const ACCOUNT_REFRESH_TOKEN_KEY = 'cindy_auth_account_refresh_token';",
+      "const LEGACY_ACCOUNT_REFRESH_TOKEN_KEY = 'cindy_auth_account_refresh_token';",
     );
+    expect(source).toContain('let pendingAccountToken: string | null = null;');
     expect(source).toContain('client.exchangeAccountMembership(accountToken, action.accountId)');
-    expect(source).toMatch(
-      /createAuthClient\(\)\s*\.logoutAccount\(currentAccountAccessToken\)/,
-    );
+    expect(source).not.toContain('.logoutAccount(');
+    expect(source).not.toContain('accountSession');
+    expect(source).not.toContain('writeSafe(LEGACY_ACCOUNT_REFRESH_TOKEN_KEY');
     expect(source).not.toContain('accountToken: accountAccessToken');
+
+    const completeStart = source.indexOf('async function completeLogin(');
+    const completeEnd = source.indexOf('\n}\n\nasync function acceptLoginOutcome', completeStart);
+    expect(source.slice(completeStart, completeEnd)).toContain('pendingAccountToken = null;');
+
+    const logoutStart = source.indexOf('export async function logout()');
+    const logoutEnd = source.indexOf('\n}\n\n/**\n * Called on system resume', logoutStart);
+    const logoutBody = source.slice(logoutStart, logoutEnd);
+    expect(logoutBody).toContain('token: currentAccessToken');
+    expect(logoutBody).not.toContain('pendingAccountToken');
 
     const getterStart = source.indexOf('export function getAccessToken(): string | null {');
     const getterEnd = source.indexOf('\n}', getterStart);
@@ -75,16 +87,16 @@ describe('auth login-flow reset', () => {
     expect(getterBody).not.toContain('accountAccessToken');
   });
 
-  it('keeps account recovery non-blocking for an already authenticated resource session', () => {
+  it('never restores an account session during resource-token initialization', () => {
     const initializeStart = source.indexOf('export async function initialize(');
     const initializeEnd = source.indexOf('\n}\n\n/**\n * 冷启动 refresh 流程本体', initializeStart);
     const initializeBody = source.slice(initializeStart, initializeEnd);
     const authenticatedFastPath = initializeBody.indexOf('if (accessToken && currentUser)');
-    const accountRecovery = initializeBody.indexOf('void accountSession.refresh();');
 
     expect(authenticatedFastPath).toBeGreaterThan(-1);
-    expect(accountRecovery).toBeGreaterThan(authenticatedFastPath);
-    expect(initializeBody).not.toContain('await accountSession.refresh()');
+    expect(initializeBody).toContain('removeSafe(LEGACY_ACCOUNT_REFRESH_TOKEN_KEY);');
+    expect(initializeBody).not.toContain('refreshAccount');
+    expect(initializeBody).not.toContain('restoreAccountSelection');
   });
 
   it('drops a runtime refresh result after logout or a newer login changes auth generation', () => {

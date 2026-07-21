@@ -2,7 +2,6 @@ import { z } from "zod";
 
 import {
   accountMembershipSchema,
-  accountTokenPairSchema,
   authRegionSchema,
   loginMethodSchema,
   loginOutcomeSchema,
@@ -12,7 +11,6 @@ import {
   tokenPairSchema,
   type AuthClientType,
   type AccountMembership,
-  type AccountTokenPair,
   type AuthMe,
   type AuthTokenPair,
   type AuthRegion,
@@ -236,18 +234,6 @@ export class CindyAuthClient {
     );
   }
 
-  refreshAccount(accountRefreshToken: string): Promise<AccountTokenPair> {
-    return this.request(
-      "/api/auth/account/refresh",
-      accountTokenPairSchema,
-      {
-        accountRefreshToken,
-        deviceId: this.options.deviceId,
-      },
-      { timeoutMs: 0 },
-    );
-  }
-
   async getAccountMemberships(
     accountToken: string,
   ): Promise<AccountMembership[]> {
@@ -268,15 +254,6 @@ export class CindyAuthClient {
       "/api/auth/account/exchange",
       tokenPairSchema,
       { membershipId },
-      { token: accountToken },
-    );
-  }
-
-  async logoutAccount(accountToken: string): Promise<void> {
-    await this.request(
-      "/api/auth/account/logout",
-      z.object({ status: z.literal("ok") }),
-      {},
       { token: accountToken },
     );
   }
