@@ -188,6 +188,13 @@ export async function prepareExternalCodexSessionForResume(threadId: string): Pr
     )
   ) return;
 
+  // state 行可能已经丢失,但标准 sessions/ 下的 rollout 仍在。app-server 的
+  // thread/resume 会自己扫描并重新 hydrate state;这里只需避免再合成一份重复文件。
+  if (!targetRollout) {
+    const currentHomeThread = findExternalThreadByIdFromRollouts(targetHome, threadId);
+    if (currentHomeThread?.rolloutPath && fs.existsSync(currentHomeThread.rolloutPath)) return;
+  }
+
   // 尝试从外部 CODEX_HOME(~/.codex、Codex.app、历史品牌 userData 等)导入这个 thread。
   // rollout 必须接管进当前 Cindy HOME,不能让新 state 长期指向可能被用户清理的老目录。
   // target row 已指向旧品牌 rollout 时,这个指针比外部 HOME 的 updatedAt 更权威。
@@ -268,7 +275,20 @@ export async function prepareExternalCodexSessionForResume(threadId: string): Pr
       });
     }
   } else if (!targetRollout) {
-    log.debug('prepare resume: no rollout_path recorded, cannot synthesize', { threadId });
+    // 更深一层的孤儿: Cindy localDb 仍保留 sdk_session_id 与可读聊天历史,但 Codex
+    // state 行和 rollout 同时丢失。不要伪造版本敏感的 threads 行;先在当前 HOME 的
+    // 标准目录重建 rollout,随后的 thread/resume 会让 app-server 按当前 schema hydrate。
+    try {
+      const synthesizedPath = await synthesizeRolloutForMissingThreadState(threadId, targetHome);
+      if (!synthesizedPath) {
+        log.debug('prepare resume: no localDb recovery source for missing thread state', { threadId });
+      }
+    } catch (err) {
+      log.warn('synthesize rollout for missing Codex thread state failed', {
+        threadId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
   }
 }
 
@@ -680,6 +700,99 @@ async function synthesizeRolloutForOrphanThread(
   });
 }
 
+/** Cindy 会话仍在、Codex state 与 rollout 都丢失时用于重建 session_meta 的最小元数据。 */
+interface LocalCodexRecoverySession {
+  id: string;
+  workingDir: string;
+  model: string | null;
+  createdAt: number;
+}
+
+/**
+ * 双缺失恢复:只重建标准位置的 rollout,让 app-server thread/resume 重新生成当前版本的
+ * state 行。写入路径由原会话创建时间稳定派生,重复调用和并发调用都复用同一文件。
+ */
+async function synthesizeRolloutForMissingThreadState(
+  threadId: string,
+  targetHome: string,
+): Promise<string | null> {
+  const session = await readLocalCodexRecoverySession(threadId);
+  if (!session) return null;
+  const messages = await readXdtMessagesBySessionId(session.id);
+  if (messages.length === 0) return null;
+
+  const rolloutPath = recoveredRolloutPath(targetHome, threadId, session.createdAt);
+  const row: SqlRow = {
+    created_at_ms: session.createdAt,
+    cwd: session.workingDir,
+    originator: 'xdt-maker',
+    source: 'cli',
+    model: session.model,
+  };
+  const jsonl = buildSyntheticRollout(threadId, row, messages);
+  const created = await writeFileAtomicallyIfAbsent(rolloutPath, jsonl);
+  log.info('synthesized rollout for missing Codex thread state', {
+    threadId,
+    rolloutPath,
+    messageCount: messages.length,
+    created,
+  });
+  return rolloutPath;
+}
+
+async function readLocalCodexRecoverySession(threadId: string): Promise<LocalCodexRecoverySession | null> {
+  return (await getDbClient().queryOne<LocalCodexRecoverySession>(`
+    SELECT
+      id,
+      working_dir AS workingDir,
+      model,
+      created_at AS createdAt
+    FROM sessions
+    WHERE agent_kind = 'codex' AND sdk_session_id = ? AND status <> 'deleted'
+    ORDER BY updated_at DESC
+    LIMIT 1
+  `, [threadId])) ?? null;
+}
+
+function recoveredRolloutPath(targetHome: string, threadId: string, createdAt: number): string {
+  const created = new Date(Number.isFinite(createdAt) && createdAt > 0 ? createdAt : Date.now());
+  const year = String(created.getUTCFullYear()).padStart(4, '0');
+  const month = String(created.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(created.getUTCDate()).padStart(2, '0');
+  const timestamp = created.toISOString().slice(0, 19).replaceAll(':', '-');
+  return path.join(
+    targetHome,
+    'sessions',
+    year,
+    month,
+    day,
+    `rollout-${timestamp}-${threadId}.jsonl`,
+  );
+}
+
+/** 同目录临时文件 + hard-link 发布:不覆盖既有 rollout,并避免并发 resume 读到半截文件。 */
+async function writeFileAtomicallyIfAbsent(targetPath: string, contents: string): Promise<boolean> {
+  if (fs.existsSync(targetPath)) return false;
+  await fsp.mkdir(path.dirname(targetPath), { recursive: true });
+  const tempPath = path.join(
+    path.dirname(targetPath),
+    `.${path.basename(targetPath)}.${randomUUID()}.recovery-tmp`,
+  );
+  try {
+    await fsp.writeFile(tempPath, contents, { encoding: 'utf-8', flag: 'wx' });
+    try {
+      await fsp.link(tempPath, targetPath);
+      return true;
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code;
+      if (code === 'EEXIST') return false;
+      throw err;
+    }
+  } finally {
+    await fsp.rm(tempPath, { force: true }).catch(() => undefined);
+  }
+}
+
 /** 读 state DB threads 表的原始整行(用于重建 session_meta)。 */
 function readRawThreadRow(dbPath: string, threadId: string): SqlRow | null {
   let db: Database.Database | null = null;
@@ -715,12 +828,16 @@ async function readXdtMessagesByThreadId(threadId: string): Promise<SyntheticRol
     LIMIT 1
   `, [threadId]);
   if (!session) return [];
+  return readXdtMessagesBySessionId(session.id);
+}
+
+async function readXdtMessagesBySessionId(sessionId: string): Promise<SyntheticRolloutMessage[]> {
   const rows = await getDbClient().query<{ role: string; content: string | null; createdAt: number }>(`
     SELECT role, content, created_at AS createdAt
     FROM messages
     WHERE session_id = ? AND rewind_at IS NULL AND role IN ('user', 'assistant')
     ORDER BY created_at ASC
-  `, [session.id]);
+  `, [sessionId]);
   const out: SyntheticRolloutMessage[] = [];
   for (const r of rows) {
     const text = extractXdtMessageText(r.content).trim();
@@ -758,13 +875,17 @@ function buildSyntheticRollout(threadId: string, row: SqlRow, messages: Syntheti
     timestamp: metaIso,
     type: 'session_meta',
     payload: dropUndefined({
+      session_id: threadId,
       id: threadId,
       timestamp: metaIso,
       cwd: stringValue(row.cwd) || os.homedir(),
       originator: stringValue(row.originator) || 'xdt-maker',
-      cli_version: stringValue(row.cli_version) || undefined,
-      source: stringValue(row.source) || undefined,
-      model_provider: stringValue(row.model_provider) || undefined,
+      // 当前 Codex SessionMeta 反序列化要求这三项存在;未知版本用 0.0.0 明确标记
+      // 为恢复生成,provider / base instructions 则用合法的空 Option。
+      cli_version: stringValue(row.cli_version) || '0.0.0',
+      source: stringValue(row.source) || 'cli',
+      model_provider: stringValue(row.model_provider) || null,
+      base_instructions: null,
       model: stringValue(row.model) || undefined,
     }),
   };

@@ -1112,6 +1112,68 @@ describe('prepareExternalCodexSessionForResume orphan rollout synthesis', () => 
     expect(fs.readFileSync(targetRow.rolloutPath, 'utf-8')).toContain('recover me');
   });
 
+  it('synthesizes a standard rollout when both the Codex state row and file are missing', async () => {
+    const dbPath = createStateDb(desktopHome());
+    const sessionId = `local-missing-state-${threadId}`;
+    insertLocalCodexSession(sessionId, threadId);
+    insertLocalMessage(sessionId, 'c1', 'user', JSON.stringify({ text: 'recover without state' }), 1_000);
+    insertLocalMessage(sessionId, 'c2', 'assistant', 'state will hydrate on resume', 1_100);
+
+    await prepareExternalCodexSessionForResume(threadId);
+
+    const rolloutPath = path.join(
+      desktopHome(),
+      'sessions',
+      '1970',
+      '01',
+      '01',
+      `rollout-1970-01-01T00-00-01-${threadId}.jsonl`,
+    );
+    expect(fs.existsSync(rolloutPath)).toBe(true);
+    const lines = fs.readFileSync(rolloutPath, 'utf-8').trim().split('\n').map((line) => JSON.parse(line));
+    expect(lines[0]).toMatchObject({
+      type: 'session_meta',
+      payload: {
+        session_id: threadId,
+        id: threadId,
+        cwd: '/tmp/project',
+        cli_version: '0.0.0',
+        source: 'cli',
+        model_provider: null,
+        base_instructions: null,
+        model: 'gpt-5.5',
+      },
+    });
+    expect(lines.slice(1).map((line) => line.payload.content[0].text)).toEqual([
+      'recover without state',
+      'state will hydrate on resume',
+    ]);
+
+    // Cindy 不伪造版本敏感的 threads 行;它由随后的 app-server thread/resume hydrate。
+    const stateDb = new Database(dbPath, { readonly: true });
+    const stateCount = stateDb.prepare('SELECT count(*) AS count FROM threads WHERE id = ?')
+      .get(threadId) as { count: number };
+    stateDb.close();
+    expect(stateCount.count).toBe(0);
+
+    // state 仍缺失时重复 prepare 会发现当前 HOME 已有 rollout,不覆盖恢复文件。
+    const originalContents = fs.readFileSync(rolloutPath, 'utf-8');
+    await prepareExternalCodexSessionForResume(threadId);
+    expect(fs.readFileSync(rolloutPath, 'utf-8')).toBe(originalContents);
+  });
+
+  it('does not synthesize missing Codex state for a deleted local session', async () => {
+    createStateDb(desktopHome());
+    const sessionId = `local-deleted-${threadId}`;
+    insertLocalCodexSession(sessionId, threadId);
+    currentTestDb().prepare('UPDATE sessions SET status = ? WHERE id = ?').run('deleted', sessionId);
+    insertLocalMessage(sessionId, 'c1', 'user', JSON.stringify({ text: 'do not resurrect' }), 1_000);
+
+    await prepareExternalCodexSessionForResume(threadId);
+
+    expect(fs.existsSync(path.join(desktopHome(), 'sessions'))).toBe(false);
+  });
+
   it('synthesizes a rollout from localDb when the DB row exists but the file is missing', async () => {
     const dbPath = createStateDb(desktopHome());
     const missingRollout = path.join(desktopHome(), 'sessions', '2026', '06', '15', `rollout-2026-06-15-${threadId}.jsonl`);
