@@ -17,13 +17,16 @@ describe('mobile top-level back buttons', () => {
     const backButtonStyle = primitives.slice(backButtonStart, backButtonEnd);
 
     expect(primitives).toContain('export function ScreenBackButton');
-    expect(backButtonStyle).toContain('backgroundColor: colors.surfaceElevated');
-    expect(backButtonStyle).toContain('borderColor: colors.border');
+    // 原档口径(8a3f43f9 考古):无底无边裸 chevron,44×44,marginLeft 贴边
+    expect(backButtonStyle).not.toContain('backgroundColor');
+    expect(backButtonStyle).not.toContain('borderColor');
+    expect(backButtonStyle).not.toContain('borderWidth');
     expect(backButtonStyle).toContain('borderRadius: radius.pill');
-    expect(backButtonStyle).toContain('borderWidth: StyleSheet.hairlineWidth');
-    expect(backButtonStyle).toContain('height: 40');
-    expect(backButtonStyle).toContain('width: 40');
-    expect(primitives).toContain('<ChevronLeft color={colors.textPrimary} size={iconSize.md} strokeWidth={iconStroke.medium} />');
+    expect(backButtonStyle).toContain('height: 44');
+    expect(backButtonStyle).toContain('width: 44');
+    expect(backButtonStyle).toContain('marginLeft: -spacing.sm');
+    // chevron 与头部右侧 action 图标同档 20(用户定稿 2026-07-21,取代换肤期 md/medium)。
+    expect(primitives).toContain('<ChevronLeft color={colors.textPrimary} size={iconSize.action} strokeWidth={iconStroke.regular} />');
 
     expect(session).toContain("import { ScreenBackButton } from '@/components/MobilePrimitives';");
     expect(session).toContain('testID="session.backButton"');

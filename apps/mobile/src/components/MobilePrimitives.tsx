@@ -406,7 +406,7 @@ export function ScreenBackButton({
       ]}
       testID={testID}
     >
-      <ChevronLeft color={colors.textPrimary} size={iconSize.md} strokeWidth={iconStroke.medium} />
+      <ChevronLeft color={colors.textPrimary} size={iconSize.action} strokeWidth={iconStroke.regular} />
     </Pressable>
   );
 }
@@ -700,17 +700,15 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   backButton: {
     alignItems: 'center',
-    backgroundColor: colors.surfaceElevated,
-    borderColor: colors.border,
     borderRadius: radius.pill,
-    borderWidth: StyleSheet.hairlineWidth,
-    height: 40,
+    height: 44,
     justifyContent: 'center',
-    width: 40,
+    marginLeft: -spacing.sm,
+    width: 44,
   },
   backButtonCompact: {
-    height: 40,
-    width: 40,
+    height: 36,
+    width: 36,
   },
   headerText: {
     flex: 1,

@@ -94,6 +94,11 @@ describe('theme tokens', () => {
     expect(darkColors.surfaceTranslucentSidebar).toBe('rgba(18, 15, 15, 0.85)');
     expect(lightColors.surfaceGlassPanel).toBe('#F8F8F8');
     expect(darkColors.surfaceGlassPanel).toBe('rgba(59, 59, 59, 0.95)');
+    // 遮罩双模式恒深(用户定稿 2026-07-21):LIGHT 模式 scrim 也必须深色。
+    // light overlay 0.24 太浅近白、0.50 实机过重,用户两轮定稿 0.35;侧栏底色另有
+    // surfaceTranslucentSidebar,不受影响。
+    expect(lightColors.overlay).toBe('rgba(38, 38, 38, 0.35)');
+    expect(darkColors.overlay).toBe('rgba(0, 0, 0, 0.45)');
   });
 
   it('M1 mobile 专用 token 契约: list / chat / sheet / caret 双模式精确值', () => {

@@ -733,13 +733,13 @@ describe('new session composer surface', () => {
     expect(newComposerSource).toContain('scrollEnabled={composerInputScrollEnabled}');
     expect(newComposerSource).toContain('trailing={composerCardActive || !composerShowCreateButton ? null : renderCreateButton()}');
     expect(newSource).toContain('const renderComposerToolbar = () => (');
-    expect(newSource).toContain('Send');
+    expect(newSource).toContain('PaperPlaneIcon');
     expect(newSource).not.toContain('ArrowUp');
     expect(attachmentButtonSource).toContain('contextSheetOpen && styles.composerIconButtonActive');
     expect(attachmentButtonSource).toContain('color={contextSheetOpen ? colors.textPrimary : colors.textSecondary}');
     expect(attachmentButtonSource).toContain('size={iconSize.sm}');
-    expect(createButtonSource).toContain('<Send');
-    expect(createButtonSource).toContain("fill={canCreate ? colors.ctaText : 'transparent'}");
+    expect(createButtonSource).toContain('<PaperPlaneIcon');
+    expect(createButtonSource).toContain('size={iconSize.lg}');
     expect(createButtonSource).toContain('color={canCreate ? colors.ctaText : colors.textSecondary}');
     expect(createButtonSource).toContain('<ActivityIndicator color={colors.textSecondary} size="small" />');
     expect(composerIconButtonStyle).toContain('backgroundColor: colors.sheetActionSurface');

@@ -1466,6 +1466,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     justifyContent: 'space-between',
     paddingBottom: spacing.sm,
     paddingHorizontal: spacing.lg,
+    paddingTop: spacing.sm,
   },
   sectionLabel: {
     color: colors.textTertiary,

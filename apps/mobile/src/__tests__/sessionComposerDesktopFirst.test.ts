@@ -86,7 +86,7 @@ describe('mobile session composer desktop-first surface', () => {
     const voiceDraftTextStyleEnd = source.indexOf('voiceDraftListeningPrompt:', voiceDraftTextStyleStart);
     const voiceDraftTextStyle = source.slice(voiceDraftTextStyleStart, voiceDraftTextStyleEnd);
 
-    expect(source).toContain('Send');
+    expect(source).toContain('PaperPlaneIcon');
     expect(source).toContain('Camera');
     expect(source).toContain('Settings');
     // Context 面板「添加」分组的四个入口 icon(照片 / 截图 / 拍照 / 文件)。
@@ -100,8 +100,8 @@ describe('mobile session composer desktop-first surface', () => {
     expect(attachmentButtonSource).toContain('<Plus');
     expect(source).toContain('<Mic color={colors.textSecondary} size={iconSize.sm} strokeWidth={iconStroke.regular} />');
     expect(composerInputSource).toContain('trailing={composerCardActive ? null : renderComposerTrailingActions()}');
-    expect(trailingActionsSource).toContain('<Send');
-    expect(trailingActionsSource).toContain("fill={composerSendDisabled ? 'transparent' : colors.ctaText}");
+    expect(trailingActionsSource).toContain('<PaperPlaneIcon');
+    expect(trailingActionsSource).toContain('color={composerSendDisabled ? colors.textSecondary : colors.ctaText}');
     expect(source).toContain('const composerCardActive = (canUseComposer && composerFocused)');
     // 权限选择已合并进模型浮窗(ModelPickerSheet 二级视图);composer 底排只剩 [+][模型]。
     expect(source).not.toContain('testID="session.composerPermissionButton"');
