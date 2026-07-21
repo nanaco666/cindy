@@ -35,7 +35,7 @@ function ComposerQuoteNodeView({ node, deleteNode, selected }: NodeViewProps) {
       as="span"
       data-composer-quote=""
       contentEditable={false}
-      className="mx-0.5 inline-block max-w-[min(240px,55vw)] align-middle"
+      className="mx-1 inline-block max-w-[min(240px,55vw)] select-none align-middle"
     >
       <Tooltip.Provider delayDuration={300}>
         <Tooltip.Root>
@@ -93,8 +93,8 @@ export const ComposerQuoteNode = Node.create<Record<string, never>, Record<strin
   inline: true,
   group: 'inline',
   atom: true,
-  selectable: true,
-  draggable: true,
+  selectable: false,
+  draggable: false,
 
   addAttributes() {
     return {
