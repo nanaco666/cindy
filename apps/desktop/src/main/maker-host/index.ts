@@ -548,7 +548,7 @@ export function getMaker(): Maker {
       codex: codexAgent,
     });
     if (makerMemoryManager.isEnabled()) {
-      await makerMemoryManager.enable();
+      void makerMemoryManager.enable();
     }
 
     // logout 后强制 dispose 本地 host —— local app-server 子进程内存里仍持有旧 token,
