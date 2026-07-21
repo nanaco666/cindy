@@ -854,9 +854,13 @@ export function MainLayout() {
         applicationMenuLog.info('new-maker invoked, navigating to /cc-agent/new');
         navigate('/cc-agent/new');
       },
-    }).finally(() => {
-      newMakerCommandInFlightRef.current = false;
-    });
+    })
+      .catch((err: unknown) => {
+        applicationMenuLog.warn('new-maker routing failed', err);
+      })
+      .finally(() => {
+        newMakerCommandInFlightRef.current = false;
+      });
   }, [navigate]);
 
   useEffect(() => {

@@ -70,7 +70,7 @@ export function OrcaWorkerPanel({
     activeWorkerCount,
     softLimit,
     hardLimit,
-    refresh,
+    refreshCreationState,
     selectedWorkerRecord,
     selectedWorkerId,
     workerSessionId,
@@ -90,8 +90,6 @@ export function OrcaWorkerPanel({
   });
   const lastAgentIslandPayloadRef = useRef<string | string[] | null>(null);
   const handledCreateWorkerRevisionRef = useRef(0);
-  const hardLimitRef = useRef(hardLimit);
-  hardLimitRef.current = hardLimit;
 
   useEffect(() => {
     handledCreateWorkerRevisionRef.current = 0;
@@ -106,12 +104,12 @@ export function OrcaWorkerPanel({
 
     // Refresh before checking the hard limit: a cold/stale worker cache must never let the
     // keyboard path open a dialog that the visible create button would disable.
-    void refresh().then((result) => {
+    void refreshCreationState().then((result) => {
       if (!active) return;
       settled = true;
       if (
         result?.status === 'applied' &&
-        canOpenWorkerFromShortcut(result.workers, hardLimitRef.current)
+        canOpenWorkerFromShortcut(result.workers, result.hardLimit)
       ) {
         setCreateOpen(true);
       }
@@ -131,7 +129,7 @@ export function OrcaWorkerPanel({
     createWorkerRequestRevision,
     leadSessionId,
     onCreateWorkerRequestConsumed,
-    refresh,
+    refreshCreationState,
     setCreateOpen,
     viewVisible,
   ]);

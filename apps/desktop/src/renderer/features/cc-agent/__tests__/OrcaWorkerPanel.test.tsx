@@ -8,6 +8,7 @@ import { OrcaWorkerPanel } from '../OrcaWorkerPanel';
 const mocks = vi.hoisted(() => ({
   hardLimit: 2,
   refresh: vi.fn(),
+  refreshCreationState: vi.fn(),
   setCreateOpen: vi.fn(),
 }));
 
@@ -26,6 +27,7 @@ vi.mock('../hooks/useOrcaWorkerSelection', () => ({
     softLimit: 1,
     hardLimit: mocks.hardLimit,
     refresh: mocks.refresh,
+    refreshCreationState: mocks.refreshCreationState,
     selectedWorkerRecord: null,
     selectedWorkerId: null,
     workerSessionId: null,
@@ -49,16 +51,17 @@ describe('OrcaWorkerPanel create Worker shortcut', () => {
   beforeEach(() => {
     mocks.hardLimit = 2;
     mocks.refresh.mockReset();
+    mocks.refreshCreationState.mockReset();
     mocks.setCreateOpen.mockReset();
   });
 
   afterEach(cleanup);
 
   it('leaves an in-flight intent pending when the panel unmounts, so a new owner can retry it', async () => {
-    const firstRefresh = deferred<{ status: 'applied'; workers: [] }>();
-    mocks.refresh
+    const firstRefresh = deferred<{ status: 'applied'; workers: []; hardLimit: number }>();
+    mocks.refreshCreationState
       .mockReturnValueOnce(firstRefresh.promise)
-      .mockResolvedValueOnce({ status: 'applied', workers: [] });
+      .mockResolvedValueOnce({ status: 'applied', workers: [], hardLimit: 2 });
     const onConsumed = vi.fn();
     const first = render(
       <OrcaWorkerPanel
@@ -72,7 +75,9 @@ describe('OrcaWorkerPanel create Worker shortcut', () => {
 
     expect(onConsumed).not.toHaveBeenCalled();
     first.unmount();
-    await act(async () => firstRefresh.resolve({ status: 'applied', workers: [] }));
+    await act(async () =>
+      firstRefresh.resolve({ status: 'applied', workers: [], hardLimit: 2 }),
+    );
     expect(onConsumed).not.toHaveBeenCalled();
     expect(mocks.setCreateOpen).not.toHaveBeenCalled();
 
@@ -89,26 +94,15 @@ describe('OrcaWorkerPanel create Worker shortcut', () => {
     expect(onConsumed).toHaveBeenCalledWith(1);
   });
 
-  it('uses the latest hard limit when an in-flight refresh completes', async () => {
-    const pendingRefresh = deferred<{
-      status: 'applied';
-      workers: Array<{ status: 'running' }>;
-    }>();
-    mocks.hardLimit = 1;
-    mocks.refresh.mockReturnValue(pendingRefresh.promise);
-    const onConsumed = vi.fn();
-    const view = render(
-      <OrcaWorkerPanel
-        leadSessionId="lead-1"
-        viewVisible
-        createWorkerRequestPending
-        createWorkerRequestRevision={1}
-        onCreateWorkerRequestConsumed={onConsumed}
-      />,
-    );
-
+  it('uses the refreshed collaboration hard limit instead of the stale rendered limit', async () => {
     mocks.hardLimit = 2;
-    view.rerender(
+    mocks.refreshCreationState.mockResolvedValue({
+      status: 'applied',
+      workers: [{ status: 'running' }],
+      hardLimit: 1,
+    });
+    const onConsumed = vi.fn();
+    render(
       <OrcaWorkerPanel
         leadSessionId="lead-1"
         viewVisible
@@ -117,10 +111,9 @@ describe('OrcaWorkerPanel create Worker shortcut', () => {
         onCreateWorkerRequestConsumed={onConsumed}
       />,
     );
-    await act(async () => pendingRefresh.resolve({ status: 'applied', workers: [{ status: 'running' }] }));
 
-    expect(mocks.setCreateOpen).toHaveBeenCalledWith(true);
-    expect(onConsumed).toHaveBeenCalledWith(1);
-    expect(mocks.refresh).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(onConsumed).toHaveBeenCalledWith(1));
+    expect(mocks.setCreateOpen).not.toHaveBeenCalled();
+    expect(mocks.refreshCreationState).toHaveBeenCalledTimes(1);
   });
 });

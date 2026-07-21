@@ -38,6 +38,22 @@ export interface WorkersRefreshResult {
   workers: WorkerInfo[];
 }
 
+/** Latest collaboration-limit snapshot returned to coordinated refresh callers. */
+export interface WorkerSettingsRefreshResult {
+  leadSessionId: string;
+  requestId: number;
+  status: 'applied' | 'failed';
+  softLimit: number;
+  hardLimit: number;
+}
+
+/** Worker list and hard limit verified together before opening the create dialog. */
+export interface WorkerCreationRefreshResult {
+  status: 'applied' | 'failed';
+  workers: WorkerInfo[];
+  hardLimit: number;
+}
+
 const DEFAULT_SNAPSHOT: WorkersSnapshot = {
   workers: [],
   softLimit: DEFAULT_SOFT_LIMIT,
@@ -48,6 +64,8 @@ const workersRequestSeq = new Map<string, number>();
 const settingsRequestSeq = new Map<string, number>();
 const latestWorkersRequest = new Map<string, Promise<WorkersRefreshResult>>();
 const latestWorkersResult = new Map<string, WorkersRefreshResult>();
+const latestSettingsRequest = new Map<string, Promise<WorkerSettingsRefreshResult>>();
+const latestSettingsResult = new Map<string, WorkerSettingsRefreshResult>();
 const cacheSubscribers = new Map<string, Set<() => void>>();
 
 function mapWorkerRecord(raw: Record<string, unknown>): WorkerInfo {
@@ -150,20 +168,69 @@ async function refreshWorkersSnapshot(leadSessionId: string): Promise<WorkersRef
   return request;
 }
 
-async function refreshSettingsSnapshot(leadSessionId: string): Promise<void> {
+async function refreshSettingsSnapshot(
+  leadSessionId: string,
+): Promise<WorkerSettingsRefreshResult> {
   const requestId = nextRequestId(settingsRequestSeq, leadSessionId);
-  try {
-    const settings = await orcaWorkflowsFor(leadSessionId).getCollaborationSettings();
-    if (settingsRequestSeq.get(leadSessionId) !== requestId) return;
-    const s = settings as Record<string, unknown> | undefined;
-    if (!s) return;
-    const patch: Partial<WorkersSnapshot> = {};
-    if (typeof s.workerSoftLimit === 'number') patch.softLimit = s.workerSoftLimit;
-    if (typeof s.workerHardLimit === 'number') patch.hardLimit = s.workerHardLimit;
-    if (Object.keys(patch).length > 0) writeCachedSnapshot(leadSessionId, patch);
-  } catch {
-    // 设置读取失败沿用缓存 / 默认限额，不影响 worker 主视图。
-  }
+  const request = orcaWorkflowsFor(leadSessionId)
+    .getCollaborationSettings()
+    .then((settings) => {
+      if (settingsRequestSeq.get(leadSessionId) !== requestId) return null;
+      const s = settings as Record<string, unknown> | undefined;
+      const patch: Partial<WorkersSnapshot> = {};
+      if (typeof s?.workerSoftLimit === 'number') patch.softLimit = s.workerSoftLimit;
+      if (typeof s?.workerHardLimit === 'number') patch.hardLimit = s.workerHardLimit;
+      const hasAuthoritativeHardLimit = typeof s?.workerHardLimit === 'number';
+      const snapshot =
+        Object.keys(patch).length > 0
+          ? writeCachedSnapshot(leadSessionId, patch)
+          : readCachedSnapshot(leadSessionId);
+      const result: WorkerSettingsRefreshResult = {
+        leadSessionId,
+        requestId,
+        status: hasAuthoritativeHardLimit ? 'applied' : 'failed',
+        softLimit: snapshot.softLimit,
+        hardLimit: snapshot.hardLimit,
+      };
+      latestSettingsResult.set(leadSessionId, result);
+      return result;
+    })
+    .catch(() => {
+      if (settingsRequestSeq.get(leadSessionId) !== requestId) return null;
+      // 设置读取失败沿用缓存 / 默认限额，不影响 worker 主视图；显式刷新调用方可 fail closed。
+      const snapshot = readCachedSnapshot(leadSessionId);
+      const result: WorkerSettingsRefreshResult = {
+        leadSessionId,
+        requestId,
+        status: 'failed',
+        softLimit: snapshot.softLimit,
+        hardLimit: snapshot.hardLimit,
+      };
+      latestSettingsResult.set(leadSessionId, result);
+      return result;
+    })
+    .then(async (result): Promise<WorkerSettingsRefreshResult> => {
+      if (result) return result;
+      const latest = latestSettingsRequest.get(leadSessionId);
+      if (latest && latest !== request) return latest;
+      const snapshot = readCachedSnapshot(leadSessionId);
+      return (
+        latestSettingsResult.get(leadSessionId) ?? {
+          leadSessionId,
+          requestId: settingsRequestSeq.get(leadSessionId) ?? requestId,
+          status: 'failed',
+          softLimit: snapshot.softLimit,
+          hardLimit: snapshot.hardLimit,
+        }
+      );
+    });
+  latestSettingsRequest.set(leadSessionId, request);
+  void request.finally(() => {
+    if (latestSettingsRequest.get(leadSessionId) === request) {
+      latestSettingsRequest.delete(leadSessionId);
+    }
+  });
+  return request;
 }
 
 export function clearWorkersCache(leadSessionId?: string): void {
@@ -173,6 +240,8 @@ export function clearWorkersCache(leadSessionId?: string): void {
     settingsRequestSeq.delete(leadSessionId);
     latestWorkersRequest.delete(leadSessionId);
     latestWorkersResult.delete(leadSessionId);
+    latestSettingsRequest.delete(leadSessionId);
+    latestSettingsResult.delete(leadSessionId);
     cacheSubscribers.get(leadSessionId)?.forEach((listener) => listener());
   } else {
     workersCache.clear();
@@ -180,6 +249,8 @@ export function clearWorkersCache(leadSessionId?: string): void {
     settingsRequestSeq.clear();
     latestWorkersRequest.clear();
     latestWorkersResult.clear();
+    latestSettingsRequest.clear();
+    latestSettingsResult.clear();
     cacheSubscribers.forEach((listeners) => listeners.forEach((listener) => listener()));
   }
 }
@@ -215,6 +286,25 @@ export function useWorkers(leadSessionId: string | undefined) {
     // device-link:远程 lead 走隧道读被控端团队;本机 lead 原样走本机 DB(orcaWorkflowsFor 分流)。
     return refreshWorkersSnapshot(leadSessionId);
   }, [leadSessionId]);
+
+  const refreshCreationState = useCallback(
+    async (): Promise<WorkerCreationRefreshResult | null> => {
+      if (!leadSessionId) return null;
+      const [workersResult, settingsResult] = await Promise.all([
+        refreshWorkersSnapshot(leadSessionId),
+        refreshSettingsSnapshot(leadSessionId),
+      ]);
+      return {
+        status:
+          workersResult.status === 'applied' && settingsResult.status === 'applied'
+            ? 'applied'
+            : 'failed',
+        workers: workersResult.workers,
+        hardLimit: settingsResult.hardLimit,
+      };
+    },
+    [leadSessionId],
+  );
 
   useEffect(() => {
     updateHookSnapshot(setHookSnapshot, leadSessionId);
@@ -252,5 +342,13 @@ export function useWorkers(leadSessionId: string | undefined) {
   // primitive 返回值不需要 useMemo 稳定身份。
   const activeWorkerCount = workers.filter((w) => isActiveWorkerStatus(w.status)).length;
 
-  return { workers, focusedWorker, activeWorkerCount, softLimit, hardLimit, refresh };
+  return {
+    workers,
+    focusedWorker,
+    activeWorkerCount,
+    softLimit,
+    hardLimit,
+    refresh,
+    refreshCreationState,
+  };
 }

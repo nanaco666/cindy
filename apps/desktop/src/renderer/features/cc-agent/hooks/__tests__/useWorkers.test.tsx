@@ -238,4 +238,33 @@ describe('useWorkers', () => {
     expect(hook.result.current.softLimit).toBe(4);
     expect(hook.result.current.hardLimit).toBe(7);
   });
+
+  it('refreshes workers and collaboration limits together for the create shortcut gate', async () => {
+    const initialSettings = deferred<unknown>();
+    mocks.getCollaborationSettings
+      .mockReset()
+      .mockReturnValueOnce(initialSettings.promise)
+      .mockResolvedValueOnce({ workerSoftLimit: 1, workerHardLimit: 1 });
+    const hook = renderHook(() => useWorkers('lead-1'));
+
+    let creationState!: Awaited<ReturnType<typeof hook.result.current.refreshCreationState>>;
+    await act(async () => {
+      creationState = await hook.result.current.refreshCreationState();
+    });
+
+    expect(creationState).toEqual(
+      expect.objectContaining({
+        status: 'applied',
+        hardLimit: 1,
+        workers: [expect.objectContaining({ sessionId: 'session-a' })],
+      }),
+    );
+    expect(hook.result.current.hardLimit).toBe(1);
+
+    await act(async () => {
+      initialSettings.resolve({ workerSoftLimit: 5, workerHardLimit: 8 });
+      await flushAsyncUpdates();
+    });
+    expect(hook.result.current.hardLimit).toBe(1);
+  });
 });
