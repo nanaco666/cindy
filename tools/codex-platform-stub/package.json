@@ -4,5 +4,5 @@
   "private": true,
   "description": "Empty stub replacing @openai/codex-{platform}-{arch} optional binaries. xdt-maker ships codex.exe via vendor BinaryProvisioner (Boss 4) and passes codexPathOverride to SDK, so findCodexPath() is never called and platform packages are never required at runtime.",
   "main": "index.js",
-  "license": "MIT"
+  "license": "Apache-2.0"
 }

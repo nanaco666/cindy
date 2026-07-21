@@ -83,7 +83,7 @@
     "name": "Lizi",
     "email": "jiali@magiclizi.com"
   },
-  "license": "UNLICENSED",
+  "license": "Apache-2.0",
   "dependencies": {
     "@cindy/auth-client": "workspace:*",
     "@cindy/slack-hook-protocol": "workspace:*",
