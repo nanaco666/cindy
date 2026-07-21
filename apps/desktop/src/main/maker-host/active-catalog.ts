@@ -191,6 +191,75 @@ function projectCodexModelsToClaude(p: Provider): Provider {
 /** 清单来源唯一化的动态供应商:目录(bundled/远端)里的静态模型一律忽略,清单只来自运行时注入。 */
 const DYNAMIC_LIST_PROVIDER_IDS: ReadonlySet<string> = new Set(['anthropic', 'openai', 'xd']);
 
+/**
+ * cindyModelMeta 里客户端消费的**展示字段子集**。能力字段(efforts / fast /
+ * contextWindow)仍以动态发现为权威,这里刻意不收——元数据基线只管「叫什么、
+ * 排哪里、默认露不露」,不管「能干什么」(2026-07-21 三层合并设计)。
+ */
+interface CindyMetaDisplayFields {
+  name?: string;
+  group?: string;
+  description?: string;
+  sortOrder?: number;
+  defaultEnabled?: boolean;
+}
+
+/**
+ * 解析目录顶层 `cindyModelMeta`(`{ version: 1, models: { id: {...} } }` 信封)为
+ * 展示字段索引。schema 归服务端所有,客户端只读认识的字段、逐字段校验类型;
+ * **版本门禁**:version !== 1 整段忽略(未来服务端升 schema 时老客户端安全降级,
+ * 不按旧语义误读新数据)。坏信封 / 坏条目静默跳过,绝不让元数据把清单弄坏。
+ */
+function buildCindyModelMetaIndex(meta: unknown): Map<string, CindyMetaDisplayFields> {
+  const index = new Map<string, CindyMetaDisplayFields>();
+  if (!meta || typeof meta !== 'object' || Array.isArray(meta)) return index;
+  const envelope = meta as { version?: unknown; models?: unknown };
+  if (envelope.version !== 1) return index;
+  const models = envelope.models;
+  if (!models || typeof models !== 'object' || Array.isArray(models)) return index;
+  for (const [id, entry] of Object.entries(models as Record<string, unknown>)) {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue;
+    const e = entry as Record<string, unknown>;
+    const fields: CindyMetaDisplayFields = {};
+    if (typeof e.name === 'string' && e.name.length > 0) fields.name = e.name;
+    if (typeof e.group === 'string' && e.group.length > 0) fields.group = e.group;
+    if (typeof e.description === 'string' && e.description.length > 0) fields.description = e.description;
+    if (typeof e.sortOrder === 'number' && Number.isFinite(e.sortOrder)) fields.sortOrder = e.sortOrder;
+    if (typeof e.defaultEnabled === 'boolean') fields.defaultEnabled = e.defaultEnabled;
+    if (Object.keys(fields).length > 0) index.set(id, fields);
+  }
+  return index;
+}
+
+/**
+ * 把元数据基线的展示字段覆盖到发现条目上(基线在场即胜出;不在场保留上游值)。
+ * 典型修正:订阅 `/v1/models` / SDK 捕获给的家族级名字("Fable")→ 产品命名
+ * ("Fable 5");上游无排序 → 产品排序。
+ */
+function overlayCindyMeta(model: CatalogModel, fields: CindyMetaDisplayFields | undefined): CatalogModel {
+  if (!fields) return model;
+  return {
+    ...model,
+    ...(fields.name !== undefined ? { name: fields.name } : {}),
+    ...(fields.group !== undefined ? { group: fields.group } : {}),
+    ...(fields.description !== undefined ? { description: fields.description } : {}),
+    ...(fields.sortOrder !== undefined ? { sortOrder: fields.sortOrder } : {}),
+    ...(fields.defaultEnabled !== undefined ? { defaultEnabled: fields.defaultEnabled } : {}),
+  };
+}
+
+/** 按 sortOrder 稳定排序(无 sortOrder 排最后,按进入序)——与 augmentModels 同口径。 */
+function sortModelsByOrder(models: CatalogModel[]): CatalogModel[] {
+  return models
+    .map((model, index) => ({ model, index }))
+    .sort(
+      (a, b) =>
+        (a.model.sortOrder ?? Number.MAX_SAFE_INTEGER) -
+          (b.model.sortOrder ?? Number.MAX_SAFE_INTEGER) || a.index - b.index,
+    )
+    .map(({ model }) => model);
+}
+
 /** 把 provider 的全部 per-agent 模型清单清零(保留身份卡);已为空则原样返回。 */
 function withEmptyModels(p: Provider): Provider {
   const entries = Object.entries(p.models) as [AgentKind, CatalogModel[]][];
@@ -240,10 +309,17 @@ function computeMerged(): Catalog {
   // Anthropic 权威模型清单重建(2026-07-19 统一重构):清单唯一来源是 SDK / 登录时
   // HTTP 发现(host 经 setAnthropicDiscoveredModels 注入),目录静态段已退役(bundled
   // 恒为空数组)。空 = 未发现,anthropic 供应商保留但不暴露任何模型,不用静态数据冒充。
+  // 展示元数据(名字/分组/排序/默认可见)以目录 cindyModelMeta 为基线覆盖(2026-07-21
+  // 三层合并:存在性=发现,展示=产品目录,用户 override 永远最高)——订阅通道返回的
+  // 家族级名字("Fable")在此归位为产品命名("Fable 5");能力字段仍以发现为准。
   if (anthropicModels.length > 0) {
+    const metaIndex = buildCindyModelMetaIndex(b.cindyModelMeta);
+    const overlaid = sortModelsByOrder(
+      anthropicModels.map((m) => overlayCindyMeta(m, metaIndex.get(m.id))),
+    );
     providers = providers.map((p) =>
       p.id === 'anthropic'
-        ? { ...p, models: { ...p.models, 'claude-code': anthropicModels } }
+        ? { ...p, models: { ...p.models, 'claude-code': overlaid } }
         : p,
     );
   }

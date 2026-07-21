@@ -34,6 +34,7 @@ vi.mock('../claude-oauth-refresh.js', () => ({
 }));
 
 import {
+  isDegenerateModelListShrink,
   mapAnthropicSdkModels,
   mapAnthropicHttpModels,
   noteAnthropicSdkSupportedModels,
@@ -204,6 +205,21 @@ describe('mapAnthropicHttpModels', () => {
   });
 });
 
+describe('isDegenerateModelListShrink(退化快照护栏,纯函数)', () => {
+  it('骤减(不足现值一半且低于 2 条下限)判退化;增长 / 持平 / 首次 / 逐个下架放行', () => {
+    // 事故形态:7 条被单条家族级响应打塌。
+    expect(isDegenerateModelListShrink(7, 1)).toBe(true);
+    expect(isDegenerateModelListShrink(5, 2)).toBe(true);
+    expect(isDegenerateModelListShrink(2, 1)).toBe(true);
+    // 合法演进:首次发现 / 增长 / 持平 / 逐个下架 / 恰好半数。
+    expect(isDegenerateModelListShrink(0, 1)).toBe(false);
+    expect(isDegenerateModelListShrink(3, 7)).toBe(false);
+    expect(isDegenerateModelListShrink(7, 7)).toBe(false);
+    expect(isDegenerateModelListShrink(7, 6)).toBe(false);
+    expect(isDegenerateModelListShrink(4, 2)).toBe(false);
+  });
+});
+
 describe('noteAnthropicSdkSupportedModels(登录态门控 + 合并纪律)', () => {
   beforeEach(() => {
     resetAnthropicDiscoveryForTest();
@@ -279,6 +295,26 @@ describe('noteAnthropicSdkSupportedModels(登录态门控 + 合并纪律)', () =
       releaseWrite();
       writeSpy.mockRestore();
     }
+  });
+
+  it('退化捕获(骤减到单条)不覆盖现值;正常演进照常生效(2026-07-21 事故回归)', () => {
+    noteAnthropicSdkSupportedModels([
+      { value: 'claude-fable-5', displayName: 'Fable 5' },
+      { value: 'claude-opus-4-8', displayName: 'Opus 4.8' },
+      { value: 'claude-sonnet-5', displayName: 'Sonnet 5' },
+      { value: 'claude-haiku-4-5', displayName: 'Haiku 4.5' },
+    ]);
+    expect(anthropicIds()).toHaveLength(4);
+    // 上游抽风只回一条家族级条目:清单不塌,保留 4 条现值。
+    noteAnthropicSdkSupportedModels([{ value: 'claude-fable-5', displayName: 'Fable' }]);
+    expect(anthropicIds()).toHaveLength(4);
+    // 逐个下架(4→3)是合法演进,照常生效。
+    noteAnthropicSdkSupportedModels([
+      { value: 'claude-fable-5', displayName: 'Fable 5' },
+      { value: 'claude-opus-4-8', displayName: 'Opus 4.8' },
+      { value: 'claude-sonnet-5', displayName: 'Sonnet 5' },
+    ]);
+    expect(anthropicIds()).toHaveLength(3);
   });
 
   it('无能力信息的捕获不打回已精化条目的档位 / fast(合并纪律)', () => {

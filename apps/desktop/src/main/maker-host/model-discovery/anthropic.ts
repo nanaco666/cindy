@@ -18,7 +18,9 @@
  *   - HTTP 明说的 max_input_tokens 单独记账(explicitWindows,随缓存持久化),SDK
  *     通道覆盖时不许把精确窗口打回 1M/200k 猜测值;
  *   - 同一授权世代内失败不清列表(上一次成功结果 + 磁盘缓存是「陈旧的真数据」,
- *     可溯源);登出 / 直接换号都会先清空并删缓存,旧账号结果不得跨世代继承。
+ *     可溯源);登出 / 直接换号都会先清空并删缓存,旧账号结果不得跨世代继承;
+ *   - 成功但**骤减**的快照同样不生效(isDegenerateModelListShrink,质量下限护栏):
+ *     清单无静态兜底,一次退化响应不允许把整个供应商清单打塌。
  *
  * 登录态门控(2026-07-19 对抗性 review P1):两条通道的 apply 都必须以「当前确有
  * Claude.ai OAuth」为前提——SDK 捕获来自本地 CLI 注册表,不需要 Anthropic 凭证也能
@@ -102,6 +104,18 @@ function toEfforts(raw: unknown): Effort[] | null {
   if (!Array.isArray(raw)) return null;
   const out = raw.filter((e): e is Effort => typeof e === 'string' && VALID_EFFORTS.has(e));
   return out;
+}
+
+/**
+ * 退化快照判定(2026-07-21「Anthropic 只剩单条 Fable」事故回归):上游返回**成功但
+ * 骤减**的清单——不足现值一半、且低于 2 条下限——视为退化响应,保留现值不覆盖。
+ * 这是「失败保留现值」之外的质量下限:清单唯一来源是动态发现、无静态兜底,一次
+ * 退化响应会把整个供应商清单打塌。合法的逐个下架(7→6→5)不受影响;上游真一次
+ * 腰斩时清单暂时偏旧(多出的条目发请求时报错暴露),后续正常快照自愈。纯函数。
+ */
+export function isDegenerateModelListShrink(prevCount: number, nextCount: number): boolean {
+  if (prevCount === 0 || nextCount >= prevCount) return false;
+  return nextCount < Math.max(2, Math.ceil(prevCount / 2));
 }
 
 /** SDK 映射结果:能力字段是条目明说的还是合成默认的(决定合并时是否覆盖已精化条目)。 */
@@ -345,6 +359,12 @@ export function noteAnthropicSdkSupportedModels(raw: unknown): void {
       supportsFastMode: prev.supportsFastMode,
     };
   });
+  if (isDegenerateModelListShrink(lastApplied.length, models.length)) {
+    log.warn(
+      `anthropic SDK capture looks degenerate (${lastApplied.length} -> ${models.length}); keeping current list`,
+    );
+    return;
+  }
   log.info(`anthropic models captured from SDK init: ${models.length}`);
   void applyModels(models, true, generation).catch((err) => {
     log.warn('apply anthropic SDK models failed', { error: String(err) });
@@ -416,6 +436,12 @@ export function refreshAnthropicModelsFromHttp(): Promise<void> {
         supportsFastMode: prev.supportsFastMode,
       };
     });
+    if (isDegenerateModelListShrink(lastApplied.length, models.length)) {
+      log.warn(
+        `anthropic /v1/models response looks degenerate (${lastApplied.length} -> ${models.length}); keeping current list`,
+      );
+      return;
+    }
     log.info(`anthropic models refreshed via HTTP: ${models.length}`);
     await applyModels(models, true, gen);
   })().finally(() => {
