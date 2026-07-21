@@ -111,7 +111,10 @@ import type {
   AutomationSessionGroup,
 } from './lib/automationSidebarGrouping';
 import { getSessionDeviceId } from '@/features/device-link/remoteProjectsStore';
-import { useRemoteSessionActivity } from '@/features/device-link/remoteSessionActivityStore';
+import {
+  useRemoteSessionActivity,
+  useRemoteSessionActivityRevision,
+} from '@/features/device-link/remoteSessionActivityStore';
 import { WorkdirBrowseSidebar } from './workdir-browse/WorkdirBrowseSidebar';
 import {
   buildDocModeSwitchProjects,
@@ -123,8 +126,8 @@ import {
   SidebarIconButton,
   SIDEBAR_RAIL_ICON_BUTTON_CLASS,
 } from '@/components/sidebar/SidebarIconButton';
-import { RailNav } from './sidebar/RailNav';
-import { railPanelStore } from './sidebar/railPanelStore';
+import { RailNav, remoteLampOf } from './sidebar/RailNav';
+import { panelHasEditingFocus, railPanelStore } from './sidebar/railPanelStore';
 import { SessionEntryList } from './sidebar/SessionEntryList';
 import { AttentionDot } from '@/components/sidebar/AttentionDot';
 import {
@@ -398,6 +401,7 @@ export function CCAgentSidebarUpper() {
               sessionsHook={sessionsHook}
               navigate={navigate}
               activeSessionId={activeSessionId}
+              viewedSessionId={activeSessionId ?? filesSession?.id}
               filter={filter}
               projectAliases={projectAliases}
               scheduleSessionIndex={scheduleSessionIndex}
@@ -478,10 +482,19 @@ interface ExpandedProps {
   sessionsHook: SessionsHook;
   navigate: ReturnType<typeof useNavigate>;
   activeSessionId: string | undefined;
+  /** 「正在被用户注视」的会话 —— 供 attention 语义(running-status 通知豁免 /
+   *  已读回执 / 系统角标清理)。files 路由下 activeSessionId 为 undefined 但用户
+   *  正看着该会话的文件视图,完成/待回复不该按后台记未读(codex review);
+   *  与 activeSessionId 分开传:后者还承担选中高亮与「点击同会话早退」语义,
+   *  files 模式下从面板点击该会话仍要能导航回聊天视图。 */
+  viewedSessionId: string | undefined;
   filter: UseSidebarFilterReturn;
   projectAliases: ReturnType<typeof useProjectAliases>;
   scheduleSessionIndex: ReturnType<typeof useAutomationScheduleSessionIndex>;
 }
+
+/** rail 未分类隐藏态的空列表(引用稳定,免得 lampScope 发布 effect 空转)。 */
+const EMPTY_SESSION_LIST: Session[] = [];
 
 /** State for the delete/archive confirm dialog. */
 interface ConfirmState {
@@ -503,6 +516,7 @@ function ExpandedView({
   sessionsHook,
   navigate,
   activeSessionId,
+  viewedSessionId,
   filter,
   projectAliases,
   scheduleSessionIndex,
@@ -732,8 +746,10 @@ function ExpandedView({
   const attachedSessionIds = useAttachedSessionIds();
 
   // F-SB-7: Session status indicators — running state + attention notifications
+  // 「active」按 viewedSessionId:files 路由下用户注视的是该会话的文件视图,
+  // 完成/待回复不能按后台会话记未读、发通知(codex review)。
   const { runningSessionIds, notifications, clearNotification } = useSessionRunningStatus(
-    activeSessionId,
+    viewedSessionId,
     {
       onSessionDone: handleSessionDone,
       onSessionError: handleSessionError,
@@ -997,6 +1013,14 @@ function ExpandedView({
     return sortSessionsForSidebar(sessions, filter.sortBy);
   }, [groups.unclassified, vendorPredicate, filter.sortBy]);
 
+  // rail 项目面板的未分类与展开态同一门控:选中具体项目筛选时隐藏
+  // (ProjectsSection.unclassifiedHidden 同判定 filter.projects !== 'all'),
+  // 否则折叠面板会展示并点亮展开态刻意隐藏的会话(codex review)。
+  const railUnclassified = useMemo(
+    () => (filter.projects === 'all' ? visibleUnclassified : EMPTY_SESSION_LIST),
+    [filter.projects, visibleUnclassified],
+  );
+
   const visibleDialogues = useMemo(() => {
     return vendorPredicate ? groups.dialogues.filter(vendorPredicate) : groups.dialogues;
   }, [groups.dialogues, vendorPredicate]);
@@ -1126,20 +1150,22 @@ function ExpandedView({
   //  2. 目标设备断线中打开:回执 invoke 失败被吞,重连后仅连接状态变化——把
   //     deviceLinkConnectionStatus 并入 key(`...:disconnected` → `...:connected`),
   //     重连即重跑补发。本机 IPC / run 标已读重发均幂等。
+  // 整段回执/清角标语义按 viewedSessionId(= activeSessionId,files 路由下兜底
+  // 到被浏览文件的会话):用户看着哪个会话,哪个会话就不该积未读。
   const activeSessionRemoteReceiptKey = useMemo(() => {
-    if (!activeSessionId) return undefined;
-    const deviceId = getSessionDeviceId(activeSessionId);
+    if (!viewedSessionId) return undefined;
+    const deviceId = getSessionDeviceId(viewedSessionId);
     if (!deviceId) return undefined;
-    const remote = remoteProjectSessions.find((s) => s.id === activeSessionId);
+    const remote = remoteProjectSessions.find((s) => s.id === viewedSessionId);
     return `${deviceId}:${remote?.deviceLinkConnectionStatus ?? 'unknown'}`;
-  }, [activeSessionId, remoteProjectSessions]);
+  }, [viewedSessionId, remoteProjectSessions]);
   // 注视中完成的远程 turn:被控端推来 attention=true 的活动包,但上面的 key 只含
   // 设备与连接态,不会重跑回执 effect。触发条件用**活动签名变化且 attention=true**
   // (与手机端 / 咽喉重定基同语义):仅凭 false→true 布尔沿会漏掉「attention 一直为
   // true 但内容更新」的场景(前一次收尾包丢失 / 延迟时,新 completed/error/
   // needs-interaction 到来布尔值不变)。attention 回落不计——那通常是本回执生效后
   // relay 推回的收尾包,重发只是无谓 invoke。
-  const activeRemoteActivity = useRemoteSessionActivity(activeSessionId ?? '');
+  const activeRemoteActivity = useRemoteSessionActivity(viewedSessionId ?? '');
   const activeRemoteAttention = activeRemoteActivity?.attention === true;
   const activeRemoteActivitySig = activeRemoteActivity
     ? `${activeRemoteActivity.phase}|${activeRemoteActivity.attention === true ? 1 : 0}|${activeRemoteActivity.interactionKind ?? ''}|${activeRemoteActivity.compactDetail}`
@@ -1154,22 +1180,22 @@ function ExpandedView({
     prevActiveRemoteActivitySigRef.current = activeRemoteActivitySig;
   }, [activeRemoteActivitySig, activeRemoteAttention]);
   useEffect(() => {
-    if (!activeSessionId) return;
-    markAutomationSessionRunsRead(activeSessionId);
-    clearSystemSessionAttention(activeSessionId);
-  }, [activeSessionId, activeSessionRemoteReceiptKey, activeRemoteAttentionRev, markAutomationSessionRunsRead]);
+    if (!viewedSessionId) return;
+    markAutomationSessionRunsRead(viewedSessionId);
+    clearSystemSessionAttention(viewedSessionId);
+  }, [viewedSessionId, activeSessionRemoteReceiptKey, activeRemoteAttentionRev, markAutomationSessionRunsRead]);
 
-  // 用户从 Dock badge / taskbar flash 点回 app 时,如果 activeSessionId 没变,
+  // 用户从 Dock badge / taskbar flash 点回 app 时,如果 viewedSessionId 没变,
   // route-driven effect 不会重跑,系统角标会残留。监听 window focus 兜底清当前
-  // active session 的角标,正好覆盖 "MR !102 的回流场景"。
+  // 注视中会话的角标,正好覆盖 "MR !102 的回流场景"。
   useEffect(() => {
-    if (!activeSessionId) return;
+    if (!viewedSessionId) return;
     const handler = () => {
-      clearSystemSessionAttention(activeSessionId);
+      clearSystemSessionAttention(viewedSessionId);
     };
     window.addEventListener('focus', handler);
     return () => window.removeEventListener('focus', handler);
-  }, [activeSessionId]);
+  }, [viewedSessionId]);
 
   const handleSessionClick = useCallback(
     async (id: string, modifiers?: SessionClickModifiers) => {
@@ -2284,7 +2310,7 @@ function ExpandedView({
           与「显示全部」),见 railPanelStore 头注。 */}
       <RailPanels
         projects={visibleProjectsWithVendor}
-        unclassified={visibleUnclassified}
+        unclassified={railUnclassified}
         dialogues={visibleDialogues}
         activeSessionId={activeSessionId}
         runningSessionIds={displayRunningSessionIds}
@@ -2612,7 +2638,10 @@ function RailPanels({
   useEffect(() => {
     if (!panelState.openSection) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') railPanelStore.closeAll();
+      if (e.key !== 'Escape') return;
+      // 行内重命名编辑中:Esc 归编辑器(取消编辑),不整面板收掉。
+      if (panelHasEditingFocus()) return;
+      railPanelStore.closeAll();
     };
     const onDown = (e: MouseEvent) => {
       const el = e.target instanceof Element ? e.target : null;
@@ -2627,33 +2656,66 @@ function RailPanels({
     };
   }, [panelState.openSection]);
 
-  // 行点击一律按普通导航处理并关面板:多选的范围剪枝按 sidebarScrollRef(展开态
-  // DOM)计算,面板 portal 行不在其中,带修饰键会得到错误的选择集(review P2)——
-  // 面板是导航面,多选留在展开态。
+  // 行点击一律按普通导航处理:多选的范围剪枝按 sidebarScrollRef(展开态 DOM)
+  // 计算,面板 portal 行不在其中,带修饰键会得到错误的选择集(review P2)——
+  // 面板是导航面,多选留在展开态。点击**不**关面板:SessionItem 的双击重命名
+  // 依赖「首击导航、行保持挂载、第二击早退、dblclick 进编辑」链路(见其头注),
+  // 首击就 closeAll 会把行卸载、重命名永远进不去(codex review);面板由指针
+  // 离开的 hover 宽限 / Esc / 外点自然收回,与展开态「点击不收侧栏」同语义。
   const handlePanelSessionClick = useCallback<NonNullable<RailPanelsProps['onSessionClick']>>(
     (id) => {
-      railPanelStore.closeAll();
       onSessionClick(id);
     },
     [onSessionClick],
   );
+
+  // 远程活动镜像整表版本号:项目行聚合灯 / 折叠豁免要跟上被控端 relay 推送。
+  const remoteActivityRevision = useRemoteSessionActivityRevision();
 
   const projectAgg = useCallback(
     (list: readonly Session[]) => {
       let running = false;
       let best: 'error' | 'awaiting' | 'done' | null = null;
       const rank = { error: 3, awaiting: 2, done: 1 } as const;
+      const consider = (tone: 'error' | 'awaiting' | 'done' | null) => {
+        if (tone && (!best || rank[tone] > rank[best])) best = tone;
+      };
       for (const s of list) {
         if (runningSessionIds.has(s.id)) running = true;
+        // 远程会话灯语与 rail 段灯同源(remoteLampOf):本地 running/attention
+        // 对被控端后台会话是盲区,不并入会出现「段灯亮、项目行不亮」(codex review)。
+        const remote = remoteLampOf(s.id);
+        if (remote) {
+          if (remote.running) running = true;
+          consider(remote.tone);
+        }
         if (!notifications.has(s.id)) continue;
         const kind = attentionKinds.get(s.id);
-        const tone = kind === 'error' || urgentSet.has(s.id) ? 'error' : kind === 'awaiting' ? 'awaiting' : 'done';
-        if (!best || rank[tone] > rank[best]) best = tone;
+        consider(kind === 'error' || urgentSet.has(s.id) ? 'error' : kind === 'awaiting' ? 'awaiting' : 'done');
       }
       return { running, dotTone: best };
     },
-    [runningSessionIds, notifications, attentionKinds, urgentSet],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- remoteActivityRevision 代表 remoteLampOf 读到的整表内容
+    [runningSessionIds, notifications, attentionKinds, urgentSet, remoteActivityRevision],
   );
+
+  // 面板未读集 = 本地 notifications ∪ 有远程活动条目的会话:折叠豁免
+  // (getSessionListCollapseView / SessionEntryList 的 attention 豁免)只认这个
+  // 集合,远程 error/awaiting/完成未读乃至 running 都只活在远程镜像里,不并入
+  // 会出现「段灯点亮,面板却把该行折进显示全部」(codex review)。远程行的
+  // 行内视觉由 SessionItem.remoteRightStatus 独立驱动,并集不会改变其展示。
+  const panelNotifications = useMemo(() => {
+    const remoteIds: string[] = [];
+    const collect = (list: readonly Session[]) => {
+      for (const s of list) if (remoteLampOf(s.id)) remoteIds.push(s.id);
+    };
+    collect(dialogues);
+    collect(unclassified);
+    for (const p of projects) collect(p.sessions);
+    if (remoteIds.length === 0) return notifications;
+    return new Set([...notifications, ...remoteIds]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- remoteActivityRevision 代表 remoteLampOf 读到的整表内容
+  }, [notifications, dialogues, unclassified, projects, remoteActivityRevision]);
 
   // 项目列表折叠:纯硬性上限(ProjectsSection 同口径,默认 20)+「显示全部 N 项」。
   const projectsView = useMemo(
@@ -2665,16 +2727,16 @@ function RailPanels({
         disableCollapse: false,
         isFiltering: false,
         isActiveEntry: (p) => p.sessions.some((s) => s.id === activeSessionId),
-        hasAttentionEntry: (p) => p.sessions.some((s) => notifications.has(s.id)),
+        hasAttentionEntry: (p) => p.sessions.some((s) => panelNotifications.has(s.id)),
       }),
-    [projects, showAllProjects, activeSessionId, notifications],
+    [projects, showAllProjects, activeSessionId, panelNotifications],
   );
 
   const entryListShared = {
     activeSessionId,
     runningSessionIds,
     attachedSessionIds,
-    notifications,
+    notifications: panelNotifications,
     scheduleSessionIndex,
     selectedSessionIds,
     onSessionClick: handlePanelSessionClick,

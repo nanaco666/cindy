@@ -83,7 +83,7 @@ function dotToneOf(
  *  与置顶瓷砖必须并入同一镜像,否则远程会话「行亮而入口不亮」(codex review)。
  *  phase → 灯语映射与 SessionItem.remoteRightStatus 同一张表;镜像里 completed/
  *  error 条目仅在未读(attention)期间存在,存在即未读。 */
-function remoteLampOf(id: string): { running: boolean; tone: AttentionKind | null } | null {
+export function remoteLampOf(id: string): { running: boolean; tone: AttentionKind | null } | null {
   const remote = getRemoteSessionActivity(id);
   if (!remote) return null;
   if (remote.phase === 'running') return { running: true, tone: null };
@@ -338,6 +338,9 @@ export function RailNav({
                 isRunning={isRunning}
                 isAttached={attachedSessionIds.has(session.id)}
                 hasAttentionNotification={hasUnread}
+                // 远程会话 tone 显式传入:attention store 对其无数据,不传会
+                // 把远程 error/awaiting 落成默认绿 done(codex review)。
+                attentionToneOverride={remoteLamp?.tone ?? undefined}
                 isActive={isActive}
                 size={15}
               />

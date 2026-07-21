@@ -68,6 +68,16 @@ function clearProjectCloseTimer(): void {
   if (projectCloseTimer) { clearTimeout(projectCloseTimer); projectCloseTimer = null; }
 }
 
+/** 面板内有**行内编辑焦点**(双击重命名的 input 等)时抑制 hover 宽限收回:
+ *  面板不是纯 hover 浮层,编辑期间指针短暂离开不能拆掉编辑器丢用户输入。
+ *  只认可编辑元素,不认普通按钮焦点——否则点过行的面板永远不自动收。
+ *  显式收回(Esc / 面板外点击 / closeAll)不受此限。 */
+export function panelHasEditingFocus(): boolean {
+  const ae = typeof document !== 'undefined' ? document.activeElement : null;
+  if (!(ae instanceof HTMLElement) || !ae.closest('[data-rail-panel]')) return false;
+  return ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable;
+}
+
 export const railPanelStore = {
   subscribe(listener: () => void): () => void {
     listeners.add(listener);
@@ -110,6 +120,7 @@ export const railPanelStore = {
     clearCloseTimer();
   },
   scheduleClose(): void {
+    if (panelHasEditingFocus()) return;
     clearCloseTimer();
     closeTimer = setTimeout(() => { closeTimer = null; railPanelStore.closeAll(); }, RAIL_PANEL_CLOSE_GRACE_MS);
   },
@@ -117,6 +128,7 @@ export const railPanelStore = {
     clearProjectCloseTimer();
   },
   scheduleProjectClose(): void {
+    if (panelHasEditingFocus()) return;
     clearProjectCloseTimer();
     projectCloseTimer = setTimeout(() => {
       projectCloseTimer = null;
