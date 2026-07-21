@@ -12,7 +12,10 @@
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useCallback, useSyncExternalStore } from 'react';
-import type { ChatQuote } from '@lizi/maker-shared/chat-quotes';
+import {
+  parseChatQuoteSegments,
+  type ChatQuote,
+} from '@lizi/maker-shared/chat-quotes';
 
 export type { ChatQuote };
 
@@ -81,7 +84,7 @@ export function setOrderedQuoteDraft(
 ): void {
   const normalized = normalizeSessionId(sessionId);
   if (!normalized) return;
-  if (quotes.length === 0 || !draft.encodedBody) {
+  if (quotes.length === 0 || !draft.encodedBody || !orderedDraftMatchesQuotes(draft, quotes)) {
     setQuotes(normalized, quotes);
     return;
   }
@@ -205,13 +208,17 @@ function parseStoredState(stored: string): {
     const record = raw as { quotes?: unknown; orderedDraft?: unknown };
     const quotes = readStoredQuotes(record.quotes);
     const ordered = record.orderedDraft;
-    const orderedDraft = ordered && typeof ordered === 'object'
+    const orderedDraftCandidate = ordered && typeof ordered === 'object'
       && typeof (ordered as { encodedBody?: unknown }).encodedBody === 'string'
       && typeof (ordered as { projectedText?: unknown }).projectedText === 'string'
       ? {
           encodedBody: (ordered as { encodedBody: string }).encodedBody,
           projectedText: (ordered as { projectedText: string }).projectedText,
         }
+      : null;
+    const orderedDraft = orderedDraftCandidate
+      && orderedDraftMatchesQuotes(orderedDraftCandidate, quotes)
+      ? orderedDraftCandidate
       : null;
     return { quotes, orderedDraft };
   } catch {
@@ -240,6 +247,17 @@ function sameQuotes(left: readonly ChatQuote[], right: readonly ChatQuote[]): bo
       && quote.startLine === other.startLine
       && quote.endLine === other.endLine;
   });
+}
+
+/** 防止失败回滚把「只编码旧引用」的 ordered body 绑定到包含新引用的列表。 */
+function orderedDraftMatchesQuotes(
+  draft: OrderedQuoteDraft,
+  quotes: readonly ChatQuote[],
+): boolean {
+  const encodedQuotes = parseChatQuoteSegments(draft.encodedBody, {
+    allowLegacyInterleavedQuotes: true,
+  }).flatMap((segment) => (segment.kind === 'quote' ? [segment.quote] : []));
+  return sameQuotes(encodedQuotes, quotes);
 }
 
 function normalizeSessionId(sessionId: string): string {

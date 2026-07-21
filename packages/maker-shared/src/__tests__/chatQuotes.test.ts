@@ -176,8 +176,9 @@ describe('parseChatQuoteSegments', () => {
   });
 
   it('never treats unmarked body blockquotes as product quotes when any explicit marker exists', () => {
-    const content = `${formatQuoteForSend({ text: 'selected' })}\n\n正文：\n> manual`;
+    const content = `> leading manual\n\n正文开头\n\n${formatQuoteForSend({ text: 'selected' })}\n\n正文：\n> manual`;
     expect(parseChatQuoteSegments(content, { allowLegacyInterleavedQuotes: true })).toEqual([
+      { kind: 'text', text: '> leading manual\n\n正文开头' },
       { kind: 'quote', quote: { text: 'selected' } },
       { kind: 'text', text: '正文：\n> manual' },
     ]);

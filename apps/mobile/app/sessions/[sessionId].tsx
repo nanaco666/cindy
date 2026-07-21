@@ -179,8 +179,11 @@ import {
 } from '@/session/composerAttachmentInbox';
 import {
   buildQueuedTextMessage,
+  createQueueEditTextState,
   queuedMessageHasEncodedQuotes,
+  resolveQueueEditTextSubmission,
   stopOptionsForProjection,
+  type QueueEditTextState,
 } from '@/session/inputProjection';
 import { findErrorTailClientId, isContinuationQueueItem, resolveSessionTailBanner } from '@/session/sessionTailBannerModel';
 import { SessionTailBanner } from '@/session/SessionTailBanner';
@@ -424,6 +427,7 @@ interface QueueEditingState {
   clientId: string;
   stashedDraft: string;
   stashedAttachments: RemoteSerializedAttachment[];
+  textState: QueueEditTextState;
 }
 
 interface ComposerRuntimeSummary {
@@ -3380,17 +3384,25 @@ export default function SessionScreen() {
     }
     const visibleDraft = options.draftOverride ?? draft;
     const body = visibleDraft.trim();
+    const queueEditAtSendStart = queueEditingRef.current;
+    const queueEditSubmission = queueEditAtSendStart
+      ? resolveQueueEditTextSubmission(queueEditAtSendStart.textState, visibleDraft)
+      : null;
+    const queueEditPreservesEncodedQuotes = queueEditSubmission?.quotesEncoded === true;
     // chat-text-quote:排队编辑是「替换原条目内容」语义,不注入引用;正常发送把
-    // 引用块前置在正文前(与桌面 ChatInput 的 formatQuotesForSend 对偶)。命令
-    // 判定(下方)用 body,命中命令时引用保留在胶囊里不消费。
-    const quotesAtSend = queueEditingRef.current ? [] : [...getQuotes(sessionId)];
+    // 引用块前置在正文前(与桌面 ChatInput 的 formatQuotesForSend 对偶)。排队
+    // 引用的可见文本未改时无损复用隐藏 marked body；改过就降级为普通 Markdown。
+    // 命令判定(下方)用 body,命中命令时引用保留在胶囊里不消费。
+    const quotesAtSend = queueEditAtSendStart ? [] : [...getQuotes(sessionId)];
     // fork / rewind 恢复的交错消息带一份隐藏 ordered body。仅当可见正文与引用
     // 列表都完全没变时复用，保证「引用 A → 回复 A → 引用 B → 回复 B」默认
     // 重发不改 prompt 顺序；任一处被编辑就显式失效并安全回落到引用前置格式。
-    const orderedDraftAtSend = queueEditingRef.current
+    const orderedDraftAtSend = queueEditAtSendStart
       ? null
       : resolveOrderedQuoteDraft(sessionId, visibleDraft, quotesAtSend);
-    const text = orderedDraftAtSend?.encodedBody ?? formatQuotesForSend(quotesAtSend, body);
+    const text = queueEditSubmission?.text
+      ?? orderedDraftAtSend?.encodedBody
+      ?? formatQuotesForSend(quotesAtSend, body);
     if (!canUseComposer) {
       if (options.draftOverride !== undefined) setComposerDraft(options.draftOverride);
       return;
@@ -3432,7 +3444,6 @@ export default function SessionScreen() {
     // 排队编辑保存的编辑态快照:下方 waitForPendingUploads 可能耗时数秒,期间用户
     // 可能点 × 放弃或切换编辑目标——等待结束后以快照与最新 ref 比对,不一致则中止
     // 保存,防止编辑文本被当成一条全新消息发出(PR#709 review P1)。
-    const queueEditAtSendStart = queueEditingRef.current;
     requestMessageListFollowLatest();
     // —— 乐观 outbox 路径:附件仍在上传(或 outbox 已有排队消息,保 FIFO)时不再
     // 原地等待,消息立即以待发气泡上屏,附件落定后由派发循环真正入队。豁免场景走
@@ -3554,7 +3565,7 @@ export default function SessionScreen() {
         }
         const updated = buildQueuedTextMessage(sessionAtSend, text, new Date(), editingQueueItem.clientId, {
           attachments: sendAttachments,
-          quotesEncoded: queuedMessageHasEncodedQuotes(original),
+          quotesEncoded: queueEditPreservesEncodedQuotes,
         });
         // 保存在途 promise:会话切换 cleanup 据此把解锁排到保存落定之后
         // (device-link 并发下解锁不许超车 update-content,见 cleanup 注释)。
@@ -3567,9 +3578,14 @@ export default function SessionScreen() {
             const projection = await maker.input.updateContent(sessionId, editingQueueItem.clientId, updated);
             applyProjection(projection);
           } catch (err) {
-            if (isChannelNotAllowedError(err) && text.trim().length > 0 && attachmentIdSetsEqual(original.files, sendAttachments)) {
-              // 旧被控端无 update-content:附件未变且文本非空时退回 update-text,仅同步
-              // 文本。空文本不降级——旧端 update-text 对空文本静默 no-op,会造成"看似
+            if (
+              isChannelNotAllowedError(err)
+              && text.trim().length > 0
+              && attachmentIdSetsEqual(original.files, sendAttachments)
+              && queuedMessageHasEncodedQuotes(original) === queueEditPreservesEncodedQuotes
+            ) {
+              // 旧被控端无 update-content:附件与 quote metadata 都不变、文本非空时
+              // 才退回 update-text。空文本不降级——旧端 update-text 对空文本静默 no-op,会造成"看似
               // 保存成功、队列还是旧文案"的假成功(review P2)。降级本身失败(弱网两次
               // RPC 之间断连)与其余失败分支对称:先还原编辑文本再抛,不许静默丢字
               // (review P1)。
@@ -3581,7 +3597,7 @@ export default function SessionScreen() {
                 throw fallbackErr;
               }
             } else if (isChannelNotAllowedError(err)) {
-              setError('电脑端版本过旧,还不支持修改排队消息的附件或清空文本。请升级电脑端,或仅修改文字。');
+              setError('电脑端版本过旧,还不支持安全修改排队引用、附件或清空文本。请升级电脑端,或仅修改普通文字。');
               restoreDraftAfterFailure();
               return;
             } else {
@@ -4164,21 +4180,24 @@ export default function SessionScreen() {
         .catch(() => undefined);
       discardQueueEditTransientAttachments(previous);
     }
+    const textState = createQueueEditTextState(item);
     const next: QueueEditingState = previous
       ? {
           clientId: item.clientId,
           stashedDraft: previous.stashedDraft,
           stashedAttachments: previous.stashedAttachments,
+          textState,
         }
       : {
           clientId: item.clientId,
           stashedDraft: draftRef.current,
           stashedAttachments: [...attachmentsRef.current],
+          textState,
         };
     queueEditingRef.current = next;
     setQueueEditing(next);
     setQueueSelectedClientId(null);
-    setComposerDraft(item.text);
+    setComposerDraft(textState.visibleText);
     const files = item.files ? [...item.files] : [];
     attachmentsRef.current = files;
     setAttachments(files);

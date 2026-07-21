@@ -59,7 +59,8 @@ interface UserMessageEditBoxProps {
   files?: readonly FileRef[];
   /** Session workingDir(UserMessage prop)— session 行缺 workingDir 时兜底。 */
   workingDir: string;
-  /** 原消息带「选中引用」编码标志(引用胶囊渲染门控),重发时原样携带。 */
+  /** 原消息带「选中引用」编码标志(引用胶囊渲染门控)。可见文本未修改时
+   *  原样携带；一旦编辑成 markerless 文本就移除，避免手写 blockquote 被误解析。 */
   quotesEncoded?: boolean;
   /** 会话是否有 in-flight turn(renderer 视角)。发送时若为 true,先经
    *  onRequestStop 中断,再挂起等它翻 false 后提交。 */
@@ -153,7 +154,8 @@ export function UserMessageEditBox({
   // 毫秒级尾差由 WithRunningRetry 内部有限重试消化)。
   const doCommit = useCallback(async () => {
     try {
-      const submitText = text === initialText ? (initialSubmitText ?? text) : text;
+      const visibleTextUnchanged = text === initialText;
+      const submitText = visibleTextUnchanged ? (initialSubmitText ?? text) : text;
       if (onCommitOverride) {
         // 被拦消息:普通重发(不 rewind)。失败抛错落入下方 catch 保留编辑态。
         await onCommitOverride(submitText);
@@ -165,7 +167,7 @@ export function UserMessageEditBox({
         images,
         files,
         fallbackWorkingDir: workingDir,
-        ...(quotesEncoded ? { quotesEncoded: true } : {}),
+        ...(quotesEncoded && visibleTextUnchanged ? { quotesEncoded: true } : {}),
       });
       }
       // 先归零守卫再 onSent:onSent 让父组件立刻卸载本组件,晚于它的 setState

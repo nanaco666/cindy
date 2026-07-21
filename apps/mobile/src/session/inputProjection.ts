@@ -2,6 +2,7 @@ import {
   buildAttachmentPersistFileRefs,
   buildAttachmentPersistImageRefs,
 } from '@/session/attachments';
+import { stripChatQuoteMarkerLines } from '@lizi/maker-shared/chat-quotes';
 import type { InputProjection, QueuedRemoteMessage, RemoteImageRef, RemoteSession } from '@/session/types';
 import type { RemoteSerializedAttachment } from '@/session/types';
 export {
@@ -153,6 +154,39 @@ export function queuedMessageHasEncodedQuotes(
   } catch {
     return false;
   }
+}
+
+/** 排队引用消息进入 composer 时的可见文本与无损提交基线。 */
+export interface QueueEditTextState {
+  visibleText: string;
+  encodedText: string;
+  quotesEncoded: boolean;
+}
+
+export function createQueueEditTextState(
+  message: Pick<QueuedRemoteMessage, 'text' | 'persistedContent'>,
+): QueueEditTextState {
+  const quotesEncoded = queuedMessageHasEncodedQuotes(message);
+  return {
+    visibleText: quotesEncoded ? stripChatQuoteMarkerLines(message.text) : message.text,
+    encodedText: message.text,
+    quotesEncoded,
+  };
+}
+
+/**
+ * 引用消息可见文本未改时复用原 marked body；一旦用户编辑 markerless 文本，
+ * 就同步移除 quotesEncoded，避免普通 Markdown blockquote 被误还原成产品引用。
+ */
+export function resolveQueueEditTextSubmission(
+  state: QueueEditTextState,
+  visibleText: string,
+): { text: string; quotesEncoded: boolean } {
+  const preserveEncodedBody = state.quotesEncoded && visibleText === state.visibleText;
+  return {
+    text: preserveEncodedBody ? state.encodedText : visibleText.trim(),
+    quotesEncoded: preserveEncodedBody,
+  };
 }
 
 function readQueuedMessages(value: unknown): QueuedRemoteMessage[] {

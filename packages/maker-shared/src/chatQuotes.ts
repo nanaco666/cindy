@@ -190,9 +190,12 @@ export function parseChatQuoteSegments(
   // inline-composer preview 曾写出 markerless 交错块；调用方可凭持久化的
   // quotesEncoded 元数据显式兼容。新版正文只要出现任一 marker 就关闭这条
   // 有歧义的兼容分支，避免把同条消息里的手写 Markdown blockquote 误还原。
+  const hasExplicitMarkers = content.includes(QUOTE_BLOCK_MARKER_LINE);
   const allowLegacyInterleavedQuotes = options.allowLegacyInterleavedQuotes === true
-    && !content.includes(QUOTE_BLOCK_MARKER_LINE);
-  let allowLegacyLeadingQuotes = true;
+    && !hasExplicitMarkers;
+  // 只要同条消息出现新版 marker，整条内容就按无歧义的新格式解析。否则正文
+  // 开头的用户手写 Markdown blockquote 会被旧版兼容分支误认成产品引用。
+  let allowLegacyLeadingQuotes = !hasExplicitMarkers;
   let index = 0;
   while (index < lines.length) {
     const line = lines[index];

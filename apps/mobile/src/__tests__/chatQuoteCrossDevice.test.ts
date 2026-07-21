@@ -23,7 +23,9 @@ describe('mobile cross-device quote wiring', () => {
 
     expect(source).toContain('quotesEncoded: quotesAtSend.length > 0');
     expect(source).toContain('quotesEncoded: item.quotesEncoded');
-    expect(source).toContain('quotesEncoded: queuedMessageHasEncodedQuotes(original)');
+    expect(source).toContain('createQueueEditTextState(item)');
+    expect(source).toContain('resolveQueueEditTextSubmission(queueEditAtSendStart.textState, visibleDraft)');
+    expect(source).toContain('quotesEncoded: queueEditPreservesEncodedQuotes');
   });
 
   it('restores structured quote drafts for mobile fork and rewind actions', () => {

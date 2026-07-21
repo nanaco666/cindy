@@ -106,6 +106,7 @@ describe('UserMessageEditBox — idle 发送', () => {
     fireEvent.click(first.sendBtn);
     await waitFor(() => expect(commitMock).toHaveBeenCalledTimes(1));
     expect(commitMock.mock.calls[0][0].text).toBe(encoded);
+    expect(commitMock.mock.calls[0][0].quotesEncoded).toBe(true);
     first.unmount();
 
     vi.clearAllMocks();
@@ -114,6 +115,7 @@ describe('UserMessageEditBox — idle 发送', () => {
     fireEvent.click(second.sendBtn);
     await waitFor(() => expect(commitMock).toHaveBeenCalledTimes(1));
     expect(commitMock.mock.calls[0][0].text).toBe('edited reply');
+    expect(commitMock.mock.calls[0][0].quotesEncoded).toBeUndefined();
   });
 
   it('提交挂起期间重复点发送不会二次提交(同步 ref 防重入)', async () => {

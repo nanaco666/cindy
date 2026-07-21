@@ -114,7 +114,18 @@ describe('chatQuoteStore', () => {
     } = await import('@/session/chatQuoteStore');
     const quotes = [{ text: 'A' }, { text: 'B', sourcePath: 'docs/b.md' }];
     const orderedDraft = {
-      encodedBody: '<!-- body with quote A / reply A / quote B / reply B -->',
+      encodedBody: [
+        '> <!-- cindy-composer-quote -->',
+        '> A',
+        '',
+        'reply A',
+        '',
+        '> <!-- cindy-composer-quote -->',
+        '> B',
+        '> — source: docs/b.md',
+        '',
+        'reply B',
+      ].join('\n'),
       projectedText: 'reply A\n\nreply B',
     };
 
@@ -122,6 +133,12 @@ describe('chatQuoteStore', () => {
     expect(resolveOrderedQuoteDraft('s1', orderedDraft.projectedText, quotes)).toEqual(orderedDraft);
     expect(resolveOrderedQuoteDraft('s1', 'edited', quotes)).toBeNull();
     expect(resolveOrderedQuoteDraft('s1', orderedDraft.projectedText, [quotes[1], quotes[0]])).toBeNull();
+
+    // 发送失败期间新采集的引用不在原 encodedBody 里，必须丢弃旧顺序基线，
+    // 否则重试会误命中并静默漏发 C。
+    const expandedQuotes = [...quotes, { text: 'C' }];
+    setOrderedQuoteDraft('s-extra', expandedQuotes, orderedDraft);
+    expect(resolveOrderedQuoteDraft('s-extra', orderedDraft.projectedText, expandedQuotes)).toBeNull();
 
     vi.advanceTimersByTime(__testing.persistDebounceMs + 10);
     vi.useRealTimers();
