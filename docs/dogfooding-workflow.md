@@ -125,8 +125,8 @@ gh pr create --base <source-branch> ...
 
 1. worktree 内先完成验证并 **commit**；再按当前开发者 / 宿主 workflow 的授权约定 push 任务分支并创建 / 更新 PR。
 2. 然后才在 app 里**删除或归档**会话——status 变更触发 `sessionRemovalRecycle.recycleWorktreeForRemovedSession` → `removeWorktreeForSession`：worktree 若是脏的，改动会先保存为内容快照（`refs/xdt/snapshots/<sessionId>`，stash-form commit；stash 栈条目保留作冗余备份，`git stash list | grep xdt-auto-stash` 可见）再删除 worktree；确认弹窗会提示"有未提交更改"。归档会话重新打开后可经「恢复工作区」横幅一键重建 + apply 快照；手动恢复：`git stash apply $(git rev-parse refs/xdt/snapshots/<sessionId>)`。（2026-07 P0 重构：回收从 onClose 迁到显式删除/归档，`/clear`、鉴权重连、app 退出、CLI 崩溃等瞬态 close 不再删 worktree；删除前有 live-ref 守卫与 `.worktree-keep` 哨兵守卫。）
-3. PR merge 后按 Git workflow 清理 worktree 和本地分支；产品不会自动替你清理，长期不收口会持续积累。
-4. **不要**绕过产品手动 `git worktree remove` 仍有会话引用的 worktree：`worktrees.json` ⇄ `sessions.worktree_path` 漂移是已确认 bug 类（MR2 未做），resume 时 cwd 缺失也还没有恢复 UX（MR3 未做）。
+3. PR merge 后先看 owning session 状态：session 仍 active 时跳过外部 Git cleanup，保留 worktree 与本地分支供继续追问；用户显式删除 / 归档会话后，产品会按上一步完成 snapshot + 回收，此时才允许通用 Git workflow 清理残余本地分支。PR merged / closed 本身绝不构成删除 active session 工作区的授权。
+4. **不要**绕过产品手动 `git worktree remove` 仍有会话引用的 worktree：这会制造 `worktrees.json` ⇄ `sessions.worktree_path` 漂移。发送链路现在会在 DB 路径精确匹配、且本地或 `origin/xdt/*` 引用仍可证明原 HEAD 时自动重建；无法证明 HEAD 或快照冲突时仍保守阻断并保留恢复入口。
 5. 每周 GC：
 
    ```bash
@@ -149,7 +149,7 @@ gh pr create --base <source-branch> ...
 | agent 读错日志 | dev 日志在**启动 checkout** 的 `apps/desktop/logs/`（`logger.ts:311-316`） | 首条消息模板第 2 条 |
 | Codex 写 hoisted node_modules 被拦 | `workspace-write` sandbox（`codex/index.ts:248-276`） | worktree 会话先用 Claude Code 引擎 |
 | agent Bash 找不到 `pnpm` / `gh` | GUI 启动的 app 继承不到 shell PATH | dev 实例永远从登录 shell 的终端启动 |
-| worktree 没了之后 resume 失败 | MR3 未做，无恢复 UX | 有会话引用时不要手动删 worktree |
+| worktree 没了之后 resume 失败 | 外部 cleanup 绕过 session 生命周期；本地分支也可能一起被删 | active session 禁止外部 cleanup；误删后发送链路会从本地 / `origin/xdt/*` 自动恢复可证明的原工作区，证明不足时走恢复横幅 |
 | `xdt/*` 分支 + stash 积压 | 清理时保留分支（无 `-D`）、无 GC | 每周 GC（见收尾节） |
 | 长任务无安全网 commit | auto git snapshot 默认关（`git-snapshot-host.ts`） | 指示 agent 阶段性 commit（或启用 snapshot） |
 

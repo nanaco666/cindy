@@ -224,7 +224,11 @@ import { createElectronIpcHandlerRegistry } from './electronIpcRegistry.js';
 import { validateExtraDirs } from './extraDirsValidator.js';
 import { prepareHandoffWorktree, shouldRecycleHandoffWorktreeOnFailure } from './handoffWorktree.js';
 import { registerProjectPluginPolicyHandlers } from './projectPluginPolicyHandlers.js';
-import { WorktreeManager as worktreeManager, worktreeStore } from '../worktree/index.js';
+import {
+  restoreMissingManagedWorktreeForSession,
+  WorktreeManager as worktreeManager,
+  worktreeStore,
+} from '../worktree/index.js';
 import type { WorktreeMeta } from '../worktree/types.js';
 import {
   createOrcaInterAgentDispatcher,
@@ -6561,6 +6565,14 @@ async function checkWorkDirExists(
     const healed = await healMissingDialogueWorkdir(workingDir, dialogueWorkspaceRootDir());
     if (healed) {
       log.info('send: recreated missing dialogue workdir', { sessionId, workingDir });
+      return true;
+    }
+    // Cindy 托管 worktree 被外部 PR cleanup / 手动 git 命令移除时，先按 DB 中
+    // 的精确 worktree_path 从本地或 origin tracking 分支重建。普通用户目录绝不
+    // 猜测 fallback；快照冲突也保持阻断，交给恢复横幅显式处理。
+    const restored = await restoreMissingManagedWorktreeForSession(sessionId, workingDir);
+    if (restored) {
+      log.info('send: restored missing managed worktree', { sessionId, workingDir });
       return true;
     }
     if (suppress) {

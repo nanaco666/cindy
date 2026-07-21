@@ -144,9 +144,12 @@ describe('worktree restore', () => {
     );
   });
 
-  it('branch missing → gone', async () => {
+  it('local and origin tracking branches missing → gone', async () => {
     gitExecMock.mockImplementation(async (args: string[]) => {
-      if (args[0] === 'rev-parse' && args.includes('refs/heads/xdt/wt1')) {
+      if (args[0] === 'rev-parse' && (
+        args.includes('refs/heads/xdt/wt1')
+        || args.includes('refs/remotes/origin/xdt/wt1')
+      )) {
         throw new Error('unknown revision');
       }
       return { stdout: '', stderr: '' };
@@ -154,6 +157,24 @@ describe('worktree restore', () => {
     await expect(mod.getWorktreeRestoreStatus('s1')).resolves.toEqual({
       state: 'gone',
       worktreePath: wtPath,
+    });
+  });
+
+  it('local branch missing + origin tracking branch present → restorable', async () => {
+    gitExecMock.mockImplementation(async (args: string[]) => {
+      if (args[0] === 'rev-parse' && args.includes('refs/heads/xdt/wt1')) {
+        throw new Error('unknown revision');
+      }
+      if (args[0] === 'rev-parse' && args.includes('refs/remotes/origin/xdt/wt1')) {
+        return { stdout: 'deadbeef\n', stderr: '' };
+      }
+      return { stdout: '', stderr: '' };
+    });
+
+    await expect(mod.getWorktreeRestoreStatus('s1')).resolves.toEqual({
+      state: 'restorable',
+      worktreePath: wtPath,
+      hasSnapshot: false,
     });
   });
 
@@ -214,6 +235,97 @@ describe('worktree restore', () => {
       's1',
       expect.objectContaining({ sessionId: 's1', path: wtPath, branch: 'xdt/wt1' }),
     );
+  });
+
+  it('restore: recreates a deleted local branch from origin before worktree add', async () => {
+    let localBranchCreated = false;
+    gitExecMock.mockImplementation(async (args: string[]) => {
+      if (args[0] === 'rev-parse' && args.includes('refs/heads/xdt/wt1')) {
+        if (!localBranchCreated) throw new Error('unknown revision');
+        return { stdout: 'deadbeef\n', stderr: '' };
+      }
+      if (args[0] === 'rev-parse' && args.includes('refs/remotes/origin/xdt/wt1')) {
+        return { stdout: 'deadbeef\n', stderr: '' };
+      }
+      if (args[0] === 'branch' && args[1] === 'xdt/wt1') {
+        localBranchCreated = true;
+      }
+      return { stdout: '', stderr: '' };
+    });
+
+    await expect(mod.restoreWorktreeForSession('s1')).resolves.toEqual({
+      ok: true,
+      snapshotApplied: true,
+    });
+
+    const calls = gitExecMock.mock.calls.map(argsOf);
+    const createBranchIndex = calls.findIndex((args) => args[0] === 'branch');
+    const addWorktreeIndex = calls.findIndex((args) => args[0] === '-c' && args[3] === 'add');
+    expect(calls[createBranchIndex]).toEqual([
+      'branch',
+      'xdt/wt1',
+      'refs/remotes/origin/xdt/wt1',
+    ]);
+    expect(createBranchIndex).toBeLessThan(addWorktreeIndex);
+  });
+
+  it('send-time restore only accepts the DB-authoritative managed path', async () => {
+    const stalePath = path.join(baseRepo, '.cindy-worktrees', 'stale');
+
+    await expect(
+      mod.restoreMissingManagedWorktreeForSession('s1', stalePath),
+    ).resolves.toBe(false);
+
+    expect(gitExecMock).not.toHaveBeenCalled();
+  });
+
+  it('send-time restore rebuilds the exact missing worktree from origin', async () => {
+    let localBranchCreated = false;
+    gitExecMock.mockImplementation(async (args: string[]) => {
+      if (args[0] === 'rev-parse' && args.includes('refs/heads/xdt/wt1')) {
+        if (!localBranchCreated) throw new Error('unknown revision');
+        return { stdout: 'deadbeef\n', stderr: '' };
+      }
+      if (args[0] === 'rev-parse' && args.includes('refs/remotes/origin/xdt/wt1')) {
+        return { stdout: 'deadbeef\n', stderr: '' };
+      }
+      if (args[0] === 'branch') localBranchCreated = true;
+      if (args[0] === '-c' && args[2] === 'worktree' && args[3] === 'add') {
+        fsSync.mkdirSync(wtPath, { recursive: true });
+      }
+      return { stdout: '', stderr: '' };
+    });
+
+    await expect(
+      mod.restoreMissingManagedWorktreeForSession('s1', wtPath),
+    ).resolves.toBe(true);
+
+    expect(storeSetMock).toHaveBeenCalledWith(
+      's1',
+      expect.objectContaining({ sessionId: 's1', path: wtPath, branch: 'xdt/wt1' }),
+    );
+  });
+
+  it('concurrent restore requests share one worktree mutation', async () => {
+    gitExecMock.mockImplementation(async (args: string[]) => {
+      if (args[0] === 'rev-parse' && args.includes('refs/heads/xdt/wt1')) {
+        return { stdout: 'deadbeef\n', stderr: '' };
+      }
+      return { stdout: '', stderr: '' };
+    });
+
+    const first = mod.restoreWorktreeForSession('s1');
+    const second = mod.restoreWorktreeForSession('s1');
+
+    expect(second).toBe(first);
+    await expect(Promise.all([first, second])).resolves.toEqual([
+      { ok: true, snapshotApplied: true },
+      { ok: true, snapshotApplied: true },
+    ]);
+
+    const calls = gitExecMock.mock.calls.map(argsOf);
+    expect(calls.filter((args) => args[0] === '-c' && args[3] === 'add')).toHaveLength(1);
+    expect(storeSetMock).toHaveBeenCalledTimes(1);
   });
 
   it('restore: falls back to the session auto-stash when snapshot ref is missing', async () => {
