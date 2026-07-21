@@ -4,6 +4,8 @@ import * as authManager from '../authManager.js';
 import { getClientEndpoint } from '../clientEndpointsService.js';
 import { serverApiFetch } from '../serverApiClient.js';
 
+const VOICE_SESSION_REQUEST_TIMEOUT_MS = 10_000;
+
 export type CindyVoiceAsrSession = {
   sessionId: string;
   ticket: string;
@@ -87,6 +89,7 @@ async function createCindyVoiceSession(input: {
       asrProvider: input.asrProvider,
       refinerProvider: input.refinerProvider,
     },
+    timeoutMs: VOICE_SESSION_REQUEST_TIMEOUT_MS,
   });
   if (
     session.asr.provider !== input.asrProvider

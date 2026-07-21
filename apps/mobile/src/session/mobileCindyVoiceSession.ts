@@ -4,6 +4,8 @@ import { VOICE_API_BASE_URL } from '@/config/env';
 import type { StoredMobileVoiceCredential } from '@/session/mobileVoiceCredentialStore';
 import { createMobileVoiceCredentialFromLiteLlmSettings } from '@/session/mobileVoiceLiteLlmSettings';
 
+const VOICE_SESSION_REQUEST_TIMEOUT_MS = 10_000;
+
 type AccessTokenProvider = () => Promise<string | null>;
 
 type VoiceSessionResponse = {
@@ -33,21 +35,29 @@ export class MobileCindyVoiceRunContext {
     authorizationToken: string;
   }> {
     const token = await this.requireAccessToken();
-    const response = await fetch(`${requireVoiceBaseUrl()}/api/voice/sessions`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        mode: 'dictation',
-        language: this.sourceLanguage,
-        client: 'mobile',
-        clientVersion: Constants.nativeAppVersion ?? Constants.expoConfig?.version,
-        asrProvider,
-        refinerProvider: this.refinerProvider,
-      }),
-    });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), VOICE_SESSION_REQUEST_TIMEOUT_MS);
+    let response: Response;
+    try {
+      response = await fetch(`${requireVoiceBaseUrl()}/api/voice/sessions`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          mode: 'dictation',
+          language: this.sourceLanguage,
+          client: 'mobile',
+          clientVersion: Constants.nativeAppVersion ?? Constants.expoConfig?.version,
+          asrProvider,
+          refinerProvider: this.refinerProvider,
+        }),
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeoutId);
+    }
     if (!response.ok) throw new Error(await voiceHttpError('创建语音会话失败', response));
     const session = await response.json() as VoiceSessionResponse;
     if (
