@@ -4596,7 +4596,13 @@
         "copyFailed": "复制失败，请手动复制",
         "projectNotFound": "找不到对应的项目，可能已被归档或不在本机"
       },
-      "railUnreadHint": "有新消息待回复"
+      "railUnreadHint": "有新消息待回复",
+      "railNav": {
+        "pinned": "置顶",
+        "projects": "项目",
+        "dialogues": "对话"
+      },
+      "railNavCount": "{{count}} 个会话"
     },
     "rename": {
       "aiRename": "用 AI 重新命名",

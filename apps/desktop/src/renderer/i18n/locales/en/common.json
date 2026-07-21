@@ -4605,7 +4605,13 @@
         "copyFailed": "Copy failed, please copy manually",
         "projectNotFound": "Project not found — it may have been archived or doesn't exist on this device"
       },
-      "railUnreadHint": "New message awaiting reply"
+      "railUnreadHint": "New message awaiting reply",
+      "railNav": {
+        "pinned": "Pinned",
+        "projects": "Projects",
+        "dialogues": "Chats"
+      },
+      "railNavCount": "{{count}} sessions"
     },
     "rename": {
       "aiRename": "Rename with AI",

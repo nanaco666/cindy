@@ -4596,7 +4596,13 @@
         "copyFailed": "복사에 실패했습니다. 수동으로 복사해주세요",
         "projectNotFound": "해당 프로젝트를 찾을 수 없습니다. 보관되었거나 이 기기에 없을 수 있습니다"
       },
-      "railUnreadHint": "새 메시지 대기 중"
+      "railUnreadHint": "새 메시지 대기 중",
+      "railNav": {
+        "pinned": "고정됨",
+        "projects": "프로젝트",
+        "dialogues": "대화"
+      },
+      "railNavCount": "세션 {{count}}개"
     },
     "rename": {
       "aiRename": "AI로 이름 다시 짓기",

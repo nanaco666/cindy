@@ -16,10 +16,11 @@
  * F-PJ-1~7：分组数据来自 useProjectGroups + useCollapsedProjects。
  */
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import type { ReactNode } from 'react';
 import type { SchedulerEvent } from '@lizi/maker-scheduler';
 import { createPortal } from 'react-dom';
-import { Archive, CirclePlus, Clock, Plug, Trash2, X } from 'lucide-react';
+import { Archive, ChevronRight, CirclePlus, Clock, Folder, Plug, Trash2, X } from 'lucide-react';
 import { useNavigate, useMatch } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 
@@ -51,7 +52,6 @@ import {
 import { useSessionRunningStatus } from '@/hooks/useSessionRunningStatus';
 import { useBackgroundActivitySessionIds } from '@/lib/sessionBackgroundActivityStore';
 import { useAttachedSessionIds } from '@/hooks/useAttachedSessionIds';
-import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { useActiveMainView } from '@/hooks/useActiveMainView';
 import { getNotificationsEnabled } from '@/hooks/useNotificationSettings';
 import { getFeishuNotificationsEnabled } from '@/hooks/useFeishuNotificationSettings';
@@ -69,7 +69,6 @@ import { requestConversationSearch } from '@/state/conversationSearchRequest';
 
 import { emitRefresh, onPatch } from '@/lib/sessionsBus';
 
-import { formatSidebarTime } from './lib/formatSidebarTime';
 import { useProjectGroups } from './hooks/useProjectGroups';
 import { useProjectAliases } from './hooks/useProjectAliases';
 import { useCollapsedProjects } from './hooks/useCollapsedProjects';
@@ -108,12 +107,12 @@ import {
 } from './lib/sessionRemovalNavigation';
 import type {
   AutomationScheduleAction,
+  AutomationScheduleSessionInfo,
   AutomationSessionGroup,
 } from './lib/automationSidebarGrouping';
 import { getSessionDeviceId } from '@/features/device-link/remoteProjectsStore';
 import { useRemoteSessionActivity } from '@/features/device-link/remoteSessionActivityStore';
 import { WorkdirBrowseSidebar } from './workdir-browse/WorkdirBrowseSidebar';
-import { SortableList } from '@/components/sidebar/SortableList';
 import {
   buildDocModeSwitchProjects,
   resolveDocModeFilesSession,
@@ -124,7 +123,16 @@ import {
   SidebarIconButton,
   SIDEBAR_RAIL_ICON_BUTTON_CLASS,
 } from '@/components/sidebar/SidebarIconButton';
+import { RailNav } from './sidebar/RailNav';
+import { railPanelStore } from './sidebar/railPanelStore';
+import { SessionEntryList } from './sidebar/SessionEntryList';
 import { AttentionDot } from '@/components/sidebar/AttentionDot';
+import {
+  getDialogueCollapseLimit,
+  getProjectCollapseLimit,
+  getProjectSessionCollapseLimit,
+} from './lib/sidebarCollapseConfig';
+import { getSessionListCollapseView } from './lib/sessionListCollapse';
 import { hasSessionSelectionModifier, type SessionClickModifiers } from './sidebar/SessionItem';
 import type { SessionMoveTarget } from './sidebar/sessionMoveTarget';
 import {
@@ -336,27 +344,6 @@ export function CCAgentSidebarUpper() {
     return new Set([...attentionNotifications, ...unread]);
   }, [attentionNotifications, scheduleSessionIndex]);
 
-  // rail(折叠态)置顶瓷砖拖拽落定 —— 与展开态共用同一份 manualPinnedOrder
-  // (ExpandedView.handlePinnedReorder 同口径)。fullActivePinnedIds 取**未过滤**的全量活跃置顶
-  // (本地 + 全部远程,不受机器切换栏选择影响),再把可见子集的新顺序原位 merge 回完整顺序 ——
-  // 否则按选中机器过滤时拖拽,会把其它机器的置顶项从持久化顺序里丢掉(切回「所有」即乱序)。
-  const handleRailPinnedReorder = useCallback(
-    (visibleNewOrder: string[]) => {
-      // baseline 必须与置顶段同序(pinnedSessionIdsInDisplayOrder 内部按 status→pinnedAt desc 排,
-      // 含归档置顶),否则首次过滤态拖拽、manualPinnedOrder 还空时,隐藏置顶项会因 baseline 顺序不符而跳位。
-      const fullActivePinnedIds = pinnedSessionIdsInDisplayOrder([
-        ...sessionsHook.sessions,
-        ...remoteProjectSessions,
-      ]);
-      const merged = mergeVisibleReorder(
-        normalizeManualPinnedOrder(filter.manualPinnedOrder, fullActivePinnedIds),
-        visibleNewOrder,
-      );
-      filter.setManualPinnedOrder(merged, fullActivePinnedIds);
-    },
-    [sessionsHook.sessions, remoteProjectSessions, filter],
-  );
-
   useOrcaWorkerAttentionWatcher(sessionsHook.sessions, activeSessionId);
 
   return (
@@ -421,7 +408,6 @@ export function CCAgentSidebarUpper() {
             activeSessionId={activeSessionId}
             notifications={railNotifications}
             manualPinnedOrder={filter.manualPinnedOrder}
-            onReorder={handleRailPinnedReorder}
           />
         </div>
 
@@ -2279,6 +2265,27 @@ function ExpandedView({
         onConfirm={handleConfirm}
         onCancel={handleCancelConfirm}
       />
+      {/* 折叠 rail 的项目/对话二级面板 —— 瓷砖在 CollapsedView(RailNav),内容在
+          本视图渲染(portal 不受隐藏 wrapper 影响):零复制复用展开态全套会话
+          行为(hover 操作钮 / 右键菜单 / 重命名 / 移动 / schedule 操作 / 折叠上限
+          与「显示全部」),见 railPanelStore 头注。 */}
+      <RailPanels
+        projects={visibleProjectsWithVendor}
+        dialogues={visibleDialogues}
+        activeSessionId={activeSessionId}
+        runningSessionIds={displayRunningSessionIds}
+        attachedSessionIds={attachedSessionIds}
+        notifications={sidebarNotifications}
+        scheduleSessionIndex={scheduleSessionIndex}
+        selectedSessionIds={selectedSessionIds}
+        onSessionClick={handleSessionClick}
+        onAction={handleActionClick}
+        onRename={handleRename}
+        onTogglePin={handleTogglePin}
+        onMoveSession={handleMoveSession}
+        projectOptions={projectPickerOptions}
+        onScheduleAction={handleScheduleAction}
+      />
       {deleteScheduleDialog}
     </>
   );
@@ -2291,115 +2298,20 @@ interface CollapsedProps {
   onAutomationsContextMenu: (e: React.MouseEvent) => void;
   /** 全量项目(供 rail 搜索图标钮的 ConversationSearchBox 用)。 */
   allSearchProjects: ProjectNode[];
-  /** rail 瓷砖数据源——全量 sessions，内部筛置顶。 */
+  /** rail 数据源——全量可见 sessions(本地 + 远程镜像合并),RailNav 内部切片。 */
   sessions: Session[];
   activeSessionId: string | undefined;
-  /** 需关注 sessionIds（attention snapshot）——瓷砖右上角红点。 */
+  /** 未读集 = attention 快照 ∪ 定时任务未读运行——段瓷砖/面板行角标依据。 */
   notifications: ReadonlySet<string>;
-  /** 与展开态共用的 1 维置顶顺序——rail 瓷砖按它排序,保证两视图次序一致。 */
+  /** 与展开态共用的置顶顺序(置顶面板同序)。 */
   manualPinnedOrder: readonly string[];
-  /** 瓷砖拖拽落定回调（新顺序 id 列表）——写回同一份 manualPinnedOrder。 */
-  onReorder: (newOrderIds: string[]) => void;
 }
 
 /**
- * 瓷砖短标签（redesign 稿 rail tiles 的 KEY 语义）——稿内是人工缩写映射
- * （"网站 HTTPS 部署"→"部署"），程序侧用启发式逼近：
- *   - 标题以拉丁词开头 → 取第一个词（≤6 字符），如 "Maker Prompt优化" → "Maker"
- *   - 否则（CJK）→ 取前 2 字，与稿内 fallback `slice(0,2)` 一致
- * 完整标题/预览由 hover flyout 承担。
- */
-function railTileLabel(title: string): string {
-  const trimmed = title.trim();
-  const latinWord = /^[A-Za-z0-9][A-Za-z0-9.-]*/.exec(trimmed)?.[0];
-  if (latinWord && latinWord.length >= 2) return latinWord.slice(0, 6);
-  return trimmed.slice(0, 2);
-}
-
-interface RailFlyoutState {
-  session: Session;
-  /** 瓷砖右缘视口坐标——flyout 渲染在其右侧 10px。 */
-  anchorRight: number;
-  anchorTop: number;
-  isRunning: boolean;
-  hasUnread: boolean;
-}
-
-/**
- * RailFlyout — rail 瓷砖 hover 弹出的 208px 预览卡（redesign 稿 .xdtsb-fly）。
- * 标题 + 最近消息预览 + 时间元信息；running 时整卡 muted。纯展示
- * （pointer-events:none），定位用 fixed + portal 到 body，避免被 aside
- * 的 overflow-hidden 裁切；首帧量高后再钳制 top 防出屏。
- */
-function RailFlyout({ flyout }: { flyout: RailFlyoutState }) {
-  const { t } = useTranslation();
-  const ref = useRef<HTMLDivElement>(null);
-  const [top, setTop] = useState<number | null>(null);
-
-  useLayoutEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const desired = flyout.anchorTop - 4;
-    const clamped = Math.max(8, Math.min(desired, window.innerHeight - el.offsetHeight - 8));
-    setTop(clamped);
-  }, [flyout]);
-
-  const { session, isRunning, hasUnread } = flyout;
-  // 任务现状摘要优先,与 SessionCard 同口径
-  const flyoutPreview = session.summary ?? session.preview ?? null;
-  const meta = [
-    formatSidebarTime(session.updatedAt, t),
-    hasUnread ? t('ccAgent.sidebar.railUnreadHint') : null,
-  ]
-    .filter(Boolean)
-    .join(' · ');
-
-  return createPortal(
-    <div
-      ref={ref}
-      role="tooltip"
-      className={cn(
-        'pointer-events-none fixed z-[9999] w-[208px] rounded-xl',
-        'bg-[var(--surface-elevated)] border border-sidebar-border',
-        'px-3 pb-[11px] pt-[10px]',
-      )}
-      style={{
-        left: flyout.anchorRight + 10,
-        top: top ?? flyout.anchorTop - 4,
-        visibility: top === null ? 'hidden' : undefined,
-      }}
-    >
-      <div
-        className={cn(
-          'text-13 font-bold leading-[1.3]',
-          isRunning ? 'text-[var(--cmd-palette-item-meta)]' : 'text-foreground',
-        )}
-      >
-        {session.title}
-      </div>
-      {flyoutPreview && (
-        <div
-          className={cn(
-            'mt-1 text-11 leading-[1.45]',
-            '[display:-webkit-box] [-webkit-line-clamp:4] [-webkit-box-orient:vertical] overflow-hidden',
-            isRunning ? 'text-[var(--text-disabled)]' : 'text-[var(--text-secondary)]',
-          )}
-        >
-          {flyoutPreview}
-        </div>
-      )}
-      <div className="mt-[7px] text-10 leading-none text-[var(--text-tertiary)]">{meta}</div>
-    </div>,
-    document.body,
-  );
-}
-
-/**
- * CollapsedView — 折叠态 64px 竖排 rail（sidebar-card-mode redesign）。
- * 不再"完全消失"：新建/自动化按钮之下渲染置顶会话的竖排短标签瓷砖
- * （writing-mode: vertical-rl，2 字缩写），running 时标题呼吸 + 底部 mini
- * 进度条，hover 弹出 RailFlyout 预览卡（标题+最近消息+时间）。
- * 点击瓷砖直接导航——不必先展开侧栏。
+ * CollapsedView — 折叠态 64px rail(rail redesign v8:三段导航)。
+ * 功能区(新建/搜索/自动化/插件)之下是「置顶 / 项目 / 对话」三段入口瓷砖
+ * (RailNav):与展开态同构,hover 展开可交互二级面板(项目段再级联三级),
+ * 段瓷砖聚合灯语(running 呼吸橙 / 最高优先级未读点)。见 sidebar/RailNav.tsx。
  */
 function CollapsedView({
   navigate,
@@ -2409,9 +2321,7 @@ function CollapsedView({
   activeSessionId,
   notifications,
   manualPinnedOrder,
-  onReorder,
 }: CollapsedProps) {
-  const reducedMotion = useReducedMotion();
   const { t } = useTranslation();
   // 只读 running 快照——**不传 options**：通知副作用（onSessionDone 等）由
   // ExpandedView 的实例独家持有，两个视图常驻挂载，双回调会重复发桌面通知。
@@ -2440,36 +2350,14 @@ function CollapsedView({
   // 命中 Plugin 或 Skill 视图时高亮。折叠 rail 之前漏了这颗按钮,现保持两态一致。
   const { activeKey, navigateToView } = useActiveMainView();
 
-  // rail 只放置顶——与 redesign 稿一致（pinned cards → rail tiles）。
-  // archived 的置顶不进 rail;Orca worker 会话(可从会话头置顶)也排除——展开态本就用
-  // isOrcaWorkerSession 隐藏它们(实现细节会话),rail 不该把它们暴露出来(codex review)。
-  // 顺序按 manualPinnedOrder 排（与展开态 visiblePinned
-  // 同口径的稳定 rank 排序）：在 order 里的按下标排前面,不在的落末尾保持 base 序——
-  // 这样 rail 拖出的次序与展开态一致,两视图共用同一份 1 维顺序。
-  const pinnedSessions = useMemo(() => {
-    const base = sessions.filter((s) => s.pinnedAt != null && s.status !== 'archived' && !isOrcaWorkerSession(s));
-    if (manualPinnedOrder.length === 0) return base;
-    const rank = new Map<string, number>();
-    manualPinnedOrder.forEach((id, idx) => rank.set(id, idx));
-    return base
-      .slice()
-      .sort(
-        (a, b) =>
-          (rank.get(a.id) ?? Number.MAX_SAFE_INTEGER) - (rank.get(b.id) ?? Number.MAX_SAFE_INTEGER),
-      );
-  }, [sessions, manualPinnedOrder]);
+  // 接管中的会话(/ctr)——面板行沿用 SessionStatusIcon 的 RadioTower 表达。
+  const attachedSessionIds = useAttachedSessionIds();
 
-  const handleTileClick = useCallback(
-    async (id: string) => {
-      if (id === activeSessionId) return;
-      const target = sessions.find((s) => s.id === id);
-      navigate(await resolveSessionRoute(id, target));
-    },
-    [activeSessionId, navigate, sessions],
-  );
-
-  // hover flyout（redesign 稿 .xdtsb-fly）——同一时刻最多一张
-  const [flyout, setFlyout] = useState<RailFlyoutState | null>(null);
+  // rail 运行集 = agent running ∪ 后台意识活动(与展开态呼吸口径一致)。
+  const railRunningIds = useMemo(() => {
+    if (backgroundActivitySessionIds.size === 0) return runningSessionIds;
+    return new Set([...runningSessionIds, ...backgroundActivitySessionIds]);
+  }, [runningSessionIds, backgroundActivitySessionIds]);
 
   return (
     <div
@@ -2486,11 +2374,6 @@ function CollapsedView({
         label={t('ccAgent.layout.new')}
         variant="rail"
         onClick={handleNewCCS}
-      />
-      <ConversationSearchBox
-        navigate={navigate}
-        allKnownProjects={allSearchProjects}
-        triggerClassName={SIDEBAR_RAIL_ICON_BUTTON_CLASS}
       />
       {/* 自动化 rail 入口 —— 仅导航,不再显示未读 dot(与展开态 SidebarTopNav 一致,
           未读 / 运行状态由展开后的各 schedule 组头承载)。 */}
@@ -2512,88 +2395,360 @@ function CollapsedView({
         aria-current={activeKey === 'plugins' ? 'page' : undefined}
         onClick={() => navigateToView('plugins')}
       />
-
-      {pinnedSessions.length > 0 && (
-        <div className="my-[7px] h-px w-[22px] shrink-0 bg-sidebar-border" aria-hidden />
-      )}
-
-      {/* rail 瓷砖可拖排序(sidebar-card-mode v2):整块瓷砖整列竖向拖,落定写回
-          同一份 manualPinnedOrder(onReorder)。瓷砖是 <button>,默认 filter 会挡
-          按钮拖拽 → 传 filter='[data-no-drag]'(不含 button)放行整块拖;
-          fallbackTolerance:4 保证"点击=导航、按住拖=排序"两不误。
-          New/自动化按钮 + 分隔线在 SortableList 外,不参与排序。 */}
-      <SortableList
-        items={pinnedSessions}
-        getId={(s) => s.id}
-        onReorder={onReorder}
-        reducedMotion={reducedMotion}
-        filter="[data-no-drag]"
-        className="flex w-full flex-col items-center gap-[3px]"
-        renderItem={(session) => {
-          const isActive = session.id === activeSessionId;
-          const isRunning =
-            runningSessionIds.has(session.id) || backgroundActivitySessionIds.has(session.id);
-          const hasUnread = notifications.has(session.id);
-          // 角标 tone:error(context 里的失败 schedule / attention 'error')红 >
-          // awaiting TapTap 蓝 > 完成未读绿(普通/定时统一,与卡片、列表行同一张色表)。
-          // urgentSet 覆盖"schedule 未读且失败"这类 attentionKind 缺失的场景 —— 避免
-          // 失败 automation 在折叠 rail 上和成功一样落到绿色。
-          const tileKind = attentionKinds.get(session.id);
-          const isScheduleFailure = urgentSet.has(session.id);
-          const tileTone =
-            tileKind === 'error' || isScheduleFailure
-              ? 'error'
-              : tileKind === 'awaiting'
-                ? 'awaiting'
-                : 'done';
-          return (
-            <button
-              onClick={() => void handleTileClick(session.id)}
-              onMouseEnter={(e) => {
-                const rect = e.currentTarget.getBoundingClientRect();
-                setFlyout({ session, anchorRight: rect.right, anchorTop: rect.top, isRunning, hasUnread });
-              }}
-              onMouseLeave={() => setFlyout(null)}
-              aria-label={session.title}
-              aria-current={isActive ? 'page' : undefined}
-              className={cn(
-                'relative flex shrink-0 flex-col items-center gap-1.5 rounded-[9px] px-2 py-[9px]',
-                'transition-colors hover:bg-sidebar-item-hover',
-                // redesign 稿 is-active 用 hover 同色（rail 上不需要更重的 active 灰）
-                isActive && 'bg-sidebar-item-hover',
-              )}
-            >
-              <span
-                className={cn(
-                  'whitespace-nowrap [writing-mode:vertical-rl] [text-orientation:mixed]',
-                  'text-11 font-semibold leading-none tracking-[2px]',
-                  isRunning
-                    ? 'text-[var(--cmd-palette-item-meta)] session-status-breathing'
-                    : 'text-foreground',
-                )}
-              >
-                {railTileLabel(session.title)}
-              </span>
-              {isRunning && (
-                <span
-                  className="session-card-bar relative h-[2px] w-3.5 overflow-hidden rounded-full bg-sidebar-item-active"
-                  aria-hidden
-                />
-              )}
-              {hasUnread && (
-                <AttentionDot
-                  breathing
-                  size={5}
-                  tone={tileTone}
-                  className="absolute right-[5px] top-[5px]"
-                />
-              )}
-            </button>
-          );
-        }}
+      <ConversationSearchBox
+        navigate={navigate}
+        allKnownProjects={allSearchProjects}
+        triggerClassName={SIDEBAR_RAIL_ICON_BUTTON_CLASS}
       />
 
-      {flyout && <RailFlyout flyout={flyout} />}
+      <div className="my-[7px] h-px w-[22px] shrink-0 bg-sidebar-border" aria-hidden />
+
+      {/* 置顶 / 项目 / 对话 三段导航(hover 出可交互二级面板,项目段三级级联)。 */}
+      <RailNav
+        navigate={navigate}
+        sessions={sessions}
+        projects={allSearchProjects}
+        activeSessionId={activeSessionId}
+        manualPinnedOrder={manualPinnedOrder}
+        runningSessionIds={railRunningIds}
+        notifications={notifications}
+        attentionKinds={attentionKinds}
+        urgentSessionIds={urgentSet}
+        attachedSessionIds={attachedSessionIds}
+      />
     </div>
+  );
+}
+
+/* ============================== Rail Panels ============================== */
+
+/** rail 面板容器:portal + fixed + 视口钳制。mouseleave 时若指针落入 Radix
+ *  popper / 对话框(行内右键菜单、移动子菜单、确认弹窗)不视为离开。 */
+function RailPanelShell({
+  anchorRight,
+  anchorTop,
+  level,
+  onEnter,
+  onLeave,
+  children,
+}: {
+  anchorRight: number;
+  anchorTop: number;
+  level: 1 | 2;
+  onEnter: () => void;
+  onLeave: () => void;
+  children: ReactNode;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [top, setTop] = useState<number | null>(null);
+
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const desired = anchorTop - 6;
+    setTop(Math.max(8, Math.min(desired, window.innerHeight - el.offsetHeight - 8)));
+  }, [anchorTop, children]);
+
+  return createPortal(
+    <div
+      ref={ref}
+      role="menu"
+      data-rail-panel="true"
+      onMouseEnter={onEnter}
+      onMouseLeave={(e) => {
+        const next = e.relatedTarget instanceof Element ? e.relatedTarget : null;
+        if (
+          next?.closest(
+            '[data-rail-panel],[data-rail-panel-trigger],[data-radix-popper-content-wrapper],[role="dialog"]',
+          )
+        ) {
+          return;
+        }
+        onLeave();
+      }}
+      className={cn(
+        'fixed w-[264px] rounded-xl border border-sidebar-border bg-[var(--surface-elevated)] p-1.5',
+        'shadow-[0_6px_24px_rgba(0,0,0,0.07)]',
+        level === 1 ? 'z-[60]' : 'z-[61]',
+      )}
+      style={{
+        left: anchorRight + (level === 1 ? 12 : 8),
+        top: top ?? anchorTop - 6,
+        visibility: top === null ? 'hidden' : undefined,
+      }}
+    >
+      {children}
+    </div>,
+    document.body,
+  );
+}
+
+interface RailPanelsProps {
+  projects: ProjectNode[];
+  dialogues: Session[];
+  activeSessionId: string | undefined;
+  runningSessionIds: ReadonlySet<string>;
+  attachedSessionIds: ReadonlySet<string>;
+  notifications: ReadonlySet<string>;
+  scheduleSessionIndex: ReadonlyMap<string, AutomationScheduleSessionInfo>;
+  selectedSessionIds?: ReadonlySet<string>;
+  onSessionClick: Parameters<typeof SessionEntryList>[0]['onSessionClick'];
+  onAction: Parameters<typeof SessionEntryList>[0]['onAction'];
+  onRename: Parameters<typeof SessionEntryList>[0]['onRename'];
+  onTogglePin: Parameters<typeof SessionEntryList>[0]['onTogglePin'];
+  onMoveSession: Parameters<typeof SessionEntryList>[0]['onMoveSession'];
+  projectOptions: Parameters<typeof SessionEntryList>[0]['projectOptions'];
+  onScheduleAction: Parameters<typeof SessionEntryList>[0]['onScheduleAction'];
+}
+
+/**
+ * RailPanels — 折叠 rail「项目 / 对话」的二级(+项目三级)面板。
+ * 由 ExpandedView 渲染以直连其全套会话 handler(见 railPanelStore 头注);
+ * 会话行 = SessionEntryList 原装(SessionItem 全量行为 + 折叠上限 +
+ * 「显示全部 N 项」页脚),与展开态零差异:
+ *   - 对话面板:collapseLimit = getDialogueCollapseLimit()(默认 10,24h 活动豁免);
+ *   - 项目内会话:collapseLimit = getProjectSessionCollapseLimit()(默认 5);
+ *   - 项目列表:getProjectCollapseLimit()(默认 20)纯硬性上限 + 同款页脚。
+ */
+function RailPanels({
+  projects,
+  dialogues,
+  activeSessionId,
+  runningSessionIds,
+  attachedSessionIds,
+  notifications,
+  scheduleSessionIndex,
+  selectedSessionIds,
+  onSessionClick,
+  onAction,
+  onRename,
+  onTogglePin,
+  onMoveSession,
+  projectOptions,
+  onScheduleAction,
+}: RailPanelsProps) {
+  const { t } = useTranslation();
+  const panelState = useSyncExternalStore(railPanelStore.subscribe, railPanelStore.getSnapshot);
+  const attentionKinds = useSessionAttentionKinds();
+  const urgentSet = useSessionAttentionUrgencySet();
+  // 项目列表「显示全部」:面板关闭后复位(与 ProjectsSection 的段收起复位同语义)。
+  const [showAllProjects, setShowAllProjects] = useState(false);
+  useEffect(() => {
+    if (panelState.openSection !== 'projects') setShowAllProjects(false);
+  }, [panelState.openSection]);
+
+  // Esc / 点击面板与瓷砖之外 → 关闭(Radix popper / 对话框视为面板内部)。
+  useEffect(() => {
+    if (!panelState.openSection) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') railPanelStore.closeAll();
+    };
+    const onDown = (e: MouseEvent) => {
+      const el = e.target instanceof Element ? e.target : null;
+      if (
+        el?.closest(
+          '[data-rail-panel],[data-rail-panel-trigger],[data-radix-popper-content-wrapper],[role="dialog"]',
+        )
+      ) {
+        return;
+      }
+      railPanelStore.closeAll();
+    };
+    window.addEventListener('keydown', onKey);
+    document.addEventListener('mousedown', onDown, true);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      document.removeEventListener('mousedown', onDown, true);
+    };
+  }, [panelState.openSection]);
+
+  // 行点击:无多选修饰键时随导航关面板;shift/⌘ 多选保持面板打开(与展开态选择语义一致)。
+  const handlePanelSessionClick = useCallback<NonNullable<RailPanelsProps['onSessionClick']>>(
+    (id, modifiers) => {
+      if (!hasSessionSelectionModifier(modifiers)) railPanelStore.closeAll();
+      onSessionClick(id, modifiers);
+    },
+    [onSessionClick],
+  );
+
+  const projectAgg = useCallback(
+    (list: readonly Session[]) => {
+      let running = false;
+      let best: 'error' | 'awaiting' | 'done' | null = null;
+      const rank = { error: 3, awaiting: 2, done: 1 } as const;
+      for (const s of list) {
+        if (runningSessionIds.has(s.id)) running = true;
+        if (!notifications.has(s.id)) continue;
+        const kind = attentionKinds.get(s.id);
+        const tone = kind === 'error' || urgentSet.has(s.id) ? 'error' : kind === 'awaiting' ? 'awaiting' : 'done';
+        if (!best || rank[tone] > rank[best]) best = tone;
+      }
+      return { running, dotTone: best };
+    },
+    [runningSessionIds, notifications, attentionKinds, urgentSet],
+  );
+
+  // 项目列表折叠:纯硬性上限(ProjectsSection 同口径,默认 20)+「显示全部 N 项」。
+  const projectsView = useMemo(
+    () =>
+      getSessionListCollapseView({
+        entries: projects,
+        minVisibleCount: getProjectCollapseLimit(),
+        showAll: showAllProjects,
+        disableCollapse: false,
+        isFiltering: false,
+        isActiveEntry: (p) => p.sessions.some((s) => s.id === activeSessionId),
+        hasAttentionEntry: (p) => p.sessions.some((s) => notifications.has(s.id)),
+      }),
+    [projects, showAllProjects, activeSessionId, notifications],
+  );
+
+  const entryListShared = {
+    activeSessionId,
+    runningSessionIds,
+    attachedSessionIds,
+    notifications,
+    scheduleSessionIndex,
+    selectedSessionIds,
+    onSessionClick: handlePanelSessionClick,
+    onAction,
+    onRename,
+    onTogglePin,
+    onMoveSession,
+    projectOptions,
+    onScheduleAction,
+  } as const;
+
+  const panelHead = (title: string, count: number) => (
+    <div className="flex items-baseline gap-1.5 px-2.5 pb-1 pt-1.5">
+      <span className="min-w-0 flex-1 truncate text-[12.5px] font-extrabold text-foreground">{title}</span>
+      <span className="shrink-0 text-[10px] text-[var(--text-tertiary)]">
+        {t('ccAgent.sidebar.railNavCount', { count })}
+      </span>
+    </div>
+  );
+
+  if (!panelState.openSection || !panelState.anchor) return null;
+
+  const openProject =
+    panelState.openSection === 'projects' && panelState.openProjectKey
+      ? projects.find((p) => p.projectKey === panelState.openProjectKey) ?? null
+      : null;
+
+  return (
+    <>
+      <RailPanelShell
+        anchorRight={panelState.anchor.right}
+        anchorTop={panelState.anchor.top}
+        level={1}
+        onEnter={() => railPanelStore.cancelClose()}
+        onLeave={() => railPanelStore.scheduleClose()}
+      >
+        {panelState.openSection === 'dialogues' && (
+          <>
+            {panelHead(t('ccAgent.sidebar.railNav.dialogues'), dialogues.length)}
+            <div className="max-h-[420px] overflow-y-auto [scrollbar-width:thin]">
+              <SessionEntryList
+                sessions={dialogues}
+                {...entryListShared}
+                collapsible
+                collapseLimit={getDialogueCollapseLimit()}
+              />
+            </div>
+          </>
+        )}
+        {panelState.openSection === 'projects' && (
+          <>
+            {panelHead(t('ccAgent.sidebar.railNav.projects'), projects.length)}
+            <div className="max-h-[420px] overflow-y-auto [scrollbar-width:thin]">
+              {projectsView.visibleEntries.map((p) => {
+                const agg = projectAgg(p.sessions);
+                const isOpen = panelState.openProjectKey === p.projectKey;
+                return (
+                  <button
+                    key={p.projectKey}
+                    role="menuitem"
+                    aria-haspopup="menu"
+                    aria-expanded={isOpen}
+                    onMouseEnter={(e) => {
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      railPanelStore.openProject(p.projectKey, { right: rect.right, top: rect.top });
+                    }}
+                    onMouseLeave={() => railPanelStore.scheduleProjectClose()}
+                    className={cn(
+                      'flex h-8 w-full items-center gap-2 rounded-lg pl-2.5 pr-1.5 text-left',
+                      isOpen ? 'bg-sidebar-item-hover' : 'hover:bg-sidebar-item-hover',
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        'inline-flex shrink-0',
+                        agg.running
+                          ? 'text-[var(--status-bar-accent)] session-status-breathing'
+                          : 'text-[var(--text-tertiary)]',
+                      )}
+                    >
+                      <Folder size={13} strokeWidth={2} aria-hidden />
+                    </span>
+                    <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
+                      {p.displayName}
+                    </span>
+                    {agg.dotTone && <AttentionDot size={5} tone={agg.dotTone} className="shrink-0" />}
+                    <span className="shrink-0 text-[10px] tabular-nums text-[var(--text-tertiary)]">
+                      {p.sessions.length}
+                    </span>
+                    <ChevronRight
+                      size={12}
+                      strokeWidth={2}
+                      className="shrink-0 text-[var(--text-tertiary)]"
+                      aria-hidden
+                    />
+                  </button>
+                );
+              })}
+              {projectsView.isOverflowing && (
+                <button
+                  type="button"
+                  className={cn(
+                    'flex h-6 w-full items-center justify-center rounded-full px-2 text-xs font-normal',
+                    'text-[var(--cmd-palette-item-meta)] transition-colors hover:bg-sidebar-item-hover hover:text-foreground',
+                    'focus:outline-none focus-visible:ring-1 focus-visible:ring-[var(--focus-ring)]',
+                  )}
+                  onClick={() => setShowAllProjects(true)}
+                >
+                  {t('ccAgent.sidebar.showAllSessions', { count: projectsView.totalCount })}
+                </button>
+              )}
+            </div>
+          </>
+        )}
+      </RailPanelShell>
+
+      {openProject && panelState.projectAnchor && (
+        <RailPanelShell
+          anchorRight={panelState.projectAnchor.right}
+          anchorTop={panelState.projectAnchor.top}
+          level={2}
+          onEnter={() => {
+            railPanelStore.cancelClose();
+            railPanelStore.cancelProjectClose();
+          }}
+          onLeave={() => {
+            railPanelStore.scheduleProjectClose();
+            railPanelStore.scheduleClose();
+          }}
+        >
+          {panelHead(openProject.displayName, openProject.sessions.length)}
+          <div className="max-h-[420px] overflow-y-auto [scrollbar-width:thin]">
+            <SessionEntryList
+              sessions={openProject.sessions}
+              {...entryListShared}
+              collapsible
+              collapseLimit={getProjectSessionCollapseLimit()}
+            />
+          </div>
+        </RailPanelShell>
+      )}
+    </>
   );
 }
