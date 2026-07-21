@@ -289,6 +289,32 @@ describe('commitEditAndResend', () => {
     });
   });
 
+  it('旧版 markerless 交错 quoted 消息重发失败:兜底仍按原顺序还原 quote chip', async () => {
+    const { deps } = makeDeps(fakeSession(), { dispatchResult: false });
+    await commitEditAndResend(
+      {
+        sessionId: SESSION_ID,
+        clientId: CLIENT_ID,
+        text: '> first quote\n\nfirst reply\n\n> second quote\n\nsecond reply',
+        fallbackWorkingDir: '/repo',
+        quotesEncoded: true,
+      },
+      deps,
+    );
+    const [, document] = (deps.saveDraftFallback as unknown as Mock).mock.calls[0] as [
+      string,
+      { content?: Array<{ content?: Array<{ type?: string; attrs?: { text?: string } }> }> },
+    ];
+    expect(document.content?.[0]?.content?.map((node) => (
+      node.type === 'composerQuote' ? `${node.type}:${node.attrs?.text}` : node.type
+    ))).toEqual([
+      'composerQuote:first quote',
+      'text',
+      'composerQuote:second quote',
+      'text',
+    ]);
+  });
+
   it('非 quoted 消息重发失败:兜底不注入 quotes(第 4 参 undefined)', async () => {
     const { deps } = makeDeps(fakeSession(), { dispatchResult: false });
     await commitEditAndResend(

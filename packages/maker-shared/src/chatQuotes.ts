@@ -234,6 +234,40 @@ export function parseChatQuoteSegments(
 }
 
 /**
+ * 将解析后的文字岛拼成「引用胶囊之外」的可见正文。
+ *
+ * 引用块被收进独立胶囊后，相邻文字岛之间至少保留一个空行，避免首尾文字
+ * 粘连；但片段自身已经带回车时只补不足的数量，不能用 join('\n\n') 再叠加
+ * 两个换行，否则用户在引用前后保留的回车会被放大。
+ */
+export function joinChatQuoteTextSegments(segments: readonly ChatQuoteSegment[]): string {
+  let body = '';
+  let hasTextSegment = false;
+  for (const segment of segments) {
+    if (segment.kind !== 'text') continue;
+    if (!hasTextSegment) {
+      body = segment.text;
+      hasTextSegment = true;
+      continue;
+    }
+
+    let trailingNewlines = 0;
+    for (let index = body.length - 1; index >= 0 && trailingNewlines < 2; index -= 1) {
+      if (body[index] !== '\n') break;
+      trailingNewlines += 1;
+    }
+    let leadingNewlines = 0;
+    for (let index = 0; index < segment.text.length && leadingNewlines < 2; index += 1) {
+      if (segment.text[index] !== '\n') break;
+      leadingNewlines += 1;
+    }
+    body += '\n'.repeat(Math.max(0, 2 - trailingNewlines - leadingNewlines));
+    body += segment.text;
+  }
+  return body;
+}
+
+/**
  * 逆解析(与 formatQuotesForSend 对偶):content 以 "> " 开头时,取出开头的
  * blockquote 区还原成引用列表,其余为正文。规则:
  * - `> x` 行是条目内容,裸 `>` 行是条目内部空行;

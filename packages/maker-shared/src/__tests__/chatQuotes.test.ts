@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   formatQuoteForSend,
   formatQuotesForSend,
+  joinChatQuoteTextSegments,
   parseChatQuoteSegments,
   parseLeadingBlockquotes,
   quoteSourceBasename,
@@ -212,6 +213,34 @@ describe('stripChatQuoteMarkerLines', () => {
   it('leaves ordinary Markdown untouched', () => {
     const content = '> handwritten quote\n\nbody';
     expect(stripChatQuoteMarkerLines(content)).toBe(content);
+  });
+});
+
+describe('joinChatQuoteTextSegments', () => {
+  it('separates text islands without duplicating preserved user line breaks', () => {
+    expect(joinChatQuoteTextSegments([
+      { kind: 'text', text: 'first' },
+      { kind: 'quote', quote: { text: 'selected' } },
+      { kind: 'text', text: 'second' },
+    ])).toBe('first\n\nsecond');
+
+    expect(joinChatQuoteTextSegments([
+      { kind: 'text', text: 'first\n' },
+      { kind: 'quote', quote: { text: 'selected' } },
+      { kind: 'text', text: 'second' },
+    ])).toBe('first\n\nsecond');
+
+    expect(joinChatQuoteTextSegments([
+      { kind: 'text', text: 'first\n\n\n' },
+      { kind: 'quote', quote: { text: 'selected' } },
+      { kind: 'text', text: '\nsecond' },
+    ])).toBe('first\n\n\n\nsecond');
+  });
+
+  it('returns an empty body for quote-only segments', () => {
+    expect(joinChatQuoteTextSegments([
+      { kind: 'quote', quote: { text: 'selected' } },
+    ])).toBe('');
   });
 });
 

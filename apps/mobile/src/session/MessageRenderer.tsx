@@ -54,6 +54,7 @@ import { LegendList, type LegendListRef } from '@legendapp/list/react-native';
 import { buildComposerTouchLayout } from '@/session/composerTouchLayout';
 import { useFoldableExpandedState } from '@/session/expandedBlockMemory';
 import {
+  joinChatQuoteTextSegments,
   parseChatQuoteSegments,
   type ChatQuote,
 } from '@lizi/maker-shared/chat-quotes';
@@ -1377,9 +1378,7 @@ function MessageBubble({
     segment.kind === 'quote' ? [segment.quote] : []
   ));
   const bubbleBody = messageQuotes.length > 0
-    ? quoteSegments
-        .flatMap((segment) => (segment.kind === 'text' ? [segment.text] : []))
-        .join('\n\n')
+    ? joinChatQuoteTextSegments(quoteSegments)
     : item.message.body;
   const presentation = summarizeMessageBubblePresentation({
     align: item.message.align,

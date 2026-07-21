@@ -13,7 +13,7 @@ describe('mobile cross-device quote wiring', () => {
     expect(bubbleSource).toContain('item.message.quotesEncoded === true');
     expect(bubbleSource).toContain('allowLegacyInterleavedQuotes: true');
     expect(bubbleSource).toContain("segment.kind === 'quote' ? [segment.quote] : []");
-    expect(bubbleSource).toContain("segment.kind === 'text' ? [segment.text] : []");
+    expect(bubbleSource).toContain('joinChatQuoteTextSegments(quoteSegments)');
     expect(bubbleSource).toContain('actions.onPreviewRewind?.(clientId, {');
     expect(bubbleSource).toContain('{ orderedBody: item.message.body }');
   });

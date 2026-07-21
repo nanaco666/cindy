@@ -37,6 +37,7 @@ import { isRemoteFileOrigin, originDeviceId, toRemoteMediaOrigin } from '@/lib/s
 import { rewriteToRemoteMediaOrigin } from '../../../shared/remoteMediaUrl';
 import { ImageLightbox } from './ImageLightbox';
 import {
+  joinChatQuoteTextSegments,
   parseChatQuoteSegments,
   stripChatQuoteMarkerLines,
   type ChatQuoteSegment,
@@ -576,10 +577,7 @@ export function UserMessage({
   );
   // 意识指令等既有语义判断只看用户自己的正文,不把引用原文误识别成命令。
   const bubbleBody = useMemo(
-    () => quoteSegments
-      .filter((segment): segment is Extract<ChatQuoteSegment, { kind: 'text' }> => segment.kind === 'text')
-      .map((segment) => segment.text)
-      .join('\n\n'),
+    () => joinChatQuoteTextSegments(quoteSegments),
     [quoteSegments],
   );
   const inlineQuoteCount = quoteSegments.reduce(
