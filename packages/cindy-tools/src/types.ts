@@ -54,7 +54,7 @@ export type CindyGhostCallResult =
        */
       producedMedia?: string[];
     }
-  | { ok: false; errorCode: CindyGhostCallErrorCode; message: string };
+  | { ok: false; errorCode: CindyGhostCallErrorCode | (string & {}); message: string };
 
 /** ghost_forge_pack 的结构化失败分类(host 侧产生,原样透传给 agent)。 */
 export type CindyForgePackErrorCode =

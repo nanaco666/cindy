@@ -2106,7 +2106,7 @@ cindy.onHostMessage(async function (msg) {
       type: 'tool-result',
       callId: msg.callId,
       ok: false,
-      message: JSON.stringify({ ok: false, errorCode: 'UNKNOWN_TOOL', message: '未知工具:' + msg.tool }),
+      message: '未知工具:' + msg.tool,
     });
     return;
   }
@@ -2115,11 +2115,17 @@ cindy.onHostMessage(async function (msg) {
     var r = await handler(args, msg.callId);
     cindy.send({ type: 'tool-result', callId: msg.callId, ok: true, result: r });
   } catch (err) {
-    // 结构化错误(toolError)整体 JSON 交卷:errorCode/hint 一并给 AI 走分支;
-    // 意外异常收敛为 INTERNAL。
+    // 结构化错误码单独交卷，意外异常仍收敛为 INTERNAL。
     var payload = err && err.ghost
       ? err.ghost
       : { ok: false, errorCode: 'INTERNAL', message: '执行失败:' + (err && err.message ? err.message : String(err)) };
-    cindy.send({ type: 'tool-result', callId: msg.callId, ok: false, message: JSON.stringify(payload) });
+    var failure = {
+      type: 'tool-result',
+      callId: msg.callId,
+      ok: false,
+      message: typeof payload.message === 'string' ? payload.message : '插件执行失败',
+    };
+    if (payload.errorCode && payload.errorCode !== 'INTERNAL') failure.errorCode = payload.errorCode;
+    cindy.send(failure);
   }
 });

@@ -39,6 +39,7 @@ function sleep(ms) {
  * 400=INVALID_SITE_NAME / 403=按 hint 分 IP_BLOCKED 与 PERMISSION_DENIED /
  * 404=NOT_FOUND / 409=SITE_NAME_TAKEN / 429=RATE_LIMITED / 其余=PAGES_API_ERROR。
  */
+// HTTP 400 仅在上游明确给出站点名错误时映射为 INVALID_SITE_NAME，否则使用 PAGES_API_ERROR。
 function mapError(status, parsed) {
   var obj = parsed && typeof parsed === 'object' ? parsed : {};
   var hint = typeof obj.hint === 'string' ? obj.hint : undefined;
@@ -46,8 +47,9 @@ function mapError(status, parsed) {
     (typeof obj.message === 'string' && obj.message) ||
     (typeof obj.error === 'string' && obj.error) ||
     'HTTP ' + status;
+  var structuredCode = extractStructuredErrorCode(obj);
   var errorCode;
-  if (status === 400) errorCode = 'INVALID_SITE_NAME';
+  if (structuredCode) errorCode = structuredCode;
   else if (status === 403) errorCode = /ip|whitelist|公司|内网/i.test(message + (hint || '')) ? 'IP_BLOCKED' : 'PERMISSION_DENIED';
   else if (status === 404) errorCode = 'NOT_FOUND';
   else if (status === 409) errorCode = 'SITE_NAME_TAKEN';
@@ -56,6 +58,44 @@ function mapError(status, parsed) {
   var out = { ok: false, errorCode: errorCode, message: message, httpStatus: status };
   if (hint) out.hint = hint;
   return out;
+}
+
+var PAGES_ERROR_CODE_ALIASES = {
+  INVALID_SITE: 'INVALID_SITE_NAME',
+  SITE_NAME_INVALID: 'INVALID_SITE_NAME',
+  NAME_TAKEN: 'SITE_NAME_TAKEN',
+  RATE_LIMIT: 'RATE_LIMITED',
+};
+var PAGES_ERROR_CODES = {
+  INVALID_SITE_NAME: true,
+  IP_BLOCKED: true,
+  PERMISSION_DENIED: true,
+  NOT_FOUND: true,
+  SITE_NAME_TAKEN: true,
+  RATE_LIMITED: true,
+  PAGES_API_ERROR: true,
+};
+
+function normalizeStructuredErrorCode(value) {
+  if (typeof value !== 'string') return undefined;
+  var code = value.trim().toUpperCase().replace(/[ -]+/g, '_');
+  code = PAGES_ERROR_CODE_ALIASES[code] || code;
+  return PAGES_ERROR_CODES[code] ? code : undefined;
+}
+
+function extractStructuredErrorCode(obj) {
+  var candidates = [obj.errorCode, obj.error_code, obj.code, obj.type];
+  if (obj.error && typeof obj.error === 'object') {
+    candidates.push(obj.error.errorCode, obj.error.error_code, obj.error.code, obj.error.type);
+  }
+  if (Array.isArray(obj.errors) && obj.errors.length > 0 && obj.errors[0] && typeof obj.errors[0] === 'object') {
+    candidates.push(obj.errors[0].errorCode, obj.errors[0].error_code, obj.errors[0].code, obj.errors[0].type);
+  }
+  for (var i = 0; i < candidates.length; i += 1) {
+    var normalized = normalizeStructuredErrorCode(candidates[i]);
+    if (normalized) return normalized;
+  }
+  return undefined;
 }
 
 /** 发一次请求并收敛成 { ok, data } | { ok:false, errorCode, ... }。 */
@@ -339,13 +379,15 @@ cindy.onHostMessage(async function (msg) {
     if (r && r.ok) {
       cindy.send({ type: 'tool-result', callId: msg.callId, ok: true, result: r });
     } else {
-      // 结构化错误整体作为失败消息交卷:errorCode/hint 一并给 AI 走分支。
-      cindy.send({
+      // 结构化错误码单独交卷，避免调用方解析 message 中的嵌套 JSON。
+      var failure = {
         type: 'tool-result',
         callId: msg.callId,
         ok: false,
-        message: JSON.stringify(r),
-      });
+        message: r && typeof r.message === 'string' ? r.message : '插件执行失败',
+      };
+      if (r && typeof r.errorCode === 'string') failure.errorCode = r.errorCode;
+      cindy.send(failure);
     }
   } catch (err) {
     cindy.send({
