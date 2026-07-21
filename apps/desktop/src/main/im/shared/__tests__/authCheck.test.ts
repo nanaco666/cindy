@@ -3,8 +3,11 @@ import { describe, expect, it, vi } from 'vitest';
 import type { AgentKind } from '@lizi/maker-core';
 import type { ProviderView } from '@lizi/model-providers';
 
+import { ui as discordUi } from '../../discord/uiText';
+import { ui as feishuUi } from '../../feishu/uiText';
 import {
   checkImRouteAuth,
+  checkImRouteAuthDetailed,
   hasAuthForImRoute,
   type ImAuthCheckDeps,
 } from '../authCheck';
@@ -73,12 +76,44 @@ function provider(
 }
 
 describe('checkImRouteAuth', () => {
+  it.each([
+    ['Discord', discordUi],
+    ['Feishu', feishuUi],
+  ])('does not recommend /new for an attached %s session', (_channel, ui) => {
+    const message = ui.agent.authMissing?.({
+      agentKind: 'codex',
+      model: 'gpt-5.5',
+      providerId: 'custom-openai',
+      providerLabel: 'My OpenAI',
+      missing: 'provider-key',
+      attached: true,
+    });
+
+    expect(message).toContain('Settings');
+    expect(message).not.toContain('/new');
+  });
+
   it('reports gateway-key when a gateway route has no XD key', async () => {
     const providerSnapshot = [provider({ id: 'xd', strategy: 'gateway-key' })];
 
     await expect(checkImRouteAuth(row(), providerSnapshot, deps())).resolves.toEqual({
       ok: false,
       missing: 'gateway-key',
+    });
+  });
+
+  it('keeps the persisted provider context for an explainable failure', async () => {
+    const providerSnapshot = [
+      provider({ id: 'custom-anthropic', name: '我的 Anthropic', strategy: 'api-key-header' }),
+    ];
+
+    await expect(
+      checkImRouteAuthDetailed(row({ providerId: 'custom-anthropic' }), providerSnapshot, deps()),
+    ).resolves.toEqual({
+      ok: false,
+      missing: 'provider-key',
+      providerId: 'custom-anthropic',
+      providerLabel: '我的 Anthropic',
     });
   });
 
@@ -110,7 +145,13 @@ describe('checkImRouteAuth', () => {
 
   it('passes oauth-token routes when the provider is connected（回归：无 XD key/agent OAuth 环境不误判未鉴权）', async () => {
     const providerSnapshot = [
-      provider({ id: 'acme', source: 'user', strategy: 'oauth-token', connected: true, modelId: 'acme-1' }),
+      provider({
+        id: 'acme',
+        source: 'user',
+        strategy: 'oauth-token',
+        connected: true,
+        modelId: 'acme-1',
+      }),
     ];
 
     // deps 缺省无 XD key、agent OAuth 未登录——oauth-token 由 host 注入 token，不应落 fallback 被阻断。
@@ -124,7 +165,13 @@ describe('checkImRouteAuth', () => {
 
   it('reports provider-disconnected for oauth-token routes when the provider is not connected', async () => {
     const providerSnapshot = [
-      provider({ id: 'acme', source: 'user', strategy: 'oauth-token', connected: false, modelId: 'acme-1' }),
+      provider({
+        id: 'acme',
+        source: 'user',
+        strategy: 'oauth-token',
+        connected: false,
+        modelId: 'acme-1',
+      }),
     ];
 
     await expect(

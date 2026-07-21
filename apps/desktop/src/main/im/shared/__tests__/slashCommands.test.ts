@@ -44,7 +44,6 @@ vi.mock('../controlState', () => ({
   enterControl: vi.fn(),
 }));
 
-import type { AgentKind } from '@lizi/maker-core';
 import type { ChannelIM } from 'lizi-im';
 
 import { ui } from '../../feishu/uiText';
@@ -91,10 +90,12 @@ function makeTurnRunner(overrides: Partial<ImTurnRunner> = {}): ImTurnRunner {
   } as unknown as ImTurnRunner;
 }
 
-function makeHarness(args: {
-  repo?: ImSessionRepo;
-  turnRunner?: ImTurnRunner;
-} = {}) {
+function makeHarness(
+  args: {
+    repo?: ImSessionRepo;
+    turnRunner?: ImTurnRunner;
+  } = {},
+) {
   const adapter: ImChannelAdapter = {
     channel: 'feishu',
     im: {
@@ -135,7 +136,7 @@ describe('IM slash commands', () => {
     mocks.sendInteractiveCard.mockResolvedValue({ messageId: 'card-1' });
     mocks.listProviders.mockResolvedValue([]);
     mocks.getMaker.mockReturnValue({
-      getCapabilities: (_agent: AgentKind) => ({ permissionModes: ['auto'] }),
+      getCapabilities: () => ({ permissionModes: ['auto'] }),
     });
   });
 
@@ -158,6 +159,49 @@ describe('IM slash commands', () => {
     expect(repo.createSession).not.toHaveBeenCalled();
     expect(mocks.resetSessionToDefaults).not.toHaveBeenCalled();
     expect(mocks.sendMarkdownText).toHaveBeenCalledWith('ou_user', ui.agent.apiKeyMissing);
+  });
+
+  it('explains the persisted provider when /new defaults are unauthenticated', async () => {
+    const prepared = { ...defaultRow, agentKind: 'codex' as const, model: 'gpt-5.5' };
+    const repo = makeRepo({ prepareNewSession: vi.fn(async () => prepared) });
+    const turnRunner = makeTurnRunner({
+      getAuthStatusForRoute: vi.fn(async () => ({
+        ok: false,
+        missing: 'provider-key' as const,
+        providerId: 'custom-openai',
+        providerLabel: '我的 OpenAI',
+      })),
+    });
+    const { handlers } = makeHarness({ repo, turnRunner });
+
+    await handlers.handleSlashCommand('/new', { botContextId: 'bot', userId: 'ou_user' });
+
+    expect(mocks.sendMarkdownText).toHaveBeenCalledWith(
+      'ou_user',
+      ui.agent.authMissing?.({
+        agentKind: 'codex',
+        model: 'gpt-5.5',
+        providerId: 'custom-openai',
+        providerLabel: '我的 OpenAI',
+        missing: 'provider-key',
+      }),
+    );
+    expect(mocks.resetSessionToDefaults).not.toHaveBeenCalled();
+  });
+
+  it('resets an existing session to the current defaults after /new', async () => {
+    const prepared = { ...defaultRow, agentKind: 'codex' as const, model: 'gpt-5.5' };
+    const repo = makeRepo({ prepareNewSession: vi.fn(async () => prepared) });
+    const { handlers } = makeHarness({ repo });
+
+    await handlers.handleSlashCommand('/new', { botContextId: 'bot', userId: 'ou_user' });
+
+    expect(mocks.resetSessionToDefaults).toHaveBeenCalledWith(
+      'feishu-session',
+      expect.anything(),
+      prepared,
+    );
+    expect(mocks.sendMarkdownText).toHaveBeenCalledWith('ou_user', ui.slash.new);
   });
 
   it('does not send /model picker when creating the target session would fail auth', async () => {

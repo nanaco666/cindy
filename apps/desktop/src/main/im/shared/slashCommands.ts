@@ -95,13 +95,24 @@ export function createSlashHandlers(
           return true;
         }
         const prepared = await repo.prepareNewSession(ctx.botContextId, ctx.userId);
-        if (!(await turnRunner.hasAuthForRoute(prepared))) {
-          await safeSendText(ctx.userId, ui.agent.apiKeyMissing);
+        const auth = await turnRunner.getAuthStatusForRoute?.(prepared);
+        if (auth ? !auth.ok : !(await turnRunner.hasAuthForRoute(prepared))) {
+          await safeSendText(
+            ctx.userId,
+            auth && ui.agent.authMissing
+              ? ui.agent.authMissing({
+                  ...auth,
+                  agentKind: prepared.agentKind,
+                  model: prepared.model,
+                })
+              : ui.agent.apiKeyMissing,
+          );
           return true;
         }
         // 找到当前 IM 会话行；没有历史会话时按已通过认证的默认值创建一行。
         const existing = await repo.findActiveSession(ctx.botContextId, ctx.userId);
-        const row = existing ?? await repo.createSession(ctx.botContextId, ctx.userId, undefined, prepared);
+        const row =
+          existing ?? (await repo.createSession(ctx.botContextId, ctx.userId, undefined, prepared));
         if (existing) {
           await resetSessionToDefaults(row.id, adapter.config, prepared);
         }
@@ -154,9 +165,7 @@ export function createSlashHandlers(
           currentEffort: row.effort,
           defaultEffortByModel: target.attached
             ? Object.fromEntries(
-                sections.flatMap((s) =>
-                  s.models.map((m) => [m.id, m.defaultEffort ?? row.effort]),
-                ),
+                sections.flatMap((s) => s.models.map((m) => [m.id, m.defaultEffort ?? row.effort])),
               )
             : undefined,
         });
@@ -269,10 +278,7 @@ export function createSlashHandlers(
           await safeSendText(ctx.userId, threadUi.perThreadConfigUnsupported);
           return true;
         }
-        const target = await turnRunner.resolveRouteTarget(
-          ctx.botContextId,
-          ctx.userId,
-        );
+        const target = await turnRunner.resolveRouteTarget(ctx.botContextId, ctx.userId);
         if (!target) {
           await safeSendText(ctx.userId, ui.agent.apiKeyMissing);
           return true;

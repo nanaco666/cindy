@@ -41,6 +41,21 @@ export const ui = {
     sendInternalError: (errMsg: string) => `❌ 内部出 bug 了：${errMsg}`,
     apiKeyMissing:
       '⚠️ Cindy AI Key 还没配呢~\n去 desktop 的 Settings → 模型供应商里连接 Cindy AI，再来 ping 我',
+    authMissing: ({ providerLabel, providerId, missing, agentKind, model, attached }) => {
+      const provider = providerLabel ?? providerId ?? '当前供应商';
+      const reason =
+        missing === 'gateway-key'
+          ? '需要先配置 Cindy AI Key'
+          : missing === 'provider-key'
+            ? '还没有配置该供应商的 API Key'
+            : missing === 'provider-disconnected'
+              ? '未连接或连接已失效'
+              : `需要先登录 ${agentKind} 凭证`;
+      const message = `⚠️ 当前 Discord 会话使用供应商「${provider}」（${model}），${reason}。`;
+      return attached
+        ? `${message}\n请在 desktop 的 Settings → 模型供应商中修复认证后，直接继续发送消息。`
+        : `${message}\n“新会话配置”只影响新会话；修改后请发送 \`/new\`，再继续聊天。`;
+    },
     controlInProgress:
       '🎮 你 /ctr 还在选择中呢 — 先把上面那张卡片操作完（或点 🚪 退出），再来发别的~',
     credentialBusy:
