@@ -11,6 +11,10 @@ import {
   uploadMobileAttachmentFromFile,
 } from '@/session/mobileAttachmentUpload';
 
+const readFileChunk = vi.fn(async (_uri: string, _position: number, length: number) =>
+  Buffer.alloc(length, 0x78).toString('base64'),
+);
+
 describe('mobileAttachmentUpload', () => {
   it('requests a device-link media presign-put with desktop-compatible file metadata', async () => {
     const apiFetch = vi.fn(async () => ({
@@ -19,11 +23,17 @@ describe('mobileAttachmentUpload', () => {
       expiresAt: '2026-06-16T00:00:00.000Z',
     }));
 
-    const result = await presignMobileAttachmentUpload({
-      name: 'spec.pdf',
-      size: 4096,
-      mimeType: 'application/pdf',
-    }, { token: 'token-1', deps: { apiFetch: apiFetch as unknown as typeof apiFetchRaw } });
+    const result = await presignMobileAttachmentUpload(
+      {
+        name: 'spec.pdf',
+        size: 4096,
+        mimeType: 'application/pdf',
+      },
+      {
+        token: 'token-1',
+        deps: { apiFetch: apiFetch as unknown as typeof apiFetchRaw },
+      },
+    );
 
     expect(apiFetch).toHaveBeenCalledWith('/api/device-link/media/presign-put', {
       baseUrl: DEVICE_LINK_API_BASE_URL,
@@ -75,28 +85,38 @@ describe('mobileAttachmentUpload', () => {
       statusText: 'OK',
     } as Response));
 
-    const attachment = await uploadMobileAttachment({
-      name: 'photo.png',
-      size: 12,
-      mimeType: 'image/png',
-    }, new Blob(['image'], { type: 'image/png' }), {
-      token: 'token-1',
-      id: 'mobile-upload-1',
-      deps: { apiFetch: apiFetch as unknown as typeof apiFetchRaw, fetch: fetchPut },
-    });
+    const attachment = await uploadMobileAttachment(
+      {
+        name: 'photo.png',
+        size: 5,
+        mimeType: 'image/png',
+      },
+      new Blob(['image'], { type: 'image/png' }),
+      {
+        token: 'token-1',
+        id: 'mobile-upload-1',
+        deps: {
+          apiFetch: apiFetch as unknown as typeof apiFetchRaw,
+          fetch: fetchPut,
+        },
+      },
+    );
 
     expect(attachment).toMatchObject({
       id: 'mobile-upload-1',
       name: 'photo.png',
       category: 'image',
       mimeType: 'image/png',
-      size: 12,
+      size: 5,
+      sha256: expect.stringMatching(/^[0-9a-f]{64}$/),
     });
     expect(attachment.url).toBe(attachment.path);
     expect(parseAttachmentOssRef(attachment.path)).toEqual({
       ossKey: 'cindy/device-link/user-1/photo.png',
       mimeType: 'image/png',
       originalName: 'photo.png',
+      size: 5,
+      sha256: expect.stringMatching(/^[0-9a-f]{64}$/),
     });
   });
 
@@ -104,14 +124,23 @@ describe('mobileAttachmentUpload', () => {
     const apiFetch = vi.fn();
     const fetchPut = vi.fn();
 
-    await expect(uploadMobileAttachment({
-      name: 'archive.zip',
-      size: 4096,
-      mimeType: 'application/zip',
-    }, new Blob(['zip'], { type: 'application/zip' }), {
-      token: 'token-1',
-      deps: { apiFetch: apiFetch as unknown as typeof apiFetchRaw, fetch: fetchPut },
-    })).rejects.toThrow('这个本机文件类型暂不支持作为附件发送。');
+    await expect(
+      uploadMobileAttachment(
+        {
+          name: 'archive.zip',
+          size: 4096,
+          mimeType: 'application/zip',
+        },
+        new Blob(['zip'], { type: 'application/zip' }),
+        {
+          token: 'token-1',
+          deps: {
+            apiFetch: apiFetch as unknown as typeof apiFetchRaw,
+            fetch: fetchPut,
+          },
+        },
+      ),
+    ).rejects.toThrow('这个本机文件类型暂不支持作为附件发送。');
 
     // 关键:校验发生在网络调用之前,绝不能 presign / PUT,否则会留下孤儿对象。
     expect(apiFetch).not.toHaveBeenCalled();
@@ -165,15 +194,23 @@ describe('mobileAttachmentUpload', () => {
     }));
     const uploadFile = vi.fn(async () => ({ status: 200 }));
 
-    const attachment = await uploadMobileAttachmentFromFile({
-      name: 'photo.png',
-      size: 12,
-      mimeType: 'image/png',
-    }, 'file:///tmp/photo.png', {
-      token: 'token-1',
-      id: 'mobile-upload-2',
-      deps: { apiFetch: apiFetch as unknown as typeof apiFetchRaw, uploadFile },
-    });
+    const attachment = await uploadMobileAttachmentFromFile(
+      {
+        name: 'photo.png',
+        size: 12,
+        mimeType: 'image/png',
+      },
+      'file:///tmp/photo.png',
+      {
+        token: 'token-1',
+        id: 'mobile-upload-2',
+        deps: {
+          apiFetch: apiFetch as unknown as typeof apiFetchRaw,
+          uploadFile,
+          readFileChunk,
+        },
+      },
+    );
 
     expect(uploadFile).toHaveBeenCalledWith('https://oss.example/upload', 'file:///tmp/photo.png', {
       'Content-Type': 'image/png',
@@ -185,12 +222,57 @@ describe('mobileAttachmentUpload', () => {
       category: 'image',
       mimeType: 'image/png',
       size: 12,
+      sha256: expect.stringMatching(/^[0-9a-f]{64}$/),
     });
     expect(parseAttachmentOssRef(attachment.path)).toEqual({
       ossKey: 'cindy/device-link/user-1/photo.png',
       mimeType: 'image/png',
       originalName: 'photo.png',
+      size: 12,
+      sha256: expect.stringMatching(/^[0-9a-f]{64}$/),
     });
+  });
+
+  it('hashes and uploads the same immutable snapshot file', async () => {
+    const apiFetch = vi.fn(async () => ({
+      putUrl: 'https://oss.example/upload',
+      key: 'xdt-maker/device-link/user-1/photo.png',
+      expiresAt: '2026-06-16T00:00:00.000Z',
+    }));
+    const uploadFile = vi.fn(async () => ({ status: 200 }));
+    const cleanup = vi.fn(async () => undefined);
+    const snapshotFile = vi.fn(async () => ({
+      uri: 'file:///cache/upload-snapshot.png',
+      size: 12,
+      cleanup,
+    }));
+    const snapshotRead = vi.fn(async (uri: string, _position: number, length: number) => {
+      expect(uri).toBe('file:///cache/upload-snapshot.png');
+      return Buffer.alloc(length, 0x78).toString('base64');
+    });
+
+    await uploadMobileAttachmentFromFile(
+      { name: 'photo.png', size: 12, mimeType: 'image/png' },
+      'file:///tmp/mutable-photo.png',
+      {
+        token: 'token-1',
+        deps: {
+          apiFetch: apiFetch as unknown as typeof apiFetchRaw,
+          uploadFile,
+          readFileChunk: snapshotRead,
+          snapshotFile,
+        },
+      },
+    );
+
+    expect(snapshotFile).toHaveBeenCalledWith('file:///tmp/mutable-photo.png');
+    expect(uploadFile).toHaveBeenCalledWith(
+      'https://oss.example/upload',
+      'file:///cache/upload-snapshot.png',
+      expect.any(Object),
+      { signal: expect.any(AbortSignal) },
+    );
+    expect(cleanup).toHaveBeenCalledTimes(1);
   });
 
   it('falls back to application/octet-stream in BOTH presign and PUT headers when mimeType is missing', async () => {
@@ -204,22 +286,40 @@ describe('mobileAttachmentUpload', () => {
     }));
     const uploadFile = vi.fn(async () => ({ status: 200 }));
 
-    await uploadMobileAttachmentFromFile({
-      name: 'scan.pdf',
-      size: 128,
-      mimeType: undefined,
-    }, 'file:///tmp/scan.pdf', {
-      token: 'token-1',
-      deps: { apiFetch: apiFetch as unknown as typeof apiFetchRaw, uploadFile },
-    });
+    await uploadMobileAttachmentFromFile(
+      {
+        name: 'scan.pdf',
+        size: 128,
+        mimeType: undefined,
+      },
+      'file:///tmp/scan.pdf',
+      {
+        token: 'token-1',
+        deps: {
+          apiFetch: apiFetch as unknown as typeof apiFetchRaw,
+          uploadFile,
+          readFileChunk,
+        },
+      },
+    );
 
-    expect(apiFetch).toHaveBeenCalledWith('/api/device-link/media/presign-put', expect.objectContaining({
-      body: expect.objectContaining({ contentType: 'application/octet-stream' }),
-    }));
-    expect(uploadFile).toHaveBeenCalledWith('https://oss.example/upload', 'file:///tmp/scan.pdf', {
-      'Content-Type': 'application/octet-stream',
-      'x-oss-object-acl': 'private',
-    }, { signal: expect.any(AbortSignal) });
+    expect(apiFetch).toHaveBeenCalledWith(
+      '/api/device-link/media/presign-put',
+      expect.objectContaining({
+        body: expect.objectContaining({
+          contentType: 'application/octet-stream',
+        }),
+      }),
+    );
+    expect(uploadFile).toHaveBeenCalledWith(
+      'https://oss.example/upload',
+      'file:///tmp/scan.pdf',
+      {
+        'Content-Type': 'application/octet-stream',
+        'x-oss-object-acl': 'private',
+      },
+      { signal: expect.any(AbortSignal) },
+    );
   });
 
   it('surfaces the OSS error code from the native file PUT failure body', async () => {
@@ -237,14 +337,23 @@ describe('mobileAttachmentUpload', () => {
     const apiFetch = vi.fn();
     const uploadFile = vi.fn();
 
-    await expect(uploadMobileAttachmentFromFile({
-      name: 'archive.zip',
-      size: 4096,
-      mimeType: 'application/zip',
-    }, 'file:///tmp/archive.zip', {
-      token: 'token-1',
-      deps: { apiFetch: apiFetch as unknown as typeof apiFetchRaw, uploadFile },
-    })).rejects.toThrow('这个本机文件类型暂不支持作为附件发送。');
+    await expect(
+      uploadMobileAttachmentFromFile(
+        {
+          name: 'archive.zip',
+          size: 4096,
+          mimeType: 'application/zip',
+        },
+        'file:///tmp/archive.zip',
+        {
+          token: 'token-1',
+          deps: {
+            apiFetch: apiFetch as unknown as typeof apiFetchRaw,
+            uploadFile,
+          },
+        },
+      ),
+    ).rejects.toThrow('这个本机文件类型暂不支持作为附件发送。');
 
     expect(apiFetch).not.toHaveBeenCalled();
     expect(uploadFile).not.toHaveBeenCalled();
@@ -373,11 +482,16 @@ describe('mobileAttachmentUpload', () => {
     const failingFetch = vi.fn(async () => {
       throw new Error('network down');
     });
-    const path = buildAttachmentOssRef({ ossKey: 'cindy/device-link/user-1/photo.png' });
-    discardMobileUploadedAttachment({ path }, {
-      getToken: async () => 'token-1',
-      deps: { apiFetch: failingFetch as unknown as typeof apiFetchRaw },
+    const path = buildAttachmentOssRef({
+      ossKey: 'cindy/device-link/user-1/photo.png',
     });
+    discardMobileUploadedAttachment(
+      { path },
+      {
+        getToken: async () => 'token-1',
+        deps: { apiFetch: failingFetch as unknown as typeof apiFetchRaw },
+      },
+    );
     await vi.waitFor(() => expect(failingFetch).toHaveBeenCalled());
   });
 });

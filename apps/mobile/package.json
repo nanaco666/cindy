@@ -11,6 +11,7 @@
     "@lizi/maker-shared": "workspace:*",
     "@lizi/model-providers": "workspace:*",
     "@lizi/voice-input-core": "workspace:*",
+    "@noble/hashes": "^1.8.0",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-native-google-signin/google-signin": "16.1.2",
     "@types/pako": "^2.0.4",

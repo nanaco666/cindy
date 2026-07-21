@@ -93,6 +93,8 @@ export type RemoteAttachmentCategory = 'image' | 'pdf' | 'text' | 'office';
 export interface RemoteFileRef {
   name: string;
   path: string;
+  size?: number;
+  sha256?: string;
 }
 
 /**
@@ -103,8 +105,22 @@ export interface RemoteFileRef {
  * - name:旧版手机端 persist 用的字段名,仅为读取存量数据保留,读侧两端均兼容。
  */
 export type RemoteImageRef =
-  | { url: string; originalName: string; name?: string; mimeType?: string }
-  | { url: string; originalName?: never; name: string; mimeType?: string };
+  | {
+      url: string;
+      originalName: string;
+      name?: string;
+      mimeType?: string;
+      size?: number;
+      sha256?: string;
+    }
+  | {
+      url: string;
+      originalName?: never;
+      name: string;
+      mimeType?: string;
+      size?: number;
+      sha256?: string;
+    };
 
 export interface RemoteSerializedAttachment {
   id: string;
@@ -112,6 +128,7 @@ export interface RemoteSerializedAttachment {
   path: string;
   ext: string;
   size: number;
+  sha256?: string;
   category: RemoteAttachmentCategory;
   mimeType: string;
   url?: string;

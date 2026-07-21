@@ -78,7 +78,12 @@ export interface ChatFileDeps {
   /** device workdir 外:被控端 media:fetch(任意绝对路径上 OSS)。 */
   deviceMediaFetch(deviceId: string, url: string): Promise<{ ossKey: string; size: number }>;
   /** OSS 对象流式直下到本地文件。 */
-  downloadToFile(key: string, destPath: string): Promise<void>;
+  downloadToFile(
+    key: string,
+    destPath: string,
+    expected?: undefined,
+    onProgress?: (downloadedBytes: number) => void,
+  ): Promise<void>;
   /** 用后删 OSS 对象(best-effort)。 */
   removeRemote(key: string): void;
   fetchToCache: typeof fetchRemoteFileToCache;
@@ -261,7 +266,9 @@ export async function fetchChatFile(
         consumed = true;
         progress(0, fetched.size);
         try {
-          await deps.downloadToFile(fetched.ossKey, dest);
+          await deps.downloadToFile(fetched.ossKey, dest, undefined, (downloaded) => {
+            progress(Math.min(downloaded, fetched.size), fetched.size);
+          });
           progress(fetched.size, fetched.size);
         } finally {
           deps.removeRemote(fetched.ossKey);

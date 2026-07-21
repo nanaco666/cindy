@@ -13,6 +13,8 @@
  * images / files lists, so no server-side migration is needed.
  */
 
+import { isValidAttachmentIntegrity } from '@lizi/device-link';
+
 export interface ImageRef {
   /** Custom-protocol URL: 'xdt-image://{sessionId}/{filename}'. */
   url: string;
@@ -20,6 +22,10 @@ export interface ImageRef {
   mimeType: string;
   /** Original filename — used as alt text and missing-image placeholder label. */
   originalName: string;
+  /** 发送端声明的原始上传字节数；与 sha256 成对出现。 */
+  size?: number;
+  /** 发送端声明的上传字节 SHA-256。 */
+  sha256?: string;
   /**
    * 非破坏性标注(可选,向后兼容):`url` 是烧录合成图(定格模型所见)时,
    * 这里指向未烧录**原图**的缓存 url。历史图"再编辑"用它 + strokes 还原
@@ -42,6 +48,8 @@ export interface ImageRef {
 export interface FileRef {
   name: string;
   path: string;
+  size?: number;
+  sha256?: string;
 }
 
 export interface UserMessageContent {
@@ -118,9 +126,7 @@ export function parseUserContent(content: unknown): UserMessageContent {
     const obj = content as Record<string, unknown>;
     if (typeof obj.text === 'string') {
       const rawImages = Array.isArray(obj.images) ? obj.images : [];
-      const images = rawImages
-        .map(coerceImageRef)
-        .filter((ref): ref is ImageRef => ref !== null);
+      const images = rawImages.map(coerceImageRef).filter((ref): ref is ImageRef => ref !== null);
       const rawFiles = Array.isArray(obj.files) ? obj.files : [];
       const files = rawFiles.filter(isValidFileRef);
       return {
@@ -165,6 +171,11 @@ function coerceImageRef(x: unknown): ImageRef | null {
         : null;
   if (originalName === null) return null;
   const ref: ImageRef = { url: o.url, mimeType: o.mimeType, originalName };
+  const integrity = { size: o.size, sha256: o.sha256 };
+  if (isValidAttachmentIntegrity(integrity)) {
+    ref.size = integrity.size;
+    ref.sha256 = integrity.sha256;
+  }
   // 非破坏性标注字段:形状校验通过才成对透传(review P2:此前 coerce 只取
   // 三字段,重载 / 从存储取回后历史图丢失可再编辑数据)。半份数据没有意义,
   // 任一不合法就整体丢弃,退化为普通烧录图展示。
@@ -197,7 +208,12 @@ function coerceAnnotationStrokes(
       if (!p || typeof p !== 'object') return null;
       const px = (p as { x?: unknown }).x;
       const py = (p as { y?: unknown }).y;
-      if (typeof px !== 'number' || typeof py !== 'number' || !Number.isFinite(px) || !Number.isFinite(py)) {
+      if (
+        typeof px !== 'number' ||
+        typeof py !== 'number' ||
+        !Number.isFinite(px) ||
+        !Number.isFinite(py)
+      ) {
         return null;
       }
       copied.push({ x: px, y: py });
@@ -210,7 +226,13 @@ function coerceAnnotationStrokes(
 function isValidFileRef(x: unknown): x is FileRef {
   if (!x || typeof x !== 'object') return false;
   const o = x as Record<string, unknown>;
-  return typeof o.name === 'string' && typeof o.path === 'string';
+  if (typeof o.name !== 'string' || typeof o.path !== 'string') return false;
+  const hasSize = o.size !== undefined;
+  const hasSha256 = o.sha256 !== undefined;
+  return (
+    (!hasSize && !hasSha256) ||
+    (hasSize && hasSha256 && isValidAttachmentIntegrity({ size: o.size, sha256: o.sha256 }))
+  );
 }
 
 /**
