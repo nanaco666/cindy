@@ -12,7 +12,7 @@
 
 import path from 'node:path';
 import fs from 'node:fs/promises';
-import { eq } from 'drizzle-orm';
+import { and, eq, ne } from 'drizzle-orm';
 
 import {
   clearSnapshotRef,
@@ -25,6 +25,7 @@ import { applyWorktreeIncludeFile } from './includePatternsEngine';
 import { pathKey } from './liveSessionRefs';
 import {
   getWorktreeRestoreMutation,
+  getWorktreeRestoreMutationVersion,
   withWorktreeRestoreMutation,
 } from './restoreLock';
 import { copyClaudeSiviDirs } from './WorktreeManager';
@@ -38,7 +39,8 @@ import type { WorktreeMeta } from './types';
 
 const log = createLogger('worktreeRestore');
 const restoreInFlight = new Map<string, Promise<WorktreeRestoreResult>>();
-const sendReadyWorktrees = new Set<string>();
+const restoreInFlightVersions = new Map<string, number>();
+const sendReadyWorktrees = new Map<string, number>();
 
 export type WorktreeRestoreStatus =
   /** worktree 目录还在，无需恢复。 */
@@ -109,6 +111,14 @@ async function pathExists(p: string): Promise<boolean> {
   }
 }
 
+async function pathIsDirectory(p: string): Promise<boolean> {
+  try {
+    return (await fs.stat(p)).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
 async function readSessionWorktreeBinding(sessionId: string): Promise<SessionWorktreeBinding | null> {
   const db = getDbClient().drizzle;
   const rows = await db
@@ -133,10 +143,19 @@ async function readWorktreeOwnerSessionId(worktreePath: string): Promise<string 
     .select({
       id: sessions.id,
       worktreePath: sessions.worktreePath,
+      status: sessions.status,
     })
     .from(sessions)
-    .where(eq(sessions.worktreePath, worktreePath));
-  return rows.find((row) => pathKey(row.worktreePath) === worktreeKey)?.id ?? null;
+    .where(and(
+      eq(sessions.worktreePath, worktreePath),
+      ne(sessions.status, 'deleted'),
+    ));
+  const matchingRows = rows.filter((row) => (
+    row.status !== 'deleted' && pathKey(row.worktreePath) === worktreeKey
+  ));
+  return matchingRows.find((row) => row.status === 'active')?.id
+    ?? matchingRows[0]?.id
+    ?? null;
 }
 
 async function refExists(baseRepo: string, ref: string): Promise<boolean> {
@@ -386,10 +405,30 @@ export function restoreWorktreeForSession(sessionId: string): Promise<WorktreeRe
     sessionId,
     () => restoreWorktreeForSessionOnce(sessionId),
   ).finally(() => {
-    if (restoreInFlight.get(sessionId) === tracked) restoreInFlight.delete(sessionId);
+    if (restoreInFlight.get(sessionId) === tracked) {
+      restoreInFlight.delete(sessionId);
+      restoreInFlightVersions.delete(sessionId);
+    }
   });
   restoreInFlight.set(sessionId, tracked);
+  restoreInFlightVersions.set(sessionId, getWorktreeRestoreMutationVersion(sessionId));
   return tracked;
+}
+
+async function markSendReadyIfMutationStable(
+  ownerSessionId: string,
+  worktreePath: string,
+  readinessKey: string,
+  restoreVersion: number,
+): Promise<boolean | null> {
+  const ready = await pathIsDirectory(worktreePath);
+  if (getWorktreeRestoreMutationVersion(ownerSessionId) !== restoreVersion) {
+    const laterMutation = getWorktreeRestoreMutation(ownerSessionId);
+    if (laterMutation) await laterMutation;
+    return null;
+  }
+  if (ready) sendReadyWorktrees.set(readinessKey, restoreVersion);
+  return ready;
 }
 
 async function ensureOwnedWorktreeReady(
@@ -404,12 +443,17 @@ async function ensureOwnedWorktreeReady(
   // send in that window must join the same restore instead of treating the directory as ready.
   const restoring = restoreInFlight.get(ownerSessionId);
   if (restoring) {
+    const restoreVersion = restoreInFlightVersions.get(ownerSessionId)
+      ?? getWorktreeRestoreMutationVersion(ownerSessionId);
     const result = await restoring;
-    const ready = result.ok
-      && result.snapshotApplied !== false
-      && await pathExists(worktreePath);
-    if (ready) sendReadyWorktrees.add(readinessKey);
-    return ready;
+    if (!result.ok || result.snapshotApplied === false) return false;
+    const ready = await markSendReadyIfMutationStable(
+      ownerSessionId,
+      worktreePath,
+      readinessKey,
+      restoreVersion,
+    );
+    return ready ?? ensureOwnedWorktreeReady(ownerSessionId, worktreePath);
   }
 
   // Recycle cancellation/removal also owns this lock while the snapshot is detached from the
@@ -417,23 +461,33 @@ async function ensureOwnedWorktreeReady(
   const mutating = getWorktreeRestoreMutation(ownerSessionId);
   if (mutating) await mutating;
 
+  const currentMutationVersion = getWorktreeRestoreMutationVersion(ownerSessionId);
+
   // The first send in this process reconciles legacy states where a pending snapshot and store
   // registration both survived an interrupted cleanup. WorktreeManager now unregisters as soon
-  // as it snapshots, so later sends use this zero-Git fast path until that registration changes.
+  // as it snapshots, so later sends use this zero-Git fast path until a later restore mutation
+  // invalidates the versioned readiness entry.
   if (
-    await pathExists(worktreePath)
+    await pathIsDirectory(worktreePath)
     && store.get(ownerSessionId)
-    && sendReadyWorktrees.has(readinessKey)
+    && sendReadyWorktrees.get(readinessKey) === currentMutationVersion
+    && getWorktreeRestoreMutationVersion(ownerSessionId) === currentMutationVersion
   ) {
     return true;
   }
 
-  const result = await restoreWorktreeForSession(ownerSessionId);
-  const ready = result.ok
-    && result.snapshotApplied !== false
-    && await pathExists(worktreePath);
-  if (ready) sendReadyWorktrees.add(readinessKey);
-  return ready;
+  const restore = restoreWorktreeForSession(ownerSessionId);
+  const restoreVersion = restoreInFlightVersions.get(ownerSessionId)
+    ?? getWorktreeRestoreMutationVersion(ownerSessionId);
+  const result = await restore;
+  if (!result.ok || result.snapshotApplied === false) return false;
+  const ready = await markSendReadyIfMutationStable(
+    ownerSessionId,
+    worktreePath,
+    readinessKey,
+    restoreVersion,
+  );
+  return ready ?? ensureOwnedWorktreeReady(ownerSessionId, worktreePath);
 }
 
 /**
@@ -474,8 +528,8 @@ export async function restoreMissingManagedWorktreeForSession(
   }
 
   // An unowned managed directory remains usable as an ordinary cwd, but cannot be recreated.
-  if (!ownerSessionId) return await pathExists(expectedWorkingDir);
+  if (!ownerSessionId) return await pathIsDirectory(expectedWorkingDir);
 
   const ready = await ensureOwnedWorktreeReady(ownerSessionId, worktreePath);
-  return ready && await pathExists(expectedWorkingDir);
+  return ready && await pathIsDirectory(expectedWorkingDir);
 }

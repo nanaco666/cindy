@@ -28,7 +28,11 @@ let dbBindingRows: Array<{
   workingDir: string | null;
   worktreePath: string | null;
 }> = [];
-let dbOwnerRows: Array<{ id: string; worktreePath: string | null }> = [];
+let dbOwnerRows: Array<{
+  id: string;
+  worktreePath: string | null;
+  status: 'active' | 'archived' | 'deleted';
+}> = [];
 
 vi.mock('../worktree/gitExec', () => ({
   gitExec: (...args: unknown[]) => gitExecMock(...args),
@@ -325,7 +329,7 @@ describe('worktree restore', () => {
       { workingDir: wtPath, worktreePath: null },
       { workingDir: wtPath, worktreePath: wtPath },
     ];
-    dbOwnerRows = [{ id: 'owner', worktreePath: wtPath }];
+    dbOwnerRows = [{ id: 'owner', worktreePath: wtPath, status: 'active' }];
     gitExecMock.mockImplementation(async (args: string[]) => {
       if (args[0] === 'rev-parse' && args.includes('refs/xdt/snapshots/owner')) {
         return { stdout: `${SHA}\n`, stderr: '' };
@@ -352,6 +356,25 @@ describe('worktree restore', () => {
     await expect(
       mod.restoreMissingManagedWorktreeForSession('s1', wtPath),
     ).resolves.toBe(false);
+
+    expect(gitExecMock).not.toHaveBeenCalled();
+    expect(storeSetMock).not.toHaveBeenCalled();
+  });
+
+  it('send-time check ignores deleted historical owners for a reused managed path', async () => {
+    fsSync.mkdirSync(wtPath, { recursive: true });
+    dbWorktreePath = null;
+    dbOwnerRows = [{ id: 'deleted-owner', worktreePath: wtPath, status: 'deleted' }];
+    gitExecMock.mockImplementation(async (args: string[]) => {
+      if (args[0] === 'rev-parse' && args.includes('refs/xdt/snapshots/deleted-owner')) {
+        return { stdout: `${SHA}\n`, stderr: '' };
+      }
+      return { stdout: '', stderr: '' };
+    });
+
+    await expect(
+      mod.restoreMissingManagedWorktreeForSession('s1', wtPath),
+    ).resolves.toBe(true);
 
     expect(gitExecMock).not.toHaveBeenCalled();
     expect(storeSetMock).not.toHaveBeenCalled();
@@ -396,6 +419,31 @@ describe('worktree restore', () => {
 
     releaseMutation();
     await expect(Promise.all([mutation, readiness])).resolves.toEqual([undefined, true]);
+  });
+
+  it('send-time check re-probes snapshots after a later restore mutation', async () => {
+    fsSync.mkdirSync(wtPath, { recursive: true });
+    storeGetMock.mockReturnValue({ sessionId: 's1', path: wtPath });
+    let fallbackStashPresent = false;
+    gitExecMock.mockImplementation(async (args: string[]) => {
+      if (args[0] === 'stash' && args[1] === 'list') {
+        return { stdout: fallbackStashPresent ? `${AUTO_STASH}\n` : '', stderr: '' };
+      }
+      return { stdout: '', stderr: '' };
+    });
+
+    await expect(
+      mod.restoreMissingManagedWorktreeForSession('s1', wtPath),
+    ).resolves.toBe(true);
+
+    await withWorktreeRestoreMutation('s1', async () => {
+      fallbackStashPresent = true;
+    });
+
+    await expect(
+      mod.restoreMissingManagedWorktreeForSession('s1', wtPath),
+    ).resolves.toBe(true);
+    expect(gitExecMock.mock.calls.map(argsOf)).toContainEqual(['stash', 'apply', SHA]);
   });
 
   it('send-time check only probes snapshot state once for a registered ready worktree', async () => {
@@ -465,6 +513,25 @@ describe('worktree restore', () => {
       wtPath,
       'xdt/wt1',
     ]);
+  });
+
+  it('send-time restore rejects a restored child cwd that is a file', async () => {
+    const childPath = path.join(wtPath, 'packages', 'app');
+    dbWorkingDir = childPath;
+    gitExecMock.mockImplementation(async (args: string[]) => {
+      if (args[0] === 'rev-parse' && args.includes('refs/heads/xdt/wt1')) {
+        return { stdout: 'deadbeef\n', stderr: '' };
+      }
+      if (args[0] === '-c' && args[2] === 'worktree' && args[3] === 'add') {
+        fsSync.mkdirSync(path.dirname(childPath), { recursive: true });
+        fsSync.writeFileSync(childPath, 'not a directory');
+      }
+      return { stdout: '', stderr: '' };
+    });
+
+    await expect(
+      mod.restoreMissingManagedWorktreeForSession('s1', childPath),
+    ).resolves.toBe(false);
   });
 
   it('concurrent restore requests share one worktree mutation', async () => {

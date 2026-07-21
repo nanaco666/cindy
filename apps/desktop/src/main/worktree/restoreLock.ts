@@ -6,6 +6,13 @@
  * mutating the worktree before it re-checks readiness.
  */
 const restoreMutationTails = new Map<string, Promise<void>>();
+let nextRestoreMutationVersion = 0;
+const restoreMutationVersions = new Map<string, number>();
+
+/** Returns the latest queued mutation version for one owning session. */
+export function getWorktreeRestoreMutationVersion(sessionId: string): number {
+  return restoreMutationVersions.get(sessionId) ?? 0;
+}
 
 /** Returns the current mutation tail, or null when the session has no restore mutation. */
 export function getWorktreeRestoreMutation(
@@ -19,6 +26,7 @@ export function withWorktreeRestoreMutation<T>(
   sessionId: string,
   mutation: () => Promise<T>,
 ): Promise<T> {
+  restoreMutationVersions.set(sessionId, ++nextRestoreMutationVersion);
   const previous = restoreMutationTails.get(sessionId) ?? Promise.resolve();
   const run = previous.then(mutation, mutation);
   const tail = run.then(
