@@ -50,10 +50,13 @@ function summarize(label, manifest) {
   console.log(`    codex.version:      ${manifest?.codex?.version ?? '(none)'}`);
 }
 
+// 特例:app 上线前的老 stable manifest 只有 codex/claudeCode 段、没有 app.version
+// (首次 app promote 必然命中),备份到 back-up/pre-app/ 目录而不是中止。
 async function backupStableManifest(client, stableText, stableJson) {
-  const version = stableJson?.app?.version;
+  let version = stableJson?.app?.version;
   if (!version) {
-    throw new Error('Current stable manifest has no app.version; refusing to promote.');
+    console.log('==> Current stable manifest has no app section (pre-app legacy); backing up to back-up/pre-app/');
+    version = 'pre-app';
   }
   if (!/^[\w.+-]+$/.test(version)) {
     throw new Error(`Stable version contains invalid path characters: ${version}`);
