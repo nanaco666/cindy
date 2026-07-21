@@ -4,6 +4,7 @@ import { EditorState, TextSelection, type Transaction } from '@tiptap/pm/state';
 import type { EditorView } from '@tiptap/pm/view';
 
 import {
+  handleWindowsCompositionEnd,
   handleWindowsCompositionStart,
   handleWindowsSelectedTextInput,
 } from '../components/new-chat/WindowsSelectionReplacement';
@@ -50,14 +51,18 @@ function documentText(state: EditorState): string {
   return state.doc.textBetween(0, state.doc.content.size, '\n', '\n');
 }
 
-function inputEvent(data: string) {
+function inputEvent(data: string, inputType = 'insertText') {
   return {
     cancelable: true,
     data,
-    inputType: 'insertText',
+    inputType,
     isComposing: false,
     preventDefault: vi.fn(),
   } as unknown as InputEvent;
+}
+
+function compositionEndEvent(data: string) {
+  return { data } as CompositionEvent;
 }
 
 describe('Windows chat composer selection replacement', () => {
@@ -77,6 +82,17 @@ describe('Windows chat composer selection replacement', () => {
     },
   );
 
+  it('also replaces a selected prefix for automatic correction input', () => {
+    const { view, getState } = makeView(selectedPrefixState('hardBreak'));
+    const event = inputEvent('K', 'insertReplacementText');
+
+    expect(handleWindowsSelectedTextInput(view, event)).toBe(true);
+
+    expect(event.preventDefault).toHaveBeenCalledOnce();
+    expect(documentText(getState())).toBe('K啊啊啊啊\n');
+    expect(getState().selection.from).toBe(2);
+  });
+
   it('collapses the selected range before IME composition without deleting the suffix', () => {
     const { view, getState } = makeView(selectedPrefixState('hardBreak'));
 
@@ -89,8 +105,23 @@ describe('Windows chat composer selection replacement', () => {
 
     // Simulate the IME's first committed character at the collapsed caret.
     view.dispatch(collapsed.tr.insertText('你'));
+    expect(handleWindowsCompositionEnd(view, compositionEndEvent('你'))).toBe(false);
     expect(documentText(getState())).toBe('你啊啊啊啊\n');
     expect(getState().selection.from).toBe(2);
+  });
+
+  it('restores the selected range when IME composition is cancelled', () => {
+    const { view, getState } = makeView(selectedPrefixState('hardBreak'));
+
+    expect(handleWindowsCompositionStart(view)).toBe(false);
+    expect(documentText(getState())).toBe('啊啊啊啊\n');
+
+    expect(handleWindowsCompositionEnd(view, compositionEndEvent(''))).toBe(false);
+
+    const restored = getState();
+    expect(documentText(restored)).toBe('GPT5.5啊啊啊啊\n');
+    expect(restored.selection.from).toBe(1);
+    expect(restored.selection.to).toBe(7);
   });
 
   it('leaves native input alone when there is no replaceable selection', () => {

@@ -1,11 +1,21 @@
 import { Extension } from '@tiptap/core';
-import { Plugin } from '@tiptap/pm/state';
+import type { Slice } from '@tiptap/pm/model';
+import { Plugin, TextSelection } from '@tiptap/pm/state';
 import type { EditorView } from '@tiptap/pm/view';
 
 /** Configuration for the Windows contenteditable selection workaround. */
 interface WindowsSelectionReplacementOptions {
   enabled: boolean;
 }
+
+interface PendingWindowsCompositionReplacement {
+  slice: Slice;
+}
+
+const pendingCompositionReplacements = new WeakMap<
+  EditorView,
+  PendingWindowsCompositionReplacement
+>();
 
 /**
  * Replace a selected range through ProseMirror instead of letting Chromium
@@ -26,7 +36,8 @@ export function handleWindowsSelectedTextInput(
     view.composing ||
     event.isComposing ||
     !event.cancelable ||
-    event.inputType !== 'insertText' ||
+    (event.inputType !== 'insertText' &&
+      event.inputType !== 'insertReplacementText') ||
     event.data == null ||
     event.data.length === 0 ||
     selection.empty
@@ -51,8 +62,49 @@ export function handleWindowsSelectedTextInput(
  * Returning false is essential: ProseMirror must still enter composition mode.
  */
 export function handleWindowsCompositionStart(view: EditorView): boolean {
-  if (view.composing || view.state.selection.empty) return false;
+  if (view.composing) return false;
+  pendingCompositionReplacements.delete(view);
+  const { selection } = view.state;
+  if (selection.empty) return false;
+  pendingCompositionReplacements.set(view, {
+    slice: view.state.doc.slice(selection.from, selection.to),
+  });
   view.dispatch(view.state.tr.deleteSelection().scrollIntoView());
+  return false;
+}
+
+/**
+ * Restore a selection when Windows cancels an IME composition with no data.
+ *
+ * The selection is deleted before composition starts to keep Chromium from
+ * widening the DOM diff. A cancelled composition does not provide a native
+ * transaction that can undo that deletion, so restore the captured slice and
+ * selection explicitly. Successful compositions only clear the pending state.
+ */
+export function handleWindowsCompositionEnd(
+  view: EditorView,
+  event: CompositionEvent,
+): boolean {
+  const pending = pendingCompositionReplacements.get(view);
+  if (!pending) return false;
+  pendingCompositionReplacements.delete(view);
+
+  if (event.data !== '') return false;
+
+  const { selection } = view.state;
+  const transaction = view.state.tr.replaceSelection(pending.slice);
+  const restoredFrom = transaction.mapping.map(selection.from, -1);
+  const restoredTo = transaction.mapping.map(selection.to, 1);
+  if (
+    restoredFrom >= 0 &&
+    restoredFrom <= restoredTo &&
+    restoredTo <= transaction.doc.content.size
+  ) {
+    transaction.setSelection(
+      TextSelection.create(transaction.doc, restoredFrom, restoredTo),
+    );
+  }
+  view.dispatch(transaction.scrollIntoView());
   return false;
 }
 
@@ -64,6 +116,8 @@ export function createWindowsSelectionReplacementPlugin(): Plugin {
         beforeinput: (view, event) =>
           handleWindowsSelectedTextInput(view, event as InputEvent),
         compositionstart: (view) => handleWindowsCompositionStart(view),
+        compositionend: (view, event) =>
+          handleWindowsCompositionEnd(view, event as CompositionEvent),
       },
     },
   });
