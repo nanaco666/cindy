@@ -29,6 +29,8 @@ export class ServerApiError extends Error {
 export interface ApiFetchOptions {
   method?: string;
   body?: unknown;
+  /** 每次实际请求前重建 body；401 refresh 重试时会再次调用，优先于静态 body。 */
+  bodyFactory?: () => unknown;
   headers?: Record<string, string>;
   cache?: RequestCache;
   /** 显式传 token；不传则取 authManager.getAccessToken()。 */
@@ -57,11 +59,12 @@ async function rawFetch<T>(apiPath: string, opts: ApiFetchOptions): Promise<RawR
     headers['Authorization'] = 'Bearer ' + token;
   }
   try {
+    const body = opts.bodyFactory ? opts.bodyFactory() : opts.body;
     const response = await net.fetch(url, {
       method,
       headers,
       cache: opts.cache,
-      body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
+      body: body !== undefined ? JSON.stringify(body) : undefined,
     });
     let data: T | null = null;
     try {

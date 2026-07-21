@@ -111,6 +111,14 @@ export interface User {
   passportId: string;
 }
 
+/**
+ * Main-process-only auth user. Keep the raw membership display name separate
+ * from `User.name`, whose UI fallback may be an email address or "Cindy".
+ */
+interface CurrentUser extends User {
+  membershipDisplayName: string;
+}
+
 export interface AuthState {
   user: User | null;
   isAuthenticated: boolean;
@@ -149,7 +157,7 @@ let accountSwitchTeardown: AccountSwitchTeardown | null = null;
 // ── Module-level state ──────────────────────────────────────────────────────
 
 let accessToken: string | null = null;
-let currentUser: User | null = null;
+let currentUser: CurrentUser | null = null;
 let refreshTimer: ReturnType<typeof setTimeout> | null = null;
 let refreshPromise: Promise<boolean> | null = null;
 /**
@@ -291,10 +299,11 @@ function getRefreshErrorCode(result: { data: unknown }): string | undefined {
   return (result.data as AuthErrorResponse | null)?.error?.code;
 }
 
-function mapMembershipToAuthUser(membership: AuthMembership, passportId?: string): User {
+function mapMembershipToAuthUser(membership: AuthMembership, passportId?: string): CurrentUser {
   return {
     id: membership.id,
     name: membership.displayName || membership.email || 'Cindy',
+    membershipDisplayName: membership.displayName,
     // auth-server 自助头像(PATCH /api/me/profile);null = 未设置(UI 首字母兜底)。
     // 产品资料头像回落已随 /api/user/me 退役(2026-07)。
     avatar: membership.avatarUrl ?? null,
@@ -311,7 +320,10 @@ function mapMembershipToAuthUser(membership: AuthMembership, passportId?: string
   };
 }
 
-function mergeMembershipWithExisting(membership: AuthMembership, existing: User | null): User {
+function mergeMembershipWithExisting(
+  membership: AuthMembership,
+  existing: CurrentUser | null,
+): CurrentUser {
   const mapped = mapMembershipToAuthUser(membership);
   if (!existing || existing.id !== mapped.id) return mapped;
   return {
@@ -645,8 +657,24 @@ function broadcastToRenderers(channel: string, payload: unknown): void {
 function snapshotAuthState(): AuthState {
   return {
     // orgSlug 在出口处统一从当前 access token 解码注入(token 与 currentUser
-    // 总是成对更新,快照读取时两者一致)。
-    user: currentUser ? { ...currentUser, orgSlug: decodeAccessTokenOrgSlug(accessToken) } : null,
+    // 总是成对更新,快照读取时两者一致)。这里显式投影公开字段,避免 main-only
+    // membershipDisplayName 意外透传到 renderer。
+    user: currentUser
+      ? {
+          id: currentUser.id,
+          name: currentUser.name,
+          avatar: currentUser.avatar,
+          email: currentUser.email,
+          defaultModel: currentUser.defaultModel,
+          defaultEffort: currentUser.defaultEffort,
+          membershipKind: currentUser.membershipKind,
+          membershipRole: currentUser.membershipRole,
+          orgId: currentUser.orgId,
+          orgName: currentUser.orgName,
+          orgSlug: decodeAccessTokenOrgSlug(accessToken),
+          passportId: currentUser.passportId,
+        }
+      : null,
     isAuthenticated: accessToken !== null && currentUser !== null,
     isCanary: currentUser !== null && canaryFlagStore.read(),
     deviceId,
@@ -793,6 +821,15 @@ export function getCurrentUserId(): string | null {
   return currentUser?.id ?? null;
 }
 
+/**
+ * Public issue attribution may only use the raw auth membership display name.
+ * UI fallbacks (`email` / "Cindy") are intentionally excluded for privacy.
+ */
+export function getCurrentMembershipDisplayName(): string | undefined {
+  const displayName = currentUser?.membershipDisplayName.trim();
+  return displayName || undefined;
+}
+
 /** SkillHub 跨设备识别：本机 deviceId（machineIdSync 结果），登录前后都可用 */
 export function getDeviceId(): string {
   return deviceId;
@@ -860,6 +897,7 @@ export async function updateServerProfile(
     currentUser = {
       ...currentUser,
       name: membership.displayName || currentUser.name,
+      membershipDisplayName: membership.displayName,
       avatar: membership.avatarUrl ?? null,
     };
     notifyRenderer();

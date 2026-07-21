@@ -10,6 +10,7 @@ import os from 'node:os';
 
 import { app } from 'electron';
 
+import { getCurrentMembershipDisplayName } from '../authManager';
 import { serverApiFetch } from '../serverApiClient';
 import { getClientEndpoint } from '../clientEndpointsService';
 import type { IssueConfirmBridge } from './issueConfirmBridge';
@@ -42,14 +43,15 @@ export async function submitGithubIssueForSession(
   return submitGithubIssueWithConfirm(
     {
       confirm: (sessionId, draft, env) => bridge.request(sessionId, draft, env),
-      postIssue: (body) =>
+      postIssue: (bodyFactory) =>
         serverApiFetch<{ githubIssue: { number: number; url: string } }>(
           '/api/github/issues',
           {
             method: 'POST',
-            body,
+            bodyFactory,
             // 独立部署的 github-server(cindy-server 仓);登录 JWT 验签与
-            // auth-server 同侧,serverApiFetch 的 Bearer 注入/401 刷新照常生效。
+            // auth-server 同侧。bodyFactory 随 401 refresh 重建,确保账号切换后
+            // userName 与最终 Bearer membership 一致。
             baseUrl: getClientEndpoint('githubApiBaseUrl'),
           },
         ),
@@ -60,6 +62,7 @@ export async function submitGithubIssueForSession(
         osVersion: os.release(),
       }),
       getFallbackLocale: () => app.getLocale(),
+      getSubmitterName: getCurrentMembershipDisplayName,
     },
     req,
   );
