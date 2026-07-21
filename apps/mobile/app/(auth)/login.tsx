@@ -50,10 +50,11 @@ export default function LoginScreen() {
   const [identifierKind, setIdentifierKind] =
     useState<VerificationKind>('email');
   const [identifier, setIdentifier] = useState('');
-  // 企业 SSO 入口子视图：在 identifier 步骤内输入企业 ID（本地展示态）
+  // 企业 SSO 入口子视图：在 identifier 步骤内输入组织标识（本地展示态）
   const [ssoOrgMode, setSsoOrgMode] = useState(false);
   const [ssoOrg, setSsoOrg] = useState('');
   const [verificationCode, setVerificationCode] = useState('');
+  const [ssoVerificationCode, setSsoVerificationCode] = useState('');
   const [bindingContact, setBindingContact] = useState('');
   const [bindingCode, setBindingCode] = useState('');
   const configIssues = getMobileConfigIssues();
@@ -75,6 +76,7 @@ export default function LoginScreen() {
     setIdentifierKind(auth.loginState.providers.attribution);
     setSsoOrgMode(false);
     setVerificationCode('');
+    setSsoVerificationCode('');
     setBindingContact('');
     setBindingCode('');
   }, [auth.loginState]);
@@ -90,7 +92,7 @@ export default function LoginScreen() {
   };
 
   // 返回按钮固定在屏幕顶栏，不随各步骤内容渲染：首屏(identifier)无返回；
-  // SSO 企业 ID 子视图退回首屏输入；其余步骤(选方式/验证码/选身份/绑定)整体重置。
+  // SSO 组织标识子视图退回首屏输入；其余步骤(选方式/验证码/选身份/绑定)整体重置。
   const step = auth.loginState?.step;
   const backAction =
     step === 'identifier'
@@ -129,7 +131,7 @@ export default function LoginScreen() {
             autoComplete="off"
             autoCorrect={false}
             editable={!disabled}
-            maxLength={64}
+            maxLength={253}
             onChangeText={setSsoOrg}
             onSubmitEditing={submitSsoOrg}
             placeholder={loginText('ssoOrgPlaceholder')}
@@ -272,7 +274,7 @@ export default function LoginScreen() {
             ))}
           </>
         ) : null}
-        {/* 企业 SSO 入口：输入企业 ID 发起单点登录（国内版隐藏邮箱后企业用户的登录路径） */}
+        {/* 企业 SSO 入口：输入组织标识发起单点登录（国内版隐藏邮箱后企业用户的登录路径） */}
         <MainWindowActionButton
           action={{
             disabled,
@@ -339,7 +341,9 @@ export default function LoginScreen() {
             action={{
               busy: auth.isBusy,
               disabled,
-              label: loginText(ssoMethods.length > 0 ? 'personalLogin' : 'emailCode'),
+              label: loginText(
+                ssoMethods.length > 0 ? 'personalLogin' : 'emailCode',
+              ),
               onPress: () =>
                 void auth.dispatchLoginAction({
                   type: 'request-code',
@@ -461,14 +465,86 @@ export default function LoginScreen() {
     );
   };
 
+  const renderSsoVerification = () => {
+    const state = auth.loginState;
+    if (state?.step !== 'sso-verification') return null;
+    const verify = () => {
+      if (ssoVerificationCode.length !== 6) return;
+      void auth.dispatchLoginAction({
+        type: 'verify-sso-verification',
+        code: ssoVerificationCode,
+      });
+    };
+    return (
+      <>
+        <StepHeader
+          title={loginText('ssoVerificationTitle')}
+          subtitle={loginText('ssoVerificationSubtitle').replace(
+            '{target}',
+            state.targetMasked,
+          )}
+        />
+        {!state.codeRequested ? (
+          <MainWindowActionButton
+            action={{
+              busy: auth.isBusy,
+              disabled,
+              label: loginText('sendCode'),
+              onPress: () =>
+                void auth.dispatchLoginAction({
+                  type: 'request-sso-verification-code',
+                }),
+              testID: 'login.ssoVerificationSendButton',
+              tone: 'primary',
+            }}
+            style={styles.fullButton}
+          />
+        ) : (
+          <>
+            <Text style={styles.helper}>{state.targetMasked}</Text>
+            <CodeInput
+              disabled={disabled}
+              onChange={setSsoVerificationCode}
+              onSubmit={verify}
+              value={ssoVerificationCode}
+            />
+            <MainWindowActionButton
+              action={{
+                busy: auth.isBusy,
+                disabled: disabled || ssoVerificationCode.length !== 6,
+                label: loginText('signIn'),
+                onPress: verify,
+                testID: 'login.ssoVerificationVerifyButton',
+                tone: 'primary',
+              }}
+              style={styles.fullButton}
+            />
+            <MainWindowActionButton
+              action={{
+                disabled,
+                label: loginText('resendCode'),
+                onPress: () =>
+                  void auth.dispatchLoginAction({
+                    type: 'request-sso-verification-code',
+                  }),
+                testID: 'login.ssoVerificationResendButton',
+              }}
+              density="compact"
+              style={styles.fullButton}
+            />
+          </>
+        )}
+      </>
+    );
+  };
+
   const renderBinding = () => {
     const state = auth.loginState;
     if (state?.step !== 'binding') return null;
     const isEmail = state.bindType === 'email';
     // 绑定手机号与登录同规则:只支持中国大陆号码,输入框存本地号,提交拼回 +86
     const contact =
-      state.contact ??
-      (isEmail ? bindingContact : toCnE164(bindingContact));
+      state.contact ?? (isEmail ? bindingContact : toCnE164(bindingContact));
     const contactReady = isEmail
       ? Boolean(bindingContact.trim())
       : isCompleteCnPhone(bindingContact);
@@ -578,6 +654,7 @@ export default function LoginScreen() {
     renderMethodChoice() ??
     renderVerification() ??
     renderAccountSelection() ??
+    renderSsoVerification() ??
     renderBinding();
 
   return (

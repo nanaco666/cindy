@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import {
+  accountMembershipSchema,
   authRegionSchema,
   loginMethodSchema,
   loginOutcomeSchema,
@@ -9,6 +10,7 @@ import {
   ssoOrgDiscoverySchema,
   tokenPairSchema,
   type AuthClientType,
+  type AccountMembership,
   type AuthMe,
   type AuthTokenPair,
   type AuthRegion,
@@ -104,7 +106,7 @@ export class CindyAuthClient {
     return result.methods;
   }
 
-  /** 企业 SSO 入口：企业 ID（组织 slug）→ 该组织已启用的 SSO 连接。 */
+  /** 企业 SSO 入口：组织 ID、slug 或已验证域名 → 已启用的 SSO 连接。 */
   async discoverSsoOrg(org: string): Promise<SsoOrgDiscovery> {
     const discovery = await this.request(
       "/api/auth/sso/discovery",
@@ -229,6 +231,49 @@ export class CindyAuthClient {
         deviceId: this.options.deviceId,
       },
       { timeoutMs: 0 },
+    );
+  }
+
+  async getAccountMemberships(
+    accountToken: string,
+  ): Promise<AccountMembership[]> {
+    const response = await this.request(
+      "/api/auth/account",
+      z.object({ memberships: z.array(accountMembershipSchema) }),
+      undefined,
+      { token: accountToken },
+    );
+    return response.memberships;
+  }
+
+  exchangeAccountMembership(
+    accountToken: string,
+    membershipId: string,
+  ): Promise<AuthTokenPair> {
+    return this.request(
+      "/api/auth/account/exchange",
+      tokenPairSchema,
+      { membershipId },
+      { token: accountToken },
+    );
+  }
+
+  async requestSsoVerificationCode(verificationTicket: string): Promise<void> {
+    await this.request(
+      "/api/auth/sso/verification/request-code",
+      z.object({ status: z.literal("sent") }),
+      { verificationTicket, deviceId: this.options.deviceId },
+    );
+  }
+
+  verifySsoVerification(
+    verificationTicket: string,
+    code: string,
+  ): Promise<LoginOutcome> {
+    return this.request(
+      "/api/auth/sso/verification/verify",
+      loginOutcomeSchema,
+      { verificationTicket, code, deviceId: this.options.deviceId },
     );
   }
 

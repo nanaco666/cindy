@@ -16,8 +16,10 @@ describe('auth login-flow reset', () => {
     expect(resetBody).toContain('loginFlowState = null;');
     expect(resetBody).toContain('providerConfig = null;');
     expect(resetBody).toContain('discoveredMethods = [];');
+    expect(resetBody).toContain('pendingAccountToken = null;');
     expect(resetBody).toContain('pendingLoginTicket = null;');
     expect(resetBody).toContain('pendingBindTicket = null;');
+    expect(resetBody).toContain('pendingSsoVerificationTicket = null;');
 
     const clearStart = source.indexOf('function clearAuth(');
     const clearEnd = source.indexOf('\n}\n\n// ── Public API', clearStart);
@@ -53,7 +55,48 @@ describe('auth login-flow reset', () => {
   it('does not leave expired private tickets on a screen that can only reuse them', () => {
     expect(source).toContain("'INVALID_LOGIN_TICKET',");
     expect(source).toContain("'INVALID_BIND_TICKET',");
+    expect(source).toContain("'INVALID_SSO_VERIFICATION_TICKET',");
     expect(source).toContain("? { step: 'error', code, recoverTo: 'identifier' }");
+  });
+
+  it('keeps the account token in the login flow only and exchanges a resource token', () => {
+    expect(source).toContain(
+      "const LEGACY_ACCOUNT_REFRESH_TOKEN_KEY = 'cindy_auth_account_refresh_token';",
+    );
+    expect(source).toContain('let pendingAccountToken: string | null = null;');
+    expect(source).toContain('client.exchangeAccountMembership(accountToken, action.accountId)');
+    expect(source).not.toContain('.logoutAccount(');
+    expect(source).not.toContain('accountSession');
+    expect(source).not.toContain('writeSafe(LEGACY_ACCOUNT_REFRESH_TOKEN_KEY');
+    expect(source).not.toContain('accountToken: accountAccessToken');
+
+    const completeStart = source.indexOf('async function completeLogin(');
+    const completeEnd = source.indexOf('\n}\n\nasync function acceptLoginOutcome', completeStart);
+    expect(source.slice(completeStart, completeEnd)).toContain('pendingAccountToken = null;');
+
+    const logoutStart = source.indexOf('export async function logout()');
+    const logoutEnd = source.indexOf('\n}\n\n/**\n * Called on system resume', logoutStart);
+    const logoutBody = source.slice(logoutStart, logoutEnd);
+    expect(logoutBody).toContain('token: currentAccessToken');
+    expect(logoutBody).not.toContain('pendingAccountToken');
+
+    const getterStart = source.indexOf('export function getAccessToken(): string | null {');
+    const getterEnd = source.indexOf('\n}', getterStart);
+    const getterBody = source.slice(getterStart, getterEnd);
+    expect(getterBody).toContain('return accessToken;');
+    expect(getterBody).not.toContain('accountAccessToken');
+  });
+
+  it('never restores an account session during resource-token initialization', () => {
+    const initializeStart = source.indexOf('export async function initialize(');
+    const initializeEnd = source.indexOf('\n}\n\n/**\n * 冷启动 refresh 流程本体', initializeStart);
+    const initializeBody = source.slice(initializeStart, initializeEnd);
+    const authenticatedFastPath = initializeBody.indexOf('if (accessToken && currentUser)');
+
+    expect(authenticatedFastPath).toBeGreaterThan(-1);
+    expect(initializeBody).toContain('removeSafe(LEGACY_ACCOUNT_REFRESH_TOKEN_KEY);');
+    expect(initializeBody).not.toContain('refreshAccount');
+    expect(initializeBody).not.toContain('restoreAccountSelection');
   });
 
   it('drops a runtime refresh result after logout or a newer login changes auth generation', () => {

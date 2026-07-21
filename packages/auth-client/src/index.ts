@@ -5,6 +5,7 @@ export type {
   AuthFetchResponse,
 } from "./client.js";
 export {
+  accountMembershipSchema,
   authRegionSchema,
   loginMethodSchema,
   loginOutcomeSchema,
@@ -19,6 +20,7 @@ export {
   tokenPairSchema,
 } from "./types.js";
 export type {
+  AccountMembership,
   AuthClientType,
   AuthFlowAction,
   AuthFlowState,
@@ -33,5 +35,6 @@ export type {
   SocialProvider,
   SsoOrgConnection,
   SsoOrgDiscovery,
+  SsoVerificationChannel,
   VerificationKind,
 } from "./types.js";

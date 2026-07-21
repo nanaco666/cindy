@@ -64,6 +64,8 @@ import {
 WebBrowser.maybeCompleteAuthSession();
 
 const REFRESH_TOKEN_KEY = 'cindy.mobile.auth.refreshToken';
+const LEGACY_ACCOUNT_REFRESH_TOKEN_KEY =
+  'cindy.mobile.auth.accountRefreshToken';
 const LEGACY_REFRESH_TOKEN_KEY = 'xdt.mobile.refreshToken';
 const USER_PROFILE_KEY = 'cindy.mobile.auth.userProfile';
 const LEGACY_USER_PROFILE_KEY = 'xdt.mobile.userProfile';
@@ -101,6 +103,8 @@ export type MobileLoginAction =
   | { type: 'start-sso'; connectionId: string; label: string }
   | { type: 'native-social'; provider: SocialProvider }
   | { type: 'select-account'; accountId: string }
+  | { type: 'request-sso-verification-code' }
+  | { type: 'verify-sso-verification'; code: string }
   | { type: 'request-binding-code'; contact: string }
   | { type: 'verify-binding'; contact: string; code: string };
 
@@ -150,7 +154,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       refreshAccessToken: async () => 'visual-mock-token',
       apiFetch: visualMockApiFetch,
     };
-    return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+    return (
+      <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
+    );
   }
 
   const [initialized, setInitialized] = useState(false);
@@ -159,6 +165,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const deviceIdRef = useRef<string | null>(null);
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const accessTokenRef = useRef<string | null>(null);
+  // Account token 只在本次登录的 Membership 选择阶段存活；成功兑换
+  // resource token 后清空，不写 SecureStore、不续期、不参与业务请求或登出。
+  const pendingAccountTokenRef = useRef<string | null>(null);
   const [user, setUser] = useState<MobileUser | null>(null);
   const userRef = useRef<MobileUser | null>(null);
   const [loginState, setLoginState] = useState<AuthFlowState | null>(null);
@@ -166,6 +175,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [authError, setAuthError] = useState<string | null>(null);
   const pendingLoginTicketRef = useRef<string | null>(null);
   const pendingBindTicketRef = useRef<string | null>(null);
+  const pendingSsoVerificationTicketRef = useRef<string | null>(null);
   const loginActionInFlightRef = useRef<Promise<boolean> | null>(null);
   const browserCompletionRef = useRef<Promise<void> | null>(null);
   // auth-server rotates refresh tokens, so every caller must share one request.
@@ -178,22 +188,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const userProfileMutationRef = useRef<Promise<void>>(Promise.resolve());
 
   /** 登录态落地后异步刷新灰度标记；失败保留旧值，迟到响应按 auth generation 丢弃。 */
-  const scheduleCanaryChannelSync = useCallback((token: string, expectedAuthGeneration: number) => {
-    // EAS/TestFlight 仍走 Expo 官方更新通道，不参与自建线 canary flag 请求；
-    // 这样自建灰度新增的状态机不会改变 EAS 登录/发版流程。
-    if (!IS_OTA_SELFHOST) return;
-    void syncCanaryChannelAfterAuth(
-      { token, expectedAuthGeneration },
-      {
-        fetchFeatureFlags: (accessToken) => apiFetchRaw('/api/user/feature-flags', {
-          baseUrl: OAUTH_BROKER_API_BASE_URL,
-          token: accessToken,
-        }),
-        readCurrentAuthGeneration: () => authGenerationRef.current,
-        persistFlag: syncCanaryChannel,
-      },
-    ).catch(() => undefined);
-  }, []);
+  const scheduleCanaryChannelSync = useCallback(
+    (token: string, expectedAuthGeneration: number) => {
+      // EAS/TestFlight 仍走 Expo 官方更新通道，不参与自建线 canary flag 请求；
+      // 这样自建灰度新增的状态机不会改变 EAS 登录/发版流程。
+      if (!IS_OTA_SELFHOST) return;
+      void syncCanaryChannelAfterAuth(
+        { token, expectedAuthGeneration },
+        {
+          fetchFeatureFlags: (accessToken) =>
+            apiFetchRaw('/api/user/feature-flags', {
+              baseUrl: OAUTH_BROKER_API_BASE_URL,
+              token: accessToken,
+            }),
+          readCurrentAuthGeneration: () => authGenerationRef.current,
+          persistFlag: syncCanaryChannel,
+        },
+      ).catch(() => undefined);
+    },
+    [],
+  );
 
   const serializeRefreshTokenMutation = useCallback(
     <T,>(operation: () => Promise<T>): Promise<T> => {
@@ -273,9 +287,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     async (outcome: LoginOutcome, did: string): Promise<void> => {
       await deleteSecureItem(PENDING_OAUTH_KEY).catch(() => undefined);
 
+      pendingAccountTokenRef.current =
+        outcome.status === 'select_account'
+          ? (outcome.accountToken ?? null)
+          : null;
+
       if (outcome.status === 'select_account') {
         pendingLoginTicketRef.current = outcome.loginTicket;
         pendingBindTicketRef.current = null;
+        pendingSsoVerificationTicketRef.current = null;
         updateLoginState(
           reduceAuthFlow(loginStateRef.current, { type: 'outcome', outcome }),
         );
@@ -284,6 +304,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (outcome.status === 'binding_required') {
         pendingBindTicketRef.current = outcome.bindTicket;
         pendingLoginTicketRef.current = null;
+        pendingSsoVerificationTicketRef.current = null;
+        updateLoginState(
+          reduceAuthFlow(loginStateRef.current, { type: 'outcome', outcome }),
+        );
+        return;
+      }
+      if (outcome.status === 'sso_verification_required') {
+        pendingSsoVerificationTicketRef.current = outcome.verificationTicket;
+        pendingLoginTicketRef.current = null;
+        pendingBindTicketRef.current = null;
         updateLoginState(
           reduceAuthFlow(loginStateRef.current, { type: 'outcome', outcome }),
         );
@@ -303,6 +333,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       pendingLoginTicketRef.current = null;
       pendingBindTicketRef.current = null;
+      pendingSsoVerificationTicketRef.current = null;
       setToken(outcome.accessToken);
       applyUser(
         mergeMembershipWithExisting(outcome.membership, userRef.current),
@@ -331,7 +362,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const generation = authGenerationRef.current;
       let run: Promise<string | null>;
       const clearIfCurrent = () => {
-        if (refreshInFlightRef.current === run) refreshInFlightRef.current = null;
+        if (refreshInFlightRef.current === run)
+          refreshInFlightRef.current = null;
       };
       run = (async () => {
         const did =
@@ -407,6 +439,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Old Feishu refresh tokens are not valid in auth-server. Purge them explicitly
         // instead of sending them to the new endpoint or restoring an unrelated profile.
         await Promise.all([
+          // 早期测试版曾持久化 account refresh token；现在仅保留登录期内存 token。
+          deleteSecureItem(LEGACY_ACCOUNT_REFRESH_TOKEN_KEY).catch(
+            () => undefined,
+          ),
           deleteSecureItem(LEGACY_REFRESH_TOKEN_KEY).catch(() => undefined),
           deleteSecureItem(LEGACY_PENDING_OAUTH_KEY).catch(() => undefined),
           deleteSecureItem(LEGACY_USER_PROFILE_KEY).catch(() => undefined),
@@ -578,8 +614,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           const client = authClientFor(did);
 
           if (action.type === 'reset') {
+            pendingAccountTokenRef.current = null;
             pendingLoginTicketRef.current = null;
             pendingBindTicketRef.current = null;
+            pendingSsoVerificationTicketRef.current = null;
             await deleteSecureItem(PENDING_OAUTH_KEY).catch(() => undefined);
             const providers = await client.getProviders();
             updateLoginState(
@@ -602,7 +640,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             );
             return true;
           }
-          // 企业 SSO 入口（按企业 ID/组织 slug）：结果映射进 method-choice，
+          // 企业 SSO 入口（按组织 ID/slug/已验证域名）：结果映射进 method-choice，
           // 复用连接选择 UI 与 start-sso 流程。
           if (action.type === 'discover-sso-org') {
             const discovery = await client.discoverSsoOrg(
@@ -690,10 +728,49 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             throw authCodeError('USER_CANCELLED');
           }
           if (action.type === 'select-account') {
+            const accountToken = pendingAccountTokenRef.current;
+            if (accountToken) {
+              const pair = await client.exchangeAccountMembership(
+                accountToken,
+                action.accountId,
+              );
+              pendingAccountTokenRef.current = null;
+              await acceptOutcome({ status: 'ok', ...pair }, did);
+              return true;
+            }
             const ticket = pendingLoginTicketRef.current;
             if (!ticket) throw authCodeError('INVALID_LOGIN_TICKET');
             await acceptOutcome(
               await client.selectAccount(ticket, action.accountId),
+              did,
+            );
+            return true;
+          }
+
+          if (action.type === 'request-sso-verification-code') {
+            const ticket = pendingSsoVerificationTicketRef.current;
+            const state = loginStateRef.current;
+            if (!ticket || state?.step !== 'sso-verification') {
+              throw authCodeError('INVALID_SSO_VERIFICATION_TICKET');
+            }
+            await client.requestSsoVerificationCode(ticket);
+            updateLoginState(
+              reduceAuthFlow(state, {
+                type: 'sso-verification-code-requested',
+                channel: state.channel,
+                targetMasked: state.targetMasked,
+              }),
+            );
+            return true;
+          }
+
+          if (action.type === 'verify-sso-verification') {
+            const ticket = pendingSsoVerificationTicketRef.current;
+            if (!ticket || loginStateRef.current?.step !== 'sso-verification') {
+              throw authCodeError('INVALID_SSO_VERIFICATION_TICKET');
+            }
+            await acceptOutcome(
+              await client.verifySsoVerification(ticket, action.code),
               did,
             );
             return true;
@@ -733,10 +810,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           const code = authErrorCode(error);
           if (
             code === 'INVALID_LOGIN_TICKET' ||
-            code === 'INVALID_BIND_TICKET'
+            code === 'INVALID_BIND_TICKET' ||
+            code === 'INVALID_SSO_VERIFICATION_TICKET' ||
+            code === 'INVALID_TOKEN' ||
+            code === 'TOKEN_EXPIRED'
           ) {
+            pendingAccountTokenRef.current = null;
             pendingLoginTicketRef.current = null;
             pendingBindTicketRef.current = null;
+            pendingSsoVerificationTicketRef.current = null;
             updateLoginState(null);
           }
           setAuthError(code);
@@ -760,8 +842,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setToken(null);
     applyUser(null);
     updateLoginState(null);
+    pendingAccountTokenRef.current = null;
     pendingLoginTicketRef.current = null;
     pendingBindTicketRef.current = null;
+    pendingSsoVerificationTicketRef.current = null;
     await clearAllMobileVoiceCredentials().catch(() => undefined);
     await clearMobileVoiceLiteLlmSettings().catch(() => undefined);
     await clearAllMobileVoiceInputHistories().catch(() => undefined);
@@ -779,6 +863,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         deleteSecureItem(USER_PROFILE_KEY).catch(() => undefined),
       ),
       deleteSecureItem(LEGACY_REFRESH_TOKEN_KEY).catch(() => undefined),
+      deleteSecureItem(LEGACY_ACCOUNT_REFRESH_TOKEN_KEY).catch(() => undefined),
       deleteSecureItem(PENDING_OAUTH_KEY).catch(() => undefined),
       deleteSecureItem(LEGACY_PENDING_OAUTH_KEY).catch(() => undefined),
       deleteSecureItem(LEGACY_USER_PROFILE_KEY).catch(() => undefined),

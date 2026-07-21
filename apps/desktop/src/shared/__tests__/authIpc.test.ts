@@ -33,7 +33,7 @@ describe('desktop auth IPC validation', () => {
     expect(
       parseDesktopLoginAction({
         type: 'discover-sso-org',
-        org: 'a'.repeat(65),
+        org: 'a'.repeat(254),
       }),
     ).toBeNull();
     expect(parseDesktopLoginAction({ type: 'discover-sso-org', org: '' })).toBeNull();
@@ -46,8 +46,12 @@ describe('desktop auth IPC validation', () => {
     });
     expect(parseDesktopLoginAction({ type: 'discover', email: 'user@example.com' })).not.toBeNull();
     expect(
-      parseDesktopLoginAction({ type: 'discover-sso-org', org: 'acme', extra: 'x' }),
-    ).toEqual({ type: 'discover-sso-org', org: 'acme' });
+      parseDesktopLoginAction({
+        type: 'discover-sso-org',
+        org: `${'a'.repeat(64)}.example.com`,
+        extra: 'x',
+      }),
+    ).toEqual({ type: 'discover-sso-org', org: `${'a'.repeat(64)}.example.com` });
     expect(
       parseDesktopLoginAction({
         type: 'request-code',
@@ -65,6 +69,12 @@ describe('desktop auth IPC validation', () => {
     ).not.toBeNull();
     expect(
       parseDesktopLoginAction({ type: 'select-account', accountId: 'account-id' }),
+    ).not.toBeNull();
+    expect(parseDesktopLoginAction({ type: 'request-sso-verification-code' })).toEqual({
+      type: 'request-sso-verification-code',
+    });
+    expect(
+      parseDesktopLoginAction({ type: 'verify-sso-verification', code: '123456' }),
     ).not.toBeNull();
     expect(
       parseDesktopLoginAction({

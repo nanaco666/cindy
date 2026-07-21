@@ -77,6 +77,7 @@ function authServerUrl(): string {
   return getClientEndpoint('authApiBaseUrl');
 }
 const REFRESH_TOKEN_KEY = 'cindy_auth_refresh_token';
+const LEGACY_ACCOUNT_REFRESH_TOKEN_KEY = 'cindy_auth_account_refresh_token';
 const LEGACY_REFRESH_TOKEN_KEY = 'refresh_token';
 const DEFAULT_MODEL = 'claude-sonnet-4-6';
 const DEFAULT_EFFORT = 'medium';
@@ -172,8 +173,12 @@ const deviceId = process.env.XDT_DEVICE_ID_OVERRIDE?.trim() || machineIdSync();
 let loginFlowState: AuthFlowState | null = null;
 let providerConfig: ProviderConfig | null = null;
 let discoveredMethods: LoginMethod[] = [];
+// Account token 仅在一次登录的 Membership 选择阶段存活；兑换 resource token
+// 后立即清空，不持久化、不续期，也不参与业务请求或正常登出。
+let pendingAccountToken: string | null = null;
 let pendingLoginTicket: string | null = null;
 let pendingBindTicket: string | null = null;
+let pendingSsoVerificationTicket: string | null = null;
 let loginActionPromise: Promise<DesktopLoginActionResult> | null = null;
 
 function createAuthClient(): CindyAuthClient {
@@ -749,11 +754,14 @@ function resetLoginFlowState(): void {
   loginFlowState = null;
   providerConfig = null;
   discoveredMethods = [];
+  pendingAccountToken = null;
   pendingLoginTicket = null;
   pendingBindTicket = null;
+  pendingSsoVerificationTicket = null;
 }
 
 async function reloadPerAccountIntegrationsFromDisk(_accessToken: string | null): Promise<void> {
+  void _accessToken;
   // 登录账号级集成清单当前为空(见 clearPerAccountIntegrations 顶注)。
   // 骨架与重试调度保留:替换式刷新的账号切换路径依赖本函数的调用位与
   // 'after-integration-reload' 守卫点。
@@ -786,6 +794,7 @@ function clearAuth(opts: { notify?: boolean } = {}): void {
   const notify = opts.notify ?? true;
   authStateEpoch += 1; // 迟到的冷启动流程从此作废(见 authStateEpoch 注释)
   accessToken = null;
+  pendingAccountToken = null;
   currentUser = null;
   resetLoginFlowState();
   persistedRefreshTokenNeedsIdentityCheck = false;
@@ -796,6 +805,7 @@ function clearAuth(opts: { notify?: boolean } = {}): void {
     refreshTimer = null;
   }
   removeSafe(REFRESH_TOKEN_KEY);
+  removeSafe(LEGACY_ACCOUNT_REFRESH_TOKEN_KEY);
   removeSafe(LEGACY_REFRESH_TOKEN_KEY);
   // 未登录时固定使用 stable；同步中的旧请求会被 authStateEpoch 守卫丢弃。
   canaryFlagStore.clear();
@@ -938,6 +948,8 @@ export async function initialize(options: AuthInitializeOptions = {}): Promise<A
     );
     lastAcceptedRefreshToken = null;
     removeSafe(REFRESH_TOKEN_KEY);
+    pendingAccountToken = null;
+    removeSafe(LEGACY_ACCOUNT_REFRESH_TOKEN_KEY);
     removeSafe(LEGACY_REFRESH_TOKEN_KEY);
     clearReloginFlag();
     return { user: null, isAuthenticated: false, isCanary: false, deviceId };
@@ -945,6 +957,8 @@ export async function initialize(options: AuthInitializeOptions = {}): Promise<A
 
   // Old Feishu-auth refresh tokens are intentionally not portable to auth-server.
   removeSafe(LEGACY_REFRESH_TOKEN_KEY);
+  // 早期测试版曾持久化 account refresh token；该会话现已收窄为登录期内存态。
+  removeSafe(LEGACY_ACCOUNT_REFRESH_TOKEN_KEY);
   const storedToken = readSafe(REFRESH_TOKEN_KEY);
   if (!storedToken) {
     return { user: null, isAuthenticated: false, isCanary: false, deviceId };
@@ -1089,10 +1103,12 @@ async function runColdStartRefreshFlow(storedToken: string): Promise<AuthState> 
 }
 
 async function loadLoginProviders(): Promise<AuthFlowState> {
-  providerConfig = await createAuthClient().getProviders();
   discoveredMethods = [];
+  pendingAccountToken = null;
   pendingLoginTicket = null;
   pendingBindTicket = null;
+  pendingSsoVerificationTicket = null;
+  providerConfig = await createAuthClient().getProviders();
   loginFlowState = reduceAuthFlow(loginFlowState, {
     type: 'providers-loaded',
     providers: providerConfig,
@@ -1102,7 +1118,8 @@ async function loadLoginProviders(): Promise<AuthFlowState> {
 
 export async function getLoginState(): Promise<DesktopLoginActionResult> {
   try {
-    return { success: true, state: loginFlowState ?? (await loadLoginProviders()) };
+    if (loginFlowState) return { success: true, state: loginFlowState };
+    return { success: true, state: await loadLoginProviders() };
   } catch (error) {
     const code = error instanceof AuthApiError ? error.code : 'AUTH_SERVICE_UNAVAILABLE';
     log.warn(`load login providers failed code=${code}`);
@@ -1125,6 +1142,7 @@ async function completeLogin(
     );
   }
 
+  pendingAccountToken = null;
   accessToken = outcome.accessToken;
   persistedRefreshTokenNeedsIdentityCheck = false;
   clearReplacementIntegrationReloadTimers();
@@ -1142,6 +1160,7 @@ async function completeLogin(
   getProviderSecretStore().reconcileOwner(outcome.membership.id);
   pendingLoginTicket = null;
   pendingBindTicket = null;
+  pendingSsoVerificationTicket = null;
   loginFlowState = reduceAuthFlow(loginFlowState, { type: 'outcome', outcome });
   notifyRenderer();
   notifyAuthListeners();
@@ -1149,13 +1168,21 @@ async function completeLogin(
 }
 
 async function acceptLoginOutcome(outcome: LoginOutcome): Promise<AuthFlowState> {
+  pendingAccountToken = outcome.status === 'select_account' ? (outcome.accountToken ?? null) : null;
+
   if (outcome.status === 'ok') return completeLogin(outcome);
   if (outcome.status === 'select_account') {
     pendingLoginTicket = outcome.loginTicket;
     pendingBindTicket = null;
-  } else {
+    pendingSsoVerificationTicket = null;
+  } else if (outcome.status === 'binding_required') {
     pendingBindTicket = outcome.bindTicket;
     pendingLoginTicket = null;
+    pendingSsoVerificationTicket = null;
+  } else {
+    pendingSsoVerificationTicket = outcome.verificationTicket;
+    pendingLoginTicket = null;
+    pendingBindTicket = null;
   }
   loginFlowState = reduceAuthFlow(loginFlowState, { type: 'outcome', outcome });
   return loginFlowState;
@@ -1186,7 +1213,7 @@ async function runLoginAction(action: DesktopLoginAction): Promise<DesktopLoginA
       return { success: true, state: loginFlowState };
     }
 
-    // 企业 SSO 入口（按企业 ID/组织 slug）：结果映射进 method-choice，
+    // 企业 SSO 入口（按组织 ID/slug/已验证域名）：结果映射进 method-choice，
     // 使 start-browser 的 connectionId 白名单校验与连接选择 UI 直接复用。
     if (action.type === 'discover-sso-org') {
       const discovery = await client.discoverSsoOrg(action.org.trim().toLowerCase());
@@ -1273,12 +1300,56 @@ async function runLoginAction(action: DesktopLoginAction): Promise<DesktopLoginA
     }
 
     if (action.type === 'select-account') {
-      if (!pendingLoginTicket)
+      const accountToken = pendingAccountToken;
+      if (accountToken) {
+        const pair = await client.exchangeAccountMembership(accountToken, action.accountId);
+        pendingAccountToken = null;
+        return {
+          success: true,
+          state: await completeLogin({ status: 'ok', ...pair }),
+        };
+      }
+      // 纯社交/SSO 等没有 account 会话的历史路径仍用一次性 loginTicket。
+      if (!pendingLoginTicket) {
         throw new AuthApiError('INVALID_LOGIN_TICKET', 401, 'Missing login ticket');
+      }
       return {
         success: true,
         state: await acceptLoginOutcome(
           await client.selectAccount(pendingLoginTicket, action.accountId),
+        ),
+      };
+    }
+
+    if (action.type === 'request-sso-verification-code') {
+      if (!pendingSsoVerificationTicket || loginFlowState?.step !== 'sso-verification') {
+        throw new AuthApiError(
+          'INVALID_SSO_VERIFICATION_TICKET',
+          401,
+          'Missing SSO verification ticket',
+        );
+      }
+      await client.requestSsoVerificationCode(pendingSsoVerificationTicket);
+      loginFlowState = reduceAuthFlow(loginFlowState, {
+        type: 'sso-verification-code-requested',
+        channel: loginFlowState.channel,
+        targetMasked: loginFlowState.targetMasked,
+      });
+      return { success: true, state: loginFlowState };
+    }
+
+    if (action.type === 'verify-sso-verification') {
+      if (!pendingSsoVerificationTicket || loginFlowState?.step !== 'sso-verification') {
+        throw new AuthApiError(
+          'INVALID_SSO_VERIFICATION_TICKET',
+          401,
+          'Missing SSO verification ticket',
+        );
+      }
+      return {
+        success: true,
+        state: await acceptLoginOutcome(
+          await client.verifySsoVerification(pendingSsoVerificationTicket, action.code),
         ),
       };
     }
@@ -1317,11 +1388,16 @@ async function runLoginAction(action: DesktopLoginAction): Promise<DesktopLoginA
     const flowCannotRetry = [
       'INVALID_LOGIN_TICKET',
       'INVALID_BIND_TICKET',
+      'INVALID_SSO_VERIFICATION_TICKET',
       'INVALID_AUTH_CODE',
+      'INVALID_TOKEN',
+      'TOKEN_EXPIRED',
     ].includes(code);
     if (flowCannotRetry) {
+      pendingAccountToken = null;
       pendingLoginTicket = null;
       pendingBindTicket = null;
+      pendingSsoVerificationTicket = null;
     }
     // Keep the last usable screen so validation/network failures can be retried
     // without discarding the entered identifier or requesting another code.

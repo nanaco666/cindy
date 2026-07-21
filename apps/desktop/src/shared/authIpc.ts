@@ -15,6 +15,8 @@ export type DesktopLoginAction =
       label: string;
     }
   | { type: 'select-account'; accountId: string }
+  | { type: 'request-sso-verification-code' }
+  | { type: 'verify-sso-verification'; code: string }
   | { type: 'request-binding-code'; contact: string }
   | { type: 'verify-binding'; contact: string; code: string };
 
@@ -25,8 +27,8 @@ export type DesktopLoginActionResult =
 const MAX_IDENTIFIER_LENGTH = 320;
 const MAX_OPAQUE_ID_LENGTH = 256;
 const MAX_CODE_LENGTH = 32;
-// 与 auth-server 的组织 slug 上限对齐（POST /api/auth/sso/discovery）
-const MAX_ORG_SLUG_LENGTH = 64;
+// 与 auth-server 的企业 ID / slug / 已验证域名统一上限对齐。
+const MAX_ORG_IDENTIFIER_LENGTH = 253;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -57,7 +59,7 @@ export function parseDesktopLoginAction(value: unknown): DesktopLoginAction | nu
         ? { type: 'discover', email: value.email }
         : null;
     case 'discover-sso-org':
-      return isBoundedString(value.org, MAX_ORG_SLUG_LENGTH)
+      return isBoundedString(value.org, MAX_ORG_IDENTIFIER_LENGTH)
         ? { type: 'discover-sso-org', org: value.org }
         : null;
     case 'request-code':
@@ -90,6 +92,12 @@ export function parseDesktopLoginAction(value: unknown): DesktopLoginAction | nu
     case 'select-account':
       return isBoundedString(value.accountId, MAX_OPAQUE_ID_LENGTH)
         ? { type: 'select-account', accountId: value.accountId }
+        : null;
+    case 'request-sso-verification-code':
+      return { type: 'request-sso-verification-code' };
+    case 'verify-sso-verification':
+      return isBoundedString(value.code, MAX_CODE_LENGTH)
+        ? { type: 'verify-sso-verification', code: value.code }
         : null;
     case 'request-binding-code':
       return isBoundedString(value.contact, MAX_IDENTIFIER_LENGTH)

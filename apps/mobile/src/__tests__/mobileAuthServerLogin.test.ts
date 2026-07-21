@@ -106,7 +106,7 @@ describe('mobile auth-server login', () => {
     );
   });
 
-  it('supports account selection and attribution binding without exposing tickets to the screen', () => {
+  it('keeps account tokens inside membership selection and private tickets off screen', () => {
     const authSource = readFileSync(
       resolve(process.cwd(), 'src/auth/AuthContext.tsx'),
       'utf8',
@@ -118,12 +118,34 @@ describe('mobile auth-server login', () => {
 
     expect(authSource).toContain('pendingLoginTicketRef');
     expect(authSource).toContain('pendingBindTicketRef');
+    expect(authSource).toContain('pendingSsoVerificationTicketRef');
+    expect(authSource).toContain('pendingAccountTokenRef');
+    expect(authSource).toContain('client.exchangeAccountMembership(');
     expect(authSource).toContain(
       'client.selectAccount(ticket, action.accountId)',
     );
     expect(authSource).toContain('client.verifyBinding(');
     expect(loginSource).not.toContain('loginTicket');
     expect(loginSource).not.toContain('bindTicket');
+    expect(loginSource).not.toContain('verificationTicket');
+    expect(authSource).toContain('client.requestSsoVerificationCode(ticket)');
+    expect(authSource).toContain(
+      'client.verifySsoVerification(ticket, action.code)',
+    );
+    expect(authSource).not.toContain('.logoutAccount(');
+    expect(authSource).not.toContain('.refreshAccount(');
+    expect(authSource).not.toContain(
+      'setSecureItem(LEGACY_ACCOUNT_REFRESH_TOKEN_KEY',
+    );
+
+    const apiFetchStart = authSource.indexOf('const apiFetch = useCallback(');
+    const apiFetchEnd = authSource.indexOf(
+      '\n\n  const value = useMemo',
+      apiFetchStart,
+    );
+    const apiFetchBody = authSource.slice(apiFetchStart, apiFetchEnd);
+    expect(apiFetchBody).toContain('const token = await getAccessToken();');
+    expect(apiFetchBody).not.toContain('pendingAccountTokenRef');
   });
 
   it('serializes rotated-token writes and keeps identity on auth-server only', () => {
@@ -133,6 +155,11 @@ describe('mobile auth-server login', () => {
     );
 
     expect(authSource).toContain('serializeRefreshTokenMutation');
+    expect(authSource).toMatch(
+      /const LEGACY_ACCOUNT_REFRESH_TOKEN_KEY\s*=\s*'cindy\.mobile\.auth\.accountRefreshToken';/,
+    );
+    expect(authSource).not.toContain('serializeAccountTokenMutation');
+    expect(authSource).not.toContain('accountRefreshInFlightRef');
     expect(authSource).toMatch(
       /if \(authGenerationRef\.current !== generation\)\s+throw authCodeError\('AUTH_FLOW_SUPERSEDED'\)/,
     );
@@ -145,5 +172,14 @@ describe('mobile auth-server login', () => {
     expect(authSource).toMatch(
       /code === 'INVALID_LOGIN_TICKET'\s*\|\|\s*code === 'INVALID_BIND_TICKET'/,
     );
+  });
+
+  it('accepts enterprise ID, organization slug, and verified domains up to the API limit', () => {
+    const loginSource = readFileSync(
+      resolve(process.cwd(), 'app/(auth)/login.tsx'),
+      'utf8',
+    );
+    expect(loginSource).toContain('maxLength={253}');
+    expect(loginSource).toContain("type: 'discover-sso-org'");
   });
 });
