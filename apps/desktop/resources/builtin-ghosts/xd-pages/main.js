@@ -49,12 +49,12 @@ function mapError(status, parsed) {
     'HTTP ' + status;
   var structuredCode = extractStructuredErrorCode(obj);
   var errorCode;
-  if (structuredCode) errorCode = structuredCode;
+  if (status === 400) errorCode = structuredCode || 'PAGES_API_ERROR';
   else if (status === 403) errorCode = /ip|whitelist|公司|内网/i.test(message + (hint || '')) ? 'IP_BLOCKED' : 'PERMISSION_DENIED';
   else if (status === 404) errorCode = 'NOT_FOUND';
   else if (status === 409) errorCode = 'SITE_NAME_TAKEN';
   else if (status === 429) errorCode = 'RATE_LIMITED';
-  else errorCode = 'PAGES_API_ERROR';
+  else errorCode = structuredCode || 'PAGES_API_ERROR';
   var out = { ok: false, errorCode: errorCode, message: message, httpStatus: status };
   if (hint) out.hint = hint;
   return out;
