@@ -2645,6 +2645,10 @@
     "sessionCostLabel": "세션 {{cost}}",
     "codex": {
       "waiting": "Codex --",
+      "noUsageLabel": "아직 사용량 없음",
+      "noUsageDetail": "이 세션에는 아직 사용량이 없습니다.",
+      "unavailableLabel": "사용량을 사용할 수 없음",
+      "unavailableDetail": "사용량 데이터를 일시적으로 사용할 수 없습니다.",
       "waitingDetail": "Codex 사용량은 다음 턴이 완료된 후 업데이트됩니다.",
       "sessionTokensLine": "이 세션에서 {{tokens}} token 사용",
       "sessionValueLabel": "세션 가치 {{cost}}",

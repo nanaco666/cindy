@@ -118,6 +118,19 @@ describe('TodaySpendChip dashboard routing', () => {
     expect(source).not.toContain('todaySpend.codex.creditsShort');
   });
 
+  it('uses token and explicit empty-state fallbacks for Codex API sessions', () => {
+    expect(source).toContain(
+      'isCodexApi || isCodexSubscription || isSubscriptionBridge ? sessionId : undefined',
+    );
+    expect(source).toContain('function hasPositiveSessionTokens(sessionTokens: number | null)');
+    expect(source).toContain('const codexApiHasTokenFallback = isCodexApi');
+    expect(source).toContain("todaySpend.codex.sessionTokensLine");
+    expect(source).toContain("todaySpend.codex.noUsageLabel");
+    expect(source).toContain("todaySpend.codex.unavailableLabel");
+    expect(source).toContain("todaySpend.codex.noUsageDetail");
+    expect(source).toContain("todaySpend.codex.unavailableDetail");
+  });
+
   it('keeps Claude subscription details in the chip and tooltip (plan B: follows current model)', () => {
     // 方案 B: 第二栏跟随当前模型的 weekly_scoped 窗口, 匹配不到回退总周限
     expect(source).toContain('function getClaudeChipSegments(');

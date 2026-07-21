@@ -2645,6 +2645,10 @@
     "sessionCostLabel": "Session {{cost}}",
     "codex": {
       "waiting": "Codex --",
+      "noUsageLabel": "No usage yet",
+      "noUsageDetail": "No usage has been recorded for this session yet.",
+      "unavailableLabel": "Usage unavailable",
+      "unavailableDetail": "Usage data is temporarily unavailable.",
       "waitingDetail": "Codex usage will update after the next turn completes.",
       "sessionTokensLine": "Session used {{tokens}} tokens",
       "sessionValueLabel": "Session value {{cost}}",
