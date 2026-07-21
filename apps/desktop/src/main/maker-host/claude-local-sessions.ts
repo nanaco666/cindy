@@ -924,6 +924,8 @@ function agentMetaFromRecord(
 ): Record<string, unknown> {
   const meta: Record<string, unknown> = {};
   const uuid = stringValue(obj.uuid);
+  const isAssistant = stringValue(obj.type) === 'assistant';
+  const sourceToolAssistantUuid = stringValue(obj.sourceToolAssistantUUID);
   // Claude transcript parentage and tool/subagent parentage are different graphs:
   // `parentUuid` / `parent_uuid` links adjacent JSONL records, while
   // `parent_tool_use_id` (and legacy sourceToolAssistantUUID) marks tool-owned
@@ -934,12 +936,16 @@ function agentMetaFromRecord(
     stringValue(obj.parent_uuid),
     stringValue(obj.logicalParentUuid),
     stringValue(obj.logical_parent_uuid),
+    // Claude uses sourceToolAssistantUUID as the transcript-chain parent for
+    // user/tool_result records, but as the tool-owned assistant marker for
+    // assistant records. Keep those meanings separate in agentMeta.
+    !isAssistant ? sourceToolAssistantUuid : '',
   );
   const parentUuid = firstNonEmpty(
     stringValue(obj.parent_tool_use_id),
     stringValue(obj.parentToolUseId),
     stringValue(obj.parentToolUseID),
-    stringValue(obj.sourceToolAssistantUUID),
+    isAssistant ? sourceToolAssistantUuid : '',
   );
   const sdkSessionId = firstNonEmpty(stringValue(obj.sessionId), stringValue(obj.session_id), fallbackSessionId);
   if (uuid) meta.uuid = uuid;

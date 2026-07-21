@@ -452,6 +452,10 @@ function forkSession(db: Database.Database, args: unknown): { messageCount: numb
   const targetCreatedAt = expectNumber(payload.targetCreatedAt, 'targetCreatedAt');
   const newSession = asRecord(payload.newSession, 'newSession');
   const uuidMap = normalizeUuidMap(payload.uuidMap);
+  const legacyTranscriptParentUuids = normalizeStringSet(
+    payload.legacyTranscriptParentUuids,
+    'legacyTranscriptParentUuids',
+  );
   const newMessageIds = normalizeNewMessageIds(payload.newMessageIds);
   const sourceMessages = db.prepare(
     `SELECT role, content, tool_use_id, agent_meta, agent_kind, created_at
@@ -528,7 +532,7 @@ function forkSession(db: Database.Database, args: unknown): { messageCount: numb
         message.role,
         message.content,
         message.tool_use_id,
-        remapAgentMetaUuid(message.agent_meta, uuidMap),
+        remapAgentMetaUuid(message.agent_meta, uuidMap, legacyTranscriptParentUuids),
         message.agent_kind,
         message.created_at,
       );
@@ -941,7 +945,11 @@ function extractContentText(content: unknown): string {
   return parts.join('\n\n');
 }
 
-function remapAgentMetaUuid(raw: string | null, map: Map<string, string>): string | null {
+function remapAgentMetaUuid(
+  raw: string | null,
+  map: Map<string, string>,
+  legacyTranscriptParentUuids: Set<string> = new Set(),
+): string | null {
   if (!raw || raw === 'null') return raw;
   let parsed: Record<string, unknown>;
   try {
@@ -950,6 +958,15 @@ function remapAgentMetaUuid(raw: string | null, map: Map<string, string>): strin
     return raw;
   }
   const next = { ...parsed };
+  if (
+    typeof next.uuid === 'string' &&
+    legacyTranscriptParentUuids.has(next.uuid) &&
+    typeof next.parentUuid === 'string' &&
+    !next.transcriptParentUuid
+  ) {
+    next.transcriptParentUuid = next.parentUuid;
+    delete next.parentUuid;
+  }
   if (typeof next.uuid === 'string') {
     const mapped = map.get(next.uuid);
     if (mapped) next.uuid = mapped;
@@ -966,6 +983,11 @@ function remapAgentMetaUuid(raw: string | null, map: Map<string, string>): strin
     else delete next.transcriptParentUuid;
   }
   return JSON.stringify(next);
+}
+
+function normalizeStringSet(value: unknown, label: string): Set<string> {
+  if (value === undefined) return new Set();
+  return new Set(expectArray(value, label).map((item, index) => expectString(item, `${label}.${index}`)));
 }
 
 function normalizeUuidMap(value: unknown): Map<string, string> {

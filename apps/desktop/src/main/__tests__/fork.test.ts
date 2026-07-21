@@ -618,6 +618,10 @@ describe('forkSessionAtMessage', () => {
       title: '[Fork] Project A',
       workingDir: '/work',
     });
+    const txCall = txCalls.find((call) => call.name === 'fork.session');
+    expect(txCall?.args).toMatchObject({
+      legacyTranscriptParentUuids: ['real-imported-assistant-uuid'],
+    });
   });
 
   it('claude path: locates JSONL under XDT_USER_DATA_DIR claude-home when main env has no CLAUDE_CONFIG_DIR', async () => {

@@ -92,6 +92,8 @@ export interface ForkSessionArgs {
     updatedAt: number;
   };
   uuidMap: Array<[string, string]> | Record<string, string>;
+  /** Legacy Claude imports may have stored transcript parentage in parentUuid. */
+  legacyTranscriptParentUuids?: string[];
   /**
    * main 侧预生成的新 message id 列表,顺序对应 source 消息按 created_at ASC 的遍历顺序。
    * 长度必须等于 source message 数。

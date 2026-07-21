@@ -92,6 +92,32 @@ function augmentClaudeForkUuidMapForSyntheticRows(
 }
 
 /**
+ * Identify legacy Claude rows whose `parentUuid` actually stores transcript
+ * parentage. The source transcript lets us distinguish those rows from real
+ * tool-owned assistant output before the fork transaction copies metadata.
+ */
+function collectLegacyClaudeTranscriptParentUuids(
+  rows: Array<{ agentMeta: string | null }>,
+  index: ClaudeTranscriptAnchorIndex | null,
+): string[] {
+  if (!index) return [];
+  const uuids = new Set<string>();
+  for (const row of rows) {
+    const meta = parseClaudeAgentMeta(row.agentMeta);
+    if (!meta.uuid || !meta.parentUuid || meta.transcriptParentUuid) continue;
+    const entry = index.byUuid.get(meta.uuid);
+    if (!entry) continue;
+    // Top-level assistants and every non-assistant transcript record use
+    // parentUuid as the legacy transcript edge. Assistant entries absent from
+    // assistantByUuid are tool-owned and must retain parentUuid.
+    if (entry.type !== 'assistant' || index.assistantByUuid.has(meta.uuid)) {
+      uuids.add(meta.uuid);
+    }
+  }
+  return [...uuids];
+}
+
+/**
  * 把 source 会话在 messageClientId 处 fork 成新会话。fork 点支持两种 role：
  *
  *   - user 消息：复制该提问 **之前** 的所有内容（不含提问本身）——经典
@@ -285,6 +311,9 @@ export async function forkSessionAtMessage(
   const txUuidMap = isCodex
     ? uuidMap
     : augmentClaudeForkUuidMapForSyntheticRows(sourceMessages, uuidMap, claudeAnchorIndex);
+  const legacyTranscriptParentUuids = isCodex
+    ? []
+    : collectLegacyClaudeTranscriptParentUuids(sourceMessages, claudeAnchorIndex);
   await getDbClient().tx('fork.session', {
     sourceSessionId,
     targetCreatedAt: boundaryCreatedAt,
@@ -318,6 +347,7 @@ export async function forkSessionAtMessage(
       updatedAt: now,
     },
     uuidMap: Array.from(txUuidMap.entries()),
+    ...(legacyTranscriptParentUuids.length > 0 ? { legacyTranscriptParentUuids } : {}),
     newMessageIds,
   });
 

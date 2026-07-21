@@ -284,6 +284,23 @@ describe('parseClaudeCodeMessageLine', () => {
     });
   });
 
+  it('stores sourceToolAssistantUUID as transcript parent on user/tool records', () => {
+    const rows = parseClaudeCodeMessageLine(line({
+      type: 'user',
+      uuid: 'user-tool-result',
+      sourceToolAssistantUUID: 'source-assistant-uuid',
+      message: { content: [{ type: 'tool_result', tool_use_id: 'toolu_1', content: 'done' }] },
+    }), 12, sdkSessionId, 'claude-sonnet-4-6');
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0].agentMeta).toMatchObject({
+      uuid: 'user-tool-result',
+      transcriptParentUuid: 'source-assistant-uuid',
+      sdkSessionId,
+    });
+    expect(rows[0].agentMeta).not.toHaveProperty('parentUuid');
+  });
+
   it('normalizes opus-4-8 full model id to short form', () => {
     const rows = parseClaudeCodeMessageLine(line({
       type: 'assistant',
