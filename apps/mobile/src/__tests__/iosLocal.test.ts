@@ -8,6 +8,7 @@ import {
   buildExportOptionsPlist,
   buildReleaseRecord,
   buildAppStoreInstallLinks,
+  selectRecordInstallLinks,
   fetchBaselineBuildNumber,
   nextDateBuildNumber,
   replaceBuildNumberInAppJson,
@@ -115,6 +116,30 @@ describe('buildAppStoreInstallLinks', () => {
   it('非数字或空 ID fail closed', () => {
     expect(() => buildAppStoreInstallLinks('id123')).toThrow(/numeric App Store ID/);
     expect(() => buildAppStoreInstallLinks('')).toThrow(/numeric App Store ID/);
+  });
+});
+
+describe('selectRecordInstallLinks', () => {
+  const enterprise = {
+    installUrl: 'https://cdn.dev.invalid/ios/1.2.3/2026072201/install.html',
+    itmsUrl: 'itms-services://?action=download-manifest&url=https://cdn.dev.invalid/ios/1.2.3/2026072201/manifest.plist',
+  };
+  it('appstore 模式 → 由数字 ID 生成商店链接(忽略企业链接)', () => {
+    expect(selectRecordInstallLinks({ mode: 'appstore', appStoreId: '6788711632' }, enterprise)).toEqual({
+      installUrl: 'https://apps.apple.com/app/id6788711632',
+      itmsUrl: 'itms-apps://itunes.apple.com/app/id6788711632',
+    });
+  });
+  it('enterprise 模式 → 直接返回企业重签安装页/itms 链接', () => {
+    expect(selectRecordInstallLinks({ mode: 'enterprise', appStoreId: '' }, enterprise)).toEqual(enterprise);
+  });
+  it('enterprise 模式但企业链接缺失 → fail closed', () => {
+    expect(() => selectRecordInstallLinks({ mode: 'enterprise' }, { installUrl: '', itmsUrl: '' }))
+      .toThrow(/企业重签安装入口缺少/);
+  });
+  it('appstore 模式空 ID 仍 fail closed(不静默放行)', () => {
+    expect(() => selectRecordInstallLinks({ mode: 'appstore', appStoreId: '' }, enterprise))
+      .toThrow(/numeric App Store ID/);
   });
 });
 

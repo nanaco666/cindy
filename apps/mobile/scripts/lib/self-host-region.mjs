@@ -237,19 +237,22 @@ export function resolveSelfHostRegion(args, options = {}) {
 }
 
 /**
- * iOS 自建冷更的 canary release record 必须指向正常 App Store 配置。
- * dev 在 app.config.js 中允许没有商店 ID（开发包仍可构建），但一旦走
- * 自建 iOS 发布就不能把空值写进 release.json；在构建/NPKG 之前 fail-fast。
+ * 判定 iOS 自建 canary 冷更的安装入口模式(显式配置优先):
+ *   - iosAppStoreId 是纯数字(任何 region)→ App Store 模式,record 写商店网页 + deep link;
+ *   - 为空且 region=dev → 企业重签模式,record 写 NPKG 企业重签后上传 OSS 的安装页 + itms-services 链接
+ *     (dev 无上架商店,以企业重签 IPA 的 itms 链接作正式安装入口;客户端契约本就优先走 itmsUrl);
+ *   - 为空且 region=cn/global → fail closed(正式线必须有商店入口,红线不放松;dev 例外仅限开发渠道)。
+ * 返回 { mode: 'appstore', appStoreId } | { mode: 'enterprise', appStoreId: '' }。
  */
-export function assertIosAppStoreConfigured(regionConfig) {
+export function resolveIosInstallEntryMode(regionConfig) {
   const id = String(regionConfig?.iosAppStoreId ?? '').trim();
-  if (!/^\d+$/.test(id)) {
-    throw new Error(
-      `iOS 自建 canary 发布需要 ${regionConfig?.authRegion ?? '?'}.iosAppStoreId 为纯数字 App Store ID;` +
-        'dev 开发包可以留空，但不能发布到自建 canary(否则客户端没有正常安装入口)',
-    );
-  }
-  return id;
+  if (/^\d+$/.test(id)) return { mode: 'appstore', appStoreId: id };
+  const region = regionConfig?.authRegion ?? '?';
+  if (region === 'dev') return { mode: 'enterprise', appStoreId: '' };
+  throw new Error(
+    `iOS 自建 canary 发布需要 ${region}.iosAppStoreId 为纯数字 App Store ID;` +
+      'dev 渠道无商店入口时改用企业重签安装页,但 cn/global 正式线必须配置商店入口(否则客户端没有正常安装入口)',
+  );
 }
 
 /**

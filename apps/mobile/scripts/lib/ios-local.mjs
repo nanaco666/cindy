@@ -218,3 +218,23 @@ export function buildAppStoreInstallLinks(appStoreId) {
     itmsUrl: `itms-apps://itunes.apple.com/app/id${id}`,
   };
 }
+
+/**
+ * 按安装入口模式(见 self-host-region.resolveIosInstallEntryMode)选出写进 release record 的安装链接:
+ *   - appstore：由数字 App Store ID 生成商店网页 + deep link;
+ *   - enterprise：直接用 NPKG 企业重签后上传 OSS 的安装页 + itms-services 链接(dev 无上架商店时)。
+ * 在此按 mode 分支,避免把空 App Store ID 喂进 buildAppStoreInstallLinks(它对空值 fail closed)。
+ * @param {{ mode: 'appstore' | 'enterprise', appStoreId?: string }} entry
+ * @param {{ installUrl?: string, itmsUrl?: string }} enterpriseLinks 企业重签上传 OSS 后的安装页/itms 链接
+ */
+export function selectRecordInstallLinks(entry, enterpriseLinks) {
+  if (entry?.mode === 'enterprise') {
+    const installUrl = String(enterpriseLinks?.installUrl ?? '').trim();
+    const itmsUrl = String(enterpriseLinks?.itmsUrl ?? '').trim();
+    if (!installUrl && !itmsUrl) {
+      throw new Error('企业重签安装入口缺少 installUrl/itmsUrl(NPKG 重签上传未产出安装页?)');
+    }
+    return { installUrl, itmsUrl };
+  }
+  return buildAppStoreInstallLinks(entry?.appStoreId);
+}
