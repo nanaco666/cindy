@@ -111,7 +111,7 @@ describe('Project 行内 + 也对标统一 New(delayed-create)', () => {
 describe('inline archive dirty-worktree warning', () => {
   it('preflights archive-now and opens the warning dialog before archiving a dirty worktree', () => {
     expect(sidebarSource).toMatch(
-      /if \(action === 'archive-now'\) \{[\s\S]*?fetchDirtyWorktreeForRemoval\([\s\S]*?if \(dirtyWorktree\) \{[\s\S]*?setConfirm\(\{ open: true, sessionId, action: 'archive', dirtyWorktree: true \}\);[\s\S]*?return;[\s\S]*?await runSessionAction\(sessionId, 'archive', \{ activeSessionId \}\);/,
+      /if \(action === 'archive-now'\) \{[\s\S]*?fetchDirtyWorktreeForRemoval\([\s\S]*?if \(dirtyWorktree\) \{[\s\S]*?setConfirm\(\{ open: true, sessionId, action: 'archive', dirtyWorktree: true \}\);[\s\S]*?return;[\s\S]*?await runSessionAction\(sessionId, 'archive', \{ activeSessionId: viewedSessionId \}\);/,
     );
   });
 });
