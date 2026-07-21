@@ -868,7 +868,7 @@ export function MainLayout() {
           break;
         case 'toggle-sidebar':
           // 菜单点击走这里。⌘B 按键由 MainLayout 内的 keydown 监听独立处理
-          // (跳过非 Tiptap 的 contenteditable 以保留 mdxeditor 等编辑器的 Bold 能力),
+          // (跳过非 Tiptap 的 contenteditable 以保留富文本编辑器的 Bold 能力),
           // 不依赖菜单 accelerator。
           handleToggleSidebar();
           break;
@@ -878,8 +878,8 @@ export function MainLayout() {
 
   // ⌘B / Ctrl+B 切换侧边栏折叠 (组合键定义在 shared/appShortcuts registry,
   // 用户可改绑)。capture 阶段处理, 但需要为真正用到 Bold 的 contenteditable
-  // 编辑器让路 —— 比如 SkillHub 的 mdxeditor (@mdxeditor/editor) 注册了 Bold
-  // mark, 偷掉 ⌘B 会让 Mac / Windows 都失去加粗能力。
+  // 编辑器让路 —— 非 Tiptap 的 contenteditable 可能注册了 Bold mark,
+  // 偷掉 ⌘B 会让 Mac / Windows 都失去加粗能力。
   //
   // ChatInput 的 Tiptap composer (.ProseMirror) 没注册 Bold mark, 让路给它只会
   // 让用户感知"启动后 ⌘B 不生效"(启动时 composer 立即自动 focus), 所以这里
@@ -888,7 +888,7 @@ export function MainLayout() {
   useAppShortcut('toggle-sidebar', (e) => {
     const target = e.target as HTMLElement | null;
     const editable = target?.closest?.('[contenteditable="true"]') as HTMLElement | null;
-    // 仅放行非 Tiptap 的 contenteditable (mdxeditor 等), Tiptap 的 ProseMirror
+    // 仅放行非 Tiptap 的 contenteditable, Tiptap 的 ProseMirror
     // 没 Bold 能力, 继续拦截以保证 sidebar 切换可用。
     if (editable && !editable.classList.contains('ProseMirror')) return false;
     handleToggleSidebar();

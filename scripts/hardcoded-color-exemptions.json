@@ -40,11 +40,6 @@
   "owner": "D2"
  },
  {
-  "glob": "apps/desktop/src/renderer/components/markdown/markdown-editor.css",
-  "reason": "D2-4 markdown-editor CINDY 覆盖段:注释引用 default/CINDY 色对比([data-theme] 段本身用 var 无 hex)",
-  "owner": "D2"
- },
- {
   "glob": "apps/desktop/src/renderer/themes/colors.ts",
   "reason": "token 注册表:注册值 + 注释引用色(panel-bg/board D1 + status-badge-fg D2)",
   "owner": "D1+D2"

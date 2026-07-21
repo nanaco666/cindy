@@ -39,13 +39,19 @@ test("generated artifact notices are platform-scoped and disclose restricted com
   assert.match(macos, /@img\/sharp-darwin-/);
   assert.doesNotMatch(macos, /Android SDK Platform-Tools/);
   assert.match(linux, /@img\/sharp-linux-x64@/);
-  assert.match(windowsRestricted, /@codesandbox\/nodebox@0\.1\.8/);
-  assert.match(windowsRestricted, /Sustainable Use License/);
+  assert.doesNotMatch(windowsRestricted, /@codesandbox\/nodebox/);
+  assert.doesNotMatch(windowsRestricted, /Sustainable Use License/);
   assert.match(iosRestricted, /WeChat OpenSDK for iOS@2\.0\.5/);
   assert.doesNotMatch(iosRestricted, /WeChat OpenSDK for Android@6\.8\.38/);
   assert.match(androidRestricted, /WeChat OpenSDK for Android@6\.8\.38/);
   assert.doesNotMatch(androidRestricted, /Claude Code CLI@/);
   assert.doesNotMatch(windows, /@codesandbox\/nodebox@0\.1\.8 —/);
+});
+
+test("commercial distributions do not resolve forbidden Sustainable Use dependencies", () => {
+  const lockfile = read("pnpm-lock.yaml");
+  assert.doesNotMatch(lockfile, /@codesandbox\/nodebox/);
+  assert.doesNotMatch(lockfile, /@codesandbox\/sandpack-(?:client|react)/);
 });
 
 test("every SPDX document is structurally consistent and has valid license expressions", () => {

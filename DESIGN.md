@@ -684,28 +684,7 @@ cindy-light 用黑字版(`cindy-logo-light.png`)、cindy-dark 用白字版(`cind
 - 覆盖数组 115→116(`cindyDecisionData` 注明 D2 期新增,源自 §7 必炸点方案);
 - 消费点(`ContactsListPane:150`)从 `accent-pure-cta-fg` 切到 `status-badge-fg`;红 CTA 上的 `surface-on-card` 消费者(`RolePillDropdown:543/544`、`SkillhubDetailView:504`)迁到 `accent-pure-cta-fg`(白),`surface-on-card` 保留中性反相(Fast toggle thumb)。
 
-### 15.9 markdown-editor.css CINDY 覆盖(B 裁决 2026-07-17)
-
-`[data-theme="cindy-light/dark"] .mdxeditor-host` 覆盖 MDXEditor 色阶用 CINDY token(var 引用,light/dark 自动解析)。锚点按文件顶部 Token map 注释,中间档按序:①语义对上决策表插值 token 的复用;②对不上的 sRGB `round(A+(B-A)*t)` 从相邻锚点算(本映射中间档均复用 token,无 sRGB 插值)。文本档实算对比度 ≥4.5:1。
-
-| --blue-* | CINDY token | 规则 |
-|---|---|---|
-| --blue-1 | `var(--surface)` | 锚点(Surface) |
-| --blue-2 | `var(--surface-hover-soft)` | ①复用插值 token |
-| --blue-3 | `var(--surface-elevated)` | 锚点(Card) |
-| --blue-4 | `var(--surface-hover)` | ①复用 |
-| --blue-5 | `var(--surface-chip)` | ①复用(Chip) |
-| --blue-6 | `var(--border-default)` | 锚点(Board) |
-| --blue-7 | `var(--border-default)` | ①复用(同 6) |
-| --blue-8 | `var(--text-tertiary)` | ①复用(中间灰) |
-| --blue-9 | `var(--text-primary)` | 锚点(primary) |
-| --blue-10 | `var(--text-primary-emphasis)` | ①复用(深字) |
-| --blue-11 | `var(--text-primary)` | ①复用(文字档,× surface-elevated ≥4.5:light #3C3F43×#F8F8F8=9.97,dark #D4D4D4×#312F2F=8.98) |
-| --blue-12 | `var(--text-primary-emphasis)` | ①复用(文字档) |
-
-`--slate-*` 同理对应中性档。`--base*`/`--accent*` 按 Token map。`:root`/`.dark` 原两套一字不动。
-
-### 15.10 E1D 红色体系重构(用户批准 2026-07-17)
+### 15.9 E1D 红色体系重构(用户批准 2026-07-17)
 
 常规主操作不再用品牌红,改反相中性(light 底 `#3C3F43`/字 `#FCFCFC`,dark 底 `#EEEEEE`/字 `#252222`;WCAG 10.32/13.60:1)。红色仅限语义例外:
 - **A 类(保留红)**:`brand-login-bg`/`brand-login-error-border`/`brand-login-error-text`(品牌海报/错误);
