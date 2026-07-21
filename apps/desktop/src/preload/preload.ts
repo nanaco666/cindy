@@ -17,10 +17,10 @@ import {
   type AgentIslandSoundSettings,
 } from '../shared/agentIsland';
 import {
-  WINDOW_BEHAVIOR_CHOOSE_WINDOWS_CLOSE_BEHAVIOR_CHANNEL,
   WINDOW_BEHAVIOR_GET_WINDOWS_CLOSE_BEHAVIOR_CHANNEL,
   WINDOW_BEHAVIOR_SET_SWALLOW_ACTIVATION_CLICK_CHANNEL,
   WINDOW_BEHAVIOR_SET_WINDOWS_CLOSE_BEHAVIOR_CHANNEL,
+  WINDOW_BEHAVIOR_WINDOWS_CLOSE_BEHAVIOR_REQUESTED_CHANNEL,
   type WindowsCloseBehavior,
 } from '../shared/windowBehavior';
 import { SELECTION_CONTEXT_MENU_ADD_TO_CHAT_CHANNEL } from '../shared/selectionContextMenu';
@@ -986,8 +986,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
       behavior: WindowsCloseBehavior,
     ): Promise<WindowsCloseBehavior> =>
       ipcRenderer.invoke(WINDOW_BEHAVIOR_SET_WINDOWS_CLOSE_BEHAVIOR_CHANNEL, behavior),
-    chooseWindowsCloseBehavior: (): Promise<WindowsCloseBehavior> =>
-      ipcRenderer.invoke(WINDOW_BEHAVIOR_CHOOSE_WINDOWS_CLOSE_BEHAVIOR_CHANNEL),
+    onWindowsCloseBehaviorRequested: (callback: () => void): (() => void) => {
+      const listener = (): void => callback();
+      ipcRenderer.on(WINDOW_BEHAVIOR_WINDOWS_CLOSE_BEHAVIOR_REQUESTED_CHANNEL, listener);
+      return () => ipcRenderer.removeListener(
+        WINDOW_BEHAVIOR_WINDOWS_CLOSE_BEHAVIOR_REQUESTED_CHANNEL,
+        listener,
+      );
+    },
   },
 
   // ── 右侧栏独立子窗口(RSB window)──────────────────────────────────────

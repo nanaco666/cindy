@@ -396,15 +396,15 @@ import {
 } from './window-behavior-settings-store.js';
 import {
   hideWindowToWindowsTray,
+  requestWindowsCloseBehavior,
   requestWindowsTrayQuit,
 } from './windowsTrayLifecycle.js';
 import {
   isWindowsCloseBehavior,
-  WINDOW_BEHAVIOR_CHOOSE_WINDOWS_CLOSE_BEHAVIOR_CHANNEL,
   WINDOW_BEHAVIOR_GET_WINDOWS_CLOSE_BEHAVIOR_CHANNEL,
   WINDOW_BEHAVIOR_SET_SWALLOW_ACTIVATION_CLICK_CHANNEL,
   WINDOW_BEHAVIOR_SET_WINDOWS_CLOSE_BEHAVIOR_CHANNEL,
-  type WindowsCloseBehavior,
+  WINDOW_BEHAVIOR_WINDOWS_CLOSE_BEHAVIOR_REQUESTED_CHANNEL,
 } from '../shared/windowBehavior.js';
 import { getDesktopCommandRegistry, registerBuiltinDesktopCommands } from './commands/index.js';
 import { registerRemoteCmdIpc } from './commands/remoteCmdIpc.js';
@@ -1388,31 +1388,6 @@ const updatePresentationRecovery = isUpdateRelaunchCandidate
 let isQuitting = false;
 let windowsTray: Tray | null = null;
 
-function getOrPromptWindowsCloseBehavior(parentWindow?: BrowserWindow): WindowsCloseBehavior {
-  const configured = readWindowBehaviorSettings().windowsCloseBehavior;
-  if (configured) return configured;
-
-  const options = {
-    type: 'question' as const,
-    title: t('settings.windowBehavior.closePrompt.title'),
-    message: t('settings.windowBehavior.closePrompt.message'),
-    detail: t('settings.windowBehavior.closePrompt.detail'),
-    buttons: [
-      t('settings.windowBehavior.closeBehavior.tray'),
-      t('settings.windowBehavior.closeBehavior.quit'),
-    ],
-    defaultId: 0,
-    cancelId: 0,
-    noLink: true,
-  };
-  const choice = parentWindow
-    ? dialog.showMessageBoxSync(parentWindow, options)
-    : dialog.showMessageBoxSync(options);
-  const behavior: WindowsCloseBehavior = choice === 1 ? 'quit' : 'tray';
-  writeWindowsCloseBehavior(behavior);
-  return behavior;
-}
-
 function updateWindowsTrayMenu(): void {
   if (!windowsTray || windowsTray.isDestroyed()) return;
   windowsTray.setContextMenu(
@@ -1911,7 +1886,14 @@ const createWindow = () => {
     // alive in the system tray. Linux keeps the historical quit behavior.
     event.preventDefault();
     if (process.platform === 'win32') {
-      const behavior = getOrPromptWindowsCloseBehavior(mainWindow);
+      const behavior = readWindowBehaviorSettings().windowsCloseBehavior;
+      if (!behavior) {
+        requestWindowsCloseBehavior(
+          mainWindow,
+          WINDOW_BEHAVIOR_WINDOWS_CLOSE_BEHAVIOR_REQUESTED_CHANNEL,
+        );
+        return;
+      }
       if (behavior === 'tray') {
         hideMainWindowToWindowsTray(mainWindow);
       } else {
@@ -2315,12 +2297,6 @@ ipcMain.on('theme:apply-vibrancy', (_event, payload: { familyId: string; isDark:
       return behavior;
     },
   );
-  ipcMain.handle(WINDOW_BEHAVIOR_CHOOSE_WINDOWS_CLOSE_BEHAVIOR_CHANNEL, async (event) => {
-    if (process.platform !== 'win32') return 'quit' satisfies WindowsCloseBehavior;
-    const parentWindow = BrowserWindow.fromWebContents(event.sender) ?? undefined;
-    return getOrPromptWindowsCloseBehavior(parentWindow);
-  });
-
   // LSP Beta 开关 IPC —— 同 compat-mode 模式:
   // GET 给 renderer 启动期同步 localStorage 镜像; SET 落 JSON 文件 + 更新 cache,
   // mcp providers isEnabled 下次 session.start 时读到新值。已开 session 不变。

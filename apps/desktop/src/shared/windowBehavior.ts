@@ -19,8 +19,8 @@ export const WINDOW_BEHAVIOR_GET_WINDOWS_CLOSE_BEHAVIOR_CHANNEL =
   'window-behavior:get-windows-close-behavior';
 export const WINDOW_BEHAVIOR_SET_WINDOWS_CLOSE_BEHAVIOR_CHANNEL =
   'window-behavior:set-windows-close-behavior';
-export const WINDOW_BEHAVIOR_CHOOSE_WINDOWS_CLOSE_BEHAVIOR_CHANNEL =
-  'window-behavior:choose-windows-close-behavior';
+export const WINDOW_BEHAVIOR_WINDOWS_CLOSE_BEHAVIOR_REQUESTED_CHANNEL =
+  'window-behavior:windows-close-behavior-requested';
 
 export function isWindowsCloseBehavior(value: unknown): value is WindowsCloseBehavior {
   return value === 'quit' || value === 'tray';

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { WindowControls } from '@/components/title-bar/WindowControls';
@@ -9,22 +9,39 @@ vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
 
-function installWindowsApi(closeBehavior: 'quit' | 'tray') {
-  const chooseWindowsCloseBehavior = vi.fn(async () => closeBehavior);
+function installWindowsApi(closeBehavior: 'quit' | 'tray' | null) {
+  let closeBehaviorRequested: (() => void) | null = null;
+  const getWindowsCloseBehavior = vi.fn(async () => closeBehavior);
+  const setWindowsCloseBehavior = vi.fn(async (behavior: 'quit' | 'tray') => behavior);
+  const onWindowsCloseBehaviorRequested = vi.fn((callback: () => void) => {
+    closeBehaviorRequested = callback;
+    return vi.fn();
+  });
   const anySessionInTurn = vi.fn(async () => false);
   const windowClose = vi.fn();
   Object.defineProperty(window, 'electronAPI', {
     configurable: true,
     value: {
       platform: 'win32',
-      windowBehavior: { chooseWindowsCloseBehavior },
+      windowBehavior: {
+        getWindowsCloseBehavior,
+        setWindowsCloseBehavior,
+        onWindowsCloseBehaviorRequested,
+      },
       anySessionInTurn,
       windowClose,
       windowMinimize: vi.fn(),
       windowMaximize: vi.fn(),
     } as unknown as Window['electronAPI'],
   });
-  return { chooseWindowsCloseBehavior, anySessionInTurn, windowClose };
+  return {
+    getWindowsCloseBehavior,
+    setWindowsCloseBehavior,
+    onWindowsCloseBehaviorRequested,
+    anySessionInTurn,
+    windowClose,
+    requestCloseBehavior: () => closeBehaviorRequested?.(),
+  };
 }
 
 afterEach(() => {
@@ -41,7 +58,7 @@ describe('Windows close behavior', () => {
     fireEvent.click(screen.getByRole('button', { name: 'titleBar.close' }));
 
     await waitFor(() => expect(api.windowClose).toHaveBeenCalledTimes(1));
-    expect(api.chooseWindowsCloseBehavior).toHaveBeenCalledTimes(1);
+    expect(api.getWindowsCloseBehavior).toHaveBeenCalledTimes(1);
     expect(api.anySessionInTurn).not.toHaveBeenCalled();
   });
 
@@ -52,7 +69,39 @@ describe('Windows close behavior', () => {
     fireEvent.click(screen.getByRole('button', { name: 'titleBar.close' }));
 
     await waitFor(() => expect(api.windowClose).toHaveBeenCalledTimes(1));
-    expect(api.chooseWindowsCloseBehavior).toHaveBeenCalledTimes(1);
+    expect(api.getWindowsCloseBehavior).toHaveBeenCalledTimes(1);
     expect(api.anySessionInTurn).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses the Cindy dialog for the first close and persists the safe tray choice', async () => {
+    const api = installWindowsApi(null);
+    render(<WindowControls />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'titleBar.close' }));
+
+    expect(await screen.findByText('settings.windowBehavior.closePrompt.title')).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole('button', { name: 'settings.windowBehavior.closeBehavior.tray' }),
+    );
+
+    await waitFor(() => expect(api.setWindowsCloseBehavior).toHaveBeenCalledWith('tray'));
+    await waitFor(() => expect(api.windowClose).toHaveBeenCalledTimes(1));
+    expect(api.anySessionInTurn).not.toHaveBeenCalled();
+  });
+
+  it('opens the same dialog for a native Windows close request', async () => {
+    const api = installWindowsApi(null);
+    render(<WindowControls />);
+
+    act(() => api.requestCloseBehavior());
+
+    expect(await screen.findByText('settings.windowBehavior.closePrompt.title')).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole('button', { name: 'settings.windowBehavior.closeBehavior.quit' }),
+    );
+
+    await waitFor(() => expect(api.setWindowsCloseBehavior).toHaveBeenCalledWith('quit'));
+    await waitFor(() => expect(api.anySessionInTurn).toHaveBeenCalledTimes(1));
+    expect(api.windowClose).toHaveBeenCalledTimes(1);
   });
 });
