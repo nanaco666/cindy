@@ -8,6 +8,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { isSecondaryWindow } from '@/lib/secondaryWindow';
 import { isSidebarWindow } from '@/lib/sidebarWindow';
+import type { WindowsCloseBehavior } from '../../../shared/windowBehavior';
 
 interface WindowControlsProps {
   /**
@@ -64,6 +65,18 @@ export function WindowControls({
     if (isSecondaryWindow() || isSidebarWindow()) {
       window.electronAPI.windowClose();
       return;
+    }
+    if (window.electronAPI.platform === 'win32') {
+      let closeBehavior: WindowsCloseBehavior | null = null;
+      try {
+        closeBehavior = await window.electronAPI.windowBehavior.chooseWindowsCloseBehavior();
+      } catch {
+        // Main close handler is the final authority and will retry the first-close prompt.
+      }
+      if (closeBehavior === 'tray') {
+        window.electronAPI.windowClose();
+        return;
+      }
     }
     let hasInFlight = false;
     try {
