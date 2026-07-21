@@ -455,6 +455,7 @@ describe('mobile session composer desktop-first surface', () => {
     expect(source).toContain('onPressIn={handleVoiceButtonPressIn}');
     expect(source).toContain(`prewarmMobileVoiceStart(deviceId, {
       getAccessToken: () => auth.getAccessToken(),
+      refreshAccessToken: () => auth.refreshAccessToken(),
       apiFetch: auth.apiFetch,
     });`);
     expect(source).toContain('connectionProvider: (providerId) => voiceContext.createAsrConnection(providerId),');

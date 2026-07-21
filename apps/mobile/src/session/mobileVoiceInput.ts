@@ -402,14 +402,14 @@ export class MobileLiteLlmTextModelClient implements TextModelClient {
   private readonly baseUrl?: string;
   private readonly endpointPath: string;
   private readonly deps?: CloudVoiceDeps;
-  private readonly requestTargetProvider?: () => Promise<{ url: string; authorization: string }>;
+  private readonly requestTargetProvider?: (options?: { refreshAccessToken?: boolean }) => Promise<{ url: string; authorization: string }>;
 
   constructor(options: {
     proxyApiKey?: string;
     baseUrl?: string;
     endpointPath?: string;
     deps?: CloudVoiceDeps;
-    requestTargetProvider?: () => Promise<{ url: string; authorization: string }>;
+    requestTargetProvider?: (options?: { refreshAccessToken?: boolean }) => Promise<{ url: string; authorization: string }>;
   }) {
     this.proxyApiKey = options.proxyApiKey;
     this.baseUrl = options.baseUrl;
@@ -427,13 +427,14 @@ export class MobileLiteLlmTextModelClient implements TextModelClient {
     onTextSnapshot?: (text: string) => void;
   }): Promise<T> {
     const fetchImpl = this.deps?.fetch ?? fetch;
-    const target = this.requestTargetProvider
-      ? await this.requestTargetProvider()
-      : {
-          url: joinProxyPath(this.baseUrl!, this.endpointPath),
-          authorization: `Bearer ${this.proxyApiKey!}`,
-        };
-    const response = await fetchImpl(target.url, {
+    const request = async (refreshAccessToken = false) => {
+      const target = this.requestTargetProvider
+        ? await this.requestTargetProvider({ refreshAccessToken })
+        : {
+            url: joinProxyPath(this.baseUrl!, this.endpointPath),
+            authorization: `Bearer ${this.proxyApiKey!}`,
+          };
+      return fetchImpl(target.url, {
       method: 'POST',
       headers: {
         Authorization: target.authorization,
@@ -456,7 +457,12 @@ export class MobileLiteLlmTextModelClient implements TextModelClient {
           },
         ],
       }),
-    });
+      });
+    };
+    let response = await request();
+    if (!response.ok && response.status === 401 && this.requestTargetProvider) {
+      response = await request(true);
+    }
     if (!response.ok) {
       throw new Error(await cloudVoiceHttpErrorMessage('语音润色失败', response, this.proxyApiKey ?? ''));
     }
@@ -535,7 +541,7 @@ export class MobileFallbackTextModelClient implements TextModelClient {
 export function buildMobileRefinerAttempts(
   credential: StoredMobileVoiceCredential,
   deps?: CloudVoiceDeps,
-  requestTargetProvider?: (provider: string) => Promise<{ url: string; authorization: string }>,
+  requestTargetProvider?: (provider: string, options?: { refreshAccessToken?: boolean }) => Promise<{ url: string; authorization: string }>,
 ): MobileRefinerAttempt[] {
   const chain = mobileRefinerCredentialChain(credential);
   return chain.map((refiner) => ({
@@ -548,7 +554,7 @@ export function buildMobileRefinerAttempts(
       endpointPath: refiner.endpointPath,
       deps,
       requestTargetProvider: requestTargetProvider
-        ? () => requestTargetProvider(refiner.provider)
+        ? (options) => requestTargetProvider(refiner.provider, options)
         : undefined,
     }),
   }));

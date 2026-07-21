@@ -31,6 +31,7 @@ export class MobileCindyVoiceRunContext {
 
   constructor(
     private readonly getAccessToken: AccessTokenProvider,
+    private readonly refreshAccessToken: AccessTokenProvider,
     private readonly apiFetch: AuthenticatedApiFetch,
     private readonly sourceLanguage: string | undefined,
     private readonly refinerProvider: string | undefined,
@@ -65,20 +66,20 @@ export class MobileCindyVoiceRunContext {
     return { websocketUrl: session.asr.websocketUrl, authorizationToken: session.ticket };
   }
 
-  async createRefinerTarget(refinerProvider: string): Promise<{
+  async createRefinerTarget(refinerProvider: string, options?: { refreshAccessToken?: boolean }): Promise<{
     url: string;
     authorization: string;
   }> {
     if (!this.latestSessionId) throw new Error('语音识别会话尚未连接。');
-    const token = await this.requireAccessToken();
+    const token = await this.requireAccessToken(options?.refreshAccessToken);
     return {
       url: `${requireVoiceBaseUrl()}/api/voice/sessions/${encodeURIComponent(this.latestSessionId)}/refine?provider=${encodeURIComponent(refinerProvider)}`,
       authorization: `Bearer ${token}`,
     };
   }
 
-  private async requireAccessToken(): Promise<string> {
-    const token = await this.getAccessToken();
+  private async requireAccessToken(refreshAccessToken = false): Promise<string> {
+    const token = await (refreshAccessToken ? this.refreshAccessToken : this.getAccessToken)();
     if (!token) throw new Error('请先登录 Cindy 后再使用语音输入。');
     return token;
   }

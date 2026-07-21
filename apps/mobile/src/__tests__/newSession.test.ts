@@ -834,6 +834,7 @@ describe('new session composer surface', () => {
     expect(newSource).toContain('onPressIn={handleVoiceButtonPressIn}');
     expect(newSource).toContain(`prewarmMobileVoiceStart(selectedDeviceId, {
       getAccessToken: () => auth.getAccessToken(),
+      refreshAccessToken: () => auth.refreshAccessToken(),
       apiFetch: auth.apiFetch,
     });`);
     expect(newSource).toContain('const [prewarmedVoice, localVoiceInputHistory] = await Promise.all([');

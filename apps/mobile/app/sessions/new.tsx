@@ -1331,6 +1331,7 @@ export default function NewRemoteSessionScreen() {
       const voiceContext = prewarmedVoice?.voiceContext
         ?? new MobileCindyVoiceRunContext(
           () => auth.getAccessToken(),
+          () => auth.refreshAccessToken(),
           auth.apiFetch,
           credential.settings?.language,
           credential.refiner.provider,
@@ -1476,6 +1477,7 @@ export default function NewRemoteSessionScreen() {
     if (!selectedDeviceId || !isMobileRealtimeAudioAvailable()) return;
     prewarmMobileVoiceStart(selectedDeviceId, {
       getAccessToken: () => auth.getAccessToken(),
+      refreshAccessToken: () => auth.refreshAccessToken(),
       apiFetch: auth.apiFetch,
     });
   }, [creating, selectedDeviceId, voiceIsProcessing, voiceState]);

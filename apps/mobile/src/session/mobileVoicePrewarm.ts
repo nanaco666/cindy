@@ -50,6 +50,7 @@ export function prewarmMobileVoiceStart(
   deviceId: string,
   options?: {
     getAccessToken: () => Promise<string | null>;
+    refreshAccessToken: () => Promise<string | null>;
     apiFetch: <T>(path: string, options: Omit<ApiFetchOptions, 'token'>) => Promise<T>;
   },
 ): void {
@@ -107,6 +108,7 @@ async function buildPrewarm(
   deviceId: string,
   auth?: {
     getAccessToken: () => Promise<string | null>;
+    refreshAccessToken: () => Promise<string | null>;
     apiFetch: <T>(path: string, options: Omit<ApiFetchOptions, 'token'>) => Promise<T>;
   },
 ): Promise<PrewarmedMobileVoiceAsr | null> {
@@ -117,6 +119,7 @@ async function buildPrewarm(
     const voiceContext = auth
       ? new MobileCindyVoiceRunContext(
         auth.getAccessToken,
+        auth.refreshAccessToken,
         auth.apiFetch,
         credential.settings?.language,
         credential.refiner.provider,

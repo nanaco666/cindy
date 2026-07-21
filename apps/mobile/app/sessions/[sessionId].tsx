@@ -2836,6 +2836,7 @@ export default function SessionScreen() {
       const voiceContext = prewarmedVoice?.voiceContext
         ?? new MobileCindyVoiceRunContext(
           () => auth.getAccessToken(),
+          () => auth.refreshAccessToken(),
           auth.apiFetch,
           credential.settings?.language,
           credential.refiner.provider,
@@ -3049,6 +3050,7 @@ export default function SessionScreen() {
     if (!deviceId || !isMobileRealtimeAudioAvailable()) return;
     prewarmMobileVoiceStart(deviceId, {
       getAccessToken: () => auth.getAccessToken(),
+      refreshAccessToken: () => auth.refreshAccessToken(),
       apiFetch: auth.apiFetch,
     });
   }, [deviceId, voiceIsProcessing, voiceState]);

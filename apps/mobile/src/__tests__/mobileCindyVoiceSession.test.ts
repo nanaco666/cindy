@@ -31,7 +31,8 @@ describe('MobileCindyVoiceRunContext', () => {
     }));
     const context = new MobileCindyVoiceRunContext(
       getAccessToken,
-      apiFetch as unknown as ConstructorParameters<typeof MobileCindyVoiceRunContext>[1],
+      vi.fn(async () => 'fresh-access-token'),
+      apiFetch as unknown as ConstructorParameters<typeof MobileCindyVoiceRunContext>[2],
       'zh-CN',
       'qwen-plus',
     );

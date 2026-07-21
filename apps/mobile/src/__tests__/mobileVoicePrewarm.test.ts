@@ -9,6 +9,7 @@ vi.mock('@/session/mobileRealtimeAudio', () => ({
   prewarmMobileRealtimeAudio: (...args: unknown[]) => prewarmMobileRealtimeAudio(...args),
 }));
 vi.mock('@/session/mobileVoiceLiteLlmSettings', () => ({
+  createMobileVoiceCredentialFromLiteLlmSettings: vi.fn(),
   resolveMobileVoiceCredentialFromLiteLlmSettings: (...args: unknown[]) => resolveCredential(...args),
 }));
 vi.mock('@/session/mobileRealtimeAsrProvider', () => ({
