@@ -380,7 +380,20 @@ export function CCAgentSidebarUpper() {
               projectKey={filesProjectKey}
               switchProjects={docModeSwitchProjects}
             />
-          ) : (
+          ) : null}
+          {/* ExpandedView 在 doc 模式下也保持挂载(display:none):折叠 rail 的
+              项目/对话面板(RailPanels)由它渲染且是唯一挂载点,doc 模式卸载会让
+              files 路由 + 折叠时 rail 入口变成永远弹不出面板的死按钮(codex
+              review)。面板经 portal 渲染到 body,不受隐藏 wrapper 影响;files
+              路由下 activeSessionId 为 undefined,ExpandedView 的路由驱动
+              effects 全部自然停摆,不与 WorkdirBrowseSidebar 抢行为。 */}
+          <div
+            className={cn(
+              'flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden',
+              filesSession && filesSession.workingDir && 'hidden',
+            )}
+            aria-hidden={filesSession && filesSession.workingDir ? true : undefined}
+          >
             <ExpandedView
               sessionsHook={sessionsHook}
               navigate={navigate}
@@ -389,7 +402,7 @@ export function CCAgentSidebarUpper() {
               projectAliases={projectAliases}
               scheduleSessionIndex={scheduleSessionIndex}
             />
-          )}
+          </div>
         </div>
 
         {/* Collapsed — fade in when collapsed */}
@@ -2544,8 +2557,8 @@ function RailPanels({
 
   // 生命周期清理(review P1「Portal 面板跨视图残留」):
   // ① 折叠态解除(侧栏展开 / peek pin)→ 触发器消失,立即收面板;
-  // ② 本组件卸载(doc 模式 WorkdirBrowseSidebar 替换 ExpandedView)→ 收面板,
-  //    避免重挂载后按旧锚点复现;
+  // ② 本组件卸载(离开 /cc-agent 域等;doc 模式下 ExpandedView 已改为隐藏
+  //    挂载、不再卸载)→ 收面板,避免重挂载后按旧锚点复现;
   // ③ 面板打开期间全局 pointermove 兜底(useSidebarPeek 同款):指针落点不在
   //    白名单内 → 排收回,覆盖「rail 被 ⌘B 完全隐藏」等 mouseleave 收不到的路径。
   const isCollapsed = useSidebarCollapsedState();

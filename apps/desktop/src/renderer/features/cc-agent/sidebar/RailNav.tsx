@@ -23,6 +23,10 @@ import type { useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import type { Session } from '@/lib/ccAgent.types';
 import type { AttentionKind } from '@/lib/sessionAttentionStore';
+import {
+  getRemoteSessionActivity,
+  useRemoteSessionActivityRevision,
+} from '@/features/device-link/remoteSessionActivityStore';
 import { AttentionDot } from '@/components/sidebar/AttentionDot';
 import { isOrcaWorkerSession, resolveSessionRoute } from '@/lib/orcaSessionIdentity';
 import { projectIdentityKeyForSession } from '../lib/projectGrouping';
@@ -72,6 +76,22 @@ function dotToneOf(
   if (kind === 'error' || urgentSessionIds.has(id)) return 'error';
   if (kind === 'awaiting') return 'awaiting';
   return 'done';
+}
+
+/** device-link 远程会话的灯语补充:本地 running/attention 链路对被控端后台会话
+ *  是盲区,SessionItem 行内状态由 remoteSessionActivityStore 驱动 —— rail 聚合灯
+ *  与置顶瓷砖必须并入同一镜像,否则远程会话「行亮而入口不亮」(codex review)。
+ *  phase → 灯语映射与 SessionItem.remoteRightStatus 同一张表;镜像里 completed/
+ *  error 条目仅在未读(attention)期间存在,存在即未读。 */
+function remoteLampOf(id: string): { running: boolean; tone: AttentionKind | null } | null {
+  const remote = getRemoteSessionActivity(id);
+  if (!remote) return null;
+  if (remote.phase === 'running') return { running: true, tone: null };
+  return {
+    running: false,
+    tone:
+      remote.phase === 'error' ? 'error' : remote.phase === 'needs-interaction' ? 'awaiting' : 'done',
+  };
 }
 
 interface PreviewState {
@@ -190,18 +210,30 @@ export function RailNav({
     [sessions],
   );
 
+  // 远程活动镜像整表版本号:revision 变化 → 聚合重算(remoteLampOf 直接查
+  // store,不是 React 状态,必须靠版本号入依赖才能跟上被控端 relay 推送)。
+  const remoteActivityRevision = useRemoteSessionActivityRevision();
+
   const aggregateIds = useCallback(
     (ids: readonly string[]) => {
       let running = false;
       let best: AttentionKind | null = null;
+      const consider = (tone: AttentionKind | null) => {
+        if (tone && (!best || TONE_RANK[tone] > TONE_RANK[best])) best = tone;
+      };
       for (const id of ids) {
         if (runningSessionIds.has(id)) running = true;
-        const tone = dotToneOf(id, notifications, attentionKinds, urgentSessionIds);
-        if (tone && (!best || TONE_RANK[tone] > TONE_RANK[best])) best = tone;
+        consider(dotToneOf(id, notifications, attentionKinds, urgentSessionIds));
+        const remote = remoteLampOf(id);
+        if (remote) {
+          if (remote.running) running = true;
+          consider(remote.tone);
+        }
       }
       return { running, dotTone: best };
     },
-    [runningSessionIds, notifications, attentionKinds, urgentSessionIds],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- remoteActivityRevision 代表 remoteLampOf 读到的整表内容
+    [runningSessionIds, notifications, attentionKinds, urgentSessionIds, remoteActivityRevision],
   );
 
   // 项目段聚合灯从 sessions(sessionsWithRemote,已按机器切换过滤)派生 ——
@@ -223,7 +255,8 @@ export function RailNav({
   );
   // 灯语取样优先用 RailPanels 发布的 lampScope(与面板展示的过滤后集合
   // 完全一致,含 vendor/项目筛选与未分类;review P2);尚未发布时回落到
-  // 本组件按机器过滤的推导(启动首帧/doc 模式 ExpandedView 未挂载)。
+  // 本组件按机器过滤的推导(启动首帧;doc 模式下 ExpandedView 现为隐藏
+  // 挂载,lampScope 照常发布)。
   const projectsAgg = useMemo(
     () =>
       aggregateIds(
@@ -265,7 +298,10 @@ export function RailNav({
           指针落在标签上也要点亮圆底,官方 class 的 hover 只作用于自身)。 ── */}
       {pinnedSessions.map((session) => {
         const isActive = session.id === activeSessionId;
-        const isRunning = runningSessionIds.has(session.id);
+        // 置顶瓷砖与聚合灯同口径:远程会话的 running/未读并入远程活动镜像。
+        const remoteLamp = remoteLampOf(session.id);
+        const isRunning = runningSessionIds.has(session.id) || remoteLamp?.running === true;
+        const hasUnread = notifications.has(session.id) || remoteLamp?.tone != null;
         return (
           <button
             key={session.id}
@@ -279,7 +315,7 @@ export function RailNav({
                 anchorRight: rect.right,
                 anchorTop: rect.top,
                 isRunning,
-                hasUnread: notifications.has(session.id),
+                hasUnread,
               });
             }}
             onMouseLeave={() => setPreview(null)}
@@ -301,7 +337,7 @@ export function RailNav({
                 session={session}
                 isRunning={isRunning}
                 isAttached={attachedSessionIds.has(session.id)}
-                hasAttentionNotification={notifications.has(session.id)}
+                hasAttentionNotification={hasUnread}
                 isActive={isActive}
                 size={15}
               />
