@@ -284,6 +284,12 @@ function dispatchTx(readyDb, payload) {
       return embeddingRecordFailures(readyDb, request.args);
     case 'embedding.enqueue':
       return embeddingEnqueue(readyDb, request.args);
+    case 'orca.reserveWorkerCreation':
+      return orcaReserveWorkerCreation(readyDb, request.args);
+    case 'orca.renewWorkerCreationReservation':
+      return orcaRenewWorkerCreationReservation(readyDb, request.args);
+    case 'orca.releaseWorkerCreationReservation':
+      return orcaReleaseWorkerCreationReservation(readyDb, request.args);
     case 'orca.upsertWorker':
       return orcaUpsertWorker(readyDb, request.args);
     case 'orca.setWorkerFocus':
@@ -584,6 +590,57 @@ function orcaUpsertWorker(readyDb, args) {
       now,
     );
   })();
+}
+
+function orcaReserveWorkerCreation(readyDb, args) {
+  const payload = asRecord(args, 'orca.reserveWorkerCreation args');
+  const reservationId = expectString(payload.reservationId, 'reservationId');
+  const teamId = expectString(payload.teamId, 'teamId');
+  const label = expectString(payload.label, 'label').toLowerCase();
+  const hardLimit = expectNumber(payload.hardLimit, 'hardLimit');
+  const now = expectNumber(payload.now, 'now');
+  const expiresAt = expectNumber(payload.expiresAt, 'expiresAt');
+  return readyDb.transaction(() => {
+    readyDb.prepare('DELETE FROM orca_worker_creation_reservations WHERE expires_at <= ?').run(now);
+    const duplicateWorker = readyDb.prepare(
+      'SELECT 1 FROM orca_workers WHERE team_id = ? AND label = ? COLLATE NOCASE LIMIT 1',
+    ).get(teamId, label);
+    const duplicateReservation = readyDb.prepare(
+      'SELECT 1 FROM orca_worker_creation_reservations WHERE team_id = ? AND label = ? COLLATE NOCASE LIMIT 1',
+    ).get(teamId, label);
+    if (duplicateWorker || duplicateReservation) return { ok: false, errorCode: 'DUPLICATE_LABEL' };
+    const activeWorkerCount = Number(readyDb.prepare(\`SELECT COUNT(*)
+      FROM orca_workers w INNER JOIN sessions s ON s.id = w.session_id
+      WHERE w.team_id = ? AND w.status IN ('idle', 'running', 'error') AND s.status = 'active'\`).pluck().get(teamId) || 0);
+    const reservationCount = Number(readyDb.prepare(
+      'SELECT COUNT(*) FROM orca_worker_creation_reservations WHERE team_id = ?',
+    ).pluck().get(teamId) || 0);
+    const occupiedSlotsBefore = activeWorkerCount + reservationCount;
+    if (occupiedSlotsBefore >= hardLimit) return { ok: false, errorCode: 'WORKER_LIMIT_HARD_EXCEEDED' };
+    readyDb.prepare(\`INSERT INTO orca_worker_creation_reservations
+      (id, team_id, label, created_at, expires_at) VALUES (?, ?, ?, ?, ?)\`)
+      .run(reservationId, teamId, label, now, expiresAt);
+    return { ok: true, occupiedSlotsBefore };
+  })();
+}
+
+function orcaRenewWorkerCreationReservation(readyDb, args) {
+  const payload = asRecord(args, 'orca.renewWorkerCreationReservation args');
+  const result = readyDb.prepare(
+    'UPDATE orca_worker_creation_reservations SET expires_at = ? WHERE id = ? AND expires_at > ?',
+  ).run(
+    expectNumber(payload.expiresAt, 'expiresAt'),
+    expectString(payload.reservationId, 'reservationId'),
+    expectNumber(payload.now, 'now'),
+  );
+  return result.changes === 1;
+}
+
+function orcaReleaseWorkerCreationReservation(readyDb, args) {
+  const payload = asRecord(args, 'orca.releaseWorkerCreationReservation args');
+  readyDb.prepare('DELETE FROM orca_worker_creation_reservations WHERE id = ?').run(
+    expectString(payload.reservationId, 'reservationId'),
+  );
 }
 
 function codexImportMessages(readyDb, args) {

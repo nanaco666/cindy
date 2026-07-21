@@ -125,6 +125,18 @@ export interface OrcaWorkerCreationDeps {
    */
   getProviderAvailability(): Promise<Record<AgentKind, string[]>>;
   readClaudeApiKey(): string | null;
+  reserveWorkerCreation(input: {
+    reservationId: string;
+    teamId: string;
+    label: string;
+    hardLimit: number;
+    leaseMs: number;
+  }): Promise<
+    | { ok: true; occupiedSlotsBefore: number }
+    | { ok: false; errorCode: 'DUPLICATE_LABEL' | 'WORKER_LIMIT_HARD_EXCEEDED' }
+  >;
+  renewWorkerCreationReservation(reservationId: string, leaseMs: number): Promise<boolean>;
+  releaseWorkerCreationReservation(reservationId: string): Promise<void>;
   createId(): string;
   createSessionId(): string;
   buildCreateOptsWithStderr(opts: MakerSessionCreateOpts): MakerSessionCreateOpts;
@@ -191,7 +203,14 @@ export function normalizeOrcaWorkerLabel(value: string): { ok: true; value: stri
   if (!ORCA_WORKER_LABEL_PATTERN.test(label.value)) {
     return { ok: false, message: 'label may only contain letters, numbers, hyphens and underscores' };
   }
-  return label;
+  return { ok: true, value: label.value.toLowerCase() };
+}
+
+const ORCA_WORKER_CREATION_RESERVATION_LEASE_MS = 5 * 60 * 1000;
+
+function isWorkerLabelConstraintError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  return err.message.includes("uniq_orca_workers_team_label");
 }
 
 type ResolveWorkerConfigResult =
@@ -333,7 +352,7 @@ export function createOrcaWorkerCreationService(deps: OrcaWorkerCreationDeps): O
     if (!label.ok) return { ok: false, errorCode: 'INVALID_PARAMS', message: label.message };
 
     const existing = await deps.listWorkersByLead(params.leadSessionId);
-    if (existing.some((worker) => worker.label === label.value)) {
+    if (existing.some((worker) => worker.label?.toLowerCase() === label.value)) {
       return { ok: false, errorCode: 'DUPLICATE_LABEL', message: `label "${label.value}" already used in this team` };
     }
 
@@ -342,8 +361,6 @@ export function createOrcaWorkerCreationService(deps: OrcaWorkerCreationDeps): O
     if (activeCount >= settings.workerHardLimit) {
       return { ok: false, errorCode: 'WORKER_LIMIT_HARD_EXCEEDED', message: `hard limit ${settings.workerHardLimit} reached` };
     }
-    const softLimitExceeded = activeCount >= settings.workerSoftLimit;
-
     const availableModels = deps.getAvailableModels(params.agent);
     if (params.model) {
       const validModels = availableModels.map((model) => model.id);
@@ -385,8 +402,37 @@ export function createOrcaWorkerCreationService(deps: OrcaWorkerCreationDeps): O
       };
     }
 
-    const workerSessionId = deps.createSessionId();
     const workerId = deps.createId();
+    let reservation:
+      | { ok: true; occupiedSlotsBefore: number }
+      | { ok: false; errorCode: 'DUPLICATE_LABEL' | 'WORKER_LIMIT_HARD_EXCEEDED' };
+    try {
+      reservation = await deps.reserveWorkerCreation({
+        reservationId: workerId,
+        teamId: params.teamId,
+        label: label.value,
+        hardLimit: settings.workerHardLimit,
+        leaseMs: ORCA_WORKER_CREATION_RESERVATION_LEASE_MS,
+      });
+    } catch (err) {
+      return toInternalFailure(err);
+    }
+    if (!reservation.ok) {
+      return reservation.errorCode === 'DUPLICATE_LABEL'
+        ? { ok: false, errorCode: 'DUPLICATE_LABEL', message: `label "${label.value}" already used in this team` }
+        : { ok: false, errorCode: 'WORKER_LIMIT_HARD_EXCEEDED', message: `hard limit ${settings.workerHardLimit} reached` };
+    }
+    const softLimitExceeded = reservation.occupiedSlotsBefore >= settings.workerSoftLimit;
+    let reservationValid = true;
+    const renewalTimer = setInterval(() => {
+      void deps.renewWorkerCreationReservation(workerId, ORCA_WORKER_CREATION_RESERVATION_LEASE_MS)
+        .then((renewed) => { if (!renewed) reservationValid = false; })
+        .catch(() => { reservationValid = false; });
+    }, Math.floor(ORCA_WORKER_CREATION_RESERVATION_LEASE_MS / 3));
+    renewalTimer.unref?.();
+
+    try {
+    const workerSessionId = deps.createSessionId();
     const workerVendorOptions = {
       orcaRole: 'worker' as const,
       orcaWorkflowId: params.teamId,
@@ -416,6 +462,14 @@ export function createOrcaWorkerCreationService(deps: OrcaWorkerCreationDeps): O
       return toInternalFailure(err);
     }
 
+    const renewed = reservationValid
+      ? await deps.renewWorkerCreationReservation(workerId, ORCA_WORKER_CREATION_RESERVATION_LEASE_MS).catch(() => false)
+      : false;
+    if (!renewed) {
+      await cleanupBootstrappedWorkerSession(workerSession.id);
+      return { ok: false, errorCode: 'INTERNAL', message: 'worker creation reservation expired before persistence' };
+    }
+
     try {
       await deps.addOrUpdateWorker({
         id: workerId,
@@ -428,6 +482,9 @@ export function createOrcaWorkerCreationService(deps: OrcaWorkerCreationDeps): O
       });
     } catch (err) {
       await cleanupBootstrappedWorkerSession(workerSession.id);
+      if (isWorkerLabelConstraintError(err)) {
+        return { ok: false, errorCode: 'DUPLICATE_LABEL', message: `label "${label.value}" already used in this team` };
+      }
       return toInternalFailure(err);
     }
 
@@ -454,6 +511,10 @@ export function createOrcaWorkerCreationService(deps: OrcaWorkerCreationDeps): O
         label: label.value,
       },
     };
+    } finally {
+      clearInterval(renewalTimer);
+      await deps.releaseWorkerCreationReservation(workerId).catch(() => undefined);
+    }
   }
 
   return {

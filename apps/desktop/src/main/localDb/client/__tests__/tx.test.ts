@@ -65,6 +65,16 @@ CREATE TABLE orca_workers (
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 );
+CREATE UNIQUE INDEX uniq_orca_workers_team_label ON orca_workers (team_id, lower(label));
+CREATE TABLE orca_worker_creation_reservations (
+  id TEXT PRIMARY KEY,
+  team_id TEXT NOT NULL,
+  label TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  expires_at INTEGER NOT NULL
+);
+CREATE UNIQUE INDEX uniq_orca_worker_creation_reservations_team_label
+  ON orca_worker_creation_reservations (team_id, lower(label));
 CREATE TABLE messages (
   id TEXT PRIMARY KEY,
   client_id TEXT NOT NULL,
@@ -682,6 +692,26 @@ describe('db worker tx handlers', () => {
       });
     });
   });
+
+  it('serializes the same worker label across independent database workers', async () => {
+    await withTwoClients(async ([first, second]) => {
+      await seedSession(first, 'lead');
+      await first.exec(
+        'INSERT INTO orca_teams (id, lead_session_id, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
+        ['team-1', 'lead', 'active', 1, 1],
+      );
+      const results = await Promise.all([
+        first.tx('orca.reserveWorkerCreation', {
+          reservationId: 'first', teamId: 'team-1', label: 'tester', hardLimit: 5, now: 100, expiresAt: 200,
+        }),
+        second.tx('orca.reserveWorkerCreation', {
+          reservationId: 'second', teamId: 'team-1', label: 'TESTER', hardLimit: 5, now: 100, expiresAt: 200,
+        }),
+      ]);
+      expect(results).toContainEqual({ ok: true, occupiedSlotsBefore: 0 });
+      expect(results).toContainEqual({ ok: false, errorCode: 'DUPLICATE_LABEL' });
+    });
+  });
 });
 
 async function withClient(fn: (client: DbClient) => Promise<void>): Promise<void> {
@@ -705,6 +735,31 @@ async function withClient(fn: (client: DbClient) => Promise<void>): Promise<void
     if (client) {
       await client.dispose();
     }
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+async function withTwoClients(fn: (clients: [DbClient, DbClient]) => Promise<void>): Promise<void> {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'xdt-db-tx-two-'));
+  const drizzleDir = path.join(dir, 'drizzle');
+  const dbPath = path.join(dir, 'xdt-maker-test-user.db');
+  fs.mkdirSync(drizzleDir);
+  fs.writeFileSync(path.join(drizzleDir, '0000_init.sql'), INIT_SQL, 'utf-8');
+  createMigratedTxDb(dbPath);
+  const clients: DbClient[] = [];
+  try {
+    for (let index = 0; index < 2; index += 1) {
+      clients.push(await createDbClient({
+        userId: `test-user-${index}`,
+        dbPath,
+        drizzleDir,
+        betterSqliteModulePath: require.resolve('better-sqlite3'),
+        workerScriptPath,
+      }));
+    }
+    await fn(clients as [DbClient, DbClient]);
+  } finally {
+    await Promise.all(clients.map((client) => client.dispose()));
     fs.rmSync(dir, { recursive: true, force: true });
   }
 }

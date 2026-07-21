@@ -10,6 +10,7 @@ import type { WorkerInfo } from '../useWorkers';
 const mocks = vi.hoisted(() => ({
   workers: [] as WorkerInfo[],
   refresh: vi.fn(),
+  createWorker: vi.fn<(input: Record<string, unknown>) => Promise<void>>(async () => undefined),
   switchFocus: vi.fn(async () => undefined),
 }));
 
@@ -26,10 +27,14 @@ vi.mock('../useWorkers', () => ({
 
 vi.mock('@/lib/makerTransport', () => ({
   orcaWorkflowsFor: () => ({
-    createWorker: vi.fn(async () => undefined),
+    createWorker: mocks.createWorker,
     switchFocus: mocks.switchFocus,
     archiveWorker: vi.fn(async () => undefined),
   }),
+}));
+
+vi.mock('react-i18next', () => ({
+  useTranslation: () => ({ t: (key: string) => key }),
 }));
 
 vi.mock('@/lib/toast', () => ({
@@ -73,6 +78,7 @@ describe('useOrcaWorkerSelection', () => {
       workers: mocks.workers,
     });
     mocks.switchFocus.mockClear();
+    mocks.createWorker.mockReset().mockResolvedValue(undefined);
   });
 
   it('pins an explicit focusWorkerSessionId ahead of the current focused worker until the user switches', async () => {
@@ -113,6 +119,31 @@ describe('useOrcaWorkerSelection', () => {
       leadSessionId: 'lead-1',
       workerIdOrLabel: 'worker-a',
     });
+  });
+
+  it('advances to the next label when an archived worker owns the generated label', async () => {
+    mocks.workers = [];
+    mocks.createWorker
+      .mockRejectedValueOnce(new Error('[DUPLICATE_LABEL] label already used'))
+      .mockResolvedValueOnce(undefined);
+    const { result } = renderHook(
+      () => useOrcaWorkerSelection({ leadSessionId: 'lead-1' }),
+      { wrapper },
+    );
+
+    await act(async () => {
+      await result.current.handleCreateWorker({
+        role: 'tester',
+        agent: 'codex',
+        model: 'gpt-5.4',
+        initialTask: '',
+      });
+    });
+
+    expect(mocks.createWorker.mock.calls.map(([input]) => input.label)).toEqual([
+      'tester',
+      'tester-2',
+    ]);
   });
 
   it('keeps a missing focusWorkerSessionId pending until the worker list refreshes', async () => {

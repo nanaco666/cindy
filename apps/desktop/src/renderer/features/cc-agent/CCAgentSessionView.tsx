@@ -3025,7 +3025,7 @@ export function CCAgentSessionView({
       <CreateWorkerPopover
         open={createWorkerOpen}
         onClose={() => setCreateWorkerOpen(false)}
-        onCreate={(form) => void requestEnableCollab(form)}
+        onCreate={requestEnableCollab}
         title={t('orca.createWorker.enableCollabTitle')}
         submitLabel={t('orca.createWorker.enableCollabSubmit')}
         deviceId={remoteDeviceId}

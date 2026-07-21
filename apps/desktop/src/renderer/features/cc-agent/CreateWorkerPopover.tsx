@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { X } from 'lucide-react';
 
@@ -75,7 +75,7 @@ export interface CreateWorkerForm {
 export interface CreateWorkerPopoverProps {
   open: boolean;
   onClose: () => void;
-  onCreate: (form: CreateWorkerForm) => void;
+  onCreate: (form: CreateWorkerForm) => void | Promise<void>;
   title?: string;
   submitLabel?: string;
   className?: string;
@@ -101,6 +101,8 @@ export function CreateWorkerPopover({
   const [fast, setFast] = useState(DEFAULT_PREFS.codex.fast);
   const [initialTask, setInitialTask] = useState('');
   const [prefs, setPrefs] = useState<WorkerPrefs>(DEFAULT_PREFS);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const submittingRef = useRef(false);
 
   const ccCaps = useAgentCapabilities('claude-code', deviceId);
   const codexCaps = useAgentCapabilities('codex', deviceId);
@@ -193,12 +195,14 @@ export function CreateWorkerPopover({
       ? t('orca.createWorker.customRolePredefinedError')
       : null;
   const canCreate =
-    activeRole.length >= 1 && activeRole.length <= 32 && !customRoleError && !!currentModel;
+    !isSubmitting && activeRole.length >= 1 && activeRole.length <= 32 && !customRoleError && !!currentModel;
   const resolvedTitle = title ?? t('orca.createWorker.title');
   const resolvedSubmitLabel = submitLabel ?? t('orca.createWorker.submit');
 
-  const handleCreate = useCallback(() => {
-    if (!canCreate) return;
+  const handleCreate = useCallback(async () => {
+    if (!canCreate || submittingRef.current) return;
+    submittingRef.current = true;
+    setIsSubmitting(true);
     const nextPrefs: WorkerPrefs = {
       ...prefs,
       lastAgent: agent,
@@ -206,14 +210,19 @@ export function CreateWorkerPopover({
     };
     setPrefs(nextPrefs);
     writeWorkerPrefs(nextPrefs);
-    onCreate({
-      role: activeRole,
-      agent,
-      model,
-      effort: currentModel && currentModel.efforts.length > 0 ? effort : undefined,
-      fast: currentModelSupportsFast ? fast : undefined,
-      initialTask,
-    });
+    try {
+      await onCreate({
+        role: activeRole,
+        agent,
+        model,
+        effort: currentModel && currentModel.efforts.length > 0 ? effort : undefined,
+        fast: currentModelSupportsFast ? fast : undefined,
+        initialTask,
+      });
+    } finally {
+      submittingRef.current = false;
+      setIsSubmitting(false);
+    }
   }, [
     canCreate,
     prefs,
@@ -356,6 +365,7 @@ export function CreateWorkerPopover({
               : 'bg-[var(--surface-chip)] text-[var(--text-tertiary)] cursor-not-allowed',
           )}
           disabled={!canCreate}
+          aria-busy={isSubmitting}
           onClick={handleCreate}
         >
           {resolvedSubmitLabel}
