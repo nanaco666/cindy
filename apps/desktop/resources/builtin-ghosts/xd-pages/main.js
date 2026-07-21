@@ -84,18 +84,29 @@ function normalizeStructuredErrorCode(value) {
 }
 
 function extractStructuredErrorCode(obj) {
-  var candidates = [obj.errorCode, obj.error_code, obj.code, obj.type];
+  var candidates = [obj.errorCode, obj.error_code, obj.code];
   if (obj.error && typeof obj.error === 'object') {
-    candidates.push(obj.error.errorCode, obj.error.error_code, obj.error.code, obj.error.type);
+    candidates.push(obj.error.errorCode, obj.error.error_code, obj.error.code);
   }
   if (Array.isArray(obj.errors) && obj.errors.length > 0 && obj.errors[0] && typeof obj.errors[0] === 'object') {
-    candidates.push(obj.errors[0].errorCode, obj.errors[0].error_code, obj.errors[0].code, obj.errors[0].type);
+    candidates.push(obj.errors[0].errorCode, obj.errors[0].error_code, obj.errors[0].code);
   }
   for (var i = 0; i < candidates.length; i += 1) {
     var normalized = normalizeStructuredErrorCode(candidates[i]);
     if (normalized) return normalized;
   }
   return undefined;
+}
+
+function formatToolFailureMessage(payload) {
+  var message = payload && typeof payload.message === 'string' ? payload.message : '插件执行失败';
+  var guidance =
+    payload && typeof payload.guidance === 'string' && payload.guidance
+      ? payload.guidance
+      : payload && typeof payload.hint === 'string' && payload.hint
+        ? payload.hint
+        : '';
+  return guidance && message.indexOf(guidance) < 0 ? message + '\n恢复指引: ' + guidance : message;
 }
 
 /** 发一次请求并收敛成 { ok, data } | { ok:false, errorCode, ... }。 */
@@ -384,9 +395,9 @@ cindy.onHostMessage(async function (msg) {
         type: 'tool-result',
         callId: msg.callId,
         ok: false,
-        message: r && typeof r.message === 'string' ? r.message : '插件执行失败',
+        message: formatToolFailureMessage(r),
       };
-      if (r && typeof r.errorCode === 'string') failure.errorCode = r.errorCode;
+      if (r && typeof r.errorCode === 'string' && r.errorCode !== 'INTERNAL') failure.errorCode = r.errorCode;
       cindy.send(failure);
     }
   } catch (err) {

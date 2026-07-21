@@ -82,6 +82,17 @@ function toolError(errorCode, message, extra) {
   return e;
 }
 
+function formatToolFailureMessage(payload) {
+  var message = payload && typeof payload.message === 'string' ? payload.message : '插件执行失败';
+  var guidance =
+    payload && typeof payload.guidance === 'string' && payload.guidance
+      ? payload.guidance
+      : payload && typeof payload.hint === 'string' && payload.hint
+        ? payload.hint
+        : '';
+  return guidance && message.indexOf(guidance) < 0 ? message + '\n恢复指引: ' + guidance : message;
+}
+
 /**
  * 主机代发失败(白名单/凭证/网络)→ 结构化错误。凭证未配置的 message 带
  * 主机的填写指引,识别后转 MIVO_API_KEY_MISSING 并叮嘱不要 fallback 到
@@ -2123,7 +2134,7 @@ cindy.onHostMessage(async function (msg) {
       type: 'tool-result',
       callId: msg.callId,
       ok: false,
-      message: typeof payload.message === 'string' ? payload.message : '插件执行失败',
+      message: formatToolFailureMessage(payload),
     };
     if (payload.errorCode && payload.errorCode !== 'INTERNAL') failure.errorCode = payload.errorCode;
     cindy.send(failure);
