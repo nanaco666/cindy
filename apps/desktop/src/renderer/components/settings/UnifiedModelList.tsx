@@ -165,7 +165,13 @@ export function UnifiedModelList({
   const toggleCollapsed = useCallback((cat: ModelCategory) => {
     setCollapsedMap((prev) => {
       const cur = prev[cat] ?? DEFAULT_COLLAPSED_CATEGORIES.has(cat);
-      const next = { ...prev, [cat]: !cur };
+      const newVal = !cur;
+      const next = { ...prev };
+      if (newVal === DEFAULT_COLLAPSED_CATEGORIES.has(cat)) {
+        delete next[cat];
+      } else {
+        next[cat] = newVal;
+      }
       try {
         window.localStorage.setItem(COLLAPSE_STORAGE_KEY, JSON.stringify(next));
       } catch {

@@ -77,7 +77,11 @@ export function categorize(id: string): ModelCategory {
   // 这些是网关多返回的、不能当 agent 用的模型,默认关、仅按类型归类展示。
   if (/embedding/.test(id) || id.startsWith('voyage/')) return 'embedding';
   if (/image/.test(id)) return 'image';
-  if (id.startsWith('elevenlabs/') || /transcribe|realtime|whisper|asr|gemini-omni/.test(id))
+  if (
+    id.startsWith('elevenlabs/') ||
+    id.startsWith('gpt-4o-realtime') ||
+    /transcribe|audio|speech|tts|whisper|asr|gemini-omni/.test(id)
+  )
     return 'audio';
   if (/seedance|happyhorse|video|-t2v|-i2v|-r2v/.test(id)) return 'video';
   if (id === 'ai-gateway-doc') return 'other';
@@ -179,9 +183,9 @@ export function resolveSourceSwitch(args: {
     const tm = visibleModels.find((m) => m.id === remembered.model);
     if (tm && tm.efforts.includes(remembered.effort)) targetEffort = remembered.effort;
   } else if (currentModelId && !providerOffersModel(provider, currentModelId, agent)) {
-    const ordered = CATEGORY_ORDER.flatMap((c) =>
-      visibleModels.filter((m) => categorize(m.id) === c),
-    );
+    const ordered = CATEGORY_ORDER.filter(
+      (c) => c !== 'image' && c !== 'audio' && c !== 'video' && c !== 'embedding' && c !== 'other',
+    ).flatMap((c) => visibleModels.filter((m) => categorize(m.id) === c));
     targetModel = ordered.find(
       (m) => providerOffersModel(provider, m.id, agent) && isVisible(m.id),
     )?.id;
