@@ -396,14 +396,17 @@ import {
 } from './window-behavior-settings-store.js';
 import {
   hideWindowToWindowsTray,
+  requestWindowsCloseBehavior,
   requestWindowsTrayQuit,
 } from './windowsTrayLifecycle.js';
+import { createWindowsClosePromptFallbackController } from './windowsClosePromptFallback.js';
 import {
   isWindowsCloseBehavior,
-  WINDOW_BEHAVIOR_CHOOSE_WINDOWS_CLOSE_BEHAVIOR_CHANNEL,
   WINDOW_BEHAVIOR_GET_WINDOWS_CLOSE_BEHAVIOR_CHANNEL,
   WINDOW_BEHAVIOR_SET_SWALLOW_ACTIVATION_CLICK_CHANNEL,
   WINDOW_BEHAVIOR_SET_WINDOWS_CLOSE_BEHAVIOR_CHANNEL,
+  WINDOW_BEHAVIOR_WINDOWS_CLOSE_BEHAVIOR_REQUESTED_CHANNEL,
+  WINDOW_BEHAVIOR_WINDOWS_CLOSE_BEHAVIOR_SHOWN_CHANNEL,
   type WindowsCloseBehavior,
 } from '../shared/windowBehavior.js';
 import { getDesktopCommandRegistry, registerBuiltinDesktopCommands } from './commands/index.js';
@@ -1387,31 +1390,7 @@ const updatePresentationRecovery = isUpdateRelaunchCandidate
 // 让窗口 close handler 放行真正的销毁。
 let isQuitting = false;
 let windowsTray: Tray | null = null;
-
-function getOrPromptWindowsCloseBehavior(parentWindow?: BrowserWindow): WindowsCloseBehavior {
-  const configured = readWindowBehaviorSettings().windowsCloseBehavior;
-  if (configured) return configured;
-
-  const options = {
-    type: 'question' as const,
-    title: t('settings.windowBehavior.closePrompt.title'),
-    message: t('settings.windowBehavior.closePrompt.message'),
-    detail: t('settings.windowBehavior.closePrompt.detail'),
-    buttons: [
-      t('settings.windowBehavior.closeBehavior.tray'),
-      t('settings.windowBehavior.closeBehavior.quit'),
-    ],
-    defaultId: 0,
-    cancelId: 0,
-    noLink: true,
-  };
-  const choice = parentWindow
-    ? dialog.showMessageBoxSync(parentWindow, options)
-    : dialog.showMessageBoxSync(options);
-  const behavior: WindowsCloseBehavior = choice === 1 ? 'quit' : 'tray';
-  writeWindowsCloseBehavior(behavior);
-  return behavior;
-}
+const WINDOWS_CLOSE_PROMPT_FALLBACK_DELAY_MS = 2_000;
 
 function updateWindowsTrayMenu(): void {
   if (!windowsTray || windowsTray.isDestroyed()) return;
@@ -1500,8 +1479,68 @@ function hideMainWindowToWindowsTray(mainWindow: BrowserWindow): void {
   });
 }
 
+function applyWindowsCloseBehavior(
+  mainWindow: BrowserWindow,
+  behavior: WindowsCloseBehavior,
+): void {
+  if (behavior === 'tray') {
+    hideMainWindowToWindowsTray(mainWindow);
+  } else {
+    app.quit();
+  }
+}
+
+function showNativeWindowsCloseBehaviorPrompt(): WindowsCloseBehavior {
+  const options = {
+    type: 'question' as const,
+    title: t('settings.windowBehavior.closePrompt.title'),
+    message: t('settings.windowBehavior.closePrompt.message'),
+    detail: t('settings.windowBehavior.closePrompt.detail'),
+    buttons: [
+      t('settings.windowBehavior.closeBehavior.tray'),
+      t('settings.windowBehavior.closeBehavior.quit'),
+    ],
+    defaultId: 0,
+    cancelId: 0,
+    noLink: true,
+  };
+  const mainWindow = mainWindowRef;
+  const choice = mainWindow && !mainWindow.isDestroyed()
+    ? dialog.showMessageBoxSync(mainWindow, options)
+    : dialog.showMessageBoxSync(options);
+  return choice === 1 ? 'quit' : 'tray';
+}
+
+const windowsClosePromptFallback = createWindowsClosePromptFallbackController(
+  {
+    readBehavior: () => readWindowBehaviorSettings().windowsCloseBehavior,
+    showRendererPrompt: () => {
+      const mainWindow = mainWindowRef;
+      if (!mainWindow) return;
+      requestWindowsCloseBehavior(
+        mainWindow,
+        WINDOW_BEHAVIOR_WINDOWS_CLOSE_BEHAVIOR_REQUESTED_CHANNEL,
+      );
+    },
+    showNativePrompt: showNativeWindowsCloseBehaviorPrompt,
+    persistBehavior: writeWindowsCloseBehavior,
+    applyBehavior: (behavior) => {
+      const mainWindow = mainWindowRef;
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        applyWindowsCloseBehavior(mainWindow, behavior);
+      } else {
+        app.quit();
+      }
+    },
+    schedule: (callback, delayMs) => setTimeout(callback, delayMs),
+    cancel: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>),
+  },
+  WINDOWS_CLOSE_PROMPT_FALLBACK_DELAY_MS,
+);
+
 app.on('before-quit', () => {
   isQuitting = true;
+  windowsClosePromptFallback.dispose();
   destroyWindowsTray();
   disposeUpdatePresentationRecovery();
 });
@@ -1911,12 +1950,12 @@ const createWindow = () => {
     // alive in the system tray. Linux keeps the historical quit behavior.
     event.preventDefault();
     if (process.platform === 'win32') {
-      const behavior = getOrPromptWindowsCloseBehavior(mainWindow);
-      if (behavior === 'tray') {
-        hideMainWindowToWindowsTray(mainWindow);
-      } else {
-        app.quit();
+      const behavior = readWindowBehaviorSettings().windowsCloseBehavior;
+      if (!behavior) {
+        windowsClosePromptFallback.request();
+        return;
       }
+      applyWindowsCloseBehavior(mainWindow, behavior);
       return;
     }
     app.quit();
@@ -2310,17 +2349,17 @@ ipcMain.on('theme:apply-vibrancy', (_event, payload: { familyId: string; isDark:
       if (!isWindowsCloseBehavior(behavior)) {
         throwIpcError('INVALID_PARAMS', 'Windows close behavior required (quit|tray)');
       }
+      windowsClosePromptFallback.acknowledge();
       writeWindowsCloseBehavior(behavior);
       if (behavior === 'quit') destroyWindowsTray();
       return behavior;
     },
   );
-  ipcMain.handle(WINDOW_BEHAVIOR_CHOOSE_WINDOWS_CLOSE_BEHAVIOR_CHANNEL, async (event) => {
-    if (process.platform !== 'win32') return 'quit' satisfies WindowsCloseBehavior;
-    const parentWindow = BrowserWindow.fromWebContents(event.sender) ?? undefined;
-    return getOrPromptWindowsCloseBehavior(parentWindow);
+  ipcMain.on(WINDOW_BEHAVIOR_WINDOWS_CLOSE_BEHAVIOR_SHOWN_CHANNEL, (event) => {
+    if (BrowserWindow.fromWebContents(event.sender) === mainWindowRef) {
+      windowsClosePromptFallback.acknowledge();
+    }
   });
-
   // LSP Beta 开关 IPC —— 同 compat-mode 模式:
   // GET 给 renderer 启动期同步 localStorage 镜像; SET 落 JSON 文件 + 更新 cache,
   // mcp providers isEnabled 下次 session.start 时读到新值。已开 session 不变。

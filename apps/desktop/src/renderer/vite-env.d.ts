@@ -1293,7 +1293,8 @@ interface ElectronAPI {
     setSwallowActivationClick: (enabled: boolean) => Promise<{ ok: true }>;
     getWindowsCloseBehavior: () => Promise<'quit' | 'tray' | null>;
     setWindowsCloseBehavior: (behavior: 'quit' | 'tray') => Promise<'quit' | 'tray'>;
-    chooseWindowsCloseBehavior: () => Promise<'quit' | 'tray'>;
+    onWindowsCloseBehaviorRequested: (callback: () => void) => () => void;
+    notifyWindowsCloseBehaviorPromptShown: () => void;
   };
 
   // ── 右侧栏独立子窗口(RSB window)──────────────────────────────────────
