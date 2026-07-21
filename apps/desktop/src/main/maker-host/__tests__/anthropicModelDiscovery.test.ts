@@ -29,9 +29,10 @@ const authState = vi.hoisted(() => ({ loggedIn: true }));
 vi.mock('../claude-credentials-store.js', () => ({
   hasClaudeAiOAuth: () => authState.loggedIn,
 }));
-vi.mock('../claude-oauth-refresh.js', () => ({
-  getValidClaudeAiOAuth: async () => null,
+const oauthRefreshMock = vi.hoisted(() => ({
+  getValidClaudeAiOAuth: vi.fn(async () => null as unknown),
 }));
+vi.mock('../claude-oauth-refresh.js', () => oauthRefreshMock);
 
 import {
   evaluateHttpShrink,
@@ -377,9 +378,11 @@ describe('noteAnthropicSdkSupportedModels(登录态门控 + 合并纪律)', () =
       { value: 'claude-haiku-4-5', displayName: 'Haiku 4.5' },
     ]);
     expect(anthropicIds()).toHaveLength(4);
-    // 上游抽风只回一条家族级条目:清单不塌,保留 4 条现值。
+    // 上游抽风只回一条家族级条目:清单不塌,保留 4 条现值,并主动请 HTTP 权威通道仲裁。
+    oauthRefreshMock.getValidClaudeAiOAuth.mockClear();
     noteAnthropicSdkSupportedModels([{ value: 'claude-fable-5', displayName: 'Fable' }]);
     expect(anthropicIds()).toHaveLength(4);
+    expect(oauthRefreshMock.getValidClaudeAiOAuth).toHaveBeenCalled();
     // 逐个下架(4→3)是合法演进,照常生效。
     noteAnthropicSdkSupportedModels([
       { value: 'claude-fable-5', displayName: 'Fable 5' },

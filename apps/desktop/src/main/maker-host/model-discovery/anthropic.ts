@@ -459,12 +459,17 @@ export function noteAnthropicSdkSupportedModels(raw: unknown): void {
       supportsFastMode: prev.supportsFastMode,
     };
   });
-  // SDK 通道骤减恒拒绝、不参与收敛(本地 CLI 注册表正是打塌事故的退化来源);
-  // 真实批量下架由 HTTP 通道的连续快照收敛纠正(见 evaluateHttpShrink)。
+  // SDK 通道骤减恒拒绝、**不参与收敛**:持续一致的退化 SDK 快照正是打塌事故的形态,
+  // 给 SDK 开 streak 收敛等于把事故门重新打开(真退化会一直一致,streak 必然凑齐)。
+  // 真实批量下架的收敛只认 HTTP 权威通道(evaluateHttpShrink);为了不依赖「下次重启 /
+  // 登录」才仲裁,这里在拒绝的同时主动触发一次 HTTP 刷新(单飞防抖):HTTP 可达时要么
+  // 纠正要么推进收敛 streak;HTTP 持续不可达时保留陈旧超集(fail-visible:多出的条目
+  // 发请求时报错,不会静默丢模型)——两难下的取舍,review P1 讨论定案。
   if (isDegenerateModelListShrink(lastApplied.length, models.length)) {
     log.warn(
-      `anthropic SDK capture looks degenerate (${lastApplied.length} -> ${models.length}); keeping current list`,
+      `anthropic SDK capture looks degenerate (${lastApplied.length} -> ${models.length}); keeping current list and consulting HTTP`,
     );
+    void refreshAnthropicModelsFromHttp().catch(() => undefined);
     return;
   }
   log.info(`anthropic models captured from SDK init: ${models.length}`);
