@@ -19,6 +19,8 @@ export function throwOrcaServiceFailure(result: { ok: false; errorCode: string; 
       return throwIpcError('WORKER_NOT_FOUND', result.message);
     case 'ALREADY_IDLE':
       return throwIpcError('ALREADY_IDLE', result.message);
+    case 'WORKER_STATE_CHANGED':
+      return throwIpcError('WORKER_STATE_CHANGED', result.message);
     case 'BUDGET_MODEL_REQUIRES_API_MODE':
       return throwIpcError('BUDGET_MODEL_REQUIRES_API_MODE', result.message);
     case 'NO_PROVIDER_FOR_AGENT':

@@ -226,6 +226,45 @@ describe('useOrcaWorkerSelection', () => {
     expect(mocks.switchFocus).not.toHaveBeenCalled();
   });
 
+  it('waits to acknowledge the selected done worker until the worker view is visible', async () => {
+    mocks.workers = [makeWorker('worker-a', 'session-a', true, 'done')];
+    markWorkerAttention('worker-a');
+
+    const { rerender } = renderHook(
+      ({ viewVisible }) =>
+        useOrcaWorkerSelection({
+          leadSessionId: 'lead-1',
+          viewVisible,
+        }),
+      { initialProps: { viewVisible: false }, wrapper },
+    );
+
+    expect(mocks.idleWorker).not.toHaveBeenCalled();
+    expect(hasWorkerAttention('worker-a')).toBe(true);
+
+    rerender({ viewVisible: true });
+
+    await waitFor(() => {
+      expect(mocks.idleWorker).toHaveBeenCalledWith('lead-1', 'worker-a', 'done');
+    });
+    expect(hasWorkerAttention('worker-a')).toBe(false);
+  });
+
+  it('acknowledges a visible selected done worker without a reveal hint', async () => {
+    mocks.workers = [makeWorker('worker-a', 'session-a', true, 'done')];
+    markWorkerAttention('worker-a');
+
+    renderHook(
+      () => useOrcaWorkerSelection({ leadSessionId: 'lead-1', viewVisible: true }),
+      { wrapper },
+    );
+
+    await waitFor(() => {
+      expect(mocks.idleWorker).toHaveBeenCalledWith('lead-1', 'worker-a', 'done');
+    });
+    expect(hasWorkerAttention('worker-a')).toBe(false);
+  });
+
   it('pins an explicit focusWorkerSessionId ahead of the current focused worker until the user switches', async () => {
     const consumed = vi.fn();
     const { result, rerender } = renderHook(

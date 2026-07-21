@@ -26,6 +26,8 @@ function parseSearchJump(state: unknown): ConversationSearchJump | null {
 export interface UseOrcaWorkerSelectionOptions {
   leadSessionId: string;
   deviceId?: string;
+  /** Whether the worker conversation is actually visible to the user. */
+  viewVisible?: boolean;
   focusWorkerSessionId?: string | null;
   focusWorkerHintRevision?: number;
   searchJump?: ConversationSearchJump | null;
@@ -36,6 +38,7 @@ export interface UseOrcaWorkerSelectionOptions {
 export function useOrcaWorkerSelection({
   leadSessionId,
   deviceId,
+  viewVisible = true,
   focusWorkerSessionId,
   focusWorkerHintRevision,
   searchJump: searchJumpProp,
@@ -266,16 +269,12 @@ export function useOrcaWorkerSelection({
     [leadSessionId],
   );
 
-  const revealWorkerSessionId =
-    effectiveSearchJumpWorkerSessionId ?? focusWorkerHintSessionId ?? urlWorkerSessionId;
-  const revealWorkerRecord = revealWorkerSessionId
-    ? workers.find((worker) => worker.sessionId === revealWorkerSessionId)
-    : null;
-  const revealDoneWorkerId = revealWorkerRecord?.status === 'done' ? revealWorkerRecord.workerId : null;
+  const visibleDoneWorkerId =
+    viewVisible && selectedWorkerRecord?.status === 'done' ? selectedWorkerRecord.workerId : null;
 
   useEffect(() => {
-    if (!revealDoneWorkerId) return;
-    void acknowledgeDoneWorker(revealDoneWorkerId)
+    if (!visibleDoneWorkerId) return;
+    void acknowledgeDoneWorker(visibleDoneWorkerId)
       .then((acknowledged) => {
         if (acknowledged) return refresh();
         return undefined;
@@ -284,7 +283,7 @@ export function useOrcaWorkerSelection({
         const msg = err instanceof Error ? err.message : String(err);
         toast.error(msg);
       });
-  }, [acknowledgeDoneWorker, refresh, revealDoneWorkerId]);
+  }, [acknowledgeDoneWorker, refresh, visibleDoneWorkerId]);
 
   const handleCreateWorker = useCallback(
     async (form: CreateWorkerForm) => {

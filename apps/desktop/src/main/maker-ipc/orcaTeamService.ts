@@ -709,6 +709,13 @@ export function createOrcaTeamService(deps: OrcaTeamServiceDeps): OrcaTeamServic
       if (worker.status === 'idle') {
         return { ok: false, errorCode: 'ALREADY_IDLE', message: `worker ${params.workerId} is already idle` };
       }
+      if (params.expectedStatus && deps.getLiveSession(worker.sessionId)?.isTurnRunning()) {
+        return {
+          ok: false,
+          errorCode: 'WORKER_STATE_CHANGED',
+          message: `worker ${params.workerId} has an active turn`,
+        };
+      }
 
       const didIdle = params.expectedStatus
         ? await deps.markWorkerIdleIfStatus(worker.id, params.expectedStatus)
@@ -718,6 +725,15 @@ export function createOrcaTeamService(deps: OrcaTeamServiceDeps): OrcaTeamServic
           ok: false,
           errorCode: 'WORKER_STATE_CHANGED',
           message: `worker ${params.workerId} is no longer ${params.expectedStatus}`,
+        };
+      }
+      // The DB CAS awaits I/O, so a direct pane turn can start after the pre-CAS check.
+      // Re-check the authoritative live session before aborting/closing that new turn.
+      if (params.expectedStatus && deps.getLiveSession(worker.sessionId)?.isTurnRunning()) {
+        return {
+          ok: false,
+          errorCode: 'WORKER_STATE_CHANGED',
+          message: `worker ${params.workerId} has an active turn`,
         };
       }
       clearRuntimeState(worker.sessionId);

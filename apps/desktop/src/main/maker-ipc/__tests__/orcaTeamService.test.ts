@@ -1031,6 +1031,54 @@ describe('OrcaTeamService', () => {
     expect(calls).toContain('updateWorkerStatus:running');
   });
 
+  it('does not acknowledge or close a done worker while its live session has a direct turn', async () => {
+    const { calls, deps, service, setWorker } = createDeps({
+      getLiveSession: vi.fn(() => ({ isTurnRunning: () => true })),
+    });
+    setWorker(createWorker({ status: 'done' }));
+
+    await expect(service.idleWorker({
+      callerLeadSessionId: 'lead-1',
+      workerId: 'worker-1',
+      expectedStatus: 'done',
+    })).resolves.toEqual({
+      ok: false,
+      errorCode: 'WORKER_STATE_CHANGED',
+      message: 'worker worker-1 has an active turn',
+    });
+
+    expect(deps.getLiveSession).toHaveBeenCalledWith('worker-session-1');
+    expect(deps.markWorkerIdleIfStatus).not.toHaveBeenCalled();
+    expect(deps.closeWorkerSession).not.toHaveBeenCalled();
+    expect(calls).toEqual([]);
+  });
+
+  it('does not close a direct turn that starts while the done-status CAS is awaiting I/O', async () => {
+    let turnRunning = false;
+    const { deps, service, setWorker } = createDeps({
+      getLiveSession: vi.fn(() => ({ isTurnRunning: () => turnRunning })),
+      markWorkerIdleIfStatus: vi.fn(async () => {
+        turnRunning = true;
+        return true;
+      }),
+    });
+    setWorker(createWorker({ status: 'done' }));
+
+    await expect(service.idleWorker({
+      callerLeadSessionId: 'lead-1',
+      workerId: 'worker-1',
+      expectedStatus: 'done',
+    })).resolves.toEqual({
+      ok: false,
+      errorCode: 'WORKER_STATE_CHANGED',
+      message: 'worker worker-1 has an active turn',
+    });
+
+    expect(deps.getLiveSession).toHaveBeenCalledTimes(2);
+    expect(deps.closeWorkerSession).not.toHaveBeenCalled();
+    expect(deps.broadcastOrcaWorkerChanged).not.toHaveBeenCalled();
+  });
+
   it('rejects a viewed-status idle request when the worker became running', async () => {
     const { calls, service, setWorker } = createDeps();
     setWorker(createWorker({ status: 'running' }));
