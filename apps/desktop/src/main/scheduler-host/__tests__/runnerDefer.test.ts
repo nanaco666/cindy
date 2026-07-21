@@ -155,10 +155,33 @@ describe('MakerScheduleRunner 顺延 / 礼让', () => {
     const ctx = createFireContext();
     ctx.abortController.abort();
 
-    await expect(runner.fire(heartbeatSchedule(), ctx)).rejects.toThrow(/aborted/i);
+    await expect(runner.fire(heartbeatSchedule(), ctx)).rejects.toThrow(
+      'schedule fire aborted before runner entry',
+    );
     expect(maker.createSession).not.toHaveBeenCalled();
     expect(h.send).not.toHaveBeenCalled();
     expect(mocks.resolveWorkingDir).not.toHaveBeenCalled();
+  });
+
+  it('rethrows a send-time abort without notifying a schedule failure', async () => {
+    mocks.getSessionRowSnapshot.mockResolvedValue({
+      status: 'active',
+      title: null,
+      userSendAt: null,
+    });
+    mocks.isSessionInTurn.mockReturnValue(false);
+    const ctx = createFireContext();
+    const h = createSessionHarness(async () => {
+      ctx.abortController.abort();
+      throw new Error('send cancelled by schedule abort');
+    });
+    const { runner, notifier } = createRunnerHarness(h.session);
+
+    await expect(runner.fire(heartbeatSchedule(), ctx)).rejects.toThrow(
+      'send cancelled by schedule abort',
+    );
+    expect(notifier.notify).not.toHaveBeenCalled();
+    expect(h.off).toHaveBeenCalledTimes(1);
   });
 
   it('B1 礼让:用户最近活跃 + session 正跑 turn → deferred,不建 session 不 send', async () => {

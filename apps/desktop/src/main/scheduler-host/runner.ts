@@ -261,7 +261,7 @@ export class MakerScheduleRunner implements ScheduleRunner {
   async fire(schedule: Schedule, ctx: FireContext): Promise<FireResult> {
     const holder: EphemeralSessionHolder = {};
     try {
-      throwIfFireAborted(ctx.signal);
+      throwIfFireAborted(ctx.signal, 'runner entry');
       return await this.fireInner(schedule, ctx, holder);
     } finally {
       if (holder.sessionId && !holder.keepAlive && !isSessionInTurn(holder.sessionId)) {
@@ -476,7 +476,7 @@ export class MakerScheduleRunner implements ScheduleRunner {
     // 3. workingDir 解析（heartbeat 模式不允许自己建 worktree —— 已有 session 的 workDir 是权威）
     // The heartbeat metadata lookup above can take time.  Check again before
     // allocating a dialogue directory or creating an ephemeral worktree.
-    throwIfFireAborted(ctx.signal);
+    throwIfFireAborted(ctx.signal, 'workspace allocation');
     let workingDir = isHeartbeat ? heartbeatWorkingDir : schedule.workingDir;
     // 未指定目录且不要 worktree → 回退 dialogue 语义(分配 app 管理的工作区)。
     // MCP/对话路径创建的任务经常不带 workingDir,而引擎 create() 默认
@@ -603,7 +603,7 @@ export class MakerScheduleRunner implements ScheduleRunner {
     }
     // The worktree path can also await filesystem work, so cancellation may
     // have arrived after the preceding guard.  Never create a late session.
-    throwIfFireAborted(ctx.signal);
+    throwIfFireAborted(ctx.signal, 'session creation');
     let session: Awaited<ReturnType<Maker['createSession']>>;
     try {
       session = await this.deps.maker.createSession({
@@ -814,7 +814,7 @@ export class MakerScheduleRunner implements ScheduleRunner {
       // session.abort() is best-effort when no turn has started yet.  The
       // explicit guard prevents a cancellation racing the setup above from
       // dispatching a new agent turn.
-      throwIfFireAborted(ctx.signal);
+      throwIfFireAborted(ctx.signal, 'agent turn dispatch');
       const sendResult = await session.send(outgoingMessage as never, {
         origin,
         planMode: false,
@@ -878,6 +878,11 @@ export class MakerScheduleRunner implements ScheduleRunner {
       if (baselineStarted) {
         this.deps.onUndispatchedUserTurn?.(session.id);
         baselineStarted = false;
+      }
+      if (ctx.signal.aborted) {
+        waiter.stopListening();
+        ctx.signal.removeEventListener('abort', onAbort);
+        throw err;
       }
       const normalized = normalizeSchedulerSendError(err);
       // B2 撞忙顺延:仅 heartbeat(复用 session)场景 —— session 正跑别的 turn
@@ -1454,9 +1459,15 @@ function extractErr(data: unknown): string {
  * run status from the signal; this guard prevents late session or turn creation
  * after a delete/pause won the race.
  */
-function throwIfFireAborted(signal: AbortSignal): void {
+type FireAbortStage =
+  | 'runner entry'
+  | 'workspace allocation'
+  | 'session creation'
+  | 'agent turn dispatch';
+
+function throwIfFireAborted(signal: AbortSignal, stage: FireAbortStage): void {
   if (signal.aborted) {
-    throw new Error('schedule fire aborted before dispatch');
+    throw new Error(`schedule fire aborted before ${stage}`);
   }
 }
 
