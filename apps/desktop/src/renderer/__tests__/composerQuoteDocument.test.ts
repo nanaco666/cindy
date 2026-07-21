@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { ComposerQuoteNode } from '@/components/new-chat/ComposerQuoteNode';
 import {
   appendQuoteToComposerDocument,
+  composerHistoryEntryToDocument,
   prependLegacyQuotesToComposerDocument,
   quoteSegmentsToComposerDocument,
   serializeComposerContentBlocks,
@@ -139,6 +140,31 @@ describe('composerQuoteDocument', () => {
           ],
         },
       ],
+    });
+  });
+
+  it('hydrates encoded history rows as quote atoms and leaves unflagged markers as text', () => {
+    const encoded = `${formatQuoteForSend({ text: 'quoted' })}\n\nreply`;
+
+    expect(composerHistoryEntryToDocument({ content: encoded, quotesEncoded: true }))
+      .toEqual({
+        type: 'doc',
+        content: [
+          {
+            type: 'paragraph',
+            content: [
+              {
+                type: 'composerQuote',
+                attrs: { text: 'quoted', sourcePath: null, startLine: null, endLine: null },
+              },
+              { type: 'text', text: 'reply' },
+            ],
+          },
+        ],
+      });
+    expect(composerHistoryEntryToDocument({ content: encoded })).toEqual({
+      type: 'doc',
+      content: [{ type: 'paragraph', content: [{ type: 'text', text: encoded }] }],
     });
   });
 

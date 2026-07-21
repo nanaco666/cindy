@@ -189,18 +189,20 @@ export function projectionRetryText(
 export function updateQueuedMessageText(
   entry: AgentInputQueuedMessage,
   newText: string,
-  /** User-authored queue edits drop quote metadata after the private marker is removed. */
-  opts?: { clearQuoteMetadataWhenMarkerless?: boolean },
 ): AgentInputQueuedMessage {
   const hasEncodedQuoteMarker = stripChatQuoteMarkerLines(newText) !== newText;
-  const shouldClearQuoteMetadata =
-    opts?.clearQuoteMetadataWhenMarkerless === true && !hasEncodedQuoteMarker;
   let nextPersisted = entry.persistedContent;
   try {
     const parsed = JSON.parse(entry.persistedContent) as Record<string, unknown>;
     if (parsed && typeof parsed === 'object') {
       const nextParsed: Record<string, unknown> = { ...parsed, text: newText };
-      if (shouldClearQuoteMetadata) delete nextParsed.quotesEncoded;
+      // A rewrite can only retain product-quote identity when it preserves an
+      // explicit marker. Keep unknown historical payloads untouched, but
+      // remove the real boolean flag before ordinary Markdown is reparsed as
+      // quote chips by desktop/mobile history renderers.
+      if (!hasEncodedQuoteMarker && nextParsed.quotesEncoded === true) {
+        delete nextParsed.quotesEncoded;
+      }
       nextPersisted = JSON.stringify(nextParsed);
     } else {
       nextPersisted = newText;
@@ -212,7 +214,7 @@ export function updateQueuedMessageText(
     ...entry.chatMessage,
     content: newText,
   };
-  if (shouldClearQuoteMetadata) delete nextChatMessage.quotesEncoded;
+  if (!hasEncodedQuoteMarker) delete nextChatMessage.quotesEncoded;
   return {
     ...entry,
     text: newText,

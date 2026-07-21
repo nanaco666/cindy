@@ -4544,6 +4544,38 @@ describe('AgentInputCoordinator 意识拦截钩(订阅槽①,will-user-message)'
     expect(parsed.images).toEqual([{ fileId: 'img-1', name: 'ref.png' }]);
     expect(parsed.quotesEncoded).toBe('q-payload');
   });
+
+  it('rewrite:marker 被移除时同步清除真实 quotesEncoded 标志', async () => {
+    const h = createHarness();
+    h.setScreenUserMessage(async () => ({
+      action: 'rewrite',
+      ghostId: 'g1',
+      ghostName: '哨兵',
+      text: '> ordinary markdown after rewrite',
+    }) as const);
+    const original = '> <!-- cindy-composer-quote -->\n> product quote\n\n润色 原始问题';
+    const envelope = JSON.stringify({ text: original, quotesEncoded: true });
+    h.coordinator.enqueue('s1', makeItem('c1', original, {
+      persistedContent: envelope,
+      chatMessage: {
+        clientId: 'c1',
+        role: 'user',
+        content: original,
+        quotesEncoded: true,
+      },
+    }));
+
+    await flush();
+
+    const persisted = mocks.createMessage.mock.calls.find(
+      (c) => (c[1] as { clientId?: string }).clientId === 'c1',
+    )?.[1] as { content: string };
+    expect(JSON.parse(persisted.content)).toEqual({
+      text: '> ordinary markdown after rewrite',
+    });
+    const rewrittenItem = h.onUserMessageRewritten.mock.calls[0]?.[1];
+    expect(rewrittenItem?.chatMessage.quotesEncoded).toBeUndefined();
+  });
 });
 
 describe('AgentInputCoordinator scheduler 排队心跳(撞忙排队桥)', () => {

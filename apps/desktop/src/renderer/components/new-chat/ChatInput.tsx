@@ -98,8 +98,10 @@ import { MentionChipNode, type MentionChipAttrs } from './MentionChipNode';
 import { ComposerQuoteNode } from './ComposerQuoteNode';
 import {
   COMPOSER_QUOTE_NODE_TYPE,
+  composerHistoryEntryToDocument,
   composerQuoteAttrsToChatQuote,
   serializeComposerContentBlocks,
+  type ComposerHistoryEntry,
   type ComposerQuoteAttrs,
   type ComposerSerializedBlock,
 } from '@/lib/composerQuoteDocument';
@@ -126,7 +128,7 @@ import {
   type PastedTextChipAttrs,
 } from './PastedTextChipNode';
 import { ToolPayloadLightbox } from '@/components/chat/ToolPayloadLightbox';
-import { Fragment, Slice } from '@tiptap/pm/model';
+import { Fragment, Slice, type Node as ProseMirrorNode } from '@tiptap/pm/model';
 import * as sessionService from '@/lib/sessionService';
 import { getModelById } from '@/lib/modelDefinitions';
 import {
@@ -347,7 +349,7 @@ interface ChatInputProps {
   /** Lock one queued row while its text is being edited. */
   onQueueEditLock?: (clientId: string, locked: boolean) => void;
   /** Chat messages — used to derive user message history for ↑/↓ navigation. */
-  messages?: Array<{ role: string; content: string }>;
+  messages?: Array<{ role: string; content: string; quotesEncoded?: boolean }>;
   /** Custom placeholder text. Defaults to "今天我们做点什么呢~" */
   placeholder?: string;
   /** Controlled open state for FolderPickerPopover. When omitted, internal state is used. */
@@ -1094,7 +1096,10 @@ export function ChatInput({
     () =>
       (messages ?? [])
         .filter((m) => m.role === 'user' && m.content.trim())
-        .map((m) => m.content)
+        .map((m): ComposerHistoryEntry => ({
+          content: m.content,
+          ...(m.quotesEncoded === true ? { quotesEncoded: true } : {}),
+        }))
         .reverse(), // newest first
     [messages],
   );
@@ -1102,6 +1107,7 @@ export function ChatInput({
   userHistoryRef.current = userHistory;
   const historyIndexRef = useRef(-1); // -1 = current draft (not browsing)
   const draftRef = useRef(''); // saves draft when user starts browsing
+  const hydratedHistoryDocumentRef = useRef<ProseMirrorNode | null>(null);
 
   // ── composer-draft-per-session ─────────────────────────────────────
   // When the parent switches `sessionId`, a `useEffect` below restores the
@@ -1727,14 +1733,28 @@ export function ChatInput({
           if (history.length === 0) return false;
 
           const editorInstance = view.state.doc;
+          const idx = historyIndexRef.current;
           // atom chip 无文本投影,textContent 判空会把只含 chip 的草稿误当
           // 空:进入历史浏览的 replaceWith 会整段覆盖、粘贴 payload 静默
-          // 丢失(review P2)。含 chip 时历史浏览整体不介入(含"浏览中途
-          // 粘了 chip 再按 ↑/↓"——historyIndex 只在切会话 / 发送时复位,
-          // 此处不拦同样会覆盖)。
-          if (docContainsAtomChip(editorInstance)) return false;
+          // 丢失(review P2)。唯一例外是我们刚从 history 恢复且仍逐节点相等
+          // 的文档——quoted history 本来就含 quote atom,必须允许继续 ↑/↓;
+          // 浏览中途新增/修改任意 chip 后 eq 失配,仍不介入。
+          const isUnmodifiedHydratedHistory =
+            idx >= 0 && hydratedHistoryDocumentRef.current?.eq(editorInstance) === true;
+          if (docContainsAtomChip(editorInstance) && !isUnmodifiedHydratedHistory) return false;
           const isEmpty = editorInstance.textContent.trim().length === 0;
-          const idx = historyIndexRef.current;
+          const replaceWithHistoryEntry = (entry: ComposerHistoryEntry) => {
+            const historyDocument = view.state.schema.nodeFromJSON(
+              composerHistoryEntryToDocument(entry),
+            );
+            const tr = view.state.tr.replaceWith(
+              0,
+              view.state.doc.content.size,
+              historyDocument.content,
+            );
+            view.dispatch(tr);
+            hydratedHistoryDocumentRef.current = tr.doc;
+          };
 
           if (event.key === 'ArrowUp') {
             // Only enter history browsing when the editor is empty or already browsing
@@ -1746,10 +1766,7 @@ export function ChatInput({
             const next = Math.min(idx + 1, history.length - 1);
             if (next === idx) return false; // already at oldest
             historyIndexRef.current = next;
-            // Use the Tiptap EditorView's dispatch to set content
-            const tr = view.state.tr;
-            tr.replaceWith(0, view.state.doc.content.size, view.state.schema.text(history[next]));
-            view.dispatch(tr);
+            replaceWithHistoryEntry(history[next]);
             event.preventDefault();
             return true;
           }
@@ -1766,10 +1783,11 @@ export function ChatInput({
               } else {
                 tr.delete(0, view.state.doc.content.size);
               }
+              view.dispatch(tr);
+              hydratedHistoryDocumentRef.current = null;
             } else {
-              tr.replaceWith(0, view.state.doc.content.size, view.state.schema.text(history[next]));
+              replaceWithHistoryEntry(history[next]);
             }
-            view.dispatch(tr);
             event.preventDefault();
             return true;
           }
@@ -2540,6 +2558,7 @@ export function ChatInput({
       // Reset history-browse bookkeeping when switching sessions —
       // arrow-key history was relative to the previous session.
       historyIndexRef.current = -1;
+      hydratedHistoryDocumentRef.current = null;
       draftRef.current = '';
 
       if (!focusOnStorageKeyChangeRef.current) return;
@@ -3269,6 +3288,7 @@ export function ChatInput({
     clearFiles();
     setBrowserComments([]);
     historyIndexRef.current = -1;
+    hydratedHistoryDocumentRef.current = null;
     draftRef.current = '';
     // composer-draft-per-session: drop the saved draft now that this
     // session's content has been sent. Without this, switching away then

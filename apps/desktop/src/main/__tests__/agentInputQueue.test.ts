@@ -161,9 +161,7 @@ describe('agentInputQueue', () => {
     entry.chatMessage.content = entry.text;
     entry.chatMessage.quotesEncoded = true;
 
-    const updated = updateQueuedMessageText(entry, '> quoted\n\nrevised reply', {
-      clearQuoteMetadataWhenMarkerless: true,
-    });
+    const updated = updateQueuedMessageText(entry, '> quoted\n\nrevised reply');
 
     expect(JSON.parse(updated.persistedContent)).toEqual({
       text: '> quoted\n\nrevised reply',
@@ -182,9 +180,7 @@ describe('agentInputQueue', () => {
     entry.chatMessage.quotesEncoded = true;
     const rewritten = '> <!-- cindy-composer-quote -->\n> revised quote\n\nreply';
 
-    const updated = updateQueuedMessageText(entry, rewritten, {
-      clearQuoteMetadataWhenMarkerless: true,
-    });
+    const updated = updateQueuedMessageText(entry, rewritten);
 
     expect(JSON.parse(updated.persistedContent)).toEqual({
       text: rewritten,

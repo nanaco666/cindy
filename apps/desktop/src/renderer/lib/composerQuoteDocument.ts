@@ -8,7 +8,11 @@
  * draft store deterministic and directly testable.
  */
 import type { JSONContent } from '@tiptap/core';
-import type { ChatQuote, ChatQuoteSegment } from '@/lib/chatQuotes';
+import {
+  parseChatQuoteSegments,
+  type ChatQuote,
+  type ChatQuoteSegment,
+} from '@/lib/chatQuotes';
 
 export const COMPOSER_QUOTE_NODE_TYPE = 'composerQuote';
 
@@ -22,6 +26,11 @@ export interface ComposerQuoteAttrs {
 export interface ComposerSerializedBlock {
   kind: 'text' | 'quote';
   text: string;
+}
+
+export interface ComposerHistoryEntry {
+  content: string;
+  quotesEncoded?: boolean;
 }
 
 export function composerQuoteAttrsToChatQuote(attrs: ComposerQuoteAttrs): ChatQuote {
@@ -164,6 +173,20 @@ export function quoteSegmentsToComposerDocument(
   if (!hasContent) return null;
   finishParagraph();
   return { type: 'doc', content };
+}
+
+/** Restore an ↑/↓ history row without exposing private quote marker text. */
+export function composerHistoryEntryToDocument(entry: ComposerHistoryEntry): JSONContent {
+  if (entry.quotesEncoded === true) {
+    const quotedDocument = quoteSegmentsToComposerDocument(
+      parseChatQuoteSegments(entry.content),
+    );
+    if (quotedDocument) return quotedDocument;
+  }
+  return {
+    type: 'doc',
+    content: [paragraph(entry.content ? [{ type: 'text', text: entry.content }] : [])],
+  };
 }
 
 /**
