@@ -6,9 +6,12 @@ import {
   createEmptyThinkingRecoveryRule,
   createEncryptedContentRecoveryRule,
   createImageGenerationIdRecoveryRule,
+  createToolUseProviderSpecificFieldsRecoveryRule,
   stripEmptyThinkingFromBody,
   stripEncryptedContentFromBody,
   stripImageGenerationItemsWithoutIdFromBody,
+  stripToolUseProviderSpecificFields,
+  stripToolUseProviderSpecificFieldsFromBody,
 } from './transform.js';
 import type { RequestTransformCtx } from './types.js';
 
@@ -59,6 +62,67 @@ describe('stripEncryptedContentFromBody', () => {
 
   it('returns null for non-JSON body', () => {
     expect(stripEncryptedContentFromBody(Buffer.from('not json', 'utf8'))).toBeNull();
+  });
+});
+
+describe('stripToolUseProviderSpecificFieldsFromBody', () => {
+  it('removes provider_specific_fields from tool_use blocks in message history', () => {
+    const body = buf({
+      model: 'claude-fable-5',
+      messages: [
+        {
+          role: 'assistant',
+          content: [
+            {
+              type: 'tool_use',
+              id: 'toolu_1',
+              name: 'Bash',
+              input: {
+                provider_specific_fields: 'keep-as-tool-input',
+                serializedBlock: {
+                  type: 'tool_use',
+                  provider_specific_fields: 'keep-nested-business-value',
+                },
+              },
+              provider_specific_fields: null,
+            },
+          ],
+        },
+      ],
+    });
+
+    const out = stripToolUseProviderSpecificFieldsFromBody(body);
+
+    expect(out).not.toBeNull();
+    const parsed = JSON.parse(out!.toString('utf8'));
+    expect(parsed.messages[0].content[0]).toEqual({
+      type: 'tool_use',
+      id: 'toolu_1',
+      name: 'Bash',
+      input: {
+        provider_specific_fields: 'keep-as-tool-input',
+        serializedBlock: {
+          type: 'tool_use',
+          provider_specific_fields: 'keep-nested-business-value',
+        },
+      },
+    });
+  });
+
+  it('returns null when no tool_use provider field is present', () => {
+    expect(stripToolUseProviderSpecificFieldsFromBody(buf({ messages: [{ role: 'assistant', content: [{ type: 'text', text: 'ok' }] }] }))).toBeNull();
+  });
+
+  it('mutates parsed request bodies for the active transform path', () => {
+    const body = {
+      messages: [{ role: 'assistant', content: [{ type: 'tool_use', provider_specific_fields: null }] }],
+    };
+    expect(stripToolUseProviderSpecificFields(body, ctx)).toBe(body);
+    expect(body.messages[0].content[0]).toEqual({ type: 'tool_use' });
+  });
+
+  it('handles malformed JSON without throwing', () => {
+    expect(stripToolUseProviderSpecificFieldsFromBody(Buffer.from('not json', 'utf8'))).toBeNull();
   });
 });
 
@@ -349,6 +413,21 @@ describe('recovery rule factories', () => {
     expect(rule.match('invalid_encrypted_content')).toBe(false);
     expect(
       rule.strip(buf({ input: [{ type: 'image_generation_end', call_id: 'ig_1' }] })),
+    ).not.toBeNull();
+  });
+
+  it('tool-use provider field rule matches the LiteLLM schema error and strips the field', () => {
+    const rule = createToolUseProviderSpecificFieldsRecoveryRule();
+    expect(rule.id).toBe('tool_use_provider_specific_fields');
+    expect(rule.enabled()).toBe(true);
+    expect(rule.match('messages.2.content.0.tool_use.provider_specific_fields: Extra inputs are not permitted')).toBe(true);
+    expect(rule.match('messages.2.content.0.tool_use.name: Extra inputs are not permitted')).toBe(false);
+    expect(rule.match(JSON.stringify([
+      { message: 'messages.2.content.0.tool_use.provider_specific_fields: unexpected value' },
+      { message: 'messages.2.content.1.name: Extra inputs are not permitted' },
+    ]))).toBe(false);
+    expect(
+      rule.strip(buf({ messages: [{ role: 'assistant', content: [{ type: 'tool_use', provider_specific_fields: null }] }] })),
     ).not.toBeNull();
   });
 });
