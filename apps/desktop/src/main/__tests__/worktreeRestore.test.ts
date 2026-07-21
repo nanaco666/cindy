@@ -294,6 +294,29 @@ describe('worktree restore', () => {
     expect(gitExecMock).not.toHaveBeenCalled();
   });
 
+  it('send-time check allows a non-owner session to use an existing managed worktree', async () => {
+    dbWorktreePath = null;
+    fsSync.mkdirSync(wtPath, { recursive: true });
+
+    await expect(
+      mod.restoreMissingManagedWorktreeForSession('s1', wtPath),
+    ).resolves.toBe(true);
+
+    expect(gitExecMock).not.toHaveBeenCalled();
+    expect(storeSetMock).not.toHaveBeenCalled();
+  });
+
+  it('send-time check does not rebuild a missing managed worktree for a non-owner', async () => {
+    dbWorktreePath = null;
+
+    await expect(
+      mod.restoreMissingManagedWorktreeForSession('s1', wtPath),
+    ).resolves.toBe(false);
+
+    expect(gitExecMock).not.toHaveBeenCalled();
+    expect(storeSetMock).not.toHaveBeenCalled();
+  });
+
   it('send-time restore rebuilds the exact missing worktree from origin', async () => {
     let localBranchCreated = false;
     gitExecMock.mockImplementation(async (args: string[]) => {

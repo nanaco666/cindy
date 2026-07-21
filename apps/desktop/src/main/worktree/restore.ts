@@ -346,9 +346,10 @@ export function restoreWorktreeForSession(sessionId: string): Promise<WorktreeRe
 }
 
 /**
- * 发送期自愈入口。只有 caller cwd 与 DB 记录的托管 worktree 精确相同时才恢复，
- * 防止队列里的陈旧 createOpts 把已经迁走的旧目录重新造回来。快照 apply 冲突时
- * 返回 false，保留现有恢复横幅让用户处理，绝不带着缺失的 WIP 静默继续。
+ * 发送期自愈入口。DB working_dir 必须与 caller cwd 精确相同；只有本 session 的
+ * worktree_path 也匹配时才执行恢复。其它 session 可把已存在的托管 worktree 当
+ * 普通 cwd 使用，但目录缺失时不能以非 owner 身份重建。快照 apply 冲突时返回
+ * false，保留现有恢复横幅让用户处理，绝不带着缺失的 WIP 静默继续。
  */
 export async function restoreMissingManagedWorktreeForSession(
   sessionId: string,
@@ -364,11 +365,15 @@ export async function restoreMissingManagedWorktreeForSession(
     return false;
   }
   if (
-    pathKey(binding?.worktreePath) !== expectedKey
-    || pathKey(binding?.workingDir) !== expectedKey
+    pathKey(binding?.workingDir) !== expectedKey
     || !parseManagedWorktreePath(expectedWorktreePath)
   ) {
     return false;
+  }
+  // A session may intentionally use another session's existing managed worktree as its cwd.
+  // It may send there, but only the owning session may recreate or restore that worktree.
+  if (pathKey(binding?.worktreePath) !== expectedKey) {
+    return await pathExists(expectedWorktreePath);
   }
 
   // `git worktree add` creates the directory before a pending snapshot is applied. A second
