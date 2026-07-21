@@ -45,6 +45,21 @@ export interface SshMediaDeps {
   fetchToCache: typeof fetchRemoteFileToCache;
 }
 
+/** SSH 媒体取回的本地缓存结果；供协议响应与 device-link 上传共用。 */
+export type MaterializedSshRemoteMedia =
+  | {
+      ok: true;
+      cachePath: string;
+      size: number;
+      mime: string;
+      relPath: string;
+    }
+  | {
+      ok: false;
+      status: 400 | 403 | 404 | 415 | 502;
+      message: string;
+    };
+
 function defaultDeps(): SshMediaDeps {
   return {
     request: <T>(hostId: string, method: 'stat' | 'readFileChunk', params: Record<string, unknown>) =>
@@ -178,25 +193,24 @@ export function serveCachedFile(
 const noopProgress: FetchProgressFn = () => undefined;
 
 /**
- * 处理一个 ssh 来源的 cindy-remote-media 请求。
+ * 把 SSH 会话工作目录内的媒体取回到本地磁盘缓存。
  * 失败语义与 device 分支对齐:上游(SSH / file-service)失败 → 502,renderer
  * 媒体占位 + 可重试;路径不合法(workdir 外 / 无路径语义 / 扩展名不在媒体
  * 名单)→ 4xx,不重试。
  */
-export async function serveSshRemoteMedia(
+export async function materializeSshRemoteMedia(
   origin: { remoteHostId: string; workdir: string },
   origUrl: string,
-  rangeHeader: string | null,
   deps: SshMediaDeps = defaultDeps(),
-): Promise<Response> {
+): Promise<MaterializedSshRemoteMedia> {
   const abs = extractMediaPathQuery(origUrl);
-  if (!abs) return new Response(null, { status: 400 });
+  if (!abs) return { ok: false, status: 400, message: '媒体 URL 缺少路径语义' };
   const relPath = toWorkdirRelPosix(origin.workdir, abs);
-  if (!relPath) return new Response(null, { status: 403 });
+  if (!relPath) return { ok: false, status: 403, message: '媒体路径不在 SSH 会话工作目录内' };
 
   const ext = path.posix.extname(relPath).toLowerCase();
   const mime = MIME_BY_EXT[ext];
-  if (!mime) return new Response(null, { status: 415 });
+  if (!mime) return { ok: false, status: 415, message: '该扩展名不是允许的媒体类型' };
 
   try {
     const stat = await deps.request<{ type: 'file' | 'directory'; size: number; mtimeMs: number }>(
@@ -204,7 +218,7 @@ export async function serveSshRemoteMedia(
       'stat',
       { workdir: origin.workdir, relPath },
     );
-    if (stat.type !== 'file') return new Response(null, { status: 404 });
+    if (stat.type !== 'file') return { ok: false, status: 404, message: 'SSH 媒体文件不存在' };
 
     const cachePath = await deps.fetchToCache(
       {
@@ -218,9 +232,21 @@ export async function serveSshRemoteMedia(
       makeSshChunkExecutor(deps.request, origin.remoteHostId, origin.workdir, relPath),
       noopProgress,
     );
-    return serveCachedFile(cachePath, stat.size, mime, rangeHeader);
+    return { ok: true, cachePath, size: stat.size, mime, relPath };
   } catch (err) {
     log.warn('ssh remote media fetch failed', { relPath, error: String(err) });
-    return new Response(null, { status: 502 });
+    return { ok: false, status: 502, message: 'SSH 远程媒体取回失败' };
   }
+}
+
+/** 处理一个 ssh 来源的 cindy-remote-media 请求。 */
+export async function serveSshRemoteMedia(
+  origin: { remoteHostId: string; workdir: string },
+  origUrl: string,
+  rangeHeader: string | null,
+  deps: SshMediaDeps = defaultDeps(),
+): Promise<Response> {
+  const materialized = await materializeSshRemoteMedia(origin, origUrl, deps);
+  if (!materialized.ok) return new Response(null, { status: materialized.status });
+  return serveCachedFile(materialized.cachePath, materialized.size, materialized.mime, rangeHeader);
 }

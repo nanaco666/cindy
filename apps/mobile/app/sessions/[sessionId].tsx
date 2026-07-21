@@ -4789,7 +4789,11 @@ export default function SessionScreen() {
     };
     return {
       deviceId,
+      sessionId,
       workdir,
+      ...(currentSession?.remoteHostId?.trim()
+        ? { remoteHostId: currentSession.remoteHostId.trim() }
+        : {}),
       statPath: async (absPath: string) => {
         await ensureLink();
         try {
@@ -4802,7 +4806,16 @@ export default function SessionScreen() {
       onOpenPath: openChatPathTarget,
       onLongPressPath: setChipMenuTarget,
     };
-  }, [connectionEpoch, currentSession?.workingDir, deviceId, maker, openChatPathTarget, openLink]);
+  }, [
+    connectionEpoch,
+    currentSession?.remoteHostId,
+    currentSession?.workingDir,
+    deviceId,
+    maker,
+    openChatPathTarget,
+    openLink,
+    sessionId,
+  ]);
 
   /** chip 菜单「导出 / 分享」:两段式导出 → 系统分享单(与文件浏览器同链路);
    *  mtime 先列一拍父目录拿真实值(导出 URL 缓存 key 依赖),拿不到用当前时间

@@ -23,6 +23,7 @@ vi.mock('../../logger', () => ({
 
 import {
   makeSshChunkExecutor,
+  materializeSshRemoteMedia,
   serveSshRemoteMedia,
   toWorkdirRelPosix,
   type SshMediaDeps,
@@ -157,6 +158,22 @@ describe('serveSshRemoteMedia', () => {
       expect.any(Function),
       expect.any(Function),
     );
+  });
+
+  it('materialize 直接返回 device-link 可上传的缓存文件契约', async () => {
+    const deps = makeDeps();
+    const result = await materializeSshRemoteMedia(
+      origin,
+      'xdt-file://open?path=%2Fhome%2Fu%2Fproj%2Fout%2Fa.png&v=message-1',
+      deps,
+    );
+    expect(result).toEqual({
+      ok: true,
+      cachePath: path.join(tmpDir, 'cached.png'),
+      size: 4,
+      mime: 'image/png',
+      relPath: 'out/a.png',
+    });
   });
 
   it('range → 206 切片;越界 → 416', async () => {

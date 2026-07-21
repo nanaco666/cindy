@@ -25,6 +25,47 @@ function messageItem(key: string, message: Partial<MobileMessageRenderItem & { m
 }
 
 describe('message gallery', () => {
+  it('resolves relative markdown images against the remote session workdir', () => {
+    const gallery = collectMobileMessageGalleryImages([
+      messageItem('m-local', { body: '![构建图](artifacts/build result.png)' }),
+    ], 'C:\\repo');
+    expect(gallery).toHaveLength(1);
+    expect(gallery[0].url).toBe(
+      'xdt-file://open?path=C%3A%5Crepo%5Cartifacts%5Cbuild%20result.png&v=m-local',
+    );
+    expect(gallery[0].payload).toMatchObject({
+      media: { previewable: false },
+    });
+  });
+
+  it('versions local markdown image urls by message so later references bypass stale media cache', () => {
+    const gallery = collectMobileMessageGalleryImages([
+      messageItem('m1', { body: '![构建图](artifacts/plot.png)' }),
+      messageItem('m2', { body: '![构建图](artifacts/plot.png)' }),
+    ], '/repo');
+
+    expect(gallery.map((item) => item.url)).toEqual([
+      'xdt-file://open?path=%2Frepo%2Fartifacts%2Fplot.png&v=m1',
+      'xdt-file://open?path=%2Frepo%2Fartifacts%2Fplot.png&v=m2',
+    ]);
+  });
+
+  it('carries SSH host context so remote workdir images do not fall through to desktop local paths', () => {
+    const gallery = collectMobileMessageGalleryImages([
+      messageItem('m-ssh', { body: '![远端图](artifacts/plot.png)' }),
+      messageItem('m-xdt', {
+        body: '![已有取件地址](xdt-file://open?path=%2Fhome%2Fu%2Fproj%2Fexisting.png&remoteHostId=forged)',
+      }),
+    ], '/home/u/proj', 'ssh-host-1', 'session-ssh');
+
+    expect(gallery.map((item) => item.url)).toEqual([
+      'xdt-file://open?path=%2Fhome%2Fu%2Fproj%2Fartifacts%2Fplot.png'
+        + '&sessionId=session-ssh&remoteHostId=ssh-host-1&workdir=%2Fhome%2Fu%2Fproj&v=m-ssh',
+      'xdt-file://open?path=%2Fhome%2Fu%2Fproj%2Fexisting.png'
+        + '&sessionId=session-ssh&remoteHostId=ssh-host-1&workdir=%2Fhome%2Fu%2Fproj&v=m-xdt',
+    ]);
+  });
+
   it('collects user image attachments and tool media images in render order', () => {
     const items: MobileMessageRenderItem[] = [
       messageItem('m1', {

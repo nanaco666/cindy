@@ -127,6 +127,7 @@ import {
   groupMobileMarkdownSelectableBlocks,
   isMobileMarkdownImageDirectUrl,
   mobileMarkdownImageTitle,
+  mobileMarkdownImageUrlForWorkdir,
   mobileMarkdownInlineImageSize,
   parseMobileMarkdown,
   type MobileMarkdownBlockGroup,
@@ -564,10 +565,22 @@ export function MessageRenderer({
   // 本地缩略兜底映射版本:collect 内部对 cindy-oss-attach:// 附件读全局 store 做 overlay,
   // hydrate / 新注册后 gallery 需要重建,否则点开气泡本地图时 initialUrl 对不上图集条目。
   const sentThumbsVersion = useSentAttachmentThumbsVersion();
+  const chatFilePathContext = useContext(ChatFilePathContext);
   const galleryImages = useMemo(
-    () => collectMobileMessageGalleryImages(listData),
+    () => collectMobileMessageGalleryImages(
+      listData,
+      chatFilePathContext?.workdir,
+      chatFilePathContext?.remoteHostId,
+      chatFilePathContext?.sessionId,
+    ),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- sentThumbsVersion 是 collect 内部读的全局 store 的失效信号
-    [listData, sentThumbsVersion],
+    [
+      chatFilePathContext?.remoteHostId,
+      chatFilePathContext?.sessionId,
+      chatFilePathContext?.workdir,
+      listData,
+      sentThumbsVersion,
+    ],
   );
   // 稳定 lightbox images 的引用:galleryImages 在流式回复期间每 token 重建
   // (item 对象全新但语义未变),若直接透传,查看器的取件 effect / FlatList /
@@ -1557,6 +1570,7 @@ function MessageBubble({
         ) : (
           <MarkdownBody
             allowIosUITextView={!shouldCollapseLongMessage}
+            markdownImageCacheKey={item.message.key}
             layout={contentLayout}
             onOpenPayload={actions.onOpenPayload}
             onOpenSessionLink={actions.onOpenSessionLink}
@@ -2740,6 +2754,7 @@ function OrcaCollabCard({ card, screenWidth }: { card: OrcaCollabCardModel; scre
 // 不跳转界面;整条复制走操作条按钮。选择按块进行(原生 Text 能力边界,跨段选择做不到)。
 function MarkdownBody({
   allowIosUITextView = true,
+  markdownImageCacheKey,
   layout,
   onOpenPayload,
   onOpenSessionLink,
@@ -2749,6 +2764,8 @@ function MarkdownBody({
 }: {
   /** 超长展开正文在 iOS 回退 RN Text,避免超高 UITextView 空白;仍保留整块复制。 */
   allowIosUITextView?: boolean;
+  /** 本地 Markdown 图片的稳定消息身份,避免后续消息复用同一路径的旧媒体缓存。 */
+  markdownImageCacheKey?: string;
   layout: MessageContentLayout;
   onOpenPayload?: (payload: MessagePayload) => void;
   /** 会话深链 chip 点击回调(app 内跳转)。 */
@@ -2761,6 +2778,7 @@ function MarkdownBody({
 }) {
   const { colors } = useTheme();
   const styles = useThemedStyles(makeStyles);
+  const chatFilePathContext = useContext(ChatFilePathContext);
   const blocks = useMemo(() => parseMobileMarkdown(text), [text]);
   // Android 的 selectable Text 内嵌 View(直连内联图)行为未定义,含这类 inline 的块不开选中。
   const inlinesSelectable = useCallback((inlines: readonly MobileMarkdownInline[]) => (
@@ -2770,13 +2788,27 @@ function MarkdownBody({
   // 正文 Markdown 图片(![](url) / 安全 <img>)点击后走既有媒体 payload 查看器,与附件图片同一条链路。
   const openMarkdownImage = useCallback((url: string, alt?: string) => {
     if (!onOpenPayload) return;
-    const title = mobileMarkdownImageTitle(url, alt);
+    const resolvedUrl = mobileMarkdownImageUrlForWorkdir(
+      url,
+      chatFilePathContext?.workdir,
+      markdownImageCacheKey,
+      chatFilePathContext?.remoteHostId,
+      chatFilePathContext?.sessionId,
+    );
+    if (!resolvedUrl) return;
+    const title = mobileMarkdownImageTitle(resolvedUrl, alt);
     // http(s) 直连预览;xdt 系 scheme 非直连,ImageLightbox 经 remote-media resolver 取图。
     onOpenPayload(buildMediaPayload(
-      { kind: 'image', url, title, previewable: isMobileMarkdownImageDirectUrl(url) },
+      { kind: 'image', url: resolvedUrl, title, previewable: isMobileMarkdownImageDirectUrl(resolvedUrl) },
       title,
     ));
-  }, [onOpenPayload]);
+  }, [
+    chatFilePathContext?.remoteHostId,
+    chatFilePathContext?.sessionId,
+    chatFilePathContext?.workdir,
+    markdownImageCacheKey,
+    onOpenPayload,
+  ]);
   // 会话深链 chip 标题:渲染期同步从会话镜像查(WebView 静态 HTML 无法事后
   // patch)。不含深链的消息恒为 undefined,不影响 html memo 稳定性。
   const sessionLinkIds = useMemo(() => extractSessionLinkIds(text), [text]);
