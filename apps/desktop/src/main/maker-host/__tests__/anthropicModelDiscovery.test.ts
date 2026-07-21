@@ -34,6 +34,7 @@ vi.mock('../claude-oauth-refresh.js', () => ({
 }));
 
 import {
+  evaluateHttpShrink,
   isDegenerateModelListShrink,
   mapAnthropicSdkModels,
   mapAnthropicHttpModels,
@@ -218,6 +219,27 @@ describe('isDegenerateModelListShrink(退化快照护栏,纯函数)', () => {
     expect(isDegenerateModelListShrink(7, 6)).toBe(false);
     expect(isDegenerateModelListShrink(2, 1)).toBe(false);
     expect(isDegenerateModelListShrink(4, 2)).toBe(false);
+  });
+});
+
+describe('evaluateHttpShrink(HTTP 骤减收敛,review P2)', () => {
+  beforeEach(() => {
+    resetAnthropicDiscoveryForTest();
+  });
+
+  it('连续 3 次相同的骤减快照 = 确认真实下架,第 3 次放行;之前一直拒绝', () => {
+    expect(evaluateHttpShrink(7, ['claude-a', 'claude-b'])).toBe('reject');
+    expect(evaluateHttpShrink(7, ['claude-b', 'claude-a'])).toBe('reject'); // 顺序无关,签名相同
+    expect(evaluateHttpShrink(7, ['claude-a', 'claude-b'])).toBe('accept');
+  });
+
+  it('签名变化(上游还在抖)重新计数;非骤减快照清零 streak', () => {
+    expect(evaluateHttpShrink(7, ['claude-a'])).toBe('reject');
+    expect(evaluateHttpShrink(7, ['claude-b'])).toBe('reject'); // 换了内容,streak 重回 1
+    expect(evaluateHttpShrink(7, ['claude-b'])).toBe('reject');
+    // 中间来了一次正常快照 → streak 清零,再骤减要重新累计。
+    expect(evaluateHttpShrink(7, ['1', '2', '3', '4', '5', '6', '7'].map((n) => `claude-${n}`))).toBe('accept');
+    expect(evaluateHttpShrink(7, ['claude-b'])).toBe('reject');
   });
 });
 
