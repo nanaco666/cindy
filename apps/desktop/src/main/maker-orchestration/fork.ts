@@ -108,9 +108,14 @@ function collectLegacyClaudeTranscriptParentUuids(
     const entry = index.byUuid.get(meta.uuid);
     if (!entry) continue;
     // Top-level assistants and every non-assistant transcript record use
-    // parentUuid as the legacy transcript edge. Assistant entries absent from
-    // assistantByUuid are tool-owned and must retain parentUuid.
-    if (entry.type !== 'assistant' || index.assistantByUuid.has(meta.uuid)) {
+    // parentUuid as the legacy transcript edge. A legacy subagent assistant
+    // can also have both edges in JSONL; when its stored parentUuid matches
+    // the transcript edge, it is safe to recover that edge before copying.
+    if (
+      entry.type !== 'assistant' ||
+      index.assistantByUuid.has(meta.uuid) ||
+      meta.parentUuid === entry.parentUuid
+    ) {
       uuids.add(meta.uuid);
     }
   }

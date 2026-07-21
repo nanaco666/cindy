@@ -584,6 +584,14 @@ describe('forkSessionAtMessage', () => {
     await writeClaudeJsonl('sdk-uuid-source', '/work', [
       {
         type: 'assistant',
+        uuid: 'legacy-subagent-assistant-uuid',
+        parent_uuid: 'legacy-subagent-transcript-parent',
+        parent_tool_use_id: 'toolu_real_parent',
+        sessionId: 'sdk-uuid-source',
+        message: { id: 'msg_legacy_subagent', content: [{ type: 'text', text: 'subagent' }] },
+      },
+      {
+        type: 'assistant',
         uuid: 'real-imported-assistant-uuid',
         parentUuid: 'preceding-user-record',
         sessionId: 'sdk-uuid-source',
@@ -602,12 +610,21 @@ describe('forkSessionAtMessage', () => {
       createdAt: 2500,
     });
     const priorUser = makeMessageRow({ id: 'user-1', role: 'user', createdAt: 2000 });
+    const legacySubagent = makeMessageRow({
+      id: 'legacy-subagent',
+      role: 'assistant',
+      agentMeta: JSON.stringify({
+        uuid: 'legacy-subagent-assistant-uuid',
+        parentUuid: 'legacy-subagent-transcript-parent',
+      }),
+      createdAt: 2250,
+    });
 
     selectQueue.push([makeSourceRow()]);
     selectQueue.push([target]);
     selectQueue.push([]);
-    selectQueue.push([target]);
-    selectQueue.push([priorUser, target]);
+    selectQueue.push([legacySubagent, target]);
+    selectQueue.push([priorUser, legacySubagent, target]);
     selectQueue.push([makeSourceRow({ sdkSessionId: 'sdk-new-session-uuid' })]);
 
     await forkSessionAtMessage('src-session', 'asst-imported-cid');
@@ -620,7 +637,10 @@ describe('forkSessionAtMessage', () => {
     });
     const txCall = txCalls.find((call) => call.name === 'fork.session');
     expect(txCall?.args).toMatchObject({
-      legacyTranscriptParentUuids: ['real-imported-assistant-uuid'],
+      legacyTranscriptParentUuids: [
+        'legacy-subagent-assistant-uuid',
+        'real-imported-assistant-uuid',
+      ],
     });
   });
 
