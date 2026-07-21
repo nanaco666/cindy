@@ -23,6 +23,7 @@ const STORAGE_KEY = 'memorySettings.makerEnabled';
 type Subscriber = (value: boolean) => void;
 const subscribers = new Set<Subscriber>();
 let inMemoryValue = true;
+let localWriteRevision = 0;
 
 /** localStorage 中只接受显式 boolean 字符串；缺失/坏值不伪装成用户选择。 */
 function readStoredMakerMemoryEnabled(): boolean | undefined {
@@ -47,6 +48,7 @@ export function getMakerMemoryEnabled(): boolean {
 /** 同步写 — 落盘 + 通知本 tab 内所有 subscriber */
 export function setMakerMemoryEnabled(next: boolean): void {
   // localStorage 不可用时仍须在当前 renderer 生命周期内保留用户选择。
+  localWriteRevision += 1;
   inMemoryValue = next;
   try {
     localStorage.setItem(STORAGE_KEY, next ? 'true' : 'false');
@@ -63,6 +65,7 @@ export function subscribeMakerMemoryEnabled(cb: Subscriber): () => void {
   // 跨实例 storage 事件 (多窗口兜底; Electron 单窗口下几乎不触发)
   const storageHandler = (e: StorageEvent) => {
     if (e.key !== STORAGE_KEY) return;
+    localWriteRevision += 1;
     cb(getMakerMemoryEnabled());
   };
   window.addEventListener('storage', storageHandler);
@@ -84,8 +87,11 @@ export function subscribeMakerMemoryEnabled(cb: Subscriber): () => void {
  */
 export async function bootstrapMemorySettingsFromMain(): Promise<void> {
   try {
+    const revisionAtStart = localWriteRevision;
     const legacyRendererValue = readStoredMakerMemoryEnabled();
     let settings = await window.electronAPI.maker.memoryGetSettings();
+    // 用户或其它窗口已在请求期间写入时，旧快照不再有资格触发迁移或覆盖本地镜像。
+    if (localWriteRevision !== revisionAtStart) return;
     // 旧版 opt-out 可能是 renderer false marker，也可能只在 main 留下两种原生记忆
     // 都关闭的状态。marker 非 true 时交给 main 统一判定，再进行 main → renderer 同步。
     if (legacyRendererValue !== true && settings.maker) {
@@ -93,6 +99,7 @@ export async function bootstrapMemorySettingsFromMain(): Promise<void> {
         legacyRendererValue ?? null,
       );
     }
+    if (localWriteRevision !== revisionAtStart) return;
     const current = getMakerMemoryEnabled();
     if (current === settings.maker) return;
     setMakerMemoryEnabled(settings.maker);

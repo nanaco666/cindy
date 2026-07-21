@@ -109,4 +109,40 @@ describe('memorySettingsStore', () => {
     expect(preserveLegacy).toHaveBeenCalledWith(null);
     expect(getMakerMemoryEnabled()).toBe(false);
   });
+
+  it('does not overwrite a user write that happens while bootstrap is pending', async () => {
+    vi.stubGlobal('localStorage', createStorage(true));
+    let resolveSettings!: (settings: {
+      maker: boolean;
+      claudeCode: boolean;
+      codex: boolean;
+    }) => void;
+    const settingsPromise = new Promise<{
+      maker: boolean;
+      claudeCode: boolean;
+      codex: boolean;
+    }>((resolve) => {
+      resolveSettings = resolve;
+    });
+    vi.stubGlobal('window', {
+      electronAPI: {
+        maker: {
+          memoryGetSettings: vi.fn(() => settingsPromise),
+          memoryPreserveLegacyMakerDisabled: vi.fn(),
+        },
+      },
+    });
+    const {
+      bootstrapMemorySettingsFromMain,
+      getMakerMemoryEnabled,
+      setMakerMemoryEnabled,
+    } = await import('@/lib/memorySettingsStore');
+
+    const bootstrap = bootstrapMemorySettingsFromMain();
+    setMakerMemoryEnabled(false);
+    resolveSettings({ maker: true, claudeCode: true, codex: true });
+    await bootstrap;
+
+    expect(getMakerMemoryEnabled()).toBe(false);
+  });
 });
