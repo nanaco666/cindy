@@ -2646,6 +2646,10 @@
     "sessionCostLabel": "本会话 {{cost}}",
     "codex": {
       "waiting": "Codex --",
+      "noUsageLabel": "暂无用量",
+      "noUsageDetail": "本会话尚未产生用量。",
+      "unavailableLabel": "用量暂不可用",
+      "unavailableDetail": "用量数据暂时不可用。",
       "waitingDetail": "Codex 用量会在下一次会话完成后更新。",
       "sessionTokensLine": "本会话已用 {{tokens}} token",
       "sessionValueLabel": "本会话价值 {{cost}}",

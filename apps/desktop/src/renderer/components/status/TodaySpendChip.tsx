@@ -344,6 +344,20 @@ function getGatewayChipSegments(slots: Record<MetricKey, MetricSlot>): string[] 
     .map((key) => slots[key].label);
 }
 
+function hasPositiveSessionTokens(sessionTokens: number | null): boolean {
+  return typeof sessionTokens === 'number'
+    && Number.isFinite(sessionTokens)
+    && sessionTokens > 0;
+}
+
+function getCodexApiEmptyState(
+  latestTurnUsage: LatestTurnUsageSummary | null,
+): 'no-usage' | 'unavailable' {
+  // A completed assistant turn without a persisted USD/token value means the
+  // session has usage data, but the billing data has not been recovered yet.
+  return latestTurnUsage ? 'unavailable' : 'no-usage';
+}
+
 function buildCodexTooltipNode(
   snapshot: RateLimitSnapshot | null,
   sessionTokens: number | null,
@@ -892,7 +906,7 @@ export function TodaySpendChip({
     (vendorKey === 'cc' && !isSubscriptionBridge) || isCodexApi ? sessionInitialCostUsd : null,
   );
   const sessionTokens = useSessionTokens(
-    isCodexSubscription || isSubscriptionBridge ? sessionId : undefined,
+    isCodexApi || isCodexSubscription || isSubscriptionBridge ? sessionId : undefined,
     sessionInitialTokens,
   );
   // 订阅会话的"本会话价值"估算 (isEstimate 消息汇总): Codex OAuth / Claude 订阅 / bridge 订阅同管道。
@@ -1014,6 +1028,19 @@ export function TodaySpendChip({
   } else {
     const slots = computeMetricSlots(claudeQuota, sessionCostUsd, t);
     const chipSegments = getGatewayChipSegments(slots);
+    const codexApiHasTokenFallback = isCodexApi
+      && !slots.session.available
+      && hasPositiveSessionTokens(sessionTokens);
+    const codexApiEmptyState = isCodexApi
+      && !slots.session.available
+      && !hasPositiveSessionTokens(sessionTokens)
+      ? getCodexApiEmptyState(latestTurnUsage)
+      : null;
+    if (codexApiHasTokenFallback) {
+      chipSegments.push(t('todaySpend.codex.sessionTokensLine', {
+        tokens: formatCompactTokens(Math.floor(sessionTokens ?? 0)),
+      }));
+    }
     // tooltip 主体: 主 chip 未显示且可用的 metric, 同样按固定顺序
     const tooltipMetricLines = METRIC_KEYS.filter(
       (k) => !PRIMARY_GATEWAY_METRICS.includes(k) && slots[k].available,
@@ -1030,16 +1057,37 @@ export function TodaySpendChip({
     if (slots.session.available) {
       tooltipLines.push(slots.session.tooltipLabel ?? slots.session.label);
     }
+    if (codexApiHasTokenFallback) {
+      tooltipLines.push(t('todaySpend.codex.sessionTokensLine', {
+        tokens: formatCompactTokens(Math.floor(sessionTokens ?? 0)),
+      }));
+    }
     tooltipLines.push(...tooltipMetricLines);
     appendLatestTurnUsageLines(tooltipLines, latestTurnUsage, t);
+    if (codexApiEmptyState) {
+      tooltipLines.unshift(t(
+        codexApiEmptyState === 'no-usage'
+          ? 'todaySpend.codex.noUsageDetail'
+          : 'todaySpend.codex.unavailableDetail',
+      ));
+    }
     // 链接行始终在最底, 用空行隔开
     if (tooltipLines.length > 0) tooltipLines.push('');
     tooltipLines.push(usageDashboardLabel);
     tooltipNode = buildTooltipNode(tooltipLines);
 
-    // chip 空 (用户全没选 / 数据全不可用): 显示 "$" 占位符, 保持 hover 区可点
     if (chipSegments.length === 0) {
-      labelNode = <span className="tabular-nums opacity-60">$</span>;
+      if (codexApiEmptyState) {
+        labelNode = (
+          <span className="tabular-nums opacity-60">
+            {t(codexApiEmptyState === 'no-usage'
+              ? 'todaySpend.codex.noUsageLabel'
+              : 'todaySpend.codex.unavailableLabel')}
+          </span>
+        );
+      } else {
+        labelNode = <span className="tabular-nums opacity-60">$</span>;
+      }
     } else {
       // 之前用纯字符串 ".join(' · ')" — middle dot · 落在 x-height, 周围混着 cap-height
       // 大写字母 + 数字 + $/k, 视觉上文字"高低不齐"。改成结构化渲染:
