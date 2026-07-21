@@ -1715,7 +1715,7 @@ export function NewMakerDraftRoute() {
             ))}
           <main
             data-testid="create-agent-main"
-            className="relative flex h-full min-w-0 w-full flex-col items-center justify-start px-8 pt-[calc(max(96px,28vh)+46px-var(--content-header-h,46px))]"
+            className="relative flex h-full min-w-0 w-full flex-col items-center justify-start px-8 pt-[calc(max(96px,28vh)_+_46px_-_var(--content-header-h,46px))]"
           >
             <div
               className="relative flex w-full max-w-[800px] flex-col items-start"

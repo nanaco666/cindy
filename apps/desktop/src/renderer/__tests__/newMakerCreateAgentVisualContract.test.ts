@@ -46,13 +46,12 @@ describe('NewMakerDraftRoute CREATE AGENT visual contract', () => {
 
   it('centers the CREATE AGENT content group without reintroducing route chrome', () => {
     expect(source).toContain('items-center justify-start');
-    // 用户改稿 2026-07-21:摘掉 268px 封顶(Figma 定稿画框高度的遗留),大窗口下顶距随 25.5vh
+    // 用户改稿 2026-07-21:摘掉 268px 封顶(Figma 定稿画框高度的遗留),大窗口下顶距随 28vh
     // 等比增长,内容组不再"偏高";96px 下限保留,小窗口行为不变。比例为可调参数。
-    // 用户改稿 2026-07-21 二连:①摘 268px 封顶(顶距随 25.5vh 等比);②叠加 --content-header-h
-    // 占位补偿——内容组距窗口顶恒为 max(96px,25.5vh)+46px(="有顶栏时"位置),顶栏显隐零跳动。
+    // 用户改稿 2026-07-21 二连:①摘 268px 封顶(顶距随 28vh 等比);②叠加 --content-header-h
+    // 占位补偿——内容组距窗口顶恒为 max(96px,28vh)+46px(="有顶栏时"位置),顶栏显隐零跳动。
     // 比例调参:25.5%→28%(用户实机拍板 2026-07-21)。
-    expect(source).toContain('pt-[calc(max(96px,28vh)+46px-var(--content-header-h,46px))]');
-    expect(source).not.toContain('pt-[max(96px,25.5vh)]');
+    expect(source).toContain('pt-[calc(max(96px,28vh)_+_46px_-_var(--content-header-h,46px))]');
     expect(source).not.toContain('pt-[clamp(96px,25.5vh,268px)]');
     expect(source).toContain('relative flex w-full max-w-[800px] flex-col items-start');
     expect(source).toContain('absolute right-0 top-[22px]');
