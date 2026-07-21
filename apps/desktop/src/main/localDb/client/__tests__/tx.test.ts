@@ -820,6 +820,27 @@ describe('db worker tx handlers', () => {
       })).resolves.toEqual({ ok: true, occupiedSlotsBefore: 1 });
     });
   });
+
+  it('does not count released idle workers toward the creation hard limit', async () => {
+    await withClient(async (client) => {
+      await seedSession(client, 'lead');
+      await seedSession(client, 'released-worker', { orcaRole: 'worker' });
+      await client.exec(
+        'INSERT INTO orca_teams (id, lead_session_id, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
+        ['team-1', 'lead', 'active', 1, 1],
+      );
+      await client.exec(
+        `INSERT INTO orca_workers (
+          id, team_id, session_id, status, label, role, idle_since, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ['worker-1', 'team-1', 'released-worker', 'idle', 'released', 'tester', 50, 1, 50],
+      );
+
+      await expect(client.tx('orca.reserveWorkerCreation', {
+        reservationId: 'replacement', teamId: 'team-1', label: 'replacement', hardLimit: 1, now: 100, expiresAt: 200,
+      })).resolves.toEqual({ ok: true, occupiedSlotsBefore: 0 });
+    });
+  });
 });
 
 async function withClient(fn: (client: DbClient) => Promise<void>): Promise<void> {

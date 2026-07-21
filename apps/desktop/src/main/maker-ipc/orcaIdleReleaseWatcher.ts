@@ -29,6 +29,7 @@ export interface OrcaIdleReleaseWatcherDeps {
   readIdleReleaseMinutes(): number;
   listCandidates(updatedBefore: number): Promise<readonly OrcaIdleReleaseCandidate[]>;
   getSession(sessionId: string): OrcaIdleReleaseSession | null;
+  withSessionLock<T>(sessionId: string, task: () => Promise<T>): Promise<T>;
   markReleased(candidate: OrcaIdleReleaseCandidate, releasedAt: number): Promise<boolean>;
   touchWorker(workerId: string, updatedAt: number): Promise<void>;
   closeSession(sessionId: string): Promise<void>;
@@ -77,33 +78,33 @@ export function createOrcaIdleReleaseWatcher(
       for (const candidate of candidates) {
         if (candidate.idleSince !== null || !isReleaseStatus(candidate.status)) continue;
 
-        const session = deps.getSession(candidate.sessionId);
-        if (session?.isTurnRunning()) {
-          await deps.touchWorker(candidate.id, deps.now());
-          continue;
-        }
-
         try {
-          // A turn can start while the candidate query is awaiting; never close that live runtime.
-          if (session?.isTurnRunning()) {
-            await deps.touchWorker(candidate.id, deps.now());
-            continue;
-          }
+          await deps.withSessionLock(candidate.sessionId, async () => {
+            // Maker sessions are process-local. A missing session can mean another
+            // shared-userData instance owns the runtime, so only the local owner may release it.
+            const session = deps.getSession(candidate.sessionId);
+            if (!session) return;
 
-          if (session) {
+            // Sends and releases share this lock. Re-read the live session only after
+            // acquiring it so a newly accepted turn cannot be closed by this scan.
+            if (session.isTurnRunning()) {
+              await deps.touchWorker(candidate.id, deps.now());
+              return;
+            }
+
             await deps.closeSession(candidate.sessionId);
-          }
 
-          const releasedAt = deps.now();
-          const marked = await deps.markReleased(candidate, releasedAt);
-          if (!marked) continue;
+            const releasedAt = deps.now();
+            const marked = await deps.markReleased(candidate, releasedAt);
+            if (!marked) return;
 
-          deps.log.info('idleWatcher: released worker', {
-            workerId: candidate.id,
-            sessionId: candidate.sessionId,
-            idleThresholdMin: idleReleaseMinutes,
+            deps.log.info('idleWatcher: released worker', {
+              workerId: candidate.id,
+              sessionId: candidate.sessionId,
+              idleThresholdMin: idleReleaseMinutes,
+            });
+            deps.broadcastWorkerChanged(candidate.leadSessionId);
           });
-          deps.broadcastWorkerChanged(candidate.leadSessionId);
         } catch (err) {
           deps.log.warn('idleWatcher: release worker failed', {
             workerId: candidate.id,

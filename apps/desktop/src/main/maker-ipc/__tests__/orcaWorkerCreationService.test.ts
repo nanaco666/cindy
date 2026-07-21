@@ -294,6 +294,26 @@ describe('OrcaWorkerCreationService', () => {
     expect(deps.addOrUpdateWorker).not.toHaveBeenCalled();
   });
 
+  it('does not count a released idle worker toward the hard limit precheck', async () => {
+    const { deps, service } = createDeps({
+      readCollaborationSettings: vi.fn(() => ({ workerSoftLimit: 1, workerHardLimit: 1 })),
+      listWorkersByLead: vi.fn(async () => [
+        { id: 'worker-1', label: 'released', status: workerStatus('idle'), idleSince: '2026-07-21T10:00:00.000Z' },
+      ]),
+    });
+
+    await expect(
+      service.createWorker({
+        leadSessionId: 'lead-1',
+        role: 'reviewer',
+        agent: 'codex',
+        label: 'replacement',
+      }),
+    ).resolves.toMatchObject({ ok: true });
+
+    expect(deps.bootstrapSession).toHaveBeenCalledOnce();
+  });
+
   it('rejects unavailable explicit models before reading lead defaults', async () => {
     const { deps, service } = createDeps();
 

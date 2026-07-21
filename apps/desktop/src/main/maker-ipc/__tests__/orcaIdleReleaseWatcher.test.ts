@@ -29,6 +29,7 @@ function createDeps(overrides: Partial<OrcaIdleReleaseWatcherDeps> = {}) {
     readIdleReleaseMinutes: vi.fn(() => 1),
     listCandidates: vi.fn(async () => [createCandidate()]),
     getSession: vi.fn(() => session),
+    withSessionLock: vi.fn(async (_sessionId, task) => task()),
     markReleased: vi.fn(async () => true),
     touchWorker: vi.fn(async () => undefined),
     closeSession: vi.fn(async () => undefined),
@@ -94,18 +95,31 @@ describe('createOrcaIdleReleaseWatcher', () => {
     expect(deps.broadcastWorkerChanged).not.toHaveBeenCalled();
   });
 
-  it('delays release when a turn starts after candidate selection', async () => {
-    const { deps, session, watcher } = createDeps();
-    session.isTurnRunning
-      .mockReturnValueOnce(false)
-      .mockReturnValueOnce(true);
+  it('leaves a worker untouched when this process does not own its runtime', async () => {
+    const { deps, watcher } = createDeps({
+      getSession: vi.fn(() => null),
+    });
 
     await watcher.scanNow();
 
-    expect(deps.touchWorker).toHaveBeenCalledOnce();
+    expect(deps.withSessionLock).toHaveBeenCalledWith('worker-session-1', expect.any(Function));
     expect(deps.closeSession).not.toHaveBeenCalled();
     expect(deps.markReleased).not.toHaveBeenCalled();
     expect(deps.broadcastWorkerChanged).not.toHaveBeenCalled();
+  });
+
+  it('rechecks the live turn after waiting for the session lock', async () => {
+    const { deps, session, watcher } = createDeps();
+    deps.withSessionLock = vi.fn(async (_sessionId, task) => {
+      session.isTurnRunning.mockReturnValue(true);
+      return task();
+    });
+
+    await watcher.scanNow();
+
+    expect(deps.touchWorker).toHaveBeenCalledWith('worker-1', 120_000);
+    expect(deps.closeSession).not.toHaveBeenCalled();
+    expect(deps.markReleased).not.toHaveBeenCalled();
   });
 
   it('skips workers that already have a release marker', async () => {

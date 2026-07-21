@@ -26,6 +26,7 @@ export interface OrcaWorkerListSnapshot {
   id: string;
   label: string | null;
   status: OrcaWorkerStatus;
+  idleSince?: string | null;
 }
 
 /** New Maker 面板传来的按 agent 默认值缓存；undefined/null 都表示继续 fallback。 */
@@ -375,7 +376,9 @@ export function createOrcaWorkerCreationService(deps: OrcaWorkerCreationDeps): O
     }
 
     const settings = deps.readCollaborationSettings();
-    const activeCount = existing.filter((worker) => deps.isActiveWorkerStatus(worker.status)).length;
+    const activeCount = existing.filter((worker) => (
+      deps.isActiveWorkerStatus(worker.status) && worker.idleSince == null
+    )).length;
     if (activeCount >= settings.workerHardLimit) {
       return {
         ok: false,

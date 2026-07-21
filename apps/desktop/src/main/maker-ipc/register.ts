@@ -1318,6 +1318,21 @@ const pendingFailedTurnAssistantPersistId = new Map<string, string>();
  * background-throttling keepalive。
  */
 const sendToSessionLocks = new Map<string, Promise<unknown>>();
+
+/** Serialize every local send / runtime release for one session. */
+function withSendToSessionLock<T>(sessionId: string, task: () => Promise<T>): Promise<T> {
+  const previous = sendToSessionLocks.get(sessionId);
+  const waitPrevious = previous ? previous.catch(() => undefined) : Promise.resolve();
+  const run = waitPrevious.then(task);
+  const tracked = run.finally(() => {
+    if (sendToSessionLocks.get(sessionId) === tracked) {
+      sendToSessionLocks.delete(sessionId);
+    }
+  });
+  sendToSessionLocks.set(sessionId, tracked);
+  return tracked;
+}
+
 let agentInputCoordinatorHolder: AgentInputCoordinator | null = null;
 const rewindInputSessions = new Set<string>();
 const SESSION_REWIND_INPUT_LOCK_ID = 'session-rewind';
@@ -5146,6 +5161,7 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
         ));
     },
     getSession: (sessionId) => maker.getSession(sessionId) ?? null,
+    withSessionLock: withSendToSessionLock,
     markReleased: async (candidate, releasedAt) => {
       // Drizzle proxy 的 UPDATE ... RETURNING 会执行写入但返回空数组；这里直接用
       // DbClient async exec 的 changes 做原子 compare-and-set 结果判定。
@@ -5344,7 +5360,7 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
     },
   };
 
-  const { sendToAgentAccepted } = createMakerSendTransaction({
+  const { sendToAgentAccepted: sendToAgentAcceptedUnlocked } = createMakerSendTransaction({
     getSession: (sessionId) => maker.getSession(sessionId),
     closeSession: (sessionId) => maker.closeSession(sessionId),
     getSessionMeta: (sessionId) => maker.getSessionMeta(sessionId),
@@ -5410,6 +5426,11 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
     applyPendingAgentSwitch: (sessionId) => applyPendingAgentSwitchIfIdle(agentSwitchDeps, sessionId),
     log,
   });
+  const sendToAgentAccepted: typeof sendToAgentAcceptedUnlocked = (...args) => {
+    const [sessionId] = args;
+    if (typeof sessionId !== 'string') return sendToAgentAcceptedUnlocked(...args);
+    return withSendToSessionLock(sessionId, () => sendToAgentAcceptedUnlocked(...args));
+  };
 
   /**
    * Same-turn steer contract: resolved STEER means maker-core accepted the

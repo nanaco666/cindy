@@ -685,7 +685,7 @@ describe('sendToSession ordering', () => {
   it('uses active slot occupancy for renderer worker-limit gating', () => {
     expect(useWorkersSource).toContain('isActiveWorkerStatus');
     expect(useWorkersSource).not.toContain('isRunningWorkerStatus');
-    expect(useWorkersSource).toContain('const activeWorkerCount = workers.filter((w) => isActiveWorkerStatus(w.status)).length;');
+    expect(useWorkersSource).toContain('isActiveWorkerStatus(w.status) && w.idleSince == null');
   });
 });
 
