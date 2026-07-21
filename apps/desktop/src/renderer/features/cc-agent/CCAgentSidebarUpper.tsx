@@ -2547,7 +2547,12 @@ function RailPanelShell({
       onMouseEnter={onEnter}
       onMouseLeave={(e) => {
         const next = e.relatedTarget instanceof Element ? e.relatedTarget : null;
-        if (next?.closest(RAIL_PANEL_KEEPALIVE_SELECTOR)) return;
+        // 一级面板:落入面板体系内部(含三级/菜单)都不算离开;三级面板:只有
+        // 落入自身或菜单/对话框浮层才不算——回到一级面板非项目区必须触发
+        // onLeave 收三级,否则旧项目的三级面板悬留(codex review;项目行经
+        // mouseenter → openProject 自会接管切换)。
+        const keepalive = level === 1 ? RAIL_PANEL_KEEPALIVE_SELECTOR : RAIL_PROJECT_KEEPALIVE_SELECTOR;
+        if (next?.closest(keepalive)) return;
         onLeave();
       }}
       className={cn(
@@ -2947,7 +2952,11 @@ function RailPanels({
         >
           {panelHead(openProject.displayName, openProject.sessions.length)}
           <div className="max-h-[420px] overflow-y-auto [scrollbar-width:thin]">
+            {/* key 按项目:hover 直切另一项目时列表组件被复用,内部「显示全部」
+                状态会泄漏给下一个项目、绕过折叠上限(codex review)——换 key 强制
+                重挂载复位,与「面板关闭复位」同语义。 */}
             <SessionEntryList
+              key={openProject.projectKey}
               sessions={openProject.sessions}
               {...entryListShared}
               collapsible
