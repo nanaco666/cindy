@@ -97,7 +97,11 @@ import { sessionActivityMs } from './lib/dateSessionGrouping';
 import { sortProjectsForSidebar, sortSessionsForSidebar } from './lib/sidebarProjectSorting';
 import { isOrcaWorkerSession, resolveSessionRoute } from '@/lib/orcaSessionIdentity';
 import { PinnedSection } from './sidebar/sections/PinnedSection';
-import { DialogueSection } from './sidebar/sections/DialogueSection';
+import {
+  DialogueSection,
+  compareDialogueSessions,
+  type DialogueSortBy,
+} from './sidebar/sections/DialogueSection';
 import { ProjectsSection } from './sidebar/sections/ProjectsSection';
 import { DateGroupedSessionsSection } from './sidebar/sections/DateGroupedSessionsSection';
 import { isAutomationGeneratedSession } from './lib/scheduledSessionGrouping';
@@ -419,7 +423,11 @@ export function CCAgentSidebarUpper() {
               sessionsHook={sessionsHook}
               navigate={navigate}
               activeSessionId={activeSessionId}
-              viewedSessionId={activeSessionId ?? filesSession?.id}
+              // 兜底直接用路由参数而非 filesSession?.id:filesSession 只从本地
+              // 会话表解析,device-link 远程会话的文件视图(WorkdirBrowseRoute
+              // 按远程镜像解析)会解析不到,面板豁免/高亮与重定向判定就会丢
+              // (codex review)。id 相等性语义不需要完整 Session 对象。
+              viewedSessionId={activeSessionId ?? filesSessionId}
               filter={filter}
               projectAliases={projectAliases}
               scheduleSessionIndex={scheduleSessionIndex}
@@ -568,15 +576,17 @@ function ExpandedView({
     async ({ disposition, affectedSessionIds }: DeletedScheduleGeneratedSessionResult) => {
       await refreshSessions();
       void refreshWorktrees();
+      // 重定向判定用 viewedSessionId(files 路由兜底,与其余归档/删除 handler
+      // 同口径):从面板删 schedule 连带清掉正在浏览的会话时也要跳离文件视图。
       if (
         disposition !== 'keep' &&
-        activeSessionId &&
-        affectedSessionIds.includes(activeSessionId)
+        viewedSessionId &&
+        affectedSessionIds.includes(viewedSessionId)
       ) {
         navigate('/cc-agent');
       }
     },
-    [activeSessionId, navigate, refreshSessions, refreshWorktrees],
+    [viewedSessionId, navigate, refreshSessions, refreshWorktrees],
   );
   const { requestDeleteSchedule, deleteScheduleDialog } = useDeleteScheduleWithSessions({
     onDeleted: handleScheduleDeleted,
@@ -1043,6 +1053,15 @@ function ExpandedView({
   const visibleDialogues = useMemo(() => {
     return vendorPredicate ? groups.dialogues.filter(vendorPredicate) : groups.dialogues;
   }, [groups.dialogues, vendorPredicate]);
+
+  // 对话段排序状态提升到此处:DialogueSection(展开态)受控消费,rail 对话
+  // 面板按同一排序渲染——否则折叠后面板的前 N 条/折叠溢出与展开态刚排好的
+  // 顺序不一致(codex review)。
+  const [dialogueSortBy, setDialogueSortBy] = useState<DialogueSortBy>('recency');
+  const railDialogues = useMemo(
+    () => visibleDialogues.slice().sort((a, b) => compareDialogueSessions(a, b, dialogueSortBy)),
+    [visibleDialogues, dialogueSortBy],
+  );
 
   const visibleProjectsWithVendor = useMemo(() => {
     const projects = vendorPredicate
@@ -2269,6 +2288,8 @@ function ExpandedView({
               projectOptions={projectPickerOptions}
               onScheduleAction={handleScheduleAction}
               onCreateDialogue={handleCreateDialogue}
+              sortBy={dialogueSortBy}
+              onSortByChange={setDialogueSortBy}
             />
           </>
         )}
@@ -2335,7 +2356,7 @@ function ExpandedView({
       <RailPanels
         projects={visibleProjectsWithVendor}
         unclassified={railUnclassified}
-        dialogues={visibleDialogues}
+        dialogues={railDialogues}
         activeSessionId={activeSessionId}
         viewedSessionId={viewedSessionId}
         runningSessionIds={displayRunningSessionIds}
