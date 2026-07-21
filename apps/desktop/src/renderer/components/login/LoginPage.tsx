@@ -48,10 +48,11 @@ export function LoginPage() {
   const isMac = window.electronAPI?.platform === 'darwin';
   const [identifierKind, setIdentifierKind] = useState<VerificationKind>('email');
   const [identifier, setIdentifier] = useState('');
-  // 企业 SSO 入口子视图：在 identifier 步骤内输入企业 ID（本地展示态，不进 main）
+  // 企业 SSO 入口子视图：在 identifier 步骤内输入组织标识（本地展示态，不进 main）
   const [ssoOrgMode, setSsoOrgMode] = useState(false);
   const [ssoOrg, setSsoOrg] = useState('');
   const [verificationCode, setVerificationCode] = useState('');
+  const [ssoVerificationCode, setSsoVerificationCode] = useState('');
   const [bindingContact, setBindingContact] = useState('');
   const [bindingCode, setBindingCode] = useState('');
 
@@ -60,6 +61,7 @@ export function LoginPage() {
     setIdentifierKind(loginState.providers.attribution);
     setSsoOrgMode(false);
     setVerificationCode('');
+    setSsoVerificationCode('');
     setBindingContact('');
     setBindingCode('');
   }, [
@@ -118,7 +120,7 @@ export function LoginPage() {
               autoFocus
               required
               disabled={isLoading}
-              maxLength={64}
+              maxLength={253}
               autoComplete="off"
               value={ssoOrg}
               onChange={(event) => setSsoOrg(event.target.value)}
@@ -219,7 +221,7 @@ export function LoginPage() {
           </>
         )}
 
-        {/* 企业 SSO 入口：输入企业 ID 发起单点登录（国内版隐藏邮箱后企业用户的登录路径） */}
+        {/* 企业 SSO 入口：输入组织标识发起单点登录（国内版隐藏邮箱后企业用户的登录路径） */}
         <button
           type="button"
           disabled={isLoading}
@@ -437,6 +439,77 @@ export function LoginPage() {
     );
   };
 
+  const renderSsoVerification = () => {
+    if (loginState?.step !== 'sso-verification') return null;
+    const verify = (event: FormEvent) => {
+      event.preventDefault();
+      if (ssoVerificationCode.length !== 6) return;
+      void dispatch({
+        type: 'verify-sso-verification',
+        code: ssoVerificationCode,
+      });
+    };
+    return (
+      <>
+        <BackButton disabled={isLoading} onClick={reset} label={t('login.cancel')} />
+        <Header
+          title={t('login.ssoVerificationTitle')}
+          subtitle={t('login.ssoVerificationSubtitle', {
+            target: loginState.targetMasked,
+          })}
+        />
+        {!loginState.codeRequested ? (
+          <button
+            type="button"
+            disabled={isLoading}
+            className={primaryButtonClass}
+            onClick={() => void dispatch({ type: 'request-sso-verification-code' })}
+          >
+            {isLoading ? <BusyLabel>{t('login.working')}</BusyLabel> : t('login.sendCode')}
+          </button>
+        ) : (
+          <form className="w-full space-y-3" onSubmit={verify}>
+            <p className="truncate text-center text-[13px] text-[var(--text-secondary)]">
+              {loginState.targetMasked}
+            </p>
+            <input
+              autoFocus
+              required
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              pattern="[0-9]{6}"
+              maxLength={6}
+              disabled={isLoading}
+              value={ssoVerificationCode}
+              onChange={(event) => setSsoVerificationCode(event.target.value.replace(/\D/g, ''))}
+              placeholder={t('login.codePlaceholder')}
+              className={cn(inputClass, 'text-center tracking-[0.35em]')}
+            />
+            <button
+              type="submit"
+              disabled={isLoading || ssoVerificationCode.length !== 6}
+              className={primaryButtonClass}
+            >
+              {isLoading ? (
+                <BusyLabel>{t('login.verifying')}</BusyLabel>
+              ) : (
+                t('login.completeSignIn')
+              )}
+            </button>
+            <button
+              type="button"
+              disabled={isLoading}
+              className="w-full text-center text-[13px] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+              onClick={() => void dispatch({ type: 'request-sso-verification-code' })}
+            >
+              {t('login.resendCode')}
+            </button>
+          </form>
+        )}
+      </>
+    );
+  };
+
   const renderBinding = () => {
     if (loginState?.step !== 'binding') return null;
     const contact = loginState.contact ?? bindingContact;
@@ -557,6 +630,7 @@ export function LoginPage() {
       renderMethodChoice() ??
       renderVerification() ??
       renderAccountSelection() ??
+      renderSsoVerification() ??
       renderBinding()
     );
   };

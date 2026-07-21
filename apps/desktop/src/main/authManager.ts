@@ -25,6 +25,7 @@ import {
   CindyAuthClient,
   reduceAuthFlow,
   ssoOrgDiscoveryToMethods,
+  type AccountTokenPair,
   type AuthFlowState,
   type AuthMembership,
   type AuthRegion,
@@ -77,6 +78,7 @@ function authServerUrl(): string {
   return getClientEndpoint('authApiBaseUrl');
 }
 const REFRESH_TOKEN_KEY = 'cindy_auth_refresh_token';
+const ACCOUNT_REFRESH_TOKEN_KEY = 'cindy_auth_account_refresh_token';
 const LEGACY_REFRESH_TOKEN_KEY = 'refresh_token';
 const DEFAULT_MODEL = 'claude-sonnet-4-6';
 const DEFAULT_EFFORT = 'medium';
@@ -157,9 +159,12 @@ let accountSwitchTeardown: AccountSwitchTeardown | null = null;
 // ── Module-level state ──────────────────────────────────────────────────────
 
 let accessToken: string | null = null;
+let accountAccessToken: string | null = null;
 let currentUser: CurrentUser | null = null;
 let refreshTimer: ReturnType<typeof setTimeout> | null = null;
 let refreshPromise: Promise<boolean> | null = null;
+let accountRefreshPromise: Promise<boolean> | null = null;
+let accountSessionGeneration = 0;
 /**
  * 设备标识。默认绑定物理机(machineIdSync)。
  *
@@ -174,6 +179,7 @@ let providerConfig: ProviderConfig | null = null;
 let discoveredMethods: LoginMethod[] = [];
 let pendingLoginTicket: string | null = null;
 let pendingBindTicket: string | null = null;
+let pendingSsoVerificationTicket: string | null = null;
 let loginActionPromise: Promise<DesktopLoginActionResult> | null = null;
 
 function createAuthClient(): CindyAuthClient {
@@ -224,6 +230,100 @@ function removeSafe(key: string): void {
     fs.unlinkSync(path.join(SAFE_STORAGE_DIR(), `${key}.enc`));
   } catch {
     // ENOENT is fine
+  }
+}
+
+function clearAccountSession(): void {
+  accountSessionGeneration += 1;
+  accountAccessToken = null;
+  removeSafe(ACCOUNT_REFRESH_TOKEN_KEY);
+}
+
+function installAccountSession(pair: AccountTokenPair): void {
+  accountSessionGeneration += 1;
+  accountAccessToken = pair.accountToken;
+  writeSafe(ACCOUNT_REFRESH_TOKEN_KEY, pair.accountRefreshToken);
+}
+
+function accountPairFromOutcome(outcome: LoginOutcome): AccountTokenPair | null {
+  if (
+    (outcome.status === 'ok' || outcome.status === 'select_account') &&
+    outcome.accountToken &&
+    outcome.accountRefreshToken
+  ) {
+    return {
+      accountToken: outcome.accountToken,
+      accountRefreshToken: outcome.accountRefreshToken,
+    };
+  }
+  return null;
+}
+
+function isJwtExpiring(token: string, skewSeconds = 300): boolean {
+  try {
+    const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString('utf-8')) as {
+      exp?: unknown;
+    };
+    return typeof payload.exp !== 'number' || payload.exp <= Date.now() / 1000 + skewSeconds;
+  } catch {
+    return true;
+  }
+}
+
+async function refreshAccountSession(): Promise<boolean> {
+  if (accountRefreshPromise) return accountRefreshPromise;
+  const generation = accountSessionGeneration;
+  const storedToken = readSafe(ACCOUNT_REFRESH_TOKEN_KEY);
+  if (!storedToken) return false;
+
+  accountRefreshPromise = (async () => {
+    try {
+      const pair = await createAuthClient().refreshAccount(storedToken);
+      if (accountSessionGeneration !== generation) return false;
+      accountAccessToken = pair.accountToken;
+      writeSafe(ACCOUNT_REFRESH_TOKEN_KEY, pair.accountRefreshToken);
+      return true;
+    } catch (error) {
+      if (
+        accountSessionGeneration === generation &&
+        error instanceof AuthApiError &&
+        error.statusCode === 401
+      ) {
+        clearAccountSession();
+      }
+      return false;
+    }
+  })();
+  try {
+    return await accountRefreshPromise;
+  } finally {
+    accountRefreshPromise = null;
+  }
+}
+
+async function getAccountAccessToken(): Promise<string | null> {
+  if (accountAccessToken && !isJwtExpiring(accountAccessToken)) return accountAccessToken;
+  accountAccessToken = null;
+  return (await refreshAccountSession()) ? accountAccessToken : null;
+}
+
+async function restoreAccountSelection(): Promise<AuthFlowState | null> {
+  let token = await getAccountAccessToken();
+  if (!token) return null;
+  try {
+    const memberships = await createAuthClient().getAccountMemberships(token);
+    if (memberships.length === 0) return null;
+    loginFlowState = { step: 'account-selection', accounts: memberships };
+    return loginFlowState;
+  } catch (error) {
+    if (!(error instanceof AuthApiError) || error.statusCode !== 401) return null;
+    accountAccessToken = null;
+    token = await getAccountAccessToken();
+    if (!token) return null;
+    const memberships = await createAuthClient().getAccountMemberships(token);
+    if (memberships.length === 0) return null;
+    loginFlowState = { step: 'account-selection', accounts: memberships };
+    return loginFlowState;
   }
 }
 
@@ -751,9 +851,11 @@ function resetLoginFlowState(): void {
   discoveredMethods = [];
   pendingLoginTicket = null;
   pendingBindTicket = null;
+  pendingSsoVerificationTicket = null;
 }
 
 async function reloadPerAccountIntegrationsFromDisk(_accessToken: string | null): Promise<void> {
+  void _accessToken;
   // 登录账号级集成清单当前为空(见 clearPerAccountIntegrations 顶注)。
   // 骨架与重试调度保留:替换式刷新的账号切换路径依赖本函数的调用位与
   // 'after-integration-reload' 守卫点。
@@ -786,6 +888,7 @@ function clearAuth(opts: { notify?: boolean } = {}): void {
   const notify = opts.notify ?? true;
   authStateEpoch += 1; // 迟到的冷启动流程从此作废(见 authStateEpoch 注释)
   accessToken = null;
+  clearAccountSession();
   currentUser = null;
   resetLoginFlowState();
   persistedRefreshTokenNeedsIdentityCheck = false;
@@ -938,6 +1041,7 @@ export async function initialize(options: AuthInitializeOptions = {}): Promise<A
     );
     lastAcceptedRefreshToken = null;
     removeSafe(REFRESH_TOKEN_KEY);
+    clearAccountSession();
     removeSafe(LEGACY_REFRESH_TOKEN_KEY);
     clearReloginFlag();
     return { user: null, isAuthenticated: false, isCanary: false, deviceId };
@@ -946,6 +1050,9 @@ export async function initialize(options: AuthInitializeOptions = {}): Promise<A
   // Old Feishu-auth refresh tokens are intentionally not portable to auth-server.
   removeSafe(LEGACY_REFRESH_TOKEN_KEY);
   const storedToken = readSafe(REFRESH_TOKEN_KEY);
+  // Account 与 resource 会话独立轮换。账号会话只用于身份列表/交换，绝不替代
+  // 当前 resource token；后台恢复不阻塞已有资源会话冷启动。
+  if (readSafe(ACCOUNT_REFRESH_TOKEN_KEY)) void refreshAccountSession();
   if (!storedToken) {
     return { user: null, isAuthenticated: false, isCanary: false, deviceId };
   }
@@ -1093,6 +1200,7 @@ async function loadLoginProviders(): Promise<AuthFlowState> {
   discoveredMethods = [];
   pendingLoginTicket = null;
   pendingBindTicket = null;
+  pendingSsoVerificationTicket = null;
   loginFlowState = reduceAuthFlow(loginFlowState, {
     type: 'providers-loaded',
     providers: providerConfig,
@@ -1102,7 +1210,14 @@ async function loadLoginProviders(): Promise<AuthFlowState> {
 
 export async function getLoginState(): Promise<DesktopLoginActionResult> {
   try {
-    return { success: true, state: loginFlowState ?? (await loadLoginProviders()) };
+    if (loginFlowState) return { success: true, state: loginFlowState };
+    // 若上次在“已认证账号、尚未选择资源身份”时退出，可直接恢复身份选择。
+    // 后台 account refresh 尚未完成时不阻塞登录页，回落到常规登录入口。
+    if (accountAccessToken && !isJwtExpiring(accountAccessToken)) {
+      const restored = await restoreAccountSelection();
+      if (restored) return { success: true, state: restored };
+    }
+    return { success: true, state: await loadLoginProviders() };
   } catch (error) {
     const code = error instanceof AuthApiError ? error.code : 'AUTH_SERVICE_UNAVAILABLE';
     log.warn(`load login providers failed code=${code}`);
@@ -1142,6 +1257,7 @@ async function completeLogin(
   getProviderSecretStore().reconcileOwner(outcome.membership.id);
   pendingLoginTicket = null;
   pendingBindTicket = null;
+  pendingSsoVerificationTicket = null;
   loginFlowState = reduceAuthFlow(loginFlowState, { type: 'outcome', outcome });
   notifyRenderer();
   notifyAuthListeners();
@@ -1149,13 +1265,23 @@ async function completeLogin(
 }
 
 async function acceptLoginOutcome(outcome: LoginOutcome): Promise<AuthFlowState> {
+  const accountPair = accountPairFromOutcome(outcome);
+  if (accountPair) installAccountSession(accountPair);
+  else clearAccountSession();
+
   if (outcome.status === 'ok') return completeLogin(outcome);
   if (outcome.status === 'select_account') {
     pendingLoginTicket = outcome.loginTicket;
     pendingBindTicket = null;
-  } else {
+    pendingSsoVerificationTicket = null;
+  } else if (outcome.status === 'binding_required') {
     pendingBindTicket = outcome.bindTicket;
     pendingLoginTicket = null;
+    pendingSsoVerificationTicket = null;
+  } else {
+    pendingSsoVerificationTicket = outcome.verificationTicket;
+    pendingLoginTicket = null;
+    pendingBindTicket = null;
   }
   loginFlowState = reduceAuthFlow(loginFlowState, { type: 'outcome', outcome });
   return loginFlowState;
@@ -1186,7 +1312,7 @@ async function runLoginAction(action: DesktopLoginAction): Promise<DesktopLoginA
       return { success: true, state: loginFlowState };
     }
 
-    // 企业 SSO 入口（按企业 ID/组织 slug）：结果映射进 method-choice，
+    // 企业 SSO 入口（按组织 ID/slug/已验证域名）：结果映射进 method-choice，
     // 使 start-browser 的 connectionId 白名单校验与连接选择 UI 直接复用。
     if (action.type === 'discover-sso-org') {
       const discovery = await client.discoverSsoOrg(action.org.trim().toLowerCase());
@@ -1273,12 +1399,55 @@ async function runLoginAction(action: DesktopLoginAction): Promise<DesktopLoginA
     }
 
     if (action.type === 'select-account') {
-      if (!pendingLoginTicket)
+      const accountToken = await getAccountAccessToken();
+      if (accountToken) {
+        const pair = await client.exchangeAccountMembership(accountToken, action.accountId);
+        return {
+          success: true,
+          state: await completeLogin({ status: 'ok', ...pair }),
+        };
+      }
+      // 纯社交/SSO 等没有 account 会话的历史路径仍用一次性 loginTicket。
+      if (!pendingLoginTicket) {
         throw new AuthApiError('INVALID_LOGIN_TICKET', 401, 'Missing login ticket');
+      }
       return {
         success: true,
         state: await acceptLoginOutcome(
           await client.selectAccount(pendingLoginTicket, action.accountId),
+        ),
+      };
+    }
+
+    if (action.type === 'request-sso-verification-code') {
+      if (!pendingSsoVerificationTicket || loginFlowState?.step !== 'sso-verification') {
+        throw new AuthApiError(
+          'INVALID_SSO_VERIFICATION_TICKET',
+          401,
+          'Missing SSO verification ticket',
+        );
+      }
+      await client.requestSsoVerificationCode(pendingSsoVerificationTicket);
+      loginFlowState = reduceAuthFlow(loginFlowState, {
+        type: 'sso-verification-code-requested',
+        channel: loginFlowState.channel,
+        targetMasked: loginFlowState.targetMasked,
+      });
+      return { success: true, state: loginFlowState };
+    }
+
+    if (action.type === 'verify-sso-verification') {
+      if (!pendingSsoVerificationTicket || loginFlowState?.step !== 'sso-verification') {
+        throw new AuthApiError(
+          'INVALID_SSO_VERIFICATION_TICKET',
+          401,
+          'Missing SSO verification ticket',
+        );
+      }
+      return {
+        success: true,
+        state: await acceptLoginOutcome(
+          await client.verifySsoVerification(pendingSsoVerificationTicket, action.code),
         ),
       };
     }
@@ -1317,11 +1486,13 @@ async function runLoginAction(action: DesktopLoginAction): Promise<DesktopLoginA
     const flowCannotRetry = [
       'INVALID_LOGIN_TICKET',
       'INVALID_BIND_TICKET',
+      'INVALID_SSO_VERIFICATION_TICKET',
       'INVALID_AUTH_CODE',
     ].includes(code);
     if (flowCannotRetry) {
       pendingLoginTicket = null;
       pendingBindTicket = null;
+      pendingSsoVerificationTicket = null;
     }
     // Keep the last usable screen so validation/network failures can be retried
     // without discarding the entered identifier or requesting another code.
@@ -1510,6 +1681,7 @@ export async function refresh(): Promise<boolean> {
 
 export async function logout(): Promise<void> {
   const currentAccessToken = accessToken;
+  const currentAccountAccessToken = accountAccessToken;
   // 注意:真实登出入口(bootstrap auth:logout handler)在调用本函数**之前**已
   // dispose DbClient 并释放 device-link 持有权(releaseDeviceLinkOwnershipBeforeLogout);
   // 需要在 DB 关闭前收尾写入的逻辑应挂在那条链路上,而不是本函数内(此时已太晚)。
@@ -1528,6 +1700,11 @@ export async function logout(): Promise<void> {
       body: { deviceId },
       token: currentAccessToken,
     }).catch(() => {});
+  }
+  if (currentAccountAccessToken) {
+    createAuthClient()
+      .logoutAccount(currentAccountAccessToken)
+      .catch(() => {});
   }
 }
 

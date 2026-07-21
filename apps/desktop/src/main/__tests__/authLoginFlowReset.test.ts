@@ -18,6 +18,7 @@ describe('auth login-flow reset', () => {
     expect(resetBody).toContain('discoveredMethods = [];');
     expect(resetBody).toContain('pendingLoginTicket = null;');
     expect(resetBody).toContain('pendingBindTicket = null;');
+    expect(resetBody).toContain('pendingSsoVerificationTicket = null;');
 
     const clearStart = source.indexOf('function clearAuth(');
     const clearEnd = source.indexOf('\n}\n\n// ── Public API', clearStart);
@@ -53,7 +54,25 @@ describe('auth login-flow reset', () => {
   it('does not leave expired private tickets on a screen that can only reuse them', () => {
     expect(source).toContain("'INVALID_LOGIN_TICKET',");
     expect(source).toContain("'INVALID_BIND_TICKET',");
+    expect(source).toContain("'INVALID_SSO_VERIFICATION_TICKET',");
     expect(source).toContain("? { step: 'error', code, recoverTo: 'identifier' }");
+  });
+
+  it('keeps account credentials in main and exchanges the selected membership into a resource token', () => {
+    expect(source).toContain(
+      "const ACCOUNT_REFRESH_TOKEN_KEY = 'cindy_auth_account_refresh_token';",
+    );
+    expect(source).toContain('client.exchangeAccountMembership(accountToken, action.accountId)');
+    expect(source).toMatch(
+      /createAuthClient\(\)\s*\.logoutAccount\(currentAccountAccessToken\)/,
+    );
+    expect(source).not.toContain('accountToken: accountAccessToken');
+
+    const getterStart = source.indexOf('export function getAccessToken(): string | null {');
+    const getterEnd = source.indexOf('\n}', getterStart);
+    const getterBody = source.slice(getterStart, getterEnd);
+    expect(getterBody).toContain('return accessToken;');
+    expect(getterBody).not.toContain('accountAccessToken');
   });
 
   it('drops a runtime refresh result after logout or a newer login changes auth generation', () => {

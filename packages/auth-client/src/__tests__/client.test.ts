@@ -61,8 +61,16 @@ describe("CindyAuthClient", () => {
     const outcomes = [
       { status: "binding_required", bindType: "phone", bindTicket: "bind-1" },
       {
+        status: "sso_verification_required",
+        verificationTicket: "sso-ticket-1",
+        channel: "email",
+        targetMasked: "a***@example.com",
+      },
+      {
         status: "select_account",
         loginTicket: "login-1",
+        accountToken: "account-access",
+        accountRefreshToken: "account-refresh",
         accounts: [
           {
             id: "m1",
@@ -97,10 +105,63 @@ describe("CindyAuthClient", () => {
     ).resolves.toMatchObject({ status: "binding_required" });
     await expect(
       client(fetch).verifyCode("phone", "+8613800000000", "123456"),
+    ).resolves.toMatchObject({ status: "sso_verification_required" });
+    await expect(
+      client(fetch).verifyCode("phone", "+8613800000000", "123456"),
     ).resolves.toMatchObject({ status: "select_account" });
     await expect(
       client(fetch).selectAccount("login-1", "m1"),
     ).resolves.toMatchObject({ status: "ok" });
+  });
+
+  it("uses account tokens only for account control and exchanges a resource token", async () => {
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(
+        response(200, {
+          memberships: [
+            {
+              id: "org-membership",
+              kind: "org",
+              role: "member",
+              displayName: "Corp User",
+              email: "user@example.com",
+              orgId: "org-1",
+              orgName: "Corp",
+              orgSlug: "org-corp",
+            },
+          ],
+        }),
+      )
+      .mockResolvedValueOnce(
+        response(200, {
+          status: "ok",
+          accessToken: "org-access",
+          refreshToken: "org-refresh",
+          membership: {
+            id: "org-membership",
+            kind: "org",
+            role: "member",
+            displayName: "Corp User",
+            email: "user@example.com",
+            orgId: "org-1",
+            orgName: "Corp",
+          },
+        }),
+      );
+    const auth = client(fetch);
+    await expect(
+      auth.getAccountMemberships("account-access"),
+    ).resolves.toHaveLength(1);
+    await expect(
+      auth.exchangeAccountMembership("account-access", "org-membership"),
+    ).resolves.toMatchObject({ accessToken: "org-access" });
+    expect(fetch.mock.calls[0]?.[1]?.headers).toMatchObject({
+      Authorization: "Bearer account-access",
+    });
+    expect(fetch.mock.calls[1]?.[1]?.headers).toMatchObject({
+      Authorization: "Bearer account-access",
+    });
   });
 
   it("maps server errors without leaking malformed responses", async () => {
@@ -144,9 +205,9 @@ describe("CindyAuthClient", () => {
     const fetch = vi.fn(async () =>
       response(200, { orgName: "Empty Corp", connections: [] }),
     );
-    await expect(client(fetch).discoverSsoOrg("empty-corp")).rejects.toMatchObject(
-      { code: "ORG_SSO_NOT_FOUND" },
-    );
+    await expect(
+      client(fetch).discoverSsoOrg("empty-corp"),
+    ).rejects.toMatchObject({ code: "ORG_SSO_NOT_FOUND" });
   });
 
   it("builds PKCE authorize URLs for social and SSO", () => {
@@ -190,5 +251,24 @@ describe("reduceAuthFlow", () => {
       expect.objectContaining({ step: "account-selection" }),
     );
     expect(JSON.stringify(state)).not.toContain("secret-ticket");
+  });
+
+  it("projects SSO verification tickets without exposing the ticket", () => {
+    const state = reduceAuthFlow(null, {
+      type: "outcome",
+      outcome: {
+        status: "sso_verification_required",
+        verificationTicket: "secret-sso-ticket",
+        channel: "sms",
+        targetMasked: "+8613****11",
+      },
+    });
+    expect(state).toEqual({
+      step: "sso-verification",
+      channel: "sms",
+      targetMasked: "+8613****11",
+      codeRequested: false,
+    });
+    expect(JSON.stringify(state)).not.toContain("secret-sso-ticket");
   });
 });

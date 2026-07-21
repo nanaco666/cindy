@@ -30,7 +30,7 @@ export const providerConfigSchema = z.object({
 });
 export type ProviderConfig = z.infer<typeof providerConfigSchema>;
 
-/** 企业 SSO discovery（POST /api/auth/sso/discovery，按企业 ID/组织 slug 探测）。 */
+/** 企业 SSO discovery（POST /api/auth/sso/discovery，按组织 ID/slug/已验证域名探测）。 */
 export const ssoOrgConnectionSchema = z.object({
   connectionId: z.string().min(1),
   protocol: z.enum(["oidc", "saml", "cas"]),
@@ -83,24 +83,64 @@ export const tokenPairSchema = z.object({
   membership: membershipSchema,
 });
 export type AuthTokenPair = z.infer<typeof tokenPairSchema>;
-const okOutcomeSchema = tokenPairSchema.extend({ status: z.literal("ok") });
+export const accountTokenPairSchema = z.object({
+  accountToken: z.string().min(1),
+  accountRefreshToken: z.string().min(1),
+});
+export type AccountTokenPair = z.infer<typeof accountTokenPairSchema>;
+
+const optionalAccountTokenFields = {
+  accountToken: z.string().min(1).optional(),
+  accountRefreshToken: z.string().min(1).optional(),
+};
+
+const okOutcomeSchema = tokenPairSchema.extend({
+  status: z.literal("ok"),
+  ...optionalAccountTokenFields,
+});
 const selectAccountOutcomeSchema = z.object({
   status: z.literal("select_account"),
   loginTicket: z.string().min(1),
   accounts: z.array(membershipSchema).min(1),
+  ...optionalAccountTokenFields,
 });
 const bindingRequiredOutcomeSchema = z.object({
   status: z.literal("binding_required"),
   bindType: z.enum(["phone", "email"]),
   bindTicket: z.string().min(1),
 });
-export const loginOutcomeSchema = z.discriminatedUnion("status", [
-  okOutcomeSchema,
-  selectAccountOutcomeSchema,
-  bindingRequiredOutcomeSchema,
-]);
+const ssoVerificationRequiredOutcomeSchema = z.object({
+  status: z.literal("sso_verification_required"),
+  verificationTicket: z.string().min(1),
+  channel: z.enum(["email", "sms"]),
+  targetMasked: z.string().min(1),
+});
+export const loginOutcomeSchema = z
+  .discriminatedUnion("status", [
+    okOutcomeSchema,
+    selectAccountOutcomeSchema,
+    bindingRequiredOutcomeSchema,
+    ssoVerificationRequiredOutcomeSchema,
+  ])
+  .superRefine((outcome, ctx) => {
+    if (outcome.status !== "ok" && outcome.status !== "select_account") return;
+    if (
+      Boolean(outcome.accountToken) !== Boolean(outcome.accountRefreshToken)
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        message:
+          "accountToken and accountRefreshToken must be returned together",
+      });
+    }
+  });
 export type LoginOutcome = z.infer<typeof loginOutcomeSchema>;
 export type AuthSuccess = z.infer<typeof okOutcomeSchema>;
+
+export const accountMembershipSchema = membershipSchema.extend({
+  orgSlug: z.string().nullable(),
+});
+export type AccountMembership = z.infer<typeof accountMembershipSchema>;
 
 export const meResponseSchema = z.object({
   membership: membershipSchema,
@@ -111,6 +151,7 @@ export type AuthMe = z.infer<typeof meResponseSchema>;
 
 export type AuthClientType = "desktop" | "mobile" | "web";
 export type VerificationKind = "email" | "phone";
+export type SsoVerificationChannel = "email" | "sms";
 
 export type AuthFlowState =
   | { step: "identifier"; providers: ProviderConfig }
@@ -118,6 +159,12 @@ export type AuthFlowState =
   | { step: "verification-code"; kind: VerificationKind; identifier: string }
   | { step: "browser-redirect"; label: string }
   | { step: "account-selection"; accounts: AuthMembership[] }
+  | {
+      step: "sso-verification";
+      channel: SsoVerificationChannel;
+      targetMasked: string;
+      codeRequested: boolean;
+    }
   | {
       step: "binding";
       bindType: VerificationKind;
@@ -137,6 +184,11 @@ export type AuthFlowAction =
   | { type: "code-requested"; kind: VerificationKind; identifier: string }
   | { type: "browser-started"; label: string }
   | { type: "outcome"; outcome: LoginOutcome }
+  | {
+      type: "sso-verification-code-requested";
+      channel: SsoVerificationChannel;
+      targetMasked: string;
+    }
   | {
       type: "binding-code-requested";
       bindType: VerificationKind;
@@ -177,6 +229,13 @@ export function reduceAuthFlow(
         codeRequested: true,
         contact: action.contact,
       };
+    case "sso-verification-code-requested":
+      return {
+        step: "sso-verification",
+        channel: action.channel,
+        targetMasked: action.targetMasked,
+        codeRequested: true,
+      };
     case "failed":
       return { step: "error", code: action.code, recoverTo: action.recoverTo };
     case "outcome":
@@ -185,6 +244,14 @@ export function reduceAuthFlow(
       }
       if (action.outcome.status === "select_account") {
         return { step: "account-selection", accounts: action.outcome.accounts };
+      }
+      if (action.outcome.status === "sso_verification_required") {
+        return {
+          step: "sso-verification",
+          channel: action.outcome.channel,
+          targetMasked: action.outcome.targetMasked,
+          codeRequested: false,
+        };
       }
       return {
         step: "binding",
