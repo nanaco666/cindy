@@ -17,8 +17,8 @@ export * from './feishu/index.js';
 export * from './lizi_feishuBotMcpServer.js';
 export * from './lizi_feishuBotToolRegistry.js';
 
-export * from './lizi_schedulerMcpServer.js';
-export * from './lizi_schedulerToolRegistry.js';
+export * from './cindy_schedulerMcpServer.js';
+export * from './cindy_schedulerToolRegistry.js';
 export * from './scheduler/index.js';
 
 export * from './lizi_sshMcpServer.js';

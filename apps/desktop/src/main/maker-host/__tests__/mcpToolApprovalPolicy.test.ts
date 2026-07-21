@@ -64,6 +64,7 @@ describe('desktop MCP approval policy', () => {
 
   it('preserves the existing built-in allowlist and lizi_ssh exception', () => {
     expect(getDesktopMcpToolApprovalPolicy({ serverName: 'lizi_memory' })).toBe('auto-approve');
+    expect(getDesktopMcpToolApprovalPolicy({ serverName: 'cindy_scheduler' })).toBe('auto-approve');
     // gitlab_lizi 已于 2026-07-14 退役(迁入内置意识 cindy-gitlab):
     // `<平台>_lizi` 显式白名单清空后,该名字回落到默认 prompt,不再自动放行。
     expect(getDesktopMcpToolApprovalPolicy({ serverName: 'gitlab_lizi' })).toBe('prompt');

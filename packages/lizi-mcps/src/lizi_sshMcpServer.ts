@@ -3,7 +3,7 @@
  * ---------------------------------------------------------------------------
  * In-process MCP server exposing xdt-maker's built-in SSH remote-host
  * capability (desktop ConnectionPool) to cc / codex agents. Mirrors the shape
- * of `lizi_schedulerMcpServer.ts`：
+ * of `cindy_schedulerMcpServer.ts`：
  *
  *  - server only exposes two entry tools: `list_tools` / `call_tool`
  *  - fine-grained tools live in ssh/*.ts and register on a registry

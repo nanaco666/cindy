@@ -15,7 +15,7 @@ import type {
 } from './types.js';
 import { createFeishuBotMcpServer } from './lizi_feishuBotMcpServer.js';
 import { createSlackMcpGatewayServer } from './lizi_slackMcpServer.js';
-import { createSchedulerMcpServer } from './lizi_schedulerMcpServer.js';
+import { createSchedulerMcpServer } from './cindy_schedulerMcpServer.js';
 import { createSshMcpServer } from './lizi_sshMcpServer.js';
 import { createLiziMemoryMcpServer } from './lizi_memoryMcpServer.js';
 import { createLiziContactsMcpServer } from './lizi_contactsMcpServer.js';
@@ -262,9 +262,9 @@ export function createLiziMcpProviders(
     });
   }
 
-  if (opts.scheduler && selected(enabled, 'lizi_scheduler')) {
+  if (opts.scheduler && selected(enabled, 'cindy_scheduler')) {
     providers.push({
-      name: 'lizi_scheduler',
+      name: 'cindy_scheduler',
       // 第一版无门控：cc / codex 任何 session 都能用 schedule_* 工具。
       // 与 IPC 层 maker.schedule.* 同源（renderer 也是任何窗口都能调）。
       // 绑定 ctx 仅为 schedule_silence_current_run / schedule_notify_current_run 服务：
@@ -273,7 +273,7 @@ export function createLiziMcpProviders(
       // 与 cindy_helper 同范式;codex 路径由 HTTP bridge 的 AsyncLocalStorage 补回 ctx。
       toClaudeSdkConfig: (ctx) => ({
         type: 'sdk',
-        name: 'lizi_scheduler',
+        name: 'cindy_scheduler',
         instance: createSchedulerMcpServer(opts.scheduler!, {
           agentKind: ctx.agentKind === 'codex' ? 'codex' : 'claude-code',
           workingDir: ctx.workingDir,

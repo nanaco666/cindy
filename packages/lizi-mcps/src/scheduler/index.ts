@@ -2,7 +2,7 @@
  * scheduler/index.ts
  *
  * Bundle export for the scheduler tool family. The MCP server factory
- * (lizi_schedulerMcpServer.ts) imports from here and registers everything
+ * (cindy_schedulerMcpServer.ts) imports from here and registers everything
  * in one go.
  */
 

@@ -1477,7 +1477,7 @@ export class MakerScheduleRunner implements ScheduleRunner {
 export function buildSilentRunInstruction(): string {
   return [
     '\n\n---\n[Silent scheduled run]',
-    'Successful runs do not notify by default. If this run needs user attention, call lizi_scheduler call_tool({ name: "schedule_notify_current_run", args: {} }).',
+    'Successful runs do not notify by default. If this run needs user attention, call cindy_scheduler call_tool({ name: "schedule_notify_current_run", args: {} }).',
   ].join('');
 }
 

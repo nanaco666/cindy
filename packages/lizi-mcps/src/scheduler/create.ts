@@ -18,7 +18,7 @@ import { z } from 'zod';
 import { AGENT_KIND, EFFORT, EXECUTION_MODE, SCRIPT_CAPABILITY } from './_enums.js';
 import { assertCronAndTimezoneValid, withScheduler } from './_shared.js';
 import type { LiziMcpSessionContext, SchedulerMcpDeps } from '../types.js';
-import type { SchedulerToolRegistry } from '../lizi_schedulerToolRegistry.js';
+import type { SchedulerToolRegistry } from '../cindy_schedulerToolRegistry.js';
 import type { CreateScheduleInput } from '@lizi/maker-scheduler';
 import { stabilizePreRunHookForCreate } from '@lizi/maker-scheduler';
 
