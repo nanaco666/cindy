@@ -24,7 +24,7 @@
  * 来源路由到被控端。
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { PanelRight } from 'lucide-react';
 
@@ -79,6 +79,8 @@ export function SidebarWindowLayout() {
   }, []);
 
   const sessionId = ctx?.available ? ctx.sessionId : null;
+  const sessionIdRef = useRef(sessionId);
+  sessionIdRef.current = sessionId;
 
   // agent tab-op 触发的可见性请求(本窗口内 rsbBrowserBridge 派发):
   //  - 'close'(最后一个 tab 被关)且目标是当前会话 → 收起 = 关本窗口
@@ -103,7 +105,9 @@ export function SidebarWindowLayout() {
   //   renderer 的 store 消费;远程会话走 memory-only,不能靠主窗 store/SQLite 同步。
   useEffect(() => {
     return window.electronAPI.rightSidebarWindow.onCommand((cmd) => {
-      void executeSidebarCommand(cmd).catch((err) => log.warn('sidebar command failed', err));
+      void executeSidebarCommand(cmd, {
+        isCurrentSession: (commandSessionId) => sessionIdRef.current === commandSessionId,
+      }).catch((err) => log.warn('sidebar command failed', err));
     });
   }, []);
 

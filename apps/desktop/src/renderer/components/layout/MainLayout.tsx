@@ -760,7 +760,9 @@ export function MainLayout() {
     if (isSecondaryWindow()) return;
     return window.electronAPI.rightSidebarWindow.onCommand((command) => {
       if (command.sessionId !== rightSidebarSessionIdRef.current) return;
-      void executeSidebarCommand(command).catch((err) => {
+      void executeSidebarCommand(command, {
+        isCurrentSession: (sessionId) => rightSidebarSessionIdRef.current === sessionId,
+      }).catch((err) => {
         applicationMenuLog.warn('execute attached sidebar command failed', err);
       });
     });
@@ -850,7 +852,12 @@ export function MainLayout() {
           'new-maker invoked in collaboration context, opening Worker dialog',
         );
         const routeResult = await revealOrcaWorkersWithRetry({
-          reveal: () => revealOrcaWorkersTab(id, { openCreateWorker: true }),
+          shouldRetry: () => rightSidebarSessionIdRef.current === id,
+          reveal: () =>
+            revealOrcaWorkersTab(id, {
+              openCreateWorker: true,
+              shouldCommit: () => rightSidebarSessionIdRef.current === id,
+            }),
         });
         if (routeResult === 'stale-context') {
           applicationMenuLog.warn(

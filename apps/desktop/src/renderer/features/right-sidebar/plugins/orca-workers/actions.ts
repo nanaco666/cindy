@@ -76,6 +76,8 @@ export interface OrcaWorkersTabOptions {
   focusTab?: boolean;
   animate?: boolean;
   openCreateWorker?: boolean;
+  /** Local-only cancellation gate, checked after hydration immediately before mutating tab state. */
+  shouldCommit?: () => boolean;
 }
 
 function withWorkerOpenIntent(
@@ -133,8 +135,9 @@ async function routeDetachedOrcaWorkersCommand(
 async function ensureOrcaWorkersTabLocal(
   leadSessionId: string,
   opts: OrcaWorkersTabOptions,
-): Promise<void> {
+): Promise<boolean> {
   await ensureHydrated(leadSessionId);
+  if (opts.shouldCommit?.() === false) return false;
   const bucket = getBucket(leadSessionId);
   const existing = bucket.tabs.find((candidate) => candidate.kind === 'orca-workers');
   if (existing) {
@@ -143,15 +146,21 @@ async function ensureOrcaWorkersTabLocal(
       opts.searchJump !== undefined ||
       opts.openCreateWorker === true
     ) {
+      // No await may sit between this check and patchTabState: its patch callback commits the
+      // optimistic state synchronously before the first IPC await.
+      if (opts.shouldCommit?.() === false) return false;
       await patchTabState(leadSessionId, existing.id, (state) => withWorkerOpenIntent(state, opts));
     }
     if (opts.focusTab && bucket.activeTabId !== existing.id) {
+      if (opts.shouldCommit?.() === false) return false;
       await setActiveTab(leadSessionId, existing.id);
     }
-    return;
+    return true;
   }
 
+  if (opts.shouldCommit?.() === false) return false;
   await addTab(leadSessionId, 'orca-workers', withWorkerOpenIntent({}, opts));
+  return true;
 }
 
 export async function ensureOrcaWorkersTab(
@@ -174,7 +183,7 @@ export async function revealOrcaWorkersTab(
   const revealOpts = { ...opts, focusTab: true };
   const routeResult = await routeDetachedOrcaWorkersCommand(leadSessionId, revealOpts, true);
   if (routeResult === 'attached') {
-    await ensureOrcaWorkersTabLocal(leadSessionId, revealOpts);
+    if (!(await ensureOrcaWorkersTabLocal(leadSessionId, revealOpts))) return 'stale-context';
   } else if (routeResult !== 'routed') {
     return routeResult;
   }

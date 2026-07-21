@@ -132,6 +132,28 @@ describe('orca-workers tab actions', () => {
     expect(getBucket('s1').activeTabId).toBe(tab?.id);
   });
 
+  it('drops a create-Worker intent when the host session changes during hydration', async () => {
+    let resolveList!: (value: { tabs: []; activeTabId: null }) => void;
+    tabsIpc.list.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveList = resolve;
+      }),
+    );
+    let isCurrent = true;
+
+    const reveal = revealOrcaWorkersTab('s1', {
+      openCreateWorker: true,
+      shouldCommit: () => isCurrent,
+    });
+    await vi.waitFor(() => expect(tabsIpc.list).toHaveBeenCalledOnce());
+    isCurrent = false;
+    resolveList({ tabs: [], activeTabId: null });
+
+    await expect(reveal).resolves.toBe('stale-context');
+    expect(getBucket('s1').tabs).toEqual([]);
+    expect(tabsIpc.upsert).not.toHaveBeenCalled();
+  });
+
   it('consumes only the matching create-Worker intent revision', async () => {
     await revealOrcaWorkersTab('s1', { openCreateWorker: true });
     await revealOrcaWorkersTab('s1', { openCreateWorker: true });

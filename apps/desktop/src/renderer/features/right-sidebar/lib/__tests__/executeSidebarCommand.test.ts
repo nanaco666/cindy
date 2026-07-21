@@ -85,7 +85,26 @@ describe('executeSidebarCommand', () => {
       searchJump,
       focusTab: false,
       openCreateWorker: true,
+      shouldCommit: undefined,
     });
     expect(closeOrcaWorkersTabAfterTeamEnd).toHaveBeenCalledWith('s1');
+  });
+
+  it('passes a live host-session guard through to collaboration tab hydration', async () => {
+    let currentSessionId = 's1';
+    await executeSidebarCommand(
+      {
+        type: 'ensure-orca-workers-tab',
+        sessionId: 's1',
+        focusTab: true,
+        openCreateWorker: true,
+      },
+      { isCurrentSession: (sessionId) => sessionId === currentSessionId },
+    );
+
+    const passedOptions = vi.mocked(ensureOrcaWorkersTab).mock.calls[0]?.[1];
+    expect(passedOptions?.shouldCommit?.()).toBe(true);
+    currentSessionId = 's2';
+    expect(passedOptions?.shouldCommit?.()).toBe(false);
   });
 });
