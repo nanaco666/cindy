@@ -1,4 +1,8 @@
-import type { AgentEvent, InteractionRequest } from '@lizi/maker-core';
+import {
+  REMOTE_DAEMON_CLOSED_REASON,
+  type AgentEvent,
+  type InteractionRequest,
+} from '@lizi/maker-core';
 
 import { stripTrailingPathSeparators } from '../../shared/pathText';
 
@@ -1166,7 +1170,7 @@ function completeAgentIslandSession(
   // and cost accounting can close. Those bookkeeping events must not replace
   // the user-visible terminal error. A remote daemon shutdown is the one planned
   // error→done sequence and remains explicitly allowed to converge to completed.
-  if (session.phase === 'error' && session.terminalErrorReason !== 'remote_daemon_closed') return;
+  if (session.phase === 'error' && session.terminalErrorReason !== REMOTE_DAEMON_CLOSED_REASON) return;
 
   session.phase = 'completed';
   session.interactionKind = undefined;

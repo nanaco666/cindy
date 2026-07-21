@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import type { AgentEvent, InteractionRequest } from '@lizi/maker-core';
+import {
+  REMOTE_DAEMON_CLOSED_REASON,
+  type AgentEvent,
+  type InteractionRequest,
+} from '@lizi/maker-core';
 import { DEFAULT_AGENT_ISLAND_STRINGS } from '../../../shared/agentIsland.js';
 
 import {
@@ -1884,7 +1888,7 @@ describe('Agent Island error read semantics (已读以 App 内真实展示为准
     applyAgentIslandEvent(
       state,
       { sessionId: 'up', title: 'Upgrade' },
-      terminalErrorEvent('[REMOTE_DAEMON_CLOSED] ...', 'remote_daemon_closed'),
+      terminalErrorEvent('[REMOTE_DAEMON_CLOSED] ...', REMOTE_DAEMON_CLOSED_REASON),
       2_000,
     );
     applyAgentIslandEvent(state, { sessionId: 'up', title: 'Upgrade' }, doneEvent(), 2_001);

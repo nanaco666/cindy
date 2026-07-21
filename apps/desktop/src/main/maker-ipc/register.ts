@@ -21,17 +21,18 @@ import {
 
 import { randomUUID } from 'node:crypto';
 
-import type {
-  AgentEvent,
-  AgentKind,
-  ContextUsageData,
-  InteractionDecision,
-  InteractionRequest,
-  Maker,
-  SendOrigin,
-  SessionSendOptions,
-  SessionSendResult,
-  UserMessage,
+import {
+  REMOTE_DAEMON_CLOSED_REASON,
+  type AgentEvent,
+  type AgentKind,
+  type ContextUsageData,
+  type InteractionDecision,
+  type InteractionRequest,
+  type Maker,
+  type SendOrigin,
+  type SessionSendOptions,
+  type SessionSendResult,
+  type UserMessage,
 } from '@lizi/maker-core';
 import { createId } from '@paralleldrive/cuid2';
 import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
@@ -2119,14 +2120,14 @@ export function wireSessionToIpc(session: ReturnType<Maker['getSession']>): void
         ? (event.data as { message?: unknown; reason?: unknown; sdkError?: unknown } | undefined)
         : undefined;
       const eventMessage = errData?.message;
-      // 计划内 cc-mgr 升级窗口的 daemon 关闭(reason='remote_daemon_closed')是
+      // 计划内 cc-mgr 升级窗口的 daemon 关闭(reason=REMOTE_DAEMON_CLOSED_REASON)是
       // 预期噪音: renderer 事件路径按同语义静默 banner, 这里同样不给 coordinator
       // 记 error —— 否则 paired-done 保留会让升级后的 projection 复现
       // [REMOTE_DAEMON_CLOSED] banner。范围与 renderer 一致**按 session**(仅
       // banner-clicker):同 host 其它会话的中断照真实失败浮现;窗口外的 daemon
       // 死亡同样不受影响(保留 + 通知)。
       isPlannedUpgradeClose =
-        errData?.reason === 'remote_daemon_closed' &&
+        errData?.reason === REMOTE_DAEMON_CLOSED_REASON &&
         isCcMgrUpgradeInFlight(session.id);
       // 远程 auth 错误跳过持久化：renderer 会静默 auto-retry（makerChatStore 在 reducer
       // 前拦截、关闭旧会话、重发消息，不显示 ErrorBanner）；若 main 已落库，retry 成功后

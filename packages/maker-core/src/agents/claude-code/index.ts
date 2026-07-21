@@ -54,7 +54,10 @@ import type {
   ForkSdkSessionOptions,
   ForkSdkSessionResult,
 } from '../../types/events.js';
-import { isTerminalAgentErrorEvent } from '../../types/events.js';
+import {
+  isTerminalAgentErrorEvent,
+  REMOTE_DAEMON_CLOSED_REASON,
+} from '../../types/events.js';
 import type { UserMessage } from '../../types/common.js';
 import { createAsyncQueue, type AsyncQueue } from '../shared/async-queue.js';
 import { AutoCompactController } from '../shared/auto-compact-controller.js';
@@ -2383,11 +2386,11 @@ export class ClaudeCodeAgent extends BaseAgent {
               type: 'error',
               data: {
                 message: '[REMOTE_DAEMON_CLOSED] Remote connection interrupted (daemon may be upgrading/restarting). Turn ended — please resend.',
-                reason: 'remote_daemon_closed',
+                reason: REMOTE_DAEMON_CLOSED_REASON,
               },
               source: 'claude-code',
             });
-            eventQueue.push({ type: 'done', data: { reason: 'remote_daemon_closed' }, source: 'claude-code' });
+            eventQueue.push({ type: 'done', data: { reason: REMOTE_DAEMON_CLOSED_REASON }, source: 'claude-code' });
             // 完整 close 副作用 — 跟 handle.close() 保持一致 (见 teardownDeadHandle 文档)。
             teardownDeadHandle('U2 fallback');
           }
