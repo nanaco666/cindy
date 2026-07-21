@@ -92,7 +92,8 @@ export function OrcaWorkerPanel({
       // Refresh both worker status and authoritative collaboration settings so the shortcut
       // cannot bypass a newly reached or newly lowered hard limit.
       const result = await refreshCreationState();
-      if (!active || result?.status !== 'applied') return true;
+      if (!active) return true;
+      if (result.status !== 'applied') return false;
       const activeCount = result.workers.filter((worker) =>
         isActiveWorkerStatus(worker.status),
       ).length;

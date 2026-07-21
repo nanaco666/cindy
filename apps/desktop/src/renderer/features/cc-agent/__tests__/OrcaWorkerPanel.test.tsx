@@ -84,7 +84,7 @@ describe('OrcaWorkerPanel New Maker shortcut', () => {
     expect(mocks.setCreateOpen).not.toHaveBeenCalled();
   });
 
-  it('does not open when authoritative creation state cannot be refreshed', async () => {
+  it('falls back to New Maker when authoritative creation state cannot be refreshed', async () => {
     mocks.refreshCreationState.mockResolvedValue({
       status: 'failed',
       workers: [],
@@ -92,7 +92,7 @@ describe('OrcaWorkerPanel New Maker shortcut', () => {
     });
     render(<OrcaWorkerPanel leadSessionId="lead-1" viewVisible />);
 
-    await expect(requestNewWorkerFromShortcut()).resolves.toBe(true);
+    await expect(requestNewWorkerFromShortcut()).resolves.toBe(false);
     expect(mocks.setCreateOpen).not.toHaveBeenCalled();
   });
 
