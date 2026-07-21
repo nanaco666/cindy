@@ -684,7 +684,7 @@ cindy-light 用黑字版(`cindy-logo-light.png`)、cindy-dark 用白字版(`cind
 - 覆盖数组 115→116(`cindyDecisionData` 注明 D2 期新增,源自 §7 必炸点方案);
 - 消费点(`ContactsListPane:150`)从 `accent-pure-cta-fg` 切到 `status-badge-fg`;红 CTA 上的 `surface-on-card` 消费者(`RolePillDropdown:543/544`、`SkillhubDetailView:504`)迁到 `accent-pure-cta-fg`(白),`surface-on-card` 保留中性反相(Fast toggle thumb)。
 
-### 15.9 E1D 红色体系重构(用户批准 2026-07-17)
+### 15.10 E1D 红色体系重构(用户批准 2026-07-17)
 
 常规主操作不再用品牌红,改反相中性(light 底 `#3C3F43`/字 `#FCFCFC`,dark 底 `#EEEEEE`/字 `#252222`;WCAG 10.32/13.60:1)。红色仅限语义例外:
 - **A 类(保留红)**:`brand-login-bg`/`brand-login-error-border`/`brand-login-error-text`(品牌海报/错误);
