@@ -1621,7 +1621,9 @@ function ExpandedView({
           setConfirm({ open: true, sessionId, action: 'archive', dirtyWorktree: true });
           return;
         }
-        await runSessionAction(sessionId, 'archive', { activeSessionId });
+        // 重定向判定用 viewedSessionId:files 路由下归档「正在浏览的会话」也要
+        // 跳离失效的文件视图(codex review;正常路由下两者恒等)。
+        await runSessionAction(sessionId, 'archive', { activeSessionId: viewedSessionId });
         return;
       }
       if (action !== 'unarchive') {
@@ -1636,7 +1638,7 @@ function ExpandedView({
       await unarchiveSession(sessionId);
     },
     [
-      activeSessionId,
+      viewedSessionId,
       runningSessionIds,
       runSessionAction,
       sessionsById,
@@ -1653,14 +1655,17 @@ function ExpandedView({
       setConfirm(CONFIRM_INITIAL);
       return;
     }
+    // 重定向判定统一用 viewedSessionId(files 路由下 = 被浏览文件的会话,
+    // 正常路由下与 activeSessionId 恒等):从面板删除/归档正在浏览的会话时
+    // 也要跳离失效的 /cc-agent/files/:id(codex review)。
     const deleteRedirectRoute =
-      action === 'delete' && sessionId === activeSessionId
+      action === 'delete' && sessionId === viewedSessionId
         ? await resolveSessionRemovalRedirect(new Set([sessionId]), sessionId)
         : null;
-    await runSessionAction(sessionId, action, { activeSessionId, deleteRedirectRoute });
+    await runSessionAction(sessionId, action, { activeSessionId: viewedSessionId, deleteRedirectRoute });
     setConfirm(CONFIRM_INITIAL);
   }, [
-    activeSessionId,
+    viewedSessionId,
     confirm,
     resolveSessionRemovalRedirect,
     runSessionAction,
@@ -1737,10 +1742,10 @@ function ExpandedView({
       await refreshSessions();
       void refreshWorktrees();
 
-      if (activeSessionId && succeededIds.has(activeSessionId)) {
+      if (viewedSessionId && succeededIds.has(viewedSessionId)) {
         const redirectRoute = await resolveSessionRemovalRedirect(
           succeededIds,
-          activeSessionId,
+          viewedSessionId,
           orderedSessionIdsBeforeDelete,
         );
         navigate(redirectRoute ?? '/cc-agent');
@@ -1767,7 +1772,7 @@ function ExpandedView({
       setBulkActionPending(null);
     }
   }, [
-    activeSessionId,
+    viewedSessionId,
     bulkActionPending,
     confirmDialog,
     handleClearSelection,
@@ -1878,7 +1883,7 @@ function ExpandedView({
       await refreshSessions();
       void refreshWorktrees();
 
-      if (activeSessionId && succeededIds.has(activeSessionId)) {
+      if (viewedSessionId && succeededIds.has(viewedSessionId)) {
         navigate('/cc-agent');
       }
 
@@ -1903,7 +1908,7 @@ function ExpandedView({
       setBulkActionPending(null);
     }
   }, [
-    activeSessionId,
+    viewedSessionId,
     bulkActionPending,
     confirmDialog,
     navigate,
@@ -2062,9 +2067,9 @@ function ExpandedView({
       await refreshSessions();
       void refreshWorktrees();
 
-      // 当前 active session 被归档了 → 走 /cc-agent 让 CCAgentIndexRedirect
+      // 当前注视中的 session 被归档了 → 走 /cc-agent 让 CCAgentIndexRedirect
       // 做 Orca-aware 的「选下一条 / 空则跳 new」决策(见 runSessionAction 同位置注释)。
-      if (activeSessionId && succeededIds.has(activeSessionId)) {
+      if (viewedSessionId && succeededIds.has(viewedSessionId)) {
         navigate('/cc-agent');
       }
 
@@ -2085,7 +2090,7 @@ function ExpandedView({
       confirmDialog,
       refreshSessions,
       refreshWorktrees,
-      activeSessionId,
+      viewedSessionId,
       navigate,
       patchLocal,
       filter.status,
