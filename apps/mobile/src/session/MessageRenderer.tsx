@@ -5510,7 +5510,9 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   stack: { gap: spacing.md },
   stackSmall: { gap: spacing.sm },
   workActivityStack: { gap: 0 },
-  workGroupStack: { gap: spacing.sm },
+  // thinking 与 tool group 都由内部 28pt 行高控制；外层不再追加组间距，
+  // 否则每段 thinking 前后会比连续工具行多出 8pt，视觉节奏不一致。
+  workGroupStack: { gap: 0 },
   workGroupElapsed: {
     color: colors.textTertiary,
     fontFamily: monoFont,

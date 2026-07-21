@@ -85,6 +85,8 @@ describe('mobile message actions desktop-first surface', () => {
     expect(workGroupSource).toContain('projectRecentMobileWorkActivities(item.children, isStreaming, MAX_LIVE_WORK_ACTIVITIES)');
     expect(workGroupSource).toContain('<ExpandedWorkThinkingRow key={child.key} item={child} />');
     expect(workGroupSource).toContain('activityProjection?.toolActivitiesByChildKey.get(child.key)');
+    // thinking / tool 行都固定 28pt，外层不能再给 thinking 子项追加组间距。
+    expect(source).toContain('workGroupStack: { gap: 0 }');
     expect(workGroupSource).not.toContain('subtitle={presentation.subtitle}');
     expect(workGroupSource).not.toContain('badges={presentation.badges}');
     expect(workGroupSource).not.toContain('badgeCount: presentation.badges.length');
