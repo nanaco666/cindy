@@ -35,7 +35,7 @@ function ComposerQuoteNodeView({ node, deleteNode, selected }: NodeViewProps) {
       as="span"
       data-composer-quote=""
       contentEditable={false}
-      className="mx-2 inline-block max-w-[min(240px,55vw)] select-none align-middle"
+      className="inline-block max-w-[min(240px,55vw)] select-none px-2 align-middle"
     >
       <Tooltip.Provider delayDuration={300}>
         <Tooltip.Root>
