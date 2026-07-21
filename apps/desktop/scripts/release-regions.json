@@ -1,0 +1,44 @@
+{
+    "cn": {
+        "oss": {
+            "cdnBaseUrl": "https://hotfix.cindy.com.cn/cindy",
+            "bucket": "cindy-prod-public",
+            "prefix": "cindy",
+            "ossRegion": "oss-cn-shanghai"
+        },
+        "macSigning": {
+            "appleId": "zhouyi@xd.com",
+            "teamId": "NTC4BJ542G",
+            "signIdentity": "Developer ID Application: X.D. Network Inc. (NTC4BJ542G)",
+            "appPasswordEnv": ""
+        }
+    },
+    "global": {
+        "oss": {
+            "cdnBaseUrl": "https://hotfix.cindy.app/cindy",
+            "bucket": "cindy-sgp-prod-public",
+            "prefix": "cindy",
+            "ossRegion": "oss-ap-southeast-1"
+        },
+        "macSigning": {
+            "appleId": "zhouyi@xd.com",
+            "teamId": "SX9RG894L5",
+            "signIdentity": "Developer ID Application: XD Entertainment Pte Ltd (SX9RG894L5)",
+            "appPasswordEnv": ""
+        }
+    },
+    "dev": {
+        "oss": {
+            "cdnBaseUrl": "",
+            "bucket": "",
+            "prefix": "",
+            "ossRegion": ""
+        },
+        "macSigning": {
+            "appleId": "zhouyi@xd.com",
+            "teamId": "NTC4BJ542G",
+            "signIdentity": "Developer ID Application: X.D. Network Inc. (NTC4BJ542G)",
+            "appPasswordEnv": ""
+        }
+    }
+}
