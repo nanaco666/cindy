@@ -1353,8 +1353,8 @@ function MessageBubble({
   const [copyState, setCopyState] = useState<CopyMessageStatus | 'idle' | 'copying'>('idle');
   // chat-text-quote:只解析持久化 quotesEncoded 明确标记的产品引用消息，避免
   // 把用户手写的 Markdown blockquote 误当产品引用。兼容 desktop 的交错
-  // marker 块、mobile 的前置引用和
-  // marker 上线前带 quotesEncoded 的交错历史消息。手机版仍把引用聚合成
+  // marker 块和 mobile 的前置引用。旧 markerless 消息保持 leading-only，
+  // 避免把正文里的用户 Markdown blockquote 误当产品引用。手机版仍把引用聚合成
   // 「N 处引用」胶囊,但正文不再泄露内部 marker/source 行。copy / rewind /
   // fork 额外携带完整 ordered body，在可见草稿未编辑时无损重发。orca 协同
   // 消息已走 orcaCard 分支,不进本路径。
@@ -1363,9 +1363,7 @@ function MessageBubble({
       && item.message.quotesEncoded === true
       && !item.message.systemCardType
       && item.message.body
-      ? parseChatQuoteSegments(item.message.body, {
-          allowLegacyInterleavedQuotes: true,
-        })
+      ? parseChatQuoteSegments(item.message.body)
       : []),
     [
       item.message.body,

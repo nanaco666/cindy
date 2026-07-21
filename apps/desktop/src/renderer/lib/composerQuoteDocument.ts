@@ -19,6 +19,11 @@ export interface ComposerQuoteAttrs {
   endLine: number | null;
 }
 
+export interface ComposerSerializedBlock {
+  kind: 'text' | 'quote';
+  text: string;
+}
+
 export function composerQuoteAttrsToChatQuote(attrs: ComposerQuoteAttrs): ChatQuote {
   return {
     text: attrs.text,
@@ -42,6 +47,14 @@ function quoteNode(quote: ChatQuote): JSONContent {
 
 function paragraph(content: JSONContent[] = []): JSONContent {
   return content.length > 0 ? { type: 'paragraph', content } : { type: 'paragraph' };
+}
+
+function isPureLineBreakText(text: string): boolean {
+  if (!text) return false;
+  for (let index = 0; index < text.length; index += 1) {
+    if (text[index] !== '\n') return false;
+  }
+  return true;
 }
 
 function normalizeTopLevelQuoteNodes(document: JSONContent | null | undefined): JSONContent[] {
@@ -132,6 +145,16 @@ export function quoteSegmentsToComposerDocument(
     }
     if (!segment.text) continue;
     hasContent = true;
+    if (isPureLineBreakText(segment.text)) {
+      // parseChatQuoteSegments 用纯换行 text island 表达「两个 quote 块之间
+      // 超出 Markdown 结构分隔的真实空行」。用 hardBreak 留在同一段内，
+      // 避免 split 产生尾部空 paragraph，并让再次序列化能精确恢复数量。
+      inlineContent.push(...Array.from(
+        { length: segment.text.length },
+        () => ({ type: 'hardBreak' }),
+      ));
+      continue;
+    }
     const lines = segment.text.split('\n');
     lines.forEach((line, index) => {
       if (line) inlineContent.push({ type: 'text', text: line });
@@ -141,4 +164,43 @@ export function quoteSegmentsToComposerDocument(
   if (!hasContent) return null;
   finishParagraph();
   return { type: 'doc', content };
+}
+
+/**
+ * Composer semantic blocks → wire text. Quote 两侧通常各有一个 Markdown
+ * 空行；两个 quote 之间的纯换行 text island 已经表示额外回车，只需共享
+ * 一份结构分隔，不能在它两侧各补一次导致空行膨胀。
+ */
+export function serializeComposerContentBlocks(
+  blocks: readonly ComposerSerializedBlock[],
+): string {
+  let serialized = '';
+  let previousKind: ComposerSerializedBlock['kind'] | null = null;
+  let suppressNextSeparator = false;
+
+  blocks.forEach((block, index) => {
+    const previous = blocks[index - 1];
+    const next = blocks[index + 1];
+    const pureLineBreakIsland = block.kind === 'text'
+      && isPureLineBreakText(block.text)
+      && previous?.kind === 'quote'
+      && next?.kind === 'quote';
+    if (pureLineBreakIsland) {
+      serialized += `\n\n${block.text}`;
+      suppressNextSeparator = true;
+      previousKind = block.kind;
+      return;
+    }
+
+    const separator = previousKind === null || suppressNextSeparator
+      ? ''
+      : previousKind === 'quote' || block.kind === 'quote'
+        ? '\n\n'
+        : '\n';
+    serialized += `${separator}${block.text}`;
+    suppressNextSeparator = false;
+    previousKind = block.kind;
+  });
+
+  return serialized.trim();
 }

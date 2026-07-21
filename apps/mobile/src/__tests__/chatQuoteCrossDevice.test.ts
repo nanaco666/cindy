@@ -11,7 +11,7 @@ describe('mobile cross-device quote wiring', () => {
 
     expect(bubbleSource).toContain('parseChatQuoteSegments(item.message.body');
     expect(bubbleSource).toContain('item.message.quotesEncoded === true');
-    expect(bubbleSource).toContain('allowLegacyInterleavedQuotes: true');
+    expect(bubbleSource).not.toContain('allowLegacyInterleavedQuotes');
     expect(bubbleSource).toContain("segment.kind === 'quote' ? [segment.quote] : []");
     expect(bubbleSource).toContain('joinChatQuoteTextSegments(quoteSegments)');
     expect(bubbleSource).toContain('actions.onPreviewRewind?.(clientId, {');
@@ -23,6 +23,8 @@ describe('mobile cross-device quote wiring', () => {
 
     expect(source).toContain('quotesEncoded: quotesAtSend.length > 0');
     expect(source).toContain('quotesEncoded: item.quotesEncoded');
+    expect(source).toContain('restoreOutboxItemsToDraft([item])');
+    expect(source).toContain('setOrderedQuoteDraft(draftSessionId, recovery.quotes');
     expect(source).toContain('createQueueEditTextState(item)');
     expect(source).toContain('resolveQueueEditTextSubmission(queueEditAtSendStart.textState, visibleDraft)');
     expect(source).toContain('quotesEncoded: queueEditPreservesEncodedQuotes');

@@ -572,7 +572,7 @@ export function UserMessage({
         ? ghostBody
           ? [{ kind: 'text', text: ghostBody }]
           : []
-        : parseChatQuoteSegments(ghostBody, { allowLegacyInterleavedQuotes: true }),
+        : parseChatQuoteSegments(ghostBody),
     [ghostBody, orcaCommunication, quotesEncoded],
   );
   // 意识指令等既有语义判断只看用户自己的正文,不把引用原文误识别成命令。
@@ -1000,8 +1000,13 @@ export function UserMessage({
             onSent={exitEditing}
             {...(isBlocked
               ? {
-                  onCommitOverride: (nextText: string) =>
-                    makerChatStore.resendBlockedMessage(sessionId, messageClientId, nextText),
+                  onCommitOverride: (submission) =>
+                    makerChatStore.resendBlockedMessage(
+                      sessionId,
+                      messageClientId,
+                      submission.text,
+                      submission.quotesEncoded ? { quotesEncoded: true } : undefined,
+                    ),
                 }
               : {})}
           />

@@ -254,9 +254,8 @@ function orderedDraftMatchesQuotes(
   draft: OrderedQuoteDraft,
   quotes: readonly ChatQuote[],
 ): boolean {
-  const encodedQuotes = parseChatQuoteSegments(draft.encodedBody, {
-    allowLegacyInterleavedQuotes: true,
-  }).flatMap((segment) => (segment.kind === 'quote' ? [segment.quote] : []));
+  const encodedQuotes = parseChatQuoteSegments(draft.encodedBody)
+    .flatMap((segment) => (segment.kind === 'quote' ? [segment.quote] : []));
   return sameQuotes(encodedQuotes, quotes);
 }
 

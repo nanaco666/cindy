@@ -11,6 +11,7 @@ import {
   outboxItemWithUploadFailure,
   outboxOwnsUpload,
   outboxWithUploadResult,
+  recoverOutboxItemsToComposerDraft,
   replaceOutboxItem,
 } from '@/session/sessionOutbox';
 import type { RemoteSerializedAttachment } from '@/session/types';
@@ -79,6 +80,72 @@ describe('buildOutboxItem', () => {
   it('keeps quote metadata until the outbox item is dispatched', () => {
     expect(itemWith({ quotesEncoded: true }).quotesEncoded).toBe(true);
     expect(itemWith().quotesEncoded).toBe(false);
+  });
+});
+
+describe('recoverOutboxItemsToComposerDraft', () => {
+  it('restores marked quotes separately while keeping the composer text marker-free', () => {
+    const encoded = [
+      '> <!-- cindy-composer-quote -->',
+      '> selected',
+      '',
+      'reply',
+      '',
+      '> <!-- cindy-composer-quote -->',
+      '> second',
+      '',
+      'more',
+    ].join('\n');
+    const item = itemWith({ text: encoded, quotesEncoded: true });
+
+    expect(recoverOutboxItemsToComposerDraft([item], {
+      visibleText: 'new draft',
+      encodedBody: 'new draft',
+      quotes: [],
+    })).toEqual({
+      visibleText: 'reply\n\nmore\n\nnew draft',
+      encodedBody: `${encoded}\n\nnew draft`,
+      quotes: [{ text: 'selected' }, { text: 'second' }],
+    });
+  });
+
+  it('keeps existing quoted draft metadata aligned after outbox recovery', () => {
+    const recoveredEncoded = [
+      '> <!-- cindy-composer-quote -->',
+      '> recovered quote',
+      '',
+      'recovered reply',
+    ].join('\n');
+    const existingEncoded = [
+      '> <!-- cindy-composer-quote -->',
+      '> existing quote',
+      '',
+      'existing reply',
+    ].join('\n');
+
+    expect(recoverOutboxItemsToComposerDraft(
+      [itemWith({ text: recoveredEncoded, quotesEncoded: true })],
+      {
+        visibleText: 'existing reply',
+        encodedBody: existingEncoded,
+        quotes: [{ text: 'existing quote' }],
+      },
+    )).toEqual({
+      visibleText: 'recovered reply\n\nexisting reply',
+      encodedBody: `${recoveredEncoded}\n\n${existingEncoded}`,
+      quotes: [{ text: 'recovered quote' }, { text: 'existing quote' }],
+    });
+  });
+
+  it('keeps markerless legacy parsing leading-only during salvage', () => {
+    const encoded = '> old quote\n\nHere:\n> user markdown';
+    const item = itemWith({ text: encoded, quotesEncoded: true });
+
+    expect(recoverOutboxItemsToComposerDraft([item])).toEqual({
+      visibleText: 'Here:\n> user markdown',
+      encodedBody: encoded,
+      quotes: [{ text: 'old quote' }],
+    });
   });
 });
 

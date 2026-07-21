@@ -77,7 +77,10 @@ interface UserMessageEditBoxProps {
    * 常规 rewind 提交会抛 EDIT_NOT_LAST_MESSAGE。给它时 doCommit 改调本回调
    * (普通重发,失败抛错保留编辑态),不走 rewind 链路。
    */
-  onCommitOverride?: (text: string) => Promise<void>;
+  onCommitOverride?: (submission: {
+    text: string;
+    quotesEncoded?: boolean;
+  }) => Promise<void>;
 }
 
 export function UserMessageEditBox({
@@ -156,9 +159,13 @@ export function UserMessageEditBox({
     try {
       const visibleTextUnchanged = text === initialText;
       const submitText = visibleTextUnchanged ? (initialSubmitText ?? text) : text;
+      const preserveQuoteMetadata = quotesEncoded && visibleTextUnchanged;
       if (onCommitOverride) {
         // 被拦消息:普通重发(不 rewind)。失败抛错落入下方 catch 保留编辑态。
-        await onCommitOverride(submitText);
+        await onCommitOverride({
+          text: submitText,
+          ...(preserveQuoteMetadata ? { quotesEncoded: true } : {}),
+        });
       } else {
       await commitEditAndResendWithRunningRetry({
         sessionId,
@@ -167,7 +174,7 @@ export function UserMessageEditBox({
         images,
         files,
         fallbackWorkingDir: workingDir,
-        ...(quotesEncoded && visibleTextUnchanged ? { quotesEncoded: true } : {}),
+        ...(preserveQuoteMetadata ? { quotesEncoded: true } : {}),
       });
       }
       // 先归零守卫再 onSent:onSent 让父组件立刻卸载本组件,晚于它的 setState

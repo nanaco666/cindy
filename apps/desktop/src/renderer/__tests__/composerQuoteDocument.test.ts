@@ -3,13 +3,16 @@ import { Editor } from '@tiptap/core';
 import Document from '@tiptap/extension-document';
 import Paragraph from '@tiptap/extension-paragraph';
 import Text from '@tiptap/extension-text';
+import HardBreak from '@tiptap/extension-hard-break';
 import { afterEach, describe, expect, it } from 'vitest';
 import { ComposerQuoteNode } from '@/components/new-chat/ComposerQuoteNode';
 import {
   appendQuoteToComposerDocument,
   prependLegacyQuotesToComposerDocument,
   quoteSegmentsToComposerDocument,
+  serializeComposerContentBlocks,
 } from '@/lib/composerQuoteDocument';
+import { formatQuoteForSend, parseChatQuoteSegments } from '@/lib/chatQuotes';
 
 const editors: Editor[] = [];
 
@@ -19,7 +22,7 @@ afterEach(() => {
 
 function makeEditor(): Editor {
   const editor = new Editor({
-    extensions: [Document, Paragraph, Text, ComposerQuoteNode],
+    extensions: [Document, Paragraph, Text, HardBreak, ComposerQuoteNode],
     content: { type: 'doc', content: [{ type: 'paragraph' }] },
   });
   editors.push(editor);
@@ -137,6 +140,45 @@ describe('composerQuoteDocument', () => {
         },
       ],
     });
+  });
+
+  it('round-trips pure blank-line islands between quotes without adding paragraphs', () => {
+    const first = formatQuoteForSend({ text: 'q1' });
+    const second = formatQuoteForSend({ text: 'q2' });
+    const encoded = `${first}\n\n\n${second}`;
+    const segments = parseChatQuoteSegments(encoded);
+
+    expect(segments).toEqual([
+      { kind: 'quote', quote: { text: 'q1' } },
+      { kind: 'text', text: '\n' },
+      { kind: 'quote', quote: { text: 'q2' } },
+    ]);
+    expect(quoteSegmentsToComposerDocument(segments)).toEqual({
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [
+            {
+              type: 'composerQuote',
+              attrs: { text: 'q1', sourcePath: null, startLine: null, endLine: null },
+            },
+            { type: 'hardBreak' },
+            {
+              type: 'composerQuote',
+              attrs: { text: 'q2', sourcePath: null, startLine: null, endLine: null },
+            },
+          ],
+        },
+      ],
+    });
+    const serialized = serializeComposerContentBlocks([
+      { kind: 'quote', text: first },
+      { kind: 'text', text: '\n' },
+      { kind: 'quote', text: second },
+    ]);
+    expect(serialized).toBe(encoded);
+    expect(parseChatQuoteSegments(serialized)).toEqual(segments);
   });
 
   it('round-trips quote text and source metadata through HTML clipboard serialization', () => {

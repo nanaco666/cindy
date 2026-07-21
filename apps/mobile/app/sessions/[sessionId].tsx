@@ -221,6 +221,7 @@ import {
   outboxItemRetrying,
   outboxItemWithEnqueueFailure,
   outboxWithUploadResult,
+  recoverOutboxItemsToComposerDraft,
   replaceOutboxItem,
   type MobileOutboxItem,
 } from '@/session/sessionOutbox';
@@ -487,6 +488,45 @@ function attachmentIdSetsEqual(
   return idsA.length === idsB.length && idsA.every((id, index) => id === idsB[index]);
 }
 
+/**
+ * 将无法继续派发的 outbox 条目按会话恢复为可见草稿 + 引用 store。
+ * marker-bearing body 只留作未编辑重发的隐藏顺序基线，绝不写进输入框。
+ */
+function restoreOutboxItemsToDraft(items: readonly MobileOutboxItem[]): void {
+  const itemsBySession = new Map<string, MobileOutboxItem[]>();
+  for (const item of items) {
+    const sessionItems = itemsBySession.get(item.sessionId) ?? [];
+    sessionItems.push(item);
+    itemsBySession.set(item.sessionId, sessionItems);
+  }
+
+  for (const [draftSessionId, sessionItems] of itemsBySession) {
+    const existingVisibleText = readComposerDraftSync(draftSessionId)?.trim() ?? '';
+    const existingQuotes = [...getQuotes(draftSessionId)];
+    const existingOrderedDraft = resolveOrderedQuoteDraft(
+      draftSessionId,
+      existingVisibleText,
+      existingQuotes,
+    );
+    const existingEncodedBody = existingOrderedDraft?.encodedBody
+      ?? formatQuotesForSend(existingQuotes, existingVisibleText);
+    const recovery = recoverOutboxItemsToComposerDraft(sessionItems, {
+      visibleText: existingVisibleText,
+      encodedBody: existingEncodedBody,
+      quotes: existingQuotes,
+    });
+    if (recovery.visibleText || recovery.quotes.length > 0) {
+      saveComposerDraft(draftSessionId, recovery.visibleText);
+    }
+    if (recovery.quotes.length > 0) {
+      setOrderedQuoteDraft(draftSessionId, recovery.quotes, {
+        encodedBody: recovery.encodedBody,
+        projectedText: recovery.visibleText,
+      });
+    }
+  }
+}
+
 export default function SessionScreen() {
   const styles = useThemedStyles(makeStyles);
   const { colors } = useTheme();
@@ -654,20 +694,9 @@ export default function SessionScreen() {
       if (items.length === 0) return;
       outboxRef.current = [];
       setOutboxItems([]);
-      // 草稿按条目自身归属写回(而非本 effect 捕获的 sessionId):防御性一致,
-      // ref 里理论上只有本会话条目(归属校验保证),按条目写永远不会写错库。
-      const textsBySession = new Map<string, string[]>();
-      for (const item of items) {
-        const text = item.text.trim();
-        if (!text) continue;
-        const list = textsBySession.get(item.sessionId) ?? [];
-        list.push(text);
-        textsBySession.set(item.sessionId, list);
-      }
-      for (const [draftSessionId, texts] of textsBySession) {
-        const existing = readComposerDraftSync(draftSessionId)?.trim();
-        saveComposerDraft(draftSessionId, [...texts, ...(existing ? [existing] : [])].join('\n\n'));
-      }
+      // 草稿按条目自身归属写回(而非本 effect 捕获的 sessionId):防御性一致。
+      // 引用正文同步恢复 quote store，输入框只接收剥过 marker 的可见文字。
+      restoreOutboxItemsToDraft(items);
       for (const item of items) {
         for (const localId of [...item.waitingIds, ...item.failedIds]) removePendingUpload(localId);
         for (const attachment of outboxItemAttachments(item)) {
@@ -3216,15 +3245,12 @@ export default function SessionScreen() {
 
   /**
    * 无法回插 outbox 时的兜底(所属会话已离场 / 屏已卸载):文字合并回**条目所属
-   * 会话**的草稿库(持久化,不静默蒸发),已就绪附件回收 OSS 中转对象。派发失败
-   * 才会走到这里,此时附件必然已全部落定(ready 才派发),没有在途任务要清。
+   * 会话**的草稿库与引用 store(持久化,不静默蒸发),已就绪附件回收 OSS
+   * 中转对象。派发失败才会走到这里,此时附件必然已全部落定(ready 才派发),
+   * 没有在途任务要清。
    */
   const salvageOutboxItem = (item: MobileOutboxItem) => {
-    const text = item.text.trim();
-    if (text) {
-      const existing = readComposerDraftSync(item.sessionId)?.trim();
-      saveComposerDraft(item.sessionId, [text, ...(existing ? [existing] : [])].join('\n\n'));
-    }
+    restoreOutboxItemsToDraft([item]);
     for (const attachment of outboxItemAttachments(item)) {
       discardMobileUploadedAttachment(attachment, {
         getToken: () => remoteMediaDepsRef.current.auth.getAccessToken(),

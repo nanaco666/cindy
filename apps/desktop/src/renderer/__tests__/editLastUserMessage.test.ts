@@ -289,7 +289,7 @@ describe('commitEditAndResend', () => {
     });
   });
 
-  it('旧版 markerless 交错 quoted 消息重发失败:兜底仍按原顺序还原 quote chip', async () => {
+  it('旧版 markerless quoted 消息重发失败:只还原前置引用并保留正文 blockquote', async () => {
     const { deps } = makeDeps(fakeSession(), { dispatchResult: false });
     await commitEditAndResend(
       {
@@ -303,16 +303,19 @@ describe('commitEditAndResend', () => {
     );
     const [, document] = (deps.saveDraftFallback as unknown as Mock).mock.calls[0] as [
       string,
-      { content?: Array<{ content?: Array<{ type?: string; attrs?: { text?: string } }> }> },
+      {
+        content?: Array<{
+          content?: Array<{ type?: string; text?: string; attrs?: { text?: string } }>;
+        }>;
+      },
     ];
-    expect(document.content?.[0]?.content?.map((node) => (
-      node.type === 'composerQuote' ? `${node.type}:${node.attrs?.text}` : node.type
-    ))).toEqual([
-      'composerQuote:first quote',
-      'text',
-      'composerQuote:second quote',
-      'text',
+    const nodes = document.content?.flatMap((paragraph) => paragraph.content ?? []) ?? [];
+    expect(nodes.filter((node) => node.type === 'composerQuote')).toEqual([
+      expect.objectContaining({ attrs: expect.objectContaining({ text: 'first quote' }) }),
     ]);
+    expect(nodes.filter((node) => node.type === 'text').map((node) => node.text).join('\n')).toContain(
+      '> second quote',
+    );
   });
 
   it('非 quoted 消息重发失败:兜底不注入 quotes(第 4 参 undefined)', async () => {

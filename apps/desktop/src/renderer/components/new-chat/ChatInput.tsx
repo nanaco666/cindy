@@ -99,7 +99,9 @@ import { ComposerQuoteNode } from './ComposerQuoteNode';
 import {
   COMPOSER_QUOTE_NODE_TYPE,
   composerQuoteAttrsToChatQuote,
+  serializeComposerContentBlocks,
   type ComposerQuoteAttrs,
+  type ComposerSerializedBlock,
 } from '@/lib/composerQuoteDocument';
 import {
   pastedSessionChipAttrs,
@@ -632,7 +634,7 @@ function serializeEditorContent(editor: Editor): {
   hasQuotes: boolean;
 } {
   const doc = editor.state.doc;
-  const blocks: Array<{ kind: 'text' | 'quote'; text: string }> = [];
+  const blocks: ComposerSerializedBlock[] = [];
   const mentions: MentionedResource[] = [];
   const seenMentions = new Set<string>();
   let hasQuotes = false;
@@ -737,19 +739,7 @@ function serializeEditorContent(editor: Editor): {
     flushText(!emittedInlineSegment);
   });
 
-  let serialized = '';
-  let previousKind: 'text' | 'quote' | null = null;
-  for (const block of blocks) {
-    const separator = previousKind === null
-      ? ''
-      : previousKind === 'quote' || block.kind === 'quote'
-        ? '\n\n'
-        : '\n';
-    serialized += `${separator}${block.text}`;
-    previousKind = block.kind;
-  }
-
-  return { text: serialized.trim(), mentions, hasQuotes };
+  return { text: serializeComposerContentBlocks(blocks), mentions, hasQuotes };
 }
 
 /**

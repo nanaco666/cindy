@@ -34,16 +34,6 @@ export type ChatQuoteSegment =
   | { kind: 'text'; text: string }
   | { kind: 'quote'; quote: ChatQuote };
 
-export interface ParseChatQuoteSegmentsOptions {
-  /**
-   * 兼容 marker 上线前短暂写出的交错引用。该格式与用户手写 blockquote
-   * 无法从 wire text 无歧义区分,因此默认关闭,只由已持久化 quotesEncoded
-   * 元数据的消息展示/草稿恢复路径显式开启。只要正文含新版 marker,即使
-   * 开启本选项也只解析 marker 块,正文手写的 `> ...` 仍保持普通文字。
-   */
-  allowLegacyInterleavedQuotes?: boolean;
-}
-
 /** 来源行前缀(条目内最后一行)。 */
 const SOURCE_LINE_PREFIX = '— source: ';
 
@@ -148,7 +138,6 @@ function quoteFromLines(lines: string[]): ChatQuote {
  */
 export function parseChatQuoteSegments(
   content: string,
-  options: ParseChatQuoteSegmentsOptions = {},
 ): ChatQuoteSegment[] {
   if (!content.includes('> ')) {
     return content ? [{ kind: 'text', text: content }] : [];
@@ -186,13 +175,11 @@ export function parseChatQuoteSegments(
     }
   };
 
-  // 历史格式没有显式 marker，默认只允许在消息开头解析。marker 上线前的
-  // inline-composer preview 曾写出 markerless 交错块；调用方可凭持久化的
-  // quotesEncoded 元数据显式兼容。新版正文只要出现任一 marker 就关闭这条
-  // 有歧义的兼容分支，避免把同条消息里的手写 Markdown blockquote 误还原。
+  // 历史稳定格式没有显式 marker，只允许在消息开头解析。PR 开发期曾短暂
+  // 写出 markerless 交错块，但它与正文里的用户 Markdown blockquote 无法
+  // 从 wire text 区分；不能拿 quotesEncoded 当版本号放宽整条消息，否则旧
+  // 消息正文里的 `> ...` 会被误还原成产品引用。新版 marker 才允许交错解析。
   const hasExplicitMarkers = content.includes(QUOTE_BLOCK_MARKER_LINE);
-  const allowLegacyInterleavedQuotes = options.allowLegacyInterleavedQuotes === true
-    && !hasExplicitMarkers;
   // 只要同条消息出现新版 marker，整条内容就按无歧义的新格式解析。否则正文
   // 开头的用户手写 Markdown blockquote 会被旧版兼容分支误认成产品引用。
   let allowLegacyLeadingQuotes = !hasExplicitMarkers;
@@ -200,8 +187,7 @@ export function parseChatQuoteSegments(
   while (index < lines.length) {
     const line = lines[index];
     const marked = line === QUOTE_BLOCK_MARKER_LINE;
-    const legacyLeading = (allowLegacyLeadingQuotes || allowLegacyInterleavedQuotes)
-      && line.startsWith('> ');
+    const legacyLeading = allowLegacyLeadingQuotes && line.startsWith('> ');
     if (!marked && !legacyLeading) {
       textLines.push(line);
       if (line !== '') allowLegacyLeadingQuotes = false;

@@ -245,9 +245,7 @@ export async function commitEditAndResend(
     // rewind 已 commit(旧消息已软删)但重发没送达:文本落草稿,用户在输入框
     // 找回可重发。错误提示由 sendMessage 内部写入 store 的 error banner。
     const document = opts.quotesEncoded
-      ? quoteSegmentsToComposerDocument(parseChatQuoteSegments(opts.text, {
-          allowLegacyInterleavedQuotes: true,
-        }))
+      ? quoteSegmentsToComposerDocument(parseChatQuoteSegments(opts.text))
       : opts.text.trim()
         ? plainTextToTiptapDoc(opts.text)
         : null;

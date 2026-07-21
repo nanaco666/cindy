@@ -17,6 +17,12 @@
  * 在 [sessionId].tsx。
  */
 import type { RemoteSerializedAttachment } from '@/session/types';
+import {
+  joinChatQuoteTextSegments,
+  parseChatQuoteSegments,
+  stripChatQuoteMarkerLines,
+  type ChatQuote,
+} from '@lizi/maker-shared/chat-quotes';
 
 /** 预生成消息 clientId(与 inputProjection.buildQueuedTextMessage 的缺省实现同构)。 */
 export function createOutboxClientId(): string {
@@ -97,6 +103,23 @@ export interface MobileOutboxDisplayItem {
   errorText: string | null;
 }
 
+/**
+ * Outbox 条目无法回插消息流时，恢复 composer 所需的可见正文与引用真相。
+ * `encodedBody` 保留 marker/交错顺序，仅在 quote store 校验仍通过时复用；
+ * `visibleText` 永不暴露私有 marker，供普通草稿输入框直接显示。
+ */
+export interface MobileOutboxDraftRecovery {
+  visibleText: string;
+  encodedBody: string;
+  quotes: ChatQuote[];
+}
+
+export interface MobileOutboxExistingDraft {
+  visibleText: string;
+  encodedBody: string;
+  quotes: readonly ChatQuote[];
+}
+
 export function buildOutboxItem(input: {
   clientId: string;
   sessionId: string;
@@ -144,6 +167,54 @@ export function buildOutboxItem(input: {
     failedIds,
     enqueueError: null,
     phase: failedIds.length > 0 ? 'failed' : 'uploading',
+  };
+}
+
+/** 将一组同会话 outbox 条目按 FIFO 顺序合并回一个可持久化 composer 草稿。 */
+export function recoverOutboxItemsToComposerDraft(
+  items: readonly MobileOutboxItem[],
+  existingDraft?: MobileOutboxExistingDraft | null,
+): MobileOutboxDraftRecovery {
+  const visibleParts: string[] = [];
+  const encodedParts: string[] = [];
+  const quotes: ChatQuote[] = [];
+
+  for (const item of items) {
+    const encodedText = item.text.trim();
+    if (!encodedText) continue;
+    encodedParts.push(encodedText);
+    if (!item.quotesEncoded) {
+      visibleParts.push(encodedText);
+      continue;
+    }
+
+    const segments = parseChatQuoteSegments(encodedText);
+    const itemQuotes = segments.flatMap((segment) => (
+      segment.kind === 'quote' ? [segment.quote] : []
+    ));
+    quotes.push(...itemQuotes);
+    const visibleText = (
+      itemQuotes.length > 0
+        ? joinChatQuoteTextSegments(segments)
+        : stripChatQuoteMarkerLines(encodedText)
+    ).trim();
+    if (visibleText) visibleParts.push(visibleText);
+  }
+
+  const normalizedExistingVisibleText = existingDraft?.visibleText.trim() ?? '';
+  const normalizedExistingEncodedBody = existingDraft?.encodedBody.trim() ?? '';
+  if (normalizedExistingVisibleText) {
+    visibleParts.push(normalizedExistingVisibleText);
+  }
+  if (normalizedExistingEncodedBody) {
+    encodedParts.push(normalizedExistingEncodedBody);
+  }
+  quotes.push(...(existingDraft?.quotes ?? []));
+
+  return {
+    visibleText: visibleParts.join('\n\n'),
+    encodedBody: encodedParts.join('\n\n'),
+    quotes,
   };
 }
 
