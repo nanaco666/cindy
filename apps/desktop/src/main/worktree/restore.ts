@@ -23,6 +23,10 @@ import {
 import { gitExec, GitExecError } from './gitExec';
 import { applyWorktreeIncludeFile } from './includePatternsEngine';
 import { pathKey } from './liveSessionRefs';
+import {
+  getWorktreeRestoreMutation,
+  withWorktreeRestoreMutation,
+} from './restoreLock';
 import { copyClaudeSiviDirs } from './WorktreeManager';
 import * as store from './worktreeStore';
 import { getDbClient } from '../localDb/client/current';
@@ -81,6 +85,21 @@ function parseManagedWorktreePath(worktreePath: string): ParsedManagedPath | nul
   }
 }
 
+/** Resolves the managed worktree root for either the root itself or one of its descendants. */
+function findManagedWorktreeRoot(candidatePath: string): string | null {
+  try {
+    let current = path.resolve(candidatePath);
+    for (;;) {
+      if (parseManagedWorktreePath(current)) return current;
+      const parent = path.dirname(current);
+      if (parent === current) return null;
+      current = parent;
+    }
+  } catch {
+    return null;
+  }
+}
+
 async function pathExists(p: string): Promise<boolean> {
   try {
     await fs.access(p);
@@ -100,6 +119,24 @@ async function readSessionWorktreeBinding(sessionId: string): Promise<SessionWor
     .from(sessions)
     .where(eq(sessions.id, sessionId));
   return rows[0] ?? null;
+}
+
+async function readWorktreeOwnerSessionId(worktreePath: string): Promise<string | null> {
+  const worktreeKey = pathKey(worktreePath);
+  if (!worktreeKey) return null;
+
+  const registeredOwner = store.getAll().find((meta) => pathKey(meta.path) === worktreeKey);
+  if (registeredOwner) return registeredOwner.sessionId;
+
+  const db = getDbClient().drizzle;
+  const rows = await db
+    .select({
+      id: sessions.id,
+      worktreePath: sessions.worktreePath,
+    })
+    .from(sessions)
+    .where(eq(sessions.worktreePath, worktreePath));
+  return rows.find((row) => pathKey(row.worktreePath) === worktreeKey)?.id ?? null;
 }
 
 async function refExists(baseRepo: string, ref: string): Promise<boolean> {
@@ -345,24 +382,71 @@ async function restoreWorktreeForSessionOnce(sessionId: string): Promise<Worktre
 export function restoreWorktreeForSession(sessionId: string): Promise<WorktreeRestoreResult> {
   const existing = restoreInFlight.get(sessionId);
   if (existing) return existing;
-  const tracked = restoreWorktreeForSessionOnce(sessionId).finally(() => {
+  const tracked = withWorktreeRestoreMutation(
+    sessionId,
+    () => restoreWorktreeForSessionOnce(sessionId),
+  ).finally(() => {
     if (restoreInFlight.get(sessionId) === tracked) restoreInFlight.delete(sessionId);
   });
   restoreInFlight.set(sessionId, tracked);
   return tracked;
 }
 
+async function ensureOwnedWorktreeReady(
+  ownerSessionId: string,
+  worktreePath: string,
+): Promise<boolean> {
+  const worktreeKey = pathKey(worktreePath);
+  if (!worktreeKey) return false;
+  const readinessKey = `${ownerSessionId}\0${worktreeKey}`;
+
+  // `git worktree add` creates the directory before a pending snapshot is applied. A second
+  // send in that window must join the same restore instead of treating the directory as ready.
+  const restoring = restoreInFlight.get(ownerSessionId);
+  if (restoring) {
+    const result = await restoring;
+    const ready = result.ok
+      && result.snapshotApplied !== false
+      && await pathExists(worktreePath);
+    if (ready) sendReadyWorktrees.add(readinessKey);
+    return ready;
+  }
+
+  // Recycle cancellation/removal also owns this lock while the snapshot is detached from the
+  // clean worktree. Wait for it, then re-check the store/snapshot state below.
+  const mutating = getWorktreeRestoreMutation(ownerSessionId);
+  if (mutating) await mutating;
+
+  // The first send in this process reconciles legacy states where a pending snapshot and store
+  // registration both survived an interrupted cleanup. WorktreeManager now unregisters as soon
+  // as it snapshots, so later sends use this zero-Git fast path until that registration changes.
+  if (
+    await pathExists(worktreePath)
+    && store.get(ownerSessionId)
+    && sendReadyWorktrees.has(readinessKey)
+  ) {
+    return true;
+  }
+
+  const result = await restoreWorktreeForSession(ownerSessionId);
+  const ready = result.ok
+    && result.snapshotApplied !== false
+    && await pathExists(worktreePath);
+  if (ready) sendReadyWorktrees.add(readinessKey);
+  return ready;
+}
+
 /**
- * 发送期自愈入口。DB working_dir 必须与 caller cwd 精确相同；只有本 session 的
- * worktree_path 也匹配时才执行恢复。其它 session 可把已存在的托管 worktree 当
- * 普通 cwd 使用，但目录缺失时不能以非 owner 身份重建。快照 apply 冲突时返回
- * false，保留现有恢复横幅让用户处理，绝不带着缺失的 WIP 静默继续。
+ * 发送期自愈入口。DB working_dir 必须与 caller cwd 精确相同；cwd 可以是托管
+ * worktree 根目录或其子目录。恢复与 snapshot readiness 始终按 owning session 的
+ * worktree 根目录串行；其它 session 借用该目录时也必须等待 owner 的 pending
+ * snapshot。快照 apply 冲突时返回 false，绝不带着缺失的 WIP 静默继续。
  */
 export async function restoreMissingManagedWorktreeForSession(
   sessionId: string,
-  expectedWorktreePath: string,
+  expectedWorkingDir: string,
 ): Promise<boolean> {
-  const expectedKey = pathKey(expectedWorktreePath);
+  const expectedKey = pathKey(expectedWorkingDir);
   if (!expectedKey) return false;
 
   let binding: SessionWorktreeBinding | null;
@@ -371,46 +455,27 @@ export async function restoreMissingManagedWorktreeForSession(
   } catch {
     return false;
   }
-  if (
-    pathKey(binding?.workingDir) !== expectedKey
-    || !parseManagedWorktreePath(expectedWorktreePath)
-  ) {
-    return false;
-  }
-  // A session may intentionally use another session's existing managed worktree as its cwd.
-  // It may send there, but only the owning session may recreate or restore that worktree.
-  if (pathKey(binding?.worktreePath) !== expectedKey) {
-    return await pathExists(expectedWorktreePath);
-  }
-  const readinessKey = `${sessionId}\0${expectedKey}`;
+  if (pathKey(binding?.workingDir) !== expectedKey) return false;
 
-  // `git worktree add` creates the directory before a pending snapshot is applied. A second
-  // send in that window must join the same mutation instead of treating the directory as ready.
-  const inFlight = restoreInFlight.get(sessionId);
-  if (inFlight) {
-    const result = await inFlight;
-    const ready = result.ok
-      && result.snapshotApplied !== false
-      && await pathExists(expectedWorktreePath);
-    if (ready) sendReadyWorktrees.add(readinessKey);
-    return ready;
+  const worktreePath = findManagedWorktreeRoot(expectedWorkingDir);
+  if (!worktreePath) return false;
+  const worktreeKey = pathKey(worktreePath);
+  if (!worktreeKey) return false;
+
+  let ownerSessionId: string | null;
+  if (pathKey(binding?.worktreePath) === worktreeKey) {
+    ownerSessionId = sessionId;
+  } else {
+    try {
+      ownerSessionId = await readWorktreeOwnerSessionId(worktreePath);
+    } catch {
+      return false;
+    }
   }
 
-  // The first send in this process reconciles legacy states where a pending snapshot and store
-  // registration both survived an interrupted cleanup. WorktreeManager now unregisters as soon
-  // as it snapshots, so later sends use this zero-Git fast path until that registration changes.
-  if (
-    await pathExists(expectedWorktreePath)
-    && store.get(sessionId)
-    && sendReadyWorktrees.has(readinessKey)
-  ) {
-    return true;
-  }
+  // An unowned managed directory remains usable as an ordinary cwd, but cannot be recreated.
+  if (!ownerSessionId) return await pathExists(expectedWorkingDir);
 
-  const result = await restoreWorktreeForSession(sessionId);
-  const ready = result.ok
-    && result.snapshotApplied !== false
-    && await pathExists(expectedWorktreePath);
-  if (ready) sendReadyWorktrees.add(readinessKey);
-  return ready;
+  const ready = await ensureOwnedWorktreeReady(ownerSessionId, worktreePath);
+  return ready && await pathExists(expectedWorkingDir);
 }

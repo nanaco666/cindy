@@ -11,6 +11,7 @@ import fsSync from 'node:fs';
 import os from 'node:os';
 
 import type { WorktreeMeta } from '../worktree/types';
+import { withWorktreeRestoreMutation } from '../worktree/restoreLock';
 
 const gitExecMock = vi.fn();
 const isWorktreeDirtyMock = vi.fn();
@@ -219,6 +220,37 @@ describe('removeWorktreeForSession', () => {
     expect(restoreAutoStashMock).toHaveBeenCalledWith(meta.path, 's1');
     expect(storeSetMock).not.toHaveBeenCalled();
     expect(storeMap.has('s1')).toBe(false);
+  });
+
+  it('serializes cancelled-recycle reapply before a SEND restore mutation', async () => {
+    const meta = makeMeta('s1');
+    storeMap.set('s1', meta);
+    isWorktreeDirtyMock.mockResolvedValue(true);
+    autoStashMock.mockResolvedValue(true);
+    const canRemove = vi.fn().mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+    let releaseReapply!: () => void;
+    restoreAutoStashMock.mockImplementationOnce(
+      () => new Promise<boolean>((resolve) => {
+        releaseReapply = () => resolve(true);
+      }),
+    );
+
+    const removal = manager.removeWorktreeForSession('s1', { canRemove });
+    await vi.waitFor(() => {
+      expect(restoreAutoStashMock).toHaveBeenCalledWith(meta.path, 's1');
+    });
+
+    let sendRestoreStarted = false;
+    const sendRestore = withWorktreeRestoreMutation('s1', async () => {
+      sendRestoreStarted = true;
+    });
+    await Promise.resolve();
+    expect(sendRestoreStarted).toBe(false);
+
+    releaseReapply();
+    await Promise.all([removal, sendRestore]);
+    expect(sendRestoreStarted).toBe(true);
+    expect(storeMap.has('s1')).toBe(true);
   });
 
   it('reapplies and re-registers a snapshot when worktree removal fails', async () => {
