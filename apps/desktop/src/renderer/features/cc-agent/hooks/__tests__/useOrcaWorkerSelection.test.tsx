@@ -177,6 +177,30 @@ describe('useOrcaWorkerSelection', () => {
     await act(async () => resolveIdle({ ok: true, workerId: 'worker-b' }));
   });
 
+  it('acknowledges a done worker revealed by a focus hint', async () => {
+    mocks.workers = [
+      makeWorker('worker-a', 'session-a', true),
+      makeWorker('worker-b', 'session-b', false, 'done'),
+    ];
+    markWorkerAttention('worker-b');
+
+    renderHook(
+      () =>
+        useOrcaWorkerSelection({
+          leadSessionId: 'lead-1',
+          focusWorkerSessionId: 'session-b',
+          focusWorkerHintRevision: 1,
+        }),
+      { wrapper },
+    );
+
+    await waitFor(() => {
+      expect(mocks.idleWorker).toHaveBeenCalledWith('lead-1', 'worker-b', 'done');
+    });
+    expect(hasWorkerAttention('worker-b')).toBe(false);
+    expect(mocks.switchFocus).not.toHaveBeenCalled();
+  });
+
   it('pins an explicit focusWorkerSessionId ahead of the current focused worker until the user switches', async () => {
     const consumed = vi.fn();
     const { result, rerender } = renderHook(

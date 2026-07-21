@@ -184,6 +184,7 @@ export interface OrcaTeamServiceDeps {
   resumeWorkerSession(worker: OrcaWorkerRecordSnapshot, link: OrcaWorkerLinkSnapshot): Promise<void>;
   updateWorkerStatus(workerId: string, status: OrcaWorkerStatus): Promise<void>;
   markWorkerIdle(workerId: string): Promise<void>;
+  markWorkerIdleIfStatus(workerId: string, expectedStatus: 'done'): Promise<boolean>;
   closeWorkerSession(sessionId: string): Promise<void>;
   archiveWorkerSession(sessionId: string): Promise<void>;
   getManualInterrupt(sessionId: string): OrcaManualInterruptSnapshot | null;
@@ -664,8 +665,17 @@ export function createOrcaTeamService(deps: OrcaTeamServiceDeps): OrcaTeamServic
       return { ok: false, errorCode: 'ALREADY_IDLE', message: `worker ${params.workerId} is already idle` };
     }
 
+    const didIdle = params.expectedStatus
+      ? await deps.markWorkerIdleIfStatus(worker.id, params.expectedStatus)
+      : (await deps.markWorkerIdle(worker.id), true);
+    if (!didIdle) {
+      return {
+        ok: false,
+        errorCode: 'WORKER_STATE_CHANGED',
+        message: `worker ${params.workerId} is no longer ${params.expectedStatus}`,
+      };
+    }
     clearRuntimeState(worker.sessionId);
-    await deps.markWorkerIdle(worker.id);
     await closeWorkerSessionBestEffort(worker.sessionId, 'idleWorker');
     deps.broadcastOrcaWorkerChanged(link.leadSessionId);
     return { ok: true, workerId: worker.id };

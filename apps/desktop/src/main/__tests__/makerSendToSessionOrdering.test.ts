@@ -538,10 +538,11 @@ describe('sendToSession ordering', () => {
     expect(source).toContain('registerOrcaWorkerControlHandlers(createElectronIpcHandlerRegistry(), {');
     expect(source).toContain('idleWorker: (params) => orcaTeamService.idleWorker(params),');
     expect(serviceIdleBlock).toContain('clearRuntimeState(worker.sessionId);');
-    expect(serviceIdleBlock).toContain('await deps.markWorkerIdle(worker.id);');
+    expect(serviceIdleBlock).toContain('await deps.markWorkerIdleIfStatus(worker.id, params.expectedStatus)');
+    expect(serviceIdleBlock).toContain('await deps.markWorkerIdle(worker.id)');
     expect(serviceIdleBlock).toContain("await closeWorkerSessionBestEffort(worker.sessionId, 'idleWorker');");
-    expectOrder(serviceIdleBlock, 'clearRuntimeState(worker.sessionId);', 'await deps.markWorkerIdle(worker.id);');
-    expectOrder(serviceIdleBlock, 'await deps.markWorkerIdle(worker.id);', "await closeWorkerSessionBestEffort(worker.sessionId, 'idleWorker');");
+    expectOrder(serviceIdleBlock, 'await deps.markWorkerIdleIfStatus(worker.id, params.expectedStatus)', 'clearRuntimeState(worker.sessionId);');
+    expectOrder(serviceIdleBlock, 'clearRuntimeState(worker.sessionId);', "await closeWorkerSessionBestEffort(worker.sessionId, 'idleWorker');");
   });
 
   it('clears pending auto-bridge state before archive and end-team abort paths', () => {

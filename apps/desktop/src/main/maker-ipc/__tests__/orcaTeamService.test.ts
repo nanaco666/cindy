@@ -130,6 +130,20 @@ function createDeps(overrides: Partial<OrcaTeamServiceDeps> = {}) {
           : worker
       ));
     }),
+    markWorkerIdleIfStatus: vi.fn(async (workerId, expectedStatus) => {
+      const worker = workers.find((item) => item.id === workerId);
+      if (!worker || worker.status !== expectedStatus) return false;
+      calls.push('markWorkerIdleIfStatus');
+      workers = workers.map((item) => (
+        item.id === workerId
+          ? {
+              ...item,
+              status: 'idle',
+            }
+          : item
+      ));
+      return true;
+    }),
     closeWorkerSession: vi.fn(async (sessionId) => {
       calls.push(`closeWorkerSession:${sessionId}`);
     }),
@@ -937,10 +951,31 @@ describe('OrcaTeamService', () => {
     })).resolves.toEqual({ ok: true, workerId: 'worker-1' });
 
     expect(calls).toEqual([
-      'markWorkerIdle',
+      'markWorkerIdleIfStatus',
       'closeWorkerSession:worker-session-1',
       'broadcastOrcaWorkerChanged',
     ]);
+  });
+
+  it('does not clear runtime or close a done worker when the conditional idle update loses a race', async () => {
+    const { calls, deps, service, setWorker } = createDeps({
+      markWorkerIdleIfStatus: vi.fn(async () => false),
+    });
+    setWorker(createWorker({ status: 'done' }));
+
+    await expect(service.idleWorker({
+      callerLeadSessionId: 'lead-1',
+      workerId: 'worker-1',
+      expectedStatus: 'done',
+    })).resolves.toEqual({
+      ok: false,
+      errorCode: 'WORKER_STATE_CHANGED',
+      message: 'worker worker-1 is no longer done',
+    });
+
+    expect(calls).toEqual([]);
+    expect(deps.closeWorkerSession).not.toHaveBeenCalled();
+    expect(deps.markWorkerIdle).not.toHaveBeenCalled();
   });
 
   it('rejects a viewed-status idle request when the worker became running', async () => {

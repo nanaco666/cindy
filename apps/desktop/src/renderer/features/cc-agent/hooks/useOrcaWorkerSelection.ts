@@ -241,6 +241,41 @@ export function useOrcaWorkerSelection({
     onSelectionIntentCleared?.(normalizedFocusWorkerHintRevision);
   }, [normalizedFocusWorkerHintRevision, onSelectionIntentCleared]);
 
+  const acknowledgeDoneWorker = useCallback(
+    async (workerId: string): Promise<boolean> => {
+      if (acknowledgingDoneWorkerIdsRef.current.has(workerId)) return false;
+      acknowledgingDoneWorkerIdsRef.current.add(workerId);
+      try {
+        await orcaWorkflowsFor(leadSessionId).idleWorker(leadSessionId, workerId, 'done');
+        clearWorkerAttention(workerId);
+        return true;
+      } finally {
+        acknowledgingDoneWorkerIdsRef.current.delete(workerId);
+      }
+    },
+    [leadSessionId],
+  );
+
+  const revealWorkerSessionId =
+    effectiveSearchJumpWorkerSessionId ?? focusWorkerHintSessionId ?? urlWorkerSessionId;
+  const revealWorkerRecord = revealWorkerSessionId
+    ? workers.find((worker) => worker.sessionId === revealWorkerSessionId)
+    : null;
+  const revealDoneWorkerId = revealWorkerRecord?.status === 'done' ? revealWorkerRecord.workerId : null;
+
+  useEffect(() => {
+    if (!revealDoneWorkerId) return;
+    void acknowledgeDoneWorker(revealDoneWorkerId)
+      .then((acknowledged) => {
+        if (acknowledged) return refresh();
+        return undefined;
+      })
+      .catch((err: unknown) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        toast.error(msg);
+      });
+  }, [acknowledgeDoneWorker, refresh, revealDoneWorkerId]);
+
   const handleCreateWorker = useCallback(
     async (form: CreateWorkerForm) => {
       const existingLabels = workers
@@ -291,8 +326,6 @@ export function useOrcaWorkerSelection({
       clearSelectionHints();
       const worker = workersRef.current.find((item) => item.workerId === workerId);
       const acknowledgeDone = worker?.status === 'done';
-      if (acknowledgeDone && acknowledgingDoneWorkerIdsRef.current.has(workerId)) return;
-      if (acknowledgeDone) acknowledgingDoneWorkerIdsRef.current.add(workerId);
       void (async () => {
         try {
           const workflows = orcaWorkflowsFor(leadSessionId);
@@ -300,20 +333,19 @@ export function useOrcaWorkerSelection({
             leadSessionId,
             workerIdOrLabel: workerId,
           });
+          let acknowledged = false;
           if (acknowledgeDone) {
-            await workflows.idleWorker(leadSessionId, workerId, 'done');
+            acknowledged = await acknowledgeDoneWorker(workerId);
           }
-          clearWorkerAttention(workerId);
+          if (!acknowledgeDone || acknowledged) clearWorkerAttention(workerId);
           await refresh();
         } catch (err: unknown) {
           const msg = err instanceof Error ? err.message : String(err);
           toast.error(msg);
-        } finally {
-          if (acknowledgeDone) acknowledgingDoneWorkerIdsRef.current.delete(workerId);
         }
       })();
     },
-    [clearSelectionHints, leadSessionId, refresh],
+    [acknowledgeDoneWorker, clearSelectionHints, leadSessionId, refresh],
   );
 
   const handleArchiveWorker = useCallback(
