@@ -94,12 +94,11 @@ export function writeMemorySetting<K extends keyof MemorySettings>(
 /**
  * 把旧版任一入口明确关闭记忆的用户意图迁成新默认下的 `maker:false` override。
  *
- * 旧默认值为 false 时，唯一能证明 Maker 选择的是 renderer localStorage 中的
- * Maker 专属 `false` marker。Claude/Codex 的原生开关可以独立设置，不能反推
- * 用户是否关闭了 Maker Memory。
+ * 旧默认值为 false 时，renderer localStorage 的 Maker 专属 marker 最精确；缺失时
+ * 已持久化的任一 native false 是保留旧 opt-out 的可用证据。
  *
- * `legacyRendererValue=null` 表示旧 renderer marker 缺失；此时不迁移任何 Maker
- * override。marker=true 表示用户曾明确开启 Maker，迁移时保留这个显式 opt-in。
+ * `legacyRendererValue=null` 表示旧 renderer marker 缺失；此时若存在 native false
+ * 则迁移为 Maker false。marker=true 表示用户曾明确开启 Maker，迁移时保留这个显式 opt-in。
  * 已存在 maker override 时始终保持 main 端事实源。
  */
 export function preserveLegacyMakerMemoryDisabled(
@@ -111,10 +110,10 @@ export function preserveLegacyMakerMemoryDisabled(
     // The new default is true, so keep an explicit legacy opt-in durable.
     return writeMemorySetting('maker', true, { preserveDefault: true }).value;
   }
-  if (legacyRendererValue !== false) {
-    return state.value;
+  if (legacyRendererValue === false || !state.value.claudeCode || !state.value.codex) {
+    return writeMemorySetting('maker', false).value;
   }
-  return writeMemorySetting('maker', false).value;
+  return state.value;
 }
 
 export function resetMemorySettings(): MemorySettings {

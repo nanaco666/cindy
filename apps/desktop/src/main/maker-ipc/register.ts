@@ -6212,16 +6212,10 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
       throwIpcError('MAKER_MEMORY_NOT_READY', 'maker memory not initialized');
     }
     log.info('maker-memory:set-enabled', { enabled });
+    // Persist before changing the manager. A failed maker:false write must reject the toggle
+    // instead of presenting an opt-out that silently disappears after restart.
+    const settingsState = writeMemorySetting('maker', enabled, { preserveDefault: enabled });
     const result = enabled ? await maker.makerMemory.enable() : await maker.makerMemory.disable();
-    let settingsState = readMemorySettingsState();
-    try {
-      settingsState = writeMemorySetting('maker', enabled, { preserveDefault: enabled });
-    } catch (err) {
-      log.warn('maker-memory:set-enabled persistence failed (in-session change still applied)', {
-        enabled,
-        error: err instanceof Error ? err.message : String(err),
-      });
-    }
     if (!settingsState.value.maker) {
       await applyNativeMemorySettingsToRuntime(maker, settingsState.value);
     }

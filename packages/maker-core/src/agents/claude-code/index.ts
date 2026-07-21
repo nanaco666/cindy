@@ -763,15 +763,7 @@ export class ClaudeCodeAgent extends BaseAgent {
       opts.makerMemoryEnabled ?? this.deps.runtimeConfig.makerMemoryEnabled ?? false;
     const makerMemory = this.deps.makerMemory;
     const makerMemoryEnabled = makerMemoryFlag === true && !!makerMemory;
-    if (makerMemory) {
-      // 同步顶层 manager state — enable/disable 幂等, 多 session 并发以最近一次为准。
-      try {
-        if (makerMemoryEnabled) await makerMemory.enable();
-        else await makerMemory.disable();
-      } catch (e) {
-        log.warn('maker memory state sync failed', { error: String(e) });
-      }
-    }
+    // This per-session injection flag must not mutate the shared manager.
     if (makerMemoryEnabled && makerMemory) {
       try {
         const store = await makerMemory.getStore(opts.workingDir);

@@ -81,7 +81,7 @@ describe('memorySettingsStore', () => {
     expect(getMakerMemoryEnabled()).toBe(false);
   });
 
-  it('does not infer a Maker opt-out from native settings without a renderer marker', async () => {
+  it('asks main to migrate native opt-outs when the legacy renderer marker is absent', async () => {
     vi.stubGlobal('localStorage', createStorage());
     const preserveLegacy = vi.fn().mockResolvedValue({
       maker: true,
@@ -106,7 +106,7 @@ describe('memorySettingsStore', () => {
 
     await bootstrapMemorySettingsFromMain();
 
-    expect(preserveLegacy).not.toHaveBeenCalled();
+    expect(preserveLegacy).toHaveBeenCalledWith(null);
     expect(getMakerMemoryEnabled()).toBe(true);
   });
 

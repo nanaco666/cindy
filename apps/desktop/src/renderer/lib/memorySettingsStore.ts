@@ -113,12 +113,11 @@ export async function bootstrapMemorySettingsFromMain(): Promise<void> {
     let settings = await window.electronAPI.maker.memoryGetSettings();
     // 用户或其它窗口已在请求期间写入时，旧快照不再有资格触发迁移或覆盖本地镜像。
     if (localWriteRevision !== revisionAtStart) return;
-    // 仅首次启动迁移旧版 Maker 专属 marker。Claude/Codex 原生开关是独立设置，
-    // 没有 renderer marker 时不能把它们的 false 推断成 Cindy opt-out。
-    if (!migrationCompleted && settings.maker && legacyRendererValue !== undefined) {
+    // 首次启动时委托 main 迁移旧档案；没有 renderer marker 时也要保留 native opt-out。
+    if (!migrationCompleted && settings.maker) {
       try {
         settings = await window.electronAPI.maker.memoryPreserveLegacyMakerDisabled(
-          legacyRendererValue,
+          legacyRendererValue ?? null,
         );
       } catch {
         // Migration persistence is best-effort. Never let a structured IPC
