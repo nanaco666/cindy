@@ -832,11 +832,10 @@ describe('new session composer surface', () => {
     // Touch-down warm-up: the mic button prewarms the audio session + ASR
     // connection at pressIn, and voice startup claims that connection when fresh.
     expect(newSource).toContain('onPressIn={handleVoiceButtonPressIn}');
-    expect(newSource).toContain(`prewarmMobileVoiceStart(selectedDeviceId, {
-      getAccessToken: () => auth.getAccessToken(),
-      refreshAccessToken: () => auth.refreshAccessToken(),
-      apiFetch: auth.apiFetch,
-    });`);
+    expect(newSource).toContain('prewarmMobileVoiceStart(selectedDeviceId, {');
+    expect(newSource).toContain('getAccessToken: () => auth.getAccessToken(),');
+    expect(newSource).toContain('refreshAccessToken: () => auth.refreshAccessToken(),');
+    expect(newSource).toContain('apiFetch: auth.apiFetch,');
     expect(newSource).toContain('const [prewarmedVoice, localVoiceInputHistory] = await Promise.all([');
     expect(newSource).toContain('takePrewarmedMobileVoiceAsr(selectedDeviceId) ?? Promise.resolve(null),');
     expect(newSource).toContain('?? createMobileCindyVoiceCredential(selectedDeviceId);');
