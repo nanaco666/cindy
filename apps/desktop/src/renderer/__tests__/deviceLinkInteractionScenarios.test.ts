@@ -644,6 +644,14 @@ describe('远程交互接线不变式', () => {
     expect(src).toContain('...(deviceLinkRemote ? {} : { makerMemoryEnabled: sshRemote ? false : getMakerMemoryEnabled() })');
   });
 
+  it('context usage 对 SSH 显式关闭本地 Maker Memory，对 device-link 仍省略', () => {
+    const src = read('features/cc-agent/CCAgentSessionView.tsx');
+    expect(src).toContain('...(remoteDeviceId');
+    expect(src).toContain('makerMemoryEnabled: session.remoteHostId');
+    expect(src).toContain('? false');
+    expect(src).toContain(': getMakerMemoryEnabled()');
+  });
+
   it('ChatInput 的 setPermissionMode 远程经隧道(makerApiFor),本机才走本机 IPC', () => {
     const src = read('components/new-chat/ChatInput.tsx');
     expect(src).toContain('makerApiFor(sessionId).setPermissionMode');
