@@ -86,10 +86,12 @@ export async function bootstrapMemorySettingsFromMain(): Promise<void> {
   try {
     const legacyRendererValue = readStoredMakerMemoryEnabled();
     let settings = await window.electronAPI.maker.memoryGetSettings();
-    // 旧版默认 false 时，用户明确关闭会只留下 renderer 的 false marker。必须先把它
-    // 迁成 main 端 override，再进行 main → renderer 同步，否则升级会静默重新开启记忆。
-    if (legacyRendererValue === false && settings.maker) {
-      settings = await window.electronAPI.maker.memoryPreserveLegacyMakerDisabled();
+    // 旧版 opt-out 可能是 renderer false marker，也可能只在 main 留下两种原生记忆
+    // 都关闭的状态。marker 非 true 时交给 main 统一判定，再进行 main → renderer 同步。
+    if (legacyRendererValue !== true && settings.maker) {
+      settings = await window.electronAPI.maker.memoryPreserveLegacyMakerDisabled(
+        legacyRendererValue ?? null,
+      );
     }
     const current = getMakerMemoryEnabled();
     if (current === settings.maker) return;

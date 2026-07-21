@@ -3751,8 +3751,8 @@ interface ElectronAPI {
       customizedKeys: string[];
       defaults: { maker: boolean; claudeCode: boolean; codex: boolean };
     }>;
-    /** 启动期一次性迁移旧版 localStorage 中明确关闭 Maker Memory 的用户意图。 */
-    memoryPreserveLegacyMakerDisabled: () => Promise<{
+    /** 启动期迁移旧版 renderer/native memory opt-out；null 表示 renderer marker 缺失。 */
+    memoryPreserveLegacyMakerDisabled: (legacyRendererValue: boolean | null) => Promise<{
       maker: boolean;
       claudeCode: boolean;
       codex: boolean;

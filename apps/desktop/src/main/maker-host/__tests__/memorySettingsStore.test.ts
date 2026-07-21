@@ -25,9 +25,12 @@ describe('memory-settings-store', () => {
   });
 
   it('enables Maker Memory by default for a new user', async () => {
-    const { readMemorySettings } = await import('../memory-settings-store.js');
+    const { preserveLegacyMakerMemoryDisabled, readMemorySettings, readMemorySettingsState } =
+      await import('../memory-settings-store.js');
 
     expect(readMemorySettings()).toEqual({ maker: true, claudeCode: true, codex: true });
+    expect(preserveLegacyMakerMemoryDisabled(null).maker).toBe(true);
+    expect(readMemorySettingsState().customizedKeys).toEqual([]);
   });
 
   it('persists a legacy renderer opt-out under the new enabled default', async () => {
@@ -35,7 +38,7 @@ describe('memory-settings-store', () => {
       '../memory-settings-store.js'
     );
 
-    expect(preserveLegacyMakerMemoryDisabled().maker).toBe(false);
+    expect(preserveLegacyMakerMemoryDisabled(false).maker).toBe(false);
     expect(readMemorySettingsState()).toMatchObject({
       value: { maker: false, claudeCode: true, codex: true },
       customizedKeys: ['maker'],
@@ -50,7 +53,38 @@ describe('memory-settings-store', () => {
     );
     const { preserveLegacyMakerMemoryDisabled } = await import('../memory-settings-store.js');
 
-    expect(preserveLegacyMakerMemoryDisabled().maker).toBe(true);
+    expect(preserveLegacyMakerMemoryDisabled(false).maker).toBe(true);
+  });
+
+  it('preserves a legacy native-all-off profile without a renderer marker', async () => {
+    fs.writeFileSync(
+      path.join(userDataDir, 'memory-settings.json'),
+      JSON.stringify({ claudeCode: false, codex: false }),
+      'utf-8',
+    );
+    const { preserveLegacyMakerMemoryDisabled, readMemorySettingsState } = await import(
+      '../memory-settings-store.js'
+    );
+
+    expect(preserveLegacyMakerMemoryDisabled(null).maker).toBe(false);
+    expect(readMemorySettingsState()).toMatchObject({
+      value: { maker: false, claudeCode: false, codex: false },
+      customizedKeys: ['claudeCode', 'codex', 'maker'],
+    });
+  });
+
+  it('does not treat native memories as legacy opt-out after Maker was enabled', async () => {
+    fs.writeFileSync(
+      path.join(userDataDir, 'memory-settings.json'),
+      JSON.stringify({ claudeCode: false, codex: false }),
+      'utf-8',
+    );
+    const { preserveLegacyMakerMemoryDisabled, readMemorySettingsState } = await import(
+      '../memory-settings-store.js'
+    );
+
+    expect(preserveLegacyMakerMemoryDisabled(true).maker).toBe(true);
+    expect(readMemorySettingsState().customizedKeys).toEqual(['claudeCode', 'codex']);
   });
 
   it('returns uncustomized state when a setting is manually changed back to default', async () => {

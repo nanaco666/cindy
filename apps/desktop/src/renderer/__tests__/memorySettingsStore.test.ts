@@ -77,6 +77,36 @@ describe('memorySettingsStore', () => {
     await bootstrapMemorySettingsFromMain();
 
     expect(preserveLegacy).toHaveBeenCalledOnce();
+    expect(preserveLegacy).toHaveBeenCalledWith(false);
+    expect(getMakerMemoryEnabled()).toBe(false);
+  });
+
+  it('migrates a legacy native-all-off profile without a renderer marker', async () => {
+    vi.stubGlobal('localStorage', createStorage());
+    const preserveLegacy = vi.fn().mockResolvedValue({
+      maker: false,
+      claudeCode: false,
+      codex: false,
+    });
+    vi.stubGlobal('window', {
+      electronAPI: {
+        maker: {
+          memoryGetSettings: vi.fn().mockResolvedValue({
+            maker: true,
+            claudeCode: false,
+            codex: false,
+          }),
+          memoryPreserveLegacyMakerDisabled: preserveLegacy,
+        },
+      },
+    });
+    const { bootstrapMemorySettingsFromMain, getMakerMemoryEnabled } = await import(
+      '@/lib/memorySettingsStore'
+    );
+
+    await bootstrapMemorySettingsFromMain();
+
+    expect(preserveLegacy).toHaveBeenCalledWith(null);
     expect(getMakerMemoryEnabled()).toBe(false);
   });
 });

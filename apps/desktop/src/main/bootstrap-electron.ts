@@ -2093,9 +2093,14 @@ ipcMain.on('theme:apply-vibrancy', (_event, payload: { familyId: string; isDark:
   ipcMain.handle(MAKER_IPC_INVOKE.MEMORY_GET_SETTINGS_STATE, async () => {
     return memorySettingsWire();
   });
-  ipcMain.handle(MAKER_IPC_INVOKE.MEMORY_PRESERVE_LEGACY_MAKER_DISABLED, async () => {
-    return preserveLegacyMakerMemoryDisabled();
-  });
+  ipcMain.handle(
+    MAKER_IPC_INVOKE.MEMORY_PRESERVE_LEGACY_MAKER_DISABLED,
+    async (_e, legacyRendererValue: unknown) => {
+      const parsedLegacyRendererValue =
+        legacyRendererValue === true ? true : legacyRendererValue === false ? false : null;
+      return preserveLegacyMakerMemoryDisabled(parsedLegacyRendererValue);
+    },
+  );
   ipcMain.handle(MAKER_IPC_INVOKE.IM_DEFAULT_SETTINGS_GET, async () => {
     return imDefaultSettingsWire();
   });

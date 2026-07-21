@@ -89,15 +89,28 @@ export function writeMemorySetting<K extends keyof MemorySettings>(
 }
 
 /**
- * 旧默认值为 false 时，用户把 Maker Memory 关回默认会删除 main override，但 renderer
- * localStorage 会保留明确的 `false`。新默认切到 true 后，由启动期 renderer 只在检测到
- * 该 legacy marker 时调用这里，把 opt-out 固化为新默认下的 `maker:false` override。
+ * 把旧版“所有记忆均关闭”的用户意图迁成新默认下的 `maker:false` override。
  *
- * 已存在 maker override 时保持 main 端事实源，不覆盖用户更新后的选择。
+ * 旧默认值为 false 时有两种合法遗留态:
+ *  - renderer localStorage 明确保留 `false`;
+ *  - 用户从未切换 Maker，但把 Claude/Codex 原生记忆都关闭，磁盘仅有两个 false。
+ *
+ * `legacyRendererValue=null` 表示旧 renderer marker 缺失。只有此时才用原生记忆双关
+ * 作为 legacy 证据；marker=true 表示用户曾明确开启 Maker，不能被双关状态覆盖。
+ * 已存在 maker override 时始终保持 main 端事实源。
  */
-export function preserveLegacyMakerMemoryDisabled(): MemorySettings {
+export function preserveLegacyMakerMemoryDisabled(
+  legacyRendererValue: boolean | null,
+): MemorySettings {
   const state = store.readState();
   if (state.customizedKeys.includes('maker')) return state.value;
+  const nativeMemoriesWereExplicitlyDisabled =
+    legacyRendererValue === null &&
+    state.value.claudeCode === false &&
+    state.value.codex === false;
+  if (legacyRendererValue !== false && !nativeMemoriesWereExplicitlyDisabled) {
+    return state.value;
+  }
   return writeMemorySetting('maker', false).value;
 }
 
