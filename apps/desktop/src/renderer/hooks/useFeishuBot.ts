@@ -53,6 +53,7 @@ export interface UseFeishuBotReturn {
   /** 操作锁 */
   isSaving: boolean;
   isClearing: boolean;
+  isReconnecting: boolean;
   saveSuccess: boolean;
 
   /** 上下线主动通知开关 */
@@ -60,6 +61,7 @@ export interface UseFeishuBotReturn {
   setLifecycleAnnouncement: (enabled: boolean) => void;
 
   save: () => Promise<boolean>;
+  reconnect: () => Promise<boolean>;
   clear: () => Promise<void>;
 }
 
@@ -91,6 +93,7 @@ export function useFeishuBot(): UseFeishuBotReturn {
   const [validationError, setValidationError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
+  const [isReconnecting, setIsReconnecting] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const saveSuccessTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -282,6 +285,38 @@ export function useFeishuBot(): UseFeishuBotReturn {
     }
   }, [isClearing, t]);
 
+  const reconnect = useCallback(async () => {
+    if (isReconnecting) return false;
+    setIsReconnecting(true);
+    try {
+      const { verdict } = await window.electronAPI.feishuBot.reconnect();
+      if (verdict === 'connected') {
+        setStatus('connected');
+        setErrorMessage(null);
+        if (cachedState) {
+          cachedState = { ...cachedState, status: 'connected', errorMessage: null };
+        }
+        toast.success(t('logic.toasts.feishuBotReconnected'));
+        return true;
+      }
+      if (verdict === 'conflict') {
+        setStatus('conflict');
+        toast.error(t('logic.toasts.feishuBotConflict'));
+        return false;
+      }
+      setStatus('error');
+      toast.error(t('logic.toasts.feishuBotReconnectFailed'));
+      return false;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      log.error('reconnect failed:', msg);
+      toast.error(t('logic.toasts.feishuBotReconnectFailed'));
+      return false;
+    } finally {
+      setIsReconnecting(false);
+    }
+  }, [isReconnecting, t]);
+
   const setLifecycleAnnouncement = useCallback((enabled: boolean) => {
     setLifecycleAnnouncementState(enabled);
     if (cachedState) cachedState = { ...cachedState, lifecycleAnnouncement: enabled };
@@ -305,8 +340,10 @@ export function useFeishuBot(): UseFeishuBotReturn {
     validationError,
     isSaving,
     isClearing,
+    isReconnecting,
     saveSuccess,
     save,
+    reconnect,
     clear,
   };
 }

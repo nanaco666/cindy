@@ -1,10 +1,10 @@
 /**
- * AgentMark — 按 schedule.agentKind 显示对应的品牌 mark
+ * AgentMark — 按 schedule.agentKind 显示对应的 Agent 身份 mark
  * ---------------------------------------------------------------------------
- * - 'claude-code' → ClaudeMark（Anthropic AA wordmark）
- * - 'codex'       → CodexMark（OpenAI 六瓣）
+ * - 'claude-code' → ClaudeMark（Claude Code CLI 像素脸）
+ * - 'codex'       → CodexMark（Codex CLI 花形 + `>_`）
  *
- * 颜色由父级通过 className 传 text-xxx 控制（两个 mark 内部都写了 fill="currentColor"）。
+ * 颜色由父级通过 className 传 text-xxx 控制（两个 mark 都消费 currentColor）。
  * 用一个统一入口避免每个调用点都写 if/else，未来加新 agent 也只动这一处。
  */
 

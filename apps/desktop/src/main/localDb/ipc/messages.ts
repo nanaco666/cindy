@@ -611,6 +611,7 @@ function getMessageSelectFields() {
     content: messages.content,
     toolUseId: messages.toolUseId,
     agentMeta: messages.agentMeta,
+    agentKind: messages.agentKind,
     createdAt: messages.createdAt,
     rewindAt: messages.rewindAt,
   };
@@ -643,6 +644,12 @@ export async function createMessage(
     content: unknown;
     toolUseId?: string;
     agentMeta?: AgentMeta | null;
+    /**
+     * 产出本行的 agent 引擎('cc' / 'codex')。session-agent-switch 后按行解析
+     * agentMeta 需要它;main 侧 SDK 事件落库路径必传,renderer pending echo 等
+     * 无 SDK 元信息的行留空(null 回落 session.agentKind)。
+     */
+    agentKind?: 'cc' | 'codex' | null;
     createdAt?: number;
   },
   opts?: {
@@ -1029,4 +1036,267 @@ function parseAgentMetaRecord(agentMeta: string | null): Record<string, unknown>
   } catch {
     return null;
   }
+}
+
+/**
+ * session-agent-switch:查"切换后是否还没发过第一条 user 消息"。
+ * 判定规则(确定性,重启后可从 DB 重建 pending 状态):
+ *   最新一条未被 rewind、且晚于 /clear 边界的 agent_switch 行之后,
+ *   不存在 user 行 ⟺ 交接注入仍 pending,返回其 content.handoff;否则 null。
+ * 同毫秒并列用 rowid 决序(与 messages list 的 tie-break 口径一致)。
+ */
+export async function findPendingAgentSwitchHandoff(
+  sessionId: string,
+): Promise<string | null> {
+  const db = getDbClient().drizzle;
+  const [sessRow] = await db
+    .select({ clearedAt: sessions.clearedAt })
+    .from(sessions)
+    .where(eq(sessions.id, sessionId))
+    .limit(1);
+  const clearedAt = sessRow?.clearedAt ?? null;
+  const afterClear = clearedAt === null ? undefined : gt(messages.createdAt, clearedAt);
+  const [sw] = await db
+    .select({
+      rowid: messageRowid,
+      content: messages.content,
+      createdAt: messages.createdAt,
+    })
+    .from(messages)
+    .where(
+      and(
+        eq(messages.sessionId, sessionId),
+        eq(messages.role, 'agent_switch'),
+        isNull(messages.rewindAt),
+        afterClear,
+      ),
+    )
+    .orderBy(desc(messages.createdAt), desc(messageRowid))
+    .limit(1);
+  if (!sw) return null;
+  let parsed: { handoff?: unknown; consumed?: unknown };
+  try {
+    parsed = JSON.parse(sw.content) as typeof parsed;
+  } catch {
+    return null;
+  }
+  const handoff = typeof parsed.handoff === 'string' && parsed.handoff.length > 0
+    ? parsed.handoff
+    : null;
+  if (!handoff || parsed.consumed === true) return null;
+  // v2 边界以持久消费位为真源:失败首发可能已先落 user 行；只要 vendor 尚未
+  // accepted,重启后仍必须恢复交接。缺字段的 v1 老行才走 user-row 启发式。
+  if (parsed.consumed === false) return handoff;
+  const [userAfter] = await db
+    .select({ id: messages.id })
+    .from(messages)
+    .where(
+      and(
+        eq(messages.sessionId, sessionId),
+        eq(messages.role, 'user'),
+        isNull(messages.rewindAt),
+        or(
+          gt(messages.createdAt, sw.createdAt),
+          and(eq(messages.createdAt, sw.createdAt), gt(messageRowid, sw.rowid)),
+        ),
+      ),
+    )
+    .limit(1);
+  if (userAfter) return null;
+  return handoff;
+}
+
+/**
+ * session-agent-switch:读取交接素材——本会话未被 rewind、晚于 /clear 边界的
+ * 最近 limit 行(时间正序返回),只取交接需要的最小投影。
+ *
+ * `after`(Phase 2 增量交接):只取严格晚于该水位线(createdAt + rowid 决序,
+ * 与 findPendingAgentSwitchHandoff 同 tie-break 口径)的行——即目标引擎停泊
+ * 边界行之后、它"离开期间"的进展。
+ */
+export async function listMessagesForAgentHandoff(
+  sessionId: string,
+  limit = 400,
+  after?: { createdAt: number; rowid: number },
+): Promise<Array<{ role: string; content: unknown; createdAt: number }>> {
+  const db = getDbClient().drizzle;
+  const [sessRow] = await db
+    .select({ clearedAt: sessions.clearedAt })
+    .from(sessions)
+    .where(eq(sessions.id, sessionId))
+    .limit(1);
+  const clearedAt = sessRow?.clearedAt ?? null;
+  const afterClear = clearedAt === null ? undefined : gt(messages.createdAt, clearedAt);
+  const afterWatermark =
+    after === undefined
+      ? undefined
+      : or(
+          gt(messages.createdAt, after.createdAt),
+          and(eq(messages.createdAt, after.createdAt), gt(messageRowid, after.rowid)),
+        );
+  const rows = await db
+    .select({
+      rowid: messageRowid,
+      role: messages.role,
+      content: messages.content,
+      createdAt: messages.createdAt,
+    })
+    .from(messages)
+    .where(
+      and(eq(messages.sessionId, sessionId), isNull(messages.rewindAt), afterClear, afterWatermark),
+    )
+    .orderBy(desc(messages.createdAt), desc(messageRowid))
+    .limit(limit);
+  rows.reverse();
+  return rows.map((r) => {
+    let content: unknown = r.content;
+    try {
+      content = JSON.parse(r.content);
+    } catch {
+      // 与 messageToCamel 同口径:非法 JSON 保留原字符串
+    }
+    return { role: r.role, content, createdAt: r.createdAt };
+  });
+}
+
+/** Phase 2:目标引擎的停泊原生会话(由最近一次"它离场"的边界行派生)。 */
+export interface ParkedEngineSession {
+  /** 该引擎离场时的原生 session id(resume 用)。 */
+  sdkSessionId: string;
+  /** 水位线 = 离场边界行的位置;增量交接只取其后的消息。 */
+  watermarkCreatedAt: number;
+  watermarkRowid: number;
+}
+
+/**
+ * session-agent-switch Phase 2:查目标引擎是否有可续接的停泊原生会话。
+ *
+ * 停泊绑定不新增 schema,从边界行确定性派生:最新一条未被 rewind、晚于 /clear
+ * 的 agent_switch 行中,content.fromAgentKind === targetDbKind 的那条——其
+ * fromSdkSessionId 即该引擎离场时的原生会话快照,行位置即水位线。
+ *
+ * 只认"该引擎最近一次离场"那一行:fromSdkSessionId 为空(该引擎上次在场期间
+ * 从未真正 spawn)→ 按无绑定处理,不回退更早的行——更早快照对应的原生会话
+ * 已被后来的全新会话取代,续接它会让引擎拿到与消息流矛盾的记忆。
+ * content 是 JSON,无法在 SQL 里按字段过滤,取有界条数(边界行数量 = 切换次数,
+ * 天然很小)在 JS 里扫。
+ */
+export async function findParkedEngineSession(
+  sessionId: string,
+  targetDbKind: 'cc' | 'codex',
+): Promise<ParkedEngineSession | null> {
+  const db = getDbClient().drizzle;
+  const [sessRow] = await db
+    .select({ clearedAt: sessions.clearedAt })
+    .from(sessions)
+    .where(eq(sessions.id, sessionId))
+    .limit(1);
+  const clearedAt = sessRow?.clearedAt ?? null;
+  const afterClear = clearedAt === null ? undefined : gt(messages.createdAt, clearedAt);
+  const rows = await db
+    .select({
+      rowid: messageRowid,
+      content: messages.content,
+      createdAt: messages.createdAt,
+    })
+    .from(messages)
+    .where(
+      and(
+        eq(messages.sessionId, sessionId),
+        eq(messages.role, 'agent_switch'),
+        isNull(messages.rewindAt),
+        afterClear,
+      ),
+    )
+    .orderBy(desc(messages.createdAt), desc(messageRowid))
+    .limit(50);
+  for (const row of rows) {
+    let parsed: { fromAgentKind?: unknown; fromSdkSessionId?: unknown };
+    try {
+      parsed = JSON.parse(row.content) as typeof parsed;
+    } catch {
+      continue;
+    }
+    if (parsed.fromAgentKind !== targetDbKind) continue;
+    // 命中"该引擎最近一次离场":快照为空即无绑定,不再往更早找。
+    if (typeof parsed.fromSdkSessionId !== 'string' || parsed.fromSdkSessionId.length === 0) {
+      return null;
+    }
+    return {
+      sdkSessionId: parsed.fromSdkSessionId,
+      watermarkCreatedAt: row.createdAt,
+      watermarkRowid: row.rowid,
+    };
+  }
+  return null;
+}
+
+/**
+ * session-agent-switch Phase 2:改写边界行 content 并广播(resume bootstrap 失败
+ * 回落全量交接时,边界卡展示的交接全文与 DB pending 重建源必须跟着换成实际注入
+ * 的版本)。广播复用 created 通道——renderer 对已存在 clientId 走 merge/替换语义。
+ */
+export async function updateAgentSwitchBoundaryContent(
+  sessionId: string,
+  clientId: string,
+  content: unknown,
+): Promise<boolean> {
+  const updated = await updateMessageContent(sessionId, clientId, content);
+  if (!updated) return false;
+  broadcastMessageRow(sessionId, updated);
+  return true;
+}
+
+/** vendor accepted 后持久化消费位；内存 registry 的 consume 不等待这笔辅助写。 */
+export async function markLatestAgentSwitchConsumed(sessionId: string): Promise<void> {
+  const db = getDbClient().drizzle;
+  const [sessRow] = await db
+    .select({ clearedAt: sessions.clearedAt })
+    .from(sessions)
+    .where(eq(sessions.id, sessionId))
+    .limit(1);
+  const clearedAt = sessRow?.clearedAt ?? null;
+  const afterClear = clearedAt === null ? undefined : gt(messages.createdAt, clearedAt);
+  const [boundary] = await db
+    .select({ clientId: messages.clientId, content: messages.content })
+    .from(messages)
+    .where(and(
+      eq(messages.sessionId, sessionId),
+      eq(messages.role, 'agent_switch'),
+      isNull(messages.rewindAt),
+      afterClear,
+    ))
+    .orderBy(desc(messages.createdAt), desc(messageRowid))
+    .limit(1);
+  if (!boundary) return;
+  let parsed: Record<string, unknown>;
+  try {
+    const value = JSON.parse(boundary.content) as unknown;
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return;
+    parsed = value as Record<string, unknown>;
+  } catch {
+    return;
+  }
+  if (parsed.consumed === true) return;
+  await updateAgentSwitchBoundaryContent(sessionId, boundary.clientId, {
+    ...parsed,
+    consumed: true,
+  });
+}
+
+/** 原子事务提交后只读并广播边界新行，不做第二次写入。 */
+export async function rebroadcastAgentSwitchBoundary(
+  sessionId: string,
+  boundaryClientId: string,
+): Promise<void> {
+  const db = getDbClient().drizzle;
+  const [row] = await db
+    .select()
+    .from(messages)
+    .where(and(
+      eq(messages.sessionId, sessionId),
+      eq(messages.clientId, boundaryClientId),
+    ))
+    .limit(1);
+  if (row) broadcastMessageRow(sessionId, messageToCamel(row));
 }

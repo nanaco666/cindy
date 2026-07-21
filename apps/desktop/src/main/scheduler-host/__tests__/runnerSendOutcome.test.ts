@@ -265,6 +265,56 @@ describe('MakerScheduleRunner send outcome policy', () => {
     expect(h.session.close).not.toHaveBeenCalled();
   });
 
+  it('applies a deferred switch before heartbeat meta lookup and creates the target engine session', async () => {
+    const h = createSessionHarness(async () => ({
+      accepted: false,
+      reason: 'cancelled-before-dispatch',
+    }));
+    const order: string[] = [];
+    const applyPendingAgentSwitch = vi.fn(async () => {
+      order.push('apply');
+    });
+    const { runner, maker } = createRunnerHarness(h.session, { applyPendingAgentSwitch });
+    vi.mocked(maker.getSessionMeta).mockImplementation(async () => {
+      order.push('meta');
+      return {
+        id: 'scheduler-session',
+        agentKind: 'codex',
+        workDir: 'F:\\XDMaker',
+        model: 'gpt-5.5-codex',
+        effort: 'high',
+        permissionMode: 'bypassPermissions',
+        fastMode: true,
+      } as never;
+    });
+    mocks.getSessionRowSnapshot.mockResolvedValue({
+      status: 'active',
+      userSendAt: null,
+      providerId: null,
+    });
+
+    await expect(
+      runner.fire(
+        baseSchedule({
+          targetSessionId: 'scheduler-session',
+          agentKind: 'claude-code',
+          model: undefined,
+        }),
+        createFireContext(),
+      ),
+    ).rejects.toThrow(/cancelled-before-dispatch/);
+
+    expect(order.slice(0, 2)).toEqual(['apply', 'meta']);
+    expect(maker.createSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'scheduler-session',
+        agentKind: 'codex',
+        model: 'gpt-5.5-codex',
+      }),
+    );
+    expect(h.send).toHaveBeenCalledTimes(1);
+  });
+
   it('captures the scheduler git baseline after the user row exists and aborts it when send is rejected', async () => {
     const order: string[] = [];
     let releaseBaseline: (() => void) | undefined;

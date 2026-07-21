@@ -246,7 +246,7 @@ export interface ChatMessage {
    * 例外:'goal-complete' 不是 ephemeral —— 它由 mapServerMessages 从持久化的
    * agentMeta.goalCompletion 派生(仿 fork divider 从 session 元数据派生),重开会话仍在。
    */
-  systemCardType?: 'help' | 'cost' | 'context' | 'pwd' | 'status' | 'compact' | 'cmd' | 'goal-complete' | 'goal-resumed' | 'learn' | 'auto-resume';
+  systemCardType?: 'help' | 'cost' | 'context' | 'pwd' | 'status' | 'compact' | 'cmd' | 'goal-complete' | 'goal-resumed' | 'learn' | 'auto-resume' | 'agent-switch';
   systemCardData?: Record<string, unknown>;
   /** FP-3: plan_review message fields */
   planReviewStatus?: 'pending' | 'approved' | 'revised' | 'expired' | 'cancelled';
@@ -533,6 +533,15 @@ export interface QueuedMessage extends Omit<AgentInputQueuedMessage, 'chatMessag
 
 export type MessageDeliveryMode = 'queue' | 'steer';
 
+/** 仅影响 selector/chip 的乐观展示；agentKind 始终保留真实 reducer 路由。 */
+export interface AgentSwitchIntentRecord {
+  target: 'claude-code' | 'codex';
+  model: string;
+  providerId: string | null;
+  effort?: string;
+  fastMode?: boolean;
+}
+
 export interface SessionChatState {
   /**
    * 该 session 用哪个 agent (Claude / Codex)。 sendMessage 据此走 maker.send 时
@@ -541,6 +550,8 @@ export interface SessionChatState {
    * 默认 'claude-code' 兼容老路径(老 session row 没有此字段时按 Claude 处理)。
    */
   agentKind: 'claude-code' | 'codex';
+  /** 下一条消息发送时才由 main 应用的跨引擎切换意图。 */
+  agentSwitchIntent: AgentSwitchIntentRecord | null;
   /**
    * Remote codex target (P2): SSH host alias from `@lizi/maker-remote-ssh`
    * pool。null/undefined = 本地 session。ensureInitialMessages 从 DB
@@ -786,11 +797,13 @@ export type SessionChatLightState = Pick<
   | 'queueExpanded'
   | 'fastMode'
   | 'planModeEnabled'
+  | 'agentSwitchIntent'
 >;
 
 function createInitialState(): SessionChatState {
   return {
     agentKind: 'claude-code',
+    agentSwitchIntent: null,
     remoteHostId: null,
     messages: [],
     taskUpdates: EMPTY_TASK_UPDATES,
@@ -847,6 +860,7 @@ function createInitialState(): SessionChatState {
 /** Stable empty snapshot for callers without a sessionId. */
 export const EMPTY_SESSION_STATE: SessionChatState = Object.freeze({
   agentKind: 'claude-code',
+  agentSwitchIntent: null,
   remoteHostId: null,
   messages: [],
   taskUpdates: EMPTY_TASK_UPDATES,
@@ -3672,6 +3686,7 @@ function subscribe(sessionId: string, cb: () => void): () => void {
 
 function selectLightState(state: SessionChatState): SessionChatLightState {
   return {
+    agentSwitchIntent: state.agentSwitchIntent,
     agentStatus: state.agentStatus,
     isStreaming: state.isStreaming,
     error: state.error,
@@ -3704,6 +3719,7 @@ function selectLightState(state: SessionChatState): SessionChatLightState {
 
 function lightStateEquals(a: SessionChatLightState, b: SessionChatLightState): boolean {
   return (
+    a.agentSwitchIntent === b.agentSwitchIntent &&
     a.agentStatus === b.agentStatus &&
     a.isStreaming === b.isStreaming &&
     a.error === b.error &&
@@ -4142,6 +4158,8 @@ function ensureInitialMessages(sessionId: string): void {
     .then((session) => {
       setState(sessionId, (s) => {
         const updates: Partial<SessionChatState> = {};
+        // agentKind 是真实 reducer 路由,始终跟随 DB；乐观切换展示单独放在
+        // agentSwitchIntent,两者不能混槽。
         const nextAgentKind = dbAgentKindToMakerKind(session.agentKind);
         if (s.agentKind !== nextAgentKind) {
           updates.agentKind = nextAgentKind;
@@ -6396,6 +6414,57 @@ function sendUiTrigger(sessionId: string, prompt: string): Promise<void> {
     });
 }
 
+/**
+ * session-agent-switch:切换 IPC 成功后由 ChatInput 调用。翻转 in-memory
+ * agentKind(事件 reducer 路由 + createOpts 派生都读它)并清掉旧引擎的
+ * sdkSessionId——否则 buildCreateOpts 会把旧引擎的原生会话 id 当 resume 目标
+ * (main 侧 reconcileCreateOptsWithDb 是兜底,这里是第一现场收敛)。
+ */
+function noteAgentSwitched(sessionId: string, agentKind: 'claude-code' | 'codex'): void {
+  if (!sessionId) return;
+  setState(sessionId, (s) =>
+    s.agentKind === agentKind && s.sdkSessionId === null && s.agentSwitchIntent === null
+      ? s
+      : { ...s, agentKind, sdkSessionId: null, agentSwitchIntent: null },
+  );
+}
+
+/**
+ * session-agent-switch 意图制:main 侧只登记切换意图(deferred),真切换在下一条
+ * 消息发送时刻执行。renderer 用本表把用户的选择**乐观**呈现出来(chip / 选择器 /
+ * capabilities 立即跟随目标引擎),DB 与 reducer 路由保持旧值。意图属于 session
+ * state,因此 setState 会驱动所有展示消费点重渲染；真切换 patched 到达时清意图。
+ */
+function noteAgentSwitchIntent(
+  sessionId: string,
+  target: 'claude-code' | 'codex',
+  opts: { model: string; providerId: string | null; effort?: string; fastMode?: boolean },
+): void {
+  if (!sessionId) return;
+  setState(sessionId, (s) => ({
+    ...s,
+    agentSwitchIntent: {
+      target,
+      model: opts.model,
+      providerId: opts.providerId,
+      effort: opts.effort,
+      fastMode: opts.fastMode,
+    },
+  }));
+}
+
+/** 用户选回当前引擎或 main 明确取消意图:只移除展示覆盖。 */
+function clearAgentSwitchIntent(sessionId: string): void {
+  if (!sessionId) return;
+  setState(sessionId, (s) =>
+    s.agentSwitchIntent === null ? s : { ...s, agentSwitchIntent: null },
+  );
+}
+
+function getAgentSwitchIntent(sessionId: string): AgentSwitchIntentRecord | null {
+  return sessions.get(sessionId)?.agentSwitchIntent ?? null;
+}
+
 function setSessionRuntime(
   sessionId: string,
   opts: { agentKind?: 'claude-code' | 'codex'; fastMode?: boolean; planModeEnabled?: boolean },
@@ -6442,9 +6511,33 @@ function setContextWindow(sessionId: string, contextWindow: number | undefined):
  */
 function mirrorSessionFields(
   sessionId: string,
-  patch: { fastMode?: unknown; planModeEnabled?: unknown } | null | undefined,
+  patch: {
+    fastMode?: unknown;
+    planModeEnabled?: unknown;
+    agentKind?: unknown;
+    agentSwitchIntentCanceled?: unknown;
+  } | null | undefined,
 ): void {
   if (!sessionId || !patch) return;
+  if (patch.agentSwitchIntentCanceled === true) clearAgentSwitchIntent(sessionId);
+  // session-agent-switch:引擎翻转必须镜像进 chat in-memory——maker:event 的
+  // reducer 按 state.agentKind 分流(Claude / Codex 两套),非发起窗口若停在旧值,
+  // 新引擎的事件会被旧引擎 reducer 错误处理(2026-07-20 审计实锤)。随引擎翻转
+  // 同步清 sdkSessionId(旧引擎的原生会话 id 对新引擎无意义,与 noteAgentSwitched
+  // 口径一致)。幂等:发起窗口已 noteAgentSwitched → 同值 no-op。
+  if (patch.agentKind === 'cc' || patch.agentKind === 'codex') {
+    const nextKind = patch.agentKind === 'codex' ? 'codex' : 'claude-code';
+    setState(sessionId, (s) => {
+      const intentApplied = s.agentSwitchIntent?.target === nextKind;
+      if (s.agentKind === nextKind && !intentApplied) return s;
+      return {
+        ...s,
+        agentKind: nextKind,
+        sdkSessionId: null,
+        ...(intentApplied ? { agentSwitchIntent: null } : {}),
+      };
+    });
+  }
   if (typeof patch.fastMode === 'boolean') {
     const next = patch.fastMode;
     setState(sessionId, (s) => (s.fastMode === next ? s : { ...s, fastMode: next }));
@@ -6530,6 +6623,10 @@ export const makerChatStore = {
   purgeSession: _purgeSession,
   /** Seed runtime-only state before a session view has mounted and loaded DB metadata. */
   setSessionRuntime,
+  noteAgentSwitched,
+  noteAgentSwitchIntent,
+  clearAgentSwitchIntent,
+  getAgentSwitchIntent,
   /** Update the displayed context window immediately after local model switches. */
   setContextWindow,
   /** MEM-OPT-2: Mark a session view mounted; returns a disposer for unmount. */
@@ -6983,6 +7080,30 @@ function mapServerMessages(serverMsgs: Message[]): ChatMessage[] {
           ...(reason ? { errorReason: reason } : {}),
           // interrupted-turn-resume:「忽略」的持久化标记(updateContent 写入)。
           ...(c.dismissed === true ? { errorDismissed: true } : {}),
+        };
+      }
+      // session-agent-switch:引擎切换边界行 → 'agent-switch' system card(与
+      // compact 分隔同视觉语言)。role 投影成 'assistant' 走 SystemCard 渲染管线
+      // (工作组分组守卫天然排除 systemCardType 消息,无需改 MessageStream);
+      // 交接全文放 systemCardData.handoff,由卡片展开入口按需查看,不进对话正文。
+      if (m.role === 'agent_switch') {
+        const c = (m.content && typeof m.content === 'object'
+          ? m.content
+          : {}) as Record<string, unknown>;
+        return {
+          clientId: m.clientId,
+          role: 'assistant' as const,
+          content: '',
+          isStreaming: false,
+          systemCardType: 'agent-switch' as const,
+          systemCardData: {
+            fromAgentKind: typeof c.fromAgentKind === 'string' ? c.fromAgentKind : '',
+            toAgentKind: typeof c.toAgentKind === 'string' ? c.toAgentKind : '',
+            fromModel: typeof c.fromModel === 'string' ? c.fromModel : null,
+            toModel: typeof c.toModel === 'string' ? c.toModel : null,
+            handoff: typeof c.handoff === 'string' ? c.handoff : '',
+            resumed: c.resumed === true,
+          },
         };
       }
       // image-local-cache: user role messages may have JSON-shaped content

@@ -50,6 +50,8 @@ let client: Lark.WSClient | null = null;
 let detector: ConflictDetector | null = null;
 let currentBotAppId: string | null = null;
 let currentStatus: FeishuConnectionStatus = 'idle';
+let acceptingInbound = false;
+let lifecycleGeneration = 0;
 
 let lifecycleAnnouncementEnabled = true;
 let pendingOfflineNotice = false;
@@ -95,7 +97,7 @@ interface SdkLogger {
   error: (...msg: unknown[]) => void | Promise<void>;
 }
 
-function makeCapturingLogger(): SdkLogger {
+function makeCapturingLogger(activeDetector: ConflictDetector): SdkLogger {
   const log = getLog();
   return {
     trace: () => {},
@@ -106,16 +108,16 @@ function makeCapturingLogger(): SdkLogger {
         .join(' ');
       log.debug('[feishu/sdk-info]', msg);
       if (msg.includes('ws client ready')) {
-        detector?.markReady();
+        activeDetector.markReady();
         if (currentStatus !== 'connected') setStatus('connected');
       } else if (msg.includes('reconnect success')) {
-        detector?.markReconnected();
+        activeDetector.markReconnected();
         if (currentStatus !== 'connected') setStatus('connected');
       } else if (msg.includes('reconnect') && !msg.includes('success')) {
-        detector?.markReconnecting();
+        activeDetector.markReconnecting();
         if (currentStatus === 'connected') setStatus('reconnecting');
       } else if (msg.includes('unable to connect to the server')) {
-        detector?.markError(new Error('unable to connect after retries'));
+        activeDetector.markError(new Error('unable to connect after retries'));
         setStatus('error', '连接失败：飞书服务无法访问，请检查网络');
       }
     },
@@ -131,11 +133,11 @@ function makeCapturingLogger(): SdkLogger {
         .join(' ');
       log.error('[feishu/sdk-error]', msg);
       if (msg.includes('code: 514')) {
-        detector?.markError(new Error('App ID / App Secret 不正确（auth_failed）'));
+        activeDetector.markError(new Error('App ID / App Secret 不正确（auth_failed）'));
         setStatus('error', 'App ID 或 App Secret 不正确');
       }
       if (msg.includes('1000040350')) {
-        detector?.markError(
+        activeDetector.markError(
           new Error('该 App 已被另一台设备占用 (exceed_conn_limit)'),
         );
       }
@@ -151,17 +153,20 @@ export async function start(
   const log = getLog();
   if (client) await stop();
 
+  const startedGeneration = ++lifecycleGeneration;
+  acceptingInbound = true;
   currentBotAppId = creds.appId;
   setStatus('testing');
 
-  detector = new ConflictDetector({ readyTimeoutMs: 8000, reconnectThreshold: 2 });
+  const startDetector = new ConflictDetector({ readyTimeoutMs: 8000, reconnectThreshold: 2 });
+  detector = startDetector;
 
   client = new Lark.WSClient({
     appId: creds.appId,
     appSecret: creds.appSecret,
     loggerLevel: Lark.LoggerLevel.info,
     autoReconnect: true,
-    logger: makeCapturingLogger(),
+    logger: makeCapturingLogger(startDetector),
   });
 
   outbound.bindClient(creds);
@@ -185,11 +190,19 @@ export async function start(
     const msg = err instanceof Error ? err.message : String(err);
     log.error(`[feishu/wsClient] start threw: ${msg}`);
     setStatus('error', msg);
-    detector?.markError(err instanceof Error ? err : new Error(msg));
+    startDetector.markError(err instanceof Error ? err : new Error(msg));
   }
 
-  const verdict = await detector.waitForVerdict();
-  detector = null;
+  const verdict = await startDetector.waitForVerdict();
+  if (detector === startDetector) detector = null;
+
+  // stop() can abandon the detector while this start() is awaiting its
+  // verdict. Ignore that stale result instead of overwriting the final idle
+  // status or announcing online after logout.
+  if (!acceptingInbound || lifecycleGeneration !== startedGeneration) {
+    log.info('[feishu/wsClient] ignore stale start verdict after stop');
+    return 'error';
+  }
 
   switch (verdict.kind) {
     case 'connected':
@@ -214,6 +227,11 @@ interface StopOptions {
 
 export async function stop(opts: StopOptions = {}): Promise<void> {
   const log = getLog();
+  // Close the logical ingress gate before awaiting the offline announcement.
+  // Lark may still deliver callbacks while stop is waiting on network I/O;
+  // those callbacks must never reach account-scoped host state after logout.
+  acceptingInbound = false;
+  lifecycleGeneration += 1;
   log.info(
     `[feishu/wsClient] stop requested status=${currentStatus} hasClient=${client ? 'yes' : 'no'} keepStatus=${opts.keepStatus ? 'yes' : 'no'} offlineTimeoutMs=${opts.offlineTimeoutMs ?? DEFAULT_OFFLINE_ANNOUNCE_TIMEOUT_MS}`,
   );
@@ -323,6 +341,10 @@ async function handleIncomingMessage(
   data: RawMessageEvent,
 ): Promise<void> {
   const log = getLog();
+  if (!acceptingInbound) {
+    log.info('[feishu/wsClient] drop inbound message while connection is stopping');
+    return;
+  }
   if (!data?.message || !data?.sender) {
     log.warn(
       `[feishu/wsClient] DROP early: hasMessage=${!!data?.message} hasSender=${!!data?.sender}`,
@@ -415,6 +437,10 @@ async function handleIncomingMessage(
 
 async function handleCardAction(data: unknown): Promise<unknown> {
   const log = getLog();
+  if (!acceptingInbound) {
+    log.info('[feishu/wsClient] drop card action while connection is stopping');
+    return {};
+  }
   let parsedOk = false;
   try {
     const event = parseCardAction({ raw: data });

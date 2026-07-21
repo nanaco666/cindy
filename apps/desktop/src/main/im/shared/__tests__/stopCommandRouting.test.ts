@@ -30,6 +30,12 @@ vi.mock('../slashCommands', () => ({
 }));
 
 import { createMessageHandler, isStopCommand } from '../messageHandler';
+import {
+  activateImAccountBoundary,
+  captureImAccountGeneration,
+  deactivateImAccountBoundary,
+  waitForImAccountGenerationIdle,
+} from '../../accountBoundary';
 import type { ImSlashHandlers } from '../slashCommands';
 import type { ImTurnRunner } from '../turnRunner';
 import type { ImChannelAdapter } from '../types';
@@ -52,6 +58,14 @@ function makeEvent(overrides: Partial<IMMessageEvent> = {}): IMMessageEvent {
 
 async function flushMicrotasks(): Promise<void> {
   for (let i = 0; i < 5; i += 1) await Promise.resolve();
+}
+
+function deferred(): { promise: Promise<void>; resolve: () => void } {
+  let resolve!: () => void;
+  const promise = new Promise<void>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
 }
 
 describe('isStopCommand', () => {
@@ -113,7 +127,88 @@ describe('messageHandler !stop routing', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    activateImAccountBoundary();
     wire(true);
+  });
+
+  it('silently drops messages delivered after logout closes the account boundary', async () => {
+    deactivateImAccountBoundary();
+    deliver(makeEvent({ text: 'after logout' }));
+    await flushMicrotasks();
+
+    expect(stopActiveTurn).not.toHaveBeenCalled();
+    expect(runAgentTurn).not.toHaveBeenCalled();
+    expect(handleSlashCommand).not.toHaveBeenCalled();
+    expect(sendMarkdownText).not.toHaveBeenCalled();
+    expect(sendText).not.toHaveBeenCalled();
+  });
+
+  it('drops an old-account message that was queued before logout and relogin', async () => {
+    const firstTurn = deferred();
+    runAgentTurn.mockImplementationOnce(async () => firstTurn.promise);
+
+    deliver(makeEvent({ messageId: 'old-1', text: 'first old message' }));
+    await vi.waitFor(() => expect(runAgentTurn).toHaveBeenCalledTimes(1));
+    deliver(makeEvent({ messageId: 'old-2', text: 'queued old message' }));
+
+    deactivateImAccountBoundary();
+    activateImAccountBoundary();
+    firstTurn.resolve();
+    await vi.waitFor(() =>
+      expect(mocks.logger.info).toHaveBeenCalledWith(
+        'drop inbound message from stale account generation channel=slack',
+      ),
+    );
+
+    expect(runAgentTurn).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps an already-started message turn inside the closing account scope', async () => {
+    const turn = deferred();
+    runAgentTurn.mockImplementationOnce(async () => turn.promise);
+    const accountGeneration = captureImAccountGeneration();
+    expect(accountGeneration).not.toBeNull();
+
+    deliver(makeEvent({ messageId: 'old-running', text: 'in-flight old message' }));
+    await vi.waitFor(() => expect(runAgentTurn).toHaveBeenCalledTimes(1));
+    deactivateImAccountBoundary();
+
+    let drained = false;
+    const draining = waitForImAccountGenerationIdle(accountGeneration!).then(() => {
+      drained = true;
+    });
+    await Promise.resolve();
+    expect(drained).toBe(false);
+
+    turn.resolve();
+    await draining;
+    expect(drained).toBe(true);
+  });
+
+  it('keeps detached turn background work inside the closing account scope', async () => {
+    const background = deferred();
+    runAgentTurn.mockImplementationOnce(
+      async (args: Parameters<ImTurnRunner['runAgentTurn']>[0]) => {
+        args.trackBackgroundTask?.(() => background.promise);
+      },
+    );
+    const accountGeneration = captureImAccountGeneration();
+    expect(accountGeneration).not.toBeNull();
+
+    deliver(makeEvent({ messageId: 'old-title', text: 'generate a title' }));
+    await vi.waitFor(() => expect(runAgentTurn).toHaveBeenCalledTimes(1));
+    deactivateImAccountBoundary();
+
+    let drained = false;
+    const draining = waitForImAccountGenerationIdle(accountGeneration!).then(() => {
+      drained = true;
+    });
+    await Promise.resolve();
+    expect(drained).toBe(false);
+
+    background.resolve();
+    await draining;
+    expect(drained).toBe(true);
   });
 
   it('routes !stop to stopActiveTurn with the thread scopeKey and replies stopDone', async () => {
@@ -128,11 +223,9 @@ describe('messageHandler !stop routing', () => {
     });
     expect(runAgentTurn).not.toHaveBeenCalled();
     expect(handleSlashCommand).not.toHaveBeenCalled();
-    expect(sendMarkdownText).toHaveBeenCalledWith(
-      'U123456789',
-      slackUi.agent.stopDone(0),
-      { threadTs: '1234.5678' },
-    );
+    expect(sendMarkdownText).toHaveBeenCalledWith('U123456789', slackUi.agent.stopDone(0), {
+      threadTs: '1234.5678',
+    });
   });
 
   it('mentions dropped queued messages in the stopDone reply', async () => {
@@ -140,11 +233,9 @@ describe('messageHandler !stop routing', () => {
     deliver(makeEvent());
     await flushMicrotasks();
 
-    expect(sendMarkdownText).toHaveBeenCalledWith(
-      'U123456789',
-      slackUi.agent.stopDone(2),
-      { threadTs: '1234.5678' },
-    );
+    expect(sendMarkdownText).toHaveBeenCalledWith('U123456789', slackUi.agent.stopDone(2), {
+      threadTs: '1234.5678',
+    });
   });
 
   it('replies stopIdle when nothing is running', async () => {
@@ -152,11 +243,9 @@ describe('messageHandler !stop routing', () => {
     deliver(makeEvent());
     await flushMicrotasks();
 
-    expect(sendMarkdownText).toHaveBeenCalledWith(
-      'U123456789',
-      slackUi.agent.stopIdle,
-      { threadTs: '1234.5678' },
-    );
+    expect(sendMarkdownText).toHaveBeenCalledWith('U123456789', slackUi.agent.stopIdle, {
+      threadTs: '1234.5678',
+    });
     expect(runAgentTurn).not.toHaveBeenCalled();
   });
 

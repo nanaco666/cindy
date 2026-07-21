@@ -45,7 +45,7 @@ export interface ProviderSection {
   models: SectionModel[];
 }
 
-/** 客户端有资产可渲染的模型图标种类(桌面 ClaudeMark / CodexMark / XDIncMark,手机同源 path)。 */
+/** 客户端有资产可渲染的模型厂牌图标种类(桌面 AnthropicMark / OpenAIMark / XDIncMark,手机同源厂牌 path)。 */
 export type ModelIconKind = 'claude' | 'codex' | 'cindy';
 
 /**

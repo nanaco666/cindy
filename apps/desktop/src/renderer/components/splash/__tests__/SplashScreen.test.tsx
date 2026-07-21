@@ -1,11 +1,14 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   isDarkMode: true,
   phase: 'checking_env',
+  tipsText: 'Loading Cindy',
+  tipsClickable: false,
+  tipsDestructive: false,
   skipSplash: vi.fn(),
   onTransitionEnd: vi.fn(),
   onTipsClick: vi.fn(),
@@ -22,9 +25,9 @@ vi.mock('@/hooks/useSplash', () => ({
     downloadProgress: 0,
     downloadInfo: {},
     resetSignal: 0,
-    tipsText: 'Loading Cindy',
-    tipsClickable: false,
-    tipsDestructive: false,
+    tipsText: mocks.tipsText,
+    tipsClickable: mocks.tipsClickable,
+    tipsDestructive: mocks.tipsDestructive,
     showManifestFailedDialog: false,
     showDownloadFailedDialog: false,
     showSpawnFailedDialog: false,
@@ -55,6 +58,9 @@ describe('SplashScreen v2 layout', () => {
   beforeEach(() => {
     mocks.isDarkMode = true;
     mocks.phase = 'checking_env';
+    mocks.tipsText = 'Loading Cindy';
+    mocks.tipsClickable = false;
+    mocks.tipsDestructive = false;
     document.documentElement.removeAttribute('data-splash-active');
     (window as unknown as { electronAPI: { platform: string } }).electronAPI = {
       platform: 'darwin',
@@ -126,5 +132,22 @@ describe('SplashScreen v2 layout', () => {
 
     expect(screen.queryByText('CINDY')).toBeNull();
     expect(screen.queryByText(/XD\.Inc/)).toBeNull();
+  });
+
+  it('keeps the failure retry tip clickable inside the draggable splash', () => {
+    mocks.tipsText = 'Environment initialization failed, click to retry';
+    mocks.tipsClickable = true;
+    mocks.tipsDestructive = true;
+
+    render(<SplashScreen />);
+
+    const retryTip = screen.getByText('Environment initialization failed, click to retry');
+    const retryStyle = (retryTip as HTMLElement).style as CSSStyleDeclaration & {
+      WebkitAppRegion?: string;
+    };
+    expect(retryStyle.WebkitAppRegion).toBe('no-drag');
+
+    fireEvent.click(retryTip);
+    expect(mocks.onTipsClick).toHaveBeenCalledTimes(1);
   });
 });

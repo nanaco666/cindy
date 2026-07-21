@@ -27,6 +27,7 @@ import {
 import { pinBlob } from '../cindy-media/ledger';
 import { t } from '../i18n';
 import { discordUiText } from './discord/uiText';
+import { imHostAccountScope } from './accountScopeBridge';
 
 const SAFE_STORAGE_DIR = (): string => path.join(app.getPath('userData'), 'safe-storage');
 
@@ -40,6 +41,7 @@ function resolveManagedImageAbsPath(url: string): string {
 }
 
 const host: IMHost = {
+  accountScope: imHostAccountScope,
   paths: {
     feishuMediaDir: path.join(app.getPath('userData'), 'cc-agent', 'feishu-media'),
     discordMediaDir: path.join(app.getPath('userData'), 'cc-agent', 'discord-media'),

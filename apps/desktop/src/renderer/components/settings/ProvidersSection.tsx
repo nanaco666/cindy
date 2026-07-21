@@ -38,8 +38,8 @@ import { customProviderSubtitleForDisplay, providerSubtitleForDisplay } from '@/
 import { CustomProviderDialog } from './CustomProviderDialog';
 import { AddProviderWizard, type WizardEntry } from './AddProviderWizard';
 import { UnifiedModelList } from './UnifiedModelList';
-import { ClaudeMark } from '@/components/icons/ClaudeMark';
-import { CodexMark } from '@/components/icons/CodexMark';
+import { AnthropicMark } from '@/components/icons/AnthropicMark';
+import { OpenAIMark } from '@/components/icons/OpenAIMark';
 import { XDIncMark } from '@/components/icons/XDIncMark';
 import { isModelEnabled, useModelVisibilityVersion } from '@/state/modelVisibilityPrefs';
 
@@ -70,8 +70,8 @@ function providerHasModels(provider: ProviderView): boolean {
 /** 供应商行图标(内置品牌 mark / 首字母 monogram)。 */
 function providerIcon(p: ProviderView, size: number): ReactNode {
   if (p.id === 'xd') return <XDIncMark size={size} />;
-  if (p.id === 'anthropic') return <ClaudeMark size={size} />;
-  if (p.id === 'openai') return <CodexMark size={size} />;
+  if (p.id === 'anthropic') return <AnthropicMark size={size} />;
+  if (p.id === 'openai') return <OpenAIMark size={size} />;
   return <span className="text-15 font-semibold leading-none">{providerMonogram(p.name)}</span>;
 }
 
@@ -342,7 +342,7 @@ function AnthropicHeader({ provider, onChanged }: { provider?: ProviderView; onC
 
   return (
     <DetailHeader
-      icon={<ClaudeMark size={18} />}
+      icon={<AnthropicMark size={18} />}
       title={t('settings.providers.anthropic.title')}
       subtitle={providerSubtitleForDisplay(provider, t('settings.providers.anthropic.modelLabel'), {
         fallback: t('settings.providers.anthropic.subtitle'),
@@ -414,7 +414,7 @@ function OpenAiHeader({ provider, onChanged }: { provider?: ProviderView; onChan
 
   return (
     <DetailHeader
-      icon={<CodexMark size={18} />}
+      icon={<OpenAIMark size={18} />}
       title={t('settings.providers.openai.title')}
       subtitle={t('settings.providers.openai.subtitle')}
       trailing={trailing}

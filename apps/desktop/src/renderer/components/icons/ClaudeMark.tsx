@@ -1,16 +1,22 @@
 /**
- * ClaudeMark —— Anthropic 官方 wordmark "AA" path,单色 currentColor 灰阶友好。
+ * ClaudeMark —— Claude Code 官方像素方块脸 mark(CLI 品牌 glyph),双轨:
+ *  - variant="mono"(默认):currentColor 单色,跟随主题/状态染色(侧栏
+ *    idle/running 灰阶、选中态同文字色等既有染色语义全部生效);
+ *  - variant="brand":Anthropic 陶土橙 #d97757 固定品牌色(跨主题一致,语义
+ *    豁免——同 DESIGN.md Toast 三色逻辑,不走主题 token),用于需要品牌辨识
+ *    度的场景,父级染色 class 对其无效。
  *
- * SVG path 来自 simpleicons.org 收录的 Anthropic 标准 mark(viewBox 24×24)。
- * Light/Dark 主题切换由父级 fill 颜色驱动(currentColor 继承)。
+ * 2026-07-20(Dash):形状统一用 Claude Code 像素脸(比旧 Anthropic "AA"
+ * wordmark 辨识度高);单色为默认,彩色按场景显式启用。
  */
 
 interface ClaudeMarkProps {
   size?: number;
   className?: string;
+  variant?: 'mono' | 'brand';
 }
 
-export function ClaudeMark({ size = 14, className }: ClaudeMarkProps) {
+export function ClaudeMark({ size = 14, className, variant = 'mono' }: ClaudeMarkProps) {
   return (
     <svg
       width={size}
@@ -21,8 +27,10 @@ export function ClaudeMark({ size = 14, className }: ClaudeMarkProps) {
       aria-hidden
     >
       <path
-        d="M13.827 3.52h3.603L24 20h-3.603l-6.57-16.48zm-7.258 0h3.767L16.906 20h-3.674l-1.343-3.461H5.017l-1.344 3.461H0L6.57 3.52zm4.132 9.876L8.453 7.247 6.205 13.396z"
-        fill="currentColor"
+        fill={variant === 'brand' ? '#d97757' : 'currentColor'}
+        fillRule="evenodd"
+        clipRule="evenodd"
+        d="M20.998 10.949H24v3.102h-3v3.028h-1.487V20H18v-2.921h-1.487V20H15v-2.921H9V20H7.488v-2.921H6V20H4.487v-2.921H3V14.05H0v-3.1h3V5h17.998zM6 10.949h1.488V8.102H6zm10.51 0H18V8.102h-1.49z"
       />
     </svg>
   );

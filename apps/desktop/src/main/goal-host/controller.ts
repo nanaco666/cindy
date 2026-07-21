@@ -18,6 +18,8 @@ import { isTerminalAgentErrorEvent } from '@lizi/maker-core';
 import type { AgentEvent } from '@lizi/maker-core';
 
 import { buildContinuationDirective, buildFirstTurnDirective } from './directive';
+import { agentHandoffPending } from '../maker-ipc/agentHandoffPendingSingleton';
+import { prependHandoffToUserMessage } from '../maker-ipc/agentHandoff';
 import { classifyTurnUsageLimit } from './usageLimit';
 import { parseVerdict, type GoalVerdict } from './verdict';
 import {
@@ -26,6 +28,7 @@ import {
   type GoalState,
   type GoalStatus,
   type GoalStatusPayload,
+  type SessionLike,
   type GoalUpdatePatch,
   type SetGoalInput,
 } from './types';
@@ -294,6 +297,13 @@ function freshTurn(): TurnAccumulator {
 
 export class GoalController {
   private readonly unsubscribers = new Map<string, () => void>();
+  /**
+   * 每个 goal listener 当前绑定的 SessionLike 对象引用。deferred agent switch 落实后
+   * live session 会被换成目标引擎的新对象(maker.getSession 返回新引用),用它判等
+   * 以决定是否需要把 listener 迁到新 session —— 否则新引擎 turn 的 done/error 事件
+   * 进不了 finalizeTurn,目标永远卡在 active(reviewer P1)。
+   */
+  private readonly listenerSessions = new Map<string, SessionLike>();
   private readonly turns = new Map<string, TurnAccumulator>();
   private readonly firing = new Set<string>();
   private readonly timers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -581,6 +591,10 @@ export class GoalController {
     if (this.unsubscribers.has(sessionId)) return; // 已在管(非 dormant)
     const state = await this.deps.storage.get(sessionId);
     if (!state || state.status !== 'active') return; // 只续 active dormant;paused/blocked 走手动 resume
+    // deferred agent switch 的 commit 会关闭旧 live session。必须在 ensureSession
+    // 之前执行,随后重新读取/bootstrap 的才是目标引擎;否则这一轮 directive 会继续
+    // 发给 fireTurn 开始时捕获的旧 session。
+    await this.deps.applyPendingAgentSwitch?.(sessionId);
     const session = await this.deps.ensureSession(sessionId);
     if (!session) return; // 活化失败(如 device-link 远程不可用)→ 留 dormant,下次打开再试
     this.resetTurn(sessionId);
@@ -655,6 +669,7 @@ export class GoalController {
       try { off(); } catch { /* ignore */ }
       this.unsubscribers.delete(sessionId);
     }
+    this.listenerSessions.delete(sessionId);
     const timer = this.timers.get(sessionId);
     if (timer) {
       clearTimeout(timer);
@@ -680,11 +695,20 @@ export class GoalController {
     this.deps.emitStatus({ sessionId: state.sessionId, goal: toPayload(state) });
   }
 
-  /** 幂等挂一个持久 onEvent listener(覆盖整个 goal 生命周期,跨多个 turn)。 */
+  /**
+   * 幂等挂一个持久 onEvent listener(覆盖整个 goal 生命周期,跨多个 turn)。
+   * 按 **session 对象身份** 判等:已绑到同一 live session → no-op;live session
+   * 已被换新(deferred agent switch commit 关旧 + spawn 新引擎)→ 先 detach 旧
+   * listener 再重挂到新 session,保证新引擎 turn 的 done/error 事件仍进 finalizeTurn。
+   */
   private attachListener(sessionId: string): void {
-    if (this.unsubscribers.has(sessionId)) return;
     const session = this.deps.getSession(sessionId);
     if (!session) return;
+    if (this.unsubscribers.has(sessionId)) {
+      if (this.listenerSessions.get(sessionId) === session) return; // 已绑到同一 session
+      // session 被 agent switch 换掉了 → 迁移 listener 到新对象。
+      try { this.unsubscribers.get(sessionId)?.(); } catch { /* ignore */ }
+    }
     const off = session.onEvent((event) => {
       try {
         this.onEvent(sessionId, event);
@@ -693,6 +717,7 @@ export class GoalController {
       }
     });
     this.unsubscribers.set(sessionId, off);
+    this.listenerSessions.set(sessionId, session);
   }
 
   private onEvent(sessionId: string, event: AgentEvent): void {
@@ -963,10 +988,20 @@ export class GoalController {
       this.scheduleContinuation(sessionId);
       return;
     }
+    // fireTurn 每次都可能是登记 deferred intent 后的第一条直发消息。apply 会关闭
+    // 旧引擎并 bootstrap 目标引擎,所以必须在拿 session 引用之前执行。
+    await this.deps.applyPendingAgentSwitch?.(sessionId);
     const session = await this.deps.ensureSession(sessionId);
     if (!session) {
       this.deps.logger.warn('[goal] no live session to fire (resume failed)', { sessionId, kind });
       return;
+    }
+    // deferred switch 可能刚把 live session 换成目标引擎的新对象;本会话若有 goal
+    // listener,必须迁到新 session,否则这轮 turn 的 done/error 事件进不了 finalizeTurn,
+    // 目标卡死在 active(reviewer P1)。attachListener 按 session 身份判等,未换则 no-op;
+    // 只对已在管(非 dormant)的 goal 重挂,不给 dormant 会话平白加 listener。
+    if (this.unsubscribers.has(sessionId)) {
+      this.attachListener(sessionId);
     }
 
     this.resetTurn(sessionId);
@@ -985,10 +1020,20 @@ export class GoalController {
         await this.deps.beforeDispatchUserTurn(sessionId);
         baselineStarted = true;
       }
+      // session-agent-switch:本路径直发 session.send(不经 makerSendTransaction),
+      // 交接注入自己接——切换后 goal 循环的下一轮 directive 同样要带交接上下文
+      // (2026-07-20 审计)。
+      const pendingHandoff = await agentHandoffPending.peek(sessionId);
+      const outgoing = pendingHandoff
+        ? prependHandoffToUserMessage({ type: 'user', content }, pendingHandoff)
+        : { type: 'user' as const, content };
       const result = await session.send(
-        { type: 'user', content },
+        outgoing as { type: 'user'; content: string },
         { origin: { kind: 'goal', goalSessionId: sessionId }, planMode: false },
       );
+      if (pendingHandoff && result.accepted) {
+        agentHandoffPending.consume(sessionId);
+      }
       if (!result.accepted) {
         if (baselineStarted) {
           this.deps.onUndispatchedUserTurn?.(sessionId);

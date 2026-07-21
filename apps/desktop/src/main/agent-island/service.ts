@@ -1471,9 +1471,14 @@ export class AgentIslandService {
     if (options.playSelectSound) {
       this.playConfiguredSound('select', Date.now());
     }
-    if (mainWindow.isMinimized()) mainWindow.restore();
-    mainWindow.show();
-    mainWindow.focus();
+    // Toggling the island sound is a background preference change. Keep the
+    // renderer command delivery, but do not interrupt the user's foreground
+    // app by restoring, showing, or focusing Cindy's main window.
+    if (command !== 'toggle-agent-island-sound') {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.show();
+      mainWindow.focus();
+    }
     mainWindow.webContents.send('app-menu:command', command);
   }
 }

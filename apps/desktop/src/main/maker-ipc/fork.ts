@@ -73,6 +73,9 @@ export function registerMakerForkIpc(): void {
           case 'NO_PRIOR_ASSISTANT':
             throwIpcError('NO_PRIOR_ASSISTANT', '请在 AI 回复之后的提问上 fork');
             break;
+          case 'UNSUPPORTED_HISTORY':
+            throwIpcError('FORK_UNSUPPORTED_HISTORY', msg);
+            break;
           default:
             throw err;
         }
@@ -102,6 +105,9 @@ export function registerMakerForkIpc(): void {
             break;
           case 'SOURCE_NEVER_RAN':
             throwIpcError('SOURCE_NEVER_RAN', '原会话尚未运行，无法 fork');
+            break;
+          case 'UNSUPPORTED_HISTORY':
+            throwIpcError('FORK_UNSUPPORTED_HISTORY', msg);
             break;
           default:
             throw err;

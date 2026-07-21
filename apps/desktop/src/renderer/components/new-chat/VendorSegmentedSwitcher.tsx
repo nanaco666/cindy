@@ -1,5 +1,5 @@
 /**
- * VendorSegmentedSwitcher —— NewMaker 主区域内的 vendor 切换控件。
+ * VendorSegmentedSwitcher —— NewMaker 主区域内的 Agent 引擎切换控件。
  * ---------------------------------------------------------------------------
  * 设计稿对照(doc/design_docs/cc-agent-view.pen 节点 HPzt0/wBlHH):
  *   - 容器:pill (9999px),宽 220,padding 3,gap 2
@@ -7,7 +7,7 @@
  *   - segment:pill,padding [6,14],fill_container,justifyContent center,gap 6
  *     · Active : Light Card #ffffff + 1px Board #d7d7d4 / Dark #3c3c3a
  *     · Inactive: 透明,文字 Stone #737373
- *   - icon: 14×14 vendor mark (Claude / OpenAI)
+ *   - icon: 14×14 Agent 身份 mark (Claude Code / Codex CLI)
  *   - 文字: Inter 14, active weight 500,inactive weight 400
  *
  * F-COLLAB (2026-05): 原本第 3 个 "协同模式" tab 已被 ChatInput 底部的
@@ -29,8 +29,13 @@ interface VendorSegmentedSwitcherProps {
   className?: string;
   width?: number;
   dense?: boolean;
-  /** CREATE AGENT 首页按 Figma 185:2724 使用独立私有 token。 */
-  visualVariant?: 'default' | 'create-agent';
+  /**
+   * CREATE AGENT 首页按 Figma 185:2724 使用独立私有 token。
+   * dropdown:模型选择器浮层内使用(session-agent-switch 两步切换)——浮层表面与
+   * default 的暗色 active 填充(#3c3c3a 级)几乎同色,选中段会融进背景看不清;
+   * 该变体把 active 段换成黑白反转强 CTA(--accent-cta-bg),当前 Agent 一眼可辨。
+   */
+  visualVariant?: 'default' | 'create-agent' | 'dropdown';
 }
 
 interface SegmentOption {
@@ -101,11 +106,15 @@ export function VendorSegmentedSwitcher({
                     'font-medium',
                     isCreateAgentVariant
                       ? 'border border-[var(--create-agent-control-border)] bg-[var(--create-agent-control-bg)] text-[var(--create-agent-control-text)]'
-                      : [
-                          // Active: Card 色凸起 + 1px Board 描边
-                          'bg-[var(--chat-input-chip-bg)] text-[var(--chat-input-chip-text)] border border-[var(--cmd-palette-border)]',
-                          'dark:border-transparent',
-                        ],
+                      : visualVariant === 'dropdown'
+                        ? // 浮层内:黑白反转强对比(同 emptyState CTA 的 token 对),
+                          // default 的 Card 色凸起在深色浮层表面上分不出来。
+                          'bg-[var(--accent-cta-bg)] text-[var(--accent-pure-cta-fg)]'
+                        : [
+                            // Active: Card 色凸起 + 1px Board 描边
+                            'bg-[var(--chat-input-chip-bg)] text-[var(--chat-input-chip-text)] border border-[var(--cmd-palette-border)]',
+                            'dark:border-transparent',
+                          ],
                   )
                 : cn(
                     'font-normal',

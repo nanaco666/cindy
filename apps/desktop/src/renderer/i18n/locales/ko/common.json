@@ -1225,6 +1225,7 @@
         "appIdLabel": "App ID",
         "ownerLabel": "Owner",
         "ownerWaiting": "첫 개인 메시지 바인딩 대기 중",
+        "reconnect": "Feishu 봇 다시 연결",
         "clear": "연동 해제"
       },
       "appIdLabel": "App ID",
@@ -1327,23 +1328,23 @@
       "title": "메모리",
       "description": "워크스페이스 단위 메모리를 구현합니다. 설정 변경 후에는 일반적으로 새 Session을 시작해야 적용됩니다. 메모리에 문제가 있다면 Reset하거나 끄세요.",
       "maker": {
-        "label": "Maker",
+        "label": "Cindy",
         "description": "동일 작업 디렉터리에서 Claude Code와 Codex의 모든 Agent Session 메모리를 공유합니다",
-        "toggleAria": "Maker 메모리 전환",
-        "resetAria": "Maker 메모리 재설정",
+        "toggleAria": "Cindy 메모리 전환",
+        "resetAria": "Cindy 메모리 재설정",
         "resetConfirm": {
-          "title": "Maker 메모리를 재설정하시겠습니까?",
-          "description": "모든 프로젝트의 Maker 메모리를 영구적으로 삭제합니다(user-data 아래에 저장되며 리포지토리 안에는 없습니다). 이 작업은 취소할 수 없습니다.",
+          "title": "Cindy 메모리를 재설정하시겠습니까?",
+          "description": "모든 프로젝트의 Cindy 메모리를 영구적으로 삭제합니다(user-data 아래에 저장되며 리포지토리 안에는 없습니다). 이 작업은 취소할 수 없습니다.",
           "confirm": "재설정",
           "cancel": "취소"
         },
         "toast": {
-          "enabled": "Maker 메모리가 활성화되었습니다",
-          "disabled": "Maker 메모리가 비활성화되었습니다",
-          "toggleFailed": "Maker 메모리 전환 실패",
-          "resetSuccess_one": "Maker 메모리가 재설정되었습니다 — {{count}}개의 작업 디렉터리가 제거됨",
-          "resetSuccess_other": "Maker 메모리가 재설정되었습니다 — {{count}}개의 작업 디렉터리가 제거됨",
-          "resetFailed": "Maker 메모리 재설정 실패"
+          "enabled": "Cindy 메모리가 활성화되었습니다",
+          "disabled": "Cindy 메모리가 비활성화되었습니다",
+          "toggleFailed": "Cindy 메모리 전환 실패",
+          "resetSuccess_one": "Cindy 메모리가 재설정되었습니다 — {{count}}개의 작업 디렉터리가 제거됨",
+          "resetSuccess_other": "Cindy 메모리가 재설정되었습니다 — {{count}}개의 작업 디렉터리가 제거됨",
+          "resetFailed": "Cindy 메모리 재설정 실패"
         }
       },
       "agents": {
@@ -1684,7 +1685,7 @@
           "description": "작업 스케줄링 — cron 반복 작업과 일회성 리마인더"
         },
         "memory": {
-          "name": "Maker 메모리",
+          "name": "Cindy 메모리",
           "description": "세션 간 컨텍스트를 유지하는 agent 공통 장기 메모리"
         },
         "xdt_helper": {
@@ -3364,6 +3365,9 @@
         "emptyTitle": "사용 가능한 소스 없음",
         "emptyDesc": "현재 모델을 지원하는 소스를 연결하면 선택할 수 있습니다",
         "disconnected": "연결 끊김"
+      },
+      "agentSwitch": {
+        "hint": "{{agent}}(으)로 전환한 후 사용할 모델을 선택하세요"
       }
     },
     "permissionSelector": {
@@ -3547,6 +3551,18 @@
         "overflowDescription": "이 세션은 {{used}}의 컨텍스트를 사용 중이며, 대상 모델 창({{total}}, 약 {{pct}}%)을 초과합니다. 전환 후에는 응답과 압축이 모두 실패할 수 있습니다. 먼저 컨텍스트 링을 클릭해 세션을 압축하거나 새 세션에서 이 모델을 사용하세요. 그래도 전환하시겠습니까?",
         "confirmSwitch": "모델 전환 진행",
         "cancelSwitch": "전환 취소"
+      },
+      "agentSwitch": {
+        "engineNotReady": "엔진이 전환되었지만 새 엔진 시작에 실패했습니다. 메시지를 보낼 때 자동으로 재시도됩니다",
+        "failed": "엔진 전환 실패: 적용되지 않음",
+        "deferred": "전환 예약됨: 다음 메시지를 보낼 때 {{agent}} · {{model}}(으)로 전환됩니다",
+        "confirmation": {
+          "title": "Agent를 전환할까요?",
+          "description": "새 Agent 엔진은 인계 요약을 통해 이어지므로 추론 내용 등이 완벽하게 이어진다고 보장할 수 없습니다. 기존 엔진으로 다시 전환하면 해당 엔진의 세션을 계속 이어갈 수 있습니다. 전환 시 프롬프트 캐시가 한 번 중단되어 토큰 사용량이 늘어날 수 있습니다.",
+          "confirm": "Agent 전환",
+          "cancel": "현재 Agent 유지",
+          "dontShowAgain": "다음부터 표시하지 않기"
+        }
       }
     },
     "atMention": {
@@ -4040,6 +4056,12 @@
       },
       "autoResume": {
         "label": "연결이 중단되어 자동으로 재개되었습니다"
+      },
+      "agentSwitch": {
+        "label": "{{from}}에서 {{to}}(으)로 전환됨",
+        "toggleHint": "인계 내용 보기",
+        "handoffTitle": "인계 내용——전환 시 새 엔진에 전송된 컨텍스트 요약(메시지에는 표시되지 않음)",
+        "resumedBadge": "세션 재개됨"
       }
     },
     "markdownRenderer": {
@@ -4103,6 +4125,7 @@
       "editSend": "전송",
       "editRollbackHint": "전송하면 이전 턴에서 변경된 파일 {{count}}개가 되돌려집니다",
       "forkErrors": {
+        "unsupportedHistory": "이 지점은 에이전트 전환 경계를 지나므로 분기할 수 없습니다",
         "noPriorAssistant": "AI 응답 뒤의 메시지에서 분기하세요",
         "sourceNeverRan": "원본 세션이 아직 실행되지 않아 분기할 수 없습니다",
         "generic": "분기 실패, 다시 시도하세요"
@@ -6061,6 +6084,8 @@
       "googleConnected": "Google에 연결됨",
       "codexConnected": "ChatGPT 계정 연결됨",
       "feishuBotConnected": "Feishu 봇에 연결됨",
+      "feishuBotReconnected": "Feishu 봇이 다시 연결됨",
+      "feishuBotReconnectFailed": "다시 연결하지 못했습니다. Feishu 구성을 확인한 후 다시 시도하세요",
       "feishuBotConflict": "이 App은 이미 사용 중입니다. 동료가 같은 App ID를 사용하고 있을 수 있습니다",
       "feishuBotConnectFailed": "연결 실패. App ID / Secret을 확인하세요",
       "feishuBotSaveFailed": "저장 실패: {{message}}",

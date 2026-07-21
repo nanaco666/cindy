@@ -60,9 +60,10 @@ const txMock = vi.fn((name: string, args: unknown) => {
   txCalls.push({ name, args });
   return Promise.resolve({});
 });
+const queryOneMock = vi.fn(async () => null as { id: string } | null);
 
 vi.mock('../localDb/client/current', () => ({
-  getDbClient: () => ({ drizzle: fakeDb, tx: txMock }),
+  getDbClient: () => ({ drizzle: fakeDb, tx: txMock, queryOne: queryOneMock }),
 }));
 
 let forkSessionAtMessage: typeof import('../maker-orchestration/fork').forkSessionAtMessage;
@@ -79,6 +80,8 @@ beforeEach(async () => {
   selectQueue.length = 0;
   txCalls.length = 0;
   txMock.mockClear();
+  queryOneMock.mockReset();
+  queryOneMock.mockResolvedValue(null);
   forkSdkSessionMock.mockReset();
   // 默认空 uuidMap 让 agentMeta 字段被去掉 (无映射)。具体测试按需 override。
   forkSdkSessionMock.mockResolvedValue({
@@ -429,6 +432,23 @@ describe('forkSessionAtMessage', () => {
       forkSessionAtMessage('src-session', 'any-msg'),
     ).rejects.toMatchObject({ code: 'SOURCE_NEVER_RAN' });
 
+    expect(forkSdkSessionMock).not.toHaveBeenCalled();
+    expect(txCalls).toHaveLength(0);
+  });
+
+  it('rejects before SDK side effects when copied range crosses an agent_switch boundary', async () => {
+    const target = makeMessageRow({ id: 'target-user', role: 'user', createdAt: 3000 });
+    selectQueue.push([makeSourceRow({ clearedAt: 1000 })]);
+    selectQueue.push([target]);
+    queryOneMock.mockResolvedValueOnce({ id: 'switch-boundary' });
+
+    await expect(forkSessionAtMessage('src-session', 'target-user')).rejects.toMatchObject({
+      code: 'UNSUPPORTED_HISTORY',
+    });
+    expect(queryOneMock).toHaveBeenCalledWith(
+      expect.stringContaining("role = 'agent_switch'"),
+      ['src-session', 3000, 1000, 1000],
+    );
     expect(forkSdkSessionMock).not.toHaveBeenCalled();
     expect(txCalls).toHaveLength(0);
   });

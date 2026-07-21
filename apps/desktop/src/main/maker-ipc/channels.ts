@@ -134,6 +134,13 @@ export const MAKER_INVOKE = {
   GET_PENDING_INTERACTIONS: 'maker:get-pending-interactions',
   // 运行时切换 (Phase B)
   SET_MODEL: 'maker:set-model',
+  /**
+   * session-agent-switch:同一会话切换 agent 引擎(claude-code ↔ codex)。
+   * 入参 = (sessionId, targetAgentKind, model, providerId?);handler 见
+   * sessionAgentSwitchHandler.ts(交接构造 + DB 提交 + 边界行 + 新引擎重建)。
+   * 与 SET_MODEL 的边界:同引擎换模型走 SET_MODEL,跨引擎必须走本 channel。
+   */
+  SWITCH_SESSION_AGENT: 'maker:switch-session-agent',
   SET_EFFORT: 'maker:set-effort',
   SET_PERMISSION_MODE: 'maker:set-permission-mode',
   SET_FAST_MODE: 'maker:set-fast-mode',

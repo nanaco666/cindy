@@ -35,4 +35,37 @@ describe('makerChatStore.mirrorSessionFields', () => {
     makerChatStore.mirrorSessionFields(s, { fastMode: 'yes' } as { fastMode?: unknown });
     expect(makerChatStore.getSnapshot(s).fastMode).toBe(true); // 仍是上次的 true
   });
+
+  it('切换意图只进入展示槽,不改真实 reducer agentKind/sdkSessionId', () => {
+    const s = sid();
+    makerChatStore.setSessionRuntime(s, { agentKind: 'claude-code' });
+    makerChatStore.noteAgentSwitchIntent(s, 'codex', {
+      model: 'gpt-5.5',
+      providerId: 'openai',
+      effort: 'high',
+      fastMode: true,
+    });
+    const snapshot = makerChatStore.getSnapshot(s);
+    expect(snapshot.agentKind).toBe('claude-code');
+    expect(snapshot.agentSwitchIntent).toMatchObject({ target: 'codex', model: 'gpt-5.5' });
+  });
+
+  it('旧引擎 patch 更新真实槽但保留 intent；目标 patch 收敛并清 intent', () => {
+    const s = sid();
+    makerChatStore.noteAgentSwitchIntent(s, 'codex', { model: 'gpt-5.5', providerId: null });
+    makerChatStore.mirrorSessionFields(s, { agentKind: 'cc' });
+    expect(makerChatStore.getSnapshot(s).agentKind).toBe('claude-code');
+    expect(makerChatStore.getSnapshot(s).agentSwitchIntent?.target).toBe('codex');
+    makerChatStore.mirrorSessionFields(s, { agentKind: 'codex' });
+    expect(makerChatStore.getSnapshot(s).agentKind).toBe('codex');
+    expect(makerChatStore.getSnapshot(s).agentSwitchIntent).toBeNull();
+  });
+
+  it('SET_MODEL 取消广播只清展示 intent,不改真实引擎', () => {
+    const s = sid();
+    makerChatStore.noteAgentSwitchIntent(s, 'codex', { model: 'gpt-5.5', providerId: null });
+    makerChatStore.mirrorSessionFields(s, { agentSwitchIntentCanceled: true });
+    expect(makerChatStore.getSnapshot(s).agentKind).toBe('claude-code');
+    expect(makerChatStore.getSnapshot(s).agentSwitchIntent).toBeNull();
+  });
 });

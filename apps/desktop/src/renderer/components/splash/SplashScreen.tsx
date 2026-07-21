@@ -160,7 +160,14 @@ export function SplashScreen() {
                   : 'font-normal',
                 tipsClickable && 'cursor-pointer underline pointer-events-auto',
               )}
-              style={tipsDestructive ? undefined : ({ color: mutedColor } as React.CSSProperties)}
+              style={
+                {
+                  color: tipsDestructive ? undefined : mutedColor,
+                  // The splash root is an Electron drag region. Keep the retry tip
+                  // in a no-drag hole so its click can reach the renderer.
+                  WebkitAppRegion: tipsClickable ? 'no-drag' : undefined,
+                } as React.CSSProperties
+              }
               onClick={tipsClickable ? onTipsClick : undefined}
             >
               {tipsText}

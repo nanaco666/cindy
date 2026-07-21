@@ -296,6 +296,10 @@ export const messages = sqliteTable(
       // 'error':turn 失败的 terminal error 持久化行(messagePersistBroadcaster
       // 的 onTurnErrorEvent)。drizzle 的 text enum 只是 TS 类型约束,SQLite 列
       // 无 CHECK,扩枚举不产生 migration(db:generate 应为 no-op)。
+      // 'agent_switch':session 内 agent 引擎切换边界行(session-agent-switch),
+      // content 存 { fromAgentKind, toAgentKind, fromModel, toModel, handoff }。
+      // handoff 交接文本只进这里(供 UI 展开查看/debug),不作为可见消息渲染正文,
+      // 也不落 user 消息——wire 注入与显示分离。
       enum: [
         'user',
         'assistant',
@@ -305,17 +309,26 @@ export const messages = sqliteTable(
         'plan_review',
         'thinking',
         'error',
+        'agent_switch',
       ],
     }).notNull(),
     content: text('content').notNull(), // JSON string
     toolUseId: text('tool_use_id'),
     /**
-     * Agent SDK 元信息（JSON.stringify 后的字符串），按 session.agent_kind 解析。
+     * Agent SDK 元信息（JSON.stringify 后的字符串），按本行 agent_kind（NULL 时回落
+     * session.agent_kind）解析。
      *  - cc: { uuid, parentUuid, sdkSessionId, model, stopReason, usage, ... }
      *  - 老消息 / 非 SDK 来源消息 / user echo 之前的 pending 消息 = NULL
      * fork、对账、token 计费、debug 都依赖这个字段。
      */
     agentMeta: text('agent_meta'),
+    /**
+     * 产出本行的 agent 引擎标识（值域与 sessions.agent_kind 相同:'cc' / 'codex'）。
+     * session-agent-switch 后 session.agent_kind 只代表"当前活跃 agent",历史行的
+     * agent_meta 形态必须按写入时的引擎解析,故落库时逐行 denormalize。
+     * NULL = 切换功能上线前的老消息,按 session.agent_kind 解析(向后兼容)。
+     */
+    agentKind: text('agent_kind'),
     createdAt: integer('created_at').notNull(),
     /**
      * rewind-session 软删时间戳（unix ms，NULL = 未被回滚）。

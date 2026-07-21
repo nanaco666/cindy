@@ -4,8 +4,8 @@ import { LoaderCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 /**
- * Minimal icon contract: lucide icons satisfy it, and so do brand marks like
- * ClaudeMark / CodexMark, so later migration batches never need an API change.
+ * Minimal icon contract: lucide icons, Agent 身份的 ClaudeMark / CodexMark 与模型
+ * 厂牌的 AnthropicMark / OpenAIMark 都满足,后续迁移无需改变 API。
  */
 export type SpinnerIconComponent = React.ComponentType<{
   size?: number | string;

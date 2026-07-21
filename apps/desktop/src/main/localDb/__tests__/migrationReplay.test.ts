@@ -262,7 +262,10 @@ describeMigrationReplay('migration replay', () => {
         currentVersion: 73,
       });
 
-      expect(result.applied.map((migration) => migration.seq)).toEqual([74, 75, 76]);
+      // 0074 桥接 legacy lineage 后,0075(schedule_runs 前置检查)、0076(run 费用)
+      // 与 session-agent-switch 的 0077(messages.agent_kind,守卫脚本对无 messages
+      // 表的 fixture no-op)也在同一次 replay 里补上。
+      expect(result.applied.map((migration) => migration.seq)).toEqual([74, 75, 76, 77]);
       expect(
         db
           .prepare(`SELECT permission_mode, plan_mode_enabled FROM sessions WHERE id = ?`)

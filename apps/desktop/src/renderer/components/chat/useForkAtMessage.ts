@@ -110,7 +110,9 @@ export function useForkAtMessage({
     } catch (err) {
       const code = err instanceof ApiError ? err.code : 'UNKNOWN';
       const msg =
-        code === 'NO_PRIOR_ASSISTANT'
+        code === 'FORK_UNSUPPORTED_HISTORY'
+          ? t('chat.userMessage.forkErrors.unsupportedHistory')
+          : code === 'NO_PRIOR_ASSISTANT'
           ? t('chat.userMessage.forkErrors.noPriorAssistant')
           : code === 'SOURCE_NEVER_RAN'
             ? t('chat.userMessage.forkErrors.sourceNeverRan')

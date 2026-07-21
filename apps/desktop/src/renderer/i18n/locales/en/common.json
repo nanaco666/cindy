@@ -1225,6 +1225,7 @@
         "appIdLabel": "App ID",
         "ownerLabel": "Owner",
         "ownerWaiting": "Waiting for first private-message bind",
+        "reconnect": "Reconnect Feishu Bot",
         "clear": "Unbind"
       },
       "appIdLabel": "App ID",
@@ -1327,23 +1328,23 @@
       "title": "Memory",
       "description": "Powers workspace-scoped memory. After changing settings you usually need to start a new Session for it to take effect. If memory misbehaves, click Reset or turn it off.",
       "maker": {
-        "label": "Maker",
+        "label": "Cindy",
         "description": "Memory is managed by the agent entry, not by each model. Claude Code and Codex sessions can share memory within the same working directory.",
-        "toggleAria": "Toggle Maker memory",
-        "resetAria": "Reset Maker memories",
+        "toggleAria": "Toggle Cindy memory",
+        "resetAria": "Reset Cindy memories",
         "resetConfirm": {
-          "title": "Reset Maker memories?",
-          "description": "This will permanently delete all Maker memories across every project (stored under user-data, not in your repos). This action cannot be undone.",
+          "title": "Reset Cindy memories?",
+          "description": "This will permanently delete all Cindy memories across every project (stored under user-data, not in your repos). This action cannot be undone.",
           "confirm": "Reset",
           "cancel": "Cancel"
         },
         "toast": {
-          "enabled": "Maker memory enabled",
-          "disabled": "Maker memory disabled",
-          "toggleFailed": "Failed to toggle Maker memory",
-          "resetSuccess_one": "Maker memories reset — removed {{count}} workdir",
-          "resetSuccess_other": "Maker memories reset — removed {{count}} workdirs",
-          "resetFailed": "Failed to reset Maker memories"
+          "enabled": "Cindy memory enabled",
+          "disabled": "Cindy memory disabled",
+          "toggleFailed": "Failed to toggle Cindy memory",
+          "resetSuccess_one": "Cindy memories reset — removed {{count}} workdir",
+          "resetSuccess_other": "Cindy memories reset — removed {{count}} workdirs",
+          "resetFailed": "Failed to reset Cindy memories"
         }
       },
       "agents": {
@@ -1684,7 +1685,7 @@
           "description": "Task scheduling — cron-based recurring jobs and one-shot reminders"
         },
         "memory": {
-          "name": "Maker Memory",
+          "name": "Cindy Memory",
           "description": "Cross-agent long-term memory for persistent context across sessions"
         },
         "xdt_helper": {
@@ -3364,6 +3365,9 @@
         "emptyTitle": "No available source",
         "emptyDesc": "Connect a source that supports the current model to select it",
         "disconnected": "Disconnected"
+      },
+      "agentSwitch": {
+        "hint": "Pick the model to use after switching to {{agent}}"
       }
     },
     "permissionSelector": {
@@ -3547,6 +3551,18 @@
         "overflowDescription": "This session uses {{used}} of context, exceeding the target model's {{total}} window (about {{pct}}%). After switching, replies and even compaction may fail. Compact the session first (click the context ring) or start a new session for this model. Switch anyway?",
         "confirmSwitch": "Switch model anyway",
         "cancelSwitch": "Cancel switch"
+      },
+      "agentSwitch": {
+        "engineNotReady": "Engine switched, but the new engine failed to start; it will retry when you send a message",
+        "failed": "Engine switch failed; not applied",
+        "deferred": "Switch scheduled: will change to {{agent}} · {{model}} when your next message is sent",
+        "confirmation": {
+          "title": "Switch Agent?",
+          "description": "The new Agent engine continues through a handoff summary, so reasoning and other content cannot be guaranteed to carry over perfectly; switching back still lets you continue the original engine’s session. Switching also interrupts the prompt cache once and may increase token usage.",
+          "confirm": "Switch Agent",
+          "cancel": "Keep Current Agent",
+          "dontShowAgain": "Don’t remind me again"
+        }
       }
     },
     "atMention": {
@@ -4040,6 +4056,12 @@
       },
       "autoResume": {
         "label": "Connection interrupted — resumed automatically"
+      },
+      "agentSwitch": {
+        "label": "Switched from {{from}} to {{to}}",
+        "toggleHint": "View handoff context",
+        "handoffTitle": "Handoff — the context summary sent to the new engine at switch time (never shown in your messages)",
+        "resumedBadge": "session resumed"
       }
     },
     "markdownRenderer": {
@@ -4103,6 +4125,7 @@
       "editSend": "Send",
       "editRollbackHint": "Sending will undo changes to {{count}} file(s) from the last turn",
       "forkErrors": {
+        "unsupportedHistory": "This point crosses an agent-switch boundary and cannot be forked",
         "noPriorAssistant": "Please fork from a message that follows an AI reply",
         "sourceNeverRan": "Source session has not run yet, cannot fork",
         "generic": "Fork failed, please retry"
@@ -6070,6 +6093,8 @@
       "googleConnected": "Google connected",
       "codexConnected": "ChatGPT account connected",
       "feishuBotConnected": "FeiShu bot connected",
+      "feishuBotReconnected": "Feishu bot reconnected",
+      "feishuBotReconnectFailed": "Reconnect failed. Check the Feishu configuration and try again",
       "feishuBotConflict": "This App is already in use — a colleague may be using the same App ID",
       "feishuBotConnectFailed": "Connection failed, check App ID / Secret",
       "feishuBotSaveFailed": "Save failed: {{message}}",

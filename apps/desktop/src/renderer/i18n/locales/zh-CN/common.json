@@ -1225,6 +1225,7 @@
         "appIdLabel": "App ID",
         "ownerLabel": "Owner",
         "ownerWaiting": "等待首次私聊绑定",
+        "reconnect": "重新连接飞书机器人",
         "clear": "解绑"
       },
       "appIdLabel": "App ID",
@@ -1327,23 +1328,23 @@
       "title": "记忆",
       "description": "用于帮助用户实现基于工作区的记忆，改变设置之后理论上需要新建会话才会生效，如果觉得记忆系统出现问题可以点击 Reset 或者关闭。",
       "maker": {
-        "label": "Maker",
+        "label": "Cindy",
         "description": "记忆按 Agent 入口管理，而不是按具体模型管理；同一工作目录下，Claude Code 和 Codex 入口的会话可以共享记忆",
-        "toggleAria": "切换 Maker 记忆",
-        "resetAria": "重置 Maker 记忆",
+        "toggleAria": "切换 Cindy 记忆",
+        "resetAria": "重置 Cindy 记忆",
         "resetConfirm": {
-          "title": "重置 Maker 记忆？",
-          "description": "将永久删除所有项目下的 Maker 记忆（存放在 user-data 目录下，不在你的代码仓库里）。此操作不可撤销。",
+          "title": "重置 Cindy 记忆？",
+          "description": "将永久删除所有项目下的 Cindy 记忆（存放在 user-data 目录下，不在你的代码仓库里）。此操作不可撤销。",
           "confirm": "重置",
           "cancel": "取消"
         },
         "toast": {
-          "enabled": "Maker 记忆已启用",
-          "disabled": "Maker 记忆已禁用",
-          "toggleFailed": "切换 Maker 记忆失败",
-          "resetSuccess_one": "Maker 记忆已重置 — 已移除 {{count}} 个工作目录",
-          "resetSuccess_other": "Maker 记忆已重置 — 已移除 {{count}} 个工作目录",
-          "resetFailed": "重置 Maker 记忆失败"
+          "enabled": "Cindy 记忆已启用",
+          "disabled": "Cindy 记忆已禁用",
+          "toggleFailed": "切换 Cindy 记忆失败",
+          "resetSuccess_one": "Cindy 记忆已重置 — 已移除 {{count}} 个工作目录",
+          "resetSuccess_other": "Cindy 记忆已重置 — 已移除 {{count}} 个工作目录",
+          "resetFailed": "重置 Cindy 记忆失败"
         }
       },
       "agents": {
@@ -1684,7 +1685,7 @@
           "description": "任务调度 —— cron 周期任务 + 一次性提醒"
         },
         "memory": {
-          "name": "Maker 记忆",
+          "name": "Cindy 记忆",
           "description": "跨 agent 的长期记忆，让上下文在会话之间持续"
         },
         "xdt_helper": {
@@ -3364,6 +3365,9 @@
         "emptyTitle": "暂无可用来源",
         "emptyDesc": "连接一个支持当前模型的来源后即可选择",
         "disconnected": "已断开"
+      },
+      "agentSwitch": {
+        "hint": "选择切换到 {{agent}} 后使用的模型"
       }
     },
     "permissionSelector": {
@@ -3547,6 +3551,18 @@
         "overflowDescription": "当前会话已使用 {{used}} 上下文，超出目标模型窗口（{{total}}，约 {{pct}}%）。切换后回复和压缩都可能失败，建议先点击上下文圆环压缩会话，或新建会话使用该模型。仍要切换吗？",
         "confirmSwitch": "仍然切换模型",
         "cancelSwitch": "取消切换"
+      },
+      "agentSwitch": {
+        "engineNotReady": "引擎已切换,但新引擎启动失败;发送消息时会自动重试",
+        "failed": "引擎切换失败,未生效",
+        "deferred": "已登记切换:下一条消息发出时将切换到 {{agent}} · {{model}}",
+        "confirmation": {
+          "title": "切换 Agent？",
+          "description": "新 Agent 引擎会通过交接摘要续接,思考内容等不能保证完美继承;切回时仍可继续原引擎会话。切换还会让 prompt 缓存中断一次,可能造成 Token 消耗的增加。",
+          "confirm": "切换 Agent",
+          "cancel": "保留当前 Agent",
+          "dontShowAgain": "下次不再提醒"
+        }
       }
     },
     "atMention": {
@@ -4040,6 +4056,12 @@
       },
       "autoResume": {
         "label": "连接中断，已自动继续"
+      },
+      "agentSwitch": {
+        "label": "已从 {{from}} 切换到 {{to}}",
+        "toggleHint": "查看交接内容",
+        "handoffTitle": "交接内容——切换时发送给新引擎的上下文摘要(不会出现在你的消息里)",
+        "resumedBadge": "已续接原会话"
       }
     },
     "markdownRenderer": {
@@ -4103,6 +4125,7 @@
       "editSend": "发送",
       "editRollbackHint": "发送将撤销上一轮对 {{count}} 个文件的改动",
       "forkErrors": {
+        "unsupportedHistory": "目标位置跨过了引擎切换边界，无法从这里分叉",
         "noPriorAssistant": "请在 AI 回复之后的消息上分叉",
         "sourceNeverRan": "原会话尚未运行，无法分叉",
         "generic": "分叉失败，请重试"
@@ -6061,6 +6084,8 @@
       "googleConnected": "Google 已连接",
       "codexConnected": "ChatGPT 账号已连接",
       "feishuBotConnected": "飞书机器人已连接",
+      "feishuBotReconnected": "飞书机器人已重新连接",
+      "feishuBotReconnectFailed": "重新连接失败，请检查飞书配置后重试",
       "feishuBotConflict": "该 App 已被占用，可能是同事在用同一个 App ID",
       "feishuBotConnectFailed": "连接失败，请检查 App ID / Secret",
       "feishuBotSaveFailed": "保存失败：{{message}}",
