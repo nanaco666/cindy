@@ -175,7 +175,7 @@ export interface MakerScheduleRunnerDeps {
   beforeDispatchUserTurn?: (sessionId: string) => void | Promise<void>;
   onUndispatchedUserTurn?: (sessionId: string) => void;
   /** heartbeat 直发前落实 deferred agent switch,并 bootstrap 新 live session。 */
-  applyPendingAgentSwitch?: (sessionId: string) => Promise<void>;
+  applyPendingAgentSwitch?: (sessionId: string, signal?: AbortSignal) => Promise<void>;
   /** 可选:撞忙排队桥。未注入时心跳撞忙回退为顺延(deferFire)旧行为。 */
   schedulerQueue?: SchedulerQueueDeps;
 }
@@ -408,7 +408,7 @@ export class MakerScheduleRunner implements ScheduleRunner {
       // 直发路径不经过 makerSendTransaction。先落实 pending switch,再读取 meta/row,
       // 才能让本轮 createSession 与 send 都指向切换后的 live engine。
       throwIfFireAborted(ctx.signal, 'credential switch setup');
-      await this.deps.applyPendingAgentSwitch?.(sessionId);
+      await this.deps.applyPendingAgentSwitch?.(sessionId, ctx.signal);
       throwIfFireAborted(ctx.signal, 'credential switch setup');
       const [meta, row] = await Promise.all([
         this.deps.maker.getSessionMeta(sessionId).catch(() => null),

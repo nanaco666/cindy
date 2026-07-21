@@ -323,6 +323,7 @@ describe('MakerScheduleRunner send outcome policy', () => {
       userSendAt: null,
       providerId: null,
     });
+    const ctx = createFireContext();
 
     await expect(
       runner.fire(
@@ -331,11 +332,12 @@ describe('MakerScheduleRunner send outcome policy', () => {
           agentKind: 'claude-code',
           model: undefined,
         }),
-        createFireContext(),
+        ctx,
       ),
     ).rejects.toThrow(/cancelled-before-dispatch/);
 
     expect(order.slice(0, 2)).toEqual(['apply', 'meta']);
+    expect(applyPendingAgentSwitch).toHaveBeenCalledWith('scheduler-session', ctx.signal);
     expect(maker.createSession).toHaveBeenCalledWith(
       expect.objectContaining({
         id: 'scheduler-session',

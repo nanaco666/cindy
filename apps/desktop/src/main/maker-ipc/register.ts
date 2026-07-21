@@ -1253,7 +1253,7 @@ const rewindInputSessions = new Set<string>();
 const SESSION_REWIND_INPUT_LOCK_ID = 'session-rewind';
 const SESSION_REWIND_STOP_TIMEOUT_MS = 15_000;
 let pendingCredentialSwitchHolder: PendingCredentialSwitchService | null = null;
-let pendingAgentSwitchApplyHolder: ((sessionId: string) => Promise<void>) | null = null;
+let pendingAgentSwitchApplyHolder: ((sessionId: string, signal?: AbortSignal) => Promise<void>) | null = null;
 let gitSnapshotCoordinator: GitSnapshotCoordinator | null = null;
 const sessionTurnActivityTracker = new SessionTurnActivityTracker();
 
@@ -1355,8 +1355,11 @@ export function isSessionInTurn(sessionId: string): boolean {
  * holder 因此要求 apply 成功时同步 bootstrap 新引擎,调用方再重新读取 live session。
  * 启动期 holder 尚未就绪时不可能已有进程内 pending intent,no-op 即可。
  */
-export async function applyPendingAgentSwitchForDirectSend(sessionId: string): Promise<void> {
-  await pendingAgentSwitchApplyHolder?.(sessionId);
+export async function applyPendingAgentSwitchForDirectSend(
+  sessionId: string,
+  signal?: AbortSignal,
+): Promise<void> {
+  await pendingAgentSwitchApplyHolder?.(sessionId, signal);
 }
 
 /**
@@ -3812,8 +3815,11 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
     log,
   };
   registerMakerSessionAgentSwitchHandler(makerSessionRegistry, agentSwitchDeps);
-  pendingAgentSwitchApplyHolder = (sessionId) =>
-    applyPendingAgentSwitchIfIdle(agentSwitchDeps, sessionId, { bootstrapAfterSwitch: true });
+  pendingAgentSwitchApplyHolder = (sessionId, signal) =>
+    applyPendingAgentSwitchIfIdle(agentSwitchDeps, sessionId, {
+      bootstrapAfterSwitch: true,
+      signal,
+    });
 
   ipcMain.handle(MAKER_INVOKE.MARK_ORCA_ROLE, async (_e, sessionId: unknown, role: unknown) => {
     if (typeof sessionId !== 'string') throwIpcError('INVALID_PARAMS', 'sessionId required');
