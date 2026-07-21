@@ -5,7 +5,7 @@
  *  1. 组环境信息(客户端版本 / OS / 界面语言 fallback)—— agent 不参与;
  *  2. await confirm(确认卡片)—— **唯一**通往 postIssue 的路径,取消/超时直接返回;
  *  3. confirmed 后以用户确认的 title/body/type 为准(用户编辑版优先);
- *  4. body 末尾附 env 块,clamp 到 server 上限后 POST。
+ *  4. body 末尾附 env 块,注入当前登录用户展示名,clamp 到 server 上限后 POST。
  *
  * 模块保持 electron-free,全部依赖注入(规则 14),单测直接调 submitGithubIssueWithConfirm。
  */
@@ -51,11 +51,14 @@ export interface GithubIssueSubmitServiceDeps {
     description?: string;
     type: 'bug' | 'feature';
     appVersion: string;
+    userName?: string;
   }) => Promise<{ githubIssue: { number: number; url: string } }>;
   getAppVersion: () => string;
   getOsInfo: () => { platform: string; arch: string; osVersion: string };
   /** main 侧 OS locale,仅当 renderer 未回传 uiLanguage 时兜底。 */
   getFallbackLocale: () => string;
+  /** 当前 Cindy membership 的展示名,仅用于 issue 正文标记提交人。 */
+  getSubmitterName: () => string | undefined;
 }
 
 // server 侧 github.ts 的上限(TITLE_MAX=200 / DESC_MAX=5000),超限会被 400,这里主动 clamp。
@@ -116,6 +119,7 @@ export async function submitGithubIssueWithConfirm(
       description,
       type: decision.type,
       appVersion: env.appVersion,
+      userName: deps.getSubmitterName(),
     });
     return {
       ok: true,

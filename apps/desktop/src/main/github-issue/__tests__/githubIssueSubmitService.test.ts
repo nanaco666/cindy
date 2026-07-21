@@ -37,6 +37,7 @@ function makeDeps(over: Partial<GithubIssueSubmitServiceDeps> = {}) {
     getAppVersion: () => '0.0.112',
     getOsInfo: () => ({ platform: 'darwin', arch: 'arm64', osVersion: '25.5.0' }),
     getFallbackLocale: () => 'en',
+    getSubmitterName: () => 'Dash',
     ...over,
   };
   return { deps, confirm, postIssue };
@@ -79,6 +80,7 @@ describe('submitGithubIssueWithConfirm', () => {
     expect(posted.title).toBe('用户改过的标题');
     expect(posted.type).toBe('feature');
     expect(posted.appVersion).toBe('0.0.112');
+    expect(posted.userName).toBe('Dash');
     expect(posted.description).toContain('用户改过的正文');
     expect(posted.description).toContain('**OS**: darwin arm64 (25.5.0)');
     expect(posted.description).toContain('**界面语言**: ja');
