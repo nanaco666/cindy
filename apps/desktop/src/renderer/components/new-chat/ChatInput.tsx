@@ -25,6 +25,7 @@ import Placeholder from '@tiptap/extension-placeholder';
 import HardBreak from '@tiptap/extension-hard-break';
 import type { Editor } from '@tiptap/core';
 import { CjkPunctDecoration } from './CjkPunctDecoration';
+import { WindowsSelectionReplacement } from './WindowsSelectionReplacement';
 import {
   setVoiceInputDraftDecoration,
   VoiceInputDraftDecoration,
@@ -1405,6 +1406,9 @@ export function ChatInput({
       }),
       MentionChipNode,
       PastedTextChipNode,
+      WindowsSelectionReplacement.configure({
+        enabled: window.electronAPI.platform === 'win32',
+      }),
       CjkPunctDecoration,
       VoiceInputDraftDecoration,
       MentionDragCaretDecoration,
