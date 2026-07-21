@@ -2231,7 +2231,7 @@ describe('AgentIslandService native publishing', () => {
     expect(playSound).not.toHaveBeenCalled();
   });
 
-  it('dispatches expanded top bar commands through the main window', async () => {
+  it('dispatches expanded top bar commands with command-specific window activation', async () => {
     const { AgentIslandService } = await import('../service.js');
     const publish = vi.fn((state: AgentIslandDisplayState, frameOrFrames: AgentIslandNativeFrame | AgentIslandNativeFrame[]) => {
       void state;
@@ -2256,9 +2256,18 @@ describe('AgentIslandService native publishing', () => {
     });
     const dispatchCommand = (
       service as unknown as {
-        dispatchMainWindowCommand(command: 'open-agent-island-settings' | 'new-maker'): void;
+        dispatchMainWindowCommand(
+          command: 'open-agent-island-settings' | 'new-maker' | 'toggle-agent-island-sound',
+        ): void;
       }
     ).dispatchMainWindowCommand.bind(service);
+
+    dispatchCommand('toggle-agent-island-sound');
+
+    expect(restore).not.toHaveBeenCalled();
+    expect(show).not.toHaveBeenCalled();
+    expect(focus).not.toHaveBeenCalled();
+    expect(send).toHaveBeenCalledWith('app-menu:command', 'toggle-agent-island-sound');
 
     dispatchCommand('open-agent-island-settings');
     dispatchCommand('new-maker');
@@ -2266,8 +2275,8 @@ describe('AgentIslandService native publishing', () => {
     expect(restore).toHaveBeenCalledTimes(2);
     expect(show).toHaveBeenCalledTimes(2);
     expect(focus).toHaveBeenCalledTimes(2);
-    expect(send).toHaveBeenNthCalledWith(1, 'app-menu:command', 'open-agent-island-settings');
-    expect(send).toHaveBeenNthCalledWith(2, 'app-menu:command', 'new-maker');
+    expect(send).toHaveBeenNthCalledWith(2, 'app-menu:command', 'open-agent-island-settings');
+    expect(send).toHaveBeenNthCalledWith(3, 'app-menu:command', 'new-maker');
   });
 
   it('does not route already visible secondary sessions through the main window', async () => {
