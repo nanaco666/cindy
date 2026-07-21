@@ -46,6 +46,7 @@ import {
   useSentAttachmentThumbsVersion,
 } from '@/session/sentAttachmentThumbStore';
 import { syntheticTriggerKind } from '@lizi/maker-shared/synthetic-trigger';
+import { stripChatQuoteMarkerLines } from '@lizi/maker-shared/chat-quotes';
 import type { MobileOutboxDisplayItem, MobileOutboxThumb } from '@/session/sessionOutbox';
 import type { InputProjection, QueuedRemoteMessage } from '@/session/types';
 import { iconSize, iconStroke, fontWeight, lineHeight, useTheme, useThemedStyles, type ThemeColors } from '@/theme';
@@ -58,11 +59,19 @@ const COLLAPSED_VISIBLE_ROWS = 3;
  * 排队气泡显示文本:合成 UI 指令行(桌面「失败后继续」等隐藏 prompt)用遮蔽标签
  * 替代原文——裸英文指令不能给用户看(对齐桌面 PendingQueuePanel 的 i18n 遮蔽标签)。
  */
-function queueBubbleText(item: Pick<QueuedRemoteMessage, 'text'>): string {
-  const kind = syntheticTriggerKind(item.text);
+function queueBubbleText(item: Pick<QueuedRemoteMessage, 'text' | 'chatMessage'>): string {
+  const visibleText = item.chatMessage.quotesEncoded === true
+    ? stripChatQuoteMarkerLines(item.text)
+    : item.text;
+  const kind = syntheticTriggerKind(visibleText);
   if (kind === 'continue') return '继续未完成的任务(系统指令)';
   if (kind === 'generic') return '系统指令';
-  return item.text;
+  return visibleText;
+}
+
+/** 本地 outbox 同样不能把产品私有 marker 当正文画出来。 */
+function outboxBubbleText(item: MobileOutboxDisplayItem): string {
+  return item.quotesEncoded ? stripChatQuoteMarkerLines(item.text) : item.text;
 }
 
 /**
@@ -396,6 +405,7 @@ export function InlineQueueSection({
       {outbox.map((item, outboxIndex) => {
         const selected = selectedClientId === item.clientId;
         const uploadsPending = item.attachmentCount > 0 && item.uploadedCount < item.attachmentCount;
+        const visibleText = outboxBubbleText(item);
         return (
           <View key={item.clientId} style={styles.rowWrap} testID={`queue.inline.outbox.${outboxIndex + 1}`}>
             <View style={styles.bubbleRow}>
@@ -408,8 +418,8 @@ export function InlineQueueSection({
               </View>
               <Pressable
                 accessibilityLabel={item.failed
-                  ? `发送失败的消息:${item.text || '附件消息'}`
-                  : `发送中的消息:${item.text || '附件消息'}`}
+                  ? `发送失败的消息:${visibleText || '附件消息'}`
+                  : `发送中的消息:${visibleText || '附件消息'}`}
                 accessibilityRole="button"
                 accessibilityState={{ expanded: selected }}
                 onPress={() => onSelect(selected ? null : item.clientId)}
@@ -420,8 +430,8 @@ export function InlineQueueSection({
                 ]}
                 testID={`queue.inline.outboxBubble.${outboxIndex + 1}`}
               >
-                {item.text ? (
-                  <Text numberOfLines={selected ? undefined : 6} style={styles.bubbleText}>{item.text}</Text>
+                {visibleText ? (
+                  <Text numberOfLines={selected ? undefined : 6} style={styles.bubbleText}>{visibleText}</Text>
                 ) : null}
                 <AttachmentThumbStrip thumbs={item.thumbnails} />
                 {item.fileCount > 0 || uploadsPending ? (

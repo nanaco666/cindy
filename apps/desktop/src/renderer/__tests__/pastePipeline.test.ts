@@ -41,6 +41,7 @@ describe('isLongPasteText / countPasteLines', () => {
   it('detects own chip markup in clipboard HTML (review P2: chip 回环不走管线)', () => {
     expect(htmlCarriesOwnChipMarkup('<span data-pasted-text-chip="" data-pasted-text="x">t</span>')).toBe(true);
     expect(htmlCarriesOwnChipMarkup('<span data-mention-chip="" data-kind="file">a.ts</span>')).toBe(true);
+    expect(htmlCarriesOwnChipMarkup('<span data-composer-quote="" data-quote-text="q">q</span>')).toBe(true);
     expect(htmlCarriesOwnChipMarkup('<a href="https://example.com">普通链接</a>')).toBe(false);
   });
 

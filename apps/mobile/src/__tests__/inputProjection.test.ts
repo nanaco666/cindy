@@ -3,9 +3,12 @@ import {
   buildQueuePanelSummary,
   buildQueueRowPresentation,
   buildQueuedTextMessage,
+  createQueueEditTextState,
   isOrcaQueueItem,
   normalizeInputProjection,
+  queuedMessageHasEncodedQuotes,
   queueMoveTargetIndex,
+  resolveQueueEditTextSubmission,
   stopOptionsForProjection,
 } from '@/session/inputProjection';
 import { buildMobileUploadedAttachment } from '@/session/attachments';
@@ -83,6 +86,48 @@ describe('inputProjection', () => {
       resumeSessionId: 'sdk-abc',
       providerId: 'prov-1',
       remoteHostId: 'host-9',
+    });
+  });
+
+  it('persists the quote encoding flag for desktop and keeps it on the optimistic chat row', () => {
+    const queued = buildQueuedTextMessage(
+      session(),
+      '> <!-- cindy-composer-quote -->\n> selected\n\nreply',
+      new Date('2026-01-01T00:00:05.000Z'),
+      'q-quote',
+      { quotesEncoded: true },
+    );
+
+    expect(JSON.parse(queued.persistedContent)).toEqual({
+      text: '> <!-- cindy-composer-quote -->\n> selected\n\nreply',
+      images: [],
+      files: [],
+      quotesEncoded: true,
+    });
+    expect(queued.chatMessage.quotesEncoded).toBe(true);
+    expect(queuedMessageHasEncodedQuotes(queued)).toBe(true);
+    expect(queuedMessageHasEncodedQuotes({ persistedContent: '{broken' })).toBe(false);
+  });
+
+  it('hides private markers in queue edits and only preserves encoding while text is unchanged', () => {
+    const encoded = '> <!-- cindy-composer-quote -->\n> selected\n\nreply';
+    const queued = buildQueuedTextMessage(
+      session(),
+      encoded,
+      new Date('2026-01-01T00:00:05.000Z'),
+      'q-edit-quote',
+      { quotesEncoded: true },
+    );
+    const state = createQueueEditTextState(queued);
+
+    expect(state.visibleText).toBe('> selected\n\nreply');
+    expect(resolveQueueEditTextSubmission(state, state.visibleText)).toEqual({
+      text: encoded,
+      quotesEncoded: true,
+    });
+    expect(resolveQueueEditTextSubmission(state, '> selected\n\nedited')).toEqual({
+      text: '> selected\n\nedited',
+      quotesEncoded: false,
     });
   });
 

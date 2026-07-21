@@ -13,7 +13,7 @@
  */
 
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { Bot, ChevronDown, ChevronRight, ChevronUp, Download, File as FileIcon, FileText, Folder as FolderIcon, MessageSquareQuote, Sparkles, Target } from 'lucide-react';
+import { Bot, ChevronDown, ChevronRight, ChevronUp, Download, File as FileIcon, FileText, Folder as FolderIcon, Sparkles, Target } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import { cn } from '@/lib/utils';
@@ -37,10 +37,12 @@ import { isRemoteFileOrigin, originDeviceId, toRemoteMediaOrigin } from '@/lib/s
 import { rewriteToRemoteMediaOrigin } from '../../../shared/remoteMediaUrl';
 import { ImageLightbox } from './ImageLightbox';
 import {
-  parseLeadingBlockquotes,
-  quoteSourceDisplayLabel,
-  type ChatQuote,
+  joinChatQuoteTextSegments,
+  parseChatQuoteSegments,
+  stripChatQuoteMarkerLines,
+  type ChatQuoteSegment,
 } from '@/lib/chatQuotes';
+import { quoteSegmentsToComposerDocument } from '@/lib/composerQuoteDocument';
 import { ChatImageView } from './ChatImageView';
 import { TextLightbox } from './TextLightbox';
 import { MessageActionBar } from './MessageActionBar';
@@ -70,6 +72,7 @@ import {
 } from './GhostSummonCard';
 import { AutomationOriginBadge } from './AutomationOriginBadge';
 import { UserMessageUrlLink } from './UserMessageUrlLink';
+import { QuoteChip } from './QuoteChip';
 
 /**
  * image-local-cache: a user-message image can be in two shapes:
@@ -562,14 +565,29 @@ export function UserMessage({
     orcaCommunication || hookSource ? null : splitGhostDirective(displayContent);
   const ghostDirective = ghostSplit?.directive ?? null;
   const ghostBody = ghostSplit?.body ?? displayContent;
-  // chat-text-quote:开头的 blockquote 是"选中文字引用"(见 lib/chatQuotes),
-  // 渲染成 Codex 风格的引用预览块 + "N selections" 胶囊;气泡正文只渲余下部分。
-  // 仅对引用功能产出的消息(quotesEncoded 标志,见 imageRef.ts)启用胶囊化
-  // 解析;历史消息与用户手打的 markdown 引用原样渲染,存量呈现不变。
-  const { quotes: leadingQuotes, body: bubbleBody } =
-    orcaCommunication || !quotesEncoded
-      ? { quotes: [] as ChatQuote[], body: ghostBody }
-      : parseLeadingBlockquotes(ghostBody);
+  // quotesEncoded 消息按正文顺序解析全部引用块,支持引用与回复交错。
+  const quoteSegments = useMemo<ChatQuoteSegment[]>(
+    () =>
+      orcaCommunication || !quotesEncoded
+        ? ghostBody
+          ? [{ kind: 'text', text: ghostBody }]
+          : []
+        : parseChatQuoteSegments(ghostBody),
+    [ghostBody, orcaCommunication, quotesEncoded],
+  );
+  // 意识指令等既有语义判断只看用户自己的正文,不把引用原文误识别成命令。
+  const bubbleBody = useMemo(
+    () => joinChatQuoteTextSegments(quoteSegments),
+    [quoteSegments],
+  );
+  const inlineQuoteCount = quoteSegments.reduce(
+    (count, segment) => count + (segment.kind === 'quote' ? 1 : 0),
+    0,
+  );
+  const quoteDraftDocument = useMemo(
+    () => quotesEncoded ? quoteSegmentsToComposerDocument(quoteSegments) : undefined,
+    [quoteSegments, quotesEncoded],
+  );
   // $指令 开头且确认命中意识时,消息走"合并形态":不渲文字气泡,prompt
   // (剥掉指令 token 的余文)收进召唤卡卡身;普通消息里的 $word 不受影响。
   const ghostCmdWord =
@@ -638,23 +656,22 @@ export function UserMessage({
   // copy text per V1.2: original text + (if files) "\n\n附件：a.md, b.md"
   // ghost-summon-card:copy 给用户的是"他自己的话"(剥离机器追加段);
   // 追加段原文在卡片展开区可查可选中。
+  const copyBody = quotesEncoded ? stripChatQuoteMarkerLines(ghostBody) : ghostBody;
   const copyText = hasFiles
-    ? `${ghostBody}\n\n${t('chat.userMessage.attachmentPrefix')}${files!.map((f) => f.name).join(', ')}`
-    : ghostBody;
+    ? `${copyBody}\n\n${t('chat.userMessage.attachmentPrefix')}${files!.map((f) => f.name).join(', ')}`
+    : copyBody;
 
   // fork-from-here: only wire when both sessionId + messageClientId are
   // present (older code paths that render UserMessage without these props
   // simply won't show the Fork button). 流程收敛在 useForkAtMessage —
   // user 消息分叉把提问文本预填进新会话 composer。
-  // 预填用解析后的 body + quotes(非 quotesEncoded 消息 leadingQuotes 恒空、
-  // bubbleBody === displayContent,行为不变):引用以草稿态还原成胶囊,重发
-  // 时 ChatInput 重新编码并带上 quotesEncoded,不丢标志。
+  // inline quote 消息用完整文档保留正文 / 引用的交错顺序。
   const handleFork = useForkAtMessage({
     sessionId,
     messageClientId,
     forkBlocked: shouldBlockUserFork(sessionRunning, delivery),
-    draftText: bubbleBody,
-    draftQuotes: leadingQuotes,
+    draftText: quotesEncoded ? undefined : bubbleBody,
+    draftDocument: quoteDraftDocument,
   });
 
   // 第一条 user 消息：fork 出来等价于复制整条 session（fork 点之前没东西），藏掉。
@@ -686,14 +703,12 @@ export function UserMessage({
       // Rewind soft-deletes this row server-side (rewind_at set), so on next
       // reload it disappears from the list; the composer keeps the draft so
       // the user can edit and re-send.
-      // 同 fork 预填:body 进文本、引用还原草稿态胶囊(见 handleFork 处注释)。
-      const draftText = textToTiptapDoc(bubbleBody);
+      const draftText = quoteDraftDocument ?? textToTiptapDoc(bubbleBody);
       const draftAttachments = buildRewindDraftAttachments({ images, files });
-      if (draftText || draftAttachments.length > 0 || leadingQuotes.length > 0) {
+      if (draftText || draftAttachments.length > 0) {
         saveComposerDraft(sessionId, {
           text: draftText,
           attachments: draftAttachments,
-          ...(leadingQuotes.length > 0 ? { quotes: leadingQuotes } : {}),
         });
       }
       // Patch sidebar: tokens reset, sdkSessionId may have changed, bump
@@ -708,7 +723,7 @@ export function UserMessage({
       // Force chat store to re-fetch messages (server filters rewind_at).
       makerChatStore.reloadMessages(sessionId);
     },
-    [sessionId, bubbleBody, leadingQuotes, images, files],
+    [sessionId, bubbleBody, quoteDraftDocument, images, files],
   );
 
   // 第一条 user 消息没有可作为锚点的 prior assistant uuid → 后端必抛
@@ -973,7 +988,8 @@ export function UserMessage({
           <UserMessageEditBox
             sessionId={sessionId}
             messageClientId={messageClientId}
-            initialText={ghostBody}
+            initialText={copyBody}
+            initialSubmitText={quotesEncoded ? ghostBody : undefined}
             images={images}
             files={files}
             workingDir={workingDir}
@@ -984,66 +1000,20 @@ export function UserMessage({
             onSent={exitEditing}
             {...(isBlocked
               ? {
-                  onCommitOverride: (nextText: string) =>
-                    makerChatStore.resendBlockedMessage(sessionId, messageClientId, nextText),
+                  onCommitOverride: (submission) =>
+                    makerChatStore.resendBlockedMessage(
+                      sessionId,
+                      messageClientId,
+                      submission.text,
+                      submission.quotesEncoded ? { quotesEncoded: true } : undefined,
+                    ),
                 }
               : {})}
           />
         ) : (
           <>
-        {/* chat-text-quote(Codex 风格):正文气泡上方只挂一个 "N 处引用" 胶囊,
-            引用内容 hover 胶囊才浮出预览(与输入框侧同款交互)。 */}
-        {leadingQuotes.length > 0 && (
-          <div className="group/msgquote relative inline-flex">
-            <span
-              className="inline-flex max-w-full items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px]"
-              style={{
-                borderColor: 'var(--msg-user-border)',
-                color: 'var(--text-secondary)',
-              }}
-            >
-              <MessageSquareQuote size={12} strokeWidth={2} aria-hidden className="shrink-0" />
-              <span className="min-w-0 truncate">
-                {t('chat.quote.selectionCount', { count: leadingQuotes.length })}
-              </span>
-            </span>
-            {/* hover 预览:右对齐锚定(消息列靠右,左锚会溢出视口)。 */}
-            <div
-              className="pointer-events-none absolute bottom-full right-0 z-30 mb-2 hidden max-h-64 w-80 max-w-[70vw] flex-col gap-2 overflow-hidden rounded-[12px] border p-3 group-hover/msgquote:flex"
-              style={{
-                backgroundColor: 'var(--surface-elevated)',
-                borderColor: 'var(--border-default)',
-                boxShadow: 'var(--shadow-menu)',
-              }}
-            >
-              {leadingQuotes.map((quote, idx) => (
-                // biome-ignore lint/suspicious/noArrayIndexKey: 消息内容不可变,index 稳定。
-                <span key={idx} className="flex min-w-0 flex-col gap-0.5">
-                  <span
-                    className="line-clamp-3 whitespace-pre-wrap text-[12px] leading-[1.5] [overflow-wrap:anywhere]"
-                    style={{ color: 'var(--text-secondary)' }}
-                  >
-                    “{quote.text}”
-                  </span>
-                  {quote.sourcePath ? (
-                    <span
-                      className="inline-flex items-center gap-1 text-[11px]"
-                      style={{ color: 'var(--text-tertiary)' }}
-                    >
-                      <FileText size={12} strokeWidth={1.75} aria-hidden className="shrink-0" />
-                      <span className="truncate">{quoteSourceDisplayLabel(quote)}</span>
-                    </span>
-                  ) : null}
-                </span>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Text bubble — only render if there is text;合并形态($指令 命中
-            意识 / 软提示被兑现 / 语义自主召唤)整条消息由召唤卡承载,
-            不再渲文字气泡。 */}
-        {bubbleBody.trim() && !ghostMergedForm && (
+        {/* 合并形态下用户正文由召唤卡承载,但引用上下文仍留在原消息中。 */}
+        {(inlineQuoteCount > 0 || (bubbleBody.trim() && !ghostMergedForm)) && (
           <div
             className={cn(
               // overflow-wrap:anywhere（不是 break-words）才能让超长无空格序列
@@ -1074,13 +1044,54 @@ export function UserMessage({
                 {bubbleBody}
               </div>
             )}
-            <div
-              className={cn(
-                'whitespace-pre-wrap [overflow-wrap:anywhere]',
-                longMessageCollapsed && (automationOrigin ? 'line-clamp-3' : 'line-clamp-10'),
-              )}
-            >
-              {longMessageCollapsed
+            {inlineQuoteCount > 0 ? (
+              <div
+                className={cn(
+                  'min-w-0 whitespace-pre-wrap [overflow-wrap:anywhere]',
+                  longMessageCollapsed && (automationOrigin ? 'line-clamp-3' : 'line-clamp-10'),
+                )}
+              >
+                {quoteSegments.map((segment, index) =>
+                  segment.kind === 'quote' ? (
+                    <span
+                      // biome-ignore lint/suspicious/noArrayIndexKey: 已发送消息内容不可变,顺序稳定。
+                      key={index}
+                      className="inline-block max-w-[min(240px,55vw)] select-none px-2 align-middle"
+                    >
+                      <QuoteChip quote={segment.quote} />
+                    </span>
+                  ) : ghostMergedForm ? null : (
+                    <span
+                      // biome-ignore lint/suspicious/noArrayIndexKey: 已发送消息内容不可变,顺序稳定。
+                      key={index}
+                    >
+                      {longMessageCollapsed
+                        ? segment.text
+                        : renderContent(
+                            segment.text,
+                            workingDir,
+                            async (abs, name, btn) => {
+                              if (!(await shouldOpenTextLightboxForOrigin(sessionFileCtx, abs))) return;
+                              activeFileChipRef.current = btn;
+                              setTextLightboxFile({ path: abs, name });
+                            },
+                            (xdtFileUrl) => setLightboxSrc(xdtFileUrl),
+                            t,
+                            sessionId,
+                            isRemoteFileOrigin(sessionFileCtx.origin),
+                          )}
+                    </span>
+                  ),
+                )}
+              </div>
+            ) : (
+              <div
+                className={cn(
+                  'whitespace-pre-wrap [overflow-wrap:anywhere]',
+                  longMessageCollapsed && (automationOrigin ? 'line-clamp-3' : 'line-clamp-10'),
+                )}
+              >
+                {longMessageCollapsed
                 // Collapsed chips render as plain text on purpose: otherwise
                 // clipped links/file chips can remain focusable behind the
                 // visual clamp. Expanding restores the rich chip rendering.
@@ -1101,7 +1112,8 @@ export function UserMessage({
                     sessionId,
                     isRemoteFileOrigin(sessionFileCtx.origin),
                   )}
-            </div>
+              </div>
+            )}
             {shouldCollapseLongMessage && (
               <button
                 type="button"

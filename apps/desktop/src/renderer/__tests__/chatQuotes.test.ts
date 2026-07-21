@@ -9,20 +9,26 @@ import {
 describe('formatQuotesForSend', () => {
   it('prefixes each quote line and separates quotes with a blank line (markdown semantics)', () => {
     expect(formatQuotesForSend([{ text: 'a\nb' }, { text: 'c' }], 'hello')).toBe(
-      '> a\n> b\n\n> c\n\nhello',
+      '> <!-- cindy-composer-quote -->\n> a\n> b\n\n> <!-- cindy-composer-quote -->\n> c\n\nhello',
     );
   });
 
   it('encodes intra-quote empty lines as a bare ">" (no trailing space to trim)', () => {
-    expect(formatQuotesForSend([{ text: 'a\n\nb' }], 'hi')).toBe('> a\n>\n> b\n\nhi');
+    expect(formatQuotesForSend([{ text: 'a\n\nb' }], 'hi')).toBe(
+      '> <!-- cindy-composer-quote -->\n> a\n>\n> b\n\nhi',
+    );
   });
 
   it('normalizes leading/trailing blank lines so the block never starts with a bare ">"', () => {
     // 开头裸 ">" 会被 parseLeadingBlockquotes 的早退守卫拒收(用户手打保护),
     // 采集侧选区吃进段落边界空行时必须在编码前剔除。
-    expect(formatQuotesForSend([{ text: '\n\nselected\n' }], 'hi')).toBe('> selected\n\nhi');
+    expect(formatQuotesForSend([{ text: '\n\nselected\n' }], 'hi')).toBe(
+      '> <!-- cindy-composer-quote -->\n> selected\n\nhi',
+    );
     const sent = formatQuotesForSend([{ text: '\nfirst\n\nsecond\n\n', sourcePath: 'a.md' }], 'body');
-    expect(sent).toBe('> first\n>\n> second\n> — source: a.md\n\nbody');
+    expect(sent).toBe(
+      '> <!-- cindy-composer-quote -->\n> first\n>\n> second\n> — source: a.md\n\nbody',
+    );
     expect(parseLeadingBlockquotes(sent)).toEqual({
       quotes: [{ text: 'first\n\nsecond', sourcePath: 'a.md' }],
       body: 'body',
@@ -31,17 +37,17 @@ describe('formatQuotesForSend', () => {
 
   it('appends a source line for file quotes', () => {
     expect(formatQuotesForSend([{ text: 'a', sourcePath: 'docs/x.md' }], 'hi')).toBe(
-      '> a\n> — source: docs/x.md\n\nhi',
+      '> <!-- cindy-composer-quote -->\n> a\n> — source: docs/x.md\n\nhi',
     );
   });
 
   it('appends source line numbers for file quotes', () => {
     expect(
       formatQuotesForSend([{ text: 'a', sourcePath: 'docs/x.md', startLine: 12, endLine: 18 }], 'hi'),
-    ).toBe('> a\n> — source: docs/x.md#L12-L18\n\nhi');
+    ).toBe('> <!-- cindy-composer-quote -->\n> a\n> — source: docs/x.md#L12-L18\n\nhi');
     expect(
       formatQuotesForSend([{ text: 'a', sourcePath: 'docs/x.md', startLine: 12, endLine: 12 }], 'hi'),
-    ).toBe('> a\n> — source: docs/x.md#L12\n\nhi');
+    ).toBe('> <!-- cindy-composer-quote -->\n> a\n> — source: docs/x.md#L12\n\nhi');
   });
 
   it('returns body untouched when there are no quotes', () => {
@@ -49,7 +55,9 @@ describe('formatQuotesForSend', () => {
   });
 
   it('trims the trailing gap for quote-only sends', () => {
-    expect(formatQuotesForSend([{ text: 'a' }], '')).toBe('> a');
+    expect(formatQuotesForSend([{ text: 'a' }], '')).toBe(
+      '> <!-- cindy-composer-quote -->\n> a',
+    );
   });
 });
 

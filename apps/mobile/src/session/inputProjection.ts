@@ -2,6 +2,7 @@ import {
   buildAttachmentPersistFileRefs,
   buildAttachmentPersistImageRefs,
 } from '@/session/attachments';
+import { stripChatQuoteMarkerLines } from '@lizi/maker-shared/chat-quotes';
 import type { InputProjection, QueuedRemoteMessage, RemoteImageRef, RemoteSession } from '@/session/types';
 import type { RemoteSerializedAttachment } from '@/session/types';
 export {
@@ -69,7 +70,10 @@ export function buildQueuedTextMessage(
   text: string,
   now = new Date(),
   clientId = createUuid(),
-  options: { attachments?: readonly RemoteSerializedAttachment[] } = {},
+  options: {
+    attachments?: readonly RemoteSerializedAttachment[];
+    quotesEncoded?: boolean;
+  } = {},
 ): QueuedRemoteMessage {
   const trimmed = text.trim();
   const attachments = options.attachments ?? [];
@@ -79,7 +83,12 @@ export function buildQueuedTextMessage(
   const effort = session.effort || '';
   const permissionMode = session.permissionMode || 'bypassPermissions';
   const agentKind = session.agentKind === 'codex' ? 'codex' : 'claude-code';
-  const persistedContent = stringifyUserContent(trimmed, persistedImageRefs, persistedFileRefs);
+  const persistedContent = stringifyUserContent(
+    trimmed,
+    persistedImageRefs,
+    persistedFileRefs,
+    options.quotesEncoded === true,
+  );
   const createdAt = now.toISOString();
 
   return {
@@ -97,6 +106,7 @@ export function buildQueuedTextMessage(
       content: trimmed,
       ...(persistedImageRefs.length > 0 ? { images: persistedImageRefs } : {}),
       ...(persistedFileRefs.length > 0 ? { files: persistedFileRefs } : {}),
+      ...(options.quotesEncoded === true ? { quotesEncoded: true } : {}),
       isStreaming: false,
       createdAt,
     },
@@ -125,8 +135,58 @@ function stringifyUserContent(
   text: string,
   images: RemoteImageRef[] = [],
   files: Array<{ name: string; path: string }> = [],
+  quotesEncoded = false,
 ): string {
-  return JSON.stringify({ text, images, files });
+  return JSON.stringify({
+    text,
+    images,
+    files,
+    ...(quotesEncoded ? { quotesEncoded: true } : {}),
+  });
+}
+
+/** 排队编辑时从持久化信封恢复引用标志，避免整条替换后 marker 退化为正文。 */
+export function queuedMessageHasEncodedQuotes(
+  message: Pick<QueuedRemoteMessage, 'persistedContent'>,
+): boolean {
+  try {
+    return readRecord(JSON.parse(message.persistedContent))?.quotesEncoded === true;
+  } catch {
+    return false;
+  }
+}
+
+/** 排队引用消息进入 composer 时的可见文本与无损提交基线。 */
+export interface QueueEditTextState {
+  visibleText: string;
+  encodedText: string;
+  quotesEncoded: boolean;
+}
+
+export function createQueueEditTextState(
+  message: Pick<QueuedRemoteMessage, 'text' | 'persistedContent'>,
+): QueueEditTextState {
+  const quotesEncoded = queuedMessageHasEncodedQuotes(message);
+  return {
+    visibleText: quotesEncoded ? stripChatQuoteMarkerLines(message.text) : message.text,
+    encodedText: message.text,
+    quotesEncoded,
+  };
+}
+
+/**
+ * 引用消息可见文本未改时复用原 marked body；一旦用户编辑 markerless 文本，
+ * 就同步移除 quotesEncoded，避免普通 Markdown blockquote 被误还原成产品引用。
+ */
+export function resolveQueueEditTextSubmission(
+  state: QueueEditTextState,
+  visibleText: string,
+): { text: string; quotesEncoded: boolean } {
+  const preserveEncodedBody = state.quotesEncoded && visibleText === state.visibleText;
+  return {
+    text: preserveEncodedBody ? state.encodedText : visibleText.trim(),
+    quotesEncoded: preserveEncodedBody,
+  };
 }
 
 function readQueuedMessages(value: unknown): QueuedRemoteMessage[] {

@@ -97,6 +97,56 @@ describe('UserMessageEditBox — idle 发送', () => {
     expect(props.onRequestStop).not.toHaveBeenCalled();
   });
 
+  it('引用编辑框隐藏 marker，未修改时仍提交保序原文，修改后只提交可见文本', async () => {
+    const encoded = '> <!-- cindy-composer-quote -->\n> quoted\n\nreply';
+    const visible = '> quoted\n\nreply';
+    const first = renderBox({ initialText: visible, initialSubmitText: encoded, quotesEncoded: true });
+    expect(first.textarea.value).toBe(visible);
+    expect(first.textarea.value).not.toContain('cindy-composer-quote');
+    fireEvent.click(first.sendBtn);
+    await waitFor(() => expect(commitMock).toHaveBeenCalledTimes(1));
+    expect(commitMock.mock.calls[0][0].text).toBe(encoded);
+    expect(commitMock.mock.calls[0][0].quotesEncoded).toBe(true);
+    first.unmount();
+
+    vi.clearAllMocks();
+    const second = renderBox({ initialText: visible, initialSubmitText: encoded, quotesEncoded: true });
+    fireEvent.change(second.textarea, { target: { value: 'edited reply' } });
+    fireEvent.click(second.sendBtn);
+    await waitFor(() => expect(commitMock).toHaveBeenCalledTimes(1));
+    expect(commitMock.mock.calls[0][0].text).toBe('edited reply');
+    expect(commitMock.mock.calls[0][0].quotesEncoded).toBeUndefined();
+  });
+
+  it('被拦消息覆盖重发仅在引用正文未修改时透传 quote metadata', async () => {
+    const encoded = '> <!-- cindy-composer-quote -->\n> quoted\n\nreply';
+    const visible = '> quoted\n\nreply';
+    const firstOverride = vi.fn(async () => {});
+    const first = renderBox({
+      initialText: visible,
+      initialSubmitText: encoded,
+      quotesEncoded: true,
+      onCommitOverride: firstOverride,
+    });
+    fireEvent.click(first.sendBtn);
+    await waitFor(() => expect(firstOverride).toHaveBeenCalledWith({
+      text: encoded,
+      quotesEncoded: true,
+    }));
+    first.unmount();
+
+    const editedOverride = vi.fn(async () => {});
+    const second = renderBox({
+      initialText: visible,
+      initialSubmitText: encoded,
+      quotesEncoded: true,
+      onCommitOverride: editedOverride,
+    });
+    fireEvent.change(second.textarea, { target: { value: 'edited reply' } });
+    fireEvent.click(second.sendBtn);
+    await waitFor(() => expect(editedOverride).toHaveBeenCalledWith({ text: 'edited reply' }));
+  });
+
   it('提交挂起期间重复点发送不会二次提交(同步 ref 防重入)', async () => {
     let release: () => void = () => {};
     commitMock.mockImplementationOnce(

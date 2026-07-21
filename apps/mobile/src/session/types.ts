@@ -177,6 +177,7 @@ export interface QueuedRemoteMessage {
     content: string;
     files?: RemoteFileRef[];
     images?: RemoteImageRef[];
+    quotesEncoded?: boolean;
     isStreaming?: boolean;
     createdAt: string;
   };

@@ -136,6 +136,26 @@ describe('normalizeRemoteMessages', () => {
     ]);
   });
 
+  it('preserves the desktop-compatible quote encoding flag', () => {
+    const [item] = normalizeRemoteMessages([
+      message({
+        id: 'quoted-user',
+        role: 'user',
+        content: JSON.stringify({
+          text: '> <!-- cindy-composer-quote -->\n> selected\n\nreply',
+          images: [],
+          files: [],
+          quotesEncoded: true,
+        }),
+      }),
+    ]);
+
+    expect(item).toMatchObject({
+      kind: 'user',
+      quotesEncoded: true,
+    });
+  });
+
   it('summarizes tool_use, attaches matching tool_result, and hides standalone tool_result', () => {
     const items = normalizeRemoteMessages([
       message({

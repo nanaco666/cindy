@@ -3,8 +3,8 @@
  *
  * 交互(对标图片标注的"发送到对话"心智):在消息流([data-scroll-container])
  * 内选中任意文字,选区上方浮出胶囊按钮;点击把选中文本追加进当前会话草稿的
- * 引用列表(composerDraftStore.appendQuoteToDraft,非 silent → ChatInput 的
- * 引用条即时出现并聚焦输入框),随后清除选区、按钮消失。
+ * 正文(composerDraftStore.appendQuoteToDraft,非 silent → ChatInput 立即插入
+ * 引用块并把光标放到其后),随后清除选区、按钮消失。
  *
  * 实现要点:
  * - selectionchange 只负责"选区塌缩就隐藏";按钮定位在 mouseup 时计算一次
@@ -203,9 +203,8 @@ export function SelectionQuoteButton({
       // 前导**缩进空格**必须保留:空白敏感代码(FileBodyView 选中缩进行)的
       // 引用要与文件原文逐字符一致,模型才能按引用文本定位 / 精准编辑。但前
       // 导 / 尾部**换行**要剥:对定位无意义,且以换行开头的引用会让
-      // formatQuotesForSend 的首行产出裸 `>`,parseLeadingBlockquotes 的
-      // `startsWith('> ')` 守卫失配,整条消息回落裸 blockquote 渲染(bot
-      // review 指出)。trim 仅用于上面的空选区判定。
+      // formatQuoteForSend 的首行产出裸 `>`,引用解析的 `> ` 守卫会失配。
+      // trim 仅用于上面的空选区判定。
       const text = raw.replace(/^[\r\n]+/, '').replace(/[\r\n]+$/, '');
       const container = containerRef.current;
       if (!container) return null;

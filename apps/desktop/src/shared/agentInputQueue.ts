@@ -8,6 +8,8 @@
  * sides from quietly inventing different meanings for the same queued row.
  */
 
+import { stripChatQuoteMarkerLines } from '@lizi/maker-shared/chat-quotes';
+
 export type AgentInputFileCategory = 'image' | 'pdf' | 'text' | 'office' | 'file';
 
 export interface AgentInputSerializedFile {
@@ -57,6 +59,7 @@ export interface AgentInputChatMessage {
   createdAt?: string;
   images?: Array<AgentInputImageRef | AgentInputFallbackImage>;
   files?: Array<{ name: string; path: string }>;
+  quotesEncoded?: boolean;
 }
 
 export interface AgentInputCreateOpts {
@@ -187,23 +190,36 @@ export function updateQueuedMessageText(
   entry: AgentInputQueuedMessage,
   newText: string,
 ): AgentInputQueuedMessage {
+  const hasEncodedQuoteMarker = stripChatQuoteMarkerLines(newText) !== newText;
   let nextPersisted = entry.persistedContent;
   try {
     const parsed = JSON.parse(entry.persistedContent) as Record<string, unknown>;
-    nextPersisted = parsed && typeof parsed === 'object'
-      ? JSON.stringify({ ...parsed, text: newText })
-      : newText;
+    if (parsed && typeof parsed === 'object') {
+      const nextParsed: Record<string, unknown> = { ...parsed, text: newText };
+      // A rewrite can only retain product-quote identity when it preserves an
+      // explicit marker. Keep unknown historical payloads untouched, but
+      // remove the real boolean flag before ordinary Markdown is reparsed as
+      // quote chips by desktop/mobile history renderers.
+      if (!hasEncodedQuoteMarker && nextParsed.quotesEncoded === true) {
+        delete nextParsed.quotesEncoded;
+      }
+      nextPersisted = JSON.stringify(nextParsed);
+    } else {
+      nextPersisted = newText;
+    }
   } catch {
     nextPersisted = newText;
   }
+  const nextChatMessage = {
+    ...entry.chatMessage,
+    content: newText,
+  };
+  if (!hasEncodedQuoteMarker) delete nextChatMessage.quotesEncoded;
   return {
     ...entry,
     text: newText,
     persistedContent: nextPersisted,
-    chatMessage: {
-      ...entry.chatMessage,
-      content: newText,
-    },
+    chatMessage: nextChatMessage,
   };
 }
 

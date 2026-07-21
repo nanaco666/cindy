@@ -17,6 +17,12 @@
  * 在 [sessionId].tsx。
  */
 import type { RemoteSerializedAttachment } from '@/session/types';
+import {
+  joinChatQuoteTextSegments,
+  parseChatQuoteSegments,
+  stripChatQuoteMarkerLines,
+  type ChatQuote,
+} from '@lizi/maker-shared/chat-quotes';
 
 /** 预生成消息 clientId(与 inputProjection.buildQueuedTextMessage 的缺省实现同构)。 */
 export function createOutboxClientId(): string {
@@ -44,6 +50,8 @@ export interface MobileOutboxItem {
   sessionId: string;
   /** 最终发送文本(引用块已前置)。 */
   text: string;
+  /** 发送文本包含产品引用块；dispatch 时必须同步写进 persistedContent。 */
+  quotesEncoded: boolean;
   /**
    * 发送时刻的权限档快照:plan 一次性语义在点发送时就恢复会话档,dispatch 重读
    * store 拿到的已是恢复后的值,消息本身必须仍按发送时刻的档位派发。
@@ -83,6 +91,7 @@ export interface MobileOutboxThumb {
 export interface MobileOutboxDisplayItem {
   clientId: string;
   text: string;
+  quotesEncoded: boolean;
   attachmentCount: number;
   uploadedCount: number;
   /** 图片槽缩略格(按槽序);非图片附件走 fileCount 计数行。 */
@@ -94,10 +103,28 @@ export interface MobileOutboxDisplayItem {
   errorText: string | null;
 }
 
+/**
+ * Outbox 条目无法回插消息流时，恢复 composer 所需的可见正文与引用真相。
+ * `encodedBody` 保留 marker/交错顺序，仅在 quote store 校验仍通过时复用；
+ * `visibleText` 永不暴露私有 marker，供普通草稿输入框直接显示。
+ */
+export interface MobileOutboxDraftRecovery {
+  visibleText: string;
+  encodedBody: string;
+  quotes: ChatQuote[];
+}
+
+export interface MobileOutboxExistingDraft {
+  visibleText: string;
+  encodedBody: string;
+  quotes: readonly ChatQuote[];
+}
+
 export function buildOutboxItem(input: {
   clientId: string;
   sessionId: string;
   text: string;
+  quotesEncoded?: boolean;
   permissionModeAtSend: string;
   /** 发送时刻已就绪的附件(占前段槽位)。 */
   readyAttachments: readonly RemoteSerializedAttachment[];
@@ -131,6 +158,7 @@ export function buildOutboxItem(input: {
     clientId: input.clientId,
     sessionId: input.sessionId,
     text: input.text,
+    quotesEncoded: input.quotesEncoded === true,
     permissionModeAtSend: input.permissionModeAtSend,
     attachmentSlots: slots,
     slotMeta,
@@ -139,6 +167,54 @@ export function buildOutboxItem(input: {
     failedIds,
     enqueueError: null,
     phase: failedIds.length > 0 ? 'failed' : 'uploading',
+  };
+}
+
+/** 将一组同会话 outbox 条目按 FIFO 顺序合并回一个可持久化 composer 草稿。 */
+export function recoverOutboxItemsToComposerDraft(
+  items: readonly MobileOutboxItem[],
+  existingDraft?: MobileOutboxExistingDraft | null,
+): MobileOutboxDraftRecovery {
+  const visibleParts: string[] = [];
+  const encodedParts: string[] = [];
+  const quotes: ChatQuote[] = [];
+
+  for (const item of items) {
+    const encodedText = item.text.trim();
+    if (!encodedText) continue;
+    encodedParts.push(encodedText);
+    if (!item.quotesEncoded) {
+      visibleParts.push(encodedText);
+      continue;
+    }
+
+    const segments = parseChatQuoteSegments(encodedText);
+    const itemQuotes = segments.flatMap((segment) => (
+      segment.kind === 'quote' ? [segment.quote] : []
+    ));
+    quotes.push(...itemQuotes);
+    const visibleText = (
+      itemQuotes.length > 0
+        ? joinChatQuoteTextSegments(segments)
+        : stripChatQuoteMarkerLines(encodedText)
+    ).trim();
+    if (visibleText) visibleParts.push(visibleText);
+  }
+
+  const normalizedExistingVisibleText = existingDraft?.visibleText.trim() ?? '';
+  const normalizedExistingEncodedBody = existingDraft?.encodedBody.trim() ?? '';
+  if (normalizedExistingVisibleText) {
+    visibleParts.push(normalizedExistingVisibleText);
+  }
+  if (normalizedExistingEncodedBody) {
+    encodedParts.push(normalizedExistingEncodedBody);
+  }
+  quotes.push(...(existingDraft?.quotes ?? []));
+
+  return {
+    visibleText: visibleParts.join('\n\n'),
+    encodedBody: encodedParts.join('\n\n'),
+    quotes,
   };
 }
 
@@ -230,6 +306,7 @@ export function outboxDisplayItem(item: MobileOutboxItem): MobileOutboxDisplayIt
   return {
     clientId: item.clientId,
     text: item.text,
+    quotesEncoded: item.quotesEncoded,
     attachmentCount,
     uploadedCount,
     thumbnails,

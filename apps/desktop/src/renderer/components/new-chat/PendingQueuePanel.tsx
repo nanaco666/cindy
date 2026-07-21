@@ -50,7 +50,10 @@ import {
   isPendingQueueRowActive,
   prunePendingQueueRowActivity,
 } from './pendingQueueRowActivity';
-import { getPendingQueueRowPresentation } from './pendingQueueRowPresentation';
+import {
+  getPendingQueueRowPresentation,
+  resolvePendingQueueEditSubmission,
+} from './pendingQueueRowPresentation';
 import {
   acquireQueueEditLock,
   acquireQueueInteractionLock,
@@ -258,12 +261,16 @@ export function PendingQueuePanel({
     if (editingClientId === null) return;
     const trimmed = editingDraft.trim();
     if (trimmed.length > 0) {
-      onEdit?.(editingClientId, editingDraft);
+      const entry = queue.find((item) => item.clientId === editingClientId);
+      const submission = entry
+        ? resolvePendingQueueEditSubmission(entry, editingDraft)
+        : null;
+      if (submission !== null) onEdit?.(editingClientId, submission);
     }
     releaseEditLock(editingClientId);
     setEditingClientId(null);
     setEditingDraft('');
-  }, [editingClientId, editingDraft, onEdit, releaseEditLock]);
+  }, [editingClientId, editingDraft, onEdit, queue, releaseEditLock]);
 
   const handleSortableReorder = useCallback(
     (nextVisibleIds: string[]) => {
@@ -569,7 +576,7 @@ export function PendingQueuePanel({
                     <Tip text={t('newChat.pendingQueue.editAction')} side="top">
                       <button
                         type="button"
-                        onClick={() => beginEdit(entry.clientId, entry.text)}
+                        onClick={() => beginEdit(entry.clientId, rowPresentation.displayText)}
                         aria-label={t('newChat.pendingQueue.editAria', { index: originalIdx + 1 })}
                         className={iconButtonClassName}
                       >

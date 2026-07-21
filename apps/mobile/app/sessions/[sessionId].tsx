@@ -71,7 +71,7 @@ import { useMobileMakerTransport } from '@/device-link/useMobileMakerTransport';
 import { startFocusedTopicSubscription } from '@/device-link/focusedTopicSubscription';
 import { useObserve } from '@/observability/observe';
 import { InteractionPanel, type MobilePlanViewerState } from '@/session/InteractionPanel';
-import { MessageRenderer } from '@/session/MessageRenderer';
+import { MessageRenderer, type MobileMessageDraft } from '@/session/MessageRenderer';
 import { InlineQueueSection } from '@/session/InlineQueueSection';
 import { RewindPreviewPanel } from '@/session/RewindPreviewPanel';
 import { BlurBackdrop } from '@/session/BlurBackdrop';
@@ -159,7 +159,17 @@ import {
 } from '@/session/composerPalette';
 import { buildComposerTouchLayout } from '@/session/composerTouchLayout';
 import { flushComposerDraftWrites, readComposerDraft, readComposerDraftSync, saveComposerDraft } from '@/session/composerDraftStore';
-import { appendQuote, clearQuotes, getQuotes, hydrateQuotes, setQuotes, truncateQuoteText, useSessionQuotes } from '@/session/chatQuoteStore';
+import {
+  appendQuote,
+  clearQuotes,
+  getQuotes,
+  hydrateQuotes,
+  resolveOrderedQuoteDraft,
+  setOrderedQuoteDraft,
+  setQuotes,
+  truncateQuoteText,
+  useSessionQuotes,
+} from '@/session/chatQuoteStore';
 import { QuoteCapsule } from '@/session/QuoteCapsule';
 import { formatQuotesForSend } from '@lizi/maker-shared/chat-quotes';
 import {
@@ -167,7 +177,14 @@ import {
   drainComposerAttachments,
   queueComposerAnnotationSubmission,
 } from '@/session/composerAttachmentInbox';
-import { buildQueuedTextMessage, stopOptionsForProjection } from '@/session/inputProjection';
+import {
+  buildQueuedTextMessage,
+  createQueueEditTextState,
+  queuedMessageHasEncodedQuotes,
+  resolveQueueEditTextSubmission,
+  stopOptionsForProjection,
+  type QueueEditTextState,
+} from '@/session/inputProjection';
 import { findErrorTailClientId, isContinuationQueueItem, resolveSessionTailBanner } from '@/session/sessionTailBannerModel';
 import { SessionTailBanner } from '@/session/SessionTailBanner';
 import {
@@ -204,6 +221,7 @@ import {
   outboxItemRetrying,
   outboxItemWithEnqueueFailure,
   outboxWithUploadResult,
+  recoverOutboxItemsToComposerDraft,
   replaceOutboxItem,
   type MobileOutboxItem,
 } from '@/session/sessionOutbox';
@@ -410,6 +428,7 @@ interface QueueEditingState {
   clientId: string;
   stashedDraft: string;
   stashedAttachments: RemoteSerializedAttachment[];
+  textState: QueueEditTextState;
 }
 
 interface ComposerRuntimeSummary {
@@ -467,6 +486,45 @@ function attachmentIdSetsEqual(
   const idsA = (a ?? []).map((item) => item.id).sort();
   const idsB = (b ?? []).map((item) => item.id).sort();
   return idsA.length === idsB.length && idsA.every((id, index) => id === idsB[index]);
+}
+
+/**
+ * 将无法继续派发的 outbox 条目按会话恢复为可见草稿 + 引用 store。
+ * marker-bearing body 只留作未编辑重发的隐藏顺序基线，绝不写进输入框。
+ */
+function restoreOutboxItemsToDraft(items: readonly MobileOutboxItem[]): void {
+  const itemsBySession = new Map<string, MobileOutboxItem[]>();
+  for (const item of items) {
+    const sessionItems = itemsBySession.get(item.sessionId) ?? [];
+    sessionItems.push(item);
+    itemsBySession.set(item.sessionId, sessionItems);
+  }
+
+  for (const [draftSessionId, sessionItems] of itemsBySession) {
+    const existingVisibleText = readComposerDraftSync(draftSessionId)?.trim() ?? '';
+    const existingQuotes = [...getQuotes(draftSessionId)];
+    const existingOrderedDraft = resolveOrderedQuoteDraft(
+      draftSessionId,
+      existingVisibleText,
+      existingQuotes,
+    );
+    const existingEncodedBody = existingOrderedDraft?.encodedBody
+      ?? formatQuotesForSend(existingQuotes, existingVisibleText);
+    const recovery = recoverOutboxItemsToComposerDraft(sessionItems, {
+      visibleText: existingVisibleText,
+      encodedBody: existingEncodedBody,
+      quotes: existingQuotes,
+    });
+    if (recovery.visibleText || recovery.quotes.length > 0) {
+      saveComposerDraft(draftSessionId, recovery.visibleText);
+    }
+    if (recovery.quotes.length > 0) {
+      setOrderedQuoteDraft(draftSessionId, recovery.quotes, {
+        encodedBody: recovery.encodedBody,
+        projectedText: recovery.visibleText,
+      });
+    }
+  }
 }
 
 export default function SessionScreen() {
@@ -636,20 +694,9 @@ export default function SessionScreen() {
       if (items.length === 0) return;
       outboxRef.current = [];
       setOutboxItems([]);
-      // 草稿按条目自身归属写回(而非本 effect 捕获的 sessionId):防御性一致,
-      // ref 里理论上只有本会话条目(归属校验保证),按条目写永远不会写错库。
-      const textsBySession = new Map<string, string[]>();
-      for (const item of items) {
-        const text = item.text.trim();
-        if (!text) continue;
-        const list = textsBySession.get(item.sessionId) ?? [];
-        list.push(text);
-        textsBySession.set(item.sessionId, list);
-      }
-      for (const [draftSessionId, texts] of textsBySession) {
-        const existing = readComposerDraftSync(draftSessionId)?.trim();
-        saveComposerDraft(draftSessionId, [...texts, ...(existing ? [existing] : [])].join('\n\n'));
-      }
+      // 草稿按条目自身归属写回(而非本 effect 捕获的 sessionId):防御性一致。
+      // 引用正文同步恢复 quote store，输入框只接收剥过 marker 的可见文字。
+      restoreOutboxItemsToDraft(items);
       for (const item of items) {
         for (const localId of [...item.waitingIds, ...item.failedIds]) removePendingUpload(localId);
         for (const attachment of outboxItemAttachments(item)) {
@@ -3198,15 +3245,12 @@ export default function SessionScreen() {
 
   /**
    * 无法回插 outbox 时的兜底(所属会话已离场 / 屏已卸载):文字合并回**条目所属
-   * 会话**的草稿库(持久化,不静默蒸发),已就绪附件回收 OSS 中转对象。派发失败
-   * 才会走到这里,此时附件必然已全部落定(ready 才派发),没有在途任务要清。
+   * 会话**的草稿库与引用 store(持久化,不静默蒸发),已就绪附件回收 OSS
+   * 中转对象。派发失败才会走到这里,此时附件必然已全部落定(ready 才派发),
+   * 没有在途任务要清。
    */
   const salvageOutboxItem = (item: MobileOutboxItem) => {
-    const text = item.text.trim();
-    if (text) {
-      const existing = readComposerDraftSync(item.sessionId)?.trim();
-      saveComposerDraft(item.sessionId, [text, ...(existing ? [existing] : [])].join('\n\n'));
-    }
+    restoreOutboxItemsToDraft([item]);
     for (const attachment of outboxItemAttachments(item)) {
       discardMobileUploadedAttachment(attachment, {
         getToken: () => remoteMediaDepsRef.current.auth.getAccessToken(),
@@ -3249,6 +3293,7 @@ export default function SessionScreen() {
     const sessionAtSend = { ...sessionNow, permissionMode: item.permissionModeAtSend };
     const queued = buildQueuedTextMessage(sessionAtSend, item.text, new Date(), item.clientId, {
       attachments: outboxItemAttachments(item),
+      quotesEncoded: item.quotesEncoded,
     });
     // 乐观交接:进本地 pendingQueue 的同一同步段把条目移出 outbox,气泡原位从
     // 「发送中」变「排队中」不闪断;enqueue 成功后用权威 projection 覆盖 reconcile。
@@ -3363,12 +3408,27 @@ export default function SessionScreen() {
       await finishVoiceRecording({ sendAfterTranscribe: true });
       return;
     }
-    const body = (options.draftOverride ?? draft).trim();
+    const visibleDraft = options.draftOverride ?? draft;
+    const body = visibleDraft.trim();
+    const queueEditAtSendStart = queueEditingRef.current;
+    const queueEditSubmission = queueEditAtSendStart
+      ? resolveQueueEditTextSubmission(queueEditAtSendStart.textState, visibleDraft)
+      : null;
+    const queueEditPreservesEncodedQuotes = queueEditSubmission?.quotesEncoded === true;
     // chat-text-quote:排队编辑是「替换原条目内容」语义,不注入引用;正常发送把
-    // 引用块前置在正文前(与桌面 ChatInput 的 formatQuotesForSend 对偶)。命令
-    // 判定(下方)用 body,命中命令时引用保留在胶囊里不消费。
-    const quotesAtSend = queueEditingRef.current ? [] : [...getQuotes(sessionId)];
-    const text = formatQuotesForSend(quotesAtSend, body);
+    // 引用块前置在正文前(与桌面 ChatInput 的 formatQuotesForSend 对偶)。排队
+    // 引用的可见文本未改时无损复用隐藏 marked body；改过就降级为普通 Markdown。
+    // 命令判定(下方)用 body,命中命令时引用保留在胶囊里不消费。
+    const quotesAtSend = queueEditAtSendStart ? [] : [...getQuotes(sessionId)];
+    // fork / rewind 恢复的交错消息带一份隐藏 ordered body。仅当可见正文与引用
+    // 列表都完全没变时复用，保证「引用 A → 回复 A → 引用 B → 回复 B」默认
+    // 重发不改 prompt 顺序；任一处被编辑就显式失效并安全回落到引用前置格式。
+    const orderedDraftAtSend = queueEditAtSendStart
+      ? null
+      : resolveOrderedQuoteDraft(sessionId, visibleDraft, quotesAtSend);
+    const text = queueEditSubmission?.text
+      ?? orderedDraftAtSend?.encodedBody
+      ?? formatQuotesForSend(quotesAtSend, body);
     if (!canUseComposer) {
       if (options.draftOverride !== undefined) setComposerDraft(options.draftOverride);
       return;
@@ -3398,14 +3458,18 @@ export default function SessionScreen() {
       // 新采集的引用跟在后面原样保留;标记复位防止多个失败分支重复回填。
       if (quotesConsumed) {
         quotesConsumed = false;
-        setQuotes(sessionId, [...quotesAtSend, ...getQuotes(sessionId)]);
+        const restoredQuotes = [...quotesAtSend, ...getQuotes(sessionId)];
+        if (orderedDraftAtSend) {
+          setOrderedQuoteDraft(sessionId, restoredQuotes, orderedDraftAtSend);
+        } else {
+          setQuotes(sessionId, restoredQuotes);
+        }
       }
     };
     if (body) setComposerDraft('');
     // 排队编辑保存的编辑态快照:下方 waitForPendingUploads 可能耗时数秒,期间用户
     // 可能点 × 放弃或切换编辑目标——等待结束后以快照与最新 ref 比对,不一致则中止
     // 保存,防止编辑文本被当成一条全新消息发出(PR#709 review P1)。
-    const queueEditAtSendStart = queueEditingRef.current;
     requestMessageListFollowLatest();
     // —— 乐观 outbox 路径:附件仍在上传(或 outbox 已有排队消息,保 FIFO)时不再
     // 原地等待,消息立即以待发气泡上屏,附件落定后由派发循环真正入队。豁免场景走
@@ -3476,6 +3540,7 @@ export default function SessionScreen() {
           clientId: createOutboxClientId(),
           sessionId,
           text,
+          quotesEncoded: quotesAtSend.length > 0,
           permissionModeAtSend,
           readyAttachments,
           readyPreviews,
@@ -3526,6 +3591,7 @@ export default function SessionScreen() {
         }
         const updated = buildQueuedTextMessage(sessionAtSend, text, new Date(), editingQueueItem.clientId, {
           attachments: sendAttachments,
+          quotesEncoded: queueEditPreservesEncodedQuotes,
         });
         // 保存在途 promise:会话切换 cleanup 据此把解锁排到保存落定之后
         // (device-link 并发下解锁不许超车 update-content,见 cleanup 注释)。
@@ -3538,9 +3604,14 @@ export default function SessionScreen() {
             const projection = await maker.input.updateContent(sessionId, editingQueueItem.clientId, updated);
             applyProjection(projection);
           } catch (err) {
-            if (isChannelNotAllowedError(err) && text.trim().length > 0 && attachmentIdSetsEqual(original.files, sendAttachments)) {
-              // 旧被控端无 update-content:附件未变且文本非空时退回 update-text,仅同步
-              // 文本。空文本不降级——旧端 update-text 对空文本静默 no-op,会造成"看似
+            if (
+              isChannelNotAllowedError(err)
+              && text.trim().length > 0
+              && attachmentIdSetsEqual(original.files, sendAttachments)
+              && queuedMessageHasEncodedQuotes(original) === queueEditPreservesEncodedQuotes
+            ) {
+              // 旧被控端无 update-content:附件与 quote metadata 都不变、文本非空时
+              // 才退回 update-text。空文本不降级——旧端 update-text 对空文本静默 no-op,会造成"看似
               // 保存成功、队列还是旧文案"的假成功(review P2)。降级本身失败(弱网两次
               // RPC 之间断连)与其余失败分支对称:先还原编辑文本再抛,不许静默丢字
               // (review P1)。
@@ -3552,7 +3623,7 @@ export default function SessionScreen() {
                 throw fallbackErr;
               }
             } else if (isChannelNotAllowedError(err)) {
-              setError('电脑端版本过旧,还不支持修改排队消息的附件或清空文本。请升级电脑端,或仅修改文字。');
+              setError('电脑端版本过旧,还不支持安全修改排队引用、附件或清空文本。请升级电脑端,或仅修改普通文字。');
               restoreDraftAfterFailure();
               return;
             } else {
@@ -3673,6 +3744,7 @@ export default function SessionScreen() {
       }
       const queued = buildQueuedTextMessage(sessionAtSend, text, new Date(), undefined, {
         attachments: sendAttachments,
+        quotesEncoded: quotesAtSend.length > 0,
       });
       // 乐观第二拍:附件落定后立即把 queued 追加进本地 projection,消息气泡当帧上屏、
       // 托盘同帧清空;enqueue 成功后用权威 projection 覆盖 reconcile。
@@ -4134,21 +4206,24 @@ export default function SessionScreen() {
         .catch(() => undefined);
       discardQueueEditTransientAttachments(previous);
     }
+    const textState = createQueueEditTextState(item);
     const next: QueueEditingState = previous
       ? {
           clientId: item.clientId,
           stashedDraft: previous.stashedDraft,
           stashedAttachments: previous.stashedAttachments,
+          textState,
         }
       : {
           clientId: item.clientId,
           stashedDraft: draftRef.current,
           stashedAttachments: [...attachmentsRef.current],
+          textState,
         };
     queueEditingRef.current = next;
     setQueueEditing(next);
     setQueueSelectedClientId(null);
-    setComposerDraft(item.text);
+    setComposerDraft(textState.visibleText);
     const files = item.files ? [...item.files] : [];
     attachmentsRef.current = files;
     setAttachments(files);
@@ -5017,24 +5092,38 @@ export default function SessionScreen() {
     })();
   }, [currentSession, deviceId, goBackToHome, invoke, maker, sessionId]);
 
-  const previewRewindAtMessage = useCallback(async (clientId: string, draftText: string) => {
+  const previewRewindAtMessage = useCallback(async (clientId: string, draft: MobileMessageDraft) => {
     if (messageActionBusy) return;
     const seq = ++rewindRequestSeqRef.current;
     setMessageActionBusy(clientId);
     setError(null);
-    setRewindState({ kind: 'loading', clientId, draftText });
+    setRewindState({
+      kind: 'loading',
+      clientId,
+      draftText: draft.text,
+      draftQuotes: draft.quotes,
+      ...(draft.orderedBody ? { draftOrderedBody: draft.orderedBody } : {}),
+    });
     try {
       const preview = await maker.rewindPreview(sessionId, clientId);
       // 请求往返期间切走 session(甚至切走又切回)或另发起了新请求 → 代际已变,丢弃这个 stale 预览,
       // 别把它画到当前在屏的 session 上。
       if (rewindRequestSeqRef.current !== seq) return;
-      setRewindState(buildRewindPreviewState(clientId, draftText, preview));
+      setRewindState(buildRewindPreviewState(
+        clientId,
+        draft.text,
+        preview,
+        draft.quotes,
+        draft.orderedBody,
+      ));
     } catch (err) {
       if (rewindRequestSeqRef.current !== seq) return;
       setRewindState({
         kind: 'error',
         clientId,
-        draftText,
+        draftText: draft.text,
+        draftQuotes: draft.quotes,
+        ...(draft.orderedBody ? { draftOrderedBody: draft.orderedBody } : {}),
         errorText: formatRemoteError(err),
       });
     } finally {
@@ -5043,14 +5132,22 @@ export default function SessionScreen() {
     }
   }, [maker, messageActionBusy, sessionId]);
 
-  const forkAtMessage = useCallback(async (clientId: string, draftText?: string) => {
+  const forkAtMessage = useCallback(async (clientId: string, draft?: MobileMessageDraft) => {
     if (!deviceId || messageActionBusy) return;
     setMessageActionBusy(clientId);
     setError(null);
     try {
       const forked = await maker.fork(sessionId, clientId);
       remoteSessionStore.upsertDeviceSession(deviceId, deviceName, forked);
-      saveComposerDraft(forked.id, draftText);
+      saveComposerDraft(forked.id, draft?.text);
+      if (draft?.orderedBody && draft.quotes.length > 0) {
+        setOrderedQuoteDraft(forked.id, draft.quotes, {
+          encodedBody: draft.orderedBody,
+          projectedText: draft.text,
+        });
+      } else {
+        setQuotes(forked.id, draft?.quotes ?? []);
+      }
       router.push({
         pathname: '/sessions/[sessionId]',
         params: { sessionId: forked.id, deviceId, deviceName },
@@ -5160,6 +5257,14 @@ export default function SessionScreen() {
         return;
       }
       setComposerDraft(state.draftText);
+      if (state.draftOrderedBody && state.draftQuotes.length > 0) {
+        setOrderedQuoteDraft(sessionId, state.draftQuotes, {
+          encodedBody: state.draftOrderedBody,
+          projectedText: state.draftText,
+        });
+      } else {
+        setQuotes(sessionId, state.draftQuotes);
+      }
       setRewindState({ kind: 'idle' });
       await syncSession({ replaceMessages: true });
     } catch (err) {
@@ -5169,6 +5274,8 @@ export default function SessionScreen() {
         kind: 'error',
         clientId: state.clientId,
         draftText: state.draftText,
+        draftQuotes: state.draftQuotes,
+        ...(state.draftOrderedBody ? { draftOrderedBody: state.draftOrderedBody } : {}),
         errorText: formatRemoteError(err),
       });
     } finally {

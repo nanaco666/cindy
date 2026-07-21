@@ -3,17 +3,26 @@ import { buildRewindPreviewState, isCommitReadyRewindState } from '@/session/rew
 
 describe('rewindPreview model', () => {
   it('maps file rewind previews to the default confirm state', () => {
-    const state = buildRewindPreviewState('m2', 'retry this', {
-      canRewind: true,
-      filesChanged: ['apps/mobile/App.tsx'],
-      insertions: 3,
-      deletions: 1,
-    });
+    const draftQuotes = [{ text: 'quoted context', sourcePath: 'docs/spec.md' }];
+    const state = buildRewindPreviewState(
+      'm2',
+      'retry this',
+      {
+        canRewind: true,
+        filesChanged: ['apps/mobile/App.tsx'],
+        insertions: 3,
+        deletions: 1,
+      },
+      draftQuotes,
+      'ordered marked body',
+    );
 
     expect(state).toEqual({
       kind: 'default',
       clientId: 'm2',
       draftText: 'retry this',
+      draftQuotes,
+      draftOrderedBody: 'ordered marked body',
       filesChanged: ['apps/mobile/App.tsx'],
       insertions: 3,
       deletions: 1,
@@ -32,6 +41,7 @@ describe('rewindPreview model', () => {
       kind: 'empty',
       clientId: 'm2',
       draftText: 'retry this',
+      draftQuotes: [],
       note: 'No file checkpoint found for this message',
     });
     expect(isCommitReadyRewindState(state)).toBe(true);

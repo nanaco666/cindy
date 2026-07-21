@@ -4062,12 +4062,25 @@ describe('AgentInputCoordinator queue mutations', () => {
     ]);
   });
 
-  it('updates pending row text and persisted content before acceptance', async () => {
+  it('updates pending row text and clears stale quote metadata before acceptance', async () => {
     const h = createHarness();
     const sid = 'edit-text';
     const first = makeItem('q-1', 'first');
     const second = makeItem('q-2', 'old', {
-      persistedContent: JSON.stringify({ text: 'old', images: [{ url: 'xdt-image://1' }], files: [] }),
+      persistedContent: JSON.stringify({
+        text: 'old',
+        images: [{ url: 'xdt-image://1' }],
+        files: [],
+        quotesEncoded: true,
+      }),
+      chatMessage: {
+        clientId: 'q-2',
+        role: 'user',
+        content: 'old',
+        isStreaming: false,
+        createdAt: '2026-06-07T00:00:00.000Z',
+        quotesEncoded: true,
+      },
     });
 
     h.coordinator.enqueue(sid, first);
@@ -4080,6 +4093,7 @@ describe('AgentInputCoordinator queue mutations', () => {
     const updated = latestProjection(h.projections).pendingQueue[0];
     expect(updated?.text).toBe('new text');
     expect(updated?.chatMessage.content).toBe('new text');
+    expect(updated?.chatMessage.quotesEncoded).toBeUndefined();
     expect(JSON.parse(updated?.persistedContent ?? '{}')).toEqual({
       text: 'new text',
       images: [{ url: 'xdt-image://1' }],
@@ -4529,6 +4543,38 @@ describe('AgentInputCoordinator 意识拦截钩(订阅槽①,will-user-message)'
     expect(parsed.text).toBe('优化后的问题');
     expect(parsed.images).toEqual([{ fileId: 'img-1', name: 'ref.png' }]);
     expect(parsed.quotesEncoded).toBe('q-payload');
+  });
+
+  it('rewrite:marker 被移除时同步清除真实 quotesEncoded 标志', async () => {
+    const h = createHarness();
+    h.setScreenUserMessage(async () => ({
+      action: 'rewrite',
+      ghostId: 'g1',
+      ghostName: '哨兵',
+      text: '> ordinary markdown after rewrite',
+    }) as const);
+    const original = '> <!-- cindy-composer-quote -->\n> product quote\n\n润色 原始问题';
+    const envelope = JSON.stringify({ text: original, quotesEncoded: true });
+    h.coordinator.enqueue('s1', makeItem('c1', original, {
+      persistedContent: envelope,
+      chatMessage: {
+        clientId: 'c1',
+        role: 'user',
+        content: original,
+        quotesEncoded: true,
+      },
+    }));
+
+    await flush();
+
+    const persisted = mocks.createMessage.mock.calls.find(
+      (c) => (c[1] as { clientId?: string }).clientId === 'c1',
+    )?.[1] as { content: string };
+    expect(JSON.parse(persisted.content)).toEqual({
+      text: '> ordinary markdown after rewrite',
+    });
+    const rewrittenItem = h.onUserMessageRewritten.mock.calls[0]?.[1];
+    expect(rewrittenItem?.chatMessage.quotesEncoded).toBeUndefined();
   });
 });
 

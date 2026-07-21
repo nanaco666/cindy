@@ -5254,6 +5254,7 @@ async function resendBlockedMessage(
   sessionId: string,
   clientId: string,
   newText: string,
+  opts?: { quotesEncoded?: boolean },
 ): Promise<void> {
   if (!sessionId || !clientId) throw new Error('resendBlockedMessage: missing session/client id');
   if (resendBlockedInFlight.has(clientId)) return;
@@ -5279,6 +5280,7 @@ async function resendBlockedMessage(
         row.workingDir,
         msg.retryFiles,
         msg.retryMentions,
+        opts?.quotesEncoded ? { quotesEncoded: true } : undefined,
       );
       if (!dispatched) throw new Error('resendBlockedMessage: enqueue failed');
     } catch (err) {

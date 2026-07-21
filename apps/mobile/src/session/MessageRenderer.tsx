@@ -53,7 +53,11 @@ import { UITextView } from 'react-native-uitextview';
 import { LegendList, type LegendListRef } from '@legendapp/list/react-native';
 import { buildComposerTouchLayout } from '@/session/composerTouchLayout';
 import { useFoldableExpandedState } from '@/session/expandedBlockMemory';
-import { parseLeadingBlockquotes } from '@lizi/maker-shared/chat-quotes';
+import {
+  joinChatQuoteTextSegments,
+  parseChatQuoteSegments,
+  type ChatQuote,
+} from '@lizi/maker-shared/chat-quotes';
 import { QuoteCapsule } from '@/session/QuoteCapsule';
 import {
   SELECTION_QUOTE_MENU_LABEL,
@@ -362,6 +366,14 @@ function MarkdownSelectableSpan(props: ComponentProps<typeof Text>) {
   return <UITextView maxFontSizeMultiplier={MAX_FONT_SIZE_MULTIPLIER} {...props} />;
 }
 
+/** Composer-ready user message body with product quotes kept out of raw text. */
+export interface MobileMessageDraft {
+  text: string;
+  quotes: readonly ChatQuote[];
+  /** marker 不进入可见输入框；未编辑时用这份原文保证 quote / prose 顺序不变。 */
+  orderedBody?: string;
+}
+
 interface MessageActions {
   /** 长按/操作条「复制消息链接」:复制该消息的会话深链(带 ?message= 锚点)。 */
   onCopyMessageLink?: (clientId: string) => void;
@@ -371,13 +383,13 @@ interface MessageActions {
    * 只读宿主零开销)。当前仅 iOS 16+ 生效(Android RN Text 无系统菜单扩展点)。
    */
   onQuoteSelection?: (quote: { text: string }) => void;
-  onForkMessage?: (clientId: string, draftText?: string) => void;
+  onForkMessage?: (clientId: string, draft?: MobileMessageDraft) => void;
   onLoadEarlier?: () => void | Promise<void>;
   onOpenForkOrigin?: () => void;
   onOpenPayload?: (payload: MessagePayload) => void;
   /** 正文里会话深链 chip(xdt-maker://session/…)点击回调,app 内跳转。 */
   onOpenSessionLink?: (url: string) => void;
-  onPreviewRewind?: (clientId: string, draftText: string) => void;
+  onPreviewRewind?: (clientId: string, draft: MobileMessageDraft) => void;
   onReadTextFilePreview?: (filePath: string) => Promise<RemoteTextFilePreviewResult>;
   onReleaseRemoteMedia?: (sourceUrl: string, media: MobileResolvedRemoteMedia) => void;
   onResolveRemoteMedia?: ResolveRemoteMediaFn;
@@ -1339,18 +1351,33 @@ function MessageBubble({
   const styles = useThemedStyles(makeStyles);
   const { colors } = useTheme();
   const [copyState, setCopyState] = useState<CopyMessageStatus | 'idle' | 'copying'>('idle');
-  // chat-text-quote:user 消息开头的 blockquote 是「选中文字引用」编码(见
-  // maker-shared/chat-quotes),剥出成「N 处引用」胶囊渲在气泡上方,气泡正文
-  // 只渲余下 body。copy / rewind / fork 仍用完整 item.message.body——引用属于
-  // 消息原文。orca 协同消息在 normalize 层已走 orcaCard 分支,不进本路径。
-  const quoteParse = useMemo(
-    () => (item.message.kind === 'user' && !item.message.systemCardType && item.message.body
-      ? parseLeadingBlockquotes(item.message.body)
-      : null),
-    [item.message.kind, item.message.systemCardType, item.message.body],
+  // chat-text-quote:只解析持久化 quotesEncoded 明确标记的产品引用消息，避免
+  // 把用户手写的 Markdown blockquote 误当产品引用。兼容 desktop 的交错
+  // marker 块和 mobile 的前置引用。旧 markerless 消息保持 leading-only，
+  // 避免把正文里的用户 Markdown blockquote 误当产品引用。手机版仍把引用聚合成
+  // 「N 处引用」胶囊,但正文不再泄露内部 marker/source 行。copy / rewind /
+  // fork 额外携带完整 ordered body，在可见草稿未编辑时无损重发。orca 协同
+  // 消息已走 orcaCard 分支,不进本路径。
+  const quoteSegments = useMemo(
+    () => (item.message.kind === 'user'
+      && item.message.quotesEncoded === true
+      && !item.message.systemCardType
+      && item.message.body
+      ? parseChatQuoteSegments(item.message.body)
+      : []),
+    [
+      item.message.body,
+      item.message.kind,
+      item.message.quotesEncoded,
+      item.message.systemCardType,
+    ],
   );
-  const leadingQuotes = quoteParse && quoteParse.quotes.length > 0 ? quoteParse.quotes : null;
-  const bubbleBody = quoteParse && leadingQuotes ? quoteParse.body : item.message.body;
+  const messageQuotes = quoteSegments.flatMap((segment) => (
+    segment.kind === 'quote' ? [segment.quote] : []
+  ));
+  const bubbleBody = messageQuotes.length > 0
+    ? joinChatQuoteTextSegments(quoteSegments)
+    : item.message.body;
   const presentation = summarizeMessageBubblePresentation({
     align: item.message.align,
     attachmentCount: item.message.attachments?.length ?? 0,
@@ -1476,16 +1503,35 @@ function MessageBubble({
       return;
     }
     if (id === 'rewind' && clientId) {
-      actions.onPreviewRewind?.(clientId, item.message.body);
+      actions.onPreviewRewind?.(clientId, {
+        text: bubbleBody,
+        quotes: messageQuotes,
+        ...(item.message.quotesEncoded === true ? { orderedBody: item.message.body } : {}),
+      });
       return;
     }
     if (id === 'fork' && clientId) {
       actions.onForkMessage?.(
         clientId,
-        item.message.kind === 'user' ? item.message.body : undefined,
+        item.message.kind === 'user'
+          ? {
+              text: bubbleBody,
+              quotes: messageQuotes,
+              ...(item.message.quotesEncoded === true ? { orderedBody: item.message.body } : {}),
+            }
+          : undefined,
       );
     }
-  }, [actions, clientId, copyMessage, item.message.body, item.message.kind]);
+  }, [
+    actions,
+    bubbleBody,
+    clientId,
+    copyMessage,
+    item.message.body,
+    item.message.kind,
+    item.message.quotesEncoded,
+    messageQuotes,
+  ]);
   // 时间文本兼任「复制消息链接」入口:点按复制该消息的会话深链(带 ?message=
   // 锚点),复制成功后短暂换成「链接已复制」。不单独占一个操作按钮位。
   const timeText = relativeTime ? (
@@ -1651,12 +1697,12 @@ function MessageBubble({
           </Text>
         </View>
       ) : null}
-      {leadingQuotes ? (
+      {messageQuotes.length > 0 ? (
         // chat-text-quote:气泡上方渲「N 处引用」胶囊(右对齐),点按展开逐条预览。
-        <QuoteCapsule quotes={leadingQuotes} testIDPrefix="message.quoteCapsule" variant="bubble" />
+        <QuoteCapsule quotes={messageQuotes} testIDPrefix="message.quoteCapsule" variant="bubble" />
       ) : null}
       {attachmentStripNode}
-      {hasBubbleContent || (!attachmentStripNode && !leadingQuotes) ? bubble : null}
+      {hasBubbleContent || (!attachmentStripNode && messageQuotes.length === 0) ? bubble : null}
       {item.message.kind === 'assistant' && item.message.modelMismatch ? (
         // 模型降级提示(对齐桌面 AssistantMessage):所选模型本轮被上游静默替换,
         // 常显在气泡下方,icon 用 warning 橙、文字保持 tertiary 灰阶。

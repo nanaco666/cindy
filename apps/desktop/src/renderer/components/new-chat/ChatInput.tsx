@@ -12,7 +12,7 @@ import {
 } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
-import { FileText, Folder, MessageSquarePlus, MessageSquareQuote, Mic, Pen, Square, TriangleAlert, X } from 'lucide-react';
+import { Folder, MessageSquarePlus, Mic, Pen, Square, TriangleAlert, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { ImageLightbox } from '@/components/chat/ImageLightbox';
 import { TextLightbox } from '@/components/chat/TextLightbox';
@@ -46,11 +46,7 @@ import { toast } from '@/lib/toast';
 import { mapIpcErrorToI18nKey } from '@/utils/ipcError';
 import { Tip } from '@/components/ui/tooltip';
 import type { AttachedFile, MentionedResource, ImageAnnotationStroke } from '@/lib/fileTypes';
-import {
-  formatQuotesForSend,
-  quoteSourceDisplayLabel,
-  type ChatQuote,
-} from '@/lib/chatQuotes';
+import { formatQuoteForSend } from '@/lib/chatQuotes';
 import {
   commentPreviewTag,
   formatBrowserCommentsForSend,
@@ -99,6 +95,16 @@ import {
 } from '@/cindy-brain/ghostMediaHandover';
 import { AtMentionPanel, type AtPanelState } from './AtMentionPanel';
 import { MentionChipNode, type MentionChipAttrs } from './MentionChipNode';
+import { ComposerQuoteNode } from './ComposerQuoteNode';
+import {
+  COMPOSER_QUOTE_NODE_TYPE,
+  composerHistoryEntryToDocument,
+  composerQuoteAttrsToChatQuote,
+  serializeComposerContentBlocks,
+  type ComposerHistoryEntry,
+  type ComposerQuoteAttrs,
+  type ComposerSerializedBlock,
+} from '@/lib/composerQuoteDocument';
 import {
   pastedSessionChipAttrs,
   serializeSessionChipText,
@@ -122,7 +128,7 @@ import {
   type PastedTextChipAttrs,
 } from './PastedTextChipNode';
 import { ToolPayloadLightbox } from '@/components/chat/ToolPayloadLightbox';
-import { Fragment, Slice } from '@tiptap/pm/model';
+import { Fragment, Slice, type Node as ProseMirrorNode } from '@tiptap/pm/model';
 import * as sessionService from '@/lib/sessionService';
 import { getModelById } from '@/lib/modelDefinitions';
 import {
@@ -343,7 +349,7 @@ interface ChatInputProps {
   /** Lock one queued row while its text is being edited. */
   onQueueEditLock?: (clientId: string, locked: boolean) => void;
   /** Chat messages — used to derive user message history for ↑/↓ navigation. */
-  messages?: Array<{ role: string; content: string }>;
+  messages?: Array<{ role: string; content: string; quotesEncoded?: boolean }>;
   /** Custom placeholder text. Defaults to "今天我们做点什么呢~" */
   placeholder?: string;
   /** Controlled open state for FolderPickerPopover. When omitted, internal state is used. */
@@ -624,11 +630,16 @@ function hasFocusMovedToInteractiveElement(
  *   - plain text → as-is
  * Paragraphs are joined with `\n`.
  */
-function serializeEditorContent(editor: Editor): { text: string; mentions: MentionedResource[] } {
+function serializeEditorContent(editor: Editor): {
+  text: string;
+  mentions: MentionedResource[];
+  hasQuotes: boolean;
+} {
   const doc = editor.state.doc;
-  const paragraphs: string[] = [];
+  const blocks: ComposerSerializedBlock[] = [];
   const mentions: MentionedResource[] = [];
   const seenMentions = new Set<string>();
+  let hasQuotes = false;
 
   const addMention = (attrs: MentionChipAttrs) => {
     // slash 不是资源;session / project 深链不进 mentions(不是文件系统资源,
@@ -641,10 +652,37 @@ function serializeEditorContent(editor: Editor): { text: string; mentions: Menti
   };
 
   doc.forEach((pNode) => {
+    if (pNode.type.name === COMPOSER_QUOTE_NODE_TYPE) {
+      hasQuotes = true;
+      blocks.push({
+        kind: 'quote',
+        text: formatQuoteForSend(
+          composerQuoteAttrsToChatQuote(pNode.attrs as ComposerQuoteAttrs),
+        ),
+      });
+      return;
+    }
     if (pNode.type.name !== 'paragraph') return;
     let buf = '';
+    let emittedInlineSegment = false;
+    const flushText = (force = false) => {
+      if (!force && !buf) return;
+      blocks.push({ kind: 'text', text: buf });
+      buf = '';
+      emittedInlineSegment = true;
+    };
     pNode.forEach((child) => {
-      if (child.type.name === 'mentionChip') {
+      if (child.type.name === COMPOSER_QUOTE_NODE_TYPE) {
+        flushText();
+        hasQuotes = true;
+        blocks.push({
+          kind: 'quote',
+          text: formatQuoteForSend(
+            composerQuoteAttrsToChatQuote(child.attrs as ComposerQuoteAttrs),
+          ),
+        });
+        emittedInlineSegment = true;
+      } else if (child.type.name === 'mentionChip') {
         const attrs = child.attrs as MentionChipAttrs;
         addMention(attrs);
         if (attrs.kind === 'slash') {
@@ -698,10 +736,12 @@ function serializeEditorContent(editor: Editor): { text: string; mentions: Menti
         buf += child.text ?? '';
       }
     });
-    paragraphs.push(buf);
+    // Preserve truly empty paragraphs as line breaks, but do not synthesize an
+    // empty text segment after a quote chip at the end of a paragraph.
+    flushText(!emittedInlineSegment);
   });
 
-  return { text: paragraphs.join('\n').trim(), mentions };
+  return { text: serializeComposerContentBlocks(blocks), mentions, hasQuotes };
 }
 
 /**
@@ -715,7 +755,11 @@ function isEditorEmpty(editor: Editor | null): boolean {
   let hasContent = false;
   doc.descendants((node) => {
     if (hasContent) return false;
-    if (node.type.name === 'mentionChip' || node.type.name === 'pastedTextChip') {
+    if (
+      node.type.name === 'mentionChip' ||
+      node.type.name === 'pastedTextChip' ||
+      node.type.name === COMPOSER_QUOTE_NODE_TYPE
+    ) {
       hasContent = true;
       return false;
     }
@@ -784,7 +828,10 @@ function detectTrigger(editor: Editor): TriggerState {
   parent.forEach((child) => {
     if (consumed >= offsetInParent) return;
     const size = child.nodeSize;
-    if (child.type.name === 'mentionChip') {
+    if (
+      child.type.name === 'mentionChip' ||
+      child.type.name === COMPOSER_QUOTE_NODE_TYPE
+    ) {
       textSoFar = ''; // chips reset the @ / slash run
       consumed += size;
       return;
@@ -1049,7 +1096,10 @@ export function ChatInput({
     () =>
       (messages ?? [])
         .filter((m) => m.role === 'user' && m.content.trim())
-        .map((m) => m.content)
+        .map((m): ComposerHistoryEntry => ({
+          content: m.content,
+          ...(m.quotesEncoded === true ? { quotesEncoded: true } : {}),
+        }))
         .reverse(), // newest first
     [messages],
   );
@@ -1057,6 +1107,7 @@ export function ChatInput({
   userHistoryRef.current = userHistory;
   const historyIndexRef = useRef(-1); // -1 = current draft (not browsing)
   const draftRef = useRef(''); // saves draft when user starts browsing
+  const hydratedHistoryDocumentRef = useRef<ProseMirrorNode | null>(null);
 
   // ── composer-draft-per-session ─────────────────────────────────────
   // When the parent switches `sessionId`, a `useEffect` below restores the
@@ -1101,13 +1152,8 @@ export function ChatInput({
     pendingFileMentionsVersion, consumePendingFileMentions,
     removeFile, updateFile, clearFiles,
   } = attachmentState;
-  // ── chat-text-quote:选中文字引用(事实源在 composerDraftStore,这里镜像渲染)──
-  const [quotes, setQuotes] = useState<ChatQuote[]>([]);
-  const quotesRef = useRef<ChatQuote[]>(quotes);
-  quotesRef.current = quotes;
   // browser-comment-chip:内置浏览器页面评论(结构化,不进草稿文本),渲染为
-  // 「N 条注释」胶囊,发送时序列化 + 截图并入 filesToSend。生命周期与 quotes
-  // 完全同构(草稿恢复 / 订阅刷新 / 发送后清空)。
+  // 「N 条注释」胶囊,发送时序列化 + 截图并入 filesToSend。
   const [browserComments, setBrowserComments] = useState<BrowserCommentDraftItem[]>([]);
   const browserCommentsRef = useRef<BrowserCommentDraftItem[]>(browserComments);
   browserCommentsRef.current = browserComments;
@@ -1405,6 +1451,7 @@ export function ChatInput({
         showOnlyCurrent: false,
       }),
       MentionChipNode,
+      ComposerQuoteNode,
       PastedTextChipNode,
       WindowsSelectionReplacement.configure({
         enabled: window.electronAPI.platform === 'win32',
@@ -1686,14 +1733,28 @@ export function ChatInput({
           if (history.length === 0) return false;
 
           const editorInstance = view.state.doc;
+          const idx = historyIndexRef.current;
           // atom chip 无文本投影,textContent 判空会把只含 chip 的草稿误当
           // 空:进入历史浏览的 replaceWith 会整段覆盖、粘贴 payload 静默
-          // 丢失(review P2)。含 chip 时历史浏览整体不介入(含"浏览中途
-          // 粘了 chip 再按 ↑/↓"——historyIndex 只在切会话 / 发送时复位,
-          // 此处不拦同样会覆盖)。
-          if (docContainsAtomChip(editorInstance)) return false;
+          // 丢失(review P2)。唯一例外是我们刚从 history 恢复且仍逐节点相等
+          // 的文档——quoted history 本来就含 quote atom,必须允许继续 ↑/↓;
+          // 浏览中途新增/修改任意 chip 后 eq 失配,仍不介入。
+          const isUnmodifiedHydratedHistory =
+            idx >= 0 && hydratedHistoryDocumentRef.current?.eq(editorInstance) === true;
+          if (docContainsAtomChip(editorInstance) && !isUnmodifiedHydratedHistory) return false;
           const isEmpty = editorInstance.textContent.trim().length === 0;
-          const idx = historyIndexRef.current;
+          const replaceWithHistoryEntry = (entry: ComposerHistoryEntry) => {
+            const historyDocument = view.state.schema.nodeFromJSON(
+              composerHistoryEntryToDocument(entry),
+            );
+            const tr = view.state.tr.replaceWith(
+              0,
+              view.state.doc.content.size,
+              historyDocument.content,
+            );
+            view.dispatch(tr);
+            hydratedHistoryDocumentRef.current = tr.doc;
+          };
 
           if (event.key === 'ArrowUp') {
             // Only enter history browsing when the editor is empty or already browsing
@@ -1705,10 +1766,7 @@ export function ChatInput({
             const next = Math.min(idx + 1, history.length - 1);
             if (next === idx) return false; // already at oldest
             historyIndexRef.current = next;
-            // Use the Tiptap EditorView's dispatch to set content
-            const tr = view.state.tr;
-            tr.replaceWith(0, view.state.doc.content.size, view.state.schema.text(history[next]));
-            view.dispatch(tr);
+            replaceWithHistoryEntry(history[next]);
             event.preventDefault();
             return true;
           }
@@ -1725,10 +1783,11 @@ export function ChatInput({
               } else {
                 tr.delete(0, view.state.doc.content.size);
               }
+              view.dispatch(tr);
+              hydratedHistoryDocumentRef.current = null;
             } else {
-              tr.replaceWith(0, view.state.doc.content.size, view.state.schema.text(history[next]));
+              replaceWithHistoryEntry(history[next]);
             }
-            view.dispatch(tr);
             event.preventDefault();
             return true;
           }
@@ -2499,6 +2558,7 @@ export function ChatInput({
       // Reset history-browse bookkeeping when switching sessions —
       // arrow-key history was relative to the previous session.
       historyIndexRef.current = -1;
+      hydratedHistoryDocumentRef.current = null;
       draftRef.current = '';
 
       if (!focusOnStorageKeyChangeRef.current) return;
@@ -2551,11 +2611,9 @@ export function ChatInput({
     return subscribeComposerDraft(storageKey, () => {
       const draft = getComposerDraft(storageKey);
       if (!draft) return;
-      setQuotes(draft.quotes ?? []);
       setBrowserComments(draft.browserComments ?? []);
-      // 引用-only 的外部写入(appendQuoteToDraft 保留 text 原值):文本没变就
-      // 不做全量 setContent——避免把用户停在中段的光标弹到末尾、打断 IME 组合;
-      // 只在编辑器未聚焦时轻聚焦(无参 focus 恢复原光标位置)。
+      // 同值外部写入不做全量 setContent,避免把用户停在中段的光标弹到末尾、
+      // 打断 IME 组合。appendQuoteToDraft 会改变正文文档,自然走下方 setContent。
       const textUnchanged =
         JSON.stringify(draft.text ?? null) === JSON.stringify(editor.isEmpty ? null : editor.getJSON());
       if (textUnchanged) {
@@ -2615,35 +2673,14 @@ export function ChatInput({
     focusComposerEndNextFrame(editor);
   }, [editor, ghostsForCommand, installedGhosts, storageKey]);
 
-  // chat-text-quote / browser-comment-chip:挂载 / 会话切换时从草稿恢复引用条
-  // 与评论胶囊(外部追加走上面的订阅)。
+  // browser-comment-chip:挂载 / 会话切换时从草稿恢复评论胶囊。
   useEffect(() => {
     if (!storageKey) {
-      setQuotes([]);
       setBrowserComments([]);
       return;
     }
     const draft = getComposerDraft(storageKey);
-    setQuotes(draft?.quotes ?? []);
     setBrowserComments(draft?.browserComments ?? []);
-  }, [storageKey]);
-
-  /** 清空全部引用(胶囊 X):同步镜像 state 与草稿事实源(silent——自己写自己)。 */
-  const clearQuotes = useCallback(() => {
-    setQuotes([]);
-    if (storageKey) {
-      const existing = getComposerDraft(storageKey);
-      saveComposerDraft(
-        storageKey,
-        {
-          text: existing?.text ?? null,
-          attachments: existing?.attachments ?? [],
-          quotes: [],
-          browserComments: existing?.browserComments ?? [],
-        },
-        { silent: true },
-      );
-    }
   }, [storageKey]);
 
   /** browser-comment-chip:按 id 删除单条 / 清空全部评论。同步镜像 state 与
@@ -3132,14 +3169,12 @@ export function ChatInput({
     if (!editor) return;
     if (disabled) return;
     if (dispatchSendInFlightRef.current) return;
-    const { text: editorText, mentions } = serializeEditorContent(editor);
-    // chat-text-quote:引用拼成 markdown blockquote 前置在用户文字前——引用是
-    // 模型的母语格式,气泡里渲染/纯文本都可读,零 wire 与持久化 schema 改动。
-    const quotedText = formatQuotesForSend(quotesRef.current, editorText);
+    const { text: editorText, mentions, hasQuotes } = serializeEditorContent(editor);
+    // composerQuote 在其正文位置序列化成 markdown blockquote,支持引用与回复交错。
     // browser-comment-chip:页面评论序列化为 `# Browser comments:` 段拼在正文后
     // (截图在下方并入 filesToSend,与文本块里的 "attached as a labeled image"
     // caption 对应)。
-    const text = formatBrowserCommentsForSend(browserCommentsRef.current, quotedText);
+    const text = formatBrowserCommentsForSend(browserCommentsRef.current, editorText);
     // Allow send if there is text OR attachments(纯引用 / 纯评论无输入也可发送)
     if (!text && !hasAttachments) return;
 
@@ -3229,7 +3264,7 @@ export function ChatInput({
         {
           deliveryMode,
           providerId: sendProviderId,
-          ...(quotesRef.current.length > 0 ? { quotesEncoded: true } : {}),
+          ...(hasQuotes ? { quotesEncoded: true } : {}),
           ...(usedGhost ? { onAccepted: markRecentPluginUsage } : {}),
         },
       );
@@ -3251,9 +3286,9 @@ export function ChatInput({
       isRestoringRef.current = false;
     }
     clearFiles();
-    setQuotes([]);
     setBrowserComments([]);
     historyIndexRef.current = -1;
+    hydratedHistoryDocumentRef.current = null;
     draftRef.current = '';
     // composer-draft-per-session: drop the saved draft now that this
     // session's content has been sent. Without this, switching away then
@@ -4215,9 +4250,7 @@ export function ChatInput({
   );
 
   const hasMessage = !isEditorEmpty(editor);
-  // chat-text-quote:纯引用(无编辑器文本、无附件)也可发送——dispatchSend
-  // 会把引用拼成非空 text。
-  const canSend = hasMessage || hasAttachments || quotes.length > 0 || browserComments.length > 0;
+  const canSend = hasMessage || hasAttachments || browserComments.length > 0;
   const hasVoiceDraftText = voiceInput.draftText.trim().length > 0;
   const [voiceReleaseToSendActive, setVoiceReleaseToSendActive] = useState(false);
   const sendButtonDisabled = Boolean(
@@ -4462,71 +4495,6 @@ export function ChatInput({
           />
         )}
 
-        {/* chat-text-quote(Codex 风格):引用收敛为一个 "N selections" 胶囊,
-            hover 浮出逐条预览气泡,X 清空。发送时拼为 blockquote 前置。 */}
-        {quotes.length > 0 && (
-          // 顶部间距由输入卡容器的 pt-[11px] 提供,这里不再叠加,只留与下方
-          // 编辑区的分隔。
-          <div className="pb-1.5">
-            <div className="group/quote relative inline-flex">
-              <div
-                className="inline-flex items-center gap-1.5 rounded-full border py-1 pl-2.5 pr-2.5 text-[12px] group-hover/quote:pr-7"
-                style={{
-                  borderColor: 'var(--border-default)',
-                  color: 'var(--text-secondary)',
-                }}
-              >
-                <MessageSquareQuote className="h-3.5 w-3.5 shrink-0" />
-                <span className="truncate">
-                  {t('chat.quote.selectionCount', { count: quotes.length })}
-                </span>
-              </div>
-              <button
-                type="button"
-                aria-label={t('chat.quote.remove')}
-                onClick={clearQuotes}
-                className="absolute right-1 top-1/2 hidden h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full group-hover/quote:inline-flex"
-                style={{
-                  backgroundColor: 'var(--surface-chip)',
-                  color: 'var(--text-secondary)',
-                }}
-              >
-                <X className="h-3 w-3" />
-              </button>
-              {/* hover 预览:逐条引用,每条截断 3 行。 */}
-              <div
-                className="pointer-events-none absolute bottom-full left-0 z-30 mb-2 hidden max-h-64 w-80 max-w-[70vw] flex-col gap-2 overflow-hidden rounded-[12px] border p-3 group-hover/quote:flex"
-                style={{
-                  backgroundColor: 'var(--surface-elevated)',
-                  borderColor: 'var(--border-default)',
-                  boxShadow: 'var(--shadow-menu)',
-                }}
-              >
-                {quotes.map((quote, idx) => (
-                  // biome-ignore lint/suspicious/noArrayIndexKey: 引用列表只尾插/整体清空,index 稳定。
-                  <span key={idx} className="flex min-w-0 flex-col gap-0.5">
-                    <span
-                      className="line-clamp-3 whitespace-pre-wrap text-[12px] leading-[1.5]"
-                      style={{ color: 'var(--text-secondary)' }}
-                    >
-                      “{quote.text}”
-                    </span>
-                    {quote.sourcePath ? (
-                      <span
-                        className="inline-flex items-center gap-1 text-[11px]"
-                        style={{ color: 'var(--text-tertiary)' }}
-                      >
-                        <FileText className="h-3 w-3 shrink-0" />
-                        <span className="truncate">{quoteSourceDisplayLabel(quote)}</span>
-                      </span>
-                    ) : null}
-                  </span>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-
         {/* browser-comment-chip(Codex 风格):页面评论收敛为一个「N 条注释」
             胶囊,hover 浮出逐条预览(截图缩略 + 目标标签 + 评论文字,可逐条删),
             X 清空全部。发送时序列化为 `# Browser comments:` 段 + 截图附件。 */}
@@ -4659,9 +4627,7 @@ export function ChatInput({
             initialObjective={newGoalInitial}
             onCreated={() => {
               // 目标的默认文字取自 composer,创建成功后清空原文(与发送后清空同款:
-              // 抑制 onUpdate 的 draft-save → 清内容 + 文件 + 引用 + 页面评论 + 已存草稿)。
-              // 引用与页面评论必须一并清:composer 语义是"内容已被目标消费",残留的引用
-              // 胶囊 / 评论胶囊会随下一次发送把旧上下文误发给模型(bot review 必改)。
+              // 抑制 onUpdate 的 draft-save → 清内容 + 文件 + 页面评论 + 已存草稿)。
               const ed = editorRef.current;
               if (!ed || ed.isDestroyed) return;
               isRestoringRef.current = true;
@@ -4671,7 +4637,6 @@ export function ChatInput({
                 isRestoringRef.current = false;
               }
               clearFiles();
-              setQuotes([]);
               // 页面评论走丢弃语义(清 state + 清截图缓存):目标不接管评论截图,
               // 与发送后清空(消息接管截图,不清缓存)不同,这里不清会留磁盘孤儿。
               clearBrowserComments();

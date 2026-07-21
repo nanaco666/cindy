@@ -55,7 +55,9 @@ describe('mobile message actions desktop-first surface', () => {
     expect(renderSource).toContain('styles.messageItem');
     expect(renderSource).toContain('isUser ? styles.userMessageItem : styles.agentMessageItem');
     // 附件条与气泡都在 action bar 之前(气泡在纯图片消息下可被跳过,但渲染位置不变)
-    expect(renderSource).toContain('{hasBubbleContent || (!attachmentStripNode && !leadingQuotes) ? bubble : null}');
+    expect(renderSource).toContain(
+      '{hasBubbleContent || (!attachmentStripNode && messageQuotes.length === 0) ? bubble : null}',
+    );
     expect(renderSource.indexOf('? bubble : null')).toBeLessThan(renderSource.indexOf('testID="message.actionBar"'));
   });
 

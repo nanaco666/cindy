@@ -49,12 +49,18 @@ interface UserMessageEditBoxProps {
   messageClientId: string;
   /** 原消息文本 — 预填进 textarea。 */
   initialText: string;
+  /**
+   * 可见文本未编辑时实际提交的原文。引用消息用它保留私有 marker / 交错顺序，
+   * 同时 textarea 只展示剥过 marker 的 initialText。
+   */
+  initialSubmitText?: string;
   /** 原消息附件 — 只透传给编排层重建重发,本组件不渲染。 */
   images?: readonly RewindDraftImage[];
   files?: readonly FileRef[];
   /** Session workingDir(UserMessage prop)— session 行缺 workingDir 时兜底。 */
   workingDir: string;
-  /** 原消息带「选中引用」编码标志(引用胶囊渲染门控),重发时原样携带。 */
+  /** 原消息带「选中引用」编码标志(引用胶囊渲染门控)。可见文本未修改时
+   *  原样携带；一旦编辑成 markerless 文本就移除，避免手写 blockquote 被误解析。 */
   quotesEncoded?: boolean;
   /** 会话是否有 in-flight turn(renderer 视角)。发送时若为 true,先经
    *  onRequestStop 中断,再挂起等它翻 false 后提交。 */
@@ -71,13 +77,17 @@ interface UserMessageEditBoxProps {
    * 常规 rewind 提交会抛 EDIT_NOT_LAST_MESSAGE。给它时 doCommit 改调本回调
    * (普通重发,失败抛错保留编辑态),不走 rewind 链路。
    */
-  onCommitOverride?: (text: string) => Promise<void>;
+  onCommitOverride?: (submission: {
+    text: string;
+    quotesEncoded?: boolean;
+  }) => Promise<void>;
 }
 
 export function UserMessageEditBox({
   sessionId,
   messageClientId,
   initialText,
+  initialSubmitText,
   images,
   files,
   workingDir,
@@ -147,18 +157,24 @@ export function UserMessageEditBox({
   // 毫秒级尾差由 WithRunningRetry 内部有限重试消化)。
   const doCommit = useCallback(async () => {
     try {
+      const visibleTextUnchanged = text === initialText;
+      const submitText = visibleTextUnchanged ? (initialSubmitText ?? text) : text;
+      const preserveQuoteMetadata = quotesEncoded && visibleTextUnchanged;
       if (onCommitOverride) {
         // 被拦消息:普通重发(不 rewind)。失败抛错落入下方 catch 保留编辑态。
-        await onCommitOverride(text);
+        await onCommitOverride({
+          text: submitText,
+          ...(preserveQuoteMetadata ? { quotesEncoded: true } : {}),
+        });
       } else {
       await commitEditAndResendWithRunningRetry({
         sessionId,
         clientId: messageClientId,
-        text,
+        text: submitText,
         images,
         files,
         fallbackWorkingDir: workingDir,
-        ...(quotesEncoded ? { quotesEncoded: true } : {}),
+        ...(preserveQuoteMetadata ? { quotesEncoded: true } : {}),
       });
       }
       // 先归零守卫再 onSent:onSent 让父组件立刻卸载本组件,晚于它的 setState
@@ -185,7 +201,7 @@ export function UserMessageEditBox({
       submittingRef.current = false;
       setSubmitting(false);
     }
-  }, [sessionId, messageClientId, text, images, files, workingDir, quotesEncoded, onSent, onCommitOverride, t]);
+  }, [sessionId, messageClientId, text, initialText, initialSubmitText, images, files, workingDir, quotesEncoded, onSent, onCommitOverride, t]);
 
   const handleSend = useCallback(() => {
     if (!canSend || submittingRef.current) return;
