@@ -8,10 +8,10 @@
  *  三者都不持久化, 重启后用户上次设置丢失 → 这里收口落 JSON。
  *
  * 文件: <userData>/memory-settings.json
- *   { "maker": false, "claudeCode": true, "codex": true }
+ *   { "maker": true, "claudeCode": true, "codex": true }
  *
  * 默认值跟原 runtime-configs.ts / maker-memory-host.ts 的硬编码对齐:
- *  - maker      : false (实验阶段默认关)
+ *  - maker      : true (默认开启，用户可以关闭)
  *  - claudeCode : true  (Claude SDK autoMemoryEnabled 默认 true, host 跟随)
  *  - codex      : true  (host 强制开 to match Claude — 跟原 runtime-configs.ts:95 一致)
  *
@@ -37,7 +37,7 @@ export interface MemorySettings {
 }
 
 const DEFAULTS: MemorySettings = {
-  maker: false,
+  maker: true,
   claudeCode: true,
   codex: true,
 };
@@ -82,10 +82,38 @@ export function readMemorySettingsState(): OverrideSettingsState<MemorySettings>
 export function writeMemorySetting<K extends keyof MemorySettings>(
   key: K,
   value: MemorySettings[K],
+  options?: { preserveDefault?: boolean },
 ): OverrideSettingsState<MemorySettings> {
-  store.writePatch({ [key]: value } as Partial<MemorySettings>);
+  store.writePatch({ [key]: value } as Partial<MemorySettings>, {
+    preserveDefaults: options?.preserveDefault === true,
+  });
   log.info('memory setting written', { key, value });
   return store.readState();
+}
+
+/**
+ * 把旧版任一入口明确关闭记忆的用户意图迁成新默认下的 `maker:false` override。
+ *
+ * 旧默认值为 false 时，renderer localStorage 的 Maker 专属 marker 最精确；缺失时
+ * 已持久化的任一 native false 是保留旧 opt-out 的可用证据。
+ *
+ * `legacyRendererValue=null` 表示旧 renderer marker 缺失；此时若存在 native false
+ * 则迁移为 Maker false。marker=true 表示用户曾明确开启 Maker，迁移时保留这个显式 opt-in。
+ * 已存在 maker override 时始终保持 main 端事实源。
+ */
+export function preserveLegacyMakerMemoryDisabled(
+  legacyRendererValue: boolean | null,
+): MemorySettings {
+  const state = store.readState();
+  if (state.customizedKeys.includes('maker')) return state.value;
+  if (legacyRendererValue === true) {
+    // The new default is true, so keep an explicit legacy opt-in durable.
+    return writeMemorySetting('maker', true, { preserveDefault: true }).value;
+  }
+  if (legacyRendererValue === false) {
+    return writeMemorySetting('maker', false).value;
+  }
+  return state.value;
 }
 
 export function resetMemorySettings(): MemorySettings {

@@ -15,28 +15,61 @@
  *   - true  : Maker Memory 启用 (写 prompt 注入 + 关闭原生 auto-memory + 暴露 lizi_memory MCP)
  *   - false : Maker Memory 关闭, 各 agent 原生 auto-memory 各自由 Claude / Codex 行控制
  *
- * **默认 false** — Maker Memory 实验阶段, 不影响现有用户行为。
+ * **默认 true** — Maker Memory 已是正式功能；已有用户的明确设置仍以 main 端为准。
  */
 
 const STORAGE_KEY = 'memorySettings.makerEnabled';
+const LEGACY_MIGRATION_KEY = 'memorySettings.makerLegacyMigrationV1';
 
 type Subscriber = (value: boolean) => void;
 const subscribers = new Set<Subscriber>();
+let inMemoryValue = true;
+let localWriteRevision = 0;
+let legacyMigrationCompletedInMemory = false;
 
-/**
- * 同步读 — 给 hook 之外路径用 (ChatInput 启 session 时透传等)。
- * 坏数据 / localStorage 不可用 / 没存过 → 兜底 false (实验阶段默认关)。
- */
-export function getMakerMemoryEnabled(): boolean {
+function hasCompletedLegacyMigration(): boolean {
+  if (legacyMigrationCompletedInMemory) return true;
   try {
-    return localStorage.getItem(STORAGE_KEY) === 'true';
+    return localStorage.getItem(LEGACY_MIGRATION_KEY) === '1';
   } catch {
     return false;
   }
 }
 
+function markLegacyMigrationCompleted(): void {
+  legacyMigrationCompletedInMemory = true;
+  try {
+    localStorage.setItem(LEGACY_MIGRATION_KEY, '1');
+  } catch {
+    // localStorage 不可用时保留进程内标记；下次启动仍会安全重试。
+  }
+}
+
+/** localStorage 中只接受显式 boolean 字符串；缺失/坏值不伪装成用户选择。 */
+function readStoredMakerMemoryEnabled(): boolean | undefined {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored === 'true') return true;
+    if (stored === 'false') return false;
+    return undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * 同步读 — 给 hook 之外路径用 (ChatInput 启 session 时透传等)。
+ * 坏数据 / localStorage 不可用 / 没存过 → 兜底 true (正式功能默认开)。
+ */
+export function getMakerMemoryEnabled(): boolean {
+  return readStoredMakerMemoryEnabled() ?? inMemoryValue;
+}
+
 /** 同步写 — 落盘 + 通知本 tab 内所有 subscriber */
 export function setMakerMemoryEnabled(next: boolean): void {
+  // localStorage 不可用时仍须在当前 renderer 生命周期内保留用户选择。
+  localWriteRevision += 1;
+  inMemoryValue = next;
   try {
     localStorage.setItem(STORAGE_KEY, next ? 'true' : 'false');
   } catch {
@@ -52,6 +85,7 @@ export function subscribeMakerMemoryEnabled(cb: Subscriber): () => void {
   // 跨实例 storage 事件 (多窗口兜底; Electron 单窗口下几乎不触发)
   const storageHandler = (e: StorageEvent) => {
     if (e.key !== STORAGE_KEY) return;
+    localWriteRevision += 1;
     cb(getMakerMemoryEnabled());
   };
   window.addEventListener('storage', storageHandler);
@@ -73,7 +107,34 @@ export function subscribeMakerMemoryEnabled(cb: Subscriber): () => void {
  */
 export async function bootstrapMemorySettingsFromMain(): Promise<void> {
   try {
-    const settings = await window.electronAPI.maker.memoryGetSettings();
+    const revisionAtStart = localWriteRevision;
+    const migrationCompleted = hasCompletedLegacyMigration();
+    const legacyRendererValue = migrationCompleted ? undefined : readStoredMakerMemoryEnabled();
+    let settings = await window.electronAPI.maker.memoryGetSettings();
+    // 用户或其它窗口已在请求期间写入时，旧快照不再有资格触发迁移或覆盖本地镜像。
+    if (localWriteRevision !== revisionAtStart) return;
+    // 首次启动时委托 main 迁移旧档案；没有 renderer marker 时也要保留 native opt-out。
+    if (!migrationCompleted && settings.maker) {
+      try {
+        settings = await window.electronAPI.maker.memoryPreserveLegacyMakerDisabled(
+          legacyRendererValue ?? null,
+        );
+      } catch {
+        // Migration persistence is best-effort. Never let a structured IPC
+        // failure prevent the main renderer tree from mounting.
+        if (
+          localWriteRevision === revisionAtStart &&
+          legacyRendererValue === false
+        ) {
+          // Keep the legacy opt-out in the process-local mirror even when the
+          // main profile cannot be written, so sessions stay disabled now.
+          setMakerMemoryEnabled(false);
+        }
+        return;
+      }
+    }
+    if (localWriteRevision !== revisionAtStart) return;
+    if (!migrationCompleted) markLegacyMigrationCompleted();
     const current = getMakerMemoryEnabled();
     if (current === settings.maker) return;
     setMakerMemoryEnabled(settings.maker);

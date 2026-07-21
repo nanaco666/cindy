@@ -637,6 +637,21 @@ describe('远程交互接线不变式', () => {
     expect(src).not.toContain('electronAPI.maker.resolveInteraction');
   });
 
+  it('makerChatStore 不向 device-link 远程 session 透传本地 Maker Memory 开关', () => {
+    const src = read('lib/makerChatStore.ts');
+    expect(src).toContain('const deviceLinkRemote = isRemoteSession(sessionId);');
+    expect(src).toContain('const sshRemote = Boolean(current.remoteHostId);');
+    expect(src).toContain('...(deviceLinkRemote ? {} : { makerMemoryEnabled: sshRemote ? false : getMakerMemoryEnabled() })');
+  });
+
+  it('context usage 对 SSH 显式关闭本地 Maker Memory，对 device-link 仍省略', () => {
+    const src = read('features/cc-agent/CCAgentSessionView.tsx');
+    expect(src).toContain('...(remoteDeviceId');
+    expect(src).toContain('makerMemoryEnabled: session.remoteHostId');
+    expect(src).toContain('? false');
+    expect(src).toContain(': getMakerMemoryEnabled()');
+  });
+
   it('ChatInput 的 setPermissionMode 远程经隧道(makerApiFor),本机才走本机 IPC', () => {
     const src = read('components/new-chat/ChatInput.tsx');
     expect(src).toContain('makerApiFor(sessionId).setPermissionMode');

@@ -244,6 +244,7 @@ import { rehydrateCloseSuppression } from './maker-host/rehydrateCloseSuppressio
 // 静态 import 不会触发 Maker / Agent 的实例化。
 import {
   getMaker as getMakerCore,
+  getMakerIfReady,
   shutdownLspServerPool,
   prepareCodexForAuthModeChange,
   cancelCodexAuthModeChange,
@@ -305,7 +306,11 @@ import {
   setGoalAskAnswerObserver,
 } from './maker-ipc/register.js';
 import { MAKER_INVOKE as MAKER_IPC_INVOKE, MAKER_PUSH } from './maker-ipc/channels.js';
-import { readMemorySettings, readMemorySettingsState } from './maker-host/memory-settings-store.js';
+import {
+  preserveLegacyMakerMemoryDisabled,
+  readMemorySettings,
+  readMemorySettingsState,
+} from './maker-host/memory-settings-store.js';
 import {
   readImDefaultSettingsState,
   resetImDefaultSettings,
@@ -2252,18 +2257,41 @@ ipcMain.on('theme:apply-vibrancy', (_event, payload: { familyId: string; isDark:
     },
   );
 
-  // Maker memory settings 只读 IPC —— renderer/index.tsx 在 React mount 前就会
-  // 调一次 (bootstrapMemorySettingsFromMain 同步本地 localStorage 镜像), 远早于
-  // splash check-environment 完成时才注册的 maker:* handler。这里独立提前挂上,
-  // 因为 readMemorySettings 只摸 <userData>/memory-settings.json, 跟 Maker 单例
-  // 完全无关。注意: 写入路径 (set-enabled / reset) 仍在 register.ts 里, 因为它们
-  // 要操作 maker.makerMemory 实例, 必须等 splash 完成后再注册。
+  // Maker memory 启动 IPC —— renderer/index.tsx 在 React mount 前调用，用 main 真值
+  // 同步 localStorage 并迁移旧 opt-out；时机远早于 splash 后才注册的交互式 maker:*
+  // handler，因此独立提前挂载。迁移只会写持久化值，并在 Maker 已被其它启动路径构造
+  // 时顺带 disable 现有 manager；不会为迁移而主动构造 Maker。正常 toggle/reset 仍在
+  // register.ts 中注册，因为它们依赖 splash 完成后的完整 agent runtime。
   ipcMain.handle(MAKER_IPC_INVOKE.MEMORY_GET_SETTINGS, async () => {
     return readMemorySettings();
   });
   ipcMain.handle(MAKER_IPC_INVOKE.MEMORY_GET_SETTINGS_STATE, async () => {
     return memorySettingsWire();
   });
+  ipcMain.handle(
+    MAKER_IPC_INVOKE.MEMORY_PRESERVE_LEGACY_MAKER_DISABLED,
+    async (_e, legacyRendererValue: unknown) => {
+      const parsedLegacyRendererValue =
+        legacyRendererValue === true ? true : legacyRendererValue === false ? false : null;
+      try {
+        const settings = preserveLegacyMakerMemoryDisabled(parsedLegacyRendererValue);
+        // renderer migration 可能晚于 splash 创建 Maker。持久化为 false 后必须立即同步
+        // 已存在的 manager，避免当前进程继续按旧的 enabled=true 启动新 Session。
+        const maker = getMakerIfReady();
+        if (!settings.maker && maker?.makerMemory?.isEnabled()) {
+          await maker.makerMemory.disable();
+          await maker.setAgentMemory('claude-code', settings.claudeCode);
+          await maker.setAgentMemory('codex', settings.codex);
+        }
+        return settings;
+      } catch (err) {
+        throwIpcError(
+          'INTERNAL',
+          `memory settings migration failed: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    },
+  );
   ipcMain.handle(MAKER_IPC_INVOKE.IM_DEFAULT_SETTINGS_GET, async () => {
     return imDefaultSettingsWire();
   });

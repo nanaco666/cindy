@@ -17,7 +17,7 @@ import { DefaultOverrideControls } from './DefaultOverrideControls';
 
 const log = createLogger('SubagentModelSection');
 
-/** 分别展示 Claude 与 Codex 的子代理模型覆盖能力。 */
+/** 展示各 Agent 运行时的子代理模型覆盖能力；模型供应商由运行时模型目录决定。 */
 export function SubagentModelSection() {
   const { t } = useTranslation();
   const [settings, setSettings] = useState<SubagentModelSettingsState | null>(null);
@@ -94,7 +94,7 @@ export function SubagentModelSection() {
         <div className="flex items-center gap-4 px-4 py-4">
           <div className="flex w-[150px] shrink-0 items-center gap-2">
             <ClaudeMark size={16} className="text-[var(--text-secondary)]" />
-            <span className="text-14 font-medium text-[var(--text-primary)]">Claude</span>
+            <span className="text-14 font-medium text-[var(--text-primary)]">Claude Code</span>
           </div>
           <div className="flex min-w-0 flex-1 items-center gap-2">
             <div className="min-w-0 flex-1">

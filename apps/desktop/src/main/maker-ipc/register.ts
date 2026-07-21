@@ -126,7 +126,13 @@ import {
   writeCollaborationSetting,
 } from '../maker-host/collaboration-settings-store.js';
 import { createGitSnapshotCoordinator } from '../maker-host/git-snapshot-host.js';
-import { getPluginRegistry, restartCodexAfterAuthModeChange } from '../maker-host/index.js';
+import {
+  cancelCodexAuthModeChange,
+  finalizeCodexAfterAuthModeChange,
+  getPluginRegistry,
+  prepareCodexForAuthModeChange,
+  restartCodexAfterAuthModeChange,
+} from '../maker-host/index.js';
 import {
   readMemorySettingsState,
   resetMemorySettings,
@@ -510,6 +516,39 @@ async function applyMemorySettingsToRuntime(maker: Maker, settings: MemorySettin
 async function applyNativeMemorySettingsToRuntime(maker: Maker, settings: MemorySettings): Promise<void> {
   await maker.setAgentMemory('claude-code', settings.claudeCode);
   await maker.setAgentMemory('codex', settings.codex);
+}
+
+/**
+ * Validate that local Codex sessions can be restarted before committing a memory setting change.
+ * Once the setting is committed, a finalize failure is logged instead of rejecting the IPC with
+ * main and renderer holding different values; the next Codex spawn still reads the new setting.
+ */
+async function applyMemoryChangeWithCodexRestart<T>(change: () => Promise<T>): Promise<T> {
+  try {
+    await prepareCodexForAuthModeChange();
+  } catch (err) {
+    throwIpcError(
+      'CREDENTIAL_SWITCH_BUSY',
+      err instanceof Error ? err.message : String(err),
+    );
+  }
+  let changed = false;
+  try {
+    const result = await change();
+    changed = true;
+    try {
+      await finalizeCodexAfterAuthModeChange();
+    } catch (err) {
+      log.warn('Codex restart failed after memory setting change', {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+    return result;
+  } finally {
+    if (!changed) {
+      cancelCodexAuthModeChange();
+    }
+  }
 }
 
 // ─── Sessions push helpers ────────────────────────────────────────────────
@@ -3646,6 +3685,12 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
     const remoteHostIdToEnsure = sessRemoteHostId ?? coRemoteHostId;
     if (!remoteHostIdToEnsure) return;
 
+    if (createOpts && typeof createOpts === 'object') {
+      const mutableCreateOpts = createOpts as { remoteHostId?: string; makerMemoryEnabled?: boolean };
+      mutableCreateOpts.remoteHostId = remoteHostIdToEnsure;
+      mutableCreateOpts.makerMemoryEnabled = false;
+    }
+
     await ensureRemoteHostReady(remoteHostIdToEnsure);
     const ensureAgentKind: 'claude-code' | 'codex' | null =
       session?.agentKind === 'codex' || session?.agentKind === 'claude-code'
@@ -6243,38 +6288,37 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
     if (typeof enabled !== 'boolean') {
       throwIpcError('INVALID_PARAMS', 'enabled required (boolean)');
     }
-    if (!maker.makerMemory) {
+    const makerMemory = maker.makerMemory;
+    if (!makerMemory) {
       throwIpcError('MAKER_MEMORY_NOT_READY', 'maker memory not initialized');
     }
     log.info('maker-memory:set-enabled', { enabled });
-    const result = enabled ? await maker.makerMemory.enable() : await maker.makerMemory.disable();
-    let settingsState = readMemorySettingsState();
-    try {
-      settingsState = writeMemorySetting('maker', enabled);
-    } catch (err) {
-      log.warn('maker-memory:set-enabled persistence failed (in-session change still applied)', {
-        enabled,
-        error: err instanceof Error ? err.message : String(err),
-      });
-    }
-    if (!settingsState.value.maker) {
-      await applyNativeMemorySettingsToRuntime(maker, settingsState.value);
-    }
-    return {
-      ...result,
-      isCustomized: settingsState.isCustomized,
-      customizedKeys: settingsState.customizedKeys,
-      defaults: settingsState.defaults,
-    };
+    return applyMemoryChangeWithCodexRestart(async () => {
+      // Persist before changing the manager. A failed maker:false write must reject the toggle
+      // instead of presenting an opt-out that silently disappears after restart.
+      const settingsState = writeMemorySetting('maker', enabled, { preserveDefault: enabled });
+      const result = enabled ? await makerMemory.enable() : await makerMemory.disable();
+      if (!settingsState.value.maker) {
+        await applyNativeMemorySettingsToRuntime(maker, settingsState.value);
+      }
+      return {
+        ...result,
+        isCustomized: settingsState.isCustomized,
+        customizedKeys: settingsState.customizedKeys,
+        defaults: settingsState.defaults,
+      };
+    });
   });
 
   // MEMORY_GET_SETTINGS 故意不在这里注册 —— renderer/index.tsx 在 React mount
   // 之前 (远早于 splash 完成) 就会调一次, 所以挂在 bootstrap-electron 的早期
   // registerIpcHandlers() 里, 见那里的注释。
   ipcMain.handle(MAKER_INVOKE.MEMORY_RESET_SETTINGS, async () => {
-    const settings = resetMemorySettings();
-    await applyMemorySettingsToRuntime(maker, settings);
-    return memorySettingsWire();
+    return applyMemoryChangeWithCodexRestart(async () => {
+      const settings = resetMemorySettings();
+      await applyMemorySettingsToRuntime(maker, settings);
+      return memorySettingsWire();
+    });
   });
 
   ipcMain.handle(MAKER_INVOKE.MAKER_MEMORY_RESET, async () => {

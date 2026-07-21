@@ -1813,4 +1813,34 @@ describe('makerChatStore text delta batching', () => {
       /workdir-missing/,
     );
   });
+
+  it('forces DB-hydrated SSH UI triggers off controller-local Maker Memory', async () => {
+    vi.mocked(sessionService.get).mockResolvedValueOnce({
+      agentKind: 'codex',
+      remoteHostId: 'remote-host',
+      sdkSessionId: null,
+      fastMode: false,
+      contextTokens: 0,
+      contextWindow: 0,
+      totalCostUsd: 0,
+      workingDir: WORKING_DIR,
+      model: MODEL,
+      effort: EFFORT,
+      permissionMode: PERMISSION_MODE,
+    } as Awaited<ReturnType<typeof sessionService.get>>);
+    input.enqueue.mockImplementationOnce(async (sessionId: string) => projection(sessionId));
+
+    await makerChatStore.sendUiTrigger(SESSION_ID, '[UI_ACTION_TRIGGER] retry');
+
+    expect(input.enqueue).toHaveBeenCalledWith(
+      SESSION_ID,
+      expect.objectContaining({
+        createOpts: expect.objectContaining({
+          remoteHostId: 'remote-host',
+          makerMemoryEnabled: false,
+        }),
+      }),
+      expect.any(Object),
+    );
+  });
 });

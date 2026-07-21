@@ -3808,6 +3808,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
       defaults: { maker: boolean; claudeCode: boolean; codex: boolean };
     }> =>
       ipcRenderer.invoke('maker:memory:get-settings-state'),
+    /** 启动期迁移旧版 renderer/native memory opt-out；null 表示 renderer marker 缺失。 */
+    memoryPreserveLegacyMakerDisabled: (legacyRendererValue: boolean | null): Promise<{
+      maker: boolean;
+      claudeCode: boolean;
+      codex: boolean;
+    }> =>
+      ipcRenderer.invoke('maker:memory:preserve-legacy-maker-disabled', legacyRendererValue),
     memoryResetSettings: (): Promise<{
       maker: boolean;
       claudeCode: boolean;

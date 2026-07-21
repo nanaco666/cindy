@@ -94,7 +94,7 @@ export interface AgentRuntimeConfig {
 
   /**
    * 是否启用 Maker Memory (跨 agent 共享、host 接管的 workdir-scoped 记忆系统)。
-   * - undefined / false : 不启用, 走 agent 各自的原生 memory (现有行为不变, 实验阶段默认值)
+   * - undefined / false : 不启用, 走 agent 各自的原生 memory
    * - true              : 启用 — agent 端在 startSession 时拼 prompt 注入 memory 段 +
    *                        MakerMemoryManager.enable() 联动调各 agent.setMemory(false) 关原生
    *

@@ -1813,7 +1813,16 @@ export function CCAgentSessionView({
           fastMode,
           permissionMode: session.permissionMode,
           userPrompt: getUserPrompt(),
-          makerMemoryEnabled: getMakerMemoryEnabled(),
+          // device-link executes on the target desktop, so let that runtime
+          // own the setting. SSH still lazy-starts through this process and
+          // must explicitly disable controller-local Cindy Memory.
+          ...(remoteDeviceId
+            ? {}
+            : {
+                makerMemoryEnabled: session.remoteHostId
+                  ? false
+                  : getMakerMemoryEnabled(),
+              }),
           extraDirs: session.extraDirs ?? [],
           displayReasoning: 'summarized' as const,
           ...(session.remoteHostId ? { remoteHostId: session.remoteHostId } : {}),
@@ -1834,7 +1843,7 @@ export function CCAgentSessionView({
         });
       });
     return true;
-  }, [fastMode, insertSystemCard, session, sessionId, t, updateSystemCardData]);
+  }, [fastMode, insertSystemCard, remoteDeviceId, session, sessionId, t, updateSystemCardData]);
 
   const handleSend = useCallback(
     async (

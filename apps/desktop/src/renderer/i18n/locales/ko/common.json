@@ -1349,7 +1349,7 @@
       "description": "워크스페이스 단위 메모리를 구현합니다. 설정 변경 후에는 일반적으로 새 Session을 시작해야 적용됩니다. 메모리에 문제가 있다면 Reset하거나 끄세요.",
       "maker": {
         "label": "Cindy",
-        "description": "동일 작업 디렉터리에서(Claude / Codex) 다중 Agent의 모든 Session 메모리를 실제로 공유합니다 (Beta 기능)",
+        "description": "메모리는 개별 모델이 아니라 Agent 진입점별로 관리됩니다. 동일한 작업 디렉터리에서 Claude Code와 Codex 진입점으로 시작한 Session은 메모리를 공유합니다",
         "toggleAria": "Cindy 메모리 전환",
         "resetAria": "Cindy 메모리 재설정",
         "resetConfirm": {
@@ -1369,12 +1369,12 @@
       },
       "agents": {
         "claude-code": {
-          "label": "Claude",
-          "description": "동일 작업 디렉터리에서 Claude Agent의 모든 Session이 메모리를 공유합니다 (Official)"
+          "label": "Claude Code",
+          "description": "Claude Code 입구를 통해 사용하는 모든 모델이 같은 메모리를 공유합니다"
         },
         "codex": {
           "label": "Codex",
-          "description": "동일 작업 디렉터리에서 Codex Agent의 모든 Session이 메모리를 공유합니다 (Official)"
+          "description": "Codex 입구를 통해 사용하는 모든 모델이 같은 메모리를 공유합니다"
         }
       },
       "agent": {
@@ -1400,10 +1400,10 @@
     },
     "subagentModels": {
       "title": "하위 에이전트 모델",
-      "description": "Claude와 Codex 하위 에이전트의 기본 모델을 각각 지정합니다.",
+      "description": "Claude Code와 Codex가 하위 작업을 실행할 때 사용할 기본 모델을 설정합니다. 설정은 진입점별로 적용되며 모델별로 저장되지 않습니다.",
       "unspecified": "지정 안 함(기본 동작 사용)",
       "codexUnavailable": "현재 Codex 버전에서는 안전한 재정의를 지원하지 않습니다",
-      "hint": "지정하지 않으면 재정의를 주입하지 않습니다. Claude 변경 사항은 새 세션부터 적용되며, Codex 전체 컨텍스트 fork는 현재 모델 재정의를 지원하지 않습니다.",
+      "hint": "선택 가능한 모델은 연결된 모델 소스에 따라 달라집니다. 지정하지 않으면 Agent의 기본 설정을 사용합니다. Claude Code 변경 사항은 새 세션부터 적용되며, 현재 Codex 버전은 하위 에이전트 모델 재정의를 지원하지 않습니다.",
       "saveFailed": "하위 에이전트 모델 저장 실패"
     },
     "compaction": {

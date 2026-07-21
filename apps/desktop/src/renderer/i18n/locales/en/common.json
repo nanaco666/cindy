@@ -1349,7 +1349,7 @@
       "description": "Powers workspace-scoped memory. After changing settings you usually need to start a new Session for it to take effect. If memory misbehaves, click Reset or turn it off.",
       "maker": {
         "label": "Cindy",
-        "description": "True cross-Agent (Claude / Codex) Session memory sharing within the same working directory (Beta).",
+        "description": "Memory is managed by the agent entry, not by each model. Claude Code and Codex sessions can share memory within the same working directory.",
         "toggleAria": "Toggle Cindy memory",
         "resetAria": "Reset Cindy memories",
         "resetConfirm": {
@@ -1369,12 +1369,12 @@
       },
       "agents": {
         "claude-code": {
-          "label": "Claude",
-          "description": "Within the same working directory, all sessions of Claude Agent share memory (Official)."
+          "label": "Claude Code",
+          "description": "All models used through the Claude Code entry share the same memory."
         },
         "codex": {
           "label": "Codex",
-          "description": "Within the same working directory, all sessions of Codex Agent share memory (Official)."
+          "description": "All models used through the Codex entry share the same memory."
         }
       },
       "agent": {
@@ -1400,10 +1400,10 @@
     },
     "subagentModels": {
       "title": "Subagent models",
-      "description": "Choose separate default models for Claude and Codex subagents.",
+      "description": "Choose the default model used for sub tasks in Claude Code and Codex. The setting applies per entry, not per model.",
       "unspecified": "Not specified (use default behavior)",
       "codexUnavailable": "Safe overrides are unavailable in this Codex version",
-      "hint": "No override is injected when left unspecified. Claude changes apply to new sessions; Codex full-context forks do not currently support model overrides.",
+      "hint": "Available models depend on your connected model sources. Leave it unspecified to use the agent's normal default. Claude Code changes apply to new sessions; the current Codex version does not support subagent model overrides.",
       "saveFailed": "Failed to save subagent model"
     },
     "compaction": {

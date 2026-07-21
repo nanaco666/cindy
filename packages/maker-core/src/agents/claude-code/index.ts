@@ -763,15 +763,7 @@ export class ClaudeCodeAgent extends BaseAgent {
       opts.makerMemoryEnabled ?? this.deps.runtimeConfig.makerMemoryEnabled ?? false;
     const makerMemory = this.deps.makerMemory;
     const makerMemoryEnabled = makerMemoryFlag === true && !!makerMemory;
-    if (makerMemory) {
-      // 同步顶层 manager state — enable/disable 幂等, 多 session 并发以最近一次为准。
-      try {
-        if (makerMemoryEnabled) await makerMemory.enable();
-        else await makerMemory.disable();
-      } catch (e) {
-        log.warn('maker memory state sync failed', { error: String(e) });
-      }
-    }
+    // This per-session injection flag must not mutate the shared manager.
     if (makerMemoryEnabled && makerMemory) {
       try {
         const store = await makerMemory.getStore(opts.workingDir);
@@ -816,6 +808,7 @@ export class ClaudeCodeAgent extends BaseAgent {
       };
       const out: Record<string, McpServerConfig> = {};
       for (const provider of providers) {
+        if (provider.name === 'lizi_memory' && (!makerMemoryEnabled || opts.remoteHostId)) continue;
         if (provider.isEnabled && !provider.isEnabled(context)) continue;
         const config = provider.toClaudeSdkConfig?.(context);
         if (!config) continue;
@@ -1072,7 +1065,10 @@ export class ClaudeCodeAgent extends BaseAgent {
     const buildSettings = (): Settings =>
       buildClaudeFlagSettings({
         showThinkingSummaries,
-        memoryOverride: this.memoryOverride,
+        // Maker Memory is not available on SSH targets. Do not carry the local
+        // manager's native-memory suppression across that boundary: the remote
+        // host must retain its own Claude memory configuration.
+        memoryOverride: opts.remoteHostId ? undefined : this.memoryOverride,
         // Fast 模式:进 flag settings 层(= --settings),解锁 cc 二进制在 Agent SDK 通道下的
         // fast(否则二进制按 "Agent SDK 不可用" 拒绝)。是否 Opus/官方/firstParty 由二进制把关,
         // agent 层不重复硬判(规则 9:确定性逻辑就近,但 fast 的最终门槛是二进制 + 配置门控)。

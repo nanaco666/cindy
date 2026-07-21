@@ -1349,7 +1349,7 @@
       "description": "用于帮助用户实现基于工作区的记忆，改变设置之后理论上需要新建会话才会生效，如果觉得记忆系统出现问题可以点击 Reset 或者关闭。",
       "maker": {
         "label": "Cindy",
-        "description": "真正实现同工作目录下（Claude / Codex）多 Agent 的所有会话记忆共享（Beta 功能）",
+        "description": "记忆按 Agent 入口管理，而不是按具体模型管理；同一工作目录下，Claude Code 和 Codex 入口的会话可以共享记忆",
         "toggleAria": "切换 Cindy 记忆",
         "resetAria": "重置 Cindy 记忆",
         "resetConfirm": {
@@ -1369,12 +1369,12 @@
       },
       "agents": {
         "claude-code": {
-          "label": "Claude",
-          "description": "同工作目录下，Claude Agent 的所有会话记忆共享（Official）"
+          "label": "Claude Code",
+          "description": "通过 Claude Code 入口使用的所有模型，会共享同一份记忆"
         },
         "codex": {
           "label": "Codex",
-          "description": "同工作目录下，Codex Agent 的所有会话记忆共享（Official）"
+          "description": "通过 Codex 入口使用的所有模型，会共享同一份记忆"
         }
       },
       "agent": {
@@ -1400,10 +1400,10 @@
     },
     "subagentModels": {
       "title": "子代理模型",
-      "description": "为 Claude 和 Codex 的子代理分别指定默认模型。",
+      "description": "分别设置 Claude Code 和 Codex 执行子任务时使用的默认模型。设置按入口生效，不会为每个模型单独保存。",
       "unspecified": "不指定（跟随原逻辑）",
       "codexUnavailable": "当前 Codex 版本暂不支持安全覆盖",
-      "hint": "留空时不会注入任何覆盖。Claude 的修改从新建会话开始生效；Codex 完整上下文派生暂不支持模型覆盖。",
+      "hint": "可选模型取决于已连接的模型来源；留空表示使用 Agent 原本的默认设置。Claude Code 的修改从新建会话开始生效，Codex 当前版本暂不支持覆盖子代理模型。",
       "saveFailed": "保存子代理模型失败"
     },
     "compaction": {
