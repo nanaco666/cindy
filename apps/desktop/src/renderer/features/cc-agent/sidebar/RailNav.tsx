@@ -28,7 +28,6 @@ import { isOrcaWorkerSession, resolveSessionRoute } from '@/lib/orcaSessionIdent
 import { SessionStatusIcon } from './SessionStatusIcon';
 import { formatSidebarTime } from '../lib/formatSidebarTime';
 import { sessionActivityMs } from '../lib/dateSessionGrouping';
-import type { ProjectNode } from '../lib/projectGrouping';
 import { railPanelStore, type RailPanelSection } from './railPanelStore';
 
 /** 预览卡宽度(px)——旧 RailFlyout 同宽。 */
@@ -40,8 +39,6 @@ export interface RailNavProps {
   navigate: ReturnType<typeof useNavigate>;
   /** 全量可见 sessions(本地 + 远程镜像合并)——置顶/对话段数据源。 */
   sessions: Session[];
-  /** 项目分组(含各自 sessions)——项目段聚合灯数据源。 */
-  projects: ProjectNode[];
   activeSessionId: string | undefined;
   /** 与展开态共用的置顶顺序(平铺瓷砖同序)。 */
   manualPinnedOrder: readonly string[];
@@ -157,7 +154,6 @@ function SessionPreviewCard({ preview }: { preview: PreviewState }) {
 export function RailNav({
   navigate,
   sessions,
-  projects,
   activeSessionId,
   manualPinnedOrder,
   runningSessionIds,
@@ -211,9 +207,20 @@ export function RailNav({
     [runningSessionIds, notifications, attentionKinds, urgentSessionIds],
   );
 
+  // 项目段聚合灯从 sessions(sessionsWithRemote,已按机器切换过滤)派生 ——
+  // 与置顶/对话灯同一数据口径,也与面板主过滤一致;不用全量搜索 universe
+  // (那是跨机器全集,会为面板里看不到的项目点灯,review P1)。
+  const projectLampSessions = useMemo(
+    () =>
+      sessions.filter(
+        (s) =>
+          s.workspaceKind === 'project' && s.status !== 'archived' && !isOrcaWorkerSession(s),
+      ),
+    [sessions],
+  );
   const projectsAgg = useMemo(
-    () => aggregate(projects.flatMap((p) => p.sessions)),
-    [aggregate, projects],
+    () => aggregate(projectLampSessions),
+    [aggregate, projectLampSessions],
   );
   const dialoguesAgg = useMemo(
     () => aggregate(dialogueLampSessions),

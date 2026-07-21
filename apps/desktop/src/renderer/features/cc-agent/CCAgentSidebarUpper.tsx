@@ -2407,7 +2407,6 @@ function CollapsedView({
       <RailNav
         navigate={navigate}
         sessions={sessions}
-        projects={allSearchProjects}
         activeSessionId={activeSessionId}
         manualPinnedOrder={manualPinnedOrder}
         runningSessionIds={railRunningIds}
@@ -2421,6 +2420,12 @@ function CollapsedView({
 }
 
 /* ============================== Rail Panels ============================== */
+
+/** rail 面板的「视为内部」白名单:面板本体、rail 触发瓷砖、Radix popper
+ *  (右键菜单/子菜单)与 dialog/alertdialog(确认弹窗——ConfirmDialog 用
+ *  alertdialog role,漏掉会在弹窗内按下鼠标时误关底层面板,review P1)。 */
+const RAIL_PANEL_KEEPALIVE_SELECTOR =
+  '[data-rail-panel],[data-rail-panel-trigger],[data-radix-popper-content-wrapper],[role="dialog"],[role="alertdialog"]';
 
 /** rail 面板容器:portal + fixed + 视口钳制。mouseleave 时若指针落入 Radix
  *  popper / 对话框(行内右键菜单、移动子菜单、确认弹窗)不视为离开。 */
@@ -2457,13 +2462,7 @@ function RailPanelShell({
       onMouseEnter={onEnter}
       onMouseLeave={(e) => {
         const next = e.relatedTarget instanceof Element ? e.relatedTarget : null;
-        if (
-          next?.closest(
-            '[data-rail-panel],[data-rail-panel-trigger],[data-radix-popper-content-wrapper],[role="dialog"]',
-          )
-        ) {
-          return;
-        }
+        if (next?.closest(RAIL_PANEL_KEEPALIVE_SELECTOR)) return;
         onLeave();
       }}
       className={cn(
@@ -2537,6 +2536,31 @@ function RailPanels({
     if (panelState.openSection !== 'projects') setShowAllProjects(false);
   }, [panelState.openSection]);
 
+  // 生命周期清理(review P1「Portal 面板跨视图残留」):
+  // ① 折叠态解除(侧栏展开 / peek pin)→ 触发器消失,立即收面板;
+  // ② 本组件卸载(doc 模式 WorkdirBrowseSidebar 替换 ExpandedView)→ 收面板,
+  //    避免重挂载后按旧锚点复现;
+  // ③ 面板打开期间全局 pointermove 兜底(useSidebarPeek 同款):指针落点不在
+  //    白名单内 → 排收回,覆盖「rail 被 ⌘B 完全隐藏」等 mouseleave 收不到的路径。
+  const isCollapsed = useSidebarCollapsedState();
+  useEffect(() => {
+    if (!isCollapsed) railPanelStore.closeAll();
+  }, [isCollapsed]);
+  useEffect(() => () => railPanelStore.closeAll(), []);
+  useEffect(() => {
+    if (!panelState.openSection) return;
+    const onPointerMove = (event: PointerEvent) => {
+      const el = event.target instanceof Element ? event.target : null;
+      if (el?.closest(RAIL_PANEL_KEEPALIVE_SELECTOR)) {
+        railPanelStore.cancelClose();
+      } else {
+        railPanelStore.scheduleClose();
+      }
+    };
+    window.addEventListener('pointermove', onPointerMove, { passive: true });
+    return () => window.removeEventListener('pointermove', onPointerMove);
+  }, [panelState.openSection]);
+
   // Esc / 点击面板与瓷砖之外 → 关闭(Radix popper / 对话框视为面板内部)。
   useEffect(() => {
     if (!panelState.openSection) return;
@@ -2545,13 +2569,7 @@ function RailPanels({
     };
     const onDown = (e: MouseEvent) => {
       const el = e.target instanceof Element ? e.target : null;
-      if (
-        el?.closest(
-          '[data-rail-panel],[data-rail-panel-trigger],[data-radix-popper-content-wrapper],[role="dialog"]',
-        )
-      ) {
-        return;
-      }
+      if (el?.closest(RAIL_PANEL_KEEPALIVE_SELECTOR)) return;
       railPanelStore.closeAll();
     };
     window.addEventListener('keydown', onKey);
