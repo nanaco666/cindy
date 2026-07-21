@@ -157,8 +157,8 @@ export const lightColors: ThemeColors = {
   brandSplashForeground: '#FFFFFF',
   brandSplashMuted: 'rgba(255, 255, 255, 0.82)',
   surfaceChip: '#F1F1F1',
-  border: '#DCDFE3',
-  borderTranslucent: 'rgba(220, 223, 227, 0.62)',
+  border: '#C6C9CE', // 试穿 B 档(原 #DCDFE3,light 对 #EDEDED 仅 1.14:1 太弱 → 1.42:1)
+  borderTranslucent: 'rgba(198, 201, 206, 0.62)',
   borderStrong: '#686B72',
   textPrimary: '#3C3F43',
   textSecondary: '#8C8E94',
