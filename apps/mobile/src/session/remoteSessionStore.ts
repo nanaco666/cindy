@@ -270,16 +270,21 @@ function finishMessageStreamingAtCompactBoundary(message: RemoteMessage): Remote
 }
 
 /** Apply a repeated Codex plan snapshot to the one persisted tool row used by desktop. */
+interface LivePlanToolUseResult {
+  handled: boolean;
+  changed: boolean;
+}
+
 function applyLivePlanToolUseMessage(
   sessionId: string,
   event: Record<string, unknown>,
   persistId?: string,
-): boolean {
+): LivePlanToolUseResult {
   const data = isRecord(event.data) ? event.data : {};
-  if (readString(data, 'toolName') !== 'update_plan') return false;
+  if (readString(data, 'toolName') !== 'update_plan') return { handled: false, changed: false };
 
   const toolUseId = readString(data, 'toolUseId');
-  if (!toolUseId) return true;
+  if (!toolUseId) return { handled: true, changed: false };
   const content = {
     toolUseId,
     toolName: 'update_plan',
@@ -293,17 +298,18 @@ function applyLivePlanToolUseMessage(
     if (message.toolUseId === toolUseId) return true;
     return readString(message.content, 'toolUseId') === toolUseId;
   });
-  if (targetIndex < 0) return true;
+  if (targetIndex < 0) return { handled: true, changed: false };
 
   const current = existing[targetIndex];
-  if (current.toolUseId === toolUseId && deepValueEqual(current.content, content)) return true;
+  if (current.toolUseId === toolUseId && deepValueEqual(current.content, content)) {
+    return { handled: true, changed: false };
+  }
 
   const next = [...existing];
   next[targetIndex] = { ...current, content, toolUseId };
   messages.set(sessionId, next);
   bumpMessageVersion();
-  emit();
-  return true;
+  return { handled: true, changed: true };
 }
 
 /**
@@ -444,6 +450,16 @@ function findPendingGeneratedStreamingFallbackIndex(
   return -1;
 }
 
+function generatedFallbackMatchesPersistedMessage(
+  fallback: RemoteMessage,
+  persisted: RemoteMessage,
+): boolean {
+  const liveText = contentToPreview(fallback.content);
+  const persistedText = contentToPreview(persisted.content);
+  if (!liveText || !persistedText) return false;
+  return persistedText.startsWith(liveText) || liveText.startsWith(persistedText);
+}
+
 interface StreamingClientIdResolution {
   clientId: string;
   changed: boolean;
@@ -503,11 +519,15 @@ function streamingClientIdFor(sessionId: string, persistId: string | undefined):
 function upsertMessage(sessionId: string, message: RemoteMessage): boolean {
   const existing = messages.get(sessionId) ?? [];
   const index = existing.findIndex((item) => messageIdentityMatches(item, message));
+  let fallbackIndex = -1;
   if (index < 0 && isPersistedAssistantMessage(message)) {
-    const fallbackIndex = findPendingGeneratedStreamingFallbackIndex(sessionId, existing);
-    if (fallbackIndex >= 0) {
+    fallbackIndex = findPendingGeneratedStreamingFallbackIndex(sessionId, existing);
+    if (
+      fallbackIndex >= 0
+      && generatedFallbackMatchesPersistedMessage(existing[fallbackIndex], message)
+    ) {
       // A producer without persistId creates a temporary mobile-stream-* row. The
-      // first DB create is authoritative even though its id cannot match that row.
+      // matching DB create is authoritative even though its id cannot match that row.
       const next = existing.slice();
       next[fallbackIndex] = message;
       messages.set(sessionId, normalizeMessages(next));
@@ -518,7 +538,9 @@ function upsertMessage(sessionId: string, message: RemoteMessage): boolean {
   }
   if (index < 0) {
     messages.set(sessionId, normalizeMessages([...existing, message]));
-    if (isPersistedAssistantMessage(message)) retireGeneratedStreamingFallback(sessionId);
+    if (isPersistedAssistantMessage(message) && fallbackIndex < 0) {
+      retireGeneratedStreamingFallback(sessionId);
+    }
     bumpMessageVersion();
     return true;
   }
@@ -1128,7 +1150,7 @@ export const remoteSessionStore = {
   ): void {
     // Only the reconnect snapshot is allowed to finalize here. Ordinary push / UI
     // callers may publish a pending card while the current turn is still streaming.
-    const streamingChanged = options.finalizeStreaming === true
+    const streamingChanged = options.finalizeStreaming === true && list.length > 0
       ? flushAndFinalizeRemoteStreamingMessages(sessionId)
       : false;
     // 已确认 dismiss 的延长抑制条目按「缺席即过期」回收:本轮快照不含该
@@ -1509,8 +1531,15 @@ export const remoteSessionStore = {
     }
 
     const textFlushed = flushPendingTextDelta(sessionId);
-    if (type === 'tool_use' && applyLivePlanToolUseMessage(sessionId, event, persistId)) {
+    if (type === 'tool_use') {
+      // Finalize before applying update_plan so its row update and the streaming
+      // row transition are published in one snapshot notification.
       const streamingChanged = finalizeRemoteStreamingMessages(sessionId);
+      const livePlan = applyLivePlanToolUseMessage(sessionId, event, persistId);
+      if (livePlan.handled) {
+        if (textFlushed || streamingChanged || livePlan.changed) emit();
+        return;
+      }
       if (textFlushed || streamingChanged) emit();
       return;
     }
@@ -1529,12 +1558,6 @@ export const remoteSessionStore = {
       } else if (textFlushed) {
         emit();
       }
-      return;
-    }
-    if (type === 'tool_use') {
-      let changed = textFlushed;
-      changed = finalizeRemoteStreamingMessages(sessionId) || changed;
-      if (changed) emit();
       return;
     }
     if (type === 'compact_boundary') {
