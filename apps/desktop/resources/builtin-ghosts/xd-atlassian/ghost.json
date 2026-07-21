@@ -4,7 +4,7 @@
   "name": "XD Atlassian",
   "description": "内置的 Atlassian 服务插件:连上公司 Atlassian 账号即可读写 Jira 与 Confluence(issue / JQL 搜索 / 工作流,页面 / 评论 / 附件)。开箱即用——点「连接账号」完成授权即可;授权由 Cindy 服务端托管,应用密钥不随包分发。",
   "whenToUse": "需要查/建/改 Jira issue,JQL 搜索,查项目或用户,流转工作流,下载 Jira 附件,或搜索/阅读/创建/更新 Confluence 页面、读写评论、下载 Confluence 附件时找我(需先在主界面侧边栏「插件」→「XD Atlassian」详情页连接账号)。",
-  "version": "1.1.1",
+  "version": "1.2.0",
   "author": "Cindy",
   "icon": "assets/icon.png",
   "entry": "main.js",
@@ -94,13 +94,13 @@
     },
     {
       "name": "jira_issues",
-      "description": "Jira issue 操作(二级分派)。action=search_jql:JQL 搜索(如 project = PROJ ORDER BY updated DESC,fields 只挑需要的字段);get:按 key/id 读单条;create:建 issue(fields 为 Jira 原生 fields 对象,含 project / issuetype / summary 等);update:改 issue(fields / update 至少传一个);add_comment:加评论(body_text 纯文本,或 body_adf 传 ADF);list_transitions:列可用工作流流转;transition:执行流转(先 list_transitions 拿 transition_id)。create / update / transition / add_comment 是写操作,执行前把内容给用户确认。返回 Jira 原生 JSON(description / 评论正文是 ADF 结构)。",
+      "description": "Jira issue 操作(二级分派)。action=search_jql:JQL 搜索(如 project = PROJ ORDER BY updated DESC,fields 只挑需要的字段);get:按 key/id 读单条;create:建 issue(fields 为 Jira 原生 fields 对象,含 project / issuetype / summary 等;可选 links 数组在创建成功后自动关联其它 issue);update:改 issue(fields / update 至少传一个);add_comment:加评论(body_text 纯文本,或 body_adf 传 ADF);list_transitions:列可用工作流流转;transition:执行流转(先 list_transitions 拿 transition_id);list_link_types:列本站点可用的 issue 关系类型(name + inward/outward 语义);link:在两个已存在 issue 之间建立关联(blocks / is blocked by、clones / is cloned by 等)。create / update / transition / add_comment / link 是写操作,执行前把内容给用户确认。返回 Jira 原生 JSON(description / 评论正文是 ADF 结构)。",
       "parameters": {
         "type": "object",
         "properties": {
           "action": {
             "type": "string",
-            "enum": ["search_jql", "get", "create", "update", "add_comment", "list_transitions", "transition"],
+            "enum": ["search_jql", "get", "create", "update", "add_comment", "list_transitions", "transition", "list_link_types", "link"],
             "description": "操作类型"
           },
           "account": { "type": "string", "description": "账号 id;省略 = 默认账号" },
@@ -117,6 +117,24 @@
           "body_text": { "type": "string", "description": "add_comment:纯文本评论正文" },
           "body_adf": { "type": "object", "description": "add_comment:进阶,ADF 格式评论正文(与 body_text 二选一)" },
           "transition_id": { "type": "string", "description": "transition:流转 id(list_transitions 可查)" },
+          "link_type": { "type": "string", "description": "link:关系类型名(list_link_types 可查),如 Blocks / Cloners / Relates / Duplicate" },
+          "inward_issue": { "type": "string", "description": "link:inward 侧 issue key,如 PROJ-123(以 Blocks 类型为例,inward 侧表示「is blocked by」)" },
+          "outward_issue": { "type": "string", "description": "link:outward 侧 issue key,如 PROJ-456(以 Blocks 类型为例,outward 侧表示「blocks」)" },
+          "link_comment": { "type": "string", "description": "link:可选,建立关联时附带的评论纯文本。注意:Jira issue link 的评论只会加到 outward_issue 这一侧的 issue 上(不会加到 inward_issue)" },
+          "links": {
+            "type": "array",
+            "description": "create:可选,issue 创建成功后要建立的关联列表;每条只指定 inward_issue / outward_issue 之一(对端已存在的 issue key),缺失的一端自动填新建的 issue。link 失败不影响 issue 创建,结果在返回的 issue_links.applied / issue_links.failed 里逐条汇报。注意:每条可选的 link_comment 评论会加到该条 link 的 outward 侧 issue 上——若新建 issue 在 inward 侧,评论会写到对端已存在的 issue,如需评论务必落在新建 issue 请改用 add_comment",
+            "items": {
+              "type": "object",
+              "properties": {
+                "link_type": { "type": "string", "description": "关系类型名(list_link_types 可查),如 Blocks / Cloners / Relates" },
+                "inward_issue": { "type": "string", "description": "对端 issue key,置于 inward 侧(与 outward_issue 二选一,另一端 = 新建 issue)。如新 issue「is blocked by」PROJ-5,则 Blocks 类型下把 PROJ-5 放 outward_issue、新 issue 在 inward" },
+                "outward_issue": { "type": "string", "description": "对端 issue key,置于 outward 侧(与 inward_issue 二选一,另一端 = 新建 issue)。如新 issue「blocks」PROJ-5,则 Blocks 类型下把 PROJ-5 放 inward_issue、新 issue 在 outward" },
+                "link_comment": { "type": "string", "description": "可选,建立关联时附带的评论纯文本;Jira 会把评论加到该条 link 的 outward 侧 issue 上(若新建 issue 在 inward 侧,评论会写到对端已存在的 issue)" }
+              },
+              "required": ["link_type"]
+            }
+          },
           "out_file": { "type": "string", "description": "可选:把完整结果 JSON 写进会话工作目录的该相对路径(如 tmp/jql-result.json),只返回文件路径——结果大、要交给脚本处理时用" }
         },
         "required": ["action"]
