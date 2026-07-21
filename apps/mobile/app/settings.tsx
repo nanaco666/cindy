@@ -34,11 +34,6 @@ import {
   buildMobileSettingsOverview,
   type MobileSettingsRow,
 } from '@/settings/mobileSettings';
-import {
-  clearMobileVoiceLiteLlmSettings,
-  hasMobileVoiceLiteLlmSettings,
-  saveMobileVoiceLiteLlmSettings,
-} from '@/session/mobileVoiceLiteLlmSettings';
 import { buildMobileUpdateInfoRows, currentMobileOtaVersion } from '@/settings/updateInfo';
 import { runManualUpdateCheck } from '@/update/manualUpdateCheck';
 import { useBundleUpdatePrompt } from '@/update/useBundleUpdatePrompt';
@@ -65,11 +60,6 @@ export default function SettingsScreen() {
   const [copiedRowId, setCopiedRowId] = useState<string | null>(null);
   const [loggingOut, setLoggingOut] = useState(false);
   const [debugExpanded, setDebugExpanded] = useState(false);
-  const [voiceExpanded, setVoiceExpanded] = useState(false);
-  const [voiceLiteLlmConfigured, setVoiceLiteLlmConfigured] = useState(false);
-  const [voiceLiteLlmDraft, setVoiceLiteLlmDraft] = useState('');
-  const [voiceSettingsBusy, setVoiceSettingsBusy] = useState(false);
-  const [voiceSettingsMessage, setVoiceSettingsMessage] = useState<string | null>(null);
   const [updatePhase, setUpdatePhase] = useState<UpdatePhase>('idle');
   const [updateMessage, setUpdateMessage] = useState<string | null>(null);
   const updateCheckInFlightRef = useRef(false);
@@ -193,50 +183,6 @@ export default function SettingsScreen() {
       updateCheckInFlightRef.current = false;
     }
   }, [checkBundleUpdate, updateCheckEnabled, updatesEnabled]);
-
-  useEffect(() => {
-    let cancelled = false;
-    void hasMobileVoiceLiteLlmSettings()
-      .then((configured) => {
-        if (!cancelled) setVoiceLiteLlmConfigured(configured);
-      })
-      .catch(() => {
-        if (!cancelled) setVoiceLiteLlmConfigured(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const saveVoiceLiteLlmKey = useCallback(async () => {
-    if (voiceSettingsBusy) return;
-    setVoiceSettingsBusy(true);
-    setVoiceSettingsMessage(null);
-    try {
-      await saveMobileVoiceLiteLlmSettings({ proxyApiKey: voiceLiteLlmDraft });
-      setVoiceLiteLlmDraft('');
-      setVoiceLiteLlmConfigured(true);
-      setVoiceSettingsMessage('LiteLLM Key 已保存。');
-    } catch (err) {
-      setVoiceSettingsMessage(err instanceof Error ? err.message : String(err));
-    } finally {
-      setVoiceSettingsBusy(false);
-    }
-  }, [voiceLiteLlmDraft, voiceSettingsBusy]);
-
-  const clearVoiceLiteLlmKey = useCallback(async () => {
-    if (voiceSettingsBusy) return;
-    setVoiceSettingsBusy(true);
-    setVoiceSettingsMessage(null);
-    try {
-      await clearMobileVoiceLiteLlmSettings();
-      setVoiceLiteLlmDraft('');
-      setVoiceLiteLlmConfigured(false);
-      setVoiceSettingsMessage('LiteLLM Key 已清除。');
-    } finally {
-      setVoiceSettingsBusy(false);
-    }
-  }, [voiceSettingsBusy]);
 
   const updateSelfDeviceNameDraft = useCallback((value: string) => {
     selfDeviceNameDraftRef.current = value;
@@ -418,11 +364,6 @@ export default function SettingsScreen() {
     setDebugExpanded((value) => !value);
   }, []);
 
-  const toggleVoice = useCallback(() => {
-    configureCollapseAnimation();
-    setVoiceExpanded((value) => !value);
-  }, []);
-
   const avatarLabel = (overview.header.name.trim()[0] ?? '?').toUpperCase();
   const updateBusy = updatePhase === 'checking' || updatePhase === 'downloading';
   const updateButtonLabel = updatePhase === 'checking' ? '检查中'
@@ -512,74 +453,14 @@ export default function SettingsScreen() {
           ]}
         </SettingsGroup>
 
-        {/* 语音输入:折叠披露,展开才露出 Key 配置,不在外层摊开一大块 */}
+        {/* 免费语音由 Cindy 登录态授权；推理项目 Key 永不进入客户端。 */}
         <SettingsGroup title="语音输入">
-          {[
-            <Pressable
-              key="voice-header"
-              accessibilityRole="button"
-              accessibilityState={{ expanded: voiceExpanded }}
-              onPress={toggleVoice}
-              style={({ pressed }) => [styles.discloseRow, pressed && styles.pressed]}
-              testID="settings.voiceDisclose"
-            >
-              <Text style={styles.rowLabel}>实时语音</Text>
-              <Text style={styles.discloseStatus} numberOfLines={1} testID="settings.voiceLiteLlmStatus">
-                {voiceLiteLlmConfigured ? '已配置' : '未配置'}
-              </Text>
-              {voiceExpanded
-                ? <ChevronDown color={colors.textTertiary} size={iconSize.action} strokeWidth={iconStroke.regular} />
-                : <ChevronRight color={colors.textTertiary} size={iconSize.action} strokeWidth={iconStroke.regular} />}
-            </Pressable>,
-            voiceExpanded ? (
-              <View key="voice-body" style={styles.voiceBody} testID="settings.voiceLiteLlmCard">
-                <Text style={styles.hint}>
-                  手机端实时 ASR 和润色都通过 LiteLLM 网关。Key 只保存在这台手机，不从被控电脑同步。
-                </Text>
-                <TextInput
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  importantForAutofill="no"
-                  onChangeText={setVoiceLiteLlmDraft}
-                  placeholder={voiceLiteLlmConfigured ? '已保存，输入新 Key 可替换' : '输入 LiteLLM Key'}
-                  placeholderTextColor={colors.textTertiary}
-                  secureTextEntry
-                  spellCheck={false}
-                  style={styles.secretInput}
-                  testID="settings.voiceLiteLlmKeyInput"
-                  textContentType="password"
-                  value={voiceLiteLlmDraft}
-                />
-                {voiceSettingsMessage ? (
-                  <Text style={styles.hint} testID="settings.voiceLiteLlmMessage">{voiceSettingsMessage}</Text>
-                ) : null}
-                <MainWindowActionGroup
-                  density="compact"
-                  primaryActions={[
-                    {
-                      accessibilityLabel: voiceSettingsBusy ? '正在保存 LiteLLM Key' : '保存 LiteLLM Key',
-                      busy: voiceSettingsBusy,
-                      disabled: voiceSettingsBusy || voiceLiteLlmDraft.trim().length === 0,
-                      label: voiceSettingsBusy ? '保存中' : '保存',
-                      onPress: () => void saveVoiceLiteLlmKey(),
-                      testID: 'settings.voiceLiteLlmSaveButton',
-                      tone: 'primary',
-                    },
-                  ]}
-                  secondaryActions={[
-                    {
-                      accessibilityLabel: '清除 LiteLLM Key',
-                      disabled: voiceSettingsBusy || !voiceLiteLlmConfigured,
-                      label: '清除',
-                      onPress: () => void clearVoiceLiteLlmKey(),
-                      testID: 'settings.voiceLiteLlmClearButton',
-                    },
-                  ]}
-                  testID="settings.voiceLiteLlmActions"
-                />
-              </View>
-            ) : null,
-          ]}
+          <InfoRow
+            detail="使用 Cindy 登录身份连接语音服务，不需要配置或保存模型 Key。"
+            label="实时语音与智能润色"
+            testID="settings.voiceIncluded"
+            value="已包含"
+          />
         </SettingsGroup>
 
         {/* 关于这台手机 */}
@@ -950,8 +831,6 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
   },
-  discloseStatus: { color: colors.textTertiary, flex: 1, fontSize: typeScale.code, textAlign: 'right' },
-  voiceBody: { gap: spacing.md, paddingBottom: spacing.lg, paddingHorizontal: spacing.lg, paddingTop: spacing.sm },
   // —— 版本行 ——
   versionRow: {
     alignItems: 'center',
@@ -980,19 +859,6 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   // —— 退出 ——
   dangerArea: { gap: spacing.md, paddingTop: spacing.sm },
   dangerHint: { color: colors.textSecondary, fontSize: typeScale.caption, lineHeight: lineHeight.caption, paddingHorizontal: spacing.md },
-  hint: { color: colors.textSecondary, fontSize: typeScale.caption, lineHeight: lineHeight.caption },
-  secretInput: {
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderRadius: radius.pill,
-    borderWidth: StyleSheet.hairlineWidth,
-    color: colors.textPrimary,
-    fontSize: typeScale.body,
-    lineHeight: lineHeight.body,
-    minHeight: 48,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
-  },
   nameEditorContent: {
     gap: spacing.sm,
     paddingHorizontal: spacing.lg,

@@ -39,6 +39,8 @@ export interface ApiFetchOptions {
   skipAutoRefresh?: boolean;
   /** 目标服务 base URL(必传;来自 clientEndpoints 的对应字段或注入方)。 */
   baseUrl: string;
+  /** Abort the request after this many milliseconds; 0 disables the deadline. */
+  timeoutMs?: number;
 }
 
 interface RawResponse<T> {
@@ -58,6 +60,11 @@ async function rawFetch<T>(apiPath: string, opts: ApiFetchOptions): Promise<RawR
   if (token) {
     headers['Authorization'] = 'Bearer ' + token;
   }
+  const timeoutMs = opts.timeoutMs ?? 0;
+  const controller = timeoutMs > 0 ? new AbortController() : null;
+  const timeoutId = controller
+    ? setTimeout(() => controller.abort(), timeoutMs)
+    : null;
   try {
     const body = opts.bodyFactory ? opts.bodyFactory() : opts.body;
     const response = await net.fetch(url, {
@@ -65,6 +72,7 @@ async function rawFetch<T>(apiPath: string, opts: ApiFetchOptions): Promise<RawR
       headers,
       cache: opts.cache,
       body: body !== undefined ? JSON.stringify(body) : undefined,
+      signal: controller?.signal,
     });
     let data: T | null = null;
     try {
@@ -76,6 +84,8 @@ async function rawFetch<T>(apiPath: string, opts: ApiFetchOptions): Promise<RawR
   } catch (err) {
     log.error('fetch failed', apiPath, err);
     return { ok: false, status: 0, data: null };
+  } finally {
+    if (timeoutId !== null) clearTimeout(timeoutId);
   }
 }
 

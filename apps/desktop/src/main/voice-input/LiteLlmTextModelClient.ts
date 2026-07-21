@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { ReadableStream as NodeReadableStream } from 'node:stream/web';
 
-import { fetch as undiciFetch, type Agent } from 'undici';
+import { fetch as undiciFetch, type Agent, type Response as UndiciResponse } from 'undici';
 
 import type { TextModelClient } from '@lizi/voice-input-core';
 
@@ -62,8 +62,11 @@ export type LiteLlmTokenUsage = {
 };
 
 type LiteLlmTextModelClientOptions = {
-  proxyApiKey: string;
-  baseUrl: string;
+  proxyApiKey?: string;
+  baseUrl?: string;
+  requestTargetProvider?: (options?: {
+    forceRefresh?: boolean;
+  }) => Promise<{ url: string; authorization: string }>;
   timeoutMs?: number;
   onUsage?: (usage: LiteLlmTokenUsage) => void;
 };
@@ -71,14 +74,18 @@ type LiteLlmTextModelClientOptions = {
 type ParsedSseBlock = { data: unknown };
 
 export class LiteLlmTextModelClient implements TextModelClient {
-  private readonly proxyApiKey: string;
-  private readonly baseUrl: string;
+  private readonly proxyApiKey?: string;
+  private readonly baseUrl?: string;
+  private readonly requestTargetProvider?: (options?: {
+    forceRefresh?: boolean;
+  }) => Promise<{ url: string; authorization: string }>;
   private readonly timeoutMs: number;
   private readonly onUsage?: (usage: LiteLlmTokenUsage) => void;
 
   constructor(options: LiteLlmTextModelClientOptions) {
     this.proxyApiKey = options.proxyApiKey;
     this.baseUrl = options.baseUrl;
+    this.requestTargetProvider = options.requestTargetProvider;
     this.timeoutMs = options.timeoutMs ?? 8_000;
     this.onUsage = options.onUsage;
   }
@@ -91,8 +98,8 @@ export class LiteLlmTextModelClient implements TextModelClient {
     promptCacheScope?: string;
     onTextSnapshot?: (text: string) => void;
   }): Promise<T> {
-    if (!this.proxyApiKey) throw new Error('Missing XD Gateway API key');
-    if (!this.baseUrl) throw new Error('Missing XD Gateway base URL');
+    if (!this.requestTargetProvider && !this.proxyApiKey) throw new Error('Missing XD Gateway API key');
+    if (!this.requestTargetProvider && !this.baseUrl) throw new Error('Missing XD Gateway base URL');
 
     const startedAt = Date.now();
     const systemPromptHash = shortHash(input.system);
@@ -126,33 +133,48 @@ export class LiteLlmTextModelClient implements TextModelClient {
     let firstByteAt: number | null = null;
     let lastTextSnapshot = '';
     try {
-      const response = await undiciFetch(joinProxyPath(this.baseUrl, '/v1/chat/completions'), {
-        method: 'POST',
-        signal: controller.signal,
-        dispatcher: refinerDispatcher,
-        headers: {
-          Authorization: `Bearer ${this.proxyApiKey}`,
-          'Content-Type': 'application/json',
-          Accept: 'text/event-stream',
-        },
-        body: JSON.stringify({
-          model: input.model,
-          response_format: { type: 'json_object' },
-          prompt_cache_key: promptCacheKey,
-          stream: true,
-          stream_options: { include_usage: true },
-          messages: [
-            { role: 'system', content: input.system },
-            {
-              role: 'user',
-              content: JSON.stringify({
-                schemaName: input.schemaName,
-                input: input.user,
-              }),
-            },
-          ],
-        }),
+      const requestBody = JSON.stringify({
+        model: input.model,
+        response_format: { type: 'json_object' },
+        prompt_cache_key: promptCacheKey,
+        stream: true,
+        stream_options: { include_usage: true },
+        messages: [
+          { role: 'system', content: input.system },
+          {
+            role: 'user',
+            content: JSON.stringify({
+              schemaName: input.schemaName,
+              input: input.user,
+            }),
+          },
+        ],
       });
+      const sendRequest = async (forceRefresh = false): Promise<UndiciResponse> => {
+        const target = this.requestTargetProvider
+          ? await this.requestTargetProvider(forceRefresh ? { forceRefresh: true } : undefined)
+          : {
+              url: joinProxyPath(this.baseUrl!, '/v1/chat/completions'),
+              authorization: `Bearer ${this.proxyApiKey!}`,
+            };
+        armIdleTimeout('response headers');
+        return undiciFetch(target.url, {
+          method: 'POST',
+          signal: controller.signal,
+          dispatcher: refinerDispatcher,
+          headers: {
+            Authorization: target.authorization,
+            'Content-Type': 'application/json',
+            Accept: 'text/event-stream',
+          },
+          body: requestBody,
+        });
+      };
+      let response = await sendRequest();
+      if (response.status === 401 && this.requestTargetProvider) {
+        await response.arrayBuffer().catch(() => undefined);
+        response = await sendRequest(true);
+      }
       const headersAt = performance.now();
       armIdleTimeout('response body');
 

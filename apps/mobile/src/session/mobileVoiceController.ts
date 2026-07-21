@@ -53,6 +53,14 @@ type MobileVoiceControllerOptions = {
   localVoiceInputHistory?: readonly string[];
   asr?: AsrProvider;
   refiner?: MobileDictationRefiner | null;
+  connectionProvider?: (provider: string) => Promise<{
+    websocketUrl: string;
+    authorizationToken: string;
+  }>;
+  refinerTargetProvider?: (provider: string, options?: { refreshAccessToken?: boolean }) => Promise<{
+    url: string;
+    authorization: string;
+  }>;
   startAudio?: StartRealtimeAudio;
   readCurrentDraft?: () => string;
   onDraftChanged: (draft: string) => void;
@@ -92,11 +100,14 @@ export function createMobileVoiceControllerSession(
   // abandoned mid-handshake tears the just-opened socket down instead of
   // leaking it. Without it, the default fallback provider silently drops every
   // chunk appended before its inner provider is chosen.
-  const asr = new BufferedAsrProvider(options.asr ?? createMobileAsrProvider(options.credential));
+  const asr = new BufferedAsrProvider(options.asr ?? createMobileAsrProvider(options.credential, {
+    connectionProvider: options.connectionProvider,
+  }));
   const refiner = options.refiner === undefined
     ? createMobileRefiner(options.credential, {
       refinementContext: options.refinementContext,
       localVoiceInputHistory: options.localVoiceInputHistory,
+      refinerTargetProvider: options.refinerTargetProvider,
     })
     : options.refiner ?? undefined;
   const baseDraft = options.initialDraft;
@@ -578,6 +589,10 @@ function createMobileRefiner(
   options: {
     refinementContext?: DictationRefinementContext;
     localVoiceInputHistory?: readonly string[];
+    refinerTargetProvider?: (provider: string, options?: { refreshAccessToken?: boolean }) => Promise<{
+      url: string;
+      authorization: string;
+    }>;
   },
 ): MobileDictationRefiner | undefined {
   if (credential.settings?.refinementEnabled === false) return undefined;
@@ -587,9 +602,14 @@ function createMobileRefiner(
   ) {
     throw new Error(`手机版语音润色暂不支持 ${credential.refiner.transport}。`);
   }
-  // Mobile runtime uses a locally saved LiteLLM key. The credential object keeps
-  // the legacy per-host shape so the shared ASR/refiner pipeline stays reusable.
-  const refinerAttempts = buildMobileRefinerAttempts(credential);
+  // Production injects a voice-server request target. The credential object
+  // keeps the legacy per-host shape so the shared ASR/refiner pipeline and
+  // historical diagnostic fixtures stay reusable without persisting a real key.
+  const refinerAttempts = buildMobileRefinerAttempts(
+    credential,
+    undefined,
+    options.refinerTargetProvider,
+  );
   return new DictationRefiner({
     client: createMobileRefinerTextModelClient(refinerAttempts),
     model: refinerAttempts[0]?.model ?? credential.refiner.model,

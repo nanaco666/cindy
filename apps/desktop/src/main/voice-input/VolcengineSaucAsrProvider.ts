@@ -8,9 +8,10 @@ import { mergeRecoveredTranscript } from './transcriptMerge.js';
 import { describeAsrHandshakeTraceId, describeAsrWebSocketTarget } from './voiceInputAsrConfig.js';
 
 type VolcengineSaucAsrProviderOptions = {
-  proxyApiKey: string;
-  baseUrl: string;
-  endpointPath: string;
+  proxyApiKey?: string;
+  baseUrl?: string;
+  endpointPath?: string;
+  connectionProvider?: () => Promise<{ websocketUrl: string; authorizationToken: string }>;
   resourceId: string;
   sourceLanguage?: string;
   pcmSampleRate?: number;
@@ -72,9 +73,10 @@ type ReplayAudioChunk = {
  * instead of OpenAI-compatible realtime JSON events.
  */
 export class VolcengineSaucAsrProvider implements AsrProvider {
-  private readonly proxyApiKey: string;
-  private readonly baseUrl: string;
-  private readonly endpointPath: string;
+  private readonly proxyApiKey?: string;
+  private readonly baseUrl?: string;
+  private readonly endpointPath?: string;
+  private readonly connectionProvider?: () => Promise<{ websocketUrl: string; authorizationToken: string }>;
   private readonly resourceId: string;
   private readonly sourceLanguage: string;
   private readonly pcmSampleRate: number;
@@ -104,6 +106,7 @@ export class VolcengineSaucAsrProvider implements AsrProvider {
     this.proxyApiKey = options.proxyApiKey;
     this.baseUrl = options.baseUrl;
     this.endpointPath = options.endpointPath;
+    this.connectionProvider = options.connectionProvider;
     this.resourceId = options.resourceId;
     this.sourceLanguage = options.sourceLanguage ?? 'auto';
     this.pcmSampleRate = options.pcmSampleRate ?? DEFAULT_PCM_SAMPLE_RATE;
@@ -117,16 +120,23 @@ export class VolcengineSaucAsrProvider implements AsrProvider {
   }
 
   async start(): Promise<void> {
-    if (!this.proxyApiKey) throw new Error(this.missingCredentialMessage);
-    if (!this.baseUrl) throw new Error('Missing XD Gateway base URL');
+    if (!this.connectionProvider && !this.proxyApiKey) throw new Error(this.missingCredentialMessage);
+    if (!this.connectionProvider && !this.baseUrl) throw new Error('Missing XD Gateway base URL');
     this.resetState();
     await this.openSocket();
   }
 
   private async openSocket(): Promise<void> {
-    const socket = new WebSocket(toWebSocketUrl(this.baseUrl, this.endpointPath), {
+    const connection = this.connectionProvider
+      ? await this.connectionProvider()
+      : {
+          websocketUrl: toWebSocketUrl(this.baseUrl!, this.endpointPath!),
+          authorizationToken: this.proxyApiKey!,
+        };
+    if (this.stopRequested) throw new Error('Volcengine SAUC ASR connection stopped.');
+    const socket = new WebSocket(connection.websocketUrl, {
       headers: {
-        Authorization: `Bearer ${this.proxyApiKey}`,
+        Authorization: `Bearer ${connection.authorizationToken}`,
         'X-Api-Resource-Id': this.resourceId,
         'X-Api-Connect-Id': buildConnectId(),
       },
@@ -196,7 +206,7 @@ export class VolcengineSaucAsrProvider implements AsrProvider {
         // against a gateway missing the ASR passthrough route is otherwise
         // indistinguishable from an upstream failure (issue #220).
         const traceId = describeAsrHandshakeTraceId(response.headers);
-        const target = describeAsrWebSocketTarget(toWebSocketUrl(this.baseUrl, this.endpointPath));
+        const target = describeAsrWebSocketTarget(connection.websocketUrl);
         fail(new Error(
           `Volcengine SAUC ASR handshake failed: HTTP ${statusCode}${statusMessage} (${target}${traceId ? `, ${traceId}` : ''})`,
         ), true);

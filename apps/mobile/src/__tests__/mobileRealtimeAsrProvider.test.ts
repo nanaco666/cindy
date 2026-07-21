@@ -123,6 +123,37 @@ function credential(overrides: Partial<StoredMobileVoiceCredential> = {}): Store
 }
 
 describe('mobileRealtimeAsrProvider', () => {
+  it('cancels an in-flight fallback candidate before it can open a managed socket', async () => {
+    FakeSocket.instances = [];
+    let resolveConnection: ((value: { websocketUrl: string; authorizationToken: string }) => void) | undefined;
+    const connectionProvider = vi.fn(() => new Promise<{ websocketUrl: string; authorizationToken: string }>((resolve) => {
+      resolveConnection = resolve;
+    }));
+    const provider = createMobileAsrProvider(credential({
+      asrProviderChain: [
+        credential().asr,
+        { ...credential().asr, provider: 'fallback-asr' },
+      ],
+    }), {
+      connectionProvider,
+      websocketFactory: FakeSocket,
+    });
+
+    const started = provider.start();
+    await Promise.resolve();
+    expect(connectionProvider).toHaveBeenCalledTimes(1);
+
+    await provider.stop();
+    resolveConnection?.({
+      websocketUrl: 'wss://voice.example.com/api/voice/asr?ticket=stale',
+      authorizationToken: 'stale',
+    });
+
+    await expect(started).rejects.toThrow('stopped');
+    expect(FakeSocket.instances).toHaveLength(0);
+    expect(connectionProvider).toHaveBeenCalledTimes(1);
+  });
+
   it('builds desktop-compatible OpenAI transcription session updates', () => {
     expect(buildSessionUpdateMessage(
       'gpt-realtime-whisper',
@@ -275,6 +306,24 @@ describe('mobileRealtimeAsrProvider', () => {
     await startRejection;
 
     expect(socket.readyState).toBe(3);
+  });
+
+  it('does not open managed realtime ASR after stop while session allocation is pending', async () => {
+    FakeSocket.instances = [];
+    let resolveConnection!: (connection: { websocketUrl: string; authorizationToken: string }) => void;
+    const provider = new MobileRealtimeAsrProvider({
+      credential: credential(),
+      websocketFactory: FakeSocket,
+      connectionProvider: () => new Promise((resolve) => { resolveConnection = resolve; }),
+    });
+    provider.onEvent(() => {});
+
+    const started = provider.start();
+    await provider.stop();
+    resolveConnection({ websocketUrl: 'wss://voice.example.com/asr', authorizationToken: 'ticket' });
+
+    await expect(started).rejects.toThrow('Realtime ASR connection stopped.');
+    expect(FakeSocket.instances).toHaveLength(0);
   });
 
   it('recovers OpenAI-compatible realtime ASR by replaying unconfirmed audio', async () => {

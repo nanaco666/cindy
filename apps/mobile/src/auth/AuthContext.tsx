@@ -125,6 +125,7 @@ export interface AuthContextValue {
   completeOAuthCallback(callbackUrl: string): Promise<void>;
   logout(): Promise<void>;
   getAccessToken(): Promise<string | null>;
+  refreshAccessToken(): Promise<string | null>;
   apiFetch<T>(path: string, opts: Omit<ApiFetchOptions, 'token'>): Promise<T>;
 }
 
@@ -146,6 +147,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       completeOAuthCallback: async () => undefined,
       logout: async () => undefined,
       getAccessToken: async () => 'visual-mock-token',
+      refreshAccessToken: async () => 'visual-mock-token',
       apiFetch: visualMockApiFetch,
     };
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
@@ -836,6 +838,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       completeOAuthCallback,
       logout,
       getAccessToken,
+      refreshAccessToken: refresh,
       apiFetch,
     }),
     [
@@ -846,6 +849,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       deviceId,
       dispatchLoginAction,
       getAccessToken,
+      refresh,
       initialized,
       isBusy,
       loginState,
