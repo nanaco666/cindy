@@ -351,7 +351,7 @@ async function driveMeta(fileId, account, callId) {
 
 async function toolDrive(args, callId) {
   if (args.action === 'list_folder') {
-    var folder = (args.folder_id || 'root').replace(/'/g, "\\'");
+    var folder = (args.folder_id || 'root').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
     var inFolder = await api({
       url: DRIVE_BASE + '/files?q=' + encodeURIComponent("'" + folder + "' in parents and trashed=false") +
         '&pageSize=' + clampInt(args.max_results, 25, 50) +
@@ -478,7 +478,7 @@ async function toolDrive(args, callId) {
     // 普通关键词自动包成 name contains;带 Drive 查询语法(= / contains)的原样用。
     var q = /contains|=/.test(args.query)
       ? args.query
-      : "name contains '" + args.query.replace(/'/g, "\\'") + "'";
+      : "name contains '" + args.query.replace(/\\/g, '\\\\').replace(/'/g, "\\'") + "'";
     var listed = await api({
       url: DRIVE_BASE + '/files?q=' + encodeURIComponent(q + ' and trashed=false') +
         '&pageSize=' + clampInt(args.max_results, 10, 25) +
