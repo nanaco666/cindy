@@ -98,4 +98,23 @@ describe('serialized IM connection lifecycle', () => {
     await lifecycle.stop();
     expect(startConnection).toHaveBeenCalledTimes(2);
   });
+
+  it('serializes account-scoped operations and cancels queued work on logout', async () => {
+    const starting = deferred();
+    const operation = vi.fn(async () => 'connected' as const);
+    const lifecycle = createSerializedConnectionLifecycle({
+      startConnection: async () => starting.promise,
+      stopConnection: vi.fn(async () => undefined),
+      onStartError: vi.fn(),
+    });
+
+    lifecycle.start();
+    const reconnecting = lifecycle.runWhileStarted(operation);
+    const stopping = lifecycle.stop();
+    starting.resolve();
+
+    await expect(reconnecting).rejects.toThrow('[IM_NOT_READY]');
+    await stopping;
+    expect(operation).not.toHaveBeenCalled();
+  });
 });

@@ -1225,6 +1225,7 @@
         "appIdLabel": "App ID",
         "ownerLabel": "Owner",
         "ownerWaiting": "等待首次私聊绑定",
+        "reconnect": "重新连接飞书机器人",
         "clear": "解绑"
       },
       "appIdLabel": "App ID",
@@ -6061,6 +6062,8 @@
       "googleConnected": "Google 已连接",
       "codexConnected": "ChatGPT 账号已连接",
       "feishuBotConnected": "飞书机器人已连接",
+      "feishuBotReconnected": "飞书机器人已重新连接",
+      "feishuBotReconnectFailed": "重新连接失败，请检查飞书配置后重试",
       "feishuBotConflict": "该 App 已被占用，可能是同事在用同一个 App ID",
       "feishuBotConnectFailed": "连接失败，请检查 App ID / Secret",
       "feishuBotSaveFailed": "保存失败：{{message}}",

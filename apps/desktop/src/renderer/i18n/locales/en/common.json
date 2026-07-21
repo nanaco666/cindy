@@ -1225,6 +1225,7 @@
         "appIdLabel": "App ID",
         "ownerLabel": "Owner",
         "ownerWaiting": "Waiting for first private-message bind",
+        "reconnect": "Reconnect Feishu Bot",
         "clear": "Unbind"
       },
       "appIdLabel": "App ID",
@@ -6070,6 +6071,8 @@
       "googleConnected": "Google connected",
       "codexConnected": "ChatGPT account connected",
       "feishuBotConnected": "FeiShu bot connected",
+      "feishuBotReconnected": "Feishu bot reconnected",
+      "feishuBotReconnectFailed": "Reconnect failed. Check the Feishu configuration and try again",
       "feishuBotConflict": "This App is already in use — a colleague may be using the same App ID",
       "feishuBotConnectFailed": "Connection failed, check App ID / Secret",
       "feishuBotSaveFailed": "Save failed: {{message}}",

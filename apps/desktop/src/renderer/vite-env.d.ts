@@ -1428,6 +1428,9 @@ interface ElectronAPI {
     save: (payload: { appId: string; appSecret: string }) => Promise<{
       verdict: 'connected' | 'conflict' | 'error';
     }>;
+    reconnect: () => Promise<{
+      verdict: 'connected' | 'conflict' | 'error';
+    }>;
     clear: () => Promise<{ ok: true }>;
     setLifecycleAnnouncement: (enabled: boolean) => Promise<{ ok: true }>;
     registrationBegin: () => Promise<FeishuBotRegistrationBeginResult>;

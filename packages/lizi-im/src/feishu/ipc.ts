@@ -124,6 +124,19 @@ export async function saveAndConnect(
   return { verdict };
 }
 
+/** Restart the saved WebSocket connection without changing credentials or owner binding. */
+export async function reconnectSavedCredentials(): Promise<{
+  verdict: 'connected' | 'conflict' | 'error';
+}> {
+  const creds = storage.readCredentials();
+  if (!creds) {
+    throw new Error('[NO_CREDENTIALS] Feishu bot credentials are not configured');
+  }
+  await wsClient.stop();
+  const verdict = await wsClient.start(creds);
+  return { verdict };
+}
+
 async function pollRegistrationInBackground(
   runId: number,
   deviceCode: string,

@@ -217,6 +217,13 @@ export function startImOrchestrators(): void {
     return { sessionIds: bindingStore.listAttachedTargets() };
   });
 
+  // Reconnect is account-scoped: serialize it with login/logout so a click
+  // racing logout cannot bring the Feishu transport back after the account
+  // boundary has closed. Credentials and TOFU owner binding stay untouched.
+  ipcMain.handle('feishuBot:reconnect', async () => {
+    return connectionLifecycle.runWhileStarted(() => feishuIm.reconnect());
+  });
+
   // 注册 binding:revoke IPC — desktop UI 上"收回"按钮调它结束接管。
   // Reverse-lookup: renderer 只知道 sessionId, 反查 identity 才能 detach +
   // 通知对应的 IM 用户。

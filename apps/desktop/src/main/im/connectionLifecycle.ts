@@ -6,6 +6,7 @@
 export interface SerializedConnectionLifecycle {
   start(): void;
   stop(): Promise<void>;
+  runWhileStarted<T>(operation: () => Promise<T>): Promise<T>;
   isStarted(): boolean;
 }
 
@@ -25,10 +26,13 @@ export function createSerializedConnectionLifecycle(
   let generation = 0;
   let tail = Promise.resolve();
 
-  const enqueue = (operation: () => Promise<void>): Promise<void> => {
+  const enqueue = <T>(operation: () => Promise<T>): Promise<T> => {
     const current = tail.catch(() => undefined).then(operation);
     // A failed operation must not poison later logout/relogin operations.
-    tail = current.catch(() => undefined);
+    tail = current.then(
+      () => undefined,
+      () => undefined,
+    );
     return current;
   };
 
@@ -59,6 +63,21 @@ export function createSerializedConnectionLifecycle(
       await enqueue(async () => {
         if (!shouldStopConnection) return;
         await deps.stopConnection();
+      });
+    },
+
+    runWhileStarted<T>(operation: () => Promise<T>): Promise<T> {
+      if (!started) {
+        return Promise.reject(new Error('[IM_NOT_READY] IM connection is not active'));
+      }
+      const requestedGeneration = generation;
+      return enqueue(async () => {
+        // Logout invalidates queued account-scoped work synchronously, before
+        // transport shutdown or DbClient disposal begins.
+        if (!started || generation !== requestedGeneration) {
+          throw new Error('[IM_NOT_READY] IM connection stopped before operation ran');
+        }
+        return operation();
       });
     },
 
