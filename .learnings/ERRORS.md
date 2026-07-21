@@ -20,3 +20,10 @@
 - **Failure:** ESLint 9 could not find `eslint.config.js`.
 - **Cause:** lint configuration is package-scoped rather than available at the monorepo root.
 - **Prevention:** use package-provided lint scripts where present; otherwise rely on the package typecheck and test entrypoints instead of invoking root ESLint directly.
+
+## 2026-07-21 — GitHub connector comment call timed out
+
+- **Command:** GitHub connector `github_add_comment_to_issue` for `xindong/cindy-moved#310`.
+- **Failure:** MCP client startup timed out during handshake; no comment was created by that call.
+- **Cause:** transient connector startup failure, unrelated to repository state.
+- **Recovery:** used the authenticated `gh issue comment --body-file` fallback and verified it returned the issue comment URL.
