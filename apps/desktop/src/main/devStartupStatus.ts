@@ -188,6 +188,7 @@ type DesktopDevAuthState = {
 export function recordDesktopDevAuthStartupResult(
   initialState: DesktopDevAuthState,
   pendingCompletion: Promise<DesktopDevAuthState> | null,
+  readCurrentState: () => DesktopDevAuthState,
 ): void {
   if (initialState.isAuthenticated && initialState.user !== null) return;
   if (pendingCompletion === null) {
@@ -196,8 +197,12 @@ export function recordDesktopDevAuthStartupResult(
   }
 
   void pendingCompletion.then(
-    (state) => {
-      if (!state.isAuthenticated || state.user === null) markDesktopDevReady();
+    () => {
+      // The background refresh result may be stale: a manual login increments
+      // authStateEpoch and makes that old flow resolve as logged out. Consult the
+      // live auth state so the new user's localDb result still owns the startup latch.
+      const currentState = readCurrentState();
+      if (!currentState.isAuthenticated || currentState.user === null) markDesktopDevReady();
     },
     (err) => {
       markDesktopDevStartupFailed(

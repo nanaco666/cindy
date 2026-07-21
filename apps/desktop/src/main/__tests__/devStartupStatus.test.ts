@@ -106,6 +106,7 @@ describe('devStartupStatus', () => {
     recordDesktopDevAuthStartupResult(
       { isAuthenticated: false, user: null },
       pendingAuth,
+      () => ({ isAuthenticated: false, user: null }),
     );
     expect(JSON.parse(fs.readFileSync(statusPath, 'utf8'))).toMatchObject({
       state: 'window-ready',
@@ -117,7 +118,7 @@ describe('devStartupStatus', () => {
     expect(JSON.parse(fs.readFileSync(statusPath, 'utf8'))).toMatchObject({ state: 'ready' });
   });
 
-  it('waits for localDb when auth recovers after the timeout fallback', async () => {
+  it('waits for localDb when manual login supersedes the timed-out refresh', async () => {
     fs.writeFileSync(statusPath, '{"state":"pending"}\n');
     cleanup = beginDesktopDevInstance({
       userDataDir: tempDir,
@@ -128,10 +129,13 @@ describe('devStartupStatus', () => {
     });
     markDesktopDevWindowReady();
 
-    const pendingAuth = Promise.resolve({ isAuthenticated: true, user: { id: 'late-user' } });
+    // The stale background flow resolves as logged out after authStateEpoch changes,
+    // while authManager's live state already contains the manually logged-in user.
+    const pendingAuth = Promise.resolve({ isAuthenticated: false, user: null });
     recordDesktopDevAuthStartupResult(
       { isAuthenticated: false, user: null },
       pendingAuth,
+      () => ({ isAuthenticated: true, user: { id: 'manual-user' } }),
     );
     await pendingAuth;
     await Promise.resolve();

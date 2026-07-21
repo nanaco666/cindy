@@ -2811,7 +2811,7 @@ ipcMain.on('theme:apply-vibrancy', (_event, payload: { familyId: string; isDark:
         },
       });
       if (!app.isPackaged) {
-        recordDesktopDevAuthStartupResult(state, pendingCompletion);
+        recordDesktopDevAuthStartupResult(state, pendingCompletion, () => authManager.getAuthState());
       }
       return state;
     } catch (err) {
