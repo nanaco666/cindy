@@ -85,7 +85,7 @@ import {
   type MobileHomeDeviceFilterItem,
   type MobileHomeProjectGroup,
 } from '@/session/mobileHome';
-import { buildHomeSections, type HomeRow, type HomeSection } from '@/session/homeSections';
+import { buildHomeSections, homeRowBefore, type HomeRow, type HomeSection } from '@/session/homeSections';
 import { readHomeViewPreferences, saveHomeViewPreferences } from '@/session/homeViewPreferenceStore';
 import {
   getCachedHomeListSnapshot,
@@ -1185,7 +1185,7 @@ export default function HomeScreen() {
       onToggleAutomationGroup={toggleAutomationGroup}
       onToggleProject={toggleProject}
       onTogglePin={toggleSessionPinned}
-      prevIsBlock={isBlockHomeRow(section.data[index - 1])}
+      prevIsBlock={isBlockHomeRow(homeRowBefore(sections, section.key, index))}
       projectCollapsed={item.kind === 'project' && collapsedProjectKeys.includes(item.project.key)}
       registry={swipeRegistry}
       swipe={sessionSwipeControls}
