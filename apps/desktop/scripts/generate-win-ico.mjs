@@ -17,6 +17,8 @@
  *   node apps/desktop/scripts/generate-win-ico.mjs [master.png] [out.ico]
  *   默认：master = apps/desktop/resources/icon-master-1024.png
  *         out    = apps/desktop/resources/icon.ico
+ *   使用默认 out 时还会同步生成 resources/icon.png，以及 cindy-updater 的
+ *   src-tauri/icons/icon.ico 与 icon.png，避免主应用和更新器图标漂移。
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -25,9 +27,12 @@ import sharp from 'sharp';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const resourcesDir = path.join(__dirname, '..', 'resources');
+const defaultOutPath = path.join(resourcesDir, 'icon.ico');
+const defaultPngPath = path.join(resourcesDir, 'icon.png');
+const updaterIconsDir = path.join(__dirname, '..', 'cindy-updater', 'src-tauri', 'icons');
 
 const masterPath = process.argv[2] ?? path.join(resourcesDir, 'icon-master-1024.png');
-const outPath = process.argv[3] ?? path.join(resourcesDir, 'icon.ico');
+const outPath = process.argv[3] ?? defaultOutPath;
 
 const CANVAS = 1024;
 const CONTENT = 824;
@@ -105,6 +110,22 @@ async function createRoundedMaster() {
     .toBuffer();
 }
 
+/** 默认生成时同步主应用 PNG 与 updater 的 PNG/ICO 资源。 */
+async function syncDefaultCompanionIcons(roundedMaster) {
+  const png = await sharp(roundedMaster).resize(512, 512).png().toBuffer();
+  const updaterIcoPath = path.join(updaterIconsDir, 'icon.ico');
+  const updaterPngPath = path.join(updaterIconsDir, 'icon.png');
+
+  fs.mkdirSync(updaterIconsDir, { recursive: true });
+  fs.writeFileSync(defaultPngPath, png);
+  fs.copyFileSync(outPath, updaterIcoPath);
+  fs.writeFileSync(updaterPngPath, png);
+
+  console.log(`[generate-win-ico] wrote ${defaultPngPath}`);
+  console.log(`[generate-win-ico] wrote ${updaterIcoPath}`);
+  console.log(`[generate-win-ico] wrote ${updaterPngPath}`);
+}
+
 async function main() {
   if (!fs.existsSync(masterPath)) {
     console.error(`[generate-win-ico] master image missing: ${masterPath}`);
@@ -146,6 +167,10 @@ async function main() {
 
   const sizeKb = (fs.statSync(outPath).size / 1024).toFixed(0);
   console.log(`[generate-win-ico] wrote ${outPath} (${sizeKb} KB, ${entries.length} entries)`);
+
+  if (path.resolve(outPath) === path.resolve(defaultOutPath)) {
+    await syncDefaultCompanionIcons(roundedMaster);
+  }
 }
 
 main().catch((err) => {
