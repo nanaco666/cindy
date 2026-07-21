@@ -113,14 +113,25 @@ describe('MacAgentIslandNativeHost', () => {
     const claudePath = claudeSource.match(/<path[\s\S]*?\bd="([^"]+)"/)?.[1];
     const codexOutline = codexSource.match(/const FLOWER_OUTLINE =\s*'([^']+)'/)?.[1];
     const codexPrompt = codexSource.match(/const PROMPT_GLYPHS =\s*'([^']+)'/)?.[1];
+    const codexSmallStrokeWidth = codexSource.match(
+      /const monoStrokeWidth = size <= 14 \? ([\d.]+) : [\d.]+;/,
+    )?.[1];
+    const nativeCodexSvg = nativeSource.match(
+      /private let agentIslandCodexMarkSVG = """([\s\S]*?)"""/,
+    )?.[1];
+    const nativeCodexOutlineStrokeWidth = nativeCodexSvg?.match(
+      /<path fill="none" stroke="black" stroke-width="([^"]+)"/,
+    )?.[1];
 
     expect(claudePath).toBeTruthy();
     expect(codexOutline).toBeTruthy();
     expect(codexPrompt).toBeTruthy();
+    expect(codexSmallStrokeWidth).toBeTruthy();
+    expect(nativeCodexOutlineStrokeWidth).toBeTruthy();
     expect(nativeSource).toContain(`d="${claudePath}"`);
     expect(nativeSource).toContain(`d="${codexOutline}z"`);
     expect(nativeSource).toContain(`d="${codexPrompt}"`);
-    expect(nativeSource).toContain('stroke-width="2"');
+    expect(nativeCodexOutlineStrokeWidth).toBe(codexSmallStrokeWidth);
     expect(nativeSource).not.toContain('agentIslandXDIncMarkSVG');
   });
 

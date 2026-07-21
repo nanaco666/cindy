@@ -3150,6 +3150,8 @@ struct ExpandedSessionRow: View, Equatable {
   @State private var isHovered = false
 
   static func == (lhs: ExpandedSessionRow, rhs: ExpandedSessionRow) -> Bool {
+    // Callbacks are intentionally excluded: onFocus is keyed by sessionId and
+    // onPermissionAction only forwards to eventSink. Re-evaluate new callbacks here.
     lhs.session == rhs.session
       && lhs.updatedAt == rhs.updatedAt
       && lhs.strings == rhs.strings
