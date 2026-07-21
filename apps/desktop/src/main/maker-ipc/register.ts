@@ -3633,6 +3633,12 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
     const remoteHostIdToEnsure = sessRemoteHostId ?? coRemoteHostId;
     if (!remoteHostIdToEnsure) return;
 
+    if (createOpts && typeof createOpts === 'object') {
+      const mutableCreateOpts = createOpts as { remoteHostId?: string; makerMemoryEnabled?: boolean };
+      mutableCreateOpts.remoteHostId = remoteHostIdToEnsure;
+      mutableCreateOpts.makerMemoryEnabled = false;
+    }
+
     await ensureRemoteHostReady(remoteHostIdToEnsure);
     const ensureAgentKind: 'claude-code' | 'codex' | null =
       session?.agentKind === 'codex' || session?.agentKind === 'claude-code'

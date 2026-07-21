@@ -808,6 +808,7 @@ export class ClaudeCodeAgent extends BaseAgent {
       };
       const out: Record<string, McpServerConfig> = {};
       for (const provider of providers) {
+        if (provider.name === 'lizi_memory' && (!makerMemoryEnabled || opts.remoteHostId)) continue;
         if (provider.isEnabled && !provider.isEnabled(context)) continue;
         const config = provider.toClaudeSdkConfig?.(context);
         if (!config) continue;
