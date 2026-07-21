@@ -18,10 +18,8 @@ import {
 } from '../../../lib/sidebarCommands';
 import { _resetStore, addTab, getBucket, setActiveTab } from '../../../store';
 import {
-  cancelPendingOrcaWorkersCreateIntent,
   clearOrcaWorkersSelectionIntent,
   closeOrcaWorkersTabAfterTeamEnd,
-  consumeOrcaWorkersCreateIntent,
   consumeOrcaWorkersFocusHint,
   consumeOrcaWorkersSearchJump,
   ensureOrcaWorkersTab,
@@ -120,89 +118,6 @@ describe('orca-workers tab actions', () => {
 
     expect(requests).toEqual([{ visibility: 'open', opts: { sessionId: 's1', animate: false } }]);
     off();
-  });
-
-  it('stores a revisioned create-Worker intent while revealing the collaboration tab', async () => {
-    await revealOrcaWorkersTab('s1', { openCreateWorker: true });
-    const tab = getBucket('s1').tabs.find((candidate) => candidate.kind === 'orca-workers');
-
-    expect(tab?.state).toEqual({
-      createWorkerRequestPending: true,
-      createWorkerRequestRevision: 1,
-    });
-    expect(getBucket('s1').activeTabId).toBe(tab?.id);
-  });
-
-  it('drops a create-Worker intent when the host session changes during hydration', async () => {
-    let resolveList!: (value: { tabs: []; activeTabId: null }) => void;
-    tabsIpc.list.mockReturnValueOnce(
-      new Promise((resolve) => {
-        resolveList = resolve;
-      }),
-    );
-    let isCurrent = true;
-
-    const reveal = revealOrcaWorkersTab('s1', {
-      openCreateWorker: true,
-      shouldCommit: () => isCurrent,
-    });
-    await vi.waitFor(() => expect(tabsIpc.list).toHaveBeenCalledOnce());
-    isCurrent = false;
-    resolveList({ tabs: [], activeTabId: null });
-
-    await expect(reveal).resolves.toBe('stale-context');
-    expect(getBucket('s1').tabs).toEqual([]);
-    expect(tabsIpc.upsert).not.toHaveBeenCalled();
-  });
-
-  it('uses one commit decision for intent patch and tab focus', async () => {
-    const review = await addTab('s1', 'review', {});
-    const orca = await addTab('s1', 'orca-workers', {});
-    await setActiveTab('s1', review.id);
-    const shouldCommit = vi.fn(() => true);
-
-    await expect(
-      revealOrcaWorkersTab('s1', { openCreateWorker: true, shouldCommit }),
-    ).resolves.toBe('attached');
-
-    expect(shouldCommit).toHaveBeenCalledOnce();
-    expect(getBucket('s1').activeTabId).toBe(orca.id);
-    expect(getBucket('s1').tabs.find((candidate) => candidate.id === orca.id)?.state).toMatchObject({
-      createWorkerRequestPending: true,
-      createWorkerRequestRevision: 1,
-    });
-  });
-
-  it('consumes only the matching create-Worker intent revision', async () => {
-    await revealOrcaWorkersTab('s1', { openCreateWorker: true });
-    await revealOrcaWorkersTab('s1', { openCreateWorker: true });
-    const tab = getBucket('s1').tabs.find((candidate) => candidate.kind === 'orca-workers');
-    if (!tab) throw new Error('missing collaboration tab');
-
-    await consumeOrcaWorkersCreateIntent('s1', tab.id, 1);
-    expect(getBucket('s1').tabs.find((candidate) => candidate.id === tab.id)?.state).toMatchObject({
-      createWorkerRequestPending: true,
-      createWorkerRequestRevision: 2,
-    });
-
-    await consumeOrcaWorkersCreateIntent('s1', tab.id, 2);
-    expect(getBucket('s1').tabs.find((candidate) => candidate.id === tab.id)?.state).toMatchObject({
-      createWorkerRequestPending: false,
-      createWorkerRequestRevision: 2,
-    });
-  });
-
-  it('cancels a detached-host create intent without clearing a later request', async () => {
-    await revealOrcaWorkersTab('s1', { openCreateWorker: true });
-    const cancelOldIntent = cancelPendingOrcaWorkersCreateIntent('s1');
-    await revealOrcaWorkersTab('s1', { openCreateWorker: true });
-    await cancelOldIntent;
-
-    const tab = getBucket('s1').tabs.find((candidate) => candidate.kind === 'orca-workers');
-    expect(tab?.state).toMatchObject({
-      createWorkerRequestPending: true,
-      createWorkerRequestRevision: 2,
-    });
   });
 
   it('patches a worker focus hint into the singleton tab state', async () => {

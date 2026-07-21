@@ -68,9 +68,6 @@ function parseCommand(raw: unknown): RsbWindowCommand {
     if (r.focusTab !== undefined && typeof r.focusTab !== 'boolean') {
       throwIpcError('INVALID_PARAMS', 'command.focusTab must be boolean');
     }
-    if (r.openCreateWorker !== undefined && typeof r.openCreateWorker !== 'boolean') {
-      throwIpcError('INVALID_PARAMS', 'command.openCreateWorker must be boolean');
-    }
     const hasSearchJump =
       Object.prototype.hasOwnProperty.call(r, 'searchJump') && r.searchJump !== undefined;
     const searchJump = parseConversationSearchJump(r.searchJump);
@@ -84,7 +81,6 @@ function parseCommand(raw: unknown): RsbWindowCommand {
       ...(hasFocusWorkerSessionId ? { focusWorkerSessionId } : {}),
       ...(hasSearchJump ? { searchJump } : {}),
       focusTab: r.focusTab === true,
-      ...(r.openCreateWorker === true ? { openCreateWorker: true } : {}),
     };
   }
   if (r.type === 'close-orca-workers-tab') {

@@ -1212,7 +1212,7 @@ function installApplicationMenu(
           label: labels.newMaker,
           accelerator: menuAcceleratorFor('new-maker'),
           registerAccelerator: registerMenuAccelerators,
-          click: () => dispatchApplicationMenuCommand(mainWindow, 'new-maker'),
+          click: () => dispatchApplicationMenuCommand(mainWindow, 'new-maker-shortcut'),
         },
       ],
     },

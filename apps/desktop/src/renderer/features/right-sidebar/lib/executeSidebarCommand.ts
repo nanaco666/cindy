@@ -13,16 +13,8 @@ import {
 } from './openInSidebarFileBrowser';
 import { openUrlInSidebarBrowser } from './openInSidebarBrowser';
 
-export interface ExecuteSidebarCommandOptions {
-  /** Host-owned live context check; prevents commands accepted before a route switch from landing. */
-  isCurrentSession?: (sessionId: string) => boolean;
-}
-
 /** 在 main 已选定的当前 renderer host 中执行命令，不自行选择宿主。 */
-export async function executeSidebarCommand(
-  command: RsbWindowCommand,
-  options: ExecuteSidebarCommandOptions = {},
-): Promise<void> {
+export async function executeSidebarCommand(command: RsbWindowCommand): Promise<void> {
   if (command.type === 'open-web-browser') {
     await openUrlInSidebarBrowser(command.sessionId, command.url);
     return;
@@ -42,10 +34,6 @@ export async function executeSidebarCommand(
       focusWorkerSessionId: command.focusWorkerSessionId,
       searchJump: command.searchJump,
       focusTab: command.focusTab === true,
-      openCreateWorker: command.openCreateWorker === true,
-      shouldCommit: options.isCurrentSession
-        ? () => options.isCurrentSession?.(command.sessionId) === true
-        : undefined,
     });
     return;
   }

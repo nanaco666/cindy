@@ -4,11 +4,11 @@ import { act, cleanup, render, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { OrcaWorkerPanel } from '../OrcaWorkerPanel';
+import { requestNewWorkerFromShortcut } from '../lib/newWorkerShortcut';
 
 const mocks = vi.hoisted(() => ({
   hardLimit: 2,
   refresh: vi.fn(),
-  refreshCreationState: vi.fn(),
   setCreateOpen: vi.fn(),
 }));
 
@@ -27,7 +27,6 @@ vi.mock('../hooks/useOrcaWorkerSelection', () => ({
     softLimit: 1,
     hardLimit: mocks.hardLimit,
     refresh: mocks.refresh,
-    refreshCreationState: mocks.refreshCreationState,
     selectedWorkerRecord: null,
     selectedWorkerId: null,
     workerSessionId: null,
@@ -47,73 +46,50 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
-describe('OrcaWorkerPanel create Worker shortcut', () => {
+describe('OrcaWorkerPanel New Maker shortcut', () => {
   beforeEach(() => {
     mocks.hardLimit = 2;
     mocks.refresh.mockReset();
-    mocks.refreshCreationState.mockReset();
     mocks.setCreateOpen.mockReset();
   });
 
-  afterEach(cleanup);
-
-  it('leaves an in-flight intent pending when the panel unmounts, so a new owner can retry it', async () => {
-    const firstRefresh = deferred<{ status: 'applied'; workers: []; hardLimit: number }>();
-    mocks.refreshCreationState
-      .mockReturnValueOnce(firstRefresh.promise)
-      .mockResolvedValueOnce({ status: 'applied', workers: [], hardLimit: 2 });
-    const onConsumed = vi.fn();
-    const first = render(
-      <OrcaWorkerPanel
-        leadSessionId="lead-1"
-        viewVisible
-        createWorkerRequestPending
-        createWorkerRequestRevision={1}
-        onCreateWorkerRequestConsumed={onConsumed}
-      />,
-    );
-
-    expect(onConsumed).not.toHaveBeenCalled();
-    first.unmount();
-    await act(async () =>
-      firstRefresh.resolve({ status: 'applied', workers: [], hardLimit: 2 }),
-    );
-    expect(onConsumed).not.toHaveBeenCalled();
-    expect(mocks.setCreateOpen).not.toHaveBeenCalled();
-
-    render(
-      <OrcaWorkerPanel
-        leadSessionId="lead-1"
-        viewVisible
-        createWorkerRequestPending
-        createWorkerRequestRevision={1}
-        onCreateWorkerRequestConsumed={onConsumed}
-      />,
-    );
-    await waitFor(() => expect(mocks.setCreateOpen).toHaveBeenCalledWith(true));
-    expect(onConsumed).toHaveBeenCalledWith(1);
+  afterEach(() => {
+    cleanup();
   });
 
-  it('uses the refreshed collaboration hard limit instead of the stale rendered limit', async () => {
-    mocks.hardLimit = 2;
-    mocks.refreshCreationState.mockResolvedValue({
+  it('opens the existing create dialog only from the visible collaboration panel', async () => {
+    mocks.refresh.mockResolvedValue({ status: 'applied', workers: [] });
+    render(<OrcaWorkerPanel leadSessionId="lead-1" viewVisible />);
+
+    await expect(requestNewWorkerFromShortcut()).resolves.toBe(true);
+    expect(mocks.refresh).toHaveBeenCalledOnce();
+    expect(mocks.setCreateOpen).toHaveBeenCalledWith(true);
+  });
+
+  it('consumes the shortcut without opening when the refreshed team is at the hard limit', async () => {
+    mocks.hardLimit = 1;
+    mocks.refresh.mockResolvedValue({
       status: 'applied',
       workers: [{ status: 'running' }],
-      hardLimit: 1,
     });
-    const onConsumed = vi.fn();
-    render(
-      <OrcaWorkerPanel
-        leadSessionId="lead-1"
-        viewVisible
-        createWorkerRequestPending
-        createWorkerRequestRevision={1}
-        onCreateWorkerRequestConsumed={onConsumed}
-      />,
-    );
+    render(<OrcaWorkerPanel leadSessionId="lead-1" viewVisible />);
 
-    await waitFor(() => expect(onConsumed).toHaveBeenCalledWith(1));
+    await expect(requestNewWorkerFromShortcut()).resolves.toBe(true);
     expect(mocks.setCreateOpen).not.toHaveBeenCalled();
-    expect(mocks.refreshCreationState).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not retain an in-flight shortcut after the visible panel unmounts', async () => {
+    const pending = deferred<{ status: 'applied'; workers: [] }>();
+    mocks.refresh.mockReturnValue(pending.promise);
+    const panel = render(<OrcaWorkerPanel leadSessionId="lead-1" viewVisible />);
+
+    const request = requestNewWorkerFromShortcut();
+    await waitFor(() => expect(mocks.refresh).toHaveBeenCalledOnce());
+    panel.unmount();
+    await act(async () => pending.resolve({ status: 'applied', workers: [] }));
+
+    await expect(request).resolves.toBe(true);
+    expect(mocks.setCreateOpen).not.toHaveBeenCalled();
+    await expect(requestNewWorkerFromShortcut()).resolves.toBe(false);
   });
 });

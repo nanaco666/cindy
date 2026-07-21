@@ -39,16 +39,4 @@ describe('revealOrcaWorkersWithRetry', () => {
     expect(reveal).toHaveBeenCalledTimes(3);
     expect(wait).toHaveBeenCalledTimes(2);
   });
-
-  it('stops retrying when the caller session is no longer current', async () => {
-    const reveal = vi.fn(async () => 'stale-context' as const);
-    const wait = vi.fn(async () => undefined);
-
-    await expect(
-      revealOrcaWorkersWithRetry({ reveal, shouldRetry: () => false, wait }),
-    ).resolves.toBe('stale-context');
-
-    expect(reveal).toHaveBeenCalledOnce();
-    expect(wait).not.toHaveBeenCalled();
-  });
 });

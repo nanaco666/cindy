@@ -29,9 +29,6 @@ export interface OrcaWorkersState {
   /** 显式 string/null intent 的单调版本；消费清 state 时不递增。 */
   focusWorkerHintRevision?: number;
   searchJump?: ConversationSearchJump | null;
-  /** Pending add-Worker shortcut intent; revision makes consumption CAS-safe. */
-  createWorkerRequestPending?: boolean;
-  createWorkerRequestRevision?: number;
 }
 
 export function hydrateOrcaWorkersState(raw: unknown): OrcaWorkersState {
@@ -57,16 +54,6 @@ export function hydrateOrcaWorkersState(raw: unknown): OrcaWorkersState {
   if (Object.prototype.hasOwnProperty.call(source, 'searchJump')) {
     state.searchJump = parseConversationSearchJump(source.searchJump);
   }
-  if (source.createWorkerRequestPending === true) {
-    state.createWorkerRequestPending = true;
-  }
-  if (
-    typeof source.createWorkerRequestRevision === 'number' &&
-    Number.isSafeInteger(source.createWorkerRequestRevision) &&
-    source.createWorkerRequestRevision >= 0
-  ) {
-    state.createWorkerRequestRevision = source.createWorkerRequestRevision;
-  }
   return state;
 }
 
@@ -75,26 +62,20 @@ export interface OrcaWorkersTabOptions {
   searchJump?: ConversationSearchJump | null;
   focusTab?: boolean;
   animate?: boolean;
-  openCreateWorker?: boolean;
-  /** Local-only cancellation gate, checked after hydration immediately before mutating tab state. */
-  shouldCommit?: () => boolean;
 }
 
 function withWorkerOpenIntent(
   current: unknown,
-  opts: Pick<OrcaWorkersTabOptions, 'focusWorkerSessionId' | 'searchJump' | 'openCreateWorker'>,
+  opts: Pick<OrcaWorkersTabOptions, 'focusWorkerSessionId' | 'searchJump'>,
 ): OrcaWorkersState {
   const state = hydrateOrcaWorkersState(current);
   const hasFocusIntent = opts.focusWorkerSessionId !== undefined;
   const hasSearchJump = opts.searchJump !== undefined;
-  const hasCreateWorkerIntent = opts.openCreateWorker === true;
-  if (!hasFocusIntent && !hasSearchJump && !hasCreateWorkerIntent) return state;
+  if (!hasFocusIntent && !hasSearchJump) return state;
 
   const next: OrcaWorkersState = { ...state };
   // focus / search 都是同一个 worker-open intent；同次 patch 只递增一次。
-  if (hasFocusIntent || hasSearchJump) {
-    next.focusWorkerHintRevision = (state.focusWorkerHintRevision ?? 0) + 1;
-  }
+  next.focusWorkerHintRevision = (state.focusWorkerHintRevision ?? 0) + 1;
   if (hasFocusIntent) {
     next.focusWorkerSessionId = opts.focusWorkerSessionId ?? null;
     // 显式 null 是“清 worker open intent”，不能遗留上一条消息定位意图。
@@ -106,10 +87,6 @@ function withWorkerOpenIntent(
     if (!hasFocusIntent && next.searchJump) {
       next.focusWorkerSessionId = next.searchJump.sessionId;
     }
-  }
-  if (hasCreateWorkerIntent) {
-    next.createWorkerRequestPending = true;
-    next.createWorkerRequestRevision = (state.createWorkerRequestRevision ?? 0) + 1;
   }
   return next;
 }
@@ -123,7 +100,6 @@ async function routeDetachedOrcaWorkersCommand(
     type: 'ensure-orca-workers-tab',
     sessionId: leadSessionId,
     focusTab: opts.focusTab === true,
-    ...(opts.openCreateWorker === true ? { openCreateWorker: true } : {}),
   };
   if (opts.focusWorkerSessionId !== undefined) {
     command.focusWorkerSessionId = opts.focusWorkerSessionId;
@@ -135,36 +111,21 @@ async function routeDetachedOrcaWorkersCommand(
 async function ensureOrcaWorkersTabLocal(
   leadSessionId: string,
   opts: OrcaWorkersTabOptions,
-): Promise<boolean> {
+): Promise<void> {
   await ensureHydrated(leadSessionId);
-  if (opts.shouldCommit?.() === false) return false;
   const bucket = getBucket(leadSessionId);
   const existing = bucket.tabs.find((candidate) => candidate.kind === 'orca-workers');
   if (existing) {
-    const shouldPatchIntent =
-      opts.focusWorkerSessionId !== undefined ||
-      opts.searchJump !== undefined ||
-      opts.openCreateWorker === true;
-    const shouldFocusTab = opts.focusTab && bucket.activeTabId !== existing.id;
-    if (!shouldPatchIntent && !shouldFocusTab) return true;
-
-    // The live-context decision immediately after hydration owns both optimistic mutations.
-    // patchTabState/setActiveTab update the local bucket synchronously before their first IPC
-    // await, so starting both without an intervening await makes the commit atomic with respect
-    // to a host-context change and cannot leave only the pending create intent behind.
-    const mutations: Promise<void>[] = [];
-    if (shouldPatchIntent) {
-      mutations.push(
-        patchTabState(leadSessionId, existing.id, (state) => withWorkerOpenIntent(state, opts)),
-      );
+    if (opts.focusWorkerSessionId !== undefined || opts.searchJump !== undefined) {
+      await patchTabState(leadSessionId, existing.id, (state) => withWorkerOpenIntent(state, opts));
     }
-    if (shouldFocusTab) mutations.push(setActiveTab(leadSessionId, existing.id));
-    await Promise.all(mutations);
-    return true;
+    if (opts.focusTab && bucket.activeTabId !== existing.id) {
+      await setActiveTab(leadSessionId, existing.id);
+    }
+    return;
   }
 
   await addTab(leadSessionId, 'orca-workers', withWorkerOpenIntent({}, opts));
-  return true;
 }
 
 export async function ensureOrcaWorkersTab(
@@ -187,7 +148,7 @@ export async function revealOrcaWorkersTab(
   const revealOpts = { ...opts, focusTab: true };
   const routeResult = await routeDetachedOrcaWorkersCommand(leadSessionId, revealOpts, true);
   if (routeResult === 'attached') {
-    if (!(await ensureOrcaWorkersTabLocal(leadSessionId, revealOpts))) return 'stale-context';
+    await ensureOrcaWorkersTabLocal(leadSessionId, revealOpts);
   } else if (routeResult !== 'routed') {
     return routeResult;
   }
@@ -264,34 +225,4 @@ export async function clearOrcaWorkersSelectionIntent(
     focusWorkerHintRevision: revision,
     searchJump: null,
   }));
-}
-
-/** Consume one add-Worker shortcut intent without clearing a newer request. */
-export async function consumeOrcaWorkersCreateIntent(
-  leadSessionId: string,
-  tabId: string,
-  revision: number,
-): Promise<void> {
-  await patchTabState(leadSessionId, tabId, (raw) => {
-    const state = hydrateOrcaWorkersState(raw);
-    if ((state.createWorkerRequestRevision ?? 0) !== revision) return raw;
-    return {
-      ...state,
-      createWorkerRequestPending: false,
-      createWorkerRequestRevision: revision,
-    };
-  });
-}
-
-/**
- * Cancel the currently pending add-Worker intent for a session, if one exists.
- * The captured revision makes a delayed persistence completion unable to clear a newer request.
- */
-export async function cancelPendingOrcaWorkersCreateIntent(leadSessionId: string): Promise<void> {
-  const tab = getBucket(leadSessionId).tabs.find((candidate) => candidate.kind === 'orca-workers');
-  if (!tab) return;
-  const state = hydrateOrcaWorkersState(tab.state);
-  const revision = state.createWorkerRequestRevision ?? 0;
-  if (!state.createWorkerRequestPending || revision <= 0) return;
-  await consumeOrcaWorkersCreateIntent(leadSessionId, tab.id, revision);
 }

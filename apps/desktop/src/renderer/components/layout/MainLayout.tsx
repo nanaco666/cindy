@@ -59,6 +59,7 @@ import {
 import { isSecondaryWindow } from '@/lib/secondaryWindow';
 import { useUpdateNotice } from '@/hooks/useUpdateNotice';
 import { isAgentIslandSupported, toggleAgentIslandSoundEnabled } from '@/hooks/useAgentIslandSettings';
+import { requestNewWorkerFromShortcut } from '@/features/cc-agent/lib/newWorkerShortcut';
 // chat-data-localization F1 V0.4 / M-FE6
 import { useCorruptionRestoredToast } from '@/hooks/useCorruptionRestoredToast';
 // #37 schema-drift release-side toast
@@ -75,10 +76,6 @@ import {
   shouldAnimateSidebarVisibilityRequest,
 } from '@/features/right-sidebar/lib/sidebarCommands';
 import { resolveSessionRoute } from '@/lib/orcaSessionIdentity';
-import * as sessionService from '@/lib/sessionService';
-import { routeNewMakerCommand } from '@/lib/newMakerCommandRouting';
-import { revealOrcaWorkersTab } from '@/features/right-sidebar/plugins/orca-workers/actions';
-import { revealOrcaWorkersWithRetry } from '@/features/cc-agent/lib/orcaWorkersRevealRetry';
 import { remoteProjectsStore } from '@/features/device-link/remoteProjectsStore';
 import {
   isAgentIslandVisibleSessionOwnedByWorkdirBrowseRoute,
@@ -760,9 +757,7 @@ export function MainLayout() {
     if (isSecondaryWindow()) return;
     return window.electronAPI.rightSidebarWindow.onCommand((command) => {
       if (command.sessionId !== rightSidebarSessionIdRef.current) return;
-      void executeSidebarCommand(command, {
-        isCurrentSession: (sessionId) => rightSidebarSessionIdRef.current === sessionId,
-      }).catch((err) => {
+      void executeSidebarCommand(command).catch((err) => {
         applicationMenuLog.warn('execute attached sidebar command failed', err);
       });
     });
@@ -833,52 +828,24 @@ export function MainLayout() {
     void window.electronAPI.pageZoomReset();
   }, []);
 
-  const newMakerCommandInFlightRef = useRef(false);
-  const handleNewMakerCommand = useCallback(() => {
-    if (newMakerCommandInFlightRef.current) return;
-    newMakerCommandInFlightRef.current = true;
-    const sessionId = rightSidebarSessionIdRef.current;
-    const remoteSession = sessionId
-      ? (remoteProjectsStore
-          .getMergedRemoteSessions()
-          .find((candidate) => candidate.id === sessionId) ?? null)
-      : null;
-    void routeNewMakerCommand({
-      sessionId,
-      loadSession: async (id) => remoteSession ?? sessionService.get(id).catch(() => null),
-      isCurrentSession: (id) => rightSidebarSessionIdRef.current === id,
-      openCreateWorker: async (id) => {
-        applicationMenuLog.info(
-          'new-maker invoked in collaboration context, opening Worker dialog',
-        );
-        const routeResult = await revealOrcaWorkersWithRetry({
-          shouldRetry: () => rightSidebarSessionIdRef.current === id,
-          reveal: () =>
-            revealOrcaWorkersTab(id, {
-              openCreateWorker: true,
-              shouldCommit: () => rightSidebarSessionIdRef.current === id,
-            }),
-        });
-        if (routeResult === 'stale-context') {
-          applicationMenuLog.warn(
-            'new-maker Worker dialog routing remained stale after bounded retries',
-            { sessionId: id },
-          );
-          return false;
+  const newMakerShortcutInFlightRef = useRef(false);
+  const handleNewMakerShortcut = useCallback(() => {
+    if (newMakerShortcutInFlightRef.current) return;
+    newMakerShortcutInFlightRef.current = true;
+    void requestNewWorkerFromShortcut()
+      .then((handled) => {
+        if (handled) {
+          applicationMenuLog.info('new-maker shortcut handled by visible collaboration panel');
+          return;
         }
-        // queued is an accepted handoff to a sidebar window that is still opening.
-        return true;
-      },
-      openNewMaker: () => {
-        applicationMenuLog.info('new-maker invoked, navigating to /cc-agent/new');
+        applicationMenuLog.info('new-maker shortcut invoked, navigating to /cc-agent/new');
         navigate('/cc-agent/new');
-      },
-    })
+      })
       .catch((err: unknown) => {
-        applicationMenuLog.warn('new-maker routing failed', err);
+        applicationMenuLog.warn('new-maker shortcut routing failed', err);
       })
       .finally(() => {
-        newMakerCommandInFlightRef.current = false;
+        newMakerShortcutInFlightRef.current = false;
       });
   }, [navigate]);
 
@@ -912,7 +879,14 @@ export function MainLayout() {
           navigate('/issues');
           break;
         case 'new-maker':
-          handleNewMakerCommand();
+          // 等价于 CCAgentSidebarUpper.handleNewCCS (sidebar 顶部 "+ New Maker" 按钮):
+          // 单步 navigate 到 /cc-agent/new, draft 状态由 NewMakerDraftRoute 自己读取。
+          // 不重置 workingDir —— sidebar 按钮也不重置, 保留用户上次的目录上下文。
+          applicationMenuLog.info('new-maker invoked, navigating to /cc-agent/new');
+          navigate('/cc-agent/new');
+          break;
+        case 'new-maker-shortcut':
+          handleNewMakerShortcut();
           break;
         case 'toggle-agent-island-sound':
           toggleAgentIslandSoundEnabled();
@@ -925,7 +899,7 @@ export function MainLayout() {
           break;
       }
     });
-  }, [isMac, navigate, openNotice, t, handleNewMakerCommand, handleToggleSidebar]);
+  }, [isMac, navigate, openNotice, t, handleNewMakerShortcut, handleToggleSidebar]);
 
   // ⌘B / Ctrl+B 切换侧边栏折叠 (组合键定义在 shared/appShortcuts registry,
   // 用户可改绑)。capture 阶段处理, 但需要为真正用到 Bold 的 contenteditable

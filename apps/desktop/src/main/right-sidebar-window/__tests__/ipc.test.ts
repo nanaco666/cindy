@@ -61,34 +61,6 @@ beforeEach(() => {
 });
 
 describe('right-sidebar-window IPC', () => {
-  it('preserves the create-Worker intent in routed collaboration commands', async () => {
-    const controller = makeController();
-    const { handler, mainWebContents } = registerController(controller);
-
-    await handler(
-      { sender: mainWebContents },
-      {
-        command: {
-          type: 'ensure-orca-workers-tab',
-          sessionId: 'lead-1',
-          focusTab: true,
-          openCreateWorker: true,
-        },
-        allowOpen: true,
-      },
-    );
-
-    expect(controller.routeCommand).toHaveBeenCalledWith({
-      command: {
-        type: 'ensure-orca-workers-tab',
-        sessionId: 'lead-1',
-        focusTab: true,
-        openCreateWorker: true,
-      },
-      allowOpen: true,
-    });
-  });
-
   it('preserves missing vs explicit null worker focus hints in ensure commands', async () => {
     const controller = makeController();
     const { handler, mainWebContents } = registerController(controller);

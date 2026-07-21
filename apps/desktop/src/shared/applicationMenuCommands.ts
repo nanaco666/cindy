@@ -21,6 +21,7 @@ export const APPLICATION_MENU_COMMANDS = [
   'open-agent-island-settings',
   'toggle-agent-island-sound',
   'new-maker',
+  'new-maker-shortcut',
   'toggle-sidebar',
 ] as const;
 

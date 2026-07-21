@@ -12,12 +12,13 @@ import { useTranslation } from 'react-i18next';
 
 import { isAgentIslandSupported } from '@/hooks/useAgentIslandSettings';
 import { isSidebarWindow } from '@/lib/sidebarWindow';
-import { canOpenWorkerFromShortcut } from '@/lib/newMakerCommandRouting';
 import { CCAgentSessionView } from './CCAgentSessionView';
 import { CreateWorkerPopover } from './CreateWorkerPopover';
 import { WorkerListToolbar } from './RolePillDropdown';
 import { useOrcaWorkerSelection } from './hooks/useOrcaWorkerSelection';
+import { subscribeNewWorkerShortcut } from './lib/newWorkerShortcut';
 import type { ConversationSearchJump } from '../../../shared/conversationSearchJump';
+import { isActiveWorkerStatus } from '../../../shared/orca-worker-status';
 
 export interface OrcaWorkerPanelProps {
   leadSessionId: string;
@@ -30,12 +31,9 @@ export interface OrcaWorkerPanelProps {
   focusWorkerSessionId?: string | null;
   focusWorkerHintRevision?: number;
   searchJump?: ConversationSearchJump | null;
-  createWorkerRequestPending?: boolean;
-  createWorkerRequestRevision?: number;
   onFocusWorkerSessionIdConsumed?: (revision: number) => void;
   onSelectionIntentCleared?: (revision: number) => void;
   onSearchJumpConsumed?: () => void;
-  onCreateWorkerRequestConsumed?: (revision: number) => void;
 }
 
 function sameVisibleSessionPayload(
@@ -55,12 +53,9 @@ export function OrcaWorkerPanel({
   focusWorkerSessionId,
   focusWorkerHintRevision,
   searchJump,
-  createWorkerRequestPending = false,
-  createWorkerRequestRevision = 0,
   onFocusWorkerSessionIdConsumed,
   onSelectionIntentCleared,
   onSearchJumpConsumed,
-  onCreateWorkerRequestConsumed,
 }: OrcaWorkerPanelProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -70,7 +65,7 @@ export function OrcaWorkerPanel({
     activeWorkerCount,
     softLimit,
     hardLimit,
-    refreshCreationState,
+    refresh,
     selectedWorkerRecord,
     selectedWorkerId,
     workerSessionId,
@@ -89,50 +84,28 @@ export function OrcaWorkerPanel({
     onSelectionIntentCleared,
   });
   const lastAgentIslandPayloadRef = useRef<string | string[] | null>(null);
-  const handledCreateWorkerRevisionRef = useRef(0);
 
   useEffect(() => {
-    handledCreateWorkerRevisionRef.current = 0;
-  }, [leadSessionId]);
-
-  useEffect(() => {
-    if (!viewVisible || !createWorkerRequestPending || createWorkerRequestRevision <= 0) return;
-    if (handledCreateWorkerRevisionRef.current >= createWorkerRequestRevision) return;
-    handledCreateWorkerRevisionRef.current = createWorkerRequestRevision;
+    if (!viewVisible) return;
     let active = true;
-    let settled = false;
-
-    // Refresh before checking the hard limit: a cold/stale worker cache must never let the
-    // keyboard path open a dialog that the visible create button would disable.
-    void refreshCreationState().then((result) => {
-      if (!active) return;
-      settled = true;
-      if (
-        result?.status === 'applied' &&
-        canOpenWorkerFromShortcut(result.workers, result.hardLimit)
-      ) {
-        setCreateOpen(true);
-      }
-      // Keep the intent pending while refresh is in flight. If this panel unmounts, the next
-      // owner can retry the same revision instead of losing the shortcut in a stale callback.
-      onCreateWorkerRequestConsumed?.(createWorkerRequestRevision);
+    const unsubscribe = subscribeNewWorkerShortcut(async () => {
+      // Match the visible create control's hard-limit semantics, but refresh worker status first
+      // so a stale cache cannot make the shortcut bypass a newly reached limit.
+      const result = await refresh();
+      if (!active || result?.status !== 'applied') return true;
+      const activeCount = result.workers.filter((worker) =>
+        isActiveWorkerStatus(worker.status),
+      ).length;
+      if (activeCount < hardLimit) setCreateOpen(true);
+      return true;
     });
-
     return () => {
+      // Prevent an in-flight refresh from opening the dialog after this panel stopped owning the
+      // visible collaboration context. No intent is retained for a later mount.
       active = false;
-      if (!settled && handledCreateWorkerRevisionRef.current === createWorkerRequestRevision) {
-        handledCreateWorkerRevisionRef.current = createWorkerRequestRevision - 1;
-      }
+      unsubscribe();
     };
-  }, [
-    createWorkerRequestPending,
-    createWorkerRequestRevision,
-    leadSessionId,
-    onCreateWorkerRequestConsumed,
-    refreshCreationState,
-    setCreateOpen,
-    viewVisible,
-  ]);
+  }, [hardLimit, refresh, setCreateOpen, viewVisible]);
 
   useEffect(() => {
     if (!isAgentIslandSupported()) return;

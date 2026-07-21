@@ -5,8 +5,6 @@ const DEFAULT_RETRY_DELAY_MS = 50;
 
 export interface RevealOrcaWorkersWithRetryOptions {
   reveal: () => Promise<RsbWindowCommandRouteResult>;
-  /** Optional live cancellation gate, checked before every retry. */
-  shouldRetry?: () => boolean;
   maxAttempts?: number;
   retryDelayMs?: number;
   wait?: (delayMs: number) => Promise<void>;
@@ -23,18 +21,13 @@ export function didOpenOrcaWorkersTab(result: RsbWindowCommandRouteResult): bool
  */
 export async function revealOrcaWorkersWithRetry({
   reveal,
-  shouldRetry = () => true,
   maxAttempts = DEFAULT_MAX_ATTEMPTS,
   retryDelayMs = DEFAULT_RETRY_DELAY_MS,
   wait = (delayMs) => new Promise((resolve) => window.setTimeout(resolve, delayMs)),
 }: RevealOrcaWorkersWithRetryOptions): Promise<RsbWindowCommandRouteResult> {
   const attempts = Math.max(1, maxAttempts);
   let result = await reveal();
-  for (
-    let attempt = 1;
-    result === 'stale-context' && attempt < attempts && shouldRetry();
-    attempt += 1
-  ) {
+  for (let attempt = 1; result === 'stale-context' && attempt < attempts; attempt += 1) {
     await wait(retryDelayMs);
     result = await reveal();
   }
