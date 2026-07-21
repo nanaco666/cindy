@@ -17,14 +17,14 @@ WeChat OpenSDK for Android@6.8.38
 Category: restricted-review-required
 License: NOASSERTION
 Source: https://developers.weixin.qq.com/doc/oplatform/Mobile_App/Access_Guide/Android.html
-Compliance note: 上游 Maven SDK 未提供标准开源许可证；发布前需确认微信开放平台 SDK 分发条款。
+Compliance note: 上游 Maven SDK 未提供标准开源许可证；按 docs/legal/wechat-open-sdk-compliance.md 完成条款、隐私披露和用户同意复核。官方合规指南：https://developers.weixin.qq.com/doc/oplatform/Mobile_App/agreement/sdk.html
 
 ------------------------------------------------------------------------------
 WeChat OpenSDK for iOS@2.0.5
 Category: restricted-review-required
 License: NOASSERTION
 Source: https://developers.weixin.qq.com/doc/oplatform/Mobile_App/Access_Guide/iOS.html
-Compliance note: 上游 CocoaPod 声明为 Copyright 且未提供标准开源许可证；发布前需确认微信开放平台 SDK 分发条款。
+Compliance note: 上游 CocoaPod 声明为 Copyright 且未提供标准开源许可证；按 docs/legal/wechat-open-sdk-compliance.md 完成条款、隐私披露和用户同意复核。官方合规指南：https://developers.weixin.qq.com/doc/oplatform/Mobile_App/agreement/sdk.html
 
 ------------------------------------------------------------------------------
 @anthropic-ai/claude-agent-sdk@0.2.112

@@ -42,8 +42,12 @@ test("generated artifact notices are platform-scoped and disclose restricted com
   assert.doesNotMatch(windowsRestricted, /@codesandbox\/nodebox/);
   assert.doesNotMatch(windowsRestricted, /Sustainable Use License/);
   assert.match(iosRestricted, /WeChat OpenSDK for iOS@2\.0\.5/);
+  assert.match(iosRestricted, /docs\/legal\/wechat-open-sdk-compliance\.md/);
+  assert.match(iosRestricted, /Mobile_App\/agreement\/sdk\.html/);
   assert.doesNotMatch(iosRestricted, /WeChat OpenSDK for Android@6\.8\.38/);
   assert.match(androidRestricted, /WeChat OpenSDK for Android@6\.8\.38/);
+  assert.match(androidRestricted, /docs\/legal\/wechat-open-sdk-compliance\.md/);
+  assert.match(androidRestricted, /Mobile_App\/agreement\/sdk\.html/);
   assert.doesNotMatch(androidRestricted, /Claude Code CLI@/);
   assert.doesNotMatch(windows, /@codesandbox\/nodebox@0\.1\.8 —/);
 });

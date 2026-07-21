@@ -1282,7 +1282,7 @@ const restrictedManualEntries = [
     license: "NOASSERTION",
     category: "restricted-review-required",
     url: "https://developers.weixin.qq.com/doc/oplatform/Mobile_App/Access_Guide/iOS.html",
-    note: "上游 CocoaPod 声明为 Copyright 且未提供标准开源许可证；发布前需确认微信开放平台 SDK 分发条款。",
+    note: "上游 CocoaPod 声明为 Copyright 且未提供标准开源许可证；按 docs/legal/wechat-open-sdk-compliance.md 完成条款、隐私披露和用户同意复核。官方合规指南：https://developers.weixin.qq.com/doc/oplatform/Mobile_App/agreement/sdk.html",
     artifacts: ["mobile-ios"],
   },
   {
@@ -1292,7 +1292,7 @@ const restrictedManualEntries = [
     license: "NOASSERTION",
     category: "restricted-review-required",
     url: "https://developers.weixin.qq.com/doc/oplatform/Mobile_App/Access_Guide/Android.html",
-    note: "上游 Maven SDK 未提供标准开源许可证；发布前需确认微信开放平台 SDK 分发条款。",
+    note: "上游 Maven SDK 未提供标准开源许可证；按 docs/legal/wechat-open-sdk-compliance.md 完成条款、隐私披露和用户同意复核。官方合规指南：https://developers.weixin.qq.com/doc/oplatform/Mobile_App/agreement/sdk.html",
     artifacts: ["mobile-android"],
   },
 ];
