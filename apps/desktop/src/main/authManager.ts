@@ -120,6 +120,14 @@ export interface AuthState {
   deviceId: string;
 }
 
+export interface AuthInitializeOptions {
+  /**
+   * 冷启动 refresh 超过 UI 等待上限时触发。renderer 仍会先拿到未登录兜底态，
+   * 但 dev restart 必须继续等待这个最终结果：迟到登录后还要观察 localDb migration。
+   */
+  onColdStartPending?: (completion: Promise<AuthState>) => void;
+}
+
 type RefreshResponse = AuthTokenPair;
 
 interface AuthErrorResponse {
@@ -867,7 +875,7 @@ export async function updateServerProfile(
   };
 }
 
-export async function initialize(): Promise<AuthState> {
+export async function initialize(options: AuthInitializeOptions = {}): Promise<AuthState> {
   // 进程内已登录快路径:auth 状态是 main 进程全局的,主窗登录后其它 renderer
   // (会话多开副窗 / 右侧栏子窗口)mount 时各自都会调一次 auth:initialize ——
   // 没有这条快路径,每个新窗口都会重跑一整轮网络 refresh(token 轮换 + /me),
@@ -913,9 +921,11 @@ export async function initialize(): Promise<AuthState> {
   }
   // 黑洞 / captive-portal 网络护栏:限时等待,超时先以未登录返回解锁 splash,
   // 流程继续后台跑;迟到成功由流程内部广播登录态(renderer 自动跳回主界面)。
-  return awaitWithStartupTimeout(coldStartAuthInFlight, {
+  const coldStartCompletion = coldStartAuthInFlight;
+  return awaitWithStartupTimeout(coldStartCompletion, {
     timeoutMs: COLD_START_AUTH_GATE_TIMEOUT_MS,
     onTimeout: () => {
+      options.onColdStartPending?.(coldStartCompletion);
       log.warn(
         `cold-start auth still pending after ${COLD_START_AUTH_GATE_TIMEOUT_MS}ms — unblocking startup as logged out, flow continues in background`,
       );

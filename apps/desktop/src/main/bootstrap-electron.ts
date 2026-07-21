@@ -15,7 +15,7 @@ import {
   resolveSingleInstanceLockUserDataDir,
 } from './devCliFlags.js';
 import {
-  markDesktopDevReady,
+  recordDesktopDevAuthStartupResult,
   markDesktopDevStartupFailed,
   markDesktopDevWindowReady,
 } from './devStartupStatus';
@@ -2804,11 +2804,14 @@ ipcMain.on('theme:apply-vibrancy', (_event, payload: { familyId: string; isDark:
 
   ipcMain.handle('auth:initialize', async () => {
     try {
-      const state = await authManager.initialize();
-      // A logged-out app has no user database to open. Once auth settles, the
-      // login screen is the usable startup destination and restart may return.
-      if (!app.isPackaged && (!state.isAuthenticated || state.user === null)) {
-        markDesktopDevReady();
+      let pendingCompletion: Promise<authManager.AuthState> | null = null;
+      const state = await authManager.initialize({
+        onColdStartPending: (completion) => {
+          pendingCompletion = completion;
+        },
+      });
+      if (!app.isPackaged) {
+        recordDesktopDevAuthStartupResult(state, pendingCompletion);
       }
       return state;
     } catch (err) {

@@ -175,6 +175,40 @@ export function markDesktopDevReady(): void {
   settleDesktopDevReadyIfPossible();
 }
 
+type DesktopDevAuthState = {
+  isAuthenticated: boolean;
+  user: unknown | null;
+};
+
+/**
+ * Complete logged-out startup immediately only when auth is definitive. A cold-start
+ * timeout is a temporary renderer fallback: keep restart pending until background auth
+ * settles, so a late login still has time to report its localDb migration result.
+ */
+export function recordDesktopDevAuthStartupResult(
+  initialState: DesktopDevAuthState,
+  pendingCompletion: Promise<DesktopDevAuthState> | null,
+): void {
+  if (initialState.isAuthenticated && initialState.user !== null) return;
+  if (pendingCompletion === null) {
+    markDesktopDevReady();
+    return;
+  }
+
+  void pendingCompletion.then(
+    (state) => {
+      if (!state.isAuthenticated || state.user === null) markDesktopDevReady();
+    },
+    (err) => {
+      markDesktopDevStartupFailed(
+        'AUTH_INIT_FAILED',
+        err instanceof Error ? err.message : String(err),
+        { phase: 'auth:initialize:late' },
+      );
+    },
+  );
+}
+
 /** Bridge localDb.ensureReady's stable result shape into the dev startup contract. */
 export function recordDesktopDevLocalDbStartupResult(result: {
   ready: boolean;

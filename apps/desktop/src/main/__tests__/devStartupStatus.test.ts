@@ -9,6 +9,7 @@ import {
   markDesktopDevReady,
   markDesktopDevStartupFailed,
   markDesktopDevWindowReady,
+  recordDesktopDevAuthStartupResult,
   recordDesktopDevLocalDbStartupResult,
 } from '../devStartupStatus.js';
 
@@ -85,6 +86,67 @@ describe('devStartupStatus', () => {
 
     markDesktopDevWindowReady();
     expect(JSON.parse(fs.readFileSync(statusPath, 'utf8'))).toMatchObject({ state: 'ready' });
+  });
+
+  it('keeps restart pending when logged-out is only the auth timeout fallback', async () => {
+    fs.writeFileSync(statusPath, '{"state":"pending"}\n');
+    cleanup = beginDesktopDevInstance({
+      userDataDir: tempDir,
+      rootDir: tempDir,
+      passive: false,
+      isolated: false,
+      pid: 4248,
+    });
+    markDesktopDevWindowReady();
+
+    let settleAuth!: (state: { isAuthenticated: boolean; user: unknown | null }) => void;
+    const pendingAuth = new Promise<{ isAuthenticated: boolean; user: unknown | null }>((resolve) => {
+      settleAuth = resolve;
+    });
+    recordDesktopDevAuthStartupResult(
+      { isAuthenticated: false, user: null },
+      pendingAuth,
+    );
+    expect(JSON.parse(fs.readFileSync(statusPath, 'utf8'))).toMatchObject({
+      state: 'window-ready',
+    });
+
+    settleAuth({ isAuthenticated: false, user: null });
+    await pendingAuth;
+    await Promise.resolve();
+    expect(JSON.parse(fs.readFileSync(statusPath, 'utf8'))).toMatchObject({ state: 'ready' });
+  });
+
+  it('waits for localDb when auth recovers after the timeout fallback', async () => {
+    fs.writeFileSync(statusPath, '{"state":"pending"}\n');
+    cleanup = beginDesktopDevInstance({
+      userDataDir: tempDir,
+      rootDir: tempDir,
+      passive: false,
+      isolated: false,
+      pid: 4249,
+    });
+    markDesktopDevWindowReady();
+
+    const pendingAuth = Promise.resolve({ isAuthenticated: true, user: { id: 'late-user' } });
+    recordDesktopDevAuthStartupResult(
+      { isAuthenticated: false, user: null },
+      pendingAuth,
+    );
+    await pendingAuth;
+    await Promise.resolve();
+    expect(JSON.parse(fs.readFileSync(statusPath, 'utf8'))).toMatchObject({
+      state: 'window-ready',
+    });
+
+    recordDesktopDevLocalDbStartupResult({
+      ready: false,
+      error: { code: 'MIGRATE_FAILED', message: 'late migration failure' },
+    });
+    expect(JSON.parse(fs.readFileSync(statusPath, 'utf8'))).toMatchObject({
+      state: 'failed',
+      code: 'MIGRATE_FAILED',
+    });
   });
 
   it('preserves a concrete main-process failure for the restart waiter', () => {
