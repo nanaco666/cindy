@@ -66,6 +66,24 @@ function pushMakerTaskUpdate(
   });
 }
 
+function pushMakerText(
+  sessionId: string,
+  persistId: string | undefined,
+  text: string,
+  isFinal: boolean,
+  agentMeta?: Record<string, unknown>,
+): void {
+  remoteSessionStore.applyRemotePush('dev-1', 'maker:event', {
+    sessionId,
+    ...(persistId ? { persistId } : {}),
+    event: {
+      type: 'text',
+      data: { text, isFinal },
+      ...(agentMeta ? { agentMeta } : {}),
+    },
+  });
+}
+
 function projection(sessionId: string, clientId = 'q-1'): InputProjection {
   return {
     sessionId,
@@ -171,6 +189,183 @@ describe('remoteSessionStore', () => {
     expect(remoteSessionStore.getMessages('s1')).toHaveLength(1);
     expect(remoteSessionStore.getMessages('s1')[0].content).toBe('updated');
     expect(remoteSessionStore.getMessageVersion()).toBeGreaterThan(versionAfterCreate);
+  });
+
+  it('batches maker text deltas into one streaming assistant row', () => {
+    vi.useFakeTimers();
+    const notify = vi.fn();
+    const unsubscribe = remoteSessionStore.subscribe(notify);
+    try {
+      pushMakerText('s1', 'persist-1', 'hello', false);
+      pushMakerText('s1', 'persist-1', ' world', false);
+
+      expect(remoteSessionStore.getMessages('s1')).toHaveLength(0);
+      expect(notify).not.toHaveBeenCalled();
+
+      vi.runOnlyPendingTimers();
+
+      expect(remoteSessionStore.getMessages('s1')).toHaveLength(1);
+      expect(remoteSessionStore.getMessages('s1')[0]).toMatchObject({
+        id: 'persist-1',
+        clientId: 'persist-1',
+        role: 'assistant',
+        content: 'hello world',
+        agentMeta: { isStreaming: true },
+      });
+      expect(notify).toHaveBeenCalledTimes(1);
+    } finally {
+      unsubscribe();
+      vi.useRealTimers();
+    }
+  });
+
+  it('treats final text as a complete block and clears streaming at done', () => {
+    pushMakerText('s1', 'persist-1', 'hello', false);
+    pushMakerText('s1', 'persist-1', 'hello world', true, { model: 'claude' });
+
+    expect(remoteSessionStore.getMessages('s1')).toMatchObject([{
+      clientId: 'persist-1',
+      content: 'hello world',
+      agentMeta: { isStreaming: true, model: 'claude' },
+    }]);
+
+    remoteSessionStore.applyRemotePush('dev-1', 'maker:event', {
+      sessionId: 's1',
+      event: { type: 'done', data: {} },
+    });
+
+    expect(remoteSessionStore.getMessages('s1')[0].agentMeta).toEqual({ model: 'claude' });
+  });
+
+  it('replaces the temporary streaming row when the persisted message arrives', () => {
+    vi.useFakeTimers();
+    try {
+      pushMakerText('s1', 'persist-1', 'partial', false);
+      vi.runOnlyPendingTimers();
+
+      remoteSessionStore.applyRemotePush('dev-1', 'local-db:messages:created', {
+        sessionId: 's1',
+        message: {
+          id: 'message-1',
+          clientId: 'persist-1',
+          sessionId: 's1',
+          role: 'assistant',
+          content: 'partial and complete',
+          toolUseId: null,
+          agentMeta: { model: 'claude' },
+          createdAt: '2026-01-01T00:00:01.000Z',
+        },
+      });
+      vi.runOnlyPendingTimers();
+
+      expect(remoteSessionStore.getMessages('s1')).toMatchObject([{
+        id: 'message-1',
+        clientId: 'persist-1',
+        content: 'partial and complete',
+        agentMeta: { model: 'claude' },
+      }]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('migrates a fallback streaming row when a later event carries persistId', () => {
+    pushMakerText('s1', undefined, 'partial ', false);
+    pushMakerText('s1', 'persist-1', 'partial and complete', true);
+
+    expect(remoteSessionStore.getMessages('s1')).toMatchObject([{
+      id: 'persist-1',
+      clientId: 'persist-1',
+      content: 'partial and complete',
+      agentMeta: { isStreaming: true },
+    }]);
+  });
+
+  it('ends the current streaming block at a tool boundary', () => {
+    vi.useFakeTimers();
+    try {
+      pushMakerText('s1', 'persist-1', 'before tool', false);
+      remoteSessionStore.applyRemotePush('dev-1', 'maker:event', {
+        sessionId: 's1',
+        event: { type: 'tool_use', data: { toolUseId: 'tool-1' } },
+      });
+
+      expect(remoteSessionStore.getMessages('s1')[0].agentMeta).toBeNull();
+
+      pushMakerText('s1', 'persist-2', 'after tool', false);
+      vi.runOnlyPendingTimers();
+      expect(remoteSessionStore.getMessages('s1')).toMatchObject([
+        { clientId: 'persist-1', content: 'before tool', agentMeta: null },
+        { clientId: 'persist-2', content: 'after tool', agentMeta: { isStreaming: true } },
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('finalizes live text on idle recovery and does not erase it from an empty window', () => {
+    vi.useFakeTimers();
+    try {
+      pushMakerText('s1', 'persist-1', 'still streaming', false);
+      remoteSessionStore.applyRemotePush('dev-1', 'local-db:sessions:activity', {
+        sessionId: 's1',
+        phase: 'completed',
+        compactDetail: '',
+      });
+      vi.runOnlyPendingTimers();
+
+      remoteSessionStore.setLatestMessageWindow('s1', []);
+      expect(remoteSessionStore.getMessages('s1')).toMatchObject([{
+        clientId: 'persist-1',
+        content: 'still streaming',
+        agentMeta: null,
+      }]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('matches persisted rows by clientId without content-prefix guesses', () => {
+    vi.useFakeTimers();
+    try {
+      pushMakerText('s1', 'persist-1', 'partial', false);
+      vi.runOnlyPendingTimers();
+
+      remoteSessionStore.setLatestMessageWindow('s1', [{
+        ...messageAt('message-1', 's1', '2026-01-01T00:00:01.000Z'),
+        clientId: 'persist-1',
+        content: 'partial and complete',
+        agentMeta: { model: 'claude' },
+      }]);
+
+      expect(remoteSessionStore.getMessages('s1')).toMatchObject([{
+        id: 'message-1',
+        clientId: 'persist-1',
+        content: 'partial and complete',
+        agentMeta: { model: 'claude' },
+      }]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps accumulated text when the final event is device-link truncated', () => {
+    pushMakerText('s1', 'persist-1', '前半段', false);
+    pushMakerText('s1', 'persist-1', '后半段', false);
+    remoteSessionStore.applyRemotePush('dev-1', 'maker:event', {
+      sessionId: 's1',
+      persistId: 'persist-1',
+      event: {
+        type: 'text',
+        __deviceLinkTruncated: true,
+        data: { text: '前半段\n[device-link truncated]', isFinal: true, __deviceLinkTruncated: true },
+      },
+    });
+
+    expect(remoteSessionStore.getMessages('s1')[0]).toMatchObject({
+      content: '前半段后半段',
+      agentMeta: { isStreaming: true },
+    });
   });
 
   it('applies live update_plan snapshots to the persisted task row', () => {
