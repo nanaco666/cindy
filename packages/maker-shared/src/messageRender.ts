@@ -141,7 +141,8 @@ export type MessageRenderWorkChildItem<
   | MessageRenderToolGroupItem<TMessage>
   | MessageRenderTodoCardItem
   | MessageRenderAgentTaskItem<TMessage>
-  | MessageRenderMessageItem<TMessage>;
+  | MessageRenderMessageItem<TMessage>
+  | MessageRenderWorkGroupItem<TMessage>;
 
 export interface MessageRenderWorkGroupItem<
   TMessage extends MessageRenderNormalizedMessage = MessageRenderNormalizedMessage,
@@ -150,6 +151,10 @@ export interface MessageRenderWorkGroupItem<
   key: string;
   children: MessageRenderWorkChildItem<TMessage>[];
   durationMs?: number;
+  /** True only for the trailing activity run in an active turn. */
+  isStreaming?: boolean;
+  /** Epoch milliseconds of the first real activity, for a live elapsed timer. */
+  startedAtMs?: number;
 }
 
 export type MessageRenderItem<
@@ -746,10 +751,13 @@ function groupMessageWorkRuns<
 
   const flushTurn = (activeTail: boolean) => {
     if (currentTurn.length === 0) return;
-    const turnItems = activeTail && isSessionStreaming
-      ? currentTurn
-      : groupAnsweredTurnItems(currentTurn);
-    out.push(...turnItems);
+    if (activeTail && isSessionStreaming) {
+      out.push(...groupActiveWorkRuns(currentTurn));
+      currentTurn = [];
+      return;
+    }
+    const grouped = groupAnsweredTurnItems(currentTurn);
+    out.push(...(grouped.handled ? grouped.items : groupLegacyWorkRuns(currentTurn)));
     currentTurn = [];
   };
 
@@ -767,40 +775,118 @@ function groupMessageWorkRuns<
 
 function groupAnsweredTurnItems<
   TMessage extends MessageRenderNormalizedMessage,
->(items: readonly MessageRenderItem<TMessage>[]): MessageRenderItem<TMessage>[] {
-  const lastAnswerIndex = findLastAssistantAnswerIndex(items);
-  if (lastAnswerIndex < 0) return [...items];
+>(items: readonly MessageRenderItem<TMessage>[]): {
+  items: MessageRenderItem<TMessage>[];
+  handled: boolean;
+} {
+  let lastAnswerIndex = -1;
+  for (let index = items.length - 1; index >= 0; index--) {
+    if (isAssistantAnswerCandidate(items[index])) {
+      lastAnswerIndex = index;
+      break;
+    }
+  }
+  if (lastAnswerIndex < 0) return { items: [...items], handled: false };
 
-  const prefix = groupWorkChildRuns(items.slice(0, lastAnswerIndex), items[lastAnswerIndex]);
-  const answer = items[lastAnswerIndex];
-  const suffix = groupWorkChildRuns(items.slice(lastAnswerIndex + 1));
-  return [...prefix, answer, ...suffix];
-}
+  const hasWorkAfterLastAnswer = items.some(
+    (item, index) => index > lastAnswerIndex && isWorkActivityItem(item),
+  );
+  if (hasWorkAfterLastAnswer) return { items: [...items], handled: false };
 
-function groupWorkChildRuns<
-  TMessage extends MessageRenderNormalizedMessage,
->(
-  items: readonly MessageRenderItem<TMessage>[],
-  finalBoundary?: MessageRenderItem<TMessage>,
-): MessageRenderItem<TMessage>[] {
+  let lastWorkActivityIndex = -1;
+  for (let index = lastAnswerIndex - 1; index >= 0; index--) {
+    if (isWorkActivityItem(items[index])) {
+      lastWorkActivityIndex = index;
+      break;
+    }
+  }
+
+  let finalAnswerStartIndex = lastAnswerIndex;
+  if (lastWorkActivityIndex >= 0) {
+    while (
+      finalAnswerStartIndex > lastWorkActivityIndex + 1
+      && isAssistantAnswerCandidate(items[finalAnswerStartIndex - 1])
+    ) {
+      finalAnswerStartIndex--;
+    }
+  }
+
   const out: MessageRenderItem<TMessage>[] = [];
   let run: MessageRenderWorkChildItem<TMessage>[] = [];
-
   const flushRun = (nextItem?: MessageRenderItem<TMessage>) => {
     if (run.length === 0) return;
-    out.push(createWorkGroup(run, nextItem ?? finalBoundary));
+    out.push(createCompletedWorkGroup(run, nextItem));
     run = [];
   };
 
-  for (const item of items) {
-    if (isWorkChild(item) && !isRunningAgentTaskItem(item)) {
+  for (let index = 0; index < items.length; index++) {
+    const item = items[index];
+    const isFinalAnswer =
+      index >= finalAnswerStartIndex
+      && index <= lastAnswerIndex
+      && isAssistantAnswerCandidate(item);
+    if (!isFinalAnswer && !isRunningAgentTaskItem(item) && isWorkChild(item)) {
       run.push(item);
     } else {
       flushRun(item);
       out.push(item);
     }
   }
-  flushRun(finalBoundary);
+  flushRun();
+  return { items: out, handled: true };
+}
+
+function groupLegacyWorkRuns<TMessage extends MessageRenderNormalizedMessage>(
+  items: readonly MessageRenderItem<TMessage>[],
+): MessageRenderItem<TMessage>[] {
+  const out: MessageRenderItem<TMessage>[] = [];
+  let run: MessageRenderWorkChildItem<TMessage>[] = [];
+  const flushRun = (nextItem?: MessageRenderItem<TMessage>) => {
+    if (run.length === 0) return;
+    out.push(createWorkGroup(run, nextItem));
+    run = [];
+  };
+  for (const item of items) {
+    if (isWorkActivityItem(item)) run.push(item);
+    else {
+      flushRun(item);
+      out.push(item);
+    }
+  }
+  flushRun();
+  return out;
+}
+
+/** Active turn: assistant text and compact cards close the previous activity run. */
+function groupActiveWorkRuns<TMessage extends MessageRenderNormalizedMessage>(
+  items: readonly MessageRenderItem<TMessage>[],
+): MessageRenderItem<TMessage>[] {
+  let lastCompletedBoundaryIndex = -1;
+  for (let index = 0; index < items.length; index++) {
+    if (isAssistantAnswerCandidate(items[index]) || isCompactBoundaryItem(items[index])) {
+      lastCompletedBoundaryIndex = index;
+    }
+  }
+
+  const out: MessageRenderItem<TMessage>[] = [];
+  let run: MessageRenderWorkChildItem<TMessage>[] = [];
+  let runLastIndex = -1;
+  const flushRun = (nextItem?: MessageRenderItem<TMessage>) => {
+    if (run.length === 0) return;
+    out.push(createWorkGroup(run, nextItem, runLastIndex > lastCompletedBoundaryIndex));
+    run = [];
+  };
+  for (let index = 0; index < items.length; index++) {
+    const item = items[index];
+    if (isWorkActivityItem(item)) {
+      run.push(item);
+      runLastIndex = index;
+    } else {
+      flushRun(item);
+      out.push(item);
+    }
+  }
+  flushRun();
   return out;
 }
 
@@ -820,20 +906,20 @@ function isRunningAgentTaskItem<
   return status === 'running';
 }
 
-function findLastAssistantAnswerIndex<
+function isAssistantAnswerCandidate<
   TMessage extends MessageRenderNormalizedMessage,
->(items: readonly MessageRenderItem<TMessage>[]): number {
-  for (let index = items.length - 1; index >= 0; index--) {
-    const item = items[index];
-    if (
-      item.type === 'message'
-      && item.message.kind === 'assistant'
-      && item.message.body.trim().length > 0
-    ) {
-      return index;
-    }
-  }
-  return -1;
+>(item: MessageRenderItem<TMessage>): item is MessageRenderMessageItem<TMessage> {
+  return item.type === 'message'
+    && item.message.kind === 'assistant'
+    && item.message.body.trim().length > 0;
+}
+
+function isCompactBoundaryItem<TMessage extends MessageRenderNormalizedMessage>(
+  item: MessageRenderItem<TMessage>,
+): item is MessageRenderMessageItem<TMessage> {
+  return item.type === 'message'
+    && item.message.kind === 'system'
+    && item.message.label === 'system:compact';
 }
 
 function isWorkChild<
@@ -851,21 +937,81 @@ function isWorkChild<
   );
 }
 
+/** Assistant progress text remains visible while running and never consumes the latest-five window. */
+function isWorkActivityItem<TMessage extends MessageRenderNormalizedMessage>(
+  item: MessageRenderItem<TMessage>,
+): item is MessageRenderThinkingItem<TMessage> | MessageRenderToolGroupItem<TMessage> | MessageRenderAgentTaskItem<TMessage> {
+  return !isRunningAgentTaskItem(item)
+    && (item.type === 'thinking' || item.type === 'tool_group' || item.type === 'agent_task');
+}
+
 function createWorkGroup<
   TMessage extends MessageRenderNormalizedMessage,
 >(
   children: MessageRenderWorkChildItem<TMessage>[],
   nextItem?: MessageRenderItem<TMessage>,
+  isStreaming = false,
 ): MessageRenderWorkGroupItem<TMessage> {
-  const start = itemTimestamp(children[0]);
-  const end = nextItem ? itemTimestamp(nextItem) : itemTimestamp(children[children.length - 1]);
+  const firstActivity = children.find((item) => item.type !== 'message' || item.message.kind === 'thinking');
+  const start = itemTimestamp(firstActivity ?? children[0]);
+  const end = nextItem ? itemTimestamp(nextItem) : workRunFallbackEnd(children);
   const durationMs = start !== null && end !== null && end >= start ? end - start : undefined;
   return {
     type: 'work_group',
-    key: `work-${workChildKey(children[0])}`,
+    key: `work-${workChildKey(firstActivity ?? children[0])}`,
     children,
     durationMs,
+    isStreaming,
+    ...(start !== null ? { startedAtMs: start } : {}),
   };
+}
+
+function createCompletedWorkGroup<TMessage extends MessageRenderNormalizedMessage>(
+  run: MessageRenderWorkChildItem<TMessage>[],
+  nextItem?: MessageRenderItem<TMessage>,
+): MessageRenderWorkGroupItem<TMessage> {
+  const hasAssistantText = run.some(
+    (item) => item.type === 'message' && item.message.kind === 'assistant',
+  );
+  if (!hasAssistantText) return createWorkGroup(run, nextItem);
+
+  const children: MessageRenderWorkChildItem<TMessage>[] = [];
+  let activityRun: MessageRenderWorkChildItem<TMessage>[] = [];
+  const flushActivityRun = (activityNextItem?: MessageRenderItem<TMessage>) => {
+    if (activityRun.length === 0) return;
+    children.push(createWorkGroup(activityRun, activityNextItem));
+    activityRun = [];
+  };
+  for (const item of run) {
+    if (item.type !== 'work_group' && isWorkActivityItem(item)) {
+      activityRun.push(item);
+    } else {
+      flushActivityRun(item);
+      children.push(item);
+    }
+  }
+  flushActivityRun(nextItem);
+  const outer = createWorkGroup(run, nextItem);
+  const firstActivity = run.find((item) => item.type !== 'message' || item.message.kind === 'thinking');
+  return {
+    ...outer,
+    key: `work-summary-${workChildKey(firstActivity ?? run[0])}`,
+    children,
+    isStreaming: false,
+  };
+}
+
+function workRunFallbackEnd<TMessage extends MessageRenderNormalizedMessage>(
+  run: readonly MessageRenderWorkChildItem<TMessage>[],
+): number | null {
+  for (let index = run.length - 1; index >= 0; index--) {
+    const item = run[index];
+    const start = itemTimestamp(item);
+    if (start === null) continue;
+    if (item.type === 'thinking') return start + (item.durationMs ?? 0);
+    return start;
+  }
+  return null;
 }
 
 export function formatDuration(ms: number): string {
@@ -900,6 +1046,7 @@ function workChildKey<
   if (item.type === 'tool_group') return messageClientId(item.tools[0]);
   if (item.type === 'todo') return item.key.startsWith('todo-') ? item.key.slice('todo-'.length) : item.key;
   if (item.type === 'agent_task') return item.toolCall ? messageClientId(item.toolCall) : item.key;
+  if (item.type === 'work_group') return item.key;
   return messageClientId(item.message);
 }
 

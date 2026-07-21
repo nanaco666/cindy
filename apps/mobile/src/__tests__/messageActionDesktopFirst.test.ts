@@ -65,20 +65,26 @@ describe('mobile message actions desktop-first surface', () => {
     const end = source.indexOf('function FoldablePanel', start);
     const workGroupSource = source.slice(start, end);
 
-    // 产品决策(2026-06):所有 agent 活动卡(work / 工具组 / subagent / 协同)统一用小机器人 Bot,
-    // 故 work group 用 Bot 而非桌面 WorkGroupBlock 的 Layers —— 有意偏离桌面,勿改回 Layers。
-    expect(source).toContain('Bot,');
+    // 运行中用状态图标,结束后回到桌面同款 Layers 工作摘要图标。
+    expect(source).toContain('Layers,');
     expect(workGroupSource).toContain('const header = presentation.header;');
     expect(workGroupSource).toContain('chevronPosition={header.chevronPosition}');
     expect(workGroupSource).toContain('chevronSize={header.chevronSize}');
-    expect(workGroupSource).toContain('title={header.title}');
+    expect(workGroupSource).toContain('title={title}');
     expect(workGroupSource).toContain('subtitle={header.subtitle ?? undefined}');
-    // 展开态走 blockId 共享记忆,不再传 defaultExpanded(blockId 存在时该值无效)。
+    // Work group 需要受控展开:运行中第一次点击先隐藏最近动作,再次点击才展开全部历史。
     expect(workGroupSource).not.toContain('defaultExpanded');
-    expect(workGroupSource).toContain('leadingIcon={<Bot color={colors.textTertiary} size={header.iconSize} strokeWidth={iconStroke.regular} />}');
+    expect(workGroupSource).toContain('controlledExpanded={expanded}');
+    expect(workGroupSource).toContain('collapsedBody={livePreview}');
+    expect(workGroupSource).toContain('onControlledToggle={onToggle}');
+    expect(workGroupSource).toContain('? <CompactActivityIndicator color={colors.textTertiary}');
+    expect(workGroupSource).toContain(': <Layers color={colors.textTertiary}');
     expect(workGroupSource).toContain('variant={header.variant}');
     expect(workGroupSource).toContain('summaryCount: header.summaryCount');
     expect(workGroupSource).toContain('<RenderItemView key={child.key} item={child} actions={actions} />');
+    expect(workGroupSource).toContain('projectRecentMobileWorkActivities(item.children, isStreaming, MAX_LIVE_WORK_ACTIVITIES)');
+    expect(workGroupSource).toContain('<ExpandedWorkThinkingRow key={child.key} item={child} />');
+    expect(workGroupSource).toContain('activityProjection?.toolActivitiesByChildKey.get(child.key)');
     expect(workGroupSource).not.toContain('subtitle={presentation.subtitle}');
     expect(workGroupSource).not.toContain('badges={presentation.badges}');
     expect(workGroupSource).not.toContain('badgeCount: presentation.badges.length');
@@ -101,7 +107,15 @@ describe('mobile message actions desktop-first surface', () => {
     expect(source).toContain('paddingHorizontal: 0');
     expect(source).toContain('paddingVertical: 2');
     expect(source).toContain("variant === 'plain' && styles.foldTitlePlain");
-    expect(source).toContain('foldTitlePlain: { color: colors.textTertiary, fontWeight: fontWeight.regular }');
+    const plainTitleStart = source.indexOf('foldTitlePlain: {');
+    const plainTitleEnd = source.indexOf('foldSubtitle:', plainTitleStart);
+    const plainTitleStyle = source.slice(plainTitleStart, plainTitleEnd);
+    expect(plainTitleStyle).toContain('color: colors.textSecondary');
+    expect(plainTitleStyle).toContain('fontSize: typeScale.listBody');
+    expect(plainTitleStyle).toContain('fontWeight: fontWeight.regular');
+    expect(plainTitleStyle).toContain('lineHeight: lineHeight.listBody');
+    expect(foldableSource).toContain("variant === 'plain'");
+    expect(foldableSource).toContain('? styles.foldBodyPlain');
   });
 
   it('keeps the load-earlier affordance lighter than message content', () => {
@@ -132,16 +146,32 @@ describe('mobile message actions desktop-first surface', () => {
     // 展开态走 blockId 共享记忆,不再传 defaultExpanded(blockId 存在时该值无效)。
     expect(toolGroupSource).not.toContain('defaultExpanded');
     expect(toolGroupSource).toContain('blockId={item.key}');
-    // 块头图标:有执行中工具时同槽位换成进行中形态(对齐桌面 #454),否则维持 Bot。
-    expect(toolGroupSource).toContain('? <CircleDashed color={colors.textTertiary} size={header.iconSize} strokeWidth={iconStroke.regular} />');
+    // 块头图标:有执行中工具时同槽位换成桌面同款 spinner,否则维持 Bot。
+    expect(toolGroupSource).toContain('? <CompactActivityIndicator color={colors.textTertiary} size={header.iconSize} />');
     expect(toolGroupSource).toContain(': <Bot color={colors.textTertiary} size={header.iconSize} strokeWidth={iconStroke.regular} />');
     expect(toolGroupSource).toContain('variant={header.variant}');
     expect(toolGroupSource).toContain('<Rail layout={layout}>');
     expect(toolGroupSource).toContain('summaryCount: header.summaryCount');
     // 工具行对齐桌面 AgentActionRow:一行摘要,点击就地展开详情;展开态走共享记忆(toolrow- 前缀)。
-    expect(toolGroupSource).toContain('useFoldableExpandedState(`toolrow-${tool.key}`, false)');
+    expect(toolGroupSource).toContain('useFoldableExpandedState(`toolrow-${rowKey ?? tool.key}`, false)');
     expect(toolGroupSource).toContain('testID="message.toolRowToggle"');
     expect(toolGroupSource).toContain('{showDetails ? (');
+    // 动作行与桌面共用「running spinner / done check」语义。工具结果内容不把
+    // 已结束动作误画成 CircleAlert；行头与 thinking 使用同样的 8px inset。
+    const statusIconStart = source.indexOf('function ToolRowStatusIcon');
+    const statusIconEnd = source.indexOf('function TodoStatusIcon', statusIconStart);
+    const statusIconSource = source.slice(statusIconStart, statusIconEnd);
+    expect(statusIconSource).toContain("status === 'running'");
+    expect(statusIconSource).toContain('<CompactActivityIndicator');
+    expect(statusIconSource).toContain('<Check');
+    expect(statusIconSource).not.toContain('hasError');
+    expect(statusIconSource).not.toContain('CircleAlert');
+    const styleStart = source.indexOf('toolRow: {');
+    const styleEnd = source.indexOf('toolName:', styleStart);
+    const actionRowStyles = source.slice(styleStart, styleEnd);
+    expect(actionRowStyles).not.toContain('borderTopWidth');
+    expect(actionRowStyles).toContain('paddingHorizontal: spacing.sm');
+    expect(actionRowStyles).toContain('gap: 6');
     // 「查看内容」hint 只在文本结果被截断时显示。
     const resultPreviewStart = source.indexOf('function ToolResultPreview');
     const resultPreviewEnd = source.indexOf('function MessageContentOpenButton', resultPreviewStart);
@@ -177,7 +207,12 @@ describe('mobile message actions desktop-first surface', () => {
     expect(todoSource).toContain('variant={header.variant}');
     expect(todoSource).toContain('summaryCount: header.summaryCount');
     expect(todoSource).toContain('item.todos.map');
-    expect(todoSource).toContain('<TodoStatusIcon status={presentation.status} />');
+    expect(todoSource).toContain('<TodoStatusIcon animated={animated} status={presentation.status} />');
+    const todoStatusStart = source.indexOf('function TodoStatusIcon');
+    const todoStatusEnd = source.indexOf('const AGENT_TASK_STATUS_LABEL', todoStatusStart);
+    const todoStatusSource = source.slice(todoStatusStart, todoStatusEnd);
+    expect(todoStatusSource).toContain("status === 'in_progress' && animated");
+    expect(todoStatusSource).toContain('<CompactActivityIndicator');
     expect(todoSource).not.toContain('summaryTodos');
     expect(todoSource).not.toContain('hiddenCount');
     expect(todoSource).not.toContain('todoOpenButton');
@@ -185,6 +220,29 @@ describe('mobile message actions desktop-first surface', () => {
     expect(todoSource).not.toContain('todoStatusLabel');
     expect(source).not.toContain('testID="message.todoSheet"');
     expect(source).not.toContain('testID="message.todoOpenButton"');
+  });
+
+  it('animates only live status icons and freezes them for reduced motion', () => {
+    const source = readFileSync(resolve(process.cwd(), 'src/session/MessageRenderer.tsx'), 'utf8');
+    const spinnerStart = source.indexOf('function CompactActivityIndicator');
+    const spinnerEnd = source.indexOf('function ToolRowStatusIcon', spinnerStart);
+    const spinnerSource = source.slice(spinnerStart, spinnerEnd);
+    const agentStatusStart = source.indexOf('function AgentTaskStatusIcon');
+    const agentStatusEnd = source.indexOf('function buildAgentTaskMeta', agentStatusStart);
+    const agentStatusSource = source.slice(agentStatusStart, agentStatusEnd);
+
+    expect(spinnerSource).toContain('AccessibilityInfo.isReduceMotionEnabled()');
+    expect(spinnerSource).toContain('AccessibilityInfo.addEventListener(');
+    expect(spinnerSource).toContain("'reduceMotionChanged'");
+    expect(spinnerSource).toContain('<Animated.View');
+    expect(spinnerSource).toContain('duration: 1000');
+    expect(spinnerSource).toContain('isInteraction: false');
+    expect(spinnerSource).toContain('useNativeDriver: true');
+    expect(spinnerSource).toContain("outputRange: ['0deg', '360deg']");
+    expect(spinnerSource).toContain('<LoaderCircle');
+    expect(spinnerSource).not.toContain('<CircleDashed');
+    expect(agentStatusSource).toContain("status === 'running'");
+    expect(agentStatusSource).toContain('<CompactActivityIndicator');
   });
 
   it('does not keep a hidden badge rendering path in foldable message hierarchy panels', () => {
@@ -206,7 +264,7 @@ describe('mobile message actions desktop-first surface', () => {
     expect(source).not.toContain('messageBadgeText');
   });
 
-  it('keeps work-group children as collapsed header rows on open (desktop two-level expand) with blockId memory', () => {
+  it('shows direct thinking/tool rows on open while nested groups keep independent expansion memory', () => {
     const source = readFileSync(resolve(process.cwd(), 'src/session/MessageRenderer.tsx'), 'utf8');
     const renderItemStart = source.indexOf('function RenderItemView');
     const renderItemEnd = source.indexOf('function EmptyMessages', renderItemStart);
@@ -221,11 +279,15 @@ describe('mobile message actions desktop-first surface', () => {
     const foldableEnd = source.indexOf('function Rail', foldableStart);
     const foldableSource = source.slice(foldableStart, foldableEnd);
 
-    // 两级展开(对齐桌面 WorkGroupBlock):打开组只显示子卡折叠头,不再有 expandByDefault 一开全展。
+    // 当前动作组展开后直接读思考/工具;完成态外层里的嵌套动作组仍通过 RenderItemView 保持第二级折叠。
     expect(source).not.toContain('expandByDefault');
+    expect(workGroupSource).toContain("if (child.type === 'thinking')");
+    expect(workGroupSource).toContain('<ExpandedWorkThinkingRow key={child.key} item={child} />');
+    expect(workGroupSource).toContain("if (child.type === 'tool_group')");
+    expect(workGroupSource).toContain('activityProjection?.toolActivitiesByChildKey.get(child.key)');
     expect(workGroupSource).toContain('<RenderItemView key={child.key} item={child} actions={actions} />');
-    expect(workGroupSource).toContain('blockId={item.key}');
-    // 展开态走共享进程内记忆(blockId = render item key,跨虚拟化重挂/切会话/重分组稳定)。
+    // 展开态走共享进程内记忆,跨虚拟化重挂/切会话/重分组稳定。
+    expect(workGroupSource).toContain('useFoldableExpandedState(item.key, false)');
     expect(foldableSource).toContain('useFoldableExpandedState(blockId, defaultExpanded)');
     expect(thinkingSource).toContain('blockId={item.key}');
     expect(renderItemSource).toContain('<ToolGroupCard item={item} actions={actions} />');
@@ -249,5 +311,15 @@ describe('mobile message actions desktop-first surface', () => {
     expect(bubbleSource).not.toContain('message.authorLabel');
     expect(bubbleSource).not.toContain('你</Text>');
     expect(bubbleSource).not.toContain('XDMaker</Text>');
+  });
+
+  it('renders compact reasoning with shared strong/code parsing and one-line expansion', () => {
+    const source = readFileSync(resolve(process.cwd(), 'src/session/MessageRenderer.tsx'), 'utf8');
+    expect(source).toContain("tokenizeThinkingText(content)");
+    expect(source).toContain("token.kind === 'strong'");
+    expect(source).toContain("token.kind === 'code'");
+    expect(source).toContain('numberOfLines={expanded ? undefined : 1}');
+    expect(source).toContain('testID="message.workThinkingToggle"');
+    expect(source).toContain('onTextLayout={(event) => setMeasuredLineCount(event.nativeEvent.lines.length)}');
   });
 });

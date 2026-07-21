@@ -18,11 +18,6 @@ export interface MessageHierarchyLayout {
   todoRowGap: number;
   todoRowMinHeight: number;
   todoSummaryInset: number;
-  toolRowGap: number;
-  /** 工具行折叠态只有一行摘要头,touch 高度落在行头上(配合 hitSlop 达到可点标准)。 */
-  toolRowHeaderMinHeight: number;
-  toolRowPadding: number;
-  toolRowPaddingTop: number;
 }
 
 const DEFAULT_SCREEN_WIDTH = 390;
@@ -52,10 +47,6 @@ export function buildMessageHierarchyLayout(input: MessageHierarchyLayoutInput):
     todoRowGap,
     todoRowMinHeight: compact ? 40 : 44,
     todoSummaryInset: todoMarkWidth + todoRowGap,
-    toolRowGap: compact ? 6 : 8,
-    toolRowHeaderMinHeight: compact ? 30 : 34,
-    toolRowPadding: compact ? 8 : 10,
-    toolRowPaddingTop: compact ? 8 : 10,
   };
 }
 

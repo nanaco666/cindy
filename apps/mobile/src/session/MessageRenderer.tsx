@@ -13,18 +13,24 @@ import {
   Copy,
   ExternalLink,
   File as FileIcon,
+  Layers,
   ListTodo,
+  LoaderCircle,
   PencilLine,
   Share as ShareIcon,
   Split,
+  Sparkles,
   Timer,
   TriangleAlert,
   Undo2,
   X,
 } from 'lucide-react-native';
 import {
+  AccessibilityInfo,
   ActivityIndicator,
   Alert,
+  Animated,
+  Easing,
   Image,
   Linking,
   Modal,
@@ -176,6 +182,7 @@ import {
   type MobileWorkGroupItem,
 } from '@/session/messageRenderModel';
 import { dedupeToolMediaByUrl } from '@lizi/maker-shared/message-render';
+import { tokenizeThinkingText } from '@lizi/maker-shared/thinking-text';
 import {
   buildAgentTaskCardModel,
   type AgentTaskCardModel,
@@ -213,6 +220,12 @@ import type {
   MobileMediaPlayerStatus,
 } from '@/session/mediaPlayerWebViewHtml';
 import { formatMobileSystemCard } from '@/session/systemCard';
+import {
+  projectMobileWorkActivities,
+  projectRecentMobileWorkActivities,
+  type MobileProjectedThinkingActivity,
+  type MobileProjectedToolActivity,
+} from '@/session/workActivityProjection';
 import { logUnhandledRenderItem } from '@/session/assertNever';
 import type { OrcaCollabCard as OrcaCollabCardModel } from '@/session/orcaCollab';
 import {
@@ -251,12 +264,28 @@ const MESSAGE_CONTROL_HIT_SLOP = { bottom: 10, left: 10, right: 10, top: 10 };
  * 更长会放大「进入会话到内容可见」的感知延迟,不取。
  */
 const MOBILE_INITIAL_ANCHOR_SETTLE_MS = 300;
+/** Cold-open history fill is useful, but bounded so a short/duplicate host page cannot drain history forever. */
+const MAX_INITIAL_HISTORY_AUTOFILL_PAGES = 3;
 const MOBILE_MESSAGE_ESTIMATED_ITEM_SIZE = 140;
+/** Running work groups expose only the same latest-five activity window as desktop. */
+const MAX_LIVE_WORK_ACTIVITIES = 5;
 // LegendList 预渲距离(px,视口外每侧):约 1 屏,挂载集小 → 滚动 mount 帧压进一帧内(见 listperf 实测)。
 const MOBILE_MESSAGE_DRAW_DISTANCE = 800;
 const FOLDABLE_HEADER_HIT_SLOP = { bottom: 10, left: 4, right: 4, top: 10 };
 // 「跳到底部」浮标直径:比 composer 里的语音按钮(28)大一档但不压过它,Telegram 同款层级感。
 const SCROLL_TO_BOTTOM_FAB_SIZE = 36;
+const stylesStatic = StyleSheet.create({
+  compactActivityIndicator: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  workActivityIconSlot: {
+    alignItems: 'center',
+    height: lineHeight.listBody,
+    justifyContent: 'center',
+    width: iconSize.md,
+  },
+});
 
 /**
  * 消息正文可选中文本块的双端实现:
@@ -442,6 +471,8 @@ export function MessageRenderer({
   // 否则短会话(只加载了少量最新消息但 hasOlderMessages)冷开时会落在 onStartReachedThreshold 内、
   // 未经用户操作就自动拉历史(review P2)。切会话重置。
   const userScrollForOlderRef = useRef(false);
+  // 冷开时自动补齐短初窗,最多连续拉三页；用户主动浏览后改走既有不限页的近顶预取。
+  const initialHistoryAutofillRemainingRef = useRef(MAX_INITIAL_HISTORY_AUTOFILL_PAGES);
   // 上一次自动 load-earlier 触发时的首项 key:相同 = 上次尝试无进展(失败 / 拉回重复页),
   // 不再自动重试,防止对着打不出进展的 host 无限拉取。用户重新拖动 / 切会话时清除。
   const lastAutoLoadEarlierKeyRef = useRef<string | null>(null);
@@ -484,6 +515,7 @@ export function MessageRenderer({
     isDraggingRef.current = false;
     dragStartOffsetYRef.current = null;
     userScrollForOlderRef.current = false;
+    initialHistoryAutofillRemainingRef.current = MAX_INITIAL_HISTORY_AUTOFILL_PAGES;
     lastAutoLoadEarlierKeyRef.current = null;
     readingOlderRef.current = false;
     previousItemKeysRef.current = [];
@@ -700,14 +732,17 @@ export function MessageRenderer({
   // nearStart / atEnd 读 LegendList getState() 的实时账:它的 scroll 记账含 prepend 锚点补偿,
   // 而 app 侧 onScroll 的原生 offsetY 在 prepend 后不再代表「距内容顶端的距离」,不可用于判顶。
   // prepend 防跳由内置 maintainVisibleContentPosition 处理,无需手动开 maintain。
-  // 门控 userScrollForOlderRef:冷开初始布局(短会话落在阈值内)未经用户操作不拉历史(review P2);
-  // 短会话没自动加载时仍有顶部「加载更早」按钮兜底。
+  // 冷开初始布局允许有界补三页,把短初窗上方的上下文补齐；真实上翻意图则继续沿用
+  // 不限页的近顶预取。两条路径都受首项进展去重保护,失败/重复页不会循环打 host。
   const attemptAutoLoadEarlier = useCallback(() => {
     if (!onLoadEarlier) return;
-    // 热路径前置短路(滚动事件每 16ms 评估一次,getState() 每次新建状态对象):冷开未拖动、
-    // 或当前首项已尝试过(读历史稳态)时不碰 getState。完整判定仍以 shouldAutoLoadEarlier 为唯一真相,
-    // 这两条只是它的子集提前返回,行为等价。
-    if (!userScrollForOlderRef.current) return;
+    // 热路径前置短路(滚动事件每 16ms 评估一次,getState() 每次新建状态对象):没有用户浏览意图
+    // 且冷开预算已耗尽、或当前首项已尝试过时不碰 getState。完整判定仍以
+    // shouldAutoLoadEarlier 为唯一真相,这里只做它的子集提前返回。
+    const userScrolledForOlder = userScrollForOlderRef.current;
+    const initialAutoFillAllowed = !userScrolledForOlder
+      && initialHistoryAutofillRemainingRef.current > 0;
+    if (!userScrolledForOlder && !initialAutoFillAllowed) return;
     if (firstItemKey !== null && lastAutoLoadEarlierKeyRef.current === firstItemKey) return;
     const listState = listRef.current?.getState();
     if (!listState) return;
@@ -716,12 +751,14 @@ export function MessageRenderer({
       actionVisible: loadEarlierAction.visible,
       atEnd: listState.isAtEnd,
       firstItemKey,
+      initialAutoFillAllowed,
       lastAttemptedFirstItemKey: lastAutoLoadEarlierKeyRef.current,
       nearStart: listState.isNearStart,
-      userScrolledForOlder: userScrollForOlderRef.current,
+      userScrolledForOlder,
     });
     if (!eligible) return;
     lastAutoLoadEarlierKeyRef.current = firstItemKey;
+    if (initialAutoFillAllowed) initialHistoryAutofillRemainingRef.current -= 1;
     readingOlderRef.current = true;
     onLoadEarlier();
   }, [firstItemKey, loadEarlierAction.disabled, loadEarlierAction.visible, onLoadEarlier]);
@@ -933,6 +970,10 @@ export function MessageRenderer({
     const index = listData.findIndex((item) => item.key === focusedItemKey);
     if (index < 0) return;
     lastAppliedFocusKeyRef.current = focusRunKey;
+    // 深链 / 搜索定位是明确的历史浏览意图。定位后落在近顶区时继续自动补页,
+    // 不要求用户再拖动一次才能看到目标上方上下文。
+    userScrollForOlderRef.current = true;
+    lastAutoLoadEarlierKeyRef.current = null;
     nearBottomRef.current = false;
     setIsAwayFromBottom(true);
     void listRef.current?.scrollToIndex({ animated: true, index, viewPosition: 0.45 });
@@ -1132,7 +1173,13 @@ const RenderItemView = memo(function RenderItemView({
       node = <ToolMediaBlock item={item} actions={actions} />;
       break;
     case 'todo':
-      node = <TodoCard item={item} screenWidth={actions.screenWidth} />;
+      node = (
+        <TodoCard
+          animated={actions.isSessionStreaming === true}
+          item={item}
+          screenWidth={actions.screenWidth}
+        />
+      );
       break;
     case 'agent_task':
       node = <AgentTaskCard item={item} screenWidth={actions.screenWidth} />;
@@ -1642,6 +1689,25 @@ function useLiveElapsedMs(active: boolean, sinceIso: string | undefined): number
   return Math.max(0, now - since);
 }
 
+/** Lightweight shared reasoning markup (`**strong**` and code spans only). */
+function ThinkingInlineText({ content }: { content: string }) {
+  const styles = useThemedStyles(makeStyles);
+  const tokens = useMemo(() => tokenizeThinkingText(content), [content]);
+  return (
+    <>
+      {tokens.map((token, index) => {
+        if (token.kind === 'strong') {
+          return <Text key={`strong-${index}`} style={styles.thinkingStrong}>{token.value}</Text>;
+        }
+        if (token.kind === 'code') {
+          return <Text key={`code-${index}`} style={styles.thinkingCode}>{token.value}</Text>;
+        }
+        return token.value;
+      })}
+    </>
+  );
+}
+
 function ThinkingCard({
   item,
   isSessionStreaming = false,
@@ -1679,7 +1745,9 @@ function ThinkingCard({
     >
       <Rail layout={layout}>
         <Text style={[styles.detailText, styles.italicText]}>
-          {item.redacted ? '模型没有返回可展示的思考内容。' : item.message.body || '暂无思考内容'}
+          {item.redacted
+            ? '模型没有返回可展示的思考内容。'
+            : <ThinkingInlineText content={item.message.body || '暂无思考内容'} />}
         </Text>
       </Rail>
     </FoldablePanel>
@@ -1721,20 +1789,19 @@ function ToolGroupCard({
       title={header.title}
       subtitle={header.subtitle ?? undefined}
       leadingIcon={presentation.hasRunning
-        ? <CircleDashed color={colors.textTertiary} size={header.iconSize} strokeWidth={iconStroke.regular} />
+        ? <CompactActivityIndicator color={colors.textTertiary} size={header.iconSize} />
         : <Bot color={colors.textTertiary} size={header.iconSize} strokeWidth={iconStroke.regular} />}
       layout={layout}
       testID="message.toolGroupToggle"
       variant={header.variant}
     >
       <Rail layout={layout}>
-        <View style={[styles.stackSmall, { gap: layout.stackSmallGap }]}>
+        <View style={styles.workActivityStack}>
           {toolRows.map(({ key, presentation: row, tool }) => (
             <ToolActionRow
               key={key}
               actions={actions}
               contentLayout={contentLayout}
-              layout={layout}
               row={row}
               tool={tool}
             />
@@ -1754,14 +1821,14 @@ function ToolGroupCard({
 function ToolActionRow({
   actions,
   contentLayout,
-  layout,
   row,
+  rowKey,
   tool,
 }: {
   actions: MessageActions & { firstUserMessageClientId?: string };
   contentLayout: MessageContentLayout;
-  layout: MessageHierarchyLayout;
   row: ToolRowPresentation;
+  rowKey?: string;
   tool: NormalizedRemoteMessage;
 }) {
   const { colors } = useTheme();
@@ -1769,7 +1836,7 @@ function ToolActionRow({
   // 媒体不在行内渲染:tool 产出的图/视频由紧随 tool_group 的独立 ToolMediaBlock
   // 承载(对齐桌面 AgentActionRow「媒体跳出折叠卡」的语义),行内不再重复。
   const hasDetails = !!(row.detail || tool.body || tool.diff || tool.secondaryBody);
-  const [expanded, toggleExpanded] = useFoldableExpandedState(`toolrow-${tool.key}`, false);
+  const [expanded, toggleExpanded] = useFoldableExpandedState(`toolrow-${rowKey ?? tool.key}`, false);
   const showDetails = expanded && hasDetails;
   const chevronNode = hasDetails
     ? (expanded
@@ -1777,54 +1844,46 @@ function ToolActionRow({
       : <ChevronRight color={colors.textTertiary} size={iconSize.sm} strokeWidth={iconStroke.regular} />)
     : null;
   return (
-    <View
-      style={[
-        styles.toolRow,
-        {
-          gap: layout.toolRowGap,
-          paddingTop: layout.toolRowPaddingTop,
-        },
-        // 错误 chip 底只在展开详情时套——收起态是单行,大块底色喧宾夺主,
-        // 错误信号由行首告警图标(ToolRowStatusIcon hasError)承担。
-        showDetails && row.hasError && [
-          styles.toolRowError,
-          { padding: layout.toolRowPadding },
-        ],
-      ]}
-      testID="message.toolRow"
-    >
+    <View style={styles.toolRow} testID="message.toolRow">
       <Pressable
         accessibilityLabel={expanded ? `收起${row.label}` : `展开${row.label}`}
         accessibilityRole="button"
         accessibilityState={{ expanded }}
         disabled={!hasDetails}
-        hitSlop={{ bottom: 6, top: 6 }}
+        hitSlop={{ bottom: 10, top: 10 }}
         onPress={toggleExpanded}
         style={({ pressed }) => [
           styles.toolRowHeader,
-          { minHeight: layout.toolRowHeaderMinHeight },
           pressed && hasDetails && styles.pressed,
         ]}
         testID="message.toolRowToggle"
       >
-        <ToolRowStatusIcon hasError={row.hasError} status={row.status} />
+        <ToolRowStatusIcon status={row.status} />
         <Text style={[styles.toolName, styles.toolNameFlex]} numberOfLines={1}>{row.label}</Text>
         {chevronNode}
       </Pressable>
       {showDetails ? (
-        <>
+        <View style={styles.toolRowDetails}>
           {row.detail || tool.body ? (
-            <Text style={styles.detailText} numberOfLines={2}>{row.detail ?? tool.body}</Text>
+            <Text style={styles.toolRowDetailText}>{row.detail ?? tool.body}</Text>
           ) : null}
           {tool.diff ? <DiffPreview diff={tool.diff} layout={contentLayout} onOpen={actions.onOpenPayload} /> : null}
           {tool.secondaryBody ? <ToolResultPreview layout={contentLayout} tool={tool} onOpen={actions.onOpenPayload} /> : null}
-        </>
+        </View>
       ) : null}
     </View>
   );
 }
 
-function TodoCard({ item, screenWidth }: { item: MobileTodoCardItem; screenWidth?: number }) {
+function TodoCard({
+  animated,
+  item,
+  screenWidth,
+}: {
+  animated: boolean;
+  item: MobileTodoCardItem;
+  screenWidth?: number;
+}) {
   const { colors } = useTheme();
   const styles = useThemedStyles(makeStyles);
   const presentation = summarizeTodoCardPresentation(item);
@@ -1848,6 +1907,7 @@ function TodoCard({ item, screenWidth }: { item: MobileTodoCardItem; screenWidth
         <View style={[styles.stackSmall, { gap: layout.stackSmallGap }]}>
           {item.todos.map((todo, index) => (
             <TodoRow
+              animated={animated}
               key={`${todo.content}:${index}`}
               layout={layout}
               todo={todo}
@@ -1860,9 +1920,11 @@ function TodoCard({ item, screenWidth }: { item: MobileTodoCardItem; screenWidth
 }
 
 function TodoRow({
+  animated,
   layout,
   todo,
 }: {
+  animated: boolean;
   layout: MessageHierarchyLayout;
   todo: MobileTodoItem;
 }) {
@@ -1881,7 +1943,7 @@ function TodoRow({
       testID="message.todoRow"
     >
       <View style={[styles.todoMark, { width: layout.todoMarkWidth }]}>
-        <TodoStatusIcon status={presentation.status} />
+        <TodoStatusIcon animated={animated} status={presentation.status} />
       </View>
       <View style={styles.todoCopy}>
         <Text
@@ -1899,23 +1961,87 @@ function TodoRow({
   );
 }
 
-/** 工具行行首状态图标(对齐桌面 #454):进行中=虚线圈(项目 running 先例),完成=灰勾,
- *  出错=告警圈(error 色属语义豁免色,与 AgentTaskStatusIcon failed 同款)。同槽位替换零布局位移。 */
-function ToolRowStatusIcon({ hasError = false, status }: { hasError?: boolean; status: ToolRowStatus }) {
-  const { colors } = useTheme();
-  if (status === 'running') {
-    return <CircleDashed color={colors.textTertiary} size={iconSize.sm} strokeWidth={iconStroke.regular} />;
-  }
-  if (hasError) {
-    return <CircleAlert color={colors.errorText} size={iconSize.sm} strokeWidth={iconStroke.regular} />;
-  }
-  return <Check color={colors.textTertiary} size={iconSize.sm} strokeWidth={iconStroke.regular} />;
+/** 桌面同款紧凑 spinner：LoaderCircle 弧形图标、1 秒一圈。
+ * 固定外框避免运行态/完成态切换时发生布局位移。 */
+function CompactActivityIndicator({ color, size }: { color: string; size: number }) {
+  const [reduceMotionEnabled, setReduceMotionEnabled] = useState<boolean | null>(null);
+  const rotation = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    let active = true;
+    void AccessibilityInfo.isReduceMotionEnabled()
+      .then((enabled) => {
+        if (active) setReduceMotionEnabled(enabled);
+      })
+      .catch(() => {
+        if (active) setReduceMotionEnabled(false);
+      });
+    const subscription = AccessibilityInfo.addEventListener(
+      'reduceMotionChanged',
+      setReduceMotionEnabled,
+    );
+    return () => {
+      active = false;
+      subscription.remove();
+    };
+  }, []);
+  useEffect(() => {
+    if (reduceMotionEnabled !== false) {
+      rotation.stopAnimation();
+      rotation.setValue(0);
+      return;
+    }
+    const loop = Animated.loop(Animated.timing(rotation, {
+      duration: 1000,
+      easing: Easing.linear,
+      isInteraction: false,
+      toValue: 1,
+      useNativeDriver: true,
+    }));
+    loop.start();
+    return () => {
+      loop.stop();
+      rotation.setValue(0);
+    };
+  }, [reduceMotionEnabled, rotation]);
+  const rotate = rotation.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '360deg'],
+  });
+  return (
+    <View style={[stylesStatic.compactActivityIndicator, { height: size, width: size }]}>
+      <Animated.View style={reduceMotionEnabled === false ? { transform: [{ rotate }] } : undefined}>
+        <LoaderCircle color={color} size={size} strokeWidth={iconStroke.regular} />
+      </Animated.View>
+    </View>
+  );
 }
 
-function TodoStatusIcon({ status }: { status: MobileTodoItem['status'] }) {
+/** 工具动作的状态是「仍在执行 / 已结束」，与桌面 AgentActionRow 一致。
+ *  tool result 内出现错误文案不改变行首图标，避免正常读取/搜索被误画成告警。 */
+function ToolRowStatusIcon({ status }: { status: ToolRowStatus }) {
+  const { colors } = useTheme();
+  return (
+    <View style={stylesStatic.workActivityIconSlot}>
+      {status === 'running'
+        ? <CompactActivityIndicator color={colors.textTertiary} size={iconSize.sm} />
+        : <Check color={colors.textTertiary} size={iconSize.sm} strokeWidth={iconStroke.regular} />}
+    </View>
+  );
+}
+
+function TodoStatusIcon({
+  animated,
+  status,
+}: {
+  animated: boolean;
+  status: MobileTodoItem['status'];
+}) {
   const { colors } = useTheme();
   if (status === 'completed') {
     return <CircleCheck color={colors.textPrimary} size={iconSize.lg} strokeWidth={iconStroke.thin} />;
+  }
+  if (status === 'in_progress' && animated) {
+    return <CompactActivityIndicator color={colors.textPrimary} size={iconSize.lg} />;
   }
   if (status === 'in_progress') {
     return <CircleDashed color={colors.textPrimary} size={iconSize.lg} strokeWidth={iconStroke.thin} />;
@@ -1941,6 +2067,7 @@ function AgentTaskStatusIcon({ status, size = iconSize.md }: { status: AgentTask
   if (status === 'completed') return <CircleCheck color={colors.textPrimary} size={size} strokeWidth={iconStroke.regular} />;
   if (status === 'failed') return <CircleAlert color={colors.errorText} size={size} strokeWidth={iconStroke.regular} />;
   if (status === 'stopped') return <CircleStop color={colors.textTertiary} size={size} strokeWidth={iconStroke.regular} />;
+  if (status === 'running') return <CompactActivityIndicator color={colors.textTertiary} size={size} />;
   return <CircleDashed color={colors.textTertiary} size={size} strokeWidth={iconStroke.regular} />;
 }
 
@@ -2028,32 +2155,239 @@ function WorkGroupCard({
   const styles = useThemedStyles(makeStyles);
   const presentation = summarizeWorkGroupPresentation(item);
   const header = presentation.header;
+  const isStreaming = item.isStreaming === true;
+  const [expanded, toggleExpanded] = useFoldableExpandedState(item.key, false);
+  const [livePreviewDismissed, toggleLivePreviewDismissed] = useFoldableExpandedState(
+    `${item.key}:live-preview-dismissed`,
+    false,
+  );
   const layout = useMemo(() => buildMessageHierarchyLayout({
     screenWidth: actions.screenWidth,
     summaryCount: header.summaryCount,
   }), [actions.screenWidth, header.summaryCount]);
+  const contentLayout = useMemo(() => buildMessageContentLayout({
+    screenWidth: actions.screenWidth,
+  }), [actions.screenWidth]);
+  const liveActivities = useMemo(
+    () => projectRecentMobileWorkActivities(item.children, isStreaming, MAX_LIVE_WORK_ACTIVITIES),
+    [isStreaming, item.children],
+  );
+  const activityProjection = useMemo(
+    () => (expanded || !isStreaming
+      ? projectMobileWorkActivities(item.children, isStreaming)
+      : null),
+    [expanded, isStreaming, item.children],
+  );
+  const isLivePreviewVisible =
+    isStreaming && !expanded && !livePreviewDismissed && liveActivities.length > 0;
+  const startedAtIso = item.startedAtMs !== undefined
+    ? new Date(item.startedAtMs).toISOString()
+    : undefined;
+  const elapsedMs = useLiveElapsedMs(isStreaming, startedAtIso);
+  const explorationSummary = activityProjection?.isPureExploration
+    ? [
+        activityProjection.explorationCounts.read > 0
+          ? `读取 ${activityProjection.explorationCounts.read} 个文件`
+          : null,
+        activityProjection.explorationCounts.search > 0
+          ? `搜索 ${activityProjection.explorationCounts.search} 次`
+          : null,
+        activityProjection.explorationCounts.list > 0
+          ? `列出 ${activityProjection.explorationCounts.list} 次`
+          : null,
+      ].filter((value): value is string => value !== null).join(' · ')
+    : '';
+  const title = [
+    presentation.title,
+    explorationSummary,
+  ].filter(Boolean).join(' · ');
+  const onToggle = useCallback(() => {
+    if (isLivePreviewVisible) {
+      toggleLivePreviewDismissed();
+      return;
+    }
+    if (isStreaming && expanded && !livePreviewDismissed) toggleLivePreviewDismissed();
+    toggleExpanded();
+  }, [
+    expanded,
+    isLivePreviewVisible,
+    isStreaming,
+    livePreviewDismissed,
+    toggleExpanded,
+    toggleLivePreviewDismissed,
+  ]);
+  const livePreview = isLivePreviewVisible ? (
+    <Rail layout={layout}>
+      <View style={styles.workActivityStack}>
+        {liveActivities.map((activity) => (
+          activity.kind === 'tool'
+            ? (
+                <WorkToolActivityRow
+                  key={activity.key}
+                  actions={actions}
+                  activity={activity}
+                  contentLayout={contentLayout}
+                />
+              )
+            : <WorkThinkingPreviewRow key={activity.key} activity={activity} />
+        ))}
+      </View>
+    </Rail>
+  ) : undefined;
   return (
     <FoldablePanel
-      blockId={item.key}
       chevronPosition={header.chevronPosition}
       chevronSize={header.chevronSize}
-      title={header.title}
+      controlledExpanded={expanded}
+      collapsedBody={livePreview}
+      onControlledToggle={onToggle}
+      title={title}
       subtitle={header.subtitle ?? undefined}
-      leadingIcon={<Bot color={colors.textTertiary} size={header.iconSize} strokeWidth={iconStroke.regular} />}
+      trailingMeta={isStreaming && elapsedMs !== null
+        ? <Text style={styles.workGroupElapsed}>{formatDuration(elapsedMs)}</Text>
+        : undefined}
+      leadingIcon={isStreaming
+        ? <CompactActivityIndicator color={colors.textTertiary} size={header.iconSize} />
+        : <Layers color={colors.textTertiary} size={header.iconSize} strokeWidth={iconStroke.regular} />}
       layout={layout}
       testID="message.workGroupToggle"
       variant={header.variant}
     >
       <Rail layout={layout}>
-        <View style={[styles.stack, { gap: layout.stackGap }]}>
-          {/* 两级展开(对齐桌面 WorkGroupBlock):打开组只显示子卡各自的折叠头行,
-              不替用户展开子卡内部;子卡展开态由各自 blockId 的共享记忆决定。 */}
-          {item.children.map((child) => (
-            <RenderItemView key={child.key} item={child} actions={actions} />
-          ))}
+        <View style={styles.workGroupStack}>
+          {item.children.map((child) => {
+            if (child.type === 'thinking') {
+              return <ExpandedWorkThinkingRow key={child.key} item={child} />;
+            }
+            if (child.type === 'tool_group') {
+              return (
+                <View key={child.key} style={styles.workActivityStack}>
+                  {(activityProjection?.toolActivitiesByChildKey.get(child.key) ?? []).map((activity) => (
+                    <WorkToolActivityRow
+                      key={activity.key}
+                      actions={actions}
+                      activity={activity}
+                      contentLayout={contentLayout}
+                    />
+                  ))}
+                </View>
+              );
+            }
+            return <RenderItemView key={child.key} item={child} actions={actions} />;
+          })}
         </View>
       </Rail>
     </FoldablePanel>
+  );
+}
+
+function WorkToolActivityRow({
+  actions,
+  activity,
+  contentLayout,
+}: {
+  actions: MessageActions & { firstUserMessageClientId?: string };
+  activity: MobileProjectedToolActivity;
+  contentLayout: MessageContentLayout;
+}) {
+  const tool = activity.message.normalized;
+  const row = useMemo(() => summarizeToolRowPresentation(tool, {
+    isSessionStreaming: actions.isSessionStreaming === true,
+    intentOverride: activity.intentOverride,
+    statusOverride: activity.status,
+  }), [actions.isSessionStreaming, activity.intentOverride, activity.status, tool]);
+  return (
+    <ToolActionRow
+      actions={actions}
+      contentLayout={contentLayout}
+      row={row}
+      rowKey={activity.key}
+      tool={tool}
+    />
+  );
+}
+
+function WorkThinkingPreviewRow({
+  activity,
+}: {
+  activity: MobileProjectedThinkingActivity;
+}) {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(makeStyles);
+  return (
+    <View
+      style={styles.workThinkingRow}
+      testID="message.workThinkingPreview"
+    >
+      <View style={stylesStatic.workActivityIconSlot}>
+        <Sparkles color={colors.textTertiary} size={iconSize.sm} strokeWidth={iconStroke.regular} />
+      </View>
+      <Text numberOfLines={1} style={[styles.workActivityText, styles.italicText, styles.workThinkingText]}>
+        <ThinkingInlineText content={activity.content} />
+      </Text>
+    </View>
+  );
+}
+
+function ExpandedWorkThinkingRow({
+  item,
+}: {
+  item: MobileThinkingItem;
+}) {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(makeStyles);
+  const [expanded, toggleExpanded] = useFoldableExpandedState(`work-${item.key}`, false);
+  const [measuredLineCount, setMeasuredLineCount] = useState(1);
+  const rawContent = item.message.body.trim();
+  const canExpand = rawContent.includes('\n') || measuredLineCount > 1;
+  return (
+    <Pressable
+      accessibilityLabel={expanded ? '收起思考内容' : '展开思考内容'}
+      accessibilityRole="button"
+      accessibilityState={{ expanded: canExpand ? expanded : undefined }}
+      disabled={!canExpand}
+      onPress={canExpand ? toggleExpanded : undefined}
+      style={({ pressed }) => [
+        styles.workThinkingRow,
+        expanded && styles.workThinkingRowExpanded,
+        pressed && canExpand && styles.pressed,
+      ]}
+      testID="message.workThinkingToggle"
+    >
+      <View style={stylesStatic.workActivityIconSlot}>
+        <Sparkles color={colors.textTertiary} size={iconSize.sm} strokeWidth={iconStroke.regular} />
+      </View>
+      <View style={styles.workThinkingText}>
+        <Text
+          numberOfLines={expanded ? undefined : 1}
+          style={[styles.workActivityText, styles.italicText]}
+        >
+          <ThinkingInlineText content={rawContent || '暂无思考内容'} />
+        </Text>
+        {!expanded ? (
+          <View
+            accessibilityElementsHidden
+            accessible={false}
+            importantForAccessibility="no-hide-descendants"
+            pointerEvents="none"
+            style={styles.workThinkingMeasureWrap}
+          >
+            <Text
+              numberOfLines={2}
+              onTextLayout={(event) => setMeasuredLineCount(event.nativeEvent.lines.length)}
+              style={[styles.workActivityText, styles.italicText]}
+            >
+              <ThinkingInlineText content={rawContent || '暂无思考内容'} />
+            </Text>
+          </View>
+        ) : null}
+      </View>
+      {canExpand
+        ? expanded
+          ? <ChevronDown color={colors.textTertiary} size={iconSize.sm} strokeWidth={iconStroke.regular} />
+          : <ChevronRight color={colors.textTertiary} size={iconSize.sm} strokeWidth={iconStroke.regular} />
+        : null}
+    </Pressable>
   );
 }
 
@@ -2110,12 +2444,16 @@ function FoldablePanel({
   title,
   subtitle,
   children,
+  collapsedBody,
+  controlledExpanded,
   defaultExpanded = false,
   layout,
   variant,
   footer,
   testID,
   leadingIcon,
+  trailingMeta,
+  onControlledToggle,
   chevronSize = 18,
   chevronPosition = 'leading',
 }: {
@@ -2128,6 +2466,10 @@ function FoldablePanel({
   title: string;
   subtitle?: string;
   children: ReactNode;
+  /** Optional running preview rendered while the full body remains collapsed. */
+  collapsedBody?: ReactNode;
+  /** Controlled mode used by work groups with a preview state separate from expansion. */
+  controlledExpanded?: boolean;
   /** 仅无 blockId 的本地 state 路径生效;blockId 存在时由共享记忆决定(默认折叠)。 */
   defaultExpanded?: boolean;
   layout: MessageHierarchyLayout;
@@ -2135,12 +2477,16 @@ function FoldablePanel({
   footer?: ReactNode;
   testID?: string;
   leadingIcon?: ReactNode;
+  trailingMeta?: ReactNode;
+  onControlledToggle?: () => void;
   chevronSize?: number;
   chevronPosition?: 'leading' | 'trailing';
 }) {
   const { colors } = useTheme();
   const styles = useThemedStyles(makeStyles);
-  const [expanded, toggleExpanded] = useFoldableExpandedState(blockId, defaultExpanded);
+  const [rememberedExpanded, toggleRememberedExpanded] = useFoldableExpandedState(blockId, defaultExpanded);
+  const expanded = controlledExpanded ?? rememberedExpanded;
+  const toggleExpanded = onControlledToggle ?? toggleRememberedExpanded;
   const headerLayoutStyle = variant === 'plain'
     ? styles.foldHeaderPlain
     : {
@@ -2178,18 +2524,33 @@ function FoldablePanel({
           </Text>
           {subtitle ? <Text style={styles.foldSubtitle} numberOfLines={1}>{subtitle}</Text> : null}
         </View>
+        {trailingMeta}
         {chevronPosition === 'trailing' ? chevron : null}
       </FoldableHeaderButton>
       {footer}
       {expanded ? (
         <View style={[
           styles.foldBody,
-          {
-            paddingBottom: layout.foldBodyPaddingBottom,
-            paddingHorizontal: layout.foldBodyPaddingHorizontal,
-          },
+          variant === 'plain'
+            ? styles.foldBodyPlain
+            : {
+              paddingBottom: layout.foldBodyPaddingBottom,
+              paddingHorizontal: layout.foldBodyPaddingHorizontal,
+            },
         ]}>
           {children}
+        </View>
+      ) : collapsedBody ? (
+        <View style={[
+          styles.foldBody,
+          variant === 'plain'
+            ? styles.foldBodyPlain
+            : {
+              paddingBottom: layout.foldBodyPaddingBottom,
+              paddingHorizontal: layout.foldBodyPaddingHorizontal,
+            },
+        ]}>
+          {collapsedBody}
         </View>
       ) : null}
     </View>
@@ -4922,6 +5283,8 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   detailText: { color: colors.textSecondary, fontSize: typeScale.caption, lineHeight: lineHeight.caption },
   italicText: { fontStyle: 'italic' },
+  thinkingStrong: { fontWeight: fontWeight.medium },
+  thinkingCode: { fontFamily: monoFont, fontStyle: 'normal' },
   attachmentStrip: { gap: spacing.sm, marginBottom: spacing.xs, maxWidth: '100%' },
   attachmentStripLeft: { alignItems: 'flex-start' },
   attachmentStripRight: { alignItems: 'flex-end' },
@@ -5126,9 +5489,19 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   loadEarlierText: { color: colors.textTertiary, fontSize: typeScale.caption, fontWeight: fontWeight.medium },
   foldText: { flex: 1, minWidth: 0 },
   foldTitle: { color: colors.textSecondary, fontSize: typeScale.footnote, fontWeight: fontWeight.medium },
-  foldTitlePlain: { color: colors.textTertiary, fontWeight: fontWeight.regular },
+  foldTitlePlain: {
+    color: colors.textSecondary,
+    fontSize: typeScale.listBody,
+    fontWeight: fontWeight.regular,
+    lineHeight: lineHeight.listBody,
+  },
   foldSubtitle: { color: colors.textTertiary, fontSize: typeScale.caption, marginTop: 2 },
   foldBody: { paddingHorizontal: spacing.md, paddingBottom: spacing.md },
+  foldBodyPlain: {
+    paddingBottom: 0,
+    paddingHorizontal: 0,
+    paddingTop: spacing.xs,
+  },
   rail: {
     borderLeftColor: colors.chatCodeBorder,
     borderLeftWidth: 2,
@@ -5136,32 +5509,71 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   stack: { gap: spacing.md },
   stackSmall: { gap: spacing.sm },
-  toolRow: {
-    borderTopColor: colors.chatCodeBorder,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    gap: spacing.xs,
-    paddingTop: spacing.sm,
+  workActivityStack: { gap: 0 },
+  workGroupStack: { gap: spacing.sm },
+  workGroupElapsed: {
+    color: colors.textTertiary,
+    fontFamily: monoFont,
+    fontSize: typeScale.caption,
+    lineHeight: lineHeight.caption,
   },
-  toolRowError: {
-    backgroundColor: colors.chatCodeSurface,
-    borderRadius: radius.container,
-    borderTopColor: colors.borderStrong,
-    padding: spacing.sm,
+  workThinkingRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 6,
+    minHeight: 28,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+  },
+  workThinkingRowExpanded: { alignItems: 'flex-start' },
+  workThinkingText: { flex: 1, minWidth: 0 },
+  workActivityText: {
+    color: colors.textSecondary,
+    fontSize: typeScale.listBody,
+    lineHeight: lineHeight.listBody,
+  },
+  workThinkingMeasureWrap: {
+    left: 0,
+    opacity: 0,
+    position: 'absolute',
+    right: 0,
+    top: 0,
+  },
+  toolRow: {
+    gap: spacing.xs,
   },
   toolRowHeader: {
     alignItems: 'center',
     flexDirection: 'row',
-    gap: spacing.sm,
+    gap: 6,
+    minHeight: 28,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
   },
-  toolName: { color: colors.textPrimary, fontSize: typeScale.caption, fontWeight: fontWeight.medium },
-  toolNameFlex: { flexShrink: 1 },
+  toolRowDetails: {
+    gap: spacing.xs,
+    marginBottom: spacing.xs,
+    marginHorizontal: spacing.sm,
+  },
+  toolRowDetailText: {
+    color: colors.textSecondary,
+    fontSize: typeScale.footnote,
+    lineHeight: lineHeight.caption,
+  },
+  toolName: {
+    color: colors.textSecondary,
+    fontSize: typeScale.listBody,
+    fontWeight: fontWeight.regular,
+    lineHeight: lineHeight.listBody,
+  },
+  toolNameFlex: { flex: 1, minWidth: 0 },
   toolResult: {
     backgroundColor: colors.chatCodeSurface,
     borderColor: colors.chatCodeBorder,
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: radius.container,
     color: colors.textSecondary,
-    fontSize: typeScale.caption,
+    fontSize: typeScale.footnote,
     lineHeight: lineHeight.caption,
     padding: spacing.sm,
   },

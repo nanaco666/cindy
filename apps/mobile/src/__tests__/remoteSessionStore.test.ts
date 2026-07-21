@@ -147,13 +147,226 @@ describe('remoteSessionStore', () => {
     ]);
   });
 
-  it('dedupes message push by id or client id', () => {
+  it('dedupes an unchanged message push by id or client id', () => {
     remoteSessionStore.setMessages('s1', [message('m1', 's1')]);
     const versionAfterSet = remoteSessionStore.getMessageVersion();
     remoteSessionStore.appendMessage('s1', message('m1', 's1'));
 
     expect(remoteSessionStore.getMessages('s1')).toHaveLength(1);
     expect(remoteSessionStore.getMessageVersion()).toBe(versionAfterSet);
+  });
+
+  it('upserts a changed message push instead of keeping the stale duplicate', () => {
+    remoteSessionStore.applyRemotePush('dev-1', 'local-db:messages:created', {
+      sessionId: 's1',
+      message: message('m1', 's1'),
+    });
+    const versionAfterCreate = remoteSessionStore.getMessageVersion();
+
+    remoteSessionStore.applyRemotePush('dev-1', 'local-db:messages:created', {
+      sessionId: 's1',
+      message: { ...message('m1', 's1'), content: 'updated' },
+    });
+
+    expect(remoteSessionStore.getMessages('s1')).toHaveLength(1);
+    expect(remoteSessionStore.getMessages('s1')[0].content).toBe('updated');
+    expect(remoteSessionStore.getMessageVersion()).toBeGreaterThan(versionAfterCreate);
+  });
+
+  it('applies live update_plan snapshots to the persisted task row', () => {
+    const initialPlan = {
+      ...message('plan-row-1', 's1'),
+      role: 'tool_use' as const,
+      toolUseId: 'plan:turn-1',
+      content: {
+        toolUseId: 'plan:turn-1',
+        toolName: 'update_plan',
+        input: {
+          plan: [
+            { step: 'Inspect', status: 'in_progress' },
+            { step: 'Patch', status: 'pending' },
+          ],
+        },
+      },
+    };
+    remoteSessionStore.setMessages('s1', [initialPlan]);
+
+    remoteSessionStore.applyRemotePush('dev-1', 'maker:event', {
+      sessionId: 's1',
+      persistId: 'plan-row-1',
+      event: {
+        type: 'tool_use',
+        data: {
+          toolUseId: 'plan:turn-1',
+          toolName: 'update_plan',
+          input: {
+            plan: [
+              { step: 'Inspect', status: 'completed' },
+              { step: 'Patch', status: 'completed' },
+            ],
+          },
+        },
+      },
+    });
+
+    expect(remoteSessionStore.getMessages('s1')).toHaveLength(1);
+    expect(remoteSessionStore.getMessages('s1')[0]).toMatchObject({
+      id: 'plan-row-1',
+      toolUseId: 'plan:turn-1',
+      content: {
+        toolUseId: 'plan:turn-1',
+        toolName: 'update_plan',
+        input: {
+          plan: [
+            { step: 'Inspect', status: 'completed' },
+            { step: 'Patch', status: 'completed' },
+          ],
+        },
+      },
+    });
+  });
+
+  it('falls back to the stable update_plan toolUseId when a live push has no persistId', () => {
+    remoteSessionStore.setMessages('s1', [{
+      ...message('plan-row-1', 's1'),
+      role: 'tool_use',
+      toolUseId: 'plan:turn-1',
+      content: {
+        toolUseId: 'plan:turn-1',
+        toolName: 'update_plan',
+        input: { plan: [{ step: 'Inspect', status: 'pending' }] },
+      },
+    }]);
+
+    remoteSessionStore.applyRemotePush('dev-1', 'maker:event', {
+      sessionId: 's1',
+      event: {
+        type: 'tool_use',
+        data: {
+          toolUseId: 'plan:turn-1',
+          toolName: 'update_plan',
+          input: { plan: [{ step: 'Inspect', status: 'completed' }] },
+        },
+      },
+    });
+
+    expect(remoteSessionStore.getMessages('s1')[0].content).toMatchObject({
+      input: { plan: [{ step: 'Inspect', status: 'completed' }] },
+    });
+  });
+
+  it('keeps the latest live update_plan snapshot when the initial DB row arrives later', () => {
+    remoteSessionStore.applyRemotePush('dev-1', 'maker:event', {
+      sessionId: 's1',
+      persistId: 'plan-row-1',
+      event: {
+        type: 'tool_use',
+        data: {
+          toolUseId: 'plan:turn-1',
+          toolName: 'update_plan',
+          input: { plan: [{ step: 'Inspect', status: 'completed' }] },
+        },
+      },
+    });
+    expect(remoteSessionStore.getMessages('s1')).toHaveLength(0);
+
+    remoteSessionStore.applyRemotePush('dev-1', 'local-db:messages:created', {
+      sessionId: 's1',
+      message: {
+        ...message('plan-row-1', 's1'),
+        role: 'tool_use',
+        toolUseId: 'plan:turn-1',
+        content: {
+          toolUseId: 'plan:turn-1',
+          toolName: 'update_plan',
+          input: { plan: [{ step: 'Inspect', status: 'pending' }] },
+        },
+      },
+    });
+
+    expect(remoteSessionStore.getMessages('s1')[0].content).toMatchObject({
+      input: { plan: [{ step: 'Inspect', status: 'completed' }] },
+    });
+  });
+
+  it('finalizes pre-compact streaming rows and de-duplicates the same boundary replay', () => {
+    vi.useFakeTimers();
+    try {
+      remoteSessionStore.setMessages('s1', [{
+        ...messageAt('before-compact', 's1', '2026-01-01T00:00:01.000Z'),
+        content: { text: 'before', isStreaming: true, streaming: true },
+        agentMeta: { isStreaming: true, streaming: true },
+      }]);
+      vi.setSystemTime(new Date('2026-01-01T00:00:10.000Z'));
+      remoteSessionStore.applyMakerEvent('s1', {
+        type: 'compact_boundary',
+        data: { boundaryId: 'compact-1', trigger: 'auto' },
+      });
+
+      const afterBoundary = remoteSessionStore.getMessages('s1');
+      expect(afterBoundary).toHaveLength(2);
+      expect(afterBoundary[0]).toMatchObject({
+        id: 'before-compact',
+        agentMeta: { isStreaming: false, streaming: false },
+        content: { text: 'before', isStreaming: false, streaming: false },
+      });
+      expect(afterBoundary[1]).toMatchObject({
+        id: 'mobile-system-compact:compact-1',
+        systemCardType: 'compact',
+        systemCardData: { boundaryId: 'compact-1', trigger: 'auto' },
+      });
+
+      remoteSessionStore.appendMessage('s1', {
+        ...messageAt('after-compact', 's1', '2026-01-01T00:00:11.000Z'),
+        agentMeta: { isStreaming: true },
+      });
+      const versionBeforeReplay = remoteSessionStore.getMessageVersion();
+      remoteSessionStore.applyMakerEvent('s1', {
+        type: 'compact_boundary',
+        data: { boundaryId: 'compact-1', trigger: 'auto' },
+      });
+
+      const afterReplay = remoteSessionStore.getMessages('s1');
+      expect(afterReplay).toHaveLength(3);
+      expect(afterReplay.find((item) => item.id === 'after-compact')?.agentMeta?.isStreaming).toBe(true);
+      expect(remoteSessionStore.getMessageVersion()).toBe(versionBeforeReplay);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('treats a new compact boundary as the end of the current post-compact activity segment', () => {
+    vi.useFakeTimers();
+    try {
+      remoteSessionStore.setMessages('s1', [{
+        ...messageAt('active-1', 's1', '2026-01-01T00:00:01.000Z'),
+        agentMeta: { isStreaming: true },
+      }]);
+      vi.setSystemTime(new Date('2026-01-01T00:00:10.000Z'));
+      remoteSessionStore.applyMakerEvent('s1', {
+        type: 'compact_boundary',
+        data: { boundaryId: 'compact-1' },
+      });
+      remoteSessionStore.appendMessage('s1', {
+        ...messageAt('active-2', 's1', '2026-01-01T00:00:11.000Z'),
+        agentMeta: { isStreaming: true },
+      });
+
+      vi.setSystemTime(new Date('2026-01-01T00:00:12.000Z'));
+      remoteSessionStore.applyMakerEvent('s1', {
+        type: 'compact_boundary',
+        data: { boundaryId: 'compact-2' },
+      });
+
+      const stored = remoteSessionStore.getMessages('s1');
+      expect(stored.filter((item) => item.systemCardType === 'compact').map((item) => item.id)).toEqual([
+        'mobile-system-compact:compact-1',
+        'mobile-system-compact:compact-2',
+      ]);
+      expect(stored.find((item) => item.id === 'active-2')?.agentMeta?.isStreaming).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('increments message version when searchable message windows change', () => {

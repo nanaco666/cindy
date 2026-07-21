@@ -130,12 +130,14 @@ describe('messageRenderModel', () => {
     // todo 作为顶层项紧随其后。work_group 时长由专门的「counts restored thinking duration」用例覆盖。
     expect(items.map((item) => item.type)).toEqual(['message', 'work_group', 'todo', 'message']);
     const group = expectType(items[1], 'work_group');
-    expect(group.key).toBe('work-thinking');
+    expect(group.key).toBe('work-summary-thinking');
     expect(group.children.map((child) => child.type)).toEqual([
-      'thinking',
-      'tool_group',
+      'work_group',
       'message',
     ]);
+    const actions = expectType(group.children[0], 'work_group');
+    expect(actions.key).toBe('work-thinking');
+    expect(actions.children.map((child) => child.type)).toEqual(['thinking', 'tool_group']);
     const todo = expectType(items[2], 'todo');
     expect(todo.todos).toEqual([{ content: 'Implement', status: 'completed', activeForm: undefined }]);
   });
@@ -169,7 +171,10 @@ describe('messageRenderModel', () => {
       toolUse('bash-1', 'Bash', { command: 'pnpm test' }, 3),
     ]);
 
-    expect(items.map((item) => item.type)).toEqual(['message', 'thinking', 'tool_group']);
+    expect(items.map((item) => item.type)).toEqual(['message', 'work_group']);
+    const group = expectType(items[1], 'work_group');
+    expect(group.children.map((child) => child.type)).toEqual(['thinking', 'tool_group']);
+    expect(group.isStreaming).toBe(false);
   });
 
   it('keeps active streaming turn work visible until the turn ends', () => {
@@ -192,12 +197,10 @@ describe('messageRenderModel', () => {
     ];
 
     const streamingItems = buildMobileMessageRenderItems(messages, { isSessionStreaming: true });
-    expect(streamingItems.map((item) => item.type)).toEqual([
-      'message',
-      'thinking',
-      'tool_group',
-      'message',
-    ]);
+    expect(streamingItems.map((item) => item.type)).toEqual(['message', 'work_group', 'message']);
+    const activeGroup = expectType(streamingItems[1], 'work_group');
+    expect(activeGroup.children.map((child) => child.type)).toEqual(['thinking', 'tool_group']);
+    expect(activeGroup.isStreaming).toBe(false);
 
     const completedItems = buildMobileMessageRenderItems(
       messages.map((item) => item.id === 'answer'
@@ -227,12 +230,8 @@ describe('messageRenderModel', () => {
     ];
 
     const runningItems = buildMobileMessageRenderItems(messages, { isSessionStreaming: true });
-    expect(runningItems.map((item) => item.type)).toEqual([
-      'message',
-      'thinking',
-      'tool_group',
-      'message',
-    ]);
+    expect(runningItems.map((item) => item.type)).toEqual(['message', 'work_group', 'message']);
+    expect(expectType(runningItems[1], 'work_group').isStreaming).toBe(false);
 
     const idleItems = buildMobileMessageRenderItems(messages, { isSessionStreaming: false });
     expect(idleItems.map((item) => item.type)).toEqual(['message', 'work_group', 'message']);
@@ -322,8 +321,8 @@ describe('messageRenderModel', () => {
       undefined, // 重连:无 live taskUpdates
     );
 
-    expect(items.map((item) => item.type)).toEqual(['agent_task']);
-    const task = expectType(items[0], 'agent_task');
+    expect(items.map((item) => item.type)).toEqual(['work_group']);
+    const task = expectType(expectType(items[0], 'work_group').children[0], 'agent_task');
     expect(task.update).toBeUndefined();
     // render item 必须携带持久化结果,卡片才有完成信号可用。
     expect(task.toolCall?.secondaryBody).toBe('Audited 3 files, all good');
@@ -449,7 +448,7 @@ describe('messageRenderModel', () => {
       ], { isSessionStreaming: true });
 
       expect(turnFinalKeys(items)).toEqual(['a1']);
-      const tools = expectType(items[1], 'tool_group');
+      const tools = expectType(expectType(items[1], 'work_group').children[0], 'tool_group');
       expect(tools.tools[0].toolSettled).toBe(true);
     });
 
@@ -567,7 +566,7 @@ describe('messageRenderModel', () => {
       ], { isSessionStreaming: true });
 
       expect(turnFinalKeys(items)).toEqual([]);
-      const tools = expectType(items[1], 'tool_group');
+      const tools = expectType(expectType(items[1], 'work_group').children[0], 'tool_group');
       expect(tools.tools[0].toolSettled).toBe(false);
     });
   });
@@ -597,9 +596,9 @@ describe('messageRenderModel', () => {
       expect(JSON.stringify(items)).not.toContain('[UI_ACTION_TRIGGER]');
 
       // turn 边界仍生效:续跑前的旧工具收敛 done,续跑后的新工具保持 running
-      const staleGroup = expectType(items[1], 'tool_group');
+      const staleGroup = expectType(expectType(items[1], 'work_group').children[0], 'tool_group');
       expect(staleGroup.tools[0].toolSettled).toBe(true);
-      const liveGroup = expectType(items[2], 'tool_group');
+      const liveGroup = expectType(expectType(items[2], 'work_group').children[0], 'tool_group');
       expect(liveGroup.tools[0].toolSettled).toBe(false);
     });
   });

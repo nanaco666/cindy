@@ -1,319 +1,34 @@
-/**
- * Work activity projection
- * ---------------------------------------------------------------------------
- * Converts renderer work-group children into the compact rows used by both the
- * live latest-five preview and the expanded activity timeline. Codex may attach
- * several structured commandActions to one commandExecution; when every action
- * is safely understood, they become separate display rows while retaining the
- * parent command's single status/result/detail surface.
- *
- * Consecutive exploration groups de-duplicate repeated reads by normalized full
- * path (keeping the latest read), then expose counts for the work-group header.
- * Searches and listings remain operation counts, matching the Codex App model.
- */
-
+/** Desktop type adapter for the framework-agnostic shared activity projection. */
 import {
-  commandIntentsFromActions,
-  describeToolUse,
-  type CommandIntent,
-  type ToolUseDescriptor,
-} from '@lizi/maker-shared';
+  projectRecentWorkActivities as projectRecentSharedWorkActivities,
+  projectWorkActivities as projectSharedWorkActivities,
+  type ExplorationActivity,
+  type ExplorationActivityKind,
+  type ProjectableWorkChild,
+  type ProjectedThinkingActivity,
+  type ProjectedToolActivity as SharedProjectedToolActivity,
+  type ProjectedWorkActivity as SharedProjectedWorkActivity,
+  type WorkActivityProjection as SharedWorkActivityProjection,
+} from '@lizi/maker-shared/work-activity-projection';
 
 import type { ChatMessage } from '@/lib/makerChatStore';
 
-export type ExplorationActivityKind = 'read' | 'search' | 'list';
+export type { ExplorationActivity, ExplorationActivityKind, ProjectedThinkingActivity };
+export type ProjectedToolActivity = SharedProjectedToolActivity<ChatMessage>;
+export type ProjectedWorkActivity = SharedProjectedWorkActivity<ChatMessage>;
+export type WorkActivityProjection = SharedWorkActivityProjection<ChatMessage>;
 
-export interface ExplorationActivity {
-  kind: ExplorationActivityKind;
-  /** Present only for reads that can be safely de-duplicated. */
-  readKey?: string;
-}
-
-export interface ProjectedToolActivity {
-  kind: 'tool';
-  key: string;
-  message: ChatMessage;
-  toolResult?: string;
-  status: 'running' | 'done';
-  /** One structured sub-action from the parent Codex commandExecution. */
-  intentOverride?: CommandIntent;
-  exploration?: ExplorationActivity;
-}
-
-export interface ProjectedThinkingActivity {
-  kind: 'thinking';
-  key: string;
-  content: string;
-}
-
-export type ProjectedWorkActivity = ProjectedToolActivity | ProjectedThinkingActivity;
-
-export interface WorkActivityProjection {
-  /** Full chronological activity list after repeated-read de-duplication. */
-  activities: ProjectedWorkActivity[];
-  /** Expanded tool rows keyed by the source tool-segment child. */
-  toolActivitiesByChildKey: Map<string, ProjectedToolActivity[]>;
-  explorationCounts: Record<ExplorationActivityKind, number>;
-  /** True only when every tool row in this direct work group is exploration. */
-  isPureExploration: boolean;
-}
-
-interface ProjectableWorkChild {
-  kind: string;
-  key: string;
-  toolCalls?: ChatMessage[];
-  resultMap?: Map<string, string>;
-  settledIds?: Set<string>;
-  message?: ChatMessage;
-}
-
-interface StructuredCommandActions {
-  count: number;
-  complete: boolean;
-}
-
-function inspectStructuredCommandActions(raw: unknown): StructuredCommandActions {
-  if (!Array.isArray(raw) || raw.length === 0) return { count: 0, complete: false };
-  let count = 0;
-  let complete = true;
-  for (const entry of raw) {
-    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
-      complete = false;
-      continue;
-    }
-    const type = (entry as Record<string, unknown>).type;
-    if (type !== 'read' && type !== 'search' && type !== 'listFiles') {
-      complete = false;
-      continue;
-    }
-    count += 1;
-  }
-  return { count, complete };
-}
-
-function normalizeReadPath(path: string | undefined, cwd: string | undefined): string | undefined {
-  const trimmed = path?.trim();
-  if (!trimmed) return undefined;
-  const normalizedPath = trimmed.replace(/\\/g, '/');
-  const rawCwd = cwd?.trim().replace(/\\/g, '/');
-  const normalizedCwd = rawCwd === '/' || /^[A-Za-z]:\/$/.test(rawCwd ?? '')
-    ? rawCwd
-    : rawCwd?.replace(/\/+$/, '');
-  const isAbsolute = normalizedPath.startsWith('/') || /^[A-Za-z]:\//.test(normalizedPath);
-  const combined = !isAbsolute && normalizedCwd
-    ? `${normalizedCwd}${normalizedCwd.endsWith('/') ? '' : '/'}${normalizedPath}`
-    : normalizedPath;
-  const isUnc = /^\/\/[^/]/.test(combined);
-  const isPosixAbsolute = !isUnc && combined.startsWith('/');
-  const prefix = isUnc ? '//' : isPosixAbsolute ? '/' : '';
-  const body = prefix ? combined.slice(prefix.length) : combined;
-  const parts: string[] = [];
-  for (const part of body.split('/')) {
-    if (!part || part === '.') continue;
-    if (part === '..' && parts.length > 0 && parts.at(-1) !== '..') {
-      parts.pop();
-      continue;
-    }
-    // Absolute roots clamp parent traversal instead of retaining `/../`.
-    if (part === '..' && prefix) continue;
-    parts.push(part);
-  }
-  const result = `${prefix}${parts.join('/')}`;
-  return isUnc || /^[A-Za-z]:\//.test(result) ? result.toLowerCase() : result;
-}
-
-function resetsReadDeduplication(activity: ProjectedWorkActivity): boolean {
-  return activity.kind === 'tool' && !activity.exploration;
-}
-
-function explorationForDescriptor(
-  descriptor: ToolUseDescriptor,
-  intentOverride: CommandIntent | undefined,
-  allowCommandIntent: boolean,
-): ExplorationActivity | undefined {
-  if (descriptor.kind === 'file' && descriptor.action === 'read') {
-    const readKey = normalizeReadPath(descriptor.filePath, undefined);
-    return {
-      kind: 'read',
-      ...(readKey ? { readKey } : {}),
-    };
-  }
-  if (descriptor.kind === 'search') return { kind: 'search' };
-  if (descriptor.kind !== 'command' || !allowCommandIntent) return undefined;
-
-  const intent = intentOverride ?? descriptor.intent;
-  if (intent?.action === 'read') {
-    const readKey = normalizeReadPath(intent.path ?? intent.target, descriptor.cwd);
-    return { kind: 'read', ...(readKey ? { readKey } : {}) };
-  }
-  if (intent?.action === 'search') return { kind: 'search' };
-  if (intent?.action === 'list') return { kind: 'list' };
-  return undefined;
-}
-
-function projectToolMessage(
-  child: ProjectableWorkChild,
-  message: ChatMessage,
-  isStreaming: boolean,
-): ProjectedToolActivity[] {
-  const input = (message.toolInput as Record<string, unknown> | null) ?? null;
-  const descriptor = describeToolUse(message.toolName ?? '', input);
-  const rawActions = input?.commandActions;
-  const structured = inspectStructuredCommandActions(rawActions);
-  const intents = descriptor.kind === 'command'
-    ? commandIntentsFromActions(rawActions, descriptor.command)
-    : [];
-  const canSplit =
-    structured.complete && structured.count > 1 && intents.length === structured.count;
-  const commandProjectionIsComplete =
-    structured.count === 0 || (structured.complete && intents.length === structured.count);
-  const done =
-    child.resultMap?.has(message.clientId) === true
-    || child.settledIds?.has(message.clientId) === true;
-  const status = isStreaming && !done ? 'running' : 'done';
-  const toolResult = child.resultMap?.get(message.clientId);
-
-  if (canSplit) {
-    return intents.map((intent, index) => ({
-      kind: 'tool',
-      key: `${message.clientId}:action:${index}`,
-      message,
-      ...(toolResult !== undefined ? { toolResult } : {}),
-      status,
-      intentOverride: intent,
-      exploration: explorationForDescriptor(descriptor, intent, true),
-    }));
-  }
-
-  return [{
-    kind: 'tool',
-    key: message.clientId,
-    message,
-    ...(toolResult !== undefined ? { toolResult } : {}),
-    status,
-    exploration: explorationForDescriptor(descriptor, undefined, commandProjectionIsComplete),
-  }];
-}
-
-function projectThinkingMessage(message: ChatMessage): ProjectedThinkingActivity | null {
-  if (message.thinkingRedacted) return null;
-  const content = message.content.replace(/\s+/g, ' ').trim();
-  return content ? { kind: 'thinking', key: message.clientId, content } : null;
-}
-
-/**
- * Hot-path projection for the running preview. Walk backwards and stop as soon
- * as the requested window is full, while still keeping the latest repeated
- * read. This avoids re-parsing a long completed history for every reasoning
- * delta.
- */
 export function projectRecentWorkActivities(
-  childItems: readonly ProjectableWorkChild[],
+  childItems: readonly ProjectableWorkChild<ChatMessage>[],
   isStreaming: boolean,
   limit: number,
 ): ProjectedWorkActivity[] {
-  if (limit <= 0) return [];
-  const reversed: ProjectedWorkActivity[] = [];
-  const seenReadKeys = new Set<string>();
-
-  const append = (activity: ProjectedWorkActivity): boolean => {
-    if (resetsReadDeduplication(activity)) seenReadKeys.clear();
-    if (
-      activity.kind === 'tool'
-      && activity.exploration?.kind === 'read'
-      && activity.exploration.readKey
-    ) {
-      if (seenReadKeys.has(activity.exploration.readKey)) return false;
-      seenReadKeys.add(activity.exploration.readKey);
-    }
-    reversed.push(activity);
-    return reversed.length === limit;
-  };
-
-  for (let childIndex = childItems.length - 1; childIndex >= 0; childIndex -= 1) {
-    const child = childItems[childIndex];
-    if (child.kind === 'tools' && Array.isArray(child.toolCalls)) {
-      for (let toolIndex = child.toolCalls.length - 1; toolIndex >= 0; toolIndex -= 1) {
-        const activities = projectToolMessage(child, child.toolCalls[toolIndex], isStreaming);
-        for (let actionIndex = activities.length - 1; actionIndex >= 0; actionIndex -= 1) {
-          if (append(activities[actionIndex])) return reversed.reverse();
-        }
-      }
-      continue;
-    }
-    if (child.kind === 'thinking' && child.message) {
-      const activity = projectThinkingMessage(child.message);
-      if (activity && append(activity)) return reversed.reverse();
-    }
-  }
-  return reversed.reverse();
+  return projectRecentSharedWorkActivities(childItems, isStreaming, limit);
 }
 
-/** Build one shared presentation model for live and expanded work-group views. */
 export function projectWorkActivities(
-  childItems: readonly ProjectableWorkChild[],
+  childItems: readonly ProjectableWorkChild<ChatMessage>[],
   isStreaming: boolean,
 ): WorkActivityProjection {
-  const rawActivities: ProjectedWorkActivity[] = [];
-  const rawToolActivitiesByChildKey = new Map<string, ProjectedToolActivity[]>();
-
-  for (const child of childItems) {
-    if (child.kind === 'tools' && Array.isArray(child.toolCalls)) {
-      const childActivities = child.toolCalls.flatMap((message) =>
-        projectToolMessage(child, message, isStreaming));
-      rawToolActivitiesByChildKey.set(child.key, childActivities);
-      rawActivities.push(...childActivities);
-      continue;
-    }
-    if (child.kind === 'thinking' && child.message) {
-      const activity = projectThinkingMessage(child.message);
-      if (activity) rawActivities.push(activity);
-    }
-  }
-
-  // Keep the latest repeated read, matching the Codex App exploration model.
-  const keptKeys = new Set<string>();
-  const seenReadKeys = new Set<string>();
-  for (let index = rawActivities.length - 1; index >= 0; index -= 1) {
-    const activity = rawActivities[index];
-    if (resetsReadDeduplication(activity)) seenReadKeys.clear();
-    if (
-      activity.kind === 'tool'
-      && activity.exploration?.kind === 'read'
-      && activity.exploration.readKey
-    ) {
-      if (seenReadKeys.has(activity.exploration.readKey)) continue;
-      seenReadKeys.add(activity.exploration.readKey);
-    }
-    keptKeys.add(activity.key);
-  }
-
-  const activities = rawActivities.filter((activity) => keptKeys.has(activity.key));
-  const toolActivitiesByChildKey = new Map<string, ProjectedToolActivity[]>();
-  for (const [childKey, childActivities] of rawToolActivitiesByChildKey) {
-    toolActivitiesByChildKey.set(
-      childKey,
-      childActivities.filter((activity) => keptKeys.has(activity.key)),
-    );
-  }
-
-  const toolActivities = activities.filter(
-    (activity): activity is ProjectedToolActivity => activity.kind === 'tool',
-  );
-  const explorationCounts: WorkActivityProjection['explorationCounts'] = {
-    read: 0,
-    search: 0,
-    list: 0,
-  };
-  for (const activity of toolActivities) {
-    if (activity.exploration) explorationCounts[activity.exploration.kind] += 1;
-  }
-
-  return {
-    activities,
-    toolActivitiesByChildKey,
-    explorationCounts,
-    isPureExploration:
-      toolActivities.length > 0 && toolActivities.every((activity) => !!activity.exploration),
-  };
+  return projectSharedWorkActivities(childItems, isStreaming);
 }

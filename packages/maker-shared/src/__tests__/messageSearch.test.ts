@@ -177,7 +177,7 @@ describe('messageSearch', () => {
       }),
     ]);
 
-    expect(items.map((item) => item.type)).toEqual(['agent_task']);
+    expect(items.map((item) => item.type)).toEqual(['work_group']);
     expect(findMessageSearchHits(items, 'Audit mobile parity')).toHaveLength(1);
     expect(findMessageSearchHits(items, 'check reconnect path')).toHaveLength(1);
     expect(findMessageSearchHits(items, 'all consistent')).toHaveLength(1);

@@ -540,6 +540,11 @@ describe('messagePresentation', () => {
       },
     });
 
+    expect(summarizeWorkGroupPresentation({ ...workGroup, isStreaming: true })).toMatchObject({
+      title: '正在工作…',
+      header: { title: '正在工作…' },
+    });
+
     expect(countMessageRenderItemDiffs([
       { type: 'tool_group', key: 'plain-tools', tools: [editTool] },
       workGroup,
