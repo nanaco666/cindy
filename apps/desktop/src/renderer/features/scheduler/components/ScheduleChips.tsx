@@ -1153,6 +1153,7 @@ export function ModelEffortChip({
                 icon={activeProvider ? getModel(activeProvider, effectiveId, agentKind)?.icon : undefined}
                 providerId={activeSourceId}
                 name={activeProvider?.name}
+                routing={activeProvider?.routing}
                 colorClass=""
                 withMargin={false}
               />

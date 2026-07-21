@@ -8,6 +8,7 @@ import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from '@/compon
 import { AnthropicMark } from '@/components/icons/AnthropicMark';
 import { OpenAIMark } from '@/components/icons/OpenAIMark';
 import { XDIncMark } from '@/components/icons/XDIncMark';
+import { hasProviderLogo, ProviderLogoMark } from '@/components/icons/ProviderLogoMark';
 import { FastModeToggle } from './FastModeToggle';
 import { VendorSegmentedSwitcher } from './VendorSegmentedSwitcher';
 import { useAgentCapabilities, type AgentKind } from '@/hooks/useAgentCapabilities';
@@ -80,12 +81,14 @@ function providerDisplayName(p: ProviderView, t: (key: string) => string): strin
 export function ProviderMark({
   providerId,
   name,
+  routing,
   colorClass = 'text-[var(--model-trigger-text)]',
   withMargin = true,
   dense = false,
 }: {
   providerId: string;
   name?: string;
+  routing?: ProviderView['routing'];
   colorClass?: string;
   withMargin?: boolean;
   /** 列表行前缀用 dense:比 trigger 小一档(约 -10%)。两套静态尺寸,JIT 友好。 */
@@ -93,35 +96,35 @@ export function ProviderMark({
 }) {
   const common = cn(withMargin && 'mr-1.5', 'shrink-0', colorClass);
   const markSize = dense ? 12.3 : 13;
-  switch (providerId) {
-    case 'anthropic':
-      return <AnthropicMark size={markSize} className={common} />;
-    case 'openai':
-      return <OpenAIMark size={markSize} className={common} />;
-    case 'xd':
-      return (
-        <XDIncMark
-          size={markSize}
-          className={cn(dense ? 'h-[8.4px] w-[14.2px]' : 'h-[9px] w-[15px]', common)}
-        />
-      );
-    default:
-      if (!name) return null;
-      // 自定义供应商:首字母描边方盒(border 跟随 currentColor = colorClass 设定的文字色)。
-      return (
-        <span
-          className={cn(
-            withMargin && 'mr-1.5',
-            'flex shrink-0 items-center justify-center rounded-[4px] border border-current font-semibold leading-none',
-            dense ? 'h-[14.2px] w-[14.2px] text-[8.4px]' : 'h-[15px] w-[15px] text-[9px]',
-            colorClass,
-          )}
-          aria-hidden
-        >
-          {providerMonogram(name)}
-        </span>
-      );
+  if (hasProviderLogo(providerId, routing)) {
+    return (
+      <ProviderLogoMark
+        providerId={providerId}
+        routing={routing}
+        size={markSize}
+        className={
+          providerId === 'xd'
+            ? cn(dense ? 'h-[8.4px] w-[14.2px]' : 'h-[9px] w-[15px]', common)
+            : common
+        }
+      />
+    );
   }
+  if (!name) return null;
+  // 未知自定义供应商:首字母描边方盒(border 跟随 currentColor = colorClass 设定的文字色)。
+  return (
+    <span
+      className={cn(
+        withMargin && 'mr-1.5',
+        'flex shrink-0 items-center justify-center rounded-[4px] border border-current font-semibold leading-none',
+        dense ? 'h-[14.2px] w-[14.2px] text-[8.4px]' : 'h-[15px] w-[15px] text-[9px]',
+        colorClass,
+      )}
+      aria-hidden
+    >
+      {providerMonogram(name)}
+    </span>
+  );
 }
 
 /**
@@ -133,6 +136,7 @@ export function ModelIconMark({
   icon,
   providerId,
   name,
+  routing,
   colorClass = 'text-[var(--model-trigger-text)]',
   withMargin = true,
   dense = false,
@@ -142,6 +146,7 @@ export function ModelIconMark({
   /** 回落用的来源供应商 id / 展示名(与 ProviderMark 同语义)。 */
   providerId: string;
   name?: string;
+  routing?: ProviderView['routing'];
   colorClass?: string;
   withMargin?: boolean;
   dense?: boolean;
@@ -163,6 +168,7 @@ export function ModelIconMark({
     <ProviderMark
       providerId={providerId}
       name={name}
+      routing={routing}
       colorClass={colorClass}
       withMargin={withMargin}
       dense={dense}
@@ -964,6 +970,7 @@ export function ModelSelectorContent({
                   icon={model.icon}
                   providerId={provider.id}
                   name={provider.name}
+                  routing={provider.routing}
                   colorClass="text-[var(--text-secondary)]"
                   withMargin={false}
                   dense
@@ -1443,6 +1450,7 @@ export function ModelSelector({
                 icon={disconnectedModelIcon}
                 providerId={currentProviderId}
                 name={disconnectedProvider?.name}
+                routing={disconnectedProvider?.routing}
                 colorClass="text-[var(--error-fg)]"
               />
               <span
@@ -1482,7 +1490,8 @@ export function ModelSelector({
                 <ModelIconMark
                   icon={triggerModelIcon}
                   providerId={activeSourceId}
-                  name={providers.find((p) => p.id === activeSourceId)?.name}
+                  name={triggerActiveProvider?.name}
+                  routing={triggerActiveProvider?.routing}
                   colorClass={
                     isCreateAgentVariant ? 'text-[var(--create-agent-control-icon)]' : undefined
                   }

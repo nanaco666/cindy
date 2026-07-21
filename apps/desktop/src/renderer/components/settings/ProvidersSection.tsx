@@ -41,6 +41,7 @@ import { UnifiedModelList } from './UnifiedModelList';
 import { AnthropicMark } from '@/components/icons/AnthropicMark';
 import { OpenAIMark } from '@/components/icons/OpenAIMark';
 import { XDIncMark } from '@/components/icons/XDIncMark';
+import { hasProviderLogo, ProviderLogoMark } from '@/components/icons/ProviderLogoMark';
 import { isModelEnabled, useModelVisibilityVersion } from '@/state/modelVisibilityPrefs';
 
 import type { LocalCliDetection } from '../../../shared/localCliDetect';
@@ -69,9 +70,9 @@ function providerHasModels(provider: ProviderView): boolean {
 
 /** 供应商行图标(内置品牌 mark / 首字母 monogram)。 */
 function providerIcon(p: ProviderView, size: number): ReactNode {
-  if (p.id === 'xd') return <XDIncMark size={size} />;
-  if (p.id === 'anthropic') return <AnthropicMark size={size} />;
-  if (p.id === 'openai') return <OpenAIMark size={size} />;
+  if (hasProviderLogo(p.id, p.routing)) {
+    return <ProviderLogoMark providerId={p.id} routing={p.routing} size={size} />;
+  }
   return <span className="text-15 font-semibold leading-none">{providerMonogram(p.name)}</span>;
 }
 
@@ -498,7 +499,7 @@ function XaiHeader({ provider, onChanged }: { provider?: ProviderView; onChanged
 
   return (
     <DetailHeader
-      icon={<span className="text-15 font-semibold leading-none">{providerMonogram(provider?.name ?? 'xAI')}</span>}
+      icon={<ProviderLogoMark providerId="xai" size={18} />}
       title={t('settings.providers.xai.title')}
       subtitle={providerSubtitleForDisplay(provider, t('settings.providers.xai.modelLabel'), {
         fallback: t('settings.providers.xai.subtitle'),
@@ -584,7 +585,7 @@ function GenericOAuthHeader({ provider, onChanged }: { provider: ProviderView; o
 
   return (
     <DetailHeader
-      icon={<span className="text-15 font-semibold leading-none">{providerMonogram(provider.name)}</span>}
+      icon={providerIcon(provider, 18)}
       title={provider.name}
       subtitle={t('settings.providers.genericOAuth.subtitle')}
       trailing={trailing}
@@ -850,7 +851,7 @@ function CustomProviderHeader({
   );
   return (
     <DetailHeader
-      icon={<span className="text-15 font-semibold leading-none">{providerMonogram(provider.name)}</span>}
+      icon={providerIcon(provider, 18)}
       title={provider.name}
       subtitle={customProviderSubtitleForDisplay(provider)}
       trailing={trailing}
