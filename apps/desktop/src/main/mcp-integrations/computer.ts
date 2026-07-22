@@ -324,7 +324,7 @@ export interface ComputerDriverPermissionGrantResult {
 }
 
 export interface ComputerMcpDepsOptions {
-  isComputerUseEnabled?: () => boolean;
+  isComputerUseEnabled?: (context?: ComputerMcpCallContext) => boolean;
 }
 
 interface ComputerDriverStatusOptions {
@@ -3027,7 +3027,7 @@ export function getComputerMcpDeps(options: ComputerMcpDepsOptions = {}): Comput
   return {
     getStatus: getComputerDriverStatus,
     callTool: async (name, args, context) => {
-      if (options.isComputerUseEnabled && !options.isComputerUseEnabled()) {
+      if (options.isComputerUseEnabled && !options.isComputerUseEnabled(context)) {
         throw new ComputerDriverError('Computer Use is disabled in Settings.');
       }
       return callComputerDriverTool(name, args, context);

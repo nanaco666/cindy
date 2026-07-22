@@ -19,8 +19,15 @@ const DESCRIPTION_CALL =
 const CATEGORY_ENUM = ['android'] as const;
 
 function readCallContext(options: AndroidMcpServerOptions): AndroidMcpCallContext | undefined {
-  const sessionId = options.getSessionContext?.().sessionId ?? options.sessionId;
-  return sessionId ? { sessionId } : undefined;
+  const sessionContext = options.getSessionContext?.();
+  const sessionId = sessionContext?.sessionId ?? options.sessionId;
+  const agentKind = sessionContext?.agentKind;
+  return sessionId || agentKind
+    ? {
+        ...(sessionId ? { sessionId } : {}),
+        ...(agentKind ? { agentKind } : {}),
+      }
+    : undefined;
 }
 
 export function createAndroidMcpServer(

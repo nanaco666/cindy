@@ -96,7 +96,7 @@ interface AndroidToolErr {
 type AndroidToolResult<T> = AndroidToolOk<T> | AndroidToolErr;
 
 export interface AndroidMcpDepsOptions {
-  isAndroidAutomationEnabled?: () => boolean;
+  isAndroidAutomationEnabled?: (context?: AndroidMcpCallContext) => boolean;
 }
 
 interface AdbCandidate {
@@ -1548,7 +1548,7 @@ export async function getAndroidStatusSummary(): Promise<AndroidToolResult<Andro
 export function getAndroidMcpDeps(options: AndroidMcpDepsOptions = {}): AndroidMcpDeps {
   return {
     callTool: async (name, args, context) => {
-      if (options.isAndroidAutomationEnabled && !options.isAndroidAutomationEnabled()) {
+      if (options.isAndroidAutomationEnabled && !options.isAndroidAutomationEnabled(context)) {
         return {
           ok: false,
           errorCode: 'ANDROID_DRIVER_ERROR',

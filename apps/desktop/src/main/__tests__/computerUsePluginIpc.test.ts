@@ -94,6 +94,20 @@ describe('computer use plugin IPC invariants', () => {
       expect(body).not.toContain('await shutdownCodexEnvironment();');
     }
   });
+
+  it('preserves the live Codex bridge plugin gate while refresh is deferred', () => {
+    const providersSource = fs.readFileSync(
+      path.resolve(__dirname, '../mcp-integrations/mcp-providers.ts'),
+      'utf-8',
+    );
+
+    expect(providersSource).toContain(
+      "context?.agentKind === 'codex' || pluginRegistry.isEnabled('android')",
+    );
+    expect(providersSource).toContain(
+      "context?.agentKind === 'codex' || pluginRegistry.isEnabled('computer')",
+    );
+  });
 });
 
 describe('computer use UI feedback invariants', () => {
