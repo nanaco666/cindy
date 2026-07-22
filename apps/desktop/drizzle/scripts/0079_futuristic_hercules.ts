@@ -12,8 +12,8 @@ function tableExists(db: Database.Database, tableName: string): boolean {
   );
 }
 
-function columnExists(db: Database.Database, tableName: string, columnName: string): boolean {
-  return (db.prepare(`PRAGMA table_info('${tableName}')`).all() as TableInfoRow[]).some(
+function schedulesColumnExists(db: Database.Database, columnName: string): boolean {
+  return (db.prepare("PRAGMA table_info('schedules')").all() as TableInfoRow[]).some(
     (row) => row.name === columnName,
   );
 }
@@ -25,7 +25,7 @@ function columnExists(db: Database.Database, tableName: string, columnName: stri
 function run(db: Database.Database): void {
   if (!tableExists(db, 'schedules')) return;
   db.transaction(() => {
-    if (columnExists(db, 'schedules', 'legacy_session_fallback')) return;
+    if (schedulesColumnExists(db, 'legacy_session_fallback')) return;
     db.exec(
       'ALTER TABLE schedules ADD COLUMN legacy_session_fallback integer DEFAULT 0 NOT NULL',
     );
