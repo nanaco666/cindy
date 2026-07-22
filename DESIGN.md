@@ -629,7 +629,7 @@ card/container
 | 品牌深红(hover/pressed) | `#A61629` | `#A61629` |
 | 背景 | `#EDEDED` | `#2A2828` |
 | 卡片/输入框 | `#F8F8F8` | `#312F2F` |
-| 边框 | `#DCDFE3` | `#434343` |
+| 边框 | `#DCDFE3`(desktop;mobile light 为全局例外 `#C6C9CE`,见「双端颜色同构」) | `#434343` |
 | 二级信息 | `#8C8E94`(用户调参 2026-07-20,自 Figma `#9A9DA3` 两轮加深) | `#6F6F6F` |
 | 正文 | `#3C3F43` | `#D4D4D4` |
 | 纯白 | `#FFFFFF` | `#FFFFFF` |
@@ -761,6 +761,7 @@ cindy-light 用黑字版(`cindy-logo-light.png`)、cindy-dark 用白字版(`cind
 #### 双端颜色同构
 
 - 手机端颜色语义必须与桌面端 token 决策表同构:主背景、正文、二级信息、边框等基础层级按 CINDY desktop 语义直映,不要为移动端另造一套相同含义的颜色。
+- **`colors.border` light 是 mobile 全局例外,不是首页 scoped token**(裁决记录 2026-07-21,PR #266):mobile light `border` / `borderTranslucent` 取 `#C6C9CE` / `rgba(198,201,206,0.62)`,偏离 desktop `#DCDFE3`。原因:desktop 边框多衬 `#F8F8F8` 卡片,而 mobile 分割线直接衬 `#EDEDED` 主背景,`#DCDFE3` 对比仅 1.14:1 几乎不可见,加深到 1.42:1 后实机可辨。该值落在 `apps/mobile/src/theme/tokens.ts` 全局 `lightColors.border`,所有 mobile light 边框 / hairline 消费方一体生效;dark 维持 `#434343` 与 desktop 同构。`chatCodeBorder` / `sheetActionBorder` / `sheetGrabber` 等专用边框 token 独立取值,不随本例外联动。
 - 移动端专用 token 只承载移动端特有层级或几何语境:
 
 | Mobile token | Light | Dark | 用途 |
@@ -788,7 +789,7 @@ cindy-light 用黑字版(`cindy-logo-light.png`)、cindy-dark 用白字版(`cind
 - List 页采用卡片化密度:20pt gutter、60pt 行高、12pt 圆角、55pt FAB。不要回退到旧的松散列表或红色普通 CTA。
 - Chat 顶栏使用毛玻璃 / 半透明玻璃体系:优先复用 `BlurBackdrop` 与专用 chat header token;未接线 blur 的位置使用半透明实色 token + hairline,不要新增未经验证的 blur 接入点。
 - Sheet 系统一致使用 sheet token。共享 `SheetSurface` 等组件改新样式时默认走 variant 隔离,只让设计稿覆盖到的 tasksheet / `SessionActionSheet` / `SessionMenuSheet` 使用新样式;ContextSheet、ModelPicker、info sheet 等未覆盖页面不自动跟随。
-- 展开块内部使用 hairline 分隔:非末行有线,末行无线;边框颜色走对应 token,不要写死。
+- 展开块内部使用 hairline 分隔:非末行有线,末行无线;边框颜色走对应 token,不要写死(mobile light 全局 border 例外口径见上方「双端颜色同构」的 `colors.border` 条)。
 
 #### 流程门禁
 
