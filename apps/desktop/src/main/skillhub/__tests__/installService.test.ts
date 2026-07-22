@@ -40,6 +40,7 @@ vi.mock('../registry', () => ({
   registryService: {
     addInstall: vi.fn(),
     getInstall: vi.fn(),
+    readManifest: vi.fn(),
     removeInstall: vi.fn(),
   },
 }));
@@ -644,6 +645,42 @@ describe('skillhub/installService', () => {
     expect(sharedSkills.prepareSharedProjectSkillLinks).toHaveBeenCalledWith({
       workingDir: projectRoot,
     });
+  });
+
+  it('uninstalls a linked install when the scanner passes its physical path', async () => {
+    const skillName = 'linked-uninstall-skill';
+    const projectRoot = path.join(TEST_ROOT, 'linked-uninstall-project');
+    const logicalDir = path.join(projectRoot, '.agents', 'skills', skillName);
+    const physicalDir = path.join(projectRoot, '.claude', 'skills', skillName);
+    const registryEntry = {
+      version: '2.0.0',
+      authorId: 'owner',
+      folderHash: 'hash',
+      installedAt: 1,
+      updatedAt: 2,
+      origin: 'installed' as const,
+    };
+    fs.mkdirSync(physicalDir, { recursive: true });
+    fs.writeFileSync(path.join(physicalDir, 'SKILL.md'), 'content');
+    makeDirectoryLink(logicalDir, physicalDir);
+
+    const { getCurrentUserId } = await import('../../authManager');
+    const { registryService } = await import('../registry');
+    const { uninstall } = await import('../installService');
+    vi.mocked(getCurrentUserId).mockReturnValue('user-1');
+    vi.mocked(registryService.getInstall).mockResolvedValue(null);
+    vi.mocked(registryService.readManifest).mockResolvedValue({
+      schemaVersion: 1,
+      skillName,
+      installs: { [logicalDir]: registryEntry },
+    });
+    vi.mocked(registryService.removeInstall).mockResolvedValue(undefined);
+
+    const result = await uninstall(physicalDir);
+
+    expect(result.success).toBe(true);
+    expect(fs.existsSync(physicalDir)).toBe(false);
+    expect(registryService.removeInstall).toHaveBeenCalledWith(skillName, logicalDir);
   });
 
   it('clears a previous auto-sync ignore marker after a successful manual install', async () => {
@@ -1412,6 +1449,7 @@ describe('skillhub/installService', () => {
 
     vi.mocked(getCurrentUserId).mockReturnValue('user-1');
     const releaseLearn = tryAcquireSkillInstallLock('locked-skill', 'learn-apply')!;
+    const lstatSpy = vi.spyOn(fs.promises, 'lstat');
     try {
       const result = await install(
         { name: 'locked-skill', installPath: path.join(TEST_ROOT, 'skills', 'locked-skill'), version: '1.0.0' },
@@ -1425,6 +1463,8 @@ describe('skillhub/installService', () => {
       // fail-fast:没有触碰网络,也没有写 registry
       expect(vi.mocked(serverApiFetch)).not.toHaveBeenCalled();
       expect(vi.mocked(net.fetch)).not.toHaveBeenCalled();
+      expect(lstatSpy).not.toHaveBeenCalled();
+      lstatSpy.mockRestore();
 
       // 不同名不互相阻塞:locked-skill 被 learn 锁着时,other-skill 正常装完
       const zipBuf = await makeZip({ 'SKILL.md': 'content' });
@@ -1450,6 +1490,7 @@ describe('skillhub/installService', () => {
       );
       expect(ok.success).toBe(true);
     } finally {
+      lstatSpy.mockRestore();
       releaseLearn();
     }
   });

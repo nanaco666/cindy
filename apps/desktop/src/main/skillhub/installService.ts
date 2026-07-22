@@ -432,8 +432,6 @@ export async function install(
     return { success: false, errorCode: resolved.error, message: resolved.message };
   }
   const logicalFinalDir = resolved.finalDir;
-  const finalDir = await resolvePhysicalInstallDir(logicalFinalDir, p.name);
-  const stagingParent = path.dirname(finalDir);
 
   // 共享安装锁（与 learn apply / uninstall 互斥,按 name 串行,fail-fast 不排队）
   const releaseLock = tryAcquireSkillInstallLock(p.name, 'market-install');
@@ -447,8 +445,6 @@ export async function install(
   const signal = ac.signal;
   inflight.set(p.name, ac);
 
-  const stagingDir = path.join(stagingParent, `.xdt-installing-${p.name}-${rand()}`);
-
   const checkAbort = (): boolean => {
     if (signal.aborted) {
       onProgress({ phase: 'failed', name: p.name, errorCode: 'CANCELLED', message: '已取消' });
@@ -458,6 +454,10 @@ export async function install(
   };
 
   try {
+    // 链接拓扑必须在持锁后读取，避免 install / learn final-switch 之间的 TOCTOU。
+    const finalDir = await resolvePhysicalInstallDir(logicalFinalDir, p.name);
+    const stagingDir = path.join(path.dirname(finalDir), `.xdt-installing-${p.name}-${rand()}`);
+
     // 1) 取下载信息（走 hub broker）
     onProgress({ phase: 'fetching-info', name: p.name });
     if (checkAbort()) return { success: false, errorCode: 'CANCELLED', message: '已取消' };
@@ -822,6 +822,44 @@ export async function uninstall(
   }
 }
 
+/** Registry entry plus the exact key that must be removed after uninstall. */
+interface RegistryInstallMatch {
+  installPath: string;
+  entry: StoredInstall;
+}
+
+/**
+ * Find the registry key for either a logical discovery path or its physical target.
+ * Scanner deduplication exposes physical paths, while installs through managed
+ * compatibility links deliberately keep their registry key on the logical path.
+ */
+async function findRegistryInstallForPath(
+  skillName: string,
+  absolutePath: string,
+  resolved: string,
+): Promise<RegistryInstallMatch | null> {
+  const directPaths = Array.from(new Set([resolved, absolutePath].map((candidate) => path.normalize(candidate))));
+  for (const installPath of directPaths) {
+    const entry = await registryService.getInstall(skillName, installPath).catch(() => null);
+    if (entry) return { installPath, entry };
+  }
+
+  const manifest = await registryService.readManifest(skillName).catch(() => null);
+  if (!manifest) return null;
+  for (const [installPath, entry] of Object.entries(manifest.installs)) {
+    let realInstallPath: string;
+    try {
+      realInstallPath = fs.realpathSync(installPath);
+    } catch {
+      continue;
+    }
+    if (resolvedPathEquals(realInstallPath, resolved)) {
+      return { installPath, entry };
+    }
+  }
+  return null;
+}
+
 /** uninstall 的持锁主体（锁获取/释放在 uninstall 外壳完成）。 */
 async function uninstallLocked(
   absolutePath: string,
@@ -830,19 +868,15 @@ async function uninstallLocked(
   userId: string,
 ): Promise<UninstallResult> {
   // 额外校验：registry 中必须有匹配记录，防止删除未注册的用户手写目录
-  let registryEntry = await registryService.getInstall(skillName, resolved).catch(() => null);
-  if (!registryEntry) {
-    // 尝试用原始路径兜底（registry 可能存的是 symlink 路径而非 realpath）
-    const fallback = await registryService.getInstall(skillName, absolutePath).catch(() => null);
-    if (!fallback) {
-      return { success: false, errorCode: 'INTERNAL', message: '该 skill 无安装记录，拒绝删除' };
-    }
-    registryEntry = fallback;
+  const registryMatch = await findRegistryInstallForPath(skillName, absolutePath, resolved);
+  if (!registryMatch) {
+    return { success: false, errorCode: 'INTERNAL', message: '该 skill 无安装记录，拒绝删除' };
   }
+  const { installPath: registryInstallPath, entry: registryEntry } = registryMatch;
 
   if (!(await pathExists(resolved))) {
     // 目录已经不在 → 静默成功，顺便清 registry 残留
-    await registryService.removeInstall(skillName, absolutePath).catch(() => {});
+    await registryService.removeInstall(skillName, registryInstallPath).catch(() => {});
     if (await shouldRecordAutoSyncIgnore(skillName, registryEntry, userId)) {
       await ignoreAutoSyncSkill(skillName, userId).catch((err) => {
         log.warn('[skillInstall] record auto-sync ignore failed:', err);
@@ -866,7 +900,7 @@ async function uninstallLocked(
 
   // 删 registry 条目。失败仅 warn，因为文件已删，scanner 会孤儿清理。
   try {
-    await registryService.removeInstall(skillName, absolutePath);
+    await registryService.removeInstall(skillName, registryInstallPath);
   } catch (err) {
     log.warn('[skillInstall] uninstall registry.removeInstall failed:', err);
   }
