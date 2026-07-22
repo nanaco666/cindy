@@ -1,4 +1,8 @@
-# Security / 安全漏洞报告
+<p align="right">
+  <strong>简体中文</strong> · <a href="SECURITY.en.md">English</a>
+</p>
+
+# 安全漏洞报告
 
 请不要在公开 issue、Pull Request、讨论区或聊天中披露未修复的安全漏洞、凭证、令牌或
 可直接利用的详细信息。

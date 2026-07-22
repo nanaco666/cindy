@@ -1,11 +1,16 @@
-# Contributing / 贡献指南
+<p align="right">
+  <strong>简体中文</strong> · <a href="CONTRIBUTING.en.md">English</a>
+</p>
+
+# 贡献指南
 
 感谢你为 Cindy 贡献代码、文档和反馈。本仓库是 Cindy 的开源客户端仓，负责
 desktop、mobile 及共享 packages；服务端位于独立仓库，不在本仓库的贡献范围内。
 
 ## 开始之前
 
-- 使用 Node.js **22.x**、pnpm 10.x 和 Git LFS。
+- 开发环境版本和安装步骤以
+  [`docs/dev-rules/environment-setup.md`](docs/dev-rules/environment-setup.md) 为准。
 - 先阅读 [README.md](README.md) 的安装说明，以及适用的
   [工程规则](AGENTS.md)。`AGENTS.md` 是详细工程约束，不是本指南的替代品。
 - 不要提交凭证、令牌、授权文件、个人数据或生成的本地数据库。
@@ -14,78 +19,27 @@ desktop、mobile 及共享 packages；服务端位于独立仓库，不在本仓
 
 ## 获取代码与安装
 
-公开贡献者不要依赖一次性递归拉取所有 submodule。先克隆主仓，再初始化当前可访问的
-必需 submodule：
-
-```bash
-git clone https://github.com/makecindy/cindy.git
-cd cindy
-git submodule update --init --recursive cindy-protocol apps/desktop/resources/builtin-ghosts/official
-git lfs pull
-pnpm install
-```
-
-如果必需的协议 submodule 不可访问，请先在 issue 中说明，不要提交任何访问令牌。
-`apps/desktop/resources/builtin-ghosts/xd` 属于私有可选资源；没有它不应阻断普通的
-客户端安装、开发和测试。协议 submodule 的版本由父仓锁定，除非在对应变更中协调，
-不要使用 `git submodule update --remote` 擅自移动 gitlink。
-
-拉取主仓更新后，同步父仓锁定的公开 submodule，并保留父仓记录的 commit：
-
-```bash
-git pull --ff-only
-git submodule update --init --recursive cindy-protocol apps/desktop/resources/builtin-ghosts/official
-git lfs pull
-```
-
-只有在明确要升级 submodule、并准备同步 review 和提交 gitlink 时，才使用
-`git submodule update --remote`。协议版本升级还需要和服务端维护者协调，避免两端
-wire protocol 漂移。
+按照[开发环境与依赖准备](docs/dev-rules/environment-setup.md)完成克隆、公开 submodule、
+Git LFS 和依赖安装。该文档是安装命令的唯一权威说明；本指南不重复维护命令副本。
 
 ## 开发与验证
 
 ### 桌面端
 
-远程开发需要 Cindy 账号，并且必须显式选择区域：
-
-```bash
-pnpm restart:desktop:remote --region=cn
-pnpm restart:desktop:remote --region=global
-```
-
-登录页的“本地模式”是无需登录 Cindy 账号的本机 agent 模式，不是连接本地 server；
-依赖服务端的能力在该模式下不可用。连接本地 server 需要额外的、独立的服务端 checkout，
-不属于普通公开贡献者的默认路径。
+启动方式、区域选择、安全重启和验证命令见
+[Desktop 开发、启动与验证](docs/dev-rules/desktop-development.md)。
 
 ### 手机端
 
-```bash
-pnpm mobile:sim:start
-pnpm --filter mobile typecheck
-pnpm --filter mobile test
-```
+模拟器、原生重建和验证命令见
+[Mobile 开发、模拟器与验证](docs/dev-rules/mobile-development.md)。
 
 ### 验证
 
-根据改动范围选择必要的检查。完整单测门禁为：
-
-```bash
-pnpm test:unit
-
-pnpm --filter desktop typecheck
-pnpm --filter desktop db:validate
-pnpm --filter desktop test:migration-replay
-pnpm --filter mobile typecheck
-pnpm --filter mobile test
-```
-
-涉及端点、移动端 scope、发布流程或其他专项规则时，请运行对应检查，并在 PR 中写明
-实际执行的命令和结果。数据库 schema 变更只能新增 migration，不能修改历史 migration。
-未执行的验证必须说明原因。
-
-移动端完整开发与发布流程见
-[`apps/mobile/docs/dev-and-release-workflow.md`](apps/mobile/docs/dev-and-release-workflow.md)
-和 [`apps/mobile/RELEASING.md`](apps/mobile/RELEASING.md)。
+根据改动范围按 [AGENTS.md](AGENTS.md) 的风险分层原则选择检查；Desktop 和 Mobile 的
+命令分别以对应开发规则为准。涉及数据库、协议、端点、移动端 scope 或其他专项规则时，
+继续读取对应专题并运行其检查。PR 中必须写明实际执行的命令和结果；未执行的高相关
+验证必须说明原因。
 
 ## 提交 Pull Request
 
@@ -103,4 +57,5 @@ pnpm --filter mobile test
 ## 安全问题
 
 不要在公开 issue、PR 或讨论中披露漏洞、凭证或可利用细节。请按
-[SECURITY.md](SECURITY.md) 的流程私下报告。
+[SECURITY.md](SECURITY.md) 的流程私下报告。英文版见
+[SECURITY.en.md](SECURITY.en.md)。

@@ -57,7 +57,8 @@ repository and is not part of this monorepo. The client is free software.
 ## Getting started
 
 Contributor setup, public submodule initialization, Git LFS, dependency updates,
-and access requirements are maintained in [`CONTRIBUTING.md`](CONTRIBUTING.md).
+and access requirements are maintained in
+[`CONTRIBUTING.en.md`](CONTRIBUTING.en.md).
 Do not use a blanket recursive submodule checkout if you do not have access to the
 private `xd` plugin repository.
 
@@ -85,7 +86,7 @@ Remote development uses your own Cindy cloud account and existing login state, s
 you can continue existing sessions and work while developing the client. Use `cn`
 for China accounts and `global` for overseas accounts; do not rely on the internal
 default. Full desktop, mobile, data-isolation, and validation workflows are in
-[`CONTRIBUTING.md`](CONTRIBUTING.md).
+[`CONTRIBUTING.en.md`](CONTRIBUTING.en.md).
 
 “Local mode” on the login screen is an unauthenticated local-agent mode, not a
 connection to a local server. Server-backed capabilities are unavailable in this
@@ -93,21 +94,21 @@ mode.
 
 ## Architecture
 
-- [`DESIGN.md`](DESIGN.md) — visual design system, color tokens, and UI conventions
-- [`CONTRIBUTING.md`](CONTRIBUTING.md) — contributor setup, validation, and submission workflow
+- [`docs/design-rules/cindy-design-system.md`](docs/design-rules/cindy-design-system.md) — visual design system, color tokens, and UI conventions
+- [`CONTRIBUTING.en.md`](CONTRIBUTING.en.md) — contributor setup, validation, and submission workflow
 - [`AGENTS.md`](AGENTS.md) — engineering rules, launch/runtime contracts, and module boundaries
 - [`docs/dev-rules/`](docs/dev-rules/) — deep-dive architecture docs (e.g. Orca multi-agent orchestration)
 
 ## Contributing
 
 Contributions go through pull requests into `main`. Read
-[`CONTRIBUTING.md`](CONTRIBUTING.md) first, then use
+[`CONTRIBUTING.en.md`](CONTRIBUTING.en.md) first, then use
 [`.github/PULL_REQUEST_TEMPLATE.md`](.github/PULL_REQUEST_TEMPLATE.md).
 
 ## Security
 
 Never commit credentials or authorization files to the working tree. If you
-discover a security issue, follow [`SECURITY.md`](SECURITY.md) to report it
+discover a security issue, follow [`SECURITY.en.md`](SECURITY.en.md) to report it
 privately rather than opening a public issue.
 
 ## License / 许可证
