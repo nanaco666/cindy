@@ -1157,6 +1157,48 @@ describe('makerChatStore text delta batching', () => {
     );
   });
 
+  it('applies a terminal Codex plan when the DB-created row arrives after done', () => {
+    makerChatStore.setSessionRuntime(SESSION_ID, { agentKind: 'codex' });
+    onEvent?.({
+      sessionId: SESSION_ID,
+      event: {
+        type: 'done',
+        source: 'codex',
+        data: {
+          type: 'codex/event/task_complete',
+          raw: { id: 'turn-late-row' },
+          plan: [{ step: 'Inspect', status: 'completed' }],
+        },
+      },
+    });
+
+    onDbMessageCreated?.({
+      sessionId: SESSION_ID,
+      message: {
+        id: 'row-plan-late',
+        clientId: 'plan-row-late',
+        sessionId: SESSION_ID,
+        role: 'tool_use',
+        toolUseId: 'plan:turn-late-row',
+        content: {
+          toolUseId: 'plan:turn-late-row',
+          toolName: 'update_plan',
+          input: { plan: [{ step: 'Inspect', status: 'in_progress' }] },
+        },
+        agentMeta: null,
+        createdAt: '2026-07-22T00:00:03.000Z',
+      },
+    });
+
+    expect(makerChatStore.getSnapshot(SESSION_ID).messages).toEqual([
+      expect.objectContaining({
+        clientId: 'plan-row-late',
+        toolUseId: 'plan:turn-late-row',
+        toolInput: { plan: [{ step: 'Inspect', status: 'completed' }] },
+      }),
+    ]);
+  });
+
   it('preserves terminal Codex plan content when stale DB hydration arrives', () => {
     const hydrated = makerChatStore.__hydratePersistedMessageForTest(
       {

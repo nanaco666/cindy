@@ -641,6 +641,36 @@ describe('remoteSessionStore', () => {
     });
   });
 
+  it('keeps a terminal plan when a stale same-length row has older renamed steps', () => {
+    remoteSessionStore.applyRemotePush('dev-1', 'maker:event', {
+      sessionId: 's1',
+      event: {
+        type: 'done',
+        source: 'codex',
+        data: {
+          type: 'codex/event/task_complete',
+          raw: { id: 'turn-rename-stale' },
+          plan: [{ step: 'Inspect current code', status: 'completed' }],
+        },
+      },
+    });
+
+    remoteSessionStore.appendMessage('s1', {
+      ...message('plan-row-rename-stale', 's1'),
+      role: 'tool_use',
+      toolUseId: 'plan:turn-rename-stale',
+      content: {
+        toolUseId: 'plan:turn-rename-stale',
+        toolName: 'update_plan',
+        input: { plan: [{ step: 'Inspect old code', status: 'in_progress' }] },
+      },
+    });
+
+    expect(remoteSessionStore.getMessages('s1')[0]).toMatchObject({
+      content: { input: { plan: [{ step: 'Inspect current code', status: 'completed' }] } },
+    });
+  });
+
   it('lets an authoritative history plan shape replace the provisional terminal snapshot', () => {
     remoteSessionStore.applyRemotePush('dev-1', 'maker:event', {
       sessionId: 's1',
@@ -728,6 +758,33 @@ describe('remoteSessionStore', () => {
 
     expect(remoteSessionStore.getMessages('s1')[0]).toMatchObject({
       content: { input: { plan: [{ step: 'Inspect', status: 'completed' }] } },
+    });
+  });
+
+  it('keeps an authoritative empty terminal snapshot from resurrecting stale steps', () => {
+    remoteSessionStore.applyMakerEvent('s1', {
+      type: 'done',
+      source: 'codex',
+      data: {
+        type: 'codex/event/task_complete',
+        raw: { id: 'turn-empty' },
+        plan: [],
+      },
+    });
+
+    remoteSessionStore.setLatestMessageWindow('s1', [{
+      ...message('plan-row-empty', 's1'),
+      role: 'tool_use',
+      toolUseId: 'plan:turn-empty',
+      content: {
+        toolUseId: 'plan:turn-empty',
+        toolName: 'update_plan',
+        input: { plan: [{ step: 'Stale', status: 'in_progress' }] },
+      },
+    }]);
+
+    expect(remoteSessionStore.getMessages('s1')[0]).toMatchObject({
+      content: { input: { plan: [] } },
     });
   });
 

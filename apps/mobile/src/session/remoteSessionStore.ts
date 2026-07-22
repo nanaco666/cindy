@@ -280,6 +280,9 @@ function readPlanFromMessageContent(content: unknown): unknown[] | null {
 
 function isPlanSnapshotAtLeastAsFresh(incoming: unknown[], cached: unknown[]): boolean {
   if (deepValueEqual(incoming, cached)) return true;
+  // `[]` is an authoritative clear from terminal done. A later non-empty row can
+  // be an older DB echo and must not resurrect cleared steps.
+  if (cached.length === 0) return incoming.length === 0;
   // A structural change can only be learned from the authoritative persisted row;
   // do not let a provisional terminal cache hide added, removed, or renamed steps.
   if (incoming.length !== cached.length) return true;
@@ -288,8 +291,11 @@ function isPlanSnapshotAtLeastAsFresh(incoming: unknown[], cached: unknown[]): b
     const incomingItem = isRecord(incoming[index]) ? incoming[index] as Record<string, unknown> : null;
     const cachedItem = isRecord(cached[index]) ? cached[index] as Record<string, unknown> : null;
     if (!incomingItem || !cachedItem) return true;
-    if (incomingItem['step'] !== cachedItem['step']) return true;
-    if (planStatusRank(incomingItem['status']) < planStatusRank(cachedItem['status'])) return false;
+    const incomingRank = planStatusRank(incomingItem['status']);
+    const cachedRank = planStatusRank(cachedItem['status']);
+    if (incomingRank < cachedRank) return false;
+    if (incomingItem['step'] !== cachedItem['step']) return incomingRank > cachedRank;
+
   }
   return true;
 }
@@ -1614,6 +1620,39 @@ export const remoteSessionStore = {
       let changed = flushPendingTextDelta(sessionId);
       changed = applyRemoteTextEvent(sessionId, event, persistId) || changed;
       if (changed) emit();
+      return;
+    }
+
+    if (type === 'plan_snapshot') {
+      const data = isRecord(event.data) ? event.data : null;
+      const turnId = readString(data, 'turnId');
+      if (!turnId || !Array.isArray(data?.plan)) return;
+      const currentMessages = messages.get(sessionId) ?? [];
+      const applied = applyCodexPlanSnapshotOnDone(currentMessages, data.plan, turnId);
+      const toolUseId = applied.toolUseId ?? `plan:${turnId}`;
+      let terminalPersistId: string | undefined;
+      if (applied.toolUseId) {
+        const terminalMessage = applied.messages.find((message) =>
+          message.role === 'tool_use'
+          && (message.toolUseId === applied.toolUseId
+            || readString(message.content, 'toolUseId') === applied.toolUseId),
+        );
+        terminalPersistId = terminalMessage?.clientId ?? terminalMessage?.id;
+      }
+      if (applied.changed) {
+        messages.set(sessionId, [...applied.messages]);
+        bumpMessageVersion();
+      }
+      rememberLivePlanSnapshot(sessionId, {
+        toolUseId,
+        ...(terminalPersistId ? { persistId: terminalPersistId } : {}),
+        content: {
+          toolUseId,
+          toolName: 'update_plan',
+          input: { plan: data.plan },
+        },
+      });
+      if (applied.changed) emit();
       return;
     }
 

@@ -911,6 +911,7 @@ export const EMPTY_SESSION_STATE: SessionChatState = Object.freeze({
 // ---------------------------------------------------------------------------
 
 const sessions = new Map<string, SessionChatState>();
+const pendingCodexTerminalPlans = new Map<string, Map<string, unknown[]>>();
 const listeners = new Map<string, Set<() => void>>();
 const lightSnapshotCache = new Map<string, SessionChatLightState>();
 
@@ -997,6 +998,34 @@ function isBeforeOrAtRendererClearBoundary(sessionId: string, createdAt: string)
   return Number.isFinite(parsed) && parsed <= boundary;
 }
 
+function rememberPendingCodexTerminalPlan(sessionId: string, toolUseId: string, plan: unknown[]): void {
+  let pending = pendingCodexTerminalPlans.get(sessionId);
+  if (!pending) {
+    pending = new Map();
+    pendingCodexTerminalPlans.set(sessionId, pending);
+  }
+  pending.set(toolUseId, plan);
+}
+
+function applyPendingCodexTerminalPlans(sessionId: string, mapped: ChatMessage[]): ChatMessage[] {
+  const pending = pendingCodexTerminalPlans.get(sessionId);
+  if (!pending || pending.size === 0) return mapped;
+
+  let changed = false;
+  const next = mapped.map((message) => {
+    const toolUseId = message.toolUseId;
+    const plan = toolUseId ? pending.get(toolUseId) : undefined;
+    if (!toolUseId || !plan) return message;
+    const applied = applyCodexPlanSnapshotOnDone([message], plan, toolUseId.replace(/^plan:/, ''));
+    if (!applied.toolUseId) return message;
+    pending.delete(toolUseId);
+    if (applied.messages[0] !== message) changed = true;
+    return applied.messages[0] as ChatMessage;
+  });
+  if (pending.size === 0) pendingCodexTerminalPlans.delete(sessionId);
+  return changed ? next : mapped;
+}
+
 /**
  * Remove a session's slice from every in-memory structure.
  * Safe to call for sessions that may not be in the Map (no-op for unknowns).
@@ -1009,6 +1038,7 @@ function _purgeSession(sessionId: string): void {
   // 避免其提交把旧窗口 merge 进 purge 后重建的空 slice。
   bumpMessagesEpoch(sessionId);
   sessions.delete(sessionId);
+  pendingCodexTerminalPlans.delete(sessionId);
   // 状态快照同步失效:该会话若有 running / pending / 待投递 transition 条目,
   // 不能在缓存里残留(purge 不走 setState,需单独置位)。
   _stopTransitions.delete(sessionId);
@@ -1989,6 +2019,19 @@ export function handleStreamEvent(inputState: SessionChatState, event: CCAgentSt
       };
     }
 
+    case 'plan_snapshot': {
+      const data = event.data as { turnId?: unknown; plan?: unknown };
+      const turnId = typeof data.turnId === 'string' ? data.turnId : null;
+      if (!turnId || !Array.isArray(data.plan)) return state;
+      const result = applyCodexPlanSnapshotOnDone(state.messages, data.plan, turnId);
+      if (!result.toolUseId) {
+        rememberPendingCodexTerminalPlan(event.sessionId, `plan:${turnId}`, data.plan);
+        return state;
+      }
+      pendingCodexTerminalPlans.get(event.sessionId)?.delete(result.toolUseId);
+      return result.changed ? { ...state, messages: [...result.messages] } : state;
+    }
+
     case 'tool_use': {
       const { toolUseId, toolName, input } = event.data as {
         toolUseId: string;
@@ -2121,9 +2164,23 @@ export function handleStreamEvent(inputState: SessionChatState, event: CCAgentSt
 
       const terminalData = event.data as { plan?: unknown; raw?: { id?: unknown } } | null | undefined;
       const terminalTurnId = typeof terminalData?.raw?.id === 'string' ? terminalData.raw.id : null;
-      const doneMessages = event.source === 'codex'
-        ? applyCodexPlanSnapshotOnDone(cleanedMessages, terminalData?.plan, terminalTurnId).messages
-        : cleanedMessages;
+      const terminalPlan = Array.isArray(terminalData?.plan) ? terminalData.plan : null;
+      const doneResult = event.source === 'codex'
+        ? applyCodexPlanSnapshotOnDone(cleanedMessages, terminalPlan, terminalTurnId)
+        : { messages: cleanedMessages, changed: false, toolUseId: null };
+      if (event.source === 'codex' && terminalTurnId && terminalPlan) {
+        if (doneResult.toolUseId) {
+          pendingCodexTerminalPlans.get(event.sessionId)?.delete(doneResult.toolUseId);
+        } else {
+          let pending = pendingCodexTerminalPlans.get(event.sessionId);
+          if (!pending) {
+            pending = new Map();
+            pendingCodexTerminalPlans.set(event.sessionId, pending);
+          }
+          pending.set(`plan:${terminalTurnId}`, terminalPlan);
+        }
+      }
+      const doneMessages = doneResult.messages;
 
       // F1-a Option C: tool-result-image 孤儿 flush(turn 末残留 pendingFullText)已收口
       // main(messagePersistBroadcaster.flushOrphanToolResults),落库后经 onCreated append
@@ -3247,26 +3304,27 @@ function initGlobalListeners(): void {
     if (isBeforeOrAtRendererClearBoundary(sessionId, message.createdAt)) return;
     const [mapped] = mapServerMessages([message]);
     if (!mapped) return;
+    const [hydratedMapped] = applyPendingCodexTerminalPlans(sessionId, [mapped]);
     setState(sessionId, (s) => {
-      const idx = s.messages.findIndex((m) => m.clientId === mapped.clientId);
+      const idx = s.messages.findIndex((m) => m.clientId === hydratedMapped.clientId);
       if (idx >= 0) {
-        const nextMessages = mergeMessages([mapped], s.messages, {
+        const nextMessages = mergeMessages([hydratedMapped], s.messages, {
           preserveExistingToolResultContent: true,
           preserveExistingCodexPlanContent: true,
         });
         return {
           ...s,
           messages: nextMessages,
-          isFirstMessage: mapped.role === 'user' ? false : s.isFirstMessage,
+          isFirstMessage: hydratedMapped.role === 'user' ? false : s.isFirstMessage,
         };
       }
       return {
         ...s,
-        messages: mergeMessages([mapped], s.messages, {
+        messages: mergeMessages([hydratedMapped], s.messages, {
           preserveExistingToolResultContent: true,
           preserveExistingCodexPlanContent: true,
         }),
-        isFirstMessage: mapped.role === 'user' ? false : s.isFirstMessage,
+        isFirstMessage: hydratedMapped.role === 'user' ? false : s.isFirstMessage,
       };
     });
     // sidebar 排序时间轴 — 让接管路径下新消息也能 bump session 顺序。
@@ -4293,6 +4351,7 @@ function ensureInitialMessages(sessionId: string): void {
       // 构建里 Vite 把常量折成 false 后 dead-code 消除,零开销。
       const ingestStartMs = import.meta.env.DEV ? performance.now() : 0;
       const mapped = mapServerMessages(merged);
+      const hydratedMapped = applyPendingCodexTerminalPlans(sessionId, mapped);
       const oldestId = oldestRow.id;
       setState(sessionId, (s) => ({
         ...s,
@@ -4300,7 +4359,7 @@ function ensureInitialMessages(sessionId: string): void {
         // Merge: keep any messages already appended by streaming events
         // (unlikely here since we gate history load on first mount, but
         // preserves slice invariants).
-        messages: mergeMessages(mapped, s.messages, {}, 'newest-first'),
+        messages: mergeMessages(hydratedMapped, s.messages, {}, 'newest-first'),
         isFirstMessage: false,
         oldestMessageId: oldestServerMessageIdForWindow(merged, s.messages, s.oldestMessageId, 'newest-first') ?? oldestId,
         hasMoreMessages: hasMore,
@@ -4502,11 +4561,12 @@ function reconcileRemoteMessages(sessionId: string, opts?: { force?: boolean }):
         windowApplied = false;
         return s;
       }
+      const hydratedMapped = applyPendingCodexTerminalPlans(sessionId, mapped);
       const isContiguous = reachedKnownWindow;
       const messages = isContiguous
-        ? mergeMessages(mapped, s.messages, {}, 'newest-first')
+        ? mergeMessages(hydratedMapped, s.messages, {}, 'newest-first')
         : mergeAuthoritativeRemoteWindow(
-          mapped,
+          hydratedMapped,
           s.messages.filter((message) => !existingIds.has(message.clientId)),
           'newest-first',
         );
@@ -4651,9 +4711,10 @@ function loadOlderMessages(sessionId: string): void {
       }
 
       const mapped = mapServerMessages(collected);
+      const hydratedMapped = applyPendingCodexTerminalPlans(sessionId, mapped);
       setState(sessionId, (s) => ({
         ...s,
-        messages: mergeMessages(mapped, s.messages, {}, 'newest-first'),
+        messages: mergeMessages(hydratedMapped, s.messages, {}, 'newest-first'),
         oldestMessageId: oldestId ?? s.oldestMessageId,
         hasMoreMessages: hasMore,
         isLoadingMore: false,
@@ -4677,10 +4738,11 @@ async function loadAroundMessage(
   if (rows.length === 0) return null;
 
   const mapped = mapServerMessages(rows);
+  const hydratedMapped = applyPendingCodexTerminalPlans(sessionId, mapped);
   const targetRow = rows.find((row) => row.id === messageId) ?? null;
   const targetClientId = targetRow?.clientId ?? null;
   setState(sessionId, (s) => {
-    const messages = mergeMessages(mapped, s.messages, {}, 'oldest-first');
+    const messages = mergeMessages(hydratedMapped, s.messages, {}, 'oldest-first');
     const oldestMessageId = oldestServerMessageIdForWindow(rows, s.messages, s.oldestMessageId, 'oldest-first');
     return {
       ...s,
@@ -4694,7 +4756,7 @@ async function loadAroundMessage(
   });
 
   if (!targetClientId) return null;
-  return mapped.find((message) => message.clientId === targetClientId) ?? null;
+  return hydratedMapped.find((message) => message.clientId === targetClientId) ?? null;
 }
 
 async function loadAroundMessageClientId(
@@ -4706,8 +4768,9 @@ async function loadAroundMessageClientId(
   if (rows.length === 0) return null;
 
   const mapped = mapServerMessages(rows);
+  const hydratedMapped = applyPendingCodexTerminalPlans(sessionId, mapped);
   setState(sessionId, (s) => {
-    const messages = mergeMessages(mapped, s.messages, {}, 'oldest-first');
+    const messages = mergeMessages(hydratedMapped, s.messages, {}, 'oldest-first');
     const oldestMessageId = oldestServerMessageIdForWindow(rows, s.messages, s.oldestMessageId, 'oldest-first');
     return {
       ...s,
@@ -4720,7 +4783,7 @@ async function loadAroundMessageClientId(
     };
   });
 
-  return mapped.find((message) => message.clientId === clientId) ?? null;
+  return hydratedMapped.find((message) => message.clientId === clientId) ?? null;
 }
 
 function buildQueuedMessage(

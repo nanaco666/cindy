@@ -20,6 +20,7 @@ export type AgentEventType =
   | 'account_usage'         // vendor-specific 账号级用量 (codex rateLimits 等); data shape 由 emit 端自定, renderer 按 source/字段嗅探
   | 'interaction_request'   // 需要用户决策(permission / ask_user_question / plan_review)
   | 'interaction_dismissed' // pending interaction 被自动 resolve(如 setPermissionMode 切换)
+  | 'plan_snapshot'         // turn-scoped Codex plan reconciliation (no generic tool_use UI side effects)
   | 'plan_mode_changed'     // agent 自行切换计划模式(典型: 计划批准后自动退出), data: { enabled: boolean }; host 据此回写持久化 + 广播 UI
   | 'status'                // 状态变化（idle / running / waiting + UsageSnapshot 内联在 data 里）
   | 'compact_boundary'      // auto-compact 边界

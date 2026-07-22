@@ -3168,12 +3168,14 @@ export class CodexAgent extends BaseAgent {
       seenRolloutPlanCallIds.clear();
 
       let stopped = false;
+      let drainingCompletedTurn = false;
       let timer: ReturnType<typeof setInterval> | null = null;
       let rolloutPath = '';
       let offset = 0;
       let remainder = '';
+      let pollChain = Promise.resolve();
 
-      const scanText = (text: string, allowFallbackTurnId: boolean, allowCompletedTurn = false): void => {
+      const scanText = (text: string, allowFallbackTurnId: boolean): void => {
         const lines = `${remainder}${text}`.split(/\r?\n/);
         remainder = lines.pop() ?? '';
         for (const line of lines) {
@@ -3190,7 +3192,7 @@ export class CodexAgent extends BaseAgent {
             { requireTurnId: true },
           );
           if (!parsed) continue;
-          if (parsed.turnId && !allowCompletedTurn && shouldIgnoreStaleTurnEvent(parsed.turnId)) continue;
+          if (parsed.turnId && !drainingCompletedTurn && shouldIgnoreStaleTurnEvent(parsed.turnId)) continue;
           if (parsed.turnId && parsed.turnId !== turnId) continue;
           if (parsed.callId) {
             if (seenRolloutPlanCallIds.has(parsed.callId)) {
@@ -3205,11 +3207,22 @@ export class CodexAgent extends BaseAgent {
               input.input.plan as TurnPlanUpdatedNotification['params']['plan'],
             );
           }
-          eventQueue.push(parsed.event);
+          // Final drain can finish after a later turn has started. Publish a
+          // turn-scoped patch rather than generic tool_use so consumers update
+          // only the matching plan row without finalizing later-turn UI.
+          if (drainingCompletedTurn) {
+            eventQueue.push({
+              type: 'plan_snapshot',
+              data: { turnId, plan: input.input?.plan ?? [] },
+              source: 'codex',
+            });
+          } else {
+            eventQueue.push(parsed.event);
+          }
         }
       };
 
-      const poll = async (allowFallbackTurnId: boolean, allowCompletedTurn = false): Promise<void> => {
+      const pollOnce = async (allowFallbackTurnId: boolean): Promise<void> => {
         if (stopped || !rolloutPath) return;
         let stat: Awaited<ReturnType<typeof fs.stat>>;
         try {
@@ -3230,12 +3243,17 @@ export class CodexAgent extends BaseAgent {
           handle = await fs.open(rolloutPath, 'r');
           const read = await handle.read(buffer, 0, length, offset);
           offset += read.bytesRead;
-          scanText(buffer.subarray(0, read.bytesRead).toString('utf8'), allowFallbackTurnId, allowCompletedTurn);
+          scanText(buffer.subarray(0, read.bytesRead).toString('utf8'), allowFallbackTurnId);
         } catch (e) {
           log.debug('rollout plan fallback poll failed', { error: String(e), threadId, turnId });
         } finally {
           try { await handle?.close(); } catch { /* no-op */ }
         }
+      };
+
+      const poll = (allowFallbackTurnId: boolean): Promise<void> => {
+        pollChain = pollChain.then(() => pollOnce(allowFallbackTurnId));
+        return pollChain;
       };
 
       stopRolloutPlanFallback = (drainCompletedTurn = false) => {
@@ -3245,7 +3263,8 @@ export class CodexAgent extends BaseAgent {
           latestPlanByTurn.delete(turnId);
           return;
         }
-        void poll(true, true).finally(() => {
+        drainingCompletedTurn = true;
+        void poll(true).finally(() => {
           stopped = true;
           latestPlanByTurn.delete(turnId);
         });
