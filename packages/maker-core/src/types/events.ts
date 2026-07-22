@@ -27,9 +27,6 @@ export type AgentEventType =
   | 'done'                  // 一轮 turn 完成
   | 'error';                // 错误（是否结束 turn 由 error data 的 isTerminal 显式表达）
 
-/** Stable reason emitted when the remote Claude daemon closes a turn. */
-export const REMOTE_DAEMON_CLOSED_REASON = 'remote_daemon_closed' as const;
-
 export interface AgentErrorEventData {
   message: string;
   /**

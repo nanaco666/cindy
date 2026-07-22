@@ -22,7 +22,6 @@
  */
 
 import type { MessageRole, Message, MessageAutomationOrigin } from '@/lib/ccAgent.types';
-import { REMOTE_DAEMON_CLOSED_REASON } from '@lizi/maker-core/events';
 import type { AttachedFile, MentionedResource, SerializedAttachedFile } from '@/lib/fileTypes';
 import type {
   AgentInputCreateOpts,
@@ -2181,10 +2180,10 @@ export function handleStreamEvent(inputState: SessionChatState, event: CCAgentSt
       const preservedRetryText = finalized.errorRetryText || null;
       // Suppress spurious "remote daemon closed" banner during user-initiated
       // cc-mgr upgrade — force-upgrade IPC kills the daemon → U2 fallback pushes
-      // an error event with reason=REMOTE_DAEMON_CLOSED_REASON. Expected, not a real
+      // an error event with reason='remote_daemon_closed'. Expected, not a real
       // failure. Daemon dying outside upgrade still surfaces a normal banner.
       const isPlannedUpgradeClose =
-        reason === REMOTE_DAEMON_CLOSED_REASON &&
+        reason === 'remote_daemon_closed' &&
         isSessionUpgrading(event.sessionId);
       return {
         ...finalized,

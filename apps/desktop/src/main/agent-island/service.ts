@@ -3,7 +3,6 @@ import path from 'node:path';
 import { release as getOsRelease } from 'node:os';
 import { SESSION_ACTIVITY_CHANNEL } from '@lizi/device-link';
 import type { AgentEvent, InteractionDecision, InteractionRequest } from '@lizi/maker-core';
-import { REMOTE_DAEMON_CLOSED_REASON } from '@lizi/maker-core/events';
 import type { SchedulerEvent } from '@lizi/maker-scheduler';
 import { BRAND_NAME } from '@lizi/maker-shared/branding';
 import type { ApplicationMenuCommand } from '../../shared/applicationMenuCommands.js';
@@ -108,7 +107,7 @@ const HARDWARE_NOTCH_CENTER_TOLERANCE_PX = 2;
 const SILENCED_COMPLETION_CLEAR_MS = 2_000;
 const LAYOUT_PREFERENCE_WRITE_DEBOUNCE_MS = 150;
 const STREAMING_PREVIEW_PUBLISH_DEBOUNCE_MS = 50;
-const REMOTE_AUTH_RETRY_FALLBACK_MS = 10_000;
+const REMOTE_DAEMON_CLOSED_REASON = 'remote_daemon_closed';
 
 interface AgentIslandSessionMeta {
   sessionId: string;
@@ -126,23 +125,6 @@ interface AgentIslandUserPromptDebugMeta {
   source?: string;
   clientId?: string;
   notifiedAt?: number;
-}
-
-/** Deferred auth failure waiting for renderer-side retry acceptance or rollback. */
-interface PendingRemoteAuthRetryError {
-  meta: AgentIslandSessionMeta;
-  event: AgentEvent;
-  fallbackTimer: ReturnType<typeof setTimeout>;
-}
-
-export interface AgentIslandSessionCloseOptions {
-  /** Soft reconnects keep the deferred auth failure until retry outcome is known. */
-  preservePendingRemoteAuthRetry?: boolean;
-}
-
-export interface AgentIslandEventHandlingOptions {
-  /** Keep a remote auth error hidden until renderer-side auto-retry succeeds or gives up. */
-  deferRemoteAuthRetry?: boolean;
 }
 
 export interface AgentIslandServiceDeps {
@@ -243,7 +225,6 @@ export class AgentIslandService {
     attention: { existed: boolean; value: boolean };
   }>();
   private readonly deferredCompletions = new Map<string, { event: AgentEvent; suppressAttention: boolean }>();
-  private readonly pendingRemoteAuthRetryErrors = new Map<string, PendingRemoteAuthRetryError>();
   private readonly pendingLayoutPreferenceWrites = new Map<number, AgentIslandLayoutPreference>();
   private readonly permissionRequests = new Map<string, {
     sessionId: string;
@@ -517,7 +498,6 @@ export class AgentIslandService {
     this.sessionHadAttentionAtRunStart.clear();
     this.userPromptRollbackTokens.clear();
     this.deferredCompletions.clear();
-    this.clearAllPendingRemoteAuthRetryErrors();
     this.nativeFailureLogged = false;
     this.enabled = false;
     this.enabledSynced = this.headless;
@@ -549,28 +529,8 @@ export class AgentIslandService {
     setAgentIslandAppFocused(this.state, focused, now);
   }
 
-  handleAgentEvent(
-    meta: AgentIslandSessionMeta,
-    event: AgentEvent,
-    options: AgentIslandEventHandlingOptions = {},
-  ): void {
+  handleAgentEvent(meta: AgentIslandSessionMeta, event: AgentEvent): void {
     const hydrated = this.hydrateMeta(meta);
-    if (options.deferRemoteAuthRetry === true && event.type === 'error') {
-      this.deferRemoteAuthRetryError(hydrated, event);
-      return;
-    }
-    if (this.pendingRemoteAuthRetryErrors.has(hydrated.sessionId)) {
-      // Claude emits status:Done + done after the auth error even though renderer is
-      // about to reconnect and resend. Keep the current run visible until that retry
-      // is accepted; otherwise these tail events would announce a false completion.
-      if (isCompletionDoneEvent(event)) return;
-      // A later real error supersedes the deferred auth error. Other bookkeeping
-      // events may still belong to the failed turn, so only prompt commit is treated
-      // as authoritative retry recovery.
-      if (event.type === 'error') {
-        this.clearPendingRemoteAuthRetryError(hydrated.sessionId);
-      }
-    }
     const now = Date.now();
     setAgentIslandStrings(this.state, buildAgentIslandStrings());
     this.prunePermissionRequestsForAgentEvent(hydrated.sessionId, event);
@@ -620,14 +580,6 @@ export class AgentIslandService {
     }
     this.clearStreamingPreviewPublishTimer();
     this.publish();
-  }
-
-  /** Surfaces a deferred remote auth error after renderer-side auto-retry gives up. */
-  handleDeferredRemoteAuthError(sessionId: string): boolean {
-    const pending = this.takePendingRemoteAuthRetryError(sessionId);
-    if (!pending) return false;
-    this.handleAgentEvent(pending.meta, pending.event);
-    return true;
   }
 
   handleScheduleEvent(event: SchedulerEvent): void {
@@ -688,9 +640,6 @@ export class AgentIslandService {
       if (rollbackKey) this.userPromptRollbackTokens.delete(rollbackKey);
       return;
     }
-    if (!rollbackKey) {
-      this.clearPendingRemoteAuthRetryError(hydrated.sessionId);
-    }
     this.ensureMetadata(hydrated.sessionId);
     this.syncSessionAttention(hydrated.sessionId);
     this.publish();
@@ -698,10 +647,8 @@ export class AgentIslandService {
 
   commitUserPrompt(sessionId: string, clientId: string | undefined): void {
     const rollbackKey = this.userPromptRollbackKey(sessionId, clientId);
-    if (rollbackKey) {
-      this.userPromptRollbackTokens.delete(rollbackKey);
-    }
-    this.clearPendingRemoteAuthRetryError(sessionId);
+    if (!rollbackKey) return;
+    this.userPromptRollbackTokens.delete(rollbackKey);
   }
 
   rollbackUserPrompt(sessionId: string, clientId: string | undefined): void {
@@ -780,7 +727,7 @@ export class AgentIslandService {
     }
   }
 
-  handleSessionClosed(sessionId: string, options: AgentIslandSessionCloseOptions = {}): void {
+  handleSessionClosed(sessionId: string): void {
     this.sessionHadAttentionAtRunStart.delete(sessionId);
     for (const key of this.userPromptRollbackTokens.keys()) {
       if (key.startsWith(`${sessionId}:`)) {
@@ -788,46 +735,9 @@ export class AgentIslandService {
       }
     }
     this.deferredCompletions.delete(sessionId);
-    if (options.preservePendingRemoteAuthRetry !== true) {
-      this.clearPendingRemoteAuthRetryError(sessionId);
-    }
     removeAgentIslandSession(this.state, sessionId);
     this.deletePermissionRequestsForSession(sessionId);
     this.publish();
-  }
-
-  private deferRemoteAuthRetryError(
-    meta: AgentIslandSessionMeta,
-    event: AgentEvent,
-  ): void {
-    this.clearPendingRemoteAuthRetryError(meta.sessionId);
-    const fallbackTimer = setTimeout(() => {
-      log.warn('remote auth retry was not acknowledged before fallback', {
-        sessionId: meta.sessionId,
-        timeoutMs: REMOTE_AUTH_RETRY_FALLBACK_MS,
-      });
-      this.handleDeferredRemoteAuthError(meta.sessionId);
-    }, REMOTE_AUTH_RETRY_FALLBACK_MS);
-    this.pendingRemoteAuthRetryErrors.set(meta.sessionId, { meta, event, fallbackTimer });
-  }
-
-  private takePendingRemoteAuthRetryError(sessionId: string): PendingRemoteAuthRetryError | undefined {
-    const pending = this.pendingRemoteAuthRetryErrors.get(sessionId);
-    if (!pending) return undefined;
-    clearTimeout(pending.fallbackTimer);
-    this.pendingRemoteAuthRetryErrors.delete(sessionId);
-    return pending;
-  }
-
-  private clearPendingRemoteAuthRetryError(sessionId: string): void {
-    this.takePendingRemoteAuthRetryError(sessionId);
-  }
-
-  private clearAllPendingRemoteAuthRetryErrors(): void {
-    for (const pending of this.pendingRemoteAuthRetryErrors.values()) {
-      clearTimeout(pending.fallbackTimer);
-    }
-    this.pendingRemoteAuthRetryErrors.clear();
   }
 
   /**

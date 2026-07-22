@@ -21,19 +21,18 @@ import {
 
 import { randomUUID } from 'node:crypto';
 
-import {
-  type AgentEvent,
-  type AgentKind,
-  type ContextUsageData,
-  type InteractionDecision,
-  type InteractionRequest,
-  type Maker,
-  type SendOrigin,
-  type SessionSendOptions,
-  type SessionSendResult,
-  type UserMessage,
+import type {
+  AgentEvent,
+  AgentKind,
+  ContextUsageData,
+  InteractionDecision,
+  InteractionRequest,
+  Maker,
+  SendOrigin,
+  SessionSendOptions,
+  SessionSendResult,
+  UserMessage,
 } from '@lizi/maker-core';
-import { REMOTE_DAEMON_CLOSED_REASON } from '@lizi/maker-core/events';
 import { createId } from '@paralleldrive/cuid2';
 import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { BrowserWindow, ipcMain } from 'electron';
@@ -150,7 +149,7 @@ import {
   setNewMakerDraftCache,
   setProviderModelMemoryCache,
 } from '../maker-host/newMakerDefaultsCache.js';
-import { rehydrateCloseSuppression, withRehydrateCloseSuppressed } from '../maker-host/rehydrateCloseSuppression.js';
+import { withRehydrateCloseSuppressed } from '../maker-host/rehydrateCloseSuppression.js';
 import { handleCloseSessionRequest } from './closeSessionRequest.js';
 import {
   hasAssistantProgressAfterMessage,
@@ -1550,11 +1549,10 @@ function sessionMetaForIsland(session: {
 function handleAgentIslandEventAfterBroadcast(
   session: { id: string; agentKind?: unknown; workDir?: unknown; workspaceKind?: unknown },
   event: AgentEvent,
-  options: { deferRemoteAuthRetry?: boolean } = {},
 ): void {
   if (!shouldNotifyAgentIslandForSession(session.id)) return;
   try {
-    getAgentIslandService()?.handleAgentEvent(sessionMetaForIsland(session), event, options);
+    getAgentIslandService()?.handleAgentEvent(sessionMetaForIsland(session), event);
   } catch (error) {
     log.warn('Agent Island event update failed after maker event broadcast', {
       sessionId: session.id,
@@ -1605,12 +1603,9 @@ function handleAgentIslandInteractionDismissedByRequestId(requestId: string): vo
   }
 }
 
-function handleAgentIslandSessionClosedAfterCleanup(
-  sessionId: string,
-  options: { preservePendingRemoteAuthRetry?: boolean } = {},
-): void {
+function handleAgentIslandSessionClosedAfterCleanup(sessionId: string): void {
   try {
-    getAgentIslandService()?.handleSessionClosed(sessionId, options);
+    getAgentIslandService()?.handleSessionClosed(sessionId);
   } catch (error) {
     log.warn('Agent Island session close cleanup failed after mandatory session cleanup', {
       sessionId,
@@ -2124,14 +2119,14 @@ export function wireSessionToIpc(session: ReturnType<Maker['getSession']>): void
         ? (event.data as { message?: unknown; reason?: unknown; sdkError?: unknown } | undefined)
         : undefined;
       const eventMessage = errData?.message;
-      // 计划内 cc-mgr 升级窗口的 daemon 关闭(reason=REMOTE_DAEMON_CLOSED_REASON)是
+      // 计划内 cc-mgr 升级窗口的 daemon 关闭(reason='remote_daemon_closed')是
       // 预期噪音: renderer 事件路径按同语义静默 banner, 这里同样不给 coordinator
       // 记 error —— 否则 paired-done 保留会让升级后的 projection 复现
       // [REMOTE_DAEMON_CLOSED] banner。范围与 renderer 一致**按 session**(仅
       // banner-clicker):同 host 其它会话的中断照真实失败浮现;窗口外的 daemon
       // 死亡同样不受影响(保留 + 通知)。
       isPlannedUpgradeClose =
-        errData?.reason === REMOTE_DAEMON_CLOSED_REASON &&
+        errData?.reason === 'remote_daemon_closed' &&
         isCcMgrUpgradeInFlight(session.id);
       // 远程 auth 错误跳过持久化：renderer 会静默 auto-retry（makerChatStore 在 reducer
       // 前拦截、关闭旧会话、重发消息，不显示 ErrorBanner）；若 main 已落库，retry 成功后
@@ -2211,9 +2206,7 @@ export function wireSessionToIpc(session: ReturnType<Maker['getSession']>): void
     }
     // 先 broadcast 保 UI 实时性,再 flush(flush 只入队、不阻塞)。
     broadcastToAllWindows(MAKER_PUSH.EVENT, { sessionId: session.id, event, persistId, resolvedContent });
-    handleAgentIslandEventAfterBroadcast(session, event, {
-      deferRemoteAuthRetry: isRemoteAuthRetry,
-    });
+    handleAgentIslandEventAfterBroadcast(session, event);
     if (shouldMarkTurnTerminalIdleAfterBroadcast) {
       sessionTurnActivityTracker.scheduleIdleAfterTerminalBroadcast(session.id);
       // 后台活动检测:done / 终止型 error = 逻辑 turn 结束,记录结束时刻。
@@ -2744,9 +2737,7 @@ export function wireSessionToIpc(session: ReturnType<Maker['getSession']>): void
       // 后台活动检测:会话进程已关闭(closeSession / 删除),清账并广播横幅熄灭。
       clearClaudeSessionBackgroundActivity(session.id);
       clearSessionPersistState(session.id);
-      handleAgentIslandSessionClosedAfterCleanup(session.id, {
-        preservePendingRemoteAuthRetry: rehydrateCloseSuppression.isSuppressed(session.id),
-      });
+      handleAgentIslandSessionClosedAfterCleanup(session.id);
     }
   });
 
@@ -5944,7 +5935,6 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
       ? agentMetaRaw as AgentMeta
       : null;
     onTurnErrorEvent(sid, errData, agentMeta);
-    getAgentIslandService()?.handleDeferredRemoteAuthError(sid);
   });
 
   ipcMain.handle(MAKER_INVOKE.INPUT_REMOVE, (_e, sessionId: unknown, clientId: unknown) => {

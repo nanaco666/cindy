@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import type { AgentEvent, InteractionRequest } from '@lizi/maker-core';
-import { REMOTE_DAEMON_CLOSED_REASON } from '@lizi/maker-core/events';
 import { DEFAULT_AGENT_ISLAND_STRINGS } from '../../../shared/agentIsland.js';
 
 import {
@@ -27,6 +26,8 @@ import {
   setAgentIslandPointerZones,
   setAgentIslandVisibleSession,
 } from '../state.js';
+
+const REMOTE_DAEMON_CLOSED_REASON = 'remote_daemon_closed';
 
 type PermissionInteractionRequest = Extract<InteractionRequest, { kind: 'permission' }>;
 

@@ -562,6 +562,7 @@ export function applyAgentIslandEvent(
     session.permissionCanAllowForSession = false;
     session.currentToolUseId = null;
     session.toolDetailUntil = null;
+    session.detailSource = null;
     completeAgentIslandSession(state, session, now, {
       suppressAttention: options.suppressCompletionAttention === true,
       preserveAttention: options.preserveCompletionAttention === true,
@@ -786,6 +787,7 @@ export function completeAgentIslandSessionWithoutAttention(
   session.permissionCanAllowForSession = false;
   session.currentToolUseId = null;
   session.toolDetailUntil = null;
+  session.detailSource = null;
   completeAgentIslandSession(state, session, now, {
     suppressAttention: true,
     preserveAttention: options.preserveAttention,
