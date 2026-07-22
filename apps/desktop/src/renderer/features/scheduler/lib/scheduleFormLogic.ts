@@ -99,7 +99,9 @@ export type RunMode = 'fresh' | 'persistent' | 'bound';
 
 /**
  * Agent-mode bound schedules may only be persisted after the selected session
- * has resolved as available. Script mode intentionally clears targetSessionId,
+ * has resolved as available and active. Archived sessions remain openable, so
+ * their reference state is still `available`, but the runner cannot use them as
+ * ordinary heartbeat targets. Script mode intentionally clears targetSessionId,
  * so a stale binding must not block that mode conversion.
  */
 export function canSubmitSessionBinding(
@@ -109,7 +111,7 @@ export function canSubmitSessionBinding(
 ): boolean {
   return executionMode === 'script'
     || runMode !== 'bound'
-    || reference?.state === 'available';
+    || (reference?.state === 'available' && reference.status !== 'archived');
 }
 
 /** targetSessionId 是真实会话 id(非空且非占位)。 */

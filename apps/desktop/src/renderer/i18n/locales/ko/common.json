@@ -5221,6 +5221,7 @@
         "loadFailed": "로드 실패: {{error}}",
         "empty": "사용 가능한 활성 세션이 없습니다",
         "deletedBinding": "연결된 세션이 삭제되었습니다. 다른 세션을 선택하세요",
+        "archivedBinding": "연결된 세션이 보관되었습니다. 복원한 후 저장하거나 다른 세션을 선택하세요",
         "selectPlaceholder": "— 세션 선택 —"
       },
       "preRunHook": {

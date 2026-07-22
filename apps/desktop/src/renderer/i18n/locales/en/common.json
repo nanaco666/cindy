@@ -5231,6 +5231,7 @@
         "loadFailed": "Failed to load: {{error}}",
         "empty": "No active sessions available",
         "deletedBinding": "Bound session deleted — select another session",
+        "archivedBinding": "Bound session archived — restore it before saving or select another session",
         "selectPlaceholder": "— Select a session —"
       },
       "preRunHook": {
