@@ -879,14 +879,13 @@ export function ComputerUseSection({ workingDir }: ComputerUseSectionProps) {
           await window.electronAPI.maker.android.prepareAdb();
           await handleRefreshAndroidStatus(false);
         }
+        toast.success(
+          next
+            ? t('settings.computerUse.android.toast.enabled')
+            : t('settings.computerUse.android.toast.disabled'),
+        );
         if (result.codexMcpRefreshed === false) {
           toast.warning(t('settings.computerUse.codexRefreshDeferred'));
-        } else {
-          toast.success(
-            next
-              ? t('settings.computerUse.android.toast.enabled')
-              : t('settings.computerUse.android.toast.disabled'),
-          );
         }
       } catch (err) {
         log.warn('plugins.setEnabled(android) failed', err);

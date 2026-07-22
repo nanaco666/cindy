@@ -81,6 +81,7 @@ describe('computer use plugin IPC invariants', () => {
       'registerProjectPluginPolicyHandlers',
       clearEnabledStart,
     );
+    expect(clearEnabledEnd).toBeGreaterThan(clearEnabledStart);
     const clearEnabledBody = registerSource.slice(clearEnabledStart, clearEnabledEnd);
 
     for (const body of [setEnabledBody, clearEnabledBody]) {
@@ -92,6 +93,30 @@ describe('computer use plugin IPC invariants', () => {
       );
       expect(body).not.toContain('await shutdownCodexEnvironment();');
     }
+  });
+});
+
+describe('computer use UI feedback invariants', () => {
+  it('keeps Android success feedback when Codex MCP refresh is deferred', () => {
+    const sectionSource = fs.readFileSync(
+      path.resolve(__dirname, '../../renderer/components/settings/ComputerUseSection.tsx'),
+      'utf-8',
+    );
+    const toggleAndroidStart = sectionSource.indexOf('const handleToggleAndroid');
+    const toggleComputerStart = sectionSource.indexOf(
+      'const handleToggleComputer',
+      toggleAndroidStart,
+    );
+    expect(toggleAndroidStart).toBeGreaterThanOrEqual(0);
+    expect(toggleComputerStart).toBeGreaterThan(toggleAndroidStart);
+
+    const toggleAndroidBody = sectionSource.slice(toggleAndroidStart, toggleComputerStart);
+    const successToast = toggleAndroidBody.indexOf('toast.success(');
+    const deferredWarning = toggleAndroidBody.indexOf(
+      'if (result.codexMcpRefreshed === false)',
+    );
+    expect(successToast).toBeGreaterThanOrEqual(0);
+    expect(deferredWarning).toBeGreaterThan(successToast);
   });
 });
 
