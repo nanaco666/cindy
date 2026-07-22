@@ -41,7 +41,6 @@ vi.mock('electron', () => ({
     getVersion: () => '1.0.0-test',
     isPackaged: false,
   },
-  nativeImage: { createFromPath: () => ({ isEmpty: () => true }) },
   // power-blocker.ts 模块级单例引用 powerSaveBlocker,需占位避免 vitest 报 mock 未定义
   powerSaveBlocker: { start: () => 0, stop: () => {}, isStarted: () => false },
   // notificationService.ts 顶层 IIFE 在 !isPackaged 时调 nativeImage.createFromPath
