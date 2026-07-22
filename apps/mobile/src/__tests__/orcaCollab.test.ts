@@ -44,10 +44,13 @@ describe('orcaCollab dispatch tool classification', () => {
   it('recognizes create_worker / create_workers / send_to_worker as bare and MCP-prefixed names', () => {
     expect(classifyOrcaDispatchTool('create_worker')).toBe('create');
     expect(classifyOrcaDispatchTool('mcp__cindy_orca__create_worker')).toBe('create');
+    expect(classifyOrcaDispatchTool('mcp__lizi_orca__create_worker')).toBe('create');
     expect(classifyOrcaDispatchTool('create_workers')).toBe('create-batch');
     expect(classifyOrcaDispatchTool('mcp__cindy_orca__create_workers')).toBe('create-batch');
+    expect(classifyOrcaDispatchTool('mcp__lizi_orca__create_workers')).toBe('create-batch');
     expect(classifyOrcaDispatchTool('send_to_worker')).toBe('send');
     expect(classifyOrcaDispatchTool('mcp__cindy_orca__send_to_worker')).toBe('send');
+    expect(classifyOrcaDispatchTool('mcp__lizi_orca__send_to_worker')).toBe('send');
     expect(classifyOrcaDispatchTool('Read')).toBeNull();
     // 不误匹配前缀粘连的无关 tool 名。
     expect(classifyOrcaDispatchTool('xcreate_worker')).toBeNull();

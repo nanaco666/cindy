@@ -27,6 +27,25 @@ const DESKTOP_CLAUDE_READ_ONLY_ALLOWED_TOOLS = [
   'mcp__cindy_slack__slack_status',
 ] as const;
 
+/**
+ * Codex MCP elicitation 的精确 server allowlist。
+ *
+ * 这里不能按 `cindy_` 前缀放行：namespace 只表示品牌归属，不代表新 provider
+ * 已完成权限 review。SSH 与 Contacts 分别走显式拒绝和 inner-tool 细粒度策略。
+ */
+const DESKTOP_CODEX_AUTO_APPROVED_MCP_SERVERS: ReadonlySet<string> = new Set([
+  'cindy_android',
+  'cindy_browser',
+  'cindy_computer',
+  'cindy_feishu_bot',
+  'cindy_slack',
+  'cindy_scheduler',
+  'cindy_memory',
+  'cindy_helper',
+  'cindy_orca',
+  'cindy_lsp',
+]);
+
 /** 返回副本，避免 SDK / 调用方原地改写 host 的白名单真源。 */
 export function getDesktopClaudeReadOnlyAllowedTools(): string[] {
   return [...DESKTOP_CLAUDE_READ_ONLY_ALLOWED_TOOLS];
@@ -44,13 +63,7 @@ export function getDesktopMcpToolApprovalPolicy(
       ? 'auto-approve'
       : 'prompt-each-time';
   }
-  // `<平台>_lizi` 显式白名单分支已随 gitlab_lizi 于 2026-07-14 退役清空
-  // (github_lizi / gitlab_lizi 先后迁入内置意识 cindy-github / cindy-gitlab)。
-  if (
-    serverName === 'cindy_scheduler'
-    || serverName === 'cindy_memory'
-    || (serverName.startsWith('cindy_') && serverName !== 'cindy_ssh')
-  ) {
+  if (DESKTOP_CODEX_AUTO_APPROVED_MCP_SERVERS.has(serverName)) {
     return 'auto-approve';
   }
   return 'prompt';

@@ -497,16 +497,12 @@ export function getMaker(): Maker {
       prepareCodexResumeSession: prepareExternalCodexSessionForResume,
       registerCodexSystemPromptForThread: ({ sessionId, threadId, text }) =>
         registerCodexProxyComposed(sessionId, threadId, text),
-      // host 自家、用户已通过 OAuth/账号授权过的可信 MCP server,自动通过 codex
-      // 的 MCP elicitation 审批,避免每次写操作(lizi_feishu send / cindy_scheduler
-      // create / cindy_memory write 等)都弹 PermissionPrompt。
-      // 多数命名仍是历史前缀 `lizi_*`(lizi_feishu / ...)，
-      // scheduler 已迁为 `cindy_scheduler`；`<平台>_lizi` 显式白名单(PR #501)已清空——`github_lizi` /
-      // `gitlab_lizi` 先后于 2026-07-14 退役,迁入内置意识 cindy-github /
-      // cindy-gitlab。
+      // host 自家、用户已通过 OAuth/账号授权过且完成权限 review 的 MCP server,
+      // 按精确 server name 自动通过 Codex MCP elicitation，避免每次可信写操作都弹
+      // PermissionPrompt。`cindy_` 只是 namespace，不构成信任边界；新 provider
+      // 默认仍弹审批，必须显式加入 allowlist。
       // 例外:`cindy_ssh` 显式排除——它的 ssh_exec 在远端机器上执行任意命令,
-      // 属于跨机器写操作,必须保留 Codex MCP elicitation 审批,不能随 lizi_ 前缀
-      // 自动放行(PR #874 review)。
+      // 属于跨机器写操作,必须保留 Codex MCP elicitation 审批(PR #874 review)。
       // cindy_contacts 是渐进式 list_tools/call_tool server：不能按 serverName
       // 粗粒度信任，否则 delete/merge/系统回写/文件覆盖都会被 outer call_tool
       // 一并放行。Codex metadata 带 outer tool params，可在执行前解析 inner tool；

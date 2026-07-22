@@ -62,13 +62,27 @@ describe('desktop MCP approval policy', () => {
     );
   });
 
-  it('preserves the existing built-in allowlist and cindy_ssh exception', () => {
-    expect(getDesktopMcpToolApprovalPolicy({ serverName: 'cindy_memory' })).toBe('auto-approve');
-    expect(getDesktopMcpToolApprovalPolicy({ serverName: 'cindy_scheduler' })).toBe('auto-approve');
+  it('auto-approves only explicitly reviewed builtin servers', () => {
+    for (const serverName of [
+      'cindy_android',
+      'cindy_browser',
+      'cindy_computer',
+      'cindy_feishu_bot',
+      'cindy_slack',
+      'cindy_scheduler',
+      'cindy_memory',
+      'cindy_helper',
+      'cindy_orca',
+      'cindy_lsp',
+    ]) {
+      expect(getDesktopMcpToolApprovalPolicy({ serverName })).toBe('auto-approve');
+    }
+
     // gitlab_lizi 已于 2026-07-14 退役(迁入内置意识 cindy-gitlab):
     // `<平台>_lizi` 显式白名单清空后,该名字回落到默认 prompt,不再自动放行。
     expect(getDesktopMcpToolApprovalPolicy({ serverName: 'gitlab_lizi' })).toBe('prompt');
     expect(getDesktopMcpToolApprovalPolicy({ serverName: 'cindy_ssh' })).toBe('prompt');
+    expect(getDesktopMcpToolApprovalPolicy({ serverName: 'cindy_future_tool' })).toBe('prompt');
     expect(getDesktopMcpToolApprovalPolicy({ serverName: 'third_party' })).toBe('prompt');
   });
 });

@@ -54,7 +54,7 @@ export function initializeCodexHistoryPromptState(db: Database.Database): void {
   }
 
   // cindy_memory rename: threads whose history contains the old product prompt still
-  // instruct the model to use cindy_memory. Mark them as needing the existing one-shot
+  // instruct the model to use lizi_memory. Mark them as needing the existing one-shot
   // non-proxy restore path; successful delivery writes the state back to true.
   if (readMeta(CINDY_MEMORY_PROMPT_RESET_META_KEY) !== 'done') {
     const updated = db.transaction(() => {

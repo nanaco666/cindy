@@ -889,7 +889,7 @@ function buildSessionRow(params: {
     source: 'shared',
     extraDirs: '[]',
     // Shared bundles can come from a build whose product prompt still named
-    // cindy_memory (or any future prompt generation). Force the existing one-shot
+    // lizi_memory (or any future prompt generation). Force the existing one-shot
     // non-proxy restore path instead of trusting a versionless exported boolean.
     codexHistoryHasProductPrompt: manifest.agentKind === 'codex' ? false : null,
     // /clear 边界照搬:不带会让 pre-clear 历史在导入端重新显示(review bot 指出)
