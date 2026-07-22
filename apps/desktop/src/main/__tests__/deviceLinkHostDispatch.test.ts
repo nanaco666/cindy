@@ -17,8 +17,10 @@
  */
 import Database from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import os from 'node:os';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import path from 'node:path';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // ── mocks(hoist 前置)──────────────────────────────────────────────────────────
 const h = vi.hoisted(() => ({
@@ -41,6 +43,9 @@ vi.mock('electron', () => ({
   },
   // power-blocker.ts 模块级单例引用 powerSaveBlocker,需占位避免 vitest 报 mock 未定义
   powerSaveBlocker: { start: () => 0, stop: () => {}, isStarted: () => false },
+  // notificationService.ts 顶层 IIFE 在 !isPackaged 时调 nativeImage.createFromPath
+  // (经 scheduler-host 传递性 import 被拉进来),补桩避免 collect 阶段报 mock 未定义
+  nativeImage: { createFromPath: () => ({ isEmpty: () => true }) },
 }));
 vi.mock('../logger', () => ({
   createLogger: () => ({ warn: vi.fn(), info: vi.fn(), debug: vi.fn(), error: vi.fn() }),
@@ -65,8 +70,14 @@ import type { InvokeResultPayload } from '@lizi/device-link';
 
 const SRC = 'controller-device';
 const TMP_DIR = os.tmpdir(); // 真实存在的目录(模拟"浏览到/新建的远程目录")
+let managedWorktreeTestRoot = '';
+let managedWorktreeDir = '';
 
 beforeAll(() => {
+  managedWorktreeTestRoot = mkdtempSync(path.join(os.tmpdir(), 'device-link-worktree-'));
+  managedWorktreeDir = path.join(managedWorktreeTestRoot, '.cindy-worktrees', 'auto-test');
+  mkdirSync(managedWorktreeDir, { recursive: true });
+
   const sqlite = new Database(':memory:');
   // 只建 guard 用到的两张表的必要列(SELECT working_dir / path)。
   sqlite.exec('CREATE TABLE recent_workdirs (path TEXT PRIMARY KEY, last_used_at INTEGER NOT NULL);');
@@ -76,6 +87,10 @@ beforeAll(() => {
   h.dbHolder.db = drizzle(sqlite, { schema: { sessions, recentWorkdirs } });
   // 接入真实 guard(与生产 register.ts:1141 同一函数)。
   setRemoteWorkingDirGuard(isRemoteWorkingDirAllowed);
+});
+
+afterAll(() => {
+  rmSync(managedWorktreeTestRoot, { recursive: true, force: true });
 });
 
 let persistSpy: ReturnType<typeof vi.fn>;
@@ -110,6 +125,17 @@ describe('device-link host dispatch (runInvoke) — real gate + guard(real DB) +
     })) as Extract<InvokeResultPayload, { ok: true }>;
     expect(res.ok).toBe(true);
     expect(res.result).toEqual({ sessionId: 's-new' });
+    expect(handler).toHaveBeenCalledTimes(1);
+  });
+
+  it('create-session 的 workingDir 是刚创建的 Cindy 托管 worktree → 放行到 handler', async () => {
+    const handler = registerHandler('maker:create-session', () => ({ sessionId: 's-worktree' }));
+    const res = (await runInvoke(SRC, {
+      channel: 'maker:create-session',
+      args: [{ id: 's-worktree', workingDir: managedWorktreeDir, workspaceKind: 'project' }],
+    })) as Extract<InvokeResultPayload, { ok: true }>;
+    expect(res.ok).toBe(true);
+    expect(res.result).toEqual({ sessionId: 's-worktree' });
     expect(handler).toHaveBeenCalledTimes(1);
   });
 

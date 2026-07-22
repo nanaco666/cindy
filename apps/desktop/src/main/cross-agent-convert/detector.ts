@@ -1,12 +1,13 @@
 /**
  * cross-agent-convert / detector
  *
- * 5 项独立判断（双向）。每一项"对面端有内容 ∧ 本端缺失" → 推入 items。
+ * 4 项独立判断（双向）。每一项"对面端有内容 ∧ 本端缺失" → 推入 items。
  *
  * 关键：用 codex 同款 `is_missing_or_empty_text_file` 语义 ——
  *   目标"不存在 OR trim 后为空" 才视为缺失。
  *
- * 集合类（skills/agents/hooks）按子项粒度枚举：subItems 列出每个待复制的具体单位。
+ * 集合类（agents/hooks）按子项粒度枚举：subItems 列出每个待转换的具体单位。
+ * Skill 使用同一份 SKILL.md + 双目录兼容链接，不属于跨 Agent 格式转换。
  */
 
 import fs from 'node:fs/promises';
@@ -59,28 +60,6 @@ async function isDir(p: string): Promise<boolean> {
   }
 }
 
-async function listSubdirs(p: string): Promise<string[]> {
-  try {
-    const ents = await fs.readdir(p, { withFileTypes: true });
-    const names = await Promise.all(
-      ents.map(async (entry) => {
-        if (entry.isDirectory()) return entry.name;
-        if (!entry.isSymbolicLink()) return null;
-
-        try {
-          const target = await fs.stat(path.join(p, entry.name));
-          return target.isDirectory() ? entry.name : null;
-        } catch {
-          return null;
-        }
-      }),
-    );
-    return names.filter((name): name is string => name !== null);
-  } catch {
-    return [];
-  }
-}
-
 async function listFilesByExt(p: string, ext: string): Promise<string[]> {
   try {
     const ents = await fs.readdir(p, { withFileTypes: true });
@@ -88,14 +67,6 @@ async function listFilesByExt(p: string, ext: string): Promise<string[]> {
   } catch {
     return [];
   }
-}
-
-/** 计算 source 集合中目标里没有的子项；name 仅比对（按子目录或按 file basename）。 */
-function diffMissing<T extends { name: string }>(
-  sourceItems: T[],
-  targetExisting: Set<string>,
-): T[] {
-  return sourceItems.filter((s) => !targetExisting.has(s.name));
 }
 
 export async function detect(input: DetectInput): Promise<DetectResult> {
@@ -108,16 +79,13 @@ export async function detect(input: DetectInput): Promise<DetectResult> {
   // ── 第 1 项：CLAUDE.md ↔ AGENTS.md ────────────────────────────────────
   await detectAgentsMd(wd, direction, items);
 
-  // ── 第 2 项：skills/ ─────────────────────────────────────────────────
-  await detectSkills(wd, direction, items);
-
-  // ── 第 3 项：agents/ ─────────────────────────────────────────────────
+  // ── 第 2 项：agents/ ─────────────────────────────────────────────────
   await detectAgents(wd, direction, items);
 
-  // ── 第 4 项：hooks/ + settings.json/hooks.json ───────────────────────
+  // ── 第 3 项：hooks/ + settings.json/hooks.json ───────────────────────
   await detectHooks(wd, direction, items);
 
-  // ── 第 5 项：MCP ────────────────────────────────────────────────────
+  // ── 第 4 项：MCP ────────────────────────────────────────────────────
   await detectMcp(wd, direction, items);
 
   return { items };
@@ -149,39 +117,6 @@ async function detectAgentsMd(wd: string, direction: MigrationDirection, items: 
       });
     }
   }
-}
-
-async function detectSkills(wd: string, direction: MigrationDirection, items: MigrationItem[]): Promise<void> {
-  const claudeSkills = path.join(wd, '.claude', 'skills');
-  // Codex 官方扫描的项目级 skill 目录是 .agents/skills/(REPO scope),
-  // 见 https://developers.openai.com/codex/skills。不是 .codex/skills/。
-  const codexSkills = path.join(wd, '.agents', 'skills');
-  const sourceDir = direction === 'to-claude' ? codexSkills : claudeSkills;
-  const targetDir = direction === 'to-claude' ? claudeSkills : codexSkills;
-  if (!(await isDir(sourceDir))) return;
-
-  const sourceNames = await listSubdirs(sourceDir);
-  if (sourceNames.length === 0) return;
-  const targetExisting = new Set(await listSubdirs(targetDir));
-  const missing = diffMissing(
-    sourceNames.map((name) => ({ name })),
-    targetExisting,
-  );
-  if (missing.length === 0) return;
-
-  items.push({
-    id: 'skills:0',
-    kind: 'skills',
-    direction,
-    label: `skills (${missing.length} 个新增)`,
-    source: sourceDir,
-    target: targetDir,
-    subItems: missing.map(({ name }) => ({
-      name,
-      sourcePath: path.join(sourceDir, name),
-      targetPath: path.join(targetDir, name),
-    })),
-  });
 }
 
 async function detectAgents(wd: string, direction: MigrationDirection, items: MigrationItem[]): Promise<void> {

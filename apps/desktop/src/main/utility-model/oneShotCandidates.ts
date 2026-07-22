@@ -7,6 +7,12 @@ import { readClaudeApiKey } from '../maker-host/auth-adapters.js';
 import { claudeUpstreamEndpoint } from '../maker-host/runtime-configs.js';
 import { getUtilityModelChainProfiles } from './UtilityModelSelection.js';
 import type { UtilityModelProfile, UtilityModelTransport } from '../../shared/utilityModelProfiles.js';
+import type {
+  UtilityTextAttempt,
+  UtilityTextAttemptReason,
+  UtilityTextFailureReason,
+  UtilityTextResult,
+} from '../../shared/utilityTextResult.js';
 
 const log = createLogger('utility-model:one-shot');
 
@@ -27,6 +33,27 @@ export type UtilityTextRequestOptions = {
   timeoutMs?: number;
 };
 
+/** Internal resolution result keeps skipped candidates visible to diagnostics. */
+type UtilityTextCandidateResolution =
+  | { candidate: UtilityTextCandidate }
+  | { attempt: UtilityTextAttempt };
+
+/** Credential-safe failure raised by a concrete utility transport. */
+type UtilityTextExecutionFailure =
+  | { reason: 'http_error'; httpStatus: number }
+  | {
+    reason: Extract<UtilityTextAttemptReason, 'timeout' | 'empty_response' | 'request_failed'>;
+    httpStatus?: never;
+  };
+
+/** Credential-safe error raised by a concrete utility transport. */
+class UtilityTextExecutionError extends Error {
+  constructor(readonly failure: UtilityTextExecutionFailure) {
+    super(failure.reason);
+    this.name = 'UtilityTextExecutionError';
+  }
+}
+
 /**
  * Resolves text-capable utility models in configured priority order, skipping
  * entries that are unsupported by the caller or not currently credential-ready.
@@ -36,29 +63,41 @@ export async function getUtilityTextCandidates(
   maker: Maker,
   capability: UtilityTextCapability = { transports: ['codex-responses', 'litellm-chat-completions'] },
 ): Promise<UtilityTextCandidate[]> {
+  return (await resolveUtilityTextCandidates(maker, capability)).candidates;
+}
+
+/** Resolve candidates and retain safe reasons for every skipped profile. */
+async function resolveUtilityTextCandidates(
+  maker: Maker,
+  capability: UtilityTextCapability,
+): Promise<{ candidates: UtilityTextCandidate[]; attempts: UtilityTextAttempt[] }> {
   const profiles = getUtilityModelChainProfiles();
   const candidates: UtilityTextCandidate[] = [];
+  const attempts: UtilityTextAttempt[] = [];
   for (const profile of profiles) {
     if (!capability.transports.includes(profile.transport)) {
       log.debug('utility text candidate skipped: unsupported transport', {
         providerId: profile.id,
         transport: profile.transport,
       });
+      attempts.push(skippedAttempt(profile, 'unsupported_transport'));
       continue;
     }
 
     if (profile.transport === 'codex-responses') {
       const codex = await resolveCodexCandidate(maker, profile);
-      if (codex) candidates.push(codex);
+      if ('candidate' in codex) candidates.push(codex.candidate);
+      else attempts.push(codex.attempt);
       continue;
     }
 
     if (profile.transport === 'litellm-chat-completions') {
       const litellm = resolveLiteLlmCandidate(profile);
-      if (litellm) candidates.push(litellm);
+      if ('candidate' in litellm) candidates.push(litellm.candidate);
+      else attempts.push(litellm.attempt);
     }
   }
-  return candidates;
+  return { candidates, attempts };
 }
 
 export async function requestUtilityText(
@@ -67,44 +106,51 @@ export async function requestUtilityText(
   opts?: UtilityTextRequestOptions & {
     capability?: UtilityTextCapability;
   },
-): Promise<{ text: string; providerId: string; model: string; transport: UtilityModelTransport } | null> {
-  const candidates = await getUtilityTextCandidates(maker, opts?.capability);
-  let lastError: unknown = null;
+): Promise<UtilityTextResult> {
+  const { candidates, attempts } = await resolveUtilityTextCandidates(
+    maker,
+    opts?.capability ?? { transports: ['codex-responses', 'litellm-chat-completions'] },
+  );
+  if (candidates.length === 0) {
+    return { ok: false, reason: 'no_candidate', attempts };
+  }
+
   for (const candidate of candidates) {
     try {
-      const text = await candidate.execute(prompt, opts);
+      const text = (await candidate.execute(prompt, opts)).trim();
+      if (!text) throw new UtilityTextExecutionError({ reason: 'empty_response' });
       return {
+        ok: true,
         text,
         providerId: candidate.providerId,
         model: candidate.model,
         transport: candidate.transport,
       };
     } catch (error) {
-      lastError = error;
+      const failure = classifyExecutionFailure(error);
+      attempts.push(failedAttempt(candidate, failure));
       log.warn('utility text candidate failed, trying next', {
         providerId: candidate.providerId,
         model: candidate.model,
         transport: candidate.transport,
-        error: error instanceof Error ? error.message : String(error),
+        reason: failure.reason,
+        httpStatus: failure.httpStatus,
       });
     }
   }
-  if (lastError) {
-    log.warn('all utility text candidates failed', {
-      error: lastError instanceof Error ? lastError.message : String(lastError),
-    });
-  }
-  return null;
+  const reason = aggregateFailureReason(attempts.filter((attempt) => attempt.status === 'failed'));
+  log.warn('all utility text candidates failed', { reason, attempts: attempts.length });
+  return { ok: false, reason, attempts };
 }
 
 async function resolveCodexCandidate(
   maker: Maker,
   profile: UtilityModelProfile,
-): Promise<UtilityTextCandidate | null> {
+): Promise<UtilityTextCandidateResolution> {
   const agentKind: AgentKind = 'codex';
   if (!maker.listAvailableAgents().includes(agentKind)) {
     log.debug('utility text candidate skipped: codex agent unavailable', { providerId: profile.id });
-    return null;
+    return { attempt: skippedAttempt(profile, 'agent_unavailable') };
   }
   try {
     const auth = await maker.getAgentAuthState(agentKind);
@@ -113,29 +159,31 @@ async function resolveCodexCandidate(
         providerId: profile.id,
         reason: auth.errorReason,
       });
-      return null;
+      return { attempt: skippedAttempt(profile, 'not_authenticated') };
     }
   } catch (error) {
     log.debug('utility text candidate skipped: codex auth probe failed', {
       providerId: profile.id,
-      error: String(error),
+      errorName: error instanceof Error ? error.name : typeof error,
     });
-    return null;
+    return { attempt: skippedAttempt(profile, 'auth_probe_failed') };
   }
   return {
-    providerId: profile.id,
-    model: profile.model,
-    transport: profile.transport,
-    profile,
-    execute: (prompt, opts) => maker.oneShot(agentKind, prompt, {
+    candidate: {
+      providerId: profile.id,
       model: profile.model,
-      maxTokens: opts?.maxTokens,
-      timeoutMs: opts?.timeoutMs,
-    }),
+      transport: profile.transport,
+      profile,
+      execute: (prompt, opts) => maker.oneShot(agentKind, prompt, {
+        model: profile.model,
+        maxTokens: opts?.maxTokens,
+        timeoutMs: opts?.timeoutMs,
+      }),
+    },
   };
 }
 
-function resolveLiteLlmCandidate(profile: UtilityModelProfile): UtilityTextCandidate | null {
+function resolveLiteLlmCandidate(profile: UtilityModelProfile): UtilityTextCandidateResolution {
   const apiKey = readClaudeApiKey();
   const baseUrl = claudeUpstreamEndpoint().trim();
   if (!apiKey || !baseUrl) {
@@ -144,21 +192,23 @@ function resolveLiteLlmCandidate(profile: UtilityModelProfile): UtilityTextCandi
       apiKeyPresent: Boolean(apiKey),
       baseUrlPresent: Boolean(baseUrl),
     });
-    return null;
+    return { attempt: skippedAttempt(profile, !apiKey ? 'api_key_missing' : 'endpoint_missing') };
   }
   return {
-    providerId: profile.id,
-    model: profile.model,
-    transport: profile.transport,
-    profile,
-    execute: (prompt, opts) => requestLiteLlmText({
-      apiKey,
-      baseUrl,
+    candidate: {
+      providerId: profile.id,
       model: profile.model,
-      prompt,
-      maxTokens: opts?.maxTokens,
-      timeoutMs: opts?.timeoutMs,
-    }),
+      transport: profile.transport,
+      profile,
+      execute: (prompt, opts) => requestLiteLlmText({
+        apiKey,
+        baseUrl,
+        model: profile.model,
+        prompt,
+        maxTokens: opts?.maxTokens,
+        timeoutMs: opts?.timeoutMs,
+      }),
+    },
   };
 }
 
@@ -188,8 +238,10 @@ async function requestLiteLlmText(input: {
       }),
     });
     if (!response.ok) {
-      const raw = await response.text().catch(() => '');
-      throw new Error(textModelErrorMessage(tryParseJsonObject(raw), raw, response.status));
+      // Do not retain or log upstream response bodies: gateways may echo request
+      // metadata, while the HTTP status is sufficient for user recovery.
+      await response.body?.cancel().catch(() => undefined);
+      throw new UtilityTextExecutionError({ reason: 'http_error', httpStatus: response.status });
     }
     const parsed = await response.json() as {
       choices?: Array<{ message?: { content?: unknown } }>;
@@ -198,47 +250,77 @@ async function requestLiteLlmText(input: {
       ?.map((choice) => typeof choice.message?.content === 'string' ? choice.message.content : '')
       .join('')
       .trim() ?? '';
-    if (!text) throw new Error('Empty response from LiteLLM utility model');
+    if (!text) throw new UtilityTextExecutionError({ reason: 'empty_response' });
     return text;
   } catch (error) {
+    if (error instanceof UtilityTextExecutionError) throw error;
     if (error instanceof Error && error.name === 'AbortError') {
-      throw new Error(`LiteLLM utility model timed out after ${timeoutMs}ms`);
+      throw new UtilityTextExecutionError({ reason: 'timeout' });
     }
-    throw error;
+    throw new UtilityTextExecutionError({ reason: 'request_failed' });
   } finally {
     clearTimeout(timeout);
   }
 }
 
+/** Build a safe diagnostic entry for a profile skipped before execution. */
+function skippedAttempt(
+  profile: UtilityModelProfile,
+  reason: Extract<UtilityTextAttemptReason,
+    | 'unsupported_transport'
+    | 'agent_unavailable'
+    | 'not_authenticated'
+    | 'auth_probe_failed'
+    | 'api_key_missing'
+    | 'endpoint_missing'>,
+): UtilityTextAttempt {
+  return {
+    providerId: profile.id,
+    model: profile.model,
+    transport: profile.transport,
+    status: 'skipped',
+    reason,
+  };
+}
+
+/** Classify candidate failures without exposing arbitrary exception messages. */
+function classifyExecutionFailure(error: unknown): UtilityTextExecutionFailure {
+  if (error instanceof UtilityTextExecutionError) {
+    return error.failure;
+  }
+  if (error instanceof Error && (error.name === 'AbortError' || /timed?\s*out|timeout/i.test(error.message))) {
+    return { reason: 'timeout' };
+  }
+  return { reason: 'request_failed' };
+}
+
+/** Attach HTTP status only to the matching discriminated-union branch. */
+function failedAttempt(
+  candidate: UtilityTextCandidate,
+  failure: UtilityTextExecutionFailure,
+): UtilityTextAttempt {
+  const base = {
+    providerId: candidate.providerId,
+    model: candidate.model,
+    transport: candidate.transport,
+    status: 'failed' as const,
+  };
+  return failure.reason === 'http_error'
+    ? { ...base, reason: failure.reason, httpStatus: failure.httpStatus }
+    : { ...base, reason: failure.reason };
+}
+
+/** Collapse homogeneous terminal failures while preserving per-candidate attempts. */
+function aggregateFailureReason(failedAttempts: UtilityTextAttempt[]): UtilityTextFailureReason {
+  if (failedAttempts.length > 0 && failedAttempts.every((attempt) => attempt.reason === 'empty_response')) {
+    return 'empty_response';
+  }
+  if (failedAttempts.length > 0 && failedAttempts.every((attempt) => attempt.reason === 'timeout')) {
+    return 'timeout';
+  }
+  return 'all_candidates_failed';
+}
+
 function joinProxyPath(baseUrl: string, suffix: string): string {
   return `${baseUrl.replace(/\/+$/, '')}${suffix}`;
-}
-
-function tryParseJsonObject(raw: string): Record<string, unknown> | null {
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
-      ? parsed as Record<string, unknown>
-      : null;
-  } catch {
-    return null;
-  }
-}
-
-function textModelErrorMessage(parsed: Record<string, unknown> | null, raw: string, status: number): string {
-  const error = parsed?.error;
-  if (error && typeof error === 'object' && !Array.isArray(error)) {
-    const message = (error as Record<string, unknown>).message;
-    if (typeof message === 'string' && message.trim()) {
-      return `LiteLLM utility model HTTP ${status}: ${message.trim()}`;
-    }
-  }
-  const message = parsed?.message;
-  if (typeof message === 'string' && message.trim()) {
-    return `LiteLLM utility model HTTP ${status}: ${message.trim()}`;
-  }
-  const trimmed = raw.trim();
-  return trimmed
-    ? `LiteLLM utility model HTTP ${status}: ${trimmed.slice(0, 500)}`
-    : `LiteLLM utility model HTTP ${status}`;
 }

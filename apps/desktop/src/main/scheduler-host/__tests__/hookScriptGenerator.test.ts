@@ -25,6 +25,13 @@ import {
 } from '../hook-script-generator';
 
 const fakeMaker = {} as Maker;
+const utilitySuccess = (text: string) => ({
+  ok: true as const,
+  text,
+  providerId: 'test-provider',
+  model: 'test-model',
+  transport: 'codex-responses' as const,
+});
 
 describe('extractScriptFromResponse', () => {
   it('提取 ```js fenced block', () => {
@@ -165,7 +172,7 @@ describe('generateHookScript(编排)', () => {
       {
         maker: fakeMaker,
         fallbackDir: path.join(dir, 'fb'),
-        requestText: async () => ({ text: '```js\nprocess.exit(2)\n```' }),
+        requestText: async () => utilitySuccess('```js\nprocess.exit(2)\n```'),
       },
       { description: 'run when ci fails', scheduleName: 'CI Watch', workingDir: dir },
     );
@@ -180,7 +187,7 @@ describe('generateHookScript(编排)', () => {
       {
         maker: fakeMaker,
         fallbackDir: fb,
-        requestText: async () => ({ text: '```\nprocess.exit(0)\n```' }),
+        requestText: async () => utilitySuccess('```\nprocess.exit(0)\n```'),
       },
       { description: 'check something' },
     );
@@ -200,7 +207,7 @@ describe('generateHookScript(编排)', () => {
         fallbackDir: path.join(dir, 'fb'),
         requestText: async (_m, prompt) => {
           seenPrompt = prompt;
-          return { text: '```js\nprocess.exit(2)\n```' };
+          return utilitySuccess('```js\nprocess.exit(2)\n```');
         },
       },
       {
@@ -223,7 +230,7 @@ describe('generateHookScript(编排)', () => {
         {
           maker: fakeMaker,
           fallbackDir: fb,
-          requestText: async () => ({ text: 'sorry, cannot do that' }),
+          requestText: async () => utilitySuccess('sorry, cannot do that'),
         },
         { description: 'x y z' },
       ),
@@ -231,13 +238,27 @@ describe('generateHookScript(编排)', () => {
     expect(existsSync(fb)).toBe(false);
   });
 
-  it('utility model 全不可用 → throw', async () => {
+  it('utility model 全不可用 → 抛出共享错误码与结构化诊断', async () => {
     await expect(
       generateHookScript(
-        { maker: fakeMaker, fallbackDir: path.join(dir, 'fb'), requestText: async () => null },
+        {
+          maker: fakeMaker,
+          fallbackDir: path.join(dir, 'fb'),
+          requestText: async () => ({
+            ok: false,
+            reason: 'no_candidate',
+            attempts: [{
+              providerId: 'codex-gpt-5.4-mini',
+              model: 'gpt-5.4-mini',
+              transport: 'codex-responses',
+              status: 'skipped',
+              reason: 'not_authenticated',
+            }],
+          }),
+        },
         { description: 'x y z' },
       ),
-    ).rejects.toThrow(/no utility model/);
+    ).rejects.toThrow(/\[UTILITY_MODEL_NO_CANDIDATE\].*not_authenticated/);
   });
 });
 
@@ -271,7 +292,7 @@ describe('installHookScript(统一安装通道:script/description 双模式 + �
       {
         maker: null,
         fallbackDir: path.join(dir, 'fb'),
-        requestText: async () => ({ text: '```js\nprocess.exit(0)\n```' }),
+        requestText: async () => utilitySuccess('```js\nprocess.exit(0)\n```'),
       },
       { description: 'always run' },
     );
@@ -330,7 +351,7 @@ describe('运行时探测:系统无 node 时命令用 xdt-node 兜底', () => {
       {
         maker: null,
         fallbackDir: path.join(dir, 'fb'),
-        requestText: async () => ({ text: '```js\nprocess.exit(0)\n```' }),
+        requestText: async () => utilitySuccess('```js\nprocess.exit(0)\n```'),
         hasSystemNode: async () => false,
       },
       { description: 'always run', scheduleName: 'X Y', workingDir: dir },

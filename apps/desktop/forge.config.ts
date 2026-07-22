@@ -740,6 +740,24 @@ function stageRipgrep(targetPlatform: string, targetArch: string): void {
   console.log(`[forge:prePackage] ripgrep ${key} -> ${dest} (${sizeMb} MB)`);
 }
 
+/**
+ * 内置意识种子 submodule 就位断言(2026-07-22 种子源拆为 official / xd 两个
+ * submodule 仓,挂载在 resources/builtin-ghosts 下):任一根缺 provisioning.json
+ * 说明 submodule 没 checkout,继续打包会静默产出一个没有内置插件的安装包 ——
+ * 必须让打包在这里失败。
+ */
+function assertGhostSeedSubmodules(): void {
+  for (const root of ['official', 'xd']) {
+    const marker = path.join(__dirname, 'resources', 'builtin-ghosts', root, 'provisioning.json');
+    if (!fs.existsSync(marker)) {
+      throw new Error(
+        `[forge] builtin-ghosts/${root} seed missing (${marker}). ` +
+          'Run "git submodule update --init" at the repo root before packaging.',
+      );
+    }
+  }
+}
+
 function extraResourcesForTarget(targetPlatform: string): string[] {
   const base = [
     'resources/icon.png',
@@ -1197,6 +1215,7 @@ const config: ForgeConfig = {
     // Builds cindy-updater.exe before electron-packager copies resources/ into
     // the package — guarantees the shipped updater matches HEAD.
     prePackage: async (_forgeConfig, platform, arch) => {
+      assertGhostSeedSubmodules();
       const targetPlatform = requestedTargetPlatform();
       const targetArch = requestedTargetArch();
       if (targetPlatform === 'win32') {

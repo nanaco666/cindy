@@ -41,9 +41,11 @@ function session(patch: Partial<RemoteSession> & Pick<RemoteSession, 'id' | 'orc
 }
 
 describe('orcaCollab dispatch tool classification', () => {
-  it('recognizes create_worker / send_to_worker as bare names and MCP-prefixed names', () => {
+  it('recognizes create_worker / create_workers / send_to_worker as bare and MCP-prefixed names', () => {
     expect(classifyOrcaDispatchTool('create_worker')).toBe('create');
     expect(classifyOrcaDispatchTool('mcp__lizi_orca__create_worker')).toBe('create');
+    expect(classifyOrcaDispatchTool('create_workers')).toBe('create-batch');
+    expect(classifyOrcaDispatchTool('mcp__lizi_orca__create_workers')).toBe('create-batch');
     expect(classifyOrcaDispatchTool('send_to_worker')).toBe('send');
     expect(classifyOrcaDispatchTool('mcp__lizi_orca__send_to_worker')).toBe('send');
     expect(classifyOrcaDispatchTool('Read')).toBeNull();
@@ -66,6 +68,20 @@ describe('buildOrcaDispatchCard', () => {
   it('falls back to role/agent meta when create_worker has no initial_task', () => {
     const card = buildOrcaDispatchCard('create_worker', { role: 'reviewer', agent: 'claude-code' });
     expect(card).toEqual({ variant: 'dispatch', title: '派活给 worker reviewer', body: '角色 reviewer · claude-code' });
+  });
+
+  it('summarizes create_workers with the batch size and each worker task', () => {
+    const card = buildOrcaDispatchCard('mcp__lizi_orca__create_workers', {
+      workers: [
+        { role: 'developer', agent: 'codex', label: 'frontend', initial_task: '实现登录页' },
+        { role: 'reviewer', agent: 'claude-code', label: 'review', initial_task: '检查交互' },
+      ],
+    });
+    expect(card).toEqual({
+      variant: 'dispatch',
+      title: '批量派活给 2 个 worker',
+      body: 'frontend：实现登录页\nreview：检查交互',
+    });
   });
 
   it('summarizes send_to_worker with the message body', () => {
@@ -125,6 +141,31 @@ describe('normalizeRemoteMessages with orca collaboration', () => {
     expect(report?.kind).toBe('user');
     expect(report?.body).toBe('接口完成');
     expect(report?.orcaCard).toEqual({ variant: 'report', title: 'worker 回报', body: '接口完成' });
+  });
+
+  it('renders create_workers tool_use as an Orca dispatch card', () => {
+    const [item] = normalizeRemoteMessages([
+      message({
+        id: 'batch-dispatch',
+        role: 'tool_use',
+        content: {
+          toolName: 'mcp__lizi_orca__create_workers',
+          input: {
+            workers: [
+              { label: 'api', role: 'developer', agent: 'codex', initial_task: '实现接口' },
+              { label: 'test', role: 'tester', agent: 'claude-code', initial_task: '补充测试' },
+            ],
+          },
+        },
+      }),
+    ]);
+
+    expect(item?.kind).toBe('system');
+    expect(item?.orcaCard).toEqual({
+      variant: 'dispatch',
+      title: '批量派活给 2 个 worker',
+      body: 'api：实现接口\ntest：补充测试',
+    });
   });
 
   it('leaves normal user messages and normal tools untouched (no orcaCard, no raw JSON leak)', () => {

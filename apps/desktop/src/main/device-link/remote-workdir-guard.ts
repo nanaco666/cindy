@@ -18,29 +18,31 @@
  * 任意目录,故「限定到已存在目录」是此处剩余的、成本极低的越权兜底(挡掉不存在路径 /
  * 把文件当目录),并非完全放开。
  *
- * 路径比较复用 normalizeRecentWorkdirPath(反斜杠归一 + 去尾斜杠),两侧同口径,避免分隔符
- * 差异造成误判。空 / 非法 / 不存在 / 非目录路径一律不放行。
+ * 路径比较复用 normalizeWorkingDirForStorage,只做路径形态归一,不复用 recentWorkdirs
+ * 的列表准入规则。后者会刻意过滤托管 worktree,若在安全闸复用会让刚创建成功的
+ * `.cindy-worktrees/*` 在 fs 存在性检查前被误判为非法。空 / 非法 / 不存在 / 非目录
+ * 路径仍一律不放行。
  */
 
 import { statSync } from 'node:fs';
 
 import { getDbClient } from '../localDb/client/current';
 import { sessions, recentWorkdirs } from '../localDb/schema';
-import { normalizeRecentWorkdirPath } from '../localDb/ipc/recentWorkdirs';
 import { createLogger } from '../logger';
+import { normalizeWorkingDirForStorage } from '../../shared/workingDir';
 
 const log = createLogger('device-link-workdir-guard');
 
 /** 该 workingDir 是否在被控端已知目录集合内,或在被控端真实存在的目录。 */
 export async function isRemoteWorkingDirAllowed(dir: string): Promise<boolean> {
-  const target = normalizeRecentWorkdirPath(dir);
+  const target = normalizeWorkingDirForStorage(dir);
   if (!target) return false;
   try {
     const db = getDbClient().drizzle;
     const recents = await db.select({ path: recentWorkdirs.path }).from(recentWorkdirs);
-    if (recents.some((r) => normalizeRecentWorkdirPath(r.path) === target)) return true;
+    if (recents.some((r) => normalizeWorkingDirForStorage(r.path) === target)) return true;
     const rows = await db.select({ workingDir: sessions.workingDir }).from(sessions);
-    if (rows.some((r) => normalizeRecentWorkdirPath(r.workingDir) === target)) return true;
+    if (rows.some((r) => normalizeWorkingDirForStorage(r.workingDir) === target)) return true;
   } catch (err) {
     // DB 查询失败不直接拒:继续走「目录是否真实存在」兜底(下面),仍能挡掉不存在 / 非目录。
     log.warn('workingDir guard db query failed, falling back to fs check', err);

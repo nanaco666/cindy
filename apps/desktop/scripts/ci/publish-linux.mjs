@@ -14,11 +14,8 @@ import {
   fetchReferenceManifest,
   findInstallerArtifact,
   loadDotenv,
-  maybeBuildClaudeCodeGz,
-  maybeBuildCodexGz,
   sha256,
   uploadToOSS,
-  uploadVersionedGzImmutable,
   writeReleaseManifest,
 } from './lib.mjs';
 
@@ -63,83 +60,13 @@ async function main() {
   fs.copyFileSync(installerPath, releaseInstallerPath);
 
   const manifest = createLinuxFirstReleaseManifest(version, linuxManifest ?? reference.manifest);
-  if (!linuxManifest) {
-    manifest.claudeCode = {
-      version: '0.0.0',
-      file: '',
-      sha256: '',
-      size: 0,
-    };
-    delete manifest.codex;
-  }
   manifest.app.installer = {
     file: `app/${PLATFORM_KEY}/${installerName}`,
     sha256: sha256(releaseInstallerPath),
     size: fs.statSync(releaseInstallerPath).size,
   };
 
-  // OSS client 提前创建:claude/codex 段的 immutable 守卫需要先查/传远端对象,
-  // 再用其返回值写 manifest(先 binary → 后 manifest 的顺序铁律)。
   const client = createOSSClient();
-
-  const claude = await maybeBuildClaudeCodeGz({
-    platformKey: PLATFORM_KEY,
-    manifest,
-    binaryName: 'claude',
-  });
-  if (claude) {
-    // immutable 守卫上传:同版本路径已存在同源对象时复用远端 sha256/size(不覆盖);
-    // 存在不同内容时抛错中止发布。见 lib.mjs uploadVersionedGzImmutable 注释。
-    const ccFileRel = `claude-code/${claude.localCCVersion}/${PLATFORM_KEY}/${claude.gzName}`;
-    console.log(`    Uploading ${claude.gzName} -> ${OSS_PREFIX}/${ccFileRel}`);
-    const ccPub = await uploadVersionedGzImmutable({
-      client,
-      ossKey: `${OSS_PREFIX}/${ccFileRel}`,
-      gzPath: claude.gzPath,
-      gzSha256: claude.ccHash,
-      gzSize: claude.ccSize,
-      binarySha256: claude.localBinHash,
-    });
-    manifest.claudeCode = {
-      version: claude.localCCVersion,
-      file: ccFileRel,
-      sha256: ccPub.gzSha256,
-      size: ccPub.gzSize,
-      binarySha256: ccPub.binarySha256,
-    };
-  }
-  if (!manifest.claudeCode?.file) {
-    throw new Error('Linux publish requires a valid claudeCode manifest entry.');
-  }
-
-  const codex = await maybeBuildCodexGz({
-    platformKey: PLATFORM_KEY,
-    manifest,
-    binaryName: 'codex',
-  });
-  if (codex) {
-    // immutable 守卫上传:同 claude 段。
-    const codexFileRel = `codex/${codex.localCodexVersion}/${PLATFORM_KEY}/${codex.gzName}`;
-    console.log(`    Uploading ${codex.gzName} -> ${OSS_PREFIX}/${codexFileRel}`);
-    const codexPub = await uploadVersionedGzImmutable({
-      client,
-      ossKey: `${OSS_PREFIX}/${codexFileRel}`,
-      gzPath: codex.gzPath,
-      gzSha256: codex.codexHash,
-      gzSize: codex.codexSize,
-      binarySha256: codex.localBinHash,
-    });
-    manifest.codex = {
-      version: codex.localCodexVersion,
-      file: codexFileRel,
-      sha256: codexPub.gzSha256,
-      size: codexPub.gzSize,
-      binarySha256: codexPub.binarySha256,
-    };
-  }
-  if (!manifest.codex?.file) {
-    throw new Error('Linux publish requires a valid codex manifest entry.');
-  }
 
   const manifestPath = path.join(RELEASE_DIR, `manifest-${PLATFORM_KEY}-canary.json`);
   fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + '\n');

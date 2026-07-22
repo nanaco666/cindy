@@ -5,7 +5,10 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import {
   prepareSharedGlobalSkillLinks,
+  prepareSharedProjectSkillLinks,
+  projectWorkingDirFromSkillPath,
   sharedGlobalSkillsPaths,
+  sharedProjectSkillsPaths,
 } from '../maker-host/shared-global-skills';
 
 let tmpDirs: string[] = [];
@@ -132,5 +135,124 @@ describe('prepareSharedGlobalSkillLinks', () => {
     await expect(fs.lstat(path.join(paths.sharedSkillsDir, 'removed-later'))).rejects.toMatchObject({
       code: 'ENOENT',
     });
+  });
+});
+
+describe('prepareSharedProjectSkillLinks', () => {
+  it('exposes a legacy Claude project skill to Codex without copying it', async () => {
+    const workingDir = await makeTmpDir();
+    const paths = sharedProjectSkillsPaths(workingDir);
+    const claudeSkill = await writeSkill(paths.claudeSkillsDir, 'legacy');
+
+    const result = await prepareSharedProjectSkillLinks({ workingDir });
+    const sharedLink = path.join(paths.sharedSkillsDir, 'legacy');
+
+    expect(result.changed).toBe(true);
+    expect(result.warnings).toEqual([]);
+    expect((await fs.lstat(sharedLink)).isSymbolicLink()).toBe(true);
+    expect(await sameRealPath(sharedLink, claudeSkill)).toBe(true);
+    if (process.platform !== 'win32') {
+      expect(path.isAbsolute(await fs.readlink(sharedLink))).toBe(false);
+    }
+  });
+
+  it('exposes a canonical shared project skill to Claude without copying it', async () => {
+    const workingDir = await makeTmpDir();
+    const paths = sharedProjectSkillsPaths(workingDir);
+    const sharedSkill = await writeSkill(paths.sharedSkillsDir, 'shared');
+
+    const result = await prepareSharedProjectSkillLinks({ workingDir });
+    const claudeLink = path.join(paths.claudeSkillsDir, 'shared');
+
+    expect(result.changed).toBe(true);
+    expect(result.warnings).toEqual([]);
+    expect((await fs.lstat(claudeLink)).isSymbolicLink()).toBe(true);
+    expect(await sameRealPath(claudeLink, sharedSkill)).toBe(true);
+  });
+
+  it('does not create empty discovery roots when the project has no skills', async () => {
+    const workingDir = await makeTmpDir();
+    const paths = sharedProjectSkillsPaths(workingDir);
+
+    const result = await prepareSharedProjectSkillLinks({ workingDir });
+
+    expect(result).toMatchObject({ changed: false, actions: [], warnings: [] });
+    await expect(fs.lstat(paths.sharedSkillsDir)).rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(fs.lstat(paths.claudeSkillsDir)).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
+  it('keeps conflicting real project skills on both sides', async () => {
+    const workingDir = await makeTmpDir();
+    const paths = sharedProjectSkillsPaths(workingDir);
+    const sharedSkill = await writeSkill(paths.sharedSkillsDir, 'duplicate');
+    const claudeSkill = await writeSkill(paths.claudeSkillsDir, 'duplicate');
+
+    const result = await prepareSharedProjectSkillLinks({ workingDir });
+
+    expect(result.warnings.some((warning) => warning.includes('duplicate'))).toBe(true);
+    expect(await sameRealPath(path.join(paths.sharedSkillsDir, 'duplicate'), sharedSkill)).toBe(true);
+    expect(await sameRealPath(path.join(paths.claudeSkillsDir, 'duplicate'), claudeSkill)).toBe(true);
+    expect(await sameRealPath(sharedSkill, claudeSkill)).toBe(false);
+  });
+
+  it('repairs a broken absolute project link after the checkout moves', async () => {
+    const root = await makeTmpDir();
+    const oldWorkingDir = path.join(root, 'old-checkout');
+    const workingDir = path.join(root, 'moved-checkout');
+    const oldPaths = sharedProjectSkillsPaths(oldWorkingDir);
+    const paths = sharedProjectSkillsPaths(workingDir);
+    const claudeSkill = await writeSkill(paths.claudeSkillsDir, 'moved-skill');
+    const staleSharedLink = path.join(paths.sharedSkillsDir, 'moved-skill');
+    await fs.mkdir(paths.sharedSkillsDir, { recursive: true });
+    await fs.symlink(
+      path.join(oldPaths.claudeSkillsDir, 'moved-skill'),
+      staleSharedLink,
+      process.platform === 'win32' ? 'junction' : 'dir',
+    );
+
+    const result = await prepareSharedProjectSkillLinks({ workingDir });
+
+    expect(result.changed).toBe(true);
+    expect(result.warnings).toEqual([]);
+    expect(await sameRealPath(staleSharedLink, claudeSkill)).toBe(true);
+  });
+
+  it('does not replace an unrelated broken project skill symlink', async () => {
+    const root = await makeTmpDir();
+    const workingDir = path.join(root, 'checkout');
+    const paths = sharedProjectSkillsPaths(workingDir);
+    await writeSkill(paths.claudeSkillsDir, 'user-link');
+    const userLink = path.join(paths.sharedSkillsDir, 'user-link');
+    const externalTarget = path.join(root, 'removed-external-skills', 'user-link');
+    await fs.mkdir(paths.sharedSkillsDir, { recursive: true });
+    await fs.symlink(
+      externalTarget,
+      userLink,
+      process.platform === 'win32' ? 'junction' : 'dir',
+    );
+
+    const result = await prepareSharedProjectSkillLinks({ workingDir });
+
+    expect(result.changed).toBe(false);
+    expect(result.warnings.some((warning) => warning.includes('user-link'))).toBe(true);
+    expect(await fs.readlink(userLink)).toBe(externalTarget);
+  });
+});
+
+describe('projectWorkingDirFromSkillPath', () => {
+  it('accepts only direct project skill discovery children', () => {
+    const projectRoot = path.join(path.sep, 'projects', 'demo');
+    expect(
+      projectWorkingDirFromSkillPath(
+        path.join(projectRoot, '.agents', 'skills', 'my-skill'),
+      ),
+    ).toBe(projectRoot);
+    expect(
+      projectWorkingDirFromSkillPath(
+        path.join(projectRoot, '.claude', 'skills', 'my-skill'),
+      ),
+    ).toBe(projectRoot);
+    expect(projectWorkingDirFromSkillPath(path.join(projectRoot, 'skills', 'my-skill')))
+      .toBeNull();
   });
 });

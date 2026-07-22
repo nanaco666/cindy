@@ -15,6 +15,7 @@
  */
 
 import type { CreateScheduleInput, ScheduleTemplate, ScheduleWorkspaceKind, ScriptCapability } from '@lizi/maker-scheduler';
+import type { SessionReference } from '../../../../shared/sessionReference';
 
 /** Effort 白名单 — 与 Phase 2 mapper enum 一致;UI 提交前的最后一道关卡。 */
 export const EFFORT_VALUES = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const;
@@ -95,6 +96,23 @@ export const PENDING_SESSION_ID = '__pending__';
 
 /** "运行会话"三态。 */
 export type RunMode = 'fresh' | 'persistent' | 'bound';
+
+/**
+ * Agent-mode bound schedules may only be persisted after the selected session
+ * has resolved as available and active. Archived sessions remain openable, so
+ * their reference state is still `available`, but the runner cannot use them as
+ * ordinary heartbeat targets. Script mode intentionally clears targetSessionId,
+ * so a stale binding must not block that mode conversion.
+ */
+export function canSubmitSessionBinding(
+  executionMode: ScheduleFormState['executionMode'],
+  runMode: RunMode,
+  reference: SessionReference | undefined,
+): boolean {
+  return executionMode === 'script'
+    || runMode !== 'bound'
+    || (reference?.state === 'available' && reference.status !== 'archived');
+}
 
 /** targetSessionId 是真实会话 id(非空且非占位)。 */
 export function hasRealBinding(form: Pick<ScheduleFormState, 'targetSessionId'>): boolean {

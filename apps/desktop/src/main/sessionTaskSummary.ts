@@ -152,7 +152,9 @@ async function generateSummaryOnce(sessionId: string): Promise<void> {
       maxTokens: 120,
       timeoutMs: 30_000,
     });
-    const text = utility?.text || (await getMaker().oneShot(agentKind, prompt, { maxTokens: 120 }));
+    const text = utility.ok
+      ? utility.text
+      : await getMaker().oneShot(agentKind, prompt, { maxTokens: 120 });
     const summary = sanitize(text, maxCharsForTier(tier));
     if (!summary) return;
 

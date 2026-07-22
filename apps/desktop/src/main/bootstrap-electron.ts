@@ -21,6 +21,10 @@ import {
 } from './devStartupStatus';
 
 const PROCESS_STARTED_AT_MS = Date.now();
+// Official Linux binaries total hundreds of MB. Keep one shared deadline for
+// both downloads, but allow normal consumer connections to finish while the
+// splash displays real byte progress.
+const LINUX_AGENT_INSTALL_STARTUP_DEADLINE_MS = 5 * 60_000;
 
 if (
   process.platform === 'linux' &&
@@ -3308,6 +3312,13 @@ ipcMain.on('theme:apply-vibrancy', (_event, payload: { familyId: string; isDark:
     // splash 首个 invoke = renderer 存活的强信号(与 renderer:log 双保险)。
     rendererBootGuard?.markAlive();
     const platform = process.platform as 'darwin' | 'win32' | 'linux';
+    // Packaged Linux may install both CLIs during one startup check. Share a
+    // single deadline so sequential fallback installs cannot each consume the
+    // full timeout.
+    const linuxInstallSignal =
+      platform === 'linux' && app.isPackaged
+        ? AbortSignal.timeout(LINUX_AGENT_INSTALL_STARTUP_DEADLINE_MS)
+        : undefined;
 
     // ── Phase 0: peek 两个 vendor 是否都需要下载（决定 (x/2) 标签）─────────────
     let claudeNeeds = false;
@@ -3323,7 +3334,12 @@ ipcMain.on('theme:apply-vibrancy', (_event, payload: { familyId: string; isDark:
     // ── Phase 1: claude 段 ───────────────────────────────────────────────────
     let claudeRes: PrepareResult;
     try {
-      claudeRes = await binaryPrepare('claude-code', isMultiDownload ? { step: 1, totalSteps: 2 } : {});
+      claudeRes = await binaryPrepare(
+        'claude-code',
+        isMultiDownload
+          ? { step: 1, totalSteps: 2, signal: linuxInstallSignal }
+          : { signal: linuxInstallSignal },
+      );
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       return {
@@ -3355,7 +3371,12 @@ ipcMain.on('theme:apply-vibrancy', (_event, payload: { familyId: string; isDark:
 
     let codexRes: PrepareResult;
     try {
-      codexRes = await binaryPrepare('codex', isMultiDownload ? { step: 2, totalSteps: 2 } : {});
+      codexRes = await binaryPrepare(
+        'codex',
+        isMultiDownload
+          ? { step: 2, totalSteps: 2, signal: linuxInstallSignal }
+          : { signal: linuxInstallSignal },
+      );
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       return {

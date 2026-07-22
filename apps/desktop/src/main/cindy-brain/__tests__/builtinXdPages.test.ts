@@ -13,7 +13,7 @@ interface CindyMessage {
 }
 
 const pagesSource = readFileSync(
-  new URL('../../../../resources/builtin-ghosts/xd-pages/main.js', import.meta.url),
+  new URL('../../../../resources/builtin-ghosts/xd/xd-pages/main.js', import.meta.url),
   'utf8',
 );
 
@@ -29,7 +29,7 @@ function createPagesHarness(response: Record<string, unknown>) {
     },
     fetch: vi.fn(async () => response),
   };
-  new Script(pagesSource, { filename: 'builtin-ghosts/xd-pages/main.js' }).runInContext(
+  new Script(pagesSource, { filename: 'builtin-ghosts/xd/xd-pages/main.js' }).runInContext(
     createContext({ cindy, setTimeout, clearTimeout, URL, encodeURIComponent }),
   );
   if (!handler) throw new Error('XD Pages did not register its host-message handler');

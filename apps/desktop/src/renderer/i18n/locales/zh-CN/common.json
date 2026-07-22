@@ -25,6 +25,23 @@
     "backHome": "回到主界面",
     "details": "错误详情"
   },
+  "localDbFatal": {
+    "updateReady": {
+      "title": "需要更新后才能继续",
+      "description": "本地数据已由更新版本的 Cindy 升级，当前版本无法打开。新版本已下载就绪，重启安装后即可恢复使用。",
+      "confirm": "重启并安装更新"
+    },
+    "preparing": {
+      "description": "本地数据已由更新版本的 Cindy 升级，当前版本无法打开。正在获取新版本，请稍候…",
+      "progress": "已下载 {{progress}}%"
+    },
+    "noUpdate": {
+      "title": "本地数据暂时无法打开",
+      "description": "本地数据版本与当前应用不匹配（通常是被更新版本升级过）。请重新检查更新；若持续出现，请联系开发团队。",
+      "checkUpdate": "重新检查更新"
+    },
+    "details": "技术细节"
+  },
   "agentIsland": {
     "native": {
       "newConversationTitle": "新建对话",
@@ -1285,11 +1302,18 @@
         "reconnect": "重新连接飞书机器人",
         "clear": "解绑"
       },
+      "saved": {
+        "heading": "飞书机器人已绑定",
+        "connectingNote": "已保存机器人凭证，正在建立连接。",
+        "reconnectingNote": "已保存机器人凭证，正在恢复连接。",
+        "conflictNote": "已保存机器人凭证，但该 App ID 当前被其他设备占用。",
+        "errorNote": "已保存机器人凭证，但当前连接失败。请点击重新连接重试。",
+        "idleNote": "已保存机器人凭证，当前尚未连接。请点击重新连接。"
+      },
       "appIdLabel": "App ID",
       "appIdPlaceholder": "cli_xxxxxxxxxxxxxxxx",
       "appSecretLabel": "App Secret",
       "appSecretPlaceholder": "sec_xxxxxxxxxxxxxxxxxx",
-      "appSecretSavedPlaceholder": "••••••••••••••••••••••••",
       "showSecret": "显示密钥",
       "hideSecret": "隐藏密钥",
       "createLink": "点击链接创建 ↗",
@@ -3402,9 +3426,14 @@
     "modelSelector": {
       "budgetNeedsApiKey": "骨折GPT 需先在设置里配置 API key 才能使用",
       "effortLabel": "推理强度",
-      "edit": "Edit",
+      "edit": "编辑",
       "options": "选项",
       "priceTip": "输入 {{input}} · 输出 {{output}} / 百万 token",
+      "trigger": {
+        "placeholder": "选择模型",
+        "aria": "选择模型。当前：{{model}}",
+        "ariaWithEffort": "选择模型。当前：{{model}}，推理强度：{{effort}}"
+      },
       "category": {
         "anthropic": "Anthropic",
         "gpt": "OpenAI",
@@ -3426,7 +3455,8 @@
       "meta": {
         "context": "{{value}} 上下文",
         "price": "{{input}}/{{output}} / 百万",
-        "fastBadge": "快速"
+        "fastBadge": "快速",
+        "budgetDiscount": "立省 85%"
       },
       "source": {
         "railLabel": "来源",
@@ -5071,6 +5101,8 @@
       "statusAria": "状态：{{status}}",
       "took": "用时 {{duration}}",
       "openSession": "打开会话",
+      "sessionDeleted": "会话已删除",
+      "sessionUnavailable": "暂时无法确认会话状态，请稍后重试",
       "markReadTitle": "点击标记为已读",
       "sessionCost": "会话开销 {{cost}}",
       "sessionValue": "会话价值 {{value}}",
@@ -5183,6 +5215,8 @@
           "open": "打开会话",
           "unbind": "解除绑定",
           "persistentNote": "会话归档后会自动重建并续绑",
+          "deleted": "绑定会话已删除",
+          "deletedPersistentNote": "下次运行时会自动创建新会话并续绑",
           "fallbackTitle": "会话 {{id}}"
         },
         "switchModelHint": "下次触发时会将绑定会话切换到此模型"
@@ -5192,6 +5226,8 @@
         "loading": "加载会话中…",
         "loadFailed": "加载失败：{{error}}",
         "empty": "暂无可用的活跃会话",
+        "deletedBinding": "绑定会话已删除，请重新选择",
+        "archivedBinding": "绑定会话已归档，请恢复该会话后再保存，或重新选择",
         "selectPlaceholder": "— 选择一个会话 —"
       },
       "preRunHook": {
@@ -5214,6 +5250,26 @@
         "aiGenerate": "生成脚本",
         "aiGenerating": "生成中…",
         "aiDone": "脚本已写入 {{path}}，建议点「测试」验证一次",
+        "aiFailure": {
+          "no_candidate": "当前没有可用的轻量模型。请先连接 OpenAI 或 Cindy AI，然后重试。",
+          "all_candidates_failed": "所有轻量模型请求均失败。请检查供应商连接后重试。",
+          "empty_response": "轻量模型未返回可用内容。请重试或检查供应商连接。",
+          "timeout": "轻量模型请求超时。请检查网络和供应商连接后重试。",
+          "checkedCandidates": "已检查的候选：",
+          "openProviders": "前往模型供应商",
+          "attemptReason": {
+            "unsupportedTransport": "不支持当前操作",
+            "agentUnavailable": "Codex 不可用",
+            "notAuthenticated": "需要登录 OpenAI",
+            "authProbeFailed": "无法确认 OpenAI 登录状态",
+            "apiKeyMissing": "Cindy AI Key 不可用",
+            "endpointMissing": "Cindy AI endpoint 不可用",
+            "timeout": "请求超时",
+            "emptyResponse": "返回内容为空",
+            "httpError": "HTTP {{status}}",
+            "requestFailed": "请求失败"
+          }
+        },
         "browse": "选择脚本文件（也可直接拖拽到输入框）"
       },
       "validation": {

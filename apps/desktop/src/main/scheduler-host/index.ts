@@ -22,6 +22,8 @@ import type { Maker } from '@lizi/maker-core';
 import type { FeishuIM } from 'lizi-im';
 
 import { dialogueWorkspaceRootDir } from '../localDb/dialogueWorkspace';
+import { getAgentIslandService } from '../agent-island/service.js';
+import { getDesktopNotificationsEnabled } from '../notificationService.js';
 import {
   applyPendingAgentSwitchForDirectSend,
   enqueueSchedulerPrompt,
@@ -61,6 +63,8 @@ export async function startScheduler(deps: StartSchedulerDeps): Promise<Schedule
     getMainWindow: deps.getMainWindow,
     feishuIm: deps.feishuIm,
     logger: deps.logger,
+    shouldNotifyDesktop: () =>
+      getDesktopNotificationsEnabled() && !(getAgentIslandService()?.isEnabled() ?? false),
   });
   const promptRunner = new MakerScheduleRunner({
     maker: deps.maker,

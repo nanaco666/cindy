@@ -18,7 +18,9 @@
  *   - 基础 BinaryProvisioner 实例懒加载 + 缓存 (createBinaryProvisioner 是工厂, 复用同一份 cached manifest)。
  *   - prepare(kind) 内部:
  *       dev: findDevBinary 短路, 缺失硬错 (开发者必须 git lfs pull / pnpm update:codex)
- *       prod: createBinaryProvisioner.prepare() + ProgressNormalizer 节流 + 'binary-download-progress' IPC 广播
+ *       Linux packaged: PC 已装 CLI / 旧缓存 / userData 私有安装优先; miss 后
+ *         直接下载带上游 SHA-256 的官方 pin 资产（不依赖系统 npm/curl/tar）
+ *       other prod: createBinaryProvisioner.prepare() + ProgressNormalizer 节流 + 'binary-download-progress' IPC 广播
  *     opts.broadcastProgress=false 时不接 IPC (lazy 调用路径, 当前 desktop 全是 splash 路径所以默认 true)。
  */
 
@@ -28,6 +30,10 @@ import { app, BrowserWindow } from 'electron';
 
 import { createBinaryProvisioner } from './factory.js';
 import { findDevBinary } from './dev-fallback.js';
+import {
+  findCachedLinuxRuntimeFallbackBinary,
+  prepareLinuxRuntimeFallback,
+} from './linux-runtime-fallback.js';
 import { getPlatformKey } from '../manifestService.js';
 import { ProgressNormalizer } from '../updateProgressNormalizer.js';
 import type {
@@ -123,12 +129,26 @@ function formatBytes(bytes: number): string {
 
 export function getCachedBinaryStatus(kind: AgentBinaryKind): CachedBinaryStatus {
   const cfg = CONFIG[kind];
+  const cachedReadyPath = lastReadyPath.get(kind);
+  if (cachedReadyPath) {
+    try {
+      fs.accessSync(cachedReadyPath, fs.constants.X_OK);
+      return { binaryReady: true, binaryPath: cachedReadyPath };
+    } catch {
+      lastReadyPath.delete(kind);
+    }
+  }
 
   // dev: 优先查 LFS bundle (apps/<devBinDir>/<platform>/<binary>)
   if (!app.isPackaged) {
     const devPath = findDevBinary({ vendorBinDir: cfg.devBinDir, binaryName: cfg.binaryName });
     if (devPath) return { binaryReady: true, binaryPath: devPath };
   }
+
+  // packaged Linux 同步快查只看已知私有路径；不能在 renderer-facing 路径
+  // 里执行 CLI --version 或 PATH shell lookup。系统 CLI 由 async prepare 发现。
+  const linuxFallbackPath = findCachedLinuxRuntimeFallbackBinary(kind);
+  if (linuxFallbackPath) return { binaryReady: true, binaryPath: linuxFallbackPath };
 
   // prod / dev fallback miss: 扫 userData/<installSubdir>/<version>/<binary> + .verified
   try {
@@ -170,6 +190,69 @@ export async function prepare(
       return { ready: true, path: devPath, downloaded: false };
     }
     return { ready: false, error: `${kind} dev binary not found for ${getPlatformKey()}`, downloaded: false };
+  }
+
+  // ── packaged Linux runtime: 私有安装 / 旧缓存 / PC 已装 / 官方下载 ───────
+  // Linux release manifest 明确不发布 Claude/Codex 资产。这里直接走 runtime
+  // fallback，不能先调 base.prepare()/manifest：离线首装会让 peek + prepare
+  // 重复等待 CDN 超时，fallback 尚未开始 splash 就已经卡住。
+  if (process.platform === 'linux' && app.isPackaged) {
+    if (broadcastProgress) {
+      broadcastBinaryDownloadProgress({
+        progress: 0,
+        step,
+        totalSteps,
+        vendor: cfg.vendorTag,
+      });
+    }
+    try {
+      const fallback = await prepareLinuxRuntimeFallback(kind, {
+        signal: opts.signal,
+        onProgress: broadcastProgress
+          ? (event) => {
+              broadcastBinaryDownloadProgress({
+                progress: Math.max(0, Math.min(100, event.percent ?? 0)),
+                speed: event.speedBps > 0 ? `${formatBytes(event.speedBps)}/s` : undefined,
+                downloaded: event.loaded > 0 ? formatBytes(event.loaded) : undefined,
+                total: event.total && event.total > 0 ? formatBytes(event.total) : undefined,
+                step,
+                totalSteps,
+                vendor: cfg.vendorTag,
+              });
+            }
+          : undefined,
+      });
+      if (fallback.ready) {
+        if (broadcastProgress && fallback.installed) {
+          broadcastBinaryDownloadProgress({
+            progress: 100,
+            step,
+            totalSteps,
+            vendor: cfg.vendorTag,
+          });
+        }
+        lastReadyPath.set(kind, fallback.binaryPath);
+        return {
+          ready: true,
+          path: fallback.binaryPath,
+          downloaded: fallback.installed,
+        };
+      }
+      return { ready: false, error: fallback.error ?? 'unknown', downloaded: false };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (broadcastProgress) {
+        broadcastBinaryDownloadProgress({
+          progress: 0,
+          failed: true,
+          error: message,
+          step,
+          totalSteps,
+          vendor: cfg.vendorTag,
+        });
+      }
+      return { ready: false, error: message, downloaded: false };
+    }
   }
 
   const base = getBase(kind);
@@ -265,6 +348,9 @@ export async function prepare(
 export async function peekNeedsDownload(kind: AgentBinaryKind): Promise<boolean> {
   // dev 模式永不下载 (findDevBinary 命中 / 缺失都不走 OSS)
   if (!app.isPackaged) return false;
+  // Linux release 不发布 manifest agent 资产。peek 只做已知私有路径的 fs 快查，
+  // PATH 与版本探测统一留给可取消的 async prepare，避免 splash 前同步阻塞。
+  if (process.platform === 'linux') return findCachedLinuxRuntimeFallbackBinary(kind) === null;
   return getBase(kind).peekNeedsDownload();
 }
 

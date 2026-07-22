@@ -15,6 +15,7 @@ import { extractIpcError } from '@/utils/ipcError';
 // 模块顶层不调用 → ESM 下安全(无 TDZ)。
 import { makerApiFor } from '@/lib/makerTransport';
 import { getSessionDeviceId } from '@/features/device-link/remoteProjectsStore';
+import type { SessionReference } from '../../shared/sessionReference';
 
 /**
  * status 过滤器：对应 Sidebar Filter 的 Active/Archived/All 三选。
@@ -74,6 +75,11 @@ export async function create(body?: {
 
 export async function get(id: string): Promise<Session> {
   return wrap(window.electronAPI.localDb.sessions.get(id));
+}
+
+/** Resolve scheduler-held ids against live, archived, deleted, and missing rows. */
+export async function resolveReferences(sessionIds: readonly string[]): Promise<SessionReference[]> {
+  return wrap(window.electronAPI.localDb.sessions.resolveReferences(Array.from(sessionIds)));
 }
 
 /**

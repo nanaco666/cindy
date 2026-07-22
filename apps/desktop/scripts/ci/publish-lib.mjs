@@ -220,7 +220,8 @@ export function resolveVersionAdvance({ newVersion, cdnVersion, force = false })
  * 把本次产物写进(深拷贝后的)现有 canary manifest:app.version / installer /
  * hotfix / requireRelogin。Linux 走 installer-only 语义(无 hotfix / requireRelogin,
  * 与 ci/lib.mjs createLinuxFirstReleaseManifest 同口径)。
- * claudeCode / codex 段不在这里动——由编排层按 immutable 守卫结果写入。
+ * claudeCode / codex / ripgrep 段不在这里动，由编排层按 immutable
+ * 守卫结果写入。Linux 也必须保留已有字段，兼容仍会读取它们的旧客户端。
  * @param {any} existingManifest  CDN 上的现有 manifest;全新渠道传 null
  * @param {{
  *   platform: string, platformKey: string, version: string, requireRelogin: boolean,

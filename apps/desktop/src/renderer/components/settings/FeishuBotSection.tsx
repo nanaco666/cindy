@@ -7,6 +7,10 @@ import { useFeishuBot, type FeishuBotStatus } from '@/hooks/useFeishuBot';
 import { useConfirmDialog } from '@/components/ui/confirm-dialog-provider';
 import { Spinner } from '@/components/ui/spinner';
 import { Tip } from '@/components/ui/tooltip';
+import {
+  savedCredentialsNoteKey,
+  shouldShowSavedCredentialsCard,
+} from './feishuBotPresentation';
 
 const FEISHU_LAUNCHER_URL = 'https://open.feishu.cn/page/launcher?from=backend_oneclick';
 
@@ -64,7 +68,7 @@ export function FeishuBotSection() {
   const { t } = useTranslation();
 
   const canSave = appId.trim().length > 0 && appSecret.trim().length > 0 && !isSaving;
-  const showConnectedCard = status === 'connected' || (hasSavedCreds && (isSaving || isReconnecting));
+  const showSavedCredentialsCard = shouldShowSavedCredentialsCard(hasSavedCreds);
 
   const handleClearClick = useCallback(async () => {
     const confirmed = await confirm({
@@ -113,10 +117,11 @@ export function FeishuBotSection() {
         {t('settings.feishuBot.description')}
       </p>
 
-      {showConnectedCard ? (
-        <ConnectedCard
+      {showSavedCredentialsCard ? (
+        <SavedCredentialsCard
           appId={appId}
           ownerOpenId={ownerOpenId}
+          status={status}
           isClearing={isClearing}
           isReconnecting={isReconnecting}
           onReconnect={reconnect}
@@ -130,14 +135,11 @@ export function FeishuBotSection() {
           setAppSecret={setAppSecret}
           showSecret={showSecret}
           setShowSecret={setShowSecret}
-          hasSavedCreds={hasSavedCreds}
           validationError={validationError}
           errorMessage={errorMessage}
           isSaving={isSaving}
-          isClearing={isClearing}
           canSave={canSave}
           onSave={save}
-          onClear={handleClearClick}
           onOpenLauncher={openLauncher}
         />
       )}
@@ -145,9 +147,10 @@ export function FeishuBotSection() {
   );
 }
 
-function ConnectedCard(props: {
+function SavedCredentialsCard(props: {
   appId: string;
   ownerOpenId: string | null;
+  status: FeishuBotStatus;
   isClearing: boolean;
   isReconnecting: boolean;
   onReconnect: () => Promise<boolean>;
@@ -163,13 +166,25 @@ function ConnectedCard(props: {
       )}
     >
       <div className="flex items-start gap-3">
-        <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[var(--settings-badge-border)] bg-[var(--settings-badge-bg)] text-[var(--settings-badge-connected)]">
+        <div
+          className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[var(--settings-badge-border)] bg-[var(--settings-badge-bg)]"
+          style={{
+            color:
+              props.status === 'connected'
+                ? 'var(--settings-badge-connected)'
+                : 'var(--settings-badge-saved)',
+          }}
+        >
           <Check size={16} />
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
             <div className="text-13 font-medium text-[var(--settings-section-title)]">
-              {t('settings.feishuBot.connected.heading')}
+              {t(
+                props.status === 'connected'
+                  ? 'settings.feishuBot.connected.heading'
+                  : 'settings.feishuBot.saved.heading',
+              )}
             </div>
             <Tip text={t('settings.feishuBot.connected.reconnect')} side="top" delay={200}>
               {/* Keep the trigger hoverable while the inner button is disabled. */}
@@ -193,7 +208,7 @@ function ConnectedCard(props: {
             </Tip>
           </div>
           <div className="mt-1 text-12 leading-[1.6] text-[var(--settings-section-desc)]">
-            {t('settings.feishuBot.connected.note')}
+            {t(savedCredentialsNoteKey(props.status))}
           </div>
         </div>
       </div>
@@ -236,14 +251,11 @@ function ManualConfig(props: {
   setAppSecret: (v: string) => void;
   showSecret: boolean;
   setShowSecret: (v: boolean) => void;
-  hasSavedCreds: boolean;
   validationError: string | null;
   errorMessage: string | null;
   isSaving: boolean;
-  isClearing: boolean;
   canSave: boolean;
   onSave: () => Promise<boolean>;
-  onClear: () => void;
   onOpenLauncher: () => void;
 }) {
   const { t } = useTranslation();
@@ -276,11 +288,7 @@ function ManualConfig(props: {
           type={props.showSecret ? 'text' : 'password'}
           value={props.appSecret}
           onChange={(e) => props.setAppSecret(e.target.value)}
-          placeholder={
-            props.hasSavedCreds
-              ? t('settings.feishuBot.appSecretSavedPlaceholder')
-              : t('settings.feishuBot.appSecretPlaceholder')
-          }
+          placeholder={t('settings.feishuBot.appSecretPlaceholder')}
           spellCheck={false}
           autoComplete="off"
           className={cn(
@@ -320,21 +328,6 @@ function ManualConfig(props: {
             </p>
           )}
         </div>
-        {props.hasSavedCreds && (
-          <button
-            type="button"
-            onClick={props.onClear}
-            disabled={props.isClearing}
-            aria-label={t('settings.feishuBot.clearAria')}
-            className={cn(
-              'mr-[4px] flex shrink-0 items-center justify-center bg-transparent p-0',
-              'text-[var(--settings-trash-icon)] transition-colors hover:text-[var(--settings-trash-icon-hover)]',
-              props.isClearing && 'cursor-not-allowed opacity-40',
-            )}
-          >
-            <Trash2 size={18} />
-          </button>
-        )}
       </div>
 
       <button

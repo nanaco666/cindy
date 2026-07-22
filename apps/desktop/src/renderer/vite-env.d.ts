@@ -14,6 +14,7 @@ type ModelAccessStatusPayload = import('../shared/modelAccess').ModelAccessStatu
 type RsbWindowCommand = import('../shared/rightSidebarWindow').RsbWindowCommand;
 type DesktopLoginAction = import('../shared/authIpc').DesktopLoginAction;
 type DesktopLoginActionResult = import('../shared/authIpc').DesktopLoginActionResult;
+type UtilityTextFailure = import('../shared/utilityTextResult').UtilityTextFailure;
 
 /* ── Environment check ── */
 
@@ -364,7 +365,7 @@ interface FeishuBotRegistrationStatusPayload {
   status: 'pending' | 'success' | 'expired' | 'cancelled' | 'error';
   appId?: string;
   ownerOpenId?: string | null;
-  verdict?: 'connected' | 'conflict' | 'error';
+  verdict?: 'connected' | 'conflict' | 'error' | 'pending';
   error?: string;
 }
 
@@ -699,7 +700,7 @@ interface AutoUpdateSettingsPayload {
 }
 
 /* ── 跨 Agent 工作区互转 wire 类型（同 main/cross-agent-convert/types.ts） ── */
-type CrossAgentMigrationKind = 'agents-md' | 'skills' | 'agents' | 'hooks' | 'mcp';
+type CrossAgentMigrationKind = 'agents-md' | 'agents' | 'hooks' | 'mcp';
 type CrossAgentDirection = 'to-claude' | 'to-codex';
 type CrossAgentStepStatus = 'pending' | 'running' | 'success' | 'skipped' | 'failed';
 
@@ -1438,7 +1439,7 @@ interface ElectronAPI {
       lifecycleAnnouncement: boolean;
     }>;
     save: (payload: { appId: string; appSecret: string }) => Promise<{
-      verdict: 'connected' | 'conflict' | 'error';
+      verdict: 'connected' | 'conflict' | 'error' | 'pending';
     }>;
     reconnect: () => Promise<{
       verdict: 'connected' | 'conflict' | 'error';
@@ -1764,6 +1765,8 @@ interface ElectronAPI {
      */
     channels?: { desktop?: boolean; feishu?: boolean };
   }) => Promise<void>;
+  /** Sync the renderer-owned global desktop-notification preference to main. */
+  notificationSetDesktopEnabled?: (enabled: boolean) => Promise<{ ok: true }>;
   /** 将对应 session 标记为需要关注，显示 Dock/taskbar app badge。 */
   notificationMarkSessionAttention: (sessionId: string) => Promise<void>;
   /** 用户查看对应 session 后，清除系统级 Dock/taskbar attention badge。 */
@@ -2885,6 +2888,9 @@ interface ElectronAPI {
         extraDirs?: string[];
       }) => Promise<import('@/lib/ccAgent.types').Session>;
       get: (id: string) => Promise<import('@/lib/ccAgent.types').Session>;
+      resolveReferences: (
+        sessionIds: string[],
+      ) => Promise<import('../shared/sessionReference').SessionReference[]>;
       restoreIfArchived: (
         id: string,
         expected: {
@@ -4160,6 +4166,7 @@ interface ElectronAPI {
         targetSessionId?: string;
         currentCommand?: string;
       }) => Promise<{
+        ok: true;
         command: string;
         filePath: string;
         content: string;
@@ -4177,7 +4184,7 @@ interface ElectronAPI {
           spawnError?: string;
           error?: string;
         };
-      }>;
+      } | UtilityTextFailure>;
       listRuns: (id: string, limit?: number) => Promise<unknown[]>;
       listSidebarIndexRuns: () => Promise<unknown[]>;
       listCostSummaries: () => Promise<unknown[]>;

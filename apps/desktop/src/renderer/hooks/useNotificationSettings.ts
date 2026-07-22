@@ -31,6 +31,11 @@ export function getNotificationsEnabled(): boolean {
   return DEFAULT_ENABLED;
 }
 
+/** Main needs the same gate for scheduler notifications that do not originate in renderer. */
+export function syncNotificationsEnabledToMain(enabled = getNotificationsEnabled()): void {
+  void window.electronAPI?.notificationSetDesktopEnabled?.(enabled);
+}
+
 export function useNotificationSettings(): {
   enabled: boolean;
   setEnabled: (next: boolean) => void;
@@ -44,6 +49,7 @@ export function useNotificationSettings(): {
     } catch {
       // localStorage 不可用——忽略，UI 仍以内存值为准。
     }
+    syncNotificationsEnabledToMain(next);
   }, []);
 
   // 跨实例同步——其他实例 setEnabled 时本实例也跟着更新。

@@ -124,7 +124,7 @@ async function routeHelpTopics(
       maxTokens: 30,
       timeoutMs: 12_000,
     });
-    let raw = utility?.text ?? '';
+    let raw = utility.ok ? utility.text : '';
     if (!raw && target.agentKind) {
       raw = await maker.oneShot(target.agentKind, prompt, {
         ...target.options,
@@ -315,11 +315,11 @@ export function registerMakerHelpIpc(maker: Maker): void {
         const utility = await requestUtilityText(maker, prompt, {
           ...target.options,
         });
-        let raw = utility?.text ?? '';
+        let raw = utility.ok ? utility.text : '';
         if (!raw && target.agentKind) {
           raw = await maker.oneShot(target.agentKind, prompt, target.options);
         }
-        if (utility) {
+        if (utility.ok) {
           log.debug('help ask used utility model', {
             provider: utility.providerId,
             model: utility.model,

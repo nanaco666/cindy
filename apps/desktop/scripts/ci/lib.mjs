@@ -14,7 +14,6 @@ import path from 'node:path';
 import { createGunzip } from 'node:zlib';
 import { pipeline } from 'node:stream/promises';
 import { fileURLToPath } from 'node:url';
-import { ensureBinary } from '../../../../scripts/ensure-agent-binaries.mjs';
 import { resolveReleaseCdnBaseUrl } from '../../../../scripts/shared/release-env.mjs';
 // OSS/CDN 原语(sha256 / gzip / ali-oss client / upload)已抽到仓库根 scripts/shared/oss.mjs,
 // 供 desktop 与 mobile 共用;这里 re-export 保持既有 import 面(CDN_BASE / createOSSClient 等)不变。
@@ -278,6 +277,12 @@ export function createLinuxFirstReleaseManifest(version, baseManifest) {
   delete manifest.app.requireRelogin;
   delete manifest.app.installer;
   delete manifest.installer;
+  // Packaged Linux resolves Claude/Codex from a compatible system install,
+  // migrates the legacy local cache, or downloads the pinned official asset.
+  // Ripgrep remains bundled in the .deb by forge and needs no manifest entry.
+  delete manifest.claudeCode;
+  delete manifest.codex;
+  delete manifest.ripgrep;
   return manifest;
 }
 
@@ -323,18 +328,9 @@ export async function ensureLinuxRuntimeAssets({
   label = 'Linux runtime assets',
   platformKey = LINUX_PLATFORM_KEY,
 } = {}) {
-  // agent CLI 二进制（claude/codex/ripgrep）不再走 LFS——按需从上游下载到 apps/<kind>-bin/<platform>/。
-  for (const kind of ['claude', 'codex', 'ripgrep']) {
-    try {
-      await ensureBinary(kind, platformKey);
-    } catch (err) {
-      console.error(`ERROR: ${label}: failed to download ${kind} (${platformKey}): ${err.message}`);
-      console.error(`Fix: run "pnpm update:${kind}" or check upstream availability / network.`);
-      process.exit(1);
-    }
-  }
-
-  // sqlite-vec 仍走 Git LFS——只校验它（claude/codex/ripgrep 已由上面下载兜底）。
+  // Claude/Codex 不打进 Linux 安装包，packaged runtime 会复用系统 CLI、迁移
+  // 旧缓存，或从官方上游下载带 SHA-256 校验的 pin 版本。Ripgrep 仍由 forge
+  // prePackage 单独 stage 进 resources/tools；这里仅校验 Git LFS 的 sqlite-vec。
   const sqliteVecPath = path.join(DESKTOP_ROOT, 'native', 'sqlite-vec', platformKey, 'vec0.so');
   const { missing, invalid } = collectLinuxRuntimeAssetProblems([sqliteVecPath]);
   if (missing.length === 0 && invalid.length === 0) return;
