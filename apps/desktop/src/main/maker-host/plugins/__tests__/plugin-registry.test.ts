@@ -376,7 +376,7 @@ describe('isEnabled wrap integration (provider → registry gate)', () => {
     writeProjectSettings(workingDir, { memory: false, scheduler: false, xdt_helper: false });
     registry = createRegistry();
 
-    expect(wrapIsEnabled('lizi_memory', workingDir)).toBe(true);
+    expect(wrapIsEnabled('cindy_memory', workingDir)).toBe(true);
     expect(wrapIsEnabled('cindy_scheduler', workingDir)).toBe(true);
     expect(wrapIsEnabled('cindy_helper', workingDir)).toBe(true);
   });

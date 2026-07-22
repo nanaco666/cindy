@@ -91,7 +91,7 @@
 - [x] **cindy_scheduler** — 12;主进程 Scheduler 引擎 → 主机本体,不迁
 - [x] **cindy_helper** — 12;本地 SQLite 聊天库 + 主进程 IPC/状态回调 → 主机本体,不迁
 - [x] **lizi_android** — 8;本机 adb 驱动 → 本机驱动,不迁
-- [x] **lizi_memory** — 8;workdir 域内 memory 文件 + 本地会话 DB → 本地文件,不迁
+- [x] **cindy_memory** — 8;workdir 域内 memory 文件 + 本地会话 DB → 本地文件,不迁
 - [x] **lizi_lsp** — 6(直注册);本机 typescript-language-server 子进程 → 子进程 + 本地文件,不迁
 - [x] **lizi_xd_service** — 5;pages 部署需遍历本地目录 + 登录态派生 token → **已完整迁移为内置意识 xd-pages 并整包退役(2026-07-13,工作区待提交;初名 cindy-xd-pages,同日更名 id=xd-pages / name=XD Pages,孤儿种子回收自动收走旧包)**
   - **结论改判(2026-07-13 Lizi 定案,推翻 07-12「不迁」)**:**迁成内置意识,audience = all**(与 cindy-web-search 同形态随应用预装)。产品理由:xd_service 是 XD 企业服务的接入层,不应由 Cindy / 主机本体负担这段逻辑;现状 MCP 本来就全量注册给所有用户,all 预装才能做到**现有用户无感迁移**。技术前置(按依赖顺序):

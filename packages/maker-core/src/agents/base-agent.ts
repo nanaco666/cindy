@@ -223,7 +223,7 @@ export interface AgentDeps {
   /**
    * Maker Memory 顶层单例 (host 注入). 当 runtimeConfig.makerMemoryEnabled === true 时,
    * agent.startSession 会从这里拉当前 workdir 的 MEMORY.md 索引拼进 system prompt;
-   * lizi_memory MCP server 也通过 host 端的 createDesktopMcpProviders({ memory: { getManager } })
+   * cindy_memory MCP server 也通过 host 端的 createDesktopMcpProviders({ memory: { getManager } })
    * 拿到同一个引用。
    *
    * 缺省 / undefined → 即使 runtimeConfig.makerMemoryEnabled=true 也不注入 (host 没接好 manager,

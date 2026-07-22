@@ -302,7 +302,7 @@ export interface SchedulerHookScriptService {
 }
 
 /**
- * lizi_memory MCP server 工厂参数。Claude 路径下 workdir 在
+ * cindy_memory MCP server 工厂参数。Claude 路径下 workdir 在
  * toClaudeSdkConfig(ctx) 时按 session 绑定到 closure；Codex HTTP bridge 路径下
  * server factory 初始化时 ctx 是全局空值，tool-call 阶段通过 getSessionContext()
  * 取回当前 thread 的真实 workingDir。
@@ -496,7 +496,7 @@ export type LiziMcpId =
   | 'lizi_slack'
   | 'cindy_scheduler'
   | 'lizi_ssh'
-  | 'lizi_memory'
+  | 'cindy_memory'
   | 'lizi_contacts'
   | 'cindy_helper'
   | 'lizi_orca'

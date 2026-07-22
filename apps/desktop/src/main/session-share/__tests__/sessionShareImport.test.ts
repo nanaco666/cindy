@@ -859,7 +859,10 @@ describe('sessionShareImport', () => {
 
   it('codex bundle without draftPrefs falls back to codex default model', async () => {
     const filePath = await writeBundleFile(
-      await buildBundle({ agentKind: 'codex', session: exporterSessionConfig }),
+      await buildBundle({
+        agentKind: 'codex',
+        session: { ...exporterSessionConfig, codexHistoryHasProductPrompt: true },
+      }),
     );
     const inspect = await inspectShareFile(filePath);
     if (inspect.encrypted) return;
@@ -871,6 +874,7 @@ describe('sessionShareImport', () => {
     });
     const session = (dbMock.txCalls[0].args as { session: Record<string, unknown> }).session;
     expect(session.model).toBe('gpt-5.4');
+    expect(session.codexHistoryHasProductPrompt).toBe(false);
   });
 
   // ── useWorktree:在 worktree 中创建(与 New Maker 草稿开 worktree 同语义) ──

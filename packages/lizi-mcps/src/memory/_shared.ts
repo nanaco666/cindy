@@ -15,7 +15,7 @@
 
 import type { MakerMemoryStore } from '@lizi/maker-core';
 
-import type { MemoryToolResult } from '../lizi_memoryToolRegistry.js';
+import type { MemoryToolResult } from '../cindy_memoryToolRegistry.js';
 import type { MemoryMcpDeps } from '../types.js';
 import { classifyMemoryError } from './errors.js';
 

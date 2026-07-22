@@ -57,8 +57,8 @@ yarn-error.log*
 downloads/
 # CODEX_HOME：包含 auth.json 与本机 skill symlink。
 apps/desktop/codex-home/
-# 项目知识正文需要提交，只忽略运行时锁。
-.cindy/project-knowledge/.lock
+# .cindy：本地私人配置与知识库，不入仓。
+.cindy/
 
 # ── 设计与开发临时产物 ───────────────────────────────────────
 docs/design_docs/.tmp_screenshots/

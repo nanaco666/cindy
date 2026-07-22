@@ -28,10 +28,19 @@ function createFakeDb() {
           return {
             run() {
               let changes = 0;
-              for (const [id, value] of sessions) {
-                if (value === null) {
-                  sessions.set(id, true);
-                  changes += 1;
+              if (sql.includes('SET codex_history_has_product_prompt = 1')) {
+                for (const [id, value] of sessions) {
+                  if (value === null) {
+                    sessions.set(id, true);
+                    changes += 1;
+                  }
+                }
+              } else if (sql.includes('SET codex_history_has_product_prompt = 0')) {
+                for (const [id, value] of sessions) {
+                  if (value === true) {
+                    sessions.set(id, false);
+                    changes += 1;
+                  }
                 }
               }
               return { changes };
@@ -55,26 +64,42 @@ function createFakeDb() {
 }
 
 describe('initializeCodexHistoryPromptState', () => {
-  it('sets legacy NULL rows to true and records a one-time guard', () => {
+  it('marks legacy rows for one-time prompt restoration after the cindy_memory rename', () => {
     const fake = createFakeDb();
     fake.sessions.set('old', null);
+    fake.sessions.set('history-prompt', true);
     fake.sessions.set('proxy', false);
 
     initializeCodexHistoryPromptState(fake.db as never);
 
-    expect(fake.sessions.get('old')).toBe(true);
+    expect(fake.sessions.get('old')).toBe(false);
+    expect(fake.sessions.get('history-prompt')).toBe(false);
     expect(fake.sessions.get('proxy')).toBe(false);
     expect(fake.meta.get('codex_history_has_product_prompt_initialized_v1')).toBe('done');
+    expect(fake.meta.get('codex_history_cindy_memory_prompt_reset_v2')).toBe('done');
   });
 
-  it('does not touch later NULL rows after the guard is set', () => {
+  it('does not touch later rows after both one-time guards are set', () => {
     const fake = createFakeDb();
     initializeCodexHistoryPromptState(fake.db as never);
     fake.sessions.set('later', null);
+    fake.sessions.set('current-prompt', true);
 
     initializeCodexHistoryPromptState(fake.db as never);
 
     expect(fake.sessions.get('later')).toBeNull();
+    expect(fake.sessions.get('current-prompt')).toBe(true);
+  });
+
+  it('resets existing v1 history state when upgrading to the cindy_memory prompt', () => {
+    const fake = createFakeDb();
+    fake.meta.set('codex_history_has_product_prompt_initialized_v1', 'done');
+    fake.sessions.set('legacy-prompt', true);
+
+    initializeCodexHistoryPromptState(fake.db as never);
+
+    expect(fake.sessions.get('legacy-prompt')).toBe(false);
+    expect(fake.meta.get('codex_history_cindy_memory_prompt_reset_v2')).toBe('done');
   });
 
   it('skips initialization when the codex history column is missing', () => {
@@ -94,5 +119,6 @@ describe('initializeCodexHistoryPromptState', () => {
 
     expect(fake.sessions.get('old')).toBeNull();
     expect(fake.meta.get('codex_history_has_product_prompt_initialized_v1')).toBeUndefined();
+    expect(fake.meta.get('codex_history_cindy_memory_prompt_reset_v2')).toBeUndefined();
   });
 });

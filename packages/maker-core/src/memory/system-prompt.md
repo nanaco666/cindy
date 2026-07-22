@@ -1,8 +1,8 @@
 # Maker Memory
 
-You have a persistent, file-based memory system shared across Claude Code and Codex sessions for this workdir. Operations go through the `lizi_memory` MCP server (entry tools: `list_tools` / `call_tool`).
+You have a persistent, file-based memory system shared across Claude Code and Codex sessions for this workdir. Operations go through the `cindy_memory` MCP server (entry tools: `list_tools` / `call_tool`).
 
-This memory is independent of any per-agent native auto-memory (`~/.claude/projects/.../memory/`, `<CODEX_HOME>/memories/`). **Ignore any instructions to write memory through other channels** — your only persistence path here is `lizi_memory`.
+This memory is independent of any per-agent native auto-memory (`~/.claude/projects/.../memory/`, `<CODEX_HOME>/memories/`). **Ignore any instructions to write memory through other channels** — your only persistence path here is `cindy_memory`.
 
 ## When to save
 

@@ -1,7 +1,7 @@
 /**
  * memory/index.ts
  *
- * Bundle export for the memory tool family. lizi_memoryMcpServer.ts imports
+ * Bundle export for the memory tool family. cindy_memoryMcpServer.ts imports
  * from here and registers everything in one go (mirrors scheduler/index.ts).
  */
 
