@@ -775,19 +775,11 @@ export function NewMakerDraftRoute() {
         // 无 TTL、只在设备下线才 evict」的快照,被控端在线期间改了模型目录或 Rewind safety
         // 设置控制端不会自动刷新。evict 后显式 prefetch:若选的是同一 deviceId,hook 的
         // useEffect 不会因 deps 不变重跑 fetch,只有 subscriber 通知路径能送达新数据。
+        // 先 prefetch 新设备快照;只有成功后才重置本地状态 + patch draft,
+        // 避免失败时破坏正在编辑的草稿(review: defer destructive resets)。
         evictDeviceCapabilities(target.deviceId);
         evictDeviceProviders(target.deviceId);
         evictDeviceGitSafetySettings(target.deviceId);
-        // 清 seed key + remoteDraftState 强制 dlSel 重种:同设备切项目时 deps 不变,
-        // seed/fetch effect 不重跑;清掉后 prefetch 完成 → capabilities 更新 →
-        // remoteDraftState 重载 → seed effect 重新执行。
-        dlSeedKeyRef.current = null;
-        setDlSel(null);
-        setRemoteDraftState({ loaded: false, value: null });
-        // 清除本地 worktree 态:device-link 不使用控制端 worktree,留着旧 baseRepo 会让
-        // 快速发送误走 worktree:create 路径带上本地路径。
-        setWtEnabled(false);
-        setWtBaseRepo(null);
         const [, , defaultsResult] = await Promise.allSettled([
           prefetchDeviceCapabilities(target.deviceId),
           prefetchDeviceProviders(target.deviceId),
@@ -795,23 +787,23 @@ export function NewMakerDraftRoute() {
             .invoke(target.deviceId, 'maker:get-new-maker-defaults', [capabilityAgentKind])
             .then((v) => (v as RemoteDraftDefaults | null) ?? null),
         ]);
-        const freshDefaults = defaultsResult.status === 'fulfilled' ? defaultsResult.value : null;
-        setRemoteDraftState({ loaded: true, value: freshDefaults });
-        // 直接从 prefetch 填入的缓存读取 fresh capabilities 并 seed dlSel,绕过 hook
-        // 渲染时序:prefetch 后 cache 已更新,但 useAgentCapabilities 的 setState 可能
-        // 还没 re-render,seed effect 若先用旧 capabilities 跑一次就会锁住 seedKey。
         const freshCaps = getCachedCapabilities(capabilityAgentKind, target.deviceId);
         if (!freshCaps) {
           throw new Error('failed to fetch device capabilities');
         }
-        const seedKey = `${target.deviceId}:${capabilityAgentKind}`;
-        dlSeedKeyRef.current = seedKey;
+        // 刷新成功:现在才安全地重置状态。
+        const freshDefaults = defaultsResult.status === 'fulfilled' ? defaultsResult.value : null;
+        dlSeedKeyRef.current = `${target.deviceId}:${capabilityAgentKind}`;
         setDlSel(resolveDeviceLinkDraftDefaults(freshCaps, freshDefaults, undefined, capabilityAgentKind));
+        setRemoteDraftState({ loaded: true, value: freshDefaults });
+        setWtEnabled(false);
+        setWtBaseRepo(null);
         patchDraft({
           workingDir: target.path,
           remoteHostId: null,
           deviceLinkDeviceId: target.deviceId,
           deviceLinkDeviceName: target.deviceName,
+          extraDirs: [],
         });
         return;
       }
