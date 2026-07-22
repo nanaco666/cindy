@@ -848,19 +848,19 @@ async function waitForAdbServerStarted(deadlineMs: number): Promise<void> {
   );
   while (Date.now() < deadlineMs) {
     const remainingMs = deadlineMs - Date.now();
+    let attemptError: unknown;
     try {
       const result = await spawnAdb(['start-server'], remainingMs);
       if (result.exitCode === 0) return;
-      const error = new AndroidDriverError(
+      attemptError = new AndroidDriverError(
         'ANDROID_DRIVER_ERROR',
         result.stderr.trim() || 'adb start-server failed after devices timed out',
       );
-      if (!isTransientAdbStartupError(error)) throw error;
-      lastError = error;
     } catch (err) {
-      if (!isTransientAdbStartupError(err)) throw err;
-      lastError = err;
+      attemptError = err;
     }
+    if (!isTransientAdbStartupError(attemptError)) throw attemptError;
+    lastError = attemptError;
 
     const delayMs = Math.min(ADB_COLD_START_POLL_INTERVAL_MS, deadlineMs - Date.now());
     if (delayMs <= 0) break;
