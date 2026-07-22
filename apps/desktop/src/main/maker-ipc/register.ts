@@ -1550,10 +1550,11 @@ function sessionMetaForIsland(session: {
 function handleAgentIslandEventAfterBroadcast(
   session: { id: string; agentKind?: unknown; workDir?: unknown; workspaceKind?: unknown },
   event: AgentEvent,
+  options: { deferRemoteAuthRetry?: boolean } = {},
 ): void {
   if (!shouldNotifyAgentIslandForSession(session.id)) return;
   try {
-    getAgentIslandService()?.handleAgentEvent(sessionMetaForIsland(session), event);
+    getAgentIslandService()?.handleAgentEvent(sessionMetaForIsland(session), event, options);
   } catch (error) {
     log.warn('Agent Island event update failed after maker event broadcast', {
       sessionId: session.id,
@@ -2207,7 +2208,9 @@ export function wireSessionToIpc(session: ReturnType<Maker['getSession']>): void
     }
     // 先 broadcast 保 UI 实时性,再 flush(flush 只入队、不阻塞)。
     broadcastToAllWindows(MAKER_PUSH.EVENT, { sessionId: session.id, event, persistId, resolvedContent });
-    handleAgentIslandEventAfterBroadcast(session, event);
+    handleAgentIslandEventAfterBroadcast(session, event, {
+      deferRemoteAuthRetry: isRemoteAuthRetry,
+    });
     if (shouldMarkTurnTerminalIdleAfterBroadcast) {
       sessionTurnActivityTracker.scheduleIdleAfterTerminalBroadcast(session.id);
       // 后台活动检测:done / 终止型 error = 逻辑 turn 结束,记录结束时刻。
@@ -5936,6 +5939,7 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
       ? agentMetaRaw as AgentMeta
       : null;
     onTurnErrorEvent(sid, errData, agentMeta);
+    getAgentIslandService()?.handleDeferredRemoteAuthError(sid);
   });
 
   ipcMain.handle(MAKER_INVOKE.INPUT_REMOVE, (_e, sessionId: unknown, clientId: unknown) => {
