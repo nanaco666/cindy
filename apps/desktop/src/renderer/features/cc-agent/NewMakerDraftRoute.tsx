@@ -124,6 +124,7 @@ import {
   useAgentCapabilities,
   evictDeviceCapabilities,
   prefetchDeviceCapabilities,
+  getCachedCapabilities,
 } from '@/hooks/useAgentCapabilities';
 import { useProviders } from '@/hooks/useProviders';
 import {
@@ -794,10 +795,17 @@ export function NewMakerDraftRoute() {
             .invoke(target.deviceId, 'maker:get-new-maker-defaults', [capabilityAgentKind])
             .then((v) => (v as RemoteDraftDefaults | null) ?? null),
         ]);
-        setRemoteDraftState({
-          loaded: true,
-          value: defaultsResult.status === 'fulfilled' ? defaultsResult.value : null,
-        });
+        const freshDefaults = defaultsResult.status === 'fulfilled' ? defaultsResult.value : null;
+        setRemoteDraftState({ loaded: true, value: freshDefaults });
+        // 直接从 prefetch 填入的缓存读取 fresh capabilities 并 seed dlSel,绕过 hook
+        // 渲染时序:prefetch 后 cache 已更新,但 useAgentCapabilities 的 setState 可能
+        // 还没 re-render,seed effect 若先用旧 capabilities 跑一次就会锁住 seedKey。
+        const freshCaps = getCachedCapabilities(capabilityAgentKind, target.deviceId);
+        if (freshCaps) {
+          const seedKey = `${target.deviceId}:${capabilityAgentKind}`;
+          dlSeedKeyRef.current = seedKey;
+          setDlSel(resolveDeviceLinkDraftDefaults(freshCaps, freshDefaults, undefined, capabilityAgentKind));
+        }
         patchDraft({
           workingDir: target.path,
           remoteHostId: null,
