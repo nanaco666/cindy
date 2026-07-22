@@ -351,7 +351,7 @@
         "export": "Create local copy",
         "openDir": "Open themes folder",
         "refresh": "Refresh",
-        "exportSuccess": "Created {{file}}. Save your edits, then click \"Refresh\" to apply them.",
+        "exportSuccess": "Created {{file}}. Replace the example image paths, save, then click \"Refresh\".",
         "exportFailed": "Export failed: {{error}}",
         "openDirFailed": "Failed to open folder: {{error}}",
         "refreshed": "Local themes refreshed"

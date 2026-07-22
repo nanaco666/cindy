@@ -19,8 +19,20 @@ let cachedSignature = '';
 const didChange = new Emitter<void>();
 
 function mapWireTheme(theme: LocalThemeWire): Theme {
-  // JSON 里的 logo 是本地绝对路径,转成 xdt-file:// URL 供 <img src> 使用。
-  const logo = theme.logo ? toLocalFileUrl(theme.logo) : undefined;
+  const iconPath = theme.brand?.icon;
+  const logoPath = theme.brand?.logo;
+  const icon = iconPath
+      ? {
+        src: toLocalFileUrl(iconPath),
+        ...(theme.brandBounds?.icon ? { visibleBounds: theme.brandBounds.icon } : {}),
+      }
+    : undefined;
+  const logo = logoPath
+      ? {
+        src: toLocalFileUrl(logoPath),
+        ...(theme.brandBounds?.logo ? { visibleBounds: theme.brandBounds.logo } : {}),
+      }
+    : undefined;
   return {
     id: theme.id,
     name: theme.name,
@@ -28,15 +40,14 @@ function mapWireTheme(theme: LocalThemeWire): Theme {
     // 加载期兼容归一化:把 text-placeholder slot 引入前创建的旧本地主题统一收口
     // 到新 slot(详见 local-themes-normalize.ts / DESIGN.md §13 G3)。
     colors: normalizeLocalThemeColors(theme.colors),
-    ...(logo ? { logo } : {}),
-    ...(theme.logoScale !== undefined ? { logoScale: theme.logoScale } : {}),
+    ...(icon || logo
+      ? { brand: { ...(icon ? { icon } : {}), ...(logo ? { logo } : {}) } }
+      : {}),
   };
 }
 
 function signatureOf(themes: Theme[]): string {
-  return JSON.stringify(
-    themes.map((t) => [t.id, t.type, t.name, t.colors, t.logo, t.logoScale]),
-  );
+  return JSON.stringify(themes.map((t) => [t.id, t.type, t.name, t.colors, t.brand]));
 }
 
 /** Returns true if the cache content actually changed. */
@@ -79,8 +90,10 @@ export function buildCopyFromTheme(source: Theme): {
     id: string;
     name: string;
     type: ThemeType;
-    logo: string;
-    logoScale: number;
+    brand: {
+      icon: string;
+      logo: string;
+    };
     colors: Record<string, string>;
   };
 } {
@@ -94,11 +107,12 @@ export function buildCopyFromTheme(source: Theme): {
       id: baseId,
       name: `${source.name} Copy`,
       type: source.type,
-      // logo / logoScale 作为可填模板写进副本:logo 留空 = 用默认打包 logo;
-      // logoScale=1 = 原始大小。不携带 source 的值(内置 logo 是打包/xdt URL,
-      // 写进 local JSON 会变死链;scale 也重置为默认,保持模板语义干净)。
-      logo: '',
-      logoScale: 1,
+      // JSON 不支持注释，用一眼可替换的示例绝对路径说明配置方式；文件不存在时
+      // ThemeBrandLockup 会回退默认素材，不展示破图。
+      brand: {
+        icon: '/absolute/path/to/your-image-folder/icon-square-50x50px.png',
+        logo: '/absolute/path/to/your-image-folder/logo-horizontal-110x37.5px.png',
+      },
       colors: exportThemeColors(source),
     },
   };

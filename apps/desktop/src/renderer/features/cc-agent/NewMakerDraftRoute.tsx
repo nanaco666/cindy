@@ -36,11 +36,10 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { NEW_MAKER_DRAFT_KEY } from './newMakerDraftKeys';
 import { useNavigate, useOutletContext } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { BRAND_NAME } from '@lizi/maker-shared/branding';
 
-import { logoDark, logoLight } from '@/hooks/useBrandLogo';
 import { themeService } from '@/themes/theme-service';
 import type { Theme as ColorTheme } from '@/themes/types';
+import { ThemeBrandLockup } from '@/components/branding/ThemeBrandLockup';
 import { ChatInput } from '@/components/new-chat/ChatInput';
 import { WorktreeChipsRow } from '@/components/new-chat/WorktreeChipsRow';
 import {
@@ -138,8 +137,6 @@ import {
 import { resolveNewMakerDraftEffort } from './newMakerDraftModelPrefs';
 import { closeAllTabs as closeRightSidebarTabs } from '@/features/right-sidebar/store';
 import { revealOrcaWorkersTab } from '@/features/right-sidebar/plugins/orca-workers/actions';
-import headImageDark from '@/assets/head-image-dark.png';
-import headImageLight from '@/assets/head-image-light.png';
 
 const log = createLogger('NewMakerDraftRoute');
 const IS_MAC_PLATFORM = typeof window !== 'undefined' && window.electronAPI?.platform === 'darwin';
@@ -258,27 +255,6 @@ function getCurrentRoutePath(): string {
   return pathOnly.startsWith('/') ? pathOnly : `/${pathOnly}`;
 }
 
-/** 欢迎页 logo 基准尺寸(px),scale=1 时的高/宽。 */
-const LOGO_BASE_HEIGHT = 114.3;
-const LOGO_BASE_WIDTH = 348.3;
-
-/**
- * 默认打包 logo 按主题深浅二选一:深色主题用白字版,浅色主题用黑字版。
- * theme 尚未 applyTheme(为 null)时退回看 <html> 上的 dark class。
- */
-function defaultLogoForTheme(theme: ColorTheme | null): string {
-  const isDark = theme
-    ? theme.type === 'dark'
-    : document.documentElement.classList.contains('dark');
-  return isDark ? logoDark : logoLight;
-}
-
-/** 把主题里的 logoScale 规整到 [0.2, 5] 区间,非法值按 1。 */
-function clampLogoScale(value: number | undefined): number {
-  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return 1;
-  return Math.min(5, Math.max(0.2, value));
-}
-
 /**
  * 发送 / 建目标成功后调用:把草稿 store 的工作区选择复位到默认(对话态、无额外目录)。
  * workingDir=null 会通过 patchDraft 的兜底级联清掉 remoteHostId / deviceLink / collab.enabled,
@@ -321,22 +297,13 @@ export function NewMakerDraftRoute() {
   const authVendor: 'cc' | 'codex' = persistedAgentKind;
   const capabilityAgentKind = persistedAgentKind === 'codex' ? 'codex' : 'claude-code';
 
-  const [logoError, setLogoError] = useState(false);
-  // 欢迎页 logo 跟随当前主题:主题对象自带 logo(内置=打包 URL,local=xdt-file URL)
-  // 与 logoScale,缺省回退到默认打包 logo(按深浅二选一)/ 1 倍。切主题时由
-  // onDidChangeTheme 实时更新(含浅色↔深色切换时黑白字版互换)。
-  const [logoSrc, setLogoSrc] = useState<string>(() => {
-    const theme = themeService.getCurrentTheme();
-    return theme?.logo ?? defaultLogoForTheme(theme);
-  });
-  const [logoScale, setLogoScale] = useState<number>(() =>
-    clampLogoScale(themeService.getCurrentTheme()?.logoScale),
+  // 品牌区跟随当前主题；icon / logo 的固定布局统一由 ThemeBrandLockup 负责。
+  const [activeColorTheme, setActiveColorTheme] = useState<ColorTheme | null>(() =>
+    themeService.getCurrentTheme(),
   );
   useEffect(() => {
     return themeService.onDidChangeTheme((theme) => {
-      setLogoError(false);
-      setLogoSrc(theme.logo ?? defaultLogoForTheme(theme));
-      setLogoScale(clampLogoScale(theme.logoScale));
+      setActiveColorTheme(theme);
     });
   }, []);
   const [folderPickerOpen, setFolderPickerOpen] = useState(false);
@@ -1767,53 +1734,11 @@ export function NewMakerDraftRoute() {
                   disabled={wtCreating}
                 />
               </div>
-              <div
-                data-testid="create-agent-brand-lockup"
-                className="mb-[15px] flex h-[50px] items-center gap-[9px]"
-              >
-                <span
-                  data-testid="create-agent-head-image"
-                  className="pointer-events-none relative h-[50px] w-[50px] shrink-0 select-none"
-                >
-                  {/* head_image 切图(Figma 185:1720/185:2911,边框玻璃圈已烧入);投影按设计 fx 0 4 7.3 @2x 折半 */}
-                  <img
-                    src={headImageLight}
-                    alt=""
-                    className="h-full w-full dark:hidden"
-                    style={{ filter: 'drop-shadow(0 2px 3.65px rgba(0, 0, 0, 0.15))' }}
-                    draggable={false}
-                  />
-                  <img
-                    src={headImageDark}
-                    alt=""
-                    className="hidden h-full w-full dark:block"
-                    style={{ filter: 'drop-shadow(0 2px 3.65px rgba(0, 0, 0, 0.15))' }}
-                    draggable={false}
-                  />
-                </span>
-                {!logoError && (
-                  <img
-                    src={logoSrc}
-                    alt={BRAND_NAME}
-                    // 默认打包 logo 是无留白的横向 wordmark,主题自定义 logo 比例不定:
-                    // 统一「定高 + 宽度按比例自适应」并限制最大宽度,整图不裁切。
-                    // 尺寸由 logoScale 缩放,故走 inline style 而非固定 tailwind 尺寸类。
-                    className="pointer-events-none shrink-0 select-none object-contain"
-                    style={{
-                      height: `${Math.min(LOGO_BASE_HEIGHT * logoScale, 37.5)}px`,
-                      width: 'auto',
-                      maxWidth: `${Math.min(LOGO_BASE_WIDTH * logoScale, 110)}px`,
-                    }}
-                    draggable={false}
-                    onError={() => {
-                      // 主题自定义 logo 读不出 → 回退默认打包图;默认图仍报错才隐藏(防死循环)。
-                      const fallback = defaultLogoForTheme(themeService.getCurrentTheme());
-                      if (logoSrc !== fallback) setLogoSrc(fallback);
-                      else setLogoError(true);
-                    }}
-                  />
-                )}
-              </div>
+              <ThemeBrandLockup
+                theme={activeColorTheme}
+                testId="create-agent-brand-lockup"
+                className="mb-[15px]"
+              />
 
               <div className="flex w-full flex-col items-start gap-0">
                 {/* device-link:为远程设备项目新建对话时的明显标识。让用户清楚这条对话会建在

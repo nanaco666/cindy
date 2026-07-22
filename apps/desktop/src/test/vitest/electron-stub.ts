@@ -182,6 +182,7 @@ export const nativeImage = {
     isEmpty: () => true,
     toPNG: () => Buffer.from(''),
     toJPEG: () => Buffer.from(''),
+    toBitmap: () => Buffer.from(''),
     resize: () => nativeImage.createEmpty(),
     getSize: () => ({ width: 0, height: 0 }),
   }),

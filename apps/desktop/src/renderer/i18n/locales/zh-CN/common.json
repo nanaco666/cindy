@@ -351,7 +351,7 @@
         "export": "新建本地副本",
         "openDir": "打开主题目录",
         "refresh": "刷新",
-        "exportSuccess": "已生成 {{file}}，改完保存后点\"刷新\"即可生效",
+        "exportSuccess": "已生成 {{file}}，替换示例图片路径并保存后点\"刷新\"即可生效",
         "exportFailed": "导出失败：{{error}}",
         "openDirFailed": "打开目录失败：{{error}}",
         "refreshed": "已刷新本地主题"

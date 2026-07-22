@@ -677,9 +677,11 @@ card/container
 
 42 个 `HSL_FORMAT_IDS` 必须 HSL 三元组(`h s% l%`,`h∈[0,360)`、灰色 `hue=0`、1 位小数);其余 token 走 hex/rgba。round-trip HSL→RGB 通道误差 ≤1。HSL_FORMAT_IDS 之外不得误填 HSL 三元组。
 
-### 15.7 logo 资产(品牌 wordmark)
+### 15.7 品牌标识资产(icon + logo)
 
-cindy-light 用黑字版(`cindy-logo-light.png`)、cindy-dark 用白字版(`cindy-logo-dark.png`),经 `theme.logo` 机制注入(`logoScale=1` 对齐默认 logo 视觉大小;NewMakerDraftRoute/欢迎页按 `theme.logo ?? defaultLogoForTheme` 消费)。
+新建对话页品牌区按 2026-07 新设计固定为 50×50px 方形 icon + 110×37.5px 横向 logo,间距 9px。`ThemeBrandLockup` 是新建页的唯一渲染实现。主题只通过 `theme.brand.icon/logo` 替换素材,不得通过 scale 改变定稿版式;本地图片透明留白按 alpha 可见边界在加载期裁切,不改写源文件。cindy-light 用黑字版(`cindy-logo-light.png`)、cindy-dark 用白字版(`cindy-logo-dark.png`)作为 logo。
+
+新版品牌区只读取 `brand.icon/logo`,不兼容旧顶层 `logo`、`logoScale` 或开发过程中的 `brand.mark/wordmark`;旧配置与新版组合结构语义不同,禁止猜测映射。「设置 → 外观」只保留本地主题副本、打开目录和刷新三个轻量入口,不放品牌预览或素材选择器。新导出的标准 JSON 在 `brand.icon/logo` 中直接放 `icon-square-50x50px.png` / `logo-horizontal-110x37.5px.png` 示例路径,让配置文件自身同时说明用途与最终显示区域;源图可按同宽高比导出 2x/3x。不另生成 README 或改用 JSONC。
 
 > logo 资产红 `#F70121` 是官方品牌资产固有色(WORD MARK frame 红箭头符号),与 UI 品牌红 `#DF0C27` **并存、不同值**——logo 是图片资产不进 token 体系,保持原色不改色。后人勿误改为 `#DF0C27`。
 ### 15.8 status-badge-fg(§7 必炸点,用户确认 2026-07-17)

@@ -147,7 +147,6 @@ export const cindyLight: Theme = {
   name: 'CINDY Light',
   type: 'light',
   colors: overrides,
-  // U5 品牌版 logo:黑字+红箭头 wordmark(浅底可见),logoScale=1 对齐默认 logo 视觉大小。
-  logo: cindyLogoLight,
-  logoScale: 1,
+  // U5 品牌版横向 logo：黑字+红箭头，浅底可见。
+  brand: { logo: { src: cindyLogoLight } },
 };

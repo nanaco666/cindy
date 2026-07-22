@@ -1,13 +1,18 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { nativeImage } from 'electron';
 
 import {
   LOCAL_THEME_SUFFIX,
+  type LocalThemeBrandBounds,
+  type LocalThemeBrandConfig,
   type LocalThemeDiagnostic,
   type LocalThemeWire,
   type LocalThemesResult,
 } from '../../shared/local-themes';
+import { findVisibleAlphaBounds } from '../../shared/imageVisibleBounds';
+import type { ImageVisibleBounds } from '../../shared/imageVisibleBounds';
 import { createLogger } from '../logger';
 
 const log = createLogger('local-themes');
@@ -17,8 +22,7 @@ interface LocalThemeJson {
   name: string;
   type: 'light' | 'dark';
   colors: Record<string, string>;
-  logo?: string;
-  logoScale?: number;
+  brand?: LocalThemeBrandConfig;
 }
 
 interface FileEntry {
@@ -38,10 +42,15 @@ function getLegacyLocalThemesDir(): string {
 }
 
 let themesMigrationDone = false;
+const visibleBoundsCache = new Map<
+  string,
+  { size: number; mtimeMs: number; bounds: ImageVisibleBounds | undefined }
+>();
 
 /** 仅供测试：清掉进程内"已搬迁"标记。 */
 export function resetLocalThemesMigrationForTest(): void {
   themesMigrationDone = false;
+  visibleBoundsCache.clear();
 }
 
 /**
@@ -83,6 +92,19 @@ function asNonEmptyString(value: unknown, field: string): string {
   return value;
 }
 
+function asOptionalPath(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined;
+}
+
+function parseBrand(value: unknown): LocalThemeBrandConfig | undefined {
+  if (!isRecord(value)) return undefined;
+  const icon = asOptionalPath(value.icon);
+  const logo = asOptionalPath(value.logo);
+  return icon || logo
+    ? { ...(icon ? { icon } : {}), ...(logo ? { logo } : {}) }
+    : undefined;
+}
+
 function parseLocalThemeJson(raw: unknown): LocalThemeJson {
   if (!isRecord(raw)) {
     throw new Error('Invalid theme JSON: expected object.');
@@ -105,33 +127,74 @@ function parseLocalThemeJson(raw: unknown): LocalThemeJson {
     colors[key] = value;
   }
 
-  // logo 可选:本地图片绝对路径。非空 string 才带上,其余忽略(向后兼容老 JSON)。
-  const logo =
-    typeof raw.logo === 'string' && raw.logo.trim().length > 0
-      ? raw.logo.trim()
-      : undefined;
-
-  // logoScale 可选:正有限数才带上,其余忽略。clamp 交给 renderer 渲染时处理。
-  const logoScale =
-    typeof raw.logoScale === 'number' && Number.isFinite(raw.logoScale) && raw.logoScale > 0
-      ? raw.logoScale
-      : undefined;
-
+  const brand = parseBrand(raw.brand);
   return {
     id,
     name,
     type: raw.type,
     colors,
-    ...(logo ? { logo } : {}),
-    ...(logoScale !== undefined ? { logoScale } : {}),
+    ...(brand ? { brand } : {}),
   };
+}
+
+const MAX_ALPHA_SCAN_PIXELS = 8_000_000;
+
+/**
+ * 读取图片透明像素边界，只生成运行时布局元数据，不改写/复制原图。
+ * 大图跳过扫描，避免同步主题 bootstrap 出现不可控主进程停顿。
+ */
+function inspectVisibleBounds(filePath: string) {
+  try {
+    const stat = fs.statSync(filePath);
+    if (!stat.isFile()) return undefined;
+    const cached = visibleBoundsCache.get(filePath);
+    if (cached && cached.size === stat.size && cached.mtimeMs === stat.mtimeMs) {
+      return cached.bounds;
+    }
+    const image = nativeImage.createFromPath(filePath);
+    if (image.isEmpty()) {
+      visibleBoundsCache.set(filePath, {
+        size: stat.size,
+        mtimeMs: stat.mtimeMs,
+        bounds: undefined,
+      });
+      return undefined;
+    }
+    const { width, height } = image.getSize();
+    if (width <= 0 || height <= 0 || width * height > MAX_ALPHA_SCAN_PIXELS) {
+      visibleBoundsCache.set(filePath, {
+        size: stat.size,
+        mtimeMs: stat.mtimeMs,
+        bounds: undefined,
+      });
+      return undefined;
+    }
+    const bitmap = image.toBitmap({ scaleFactor: 1 });
+    const bounds = findVisibleAlphaBounds(bitmap, width, height);
+    visibleBoundsCache.set(filePath, { size: stat.size, mtimeMs: stat.mtimeMs, bounds });
+    return bounds;
+  } catch {
+    return undefined;
+  }
+}
+
+function inspectBrandBounds(theme: LocalThemeJson): LocalThemeBrandBounds | undefined {
+  const iconPath = theme.brand?.icon;
+  const logoPath = theme.brand?.logo;
+  const icon = iconPath ? inspectVisibleBounds(iconPath) : undefined;
+  const logo = logoPath ? inspectVisibleBounds(logoPath) : undefined;
+  return icon || logo
+    ? { ...(icon ? { icon } : {}), ...(logo ? { logo } : {}) }
+    : undefined;
 }
 
 function normalizeError(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-function processEntries(entries: Array<FileEntry | { file: string; error: string }>): LocalThemesResult {
+function processEntries(
+  entries: Array<FileEntry | { file: string; error: string }>,
+): LocalThemesResult {
   const themes: LocalThemeWire[] = [];
   const diagnostics: LocalThemeDiagnostic[] = [];
   const seenIds = new Set<string>();
@@ -152,7 +215,8 @@ function processEntries(entries: Array<FileEntry | { file: string; error: string
         continue;
       }
       seenIds.add(id);
-      themes.push({ ...parsed, id });
+      const brandBounds = inspectBrandBounds(parsed);
+      themes.push({ ...parsed, id, ...(brandBounds ? { brandBounds } : {}) });
     } catch (error) {
       const message = normalizeError(error);
       log.warn(`Failed to load local theme '${entry.file}': ${message}`);

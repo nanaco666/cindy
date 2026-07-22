@@ -1,7 +1,21 @@
+import type { ImageVisibleBounds } from './imageVisibleBounds';
+
 export const LOCAL_THEME_SUFFIX = '-local';
 
 export function isLocalThemeId(id: string): boolean {
   return id.endsWith(LOCAL_THEME_SUFFIX);
+}
+
+export interface LocalThemeBrandConfig {
+  /** 新建对话页左侧方形图标的本地图片绝对路径。 */
+  icon?: string;
+  /** 新建对话页右侧横向 logo 的本地图片绝对路径。 */
+  logo?: string;
+}
+
+export interface LocalThemeBrandBounds {
+  icon?: ImageVisibleBounds;
+  logo?: ImageVisibleBounds;
 }
 
 export interface LocalThemeWire {
@@ -9,10 +23,10 @@ export interface LocalThemeWire {
   name: string;
   type: 'light' | 'dark';
   colors: Record<string, string>;
-  /** 欢迎页 logo 的本地图片绝对路径(可选);renderer 装载时转成 xdt-file:// URL。 */
-  logo?: string;
-  /** 欢迎页 logo 缩放倍数(可选,1 = 原始大小)。 */
-  logoScale?: number;
+  /** 新版品牌区配置；renderer 装载时把路径转成 xdt-file:// URL。 */
+  brand?: LocalThemeBrandConfig;
+  /** loader 从透明像素计算出的运行时裁边信息，不写回用户 JSON。 */
+  brandBounds?: LocalThemeBrandBounds;
 }
 
 export interface LocalThemeDiagnostic {
@@ -41,10 +55,11 @@ export interface LocalThemeWriteRequest {
     id: string;
     name: string;
     type: 'light' | 'dark';
-    /** 欢迎页 logo 本地图片绝对路径;新建副本时写空串作模板(空 = 用默认 logo)。 */
-    logo: string;
-    /** 欢迎页 logo 缩放倍数;新建副本时写 1 作模板(默认 = 原始大小)。 */
-    logoScale: number;
+    /** 品牌素材本地绝对路径；空串表示使用默认素材。 */
+    brand: {
+      icon: string;
+      logo: string;
+    };
     colors: Record<string, string>;
   };
 }

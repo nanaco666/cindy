@@ -351,7 +351,7 @@
         "export": "ローカルコピーを作成",
         "openDir": "テーマフォルダを開く",
         "refresh": "更新",
-        "exportSuccess": "{{file}} を生成しました。編集して保存したあと、「更新」を押すと反映されます。",
+        "exportSuccess": "{{file}} を生成しました。画像のサンプルパスを書き換えて保存し、「更新」を押してください。",
         "exportFailed": "エクスポートに失敗しました: {{error}}",
         "openDirFailed": "フォルダを開けませんでした: {{error}}",
         "refreshed": "ローカルテーマを更新しました"

@@ -351,7 +351,7 @@
         "export": "로컬 복사본 만들기",
         "openDir": "테마 폴더 열기",
         "refresh": "새로고침",
-        "exportSuccess": "{{file}} 파일을 만들었습니다. 수정 후 저장하고 \"새로고침\"을 누르면 반영됩니다.",
+        "exportSuccess": "{{file}} 파일을 만들었습니다. 예시 이미지 경로를 바꾸고 저장한 뒤 \"새로고침\"을 누르세요.",
         "exportFailed": "내보내기에 실패했습니다: {{error}}",
         "openDirFailed": "폴더를 열지 못했습니다: {{error}}",
         "refreshed": "로컬 테마를 새로고쳤습니다"

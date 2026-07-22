@@ -87,4 +87,29 @@ describe('local themes legacy dir migration (~/.xdmaker/themes -> ~/.cindy/theme
   it('getLocalThemesDir 指向 ~/.cindy/themes', () => {
     expect(getLocalThemesDir()).toBe(path.join(home, '.cindy', 'themes'));
   });
+
+  it('只读取 brand.icon / brand.logo', () => {
+    const dir = path.join(home, '.cindy', 'themes');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(
+      path.join(dir, 'brand.json'),
+      JSON.stringify({
+        id: 'brand',
+        name: 'Brand',
+        type: 'light',
+        colors: {},
+        brand: { icon: '/tmp/icon.png', logo: '/tmp/logo.png' },
+      }),
+      'utf8',
+    );
+
+    const result = loadLocalThemesSync();
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.themes[0]).toMatchObject({
+      id: 'brand-local',
+      brand: { icon: '/tmp/icon.png', logo: '/tmp/logo.png' },
+    });
+  });
+
 });
