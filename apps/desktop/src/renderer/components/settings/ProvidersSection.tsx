@@ -37,12 +37,11 @@ import { providerMonogram } from '@/lib/providerModels';
 import { customProviderSubtitleForDisplay, providerSubtitleForDisplay } from '@/lib/providerSubtitle';
 import { CustomProviderDialog } from './CustomProviderDialog';
 import { AddProviderWizard, type WizardEntry } from './AddProviderWizard';
-import { UnifiedModelList } from './UnifiedModelList';
+import { buildUnionRows, UnifiedModelList } from './UnifiedModelList';
 import { AnthropicMark } from '@/components/icons/AnthropicMark';
 import { OpenAIMark } from '@/components/icons/OpenAIMark';
 import { XDIncMark } from '@/components/icons/XDIncMark';
 import { hasProviderLogo, ProviderLogoMark } from '@/components/icons/ProviderLogoMark';
-import { isModelEnabled, useModelVisibilityVersion } from '@/state/modelVisibilityPrefs';
 
 import type { LocalCliDetection } from '../../../shared/localCliDetect';
 import type { CustomProviderConfig, ProviderView } from '@lizi/model-providers';
@@ -50,19 +49,6 @@ import type { CustomProviderConfig, ProviderView } from '@lizi/model-providers';
 // ---------------------------------------------------------------------------
 // 工具
 // ---------------------------------------------------------------------------
-
-/** 该来源跨「所有它服务的 agent」的模型开启数 / 总数(左栏行计数 + 详情头计数)。 */
-function combinedCount(provider: ProviderView): { on: number; total: number } {
-  let on = 0;
-  let total = 0;
-  for (const agent of provider.agents) {
-    for (const m of provider.models[agent] ?? []) {
-      total += 1;
-      if (isModelEnabled(agent, provider.id, m)) on += 1;
-    }
-  }
-  return { on, total };
-}
 
 function providerHasModels(provider: ProviderView): boolean {
   return provider.agents.some((a) => (provider.models[a]?.length ?? 0) > 0);
@@ -113,7 +99,9 @@ function ReconnectRequiredPill() {
   );
 }
 
-function CountChip({ on, total }: { on: number; total: number }) {
+/** 摘要只展示去重后的模型数，避免把「模型 × Agent」误读成模型数量。 */
+function ModelCountChip({ count }: { count: number }) {
+  const { t } = useTranslation();
   return (
     <span
       className="flex h-[18px] shrink-0 items-center rounded-full px-2 text-11 font-medium tabular-nums"
@@ -122,7 +110,7 @@ function CountChip({ on, total }: { on: number; total: number }) {
         color: 'var(--settings-section-desc)',
       }}
     >
-      {on}/{total}
+      {t('settings.providers.models.modelCount', { count })}
     </span>
   );
 }
@@ -206,7 +194,7 @@ function DetailHeader({
 }) {
   const { t } = useTranslation();
   const hasModels = !!provider && providerHasModels(provider);
-  const counts = hasModels && provider ? combinedCount(provider) : null;
+  const modelCount = hasModels && provider ? buildUnionRows(provider).length : null;
   const subscriptionProduct =
     provider?.access?.kind === 'subscription' ? provider.access.product : null;
   // 单 agent 供应商在头部统一说明(行级不再逐条标注,见 UnifiedModelList 头注释)。
@@ -239,7 +227,7 @@ function DetailHeader({
             >
               {title}
             </span>
-            {counts && <CountChip on={counts.on} total={counts.total} />}
+            {modelCount !== null && <ModelCountChip count={modelCount} />}
             {subscriptionProduct && (
               <CustomTag
                 label={t('settings.providers.models.subscriptionProduct', {
@@ -875,7 +863,7 @@ function ListRow({
   onSelect: () => void;
 }) {
   const { t } = useTranslation();
-  const counts = providerHasModels(provider) ? combinedCount(provider) : null;
+  const modelCount = providerHasModels(provider) ? buildUnionRows(provider).length : null;
   const title = provider.id === 'xd' ? t('settings.providers.xd.title') : provider.name;
   return (
     <button
@@ -904,9 +892,9 @@ function ListRow({
       >
         {title}
       </span>
-      {counts && (
+      {modelCount !== null && (
         <span className="shrink-0 text-11 tabular-nums" style={{ color: 'var(--text-tertiary)' }}>
-          {counts.on}/{counts.total}
+          {t('settings.providers.models.modelCount', { count: modelCount })}
         </span>
       )}
       <span
@@ -978,8 +966,6 @@ export function ProvidersSection() {
   const { t } = useTranslation();
   const { confirm } = useConfirmDialog();
   const { providers, loading, refetch } = useProviders();
-  // 订阅模型显示开关 version:任一开关变更后整页重算(左栏计数 + 详情列表)。
-  useModelVisibilityVersion();
   // OpenAI 的 reconnect-required 是 useCodexAuth 独有状态(目录 connected 此时为 false):
   // 该状态下 OpenAI 行必须留在左栏,否则「重新连接」入口不可达,用户被迫从向导重发现。
   const codexAuth = useCodexAuth();
