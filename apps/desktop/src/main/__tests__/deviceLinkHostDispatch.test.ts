@@ -43,6 +43,8 @@ vi.mock('electron', () => ({
   },
   // power-blocker.ts 模块级单例引用 powerSaveBlocker,需占位避免 vitest 报 mock 未定义
   powerSaveBlocker: { start: () => 0, stop: () => {}, isStarted: () => false },
+  // notificationService.ts 在 dev 模式加载通知图标；测试只需要一个空图占位。
+  nativeImage: { createFromPath: () => ({ isEmpty: () => true }) },
 }));
 vi.mock('../logger', () => ({
   createLogger: () => ({ warn: vi.fn(), info: vi.fn(), debug: vi.fn(), error: vi.fn() }),
