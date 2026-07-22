@@ -125,6 +125,7 @@ import {
   useAgentCapabilities,
   evictDeviceCapabilities,
   prefetchDeviceCapabilities,
+  getCachedCapabilities,
   type AgentCapabilities,
 } from '@/hooks/useAgentCapabilities';
 import { useProviders } from '@/hooks/useProviders';
@@ -807,6 +808,8 @@ export function NewMakerDraftRoute() {
           .then((v) => (v as RemoteDraftDefaults | null) ?? null)
           .catch(() => null);
         // 设备验证通过后 evict + prefetch 以刷新 hook 缓存;await 确保 cache 就绪。
+        // prefetch 内部 swallow error,故额外验证 cache 被填充(直接 invoke 成功不代表
+        // 紧随其后的 prefetch 也成功——evict 清了 cache,prefetch 重新拉取可能失败)。
         evictDeviceCapabilities(target.deviceId);
         evictDeviceProviders(target.deviceId);
         evictDeviceGitSafetySettings(target.deviceId);
@@ -814,6 +817,9 @@ export function NewMakerDraftRoute() {
           prefetchDeviceCapabilities(target.deviceId),
           prefetchDeviceProviders(target.deviceId),
         ]);
+        if (!getCachedCapabilities(capabilityAgentKind, target.deviceId)) {
+          throw new Error('device capabilities cache not populated after refresh');
+        }
         dlSeedKeyRef.current = `${target.deviceId}:${capabilityAgentKind}`;
         setDlSel(resolveDeviceLinkDraftDefaults(freshCaps, freshDefaults, undefined, capabilityAgentKind));
         setRemoteDraftState({ loaded: true, value: freshDefaults });
@@ -872,16 +878,16 @@ export function NewMakerDraftRoute() {
       );
       // 只有用户显式选中的来源在本地仍可用时才保留;否则 null = 走默认路由。
       const sshProviderId = (rawProviderId && sshLocalSourceId === rawProviderId) ? rawProviderId : null;
-      // fast mode 必须经 source capability gate:来源不支持就关闭。
+      // fast mode:来源不支持就关闭;支持时保留用户在 composer 里看到的 effectiveFastMode
+      // (device-link 草稿活跃时来自 dlSel/deviceLinkInitial,本地草稿来自 per-model 记忆)。
       const sshSourceSupportsFast = sessionModelSupportsFastMode(localProviders, sshProviderId, sshModel, capabilityAgentKind);
-      const sshFastMode = sshSourceSupportsFast
-        ? (getProviderModelFast(capabilityAgentKind, sshLocalSourceId ?? '', sshModel) ?? getFastModeForModel(sshModel))
-        : false;
-      // effort: 从本地 provider + sshModel 解析,不用 device-link 派生的 draftInitialEffort。
+      const sshFastMode = sshSourceSupportsFast ? effectiveFastMode : false;
+      // effort: 用 draftInitialEffort(用户在 composer 里看到的值)作 currentEffort,
+      // 再由 resolveNewMakerDraftEffort 按本地 SSH model 支持的 levels 做 clamp。
       const sshLocalProvider = sshLocalSourceId ? localProviders.find((p) => p.id === sshLocalSourceId) : undefined;
       const sshLocalModelDesc = sshLocalProvider ? getModel(sshLocalProvider, sshModel, capabilityAgentKind) : undefined;
       const sshEffort = resolveNewMakerDraftEffort({
-        currentEffort: chatPrefs.effort,
+        currentEffort: draftInitialEffort,
         presetEffort: sshLocalSourceId ? getProviderModelEffort(capabilityAgentKind, sshLocalSourceId, sshModel) : undefined,
         efforts: sshLocalModelDesc?.efforts ?? [],
         defaultEffort: sshLocalModelDesc?.defaultEffort ?? null,
@@ -948,7 +954,7 @@ export function NewMakerDraftRoute() {
         throw err;
       }
     },
-    [draft.vendor, chatPrefs, chatInitialPermissionMode, chatInitialProviderId, draftInitialModel, effectiveDeviceLinkDeviceId, localProviders, capabilityAgentKind, effectivePlanMode, attachmentState, createSession, navigate, t],
+    [draft.vendor, chatPrefs, chatInitialPermissionMode, chatInitialProviderId, draftInitialModel, draftInitialEffort, effectiveFastMode, effectiveDeviceLinkDeviceId, localProviders, capabilityAgentKind, effectivePlanMode, attachmentState, createSession, navigate, t],
   );
 
   // ─── 切 vendor ──────────────────────────────────────────────────────
