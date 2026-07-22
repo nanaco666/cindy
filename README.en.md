@@ -43,10 +43,10 @@ apps plus their shared packages, organized as a pnpm monorepo.
 **Not in this repo:** the backend service (`cindy-server`) lives in a separate
 repository and is not part of this monorepo. The client is free software.
 
-| Mode | Account requirement | Description |
+| Mode | Account requirement | Availability |
 | --- | --- | --- |
-| Hosted service | Cindy cloud account | Use Cindy's hosted service. See the website for downloads and pricing. |
-| Local mode | No Cindy cloud account required | Connect to your own local server with `pnpm restart:desktop:local`. Whether it uses local sign-in or another development auth mode is controlled by the server configuration. |
+| Hosted service | Cindy cloud account | Use Cindy's full hosted service. See the website for downloads and pricing. |
+| Local mode | No Cindy sign-in required | Choose “Local mode” on the login screen to use local agents. Server-backed capabilities are unavailable in this mode. |
 
 ## Prerequisites
 
@@ -103,15 +103,16 @@ lockstep to avoid wire-protocol drift.
 ```bash
 # Connect to the remote API (default)
 pnpm restart:desktop:remote
-
-# Connect to a locally running server
-pnpm restart:desktop:local
 ```
 
 `restart:desktop:remote` accepts `--region=cn` (default) / `--region=global`, and
 supports isolated sandboxes and passive multi-instance modes. See
 [`AGENTS.md`](AGENTS.md) for the full launch-flag reference and the desktop
 dev/runtime contract.
+
+“Local mode” on the login screen is an unauthenticated local-agent mode, not a
+connection to a local server. Server-backed capabilities are unavailable in this
+mode.
 
 ### Mobile
 

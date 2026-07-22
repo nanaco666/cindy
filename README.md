@@ -41,10 +41,10 @@ monorepo 组织。
 
 **服务端不在本仓库：** 服务端（`cindy-server`）位于独立仓库，不属于本 monorepo。软件本身免费。
 
-| 使用方式 | 账号要求 | 说明 |
+| 使用方式 | 账号要求 | 可用范围 |
 | --- | --- | --- |
-| 远程托管 | Cindy 云端账号 | 使用 Cindy 的远程托管服务。下载方式与定价见官网。 |
-| 本地模式 | 不需要 Cindy 云端账号 | 连接自己启动的本地服务端（`pnpm restart:desktop:local`）即可使用。本地服务端采用本地登录还是其他开发认证方式，由服务端配置决定。 |
+| 远程托管 | Cindy 云端账号 | 使用 Cindy 的完整托管服务。下载方式与定价见官网。 |
+| 本地模式 | 无需登录 Cindy 账号 | 在登录页选择「本地模式」即可使用本机 agent 功能。依赖服务端的能力在该模式下不可用。 |
 
 ## 前置要求
 
@@ -95,14 +95,14 @@ git submodule update --remote --merge --recursive
 ```bash
 # 连接远程 API（默认）
 pnpm restart:desktop:remote
-
-# 连接开发者自己启动的本地服务端
-pnpm restart:desktop:local
 ```
 
 `restart:desktop:remote` 支持 `--region=cn`（默认）/ `--region=global`，以及独立
 沙箱、被动多开等模式。完整启动参数与桌面端 dev / 运行时契约见
 [`AGENTS.md`](AGENTS.md)。
+
+登录页的「本地模式」不是连接本地服务端，而是无需登录 Cindy 账号即可使用本机
+agent 的模式。依赖服务端的能力在该模式下不可用。
 
 ### 手机端
 
