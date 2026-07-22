@@ -410,6 +410,7 @@ export const sessionPrRefs = sqliteTable(
  * 已知 keys：
  *   - schema_version                       (string，"0" / "1" / ...)
  *   - codex_history_has_product_prompt_initialized_v1 ('done')
+ *   - codex_history_cindy_memory_prompt_reset_v2 ('done')
  *
  * 历史 keys（只读遗留，不再写入）：cloud_migration_*——chat-data 云端迁移已随
  * 主 server 退役（2026-07），存量库里可能残留这组键，无消费方。
