@@ -38,6 +38,7 @@ export interface MessageDeleteHandlerDeps {
   ): Promise<{ id: string; role: 'user' | 'assistant' } | null>;
   listMessagesForContext(sessionId: string): Promise<ContextSourceMessage[]>;
   getLiveSession(sessionId: string): { isTurnRunning(): boolean } | null | undefined;
+  hasBackgroundActivity(sessionId: string): boolean;
   closeSession(sessionId: string): Promise<void>;
   commitDeletion(
     sessionId: string,
@@ -83,6 +84,9 @@ export async function performMessageDeletion(
   if (live?.isTurnRunning()) {
     throwIpcError('SESSION_RUNNING', `Session ${sessionId} is running a turn`);
   }
+  if (deps.hasBackgroundActivity(sessionId)) {
+    throwIpcError('SESSION_RUNNING', `Session ${sessionId} has background activity`);
+  }
 
   const source = await deps.listMessagesForContext(sessionId);
   const remaining = source.filter((message) => message.clientId !== clientId);
@@ -100,6 +104,9 @@ export async function performMessageDeletion(
     const currentLive = deps.getLiveSession(sessionId);
     if (currentLive?.isTurnRunning()) {
       throwIpcError('SESSION_RUNNING', `Session ${sessionId} is running a turn`);
+    }
+    if (deps.hasBackgroundActivity(sessionId)) {
+      throwIpcError('SESSION_RUNNING', `Session ${sessionId} has background activity`);
     }
     if (currentLive) await deps.closeSession(sessionId);
 

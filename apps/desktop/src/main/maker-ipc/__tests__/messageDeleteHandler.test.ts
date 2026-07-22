@@ -19,6 +19,7 @@ function makeDeps(
       { clientId: 'after', role: 'assistant', content: 'keep after', createdAt: 300 },
     ]),
     getLiveSession: vi.fn(() => ({ isTurnRunning: () => false })),
+    hasBackgroundActivity: vi.fn(() => false),
     closeSession: vi.fn(async () => undefined),
     commitDeletion: vi.fn(async (sessionId, clientId) => ({
       sessionId,
@@ -87,6 +88,35 @@ describe('performMessageDeletion', () => {
       clientId: 'target',
     })).rejects.toThrow('SESSION_RUNNING');
     expect(deps.listMessagesForContext).not.toHaveBeenCalled();
+    expect(deps.closeSession).not.toHaveBeenCalled();
+    expect(deps.commitDeletion).not.toHaveBeenCalled();
+  });
+
+  it('rejects while background activity is running and leaves storage untouched', async () => {
+    const deps = makeDeps({
+      hasBackgroundActivity: vi.fn(() => true),
+    });
+
+    await expect(performMessageDeletion(deps, {
+      sessionId: 's1',
+      clientId: 'target',
+    })).rejects.toThrow('SESSION_RUNNING');
+    expect(deps.listMessagesForContext).not.toHaveBeenCalled();
+    expect(deps.closeSession).not.toHaveBeenCalled();
+    expect(deps.commitDeletion).not.toHaveBeenCalled();
+  });
+
+  it('rechecks background activity before closing the native session', async () => {
+    let reads = 0;
+    const deps = makeDeps({
+      hasBackgroundActivity: vi.fn(() => ++reads > 1),
+    });
+
+    await expect(performMessageDeletion(deps, {
+      sessionId: 's1',
+      clientId: 'target',
+    })).rejects.toThrow('SESSION_RUNNING');
+    expect(deps.listMessagesForContext).toHaveBeenCalledOnce();
     expect(deps.closeSession).not.toHaveBeenCalled();
     expect(deps.commitDeletion).not.toHaveBeenCalled();
   });

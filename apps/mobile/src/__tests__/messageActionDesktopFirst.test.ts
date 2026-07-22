@@ -17,6 +17,7 @@ describe('mobile message actions desktop-first surface', () => {
     expect(sharedSource).toContain("input.hasTime ? 'time' : null");
     expect(sharedSource).toContain("input.canRewind ? 'rewind' : null");
     expect(source).toContain("&& (item.message.kind === 'user' || item.message.kind === 'assistant')");
+    expect(source).toContain('&& actions.isSessionStreaming !== true');
     expect(source).toContain('hitSlop={MESSAGE_CONTROL_HIT_SLOP}');
     expect(source).toContain('buttonSize={actionBar.buttonSize}');
     expect(source).toContain('iconSize={actionBar.iconSize}');

@@ -3953,6 +3953,7 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
     getMessage: getDeletableMessage,
     listMessagesForContext: (sessionId) => listMessagesForAgentHandoff(sessionId, 400),
     getLiveSession: (sessionId) => maker.getSession(sessionId),
+    hasBackgroundActivity: getClaudeSessionBackgroundActivity,
     closeSession: (sessionId) => maker.closeSession(sessionId),
     commitDeletion: commitSingleMessageDeletion,
     setPendingHandoff: (sessionId, handoff) => agentHandoffPending.set(sessionId, handoff),

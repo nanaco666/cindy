@@ -1431,6 +1431,7 @@ function MessageBubble({
     showCompletedActionBar
     && clientId
     && actions.onDeleteMessage
+    && actions.isSessionStreaming !== true
     && (item.message.kind === 'user' || item.message.kind === 'assistant')
   );
   const canCopyLink = !!(canUseCompletedActions && clientId && actions.onCopyMessageLink);
