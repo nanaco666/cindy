@@ -43,11 +43,34 @@ describe('sessionControls', () => {
     });
   });
 
-  it('exposes local Codex quota controls only for local Codex sessions', () => {
-    expect(canUseLocalCodexRateLimitControl(session({ agentKind: 'codex' }))).toBe(true);
+  it('exposes local Codex quota controls only for local subscription sessions', () => {
     expect(canUseLocalCodexRateLimitControl(session({
       agentKind: 'codex',
+      model: 'gpt-5.5',
+    }))).toBe(true);
+    expect(canUseLocalCodexRateLimitControl(session({
+      agentKind: 'codex',
+      model: 'gpt-5.5',
+      providerId: 'openai',
+    }))).toBe(true);
+    expect(canUseLocalCodexRateLimitControl(session({
+      agentKind: 'codex',
+      model: 'gpt-5.5',
       remoteHostId: 'ssh-host-1',
+    }))).toBe(false);
+    expect(canUseLocalCodexRateLimitControl(session({
+      agentKind: 'codex',
+      model: 'gpt-5.5',
+      providerId: 'xd',
+    }))).toBe(false);
+    expect(canUseLocalCodexRateLimitControl(session({
+      agentKind: 'codex',
+      model: 'codex/gpt-5.5',
+    }))).toBe(false);
+    expect(canUseLocalCodexRateLimitControl(session({
+      agentKind: 'codex',
+      model: 'xai/grok-4.3',
+      providerId: 'xai',
     }))).toBe(false);
     expect(canUseLocalCodexRateLimitControl(session({ agentKind: 'cc' }))).toBe(false);
   });

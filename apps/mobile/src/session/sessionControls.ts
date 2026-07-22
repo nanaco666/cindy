@@ -6,11 +6,17 @@ export {
   summarizeSessionSpend,
 } from '@lizi/maker-shared/session-controls';
 
-/** Local app-server quota controls must never be shown for an SSH-hosted session. */
+/** Local ChatGPT quota controls are only relevant to local Codex subscription sessions. */
 export function canUseLocalCodexRateLimitControl(
-  session: Pick<RemoteSession, 'agentKind' | 'remoteHostId'> | null,
+  session: Pick<RemoteSession, 'agentKind' | 'model' | 'providerId' | 'remoteHostId'> | null,
 ): boolean {
-  return session?.agentKind === 'codex' && !session.remoteHostId?.trim();
+  if (session?.agentKind !== 'codex' || session.remoteHostId?.trim()) return false;
+  const providerId = session.providerId?.trim() ?? '';
+  const model = session.model.trim();
+  return (providerId === '' || providerId === 'openai')
+    && !model.startsWith('codex/')
+    && !model.startsWith('chatgpt/')
+    && !model.startsWith('xai/');
 }
 
 export function buildContextUsageCreateOpts(session: RemoteSession): Record<string, unknown> {

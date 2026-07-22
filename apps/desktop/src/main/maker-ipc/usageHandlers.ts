@@ -56,7 +56,14 @@ export function registerMakerUsageHandlers(
   });
 
   registry.handle(MAKER_INVOKE.USAGE_CODEX_RATE_LIMITS, async () => {
-    return await deps.readCodexRateLimits();
+    try {
+      return await deps.readCodexRateLimits();
+    } catch (err) {
+      if (err instanceof CodexRateLimitResetRejectedError) {
+        throwIpcError('PRECONDITION_FAILED', `${err.reason}: ${err.message}`);
+      }
+      throw err;
+    }
   });
 
   registry.handle(

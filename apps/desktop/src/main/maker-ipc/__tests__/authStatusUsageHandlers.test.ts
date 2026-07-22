@@ -457,6 +457,19 @@ describe('maker usage IPC handlers', () => {
     });
   });
 
+  it('encodes account changes during rate-limit reads as a stable IPC precondition error', async () => {
+    const harness = new IpcHarness();
+    const readCodexRateLimits = vi.fn().mockRejectedValue(
+      new CodexRateLimitResetRejectedError('ACCOUNT_CHANGED', 'retry after account settles'),
+    );
+    registerMakerUsageHandlers(harness, makeUsageDeps({ readCodexRateLimits }));
+
+    await expect(harness.invoke(MAKER_INVOKE.USAGE_CODEX_RATE_LIMITS)).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: expect.stringContaining('ACCOUNT_CHANGED'),
+    });
+  });
+
   it('passes numeric days through to readUsageHistory and drops invalid values', async () => {
     const harness = new IpcHarness();
     const readUsageHistory = vi.fn().mockResolvedValue(emptyHistory);

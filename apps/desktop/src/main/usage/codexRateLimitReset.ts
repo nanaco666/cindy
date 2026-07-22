@@ -58,7 +58,7 @@ export class CodexRateLimitResetRejectedError extends Error {
 /** In-memory state for one retryable reset attempt. */
 interface ResetOfferEntry {
   account: CodexRateLimitAccountIdentity;
-  creditId: string;
+  creditId: string | null;
   creditExpiresAt: number | null;
   validUntil: number;
   settled: boolean;
@@ -240,9 +240,9 @@ export function createCodexRateLimitResetService(
     const credits = availableResetCredits(response);
     const selectedCredit = selectEarliestExpiringCredit(credits);
     let resetOffer: MobileCodexRateLimitsResult['resetOffer'] = null;
-    // A concrete credit id pins consume to the credit selected from this verified account.
-    // Count-only responses remain visible but cannot mint an account-ambiguous reset offer.
-    const hasEligibleCredit = selectedCredit !== null;
+    // Detailed rows must contain an eligible Codex credit. Count-only responses may still
+    // mint an offer because app-server officially supports backend credit selection.
+    const hasEligibleCredit = credits === null || selectedCredit !== null;
     if (availableCount > 0 && hasEligibleCredit && canBindResetOffer(identity)) {
       // Repeated reads must not mint a new retry key. This preserves idempotency when the
       // consume response was lost and mobile refreshes/reconnects before retrying.
@@ -252,8 +252,8 @@ export function createCodexRateLimitResetService(
       const idempotencyKey = existing?.[0] ?? createIdempotencyKey();
       const entry = existing?.[1] ?? {
         account: identity,
-        creditId: selectedCredit.id,
-        creditExpiresAt: selectedCredit.expiresAt ?? null,
+        creditId: selectedCredit?.id ?? null,
+        creditExpiresAt: selectedCredit?.expiresAt ?? null,
         validUntil: now() + RESET_OFFER_TTL_MS,
         settled: false,
         pending: null,
@@ -302,7 +302,7 @@ export function createCodexRateLimitResetService(
       }
       const response = await deps.consumeResetCredit({
         idempotencyKey,
-        creditId: offer.creditId,
+        ...(offer.creditId ? { creditId: offer.creditId } : {}),
       });
       // Mark the attempt settled before refreshing. That refresh may expose another
       // available credit and must receive a fresh idempotency key, while concurrent

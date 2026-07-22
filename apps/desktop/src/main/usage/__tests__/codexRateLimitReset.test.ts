@@ -94,11 +94,11 @@ describe('Codex rate-limit reset control plane', () => {
     });
   });
 
-  it('does not mint an account-ambiguous offer when credit detail is unavailable', async () => {
+  it('reuses a count-only offer and lets app-server select the credit', async () => {
     const createIdempotencyKey = vi.fn()
       .mockReturnValueOnce(KEY)
       .mockReturnValueOnce(NEXT_KEY);
-    const { service } = harness({
+    const { deps, service } = harness({
       createIdempotencyKey,
       readRateLimits: vi.fn().mockResolvedValue(response({
         rateLimitResetCredits: { availableCount: 1, credits: null },
@@ -109,10 +109,17 @@ describe('Codex rate-limit reset control plane', () => {
     const second = await service.read();
     expect(first).toMatchObject({
       rateLimitResetCredits: { availableCount: 1, credits: null },
-      resetOffer: null,
+      resetOffer: {
+        idempotencyKey: KEY,
+        expiresAt: null,
+        validUntil: NOW_MS + 10 * 60 * 1000,
+      },
     });
-    expect(second.resetOffer).toBeNull();
-    expect(createIdempotencyKey).not.toHaveBeenCalled();
+    expect(second.resetOffer).toEqual(first.resetOffer);
+    expect(createIdempotencyKey).toHaveBeenCalledOnce();
+
+    await service.consume(KEY);
+    expect(deps.consumeResetCredit).toHaveBeenCalledWith({ idempotencyKey: KEY });
   });
 
   it('coalesces concurrent consumes and caches the terminal result for retries', async () => {
