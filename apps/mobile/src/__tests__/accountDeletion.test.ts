@@ -22,8 +22,9 @@ describe('mobile account deletion', () => {
     expect(visibilityBlock).not.toContain('membershipKind');
   });
 
-  it('persists the receipt before confirmation and clears local credentials without logout', () => {
+  it('scopes receipts to the current login and clears local credentials without logout', () => {
     const context = source('src/auth/AuthContext.tsx');
+    const acceptStart = context.indexOf('const acceptOutcome = useCallback');
     const requestStart = context.indexOf(
       'const requestAccountDeletionChallenge = useCallback',
     );
@@ -35,14 +36,27 @@ describe('mobile account deletion', () => {
       confirmStart,
       context.indexOf('const getAccountDeletionStatus', confirmStart),
     );
+    const acceptBody = context.slice(
+      acceptStart,
+      context.indexOf('const dispatchLoginAction', acceptStart),
+    );
 
     expect(context).toContain(
       "'cindy.mobile.auth.accountDeletionReceipt'",
     );
+    expect(acceptBody).toContain(
+      "if (outcome.status === 'ok' || outcome.status === 'select_account')",
+    );
+    expect(
+      acceptBody.indexOf('await persistAccountDeletionReceipt(null);'),
+    ).toBeLessThan(acceptBody.indexOf('if (outcome.accountDeletionRestored)'));
     expect(requestBody.indexOf('persistAccountDeletionReceipt')).toBeLessThan(
       requestBody.indexOf('return challenge'),
     );
     expect(confirmBody).toContain('await clearLocalSession();');
+    expect(confirmBody).not.toContain(
+      'persistAccountDeletionReceipt(input.receiptToken)',
+    );
     expect(confirmBody).not.toContain('.logout(');
     expect(confirmBody).toContain("'REQUEST_TIMEOUT'");
     expect(confirmBody).toContain(
@@ -79,10 +93,23 @@ describe('mobile account deletion', () => {
 
   it('shows persisted status and forwards Apple authorization codes when available', () => {
     const login = source('app/(auth)/login.tsx');
+    const loginMessages = source('src/auth/loginMessages.ts');
     const nativeSocial = source('src/auth/nativeSocial.ts');
+    const panel = login.slice(
+      login.indexOf('function AccountDeletionStatusPanel'),
+      login.indexOf('function socialLabel'),
+    );
 
     expect(login).toContain('testID="login.accountDeletionStatus"');
-    expect(login).toContain('现在重新登录即可取消注销');
+    expect(panel).toContain("loginText('accountDeletionPendingTitle')");
+    expect(panel).toContain("loginText('accountDeletionPendingCopy')");
+    expect(panel).toContain('getAuthLocale()');
+    expect(panel).not.toMatch(/[\u4e00-\u9fff]/);
+    expect(loginMessages.match(/accountDeletionPendingTitle:/g)).toHaveLength(
+      2,
+    );
+    expect(loginMessages).toContain('现在重新登录即可取消注销');
+    expect(loginMessages).toContain('Sign in now to cancel deletion.');
     expect(login).toContain("cause.code === 'INVALID_RESPONSE'");
     expect(login).toContain('if (status.status === \'completed\') stopPolling()');
     expect(nativeSocial).toContain('if (!credential.identityToken)');

@@ -49,6 +49,15 @@ const messages = {
     browserSubtitle: '完成后会自动返回 Cindy。',
     working: '处理中…',
     configTitle: '登录配置未完成',
+    accountDeletionPendingTitle: '账号正在等待注销',
+    accountDeletionProcessingTitle: '账号正在注销',
+    accountDeletionCompletedTitle: '账号已注销',
+    accountDeletionPendingCopy:
+      '预计于 {date} 永久删除。现在重新登录即可取消注销。',
+    accountDeletionProcessingCopy:
+      '数据清理正在进行，完成后会向你的验证联系方式发送通知。',
+    accountDeletionCompletedCopy: '账号和个人数据清理已完成。',
+    accountDeletionDismiss: '我知道了',
     errorFallback: '登录未完成，请重试。',
   },
   en: {
@@ -102,6 +111,16 @@ const messages = {
     browserSubtitle: 'You will return to Cindy automatically.',
     working: 'Working…',
     configTitle: 'Sign-in configuration is incomplete',
+    accountDeletionPendingTitle: 'Account scheduled for deletion',
+    accountDeletionProcessingTitle: 'Account deletion in progress',
+    accountDeletionCompletedTitle: 'Account deleted',
+    accountDeletionPendingCopy:
+      'Scheduled for permanent deletion on {date}. Sign in now to cancel deletion.',
+    accountDeletionProcessingCopy:
+      'Your data is being deleted. We will notify your verified contact when it is complete.',
+    accountDeletionCompletedCopy:
+      'Your account and personal data have been deleted.',
+    accountDeletionDismiss: 'Got it',
     errorFallback: 'Sign-in did not complete. Please try again.',
   },
 } as const;

@@ -29,7 +29,7 @@ import {
   sanitizeCnPhoneInput,
   toCnE164,
 } from '@/auth/cnPhone';
-import { authErrorText, loginText } from '@/auth/loginMessages';
+import { authErrorText, getAuthLocale, loginText } from '@/auth/loginMessages';
 import { isNativeSocialProviderSupported } from '@/auth/nativeSocial';
 import { Text, TextInput } from '@/components/AppText';
 import { MainWindowActionButton } from '@/components/MobilePrimitives';
@@ -837,22 +837,25 @@ function AccountDeletionStatusPanel({
     <View style={styles.deletionStatus} testID="login.accountDeletionStatus">
       <Text style={styles.deletionStatusTitle}>
         {pending
-          ? '账号正在等待注销'
+          ? loginText('accountDeletionPendingTitle')
           : status.status === 'processing'
-            ? '账号正在注销'
-            : '账号已注销'}
+            ? loginText('accountDeletionProcessingTitle')
+            : loginText('accountDeletionCompletedTitle')}
       </Text>
       <Text style={styles.deletionStatusCopy}>
         {pending
-          ? `预计于 ${formatAccountDeletionDate(status.deleteAfter)} 永久删除。现在重新登录即可取消注销。`
+          ? loginText('accountDeletionPendingCopy').replace(
+              '{date}',
+              formatAccountDeletionDate(status.deleteAfter),
+            )
           : status.status === 'processing'
-            ? '数据清理正在进行，完成后会向你的验证联系方式发送通知。'
-            : '账号和个人数据清理已完成。'}
+            ? loginText('accountDeletionProcessingCopy')
+            : loginText('accountDeletionCompletedCopy')}
       </Text>
       {onDismiss ? (
         <MainWindowActionButton
           action={{
-            label: '我知道了',
+            label: loginText('accountDeletionDismiss'),
             onPress: onDismiss,
             testID: 'login.accountDeletionDismissButton',
           }}
@@ -867,7 +870,7 @@ function AccountDeletionStatusPanel({
 function formatAccountDeletionDate(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat('zh-CN', {
+  return new Intl.DateTimeFormat(getAuthLocale(), {
     year: 'numeric',
     month: 'long',
     day: 'numeric',

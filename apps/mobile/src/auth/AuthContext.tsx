@@ -366,12 +366,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const acceptOutcome = useCallback(
     async (outcome: LoginOutcome, did: string): Promise<void> => {
       await deleteSecureItem(PENDING_OAUTH_KEY).catch(() => undefined);
-      if (
-        (outcome.status === 'ok' || outcome.status === 'select_account') &&
-        outcome.accountDeletionRestored
-      ) {
+      if (outcome.status === 'ok' || outcome.status === 'select_account') {
+        // 成功登录后，当前会话已明确属于本次登录的 passport。无论是否恢复了
+        // 注销中的账号，都不能继续保留此前其他账号留下的查询 receipt。
         await persistAccountDeletionReceipt(null);
-        setAccountDeletionRestored(true);
+        if (outcome.accountDeletionRestored) {
+          setAccountDeletionRestored(true);
+        }
       }
 
       pendingAccountTokenRef.current =
@@ -1040,13 +1041,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!recovered || recovered.status === 'cancelled') throw cause;
         status = recovered;
       }
-      await persistAccountDeletionReceipt(input.receiptToken);
       // confirm 已在服务端撤销 refresh token 并广播即时断连；客户端只做本地
-      // 清理，不再调用普通 logout，以免覆盖或依赖已撤销的会话。
+      // 清理，不再调用普通 logout，以免覆盖或依赖已撤销的会话。receipt 已在
+      // challenge 返回前持久化，不做可能阻断本地登出的冗余二次写入。
       await clearLocalSession();
       return status;
     },
-    [clearLocalSession, getAccessToken, persistAccountDeletionReceipt],
+    [clearLocalSession, getAccessToken],
   );
 
   const getAccountDeletionStatus = useCallback(async () => {
