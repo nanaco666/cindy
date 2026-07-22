@@ -62,6 +62,25 @@ describe('active-catalog discovered augment', () => {
     expect(openaiIds('claude-code')).toContain('chatgpt/gpt-5.7');
   });
 
+  it('bridge 投影剔除 max/ultra:codex 侧保留、claude-code 侧封顶 xhigh(issue #352)', () => {
+    setActiveCatalog(BUNDLED_CATALOG);
+    setDiscoveredCodexModels([{
+      ...fake('gpt-5.6-sol', 17),
+      efforts: ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'],
+      defaultEffort: 'ultra',
+    }]);
+    const openai = getActiveCatalog().providers.find((p) => p.id === 'openai');
+    const codex = (openai?.models.codex ?? []).find((m) => m.id === 'gpt-5.6-sol');
+    const bridge = (openai?.models['claude-code'] ?? []).find((m) => m.id === 'chatgpt/gpt-5.6-sol');
+    // codex 侧完整保留(该模型确实支持 max/ultra)。
+    expect(codex?.efforts).toEqual(['low', 'medium', 'high', 'xhigh', 'max', 'ultra']);
+    expect(codex?.defaultEffort).toBe('ultra');
+    // claude-code bridge 侧剔除 max/ultra 并把 defaultEffort 封顶到 xhigh
+    // (anthropic-responses bridge 对 GPT 模型推理档封顶 xhigh)。
+    expect(bridge?.efforts).toEqual(['low', 'medium', 'high', 'xhigh']);
+    expect(bridge?.defaultEffort).toBe('xhigh');
+  });
+
   it('动态清单契约:注册表快照即清单本身(bundled 零静态,快照全量呈现)', () => {
     setActiveCatalog(BUNDLED_CATALOG);
     setDiscoveredCodexModels([fake('gpt-5.7', 17), fake('gpt-5.5', 20)]);

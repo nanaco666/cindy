@@ -632,9 +632,7 @@
           "low",
           "medium",
           "high",
-          "xhigh",
-          "max",
-          "ultra"
+          "xhigh"
         ],
         "defaultEffort": "high",
         "sortOrder": 8,
@@ -642,6 +640,16 @@
         "perAgent": {
           "claude-code": {
             "supportsFastMode": false
+          },
+          "codex": {
+            "efforts": [
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max",
+              "ultra"
+            ]
           }
         }
       },
@@ -658,9 +666,7 @@
           "low",
           "medium",
           "high",
-          "xhigh",
-          "max",
-          "ultra"
+          "xhigh"
         ],
         "defaultEffort": "high",
         "sortOrder": 9,
@@ -668,6 +674,16 @@
         "perAgent": {
           "claude-code": {
             "supportsFastMode": false
+          },
+          "codex": {
+            "efforts": [
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max",
+              "ultra"
+            ]
           }
         }
       },
@@ -734,9 +750,7 @@
           "low",
           "medium",
           "high",
-          "xhigh",
-          "max",
-          "ultra"
+          "xhigh"
         ],
         "defaultEffort": "high",
         "sortOrder": 18,
@@ -744,6 +758,16 @@
         "perAgent": {
           "claude-code": {
             "supportsFastMode": false
+          },
+          "codex": {
+            "efforts": [
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max",
+              "ultra"
+            ]
           }
         }
       },
@@ -760,9 +784,7 @@
           "low",
           "medium",
           "high",
-          "xhigh",
-          "max",
-          "ultra"
+          "xhigh"
         ],
         "defaultEffort": "high",
         "sortOrder": 19,
@@ -770,6 +792,16 @@
         "perAgent": {
           "claude-code": {
             "supportsFastMode": false
+          },
+          "codex": {
+            "efforts": [
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max",
+              "ultra"
+            ]
           }
         }
       },

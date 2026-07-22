@@ -255,6 +255,10 @@ function normalizeResolvedEffort(params: {
   if (effort === 'ultra' && !explicit && validEfforts.includes('max')) {
     return { ok: true, effort: 'max' };
   }
+  // ultra 但模型无 max(只到 xhigh)时,级联到 xhigh,别掉回 defaultEffort 丢掉最高兼容档。
+  if (effort === 'ultra' && !explicit && validEfforts.includes('xhigh')) {
+    return { ok: true, effort: 'xhigh' };
+  }
   if (effort === 'max' && !explicit && validEfforts.includes('xhigh')) {
     return { ok: true, effort: 'xhigh' };
   }
