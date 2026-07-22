@@ -23,6 +23,7 @@ import { fontWeight as fontWeightToken, radius, typeScale } from '@/theme/tokens
 import {
   PROVIDER_LOGO_PATHS,
   resolveProviderLogoKind,
+  type ProviderLogoKind,
   type ProviderLogoRouting,
 } from '@lizi/model-providers/branding';
 import { resolveModelIconKind } from '@lizi/model-providers/sections';
@@ -63,6 +64,8 @@ export interface MobileProviderMarkProps {
   providerId?: string;
   /** 用户重命名 provider 后用持久化 upstream 继续识别品牌。 */
   routing?: ProviderLogoRouting;
+  /** 被控端剥离 routing 前解析出的非敏感品牌;device-link 场景优先使用。 */
+  logoKind?: ProviderLogoKind;
   /** 供应商展示名(monogram 取首字母;官方 mark 分支不消费)。 */
   name: string;
   /** mark 单色;缺省 textSecondary(列表行口径,trigger 场景可传 textPrimary)。 */
@@ -70,14 +73,14 @@ export interface MobileProviderMarkProps {
 }
 
 /** 渲染单个供应商的来源徽标(官方 mark 或 monogram)。 */
-export function MobileProviderMark({ providerId, routing, name, color }: MobileProviderMarkProps) {
+export function MobileProviderMark({ providerId, routing, logoKind, name, color }: MobileProviderMarkProps) {
   const styles = useThemedStyles(makeStyles);
   const { colors } = useTheme();
   const fill = color ?? colors.textSecondary;
   // 官方 mark 比 monogram 容器缩一档(桌面同比:行内 mark ≈ 12.3 vs 容器 18),避免视觉过重。
   const glyph = 13;
 
-  const kind = resolveProviderLogoKind(providerId ?? '', routing);
+  const kind = logoKind ?? resolveProviderLogoKind(providerId ?? '', routing);
 
   switch (kind) {
     case 'anthropic':
@@ -135,6 +138,7 @@ export interface MobileModelIconMarkProps {
   /** 回落用的来源供应商 id / 展示名(与 MobileProviderMark 同语义)。 */
   providerId?: string;
   routing?: ProviderLogoRouting;
+  logoKind?: ProviderLogoKind;
   name: string;
   color?: string;
 }
@@ -148,6 +152,7 @@ export function MobileModelIconMark({
   icon,
   providerId,
   routing,
+  logoKind,
   name,
   color,
 }: MobileModelIconMarkProps) {
@@ -183,6 +188,7 @@ export function MobileModelIconMark({
       name={name}
       providerId={providerId}
       routing={routing}
+      logoKind={logoKind}
     />
   );
 }

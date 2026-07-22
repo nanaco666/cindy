@@ -9,6 +9,7 @@
  *      adapter) → 投影后全部消失(安全边界 D3)。
  *   2. 即便输入里残留 supportsFastMode → 也一并剥掉(routing 不再承载任何 Fast 信息)。
  *   3. models[agent](含 supportsFastMode 显示门控)原样透传 —— Fast 显隐数据源在这里。
+ *   4. 品牌只以非敏感 logoKind 透传;重命名 preset 仍可识别,upstream 绝不泄漏。
  * 只 mock electron(app)+ logger,与同目录 dispatchSendSafety.test 同范式。
  */
 import { describe, it, expect, vi } from 'vitest';
@@ -109,6 +110,44 @@ describe('projectInvokeResultForTunnel — maker:provider:list 投影', () => {
       connected: true,
       agents: ['claude-code', 'codex'],
     });
+  });
+
+  it('重命名 preset 在剥掉 upstream 前解析非敏感 logoKind', () => {
+    const renamed = {
+      ...xdProviderWithFullRouting(),
+      id: 'my-renamed-kimi-provider',
+      name: '团队模型服务',
+      routing: {
+        'claude-code': {
+          upstream: 'https://api.moonshot.cn/v1',
+          authStrategy: 'api-key',
+          headerOverride: { authorization: 'secret' },
+        },
+      },
+    };
+    const { providers } = project({ providers: [renamed] });
+
+    expect(providers[0].logoKind).toBe('moonshot');
+    expect(providers[0].routing).toEqual({ 'claude-code': {} });
+    expect(JSON.stringify(providers[0])).not.toContain('api.moonshot.cn');
+    expect(JSON.stringify(providers[0])).not.toContain('secret');
+  });
+
+  it('混合品牌 routing 不产生 logoKind,也不透传伪造值', () => {
+    const { providers } = project({
+      providers: [{
+        ...xdProviderWithFullRouting(),
+        id: 'mixed-provider',
+        logoKind: 'xai',
+        routing: {
+          codex: { upstream: 'https://api.openai.com/v1' },
+          'claude-code': { upstream: 'https://api.anthropic.com/v1' },
+        },
+      }],
+    });
+
+    expect(providers[0]).not.toHaveProperty('logoKind');
+    expect(providers[0].routing).toEqual({ codex: {}, 'claude-code': {} });
   });
 
   it('非 maker:provider:list 通道 → 原样返回不改', () => {

@@ -9,6 +9,14 @@ import {
 } from '../providerBranding.js';
 
 describe('provider branding', () => {
+  it.each([
+    ['anthropic', 'anthropic'],
+    ['openai', 'openai'],
+    ['xd', 'xd'],
+  ] as const)('maps built-in provider %s to its official mark', (providerId, logoKind) => {
+    expect(resolveProviderLogoKind(providerId)).toBe(logoKind);
+  });
+
   it('covers every bundled provider and preset id', () => {
     const entries = [...BUNDLED_CATALOG.providers, ...(BUNDLED_CATALOG.presets ?? [])];
     for (const entry of entries) {

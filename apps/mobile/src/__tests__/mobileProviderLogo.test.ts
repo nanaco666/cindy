@@ -1,10 +1,18 @@
-/** Mobile provider logo render/wiring contract (pure source checks; no React Native runtime). */
+/**
+ * Mobile provider logo render/wiring contract.
+ *
+ * These source checks are intentional: the Node Vitest environment cannot import React Native
+ * components without loading native runtime modules. Whitespace is normalized so formatter line
+ * wrapping does not make the wiring assertions brittle.
+ */
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 function readSource(relativePath: string): string {
-  return readFileSync(resolve(process.cwd(), relativePath), 'utf8').replace(/\r\n/g, '\n');
+  return readFileSync(resolve(process.cwd(), relativePath), 'utf8')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 describe('MobileProviderMark', () => {
@@ -12,7 +20,7 @@ describe('MobileProviderMark', () => {
     const source = readSource('src/session/MobileProviderMark.tsx');
 
     expect(source).toContain("from '@lizi/model-providers/branding';");
-    expect(source).toContain("resolveProviderLogoKind(providerId ?? '', routing)");
+    expect(source).toContain("logoKind ?? resolveProviderLogoKind(providerId ?? '', routing)");
     expect(source).toContain('<Path d={PROVIDER_LOGO_PATHS[kind]} fill={fill} />');
     expect(source).toContain('{providerMonogram(name)}');
     expect(source).not.toContain('switch (providerId)');
@@ -31,13 +39,16 @@ describe('MobileProviderMark', () => {
     expect(session).toContain('providerId={composerPillSourceId}');
   });
 
-  it('passes provider routing through model rows and both current-model entries', () => {
+  it('passes provider branding through model rows and both current-model entries', () => {
     const list = readSource('src/session/MobileModelPickerList.tsx');
     const draft = readSource('app/sessions/new.tsx');
     const session = readSource('app/sessions/[sessionId].tsx');
 
     expect(list).toContain('routing={row.provider.routing}');
+    expect(list).toContain('logoKind={row.provider.logoKind}');
     expect(draft).toContain('routing={activeSourceProvider.routing}');
+    expect(draft).toContain('logoKind={activeSourceProvider.logoKind}');
     expect(session).toContain('routing={composerPillSourceProvider?.routing}');
+    expect(session).toContain('logoKind={composerPillSourceProvider?.logoKind}');
   });
 });

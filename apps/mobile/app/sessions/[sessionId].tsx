@@ -101,11 +101,12 @@ import type { DeviceApiKeyStatus } from '@/device-link/deviceModelMetaCache';
 import type { MobileModelMemoryAccessors } from '@/session/draftModelMemory';
 import { ModelPickerSheet } from '@/session/ModelPickerSheet';
 import { MobileModelIconMark } from '@/session/MobileProviderMark';
-import { getModel, sourcesForModel } from '@lizi/model-providers/registry';
+import { getModel } from '@lizi/model-providers/registry';
 import { clearSessionMirror, makeSessionMirrorAccessors } from '@/session/sessionModelMirror';
 import { rowFastEditable } from '@/session/modelPickerRows';
 import {
   buildMobileModelSections,
+  isSelectedSourceDisconnected,
   resolveRowSelection,
   type ProviderModelRow,
 } from '@/session/providerModelSections';
@@ -1328,14 +1329,17 @@ export default function SessionScreen() {
   // 画成真实来源，否则手机会显示「默认来源 Logo」，发送却仍按已断开的 providerId 路由。
   // provider 列表加载期间不判，避免首帧短暂闪出断开态。
   const composerSelectedSourceDisconnected = useMemo(() => {
-    const providerId = currentSession?.providerId;
-    if (!providerId || !currentSession || composerDeviceProviders.loading) return false;
-    return !sourcesForModel(
-      composerDeviceProviders.providers,
-      currentSession.model,
-      sessionAgentKind,
-    ).some((provider) => provider.id === providerId);
+    if (!currentSession) return false;
+    return isSelectedSourceDisconnected({
+      providers: composerDeviceProviders.providers,
+      providerId: currentSession.providerId,
+      modelId: currentSession.model,
+      agentKind: sessionAgentKind,
+      loading: composerDeviceProviders.loading,
+      error: composerDeviceProviders.error,
+    });
   }, [
+    composerDeviceProviders.error,
     composerDeviceProviders.loading,
     composerDeviceProviders.providers,
     currentSession,
@@ -1587,6 +1591,7 @@ export default function SessionScreen() {
               name={composerPillSourceProvider?.name ?? composerPillSourceId}
               providerId={composerPillSourceId}
               routing={composerPillSourceProvider?.routing}
+              logoKind={composerPillSourceProvider?.logoKind}
             />
           ) : null}
           onPress={toggleComposerModelPicker}
