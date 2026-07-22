@@ -94,3 +94,38 @@ describe('computer use plugin IPC invariants', () => {
     }
   });
 });
+
+describe('computer use platform copy invariants', () => {
+  it('keeps macOS permission guidance out of the Windows copy path', () => {
+    const sectionSource = fs.readFileSync(
+      path.resolve(__dirname, '../../renderer/components/settings/ComputerUseSection.tsx'),
+      'utf-8',
+    );
+    expect(sectionSource).toContain("nextStatus?.permissionState?.platform === 'macos'");
+    expect(sectionSource).toContain(
+      "? 'settings.computerUse.directControl.permissionIntro.macosDescription'",
+    );
+
+    for (const locale of ['en', 'ja', 'ko', 'zh-CN']) {
+      const messages = JSON.parse(
+        fs.readFileSync(
+          path.resolve(__dirname, `../../renderer/i18n/locales/${locale}/common.json`),
+          'utf-8',
+        ),
+      ) as {
+        settings: {
+          computerUse: {
+            directControl: {
+              driverInfo: string;
+              permissionIntro: { description: string; macosDescription: string };
+            };
+          };
+        };
+      };
+      const directControl = messages.settings.computerUse.directControl;
+      expect(directControl.driverInfo).not.toContain('macOS');
+      expect(directControl.permissionIntro.description).not.toContain('macOS');
+      expect(directControl.permissionIntro.macosDescription).toContain('macOS');
+    }
+  });
+});

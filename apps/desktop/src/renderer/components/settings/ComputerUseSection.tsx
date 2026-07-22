@@ -912,7 +912,11 @@ export function ComputerUseSection({ workingDir }: ComputerUseSectionProps) {
         if (next && (!nextStatus?.installed || !isComputerPermissionReady(nextStatus))) {
           const confirmed = await confirm({
             title: t('settings.computerUse.directControl.permissionIntro.title'),
-            description: t('settings.computerUse.directControl.permissionIntro.description'),
+            description: t(
+              nextStatus?.permissionState?.platform === 'macos'
+                ? 'settings.computerUse.directControl.permissionIntro.macosDescription'
+                : 'settings.computerUse.directControl.permissionIntro.description',
+            ),
             confirmText: t('settings.computerUse.directControl.permissionIntro.confirm'),
             cancelText: t('settings.computerUse.directControl.permissionIntro.cancel'),
             autoFocusConfirm: true,
