@@ -133,6 +133,7 @@ import {
   useDeviceProviders,
   evictDeviceProviders,
   prefetchDeviceProviders,
+  getCachedDeviceProviders,
 } from '@/hooks/useDeviceProviders';
 import { evictDeviceGitSafetySettings } from '@/hooks/useGitSafetySettings';
 import {
@@ -817,8 +818,8 @@ export function NewMakerDraftRoute() {
           prefetchDeviceCapabilities(target.deviceId),
           prefetchDeviceProviders(target.deviceId),
         ]);
-        if (!getCachedCapabilities(capabilityAgentKind, target.deviceId)) {
-          throw new Error('device capabilities cache not populated after refresh');
+        if (!getCachedCapabilities(capabilityAgentKind, target.deviceId) || !getCachedDeviceProviders(target.deviceId)) {
+          throw new Error('device capabilities/providers cache not populated after refresh');
         }
         dlSeedKeyRef.current = `${target.deviceId}:${capabilityAgentKind}`;
         setDlSel(resolveDeviceLinkDraftDefaults(freshCaps, freshDefaults, undefined, capabilityAgentKind));
