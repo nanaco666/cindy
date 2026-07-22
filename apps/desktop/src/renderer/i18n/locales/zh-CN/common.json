@@ -25,6 +25,23 @@
     "backHome": "回到主界面",
     "details": "错误详情"
   },
+  "localDbFatal": {
+    "updateReady": {
+      "title": "需要更新后才能继续",
+      "description": "本地数据已由更新版本的 Cindy 升级，当前版本无法打开。新版本已下载就绪，重启安装后即可恢复使用。",
+      "confirm": "重启并安装更新"
+    },
+    "preparing": {
+      "description": "本地数据已由更新版本的 Cindy 升级，当前版本无法打开。正在获取新版本，请稍候…",
+      "progress": "已下载 {{progress}}%"
+    },
+    "noUpdate": {
+      "title": "本地数据暂时无法打开",
+      "description": "本地数据版本与当前应用不匹配（通常是被更新版本升级过）。请重新检查更新；若持续出现，请联系开发团队。",
+      "checkUpdate": "重新检查更新"
+    },
+    "details": "技术细节"
+  },
   "agentIsland": {
     "native": {
       "newConversationTitle": "新建对话",

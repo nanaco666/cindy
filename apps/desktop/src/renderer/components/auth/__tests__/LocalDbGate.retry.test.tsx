@@ -39,6 +39,8 @@ type ElectronApiStub = {
     ensureReady: ReturnType<typeof vi.fn>;
   };
   appReadyForBot: ReturnType<typeof vi.fn>;
+  getUpdateStatus: ReturnType<typeof vi.fn>;
+  onUpdateStatus: ReturnType<typeof vi.fn>;
 };
 
 function stubElectronApi(): ElectronApiStub {
@@ -47,6 +49,9 @@ function stubElectronApi(): ElectronApiStub {
       ensureReady: vi.fn().mockResolvedValue({ ready: true }),
     },
     appReadyForBot: vi.fn().mockResolvedValue(undefined),
+    // fatal 分支挂载 LocalDbFatalScreen → useUpdateStatus 需要这两个 API。
+    getUpdateStatus: vi.fn().mockResolvedValue({ status: 'idle' }),
+    onUpdateStatus: vi.fn(() => () => {}),
   };
   (window as unknown as { electronAPI: unknown }).electronAPI = api;
   return api;
@@ -154,7 +159,7 @@ describe('LocalDbGate 有限重试', () => {
     view.unmount();
   });
 
-  it('持续失败耗尽重试 → 落 fatal 阻断渲染', async () => {
+  it('持续失败耗尽重试 → 落 fatal:阻断主内容,渲染全屏恢复界面', async () => {
     const api = stubElectronApi();
     api.localDb.ensureReady.mockRejectedValue(
       new Error('db worker RPC timeout: op="queryOne"'),

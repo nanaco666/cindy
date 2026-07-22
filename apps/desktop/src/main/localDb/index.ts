@@ -60,6 +60,7 @@ import {
 } from './schemaMigrationLease';
 import { runSchemaStartupPolicy } from './schemaStartupPolicy';
 import { buildSharedDbCompatibilityMessage } from './sharedDbCompatibilityMessage';
+import { shouldShowNativeFatalDialog, type EnsureReadyErrorCode } from './fatalDialogPolicy';
 
 import { createLogger } from '../logger';
 import { recordDesktopDevLocalDbStartupResult } from '../devStartupStatus';
@@ -101,8 +102,6 @@ export function getCurrentUserId(): string | null {
 function dbPath(userId: string): string {
   return path.join(app.getPath('userData'), `${BRAND_IDENTITY.dbFilePrefix}-${userId}.db`);
 }
-
-type EnsureReadyErrorCode = 'DB_INIT_FAILED' | 'DB_CORRUPT_NO_BACKUP' | 'MIGRATE_FAILED';
 
 export type EnsureReadyResult =
   | { ready: true }
@@ -729,6 +728,14 @@ function showFatalDialog(title: string, detail: string, code: EnsureReadyErrorCo
     ready: false,
     error: { code, message: detail },
   });
+  // MIGRATE_FAILED 由 renderer 的 LocalDbFatalScreen 全屏接管（可安装已暂存更新），
+  // 不再弹阻塞式原生对话框；错误详情随 ensureReady 的 invoke reply 回渲染层。
+  if (!shouldShowNativeFatalDialog(code)) {
+    log.error(
+      JSON.stringify({ event: 'localDb.fatal.rendererOwned', code, title, detail }),
+    );
+    return;
+  }
   try {
     dialog.showMessageBoxSync({
       type: 'error',
