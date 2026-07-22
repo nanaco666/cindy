@@ -163,7 +163,9 @@ export function summarizeCodexRateLimitReset(
   if (value.account.accountId) rows.push({ label: 'Workspace', value: value.account.accountId });
 
   const availableCount = Math.max(0, Math.floor(value.rateLimitResetCredits?.availableCount ?? 0));
-  rows.push({ label: '可用重置', value: `${availableCount} 次` });
+  if (value.rateLimitResetCredits) {
+    rows.push({ label: '可用重置', value: `${availableCount} 次` });
+  }
 
   const earliestExpiry = value.resetOffer?.expiresAt ?? earliestCreditExpiry(
     value.rateLimitResetCredits?.credits ?? null,

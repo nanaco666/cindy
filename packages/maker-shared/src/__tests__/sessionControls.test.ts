@@ -104,6 +104,17 @@ describe('summarizeCodexRateLimitReset', () => {
       },
     }, NOW_MS)).toMatchObject({ shouldPrompt: false, canReset: false });
   });
+
+  it('omits the reset count when credit availability was not returned', () => {
+    const summary = summarizeCodexRateLimitReset({
+      ...base,
+      rateLimitResetCredits: null,
+      resetOffer: null,
+    }, NOW_MS);
+
+    expect(summary).toMatchObject({ availableCount: 0, shouldPrompt: true, canReset: false });
+    expect(summary?.rows).not.toContainEqual(expect.objectContaining({ label: '可用重置' }));
+  });
 });
 
 describe('summarizeAccountRateLimits', () => {

@@ -212,6 +212,29 @@ describe('Codex rate-limit reset control plane', () => {
     expect(consumeResetCredit).toHaveBeenCalledOnce();
   });
 
+  it('does not evict a cached terminal result before its retry TTL expires', async () => {
+    let activeIdentity = { email: 'person-0@example.com', accountId: 'workspace-0' };
+    let keyIndex = 0;
+    const { deps, service } = harness({
+      createIdempotencyKey: () => `key-${keyIndex++}`,
+      readAccountIdentity: vi.fn(async () => activeIdentity),
+    });
+
+    await service.read();
+    const firstResult = await service.consume('key-0');
+
+    for (let index = 1; index <= 64; index += 1) {
+      activeIdentity = {
+        email: `person-${index}@example.com`,
+        accountId: `workspace-${index}`,
+      };
+      await service.read();
+    }
+
+    await expect(service.consume('key-0')).resolves.toEqual(firstResult);
+    expect(deps.consumeResetCredit).toHaveBeenCalledOnce();
+  });
+
   it('fails closed when either account or workspace identity changes', async () => {
     const readAccountIdentity = vi.fn()
       .mockResolvedValueOnce({ email: 'person@example.com', accountId: 'workspace-a' })

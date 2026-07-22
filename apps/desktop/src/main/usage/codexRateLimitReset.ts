@@ -204,9 +204,10 @@ export function createCodexRateLimitResetService(
     }
     for (const [key, offer] of offers) {
       if (offers.size < MAX_RESET_OFFERS) break;
-      // Keep an in-flight redemption addressable until it settles. The registry may
-      // temporarily exceed the soft limit when every retained offer is pending.
-      if (offer.pending) continue;
+      // Keep both an in-flight redemption and its cached terminal result addressable
+      // for the full TTL. The registry may temporarily exceed the soft limit when every
+      // retained offer is still required for an idempotent retry.
+      if (offer.pending || offer.result) continue;
       offers.delete(key);
     }
   };
