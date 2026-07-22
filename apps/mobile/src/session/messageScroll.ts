@@ -342,20 +342,6 @@ export function mobileMessageListTopPadding(topOverlayHeight?: number): number {
   return Math.ceil(topOverlayHeight) + MOBILE_MESSAGE_LIST_TOP_GAP;
 }
 
-/**
- * “跳到上一条提问”浮标的顶部位置。
- *
- * 浮标与消息列表共用顶部 chrome 的实测高度，确保状态栏、工具栏或连接横幅
- * 高度变化时始终落在 chrome 下方。测量完成前返回 null，避免首帧短暂落进
- * edge-to-edge 系统状态栏后再跳动。
- */
-export function mobilePreviousUserButtonTop(topOverlayHeight?: number): number | null {
-  if (typeof topOverlayHeight !== 'number' || !Number.isFinite(topOverlayHeight) || topOverlayHeight <= 0) {
-    return null;
-  }
-  return Math.ceil(topOverlayHeight) + MOBILE_MESSAGE_LIST_TOP_GAP;
-}
-
 export interface MobileTopPaddingCompensationInput {
   previousTopPadding: number;
   nextTopPadding: number;
