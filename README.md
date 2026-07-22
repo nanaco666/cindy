@@ -1,124 +1,144 @@
-# Cindy 客户端
+<p align="center">
+  <img src="apps/mobile/assets/splash/cindy-splash-illustration.webp" alt="Cindy" width="200" />
+</p>
 
-Cindy 的客户端 monorepo，包含：
+<h1 align="center">Cindy Client</h1>
 
-- `apps/desktop`：Electron 桌面客户端
-- `apps/mobile`：Expo / React Native 手机客户端
-- `apps/android-platform-tools-bin`：桌面端随包使用的 Android Platform-Tools
-- `packages/*`：客户端共享能力
-- `cindy-protocol/`：与服务端共用的协议 submodule
+<p align="center">
+  <strong>CONSIDER IT DONE.</strong><br />
+  An all-in-one AI assistant that operates your computer to get real work done — not just answer questions.
+</p>
 
-服务端已经拆到独立仓库 `xindong/cindy-server`，不在本仓构建。
+<p align="center">
+  <strong>English</strong> · <a href="README.zh-CN.md">简体中文</a>
+</p>
 
-## 首次安装
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="License" /></a>
+  <a href="https://github.com/makecindy/cindy/actions/workflows/ci.yml"><img src="https://github.com/makecindy/cindy/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+  <a href="https://nodejs.org"><img src="https://img.shields.io/badge/node-22%2B-brightgreen.svg" alt="Node" /></a>
+  <a href="https://pnpm.io"><img src="https://img.shields.io/badge/pnpm-10-orange.svg" alt="pnpm" /></a>
+</p>
 
-需要 Node.js 22、pnpm 10、Git LFS，以及访问私有仓库 `xindong/cindy-protocol` 的权限。
+<p align="center">
+  🌐 <a href="https://cindy.com.cn">cindy.com.cn</a> (China) · <a href="https://cindy.app">cindy.app</a> (Global)
+</p>
+
+Cindy runs locally on your own machine, uses your files and logged-in apps, and
+is powered by [Claude Code](https://www.anthropic.com/claude-code) and Codex as
+its underlying agent engines. It can drive your browser, computer, and phone,
+coordinate multiple agents as a team, and dispatch tasks from IM and schedules.
+
+This repository is the open-source **client** for Cindy — the desktop and mobile
+apps plus their shared packages, organized as a pnpm monorepo.
+
+## What's in this repo
+
+| Path | Description |
+| --- | --- |
+| `apps/desktop` | Electron desktop client |
+| `apps/mobile` | Expo / React Native mobile client |
+| `packages/*` | Shared client capabilities (auth, device-link, agent orchestration, model providers, …) |
+| `apps/*-bin` | Vendored agent/tool binaries bundled with the desktop app (claude-code, codex, ripgrep, android-platform-tools) |
+| `cindy-protocol/` | Wire protocol shared with the server (git submodule) |
+
+**Not in this repo:** the backend service (`cindy-server`) lives in a separate
+repository and is not part of this monorepo. The client is free software; the
+hosted experience requires a Cindy account (download & pricing on the website).
+
+## Prerequisites
+
+- **Node.js** 22 LTS or newer
+- **pnpm** 10.x (v11 is not yet supported)
+- **Git LFS**
+
+## Getting started
 
 ```bash
-git clone --recurse-submodules git@github.com:xindong/cindy-moved.git
-cd cindy-moved
+git clone --recurse-submodules https://github.com/makecindy/cindy.git
+cd cindy
 git lfs pull
 pnpm install
 ```
 
-已有 checkout 补 submodule：
+Already cloned without submodules:
 
 ```bash
 git submodule update --init --recursive
 ```
 
-协议版本固定在父仓记录的 commit。升级协议时必须同步确认 `cindy-server` 的 submodule 指针。
+The protocol version is pinned to the commit recorded by this repo. When
+upgrading the protocol, the server's submodule pointer must be upgraded in
+lockstep to avoid wire-protocol drift.
 
-## 桌面端开发
+## Development
 
-默认连接远程 API：
+### Desktop
 
 ```bash
+# Connect to the remote API (default)
 pnpm restart:desktop:remote
-```
 
-区域化 desktop dev：
-
-```bash
-# 国内版（默认，读取 config/endpoint.json）
-pnpm restart:desktop:remote --region=cn
-
-# 海外版（读取 config/endpoint.global.json）
-pnpm restart:desktop:remote --region=global
-
-# 验证对应区域的线上 CDN 端点清单
-pnpm restart:desktop:remote --region=global --endpoints-cdn
-```
-
-连接开发者自己启动的本地服务端：
-
-```bash
+# Connect to a locally running server
 pnpm restart:desktop:local
 ```
 
-少数手机端本地 E2E 会用 `pnpm dev:server` 临时拉起服务端。本仓的这个命令只负责
-转发到外部服务端仓：默认查找同级目录 `../cindy-server`，也可以显式指定：
+`restart:desktop:remote` accepts `--region=cn` (default) / `--region=global`, and
+supports isolated sandboxes and passive multi-instance modes. See
+[`AGENTS.md`](AGENTS.md) for the full launch-flag reference and the desktop
+dev/runtime contract.
 
-```bash
-XDT_SERVER_REPO=/path/to/cindy-server pnpm dev:server
-```
-
-dev 数据目录为 `Cindy` userData（2026-07-17 身份翻转起由 `productName: Cindy` 派生，
-从空开始；主库为 `cindy-<userId>.db`，不再沿用老 `xdt-maker` 目录的历史数据）。
-不要给普通开发启动加 `--isolated`，也不要设置 `XDT_USER_DATA_DIR`；这两个入口
-只用于明确需要数据隔离的调试场景。
-
-## 手机端开发
-
-常用入口：
+### Mobile
 
 ```bash
 pnpm mobile:sim:start
 pnpm --filter mobile typecheck
 pnpm --filter mobile test
-pnpm --filter mobile test:scope
 ```
 
-完整开发与发布说明见 `apps/mobile/docs/dev-and-release-workflow.md` 和
-`apps/mobile/RELEASING.md`。
+Full mobile dev & release workflow:
+[`apps/mobile/docs/dev-and-release-workflow.md`](apps/mobile/docs/dev-and-release-workflow.md)
+and [`apps/mobile/RELEASING.md`](apps/mobile/RELEASING.md).
 
-## 验证
+## Testing & validation
 
 ```bash
-pnpm check:endpoints
+pnpm test:unit                              # full unit gate (required before every PR)
+
 pnpm --filter desktop typecheck
 pnpm --filter desktop db:validate
 pnpm --filter desktop test:migration-replay
-pnpm --filter mobile typecheck
-pnpm --filter mobile test
-pnpm --filter mobile test:scope
-pnpm test:unit
+pnpm --filter mobile  typecheck
+pnpm --filter mobile  test
 ```
 
-`apps/desktop/drizzle/migration-baseline.json` 固定了从旧仓迁入的历史 SQL。历史
-migration 只允许原样保留；数据库变化必须新增 migration。
+Database schema changes are **append-only**: historical migrations are frozen by
+`apps/desktop/drizzle/migration-baseline.json`, and any change must add a new
+migration rather than editing an existing one.
 
-## CI 与发布
+## Architecture
 
-普通 CI 只检查客户端、共享 packages 和协议消费。由于协议仓是私有 submodule，
-GitHub 仓库需要配置 Actions secret `CINDY_PROTOCOL_DEPLOY_KEY`，内容为能够只读
-`xindong/cindy-protocol` 的 SSH deploy key。
+- [`DESIGN.md`](DESIGN.md) — visual design system, color tokens, and UI conventions
+- [`AGENTS.md`](AGENTS.md) — engineering rules, launch/runtime contracts, and module boundaries
+- [`docs/dev-rules/`](docs/dev-rules/) — deep-dive architecture docs (e.g. Orca multi-agent orchestration)
 
-旧仓的发版 CI、签名凭据和自托管 runner 没有迁入。本仓发布线后续单独建设。
+## Contributing
 
-## 许可证 / License
+Contributions go through pull requests into `main`. Before opening a PR:
 
-除非另有说明，本仓库的源代码依据 [Apache License 2.0](LICENSE) 授权。
+1. Run `pnpm test:unit` and make sure it passes.
+2. Fill in the PR description per [`.github/PULL_REQUEST_TEMPLATE.md`](.github/PULL_REQUEST_TEMPLATE.md).
 
-模型权重、数据集、提示词、商标，以及其他单独标识的材料，可能适用各自的许可条款，
-不因根目录的 Apache-2.0 而被自动覆盖。第三方开源组件保留各自的版权与许可，其归属
-声明与 SPDX SBOM 统一收口在 [`docs/legal/`](docs/legal/)；各分发产物的精确清单
-见 [`docs/legal/notices/`](docs/legal/notices/)（说明见
-[`docs/legal/notices/README.md`](docs/legal/notices/README.md)）。
+The engineering rules in [`AGENTS.md`](AGENTS.md) are authoritative for code
+style, platform (macOS/Windows) parity, i18n, theming, and review severity.
 
-本项目的版权与归属信息见 [`NOTICE`](NOTICE)。
+## Security
 
----
+Never commit credentials or authorization files to the working tree. If you
+discover a security issue, please report it privately rather than opening a
+public issue. <!-- TODO: add SECURITY.md with a contact/disclosure address -->
+
+## License / 许可证
 
 Except as otherwise noted, the source code in this repository is licensed under
 the [Apache License, Version 2.0](LICENSE).
