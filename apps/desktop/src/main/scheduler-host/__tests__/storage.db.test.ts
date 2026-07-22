@@ -895,4 +895,56 @@ describe('DrizzleScheduleStorage (in-memory)', () => {
       harness.close();
     }
   });
+
+  it('keeps legacy sessions owned by the fallback schedule when a duplicate is added', async () => {
+    const harness = createStorageHarness();
+    const legacySchedule = baseSchedule({
+      id: 'sch-legacy-owner',
+      name: 'weekly summary',
+      workingDir: '/repo',
+    });
+    const duplicate = baseSchedule({
+      id: 'sch-new-duplicate',
+      name: legacySchedule.name,
+      workingDir: legacySchedule.workingDir,
+      createdAt: legacySchedule.createdAt + 10_000,
+      updatedAt: legacySchedule.updatedAt + 10_000,
+    });
+
+    try {
+      await harness.storage.insert(legacySchedule);
+      enableLegacySessionFallback(harness, legacySchedule.id);
+      harness.db.run(sql`
+        INSERT INTO sessions (
+          id, title, source, workspace_kind, working_dir, created_at, updated_at, total_cost_usd
+        ) VALUES (
+          'sess-legacy-owner', '[Schedule] weekly summary', 'scheduler', 'project', '/repo',
+          ${legacySchedule.createdAt + 1}, ${legacySchedule.createdAt + 2}, 4.25
+        )
+      `);
+      await harness.storage.insert(duplicate);
+
+      await expect(harness.storage.listRuns(legacySchedule.id)).resolves.toEqual([
+        expect.objectContaining({
+          scheduleId: legacySchedule.id,
+          sessionId: 'sess-legacy-owner',
+        }),
+      ]);
+      await expect(harness.storage.listRuns(duplicate.id)).resolves.toEqual([]);
+      await expect(harness.storage.listSidebarIndexRuns()).resolves.toEqual([
+        expect.objectContaining({
+          scheduleId: legacySchedule.id,
+          sessionId: 'sess-legacy-owner',
+        }),
+      ]);
+      await expect(harness.storage.listCostSummaries()).resolves.toEqual([
+        expect.objectContaining({
+          scheduleId: legacySchedule.id,
+          sessionCount: 1,
+        }),
+      ]);
+    } finally {
+      harness.close();
+    }
+  });
 });

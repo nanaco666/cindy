@@ -18,9 +18,16 @@ function schedulesColumnExists(db: Database.Database, columnName: string): boole
   );
 }
 
+function sessionsColumnExists(db: Database.Database, columnName: string): boolean {
+  return (db.prepare("PRAGMA table_info('sessions')").all() as TableInfoRow[]).some(
+    (row) => row.name === columnName,
+  );
+}
+
 /**
- * 存量 schedule 可能依赖按名称/目录匹配旧会话的兼容路径，因此升级时标记为 true；
- * 新 schedule 走列默认 false，以 scheduleId 作为唯一身份，删除后同名重建不会继承旧数据。
+ * 只给仍可能是 legacy session 原始 owner 的存量 schedule 开启兼容匹配。
+ * 若同 key session 早于 schedule 创建，说明当前 row 可能已经是删除后的同名重建，
+ * 不能让它在升级时重新认领上一代留下的会话。
  */
 function run(db: Database.Database): void {
   if (!tableExists(db, 'schedules')) return;
@@ -29,7 +36,33 @@ function run(db: Database.Database): void {
     db.exec(
       'ALTER TABLE schedules ADD COLUMN legacy_session_fallback integer DEFAULT 0 NOT NULL',
     );
-    db.exec('UPDATE schedules SET legacy_session_fallback = 1');
+    if (!tableExists(db, 'sessions')) return;
+    const hasWorkspaceIdentity =
+      schedulesColumnExists(db, 'workspace_kind')
+      && schedulesColumnExists(db, 'working_dir')
+      && sessionsColumnExists(db, 'workspace_kind')
+      && sessionsColumnExists(db, 'working_dir');
+    const legacyOwnerGuard = hasWorkspaceIdentity
+      ? `
+          AND sessions.workspace_kind = schedules.workspace_kind
+          AND (
+            schedules.workspace_kind = 'dialogue'
+            OR sessions.working_dir IS schedules.working_dir
+          )
+        `
+      : '';
+    db.exec(`
+      UPDATE schedules
+      SET legacy_session_fallback = 1
+      WHERE NOT EXISTS (
+        SELECT 1
+        FROM sessions
+        WHERE sessions.source = 'scheduler'
+          AND sessions.title = '[Schedule] ' || schedules.name
+          ${legacyOwnerGuard}
+          AND sessions.created_at < schedules.created_at
+      )
+    `);
   })();
 }
 

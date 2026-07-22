@@ -1113,6 +1113,7 @@ export class DrizzleScheduleStorage implements ScheduleStorage {
       .select({
         id: schedules.id,
         name: schedules.name,
+        legacySessionFallback: schedules.legacySessionFallback,
         workspaceKind: schedules.workspaceKind,
         workingDir: schedules.workingDir,
         updatedAt: schedules.updatedAt,
@@ -1122,6 +1123,8 @@ export class DrizzleScheduleStorage implements ScheduleStorage {
 
     const directScheduleIdByLegacyKey = new Map<string, string>();
     for (const schedule of scheduleRows) {
+      // 非兼容的新任务不能抢走真正存量任务的 legacy key 所有权。
+      if (!schedule.legacySessionFallback) continue;
       const key = legacyScheduleKey({
         name: schedule.name,
         workspaceKind: schedule.workspaceKind,
