@@ -17,10 +17,10 @@
  *   - dev 下 electron.exe 启动没有 NSIS 装的快捷方式，原生 toast 可能不弹——
  *     把 dev 环境当成"通知功能要在 packaged 构建里测"即可，不再额外兜底。
  *
- * 静音 gate 在 renderer 侧（localStorage `notifications.enabled` /
- * `notifications.feishuEnabled`）做，主进程不持有这两个开关——避免主/渲染双份
- * 状态。主进程仅按 payload.channels 分发,且飞书分支额外要求 ownerOpenId 存在
- * (TOFU 绑定前不发,只 warn)。
+ * 通知偏好仍由 renderer 的 localStorage 持久化。普通会话在 renderer gate 后通过
+ * payload.channels 分发；scheduler 从 main 直接发桌面通知，因此 renderer 会把
+ * `notifications.enabled` 的当前值轻量同步到 main。飞书仍只按调用方 channels 分发，
+ * 且额外要求 ownerOpenId 存在（TOFU 绑定前不发，只 warn）。
  */
 
 import { app, ipcMain, nativeImage, Notification, type BrowserWindow } from 'electron';
@@ -31,6 +31,12 @@ import { markSessionNeedsAttention } from './appBadgeService';
 import { createLogger } from './logger';
 
 const log = createLogger('notificationService');
+let desktopNotificationsEnabled = true;
+
+/** Renderer owns persistence; main keeps the current value for scheduler-originated toasts. */
+export function getDesktopNotificationsEnabled(): boolean {
+  return desktopNotificationsEnabled;
+}
 
 // dev 下 electron.exe / Electron.app 自带的是默认图标，notification toast 没有
 // AUMID/.icns 兜底会显示成空白或 Electron logo——给 toast 显式塞一张 PNG
@@ -51,7 +57,9 @@ const devNotificationIcon = !app.isPackaged
  *   - 'error'       — agent 本轮以报错结束
  *   - 'needs-reply' — agent 抛出 ask-user / permission / plan-review，等用户处理
  */
-type SessionEventKind = 'done' | 'error' | 'needs-reply';
+export type SessionEventKind = 'done' | 'error' | 'needs-reply';
+
+const CLIENT_NOTIFICATION_NAME = 'Cindy';
 
 interface ShowSessionEventPayload {
   sessionId: string;
@@ -66,11 +74,9 @@ interface ShowSessionEventPayload {
 }
 
 /**
- * Toast 文案分两层：粗体 title 放会话标题（真正变化的语义信息），body 放状态。
- *
- * Windows toast 顶部那行是按 AUMID 关联的 app 元数据自动渲染（"xdt-maker" + 图标），
- * 已经表达了"哪个 app 的通知"；如果 title 也再放一遍 "XDMaker" 三层都重复，
- * 信息密度低。把 title 让给会话名，扫一眼就知道是谁、什么状态。
+ * Toast 文案分两层：title 同时标识 Cindy 与会话，body 放结构化终态。
+ * 不能只依赖 Windows AUMID / macOS bundle 元数据标识来源：不同系统和通知中心
+ * 展示的 app 元数据并不一致，只显示会话名时容易被误认成同名插件主动发出的通知。
  */
 function buildBody(kind: SessionEventKind): string {
   switch (kind) {
@@ -94,7 +100,7 @@ function buildFeishuText(title: string, kind: SessionEventKind): string {
     : kind === 'error'
       ? '执行失败'
       : '已完成 ✓';
-  return `会话「${title}」${status}`;
+  return `${CLIENT_NOTIFICATION_NAME} · 会话「${title}」${status}`;
 }
 
 // 防 GC：Electron Notification 实例如果不持引用，JS 引擎可能在 toast 还在显示
@@ -122,7 +128,22 @@ function focusWindow(getWindow: () => BrowserWindow | null, sessionId: string): 
   win.show();
   win.focus();
   win.setAlwaysOnTop(false);
-  win.webContents.send('notification:focus-session', sessionId);
+  if (sessionId) win.webContents.send('notification:focus-session', sessionId);
+}
+
+/**
+ * 从 main 内其它模块发送与会话通知同语义的桌面 toast。
+ * Scheduler 运行在 main，必须直接调用此入口；`webContents.send` 同名 IPC 只会
+ * 发给 renderer，不会命中 main 的 `ipcMain.handle`。
+ */
+export function showDesktopSessionEvent(
+  getWindow: () => BrowserWindow | null,
+  payload: Pick<ShowSessionEventPayload, 'sessionId' | 'title' | 'kind'>,
+): void {
+  const { sessionId, title, kind } = payload;
+  if (sessionId) markSessionNeedsAttention(sessionId);
+  const safeTitle = title?.trim() || sessionId.slice(0, 8) || '会话';
+  showDesktopToast(safeTitle, kind, () => focusWindow(getWindow, sessionId));
 }
 
 export interface NotificationServiceDeps {
@@ -137,11 +158,18 @@ export interface NotificationServiceDeps {
 export function initNotificationService(deps: NotificationServiceDeps): void {
   const { getWindow, feishuIm } = deps;
 
+  ipcMain.handle('notification:set-desktop-enabled', (_event, enabled: unknown) => {
+    if (typeof enabled !== 'boolean') {
+      throw new TypeError('notification desktop enabled must be a boolean');
+    }
+    desktopNotificationsEnabled = enabled;
+    return { ok: true as const };
+  });
+
   ipcMain.handle(
     'notification:show-session-event',
     async (_event, payload: ShowSessionEventPayload): Promise<void> => {
       const { sessionId, title, kind, channels } = payload;
-      markSessionNeedsAttention(sessionId);
       // 兜底：title 为空（极早期 session 还没生成标题）也别炸，用 sessionId 前 8 位顶上。
       const safeTitle = title?.trim() || sessionId.slice(0, 8);
 
@@ -150,7 +178,11 @@ export function initNotificationService(deps: NotificationServiceDeps): void {
       const wantFeishu = channels?.feishu === true;
 
       if (wantDesktop) {
-        showDesktopToast(safeTitle, kind, () => focusWindow(getWindow, sessionId));
+        showDesktopSessionEvent(getWindow, { sessionId, title: safeTitle, kind });
+      } else {
+        // Dock/taskbar 角标独立于外发通道；即便只开飞书或两个通知开关都关闭，
+        // session 进入终态后仍要在 Cindy 内标记为需要关注。
+        markSessionNeedsAttention(sessionId);
       }
 
       if (wantFeishu) {
@@ -171,7 +203,7 @@ function showDesktopToast(safeTitle: string, kind: SessionEventKind, onClick: ()
   }
 
   const notif = new Notification({
-    title: safeTitle,
+    title: `${CLIENT_NOTIFICATION_NAME} · ${safeTitle}`,
     body,
     // silent 默认 false——发声音，与 Electron 默认一致。
     // icon 仅在 dev 下传值；packaged 时为 undefined，回到原行为(由 AUMID/.icns 兜底)。

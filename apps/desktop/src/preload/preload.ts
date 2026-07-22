@@ -2038,6 +2038,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     channels?: { desktop?: boolean; feishu?: boolean };
   }): Promise<void> =>
     ipcRenderer.invoke('notification:show-session-event', payload),
+  notificationSetDesktopEnabled: (enabled: boolean): Promise<{ ok: true }> =>
+    ipcRenderer.invoke('notification:set-desktop-enabled', enabled),
   notificationMarkSessionAttention: (sessionId: string): Promise<void> =>
     ipcRenderer.invoke('notification:mark-session-attention', sessionId),
   // intent:'explicit' = 用户真实看到了内容(报错 banner 聚焦驻留 / 全部标为已读等);

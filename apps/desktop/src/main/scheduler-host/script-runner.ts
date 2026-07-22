@@ -654,6 +654,17 @@ export class ScriptScheduleRunner {
       }
     }
 
+    // Script schedules learn their primary session from the terminal protocol frame rather
+    // than the prompt runner's early binding path. Publish the existing binding event before
+    // the scheduler notifier runs so renderer-side completion handling cannot emit a duplicate.
+    if (primarySessionId) {
+      try {
+        await ctx.onSessionBound?.(primarySessionId);
+      } catch (err) {
+        this.deps.logger.warn?.('[script-runner] onSessionBound failed (non-fatal)', err);
+      }
+    }
+
     this.deps.logger.info?.('[script-runner] script completed', {
       scheduleId: schedule.id,
       runId: ctx.runId,

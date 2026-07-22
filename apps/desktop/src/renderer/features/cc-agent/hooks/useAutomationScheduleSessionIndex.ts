@@ -7,12 +7,15 @@ import {
   hasSessionAttention,
 } from '@/lib/sessionAttentionStore';
 import {
+  clearSchedulerOwnedRun,
   clearSilencedRun,
   getScheduleRunSessionAttentionBaseline,
   getSilencedRunSessionId,
   getSilencedRunSessionIdForAttentionFallback,
+  markNextSessionTerminalNotificationOwnedByScheduler,
   markNextSessionDoneSilenced,
   rememberScheduleRunSessionAttentionBaseline,
+  scheduleClearSchedulerOwnedRun,
   scheduleClearSilencedRun,
 } from '@/lib/silencedSessionDoneStore';
 import type { AutomationScheduleSessionInfo } from '../lib/automationSidebarGrouping';
@@ -74,6 +77,9 @@ export function useAutomationScheduleSessionIndex(): ReadonlyMap<string, Automat
     const off = window.electronAPI.maker.schedule.onEvent((raw) => {
       const event = raw as SchedulerEvent;
       if (event.type === 'session-bound') {
+        // Scheduler notifier 是 schedule.notify 的唯一外发通知 owner；普通 session
+        // transition 仍负责 attention，但不能再发第二条桌面 / 飞书通知。
+        markNextSessionTerminalNotificationOwnedByScheduler(event.runId, event.sessionId);
         rememberScheduleRunSessionAttentionBaseline(
           event.runId,
           event.sessionId,
@@ -114,6 +120,13 @@ export function useAutomationScheduleSessionIndex(): ReadonlyMap<string, Automat
         clearSilencedRun(event.runId);
       } else if (event.type === 'failed' || event.type === 'deferred') {
         clearSilencedRun(event.runId);
+      }
+      // completed / failed 可能早于 React transition effect 消费终态，延迟清理；
+      // deferred / skipped 没有可接管的 session 终态，立即释放，避免误伤后续 turn。
+      if (event.type === 'completed' || event.type === 'failed') {
+        scheduleClearSchedulerOwnedRun(event.runId, 2000);
+      } else if (event.type === 'deferred' || event.type === 'skipped') {
+        clearSchedulerOwnedRun(event.runId);
       }
       if (
         event.type === 'changed' ||

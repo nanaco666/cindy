@@ -46,7 +46,9 @@ import {
   useSessionAttentionSnapshot,
 } from '@/lib/sessionAttentionStore';
 import {
+  clearCompletedSchedulerOwnedRunForNewActivity,
   clearCompletedSilencedRunForNewActivity,
+  observeNextSessionTerminalNotificationOwnedByScheduler,
   observeNextSessionDoneSilenced,
 } from '@/lib/silencedSessionDoneStore';
 
@@ -141,6 +143,7 @@ export function useSessionRunningStatus(
     for (const sessionId of currentRunningSet) {
       if (!prevRunning.has(sessionId)) {
         clearCompletedSilencedRunForNewActivity(sessionId);
+        clearCompletedSchedulerOwnedRunForNewActivity(sessionId);
         // error 红角标与真实错误态同步:新 turn 启动会清掉 store 的终止错误
         // (staleErrorClearedOnTurnStart),若此时角标还是 'error' 就成了 orphan——
         // useErrorReadAck 因错误态消失永不 ack,活跃会话的 done 分支又不覆写,
@@ -184,6 +187,10 @@ export function useSessionRunningStatus(
         // 读一次,不能推迟到定时器里 —— 否则 debounce 期间 session 又起新 turn 时
         // 静默 slot 会被跳过。
         const isSilencedDone = !hasError && observeNextSessionDoneSilenced(sessionId);
+        // Scheduler 已按 schedule.notify 接管这次终态的桌面 / 飞书通知。这里只
+        // 抑制 callback，侧栏 / Dock attention 仍按普通 done/error 逻辑保留。
+        const notificationOwnedByScheduler =
+          observeNextSessionTerminalNotificationOwnedByScheduler(sessionId);
         const isActive = sessionId === activeSessionId;
 
         // error 立刻处理:队列会被 abort,不存在"下一条自动接着跑"的场景;红角标 +
@@ -194,7 +201,7 @@ export function useSessionRunningStatus(
           // useErrorReadAck 在 ErrorBanner 真实展示(会话打开 + 窗口聚焦驻留)后清除。
           // 不能沿用「活跃会话不亮」的 done 语义——活跃 ≠ 用户看到了报错。
           addSessionAttention(sessionId, 'error');
-          onSessionErrorRef.current?.(sessionId);
+          if (!notificationOwnedByScheduler) onSessionErrorRef.current?.(sessionId);
           continue;
         }
 
@@ -223,7 +230,7 @@ export function useSessionRunningStatus(
           if (!isActive && !stillPending) {
             addSessionAttention(sessionId, 'done');
           }
-          onSessionDoneRef.current?.(sessionId);
+          if (!notificationOwnedByScheduler) onSessionDoneRef.current?.(sessionId);
         }, QUEUE_DEBOUNCE_MS);
         pendingDoneTimersRef.current.set(sessionId, timer);
       }

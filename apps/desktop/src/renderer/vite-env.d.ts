@@ -1765,6 +1765,8 @@ interface ElectronAPI {
      */
     channels?: { desktop?: boolean; feishu?: boolean };
   }) => Promise<void>;
+  /** Sync the renderer-owned global desktop-notification preference to main. */
+  notificationSetDesktopEnabled?: (enabled: boolean) => Promise<{ ok: true }>;
   /** 将对应 session 标记为需要关注，显示 Dock/taskbar app badge。 */
   notificationMarkSessionAttention: (sessionId: string) => Promise<void>;
   /** 用户查看对应 session 后，清除系统级 Dock/taskbar attention badge。 */
