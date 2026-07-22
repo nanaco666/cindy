@@ -1297,7 +1297,6 @@
       "appIdPlaceholder": "cli_xxxxxxxxxxxxxxxx",
       "appSecretLabel": "App Secret",
       "appSecretPlaceholder": "sec_xxxxxxxxxxxxxxxxxx",
-      "appSecretSavedPlaceholder": "••••••••••••••••••••••••",
       "showSecret": "显示密钥",
       "hideSecret": "隐藏密钥",
       "createLink": "点击链接创建 ↗",

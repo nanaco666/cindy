@@ -1297,7 +1297,6 @@
       "appIdPlaceholder": "cli_xxxxxxxxxxxxxxxx",
       "appSecretLabel": "App Secret",
       "appSecretPlaceholder": "sec_xxxxxxxxxxxxxxxxxx",
-      "appSecretSavedPlaceholder": "••••••••••••••••••••••••",
       "showSecret": "シークレットを表示",
       "hideSecret": "シークレットを非表示",
       "createLink": "クリックして作成 ↗",

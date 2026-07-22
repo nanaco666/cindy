@@ -1297,7 +1297,6 @@
       "appIdPlaceholder": "cli_xxxxxxxxxxxxxxxx",
       "appSecretLabel": "App Secret",
       "appSecretPlaceholder": "sec_xxxxxxxxxxxxxxxxxx",
-      "appSecretSavedPlaceholder": "••••••••••••••••••••••••",
       "showSecret": "시크릿 표시",
       "hideSecret": "시크릿 숨기기",
       "createLink": "여기를 클릭해 생성 ↗",

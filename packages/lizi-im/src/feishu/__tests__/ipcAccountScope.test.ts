@@ -212,6 +212,22 @@ describe('Feishu credential connection semantics', () => {
     expect(mocks.start).not.toHaveBeenCalled();
   });
 
+  it.each(['testing', 'reconnecting'] as const)(
+    'keeps an in-flight %s transport untouched when credentials are unchanged',
+    async (status) => {
+      mocks.readCredentials.mockReturnValue(credentials);
+      mocks.getCurrentStatus.mockReturnValue(status);
+
+      await expect(saveAndConnect(credentials.appId, credentials.appSecret)).resolves.toEqual({
+        verdict: 'pending',
+      });
+
+      expect(mocks.writeCredentials).not.toHaveBeenCalled();
+      expect(mocks.stop).not.toHaveBeenCalled();
+      expect(mocks.start).not.toHaveBeenCalled();
+    },
+  );
+
   it('recovers an unchanged saved binding without lifecycle announcements', async () => {
     mocks.readCredentials.mockReturnValue(credentials);
     mocks.getCurrentStatus.mockReturnValue('error');

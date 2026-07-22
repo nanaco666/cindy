@@ -171,13 +171,20 @@ export function getPublicState(): FeishuPublicState {
 export async function saveAndConnect(
   appId: string,
   appSecret: string,
-): Promise<{ verdict: 'connected' | 'conflict' | 'error' }> {
+): Promise<{ verdict: 'connected' | 'conflict' | 'error' | 'pending' }> {
   const saved = storage.readCredentials();
   const credentialsUnchanged = saved?.appId === appId && saved.appSecret === appSecret;
   if (credentialsUnchanged) {
-    if (wsClient.getCurrentStatus() === 'connected') {
+    const status = wsClient.getCurrentStatus();
+    if (status === 'connected') {
       getLog().info('[feishu/ipc] saveAndConnect skipped: same credentials already connected');
       return { verdict: 'connected' };
+    }
+    if (status === 'testing' || status === 'reconnecting') {
+      getLog().info(
+        `[feishu/ipc] saveAndConnect skipped: same credentials already ${status}`,
+      );
+      return { verdict: 'pending' };
     }
     return reconnectSavedCredentials();
   }
@@ -274,7 +281,7 @@ async function pollRegistrationInBackground(
         return;
       }
 
-      let verdict: 'connected' | 'conflict' | 'error';
+      let verdict: 'connected' | 'conflict' | 'error' | 'pending';
       try {
         ({ verdict } = await runInAccountScope(accountScope, async () => {
           if (success.ownerOpenId) {

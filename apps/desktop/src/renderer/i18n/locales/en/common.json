@@ -1298,7 +1298,6 @@
       "appIdPlaceholder": "cli_xxxxxxxxxxxxxxxx",
       "appSecretLabel": "App Secret",
       "appSecretPlaceholder": "sec_xxxxxxxxxxxxxxxxxx",
-      "appSecretSavedPlaceholder": "••••••••••••••••••••••••",
       "showSecret": "Show secret",
       "hideSecret": "Hide secret",
       "createLink": "Click here to create ↗",

@@ -211,9 +211,9 @@ export function useFeishuBot(): UseFeishuBotReturn {
         appSecret: trimmedSecret,
       });
 
-      // A failed/conflicting first connection can still follow a successful
-      // credential write. Re-read main's persisted state instead of treating
-      // the transport verdict as the binding state.
+      // A non-connected verdict can still coexist with persisted credentials.
+      // Re-read main's current state instead of treating an earlier transport
+      // verdict as either the binding state or the latest live status.
       if (verdict !== 'connected') {
         await reloadState();
       }
@@ -237,13 +237,15 @@ export function useFeishuBot(): UseFeishuBotReturn {
         return true;
       }
 
+      if (verdict === 'pending') {
+        return true;
+      }
+
       if (verdict === 'conflict') {
-        setStatus('conflict');
         toast.error(t('logic.toasts.feishuBotConflict'));
         return false;
       }
 
-      setStatus('error');
       toast.error(t('logic.toasts.feishuBotConnectFailed'));
       return false;
     } catch (err) {
