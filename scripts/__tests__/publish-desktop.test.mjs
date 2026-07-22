@@ -33,6 +33,7 @@ test('publish orchestrator: region 选择先于 ensureBinary,binary 上传先于
   assert.notEqual(manifestUploadIndex, -1);
   assert.ok(regionIndex < agentsIndex);
   assert.ok(agentsIndex < manifestUploadIndex, '先传二进制、后传 manifest 的铁律不能倒');
+  assert.match(source, /if \(buildInfo\.platform !== 'linux'\)/);
 });
 
 // ── parsePublishArgs ─────────────────────────────────────────────────────────
@@ -284,10 +285,13 @@ test('applyAppToManifest: requireRelogin=true 写入标记', () => {
   assert.equal(m.app.requireRelogin, true);
 });
 
-test('applyAppToManifest: linux installer-only,剥掉 hotfix/requireRelogin/历史 installer 段', () => {
+test('applyAppToManifest: linux installer-only,保留旧客户端依赖的 agent 段', () => {
   const existing = {
     app: { version: '1.0.0', hotfix: { file: 'x' }, requireRelogin: true },
     installer: { legacy: true },
+    claudeCode: { version: '2.0.0', file: 'claude.gz' },
+    codex: { version: '3.0.0', file: 'codex.gz' },
+    ripgrep: { version: '15.1.0', file: 'rg.gz' },
   };
   const m = applyAppToManifest(existing, {
     platform: 'linux', platformKey: 'linux-x64', version: '1.2.3',
@@ -299,6 +303,9 @@ test('applyAppToManifest: linux installer-only,剥掉 hotfix/requireRelogin/历�
   assert.equal('hotfix' in m.app, false);
   assert.equal('requireRelogin' in m.app, false);
   assert.equal('installer' in m, false);
+  assert.deepEqual(m.claudeCode, existing.claudeCode);
+  assert.deepEqual(m.codex, existing.codex);
+  assert.deepEqual(m.ripgrep, existing.ripgrep);
 });
 
 // ── 上传计划 ─────────────────────────────────────────────────────────────────

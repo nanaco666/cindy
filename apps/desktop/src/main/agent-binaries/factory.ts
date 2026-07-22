@@ -31,6 +31,7 @@ import {
   fetchManifest,
   getCachedManifest,
   getBaseUrl,
+  getPlatformKey,
 } from '../manifestService.js';
 
 // ── 私有路径 helpers（顶层 function，无 export）─────────────────────────────
@@ -130,6 +131,20 @@ export function createBinaryProvisioner(config: BinaryProvisionerConfig): Binary
             },
           }, onProgress);
           return { ready: false, binaryPath: '', error: 'asset_missing' };
+        }
+        // Reject a manifest asset explicitly scoped to another platform, while
+        // keeping compatibility with older manifests whose file path had no
+        // platform segment at all.
+        const assetPlatform = asset.file.match(/\/(linux-x64|darwin-arm64|darwin-x64|win32-x64)\//)?.[1];
+        if (assetPlatform && assetPlatform !== getPlatformKey()) {
+          emit({
+            status: 'failed',
+            error: {
+              code: 'asset_platform_mismatch',
+              message: `manifest field "${config.manifestField}" points to non-${getPlatformKey()} asset`,
+            },
+          }, onProgress);
+          return { ready: false, binaryPath: '', error: 'asset_platform_mismatch' };
         }
         emit({ availableVersion: asset.version }, onProgress);
 

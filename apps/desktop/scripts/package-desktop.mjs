@@ -354,7 +354,8 @@ async function main() {
   console.log(`    version:  ${versionless ? `(版本无关,占位 ${version},不参与热更新)` : version}`);
   console.log('='.repeat(60));
 
-  // agent 二进制按需下载(packaged extraResource + 后续发布上传都要用)。
+  // Linux 只校验 sqlite-vec 等原生运行资产；Claude/Codex 由 packaged
+  // runtime 在首启时复用系统 CLI 或安装到 userData/agent-runtime。
   if (platform === 'linux') {
     await ensureLinuxRuntimeAssets();
     logLinuxPackagingRequirements();

@@ -72,7 +72,8 @@ export interface RipgrepManifest {
 
 export interface Manifest {
   app: AppManifest;
-  claudeCode: ClaudeCodeManifest;
+  /** Linux manifests omit agent assets; packaged Linux uses its official runtime fallback. */
+  claudeCode?: ClaudeCodeManifest;
   codex?: CodexManifest;
   ripgrep?: RipgrepManifest;
 }

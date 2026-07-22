@@ -65,6 +65,8 @@ export interface PrepareOpts {
   totalSteps?: 2;
   /** false 时不广播 'binary-download-progress' (lazy 调用路径)。缺省 true (splash 路径)。 */
   broadcastProgress?: boolean;
+  /** 允许宿主在退出或启动 deadline 到期时取消 Linux 私有安装子进程。 */
+  signal?: AbortSignal;
 }
 
 export interface PrepareResult {
