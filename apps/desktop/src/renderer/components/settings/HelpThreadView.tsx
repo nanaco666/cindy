@@ -191,7 +191,9 @@ function HelpMessageRow({
             <ArrowUpRight size={12} />
             {t('settings.help.qnaOpenTab', {
               tab:
-                action.tab === 'api-keys' || action.tab === 'connections'
+                action.tab === 'api-keys' ||
+                action.tab === 'connections' ||
+                action.tab === 'ghosts'
                   ? t('sidebar.tabs.plugins')
                   : TAB_LABEL_KEY[action.tab]
                     ? t(TAB_LABEL_KEY[action.tab])

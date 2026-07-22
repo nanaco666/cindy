@@ -2,7 +2,6 @@
 id: sessions-and-chat
 title: Sessions and the chat thread
 summary: Create sessions, send / stop / queue messages, clear context, and switch between sessions in the sidebar.
-status: draft
 ---
 Each **session** is a persistent chat thread driven by **one agent** (Claude Code or Codex). All your chats live as sessions in the left sidebar.
 
@@ -20,9 +19,9 @@ Each **session** is a persistent chat thread driven by **one agent** (Claude Cod
 
 **Conversation controls:**
 
-- **`/clear`** — reset the conversation context (the agent forgets what was said) without deleting the session itself.
+- **`/clear`** — the same as **+ New Maker**: opens a fresh empty draft and switches to it, discarding the current conversation context. It doesn't reset the existing session in place — the old session stays in the sidebar untouched.
 - **`/compact`** — ask the agent to summarize and compress earlier turns into a shorter context (Claude Code).
-- **Edit** an earlier user message to fork from that point — the agent restarts from your edited message; later messages are dropped.
+- **Edit** — you can edit your **last** user message. Doing so **rewinds** the conversation: it drops that message and everything after it, **and rolls back the file changes made since**, then resends your edited message. It's a true rewind, not a branching fork.
 
 **Switching between sessions:**
 

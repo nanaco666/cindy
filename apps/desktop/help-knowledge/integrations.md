@@ -1,14 +1,14 @@
 ---
 id: integrations
 title: What Cindy integrates with
-summary: Supported external services — FeiShu, Slack, Google, Jira / Confluence, GitHub, GitLab (via plugins) — and what's not supported.
+summary: Supported external services — FeiShu, Slack, Discord, Google, Jira / Confluence, GitHub, GitLab — and what's not supported.
 tab: connections
-status: draft
 ---
 At a glance, Cindy integrates with:
 
-- **FeiShu (Lark)** — sign-in (OAuth) and DM-style bot notifications. See the FeiShu bot topic.
-- **Slack** — one Slack binding (Settings > Slack toggle) powers both directions: the Slack channel bot for receiving tasks, and agent Slack tools (search / read history / post as the bound user via Slack's hosted MCP) available in every session.
+- **FeiShu (Lark)** — DM-style bot notifications and interaction (Settings > IM bots). See the FeiShu bot topic. (FeiShu is no longer a sign-in method for Cindy itself.)
+- **Slack** — one binding (Settings > IM bots, the "Cindy" tab) powers both directions: the Slack channel bot for receiving tasks, and agent Slack tools (search / read history / post as the bound user) available in every session.
+- **Discord** — a Discord bot you bring yourself (your own Discord App + bot token) under Settings > IM bots.
 - **Google** — Gmail / Calendar / Drive / Sheets, via the Filo Google plugin (Plugins > Filo Google).
 - **Jira / Confluence** — via the XD Atlassian plugin (Plugins > XD Atlassian; one OAuth covers both).
 - **GitHub / GitLab** — via the Cindy GitHub and Cindy GitLab plugins (Plugins).
@@ -17,7 +17,7 @@ At a glance, Cindy integrates with:
 
 **Not supported:**
 
-- There is no built-in Discord or Microsoft Teams integration. If you want chat notifications, use the FeiShu bot.
+- There is no built-in Microsoft Teams integration. For chat notifications, use the FeiShu, Slack, or Discord bot.
 - There's no native Linear integration as a first-party feature — those would have to come via an MCP a user installs themselves.
 
 **Notes:**
