@@ -48,6 +48,11 @@ import {
   type FolderPickerSelectSource,
 } from '@/components/new-chat/FolderPickerPopover';
 import { RightSidebarToggle } from '@/components/layout/RightSidebarToggle';
+import {
+  AddRemoteProjectDialog,
+  type RemoteProjectTarget,
+} from '@/components/new-chat/AddRemoteProjectDialog';
+import { useHasAnyRemoteTarget } from '@/hooks/useHasAnyReadyRemoteHost';
 import { buildDeviceLinkCreateArgs } from './deviceLinkCreateArgs';
 import { VendorSegmentedSwitcher } from '@/components/new-chat/VendorSegmentedSwitcher';
 import { TopRightChipStack, TopRightChipStackProvider } from '@/components/chat/TopRightChipStack';
@@ -115,9 +120,10 @@ import {
 import { isGlobalDropIntercepted } from '@/lib/globalDropIntercept';
 import { createLogger } from '@/lib/logger';
 import { matchNavigationCommandName, tryHandleNavigationCommand } from '@/lib/navigationCommands';
-import { useAgentCapabilities } from '@/hooks/useAgentCapabilities';
+import { useAgentCapabilities, evictDeviceCapabilities } from '@/hooks/useAgentCapabilities';
 import { useProviders } from '@/hooks/useProviders';
-import { useDeviceProviders } from '@/hooks/useDeviceProviders';
+import { useDeviceProviders, evictDeviceProviders } from '@/hooks/useDeviceProviders';
+import { evictDeviceGitSafetySettings } from '@/hooks/useGitSafetySettings';
 import {
   getProjectPickerDisplayName,
   useProjectPickerOptions,
@@ -297,6 +303,73 @@ export function NewMakerDraftRoute() {
   const { createSession } = useCCSessions();
   const vendorAuthGate = useVendorAuthGate();
   const refreshWorktrees = useRefreshWorktrees();
+
+  // 「添加远程项目」入口:gate = 至少一台 ready SSH 主机 或 一台可控 device-link 设备。
+  // 入口渲染在 mode pill 的 FolderPickerPopover 里(Globe 项),点开下面这个弹窗。
+  const hasAnyRemoteTarget = useHasAnyRemoteTarget();
+  const [addRemoteProjectOpen, setAddRemoteProjectOpen] = useState(false);
+  // 弹窗确认添加后的落点:SSH 立即建会话 + navigate;device-link 把当前草稿指向被控端项目,
+  // 首条消息发出时走既有 create-on-send 链路(见下方 isDeviceLinkDraft 分支)。
+  const handleRemoteProjectAdded = useCallback(
+    async (target: RemoteProjectTarget) => {
+      // vendor 由外层 VendorSegmentedSwitcher (draft.vendor) 单一决策 —— dialog 不再让用户选。
+      // lastByVendor[draftVendor] 提供该 vendor 上次的 model / effort / permission / fast 偏好作初始值。
+      const draftVendor: 'cc' | 'codex' = draft.vendor === 'codex' ? 'codex' : 'cc';
+
+      if (target.kind === 'device-link') {
+        // device-link:**不**像 SSH 立即建会话(会在被控端留空会话)。改为把当前草稿指向该被控
+        // 设备项目,用户发首条消息时走既有 device-link create-on-send 链路(与侧边栏「+新建」同款,
+        // 见本文件下方 isDeviceLinkDraft 分支)。我们已在 /cc-agent/new,无需 navigate。
+        //
+        // 打开远程草稿前先驱逐该设备的能力 / 供应商 / Git safety 缓存:这些是「订阅时拉一次、
+        // 无 TTL、只在设备下线才 evict」的快照,被控端在线期间改了模型目录或 Rewind safety
+        // 设置控制端不会自动刷新。这里同步 evict → 紧接着 patchDraft 触发的 ChatInput /
+        // ModelSelector 重渲染会 cache-miss 重新拉取,保证草稿打开时信息 = 被控端「当下」状态。
+        evictDeviceCapabilities(target.deviceId);
+        evictDeviceProviders(target.deviceId);
+        evictDeviceGitSafetySettings(target.deviceId);
+        patchDraft({
+          workingDir: target.path,
+          remoteHostId: null,
+          deviceLinkDeviceId: target.deviceId,
+          deviceLinkDeviceName: target.deviceName,
+        });
+        return;
+      }
+
+      // SSH:lazy-create(workspaceKind='project',第一条消息发出时 agent 进程才真正起),
+      // 立即建会话记录并 navigate 过去。建会话约定与本文件其它 createSession 路径一致
+      // (createSession + makerChatStore.setSessionRuntime + navigate)。
+      const prefs = draft.lastByVendor[draftVendor];
+      const fastMode = getFastModeForModel(prefs.model);
+      try {
+        const newSession = await createSession({
+          agentKind: draftVendor,
+          workingDir: target.path,
+          workspaceKind: 'project',
+          permissionMode: prefs.permissionMode,
+          model: prefs.model,
+          effort: prefs.effort,
+          fastMode,
+          remoteHostId: target.hostId,
+        });
+        if (!newSession) {
+          toast.error(t('ccAgent.draft.createSessionFailed'));
+          return;
+        }
+        makerChatStore.setSessionRuntime(newSession.id, {
+          agentKind: draftVendor === 'codex' ? 'codex' : 'claude-code',
+          fastMode,
+          planModeEnabled: false,
+        });
+        navigate(`/cc-agent/${newSession.id}`);
+      } catch (err) {
+        // createSession 内部已通过 toast 报错, 这里再 catch 避免 unhandled rejection。
+        log.warn('add remote project failed', { error: String(err), vendor: draftVendor });
+      }
+    },
+    [draft.vendor, draft.lastByVendor, createSession, navigate, t],
+  );
   const outletContext = useOutletContext<{
     rightSidebarCollapsed?: boolean;
     onToggleRightSidebar?: () => void;
@@ -1731,6 +1804,8 @@ export function NewMakerDraftRoute() {
                   onOpenChange={handleFolderPickerOpenChange}
                   onSelect={handleModePickerSelect}
                   projectOptions={projectPickerOptions}
+                  // 仅在有可用远程目标时暴露「添加远程项目」入口(SSH ready 主机 / device-link 可控设备)。
+                  onAddRemoteProject={hasAnyRemoteTarget ? () => setAddRemoteProjectOpen(true) : undefined}
                   side="bottom"
                   align="end"
                   sideOffset={6}
@@ -1960,6 +2035,16 @@ export function NewMakerDraftRoute() {
           onOpenChange={crossAgentDialog.onOpenChange}
           onConfirm={crossAgentDialog.onConfirm}
           onCancel={crossAgentDialog.onCancel}
+        />
+        {/* 添加远程项目弹窗 (入口在 mode pill 的 FolderPickerPopover 里, gate 走 hasAnyRemoteTarget =
+            SSH ready 主机 或 device-link 可控设备)。onProjectAdded 带 kind:SSH 立即建会话 + navigate;
+            device-link 把当前草稿指向被控设备项目,发首条消息时 create-on-send。 */}
+        <AddRemoteProjectDialog
+          open={addRemoteProjectOpen}
+          onOpenChange={setAddRemoteProjectOpen}
+          onProjectAdded={(target) => {
+            void handleRemoteProjectAdded(target);
+          }}
         />
       </div>
     </TopRightChipStackProvider>
