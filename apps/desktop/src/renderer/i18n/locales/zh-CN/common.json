@@ -5221,6 +5221,7 @@
         "loadFailed": "加载失败：{{error}}",
         "empty": "暂无可用的活跃会话",
         "deletedBinding": "绑定会话已删除，请重新选择",
+        "archivedBinding": "绑定会话已归档，请恢复该会话后再保存，或重新选择",
         "selectPlaceholder": "— 选择一个会话 —"
       },
       "preRunHook": {

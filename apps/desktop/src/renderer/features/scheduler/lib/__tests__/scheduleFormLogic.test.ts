@@ -63,11 +63,21 @@ describe('canSubmitSessionBinding', () => {
     expect(canSubmitSessionBinding('agent', 'persistent', undefined)).toBe(true);
   });
 
-  it('only allows a bound session after it resolves as available', () => {
+  it('only allows a bound session after it resolves as available and not archived', () => {
     expect(canSubmitSessionBinding('agent', 'bound', undefined)).toBe(false);
     expect(canSubmitSessionBinding('agent', 'bound', { sessionId: 'session-1', state: 'missing' })).toBe(false);
     expect(canSubmitSessionBinding('agent', 'bound', { sessionId: 'session-1', state: 'deleted' })).toBe(false);
     expect(canSubmitSessionBinding('agent', 'bound', { sessionId: 'session-1', state: 'available' })).toBe(true);
+    expect(canSubmitSessionBinding('agent', 'bound', {
+      sessionId: 'session-1',
+      state: 'available',
+      status: 'active',
+    })).toBe(true);
+    expect(canSubmitSessionBinding('agent', 'bound', {
+      sessionId: 'session-1',
+      state: 'available',
+      status: 'archived',
+    })).toBe(false);
   });
 
   it('allows script mode to clear an unavailable stale binding', () => {
@@ -75,6 +85,11 @@ describe('canSubmitSessionBinding', () => {
     expect(
       canSubmitSessionBinding('script', 'bound', { sessionId: 'session-1', state: 'deleted' }),
     ).toBe(true);
+    expect(canSubmitSessionBinding('script', 'bound', {
+      sessionId: 'session-1',
+      state: 'available',
+      status: 'archived',
+    })).toBe(true);
   });
 });
 
