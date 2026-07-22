@@ -83,6 +83,8 @@ describe('mobile account deletion', () => {
 
     expect(login).toContain('testID="login.accountDeletionStatus"');
     expect(login).toContain('现在重新登录即可取消注销');
+    expect(login).toContain("cause.code === 'INVALID_RESPONSE'");
+    expect(login).toContain('if (status.status === \'completed\') stopPolling()');
     expect(nativeSocial).toContain('if (!credential.identityToken)');
     expect(nativeSocial).not.toContain('!credential.authorizationCode');
     expect(nativeSocial).toContain(

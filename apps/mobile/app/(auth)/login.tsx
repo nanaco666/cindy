@@ -98,30 +98,51 @@ export default function LoginScreen() {
       return;
     }
     let cancelled = false;
+    let polling = true;
+    let timer: ReturnType<typeof setInterval> | undefined;
+    const stopPolling = () => {
+      polling = false;
+      if (timer) {
+        clearInterval(timer);
+        timer = undefined;
+      }
+    };
     const refreshStatus = async () => {
+      if (!polling) return;
       try {
         const status = await auth.getAccountDeletionStatus();
         if (cancelled || !status) return;
         if (status.status === 'cancelled') {
+          stopPolling();
           await auth.clearAccountDeletionReceipt();
           if (!cancelled) setAccountDeletionStatus(null);
           return;
         }
         setAccountDeletionStatus(status);
+        if (status.status === 'completed') stopPolling();
       } catch (cause) {
         if (
           cause instanceof AuthApiError &&
           cause.code === 'ACCOUNT_DELETION_RECEIPT_INVALID'
         ) {
+          stopPolling();
           await auth.clearAccountDeletionReceipt();
+        } else if (
+          cause instanceof AuthApiError &&
+          cause.code === 'INVALID_RESPONSE'
+        ) {
+          // 契约漂移不是可重试网络错误：停止本次页面轮询，但保留 receipt，避免
+          // 丢失唯一查询能力；下次挂载仍可在服务端恢复后重试。
+          stopPolling();
+          if (!cancelled) setAccountDeletionStatus(null);
         }
       }
     };
     void refreshStatus();
-    const timer = setInterval(() => void refreshStatus(), 30_000);
+    timer = setInterval(() => void refreshStatus(), 30_000);
     return () => {
       cancelled = true;
-      clearInterval(timer);
+      stopPolling();
     };
   }, [
     auth.accountDeletionReceipt,
