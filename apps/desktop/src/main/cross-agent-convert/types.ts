@@ -4,10 +4,9 @@
  * detector / converter / IPC / renderer 之间共享的契约。改动需同步更新 vite-env.d.ts。
  */
 
-/** 当前 5 项迁移种类（双向对称）。Commit A 仅 'agents-md' 真做。 */
+/** 当前 4 项迁移种类（双向对称）。Skill 通过共享链接复用，不做格式转换。 */
 export type MigrationItemKind =
   | 'agents-md' // CLAUDE.md ↔ AGENTS.md
-  | 'skills' // .claude/skills/ ↔ .agents/skills/
   | 'agents' // .claude/agents/ ↔ .codex/agents/
   | 'hooks' // .claude/hooks/ + settings.json ↔ .codex/hooks/ + .codex/hooks.json
   | 'mcp'; // .mcp.json ↔ .codex/config.toml [mcp_servers]
@@ -32,8 +31,8 @@ export interface MigrationItem {
   /** 主目标路径。 */
   target: string;
   /**
-   * 子项（可选）。skills/agents/hooks 这种集合类把要做的子单位列出来，
-   * UI 可以展示 "skills (3 个新增)" 一行；converter 按子项分别处理。
+   * 子项（可选）。agents/hooks 这种集合类把要做的子单位列出来，
+   * converter 按子项分别处理。
    */
   subItems?: { name: string; sourcePath: string; targetPath: string }[];
 }

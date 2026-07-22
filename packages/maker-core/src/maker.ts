@@ -45,7 +45,15 @@ import type { MakerMemoryManager } from './memory/manager.js';
  * 一处声明,避免散落在各个 IPC handler 的 post-hook 里; maker-core 抽象保持干净
  * (零 Electron / 零 file system 概念)。
  */
+export interface SessionBeforeStartContext {
+  agentKind: AgentKind;
+  workingDir: string;
+  remoteHostId?: string;
+}
+
 export interface SessionLifecycleHooks {
+  /** Agent 启动前的 host 准备动作。失败只记日志，不阻断 session 创建。 */
+  onBeforeStart?: (context: SessionBeforeStartContext) => void | Promise<void>;
   /** session 关闭时 (Maker.closeSession 主动 / 内部异常 / handle 自然结束)。 */
   onClose?: (sessionId: string) => void | Promise<void>;
   /**
@@ -144,6 +152,7 @@ export class Maker {
     this.makerMemory = deps.makerMemory;
     this.logger.info('Maker initialized', {
       agents: Object.keys(this.agents),
+      hasOnBeforeStartHook: !!this.lifecycleHooks.onBeforeStart,
       hasOnCloseHook: !!this.lifecycleHooks.onClose,
       makerMemory: !!this.makerMemory,
     });
@@ -185,6 +194,21 @@ export class Maker {
 
     const startedAt = Date.now();
     const startOpts: CreateSessionOptions = { ...opts };
+    if (this.lifecycleHooks.onBeforeStart) {
+      try {
+        await this.lifecycleHooks.onBeforeStart({
+          agentKind: opts.agentKind,
+          workingDir: opts.workingDir,
+          ...(opts.remoteHostId ? { remoteHostId: opts.remoteHostId } : {}),
+        });
+      } catch (err) {
+        this.logger.warn('lifecycleHooks.onBeforeStart threw; continuing session startup', {
+          sessionId: id,
+          workingDir: opts.workingDir,
+          error: String(err),
+        });
+      }
+    }
     if (
       opts.agentKind === 'codex' &&
       opts.resumeSessionId &&

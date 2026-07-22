@@ -36,6 +36,19 @@ interface PrepareOptions {
   homeDir?: string;
 }
 
+export interface SharedProjectSkillLinksResult {
+  workingDir: string;
+  sharedSkillsDir: string;
+  claudeSkillsDir: string;
+  changed: boolean;
+  actions: LinkAction[];
+  warnings: string[];
+}
+
+interface PrepareProjectOptions {
+  workingDir: string;
+}
+
 function normalizeForCompare(value: string): string {
   const resolved = path.resolve(value);
   return process.platform === 'win32' ? resolved.toLowerCase() : resolved;
@@ -81,6 +94,33 @@ export function sharedGlobalSkillsPaths(homeDir = os.homedir()) {
     claudeSkillsDir: path.join(homeDir, '.claude', 'skills'),
     codexSkillsDir: path.join(homeDir, '.codex', 'skills'),
   };
+}
+
+/** Project skills keep their single source of truth under either supported discovery root. */
+export function sharedProjectSkillsPaths(workingDir: string) {
+  const resolvedWorkingDir = path.resolve(workingDir);
+  return {
+    workingDir: resolvedWorkingDir,
+    sharedSkillsDir: path.join(resolvedWorkingDir, '.agents', 'skills'),
+    claudeSkillsDir: path.join(resolvedWorkingDir, '.claude', 'skills'),
+  };
+}
+
+/** Returns the root only for a direct `<root>/.{agents,claude}/skills/<name>` child. */
+export function projectWorkingDirFromSkillPath(skillPath: string): string | null {
+  const resolved = path.resolve(skillPath);
+  const skillsDir = path.dirname(resolved);
+  const agentsDir = path.dirname(skillsDir);
+  const equalsName = (actual: string, expected: string) =>
+    process.platform === 'win32'
+      ? actual.toLowerCase() === expected.toLowerCase()
+      : actual === expected;
+  if (!equalsName(path.basename(skillsDir), 'skills')) return null;
+  const discoveryRoot = path.basename(agentsDir);
+  if (!equalsName(discoveryRoot, '.agents') && !equalsName(discoveryRoot, '.claude')) {
+    return null;
+  }
+  return path.dirname(agentsDir);
 }
 
 async function listSkillEntries(
@@ -158,7 +198,11 @@ async function cleanupBrokenManagedLinks(rootPath: string, managedRoots: string[
   return changed;
 }
 
-async function ensureDirectoryLink(source: SkillEntry, targetPath: string): Promise<{ status: LinkStatus; changed: boolean; reason?: string }> {
+async function ensureDirectoryLink(
+  source: SkillEntry,
+  targetPath: string,
+  useRelativeTarget = false,
+): Promise<{ status: LinkStatus; changed: boolean; reason?: string }> {
   const targetReal = await realPathOrNull(targetPath);
   if (targetReal && targetReal === source.realPath) {
     return { status: 'kept', changed: false };
@@ -181,7 +225,10 @@ async function ensureDirectoryLink(source: SkillEntry, targetPath: string): Prom
 
   try {
     await fsp.mkdir(path.dirname(targetPath), { recursive: true });
-    await fsp.symlink(source.path, targetPath, process.platform === 'win32' ? 'junction' : 'dir');
+    const linkTarget = useRelativeTarget && process.platform !== 'win32'
+      ? path.relative(path.dirname(targetPath), source.path)
+      : source.path;
+    await fsp.symlink(linkTarget, targetPath, process.platform === 'win32' ? 'junction' : 'dir');
     return { status: 'linked', changed: true };
   } catch (err) {
     return { status: 'error', changed: false, reason: (err as Error).message };
@@ -191,6 +238,7 @@ async function ensureDirectoryLink(source: SkillEntry, targetPath: string): Prom
 async function linkEntriesIntoRoot(
   entries: SkillEntry[],
   targetRoot: string,
+  useRelativeTarget = false,
 ): Promise<{ actions: LinkAction[]; changed: boolean; warnings: string[] }> {
   const actions: LinkAction[] = [];
   const warnings: string[] = [];
@@ -210,7 +258,7 @@ async function linkEntriesIntoRoot(
     }
 
     const targetPath = path.join(targetRoot, entry.name);
-    const result = await ensureDirectoryLink(entry, targetPath);
+    const result = await ensureDirectoryLink(entry, targetPath, useRelativeTarget);
     changed = changed || result.changed;
     const action: LinkAction = {
       name: entry.name,
@@ -290,4 +338,65 @@ export async function prepareSharedGlobalSkillLinks(
     actions,
     warnings,
   };
+}
+
+/**
+ * Makes project skills visible to both engines without copying or rewriting them.
+ *
+ * Rules:
+ * - Codex discovers `<workingDir>/.agents/skills` and Claude Code discovers
+ *   `<workingDir>/.claude/skills`.
+ * - A real skill directory on either side is exposed to the other side with a link.
+ * - Existing non-managed paths are never overwritten; conflicts are reported as warnings.
+ * - Empty projects are left untouched, so merely opening a project does not create folders.
+ */
+export async function prepareSharedProjectSkillLinks(
+  opts: PrepareProjectOptions,
+): Promise<SharedProjectSkillLinksResult> {
+  const paths = sharedProjectSkillsPaths(opts.workingDir);
+  const sharedRootCompare = (await realPathOrNull(paths.sharedSkillsDir))
+    ?? normalizeForCompare(paths.sharedSkillsDir);
+  const claudeRootCompare = (await realPathOrNull(paths.claudeSkillsDir))
+    ?? normalizeForCompare(paths.claudeSkillsDir);
+
+  const managedRoots = Array.from(new Set([
+    sharedRootCompare,
+    claudeRootCompare,
+    normalizeForCompare(paths.sharedSkillsDir),
+    normalizeForCompare(paths.claudeSkillsDir),
+  ]));
+  let changed = false;
+  changed = (await cleanupBrokenManagedLinks(paths.sharedSkillsDir, managedRoots)) || changed;
+  changed = (await cleanupBrokenManagedLinks(paths.claudeSkillsDir, managedRoots)) || changed;
+
+  const initialClaudeEntries = (await listSkillEntries('claude', paths.claudeSkillsDir))
+    .filter((entry) => !(entry.isSymlink && pointsInto(entry, [sharedRootCompare])));
+  const initialSharedEntries = (await listSkillEntries('shared', paths.sharedSkillsDir))
+    .filter((entry) => !(entry.isSymlink && pointsInto(entry, [claudeRootCompare])));
+  if (initialClaudeEntries.length === 0 && initialSharedEntries.length === 0) {
+    return { ...paths, changed, actions: [], warnings: [] };
+  }
+
+  const actions: LinkAction[] = [];
+  const warnings: string[] = [];
+
+  const claudeToShared = await linkEntriesIntoRoot(
+    initialClaudeEntries,
+    paths.sharedSkillsDir,
+    true,
+  );
+  actions.push(...claudeToShared.actions);
+  warnings.push(...claudeToShared.warnings);
+  changed = claudeToShared.changed || changed;
+
+  const sharedToClaude = await linkEntriesIntoRoot(
+    initialSharedEntries,
+    paths.claudeSkillsDir,
+    true,
+  );
+  actions.push(...sharedToClaude.actions);
+  warnings.push(...sharedToClaude.warnings);
+  changed = sharedToClaude.changed || changed;
+
+  return { ...paths, changed, actions, warnings };
 }

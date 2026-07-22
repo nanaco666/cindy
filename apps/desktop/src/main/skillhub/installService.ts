@@ -10,7 +10,8 @@
  * 安装目标：
  *   - 未传 installPath → 默认 `~/.agents/skills/<name>/`（双引擎共享）
  *     + 额外创建 `~/.claude/skills/<name>` symlink
- *   - 传入 installPath（完整路径）→ 直接使用，main 不做语义拼接
+ *   - 传入项目级 `.agents/skills/<name>` → 直接使用，并创建 Claude 兼容链接
+ *   - 其它自定义 installPath（完整路径）→ 直接使用，main 不做语义拼接
  *
  * 同名冲突（finalDir 已存在）的两个分支：
  *   1. finalDir 存在 + !force → 返回 errorCode='CONFLICT_USER_OWNED'（UI 弹二次确认）
@@ -33,7 +34,11 @@ import { registryService } from './registry';
 import type { StoredInstall } from './registry/types';
 import { computeFolderHash } from './folderHash';
 import { getSkillInstallLockOwner, tryAcquireSkillInstallLock } from './installLock';
-import { prepareSharedGlobalSkillLinks } from '../maker-host/shared-global-skills.js';
+import {
+  prepareSharedGlobalSkillLinks,
+  prepareSharedProjectSkillLinks,
+  projectWorkingDirFromSkillPath,
+} from '../maker-host/shared-global-skills.js';
 import { clearIgnoredAutoSyncSkill, ignoreAutoSyncSkill, isKnownAutoSyncCandidateSkill } from './autoSyncPreferences';
 
 import { createLogger } from '../logger';
@@ -604,14 +609,25 @@ export async function install(
       });
     }
 
-    // best-effort: 创建 Claude 侧 symlink（Claude Code 只扫 .claude/skills/）
-    // 自定义 installPath 场景不建 link — 无法可靠推导对应的 .claude/skills/ 位置
+    // best-effort:让同一份 Skill 同时出现在两个 Agent 的 discovery root。
     if (!p.installPath) {
       const claudeLink = path.join(os.homedir(), '.claude', 'skills', p.name);
       try {
         await ensureSymlinkToShared(claudeLink, finalDir);
       } catch (err) {
         log.warn('[skillInstall] claude symlink failed (non-fatal):', claudeLink, err);
+      }
+    } else {
+      const projectWorkingDir = projectWorkingDirFromSkillPath(finalDir);
+      if (projectWorkingDir && path.resolve(projectWorkingDir) !== path.resolve(os.homedir())) {
+        try {
+          const linkResult = await prepareSharedProjectSkillLinks({ workingDir: projectWorkingDir });
+          for (const warning of linkResult.warnings) {
+            log.warn('[skillInstall] shared project skill link warning:', warning);
+          }
+        } catch (err) {
+          log.warn('[skillInstall] prepare shared project skill links failed:', err);
+        }
       }
     }
     try {
@@ -642,7 +658,7 @@ export async function install(
 /**
  * 卸载一个 skill。
  *
- * 防御：absolutePath 必须落在 `/.claude/skills/<name>` 格式下 —— 拒绝删除任意路径。
+ * 防御：absolutePath 必须落在受支持的 skill discovery root 下 —— 拒绝删除任意路径。
  * UI 层（F-UI-4）在按钮分流时已确保"未注册的本地技能"不显示卸载按钮，这层是双保险。
  */
 export async function uninstall(
@@ -752,6 +768,14 @@ async function uninstallLocked(
         }
       }
     } catch { /* ignore */ }
+  }
+
+  const projectWorkingDir = projectWorkingDirFromSkillPath(resolved)
+    ?? projectWorkingDirFromSkillPath(absolutePath);
+  if (projectWorkingDir && path.resolve(projectWorkingDir) !== path.resolve(os.homedir())) {
+    await prepareSharedProjectSkillLinks({ workingDir: projectWorkingDir }).catch((err) => {
+      log.warn('[skillInstall] cleanup shared project skill links failed:', err);
+    });
   }
 
   return { success: true };

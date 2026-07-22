@@ -108,6 +108,65 @@ function createHandle(args: {
   };
 }
 
+describe('Maker before-start lifecycle hook', () => {
+  it('awaits host preparation before starting the agent', async () => {
+    const order: string[] = [];
+    const onBeforeStart = vi.fn(async () => {
+      order.push('prepare');
+    });
+    const startSession = vi.fn(async () => {
+      order.push('start');
+      return createHandle({ id: 'thread-1' });
+    });
+    const maker = new Maker({
+      agents: { codex: createAgent(startSession) },
+      storage: createStorage(),
+      logger: createLogger(),
+      lifecycleHooks: { onBeforeStart },
+    });
+
+    await maker.createSession({
+      id: 'session-1',
+      agentKind: 'codex',
+      workingDir: '/repo',
+      model: 'gpt-5.4',
+    });
+
+    expect(order).toEqual(['prepare', 'start']);
+    expect(onBeforeStart).toHaveBeenCalledWith({
+      agentKind: 'codex',
+      workingDir: '/repo',
+    });
+  });
+
+  it('keeps session startup fail-soft when host preparation fails', async () => {
+    const logger = createLogger();
+    const startSession = vi.fn(async () => createHandle({ id: 'thread-1' }));
+    const maker = new Maker({
+      agents: { codex: createAgent(startSession) },
+      storage: createStorage(),
+      logger,
+      lifecycleHooks: {
+        onBeforeStart: async () => {
+          throw new Error('prepare failed');
+        },
+      },
+    });
+
+    await expect(maker.createSession({
+      id: 'session-1',
+      agentKind: 'codex',
+      workingDir: '/repo',
+      model: 'gpt-5.4',
+    })).resolves.toBeInstanceOf(Session);
+    expect(startSession).toHaveBeenCalledTimes(1);
+    expect(logger.warn).toHaveBeenCalledWith(
+      'lifecycleHooks.onBeforeStart threw; continuing session startup',
+      expect.objectContaining({ sessionId: 'session-1', workingDir: '/repo' }),
+    );
+  });
+});
+
 describe('Maker codex prompt lifecycle hooks', () => {
   it('hydrates codex history prompt state before startSession and persists delivery facts after success', async () => {
     const startSession = vi.fn(async () => ({
