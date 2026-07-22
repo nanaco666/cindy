@@ -12,8 +12,10 @@
 
 import { customProviderSecretStorageKey } from '@/../shared/providerSecrets';
 
+import { DEFAULT_CUSTOM_CONTEXT_WINDOW } from '@lizi/model-providers';
 import type {
   AgentKind,
+  CatalogModel,
   CustomProviderConfig,
   ProviderRuntimeModelConfig,
 } from '@lizi/model-providers';
@@ -33,6 +35,22 @@ export function replaceCustomProviderModelId(
 ): ProviderRuntimeModelConfig {
   if (nextId === model.id) return model;
   return { id: nextId, name: model.name };
+}
+
+/**
+ * 运行期 CatalogModel 已把缺省 contextWindow 物化为通用默认值；转回用户配置时不能把该
+ * 默认快照写成 override，否则未来默认升级后老配置无法跟随。厂商明确的非默认值则保留。
+ */
+export function customProviderModelConfigFromCatalogModel(
+  model: Pick<CatalogModel, 'id' | 'name' | 'contextWindow'>,
+): ProviderRuntimeModelConfig {
+  return {
+    id: model.id,
+    name: model.name,
+    ...(model.contextWindow !== DEFAULT_CUSTOM_CONTEXT_WINDOW
+      ? { contextWindow: model.contextWindow }
+      : {}),
+  };
 }
 
 /**
