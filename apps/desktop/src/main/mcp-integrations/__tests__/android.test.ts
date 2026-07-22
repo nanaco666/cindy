@@ -342,6 +342,29 @@ emulator-5554 device product:sdk_gphone64_arm64 model:Pixel_8 device:emu transpo
     ]);
   });
 
+  it('does not treat a strict adb version probe timeout as a cold daemon', async () => {
+    vi.useFakeTimers();
+    setAndroidAutomationSettingsReaderForTest(() => ({
+      defaultDeviceSerial: null,
+      adbPathOverride: '/custom/platform-tools/adb',
+    }));
+    mockAdbSpawnByArgs({
+      '/custom/platform-tools/adb version': { hang: true },
+    });
+
+    const resultPromise = callAndroidDriverTool('list_devices', {});
+    await vi.advanceTimersByTimeAsync(3_000);
+
+    await expect(resultPromise).resolves.toMatchObject({
+      ok: false,
+      errorCode: 'ANDROID_DRIVER_ERROR',
+      message: 'adb version timed out after 3000ms',
+    });
+    expect(spawnMock.mock.calls.map((call) => [slashPath(call[0]), call[1]])).toEqual([
+      ['/custom/platform-tools/adb', ['version']],
+    ]);
+  });
+
   it('returns ADB_NOT_FOUND when adb cannot be spawned', async () => {
     mockAdbSpawn({ error: Object.assign(new Error('spawn adb ENOENT'), { code: 'ENOENT' }) });
 

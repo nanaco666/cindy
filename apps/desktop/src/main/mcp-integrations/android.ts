@@ -192,13 +192,22 @@ class AndroidDriverError extends Error {
 
 /** Identifies a timed-out adb child process without relying on its user-facing message. */
 class AdbCommandTimeoutError extends AndroidDriverError {
+  readonly args: readonly string[];
+
   constructor(args: string[], timeoutMs: number) {
     super(
       'ANDROID_DRIVER_ERROR',
       `adb ${args.join(' ')} timed out after ${timeoutMs}ms`,
     );
     this.name = 'AdbCommandTimeoutError';
+    this.args = [...args];
   }
+}
+
+function isAdbCommandTimeoutFor(err: unknown, args: readonly string[]): boolean {
+  return err instanceof AdbCommandTimeoutError
+    && err.args.length === args.length
+    && err.args.every((arg, index) => arg === args[index]);
 }
 
 let readSettings = readAndroidAutomationSettings;
@@ -887,7 +896,7 @@ function listDevicesRaw(): Promise<AndroidConnectedDevice[]> {
     try {
       return await listDevicesWithTimeout(STATUS_TIMEOUT_MS);
     } catch (err) {
-      if (!(err instanceof AdbCommandTimeoutError)) throw err;
+      if (!isAdbCommandTimeoutFor(err, ['devices', '-l'])) throw err;
       return recoverAdbColdStart();
     }
   })().finally(() => {
