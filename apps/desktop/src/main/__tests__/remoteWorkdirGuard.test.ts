@@ -39,8 +39,8 @@ const h = vi.hoisted(() => {
 vi.mock('node:fs', () => ({ statSync: (p: string) => h.callStat(p) }));
 vi.mock('../localDb/client/current', () => ({ getDbClient: () => ({ drizzle: h.fakeDb }) }));
 vi.mock('../localDb/schema', () => ({ sessions: { workingDir: 'wd' }, recentWorkdirs: { path: 'p' } }));
-vi.mock('../localDb/ipc/recentWorkdirs', () => ({
-  normalizeRecentWorkdirPath: (p: string | null | undefined) => {
+vi.mock('../../shared/workingDir', () => ({
+  normalizeWorkingDirForStorage: (p: string | null | undefined) => {
     if (!p) return null;
     const n = String(p).replace(/\\/g, '/').replace(/\/+$/, '');
     return n || null;
@@ -84,6 +84,13 @@ describe('isRemoteWorkingDirAllowed', () => {
     h.selectResults.push([]);
     h.setStat(asDir);
     expect(await isRemoteWorkingDirAllowed('/freshly/browsed/dir')).toBe(true);
+  });
+
+  it('真实存在的 Cindy 托管 worktree → 放行', async () => {
+    h.selectResults.push([]);
+    h.selectResults.push([]);
+    h.setStat(asDir);
+    expect(await isRemoteWorkingDirAllowed('/repo/.cindy-worktrees/auto-test')).toBe(true);
   });
 
   it('不在 recents/sessions 且路径不存在 → 拒(挡伪造/笔误路径)', async () => {
