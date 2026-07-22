@@ -54,7 +54,5 @@ packages/*
 !cindy-protocol/**
 
 tools/*
-!tools/codex-platform-stub
-!tools/codex-platform-stub/**
 !tools/shared
 !tools/shared/fetch-with-timeout.mjs
