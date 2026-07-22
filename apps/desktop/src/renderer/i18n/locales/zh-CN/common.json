@@ -1173,7 +1173,7 @@
       "models": {
         "search": "搜索模型",
         "available": "在选择器中显示",
-        "modelCount": "{{count}} 个模型",
+        "modelCount_other": "{{count}} 个模型",
         "agentEnabledCount": "{{agent}} {{on}}/{{total}}",
         "enableAll": "全部显示",
         "disableAll": "全部隐藏",
