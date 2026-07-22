@@ -470,11 +470,11 @@ export function createOrcaWorkerCreationService(deps: OrcaWorkerCreationDeps): O
         : resolvedConfig.providerId,
     };
 
-    // codex/ 预算模型依赖 Cindy AI API key；当显式模型尚无可用路由时，先返回这条
-    // 可操作的凭证错误，避免被下方通用的精确路由失败遮蔽。
+    // codex/ 预算模型依赖 Cindy AI API key；XD/default 路由即使因 provider 缺失，
+    // 也要先返回这条可操作的凭证错误，避免被下方通用的精确路由失败遮蔽。
     if (
-      resolved.providerId === null
-      && budgetModelRequiresApiKey(params.agent, resolved.model, deps.readClaudeApiKey() != null)
+      budgetModelRequiresApiKey(params.agent, resolved.model, deps.readClaudeApiKey() != null)
+      && (resolved.providerId === null || resolved.providerId === 'xd')
     ) {
       return {
         ok: false,

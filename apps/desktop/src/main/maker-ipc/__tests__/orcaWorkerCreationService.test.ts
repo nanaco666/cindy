@@ -454,6 +454,30 @@ describe('OrcaWorkerCreationService', () => {
     expect(deps.addOrUpdateWorker).not.toHaveBeenCalled();
   });
 
+  it('returns the budget-model error for an XD-routed default when another provider is connected', async () => {
+    const { deps, service } = createDeps({
+      getWorkerDefaults: vi.fn(() => ({ model: 'codex/budget', providerId: 'xd' })),
+      getProviderRoutingContext: vi.fn(async () => providerRoutingContext({
+        'claude-code': [],
+        codex: [{ id: 'openai', name: 'OpenAI', models: ['gpt-5.5'] }],
+      })),
+      readClaudeApiKey: vi.fn((): string | null => null),
+    });
+
+    await expect(service.createWorker({
+      leadSessionId: 'lead-1',
+      role: 'reviewer',
+      agent: 'codex',
+      label: 'reviewer',
+    })).resolves.toMatchObject({
+      ok: false,
+      errorCode: 'BUDGET_MODEL_REQUIRES_API_MODE',
+      message: expect.stringContaining('codex/budget'),
+    });
+
+    expect(deps.bootstrapSession).not.toHaveBeenCalled();
+  });
+
   it('rejects explicit minimal effort for a Codex GPT worker at the creation boundary', async () => {
     const { deps, service } = createDeps();
 
