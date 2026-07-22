@@ -48,8 +48,15 @@ export function useOrcaWorkerSelection({
   const { t } = useTranslation();
   const location = useLocation();
   const [searchParams] = useSearchParams();
-  const { workers, focusedWorker, activeWorkerCount, softLimit, hardLimit, refresh } =
-    useWorkers(leadSessionId);
+  const {
+    workers,
+    focusedWorker,
+    activeWorkerCount,
+    softLimit,
+    hardLimit,
+    refresh,
+    refreshCreationState,
+  } = useWorkers(leadSessionId);
   const [createOpen, setCreateOpen] = useState(false);
   const [searchJumpPinnedWorkerSessionId, setSearchJumpPinnedWorkerSessionId] = useState<
     string | null
@@ -383,6 +390,7 @@ export function useOrcaWorkerSelection({
     softLimit,
     hardLimit,
     refresh,
+    refreshCreationState,
     selectedWorkerRecord,
     selectedWorkerId,
     workerSessionId,

@@ -98,8 +98,8 @@ describe('installNewMakerWindowShortcut', () => {
     expect(press(secondary, input('KeyN', { control: true }))).toHaveBeenCalledOnce();
     expect(main.send).toHaveBeenCalledOnce();
     expect(secondary.send).toHaveBeenCalledOnce();
-    expect(main.send).toHaveBeenCalledWith('app-menu:command', 'new-maker');
-    expect(secondary.send).toHaveBeenCalledWith('app-menu:command', 'new-maker');
+    expect(main.send).toHaveBeenCalledWith('app-menu:command', 'new-maker-shortcut');
+    expect(secondary.send).toHaveBeenCalledWith('app-menu:command', 'new-maker-shortcut');
   });
 
   it('reads custom bindings immediately and yields while shortcut recording is active', () => {

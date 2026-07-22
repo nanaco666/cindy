@@ -26,6 +26,7 @@ export function installNewMakerWindowShortcut(
     if (!combos.some((combo) => matchesElectronInput(input, combo))) return;
 
     event.preventDefault();
-    window.webContents.send('app-menu:command', 'new-maker');
+    // Keep physical shortcuts distinct from Agent Island's semantic "New message" action.
+    window.webContents.send('app-menu:command', 'new-maker-shortcut');
   });
 }
