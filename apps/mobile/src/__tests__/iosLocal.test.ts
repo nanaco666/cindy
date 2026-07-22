@@ -83,6 +83,10 @@ describe('resolveIosSigningEnv（从 region JSON 的 iosSigning 取值,非机密
   it('signIdentity 是不含冒号的部分名 → 拒(CODE_SIGN_IDENTITY 模糊匹配同样有歧义)', () => {
     expect(() => resolveIosSigningEnv(withSigning({ signIdentity: 'Yi Zhou (RQ24UVT6TG)' }))).toThrow(/完整证书名/);
   });
+  it('signIdentity 含冒号但掐掉末尾括号 ID → 拒(仍是部分名,钉不住)', () => {
+    expect(() => resolveIosSigningEnv(withSigning({ signIdentity: 'Apple Development: Jiali LIU' }))).toThrow(/完整证书名/);
+    expect(() => resolveIosSigningEnv(withSigning({ signIdentity: 'Apple Development: Yi Zhou (rq24)' }))).toThrow(/完整证书名/);
+  });
   it('signIdentity 是 40 位 SHA-1 → 放行', () => {
     const sha1 = 'A1B2C3D4E5F60718293A4B5C6D7E8F9012345678';
     expect(resolveIosSigningEnv(withSigning({ signIdentity: sha1 })).identity).toBe(sha1);
