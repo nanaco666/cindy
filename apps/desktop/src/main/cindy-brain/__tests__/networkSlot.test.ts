@@ -657,11 +657,11 @@ describe('networkSlot · 在途并发闸', () => {
 });
 
 describe('networkSlot · 登录邮箱派生凭证(source:login-email)', () => {
-  const PAGES_URL = 'https://api.workers.xd.team/list';
+  const PAGES_URL = 'https://api.pages.example.com/list';
 
   /** xd-pages 形态的详单:X-Pages-Token = pages_<登录邮箱>(inject.format 派生)。 */
   const pagesNetwork: GhostNetworkNeeds = {
-    hosts: ['api.workers.xd.team'],
+    hosts: ['api.pages.example.com'],
     secrets: [
       {
         key: 'pages_token',

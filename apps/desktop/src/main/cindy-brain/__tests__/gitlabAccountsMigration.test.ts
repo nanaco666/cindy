@@ -67,7 +67,7 @@ function makeDeps(overrides?: Partial<GitlabAccountsMigrationDeps>): GitlabAccou
     readLegacyToken: () => 'glpat_legacy_token',
     // 缺省与 readLegacyToken 一致地"在场";幂等留痕用例单独覆盖两种取值。
     legacyTokenExists: () => true,
-    readLegacyConnection: () => ({ baseUrl: 'https://git.tapsvc.com', username: 'devuser' }),
+    readLegacyConnection: () => ({ baseUrl: 'https://gitlab.example.com', username: 'devuser' }),
     manager: memoryManager(),
     ...overrides,
   };
@@ -84,7 +84,7 @@ describe('migrateGitlabAccounts', () => {
     expect(migrateGitlabAccounts(makeDeps({ manager }))).toBe(1);
     expect(manager.rows).toHaveLength(1);
     expect(manager.rows[0]).toMatchObject({
-      host: 'git.tapsvc.com',
+      host: 'gitlab.example.com',
       token: 'glpat_legacy_token',
       label: 'devuser',
     });
@@ -189,7 +189,7 @@ describe('migrateGitlabAccounts', () => {
       migrateGitlabAccounts(
         makeDeps({
           manager,
-          readLegacyConnection: () => ({ baseUrl: 'https://git.tapsvc.com', username: null }),
+          readLegacyConnection: () => ({ baseUrl: 'https://gitlab.example.com', username: null }),
         }),
       ),
     ).toBe(1);

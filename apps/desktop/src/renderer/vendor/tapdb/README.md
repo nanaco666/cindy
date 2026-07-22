@@ -2,14 +2,14 @@
 
 未发布到 npm 的官方 SDK,直接 vendor 进仓库以避免运行时拉取。
 
-- **来源**: `git@git.tapsvc.com:tapdb/web/tapdb-sdk-web.git`
+- **来源**: `git@git.example.com:tapdb/web/tapdb-sdk-web.git`
 - **版本**: `1.0.0` (取自源仓 `package.json` / `release/npm_js/package.json`)
 - **License**: Apache-2.0 (见同目录 `LICENSE`)
 
 ## 更新方式
 
 ```bash
-git -C <somewhere> clone git@git.tapsvc.com:tapdb/web/tapdb-sdk-web.git
+git -C <somewhere> clone git@git.example.com:tapdb/web/tapdb-sdk-web.git
 cp <somewhere>/tapdb-sdk-web/release/tapdb.esm.min.{js,d.ts} ./
 cp <somewhere>/tapdb-sdk-web/LICENSE ./
 ```

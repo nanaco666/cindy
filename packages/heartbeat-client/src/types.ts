@@ -48,7 +48,7 @@ export interface HeartbeatTickPayload {
 }
 
 export interface HeartbeatClientOptions {
-  /** heartbeat-server 完整地址,例如 https://xdt-heartbreak.magiclizi.com */
+  /** heartbeat-server 完整地址,例如 https://heartbeat.example.com */
   endpoint: string;
   /** 心跳间隔毫秒。建议 60000 (与 server ONLINE_TTL_SEC=90 配合,保留 30s 容错) */
   intervalMs: number;

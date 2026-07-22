@@ -15,7 +15,7 @@ Cindy 客户端在线心跳模块。
 import { createHeartbeatClient } from '@lizi/heartbeat-client';
 
 const handle = createHeartbeatClient({
-  endpoint: 'https://xdt-heartbreak.magiclizi.com',
+  endpoint: 'https://heartbeat.example.com',
   intervalMs: 60_000,
   timeoutMs: 5_000,
   host: {

@@ -408,7 +408,7 @@ export const GHOST_OAUTH_BOUNCE_PATH_RE = /^\/[A-Za-z0-9_-]+(?:\/[A-Za-z0-9_-]+)
  * - 'login-email':值 = 主机当前登录账号的邮箱——主机注入时现取登录态,
  *   设置页只读展示该邮箱(不可编辑、不进保险库);未登录 / 登录态缺 email
  *   时 fail-closed 报错并引导重新登录。适用于"服务端按登录邮箱派生鉴权"
- *   的第一方服务(如 workers.xd.team 的 pages_<email> token,经 inject.format
+ *   的第一方服务(如 pages 服务的 pages_<email> token,经 inject.format
  *   的静态前缀完成派生)。
  * - 'oauth'(2026-07-13,google/conf/jira 意识化前置):值 = 主机托管 OAuth
  *   授权换来的 access token——用户在意识设置页填 client 凭证并点"连接账号",
