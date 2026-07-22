@@ -179,7 +179,9 @@ export function summarizeCodexRateLimitReset(
   ];
   const shouldPrompt = snapshots.some((snapshot) => {
     const reached = readString(snapshot.rateLimitReachedType);
-    if (reached && !reached.includes('credits_depleted')) return true;
+    // Prepaid-credit depletion means “recharge”, not a resettable Codex usage window.
+    if (reached?.includes('credits_depleted')) return false;
+    if (reached) return true;
     return [snapshot.primary, snapshot.secondary].some((window) => {
       const used = readNumber(window?.usedPercent);
       return used !== null && used >= 100;

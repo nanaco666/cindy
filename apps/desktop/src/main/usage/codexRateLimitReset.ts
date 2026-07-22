@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
+import { normalizeAccountRateLimitSnapshot } from '@lizi/maker-core';
 import type {
   AccountRateLimitWindow,
   AccountRateLimitResetCredit,
@@ -228,7 +229,8 @@ export function createCodexRateLimitResetService(
       );
     }
     const accountId = identity.accountId;
-    const normalizedRateLimits = displayRateLimitSnapshot(response.rateLimits);
+    const normalizedRateLimits = normalizeAccountRateLimitSnapshot(response.rateLimits);
+    const mobileRateLimits = displayRateLimitSnapshot(normalizedRateLimits);
     // The persisted broadcaster merges absent fields with the previous snapshot. Never feed
     // it an unbound app-server read, or a workspace switch can inherit the old account id.
     if (accountId) {
@@ -296,7 +298,7 @@ export function createCodexRateLimitResetService(
 
     return {
       account: displayAccount(identity, response.rateLimits.planType ?? null),
-      rateLimits: normalizedRateLimits,
+      rateLimits: mobileRateLimits,
       rateLimitsByLimitId: displayRateLimitsById(response.rateLimitsByLimitId),
       rateLimitResetCredits: response.rateLimitResetCredits
         ? { availableCount, credits: displayResetCredits(credits) }

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildContextUsageCreateOpts,
   canUseLocalCodexRateLimitControl,
+  shouldFallbackToLegacyCodexUsage,
   summarizeContextUsage,
   summarizeSessionSpend,
 } from '@/session/sessionControls';
@@ -73,6 +74,14 @@ describe('sessionControls', () => {
       providerId: 'xai',
     }))).toBe(false);
     expect(canUseLocalCodexRateLimitControl(session({ agentKind: 'cc' }))).toBe(false);
+  });
+
+  it('does not reuse legacy quota after an account-change precondition', () => {
+    expect(shouldFallbackToLegacyCodexUsage({
+      code: 'PRECONDITION_FAILED',
+      message: 'ACCOUNT_CHANGED: refresh usage',
+    })).toBe(false);
+    expect(shouldFallbackToLegacyCodexUsage(new Error('new channel unavailable'))).toBe(true);
   });
 
   it('summarizes common context usage shapes for mobile display', () => {

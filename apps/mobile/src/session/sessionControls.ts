@@ -1,4 +1,5 @@
 import type { RemoteSession } from '@/session/types';
+import { isPreconditionFailedRemoteError } from '@lizi/maker-shared/device-link-contract';
 export {
   summarizeAccountRateLimits,
   summarizeCodexRateLimitReset,
@@ -17,6 +18,11 @@ export function canUseLocalCodexRateLimitControl(
     && !model.startsWith('codex/')
     && !model.startsWith('chatgpt/')
     && !model.startsWith('xai/');
+}
+
+/** Legacy usage is safe only when the authoritative read failed for a non-identity reason. */
+export function shouldFallbackToLegacyCodexUsage(error: unknown): boolean {
+  return !isPreconditionFailedRemoteError(error);
 }
 
 export function buildContextUsageCreateOpts(session: RemoteSession): Record<string, unknown> {

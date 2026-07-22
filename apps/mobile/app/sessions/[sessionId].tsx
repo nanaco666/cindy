@@ -346,6 +346,7 @@ import { projectMobileSessionActions } from '@/session/sessionActionProjection';
 import {
   buildContextUsageCreateOpts,
   canUseLocalCodexRateLimitControl,
+  shouldFallbackToLegacyCodexUsage,
 } from '@/session/sessionControls';
 import { buildSessionOperationLayout } from '@/session/sessionOperationLayout';
 import {
@@ -4718,11 +4719,16 @@ export default function SessionScreen() {
       if (contextUsageSessionRef.current !== sessionId) return;
       setCodexRateLimits(snapshot);
       setAccountUsage(snapshot.rateLimits);
-    } catch {
+    } catch (err) {
       if (contextUsageSessionRef.current !== sessionId) return;
       // 权威控制面读取失败后只能降级为只读用量；旧 offer / retry key 不得继续可消费。
       setCodexRateLimits(null);
       setCodexResetRetryKey(null);
+      if (!shouldFallbackToLegacyCodexUsage(err)) {
+        // 账号切换期间 legacy cache 仍可能属于旧 workspace；等待下一次权威读取。
+        setAccountUsage(null);
+        return;
+      }
       try {
         const snapshot = await maker.getAccountUsage('codex');
         if (contextUsageSessionRef.current !== sessionId) return;

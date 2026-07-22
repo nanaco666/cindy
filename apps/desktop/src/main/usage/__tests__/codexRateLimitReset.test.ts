@@ -94,6 +94,26 @@ describe('Codex rate-limit reset control plane', () => {
     });
   });
 
+  it('persists normalized account credits without exposing them to mobile', async () => {
+    const { deps, service } = harness({
+      readRateLimits: vi.fn().mockResolvedValue(response({
+        rateLimits: {
+          planType: 'plus',
+          primary: { usedPercent: 42, windowDurationMins: 300 },
+          credits: { hasCredits: false, unlimited: false, balance: null },
+        },
+      })),
+    });
+
+    const snapshot = await service.read();
+
+    expect(snapshot.rateLimits).not.toHaveProperty('credits');
+    expect(deps.recordRateLimitSnapshot).toHaveBeenCalledWith(expect.objectContaining({
+      primary: expect.objectContaining({ windowMinutes: 300 }),
+      credits: { hasCredits: false, unlimited: false, balance: null },
+    }));
+  });
+
   it('reuses a count-only offer and lets app-server select the credit', async () => {
     const createIdempotencyKey = vi.fn()
       .mockReturnValueOnce(KEY)

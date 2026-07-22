@@ -99,7 +99,7 @@ describe('summarizeCodexRateLimitReset', () => {
     expect(summarizeCodexRateLimitReset({
       ...base,
       rateLimits: {
-        primary: { usedPercent: 10 },
+        primary: { usedPercent: 100 },
         rateLimitReachedType: 'workspace_owner_credits_depleted',
       },
     }, NOW_MS)).toMatchObject({ shouldPrompt: false, canReset: false });
