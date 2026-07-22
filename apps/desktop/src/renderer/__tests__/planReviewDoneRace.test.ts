@@ -88,11 +88,13 @@ function emptyProjection(sessionId: string) {
 }
 
 let onEvent: ((data: unknown) => void) | undefined;
+let onDbMessageCreated: ((data: unknown) => void) | undefined;
 let onInteractionRequest: ((data: unknown) => void) | undefined;
 let onInteractionDismissed: ((data: unknown) => void) | undefined;
 
 function installElectronBridge(): void {
   onEvent = undefined;
+  onDbMessageCreated = undefined;
   onInteractionRequest = undefined;
   onInteractionDismissed = undefined;
   const w = globalThis as unknown as { window: Record<string, unknown> };
@@ -127,7 +129,10 @@ function installElectronBridge(): void {
       },
       localDb: {
         messages: {
-          onCreated: vi.fn(() => vi.fn()),
+          onCreated: (cb: (data: unknown) => void) => {
+            onDbMessageCreated = cb;
+            return vi.fn();
+          },
         },
       },
     },
@@ -142,11 +147,67 @@ function emitPlanReviewRequest(requestId: string): void {
   });
 }
 
-function emitDone(source: 'codex' | 'claude-code'): void {
+function emitDone(
+  source: 'codex' | 'claude-code',
+  plan?: Array<{ step: string; status: string }>,
+  turnId = 'turn-1',
+): void {
   onEvent?.({
     sessionId: SESSION_ID,
-    event: { type: 'done', source, data: { type: 'task_complete' } },
+    event: {
+      type: 'done',
+      source,
+      data: { type: 'task_complete', raw: { id: turnId }, ...(plan ? { plan } : {}) },
+    },
   });
+}
+
+function emitPlanUpdate(source: 'codex' | 'claude-code', statuses: string[]): void {
+  onEvent?.({
+    sessionId: SESSION_ID,
+    event: {
+      type: 'tool_use',
+      source,
+      data: {
+        toolUseId: 'plan:turn-1',
+        toolName: 'update_plan',
+        input: {
+          plan: statuses.map((status, index) => ({ step: `Step ${index + 1}`, status })),
+        },
+      },
+    },
+    persistId: 'plan-row-1',
+  });
+}
+
+function emitPersistedPlanEcho(statuses: string[]): void {
+  onDbMessageCreated?.({
+    sessionId: SESSION_ID,
+    message: {
+      id: 'db-plan-row-1',
+      sessionId: SESSION_ID,
+      clientId: 'plan-row-1',
+      role: 'tool_use',
+      content: JSON.stringify({
+        toolUseId: 'plan:turn-1',
+        toolName: 'update_plan',
+        input: {
+          plan: statuses.map((status, index) => ({ step: `Step ${index + 1}`, status })),
+        },
+      }),
+      toolUseId: 'plan:turn-1',
+      agentMeta: null,
+      createdAt: '2026-07-22T00:00:01.000Z',
+    },
+  });
+}
+
+function latestPlanStatuses(): string[] {
+  const plan = makerChatStore
+    .getSnapshot(SESSION_ID)
+    .messages.findLast((message) => message.role === 'tool_use' && message.toolName === 'update_plan');
+  const input = plan?.toolInput as { plan?: Array<{ status?: string }> } | undefined;
+  return input?.plan?.map((item) => item.status ?? 'unknown') ?? [];
 }
 
 function pendingBubbleStatuses(): string[] {
@@ -168,6 +229,47 @@ describe('plan_review 与 done 的时序', () => {
   afterEach(() => {
     makerChatStore.__teardownGlobalListeners();
     makerChatStore.purgeSession(SESSION_ID);
+  });
+
+  it('codex:done 使用携带的权威快照收口最新结构化计划', () => {
+    makerChatStore.setSessionRuntime(SESSION_ID, { agentKind: 'codex' });
+    emitPlanUpdate('codex', ['completed', 'in_progress', 'pending']);
+
+    emitDone('codex', [
+      { step: 'Step 1', status: 'completed' },
+      { step: 'Step 2', status: 'completed' },
+      { step: 'Step 3', status: 'completed' },
+    ]);
+
+    expect(latestPlanStatuses()).toEqual(['completed', 'completed', 'completed']);
+  });
+
+  it('codex:延迟 DB create 回声不覆盖刚应用的终态计划', () => {
+    makerChatStore.setSessionRuntime(SESSION_ID, { agentKind: 'codex' });
+    emitPlanUpdate('codex', ['in_progress']);
+    emitDone('codex', [{ step: 'Step 1', status: 'completed' }]);
+
+    emitPersistedPlanEcho(['in_progress']);
+
+    expect(latestPlanStatuses()).toEqual(['completed']);
+  });
+
+  it('codex:done 没有 plan 快照时不猜测旧计划已完成', () => {
+    makerChatStore.setSessionRuntime(SESSION_ID, { agentKind: 'codex' });
+    emitPlanUpdate('codex', ['in_progress', 'pending']);
+
+    emitDone('codex');
+
+    expect(latestPlanStatuses()).toEqual(['in_progress', 'pending']);
+  });
+
+  it('claude:done 不改 Codex update_plan 展示状态', () => {
+    makerChatStore.setSessionRuntime(SESSION_ID, { agentKind: 'claude-code' });
+    emitPlanUpdate('claude-code', ['in_progress', 'pending']);
+
+    emitDone('claude-code');
+
+    expect(latestPlanStatuses()).toEqual(['in_progress', 'pending']);
   });
 
   it('codex:done 不吞掉刚弹出的计划审阅(卡片与气泡存活)', () => {

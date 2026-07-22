@@ -7,6 +7,7 @@ import {
   type AgentTaskUpdate,
 } from '@lizi/maker-shared/agent-task';
 import type { MobileGoalStatusPayload } from '@lizi/maker-shared/device-link-contract';
+import { applyCodexPlanSnapshotOnDone } from '@lizi/maker-shared/message-render';
 import type { RemoteSessionLiveActivity } from '@lizi/maker-shared/session-list';
 import { buildDeviceIdentity, resolveCanonicalDeviceId } from '@lizi/maker-shared/mobile-home';
 import { EMPTY_INPUT_PROJECTION, normalizeInputProjection } from '@/session/inputProjection';
@@ -1035,7 +1036,8 @@ export const remoteSessionStore = {
         byKey.set(messageKey(item), item);
       }
     }
-    for (const item of latestWindow) {
+    for (const rawItem of latestWindow) {
+      const item = overlayLivePlanSnapshot(sessionId, rawItem);
       if (isPersistedAssistantMessage(item)) {
         const fallbackIndex = findPendingGeneratedStreamingFallbackIndex(sessionId, existing);
         const fallback = fallbackIndex >= 0 ? existing[fallbackIndex] : undefined;
@@ -1117,7 +1119,8 @@ export const remoteSessionStore = {
     for (const item of messages.get(sessionId) ?? []) {
       byKey.set(messageKey(item), item);
     }
-    for (const item of list) {
+    for (const rawItem of list) {
+      const item = overlayLivePlanSnapshot(sessionId, rawItem);
       const identityKey = findMessageMergeKey(byKey, item);
       const key = identityKey ?? messageKey(item);
       const existingMatch = byKey.get(key);
@@ -1562,11 +1565,37 @@ export const remoteSessionStore = {
     // setSessionRunning owns the final flush/finalize and run-state transition;
     // keeping the done path in one call avoids notifying subscribers twice.
     if (type === 'done' || isTerminalMakerErrorEvent(event)) {
+      let terminalPlanChanged = false;
+      if (type === 'done' && readString(event, 'source') === 'codex') {
+        const data = isRecord(event.data) ? event.data : null;
+        const rawTurn = isRecord(data?.raw) ? data.raw : null;
+        const turnId = readString(rawTurn, 'id');
+        const currentMessages = messages.get(sessionId) ?? [];
+        const completed = applyCodexPlanSnapshotOnDone(currentMessages, data?.plan, turnId);
+        terminalPlanChanged = completed.changed;
+        if (completed.changed) {
+          messages.set(sessionId, [...completed.messages]);
+          if (Array.isArray(data?.plan) && completed.toolUseId) {
+            rememberLivePlanSnapshot(sessionId, {
+              toolUseId: completed.toolUseId,
+              content: {
+                toolUseId: completed.toolUseId,
+                toolName: 'update_plan',
+                input: { plan: data.plan },
+              },
+            });
+          }
+        }
+      }
       this.setSessionRunning(
         sessionId,
         false,
         isRecord(event.agentMeta) ? event.agentMeta : null,
       );
+      if (terminalPlanChanged) {
+        bumpMessageVersion();
+        emit();
+      }
       return;
     }
 
