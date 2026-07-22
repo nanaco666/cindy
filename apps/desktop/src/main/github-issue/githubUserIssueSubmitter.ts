@@ -23,11 +23,13 @@ type GhostToolCallResult =
 export interface GithubUserIssueSubmitterDeps {
   isGithubGhostEnabled: () => boolean;
   isGithubCredentialSaved: () => boolean;
+  isGithubGhostDisabledForWorkdir: (workdir: string | null | undefined) => boolean;
   callGhostTool: (request: {
     ghostId: string;
     tool: string;
     args: Record<string, unknown>;
   }) => Promise<GhostToolCallResult>;
+  identityProbeTimeoutMs?: number;
 }
 
 interface IssueSubmissionError extends Error {
@@ -43,14 +45,21 @@ interface GithubOperationFailure {
 /** 已装、启用且保存了凭证时验证 token；其余场景明确选择平台代提交。 */
 export async function resolveGithubIssueSubmissionIdentity(
   deps: GithubUserIssueSubmitterDeps,
+  workdir?: string | null,
 ): Promise<IssueSubmissionIdentity> {
-  if (!deps.isGithubGhostEnabled() || !deps.isGithubCredentialSaved()) {
+  if (
+    deps.isGithubGhostDisabledForWorkdir(workdir) ||
+    !deps.isGithubGhostEnabled() ||
+    !deps.isGithubCredentialSaved()
+  ) {
     return PLATFORM_ISSUE_SUBMISSION_IDENTITY;
   }
 
   let operation: { ok: true; data: unknown } | GithubOperationFailure;
   try {
-    operation = await callGithubOperation(deps, 'get_current_user', {});
+    operation = await callGithubOperation(deps, 'get_current_user', {}, {
+      timeoutMs: deps.identityProbeTimeoutMs ?? 5000,
+    });
   } catch (err) {
     throw malformedResponseError('读取 GitHub 用户身份失败', err);
   }
@@ -132,12 +141,21 @@ async function callGithubOperation(
   deps: GithubUserIssueSubmitterDeps,
   name: 'get_current_user' | 'create_issue',
   args: Record<string, unknown>,
+  options: { timeoutMs?: number } = {},
 ): Promise<{ ok: true; data: unknown } | GithubOperationFailure> {
-  const result = await deps.callGhostTool({
-    ghostId: CINDY_GITHUB_GHOST_ID,
-    tool: 'call_tool',
-    args: { name, args },
-  });
+  const result = await withOptionalTimeout(
+    deps.callGhostTool({
+      ghostId: CINDY_GITHUB_GHOST_ID,
+      tool: 'call_tool',
+      args: { name, args },
+    }),
+    options.timeoutMs,
+    () => ({
+      ok: false as const,
+      errorCode: 'GHOST_TIMEOUT',
+      message: `Cindy GitHub ${name} 超时`,
+    }),
+  );
   if (!result.ok) return result;
   if (!isRecord(result.result) || !Object.prototype.hasOwnProperty.call(result.result, 'data')) {
     throw new Error('响应缺少 data');
@@ -156,11 +174,18 @@ function parseGithubLogin(value: unknown): string {
 }
 
 function buildDirectIssueBody(body: GithubIssuePostBody): string {
-  return [`**客户端版本**: ${body.appVersion}`, '', '---', '', body.description ?? ''].join('\n');
+  return [
+    `**客户端版本**: ${body.appVersion}`,
+    `**反馈类型**: ${body.type}`,
+    '',
+    '---',
+    '',
+    body.description ?? '',
+  ].join('\n');
 }
 
 function isGithubAuthFailure(message: string): boolean {
-  return /token 未配置|token.*失效|HTTP 401|没有权限.*token scope|token scope 不够/i.test(message);
+  return /token 未配置|token.*失效|凭证.*尚未配置|HTTP 401|HTTP 403|没有权限.*token scope|token scope 不够/i.test(message);
 }
 
 function isNetworkFailure(message: string): boolean {
@@ -183,4 +208,25 @@ function submissionError(
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function withOptionalTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number | undefined,
+  fallback: () => T,
+): Promise<T> {
+  if (timeoutMs === undefined || timeoutMs <= 0) return promise;
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => resolve(fallback()), timeoutMs);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (err) => {
+        clearTimeout(timer);
+        reject(err);
+      },
+    );
+  });
 }

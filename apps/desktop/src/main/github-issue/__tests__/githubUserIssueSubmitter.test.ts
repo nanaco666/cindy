@@ -11,6 +11,7 @@ function makeDeps(over: Partial<GithubUserIssueSubmitterDeps> = {}): GithubUserI
   return {
     isGithubGhostEnabled: () => true,
     isGithubCredentialSaved: () => true,
+    isGithubGhostDisabledForWorkdir: () => false,
     callGhostTool: vi.fn(async (request) => {
       const operation = request.args.name;
       if (operation === 'get_current_user') {
@@ -54,6 +55,14 @@ describe('resolveGithubIssueSubmissionIdentity', () => {
     }
   });
 
+  it('当前 workdir 禁用 cindy-github 时走平台身份且不调用插件', async () => {
+    const deps = makeDeps({ isGithubGhostDisabledForWorkdir: (workdir) => workdir === '/repo' });
+    await expect(resolveGithubIssueSubmissionIdentity(deps, '/repo')).resolves.toEqual(
+      PLATFORM_ISSUE_SUBMISSION_IDENTITY,
+    );
+    expect(deps.callGhostTool).not.toHaveBeenCalled();
+  });
+
   it('插件运行时不可用时在确认前回退平台身份', async () => {
     const deps = makeDeps({
       callGhostTool: vi.fn(async () => ({
@@ -68,16 +77,35 @@ describe('resolveGithubIssueSubmissionIdentity', () => {
   });
 
   it('已保存但失效的 token 返回 AUTH_NOT_READY，不冒充未绑定', async () => {
+    for (const message of [
+      'GitHub token 未配置或已失效',
+      'GitHub API HTTP 403 Forbidden',
+      '凭证「github_pat」尚未配置',
+    ]) {
+      const deps = makeDeps({
+        callGhostTool: vi.fn(async () => ({
+          ok: false as const,
+          errorCode: 'INTERNAL',
+          message,
+        })),
+      });
+      await expect(resolveGithubIssueSubmissionIdentity(deps)).rejects.toMatchObject({
+        issueErrorCode: 'AUTH_NOT_READY',
+      });
+    }
+  });
+
+  it('确认前身份探测超时时快速回退平台身份', async () => {
     const deps = makeDeps({
-      callGhostTool: vi.fn(async () => ({
-        ok: false as const,
-        errorCode: 'INTERNAL',
-        message: 'GitHub token 未配置或已失效',
-      })),
+      identityProbeTimeoutMs: 1,
+      callGhostTool: vi.fn(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        return { ok: true as const, result: { data: { login: 'dashhuang' } } };
+      }),
     });
-    await expect(resolveGithubIssueSubmissionIdentity(deps)).rejects.toMatchObject({
-      issueErrorCode: 'AUTH_NOT_READY',
-    });
+    await expect(resolveGithubIssueSubmissionIdentity(deps)).resolves.toEqual(
+      PLATFORM_ISSUE_SUBMISSION_IDENTITY,
+    );
   });
 
   it('get_current_user 成功但缺少 login 时拒绝半残身份', async () => {
@@ -118,7 +146,7 @@ describe('postGithubIssueAsUser', () => {
           owner: 'xindong',
           repo: 'cindy-moved',
           title: BODY.title,
-          body: expect.stringContaining('**客户端版本**: 0.1.6'),
+          body: expect.stringContaining('**反馈类型**: feature'),
           labels: ['feature'],
         },
       },

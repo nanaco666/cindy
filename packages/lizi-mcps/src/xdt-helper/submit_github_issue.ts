@@ -53,6 +53,7 @@ export interface SubmitGithubIssueDeps {
   /** host 回调:弹确认卡片 → 用户确认后提交到 server。 */
   submit: (req: {
     sessionId: string;
+    workingDir: string;
     title: string;
     body: string;
     type: 'bug' | 'feature';
@@ -104,6 +105,7 @@ export function registerSubmitGithubIssueTool(
 
       const result = await deps.submit({
         sessionId: ctx.sessionId,
+        workingDir: ctx.workingDir,
         title: title.trim(),
         body: body.trim(),
         type,

@@ -13,6 +13,7 @@ import type { IssueConfirmDecision, IssueSubmissionIdentity } from '../issueConf
 
 const REQ = {
   sessionId: 'sess-1',
+  workingDir: '/repo',
   title: 'agent 整理的标题标题标题',
   body: '## 现象\nagent 整理的正文,长度足够覆盖最小要求。',
   type: 'bug' as const,
@@ -95,6 +96,13 @@ describe('submitGithubIssueWithConfirm', () => {
       finalTitle: '用户改过的标题',
       editedByUser: true,
     });
+  });
+
+  it('身份解析收到当前 session workingDir', async () => {
+    const resolveSubmissionIdentity = vi.fn(async () => PLATFORM_IDENTITY);
+    const { deps } = makeDeps({ resolveSubmissionIdentity });
+    await expect(submitGithubIssueWithConfirm(deps, REQ)).resolves.toMatchObject({ ok: true });
+    expect(resolveSubmissionIdentity).toHaveBeenCalledWith('/repo');
   });
 
   it('未编辑时 editedByUser=false;未回传 uiLanguage 时用 fallback locale', async () => {

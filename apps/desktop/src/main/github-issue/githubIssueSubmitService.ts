@@ -40,6 +40,7 @@ export type GithubIssueSubmitResult =
 
 export interface SubmitIssueRequest {
   sessionId: string;
+  workingDir: string;
   title: string;
   body: string;
   type: 'bug' | 'feature';
@@ -66,7 +67,7 @@ export interface GithubIssueSubmitServiceDeps {
     submissionIdentity: IssueSubmissionIdentity,
   ) => Promise<IssueConfirmDecision>;
   /** 每次发起确认前现查；已绑定但凭证失效时应抛 AUTH_NOT_READY，不能冒充未绑定。 */
-  resolveSubmissionIdentity: () => Promise<IssueSubmissionIdentity>;
+  resolveSubmissionIdentity: (workingDir: string) => Promise<IssueSubmissionIdentity>;
   /** body factory must be evaluated for each network attempt after auth refresh. */
   postIssue: (
     submissionIdentity: IssueSubmissionIdentity,
@@ -95,7 +96,7 @@ export async function submitGithubIssueWithConfirm(
 
   let submissionIdentity: IssueSubmissionIdentity;
   try {
-    submissionIdentity = await deps.resolveSubmissionIdentity();
+    submissionIdentity = await deps.resolveSubmissionIdentity(req.workingDir);
   } catch (err) {
     return mapSubmitError(err);
   }

@@ -12,6 +12,7 @@ import { app } from 'electron';
 
 import { getCurrentMembershipDisplayName } from '../authManager';
 import { getGhostManager, getGhostPipeDispatcher } from '../cindy-brain';
+import { isGhostDisabledForWorkdir } from '../cindy-brain/ghostWorkdirPrefs.js';
 import { ghostSecretSaved } from '../secrets/providerSecretStore';
 import { serverApiFetch } from '../serverApiClient';
 import { getClientEndpoint } from '../clientEndpointsService';
@@ -55,14 +56,16 @@ export async function submitGithubIssueForSession(
         .list()
         .some((ghost) => ghost.manifest.id === CINDY_GITHUB_GHOST_ID && ghost.enabled),
     isGithubCredentialSaved: () => ghostSecretSaved(CINDY_GITHUB_GHOST_ID, CINDY_GITHUB_SECRET_KEY),
+    isGithubGhostDisabledForWorkdir: (workdir) =>
+      isGhostDisabledForWorkdir(CINDY_GITHUB_GHOST_ID, workdir),
     callGhostTool: (request) => getGhostPipeDispatcher().callGhostTool(request),
   };
   return submitGithubIssueWithConfirm(
     {
       confirm: (sessionId, draft, env, submissionIdentity) =>
         bridge.request(sessionId, draft, env, submissionIdentity),
-      resolveSubmissionIdentity: () =>
-        resolveGithubIssueSubmissionIdentity(githubUserSubmitterDeps),
+      resolveSubmissionIdentity: (workdir) =>
+        resolveGithubIssueSubmissionIdentity(githubUserSubmitterDeps, workdir),
       postIssue: (submissionIdentity, bodyFactory) => {
         if (submissionIdentity.kind === 'github-user') {
           return postGithubIssueAsUser(githubUserSubmitterDeps, submissionIdentity, bodyFactory());
