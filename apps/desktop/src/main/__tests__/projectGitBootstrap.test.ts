@@ -11,6 +11,9 @@ import {
 import { parseSnapshotCommit } from '../git-snapshot/snapshotTrailers';
 import { gitExec } from '../worktree/gitExec';
 
+// Full-suite concurrency makes Windows Git process startup substantially slower.
+vi.setConfig({ testTimeout: process.platform === 'win32' ? 30_000 : 5_000 });
+
 const tempDirs: string[] = [];
 
 async function makeTempDir(): Promise<string> {

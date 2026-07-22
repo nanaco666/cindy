@@ -14,7 +14,7 @@ import { createSnapshot } from '../git-snapshot/gitSnapshotService';
 import { enqueueGitRepoWrite } from '../git-snapshot/gitRepoWriteQueue';
 import { gitExec, GitExecError } from '../worktree/gitExec';
 
-const REAL_GIT_TEST_TIMEOUT_MS = 20_000;
+const REAL_GIT_TEST_TIMEOUT_MS = process.platform === 'win32' ? 60_000 : 20_000;
 
 let repoPath: string;
 async function initRepo() {
