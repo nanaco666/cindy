@@ -1,5 +1,5 @@
 /**
- * parseOmnibox 单测 —— 覆盖 plan §5.7 所有边界 case。
+ * parseOmnibox 单测 —— 覆盖 omnibox 输入归一化的所有边界 case。
  *
  * 重点验:
  *   A) 显式 scheme(http/https/about/file/...)原文透传

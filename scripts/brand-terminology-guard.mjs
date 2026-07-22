@@ -57,14 +57,10 @@ const LOCALE_BRAND_RE = /XDMaker|XD Maker|xdt-maker/;
  * 嵌套下同名 key 都会被静默放过。
  */
 const LOCALE_EXEMPT_KEY_PATHS = new Set([]);
-/** 值级豁免:文档路径引用。 */
-const LOCALE_EXEMPT_VALUE_SUBSTRINGS = ['xdt-maker-architecture.md'];
-
 function collectLocaleViolations(file, node, path, out) {
   if (typeof node === 'string') {
     if (!LOCALE_BRAND_RE.test(node)) return;
     if (LOCALE_EXEMPT_KEY_PATHS.has(path)) return;
-    if (LOCALE_EXEMPT_VALUE_SUBSTRINGS.some((s) => node.includes(s))) return;
     out.push({ file, key: path });
     return;
   }

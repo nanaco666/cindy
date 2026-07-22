@@ -3,7 +3,7 @@
  * ---------------------------------------------------------------------------
  * 主界面 Shell（MainLayout / Sidebar）与"主功能 Feature Layout"之间的契约。
  *
- * 架构背景（见 doc/prod_docs/xdt-maker-主界面设计.md V0.8 F2 "Sidebar 分层"）：
+ * 架构边界（Sidebar 分层）：
  *   - 外壳层（Shell）：Sidebar（含通顶顶行）+ ContentHeader chrome + 底部
  *     用户信息区（F3）。跨所有主功能共享，永远不变。
  *   - 功能内容槽（上半）：内容由当前激活的主功能完全掌控。Shell 只提供槽位，

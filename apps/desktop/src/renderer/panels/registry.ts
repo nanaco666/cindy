@@ -12,7 +12,7 @@ import type { PanelKind } from '../../shared/layoutTree';
  *
  * 与 right-sidebar 的 TabKindPlugin registry 的关系:那是"右栏容器内部的 tab
  * 插件"(将来整体作为工具箱意识的内部实现),本注册表是**顶层 pane 级**面板;
- * 两层各管一层,第 4 步只消费本层。
+ * 两层各管一层,顶层布局只消费本层。
  */
 
 /** 所有面板组件的统一入参 —— 引擎只认识这一个形状,不为任何 kind 特化。 */

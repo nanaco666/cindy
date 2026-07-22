@@ -10,7 +10,7 @@
  *      pendingRewindTo(下一次 send 触发三件套重启)。await 返回时 DB 事务已完成。
  *   2. emitSessionPatch — sidebar 镜像 token 归零 / sdkSessionId 可能变化。
  *   3. dropMessagesFromClientId — 内存里按同一软删语义裁掉旧段(不走
- *      reloadMessages 的"清空 + 异步重拉",避免和第 4 步的乐观气泡竞态闪烁)。
+ *      reloadMessages 的"清空 + 异步重拉",避免和乐观气泡竞态闪烁)。
  *   4. sendMessage — 用 rewindCommit 返回的 session 行里的 model / effort /
  *      permissionMode(选择器改动是 server-first 持久化,行值即当前值)重发;
  *      原消息附件经 buildRewindDraftAttachments 原样重建。
@@ -18,7 +18,7 @@
  * 失败面:
  *   - 第 1 步抛错(SESSION_RUNNING / NO_LIVE_QUERY 等)→ 整体未发生,调用方保持
  *     编辑态让用户重试。
- *   - 第 4 步重发入队失败(远端错误等)→ rewind 已 commit、旧消息已软删,编辑
+ *   - 重发入队失败(远端错误等)→ rewind 已 commit、旧消息已软删,编辑
  *     文本**不能丢**:落 composer 草稿兜底(saveDraft 非 silent,已挂载的
  *     ChatInput 会收到通知立即回填),与 Rewind 按钮的"预填输入框"UX 收敛到
  *     同一条路。store 侧的 error banner 由 sendMessage 内部错误处理负责。

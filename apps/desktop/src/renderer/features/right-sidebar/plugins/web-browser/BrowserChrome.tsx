@@ -1,7 +1,7 @@
 /**
  * BrowserChrome —— web-browser tab 的 40px 顶部工具栏。
  *
- * 视觉对齐 plan §5.2:
+ * 视觉结构:
  *   ┌────────────────────────────────────────────────────────────────┐
  *   │ ← → ↻   [🔒  https://github.com           ⭐]   ⋯              │  40px
  *   └────────────────────────────────────────────────────────────────┘
@@ -11,7 +11,7 @@
  *         lock icon 居左、URL/title 居中、star 居右
  *   - 右:24×24 download / ellipsis(Phase 5 范围内只渲染占位,实际无 action)
  *
- * 设计稿 F4(newtab quick-link 卡片)plan 明确不做,所以 URL bar 是常驻、URL 输入
+ * 不提供 newtab quick-link 卡片,所以 URL bar 常驻、URL 输入
  * 框跟显示框是同一个(点 / focus 就能编辑)。
  *
  * URL bar 自身要支持:

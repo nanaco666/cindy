@@ -1,7 +1,6 @@
 /**
  * env 三段组装 + process.env strip —— Claude Code spawn 用。
  *
- * 详见 doc/agent/xdt-maker-architecture.md §6.5：
  *   1. process.env 剥离敏感 OAuth token（避免 CLI 子进程读到用户系统 key）
  *   2. behaviorFlags 打底（runtimeConfig 注入，host 配置）
  *   3. endpoint → ANTHROPIC_BASE_URL（runtimeConfig 注入）

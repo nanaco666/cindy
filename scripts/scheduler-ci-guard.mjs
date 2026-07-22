@@ -8,8 +8,7 @@
 // 3 条 anti-pattern grep + 3 条 ESLint 反向依赖（lint 在 maker-scheduler /
 // maker-core 的 eslint.config.mjs 里 no-restricted-imports 落地）。
 //
-// 设计文档：apps/desktop/doc/agent/xdt-maker-scheduler-plan.md §Phase 7
-// RFC：apps/desktop/doc/agent/xdt-maker-scheduler.md §6 解耦自检清单
+// 守门规则与解耦边界以本脚本、maker-scheduler 和 maker-core 的 ESLint 配置为准。
 
 import { spawnSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';

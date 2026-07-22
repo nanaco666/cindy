@@ -1,14 +1,12 @@
 /**
- * MakerExperimentalView — 一阶段重构新链路的独立验证页面。
+ * MakerExperimentalView — Maker IPC / agent event 链路的独立诊断页面。
  *
  * 路由：/maker-experimental
  *
  * 设计意图：
- * - 不替换现有 chat UI（那是下一轮工作）
- * - 仅给开发者一个最小入口验证 maker:* IPC 链路通畅
+ * - 不替换标准 chat UI
+ * - 给开发者一个最小入口验证 maker:* IPC 链路通畅
  * - 显示原始 AgentEvent JSON，方便诊断
- *
- * 详见 doc/agent/xdt-maker-architecture.md §10
  */
 
 import { useState, useEffect, type ReactElement } from 'react';

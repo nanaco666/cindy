@@ -3,8 +3,6 @@
  *
  * 关键设计：CapabilityStatus 区分 "SDK 真不支持" 和 "我们暂未实现"，
  * 让 UI 能给用户更准确的提示，也方便跟踪上游补全进度。
- *
- * 详见 apps/desktop/doc/agent/xdt-maker-architecture.md §3.3
  */
 
 import type { Effort, PermissionMode, ReasoningDisplay } from './common.js';

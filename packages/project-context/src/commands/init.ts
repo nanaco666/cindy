@@ -137,7 +137,7 @@ export async function runInit(options: InitOptions = {}): Promise<InitResult> {
           'Skipping bootstrap; you can fill modules manually or wait for Phase 2.',
       ),
     );
-    // Bootstrap implementation deferred — see plan file. The hook is here so that
+    // Bootstrap implementation is deferred. The hook is here so that
     // the CLI accepts the flag without erroring; concerns/ scan + LLM prompting will
     // land in the next iteration.
   }

@@ -1,7 +1,7 @@
 /**
  * unified-downloader — M4: Retry controller + error classification.
  * ---------------------------------------------------------------------------
- * Tech spec: .sivi/docs/tech_specs/unified-downloader-frontend.md (M4)
+ * Retry classification and backoff invariants are maintained in this module.
  *
  * Backoff: 1s, 2s, 4s, 8s, 16s, 30s (capped at maxDelayMs, ±25% jitter).
  *

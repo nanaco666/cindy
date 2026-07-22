@@ -14,9 +14,9 @@
  *    `classifySchedulerError` and return a structured `{ok:false, code, message}`
  *    so the model can retry or prompt the user instead of crashing the tool.
  *
- *    Phase 5 hard rule (plan §C.6): MCP tool result error codes MUST reuse
+ *    MCP contract: tool result error codes reuse
  *    IPC layer's NOT_FOUND / INVALID_PARAMS / INTERNAL + new SCHEDULER_NOT_READY.
- *    Implemented in errors.ts; Phase 7 will抽 shared util.
+ *    Implemented in errors.ts.
  */
 
 import { parseCron, type Scheduler } from '@lizi/maker-scheduler';

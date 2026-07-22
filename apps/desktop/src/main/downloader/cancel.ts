@@ -1,7 +1,7 @@
 /**
  * unified-downloader — M7: Cancel & cleanup contracts.
  * ---------------------------------------------------------------------------
- * Tech spec: .sivi/docs/tech_specs/unified-downloader-frontend.md (M7)
+ * Cancellation cleanup and error semantics are maintained in this module.
  *
  * The cancel logic lives where it actually fires:
  *   - In-flight cancel  → transport.ts (AbortSignal handler aborts net.request)

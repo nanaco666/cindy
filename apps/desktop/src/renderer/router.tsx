@@ -145,8 +145,7 @@ export const router = createHashRouter([
                   },
                   { path: 'settings', element: <SettingsView /> },
                   { path: 'plugins', element: <GhostPluginPage /> },
-                  // 一阶段重构：新链路验证页面（独立路由，不影响现有 chat）
-                  // 详见 doc/agent/xdt-maker-architecture.md
+                  // Maker IPC / agent event 链路诊断页(独立路由,不影响标准 chat)。
                   { path: 'maker-experimental', element: <MakerExperimentalView /> },
                 ],
               },

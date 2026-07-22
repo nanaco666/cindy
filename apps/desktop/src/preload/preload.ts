@@ -3285,9 +3285,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // electronAPI.codex.* 已退役 —— auth / agent status / usage 全部走 electronAPI.maker.*(agentKind),
   // 详见下方 maker 块的 auth / agent / usage 三个子对象。
 
-  // ─── Maker Core 一阶段重构（新链路）────────────────────────────────────
-  // 与上面的 cc-agent / codex 老 API 双轨并行；renderer 通过 settings 开关切换。
-  // 详见 doc/agent/xdt-maker-architecture.md
+  // ─── Maker Core IPC ─────────────────────────────────────────────────────
+  // renderer 通过统一 maker API 按 agentKind 调用 Claude Code / Codex。
   maker: {
     listAvailableAgents: (): Promise<Array<'claude-code' | 'codex'>> =>
       ipcRenderer.invoke('maker:list-available-agents'),

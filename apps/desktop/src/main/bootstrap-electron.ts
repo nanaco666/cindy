@@ -3402,8 +3402,7 @@ ipcMain.on('theme:apply-vibrancy', (_event, payload: { familyId: string; isDark:
       };
     }
 
-    // 两个 binary 都 ready, 现在才能安全构造 Maker 单例并挂 maker:* / 相关 IPC。
-    // 详见 doc/agent/xdt-maker-architecture.md
+    // 两个 binary 都 ready,现在才能安全构造 Maker 单例并挂 maker:* / 相关 IPC。
     await registerMakerIpcsAfterSplash();
 
     return {

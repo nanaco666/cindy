@@ -8,13 +8,13 @@
  *   - call_tool 入口：透传到 SchedulerToolRegistry；正确分发 handler
  *   - 真 Scheduler（InMemoryStorage + mock runner）的 create / list / get /
  *     run_now / list_runs 行为透传给 MCP 调用方时形态正确
- *   - 错误码翻译（plan §C.6 硬规则）：
+ *   - MCP 错误码翻译契约：
  *       * UNKNOWN_TOOL — 调不存在的 tool
  *       * INVALID_ARGS — zod schema 校验失败（带 schema 自纠 payload）
  *       * NOT_FOUND    — Scheduler 抛 'schedule {id} not found'
  *       * SCHEDULER_NOT_READY — getScheduler() 抛 'scheduler not started'
  *
- * 不 cover 的边界（plan §Phase 5 验收 user 仍需在 desktop 上跑）：
+ * 不 cover 的边界（仍需在 desktop 端到端验证）：
  *   - cc / codex agent 把 cindy_scheduler provider 拼进 mcpServers config 的 spawn 链
  *   - 真 LLM 模型在对话里能 discovery 并调用这些 tool
  *   - GUI 列表 onEvent 推送实时刷新
@@ -280,7 +280,7 @@ describe('cindy_scheduler MCP server (in-process smoke)', () => {
     expect(createdData.notify).toEqual({ desktop: true, feishu: false });
     expect(typeof createdData.nextFireAt).toBe('number');
 
-    // schedule_list — verify same shape as scheduler.list() (plan §C.6 hard rule)
+    // schedule_list — verify the same payload shape as scheduler.list().
     const listed = await h.client.callTool({
       name: 'call_tool',
       arguments: { name: 'schedule_list', args: {} },

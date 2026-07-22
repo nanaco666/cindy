@@ -16,7 +16,7 @@
  *     remote): Phase 4.3 在 maker-core 端处理
  *   - UI 入口(添加远程项目 dialog vendor 选择): Phase 4.4
  *
- * Smoke test 已验证(2026-06-05 cache host, 见 docs/cc-remote-follow-up.md):
+ * Smoke test 已验证(2026-06-05 cache host):
  *   - daemon nohup setsid 启动 / sock ready / protocol/hello 返 protocolVersion
  *   - OpenBSD nc 支持 `-U` (unix socket) + 双向桥
  *   - daemon 主进程 cmdline 是 `node cc-mgr.mjs daemon --socket ...`

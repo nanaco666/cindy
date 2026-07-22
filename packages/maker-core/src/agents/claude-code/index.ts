@@ -1498,8 +1498,7 @@ export class ClaudeCodeAgent extends BaseAgent {
         // server (plain JSON 可跨进程)。in-process SDK MCP (type='sdk' + 闭包 instance)
         // 不可序列化 — instance 里藏 ajv SchemaEnv 循环引用, JSON.stringify 会爆栈。
         // 直接 filter 掉, 让远端 daemon 用 stdio/sse/http MCP 跑; 本地 lizi-* 全套
-        // in-process MCP 在远端会话里不可用 (用户已 sign-off 的 MVP 妥协, 见
-        // docs/cc-remote-follow-up.md).
+        // in-process MCP 在远端会话里不可用(远端 cc MVP 的已知限制)。
         const remoteMcpServers = mcpServers
           ? Object.fromEntries(
               Object.entries(mcpServers).reduce<Array<[string, unknown]>>((acc, [name, cfg]) => {
