@@ -828,9 +828,12 @@ export function NewMakerDraftRoute() {
           saveComposerDraft(NEW_MAKER_DRAFT_KEY, {
             ...dlDraft,
             text: stripLocalMentionChips(dlDraft.text),
-          }, { silent: true });
+          });
         }
-        skipDefaultsRefetchRef.current = true;
+        // 只有 deviceId 真正变化时 effect 才会重跑并消费 skip flag;同设备不设。
+        if (target.deviceId !== effectiveDeviceLinkDeviceId) {
+          skipDefaultsRefetchRef.current = true;
+        }
         patchDraft({
           workingDir: target.path,
           remoteHostId: null,
