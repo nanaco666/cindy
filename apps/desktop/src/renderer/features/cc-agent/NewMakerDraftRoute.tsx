@@ -137,7 +137,8 @@ import {
   useProjectPickerOptions,
 } from '@/hooks/useProjectPickerOptions';
 import { resolveFastSupported } from '@/lib/providerModels';
-import { effectiveSourceIdForModel, getModel } from '@lizi/model-providers';
+import { effectiveSourceIdForModel, getModel, sessionModelSupportsFastMode } from '@lizi/model-providers';
+import { isSubscriptionDirectModel } from '../../../shared/subscriptionModels';
 import {
   resolveDeviceLinkDraftDefaults,
   type DeviceLinkDraftSelection,
@@ -791,23 +792,32 @@ export function NewMakerDraftRoute() {
       // 立即建会话记录并 navigate 过去。建会话约定与本文件其它 createSession 路径一致
       // (createSession + makerChatStore.setSessionRuntime + navigate)。
       //
-      // SSH 始终取本地(controller)的 provider/fast 上下文,不复用 device-link 派生值:
-      // - providerId: chatPrefs.providerId ?? null(null = 默认路由,不固化当前默认来源)
-      // - fastMode: 从 localProviders 解析,不走 deviceLinkInitial
-      const sshProviderId = chatPrefs.providerId ?? null;
+      // SSH 始终取本地(controller)的 provider/fast 上下文,不复用 device-link 派生值。
+      // providerId 只保留用户显式选中且仍有效的来源,否则 null(默认路由,不固化默认来源)。
+      // bridge 模型(chatgpt/ / xai/)在远程模式不可用(不经本地 compat-proxy),需降级。
+      let sshModel = chatPrefs.model;
+      if (isSubscriptionDirectModel(sshModel)) {
+        const fallback = capabilities?.availableModels.find((m) => !isSubscriptionDirectModel(m.id));
+        sshModel = fallback?.id ?? (draftVendor === 'codex' ? 'gpt-5.5' : 'claude-sonnet-4-6');
+      }
+      const rawProviderId = chatPrefs.providerId ?? null;
       const sshLocalSourceId = effectiveSourceIdForModel(
-        localProviders, sshProviderId, chatPrefs.model, capabilityAgentKind,
+        localProviders, rawProviderId, sshModel, capabilityAgentKind,
       );
-      const sshFastMode = sshLocalSourceId
-        ? (getProviderModelFast(capabilityAgentKind, sshLocalSourceId, chatPrefs.model) ?? getFastModeForModel(chatPrefs.model))
-        : getFastModeForModel(chatPrefs.model);
+      // 只有用户显式选中的来源在本地仍可用时才保留;否则 null = 走默认路由。
+      const sshProviderId = (rawProviderId && sshLocalSourceId === rawProviderId) ? rawProviderId : null;
+      // fast mode 必须经 source capability gate:来源不支持就关闭。
+      const sshSourceSupportsFast = sessionModelSupportsFastMode(localProviders, sshProviderId, sshModel, capabilityAgentKind);
+      const sshFastMode = sshSourceSupportsFast
+        ? (getProviderModelFast(capabilityAgentKind, sshLocalSourceId ?? '', sshModel) ?? getFastModeForModel(sshModel))
+        : false;
       try {
         const newSession = await createSession({
           agentKind: draftVendor,
           workingDir: target.path,
           workspaceKind: 'project',
           permissionMode: chatPrefs.permissionMode,
-          model: chatPrefs.model,
+          model: sshModel,
           effort: draftInitialEffort,
           fastMode: sshFastMode,
           planModeEnabled: effectivePlanMode,
@@ -858,13 +868,14 @@ export function NewMakerDraftRoute() {
           clearComposerDraftAndNotify(NEW_MAKER_DRAFT_KEY);
           attachmentState.clearFiles();
         }
+        resetDraftWorkspaceAfterSend();
         navigate(`/cc-agent/${newSession.id}`, { replace: true });
       } catch (err) {
         log.error('[add remote project]', err);
         throw err;
       }
     },
-    [draft.vendor, chatPrefs, draftInitialEffort, effectiveExtraDirs, localProviders, capabilityAgentKind, effectivePlanMode, attachmentState, createSession, navigate, t],
+    [draft.vendor, chatPrefs, draftInitialEffort, effectiveExtraDirs, localProviders, capabilityAgentKind, capabilities, effectivePlanMode, attachmentState, createSession, navigate, t],
   );
 
   // ─── 切 vendor ──────────────────────────────────────────────────────
