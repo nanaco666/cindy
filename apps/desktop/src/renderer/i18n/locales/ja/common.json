@@ -1285,6 +1285,14 @@
         "reconnect": "Feishu ボットを再接続",
         "clear": "連携解除"
       },
+      "saved": {
+        "heading": "Feishu ボットは連携済み",
+        "connectingNote": "ボットの認証情報は保存されています。接続しています。",
+        "reconnectingNote": "ボットの認証情報は保存されています。接続を復旧しています。",
+        "conflictNote": "ボットの認証情報は保存されていますが、この App ID は別のデバイスで使用中です。",
+        "errorNote": "ボットの認証情報は保存されていますが、接続に失敗しました。再接続してもう一度お試しください。",
+        "idleNote": "ボットの認証情報は保存されていますが、現在接続されていません。再接続してください。"
+      },
       "appIdLabel": "App ID",
       "appIdPlaceholder": "cli_xxxxxxxxxxxxxxxx",
       "appSecretLabel": "App Secret",

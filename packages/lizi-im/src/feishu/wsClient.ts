@@ -149,9 +149,18 @@ function makeCapturingLogger(activeDetector: ConflictDetector): SdkLogger {
 
 export async function start(
   creds: BotCredentials,
+  opts: StartOptions = {},
 ): Promise<'connected' | 'conflict' | 'error'> {
   const log = getLog();
-  if (client) await stop();
+  log.info(
+    `[feishu/wsClient] start requested reason=${opts.reason ?? 'unspecified'} announceLifecycle=${opts.announceLifecycle === false ? 'no' : 'yes'}`,
+  );
+  if (client) {
+    await stop({
+      announceOffline: opts.announceLifecycle !== false,
+      reason: `${opts.reason ?? 'start'}:replace-existing-client`,
+    });
+  }
 
   const startedGeneration = ++lifecycleGeneration;
   acceptingInbound = true;
@@ -207,7 +216,11 @@ export async function start(
   switch (verdict.kind) {
     case 'connected':
       if (currentStatus !== 'connected') setStatus('connected');
-      void announceLifecycle('online');
+      if (opts.announceLifecycle !== false) {
+        void announceLifecycle('online');
+      } else {
+        log.info('[feishu/wsClient] online announcement suppressed for transport restart');
+      }
       return 'connected';
     case 'conflict':
       setStatus('conflict', '该 App ID 似乎已被另一台设备使用');
@@ -220,9 +233,18 @@ export async function start(
   }
 }
 
+interface StartOptions {
+  /** A transport-only restart keeps the logical bot online and must not announce again. */
+  announceLifecycle?: boolean;
+  reason?: string;
+}
+
 interface StopOptions {
   keepStatus?: boolean;
   offlineTimeoutMs?: number;
+  /** False for transport recovery; true/default for a logical shutdown. */
+  announceOffline?: boolean;
+  reason?: string;
 }
 
 export async function stop(opts: StopOptions = {}): Promise<void> {
@@ -233,12 +255,16 @@ export async function stop(opts: StopOptions = {}): Promise<void> {
   acceptingInbound = false;
   lifecycleGeneration += 1;
   log.info(
-    `[feishu/wsClient] stop requested status=${currentStatus} hasClient=${client ? 'yes' : 'no'} keepStatus=${opts.keepStatus ? 'yes' : 'no'} offlineTimeoutMs=${opts.offlineTimeoutMs ?? DEFAULT_OFFLINE_ANNOUNCE_TIMEOUT_MS}`,
+    `[feishu/wsClient] stop requested reason=${opts.reason ?? 'unspecified'} status=${currentStatus} hasClient=${client ? 'yes' : 'no'} keepStatus=${opts.keepStatus ? 'yes' : 'no'} announceOffline=${opts.announceOffline === false ? 'no' : 'yes'} offlineTimeoutMs=${opts.offlineTimeoutMs ?? DEFAULT_OFFLINE_ANNOUNCE_TIMEOUT_MS}`,
   );
   // currentStatus === 'connected' 时一定发; 'reconnecting' 时也发 —— 关闭应用
   // 时 SDK 可能在 close() 之前先记录一条 reconnect 日志, 导致状态切到
   // 'reconnecting', 若只检查 'connected' 则 offline 通知会静默丢失。
-  if (client && (currentStatus === 'connected' || currentStatus === 'reconnecting')) {
+  if (
+    opts.announceOffline !== false &&
+    client &&
+    (currentStatus === 'connected' || currentStatus === 'reconnecting')
+  ) {
     const timeoutMs = opts.offlineTimeoutMs ?? DEFAULT_OFFLINE_ANNOUNCE_TIMEOUT_MS;
     let timedOut = false;
     let timer: ReturnType<typeof setTimeout> | null = null;

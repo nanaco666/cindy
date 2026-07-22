@@ -172,10 +172,20 @@ export async function saveAndConnect(
   appId: string,
   appSecret: string,
 ): Promise<{ verdict: 'connected' | 'conflict' | 'error' }> {
-  await wsClient.stop();
+  const saved = storage.readCredentials();
+  const credentialsUnchanged = saved?.appId === appId && saved.appSecret === appSecret;
+  if (credentialsUnchanged) {
+    if (wsClient.getCurrentStatus() === 'connected') {
+      getLog().info('[feishu/ipc] saveAndConnect skipped: same credentials already connected');
+      return { verdict: 'connected' };
+    }
+    return reconnectSavedCredentials();
+  }
+
   const ok = storage.writeCredentials({ appId, appSecret });
   if (!ok) return { verdict: 'error' };
-  const verdict = await wsClient.start({ appId, appSecret });
+  await wsClient.stop({ reason: 'credentials-replaced' });
+  const verdict = await wsClient.start({ appId, appSecret }, { reason: 'credentials-replaced' });
   return { verdict };
 }
 
@@ -187,8 +197,11 @@ export async function reconnectSavedCredentials(): Promise<{
   if (!creds) {
     throw new Error('[NO_CREDENTIALS] Feishu bot credentials are not configured');
   }
-  await wsClient.stop();
-  const verdict = await wsClient.start(creds);
+  await wsClient.stop({ announceOffline: false, reason: 'manual-reconnect' });
+  const verdict = await wsClient.start(creds, {
+    announceLifecycle: false,
+    reason: 'manual-reconnect',
+  });
   return { verdict };
 }
 
@@ -317,7 +330,7 @@ function delay(ms: number): Promise<void> {
 
 export async function clearAndDisconnect(): Promise<void> {
   cancelAppRegistration();
-  await wsClient.stop();
+  await wsClient.stop({ reason: 'credentials-cleared' });
   ownerGuard.clear();
   storage.clearAll();
 }

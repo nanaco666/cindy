@@ -5,6 +5,12 @@ import type { IMHost } from '../../types.js';
 const mocks = vi.hoisted(() => ({
   stop: vi.fn(async () => undefined),
   start: vi.fn(async () => 'connected' as const),
+  getCurrentStatus: vi.fn<
+    () => 'idle' | 'testing' | 'connected' | 'reconnecting' | 'conflict' | 'error'
+  >(() => 'idle'),
+  readCredentials: vi.fn(
+    () => null as { appId: string; appSecret: string } | null,
+  ),
   writeCredentials: vi.fn(() => true),
   writeOwnerOpenId: vi.fn(),
   loadOwner: vi.fn(),
@@ -14,14 +20,14 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('../wsClient.js', () => ({
   QUIT_OFFLINE_ANNOUNCE_TIMEOUT_MS: 4500,
-  getCurrentStatus: () => 'idle',
+  getCurrentStatus: mocks.getCurrentStatus,
   setLifecycleAnnouncement: vi.fn(),
   stop: mocks.stop,
   start: mocks.start,
 }));
 
 vi.mock('../storage.js', () => ({
-  readCredentials: vi.fn(() => null),
+  readCredentials: mocks.readCredentials,
   readOwnerOpenId: vi.fn(() => null),
   readLifecycleAnnouncement: vi.fn(() => true),
   writeLifecycleAnnouncement: vi.fn(),
@@ -42,7 +48,11 @@ vi.mock('../appRegistration.js', () => ({
 }));
 
 import { FeishuIM } from '../index.js';
-import { cancelAppRegistration } from '../ipc.js';
+import {
+  cancelAppRegistration,
+  reconnectSavedCredentials,
+  saveAndConnect,
+} from '../ipc.js';
 
 type IpcHandler = (payload?: unknown) => Promise<unknown> | unknown;
 
@@ -110,6 +120,11 @@ beforeEach(() => {
   accountToken += 1;
   operationGate = null;
   vi.clearAllMocks();
+  mocks.getCurrentStatus.mockReturnValue('idle');
+  mocks.readCredentials.mockReturnValue(null);
+  mocks.stop.mockResolvedValue(undefined);
+  mocks.start.mockResolvedValue('connected');
+  mocks.writeCredentials.mockReturnValue(true);
 });
 
 afterEach(() => {
@@ -177,6 +192,69 @@ describe('Feishu IPC account scope', () => {
 
     expect(mocks.writeOwnerOpenId).not.toHaveBeenCalled();
     expect(mocks.writeCredentials).not.toHaveBeenCalled();
+    expect(mocks.start).not.toHaveBeenCalled();
+  });
+});
+
+describe('Feishu credential connection semantics', () => {
+  const credentials = { appId: 'cli_test', appSecret: 'secret' };
+
+  it('keeps an already-connected transport untouched when credentials are unchanged', async () => {
+    mocks.readCredentials.mockReturnValue(credentials);
+    mocks.getCurrentStatus.mockReturnValue('connected');
+
+    await expect(saveAndConnect(credentials.appId, credentials.appSecret)).resolves.toEqual({
+      verdict: 'connected',
+    });
+
+    expect(mocks.writeCredentials).not.toHaveBeenCalled();
+    expect(mocks.stop).not.toHaveBeenCalled();
+    expect(mocks.start).not.toHaveBeenCalled();
+  });
+
+  it('recovers an unchanged saved binding without lifecycle announcements', async () => {
+    mocks.readCredentials.mockReturnValue(credentials);
+    mocks.getCurrentStatus.mockReturnValue('error');
+
+    await expect(saveAndConnect(credentials.appId, credentials.appSecret)).resolves.toEqual({
+      verdict: 'connected',
+    });
+
+    expect(mocks.writeCredentials).not.toHaveBeenCalled();
+    expect(mocks.stop).toHaveBeenCalledWith({
+      announceOffline: false,
+      reason: 'manual-reconnect',
+    });
+    expect(mocks.start).toHaveBeenCalledWith(credentials, {
+      announceLifecycle: false,
+      reason: 'manual-reconnect',
+    });
+  });
+
+  it('suppresses lifecycle announcements for an explicit manual reconnect', async () => {
+    mocks.readCredentials.mockReturnValue(credentials);
+
+    await expect(reconnectSavedCredentials()).resolves.toEqual({ verdict: 'connected' });
+
+    expect(mocks.stop).toHaveBeenCalledWith({
+      announceOffline: false,
+      reason: 'manual-reconnect',
+    });
+    expect(mocks.start).toHaveBeenCalledWith(credentials, {
+      announceLifecycle: false,
+      reason: 'manual-reconnect',
+    });
+  });
+
+  it('does not tear down the current transport when saving new credentials fails', async () => {
+    mocks.readCredentials.mockReturnValue(credentials);
+    mocks.writeCredentials.mockReturnValue(false);
+
+    await expect(saveAndConnect('cli_other', 'other-secret')).resolves.toEqual({
+      verdict: 'error',
+    });
+
+    expect(mocks.stop).not.toHaveBeenCalled();
     expect(mocks.start).not.toHaveBeenCalled();
   });
 });

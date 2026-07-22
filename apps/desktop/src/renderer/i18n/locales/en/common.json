@@ -1286,6 +1286,14 @@
         "reconnect": "Reconnect Feishu Bot",
         "clear": "Unbind"
       },
+      "saved": {
+        "heading": "Feishu Bot is bound",
+        "connectingNote": "Bot credentials are saved. Establishing the connection now.",
+        "reconnectingNote": "Bot credentials are saved. Restoring the connection now.",
+        "conflictNote": "Bot credentials are saved, but this App ID is currently in use on another device.",
+        "errorNote": "Bot credentials are saved, but the connection failed. Select reconnect to try again.",
+        "idleNote": "Bot credentials are saved, but the bot is not connected. Select reconnect to try again."
+      },
       "appIdLabel": "App ID",
       "appIdPlaceholder": "cli_xxxxxxxxxxxxxxxx",
       "appSecretLabel": "App Secret",
