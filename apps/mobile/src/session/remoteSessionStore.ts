@@ -241,7 +241,11 @@ function rememberLivePlanSnapshot(sessionId: string, snapshot: LivePlanSnapshot)
   if (snapshot.persistId) sessionSnapshots.set(`persist:${snapshot.persistId}`, snapshot);
 }
 
-function overlayLivePlanSnapshot(sessionId: string, message: RemoteMessage): RemoteMessage {
+function overlayLivePlanSnapshot(
+  sessionId: string,
+  message: RemoteMessage,
+  options: { authoritativeHistory?: boolean } = {},
+): RemoteMessage {
   if (message.role !== 'tool_use') return message;
   const sessionSnapshots = livePlanSnapshots.get(sessionId);
   if (!sessionSnapshots) return message;
@@ -259,7 +263,11 @@ function overlayLivePlanSnapshot(sessionId: string, message: RemoteMessage): Rem
   // immediately afterward.
   const persistedPlan = readPlanFromMessageContent(message.content);
   const cachedPlan = readPlanFromMessageContent(snapshot.content);
-  if (persistedPlan && cachedPlan && isPlanSnapshotAtLeastAsFresh(persistedPlan, cachedPlan)) {
+  if (persistedPlan && cachedPlan && isPlanSnapshotAtLeastAsFresh(
+    persistedPlan,
+    cachedPlan,
+    options.authoritativeHistory === true,
+  )) {
     const promoted: LivePlanSnapshot = {
       ...snapshot,
       content: message.content as Record<string, unknown>,
@@ -278,14 +286,29 @@ function readPlanFromMessageContent(content: unknown): unknown[] | null {
   return Array.isArray(input?.plan) ? input.plan : null;
 }
 
-function isPlanSnapshotAtLeastAsFresh(incoming: unknown[], cached: unknown[]): boolean {
+function isPlanSnapshotAtLeastAsFresh(
+  incoming: unknown[],
+  cached: unknown[],
+  authoritativeHistory: boolean,
+): boolean {
   if (deepValueEqual(incoming, cached)) return true;
   // `[]` is an authoritative clear from terminal done. A later non-empty row can
   // be an older DB echo and must not resurrect cleared steps.
   if (cached.length === 0) return incoming.length === 0;
-  // A structural change can only be learned from the authoritative persisted row;
-  // do not let a provisional terminal cache hide added, removed, or renamed steps.
-  if (incoming.length !== cached.length) return true;
+  // A messages:created echo can arrive after task_complete while still containing
+  // an older plan shape. Only an explicit history/window refresh may establish a
+  // structural change; live echoes must not add or drop terminal steps.
+  if (incoming.length !== cached.length) {
+    if (!authoritativeHistory) return false;
+    const sharedLength = Math.min(incoming.length, cached.length);
+    for (let index = 0; index < sharedLength; index += 1) {
+      const incomingItem = isRecord(incoming[index]) ? incoming[index] as Record<string, unknown> : null;
+      const cachedItem = isRecord(cached[index]) ? cached[index] as Record<string, unknown> : null;
+      if (!incomingItem || !cachedItem) return false;
+      if (planStatusRank(incomingItem['status']) < planStatusRank(cachedItem['status'])) return false;
+    }
+    return true;
+  }
 
   for (let index = 0; index < incoming.length; index += 1) {
     const incomingItem = isRecord(incoming[index]) ? incoming[index] as Record<string, unknown> : null;
@@ -1098,7 +1121,7 @@ export const remoteSessionStore = {
       }
     }
     for (const rawItem of latestWindow) {
-      const item = overlayLivePlanSnapshot(sessionId, rawItem);
+      const item = overlayLivePlanSnapshot(sessionId, rawItem, { authoritativeHistory: true });
       if (isPersistedAssistantMessage(item)) {
         const fallbackIndex = findPendingGeneratedStreamingFallbackIndex(sessionId, existing);
         const fallback = fallbackIndex >= 0 ? existing[fallbackIndex] : undefined;

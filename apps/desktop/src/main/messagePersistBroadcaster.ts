@@ -421,6 +421,21 @@ export function onToolUseEvent(
   return persistId;
 }
 
+/** Persist a turn-scoped terminal plan reconciliation without broadcasting it as
+ * a generic tool_use event, which could finalize UI belonging to a later turn. */
+export function onPlanSnapshotEvent(
+  sessionId: string,
+  data: { turnId?: unknown; plan?: unknown },
+  agentMeta: AgentMeta | null,
+): string | undefined {
+  if (typeof data.turnId !== 'string' || !Array.isArray(data.plan)) return undefined;
+  return onToolUseEvent(sessionId, {
+    toolUseId: `plan:${data.turnId}`,
+    toolName: 'update_plan',
+    input: { plan: data.plan },
+  }, agentMeta);
+}
+
 /**
  * Main 侧合成 tool 事件也必须遵守 renderer 的展示契约:
  * tool_result / tool_result_full 只有带 persistId + resolvedContent 才会渲染。

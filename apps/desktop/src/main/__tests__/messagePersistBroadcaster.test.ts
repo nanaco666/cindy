@@ -40,6 +40,7 @@ import {
   prepareSyntheticToolEventForBroadcast,
   onAssistantTextEvent,
   onInteractionMessage,
+  onPlanSnapshotEvent,
   onThinkingEvent,
   flushAssistantBlock,
   flushOrphanToolResults,
@@ -127,6 +128,48 @@ describe('update_plan tool_use persistence', () => {
     await flushWrites();
     expect(createMessage).toHaveBeenCalledTimes(2);
     expect(updateMessageContent).not.toHaveBeenCalled();
+  });
+
+  it('persists a turn-scoped plan_snapshot and updates the same row on reconciliation', async () => {
+    const firstPersistId = onPlanSnapshotEvent(
+      SESSION,
+      { turnId: 'turn-late', plan: [{ step: 'Inspect', status: 'in_progress' }] },
+      null,
+    );
+    const secondPersistId = onPlanSnapshotEvent(
+      SESSION,
+      { turnId: 'turn-late', plan: [{ step: 'Inspect', status: 'completed' }] },
+      null,
+    );
+
+    expect(firstPersistId).toEqual(expect.any(String));
+    expect(secondPersistId).toBe(firstPersistId);
+
+    await flushWrites();
+    expect(createMessage).toHaveBeenCalledTimes(1);
+    expect(createMessage).toHaveBeenCalledWith(
+      SESSION,
+      expect.objectContaining({
+        clientId: firstPersistId,
+        role: 'tool_use',
+        toolUseId: 'plan:turn-late',
+        content: {
+          toolUseId: 'plan:turn-late',
+          toolName: 'update_plan',
+          input: { plan: [{ step: 'Inspect', status: 'in_progress' }] },
+        },
+      }),
+      broadcastGuard(),
+    );
+    expect(updateMessageContent).toHaveBeenCalledWith(
+      SESSION,
+      firstPersistId,
+      {
+        toolUseId: 'plan:turn-late',
+        toolName: 'update_plan',
+        input: { plan: [{ step: 'Inspect', status: 'completed' }] },
+      },
+    );
   });
 });
 

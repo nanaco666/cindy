@@ -184,6 +184,7 @@ import {
   onAssistantTextEvent,
   onInteractionMessage,
   onInteractionResolved,
+  onPlanSnapshotEvent,
   onThinkingEvent,
   onToolResultEvent,
   onToolResultFullEvent,
@@ -2168,6 +2169,15 @@ export function wireSessionToIpc(session: ReturnType<Maker['getSession']>): void
       persistId = onAssistantTextEvent(
         session.id,
         event.data as { text?: unknown; isFinal?: unknown },
+        eventAgentMeta,
+      );
+    } else if (event.type === 'plan_snapshot') {
+      // A final rollout drain may discover the first plan row only after done.
+      // Persist it under the same turn-scoped identity while preserving the
+      // plan_snapshot broadcast contract (generic tool_use would affect later UI).
+      persistId = onPlanSnapshotEvent(
+        session.id,
+        event.data as { turnId?: unknown; plan?: unknown },
         eventAgentMeta,
       );
     } else if (event.type === 'tool_use') {

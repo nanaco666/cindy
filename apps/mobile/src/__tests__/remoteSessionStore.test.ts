@@ -671,6 +671,81 @@ describe('remoteSessionStore', () => {
     });
   });
 
+  it('keeps a terminal plan when a stale live echo has fewer steps', () => {
+    remoteSessionStore.applyRemotePush('dev-1', 'maker:event', {
+      sessionId: 's1',
+      event: {
+        type: 'done',
+        source: 'codex',
+        data: {
+          type: 'codex/event/task_complete',
+          raw: { id: 'turn-fewer-stale' },
+          plan: [
+            { step: 'Inspect', status: 'completed' },
+            { step: 'Verify', status: 'completed' },
+          ],
+        },
+      },
+    });
+
+    remoteSessionStore.appendMessage('s1', {
+      ...message('plan-row-fewer-stale', 's1'),
+      role: 'tool_use',
+      toolUseId: 'plan:turn-fewer-stale',
+      content: {
+        toolUseId: 'plan:turn-fewer-stale',
+        toolName: 'update_plan',
+        input: { plan: [{ step: 'Inspect', status: 'in_progress' }] },
+      },
+    });
+
+    expect(remoteSessionStore.getMessages('s1')[0]).toMatchObject({
+      content: {
+        input: {
+          plan: [
+            { step: 'Inspect', status: 'completed' },
+            { step: 'Verify', status: 'completed' },
+          ],
+        },
+      },
+    });
+  });
+
+  it('keeps a terminal plan when a stale live echo has extra steps', () => {
+    remoteSessionStore.applyRemotePush('dev-1', 'maker:event', {
+      sessionId: 's1',
+      event: {
+        type: 'done',
+        source: 'codex',
+        data: {
+          type: 'codex/event/task_complete',
+          raw: { id: 'turn-extra-stale' },
+          plan: [{ step: 'Inspect', status: 'completed' }],
+        },
+      },
+    });
+
+    remoteSessionStore.appendMessage('s1', {
+      ...message('plan-row-extra-stale', 's1'),
+      role: 'tool_use',
+      toolUseId: 'plan:turn-extra-stale',
+      content: {
+        toolUseId: 'plan:turn-extra-stale',
+        toolName: 'update_plan',
+        input: {
+          plan: [
+            { step: 'Inspect', status: 'in_progress' },
+            { step: 'Old follow-up', status: 'pending' },
+          ],
+        },
+      },
+    });
+
+    expect(remoteSessionStore.getMessages('s1')[0]).toMatchObject({
+      content: { input: { plan: [{ step: 'Inspect', status: 'completed' }] } },
+    });
+  });
+
   it('lets an authoritative history plan shape replace the provisional terminal snapshot', () => {
     remoteSessionStore.applyRemotePush('dev-1', 'maker:event', {
       sessionId: 's1',
