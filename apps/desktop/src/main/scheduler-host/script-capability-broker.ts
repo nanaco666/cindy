@@ -6,7 +6,7 @@ import type { ScriptCapabilityBroker, ScriptCapabilityCall } from './script-runn
 // model 兜底与 runner 同源(2026-06 曾因多份拷贝不同步导致 UI 显示与实跑模型不一致)
 import { defaultModelFor } from './model-defaults.js';
 
-type DispatchEffort = 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+type DispatchEffort = 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultra';
 
 interface BrokerError extends Error {
   code: string;

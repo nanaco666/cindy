@@ -92,6 +92,7 @@ const EFFORT_RANK: Record<Effort, number> = {
   high: 3,
   xhigh: 4,
   max: 5,
+  ultra: 6,
 };
 
 /** 取一组 effort 里的最低档;空 → null。 */

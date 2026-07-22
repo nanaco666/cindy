@@ -19,7 +19,7 @@ import { useMakerSession } from '@/hooks/useMakerSession';
 const CLAUDE_MODELS = ['claude-opus-4-8', 'claude-opus-4-7', 'claude-opus-4-6', 'claude-sonnet-4-6', 'claude-haiku-4-5-20251001'];
 const CODEX_MODELS = ['gpt-5'];
 
-type Effort = 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+type Effort = 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultra';
 type PermissionMode = 'ask' | 'default' | 'acceptEdits' | 'plan' | 'auto' | 'bypassPermissions';
 
 interface EffortDescriptorShape { id: Effort; displayName: string }

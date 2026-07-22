@@ -51,7 +51,7 @@ describe('mapCodexModelsToCatalog', () => {
       name: 'GPT-5.6',
       group: 'gpt',
       contextWindow: 400000,
-      efforts: ['low', 'high', 'xhigh'],
+      efforts: ['low', 'high', 'xhigh', 'max', 'ultra'],
       defaultEffort: 'high',
       status: 'active',
       defaultEnabled: true,
@@ -66,13 +66,36 @@ describe('mapCodexModelsToCatalog', () => {
     expect(out.find((m) => m.id === 'gpt-5.6')?.supportsFastMode).toBeUndefined();
   });
 
-  it('display name 保持纯净,过滤 runtime 不支持的 effort,priority 对齐静态排序锚点', () => {
+  it('display name 保持纯净,保留模型自报的全部合法 effort(含 max/ultra),priority 对齐静态排序锚点', () => {
     const out = mapCodexModelsToCatalog(SAMPLE);
     expect(out.every((m) => !m.name.includes('订阅'))).toBe(true);
-    expect(out.find((m) => m.id === 'gpt-5.6')?.efforts).toEqual(['low', 'high', 'xhigh']);
+    // issue #352:max/ultra 是合法 Codex 档,不再被 CODEX_EFFORTS 白名单过滤掉。
+    expect(out.find((m) => m.id === 'gpt-5.6')?.efforts).toEqual(['low', 'high', 'xhigh', 'max', 'ultra']);
     expect(out.find((m) => m.id === 'gpt-5.6')?.sortOrder).toBe(19);
     expect(out.find((m) => m.id === 'gpt-5.5')?.sortOrder).toBe(20);
     expect(out.find((m) => m.id === 'gpt-5.4')?.sortOrder).toBe(21);
+  });
+
+  it('只放行 CODEX_EFFORTS 白名单内的档(含 max/ultra),未知 effort id 仍被过滤', () => {
+    const out = mapCodexModelsToCatalog({
+      models: [
+        {
+          slug: 'gpt-5.7',
+          display_name: 'GPT-5.7',
+          visibility: 'list',
+          supported_in_api: true,
+          context_window: 400000,
+          default_reasoning_level: 'high',
+          supported_reasoning_levels: [
+            { effort: 'high' },
+            { effort: 'max' },
+            { effort: 'ultra' },
+            { effort: 'giga' },
+          ],
+        },
+      ],
+    });
+    expect(out[0].efforts).toEqual(['high', 'max', 'ultra']);
   });
 
   it('legacy 默认隐藏策略:gpt-5.4-mini defaultEnabled:false(旧目录可见性不因清单动态化漂移)', () => {

@@ -640,6 +640,16 @@
         "perAgent": {
           "claude-code": {
             "supportsFastMode": false
+          },
+          "codex": {
+            "efforts": [
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max",
+              "ultra"
+            ]
           }
         }
       },
@@ -664,6 +674,16 @@
         "perAgent": {
           "claude-code": {
             "supportsFastMode": false
+          },
+          "codex": {
+            "efforts": [
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max",
+              "ultra"
+            ]
           }
         }
       },
@@ -738,6 +758,16 @@
         "perAgent": {
           "claude-code": {
             "supportsFastMode": false
+          },
+          "codex": {
+            "efforts": [
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max",
+              "ultra"
+            ]
           }
         }
       },
@@ -762,6 +792,16 @@
         "perAgent": {
           "claude-code": {
             "supportsFastMode": false
+          },
+          "codex": {
+            "efforts": [
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max",
+              "ultra"
+            ]
           }
         }
       },

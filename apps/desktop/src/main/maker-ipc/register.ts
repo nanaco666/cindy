@@ -624,7 +624,7 @@ type SendToSessionCreateDefaults = {
   agentKind: AgentKind;
   model: string;
   providerId?: string | null;
-  effort?: 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+  effort?: 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultra';
   fastMode?: boolean;
   workingDir: string;
   workspaceKind?: 'project' | 'dialogue';
@@ -698,7 +698,7 @@ interface OrcaCollabService {
     role: string;
     agent: AgentKind;
     model?: string;
-    effort?: 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+    effort?: 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultra';
     fast?: boolean;
     label: string;
     initialTask?: string;
@@ -6222,7 +6222,7 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
       log.debug('set-effort: skipped live push (pending credential switch)', { sessionId });
       return;
     }
-    await sess.setEffort(effort as 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max');
+    await sess.setEffort(effort as 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultra');
   });
 
   ipcMain.handle(MAKER_INVOKE.SET_PERMISSION_MODE, async (_e, sessionId: unknown, mode: unknown) => {

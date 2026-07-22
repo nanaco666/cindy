@@ -515,6 +515,33 @@ describe('OrcaWorkerCreationService', () => {
     }));
   });
 
+  it('cascades inherited ultra effort down to xhigh when the model tops out at xhigh (issue #352)', async () => {
+    const { deps, service } = createDeps({
+      getWorkerDefaults: vi.fn(() => ({ model: 'gpt-5.4-mini', effort: 'ultra', fastMode: false })),
+    });
+
+    await expect(
+      service.createWorker({
+        leadSessionId: 'lead-1',
+        role: 'reviewer',
+        agent: 'codex',
+        label: 'reviewer',
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      resolved: {
+        model: 'gpt-5.4-mini',
+        // ultra 无对应档 → 级联到最高兼容档 xhigh,而不是掉回 defaultEffort(high)。
+        effort: 'xhigh',
+      },
+    });
+
+    expect(deps.buildCreateOptsWithStderr).toHaveBeenCalledWith(expect.objectContaining({
+      model: 'gpt-5.4-mini',
+      effort: 'xhigh',
+    }));
+  });
+
   it('rejects explicit max effort when the selected Codex model only supports xhigh', async () => {
     const { deps, service } = createDeps();
 

@@ -54,7 +54,7 @@ interface CodexThreadSummary {
   cwd: string;
   workspaceKind: 'project' | 'dialogue';
   model: string;
-  effort: 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+  effort: 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultra';
   permissionMode: 'ask' | 'auto' | 'bypassPermissions';
   tokensUsed: number;
   createdAt: number;
@@ -2096,7 +2096,7 @@ function isLikelyThreadId(id: string): boolean {
 }
 
 function normalizeEffort(raw: string): CodexThreadSummary['effort'] {
-  if (raw === 'minimal' || raw === 'low' || raw === 'medium' || raw === 'high' || raw === 'xhigh' || raw === 'max') {
+  if (raw === 'minimal' || raw === 'low' || raw === 'medium' || raw === 'high' || raw === 'xhigh' || raw === 'max' || raw === 'ultra') {
     return raw;
   }
   return 'high';

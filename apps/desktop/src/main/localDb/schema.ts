@@ -46,7 +46,7 @@ export const sessions = sqliteTable(
       .default('project'),
     model: text('model').notNull().default('claude-sonnet-4-6'),
     effort: text('effort', {
-      enum: ['minimal', 'low', 'medium', 'high', 'xhigh', 'max'],
+      enum: ['minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra'],
     })
       .notNull()
       .default('high'),
@@ -570,7 +570,7 @@ export const schedules = sqliteTable(
      */
     providerId: text('provider_id'),
     effort: text('effort', {
-      enum: ['minimal', 'low', 'medium', 'high', 'xhigh', 'max'],
+      enum: ['minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra'],
     }),
     /**
      * Codex Fast 模式开关。true → runner fire 时透传给 codex agent，落到

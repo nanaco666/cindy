@@ -15,7 +15,7 @@ export interface OrcaPersistedSession {
   workingDir: string;
   model: string;
   providerId?: string | null;
-  effort?: 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+  effort?: 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultra';
   permissionMode?: 'ask' | 'auto' | 'bypassPermissions' | 'acceptEdits' | 'plan' | 'default';
   fastMode?: boolean;
   sdkSessionId?: string;

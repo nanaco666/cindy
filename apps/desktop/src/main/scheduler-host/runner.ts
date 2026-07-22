@@ -80,6 +80,7 @@ const ALLOWED_EFFORT = new Set<string>([
   'high',
   'xhigh',
   'max',
+  'ultra',
 ]);
 
 // ── 撞忙顺延 / 活跃礼让(仅 heartbeat 复用 session 场景)─────────────────────

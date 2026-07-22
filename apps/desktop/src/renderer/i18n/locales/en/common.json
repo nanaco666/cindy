@@ -4985,7 +4985,8 @@
     "medium": "Medium",
     "high": "High",
     "xhigh": "Extra",
-    "max": "Max"
+    "max": "Max",
+    "ultra": "Ultra"
   },
   "scheduler": {
     "page": {
