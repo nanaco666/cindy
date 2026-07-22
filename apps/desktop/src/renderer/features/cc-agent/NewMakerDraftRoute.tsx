@@ -786,10 +786,10 @@ export function NewMakerDraftRoute() {
           .catch(() => null);
         // capabilities + providers 必须都成功,否则终止 handoff(dialog 留 open)。
         // defaults 允许失败(旧版被控端无此 channel → capabilities 默认 fallback)。
-        // prefetchDeviceProviders 吞 error,所以另外 invoke provider:list 验证可达。
+        // prefetchDeviceProviders 填充 cache 并通知 subscriber(解除 loading 阻塞)。
         await Promise.all([
           prefetchDeviceCapabilities(target.deviceId),
-          window.electronAPI.deviceLink.invoke(target.deviceId, 'maker:provider:list', []),
+          prefetchDeviceProviders(target.deviceId),
         ]);
         const freshCaps = getCachedCapabilities(capabilityAgentKind, target.deviceId);
         if (!freshCaps) {
@@ -801,6 +801,7 @@ export function NewMakerDraftRoute() {
         setRemoteDraftState({ loaded: true, value: freshDefaults });
         setWtEnabled(false);
         setWtBaseRepo(null);
+        setWtSourceBranch('');
         patchDraft({
           workingDir: target.path,
           remoteHostId: null,
@@ -820,12 +821,13 @@ export function NewMakerDraftRoute() {
       // 使用 draftInitialModel(用户在 composer 里看到的模型),而不是 chatPrefs.model
       // (当 device-link 草稿活跃时 chatPrefs.model 是旧的 controller-local 值)。
       // bridge 模型(chatgpt/ / xai/)在远程模式不可用(不经本地 compat-proxy),需降级。
+      // 非 bridge 模型也必须在已连接的本地来源中存在,否则 SSH 会话首消息会被阻塞。
+      const sshConnected = connectedProvidersForAgent(localProviders, capabilityAgentKind);
+      const sshVisibleModels = deriveModelsFromProviders(sshConnected, capabilityAgentKind)
+        .filter((m) => !isSubscriptionDirectModel(m.id));
       let sshModel = draftInitialModel;
-      if (isSubscriptionDirectModel(sshModel)) {
-        const connected = connectedProvidersForAgent(localProviders, capabilityAgentKind);
-        const localModels = deriveModelsFromProviders(connected, capabilityAgentKind);
-        const fallback = localModels.find((m) => !isSubscriptionDirectModel(m.id));
-        sshModel = fallback?.id ?? (draftVendor === 'codex' ? 'gpt-5.5' : 'claude-sonnet-4-6');
+      if (isSubscriptionDirectModel(sshModel) || !sshVisibleModels.some((m) => m.id === sshModel)) {
+        sshModel = sshVisibleModels[0]?.id ?? (draftVendor === 'codex' ? 'gpt-5.5' : 'claude-sonnet-4-6');
       }
       const rawProviderId = chatPrefs.providerId ?? null;
       const sshLocalSourceId = effectiveSourceIdForModel(
@@ -859,7 +861,7 @@ export function NewMakerDraftRoute() {
           planModeEnabled: effectivePlanMode,
           remoteHostId: target.hostId,
           providerId: sshProviderId,
-          extraDirs: effectiveExtraDirs,
+          extraDirs: [],
         });
         if (!newSession) {
           throw new Error('createSession returned null');
@@ -911,7 +913,7 @@ export function NewMakerDraftRoute() {
         throw err;
       }
     },
-    [draft.vendor, chatPrefs, chatInitialPermissionMode, draftInitialModel, effectiveExtraDirs, localProviders, capabilityAgentKind, effectivePlanMode, attachmentState, createSession, navigate, t],
+    [draft.vendor, chatPrefs, chatInitialPermissionMode, draftInitialModel, localProviders, capabilityAgentKind, effectivePlanMode, attachmentState, createSession, navigate, t],
   );
 
   // ─── 切 vendor ──────────────────────────────────────────────────────
