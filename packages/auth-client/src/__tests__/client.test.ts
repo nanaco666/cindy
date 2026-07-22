@@ -118,6 +118,31 @@ describe("CindyAuthClient", () => {
     });
   });
 
+  it("keeps Apple native login compatible when the SDK omits authorizationCode", async () => {
+    const fetch = vi.fn(async () =>
+      response(200, {
+        status: "binding_required",
+        bindType: "email",
+        bindTicket: "bind-apple",
+      }),
+    );
+    const auth = client(fetch);
+
+    await expect(
+      auth.exchangeNativeSocial("apple", {
+        identityToken: "identity-token",
+        rawNonce: "raw-nonce-placeholder",
+      }),
+    ).resolves.toMatchObject({ status: "binding_required" });
+
+    const body = JSON.parse(String(fetch.mock.calls[0]?.[1]?.body));
+    expect(body).toMatchObject({
+      identityToken: "identity-token",
+      rawNonce: "raw-nonce-placeholder",
+    });
+    expect(body).not.toHaveProperty("authorizationCode");
+  });
+
   it("uses an authenticated challenge and an unauthenticated receipt for account deletion", async () => {
     const pending = {
       status: "pending" as const,

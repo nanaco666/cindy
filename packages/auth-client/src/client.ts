@@ -181,7 +181,7 @@ export class CindyAuthClient {
       | { idToken: string }
       | {
           identityToken: string;
-          authorizationCode: string;
+          authorizationCode?: string;
           rawNonce: string;
           user?: { name?: string };
         }

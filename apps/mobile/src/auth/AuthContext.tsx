@@ -971,12 +971,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(async () => {
     const token = accessTokenRef.current;
     const did = deviceIdRef.current;
+    // 普通登出代表放弃尚未确认的 challenge；确认注销走 clearLocalSession 直达，
+    // 不调用本函数，因此已确认请求的 receipt 仍会保留供登录页查询。
+    await persistAccountDeletionReceipt(null);
     await clearLocalSession();
     if (token && did)
       await authClientFor(did)
         .logout(token)
         .catch(() => undefined);
-  }, [clearLocalSession]);
+  }, [clearLocalSession, persistAccountDeletionReceipt]);
 
   const getAccessToken = useCallback(async () => {
     const cached = accessTokenRef.current;

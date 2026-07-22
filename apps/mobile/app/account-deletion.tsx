@@ -94,13 +94,12 @@ export default function AccountDeletionScreen() {
         receiptToken: challenge.receiptToken,
         code,
       });
-      router.replace('/login');
     } catch (cause) {
       setError(accountDeletionErrorText(cause));
     } finally {
       setBusy(false);
     }
-  }, [acknowledged, auth, busy, challenge, code, router]);
+  }, [acknowledged, auth, busy, challenge, code]);
 
   const available = availability?.enabled && availability.available;
   return (

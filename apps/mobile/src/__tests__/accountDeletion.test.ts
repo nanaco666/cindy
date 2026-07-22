@@ -48,10 +48,24 @@ describe('mobile account deletion', () => {
     expect(confirmBody).toContain(
       '.getAccountDeletionStatus(input.receiptToken)',
     );
+
+    const logoutStart = context.indexOf('const logout = useCallback');
+    const logoutBody = context.slice(
+      logoutStart,
+      context.indexOf('const getAccessToken', logoutStart),
+    );
+    expect(logoutBody.indexOf('persistAccountDeletionReceipt(null)')).toBeLessThan(
+      logoutBody.indexOf('clearLocalSession()'),
+    );
   });
 
   it('requires a six-digit code and explicit acknowledgement', () => {
     const deletion = source('app/account-deletion.tsx');
+    const confirmStart = deletion.indexOf('const confirm = useCallback');
+    const confirmBody = deletion.slice(
+      confirmStart,
+      deletion.indexOf('const available', confirmStart),
+    );
 
     expect(deletion).toContain('testID="accountDeletion.codeInput"');
     expect(deletion).toContain('testID="accountDeletion.acknowledgement"');
@@ -60,17 +74,19 @@ describe('mobile account deletion', () => {
     );
     expect(deletion).toContain("testID: 'accountDeletion.confirmButton'");
     expect(deletion).toContain('30 天内重新登录可撤销');
+    expect(confirmBody).not.toContain("router.replace('/login')");
   });
 
-  it('shows persisted status on login and sends Apple authorization codes', () => {
+  it('shows persisted status and forwards Apple authorization codes when available', () => {
     const login = source('app/(auth)/login.tsx');
     const nativeSocial = source('src/auth/nativeSocial.ts');
 
     expect(login).toContain('testID="login.accountDeletionStatus"');
     expect(login).toContain('现在重新登录即可取消注销');
-    expect(nativeSocial).toContain('!credential.authorizationCode');
+    expect(nativeSocial).toContain('if (!credential.identityToken)');
+    expect(nativeSocial).not.toContain('!credential.authorizationCode');
     expect(nativeSocial).toContain(
-      'authorizationCode: credential.authorizationCode',
+      '...(credential.authorizationCode',
     );
   });
 });

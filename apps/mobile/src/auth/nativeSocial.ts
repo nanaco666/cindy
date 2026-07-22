@@ -17,7 +17,7 @@ export type NativeSocialCredential =
   | { idToken: string }
   | {
       identityToken: string;
-      authorizationCode: string;
+      authorizationCode?: string;
       rawNonce: string;
       user?: { name?: string };
     }
@@ -72,7 +72,7 @@ async function acquireAppleCredential(): Promise<NativeSocialCredential> {
       AppleAuthentication.AppleAuthenticationScope.EMAIL,
     ],
   });
-  if (!credential.identityToken || !credential.authorizationCode) {
+  if (!credential.identityToken) {
     throw authAdapterError('AUTH_REQUEST_FAILED');
   }
   const name = credential.fullName
@@ -80,7 +80,9 @@ async function acquireAppleCredential(): Promise<NativeSocialCredential> {
     : '';
   return {
     identityToken: credential.identityToken,
-    authorizationCode: credential.authorizationCode,
+    ...(credential.authorizationCode
+      ? { authorizationCode: credential.authorizationCode }
+      : {}),
     rawNonce,
     ...(name ? { user: { name } } : {}),
   };
