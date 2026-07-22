@@ -62,7 +62,7 @@ export function LocalDbFatalScreen({ code, message }: { code?: string; message?:
         description={description}
         showCancel={false}
         autoFocusConfirm
-        loading={installing || view === 'preparing-update'}
+        loading={(installing && view === 'install-update') || view === 'preparing-update'}
         confirmText={confirmText}
         onConfirm={handleConfirm}
         content={
