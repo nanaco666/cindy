@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import Sortable, { type SortableEvent } from 'sortablejs';
 
 // react-i18next 走 key 透传(仓库同款,见 RightSidebarShell.test.ts):label 直接是 i18n key。
 vi.mock('react-i18next', () => ({
@@ -34,19 +35,25 @@ function fireAux(el: HTMLElement, button: number): void {
   fireEvent(el, new MouseEvent('auxclick', { button, bubbles: true, cancelable: true }));
 }
 
-function renderStrip(overrides?: { onClose?: () => void; onActivate?: () => void }) {
+function renderStrip(overrides?: {
+  onClose?: () => void;
+  onActivate?: () => void;
+  onReorder?: (orderedIds: string[]) => void;
+}) {
   const onClose = vi.fn(overrides?.onClose);
   const onActivate = vi.fn(overrides?.onActivate);
+  const onReorder = vi.fn(overrides?.onReorder);
   render(
     <TabStrip
       tabs={TABS}
       activeTabId={null}
       onActivate={onActivate}
       onClose={onClose}
+      onReorder={onReorder}
       onAdd={vi.fn()}
     />,
   );
-  return { onClose, onActivate };
+  return { onClose, onActivate, onReorder };
 }
 
 afterEach(() => cleanup());
@@ -80,6 +87,41 @@ describe('TabStrip 中键关闭 tab', () => {
   });
 });
 
+describe('TabStrip 拖拽重排', () => {
+  it('drop 后按新顺序上报全部 tab id,并让 React 保持 DOM 唯一写入者', () => {
+    const { onReorder } = renderStrip();
+    const firstRow = document.querySelector<HTMLElement>('[data-sortable-id="tab-file"]');
+    const list = firstRow?.parentElement;
+    if (!firstRow || !list) throw new Error('sortable tab list not found');
+
+    const sortable = Sortable.get(list);
+    const onEnd = sortable?.option('onEnd') as ((evt: SortableEvent) => void) | undefined;
+    if (!onEnd) throw new Error('Sortable onEnd handler not found');
+
+    // 模拟 SortableJS 在 drop 前已把首项移到末尾;onEnd 应先还原 DOM,
+    // 再把目标顺序交给 React/store,避免 Sortable 与 React 同时改 children。
+    list.appendChild(firstRow);
+    act(() => {
+      onEnd({ item: firstRow, from: list, oldIndex: 0, newIndex: 2 } as SortableEvent);
+    });
+
+    expect(onReorder).toHaveBeenCalledWith(['tab-web', 'tab-orca', 'tab-file']);
+    expect(Array.from(list.children).map((row) => row.getAttribute('data-sortable-id'))).toEqual([
+      'tab-file',
+      'tab-web',
+      'tab-orca',
+    ]);
+  });
+
+  it('关闭按钮不作为拖拽起点', () => {
+    renderStrip();
+    const close = screen.getAllByRole('button', {
+      name: 'rightSidebar.tabs.tabCloseAria',
+    })[0];
+    expect(close?.hasAttribute('data-no-drag')).toBe(true);
+  });
+});
+
 describe('TabStrip 未知 kind 前向兼容(2026-07-09 React #130 事故回归)', () => {
   // DB 里的 kind 是自由文本:更新版本 / 并行 dev 分支可能写入本版本不认识的
   // kind(事故实例:'orca-workers',该 kind 现已注册,用例改用仍未注册的假想
@@ -98,6 +140,7 @@ describe('TabStrip 未知 kind 前向兼容(2026-07-09 React #130 事故回归)'
         activeTabId={null}
         onActivate={vi.fn()}
         onClose={vi.fn()}
+        onReorder={vi.fn()}
         onAdd={vi.fn()}
       />,
     );
@@ -114,6 +157,7 @@ describe('TabStrip 未知 kind 前向兼容(2026-07-09 React #130 事故回归)'
         activeTabId={null}
         onActivate={vi.fn()}
         onClose={onClose}
+        onReorder={vi.fn()}
         onAdd={vi.fn()}
       />,
     );

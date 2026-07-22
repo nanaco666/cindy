@@ -36,6 +36,7 @@ import {
   ensureHydrated,
   getBucket,
   patchTabState,
+  reorderTabs,
   setActiveTab,
   setTabCloseInterceptor,
   subscribe,
@@ -229,6 +230,16 @@ export function RightSidebarShell({
     [sessionId],
   );
 
+  const handleReorder = useCallback(
+    (orderedIds: string[]) => {
+      if (!sessionId) return;
+      void reorderTabs(sessionId, orderedIds).catch((err) => {
+        log.error('handleReorder failed', { sessionId, orderedIds, err });
+      });
+    },
+    [sessionId],
+  );
+
   const handleCycleTab = useCallback(
     (direction: RightTabDirection): boolean => {
       if (!sessionId) return false;
@@ -352,6 +363,7 @@ export function RightSidebarShell({
             sessionId={sessionId}
             onActivate={handleActivate}
             onClose={handleClose}
+            onReorder={handleReorder}
             onAdd={handleAdd}
             onCloseOthers={handleCloseOthers}
             onCloseAll={handleCloseAll}
@@ -395,6 +407,7 @@ export function RightSidebarShell({
           sessionId={sessionId}
           onActivate={handleActivate}
           onClose={handleClose}
+          onReorder={handleReorder}
           onAdd={handleAdd}
           showWindowControls={!isMac}
           onMaximize={onMaximize}
