@@ -15,6 +15,7 @@ import {
   extractRolloutUpdatePlanFunctionCallEvent,
   newCodexRuntimeState,
   translateErrorNotification,
+  translateAccountRateLimitsUpdated,
   translateItemNotification,
   translatePlanUpdatedNotification,
 } from './translator.js';
@@ -64,6 +65,29 @@ async function collect(queue: AsyncQueue<AgentEvent>): Promise<AgentEvent[]> {
   for await (const ev of queue) out.push(ev);
   return out;
 }
+
+describe('translateAccountRateLimitsUpdated', () => {
+  it('normalizes Codex 0.144 windowDurationMins before emitting account usage', async () => {
+    const q = createAsyncQueue<AgentEvent>();
+    translateAccountRateLimitsUpdated({
+      rateLimits: {
+        primary: { usedPercent: 100, windowDurationMins: 300 },
+        secondary: { usedPercent: 25, windowMinutes: 10080, windowDurationMins: 60 },
+      },
+    }, q, makeCtx(newCodexRuntimeState()));
+
+    const events = await collect(q);
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      type: 'account_usage',
+      source: 'codex',
+      data: {
+        primary: { usedPercent: 100, windowMinutes: 300, windowDurationMins: 300 },
+        secondary: { usedPercent: 25, windowMinutes: 10080, windowDurationMins: 60 },
+      },
+    });
+  });
+});
 
 describe('translateErrorNotification', () => {
   it('willRetry=true transient → silent (no event pushed)', async () => {

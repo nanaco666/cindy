@@ -31,12 +31,6 @@
       ]
     },
     "overrides": {
-      "@openai/codex-linux-x64": "link:./tools/codex-platform-stub",
-      "@openai/codex-linux-arm64": "link:./tools/codex-platform-stub",
-      "@openai/codex-darwin-x64": "link:./tools/codex-platform-stub",
-      "@openai/codex-darwin-arm64": "link:./tools/codex-platform-stub",
-      "@openai/codex-win32-x64": "link:./tools/codex-platform-stub",
-      "@openai/codex-win32-arm64": "link:./tools/codex-platform-stub",
       "@electron/rebuild": "^4.0.3",
       "protobufjs": "7.6.5",
       "js-yaml@^4.0.0": "^4.3.0",
@@ -44,10 +38,10 @@
       "tmp": "^0.2.7"
     },
     "patchedDependencies": {
-      "harmonyos-sans-sc-webfont-splitted": "patches/harmonyos-sans-sc-webfont-splitted.patch",
-      "react-native-uitextview@2.2.0": "patches/react-native-uitextview@2.2.0.patch",
-      "react-native-webview@13.16.1": "patches/react-native-webview@13.16.1.patch",
-      "expo-paste-input@0.2.2": "patches/expo-paste-input@0.2.2.patch"
+      "harmonyos-sans-sc-webfont-splitted": "dependency-patches/harmonyos-sans-sc-webfont-splitted.patch",
+      "react-native-uitextview@2.2.0": "dependency-patches/react-native-uitextview@2.2.0.patch",
+      "react-native-webview@13.16.1": "dependency-patches/react-native-webview@13.16.1.patch",
+      "expo-paste-input@0.2.2": "dependency-patches/expo-paste-input@0.2.2.patch"
     },
     "allowUnusedPatches": true
   },
@@ -73,7 +67,6 @@
     "mobile:beta:add-dev": "node apps/mobile/scripts/beta-add-dev.mjs",
     "ensure-deps": "node scripts/ensure-deps.mjs",
     "sync:browser-runtime": "node scripts/browser-runtime/sync.mjs",
-    "sync:agent-instructions": "node agent-use/scripts/sync-agent-instructions.mjs",
     "repo:worktrees": "node scripts/repo-worktrees.mjs",
     "update:claude": "node tools/claude/update.mjs",
     "update:codex": "node tools/codex/update.mjs",

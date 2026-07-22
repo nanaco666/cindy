@@ -36,7 +36,7 @@ describe('planOutboundImageCompression', () => {
 });
 
 describe('compressOutboundImage', () => {
-  const bigJpeg = Buffer.alloc(2 * 1024 * 1024, 7);
+  const bigJpeg = Buffer.alloc(OUTBOUND_IMAGE_RECOMPRESS_MIN_BYTES + 1, 7);
 
   it('直通格式不调 transform', async () => {
     const transform = vi.fn<OutboundImageTransform>();
@@ -48,8 +48,12 @@ describe('compressOutboundImage', () => {
     const out = Buffer.alloc(100 * 1024, 1);
     const transform = vi.fn<OutboundImageTransform>().mockResolvedValue(out);
     const result = await compressOutboundImage(bigJpeg, 'image/jpeg', { transform });
-    expect(transform).toHaveBeenCalledWith({
-      bytes: bigJpeg,
+    // Avoid deep-equality walking the 2 MiB input buffer under the full desktop
+    // test suite; verify the buffer identity separately and keep the remaining
+    // transform options covered by a small object comparison.
+    const transformInput = transform.mock.calls[0]?.[0];
+    expect(transformInput?.bytes).toBe(bigJpeg);
+    expect(transformInput).toMatchObject({
       maxEdge: OUTBOUND_IMAGE_MAX_EDGE,
       format: 'jpeg',
       quality: OUTBOUND_IMAGE_JPEG_QUALITY,

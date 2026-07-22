@@ -967,7 +967,7 @@ body.resizing-pane [data-ghost-webview] {
   background-color: rgba(220, 50, 47, 0.12);
 }
 
-/* Scrollbar: 6px visible thumb with gap from edges, hover color (per cc-agent-view.pen)
+/* Scrollbar: 6px visible thumb with gap from edges and a hover color.
    Gutter=12px (= sidebar 左 padding pl-3，让 scrollbar-gutter:stable 时左右视觉对称),
    transparent border=3px each side → visible thumb=6px, gap=3px from edges
    ---
@@ -1262,8 +1262,7 @@ body.resizing-pane [data-ghost-webview] {
    Two states:
      .doc-search-mark              → normal match (淡黄底, text inherit)
      .doc-search-mark[data-active] → currently focused match (中黄实底 + 1px 琥珀内描边)
-   Color spec mirrors `In-Doc Find Highlight` page in work-md-show.pen
-   (GitHub Primer attention 系)。 */
+   Color spec follows the GitHub Primer attention family. */
 .doc-search-mark {
   background-color: #fff8c5;       /* Primer attention-muted */
   color: inherit;

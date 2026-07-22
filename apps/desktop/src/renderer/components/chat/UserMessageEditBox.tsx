@@ -168,15 +168,21 @@ export function UserMessageEditBox({
       const visibleTextUnchanged = text === initialText;
       const submitText = visibleTextUnchanged ? (initialSubmitText ?? text) : text;
       const preserveQuoteMetadata = quotesEncoded && visibleTextUnchanged;
-      const preservePastedTextRanges = visibleTextUnchanged && (pastedTextRanges?.length ?? 0) > 0;
-      const preserveSlashCommandRanges = visibleTextUnchanged && slashCommandRanges !== undefined;
+      const preservedPastedTextRanges =
+        visibleTextUnchanged && pastedTextRanges && pastedTextRanges.length > 0
+          ? [...pastedTextRanges]
+          : undefined;
+      const preservedSlashCommandRanges =
+        visibleTextUnchanged && slashCommandRanges !== undefined
+          ? [...slashCommandRanges]
+          : undefined;
       if (onCommitOverride) {
         // 被拦消息:普通重发(不 rewind)。失败抛错落入下方 catch 保留编辑态。
         await onCommitOverride({
           text: submitText,
           ...(preserveQuoteMetadata ? { quotesEncoded: true } : {}),
-          ...(preservePastedTextRanges ? { pastedTextRanges: [...pastedTextRanges] } : {}),
-          ...(preserveSlashCommandRanges ? { slashCommandRanges: [...slashCommandRanges] } : {}),
+          ...(preservedPastedTextRanges ? { pastedTextRanges: preservedPastedTextRanges } : {}),
+          ...(preservedSlashCommandRanges !== undefined ? { slashCommandRanges: preservedSlashCommandRanges } : {}),
         });
       } else {
         await commitEditAndResendWithRunningRetry({
@@ -187,8 +193,8 @@ export function UserMessageEditBox({
           files,
           fallbackWorkingDir: workingDir,
           ...(preserveQuoteMetadata ? { quotesEncoded: true } : {}),
-          ...(preservePastedTextRanges ? { pastedTextRanges: [...pastedTextRanges] } : {}),
-          ...(preserveSlashCommandRanges ? { slashCommandRanges: [...slashCommandRanges] } : {}),
+          ...(preservedPastedTextRanges ? { pastedTextRanges: preservedPastedTextRanges } : {}),
+          ...(preservedSlashCommandRanges !== undefined ? { slashCommandRanges: preservedSlashCommandRanges } : {}),
         });
       }
       // 先归零守卫再 onSent:onSent 让父组件立刻卸载本组件,晚于它的 setState

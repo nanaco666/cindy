@@ -443,7 +443,16 @@ export function AddProviderWizard({
         // (空模型 runtime 无意义,且避免把另一端的模型 id 越界写入)。
         const agentModels = selected
           .filter((m) => m.agents.includes(agent))
-          .map((m) => ({ id: m.id, name: m.name }));
+          .map((m) => {
+            const presetModel = rt.models.find((candidate) => candidate.id === m.id);
+            return {
+              id: m.id,
+              name: m.name,
+              ...(presetModel?.contextWindow !== undefined
+                ? { contextWindow: presetModel.contextWindow }
+                : {}),
+            };
+          });
         if (agentModels.length === 0) continue;
         runtimes[agent] = {
           baseUrl: rt.baseUrl,

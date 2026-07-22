@@ -10,7 +10,7 @@
  * navigateToView 内部做同源去重，避免重复 navigate 触发 FadeSwitcher
  * 不必要的子树重挂载。
  *
- * 见 .sivi/docs/tech_specs/horizontal-tabbar-frontend.md M2。
+ * URL 派生与最近一次有效 view 的保持语义由本 hook 维护。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 

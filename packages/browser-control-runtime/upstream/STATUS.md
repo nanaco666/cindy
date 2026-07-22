@@ -8,7 +8,7 @@
 浏览器自动化已端到端跑通并接入桌面端:
 
 - **L1 vendored runtime**(`@lizi/browser-control-runtime`):`sync.mjs` 可复现地拉取上游核心 + 未发布包 + fs-safe dist 并机械重写 import;全部 shim 写齐,`build`(tsc --noEmit)+ `test`(runtime / SSRF guard / sanitize / 配置应用回归)通过。
-- **L2 MCP 面**(`lizi-mcps/src/browser`):单 `browser` 工具(17 action)+ `browser-workflow.md` 用法 rules,经 `list_tools` 下发;注册为 `lizi_browser` provider。
+- **L2 MCP 面**(`lizi-mcps/src/browser`):单 `browser` 工具(17 action)+ `browser-workflow.md` 用法 rules,经 `list_tools` 下发;注册为 `cindy_browser` provider。
 - **L3 desktop host**:托管单例 runtime(默认 headed 持久 "XDMaker" profile)、`BROWSER_STATUS` / `BROWSER_OPEN_FOR_LOGIN` IPC、设置 →「自动操作」面板 + 4 语言 i18n、builtin-plugin 开关(默认开,项目级 override)。
 - **agent 暴露**:Claude Code + 本地 Codex 均可用(同一进程内 server / 同一持久 profile);远端 Codex 不支持 lizi MCP 桥接(已知限制)。
 

@@ -1,11 +1,7 @@
 /**
- * Desktop AgentRuntimeConfig 实现 ——
- * 把 vendor/{claude,codex}/authAdapter.ts:getProcessEnv() 里 hardcoded 的 endpoint + behavior flag 提取到这里。
- *
- * 详见 doc/agent/xdt-maker-architecture.md §6.5 的迁移映射表。
- *
- * 注意：本轮 (stage-1) 这些值实际未被消费 —— ClaudeCodeAgent adapter 仍走 claudeRuntime
- * 内部的老 env 路径，runtimeConfig 接口仅为下一轮迁移预留。
+ * Desktop AgentRuntimeConfig 实现。
+ * endpoint、行为开关与宿主资源路径由 desktop host 在这里统一注入,
+ * maker-core 只消费抽象配置,不依赖 Electron 或部署环境。
  */
 
 import type { AgentRuntimeConfig } from '@lizi/maker-core';

@@ -1,5 +1,5 @@
 /**
- * ghost.ts — cindy-tools ghost 总机的 host 侧接线(C3d;runtime-sandbox.md §5.5)。
+ * ghost.ts — cindy-tools ghost 总机的 host 侧接线(AGENTS.md 规则 28)。
  * ---------------------------------------------------------------------------
  * 网关模式:agent 工具箱里永远只有 ghost_list / ghost_call 两件固定工具
  * (缓存前缀零变化),内容现查现报——本文件就是"现查"的真身:
@@ -12,7 +12,7 @@
  *     真身在 cindy-brain/forge.ts,打包成功后经双击转交通道弹装入确认框
  *     (与拖入/双击完全同一个弹窗,装不装永远由用户点头)。
  *
- * cindy-tools 是"新世界"工具集(lizi-mcps 为待迁移老世界),包内零 Electron
+ * cindy-tools 是意识系统工具集,包内零 Electron
  * 依赖,全部能力经本文件注入(设计规范规则 2)。
  */
 
@@ -490,7 +490,7 @@ export function getCindyGhostsMcpDeps(sessionCtx?: LiziMcpSessionContext): Cindy
         }));
     },
     async callGhostTool({ ghostId, tool, args, attachments, dir, saveDir, agentToolUseId, grantOnly }) {
-      // 用户图片过户(C3c-4):attachments 里的地址逐张落媒体总仓 + 记
+      // 用户图片过户:attachments 里的地址逐张落媒体总仓 + 记
       // ghost-grant 引用(显式引渡 = 授权,按张、永久),指纹注入
       // args.attachments 交给意识。任何一张失败整批拒(ATTACHMENT_INVALID),
       // 不做半成品授权。全链路见 grantAttachmentUrls。
@@ -613,7 +613,7 @@ export function getCindyGhostsMcpDeps(sessionCtx?: LiziMcpSessionContext): Cindy
         }
         mergedArgs = { ...mergedArgs, save_deposit: saveDeposited.receipt };
       }
-      // ── 卡槽③(C3d'):callId 在这里预铸并登记给卡片服务 ──────────────
+      // ── 卡槽③:callId 在这里预铸并登记给卡片服务 ────────────────────
       // 时序契约:register(供片窗开)→ dispatch(意识拿到同一 callId,执行
       // 中可 card-update)→ finalize(问"这单供过卡吗",开晚到宽限窗)→
       // 真供过卡才把 xdt_card_id 注入 result(mcpServer 提升到顶层,renderer

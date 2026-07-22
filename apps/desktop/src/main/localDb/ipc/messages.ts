@@ -848,7 +848,7 @@ export async function createMessage(
   const [row] = await db.select().from(messages).where(eq(messages.id, id));
   if (!row) throw new Error('Message 创建后查询失败');
   const msg = messageToCamel(row);
-  // 媒体总仓挂账钩子(规则 25,迁移第 2 步):消息落库是"blob 归属本会话"的
+  // 媒体总仓挂账钩子(规则 25):消息落库是"blob 归属本会话"的
   // 确定时点,覆盖所有落库来源(renderer IPC / hook / im / agent echo / 合成
   // tool_result)。生成产物(art/mivo/codex)入仓时零引用,在这里补挂
   // session-attachment 引用;用户附件已在发送链路 commit 过,hasRef 幂等跳过。

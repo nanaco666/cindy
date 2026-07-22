@@ -1,4 +1,4 @@
-// lizi_browser MCP 面(L2)。改这块前先读维护者指南:
+// cindy_browser MCP 面(L2)。改这块前先读维护者指南:
 // packages/browser-control-runtime/upstream/MAINTAINING.md
 export * from './server.js';
 export * from './tool-registry.js';

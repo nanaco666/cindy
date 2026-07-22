@@ -280,7 +280,7 @@ export async function performSessionAgentSwitch(
     throwIpcError('UNSUPPORTED_CAPABILITY', 'agent switch is not supported for remote sessions');
   }
   if (row.orcaRole) {
-    // Orca lead/worker:协同运行时对 agent 形态有独立契约(docs/orca-team-architecture.md),不掺和。
+    // Orca lead/worker:协同运行时对 agent 形态有独立契约(docs/dev-rules/orca-team-architecture.md),不掺和。
     throwIpcError('UNSUPPORTED_CAPABILITY', 'agent switch is not supported for Orca sessions');
   }
 

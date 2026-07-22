@@ -1,10 +1,11 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import JSZip from 'jszip';
 
-const TEST_ROOT = '/tmp/xdt-install-service-test';
+const TEST_ROOT = path.join(os.tmpdir(), 'xdt-install-service-test');
 
 vi.mock('electron', () => ({
   app: {
@@ -501,7 +502,7 @@ describe('skillhub/installService', () => {
     expect(fs.lstatSync(logicalDir).isSymbolicLink()).toBe(true);
     expect(fs.readFileSync(path.join(logicalDir, 'SKILL.md'), 'utf-8')).toBe('new content');
     expect(fs.readFileSync(path.join(physicalDir, 'SKILL.md'), 'utf-8')).toBe('new content');
-    expect(computeFolderHash).toHaveBeenCalledWith(physicalDir);
+    expect(computeFolderHash).toHaveBeenCalledWith(fs.realpathSync(physicalDir));
     expect(registryService.getInstall).toHaveBeenCalledWith(skillName, logicalDir);
     expect(registryService.addInstall).toHaveBeenCalledWith(
       skillName,
@@ -780,8 +781,9 @@ describe('skillhub/installService', () => {
     await setupInstallDownload(skillName, zipBuf);
     const { registryService } = await import('../registry');
     const { install } = await import('../installService');
+    const physicalRegistryPath = fs.realpathSync(physicalDir);
     vi.mocked(registryService.getInstall).mockImplementation(async (_name, installPath) =>
-      path.normalize(installPath) === path.normalize(physicalDir) ? physicalEntry : null,
+      path.normalize(installPath) === path.normalize(physicalRegistryPath) ? physicalEntry : null,
     );
     vi.mocked(registryService.addInstall).mockResolvedValue(undefined);
     vi.mocked(registryService.removeInstall)
@@ -803,7 +805,11 @@ describe('skillhub/installService', () => {
     if (!result.success) expect(result.errorCode).toBe('WRITE_FAILED');
     expect(fs.lstatSync(logicalDir).isSymbolicLink()).toBe(true);
     expect(fs.readFileSync(path.join(physicalDir, 'SKILL.md'), 'utf-8')).toBe('old content');
-    expect(registryService.addInstall).toHaveBeenLastCalledWith(skillName, physicalDir, physicalEntry);
+    expect(registryService.addInstall).toHaveBeenLastCalledWith(
+      skillName,
+      physicalRegistryPath,
+      physicalEntry,
+    );
   });
 
   it('returns the project cwd after uninstalling a project skill', async () => {

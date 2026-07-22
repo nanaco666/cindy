@@ -12,7 +12,7 @@ import { rebuildQueuedOrcaLeadMessage } from './orcaInterAgentDispatcher.js';
 /**
  * OrcaTeamService 只接管已存在 worker 的派活、释放、归档与 auto-bridge。
  * 普通 worker 创建由 OrcaWorkerCreationService 处理；开启协同的 team 生命周期编排由 OrcaLifecycleService 处理。
- * 契约锚点：accepted/rollback 与 terminal auto-bridge 不变量见 docs/orca-team-architecture.md「协同运行时行为契约」。
+ * 契约锚点：accepted/rollback 与 terminal auto-bridge 不变量见 docs/dev-rules/orca-team-architecture.md「协同运行时行为契约」。
  */
 export type OrcaWorkerStatus = 'idle' | 'running' | 'done' | 'error';
 export type OrcaWorkerEffort = 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultra';

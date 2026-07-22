@@ -4,8 +4,9 @@ import path from 'node:path';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-// Windows 上 git 子进程明显更慢(每次 spawn 数百毫秒),多步 git 编排用例会超默认 5s。
-vi.setConfig({ testTimeout: 30_000 });
+// Windows 上 git 子进程明显更慢；完整 workspace 并发测试时，hunk 的多步
+// stage/unstage/discard 编排会超过 30s，给真实 Git 集成用例留足余量。
+vi.setConfig({ testTimeout: 60_000 });
 
 // Windows 未开发者模式/无特权时创建文件 symlink 会 EPERM;探测一次,不可用则跳过 symlink 用例。
 const canSymlink = (() => {

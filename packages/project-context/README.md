@@ -2,7 +2,7 @@
 
 Agent-maintained project knowledge layer. Commit-driven, markdown + frontmatter, generic CLI.
 
-设计稿：`docs/project-context.md`（XDMaker 仓库根，详细架构 + 决策日志 + 进程拓扑）。
+本文档同时维护使用方式、架构边界与当前限制。
 
 > **Status**: MVP (v0.1)。MVP 范围见本文档底部"Limitations"。
 
@@ -359,7 +359,7 @@ MVP 内置一个 adapter：`claude-code`。
 - 超时 → 杀子进程报错
 - 任何失败 → 该 module 标 stale，update 继续处理后面的 ID
 
-后续可加 `codex` / `custom` adapter（设计见 `docs/project-context.md` §5.2）。
+后续可按 `src/adapters/types.ts` 的接口增加 `codex` / `custom` adapter。
 
 ---
 
@@ -467,8 +467,6 @@ node packages/project-context/dist/cli.js refresh --all
 - 没有"跨进程更稳的锁"——`.cindy/project-knowledge/.lock` 是简单文件锁，崩溃时可能残留（手动删）
 - 演进备忘没有膨胀防护（Phase 3）
 
-完整决策列表见 `docs/project-context.md` §12 Decisions Log。
-
 ---
 
 ## Troubleshooting
@@ -482,10 +480,4 @@ node packages/project-context/dist/cli.js refresh --all
 | update 报 `claude CLI not found` | 装 Claude Code CLI 或在 config.yaml 写 `agent_options.command` 指自定义路径 |
 | init 报某个目录是 orphan 但不该是 | 该目录里全是非源码后缀。要么手动建一份 .md（init 不会覆盖），要么扩展 `SOURCE_EXTENSIONS`（src/discovery.ts） |
 
----
-
-## 设计文档
-
-完整架构、决策、进程拓扑、试运行计划：
-
-`docs/project-context.md`（XDMaker 仓库根）
+配置字段与当前限制以本 README 和 `src/` 实现为准。

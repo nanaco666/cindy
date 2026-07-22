@@ -3,11 +3,13 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { appMock, downloadMock } = vi.hoisted(() => ({
+const { appMock, downloadMock, execFileMock } = vi.hoisted(() => ({
   appMock: { isPackaged: true, getPath: vi.fn<(name: string) => string>() },
   downloadMock: vi.fn(),
+  execFileMock: vi.fn(),
 }));
 
+vi.mock('node:child_process', () => ({ execFile: execFileMock }));
 vi.mock('electron', () => ({
   app: appMock,
   net: { request: vi.fn() },
@@ -27,6 +29,18 @@ beforeEach(() => {
   tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cindy-linux-runtime-migration-'));
   appMock.getPath.mockReturnValue(tempDir);
   downloadMock.mockRejectedValue(new Error('network download must not run during migration'));
+  execFileMock.mockImplementation((
+    command: string,
+    _args: string[],
+    _options: unknown,
+    callback: (error: Error | null, stdout: string, stderr: string) => void,
+  ) => {
+    if (command === '/bin/sh') {
+      callback(new Error('system lookup disabled in migration test'), '', '');
+      return;
+    }
+    callback(null, '2.1.215 (Claude Code)\n', '');
+  });
 });
 
 afterEach(() => {

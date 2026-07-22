@@ -15,6 +15,16 @@ type RsbWindowCommand = import('../shared/rightSidebarWindow').RsbWindowCommand;
 type DesktopLoginAction = import('../shared/authIpc').DesktopLoginAction;
 type DesktopLoginActionResult = import('../shared/authIpc').DesktopLoginActionResult;
 type UtilityTextFailure = import('../shared/utilityTextResult').UtilityTextFailure;
+type DesktopAccountDeletionConfirmInput =
+  import('../shared/authIpc').DesktopAccountDeletionConfirmInput;
+type DesktopAccountDeletionAvailabilityResult =
+  import('../shared/authIpc').DesktopAccountDeletionAvailabilityResult;
+type DesktopAccountDeletionChallengeResult =
+  import('../shared/authIpc').DesktopAccountDeletionChallengeResult;
+type DesktopAccountDeletionConfirmResult =
+  import('../shared/authIpc').DesktopAccountDeletionConfirmResult;
+type DesktopAccountDeletionStatusResult =
+  import('../shared/authIpc').DesktopAccountDeletionStatusResult;
 
 /* ── Environment check ── */
 
@@ -377,6 +387,8 @@ interface AuthStateChangePayload {
   isCanary: boolean;
   /** SkillHub 跨设备识别：本机 deviceId（machineIdSync 结果），登录前后都有值 */
   deviceId: string;
+  hasAccountDeletionReceipt: boolean;
+  accountDeletionRestored: boolean;
 }
 
 interface AuthSessionExpiredPayload {
@@ -736,6 +748,10 @@ interface PluginEnableState {
   globalOverride?: { enabled: boolean } | null;
 }
 
+interface PluginEnableUpdateResult {
+  codexMcpRefreshed: boolean;
+}
+
 interface BrowserAvailability {
   detected: boolean;
   browserKind: string | null;
@@ -978,7 +994,7 @@ interface ElectronAPI {
     update: (lizFilePath: string) => Promise<{ ghost: import('../shared/ghost').InstalledGhost }>;
     /**
      * cindy 槽后端覆盖:首帧同步读(规则 7);overrides 键为 "image.generate"
-     * 等能力键;image/video 各一份下拉数据(C3c-5),defaultModel = 目录默认
+     * 等能力键;image/video 各一份下拉数据,defaultModel = 目录默认
      * 选型的展示信息("默认(GPT Image 2)")。
      */
     cindyPrefsSync: (id: string) => {
@@ -1160,7 +1176,7 @@ interface ElectronAPI {
     runtimeStates: () => Promise<{ states: Record<string, string> }>;
     /** 面板错误态「重载意识」:清熔断记账 + 重新拉起沙箱。 */
     reload: (id: string) => Promise<{ state: string }>;
-    /** dev-only 运行时控制(C3a;packaged 版 main 侧不注册,调用会 reject)。 */
+    /** dev-only 运行时控制(packaged 版 main 侧不注册,调用会 reject)。 */
     devRuntime: (
       action: 'status' | 'spawn' | 'stop' | 'crash',
       id?: string,
@@ -1399,11 +1415,21 @@ interface ElectronAPI {
     isCanary: boolean;
     /** SkillHub 跨设备识别：本机 deviceId，登录前后都有值 */
     deviceId: string;
+    hasAccountDeletionReceipt: boolean;
+    accountDeletionRestored: boolean;
   }>;
   authGetLoginState: () => Promise<DesktopLoginActionResult>;
   authDispatchLoginAction: (action: DesktopLoginAction) => Promise<DesktopLoginActionResult>;
   authLogout: () => Promise<void>;
   authRefresh: () => Promise<boolean>;
+  authGetAccountDeletionAvailability: () => Promise<DesktopAccountDeletionAvailabilityResult>;
+  authRequestAccountDeletionChallenge: () => Promise<DesktopAccountDeletionChallengeResult>;
+  authConfirmAccountDeletion: (
+    input: DesktopAccountDeletionConfirmInput,
+  ) => Promise<DesktopAccountDeletionConfirmResult>;
+  authGetAccountDeletionStatus: () => Promise<DesktopAccountDeletionStatusResult>;
+  authClearAccountDeletionReceipt: () => Promise<void>;
+  authConsumeAccountDeletionRestoredNotice: () => Promise<boolean>;
   onAuthStateChange: (callback: (state: AuthStateChangePayload) => void) => () => void;
   onAuthSessionExpired: (callback: (state: AuthSessionExpiredPayload) => void) => () => void;
   onTapdbDailyActive: (callback: (payload: { date: string }) => void) => () => void;
@@ -2370,7 +2396,7 @@ interface ElectronAPI {
   cleanupCachedImages: (urls: string[]) => Promise<void>;
 
   /**
-   * 媒体总仓存储管理(关于页存储空间卡片,迁移第 5 步):占用统计 / 清理
+   * 媒体总仓存储管理(关于页存储空间卡片):占用统计 / 清理
    * 预检(报数)/ 执行清理 / 对账体检。draftUrls 由 renderer 从
    * composerDraftStore 现场收集随参带上(草稿附件是合法零引用,防误删)。
    */
@@ -4218,8 +4244,8 @@ interface ElectronAPI {
     plugins: {
       list: (workingDir?: string) => Promise<PluginListItem[]>;
       getState: (id: string, workingDir?: string) => Promise<PluginEnableState>;
-      setEnabled: (id: string, enabled: boolean) => Promise<void>;
-      clearEnabled: (id: string) => Promise<void>;
+      setEnabled: (id: string, enabled: boolean) => Promise<PluginEnableUpdateResult>;
+      clearEnabled: (id: string) => Promise<PluginEnableUpdateResult>;
       setProjectEnabled: (workingDir: string, id: string, enabled: boolean) => Promise<void>;
       clearProjectEnabled: (workingDir: string, id: string) => Promise<void>;
     };

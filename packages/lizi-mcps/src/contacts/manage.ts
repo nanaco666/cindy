@@ -24,7 +24,7 @@ import {
 
 import { withContacts } from './_shared.js';
 import type { ContactsMcpDeps } from '../types.js';
-import type { ContactsToolRegistry } from '../lizi_contactsToolRegistry.js';
+import type { ContactsToolRegistry } from '../cindy_contactsToolRegistry.js';
 
 const MANAGE_RULES =
   'manage 类操作(删除/合并/分组管理)只在用户明确指示时执行, 不要自主决定。' +

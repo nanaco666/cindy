@@ -1,13 +1,13 @@
 /**
- * legacyDeadDirs.ts — 老世界死目录清退(迁移第 5 步,media-store.md §4)。
+ * legacyDeadDirs.ts — 冻结历史兼容层的死目录清退。
  * ---------------------------------------------------------------------------
  * `userData/cc-agent/` 下有三个**现行代码零引用**的死目录(2026-07 实地盘点
  * 约 40MB;目录改名后旧目录永久滞留的历史证据):
  *   - lizi-image-media(art 图片老仓改名前身)
  *   - mivo-media / mivo(mivo 集成早期目录,现行写 lizi-mivo-models 等)
  *
- * 这是对冻结老世界的**唯一**允许删除操作,门槛按设计三条全满足:
- *   1. 现行代码零引用 —— 2026-07-12 全仓 grep 核验(仅设计文档提及);
+ * 这是对冻结历史兼容层的**唯一**允许删除操作,门槛按三条全满足:
+ *   1. 现行代码零引用 —— 2026-07-12 全仓 grep 核验;
  *   2. 线上正式版代码零引用 —— 同一结论(dev 与 release 同源 main);
  *   3. 目录内所有文件 mtime > 30 天 —— 本模块运行时逐文件核验,有一个新
  *      文件整个目录就不合格(说明"零引用"结论过期了,宁可不删)。
@@ -139,7 +139,7 @@ export async function cleanDeadDirs(
   return result;
 }
 
-/** 老世界 cc-agent 目录总占用(存储卡片"老版本数据(只读)"一行展示用)。 */
+/** 历史 cc-agent 目录总占用(存储卡片"老版本数据(只读)"一行展示用)。 */
 export async function getLegacyRootUsage(
   rootDir: string = legacyRoot(),
 ): Promise<{ bytes: number; fileCount: number }> {

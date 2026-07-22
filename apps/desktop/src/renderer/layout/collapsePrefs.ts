@@ -1,7 +1,6 @@
 /**
  * collapsePrefs —— 面板折叠态的统一读写入口(布局树 B2a)。
  *
- * 设计文档:docs/Cindy架构设计/意识系统/layout-tree.md §7.2。
  * 面板在注册表声明 `collapseMemory`(global / per-session / none),本模块按声明分发:
  * - **global**:持久化真身是布局树上该面板 pane 的 `collapsed`(userData/layout.v1.json)。
  *   读 = 同步 getStateSync(首帧就位);写 = setPaneCollapsed + layout.set(best-effort)。

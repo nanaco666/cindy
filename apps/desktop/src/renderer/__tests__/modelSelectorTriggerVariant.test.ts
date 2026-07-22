@@ -282,8 +282,16 @@ vi.mock('@/lib/providerModels', () => ({
   }),
 }));
 
+const modelVisibilityRef = vi.hoisted(
+  (): {
+    isEnabled: (agent: string, providerId: string, model: { id: string }) => boolean;
+  } => ({
+    isEnabled: () => true,
+  }),
+);
 vi.mock('@/state/modelVisibilityPrefs', () => ({
-  isModelEnabled: () => true,
+  isModelEnabled: (agent: string, providerId: string, model: { id: string }) =>
+    modelVisibilityRef.isEnabled(agent, providerId, model),
   useModelVisibilityVersion: () => 0,
 }));
 
@@ -478,6 +486,27 @@ describe('ModelSelector trigger variants', () => {
     const information = screen.getByRole('group', { name: /Opus 4\.8/ });
     expect(within(information).getByText('Most capable for ambitious work')).toBeTruthy();
     expect(within(information).queryByRole('option')).toBeNull();
+  });
+
+  it('filters provider-ignored models from flat model-only selectors', () => {
+    modelVisibilityRef.isEnabled = (_agent, _providerId, model) => model.id !== 'claude-sonnet-4-6';
+    try {
+      render(
+        React.createElement(ModelSelectorContent, {
+          modelId: '',
+          effort: 'high',
+          onModelChange: vi.fn(),
+          onEffortChange: vi.fn(),
+          vendorKey: 'cc',
+          configurationEnabled: false,
+        }),
+      );
+
+      expect(screen.getByRole('option', { name: /Opus 4\.8/ })).toBeTruthy();
+      expect(screen.queryByRole('option', { name: /Sonnet 4\.6/ })).toBeNull();
+    } finally {
+      modelVisibilityRef.isEnabled = () => true;
+    }
   });
 
   it('forwards an overlay-specific z-index to the model information panel', () => {

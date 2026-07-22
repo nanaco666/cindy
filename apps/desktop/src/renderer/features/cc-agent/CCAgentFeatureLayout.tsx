@@ -3,7 +3,7 @@
  * ---------------------------------------------------------------------------
  * CC Agent 系统（原 ChatSystem）主功能的 Feature Layout。
  *
- * 职责（见 doc/prod_docs/xdt-maker-主界面设计.md V0.11 F5）：
+ * 职责：
  *   1. 向 Shell 的 Sidebar 上半槽位注入 CC Agent 功能自己的内容
  *      （CCAgentSidebarUpper）
  *   2. 通过 <Outlet /> 包装本功能内的所有 View 路由

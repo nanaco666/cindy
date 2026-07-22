@@ -104,6 +104,24 @@ describe('mobile session main layer desktop-first noise budget', () => {
     expect(source).not.toContain('presenceVersion');
   });
 
+  it('drops stale Codex reset alerts after the active session changes during refresh', () => {
+    const source = readFileSync(resolve(process.cwd(), 'app/sessions/[sessionId].tsx'), 'utf8');
+    const resetStart = source.indexOf('const resetCodexRateLimits');
+    const resetEnd = source.indexOf('const loadExtraDirBrowsePath', resetStart);
+    const resetSource = source.slice(resetStart, resetEnd);
+    const staleOfferStart = resetSource.indexOf('if (!offer');
+    const refresh = resetSource.indexOf('await refreshAccountUsage();', staleOfferStart);
+    const sessionGuard = resetSource.indexOf(
+      'if (contextUsageSessionRef.current !== sessionId) return;',
+      refresh,
+    );
+    const alert = resetSource.indexOf("Alert.alert('请重新确认', '重置凭证已过期", refresh);
+
+    expect(refresh).toBeGreaterThan(-1);
+    expect(sessionGuard).toBeGreaterThan(refresh);
+    expect(alert).toBeGreaterThan(sessionGuard);
+  });
+
   it('keeps session sheets titled by user-facing desktop concepts only', () => {
     const source = readFileSync(resolve(process.cwd(), 'app/sessions/[sessionId].tsx'), 'utf8');
 

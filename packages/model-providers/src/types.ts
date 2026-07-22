@@ -284,7 +284,7 @@ export interface Provider {
    */
   imageDefaults?: { standard: string; draft?: string; best?: string };
   /**
-   * 该供应商提供的**视频生成/编辑模型**清单(C3c-5;与 imageModels 同地位:
+   * 该供应商提供的**视频生成/编辑模型**清单(与 imageModels 同地位:
    * 不挂 agent,由主机视频通道直调,id 即 video provider 层的 alias)。
    * 消费方为意识 cindy 槽(白名单 + 详情页下拉)。可选,additions-only。
    */
@@ -297,6 +297,18 @@ export interface Provider {
 }
 
 /**
+ * 供应商预设 / 用户自定义 runtime 的模型配置。
+ *
+ * contextWindow 缺省时由 `buildUserProvider` 使用保守默认；预设可显式携带厂商文档确认的值，
+ * 并随用户配置持久化，避免已知长上下文模型被错误降级。
+ */
+export interface ProviderRuntimeModelConfig {
+  id: string;
+  name: string;
+  contextWindow?: number;
+}
+
+/**
  * 供应商预设的单 runtime 预填数据（「从模板创建自定义供应商」用）。
  * 形状对齐 `CustomProviderRuntimeConfig`：选中预设 = 把这段数据灌进创建表单，用户只补 API key。
  */
@@ -304,7 +316,7 @@ export interface ProviderPresetRuntime {
   /** 该 runtime 的兼容端点 base URL（cc=Anthropic 兼容 / codex=OpenAI Responses 兼容）。 */
   baseUrl: string;
   /** 推荐模型清单（预填进表单，用户可增删改）。 */
-  models: { id: string; name: string }[];
+  models: ProviderRuntimeModelConfig[];
   /** 可选预填请求头。 */
   headers?: Record<string, string>;
   /**
@@ -374,8 +386,8 @@ export interface Catalog {
 export interface CustomProviderRuntimeConfig {
   /** 该 runtime 的兼容上游 base URL（cc=Anthropic 端点 / codex=OpenAI 端点）。 */
   baseUrl: string;
-  /** 用户手填的模型（仅 id + 显示名）；其余元数据由 `buildUserProvider` 补保守默认。 */
-  models: { id: string; name: string }[];
+  /** 用户模型；contextWindow 可由预设带入，缺省时由 `buildUserProvider` 补保守默认。 */
+  models: ProviderRuntimeModelConfig[];
   /** 可选自定义请求头（非密钥鉴权头可放这里；API key 走 safeStorage，不放这里）。 */
   headers?: Record<string, string>;
   /**

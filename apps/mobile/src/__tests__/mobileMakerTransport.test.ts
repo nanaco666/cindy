@@ -41,6 +41,8 @@ describe('mobile maker transport', () => {
       'maker:set-session-model-pref',
       'maker:apply-new-maker-draft-pref',
       'maker:usage:model-pricing',
+      'maker:usage:codex-rate-limits',
+      'maker:usage:codex-rate-limit-reset',
       'maker:api-key:present',
       'maker:list-agent-commands',
       'maker:list-agent-skills',
@@ -60,6 +62,7 @@ describe('mobile maker transport', () => {
       'maker:fork',
       'maker:rewind:preview',
       'maker:rewind:commit',
+      'maker:message:delete',
       'maker:close-session',
       'maker:schedule:list',
       'maker:schedule:get',
@@ -277,6 +280,8 @@ describe('mobile maker transport', () => {
     await maker.input.setEditLock('s1', 'queued-1', false);
     await maker.fs.readTextFilePreview('/repo/spec.md');
     await maker.getModelPricing();
+    await maker.getCodexRateLimits();
+    await maker.resetCodexRateLimits('018f4ec7-c6d8-7f10-8d43-9f8791d33000');
     await maker.getApiKeyPresent();
     await maker.setSessionModelPref({
       sessionId: 's1', agent: 'codex', providerId: 'openai', model: 'gpt-5.5', effort: 'high',
@@ -313,6 +318,8 @@ describe('mobile maker transport', () => {
       ['maker:input:set-edit-lock', ['s1', 'queued-1', false]],
       ['text-file:read-preview', [{ filePath: '/repo/spec.md' }]],
       ['maker:usage:model-pricing', []],
+      ['maker:usage:codex-rate-limits', []],
+      ['maker:usage:codex-rate-limit-reset', ['018f4ec7-c6d8-7f10-8d43-9f8791d33000']],
       ['maker:api-key:present', []],
       ['maker:set-session-model-pref', [{
         sessionId: 's1', agent: 'codex', providerId: 'openai', model: 'gpt-5.5', effort: 'high',
@@ -323,17 +330,19 @@ describe('mobile maker transport', () => {
     ]);
   });
 
-  it('routes fork and rewind actions through maker namespace', async () => {
+  it('routes fork, rewind and delete actions through maker namespace', async () => {
     const { calls, maker } = harness();
 
     await maker.fork('s1', 'm2');
     await maker.rewindPreview('s1', 'm2');
     await maker.rewindCommit('s1', 'm2');
+    await maker.deleteMessage('s1', 'm2');
 
     expect(calls.map((call) => [call.channel, call.args])).toEqual([
       ['maker:fork', ['s1', 'm2']],
       ['maker:rewind:preview', ['s1', 'm2']],
       ['maker:rewind:commit', ['s1', 'm2']],
+      ['maker:message:delete', ['s1', 'm2']],
     ]);
   });
 

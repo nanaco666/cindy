@@ -68,7 +68,7 @@ afterEach(() => {
 });
 
 describe('LayoutRoot · 树驱动的顺序与在场', () => {
-  it('默认树:chat 在前、right 在后,相邻可见面板之间有引擎分割线(C1)', () => {
+  it('默认树:chat 在前、right 在后,相邻可见面板之间有引擎分割线', () => {
     renderLayoutRoot();
     expect(rowChildTestIds()).toEqual(['p-chat', 'layout-divider', 'p-right']);
   });

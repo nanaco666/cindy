@@ -1,8 +1,7 @@
 /**
  * RewindPreviewDialog
  * ---------------------------------------------------------------------------
- * 5 状态对话框（Running / Loading / Default / Empty / Error），按设计稿 message-actions.pen
- * 节点 UjIdH（Default）+ BXQfL（Error）。
+ * 5 状态对话框（Running / Loading / Default / Empty / Error），共享同一套结构与视觉规格。
  *
  * 流程：
  *   open=true + running → 直接确认 Stop + Rewind，不读取会立刻过期的 preview

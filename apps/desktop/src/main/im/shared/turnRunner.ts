@@ -1329,7 +1329,7 @@ export function createTurnRunner(
       return [];
     }
     if (parsed._xdt_render_image === false) return [];
-    // 双协议:老 xdt-image(历史/未迁移工具)+ 新 cindy-media(迁移第 2 步起
+    // 双协议:历史 xdt-image + 当前 cindy-media
     // art/mivo/codex 生成图的地址形态;只认老协议会让 IM 端"画了图看不到")。
     const isManagedImageUrl = (u: string): boolean =>
       u.startsWith('xdt-image://') || u.startsWith('cindy-media://');

@@ -89,7 +89,7 @@ interface RightSidebarShellProps {
   isMaximized?: boolean;
   /** 「在新窗口中打开侧边栏」;仅 Win 端 TabBar 内渲染按钮(Mac 走 MainLayout 浮层)。 */
   onDetach?: () => void;
-  /** TabBar 横带是否作为窗口拖拽区(B3,见 TabBar 同名 prop):主窗口内嵌形态传
+  /** TabBar 横带是否作为窗口拖拽区(见 TabBar 同名 prop):主窗口内嵌形态传
    *  false(空白处 = 拖面板手势面);detached 子窗口不传,默认 true。 */
   chromeWindowDrag?: boolean;
   /** M2(mac 交换态):面板当前贴哪条边。'left' 且非 maximize 时合并顶栏右端
@@ -314,8 +314,8 @@ export function RightSidebarShell({
     if (!sessionId) return;
     const off = window.electronAPI.onRsbBrowserPopup(({ url }) => {
       // 给新 tab 一份完整 default state,只把 url 替换成 popup URL;hydrateState
-      // 会把缺字段补回默认。background-tab disposition 暂不区分(plan §22 范围
-      // 内简化为前台开),日后想做"后台 tab"再按 disposition 分支选 setActive。
+      // 会把缺字段补回默认。background-tab disposition 暂不区分,统一前台打开;
+      // 日后要支持后台 tab 时再按 disposition 分支选 setActive。
       const initialState = {
         url,
         title: '',

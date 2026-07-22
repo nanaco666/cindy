@@ -1,5 +1,5 @@
 /**
- * 远程文件浏览(网格为主视图,对标 iOS Files;设计稿 docs/design_docs/mobile-file-browser.pen F1/F2/F3/F7/F9)。
+ * 远程文件浏览(网格为主视图,对标 iOS Files)。
  *
  * 数据链路:被控端 `file-browser:remote-op` 聚合通道(与桌面 workdir-browse 同源),
  * workdir 相对路径语义,浏览范围收敛在会话工作目录内(被控端 workdir guard 决定)。

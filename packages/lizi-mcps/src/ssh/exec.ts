@@ -64,7 +64,7 @@ export function registerSshExecTool(
       try {
         pool = await deps.getPool();
       } catch (err) {
-        deps.logger?.error?.(`[lizi_ssh] getPool failed: ${String(err)}`);
+        deps.logger?.error?.(`[cindy_ssh] getPool failed: ${String(err)}`);
         return errorPayload('INTERNAL', `SSH 连接池不可用：${err instanceof Error ? err.message : String(err)}`);
       }
 
@@ -81,7 +81,7 @@ export function registerSshExecTool(
         const result = await remote.exec(wrapCwd(command, cwd), {
           input,
           timeoutMs: timeoutMs ?? DEFAULT_TIMEOUT_MS,
-          label: `lizi_ssh:ssh_exec(${hostId})`,
+          label: `cindy_ssh:ssh_exec(${hostId})`,
           maxOutputBytes: MAX_OUTPUT_BYTES,
         });
         const stdout = truncateOutput(result.stdout);
@@ -106,7 +106,7 @@ export function registerSshExecTool(
         // 不回显 command 原文，只落 host + 分类结果。
         const classified = classifySshError(err);
         deps.logger?.warn?.(
-          `[lizi_ssh] ssh_exec on "${hostId}" failed: ${classified.errorCode}`,
+          `[cindy_ssh] ssh_exec on "${hostId}" failed: ${classified.errorCode}`,
         );
         return errorPayload(classified.errorCode, classified.hint, { host: hostId });
       }

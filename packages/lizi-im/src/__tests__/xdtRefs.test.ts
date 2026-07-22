@@ -1,5 +1,5 @@
 /**
- * xdtRefs.test.ts — IM 正文托管图片引用解析(双协议回归,迁移第 3 步)。
+ * xdtRefs.test.ts — IM 正文托管图片引用双协议回归。
  * 钉死:cindy-media://(媒体总仓新地址)与老 xdt-image:// 在收集/占位/分类
  * 三个纯函数里同等对待——只认老协议会让 IM 卡片露裸 markdown(review P1)。
  */

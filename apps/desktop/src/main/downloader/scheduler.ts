@@ -1,7 +1,7 @@
 /**
  * unified-downloader — M6: Scheduler + single-flight dedupe.
  * ---------------------------------------------------------------------------
- * Tech spec: .sivi/docs/tech_specs/unified-downloader-frontend.md (M6)
+ * Concurrency and queue-ordering invariants are maintained in this module.
  *
  * Responsibilities:
  *   - Single-flight: identical (url|targetPath|sha256) tuples share one Promise.

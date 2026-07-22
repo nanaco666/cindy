@@ -1,5 +1,5 @@
 /**
- * ContextSheet —— + 号弹出的可拖动「上下文」面板（对照 docs/design_docs/mobile-context-panel.pen）。
+ * ContextSheet —— + 号弹出的可拖动「上下文」面板。
  *
  * 结构：`SheetModal`（背板原地淡入淡出 + 面板自底部滑入滑出的共用外壳）+ `SheetSurface`
  * (底部吸附的可拖动面板表面,grabber / header / 滚动区 / footer 与拖动编排都在那里,

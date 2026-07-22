@@ -330,6 +330,40 @@ function createXaiResponsesCompatTransform(): RequestTransform {
   };
 }
 
+const MINIMAX_RESPONSES_UPSTREAMS: ReadonlySet<string> = new Set([
+  'https://api.minimaxi.com/v1',
+  'https://api.minimax.io/v1',
+]);
+
+function isMiniMaxResponsesSession(ctx: RequestTransformCtx): boolean {
+  const sessionId = sessionIdFromTransformCtx(ctx);
+  const providerId = sessionId ? getSessionProvider(sessionId) : null;
+  if (!providerId) return false;
+  const upstream = getActiveCatalog().providers.find((provider) => provider.id === providerId)
+    ?.routing.codex?.upstream.replace(/\/+$/, '');
+  return upstream !== undefined && MINIMAX_RESPONSES_UPSTREAMS.has(upstream);
+}
+
+/** MiniMax Responses 不接受 xhigh 或 reasoning summary，路由前收敛到官方支持字段。 */
+function createMiniMaxResponsesCompatTransform(): RequestTransform {
+  return (body, ctx) => {
+    if (!isPlainObject(body) || !isMiniMaxResponsesSession(ctx)) return null;
+    const reasoning = body.reasoning;
+    if (!isPlainObject(reasoning)) return null;
+    let changed = false;
+    const nextReasoning = { ...reasoning };
+    if (nextReasoning.effort === 'xhigh') {
+      nextReasoning.effort = 'high';
+      changed = true;
+    }
+    if ('summary' in nextReasoning) {
+      delete nextReasoning.summary;
+      changed = true;
+    }
+    return changed ? { ...body, reasoning: nextReasoning } : null;
+  };
+}
+
 function createProviderModelRewriteTransform(): RequestTransform {
   return (body, ctx) => {
     const sessionId = sessionIdFromTransformCtx(ctx);
@@ -642,6 +676,7 @@ function createTransformRequestChain(): RequestTransform[] {
     }),
     createCodexTransform(),
     createXaiResponsesCompatTransform(),
+    createMiniMaxResponsesCompatTransform(),
     createProviderModelRewriteTransform(),
     stripNonAnthropicFields,
   ];

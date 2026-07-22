@@ -1563,6 +1563,7 @@
     "computerUse": {
       "title": "自动操作",
       "description": "让 agent 使用电脑和已连接设备替你完成任务。浏览器自动化使用独立浏览器；Android 自动化使用 ADB；电脑自动化依赖本机 driver。",
+      "codexRefreshDeferred": "设置已保存，但 Codex 正忙；重启应用后将对 Codex 新会话生效",
       "browser": {
         "title": "自动操作浏览器",
         "description": "一个 agent 专用的独立浏览器，与你日常的 Chrome 互不影响",
@@ -1661,7 +1662,7 @@
         "title": "自动操作电脑",
         "description": "让 agent 检查窗口、读取界面并点击或输入",
         "toggleAria": "切换直接操作电脑",
-        "driverInfo": "自动操作电脑由开源 CUA Driver 提供，运行在本机，用于读取屏幕并执行点击、输入等操作。启用前需要授予核心权限；实际使用时，macOS 仍可能按目标 App 或具体动作弹出额外确认。",
+        "driverInfo": "自动操作电脑由开源 CUA Driver 提供，运行在本机，用于读取屏幕并执行点击、输入等操作。",
         "openSourceProject": "查看开源项目",
         "detected": "已检测到 {{version}}（{{path}}，{{daemon}}）",
         "daemonRunning": "后台服务运行中",
@@ -1670,9 +1671,10 @@
         "installing": "正在安装 cua-driver...",
         "authorizing": "正在等待系统授权。请在弹出的 Cua Driver 授权窗口中完成「辅助功能」和「屏幕录制」授权。",
         "permissionIntro": {
-          "title": "准备授予电脑自动操作权限",
-          "description": "接下来 {{appName}} 会安装或打开 Cua Driver 的授权流程，并可能跳转到 macOS 系统设置。请先为 CuaDriver 授予「辅助功能」和「屏幕录制」核心权限；之后在使用过程中，macOS 可能还会按目标 App 或具体动作弹出额外确认。只有在你主动发起 Computer Use 任务时才应确认这些请求。完成后回到 {{appName}}，它会自动检查并启用。",
-          "confirm": "继续授权",
+          "title": "启用自动操作电脑",
+          "description": "{{appName}} 将在本机安装或启动 Cua Driver，用于读取屏幕并执行点击、输入等操作。请仅在你主动发起自动操作电脑任务时启用。",
+          "macosDescription": "接下来 {{appName}} 会安装或打开 Cua Driver 的授权流程，并可能跳转到 macOS 系统设置。请先为 CuaDriver 授予「辅助功能」和「屏幕录制」核心权限；之后在使用过程中，macOS 可能还会按目标 App 或具体动作弹出额外确认。只有在你主动发起 Computer Use 任务时才应确认这些请求。完成后回到 {{appName}}，它会自动检查并启用。",
+          "confirm": "继续",
           "cancel": "稍后再说"
         },
         "permissionGuide": {
@@ -2565,6 +2567,58 @@
     "revokeAccess": "撤销权限",
     "viewControllers": "查看",
     "versionMismatch": "对方版本不一致,部分功能可能受限"
+  },
+  "accountDeletion": {
+    "entryButton": "注销账号",
+    "entryAria": "注销当前账号",
+    "introTitle": "注销账号？",
+    "introDescription": "此操作会安排永久删除你的 Cindy 登录账号。",
+    "confirmTitle": "确认注销账号",
+    "sendCodeButton": "发送注销验证码",
+    "confirmButton": "确认注销账号",
+    "cancelButton": "取消",
+    "resendCodeButton": "重新发送验证码",
+    "codePlaceholder": "6 位验证码",
+    "codeInputAria": "注销验证码",
+    "codeSent": "验证码已通过{{channel}}发送至 {{target}}。",
+    "channels": {
+      "email": "邮箱",
+      "sms": "短信"
+    },
+    "sessionNotice": "确认后，本机将立即退出登录；其他客户端会在当前访问凭证到期并尝试续期时退出。",
+    "gracePeriodNotice": "确认后，账号将进入 30 天等待期。等待期内重新登录可取消注销；到期后 Cindy 登录账号将永久删除。",
+    "verificationNotice": "注销验证码将通过{{channel}}发送至 {{target}}。",
+    "appleRevocationNotice": "如果你曾使用 Apple 登录，还需要在 Apple ID 设置中手动撤销 Cindy 的访问权限。",
+    "acknowledgement": "我已了解：等待期结束后，Cindy 登录账号将被永久删除且无法恢复。",
+    "restoredNotice": "账号注销已取消，你的 Cindy 登录账号将继续保留。",
+    "errors": {
+      "fallback": "注销请求未能完成，请检查网络后重试。",
+      "UNAUTHENTICATED": "登录已过期，请重新登录后再试。",
+      "ACCOUNT_DELETION_UNAVAILABLE": "当前账号不支持自助注销。",
+      "ACCOUNT_DELETION_PENDING": "账号已进入注销等待期。",
+      "ACCOUNT_DELETION_PROCESSING": "账号正在注销处理中。",
+      "ACCOUNT_DELETION_CHALLENGE_INVALID": "验证码无效或已过期，请重新发送验证码。",
+      "ACCOUNT_DELETION_RECEIPT_MISSING": "注销验证已失效，请重新发送验证码。",
+      "ACCOUNT_DELETION_RECEIPT_INVALID": "无法查询该注销请求，请重新发起操作。",
+      "ACCOUNT_DELETION_RECEIPT_STORE_FAILED": "无法安全保存注销状态凭证，请重试。",
+      "AUTH_FLOW_SUPERSEDED": "登录状态已变化；为避免退出其他账号，本机未执行退登。",
+      "INVALID_CODE": "验证码错误或已过期，请检查后重试。",
+      "CODE_ATTEMPTS_EXCEEDED": "验证码错误次数过多，请重新发送验证码。",
+      "NETWORK_ERROR": "网络连接失败，请检查网络后重试。",
+      "REQUEST_TIMEOUT": "请求超时，请重试。",
+      "INVALID_RESPONSE": "登录服务返回了无法识别的结果，请稍后重试。",
+      "RATE_LIMITED": "操作过于频繁，请稍后再试。",
+      "INVALID_PARAMS": "输入内容不正确，请检查后重试。"
+    },
+    "status": {
+      "pendingTitle": "账号正在等待注销",
+      "processingTitle": "账号正在注销",
+      "completedTitle": "账号已注销",
+      "pendingCopy": "账号计划于 {{date}} 永久删除。在此之前重新登录可取消注销。",
+      "processingCopy": "等待期已结束，Cindy 登录账号正在删除。",
+      "completedCopy": "Cindy 登录账号已删除。",
+      "dismissButton": "我知道了"
+    }
   },
   "login": {
     "title": "欢迎使用 Cindy",
@@ -4481,6 +4535,7 @@
     },
     "draft": {
       "createSessionFailed": "创建会话失败，请重试",
+      "deviceStillLoading": "远程设备仍在加载中，请稍候",
       "worktreeMissingRepo": "无法开 worktree：缺少当前目录的仓库根",
       "worktreeRepoHint": "可尝试重新选一次工作目录，等右下角文件夹标识刷新后再试",
       "sessionInactive": "会话已不再处于活动状态",
@@ -6210,8 +6265,8 @@
     "dialogUnavailable": "window.electronAPI.dialog 不可用",
     "notReadyHeading": "Maker Experimental",
     "notReadyBody": "window.electronAPI.maker 不可用。请重启应用并检查控制台中的 IPC 注册错误。",
-    "title": "Maker Experimental — 一阶段重构新链路",
-    "description": "新链路验证页面。老链路（cc-agent / codex）不受影响。详见 doc/agent/xdt-maker-architecture.md",
+    "title": "Maker Experimental — Agent 链路诊断",
+    "description": "用于诊断 Maker IPC 与 Agent 事件链路，不影响标准聊天会话。",
     "agentLabel": "代理：",
     "workingDirLabel": "工作目录：",
     "workingDirPlaceholder": "点右侧按钮选择目录",

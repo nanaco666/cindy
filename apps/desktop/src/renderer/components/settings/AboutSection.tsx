@@ -6,7 +6,6 @@
  *   - Claude Code 版本号: spawn 当前应用使用的 binary `--version`
  *   - Codex 版本号: 同上
  *
- * 视觉对标 doc/design_docs/settings-view.pen 的 "Light/Dark Mode - Settings (About tab)"。
  * 卡片样式与 NotificationSection / FeishuBotSection 同级 (rounded-xl / Board border)。
  */
 
@@ -123,7 +122,7 @@ export function AboutSection() {
         <OpenLogsRow />
       </div>
 
-      {/* 存储空间(媒体总仓占用 / 清理 / 体检,迁移第 5 步) */}
+      {/* 存储空间(媒体总仓占用 / 清理 / 体检) */}
       <h3 className="mt-2 text-13 font-medium text-[var(--settings-section-title)]">
         {t('settings.about.storage.title')}
       </h3>

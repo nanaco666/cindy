@@ -1,5 +1,5 @@
 /**
- * codexHttpBridge — 把 in-process lizi_mcp McpServer 实例通过 streamable-HTTP
+ * codexHttpBridge — 把 in-process Cindy MCP server 实例通过 streamable-HTTP
  * 暴露给 codex app-server 子进程。
  *
  * 架构：

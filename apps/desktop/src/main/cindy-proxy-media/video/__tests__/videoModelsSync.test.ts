@@ -1,7 +1,7 @@
 /**
  * videoModelsSync.test.ts
  * ---------------------------------------------------------------------------
- * 同源守卫(C3c-5,与 desktop imageModelCatalogSync 同职责):
+ * 同源守卫(与 desktop imageModelCatalogSync 同职责):
  * XDPROXY_VIDEO_MODELS(打包兜底常量,意识 cindy 槽视频白名单/详情页下拉的
  * 派生源)里的每个 id 必须真是 video provider 层注册的 alias——provider 改名/
  * 下架别名而忘改常量时在这里炸,不许静默漂移;首项必须与注册序首别名一致

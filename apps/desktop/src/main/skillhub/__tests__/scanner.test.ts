@@ -116,7 +116,7 @@ describe('scanAllSkills', () => {
   });
 
   it('dedupes the same global skill across Claude and Codex, preferring the shared .agents path', async () => {
-    const home = path.join('/Users', 'lizi');
+    const home = path.join('/Users', 'devuser');
     const claudePath = path.join(home, '.claude', 'skills', 'web-access');
     const agentsPath = path.join(home, '.agents', 'skills', 'web-access');
 

@@ -9,8 +9,7 @@
  * 该组件不持有任何业务状态:enabled / worker / onChange 全部由 parent 传入。
  * 内部仅有 popover 的开合状态 + 选择 Worker 的草稿值。
  *
- * 设计稿: docs/design_docs/cc-agent-view.pen「协同模式 · ChatInput 开关」frame
- * (节点 g1Ub0,3 态 OFF / Popover / ON)。
+ * 视觉状态固定为 OFF / Popover / ON 三态。
  */
 import { useState, type ReactElement } from 'react';
 import { UsersRound, Check } from 'lucide-react';

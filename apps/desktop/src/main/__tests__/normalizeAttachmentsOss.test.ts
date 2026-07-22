@@ -25,7 +25,7 @@ vi.mock('../imageCacheStore.js', () => ({
   collectSessionImageUrls: vi.fn(() => []),
 }));
 
-// cindy-media(迁移第 1 步):媒体 mime 的物化改走总仓 ingest,mock 记调用。
+// cindy-media:媒体 mime 物化走总仓 ingest,mock 记调用。
 const BLOB_HASH = 'a'.repeat(64);
 const BLOB_URL = `cindy-media://blobs/${BLOB_HASH}.png`;
 const ingestMedia = vi.hoisted(() => vi.fn());

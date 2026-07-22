@@ -215,3 +215,29 @@ describe('BUNDLED_CATALOG 首批预设自检', () => {
     }
   });
 });
+
+describe('MiniMax OpenAI Responses 预设契约 (issue #345)', () => {
+  it.each([
+    {
+      id: 'minimax-cn',
+      docsUrl: 'https://platform.minimaxi.com/docs/api-reference/responses-create',
+      codexBaseUrl: 'https://api.minimaxi.com/v1',
+    },
+    {
+      id: 'minimax-global',
+      docsUrl: 'https://platform.minimax.io/docs/api-reference/responses-create',
+      codexBaseUrl: 'https://api.minimax.io/v1',
+    },
+  ])('$id 同时提供 Anthropic 与 Responses runtime', ({ id, docsUrl, codexBaseUrl }) => {
+    const preset = BUNDLED_CATALOG.presets?.find((candidate) => candidate.id === id);
+    expect(preset?.docsUrl).toBe(docsUrl);
+    expect(preset?.runtimes['claude-code']?.baseUrl).toMatch(/\/anthropic$/);
+    expect(preset?.runtimes.codex).toEqual({
+      baseUrl: codexBaseUrl,
+      models: [
+        { id: 'MiniMax-M3', name: 'MiniMax M3', contextWindow: 1_000_000 },
+        { id: 'MiniMax-M2.5', name: 'MiniMax M2.5' },
+      ],
+    });
+  });
+});

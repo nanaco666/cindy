@@ -2,16 +2,17 @@
  * cindy_schedulerMcpServer.ts
  * ---------------------------------------------------------------------------
  * In-process MCP server exposing xdt-maker's local Scheduler to cc / codex
- * agents. Mirrors the shape of `lizi_feishuBotMcpServer.ts`：
+ * agents. Mirrors the shape of `cindy_feishuBotMcpServer.ts` /
+ * `feishu/mcp/server.ts`：
  *
  *  - server only exposes two entry tools: `list_tools` / `call_tool`
  *  - fine-grained tools live in scheduler/*.ts and register on a registry
  *
  * Phase 5 hard rules satisfied here:
- *  - server name is **cindy_scheduler**（独立，不复用 lizi_feishu_bot）
+ *  - server name is **cindy_scheduler**（独立，不复用 cindy_feishu_bot）
  *  - 没有 import any maker-core agent code（cc/codex 文件零修改 — 加 provider
  *    自动被 host:63&73 注入）
- *  - 只通过 `deps.getScheduler()` 操作，不直接 new 引擎类（plan §C.6 硬规则）
+ *  - 只通过 `deps.getScheduler()` 操作，不直接 new 引擎类
  *  - 每个 tool handler 入口 try/catch，把 `'scheduler not started'` 翻成
  *    `SCHEDULER_NOT_READY` —— 见 scheduler/_shared.ts withScheduler
  *  - 错误码集复用 IPC 层 NOT_FOUND/INVALID_PARAMS/INTERNAL + 新增
@@ -59,7 +60,7 @@ export interface SchedulerMcpSessionCtx {
 // ── Entry-tool descriptions ─────────────────────────────────────────────────
 //
 // 内嵌 string，不走 prompts/*.md ?raw 模板：scheduler 工具家族短小，没有共享
-// rules 文档需要 bundle，inline 比额外建 prompts 目录更轻。lizi_feishu_bot 的
+// rules 文档需要 bundle，inline 比额外建 prompts 目录更轻。cindy_feishu_bot 的
 // markdown 模板是为了未来扩 chat_meta / reaction 等家族留 slot，scheduler 暂
 // 不需要。
 

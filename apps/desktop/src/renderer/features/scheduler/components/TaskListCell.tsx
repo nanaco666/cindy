@@ -1,7 +1,7 @@
 /**
  * TaskListCell — 左侧任务列表单元格
  * ---------------------------------------------------------------------------
- * 设计稿 (schedule.pen "Automations master-detail")：
+ * 任务列表单元格的视觉规格：
  *   - cornerRadius 10，padding [12, 14]，gap 5
  *   - 标题 14/500 + 副标题 'Last X ago' 11/normal
  *   - 选中态：bg #e5e5e5 (light) / #3c3c3a (dark)（与 nav-pill 选中色对齐）
@@ -366,7 +366,7 @@ export function TaskListCell({
           </span>
         )}
         {/* 一次性任务标识：recurring=false 即标 Once；manual 优先标 Manual（更准确）。
-            视觉规格对齐 schedule.pen 设计稿 — 椭圆描边 + 11px 灰字。
+            视觉规格：椭圆描边 + 11px 灰字。
             编辑态下隐藏 chip 给输入框留满宽度。 */}
         {!isEditing && isProjectSchedule && (
           <span

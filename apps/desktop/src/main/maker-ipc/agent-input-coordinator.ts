@@ -408,7 +408,7 @@ export class AgentInputCoordinator {
   constructor(private readonly deps: AgentInputCoordinatorDeps) {}
 
   /**
-   * 媒体回收器活引用取证(media-store.md §4 暂存区 (2)):序列化所有会话在
+   * 媒体回收器活引用取证(recycler.ts 的内存队列暂存区):序列化所有会话在
    * 内存中的排队/在途消息(pendingQueue + activeTurn 消息体 + recovery 项),
    * 供回收器按文本抽取 cindy-media 指纹当活引用——这些消息尚未(或可能不会)
    * 落库,其附件 blob 合法地处于零引用状态,清理时必须豁免。

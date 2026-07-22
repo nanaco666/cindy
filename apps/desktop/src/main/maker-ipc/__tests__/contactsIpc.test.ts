@@ -84,7 +84,7 @@ describe('contacts-ipc handlers', () => {
 
   it('开关值变化时失效 Codex MCP, 同值重写不失效, 失效失败不影响落盘', async () => {
     // 回归: Codex spawn 配置冻在 codexEnvironment cached 里, 开关变化必须触发失效,
-    // 否则后续 codex 会话直到重启 app 都拿不到(或残留) lizi_contacts。
+    // 否则后续 codex 会话直到重启 app 都拿不到(或残留) cindy_contacts。
     const invalidateCodexMcp = vi.fn(async () => {});
     handlers = createContactsIpcHandlers({
       getManager: () => manager,
@@ -128,11 +128,11 @@ describe('contacts-ipc handlers', () => {
     const created = (await handlers[MAKER_INVOKE.CONTACTS_CREATE]!({
       kind: 'person',
       displayName: '张三',
-      identities: [{ platform: 'email', value: 'zhang@xd.com' }],
+      identities: [{ platform: 'email', value: 'zhang@example.com' }],
     })) as { id: string };
     expect(broadcasts).toBe(1);
 
-    const resolved = (await handlers[MAKER_INVOKE.CONTACTS_RESOLVE]!('zhang@xd.com', undefined)) as Array<{
+    const resolved = (await handlers[MAKER_INVOKE.CONTACTS_RESOLVE]!('zhang@example.com', undefined)) as Array<{
       profile: { id: string };
     }>;
     expect(resolved[0]!.profile.id).toBe(created.id);
@@ -151,13 +151,13 @@ describe('contacts-ipc handlers', () => {
     await handlers[MAKER_INVOKE.CONTACTS_CREATE]!({
       kind: 'person',
       displayName: 'A',
-      identities: [{ platform: 'email', value: 'a@xd.com' }],
+      identities: [{ platform: 'email', value: 'a@example.com' }],
     });
     await expect(
       handlers[MAKER_INVOKE.CONTACTS_CREATE]!({
         kind: 'person',
         displayName: 'B',
-        identities: [{ platform: 'email', value: 'a@xd.com' }],
+        identities: [{ platform: 'email', value: 'a@example.com' }],
       }),
     ).rejects.toThrow(/\[IDENTITY_CONFLICT\]/);
   });

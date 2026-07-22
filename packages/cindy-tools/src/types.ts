@@ -1,11 +1,11 @@
 /**
  * cindy-tools 公共类型 —— Cindy 意识系统的内部工具集契约。
  *
- * 本包是"新世界"工具的家(lizi-mcps 为待迁移的老世界):向 agent 暴露的
+ * 本包统一承载 Cindy 意识系统向 agent 暴露的
  * 工具一律经 MCP 注册,host(apps/desktop main)通过 deps 注入真实实现,
  * 包内不感知 Electron / 沙箱 / DB(设计规范规则 2:package 解耦)。
  *
- * 首个成员:ghost 总机(runtime-sandbox.md §5.5 网关模式)——
+ * 首个成员:ghost 总机(AGENTS.md 规则 28 的网关模式)——
  * agent 工具箱里永远只有 ghost_list / ghost_call 两件固定工具,
  * 已装意识的增删即时反映在 ghost_list 的**返回内容**里,
  * 工具定义(缓存前缀)自始至终零变化。
@@ -93,7 +93,7 @@ export interface CindyGhostsMcpDeps {
     tool: string;
     args: Record<string, unknown>;
     /**
-     * 用户图片过户(C3c-4,可选):会话里用户图片的地址(xdt-image:// /
+     * 用户图片过户(可选):会话里用户图片的地址(xdt-image:// /
      * cindy-media://blobs/ / 本机绝对路径,主机归一化并验归属)。
      * host 把每张图落媒体总仓、给目标意识记 ghost-grant 引用(显式引渡 =
      * 授权,按张、永久),再以指纹数组注入 args.attachments 交给意识——

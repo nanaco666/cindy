@@ -98,7 +98,7 @@ vi.mock('../../maker-host/session-provider-store.js', () => ({
 vi.mock('../../imageCacheStore.js', () => ({
   resolveSafe: vi.fn(),
 }));
-// cindy-media(迁移第 1 步):入站图片写入切到媒体总仓,mock 记调用。
+// cindy-media:入站图片写入媒体总仓,mock 记调用。
 const cindyMock = vi.hoisted(() => ({
   ingestMedia: vi.fn(async () => ({
     hash: 'a'.repeat(64),
@@ -332,7 +332,7 @@ describe('hook session-runner 的 userSendAt 时序(未分类误判回归)', () 
     const outcome = await runner.run(baseReq({}));
     expect(outcome.status).toBe('ok');
 
-    // createSession 带渠道标记(lizi_feishu_bot 据此注入路由提示;
+    // createSession 带渠道标记(cindy_feishu_bot 据此注入路由提示;
     // 刻意不是 'slack' —— 那是已退役 organic SlackIM 渠道的历史标记)
     expect(fakeMaker.createSession).toHaveBeenCalledWith(
       expect.objectContaining({ vendorOptions: { source: 'slack-hook' } }),

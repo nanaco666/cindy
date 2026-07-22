@@ -1,7 +1,7 @@
 /**
  * UnclassifiedSection — 未绑定目录的草稿段
  * ---------------------------------------------------------------------------
- * 设计稿对照：cc-agent-view.pen frame cwBi3 / t2h4A（DraftAndDedupe）顶部
+ * 未分类草稿段视觉规格：
  *   - Draft Session (Unclassified)：高 32 / 圆角 8 / padding [0,8] / gap 10
  *   - circle-dashed icon 12×12 #a3a3a3
  *   - title Inter 14 italic normal，#737373 (Light) / #a3a3a3 (Dark)

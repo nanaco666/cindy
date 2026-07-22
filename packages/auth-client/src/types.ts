@@ -87,6 +87,7 @@ export type AuthTokenPair = z.infer<typeof tokenPairSchema>;
 const optionalAccountTokenFields = {
   accountToken: z.string().min(1).optional(),
   accountRefreshToken: z.string().min(1).optional(),
+  accountDeletionRestored: z.literal(true).optional(),
 };
 
 const okOutcomeSchema = tokenPairSchema.extend({
@@ -143,6 +144,43 @@ export const meResponseSchema = z.object({
   identities: z.array(membershipSchema),
 });
 export type AuthMe = z.infer<typeof meResponseSchema>;
+
+export const accountDeletionAvailabilitySchema = z.object({
+  available: z.boolean(),
+  verification: z
+    .object({
+      channel: z.enum(["email", "sms"]),
+      maskedTarget: z.string().min(1),
+    })
+    .optional(),
+  manualAppleRevocationRequired: z.boolean(),
+});
+export type AccountDeletionAvailability = z.infer<
+  typeof accountDeletionAvailabilitySchema
+>;
+
+export const accountDeletionChallengeSchema = z.object({
+  challengeId: z.string().min(1),
+  receiptToken: z.string().min(1),
+  channel: z.enum(["email", "sms"]),
+  maskedTarget: z.string().min(1),
+  expiresAt: z.string().datetime(),
+});
+export type AccountDeletionChallenge = z.infer<
+  typeof accountDeletionChallengeSchema
+>;
+
+export const accountDeletionStatusSchema = z.object({
+  status: z.enum(["pending", "processing", "completed", "cancelled"]),
+  requestedAt: z.string().datetime(),
+  deleteAfter: z.string().datetime(),
+  processingAt: z.string().datetime().optional(),
+  completedAt: z.string().datetime().optional(),
+  cancelledAt: z.string().datetime().optional(),
+});
+export type AccountDeletionStatus = z.infer<
+  typeof accountDeletionStatusSchema
+>;
 
 export type AuthClientType = "desktop" | "mobile" | "web";
 export type VerificationKind = "email" | "phone";

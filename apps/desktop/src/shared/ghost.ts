@@ -3,16 +3,15 @@ import { findSplitChildByPanelKind, insertRootSplitPane, type Layout } from './l
 /**
  * 意识(Ghost,.cindy 文件)的清单数据模型与校验 —— main / renderer 共用。
  *
- * 设计背景见 docs/Cindy架构设计/意识系统/README.md、layout-tree.md §6 与
- * runtime-sandbox.md:
+ * 跨模块安全与布局不变量见 AGENTS.md 规则 27 / 28:
  * - `.cindy` 是一个 zip 压缩包,根部放一份 `ghost.json` 清单(身份卡);
  * - 意识只有一种形态(2026-07-12 Lizi 定案):`kind: 'chip'`、schemaVersion 2,
- *   带代码,跑在独立沙箱进程,slots 白名单声明能力(runtime-sandbox.md
- *   §2/§5),注入必弹权限清单。早期无代码的声明型(declaration, v1)已
+ *   带代码,跑在独立沙箱进程,slots 白名单声明能力,注入必弹权限清单。
+ *   早期无代码的声明型(declaration, v1)已
  *   整体移除——Lizi 确认无存量包,不留兼容层(对齐 07-08"无曾用名兼容"
  *   先例);原规划的"经验"档(提示词层)同日取消,场景由 Skill 体系覆盖;
  * - 意识面板在布局树中的 panelKind 统一为 `ghost:<id>`,与布局引擎的
- *   「未安装意识面板隐藏、重装原位复活」语义(layout-tree.md §6 规则 5)对接。
+ *   与规则 27 的「未安装意识面板隐藏、重装原位复活」语义对接。
  *
  * 校验风格对齐 shared/layoutTree.ts:纯函数、返回 ok/reason,不抛异常;
  * main 端 GhostManager 与未来的 renderer 消费方共用,规则不漂移。
@@ -27,7 +26,7 @@ export const CINDY_FILE_EXT = '.cindy';
 /** 意识面板在布局树中的 panelKind 前缀。 */
 export const GHOST_PANEL_KIND_PREFIX = 'ghost:';
 
-/** 意识沙箱文件供片协议(runtime-sandbox.md §3;特权注册见 bootstrap)。 */
+/** 意识沙箱文件供片协议;特权注册见 bootstrap。 */
 export const GHOST_SCHEME = 'cindy-ghost';
 
 /**
@@ -56,11 +55,11 @@ export function parseGhostPartition(partition: unknown): string | null {
 const GHOST_ID_RE = /^[a-z0-9][a-z0-9-]{0,31}$/;
 
 /**
- * 七个卡槽(意识能力的全部出口,runtime-sandbox.md §5)。
+ * 八个卡槽(意识能力的全部出口,AGENTS.md 规则 28)。
  * 'cindy' = 请 Cindy 本体代办(借主机自带 AI 能力干活;2026-07-11 Lizi 定案
  * 由 'model' 更名——本质是 Cindy 在干活,与选模型无关;旧名在校验层作
  * 静默别名兼容,已装老包不消失)。
- * 'network' = 意识自带服务(C4,capability-permissions.md §7):域名白名单
+ * 'network' = 意识自带服务:域名白名单
  * 内的 HTTP 经主机代发(沙箱本身保持零直连),凭证锁主机保险库按声明注入。
  * 'notify' = 系统提示(2026-07-14):意识经管子请主机弹一条轻提示(toast),
  * 意识只供纯文本,整块 UI 主机画并带意识身份头(与订阅槽红条同一信任边界);
@@ -99,7 +98,7 @@ export interface GhostPanelDecl {
   title?: string;
   /** 停靠位置(相对主聊天窗);缺省 = right(2026-07-12 Lizi 定案)。 */
   position?: GhostPanelPosition;
-  /** 面板界面入口(安装目录内相对路径,意识自绘,C3b 渲染)。 */
+  /** 面板界面入口(安装目录内相对路径,意识自绘)。 */
   html: string;
   /** 面板最小宽度(px),布局引擎拖缝时的下限。 */
   minWidth?: number;
@@ -108,7 +107,7 @@ export interface GhostPanelDecl {
 }
 
 /**
- * 芯片型意识注册给 agent 的工具声明(卡槽②,C3d)。
+ * 芯片型意识注册给 agent 的工具声明(卡槽②)。
  * 声明式而非运行时动态注册(规则 9:确定性;且会话中途增删工具会破坏
  * prompt 缓存前缀,规则 10)——主机在会话建立时按"已装且唤醒"的意识
  * 快照注入工具集。
@@ -126,7 +125,7 @@ export interface GhostToolDecl {
 export const GHOST_MODEL_IMAGE_ACTIONS = ['generate', 'edit'] as const;
 export type GhostModelImageAction = (typeof GHOST_MODEL_IMAGE_ACTIONS)[number];
 
-/** cindy 槽·视频类可申请的动作(C3c-5:generate=文生视频,edit=参考图生视频)。 */
+/** cindy 槽·视频类可申请的动作(generate=文生视频,edit=参考图生视频)。 */
 export const GHOST_MODEL_VIDEO_ACTIONS = ['generate', 'edit'] as const;
 export type GhostModelVideoAction = (typeof GHOST_MODEL_VIDEO_ACTIONS)[number];
 
@@ -177,7 +176,7 @@ export interface GhostSubscribeNeeds {
   hooks?: GhostSubscribeHook[];
 }
 
-/* ── network 槽详单(C4,capability-permissions.md §7)────────────────────
+/* ── network 槽详单(AGENTS.md 规则 28)──────────────────────────────────
  * 意识自带服务:作者声明域名白名单 + 凭证需求,装入时钉死、确认框逐项展示。
  * 运行期沙箱仍零直连,所有出网经管子 fetch-request 由主机代发;凭证明文
  * 永不进沙箱——主机只在"该凭证声明的注入位置"拼进请求头。 */
@@ -742,7 +741,7 @@ export function isValidGhostId(id: unknown): id is string {
 }
 
 /**
- * 官方意识 id 前缀(capability-permissions.md §6):`cindy-` 保留给随包预装的
+ * 官方意识 id 前缀(AGENTS.md 规则 28):`cindy-` 保留给随包预装的
  * 第一方意识。用户装入通道(拖入/选文件/forge 转交)对该前缀**在 packaged
  * 版本上拒装**——否则卸载内置意识后,同 id 的第三方包可抢注官方身份,连带
  * 蹭走凭证别名(providerSecrets 的 GHOST_SECRET_STORAGE_ALIASES 按 id 生效,
@@ -765,7 +764,7 @@ export function isOfficialGhostId(id: string): boolean {
 }
 
 /**
- * 装入确认框的单项权限(C3c-1 逐项权限清单,capability-permissions.md §1)。
+ * 装入确认框的单项权限。
  * 纯数据描述:renderer 拼 `settings.ghosts.perm.<labelKey>` 翻译,`detail` 是
  * 作者自由文本(如工具描述)如实展示不翻译,`detailKey` 是主机固定说明的
  * i18n 后缀(如可执行代码的沙箱说明)——两者互斥。
@@ -796,7 +795,7 @@ const GHOST_CINDY_PERM_LABEL: Record<string, string> = {
 /**
  * 从身份卡静态推导逐项权限清单(装入前无需运行任何意识代码)。
  * 顺序即展示顺序:Cindy 代办 → 注册工具 → 聊天指令 → 面板 → 订阅/卡片 →
- * 可执行代码(先能力后载体,与 capability-permissions.md §1 表格一致)。
+ * 可执行代码(先能力后载体,与权限展示契约一致)。
  */
 export function ghostPermissionItems(manifest: GhostManifest): GhostPermissionItem[] {
   const items: GhostPermissionItem[] = [];
@@ -904,7 +903,7 @@ export function ghostPermissionItems(manifest: GhostManifest): GhostPermissionIt
   for (const slot of manifest.slots) {
     if (slot === 'subscribe') {
       // 订阅两档分列:旁听(元数据)常规位;拦截是全部槽里权限最重的一档,
-      // unshift 排到清单最顶(敏感项排最上,capability-permissions.md §1)。
+      // unshift 排到清单最顶(敏感项排最上)。
       if (manifest.subscribe?.topics?.length) {
         items.push({ key: 'subscribe:topics', kind: 'subscribe', labelKey: 'subscribeTopics' });
       }
@@ -1025,7 +1024,7 @@ export function ghostWebviewEntryPaths(manifest: GhostManifest): string[] {
 }
 
 /**
- * 装入带面板的意识后,把面板停进布局树(C2b,main 侧随 install 调用)。
+ * 装入带面板的意识后,把面板停进布局树(main 侧随 install 调用)。
  * - 树上已有同 kind 的 pane(重装)→ 返回 null:不动树,位置记忆保留、原位复活;
  * - 意识没声明面板 → null;
  * - 否则停在聊天区右侧(index 1),宽度占比/最小宽取清单声明。
@@ -1262,7 +1261,7 @@ export function validateGhostManifest(raw: unknown): ManifestValidation {
       return { ok: false, reason: '声明了 cindy 能力详单但 slots 未包含 "cindy"' };
     }
     cindy = {};
-    // 类目 → 合法动作表(C3c-5 起 image / video 两类;动作集恰好同名,但按
+    // 类目 → 合法动作表(当前包含 image / video 两类;动作集恰好同名,但按
     // 类目查表,未来某类目动作分叉时这里天然承接)。
     const actionTable: Record<string, readonly string[]> = {
       image: GHOST_MODEL_IMAGE_ACTIONS,
@@ -1349,7 +1348,7 @@ export function validateGhostManifest(raw: unknown): ManifestValidation {
     }
   }
 
-  // network 槽详单(C4):与 slots 含 'network' 成对(有详单必有槽;有槽
+  // network 槽详单:与 slots 含 'network' 成对(有详单必有槽;有槽
   // 无详单允许装入但零能力,同 cindy / subscribe 语义)。hosts 是核心声明;
   // secrets 每条必须带 inject(没有注入位置的凭证无处可用),inject.hosts
   // 必须是 hosts 声明条目的子集——结构上钉死"key 只流向它声明的域名"。
@@ -2158,7 +2157,7 @@ export function validateGhostManifest(raw: unknown): ManifestValidation {
 }
 
 /**
- * ── 管子(脑机接口)消息协议(C3d 主循环通电;runtime-sandbox.md §5.5)──
+ * ── 管子(脑机接口)消息协议(AGENTS.md 规则 28)──
  *
  * 下行(主机 → 电子脑,'ghost-pipe:message' 单向推):
  *   - tool-call:agent 经 ghost 总机派活。电子脑处理完必须用 send 上行
@@ -2211,7 +2210,7 @@ export interface GhostAppContextResult {
 }
 
 /**
- * 上行:聊天卡片供片(卡槽③,C3d' 海报模式)。意识为自己的一次 tool-call
+ * 上行:聊天卡片供片(卡槽③海报模式)。意识为自己的一次 tool-call
  * 提供聊天流卡片内容:收到 tool-call 后即可发第一版(过程海报),执行中
  * 整版换稿(主机按 GHOST_CARD_MIN_INTERVAL_MS 限速),交卷前发最终版。
  * html 必须是纯静态 HTML+CSS——脚本/事件属性/外链会被主机 sanitizer 剥除,
@@ -2388,7 +2387,7 @@ export type GhostPipeCindyRequest =
       tier?: GhostModelTier;
       model?: string;
       /**
-       * 归因号(C3c-3,可选):这单代办由哪次 tool-call 触发,把收到的
+       * 归因号(可选):这单代办由哪次 tool-call 触发,把收到的
        * callId 原样带上——配额记账、日志、用量面板由此对上"哪次调用花的
        * 钱"。面板交互等无 tool-call 语境的代办可不带(日志记 unattributed)。
        */
@@ -2601,7 +2600,7 @@ export interface GhostPipeEventVerdict {
   height?: number;
 }
 
-/* ── network 槽:代理 fetch 协议(C4,2026-07-12)──────────────────────
+/* ── network 槽:代理 fetch 协议(2026-07-12)──────────────────────────
  * 意识 cindy.send({type:'fetch-request',…}) → 主机白名单校验 + 凭证注入 +
  * 真实 HTTP → invoke resolve 值即 GhostPipeFetchResult。硬边界都在主机侧
  * 代码强制(规则 9),常量在此与手册/校验共用一份。 */

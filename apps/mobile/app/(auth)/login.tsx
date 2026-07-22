@@ -15,7 +15,17 @@ import {
   UserRound,
 } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import type { SocialProvider, VerificationKind } from '@cindy/auth-client';
+import {
+  AppleAuthenticationButton,
+  AppleAuthenticationButtonStyle,
+  AppleAuthenticationButtonType,
+} from 'expo-apple-authentication';
+import {
+  AuthApiError,
+  type AccountDeletionStatus,
+  type SocialProvider,
+  type VerificationKind,
+} from '@cindy/auth-client';
 
 import { useAuth } from '@/auth/AuthContext';
 import {
@@ -24,7 +34,7 @@ import {
   sanitizeCnPhoneInput,
   toCnE164,
 } from '@/auth/cnPhone';
-import { authErrorText, loginText } from '@/auth/loginMessages';
+import { authErrorText, getAuthLocale, loginText } from '@/auth/loginMessages';
 import { isNativeSocialProviderSupported } from '@/auth/nativeSocial';
 import { Text, TextInput } from '@/components/AppText';
 import { MainWindowActionButton } from '@/components/MobilePrimitives';
@@ -43,7 +53,7 @@ import {
 /** Auth-server login presentation. Credentials and tickets remain in AuthContext. */
 export default function LoginScreen() {
   const styles = useThemedStyles(makeStyles);
-  const { colors } = useTheme();
+  const { colors, mode } = useTheme();
   const auth = useAuth();
   const { markInteractive } = useObserve();
   const initializedLoginRef = useRef(false);
@@ -57,6 +67,8 @@ export default function LoginScreen() {
   const [ssoVerificationCode, setSsoVerificationCode] = useState('');
   const [bindingContact, setBindingContact] = useState('');
   const [bindingCode, setBindingCode] = useState('');
+  const [accountDeletionStatus, setAccountDeletionStatus] =
+    useState<AccountDeletionStatus | null>(null);
   const configIssues = getMobileConfigIssues();
   const disabled = auth.isBusy || !auth.initialized || configIssues.length > 0;
 
@@ -80,6 +92,70 @@ export default function LoginScreen() {
     setBindingContact('');
     setBindingCode('');
   }, [auth.loginState]);
+
+  useEffect(() => {
+    if (
+      !auth.initialized ||
+      auth.isAuthenticated ||
+      !auth.accountDeletionReceipt
+    ) {
+      setAccountDeletionStatus(null);
+      return;
+    }
+    let cancelled = false;
+    let polling = true;
+    let timer: ReturnType<typeof setInterval> | undefined;
+    const stopPolling = () => {
+      polling = false;
+      if (timer) {
+        clearInterval(timer);
+        timer = undefined;
+      }
+    };
+    const refreshStatus = async () => {
+      if (!polling) return;
+      try {
+        const status = await auth.getAccountDeletionStatus();
+        if (cancelled || !status) return;
+        if (status.status === 'cancelled') {
+          stopPolling();
+          await auth.clearAccountDeletionReceipt();
+          if (!cancelled) setAccountDeletionStatus(null);
+          return;
+        }
+        setAccountDeletionStatus(status);
+        if (status.status === 'completed') stopPolling();
+      } catch (cause) {
+        if (
+          cause instanceof AuthApiError &&
+          cause.code === 'ACCOUNT_DELETION_RECEIPT_INVALID'
+        ) {
+          stopPolling();
+          await auth.clearAccountDeletionReceipt();
+        } else if (
+          cause instanceof AuthApiError &&
+          cause.code === 'INVALID_RESPONSE'
+        ) {
+          // 契约漂移不是可重试网络错误：停止本次页面轮询，但保留 receipt，避免
+          // 丢失唯一查询能力；下次挂载仍可在服务端恢复后重试。
+          stopPolling();
+          if (!cancelled) setAccountDeletionStatus(null);
+        }
+      }
+    };
+    void refreshStatus();
+    timer = setInterval(() => void refreshStatus(), 30_000);
+    return () => {
+      cancelled = true;
+      stopPolling();
+    };
+  }, [
+    auth.accountDeletionReceipt,
+    auth.clearAccountDeletionReceipt,
+    auth.getAccountDeletionStatus,
+    auth.initialized,
+    auth.isAuthenticated,
+  ]);
 
   // EAS Observe: the stable login surface is ready before network actions complete.
   useEffect(() => {
@@ -256,22 +332,46 @@ export default function LoginScreen() {
         {socialProviders.length > 0 ? (
           <>
             <Divider />
-            {socialProviders.map((provider) => (
-              <MainWindowActionButton
-                action={{
-                  disabled,
-                  label: socialLabel(provider),
-                  onPress: () =>
+            {socialProviders.map((provider) =>
+              provider === 'apple' ? (
+                <AppleAuthenticationButton
+                  accessibilityState={{ disabled }}
+                  buttonStyle={
+                    mode === 'dark'
+                      ? AppleAuthenticationButtonStyle.WHITE
+                      : AppleAuthenticationButtonStyle.BLACK
+                  }
+                  buttonType={AppleAuthenticationButtonType.SIGN_IN}
+                  cornerRadius={24}
+                  key={provider}
+                  onPress={() => {
+                    if (disabled) return;
                     void auth.dispatchLoginAction({
                       type: 'native-social',
                       provider,
-                    }),
-                  testID: `login.${provider}Button`,
-                }}
-                key={provider}
-                style={styles.fullButton}
-              />
-            ))}
+                    });
+                  }}
+                  pointerEvents={disabled ? 'none' : 'auto'}
+                  style={styles.appleButton}
+                  testID="login.appleButton"
+                />
+              ) : (
+                <MainWindowActionButton
+                  action={{
+                    disabled,
+                    label: socialLabel(provider),
+                    onPress: () =>
+                      void auth.dispatchLoginAction({
+                        type: 'native-social',
+                        provider,
+                      }),
+                    testID: `login.${provider}Button`,
+                  }}
+                  key={provider}
+                  style={styles.fullButton}
+                />
+              ),
+            )}
           </>
         ) : null}
         {/* 企业 SSO 入口：输入组织标识发起单点登录（国内版隐藏邮箱后企业用户的登录路径） */}
@@ -683,6 +783,16 @@ export default function LoginScreen() {
           </View>
 
           <View style={styles.card}>
+            {accountDeletionStatus ? (
+              <AccountDeletionStatusPanel
+                onDismiss={
+                  accountDeletionStatus.status === 'completed'
+                    ? () => void auth.clearAccountDeletionReceipt()
+                    : undefined
+                }
+                status={accountDeletionStatus}
+              />
+            ) : null}
             {error ? (
               <Text style={styles.error} testID="login.error">
                 {error}
@@ -741,6 +851,59 @@ export default function LoginScreen() {
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
+}
+
+function AccountDeletionStatusPanel({
+  onDismiss,
+  status,
+}: {
+  onDismiss?: () => void;
+  status: AccountDeletionStatus;
+}) {
+  const styles = useThemedStyles(makeStyles);
+  const pending = status.status === 'pending';
+  return (
+    <View style={styles.deletionStatus} testID="login.accountDeletionStatus">
+      <Text style={styles.deletionStatusTitle}>
+        {pending
+          ? loginText('accountDeletionPendingTitle')
+          : status.status === 'processing'
+            ? loginText('accountDeletionProcessingTitle')
+            : loginText('accountDeletionCompletedTitle')}
+      </Text>
+      <Text style={styles.deletionStatusCopy}>
+        {pending
+          ? loginText('accountDeletionPendingCopy').replace(
+              '{date}',
+              formatAccountDeletionDate(status.deleteAfter),
+            )
+          : status.status === 'processing'
+            ? loginText('accountDeletionProcessingCopy')
+            : loginText('accountDeletionCompletedCopy')}
+      </Text>
+      {onDismiss ? (
+        <MainWindowActionButton
+          action={{
+            label: loginText('accountDeletionDismiss'),
+            onPress: onDismiss,
+            testID: 'login.accountDeletionDismissButton',
+          }}
+          density="compact"
+          style={styles.fullButton}
+        />
+      ) : null}
+    </View>
+  );
+}
+
+function formatAccountDeletionDate(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat(getAuthLocale(), {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  }).format(date);
 }
 
 function socialLabel(provider: SocialProvider): string {
@@ -868,6 +1031,23 @@ const makeStyles = (colors: ThemeColors) =>
       gap: spacing.md,
       padding: spacing.lg,
     },
+    deletionStatus: {
+      borderColor: colors.borderStrong,
+      borderRadius: radius.control,
+      borderWidth: StyleSheet.hairlineWidth,
+      gap: spacing.sm,
+      padding: spacing.md,
+    },
+    deletionStatusTitle: {
+      color: colors.textPrimary,
+      fontSize: typeScale.body,
+      fontWeight: fontWeight.semibold,
+    },
+    deletionStatusCopy: {
+      color: colors.textSecondary,
+      fontSize: typeScale.footnote,
+      lineHeight: lineHeight.caption,
+    },
     stepHeader: { gap: spacing.xs, marginBottom: spacing.xs },
     stepTitle: {
       color: colors.textPrimary,
@@ -938,6 +1118,7 @@ const makeStyles = (colors: ThemeColors) =>
       letterSpacing: spacing.sm,
       textAlign: 'center',
     },
+    appleButton: { height: 48, width: '100%' },
     fullButton: { minHeight: 48, minWidth: 0 },
     helper: {
       color: colors.textSecondary,

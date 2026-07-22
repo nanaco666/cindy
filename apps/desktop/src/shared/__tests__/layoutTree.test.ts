@@ -288,7 +288,7 @@ describe('setSplitChildFraction', () => {
   });
 });
 
-describe('insertRootSplitPane / removeRootSplitPaneByKind(加装/卸载,C1a)', () => {
+describe('insertRootSplitPane / removeRootSplitPaneByKind(加装/卸载)', () => {
   it('插入第三块:份额等比让出、总和保持 1、原树不动', () => {
     const layout = createDefaultLayout();
     const r = insertRootSplitPane(
@@ -347,7 +347,7 @@ describe('insertRootSplitPane / removeRootSplitPaneByKind(加装/卸载,C1a)', (
   });
 });
 
-describe('swapRootSplitChildrenByKind(N 面板换位,C1b)', () => {
+describe('swapRootSplitChildrenByKind(N 面板换位)', () => {
   it('三块中交换源与目标,fraction 随面板走,其余不动', () => {
     const layout = createDefaultLayout();
     const added = insertRootSplitPane(
@@ -371,7 +371,7 @@ describe('swapRootSplitChildrenByKind(N 面板换位,C1b)', () => {
   });
 });
 
-describe('transferSplitFraction(缝把手拖宽提交,C1c)', () => {
+describe('transferSplitFraction(缝把手拖宽提交)', () => {
   it('只动缝两侧邻居:from 减 to 增,第三方不受影响,总和保持 1', () => {
     const layout = createDefaultLayout();
     const added = insertRootSplitPane(

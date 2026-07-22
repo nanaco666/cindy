@@ -2,15 +2,21 @@ import { describe, expect, it } from 'vitest';
 import { spawnSync } from 'node:child_process';
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { delimiter, join, resolve } from 'node:path';
+import { join, resolve } from 'node:path';
+import {
+  bashCommandWorks,
+  resolveBashTestEnvironment,
+  withBashTestBin,
+} from './bashTestUtils';
 
 const scriptPath = resolve(process.cwd(), 'scripts/release-android-npkg.sh');
-const bashAvailable = spawnSync('bash', ['--version'], { encoding: 'utf8' }).status === 0;
-const itWithBash = bashAvailable ? it : it.skip;
+const bashEnvironment = resolveBashTestEnvironment();
+const itWithBash = bashEnvironment.available ? it : it.skip;
+const bashTestTimeoutMs = 35_000;
 // Windows 上 `python3` 常是 Microsoft Store 的 App Execution Alias 假可执行
 // (静默退出码 49、零输出),脚本内 JSON 解析会全体失败;此时在 binDir 架一个
 // 转发到真实 `python` 的 shim(CI ubuntu 的 python3 可用,不会写 shim)。
-const python3Works = spawnSync('python3', ['-c', 'print(1)'], { encoding: 'utf8' }).status === 0;
+const python3Works = bashCommandWorks(bashEnvironment, 'python3 -c "print(1)"');
 
 function writePython3ShimIfNeeded(binDir: string) {
   if (python3Works) return;
@@ -37,12 +43,19 @@ function runReleaseAndroid(
   chmodSync(curlPath, 0o755);
   writePython3ShimIfNeeded(binDir);
 
-  const result = spawnSync('bash', [scriptPath, ...args.map((arg) => (arg === '<apk>' ? apkPath : arg))], {
+  const result = spawnSync(bashEnvironment.command, [
+    bashEnvironment.toPath(scriptPath),
+    ...args.map((arg) => (arg === '<apk>' ? bashEnvironment.toPath(apkPath) : arg)),
+  ], {
     cwd: process.cwd(),
     encoding: 'utf8',
-    // PATH 分隔符必须按平台取(Windows 是 ';' 且路径自带 'C:'),硬编码 ':' 会
-    // 让 Git Bash 解析不到 fake curl,直接漏到真实 curl / 轮询超时。
-    env: { ...process.env, NPKG_CONFIG_DIR: configDir, PATH: `${binDir}${delimiter}${process.env.PATH ?? ''}`, ...extraEnv },
+    // The helper restores fake tools after Git Bash rewrites PATH during startup.
+    env: withBashTestBin(bashEnvironment, binDir, {
+      ...process.env,
+      NPKG_CONFIG_DIR: bashEnvironment.toPath(configDir),
+      ...extraEnv,
+    }),
+    timeout: 30_000,
   });
   rmSync(root, { recursive: true, force: true });
   return result;
@@ -75,7 +88,7 @@ esac
     expect(result.status).toBe(0);
     expect(result.stdout).toContain('/install/555');
     expect(result.stdout).toContain('/api/v1/packages/555/download/');
-  });
+  }, bashTestTimeoutMs);
 
   itWithBash('package 不符预期 → 拒绝打印安装链接', () => {
     const result = runReleaseAndroid(['upload', '<apk>'], `
@@ -89,7 +102,7 @@ esac
     expect(result.status).not.toBe(0);
     expect(result.stderr).toContain('com.xd.cindycn');
     expect(result.stdout).not.toContain('/install/');
-  });
+  }, bashTestTimeoutMs);
 
   itWithBash('NPKG_EXPECT_PACKAGE 覆盖生效', () => {
     const result = runReleaseAndroid(['upload', '<apk>'], `
@@ -102,5 +115,5 @@ esac
 `, { NPKG_EXPECT_PACKAGE: 'com.other.pkg' });
     expect(result.status).not.toBe(0);
     expect(result.stderr).toContain('com.other.pkg');
-  });
+  }, bashTestTimeoutMs);
 });

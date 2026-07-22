@@ -1,5 +1,5 @@
 /**
- * 跨语言协议常驻验收:examples/script-automation 的权威 Python 客户端
+ * 跨语言协议常驻验收:scheduler-host/python-client 的权威 Python 客户端
  * (protocol.py / maker_client.py / demo.py)对接真实 ScriptScheduleRunner,
  * 锁住 cindy-script/1 两端实现的兼容性(帧格式、UTF-8、stdout 纪律、
  * 能力降级)。协议或模板任何一端改动破坏兼容,这里先红。
@@ -17,10 +17,7 @@ import type { FireContext, Schedule, ScriptCapability } from '@lizi/maker-schedu
 
 import { ScriptScheduleRunner, type ScriptCapabilityBroker } from '../script-runner';
 
-const EXAMPLES_DIR = path.resolve(
-  fileURLToPath(new URL('.', import.meta.url)),
-  '../../../../../../examples/script-automation',
-);
+const PYTHON_CLIENT_DIR = fileURLToPath(new URL('../python-client/', import.meta.url));
 
 function detectPython(): string | null {
   for (const cmd of ['python', 'python3']) {
@@ -95,9 +92,9 @@ function stubBroker(): ScriptCapabilityBroker {
   };
 }
 
-describe.skipIf(!PYTHON)('script automation python template (examples/script-automation)', () => {
+describe.skipIf(!PYTHON)('script automation Python client', () => {
   it('uses the Cindy protocol with a current host and keeps the legacy protocol with an older host', () => {
-    cpSync(path.join(EXAMPLES_DIR, 'protocol.py'), path.join(tmp, 'protocol.py'));
+    cpSync(path.join(PYTHON_CLIENT_DIR, 'protocol.py'), path.join(tmp, 'protocol.py'));
     const {
       CINDY_SCRIPT_PROTOCOL: _cindyProtocol,
       XDT_MAKER_SCRIPT_PROTOCOL: _legacyProtocol,
@@ -134,7 +131,7 @@ describe.skipIf(!PYTHON)('script automation python template (examples/script-aut
 
   it('demo.py completes a full run: granted capability succeeds, denied one degrades', async () => {
     for (const file of ['protocol.py', 'maker_client.py', 'demo.py']) {
-      cpSync(path.join(EXAMPLES_DIR, file), path.join(tmp, file));
+      cpSync(path.join(PYTHON_CLIENT_DIR, file), path.join(tmp, file));
     }
     const logInfo = vi.fn();
     const runner = new ScriptScheduleRunner({
@@ -156,7 +153,7 @@ describe.skipIf(!PYTHON)('script automation python template (examples/script-aut
 
   it('stray stdout noise (script print + child process) never corrupts the protocol channel', async () => {
     for (const file of ['protocol.py', 'maker_client.py']) {
-      cpSync(path.join(EXAMPLES_DIR, file), path.join(tmp, file));
+      cpSync(path.join(PYTHON_CLIENT_DIR, file), path.join(tmp, file));
     }
     writeFileSync(
       path.join(tmp, 'noisy.py'),

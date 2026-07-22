@@ -11,7 +11,7 @@ import { z } from 'zod';
 import { withContacts } from './_shared.js';
 import { compactProfile } from './read.js';
 import type { ContactsMcpDeps } from '../types.js';
-import type { ContactsToolRegistry } from '../lizi_contactsToolRegistry.js';
+import type { ContactsToolRegistry } from '../cindy_contactsToolRegistry.js';
 
 export function registerContactsResolveTool(registry: ContactsToolRegistry, deps: ContactsMcpDeps): void {
   registry.register({

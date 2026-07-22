@@ -77,7 +77,15 @@ import type {
   RsbWindowCommandRouteRequest,
   RsbWindowCommandRouteResult,
 } from '../shared/rightSidebarWindow';
-import type { DesktopLoginAction, DesktopLoginActionResult } from '../shared/authIpc';
+import type {
+  DesktopAccountDeletionAvailabilityResult,
+  DesktopAccountDeletionChallengeResult,
+  DesktopAccountDeletionConfirmInput,
+  DesktopAccountDeletionConfirmResult,
+  DesktopAccountDeletionStatusResult,
+  DesktopLoginAction,
+  DesktopLoginActionResult,
+} from '../shared/authIpc';
 
 // Codex 元 IPC 全部升级到 maker.* (agentKind 参数化), preload 不再 import vendor/codex/ipcChannels。
 //   auth      → maker:auth:*(agentKind)
@@ -454,6 +462,10 @@ interface PluginEnableState {
   globalOverride?: { enabled: boolean } | null;
 }
 
+interface PluginEnableUpdateResult {
+  codexMcpRefreshed: boolean;
+}
+
 interface BrowserAvailability {
   detected: boolean;
   browserKind: string | null;
@@ -753,7 +765,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       id: string,
     ): {
       overrides: Record<string, string>;
-      /** 每类目一份下拉数据(能力键按类目取对应清单,C3c-5)。 */
+      /** 每类目一份下拉数据(能力键按类目取对应清单)。 */
       image: { options: Array<{ id: string; label: string }>; defaultModel: { id: string; label: string } };
       video: { options: Array<{ id: string; label: string }>; defaultModel: { id: string; label: string } };
     } => ipcRenderer.sendSync('ghosts:cindy-prefs', id),
@@ -821,7 +833,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     runtimeStates: (): Promise<{ states: Record<string, string> }> =>
       ipcRenderer.invoke('ghosts:runtime-states'),
     reload: (id: string): Promise<{ state: string }> => ipcRenderer.invoke('ghosts:reload', id),
-    // dev-only 运行时控制(C3a QA;packaged 版 main 侧不注册该 channel)。
+    // dev-only 运行时控制(packaged 版 main 侧不注册该 channel)。
     devRuntime: (action: 'status' | 'spawn' | 'stop' | 'crash', id?: string): Promise<unknown> =>
       ipcRenderer.invoke('ghosts:dev-runtime', action, id),
   },
@@ -1116,6 +1128,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     isAuthenticated: boolean;
     isCanary: boolean;
     deviceId: string;
+    hasAccountDeletionReceipt: boolean;
+    accountDeletionRestored: boolean;
   }> =>
     ipcRenderer.invoke('auth:initialize'),
   authGetLoginState: (): Promise<DesktopLoginActionResult> =>
@@ -1124,6 +1138,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('auth:dispatch-login-action', action),
   authLogout: (): Promise<void> => ipcRenderer.invoke('auth:logout'),
   authRefresh: (): Promise<boolean> => ipcRenderer.invoke('auth:refresh'),
+  authGetAccountDeletionAvailability: (): Promise<DesktopAccountDeletionAvailabilityResult> =>
+    ipcRenderer.invoke('auth:account-deletion:get-availability'),
+  authRequestAccountDeletionChallenge: (): Promise<DesktopAccountDeletionChallengeResult> =>
+    ipcRenderer.invoke('auth:account-deletion:request-challenge'),
+  authConfirmAccountDeletion: (
+    input: DesktopAccountDeletionConfirmInput,
+  ): Promise<DesktopAccountDeletionConfirmResult> =>
+    ipcRenderer.invoke('auth:account-deletion:confirm', input),
+  authGetAccountDeletionStatus: (): Promise<DesktopAccountDeletionStatusResult> =>
+    ipcRenderer.invoke('auth:account-deletion:get-status'),
+  authClearAccountDeletionReceipt: (): Promise<void> =>
+    ipcRenderer.invoke('auth:account-deletion:clear-receipt'),
+  authConsumeAccountDeletionRestoredNotice: (): Promise<boolean> =>
+    ipcRenderer.invoke('auth:account-deletion:consume-restored-notice'),
 
   // ── Profile 编辑(设置 → 用户卡片编辑名字 / 头像;直写服务端,跨设备生效) ──
   profileGetState: (): Promise<{
@@ -2362,7 +2390,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   cleanupCachedImages: (urls: string[]): Promise<void> =>
     ipcRenderer.invoke('image-cache:cleanup-files', urls),
 
-  // ── 媒体总仓存储管理(关于页存储空间卡片,迁移第 5 步)──
+  // ── 媒体总仓存储管理(关于页存储空间卡片)──
   // 占用统计 / 清理预检(报数)/ 执行清理 / 对账体检。scan 与 cleanup 的
   // draftUrls 由 renderer 从 composerDraftStore 现场收集(main 读不到
   // renderer 内存,草稿附件是合法的零引用 blob,必须随参取证防误删)。
@@ -3287,9 +3315,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // electronAPI.codex.* 已退役 —— auth / agent status / usage 全部走 electronAPI.maker.*(agentKind),
   // 详见下方 maker 块的 auth / agent / usage 三个子对象。
 
-  // ─── Maker Core 一阶段重构（新链路）────────────────────────────────────
-  // 与上面的 cc-agent / codex 老 API 双轨并行；renderer 通过 settings 开关切换。
-  // 详见 doc/agent/xdt-maker-architecture.md
+  // ─── Maker Core IPC ─────────────────────────────────────────────────────
+  // renderer 通过统一 maker API 按 agentKind 调用 Claude Code / Codex。
   maker: {
     listAvailableAgents: (): Promise<Array<'claude-code' | 'codex'>> =>
       ipcRenderer.invoke('maker:list-available-agents'),
@@ -3920,7 +3947,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // 智能通讯录(maker-contacts)—— 设置页管理 UI 的数据通道。
     // DTO 形状即 @lizi/maker-core contacts/types.ts(renderer 直接 type-import),
     // 这里保持 unknown 透传, 类型收敛在 renderer service 层做。
-    // 开关只 gate agent 侧 lizi_contacts MCP; 数据通道恒可用。
+    // 开关只 gate agent 侧 cindy_contacts MCP; 数据通道恒可用。
     contacts: {
       settingsGet: (): Promise<{ enabled: boolean; isCustomized: boolean }> =>
         ipcRenderer.invoke('maker:contacts:settings:get'),
@@ -4351,9 +4378,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.invoke('maker:plugins:list', workingDir),
       getState: (id: string, workingDir?: string): Promise<PluginEnableState> =>
         ipcRenderer.invoke('maker:plugins:get-state', id, workingDir),
-      setEnabled: (id: string, enabled: boolean): Promise<void> =>
+      setEnabled: (id: string, enabled: boolean): Promise<PluginEnableUpdateResult> =>
         ipcRenderer.invoke('maker:plugins:set-enabled', id, enabled),
-      clearEnabled: (id: string): Promise<void> =>
+      clearEnabled: (id: string): Promise<PluginEnableUpdateResult> =>
         ipcRenderer.invoke('maker:plugins:clear-enabled', id),
       setProjectEnabled: (workingDir: string, id: string, enabled: boolean): Promise<void> =>
         ipcRenderer.invoke('maker:plugins:set-project-enabled', workingDir, id, enabled),

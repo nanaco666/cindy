@@ -1,8 +1,7 @@
 /**
- * generatedMedia.ts — AI 生成产物(art / mivo / codex 生成图)的新世界存储适配器
- * (媒体总仓迁移第 2 步)。
+ * generatedMedia.ts — AI 生成产物(art / mivo / codex 生成图)的媒体总仓存储适配器。
  * ---------------------------------------------------------------------------
- * 设计:media-store.md §3「AI 生成作品」;AGENTS.md 规则 25。
+ * 契约:AGENTS.md 规则 25。
  *
  * 形状对齐 lizi-mcps 的 art 存储契约(`storage.saveImage/resolveImageRef`、
  * `videoStorage.saveVideo`),替换 `createArtMediaStore/createArtVideoStore`
@@ -14,7 +13,7 @@
  * 记账口径:生成时**零引用入仓**(art service 是无会话上下文的单例,拿不到
  * sessionId)——归属在消息落库的唯一汇聚点(localDb createMessage)由
  * commitChatImageUrls 统一挂 session-attachment 引用;落库前的零引用窗口受
- * media-store.md §4「零引用≠无主」不变量保护。
+ * recycler.ts 的「零引用≠无主」不变量保护。
  */
 
 import fs from 'node:fs/promises';
@@ -52,12 +51,12 @@ async function assertOnDisk(absPath: string, ref: string): Promise<void> {
 
 /**
  * 图片存储适配器:saveImage 入总仓(零引用),resolveImageRef 三分支——
- * 新世界 blob 地址 / 老世界 xdt-image 地址(改图的源图可能是历史图)/
+ * 媒体总仓 blob 地址 / 历史 xdt-image 地址(改图的源图可能是历史图)/
  * 绝对路径(用户 @ 的本地图)。
  */
 export function createBlobImageStorage(
   opts: {
-    /** 老 xdt-image:// 地址 → 绝对路径(真身 imageCacheStore.resolveSafe;只读老世界)。 */
+    /** 历史 xdt-image:// 地址 → 绝对路径(真身 imageCacheStore.resolveSafe;只读兼容层)。 */
     resolveLegacyImageRef: (ref: string) => { absPath: string };
   },
   db?: LedgerDb,

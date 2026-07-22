@@ -1,7 +1,7 @@
 /**
  * VendorSegmentedSwitcher —— NewMaker 主区域内的 Agent 引擎切换控件。
  * ---------------------------------------------------------------------------
- * 设计稿对照(doc/design_docs/cc-agent-view.pen 节点 HPzt0/wBlHH):
+ * 视觉规格:
  *   - 容器:pill (9999px),宽 220,padding 3,gap 2
  *           Light fill #e5e5e5 / Dark fill #1f1f1e + 1px Board #3c3c3a
  *   - segment:pill,padding [6,14],fill_container,justifyContent center,gap 6

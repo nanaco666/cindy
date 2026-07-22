@@ -99,8 +99,8 @@ canary 与 stable 共享同一批底层文件。覆盖前自动把当前 stable 
 
 **两条渠道相同、与区域无关的配置**(同一份 `.env`):
 
-- macOS 公证账号:`APPLE_APP_PASSWORD`(必填,env,zhouyi@xd.com 名下的 App 专用密码)
-  + `macSigning.appleId = zhouyi@xd.com`(该账号对两个 team 均有公证权限,已实测;
+- macOS 公证账号:`APPLE_APP_PASSWORD`(必填,env,release@example.com 名下的 App 专用密码)
+  + `macSigning.appleId = release@example.com`(该账号对两个 team 均有公证权限,已实测;
   换公证账号时两处必须成对更新——App 专用密码与 Apple ID 一一绑定)。签名**证书**按区域走 `macSigning`(见上表)。
 - Windows 签名:`NPKG_TOKEN` **必填硬闸**(npkg 内网签名服务)——缺 token 构建前终止,签名后对安装器与热更包主 exe 做 Authenticode 验签,非 Valid 一律中止;未签名 exe 禁止出渠道(调试用 `package-desktop.mjs --allow-unsigned`)。
 - 渠道冻结硬闸:任一区域都禁止把 OSS prefix 指到已冻结的老 `/xdt-maker` 渠道
@@ -118,11 +118,11 @@ canary 与 stable 共享同一批底层文件。覆盖前自动把当前 stable 
 {
     "cn": {
         "oss":        { "cdnBaseUrl": "…", "bucket": "…", "prefix": "…", "ossRegion": "…" },
-        "macSigning": { "appleId": "zhouyi@xd.com", "teamId": "NTC4BJ542G", "signIdentity": "Developer ID Application: X.D. Network Inc. (NTC4BJ542G)" }
+        "macSigning": { "appleId": "release@example.com", "teamId": "NTC4BJ542G", "signIdentity": "Developer ID Application: X.D. Network Inc. (NTC4BJ542G)" }
     },
     "global": {
         "oss":        { "cdnBaseUrl": "…", "bucket": "…", "prefix": "…", "ossRegion": "…" },
-        "macSigning": { "appleId": "zhouyi@xd.com", "teamId": "SX9RG894L5", "signIdentity": "Developer ID Application: XD Entertainment Pte Ltd (SX9RG894L5)" }
+        "macSigning": { "appleId": "release@example.com", "teamId": "SX9RG894L5", "signIdentity": "Developer ID Application: XD Entertainment Pte Ltd (SX9RG894L5)" }
     }
 }
 ```

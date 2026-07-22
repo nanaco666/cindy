@@ -740,7 +740,7 @@ export function SessionCard({
               'mt-[4px] text-11 leading-[1.4]',
               '[display:-webkit-box] [-webkit-box-orient:vertical] overflow-hidden',
               'transition-[color] duration-500',
-              // 黄一孟 review:等待决策不再额外多出一种黄色,与 running 同口径走 muted/次级色。
+              // 评审:等待决策不再额外多出一种黄色,与 running 同口径走 muted/次级色。
               isMuted ? 'text-[var(--text-disabled)]' : 'text-[var(--text-secondary)]',
             )}
             style={{ WebkitLineClamp: cardPreviewLineClamp }}
@@ -749,7 +749,7 @@ export function SessionCard({
           </p>
         )}
 
-        {/* 底部 meta 行(黄一孟 review 定稿):标题 / 正文之后另起整整一行。
+        {/* 底部 meta 行(评审定稿):标题 / 正文之后另起整整一行。
             左侧图标簇——状态/agent 图标(含运行呼吸 + 需关注红点 + 草稿)、定时任务标识、
             远程业务标识、worktree;右下角业务时间。中间空位自然由图标簇与时间撑开。 */}
         <div

@@ -290,7 +290,7 @@ export function clearDraftAndNotify(sessionId: string): void {
 }
 
 /**
- * 媒体回收器活引用取证(media-store.md §4 暂存区 (1)):全部会话草稿附件的
+ * 媒体回收器活引用取证(recycler.ts 的输入框草稿暂存区):全部会话草稿附件的
  * URL。草稿附件是合法的零引用 blob(粘贴=草稿、发送才挂引用),而本 Map 是
  * renderer 内存、main 读不到——存储清理由设置页发起时把这份清单随 IPC 带给
  * main,回收器把它们当活引用豁免。宁可多报(混着老 xdt-image 地址也没关系,

@@ -29,6 +29,12 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
+    // The release-script tests spawn a real bash + shell script + curl/python
+    // shims; on Windows (Git Bash) that process churn is slow and, under the
+    // full suite's worker-pool contention, blows past vitest's 5s default. Give
+    // Windows a wider default; keep the standard 5s on Linux/macOS/CI so real
+    // hangs still surface promptly.
+    testTimeout: process.platform === 'win32' ? 20_000 : 5_000,
     env: {
       EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL: 'https://relay.example.invalid',
       EXPO_PUBLIC_XDT_MOBILE_VOICE_LITELLM_BASE_URL: 'https://gateway.example.invalid',

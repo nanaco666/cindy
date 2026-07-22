@@ -1,7 +1,7 @@
 /**
  * unified-downloader — M3: Streaming SHA256 integrity check.
  * ---------------------------------------------------------------------------
- * Tech spec: .sivi/docs/tech_specs/unified-downloader-frontend.md (M3)
+ * Checksum verification and integrity errors are maintained in this module.
  *
  * Two entry points:
  *   - computeHash(filePath)        — one-shot file hash (used for fromCache check)

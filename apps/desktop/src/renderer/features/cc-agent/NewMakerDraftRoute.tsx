@@ -47,6 +47,11 @@ import {
   type FolderPickerSelectSource,
 } from '@/components/new-chat/FolderPickerPopover';
 import { RightSidebarToggle } from '@/components/layout/RightSidebarToggle';
+import {
+  AddRemoteProjectDialog,
+  type RemoteProjectTarget,
+} from '@/components/new-chat/AddRemoteProjectDialog';
+import { useHasAnyRemoteTarget } from '@/hooks/useHasAnyReadyRemoteHost';
 import { buildDeviceLinkCreateArgs } from './deviceLinkCreateArgs';
 import { VendorSegmentedSwitcher } from '@/components/new-chat/VendorSegmentedSwitcher';
 import { TopRightChipStack, TopRightChipStackProvider } from '@/components/chat/TopRightChipStack';
@@ -77,6 +82,7 @@ import {
   plainTextToTiptapDoc,
   saveDraft as saveComposerDraft,
 } from '@/lib/composerDraftStore';
+import type { JSONContent } from '@tiptap/core';
 import { base64ToUint8Array } from '@/lib/fileTypeInference';
 import { showWorktreeError } from '@/lib/worktreeToast';
 import type { CreateWorktreeResp } from '@/lib/worktree.types';
@@ -115,15 +121,26 @@ import {
 import { isGlobalDropIntercepted } from '@/lib/globalDropIntercept';
 import { createLogger } from '@/lib/logger';
 import { matchNavigationCommandName, tryHandleNavigationCommand } from '@/lib/navigationCommands';
-import { useAgentCapabilities } from '@/hooks/useAgentCapabilities';
+import {
+  useAgentCapabilities,
+  evictDeviceCapabilities,
+  prefetchDeviceCapabilities,
+  type AgentCapabilities,
+} from '@/hooks/useAgentCapabilities';
 import { useProviders } from '@/hooks/useProviders';
-import { useDeviceProviders } from '@/hooks/useDeviceProviders';
+import {
+  useDeviceProviders,
+  evictDeviceProviders,
+  prefetchDeviceProviders,
+} from '@/hooks/useDeviceProviders';
+import { evictDeviceGitSafetySettings } from '@/hooks/useGitSafetySettings';
 import {
   getProjectPickerDisplayName,
   useProjectPickerOptions,
 } from '@/hooks/useProjectPickerOptions';
-import { resolveFastSupported } from '@/lib/providerModels';
-import { effectiveSourceIdForModel, getModel } from '@lizi/model-providers';
+import { resolveFastSupported, deriveModelsFromProviders } from '@/lib/providerModels';
+import { effectiveSourceIdForModel, getModel, sessionModelSupportsFastMode, connectedProvidersForAgent } from '@lizi/model-providers';
+import { isSubscriptionDirectModel } from '../../../shared/subscriptionModels';
 import {
   resolveDeviceLinkDraftDefaults,
   type DeviceLinkDraftSelection,
@@ -148,6 +165,19 @@ const IS_MAC_PLATFORM = typeof window !== 'undefined' && window.electronAPI?.pla
 
 function makeDraftSessionId(): string {
   return crypto.randomUUID();
+}
+
+function stripLocalMentionChips(node: JSONContent | null): JSONContent | null {
+  if (!node) return null;
+  if (node.type === 'mentionChip') {
+    const kind = (node.attrs as { kind?: string } | undefined)?.kind;
+    if (kind === 'file' || kind === 'dir' || kind === 'agent') return null;
+  }
+  if (!node.content) return node;
+  const filtered = node.content
+    .map((child) => stripLocalMentionChips(child))
+    .filter((c): c is JSONContent => c !== null);
+  return { ...node, content: filtered };
 }
 
 /**
@@ -274,6 +304,11 @@ export function NewMakerDraftRoute() {
   const { createSession } = useCCSessions();
   const vendorAuthGate = useVendorAuthGate();
   const refreshWorktrees = useRefreshWorktrees();
+
+  // 「添加远程项目」入口:gate = 至少一台 ready SSH 主机 或 一台可控 device-link 设备。
+  // 入口渲染在 mode pill 的 FolderPickerPopover 里(Globe 项),点开下面这个弹窗。
+  const hasAnyRemoteTarget = useHasAnyRemoteTarget();
+  const [addRemoteProjectOpen, setAddRemoteProjectOpen] = useState(false);
   const outletContext = useOutletContext<{
     rightSidebarCollapsed?: boolean;
     onToggleRightSidebar?: () => void;
@@ -395,11 +430,11 @@ export function NewMakerDraftRoute() {
 
   // device-link:在远程设备上新建会话时,能力 / 模型必须来自该被控端(草稿带 deviceLinkDeviceId);
   // 本地草稿 effectiveDeviceLinkDeviceId 为 undefined → 走本地能力(行为不变)。
-  const { capabilities } = useAgentCapabilities(capabilityAgentKind, effectiveDeviceLinkDeviceId);
+  const { capabilities, loading: capabilitiesLoading } = useAgentCapabilities(capabilityAgentKind, effectiveDeviceLinkDeviceId);
   // device-link「以被控端为准」:远程草稿用被控端经隧道带来的 providers(per-provider,含 fast 能力);
   // 本地草稿用本机 providers。fast 判定统一交给 resolveFastSupported(不在控制端另写远程逻辑)。
   const { providers: localProviders } = useProviders();
-  const { providers: deviceProviders } = useDeviceProviders(effectiveDeviceLinkDeviceId);
+  const { providers: deviceProviders, loading: deviceProvidersLoading } = useDeviceProviders(effectiveDeviceLinkDeviceId);
   const providers = effectiveDeviceLinkDeviceId ? deviceProviders : localProviders;
 
   // 草稿当前**生效来源 id**(= ModelSelector 高亮 / ChatInput effectiveSourceId 同口径):显式选中且
@@ -466,11 +501,17 @@ export function NewMakerDraftRoute() {
   }>({ loaded: false, value: null });
   const [dlSel, setDlSel] = useState<DeviceLinkDraftSelection | null>(null);
   const dlSeedKeyRef = useRef<string | null>(null);
+  const skipDefaultsRefetchRef = useRef(false);
 
   // 拉被控端当前草稿值(每次 deviceId / vendor 变化重拉;失败 / 旧版 → value=null 触发 fallback)。
   useEffect(() => {
     if (!isDeviceLinkDraft || !effectiveDeviceLinkDeviceId) {
       setRemoteDraftState({ loaded: false, value: null });
+      return;
+    }
+    // handoff 路径已 inline 拉取并 set 了 remoteDraftState,跳过本次 effect 重拉。
+    if (skipDefaultsRefetchRef.current) {
+      skipDefaultsRefetchRef.current = false;
       return;
     }
     let cancelled = false;
@@ -706,6 +747,181 @@ export function NewMakerDraftRoute() {
     ? (deviceLinkInitial?.providerId ?? null)
     : (chatPrefs.providerId ?? null);
 
+  // 弹窗确认添加后的落点:SSH 立即建会话 + navigate;device-link 把当前草稿指向被控端项目,
+  // 首条消息发出时走既有 create-on-send 链路(见下方 isDeviceLinkDraft 分支)。
+  const handleRemoteProjectAdded = useCallback(
+    async (target: RemoteProjectTarget) => {
+      // vendor 由外层 VendorSegmentedSwitcher (draft.vendor) 单一决策 —— dialog 不再让用户选。
+      const draftVendor: 'cc' | 'codex' = draft.vendor === 'codex' ? 'codex' : 'cc';
+
+      if (target.kind === 'device-link') {
+        // device-link:**不**像 SSH 立即建会话(会在被控端留空会话)。改为把当前草稿指向该被控
+        // 设备项目,用户发首条消息时走既有 device-link create-on-send 链路(与侧边栏「+新建」同款,
+        // 见本文件下方 isDeviceLinkDraft 分支)。我们已在 /cc-agent/new,无需 navigate。
+        //
+        // 打开远程草稿前先驱逐该设备的能力 / 供应商 / Git safety 缓存:这些是「订阅时拉一次、
+        // 无 TTL、只在设备下线才 evict」的快照,被控端在线期间改了模型目录或 Rewind safety
+        // 设置控制端不会自动刷新。evict 后显式 prefetch:若选的是同一 deviceId,hook 的
+        // useEffect 不会因 deps 不变重跑 fetch,只有 subscriber 通知路径能送达新数据。
+        // 验证设备可达:直接 invoke 能力 + 供应商(不走 swallow 的 prefetch)。
+        // 失败 throw → dialog 留 open,不破坏当前草稿状态。
+        const [freshCaps] = await Promise.all([
+          window.electronAPI.deviceLink.invoke(target.deviceId, 'maker:get-capabilities', [capabilityAgentKind]) as Promise<AgentCapabilities>,
+          window.electronAPI.deviceLink.invoke(target.deviceId, 'maker:provider:list', []),
+        ]);
+        // defaults 允许失败(旧版被控端无此 channel → capabilities 默认 fallback)。
+        const freshDefaults = await window.electronAPI.deviceLink
+          .invoke(target.deviceId, 'maker:get-new-maker-defaults', [capabilityAgentKind])
+          .then((v) => (v as RemoteDraftDefaults | null) ?? null)
+          .catch(() => null);
+        // 设备验证通过(direct invoke 成功)。在所有能 throw 的路径之后才 evict,
+        // 避免失败时破坏当前草稿的 hook 快照。evict + prefetch 刷新 hook 缓存;
+        // 即使 prefetch 内部 swallow error,send/goal 的 capabilitiesLoading/deviceProvidersLoading
+        // gate 会阻止在 hook 尚未就绪时发送。
+        evictDeviceCapabilities(target.deviceId);
+        evictDeviceProviders(target.deviceId);
+        evictDeviceGitSafetySettings(target.deviceId);
+        await Promise.all([
+          prefetchDeviceCapabilities(target.deviceId),
+          prefetchDeviceProviders(target.deviceId),
+        ]);
+        dlSeedKeyRef.current = `${target.deviceId}:${capabilityAgentKind}`;
+        setDlSel(resolveDeviceLinkDraftDefaults(freshCaps, freshDefaults, undefined, capabilityAgentKind));
+        setRemoteDraftState({ loaded: true, value: freshDefaults });
+        setWtEnabled(false);
+        setWtBaseRepo(null);
+        setWtSourceBranch('');
+        // patchDraft 会改 effectiveDeviceLinkDeviceId → 触发 defaults effect 重拉;
+        // 我们已 inline 拉取了 freshDefaults,跳过那次重拉避免覆盖。
+        // 清除草稿中基于本地/前设备文件系统的 @file/@dir mention chips。
+        const dlDraft = getComposerDraft(NEW_MAKER_DRAFT_KEY);
+        if (dlDraft?.text) {
+          saveComposerDraft(NEW_MAKER_DRAFT_KEY, {
+            ...dlDraft,
+            text: stripLocalMentionChips(dlDraft.text),
+          });
+        }
+        // 只有 deviceId 真正变化时 effect 才会重跑并消费 skip flag;同设备不设。
+        if (target.deviceId !== effectiveDeviceLinkDeviceId) {
+          skipDefaultsRefetchRef.current = true;
+        }
+        patchDraft({
+          workingDir: target.path,
+          remoteHostId: null,
+          deviceLinkDeviceId: target.deviceId,
+          deviceLinkDeviceName: target.deviceName,
+          extraDirs: [],
+        });
+        return;
+      }
+
+      // SSH:lazy-create(workspaceKind='project',第一条消息发出时 agent 进程才真正起),
+      // 立即建会话记录并 navigate 过去。建会话约定与本文件其它 createSession 路径一致
+      // (createSession + makerChatStore.setSessionRuntime + navigate)。
+      //
+      // SSH 始终取本地(controller)的 provider/fast/effort 上下文,不复用 device-link 派生值。
+      // providerId 只保留用户显式选中且仍有效的来源,否则 null(默认路由,不固化默认来源)。
+      // 使用 draftInitialModel(用户在 composer 里看到的模型),而不是 chatPrefs.model
+      // (当 device-link 草稿活跃时 chatPrefs.model 是旧的 controller-local 值)。
+      // bridge 模型(chatgpt/ / xai/)在远程模式不可用(不经本地 compat-proxy),需降级。
+      // 非 bridge 模型也必须在已连接的本地来源中存在,否则 SSH 会话首消息会被阻塞。
+      const sshConnected = connectedProvidersForAgent(localProviders, capabilityAgentKind);
+      const sshVisibleModels = deriveModelsFromProviders(sshConnected, capabilityAgentKind)
+        .filter((m) => !isSubscriptionDirectModel(m.id));
+      let sshModel = draftInitialModel;
+      if (isSubscriptionDirectModel(sshModel) || !sshVisibleModels.some((m) => m.id === sshModel)) {
+        if (!sshVisibleModels.length) {
+          throw new Error(t('ccAgent.draft.createSessionFailed'));
+        }
+        sshModel = sshVisibleModels[0].id;
+      }
+      // 使用 chatInitialProviderId(显示给用户的来源,device-link 活跃时取镜像值)而非
+      // chatPrefs.providerId(可能是旧的 controller-local 值)。
+      const rawProviderId = chatInitialProviderId ?? null;
+      const sshLocalSourceId = effectiveSourceIdForModel(
+        localProviders, rawProviderId, sshModel, capabilityAgentKind,
+      );
+      // 只有用户显式选中的来源在本地仍可用时才保留;否则 null = 走默认路由。
+      const sshProviderId = (rawProviderId && sshLocalSourceId === rawProviderId) ? rawProviderId : null;
+      // fast mode:来源不支持就关闭;支持时保留用户在 composer 里看到的 effectiveFastMode
+      // (device-link 草稿活跃时来自 dlSel/deviceLinkInitial,本地草稿来自 per-model 记忆)。
+      const sshSourceSupportsFast = sessionModelSupportsFastMode(localProviders, sshProviderId, sshModel, capabilityAgentKind);
+      const sshFastMode = sshSourceSupportsFast ? effectiveFastMode : false;
+      // effort: 用 draftInitialEffort(用户在 composer 里看到的值)作 currentEffort,
+      // 再由 resolveNewMakerDraftEffort 按本地 SSH model 支持的 levels 做 clamp。
+      const sshLocalProvider = sshLocalSourceId ? localProviders.find((p) => p.id === sshLocalSourceId) : undefined;
+      const sshLocalModelDesc = sshLocalProvider ? getModel(sshLocalProvider, sshModel, capabilityAgentKind) : undefined;
+      const sshEffort = resolveNewMakerDraftEffort({
+        currentEffort: draftInitialEffort,
+        presetEffort: sshLocalSourceId ? getProviderModelEffort(capabilityAgentKind, sshLocalSourceId, sshModel) : undefined,
+        efforts: sshLocalModelDesc?.efforts ?? [],
+        defaultEffort: sshLocalModelDesc?.defaultEffort ?? null,
+      });
+      try {
+        const newSession = await createSession({
+          agentKind: draftVendor,
+          workingDir: target.path,
+          workspaceKind: 'project',
+          permissionMode: chatInitialPermissionMode,
+          model: sshModel,
+          effort: sshEffort,
+          fastMode: sshFastMode,
+          planModeEnabled: effectivePlanMode,
+          remoteHostId: target.hostId,
+          providerId: sshProviderId,
+          extraDirs: [],
+        });
+        if (!newSession) {
+          throw new Error('createSession returned null');
+        }
+        if (effectivePlanMode) patchCurrentVendorPrefs({ planMode: false });
+        makerChatStore.setSessionRuntime(newSession.id, {
+          agentKind: draftVendor === 'codex' ? 'codex' : 'claude-code',
+          fastMode: sshFastMode,
+          planModeEnabled: effectivePlanMode,
+        });
+        // 把草稿页已输入的文本/附件移交到新会话,避免 navigate 后丢失。
+        // rehomeDraftAttachments 把 base64 和 xdt-image://__new_maker_draft__/ 迁移到
+        // 新 session 的 image cache,避免持久化孤立引用。browserComments 的 screenshot
+        // 也是 AttachedFile,同样需要 rehome。
+        const existingDraft = getComposerDraft(NEW_MAKER_DRAFT_KEY);
+        if (existingDraft) {
+          // SSH agent 无法读取控制端本地文件;只保留 image 类附件(可 rehome 到 cache URL),
+          // 丢弃 path-based 非 image 附件(PDF / text 等)。
+          const imageOnly = existingDraft.attachments.filter((f) => f.category === 'image');
+          const rehomedAttachments = await rehomeDraftAttachments(imageOnly, newSession.id);
+          let rehomedComments = existingDraft.browserComments;
+          if (rehomedComments && rehomedComments.length > 0) {
+            rehomedComments = await Promise.all(
+              rehomedComments.map(async (c) => {
+                const rehomed = await rehomeDraftAttachments([c.screenshot], newSession.id);
+                return rehomed?.[0] ? { ...c, screenshot: rehomed[0] } : c;
+              }),
+            );
+          }
+          // SSH 环境下本地 @file/@dir mention 无效,从 Tiptap 文档中剥离。
+          const strippedText = existingDraft.text
+            ? stripLocalMentionChips(existingDraft.text)
+            : existingDraft.text;
+          saveComposerDraft(newSession.id, {
+            ...existingDraft,
+            text: strippedText,
+            attachments: rehomedAttachments ?? [],
+            browserComments: rehomedComments,
+          });
+          clearComposerDraftAndNotify(NEW_MAKER_DRAFT_KEY);
+          attachmentState.clearFiles();
+        }
+        resetDraftWorkspaceAfterSend();
+        navigate(`/cc-agent/${newSession.id}`, { replace: true });
+      } catch (err) {
+        log.error('[add remote project]', err);
+        throw err;
+      }
+    },
+    [draft.vendor, chatPrefs, chatInitialPermissionMode, chatInitialProviderId, draftInitialModel, draftInitialEffort, effectiveFastMode, effectiveDeviceLinkDeviceId, localProviders, capabilityAgentKind, effectivePlanMode, attachmentState, createSession, navigate, t],
+  );
+
   // ─── 切 vendor ──────────────────────────────────────────────────────
   // 把"当前 vendor 的最新 prefs"落进 lastByVendor[oldVendor],然后切到新 vendor。
   // ChatInput 的 initial* 由父级传入,vendor 切换后 ChatInput 重新 mount(key 变化)
@@ -909,6 +1125,9 @@ export function NewMakerDraftRoute() {
       },
     ): boolean | undefined => {
       if (sendInFlightRef.current) return false;
+      // device-link 切设备后,capabilities/providers hook 可能还没 re-render 到新设备快照;
+      // 此时 effectiveFastMode / supportsFastMode / sendProviderId 仍基于旧设备。
+      if (isDeviceLinkDraft && (capabilitiesLoading || deviceProvidersLoading)) return false;
       // 草稿里选定的来源(供应商):ChatInput 在发送时把"仍连接的显式选择"经 opts 传上来
       // (未选 / 已断开 → null = 跟随默认路由)。透传给 createSession 落盘 sessions.provider_id,
       // 让新会话首个请求就走对来源,与"会话内切来源"行为一致。device-link 远程会话不支持(下方分支跳过)。
@@ -1407,6 +1626,8 @@ export function NewMakerDraftRoute() {
       effectiveRemoteHostId,
       isRemoteProjectDraft,
       isDeviceLinkDraft,
+      capabilitiesLoading,
+      deviceProvidersLoading,
       effectiveDeviceLinkDeviceId,
       effectiveDeviceLinkDeviceName,
       effectiveExtraDirs,
@@ -1436,6 +1657,9 @@ export function NewMakerDraftRoute() {
   // 失败抛错 → NewGoalDialog 内联报错并保持打开。
   const handleCreateGoal = useCallback(
     async (objective: string, limits: GoalLimitValues): Promise<void> => {
+      if (isDeviceLinkDraft && (capabilitiesLoading || deviceProvidersLoading)) {
+        throw new Error(t('ccAgent.draft.deviceStillLoading'));
+      }
       const { proceed } = await vendorAuthGate.checkAndConfirm(authVendor, {
         deviceId: effectiveDeviceLinkDeviceId,
       });
@@ -1550,6 +1774,8 @@ export function NewMakerDraftRoute() {
     },
     [
       isDeviceLinkDraft,
+      capabilitiesLoading,
+      deviceProvidersLoading,
       vendorAuthGate,
       authVendor,
       effectiveDeviceLinkDeviceId,
@@ -1720,6 +1946,8 @@ export function NewMakerDraftRoute() {
                   onOpenChange={handleFolderPickerOpenChange}
                   onSelect={handleModePickerSelect}
                   projectOptions={projectPickerOptions}
+                  // 仅在有可用远程目标时暴露「添加远程项目」入口(SSH ready 主机 / device-link 可控设备)。
+                  onAddRemoteProject={hasAnyRemoteTarget ? () => setAddRemoteProjectOpen(true) : undefined}
                   side="bottom"
                   align="end"
                   sideOffset={6}
@@ -1907,6 +2135,14 @@ export function NewMakerDraftRoute() {
           onOpenChange={crossAgentDialog.onOpenChange}
           onConfirm={crossAgentDialog.onConfirm}
           onCancel={crossAgentDialog.onCancel}
+        />
+        {/* 添加远程项目弹窗 (入口在 mode pill 的 FolderPickerPopover 里, gate 走 hasAnyRemoteTarget =
+            SSH ready 主机 或 device-link 可控设备)。onProjectAdded 带 kind:SSH 立即建会话 + navigate;
+            device-link 把当前草稿指向被控设备项目,发首条消息时 create-on-send。 */}
+        <AddRemoteProjectDialog
+          open={addRemoteProjectOpen}
+          onOpenChange={setAddRemoteProjectOpen}
+          onProjectAdded={handleRemoteProjectAdded}
         />
       </div>
     </TopRightChipStackProvider>

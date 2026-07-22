@@ -65,6 +65,16 @@ function validateRuntime(agent: string, rt: unknown): ValidationResult {
     if (typeof mm.name !== 'string' || mm.name.trim().length === 0) {
       return invalid(`runtime '${agent}' model.name required`);
     }
+    if (
+      mm.contextWindow !== undefined
+      && (
+        typeof mm.contextWindow !== 'number'
+        || !Number.isFinite(mm.contextWindow)
+        || mm.contextWindow <= 0
+      )
+    ) {
+      return invalid(`runtime '${agent}' model.contextWindow must be a positive number`);
+    }
   }
   if (r.headers !== undefined) {
     if (!r.headers || typeof r.headers !== 'object' || Array.isArray(r.headers)) {
@@ -167,7 +177,11 @@ export function validateCustomProviderConfig(config: unknown): ValidationResult 
 function normalizeRuntime(rt: CustomProviderRuntimeConfig): CustomProviderRuntimeConfig {
   const seen = new Set<string>();
   const models = rt.models
-    .map((m) => ({ id: m.id.trim(), name: m.name.trim() }))
+    .map((m) => ({
+      id: m.id.trim(),
+      name: m.name.trim(),
+      ...(m.contextWindow !== undefined ? { contextWindow: m.contextWindow } : {}),
+    }))
     .filter((m) => {
       if (!m.id || !m.name || seen.has(m.id)) return false;
       seen.add(m.id);
@@ -264,10 +278,18 @@ function parseRuntimes(raw: string): Partial<Record<AgentKind, CustomProviderRun
     const r = rt as Record<string, unknown>;
     const models = Array.isArray(r.models)
       ? r.models
-          .filter((m): m is { id: string; name: string } =>
+          .filter((m): m is Record<string, unknown> =>
             !!m && typeof m === 'object' && typeof (m as { id?: unknown }).id === 'string',
           )
-          .map((m) => ({ id: String(m.id), name: String((m as { name?: unknown }).name ?? '') }))
+          .map((m) => ({
+            id: String(m.id),
+            name: String(m.name ?? ''),
+            ...(typeof m.contextWindow === 'number'
+              && Number.isFinite(m.contextWindow)
+              && m.contextWindow > 0
+              ? { contextWindow: m.contextWindow }
+              : {}),
+          }))
       : [];
     const entry: CustomProviderRuntimeConfig = {
       baseUrl: typeof r.baseUrl === 'string' ? r.baseUrl : '',

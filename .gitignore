@@ -61,12 +61,22 @@ apps/desktop/codex-home/
 .cindy/
 
 # ── 设计与开发临时产物 ───────────────────────────────────────
-docs/design_docs/.tmp_screenshots/
 docs/superpowers/
 
 # ── IDE / 本地知识工具 ───────────────────────────────────────
 .idea/
 .vscode/
+.vs/
+.fleet/
+.zed/
+.nova/
+.metadata/
+.history/
+.ionide/
+xcuserdata/
+*.xcuserstate
+*.sublime-workspace
+**/nbproject/private/
 .codegraph/
 .obsidian/
 
@@ -86,10 +96,10 @@ nul
 
 # ── AI coding agent 本地状态 ──────────────────────────────────
 # 国际主流
-# .claude 整体忽略,但共享 skill(review-pr 等,由 agent-use/ 单源生成)反向豁免——
-# 用 `.claude/*` 而非 `.claude/`:gitignore 排除整个目录后 `!` 无法重新包含其子项。
-.claude/*
-!.claude/skills/
+# Agent 工具私有目录整体忽略；共享说明只通过 AGENTS.md / CLAUDE.md 提交。
+.agents/
+.learnings/
+.claude/
 CLAUDE.local.md
 .codex/
 .cursor/

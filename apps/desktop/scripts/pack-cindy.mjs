@@ -9,7 +9,7 @@
  *
  * 意识源码**不入本仓库**(2026-07-09 Lizi 定案):意识是与 desktop 完全解耦的
  * 第三方内容,源码住用户自己的目录(如 ~/Desktop/cindy-ghosts/<id>/),.cindy
- * 也生成在那里——这正是未来「Maker 内置做意识」(runtime-sandbox.md §9)的
+ * 也生成在那里——这正是「Maker 内置做意识」的
  * 真实用户形态,本脚本即其打包工具雏形。仓库里只留 QA 假人生成器
  * (make-demo-cindy.mjs)。
  */

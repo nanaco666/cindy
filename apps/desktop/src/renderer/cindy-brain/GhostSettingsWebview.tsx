@@ -20,7 +20,7 @@ import {
 } from './ghostSettingsSnapshot';
 
 /**
- * 意识「自定义设置区」卡片(C3b 收尾:settingsHtml 渲染通道):设置页详情里
+ * 意识「自定义设置区」卡片(settingsHtml 渲染通道):设置页详情里
  * 一块沙箱 webview 装载意识自绘的 settingsHtml——与面板同一套机制:
  * 分区/地址由 main 侧 webview 附加闸验明正身(resolveGhostWebviewAttach 的
  * 入口白名单),主题 token 在 dom-ready 注入、主机换肤时重灌(注入基线用

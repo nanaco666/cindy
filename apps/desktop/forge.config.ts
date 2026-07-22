@@ -695,34 +695,37 @@ function applyMacPackagedDisplayName(buildPath: string, platform: string): void 
  * prePackage 的 assertGhostSeedSubmodules 兜底)。
  */
 function prunePackagedGhostSeedMeta(buildPath: string, platform: string): void {
-  const resourcesDir =
+  // 与 applyMacPackagedDisplayName 一致:mac 下遍历 buildPath 里全部 .app
+  // (通常只有一个,但防御性覆盖多包场景),其余平台单一 resources/。
+  const resourcesDirs =
     platform === 'darwin' || platform === 'mas'
-      ? (() => {
-          const app = fs.readdirSync(buildPath).find((n) => n.endsWith('.app'));
-          return app ? path.join(buildPath, app, 'Contents', 'Resources') : null;
-        })()
-      : path.join(buildPath, 'resources');
-  if (!resourcesDir) return;
+      ? fs
+          .readdirSync(buildPath)
+          .filter((n) => n.endsWith('.app'))
+          .map((app) => path.join(buildPath, app, 'Contents', 'Resources'))
+      : [path.join(buildPath, 'resources')];
 
-  const seedBase = path.join(resourcesDir, 'builtin-ghosts');
-  for (const root of ['official', 'xd']) {
-    const rootDir = path.join(seedBase, root);
-    let entries: fs.Dirent[];
-    try {
-      entries = fs.readdirSync(rootDir, { withFileTypes: true });
-    } catch {
-      continue; // 根不存在(理论上 prePackage 已拦)——跳过
-    }
-    for (const entry of entries) {
-      if (!entry.name.startsWith('.') && entry.name !== 'README.md') continue;
-      const target = path.join(rootDir, entry.name);
+  for (const resourcesDir of resourcesDirs) {
+    const seedBase = path.join(resourcesDir, 'builtin-ghosts');
+    for (const root of ['official', 'xd']) {
+      const rootDir = path.join(seedBase, root);
+      let entries: fs.Dirent[];
       try {
-        fs.rmSync(target, { recursive: true, force: true });
-        console.log(`[forge:postPackage] pruned seed repo-meta: builtin-ghosts/${root}/${entry.name}`);
-      } catch (err) {
-        console.warn(
-          `[forge:postPackage] failed to prune ${target}: ${err instanceof Error ? err.message : String(err)}`,
-        );
+        entries = fs.readdirSync(rootDir, { withFileTypes: true });
+      } catch {
+        continue; // 根不存在(理论上 prePackage 已拦)——跳过
+      }
+      for (const entry of entries) {
+        if (!entry.name.startsWith('.') && entry.name !== 'README.md') continue;
+        const target = path.join(rootDir, entry.name);
+        try {
+          fs.rmSync(target, { recursive: true, force: true });
+          console.log(`[forge:postPackage] pruned seed repo-meta: builtin-ghosts/${root}/${entry.name}`);
+        } catch (err) {
+          console.warn(
+            `[forge:postPackage] failed to prune ${target}: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
       }
     }
   }
@@ -1181,7 +1184,7 @@ const config: ForgeConfig = {
           LSItemContentTypes: ['public.folder'],
         },
         // Cindy 卡带 (.cindy):Finder 双击 → open-file 事件 → 装入 + 停靠
-        // (卡带系统 C2c;Windows 半边走注册表自注册,见 brain/fileAssociation.ts)。
+        // (卡带系统;Windows 半边走注册表自注册,见 brain/fileAssociation.ts)。
         // LSItemContentTypes 指向下方 UTExportedTypeDeclarations 声明的自有 UTI
         // (UTI 里带扩展名 + MIME 映射);CFBundleTypeExtensions 保留作旧系统
         // 兜底(LSItemContentTypes 存在时会被忽略)。Owner 表示本 app 是该类型

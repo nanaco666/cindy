@@ -36,7 +36,7 @@ vi.mock('lizi-mcps', () => ({
     mockState.capturedProvidersConfig = config;
     return [
       {
-        name: 'lizi_orca',
+        name: 'cindy_orca',
         isEnabled: () => true,
         toClaudeSdkConfig: () => null,
       },
@@ -45,7 +45,7 @@ vi.mock('lizi-mcps', () => ({
 }));
 
 vi.mock('../../maker-host/plugins/builtin-plugins.js', () => ({
-  BUILTIN_LIZI_MCP_IDS: ['lizi_orca', 'cindy_helper'],
+  BUILTIN_LIZI_MCP_IDS: ['cindy_orca', 'cindy_helper'],
   pluginIdForProviderName: (name: string) => name,
 }));
 
@@ -365,7 +365,7 @@ describe('collab send outcome semantics', () => {
     });
   });
 
-  it('exposes lizi_orca diagnostics through read-only collab provider callbacks', async () => {
+  it('exposes cindy_orca diagnostics through read-only collab provider callbacks', async () => {
     mockState.collabService = createCollabService({
       getWorkspaceInfo: vi.fn().mockResolvedValue({
         ok: true,

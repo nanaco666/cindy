@@ -183,7 +183,7 @@ export function ContactsSection() {
         </div>
       )}
 
-      {/* "让 AI 整理"引导只在开关开启时提供 — 关着时 lizi_contacts MCP 未注册,
+      {/* "让 AI 整理"引导只在开关开启时提供 — 关着时 cindy_contacts MCP 未注册,
           引导出的会话拿不到工具, 空跑误导用户 */}
       <ContactsManagerDialog
         open={managerOpen}

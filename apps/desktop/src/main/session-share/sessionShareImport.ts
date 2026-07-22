@@ -656,8 +656,8 @@ function isSafePathSegment(value: string): boolean {
 
 /**
  * 还原一个媒体文件到 B 机对应位置。
- * - session 图片(老包里的 xdt-image per-session 地址)→ **入媒体总仓**(迁移
- *   第 4 步,规则 25:导入是新写入,不再往 cc-agent/images 添字节),URL 重写为
+ * - session 图片(老包里的 xdt-image per-session 地址)→ **入媒体总仓**(导入
+ *   是新写入,不再往 cc-agent/images 添字节),URL 重写为
  *   cindy-media://(消息 content 本来就要重写);入仓失败回落老目录写法;
  * - reserved 缓存(feishu/art/confluence/jira 图、video、model)→ 写回同名位置
  *   (目标路径同样来自 resolveSafe 验证过的 URL),已存在则跳过复用,URL 不变
@@ -706,7 +706,7 @@ async function restoreMediaEntry(params: {
         // per-session 图片:文件名从已验证 URL 解析(resolveSafe 已保证单段),
         // 双保险再过一次单段校验。
         if (!isSafePathSegment(parsed.filename)) return null;
-        // 老包 xdt-image 图入总仓,消息里的地址重写为 cindy-media(第 4 步)。
+        // 老包 xdt-image 图入总仓,消息里的地址重写为 cindy-media。
         const ingested = await ingestLegacyMedia(path.extname(parsed.filename));
         if (ingested) {
           return { kind: 'session-image', newUrl: ingested.url, viaBlob: true };
@@ -763,7 +763,7 @@ async function restoreMediaEntry(params: {
     const filename = path.posix.basename(entry.zipPath ?? '');
     if (!isSafePathSegment(filename)) return null;
     const scheme = entry.scheme === 'xdt-audio' ? 'xdt-audio' : 'xdt-file';
-    // 媒体 mime 的散件入总仓(第 4 步):?path= 重写为仓内绝对路径,直读协议
+    // 媒体 mime 的散件入总仓:?path= 重写为仓内绝对路径,直读协议
     // 照常;非媒体(docx/zip)维持 shared-media 老路径(规则 25 边界)。
     const ingested = await ingestLegacyMedia(path.extname(filename));
     if (ingested) {

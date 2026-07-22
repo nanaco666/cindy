@@ -20,7 +20,7 @@ function noticeSource(projectRoot, platform, destinationName) {
     destinationName === "THIRD-PARTY-RESTRICTED.txt"
       ? `mobile-${platform}-restricted.txt`
       : `mobile-${platform}.txt`;
-  return path.join(repoRoot, "notices", filename);
+  return path.join(repoRoot, "docs", "legal", "notices", filename);
 }
 
 function copyNoticeFiles(projectRoot, platform, destinationDir) {

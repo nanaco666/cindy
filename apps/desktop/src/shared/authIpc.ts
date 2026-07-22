@@ -1,5 +1,10 @@
-/** Typed renderer/main boundary for the auth-server login flow. */
-import type { AuthFlowState, VerificationKind } from '@cindy/auth-client';
+/** Typed renderer/main boundary for the auth-server login and account lifecycle flows. */
+import type {
+  AccountDeletionAvailability,
+  AccountDeletionStatus,
+  AuthFlowState,
+  VerificationKind,
+} from '@cindy/auth-client';
 
 export type DesktopLoginAction =
   | { type: 'reset' }
@@ -23,6 +28,32 @@ export type DesktopLoginAction =
 export type DesktopLoginActionResult =
   | { success: true; state: AuthFlowState }
   | { success: false; code: string; state: AuthFlowState | null };
+
+/** The receipt token stays in Electron main; renderer only receives display-safe fields. */
+export interface DesktopAccountDeletionChallenge {
+  challengeId: string;
+  channel: 'email' | 'sms';
+  maskedTarget: string;
+  expiresAt: string;
+}
+
+export interface DesktopAccountDeletionConfirmInput {
+  challengeId: string;
+  code: string;
+}
+
+/** Account-deletion IPC keeps auth-server error codes as structured UI metadata. */
+export type DesktopAccountDeletionResult<T> =
+  { success: true; value: T } | { success: false; code: string };
+
+export type DesktopAccountDeletionAvailabilityResult =
+  DesktopAccountDeletionResult<AccountDeletionAvailability>;
+export type DesktopAccountDeletionChallengeResult =
+  DesktopAccountDeletionResult<DesktopAccountDeletionChallenge>;
+export type DesktopAccountDeletionConfirmResult =
+  DesktopAccountDeletionResult<AccountDeletionStatus>;
+export type DesktopAccountDeletionStatusResult =
+  DesktopAccountDeletionResult<AccountDeletionStatus | null>;
 
 const MAX_IDENTIFIER_LENGTH = 320;
 const MAX_OPAQUE_ID_LENGTH = 256;
@@ -111,4 +142,14 @@ export function parseDesktopLoginAction(value: unknown): DesktopLoginAction | nu
     default:
       return null;
   }
+}
+
+/** Runtime validation for the irreversible account-deletion confirmation boundary. */
+export function parseDesktopAccountDeletionConfirmInput(
+  value: unknown,
+): DesktopAccountDeletionConfirmInput | null {
+  if (!isRecord(value)) return null;
+  if (!isBoundedString(value.challengeId, MAX_OPAQUE_ID_LENGTH)) return null;
+  if (typeof value.code !== 'string' || !/^\d{6}$/.test(value.code)) return null;
+  return { challengeId: value.challengeId, code: value.code };
 }

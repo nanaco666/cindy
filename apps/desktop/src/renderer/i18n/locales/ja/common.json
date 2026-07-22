@@ -1563,6 +1563,7 @@
     "computerUse": {
       "title": "自動操作",
       "description": "エージェントがコンピュータと接続済みデバイスを使ってあなたの代わりに作業します。ブラウザ自動操作は独立したブラウザを使い、Android 自動操作は ADB を使い、コンピュータ自動操作はローカルドライバーに依存します。",
+      "codexRefreshDeferred": "設定は保存されましたが、Codex が使用中です。アプリを再起動すると、新しい Codex セッションに反映されます。",
       "browser": {
         "title": "自動操作ブラウザ",
         "description": "エージェント専用の独立したブラウザ。普段の Chrome とは分離されています",
@@ -1661,7 +1662,7 @@
         "title": "自動操作コンピュータ",
         "description": "エージェントがウィンドウを調べ、UI を読み取り、クリックや入力を実行できます",
         "toggleAria": "コンピュータの直接操作を切り替える",
-        "driverInfo": "コンピュータ自動操作はオープンソースの CUA Driver で提供されます。ローカルで動作し、画面の読み取りやクリック、入力などを行います。有効化には基本権限が必要です。実際の使用中には、macOS が対象アプリや具体的な操作ごとに追加の確認を表示することがあります。",
+        "driverInfo": "コンピュータ自動操作はオープンソースの CUA Driver で提供されます。ローカルで動作し、画面の読み取りやクリック、入力などを行います。",
         "openSourceProject": "オープンソースプロジェクトを見る",
         "detected": "{{version}} を検出しました（{{path}}、{{daemon}}）",
         "daemonRunning": "バックグラウンドサービスは実行中です",
@@ -1670,8 +1671,9 @@
         "installing": "cua-driver をインストール中...",
         "authorizing": "システム権限を待っています。Cua Driver の権限ウィンドウで「アクセシビリティ」と「画面収録」を許可してください。",
         "permissionIntro": {
-          "title": "コンピュータ自動操作の権限を準備",
-          "description": "次に {{appName}} は Cua Driver のインストールまたは権限付与フローを開き、必要に応じて macOS のシステム設定へ移動します。まず CuaDriver に「アクセシビリティ」と「画面収録」の基本権限を許可してください。その後の使用中に、macOS が対象アプリや具体的な操作ごとに追加の確認を表示することがあります。自分で Computer Use タスクを開始した場合にのみ承認してください。完了後 {{appName}} に戻ると、自動で確認して有効化します。",
+          "title": "コンピュータ自動操作を有効化",
+          "description": "{{appName}} は Cua Driver をローカルにインストールまたは起動し、画面の読み取りやクリック、入力などを行います。自分でコンピュータ自動操作タスクを開始した場合にのみ有効にしてください。",
+          "macosDescription": "次に {{appName}} は Cua Driver のインストールまたは権限付与フローを開き、必要に応じて macOS のシステム設定へ移動します。まず CuaDriver に「アクセシビリティ」と「画面収録」の基本権限を許可してください。その後の使用中に、macOS が対象アプリや具体的な操作ごとに追加の確認を表示することがあります。自分で Computer Use タスクを開始した場合にのみ承認してください。完了後 {{appName}} に戻ると、自動で確認して有効化します。",
           "confirm": "続行",
           "cancel": "後で"
         },
@@ -2565,6 +2567,58 @@
     "revokeAccess": "権限を撤回",
     "viewControllers": "表示",
     "versionMismatch": "相手のバージョンが異なります。一部機能が制限される場合があります"
+  },
+  "accountDeletion": {
+    "entryButton": "アカウントを削除",
+    "entryAria": "現在のアカウントを削除",
+    "introTitle": "アカウントを削除しますか？",
+    "introDescription": "Cindy のログインアカウントの完全削除を予約します。",
+    "confirmTitle": "アカウント削除の確認",
+    "sendCodeButton": "削除確認コードを送信",
+    "confirmButton": "アカウントを削除",
+    "cancelButton": "キャンセル",
+    "resendCodeButton": "コードを再送信",
+    "codePlaceholder": "6 桁のコード",
+    "codeInputAria": "アカウント削除の確認コード",
+    "codeSent": "{{channel}}で {{target}} に確認コードを送信しました。",
+    "channels": {
+      "email": "メール",
+      "sms": "SMS"
+    },
+    "sessionNotice": "確認後、このパソコンはすぐにログアウトします。他のクライアントは、現在のアクセス認証情報が期限切れになり更新を試みた時点でログアウトします。",
+    "gracePeriodNotice": "確認後、アカウントは 30 日間の待機期間に入ります。期間内にログインすると削除を取り消せます。期間終了後、Cindy のログインアカウントは完全に削除されます。",
+    "verificationNotice": "削除確認コードを{{channel}}で {{target}} に送信します。",
+    "appleRevocationNotice": "Apple でサインインを使用した場合は、Apple ID の設定でも Cindy のアクセス権を取り消してください。",
+    "acknowledgement": "待機期間の終了後、Cindy のログインアカウントが復元できない形で完全に削除されることを理解しました。",
+    "restoredNotice": "アカウント削除は取り消されました。Cindy のログインアカウントは引き続き保持されます。",
+    "errors": {
+      "fallback": "削除リクエストを完了できませんでした。ネットワークを確認して再試行してください。",
+      "UNAUTHENTICATED": "ログインの有効期限が切れました。再度ログインしてお試しください。",
+      "ACCOUNT_DELETION_UNAVAILABLE": "このアカウントはセルフサービスで削除できません。",
+      "ACCOUNT_DELETION_PENDING": "このアカウントはすでに削除待ちです。",
+      "ACCOUNT_DELETION_PROCESSING": "アカウントの削除処理が進行中です。",
+      "ACCOUNT_DELETION_CHALLENGE_INVALID": "コードが無効または期限切れです。新しいコードを取得してください。",
+      "ACCOUNT_DELETION_RECEIPT_MISSING": "削除確認の有効期限が切れました。新しいコードを取得してください。",
+      "ACCOUNT_DELETION_RECEIPT_INVALID": "この削除リクエストを確認できません。最初からやり直してください。",
+      "ACCOUNT_DELETION_RECEIPT_STORE_FAILED": "削除状態の認証情報を安全に保存できませんでした。再試行してください。",
+      "AUTH_FLOW_SUPERSEDED": "ログイン中のアカウントが変更されたため、別のアカウントに影響しないようこのパソコンではログアウトしませんでした。",
+      "INVALID_CODE": "コードが間違っているか期限切れです。確認して再試行してください。",
+      "CODE_ATTEMPTS_EXCEEDED": "試行回数を超えました。新しいコードを取得してください。",
+      "NETWORK_ERROR": "ネットワーク接続を確認して再試行してください。",
+      "REQUEST_TIMEOUT": "リクエストがタイムアウトしました。再試行してください。",
+      "INVALID_RESPONSE": "ログインサービスから認識できない結果が返されました。しばらくしてから再試行してください。",
+      "RATE_LIMITED": "操作が多すぎます。しばらく待ってから再試行してください。",
+      "INVALID_PARAMS": "入力内容を確認して再試行してください。"
+    },
+    "status": {
+      "pendingTitle": "アカウントは削除待ちです",
+      "processingTitle": "アカウントを削除しています",
+      "completedTitle": "アカウントを削除しました",
+      "pendingCopy": "{{date}} に完全削除される予定です。それまでにログインすると削除を取り消せます。",
+      "processingCopy": "待機期間が終了し、Cindy のログインアカウントを削除しています。",
+      "completedCopy": "Cindy のログインアカウントを削除しました。",
+      "dismissButton": "確認"
+    }
   },
   "login": {
     "title": "Cindy へようこそ",
@@ -4481,6 +4535,7 @@
     },
     "draft": {
       "createSessionFailed": "セッションの作成に失敗しました。再試行してください",
+      "deviceStillLoading": "リモートデバイスの読み込み中です。しばらくお待ちください",
       "worktreeMissingRepo": "worktree を作成できません：現在のディレクトリのリポジトリルートがありません",
       "worktreeRepoHint": "作業ディレクトリを再選択し、右下のフォルダ表示が更新されてから再試行してください",
       "sessionInactive": "セッションはすでにアクティブではありません",
@@ -6210,8 +6265,8 @@
     "dialogUnavailable": "window.electronAPI.dialog が利用できません",
     "notReadyHeading": "Maker Experimental",
     "notReadyBody": "window.electronAPI.maker が利用できません。アプリを再起動し、コンソールで IPC 登録エラーを確認してください。",
-    "title": "Maker Experimental — ステージ 1 リファクタ新パイプライン",
-    "description": "新パイプライン検証ページ。旧パイプライン（cc-agent / codex）には影響なし。詳細は doc/agent/xdt-maker-architecture.md",
+    "title": "Maker Experimental — エージェント経路診断",
+    "description": "Maker IPC とエージェントイベント経路を診断します。通常のチャットセッションには影響しません。",
     "agentLabel": "エージェント:",
     "workingDirLabel": "作業ディレクトリ:",
     "workingDirPlaceholder": "右のボタンでディレクトリを選択",

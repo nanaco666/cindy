@@ -97,6 +97,7 @@ describe('messagePresentation', () => {
     expect(buildMessageActionBarPresentation({
       align: 'user',
       canCopy: true,
+      canDelete: true,
       canFork: true,
       canRewind: true,
       hasTime: true,
@@ -106,7 +107,7 @@ describe('messagePresentation', () => {
       align: 'right',
       buttonSize: 24,
       iconSize: 14,
-      items: ['time', 'copy', 'rewind', 'fork'],
+      items: ['time', 'copy', 'rewind', 'fork', 'delete'],
     });
 
     expect(buildMessageActionBarPresentation({

@@ -122,7 +122,7 @@ export function applyWebviewHardening(
 }
 
 /**
- * 意识面板 webview 的加固(C3b,runtime-sandbox.md §3):与浏览器 webview
+ * 意识面板 webview 的加固(AGENTS.md 规则 28):与浏览器 webview
  * 同一套安全锁,区别两处——
  *   1. **保留意识专属分区**(浏览器路径是强制覆盖为 BROWSER_PARTITION;意识
  *      路径的分区已在 will-attach 阶段经 resolveGhostWebviewAttach 验明正身);
@@ -357,7 +357,7 @@ export function installWebviewHardener(): void {
     // 的 popup 路由与快捷键转发)。
     let pendingGhostAttach: { id: string } | null = null;
     contents.on('will-attach-webview', (e, webPreferences, params) => {
-      // 意识面板分支(C3b):声明了意识分区的 webview 必须验明正身——
+      // 意识面板分支:声明了意识分区的 webview 必须验明正身——
       // 分区/地址/已装清单三对齐才放行并保留专属分区;验证失败直接拒附加
       // (绝不回落到浏览器分区,那会让 cindy-ghost:// 内容跑进错误 session)。
       if (typeof params.partition === 'string' && params.partition.startsWith(GHOST_PARTITION_PREFIX)) {

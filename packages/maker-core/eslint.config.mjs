@@ -9,8 +9,7 @@ export default tseslint.config(
   },
   {
     rules: {
-      // maker-core 必须零 Electron 依赖 —— 任何对 electron / electron-* 的 import 都报错
-      // 详见 doc/agent/xdt-maker-architecture.md §6
+      // maker-core 必须零 Electron 依赖——任何对 electron / electron-* 的 import 都报错。
       'no-restricted-imports': [
         'error',
         {

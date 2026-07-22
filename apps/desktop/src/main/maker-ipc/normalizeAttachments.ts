@@ -171,7 +171,7 @@ export async function normalizeUserMessage(
       }
     }
 
-    // 2') cindy-media:// 媒体总仓 blob(新世界统一地址,规则 25)→ 字节仓内绝对路径;
+    // 2') cindy-media:// 媒体总仓 blob(统一地址,规则 25)→ 字节仓内绝对路径;
     //     mime 由扩展名白名单定死,resolveSafe 自带指纹校验与仓内前缀双保险。
     if (typeof block.path === 'string' && block.path.startsWith('cindy-media://')) {
       try {
@@ -348,7 +348,7 @@ export async function materializeQueuedOssAttachments(
   const ossKeys = new Set<string>();
   // 可入总仓的媒体(图片等白名单 mime)→ ingest 进 cindy-media 并直接挂
   // session-attachment 引用(入队消息没有草稿期,等价老 lifecycle committed);
-  // 迁移第 1 步从 imageCacheStore.copyFromPath 切换(规则 25)。
+  // 媒体附件统一走总仓 ingest(规则 25)。
   const ingestIntoBlobStore = async (
     sourcePath: string,
     mimeType: string,
@@ -407,7 +407,7 @@ export async function materializeQueuedOssAttachments(
       if (mime && mime.startsWith('image/') && cindyMediaBlobStore.supportedMime(mime)) {
         entry = await ingestIntoBlobStore(tmp, mime);
       } else {
-        // 非媒体附件维持老世界落地(存量路径,按迁移计划后续处理)。
+        // 非媒体附件维持历史兼容路径落地;规则 25 明确非媒体不进字节仓。
         const originalName =
           ref.originalName && ref.originalName.length > 0 ? ref.originalName : path.basename(tmp);
         const { url } = await imageCacheStore.copyFromPath({

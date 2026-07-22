@@ -23,8 +23,7 @@
  *         (v8 2026-04-20: was `--info-700` blue —— DESIGN.md §2 严禁 chromatic
  *         color，secondary 文本只允许 Stone/Mid Gray/Silver 三档纯灰，蓝色违规。
  *         改用 `--msg-tool-card-chevron` (#525252 Light / #a3a3a3 Dark) 与动词
- *         同色。注：cc-agent-view.pen 历史版本曾用 Stone 暖灰系 (#78716c 等)，
- *         同样违反 DESIGN.md "no warm tones"，已于本次同步校正为纯灰。)
+ *         同色，保持 DESIGN.md 要求的纯灰色系。)
  *   - +N / -N stats: JetBrains Mono 13 / weight 500 / `--diff-add-fg` and
  *     `--diff-del-fg`. Rendered for Edit / Write / MultiEdit (ADR-5).
  *   - Trailing chevron: lucide ChevronRight 13 / `--msg-tool-card-chevron`,
@@ -144,7 +143,7 @@ export interface ToolAudioTrack {
    * ChatAudioCard path stays binary-compatible.
    */
   kind: 'music' | 'sound_effect';
-  /** `<audio>` src:cindy-media://blobs/…(新世界)或 xdt-audio://local/?path=…(遗产)。 */
+  /** `<audio>` src:cindy-media://blobs/…或历史 xdt-audio://local/?path=…。 */
   audioUrl: string;
   /** xdt-image://... cover art (Suno gives one per track); optional. */
   coverUrl?: string;
@@ -231,7 +230,7 @@ function parseAudioTracks(raw: unknown): ToolAudioTrack[] {
 }
 
 /**
- * 图卡接受的取件协议:老世界 xdt-image://(遗产,只读)+ 新世界
+ * 图卡接受的取件协议:历史 xdt-image://(只读)+ 媒体总仓
  * cindy-media://(媒体总仓,内容寻址;意识 gen_image 等新链路的产物)。
  * cindy-media 是图还是视频由落盘后缀定,放进 xdt_image_urls 字段即当图渲染。
  */
@@ -245,8 +244,8 @@ function isToolVideoUrl(url: string): boolean {
 }
 
 /**
- * 音频卡接受的取件协议:老世界 xdt-audio://(退役 lizi_mivo MCP 的历史消息,
- * 只读)+ 新世界 cindy-media://(意识 xd-mivo 等新链路的产物)。
+ * 音频卡接受的取件协议:历史 xdt-audio://(退役 lizi_mivo MCP 的历史消息,
+ * 只读)+ 媒体总仓 cindy-media://(意识 xd-mivo 等当前链路的产物)。
  */
 function isToolAudioUrl(url: string): boolean {
   return url.startsWith('xdt-audio://') || url.startsWith('cindy-media://');
@@ -355,7 +354,7 @@ export function extractToolResultMedia(toolResult: string): ToolMediaItem[] {
       }
     }
     // 协议白名单与图卡同款双世界:老 xdt-video://(遗产只读)+ 新
-    // cindy-media://(意识 gen_video 等新链路产物,C3c-5)。
+    // cindy-media://(意识 gen_video 等新链路产物)。
     if (
       typeof parsed.xdt_video_url === 'string' &&
       isToolVideoUrl(parsed.xdt_video_url)

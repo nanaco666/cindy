@@ -1,5 +1,5 @@
 /**
- * 远程文件 Quick Look 预览(设计稿 mobile-file-browser.pen F4/F5/F6)。
+ * 远程文件 Quick Look 预览。
  *
  * 同目录文件横滑翻页(iOS Quick Look 心智):进入时列一次父目录,把全部文件
  * (含不可预览的,显示占位页)按浏览页同款排序装进水平 pager。

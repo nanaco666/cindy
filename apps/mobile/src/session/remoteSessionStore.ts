@@ -2111,6 +2111,7 @@ function useSessionMessageCacheSync(
   messages: RemoteMessage[],
 ): void {
   const hydratedKeyRef = useRef<string | null>(null);
+  const hydrationReadyKeyRef = useRef<string | null>(null);
   const persistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // 持久化在定时器回调里读最新值,避免把每次渲染的 messages 都闭包进 timer。
   const ctxRef = useRef<{ deviceId?: string; sessionId: string; messages: RemoteMessage[] }>({
@@ -2126,13 +2127,17 @@ function useSessionMessageCacheSync(
     const key = `${deviceId}::${sessionId}`;
     if (hydratedKeyRef.current === key) return;
     hydratedKeyRef.current = key;
+    hydrationReadyKeyRef.current = null;
     let cancelled = false;
     void getCachedSessionMessages(deviceId, sessionId)
       .then((cached) => {
         if (cancelled || cached.length === 0) return;
         remoteSessionStore.hydrateMessagesIfEmpty(sessionId, cached);
       })
-      .catch(() => undefined);
+      .catch(() => undefined)
+      .finally(() => {
+        if (!cancelled) hydrationReadyKeyRef.current = key;
+      });
     return () => {
       cancelled = true;
     };
@@ -2143,7 +2148,9 @@ function useSessionMessageCacheSync(
     if (persistTimerRef.current) clearTimeout(persistTimerRef.current);
     persistTimerRef.current = null;
     if (!deviceId || !sessionId) return;
+    const key = `${deviceId}::${sessionId}`;
     if (messages.length === 0) {
+      if (hydrationReadyKeyRef.current !== key) return;
       void cacheSessionMessages(deviceId, sessionId, []).catch(() => undefined);
       return;
     }

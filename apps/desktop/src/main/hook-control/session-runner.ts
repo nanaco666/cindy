@@ -404,7 +404,7 @@ export function createMakerHookSessionRunner(deps: {
             ? { workspaceKind: req.workspaceKind }
             : {}),
           title: req.isNew ? (req.title ?? undefined) : undefined,
-          // 渠道标记(仅 hook 亲生新会话): lizi_feishu_bot 据此在构建期给
+          // 渠道标记(仅 hook 亲生新会话): cindy_feishu_bot 据此在构建期给
           // 工具描述注入渠道路由提示。两个刻意限定:
           //   - 不用 'slack'(那是已退役的 organic SlackIM relay 渠道的历史
           //     标记,留给存量会话的侧边栏显示,新会话不再产生);
@@ -677,7 +677,7 @@ export function createMakerHookSessionRunner(deps: {
       } as const;
 
       // 入站附件: 解码后图片/文件分流(server 2026-07 起全 MIME 转发) ->
-      //   - 图片写入 cindy-media 媒体总仓(规则 25;迁移第 1 步从 imageCacheStore
+      //   - 图片写入 cindy-media 媒体总仓(规则 25;不再通过 imageCacheStore
       //     切换): sendContent 用本地绝对 path 的 image block(maker 要 path
       //     而非 base64 / URL), 落库用 cindy-media:// URL(parseUserContent 只认
       //     {text,images:ImageRef[]} 形态, 裸 path 的 image block 会被忽略);
@@ -741,7 +741,7 @@ export function createMakerHookSessionRunner(deps: {
       }
       // 渠道说明只进喂给 agent 的内容,不进落库的 userMessageContent ——
       // 渲染层展示的用户消息保持 Slack 原话。逐 turn 追加固定文本,教模型
-      // 用 xdt-file 引用回传文件而非误用 lizi_feishu_bot(规则 9,实踩背景
+      // 用 xdt-file 引用回传文件而非误用 cindy_feishu_bot(规则 9,实踩背景
       // 见 outbound.ts 的常量注释)。
       const promptWithNote = `${req.prompt}\n\n${SLACK_HOOK_PROMPT_NOTE}`;
       const sendContent =

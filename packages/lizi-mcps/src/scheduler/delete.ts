@@ -1,7 +1,7 @@
 /**
  * scheduler/delete.ts — schedule_delete tool
  *
- * 不加二次确认参数（plan §Phase 5「禁忌清单」）：模型在调用前应自己用
+ * 不加二次确认参数：模型在调用前应自己用
  * AskUserQuestion 跟用户确认。
  *
  * caller-ownership 豁免：agent 在任务 run 内删除**自己的** schedule（心跳任务

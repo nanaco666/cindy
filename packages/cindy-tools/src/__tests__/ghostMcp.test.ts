@@ -89,7 +89,7 @@ describe('cindy_ghosts · ghost_call(派活透传)', () => {
     expect(callGhostTool).toHaveBeenCalledWith({ ghostId: 'art', tool: 'gen_image', args: {} });
   });
 
-  it('attachments 透传给 host(用户图片过户,C3c-4);空数组不带', async () => {
+  it('attachments 透传给 host(用户图片过户);空数组不带', async () => {
     const callGhostTool = vi.fn().mockResolvedValue({ ok: true, result: { done: true } });
     const deps = fakeDeps({ callGhostTool });
     await handleGhostCall(deps, {

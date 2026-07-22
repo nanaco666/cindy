@@ -67,7 +67,7 @@ function makeDeps(overrides?: Partial<GitlabAccountsMigrationDeps>): GitlabAccou
     readLegacyToken: () => 'glpat_legacy_token',
     // 缺省与 readLegacyToken 一致地"在场";幂等留痕用例单独覆盖两种取值。
     legacyTokenExists: () => true,
-    readLegacyConnection: () => ({ baseUrl: 'https://git.tapsvc.com', username: 'lizi' }),
+    readLegacyConnection: () => ({ baseUrl: 'https://git.tapsvc.com', username: 'devuser' }),
     manager: memoryManager(),
     ...overrides,
   };
@@ -86,7 +86,7 @@ describe('migrateGitlabAccounts', () => {
     expect(manager.rows[0]).toMatchObject({
       host: 'git.tapsvc.com',
       token: 'glpat_legacy_token',
-      label: 'lizi',
+      label: 'devuser',
     });
     expect(manager.defaultId).toBe(manager.rows[0].id);
   });
@@ -149,7 +149,7 @@ describe('migrateGitlabAccounts', () => {
       migrateGitlabAccounts(
         makeDeps({
           manager,
-          readLegacyConnection: () => ({ baseUrl: 'http://gitlab.internal.example', username: 'lizi' }),
+          readLegacyConnection: () => ({ baseUrl: 'http://gitlab.internal.example', username: 'devuser' }),
         }),
       ),
     ).toBe(0);
@@ -162,7 +162,7 @@ describe('migrateGitlabAccounts', () => {
       migrateGitlabAccounts(
         makeDeps({
           manager,
-          readLegacyConnection: () => ({ baseUrl: 'https://git.example.com:8443', username: 'lizi' }),
+          readLegacyConnection: () => ({ baseUrl: 'https://git.example.com:8443', username: 'devuser' }),
         }),
       ),
     ).toBe(0);
@@ -175,7 +175,7 @@ describe('migrateGitlabAccounts', () => {
       migrateGitlabAccounts(
         makeDeps({
           manager,
-          readLegacyConnection: () => ({ baseUrl: 'HTTPS://Git.X.com/', username: 'lizi' }),
+          readLegacyConnection: () => ({ baseUrl: 'HTTPS://Git.X.com/', username: 'devuser' }),
         }),
       ),
     ).toBe(1);

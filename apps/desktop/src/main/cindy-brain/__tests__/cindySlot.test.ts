@@ -201,7 +201,7 @@ describe('意识专属后端覆盖(解析表第②层)', () => {
   });
 });
 
-describe('视频代办(gen_video / edit_video,C3c-5)', () => {
+describe('视频代办(gen_video / edit_video)', () => {
   const VREQ = { type: 'cindy-request', kind: 'gen_video', prompt: '一只猫奔跑' };
 
   it('gen_video happy path:走视频白名单默认款,产物同一条落仓链路', async () => {
@@ -401,7 +401,7 @@ describe('代办链路', () => {
   });
 });
 
-describe('callId 归因(C3c-3)', () => {
+describe('callId 归因', () => {
   it('带 callId 的单:start/done 日志都归因到它', async () => {
     const info = vi.fn();
     const { slot } = makeSlot({ log: { info, warn: vi.fn() } } as unknown as Partial<CindySlotDeps>);

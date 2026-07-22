@@ -1,7 +1,7 @@
 /**
  * unified-downloader — M5: Progress sampling + speed estimation.
  * ---------------------------------------------------------------------------
- * Tech spec: .sivi/docs/tech_specs/unified-downloader-frontend.md (M5)
+ * Progress normalization and throttling are maintained in this module.
  *
  * Produces RAW progress events: no clamping, no smoothing, no anti-rollback —
  * those are caller-side concerns (see updateProgressNormalizer.ts on the

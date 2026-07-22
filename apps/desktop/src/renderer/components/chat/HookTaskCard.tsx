@@ -2,8 +2,7 @@
  * HookTaskCard
  * ---------------------------------------------------------------------------
  * Hook(IM 渠道)消息的 Cindy 署名任务卡片 —— 左对齐渲染, 替代右对齐用户气泡。
- * 设计稿: docs/design_docs/cc-agent-view.pen "Hook Message — Tina Task Card
- * Redesign"(节点 KSFBa)。
+ * 视觉语义采用左对齐的 "Hook Message — Tina Task Card"。
  *
  * 显示与 prompt 分离: 卡片正文渲染 source.userText(用户 @ 的干净原文),
  * thread 上下文折叠可展开; 发给 agent 的完整工程化 prompt(含指引文本)

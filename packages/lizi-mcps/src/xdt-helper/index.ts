@@ -5,7 +5,7 @@
  * from here and registers everything in one go (mirrors scheduler/index.ts).
  *
  * Note: handoff 工具 send_to_session 注册在 cindy_helper 的 handoff 类目(走 call_tool,essential 常开)。
- * 协同 team 工具由 lizi_orca server(src/orca/)托管,通过本目录的 register*Tool 注册。
+ * 协同 team 工具由 cindy_orca server(src/orca/)托管,通过本目录的 register*Tool 注册。
  */
 
 export { registerGetCapabilitiesTool } from './get_capabilities.js';

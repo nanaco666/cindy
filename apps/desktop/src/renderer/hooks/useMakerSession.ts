@@ -1,13 +1,8 @@
 /**
- * useMakerSession — 一阶段重构新链路的最小 hook。
- *
- * 设计权衡：本轮**不替换**现有 useCCAgentChat，那需要替换
- * ChatInput / MessageList / store 整套，工作量太大。
+ * useMakerSession — maker-experimental 诊断页的最小会话 hook。
  *
  * 本 hook 只暴露最小能力（create/send/abort/close + 事件 list），
- * 配合 /maker-experimental 实验页验证新链路通畅。
- *
- * 详见 doc/agent/xdt-maker-architecture.md §10
+ * 配合 /maker-experimental 诊断 Maker IPC 与 agent event 链路。
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';

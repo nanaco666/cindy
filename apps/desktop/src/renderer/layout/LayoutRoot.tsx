@@ -19,14 +19,14 @@ import { PaneWidthProvider, useContentAvailableWidth } from './paneWidths';
 /**
  * LayoutRoot —— 主界面布局树的渲染引擎入口。
  *
- * 设计文档:docs/Cindy架构设计/意识系统/layout-tree.md
+ * 布局树不变量见 AGENTS.md 规则 27。
  *
  * 职责(随 Step B / C 逐步扩展):
  * - 首帧同步拉取布局(sendSync,规则 7:第一帧就是用户布局,禁止默认→用户布局跳变);
  * - 订阅 layout:changed 热更新(set/reset 后全窗口广播);
  * - 按 content 树渲染 pane 的**顺序与在场**;未注册 kind(未安装的意识残留)
  *   整个 pane 不渲染、空间自然回流;
- * - **分割线与宽度主权(C1c)**:相邻可见面板之间有且仅有一条引擎分割线,每条
+ * - **分割线与宽度主权**:相邻可见面板之间有且仅有一条引擎分割线,每条
  *   分割线都是拖宽把手 —— 拖动把 delta 在缝两侧邻居的 fraction 之间转移
  *   (只动邻居,其余面板不受影响),拖动中走本地瞬时值实时跟手,松手才写树
  *   持久化;双击缝 = 两侧份额均分。非 chat 面板的像素宽 = fraction × 可用宽
@@ -179,7 +179,7 @@ interface RootDividerPropsExtra {
    * 按账面算余量会把拖缝整个钳死(2026-07-09 mac 实测"纹丝不动"的根因)。
    * 折叠工具栏的份额此处未剔除(其折叠态在面板内部,引擎不可见),导致
    * 估值偏保守:拖动会提前一点到头,不会越界。份额记忆与活跃份额分账的
-   * 根治方案记 C3 待办。
+   * 根治方案暂未纳入布局树职责。
    */
   chatRenderedPx: number;
 }
@@ -313,12 +313,12 @@ interface LayoutRootProps {
 export function LayoutRoot({ suppressNonChatPanels = false }: LayoutRootProps = {}): ReactNode {
   // 幂等注册内置面板 —— 放组件体而非模块副作用:HMR / 测试 reset 后再渲染也能自愈。
   registerBuiltinPanels();
-  // 已装意识的面板首帧前同步注册(C2b,替代 C1a 的写死示例面板):与内置面板
-  // 同帧就位;未装意识的存档残留 pane 按"未安装意识"隐藏(§6 规则 5)。
+  // 已装意识的面板首帧前同步注册:与内置面板同帧就位;未装意识的存档残留
+  // pane 按"未安装意识"隐藏,树数据保留以便重新安装时原位恢复。
   ensureGhostPanelsRegistered();
   // dev-only:挂 window.__cindyLayout 调试入口(swap/reset/removePane)。
   installLayoutDevTools();
-  // dev-only:挂 window.__cindyGhosts 调试入口(list/install/uninstall,C2a QA 通道)。
+  // dev-only:挂 window.__cindyGhosts 调试入口(list/install/uninstall,QA 通道)。
   installGhostDevTools();
 
   // 装/卸广播 → 注册表对齐 + 重渲(卸下不动布局树,靠这里让引擎重过滤在场面板)。

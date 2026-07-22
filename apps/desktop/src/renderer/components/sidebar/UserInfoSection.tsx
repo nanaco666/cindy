@@ -169,7 +169,7 @@ export function UserInfoSection({ isCollapsed, onOpenUpdateNotice }: UserInfoSec
             <p className="truncate text-[14px] font-semibold leading-[18px] text-[var(--sidebar-user-card-text)]">
               {user.name}
             </p>
-            {/* 2px gap 对齐 cc-agent-view.pen 里 userNameContainer 的 gap: 2 */}
+            {/* 2px gap 与同栏 userNameContainer 保持一致。 */}
             <p
               className="truncate text-[10.5px] leading-[13px] text-[var(--sidebar-user-card-text)] opacity-80"
               title={appVersionLabelDetail}

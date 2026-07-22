@@ -27,7 +27,7 @@ export interface LayoutStoreOptions {
 /**
  * 主界面布局树的 main 端持久化 source of truth。
  *
- * 设计要点(与 docs/Cindy架构设计/意识系统/layout-tree.md §3 对齐):
+ * 持久化契约(AGENTS.md 规则 27):
  * - 全局**一份**布局,不随 session 变形;
  * - 同步 R/W(文件极小,不卡 UI;renderer 首帧靠 sendSync 拉取,遵守规则 7
  *   「第一帧就是用户布局,禁止先默认后跳变」);

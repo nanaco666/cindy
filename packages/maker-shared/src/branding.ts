@@ -11,7 +11,7 @@
  * （mcp-integrations/browser.ts 的 MANAGED_PROFILE，翻转时定格 'Cindy'）。
  * 这些标识符之后同样不跟随本常量变化——与展示名解耦正是本模块存在的意义。
  *
- * 完整的改名操作清单（手动项 / 外部协调项 / 标识符边界）见 docs/branding-rename-checklist.md。
+ * 稳定标识符边界由本模块常量和相关测试维护，不随展示名迁移。
  */
 
 /** 产品对用户 / LLM 展示的品牌名（唯一规范写法，不要再派生其它变体）。 */

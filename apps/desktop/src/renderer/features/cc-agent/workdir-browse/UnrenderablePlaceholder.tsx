@@ -2,7 +2,7 @@
  * UnrenderablePlaceholder — main-area card shown when the selected file
  * cannot be previewed in-app (binary / pdf / archive / huge file).
  *
- * Matches design稿 work-md-show.pen → "Unrenderable File Placeholder":
+ * "Unrenderable File Placeholder" visual spec:
  *   - 64×64 icon circle (file type icon)
  *   - filename (Inter 16/600)
  *   - meta line (Inter 12 normal — type · size · mtime)

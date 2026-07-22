@@ -1,7 +1,7 @@
 /**
  * RunHistoryPane — 右侧执行历史面板
  * ---------------------------------------------------------------------------
- * 设计稿 (schedule.pen "Automations master-detail" 右侧)：
+ * 右侧执行历史面板的视觉规格：
  *   - Pane header: 任务名 + 副行 'cron · agent · destination' + [Run now pill] + [Edit]
  *   - 'RECENT RUNS · count' 小灰标签
  *   - 滚动 run 卡片列表（最多 50 条）

@@ -243,6 +243,7 @@ import type {
 } from './collabSendOutcome.js';
 import { runAcceptedCallback } from './acceptedCallbackRunner.js';
 import { createElectronIpcHandlerRegistry } from './electronIpcRegistry.js';
+import { refreshCodexMcpEnvironment } from './codexMcpRefresh.js';
 import { validateExtraDirs } from './extraDirsValidator.js';
 import { prepareHandoffWorktree, shouldRecycleHandoffWorktreeOnFailure } from './handoffWorktree.js';
 import { registerProjectPluginPolicyHandlers } from './projectPluginPolicyHandlers.js';
@@ -947,7 +948,7 @@ async function prepareUserMessageForAgent(
       });
     }
   }
-  // 新世界晋升:消息里的 cindy-media blob 挂 session-attachment 引用(草稿
+  // 媒体总仓晋升:消息里的 cindy-media blob 挂 session-attachment 引用(草稿
   // 转正,替代 markFilesCommitted;幂等,重发不刷重复行)。失败只警告——
   // 引用缺失的代价是 blob 提前进回收候选,不该阻塞消息发送。
   const sentBlobUrls = collectCindyMediaUrls(msg);
@@ -1413,7 +1414,7 @@ export async function withSessionInputStoppedForRewind<T>(
 }
 
 /**
- * 媒体回收器活引用取证入口(media-store.md §4 暂存区 (2)):内存排队/在途
+ * 媒体回收器活引用取证入口(recycler.ts 的内存队列暂存区):内存排队/在途
  * 消息的序列化文本。coordinator 未就绪(启动早期)返回空——此时也不存在
  * 内存队列,空集合语义正确。
  */
@@ -3180,7 +3181,7 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
       }
     },
   });
-  // Claude Auto 分类器 429/5xx → 单会话切 ask + 持久化 + 结构化提示。
+  // Claude Auto 分类器错误响应(status≥400,含 4xx/5xx) → 单会话切 ask + 持久化 + 结构化提示。
   // coordinator 内部会复核 DB 仍为 auto,并按 session 去重;listener 只 fire-and-forget,
   // 绝不阻塞 proxy 响应 pipe,也不自动重放本次 tool call。
   const handleClaudeAutoClassifierUnavailable = createClaudeAutoPermissionFallbackCoordinator({
@@ -6474,8 +6475,15 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
     if (!ok) {
       throwIpcError('PERMISSION_DENIED', `Cannot modify essential plugin: ${id}`);
     }
-    await shutdownCodexEnvironment();
-    await restartCodexAfterAuthModeChange();
+    // The preference is already durable at this point. Codex freezes MCP flags
+    // in its shared app-server, so refresh best-effort; a busy turn must keep
+    // using the existing bridge and must not turn a successful save into an IPC
+    // failure. Renderer surfaces the deferred state explicitly.
+    return refreshCodexMcpEnvironment({
+      restartCodex: restartCodexAfterAuthModeChange,
+      shutdownCodexEnvironment,
+      logger: log,
+    });
   });
 
   ipcMain.handle(MAKER_INVOKE.PLUGINS_CLEAR_ENABLED, async (_e, id: unknown) => {
@@ -6489,8 +6497,11 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
     if (!ok) {
       throwIpcError('PERMISSION_DENIED', `Cannot modify essential plugin: ${id}`);
     }
-    await shutdownCodexEnvironment();
-    await restartCodexAfterAuthModeChange();
+    return refreshCodexMcpEnvironment({
+      restartCodex: restartCodexAfterAuthModeChange,
+      shutdownCodexEnvironment,
+      logger: log,
+    });
   });
 
   registerProjectPluginPolicyHandlers(createElectronIpcHandlerRegistry(), {
@@ -6690,7 +6701,7 @@ async function materializeCodexImage(
   sessionId: string,
   data: CodexImageEventData,
 ): Promise<{ url: string; filename: string } | null> {
-  // 迁移第 2 步(规则 25):生成图入 cindy-media 总仓(零引用;合成 tool_result
+  // 规则 25:生成图入 cindy-media 总仓(零引用;合成 tool_result
   // 消息落库时由 createMessage 的挂账钩子补 session-attachment 引用)。逻辑
   // 本体在 cindy-media/generatedMedia.ts(规则 14 可测),这里只做 thin adapter。
   try {

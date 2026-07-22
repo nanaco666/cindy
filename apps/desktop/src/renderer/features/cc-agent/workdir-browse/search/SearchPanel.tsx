@@ -1,7 +1,7 @@
 /**
- * SearchPanel — 1:1 对设计稿 work-md-show.pen 的 "Sidebar Slice"(search 状态)
+ * SearchPanel — 文件侧栏的搜索状态
  *
- * 内部三段(从上到下,跟设计稿严格一致):
+ * 内部三段（从上到下）：
  *   1. Input Area      padding [4, 12, 8, 12]  gap:6  → 仅 SearchInput
  *   2. Results Header  padding [8, 12, 4, 24]
  *      左:"23 results in 5 files"  Inter 12 / 500 / Stone(#737373)

@@ -34,7 +34,7 @@ function goodManifest(): Record<string, unknown> {
   };
 }
 
-/** 一份全绿的芯片型清单基底(C3a)。 */
+/** 一份全绿的芯片型清单基底。 */
 function goodChipManifest(): Record<string, unknown> {
   return {
     schemaVersion: 2,
@@ -216,7 +216,7 @@ describe('ghost · 清单校验', () => {
   });
 });
 
-describe('ghost · 芯片型清单(schemaVersion 2,C3a)', () => {
+describe('ghost · 芯片型清单(schemaVersion 2)', () => {
   it('全字段合法芯片清单通过', () => {
     const v = validateGhostManifest(goodChipManifest());
     expect(v.ok).toBe(true);
@@ -598,7 +598,7 @@ describe('ghost · whenToUse(语义召回线索)', () => {
   });
 });
 
-describe('ghost · cindy 详单 video 类目(C3c-5)', () => {
+describe('ghost · cindy 详单 video 类目', () => {
   const withCindy = (cindy: unknown): Record<string, unknown> => ({
     ...goodChipManifest(),
     slots: ['panel', 'cindy'],
@@ -640,7 +640,7 @@ describe('ghost · cindy 详单 video 类目(C3c-5)', () => {
 
 });
 
-describe('ghost · 逐项权限清单(C3c-1)', () => {
+describe('ghost · 逐项权限清单', () => {
   /** 全能力芯片清单:cindy 两动作 + 两工具 + 指令 + 左停面板。 */
   const fullChip = (): GhostManifest => ({
     schemaVersion: 2,
@@ -927,7 +927,7 @@ describe('ghost · 官方保留 id 前缀(cindy-)', () => {
   });
 });
 
-describe('ghost · network 域名条目格式与匹配(C4)', () => {
+describe('ghost · network 域名条目格式与匹配', () => {
   it('合法条目:小写域名至少两段,通配只允许最左一段', () => {
     for (const p of ['api.example.com', 'example.com', '*.weather.com', 'a-b.c1.io']) {
       expect(isValidGhostNetworkHostPattern(p), p).toBe(true);
@@ -955,7 +955,7 @@ describe('ghost · network 域名条目格式与匹配(C4)', () => {
   });
 });
 
-describe('ghost · network 详单校验(C4)', () => {
+describe('ghost · network 详单校验', () => {
   const withNet = (network: unknown, extra: Record<string, unknown> = {}) => ({
     ...goodManifest(),
     slots: ['panel', 'network'],
@@ -1433,7 +1433,7 @@ describe('ghost · 交互卡 action id 形状(v2)', () => {
   });
 });
 
-describe('ghost · settingsHtml 自绘设置区 + settingsHeight(C3b 收尾)', () => {
+describe('ghost · settingsHtml 自绘设置区 + settingsHeight', () => {
   it('settingsHtml 合法相对路径通过并透传;非法路径拒', () => {
     const ok = validateGhostManifest({ ...goodManifest(), settingsHtml: 'ui/settings.html' });
     expect(ok.ok && ok.manifest.settingsHtml).toBe('ui/settings.html');

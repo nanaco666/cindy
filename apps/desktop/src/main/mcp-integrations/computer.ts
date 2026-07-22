@@ -19,7 +19,7 @@ import type {
 } from 'lizi-mcps';
 import { createLogger } from '../logger.js';
 
-const logger = createLogger('mcp/lizi_computer');
+const logger = createLogger('mcp/cindy_computer');
 const DRIVER_COMMAND = 'cua-driver';
 const STATUS_TIMEOUT_MS = 3_000;
 const DOCTOR_TIMEOUT_MS = 10_000;
@@ -324,7 +324,7 @@ export interface ComputerDriverPermissionGrantResult {
 }
 
 export interface ComputerMcpDepsOptions {
-  isComputerUseEnabled?: () => boolean;
+  isComputerUseEnabled?: (context?: ComputerMcpCallContext) => boolean;
 }
 
 interface ComputerDriverStatusOptions {
@@ -3027,7 +3027,7 @@ export function getComputerMcpDeps(options: ComputerMcpDepsOptions = {}): Comput
   return {
     getStatus: getComputerDriverStatus,
     callTool: async (name, args, context) => {
-      if (options.isComputerUseEnabled && !options.isComputerUseEnabled()) {
+      if (options.isComputerUseEnabled && !options.isComputerUseEnabled(context)) {
         throw new ComputerDriverError('Computer Use is disabled in Settings.');
       }
       return callComputerDriverTool(name, args, context);

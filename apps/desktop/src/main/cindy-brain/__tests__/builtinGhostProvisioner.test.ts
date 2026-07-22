@@ -72,7 +72,7 @@ async function writeConfig(config: unknown): Promise<void> {
   await fs.promises.writeFile(path.join(seedRootDir, PROVISIONING_CONFIG_FILE), content);
 }
 
-const alice: ProvisionIdentity = { userId: 'u-alice', email: 'Alice@XD.com' };
+const alice: ProvisionIdentity = { userId: 'u-alice', email: 'Alice@example.com' };
 const bob: ProvisionIdentity = { userId: 'u-bob', email: null };
 
 function installedFile(id: string, rel: string): string {
@@ -195,8 +195,8 @@ describe('matchesAudience · 受众命中判定', () => {
 
   it('对象规则:任一维度命中即命中;email 大小写不敏感', () => {
     expect(matchesAudience({ userIds: ['u-alice'] }, alice)).toBe(true);
-    expect(matchesAudience({ emails: ['alice@xd.com'] }, alice)).toBe(true);
-    expect(matchesAudience({ userIds: ['u-x'], emails: ['x@xd.com'] }, alice)).toBe(false);
+    expect(matchesAudience({ emails: ['alice@example.com'] }, alice)).toBe(true);
+    expect(matchesAudience({ userIds: ['u-x'], emails: ['x@example.com'] }, alice)).toBe(false);
     // 已退役的 roles 维度按"不认识的字段"处理:其它维度不命中即不装(fail-closed)。
     expect(matchesAudience({ roles: ['admin'] } as never, bob)).toBe(false);
   });
@@ -205,14 +205,14 @@ describe('matchesAudience · 受众命中判定', () => {
     expect(matchesAudience({ userIds: ['u-alice'] }, null)).toBe(false);
     expect(matchesAudience({}, alice)).toBe(false);
     expect(matchesAudience('everyone' as never, alice)).toBe(false);
-    expect(matchesAudience({ emails: ['x@xd.com'] }, bob)).toBe(false); // email null
+    expect(matchesAudience({ emails: ['x@example.com'] }, bob)).toBe(false); // email null
   });
 });
 
 describe('provisionBuiltinGhosts · 受众与回收', () => {
   it('定向种子:登出不装,登录命中后装上并记 seeded 台账', async () => {
     await writeSeed('vip', { 'main.js': 'v1' });
-    await writeConfig({ ghosts: { vip: { audience: { emails: ['alice@xd.com'] } } } });
+    await writeConfig({ ghosts: { vip: { audience: { emails: ['alice@example.com'] } } } });
 
     const loggedOut = await provision({ identity: null });
     expect(loggedOut.installed).toEqual([]);

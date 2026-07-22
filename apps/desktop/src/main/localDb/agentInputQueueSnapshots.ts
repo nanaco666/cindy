@@ -108,7 +108,7 @@ export function saveAgentInputQueueSnapshot(
 }
 
 /**
- * 媒体回收器活引用取证(media-store.md §4 暂存区 (3)):全量快照 payload 原文。
+ * 媒体回收器活引用取证(recycler.ts 的崩溃恢复暂存区):全量快照 payload 原文。
  * 不解析形状——回收器只按文本正则抽取 cindy-media 指纹,坏 JSON 也能扫,
  * 比逐条恢复更保守(宁可多保护,不可漏保护)。
  */

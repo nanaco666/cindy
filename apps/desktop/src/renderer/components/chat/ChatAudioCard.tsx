@@ -5,8 +5,7 @@
  * 同位:`extractToolResultMedia` 返回的 audio 类 ToolMediaItem 在
  * MessageStream 的 tool_media 分支会按一行一张地渲染本组件。
  *
- * 设计稿来源:`docs/design_docs/cc-agent-view.pen` 顶级 frame `fmViQ`
- * (Light) / `TFh9Q` (Dark) —— Single Track。Dual Track 在 chat 流里通过
+ * Single Track 分别适配 Light / Dark。Dual Track 在 chat 流里通过
  * "两条相邻的 ToolMediaItem" 自然形成,我们不在组件层组合。
  *
  * 行为契约:

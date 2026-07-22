@@ -11,6 +11,7 @@ describe('mobile message actions desktop-first surface', () => {
     expect(source).toContain('buildMessageActionBarPresentation');
     expect(sharedSource).toContain("input.canCopy ? 'copy' : null");
     expect(sharedSource).toContain("input.canFork ? 'fork' : null");
+    expect(sharedSource).toContain("input.canDelete ? 'delete' : null");
     expect(sharedSource).toContain("input.hasTime ? 'time' : null");
     expect(sharedSource).toContain("input.hasTurnCost ? 'cost' : null");
     expect(sharedSource).toContain("input.hasTime ? 'time' : null");
@@ -18,6 +19,8 @@ describe('mobile message actions desktop-first surface', () => {
     expect(source).toContain('hitSlop={MESSAGE_CONTROL_HIT_SLOP}');
     expect(source).toContain('buttonSize={actionBar.buttonSize}');
     expect(source).toContain('iconSize={actionBar.iconSize}');
+    expect(source).toContain("return id === 'copy' || id === 'delete' || id === 'rewind' || id === 'fork';");
+    expect(source).toContain("if (id === 'delete') return 'message.deleteButton';");
     expect(source).toContain('{ height: buttonSize, width: buttonSize }');
     expect(source).toContain('height: 24');
     expect(source).toContain('width: 24');

@@ -1,7 +1,6 @@
 /**
  * GhostSummonCard — 消息流「意识召唤卡片」。
  *
- * 设计稿:docs/design_docs/cc-agent-view.pen「Ghost Summon Card (Light/Dark)」。
  * 用户消息尾部由 expandGhostCommand 追加的机器指令(splitGhostDirective 拆出)
  * 不再以裸文本刷在气泡里,而是收进这张卡:
  *

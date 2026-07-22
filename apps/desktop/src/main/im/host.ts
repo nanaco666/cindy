@@ -33,7 +33,7 @@ const SAFE_STORAGE_DIR = (): string => path.join(app.getPath('userData'), 'safe-
 
 const log = createLogger('im/host');
 
-/** IM 托管媒体 URL → 绝对路径:新世界 cindy-media 与老 xdt-image 双协议。 */
+/** IM 托管媒体 URL → 绝对路径:媒体总仓 cindy-media 与历史 xdt-image 双协议。 */
 function resolveManagedImageAbsPath(url: string): string {
   return url.startsWith('cindy-media://')
     ? resolveCindyMediaUrl(url).absPath
@@ -46,7 +46,7 @@ const host: IMHost = {
     feishuMediaDir: path.join(app.getPath('userData'), 'cc-agent', 'feishu-media'),
     discordMediaDir: path.join(app.getPath('userData'), 'cc-agent', 'discord-media'),
   },
-  // cindy-media 媒体总仓回调(迁移第 3 步,规则 25):IM 入站图片按平台 token
+  // cindy-media 媒体总仓回调(规则 25):IM 入站图片按平台 token
   // 免重下、内容寻址去重、isCache=true 吃缓存回收策略;包侧只摸字节和字符串。
   media: {
     cacheImage: async ({ integration, token, buffer, mimeType }) => {

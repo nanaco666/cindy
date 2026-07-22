@@ -21,6 +21,7 @@ import {
   Split,
   Sparkles,
   Timer,
+  Trash2,
   TriangleAlert,
   Undo2,
   X,
@@ -384,6 +385,7 @@ interface MessageActions {
    */
   onQuoteSelection?: (quote: { text: string }) => void;
   onForkMessage?: (clientId: string, draft?: MobileMessageDraft) => void;
+  onDeleteMessage?: (clientId: string) => void;
   onLoadEarlier?: () => void | Promise<void>;
   onOpenForkOrigin?: () => void;
   onOpenPayload?: (payload: MessagePayload) => void;
@@ -408,6 +410,7 @@ export function MessageRenderer({
   items,
   onCopyMessageLink,
   onForkMessage,
+  onDeleteMessage,
   onLoadEarlier,
   onOpenForkOrigin,
   onOpenSessionLink,
@@ -617,6 +620,7 @@ export function MessageRenderer({
   }, [galleryImages, payload]);
   const bottomPadding = mobileMessageListBottomPadding(bottomOverlayHeight);
   const topPadding = mobileMessageListTopPadding(topOverlayHeight);
+  const previousUserButtonTop = topPadding > 0 ? topPadding : null;
   // 上一次 topPadding,供顶部 chrome 高度变化时补偿 scroll offset(见下方 effect)。
   const prevTopPaddingRef = useRef(topPadding);
   const floatingBottomOffset = Math.max(
@@ -643,6 +647,7 @@ export function MessageRenderer({
   const actions: MessageActions & { firstUserMessageClientId?: string } = useMemo(() => ({
     onCopyMessageLink,
     onForkMessage,
+    onDeleteMessage,
     onOpenForkOrigin,
     onOpenSessionLink,
     onPreviewRewind,
@@ -657,6 +662,7 @@ export function MessageRenderer({
     firstUserMessageClientId,
     isSessionStreaming,
     onCopyMessageLink,
+    onDeleteMessage,
     onForkMessage,
     onOpenForkOrigin,
     onOpenSessionLink,
@@ -1121,11 +1127,11 @@ export function MessageRenderer({
         viewabilityConfig={viewabilityConfigRef.current}
         onViewableItemsChanged={handleViewableItemsChangedRef.current}
       />
-      {previousUserTarget ? (
+      {previousUserTarget && previousUserButtonTop !== null ? (
         <MessageListActionButton
           accessibilityLabel={`跳到上一条提问：${previousUserTarget.preview || '无预览'}`}
           onPress={jumpToPreviousUserMessage}
-          style={styles.previousUserButton}
+          style={[styles.previousUserButton, { top: previousUserButtonTop }]}
           testID="message.previousUserButton"
         >
           <ArrowUp color={colors.textPrimary} size={iconSize.md} strokeWidth={iconStroke.regular} />
@@ -1421,6 +1427,11 @@ function MessageBubble({
     && item.message.kind === 'user'
     && !isFirstUserMessage
   );
+  const canDelete = !!(
+    showCompletedActionBar
+    && clientId
+    && actions.onDeleteMessage
+  );
   const canCopyLink = !!(canUseCompletedActions && clientId && actions.onCopyMessageLink);
   const contentLayout = useMemo(() => buildMessageContentLayout({
     screenWidth: actions.screenWidth,
@@ -1468,12 +1479,13 @@ function MessageBubble({
   const actionBar = useMemo(() => buildMessageActionBarPresentation({
     align: isUser ? 'user' : 'agent',
     canCopy,
+    canDelete,
     canFork,
     canRewind,
     hasTime: !!relativeTime,
     hasTurnCost: !!turnCost,
     isStreaming: isStreamingAssistant,
-  }), [canCopy, canFork, canRewind, isStreamingAssistant, isUser, relativeTime, turnCost]);
+  }), [canCopy, canDelete, canFork, canRewind, isStreamingAssistant, isUser, relativeTime, turnCost]);
   const hasActions = actionBar.items.length > 0;
   const actionBusy = !!clientId && actions.busyClientId === clientId;
   const disabled = !!actions.busyClientId;
@@ -1521,6 +1533,10 @@ function MessageBubble({
             }
           : undefined,
       );
+      return;
+    }
+    if (id === 'delete' && clientId) {
+      actions.onDeleteMessage?.(clientId);
     }
   }, [
     actions,
@@ -5022,7 +5038,7 @@ function MessageControlButton({
 }
 
 function isMessageControlActionId(id: MessageActionBarItemId): id is MobileMessageControlActionId {
-  return id === 'copy' || id === 'rewind' || id === 'fork';
+  return id === 'copy' || id === 'delete' || id === 'rewind' || id === 'fork';
 }
 
 function messageControlActionLabel(
@@ -5030,12 +5046,14 @@ function messageControlActionLabel(
   copyState: CopyMessageStatus | 'idle' | 'copying',
 ): string {
   if (id === 'copy') return copyActionLabel(copyState);
+  if (id === 'delete') return '删除消息';
   if (id === 'rewind') return '回退到这里';
   return '分叉对话';
 }
 
 function messageControlActionTestID(id: MobileMessageControlActionId): string {
   if (id === 'copy') return 'message.copyButton';
+  if (id === 'delete') return 'message.deleteButton';
   if (id === 'rewind') return 'message.rewindButton';
   return 'message.forkButton';
 }
@@ -5053,6 +5071,7 @@ function messageControlActionIcon(
         ? <Check color={colors.textSecondary} size={iconSize} strokeWidth={iconStroke.regular} />
         : <Copy color={colors.textSecondary} size={iconSize} strokeWidth={iconStroke.regular} />;
   }
+  if (id === 'delete') return <Trash2 color={colors.textSecondary} size={iconSize} strokeWidth={iconStroke.regular} />;
   if (id === 'rewind') return <Undo2 color={colors.textSecondary} size={iconSize} strokeWidth={iconStroke.regular} />;
   return <Split color={colors.textSecondary} size={iconSize} strokeWidth={iconStroke.regular} />;
 }
@@ -5557,7 +5576,6 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     justifyContent: 'center',
     position: 'absolute',
     right: spacing.lg,
-    top: spacing.lg,
     width: 34,
     zIndex: 20,
   },

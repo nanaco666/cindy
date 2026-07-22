@@ -6,8 +6,8 @@
  *   - 双击或 Pencil 图标进入重命名；Enter 提交、Escape 取消、Blur 提交
  *   - 左侧 status zone 直接渲染 vendor mark（Claude=AA / Codex=六瓣）—— 同一 icon
  *     承担 vendor 标识 + 运行状态：idle 灰、running 切 Thinking Orange + 呼吸、
- *     需关注时叠右上红点、archived 改 Archive icon。设计参考 cc-agent-view.pen 节点
- *     ugsrn (方案 C)。**Pin 入口走右键菜单**（避免与 F-PJ-9 菜单内 Pin/Unpin 重复）
+ *     需关注时叠右上红点、archived 改 Archive icon。**Pin 入口走右键菜单**
+ *     （避免与会话菜单内 Pin/Unpin 重复）
  *   - 右键(contextmenu) 弹出 DropdownMenu —— 与 ProjectNode 同款 coordinate-anchored
  *     pattern（fixed-position 隐形 trigger 锚定到鼠标坐标）。
  *     菜单内容按状态分支（F-PJ-9：标准 Pin/Rename/Archived；Pinned Unpin/Rename/Archived；
@@ -642,7 +642,7 @@ export const SessionItem = memo(function SessionItem({
       aria-pressed={isSelected || undefined}
     >
       {/* 左侧状态图标(vendor mark + 运行/需关注/草稿)——与置顶卡片共用 SessionStatusIcon,
-          保证两处完全一致。设计参考 cc-agent-view.pen 节点 ugsrn(方案 C)。
+          保证两处完全一致。
           外包 15px 定宽槽:状态图标本体 12px,槽宽与顶部导航/文件夹图标(15)一致,
           让会话标题与其它行落在同一文字列(见文件头注释)。 */}
       <span className="flex w-[15px] shrink-0 items-center justify-center">

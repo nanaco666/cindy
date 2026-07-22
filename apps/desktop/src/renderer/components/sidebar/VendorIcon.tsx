@@ -11,7 +11,6 @@
  *   - idle (默认)   : Stone 灰 #737373 / dark #a3a3a3
  *   - running=true  : Thinking Orange(--warning-accent,全主题同值)+ session-breathing 呼吸;选中态同样橙(用户拍板 2026-07-20)
  *
- * 设计参考:doc/design_docs/cc-agent-view.pen 节点 ugsrn (方案 C)。
  */
 
 import { cn } from '@/lib/utils';

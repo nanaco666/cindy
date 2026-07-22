@@ -9,8 +9,8 @@
  * 分发的非 npm 资产(ripgrep / Codex CLI / Electron / Android Platform-Tools /
  * vendored 代码)的手工条目。
  *
- * 输出(两份均应提交进仓库,但依赖范围不同):
- *   - <repo>/THIRD-PARTY-NOTICES.txt (全工程生产依赖)
+ * 输出(均应提交进仓库,但依赖范围不同):
+ *   - <repo>/docs/legal/notices/ (全工程、各分发产物及 SBOM)
  *   - <repo>/apps/desktop/resources/THIRD-PARTY-NOTICES.txt
  *     (仅桌面端生产依赖,随 forge extraResource 打进安装包)
  *
@@ -29,7 +29,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, "..");
 const DESKTOP_DIR = path.join(REPO_ROOT, "apps", "desktop");
 const MOBILE_DIR = path.join(REPO_ROOT, "apps", "mobile");
-const NOTICES_DIR = path.join(REPO_ROOT, "notices");
+const NOTICES_DIR = path.join(REPO_ROOT, "docs", "legal", "notices");
 const SBOM_DIR = path.join(NOTICES_DIR, "sbom");
 const CARGO_MANIFEST = path.join(
   DESKTOP_DIR,
@@ -1391,13 +1391,15 @@ const desktopRestricted = mergeComponents(
 );
 outputs.push(
   [
-    path.join(REPO_ROOT, "THIRD-PARTY-NOTICES.txt"),
+    path.join(NOTICES_DIR, "THIRD-PARTY-NOTICES.txt"),
     buildOutput({
       packages: projectClosure.packages,
       manualEntries: projectManual,
       productName: "Cindy project aggregate",
       description: ["全工程各已定义分发产物的第三方开源组件聚合声明。"],
-      coverageNotes: ["各产物精确范围见 notices/*.txt;受限组件见独立清单。"],
+      coverageNotes: [
+        "各产物精确范围见 docs/legal/notices/*.txt;受限组件见独立清单。",
+      ],
     }),
   ],
   [
@@ -1408,7 +1410,7 @@ outputs.push(
       productName: "Cindy desktop application — all supported platforms",
       description: ["Windows、macOS 与 Linux 桌面产物的保守合并声明。"],
       coverageNotes: [
-        "发布包可按 notices/desktop-<platform>.txt 使用平台精确版本。",
+        "发布包可按 docs/legal/notices/desktop-<platform>.txt 使用平台精确版本。",
       ],
     }),
   ],

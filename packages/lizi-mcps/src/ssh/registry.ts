@@ -50,7 +50,7 @@ export class SshToolRegistry {
     handler: SshToolHandler<{ [K in keyof T]: z.infer<T[K]> }>;
   }): void {
     if (this.tools.has(def.name)) {
-      throw new Error(`[lizi_ssh registry] duplicate tool name: ${def.name}`);
+      throw new Error(`[cindy_ssh registry] duplicate tool name: ${def.name}`);
     }
     this.tools.set(def.name, def as unknown as SshToolDef);
   }

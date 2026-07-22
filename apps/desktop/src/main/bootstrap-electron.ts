@@ -125,6 +125,7 @@ import matter from 'gray-matter';
 import type { Maker } from '@lizi/maker-core';
 import { im, feishuIm, startImOrchestrators, startImConnection, stopImConnection } from './im';
 import * as authManager from './authManager';
+import { createAccountDeletionIpcHandlers } from './accountDeletionIpc';
 import * as profileEdit from './profileEdit';
 import { uploadPublicAsset } from './ossPublicUpload';
 import { removeRefs as removeMediaRefs } from './cindy-media/ledger';
@@ -787,6 +788,7 @@ async function teardownAuthAccountBoundary(reason: string): Promise<void> {
 authManager.setAccountSwitchTeardown(async () => {
   await teardownAuthAccountBoundary('runtime-replacement-account-switch');
 });
+authManager.setAuthSessionTeardown(teardownAuthAccountBoundary);
 
 try {
   reapClaudeOrphansSync();
@@ -898,12 +900,12 @@ registerBrowserBackendIpc();
 // ipcMain.handle 在 app ready 前注册也有效。
 registerAppShortcutIpc();
 
-// ── 主界面布局树存储 IPC(布局树重构 2/5)────────────────────────────────
+// ── 主界面布局树存储 IPC──────────────────────────────────────────────
 // renderer 首帧 sendSync 拉布局(规则 7 无跳变)、set/reset 写路径、changed
 // 广播。注册时顺带 ensurePersisted:userData 落 layout.v1.json + 损坏自愈。
 registerLayoutIpc();
 
-// ── 意识仓库 IPC(意识系统 C2)────────────────────────────────────────────
+// ── 意识仓库 IPC──────────────────────────────────────────────────────
 // renderer 首帧 sendSync 拉已装意识清单(意识面板与内置面板同帧注册,规则 7
 // 无跳变)、install/uninstall 写路径、changed 广播。见 main/cindy-brain/。
 registerGhostIpc();
@@ -925,9 +927,9 @@ registerGhostIpc();
 //                     supportFetchAPI 丢失即静默白屏,勿动
 //   cindy-remote-media: device-link 入方向媒体(被控端字节经 OSS 中转)
 //   cindy-ghost:      意识沙箱文件供片(handler 挂在每意识专属 session 分区,
-//                     只认自己安装目录;runtime-sandbox.md §3)
+//                     只认自己安装目录;AGENTS.md 规则 28)
 //   cindy-media:      媒体总仓字节仓取件窗口(内容寻址 blob;新写入媒体的
-//                     唯一新协议,老 xdt-* 转只读遗产;媒体总仓设计稿 §2.4)
+//                     统一协议,历史 xdt-* 协议只读兼容)
 protocol.registerSchemesAsPrivileged([
   imageSchemePrivilege,
   videoSchemePrivilege,
@@ -1710,7 +1712,7 @@ app.on('open-url', (event, url) => {
 
 // macOS Finder "打开方式 → XDMaker" 入口:声明 CFBundleDocumentTypes 接受
 // public.folder 后,Finder 把目录路径通过 open-file 事件推过来 (冷启动 / 已运行
-// 都走此路径)。事件也可能被文件触发:.cindy 意识走双击装入 (C2c),其余文件
+// 都走此路径)。事件也可能被文件触发:.cindy 意识走双击装入,其余文件
 // 静默忽略。
 //
 // 必须在 app.whenReady() 之前 attach,与 open-url 同理 (冷启动早于 ready 触发)。
@@ -1803,7 +1805,7 @@ if (shouldRequestSingleInstanceLock({
         if (openFolder) {
           handleIncomingOpenFolder(openFolder, 'second-instance');
         } else {
-          // 双击已关联的 .cindy(Windows):装入 + 停靠(C2c)。
+          // 双击已关联的 .cindy(Windows):装入 + 停靠。
           const openShareFile = findOpenShareFileInArgv(argv);
           if (openShareFile) {
             handleIncomingShareFile(openShareFile, 'second-instance');
@@ -1860,7 +1862,7 @@ if (process.platform !== 'darwin') {
 // 不为此加门控。
 if (app.isPackaged) {
   void registerFolderContextMenu();
-  // Windows .cindy 文件关联自注册(双击装入意识,C2c)。同款 best-effort 口径。
+  // Windows .cindy 文件关联自注册(双击装入意识)。同款 best-effort 口径。
   registerCindyFileAssociation();
   // 品牌改名快捷方式自愈(XDMaker.lnk → Cindy.lnk;差量更新不重跑安装器,
   // 存量用户靠这里换名)。同款 best-effort 口径,详见模块头注释。
@@ -3095,6 +3097,42 @@ ipcMain.on('theme:apply-vibrancy', (_event, payload: { familyId: string; isDark:
     return authManager.refresh();
   });
 
+  // ── Account deletion IPC ──
+  // Receipt and auth tokens stay in main. A successful confirm first reuses
+  // the full logout account-boundary teardown, then clears only this local
+  // session (the server has already revoked its refresh family).
+  const accountDeletionLog = createLogger('accountDeletion');
+  const accountDeletionHandlers = createAccountDeletionIpcHandlers({
+    getAvailability: () => authManager.getAccountDeletionAvailability(),
+    requestChallenge: () => authManager.requestAccountDeletionChallenge(),
+    confirm: (input) => authManager.confirmAccountDeletion(input),
+    getStatus: () => authManager.getAccountDeletionStatus(),
+    clearReceipt: () => authManager.clearAccountDeletionReceipt(),
+    consumeRestoredNotice: () => authManager.consumeAccountDeletionRestoredNotice(),
+    isConfirmedLocalSessionCurrent: () =>
+      authManager.isConfirmedAccountDeletionSessionCurrent(),
+    teardownAccountBoundary: () => teardownAuthAccountBoundary('account-deletion'),
+    clearLocalSession: () => authManager.clearLocalSessionAfterAccountDeletion(),
+    logWarn: (message, error) => accountDeletionLog.warn(message, error),
+  });
+
+  ipcMain.handle('auth:account-deletion:get-availability', () =>
+    accountDeletionHandlers.getAvailability(),
+  );
+  ipcMain.handle('auth:account-deletion:request-challenge', () =>
+    accountDeletionHandlers.requestChallenge(),
+  );
+  ipcMain.handle('auth:account-deletion:confirm', (_event, input: unknown) =>
+    accountDeletionHandlers.confirm(input),
+  );
+  ipcMain.handle('auth:account-deletion:get-status', () => accountDeletionHandlers.getStatus());
+  ipcMain.handle('auth:account-deletion:clear-receipt', () =>
+    accountDeletionHandlers.clearReceipt(),
+  );
+  ipcMain.handle('auth:account-deletion:consume-restored-notice', () =>
+    accountDeletionHandlers.consumeRestoredNotice(),
+  );
+
   // ── Profile 编辑 IPC(设置 → 用户卡片编辑;业务体在 profileEdit.ts,
   //    资料直写 auth-server,头像经 oss-server 预签名直传) ──
 
@@ -3110,15 +3148,20 @@ ipcMain.on('theme:apply-vibrancy', (_event, payload: { familyId: string; isDark:
       return result.canceled || !result.filePaths[0] ? null : result.filePaths[0];
     },
     readFile: (filePath) => fs.promises.readFile(filePath),
-    uploadAvatar: ({ buffer, mimeType }) =>
-      uploadPublicAsset(
+    uploadAvatar: async ({ buffer, mimeType }) => {
+      const result = await uploadPublicAsset(
         {
           fetchImpl: (input, init) => net.fetch(input, init),
           getBaseUrl: () => getClientEndpoint('ossApiBaseUrl'),
           getToken: () => authManager.getAccessToken(),
         },
         { scene: 'avatar', contentType: mimeType, body: buffer },
-      ),
+      );
+      if (!result.ok && result.status === 401 && result.code === 'ACCOUNT_UNAVAILABLE') {
+        void authManager.invalidateSession('account-unavailable');
+      }
+      return result;
+    },
     patchProfile: (patch) => authManager.updateServerProfile(patch),
     logWarn: (message, err) => profileEditLog.warn(message, err),
   };
@@ -3199,7 +3242,7 @@ ipcMain.on('theme:apply-vibrancy', (_event, payload: { familyId: string; isDark:
       registerMakerForkIpc();
       registerMakerAuthIpc(getMakerCore());
       registerMakerStatusIpc(getMakerCore());
-      registerMakerUsageIpc();
+      registerMakerUsageIpc(getMakerCore());
       registerMakerBinaryVersionIpc();
       registerCrossAgentConvertIpc();
       // Workdir File Browser (vscode-style lazy file tree + content viewer for
@@ -3402,8 +3445,7 @@ ipcMain.on('theme:apply-vibrancy', (_event, payload: { familyId: string; isDark:
       };
     }
 
-    // 两个 binary 都 ready, 现在才能安全构造 Maker 单例并挂 maker:* / 相关 IPC。
-    // 详见 doc/agent/xdt-maker-architecture.md
+    // 两个 binary 都 ready,现在才能安全构造 Maker 单例并挂 maker:* / 相关 IPC。
     await registerMakerIpcsAfterSplash();
 
     return {
@@ -4427,7 +4469,7 @@ ipcMain.on('theme:apply-vibrancy', (_event, payload: { familyId: string; isDark:
         url.startsWith('cindy-media://')
           ? cindyMediaBlobStore.resolveSafe(url)
           : imageCacheStore.resolveSafe(url),
-      // 迁移第 1 步:lightbox「发送到对话」的缓存写同样进媒体总仓(草稿语义,
+      // 规则 25:lightbox「发送到对话」的缓存写同样进媒体总仓(草稿语义,
       // 发送时统一由 register.ts 挂引用),与 IPC from-path/from-buffer 一致。
       cacheImageFromPath: (params) =>
         cindyChatAttachments.ingestChatImageFromPath({
@@ -4516,8 +4558,8 @@ ipcMain.on('theme:apply-vibrancy', (_event, payload: { familyId: string; isDark:
   //   - rewind:preview / rewind:commit → maker-ipc/rewind.ts (C2, 本提交)
 
   // ── Image local cache IPC handlers (image-local-cache M3) ──
-  // 迁移第 1 步(规则 25):粘贴/拖拽写入切到 cindy-media 媒体总仓,返回
-  // cindy-media:// 内容寻址地址。老 draft/committed 状态机由引用计数替代:
+  // 规则 25:粘贴/拖拽写入走 cindy-media 媒体总仓,返回
+  // cindy-media:// 内容寻址地址。历史 draft/committed 状态机由引用计数替代:
   // 此处只写 blob 不挂引用(=草稿),发送时 register.ts 挂 session-attachment
   // 引用(=晋升)。sessionId 参数保留兼容 renderer 签名,不再决定落盘位置。
   // F1: drag drop → blob 仓,returns cindy-media:// url
@@ -4553,7 +4595,7 @@ ipcMain.on('theme:apply-vibrancy', (_event, payload: { familyId: string; isDark:
     },
   );
 
-  // ── 存储空间卡片(关于页)IPC:媒体总仓回收器 + 对账(迁移第 5 步)──
+  // ── 存储空间卡片(关于页)IPC:媒体总仓回收器 + 对账──
   // 业务体在 cindy-media/storageIpc.ts(依赖注入,规则 14),这里只做接线。
   {
     // 各窗口草稿附件 URL 上报(composerDraftStore mutator 尾部推送;多窗口
@@ -4609,7 +4651,7 @@ ipcMain.on('theme:apply-vibrancy', (_event, payload: { familyId: string; isDark:
     'image-cache:cleanup-session',
     async (_event: Electron.IpcMainInvokeEvent, sessionId: string): Promise<void> => {
       await imageCacheStore.removeSession(sessionId);
-      // 新世界(cindy-media)对应清理:删本会话名下的媒体引用行(附件/导入/
+      // 媒体总仓对应清理:删本会话名下的媒体引用行(附件/导入/
       // 消息出生引用;画廊等持久引用不动)。失败只警告——引用行残留是
       // 无害的保守方向(blob 多活一阵),由对账工具兜底,不阻塞会话删除。
       try {
@@ -4632,7 +4674,7 @@ ipcMain.on('theme:apply-vibrancy', (_event, payload: { familyId: string; isDark:
       for (const url of urls) {
         // cindy-media blob 是内容寻址共享字节,chip 移除不删任何东西——
         // 同内容可能被其它消息/画廊引用,删字节必误伤;未发送的无引用 blob
-        // 由回收器(阶段③)收走。老 xdt-image 草稿维持物理删除。
+        // 由回收器收走。历史 xdt-image 草稿维持物理删除。
         if (typeof url === 'string' && url.startsWith('cindy-media://')) continue;
         try {
           await imageCacheStore.removeFile(url);

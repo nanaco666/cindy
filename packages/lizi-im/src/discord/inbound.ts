@@ -83,7 +83,7 @@ export async function normalizeDmMessage(
       const kind = mimeType.startsWith('image/') ? ('image' as const) : ('file' as const);
       let absPath = dest;
       let cindyUrl: string | undefined;
-      // 图片提升进 host 媒体总仓(迁移第 3 步):download 只会写文件,先落老
+      // 图片提升进 host 媒体总仓:download 只会写文件,先落历史
       // 目录再读字节入仓、删临时副本;失败回落老路径(附件不能丢)。token 用
       // 平台附件 id(全局唯一),缺失时退 `msgId-序号`。
       if (kind === 'image' && ctx.media) {

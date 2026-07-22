@@ -155,7 +155,7 @@ describe('applyWebviewHardening', () => {
   });
 });
 
-describe('applyGhostWebviewHardening(意识面板 webview,C3b)', () => {
+describe('applyGhostWebviewHardening(意识面板 webview)', () => {
   it('同一套安全锁全部生效,但保留意识专属分区、掐死 popup', () => {
     const webPreferences: Record<string, unknown> = {
       nodeIntegration: true,

@@ -24,7 +24,7 @@ function noopLogger(): Logger {
 }
 
 function createTestServer(): McpServer {
-  const server = new McpServer({ name: 'lizi_test', version: '1.0.0' });
+  const server = new McpServer({ name: 'cindy_test', version: '1.0.0' });
   server.tool(
     'current_session',
     'Return the active lizi MCP session context session id.',
@@ -60,7 +60,7 @@ describe('codexHttpBridge', () => {
 
   it('routes tool calls by JSON-RPC params._meta.threadId', async () => {
     bridge = await startCodexHttpBridge({
-      serverFactories: { lizi_test: createTestServer },
+      serverFactories: { cindy_test: createTestServer },
       logger: noopLogger(),
     });
     bridge.registerThreadContext('thread-a', {
@@ -75,7 +75,7 @@ describe('codexHttpBridge', () => {
       accept: 'application/json, text/event-stream',
       'content-type': 'application/json',
     };
-    const initResp = await fetch(bridge.url('lizi_test'), {
+    const initResp = await fetch(bridge.url('cindy_test'), {
       method: 'POST',
       headers: baseHeaders,
       body: JSON.stringify({
@@ -94,7 +94,7 @@ describe('codexHttpBridge', () => {
     expect(mcpSessionId).toBeTruthy();
     await initResp.text();
 
-    const callResp = await fetch(bridge.url('lizi_test'), {
+    const callResp = await fetch(bridge.url('cindy_test'), {
       method: 'POST',
       headers: {
         ...baseHeaders,

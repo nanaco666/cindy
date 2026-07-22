@@ -241,7 +241,7 @@ describe('prepareSharedProjectSkillLinks', () => {
 
 describe('projectWorkingDirFromSkillPath', () => {
   it('accepts only direct project skill discovery children', () => {
-    const projectRoot = path.join(path.sep, 'projects', 'demo');
+    const projectRoot = path.resolve(path.sep, 'projects', 'demo');
     expect(
       projectWorkingDirFromSkillPath(
         path.join(projectRoot, '.agents', 'skills', 'my-skill'),

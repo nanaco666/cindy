@@ -12,17 +12,24 @@ import { useTranslation } from 'react-i18next';
 
 import { useConfirmDialog } from '@/components/ui/confirm-dialog-provider';
 import { clearWorkersCache } from '@/features/cc-agent/hooks/useWorkers';
+import { toast } from '@/lib/toast';
 import {
   createAuthService,
+  type AccountDeletionAvailability,
+  type AccountDeletionStatus,
   type AuthService,
   type AuthState,
   type AuthFlowState,
+  type DesktopAccountDeletionChallenge,
+  type DesktopAccountDeletionResult,
   type DesktopLoginAction,
   type DesktopLoginActionResult,
   type User,
 } from '@/lib/authService';
 import { setCurrentUserName } from '@/lib/makerChatStore';
+import { isSecondaryWindow } from '@/lib/secondaryWindow';
 import { sessionsStore } from '@/lib/sessionsStore';
+import { isSidebarWindow } from '@/lib/sidebarWindow';
 
 /**
  * 登录态上下文：user / isAuthenticated / isCanary / deviceId 全部来自 main 的
@@ -45,6 +52,21 @@ export interface AuthContextValue {
   loadLoginState: () => Promise<DesktopLoginActionResult>;
   dispatchLoginAction: (action: DesktopLoginAction) => Promise<DesktopLoginActionResult>;
   logout: () => Promise<void>;
+  hasAccountDeletionReceipt: boolean;
+  getAccountDeletionAvailability: () => Promise<
+    DesktopAccountDeletionResult<AccountDeletionAvailability>
+  >;
+  requestAccountDeletionChallenge: () => Promise<
+    DesktopAccountDeletionResult<DesktopAccountDeletionChallenge>
+  >;
+  confirmAccountDeletion: (input: {
+    challengeId: string;
+    code: string;
+  }) => Promise<DesktopAccountDeletionResult<AccountDeletionStatus>>;
+  getAccountDeletionStatus: () => Promise<
+    DesktopAccountDeletionResult<AccountDeletionStatus | null>
+  >;
+  clearAccountDeletionReceipt: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -56,6 +78,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isInitializing, setIsInitializing] = useState(true);
   const [deviceId, setDeviceId] = useState<string | null>(null);
   const [loginState, setLoginState] = useState<AuthFlowState | null>(null);
+  const [hasAccountDeletionReceipt, setHasAccountDeletionReceipt] = useState(false);
+  const [accountDeletionRestored, setAccountDeletionRestored] = useState(false);
   const { confirm } = useConfirmDialog();
   const { t } = useTranslation();
 
@@ -88,6 +112,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setIsAuthenticated(state.isAuthenticated);
       setIsCanary(state.isCanary);
       setDeviceId(state.deviceId);
+      setHasAccountDeletionReceipt(state.hasAccountDeletionReceipt);
+      setAccountDeletionRestored(state.accountDeletionRestored);
       if (state.user) {
         setLoginState(null);
         applyIncomingUser(state.user);
@@ -108,6 +134,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setIsAuthenticated(state.isAuthenticated);
         setIsCanary(state.isCanary);
         setDeviceId(state.deviceId);
+        setHasAccountDeletionReceipt(state.hasAccountDeletionReceipt);
+        setAccountDeletionRestored(state.accountDeletionRestored);
         if (state.user) {
           applyIncomingUser(state.user);
         } else {
@@ -124,6 +152,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       service.dispose();
     };
   }, [applyIncomingUser]);
+
+  useEffect(() => {
+    if (!isAuthenticated || !accountDeletionRestored) return;
+    setAccountDeletionRestored(false);
+    if (isSecondaryWindow() || isSidebarWindow()) return;
+    let disposed = false;
+    void authServiceRef.current!
+      .consumeAccountDeletionRestoredNotice()
+      .then((shouldShow) => {
+        if (!disposed && shouldShow) {
+          toast.success(t('accountDeletion.restoredNotice'), { duration: 5000 });
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      disposed = true;
+    };
+  }, [accountDeletionRestored, isAuthenticated, t]);
 
   useEffect(() => {
     let handling = false;
@@ -174,6 +220,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     clearWorkersCache();
   }, []);
 
+  const getAccountDeletionAvailability = useCallback(
+    () => authServiceRef.current!.getAccountDeletionAvailability(),
+    [],
+  );
+
+  const requestAccountDeletionChallenge = useCallback(async () => {
+    const result = await authServiceRef.current!.requestAccountDeletionChallenge();
+    if (result.success) setHasAccountDeletionReceipt(true);
+    return result;
+  }, []);
+
+  const confirmAccountDeletion = useCallback(
+    (input: { challengeId: string; code: string }) =>
+      authServiceRef.current!.confirmAccountDeletion(input),
+    [],
+  );
+
+  const getAccountDeletionStatus = useCallback(
+    () => authServiceRef.current!.getAccountDeletionStatus(),
+    [],
+  );
+
+  const clearAccountDeletionReceipt = useCallback(async () => {
+    await authServiceRef.current!.clearAccountDeletionReceipt();
+    setHasAccountDeletionReceipt(false);
+  }, []);
+
   // 同步用户名到 makerChatStore 模块级 cache — dispatchToSdk 把它透传给 maker.send
   // 让 turn-start status 文案带 "<userName> Just Wait ..." (登出 / 切账号自动清空)。
   useEffect(() => {
@@ -191,6 +264,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       loadLoginState,
       dispatchLoginAction,
       logout,
+      hasAccountDeletionReceipt,
+      getAccountDeletionAvailability,
+      requestAccountDeletionChallenge,
+      confirmAccountDeletion,
+      getAccountDeletionStatus,
+      clearAccountDeletionReceipt,
     }),
     [
       user,
@@ -202,6 +281,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       loadLoginState,
       dispatchLoginAction,
       logout,
+      hasAccountDeletionReceipt,
+      getAccountDeletionAvailability,
+      requestAccountDeletionChallenge,
+      confirmAccountDeletion,
+      getAccountDeletionStatus,
+      clearAccountDeletionReceipt,
     ],
   );
 

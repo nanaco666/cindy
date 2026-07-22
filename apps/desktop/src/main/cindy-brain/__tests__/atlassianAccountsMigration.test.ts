@@ -32,7 +32,7 @@ function memoryVault(seed?: Record<string, string>): GhostOauthVault & { data: M
 function makeDeps(overrides?: Partial<AtlassianAccountsMigrationDeps>): AtlassianAccountsMigrationDeps {
   return {
     readLegacyRefreshToken: () => 'rt-legacy',
-    readLegacyConnection: () => ({ email: 'lizi@xd.com' }),
+    readLegacyConnection: () => ({ email: 'dev@example.com' }),
     vault: memoryVault(),
     ...overrides,
   };
@@ -54,7 +54,7 @@ describe('migrateAtlassianAccounts', () => {
     expect(manifest).not.toBeNull();
     expect(manifest?.accounts).toHaveLength(1);
     const account = manifest!.accounts[0];
-    expect(account.label).toBe('lizi@xd.com');
+    expect(account.label).toBe('dev@example.com');
     expect(account.status).toBe('connected');
     expect(manifest!.defaultAccountId).toBe(account.id);
     expect(vault.read(XD_ATLASSIAN_GHOST_ID, `${XD_ATLASSIAN_SECRET_KEY}-rt-${account.id}`)).toBe('rt-legacy');

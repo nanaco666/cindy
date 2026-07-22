@@ -29,6 +29,7 @@ import { useModelAccessStatus } from '@/hooks/useModelAccessStatus';
 import { useConfirmDialog } from '@/components/ui/confirm-dialog-provider';
 import { toast } from '@/lib/toast';
 import {
+  customProviderModelConfigFromCatalogModel,
   deleteCustomProvider,
   readCustomProviderKey,
   updateCustomProvider,
@@ -758,7 +759,7 @@ function providerViewToConfig(p: ProviderView): CustomProviderConfig {
     const models = p.models[agent] ?? [];
     runtimes[agent] = {
       baseUrl: routing?.upstream ?? '',
-      models: models.map((m) => ({ id: m.id, name: m.name })),
+      models: models.map(customProviderModelConfigFromCatalogModel),
       ...(routing?.headerOverride && Object.keys(routing.headerOverride).length > 0
         ? { headers: { ...routing.headerOverride } }
         : {}),

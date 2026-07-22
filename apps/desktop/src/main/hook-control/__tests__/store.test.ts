@@ -135,7 +135,7 @@ describe('旧多连接文件迁移', () => {
 });
 
 describe('(multi-team)bindingsCache 持久化', () => {
-  const T1 = { teamId: 'T1', teamName: 'xindong', slackUserId: 'U1', slackUserName: 'lizi' };
+  const T1 = { teamId: 'T1', teamName: 'acme', slackUserId: 'U1', slackUserName: 'devuser' };
   const T2 = { teamId: 'T2', teamName: null, slackUserId: 'U2', slackUserName: null };
 
   it('setBindingsCache 落盘, 重建实例仍在; 覆写为空即清空', () => {

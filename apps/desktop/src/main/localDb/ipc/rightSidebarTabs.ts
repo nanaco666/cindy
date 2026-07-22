@@ -15,7 +15,7 @@
  *     (避免 schema 和 renderer kinds 双源真相不同步;renderer 端调用前已校验)
  *
  * 大小数据:
- *   - 普通用户 1 年 ~600KB,重度用户 ~3.5MB(详见 plan §"数据量估算")。
+ *   - 按单条 state 上限与常见 tab 数估算,普通用户 1 年约 600KB,重度用户约 3.5MB。
  *   - `ON DELETE CASCADE` 联动 sessions 表,删 session 自动清相关 tab,无孤立行。
  */
 

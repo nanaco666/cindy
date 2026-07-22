@@ -6,7 +6,7 @@ import { registerPanelKind, type PanelComponentProps } from './registry';
 /**
  * 三个内置面板的包装组件 —— "只包不改":不 import 任何大组件,只从
  * BuiltinPanelBridge 取 MainLayout 构造好的 ReactNode 原样渲染。
- * 这保证第 3 步零行为变化(无人挂载它们),第 4 步 LayoutRoot 挂载后
+ * 这保证布局引擎挂载前零行为变化,LayoutRoot 挂载后
  * 三个大组件的构造与状态所有权仍完整留在 MainLayout。
  */
 
@@ -34,7 +34,7 @@ let registered = false;
 
 /**
  * 注册三个内置面板。显式调用而非 import 副作用 —— 由布局引擎入口
- * (第 4 步的 LayoutRoot 模块)在挂载前调用,幂等。
+ * (LayoutRoot 模块)在挂载前调用,幂等。
  */
 export function registerBuiltinPanels(): void {
   if (registered) return;
