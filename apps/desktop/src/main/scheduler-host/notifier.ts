@@ -23,13 +23,15 @@ export interface DesktopNotifierDeps {
   getMainWindow: () => BrowserWindow | null;
   feishuIm: FeishuIM;
   logger: Logger;
+  /** Global desktop preference and Agent Island arbitration, evaluated at send time. */
+  shouldNotifyDesktop: () => boolean;
 }
 
 export class DesktopNotifier implements Notifier {
   constructor(private readonly deps: DesktopNotifierDeps) {}
 
   async notify(schedule: Schedule, run: ScheduleRun): Promise<void> {
-    if (schedule.notify.desktop) {
+    if (schedule.notify.desktop && this.deps.shouldNotifyDesktop()) {
       try {
         this.notifyDesktop(schedule, run);
       } catch (err) {

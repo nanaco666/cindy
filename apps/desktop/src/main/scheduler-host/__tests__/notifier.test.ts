@@ -27,7 +27,10 @@ function run(status: ScheduleRun['status']): ScheduleRun {
   };
 }
 
-function createNotifier(opts?: { sendMarkdownText?: ReturnType<typeof vi.fn> }): {
+function createNotifier(opts?: {
+  sendMarkdownText?: ReturnType<typeof vi.fn>;
+  shouldNotifyDesktop?: () => boolean;
+}): {
   notifier: DesktopNotifier;
   sendMarkdownText: ReturnType<typeof vi.fn>;
   warn: ReturnType<typeof vi.fn>;
@@ -41,6 +44,7 @@ function createNotifier(opts?: { sendMarkdownText?: ReturnType<typeof vi.fn> }):
       sendMarkdownText,
     } as unknown as FeishuIM,
     logger: { warn },
+    shouldNotifyDesktop: opts?.shouldNotifyDesktop ?? (() => true),
   });
   return { notifier, sendMarkdownText, warn };
 }
@@ -76,6 +80,14 @@ describe('DesktopNotifier desktop status mapping', () => {
       });
     },
   );
+
+  it('does not show a scheduler toast when the shared desktop gate is closed', async () => {
+    const { notifier } = createNotifier({ shouldNotifyDesktop: () => false });
+
+    await notifier.notify(schedule, run('success'));
+
+    expect(showDesktopSessionEvent).not.toHaveBeenCalled();
+  });
 
   it('renders and sends a successful Feishu notification', async () => {
     const { notifier, sendMarkdownText } = createNotifier();

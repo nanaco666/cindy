@@ -442,6 +442,11 @@ export class AgentIslandService {
     this.publish();
   }
 
+  /** Main-process consumers use this to avoid duplicating Agent Island completion UI. */
+  isEnabled(): boolean {
+    return this.enabledSynced && this.enabled;
+  }
+
   refreshLocalization(): void {
     setAgentIslandStrings(this.state, buildAgentIslandStrings());
     this.publish();

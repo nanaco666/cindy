@@ -17,10 +17,10 @@
  *   - dev 下 electron.exe 启动没有 NSIS 装的快捷方式，原生 toast 可能不弹——
  *     把 dev 环境当成"通知功能要在 packaged 构建里测"即可，不再额外兜底。
  *
- * 静音 gate 在 renderer 侧（localStorage `notifications.enabled` /
- * `notifications.feishuEnabled`）做，主进程不持有这两个开关——避免主/渲染双份
- * 状态。主进程仅按 payload.channels 分发,且飞书分支额外要求 ownerOpenId 存在
- * (TOFU 绑定前不发,只 warn)。
+ * 通知偏好仍由 renderer 的 localStorage 持久化。普通会话在 renderer gate 后通过
+ * payload.channels 分发；scheduler 从 main 直接发桌面通知，因此 renderer 会把
+ * `notifications.enabled` 的当前值轻量同步到 main。飞书仍只按调用方 channels 分发，
+ * 且额外要求 ownerOpenId 存在（TOFU 绑定前不发，只 warn）。
  */
 
 import { app, ipcMain, nativeImage, Notification, type BrowserWindow } from 'electron';
@@ -31,6 +31,12 @@ import { markSessionNeedsAttention } from './appBadgeService';
 import { createLogger } from './logger';
 
 const log = createLogger('notificationService');
+let desktopNotificationsEnabled = true;
+
+/** Renderer owns persistence; main keeps the current value for scheduler-originated toasts. */
+export function getDesktopNotificationsEnabled(): boolean {
+  return desktopNotificationsEnabled;
+}
 
 // dev 下 electron.exe / Electron.app 自带的是默认图标，notification toast 没有
 // AUMID/.icns 兜底会显示成空白或 Electron logo——给 toast 显式塞一张 PNG
@@ -151,6 +157,14 @@ export interface NotificationServiceDeps {
 
 export function initNotificationService(deps: NotificationServiceDeps): void {
   const { getWindow, feishuIm } = deps;
+
+  ipcMain.handle('notification:set-desktop-enabled', (_event, enabled: unknown) => {
+    if (typeof enabled !== 'boolean') {
+      throw new TypeError('notification desktop enabled must be a boolean');
+    }
+    desktopNotificationsEnabled = enabled;
+    return { ok: true as const };
+  });
 
   ipcMain.handle(
     'notification:show-session-event',

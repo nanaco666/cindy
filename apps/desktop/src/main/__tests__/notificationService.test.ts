@@ -26,8 +26,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 type IpcHandler = (event: unknown, payload: unknown) => Promise<void> | void;
 
-// 捕获被注册的 IPC handler。每个用例 freshModule 后重置。
-let registeredHandler: IpcHandler | null = null;
+// 捕获被注册的 IPC handlers。每个用例 freshModule 后重置。
+const registeredHandlers = new Map<string, IpcHandler>();
 
 // Notification 构造调用计数(每条 toast 一次)。
 const notificationCtor = vi.fn();
@@ -64,8 +64,8 @@ vi.mock('electron', () => ({
     isPackaged: true,
   },
   ipcMain: {
-    handle: (_channel: string, handler: IpcHandler) => {
-      registeredHandler = handler;
+    handle: (channel: string, handler: IpcHandler) => {
+      registeredHandlers.set(channel, handler);
     },
   },
   Notification: Object.assign(FakeNotification, {
@@ -106,7 +106,7 @@ function makeFeishuIm(ownerOpenId: string | null): FakeFeishuIM {
 // notificationService 在顶层做 IIFE / module state, 每个用例都拿一份新的。
 async function freshService() {
   vi.resetModules();
-  registeredHandler = null;
+  registeredHandlers.clear();
   notificationCtor.mockClear();
   warn.mockClear();
   notificationSupported = true;
@@ -115,8 +115,9 @@ async function freshService() {
 }
 
 async function invokeHandler(payload: unknown): Promise<void> {
-  if (!registeredHandler) throw new Error('handler not registered');
-  await registeredHandler({} as unknown, payload);
+  const handler = registeredHandlers.get('notification:show-session-event');
+  if (!handler) throw new Error('handler not registered');
+  await handler({} as unknown, payload);
 }
 
 const baseDeps = (feishuIm: FakeFeishuIM) => ({
@@ -134,6 +135,19 @@ describe('notificationService — channels 分发', () => {
   });
   afterEach(() => {
     vi.useRealTimers();
+  });
+
+  it('同步并校验 renderer 持久化的桌面通知总开关', async () => {
+    const { getDesktopNotificationsEnabled, initNotificationService } = await freshService();
+    initNotificationService(baseDeps(makeFeishuIm('ou_owner')));
+    const handler = registeredHandlers.get('notification:set-desktop-enabled');
+    expect(handler).toBeDefined();
+
+    await handler?.({}, false);
+    expect(getDesktopNotificationsEnabled()).toBe(false);
+    expect(() => handler?.({}, 'false')).toThrow(
+      'notification desktop enabled must be a boolean',
+    );
   });
 
   it('payload.channels 缺省 → 仅桌面 toast (默认契约,防御漏传)', async () => {
