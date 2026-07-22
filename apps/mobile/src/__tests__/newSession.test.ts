@@ -698,14 +698,12 @@ describe('new session model', () => {
 describe('new session composer surface', () => {
   it('uses the shared platform keyboard avoidance rule for the new-session composer', () => {
     const newSource = readFileSync(resolve(process.cwd(), 'app/sessions/new.tsx'), 'utf8');
-    const keyboardAvoidingStart = newSource.indexOf('<KeyboardAvoidingView');
-    const keyboardAvoidingEnd = newSource.indexOf('>', keyboardAvoidingStart);
-    const keyboardAvoidingSource = newSource.slice(keyboardAvoidingStart, keyboardAvoidingEnd);
 
     expect(newSource).toContain("import { keyboardAvoidingBehaviorForPlatform } from '@/session/mobileNativeShellLayout';");
-    expect(keyboardAvoidingSource).toContain('behavior={keyboardAvoidingBehaviorForPlatform(');
-    expect(keyboardAvoidingSource).toContain("Platform.OS === 'android' ? 'android'");
-    expect(keyboardAvoidingSource).not.toContain("Platform.OS === 'ios' ? 'padding' : undefined");
+    expect(newSource).toContain(`behavior={keyboardAvoidingBehaviorForPlatform(
+          Platform.OS === 'ios' ? 'ios' : Platform.OS === 'android' ? 'android' : 'web',
+        )}`);
+    expect(newSource).not.toContain("Platform.OS === 'ios' ? 'padding' : undefined");
   });
 
   it('uses the shared mobile composer row rather than a separate input implementation', () => {
