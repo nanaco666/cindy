@@ -1547,12 +1547,25 @@ function sessionMetaForIsland(session: {
 }
 
 function handleAgentIslandEventAfterBroadcast(
-  session: { id: string; agentKind?: unknown; workDir?: unknown; workspaceKind?: unknown },
+  session: {
+    id: string;
+    agentKind?: unknown;
+    workDir?: unknown;
+    workspaceKind?: unknown;
+    remoteHostId?: unknown;
+  },
   event: AgentEvent,
 ): void {
   if (!shouldNotifyAgentIslandForSession(session.id)) return;
   try {
-    getAgentIslandService()?.handleAgentEvent(sessionMetaForIsland(session), event);
+    const service = getAgentIslandService();
+    if (!service) return;
+    const meta = sessionMetaForIsland(session);
+    if (isRemoteAuthRetryErrorEvent(session, event)) {
+      service.deferRemoteAuthRetryError(meta, event);
+      return;
+    }
+    service.handleAgentEvent(meta, event);
   } catch (error) {
     log.warn('Agent Island event update failed after maker event broadcast', {
       sessionId: session.id,
@@ -1560,6 +1573,18 @@ function handleAgentIslandEventAfterBroadcast(
       error: error instanceof Error ? error.message : String(error),
     });
   }
+}
+
+function isRemoteAuthRetryErrorEvent(
+  session: { remoteHostId?: unknown },
+  event: AgentEvent,
+): boolean {
+  if (!session.remoteHostId || event.type !== 'error' || !isTerminalTurnErrorEvent(event)) return false;
+  const data = event.data as { message?: unknown; sdkError?: unknown } | undefined;
+  return data?.sdkError === 'authentication_failed' ||
+    /authentication_error|invalid.*api.key|401/i.test(
+      typeof data?.message === 'string' ? data.message : '',
+    );
 }
 
 function handleAgentIslandInteractionAfterBroadcast(
@@ -2133,10 +2158,7 @@ export function wireSessionToIpc(session: ReturnType<Maker['getSession']>): void
       // 重开会话会看到虚假错误卡。判定与 renderer 的 isAuthError 保持一致，覆盖
       // sdkError === 'authentication_failed' 以及 message 命中 authentication_error /
       // invalid api key / 401 的情形。本地会话（无 remoteHostId）无 auto-retry，不跳过。
-      isRemoteAuthRetry =
-        (errData?.sdkError === 'authentication_failed' ||
-          /authentication_error|invalid.*api.key|401/i.test(typeof errData?.message === 'string' ? errData.message : '')) &&
-        Boolean(session.remoteHostId);
+      isRemoteAuthRetry = isRemoteAuthRetryErrorEvent(session, event);
       if (!isPlannedUpgradeClose) {
         agentInputCoordinatorHolder?.onTurnEvent(
           session.id,
@@ -5935,6 +5957,7 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
       ? agentMetaRaw as AgentMeta
       : null;
     onTurnErrorEvent(sid, errData, agentMeta);
+    getAgentIslandService()?.resolveDeferredRemoteAuthRetryError(sid);
   });
 
   ipcMain.handle(MAKER_INVOKE.INPUT_REMOVE, (_e, sessionId: unknown, clientId: unknown) => {

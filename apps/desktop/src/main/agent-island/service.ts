@@ -108,6 +108,9 @@ const SILENCED_COMPLETION_CLEAR_MS = 2_000;
 const LAYOUT_PREFERENCE_WRITE_DEBOUNCE_MS = 150;
 const STREAMING_PREVIEW_PUBLISH_DEBOUNCE_MS = 50;
 const REMOTE_DAEMON_CLOSED_REASON = 'remote_daemon_closed';
+// Remote close can legitimately consume the full 15s RPC timeout before the
+// renderer waits another 1.5s and resends. Keep the fallback beyond that window.
+const REMOTE_AUTH_ERROR_FALLBACK_MS = 30_000;
 
 interface AgentIslandSessionMeta {
   sessionId: string;
@@ -225,6 +228,11 @@ export class AgentIslandService {
     attention: { existed: boolean; value: boolean };
   }>();
   private readonly deferredCompletions = new Map<string, { event: AgentEvent; suppressAttention: boolean }>();
+  private readonly deferredRemoteAuthErrors = new Map<string, {
+    meta: AgentIslandSessionMeta;
+    event: AgentEvent;
+    timer: ReturnType<typeof setTimeout>;
+  }>();
   private readonly pendingLayoutPreferenceWrites = new Map<number, AgentIslandLayoutPreference>();
   private readonly permissionRequests = new Map<string, {
     sessionId: string;
@@ -265,6 +273,29 @@ export class AgentIslandService {
 
   setCompletionDeferResolver(resolver: ((sessionId: string) => boolean) | null): void {
     this.shouldDeferCompletion = resolver;
+  }
+
+  /**
+   * Holds a remote authentication error while the renderer decides whether its
+   * built-in reconnect can retry the turn. Paired completion events are ignored
+  * until the retry either starts, fails explicitly, or reaches the fallback.
+  */
+  deferRemoteAuthRetryError(meta: AgentIslandSessionMeta, event: AgentEvent): void {
+    this.clearDeferredRemoteAuthError(meta.sessionId);
+    const timer = setTimeout(() => {
+      this.resolveDeferredRemoteAuthRetryError(meta.sessionId);
+    }, REMOTE_AUTH_ERROR_FALLBACK_MS);
+    this.deferredRemoteAuthErrors.set(meta.sessionId, { meta, event, timer });
+  }
+
+  /** Surfaces a deferred auth error after retry is rejected or fails. */
+  resolveDeferredRemoteAuthRetryError(sessionId: string): boolean {
+    const pending = this.deferredRemoteAuthErrors.get(sessionId);
+    if (!pending) return false;
+    this.deferredRemoteAuthErrors.delete(sessionId);
+    clearTimeout(pending.timer);
+    this.handleAgentEvent(pending.meta, pending.event);
+    return true;
   }
 
   /**
@@ -498,6 +529,9 @@ export class AgentIslandService {
     this.sessionHadAttentionAtRunStart.clear();
     this.userPromptRollbackTokens.clear();
     this.deferredCompletions.clear();
+    for (const sessionId of this.deferredRemoteAuthErrors.keys()) {
+      this.clearDeferredRemoteAuthError(sessionId);
+    }
     this.nativeFailureLogged = false;
     this.enabled = false;
     this.enabledSynced = this.headless;
@@ -531,6 +565,14 @@ export class AgentIslandService {
 
   handleAgentEvent(meta: AgentIslandSessionMeta, event: AgentEvent): void {
     const hydrated = this.hydrateMeta(meta);
+    if (this.deferredRemoteAuthErrors.has(hydrated.sessionId)) {
+      // The failed turn's status Done/done tail is bookkeeping, not a user-visible
+      // completion. A running status proves the replacement turn was accepted.
+      if (isCompletionDoneEvent(event)) return;
+      if (isRunningStatusEvent(event)) {
+        this.clearDeferredRemoteAuthError(hydrated.sessionId);
+      }
+    }
     const now = Date.now();
     setAgentIslandStrings(this.state, buildAgentIslandStrings());
     this.prunePermissionRequestsForAgentEvent(hydrated.sessionId, event);
@@ -735,6 +777,8 @@ export class AgentIslandService {
       }
     }
     this.deferredCompletions.delete(sessionId);
+    // Remote auth retry closes the failed session before the renderer reports
+    // whether its replacement turn started, so keep that deferred error here.
     removeAgentIslandSession(this.state, sessionId);
     this.deletePermissionRequestsForSession(sessionId);
     this.publish();
@@ -951,6 +995,13 @@ export class AgentIslandService {
     if (!timer) return;
     clearTimeout(timer);
     this.silencedRunClearTimers.delete(runId);
+  }
+
+  private clearDeferredRemoteAuthError(sessionId: string): void {
+    const pending = this.deferredRemoteAuthErrors.get(sessionId);
+    if (!pending) return;
+    clearTimeout(pending.timer);
+    this.deferredRemoteAuthErrors.delete(sessionId);
   }
 
   private syncSessionAttention(sessionId: string): void {
@@ -1766,6 +1817,12 @@ function isCompletionDoneEvent(event: AgentEvent): boolean {
   if (event.type !== 'status') return false;
   const data = event.data as { isRunning?: unknown; status?: unknown } | undefined;
   return data?.isRunning === false && data.status === 'Done';
+}
+
+function isRunningStatusEvent(event: AgentEvent): boolean {
+  if (event.type !== 'status') return false;
+  const data = event.data as { isRunning?: unknown } | undefined;
+  return data?.isRunning === true;
 }
 
 function isRemoteDaemonClosedErrorEvent(event: AgentEvent): boolean {
