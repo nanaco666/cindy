@@ -1170,7 +1170,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       lifecycleAnnouncement: boolean;
     }> => ipcRenderer.invoke('feishuBot:get-state'),
     save: (payload: { appId: string; appSecret: string }): Promise<{
-      verdict: 'connected' | 'conflict' | 'error';
+      verdict: 'connected' | 'conflict' | 'error' | 'pending';
     }> => ipcRenderer.invoke('feishuBot:save', payload),
     reconnect: (): Promise<{ verdict: 'connected' | 'conflict' | 'error' }> =>
       ipcRenderer.invoke('feishuBot:reconnect'),

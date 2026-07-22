@@ -1302,11 +1302,18 @@
         "reconnect": "重新连接飞书机器人",
         "clear": "解绑"
       },
+      "saved": {
+        "heading": "飞书机器人已绑定",
+        "connectingNote": "已保存机器人凭证，正在建立连接。",
+        "reconnectingNote": "已保存机器人凭证，正在恢复连接。",
+        "conflictNote": "已保存机器人凭证，但该 App ID 当前被其他设备占用。",
+        "errorNote": "已保存机器人凭证，但当前连接失败。请点击重新连接重试。",
+        "idleNote": "已保存机器人凭证，当前尚未连接。请点击重新连接。"
+      },
       "appIdLabel": "App ID",
       "appIdPlaceholder": "cli_xxxxxxxxxxxxxxxx",
       "appSecretLabel": "App Secret",
       "appSecretPlaceholder": "sec_xxxxxxxxxxxxxxxxxx",
-      "appSecretSavedPlaceholder": "••••••••••••••••••••••••",
       "showSecret": "显示密钥",
       "hideSecret": "隐藏密钥",
       "createLink": "点击链接创建 ↗",

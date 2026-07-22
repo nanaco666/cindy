@@ -42,7 +42,7 @@ export interface UseFeishuBotReturn {
   /** 真实状态，由 main 推送驱动 */
   status: FeishuBotStatus;
   errorMessage: string | null;
-  /** 是否已有持久化凭证（用于显示 trash icon） */
+  /** 是否已有持久化凭证（独立于当前连接状态） */
   hasSavedCreds: boolean;
   /** 已绑定的 owner openId（仅显示用，可能为 null） */
   ownerOpenId: string | null;
@@ -211,6 +211,13 @@ export function useFeishuBot(): UseFeishuBotReturn {
         appSecret: trimmedSecret,
       });
 
+      // A non-connected verdict can still coexist with persisted credentials.
+      // Re-read main's current state instead of treating an earlier transport
+      // verdict as either the binding state or the latest live status.
+      if (verdict !== 'connected') {
+        await reloadState();
+      }
+
       if (verdict === 'connected') {
         setStatus('connected');
         setHasSavedCreds(true);
@@ -230,13 +237,15 @@ export function useFeishuBot(): UseFeishuBotReturn {
         return true;
       }
 
+      if (verdict === 'pending') {
+        return true;
+      }
+
       if (verdict === 'conflict') {
-        setStatus('conflict');
         toast.error(t('logic.toasts.feishuBotConflict'));
         return false;
       }
 
-      setStatus('error');
       toast.error(t('logic.toasts.feishuBotConnectFailed'));
       return false;
     } catch (err) {
@@ -247,7 +256,7 @@ export function useFeishuBot(): UseFeishuBotReturn {
     } finally {
       setIsSaving(false);
     }
-  }, [appId, appSecret, isSaving, t]);
+  }, [appId, appSecret, isSaving, reloadState, t]);
 
   const clear = useCallback(async () => {
     if (isClearing) return;

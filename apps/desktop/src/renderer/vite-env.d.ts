@@ -365,7 +365,7 @@ interface FeishuBotRegistrationStatusPayload {
   status: 'pending' | 'success' | 'expired' | 'cancelled' | 'error';
   appId?: string;
   ownerOpenId?: string | null;
-  verdict?: 'connected' | 'conflict' | 'error';
+  verdict?: 'connected' | 'conflict' | 'error' | 'pending';
   error?: string;
 }
 
@@ -1439,7 +1439,7 @@ interface ElectronAPI {
       lifecycleAnnouncement: boolean;
     }>;
     save: (payload: { appId: string; appSecret: string }) => Promise<{
-      verdict: 'connected' | 'conflict' | 'error';
+      verdict: 'connected' | 'conflict' | 'error' | 'pending';
     }>;
     reconnect: () => Promise<{
       verdict: 'connected' | 'conflict' | 'error';

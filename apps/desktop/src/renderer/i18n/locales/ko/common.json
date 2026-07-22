@@ -1302,11 +1302,18 @@
         "reconnect": "Feishu 봇 다시 연결",
         "clear": "연동 해제"
       },
+      "saved": {
+        "heading": "Feishu 봇이 연동됨",
+        "connectingNote": "봇 자격 증명이 저장되어 있습니다. 연결하는 중입니다.",
+        "reconnectingNote": "봇 자격 증명이 저장되어 있습니다. 연결을 복구하는 중입니다.",
+        "conflictNote": "봇 자격 증명이 저장되어 있지만 이 App ID는 다른 기기에서 사용 중입니다.",
+        "errorNote": "봇 자격 증명이 저장되어 있지만 연결에 실패했습니다. 다시 연결해 보세요.",
+        "idleNote": "봇 자격 증명이 저장되어 있지만 현재 연결되지 않았습니다. 다시 연결해 보세요."
+      },
       "appIdLabel": "App ID",
       "appIdPlaceholder": "cli_xxxxxxxxxxxxxxxx",
       "appSecretLabel": "App Secret",
       "appSecretPlaceholder": "sec_xxxxxxxxxxxxxxxxxx",
-      "appSecretSavedPlaceholder": "••••••••••••••••••••••••",
       "showSecret": "시크릿 표시",
       "hideSecret": "시크릿 숨기기",
       "createLink": "여기를 클릭해 생성 ↗",

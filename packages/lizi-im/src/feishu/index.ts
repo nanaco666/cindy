@@ -71,7 +71,10 @@ export class FeishuIM extends BaseIM implements ChannelIM {
   async dispose(): Promise<void> {
     this.log.info('dispose');
     cancelAppRegistration();
-    await wsClient.stop({ offlineTimeoutMs: wsClient.QUIT_OFFLINE_ANNOUNCE_TIMEOUT_MS });
+    await wsClient.stop({
+      offlineTimeoutMs: wsClient.QUIT_OFFLINE_ANNOUNCE_TIMEOUT_MS,
+      reason: 'transport-dispose',
+    });
   }
 
   registerIpc(): void {
