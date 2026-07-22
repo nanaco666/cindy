@@ -34,5 +34,6 @@ describe('composer morph scope', () => {
     expect(chatInput).toContain('const expandable = !isCreateAgentVariant;');
     expect(chatInput).toContain('return () => window.clearInterval(id);');
     expect(chatInput).toContain("isCreateAgentVariant ? (");
+    expect(chatInput).toContain('inline-flex animate-pulse motion-reduce:animate-none');
   });
 });

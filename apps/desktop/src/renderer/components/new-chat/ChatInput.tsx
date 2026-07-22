@@ -5265,7 +5265,7 @@ function VoiceInputButton({
               {refining ? (
                 <Spinner size={15} />
               ) : activeRecording ? (
-                <span className="inline-flex animate-pulse">
+                <span className="inline-flex animate-pulse motion-reduce:animate-none">
                   <span className="h-2 w-2 rounded-full bg-[var(--settings-badge-error)]" />
                 </span>
               ) : (

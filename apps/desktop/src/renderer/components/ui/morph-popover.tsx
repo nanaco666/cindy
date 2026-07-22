@@ -172,6 +172,36 @@ export function MorphPopover({
     [align, panelWidth, side],
   );
 
+  /**
+   * 把已展开面板同步到内容的最新尺寸。
+   *
+   * opening 期间 ResizeObserver 仍会消费通知，但那时不能与开场动画同时改几何；
+   * 因此 settle 时必须无条件补量一次，避免异步 capability / provider 列表恰好在
+   * 前 300ms 内返回后，面板永久停在旧高度。
+   */
+  const syncPanelToContent = useCallback(() => {
+    const panel = panelRef.current;
+    const rect = chipRectRef.current;
+    if (!panel || !rect) return;
+    const prevTransition = panel.style.transition;
+    panel.style.transition = 'none';
+    const measured = measure(panel, rect);
+    const currentWidth = panel.offsetWidth;
+    const currentHeight = panel.offsetHeight;
+    panel.style.width = `${currentWidth}px`;
+    panel.style.height = `${currentHeight}px`;
+    void panel.offsetHeight;
+    panel.style.transition = prevTransition;
+    // 差 1px 内不动,防 ResizeObserver 观察回环。
+    if (
+      Math.abs(measured.w - currentWidth) <= 1 &&
+      Math.abs(measured.h - currentHeight) <= 1
+    ) return;
+    panel.style.left = `${measured.left}px`;
+    panel.style.width = `${measured.w}px`;
+    panel.style.height = `${measured.h}px`;
+  }, [measure]);
+
   /** 把面板锚到 chip 的形变起点几何(closed 视觉态) */
   const applyChipGeometry = useCallback(
     (panel: HTMLDivElement, rect: DOMRect) => {
@@ -247,6 +277,8 @@ export function MorphPopover({
       const focusDelay = reduced ? 0 : MORPH_MS;
       closeTimerRef.current = setTimeout(() => {
         settledRef.current = true;
+        // RO 在 opening 期间收到的尺寸变化不会在 settled 后自动重发；这里补量一次。
+        syncPanelToContent();
         const focusRoot = contentRef.current ?? panel;
         const target =
           focusRoot.querySelector<HTMLElement>('[data-morph-autofocus]:not([disabled])') ??
@@ -294,6 +326,7 @@ export function MorphPopover({
     endBg,
     endBorderColor,
     hasCustomGhost,
+    syncPanelToContent,
   ]);
 
   /** 打开稳定后跟随内容尺寸变化(搜索过滤 / Edit 面板展宽),同曲线平滑过渡 */
@@ -310,22 +343,8 @@ export function MorphPopover({
       roRaf = requestAnimationFrame(() => {
         roRaf = 0;
         const p = panelRef.current;
-        const rect = chipRectRef.current;
-        if (!p || !settledRef.current || !rect) return;
-        const prevT = p.style.transition;
-        p.style.transition = 'none';
-        const m = measure(p, rect);
-        const curW = p.offsetWidth;
-        const curH = p.offsetHeight;
-        p.style.width = `${curW}px`;
-        p.style.height = `${curH}px`;
-        void p.offsetHeight;
-        p.style.transition = prevT;
-        // 差 1px 内不动,防观察回环
-        if (Math.abs(m.w - curW) <= 1 && Math.abs(m.h - curH) <= 1) return;
-        p.style.left = `${m.left}px`;
-        p.style.width = `${m.w}px`;
-        p.style.height = `${m.h}px`;
+        if (!p || !settledRef.current) return;
+        syncPanelToContent();
       });
     });
     ro.observe(content);
@@ -333,7 +352,7 @@ export function MorphPopover({
       if (roRaf) cancelAnimationFrame(roRaf);
       ro.disconnect();
     };
-  }, [mounted, open, measure]);
+  }, [mounted, open, syncPanelToContent]);
 
   /** 卸载兜底:组件树移除时恢复 chip 可见性(否则 chip 永久隐形) */
   useEffect(() => {

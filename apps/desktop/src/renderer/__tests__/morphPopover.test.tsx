@@ -53,6 +53,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
@@ -214,5 +215,94 @@ describe('MorphPopover interaction contract', () => {
 
     expect(requestFrame).toHaveBeenCalled();
     expect(cancelFrame).toHaveBeenCalledWith(1);
+  });
+
+  it('remeasures content that grows during the opening animation after settling', () => {
+    setReducedMotion(false);
+    vi.useFakeTimers();
+
+    let resizeCallback: ResizeObserverCallback | null = null;
+    class TestResizeObserver {
+      constructor(callback: ResizeObserverCallback) {
+        resizeCallback = callback;
+      }
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    }
+    vi.stubGlobal('ResizeObserver', TestResizeObserver);
+
+    let nextFrame = 1;
+    const queuedFrames = new Map<number, FrameRequestCallback>();
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      const id = nextFrame++;
+      queuedFrames.set(id, callback);
+      return id;
+    });
+    vi.stubGlobal('cancelAnimationFrame', (id: number) => queuedFrames.delete(id));
+    const runFrame = () => {
+      const callbacks = [...queuedFrames.values()];
+      queuedFrames.clear();
+      callbacks.forEach((callback) => callback(performance.now()));
+    };
+
+    let contentHeight = 100;
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (
+      this: HTMLElement,
+    ) {
+      if (this.matches('span.relative')) {
+        return {
+          x: 24,
+          y: 570,
+          left: 24,
+          top: 570,
+          right: 64,
+          bottom: 600,
+          width: 40,
+          height: 30,
+          toJSON: () => ({}),
+        } as DOMRect;
+      }
+      return {
+        x: 0,
+        y: 0,
+        left: 0,
+        top: 0,
+        right: 0,
+        bottom: 0,
+        width: 0,
+        height: 0,
+        toJSON: () => ({}),
+      } as DOMRect;
+    });
+    vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockImplementation(function (
+      this: HTMLElement,
+    ) {
+      return this.style.width && this.style.width !== 'max-content'
+        ? Number.parseFloat(this.style.width)
+        : 240;
+    });
+    vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(function (
+      this: HTMLElement,
+    ) {
+      return this.style.height && this.style.height !== 'auto'
+        ? Number.parseFloat(this.style.height)
+        : contentHeight;
+    });
+
+    render(<Harness panelWidth={240} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Toggle' }));
+    const panel = screen.getByRole('group', { name: 'Morph panel' });
+    act(runFrame);
+    act(runFrame);
+    expect(panel.style.height).toBe('100px');
+
+    contentHeight = 240;
+    act(() => resizeCallback?.([], {} as ResizeObserver));
+    act(runFrame);
+    expect(panel.style.height).toBe('100px');
+
+    act(() => vi.advanceTimersByTime(300));
+    expect(panel.style.height).toBe('240px');
   });
 });
