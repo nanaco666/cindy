@@ -31,12 +31,16 @@ export function okPayload(data: Record<string, unknown>): ToolPayloadResult {
   };
 }
 
-export function errorPayload(errorCode: string, hint: string): ToolPayloadResult {
+export function errorPayload(
+  errorCode: string,
+  hint: string,
+  data: Record<string, unknown> = {},
+): ToolPayloadResult {
   return {
     content: [
       {
         type: 'text',
-        text: JSON.stringify({ ok: false, errorCode, data: { hint } }),
+        text: JSON.stringify({ ok: false, errorCode, data: { ...data, hint } }),
       },
     ],
     isError: true,

@@ -101,6 +101,22 @@ function createOrcaDeps(overrides: Partial<OrcaMcpDeps> = {}): OrcaMcpDeps {
 }
 
 describe('dynamic lizi MCP session context', () => {
+  it('keeps the 16-tool Orca manifest order stable across server construction', () => {
+    const context = {
+      agentKind: 'codex' as const,
+      workingDir: 'C:\\repo',
+      sessionId: 'lead-1',
+      vendorOptions: { orcaRole: 'lead' },
+    };
+    const first = Object.keys(tools(createOrcaMcpServer(createOrcaDeps(), context)));
+    const second = Object.keys(tools(createOrcaMcpServer(createOrcaDeps(), context)));
+
+    expect(first).toHaveLength(16);
+    expect(first).toEqual(second);
+    expect(first).toContain('create_worker');
+    expect(first).toContain('create_workers');
+  });
+
   // github_lizi / gitlab_lizi 的同款用例已分别随 lizi_github / lizi_gitlab 退役
   // 删除(2026-07-14,能力迁入内置意识 cindy-github / cindy-gitlab)。原覆盖的
   // 两条路径由 lizi_memory 版承接:Claude 绑定语境路径见下面第一个用例,Codex
