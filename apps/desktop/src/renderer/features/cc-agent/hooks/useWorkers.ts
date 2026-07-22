@@ -275,9 +275,7 @@ export function useWorkers(leadSessionId: string | undefined) {
   const focusedWorker = workers.find((w) => w.focused) ?? workers[0] ?? null;
   // 与后端 activeCount 共用 shared/orca-worker-status 的判定, 避免漂移 (F6)。
   // primitive 返回值不需要 useMemo 稳定身份。
-  const activeWorkerCount = workers.filter((w) => (
-    isActiveWorkerStatus(w.status) && w.idleSince == null
-  )).length;
+  const activeWorkerCount = workers.filter((w) => isActiveWorkerStatus(w.status)).length;
 
   return {
     workers,

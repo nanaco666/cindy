@@ -1035,10 +1035,7 @@ export function createOrcaTeamService(deps: OrcaTeamServiceDeps): OrcaTeamServic
 
       const manualInterrupt = deps.getManualInterrupt(params.sessionId);
       if (manualInterrupt) {
-        // A manual stop ends the current turn but keeps the Maker runtime alive.
-        // Do not write the idle-release marker until the watcher actually tears
-        // that runtime down, otherwise the live Worker disappears from capacity.
-        await deps.updateWorkerStatus(link.workerId, 'idle');
+        await deps.markWorkerIdle(link.workerId);
         deps.broadcastOrcaWorkerChanged(link.leadSessionId);
         clearRuntimeState(params.sessionId);
         deps.log.info('worker manual interrupt: suppressed auto-bridge', {

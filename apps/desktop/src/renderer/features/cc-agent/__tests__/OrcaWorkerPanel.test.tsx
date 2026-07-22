@@ -84,19 +84,6 @@ describe('OrcaWorkerPanel New Maker shortcut', () => {
     expect(mocks.setCreateOpen).not.toHaveBeenCalled();
   });
 
-  it('opens the create dialog when the hard limit includes a dormant worker', async () => {
-    mocks.hardLimit = 1;
-    mocks.refreshCreationState.mockResolvedValue({
-      status: 'applied',
-      workers: [{ status: 'idle', idleSince: '2026-07-21T10:00:00.000Z' }],
-      hardLimit: 1,
-    });
-    render(<OrcaWorkerPanel leadSessionId="lead-1" viewVisible />);
-
-    await expect(requestNewWorkerFromShortcut()).resolves.toBe(true);
-    expect(mocks.setCreateOpen).toHaveBeenCalledWith(true);
-  });
-
   it('falls back to New Maker when authoritative creation state cannot be refreshed', async () => {
     mocks.refreshCreationState.mockResolvedValue({
       status: 'failed',

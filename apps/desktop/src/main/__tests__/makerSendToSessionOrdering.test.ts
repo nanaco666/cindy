@@ -441,15 +441,8 @@ describe('sendToSession ordering', () => {
 
     expect(resumeBranch).toContain('const extraDirs = await readSessionExtraDirsFromDb(target.sessionId);');
     expect(resumeBranch).toContain('...(extraDirs.length > 0 ? { extraDirs } : {}),');
-    expect(resumeBranch).toContain('await clearOrcaWorkerReleaseMarker(target.id);');
     expectOrder(resumeBranch, 'const extraDirs = await readSessionExtraDirsFromDb(target.sessionId);', 'const opts = buildCreateOptsWithStderr({');
     expectOrder(resumeBranch, '...(extraDirs.length > 0 ? { extraDirs } : {}),', 'await bootstrapSession(opts);');
-    expect(resumeBranch).toContain(
-      'const { session: resumedSession } = await bootstrapSession(opts);\n' +
-      '    // Only a successfully recreated runtime occupies capacity. Keeping the release\n' +
-      '    // marker during bootstrap means a failed resume remains dormant and retryable.\n' +
-      '    await clearOrcaWorkerReleaseMarker(target.id);',
-    );
     expect(serviceDepsBlock).toContain('resumeWorkerSession: async (target) => {');
     expect(serviceDepsBlock).toContain('await resumeOrcaWorkerSessionIfMissing(target);');
     expect(switchFocusIpcBlock).toContain('const didResume = await resumeOrcaWorkerSessionIfMissing(target);');
@@ -521,12 +514,11 @@ describe('sendToSession ordering', () => {
     expect(serviceTerminalBlock).toContain('clearRuntimeState(params.sessionId);');
     expect(serviceTerminalBlock).toContain("worker.status === 'done' || worker.status === 'error' || worker.status === 'idle'");
     expect(serviceTerminalBlock).toContain('const manualInterrupt = deps.getManualInterrupt(params.sessionId);');
-    expect(serviceTerminalBlock).toContain("await deps.updateWorkerStatus(link.workerId, 'idle');");
-    expect(serviceTerminalBlock).not.toContain('await deps.markWorkerIdle(link.workerId);');
+    expect(serviceTerminalBlock).toContain('await deps.markWorkerIdle(link.workerId);');
     expect(serviceTerminalBlock).toContain("log.info('worker manual interrupt: suppressed auto-bridge'");
     expectOrder(serviceTerminalBlock, "worker.status === 'done' || worker.status === 'error' || worker.status === 'idle'", 'const manualInterrupt = deps.getManualInterrupt(params.sessionId);');
-    expectOrder(serviceTerminalBlock, 'const manualInterrupt = deps.getManualInterrupt(params.sessionId);', "await deps.updateWorkerStatus(link.workerId, 'idle');");
-    expectOrder(serviceTerminalBlock, "await deps.updateWorkerStatus(link.workerId, 'idle');", 'await deps.updateWorkerStatus(link.workerId, params.status);');
+    expectOrder(serviceTerminalBlock, 'const manualInterrupt = deps.getManualInterrupt(params.sessionId);', 'await deps.markWorkerIdle(link.workerId);');
+    expectOrder(serviceTerminalBlock, 'await deps.markWorkerIdle(link.workerId);', 'await deps.updateWorkerStatus(link.workerId, params.status);');
     expectOrder(serviceTerminalBlock, "worker.status === 'done' || worker.status === 'error' || worker.status === 'idle'", 'await bridgeWorkerCompletion(');
     const manualBlock = extractBetween(
       serviceTerminalBlock,
@@ -547,11 +539,6 @@ describe('sendToSession ordering', () => {
       'const orcaTeamService = createOrcaTeamService({',
       '  });\n  orcaTeamServiceForEvents = orcaTeamService;',
     );
-    const pendingWorkerInputBlock = extractBetween(
-      source,
-      'const hasPendingWorkerInput = async',
-      'const orcaTeamService = createOrcaTeamService({',
-    );
 
     expect(source).toContain('registerOrcaWorkerControlHandlers(createElectronIpcHandlerRegistry(), {');
     expect(source).toContain('idleWorker: (params) => orcaTeamService.idleWorker(params),');
@@ -565,9 +552,8 @@ describe('sendToSession ordering', () => {
     expectOrder(serviceIdleBlock, 'clearRuntimeState(worker.sessionId);', "await closeWorkerSessionBestEffort(worker.sessionId, 'idleWorker');");
 
     expect(serviceDepsBlock).toContain('if (sendToSessionLocks.has(sessionId)) return false;');
-    expect(serviceDepsBlock).toContain('hasPendingWorkerInput,');
-    expect(pendingWorkerInputBlock).toContain('await inputCoordinator.ensureQueueRestored(sessionId).catch(() => undefined);');
-    expect(pendingWorkerInputBlock).toContain('if (!inputCoordinator.isQueueRestored(sessionId)) return true;');
+    expect(serviceDepsBlock).toContain('await inputCoordinator.ensureQueueRestored(sessionId).catch(() => undefined);');
+    expect(serviceDepsBlock).toContain('if (!inputCoordinator.isQueueRestored(sessionId)) return true;');
   });
 
   it('clears pending auto-bridge state before archive and end-team abort paths', () => {
@@ -699,7 +685,7 @@ describe('sendToSession ordering', () => {
   it('uses active slot occupancy for renderer worker-limit gating', () => {
     expect(useWorkersSource).toContain('isActiveWorkerStatus');
     expect(useWorkersSource).not.toContain('isRunningWorkerStatus');
-    expect(useWorkersSource).toContain('isActiveWorkerStatus(w.status) && w.idleSince == null');
+    expect(useWorkersSource).toContain('const activeWorkerCount = workers.filter((w) => isActiveWorkerStatus(w.status)).length;');
   });
 });
 

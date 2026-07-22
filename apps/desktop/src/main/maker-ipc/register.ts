@@ -35,7 +35,7 @@ import type {
 } from '@lizi/maker-core';
 import { createId } from '@paralleldrive/cuid2';
 import { permissionModeOrAsk } from '@lizi/maker-shared/permission-mode';
-import { and, desc, eq, inArray, isNotNull, isNull, or, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { BrowserWindow, ipcMain } from 'electron';
 import type { AgentMeta } from '../../renderer/lib/ccAgent.types';
 import type { AgentInputCreateOpts, AgentInputQueuedMessage } from '../../shared/agentInputQueue.js';
@@ -111,10 +111,8 @@ import {
   removeWorker,
   renewWorkerCreationReservation,
   reserveWorkerCreation,
-  restoreReleasedWorkerRunning,
   setSessionOrcaRole,
   setWorkerFocus,
-  touchWorkerRuntimeActivity,
   updateWorkerStatus,
 } from '../localDb/orcaTeamStore.js';
 import { messages, orcaTeams, orcaWorkers, sessions } from '../localDb/schema.js';
@@ -3673,12 +3671,7 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
     return { session, didInjectOrcaInstructions, didInjectProjectContext };
   }
 
-  async function clearOrcaWorkerReleaseMarker(workerId: string): Promise<void> {
-    await touchWorkerRuntimeActivity(workerId, Date.now());
-  }
-
-  // switchFocus 和 sendToWorker 都可能唤醒 idle worker；统一走这里才能保留 extraDirs，
-  // 并在 runtime 可用前恢复它占用的 Worker 名额。
+  // switchFocus 和 sendToWorker 都可能唤醒 idle worker；统一走这里才能保留 extraDirs。
   async function resumeOrcaWorkerSessionIfMissing(target: {
     id: string;
     teamId: string;
@@ -3686,10 +3679,7 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
     sessionId: string;
   }): Promise<boolean> {
     const live = maker.getSession(target.sessionId);
-    if (live) {
-      await clearOrcaWorkerReleaseMarker(target.id);
-      return false;
-    }
+    if (live) return false;
 
     const db = getDbClient().drizzle;
     const [row] = await db.select().from(sessions).where(eq(sessions.id, target.sessionId)).limit(1);
@@ -3718,9 +3708,6 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
       ...(extraDirs.length > 0 ? { extraDirs } : {}),
     });
     const { session: resumedSession } = await bootstrapSession(opts);
-    // Only a successfully recreated runtime occupies capacity. Keeping the release
-    // marker during bootstrap means a failed resume remains dormant and retryable.
-    await clearOrcaWorkerReleaseMarker(target.id);
     await markOrcaRoleIfNeeded(resumedSession.id, 'worker');
     return true;
   }
@@ -4886,7 +4873,7 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
     return result;
   });
 
-  const hasPendingWorkerInput = async (sessionId: string): Promise<boolean> => {
+  const hasPendingIdleReleaseInput = async (sessionId: string): Promise<boolean> => {
     await inputCoordinator.ensureQueueRestored(sessionId).catch(() => undefined);
     // A failed restore is itself a pending condition: never close a worker while
     // its durable follow-up snapshot is still unavailable.
@@ -4925,7 +4912,14 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
       const sess = maker.getSession(sessionId);
       return sess ? sess.closeIfIdle() : true;
     },
-    hasPendingWorkerInput,
+    hasPendingWorkerInput: async (sessionId) => {
+      await inputCoordinator.ensureQueueRestored(sessionId).catch(() => undefined);
+      // A failed restore is itself a pending condition: never close a worker while
+      // its durable follow-up snapshot is still unavailable.
+      if (!inputCoordinator.isQueueRestored(sessionId)) return true;
+      return inputCoordinator.hasPendingQueuedWork(sessionId) ||
+        inputCoordinator.hasQueuedItemWhere(sessionId, () => true, { includeRecovery: true });
+    },
     hasSendToSessionLock: (sessionId) => sendToSessionLocks.has(sessionId),
     archiveWorkerSession: archiveSingleWorkerSession,
     getManualInterrupt,
@@ -5168,21 +5162,16 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
         .innerJoin(orcaTeams, eq(orcaTeams.id, orcaWorkers.teamId))
         .innerJoin(sessions, eq(sessions.id, orcaWorkers.sessionId))
         .where(and(
+          isNull(orcaWorkers.idleSince),
           inArray(orcaWorkers.status, ORCA_IDLE_RELEASE_STATUSES),
-          or(
-            isNotNull(orcaWorkers.idleSince),
-            and(
-              isNull(orcaWorkers.idleSince),
-              sql`${orcaWorkers.updatedAt} < ${updatedBefore}`,
-            ),
-          ),
+          sql`${orcaWorkers.updatedAt} < ${updatedBefore}`,
           eq(orcaTeams.status, 'active'),
           eq(sessions.status, 'active'),
         ));
     },
     getSession: (sessionId) => maker.getSession(sessionId) ?? null,
     withSessionLock: withSendToSessionLock,
-    hasPendingInput: hasPendingWorkerInput,
+    hasPendingInput: hasPendingIdleReleaseInput,
     markReleased: async (candidate, releasedAt) => {
       // Drizzle proxy 的 UPDATE ... RETURNING 会执行写入但返回空数组；这里直接用
       // DbClient async exec 的 changes 做原子 compare-and-set 结果判定。
@@ -5194,12 +5183,11 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
       );
       return result.changes === 1;
     },
-    clearReleased: async (candidate, restoredAt) => {
-      if (candidate.idleSince === null) return false;
-      return restoreReleasedWorkerRunning(candidate.id, candidate.idleSince, restoredAt);
-    },
     touchWorker: async (workerId, updatedAt) => {
-      await touchWorkerRuntimeActivity(workerId, updatedAt);
+      await getDbClient().drizzle
+        .update(orcaWorkers)
+        .set({ updatedAt })
+        .where(eq(orcaWorkers.id, workerId));
     },
     closeSession: (sessionId) => maker.closeSession(sessionId),
     broadcastWorkerChanged: (leadSessionId) => {

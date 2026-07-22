@@ -126,21 +126,6 @@ describe('useWorkers', () => {
     remount.unmount();
   });
 
-  it('excludes released idle workers from the active slot count', async () => {
-    mocks.listWorkersByLead.mockResolvedValue([
-      workerRecord('worker-active', 'session-active', true),
-      { ...workerRecord('worker-released', 'session-released'), idleSince: '2026-07-21T10:00:00.000Z' },
-    ]);
-
-    const result = renderHook(() => useWorkers('lead-1'));
-
-    await waitFor(() => {
-      expect(result.result.current.workers).toHaveLength(2);
-    });
-    expect(result.result.current.activeWorkerCount).toBe(1);
-    result.unmount();
-  });
-
   it('refreshes the cache when an ORCA_WORKER_CHANGED event arrives', async () => {
     let onWorkerChanged: (() => void) | null = null;
     mocks.subscribeOrcaWorkerChanged.mockImplementation(

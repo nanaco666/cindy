@@ -95,9 +95,9 @@ export function OrcaWorkerPanel({
       const result = await refreshCreationState();
       if (!active) return true;
       if (result.status !== 'applied') return false;
-      const activeCount = result.workers.filter((worker) => (
-        isActiveWorkerStatus(worker.status) && worker.idleSince == null
-      )).length;
+      const activeCount = result.workers.filter((worker) =>
+        isActiveWorkerStatus(worker.status),
+      ).length;
       if (result.hardLimit !== null && activeCount < result.hardLimit) setCreateOpen(true);
       return true;
     });

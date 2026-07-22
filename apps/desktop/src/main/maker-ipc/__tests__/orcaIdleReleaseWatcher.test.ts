@@ -32,7 +32,6 @@ function createDeps(overrides: Partial<OrcaIdleReleaseWatcherDeps> = {}) {
     withSessionLock: vi.fn(async (_sessionId, task) => task()),
     hasPendingInput: vi.fn(async () => false),
     markReleased: vi.fn(async () => true),
-    clearReleased: vi.fn(async () => true),
     touchWorker: vi.fn(async () => undefined),
     closeSession: vi.fn(async () => undefined),
     broadcastWorkerChanged: vi.fn(),
@@ -97,37 +96,7 @@ describe('createOrcaIdleReleaseWatcher', () => {
     expect(deps.broadcastWorkerChanged).not.toHaveBeenCalled();
   });
 
-  it('keeps a terminal worker with queued follow-up input counted and open', async () => {
-    const candidate = createCandidate({ status: 'done' });
-    const { deps, watcher } = createDeps({
-      listCandidates: vi.fn(async () => [candidate]),
-      hasPendingInput: vi.fn(async () => true),
-    });
-
-    await watcher.scanNow();
-
-    expect(deps.touchWorker).toHaveBeenCalledWith(candidate.id, 120_000);
-    expect(deps.closeSession).not.toHaveBeenCalled();
-    expect(deps.markReleased).not.toHaveBeenCalled();
-    expect(deps.broadcastWorkerChanged).not.toHaveBeenCalled();
-  });
-
-  it('clears a stale release marker when local queued input still targets the worker', async () => {
-    const candidate = createCandidate({ status: 'idle', idleSince: 90_000, updatedAt: 90_000 });
-    const { deps, watcher } = createDeps({
-      listCandidates: vi.fn(async () => [candidate]),
-      hasPendingInput: vi.fn(async () => true),
-    });
-
-    await watcher.scanNow();
-
-    expect(deps.touchWorker).toHaveBeenCalledWith(candidate.id, 120_000);
-    expect(deps.closeSession).not.toHaveBeenCalled();
-    expect(deps.clearReleased).not.toHaveBeenCalled();
-    expect(deps.broadcastWorkerChanged).toHaveBeenCalledWith(candidate.leadSessionId);
-  });
-
-  it('does not release a missing runtime on its first observation', async () => {
+  it('leaves a worker untouched when this process does not own its runtime', async () => {
     const { deps, watcher } = createDeps({
       getSession: vi.fn(() => null),
     });
@@ -140,88 +109,19 @@ describe('createOrcaIdleReleaseWatcher', () => {
     expect(deps.broadcastWorkerChanged).not.toHaveBeenCalled();
   });
 
-  it('releases a persisted worker whose runtime stays missing for a full scan interval', async () => {
-    let now = 120_000;
-    const candidate = createCandidate();
+  it('delays a terminal worker with queued follow-up input', async () => {
+    const candidate = createCandidate({ status: 'done' });
     const { deps, watcher } = createDeps({
-      getSession: vi.fn(() => null),
-      listCandidates: vi.fn(async () => [candidate]),
-      now: vi.fn(() => now),
-    });
-
-    await watcher.scanNow();
-    now += 25;
-    await watcher.scanNow();
-
-    expect(deps.closeSession).not.toHaveBeenCalled();
-    expect(deps.markReleased).toHaveBeenCalledOnce();
-    expect(deps.markReleased).toHaveBeenCalledWith(candidate, 120_025);
-    expect(deps.broadcastWorkerChanged).toHaveBeenCalledWith(candidate.leadSessionId);
-  });
-
-  it('restarts the missing-runtime grace period when persisted state changes', async () => {
-    let now = 120_000;
-    let candidate = createCandidate();
-    const { deps, watcher } = createDeps({
-      getSession: vi.fn(() => null),
-      listCandidates: vi.fn(async () => [candidate]),
-      now: vi.fn(() => now),
-    });
-
-    await watcher.scanNow();
-    now += 25;
-    candidate = createCandidate({ updatedAt: 2 });
-    await watcher.scanNow();
-
-    expect(deps.markReleased).not.toHaveBeenCalled();
-  });
-
-  it('closes a local dormant runtime after another process marks it released', async () => {
-    const candidate = createCandidate({ status: 'idle', idleSince: 90_000, updatedAt: 90_000 });
-    const { deps, watcher } = createDeps({
-      listCandidates: vi.fn(async () => [candidate]),
-    });
-
-    await watcher.scanNow();
-
-    expect(deps.closeSession).toHaveBeenCalledWith(candidate.sessionId);
-    expect(deps.markReleased).not.toHaveBeenCalled();
-    expect(deps.clearReleased).not.toHaveBeenCalled();
-    expect(deps.log.info).toHaveBeenCalledWith(
-      'idleWatcher: closed released worker runtime',
-      expect.objectContaining({ workerId: candidate.id }),
-    );
-  });
-
-  it('clears a release marker instead of closing a runtime with a live turn', async () => {
-    const candidate = createCandidate({ status: 'idle', idleSince: 90_000, updatedAt: 90_000 });
-    const { deps, session, watcher } = createDeps({
-      listCandidates: vi.fn(async () => [candidate]),
-    });
-    session.isTurnRunning.mockReturnValue(true);
-
-    await watcher.scanNow();
-
-    expect(deps.clearReleased).toHaveBeenCalledWith(candidate, 120_000);
-    expect(deps.closeSession).not.toHaveBeenCalled();
-    expect(deps.broadcastWorkerChanged).toHaveBeenCalledWith(candidate.leadSessionId);
-  });
-
-  it('restores running state before handling queued input on a marked live turn', async () => {
-    const candidate = createCandidate({ status: 'idle', idleSince: 90_000, updatedAt: 90_000 });
-    const { deps, session, watcher } = createDeps({
       listCandidates: vi.fn(async () => [candidate]),
       hasPendingInput: vi.fn(async () => true),
     });
-    session.isTurnRunning.mockReturnValue(true);
 
     await watcher.scanNow();
 
-    expect(deps.clearReleased).toHaveBeenCalledWith(candidate, 120_000);
-    expect(deps.hasPendingInput).not.toHaveBeenCalled();
-    expect(deps.touchWorker).not.toHaveBeenCalled();
+    expect(deps.touchWorker).toHaveBeenCalledWith(candidate.id, 120_000);
     expect(deps.closeSession).not.toHaveBeenCalled();
-    expect(deps.broadcastWorkerChanged).toHaveBeenCalledWith(candidate.leadSessionId);
+    expect(deps.markReleased).not.toHaveBeenCalled();
+    expect(deps.broadcastWorkerChanged).not.toHaveBeenCalled();
   });
 
   it('rechecks the live turn after waiting for the session lock', async () => {
@@ -238,16 +138,14 @@ describe('createOrcaIdleReleaseWatcher', () => {
     expect(deps.markReleased).not.toHaveBeenCalled();
   });
 
-  it('ignores a release marker when this process has no matching runtime', async () => {
+  it('skips workers that already have a release marker', async () => {
     const { deps, watcher } = createDeps({
       listCandidates: vi.fn(async () => [createCandidate({ idleSince: 90_000 })]),
-      getSession: vi.fn(() => null),
     });
 
     await watcher.scanNow();
 
     expect(deps.markReleased).not.toHaveBeenCalled();
-    expect(deps.clearReleased).not.toHaveBeenCalled();
     expect(deps.closeSession).not.toHaveBeenCalled();
     expect(deps.broadcastWorkerChanged).not.toHaveBeenCalled();
   });
