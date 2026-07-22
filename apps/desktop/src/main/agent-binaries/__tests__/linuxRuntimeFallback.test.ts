@@ -6,10 +6,9 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import {
   claudeLauncherScript,
-  claudeOfficialAssetDescriptor,
-  codexOfficialAssetDescriptor,
   extractCodexBinaryFromTarGz,
   legacyManagedBinaryPath,
+  pinnedOfficialAssetDescriptor,
   privateBinaryPath,
   runtimeInstallRoot,
   runtimeVersionMatchesPin,
@@ -80,10 +79,16 @@ describe('install path helpers', () => {
 });
 
 describe('official asset descriptors', () => {
-  it('uses the trusted Claude release-manifest checksum and size', () => {
+  it('uses the trusted Claude asset committed with the version pin', () => {
     const sha256 = 'a'.repeat(64);
-    expect(claudeOfficialAssetDescriptor('2.1.215', {
-      platforms: { 'linux-x64': { checksum: sha256, size: 123 } },
+    expect(pinnedOfficialAssetDescriptor('claude-code', '2.1.215', {
+      runtimeAssets: {
+        'linux-x64': {
+          url: 'https://downloads.claude.ai/claude-code-releases/2.1.215/linux-x64/claude',
+          sha256,
+          size: 123,
+        },
+      },
     })).toEqual({
       url: 'https://downloads.claude.ai/claude-code-releases/2.1.215/linux-x64/claude',
       sha256,
@@ -91,18 +96,16 @@ describe('official asset descriptors', () => {
     });
   });
 
-  it('uses the GitHub release asset digest and rejects missing integrity metadata', () => {
+  it('uses the pinned Codex asset and rejects missing or unexpected metadata', () => {
     const sha256 = 'b'.repeat(64);
-    expect(codexOfficialAssetDescriptor('0.144.6', {
-      assets: [{
-        name: 'codex-x86_64-unknown-linux-musl.tar.gz',
-        browser_download_url: 'https://example.test/codex.tar.gz',
-        digest: `sha256:${sha256}`,
-        size: 456,
-      }],
-    })).toEqual({ url: 'https://example.test/codex.tar.gz', sha256, size: 456 });
-    expect(() => codexOfficialAssetDescriptor('0.144.6', { assets: [] })).toThrow(
-      /trusted SHA-256 digest/,
+    const url = 'https://github.com/openai/codex/releases/download/rust-v0.144.6/codex-x86_64-unknown-linux-musl.tar.gz';
+    expect(pinnedOfficialAssetDescriptor('codex', '0.144.6', {
+      runtimeAssets: { 'linux-x64': { url, sha256, size: 456 } },
+    })).toEqual({ url, sha256, size: 456 });
+    expect(() => pinnedOfficialAssetDescriptor('codex', '0.144.6', {
+      runtimeAssets: { 'linux-x64': { url: 'https://example.test/codex.tar.gz', sha256 } },
+    })).toThrow(
+      /pin lacks a trusted linux-x64 asset/,
     );
   });
 });

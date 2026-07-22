@@ -285,7 +285,7 @@ test('applyAppToManifest: requireRelogin=true 写入标记', () => {
   assert.equal(m.app.requireRelogin, true);
 });
 
-test('applyAppToManifest: linux installer-only,剥掉 hotfix/requireRelogin/历史 installer 段', () => {
+test('applyAppToManifest: linux installer-only,保留旧客户端依赖的 agent 段', () => {
   const existing = {
     app: { version: '1.0.0', hotfix: { file: 'x' }, requireRelogin: true },
     installer: { legacy: true },
@@ -303,9 +303,9 @@ test('applyAppToManifest: linux installer-only,剥掉 hotfix/requireRelogin/历�
   assert.equal('hotfix' in m.app, false);
   assert.equal('requireRelogin' in m.app, false);
   assert.equal('installer' in m, false);
-  assert.equal('claudeCode' in m, false);
-  assert.equal('codex' in m, false);
-  assert.equal('ripgrep' in m, false);
+  assert.deepEqual(m.claudeCode, existing.claudeCode);
+  assert.deepEqual(m.codex, existing.codex);
+  assert.deepEqual(m.ripgrep, existing.ripgrep);
 });
 
 // ── 上传计划 ─────────────────────────────────────────────────────────────────

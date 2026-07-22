@@ -11,7 +11,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { createGunzip } from 'node:zlib';
-import { app, net } from 'electron';
+import { app } from 'electron';
 
 import claudeLatest from '../../../../../tools/claude/latest.json';
 import codexLatest from '../../../../../tools/codex/latest.json';
@@ -44,7 +44,6 @@ const CONFIG: Record<LinuxRuntimeFallbackKind, RuntimeConfig> = {
 const STARTUP_INSTALL_TIMEOUT_MS = 5 * 60_000;
 const VERIFY_TIMEOUT_MS = 15_000;
 const LOOKUP_TIMEOUT_MS = 5_000;
-const JSON_RESPONSE_LIMIT_BYTES = 4 * 1024 * 1024;
 const LINUX_PLATFORM_KEY = 'linux-x64';
 const CODEX_LINUX_ASSET = 'codex-x86_64-unknown-linux-musl.tar.gz';
 
@@ -341,105 +340,25 @@ export function findCachedLinuxRuntimeFallbackBinary(
   }
 }
 
-function fetchJson(
-  url: string,
-  options: { signal?: AbortSignal; timeoutMs?: number } = {},
-): Promise<unknown> {
-  return new Promise((resolve, reject) => {
-    if (options.signal?.aborted) {
-      reject(new Error(`request cancelled: ${url}`));
-      return;
-    }
-
-    const request = net.request({ url, method: 'GET', redirect: 'follow' });
-    let settled = false;
-    let body = '';
-    const finish = (fn: () => void): void => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timeout);
-      options.signal?.removeEventListener('abort', onAbort);
-      fn();
-    };
-    const onAbort = (): void => {
-      try { request.abort(); } catch { /* ignore */ }
-      finish(() => reject(new Error(`request cancelled: ${url}`)));
-    };
-    const timeout = setTimeout(() => {
-      try { request.abort(); } catch { /* ignore */ }
-      finish(() => reject(new Error(`request timed out: ${url}`)));
-    }, options.timeoutMs ?? 15_000);
-
-    options.signal?.addEventListener('abort', onAbort, { once: true });
-    if (options.signal?.aborted) {
-      onAbort();
-      return;
-    }
-
-    request.on('response', (response) => {
-      if (response.statusCode < 200 || response.statusCode >= 300) {
-        finish(() => reject(new Error(`HTTP ${response.statusCode}: ${url}`)));
-        return;
-      }
-      response.on('data', (chunk: Buffer) => {
-        body += chunk.toString('utf8');
-        if (Buffer.byteLength(body, 'utf8') > JSON_RESPONSE_LIMIT_BYTES) {
-          try { request.abort(); } catch { /* ignore */ }
-          finish(() => reject(new Error(`JSON response too large: ${url}`)));
-        }
-      });
-      response.on('end', () => {
-        finish(() => {
-          try {
-            resolve(JSON.parse(body));
-          } catch (error) {
-            reject(new Error(`invalid JSON from ${url}: ${error instanceof Error ? error.message : String(error)}`));
-          }
-        });
-      });
-      response.on('error', (error) => finish(() => reject(error)));
-    });
-    request.on('error', (error) => finish(() => reject(error)));
-    request.end();
-  });
-}
-
-export function claudeOfficialAssetDescriptor(
+/** Read an official asset URL and checksum committed alongside the version pin. */
+export function pinnedOfficialAssetDescriptor(
+  kind: LinuxRuntimeFallbackKind,
   version: string,
-  manifest: unknown,
+  pin: unknown,
 ): OfficialAssetDescriptor {
-  const entry = (manifest as {
-    platforms?: Record<string, { checksum?: unknown; size?: unknown }>;
-  })?.platforms?.[LINUX_PLATFORM_KEY];
-  const sha256 = normalizeSha256(entry?.checksum);
-  if (!sha256) throw new Error(`Claude ${version} manifest lacks a trusted linux-x64 checksum`);
-  const size = typeof entry?.size === 'number' && entry.size > 0 ? entry.size : undefined;
-  return {
-    url: `https://downloads.claude.ai/claude-code-releases/${version}/${LINUX_PLATFORM_KEY}/claude`,
-    sha256,
-    ...(size ? { size } : {}),
-  };
-}
-
-export function codexOfficialAssetDescriptor(
-  version: string,
-  release: unknown,
-): OfficialAssetDescriptor {
-  const asset = (release as {
-    assets?: Array<{
-      name?: unknown;
-      browser_download_url?: unknown;
-      digest?: unknown;
-      size?: unknown;
-    }>;
-  })?.assets?.find((candidate) => candidate.name === CODEX_LINUX_ASSET);
-  const sha256 = normalizeSha256(asset?.digest);
-  if (!asset || typeof asset.browser_download_url !== 'string' || !sha256) {
-    throw new Error(`Codex ${version} release lacks ${CODEX_LINUX_ASSET} with a trusted SHA-256 digest`);
+  const entry = (pin as {
+    runtimeAssets?: Record<string, { url?: unknown; sha256?: unknown; size?: unknown }>;
+  })?.runtimeAssets?.[LINUX_PLATFORM_KEY];
+  const sha256 = normalizeSha256(entry?.sha256);
+  const expectedUrl = kind === 'claude-code'
+    ? `https://downloads.claude.ai/claude-code-releases/${version}/${LINUX_PLATFORM_KEY}/claude`
+    : `https://github.com/openai/codex/releases/download/rust-v${version}/${CODEX_LINUX_ASSET}`;
+  if (entry?.url !== expectedUrl || !sha256) {
+    throw new Error(`${kind} ${version} pin lacks a trusted ${LINUX_PLATFORM_KEY} asset`);
   }
-  const size = typeof asset.size === 'number' && asset.size > 0 ? asset.size : undefined;
+  const size = typeof entry.size === 'number' && entry.size > 0 ? entry.size : undefined;
   return {
-    url: asset.browser_download_url,
+    url: expectedUrl,
     sha256,
     ...(size ? { size } : {}),
   };
@@ -513,11 +432,7 @@ async function installClaudeFromOfficialAsset(
   onProgress?: (event: ProgressEvent) => void,
 ): Promise<string> {
   const version = CONFIG['claude-code'].version;
-  const manifestUrl = `https://downloads.claude.ai/claude-code-releases/${version}/manifest.json`;
-  const descriptor = claudeOfficialAssetDescriptor(
-    version,
-    await fetchJson(manifestUrl, { signal }),
-  );
+  const descriptor = pinnedOfficialAssetDescriptor('claude-code', version, claudeLatest);
   const binaryPath = privateBinaryPath(app.getPath('userData'), 'claude-code');
   fs.mkdirSync(path.dirname(binaryPath), { recursive: true });
   await download({
@@ -542,25 +457,24 @@ async function installCodexFromOfficialAsset(
   onProgress?: (event: ProgressEvent) => void,
 ): Promise<string> {
   const version = CONFIG.codex.version;
-  const releaseUrl = `https://api.github.com/repos/openai/codex/releases/tags/rust-v${version}`;
-  const descriptor = codexOfficialAssetDescriptor(
-    version,
-    await fetchJson(releaseUrl, { signal }),
-  );
+  const descriptor = pinnedOfficialAssetDescriptor('codex', version, codexLatest);
   const root = runtimeInstallRoot(app.getPath('userData'), 'codex');
   const archivePath = path.join(root, `${CODEX_LINUX_ASSET}.${version}`);
   const binaryPath = privateBinaryPath(app.getPath('userData'), 'codex');
   fs.mkdirSync(root, { recursive: true });
-  await download({
-    url: descriptor.url,
-    targetPath: archivePath,
-    sha256: descriptor.sha256,
-    expectedSize: descriptor.size,
-    signal,
-    onProgress,
-  });
-  await extractCodexBinaryFromTarGz(archivePath, binaryPath);
-  try { fs.rmSync(archivePath, { force: true }); } catch { /* ignore */ }
+  try {
+    await download({
+      url: descriptor.url,
+      targetPath: archivePath,
+      sha256: descriptor.sha256,
+      expectedSize: descriptor.size,
+      signal,
+      onProgress,
+    });
+    await extractCodexBinaryFromTarGz(archivePath, binaryPath);
+  } finally {
+    try { fs.rmSync(archivePath, { force: true }); } catch { /* ignore */ }
+  }
   const versionOutput = await readExecutableVersion(binaryPath, signal);
   if (!versionOutput || !runtimeVersionMatchesPin('codex', versionOutput)) {
     throw new Error(`Codex ${version} downloaded but failed version verification`);
