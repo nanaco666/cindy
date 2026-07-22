@@ -5691,6 +5691,8 @@
       "typeFeature": "功能建议",
       "titleLabel": "标题",
       "bodyLabel": "正文(Markdown)",
+      "identityGithubUser": "提交身份:GitHub 用户 @{{login}}(本人)",
+      "identityPlatform": "提交身份:Cindy 平台代提交(GitHub App {{login}})",
       "envLine": "提交时将自动附加:客户端 {{appVersion}} · {{platform}} {{arch}} · 界面语言 {{uiLanguage}}",
       "submit": "提交",
       "cancel": "取消"

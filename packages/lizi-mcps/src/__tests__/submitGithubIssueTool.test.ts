@@ -92,6 +92,7 @@ describe('submit_github_issue tool', () => {
     });
     expect(submit).toHaveBeenCalledWith({
       sessionId: 'sess-1',
+      workingDir: '/tmp/wd',
       title: VALID_ARGS.title,
       body: VALID_ARGS.body,
       type: 'bug',

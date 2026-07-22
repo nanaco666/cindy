@@ -5701,6 +5701,8 @@
       "typeFeature": "Feature",
       "titleLabel": "Title",
       "bodyLabel": "Body (Markdown)",
+      "identityGithubUser": "Submitting identity: GitHub user @{{login}} (you)",
+      "identityPlatform": "Submitting identity: Cindy platform (GitHub App {{login}})",
       "envLine": "Attached automatically on submit: client {{appVersion}} · {{platform}} {{arch}} · UI language {{uiLanguage}}",
       "submit": "Submit",
       "cancel": "Cancel"

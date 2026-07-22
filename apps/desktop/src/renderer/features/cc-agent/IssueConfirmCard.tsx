@@ -148,6 +148,15 @@ export function IssueConfirmCard({ pending, onRespond }: IssueConfirmCardProps) 
 
       {/* 只读环境信息(main 侧自动附进 issue body) */}
       <p className="mt-2 text-12 leading-tight text-[var(--status-bar-meta)]">
+        {pending.submissionIdentity.kind === 'github-user'
+          ? t('issueAgent.confirm.identityGithubUser', {
+              login: pending.submissionIdentity.login,
+            })
+          : t('issueAgent.confirm.identityPlatform', {
+              login: pending.submissionIdentity.login,
+            })}
+      </p>
+      <p className="mt-1 text-12 leading-tight text-[var(--status-bar-meta)]">
         {t('issueAgent.confirm.envLine', {
           appVersion: pending.env.appVersion,
           platform: pending.env.platform,
