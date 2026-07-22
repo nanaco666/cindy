@@ -55,7 +55,7 @@ const messages = {
     accountDeletionPendingCopy:
       '预计于 {date} 永久删除。现在重新登录即可取消注销。',
     accountDeletionProcessingCopy:
-      '登录账号正在删除，完成后会向你的验证联系方式发送通知。',
+      'Cindy 登录账号正在删除，处理完成后将永久注销。',
     accountDeletionCompletedCopy: 'Cindy 登录账号已删除。',
     accountDeletionDismiss: '我知道了',
     errorFallback: '登录未完成，请重试。',
@@ -117,7 +117,7 @@ const messages = {
     accountDeletionPendingCopy:
       'Scheduled for permanent deletion on {date}. Sign in now to cancel deletion.',
     accountDeletionProcessingCopy:
-      'Your sign-in account is being deleted. We will notify your verified contact when it is complete.',
+      'Your Cindy sign-in account is being deleted and will be permanently deleted when processing is complete.',
     accountDeletionCompletedCopy: 'Your Cindy sign-in account has been deleted.',
     accountDeletionDismiss: 'Got it',
     errorFallback: 'Sign-in did not complete. Please try again.',
