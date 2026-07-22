@@ -241,11 +241,7 @@ function rememberLivePlanSnapshot(sessionId: string, snapshot: LivePlanSnapshot)
   if (snapshot.persistId) sessionSnapshots.set(`persist:${snapshot.persistId}`, snapshot);
 }
 
-function overlayLivePlanSnapshot(
-  sessionId: string,
-  message: RemoteMessage,
-  options: { authoritativeHistory?: boolean } = {},
-): RemoteMessage {
+function overlayLivePlanSnapshot(sessionId: string, message: RemoteMessage): RemoteMessage {
   if (message.role !== 'tool_use') return message;
   const sessionSnapshots = livePlanSnapshots.get(sessionId);
   if (!sessionSnapshots) return message;
@@ -254,93 +250,10 @@ function overlayLivePlanSnapshot(
     ?? sessionSnapshots.get(`persist:${message.clientId}`)
     ?? (message.toolUseId ? sessionSnapshots.get(`tool:${message.toolUseId}`) : undefined)
     ?? (contentToolUseId ? sessionSnapshots.get(`tool:${contentToolUseId}`) : undefined);
-  if (!snapshot) return message;
-
-  // A later history/window response is authoritative. If it contains a plan that
-  // has progressed beyond the provisional terminal snapshot, promote that row into
-  // the cache instead of overlaying the older snapshot back onto it. Keeping the
-  // promoted value cached still protects against an older delayed DB echo arriving
-  // immediately afterward.
-  const persistedPlan = readPlanFromMessageContent(message.content);
-  const cachedPlan = readPlanFromMessageContent(snapshot.content);
-  if (persistedPlan && cachedPlan && isPlanSnapshotAtLeastAsFresh(
-    persistedPlan,
-    cachedPlan,
-    options.authoritativeHistory === true,
-  )) {
-    const promoted: LivePlanSnapshot = {
-      ...snapshot,
-      content: message.content as Record<string, unknown>,
-      toolUseId: message.toolUseId ?? contentToolUseId ?? snapshot.toolUseId,
-    };
-    rememberLivePlanSnapshot(sessionId, promoted);
-    return message;
-  }
-
-  return { ...message, content: snapshot.content, toolUseId: snapshot.toolUseId };
+  return snapshot
+    ? { ...message, content: snapshot.content, toolUseId: snapshot.toolUseId }
+    : message;
 }
-
-function readPlanFromMessageContent(content: unknown): unknown[] | null {
-  const record = isRecord(content) ? content : null;
-  const input = isRecord(record?.input) ? record.input : null;
-  return Array.isArray(input?.plan) ? input.plan : null;
-}
-
-function isPlanSnapshotAtLeastAsFresh(
-  incoming: unknown[],
-  cached: unknown[],
-  authoritativeHistory: boolean,
-): boolean {
-  if (deepValueEqual(incoming, cached)) return true;
-  // `[]` is an authoritative clear from terminal done. A later non-empty row can
-  // be an older DB echo and must not resurrect cleared steps.
-  if (cached.length === 0) return incoming.length === 0;
-  // A messages:created echo can arrive after task_complete while still containing
-  // an older plan shape. Only an explicit history/window refresh may establish a
-  // structural change; live echoes must not add or drop terminal steps.
-  if (incoming.length !== cached.length) {
-    // Terminal reconciliation is the last known state for every cached step. A
-    // shorter persisted row cannot prove that omitted steps were intentionally
-    // removed, so keep the complete terminal snapshot even during history sync.
-    if (incoming.length < cached.length) return false;
-    if (!authoritativeHistory) return false;
-    for (let index = 0; index < cached.length; index += 1) {
-      const incomingItem = isRecord(incoming[index]) ? incoming[index] as Record<string, unknown> : null;
-      const cachedItem = isRecord(cached[index]) ? cached[index] as Record<string, unknown> : null;
-      if (!incomingItem || !cachedItem) return false;
-      if (planStatusRank(incomingItem['status']) < planStatusRank(cachedItem['status'])) return false;
-    }
-    return true;
-  }
-
-  for (let index = 0; index < incoming.length; index += 1) {
-    const incomingItem = isRecord(incoming[index]) ? incoming[index] as Record<string, unknown> : null;
-    const cachedItem = isRecord(cached[index]) ? cached[index] as Record<string, unknown> : null;
-    if (!incomingItem || !cachedItem) return true;
-    const incomingRank = planStatusRank(incomingItem['status']);
-    const cachedRank = planStatusRank(cachedItem['status']);
-    if (incomingRank < cachedRank) return false;
-    if (incomingItem['step'] !== cachedItem['step']) return incomingRank > cachedRank;
-
-  }
-  return true;
-}
-
-function planStatusRank(value: unknown): number {
-  if (typeof value !== 'string') return 0;
-  switch (value.replace(/[-_]/g, '').toLowerCase()) {
-    case 'completed':
-    case 'failed':
-      return 3;
-    case 'inprogress':
-      return 2;
-    case 'pending':
-      return 1;
-    default:
-      return 0;
-  }
-}
-
 
 /** End any pre-compaction streaming rows without changing the overall running turn. */
 function finishMessageStreamingAtCompactBoundary(message: RemoteMessage): RemoteMessage {
@@ -1124,7 +1037,7 @@ export const remoteSessionStore = {
       }
     }
     for (const rawItem of latestWindow) {
-      const item = overlayLivePlanSnapshot(sessionId, rawItem, { authoritativeHistory: true });
+      const item = overlayLivePlanSnapshot(sessionId, rawItem);
       if (isPersistedAssistantMessage(item)) {
         const fallbackIndex = findPendingGeneratedStreamingFallbackIndex(sessionId, existing);
         const fallback = fallbackIndex >= 0 ? existing[fallbackIndex] : undefined;
@@ -1649,39 +1562,6 @@ export const remoteSessionStore = {
       return;
     }
 
-    if (type === 'plan_snapshot') {
-      const data = isRecord(event.data) ? event.data : null;
-      const turnId = readString(data, 'turnId');
-      if (!turnId || !Array.isArray(data?.plan)) return;
-      const currentMessages = messages.get(sessionId) ?? [];
-      const applied = applyCodexPlanSnapshotOnDone(currentMessages, data.plan, turnId);
-      const toolUseId = applied.toolUseId ?? `plan:${turnId}`;
-      let terminalPersistId: string | undefined;
-      if (applied.toolUseId) {
-        const terminalMessage = applied.messages.find((message) =>
-          message.role === 'tool_use'
-          && (message.toolUseId === applied.toolUseId
-            || readString(message.content, 'toolUseId') === applied.toolUseId),
-        );
-        terminalPersistId = terminalMessage?.clientId ?? terminalMessage?.id;
-      }
-      if (applied.changed) {
-        messages.set(sessionId, [...applied.messages]);
-        bumpMessageVersion();
-      }
-      rememberLivePlanSnapshot(sessionId, {
-        toolUseId,
-        ...(terminalPersistId ? { persistId: terminalPersistId } : {}),
-        content: {
-          toolUseId,
-          toolName: 'update_plan',
-          input: { plan: data.plan },
-        },
-      });
-      if (applied.changed) emit();
-      return;
-    }
-
     // setSessionRunning owns the final flush/finalize and run-state transition;
     // keeping the done path in one call avoids notifying subscribers twice.
     if (type === 'done' || isTerminalMakerErrorEvent(event)) {
@@ -1695,23 +1575,11 @@ export const remoteSessionStore = {
         terminalPlanChanged = completed.changed;
         if (completed.changed) {
           messages.set(sessionId, [...completed.messages]);
-        }
-        if (Array.isArray(data?.plan)) {
-          const toolUseId = completed.toolUseId ?? (turnId ? `plan:${turnId}` : null);
-          if (toolUseId) {
-            const terminalMessage = completed.toolUseId
-              ? completed.messages.find((message) =>
-                message.role === 'tool_use'
-                && (message.toolUseId === completed.toolUseId
-                  || readString(message.content, 'toolUseId') === completed.toolUseId),
-              )
-              : undefined;
-            const terminalPersistId = terminalMessage?.clientId ?? terminalMessage?.id;
+          if (Array.isArray(data?.plan) && completed.toolUseId) {
             rememberLivePlanSnapshot(sessionId, {
-              toolUseId,
-              ...(terminalPersistId ? { persistId: terminalPersistId } : {}),
+              toolUseId: completed.toolUseId,
               content: {
-                toolUseId,
+                toolUseId: completed.toolUseId,
                 toolName: 'update_plan',
                 input: { plan: data.plan },
               },

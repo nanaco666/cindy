@@ -6065,54 +6065,6 @@ describe('CodexAgent plan mode', () => {
     await handle.close();
   });
 
-
-  it('does not publish rollout plan updates after a failed turn', async () => {
-    const agent = new CodexAgent(createDeps());
-    const rolloutRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'xdt-codex-failed-plan-'));
-    tempRoots.push(rolloutRoot);
-    const rolloutPath = path.join(rolloutRoot, 'rollout-failed-turn.jsonl');
-    await fs.writeFile(rolloutPath, '', 'utf8');
-    vi.spyOn(agent as never, 'findRolloutPath').mockResolvedValue(rolloutPath);
-    const host = installTurnHost(agent);
-    const handle = await agent.startSession({
-      sessionId: 'session-plan-failed-rollout-drain',
-      model: 'gpt-5.4',
-      workingDir: '/repo',
-    });
-    const iterator = handle.events()[Symbol.asyncIterator]();
-    const handlers = host.getThreadHandlers();
-    if (!handlers) throw new Error('expected thread handlers');
-
-    await handle.send({ type: 'user', content: 'implement it' });
-    handlers.turnStarted?.({ threadId: 'start-thread-id', turn: { id: 'turn-1' } });
-    await fs.appendFile(
-      rolloutPath,
-      `${JSON.stringify({
-        turn_id: 'turn-1',
-        type: 'response_item',
-        payload: {
-          type: 'function_call',
-          name: 'update_plan',
-          call_id: 'late-failed-plan',
-          arguments: JSON.stringify({ plan: [{ step: 'Patch', status: 'in_progress' }] }),
-        },
-      })}\n`,
-      'utf8',
-    );
-    handlers.turnCompleted?.({
-      threadId: 'start-thread-id',
-      turn: { id: 'turn-1', status: 'failed', error: { message: 'failed' } },
-    });
-
-    const events: AgentEvent[] = [];
-    for (let i = 0; i < 20 && events.at(-1)?.type !== 'done'; i += 1) {
-      events.push(await nextEvent(iterator));
-    }
-    await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(events.some((event) => event.type === 'tool_use')).toBe(false);
-    await handle.close();
-  });
-
   it('does not attach a prior turn plan to a later task_complete', async () => {
     const agent = new CodexAgent(createDeps());
     const host = installTurnHost(agent);

@@ -181,11 +181,9 @@ import {
   noteSessionAgentKind,
   noteSessionClearBoundary,
   noteTurnStarted,
-  rememberPlanTurnCompletion,
   onAssistantTextEvent,
   onInteractionMessage,
   onInteractionResolved,
-  onPlanSnapshotEvent,
   onThinkingEvent,
   onToolResultEvent,
   onToolResultFullEvent,
@@ -2172,15 +2170,6 @@ export function wireSessionToIpc(session: ReturnType<Maker['getSession']>): void
         event.data as { text?: unknown; isFinal?: unknown },
         eventAgentMeta,
       );
-    } else if (event.type === 'plan_snapshot') {
-      // A final rollout drain may discover the first plan row only after done.
-      // Persist it under the same turn-scoped identity while preserving the
-      // plan_snapshot broadcast contract (generic tool_use would affect later UI).
-      persistId = onPlanSnapshotEvent(
-        session.id,
-        event.data as { turnId?: unknown; plan?: unknown },
-        eventAgentMeta,
-      );
     } else if (event.type === 'tool_use') {
       // tool_use 边界:先 flush 在飞 assistant(保证 assistant 行先于其 tool_use 入队
       // 落库),再落 tool_use 本身,拿回 persistId 盖进 payload。两者都只入队、不阻塞。
@@ -2285,13 +2274,6 @@ export function wireSessionToIpc(session: ReturnType<Maker['getSession']>): void
       // _turnStartedAtBySession 之前保存一份，让 deferred 路径能正确做 /clear 竞态 cap。
       if (event.type === 'error' && isRemoteAuthRetry) {
         saveTurnStartedAtForDeferred(session.id);
-      }
-      if (event.type === 'done') {
-        if (event.source === 'codex') {
-          const doneData = event.data as { raw?: { id?: unknown } } | null;
-          const turnId = typeof doneData?.raw?.id === 'string' ? doneData.raw.id : null;
-          if (turnId) rememberPlanTurnCompletion(session.id, turnId);
-        }
       }
       // turn 收尾打标:本 turn 已知持久化(assistant flush / orphan tool_result /
       // error 行)已全部入队,在此统一定格并等排空后写。done 与 terminal error

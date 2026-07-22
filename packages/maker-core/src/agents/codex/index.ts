@@ -1895,7 +1895,7 @@ export class CodexAgent extends BaseAgent {
     let subscriptionInvalidatedByTransport = false;
     let subscription: ThreadSubscription | null = null;
     let interactionResolver: InteractionResolver | null = null;
-    let stopRolloutPlanFallback: ((drainCompletedTurn?: boolean) => void) | null = null;
+    let stopRolloutPlanFallback: (() => void) | null = null;
     const seenRolloutPlanCallIds = new Set<string>();
     const latestPlanByTurn = new Map<string, TurnPlanUpdatedNotification['params']['plan']>();
     // 当前 session 的 one-shot tip 状态 (turn-start status 用):
@@ -3157,10 +3157,10 @@ export class CodexAgent extends BaseAgent {
       return currentTurnId !== null && turnId !== currentTurnId;
     };
 
-    const stopActiveRolloutPlanFallback = (opts: { drainCompletedTurn?: boolean } = {}): void => {
+    const stopActiveRolloutPlanFallback = (): void => {
       const stop = stopRolloutPlanFallback;
       stopRolloutPlanFallback = null;
-      try { stop?.(opts.drainCompletedTurn === true); } catch { /* no-op */ }
+      try { stop?.(); } catch { /* no-op */ }
     };
 
     const startRolloutPlanFallback = (turnId: string): void => {
@@ -3168,12 +3168,10 @@ export class CodexAgent extends BaseAgent {
       seenRolloutPlanCallIds.clear();
 
       let stopped = false;
-      let drainingCompletedTurn = false;
       let timer: ReturnType<typeof setInterval> | null = null;
       let rolloutPath = '';
       let offset = 0;
       let remainder = '';
-      let pollChain = Promise.resolve();
 
       const scanText = (text: string, allowFallbackTurnId: boolean): void => {
         const lines = `${remainder}${text}`.split(/\r?\n/);
@@ -3192,7 +3190,7 @@ export class CodexAgent extends BaseAgent {
             { requireTurnId: true },
           );
           if (!parsed) continue;
-          if (parsed.turnId && !drainingCompletedTurn && shouldIgnoreStaleTurnEvent(parsed.turnId)) continue;
+          if (parsed.turnId && shouldIgnoreStaleTurnEvent(parsed.turnId)) continue;
           if (parsed.turnId && parsed.turnId !== turnId) continue;
           if (parsed.callId) {
             if (seenRolloutPlanCallIds.has(parsed.callId)) {
@@ -3207,22 +3205,11 @@ export class CodexAgent extends BaseAgent {
               input.input.plan as TurnPlanUpdatedNotification['params']['plan'],
             );
           }
-          // Final drain can finish after a later turn has started. Publish a
-          // turn-scoped patch rather than generic tool_use so consumers update
-          // only the matching plan row without finalizing later-turn UI.
-          if (drainingCompletedTurn) {
-            eventQueue.push({
-              type: 'plan_snapshot',
-              data: { turnId, plan: input.input?.plan ?? [] },
-              source: 'codex',
-            });
-          } else {
-            eventQueue.push(parsed.event);
-          }
+          eventQueue.push(parsed.event);
         }
       };
 
-      const pollOnce = async (allowFallbackTurnId: boolean): Promise<void> => {
+      const poll = async (allowFallbackTurnId: boolean): Promise<void> => {
         if (stopped || !rolloutPath) return;
         let stat: Awaited<ReturnType<typeof fs.stat>>;
         try {
@@ -3251,23 +3238,9 @@ export class CodexAgent extends BaseAgent {
         }
       };
 
-      const poll = (allowFallbackTurnId: boolean): Promise<void> => {
-        pollChain = pollChain.then(() => pollOnce(allowFallbackTurnId));
-        return pollChain;
-      };
-
-      stopRolloutPlanFallback = (drainCompletedTurn = false) => {
+      stopRolloutPlanFallback = () => {
         if (timer) clearInterval(timer);
-        if (!drainCompletedTurn) {
-          stopped = true;
-          latestPlanByTurn.delete(turnId);
-          return;
-        }
-        drainingCompletedTurn = true;
-        void poll(true).finally(() => {
-          stopped = true;
-          latestPlanByTurn.delete(turnId);
-        });
+        stopped = true;
       };
 
       void (async () => {
@@ -3328,11 +3301,7 @@ export class CodexAgent extends BaseAgent {
       const suppressTerminalUi = terminalErroredTurnIds.has(turn.id);
       deferredTerminalTurnCompletions.delete(turn.id);
       if (currentTurnId === turn.id || currentTurnId === null) {
-        const canDrainCompletedTurn =
-          !terminalErroredTurnIds.has(turn.id) &&
-          turn.status !== 'failed' &&
-          turn.status !== 'interrupted';
-        stopActiveRolloutPlanFallback({ drainCompletedTurn: canDrainCompletedTurn });
+        stopActiveRolloutPlanFallback();
       }
       dismissPendingUserInputForTurn(turn.id, `turn_${turn.status}`);
       clearActiveToolContextsForTurn(turn.id);

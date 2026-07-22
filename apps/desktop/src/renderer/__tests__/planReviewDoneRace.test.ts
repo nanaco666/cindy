@@ -88,11 +88,13 @@ function emptyProjection(sessionId: string) {
 }
 
 let onEvent: ((data: unknown) => void) | undefined;
+let onDbMessageCreated: ((data: unknown) => void) | undefined;
 let onInteractionRequest: ((data: unknown) => void) | undefined;
 let onInteractionDismissed: ((data: unknown) => void) | undefined;
 
 function installElectronBridge(): void {
   onEvent = undefined;
+  onDbMessageCreated = undefined;
   onInteractionRequest = undefined;
   onInteractionDismissed = undefined;
   const w = globalThis as unknown as { window: Record<string, unknown> };
@@ -127,7 +129,10 @@ function installElectronBridge(): void {
       },
       localDb: {
         messages: {
-          onCreated: vi.fn(() => vi.fn()),
+          onCreated: (cb: (data: unknown) => void) => {
+            onDbMessageCreated = cb;
+            return vi.fn();
+          },
         },
       },
     },
@@ -170,6 +175,29 @@ function emitPlanUpdate(source: 'codex' | 'claude-code', statuses: string[]): vo
           plan: statuses.map((status, index) => ({ step: `Step ${index + 1}`, status })),
         },
       },
+    },
+    persistId: 'plan-row-1',
+  });
+}
+
+function emitPersistedPlanEcho(statuses: string[]): void {
+  onDbMessageCreated?.({
+    sessionId: SESSION_ID,
+    message: {
+      id: 'db-plan-row-1',
+      sessionId: SESSION_ID,
+      clientId: 'plan-row-1',
+      role: 'tool_use',
+      content: JSON.stringify({
+        toolUseId: 'plan:turn-1',
+        toolName: 'update_plan',
+        input: {
+          plan: statuses.map((status, index) => ({ step: `Step ${index + 1}`, status })),
+        },
+      }),
+      toolUseId: 'plan:turn-1',
+      agentMeta: null,
+      createdAt: '2026-07-22T00:00:01.000Z',
     },
   });
 }
@@ -214,6 +242,16 @@ describe('plan_review 与 done 的时序', () => {
     ]);
 
     expect(latestPlanStatuses()).toEqual(['completed', 'completed', 'completed']);
+  });
+
+  it('codex:延迟 DB create 回声不覆盖刚应用的终态计划', () => {
+    makerChatStore.setSessionRuntime(SESSION_ID, { agentKind: 'codex' });
+    emitPlanUpdate('codex', ['in_progress']);
+    emitDone('codex', [{ step: 'Step 1', status: 'completed' }]);
+
+    emitPersistedPlanEcho(['in_progress']);
+
+    expect(latestPlanStatuses()).toEqual(['completed']);
   });
 
   it('codex:done 没有 plan 快照时不猜测旧计划已完成', () => {

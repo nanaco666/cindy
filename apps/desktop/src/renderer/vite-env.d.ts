@@ -475,7 +475,7 @@ interface CodexUsageSnapshot {
 
 interface CCAgentStreamEvent {
   sessionId: string;
-  type: 'text' | 'tool_use' | 'tool_result' | 'tool_result_full' | 'agent_task_update' | 'plan_snapshot' | 'status' | 'done' | 'error' | 'permission_request' | 'permission_dismissed' | 'ask_user_question' | 'plan_review' | 'thinking' | 'compact_boundary';
+  type: 'text' | 'tool_use' | 'tool_result' | 'tool_result_full' | 'agent_task_update' | 'status' | 'done' | 'error' | 'permission_request' | 'permission_dismissed' | 'ask_user_question' | 'plan_review' | 'thinking' | 'compact_boundary';
   data: unknown;
   source?: 'claude-code' | 'codex';
   /**

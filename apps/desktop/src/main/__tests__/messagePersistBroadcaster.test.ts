@@ -40,7 +40,6 @@ import {
   prepareSyntheticToolEventForBroadcast,
   onAssistantTextEvent,
   onInteractionMessage,
-  onPlanSnapshotEvent,
   onThinkingEvent,
   flushAssistantBlock,
   flushOrphanToolResults,
@@ -52,7 +51,6 @@ import {
   noteSessionAgentKind,
   enqueueDurableWrite,
   noteTurnStarted,
-  rememberPlanTurnCompletion,
   saveTurnStartedAtForDeferred,
 } from '../messagePersistBroadcaster.js';
 
@@ -129,76 +127,6 @@ describe('update_plan tool_use persistence', () => {
     await flushWrites();
     expect(createMessage).toHaveBeenCalledTimes(2);
     expect(updateMessageContent).not.toHaveBeenCalled();
-  });
-
-  it('updates the existing plan row when plan_snapshot arrives after the done reset', async () => {
-    const firstPersistId = onToolUseEvent(
-      SESSION,
-      {
-        toolUseId: 'plan:turn-late',
-        toolName: 'update_plan',
-        input: { plan: [{ step: 'Inspect', status: 'in_progress' }] },
-      },
-      null,
-    );
-    rememberPlanTurnCompletion(SESSION, 'turn-late', 2_000);
-    resetTurnPersistState(SESSION);
-    const secondPersistId = onPlanSnapshotEvent(
-      SESSION,
-      { turnId: 'turn-late', plan: [{ step: 'Inspect', status: 'completed' }] },
-      null,
-    );
-
-    expect(firstPersistId).toEqual(expect.any(String));
-    expect(secondPersistId).toBe(firstPersistId);
-
-    await flushWrites();
-    expect(createMessage).toHaveBeenCalledTimes(1);
-    expect(createMessage).toHaveBeenCalledWith(
-      SESSION,
-      expect.objectContaining({
-        clientId: firstPersistId,
-        role: 'tool_use',
-        toolUseId: 'plan:turn-late',
-        content: {
-          toolUseId: 'plan:turn-late',
-          toolName: 'update_plan',
-          input: { plan: [{ step: 'Inspect', status: 'in_progress' }] },
-        },
-      }),
-      broadcastGuard(),
-    );
-    expect(updateMessageContent).toHaveBeenCalledWith(
-      SESSION,
-      firstPersistId,
-      {
-        toolUseId: 'plan:turn-late',
-        toolName: 'update_plan',
-        input: { plan: [{ step: 'Inspect', status: 'completed' }] },
-      },
-    );
-  });
-
-  it('positions a first-seen drained plan at the completed turn boundary', async () => {
-    rememberPlanTurnCompletion(SESSION, 'turn-first-seen-late', 2_000);
-    resetTurnPersistState(SESSION);
-
-    const persistId = onPlanSnapshotEvent(
-      SESSION,
-      { turnId: 'turn-first-seen-late', plan: [{ step: 'Inspect', status: 'completed' }] },
-      null,
-    );
-
-    await flushWrites();
-    expect(createMessage).toHaveBeenCalledWith(
-      SESSION,
-      expect.objectContaining({
-        clientId: persistId,
-        toolUseId: 'plan:turn-first-seen-late',
-        createdAt: 2_000,
-      }),
-      broadcastGuard(),
-    );
   });
 });
 

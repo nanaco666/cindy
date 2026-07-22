@@ -324,29 +324,7 @@ const toolUseCreatedAtBySession = new Map<string, Map<string, number>>();
  * 需要按 tool_use 的 input.args 去 mediaToolResultFallback 池里认领结果。
  */
 const toolUseInfoBySession = new Map<string, Map<string, { toolName: string; input: unknown }>>();
-/** Recent turn-scoped plan identities survive done so a late final drain can
- * update the original row and retain the completed turn's timeline position. */
 const planToolUsePersistIdBySession = new Map<string, Map<string, string>>();
-const planTurnCompletedAtBySession = new Map<string, Map<string, number>>();
-const MAX_RETAINED_PLAN_TURNS = 32;
-
-function rememberRecentPlanValue<T>(
-  registry: Map<string, Map<string, T>>,
-  sessionId: string,
-  toolUseId: string,
-  value: T,
-): void {
-  let values = registry.get(sessionId);
-  if (!values) {
-    values = new Map();
-    registry.set(sessionId, values);
-  }
-  if (!values.has(toolUseId) && values.size >= MAX_RETAINED_PLAN_TURNS) {
-    const oldest = values.keys().next().value as string | undefined;
-    if (oldest) values.delete(oldest);
-  }
-  values.set(toolUseId, value);
-}
 
 function rememberToolUseId(sessionId: string, toolUseId: string, createdAt: number): void {
   let set = knownToolUseIdsBySession.get(sessionId);
@@ -385,21 +363,12 @@ function clampAfterLatestToolUse(sessionId: string, toolUseIds: string[], create
 }
 
 function rememberPlanToolUsePersistId(sessionId: string, toolUseId: string, persistId: string): void {
-  rememberRecentPlanValue(planToolUsePersistIdBySession, sessionId, toolUseId, persistId);
-}
-
-/** Capture the old turn's terminal position before per-turn state is reset. */
-export function rememberPlanTurnCompletion(
-  sessionId: string,
-  turnId: string,
-  completedAt = Date.now(),
-): void {
-  rememberRecentPlanValue(
-    planTurnCompletedAtBySession,
-    sessionId,
-    `plan:${turnId}`,
-    completedAt,
-  );
+  let idMap = planToolUsePersistIdBySession.get(sessionId);
+  if (!idMap) {
+    idMap = new Map();
+    planToolUsePersistIdBySession.set(sessionId, idMap);
+  }
+  idMap.set(toolUseId, persistId);
 }
 
 /**
@@ -412,9 +381,8 @@ export function onToolUseEvent(
   sessionId: string,
   data: { toolUseId?: unknown; toolName?: unknown; input?: unknown },
   agentMeta: AgentMeta | null,
-  options: { createdAt?: number } = {},
 ): string {
-  const createdAt = options.createdAt ?? Date.now();
+  const createdAt = Date.now();
   const toolUseId = typeof data.toolUseId === 'string' ? data.toolUseId : '';
   const toolName = typeof data.toolName === 'string' ? data.toolName : '';
   if (toolUseId) {
@@ -451,24 +419,6 @@ export function onToolUseEvent(
   }
   notePersistedMessage(sessionId, 'tool_use', persistId);
   return persistId;
-}
-
-/** Persist a turn-scoped terminal plan reconciliation without broadcasting it as
- * a generic tool_use event, which could finalize UI belonging to a later turn. */
-export function onPlanSnapshotEvent(
-  sessionId: string,
-  data: { turnId?: unknown; plan?: unknown },
-  agentMeta: AgentMeta | null,
-): string | undefined {
-  if (typeof data.turnId !== 'string' || !Array.isArray(data.plan)) return undefined;
-  const toolUseId = `plan:${data.turnId}`;
-  return onToolUseEvent(sessionId, {
-    toolUseId,
-    toolName: 'update_plan',
-    input: { plan: data.plan },
-  }, agentMeta, {
-    createdAt: planTurnCompletedAtBySession.get(sessionId)?.get(toolUseId),
-  });
 }
 
 /**
@@ -903,8 +853,7 @@ export function resetTurnPersistState(sessionId: string): void {
   knownToolUseIdsBySession.delete(sessionId);
   toolUseCreatedAtBySession.delete(sessionId);
   toolUseInfoBySession.delete(sessionId);
-  // planToolUsePersistIdBySession and planTurnCompletedAtBySession intentionally
-  // survive this reset: rollout final drain can publish plan_snapshot after done.
+  planToolUsePersistIdBySession.delete(sessionId);
   lastAgentMetaBySession.delete(sessionId);
   _turnStartedAtBySession.delete(sessionId);
   _turnDedupIdBySession.delete(sessionId);
@@ -1176,7 +1125,6 @@ export function clearSessionPersistState(sessionId: string): void {
   toolUseCreatedAtBySession.delete(sessionId);
   toolUseInfoBySession.delete(sessionId);
   planToolUsePersistIdBySession.delete(sessionId);
-  planTurnCompletedAtBySession.delete(sessionId);
   toolResultIdByToolUseId.delete(sessionId);
   pendingFullTextByToolUseId.delete(sessionId);
   toolResultContentByClientId.delete(sessionId);
