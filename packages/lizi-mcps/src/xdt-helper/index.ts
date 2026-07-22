@@ -47,6 +47,7 @@ export {
   registerCreateWorkerTool,
   type CreateWorkerDeps,
 } from './create_worker.js';
+export { registerCreateWorkersTool } from './create_workers.js';
 export {
   registerListWorkersTool,
   type ListWorkersDeps,
