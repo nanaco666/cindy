@@ -777,10 +777,27 @@ export function NewMakerDraftRoute() {
         evictDeviceCapabilities(target.deviceId);
         evictDeviceProviders(target.deviceId);
         evictDeviceGitSafetySettings(target.deviceId);
-        await Promise.allSettled([
+        // 清 seed key + remoteDraftState 强制 dlSel 重种:同设备切项目时 deps 不变,
+        // seed/fetch effect 不重跑;清掉后 prefetch 完成 → capabilities 更新 →
+        // remoteDraftState 重载 → seed effect 重新执行。
+        dlSeedKeyRef.current = null;
+        setDlSel(null);
+        setRemoteDraftState({ loaded: false, value: null });
+        // 清除本地 worktree 态:device-link 不使用控制端 worktree,留着旧 baseRepo 会让
+        // 快速发送误走 worktree:create 路径带上本地路径。
+        setWtEnabled(false);
+        setWtBaseRepo(null);
+        const [, , defaultsResult] = await Promise.allSettled([
           prefetchDeviceCapabilities(target.deviceId),
           prefetchDeviceProviders(target.deviceId),
+          window.electronAPI.deviceLink
+            .invoke(target.deviceId, 'maker:get-new-maker-defaults', [capabilityAgentKind])
+            .then((v) => (v as RemoteDraftDefaults | null) ?? null),
         ]);
+        setRemoteDraftState({
+          loaded: true,
+          value: defaultsResult.status === 'fulfilled' ? defaultsResult.value : null,
+        });
         patchDraft({
           workingDir: target.path,
           remoteHostId: null,
