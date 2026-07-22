@@ -3426,9 +3426,14 @@
     "modelSelector": {
       "budgetNeedsApiKey": "割引版 GPT は設定で API key を構成してから使用できます",
       "effortLabel": "推論強度",
-      "edit": "Edit",
+      "edit": "編集",
       "options": "オプション",
       "priceTip": "入力 {{input}} · 出力 {{output}} / 100万トークン",
+      "trigger": {
+        "placeholder": "モデルを選択",
+        "aria": "モデルを選択。現在：{{model}}",
+        "ariaWithEffort": "モデルを選択。現在：{{model}}、推論レベル：{{effort}}"
+      },
       "category": {
         "anthropic": "Anthropic",
         "gpt": "OpenAI",
@@ -3450,7 +3455,8 @@
       "meta": {
         "context": "コンテキスト {{value}}",
         "price": "{{input}}/{{output}} / 100万",
-        "fastBadge": "高速"
+        "fastBadge": "高速",
+        "budgetDiscount": "85%オフ"
       },
       "source": {
         "railLabel": "ソース",

@@ -4979,11 +4979,11 @@ export function ChatInput({
                     'hover:bg-[var(--folder-item-hover)]',
                     'focus-visible:outline-none',
                   )}
-                  aria-label="Select folder"
+                  aria-label={t('newChat.folderPicker.selectFolder')}
                 >
                   <Folder size={18} className="shrink-0 text-[var(--folder-btn-icon)]" />
                   <span className="text-[15px] font-normal text-[var(--folder-btn-text)]">
-                    {folderBasename ?? 'Select folder'}
+                    {folderBasename ?? t('newChat.folderPicker.selectFolder')}
                   </span>
                 </button>
               </Tip>

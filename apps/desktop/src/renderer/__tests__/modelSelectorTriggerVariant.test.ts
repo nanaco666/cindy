@@ -17,11 +17,14 @@ vi.mock('react-i18next', async (importOriginal) => ({
         output?: string;
         source?: string;
         value?: string;
+        model?: string;
+        effort?: string;
       },
     ) => {
       const translations: Record<string, string> = {
         'effortLevels.xhigh': '超高',
         'settings.providers.anthropic.title': 'Anthropic',
+        'newChat.modelSelector.trigger.placeholder': '选择模型',
       };
       if (key === 'newChat.modelSelector.priceTip') {
         return `Input ${options?.input} · Output ${options?.output} per 1M tokens`;
@@ -31,6 +34,12 @@ vi.mock('react-i18next', async (importOriginal) => ({
       }
       if (key === 'newChat.modelSelector.source.viaSource') {
         return `Source: ${options?.source}`;
+      }
+      if (key === 'newChat.modelSelector.trigger.aria') {
+        return `Select model. Current: ${options?.model}`;
+      }
+      if (key === 'newChat.modelSelector.trigger.ariaWithEffort') {
+        return `Select model. Current: ${options?.model}, effort: ${options?.effort}`;
       }
       return translations[key] ?? options?.defaultValue ?? key;
     },
@@ -393,7 +402,7 @@ describe('ModelSelector trigger variants', () => {
     );
 
     const trigger = screen.getByRole('button', {
-      name: /Current: Opus 4\.8, 超高 effort/,
+      name: /Current: Opus 4\.8, effort: 超高/,
     });
 
     expect(trigger.className).toContain('w-full');
@@ -436,6 +445,21 @@ describe('ModelSelector trigger variants', () => {
     const trigger = screen.getByRole('button', { name: /不指定（跟随原逻辑）/ });
     expect(trigger.textContent).toContain('不指定（跟随原逻辑）');
     expect(trigger.textContent).not.toContain('high');
+  });
+
+  it('localizes the placeholder when the current model is unavailable', () => {
+    render(
+      React.createElement(ModelSelector, {
+        modelId: 'missing-model',
+        effort: 'high',
+        onModelChange: vi.fn(),
+        onEffortChange: vi.fn(),
+        vendorKey: 'cc',
+        triggerVariant: 'field',
+      }),
+    );
+
+    expect(screen.getByRole('button', { name: /选择模型/ }).textContent).toContain('选择模型');
   });
 
   it('can hide model effort and Fast editing controls for model-id-only settings', () => {
