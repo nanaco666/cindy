@@ -860,7 +860,7 @@ describe('OrcaWorkerCreationService', () => {
     }));
   });
 
-  it('recomputes the provider from connected model sources when the worker model is explicit', async () => {
+  it('keeps the default route while validating connected sources when only the worker model is explicit', async () => {
     const availability = {
       'claude-code': [],
       codex: [
@@ -881,11 +881,11 @@ describe('OrcaWorkerCreationService', () => {
       model: 'gpt-5.4',
     })).resolves.toMatchObject({
       ok: true,
-      resolved: { providerId: 'xd', model: 'gpt-5.4' },
+      resolved: { providerId: null, model: 'gpt-5.4' },
     });
 
     expect(deps.buildCreateOptsWithStderr).toHaveBeenCalledWith(expect.objectContaining({
-      providerId: 'xd',
+      providerId: null,
       model: 'gpt-5.4',
     }));
   });

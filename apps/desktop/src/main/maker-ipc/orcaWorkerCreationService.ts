@@ -461,13 +461,14 @@ export function createOrcaWorkerCreationService(deps: OrcaWorkerCreationDeps): O
     if (!resolvedConfig.ok) {
       return { ok: false, errorCode: 'INVALID_PARAMS', message: resolvedConfig.message };
     }
+    const explicitModelAvailableProviderId = params.model !== undefined
+      ? providerRouting.resolveDefaultProviderIdForModel(params.agent, resolvedConfig.model)
+      : null;
     const resolved = {
       ...resolvedConfig,
-      // 显式 model 属于本次 Worker 创建请求，不能沿用无关的 New Maker/Lead provider。
-      // 来源选择必须基于当前已连接且实际提供该 model 的 provider 集合重新派生。
-      providerId: params.model !== undefined
-        ? providerRouting.resolveDefaultProviderIdForModel(params.agent, resolvedConfig.model)
-        : resolvedConfig.providerId,
+      // 仅显式指定 model 不等于显式选择来源：providerId=null 必须保留 spawn-aware 默认路由。
+      // resolveDefaultProviderIdForModel 只用于确认至少一个已连接来源提供该模型，不能把其结果持久化。
+      providerId: params.model !== undefined ? null : resolvedConfig.providerId,
     };
 
     // codex/ 预算模型依赖 Cindy AI API key；XD/default 路由即使因 provider 缺失，
@@ -483,7 +484,7 @@ export function createOrcaWorkerCreationService(deps: OrcaWorkerCreationDeps): O
       };
     }
 
-    if (params.model !== undefined && resolved.providerId === null) {
+    if (params.model !== undefined && explicitModelAvailableProviderId === null) {
       return {
         ok: false,
         errorCode: 'PROVIDER_ROUTE_UNAVAILABLE',
