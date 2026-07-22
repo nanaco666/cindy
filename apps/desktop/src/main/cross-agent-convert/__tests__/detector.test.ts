@@ -118,7 +118,7 @@ describe('detect — shared skills', () => {
     );
 
     const r = await detect({ workingDir: tmpDir, agentKind: 'codex' });
-    expect(r.items.find((i) => i.kind === 'skills')).toBeUndefined();
+    expect(r.items).toEqual([]);
   });
 });
 
