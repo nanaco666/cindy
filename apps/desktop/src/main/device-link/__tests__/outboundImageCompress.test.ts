@@ -36,7 +36,7 @@ describe('planOutboundImageCompression', () => {
 });
 
 describe('compressOutboundImage', () => {
-  const bigJpeg = Buffer.alloc(2 * 1024 * 1024, 7);
+  const bigJpeg = Buffer.alloc(OUTBOUND_IMAGE_RECOMPRESS_MIN_BYTES + 1, 7);
 
   it('直通格式不调 transform', async () => {
     const transform = vi.fn<OutboundImageTransform>();
