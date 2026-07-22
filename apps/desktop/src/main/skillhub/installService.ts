@@ -375,12 +375,14 @@ async function readRegistryInstallSnapshots(
   skillName: string,
   logicalFinalDir: string,
   physicalFinalDir: string,
+  preSwitchPhysicalRealDir?: string,
 ): Promise<RegistryInstallSnapshot[]> {
   const candidates = [logicalFinalDir];
   if (!pathTextEquals(path.normalize(logicalFinalDir), path.normalize(physicalFinalDir))) {
     candidates.push(physicalFinalDir);
     const realPhysicalDir = await fs.promises.realpath(physicalFinalDir).catch(() => physicalFinalDir);
     candidates.push(realPhysicalDir);
+    if (preSwitchPhysicalRealDir) candidates.push(preSwitchPhysicalRealDir);
   }
 
   const snapshots: RegistryInstallSnapshot[] = [];
@@ -650,6 +652,13 @@ export async function install(
     }
 
     // 6) final switch: staging → final。只有此时才移动/删除旧目录。
+    // 物理 Skill 自身可能还是一层用户链接；替换后再 realpath 已看不到旧 registry key。
+    const preSwitchPhysicalRealDir = !pathTextEquals(
+      path.normalize(logicalFinalDir),
+      path.normalize(finalDir),
+    )
+      ? await fs.promises.realpath(finalDir).catch(() => finalDir)
+      : undefined;
     const rollbackState: FinalSwitchRollbackState = {
       backupDir: null,
       finalDirCreated: false,
@@ -704,7 +713,12 @@ export async function install(
     const folderHash = (await computeFolderHash(finalDir).catch(() => null)) ?? '';
     const nowSec = Math.floor(Date.now() / 1000);
     const versionStr = downloadVersion || info.fileHash.slice(0, 8);
-    const registrySnapshots = await readRegistryInstallSnapshots(p.name, logicalFinalDir, finalDir);
+    const registrySnapshots = await readRegistryInstallSnapshots(
+      p.name,
+      logicalFinalDir,
+      finalDir,
+      preSwitchPhysicalRealDir,
+    );
     const logicalRegistrySnapshot = registrySnapshots.find(({ installPath }) =>
       pathTextEquals(path.normalize(installPath), path.normalize(logicalFinalDir)),
     );
