@@ -1,8 +1,18 @@
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('react-native', () => ({ Alert: { alert: vi.fn() } }));
+vi.mock('expo-localization', () => ({ getLocales: vi.fn(() => [{ languageCode: 'en' }]) }));
 
-import { confirmFullAccessChange } from '@/session/fullAccessConfirmation';
+import { confirmFullAccessChange, getFullAccessConfirmationCopy } from '@/session/fullAccessConfirmation';
+
+describe('getFullAccessConfirmationCopy', () => {
+  it('selects the supported system language and falls back to English', () => {
+    expect(getFullAccessConfirmationCopy('ja').confirm).toBe('Full access を有効にする');
+    expect(getFullAccessConfirmationCopy('ko-KR').cancel).toBe('현재 권한 유지');
+    expect(getFullAccessConfirmationCopy('zh-Hans-CN').title).toBe('开启 Full access？');
+    expect(getFullAccessConfirmationCopy('fr').title).toBe('Enable Full access?');
+  });
+});
 
 describe('confirmFullAccessChange', () => {
   it('does not show an alert when the change does not enter Full access', async () => {
