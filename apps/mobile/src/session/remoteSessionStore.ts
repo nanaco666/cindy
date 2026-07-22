@@ -1634,8 +1634,17 @@ export const remoteSessionStore = {
         if (Array.isArray(data?.plan)) {
           const toolUseId = completed.toolUseId ?? (turnId ? `plan:${turnId}` : null);
           if (toolUseId) {
+            const terminalMessage = completed.toolUseId
+              ? completed.messages.find((message) =>
+                message.role === 'tool_use'
+                && (message.toolUseId === completed.toolUseId
+                  || readString(message.content, 'toolUseId') === completed.toolUseId),
+              )
+              : undefined;
+            const terminalPersistId = terminalMessage?.clientId ?? terminalMessage?.id;
             rememberLivePlanSnapshot(sessionId, {
               toolUseId,
+              ...(terminalPersistId ? { persistId: terminalPersistId } : {}),
               content: {
                 toolUseId,
                 toolName: 'update_plan',

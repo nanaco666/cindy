@@ -683,6 +683,54 @@ describe('remoteSessionStore', () => {
     });
   });
 
+  it('refreshes a stale persist-indexed plan cache with the terminal snapshot', () => {
+    remoteSessionStore.setMessages('s1', [{
+      ...message('db-row-plan', 's1'),
+      clientId: 'plan-row-persisted',
+      role: 'tool_use',
+      toolUseId: 'plan:turn-1',
+      content: {
+        toolUseId: 'plan:turn-1',
+        toolName: 'update_plan',
+        input: { plan: [{ step: 'Inspect', status: 'pending' }] },
+      },
+    }]);
+    remoteSessionStore.applyMakerEvent('s1', {
+      type: 'tool_use',
+      data: {
+        toolUseId: 'plan:turn-1',
+        toolName: 'update_plan',
+        input: { plan: [{ step: 'Inspect', status: 'in_progress' }] },
+      },
+    }, 'plan-row-persisted');
+
+    remoteSessionStore.applyMakerEvent('s1', {
+      type: 'done',
+      source: 'codex',
+      data: {
+        type: 'codex/event/task_complete',
+        raw: { id: 'turn-1' },
+        plan: [{ step: 'Inspect', status: 'completed' }],
+      },
+    });
+
+    remoteSessionStore.setLatestMessageWindow('s1', [{
+      ...message('db-row-plan-reloaded', 's1'),
+      clientId: 'plan-row-persisted',
+      role: 'tool_use',
+      toolUseId: 'plan:turn-1',
+      content: {
+        toolUseId: 'plan:turn-1',
+        toolName: 'update_plan',
+        input: { plan: [{ step: 'Inspect', status: 'in_progress' }] },
+      },
+    }]);
+
+    expect(remoteSessionStore.getMessages('s1')[0]).toMatchObject({
+      content: { input: { plan: [{ step: 'Inspect', status: 'completed' }] } },
+    });
+  });
+
   it('applies live update_plan snapshots to the persisted task row', () => {
     const initialPlan = {
       ...message('plan-row-1', 's1'),
