@@ -790,6 +790,17 @@ export function NewMakerDraftRoute() {
       // SSH:lazy-create(workspaceKind='project',第一条消息发出时 agent 进程才真正起),
       // 立即建会话记录并 navigate 过去。建会话约定与本文件其它 createSession 路径一致
       // (createSession + makerChatStore.setSessionRuntime + navigate)。
+      //
+      // SSH 始终取本地(controller)的 provider/fast 上下文,不复用 device-link 派生值:
+      // - providerId: chatPrefs.providerId ?? null(null = 默认路由,不固化当前默认来源)
+      // - fastMode: 从 localProviders 解析,不走 deviceLinkInitial
+      const sshProviderId = chatPrefs.providerId ?? null;
+      const sshLocalSourceId = effectiveSourceIdForModel(
+        localProviders, sshProviderId, chatPrefs.model, capabilityAgentKind,
+      );
+      const sshFastMode = sshLocalSourceId
+        ? (getProviderModelFast(capabilityAgentKind, sshLocalSourceId, chatPrefs.model) ?? getFastModeForModel(chatPrefs.model))
+        : getFastModeForModel(chatPrefs.model);
       try {
         const newSession = await createSession({
           agentKind: draftVendor,
@@ -798,10 +809,10 @@ export function NewMakerDraftRoute() {
           permissionMode: chatPrefs.permissionMode,
           model: chatPrefs.model,
           effort: draftInitialEffort,
-          fastMode: effectiveFastMode,
+          fastMode: sshFastMode,
           planModeEnabled: effectivePlanMode,
           remoteHostId: target.hostId,
-          providerId: effectiveSourceId,
+          providerId: sshProviderId,
           extraDirs: effectiveExtraDirs,
         });
         if (!newSession) {
@@ -810,7 +821,7 @@ export function NewMakerDraftRoute() {
         if (effectivePlanMode) patchCurrentVendorPrefs({ planMode: false });
         makerChatStore.setSessionRuntime(newSession.id, {
           agentKind: draftVendor === 'codex' ? 'codex' : 'claude-code',
-          fastMode: effectiveFastMode,
+          fastMode: sshFastMode,
           planModeEnabled: effectivePlanMode,
         });
         {
@@ -822,14 +833,28 @@ export function NewMakerDraftRoute() {
         }
         // 把草稿页已输入的文本/附件移交到新会话,避免 navigate 后丢失。
         // rehomeDraftAttachments 把 base64 和 xdt-image://__new_maker_draft__/ 迁移到
-        // 新 session 的 image cache,避免持久化孤立引用。
+        // 新 session 的 image cache,避免持久化孤立引用。browserComments 的 screenshot
+        // 也是 AttachedFile,同样需要 rehome。
         const existingDraft = getComposerDraft(NEW_MAKER_DRAFT_KEY);
         if (existingDraft) {
           const rehomedAttachments = await rehomeDraftAttachments(
             existingDraft.attachments,
             newSession.id,
           );
-          saveComposerDraft(newSession.id, { ...existingDraft, attachments: rehomedAttachments ?? [] });
+          let rehomedComments = existingDraft.browserComments;
+          if (rehomedComments && rehomedComments.length > 0) {
+            rehomedComments = await Promise.all(
+              rehomedComments.map(async (c) => {
+                const rehomed = await rehomeDraftAttachments([c.screenshot], newSession.id);
+                return rehomed?.[0] ? { ...c, screenshot: rehomed[0] } : c;
+              }),
+            );
+          }
+          saveComposerDraft(newSession.id, {
+            ...existingDraft,
+            attachments: rehomedAttachments ?? [],
+            browserComments: rehomedComments,
+          });
           clearComposerDraftAndNotify(NEW_MAKER_DRAFT_KEY);
           attachmentState.clearFiles();
         }
@@ -839,7 +864,7 @@ export function NewMakerDraftRoute() {
         throw err;
       }
     },
-    [draft.vendor, chatPrefs, draftInitialEffort, effectiveExtraDirs, effectiveSourceId, effectiveFastMode, effectivePlanMode, attachmentState, createSession, navigate, t],
+    [draft.vendor, chatPrefs, draftInitialEffort, effectiveExtraDirs, localProviders, capabilityAgentKind, effectivePlanMode, attachmentState, createSession, navigate, t],
   );
 
   // ─── 切 vendor ──────────────────────────────────────────────────────
