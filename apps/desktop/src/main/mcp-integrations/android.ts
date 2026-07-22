@@ -36,6 +36,7 @@ const MAX_PLATFORM_TOOLS_ZIP_BYTES = 256 * 1024 * 1024;
 const DEFAULT_PLATFORM_TOOLS_DOWNLOAD_TIMEOUT_MS = 60_000;
 const STATUS_TIMEOUT_MS = 3_000;
 const ADB_COLD_START_TIMEOUT_MS = 15_000;
+const ADB_COLD_START_POLL_INTERVAL_MS = 250;
 const CALL_TIMEOUT_MS = 20_000;
 const MAX_STDOUT_BYTES = 10 * 1024 * 1024;
 const MAX_STDERR_BYTES = 512 * 1024;
@@ -113,6 +114,7 @@ interface ResolvedAdbCommand {
 
 const latestStateSnapshots = new Map<string, AndroidStateSnapshot>();
 let runnableAdbCache: ResolvedAdbCommand | null = null;
+const adbDeviceListRequests = new Map<string, Promise<AndroidConnectedDevice[]>>();
 let platformToolsDownloadTimeoutMs = DEFAULT_PLATFORM_TOOLS_DOWNLOAD_TIMEOUT_MS;
 /** 本会话用「我们分发的 adb」(bundled/prepared)跑过命令时记录其路径,退出时 kill-server 用。 */
 let managedAdbCommandUsed: string | null = null;
@@ -126,6 +128,7 @@ let serverPreExistedBeforeUs: boolean | null = null;
 export function clearAndroidStateSnapshotsForTest(): void {
   latestStateSnapshots.clear();
   runnableAdbCache = null;
+  adbDeviceListRequests.clear();
   platformToolsDownloadTimeoutMs = DEFAULT_PLATFORM_TOOLS_DOWNLOAD_TIMEOUT_MS;
   managedAdbCommandUsed = null;
   serverPreExistedBeforeUs = null;
@@ -798,25 +801,81 @@ async function listDevicesWithTimeout(timeoutMs: number): Promise<AndroidConnect
   return parseDevices(result.stdout);
 }
 
-async function listDevicesRaw(): Promise<AndroidConnectedDevice[]> {
-  try {
-    return await listDevicesWithTimeout(STATUS_TIMEOUT_MS);
-  } catch (err) {
-    if (!(err instanceof AdbCommandTimeoutError)) throw err;
+function waitForDelay(delayMs: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, delayMs));
+}
 
-    logger.info('adb devices timed out; waiting for a cold daemon startup before retrying', {
-      initialTimeoutMs: STATUS_TIMEOUT_MS,
-      coldStartTimeoutMs: ADB_COLD_START_TIMEOUT_MS,
-    });
-    const startResult = await spawnAdb(['start-server'], ADB_COLD_START_TIMEOUT_MS);
-    if (startResult.exitCode !== 0) {
-      throw new AndroidDriverError(
-        'ANDROID_DRIVER_ERROR',
-        startResult.stderr.trim() || 'adb start-server failed after devices timed out',
-      );
+function isTransientAdbStartupError(err: unknown): boolean {
+  if (err instanceof AdbCommandTimeoutError) return true;
+  if (!(err instanceof AndroidDriverError)) return false;
+  return /protocol fault|connection reset by peer|cannot connect to daemon|daemon not running|failed to connect to.*daemon/i
+    .test(err.message);
+}
+
+async function waitForAdbDevicesReady(deadlineMs: number): Promise<AndroidConnectedDevice[]> {
+  let lastError: unknown = new AdbCommandTimeoutError(
+    ['devices', '-l'],
+    ADB_COLD_START_TIMEOUT_MS,
+  );
+  while (Date.now() < deadlineMs) {
+    const remainingMs = deadlineMs - Date.now();
+    try {
+      return await listDevicesWithTimeout(Math.min(STATUS_TIMEOUT_MS, remainingMs));
+    } catch (err) {
+      if (!isTransientAdbStartupError(err)) throw err;
+      lastError = err;
+      const delayMs = Math.min(ADB_COLD_START_POLL_INTERVAL_MS, deadlineMs - Date.now());
+      if (delayMs <= 0) break;
+      await waitForDelay(delayMs);
     }
-    return listDevicesWithTimeout(ADB_COLD_START_TIMEOUT_MS);
   }
+  throw lastError;
+}
+
+async function runAdbColdStartRecovery(): Promise<AndroidConnectedDevice[]> {
+  const deadlineMs = Date.now() + ADB_COLD_START_TIMEOUT_MS;
+  const startResult = await spawnAdb(
+    ['start-server'],
+    Math.max(1, deadlineMs - Date.now()),
+  );
+  if (startResult.exitCode !== 0) {
+    throw new AndroidDriverError(
+      'ANDROID_DRIVER_ERROR',
+      startResult.stderr.trim() || 'adb start-server failed after devices timed out',
+    );
+  }
+  return waitForAdbDevicesReady(deadlineMs);
+}
+
+function recoverAdbColdStart(): Promise<AndroidConnectedDevice[]> {
+  logger.info('adb devices timed out; waiting for a cold daemon startup before retrying', {
+    initialTimeoutMs: STATUS_TIMEOUT_MS,
+    coldStartTimeoutMs: ADB_COLD_START_TIMEOUT_MS,
+  });
+  return runAdbColdStartRecovery();
+}
+
+function listDevicesRaw(): Promise<AndroidConnectedDevice[]> {
+  const details = currentAdbCommandDetails();
+  const key = `${details.source}:${details.command}`;
+  const existing = adbDeviceListRequests.get(key);
+  if (existing) {
+    logger.debug('joining in-flight adb device query', { command: details.command });
+    return existing;
+  }
+
+  const request = (async () => {
+    try {
+      return await listDevicesWithTimeout(STATUS_TIMEOUT_MS);
+    } catch (err) {
+      if (!(err instanceof AdbCommandTimeoutError)) throw err;
+      return recoverAdbColdStart();
+    }
+  })().finally(() => {
+    adbDeviceListRequests.delete(key);
+  });
+  adbDeviceListRequests.set(key, request);
+  return request;
 }
 
 function classifyDeviceIssue(devices: AndroidConnectedDevice[]): AndroidMcpErrorCode | null {

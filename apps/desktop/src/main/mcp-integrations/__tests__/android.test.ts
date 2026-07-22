@@ -233,6 +233,78 @@ emulator-5554 device product:sdk_gphone64_arm64 model:Pixel_8 device:emu transpo
     ]);
   });
 
+  it('keeps polling during the cold-start window after a transient protocol reset', async () => {
+    vi.useFakeTimers();
+    mockAdbSpawnByArgs({
+      'adb devices -l': [
+        { hang: true },
+        {
+          stderr: "error: protocol fault (couldn't read status): Connection reset by peer\n",
+          exitCode: 1,
+        },
+        {
+          stdout: `List of devices attached
+emulator-5554 device product:sdk_gphone64_arm64 model:Pixel_8 device:emu transport_id:1
+`,
+        },
+      ],
+      'adb start-server': {
+        stderr: '* daemon not running; starting now at tcp:5037\n* daemon started successfully\n',
+      },
+    });
+
+    const resultPromise = callAndroidDriverTool('list_devices', {});
+    await vi.advanceTimersByTimeAsync(3_250);
+
+    await expect(resultPromise).resolves.toMatchObject({
+      ok: true,
+      data: [{ device_serial: 'emulator-5554', state: 'device' }],
+    });
+    expect(spawnMock.mock.calls.map((call) => call[1])).toEqual([
+      ['devices', '-l'],
+      ['start-server'],
+      ['devices', '-l'],
+      ['devices', '-l'],
+    ]);
+  });
+
+  it('shares one cold-start recovery across concurrent device queries', async () => {
+    vi.useFakeTimers();
+    mockAdbSpawnByArgs({
+      'adb devices -l': [
+        { hang: true },
+        {
+          stdout: `List of devices attached
+emulator-5554 device product:sdk_gphone64_arm64 model:Pixel_8 device:emu transport_id:1
+`,
+        },
+      ],
+      'adb start-server': {
+        stderr: '* daemon not running; starting now at tcp:5037\n* daemon started successfully\n',
+      },
+    });
+
+    const first = callAndroidDriverTool('list_devices', {});
+    const second = callAndroidDriverTool('list_devices', {});
+    await vi.advanceTimersByTimeAsync(3_000);
+
+    await expect(Promise.all([first, second])).resolves.toEqual([
+      expect.objectContaining({
+        ok: true,
+        data: [expect.objectContaining({ device_serial: 'emulator-5554' })],
+      }),
+      expect.objectContaining({
+        ok: true,
+        data: [expect.objectContaining({ device_serial: 'emulator-5554' })],
+      }),
+    ]);
+    expect(spawnMock.mock.calls.map((call) => call[1])).toEqual([
+      ['devices', '-l'],
+      ['start-server'],
+      ['devices', '-l'],
+    ]);
+  });
+
   it('returns ADB_NOT_FOUND when adb cannot be spawned', async () => {
     mockAdbSpawn({ error: Object.assign(new Error('spawn adb ENOENT'), { code: 'ENOENT' }) });
 
