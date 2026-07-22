@@ -138,7 +138,7 @@ import {
   useProjectPickerOptions,
 } from '@/hooks/useProjectPickerOptions';
 import { resolveFastSupported, deriveModelsFromProviders } from '@/lib/providerModels';
-import { effectiveSourceIdForModel, getModel, sessionModelSupportsFastMode } from '@lizi/model-providers';
+import { effectiveSourceIdForModel, getModel, sessionModelSupportsFastMode, connectedProvidersForAgent } from '@lizi/model-providers';
 import { isSubscriptionDirectModel } from '../../../shared/subscriptionModels';
 import {
   resolveDeviceLinkDraftDefaults,
@@ -780,19 +780,22 @@ export function NewMakerDraftRoute() {
         evictDeviceCapabilities(target.deviceId);
         evictDeviceProviders(target.deviceId);
         evictDeviceGitSafetySettings(target.deviceId);
-        const [, , defaultsResult] = await Promise.allSettled([
+        const defaultsPromise = window.electronAPI.deviceLink
+          .invoke(target.deviceId, 'maker:get-new-maker-defaults', [capabilityAgentKind])
+          .then((v) => (v as RemoteDraftDefaults | null) ?? null)
+          .catch(() => null);
+        // capabilities + providers 必须都成功,否则终止 handoff(dialog 留 open)。
+        // defaults 允许失败(旧版被控端无此 channel → capabilities 默认 fallback)。
+        // prefetchDeviceProviders 吞 error,所以另外 invoke provider:list 验证可达。
+        await Promise.all([
           prefetchDeviceCapabilities(target.deviceId),
-          prefetchDeviceProviders(target.deviceId),
-          window.electronAPI.deviceLink
-            .invoke(target.deviceId, 'maker:get-new-maker-defaults', [capabilityAgentKind])
-            .then((v) => (v as RemoteDraftDefaults | null) ?? null),
+          window.electronAPI.deviceLink.invoke(target.deviceId, 'maker:provider:list', []),
         ]);
         const freshCaps = getCachedCapabilities(capabilityAgentKind, target.deviceId);
         if (!freshCaps) {
           throw new Error('failed to fetch device capabilities');
         }
-        // 刷新成功:现在才安全地重置状态。
-        const freshDefaults = defaultsResult.status === 'fulfilled' ? defaultsResult.value : null;
+        const freshDefaults = await defaultsPromise;
         dlSeedKeyRef.current = `${target.deviceId}:${capabilityAgentKind}`;
         setDlSel(resolveDeviceLinkDraftDefaults(freshCaps, freshDefaults, undefined, capabilityAgentKind));
         setRemoteDraftState({ loaded: true, value: freshDefaults });
@@ -814,10 +817,13 @@ export function NewMakerDraftRoute() {
       //
       // SSH 始终取本地(controller)的 provider/fast/effort 上下文,不复用 device-link 派生值。
       // providerId 只保留用户显式选中且仍有效的来源,否则 null(默认路由,不固化默认来源)。
+      // 使用 draftInitialModel(用户在 composer 里看到的模型),而不是 chatPrefs.model
+      // (当 device-link 草稿活跃时 chatPrefs.model 是旧的 controller-local 值)。
       // bridge 模型(chatgpt/ / xai/)在远程模式不可用(不经本地 compat-proxy),需降级。
-      let sshModel = chatPrefs.model;
+      let sshModel = draftInitialModel;
       if (isSubscriptionDirectModel(sshModel)) {
-        const localModels = deriveModelsFromProviders(localProviders, capabilityAgentKind);
+        const connected = connectedProvidersForAgent(localProviders, capabilityAgentKind);
+        const localModels = deriveModelsFromProviders(connected, capabilityAgentKind);
         const fallback = localModels.find((m) => !isSubscriptionDirectModel(m.id));
         sshModel = fallback?.id ?? (draftVendor === 'codex' ? 'gpt-5.5' : 'claude-sonnet-4-6');
       }
@@ -905,7 +911,7 @@ export function NewMakerDraftRoute() {
         throw err;
       }
     },
-    [draft.vendor, chatPrefs, chatInitialPermissionMode, effectiveExtraDirs, localProviders, capabilityAgentKind, effectivePlanMode, attachmentState, createSession, navigate, t],
+    [draft.vendor, chatPrefs, chatInitialPermissionMode, draftInitialModel, effectiveExtraDirs, localProviders, capabilityAgentKind, effectivePlanMode, attachmentState, createSession, navigate, t],
   );
 
   // ─── 切 vendor ──────────────────────────────────────────────────────
