@@ -194,6 +194,49 @@ describe('prepareSharedProjectSkillLinks', () => {
     expect(await sameRealPath(path.join(paths.claudeSkillsDir, 'duplicate'), claudeSkill)).toBe(true);
     expect(await sameRealPath(sharedSkill, claudeSkill)).toBe(false);
   });
+
+  it('repairs a broken absolute project link after the checkout moves', async () => {
+    const root = await makeTmpDir();
+    const oldWorkingDir = path.join(root, 'old-checkout');
+    const workingDir = path.join(root, 'moved-checkout');
+    const oldPaths = sharedProjectSkillsPaths(oldWorkingDir);
+    const paths = sharedProjectSkillsPaths(workingDir);
+    const claudeSkill = await writeSkill(paths.claudeSkillsDir, 'moved-skill');
+    const staleSharedLink = path.join(paths.sharedSkillsDir, 'moved-skill');
+    await fs.mkdir(paths.sharedSkillsDir, { recursive: true });
+    await fs.symlink(
+      path.join(oldPaths.claudeSkillsDir, 'moved-skill'),
+      staleSharedLink,
+      process.platform === 'win32' ? 'junction' : 'dir',
+    );
+
+    const result = await prepareSharedProjectSkillLinks({ workingDir });
+
+    expect(result.changed).toBe(true);
+    expect(result.warnings).toEqual([]);
+    expect(await sameRealPath(staleSharedLink, claudeSkill)).toBe(true);
+  });
+
+  it('does not replace an unrelated broken project skill symlink', async () => {
+    const root = await makeTmpDir();
+    const workingDir = path.join(root, 'checkout');
+    const paths = sharedProjectSkillsPaths(workingDir);
+    await writeSkill(paths.claudeSkillsDir, 'user-link');
+    const userLink = path.join(paths.sharedSkillsDir, 'user-link');
+    const externalTarget = path.join(root, 'removed-external-skills', 'user-link');
+    await fs.mkdir(paths.sharedSkillsDir, { recursive: true });
+    await fs.symlink(
+      externalTarget,
+      userLink,
+      process.platform === 'win32' ? 'junction' : 'dir',
+    );
+
+    const result = await prepareSharedProjectSkillLinks({ workingDir });
+
+    expect(result.changed).toBe(false);
+    expect(result.warnings.some((warning) => warning.includes('user-link'))).toBe(true);
+    expect(await fs.readlink(userLink)).toBe(externalTarget);
+  });
 });
 
 describe('projectWorkingDirFromSkillPath', () => {

@@ -162,7 +162,27 @@ function pointsInto(entry: SkillEntry, roots: string[]): boolean {
   return roots.some((root) => isSameOrInside(entry.realPath, normalizeForCompare(root)));
 }
 
-async function cleanupBrokenManagedLinks(rootPath: string, managedRoots: string[]): Promise<boolean> {
+function matchesManagedSkillTargetShape(
+  targetPath: string,
+  skillName: string,
+  discoveryRoots: string[],
+): boolean {
+  const equalsName = (actual: string, expected: string) =>
+    process.platform === 'win32'
+      ? actual.toLowerCase() === expected.toLowerCase()
+      : actual === expected;
+  const skillsDir = path.dirname(targetPath);
+  const discoveryDir = path.dirname(skillsDir);
+  return equalsName(path.basename(targetPath), skillName)
+    && equalsName(path.basename(skillsDir), 'skills')
+    && discoveryRoots.some((root) => equalsName(path.basename(discoveryDir), root));
+}
+
+async function cleanupBrokenManagedLinks(
+  rootPath: string,
+  managedRoots: string[],
+  staleManagedDiscoveryRoots: string[] = [],
+): Promise<boolean> {
   let entries;
   try {
     entries = await fsp.readdir(rootPath, { withFileTypes: true });
@@ -186,7 +206,13 @@ async function cleanupBrokenManagedLinks(rootPath: string, managedRoots: string[
     }
 
     const targetCompare = normalizeForCompare(targetPath);
-    if (!managedRoots.some((root) => isSameOrInside(targetCompare, root))) continue;
+    const pointsIntoCurrentRoots = managedRoots.some((root) => isSameOrInside(targetCompare, root));
+    const matchesMovedProjectLink = matchesManagedSkillTargetShape(
+      targetPath,
+      ent.name,
+      staleManagedDiscoveryRoots,
+    );
+    if (!pointsIntoCurrentRoots && !matchesMovedProjectLink) continue;
 
     try {
       await fsp.rm(linkPath, { recursive: true, force: true });
@@ -366,8 +392,18 @@ export async function prepareSharedProjectSkillLinks(
     normalizeForCompare(paths.claudeSkillsDir),
   ]));
   let changed = false;
-  changed = (await cleanupBrokenManagedLinks(paths.sharedSkillsDir, managedRoots)) || changed;
-  changed = (await cleanupBrokenManagedLinks(paths.claudeSkillsDir, managedRoots)) || changed;
+  // Windows junctions use absolute targets. After a checkout moves, repair only broken links
+  // whose target still has the exact opposite discovery-root + skill-name shape we create.
+  changed = (await cleanupBrokenManagedLinks(
+    paths.sharedSkillsDir,
+    managedRoots,
+    ['.claude'],
+  )) || changed;
+  changed = (await cleanupBrokenManagedLinks(
+    paths.claudeSkillsDir,
+    managedRoots,
+    ['.agents'],
+  )) || changed;
 
   const initialClaudeEntries = (await listSkillEntries('claude', paths.claudeSkillsDir))
     .filter((entry) => !(entry.isSymlink && pointsInto(entry, [sharedRootCompare])));
