@@ -1,37 +1,57 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { appMock, downloadMock } = vi.hoisted(() => ({
+const { appMock, downloadMock, execFileMock } = vi.hoisted(() => ({
   appMock: { isPackaged: true, getPath: vi.fn<(name: string) => string>() },
   downloadMock: vi.fn(),
+  execFileMock: vi.fn(),
 }));
 
+vi.mock('node:child_process', () => ({ execFile: execFileMock }));
 vi.mock('electron', () => ({
   app: appMock,
   net: { request: vi.fn() },
 }));
 vi.mock('../../downloader/index.js', () => ({ download: downloadMock }));
 
+const originalPlatform = process.platform;
 let fallback: typeof import('../linux-runtime-fallback');
 let tempDir = '';
 
-describe.skipIf(process.platform !== 'linux')('legacy managed binary migration', () => {
-  beforeAll(async () => {
-    fallback = await import('../linux-runtime-fallback');
-  });
+beforeAll(async () => {
+  Object.defineProperty(process, 'platform', { value: 'linux', configurable: true });
+  fallback = await import('../linux-runtime-fallback');
+});
 
-  beforeEach(() => {
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cindy-linux-runtime-migration-'));
-    appMock.getPath.mockReturnValue(tempDir);
-    downloadMock.mockRejectedValue(new Error('network download must not run during migration'));
+beforeEach(() => {
+  tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cindy-linux-runtime-migration-'));
+  appMock.getPath.mockReturnValue(tempDir);
+  downloadMock.mockRejectedValue(new Error('network download must not run during migration'));
+  execFileMock.mockImplementation((
+    command: string,
+    _args: string[],
+    _options: unknown,
+    callback: (error: Error | null, stdout: string, stderr: string) => void,
+  ) => {
+    if (command === '/bin/sh') {
+      callback(new Error('system lookup disabled in migration test'), '', '');
+      return;
+    }
+    callback(null, '2.1.215 (Claude Code)\n', '');
   });
+});
 
-  afterEach(() => {
-    fs.rmSync(tempDir, { recursive: true, force: true });
-  });
+afterEach(() => {
+  fs.rmSync(tempDir, { recursive: true, force: true });
+});
 
+afterAll(() => {
+  Object.defineProperty(process, 'platform', { value: originalPlatform, configurable: true });
+});
+
+describe('legacy managed binary migration', () => {
   it('reuses and atomically migrates the exact pinned Claude cache without network access', async () => {
     const legacyPath = fallback.legacyManagedBinaryPath(tempDir, 'claude-code');
     fs.mkdirSync(path.dirname(legacyPath), { recursive: true });
