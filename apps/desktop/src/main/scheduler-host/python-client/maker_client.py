@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Cindy script-task capability client. No network endpoint or credential."""
+"""Cindy Desktop script-task Python client. No network endpoint or credential."""
 
 from __future__ import annotations
 

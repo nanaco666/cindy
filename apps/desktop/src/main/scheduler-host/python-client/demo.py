@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
-"""「仅运行脚本」自动化的最小模板:拷走这仨文件(protocol.py / maker_client.py /
-demo.py)改 demo 即可接入。运行方式见同目录 README.md。
+"""Cindy Desktop「仅运行脚本」Python 客户端的最小接入脚本。
+
+拷走 protocol.py / maker_client.py / demo.py 后修改 demo 即可接入。运行方式见
+同目录 README.md。
 
 演示三件事:
   1. 读取 host 下发的任务上下文(scheduleId / runId / workingDir 等)

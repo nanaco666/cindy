@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""cindy-script/1 synchronous JSONL client over this process' stdio."""
+"""Cindy Desktop Python client's synchronous cindy-script/1 JSONL transport."""
 
 from __future__ import annotations
 

@@ -1,18 +1,19 @@
-# 「仅运行脚本」自动化 · 接入模板
+# Cindy Desktop「仅运行脚本」Python 客户端
 
 Cindy 自动化任务支持 **script 执行模式**:触发时不起 agent、零 token,宿主直接
 spawn 你的脚本;脚本通过 stdin/stdout 的 JSONL 协议(`cindy-script/1`)回调
 宿主的受限能力(Jira / 飞书 / 会话派发),能力按任务级白名单授予、默认全拒。
 
-本目录是接入模板与**协议客户端的权威副本**:
+本目录与 Desktop 定时器的 `scheduler-host` 共置，是 Python 协议客户端的
+**权威副本**，同时包含一份可执行的接入验收脚本：
 
 | 文件 | 说明 |
 |---|---|
-| `protocol.py` | 协议层(语言无关的 JSONL 双工;含 stdout fd 接管与 UTF-8 兜底),**不用改** |
-| `maker_client.py` | 能力封装(`jira_*` / `feishu_*` / `sessions_dispatch` / 通用 `call_rpc`),**不用改** |
-| `demo.py` | 最小示例,拷走改它 |
+| `protocol.py` | 协议层(JSONL 双工；含 stdout fd 接管与 UTF-8 兜底)，**不用改** |
+| `maker_client.py` | 能力封装(`jira_*` / `feishu_*` / `sessions_dispatch` / 通用 `call_rpc`)，**不用改** |
+| `demo.py` | 最小可执行接入脚本，拷走后修改业务逻辑 |
 
-> 下游项目(如 proj-workflow 的 auto-jira-dispatch)按拷贝分发这两个客户端文件;
+> 下游项目(如 proj-workflow 的 auto-jira-dispatch)按拷贝分发这两个客户端文件；
 > 协议或能力面变更时以本目录为准同步。
 
 ## 快速开始
