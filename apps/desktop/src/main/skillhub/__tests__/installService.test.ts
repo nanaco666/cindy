@@ -616,6 +616,141 @@ describe('skillhub/installService', () => {
     expect(fs.readFileSync(path.join(externalDir, 'SKILL.md'), 'utf-8')).toBe('external content');
   });
 
+  it('does not follow a compatibility link through a symlinked discovery root', async () => {
+    const skillName = 'root-linked-skill';
+    const projectRoot = path.join(TEST_ROOT, 'root-linked-project');
+    const logicalDir = path.join(projectRoot, '.agents', 'skills', skillName);
+    const physicalSkillsRoot = path.join(projectRoot, '.claude', 'skills');
+    const physicalDir = path.join(physicalSkillsRoot, skillName);
+    const externalSkillsRoot = path.join(TEST_ROOT, 'root-linked-external-skills');
+    const externalDir = path.join(externalSkillsRoot, skillName);
+    fs.mkdirSync(externalDir, { recursive: true });
+    fs.writeFileSync(path.join(externalDir, 'SKILL.md'), 'external content');
+    makeDirectoryLink(physicalSkillsRoot, externalSkillsRoot);
+    makeDirectoryLink(logicalDir, physicalDir);
+
+    const zipBuf = await makeZip({ 'SKILL.md': 'new content' });
+    await setupInstallDownload(skillName, zipBuf);
+    const { registryService } = await import('../registry');
+    const { install } = await import('../installService');
+    vi.mocked(registryService.addInstall).mockResolvedValue(undefined);
+
+    const result = await install(
+      {
+        name: skillName,
+        installPath: logicalDir,
+        version: '2.0.0',
+        force: true,
+        skipBackup: true,
+      },
+      () => {},
+    );
+
+    expect(result).toMatchObject({ success: true, absolutePath: logicalDir });
+    expect(fs.lstatSync(logicalDir).isSymbolicLink()).toBe(false);
+    expect(fs.readFileSync(path.join(logicalDir, 'SKILL.md'), 'utf-8')).toBe('new content');
+    expect(fs.readFileSync(path.join(externalDir, 'SKILL.md'), 'utf-8')).toBe('external content');
+  });
+
+  it('migrates a physical realpath registry entry to the logical compatibility-link path', async () => {
+    const skillName = 'linked-registry-migration-skill';
+    const realProjectRoot = path.join(TEST_ROOT, 'linked-registry-migration-real-project');
+    const projectRoot = path.join(TEST_ROOT, 'linked-registry-migration-project-link');
+    fs.mkdirSync(realProjectRoot, { recursive: true });
+    makeDirectoryLink(projectRoot, realProjectRoot);
+    const logicalDir = path.join(projectRoot, '.agents', 'skills', skillName);
+    const physicalDir = path.join(projectRoot, '.claude', 'skills', skillName);
+    const physicalEntry = {
+      version: '1.0.0',
+      authorId: 'owner',
+      folderHash: 'old-hash',
+      installedAt: 1,
+      updatedAt: 1,
+      origin: 'installed' as const,
+      autoSynced: true,
+    };
+    fs.mkdirSync(physicalDir, { recursive: true });
+    fs.writeFileSync(path.join(physicalDir, 'SKILL.md'), 'old content');
+    makeDirectoryLink(logicalDir, physicalDir);
+    const physicalRegistryPath = fs.realpathSync(physicalDir);
+
+    const zipBuf = await makeZip({ 'SKILL.md': 'new content' });
+    await setupInstallDownload(skillName, zipBuf);
+    const { registryService } = await import('../registry');
+    const { install } = await import('../installService');
+    vi.mocked(registryService.getInstall).mockImplementation(async (_name, installPath) =>
+      path.normalize(installPath) === path.normalize(physicalRegistryPath) ? physicalEntry : null,
+    );
+    vi.mocked(registryService.addInstall).mockResolvedValue(undefined);
+    vi.mocked(registryService.removeInstall).mockResolvedValue(undefined);
+
+    const result = await install(
+      {
+        name: skillName,
+        installPath: logicalDir,
+        version: '2.0.0',
+        force: true,
+        skipBackup: true,
+      },
+      () => {},
+    );
+
+    expect(result).toMatchObject({ success: true, absolutePath: logicalDir });
+    expect(registryService.addInstall).toHaveBeenCalledWith(
+      skillName,
+      logicalDir,
+      expect.objectContaining({ version: '2.0.0', autoSynced: true }),
+    );
+    expect(registryService.removeInstall).toHaveBeenCalledWith(skillName, physicalRegistryPath);
+  });
+
+  it('restores physical registry state when migration removal fails', async () => {
+    const skillName = 'linked-registry-rollback-skill';
+    const projectRoot = path.join(TEST_ROOT, 'linked-registry-rollback-project');
+    const logicalDir = path.join(projectRoot, '.agents', 'skills', skillName);
+    const physicalDir = path.join(projectRoot, '.claude', 'skills', skillName);
+    const physicalEntry = {
+      version: '1.0.0',
+      authorId: 'owner',
+      folderHash: 'old-hash',
+      installedAt: 1,
+      updatedAt: 1,
+      origin: 'installed' as const,
+    };
+    fs.mkdirSync(physicalDir, { recursive: true });
+    fs.writeFileSync(path.join(physicalDir, 'SKILL.md'), 'old content');
+    makeDirectoryLink(logicalDir, physicalDir);
+
+    const zipBuf = await makeZip({ 'SKILL.md': 'new content' });
+    await setupInstallDownload(skillName, zipBuf);
+    const { registryService } = await import('../registry');
+    const { install } = await import('../installService');
+    vi.mocked(registryService.getInstall).mockImplementation(async (_name, installPath) =>
+      path.normalize(installPath) === path.normalize(physicalDir) ? physicalEntry : null,
+    );
+    vi.mocked(registryService.addInstall).mockResolvedValue(undefined);
+    vi.mocked(registryService.removeInstall)
+      .mockRejectedValueOnce(new Error('registry remove failed'))
+      .mockResolvedValue(undefined);
+
+    const result = await install(
+      {
+        name: skillName,
+        installPath: logicalDir,
+        version: '2.0.0',
+        force: true,
+        skipBackup: true,
+      },
+      () => {},
+    );
+
+    expect(result.success).toBe(false);
+    if (!result.success) expect(result.errorCode).toBe('WRITE_FAILED');
+    expect(fs.lstatSync(logicalDir).isSymbolicLink()).toBe(true);
+    expect(fs.readFileSync(path.join(physicalDir, 'SKILL.md'), 'utf-8')).toBe('old content');
+    expect(registryService.addInstall).toHaveBeenLastCalledWith(skillName, physicalDir, physicalEntry);
+  });
+
   it('returns the project cwd after uninstalling a project skill', async () => {
     const projectRoot = path.join(TEST_ROOT, 'project-uninstall');
     const finalDir = path.join(projectRoot, '.agents', 'skills', 'project-skill');

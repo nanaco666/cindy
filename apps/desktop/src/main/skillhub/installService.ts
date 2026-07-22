@@ -109,7 +109,10 @@ interface FinalSwitchRollbackState {
   finalDirCreated: boolean;
 }
 
-type RegistryInstallEntry = Awaited<ReturnType<typeof registryService.getInstall>>;
+interface RegistryInstallSnapshot {
+  installPath: string;
+  entry: StoredInstall;
+}
 
 /** 仅供 main 内部调用层消费的项目级 Skill 变更元数据。 */
 export interface ProjectSkillMutationMetadata {
@@ -222,32 +225,24 @@ async function rollbackFinalSwitch(finalDir: string, state: FinalSwitchRollbackS
 async function restoreRegistryAfterFinalSwitchRollback(
   skillName: string,
   physicalFinalDir: string,
-  registryInstallPath: string,
-  previousEntry: RegistryInstallEntry,
+  mutatedRegistryPaths: string[],
+  previousEntries: RegistryInstallSnapshot[],
 ): Promise<void> {
   try {
-    await registryService.removeInstall(skillName, registryInstallPath);
+    for (const installPath of mutatedRegistryPaths) {
+      await registryService.removeInstall(skillName, installPath);
+    }
+    for (const { installPath, entry } of previousEntries) {
+      await registryService.addInstall(skillName, installPath, entry);
+    }
   } catch (err) {
     try {
       const quarantinePath = await quarantineRolledBackInstall(physicalFinalDir, skillName);
-      log.warn('[skillInstall] quarantined rolled back install after registry removal failed:', quarantinePath);
+      log.warn('[skillInstall] quarantined rolled back install after registry restore failed:', quarantinePath);
     } catch (quarantineErr) {
-      log.error('[skillInstall] quarantine after registry removal failed:', quarantineErr);
+      log.error('[skillInstall] quarantine after registry restore failed:', quarantineErr);
     }
     throw err;
-  }
-  if (previousEntry) {
-    try {
-      await registryService.addInstall(skillName, registryInstallPath, previousEntry);
-    } catch (err) {
-      try {
-        const quarantinePath = await quarantineRolledBackInstall(physicalFinalDir, skillName);
-        log.warn('[skillInstall] quarantined rolled back install after registry restore failed:', quarantinePath);
-      } catch (quarantineErr) {
-        log.error('[skillInstall] quarantine after registry restore failed:', quarantineErr);
-      }
-      throw err;
-    }
   }
 }
 
@@ -294,6 +289,16 @@ function resolvedPathEquals(actual: string, expected: string): boolean {
   return normalize(actual) === normalize(expected);
 }
 
+function uniqueNormalizedPaths(paths: string[]): string[] {
+  const result: string[] = [];
+  for (const candidate of paths.map((value) => path.normalize(value))) {
+    if (!result.some((existing) => pathTextEquals(existing, candidate))) {
+      result.push(candidate);
+    }
+  }
+  return result;
+}
+
 /** Parse only direct `<workingDir>/.{agents,claude}/skills/<name>` children. */
 function parseDirectSkillDiscoveryPath(skillPath: string): DirectSkillDiscoveryPath | null {
   const absolutePath = path.resolve(skillPath);
@@ -312,12 +317,27 @@ function parseDirectSkillDiscoveryPath(skillPath: string): DirectSkillDiscoveryP
   };
 }
 
+/** Verify that the discovery root is not reached through a symlink/junction. */
+async function hasUnlinkedDiscoveryRoot(shape: DirectSkillDiscoveryPath): Promise<boolean> {
+  let current = shape.workingDir;
+  for (const segment of [shape.discoveryRoot, 'skills']) {
+    current = path.join(current, segment);
+    try {
+      if ((await fs.promises.lstat(current)).isSymbolicLink()) return false;
+    } catch {
+      return false;
+    }
+  }
+  return true;
+}
+
 /**
  * Preserve a managed cross-agent compatibility link during an install/update.
  *
- * Only one link hop is followed. If the opposite-side source is itself a user
- * symlink, the final switch replaces that symlink rather than touching its
- * external target.
+ * Only one link hop is followed, and only when the opposite discovery root has
+ * no symlink/junction parent components. If the opposite-side Skill itself is
+ * a user symlink, the final switch replaces that symlink rather than touching
+ * its external target.
  */
 async function resolvePhysicalInstallDir(logicalFinalDir: string, skillName: string): Promise<string> {
   let stat: fs.Stats;
@@ -346,7 +366,29 @@ async function resolvePhysicalInstallDir(logicalFinalDir: string, skillName: str
   const sameWorkingDir = resolvedPathEquals(logicalShape.workingDir, targetShape.workingDir);
   const isOppositeRoot = logicalShape.discoveryRoot !== targetShape.discoveryRoot;
   const isSameSkill = pathTextEquals(path.basename(target), skillName);
-  return sameWorkingDir && isOppositeRoot && isSameSkill ? target : logicalFinalDir;
+  if (!sameWorkingDir || !isOppositeRoot || !isSameSkill) return logicalFinalDir;
+  return (await hasUnlinkedDiscoveryRoot(targetShape)) ? target : logicalFinalDir;
+}
+
+/** Capture logical plus physical/realpath registry entries before migration. */
+async function readRegistryInstallSnapshots(
+  skillName: string,
+  logicalFinalDir: string,
+  physicalFinalDir: string,
+): Promise<RegistryInstallSnapshot[]> {
+  const candidates = [logicalFinalDir];
+  if (!pathTextEquals(path.normalize(logicalFinalDir), path.normalize(physicalFinalDir))) {
+    candidates.push(physicalFinalDir);
+    const realPhysicalDir = await fs.promises.realpath(physicalFinalDir).catch(() => physicalFinalDir);
+    candidates.push(realPhysicalDir);
+  }
+
+  const snapshots: RegistryInstallSnapshot[] = [];
+  for (const installPath of uniqueNormalizedPaths(candidates)) {
+    const entry = await Promise.resolve(registryService.getInstall(skillName, installPath)).catch(() => null);
+    if (entry) snapshots.push({ installPath, entry });
+  }
+  return snapshots;
 }
 
 /** 共享安装锁被占时的用户可读文案（按持有方区分）。 */
@@ -662,16 +704,26 @@ export async function install(
     const folderHash = (await computeFolderHash(finalDir).catch(() => null)) ?? '';
     const nowSec = Math.floor(Date.now() / 1000);
     const versionStr = downloadVersion || info.fileHash.slice(0, 8);
-    const existingRegistryEntry = await Promise.resolve(
-      registryService.getInstall(p.name, logicalFinalDir),
-    ).catch(() => null);
-    const previousRegistryEntry = rollbackState.backupDir ? existingRegistryEntry : null;
+    const registrySnapshots = await readRegistryInstallSnapshots(p.name, logicalFinalDir, finalDir);
+    const logicalRegistrySnapshot = registrySnapshots.find(({ installPath }) =>
+      pathTextEquals(path.normalize(installPath), path.normalize(logicalFinalDir)),
+    );
+    const physicalRegistrySnapshots = registrySnapshots.filter(({ installPath }) =>
+      !pathTextEquals(path.normalize(installPath), path.normalize(logicalFinalDir)),
+    );
+    const existingRegistryEntry = logicalRegistrySnapshot?.entry ?? physicalRegistrySnapshots[0]?.entry ?? null;
+    const previousRegistrySnapshots = registrySnapshots;
+    const mutatedRegistryPaths = uniqueNormalizedPaths([
+      logicalFinalDir,
+      ...physicalRegistrySnapshots.map(({ installPath }) => installPath),
+    ]);
     const nextAutoSynced = p.autoSync === true
       ? true
       : existingRegistryEntry
         ? existingRegistryEntry.autoSynced
         : false;
 
+    let logicalRegistryWritten = false;
     try {
       await registryService.addInstall(p.name, logicalFinalDir, {
         version: versionStr,
@@ -682,15 +734,36 @@ export async function install(
         origin: 'installed',
         autoSynced: nextAutoSynced,
       });
+      logicalRegistryWritten = true;
+      for (const { installPath } of physicalRegistrySnapshots) {
+        await registryService.removeInstall(p.name, installPath);
+      }
     } catch (err) {
-      log.error('[skillInstall] registry.addInstall failed:', err);
+      log.error('[skillInstall] registry sync failed:', err);
       const registryMessage = err instanceof Error ? err.message : String(err);
       let message = `注册失败，已回滚安装文件：${registryMessage}`;
+      let fileRollbackFailed = false;
       try {
         await rollbackFinalSwitch(finalDir, rollbackState);
       } catch (restoreErr) {
+        fileRollbackFailed = true;
         message = `注册失败，且安装文件回滚失败：${registryMessage}；回滚错误：${restoreErr instanceof Error ? restoreErr.message : String(restoreErr)}`;
         log.error('[skillInstall] rollback after registry.addInstall failed:', restoreErr);
+      }
+      if (logicalRegistryWritten) {
+        try {
+          await restoreRegistryAfterFinalSwitchRollback(
+            p.name,
+            finalDir,
+            mutatedRegistryPaths,
+            previousRegistrySnapshots,
+          );
+        } catch (restoreErr) {
+          message = fileRollbackFailed
+            ? `注册失败，且安装文件 / registry 回滚失败：${registryMessage}；registry 错误：${restoreErr instanceof Error ? restoreErr.message : String(restoreErr)}`
+            : `注册失败，已回滚安装文件，但 registry 回滚失败：${registryMessage}；registry 错误：${restoreErr instanceof Error ? restoreErr.message : String(restoreErr)}`;
+          log.error('[skillInstall] registry rollback after registry migration failed:', restoreErr);
+        }
       }
       onProgress({ phase: 'failed', name: p.name, errorCode: 'WRITE_FAILED', message });
       return { success: false, errorCode: 'WRITE_FAILED', message };
@@ -721,8 +794,8 @@ export async function install(
             await restoreRegistryAfterFinalSwitchRollback(
               p.name,
               finalDir,
-              logicalFinalDir,
-              previousRegistryEntry,
+              mutatedRegistryPaths,
+              previousRegistrySnapshots,
             );
           } catch (restoreErr) {
             message = fileRollbackFailed
