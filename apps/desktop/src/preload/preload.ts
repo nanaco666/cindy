@@ -3608,7 +3608,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
         role?: string;
         label?: string;
         model?: string;
-        effort?: 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+        effort?: 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultra';
       },
     ): Promise<{ workflowId: string; workerSessionId: string; workerId: string }> =>
       ipcRenderer.invoke('maker:session:enable-orca', leadSessionId, opts),

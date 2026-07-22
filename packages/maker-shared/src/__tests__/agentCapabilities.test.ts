@@ -84,6 +84,47 @@ describe('agent capabilities shared model', () => {
     expect(runtime.fastModeSupported).toBe(true);
   });
 
+  it('surfaces Codex max/ultra efforts with localized labels (issue #352 GPT-5.6 Sol via remote control)', () => {
+    // 模拟被控端经 device-link 透传的 capabilities:GPT-5.6 Sol 声明支持到 ultra。
+    const capabilities = normalizeMobileAgentCapabilities({
+      ...desktopCapabilitiesPayload,
+      availableModels: [
+        {
+          id: 'codex/gpt-5.6-sol',
+          displayName: 'GPT-5.6-Sol',
+          contextWindow: 372_000,
+          efforts: ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'],
+          defaultEffort: 'high',
+          supportsFastMode: true,
+        },
+      ],
+      effortLevels: [
+        { id: 'low', displayName: 'Low' },
+        { id: 'medium', displayName: 'Medium' },
+        { id: 'high', displayName: 'High' },
+        { id: 'xhigh', displayName: 'Extra' },
+        { id: 'max', displayName: 'Max' },
+        { id: 'ultra', displayName: 'Ultra' },
+      ],
+    });
+    const runtime = buildSessionRuntimeOptions({ model: 'codex/gpt-5.6-sol' }, capabilities);
+    expect(runtime.effortOptions.map((item) => [item.id, item.label])).toEqual([
+      ['low', '低'],
+      ['medium', '中'],
+      ['high', '高'],
+      ['xhigh', '超高'],
+      ['max', '最高'],
+      ['ultra', '极致'],
+    ]);
+    // 反向:该模型声明支持 ultra,显式选中不被降级(不做全局硬塞也不错误剔除)。
+    expect(reconcileRuntimeDraftWithCapabilities({
+      model: 'codex/gpt-5.6-sol',
+      effort: 'ultra',
+      permissionMode: 'ask',
+      fastMode: false,
+    }, capabilities).effort).toBe('ultra');
+  });
+
   it('disables effort and fast mode when the selected model does not support them', () => {
     const capabilities = normalizeMobileAgentCapabilities(desktopCapabilitiesPayload);
     const runtime = buildSessionRuntimeOptions({ model: 'claude-haiku-4-6' }, capabilities);

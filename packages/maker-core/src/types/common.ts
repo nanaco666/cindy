@@ -11,16 +11,17 @@ export type WorkspaceKind = 'project' | 'dialogue';
 /**
  * Effort —— 全集 union，含历史持久化值和当前 runtime 支持值。
  *
- * 各 agent 实际能传哪些列在 capabilities.effortLevels：
+ * 各 agent 实际能传哪些列在 capabilities.effortLevels（且随具体模型能力而定）：
  *   - Claude: low | medium | high | xhigh | max
- *   - Codex:  low | medium | high | xhigh
+ *   - Codex:  low | medium | high | xhigh | max | ultra
+ *     （max/ultra 仅部分模型支持，如 GPT-5.6 Sol；旧模型仍只到 xhigh，由目录 efforts 决定）
  *
  * minimal 只作为历史数据 / 旧调用兼容输入保留，当前模型能力不应把它暴露为可选档。
  * adapter 收到后应按对应 agent 语义降级，而不是让新 UI / MCP schema 继续产生它。
  *
  * UI 应该读对应 agent 的 capabilities.effortLevels 渲染下拉，避免传不支持的值。
  */
-export type Effort = 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+export type Effort = 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultra';
 
 /**
  * Permission 5 态（Claude Code 完整集合）。

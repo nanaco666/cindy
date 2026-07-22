@@ -43,8 +43,12 @@ function hasPriorityTier(tiers: unknown): boolean {
   );
 }
 
-/** Codex runtime 当前可安全透传的推理档位；cache 可能先于 runtime 暴露 max/ultra。 */
-const CODEX_EFFORTS = new Set(['low', 'medium', 'high', 'xhigh']);
+/**
+ * Codex runtime 可透传的推理档位(issue #352 起含 max/ultra)。
+ * 这是「客户端能透传哪些档」的白名单,不是「某模型支持哪些档」——后者由每个模型
+ * 自报的 supported_reasoning_levels 决定,过滤后只保留该模型真正声明的子集。
+ */
+const CODEX_EFFORTS = new Set(['low', 'medium', 'high', 'xhigh', 'max', 'ultra']);
 
 /**
  * 默认收起的 slug(旧产品目录 defaultEnabled:false 的延续):清单动态化后注册表不带

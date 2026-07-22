@@ -22,7 +22,7 @@
 export type AgentKind = 'claude-code' | 'codex';
 
 /** 推理强度档位 —— 与 maker-core Effort 对齐。 */
-export type Effort = 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+export type Effort = 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultra';
 
 /** 供应商来源：内置 vs 用户自定义（自定义本轮不实现，类型先留位）。 */
 export type ProviderSource = 'builtin' | 'user';

@@ -153,13 +153,17 @@ export type SandboxMode = 'read-only' | 'workspace-write' | 'danger-full-access'
 /**
  * 推理 effort — codex_protocol::openai_models::ReasoningEffort
  * `#[serde(rename_all = "lowercase")]` (注意是全小写不是 kebab/camel),
- * `XHigh → "xhigh"` 而不是 "x-high"。
+ * `XHigh → "xhigh"` 而不是 "x-high"; 同理 `Max → "max"`、`Ultra → "ultra"`。
+ *
+ * max / ultra 是较新档 (GPT-5.6 Sol 等), server 按模型的 supported_reasoning_levels
+ * 决定是否接受; 不支持的模型仍只到 xhigh。这里放开为全集, 由目录 efforts + UI 门控
+ * 保证只对声明支持的模型透传 (不做全局硬塞)。
  *
  * 协议层只有 turn/start 接 `effort: Option<ReasoningEffort>` (v2.rs:5800);
  * thread/start 不接 effort (走 server config 默认), 想让 first turn 用用户选的
  * effort, 必须在 first turn/start 透传。
  */
-export type ReasoningEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+export type ReasoningEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultra';
 
 /**
  * 推理 summary 偏好 — codex_protocol::config_types::ReasoningSummary

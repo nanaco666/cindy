@@ -252,6 +252,9 @@ function normalizeResolvedEffort(params: {
   if (effort === 'minimal' && !explicit && validEfforts.includes('low')) {
     return { ok: true, effort: 'low' };
   }
+  if (effort === 'ultra' && !explicit && validEfforts.includes('max')) {
+    return { ok: true, effort: 'max' };
+  }
   if (effort === 'max' && !explicit && validEfforts.includes('xhigh')) {
     return { ok: true, effort: 'xhigh' };
   }

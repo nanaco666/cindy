@@ -4975,7 +4975,8 @@
     "medium": "보통",
     "high": "높음",
     "xhigh": "초고",
-    "max": "최고"
+    "max": "최고",
+    "ultra": "극한"
   },
   "scheduler": {
     "page": {

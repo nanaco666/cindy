@@ -137,7 +137,7 @@ import {
   type UserInput,
 } from './app-server/protocol.js';
 
-type CodexEffort = 'low' | 'medium' | 'high' | 'xhigh';
+type CodexEffort = 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultra';
 
 /**
  * item.type → chip status 文案 (对齐 claude-code 6 类). null = 该 item 不触发 chip 切换
@@ -167,10 +167,15 @@ function statusTextForItem(item: { type?: string; command?: string; tool?: strin
   }
 }
 
-/** maker 6 态 → Codex GPT 支持态 (minimal → low, max → xhigh)。 */
+/**
+ * maker Effort → Codex GPT 可透传档。
+ *
+ * 只把 'minimal' 收敛到 'low'(Codex 无 minimal 档); max / ultra 直接透传,
+ * 不再静默降级为 xhigh(issue #352)。某模型是否真支持 max/ultra 由目录 efforts
+ * 与 UI/reconcile 门控保证——只有声明支持的模型才会走到这里传 max/ultra。
+ */
 function clampEffortForCodex(e: Effort): CodexEffort {
   if (e === 'minimal') return 'low';
-  if (e === 'max') return 'xhigh';
   return e;
 }
 
@@ -578,7 +583,11 @@ const CODEX_EFFORTS: EffortDescriptor[] = [
   { id: 'low', displayName: 'Low', description: 'Fast responses with minimal reasoning' },
   { id: 'medium', displayName: 'Medium', description: 'Balanced reasoning depth' },
   { id: 'high', displayName: 'High', description: 'Deeper reasoning for harder tasks' },
-  { id: 'xhigh', displayName: 'Extra', description: 'Maximum reasoning budget' },
+  { id: 'xhigh', displayName: 'Extra', description: 'Extended reasoning budget' },
+  // max/ultra 仅部分模型支持(如 GPT-5.6 Sol);实际是否可选由该模型目录 efforts 决定,
+  // 这里只提供 agent 级档名/描述兜底(桌面 i18n effortLevels.* 优先)。
+  { id: 'max', displayName: 'Max', description: 'Very high reasoning budget (model-dependent)' },
+  { id: 'ultra', displayName: 'Ultra', description: 'Maximum reasoning budget (model-dependent)' },
 ];
 
 const CODEX_PERMISSION_MODES: PermissionModeDescriptor[] = [

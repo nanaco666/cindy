@@ -632,7 +632,9 @@
           "low",
           "medium",
           "high",
-          "xhigh"
+          "xhigh",
+          "max",
+          "ultra"
         ],
         "defaultEffort": "high",
         "sortOrder": 8,
@@ -656,7 +658,9 @@
           "low",
           "medium",
           "high",
-          "xhigh"
+          "xhigh",
+          "max",
+          "ultra"
         ],
         "defaultEffort": "high",
         "sortOrder": 9,
@@ -730,7 +734,9 @@
           "low",
           "medium",
           "high",
-          "xhigh"
+          "xhigh",
+          "max",
+          "ultra"
         ],
         "defaultEffort": "high",
         "sortOrder": 18,
@@ -754,7 +760,9 @@
           "low",
           "medium",
           "high",
-          "xhigh"
+          "xhigh",
+          "max",
+          "ultra"
         ],
         "defaultEffort": "high",
         "sortOrder": 19,

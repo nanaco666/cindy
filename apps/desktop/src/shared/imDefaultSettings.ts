@@ -1,5 +1,5 @@
 export type ImDefaultAgentKind = 'claude-code' | 'codex';
-export type ImDefaultEffort = 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+export type ImDefaultEffort = 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultra';
 
 export interface ImDefaultAgentSettings {
   providerId: string | null;
@@ -53,6 +53,7 @@ const EFFORTS = new Set<ImDefaultEffort>([
   'high',
   'xhigh',
   'max',
+  'ultra',
 ]);
 
 export function isImDefaultAgentKind(value: unknown): value is ImDefaultAgentKind {

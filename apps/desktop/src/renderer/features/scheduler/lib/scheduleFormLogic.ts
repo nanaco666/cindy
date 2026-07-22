@@ -18,7 +18,7 @@ import type { CreateScheduleInput, ScheduleTemplate, ScheduleWorkspaceKind, Scri
 import type { SessionReference } from '../../../../shared/sessionReference';
 
 /** Effort 白名单 — 与 Phase 2 mapper enum 一致;UI 提交前的最后一道关卡。 */
-export const EFFORT_VALUES = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const;
+export const EFFORT_VALUES = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra'] as const;
 export type EffortValue = (typeof EFFORT_VALUES)[number];
 
 export function isEffortValue(v: string): v is EffortValue {

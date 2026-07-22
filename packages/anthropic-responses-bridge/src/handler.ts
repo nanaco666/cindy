@@ -44,6 +44,7 @@ function normalizeReasoningEffort(raw: string | undefined): ResponsesReasoningEf
       return 'high';
     case 'xhigh':
     case 'max':
+    case 'ultra':
       return 'xhigh';
     default:
       return undefined;

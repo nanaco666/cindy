@@ -84,7 +84,7 @@ export interface OrcaMcpDeps {
     role: string;
     agent: ControlWorkerAgent;
     model?: string;
-    effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+    effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultra';
     fast?: boolean;
     label: string;
     initialTask?: string;

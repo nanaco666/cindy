@@ -193,8 +193,8 @@ function isReadOnlyClaudeTool(toolName: string): boolean {
 }
 
 /**
- * 把 maker-core 的 6 态 Effort clamp 到 Claude SDK 支持的 5 态。
- * Claude 没有 'minimal' —— 收到时降级为 'low'（最接近的语义）。
+ * 把 maker-core 的 Effort clamp 到 Claude SDK 支持的档位 (ClaudeSdkEffort)。
+ * Claude 没有 'minimal'(→ 'low') 与 'ultra'(→ 'max'; ultra 是 Codex GPT-5.6 专属档)。
  */
 function isLoopbackEndpoint(value: string | undefined): boolean {
   if (!value) return false;
@@ -208,6 +208,7 @@ function isLoopbackEndpoint(value: string | undefined): boolean {
 
 function clampEffortForClaude(e: Effort): ClaudeSdkEffort {
   if (e === 'minimal') return 'low';
+  if (e === 'ultra') return 'max';
   return e;
 }
 

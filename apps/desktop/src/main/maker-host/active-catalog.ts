@@ -103,6 +103,7 @@ const VALID_EFFORTS: ReadonlySet<string> = new Set([
   'high',
   'xhigh',
   'max',
+  'ultra',
 ]);
 
 type Effort = CatalogModel['efforts'][number];
