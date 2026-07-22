@@ -1,7 +1,7 @@
 # @lizi/browser-control-runtime
 
 Neutral, in-process browser-automation runtime for Cindy. Exposes a small,
-stable contract (`BrowserControlRuntime`) that the `lizi_browser` MCP and the
+stable contract (`BrowserControlRuntime`) that the `cindy_browser` MCP and the
 desktop host drive — without depending on any upstream product API or surfacing
 an upstream product name in product code.
 
@@ -32,7 +32,7 @@ upstream/
   BUILD-PLAN.md               历史设计笔记
 ```
 
-> **改这块代码前先读 `upstream/MAINTAINING.md`** —— 它记录了集成层(desktop host + lizi_browser MCP)以及所有踩过的坑与不变量。
+> **改这块代码前先读 `upstream/MAINTAINING.md`** —— 它记录了集成层(desktop host + cindy_browser MCP)以及所有踩过的坑与不变量。
 
 ## Updating from upstream
 

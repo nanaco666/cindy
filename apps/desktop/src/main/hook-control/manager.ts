@@ -69,7 +69,7 @@ export interface HookControlManagerDeps {
   /** 状态变化推送(IPC 层广播到所有窗口)。 */
   notifyStatus: (view: SlackHookView) => void;
   /**
-   * lizi_slack provider 的构建期可用性(bound + server capability)翻转通知。
+   * cindy_slack provider 的构建期可用性(bound + server capability)翻转通知。
    *
    * Claude 每个 session 启动时都会重新评估 provider；Codex 会把 MCP server
    * 清单冻结在共享 app-server / bridge 中，host 用这个出口失效其缓存。只在
@@ -163,7 +163,7 @@ export interface HookControlManager {
     args?: Record<string, unknown>,
     teamId?: string | null,
   ): Promise<HookSlackToolResult>;
-  /** Slack 工具可用性快照(lizi_slack provider 的 isEnabled / slack_status 数据源)。 */
+  /** Slack 工具可用性快照(cindy_slack provider 的 isEnabled / slack_status 数据源)。 */
   getSlackToolAvailability(): HookSlackToolAvailability;
   /**
    * 拉取绑定用户的全部目录偏好快照(prefs.get -> prefs.state 往返)。
@@ -361,7 +361,7 @@ export function createHookControlManager(deps: HookControlManagerDeps): HookCont
    * 清单随网络抖动反复重建；重连后的新 welcome 会整组覆盖并触发 gate 复算。
    */
   let serverFeatures: string[] = [];
-  /** lizi_slack provider 的构建期 gate 当前值；初始未绑定 = false。 */
+  /** cindy_slack provider 的构建期 gate 当前值；初始未绑定 = false。 */
   let slackToolProviderEnabled = false;
   let disposed = false;
 
@@ -1312,7 +1312,7 @@ export function createHookControlManager(deps: HookControlManagerDeps): HookCont
       return {
         connected: status === 'connected',
         // multi-team 关开关不清绑定, bound 必须叠 enabled 因子 —— 否则 Slack
-        // 已关的设备上 lizi_slack 工具面仍会挂进新会话(老路径关开关会把
+        // 已关的设备上 cindy_slack 工具面仍会挂进新会话(老路径关开关会把
         // binding 归零, confirmed 判据自足)
         bound: multi
           ? store.get().enabled && activeBindings().length > 0

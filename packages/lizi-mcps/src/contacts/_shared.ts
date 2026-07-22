@@ -1,5 +1,5 @@
 /**
- * contacts/_shared.ts — lizi_contacts 工具共享 helpers。
+ * contacts/_shared.ts — cindy_contacts 工具共享 helpers。
  *
  *  - buildJsonResult: 拼单 text ContactsToolResult (跟 memory/_shared 同形)
  *  - withContacts:    拿全局 MakerContactsStore, 自动 try/catch + 错误翻译。
@@ -13,7 +13,7 @@
 
 import type { MakerContactsStore } from '@lizi/maker-core';
 
-import type { ContactsToolResult } from '../lizi_contactsToolRegistry.js';
+import type { ContactsToolResult } from '../cindy_contactsToolRegistry.js';
 import type { ContactsMcpDeps } from '../types.js';
 import { classifyContactsError } from './errors.js';
 

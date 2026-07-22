@@ -397,7 +397,7 @@ export function getMaker(): Maker {
       runtimeConfig: desktopCodexRuntimeConfig,
       binaryPath: codexPath,
       logger: desktopMakerLogger,
-      // Codex 也接 lizi_mcp providers (跟 claude 共享同一份 feishu/google instance);
+      // Codex 也接 Cindy MCP providers (跟 claude 共享同一份 provider instances);
       // codex 子进程没法消费 in-process JS instance, prepareCodexExtraSpawnConfig
       // 起 streamable-HTTP bridge 把 instance 通过 -c 'mcp_servers...=...' 注入。
       mcpProviders: codexMcpProviders,
@@ -504,10 +504,10 @@ export function getMaker(): Maker {
       // scheduler 已迁为 `cindy_scheduler`；`<平台>_lizi` 显式白名单(PR #501)已清空——`github_lizi` /
       // `gitlab_lizi` 先后于 2026-07-14 退役,迁入内置意识 cindy-github /
       // cindy-gitlab。
-      // 例外:`lizi_ssh` 显式排除——它的 ssh_exec 在远端机器上执行任意命令,
+      // 例外:`cindy_ssh` 显式排除——它的 ssh_exec 在远端机器上执行任意命令,
       // 属于跨机器写操作,必须保留 Codex MCP elicitation 审批,不能随 lizi_ 前缀
       // 自动放行(PR #874 review)。
-      // lizi_contacts 是渐进式 list_tools/call_tool server：不能按 serverName
+      // cindy_contacts 是渐进式 list_tools/call_tool server：不能按 serverName
       // 粗粒度信任，否则 delete/merge/系统回写/文件覆盖都会被 outer call_tool
       // 一并放行。Codex metadata 带 outer tool params，可在执行前解析 inner tool；
       // 未知或高风险 action 逐次弹卡且禁止“本会话允许”。

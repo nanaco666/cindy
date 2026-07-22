@@ -15,16 +15,16 @@ import { canAutoApproveContactsMcpTool } from 'lizi-mcps';
 const DESKTOP_CLAUDE_READ_ONLY_ALLOWED_TOOLS = [
   'mcp__cindy__ghost_list',
   'mcp__cindy__ghost_forge_guide',
-  'mcp__lizi_browser__list_tools',
-  'mcp__lizi_android__list_tools',
-  'mcp__lizi_computer__list_tools',
-  'mcp__lizi_feishu_bot__list_tools',
+  'mcp__cindy_browser__list_tools',
+  'mcp__cindy_android__list_tools',
+  'mcp__cindy_computer__list_tools',
+  'mcp__cindy_feishu_bot__list_tools',
   'mcp__cindy_scheduler__list_tools',
-  'mcp__lizi_ssh__list_tools',
+  'mcp__cindy_ssh__list_tools',
   'mcp__cindy_helper__list_tools',
   'mcp__cindy_memory__list_tools',
-  'mcp__lizi_contacts__list_tools',
-  'mcp__lizi_slack__slack_status',
+  'mcp__cindy_contacts__list_tools',
+  'mcp__cindy_slack__slack_status',
 ] as const;
 
 /** 返回副本，避免 SDK / 调用方原地改写 host 的白名单真源。 */
@@ -39,7 +39,7 @@ export function getDesktopMcpToolApprovalPolicy(
   context: McpToolApprovalContext,
 ): McpToolApprovalPolicy {
   const { serverName, toolName, toolParams } = context;
-  if (serverName === 'lizi_contacts') {
+  if (serverName === 'cindy_contacts') {
     return canAutoApproveContactsMcpTool({ toolName, toolParams })
       ? 'auto-approve'
       : 'prompt-each-time';
@@ -49,7 +49,7 @@ export function getDesktopMcpToolApprovalPolicy(
   if (
     serverName === 'cindy_scheduler'
     || serverName === 'cindy_memory'
-    || (serverName.startsWith('lizi_') && serverName !== 'lizi_ssh')
+    || (serverName.startsWith('cindy_') && serverName !== 'cindy_ssh')
   ) {
     return 'auto-approve';
   }

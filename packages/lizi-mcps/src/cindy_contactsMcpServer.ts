@@ -1,5 +1,5 @@
 /**
- * lizi_contactsMcpServer.ts
+ * cindy_contactsMcpServer.ts
  * ---------------------------------------------------------------------------
  * In-process MCP server exposing Maker Contacts(智能通讯录, agent-native 全局
  * 人物实体库)to cc / codex agents. Mirrors cindy_memoryMcpServer.ts:
@@ -18,7 +18,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { jsonObjectArg } from './json-object-arg.js';
 
-import { ContactsToolRegistry } from './lizi_contactsToolRegistry.js';
+import { ContactsToolRegistry } from './cindy_contactsToolRegistry.js';
 import {
   registerContactsAddIdentityTool,
   registerContactsAppendEventTool,
@@ -45,14 +45,14 @@ import type { ContactsMcpDeps } from './types.js';
 // ── Entry-tool descriptions ────────────────────────────────────────────────
 
 const D_LIST_TOOLS =
-  '探索智能通讯录(lizi_contacts)可用工具(渐进式发现入口)。这是 agent 专用的人物实体库: ' +
+  '探索智能通讯录(cindy_contacts)可用工具(渐进式发现入口)。这是 agent 专用的人物实体库: ' +
   '跨平台身份反查(邮箱/飞书/Slack/GitHub id → 这是谁)、关系背景、带日期事件流、分组。' +
   '遇到陌生邮箱/平台 id、要找人/发消息/@某人、需要人物背景时, 先来这里查。' +
   '不传 category → 返回所有类目+工具数量; 传 category=search/read/write/manage → 该类目工具清单' +
   '(rules 字段是该类工具的使用边界, 首次拉取时读一遍)。获取工具名后用 call_tool({name, args}) 执行。';
 
 const D_CALL_TOOL =
-  '调用智能通讯录(lizi_contacts)中的某个具体工具。先用 list_tools 拿工具名 + 简介, 再用本工具执行。' +
+  '调用智能通讯录(cindy_contacts)中的某个具体工具。先用 list_tools 拿工具名 + 简介, 再用本工具执行。' +
   '错误码: ' +
   '`CONTACTS_NOT_READY` = 通讯录未在设置中开启, 提示用户去设置开启; ' +
   '`NOT_FOUND` = 指定 contact/identity/event/group 不存在; ' +
@@ -145,9 +145,9 @@ function registerCallToolEntry(server: McpServer, registry: ContactsToolRegistry
 
 // ── Factory ────────────────────────────────────────────────────────────────
 
-export function createLiziContactsMcpServer(deps: ContactsMcpDeps): McpServer {
+export function createCindyContactsMcpServer(deps: ContactsMcpDeps): McpServer {
   const server = new McpServer({
-    name: 'lizi_contacts',
+    name: 'cindy_contacts',
     version: '1.0.0',
   });
 

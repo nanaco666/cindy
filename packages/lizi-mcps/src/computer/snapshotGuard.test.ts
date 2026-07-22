@@ -271,7 +271,7 @@ describe('computer snapshot guard', () => {
     expect(clicked.ok).toBe(true);
     expect(callTool).toHaveBeenCalledTimes(1);
     expect(logger.warn).toHaveBeenCalledWith('element_index action without snapshot_id', {
-      server: 'lizi_computer',
+      server: 'cindy_computer',
       tool: 'click',
       sessionId: 'sess-1',
     });

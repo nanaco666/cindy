@@ -7,7 +7,7 @@
  * hook-control/ipc.ts 又 import getMaker —— 静态引用会闭环; provider 的
  * isEnabled 是同步调用, ssh 式的 lazy import() 也不适用(且 main 进程禁运行时
  * 动态 import)。本模块只持有一个可空引用: ipc.ts ensureInstances 时注册
- * (委托给 HookControlManager), dispose 时注销; lizi_slack provider 经
+ * (委托给 HookControlManager), dispose 时注销; cindy_slack provider 经
  * getSlackToolBridge() 取用, 桥未注册 = fail-closed(工具面不可用)。
  */
 
@@ -16,7 +16,7 @@ import type {
 } from '../../shared/hookControlIpc.js';
 import type { HookSlackToolAvailability, HookSlackToolResult } from './manager.js';
 
-/** lizi_slack provider 消费的桥接面(与 manager 的工具 API 同形)。 */
+/** cindy_slack provider 消费的桥接面(与 manager 的工具 API 同形)。 */
 export interface SlackToolBridge {
   availability(): HookSlackToolAvailability;
   /** teamId: (multi-team)以哪个 workspace 身份执行; 缺省 = 设备唯一绑定。 */

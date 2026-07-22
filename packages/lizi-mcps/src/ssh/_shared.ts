@@ -1,5 +1,5 @@
 /**
- * ssh/_shared.ts —— lizi_ssh 工具家族的共享 helper。
+ * ssh/_shared.ts —— cindy_ssh 工具家族的共享 helper。
  *
  * 设计原则（规则 9：确定性进代码，不靠 prompt）：
  *  - 主机名解析、cwd 引号包装、输出截断、错误分类全部在这里用代码保证，

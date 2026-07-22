@@ -3934,7 +3934,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // 智能通讯录(maker-contacts)—— 设置页管理 UI 的数据通道。
     // DTO 形状即 @lizi/maker-core contacts/types.ts(renderer 直接 type-import),
     // 这里保持 unknown 透传, 类型收敛在 renderer service 层做。
-    // 开关只 gate agent 侧 lizi_contacts MCP; 数据通道恒可用。
+    // 开关只 gate agent 侧 cindy_contacts MCP; 数据通道恒可用。
     contacts: {
       settingsGet: (): Promise<{ enabled: boolean; isCustomized: boolean }> =>
         ipcRenderer.invoke('maker:contacts:settings:get'),

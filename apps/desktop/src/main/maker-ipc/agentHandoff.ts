@@ -28,7 +28,7 @@ export interface BuildHandoffOptions {
   toLabel: string;
   /**
    * business 层会话 id。提供时交接文本附带「早期原文检索」指引——新引擎可用
-   * lizi_xdt_helper 的 get_chat_history / search_chat_history(带 session_ids
+   * cindy_helper 的 get_chat_history / search_chat_history(带 session_ids
    * 定向过滤)按需检索本会话完整历史:摘要管大局、检索管细节,消除逐字窗口外
    * 的细节性失忆。两家引擎的会话都挂了该 MCP server。
    */
@@ -383,7 +383,7 @@ function assembleHandoffText(
     sections.push(
       `== 早期原文检索(需要时用)==\n` +
         `本会话 id:${opts.sessionId}\n` +
-        `以上摘要之外的早期对话原文可随时检索(工具在 lizi_xdt_helper 的 history 类目):\n` +
+        `以上摘要之外的早期对话原文可随时检索(工具在 cindy_helper 的 history 类目):\n` +
         `- 按内容找:search_chat_history,args {"query":"<关键词>","session_ids":["${opts.sessionId}"]}\n` +
         `- 按时间/角色拉原文:get_chat_history,args {"session_ids":["${opts.sessionId}"],"roles":["user","assistant"]}(hasMore 用 nextCursor 翻页)\n` +
         `用户追问的细节不在上文时,先检索原文再回答,不要凭提要猜;检索到的旧内容与工作区现状冲突时,以工作区为准。仅在需要时使用,不必每轮都查。`,

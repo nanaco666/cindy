@@ -55,7 +55,7 @@ export interface SendToSessionDeps {
 // 这是 LLM 点进 handoff 类目、看到本工具后的行为说明;选类目阶段的协同规避另见
 // lizi_xdtHelperMcpServer.ts 的 D_LIST_TOOLS(handoff 类目介绍)。
 const DESCRIPTION = [
-  '⚠️【不要用于"开协同 / 多 worker"】用户要"开协同 / 多 agent / 派个 worker 帮我做 X / 拉个 agent review"等诉求时, 用 lizi_orca 的 start_team + create_worker(create_worker 支持 agent / model / effort / initial_task, 一步建 worker 并派活), 不要用本工具。本工具 create 模式产出的是独立 session: 不进协同分组(不在 Lead 右侧的 worker 栏)、且只能克隆当前 session 的 agent / model, 无法指定 worker 用 codex 或某个模型 —— 拿它"开协同"会让需求被静默吞掉。本工具仅供 skill 把外部业务对象(issue / jira / pr)绑定到专属 session。',
+  '⚠️【不要用于"开协同 / 多 worker"】用户要"开协同 / 多 agent / 派个 worker 帮我做 X / 拉个 agent review"等诉求时, 用 cindy_orca 的 start_team + create_worker(create_worker 支持 agent / model / effort / initial_task, 一步建 worker 并派活), 不要用本工具。本工具 create 模式产出的是独立 session: 不进协同分组(不在 Lead 右侧的 worker 栏)、且只能克隆当前 session 的 agent / model, 无法指定 worker 用 codex 或某个模型 —— 拿它"开协同"会让需求被静默吞掉。本工具仅供 skill 把外部业务对象(issue / jira / pr)绑定到专属 session。',
   '',
   '把一条控制层 handoff 消息投递到一个 session。两种模式:',
   '- 传 target_session_id → jump:投递到该既有 session(已关闭会自动 resume),wake_kind 返 resumed / already-active;目标正在跑 turn 时消息进入其输入队列、当前 turn 结束后自动派发,wake_kind 返 queued(无需重试)。',

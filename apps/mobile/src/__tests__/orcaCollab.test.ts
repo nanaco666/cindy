@@ -43,11 +43,11 @@ function session(patch: Partial<RemoteSession> & Pick<RemoteSession, 'id' | 'orc
 describe('orcaCollab dispatch tool classification', () => {
   it('recognizes create_worker / create_workers / send_to_worker as bare and MCP-prefixed names', () => {
     expect(classifyOrcaDispatchTool('create_worker')).toBe('create');
-    expect(classifyOrcaDispatchTool('mcp__lizi_orca__create_worker')).toBe('create');
+    expect(classifyOrcaDispatchTool('mcp__cindy_orca__create_worker')).toBe('create');
     expect(classifyOrcaDispatchTool('create_workers')).toBe('create-batch');
-    expect(classifyOrcaDispatchTool('mcp__lizi_orca__create_workers')).toBe('create-batch');
+    expect(classifyOrcaDispatchTool('mcp__cindy_orca__create_workers')).toBe('create-batch');
     expect(classifyOrcaDispatchTool('send_to_worker')).toBe('send');
-    expect(classifyOrcaDispatchTool('mcp__lizi_orca__send_to_worker')).toBe('send');
+    expect(classifyOrcaDispatchTool('mcp__cindy_orca__send_to_worker')).toBe('send');
     expect(classifyOrcaDispatchTool('Read')).toBeNull();
     // 不误匹配前缀粘连的无关 tool 名。
     expect(classifyOrcaDispatchTool('xcreate_worker')).toBeNull();
@@ -56,7 +56,7 @@ describe('orcaCollab dispatch tool classification', () => {
 
 describe('buildOrcaDispatchCard', () => {
   it('summarizes create_worker with label + initial_task', () => {
-    const card = buildOrcaDispatchCard('mcp__lizi_orca__create_worker', {
+    const card = buildOrcaDispatchCard('mcp__cindy_orca__create_worker', {
       role: 'developer',
       agent: 'codex',
       label: 'frontend',
@@ -71,7 +71,7 @@ describe('buildOrcaDispatchCard', () => {
   });
 
   it('summarizes create_workers with the batch size and each worker task', () => {
-    const card = buildOrcaDispatchCard('mcp__lizi_orca__create_workers', {
+    const card = buildOrcaDispatchCard('mcp__cindy_orca__create_workers', {
       workers: [
         { role: 'developer', agent: 'codex', label: 'frontend', initial_task: '实现登录页' },
         { role: 'reviewer', agent: 'claude-code', label: 'review', initial_task: '检查交互' },
@@ -85,7 +85,7 @@ describe('buildOrcaDispatchCard', () => {
   });
 
   it('summarizes send_to_worker with the message body', () => {
-    const card = buildOrcaDispatchCard('mcp__lizi_orca__send_to_worker', {
+    const card = buildOrcaDispatchCard('mcp__cindy_orca__send_to_worker', {
       target_session_id: 'sess-123',
       message: '继续下一步',
     });
@@ -122,7 +122,7 @@ describe('normalizeRemoteMessages with orca collaboration', () => {
       message({
         id: 'dispatch',
         role: 'tool_use',
-        content: { toolName: 'mcp__lizi_orca__create_worker', input: { label: 'api', role: 'dev', agent: 'codex', initial_task: '建接口' } },
+        content: { toolName: 'mcp__cindy_orca__create_worker', input: { label: 'api', role: 'dev', agent: 'codex', initial_task: '建接口' } },
         createdAt: '2026-01-01T00:00:01.000Z',
       }),
       message({
@@ -149,7 +149,7 @@ describe('normalizeRemoteMessages with orca collaboration', () => {
         id: 'batch-dispatch',
         role: 'tool_use',
         content: {
-          toolName: 'mcp__lizi_orca__create_workers',
+          toolName: 'mcp__cindy_orca__create_workers',
           input: {
             workers: [
               { label: 'api', role: 'developer', agent: 'codex', initial_task: '实现接口' },

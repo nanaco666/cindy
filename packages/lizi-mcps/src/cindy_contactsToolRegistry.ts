@@ -1,5 +1,5 @@
 /**
- * lizi_contactsToolRegistry.ts
+ * cindy_contactsToolRegistry.ts
  * ---------------------------------------------------------------------------
  * Mirror of MemoryToolRegistry — 智能通讯录工具注册表, 保持 entry-tool 面只有
  * list_tools + call_tool (token economy)。
@@ -59,7 +59,7 @@ export class ContactsToolRegistry {
     handler: ContactsToolHandler<{ [K in keyof T]: z.infer<T[K]> }>;
   }): void {
     if (this.tools.has(def.name)) {
-      throw new Error(`[lizi_contactsToolRegistry] duplicate tool name: ${def.name}`);
+      throw new Error(`[cindy_contactsToolRegistry] duplicate tool name: ${def.name}`);
     }
     this.tools.set(def.name, def as unknown as ContactsToolDef);
   }

@@ -719,7 +719,7 @@ describe('dynamic lizi MCP session context', () => {
     });
   });
 
-  it('lets lizi_orca resolve a Codex session id from AsyncLocalStorage', async () => {
+  it('lets cindy_orca resolve a Codex session id from AsyncLocalStorage', async () => {
     const startTeam = vi.fn(async () => ({
       ok: true as const,
       teamId: 'team-1',
@@ -758,7 +758,7 @@ describe('dynamic lizi MCP session context', () => {
     });
   });
 
-  it('requires lizi_orca external worker controls to resolve caller session context', async () => {
+  it('requires cindy_orca external worker controls to resolve caller session context', async () => {
     const deps: OrcaMcpDeps = createOrcaDeps();
     const server = createOrcaMcpServer(deps, {
       agentKind: 'codex',
@@ -829,7 +829,7 @@ describe('dynamic lizi MCP session context', () => {
     });
   });
 
-  it('routes lizi_orca diagnostic tools through the current lead session context', async () => {
+  it('routes cindy_orca diagnostic tools through the current lead session context', async () => {
     const deps = createOrcaDeps({
       getWorkspaceInfo: vi.fn(async () => ({
         ok: true as const,

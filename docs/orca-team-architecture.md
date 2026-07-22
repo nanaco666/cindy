@@ -39,7 +39,7 @@ Orca 是 XDMaker Desktop 内的多 agent 协同能力：一个 **Lead session** 
 - 多 worker：同一个 active team 下可创建多个 worker，支持 role、label、focused worker 切换、soft/hard limit 与归档。
 - Split view：Lead 与 focused Worker 共用 `OrcaSplitView` pane 外壳，宽屏为左右 split，doc rail 为 Lead/Worker toggle。见 `apps/desktop/src/renderer/features/cc-agent/OrcaSplitView.tsx` 的 `OrcaSplitView`、`OrcaPaneShell`。
 - Claude Code 与 Codex 都可作为本地项目 Lead。renderer gate 允许本地 project session，排除 worker 和 remote session，见 `apps/desktop/src/renderer/features/cc-agent/CCAgentSessionView.tsx` 的 `allowCollabToggle`。
-- Codex Lead 使用全局注册的 `lizi_orca`，调用时通过 context 恢复身份并在 handler 内拒绝越权。
+- Codex Lead 使用全局注册的 `cindy_orca`，调用时通过 context 恢复身份并在 handler 内拒绝越权。
 - PR #107 提供 side_chat 的底层 fork 数据动作：user/assistant 消息都能 fork，assistant 按 turn 粒度复制，Claude 用 uuid 锚点，Codex 用 ThreadFork + ThreadRollback。当前作为普通 session 跳转；未来要登记为 side activity 并挂入统一 pane。
 
 当前边界：
@@ -86,7 +86,7 @@ PR #101 之后，Orca 的 main 侧业务由独立 service 承接，`register.ts`
 
 ### MCP 与 IPC 控制面
 
-`lizi_orca` 是独立 MCP server，直接顶层注册 16 个工具：13 个 team 控制工具 + 3 个只读诊断工具（后者从已下线的 `orca_bridge` 桥入，保裸名）。它与 renderer IPC 共用同一组 main 侧 service，因此 MCP 和 UI 操作必须有一致的权限、状态和回滚语义。
+`cindy_orca` 是独立 MCP server，直接顶层注册 16 个工具：13 个 team 控制工具 + 3 个只读诊断工具（后者从已下线的 `orca_bridge` 桥入，保裸名）。它与 renderer IPC 共用同一组 main 侧 service，因此 MCP 和 UI 操作必须有一致的权限、状态和回滚语义。
 
 1. `start_team`
 2. `end_team`
@@ -109,15 +109,15 @@ PR #101 之后，Orca 的 main 侧业务由独立 service 承接，`register.ts`
 
 排队消息控制 3 工具让 Lead 在消息被 worker 消费前管理自己发出的排队消息：`send_to_worker` / `create_worker`（initial_task）在 `wakeKind='queued'` 时回传 `queued_message_id`（coordinator 队列内的 clientId），Lead 可据此列出、整条改写或撤回。实现走 `OrcaTeamService.listWorkerQueuedMessages / updateWorkerQueuedMessage / cancelWorkerQueuedMessage`，语义约束见「协同运行时行为契约 · 消息派发与 auto-bridge」第 6 条。
 
-诊断 3 工具是纯只读，实现走 host `apps/desktop/src/main/maker-ipc/orcaDiagnostics.ts`（读 active team + DB worker 列表 + live session 状态 + 最近 assistant 消息），**无建 team 写副作用**——这是与旧 `orca_bridge` 版本的关键差异（旧版经 `ensureWorkflowForLead` 会顺手建 team）。早期 Lead 侧 `orca_bridge`（门面 + 私有 registry/restore/auto-bridge）已整体删除：Lead→worker/team 工具面唯 `lizi_orca`（C）一套，worker→lead 唯 `orca_worker_bridge`（B，在 `packages/orca-workflow`）一套；`@lizi`/`@fmfsaisai` 的 `orca-workflow` 包通过 B provider 与 `renderOrcaLeadSystemPrompt`/`renderOrcaWorkerSystemPrompt` 两个 render 函数继续被 host 依赖。
+诊断 3 工具是纯只读，实现走 host `apps/desktop/src/main/maker-ipc/orcaDiagnostics.ts`（读 active team + DB worker 列表 + live session 状态 + 最近 assistant 消息），**无建 team 写副作用**——这是与旧 `orca_bridge` 版本的关键差异（旧版经 `ensureWorkflowForLead` 会顺手建 team）。早期 Lead 侧 `orca_bridge`（门面 + 私有 registry/restore/auto-bridge）已整体删除：Lead→worker/team 工具面唯 `cindy_orca`（C）一套，worker→lead 唯 `orca_worker_bridge`（B，在 `packages/orca-workflow`）一套；`@lizi`/`@fmfsaisai` 的 `orca-workflow` 包通过 B provider 与 `renderOrcaLeadSystemPrompt`/`renderOrcaWorkerSystemPrompt` 两个 render 函数继续被 host 依赖。
 
-`lizi_orca` 直接注册到顶层，而不是藏在 `list_tools/call_tool` 后面；模型在“开协同 / 派 worker”时需要稳定发现 `start_team/create_worker`。实现见 `packages/lizi-mcps/src/orca/server.ts` 的 `createOrcaMcpServer`、`DirectToolSink`、`OrcaMcpDeps`。
+`cindy_orca` 直接注册到顶层，而不是藏在 `list_tools/call_tool` 后面；模型在“开协同 / 派 worker”时需要稳定发现 `start_team/create_worker`。实现见 `packages/lizi-mcps/src/orca/server.ts` 的 `createOrcaMcpServer`、`DirectToolSink`、`OrcaMcpDeps`。
 
 工具注册是全局可见 + handler 拒绝：
 
-- 工具可见性不是权限边界：`providers.ts` 的 `lizi_orca` provider 没有 per-role `isEnabled` gate，普通 session / worker / lead 的差异必须由 handler 和 host service 拒绝。
+- 工具可见性不是权限边界：`providers.ts` 的 `cindy_orca` provider 没有 per-role `isEnabled` gate，普通 session / worker / lead 的差异必须由 handler 和 host service 拒绝。
 - Codex 场景的真实 session 身份来自 MCP request context；`session-context.ts` 用 `AsyncLocalStorage` 提供 `withLiziMcpSessionContext` / `resolveLiziMcpSessionContext`，不能依赖全局 fallback 猜身份。
-- renderer 开启协同走 `CCAgentSessionView.tsx` 的 `requestEnableCollab`，MCP 工具通过 `lizi_orca` callback 进入同一组 service。
+- renderer 开启协同走 `CCAgentSessionView.tsx` 的 `requestEnableCollab`，MCP 工具通过 `cindy_orca` callback 进入同一组 service。
 
 ### Codex Lead 机制
 
@@ -140,7 +140,7 @@ Codex prompt / developerInstructions 有双通道：
 
 - Codex app-server 不支持单进程内 per-thread MCP 配置；MCP server 配置是 app-server spawn/config 层全局注入，thread/start 参数没有 per-thread MCP override。
 - 另一个等价方案是按 profile 拆多个 app-server 实例，但会引入启动耗时、常驻内存、resume profile 匹配、shutdown 管理和 prompt cache 评估成本。
-- Claude Code 侧的 `lizi_orca` 本身也是全局可见 + handler 拒绝。Codex 对齐这一语义即可，不为更强的曝光隔离付出多进程复杂度。
+- Claude Code 侧的 `cindy_orca` 本身也是全局可见 + handler 拒绝。Codex 对齐这一语义即可，不为更强的曝光隔离付出多进程复杂度。
 - 未来只有当 Codex app-server 原生支持 per-thread MCP 配置时，再重新评估。
 
 ### UI、协同 Tab 与 Worktree
@@ -207,7 +207,7 @@ Worktree 现状：Orca 与普通 session 对齐，worktree 是可选项，不强
 当前文档要求保留以下回归方向：
 
 - Service 边界：`orcaLifecycleService`、`orcaWorkerCreationService`、`orcaTeamService` 的单测覆盖 start/enable/create/dispatch/idle/archive/auto-bridge 关键路径。
-- MCP 工具：`lizi_orca` 16 工具（13 team + 3 只读诊断）的 role gate、ctx 缺失、worker/main 误调用、soft/hard limit、duplicate label、budget model API mode gate；`create_workers` 另覆盖默认 hard limit、配置 hard=3、部分成功、连续失败与 hard-limit 后不再调用 host；诊断工具的纯只读语义（无 active team 时返回空 workspace、不建 team）；排队消息控制 3 工具的归属校验（跨 lead 拒绝）、非 lead 条目拒绝（`NOT_LEAD_MESSAGE`）、steering 拒绝（`MESSAGE_CONSUMING`）、撤回结清 accepted 暂存。
+- MCP 工具：`cindy_orca` 16 工具（13 team + 3 只读诊断）的 role gate、ctx 缺失、worker/main 误调用、soft/hard limit、duplicate label、budget model API mode gate；`create_workers` 另覆盖默认 hard limit、配置 hard=3、部分成功、连续失败与 hard-limit 后不再调用 host；诊断工具的纯只读语义（无 active team 时返回空 workspace、不建 team）；排队消息控制 3 工具的归属校验（跨 lead 拒绝）、非 lead 条目拒绝（`NOT_LEAD_MESSAGE`）、steering 拒绝（`MESSAGE_CONSUMING`）、撤回结清 accepted 暂存。
 - Codex MCP context：`CodexMcpThreadContextStore` 覆盖按 threadId 查 context、unknown / missing threadId fail-closed、unregister 后清理、`vendorOptions` 引用保持；`codexHttpBridge` 覆盖从 JSON-RPC `params._meta.threadId` 注入真实 session context。
 - Host 归属校验：`send_to_worker`、`idle_worker`、`archive_worker` 经共享 `resolveWorkerRef`（同时接受 worker_id / session_id 两种 id）必须以 caller 自身 Lead 身份校验，拒绝跨 workflow worker id 与 ctx 缺失；即使模型传错 id 或换用另一种 id，也不能越权操作。
 - UI route：Orca worker 不出现在 sidebar，Lead 自动进 split route，worker deep link 解析到 Lead split route；已有测试守住“不用 fork parentSessionId 或标题推断 Orca mapping”，见 `apps/desktop/src/renderer/__tests__/orcaWorkflowRoute.test.ts` 的 `does not use fork parentSessionId or title-linked worker lookup for Orca mapping`。
@@ -242,7 +242,7 @@ Codex thread start / resume 成功后必须注册 `threadId -> session context`�
 
 #### 5. Lead prompt 的诊断工具名（状态：已解决）
 
-历史问题：`renderOrcaLeadSystemPrompt`（`packages/orca-workflow/src/orca-bridge-prompt.ts`）的 Lead prompt 用裸工具名引用 `get_workspace_info` / `worker_status` / `read_worker`，而这些过去只在 Claude-lead 专属的 `orca_bridge` 里、Codex Lead 看不到，会制造稳定噪音。统一后这 3 个诊断工具以**同名裸工具**桥入全局可见的 `lizi_orca`，Claude 与 Codex Lead 都能解析到真实工具，噪音消除。prompt 正文保持不动（无 provider namespace、只用裸名），因此本次未触发规则 11。
+历史问题：`renderOrcaLeadSystemPrompt`（`packages/orca-workflow/src/orca-bridge-prompt.ts`）的 Lead prompt 用裸工具名引用 `get_workspace_info` / `worker_status` / `read_worker`，而这些过去只在 Claude-lead 专属的 `orca_bridge` 里、Codex Lead 看不到，会制造稳定噪音。统一后这 3 个诊断工具以**同名裸工具**桥入全局可见的 `cindy_orca`，Claude 与 Codex Lead 都能解析到真实工具，噪音消除。prompt 正文保持不动（无 provider namespace、只用裸名），因此本次未触发规则 11。
 
 #### 6. Model 不可中途换，effort 可调（状态：不变量）
 
@@ -380,7 +380,7 @@ side_chat 待落地的是：
 
 ### 分阶段路线
 
-1. **稳住当前 worker 底座**：Codex MCP context 路由已是 fail-closed、worker 控制入口已按 caller 归属校验（坑点 #1/#3 已是不变量）；剩余 follow-up 是补 worker bridge role gate（坑点 #4）、持续补回归测试。（坑点 #5 已随诊断工具桥入 `lizi_orca` 解决；`orca_bridge`（A）已整体删除。）
+1. **稳住当前 worker 底座**：Codex MCP context 路由已是 fail-closed、worker 控制入口已按 caller 归属校验（坑点 #1/#3 已是不变量）；剩余 follow-up 是补 worker bridge role gate（坑点 #4）、持续补回归测试。（坑点 #5 已随诊断工具桥入 `cindy_orca` 解决；`orca_bridge`（A）已整体删除。）
 2. **生命周期建模**：引入 `lifecycle_kind` 与 live/dormant，统一 resume helper，默认不自动有损回收。
 3. **side activity 关系层**：新增关系/side activity 数据结构，兼容现有 `parent_session_id/forked_at_message_id` 和 `orca_teams/orca_workers`。
 4. **side_chat 纳入 pane**：复用 PR #107 fork 动作，但创建 side_chat child execution，挂到统一 pane，默认不回传。

@@ -1,11 +1,11 @@
 /**
  * ComputerUseSection — Settings →「电脑使用 / Computer Use」面板。
  * ---------------------------------------------------------------------------
- * 电脑使用类能力的统一入口。当前承载「浏览器自动化」(lizi_browser MCP):
+ * 电脑使用类能力的统一入口。当前承载「浏览器自动化」(cindy_browser MCP):
  *   - 启用开关 (复用 builtin plugin 系统, id='browser', 项目级 .claude/settings.json)
  *   - 本机浏览器探测状态 (maker.browser.status — 只探测不启动)
  *   - 未探测到时引导去 Chrome 官方下载页
- * 以及「直接操作电脑」能力 (lizi_computer MCP, machine-wide opt-in).
+ * 以及「直接操作电脑」能力 (cindy_computer MCP, machine-wide opt-in).
  *
  * 数据流 (规则 7: 先拉数据再渲染, 无 loading 闪屏):
  *   - mount → 并行拉 plugins.getState('browser', workingDir) (取 browser 开关态)

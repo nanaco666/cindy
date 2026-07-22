@@ -1,5 +1,5 @@
 /**
- * codexEnvironment — 把 lizi_mcp providers 暴露成 codex spawn 时用的
+ * codexEnvironment — 把 Cindy MCP providers 暴露成 codex spawn 时用的
  * extraArgs (-c flags) + extraEnv (LIZI_MCP_TOKEN)。
  *
  * Lazy + cached：第一次 CodexAgent.getHost() 调用时启动 HTTP bridge，整个

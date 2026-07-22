@@ -1,5 +1,5 @@
 /**
- * lizi_ssh MCP server tests
+ * cindy_ssh MCP server tests
  * ---------------------------------------------------------------------------
  * 两种风格（照 cindy_schedulerMcpServer.test.ts）：
  *  1. 直测：fake SshPoolLike + registry.call()，覆盖名字解析 / exec 行为 /
@@ -11,7 +11,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 
-import { createSshMcpServer } from '../lizi_sshMcpServer.js';
+import { createSshMcpServer } from '../cindy_sshMcpServer.js';
 import { SshToolRegistry } from '../ssh/registry.js';
 import {
   registerSshExecTool,
@@ -301,7 +301,7 @@ describe('ssh_exec', () => {
 
   it('exec timeout error → EXEC_TIMEOUT with nohup hint', async () => {
     const { pool } = makeFakePool([snapshot({ id: 'web-1' })], async () => {
-      throw new Error('lizi_ssh:ssh_exec(web-1) timed out after 60000ms');
+      throw new Error('cindy_ssh:ssh_exec(web-1) timed out after 60000ms');
     });
     const { deps } = makeDeps(pool);
     const { payload, isError } = await callParsed(makeRegistry(deps), 'ssh_exec', {
@@ -487,7 +487,7 @@ describe('runtime plugin gate via isEnabledForWorkdir', () => {
 
 // ── e2e smoke: real MCP server over in-memory transport ────────────────────
 
-describe('lizi_ssh MCP server (in-process smoke)', () => {
+describe('cindy_ssh MCP server (in-process smoke)', () => {
   let client: Client;
   let cleanup: () => Promise<void>;
 

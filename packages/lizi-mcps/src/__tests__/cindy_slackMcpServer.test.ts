@@ -1,5 +1,5 @@
 /**
- * lizi_slack MCP server tests: 真 McpServer + InMemoryTransport 驱动三个网关
+ * cindy_slack MCP server tests: 真 McpServer + InMemoryTransport 驱动三个网关
  * 工具, 假 SlackToolBridge 注入。覆盖:
  *   - slack_status: 本地不可用视角 / server status 合并 / 桥错误透传
  *   - slack_list_tools / slack_call_tool: 透传 + 参数组装
@@ -15,7 +15,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 
-import { createSlackMcpGatewayServer } from '../lizi_slackMcpServer.js';
+import { createSlackMcpGatewayServer } from '../cindy_slackMcpServer.js';
 import type { SlackHookMcpDeps, SlackToolBridgeLike, SlackToolBridgeResult } from '../types.js';
 
 interface BridgeOpts {
@@ -72,7 +72,7 @@ function tmpWorkdir(): string {
   return d;
 }
 
-describe('lizi_slack MCP server', () => {
+describe('cindy_slack MCP server', () => {
   it('工具面固定三个(slack_status / slack_list_tools / slack_call_tool)', async () => {
     const { bridge } = makeBridge();
     const client = await connectServer({ getBridge: () => bridge });

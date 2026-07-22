@@ -358,18 +358,18 @@ describe('isEnabled wrap integration (provider → registry gate)', () => {
     return registry.isEnabled(pluginId, workingDir);
   }
 
-  it('provider lizi_ssh disabled via project override → isEnabled false', () => {
+  it('provider cindy_ssh disabled via project override → isEnabled false', () => {
     writeProjectSettings(workingDir, { ssh: false });
     registry = createRegistry();
 
-    expect(wrapIsEnabled('lizi_ssh', workingDir)).toBe(false);
+    expect(wrapIsEnabled('cindy_ssh', workingDir)).toBe(false);
   });
 
-  it('provider lizi_feishu_bot → feishu_bot mapping works', () => {
+  it('provider cindy_feishu_bot → feishu_bot mapping works', () => {
     writeProjectSettings(workingDir, { feishu_bot: false });
     registry = createRegistry();
 
-    expect(wrapIsEnabled('lizi_feishu_bot', workingDir)).toBe(false);
+    expect(wrapIsEnabled('cindy_feishu_bot', workingDir)).toBe(false);
   });
 
   it('essential providers stay enabled even when project says false', () => {
@@ -411,5 +411,9 @@ describe('isEnabled wrap integration (provider → registry gate)', () => {
       const mappedId = PROVIDER_NAME_TO_PLUGIN_ID[name];
       expect(registry.getPlugins().map((p) => p.id)).toContain(mappedId);
     }
+  });
+
+  it('all active builtin MCP providers use the cindy namespace', () => {
+    expect(realBuiltinProviderNames().every((name) => name.startsWith('cindy_'))).toBe(true);
   });
 });

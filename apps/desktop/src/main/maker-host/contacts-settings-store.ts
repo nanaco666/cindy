@@ -6,7 +6,7 @@
  *
  * 默认 false —— 通讯录是个人数据采集类功能, 必须用户主动开启(开 = 允许 agent
  * 自动采集人物信息, 单开关语义, 无独立"自动采集"子开关)。开关只 gate agent 侧
- * (lizi_contacts MCP server 注册 + 工具级拦截); 设置页管理 UI 不受 gate —
+ * (cindy_contacts MCP server 注册 + 工具级拦截); 设置页管理 UI 不受 gate —
  * 关着也能浏览/清理已有数据。
  *
  * 形态与 chat-embedding-settings-store 完全一致(createOverrideSettingsFile:

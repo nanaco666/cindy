@@ -13,15 +13,15 @@ import type {
   ContactsMcpDeps,
   LspMcpDeps,
 } from './types.js';
-import { createFeishuBotMcpServer } from './lizi_feishuBotMcpServer.js';
-import { createSlackMcpGatewayServer } from './lizi_slackMcpServer.js';
+import { createFeishuBotMcpServer } from './cindy_feishuBotMcpServer.js';
+import { createSlackMcpGatewayServer } from './cindy_slackMcpServer.js';
 import { createSchedulerMcpServer } from './cindy_schedulerMcpServer.js';
-import { createSshMcpServer } from './lizi_sshMcpServer.js';
+import { createSshMcpServer } from './cindy_sshMcpServer.js';
 import { createCindyMemoryMcpServer } from './cindy_memoryMcpServer.js';
-import { createLiziContactsMcpServer } from './lizi_contactsMcpServer.js';
+import { createCindyContactsMcpServer } from './cindy_contactsMcpServer.js';
 import { createXdtHelperMcpServer, type XdtHelperMcpDeps } from './lizi_xdtHelperMcpServer.js';
 import { createOrcaMcpServer, type OrcaMcpDeps } from './orca/index.js';
-import { createLiziLspMcpServer, detectTypeScriptProject } from './lsp/index.js';
+import { createCindyLspMcpServer, detectTypeScriptProject } from './lsp/index.js';
 import { createBrowserMcpServer } from './browser/index.js';
 import { createComputerMcpServer } from './computer/index.js';
 import { createAndroidMcpServer } from './android/index.js';
@@ -39,7 +39,7 @@ export interface CreateLiziMcpProvidersOptions {
   computer?: ComputerMcpDeps;
   feishuBot?: FeishuBotMcpHostDeps;
   /**
-   * lizi_slack: Slack 网关工具(经 hook 通道由 slack-hook-server 以托管
+   * cindy_slack: Slack 网关工具(经 hook 通道由 slack-hook-server 以托管
    * user token 调 Slack 官方 MCP, 接替退役的 cindy-slack 意识)。
    * workingDir 由 provider 从 ctx 绑定; isEnabled = 桥可用、绑定 confirmed 且
    * 最近一次 welcome 宣告 slack-tools 能力(所有会话可见, 不按 source 门控)。
@@ -48,7 +48,7 @@ export interface CreateLiziMcpProvidersOptions {
   slackHook?: Omit<SlackHookMcpDeps, 'workingDir'>;
   scheduler?: SchedulerMcpDeps;
   /**
-   * lizi_ssh: 在已配置 SSH 主机上直接执行命令（复用 desktop ConnectionPool 的
+   * cindy_ssh: 在已配置 SSH 主机上直接执行命令（复用 desktop ConnectionPool 的
    * alias / ssh-agent / key，远端零安装；直连、暂不支持 ProxyJump 跳板——
    * ConnectionPool 既有限制）。deps 的 getPool /
    * ensureReady 必须是 lazy async（desktop 侧 `await import()` remote-ssh 模块
@@ -61,7 +61,7 @@ export interface CreateLiziMcpProvidersOptions {
    */
   memory?: Omit<MemoryMcpDeps, 'workdir'>;
   /**
-   * 智能通讯录(lizi_contacts)deps. 全局单库, 无 workdir 绑定;
+   * 智能通讯录(cindy_contacts)deps. 全局单库, 无 workdir 绑定;
    * isEnabled 来自 host 设置层开关(缺省常开)。
    */
   contacts?: ContactsMcpDeps;
@@ -77,7 +77,7 @@ export interface CreateLiziMcpProvidersOptions {
    */
   xdtHelper?: XdtHelperMcpDeps;
   /**
-   * lizi_orca MCP server: 多 worker 协同(Orca team)控制工具集。
+   * cindy_orca MCP server: 多 worker 协同(Orca team)控制工具集。
    * 对应"协同模式"可关插件。deps 注入即激活 9 个 team 工具。
    */
   orca?: OrcaMcpDeps;
@@ -109,7 +109,7 @@ export function createLiziMcpProviders(
 
   if (opts.browser && selected(enabled, 'browser')) {
     providers.push({
-      name: 'lizi_browser',
+      name: 'cindy_browser',
       // ctx 注入:agent 实际跑在哪个 chat session 里,backend 必须以那个 session
       // 为操作主体,不能依赖 host 端的 UI-焦点推断(用户提交 prompt 后立刻切到
       // 别的 session,会让 backend 把 tab 落到错误 session)。
@@ -123,7 +123,7 @@ export function createLiziMcpProviders(
         const sessionId = ctx.sessionId;
         return {
           type: 'sdk',
-          name: 'lizi_browser',
+          name: 'cindy_browser',
           instance: createBrowserMcpServer({
             ...baseDeps,
             getRuntime: () => {
@@ -148,10 +148,10 @@ export function createLiziMcpProviders(
 
   if (opts.android && selected(enabled, 'android')) {
     providers.push({
-      name: 'lizi_android',
+      name: 'cindy_android',
       toClaudeSdkConfig: (ctx) => ({
         type: 'sdk',
-        name: 'lizi_android',
+        name: 'cindy_android',
         instance: createAndroidMcpServer(opts.android!, {
           sessionId: ctx.sessionId,
           getSessionContext: () => resolveLiziMcpSessionContext(ctx),
@@ -162,10 +162,10 @@ export function createLiziMcpProviders(
 
   if (opts.computer && selected(enabled, 'computer')) {
     providers.push({
-      name: 'lizi_computer',
+      name: 'cindy_computer',
       toClaudeSdkConfig: (ctx) => ({
         type: 'sdk',
-        name: 'lizi_computer',
+        name: 'cindy_computer',
         instance: createComputerMcpServer(opts.computer!, {
           sessionId: ctx.sessionId,
           getSessionContext: () => resolveLiziMcpSessionContext(ctx),
@@ -217,12 +217,12 @@ export function createLiziMcpProviders(
   // ghost_call 调用),MCP 壳与 gitlab 后端一并删除;老账号(safe-storage 单账号)
   // 由主机启动时一次性搬账进意识多连接清单(gitlabAccountsMigration)。
 
-  if (opts.feishuBot && selected(enabled, 'lizi_feishu_bot')) {
+  if (opts.feishuBot && selected(enabled, 'cindy_feishu_bot')) {
     providers.push({
-      name: 'lizi_feishu_bot',
+      name: 'cindy_feishu_bot',
       toClaudeSdkConfig: (ctx) => ({
         type: 'sdk',
-        name: 'lizi_feishu_bot',
+        name: 'cindy_feishu_bot',
         instance: createFeishuBotMcpServer({
           getChatId: () =>
             readFeishuChatId(ctx) ?? opts.feishuBot!.getOwnerOpenId() ?? null,
@@ -236,9 +236,9 @@ export function createLiziMcpProviders(
     });
   }
 
-  if (opts.slackHook && selected(enabled, 'lizi_slack')) {
+  if (opts.slackHook && selected(enabled, 'cindy_slack')) {
     providers.push({
-      name: 'lizi_slack',
+      name: 'cindy_slack',
       // 会话构建期门控: 桥已注册、绑定 confirmed、最近一次成功 welcome 宣告
       // slack-tools 才挂工具面。瞬时断线不撤 provider(避免重建 Codex),调用期由
       // connected fail-closed 复查兜底;重连到不同 server 后 manager 会按新 welcome
@@ -251,7 +251,7 @@ export function createLiziMcpProviders(
       },
       toClaudeSdkConfig: (ctx) => ({
         type: 'sdk',
-        name: 'lizi_slack',
+        name: 'cindy_slack',
         instance: createSlackMcpGatewayServer({
           getBridge: opts.slackHook!.getBridge,
           // 大结果落盘的钳制根: 绑定当前会话工作目录(空 = 只截断不落盘)
@@ -284,16 +284,16 @@ export function createLiziMcpProviders(
     });
   }
 
-  if (opts.ssh && selected(enabled, 'lizi_ssh')) {
+  if (opts.ssh && selected(enabled, 'cindy_ssh')) {
     providers.push({
-      name: 'lizi_ssh',
+      name: 'cindy_ssh',
       // 无 isEnabled 门控:plugin 系统已在 host 层(mcp-providers.ts wrap)按
-      // plugin id 'ssh' 包了 isEnabled 检查,这里再加就是双重门(同 lizi_orca)。
+      // plugin id 'ssh' 包了 isEnabled 检查,这里再加就是双重门(同 cindy_orca)。
       // ctx 当前仅日志归因用;工具本身不依赖 workingDir,Codex bridge 空 ctx
       // 也能正常工作。
       toClaudeSdkConfig: (ctx) => ({
         type: 'sdk',
-        name: 'lizi_ssh',
+        name: 'cindy_ssh',
         instance: createSshMcpServer(opts.ssh!, {
           agentKind: ctx.agentKind === 'codex' ? 'codex' : 'claude-code',
           workingDir: ctx.workingDir,
@@ -314,7 +314,7 @@ export function createLiziMcpProviders(
       // 对应的 session ctx;未绑定 session 的调用仍会按工具语义返 NO_SESSION_CONTEXT
       // 或 LEAD_NOT_SUPPORTED。
       // send_to_session 是 skill 的 session handoff 原语, 放 essential 常开;
-      // 协同 team 工具在独立的 lizi_orca server(可关插件)。
+      // 协同 team 工具在独立的 cindy_orca server(可关插件)。
       toClaudeSdkConfig: (ctx) => ({
         type: 'sdk',
         name: 'cindy_helper',
@@ -328,18 +328,18 @@ export function createLiziMcpProviders(
     });
   }
 
-  if (opts.orca && selected(enabled, 'lizi_orca')) {
+  if (opts.orca && selected(enabled, 'cindy_orca')) {
     providers.push({
-      name: 'lizi_orca',
+      name: 'cindy_orca',
       // 无 isEnabled 门控:plugin 系统已经在 host 那层 (mcp-providers.ts wrap)
       // 包了一层 isEnabled 检查 builtinTools.collab.enabled(plugin id 'collab'
-      // 重指向 provider 'lizi_orca'), 这里再加就是双重门。
+      // 重指向 provider 'cindy_orca'), 这里再加就是双重门。
       // ctx 闭包绑定 sessionId/vendorOptions 让工具知道是哪个 session 在调。
       // Codex HTTP bridge 的 server factory 初始 ctx 是空的,但 tool handler 会
       // 通过 AsyncLocalStorage 在调用时解析真实 session ctx。
       toClaudeSdkConfig: (ctx) => ({
         type: 'sdk',
-        name: 'lizi_orca',
+        name: 'cindy_orca',
         instance: createOrcaMcpServer(opts.orca!, {
           agentKind: ctx.agentKind === 'codex' ? 'codex' : 'claude-code',
           workingDir: ctx.workingDir,
@@ -376,24 +376,24 @@ export function createLiziMcpProviders(
     });
   }
 
-  if (opts.contacts && selected(enabled, 'lizi_contacts')) {
+  if (opts.contacts && selected(enabled, 'cindy_contacts')) {
     providers.push({
-      name: 'lizi_contacts',
+      name: 'cindy_contacts',
       // 跟 memory 同模式: 设置层开关关闭时 server 整个不注册(LLM 看不到, 不浪费
       // token); Codex host 长生命周期下运行期关闭由 withContacts 的
       // CONTACTS_NOT_READY 工具级拦截兜底。
       ...(opts.contacts.isEnabled ? { isEnabled: () => opts.contacts!.isEnabled!() } : {}),
       toClaudeSdkConfig: () => ({
         type: 'sdk',
-        name: 'lizi_contacts',
-        instance: createLiziContactsMcpServer(opts.contacts!),
+        name: 'cindy_contacts',
+        instance: createCindyContactsMcpServer(opts.contacts!),
       }),
     });
   }
 
-  if (opts.lsp && selected(enabled, 'lizi_lsp')) {
+  if (opts.lsp && selected(enabled, 'cindy_lsp')) {
     providers.push({
-      name: 'lizi_lsp',
+      name: 'cindy_lsp',
       // LIZI_LSP_DISABLED=1 lets us run A/B benchmarks against grep+Read
       // baselines without changing prompt wording — flip the env, restart
       // xdt-maker, and lsp_* tools vanish from the agent's tool list entirely.
@@ -404,8 +404,8 @@ export function createLiziMcpProviders(
         && detectTypeScriptProject(ctx.workingDir),
       toClaudeSdkConfig: (ctx) => ({
         type: 'sdk',
-        name: 'lizi_lsp',
-        instance: createLiziLspMcpServer({
+        name: 'cindy_lsp',
+        instance: createCindyLspMcpServer({
           workdir: ctx.workingDir,
           pool: opts.lsp!.pool,
           ...(opts.lsp!.logger ? { logger: opts.lsp!.logger } : {}),

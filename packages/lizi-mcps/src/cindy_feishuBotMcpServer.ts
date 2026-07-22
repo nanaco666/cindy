@@ -1,5 +1,5 @@
 /**
- * lizi_feishuBotMcpServer.ts
+ * cindy_feishuBotMcpServer.ts
  * ---------------------------------------------------------------------------
  * In-process MCP server for the feishu bot channel. Attached to every session
  * (no source gate) so users can say "跑完通过飞书通知我" from a desktop chat
@@ -25,13 +25,13 @@ import { jsonObjectArg } from './json-object-arg.js';
 import {
   FeishuBotToolRegistry,
   type FeishuBotToolResult,
-} from './lizi_feishuBotToolRegistry';
+} from './cindy_feishuBotToolRegistry';
 import type { FeishuBotMcpHostDeps } from './types.js';
 
-import descListTools from './prompts/lizi_feishu_bot/tools/list_tools.md?raw';
-import descCallTool from './prompts/lizi_feishu_bot/tools/call_tool.md?raw';
-import descSendFileToUser from './prompts/lizi_feishu_bot/tools/send_file_to_user.md?raw';
-import descSendMessageToUser from './prompts/lizi_feishu_bot/tools/send_message_to_user.md?raw';
+import descListTools from './prompts/cindy_feishu_bot/tools/list_tools.md?raw';
+import descCallTool from './prompts/cindy_feishu_bot/tools/call_tool.md?raw';
+import descSendFileToUser from './prompts/cindy_feishu_bot/tools/send_file_to_user.md?raw';
+import descSendMessageToUser from './prompts/cindy_feishu_bot/tools/send_message_to_user.md?raw';
 
 const D = {
   list_tools: descListTools.trim(),
@@ -367,7 +367,7 @@ function registerCallToolEntry(
 
 export function createFeishuBotMcpServer(deps: FeishuBotMcpDeps): McpServer {
   const server = new McpServer({
-    name: 'lizi_feishu_bot',
+    name: 'cindy_feishu_bot',
     version: '1.0.0',
   });
 
