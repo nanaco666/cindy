@@ -2567,6 +2567,58 @@
     "viewControllers": "View",
     "versionMismatch": "Version mismatch with the other device; some features may be limited"
   },
+  "accountDeletion": {
+    "entryButton": "Delete account",
+    "entryAria": "Delete the current account",
+    "introTitle": "Delete your account?",
+    "introDescription": "This schedules permanent deletion of your Cindy sign-in account.",
+    "confirmTitle": "Confirm account deletion",
+    "sendCodeButton": "Send deletion code",
+    "confirmButton": "Delete account",
+    "cancelButton": "Cancel",
+    "resendCodeButton": "Resend code",
+    "codePlaceholder": "6-digit code",
+    "codeInputAria": "Account deletion verification code",
+    "codeSent": "We sent a code to {{target}} via {{channel}}.",
+    "channels": {
+      "email": "email",
+      "sms": "SMS"
+    },
+    "sessionNotice": "This computer signs out immediately. Other clients sign out when their current access credential expires and they attempt to refresh it.",
+    "gracePeriodNotice": "After confirmation, your account enters a 30-day waiting period. Signing in during that period cancels deletion; afterwards, your Cindy sign-in account is permanently deleted.",
+    "verificationNotice": "A deletion code will be sent to {{target}} via {{channel}}.",
+    "appleRevocationNotice": "If you used Sign in with Apple, you must also revoke Cindy's access in your Apple ID settings.",
+    "acknowledgement": "I understand that after the waiting period, my Cindy sign-in account will be permanently deleted and cannot be recovered.",
+    "restoredNotice": "Account deletion was cancelled. Your Cindy sign-in account will be retained.",
+    "errors": {
+      "fallback": "The deletion request could not be completed. Check your network and try again.",
+      "UNAUTHENTICATED": "Your login expired. Sign in and try again.",
+      "ACCOUNT_DELETION_UNAVAILABLE": "This account is not eligible for self-service deletion.",
+      "ACCOUNT_DELETION_PENDING": "This account is already in the deletion waiting period.",
+      "ACCOUNT_DELETION_PROCESSING": "Account deletion is already in progress.",
+      "ACCOUNT_DELETION_CHALLENGE_INVALID": "The code is invalid or expired. Request a new code.",
+      "ACCOUNT_DELETION_RECEIPT_MISSING": "Deletion verification expired. Request a new code.",
+      "ACCOUNT_DELETION_RECEIPT_INVALID": "This deletion request could not be found. Start again.",
+      "ACCOUNT_DELETION_RECEIPT_STORE_FAILED": "The deletion status credential could not be stored securely. Try again.",
+      "AUTH_FLOW_SUPERSEDED": "The signed-in account changed, so this computer did not sign out to avoid affecting another account.",
+      "INVALID_CODE": "The code is incorrect or expired. Check it and try again.",
+      "CODE_ATTEMPTS_EXCEEDED": "Too many incorrect attempts. Request a new code.",
+      "NETWORK_ERROR": "Could not connect. Check your network and try again.",
+      "REQUEST_TIMEOUT": "The request timed out. Try again.",
+      "INVALID_RESPONSE": "The sign-in service returned an unrecognized result. Try again later.",
+      "RATE_LIMITED": "Too many attempts. Wait a moment and try again.",
+      "INVALID_PARAMS": "Check the information you entered and try again."
+    },
+    "status": {
+      "pendingTitle": "Account scheduled for deletion",
+      "processingTitle": "Account deletion in progress",
+      "completedTitle": "Account deleted",
+      "pendingCopy": "Scheduled for permanent deletion on {{date}}. Sign in before then to cancel deletion.",
+      "processingCopy": "The waiting period ended. Your Cindy sign-in account is being removed.",
+      "completedCopy": "Your Cindy sign-in account has been removed.",
+      "dismissButton": "Got it"
+    }
+  },
   "login": {
     "title": "Welcome to Cindy",
     "subtitle": "Choose a secure way to sign in",

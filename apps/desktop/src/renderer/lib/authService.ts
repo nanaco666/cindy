@@ -1,5 +1,14 @@
-import type { AuthFlowState } from '@cindy/auth-client';
-import type { DesktopLoginAction, DesktopLoginActionResult } from '../../shared/authIpc';
+import type {
+  AccountDeletionAvailability,
+  AccountDeletionStatus,
+  AuthFlowState,
+} from '@cindy/auth-client';
+import type {
+  DesktopAccountDeletionChallenge,
+  DesktopAccountDeletionResult,
+  DesktopLoginAction,
+  DesktopLoginActionResult,
+} from '../../shared/authIpc';
 import type { Effort } from '@/lib/userPreferences.types';
 
 /** Renderer-safe projection of the authenticated auth-server membership. */
@@ -26,6 +35,8 @@ export interface AuthState {
   isAuthenticated: boolean;
   isCanary: boolean;
   deviceId: string;
+  hasAccountDeletionReceipt: boolean;
+  accountDeletionRestored: boolean;
 }
 
 export interface AuthService {
@@ -33,6 +44,19 @@ export interface AuthService {
   getLoginState(): Promise<DesktopLoginActionResult>;
   dispatchLoginAction(action: DesktopLoginAction): Promise<DesktopLoginActionResult>;
   logout(): Promise<void>;
+  getAccountDeletionAvailability(): Promise<
+    DesktopAccountDeletionResult<AccountDeletionAvailability>
+  >;
+  requestAccountDeletionChallenge(): Promise<
+    DesktopAccountDeletionResult<DesktopAccountDeletionChallenge>
+  >;
+  confirmAccountDeletion(input: {
+    challengeId: string;
+    code: string;
+  }): Promise<DesktopAccountDeletionResult<AccountDeletionStatus>>;
+  getAccountDeletionStatus(): Promise<DesktopAccountDeletionResult<AccountDeletionStatus | null>>;
+  clearAccountDeletionReceipt(): Promise<void>;
+  consumeAccountDeletionRestoredNotice(): Promise<boolean>;
   onAuthStateChange(callback: (state: AuthState) => void): () => void;
   dispose(): void;
 }
@@ -46,6 +70,8 @@ export function createAuthService(): AuthService {
       isAuthenticated: rawState.isAuthenticated,
       isCanary: rawState.isCanary === true,
       deviceId: rawState.deviceId,
+      hasAccountDeletionReceipt: rawState.hasAccountDeletionReceipt === true,
+      accountDeletionRestored: rawState.accountDeletionRestored === true,
     };
     listeners.forEach((listener) => listener(normalized));
   });
@@ -58,6 +84,8 @@ export function createAuthService(): AuthService {
         isAuthenticated: raw.isAuthenticated,
         isCanary: raw.isCanary === true,
         deviceId: raw.deviceId,
+        hasAccountDeletionReceipt: raw.hasAccountDeletionReceipt === true,
+        accountDeletionRestored: raw.accountDeletionRestored === true,
       };
     },
 
@@ -73,6 +101,30 @@ export function createAuthService(): AuthService {
       await window.electronAPI.authLogout();
     },
 
+    getAccountDeletionAvailability() {
+      return window.electronAPI.authGetAccountDeletionAvailability();
+    },
+
+    requestAccountDeletionChallenge() {
+      return window.electronAPI.authRequestAccountDeletionChallenge();
+    },
+
+    confirmAccountDeletion(input) {
+      return window.electronAPI.authConfirmAccountDeletion(input);
+    },
+
+    getAccountDeletionStatus() {
+      return window.electronAPI.authGetAccountDeletionStatus();
+    },
+
+    clearAccountDeletionReceipt() {
+      return window.electronAPI.authClearAccountDeletionReceipt();
+    },
+
+    consumeAccountDeletionRestoredNotice() {
+      return window.electronAPI.authConsumeAccountDeletionRestoredNotice();
+    },
+
     onAuthStateChange(callback: (state: AuthState) => void): () => void {
       listeners.add(callback);
       return () => listeners.delete(callback);
@@ -85,4 +137,12 @@ export function createAuthService(): AuthService {
   };
 }
 
-export type { AuthFlowState, DesktopLoginAction, DesktopLoginActionResult };
+export type {
+  AccountDeletionAvailability,
+  AccountDeletionStatus,
+  AuthFlowState,
+  DesktopAccountDeletionChallenge,
+  DesktopAccountDeletionResult,
+  DesktopLoginAction,
+  DesktopLoginActionResult,
+};

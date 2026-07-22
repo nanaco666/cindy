@@ -9,12 +9,14 @@ const mocks = vi.hoisted(() => ({
   netFetch: vi.fn(),
   getAccessToken: vi.fn(),
   refresh: vi.fn(),
+  invalidateSession: vi.fn(),
 }));
 
 vi.mock('electron', () => ({ net: { fetch: mocks.netFetch } }));
 vi.mock('../authManager', () => ({
   getAccessToken: mocks.getAccessToken,
   refresh: mocks.refresh,
+  invalidateSession: mocks.invalidateSession,
 }));
 vi.mock('../logger', () => ({
   createLogger: () => ({ error: vi.fn(), warn: vi.fn() }),
@@ -72,5 +74,92 @@ describe('serverApiFetch', () => {
         body: JSON.stringify({ userName: 'Account B' }),
       }),
     );
+  });
+
+  it('ACCOUNT_UNAVAILABLE 不 refresh，直接完整退登', async () => {
+    mocks.getAccessToken.mockReturnValue('token-a');
+    mocks.invalidateSession.mockResolvedValue(undefined);
+    mocks.netFetch.mockResolvedValue({
+      ok: false,
+      status: 401,
+      json: async () => ({ error: { code: 'ACCOUNT_UNAVAILABLE' } }),
+    });
+
+    await expect(
+      serverApiFetch('/api/resource', {
+        baseUrl: 'https://resource.example.com',
+      }),
+    ).rejects.toMatchObject({
+      code: 'ACCOUNT_UNAVAILABLE',
+      statusCode: 401,
+    });
+
+    expect(mocks.refresh).not.toHaveBeenCalled();
+    expect(mocks.invalidateSession).toHaveBeenCalledWith('account-unavailable');
+  });
+
+  it.each(['INVALID_TOKEN', 'UNAUTHORIZED'])('%s refresh 一次后重试', async (code) => {
+    mocks.getAccessToken.mockReturnValueOnce('token-a').mockReturnValueOnce('token-b');
+    mocks.refresh.mockResolvedValue(true);
+    mocks.netFetch
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 401,
+        json: async () => ({ error: { code } }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ ok: true }),
+      });
+
+    await expect(
+      serverApiFetch('/api/resource', {
+        baseUrl: 'https://resource.example.com',
+      }),
+    ).resolves.toEqual({ ok: true });
+    expect(mocks.refresh).toHaveBeenCalledTimes(1);
+    expect(mocks.invalidateSession).not.toHaveBeenCalled();
+  });
+
+  it('refresh 后仍返回可恢复 401 时完整退登', async () => {
+    mocks.getAccessToken.mockReturnValue('token-a');
+    mocks.refresh.mockResolvedValue(true);
+    mocks.invalidateSession.mockResolvedValue(undefined);
+    mocks.netFetch
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 401,
+        json: async () => ({ error: { code: 'TOKEN_EXPIRED' } }),
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 401,
+        json: async () => ({ error: { code: 'UNAUTHORIZED' } }),
+      });
+
+    await expect(
+      serverApiFetch('/api/resource', {
+        baseUrl: 'https://resource.example.com',
+      }),
+    ).rejects.toMatchObject({ code: 'UNAUTHORIZED', statusCode: 401 });
+    expect(mocks.invalidateSession).toHaveBeenCalledWith('resource-unauthorized-after-refresh');
+  });
+
+  it.each([
+    { name: '403', response: { ok: false, status: 403, json: async () => ({}) } },
+    { name: 'network failure', response: new Error('offline') },
+  ])('$name 不触发退登', async ({ response }) => {
+    mocks.getAccessToken.mockReturnValue('token-a');
+    if (response instanceof Error) mocks.netFetch.mockRejectedValue(response);
+    else mocks.netFetch.mockResolvedValue(response);
+
+    await expect(
+      serverApiFetch('/api/resource', {
+        baseUrl: 'https://resource.example.com',
+      }),
+    ).rejects.toBeTruthy();
+    expect(mocks.refresh).not.toHaveBeenCalled();
+    expect(mocks.invalidateSession).not.toHaveBeenCalled();
   });
 });

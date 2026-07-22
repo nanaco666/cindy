@@ -125,6 +125,7 @@ import matter from 'gray-matter';
 import type { Maker } from '@lizi/maker-core';
 import { im, feishuIm, startImOrchestrators, startImConnection, stopImConnection } from './im';
 import * as authManager from './authManager';
+import { createAccountDeletionIpcHandlers } from './accountDeletionIpc';
 import * as profileEdit from './profileEdit';
 import { uploadPublicAsset } from './ossPublicUpload';
 import { removeRefs as removeMediaRefs } from './cindy-media/ledger';
@@ -787,6 +788,7 @@ async function teardownAuthAccountBoundary(reason: string): Promise<void> {
 authManager.setAccountSwitchTeardown(async () => {
   await teardownAuthAccountBoundary('runtime-replacement-account-switch');
 });
+authManager.setAuthSessionTeardown(teardownAuthAccountBoundary);
 
 try {
   reapClaudeOrphansSync();
@@ -3095,6 +3097,42 @@ ipcMain.on('theme:apply-vibrancy', (_event, payload: { familyId: string; isDark:
     return authManager.refresh();
   });
 
+  // ── Account deletion IPC ──
+  // Receipt and auth tokens stay in main. A successful confirm first reuses
+  // the full logout account-boundary teardown, then clears only this local
+  // session (the server has already revoked its refresh family).
+  const accountDeletionLog = createLogger('accountDeletion');
+  const accountDeletionHandlers = createAccountDeletionIpcHandlers({
+    getAvailability: () => authManager.getAccountDeletionAvailability(),
+    requestChallenge: () => authManager.requestAccountDeletionChallenge(),
+    confirm: (input) => authManager.confirmAccountDeletion(input),
+    getStatus: () => authManager.getAccountDeletionStatus(),
+    clearReceipt: () => authManager.clearAccountDeletionReceipt(),
+    consumeRestoredNotice: () => authManager.consumeAccountDeletionRestoredNotice(),
+    isConfirmedLocalSessionCurrent: () =>
+      authManager.isConfirmedAccountDeletionSessionCurrent(),
+    teardownAccountBoundary: () => teardownAuthAccountBoundary('account-deletion'),
+    clearLocalSession: () => authManager.clearLocalSessionAfterAccountDeletion(),
+    logWarn: (message, error) => accountDeletionLog.warn(message, error),
+  });
+
+  ipcMain.handle('auth:account-deletion:get-availability', () =>
+    accountDeletionHandlers.getAvailability(),
+  );
+  ipcMain.handle('auth:account-deletion:request-challenge', () =>
+    accountDeletionHandlers.requestChallenge(),
+  );
+  ipcMain.handle('auth:account-deletion:confirm', (_event, input: unknown) =>
+    accountDeletionHandlers.confirm(input),
+  );
+  ipcMain.handle('auth:account-deletion:get-status', () => accountDeletionHandlers.getStatus());
+  ipcMain.handle('auth:account-deletion:clear-receipt', () =>
+    accountDeletionHandlers.clearReceipt(),
+  );
+  ipcMain.handle('auth:account-deletion:consume-restored-notice', () =>
+    accountDeletionHandlers.consumeRestoredNotice(),
+  );
+
   // ── Profile 编辑 IPC(设置 → 用户卡片编辑;业务体在 profileEdit.ts,
   //    资料直写 auth-server,头像经 oss-server 预签名直传) ──
 
@@ -3110,15 +3148,20 @@ ipcMain.on('theme:apply-vibrancy', (_event, payload: { familyId: string; isDark:
       return result.canceled || !result.filePaths[0] ? null : result.filePaths[0];
     },
     readFile: (filePath) => fs.promises.readFile(filePath),
-    uploadAvatar: ({ buffer, mimeType }) =>
-      uploadPublicAsset(
+    uploadAvatar: async ({ buffer, mimeType }) => {
+      const result = await uploadPublicAsset(
         {
           fetchImpl: (input, init) => net.fetch(input, init),
           getBaseUrl: () => getClientEndpoint('ossApiBaseUrl'),
           getToken: () => authManager.getAccessToken(),
         },
         { scene: 'avatar', contentType: mimeType, body: buffer },
-      ),
+      );
+      if (!result.ok && result.status === 401 && result.code === 'ACCOUNT_UNAVAILABLE') {
+        void authManager.invalidateSession('account-unavailable');
+      }
+      return result;
+    },
     patchProfile: (patch) => authManager.updateServerProfile(patch),
     logWarn: (message, err) => profileEditLog.warn(message, err),
   };

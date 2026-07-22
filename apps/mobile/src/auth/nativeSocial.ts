@@ -15,7 +15,12 @@ const NATIVE_WECHAT_LOGIN_FOREGROUND_TIMEOUT_MS = 8 * 1000;
 
 export type NativeSocialCredential =
   | { idToken: string }
-  | { identityToken: string; rawNonce: string; user?: { name?: string } }
+  | {
+      identityToken: string;
+      authorizationCode?: string;
+      rawNonce: string;
+      user?: { name?: string };
+    }
   | { code: string };
 
 /**
@@ -67,12 +72,17 @@ async function acquireAppleCredential(): Promise<NativeSocialCredential> {
       AppleAuthentication.AppleAuthenticationScope.EMAIL,
     ],
   });
-  if (!credential.identityToken) throw authAdapterError('AUTH_REQUEST_FAILED');
+  if (!credential.identityToken) {
+    throw authAdapterError('AUTH_REQUEST_FAILED');
+  }
   const name = credential.fullName
     ? AppleAuthentication.formatFullName(credential.fullName).trim()
     : '';
   return {
     identityToken: credential.identityToken,
+    ...(credential.authorizationCode
+      ? { authorizationCode: credential.authorizationCode }
+      : {}),
     rawNonce,
     ...(name ? { user: { name } } : {}),
   };

@@ -19,6 +19,22 @@ export interface ApiFetchOptions {
 }
 
 const DEFAULT_API_TIMEOUT_MS = 20_000;
+type AccountUnavailableHandler = () => void | Promise<void>;
+let accountUnavailableHandler: AccountUnavailableHandler | null = null;
+
+/**
+ * Registers the process-wide terminal auth boundary used by low-level API
+ * helpers (uploads included). The returned disposer only removes its own
+ * registration, so a remounted AuthProvider cannot be cleared by an old one.
+ */
+export function registerAccountUnavailableHandler(
+  handler: AccountUnavailableHandler,
+): () => void {
+  accountUnavailableHandler = handler;
+  return () => {
+    if (accountUnavailableHandler === handler) accountUnavailableHandler = null;
+  };
+}
 
 export async function apiFetchRaw<T>(
   path: string,
@@ -83,7 +99,15 @@ export async function apiFetchRaw<T>(
 
   if (!response.ok) {
     const error = readError(data);
-    throw new ApiError(error.code ?? `HTTP_${response.status}`, response.status, error.message ?? '请求失败');
+    const code = error.code ?? `HTTP_${response.status}`;
+    if (response.status === 401 && code === 'ACCOUNT_UNAVAILABLE') {
+      try {
+        await accountUnavailableHandler?.();
+      } catch {
+        // Preserve the original typed API error even if local cleanup fails.
+      }
+    }
+    throw new ApiError(code, response.status, error.message ?? '请求失败');
   }
 
   return data as T;

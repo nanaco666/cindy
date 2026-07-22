@@ -8,9 +8,10 @@ import {
 } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useMemo, type ReactElement } from 'react';
-import { StyleSheet } from 'react-native';
+import { Alert, StyleSheet } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider, useAuth } from '@/auth/AuthContext';
+import { loginText } from '@/auth/loginMessages';
 import { DeviceLinkProvider } from '@/device-link/DeviceLinkContext';
 import { GestureHandlerRootView } from '@/platform/gestureHandler';
 import { ThemeProvider, useTheme } from '@/theme/ThemeProvider';
@@ -63,6 +64,19 @@ function NavigationGate() {
       router.replace('/');
     }
   }, [auth.initialized, auth.isAuthenticated, router, segments]);
+
+  useEffect(() => {
+    if (!auth.isAuthenticated || !auth.accountDeletionRestored) return;
+    auth.consumeAccountDeletionRestored();
+    Alert.alert(
+      loginText('accountDeletionRestoredTitle'),
+      loginText('accountDeletionRestoredCopy'),
+    );
+  }, [
+    auth.accountDeletionRestored,
+    auth.consumeAccountDeletionRestored,
+    auth.isAuthenticated,
+  ]);
 
   return (
     <NavigationThemeProvider value={navigationTheme}>

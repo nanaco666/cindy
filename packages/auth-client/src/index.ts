@@ -5,6 +5,9 @@ export type {
   AuthFetchResponse,
 } from "./client.js";
 export {
+  accountDeletionAvailabilitySchema,
+  accountDeletionChallengeSchema,
+  accountDeletionStatusSchema,
   accountMembershipSchema,
   authRegionSchema,
   loginMethodSchema,
@@ -20,6 +23,9 @@ export {
   tokenPairSchema,
 } from "./types.js";
 export type {
+  AccountDeletionAvailability,
+  AccountDeletionChallenge,
+  AccountDeletionStatus,
   AccountMembership,
   AuthClientType,
   AuthFlowAction,

@@ -15,6 +15,16 @@ type RsbWindowCommand = import('../shared/rightSidebarWindow').RsbWindowCommand;
 type DesktopLoginAction = import('../shared/authIpc').DesktopLoginAction;
 type DesktopLoginActionResult = import('../shared/authIpc').DesktopLoginActionResult;
 type UtilityTextFailure = import('../shared/utilityTextResult').UtilityTextFailure;
+type DesktopAccountDeletionConfirmInput =
+  import('../shared/authIpc').DesktopAccountDeletionConfirmInput;
+type DesktopAccountDeletionAvailabilityResult =
+  import('../shared/authIpc').DesktopAccountDeletionAvailabilityResult;
+type DesktopAccountDeletionChallengeResult =
+  import('../shared/authIpc').DesktopAccountDeletionChallengeResult;
+type DesktopAccountDeletionConfirmResult =
+  import('../shared/authIpc').DesktopAccountDeletionConfirmResult;
+type DesktopAccountDeletionStatusResult =
+  import('../shared/authIpc').DesktopAccountDeletionStatusResult;
 
 /* ── Environment check ── */
 
@@ -377,6 +387,8 @@ interface AuthStateChangePayload {
   isCanary: boolean;
   /** SkillHub 跨设备识别：本机 deviceId（machineIdSync 结果），登录前后都有值 */
   deviceId: string;
+  hasAccountDeletionReceipt: boolean;
+  accountDeletionRestored: boolean;
 }
 
 interface AuthSessionExpiredPayload {
@@ -1399,11 +1411,21 @@ interface ElectronAPI {
     isCanary: boolean;
     /** SkillHub 跨设备识别：本机 deviceId，登录前后都有值 */
     deviceId: string;
+    hasAccountDeletionReceipt: boolean;
+    accountDeletionRestored: boolean;
   }>;
   authGetLoginState: () => Promise<DesktopLoginActionResult>;
   authDispatchLoginAction: (action: DesktopLoginAction) => Promise<DesktopLoginActionResult>;
   authLogout: () => Promise<void>;
   authRefresh: () => Promise<boolean>;
+  authGetAccountDeletionAvailability: () => Promise<DesktopAccountDeletionAvailabilityResult>;
+  authRequestAccountDeletionChallenge: () => Promise<DesktopAccountDeletionChallengeResult>;
+  authConfirmAccountDeletion: (
+    input: DesktopAccountDeletionConfirmInput,
+  ) => Promise<DesktopAccountDeletionConfirmResult>;
+  authGetAccountDeletionStatus: () => Promise<DesktopAccountDeletionStatusResult>;
+  authClearAccountDeletionReceipt: () => Promise<void>;
+  authConsumeAccountDeletionRestoredNotice: () => Promise<boolean>;
   onAuthStateChange: (callback: (state: AuthStateChangePayload) => void) => () => void;
   onAuthSessionExpired: (callback: (state: AuthSessionExpiredPayload) => void) => () => void;
   onTapdbDailyActive: (callback: (payload: { date: string }) => void) => () => void;
