@@ -34,14 +34,28 @@ describe('computeWorkerAttentionUpdates', () => {
     expect(result.toMark).toEqual([WORKER_ID]);
   });
 
-  it('does not mark attention for first observed done status', () => {
+  it('marks attention for first observed done status so remount can restore unread state', () => {
     const result = computeWorkerAttentionUpdates(
       new Map(),
       [worker(WORKER_ID, 'done')],
       LEAD_ID,
     );
 
-    expect(result.toMark).toEqual([]);
+    expect(result.toMark).toEqual([WORKER_ID]);
+  });
+
+  it('marks multiple first-observed done workers independently', () => {
+    const result = computeWorkerAttentionUpdates(
+      new Map(),
+      [
+        worker(WORKER_ID, 'done'),
+        worker(OTHER_WORKER_ID, 'done'),
+        worker('worker-3', 'idle'),
+      ],
+      LEAD_ID,
+    );
+
+    expect(result.toMark).toEqual([WORKER_ID, OTHER_WORKER_ID]);
   });
 
   it('marks again when a read worker runs new work and finishes again', () => {
@@ -61,7 +75,7 @@ describe('computeWorkerAttentionUpdates', () => {
 
   it('does not mark when the focused worker finishes in the active lead', () => {
     const result = computeWorkerAttentionUpdates(
-      new Map([[WORKER_ID, 'running']]),
+      new Map(),
       [worker(WORKER_ID, 'done', true)],
       LEAD_ID,
     );
