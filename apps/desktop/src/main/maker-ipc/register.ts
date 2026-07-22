@@ -5034,6 +5034,7 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
         effort: leadRow.effort,
         permissionMode: leadRow.permissionMode,
         fastMode: !!leadRow.fastMode,
+        providerId: leadRow.providerId ?? null,
       };
     },
     getWorkerDefaults: getWorkerDefaultsFromNewMaker,
@@ -5041,8 +5042,16 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
     getProviderAvailability: async () => {
       const views = await getDesktopProviderService().listProviders();
       return {
-        'claude-code': connectedProvidersForAgent(views, 'claude-code').map((p) => p.name),
-        codex: connectedProvidersForAgent(views, 'codex').map((p) => p.name),
+        'claude-code': connectedProvidersForAgent(views, 'claude-code').map((provider) => ({
+          id: provider.id,
+          name: provider.name,
+          models: (provider.models['claude-code'] ?? []).map((model) => model.id),
+        })),
+        codex: connectedProvidersForAgent(views, 'codex').map((provider) => ({
+          id: provider.id,
+          name: provider.name,
+          models: (provider.models.codex ?? []).map((model) => model.id),
+        })),
       };
     },
     readClaudeApiKey,
