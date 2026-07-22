@@ -12,9 +12,14 @@ import {
 /**
  * builtinGhostProvisioner — 内置意识的启动播种(第一方可信通道)。
  *
- * 模型(2026-07-12 Lizi 定案):
+ * 模型(2026-07-12 Lizi 定案;2026-07-22 种子源拆分为多仓):
  * - 种子 = 随包分发的意识源码目录(dev 读仓库 resources/builtin-ghosts,
  *   packaged 读 process.resourcesPath/builtin-ghosts),不经 .cindy zip;
+ * - **多种子根**:种子源按归属拆成多个 submodule 仓(official = cindy-official-plugin,
+ *   xd = cindy-xd-plugin),每个根自带一份 provisioning.json,配置损坏按根隔离
+ *   fail-closed(只跳过该根的种子,不拖累其它根);同 id 撞车取先到的根(warn 留痕);
+ * - **半初始化保护**:submodule 未 init 时根目录存在但为空 —— 任一根为空整轮跳过
+ *   孤儿回收(空根无法区分"仓里真没有"和"没 checkout",宁可不删),只做装/覆盖;
  * - 「永远以最新包为准」:对每个种子做内容指纹比对(逐字节收敛),本地没装
  *   就装、指纹不同就覆盖 —— 不看 version 字段,dev 改源码重启即生效;
  * - **受众(audience)**:种子根下可选的 provisioning.json 按 id 声明给谁装
@@ -79,8 +84,12 @@ interface SeedConfigEntry {
 }
 
 export interface ProvisionDeps {
-  /** 种子根目录(builtin-ghosts;不存在 = 无种子,静默返回)。 */
-  seedRootDir: string;
+  /**
+   * 种子根目录列表(builtin-ghosts 下的各 submodule 根,如 official / xd)。
+   * 根不存在或为空 = 该根无种子(submodule 未初始化的典型形态);全部为空则
+   * 静默返回,部分为空只跳过孤儿回收(半初始化保护,见模块头注释)。
+   */
+  seedRootDirs: string[];
   /** 意识仓库根(userData/cindy-brain)。 */
   repoRootDir: string;
   /** 当前登录身份(登出传 null;缺省 null)。 */
@@ -114,8 +123,17 @@ interface ProvisioningState {
   seeded: string[];
 }
 
-/** 列出种子根下的意识 id(= 子目录名;点开头跳过)。种子根缺失返回空。 */
-export function listBuiltinSeedIds(seedRootDir: string): string[] {
+/** 列出多个种子根下的意识 id 并集(去重排序)。根缺失/为空按无种子处理。 */
+export function listBuiltinSeedIds(seedRootDirs: string[]): string[] {
+  const ids = new Set<string>();
+  for (const root of seedRootDirs) {
+    for (const id of listSeedIdsInRoot(root)) ids.add(id);
+  }
+  return [...ids].sort();
+}
+
+/** 列出单个种子根下的意识 id(= 子目录名;点开头跳过)。种子根缺失返回空。 */
+function listSeedIdsInRoot(seedRootDir: string): string[] {
   let entries: fs.Dirent[];
   try {
     entries = fs.readdirSync(seedRootDir, { withFileTypes: true });
@@ -198,8 +216,8 @@ export function matchesAudience(rule: AudienceRule | undefined, identity: Provis
  * 读受众配置。三种结果:
  * - 文件不存在 → 空表(全部种子默认 'all',零配置模式);
  * - 文件在且合法 → id → 规则表;
- * - 文件在但坏(JSON 解析失败 / 形态不对)→ null(fail-closed:本轮跳过全部
- *   播种,warn 留痕 —— 配置坏了宁可什么都不动,不按"人人都装"误发定向意识)。
+ * - 文件在但坏(JSON 解析失败 / 形态不对)→ null(fail-closed:本根种子整轮
+ *   跳过,warn 留痕 —— 配置坏了宁可什么都不动,不按"人人都装"误发定向意识)。
  */
 function readProvisioningConfig(
   seedRootDir: string,
@@ -241,7 +259,7 @@ function readProvisioningConfig(
     }
     return map;
   } catch (err) {
-    log?.warn('builtin provisioning config invalid, skipping all seeds this round', {
+    log?.warn('builtin provisioning config invalid, skipping this seed root this round', {
       file,
       error: err instanceof Error ? err.message : String(err),
     });
@@ -252,19 +270,28 @@ function readProvisioningConfig(
 /**
  * 播种主流程。对每个种子:墓碑 → 受众 → 指纹 → 首装 / 覆盖 / 回收 / 跳过。
  * 单个种子失败只 warn + 跳过,绝不拖垮其它种子或启动流程。
+ * 多根语义:配置损坏按根 fail-closed(该根种子整轮跳过,但其 id 仍算入种子
+ * 全集,不会被当孤儿回收);同 id 撞车取先到的根;任一根为空跳过孤儿回收。
  */
 export async function provisionBuiltinGhosts(deps: ProvisionDeps): Promise<ProvisionOutcome> {
-  const { seedRootDir, repoRootDir, log } = deps;
+  const { seedRootDirs, repoRootDir, log } = deps;
   const identity = deps.identity ?? null;
   const outcome: ProvisionOutcome = { installed: [], updated: [], removed: [], skipped: [] };
 
-  const seedIds = listBuiltinSeedIds(seedRootDir);
-  if (seedIds.length === 0) return outcome;
-  const config = readProvisioningConfig(seedRootDir, log);
-  if (config === null) {
-    outcome.skipped.push(...seedIds);
-    return outcome;
-  }
+  // 每根独立列种子 + 读配置。空根不读配置(未初始化 submodule 的目录里连
+  // provisioning.json 都没有,读了必 warn,徒增噪音)。
+  const rootStates = seedRootDirs.map((root) => {
+    const ids = listSeedIdsInRoot(root);
+    return {
+      root,
+      ids,
+      config: ids.length === 0 ? new Map<string, SeedConfigEntry>() : readProvisioningConfig(root, log),
+    };
+  });
+  const allSeedIds = new Set(rootStates.flatMap((s) => s.ids));
+  if (allSeedIds.size === 0) return outcome;
+  const hasEmptyRoot = rootStates.some((s) => s.ids.length === 0);
+
   const state = readState(repoRootDir);
   const tombstones = new Set(state.removed);
   const seeded = new Set(state.seeded);
@@ -277,69 +304,84 @@ export async function provisionBuiltinGhosts(deps: ProvisionDeps): Promise<Provi
     deps.onApplyStart?.();
   };
 
-  for (const id of seedIds) {
-    const seedDir = path.join(seedRootDir, id);
-    try {
-      // 1) 种子自检:manifest 合法且 id 与目录名一致(第一方内容,不合格
-      //    属于打包/提交事故 —— warn 跳过,别把坏种子播出去)。
-      const manifest = readSeedManifest(seedDir, id, log);
-      if (!manifest) {
+  const processed = new Set<string>();
+  for (const { root, ids, config } of rootStates) {
+    if (config === null) {
+      // 本根配置损坏:fail-closed 跳过本根全部种子;id 仍在 allSeedIds 里,
+      // 孤儿回收不会误删它们名下已装的意识。
+      outcome.skipped.push(...ids);
+      continue;
+    }
+    for (const id of ids) {
+      if (processed.has(id)) {
+        log?.warn('builtin seed skipped: duplicate id across seed roots', { id, root });
         outcome.skipped.push(id);
         continue;
       }
-
-      // 2) 墓碑:用户删过,永不装回(顺手清掉台账残留)。
-      if (tombstones.has(id)) {
-        seeded.delete(id);
-        outcome.skipped.push(id);
-        continue;
-      }
-
-      const installedDir = path.join(repoRootDir, id);
-      const installedExists = fs.existsSync(path.join(installedDir, GHOST_MANIFEST_FILE));
-
-      // 3) 受众:不命中 → 回收"播种装的"(seeded 台账内),手动装的不动。
-      if (!matchesAudience(config.get(id)?.audience, identity)) {
-        if (seeded.has(id) && installedExists) {
-          markApplyStart();
-          await deps.beforeRemove?.(id);
-          await fs.promises.rm(installedDir, { recursive: true, force: true });
-          seeded.delete(id);
-          outcome.removed.push(id);
-          log?.info('builtin ghost removed: audience no longer matches', { id });
-        } else {
-          outcome.skipped.push(id);
-        }
-        continue;
-      }
-
-      // 4) 指纹比对(忽略点开头文件:`.disabled` 是用户状态不是内容)。
-      if (installedExists) {
-        const seedHash = await hashDirContent(seedDir);
-        const installedHash = await hashDirContent(installedDir);
-        if (seedHash === installedHash) {
+      processed.add(id);
+      const seedDir = path.join(root, id);
+      try {
+        // 1) 种子自检:manifest 合法且 id 与目录名一致(第一方内容,不合格
+        //    属于打包/提交事故 —— warn 跳过,别把坏种子播出去)。
+        const manifest = readSeedManifest(seedDir, id, log);
+        if (!manifest) {
           outcome.skipped.push(id);
           continue;
         }
-        const wasDisabled = fs.existsSync(path.join(installedDir, '.disabled'));
-        markApplyStart();
-        await swapInSeed(seedDir, installedDir, repoRootDir, id, { disabled: wasDisabled });
-        seeded.add(id);
-        outcome.updated.push(manifest);
-        log?.info('builtin ghost updated to bundled content', { id, version: manifest.version });
-      } else {
-        markApplyStart();
-        await swapInSeed(seedDir, installedDir, repoRootDir, id, { disabled: false });
-        seeded.add(id);
-        outcome.installed.push(manifest);
-        log?.info('builtin ghost installed', { id, version: manifest.version });
+
+        // 2) 墓碑:用户删过,永不装回(顺手清掉台账残留)。
+        if (tombstones.has(id)) {
+          seeded.delete(id);
+          outcome.skipped.push(id);
+          continue;
+        }
+
+        const installedDir = path.join(repoRootDir, id);
+        const installedExists = fs.existsSync(path.join(installedDir, GHOST_MANIFEST_FILE));
+
+        // 3) 受众:不命中 → 回收"播种装的"(seeded 台账内),手动装的不动。
+        if (!matchesAudience(config.get(id)?.audience, identity)) {
+          if (seeded.has(id) && installedExists) {
+            markApplyStart();
+            await deps.beforeRemove?.(id);
+            await fs.promises.rm(installedDir, { recursive: true, force: true });
+            seeded.delete(id);
+            outcome.removed.push(id);
+            log?.info('builtin ghost removed: audience no longer matches', { id });
+          } else {
+            outcome.skipped.push(id);
+          }
+          continue;
+        }
+
+        // 4) 指纹比对(忽略点开头文件:`.disabled` 是用户状态不是内容)。
+        if (installedExists) {
+          const seedHash = await hashDirContent(seedDir);
+          const installedHash = await hashDirContent(installedDir);
+          if (seedHash === installedHash) {
+            outcome.skipped.push(id);
+            continue;
+          }
+          const wasDisabled = fs.existsSync(path.join(installedDir, '.disabled'));
+          markApplyStart();
+          await swapInSeed(seedDir, installedDir, repoRootDir, id, { disabled: wasDisabled });
+          seeded.add(id);
+          outcome.updated.push(manifest);
+          log?.info('builtin ghost updated to bundled content', { id, version: manifest.version });
+        } else {
+          markApplyStart();
+          await swapInSeed(seedDir, installedDir, repoRootDir, id, { disabled: false });
+          seeded.add(id);
+          outcome.installed.push(manifest);
+          log?.info('builtin ghost installed', { id, version: manifest.version });
+        }
+      } catch (err) {
+        outcome.skipped.push(id);
+        log?.warn('builtin ghost provisioning failed', {
+          id,
+          error: err instanceof Error ? err.message : String(err),
+        });
       }
-    } catch (err) {
-      outcome.skipped.push(id);
-      log?.warn('builtin ghost provisioning failed', {
-        id,
-        error: err instanceof Error ? err.message : String(err),
-      });
     }
   }
 
@@ -347,26 +389,33 @@ export async function provisionBuiltinGhosts(deps: ProvisionDeps): Promise<Provi
   // (意识改名 / 下架)时,当初"播种装上的"旧包也要收走,否则新旧两个
   // 意识并存(工具面重复、旧包永不再更新)。只收 seeded 台账内的——用户
   // 手动装的同 id 意识与本机制无关,照旧不动。
-  const seedIdSet = new Set(seedIds);
-  for (const id of [...seeded]) {
-    if (seedIdSet.has(id)) continue;
-    const installedDir = path.join(repoRootDir, id);
-    if (fs.existsSync(path.join(installedDir, GHOST_MANIFEST_FILE))) {
-      try {
-        markApplyStart();
-        await deps.beforeRemove?.(id);
-        await fs.promises.rm(installedDir, { recursive: true, force: true });
-        outcome.removed.push(id);
-        log?.info('builtin ghost removed: seed no longer bundled', { id });
-      } catch (err) {
-        log?.warn('builtin ghost orphan removal failed', {
-          id,
-          error: err instanceof Error ? err.message : String(err),
-        });
-        continue; // 删失败保留台账,下轮再试
+  // 半初始化保护(多根拆分后新增):任一根为空说明该根 submodule 很可能没
+  // checkout,其种子全集不可知 —— 本轮跳过孤儿回收,宁可留旧包也不误删。
+  if (hasEmptyRoot) {
+    log?.info('builtin ghost orphan recovery skipped: empty seed root (submodule not initialized?)', {
+      emptyRoots: rootStates.filter((s) => s.ids.length === 0).map((s) => s.root),
+    });
+  } else {
+    for (const id of [...seeded]) {
+      if (allSeedIds.has(id)) continue;
+      const installedDir = path.join(repoRootDir, id);
+      if (fs.existsSync(path.join(installedDir, GHOST_MANIFEST_FILE))) {
+        try {
+          markApplyStart();
+          await deps.beforeRemove?.(id);
+          await fs.promises.rm(installedDir, { recursive: true, force: true });
+          outcome.removed.push(id);
+          log?.info('builtin ghost removed: seed no longer bundled', { id });
+        } catch (err) {
+          log?.warn('builtin ghost orphan removal failed', {
+            id,
+            error: err instanceof Error ? err.message : String(err),
+          });
+          continue; // 删失败保留台账,下轮再试
+        }
       }
+      seeded.delete(id);
     }
-    seeded.delete(id);
   }
 
   if (!setsEqual(seeded, seededBefore)) {
@@ -394,50 +443,66 @@ const MAX_RESTORABLE_ICON_BYTES = 512 * 1024;
 /**
  * 列出"可恢复"的内置意识 = 种子 ∩ 墓碑 ∩ 受众命中。
  * 全同步(设置页 sendSync 首帧拉取,种子极小);受众不命中的墓碑不列
- * (恢复了也装不上);配置损坏时 fail-closed 返回空。
+ * (恢复了也装不上);配置损坏按根 fail-closed(只该根不列,不拖累其它根);
+ * 同 id 撞车取先到的根(与播种口径一致)。
  */
 export function listRestorableBuiltinGhosts(deps: {
-  seedRootDir: string;
+  seedRootDirs: string[];
   repoRootDir: string;
   identity?: ProvisionIdentity | null;
   log?: BuiltinProvisionerLogger;
 }): RestorableBuiltinGhost[] {
   const tombstones = new Set(readBuiltinTombstones(deps.repoRootDir));
   if (tombstones.size === 0) return [];
-  const config = readProvisioningConfig(deps.seedRootDir, deps.log);
-  if (config === null) return [];
   const identity = deps.identity ?? null;
 
   const result: RestorableBuiltinGhost[] = [];
-  for (const id of listBuiltinSeedIds(deps.seedRootDir)) {
-    if (!tombstones.has(id)) continue;
-    if (!matchesAudience(config.get(id)?.audience, identity)) continue;
-    const seedDir = path.join(deps.seedRootDir, id);
-    const manifest = readSeedManifest(seedDir, id, deps.log);
-    if (!manifest) continue;
-    const iconDataUrl = readSeedIconDataUrl(seedDir, manifest);
-    result.push({
-      id: manifest.id,
-      name: manifest.name,
-      ...(manifest.description !== undefined ? { description: manifest.description } : {}),
-      version: manifest.version,
-      manifest,
-      tier: config.get(id)?.tier ?? 'builtin',
-      ...(iconDataUrl !== null ? { iconDataUrl } : {}),
-    });
+  const seen = new Set<string>();
+  for (const root of deps.seedRootDirs) {
+    const ids = listSeedIdsInRoot(root);
+    if (ids.length === 0) continue;
+    const config = readProvisioningConfig(root, deps.log);
+    if (config === null) continue;
+    for (const id of ids) {
+      if (seen.has(id)) continue;
+      seen.add(id);
+      if (!tombstones.has(id)) continue;
+      if (!matchesAudience(config.get(id)?.audience, identity)) continue;
+      const seedDir = path.join(root, id);
+      const manifest = readSeedManifest(seedDir, id, deps.log);
+      if (!manifest) continue;
+      const iconDataUrl = readSeedIconDataUrl(seedDir, manifest);
+      result.push({
+        id: manifest.id,
+        name: manifest.name,
+        ...(manifest.description !== undefined ? { description: manifest.description } : {}),
+        version: manifest.version,
+        manifest,
+        tier: config.get(id)?.tier ?? 'builtin',
+        ...(iconDataUrl !== null ? { iconDataUrl } : {}),
+      });
+    }
   }
   return result;
 }
 
 /**
  * 列出企业档种子 id(= 种子目录 ∩ provisioning.json 里 tier: 'enterprise')。
- * 纯展示用途(设置页分组/打标),配置缺失或损坏一律返回空 —— 降级成
- * "全归内置组"而不是报错,不影响播种主流程。
+ * 纯展示用途(设置页分组/打标),配置缺失或损坏按根降级成"全归内置组"
+ * 而不是报错,不影响播种主流程。
  */
-export function listEnterpriseSeedIds(seedRootDir: string, log?: BuiltinProvisionerLogger): string[] {
-  const config = readProvisioningConfig(seedRootDir, log);
-  if (config === null) return [];
-  return listBuiltinSeedIds(seedRootDir).filter((id) => config.get(id)?.tier === 'enterprise');
+export function listEnterpriseSeedIds(seedRootDirs: string[], log?: BuiltinProvisionerLogger): string[] {
+  const ids = new Set<string>();
+  for (const root of seedRootDirs) {
+    const rootIds = listSeedIdsInRoot(root);
+    if (rootIds.length === 0) continue;
+    const config = readProvisioningConfig(root, log);
+    if (config === null) continue;
+    for (const id of rootIds) {
+      if (config.get(id)?.tier === 'enterprise') ids.add(id);
+    }
+  }
+  return [...ids].sort();
 }
 
 /** 种子目录里的 icon → data URL(缺失/超限/读失败降级 null,不拖垮列表)。 */

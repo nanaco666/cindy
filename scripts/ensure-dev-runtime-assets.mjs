@@ -185,9 +185,39 @@ function ensureLfsAssets() {
   }
 }
 
+// ③ 内置意识种子 submodule(official / xd 两仓,2026-07-22 拆分):未初始化时
+// 种子根为空,desktop 会静默播不出内置插件(播种层只做半初始化保护不装不删)。
+// 先尝试自动 init,失败再报错退出。
+function ensureGhostSeedSubmodules() {
+  const seedBase = path.join(ROOT, 'apps', 'desktop', 'resources', 'builtin-ghosts');
+  const roots = ['official', 'xd'];
+  const missing = () =>
+    roots.filter((name) => !fs.existsSync(path.join(seedBase, name, 'provisioning.json')));
+
+  let broken = missing();
+  if (broken.length === 0) return;
+
+  log(`内置插件种子 submodule 未就位(${broken.join(', ')}),尝试 git submodule update --init...`);
+  const update = run('git', [
+    'submodule',
+    'update',
+    '--init',
+    ...broken.map((name) => path.posix.join('apps/desktop/resources/builtin-ghosts', name)),
+  ]);
+  broken = missing();
+  if (update.status !== 0 || broken.length > 0) {
+    err(`内置插件种子 submodule 仍缺失:${broken.join(', ')}`);
+    err('请检查 cindy-official-plugin / cindy-xd-plugin 仓库访问权限,');
+    err('然后在仓库根手动运行 "git submodule update --init"。');
+    process.exit(1);
+  }
+  log('内置插件种子 submodule 已就位。');
+}
+
 async function main() {
   await ensureAgentBinaries();
   ensureLfsAssets();
+  ensureGhostSeedSubmodules();
   // node-pty 的 spawn-helper 可执行位可能被 pnpm install 剥掉（终端面板会因此报
   // posix_spawnp failed）。best-effort 补回，never throw，不阻断 dev 启动。
   fixNodePtyExecutables({ quiet: true });

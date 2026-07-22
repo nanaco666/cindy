@@ -22,7 +22,7 @@ interface CindyMessage {
   message?: string;
 }
 
-const ghostRoot = new URL('../../../../resources/builtin-ghosts/cindy-mermaid/', import.meta.url);
+const ghostRoot = new URL('../../../../resources/builtin-ghosts/official/cindy-mermaid/', import.meta.url);
 const mainSource = readFileSync(new URL('main.js', ghostRoot), 'utf8');
 const manifestSource = readFileSync(new URL('ghost.json', ghostRoot), 'utf8');
 const provisioningSource = readFileSync(new URL('../provisioning.json', ghostRoot), 'utf8');
@@ -39,7 +39,7 @@ function createMermaidHarness() {
     }),
   };
 
-  new Script(mainSource, { filename: 'builtin-ghosts/cindy-mermaid/main.js' }).runInContext(
+  new Script(mainSource, { filename: 'builtin-ghosts/official/cindy-mermaid/main.js' }).runInContext(
     createContext({ cindy }),
   );
   if (!handler) throw new Error('Cindy Mermaid did not register its host-message handler');

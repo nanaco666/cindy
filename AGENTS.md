@@ -13,6 +13,7 @@
 - **SQLite migration 迁移基线**：从旧仓迁入的 SQL 由 `drizzle/migration-baseline.json` 固定 SHA256；已经进入 `main` 的 SQL 与同名 companion TS runtime script 都永久不可改名、改内容、增删或换序号，数据库变化只能在最新 `origin/main` 之后追加新 migration，并运行 `pnpm --filter desktop db:validate` 与 migration replay。多人分支撞号时必须先基于最新主干重新编号，未合入主干的 migration 禁止连接共享 Cindy userData 运行，只能使用显式 `--isolated[=<名字>]` 沙箱。本地数据库查询必须使用异步 API；不要对异步 DB client 使用同步 `.all()`。
 - **main 进程禁止运行时动态 `import()`**；依赖使用顶层静态 import。
 - **协议 submodule**：`cindy-protocol` 是协议权威来源。desktop 使用 `@cindy/slack-hook-protocol`，客户端 device-link 包复用 `@cindy/device-link-protocol` 的 relay 层定义；客户端重连、IPC allowlist 与隧道 payload 留在 `packages/device-link`。**升级 submodule 指针前必须确认服务端同步升级**，避免两端 wire protocol 漂移。
+- **内置插件种子 submodule**（2026-07-22 起）：内置意识（Ghost）源码已迁出主仓，按归属拆为两个 submodule 仓挂载在 `apps/desktop/resources/builtin-ghosts/` 下——`official/`（`xindong/cindy-official-plugin`：cindy-art / cindy-github / cindy-gitlab / cindy-mermaid / cindy-web-search）与 `xd/`（`xindong/cindy-xd-plugin`：xd-atlassian / xd-feishu / xd-mivo / xd-pages / filo-google），各自带一份 `provisioning.json`。**改内置插件 = 对应子仓提 PR 合入 → 主仓 bump submodule 指针**（无服务端漂移问题，bump 时机宽松）；dev 下改本地 submodule 文件重启即生效（播种按内容指纹收敛）。submodule 未初始化时种子根为空：播种层按半初始化保护只装不删，dev 启动链（`ensure-dev-runtime-assets`）会自动尝试 `git submodule update --init`，forge 打包遇缺根直接报错。
 - **dev 数据目录为 `Cindy` userData**（2026-07-17 身份翻转起由 `productName: Cindy` 派生；从空开始，不再沿用老 `xdt-maker` 目录的历史数据）；用户未明确要求隔离时，不加 `--isolated`、不设置 `XDT_USER_DATA_DIR`（参数语义见下文启动参数表）。
 
 ## Architecture Index
@@ -64,6 +65,10 @@ pnpm install
 
 # 2. Pull LFS files (sqlite-vec 原生扩展等仍走 LFS)
 git lfs pull
+
+# 2.5 初始化 submodule(协议仓 + 两个内置插件种子仓;缺了会导致内置插件
+# 播不出来、相关单测报错 —— dev 启动链会自动补,但手动跑测试前先执行)
+git submodule update --init
 
 # 3. Start desktop (remote API, no local server needed)
 # 创建/修复 apps/desktop/.env；predev guard 会再确认 agent 二进制就位（缺了在此硬下载）。
