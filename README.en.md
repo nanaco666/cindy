@@ -41,8 +41,11 @@ apps plus their shared packages, organized as a pnpm monorepo.
 | `cindy-protocol/` | Wire protocol shared with the server (git submodule) |
 
 **Not in this repo:** the backend service (`cindy-server`) lives in a separate
-repository and is not part of this monorepo. The client is free software; the
-hosted experience requires a Cindy account (download & pricing on the website).
+repository and is not part of this monorepo. The client is free software. Cindy's
+hosted service requires a Cindy cloud account; see the website for downloads and
+pricing. When connected to your own local server (`pnpm restart:desktop:local`),
+the client does not depend on a Cindy cloud account; whether the local server uses
+local sign-in or another development auth mode is controlled by its configuration.
 
 ## Prerequisites
 
@@ -59,10 +62,33 @@ git lfs pull
 pnpm install
 ```
 
+`--recurse-submodules` initializes all submodules declared by the parent repo (the
+protocol repo and built-in plugin seed repos), including nested submodules. They
+are checked out at the commits pinned by the parent repo; this does not track the
+latest commit from each submodule automatically.
+
 Already cloned without submodules:
 
 ```bash
 git submodule update --init --recursive
+```
+
+After pulling updates to the parent repo, sync the submodules to the versions it
+pins:
+
+```bash
+git pull --ff-only
+git submodule update --init --recursive
+git lfs pull
+```
+
+Only use the following when you intentionally want to track the latest commits
+from the submodule upstreams. It changes the parent repo's gitlinks, so review and
+commit the result. Protocol submodule updates must also be synchronized with the
+server's pointer.
+
+```bash
+git submodule update --remote --merge --recursive
 ```
 
 The protocol version is pinned to the commit recorded by this repo. When

@@ -39,8 +39,10 @@ monorepo 组织。
 | `apps/*-bin` | 随桌面端打包的 agent / 工具二进制(claude-code、codex、ripgrep、android-platform-tools) |
 | `cindy-protocol/` | 与服务端共用的协议(git submodule) |
 
-**本仓不包含:** 服务端(`cindy-server`)位于独立仓库,不属于本 monorepo。软件本身
-免费,托管体验需要 Cindy 账号(下载与定价见官网)。
+**本仓不包含:** 服务端(`cindy-server`)位于独立仓库,不属于本 monorepo。软件本身免费。
+使用 Cindy 的远程托管服务需要 Cindy 云端账号,下载方式与定价见官网。若连接你自己启动的
+本地服务端(`pnpm restart:desktop:local`),客户端不依赖 Cindy 云端账号即可使用;本地服务端
+采用本地登录还是其他开发认证方式,由服务端配置决定。
 
 ## 前置要求
 
@@ -57,10 +59,28 @@ git lfs pull
 pnpm install
 ```
 
+`--recurse-submodules` 会初始化当前父仓声明的全部 submodule(协议仓与内置插件种子仓),
+并递归处理嵌套 submodule。它们会检出父仓锁定的 commit,不会自动追踪各子仓最新版本。
+
 已经 clone 但没拉 submodule:
 
 ```bash
 git submodule update --init --recursive
+```
+
+拉取主仓更新后,建议同步父仓记录的 submodule 版本:
+
+```bash
+git pull --ff-only
+git submodule update --init --recursive
+git lfs pull
+```
+
+只有需要主动追踪 submodule 上游最新版本时才使用下面的命令;它会修改父仓中的 gitlink,
+需要 review 后提交。协议 submodule 更新时还必须同步服务端的指针。
+
+```bash
+git submodule update --remote --merge --recursive
 ```
 
 协议版本固定在父仓记录的 commit。升级协议时必须同步升级服务端的 submodule 指针,
