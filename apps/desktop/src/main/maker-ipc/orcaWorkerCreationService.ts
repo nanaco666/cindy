@@ -470,6 +470,19 @@ export function createOrcaWorkerCreationService(deps: OrcaWorkerCreationDeps): O
         : resolvedConfig.providerId,
     };
 
+    // codex/ 预算模型依赖 Cindy AI API key；当显式模型尚无可用路由时，先返回这条
+    // 可操作的凭证错误，避免被下方通用的精确路由失败遮蔽。
+    if (
+      resolved.providerId === null
+      && budgetModelRequiresApiKey(params.agent, resolved.model, deps.readClaudeApiKey() != null)
+    ) {
+      return {
+        ok: false,
+        errorCode: 'BUDGET_MODEL_REQUIRES_API_MODE',
+        message: budgetModelRequiresApiKeyMessage(resolved.model),
+      };
+    }
+
     if (params.model !== undefined && resolved.providerId === null) {
       return {
         ok: false,
@@ -500,17 +513,6 @@ export function createOrcaWorkerCreationService(deps: OrcaWorkerCreationDeps): O
         };
       }
     }
-    if (
-      resolved.providerId === null
-      && budgetModelRequiresApiKey(params.agent, resolved.model, deps.readClaudeApiKey() != null)
-    ) {
-      return {
-        ok: false,
-        errorCode: 'BUDGET_MODEL_REQUIRES_API_MODE',
-        message: budgetModelRequiresApiKeyMessage(resolved.model),
-      };
-    }
-
     const workerId = deps.createId();
     let reservation:
       | { ok: true; occupiedSlotsBefore: number }
