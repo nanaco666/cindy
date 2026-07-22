@@ -266,7 +266,7 @@ export const BrowserChrome = forwardRef<BrowserChromeHandle, BrowserChromeProps>
           </button>
         )}
       </div>
-      {/* 右侧工具区(设计稿 right-side.pen「Browser 工具栏增强」):
+      {/* 右侧工具区交互约定:
           camera = 截图(capturePage → 剪贴板,已实现);
           message-square-plus = 页面评论(评论模式点选元素 → 评论进 composer,
           已实现,active 态高亮);ellipsis = 更多菜单(系统浏览器打开 / 复制链接)。 */}

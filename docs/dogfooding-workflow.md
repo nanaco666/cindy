@@ -1,6 +1,6 @@
 # Dogfooding 工作流：用 Cindy 开发 Cindy
 
-> 状态：参考（工作流指南）。记录 2026-07 时点的代码事实与实践建议，文中文件引用均经代码核对；与代码冲突时以代码为准，并请在同一改动里修正本文档。worktree 生命周期的已知 bug 与改进计划见 `docs/worktree-lifecycle.md`（MR1–MR4）。
+> 状态：参考（工作流指南）。记录 2026-07 时点的代码事实与实践建议，文中文件引用均经代码核对；与代码冲突时以代码为准，并请在同一改动里修正本文档。worktree 生命周期与回收安全约束以根目录 `AGENTS.md` 为准。
 
 ## 背景与结论
 
@@ -164,13 +164,12 @@ gh pr create --base <source-branch> ...
 
 - Bash 审批白名单只有 session 级持久化（`permissions.ts` 归一化为 `destination: 'session'`）——N 个并行会话重复审批 N 次。
 - worktree 里 `.claude` / `.sivi` 是创建时快照，不随 baseRepo 更新。
-- 删除/归档会话静默 auto-stash + 删 worktree，无确认、无 UI 提示（对应 MR3 方向；瞬态 close 误删已由 2026-07 P0 重构消除）。
 - 「改动」tab 非 git 真相，且无 commit / push / PR 按钮——分支提交与 PR 发布全靠终端。
 - stale prebundle 白屏陷阱只能靠文档规避。
 
 **P2（锦上添花）**：worktree 名不可编辑 / 不可复用、`xdt/*` 分支与 stash 无 GC、dev 构建原生通知不可靠、Orca per-worker worktree（未来项）、Codex sandbox 与 pnpm hoisted 路径冲突、`.cindy/project-knowledge` 待刷新。
 
-**推荐推进顺序**（每步本身就是 dogfooding 任务，按当前能力递增）：Day 0 人工验证闭环（登录 shell 启实例、`gh auth status`、跑一个 trivial worktree 会话到 PR）→ 纯文档契约（本文档 + AGENTS.md 节）→ 任务 worktree 里的小 UX 修复练手 → `scripts/dev-worktree.mjs`（P0-1）→ createWorktree 后台 install（P0-2）→ 持久化审批白名单 / auto-stash 确认 UX / `.claude` 重同步（P1）→ git 真相 review tab + commit / PR 按钮（最大件）。
+**推荐推进顺序**（每步本身就是 dogfooding 任务，按当前能力递增）：Day 0 人工验证闭环（登录 shell 启实例、`gh auth status`、跑一个 trivial worktree 会话到 PR）→ 纯文档契约（本文档 + AGENTS.md 节）→ 任务 worktree 里的小 UX 修复练手 → `scripts/dev-worktree.mjs`（P0-1）→ createWorktree 后台 install（P0-2）→ 持久化审批白名单 / `.claude` 重同步（P1）→ git 真相 review tab + commit / PR 按钮（最大件）。
 
 ## 已知不确定性（待实测）
 

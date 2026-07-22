@@ -1,7 +1,7 @@
 import { createContext, useContext } from 'react';
 
 /**
- * paneWidths —— 引擎面板宽度通道(布局树 C1c:缝即把手,宽度主权归引擎)。
+ * paneWidths —— 引擎面板宽度通道(缝即把手,宽度主权归引擎)。
  *
  * 两个 context:
  * - ContentAvailableWidthContext:内容区可分配总宽(窗口宽 − 左栏宽),由

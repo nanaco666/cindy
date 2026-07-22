@@ -6,7 +6,7 @@
  *     左 TaskListPane (300w，按 lastFiredAt desc 排) + 右 RunHistoryPane (flex)
  *
  * 排序变化：从原"按状态分组(active/paused/expired)"改成"统一按 lastFiredAt 降序"
- * （schedule.pen 设计稿 + 用户对齐：列表更直观地看到"最近一次执行的任务"）。
+ * （用户对齐：列表更直观地看到"最近一次执行的任务"）。
  *
  * selectedId 维护：
  *   1. URL ?focus=<id> 命中 → 选中

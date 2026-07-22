@@ -4,7 +4,7 @@
  *
  * 三层归一化:
  *   1. imageCacheStore.resolveSessionImageLenient —— 规范 xdt-image 地址、
- *      缓存内绝对路径、丢会话段地址(老世界会话图缓存);
+ *      缓存内绝对路径、丢会话段地址(历史会话图缓存);
  *   2. 媒体总仓 blob —— 聊天附件迁总仓(cindy-media)后,新消息里用户图的
  *      落盘身份就是总仓 blob,模型手里的地址是 blob 绝对路径(prompt 附件
  *      路径透传)或 cindy-media://blobs/ 地址。绝对路径按文件名解出指纹后

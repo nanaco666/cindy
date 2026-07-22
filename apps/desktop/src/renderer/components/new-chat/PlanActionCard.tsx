@@ -17,7 +17,6 @@
  * Cancel(取消本次审阅)是次级动作,不与批准/反馈同级成行:可见入口收在
  * PlanViewerCard 工具条的 X;这里只保留全局 Esc 快捷键(onCancel)。
  *
- * Design reference: doc/design_docs/cc-agent-view.pen — Plan Action Card
  *   (same node across all 8 state frames; identical styling in both themes
  *   apart from the --plan-action-* tokens).
  */

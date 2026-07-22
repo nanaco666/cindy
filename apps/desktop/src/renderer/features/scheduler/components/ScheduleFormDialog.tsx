@@ -908,7 +908,6 @@ export function ScheduleFormDialog({
 
             {/* 前置检查(Pre-run Hook):触发时先执行脚本,exit 0 放行 / exit 2 跳过本轮
                 (不启动 agent、零 token);报错 / 超时会阻止本轮并记录失败。
-                设计稿:docs/design_docs/schedule.pen「创建自动化 · 前置检查集成 (Dark)」。
                 仅 agent 模式展示——script 模式任务本体就是脚本,再叠一层脚本闸门是套娃。 */}
             {!isScriptMode && (
             <div className="flex flex-col gap-2">

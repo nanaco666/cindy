@@ -1,7 +1,6 @@
 /**
  * MemorySection — Settings → Personalization 下的 Memory 控制面板。
  * ---------------------------------------------------------------------------
- * 设计稿: doc/design_docs/settings-view.pen 节点 SUk5m (Light) / 4x4g2 (Dark)。
  *
  * 数据流:
  *   - 加载: window.electronAPI.maker.memoryGet(agentKind) on mount + agent

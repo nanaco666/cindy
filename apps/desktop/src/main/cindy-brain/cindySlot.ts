@@ -1,7 +1,7 @@
 /**
- * cindySlot.ts — cindy 槽代办(卡槽⑤,原名模型槽;C3d 主循环通电)。
+ * cindySlot.ts — cindy 槽代办(卡槽⑤,原名模型槽)。
  * ---------------------------------------------------------------------------
- * runtime-sandbox.md §3/§5.5 + 媒体总仓设计稿 §5:意识沙箱零网络零文件,
+ * 意识沙箱零网络零文件,
  * 想用 AI 只能经管子请主机代办。本模块处理上行 cindy-request(旧名 model-request 兼容):
  *
  *   电子脑 cindy.send({type:'cindy-request', kind:'gen_image'|'edit_image'|'gen_video'|'edit_video', …})
@@ -15,9 +15,9 @@
  *     → 落 blob(SHA-256 主机算)+ 账本记账(出生=该意识)
  *     → 只回指纹/地址字符串(GhostPipeModelResult)
  *
- * 记账口径(v1 简化,阶段②细化为消息级引用):意识产物加一条
+ * 记账口径:意识产物加一条
  * ghost-gallery ref(出生=该意识)——面板供图的归属校验(ghostCanRead)
- * 与"产物不被回收"同时成立;配额上限归 C3c 权限切片。
+ * 与"产物不被回收"同时成立;配额上限由权限策略负责。
  *
  * 依赖注入(规则 14):生成/落盘/记账/归属解析全部经 deps,单测直测。
  */
@@ -47,7 +47,7 @@ export interface CindySlotDeps {
     imagePaths: string[];
   }): Promise<{ buffer: Uint8Array; mimeType: string }>;
   /**
-   * 主机统一视频通道·文生视频(C3c-5;art 视频 provider 层复用,submit→
+   * 主机统一视频通道·文生视频(art 视频 provider 层复用,submit→
    * 轮询→下载一条龙在注入实现里完成);返回视频字节与 mime。长任务:
    * 分钟级才 resolve,在途名额在整个等待期占用。
    */
@@ -174,7 +174,7 @@ export class GhostCindySlot {
     if (p.prompt.length > MAX_PROMPT_LEN) {
       return { ok: false, message: `prompt 过长(上限 ${MAX_PROMPT_LEN} 字符)` };
     }
-    // 归因号(C3c-3):可选——tool-call 触发的代办把 callId 原样带回,日志/
+    // 归因号:可选——tool-call 触发的代办把 callId 原样带回,日志/
     // 配额由此对上"哪次调用花的钱";面板交互等自发代办可不带,日志记
     // unattributed。带了就必须像样(非空字符串、长度设限),乱填拒单。
     if (p.callId !== undefined && (typeof p.callId !== 'string' || p.callId.length === 0 || p.callId.length > MAX_CALL_ID_LEN)) {

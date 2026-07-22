@@ -149,7 +149,7 @@ describe('parseGhostPreviewUrl', () => {
     expect(parseGhostPreviewUrl(`cindy-ghost://art/preview/${'Z'.repeat(64)}.png`, 'art')).toBeNull();
   });
 
-  it('媒体后缀白名单:视频(C3c-5)放行,非媒体后缀拒绝', () => {
+  it('媒体后缀白名单:视频放行,非媒体后缀拒绝', () => {
     expect(parseGhostPreviewUrl(`cindy-ghost://art/preview/${HASH}.mp4`, 'art')).toEqual({
       hash: HASH,
       ext: '.mp4',
@@ -336,7 +336,7 @@ describe('GhostPreviewGate', () => {
     ).resolves.toEqual({ ok: true, src: `cindy-media://blobs/${HASH}.png`, kind: 'image' });
   });
 
-  it('视频产物 → 放行且 kind=video(C3c-5,宿主据此弹 VideoLightbox)', async () => {
+  it('视频产物 → 放行且 kind=video(宿主据此弹 VideoLightbox)', async () => {
     const { gate } = makeGate({ getBlobInfo: async () => ({ ext: '.mp4', mimeType: 'video/mp4' }) });
     await expect(
       gate.request({

@@ -61,7 +61,6 @@ apps/desktop/codex-home/
 .cindy/
 
 # ── 设计与开发临时产物 ───────────────────────────────────────
-docs/design_docs/.tmp_screenshots/
 docs/superpowers/
 
 # ── IDE / 本地知识工具 ───────────────────────────────────────

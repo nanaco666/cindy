@@ -677,7 +677,7 @@ export function createMakerHookSessionRunner(deps: {
       } as const;
 
       // 入站附件: 解码后图片/文件分流(server 2026-07 起全 MIME 转发) ->
-      //   - 图片写入 cindy-media 媒体总仓(规则 25;迁移第 1 步从 imageCacheStore
+      //   - 图片写入 cindy-media 媒体总仓(规则 25;不再通过 imageCacheStore
       //     切换): sendContent 用本地绝对 path 的 image block(maker 要 path
       //     而非 base64 / URL), 落库用 cindy-media:// URL(parseUserContent 只认
       //     {text,images:ImageRef[]} 形态, 裸 path 的 image block 会被忽略);

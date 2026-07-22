@@ -943,7 +943,7 @@ async function prepareUserMessageForAgent(
       });
     }
   }
-  // 新世界晋升:消息里的 cindy-media blob 挂 session-attachment 引用(草稿
+  // 媒体总仓晋升:消息里的 cindy-media blob 挂 session-attachment 引用(草稿
   // 转正,替代 markFilesCommitted;幂等,重发不刷重复行)。失败只警告——
   // 引用缺失的代价是 blob 提前进回收候选,不该阻塞消息发送。
   const sentBlobUrls = collectCindyMediaUrls(msg);
@@ -1409,7 +1409,7 @@ export async function withSessionInputStoppedForRewind<T>(
 }
 
 /**
- * 媒体回收器活引用取证入口(media-store.md §4 暂存区 (2)):内存排队/在途
+ * 媒体回收器活引用取证入口(recycler.ts 的内存队列暂存区):内存排队/在途
  * 消息的序列化文本。coordinator 未就绪(启动早期)返回空——此时也不存在
  * 内存队列,空集合语义正确。
  */
@@ -6659,7 +6659,7 @@ async function materializeCodexImage(
   sessionId: string,
   data: CodexImageEventData,
 ): Promise<{ url: string; filename: string } | null> {
-  // 迁移第 2 步(规则 25):生成图入 cindy-media 总仓(零引用;合成 tool_result
+  // 规则 25:生成图入 cindy-media 总仓(零引用;合成 tool_result
   // 消息落库时由 createMessage 的挂账钩子补 session-attachment 引用)。逻辑
   // 本体在 cindy-media/generatedMedia.ts(规则 14 可测),这里只做 thin adapter。
   try {

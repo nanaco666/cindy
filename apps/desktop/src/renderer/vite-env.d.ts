@@ -978,7 +978,7 @@ interface ElectronAPI {
     update: (lizFilePath: string) => Promise<{ ghost: import('../shared/ghost').InstalledGhost }>;
     /**
      * cindy 槽后端覆盖:首帧同步读(规则 7);overrides 键为 "image.generate"
-     * 等能力键;image/video 各一份下拉数据(C3c-5),defaultModel = 目录默认
+     * 等能力键;image/video 各一份下拉数据,defaultModel = 目录默认
      * 选型的展示信息("默认(GPT Image 2)")。
      */
     cindyPrefsSync: (id: string) => {
@@ -1160,7 +1160,7 @@ interface ElectronAPI {
     runtimeStates: () => Promise<{ states: Record<string, string> }>;
     /** 面板错误态「重载意识」:清熔断记账 + 重新拉起沙箱。 */
     reload: (id: string) => Promise<{ state: string }>;
-    /** dev-only 运行时控制(C3a;packaged 版 main 侧不注册,调用会 reject)。 */
+    /** dev-only 运行时控制(packaged 版 main 侧不注册,调用会 reject)。 */
     devRuntime: (
       action: 'status' | 'spawn' | 'stop' | 'crash',
       id?: string,
@@ -2370,7 +2370,7 @@ interface ElectronAPI {
   cleanupCachedImages: (urls: string[]) => Promise<void>;
 
   /**
-   * 媒体总仓存储管理(关于页存储空间卡片,迁移第 5 步):占用统计 / 清理
+   * 媒体总仓存储管理(关于页存储空间卡片):占用统计 / 清理
    * 预检(报数)/ 执行清理 / 对账体检。draftUrls 由 renderer 从
    * composerDraftStore 现场收集随参带上(草稿附件是合法零引用,防误删)。
    */

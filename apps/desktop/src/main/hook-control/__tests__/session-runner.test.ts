@@ -98,7 +98,7 @@ vi.mock('../../maker-host/session-provider-store.js', () => ({
 vi.mock('../../imageCacheStore.js', () => ({
   resolveSafe: vi.fn(),
 }));
-// cindy-media(迁移第 1 步):入站图片写入切到媒体总仓,mock 记调用。
+// cindy-media:入站图片写入媒体总仓,mock 记调用。
 const cindyMock = vi.hoisted(() => ({
   ingestMedia: vi.fn(async () => ({
     hash: 'a'.repeat(64),

@@ -4,7 +4,7 @@ import { z } from 'zod';
 import type { CindyGhostsMcpDeps } from '../types.js';
 
 /**
- * ghost 总机(网关模式,runtime-sandbox.md §5.5):
+ * ghost 总机(AGENTS.md 规则 28 的网关模式):
  * agent 工具箱里**永远只有这两件固定工具**,内容全部现查现报——
  * 工具定义(prompt 缓存前缀)零变化,意识的装/卸/唤醒/沉睡对
  * 新老会话一视同仁地"下一次查询即生效"。

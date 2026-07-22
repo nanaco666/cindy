@@ -1,7 +1,6 @@
 /**
  * ReviewVerdictDialog — WARN and BLOCK review result dialogs.
  *
- * Design: doc/design_docs/skillhub.pen
  *   WARN:  ZsNls (Light) / 4kwHH (Dark)
  *   BLOCK: VIuO3 (Light) / cRUum (Dark)
  *

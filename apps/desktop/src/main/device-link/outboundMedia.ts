@@ -154,7 +154,7 @@ async function uploadAttachment(src: AttachmentSource): Promise<string> {
     return buildUploadedAttachmentRef(r, originalName);
   }
 
-  // 2a') cindy-media:// 媒体总仓 blob(新世界统一地址,规则 25):图片沿用
+  // 2a') cindy-media:// 媒体总仓 blob(统一地址,规则 25):图片沿用
   //      视觉上下文语义压缩后上传;视频/音频/模型等其余类型流式原样上传。
   //      blob 是内容寻址缓存副本,不存在 xdt-image 分支的「显式文件」歧义。
   if (ref.startsWith('cindy-media://')) {

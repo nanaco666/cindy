@@ -3,7 +3,7 @@
  *
  * File: <rootDir>/<ghostId>.json(生产 rootDir = <userData>/ghost-kv/)
  *
- * 语义(capability-permissions.md 意识自定义参数节 / FORGE_GUIDE §4.8):
+ * 语义(AGENTS.md 规则 28 / FORGE_GUIDE §4.8):
  * - 单意识单文件:损坏只伤一个意识,卸下清理 = unlink 一个文件;
  * - 值必须是 plain JSON object,序列化 ≤ 64KB(GHOST_KV_MAX_BYTES),
  *   整体覆盖写(last-write-wins),不做字段级 merge;

@@ -753,7 +753,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       id: string,
     ): {
       overrides: Record<string, string>;
-      /** 每类目一份下拉数据(能力键按类目取对应清单,C3c-5)。 */
+      /** 每类目一份下拉数据(能力键按类目取对应清单)。 */
       image: { options: Array<{ id: string; label: string }>; defaultModel: { id: string; label: string } };
       video: { options: Array<{ id: string; label: string }>; defaultModel: { id: string; label: string } };
     } => ipcRenderer.sendSync('ghosts:cindy-prefs', id),
@@ -821,7 +821,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     runtimeStates: (): Promise<{ states: Record<string, string> }> =>
       ipcRenderer.invoke('ghosts:runtime-states'),
     reload: (id: string): Promise<{ state: string }> => ipcRenderer.invoke('ghosts:reload', id),
-    // dev-only 运行时控制(C3a QA;packaged 版 main 侧不注册该 channel)。
+    // dev-only 运行时控制(packaged 版 main 侧不注册该 channel)。
     devRuntime: (action: 'status' | 'spawn' | 'stop' | 'crash', id?: string): Promise<unknown> =>
       ipcRenderer.invoke('ghosts:dev-runtime', action, id),
   },
@@ -2362,7 +2362,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   cleanupCachedImages: (urls: string[]): Promise<void> =>
     ipcRenderer.invoke('image-cache:cleanup-files', urls),
 
-  // ── 媒体总仓存储管理(关于页存储空间卡片,迁移第 5 步)──
+  // ── 媒体总仓存储管理(关于页存储空间卡片)──
   // 占用统计 / 清理预检(报数)/ 执行清理 / 对账体检。scan 与 cleanup 的
   // draftUrls 由 renderer 从 composerDraftStore 现场收集(main 读不到
   // renderer 内存,草稿附件是合法的零引用 blob,必须随参取证防误删)。

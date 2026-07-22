@@ -1,5 +1,5 @@
 /**
- * generatedMedia.test.ts — AI 生成产物存储适配器单测(迁移第 2 步)。
+ * generatedMedia.test.ts — AI 生成产物媒体总仓适配器单测。
  * 覆盖:saveImage/saveVideo 零引用入仓(字段形状对齐 lizi-mcps 契约)、
  * resolveImageRef 三分支(blob 地址 / 老 xdt-image 地址 / 绝对路径)与拒绝面、
  * 空输入/缺 mime 的错误语义(与老 store 报错文案同族,模型可自纠)。

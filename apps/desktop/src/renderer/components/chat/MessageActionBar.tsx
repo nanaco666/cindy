@@ -462,12 +462,10 @@ export function MessageActionBar({
         // (browser CSS transition behavior — no replay from 0).
         'transition-opacity duration-[250ms] ease-out',
         visible ? 'opacity-100' : 'opacity-0 pointer-events-none',
-        // Fork in-flight: dim entire bar + block clicks (per design notes
-        // in message-actions.pen — bar opacity 0.6 + pointer-events:none
-        // until the operation resolves).
+        // Fork in-flight: dim the entire bar and block clicks until the
+        // operation resolves (opacity 0.6 + pointer-events:none).
         // Fork in-flight OR rewind in-flight: dim entire bar + block clicks
-        // (per design notes in message-actions.pen — bar opacity 0.6 +
-        // pointer-events:none until the operation resolves).
+        // (opacity 0.6 + pointer-events:none until the operation resolves).
         inFlight && 'opacity-60 pointer-events-none',
       )}
     >

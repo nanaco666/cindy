@@ -5,9 +5,7 @@ import type { PanelKind } from '../../shared/layoutTree';
 /**
  * 面板注册表 —— 布局引擎与"面板是谁"之间的唯一解耦点。
  *
- * 设计文档:docs/Cindy架构设计/意识系统/layout-tree.md
- *
- * 布局引擎(LayoutRoot/SplitView/PaneView,第 4 步接入)只做一件事:拿树节点的
+ * 布局引擎(LayoutRoot/SplitView/PaneView)只做一件事:拿树节点的
  * panelKind 来这里查组件;查得到就渲染,查不到就把该 pane 整体隐藏、空间回流
  * (未安装意识的存档残留 = 平时不可见,树数据保留)。引擎对"面板是谁"零感知,
  * 未来意识面板接入 = 往本注册表多一条记录,引擎不改。
@@ -53,8 +51,8 @@ export function registerPanelKind(definition: PanelDefinition): void {
 }
 
 /**
- * 注销一种面板(C2b:卸下意识时调用)。布局树里残留的同 kind pane 自此按
- * "未安装意识"隐藏 —— 树数据保留,重装即原位复活(§6 规则 5)。幂等。
+ * 注销一种面板(卸下意识时调用)。布局树里残留的同 kind pane 自此按
+ * "未安装意识"隐藏 —— 树数据保留,重装即原位复活。幂等。
  */
 export function unregisterPanelKind(kind: PanelKind): void {
   registry.delete(kind);

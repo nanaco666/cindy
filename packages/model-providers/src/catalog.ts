@@ -138,7 +138,7 @@ function validateProvider(p: Provider): void {
       assert(known, `provider '${p.id}' titleModel '${p.titleModel}' not found in any agent's models`);
     }
   }
-  // 媒体模型清单与默认选型(图像/视频同一套规则,C3c-5 起两类目):
+  // 媒体模型清单与默认选型(图像/视频同一套规则):
   // 清单 id/name 非空、id 不重复,不参与 agent/routing 约束(媒体模型不经
   // agent runtime);默认选型必须与清单配套且每个值指向在册 id。
   validateMediaModels(p.id, 'imageModels', p.imageModels, 'imageDefaults', p.imageDefaults);

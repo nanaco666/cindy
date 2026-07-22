@@ -1,17 +1,17 @@
 /**
- * chatAttachments.ts — 聊天图片附件的新世界写入口(媒体总仓迁移第 1 步)。
+ * chatAttachments.ts — 聊天图片附件的媒体总仓写入口。
  * ---------------------------------------------------------------------------
- * 设计:media-store.md §3「聊天附件」;AGENTS.md 规则 25。
+ * 契约:AGENTS.md 规则 25;引用与回收语义见本文件注释及 recycler.ts。
  *
- * 老世界的 draft/committed 状态机(xdt-meta.json + markFilesCommitted +
+ * 历史缓存的 draft/committed 状态机(xdt-meta.json + markFilesCommitted +
  * 启动孤儿清扫)在引用计数模型下坍缩成两个动作:
  *   - **粘贴/拖拽 = 只写字节仓 + blob 行,不挂引用**:无引用 blob 天然就是
- *     "草稿"——回收器(阶段③)按引用归零回收,不需要 per-file meta;
+ *     "草稿"——回收器按引用归零回收,不需要 per-file meta;
  *   - **发送 = commitChatImageUrls 挂 session-attachment 引用**:消息真正
  *     入库时才建立归属,替代 markFilesCommitted 的晋升语义;删会话时由
  *     removeSessionRefs 连坐清理。
  * 移除输入框 chip 不删任何东西(内容寻址 blob 可能被其它引用共享,删字节
- * 必误伤;未发送的 blob 交回收器),对应老世界 cleanup-files 的语义变更。
+ * 必误伤;未发送的 blob 交回收器),对应历史 cleanup-files 的语义变更。
  *
  * 所有函数接受可注入 db(规则 14);字节路径走 blobStore(指纹/白名单校验)。
  */

@@ -1,10 +1,10 @@
 /**
- * integrationCache.ts — 集成下载缓存的新世界存取口(媒体总仓迁移第 3 步)。
+ * integrationCache.ts — 集成下载缓存的媒体总仓存取口。
  * ---------------------------------------------------------------------------
- * 设计:media-store.md §3「集成下载」;AGENTS.md 规则 25。
+ * 契约:AGENTS.md 规则 25;缓存引用与逐出语义见本文件及 recycler.ts。
  *
  * 服务飞书 / Slack / Discord / Confluence / Jira 等集成的"按 token 缓存媒体"
- * 场景。老世界用 `<token>.<ext>` 文件名回答"下过没有";指纹制下文件名与
+ * 场景。历史缓存用 `<token>.<ext>` 文件名回答"下过没有";指纹制下文件名与
  * token 无关,改由账本的 integration-cache 引用行充当 token→指纹索引:
  *   - **cacheGet(key)**:查索引 → 指纹 → 仓内文件。命中即免重下;
  *     "有账无文件"(坏账)按对账原则只报不删,当 miss 处理让调用方重下自愈。
@@ -34,7 +34,7 @@ export function integrationCacheKey(integration: string, token: string): string 
 
 /**
  * 集成侧 mime 归一化:剥参数 + 小写 + 常见别名(`image/jpg` 是 Jira/Confluence
- * 真实会给的非标值,不归一会被 writeBlob 白名单硬拒、永远进不了新世界还刷
+ * 真实会给的非标值,不归一会被 writeBlob 白名单硬拒、永远进不了媒体总仓还刷
  * warn,review P2)。
  */
 const INTEGRATION_MIME_ALIASES: Record<string, string> = {

@@ -1,7 +1,7 @@
 /**
  * TodoListCard
  * ---------------------------------------------------------------------------
- * Design ref: cc-agent-view.pen → "TodoChecklistCard · Showcase"
+ * TodoChecklistCard · Showcase visual contract
  *
  * Card with border, collapsible (default expanded).
  * Uses the same color tokens as ToolCallCard for consistency:

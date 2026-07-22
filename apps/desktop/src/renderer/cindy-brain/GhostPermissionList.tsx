@@ -1,5 +1,5 @@
 /**
- * 装入/更新确认框的逐项权限清单(意识系统 C3c-1,capability-permissions.md §1)。
+ * 装入/更新确认框的逐项权限清单(AGENTS.md 规则 28)。
  *
  * 纯展示组件:条目由 shared/ghost.ts 的 ghostPermissionItems /
  * diffGhostPermissionItems 静态推导(装入前无需运行意识代码),这里只负责

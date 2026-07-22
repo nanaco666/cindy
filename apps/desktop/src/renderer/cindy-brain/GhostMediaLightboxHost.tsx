@@ -11,7 +11,7 @@ import { VideoLightbox } from '@/components/chat/VideoLightbox';
  * 形状/焦点/限速/归属/mime)→ 推 `ghosts:preview-media` 到宿主窗口 →
  * 本组件收到主机拼装的 cindy-media:// 地址,按 kind 弹标准 lightbox:
  * 图片 ImageLightbox(缩放/标注/复制/另存),视频 VideoLightbox(播放,
- * C3c-5 画廊视频卡)——与聊天里点开媒体同一套组件。
+ * 画廊视频卡)——与聊天里点开媒体同一套组件。
  *
  * 挂载点:MainLayout 顶层(与 PanelDragController 同级),整窗一份。
  * 模式同 MarkdownImageLightboxHost:纯监听 + 条件挂载,无自绘 UI。

@@ -3228,7 +3228,7 @@ export function ChatInput({
         ? [...attachments, ...commentScreenshots]
         : undefined;
     const mentionsToSend = mentions.length > 0 ? mentions : undefined;
-    // 意识 $指令展开(C3d 双触发):`$画图 ...` 开头且命中已唤醒意识时,
+    // 意识 $指令展开(双触发):`$画图 ...` 开头且命中已唤醒意识时,
     // 追加"必须走 cindy 总机"的机器指令;未命中原样发送。
     // listSync 是既有同步 IPC(首帧同款,极小),每次发送现查,装/卸即时反映;
     // 目录级禁用同判(与胶囊 / main 侧生效点同源),被禁用 = 原样发送。
@@ -4896,8 +4896,8 @@ export function ChatInput({
       {/* Palette host — tracks mouseover to prevent blur-close races.
            Palettes use `absolute bottom-full` referencing the palette anchor
            layer above, so they appear flush above the ENTIRE ChatInputBox —
-           pending-queue panel included — matching the design spec
-           (command-palette.pen: Slash Popover Wrap bottom ≈ ChatInputBox top). */}
+           pending-queue panel included — keeping the popover bottom flush
+           with the ChatInputBox top. */}
       {/* biome-ignore lint/a11y/noStaticElementInteractions: hover tracking prevents palette blur-close races; rows remain keyboard reachable. */}
       <div
         onMouseEnter={() => setPalettePanelHover(true)}

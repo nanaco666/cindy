@@ -3,7 +3,7 @@ import { useSyncExternalStore } from 'react';
 import type { InstalledGhost } from '../../shared/ghost';
 
 /**
- * 已装意识清单(意识系统 C2c)—— renderer 窗口级单例缓存。
+ * 已装意识清单—— renderer 窗口级单例缓存。
  *
  * 历史问题:hook 早期版本在每个组件实例挂载时各自 listSync(sendSync 阻塞
  * renderer 主线程,main 端每次全量扫盘 + icon base64)。AgentActionRow 等

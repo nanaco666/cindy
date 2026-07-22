@@ -1,8 +1,6 @@
 /**
  * 主界面布局树(Layout Tree)—— 数据模型、校验与纯函数操作。
  *
- * 设计文档:docs/Cindy架构设计/意识系统/layout-tree.md
- *
  * 放在 shared 层的原因:renderer(渲染布局)与 main(持久化 layout.json 时校验/回退)
  * 必须使用同一套校验逻辑,避免两份实现漂移。本文件零依赖、零 IO、全部纯函数,
  * 任何操作都不原地修改输入(immutable),损坏输入永不抛异常(coerceLayout 兜底回默认)。
@@ -388,8 +386,8 @@ export function setSplitChildFraction(
 }
 
 /**
- * 往 content 根分割插入一个新 pane —— "加装面板"的底层操作(C1a;C2 意识装载器复用)。
- * - content 必须是分割(默认树满足;单 pane content 的重构留给 C2);
+ * 往 content 根分割插入一个新 pane —— "加装面板"的底层操作。
+ * - content 必须是分割(默认树满足;单 pane content 暂不支持);
  * - 新 child 分走 fraction 份额(夹取到 [0.05, 0.8]),已有 children 等比让出,总和保持 1;
  * - index 越界自动夹取(默认追加到最右);
  * - id 重复 / 其它不变量破坏由出口校验兜底拒绝(返回原树,不半途落地)。
@@ -417,7 +415,7 @@ export function insertRootSplitPane(
 /**
  * 从 content 根分割移除第一个匹配 panelKind 的 pane —— "卸载面板"的底层操作。
  * 剩余 children 份额归一。拒绝:目标不存在 / 移除后 children < 2(根分割至少
- * 两块;收缩成单 pane 的树重构是 C2 话题)/ 移除 chat-main(出口校验兜底)。
+ * 两块;收缩成单 pane 暂不支持)/ 移除 chat-main(出口校验兜底)。
  */
 export function removeRootSplitPaneByKind(layout: Layout, kind: PanelKind): LayoutOpResult {
   if (layout.content.type !== 'split') {
@@ -438,7 +436,7 @@ export function removeRootSplitPaneByKind(layout: Layout, kind: PanelKind): Layo
 }
 
 /**
- * 交换 content 根分割中两个 panelKind 对应 child 的位置(C1b:N 面板拖拽换位的
+ * 交换 content 根分割中两个 panelKind 对应 child 的位置(N 面板拖拽换位的
  * 提交操作)。child 整体交换 —— fraction 随面板走(换位不改变各自宽度份额)。
  * 任一 kind 不在根分割里则拒绝。
  */
@@ -465,7 +463,7 @@ export function swapRootSplitChildrenByKind(
 }
 
 /**
- * 在分割内把 amount 份额从 fromIndex child 转移给 toIndex child(C1c:引擎分割线
+ * 在分割内把 amount 份额从 fromIndex child 转移给 toIndex child(引擎分割线
  * 拖宽的提交操作 —— 只动缝两侧的邻居,其余 children 份额不受影响;与
  * setSplitChildFraction 的"全体按比例重分"语义不同)。
  * 双方转移后都必须仍 ≥ 0.05,否则拒绝(调用方应预先按像素下限夹取 amount)。

@@ -1,5 +1,5 @@
 /**
- * SearchInput — 1:1 对设计稿 work-md-show.pen 的 "Search Input"
+ * SearchInput — 文件搜索输入框
  *
  * Specs:
  *   container:   h:30  cornerRadius:6  padding [0, 4, 0, 10]  gap:4

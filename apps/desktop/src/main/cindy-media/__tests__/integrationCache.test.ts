@@ -1,5 +1,5 @@
 /**
- * integrationCache.test.ts — 集成缓存存取口单测(迁移第 3 步)。
+ * integrationCache.test.ts — 集成缓存媒体总仓存取口单测。
  * 覆盖:put→get 往返(token 命中免重下)、isCache 记账、同 key 幂等、
  * token 复用换内容取最新、坏账(有账无文件)按 miss 自愈、未登记 miss。
  * 文件落 os.tmpdir() 收尾清理(规则 23);账本内存 SQLite + 真实 migration。

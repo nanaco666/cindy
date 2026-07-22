@@ -1,19 +1,19 @@
 import type { InstalledGhost } from '../../../shared/ghost.js';
 
 /**
- * GhostRuntime — 意识运行时状态机(C3a,runtime-sandbox.md §3/§4)。
+ * GhostRuntime — 意识运行时状态机(AGENTS.md 规则 28)。
  *
  * 管"每段意识一个独立沙箱进程"的生命周期:拉起 / 熄灯 / 崩溃收尸 / 熔断。
  * 沙箱怎么造(Electron 隐藏沙箱网页)通过 SandboxHostAdapter 注入——
  * 本类只有纯状态逻辑,单测用假 adapter + 假时钟直接驱动(规范 14)。
  *
- * 状态梯子(runtime-sandbox.md §4):
+ * 状态梯子:
  *   off → starting → running → stopping → off
  *                       └→ crashed(单次崩溃,可再 spawn)
  *                       └→ fused(60s 内 3 崩熔断;onFused 回调让上层转沉睡)
  *
- * C3a 只做"被动驱动"(dev 工具 / 上层显式调用);按需拉起与闲置熄灯的
- * 自动策略(面板可见性、宽限 5 分钟)是 C3b+ 的接线,不在本类。
+ * 本类只做"被动驱动"(dev 工具 / 上层显式调用);按需拉起与闲置熄灯的
+ * 自动策略(面板可见性、宽限 5 分钟)由上层接线,不在本类。
  */
 
 export type GhostRuntimeState = 'off' | 'starting' | 'running' | 'stopping' | 'crashed' | 'fused';
@@ -127,7 +127,7 @@ export class GhostRuntime {
     const entry = this.entries.get(id);
     if (!entry || !entry.handle || entry.state === 'off') return;
     this.setState(id, entry, 'stopping');
-    // C3a 先斩后奏:沙箱页面没有需要善后的状态,直接销毁(先礼后兵的
+    // 当前直接销毁:沙箱页面没有需要善后的状态(先礼后兵的
     // "礼"——shutdown 通知 + 宽限——等管子协议丰满后在此插入)。
     entry.handle.destroy();
     entry.handle = null;

@@ -281,7 +281,7 @@ export function installQuitHandler(timeoutMs = 2000): void {
   // Main 还活着, 但 renderer 死了。继续让用户看一个空白窗没意义, 走 disposer
   // chain 把 IM offline / 子进程都收掉再 exit(1)。
   // 例外:意识沙箱(cindy-brain/runtime)的渲染进程"允许死"——崩溃隔离正是它的
-  // 设计属性(runtime-sandbox.md §4),由 GhostRuntime 自己收尸/熔断,
+  // 设计属性(AGENTS.md 规则 28),由 GhostRuntime 自己收尸/熔断,
   // 绝不能触发整个应用关机(实证:强崩沙箱曾把主界面一起带走)。
   app.on('render-process-gone', (_event, webContents, details) => {
     if (isGhostSandboxWebContentsId(webContents.id)) {

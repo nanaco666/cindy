@@ -11,7 +11,6 @@
  * 「取消」置于其下(次级、需刻意移动),从而在保持左下角、减少视线/鼠标移动的同时,
  * 用两步显式点击防止误更新。
  *
- * Design reference: doc/design_docs/main-interface.pen
  *   - Expanded ready:        Flame 36px → "Updated to {v}" → "Relaunch to apply" → Relaunch pill
  *   - Expanded confirming:   Flame 36px → "Restart to update?" → hint → Confirm pill / Cancel (下方,ghost)
  *   - Expanded superseding:  Loader2 36px (spin) → "Newer version found" → "Updating…" → disabled pill with spinner

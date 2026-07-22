@@ -1,5 +1,5 @@
 /**
- * chatAttachments.test.ts — 聊天附件新世界写入口单测(迁移第 1 步)。
+ * chatAttachments.test.ts — 聊天附件媒体总仓写入口单测。
  * 覆盖:草稿入仓(blob+账本行,零引用)、拖拽路径入仓(扩展名判 mime、白名单外拒)、
  * URL 收集(嵌套 JSON 穿透)、发送提交(挂 session-attachment 引用、幂等去重、
  * 非法 URL 跳过)。文件落 os.tmpdir() 并收尾清理(规则 23);账本内存 SQLite +

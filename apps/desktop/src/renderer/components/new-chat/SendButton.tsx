@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils';
 interface SendButtonProps {
   disabled: boolean;
   onClick: () => void;
-  /** When true, renders as Stop button per cc-agent-view.pen Streaming variant */
+  /** When true, renders the streaming Stop variant. */
   isStreaming?: boolean;
   /** Highlighted while voice long-press is hovering over this button as a release target. */
   highlighted?: boolean;
@@ -30,7 +30,7 @@ function CreateAgentSendIcon() {
 }
 
 /**
- * Send / Stop button — 对标 cc-agent-view.pen
+ * Send / Stop button
  *
  * Send (idle): 28×28 圆形（9999）, bg #262626/#fff, arrow-up icon 白/黑
  * Stop (streaming):复用 Send 壳样式,仅把内容换成 10×10 圆角 1.5 的停止方块

@@ -284,7 +284,7 @@ export interface Provider {
    */
   imageDefaults?: { standard: string; draft?: string; best?: string };
   /**
-   * 该供应商提供的**视频生成/编辑模型**清单(C3c-5;与 imageModels 同地位:
+   * 该供应商提供的**视频生成/编辑模型**清单(与 imageModels 同地位:
    * 不挂 agent,由主机视频通道直调,id 即 video provider 层的 alias)。
    * 消费方为意识 cindy 槽(白名单 + 详情页下拉)。可选,additions-only。
    */

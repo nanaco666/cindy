@@ -196,7 +196,13 @@ restart 脚本会在非交互式 agent（Claude / Codex）终端里自动打开�
 
 5. **注释**：所有类 / 对象都需要有明确的注释；核心类的实现内部要有注释描述逻辑。
 
-25. **媒体文件的生成 / 存储 / 读取一律走 cindy-media 媒体总仓,禁止另起炉灶(编码与 review 必查)**。任何新增或修改的功能涉及媒体字节(图片 / 视频 / 音频 / 3D 模型)落盘时,必须走 `apps/desktop/src/main/cindy-media/` 的统一逻辑:写入 = blobStore 指纹落盘 + ledger 记账(blob 行 + 引用行,含出生信息);读取 / 渲染 = `cindy-media://blobs/<指纹>.<ext>` 协议;生命周期 = 引用计数(业务删除自己名下的 ref,不直接删文件)。设计依据 `docs/Cindy架构设计/媒体总仓/media-store.md`。**禁止**:新建专用媒体目录、新写 cache store、新注册媒体协议、绕过账本直接往磁盘写媒体文件。`imageCacheStore` / `videoCacheStore` / `modelCacheStore` / `audioFileProtocol` 与 `userData/cc-agent/` 是**冻结的老世界**——老协议(`xdt-image` / `xdt-video` / `xdt-model`)只读服务历史地址,存量写入点按迁移计划逐步切换到总仓,期间不许有任何**新增**代码路径往 `cc-agent/` 写入。边界:非媒体的任意类型文件(docx / zip 等)不进字节仓,走 `xdt-file` 直读通道;`xdt-audio` 保留"播放用户本地散文件"的直读职责。review 时命中"新增媒体落盘"的 PR 按此检查,绕过总仓 = P1。
+25. **媒体文件的生成 / 存储 / 读取一律走 cindy-media 媒体总仓,禁止另起炉灶(编码与 review 必查)**。任何新增或修改的功能涉及媒体字节(图片 / 视频 / 音频 / 3D 模型)落盘时,必须走 `apps/desktop/src/main/cindy-media/` 的统一逻辑:写入 = blobStore 指纹落盘 + ledger 记账(blob 行 + 引用行,含出生信息);读取 / 渲染 = `cindy-media://blobs/<指纹>.<ext>` 协议;生命周期 = 引用计数(业务删除自己名下的 ref,不直接删文件)。核心安全不变量由本规则、`cindy-media` 各模块顶层注释及单测共同维护。**禁止**:新建专用媒体目录、新写 cache store、新注册媒体协议、绕过账本直接往磁盘写媒体文件。`imageCacheStore` / `videoCacheStore` / `modelCacheStore` / `audioFileProtocol` 与 `userData/cc-agent/` 是**冻结的历史兼容层**——`xdt-image` / `xdt-video` / `xdt-model` 只服务历史地址,已经声明的存量兼容回落不得扩展,不许有任何**新增**代码路径往 `cc-agent/` 写入。边界:非媒体的任意类型文件(docx / zip 等)不进字节仓,走 `xdt-file` 直读通道;`xdt-audio` 保留"播放用户本地散文件"的直读职责。review 时命中"新增媒体落盘"的 PR 按此检查,绕过总仓 = P1。
+    - **已知待收口项不得随旧设计文档删除而视为完成**：Ghost gallery 持久引用尚缺 per-Ghost 字节配额，安装确认尚未展示持久媒体占用上限；cache 默认上限与设置可见性、对账工具入口、`cc-agent/` 历史仓治理仍待收口。触及这些链路时必须修复，或在 PR 中保留明确的正式跟踪，不得静默丢弃。
+
+27. **主界面布局树不变量(编码与 review 必查)**：布局真身是 `apps/desktop/src/shared/layoutTree.ts` 定义、`apps/desktop/src/main/layout/LayoutStore.ts` 持久化的全局递归 split/pane 树；面板身份只认 `panelKind`，禁止用「左栏 / 右栏」等当前位置充当业务身份。`chat-main` 在整棵树中必须恰好一个、始终可见、不可关闭、不可折叠且最小宽 400px；任何树变换都必须保持结构合法。布局是用户级配置而非 session 数据，启动时必须随首帧同步就位，禁止先画默认布局再跳成用户布局。未注册、沉睡或已抽离的 Ghost 面板允许保留在存档中但不渲染，重新注入 / 唤醒后必须原位恢复；不要用清理未知 `panelKind` 的方式破坏这份位置记忆。新增面板经 panel registry 注册并复用标准 pane chrome / 平台顶部安全区，折叠记忆按面板声明的 global / per-session / none 语义处理。详细数据结构、修复与迁移语义由上述模块顶层注释和测试维护。
+
+28. **意识(Ghost)运行时与权限安全不变量(编码与 review 必查)**：`.cindy` 是以 `ghost.json` 为身份卡的意识包，现行唯一形态为 `kind: 'chip'`；代码目录使用 `cindy-brain` / `Ghost` 术语，不得重新引入已退役的 cartridge 声明型兼容层。每个运行中的意识使用独立 Electron 沙箱进程与专属 session partition，沙箱禁止直接访问 Node、宿主文件系统和网络；只允许读取自身安装目录内经安全相对路径校验的静态资源。逻辑页只能经最小 `contextBridge` 管子申请主机能力，面板 webview 保持零特权桥；主机按 `webContents` 绑定反查真实 ghostId，不信任 sender 自报。所有能力必须先在 manifest 声明 slot、通过同一套校验并在注入 / 更新确认框逐项如实展示，再由 host 代码强制授权，prompt 不构成安全边界。network 只允许清单白名单域名且凭证由主机保险库注入、无明文读回；模型调用走 Cindy 统一通道；附件、媒体、目录和保存路径通过归属校验后的 grant / deposit / ledger 交接，禁止把宿主绝对路径或不必要的字节暴露给沙箱。`cindy-` id 前缀保留给随包官方意识。沉睡、抽离和主机退出必须终止对应沙箱；沙箱崩溃只由 GhostRuntime 收敛，不得带崩主应用。新增 / 修改 slot 或作者可见契约时，除规则 24 的 FORGE_GUIDE + 校验同步外，还必须同步 shared 类型、preload/host handler、权限 UI、错误边界和测试，并按规则 26 检查远程与手机版。
+    - **已知安全 / 兼容缺口不得随旧迁移文档删除而视为完成**：`networkSlot.ts` 的 `as: 'media'` 不能只信任 Content-Type（GLB 常见 `application/octet-stream`），需要安全的 magic-byte / 扩展名嗅探；SSH remote 场景必须让 `LiziMcpSessionContext` 携带 remote 标识，目录过户不得回退读取本机同名路径，无法证明来源时 fail closed；手机版仍需把历史 mivo 动作按钮降级为纯展示。触及相关链路时必须一并修复，或在 PR 中保留明确的正式跟踪。
 
 ### 前端实现
 
@@ -262,7 +268,13 @@ restart 脚本会在非交互式 agent（Claude / Codex）终端里自动打开�
 
 19. **服务端部署环境变量**(服务端专属,本仓不适用):新增服务端环境变量时,请遵循对应服务端仓库的 compose / deployment 白名单规则,不要在客户端仓库维护服务端部署配置。
 
-20. **配置设计遵守 `docs/configuration-design-principles.md`**：Cindy 允许用户高度定制，但默认配置承载创作者品味，是产品体验的一部分。新增 / 修改任何用户可配置项时，必须先判断它属于常规设置、高级设置、隐藏配置还是内部常量；不要因为技术上能配置就放进 Settings 外层，只有大多数用户需要看到和理解的选项才默认可见，其它应收进高级设置、配置文件或允许用户通过自然语言让 agent 修改本地配置。每个配置项都必须区分系统默认值和用户 override，能判断是否被用户显式自定义；未自定义的用户应随版本吃到新的系统默认值，已自定义的用户保留自己的选择。Settings 中恢复默认的语义是清除 override、重新跟随当前版本默认值，而不是写入一份静态默认值快照。实现或 PR 说明里要讲清：默认值、可见性层级、override 如何记录、默认值未来变更时如何迁移、恢复默认清除什么。完整原则见 `docs/configuration-design-principles.md`。
+20. **配置设计遵守分层与 override 契约**：本规则适用于 Settings UI、配置文件、本地数据库偏好、运行时 profile，以及 agent / MCP / provider 相关开关。Cindy 允许用户高度定制，但默认配置承载创作者品味，是产品体验的一部分。
+    - **可见性分层**：新增 / 修改任何用户可配置项时，必须先判断它属于常规设置、高级设置、隐藏配置还是内部常量；不要因为技术上能配置就放进 Settings 外层。只有大多数用户经常需要理解和调整、且无需理解内部实现的选项才默认可见；低频、专业或误改成本高的选项进入高级设置；有定制价值但不值得占用 UI 注意力的选项进入配置文件、本地配置存储或由 agent 通过自然语言修改；涉及产品语义、安全边界、数据契约或核心体验的不变量保留为内部常量。
+    - **默认值与用户 override 分离**：每个配置项都必须能判断是否被用户显式自定义，运行时以「系统默认值 + 用户 override」合并出有效值，持久化只记录 override 与必要的自定义标记，不把完整默认配置复制进用户配置。未自定义的用户随版本获得新默认值，已自定义的用户保留自己的选择。
+    - **默认值演进与迁移**：默认值变化时分别说明新用户、未自定义老用户、已自定义老用户的行为。迁移必须基于「是否自定义」的状态判断，不得通过旧值猜测用户意图；只有历史数据缺少自定义状态时才允许一次性兼容迁移，并在代码或 PR 中说明判断依据与风险。
+    - **恢复默认**：Settings 中恢复默认的语义是删除对应 override、重新跟随当前版本默认值，而不是写入一份静态默认值快照；配置组与整体设置页应提供相应粒度的恢复入口。用户通过 agent 要求恢复默认时同样删除 override。
+    - **隐藏配置也必须是正式契约**：隐藏配置必须有清晰 schema、字段说明、取值约束和安全边界，不能依赖零散分支或隐式约定。agent 修改配置时，用户明确要求修改才写入 override，不得把当前默认值固化回用户配置。
+    - **实现 / PR 说明**：至少写明配置层级、默认值及推荐它的理由、override 如何记录与识别、默认值未来变化时未自定义用户如何跟随、恢复默认会清除什么；进入 Settings UI 的配置还必须遵守 UI / i18n / 主题 token 等规则。
 
 26. **任何产品功能的设计与实现都必须同时考虑「远程连接」与「手机版」，PR 里要么一并适配、要么开 issue 跟踪，不允许静默忽略**。Cindy 的产品形态不止本地桌面单机，同一个功能可能运行在：(a) **SSH 远程工作区**（「远程连接」——workdir、agent 进程、文件都在远程主机上，经 `packages/maker-remote-ssh` / `packages/remote-file-service` / cc-manager 驱动）；(b) **设备互联远程控制**（手机或另一台桌面通过 `packages/device-link` 隧道驱动被控桌面端，IPC channel 白名单准入）；(c) **手机版**（`apps/mobile` 独立客户端，作为纯控制端复用 device-link）。**为什么容易踩**：开发与自测默认在本地桌面进行，这三个形态的缺口不报错、typecheck / 单测全拦不住——远程工作区下直接 `fs` 读 workdir 路径读到的是本机而不是远端；新 IPC channel 不登记 device-link allowlist，手机 / 远程控制端就永远调不通；手机版没有对应入口，用户在手机上就完全看不到这个功能——全部只在对应场景的用户实际使用时才暴露成「功能在远程 / 手机上不工作」。**怎么做**：
     - **设计阶段先回答三个问题**：① 功能涉及 workdir 文件 / agent 进程 / 会话数据时，在 SSH 远程工作区下能否正常工作（路径与执行位置在远端，现有远程通道 remote-file-service / cc-manager / exec 能否覆盖）？② 新增 / 修改的 IPC channel 与推送事件，手机 / 远程控制场景需不需要用？需要就按 `packages/device-link/src/allowlist.ts` 顶注的准入判据登记 invoke / push 白名单并同步 topic 路由；③ 手机版需不需要对应的入口 / UI / 交互？

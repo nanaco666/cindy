@@ -13,7 +13,7 @@ import { GhostInstallReview, GhostPermissionDiffView } from './GhostPermissionLi
 import { ghostInstallErrorKey } from './installErrorKey';
 
 /**
- * 装入/更新意识的统一编排(意识系统 C2c):inspect(验明正身)→ 确认弹窗 →
+ * 装入/更新意识的统一编排:inspect(验明正身)→ 确认弹窗 →
  * install / update。
  *
  * 「装意识前弹确认」是 README 定下的安全原则:确认框展示的是**意识自称的身份**
@@ -22,7 +22,7 @@ import { ghostInstallErrorKey } from './installErrorKey';
  * 转交路径进来(main/cindy-brain/openFileInstall.ts,pending buffer +
  * GlobalDropImportListener 消费),确认弹窗永远是应用内这同一个。
  *
- * 确认框正文是逐项权限清单(C3c-1):由身份卡静态推导(ghostPermissionItems),
+ * 确认框正文是逐项权限清单:由身份卡静态推导(ghostPermissionItems),
  * Cindy 代办按类目、工具逐个、指令/面板/可执行代码各一项,如实展示无黑话。
  *
  * 同 id 已装 → 自动转「更新」分支:确认框展示版本变化(vX → vY)+ 权限 diff
@@ -74,7 +74,7 @@ async function confirmAndRunUpdate(
   deps: InstallFlowDeps,
 ): Promise<void> {
   const { t, confirm } = deps;
-  // 权限 diff(C3c-1):只把新增/移除的权限亮给用户,不变项折叠计数。
+  // 权限 diff:只把新增/移除的权限亮给用户,不变项折叠计数。
   const diff = diffGhostPermissionItems(installed.manifest, manifest);
   const ok = await confirm({
     title: t('settings.ghosts.updateConfirm.title', { name: manifest.name }),
@@ -124,7 +124,7 @@ export async function confirmAndInstallGhost(
     return;
   }
 
-  // 2) 确认弹窗(C3c-1):自我介绍、作者/版本、权限清单分层展示。
+  // 2) 确认弹窗:自我介绍、作者/版本、权限清单分层展示。
   // 作者自由填写的工具长说明默认折叠;敏感权限仍直接展示。详情区限高滚动,
   // 不再让内容把整个弹窗撑出屏幕。
   // 身份卡自称的作者也如实展示(有才显示,避免"作者 ·"空段)。

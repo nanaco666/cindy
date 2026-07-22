@@ -1,5 +1,5 @@
 /**
- * ghostCardStore.ts — 意识聊天卡片的 renderer 侧数据源(卡槽③,C3d')。
+ * ghostCardStore.ts — 意识聊天卡片的 renderer 侧数据源(卡槽③)。
  *
  * 独立模块级 store(不并入 makerChatStore):卡片以 callId 为键、经全局
  * 推送通道('ghosts:card-updated',带净化 html 全量推)到达,与会话消息流

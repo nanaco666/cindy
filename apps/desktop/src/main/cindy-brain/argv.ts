@@ -1,7 +1,7 @@
 import { CINDY_FILE_EXT } from '../../shared/ghost.js';
 
 /**
- * 从启动参数里找双击关联而来的 .cindy 文件路径(意识系统 C2c:双击装入)。
+ * 从启动参数里找双击关联而来的 .cindy 文件路径(双击装入)。
  *
  * Windows 双击已关联的 .cindy 时,OS 把文件路径追加到 argv 末尾(冷启动进
  * process.argv,已运行则经单例锁转为 second-instance 的 argv)。从后往前找

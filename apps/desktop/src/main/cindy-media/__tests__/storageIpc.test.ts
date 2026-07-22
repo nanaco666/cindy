@@ -110,7 +110,7 @@ function makeHandlers(overrides?: {
 }
 
 describe('stats(占用总览)', () => {
-  it('账面统计 + 老世界占用 + 死目录状态', async () => {
+  it('账面统计 + 历史兼容层占用 + 死目录状态', async () => {
     const a = await seedBlob('stats-a');
     const c = await seedBlob('stats-cache', { isCache: true });
     fs.mkdirSync(path.join(legacyRoot, 'feishu-media'), { recursive: true });

@@ -102,7 +102,7 @@ export const MentionChipNode = Node.create<Record<string, never>, Record<string,
   },
 
   renderHTML({ HTMLAttributes, node }) {
-    // Design spec (command-palette.pen → 9GNAN "At Chip"):
+    // Visual spec for the mention chip:
     //   bg #e5e5e5, border 1px #d7d7d4, radius 4, padding 2px 6px, gap 4px,
     //   text #262626 JetBrains Mono 14px, icon 14x14 #262626.
     // We use CSS variables so dark mode flips automatically; the actual

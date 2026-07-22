@@ -1175,14 +1175,14 @@ export const deviceLinkOwnership = sqliteTable('device_link_ownership', {
 });
 
 /**
- * ── cindy-media 媒体总仓账本(设计:docs/Cindy架构设计/媒体总仓/media-store.md)──
+ * ── cindy-media 媒体总仓账本(契约:AGENTS.md 规则 25)─────────────────────
  *
  * 字节与含义分家:硬盘上的字节仓(userData/cindy-media/blobs,内容寻址,
  * 文件名=SHA-256 指纹)不含任何归属信息;文件的出生、性质、引用全部是
  * 下面两张表的行。生命周期 = 引用计数:blob 无任何 ref → 回收候选
  * (回收器在后续切片实现,本切片只做写入与归属查询)。
  *
- * 老世界(cc-agent/ 各仓 + xdt-image 等协议)整体冻结 grandfather,
+ * 历史兼容层(cc-agent/ 各仓 + xdt-image 等协议)整体冻结,
  * 不进本账本;新写入 100% 走本体系。
  */
 
@@ -1242,7 +1242,7 @@ export const mediaRefs = sqliteTable(
 );
 
 /**
- * 意识聊天卡片(卡槽③海报模式,C3d')。
+ * 意识聊天卡片(卡槽③海报模式)。
  *
  * 一行 = 一次 ghost_call 的最新卡片版本(upsert by callId,过程版被终版
  * 覆盖)。html 是主机 sanitizer 的净化产物,renderer 直接装入沙箱 iframe;

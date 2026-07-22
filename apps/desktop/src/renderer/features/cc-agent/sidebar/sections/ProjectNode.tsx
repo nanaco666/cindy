@@ -1,7 +1,7 @@
 /**
  * ProjectNode — 单个 Project 节点（Header + 受控折叠的子 sessions）
  * ---------------------------------------------------------------------------
- * 设计稿对照（cc-agent-view.pen）：
+ * Project 节点视觉规格：
  *   - Project Header：高 28 / 圆角 6 / padding [0, 8] / gap 6
  *     · chevron-right (折叠) / chevron-down (展开)，14×14 #737373
  *     · displayName Inter 14 / 500 #262626 (Light) / #f5f5f5 (Dark)

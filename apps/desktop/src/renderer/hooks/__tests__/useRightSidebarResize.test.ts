@@ -134,7 +134,7 @@ describe('useRightSidebarResize(树驱动宽度)', () => {
     expect(result.current.width).toBe(Math.round(0.7 * AVAIL));
   });
 
-  // resetWidth 已随私有把手拆除(C1c):复位语义 = 引擎分割线双击(RootDivider),
+  // resetWidth 已随私有把手拆除:复位语义 = 引擎分割线双击(RootDivider),
   // 由 layoutTree 的 transferSplitFraction 单测锁定,不再经本 hook。
 
   it('树里没有 right-tabs(单 pane content)→ 落渲染兜底默认', () => {

@@ -23,7 +23,7 @@ import { createOverrideSettingsFile } from '../maker-host/override-settings-file
 
 const log = desktopMakerLogger.child('cindy-prefs-store');
 
-/** cindy 槽能力键(类目.动作;与身份卡详单同一词汇表,C3c-5 起含 video)。 */
+/** cindy 槽能力键(类目.动作;与身份卡详单同一词汇表,当前包含 video)。 */
 export const CINDY_CAPABILITY_KEYS = ['image.generate', 'image.edit', 'video.generate', 'video.edit'] as const;
 export type CindyCapabilityKey = (typeof CINDY_CAPABILITY_KEYS)[number];
 

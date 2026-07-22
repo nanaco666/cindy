@@ -5,7 +5,7 @@ import {
 } from '../../shared/layoutTree';
 
 /**
- * 布局树 dev 调试工具(布局树重构 5/5)—— 证明"引擎是活的"的黑盒验证入口。
+ * 布局树 dev 调试工具—— 证明"引擎是活的"的黑盒验证入口。
  *
  * Step A 承诺外观零变化,布局引擎的通用性(顺序真的由树驱动、持久化真的
  * round-trip)没有任何用户可见路径能验证 —— 本工具在 dev 构建下往 window 挂
@@ -37,7 +37,7 @@ interface LayoutDevToolsApi {
   get: () => Layout;
   swap: () => Promise<string>;
   reset: () => Promise<string>;
-  /** 从树里移除指定 panelKind 的 pane(位置记忆随之丢弃;C2b 起替代 removeDemo)。 */
+  /** 从树里移除指定 panelKind 的 pane(位置记忆随之丢弃)。 */
   removePane: (kind: string) => Promise<string>;
 }
 

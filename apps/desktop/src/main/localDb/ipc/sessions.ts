@@ -988,9 +988,9 @@ export async function patchSessionMetaInDb(
         err: err instanceof Error ? err.message : String(err),
       });
     });
-    // 新世界(cindy-media)对应清理:删本会话名下的媒体引用行(附件/导入/
+    // 媒体总仓对应清理:删本会话名下的媒体引用行(附件/导入/
     // 消息出生引用;画廊等持久引用不动),引用归零的 blob 交回收器。
-    // fire-and-forget 与老世界目录清理同语义:失败只警告,不阻塞删除。
+    // fire-and-forget 与历史目录清理同语义:失败只警告,不阻塞删除。
     void removeSessionMediaRefs(sessionId)
       .then((n) => {
         if (n > 0) log.info('session media refs removed', { sessionId, count: n });

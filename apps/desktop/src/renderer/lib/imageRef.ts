@@ -153,7 +153,7 @@ export function parseUserContent(content: unknown): UserMessageContent {
  * `originalName`, but messages already stored with `name` must keep
  * rendering). Output is always normalised to `originalName`.
  */
-/** 可渲染的托管图片地址:老世界 xdt-image://(历史消息)或媒体总仓 cindy-media://(新消息)。 */
+/** 可渲染的托管图片地址:历史 xdt-image:// 或媒体总仓 cindy-media://。 */
 function isManagedImageUrl(url: string): boolean {
   return url.startsWith('xdt-image://') || url.startsWith('cindy-media://');
 }

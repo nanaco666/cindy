@@ -61,7 +61,7 @@ export interface IMHost {
   };
 
   /**
-   * host 托管的媒体缓存(cindy-media 媒体总仓,迁移第 3 步)。可选——注入后
+   * host 托管的媒体缓存(cindy-media 媒体总仓)。可选——注入后
    * 入站**图片**改走 host 内容寻址仓(按 token 免重下、全局去重、吃缓存回收
    * 策略);缺省时回落 `paths.*MediaDir` 的老目录写盘。非图片文件始终走老
    * 目录(host 侧规则 25 边界:非媒体不进字节仓)。包侧只摸字节和字符串,

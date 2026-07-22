@@ -105,7 +105,7 @@ export function providerOAuthStorageKey(providerId: string): string {
 }
 
 /**
- * 意识(Ghost)network 槽凭证的 safeStorage 键名前缀(C4 凭证保险库)。
+ * 意识(Ghost)network 槽凭证的 safeStorage 键名前缀(凭证保险库)。
  *
  * 账号切换清理(providerSecretStore.clearAll)按此前缀清扫 `ghost_secret_*`:
  * 意识按机器装入、键名不含 userId,同机换账号必须连同清掉,避免串号。
@@ -167,7 +167,7 @@ export function ghostSecretStorageKey(ghostId: string, secretKey: string): strin
  */
 export const GHOST_SECRET_HINT_PREFIX = 'ghost_hint_';
 
-/** 意识凭证尾指纹的存储键名(无别名——指纹是新世界产物,不与老键互通)。 */
+/** 意识凭证尾指纹的存储键名(无历史别名,不与旧键互通)。 */
 export function ghostSecretHintStorageKey(ghostId: string, secretKey: string): string {
   assertSafeKeyPart(ghostId, 'ghostId');
   assertSafeKeyPart(secretKey, 'secretKey');

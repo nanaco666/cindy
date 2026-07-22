@@ -295,7 +295,7 @@ export function MainLayout() {
   // 可用宽度测量的唯一观测目标 —— 见下方 useLayoutEffect 注释。
   const sidebarBlockRef = useRef<HTMLDivElement>(null);
   // B1b-1:宽度全局一份、持久化在布局树里(不再 per-session),hook 不再收 sessionId。
-  // C1c:拖宽把手已统一为引擎分割线(LayoutRoot RootDivider),hook 只剩宽度兜底 +
+  // 拖宽把手已统一为引擎分割线(LayoutRoot RootDivider),hook 只剩宽度兜底 +
   // 所在侧推导(rightSidebarSide 供折叠 toggle 落角)。
   const { width: rightSidebarWidth, resizeEdge: rightResizeEdge } =
     useRightSidebarResize(rightAvailableWidth);
@@ -346,7 +346,7 @@ export function MainLayout() {
   const hasInlineControlledBanner = hasInlineControlledBannerPath(location.pathname);
 
   // 可用总宽 = 窗口宽 − 左侧占位块宽(pinning spacer + Sidebar 的 wrapper)。
-  // B1a 去方位化(布局树重构 Step B,见 docs/Cindy架构设计/意识系统/layout-tree.md §7.1):
+  // 布局去方位化(AGENTS.md 规则 27):
   // 旧实现用「main 左边界」推左栏占宽,隐含"工具面板在 main 右侧"的方位假设 ——
   // 布局树把工具面板换到 main 左侧后,其展开动画每帧推动 main 左边界,
   // ResizeObserver 每帧触发 → 整个 MainLayout 每帧重渲染(实测明显卡顿),
@@ -1123,7 +1123,7 @@ export function MainLayout() {
             peekTriggerProps={sidebarPeek.triggerProps}
           />
         )}
-        {/* 布局树引擎(布局树重构 4/5):聊天主区与工具面板的**顺序与在场**改由
+        {/* 布局树引擎:聊天主区与工具面板的**顺序与在场**改由
             布局树(userData/layout.v1.json)驱动,渲染链 LayoutRoot → 面板注册表
             (renderer/panels)。两大块 JSX 原样保留在 bridge 里 —— 构造与状态
             所有权仍在 MainLayout(绞杀式重构 Step A:只换骨架不动组件;尺寸/
@@ -1193,7 +1193,7 @@ export function MainLayout() {
                 <RightSidebar
                   ref={rightSidebarRef}
                   isCollapsed={isRightSidebarCollapsed}
-                  // width 只在非 maximize 受控,且只是兜底 —— C1c 起 RSB 优先消费
+                  // width 只在非 maximize 受控,且只是兜底 —— RSB 优先消费
                   // 引擎 PaneWidthContext 的实时值;maximize 时 RightSidebar 内部走
                   // flex-1 自己撑满(2026-07-01 bug 修)。拖宽把手 = 引擎分割线。
                   width={rightSidebarWidth}
@@ -1215,7 +1215,7 @@ export function MainLayout() {
               ) : null,
           }}
         >
-          {/* C1c:内容区可用总宽下发给引擎(fraction → 像素宽、缝把手夹取都用它)。
+          {/* 内容区可用总宽下发给引擎(fraction → 像素宽、缝把手夹取都用它)。
               设置页 = 全屏接管路由,非 chat 面板(右栏之外还有意识面板)统一歇业。 */}
           <ContentAvailableWidthProvider value={rightAvailableWidth}>
             <LayoutRoot suppressNonChatPanels={isSettingsRoute} />
@@ -1223,7 +1223,7 @@ export function MainLayout() {
         </BuiltinPanelBridgeProvider>
         {/* 拖面板换位(B3 转正;M3 起 mac 同步开闸——mac 顶栏全部保留窗口拖拽,
             手势天然只剩长按窗体)。总开关只管全局语境(内容区路由在场、非
-            maximize 撑满态);"哪些面板当下可换位"不在这里猜 —— C1b 起 N 面板
+            maximize 撑满态);"哪些面板当下可换位"不在这里猜 —— N 面板
             通用,控制器起拖时按布局树现场收集落点,折叠/隐藏(无身体)的面板
             被 isDroppableRect 过滤,一个落点都没有就不浮起。曾经的
             !isRightSidebarCollapsed 写死条件是 B3 双面板时代遗产:右栏一折叠

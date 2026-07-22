@@ -1,5 +1,5 @@
 /**
- * attachmentGrant.test.ts — 用户图片过户(C3c-4)单测(纯 DI,无 Electron)。
+ * attachmentGrant.test.ts — 用户图片过户单测(纯 DI,无 Electron)。
  * 覆盖:happy path 记账链路(blob 入账 + ghost-grant 引用 + 指纹返回)、
  * 地址解析失败整批拒且零副作用、张数上限、空批直通、落库中途失败报错。
  */

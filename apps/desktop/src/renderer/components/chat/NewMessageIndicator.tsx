@@ -5,7 +5,6 @@
  *
  * 纯呈现按钮组件——cc-agent 聊天流底部的"↓ N 条新消息"小药丸。
  *
- * 设计参考: doc/design_docs/cc-agent-view.pen frame `wHMhg`
  *   - height 32px / rounded-full / padding 0 12px / gap 6px
  *   - Inter 12px / weight 500
  *   - ArrowDown lucide size=14

@@ -1184,7 +1184,7 @@ const config: ForgeConfig = {
           LSItemContentTypes: ['public.folder'],
         },
         // Cindy 卡带 (.cindy):Finder 双击 → open-file 事件 → 装入 + 停靠
-        // (卡带系统 C2c;Windows 半边走注册表自注册,见 brain/fileAssociation.ts)。
+        // (卡带系统;Windows 半边走注册表自注册,见 brain/fileAssociation.ts)。
         // LSItemContentTypes 指向下方 UTExportedTypeDeclarations 声明的自有 UTI
         // (UTI 里带扩展名 + MIME 映射);CFBundleTypeExtensions 保留作旧系统
         // 兜底(LSItemContentTypes 存在时会被忽略)。Owner 表示本 app 是该类型

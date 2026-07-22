@@ -46,7 +46,7 @@ export interface RightSidebarHandle {
 
 interface RightSidebarProps {
   isCollapsed: boolean;
-  /** Expanded-state width in px —— 兜底值。C1c 起宽度主权在引擎:本组件优先消费
+  /** Expanded-state width in px —— 兜底值。宽度主权在引擎:本组件优先消费
    *  PaneWidthContext 的实时值(拖引擎缝把手时逐帧跟手),引擎未接管时才回落
    *  本 prop。私有拖宽把手已拆除(同一条缝不双把手,把手 = 引擎分割线)。 */
   width: number;
@@ -112,7 +112,7 @@ export const RightSidebar = forwardRef<RightSidebarHandle, RightSidebarProps>(fu
   const [animationWidthSnapshot, setAnimationWidthSnapshot] = useState<number | null>(null);
   const animateNextRef = useRef(false);
   const asideRef = useRef<HTMLElement | null>(null);
-  // C1c:宽度优先取引擎实时值(拖引擎缝把手逐帧跟手),未接管回落 prop。
+  // 宽度优先取引擎实时值(拖引擎缝把手逐帧跟手),未接管回落 prop。
   const engineWidth = usePanelWidth('right-tabs');
   const effectiveWidth = engineWidth ?? width;
   const widthRef = useRef(effectiveWidth);
@@ -175,7 +175,7 @@ export const RightSidebar = forwardRef<RightSidebarHandle, RightSidebarProps>(fu
       // 收起到 0 宽时不在窗口边缘留孤线。
       data-pane-collapsed={displayCollapsed ? '' : undefined}
       className={cn(
-        // 侧边分割线由布局引擎统一绘制(C1),aside 与内容层都不自画竖线。
+        // 侧边分割线由布局引擎统一绘制,aside 与内容层都不自画竖线。
         'relative flex flex-col bg-content-area',
         animating &&
           'transition-[width] duration-[250ms] ease-[cubic-bezier(0.4,0,0.2,1)] motion-reduce:duration-0',
@@ -208,7 +208,7 @@ export const RightSidebar = forwardRef<RightSidebarHandle, RightSidebarProps>(fu
       {/* border-l 画在本层,跨 46px chrome + TabBar + Body 整个 RSB 内部,从顶到底连贯一条;
           aside 外壳折叠到 w-0 时本层被 overflow-hidden 一并裁掉,不留残留。 */}
       <div
-        // 侧边分割线已移交布局引擎统一绘制(LayoutRoot 的 layout-divider,C1)——
+        // 侧边分割线已移交布局引擎统一绘制(LayoutRoot 的 layout-divider)——
         // 本层不再自画 border,避免与引擎缝双线/漏缝;把手 hover 高亮线仍在下方。
         className="flex h-full min-h-0 min-w-0 w-full flex-col overflow-hidden"
         style={contentStyle}
@@ -262,7 +262,7 @@ export const RightSidebar = forwardRef<RightSidebarHandle, RightSidebarProps>(fu
         />
       </div>
 
-      {/* 私有拖宽把手已拆除(C1c):同一条缝不双把手 —— 拖宽/双击复位统一走
+      {/* 私有拖宽把手已拆除:同一条缝不双把手 —— 拖宽/双击复位统一走
           引擎分割线(LayoutRoot 的 RootDivider),对任意排列与 N 面板通用。 */}
     </aside>
   );
