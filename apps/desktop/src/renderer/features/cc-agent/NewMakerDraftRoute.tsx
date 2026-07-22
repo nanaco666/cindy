@@ -802,6 +802,7 @@ export function NewMakerDraftRoute() {
           planModeEnabled: effectivePlanMode,
           remoteHostId: target.hostId,
           providerId: chatPrefs.providerId ?? null,
+          extraDirs: effectiveExtraDirs,
         });
         if (!newSession) {
           toast.error(t('ccAgent.draft.createSessionFailed'));
@@ -814,15 +815,26 @@ export function NewMakerDraftRoute() {
           planModeEnabled: effectivePlanMode,
         });
         {
-          const iso = new Date().toISOString();
-          sessionsStore.patchLocal(newSession.id, { userSendAt: iso, updatedAt: iso });
+          const sendAt = new Date();
+          sessionsStore.patchLocal(newSession.id, { userSendAt: sendAt.toISOString(), updatedAt: sendAt.toISOString() });
+          sessionService.touchUserSend(newSession.id, sendAt.getTime()).catch((e) => {
+            log.warn('[add remote project] touchUserSend failed', e);
+          });
+        }
+        // 把草稿页已输入的文本/附件移交到新会话,避免 navigate 后丢失。
+        const existingDraft = getComposerDraft(NEW_MAKER_DRAFT_KEY);
+        if (existingDraft) {
+          saveComposerDraft(newSession.id, existingDraft);
+          clearComposerDraftAndNotify(NEW_MAKER_DRAFT_KEY);
+          attachmentState.clearFiles();
         }
         navigate(`/cc-agent/${newSession.id}`, { replace: true });
       } catch (err) {
-        log.warn('add remote project failed', { error: String(err), vendor: draftVendor });
+        log.error('[add remote project]', err);
+        toast.error(t('ccAgent.draft.createSessionFailed'));
       }
     },
-    [draft.vendor, chatPrefs, draftInitialEffort, effectiveFastMode, effectivePlanMode, createSession, navigate, t],
+    [draft.vendor, chatPrefs, draftInitialEffort, effectiveExtraDirs, effectiveFastMode, effectivePlanMode, attachmentState, createSession, navigate, t],
   );
 
   // ─── 切 vendor ──────────────────────────────────────────────────────
@@ -2056,9 +2068,7 @@ export function NewMakerDraftRoute() {
         <AddRemoteProjectDialog
           open={addRemoteProjectOpen}
           onOpenChange={setAddRemoteProjectOpen}
-          onProjectAdded={(target) => {
-            void handleRemoteProjectAdded(target);
-          }}
+          onProjectAdded={handleRemoteProjectAdded}
         />
       </div>
     </TopRightChipStackProvider>

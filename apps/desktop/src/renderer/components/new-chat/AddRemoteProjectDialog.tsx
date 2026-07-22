@@ -54,7 +54,7 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /** vendor 不在 dialog 里选 —— 由父层根据当前 draft / segmented switcher 决定。 */
-  onProjectAdded: (target: RemoteProjectTarget) => void;
+  onProjectAdded: (target: RemoteProjectTarget) => void | Promise<void>;
 }
 
 export function AddRemoteProjectDialog({ open, onOpenChange, onProjectAdded }: Props) {
@@ -268,9 +268,9 @@ export function AddRemoteProjectDialog({ open, onOpenChange, onProjectAdded }: P
         finalPath = mk.resolvedPath;
       }
       if (selectedTarget.kind === 'ssh') {
-        onProjectAdded({ kind: 'ssh', hostId: selectedTarget.hostId, path: finalPath });
+        await onProjectAdded({ kind: 'ssh', hostId: selectedTarget.hostId, path: finalPath });
       } else {
-        onProjectAdded({
+        await onProjectAdded({
           kind: 'device-link',
           deviceId: selectedTarget.deviceId,
           deviceName: selectedTarget.deviceName,
