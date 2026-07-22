@@ -142,13 +142,17 @@ function emitPlanReviewRequest(requestId: string): void {
   });
 }
 
-function emitDone(source: 'codex' | 'claude-code', plan?: Array<{ step: string; status: string }>): void {
+function emitDone(
+  source: 'codex' | 'claude-code',
+  plan?: Array<{ step: string; status: string }>,
+  turnId = 'turn-1',
+): void {
   onEvent?.({
     sessionId: SESSION_ID,
     event: {
       type: 'done',
       source,
-      data: { type: 'task_complete', ...(plan ? { plan } : {}) },
+      data: { type: 'task_complete', raw: { id: turnId }, ...(plan ? { plan } : {}) },
     },
   });
 }
