@@ -53,6 +53,7 @@ import type { VoiceInputAsrMode, VoiceInputProviderKind } from '../shared/voiceI
 import type { VoiceInputRefinerProviderKind, VoiceInputRefinerTransport } from '../shared/voiceInputRefinerProfiles';
 import { isIpcErrorCode, type IpcErrorCode } from '../shared/ipc-errors';
 import type { VoiceInputSyncErrorResult } from '../shared/voiceInputData';
+import type { UtilityTextFailure } from '../shared/utilityTextResult';
 import type {
   ReviewBranchDiffData,
   ReviewCommitDiffData,
@@ -4249,6 +4250,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
         targetSessionId?: string;
         currentCommand?: string;
       }): Promise<{
+        ok: true;
         command: string;
         filePath: string;
         content: string;
@@ -4266,7 +4268,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
           spawnError?: string;
           error?: string;
         };
-      }> => ipcRenderer.invoke('maker:schedule:generate-pre-run-hook', params),
+      } | UtilityTextFailure> => ipcRenderer.invoke('maker:schedule:generate-pre-run-hook', params),
       listRuns: (id: string, limit?: number): Promise<unknown[]> =>
         ipcRenderer.invoke('maker:schedule:list-runs', id, limit),
       listSidebarIndexRuns: (): Promise<unknown[]> =>

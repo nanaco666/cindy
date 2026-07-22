@@ -22,6 +22,7 @@ import path from 'node:path';
 
 import type { Maker } from '@lizi/maker-core';
 import type { PreRunHookRunResult } from '@lizi/maker-scheduler';
+import type { UtilityTextFailure, UtilityTextResult } from '../../shared/utilityTextResult.js';
 
 /** 生成请求的输入(IPC 层已完成参数校验)。 */
 export interface GenerateHookScriptInput {
@@ -50,13 +51,43 @@ export interface HookScriptGeneratorDeps {
   fallbackDir: string;
   logger?: { info?: (msg: string, meta?: unknown) => void; warn?: (msg: string, meta?: unknown) => void };
   /** 测试注入;缺省走 requestUtilityText。 */
-  requestText?: (maker: Maker, prompt: string, opts: { maxTokens: number; timeoutMs: number }) => Promise<{ text: string } | null>;
+  requestText?: (maker: Maker, prompt: string, opts: { maxTokens: number; timeoutMs: number }) => Promise<UtilityTextResult>;
   /**
    * 测试注入;缺省走 hook-runtimes.hasSystemNode(探测系统 node)。
    * false → 生成的命令用 `xdt-node` 前缀(app 自带 Electron 运行时兜底,
    * 见 pre-run-hook.resolveHookCommand),裸机用户也能跑。
    */
   hasSystemNode?: () => Promise<boolean>;
+}
+
+/** Stable error codes consumed by both the scheduler IPC and scheduler MCP. */
+export type HookScriptUtilityModelErrorCode =
+  | 'UTILITY_MODEL_NO_CANDIDATE'
+  | 'UTILITY_MODEL_ALL_CANDIDATES_FAILED'
+  | 'UTILITY_MODEL_EMPTY_RESPONSE'
+  | 'UTILITY_MODEL_TIMEOUT';
+
+const UTILITY_MODEL_ERROR_CODE: Record<UtilityTextFailure['reason'], HookScriptUtilityModelErrorCode> = {
+  no_candidate: 'UTILITY_MODEL_NO_CANDIDATE',
+  all_candidates_failed: 'UTILITY_MODEL_ALL_CANDIDATES_FAILED',
+  empty_response: 'UTILITY_MODEL_EMPTY_RESPONSE',
+  timeout: 'UTILITY_MODEL_TIMEOUT',
+};
+
+/** Expected utility-model exhaustion with a credential-safe structured diagnostic. */
+export class HookScriptUtilityModelError extends Error {
+  readonly code: HookScriptUtilityModelErrorCode;
+
+  constructor(readonly failure: UtilityTextFailure) {
+    const code = UTILITY_MODEL_ERROR_CODE[failure.reason];
+    const attempts = failure.attempts
+      .map((attempt) =>
+        `${attempt.providerId}/${attempt.model}:${attempt.reason}${attempt.httpStatus !== undefined ? `(${attempt.httpStatus})` : ''}`)
+      .join(', ');
+    super(`[${code}] ${failure.reason}${attempts ? `; attempts=${attempts}` : ''}`);
+    this.name = 'HookScriptUtilityModelError';
+    this.code = code;
+  }
 }
 
 /** 生成脚本的输出 token 预算与超时:脚本 ≤ ~120 行,4k token 充裕;网络+推理放宽到 90s。 */
@@ -373,9 +404,7 @@ export async function generateHookScript(
     maxTokens: GENERATE_MAX_TOKENS,
     timeoutMs: GENERATE_TIMEOUT_MS,
   });
-  if (!response?.text) {
-    throw new Error('hook script generation failed: no utility model available or empty response');
-  }
+  if (!response.ok) throw new HookScriptUtilityModelError(response);
   const content = extractScriptFromResponse(response.text);
   if (!content) {
     throw new Error('hook script generation failed: response did not contain a code block');

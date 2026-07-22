@@ -8,17 +8,18 @@
  * message → 三个 IPC 错误码），多了一个 `SCHEDULER_NOT_READY` 用于 reset 期间
  * `getScheduler()` 抛 'scheduler not started' 的场景。
  *
- * Phase 5 hard rule (plan §C.6)：MCP tool result 错误码必须复用 IPC 层 3 种 +
- * 新增 SCHEDULER_NOT_READY，禁止自创新错误码集。Phase 7 cleanup 会把这条逻辑
- * 抽成 IPC + MCP 共享 util；本 Phase 先在 lizi-mcps 内就近实现，签名与 IPC 层对应
- * （IPC 抛带 code 的 Error；MCP 返回 `{code, message}` 由 caller 包成 isError
- * tool result）。
+ * MCP tool result 错误码必须复用 IPC 层错误码；utility-model 耗尽也沿用 desktop
+ * generator 的稳定 code，避免 UI 与 MCP 对同一失败给出不同分类。
  */
 export type SchedulerToolErrorCode =
   | 'NOT_FOUND'
   | 'INVALID_PARAMS'
   | 'INTERNAL'
-  | 'SCHEDULER_NOT_READY';
+  | 'SCHEDULER_NOT_READY'
+  | 'UTILITY_MODEL_NO_CANDIDATE'
+  | 'UTILITY_MODEL_ALL_CANDIDATES_FAILED'
+  | 'UTILITY_MODEL_EMPTY_RESPONSE'
+  | 'UTILITY_MODEL_TIMEOUT';
 
 export interface SchedulerToolError {
   code: SchedulerToolErrorCode;
@@ -31,6 +32,11 @@ export interface SchedulerToolError {
  */
 export function classifySchedulerError(err: unknown): SchedulerToolError {
   const message = err instanceof Error ? err.message : String(err);
+  const utilityCode = /^\[(UTILITY_MODEL_(?:NO_CANDIDATE|ALL_CANDIDATES_FAILED|EMPTY_RESPONSE|TIMEOUT))\]/
+    .exec(message)?.[1];
+  if (utilityCode) {
+    return { code: utilityCode as SchedulerToolErrorCode, message };
+  }
   if (/scheduler not started/i.test(message)) {
     return { code: 'SCHEDULER_NOT_READY', message };
   }
