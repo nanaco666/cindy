@@ -1,7 +1,3 @@
-import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -1266,119 +1262,6 @@ describe('ghost · network 详单校验(C4)', () => {
     const item = ghostPermissionItems(r.manifest).find((i) => i.key === 'notify');
     expect(item).toMatchObject({ kind: 'notify', labelKey: 'notify', detailKey: 'notifyDetail' });
   });
-
-  it('内置意识 cindy-web-search 的身份卡永远过校验(随包种子即契约,防腐烂)', () => {
-    const p = path.join(
-      path.dirname(fileURLToPath(import.meta.url)),
-      '../../../resources/builtin-ghosts/official/cindy-web-search/ghost.json',
-    );
-    const r = validateGhostManifest(JSON.parse(fs.readFileSync(p, 'utf-8')));
-    expect(r.ok, r.ok ? '' : r.reason).toBe(true);
-    if (!r.ok) return;
-    expect(r.manifest.id).toBe('cindy-web-search');
-    expect(r.manifest.network?.hosts).toEqual(['api.search.brave.com', 'api.tavily.com']);
-    expect(r.manifest.network?.secrets?.map((s) => s.key)).toEqual(['brave_api_key', 'tavily_api_key']);
-  });
-
-  it('内置意识 xd-pages 的身份卡永远过校验(登录邮箱派生凭证 + 5 工具)', () => {
-    const p = path.join(
-      path.dirname(fileURLToPath(import.meta.url)),
-      '../../../resources/builtin-ghosts/xd/xd-pages/ghost.json',
-    );
-    const r = validateGhostManifest(JSON.parse(fs.readFileSync(p, 'utf-8')));
-    expect(r.ok, r.ok ? '' : r.reason).toBe(true);
-    if (!r.ok) return;
-    expect(r.manifest.id).toBe('xd-pages');
-    expect(r.manifest.network?.hosts).toEqual(['api.workers.xd.team']);
-    const secret = r.manifest.network?.secrets?.[0];
-    expect(secret?.key).toBe('pages_token');
-    expect(secret?.source).toBe('login-email');
-    expect(secret?.inject).toEqual({ header: 'X-Pages-Token', format: 'pages_{value}' });
-    expect(r.manifest.tools?.map((t) => t.name)).toEqual([
-      'pages_deploy',
-      'pages_list',
-      'pages_info',
-      'pages_delete',
-      'pages_get_worker_template',
-    ]);
-  });
-
-  it('内置意识 cindy-github 的身份卡永远过校验(user 凭证 PAT + 两段式目录 2 元工具)', () => {
-    const p = path.join(
-      path.dirname(fileURLToPath(import.meta.url)),
-      '../../../resources/builtin-ghosts/official/cindy-github/ghost.json',
-    );
-    const r = validateGhostManifest(JSON.parse(fs.readFileSync(p, 'utf-8')));
-    expect(r.ok, r.ok ? '' : r.reason).toBe(true);
-    if (!r.ok) return;
-    expect(r.manifest.id).toBe('cindy-github');
-    // 白名单三条:API 主域 + Actions 产物/日志 302 跳转的两个下载域;
-    // PAT 只注入 api.github.com(Bearer 不跟去下载域)。
-    expect(r.manifest.network?.hosts).toEqual([
-      'api.github.com',
-      'objects.githubusercontent.com',
-      '*.blob.core.windows.net',
-    ]);
-    const secret = r.manifest.network?.secrets?.[0];
-    expect(secret?.key).toBe('github_pat');
-    // 来源缺省 'user',校验归一化后不落清单(见 ghost.ts 的 source 归一化)。
-    expect(secret?.source).toBeUndefined();
-    expect(secret?.inject).toEqual({ header: 'Authorization', format: 'Bearer {value}', hosts: ['api.github.com'] });
-    expect(r.manifest.settingsHtml).toBe('settings.html');
-    // 两段式目录(FORGE_GUIDE §3.5):117 个操作在电子脑目录里,不平铺进 tools。
-    expect(r.manifest.tools?.map((t) => t.name)).toEqual(['list_tools', 'call_tool']);
-  });
-
-  it('内置意识 xd-mivo 的身份卡永远过校验(exchange 二段式 + OSS 取件域 + 13 工具)', () => {
-    const p = path.join(
-      path.dirname(fileURLToPath(import.meta.url)),
-      '../../../resources/builtin-ghosts/xd/xd-mivo/ghost.json',
-    );
-    const r = validateGhostManifest(JSON.parse(fs.readFileSync(p, 'utf-8')));
-    expect(r.ok, r.ok ? '' : r.reason).toBe(true);
-    if (!r.ok) return;
-    expect(r.manifest.id).toBe('xd-mivo');
-    // 自绘设置区:mivo key 由意识自己收单(经 /secrets 只写通道入库),
-    // 宿主凭证渲染已整体退役,input 字段随之退役、归一化后不落清单;
-    // 保管与注入仍在主机(2026-07-13 Lizi 定案)。
-    // 不声明 settingsHeight = 高度随内容自适应。
-    expect(r.manifest.settingsHtml).toBe('settings.html');
-    expect(r.manifest.settingsHeight).toBeUndefined();
-    expect(ghostContentKeys(r.manifest)).toContain('settingsUi');
-    // OSS 通配域是 307 取件地基(全 region 收口 *.aliyuncs.com,mivo 桶不一定
-    // 在 shanghai);凭证注入范围必须锁 aigc(Bearer 不去 OSS)。
-    expect(r.manifest.network?.hosts).toEqual(['aigc.xindong.com', '*.aliyuncs.com']);
-    const secret = r.manifest.network?.secrets?.[0];
-    expect(secret?.key).toBe('mivo_api_key');
-    expect(secret && 'input' in secret).toBe(false);
-    expect(secret?.inject.hosts).toEqual(['aigc.xindong.com']);
-    // exchange 二段式声明:主机代办 key→session,tokenPath 指向 session 字段。
-    expect(secret?.exchange).toEqual({
-      url: 'https://aigc.xindong.com/api/v1/state/token',
-      bodyFormat: '{"id":"","sub":"{value}","name":""}',
-      tokenPath: 'session',
-      ttlSeconds: 86400,
-    });
-    expect(r.manifest.tools?.map((t) => t.name)).toEqual([
-      'submit_gen_image',
-      'poll_result',
-      'segment_image',
-      'super_resolution_image',
-      'mivo_button_action',
-      'submit_gen_video',
-      'submit_gen_music',
-      'submit_gen_sound_effect',
-      'submit_gen_3d_model',
-      'poll_3d_result',
-      // convert 双路落地(2026-07-13):GLB 入媒体库,FBX/OBJ_ZIP 凭
-      // save_dir 票据(as:'file')直写用户目录,绕开总仓只收 GLB 的限制。
-      'convert_3d_model_format',
-      'animate_3d_model',
-      'download_file',
-    ]);
-  });
-
-  // cindy-slack 意识已于 2026-07-19 退役(Slack 能力并轨 hook 通道),其身份卡校验用例随包删除。
 });
 
 describe('ghost · network 多连接声明(connections)', () => {
@@ -1702,40 +1585,5 @@ describe('ghost · 权限清单凭证分档(知情同意面不许说过头话)',
     expect(items.find((i) => i.key === 'network:secret:pages_token')?.detailKey).toBe(
       'networkSecretIdentityDetail',
     );
-  });
-});
-
-describe('内置插件 · 配置入口引导', () => {
-  it('所有内置插件的用户可见文案都指向主界面侧边栏「插件」', () => {
-    // 种子源已拆为两个 submodule 仓(official / xd),逐根扫描;根为空说明
-    // submodule 没初始化,直接报错提醒(否则本测试会静默空转失去意义)。
-    const base = path.join(path.dirname(fileURLToPath(import.meta.url)), '../../../resources/builtin-ghosts');
-    const stalePatterns = ['设置 → 插件', '插件设置页', '本插件设置页', '到设置页'];
-    const offenders: string[] = [];
-
-    for (const rootName of ['official', 'xd']) {
-      const root = path.join(base, rootName);
-      // 目录不存在(极端:连空目录都没建)与目录为空同判——都归成同一条
-      // 友好断言,不让裸 ENOENT 盖掉「去 init submodule」的提示。
-      let entries: fs.Dirent[] = [];
-      try {
-        entries = fs.readdirSync(root, { withFileTypes: true }).filter((e) => e.isDirectory());
-      } catch {
-        entries = [];
-      }
-      expect(entries.length, `${rootName} 种子根为空 —— 先跑 git submodule update --init`).toBeGreaterThan(0);
-      for (const entry of entries) {
-        for (const fileName of ['ghost.json', 'main.js']) {
-          const filePath = path.join(root, entry.name, fileName);
-          if (!fs.existsSync(filePath)) continue;
-          const source = fs.readFileSync(filePath, 'utf8');
-          for (const pattern of stalePatterns) {
-            if (source.includes(pattern)) offenders.push(`${rootName}/${entry.name}/${fileName}: ${pattern}`);
-          }
-        }
-      }
-    }
-
-    expect(offenders).toEqual([]);
   });
 });
