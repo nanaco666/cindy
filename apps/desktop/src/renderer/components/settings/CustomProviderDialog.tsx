@@ -24,6 +24,7 @@ import { extractIpcError } from '@/utils/ipcError';
 import {
   createCustomProvider,
   readCustomProviderKey,
+  replaceCustomProviderModelId,
   updateCustomProvider,
   type RuntimeKeys,
 } from '@/lib/customProviders';
@@ -942,7 +943,9 @@ export function CustomProviderDialog({ initial, existingIds, onSaved, onClose }:
                       onChange={(v) =>
                         patch(activeTab, (x) => ({
                           ...x,
-                          models: x.models.map((y, j) => (j === i ? { ...y, id: v } : y)),
+                          models: x.models.map((y, j) => (
+                            j === i ? replaceCustomProviderModelId(y, v) : y
+                          )),
                         }))
                       }
                       placeholder={t('settings.providers.custom.fields.modelIdPlaceholder')}
