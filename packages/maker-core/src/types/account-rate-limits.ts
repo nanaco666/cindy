@@ -2,8 +2,10 @@
 export interface AccountRateLimitWindow {
   /** Percentage consumed, in the inclusive range 0-100. */
   usedPercent: number;
-  /** Window duration in minutes when the provider exposes it. */
+  /** Normalized window duration used by Cindy presentation layers. */
   windowMinutes?: number | null;
+  /** Raw Codex app-server field (0.144.x wire shape). */
+  windowDurationMins?: number | null;
   /** Unix epoch seconds when this window resets. */
   resetsAt?: number | null;
 }

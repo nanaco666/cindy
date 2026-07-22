@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
 import type {
+  AccountRateLimitWindow,
   AccountRateLimitResetCredit,
   AccountRateLimitSnapshot,
   AccountRateLimitsResponse,
@@ -123,10 +124,21 @@ function displayRateLimitSnapshot(
   return {
     limitId: snapshot.limitId,
     limitName: snapshot.limitName,
-    primary: snapshot.primary,
-    secondary: snapshot.secondary,
+    primary: displayRateLimitWindow(snapshot.primary),
+    secondary: displayRateLimitWindow(snapshot.secondary),
     planType: snapshot.planType,
     rateLimitReachedType: snapshot.rateLimitReachedType,
+  };
+}
+
+function displayRateLimitWindow(
+  window: AccountRateLimitWindow | null | undefined,
+): MobileCodexRateLimitsResult['rateLimits']['primary'] {
+  if (!window) return window;
+  return {
+    usedPercent: window.usedPercent,
+    windowMinutes: window.windowMinutes ?? window.windowDurationMins ?? null,
+    resetsAt: window.resetsAt,
   };
 }
 
@@ -185,8 +197,9 @@ export function createCodexRateLimitResetService(
       deps.readAccountIdentity(),
     ]);
     const accountId = identity.accountId;
+    const normalizedRateLimits = displayRateLimitSnapshot(response.rateLimits);
     await deps.recordRateLimitSnapshot({
-      ...response.rateLimits,
+      ...normalizedRateLimits,
       source: 'codex-app-server',
       updatedAt: now(),
       accountId,
@@ -221,7 +234,7 @@ export function createCodexRateLimitResetService(
 
     return {
       account: displayAccount(identity, response.rateLimits.planType ?? null),
-      rateLimits: displayRateLimitSnapshot(response.rateLimits),
+      rateLimits: normalizedRateLimits,
       rateLimitsByLimitId: displayRateLimitsById(response.rateLimitsByLimitId),
       rateLimitResetCredits: response.rateLimitResetCredits
         ? { availableCount, credits: displayResetCredits(credits) }

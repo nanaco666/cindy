@@ -10,7 +10,7 @@ function response(over: Partial<AccountRateLimitsResponse> = {}): AccountRateLim
   return {
     rateLimits: {
       planType: 'plus',
-      primary: { usedPercent: 100, windowMinutes: 300 },
+      primary: { usedPercent: 100, windowDurationMins: 300 },
     },
     rateLimitsByLimitId: null,
     rateLimitResetCredits: {
@@ -66,12 +66,20 @@ describe('Codex rate-limit reset control plane', () => {
       accountId: '…456789',
       planType: 'plus',
     });
+    expect(snapshot.rateLimits.primary).toEqual({
+      usedPercent: 100,
+      windowMinutes: 300,
+      resetsAt: undefined,
+    });
     expect(snapshot.resetOffer).toEqual({
       idempotencyKey: KEY,
       expiresAt: 200,
       validUntil: NOW_MS + 10 * 60 * 1000,
     });
     expect(snapshot.rateLimitResetCredits?.credits?.[0]).not.toHaveProperty('id');
+    expect(deps.recordRateLimitSnapshot).toHaveBeenCalledWith(expect.objectContaining({
+      primary: expect.objectContaining({ windowMinutes: 300 }),
+    }));
 
     await service.consume(KEY);
     expect(deps.consumeResetCredit).toHaveBeenCalledWith({
