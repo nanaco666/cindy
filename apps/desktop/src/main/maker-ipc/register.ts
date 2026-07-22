@@ -3118,7 +3118,7 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
       }
     },
   });
-  // Claude Auto 分类器 429/5xx → 单会话切 ask + 持久化 + 结构化提示。
+  // Claude Auto 分类器错误响应(status≥400,含 4xx/5xx) → 单会话切 ask + 持久化 + 结构化提示。
   // coordinator 内部会复核 DB 仍为 auto,并按 session 去重;listener 只 fire-and-forget,
   // 绝不阻塞 proxy 响应 pipe,也不自动重放本次 tool call。
   const handleClaudeAutoClassifierUnavailable = createClaudeAutoPermissionFallbackCoordinator({
