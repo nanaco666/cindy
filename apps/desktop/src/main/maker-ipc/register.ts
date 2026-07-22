@@ -379,7 +379,9 @@ import {
 const log = createLogger('maker-ipc');
 
 async function prepareProjectSkillLinksFailSoft(workingDir: unknown): Promise<boolean> {
-  if (typeof workingDir !== 'string' || !workingDir) return false;
+  // Slash/@ palettes are read-only device-link surfaces. Their remote invokes must not
+  // create or remove compatibility links in the controlled project's filesystem.
+  if (isDeviceLinkInvoke() || typeof workingDir !== 'string' || !workingDir) return false;
   try {
     const result = await prepareSharedProjectSkillLinks({ workingDir });
     for (const warning of result.warnings) {
