@@ -1447,6 +1447,14 @@ export class CodexAgent extends BaseAgent {
     return { key, host };
   }
 
+  /** Start the local OAuth host used by non-model account control-plane RPCs. */
+  private async getStartedAccountHost(): Promise<AppServerHost> {
+    const host = await this.getHost(undefined, 'oauth-bearer');
+    const init = await host.ensureStarted();
+    if (init.codexHome) this.codexHome = init.codexHome;
+    return host;
+  }
+
   /**
    * 向本地 app-server 实时读取完整模型清单并交给宿主。
    *
@@ -1491,7 +1499,7 @@ export class CodexAgent extends BaseAgent {
     // This RPC is credential-specific, unlike model/list or memory utilities. Requiring
     // oauth-bearer prevents a gateway/provider host from reading or mutating the wrong
     // account context; getHost refuses to replace a differently-authenticated active host.
-    const host = await this.getHost(undefined, 'oauth-bearer');
+    const host = await this.getStartedAccountHost();
     return await host.request<AccountRateLimitsResponse>(Method.AccountRateLimitsRead, undefined);
   }
 
@@ -1499,7 +1507,7 @@ export class CodexAgent extends BaseAgent {
   override async consumeAccountRateLimitResetCredit(
     params: ConsumeAccountRateLimitResetCreditParams,
   ): Promise<ConsumeAccountRateLimitResetCreditResponse> {
-    const host = await this.getHost(undefined, 'oauth-bearer');
+    const host = await this.getStartedAccountHost();
     return await host.request<ConsumeAccountRateLimitResetCreditResponse>(
       Method.AccountRateLimitResetCreditConsume,
       params,

@@ -15,6 +15,7 @@ import type { ClaudeAccountUsageSnapshot } from '../usage/claudeAccountUsage.js'
 import type { ModelPricingMap } from '../usage/modelPricing.js';
 import type { UsageHistoryPayload, UsageHistoryReadOptions } from '../usage/usageHistory.js';
 import type { AgentTodayUsage, RateLimitSnapshot } from '../usageBroadcaster.js';
+import { CodexRateLimitResetRejectedError } from '../usage/codexRateLimitReset.js';
 import { requireString, throwIpcError } from '../utils/ipcValidate.js';
 import { MAKER_INVOKE } from './channels.js';
 import type { IpcHandlerRegistry } from './ipcHandlerRegistry.js';
@@ -65,7 +66,14 @@ export function registerMakerUsageHandlers(
       if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(key)) {
         throwIpcError('INVALID_PARAMS', 'idempotencyKey must be a UUID');
       }
-      return await deps.consumeCodexRateLimitReset(key);
+      try {
+        return await deps.consumeCodexRateLimitReset(key);
+      } catch (err) {
+        if (err instanceof CodexRateLimitResetRejectedError) {
+          throwIpcError('PRECONDITION_FAILED', `${err.reason}: ${err.message}`);
+        }
+        throw err;
+      }
     },
   );
 

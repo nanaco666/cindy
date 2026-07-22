@@ -20,6 +20,7 @@ const { MockCodexTransport, createdTransports } = vi.hoisted(() => {
     static threadSeq = 1;
     static failThreadStart = false;
     static beforeThreadStartResponse: ((transport: MockCodexTransport) => Promise<void> | void) | null = null;
+    static onCreate: ((transport: MockCodexTransport) => void) | null = null;
 
     readonly lines: string[] = [];
     closed = false;
@@ -32,6 +33,10 @@ const { MockCodexTransport, createdTransports } = vi.hoisted(() => {
       result?: unknown;
       error?: { code: number; message: string; data?: unknown };
     }>();
+
+    constructor() {
+      MockCodexTransport.onCreate?.(this);
+    }
 
     async writeLine(line: string): Promise<void> {
       this.lines.push(line);
@@ -217,6 +222,7 @@ beforeEach(() => {
   MockCodexTransport.threadSeq = 1;
   MockCodexTransport.failThreadStart = false;
   MockCodexTransport.beforeThreadStartResponse = null;
+  MockCodexTransport.onCreate = null;
 });
 
 const tempRoots: string[] = [];
@@ -1346,6 +1352,31 @@ describe('CodexAgent MCP thread context hooks', () => {
     ).toBe(pushCountAfterSet);
 
     await handle.close();
+    await agent.dispose();
+  });
+
+  it('starts a cold OAuth host before account rate-limit RPCs', async () => {
+    const rateLimits = {
+      rateLimits: { planType: 'plus', primary: { usedPercent: 100, windowMinutes: 300 } },
+      rateLimitsByLimitId: null,
+      rateLimitResetCredits: { availableCount: 1, credits: null },
+    };
+    MockCodexTransport.onCreate = (transport) => {
+      transport.setMockResponse(Method.AccountRateLimitsRead, { result: rateLimits });
+      transport.setMockResponse(Method.AccountRateLimitResetCreditConsume, {
+        result: { outcome: 'reset' },
+      });
+    };
+    const agent = new CodexAgent(createDeps());
+
+    await expect(agent.readAccountRateLimits()).resolves.toEqual(rateLimits);
+    await expect(agent.consumeAccountRateLimitResetCredit({
+      idempotencyKey: '018f4ec7-c6d8-7f10-8d43-9f8791d33000',
+    })).resolves.toEqual({ outcome: 'reset' });
+
+    expect(createdTransports).toHaveLength(1);
+    expect(createdTransports[0].lines[0]).toContain('initialize');
+    expect(createdTransports[0].lines.some((line) => line.includes('account/rateLimits/read'))).toBe(true);
     await agent.dispose();
   });
 

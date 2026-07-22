@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildContextUsageCreateOpts,
+  canUseLocalCodexRateLimitControl,
   summarizeContextUsage,
   summarizeSessionSpend,
 } from '@/session/sessionControls';
@@ -40,6 +41,15 @@ describe('sessionControls', () => {
       agentKind: 'codex',
       fastMode: true,
     });
+  });
+
+  it('exposes local Codex quota controls only for local Codex sessions', () => {
+    expect(canUseLocalCodexRateLimitControl(session({ agentKind: 'codex' }))).toBe(true);
+    expect(canUseLocalCodexRateLimitControl(session({
+      agentKind: 'codex',
+      remoteHostId: 'ssh-host-1',
+    }))).toBe(false);
+    expect(canUseLocalCodexRateLimitControl(session({ agentKind: 'cc' }))).toBe(false);
   });
 
   it('summarizes common context usage shapes for mobile display', () => {

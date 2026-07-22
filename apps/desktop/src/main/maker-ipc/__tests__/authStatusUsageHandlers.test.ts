@@ -4,6 +4,7 @@ import { registerMakerAuthHandlers } from '../authHandlers';
 import { MAKER_INVOKE, MAKER_PUSH } from '../channels';
 import { registerMakerStatusHandlers } from '../statusHandlers';
 import { registerMakerUsageHandlers } from '../usageHandlers';
+import { CodexRateLimitResetRejectedError } from '../../usage/codexRateLimitReset';
 import { IpcHarness } from './helpers/ipcHarness';
 
 function createMakerStub(methods: Partial<Maker>): Maker {
@@ -438,6 +439,22 @@ describe('maker usage IPC handlers', () => {
       'credit-id-from-client',
     )).rejects.toThrow(/idempotencyKey must be a UUID/);
     expect(consumeCodexRateLimitReset).not.toHaveBeenCalled();
+  });
+
+  it('encodes stale reset offers as a stable IPC precondition error', async () => {
+    const harness = new IpcHarness();
+    const consumeCodexRateLimitReset = vi.fn().mockRejectedValue(
+      new CodexRateLimitResetRejectedError('OFFER_EXPIRED', 'refresh usage'),
+    );
+    registerMakerUsageHandlers(harness, makeUsageDeps({ consumeCodexRateLimitReset }));
+
+    await expect(harness.invoke(
+      MAKER_INVOKE.USAGE_CODEX_RATE_LIMIT_RESET,
+      '018f4ec7-c6d8-7f10-8d43-9f8791d33000',
+    )).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: expect.stringContaining('OFFER_EXPIRED'),
+    });
   });
 
   it('passes numeric days through to readUsageHistory and drops invalid values', async () => {

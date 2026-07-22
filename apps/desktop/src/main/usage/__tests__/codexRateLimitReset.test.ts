@@ -1,7 +1,10 @@
 import type { AccountRateLimitsResponse } from '@lizi/maker-core';
 import { describe, expect, it, vi } from 'vitest';
 
-import { createCodexRateLimitResetService } from '../codexRateLimitReset.js';
+import {
+  CodexRateLimitResetRejectedError,
+  createCodexRateLimitResetService,
+} from '../codexRateLimitReset.js';
 
 const NOW_MS = Date.UTC(2026, 6, 22, 12, 0, 0);
 const KEY = '018f4ec7-c6d8-7f10-8d43-9f8791d33000';
@@ -214,8 +217,39 @@ describe('Codex rate-limit reset control plane', () => {
     const { deps, service } = harness({ readAccountIdentity });
     await service.read();
 
-    await expect(service.consume(KEY)).rejects.toThrow('Codex account changed');
+    await expect(service.consume(KEY)).rejects.toMatchObject({
+      reason: 'ACCOUNT_CHANGED',
+      message: expect.stringContaining('Codex account changed'),
+    });
     expect(deps.consumeResetCredit).not.toHaveBeenCalled();
+  });
+
+  it('does not issue an offer when returned credit details have no eligible row', async () => {
+    const { service } = harness({
+      readRateLimits: vi.fn().mockResolvedValue(response({
+        rateLimitResetCredits: {
+          availableCount: 1,
+          credits: [{
+            id: 'future-reset',
+            status: 'available',
+            resetType: 'unknown',
+            grantedAt: 10,
+            expiresAt: 200,
+            title: 'Future reset',
+            description: null,
+          }],
+        },
+      })),
+    });
+
+    await expect(service.read()).resolves.toMatchObject({ resetOffer: null });
+  });
+
+  it('uses a typed rejection when the offer expires', async () => {
+    const { service } = harness();
+
+    await expect(service.consume(KEY)).rejects.toBeInstanceOf(CodexRateLimitResetRejectedError);
+    await expect(service.consume(KEY)).rejects.toMatchObject({ reason: 'OFFER_EXPIRED' });
   });
 
   it('returns the authoritative outcome when the post-consume refresh fails', async () => {

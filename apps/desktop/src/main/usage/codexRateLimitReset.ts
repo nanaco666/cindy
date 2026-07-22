@@ -42,6 +42,19 @@ export interface CodexRateLimitResetService {
   consume(idempotencyKey: string): Promise<MobileCodexRateLimitResetResult>;
 }
 
+export type CodexRateLimitResetRejection = 'OFFER_EXPIRED' | 'ACCOUNT_CHANGED';
+
+/** Expected reset rejection that the IPC boundary must expose as a stable precondition error. */
+export class CodexRateLimitResetRejectedError extends Error {
+  constructor(
+    readonly reason: CodexRateLimitResetRejection,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'CodexRateLimitResetRejectedError';
+  }
+}
+
 /** In-memory state for one retryable reset attempt. */
 interface ResetOfferEntry {
   account: CodexRateLimitAccountIdentity;
@@ -214,7 +227,8 @@ export function createCodexRateLimitResetService(
     const credits = availableResetCredits(response);
     const selectedCredit = selectEarliestExpiringCredit(credits);
     let resetOffer: MobileCodexRateLimitsResult['resetOffer'] = null;
-    if (availableCount > 0 && canBindResetOffer(identity)) {
+    const hasEligibleCredit = credits === null || selectedCredit !== null;
+    if (availableCount > 0 && hasEligibleCredit && canBindResetOffer(identity)) {
       // Repeated reads must not mint a new retry key. This preserves idempotency when the
       // consume response was lost and mobile refreshes/reconnects before retrying.
       const existing = [...offers.entries()].find(([, offer]) => (
@@ -252,7 +266,12 @@ export function createCodexRateLimitResetService(
   const consume = async (idempotencyKey: string): Promise<MobileCodexRateLimitResetResult> => {
     pruneOffers();
     const offer = offers.get(idempotencyKey);
-    if (!offer) throw new Error('Codex reset offer expired; refresh usage before retrying');
+    if (!offer) {
+      throw new CodexRateLimitResetRejectedError(
+        'OFFER_EXPIRED',
+        'Codex reset offer expired; refresh usage before retrying',
+      );
+    }
     if (offer.result) return offer.result;
     if (offer.pending) return await offer.pending;
 
@@ -261,7 +280,10 @@ export function createCodexRateLimitResetService(
       // both pass the preflight await before offer.pending is installed and redeem twice.
       const currentAccount = await deps.readAccountIdentity();
       if (!sameAccount(offer.account, currentAccount)) {
-        throw new Error('Codex account changed; refresh usage before resetting');
+        throw new CodexRateLimitResetRejectedError(
+          'ACCOUNT_CHANGED',
+          'Codex account changed; refresh usage before resetting',
+        );
       }
       const response = await deps.consumeResetCredit({
         idempotencyKey,

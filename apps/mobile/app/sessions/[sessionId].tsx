@@ -338,7 +338,10 @@ import {
   type RewindPreviewState,
 } from '@/session/rewindPreview';
 import { projectMobileSessionActions } from '@/session/sessionActionProjection';
-import { buildContextUsageCreateOpts } from '@/session/sessionControls';
+import {
+  buildContextUsageCreateOpts,
+  canUseLocalCodexRateLimitControl,
+} from '@/session/sessionControls';
 import { buildSessionOperationLayout } from '@/session/sessionOperationLayout';
 import {
   summarizeSessionOverview,
@@ -997,6 +1000,7 @@ export default function SessionScreen() {
     () => sessions.find((item) => item.id === sessionId) ?? null,
     [sessionId, sessions],
   );
+  const localCodexRateLimitControl = canUseLocalCodexRateLimitControl(currentSession);
   const isDeviceAccessRevoked = !!deviceId && revokedDevices.has(deviceId);
   const connectionError = isDeviceAccessRevoked
     ? '[ACCESS_REVOKED] access revoked by target device'
@@ -4697,7 +4701,12 @@ export default function SessionScreen() {
   // 同时拿窗口和 reset credits。老被控端没有新通道时回退既有只读 usage channel;
   // 两条都失败则静默保留当前快照——限额是补充信息,不打断会话操作。
   const refreshAccountUsage = useCallback(async () => {
-    if (!currentSession || currentSession.agentKind !== 'codex') return;
+    if (!localCodexRateLimitControl) {
+      setAccountUsage(null);
+      setCodexRateLimits(null);
+      setCodexResetRetryKey(null);
+      return;
+    }
     try {
       const snapshot = await maker.getCodexRateLimits();
       // 迟到结果归属校验,同 contextUsage(见 contextUsageSessionRef 注释)。
@@ -4713,7 +4722,7 @@ export default function SessionScreen() {
         // 静默:通道不支持 / 网络瞬断都不打扰用户。
       }
     }
-  }, [currentSession, maker, sessionId]);
+  }, [localCodexRateLimitControl, maker, sessionId]);
 
   // reset 只接受 desktop read 签发的 UUID。失败时不替换 codexRateLimits/offer,
   // 用户重试会继续使用同一幂等键;成功后优先采用 desktop 已重新读取的权威快照。
@@ -5277,9 +5286,9 @@ export default function SessionScreen() {
         </View>
         {currentSession ? (
           <SessionMenuSheet
-            accountUsage={currentSession.agentKind === 'codex' ? accountUsage : null}
+            accountUsage={localCodexRateLimitControl ? accountUsage : null}
             busy={controlBusy}
-            codexRateLimits={currentSession.agentKind === 'codex' ? codexRateLimits : null}
+            codexRateLimits={localCodexRateLimitControl ? codexRateLimits : null}
             codexResetBusy={codexResetBusy}
             contextLoading={contextLoading}
             contextUsage={contextUsage}
