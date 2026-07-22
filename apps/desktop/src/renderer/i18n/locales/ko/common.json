@@ -3402,9 +3402,14 @@
     "modelSelector": {
       "budgetNeedsApiKey": "할인형 GPT는 설정에서 API key를 구성해야 사용할 수 있습니다",
       "effortLabel": "추론 강도",
-      "edit": "Edit",
+      "edit": "편집",
       "options": "옵션",
       "priceTip": "입력 {{input}} · 출력 {{output}} / 100만 토큰",
+      "trigger": {
+        "placeholder": "모델 선택",
+        "aria": "모델 선택. 현재: {{model}}",
+        "ariaWithEffort": "모델 선택. 현재: {{model}}, 추론 강도: {{effort}}"
+      },
       "category": {
         "anthropic": "Anthropic",
         "gpt": "OpenAI",
@@ -3426,7 +3431,8 @@
       "meta": {
         "context": "컨텍스트 {{value}}",
         "price": "{{input}}/{{output}} / 100만",
-        "fastBadge": "고속"
+        "fastBadge": "고속",
+        "budgetDiscount": "85% 할인"
       },
       "source": {
         "railLabel": "소스",

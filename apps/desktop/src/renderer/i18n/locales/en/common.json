@@ -3406,6 +3406,11 @@
       "edit": "Edit",
       "options": "Options",
       "priceTip": "Input {{input}} · Output {{output}} per 1M tokens",
+      "trigger": {
+        "placeholder": "Select model",
+        "aria": "Select model. Current: {{model}}",
+        "ariaWithEffort": "Select model. Current: {{model}}, effort: {{effort}}"
+      },
       "category": {
         "anthropic": "Anthropic",
         "gpt": "OpenAI",
@@ -3427,7 +3432,8 @@
       "meta": {
         "context": "{{value}} context",
         "price": "{{input}}/{{output}} per 1M",
-        "fastBadge": "Fast"
+        "fastBadge": "Fast",
+        "budgetDiscount": "85% off"
       },
       "source": {
         "railLabel": "Source",

@@ -3402,9 +3402,14 @@
     "modelSelector": {
       "budgetNeedsApiKey": "骨折GPT 需先在设置里配置 API key 才能使用",
       "effortLabel": "推理强度",
-      "edit": "Edit",
+      "edit": "编辑",
       "options": "选项",
       "priceTip": "输入 {{input}} · 输出 {{output}} / 百万 token",
+      "trigger": {
+        "placeholder": "选择模型",
+        "aria": "选择模型。当前：{{model}}",
+        "ariaWithEffort": "选择模型。当前：{{model}}，推理强度：{{effort}}"
+      },
       "category": {
         "anthropic": "Anthropic",
         "gpt": "OpenAI",
@@ -3426,7 +3431,8 @@
       "meta": {
         "context": "{{value}} 上下文",
         "price": "{{input}}/{{output}} / 百万",
-        "fastBadge": "快速"
+        "fastBadge": "快速",
+        "budgetDiscount": "立省 85%"
       },
       "source": {
         "railLabel": "来源",
