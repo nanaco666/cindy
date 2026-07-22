@@ -54,7 +54,7 @@ export interface IMHost {
 
   /** Filesystem path config; hosts derive these from `app.getPath('userData')`. */
   paths: {
-    /** Root for downloaded feishu media (images / files). MUST equal the `mediaService.rootDir` passed to `lizi-mcps`'s `createFeishuService` so xdt-image:// URLs resolve in both contexts. */
+    /** Root for downloaded feishu media (images / files). MUST equal the media root the host wires elsewhere (e.g. the xdt-image:// media service) so xdt-image:// URLs resolve consistently across contexts. */
     feishuMediaDir: string;
     /** Root for downloaded discord media. Optional — only hosts that wire the discord channel provide it. */
     discordMediaDir?: string;

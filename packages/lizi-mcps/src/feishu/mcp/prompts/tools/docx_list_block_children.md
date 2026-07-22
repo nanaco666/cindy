@@ -1,1 +1,0 @@
-读取指定飞书 Docx 块的直接子块,用于定位文档内表格(table block_type=31)、表格单元格(table_cell block_type=32)以及单元格里的文本块。读取表格内容时先对表格 block_id 调用本工具拿到单元格 block_id,再对目标单元格 block_id 调用本工具拿到内部文本块;写入文字时通常更新单元格内的文本块,不要直接更新 table_cell 容器。

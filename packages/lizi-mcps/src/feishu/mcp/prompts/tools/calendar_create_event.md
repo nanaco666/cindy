@@ -1,1 +1,0 @@
-创建飞书日程并可邀请参与者。Create a Feishu calendar event with optional attendees. start_time/end_time 支持 Unix 秒、Unix 毫秒、RFC3339/ISO 时间;无时区的日期时间按 time_zone 参数解析,未传 time_zone 时使用运行环境本地时区。time_zone 可传 Asia/Shanghai、America/Los_Angeles 或 +08:00。对方会收到邀请通知。【重要】邀请参与者时必须先用 contact_search 搜人,然后必须向用户确认"要给 XX 发日程邀请吗?",用户明确同意后才能调用此工具创建日程。未经用户确认不得创建。以当前登录用户的飞书权限操作。

@@ -1,1 +1,0 @@
-搜索飞书文档/Wiki/多维表格并返回完整内容,用于需要跨文档汇总的场景。docx/wiki(docx) 类型节点返回文本 + 图片清单(available_images) + 评论列表(comments);bitable 返回表列表。默认 max_images=0 不下载图片(每篇都是),按需调 media_download 单拉。✨ 评论默认包含,user_name 已自动解析。总结跨文档内容时务必把评论纳入。

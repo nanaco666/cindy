@@ -52,16 +52,6 @@
       "copyrightText": "NOASSERTION"
     },
     {
-      "name": "lark-openapi-mcp generated sources (vendored)",
-      "SPDXID": "SPDXRef-Package-6ad95b8cfcf52b4e",
-      "versionInfo": "vendored",
-      "downloadLocation": "https://github.com/larksuite/lark-openapi-mcp",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION"
-    },
-    {
       "name": "Lobe Icons SVG paths (vendored)",
       "SPDXID": "SPDXRef-Package-82458194310410e0",
       "versionInfo": "5.14.0",
@@ -17781,11 +17771,6 @@
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
       "relatedSpdxElement": "SPDXRef-Package-e01faf6cc0ab33f1"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-6ad95b8cfcf52b4e"
     },
     {
       "spdxElementId": "SPDXRef-DOCUMENT",

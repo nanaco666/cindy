@@ -1,1 +1,0 @@
-在飞书知识库指定空间/父节点下创建新节点(默认 docx 类型,即新文档)。用户确认流程见 `mutation-confirm` 共享规则;确认时至少要把 space_id / parent_node_token / 标题 / 文档类型(docx/sheet/bitable/...)列给用户看。不传 parent_node_token 时建在空间根目录。以登录用户身份操作,无父节点容器编辑权限会失败。返回 node_token + obj_token + url,可继续用 docx_append_blocks 等工具往里面写内容。

@@ -1,1 +1,0 @@
-查询飞书日历日程列表。List events from a Feishu calendar. start_time/end_time 支持 Unix 秒、Unix 毫秒、RFC3339/ISO 时间;无时区的日期时间按 time_zone 参数解析,未传 time_zone 时使用运行环境本地时区。time_zone 可传 Asia/Shanghai、America/Los_Angeles 或 +08:00。以当前登录用户的飞书权限操作。
