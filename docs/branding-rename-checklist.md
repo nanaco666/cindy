@@ -54,7 +54,7 @@
 ### Markdown prompt / skills（纯文本吃不到 TS 常量）
 
 - [x]（2026-07-17）`packages/lizi-mcps/src/prompts/**/*.md`：飞书 bot 工具说明里的「私聊 xdt-maker bot」——经 owner 澄清飞书 bot 是**用户自己配置的**（名字用户自起），文案写死具体名字本就是错误假设，已改为中性说法「私聊你配置的那个机器人」，不依赖任何外部改名。
-- [x]（2026-07-17）`.claude/skills/**`、`.agents/skills/**`：grep 无品牌残留（`agent-use/scripts/sync-agent-instructions.mjs` 仅历史对比注释，保留）。
+- [x]（2026-07-22）`.claude/`、`.agents/` 已作为 Agent 工具私有目录移出仓库并整体忽略。
 - [x]（2026-07-17）`AGENTS.md` / `README.md` / `DESIGN.md` / `docs/**`：README/DESIGN 现行引用已改；AGENTS.md「由原 XDMaker 单仓迁出」为历史记录保留；`docs/**` 历史/迁移文档不动。
 - [x]（2026-07-17）`packages/lizi-mcps/src/browser/prompts/rules/browser-workflow.md` 里的 profile 名**跟随 `MANAGED_PROFILE`**——profile 已翻转为 `'Cindy'`（老登录态经 mToc 迁移 `browser/XDMaker → browser/Cindy` 接续 + dev 实例就地改名自愈），文案已同步。
 

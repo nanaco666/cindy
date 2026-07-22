@@ -39,7 +39,9 @@ export default {
       tiers: {
         unit: {
           status: 'required',
-          command: vitestBin('run'),
+          // Desktop unit tests spawn many Git/filesystem subprocesses; cap workers so
+          // Windows does not exhaust process and file-lock budgets under full-suite load.
+          command: vitestBin('run', '--maxWorkers=4'),
           exclude: [
             'src/main/localDb/**',
             'src/main/__tests__/*Migration.test.ts',

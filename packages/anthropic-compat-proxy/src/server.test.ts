@@ -1106,7 +1106,11 @@ describe('anthropic-compat-proxy request body limit(超限回可读 413,不斩�
       upstream: gateway.url,
       transformRequest: [],
       maxRequestBodyBytes: 1024,
-      logger: { warn: (_msg, ctx) => { warns.push(ctx ?? {}); } },
+      logger: {
+        warn: (msg, ctx) => {
+          if (msg === '✖ request body exceeds proxy limit → 413') warns.push(ctx ?? {});
+        },
+      },
     });
     const body = JSON.stringify({ model: 'gpt-5.5', input: 'x'.repeat(4096) });
     const res = await fetch(`${proxy.url}/v1/responses`, {
@@ -1136,7 +1140,11 @@ describe('anthropic-compat-proxy request body limit(超限回可读 413,不斩�
       upstream: gateway.url,
       transformRequest: [],
       maxRequestBodyBytes: 256 * 1024,
-      logger: { warn: (_msg, ctx) => { warns.push(ctx ?? {}); } },
+      logger: {
+        warn: (msg, ctx) => {
+          if (msg === '✖ request body exceeds proxy limit → 413') warns.push(ctx ?? {});
+        },
+      },
     });
     const chunk = new Uint8Array(64 * 1024).fill(0x78);
     const stream = new ReadableStream<Uint8Array>({

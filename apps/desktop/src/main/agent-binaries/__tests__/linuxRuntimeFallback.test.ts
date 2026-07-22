@@ -15,6 +15,7 @@ import {
 } from '../linux-runtime-fallback';
 
 const tempDirs: string[] = [];
+const describeOnLinuxFileSystem = process.platform === 'win32' ? describe.skip : describe;
 
 afterEach(() => {
   for (const dir of tempDirs.splice(0)) fs.rmSync(dir, { recursive: true, force: true });
@@ -49,7 +50,7 @@ describe('runtimeVersionMatchesPin', () => {
   });
 });
 
-describe('install path helpers', () => {
+describeOnLinuxFileSystem('install path helpers', () => {
   it('places pinned private binaries under userData/agent-runtime/<kind>/bin', () => {
     const userDataPath = path.join(os.tmpdir(), 'cindy-runtime-path-test');
     expect(runtimeInstallRoot(userDataPath, 'codex')).toBe(
@@ -116,7 +117,7 @@ describe('official asset descriptors', () => {
   });
 });
 
-describe('extractCodexBinaryFromTarGz', () => {
+describeOnLinuxFileSystem('extractCodexBinaryFromTarGz', () => {
   it('extracts the verified archive binary without a system tar dependency', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cindy-codex-tar-'));
     tempDirs.push(dir);
