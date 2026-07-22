@@ -4,6 +4,8 @@ import {
   sanitizeSessionChipTitle,
   pastedSessionChipAttrs,
   serializeSessionChipText,
+  summarizeSessionMessageChipLabel,
+  SESSION_MESSAGE_CHIP_LABEL_MAX_CHARS,
 } from '../components/new-chat/sessionLinkPaste';
 
 // 粘贴文本的分段(text / session / project / path)用例在 pastePipeline.test.ts;
@@ -78,5 +80,14 @@ describe('serializeSessionChipText', () => {
         titled: true,
       }),
     ).toBe(MESSAGE_URL);
+  });
+});
+
+describe('summarizeSessionMessageChipLabel', () => {
+  it('collapses whitespace and caps draft metadata for long message links', () => {
+    const summary = summarizeSessionMessageChipLabel(` first\n\n${'x'.repeat(400)} `);
+    expect(summary).toHaveLength(SESSION_MESSAGE_CHIP_LABEL_MAX_CHARS);
+    expect(summary.startsWith('first x')).toBe(true);
+    expect(summary.endsWith('…')).toBe(true);
   });
 });

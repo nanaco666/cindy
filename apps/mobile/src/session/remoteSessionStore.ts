@@ -1152,6 +1152,28 @@ export const remoteSessionStore = {
     if (changed) emit();
   },
 
+  /**
+   * 被控端已原子清除单条消息后，按稳定 clientId 精确移除控制端镜像。
+   * 同时失效 latest-window marker；sessions patch 与 deletion push 无顺序保证，
+   * 不能让旧 marker 把已变更的窗口误判为已同步。
+   */
+  removeMessage(sessionId: string, clientId: string, deviceId?: string): void {
+    if (!sessionId || !clientId) return;
+    const existing = messages.get(sessionId) ?? emptyMessages;
+    const next = existing.filter((message) => (
+      message.clientId !== clientId && message.id !== clientId
+    ));
+    sessionMessageSyncMarkers.delete(sessionId);
+    if (next.length === existing.length) return;
+    messages.set(sessionId, next);
+    forgetPendingLiveAssistantMessageIdentity(sessionId, clientId);
+    bumpMessageVersion();
+    emit();
+    // useSessionMessageCacheSync 对空数组会跳过持久化；删除最后一条消息时在这里
+    // 主动清理 AsyncStorage，避免下次冷开又 hydrate 出已删除正文。
+    if (deviceId) void cacheSessionMessages(deviceId, sessionId, next).catch(() => undefined);
+  },
+
   appendLocalSystemCard(
     sessionId: string,
     cardType: MobileSystemCardType,
@@ -1379,6 +1401,12 @@ export const remoteSessionStore = {
       const sessionId = readString(payload, 'sessionId');
       const message = isRecord(payload.message) ? (payload.message as unknown as RemoteMessage) : null;
       if (sessionId && message) this.appendMessage(sessionId, message);
+      return;
+    }
+    if (channel === 'local-db:messages:deleted' && isRecord(payload)) {
+      const sessionId = readString(payload, 'sessionId');
+      const clientId = readString(payload, 'clientId');
+      if (sessionId && clientId) this.removeMessage(sessionId, clientId, deviceId);
       return;
     }
     if (channel === 'local-db:session:error-persisted' && isRecord(payload)) {
@@ -2112,8 +2140,13 @@ function useSessionMessageCacheSync(
 
   // 去抖持久化:messages 变化时重排定时器,静默后落盘最新快照。
   useEffect(() => {
-    if (!deviceId || !sessionId || messages.length === 0) return;
     if (persistTimerRef.current) clearTimeout(persistTimerRef.current);
+    persistTimerRef.current = null;
+    if (!deviceId || !sessionId) return;
+    if (messages.length === 0) {
+      void cacheSessionMessages(deviceId, sessionId, []).catch(() => undefined);
+      return;
+    }
     persistTimerRef.current = setTimeout(() => {
       persistTimerRef.current = null;
       const ctx = ctxRef.current;

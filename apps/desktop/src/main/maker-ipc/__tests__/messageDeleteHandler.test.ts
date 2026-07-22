@@ -22,6 +22,8 @@ function makeDeps(
       sessionId,
       clientId,
       updatedAt: 500,
+      preview: 'keep after',
+      messageCount: 4,
     })),
     setPendingHandoff: vi.fn(),
     onCommitted: vi.fn(),
@@ -56,6 +58,8 @@ describe('performMessageDeletion', () => {
       sessionId: 's1',
       clientId: 'target',
       updatedAt: 500,
+      preview: 'keep after',
+      messageCount: 4,
     });
   });
 
@@ -68,7 +72,21 @@ describe('performMessageDeletion', () => {
       sessionId: 's1',
       clientId: 'target',
     })).rejects.toThrow('SESSION_RUNNING');
+    expect(deps.listMessagesForContext).not.toHaveBeenCalled();
     expect(deps.closeSession).not.toHaveBeenCalled();
+    expect(deps.commitDeletion).not.toHaveBeenCalled();
+  });
+
+  it('rejects a missing target before loading the bounded context window', async () => {
+    const deps = makeDeps({
+      getMessage: vi.fn(async () => null),
+    });
+
+    await expect(performMessageDeletion(deps, {
+      sessionId: 's1',
+      clientId: 'missing',
+    })).rejects.toThrow('NOT_FOUND');
+    expect(deps.listMessagesForContext).not.toHaveBeenCalled();
     expect(deps.commitDeletion).not.toHaveBeenCalled();
   });
 

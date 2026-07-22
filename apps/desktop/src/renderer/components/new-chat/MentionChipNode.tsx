@@ -6,6 +6,7 @@
  */
 import { Node, mergeAttributes } from '@tiptap/core';
 import { NodeViewWrapper, ReactNodeViewRenderer, type NodeViewProps } from '@tiptap/react';
+import { useEffect, useState } from 'react';
 import {
   CornerDownRight,
   File,
@@ -17,6 +18,8 @@ import {
 
 import { InlineReferenceChip } from '@/components/chat/InlineReferenceChip';
 import { parseSessionDeepLinkHref } from '@/lib/deepLink';
+
+import { resolvePastedSessionMessageText } from './sessionLinkPaste';
 
 export interface MentionChipAttrs {
   /** Chip kind — decides icon + trailing slash behaviour + serialization. */
@@ -51,6 +54,27 @@ function MentionIcon({ attrs }: { attrs: MentionChipAttrs }) {
 function MentionChipNodeView({ node, selected }: NodeViewProps) {
   const attrs = node.attrs as MentionChipAttrs;
   const label = displayLabel(attrs).replace(/\s+/g, ' ').trim();
+  const [tooltip, setTooltip] = useState(displayLabel(attrs));
+
+  useEffect(() => {
+    const fallback = displayLabel(attrs);
+    const target = attrs.kind === 'session' ? parseSessionDeepLinkHref(attrs.path) : null;
+    if (!target?.messageClientId) {
+      setTooltip(fallback);
+      return;
+    }
+    let cancelled = false;
+    void resolvePastedSessionMessageText(target.sessionId, target.messageClientId)
+      .then((text) => {
+        if (!cancelled) setTooltip(text?.trim() || fallback);
+      })
+      .catch(() => {
+        if (!cancelled) setTooltip(fallback);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [attrs.kind, attrs.label, attrs.path]);
 
   return (
     <NodeViewWrapper
@@ -69,7 +93,7 @@ function MentionChipNodeView({ node, selected }: NodeViewProps) {
       <InlineReferenceChip
         label={label}
         icon={<MentionIcon attrs={attrs} />}
-        tooltip={displayLabel(attrs)}
+        tooltip={tooltip}
         ariaLabel={displayLabel(attrs)}
         selected={selected}
         className={attrs.kind === 'slash' ? 'text-[var(--chat-input-text)]' : undefined}

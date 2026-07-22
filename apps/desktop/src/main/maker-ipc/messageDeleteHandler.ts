@@ -22,6 +22,14 @@ interface MessageDeleteSessionRow {
   agentKind: string;
 }
 
+interface MessageDeleteCommittedPayload {
+  sessionId: string;
+  clientId: string;
+  updatedAt: number;
+  preview: string | null;
+  messageCount: number;
+}
+
 export interface MessageDeleteHandlerDeps {
   getSessionRow(sessionId: string): Promise<MessageDeleteSessionRow | null>;
   getMessage(
@@ -35,9 +43,9 @@ export interface MessageDeleteHandlerDeps {
     sessionId: string,
     clientId: string,
     handoff: string,
-  ): Promise<{ sessionId: string; clientId: string; updatedAt: number }>;
+  ): Promise<MessageDeleteCommittedPayload>;
   setPendingHandoff(sessionId: string, handoff: string): void;
-  onCommitted(payload: { sessionId: string; clientId: string; updatedAt: number }): void;
+  onCommitted(payload: MessageDeleteCommittedPayload): void | Promise<void>;
   withCloseSuppressed<T>(sessionId: string, fn: () => Promise<T>): Promise<T>;
   log: {
     info(message: string, fields?: Record<string, unknown>): void;
@@ -60,10 +68,9 @@ export async function performMessageDeletion(
     throwIpcError('INVALID_PARAMS', 'clientId required');
   }
 
-  const [sessionRow, target, source] = await Promise.all([
+  const [sessionRow, target] = await Promise.all([
     deps.getSessionRow(sessionId),
     deps.getMessage(sessionId, clientId),
-    deps.listMessagesForContext(sessionId),
   ]);
   if (!sessionRow || sessionRow.status === 'deleted') {
     throwIpcError('NOT_FOUND', `Session ${sessionId} not found`);
@@ -77,6 +84,7 @@ export async function performMessageDeletion(
     throwIpcError('SESSION_RUNNING', `Session ${sessionId} is running a turn`);
   }
 
+  const source = await deps.listMessagesForContext(sessionId);
   const remaining = source.filter((message) => message.clientId !== clientId);
   const label = engineLabel(sessionRow.agentKind);
   const handoff = buildHandoffText(remaining, {
@@ -97,7 +105,7 @@ export async function performMessageDeletion(
 
     const committed = await deps.commitDeletion(sessionId, clientId, handoff);
     deps.setPendingHandoff(sessionId, handoff);
-    deps.onCommitted(committed);
+    await deps.onCommitted(committed);
     deps.log.info('message delete committed; native context will rebuild on next send', {
       sessionId,
       clientId,

@@ -24,6 +24,15 @@ import { shortSessionId } from '@/lib/sessionId';
 
 import type { MentionChipAttrs } from './MentionChipNode';
 
+/** Draft / DOM attrs only keep a compact message summary; full text lives in tooltip state. */
+export const SESSION_MESSAGE_CHIP_LABEL_MAX_CHARS = 240;
+
+export function summarizeSessionMessageChipLabel(text: string): string {
+  const collapsed = text.replace(/\s+/g, ' ').trim();
+  if (collapsed.length <= SESSION_MESSAGE_CHIP_LABEL_MAX_CHARS) return collapsed;
+  return `${collapsed.slice(0, SESSION_MESSAGE_CHIP_LABEL_MAX_CHARS - 1)}…`;
+}
+
 /**
  * 序列化用 label 清洗:
  *   - ASCII 方括号破坏 `[..](..)` 语法 → 换空格;
@@ -127,7 +136,7 @@ export function resolveSessionChipTitles(
     void resolved
       .then((value) => {
         const display = target.messageClientId
-          ? (value?.trim() ?? '')
+          ? summarizeSessionMessageChipLabel(value ?? '')
           : value
             ? sanitizeSessionChipTitle(value)
             : '';

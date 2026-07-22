@@ -7,7 +7,7 @@
  */
 
 import { ipcMain, BrowserWindow } from 'electron';
-import { and, asc, eq, lt, gt, desc, isNull, or, sql, type SQL } from 'drizzle-orm';
+import { and, asc, count, eq, lt, gt, desc, isNull, or, sql, type SQL } from 'drizzle-orm';
 import { createId } from '@paralleldrive/cuid2';
 
 import { getDbClient } from '../client/current';
@@ -16,6 +16,7 @@ import {
   messageToCamel,
   messageCreateToRow,
   safeStringify,
+  extractMessagePreview,
 } from '../mapper';
 import { throwIpcError, requireString } from '../../utils/ipcValidate';
 import { tapWindowBroadcast } from '../../device-link/broadcast-tap';
@@ -566,7 +567,13 @@ export async function commitSingleMessageDeletion(
   sessionId: string,
   clientId: string,
   handoff: string,
-): Promise<{ sessionId: string; clientId: string; updatedAt: number }> {
+): Promise<{
+  sessionId: string;
+  clientId: string;
+  updatedAt: number;
+  preview: string | null;
+  messageCount: number;
+}> {
   const now = Date.now();
   const result = await getDbClient().tx('message.delete', {
     sessionId,
@@ -597,7 +604,52 @@ export async function commitSingleMessageDeletion(
     });
   }
   void recomputePrRefsForSession(sessionId).catch(() => undefined);
-  return { sessionId, clientId, updatedAt: now };
+
+  // sessions:patched 的消费者只做 shallow merge，不会主动重拉。删除后同步带出
+  // canonical session-list projection，避免其它窗口 / device-link 控制端继续显示
+  // 已删除的末条消息预览或旧 _count。count 口径与 sessions:list 保持一致（全部 DB 行）。
+  let preview: string | null = null;
+  let messageCount = 0;
+  try {
+    const db = getDbClient().drizzle;
+    const [sessionRow] = await db
+      .select({ clearedAt: sessions.clearedAt })
+      .from(sessions)
+      .where(eq(sessions.id, sessionId))
+      .limit(1);
+    const visibleAfterClear = sessionRow?.clearedAt == null
+      ? undefined
+      : gt(messages.createdAt, sessionRow.clearedAt);
+    const [[countRow], [latestRow]] = await Promise.all([
+      db
+        .select({ messageCount: count(messages.id) })
+        .from(messages)
+        .where(eq(messages.sessionId, sessionId)),
+      db
+        .select({ content: messages.content, role: messages.role })
+        .from(messages)
+        .where(and(
+          eq(messages.sessionId, sessionId),
+          sql`${messages.role} IN ('user', 'assistant')`,
+          isNull(messages.rewindAt),
+          sql`(${messages.agentMeta} IS NULL OR json_extract(${messages.agentMeta}, '$.autoResume') IS NOT 1)`,
+          visibleAfterClear,
+        ))
+        .orderBy(desc(messages.createdAt), desc(messageRowid))
+        .limit(1),
+    ]);
+    preview = extractMessagePreview(latestRow?.content, latestRow?.role);
+    messageCount = countRow?.messageCount ?? 0;
+  } catch (error) {
+    // 删除已经原子提交；投影查询失败不能把成功操作伪装成失败。广播保守空值，
+    // 后续 sessions:list / reseed 会按 DB 真相收敛。
+    log.warn('message delete session projection refresh failed', {
+      sessionId,
+      clientId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+  return { sessionId, clientId, updatedAt: now, preview, messageCount };
 }
 
 export function broadcastMessageDeleted(payload: MessageDeletedPayload): void {

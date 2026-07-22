@@ -3954,11 +3954,13 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
     closeSession: (sessionId) => maker.closeSession(sessionId),
     commitDeletion: commitSingleMessageDeletion,
     setPendingHandoff: (sessionId, handoff) => agentHandoffPending.set(sessionId, handoff),
-    onCommitted: ({ sessionId, clientId, updatedAt }) => {
+    onCommitted: ({ sessionId, clientId, updatedAt, preview, messageCount }) => {
       broadcastMessageDeleted({ sessionId, clientId });
       broadcastSessionPatched(sessionId, {
         sdkSessionId: null,
         updatedAt: new Date(updatedAt).toISOString(),
+        preview,
+        _count: { messages: messageCount },
       });
     },
     withCloseSuppressed: withRehydrateCloseSuppressed,

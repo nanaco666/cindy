@@ -3111,6 +3111,8 @@ function initGlobalListeners(): void {
                     retryFiles,
                     retryMentions,
                     {
+                      pastedTextRanges: lastUser?.pastedTextRanges,
+                      slashCommandRanges: lastUser?.slashCommandRanges,
                       authRetryPersistOnProjectionError: {
                         data: event.data as Record<string, unknown> | null,
                         agentMeta: event.agentMeta ?? null,
