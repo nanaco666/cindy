@@ -929,9 +929,6 @@ importers:
       '@googleapis/sheets':
         specifier: ^13.0.1
         version: 13.0.2
-      '@larksuiteoapi/node-sdk':
-        specifier: ^1.60.0
-        version: 1.71.1
       '@lizi/browser-control-runtime':
         specifier: workspace:*
         version: link:../browser-control-runtime

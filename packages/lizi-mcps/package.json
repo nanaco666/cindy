@@ -23,7 +23,6 @@
     "@googleapis/drive": "^20.2.0",
     "@googleapis/gmail": "^17.0.0",
     "@googleapis/sheets": "^13.0.1",
-    "@larksuiteoapi/node-sdk": "^1.60.0",
     "@lizi/browser-control-runtime": "workspace:*",
     "@lizi/github-client": "workspace:*",
     "@lizi/gitlab-client": "workspace:*",
