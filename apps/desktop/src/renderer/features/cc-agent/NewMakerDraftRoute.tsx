@@ -83,6 +83,7 @@ import {
   plainTextToTiptapDoc,
   saveDraft as saveComposerDraft,
 } from '@/lib/composerDraftStore';
+import type { JSONContent } from '@tiptap/core';
 import { base64ToUint8Array } from '@/lib/fileTypeInference';
 import { showWorktreeError } from '@/lib/worktreeToast';
 import type { CreateWorktreeResp } from '@/lib/worktree.types';
@@ -124,7 +125,7 @@ import {
   useAgentCapabilities,
   evictDeviceCapabilities,
   prefetchDeviceCapabilities,
-  getCachedCapabilities,
+  type AgentCapabilities,
 } from '@/hooks/useAgentCapabilities';
 import { useProviders } from '@/hooks/useProviders';
 import {
@@ -166,6 +167,16 @@ const IS_MAC_PLATFORM = typeof window !== 'undefined' && window.electronAPI?.pla
 
 function makeDraftSessionId(): string {
   return crypto.randomUUID();
+}
+
+function stripMentionChips(node: JSONContent | null): JSONContent | null {
+  if (!node) return null;
+  if (node.type === 'mentionChip') return null;
+  if (!node.content) return node;
+  const filtered = node.content
+    .map((child) => stripMentionChips(child))
+    .filter((c): c is JSONContent => c !== null);
+  return { ...node, content: filtered };
 }
 
 /**
@@ -775,27 +786,23 @@ export function NewMakerDraftRoute() {
         // 无 TTL、只在设备下线才 evict」的快照,被控端在线期间改了模型目录或 Rewind safety
         // 设置控制端不会自动刷新。evict 后显式 prefetch:若选的是同一 deviceId,hook 的
         // useEffect 不会因 deps 不变重跑 fetch,只有 subscriber 通知路径能送达新数据。
-        // 先 prefetch 新设备快照;只有成功后才重置本地状态 + patch draft,
-        // 避免失败时破坏正在编辑的草稿(review: defer destructive resets)。
-        evictDeviceCapabilities(target.deviceId);
-        evictDeviceProviders(target.deviceId);
-        evictDeviceGitSafetySettings(target.deviceId);
-        const defaultsPromise = window.electronAPI.deviceLink
+        // 验证设备可达:直接 invoke 能力 + 供应商(不走 swallow 的 prefetch)。
+        // 失败 throw → dialog 留 open,不破坏当前草稿状态。
+        const [freshCaps] = await Promise.all([
+          window.electronAPI.deviceLink.invoke(target.deviceId, 'maker:get-capabilities', [capabilityAgentKind]) as Promise<AgentCapabilities>,
+          window.electronAPI.deviceLink.invoke(target.deviceId, 'maker:provider:list', []),
+        ]);
+        // defaults 允许失败(旧版被控端无此 channel → capabilities 默认 fallback)。
+        const freshDefaults = await window.electronAPI.deviceLink
           .invoke(target.deviceId, 'maker:get-new-maker-defaults', [capabilityAgentKind])
           .then((v) => (v as RemoteDraftDefaults | null) ?? null)
           .catch(() => null);
-        // capabilities + providers 必须都成功,否则终止 handoff(dialog 留 open)。
-        // defaults 允许失败(旧版被控端无此 channel → capabilities 默认 fallback)。
-        // prefetchDeviceProviders 填充 cache 并通知 subscriber(解除 loading 阻塞)。
-        await Promise.all([
-          prefetchDeviceCapabilities(target.deviceId),
-          prefetchDeviceProviders(target.deviceId),
-        ]);
-        const freshCaps = getCachedCapabilities(capabilityAgentKind, target.deviceId);
-        if (!freshCaps) {
-          throw new Error('failed to fetch device capabilities');
-        }
-        const freshDefaults = await defaultsPromise;
+        // 设备验证通过后才 evict + prefetch 以刷新 hook 缓存。
+        evictDeviceCapabilities(target.deviceId);
+        evictDeviceProviders(target.deviceId);
+        evictDeviceGitSafetySettings(target.deviceId);
+        void prefetchDeviceCapabilities(target.deviceId);
+        void prefetchDeviceProviders(target.deviceId);
         dlSeedKeyRef.current = `${target.deviceId}:${capabilityAgentKind}`;
         setDlSel(resolveDeviceLinkDraftDefaults(freshCaps, freshDefaults, undefined, capabilityAgentKind));
         setRemoteDraftState({ loaded: true, value: freshDefaults });
@@ -827,7 +834,10 @@ export function NewMakerDraftRoute() {
         .filter((m) => !isSubscriptionDirectModel(m.id));
       let sshModel = draftInitialModel;
       if (isSubscriptionDirectModel(sshModel) || !sshVisibleModels.some((m) => m.id === sshModel)) {
-        sshModel = sshVisibleModels[0]?.id ?? (draftVendor === 'codex' ? 'gpt-5.5' : 'claude-sonnet-4-6');
+        if (!sshVisibleModels.length) {
+          throw new Error(t('ccAgent.draft.createSessionFailed'));
+        }
+        sshModel = sshVisibleModels[0].id;
       }
       const rawProviderId = chatPrefs.providerId ?? null;
       const sshLocalSourceId = effectiveSourceIdForModel(
@@ -898,8 +908,13 @@ export function NewMakerDraftRoute() {
               }),
             );
           }
+          // SSH 环境下本地 @file/@dir mention 无效,从 Tiptap 文档中剥离。
+          const strippedText = existingDraft.text
+            ? stripMentionChips(existingDraft.text)
+            : existingDraft.text;
           saveComposerDraft(newSession.id, {
             ...existingDraft,
+            text: strippedText,
             attachments: rehomedAttachments ?? [],
             browserComments: rehomedComments,
           });
