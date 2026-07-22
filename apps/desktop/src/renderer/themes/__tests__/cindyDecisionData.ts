@@ -276,7 +276,7 @@ export const CINDY_EXPECTED_VALUES: Record<string, { light: string; dark: string
   'text-placeholder': { light: '#686B72', dark: '#BFC1C4' },
   'settings-integration-avatar-bg': { light: '#F8F8F8', dark: '#2F2D2D' },
   'settings-logout-bg': { light: '#F8F8F8', dark: '#312F2F' },
-  'settings-menu-bg-hover': { light: '#EFEFEF', dark: '#2B2929' },
+  'settings-menu-bg-hover': { light: '#E2E2E2', dark: '#3A3838' }, // 用户改稿 2026-07-21:原值贴着页底(#EDEDED/#2A2828)不可见,light 压暗 / dark 提亮到 ~5-6% 亮度差
   'settings-menu-bg-selected': { light: '#F1F1F1', dark: '#2F2D2D' },
   'settings-source-link': { light: '#1D4ED8', dark: '#93C5FD' },
   'settings-theme-auto-dark': { light: '#2A2828', dark: '#2A2828' },

@@ -3560,6 +3560,7 @@
       "defaultPlaceholder": "今日は何をしましょうか〜",
       "voiceInput": {
         "start": "音声入力を開始",
+        "pillLabel": "音声",
         "stop": "音声入力を停止",
         "releaseToStop": "音声入力中、離すと終了",
         "releaseToSend": "離すと送信",
@@ -6269,6 +6270,7 @@
   },
   "extraDirs": {
     "menuAria": "操作メニュー",
+    "expandLabel": "追加",
     "tooltipEmpty": "その他の操作",
     "tooltipCount": "参照ディレクトリ {{count}} 件",
     "pluginsTitle": "インストール済みプラグイン",

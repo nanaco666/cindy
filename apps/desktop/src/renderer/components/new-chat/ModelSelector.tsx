@@ -1,10 +1,18 @@
-import { useState, useMemo, useEffect, useRef, type CSSProperties } from 'react';
+import {
+  useState,
+  useMemo,
+  useEffect,
+  useRef,
+  type CSSProperties,
+  type PointerEvent as ReactPointerEvent,
+} from 'react';
 import { Check, ChevronDown, PlugZap, Plus, Search, Unplug, Zap } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { cn } from '@/lib/utils';
 import { flashScrollbar } from '@/lib/scrollbarAutoHide';
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { MorphPopover } from '@/components/ui/morph-popover';
 import { AnthropicMark } from '@/components/icons/AnthropicMark';
 import { OpenAIMark } from '@/components/icons/OpenAIMark';
 import { XDIncMark } from '@/components/icons/XDIncMark';
@@ -270,6 +278,8 @@ interface ModelSelectorProps {
   triggerVariant?: 'toolbar' | 'field';
   /** CREATE AGENT 首页按 Figma 185:2724 使用独立私有 token。 */
   visualVariant?: 'default' | 'create-agent';
+  /** 仅普通 composer 显式开启 chip → panel 容器形变；设置页/worker 等维持 Radix。 */
+  useMorphPopover?: boolean;
   /** Popover 弹出方向,默认 "top"（底部工具栏向上弹），dialog 内嵌场景传 "bottom"。 */
   popoverSide?: 'top' | 'bottom';
   /** 关闭模型的 effort / Fast 编辑入口；只选择模型 id 的设置项使用。 */
@@ -326,6 +336,8 @@ interface ModelSelectorContentProps {
   followSession?: { active: boolean; label: string; onFollow: () => void };
   /** 是否显示模型的 effort / Fast 编辑入口。 */
   configurationEnabled?: boolean;
+  /** Morph 原位展开时，要求真实 pointer move 后才展示行级配置，避免静止光标误触。 */
+  pointerRevealRequiresIntent?: boolean;
   /** 语义同 ModelSelectorProps.agentSwitch(显式两步引擎切换)。 */
   agentSwitch?: {
     currentVendor: 'cc' | 'codex';
@@ -362,6 +374,7 @@ export function ModelSelectorContent({
   onNavigateToProviders,
   followSession,
   configurationEnabled = true,
+  pointerRevealRequiresIntent = false,
   agentSwitch,
 }: ModelSelectorContentProps) {
   const { t } = useTranslation();
@@ -431,6 +444,31 @@ export function ModelSelectorContent({
   const suppressScrollDismissRef = useRef(false);
   const closeOptionsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // ── pointer-reveal 武装门 ──
+  // 面板(MorphPopover)在光标正下方原位展开:行滑到**静止**光标底下会触发
+  // pointerenter,行配置浮层闪现一下(2026-07-22 用户反馈)。静止光标不代表
+  // hover 意图 —— 以挂载后首个 move 事件为基线,累计移动 ≥4px 才武装
+  // pointer-reveal;布局变化后 Chromium 补发的合成 move 坐标不变,天然被挡。
+  const hoverIntentArmedRef = useRef(false);
+  const hoverIntentBaseRef = useRef<{ x: number; y: number } | null>(null);
+  useEffect(() => {
+    if (!pointerRevealRequiresIntent) return;
+    const onMove = (e: PointerEvent) => {
+      if (!hoverIntentBaseRef.current) {
+        hoverIntentBaseRef.current = { x: e.screenX, y: e.screenY };
+        return;
+      }
+      const dx = e.screenX - hoverIntentBaseRef.current.x;
+      const dy = e.screenY - hoverIntentBaseRef.current.y;
+      if (dx * dx + dy * dy >= 16) {
+        hoverIntentArmedRef.current = true;
+        document.removeEventListener('pointermove', onMove, true);
+      }
+    };
+    document.addEventListener('pointermove', onMove, true);
+    return () => document.removeEventListener('pointermove', onMove, true);
+  }, [pointerRevealRequiresIntent]);
+
   const cancelOptionsClose = () => {
     if (closeOptionsTimerRef.current === null) return;
     clearTimeout(closeOptionsTimerRef.current);
@@ -445,6 +483,22 @@ export function ModelSelectorContent({
       setEditing(null);
     }, 80);
   };
+
+  // 列表(或任何祖先滚动容器)滚动时立即关掉行级配置浮层:浮层锚定行会跟着滚动
+  // 漂移,体验很差(2026-07-22 用户反馈)。桌面端惯例是 scroll 即关(macOS 菜单同);
+  // 浮层本身是 hover 即现的,重开零成本。capture 监听兜住所有滚动源,
+  // 浮层内部自身的滚动除外(configPanelRef 过滤)。
+  useEffect(() => {
+    if (!editing) return;
+    const onAnyScroll = (event: Event) => {
+      if (configPanelRef.current?.contains(event.target as Node)) return;
+      cancelOptionsClose();
+      setEditing(null);
+    };
+    document.addEventListener('scroll', onAnyScroll, true);
+    return () => document.removeEventListener('scroll', onAnyScroll, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editing]);
 
   useEffect(
     () => () => {
@@ -911,6 +965,22 @@ export function ModelSelectorContent({
       cancelOptionsClose();
       setEditing(hasOptions ? { providerId, modelId: model.id } : null);
     };
+    // pointerenter 触发的 reveal 必须等光标真实移动过才武装:面板(MorphPopover)在
+    // 光标正下方原位展开时,行会滑到**静止**光标底下触发 pointerenter,行配置浮层
+    // 会闪现一下(2026-07-22 用户反馈)。macOS 菜单同款解法:静止光标不算 hover 意图。
+    // 注意 enter 先于 move 派发 —— 首次移入行时 enter 可能仍被拦,由行上的
+    // onPointerMove 兜底 reveal(setEditing 同值幂等,不抖)。
+    // untrusted 事件(jsdom 测试/程序派发)不设门:布局位移诱发的浏览器事件是
+    // trusted 的,真实闪现场景仍被挡。
+    const revealOptionsByPointer = (event: ReactPointerEvent<HTMLDivElement>) => {
+      if (
+        pointerRevealRequiresIntent &&
+        !hoverIntentArmedRef.current &&
+        event.nativeEvent.isTrusted
+      ) return;
+      if (!isEditingThis) revealOptions();
+      else cancelOptionsClose();
+    };
     return (
       <Popover
         key={`${providerId ?? ''}::${model.id}`}
@@ -927,7 +997,8 @@ export function ModelSelectorContent({
             data-model-selected={isSelected ? 'true' : undefined}
             data-model-options-active={isEditingThis ? 'true' : undefined}
             tabIndex={disabled ? -1 : 0}
-            onPointerEnter={revealOptions}
+            onPointerEnter={revealOptionsByPointer}
+            onPointerMove={revealOptionsByPointer}
             onPointerLeave={scheduleOptionsClose}
             onFocus={revealOptions}
             onBlur={(event) => {
@@ -1213,6 +1284,7 @@ export function ModelSelector({
   dense = false,
   triggerVariant = 'toolbar',
   visualVariant = 'default',
+  useMorphPopover = false,
   popoverSide = 'top',
   configurationEnabled = true,
   fallbackOption,
@@ -1368,6 +1440,7 @@ export function ModelSelector({
   const isBudget = modelId.startsWith('codex/');
   const isFieldTrigger = triggerVariant === 'field';
   const isCreateAgentVariant = visualVariant === 'create-agent';
+  const morphEnabled = useMorphPopover && !isFieldTrigger && !isCreateAgentVariant;
   const budgetGradientStyle: CSSProperties | undefined = isBudget
     ? {
         background: 'var(--model-budget-gradient)',
@@ -1377,15 +1450,13 @@ export function ModelSelector({
       }
     : undefined;
 
-  return (
-    <Popover
-      open={(open || keepOpenForAgentConfirmation) && !disabled}
-      onOpenChange={(next) => setOpen(disabled ? false : next)}
-    >
-      <PopoverTrigger asChild>
-        <button
+  const trigger = (
+    <button
           type="button"
           disabled={switching || disabled}
+          onClick={morphEnabled ? () => setOpen((prev) => (disabled ? false : !prev)) : undefined}
+          aria-expanded={open && !disabled}
+          aria-haspopup="listbox"
           className={cn(
             'flex min-w-0 max-w-full items-center gap-1 transition-colors',
             isFieldTrigger
@@ -1403,12 +1474,16 @@ export function ModelSelector({
                         'hover:bg-[var(--create-agent-control-bg-hover)] active:bg-[var(--create-agent-control-bg-pressed)]',
                         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--create-agent-focus-ring)]',
                       ]
-                    : [
-                        'h-[30px] min-w-[72px] max-w-full shrink overflow-hidden',
-                        noSource
-                          ? 'border border-[var(--border-default)] bg-[var(--composer-pill-bg,#FCFCFC)] px-2.5 hover:bg-[var(--model-trigger-hover)]'
-                          : 'bg-[var(--composer-pill-bg,#FCFCFC)] dark:bg-[var(--composer-pill-bg,#393838)] px-2.5 border border-[var(--border-default)] hover:bg-[var(--model-trigger-hover)]' /* spec 2026-07-17, token by 一哥 */,
-                      ],
+                    : morphEnabled
+                      ? [
+                          'h-[30px] min-w-[72px] max-w-full shrink overflow-hidden px-2.5',
+                          'border border-transparent bg-transparent',
+                          'hover:border-[var(--border-default)] hover:bg-[var(--composer-pill-bg,#FCFCFC)] dark:hover:bg-[var(--composer-pill-bg,#393838)]',
+                        ]
+                      : [
+                          'h-[30px] min-w-[72px] max-w-full shrink overflow-hidden',
+                          'bg-[var(--composer-pill-bg,#FCFCFC)] dark:bg-[var(--composer-pill-bg,#393838)] px-2.5 border border-[var(--border-default)] hover:bg-[var(--model-trigger-hover)]',
+                        ],
                 ),
             // device-link 远程切换 in-flight:置灰 + 禁用点击(复用本文件 disabled 行的 opacity-50 习惯)。
             (switching || disabled) && 'pointer-events-none opacity-50',
@@ -1579,47 +1654,75 @@ export function ModelSelector({
               isFieldTrigger && 'ml-auto',
             )}
           />
-        </button>
-      </PopoverTrigger>
+    </button>
+  );
+
+  const content = (
+    <ModelSelectorContent
+      modelId={modelId}
+      effort={effort}
+      onModelChange={onModelChange}
+      onEffortChange={onEffortChange}
+      fastMode={fastMode}
+      onFastModeChange={onFastModeChange}
+      modelMemory={modelMemory}
+      vendorKey={vendorKey}
+      deviceId={deviceId}
+      excludeSubscriptionDirect={excludeSubscriptionDirect}
+      onDismiss={() => setOpen(false)}
+      currentProviderId={currentProviderId}
+      onProviderChange={onProviderChange}
+      onNavigateToProviders={onNavigateToProviders}
+      configurationEnabled={configurationEnabled}
+      pointerRevealRequiresIntent={morphEnabled}
+      agentSwitch={contentAgentSwitch}
+      followSession={
+        fallbackOption
+          ? {
+              active: fallbackOption.active,
+              label: fallbackOption.label,
+              onFollow: fallbackOption.onSelect,
+            }
+          : undefined
+      }
+    />
+  );
+
+  if (morphEnabled) {
+    return (
+      <MorphPopover
+        open={(open || keepOpenForAgentConfirmation) && !disabled}
+        onOpenChange={(next) => setOpen(disabled ? false : next)}
+        side={popoverSide}
+        align="end"
+        wrapperClassName="min-w-0 max-w-full shrink"
+        panelClassName="p-0"
+        panelAriaLabel={ariaLabel}
+        trigger={trigger}
+      >
+        {content}
+      </MorphPopover>
+    );
+  }
+
+  return (
+    <Popover
+      open={(open || keepOpenForAgentConfirmation) && !disabled}
+      onOpenChange={(next) => setOpen(disabled ? false : next)}
+    >
+      <PopoverTrigger asChild>{trigger}</PopoverTrigger>
       <PopoverContent
         side={popoverSide}
         align="end"
         sideOffset={4}
         collisionPadding={8}
         className={cn(
-          // 宽度由内容决定(单栏 320;Edit 展开 ~516,向左加宽)。
           'w-auto overflow-hidden rounded-[12px] p-0',
           'bg-[var(--model-dropdown-bg)]',
           'border border-[var(--model-dropdown-border)]',
         )}
       >
-        <ModelSelectorContent
-          modelId={modelId}
-          effort={effort}
-          onModelChange={onModelChange}
-          onEffortChange={onEffortChange}
-          fastMode={fastMode}
-          onFastModeChange={onFastModeChange}
-          modelMemory={modelMemory}
-          vendorKey={vendorKey}
-          deviceId={deviceId}
-          excludeSubscriptionDirect={excludeSubscriptionDirect}
-          onDismiss={() => setOpen(false)}
-          currentProviderId={currentProviderId}
-          onProviderChange={onProviderChange}
-          onNavigateToProviders={onNavigateToProviders}
-          configurationEnabled={configurationEnabled}
-          agentSwitch={contentAgentSwitch}
-          followSession={
-            fallbackOption
-              ? {
-                  active: fallbackOption.active,
-                  label: fallbackOption.label,
-                  onFollow: fallbackOption.onSelect,
-                }
-              : undefined
-          }
-        />
+        {content}
       </PopoverContent>
     </Popover>
   );
