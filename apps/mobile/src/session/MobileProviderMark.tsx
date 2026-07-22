@@ -1,8 +1,8 @@
 /**
  * MobileProviderMark —— provider-aware 模型下拉里每行前缀 / trigger 药丸的「来源徽标」。
  *
- * 对齐桌面 ProviderMark:三个内置供应商用**官方单色 mark**(Claude / Codex / XD,path 与桌面
- * 同源,见 components/vendorIconPaths),其它(自定义供应商)回退首字母 monogram。与桌面的
+ * 对齐桌面 ProviderMark:目录供应商用**官方单色 mark**，品牌路径与 provider id/upstream
+ * 识别由 @lizi/model-providers/branding 双端共享；未知自定义供应商回退首字母 monogram。与桌面的
  * 一处刻意差异:monogram 容器沿用 pill 圆角(桌面是 4px 方盒)——手机圆角走二元规则
  * (container/pill),不引入中间值。XD mark 非正方形(158:282),渲染时在 size×size 盒内
  * 垂直居中,保证与正方形 mark 同行对齐。
@@ -20,6 +20,11 @@ import {
 } from '@/components/vendorIconPaths';
 import { useTheme, useThemedStyles, type ThemeColors } from '@/theme';
 import { fontWeight as fontWeightToken, radius, typeScale } from '@/theme/tokens';
+import {
+  PROVIDER_LOGO_PATHS,
+  resolveProviderLogoKind,
+  type ProviderLogoRouting,
+} from '@lizi/model-providers/branding';
 import { resolveModelIconKind } from '@lizi/model-providers/sections';
 
 import { providerMonogram } from './providerModelSections';
@@ -54,8 +59,10 @@ const makeStyles = (c: ThemeColors) =>
   });
 
 export interface MobileProviderMarkProps {
-  /** 供应商 id(anthropic / openai / xd → 官方 mark;其它 / 缺省 → monogram)。 */
+  /** 供应商 id(目录 id → 官方 mark；未知 / 缺省 → monogram)。 */
   providerId?: string;
+  /** 用户重命名 provider 后用持久化 upstream 继续识别品牌。 */
+  routing?: ProviderLogoRouting;
   /** 供应商展示名(monogram 取首字母;官方 mark 分支不消费)。 */
   name: string;
   /** mark 单色;缺省 textSecondary(列表行口径,trigger 场景可传 textPrimary)。 */
@@ -63,14 +70,16 @@ export interface MobileProviderMarkProps {
 }
 
 /** 渲染单个供应商的来源徽标(官方 mark 或 monogram)。 */
-export function MobileProviderMark({ providerId, name, color }: MobileProviderMarkProps) {
+export function MobileProviderMark({ providerId, routing, name, color }: MobileProviderMarkProps) {
   const styles = useThemedStyles(makeStyles);
   const { colors } = useTheme();
   const fill = color ?? colors.textSecondary;
   // 官方 mark 比 monogram 容器缩一档(桌面同比:行内 mark ≈ 12.3 vs 容器 18),避免视觉过重。
   const glyph = 13;
 
-  switch (providerId) {
+  const kind = resolveProviderLogoKind(providerId ?? '', routing);
+
+  switch (kind) {
     case 'anthropic':
       return (
         <View accessible={false} style={styles.markBox}>
@@ -99,15 +108,25 @@ export function MobileProviderMark({ providerId, name, color }: MobileProviderMa
         </View>
       );
     }
-    default:
-      return (
-        <View style={styles.monogram}>
-          <Text style={[styles.monogramText, color ? { color } : null]}>
-            {providerMonogram(name)}
-          </Text>
-        </View>
-      );
   }
+
+  if (kind) {
+    return (
+      <View accessible={false} style={styles.markBox}>
+        <Svg width={glyph} height={glyph} viewBox="0 0 24 24">
+          <Path d={PROVIDER_LOGO_PATHS[kind]} fill={fill} />
+        </Svg>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.monogram}>
+      <Text style={[styles.monogramText, color ? { color } : null]}>
+        {providerMonogram(name)}
+      </Text>
+    </View>
+  );
 }
 
 export interface MobileModelIconMarkProps {
@@ -115,6 +134,7 @@ export interface MobileModelIconMarkProps {
   icon?: string;
   /** 回落用的来源供应商 id / 展示名(与 MobileProviderMark 同语义)。 */
   providerId?: string;
+  routing?: ProviderLogoRouting;
   name: string;
   color?: string;
 }
@@ -124,7 +144,13 @@ export interface MobileModelIconMarkProps {
  * resolveModelIconKind 口径):模型条目带 `icon`(**AI Gateway / 目录设定**)就渲染
  * 对应厂牌 mark;缺省或未知值回落来源供应商标。禁止在客户端按 model id 猜厂牌。
  */
-export function MobileModelIconMark({ icon, providerId, name, color }: MobileModelIconMarkProps) {
+export function MobileModelIconMark({
+  icon,
+  providerId,
+  routing,
+  name,
+  color,
+}: MobileModelIconMarkProps) {
   const styles = useThemedStyles(makeStyles);
   const { colors } = useTheme();
   const kind = resolveModelIconKind(icon);
@@ -151,5 +177,12 @@ export function MobileModelIconMark({ icon, providerId, name, color }: MobileMod
       </View>
     );
   }
-  return <MobileProviderMark color={color} name={name} providerId={providerId} />;
+  return (
+    <MobileProviderMark
+      color={color}
+      name={name}
+      providerId={providerId}
+      routing={routing}
+    />
+  );
 }

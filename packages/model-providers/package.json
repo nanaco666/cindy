@@ -10,6 +10,7 @@
     ".": "./src/index.ts",
     "./catalog": "./catalog/providers.json",
     "./sections": "./src/sections.ts",
+    "./branding": "./src/providerBranding.ts",
     "./registry": "./src/registry.ts",
     "./types": "./src/types.ts",
     "./effort-resolution": "./src/effortResolution.ts"
