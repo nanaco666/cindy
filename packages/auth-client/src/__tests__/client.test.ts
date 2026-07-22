@@ -85,6 +85,7 @@ describe("CindyAuthClient", () => {
       },
       {
         status: "ok",
+        accountDeletionRestored: true,
         accessToken: "access",
         refreshToken: "refresh",
         membership: {
@@ -111,7 +112,72 @@ describe("CindyAuthClient", () => {
     ).resolves.toMatchObject({ status: "select_account" });
     await expect(
       client(fetch).selectAccount("login-1", "m1"),
-    ).resolves.toMatchObject({ status: "ok" });
+    ).resolves.toMatchObject({
+      status: "ok",
+      accountDeletionRestored: true,
+    });
+  });
+
+  it("uses an authenticated challenge and an unauthenticated receipt for account deletion", async () => {
+    const pending = {
+      status: "pending" as const,
+      requestedAt: "2026-07-22T00:00:00.000Z",
+      deleteAfter: "2026-08-21T00:00:00.000Z",
+    };
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(
+        response(200, {
+          enabled: true,
+          available: true,
+          verification: {
+            channel: "email",
+            maskedTarget: "a***@example.com",
+          },
+          manualAppleRevocationRequired: false,
+        }),
+      )
+      .mockResolvedValueOnce(
+        response(200, {
+          challengeId: "challenge-1",
+          receiptToken: "receipt-1",
+          channel: "email",
+          maskedTarget: "a***@example.com",
+          expiresAt: "2026-07-22T00:10:00.000Z",
+        }),
+      )
+      .mockResolvedValueOnce(response(200, pending))
+      .mockResolvedValueOnce(response(200, pending));
+    const auth = client(fetch);
+
+    await expect(
+      auth.getAccountDeletionAvailability("access-token"),
+    ).resolves.toMatchObject({ available: true });
+    const challenge = await auth.requestAccountDeletionChallenge("access-token");
+    await expect(
+      auth.confirmAccountDeletion("access-token", {
+        challengeId: challenge.challengeId,
+        receiptToken: challenge.receiptToken,
+        code: "123456",
+        acknowledged: true,
+      }),
+    ).resolves.toEqual(pending);
+    await expect(
+      auth.getAccountDeletionStatus(challenge.receiptToken),
+    ).resolves.toEqual(pending);
+
+    expect(fetch.mock.calls[0]?.[1]?.headers).toMatchObject({
+      Authorization: "Bearer access-token",
+    });
+    expect(fetch.mock.calls[1]?.[1]?.headers).toMatchObject({
+      Authorization: "Bearer access-token",
+    });
+    expect(fetch.mock.calls[2]?.[1]?.headers).toMatchObject({
+      Authorization: "Bearer access-token",
+    });
+    expect(fetch.mock.calls[3]?.[1]?.headers).not.toHaveProperty(
+      "Authorization",
+    );
   });
 
   it("uses account tokens only for account control and exchanges a resource token", async () => {

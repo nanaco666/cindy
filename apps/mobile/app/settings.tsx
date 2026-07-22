@@ -69,6 +69,8 @@ export default function SettingsScreen() {
   const { status } = useDeviceLink();
   const [copiedRowId, setCopiedRowId] = useState<string | null>(null);
   const [loggingOut, setLoggingOut] = useState(false);
+  const [accountDeletionAvailable, setAccountDeletionAvailable] =
+    useState(false);
   const [debugExpanded, setDebugExpanded] = useState(false);
   const [voiceExpanded, setVoiceExpanded] = useState(false);
   const [voiceServiceMode, setVoiceServiceModeState] = useState<MobileVoiceServiceMode>('cindy');
@@ -152,6 +154,30 @@ export default function SettingsScreen() {
       cancelled = true;
     };
   }, [auth]);
+
+  useEffect(() => {
+    if (!auth.isAuthenticated) {
+      setAccountDeletionAvailable(false);
+      return;
+    }
+    let cancelled = false;
+    setAccountDeletionAvailable(false);
+    void auth
+      .getAccountDeletionAvailability()
+      .then((availability) => {
+        if (!cancelled) {
+          setAccountDeletionAvailable(
+            availability.enabled && availability.available,
+          );
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setAccountDeletionAvailable(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [auth.getAccountDeletionAvailability, auth.isAuthenticated]);
 
   const copyRow = useCallback(async (row: MobileSettingsRow) => {
     if (!row.copyValue) return;
@@ -435,6 +461,10 @@ export default function SettingsScreen() {
     }
   }, [auth, loggingOut, router]);
 
+  const openAccountDeletion = useCallback(() => {
+    router.push('/account-deletion');
+  }, [router]);
+
   const toggleDebug = useCallback(() => {
     configureCollapseAnimation();
     setDebugExpanded((value) => !value);
@@ -709,6 +739,17 @@ export default function SettingsScreen() {
           </Text>
           <MainWindowActionGroup
             dangerActions={[
+              ...(accountDeletionAvailable
+                ? [
+                    {
+                      accessibilityLabel: '注销账号',
+                      label: '注销账号',
+                      onPress: openAccountDeletion,
+                      testID: 'settings.deleteAccountButton',
+                      tone: 'danger' as const,
+                    },
+                  ]
+                : []),
               {
                 accessibilityLabel: loggingOut ? '正在退出登录' : '退出登录',
                 busy: loggingOut,

@@ -8,7 +8,7 @@ import {
 } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useMemo, type ReactElement } from 'react';
-import { StyleSheet } from 'react-native';
+import { Alert, StyleSheet } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider, useAuth } from '@/auth/AuthContext';
 import { DeviceLinkProvider } from '@/device-link/DeviceLinkContext';
@@ -63,6 +63,16 @@ function NavigationGate() {
       router.replace('/');
     }
   }, [auth.initialized, auth.isAuthenticated, router, segments]);
+
+  useEffect(() => {
+    if (!auth.isAuthenticated || !auth.accountDeletionRestored) return;
+    auth.consumeAccountDeletionRestored();
+    Alert.alert('账号已恢复', '本次登录已取消账号注销，账号和数据将继续保留。');
+  }, [
+    auth.accountDeletionRestored,
+    auth.consumeAccountDeletionRestored,
+    auth.isAuthenticated,
+  ]);
 
   return (
     <NavigationThemeProvider value={navigationTheme}>

@@ -343,16 +343,19 @@ describe('native e2e environment', () => {
     expect(authContext).toContain(
       'await clearAllMobileVoiceInputHistories().catch(() => undefined);',
     );
-    // Scope the ordering check to the logout body: refresh-token deletion is serialized so a
-    // racing refresh cannot restore credentials after logout has begun.
+    // Scope the ordering check to the shared local-session cleanup: both logout and confirmed
+    // account deletion use it, and refresh-token deletion remains serialized against refresh.
+    const cleanupStart = authContext.indexOf('const clearLocalSession = useCallback(async () => {');
+    const cleanupBody = authContext.slice(cleanupStart, authContext.indexOf('}, [', cleanupStart));
+    const refreshTokenDelete = cleanupBody.indexOf('await serializeRefreshTokenMutation(() =>');
+    expect(refreshTokenDelete).toBeGreaterThanOrEqual(0);
+    expect(cleanupBody).toContain('deleteSecureItem(REFRESH_TOKEN_KEY).catch(() => undefined)');
+    expect(cleanupBody.indexOf('await clearAllMobileVoiceCredentials().catch(() => undefined);')).toBeLessThan(refreshTokenDelete);
+    expect(cleanupBody.indexOf('await clearMobileVoiceLiteLlmSettings().catch(() => undefined);')).toBeLessThan(refreshTokenDelete);
+    expect(cleanupBody.indexOf('await clearAllMobileVoiceInputHistories().catch(() => undefined);')).toBeLessThan(refreshTokenDelete);
     const logoutStart = authContext.indexOf('const logout = useCallback(async () => {');
     const logoutBody = authContext.slice(logoutStart, authContext.indexOf('}, [', logoutStart));
-    const refreshTokenDelete = logoutBody.indexOf('await serializeRefreshTokenMutation(() =>');
-    expect(refreshTokenDelete).toBeGreaterThanOrEqual(0);
-    expect(logoutBody).toContain('deleteSecureItem(REFRESH_TOKEN_KEY).catch(() => undefined)');
-    expect(logoutBody.indexOf('await clearAllMobileVoiceCredentials().catch(() => undefined);')).toBeLessThan(refreshTokenDelete);
-    expect(logoutBody.indexOf('await clearMobileVoiceLiteLlmSettings().catch(() => undefined);')).toBeLessThan(refreshTokenDelete);
-    expect(logoutBody.indexOf('await clearAllMobileVoiceInputHistories().catch(() => undefined);')).toBeLessThan(refreshTokenDelete);
+    expect(logoutBody).toContain('await clearLocalSession();');
   });
 
   it('keeps Android voice input as an explicit unsupported native boundary for now', () => {

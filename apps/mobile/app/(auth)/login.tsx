@@ -15,7 +15,12 @@ import {
   UserRound,
 } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import type { SocialProvider, VerificationKind } from '@cindy/auth-client';
+import {
+  AuthApiError,
+  type AccountDeletionStatus,
+  type SocialProvider,
+  type VerificationKind,
+} from '@cindy/auth-client';
 
 import { useAuth } from '@/auth/AuthContext';
 import {
@@ -57,6 +62,8 @@ export default function LoginScreen() {
   const [ssoVerificationCode, setSsoVerificationCode] = useState('');
   const [bindingContact, setBindingContact] = useState('');
   const [bindingCode, setBindingCode] = useState('');
+  const [accountDeletionStatus, setAccountDeletionStatus] =
+    useState<AccountDeletionStatus | null>(null);
   const configIssues = getMobileConfigIssues();
   const disabled = auth.isBusy || !auth.initialized || configIssues.length > 0;
 
@@ -80,6 +87,49 @@ export default function LoginScreen() {
     setBindingContact('');
     setBindingCode('');
   }, [auth.loginState]);
+
+  useEffect(() => {
+    if (
+      !auth.initialized ||
+      auth.isAuthenticated ||
+      !auth.accountDeletionReceipt
+    ) {
+      setAccountDeletionStatus(null);
+      return;
+    }
+    let cancelled = false;
+    const refreshStatus = async () => {
+      try {
+        const status = await auth.getAccountDeletionStatus();
+        if (cancelled || !status) return;
+        if (status.status === 'cancelled') {
+          await auth.clearAccountDeletionReceipt();
+          if (!cancelled) setAccountDeletionStatus(null);
+          return;
+        }
+        setAccountDeletionStatus(status);
+      } catch (cause) {
+        if (
+          cause instanceof AuthApiError &&
+          cause.code === 'ACCOUNT_DELETION_RECEIPT_INVALID'
+        ) {
+          await auth.clearAccountDeletionReceipt();
+        }
+      }
+    };
+    void refreshStatus();
+    const timer = setInterval(() => void refreshStatus(), 30_000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [
+    auth.accountDeletionReceipt,
+    auth.clearAccountDeletionReceipt,
+    auth.getAccountDeletionStatus,
+    auth.initialized,
+    auth.isAuthenticated,
+  ]);
 
   // EAS Observe: the stable login surface is ready before network actions complete.
   useEffect(() => {
@@ -683,6 +733,16 @@ export default function LoginScreen() {
           </View>
 
           <View style={styles.card}>
+            {accountDeletionStatus ? (
+              <AccountDeletionStatusPanel
+                onDismiss={
+                  accountDeletionStatus.status === 'completed'
+                    ? () => void auth.clearAccountDeletionReceipt()
+                    : undefined
+                }
+                status={accountDeletionStatus}
+              />
+            ) : null}
             {error ? (
               <Text style={styles.error} testID="login.error">
                 {error}
@@ -741,6 +801,56 @@ export default function LoginScreen() {
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
+}
+
+function AccountDeletionStatusPanel({
+  onDismiss,
+  status,
+}: {
+  onDismiss?: () => void;
+  status: AccountDeletionStatus;
+}) {
+  const styles = useThemedStyles(makeStyles);
+  const pending = status.status === 'pending';
+  return (
+    <View style={styles.deletionStatus} testID="login.accountDeletionStatus">
+      <Text style={styles.deletionStatusTitle}>
+        {pending
+          ? '账号正在等待注销'
+          : status.status === 'processing'
+            ? '账号正在注销'
+            : '账号已注销'}
+      </Text>
+      <Text style={styles.deletionStatusCopy}>
+        {pending
+          ? `预计于 ${formatAccountDeletionDate(status.deleteAfter)} 永久删除。现在重新登录即可取消注销。`
+          : status.status === 'processing'
+            ? '数据清理正在进行，完成后会向你的验证联系方式发送通知。'
+            : '账号和个人数据清理已完成。'}
+      </Text>
+      {onDismiss ? (
+        <MainWindowActionButton
+          action={{
+            label: '我知道了',
+            onPress: onDismiss,
+            testID: 'login.accountDeletionDismissButton',
+          }}
+          density="compact"
+          style={styles.fullButton}
+        />
+      ) : null}
+    </View>
+  );
+}
+
+function formatAccountDeletionDate(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat('zh-CN', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  }).format(date);
 }
 
 function socialLabel(provider: SocialProvider): string {
@@ -867,6 +977,23 @@ const makeStyles = (colors: ThemeColors) =>
       borderWidth: StyleSheet.hairlineWidth,
       gap: spacing.md,
       padding: spacing.lg,
+    },
+    deletionStatus: {
+      borderColor: colors.borderStrong,
+      borderRadius: radius.control,
+      borderWidth: StyleSheet.hairlineWidth,
+      gap: spacing.sm,
+      padding: spacing.md,
+    },
+    deletionStatusTitle: {
+      color: colors.textPrimary,
+      fontSize: typeScale.body,
+      fontWeight: fontWeight.semibold,
+    },
+    deletionStatusCopy: {
+      color: colors.textSecondary,
+      fontSize: typeScale.footnote,
+      lineHeight: lineHeight.caption,
     },
     stepHeader: { gap: spacing.xs, marginBottom: spacing.xs },
     stepTitle: {

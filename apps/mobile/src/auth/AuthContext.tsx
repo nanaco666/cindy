@@ -17,6 +17,9 @@ import {
   ssoOrgDiscoveryToMethods,
   type AuthFlowState,
   type AuthMembership,
+  type AccountDeletionAvailability,
+  type AccountDeletionChallenge,
+  type AccountDeletionStatus,
   type LoginOutcome,
   type SocialProvider,
   type VerificationKind,
@@ -70,6 +73,8 @@ const LEGACY_REFRESH_TOKEN_KEY = 'xdt.mobile.refreshToken';
 const USER_PROFILE_KEY = 'cindy.mobile.auth.userProfile';
 const LEGACY_USER_PROFILE_KEY = 'xdt.mobile.userProfile';
 const PENDING_OAUTH_KEY = 'cindy.mobile.auth.pendingOAuth';
+const ACCOUNT_DELETION_RECEIPT_KEY =
+  'cindy.mobile.auth.accountDeletionReceipt';
 const LEGACY_PENDING_OAUTH_KEY = 'xdt.mobile.pendingOAuth';
 const PENDING_OAUTH_MAX_AGE_MS = 10 * 60 * 1000;
 const AUTH_STARTUP_GATE_TIMEOUT_MS = 20 * 1000;
@@ -124,10 +129,22 @@ export interface AuthContextValue {
   deviceId: string | null;
   loginState: AuthFlowState | null;
   authError: string | null;
+  accountDeletionReceipt: string | null;
+  accountDeletionRestored: boolean;
   clearAuthError(): void;
+  consumeAccountDeletionRestored(): void;
   dispatchLoginAction(action: MobileLoginAction): Promise<boolean>;
   completeOAuthCallback(callbackUrl: string): Promise<void>;
   logout(): Promise<void>;
+  getAccountDeletionAvailability(): Promise<AccountDeletionAvailability>;
+  requestAccountDeletionChallenge(): Promise<AccountDeletionChallenge>;
+  confirmAccountDeletion(input: {
+    challengeId: string;
+    receiptToken: string;
+    code: string;
+  }): Promise<AccountDeletionStatus>;
+  getAccountDeletionStatus(): Promise<AccountDeletionStatus | null>;
+  clearAccountDeletionReceipt(): Promise<void>;
   getAccessToken(): Promise<string | null>;
   refreshAccessToken(): Promise<string | null>;
   apiFetch<T>(path: string, opts: Omit<ApiFetchOptions, 'token'>): Promise<T>;
@@ -146,10 +163,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       deviceId: 'visual-mock-phone',
       loginState: null,
       authError: null,
+      accountDeletionReceipt: null,
+      accountDeletionRestored: false,
       clearAuthError: () => undefined,
+      consumeAccountDeletionRestored: () => undefined,
       dispatchLoginAction: async () => true,
       completeOAuthCallback: async () => undefined,
       logout: async () => undefined,
+      getAccountDeletionAvailability: async () => ({
+        enabled: true,
+        available: true,
+        verification: {
+          channel: 'email',
+          maskedTarget: 'c***@example.com',
+        },
+        manualAppleRevocationRequired: false,
+      }),
+      requestAccountDeletionChallenge: async () => ({
+        challengeId: 'visual-mock-challenge',
+        receiptToken: 'visual-mock-receipt',
+        channel: 'email',
+        maskedTarget: 'c***@example.com',
+        expiresAt: new Date(Date.now() + 600_000).toISOString(),
+      }),
+      confirmAccountDeletion: async () => ({
+        status: 'pending',
+        requestedAt: new Date().toISOString(),
+        deleteAfter: new Date(Date.now() + 30 * 86_400_000).toISOString(),
+      }),
+      getAccountDeletionStatus: async () => null,
+      clearAccountDeletionReceipt: async () => undefined,
       getAccessToken: async () => 'visual-mock-token',
       refreshAccessToken: async () => 'visual-mock-token',
       apiFetch: visualMockApiFetch,
@@ -173,6 +216,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loginState, setLoginState] = useState<AuthFlowState | null>(null);
   const loginStateRef = useRef<AuthFlowState | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [accountDeletionReceipt, setAccountDeletionReceipt] = useState<
+    string | null
+  >(null);
+  const [accountDeletionRestored, setAccountDeletionRestored] =
+    useState(false);
   const pendingLoginTicketRef = useRef<string | null>(null);
   const pendingBindTicketRef = useRef<string | null>(null);
   const pendingSsoVerificationTicketRef = useRef<string | null>(null);
@@ -186,6 +234,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // wins over a refresh/login write that was already inside the native storage call.
   const refreshTokenMutationRef = useRef<Promise<void>>(Promise.resolve());
   const userProfileMutationRef = useRef<Promise<void>>(Promise.resolve());
+  const accountDeletionReceiptMutationRef = useRef<Promise<void>>(
+    Promise.resolve(),
+  );
 
   /** 登录态落地后异步刷新灰度标记；失败保留旧值，迟到响应按 auth generation 丢弃。 */
   const scheduleCanaryChannelSync = useCallback(
@@ -233,6 +284,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [],
   );
 
+  const persistAccountDeletionReceipt = useCallback(
+    async (receiptToken: string | null): Promise<void> => {
+      const operation = async () => {
+        if (receiptToken) {
+          await setSecureItem(ACCOUNT_DELETION_RECEIPT_KEY, receiptToken);
+        } else {
+          await deleteSecureItem(ACCOUNT_DELETION_RECEIPT_KEY).catch(
+            () => undefined,
+          );
+        }
+        setAccountDeletionReceipt(receiptToken);
+      };
+      const run = accountDeletionReceiptMutationRef.current.then(
+        operation,
+        operation,
+      );
+      accountDeletionReceiptMutationRef.current = run.then(
+        () => undefined,
+        () => undefined,
+      );
+      await run;
+    },
+    [],
+  );
+
   const updateLoginState = useCallback((next: AuthFlowState | null) => {
     loginStateRef.current = next;
     setLoginState(next);
@@ -255,6 +331,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const clearAuthError = useCallback(() => setAuthError(null), []);
+  const consumeAccountDeletionRestored = useCallback(
+    () => setAccountDeletionRestored(false),
+    [],
+  );
 
   const loadMe = useCallback(
     async (
@@ -286,6 +366,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const acceptOutcome = useCallback(
     async (outcome: LoginOutcome, did: string): Promise<void> => {
       await deleteSecureItem(PENDING_OAUTH_KEY).catch(() => undefined);
+      if (
+        (outcome.status === 'ok' || outcome.status === 'select_account') &&
+        outcome.accountDeletionRestored
+      ) {
+        await persistAccountDeletionReceipt(null);
+        setAccountDeletionRestored(true);
+      }
 
       pendingAccountTokenRef.current =
         outcome.status === 'select_account'
@@ -349,6 +436,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [
       applyUser,
       loadMe,
+      persistAccountDeletionReceipt,
       scheduleCanaryChannelSync,
       serializeRefreshTokenMutation,
       setToken,
@@ -447,10 +535,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           deleteSecureItem(LEGACY_PENDING_OAUTH_KEY).catch(() => undefined),
           deleteSecureItem(LEGACY_USER_PROFILE_KEY).catch(() => undefined),
         ]);
-        const [storedRefreshToken, cachedUser] = await Promise.all([
+        const [storedRefreshToken, cachedUser, storedDeletionReceipt] =
+          await Promise.all([
           getSecureItem(REFRESH_TOKEN_KEY).catch(() => null),
           readCachedUserProfile(),
+          getSecureItem(ACCOUNT_DELETION_RECEIPT_KEY).catch(() => null),
         ]);
+        if (storedDeletionReceipt) {
+          setAccountDeletionReceipt(storedDeletionReceipt);
+        }
         // 弱网冷启动:先用本地会话痕迹恢复已登录视图,再走网络刷新。
         if (storedRefreshToken && cachedUser) {
           userRef.current = cachedUser;
@@ -834,14 +927,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [acceptOutcome, completeOAuthCallback, updateLoginState],
   );
 
-  const logout = useCallback(async () => {
+  const clearLocalSession = useCallback(async () => {
     authGenerationRef.current += 1;
     refreshInFlightRef.current = null;
-    const token = accessTokenRef.current;
-    const did = deviceIdRef.current;
     setToken(null);
     applyUser(null);
     updateLoginState(null);
+    setAccountDeletionRestored(false);
     pendingAccountTokenRef.current = null;
     pendingLoginTicketRef.current = null;
     pendingBindTicketRef.current = null;
@@ -868,10 +960,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       deleteSecureItem(LEGACY_PENDING_OAUTH_KEY).catch(() => undefined),
       deleteSecureItem(LEGACY_USER_PROFILE_KEY).catch(() => undefined),
     ]);
-    if (token && did)
-      await authClientFor(did)
-        .logout(token)
-        .catch(() => undefined);
   }, [
     applyUser,
     serializeRefreshTokenMutation,
@@ -880,11 +968,96 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     updateLoginState,
   ]);
 
+  const logout = useCallback(async () => {
+    const token = accessTokenRef.current;
+    const did = deviceIdRef.current;
+    await clearLocalSession();
+    if (token && did)
+      await authClientFor(did)
+        .logout(token)
+        .catch(() => undefined);
+  }, [clearLocalSession]);
+
   const getAccessToken = useCallback(async () => {
     const cached = accessTokenRef.current;
     if (cached && !isAccessTokenExpiring(cached)) return cached;
     return refresh();
   }, [refresh]);
+
+  const getAccountDeletionAvailability = useCallback(async () => {
+    const token = await getAccessToken();
+    if (!token) throw authCodeError('UNAUTHENTICATED');
+    const did = deviceIdRef.current ?? (await ensureDeviceId());
+    deviceIdRef.current = did;
+    return authClientFor(did).getAccountDeletionAvailability(token);
+  }, [getAccessToken]);
+
+  const requestAccountDeletionChallenge = useCallback(async () => {
+    const token = await getAccessToken();
+    if (!token) throw authCodeError('UNAUTHENTICATED');
+    const did = deviceIdRef.current ?? (await ensureDeviceId());
+    deviceIdRef.current = did;
+    const challenge = await authClientFor(did).requestAccountDeletionChallenge(
+      token,
+    );
+    // 先持久化查询凭证，再把 challenge 交给 UI。即使确认成功后的响应丢失，
+    // 下一次冷启动仍能查询注销状态。
+    await persistAccountDeletionReceipt(challenge.receiptToken);
+    return challenge;
+  }, [getAccessToken, persistAccountDeletionReceipt]);
+
+  const confirmAccountDeletion = useCallback(
+    async (input: {
+      challengeId: string;
+      receiptToken: string;
+      code: string;
+    }): Promise<AccountDeletionStatus> => {
+      const token = await getAccessToken();
+      if (!token) throw authCodeError('UNAUTHENTICATED');
+      const did = deviceIdRef.current ?? (await ensureDeviceId());
+      deviceIdRef.current = did;
+      const client = authClientFor(did);
+      let status: AccountDeletionStatus;
+      try {
+        status = await client.confirmAccountDeletion(token, {
+          ...input,
+          acknowledged: true,
+        });
+      } catch (cause) {
+        const ambiguous =
+          cause instanceof AuthApiError &&
+          ['NETWORK_ERROR', 'REQUEST_TIMEOUT', 'INVALID_RESPONSE'].includes(
+            cause.code,
+          );
+        if (!ambiguous) throw cause;
+        // confirm 可能已提交但响应丢失；receipt 查询把不确定结果收敛为成功或原错误。
+        const recovered = await client
+          .getAccountDeletionStatus(input.receiptToken)
+          .catch(() => null);
+        if (!recovered || recovered.status === 'cancelled') throw cause;
+        status = recovered;
+      }
+      await persistAccountDeletionReceipt(input.receiptToken);
+      // confirm 已在服务端撤销 refresh token 并广播即时断连；客户端只做本地
+      // 清理，不再调用普通 logout，以免覆盖或依赖已撤销的会话。
+      await clearLocalSession();
+      return status;
+    },
+    [clearLocalSession, getAccessToken, persistAccountDeletionReceipt],
+  );
+
+  const getAccountDeletionStatus = useCallback(async () => {
+    const receiptToken = accountDeletionReceipt;
+    if (!receiptToken) return null;
+    const did = deviceIdRef.current ?? (await ensureDeviceId());
+    deviceIdRef.current = did;
+    return authClientFor(did).getAccountDeletionStatus(receiptToken);
+  }, [accountDeletionReceipt]);
+
+  const clearAccountDeletionReceipt = useCallback(
+    () => persistAccountDeletionReceipt(null),
+    [persistAccountDeletionReceipt],
+  );
 
   // 带 Bearer + 401 自动 refresh 的业务请求封装;目标服务由调用方经
   // opts.baseUrl 显式指定(老主 server xdt-api 已退役,没有默认业务 server)。
@@ -918,27 +1091,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       deviceId,
       loginState,
       authError,
+      accountDeletionReceipt,
+      accountDeletionRestored,
       clearAuthError,
+      consumeAccountDeletionRestored,
       dispatchLoginAction,
       completeOAuthCallback,
       logout,
+      getAccountDeletionAvailability,
+      requestAccountDeletionChallenge,
+      confirmAccountDeletion,
+      getAccountDeletionStatus,
+      clearAccountDeletionReceipt,
       getAccessToken,
       refreshAccessToken: refresh,
       apiFetch,
     }),
     [
       apiFetch,
+      accountDeletionReceipt,
+      accountDeletionRestored,
       authError,
+      clearAccountDeletionReceipt,
       clearAuthError,
       completeOAuthCallback,
+      confirmAccountDeletion,
+      consumeAccountDeletionRestored,
       deviceId,
       dispatchLoginAction,
       getAccessToken,
+      getAccountDeletionAvailability,
+      getAccountDeletionStatus,
       refresh,
       initialized,
       isBusy,
       loginState,
       logout,
+      requestAccountDeletionChallenge,
       user,
     ],
   );
