@@ -17,6 +17,7 @@ export type DbTxName =
   | 'sessions.renameTitles'
   | 'sessions.setStatus'
   | 'session.agentSwitchFallback'
+  | 'message.delete'
   | 'session.importShare';
 
 export interface CodexImportMessagesArgs {
@@ -232,6 +233,27 @@ export interface SessionAgentSwitchFallbackArgs {
   updatedAt: number;
 }
 
+/**
+ * 单条消息本地内容清除。正文/元数据清空为最小 tombstone、清原生会话绑定、
+ * 写入隐藏的上下文重建标记
+ * 必须在同一事务内提交，避免崩溃后继续 resume 含被删消息的旧 transcript。
+ */
+export interface MessageDeleteArgs {
+  sessionId: string;
+  clientId: string;
+  contextMarker: {
+    id: string;
+    clientId: string;
+    content: string;
+    createdAt: number;
+  };
+  updatedAt: number;
+}
+
+export interface MessageDeleteResult {
+  messageId: string;
+}
+
 export interface SessionsSetStatusResultItem {
   sessionId: string;
   title: string | null;
@@ -310,6 +332,7 @@ export type DbTxArgsByName = {
   'sessions.renameTitles': SessionsRenameTitlesArgs;
   'sessions.setStatus': SessionsSetStatusArgs;
   'session.agentSwitchFallback': SessionAgentSwitchFallbackArgs;
+  'message.delete': MessageDeleteArgs;
   'session.importShare': SessionImportShareArgs;
 };
 
@@ -332,5 +355,6 @@ export type DbTxResultByName = {
   'sessions.renameTitles': SessionsRenameTitleResult[];
   'sessions.setStatus': SessionsSetStatusResultItem[];
   'session.agentSwitchFallback': undefined;
+  'message.delete': MessageDeleteResult;
   'session.importShare': { messageCount: number };
 };

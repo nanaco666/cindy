@@ -13,13 +13,34 @@
  * F-FP-5:   workingDir read-only display
  */
 
-import { Profiler, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import {
+  Profiler,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import { useLocation, useNavigate, useOutletContext, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useProportionalWidth } from '@/hooks/useProportionalWidth';
 import { setBlockExpanded } from '@/hooks/useExpandedBlockMemory';
-import { Activity, AlertCircle, ArrowDown, ArrowLeft, Brain, Check, CornerUpLeft, Layers, Monitor, Sparkles, Square, X } from 'lucide-react';
+import {
+  Activity,
+  AlertCircle,
+  ArrowDown,
+  ArrowLeft,
+  Brain,
+  Check,
+  CornerUpLeft,
+  Layers,
+  Monitor,
+  Sparkles,
+  Square,
+  X,
+} from 'lucide-react';
 
 import { cn, basename } from '@/lib/utils';
 import { Spinner } from '@/components/ui/spinner';
@@ -43,7 +64,10 @@ import { PlanActionCard } from '@/components/new-chat/PlanActionCard';
 import { InteractionPromptHost } from '@/components/interaction-portal';
 import { MessageStream } from '@/components/chat/MessageStream';
 import { ErrorBanner } from '@/components/chat/ErrorBanner';
-import { ErrorTailErrorBanner, InterruptedTurnBanner } from '@/components/chat/InterruptedTurnBanner';
+import {
+  ErrorTailErrorBanner,
+  InterruptedTurnBanner,
+} from '@/components/chat/InterruptedTurnBanner';
 import { useSessionBackgroundActivity } from '@/hooks/useSessionBackgroundActivity';
 import { VendorIcon } from '@/components/sidebar/VendorIcon';
 import {
@@ -60,10 +84,7 @@ import { useConfirmDialog } from '@/components/ui/confirm-dialog-provider';
 import { useSilentEncryptedRetry } from '@/hooks/useSilentEncryptedRetry';
 import { TodaySpendChip } from '@/components/status/TodaySpendChip';
 import { RightSidebarToggle } from '@/components/layout/RightSidebarToggle';
-import {
-  TopRightChipStack,
-  TopRightChipStackProvider,
-} from '@/components/chat/TopRightChipStack';
+import { TopRightChipStack, TopRightChipStackProvider } from '@/components/chat/TopRightChipStack';
 import { ChatDisplaySnapshotProvider } from '@/components/chat/ChatDisplaySnapshotContext';
 import { useCCAgentChat } from '@/hooks/useCCAgentChat';
 import { ackErrorRead, useErrorReadAck } from '@/hooks/useErrorReadAck';
@@ -92,7 +113,11 @@ import * as sessionService from '@/lib/sessionService';
 import { emitRefresh } from '@/lib/sessionsBus';
 import type { Session } from '@/lib/ccAgent.types';
 import { toast } from '@/lib/toast';
-import { decodeRemoteErrorMessage, makerChatStore, type MessageDeliveryMode } from '@/lib/makerChatStore';
+import {
+  decodeRemoteErrorMessage,
+  makerChatStore,
+  type MessageDeliveryMode,
+} from '@/lib/makerChatStore';
 import { getMakerMemoryEnabled } from '@/lib/memorySettingsStore';
 import { useWorktreeCreation, worktreeCreationStore } from '@/lib/worktreeCreationStore';
 import { useWorktreeForSession } from '@/contexts/WorktreeContext';
@@ -103,6 +128,7 @@ import {
 } from '@/lib/orcaSessionIdentity';
 import type { Effort, PermissionMode } from '@/lib/userPreferences.types';
 import type { AttachedFile, MentionedResource } from '@/lib/fileTypes';
+import type { PastedTextRange, SlashCommandRange } from '@/lib/imageRef';
 import { createLogger } from '@/lib/logger';
 import { getModelById, getDefaultModelForVendor, getModelsForVendor } from '@/lib/modelDefinitions';
 import { resolveDisplayContextWindow } from '@/lib/contextWindow';
@@ -131,10 +157,7 @@ import {
   shouldRevealOrcaWorkersAfterPaint,
   shouldRevealOrcaWorkersBeforeFirstPaint,
 } from './lib/orcaPassiveReveal';
-import {
-  didOpenOrcaWorkersTab,
-  revealOrcaWorkersWithRetry,
-} from './lib/orcaWorkersRevealRetry';
+import { didOpenOrcaWorkersTab, revealOrcaWorkersWithRetry } from './lib/orcaWorkersRevealRetry';
 import {
   closeOrcaWorkersTabAfterTeamEnd,
   ensureOrcaWorkersTab,
@@ -160,7 +183,11 @@ import type { ModelMemoryAccessors } from '@/components/new-chat/ModelSelector';
 // 完整对等:context-usage / extra-dirs / orca 等会话级操作按 sessionId 来源路由
 // (本机走本地 maker,远程 device-link 会话走隧道)。
 import {
-  ackInterruptedTurnFor, goalApiFor, makerApiFor, orcaWorkflowsFor } from '@/lib/makerTransport';
+  ackInterruptedTurnFor,
+  goalApiFor,
+  makerApiFor,
+  orcaWorkflowsFor,
+} from '@/lib/makerTransport';
 // fork / orca 在被控端建新 session 后,navigate 前先把该设备会话列表重拉进 store(避免 404 破窗)。
 import { refreshRemoteDeviceSessions } from '@/features/device-link/refreshRemoteSessions';
 import {
@@ -215,9 +242,8 @@ function parseHandoffState(state: unknown): HandoffFromState | null {
   return {
     kind: 'handoff',
     dispatcherSessionId: candidate.dispatcherSessionId,
-    dispatcherTitle: typeof candidate.dispatcherTitle === 'string'
-      ? candidate.dispatcherTitle
-      : null,
+    dispatcherTitle:
+      typeof candidate.dispatcherTitle === 'string' ? candidate.dispatcherTitle : null,
   };
 }
 
@@ -230,7 +256,8 @@ function parseOrcaWorkersRevealState(state: unknown): OrcaWorkersRevealState | n
   if (!state || typeof state !== 'object') return null;
   const candidate = (state as { orcaWorkersReveal?: unknown }).orcaWorkersReveal;
   if (!candidate || typeof candidate !== 'object') return null;
-  const focusWorkerSessionId = (candidate as { focusWorkerSessionId?: unknown }).focusWorkerSessionId;
+  const focusWorkerSessionId = (candidate as { focusWorkerSessionId?: unknown })
+    .focusWorkerSessionId;
   const leadSessionId = (candidate as { leadSessionId?: unknown }).leadSessionId;
   return {
     leadSessionId: typeof leadSessionId === 'string' && leadSessionId ? leadSessionId : null,
@@ -430,22 +457,13 @@ export function CCAgentSessionView({
   // 在聊天区左上角显示一个返回按钮；点别的 session 入口（不带 state）时按钮自然消失。
   const navState = location.state as { from?: string } | null;
   const cameFromAutomations = navState?.from === 'automations';
-  const handoffFrom = useMemo(
-    () => parseHandoffState(location.state),
-    [location.state],
-  );
-  const locationSearchJump = useMemo(
-    () => parseSearchJumpState(location.state),
-    [location.state],
-  );
+  const handoffFrom = useMemo(() => parseHandoffState(location.state), [location.state]);
+  const locationSearchJump = useMemo(() => parseSearchJumpState(location.state), [location.state]);
   const searchJump = searchJumpProp !== undefined ? searchJumpProp : locationSearchJump;
-  const orcaWorkersReveal = useMemo(
-    () => {
-      const reveal = parseOrcaWorkersRevealState(location.state);
-      return reveal?.leadSessionId && reveal.leadSessionId !== sessionId ? null : reveal;
-    },
-    [location.state, sessionId],
-  );
+  const orcaWorkersReveal = useMemo(() => {
+    const reveal = parseOrcaWorkersRevealState(location.state);
+    return reveal?.leadSessionId && reveal.leadSessionId !== sessionId ? null : reveal;
+  }, [location.state, sessionId]);
   const [focusedMessageTarget, setFocusedMessageTarget] = useState<{
     clientId: string;
     requestId: number;
@@ -463,9 +481,19 @@ export function CCAgentSessionView({
     }
     navigate(`${location.pathname}${location.search}`, {
       replace: true,
-      state: { ...(location.state as Record<string, unknown> | null ?? {}), searchJump: undefined },
+      state: {
+        ...((location.state as Record<string, unknown> | null) ?? {}),
+        searchJump: undefined,
+      },
     });
-  }, [location.pathname, location.search, location.state, navigate, onSearchJumpConsumed, searchJumpProp]);
+  }, [
+    location.pathname,
+    location.search,
+    location.state,
+    navigate,
+    onSearchJumpConsumed,
+    searchJumpProp,
+  ]);
   const [handoffPillDismissed, setHandoffPillDismissed] = useState(false);
   // biome-ignore lint/correctness/useExhaustiveDependencies: sessionId 是会话切换重置触发器。
   useEffect(() => {
@@ -517,9 +545,9 @@ export function CCAgentSessionView({
   // 响应式,远程元数据(model/title 等)随 listing/push 刷新自动更新。
   const remoteProjectSessions = useRemoteProjectSessions();
   const sessionFromList = sessionId
-    ? allSessions.find((s) => s.id === sessionId) ??
+    ? (allSessions.find((s) => s.id === sessionId) ??
       remoteProjectSessions.find((s) => s.id === sessionId) ??
-      null
+      null)
     : null;
   // Prefer server-fetched data; fall back to cached list for instant first paint.
   // 远程会话 serverSession 恒为 null(下方 effect 跳过本地 get),故走 sessionFromList。
@@ -542,10 +570,15 @@ export function CCAgentSessionView({
     // device-link 远程会话:跳过本地 DB get(会 404),元数据走 remoteProjectsStore。
     if (getSessionDeviceId(sessionId)) return;
     let cancelled = false;
-    sessionService.get(sessionId).then((s) => {
-      if (!cancelled) setServerSession(s);
-    }).catch(() => {});
-    return () => { cancelled = true; };
+    sessionService
+      .get(sessionId)
+      .then((s) => {
+        if (!cancelled) setServerSession(s);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
   }, [sessionId]);
 
   // device-link streaming tier:进入远程会话时订阅该会话的 `session:<id>` topic → 被控端把该会话
@@ -616,9 +649,10 @@ export function CCAgentSessionView({
 
     const off = window.electronAPI.deviceLink.onRemotePush((push) => {
       if (push.deviceId !== deviceId || push.channel !== 'maker:new-maker-draft:changed') return;
-      const payload = push.payload as
-        | Record<string, { providerModelMemory?: RemoteModelMemorySnapshot } | undefined>
-        | null;
+      const payload = push.payload as Record<
+        string,
+        { providerModelMemory?: RemoteModelMemorySnapshot } | undefined
+      > | null;
       applySnapshot(payload?.[vendorSlot]?.providerModelMemory);
     });
 
@@ -640,7 +674,9 @@ export function CCAgentSessionView({
             providerId,
             modelId: model,
             active: false,
-            ...(patch.markModelChoice !== undefined ? { markModelChoice: patch.markModelChoice } : {}),
+            ...(patch.markModelChoice !== undefined
+              ? { markModelChoice: patch.markModelChoice }
+              : {}),
             ...(patch.effort !== undefined ? { effort: patch.effort } : {}),
             ...(patch.fast !== undefined ? { fast: patch.fast } : {}),
           },
@@ -736,15 +772,18 @@ export function CCAgentSessionView({
     }
     let cancelled = false;
     const currentState = makerChatStore.getSnapshot(sessionId);
-    const existing = currentState.messages.find((message) => message.clientId === searchJump.messageClientId);
+    const existing = currentState.messages.find(
+      (message) => message.clientId === searchJump.messageClientId,
+    );
     if (existing) {
       requestFocusMessage(searchJump.messageClientId);
       clearSearchJumpState();
       return;
     }
-    const loadAround = searchJump.messageIdKind === 'clientId'
-      ? makerChatStore.loadAroundMessageClientId
-      : makerChatStore.loadAroundMessage;
+    const loadAround =
+      searchJump.messageIdKind === 'clientId'
+        ? makerChatStore.loadAroundMessageClientId
+        : makerChatStore.loadAroundMessage;
     void loadAround(sessionId, searchJump.messageId, { radius: 60 })
       .then((message) => {
         if (cancelled) return;
@@ -764,7 +803,16 @@ export function CCAgentSessionView({
     return () => {
       cancelled = true;
     };
-  }, [clearSearchJumpState, isOrcaLeadSessionView, isOrcaMode, requestFocusMessage, searchJump, session, sessionId, t]);
+  }, [
+    clearSearchJumpState,
+    isOrcaLeadSessionView,
+    isOrcaMode,
+    requestFocusMessage,
+    searchJump,
+    session,
+    sessionId,
+    t,
+  ]);
 
   // 选中一个 Worker session 时,如果当前是普通单 session 路由,自动跳到 Lead
   // 普通路由并用 worker query 作为协同 tab 的初始 hint。doc 模式 (`/cc-agent/files/...`) 下不跳——doc 应该一直
@@ -781,7 +829,9 @@ export function CCAgentSessionView({
         }
       })
       .catch(() => undefined);
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [isOrcaMode, isCompactRail, navigate, ownsWindowRoute, session, sessionId]);
 
   // F2: controlled folder picker open state
@@ -913,9 +963,15 @@ export function CCAgentSessionView({
     // 会把被控端 skill/builtin 影子掉的 /clear、/help 等误判成 desktop 命令、在控制端执行。
     // 本机会话 remoteDeviceId=undefined → 行为不变。desktop 命令始终本地(见 loadAllCommands)。
     loadAllCommands(agentKind, wd, undefined, remoteDeviceId)
-      .then((cmds) => { if (!cancelled) setAllCommands(cmds); })
-      .catch(() => { if (!cancelled) setAllCommands([]); });
-    return () => { cancelled = true; };
+      .then((cmds) => {
+        if (!cancelled) setAllCommands(cmds);
+      })
+      .catch(() => {
+        if (!cancelled) setAllCommands([]);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [session?.agentKind, session?.workingDir, isRemoteSession, remoteDeviceId]);
 
   // Keep lastWorkingDir in sync so Settings → BuiltinToolsSection has a
@@ -929,7 +985,6 @@ export function CCAgentSessionView({
   //  insertSystemCard / clearSession 之后才能挂, 见下面 "Desktop slash dispatch
   //  subscriber" 段。)
 
-
   // Pending send: stored when folder picker needs to open mid-send
   const pendingSendRef = useRef<{
     message: string;
@@ -940,6 +995,8 @@ export function CCAgentSessionView({
     mentions?: MentionedResource[];
     /** 正文前缀含「选中引用」编码块——补选目录后的派发同样要携带,否则该消息持久化后渲染不出胶囊。 */
     quotesEncoded?: boolean;
+    pastedTextRanges?: PastedTextRange[];
+    slashCommandRanges?: SlashCommandRange[];
   } | null>(null);
 
   const handleTitleUpdate = useCallback(() => {
@@ -948,27 +1005,74 @@ export function CCAgentSessionView({
 
   const {
     agentSwitchIntent,
-    messages, taskUpdates, agentStatus, isStreaming, isAgentBusy, sendMessage, compactSession, steerMessage, steerQueuedMessage, stopSession, clearSession, clearError, retryLastError, continueAfterSilentStop, errorReason, insertSystemCard, updateSystemCardData, error, errorIsRecoverable, errorRetryText, credentialSwitchWait,
-    loadOlderMessages, isLoadingMore, hasMoreMessages,
-    pendingPermission, respondToPermission,
-    pendingAskUser, answerUserQuestion, askUserViewerState, setAskUserViewerState,
-    askUserDraft, setAskUserDraft,
-    pendingPlanReview, respondToPlanReview, cancelPlanReview, planViewerState, setPlanViewerState,
-    pendingIssueConfirm, respondToIssueConfirm,
-    pendingRenameSessionsConfirm, respondToRenameSessionsConfirm,
-    pendingGhostGrantConfirm, respondToGhostGrantConfirm,
-    lastExpandedPlanViewerState, updatePlanContent,
+    messages,
+    taskUpdates,
+    agentStatus,
+    isStreaming,
+    isAgentBusy,
+    sendMessage,
+    compactSession,
+    steerMessage,
+    steerQueuedMessage,
+    stopSession,
+    clearSession,
+    clearError,
+    retryLastError,
+    continueAfterSilentStop,
+    errorReason,
+    insertSystemCard,
+    updateSystemCardData,
+    error,
+    errorIsRecoverable,
+    errorRetryText,
+    credentialSwitchWait,
+    loadOlderMessages,
+    isLoadingMore,
+    hasMoreMessages,
+    pendingPermission,
+    respondToPermission,
+    pendingAskUser,
+    answerUserQuestion,
+    askUserViewerState,
+    setAskUserViewerState,
+    askUserDraft,
+    setAskUserDraft,
+    pendingPlanReview,
+    respondToPlanReview,
+    cancelPlanReview,
+    planViewerState,
+    setPlanViewerState,
+    pendingIssueConfirm,
+    respondToIssueConfirm,
+    pendingRenameSessionsConfirm,
+    respondToRenameSessionsConfirm,
+    pendingGhostGrantConfirm,
+    respondToGhostGrantConfirm,
+    lastExpandedPlanViewerState,
+    updatePlanContent,
     historyLoaded,
-    fastMode, setFastMode, resetFastMode,
-    planModeEnabled, setPlanMode,
+    fastMode,
+    setFastMode,
+    resetFastMode,
+    planModeEnabled,
+    setPlanMode,
     // F-QUEUE-DEFER
-    pendingQueue, steeringQueueClientIds, queuePaused, queueExpanded, setQueueExpanded,
-    resumeQueue, moveQueueItem, setQueueInteractionLock, setQueueEditLock, removeFromQueue, updateQueueItem,
+    pendingQueue,
+    steeringQueueClientIds,
+    queuePaused,
+    queueExpanded,
+    setQueueExpanded,
+    resumeQueue,
+    moveQueueItem,
+    setQueueInteractionLock,
+    setQueueEditLock,
+    removeFromQueue,
+    updateQueueItem,
     chatDisplaySnapshot,
   } = useCCAgentChat(sessionId, handleTitleUpdate, { chatRealtime });
   // 展示引擎可乐观跟随 intent；真实 event reducer 仍只读 store.agentKind。
-  const displayAgentKind = agentSwitchIntent?.target ??
-    (session?.agentKind === 'codex' ? 'codex' : 'claude-code');
+  const displayAgentKind =
+    agentSwitchIntent?.target ?? (session?.agentKind === 'codex' ? 'codex' : 'claude-code');
   const isCodex = displayAgentKind === 'codex';
   // live 供应商目录(含内置 + 自定义,按 agent 挂模型)—— vendor↔model 一致性校验的真源,
   // 与模型选择器同源(见下方 M35 vendor fallback effect)。本地 IPC 极快返回,有模块级缓存。
@@ -983,7 +1087,9 @@ export function CCAgentSessionView({
   // 错误(agent 仍在跑,不算已读),再用 store 的 terminal 判定过滤;渲染由同一
   // store 状态驱动,同步读取不会拿到过期值。
   const hasTerminalErrorForReadAck =
-    Boolean(error) && !agentStatus?.isRunning && (sessionId ? makerChatStore.hasSessionTerminalError(sessionId) : false);
+    Boolean(error) &&
+    !agentStatus?.isRunning &&
+    (sessionId ? makerChatStore.hasSessionTerminalError(sessionId) : false);
   useErrorReadAck(sessionId, hasTerminalErrorForReadAck, viewVisible);
 
   // 后台子任务活动:turn 已结束但该会话的 CC 子进程仍在调模型(后台子 agent 持续
@@ -1058,7 +1164,9 @@ export function CCAgentSessionView({
       // 进度接着做。send 失败恢复红条让用户能重试。
       await makerChatStore.sendUiTrigger(
         sessionId,
-        errorTailKind === 'interrupted' ? CONTINUE_AFTER_APP_EXIT_PROMPT : CONTINUE_AFTER_ERROR_PROMPT,
+        errorTailKind === 'interrupted'
+          ? CONTINUE_AFTER_APP_EXIT_PROMPT
+          : CONTINUE_AFTER_ERROR_PROMPT,
       );
     } catch (err) {
       setErrorTailBannerHiddenFor(null);
@@ -1107,7 +1215,8 @@ export function CCAgentSessionView({
   // 操作)时,banner 不会 mount、useAckErrorAttention 没有清除时机 —— 这里清掉
   // useInterruptedSessionsAttention 打的红点(只清 hook 自有的,不误伤任务失败红点)。
   useEffect(() => {
-    if (sessionId && session && !interruptedFromSession) clearInterruptedAttentionIfOwned(sessionId);
+    if (sessionId && session && !interruptedFromSession)
+      clearInterruptedAttentionIfOwned(sessionId);
   }, [sessionId, session, interruptedFromSession]);
   const handleSessionInterruptContinue = useCallback(async () => {
     if (!sessionId) return;
@@ -1162,7 +1271,7 @@ export function CCAgentSessionView({
   // 但 overlay 还需要继续显示 (min-duration 没到), 所以这里把进入 creating 时的 name
   // 镜像出来, 给 overlay 用。raw 重新回 true 再覆盖。
   const [smoothedBranchName, setSmoothedBranchName] = useState<string | null>(
-    rawWorktreeCreating ? worktreeCreation?.name ?? null : null,
+    rawWorktreeCreating ? (worktreeCreation?.name ?? null) : null,
   );
   const creatingStartedAtRef = useRef<number | null>(rawWorktreeCreating ? Date.now() : null);
   useEffect(() => {
@@ -1226,7 +1335,12 @@ export function CCAgentSessionView({
     const agentKind = session?.agentKind === 'codex' ? 'codex' : 'claude-code';
     try {
       // device-link 远程会话同源:传 remoteDeviceId,fallback 快照也从被控端读(见上方 cache effect 说明)。
-      return await loadAllCommands(agentKind, isRemoteSession ? null : (session?.workingDir ?? null), undefined, remoteDeviceId);
+      return await loadAllCommands(
+        agentKind,
+        isRemoteSession ? null : (session?.workingDir ?? null),
+        undefined,
+        remoteDeviceId,
+      );
     } catch {
       return [];
     }
@@ -1322,13 +1436,7 @@ export function CCAgentSessionView({
       // 'issue' 命令由下方独立 effect 处理(需要 handleSend,其声明在本 effect 之后)。
     });
     return unsub;
-  }, [
-    insertHelpCard,
-    clearSession,
-    insertSystemCard,
-    sessionId,
-    t,
-  ]);
+  }, [insertHelpCard, clearSession, insertSystemCard, sessionId, t]);
 
   // F-COLLAB: 协同模式真实状态。enabled 来自 session.orcaRole === 'lead';
   // worker(显示用)从 active workflow 的 Worker session 列表查到 agentKind。
@@ -1399,8 +1507,8 @@ export function CCAgentSessionView({
     const focusWorkerSessionId = hasExplicitOrcaWorkersReveal
       ? routeWorkerHint.hasWorkerParam
         ? routeWorkerHint.workerSessionId
-        : orcaWorkersReveal?.focusWorkerSessionId ??
-          (hasWorkerSearchJump ? searchJump?.sessionId ?? null : null)
+        : (orcaWorkersReveal?.focusWorkerSessionId ??
+          (hasWorkerSearchJump ? searchJump?.sessionId ?? null : null))
       : null;
     const workerSearchJump =
       focusWorkerSessionId && searchJump?.sessionId === focusWorkerSessionId
@@ -1417,7 +1525,7 @@ export function CCAgentSessionView({
       navigate(`${location.pathname}${nextSearch ? `?${nextSearch}` : ''}`, {
         replace: true,
         state: {
-          ...(location.state as Record<string, unknown> | null ?? {}),
+          ...((location.state as Record<string, unknown> | null) ?? {}),
           orcaWorkersReveal: undefined,
           ...(workerSearchJump ? { searchJump: undefined } : {}),
         },
@@ -1482,11 +1590,12 @@ export function CCAgentSessionView({
   // 针对 Lead session 接入了 OrcaSplitView toggle 布局,普通 session 必须能从
   // ChatInput 工具行启用协同变成 Lead,否则 doc 模式下首次开启入口完全没有。
   // 工具行同时传 denseToolbar=true,协同 pill 自动收成 icon-only,窄 rail 视觉 OK。
-  const allowCollabToggle = !orcaMode
-    && session?.orcaRole !== 'worker'
-    && session?.remoteHostId == null
-    && session?.workspaceKind === 'project'
-    && !!session?.workingDir;
+  const allowCollabToggle =
+    !orcaMode &&
+    session?.orcaRole !== 'worker' &&
+    session?.remoteHostId == null &&
+    session?.workspaceKind === 'project' &&
+    !!session?.workingDir;
   // 把 sessionId 抽出来给 useEffect 用 (linter 偏好稳定的标量依赖)
   const collabSessionId = sessionId;
   useEffect(() => {
@@ -1501,7 +1610,9 @@ export function CCAgentSessionView({
         setCollabWorker(kind);
       })
       .catch(() => undefined);
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [collabSessionId, collabEnabled]);
 
   // F-COLLAB: "外部触发" 协同状态变化时自动打开协同 tab (典型场景: MCP team
@@ -1640,7 +1751,10 @@ export function CCAgentSessionView({
   // 路径，不需要这里的全量同步。
   const refreshServerSession = useCallback(() => {
     if (!sessionId) return;
-    sessionService.get(sessionId).then(setServerSession).catch(() => {});
+    sessionService
+      .get(sessionId)
+      .then(setServerSession)
+      .catch(() => {});
   }, [sessionId]);
 
   const handleWorkingDirChange = useCallback(
@@ -1650,8 +1764,17 @@ export function CCAgentSessionView({
 
       // Auto-continue: if there's a pending send and a valid dir was selected, execute step ③
       if (newDir && pendingSendRef.current) {
-        const { message, model, effort, permissionMode, files, mentions, quotesEncoded } =
-          pendingSendRef.current;
+        const {
+          message,
+          model,
+          effort,
+          permissionMode,
+          files,
+          mentions,
+          quotesEncoded,
+          pastedTextRanges,
+          slashCommandRanges,
+        } = pendingSendRef.current;
         pendingSendRef.current = null;
         sendMessage(
           message,
@@ -1661,7 +1784,13 @@ export function CCAgentSessionView({
           newDir,
           files,
           mentions,
-          quotesEncoded ? { quotesEncoded: true } : undefined,
+          quotesEncoded || pastedTextRanges?.length || slashCommandRanges !== undefined
+            ? {
+                ...(quotesEncoded ? { quotesEncoded: true } : {}),
+                ...(pastedTextRanges?.length ? { pastedTextRanges } : {}),
+                ...(slashCommandRanges !== undefined ? { slashCommandRanges } : {}),
+              }
+            : undefined,
         );
       }
     },
@@ -1699,9 +1828,7 @@ export function CCAgentSessionView({
         agentKind: session?.agentKind === 'codex' ? 'codex' : 'claude-code',
       });
       if (!supportsFast) {
-        const currentFastMode = sessionId
-          ? makerChatStore.getSnapshot(sessionId).fastMode
-          : false;
+        const currentFastMode = sessionId ? makerChatStore.getSnapshot(sessionId).fastMode : false;
         if (currentFastMode) {
           resetFastMode();
           toast.warning(t('ccAgent.layout.modelSwitchedFastModeOff'));
@@ -1781,9 +1908,7 @@ export function CCAgentSessionView({
       const cmdName = slashMatch[1].toLowerCase();
       const args = slashMatch[2] ?? '';
       const cached = allCommandsRef.current;
-      const commands = cached.length > 0
-        ? cached
-        : await getHelpCommandsSnapshot();
+      const commands = cached.length > 0 ? cached : await getHelpCommandsSnapshot();
       const hit = commands.find((c) => c.name.toLowerCase() === cmdName);
       if (hit?.kind !== 'desktop') return false;
       // 仅 /issue 需要携带附件:snapshot 到 ref,DESKTOP_COMMAND_TRIGGERED 回流时消费。
@@ -1806,60 +1931,62 @@ export function CCAgentSessionView({
     [getHelpCommandsSnapshot, session?.workingDir, sessionId, remoteDeviceId],
   );
 
-  const maybeShowContextUsage = useCallback(async (message: string): Promise<boolean> => {
-    if (!/^\/context\s*$/i.test(message.trim())) return false;
-    if (!sessionId) {
-      insertSystemCard('context', { usage: null });
-      return true;
-    }
-    if (session?.agentKind === 'codex') {
-      insertSystemCard('context', {
-        usage: null,
-        error: t('chat.systemCard.context.unsupportedAgent', { agent: 'Codex' }),
-      });
-      return true;
-    }
-    const createOpts = session?.workingDir
-      ? {
-          agentKind: 'claude-code' as const,
-          workingDir: session.workingDir,
-          model: session.model,
-          orcaRole: session.orcaRole ?? null,
-          effort: session.effort,
-          fastMode,
-          permissionMode: session.permissionMode,
-          userPrompt: getUserPrompt(),
-          // device-link executes on the target desktop, so let that runtime
-          // own the setting. SSH still lazy-starts through this process and
-          // must explicitly disable controller-local Cindy Memory.
-          ...(remoteDeviceId
-            ? {}
-            : {
-                makerMemoryEnabled: session.remoteHostId
-                  ? false
-                  : getMakerMemoryEnabled(),
-              }),
-          extraDirs: session.extraDirs ?? [],
-          displayReasoning: 'summarized' as const,
-          ...(session.remoteHostId ? { remoteHostId: session.remoteHostId } : {}),
-          ...(session.sdkSessionId ? { resumeSessionId: session.sdkSessionId } : {}),
-        }
-      : undefined;
-    const cardClientId = insertSystemCard('context', { usage: undefined });
-    if (!cardClientId) return true;
-    void makerApiFor(sessionId).getContextUsage(sessionId, createOpts)
-      .then((usage) => {
-        updateSystemCardData(cardClientId, { usage });
-      })
-      .catch((err) => {
-        const ipcError = extractIpcError(err);
-        updateSystemCardData(cardClientId, {
+  const maybeShowContextUsage = useCallback(
+    async (message: string): Promise<boolean> => {
+      if (!/^\/context\s*$/i.test(message.trim())) return false;
+      if (!sessionId) {
+        insertSystemCard('context', { usage: null });
+        return true;
+      }
+      if (session?.agentKind === 'codex') {
+        insertSystemCard('context', {
           usage: null,
-          error: ipcError?.message || (err instanceof Error ? err.message : String(err)),
+          error: t('chat.systemCard.context.unsupportedAgent', { agent: 'Codex' }),
         });
-      });
-    return true;
-  }, [fastMode, insertSystemCard, remoteDeviceId, session, sessionId, t, updateSystemCardData]);
+        return true;
+      }
+      const createOpts = session?.workingDir
+        ? {
+            agentKind: 'claude-code' as const,
+            workingDir: session.workingDir,
+            model: session.model,
+            orcaRole: session.orcaRole ?? null,
+            effort: session.effort,
+            fastMode,
+            permissionMode: session.permissionMode,
+            userPrompt: getUserPrompt(),
+            // device-link executes on the target desktop, so let that runtime
+            // own the setting. SSH still lazy-starts through this process and
+            // must explicitly disable controller-local Cindy Memory.
+            ...(remoteDeviceId
+              ? {}
+              : {
+                  makerMemoryEnabled: session.remoteHostId ? false : getMakerMemoryEnabled(),
+                }),
+            extraDirs: session.extraDirs ?? [],
+            displayReasoning: 'summarized' as const,
+            ...(session.remoteHostId ? { remoteHostId: session.remoteHostId } : {}),
+            ...(session.sdkSessionId ? { resumeSessionId: session.sdkSessionId } : {}),
+          }
+        : undefined;
+      const cardClientId = insertSystemCard('context', { usage: undefined });
+      if (!cardClientId) return true;
+      void makerApiFor(sessionId)
+        .getContextUsage(sessionId, createOpts)
+        .then((usage) => {
+          updateSystemCardData(cardClientId, { usage });
+        })
+        .catch((err) => {
+          const ipcError = extractIpcError(err);
+          updateSystemCardData(cardClientId, {
+            usage: null,
+            error: ipcError?.message || (err instanceof Error ? err.message : String(err)),
+          });
+        });
+      return true;
+    },
+    [fastMode, insertSystemCard, remoteDeviceId, session, sessionId, t, updateSystemCardData],
+  );
 
   const handleSend = useCallback(
     async (
@@ -1869,7 +1996,12 @@ export function CCAgentSessionView({
       permissionMode: PermissionMode,
       files?: AttachedFile[],
       mentions?: MentionedResource[],
-      opts?: { deliveryMode?: MessageDeliveryMode; quotesEncoded?: boolean },
+      opts?: {
+        deliveryMode?: MessageDeliveryMode;
+        quotesEncoded?: boolean;
+        pastedTextRanges?: PastedTextRange[];
+        slashCommandRanges?: SlashCommandRange[];
+      },
     ) => {
       const deliveryMode = opts?.deliveryMode ?? 'queue';
       if (
@@ -1918,8 +2050,17 @@ export function CCAgentSessionView({
       // ② Working directory check
       if (!session?.workingDir) {
         pendingSendRef.current = {
-          message, model, effort, permissionMode, files, mentions,
+          message,
+          model,
+          effort,
+          permissionMode,
+          files,
+          mentions,
           ...(opts?.quotesEncoded ? { quotesEncoded: true } : {}),
+          ...(opts?.pastedTextRanges?.length ? { pastedTextRanges: opts.pastedTextRanges } : {}),
+          ...(opts?.slashCommandRanges !== undefined
+            ? { slashCommandRanges: opts.slashCommandRanges }
+            : {}),
         };
         setFolderPickerOpen(true);
         return false;
@@ -1939,7 +2080,8 @@ export function CCAgentSessionView({
       if (sessionId && session?.status === 'archived') {
         setServerSession((prev) => (prev ? { ...prev, status: 'active' } : prev));
         patchLocalSession(sessionId, { status: 'active' });
-        sessionService.setStatus(sessionId, 'active')
+        sessionService
+          .setStatus(sessionId, 'active')
           .then(() => emitRefresh())
           .catch((err) => {
             log.error('[auto-unarchive on send]', err);
@@ -1953,19 +2095,14 @@ export function CCAgentSessionView({
           ? { vendorOptions: { orcaRole: 'lead', orcaLeadSessionId: sessionId } }
           : undefined;
       const dispatch = deliveryMode === 'steer' ? steerMessage : sendMessage;
-      return dispatch(
-        message,
-        model,
-        effort,
-        permissionMode,
-        session.workingDir,
-        files,
-        mentions,
-        {
-          ...orcaLeadVendorOptions,
-          ...(opts?.quotesEncoded ? { quotesEncoded: true } : {}),
-        },
-      );
+      return dispatch(message, model, effort, permissionMode, session.workingDir, files, mentions, {
+        ...orcaLeadVendorOptions,
+        ...(opts?.quotesEncoded ? { quotesEncoded: true } : {}),
+        ...(opts?.pastedTextRanges?.length ? { pastedTextRanges: opts.pastedTextRanges } : {}),
+        ...(opts?.slashCommandRanges !== undefined
+          ? { slashCommandRanges: opts.slashCommandRanges }
+          : {}),
+      });
     },
     [
       maybeDispatchDesktopSlashCommand,
@@ -2037,7 +2174,11 @@ export function CCAgentSessionView({
     try {
       const contextWindow = resolveDisplayContextWindow({
         sdkContextWindow: agentStatus.contextWindow,
-        modelContextWindow: getModelContextWindow(session.model, session.agentKind ?? 'cc', remoteDeviceId),
+        modelContextWindow: getModelContextWindow(
+          session.model,
+          session.agentKind ?? 'cc',
+          remoteDeviceId,
+        ),
       });
       const used = Math.min(agentStatus.contextTokens, contextWindow || Infinity);
       const pct = contextWindow > 0 ? Math.round((used / contextWindow) * 100) : 0;
@@ -2061,7 +2202,15 @@ export function CCAgentSessionView({
     } finally {
       compactRequestInFlightRef.current = false;
     }
-  }, [agentStatus.contextTokens, agentStatus.contextWindow, compactSession, confirmDialog, remoteDeviceId, session, t]);
+  }, [
+    agentStatus.contextTokens,
+    agentStatus.contextWindow,
+    compactSession,
+    confirmDialog,
+    remoteDeviceId,
+    session,
+    t,
+  ]);
 
   const handleBeforeVoiceInputStart = useCallback(async () => {
     const { proceed } = await vendorAuthGate.checkAndConfirm('codex', { purpose: 'voice-input' });
@@ -2074,14 +2223,11 @@ export function CCAgentSessionView({
   // interrupted-turn-resume:main 判定失败 turn 已有 assistant 产出时,会用隐藏的
   // 规范化续跑指令(CONTINUE_AFTER_ERROR_PROMPT)替代重发原文;零产出仍重发原文。
   // 判定与文案都在 main(规则 9),renderer 只发意图。
-  const handleRetry = useCallback(
-    () => {
-      // 点击 Retry 即已读:用户操作了报错 banner,无需等驻留计时。
-      if (sessionId) ackErrorRead(sessionId);
-      retryLastError();
-    },
-    [retryLastError, sessionId],
-  );
+  const handleRetry = useCallback(() => {
+    // 点击 Retry 即已读:用户操作了报错 banner,无需等驻留计时。
+    if (sessionId) ackErrorRead(sessionId);
+    retryLastError();
+  }, [retryLastError, sessionId]);
 
   // silent-stop 耗尽横幅「继续」:同 Retry 计已读,动作走 store(清横幅 + 隐藏续跑指令)。
   const handleSilentStopContinue = useCallback(() => {
@@ -2173,7 +2319,21 @@ export function CCAgentSessionView({
         workingDir,
         pending.files,
         pending.mentions,
-        pending.vendorOptions ? { vendorOptions: pending.vendorOptions } : undefined,
+        pending.vendorOptions ||
+          pending.quotesEncoded ||
+          pending.pastedTextRanges?.length ||
+          pending.slashCommandRanges !== undefined
+          ? {
+              ...(pending.vendorOptions ? { vendorOptions: pending.vendorOptions } : {}),
+              ...(pending.quotesEncoded ? { quotesEncoded: true } : {}),
+              ...(pending.pastedTextRanges?.length
+                ? { pastedTextRanges: pending.pastedTextRanges }
+                : {}),
+              ...(pending.slashCommandRanges !== undefined
+                ? { slashCommandRanges: pending.slashCommandRanges }
+                : {}),
+            }
+          : undefined,
       );
     })();
   }, [historyLoaded, maybeDispatchDesktopSlashCommand, sendMessage, session, sessionId]);
@@ -2376,204 +2536,212 @@ export function CCAgentSessionView({
           declare={setRightSidebarWorkdir}
         />
       )}
-    <section
-      className="relative flex h-full w-full flex-col bg-content-area"
-      aria-label={t('ccAgent.layout.chatDropAreaAria')}
-      onDragEnter={(e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        dragCounterRef.current += 1;
-        if (dragCounterRef.current === 1) setIsDragOver(true);
-      }}
-      onDragOver={(e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        e.dataTransfer.dropEffect = 'copy';
-      }}
-      onDragLeave={(e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        dragCounterRef.current -= 1;
-        if (dragCounterRef.current === 0) setIsDragOver(false);
-      }}
-      onDrop={(e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        dragCounterRef.current = 0;
-        setIsDragOver(false);
-        // .cindy / .cshare 已被窗口级 capture 接管(装入 / 导入链路),
-        // 只清理拖拽 UI 状态,不当附件消费。
-        if (isGlobalDropIntercepted(e.nativeEvent)) return;
-        if (
-          consumeComposerMentionDrop(e.dataTransfer, {
-            addFileMention: attachmentState.addFileMention,
-            addFolderPath: attachmentState.addFolderPath,
-          })
-        ) {
-          return;
-        }
-        // 意识面板拖来的产物(cindy-ghost:// 媒体地址,不带 files):落在聊天区
-        // 任意位置都算数,与 ChatInput 自己的 onDrop 同一条引渡链路——
-        // main 验归属后图片落图片附件、视频落路径引用的 file 附件(托盘可见)。
-        const ghostMediaUri = getGhostMediaUriFromDataTransfer(e.dataTransfer);
-        if (ghostMediaUri) {
-          if (sessionId) void attachGhostMediaToSession(ghostMediaUri, sessionId, t);
-          return;
-        }
-        if (e.dataTransfer.files.length > 0) {
-          const files: File[] = [];
-          for (let i = 0; i < e.dataTransfer.items.length; i++) {
-            const item = e.dataTransfer.items[i];
-            const entry = item.webkitGetAsEntry?.();
-            const file = e.dataTransfer.files[i];
-            if (!file) continue;
-            if (entry?.isDirectory) {
-              let folderPath = '';
-              try { folderPath = window.electronAPI.getFilePath(file); } catch { /* ignore */ }
-              if (folderPath) attachmentState.addFolderPath(folderPath);
-            } else {
-              files.push(file);
+      <section
+        className="relative flex h-full w-full flex-col bg-content-area"
+        aria-label={t('ccAgent.layout.chatDropAreaAria')}
+        onDragEnter={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          dragCounterRef.current += 1;
+          if (dragCounterRef.current === 1) setIsDragOver(true);
+        }}
+        onDragOver={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          e.dataTransfer.dropEffect = 'copy';
+        }}
+        onDragLeave={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          dragCounterRef.current -= 1;
+          if (dragCounterRef.current === 0) setIsDragOver(false);
+        }}
+        onDrop={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          dragCounterRef.current = 0;
+          setIsDragOver(false);
+          // .cindy / .cshare 已被窗口级 capture 接管(装入 / 导入链路),
+          // 只清理拖拽 UI 状态,不当附件消费。
+          if (isGlobalDropIntercepted(e.nativeEvent)) return;
+          if (
+            consumeComposerMentionDrop(e.dataTransfer, {
+              addFileMention: attachmentState.addFileMention,
+              addFolderPath: attachmentState.addFolderPath,
+            })
+          ) {
+            return;
+          }
+          // 意识面板拖来的产物(cindy-ghost:// 媒体地址,不带 files):落在聊天区
+          // 任意位置都算数,与 ChatInput 自己的 onDrop 同一条引渡链路——
+          // main 验归属后图片落图片附件、视频落路径引用的 file 附件(托盘可见)。
+          const ghostMediaUri = getGhostMediaUriFromDataTransfer(e.dataTransfer);
+          if (ghostMediaUri) {
+            if (sessionId) void attachGhostMediaToSession(ghostMediaUri, sessionId, t);
+            return;
+          }
+          if (e.dataTransfer.files.length > 0) {
+            const files: File[] = [];
+            for (let i = 0; i < e.dataTransfer.items.length; i++) {
+              const item = e.dataTransfer.items[i];
+              const entry = item.webkitGetAsEntry?.();
+              const file = e.dataTransfer.files[i];
+              if (!file) continue;
+              if (entry?.isDirectory) {
+                let folderPath = '';
+                try {
+                  folderPath = window.electronAPI.getFilePath(file);
+                } catch {
+                  /* ignore */
+                }
+                if (folderPath) attachmentState.addFolderPath(folderPath);
+              } else {
+                files.push(file);
+              }
+            }
+            if (files.length > 0) {
+              const dt = new DataTransfer();
+              for (const f of files) dt.items.add(f);
+              attachmentState.addFiles(dt.files);
             }
           }
-          if (files.length > 0) {
-            const dt = new DataTransfer();
-            for (const f of files) dt.items.add(f);
-            attachmentState.addFiles(dt.files);
-          }
-        }
-      }}
-    >
-      {showOrcaLeadIdentityBar && (
-        <div className="flex h-8 shrink-0 select-none items-center border-b border-border/40 px-3 text-[11px] font-medium leading-none text-muted-foreground">
-          <span className="min-w-0 flex flex-1 items-center gap-1.5 truncate">
-            <VendorIcon
-              vendor={leadVendor}
-              size={leadVendor === 'cc' ? 14 : 13}
-              className="text-current"
-            />
-            <span className="min-w-0 truncate">{leadPaneLabel}</span>
-          </span>
-        </div>
-      )}
+        }}
+      >
+        {showOrcaLeadIdentityBar && (
+          <div className="flex h-8 shrink-0 select-none items-center border-b border-border/40 px-3 text-[11px] font-medium leading-none text-muted-foreground">
+            <span className="min-w-0 flex flex-1 items-center gap-1.5 truncate">
+              <VendorIcon
+                vendor={leadVendor}
+                size={leadVendor === 'cc' ? 14 : 13}
+                className="text-current"
+              />
+              <span className="min-w-0 truncate">{leadPaneLabel}</span>
+            </span>
+          </div>
+        )}
 
-      {/* device-link 远程会话状态 banner:断链重连 / 被控离线时提示 + 重新同步(以被控端为准重拉对账)。
+        {/* device-link 远程会话状态 banner:断链重连 / 被控离线时提示 + 重新同步(以被控端为准重拉对账)。
           suspect-stall(链路在线但本轮久未更新且核实不到被控端)优先 —— 它可能在 connected 时触发,
           额外给「结束本轮」手动收尾。connected / local 且无 stall 时不渲染。 */}
-      {remoteSync.suspectStall ? (
-        <RemoteSessionBanner
-          status="suspect-stall"
-          onResync={remoteSync.resync}
-          onFinalize={remoteSync.forceFinalize}
-        />
-      ) : remoteConn === 'reconnecting' || remoteConn === 'host-offline' ? (
-        <RemoteSessionBanner status={remoteConn} issue={remoteLinkIssue} onResync={remoteSync.resync} />
-      ) : null}
+        {remoteSync.suspectStall ? (
+          <RemoteSessionBanner
+            status="suspect-stall"
+            onResync={remoteSync.resync}
+            onFinalize={remoteSync.forceFinalize}
+          />
+        ) : remoteConn === 'reconnecting' || remoteConn === 'host-offline' ? (
+          <RemoteSessionBanner
+            status={remoteConn}
+            issue={remoteLinkIssue}
+            onResync={remoteSync.resync}
+          />
+        ) : null}
 
-      {/* 远程会话首屏:等被控端经隧道返回历史/元数据期间的 loading(仅远程、延迟防闪)。 */}
-      {showRemoteLoading && <RemoteSessionLoading />}
+        {/* 远程会话首屏:等被控端经隧道返回历史/元数据期间的 loading(仅远程、延迟防闪)。 */}
+        {showRemoteLoading && <RemoteSessionLoading />}
 
-      {/* Full-area drop overlay.
+        {/* Full-area drop overlay.
           Keep the event-capture surface for the whole chat area, but leave the
           actual hint UI to ChatInput so the copy sits inside the composer card
           instead of floating over old messages. */}
-      {isDragOver && (
-        <div
-          className="pointer-events-none absolute inset-0 z-50"
-          style={{
-            backgroundColor: 'var(--drop-overlay-bg)',
-            border: '2px dashed var(--drop-overlay-border)',
-          }}
-        />
-      )}
+        {isDragOver && (
+          <div
+            className="pointer-events-none absolute inset-0 z-50"
+            style={{
+              backgroundColor: 'var(--drop-overlay-bg)',
+              border: '2px dashed var(--drop-overlay-border)',
+            }}
+          />
+        )}
 
-      {ownsWindowRoute && handoffFrom && !handoffPillDismissed && (
-        <div className="shrink-0 px-4 pt-3">
-          <div className="mx-auto" style={{ maxWidth: messageWidth ?? 880 }}>
-            <HandoffSourcePill
-              dispatcherSessionId={handoffFrom.dispatcherSessionId}
-              dispatcherTitle={handoffFrom.dispatcherTitle}
-              onReturn={handleReturnToDispatcher}
-              onDismiss={() => setHandoffPillDismissed(true)}
-            />
+        {ownsWindowRoute && handoffFrom && !handoffPillDismissed && (
+          <div className="shrink-0 px-4 pt-3">
+            <div className="mx-auto" style={{ maxWidth: messageWidth ?? 880 }}>
+              <HandoffSourcePill
+                dispatcherSessionId={handoffFrom.dispatcherSessionId}
+                dispatcherTitle={handoffFrom.dispatcherTitle}
+                onReturn={handleReturnToDispatcher}
+                onDismiss={() => setHandoffPillDismissed(true)}
+              />
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Scroll container — full height, bottom padding reserves space for input overlay.
+        {/* Scroll container — full height, bottom padding reserves space for input overlay.
            key={sessionId}: force a full remount on session switch so scroll state,
            refs, and ResizeObservers are fresh — guarantees per-session isolation. */}
-      <div className="relative min-h-0 flex-1">
-        {/* perf/session-switch 探针纯诊断:仅 DEV 用 Profiler 量 MessageStream commit,
+        <div className="relative min-h-0 flex-1">
+          {/* perf/session-switch 探针纯诊断:仅 DEV 用 Profiler 量 MessageStream commit,
             生产直接渲染 el(见上方 messageStreamEl),不引入多余 Profiler fiber。 */}
-        {import.meta.env.DEV ? (
-          <Profiler id="message-stream" onRender={onStreamProfile}>
-            {messageStreamEl}
-          </Profiler>
-        ) : (
-          messageStreamEl
-        )}
-      </div>
-
-      {/* Input overlay — sticky at bottom with gradient fade.
-           左右 padding 由 useProportionalWidth.inputPad 计算:默认 40,compact
-           rail 为 0。inputWidth = messageWidth + 20,每侧多 10px,正好填满 overlay。 */}
-      <div
-        ref={overlayRef}
-        style={{ left: inputPad, right: inputPad }}
-        className="pointer-events-none absolute bottom-0 flex flex-col items-center"
-      >
-        {/* Gradient mask: transparent → content-area */}
-        <div className="pointer-events-none h-8 w-full">
-          <div className="h-full w-full bg-gradient-to-t from-[hsl(var(--content-area))] to-transparent" />
+          {import.meta.env.DEV ? (
+            <Profiler id="message-stream" onRender={onStreamProfile}>
+              {messageStreamEl}
+            </Profiler>
+          ) : (
+            messageStreamEl
+          )}
         </div>
 
-        {/* Solid background zone */}
-        <div className="pointer-events-auto flex w-full flex-col items-center bg-[hsl(var(--content-area))] pb-5">
-          {/* Running Status Bar (F-SDK-3) — hidden while a plan review is pending (FP-7)。
+        {/* Input overlay — sticky at bottom with gradient fade.
+           左右 padding 由 useProportionalWidth.inputPad 计算:默认 40,compact
+           rail 为 0。inputWidth = messageWidth + 20,每侧多 10px,正好填满 overlay。 */}
+        <div
+          ref={overlayRef}
+          style={{ left: inputPad, right: inputPad }}
+          className="pointer-events-none absolute bottom-0 flex flex-col items-center"
+        >
+          {/* Gradient mask: transparent → content-area */}
+          <div className="pointer-events-none h-8 w-full">
+            <div className="h-full w-full bg-gradient-to-t from-[hsl(var(--content-area))] to-transparent" />
+          </div>
+
+          {/* Solid background zone */}
+          <div className="pointer-events-auto flex w-full flex-col items-center bg-[hsl(var(--content-area))] pb-5">
+            {/* Running Status Bar (F-SDK-3) — hidden while a plan review is pending (FP-7)。
               turn 结束但后台子任务仍在调模型时,状态栏保持点亮(shimmer 呼吸)显示
               后台运行文案 + 右侧「全部停止」入口 —— 替代原独立横幅(Lizi 拍板:
               不新增信息栏,复用状态栏)。 */}
-          {!pendingPlanReview && (
-            <RunningStatusBar
-              key={sessionId}
-              status={agentStatus.status}
-              tokenUsage={agentStatus.tokenUsage}
-              startedAt={agentStatus.startedAt}
-              visible={agentStatus.isRunning || backgroundTasksActive}
-              inputWidth={inputWidth}
-              sideTaskRunning={agentStatus.sideTaskRunning ?? false}
-              backgroundTasksRunning={backgroundTasksActive}
-              backgroundStopping={backgroundActivity.stopping}
-              onStopBackgroundTasks={() => void backgroundActivity.stopAll()}
-              // 被控端可见性 chip 嵌进状态栏中央槽位,与 thinking / 时间 token 同行
-              // (不再单独占一行)。中央槽位独立于状态栏淡入淡出 → 空闲时仍显示。
-              centerSlot={showInlineControlledBanner ? <ControlledBanner placement="statusbar" /> : null}
-            />
-          )}
+            {!pendingPlanReview && (
+              <RunningStatusBar
+                key={sessionId}
+                status={agentStatus.status}
+                tokenUsage={agentStatus.tokenUsage}
+                startedAt={agentStatus.startedAt}
+                visible={agentStatus.isRunning || backgroundTasksActive}
+                inputWidth={inputWidth}
+                sideTaskRunning={agentStatus.sideTaskRunning ?? false}
+                backgroundTasksRunning={backgroundTasksActive}
+                backgroundStopping={backgroundActivity.stopping}
+                onStopBackgroundTasks={() => void backgroundActivity.stopAll()}
+                // 被控端可见性 chip 嵌进状态栏中央槽位,与 thinking / 时间 token 同行
+                // (不再单独占一行)。中央槽位独立于状态栏淡入淡出 → 空闲时仍显示。
+                centerSlot={showInlineControlledBanner ? <ControlledBanner placement="statusbar" /> : null}
+              />
+            )}
 
-          {/* Error display.
+            {/* Error display.
               - agentKind 传到 ErrorBanner 让 codex 401 / Missing bearer 不仅在远端
                 能 hide Retry (走 syncCodexAuth 引导), 本地 codex session 401 也能
                 hide Retry + 显本地 fix 文案 (避免 retry 撞同样的 auth retry-loop)。
               - remoteHostId / deviceLinkDeviceId 始终标记真实执行端，避免控制端本机
                 认证恢复入口误处理远端错误；SSH 同步按钮仍由 agentKind='codex' 单独门控。 */}
-          {/* 凭证切换等待(非错误):消息保留在队首,挡路的本地 Codex 任务结束后
+            {/* 凭证切换等待(非错误):消息保留在队首,挡路的本地 Codex 任务结束后
               main 自动重发;取消 = 删除队首消息。与下方 ErrorBanner 互斥渲染——
               等待态由 main 权威维护,error 为空。 */}
-          {credentialSwitchWait && !error && (
-            <CredentialSwitchWaitBanner
-              blockedBySessionIds={credentialSwitchWait.blockedBySessionIds}
-              onCancel={(() => {
-                // 取消目标 = 等待中的那条消息(clientId 绑定);老被控端缺省时回落队首。
-                const cancelId = credentialSwitchWait.clientId ?? pendingQueue[0]?.clientId;
-                return cancelId ? () => removeFromQueue(cancelId) : undefined;
-              })()}
-              style={{ width: inputWidth }}
-              className="py-1"
-            />
-          )}
+            {credentialSwitchWait && !error && (
+              <CredentialSwitchWaitBanner
+                blockedBySessionIds={credentialSwitchWait.blockedBySessionIds}
+                onCancel={(() => {
+                  // 取消目标 = 等待中的那条消息(clientId 绑定);老被控端缺省时回落队首。
+                  const cancelId = credentialSwitchWait.clientId ?? pendingQueue[0]?.clientId;
+                  return cancelId ? () => removeFromQueue(cancelId) : undefined;
+                })()}
+                style={{ width: inputWidth }}
+                className="py-1"
+              />
+            )}
 
-          {/* error-tail-banner:会话尾部错误行的可操作提示 —— 互斥渲染
+            {/* error-tail-banner:会话尾部错误行的可操作提示 —— 互斥渲染
               (live error / 凭证等待优先);会话跑起来即隐藏。两种语义:
               - 中断标记行 → InterruptedTurnBanner(继续任务/忽略);
               - 普通失败行 → 直接复用 ErrorBanner(review P2):它已内置
@@ -2581,27 +2749,74 @@ export function CCAgentSessionView({
                 Retry 门控与恢复路径(同步登录态 / fork 剥离),此前的简化红条
                 一律显示重试会把用户带进同样的失败循环。onRetry 忽略 retryText
                 (typed token),发隐藏续跑指令;onCancel = dismiss 持久化。 */}
-          {errorTailMsg && !errorTailBannerHidden && !syntheticContinuationQueued &&
-            !error && !credentialSwitchWait &&
-            !isStreaming && !agentStatus.isRunning && sessionId && (
-            errorTailKind === 'interrupted' ? (
-              <InterruptedTurnBanner
-                sessionId={sessionId}
-                onContinue={handleErrorTailContinue}
-                onDismiss={handleErrorTailDismiss}
-                viewVisible={viewVisible}
-                style={{ width: inputWidth }}
-                className="py-1"
-              />
-            ) : (
-              <ErrorTailErrorBanner
-                sessionId={sessionId}
-                errorText={errorTailText}
-                errorReason={errorTailMsg?.errorReason}
-                onContinue={handleErrorTailContinue}
-                onDismiss={handleErrorTailDismiss}
+            {errorTailMsg &&
+              !errorTailBannerHidden &&
+              !syntheticContinuationQueued &&
+              !error &&
+              !credentialSwitchWait &&
+              !isStreaming &&
+              !agentStatus.isRunning &&
+              sessionId &&
+              (errorTailKind === 'interrupted' ? (
+                <InterruptedTurnBanner
+                  sessionId={sessionId}
+                  onContinue={handleErrorTailContinue}
+                  onDismiss={handleErrorTailDismiss}
+                  viewVisible={viewVisible}
+                  style={{ width: inputWidth }}
+                  className="py-1"
+                />
+              ) : (
+                <ErrorTailErrorBanner
+                  sessionId={sessionId}
+                  errorText={errorTailText}
+                  errorReason={errorTailMsg?.errorReason}
+                  onContinue={handleErrorTailContinue}
+                  onDismiss={handleErrorTailDismiss}
+                  onSilentStopContinue={handleSilentStopContinue}
+                  viewVisible={viewVisible}
+                  agentKind={session?.agentKind}
+                  remoteHostId={session?.remoteHostId ?? undefined}
+                  deviceLinkDeviceId={remoteDeviceId}
+                  modelId={session?.model}
+                  providerId={session?.providerId}
+                  silentEncryptedRetryEnabled={silentEncryptedRetryEnabled}
+                  onForkStripEncrypted={ownsWindowRoute ? handleForkStripEncrypted : undefined}
+                  forkStripEncryptedRunning={forkStripEncryptedRunning}
+                  style={{ width: inputWidth }}
+                  className="py-1"
+                />
+              ))}
+
+            {/* interrupted-turn-resume(简化版):session 双时间戳驱动的中断提示。
+              历史中断行(上方 errorTailMsg 判定)优先;互斥条件与 error-tail 同款。 */}
+            {!errorTailMsg &&
+              interruptedFromSession &&
+              !syntheticContinuationQueued &&
+              !error &&
+              !credentialSwitchWait &&
+              !isStreaming &&
+              !agentStatus.isRunning &&
+              sessionId && (
+                <InterruptedTurnBanner
+                  sessionId={sessionId}
+                  onContinue={handleSessionInterruptContinue}
+                  onDismiss={handleSessionInterruptDismiss}
+                  viewVisible={viewVisible}
+                  style={{ width: inputWidth }}
+                  className="py-1"
+                />
+              )}
+
+            {error && (
+              <ErrorBanner
+                error={error}
+                errorReason={errorReason}
+                isRecoverable={errorIsRecoverable}
+                retryText={errorRetryText}
+                onRetry={handleRetry}
                 onSilentStopContinue={handleSilentStopContinue}
-                viewVisible={viewVisible}
+                onCancel={handleDismissError}
                 agentKind={session?.agentKind}
                 remoteHostId={session?.remoteHostId ?? undefined}
                 deviceLinkDeviceId={remoteDeviceId}
@@ -2613,81 +2828,46 @@ export function CCAgentSessionView({
                 style={{ width: inputWidth }}
                 className="py-1"
               />
-            )
-          )}
+            )}
 
-          {/* interrupted-turn-resume(简化版):session 双时间戳驱动的中断提示。
-              历史中断行(上方 errorTailMsg 判定)优先;互斥条件与 error-tail 同款。 */}
-          {!errorTailMsg && interruptedFromSession && !syntheticContinuationQueued &&
-            !error && !credentialSwitchWait &&
-            !isStreaming && !agentStatus.isRunning && sessionId && (
-            <InterruptedTurnBanner
-              sessionId={sessionId}
-              onContinue={handleSessionInterruptContinue}
-              onDismiss={handleSessionInterruptDismiss}
-              viewVisible={viewVisible}
-              style={{ width: inputWidth }}
-              className="py-1"
-            />
-          )}
-
-          {error && (
-            <ErrorBanner
-              error={error}
-              errorReason={errorReason}
-              isRecoverable={errorIsRecoverable}
-              retryText={errorRetryText}
-              onRetry={handleRetry}
-              onSilentStopContinue={handleSilentStopContinue}
-              onCancel={handleDismissError}
-              agentKind={session?.agentKind}
-              remoteHostId={session?.remoteHostId ?? undefined}
-              deviceLinkDeviceId={remoteDeviceId}
-              modelId={session?.model}
-              providerId={session?.providerId}
-              silentEncryptedRetryEnabled={silentEncryptedRetryEnabled}
-              onForkStripEncrypted={ownsWindowRoute ? handleForkStripEncrypted : undefined}
-              forkStripEncryptedRunning={forkStripEncryptedRunning}
-              style={{ width: inputWidth }}
-              className="py-1"
-            />
-          )}
-
-          {/* worktree 恢复横幅(P1):worktree 已被回收(目录缺失、分支还在)时
+            {/* worktree 恢复横幅(P1):worktree 已被回收(目录缺失、分支还在)时
               提供一键恢复。组件自查 restore-status,非 restorable 自渲染 null;
               与 error/streaming 互斥条件从轻——目录缺失是持续状态,不依赖错误出现。 */}
-          {sessionId && !isStreaming && !agentStatus.isRunning && (
-            <WorktreeRestoreBanner
-              sessionId={sessionId}
-              style={{ width: inputWidth }}
-              className="py-1"
-            />
-          )}
+            {sessionId && !isStreaming && !agentStatus.isRunning && (
+              <WorktreeRestoreBanner
+                sessionId={sessionId}
+                style={{ width: inputWidth }}
+                className="py-1"
+              />
+            )}
 
-          {/* cc-mgr 升级提示 — 仅 cc remote session (cc agentKind + remoteHostId 在场)。
+            {/* cc-mgr 升级提示 — 仅 cc remote session (cc agentKind + remoteHostId 在场)。
               session.agentKind 在 sessionService 端是 'cc' / 'codex' (不是 SDK 风格的
               'claude-code'); 这里判 'cc' 才匹配 cc-mgr 链路的会话。
               内部会订阅 ccMgrUpgradeStore, 该 host 无 pending 时自渲染 null (零开销)。
               sessionId 传给 banner 用于 U3 — 升级完成后自动重发该 session 的 last
               user message (避免用户手动重新输入被中断的消息)。 */}
-          {session?.agentKind === 'cc' && session?.remoteHostId && (
-            <UpgradeBanner
-              hostId={session.remoteHostId}
-              sessionId={session.id}
-              style={{ width: inputWidth }}
-              className="py-1"
-            />
-          )}
-
-          <div className="mx-auto flex flex-col items-center gap-[10px]" style={{ width: inputWidth }}>
-            {/* 被控端可见性:常规情况下 chip 已并入 RunningStatusBar 中央槽位(见上)。
-                plan-review 时 RunningStatusBar 不渲染,这里回退到独占一行的 inline,
-                让被控提示在 plan 卡片上方仍可见。 */}
-            {showInlineControlledBanner && pendingPlanReview && (
-              <ControlledBanner placement="inline" maxWidth={controlledBannerMaxWidth} />
+            {session?.agentKind === 'cc' && session?.remoteHostId && (
+              <UpgradeBanner
+                hostId={session.remoteHostId}
+                sessionId={session.id}
+                style={{ width: inputWidth }}
+                className="py-1"
+              />
             )}
 
-            {/* FP-7 / F-PERM-2 / F7.4: mutually exclusive prompts.
+            <div
+              className="mx-auto flex flex-col items-center gap-[10px]"
+              style={{ width: inputWidth }}
+            >
+              {/* 被控端可见性:常规情况下 chip 已并入 RunningStatusBar 中央槽位(见上)。
+                plan-review 时 RunningStatusBar 不渲染,这里回退到独占一行的 inline,
+                让被控提示在 plan 卡片上方仍可见。 */}
+              {showInlineControlledBanner && pendingPlanReview && (
+                <ControlledBanner placement="inline" maxWidth={controlledBannerMaxWidth} />
+              )}
+
+              {/* FP-7 / F-PERM-2 / F7.4: mutually exclusive prompts.
                  Plan review takes precedence — the SDK won't interleave it with
                  other tool calls, but explicit priority guards against layout
                  races during state transitions.
@@ -2695,66 +2875,75 @@ export function CCAgentSessionView({
                  InteractionPromptHost: 普通模式下行为不变(直接 inline 渲染)。
                  当外部 (workdir-browse 等窄 rail 场景) 挂了 InteractionPromptSlot
                  时,卡片会被 portal 出去,这里就显占位。 */}
-            <InteractionPromptHost
-              hasInteraction={!!(pendingPlanReview || pendingPermission || pendingAskUser || pendingIssueConfirm || pendingRenameSessionsConfirm || pendingGhostGrantConfirm)}
-              placeholder={
-                <div className="w-full rounded-xl border border-dashed border-[var(--cmd-palette-border)] bg-[hsl(var(--content-area))] px-4 py-3 text-center text-12 text-[var(--cmd-palette-item-meta)]">
-                  {t('ccAgent.layout.waitForReply')}
-                </div>
-              }
-            >
-              {pendingPlanReview ? (
-                <>
-                  <PlanViewerCard
-                    pending={pendingPlanReview}
-                    viewerState={planViewerState}
-                    workingDir={session?.workingDir ?? ''}
-                    lastExpandedState={lastExpandedPlanViewerState}
-                    onStateChange={setPlanViewerState}
-                    onPlanContentChange={updatePlanContent}
-                    onCancel={() => cancelPlanReview(pendingPlanReview.requestId)}
+              <InteractionPromptHost
+                hasInteraction={
+                  !!(
+                    pendingPlanReview ||
+                    pendingPermission ||
+                    pendingAskUser ||
+                    pendingIssueConfirm ||
+                    pendingRenameSessionsConfirm ||
+                    pendingGhostGrantConfirm
+                  )
+                }
+                placeholder={
+                  <div className="w-full rounded-xl border border-dashed border-[var(--cmd-palette-border)] bg-[hsl(var(--content-area))] px-4 py-3 text-center text-12 text-[var(--cmd-palette-item-meta)]">
+                    {t('ccAgent.layout.waitForReply')}
+                  </div>
+                }
+              >
+                {pendingPlanReview ? (
+                  <>
+                    <PlanViewerCard
+                      pending={pendingPlanReview}
+                      viewerState={planViewerState}
+                      workingDir={session?.workingDir ?? ''}
+                      lastExpandedState={lastExpandedPlanViewerState}
+                      onStateChange={setPlanViewerState}
+                      onPlanContentChange={updatePlanContent}
+                      onCancel={() => cancelPlanReview(pendingPlanReview.requestId)}
+                    />
+                    <PlanActionCard
+                      requestId={pendingPlanReview.requestId}
+                      onRespond={respondToPlanReview}
+                      onCancel={cancelPlanReview}
+                    />
+                  </>
+                ) : pendingPermission ? (
+                  <PermissionPrompt
+                    permission={pendingPermission}
+                    onRespond={respondToPermission}
                   />
-                  <PlanActionCard
-                    requestId={pendingPlanReview.requestId}
-                    onRespond={respondToPlanReview}
-                    onCancel={cancelPlanReview}
+                ) : pendingAskUser ? (
+                  <AskUserQuestionPrompt
+                    pending={pendingAskUser}
+                    onAnswer={answerUserQuestion}
+                    viewerState={askUserViewerState}
+                    onViewerStateChange={setAskUserViewerState}
+                    draft={askUserDraft}
+                    onDraftChange={setAskUserDraft}
                   />
-                </>
-              ) : pendingPermission ? (
-                <PermissionPrompt
-                  permission={pendingPermission}
-                  onRespond={respondToPermission}
-                />
-              ) : pendingAskUser ? (
-                <AskUserQuestionPrompt
-                  pending={pendingAskUser}
-                  onAnswer={answerUserQuestion}
-                  viewerState={askUserViewerState}
-                  onViewerStateChange={setAskUserViewerState}
-                  draft={askUserDraft}
-                  onDraftChange={setAskUserDraft}
-                />
-              ) : pendingIssueConfirm ? (
-                <IssueConfirmCard
-                  pending={pendingIssueConfirm}
-                  onRespond={respondToIssueConfirm}
-                />
-              ) : pendingRenameSessionsConfirm ? (
-                <RenameSessionsConfirmCard
-                  pending={pendingRenameSessionsConfirm}
-                  onRespond={respondToRenameSessionsConfirm}
-                />
-              ) : pendingGhostGrantConfirm ? (
-                <GhostGrantConfirmCard
-                  key={pendingGhostGrantConfirm.requestId}
-                  pending={pendingGhostGrantConfirm}
-                  onRespond={respondToGhostGrantConfirm}
-                />
-              ) : null}
-            </InteractionPromptHost>
-            {/* 会话内 /goal 进行中状态条(composer 上方);无 goal 时返回 null 不占位。 */}
-            <GoalIndicator sessionId={sessionId} />
-            {/* 互斥:有任意 pending interaction 时,下方 takeover/overlay/ChatInput
+                ) : pendingIssueConfirm ? (
+                  <IssueConfirmCard
+                    pending={pendingIssueConfirm}
+                    onRespond={respondToIssueConfirm}
+                  />
+                ) : pendingRenameSessionsConfirm ? (
+                  <RenameSessionsConfirmCard
+                    pending={pendingRenameSessionsConfirm}
+                    onRespond={respondToRenameSessionsConfirm}
+                  />
+                ) : pendingGhostGrantConfirm ? (
+                  <GhostGrantConfirmCard
+                    key={pendingGhostGrantConfirm.requestId}
+                    pending={pendingGhostGrantConfirm}
+                    onRespond={respondToGhostGrantConfirm}
+                  />
+                ) : null}
+              </InteractionPromptHost>
+              {/* 会话内 /goal 进行中状态条(composer 上方);无 goal 时返回 null 不占位。 */}
+              <GoalIndicator sessionId={sessionId} />
+              {/* 互斥:有任意 pending interaction 时,下方 takeover/overlay/ChatInput
                  全部静默 — 跟改造前 ternary 链 (Plan ? : Perm ? : Ask ? :
                  Takeover ? : ChatInput) 的语义一致。
                  优先级 (高 → 低):
@@ -2764,17 +2953,22 @@ export function CCAgentSessionView({
                  两个 mask 共用 TakeoverMask 同款外形 (90px h / 12px round / sidebar
                  border), 切到 ChatInput 时高度变大, 与 takeover 收回回到 ChatInput
                  的体验一致。 */}
-            {pendingPlanReview || pendingPermission || pendingAskUser || pendingIssueConfirm || pendingRenameSessionsConfirm || pendingGhostGrantConfirm ? null : sessionBinding.attached && sessionId ? (
-              <TakeoverMask
-                sessionId={sessionId}
-                channel={sessionBinding.identity?.channel ?? 'feishu'}
-                userId={sessionBinding.identity?.userId ?? null}
-                displayName={sessionBinding.displayName}
-              />
-            ) : worktreePreparing && smoothedBranchName ? (
-              <WorktreeCreatingOverlay branchName={smoothedBranchName} />
-            ) : (
-              <ChatInput
+              {pendingPlanReview ||
+              pendingPermission ||
+              pendingAskUser ||
+              pendingIssueConfirm ||
+              pendingRenameSessionsConfirm ||
+              pendingGhostGrantConfirm ? null : sessionBinding.attached && sessionId ? (
+                <TakeoverMask
+                  sessionId={sessionId}
+                  channel={sessionBinding.identity?.channel ?? 'feishu'}
+                  userId={sessionBinding.identity?.userId ?? null}
+                  displayName={sessionBinding.displayName}
+                />
+              ) : worktreePreparing && smoothedBranchName ? (
+                <WorktreeCreatingOverlay branchName={smoothedBranchName} />
+              ) : (
+                <ChatInput
                   onSend={handleSend}
                   onBeforeVoiceInputStart={handleBeforeVoiceInputStart}
                   sessionId={sessionId}
@@ -2863,170 +3057,174 @@ export function CCAgentSessionView({
                         }
                       : undefined
                   }
-              />
-            )}
+                />
+              )}
 
-            {/* F-FP-5: workingDir — always rendered to prevent layout shift
+              {/* F-FP-5: workingDir — always rendered to prevent layout shift
                 worktree-parallel-sessions:worktree 创建过程的反馈(creating/failed)
                 也复用这一行 inline 显示,替换原 Monitor+basename chip。完成后 store
                 自动 clear,UI 回到正常显示。设计参考用户反馈"把这部分的体验逻辑放到
                 chatinput 底部 显示 work dir 的地方"——不再在 chat stream 插 SystemCard。 */}
-            <div
-              className={cn(
-                'mt-1.5 flex w-full items-center justify-between gap-3 px-1',
-                !session?.workingDir && !worktreeCreation && 'invisible',
-              )}
-            >
-              {/* Left: workingDir — 点击在系统文件管理器中打开;
-                  click 区域宽度与文本一致(不拉伸到整行) */}
-              {worktreeCreation?.status === 'creating' ? (
-                <div className="flex min-w-0 items-center gap-1.5">
-                  <Spinner size={12} className="text-[var(--workingdir-icon)]" />
-                  <span className="block min-w-0 truncate text-[12px] font-medium leading-none text-[var(--workingdir-text)]">
-                    {t('ccAgent.layout.worktreeCreating', '正在创建 worktree')}{' '}
-                    <code className="font-mono text-[11px] opacity-80">
-                      {worktreeCreation.name}
-                    </code>
-                    …
-                  </span>
-                </div>
-              ) : worktreeCreation?.status === 'failed' ? (
-                <Tip text={worktreeCreation.error} mono side="top">
-                  <div className="flex min-w-0 items-center gap-1.5">
-                    <AlertCircle size={12} className="shrink-0 text-red-500 dark:text-red-400" />
-                    <span className="block min-w-0 truncate text-[12px] font-medium leading-none text-red-500 dark:text-red-400">
-                      {t('ccAgent.layout.worktreeFailed', 'Worktree 创建失败')}
-                      {' — '}
-                      {worktreeCreation.error}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (sessionId) worktreeCreationStore.clear(sessionId);
-                      }}
-                      className="shrink-0 rounded p-0.5 transition-colors hover:bg-foreground/10"
-                      aria-label={t('common.dismiss', 'Dismiss')}
-                    >
-                      <X size={10} className="text-red-500/70 dark:text-red-400/70" />
-                    </button>
-                  </div>
-                </Tip>
-              ) : (
-                <Tip
-                  text={
-                    session?.workingDir
-                      ? session?.remoteHostId
-                        ? (
-                            // 远端 session: Tip 顶部加一行 "Host: <alias>" 让用户在
-                            // 同 workingDir 跨多 host 撞合场景下也能区分。hostId 即
-                            // SSH alias (HostConfig.id), 不需要额外 lookup。
-                            <>
-                              <div>Host: {session.remoteHostId}</div>
-                              <div>{session.workingDir}</div>
-                            </>
-                          )
-                        : session.workingDir
-                      : null
-                  }
-                  mono
-                  side="top"
-                >
-                {session?.remoteHostId ? (
-                  <div className="flex min-w-0 items-center gap-1.5">
-                    {workingDirChipContent}
-                  </div>
-                ) : (
-                  <button
-                    type="button"
-                    className="flex min-w-0 cursor-pointer items-center gap-1.5 text-left transition-opacity active:opacity-60"
-                    onClick={handleOpenWorkingDir}
-                    aria-label={t('ccAgent.layout.openWorkingDirAria')}
-                  >
-                    {workingDirChipContent}
-                  </button>
+              <div
+                className={cn(
+                  'mt-1.5 flex w-full items-center justify-between gap-3 px-1',
+                  !session?.workingDir && !worktreeCreation && 'invisible',
                 )}
-              </Tip>
-              )}
-
-              {/* Right: Context capacity indicator */}
-              <div className="flex shrink-0 items-center gap-3">
-                {session?.usedProjectContext && (
-                  <Tip text={t('ccAgent.layout.projectContextLoaded')} side="top">
-                    <Brain
-                      size={14}
-                      strokeWidth={1.75}
-                      className="shrink-0 -translate-y-px text-foreground/70"
-                      aria-label={t('ccAgent.layout.projectContextLoaded')}
-                    />
+              >
+                {/* Left: workingDir — 点击在系统文件管理器中打开;
+                  click 区域宽度与文本一致(不拉伸到整行) */}
+                {worktreeCreation?.status === 'creating' ? (
+                  <div className="flex min-w-0 items-center gap-1.5">
+                    <Spinner size={12} className="text-[var(--workingdir-icon)]" />
+                    <span className="block min-w-0 truncate text-[12px] font-medium leading-none text-[var(--workingdir-text)]">
+                      {t('ccAgent.layout.worktreeCreating', '正在创建 worktree')}{' '}
+                      <code className="font-mono text-[11px] opacity-80">
+                        {worktreeCreation.name}
+                      </code>
+                      …
+                    </span>
+                  </div>
+                ) : worktreeCreation?.status === 'failed' ? (
+                  <Tip text={worktreeCreation.error} mono side="top">
+                    <div className="flex min-w-0 items-center gap-1.5">
+                      <AlertCircle size={12} className="shrink-0 text-red-500 dark:text-red-400" />
+                      <span className="block min-w-0 truncate text-[12px] font-medium leading-none text-red-500 dark:text-red-400">
+                        {t('ccAgent.layout.worktreeFailed', 'Worktree 创建失败')}
+                        {' — '}
+                        {worktreeCreation.error}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (sessionId) worktreeCreationStore.clear(sessionId);
+                        }}
+                        className="shrink-0 rounded p-0.5 transition-colors hover:bg-foreground/10"
+                        aria-label={t('common.dismiss', 'Dismiss')}
+                      >
+                        <X size={10} className="text-red-500/70 dark:text-red-400/70" />
+                      </button>
+                    </div>
+                  </Tip>
+                ) : (
+                  <Tip
+                    text={
+                      session?.workingDir ? (
+                        session?.remoteHostId ? (
+                          // 远端 session: Tip 顶部加一行 "Host: <alias>" 让用户在
+                          // 同 workingDir 跨多 host 撞合场景下也能区分。hostId 即
+                          // SSH alias (HostConfig.id), 不需要额外 lookup。
+                          <>
+                            <div>Host: {session.remoteHostId}</div>
+                            <div>{session.workingDir}</div>
+                          </>
+                        ) : (
+                          session.workingDir
+                        )
+                      ) : null
+                    }
+                    mono
+                    side="top"
+                  >
+                    {session?.remoteHostId ? (
+                      <div className="flex min-w-0 items-center gap-1.5">
+                        {workingDirChipContent}
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        className="flex min-w-0 cursor-pointer items-center gap-1.5 text-left transition-opacity active:opacity-60"
+                        onClick={handleOpenWorkingDir}
+                        aria-label={t('ccAgent.layout.openWorkingDirAria')}
+                      >
+                        {workingDirChipContent}
+                      </button>
+                    )}
                   </Tip>
                 )}
-                <TodaySpendChip
-                  vendorKey={displayAgentKind === 'codex' ? 'codex' : 'cc'}
-                  modelId={agentSwitchIntent?.model ?? session?.model ?? null}
-                  providerId={agentSwitchIntent ? agentSwitchIntent.providerId : (session?.providerId ?? null)}
-                  sessionId={sessionId}
-                  sessionInitialCostUsd={session?.totalCostUsd ?? null}
-                  sessionInitialTokens={session?.totalTokenUsage ?? null}
-                  remoteHostId={session?.remoteHostId ?? null}
-                  deviceLinkDeviceId={remoteDeviceId ?? null}
-                />
-                <ContextCapacityRing
-                  contextTokens={agentStatus.contextTokens}
-                  model={agentSwitchIntent?.model ?? session?.model ?? ''}
-                  vendorKey={displayAgentKind === 'codex' ? 'codex' : 'cc'}
-                  sdkContextWindow={agentStatus.contextWindow}
-                  deviceId={remoteDeviceId}
-                  onCompact={
-                    // codex 无手动 compact;context 为 0 时压缩无意义 → 两种情况保持纯展示
-                    !isCodex && session != null && agentStatus.contextTokens > 0
-                      ? handleCompactRequest
-                      : undefined
-                  }
-                />
+
+                {/* Right: Context capacity indicator */}
+                <div className="flex shrink-0 items-center gap-3">
+                  {session?.usedProjectContext && (
+                    <Tip text={t('ccAgent.layout.projectContextLoaded')} side="top">
+                      <Brain
+                        size={14}
+                        strokeWidth={1.75}
+                        className="shrink-0 -translate-y-px text-foreground/70"
+                        aria-label={t('ccAgent.layout.projectContextLoaded')}
+                      />
+                    </Tip>
+                  )}
+                  <TodaySpendChip
+                    vendorKey={displayAgentKind === 'codex' ? 'codex' : 'cc'}
+                    modelId={agentSwitchIntent?.model ?? session?.model ?? null}
+                    providerId={
+                      agentSwitchIntent
+                        ? agentSwitchIntent.providerId
+                        : (session?.providerId ?? null)
+                    }
+                    sessionId={sessionId}
+                    sessionInitialCostUsd={session?.totalCostUsd ?? null}
+                    sessionInitialTokens={session?.totalTokenUsage ?? null}
+                    remoteHostId={session?.remoteHostId ?? null}
+                    deviceLinkDeviceId={remoteDeviceId ?? null}
+                  />
+                  <ContextCapacityRing
+                    contextTokens={agentStatus.contextTokens}
+                    model={agentSwitchIntent?.model ?? session?.model ?? ''}
+                    vendorKey={displayAgentKind === 'codex' ? 'codex' : 'cc'}
+                    sdkContextWindow={agentStatus.contextWindow}
+                    deviceId={remoteDeviceId}
+                    onCompact={
+                      // codex 无手动 compact;context 为 0 时压缩无意义 → 两种情况保持纯展示
+                      !isCodex && session != null && agentStatus.contextTokens > 0
+                        ? handleCompactRequest
+                        : undefined
+                    }
+                  />
+                </div>
               </div>
             </div>
           </div>
         </div>
-      </div>
 
-      {/* TopRightChipStack:聊天视图右上 chip 浮层。
+        {/* TopRightChipStack:聊天视图右上 chip 浮层。
           chip 栈第一行 = 右栏展开入口(仅 Windows 且右栏折叠时;展开态的折叠按钮
           归属右栏 TabBar;mac 开关在 ContentHeader 右端,故 !isMac 守卫)。
           MessageStream 内部的 PrevMessageJumpChip 通过 portal 挂入同一栈,自然落到下一行。
           "本次会话改动文件列表"已迁移到 RSB review tab,不再保留浮动按钮 + 滑入抽屉。 */}
-      <TopRightChipStack>
-        {/* Windows 折叠态的展开入口钉在聊天区靠缝的角上;面板贴右时在右上
+        <TopRightChipStack>
+          {/* Windows 折叠态的展开入口钉在聊天区靠缝的角上;面板贴右时在右上
             (本栈第一行),贴左时镜像到左上(下方容器)。 */}
+          {!isMac &&
+            rightSidebarCollapsed &&
+            (ownsRoute || showRsbToggle) &&
+            onToggleRightSidebar &&
+            rightSidebarSide === 'right' && (
+              <RightSidebarToggle
+                collapsed={rightSidebarCollapsed}
+                onToggle={onToggleRightSidebar}
+                side="right"
+              />
+            )}
+        </TopRightChipStack>
+        {/* mac 不渲染本 chip(2026-07-09 Lizi 口径):mac 的折叠 toggle 无论面板贴
+          哪侧都**恒钉窗口右上角**(MainLayout 浮层,与左栏折叠按钮对称);
+          Windows 仅折叠态显示,面板贴左时镜像到聊天区左上角。 */}
         {!isMac &&
           rightSidebarCollapsed &&
           (ownsRoute || showRsbToggle) &&
           onToggleRightSidebar &&
-          rightSidebarSide === 'right' && (
-            <RightSidebarToggle
-              collapsed={rightSidebarCollapsed}
-              onToggle={onToggleRightSidebar}
-              side="right"
-            />
+          rightSidebarSide === 'left' && (
+            <div className="pointer-events-none absolute left-3 top-3 z-20 flex flex-col items-start gap-2">
+              <RightSidebarToggle
+                collapsed={rightSidebarCollapsed}
+                onToggle={onToggleRightSidebar}
+                side="left"
+              />
+            </div>
           )}
-      </TopRightChipStack>
-      {/* mac 不渲染本 chip(2026-07-09 Lizi 口径):mac 的折叠 toggle 无论面板贴
-          哪侧都**恒钉窗口右上角**(MainLayout 浮层,与左栏折叠按钮对称);
-          Windows 仅折叠态显示,面板贴左时镜像到聊天区左上角。 */}
-      {!isMac &&
-        rightSidebarCollapsed &&
-        (ownsRoute || showRsbToggle) &&
-        onToggleRightSidebar &&
-        rightSidebarSide === 'left' && (
-          <div className="pointer-events-none absolute left-3 top-3 z-20 flex flex-col items-start gap-2">
-            <RightSidebarToggle
-              collapsed={rightSidebarCollapsed}
-              onToggle={onToggleRightSidebar}
-              side="left"
-            />
-          </div>
-        )}
-    </section>
+      </section>
     </>
   );
 
@@ -3035,7 +3233,10 @@ export function CCAgentSessionView({
     // 主消息流在容器宽 <AUTO_COMPACT_THRESHOLD 时为 true、回到宽态时回 false。
     // 挂 `chat-rail-compact` 让字号与 padding 同步缩放——doc rail 外层(OrcaSplitView /
     // WorkdirBrowseRoute)本身也挂这个类,主会话内层再挂一层是冗余但无害(CSS 规则幂等)。
-    <div ref={containerRef} className={cn('relative h-full w-full', isCompact && 'chat-rail-compact')}>
+    <div
+      ref={containerRef}
+      className={cn('relative h-full w-full', isCompact && 'chat-rail-compact')}
+    >
       {/* TopRightChipStackProvider 必须包住 MessageStream(消费 slot 的后代)
           与 TopRightChipStack(提供 slot 的容器)二者的共同祖先,context 才
           能流到。content 内同时包含两者,所以包在外层即可。 */}
@@ -3072,7 +3273,6 @@ export function CCAgentSessionView({
           <ArrowLeft size={18} strokeWidth={2} />
         </button>
       )}
-
     </div>
   );
 }
@@ -3206,7 +3406,10 @@ function RunningStatusBar({
       // Linger 1s at full opacity, then fade, then swap to placeholder
       const lingerTimer = setTimeout(() => setFading(true), 1000);
       const hideTimer = setTimeout(() => setShowContent(false), 1000 + STATUS_BAR_FADE_MS);
-      return () => { clearTimeout(lingerTimer); clearTimeout(hideTimer); };
+      return () => {
+        clearTimeout(lingerTimer);
+        clearTimeout(hideTimer);
+      };
     }
   }, [visible]);
 
@@ -3235,9 +3438,7 @@ function RunningStatusBar({
   const isDone = status === 'Done' && !sideTaskRunning && !backgroundTasksRunning;
   // 后台子任务模式的左段文案:上一轮残留的 status(多半是 "Done")在此语义下是
   // 误导信息,整体替换为后台运行提示。
-  const displayStatus = backgroundTasksRunning
-    ? t('chat.backgroundActivity.status')
-    : status;
+  const displayStatus = backgroundTasksRunning ? t('chat.backgroundActivity.status') : status;
   // F-COMPACT-1: when SDK is auto-summarizing the conversation, give the
   // status bar a distinct icon so the user can tell "Compacting..." apart
   // from "Thinking..." — both share the shimmer animation by design, but
@@ -3253,9 +3454,10 @@ function RunningStatusBar({
   // code's CLI status line ticks. The hook re-anchors from the displayed value
   // on every target change, so rapid updates blend without snap-back.
   const animatedTokens = useAnimatedNumber(tokenUsage, 400);
-  const tokenText = animatedTokens >= 1000
-    ? `${(animatedTokens / 1000).toFixed(1)}k tokens`
-    : `${animatedTokens} tokens`;
+  const tokenText =
+    animatedTokens >= 1000
+      ? `${(animatedTokens / 1000).toFixed(1)}k tokens`
+      : `${animatedTokens} tokens`;
 
   // 淡入淡出/隐藏占位样式 —— 只作用于左(状态)、右(elapsed/tokens)两段;
   // 中央槽位(centerSlot)不套此样式,故空闲淡出时其内容(被控提示 chip)仍可见。
@@ -3263,7 +3465,7 @@ function RunningStatusBar({
   // ResizeObserver 看到的高度不变,MessageStream 的 bottomPadding 不抖。
   const fadeStyle: CSSProperties = {
     visibility: isHidden ? 'hidden' : 'visible',
-    opacity: isHidden ? 0 : (fading ? 0 : 1),
+    opacity: isHidden ? 0 : fading ? 0 : 1,
     transition: isHidden ? 'none' : `opacity ${STATUS_BAR_FADE_MS}ms ease-out`,
     pointerEvents: isHidden ? 'none' : 'auto',
   };
@@ -3302,29 +3504,28 @@ function RunningStatusBar({
           // - done 是 0.4s 一次性 pop(keyframe 已去掉 opacity、只动 transform)，turn
           //   结束那一刻(isDone 必伴随 !visible)要弹一下，故保持 !isHidden gate;
           //   不动 opacity 所以不会盖 fade。
-          isHidden ? '' : (isDone ? 'status-bar-done' : (visible ? 'status-bar-shimmer' : '')),
+          isHidden ? '' : isDone ? 'status-bar-done' : visible ? 'status-bar-shimmer' : '',
         )}
         style={fadeStyle}
         aria-hidden={isHidden}
       >
-        {isDone
-          ? <Check size={14} className="shrink-0" strokeWidth={2.5} />
-          // 后台子任务模式换 Activity 图标(与 Compacting 换 Layers 同一设计逻辑:
-          // 图标回答"现在在干嘛")。优先于 isCompacting —— 后者按残留 status 文本
-          // 判断,turn 在 compact 阶段结束时会错配出 Layers + 后台文案。
-          : backgroundTasksRunning
-          ? <Activity size={14} className="shrink-0 -translate-y-px" />
-          : isCompacting
-          ? <Layers size={14} className="shrink-0 -translate-y-px" />
+        {isDone ? (
+          <Check size={14} className="shrink-0" strokeWidth={2.5} />
+        ) : // 后台子任务模式换 Activity 图标(与 Compacting 换 Layers 同一设计逻辑:
+        // 图标回答"现在在干嘛")。优先于 isCompacting —— 后者按残留 status 文本
+        // 判断,turn 在 compact 阶段结束时会错配出 Layers + 后台文案。
+        backgroundTasksRunning ? (
+          <Activity size={14} className="shrink-0 -translate-y-px" />
+        ) : isCompacting ? (
+          <Layers size={14} className="shrink-0 -translate-y-px" />
+        ) : (
           // -translate-y-px: lucide Sparkles' visual center sits slightly below
           // its geometric center (the lower-right tail biases mass downward),
           // so flex items-center alignment looks off — nudging the icon up 1px
           // restores optical alignment with the text baseline.
-          : <Sparkles size={14} className="shrink-0 -translate-y-px" />
-        }
-        <span className="truncate text-[13px] font-medium">
-          {displayStatus}
-        </span>
+          <Sparkles size={14} className="shrink-0 -translate-y-px" />
+        )}
+        <span className="truncate text-[13px] font-medium">{displayStatus}</span>
       </div>
       {/* 中央槽位(几何真居中):被控提示 chip 等。maxWidth 封顶 + max-w-full 让长设备名
           在窄宽时收缩,chip 靠自带 max-w-full + 内部 truncate 截断;不套 fadeStyle
@@ -3372,10 +3573,7 @@ function RunningStatusBar({
                 <span className="text-[13px] font-medium text-[var(--status-bar-meta)]">
                   &middot;
                 </span>
-                <ArrowDown
-                  size={13}
-                  className="shrink-0 text-[var(--status-bar-meta)]"
-                />
+                <ArrowDown size={13} className="shrink-0 text-[var(--status-bar-meta)]" />
                 <span className="text-[13px] font-medium text-[var(--status-bar-meta)]">
                   {tokenText}
                 </span>
@@ -3418,7 +3616,14 @@ function getModelContextWindow(
   return found?.contextWindow;
 }
 
-function ContextCapacityRing({ contextTokens, model, vendorKey, sdkContextWindow, deviceId, onCompact }: {
+function ContextCapacityRing({
+  contextTokens,
+  model,
+  vendorKey,
+  sdkContextWindow,
+  deviceId,
+  onCompact,
+}: {
   contextTokens: number;
   model: string;
   vendorKey: 'cc' | 'codex';
@@ -3434,9 +3639,10 @@ function ContextCapacityRing({ contextTokens, model, vendorKey, sdkContextWindow
     sdkContextWindow,
     modelContextWindow: getModelContextWindow(model, vendorKey, deviceId),
   });
-  const pct = contextWindow > 0
-    ? Math.min(Math.max(Math.round((contextTokens / contextWindow) * 100), 0), 100)
-    : 0;
+  const pct =
+    contextWindow > 0
+      ? Math.min(Math.max(Math.round((contextTokens / contextWindow) * 100), 0), 100)
+      : 0;
 
   // Ring geometry: outer diameter 20px, strokeWidth 2.5
   const size = 20;
@@ -3446,17 +3652,13 @@ function ContextCapacityRing({ contextTokens, model, vendorKey, sdkContextWindow
   const dashOffset = circumference - (circumference * pct) / 100;
 
   // Color thresholds per spec
-  const fillColor =
-    pct > 90
-      ? '#EF4444'
-      : pct > 70
-        ? '#F59E0B'
-        : 'var(--msg-tool-card-chevron)';
+  const fillColor = pct > 90 ? '#EF4444' : pct > 70 ? '#F59E0B' : 'var(--msg-tool-card-chevron)';
 
   const usedTokens = Math.min(contextTokens, contextWindow || Infinity);
-  const tooltipText = contextWindow > 0
-    ? `Context — ${formatTokenCount(usedTokens)} / ${formatTokenCount(contextWindow)} (${pct}%)`
-    : 'No context data yet';
+  const tooltipText =
+    contextWindow > 0
+      ? `Context — ${formatTokenCount(usedTokens)} / ${formatTokenCount(contextWindow)} (${pct}%)`
+      : 'No context data yet';
 
   const ringContent = (
     <>
@@ -3491,10 +3693,7 @@ function ContextCapacityRing({ contextTokens, model, vendorKey, sdkContextWindow
           transform={`rotate(-90 ${size / 2} ${size / 2})`}
         />
       </svg>
-      <span
-        className="text-[12px] font-medium leading-none"
-        style={{ color: fillColor }}
-      >
+      <span className="text-[12px] font-medium leading-none" style={{ color: fillColor }}>
         {pct}%
       </span>
     </>

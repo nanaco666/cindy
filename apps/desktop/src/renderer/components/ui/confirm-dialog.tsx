@@ -92,7 +92,7 @@ export function ConfirmDialog({
         <AlertDialog.Content
           className={cn(
             'fixed left-1/2 top-1/2 z-[10000] -translate-x-1/2 -translate-y-1/2',
-            'w-full rounded-xl p-4',
+            'w-full select-none rounded-xl p-4',
             'bg-[var(--confirm-bg)] shadow-[var(--confirm-shadow)]',
             'data-[state=open]:animate-confirm-content-in',
             'data-[state=closed]:animate-confirm-content-out',

@@ -169,6 +169,8 @@ const CORE_INVOKE_CHANNELS: readonly string[] = [
   // 红条复活。老被控端无此 handler → CHANNEL_NOT_ALLOWED → 控制端吞错退化为
   // 本视图内存隐藏。
   'local-db:messages:dismiss-error',
+  // 消息菜单单条内容删除:在被控端清旧原生上下文并写 context rebuild handoff。
+  'maker:message:delete',
   // 订阅控制帧(push 驱动):被控端 dispatch 拦截执行,不落到 ipcMain handler。
   // 列入 allowlist 作契约登记 + 老被控端不识别时回 CHANNEL_NOT_ALLOWED 供控制端探测能力(回退 poll)。
   DL_SUBSCRIBE_CHANNEL,
@@ -377,6 +379,7 @@ export const PUSH_FORWARD_ALLOWLIST: ReadonlySet<string> = new Set([
   'local-db:sessions:patched',
   SESSION_ACTIVITY_CHANNEL,
   'local-db:messages:created',
+  'local-db:messages:deleted',
   // 被控端 terminal error 落库脏信号:控制端据此把已加载历史的远程会话标脏,下次打开重拉。
   'local-db:session:error-persisted',
   // 被控端「当前 New Maker 草稿」全量变更:被控端草稿 effort/fast/选中 等任意变化时广播,

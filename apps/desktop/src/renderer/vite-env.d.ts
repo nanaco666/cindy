@@ -3137,6 +3137,9 @@ interface ElectronAPI {
           message: import('@/lib/ccAgent.types').Message;
         }) => void,
       ) => () => void;
+      onDeleted: (
+        callback: (payload: { sessionId: string; clientId: string }) => void,
+      ) => () => void;
       onErrorPersisted: (
         callback: (payload: { sessionId: string }) => void,
       ) => () => void;
@@ -3609,6 +3612,11 @@ interface ElectronAPI {
 
     abortSession: (sessionId: string) => Promise<void>;
     closeSession: (sessionId: string, opts?: { preserveWorkspace?: boolean }) => Promise<void>;
+    /** 删除单条消息并让下一次发送从剩余本地历史重建 Agent 上下文。 */
+    deleteMessage: (
+      sessionId: string,
+      clientId: string,
+    ) => Promise<{ sessionId: string; clientId: string }>;
     listActive: () => Promise<Array<{
       sessionId: string;
       agentKind: 'claude-code' | 'codex';

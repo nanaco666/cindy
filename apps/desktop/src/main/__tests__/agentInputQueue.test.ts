@@ -39,18 +39,22 @@ function queuedMessage(files: AgentInputQueuedMessage['files']): AgentInputQueue
 
 describe('agentInputQueue', () => {
   it('sends queued GIF attachments as file blocks', () => {
-    expect(buildMakerUserMessage(queuedMessage([
-      {
-        id: 'gif-1',
-        name: 'clip.gif',
-        path: '/repo/clip.gif',
-        ext: '.gif',
-        size: 128,
-        category: 'image',
-        mimeType: 'image/gif',
-        url: 'xdt-image://session/clip.gif',
-      },
-    ]))).toEqual({
+    expect(
+      buildMakerUserMessage(
+        queuedMessage([
+          {
+            id: 'gif-1',
+            name: 'clip.gif',
+            path: '/repo/clip.gif',
+            ext: '.gif',
+            size: 128,
+            category: 'image',
+            mimeType: 'image/gif',
+            url: 'xdt-image://session/clip.gif',
+          },
+        ]),
+      ),
+    ).toEqual({
       type: 'user',
       content: [
         { type: 'text', text: 'inspect attachment' },
@@ -60,18 +64,22 @@ describe('agentInputQueue', () => {
   });
 
   it('keeps queued non-GIF image attachments as image blocks', () => {
-    expect(buildMakerUserMessage(queuedMessage([
-      {
-        id: 'image-1',
-        name: 'shot.png',
-        path: '/repo/shot.png',
-        ext: '.png',
-        size: 128,
-        category: 'image',
-        mimeType: 'image/png',
-        url: 'xdt-image://session/shot.png',
-      },
-    ]))).toEqual({
+    expect(
+      buildMakerUserMessage(
+        queuedMessage([
+          {
+            id: 'image-1',
+            name: 'shot.png',
+            path: '/repo/shot.png',
+            ext: '.png',
+            size: 128,
+            category: 'image',
+            mimeType: 'image/png',
+            url: 'xdt-image://session/shot.png',
+          },
+        ]),
+      ),
+    ).toEqual({
       type: 'user',
       content: [
         { type: 'text', text: 'inspect attachment' },
@@ -81,30 +89,34 @@ describe('agentInputQueue', () => {
   });
 
   it('appends the hidden annotation note once after all blocks for annotated images', () => {
-    expect(buildMakerUserMessage(queuedMessage([
-      {
-        id: 'image-1',
-        name: 'shot.png',
-        path: '/repo/shot.png',
-        ext: '.png',
-        size: 128,
-        category: 'image',
-        mimeType: 'image/png',
-        url: 'xdt-image://session/shot.png',
-        annotated: true,
-      },
-      {
-        id: 'image-2',
-        name: 'other.png',
-        path: '/repo/other.png',
-        ext: '.png',
-        size: 64,
-        category: 'image',
-        mimeType: 'image/png',
-        url: 'xdt-image://session/other.png',
-        annotated: true,
-      },
-    ]))).toEqual({
+    expect(
+      buildMakerUserMessage(
+        queuedMessage([
+          {
+            id: 'image-1',
+            name: 'shot.png',
+            path: '/repo/shot.png',
+            ext: '.png',
+            size: 128,
+            category: 'image',
+            mimeType: 'image/png',
+            url: 'xdt-image://session/shot.png',
+            annotated: true,
+          },
+          {
+            id: 'image-2',
+            name: 'other.png',
+            path: '/repo/other.png',
+            ext: '.png',
+            size: 64,
+            category: 'image',
+            mimeType: 'image/png',
+            url: 'xdt-image://session/other.png',
+            annotated: true,
+          },
+        ]),
+      ),
+    ).toEqual({
       type: 'user',
       content: [
         { type: 'text', text: 'inspect attachment' },
@@ -116,30 +128,34 @@ describe('agentInputQueue', () => {
   });
 
   it('does not inject the annotation note for plain images or annotated GIF-as-file blocks', () => {
-    expect(buildMakerUserMessage(queuedMessage([
-      {
-        id: 'image-1',
-        name: 'shot.png',
-        path: '/repo/shot.png',
-        ext: '.png',
-        size: 128,
-        category: 'image',
-        mimeType: 'image/png',
-        url: 'xdt-image://session/shot.png',
-      },
-      {
-        // GIF 进 file block(不做视觉标注语义),即便误带 annotated 也不注入。
-        id: 'gif-1',
-        name: 'clip.gif',
-        path: '/repo/clip.gif',
-        ext: '.gif',
-        size: 128,
-        category: 'image',
-        mimeType: 'image/gif',
-        url: 'xdt-image://session/clip.gif',
-        annotated: true,
-      },
-    ]))).toEqual({
+    expect(
+      buildMakerUserMessage(
+        queuedMessage([
+          {
+            id: 'image-1',
+            name: 'shot.png',
+            path: '/repo/shot.png',
+            ext: '.png',
+            size: 128,
+            category: 'image',
+            mimeType: 'image/png',
+            url: 'xdt-image://session/shot.png',
+          },
+          {
+            // GIF 进 file block(不做视觉标注语义),即便误带 annotated 也不注入。
+            id: 'gif-1',
+            name: 'clip.gif',
+            path: '/repo/clip.gif',
+            ext: '.gif',
+            size: 128,
+            category: 'image',
+            mimeType: 'image/gif',
+            url: 'xdt-image://session/clip.gif',
+            annotated: true,
+          },
+        ]),
+      ),
+    ).toEqual({
       type: 'user',
       content: [
         { type: 'text', text: 'inspect attachment' },
@@ -167,6 +183,7 @@ describe('agentInputQueue', () => {
       text: '> quoted\n\nrevised reply',
       images: [],
       files: [],
+      slashCommandRanges: [],
     });
     expect(updated.chatMessage.quotesEncoded).toBeUndefined();
   });
@@ -185,7 +202,41 @@ describe('agentInputQueue', () => {
     expect(JSON.parse(updated.persistedContent)).toEqual({
       text: rewritten,
       quotesEncoded: true,
+      slashCommandRanges: [],
     });
     expect(updated.chatMessage.quotesEncoded).toBe(true);
+  });
+
+  it('drops stale long-paste offsets when queued text is rewritten', () => {
+    const entry = queuedMessage(undefined);
+    entry.persistedContent = JSON.stringify({
+      text: entry.text,
+      images: [],
+      files: [],
+      pastedTextRanges: [{ start: 0, end: 7, display: 'Pasted text (1 line)' }],
+    });
+    entry.chatMessage.pastedTextRanges = [{ start: 0, end: 7, display: 'Pasted text (1 line)' }];
+
+    const updated = updateQueuedMessageText(entry, 'rewritten');
+
+    expect(JSON.parse(updated.persistedContent).pastedTextRanges).toBeUndefined();
+    expect(updated.chatMessage.pastedTextRanges).toBeUndefined();
+  });
+
+  it('clears stale slash offsets but keeps the explicit no-legacy marker after a text rewrite', () => {
+    const entry = queuedMessage(undefined);
+    entry.persistedContent = JSON.stringify({
+      text: '/git old',
+      images: [],
+      files: [],
+      slashCommandRanges: [{ start: 0, end: 4 }],
+    });
+    entry.chatMessage.content = '/git old';
+    entry.chatMessage.slashCommandRanges = [{ start: 0, end: 4 }];
+
+    const updated = updateQueuedMessageText(entry, '/unknown rewritten');
+
+    expect(JSON.parse(updated.persistedContent).slashCommandRanges).toEqual([]);
+    expect(updated.chatMessage.slashCommandRanges).toEqual([]);
   });
 });

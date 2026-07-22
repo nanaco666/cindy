@@ -4,11 +4,12 @@
  * Hover-revealed action bar for chat messages (V1.2 spec).
  *
  * Layout:
- *   - Bar gap 4px, align-items: center
+ *   - Bar gap 2px, align-items: center
  *   - Order is `align`-driven:
- *       align="left"  → [CopyBtn][ForkBtn][TimeText]            (assistant)
- *       align="right" → [TimeText][CopyBtn][RewindBtn][ForkBtn] (user)
- *   - Button container 24×24, rounded-4, hover bg cmd-palette-item-hover
+ *       align="left"  → [CopyBtn][MoreMenu][TimeText][CostText]       (assistant)
+ *       align="right" → [TimeText][CopyBtn][EditBtn][MoreMenu] (user)
+ *   - Action buttons are 24×24; More uses a pill trigger and a 12px menu
+ *     containing fork, message deep-link copy, and single-message deletion.
  *   - Icon lucide 14×14, color #737373 (Light) / #a3a3a3 (Dark)
  *     hover color #262626 (Light) / #ffffff (Dark)
  *   - Time text 12px Inter normal, color INVERTED from icon (#a3a3a3 / #737373)
@@ -23,17 +24,32 @@
  *   - Bar does NOT auto-fade — appearance/disappearance is driven entirely by
  *     hover. Check icon resets to Copy when hover leaves (next hover-in shows
  *     the default Copy icon again).
- *
- * Future: rewind/fork buttons mount in this same bar (V1.x); intentionally
- * omitted in V1 to ship Copy + smart-time first.
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Copy, Check, Pencil, Split, Undo2 } from 'lucide-react';
+import {
+  Check,
+  Copy,
+  Ellipsis,
+  Link2,
+  MessageSquarePlus,
+  Pencil,
+  Split,
+  Trash2,
+  Undo2,
+} from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 import { Spinner } from '@/components/ui/spinner';
 import { Tooltip } from '@/components/ui/tooltip';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { toast } from '@/lib/toast';
 import { formatAbsolute, useRelativeTime } from '@/hooks/useRelativeTime';
 import { formatTurnCostUsd } from '@/lib/usageFormat';
 import { buildTurnUsageTooltipLines } from '@/lib/turnUsageTooltip';
@@ -43,10 +59,8 @@ interface MessageActionBarProps {
   createdAt?: string;
   /** Plaintext that will hit the clipboard on copy click. */
   copyText: string;
-  /** When provided, the time text becomes clickable and copies this deep
-   *  link (`cindy://session/<id>?message=<clientId>`) — the tooltip
-   *  gains a hint line, and the time text briefly swaps to a "link copied"
-   *  confirmation after a successful copy. No extra button is rendered. */
+  /** Message deep link (`cindy://session/<id>?message=<clientId>`) copied by
+   *  the More menu's "copy current conversation link" item. */
   copyLinkText?: string;
   /** Bar alignment + button order: 'left' = assistant, 'right' = user. */
   align: 'left' | 'right';
@@ -60,6 +74,12 @@ interface MessageActionBarProps {
    *  pointer-events:none for the duration; the Fork icon is replaced with a
    *  spinning Loader2. */
   onFork?: () => Promise<void>;
+  /** Insert this message's anchored conversation link into the active composer. */
+  onAddToChat?: () => void;
+  /** When provided, the More menu exposes single-message deletion. The
+   *  parent owns confirmation + persistence; the promise keeps the action
+   *  bar disabled until the flow resolves. */
+  onDelete?: () => Promise<void>;
   /** When provided, render an Edit (Pencil) button (last user message only).
    *  Click is fire-and-forget — the parent owns the inline edit lifecycle. */
   onEdit?: () => void;
@@ -93,6 +113,8 @@ export function MessageActionBar({
   align,
   hovered,
   onFork,
+  onAddToChat,
+  onDelete,
   onEdit,
   onRewind,
   rewindInFlight = false,
@@ -104,11 +126,18 @@ export function MessageActionBar({
 }: MessageActionBarProps) {
   const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
-  const [linkCopied, setLinkCopied] = useState(false);
   const [forking, setForking] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  // Radix restores focus to the trigger when a menu closes. Programmatic
+  // focus restoration is treated as `:focus-visible` by Chromium even when
+  // the user opened/closed the menu with a pointer, leaving an unwanted blue
+  // ring behind. Track the latest menu interaction modality so pointer flows
+  // can skip restoration while keyboard flows keep their focus indicator.
+  const menuInteractionFromPointerRef = useRef(false);
   // Unified in-flight: fork (internal) OR rewind (external) — bar dims & blocks
   // pointer events for either. Same visual treatment for consistency.
-  const inFlight = forking || rewindInFlight;
+  const inFlight = forking || deleting || rewindInFlight;
   // `visible` is the actual opacity driver. It tracks `hovered` with a
   // trailing debounce so the bar fades out smoothly (CSS handles the
   // opacity interpolation from current value, not from 1).
@@ -154,13 +183,6 @@ export function MessageActionBar({
     prevHoveredRef.current = hovered;
   }, [hovered, copied]);
 
-  // 时间点击复制链接的反馈:时间文本短暂换成「链接已复制」,1.5s 后还原。
-  useEffect(() => {
-    if (!linkCopied) return;
-    const timer = setTimeout(() => setLinkCopied(false), 1500);
-    return () => clearTimeout(timer);
-  }, [linkCopied]);
-
   const handleCopy = useCallback(
     async (e: React.MouseEvent) => {
       e.stopPropagation();
@@ -176,12 +198,13 @@ export function MessageActionBar({
   );
 
   const handleFork = useCallback(
-    async (e: React.MouseEvent) => {
-      e.stopPropagation();
+    async () => {
       if (!onFork || forking) return;
       setForking(true);
       try {
         await onFork();
+      } catch {
+        // useForkAtMessage already maps the error to a user-facing toast.
       } finally {
         // Reset regardless of outcome — caller toasts on failure, and on
         // success we usually navigate away anyway so unmount handles it.
@@ -192,18 +215,29 @@ export function MessageActionBar({
   );
 
   const handleCopyLink = useCallback(
-    async (e: React.MouseEvent) => {
-      e.stopPropagation();
+    async () => {
       if (!copyLinkText) return;
       try {
         await navigator.clipboard.writeText(copyLinkText);
-        setLinkCopied(true);
+        toast.success(t('chat.messageActionBar.linkCopied'));
       } catch {
-        // Clipboard may be unavailable; fail silently (same as handleCopy).
+        toast.warning(t('chat.messageActionBar.copyLinkFailed'));
       }
     },
-    [copyLinkText],
+    [copyLinkText, t],
   );
+
+  const handleDelete = useCallback(async () => {
+    if (!onDelete || deleting) return;
+    setDeleting(true);
+    try {
+      await onDelete();
+    } catch {
+      // useDeleteMessage already maps persistence failures to a user-facing toast.
+    } finally {
+      setDeleting(false);
+    }
+  }, [deleting, onDelete]);
 
   const relText = useRelativeTime(createdAt, { hovered });
   const absText = formatAbsolute(createdAt);
@@ -233,17 +267,11 @@ export function MessageActionBar({
     </button>
   );
 
-  // 时间文本兼任「复制消息链接」入口:有 copyLinkText 时可点击复制,tooltip
-  // 在绝对时间下加一行提示;复制成功后时间文本短暂换成「链接已复制」。
-  const timeTooltip = copyLinkText
-    ? [absText, t('chat.messageActionBar.timeCopyHint')].filter(Boolean).join('\n')
-    : absText;
   const timeText = relText && (
     <Tooltip.Root key="time">
       <Tooltip.Trigger asChild>
         <time
           dateTime={createdAt}
-          onClick={copyLinkText ? handleCopyLink : undefined}
           className={cn(
             'inline-flex h-[24px] items-center text-[12px] font-normal whitespace-nowrap',
             // Optical adjustment: nudge time text down 0.5px so its visual
@@ -254,18 +282,15 @@ export function MessageActionBar({
             // 之间额外 +6px(共 8px),让"元信息 | 操作组"两段读起来是独立分组
             // —— 与 assistant 侧 costText 的 ml-1.5 同一间距语言。
             align === 'right' && 'mr-1.5',
-            'text-[var(--settings-section-desc)]',
-            copyLinkText
-              ? 'cursor-pointer hover:text-[var(--msg-assistant-text)] transition-colors duration-150'
-              : 'cursor-default',
+            'text-[var(--settings-section-desc)] cursor-default',
           )}
         >
-          {linkCopied ? t('chat.messageActionBar.linkCopied') : relText}
+          {relText}
         </time>
       </Tooltip.Trigger>
-      {timeTooltip && (
+      {absText && (
         <Tooltip.Content>
-          <span className="whitespace-pre-line">{timeTooltip}</span>
+          <span className="whitespace-pre-line">{absText}</span>
         </Tooltip.Content>
       )}
     </Tooltip.Root>
@@ -366,32 +391,35 @@ export function MessageActionBar({
     </Tooltip.Root>
   );
 
-  // Rewind (Undo2) button — user messages only. Loading state is driven by
-  // `rewindInFlight` (external) since the dialog + commit span outlives this
-  // component's local state.
-  const rewindBtn = onRewind && align === 'right' && (
-    <Tooltip.Root key="rewind">
-      <Tooltip.Trigger asChild>
+  // Fork / rewind 收进 More 菜单；链接复制与单条删除也放在同一入口。
+  // 面板/行几何遵守 12px container + 8px inner-control 两档圆角。
+  const canRewind = Boolean(onRewind && align === 'right');
+  const moreMenu = (onFork || onAddToChat || copyLinkText || canRewind || onDelete) && (
+    <DropdownMenu key="more" open={menuOpen} onOpenChange={setMenuOpen}>
+      <DropdownMenuTrigger asChild>
         <button
           type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            if (rewindInFlight) return;
-            onRewind();
+          onClick={(e) => e.stopPropagation()}
+          onPointerDown={() => {
+            menuInteractionFromPointerRef.current = true;
           }}
-          disabled={rewindInFlight}
+          onKeyDown={() => {
+            menuInteractionFromPointerRef.current = false;
+          }}
+          disabled={inFlight}
           className={cn(
             'group flex h-[24px] w-[24px] items-center justify-center',
-            'rounded-[4px] border-none bg-transparent outline-none cursor-pointer',
+            'rounded-full border-none bg-transparent outline-none cursor-pointer',
             'hover:bg-[var(--cmd-palette-item-hover)] transition-colors',
-            'disabled:cursor-default',
+            'focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]',
+            'data-[state=open]:bg-[var(--cmd-palette-item-hover)] disabled:cursor-default',
           )}
-          aria-label={t('chat.messageActionBar.rewind')}
+          aria-label={t('chat.messageActionBar.moreActions')}
         >
-          {rewindInFlight ? (
+          {inFlight ? (
             <Spinner size={14} strokeWidth={2} className="text-[var(--cmd-palette-item-meta)]" />
           ) : (
-            <Undo2
+            <Ellipsis
               size={14}
               strokeWidth={2}
               className={cn(
@@ -402,55 +430,108 @@ export function MessageActionBar({
             />
           )}
         </button>
-      </Tooltip.Trigger>
-      <Tooltip.Content>{t('chat.messageActionBar.rewind')}</Tooltip.Content>
-    </Tooltip.Root>
-  );
-
-  // Fork button — user & assistant messages both; the parent decides whether
-  // to pass `onFork`. Spinning Loader2 during in-flight.
-  const forkBtn = onFork && (
-    <Tooltip.Root key="fork">
-      <Tooltip.Trigger asChild>
-        <button
-          type="button"
-          onClick={handleFork}
-          disabled={forking}
-          className={cn(
-            'group flex h-[24px] w-[24px] items-center justify-center',
-            'rounded-[4px] border-none bg-transparent outline-none cursor-pointer',
-            'hover:bg-[var(--cmd-palette-item-hover)] transition-colors',
-            'disabled:cursor-default',
-          )}
-          aria-label={t('chat.messageActionBar.fork')}
-        >
-          {forking ? (
-            <Spinner size={14} strokeWidth={2} className="text-[var(--cmd-palette-item-meta)]" />
-          ) : (
-            // Split (路径分岔箭头) 比 GitBranch 更贴"分叉对话"的语义 —
-            // 不依赖 git 心智模型, 14px 下笔画也更干脆。
-            <Split
-              size={14}
-              strokeWidth={2}
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        align={align === 'left' ? 'start' : 'end'}
+        sideOffset={4}
+        onPointerDownCapture={() => {
+          menuInteractionFromPointerRef.current = true;
+        }}
+        onPointerDownOutside={() => {
+          menuInteractionFromPointerRef.current = true;
+        }}
+        onKeyDownCapture={() => {
+          menuInteractionFromPointerRef.current = false;
+        }}
+        onCloseAutoFocus={(event) => {
+          if (menuInteractionFromPointerRef.current) event.preventDefault();
+        }}
+        className={cn(
+          'min-w-[184px] rounded-xl border border-[var(--cmd-palette-border)]',
+          'bg-[var(--cmd-palette-bg)] p-1 text-[var(--cmd-palette-item-text)] shadow-none',
+        )}
+      >
+        {onFork && (
+          <DropdownMenuItem
+            disabled={forking}
+            onSelect={(event) => {
+              event.stopPropagation();
+              void handleFork();
+            }}
+            className="h-8 cursor-pointer select-none rounded-lg px-2 text-sm focus:bg-[var(--cmd-palette-item-hover)]"
+          >
+            <Split size={14} strokeWidth={2} className="mr-2 shrink-0" />
+            {t('chat.messageActionBar.fork')}
+          </DropdownMenuItem>
+        )}
+        {onAddToChat && (
+          <DropdownMenuItem
+            onSelect={(event) => {
+              event.stopPropagation();
+              onAddToChat();
+            }}
+            className="h-8 cursor-pointer select-none rounded-lg px-2 text-sm focus:bg-[var(--cmd-palette-item-hover)]"
+          >
+            <MessageSquarePlus size={14} strokeWidth={2} className="mr-2 shrink-0" />
+            {t('chat.quote.addToChat')}
+          </DropdownMenuItem>
+        )}
+        {copyLinkText && (
+          <DropdownMenuItem
+            onSelect={(event) => {
+              event.stopPropagation();
+              void handleCopyLink();
+            }}
+            className="h-8 cursor-pointer select-none rounded-lg px-2 text-sm focus:bg-[var(--cmd-palette-item-hover)]"
+          >
+            <Link2 size={14} strokeWidth={2} className="mr-2 shrink-0" />
+            {t('chat.messageActionBar.copyLink')}
+          </DropdownMenuItem>
+        )}
+        {canRewind && (
+          <DropdownMenuItem
+            disabled={rewindInFlight}
+            onSelect={(event) => {
+              event.stopPropagation();
+              if (!rewindInFlight) onRewind?.();
+            }}
+            className="h-8 cursor-pointer select-none rounded-lg px-2 text-sm focus:bg-[var(--cmd-palette-item-hover)]"
+          >
+            <Undo2 size={14} strokeWidth={2} className="mr-2 shrink-0" />
+            {t('chat.messageActionBar.rewind')}
+          </DropdownMenuItem>
+        )}
+        {onDelete && (
+          <>
+            {(onFork || onAddToChat || copyLinkText || canRewind) && (
+              <DropdownMenuSeparator className="my-1 h-px bg-[var(--cmd-palette-border)]" />
+            )}
+            <DropdownMenuItem
+              disabled={deleting}
+              onSelect={(event) => {
+                event.stopPropagation();
+                void handleDelete();
+              }}
               className={cn(
-                'text-[var(--cmd-palette-item-meta)]',
-                'group-hover:text-[var(--msg-assistant-text)]',
-                'transition-colors duration-150',
+                'h-8 cursor-pointer select-none rounded-lg px-2 text-sm',
+                'text-[hsl(var(--destructive))] focus:bg-[var(--cmd-palette-item-hover)]',
               )}
-            />
-          )}
-        </button>
-      </Tooltip.Trigger>
-      <Tooltip.Content>{t('chat.messageActionBar.fork')}</Tooltip.Content>
-    </Tooltip.Root>
+            >
+              <Trash2 size={14} strokeWidth={2} className="mr-2 shrink-0" />
+              {t('chat.messageActionBar.delete')}
+            </DropdownMenuItem>
+          </>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 
-  // align='left'  → [copy][fork][time][cost]        (assistant — codex 同款顺序)
-  // align='right' → [time][copy][edit][undo][fork]  (edit before rewind — 最常用的放前面)
+  // align='left'  → [copy][more][time][cost]        (assistant)
+  // align='right' → [time][copy][edit][more]        (user)
   const items =
     align === 'left'
-      ? [copyBtn, forkBtn, timeText, costText]
-      : [timeText, copyBtn, editBtn, rewindBtn, forkBtn];
+      ? [copyBtn, moreMenu, timeText, costText]
+      : [timeText, copyBtn, editBtn, moreMenu];
 
   return (
     <div
@@ -461,13 +542,8 @@ export function MessageActionBar({
         // Hover re-enters mid-fade interpolate from the current opacity
         // (browser CSS transition behavior — no replay from 0).
         'transition-opacity duration-[250ms] ease-out',
-        visible ? 'opacity-100' : 'opacity-0 pointer-events-none',
-        // Fork in-flight: dim entire bar + block clicks (per design notes
-        // in message-actions.pen — bar opacity 0.6 + pointer-events:none
-        // until the operation resolves).
-        // Fork in-flight OR rewind in-flight: dim entire bar + block clicks
-        // (per design notes in message-actions.pen — bar opacity 0.6 +
-        // pointer-events:none until the operation resolves).
+        visible || menuOpen ? 'opacity-100' : 'opacity-0 pointer-events-none',
+        // Fork / delete / rewind in-flight: dim the entire bar and block clicks.
         inFlight && 'opacity-60 pointer-events-none',
       )}
     >

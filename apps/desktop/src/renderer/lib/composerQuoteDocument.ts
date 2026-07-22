@@ -8,11 +8,8 @@
  * draft store deterministic and directly testable.
  */
 import type { JSONContent } from '@tiptap/core';
-import {
-  parseChatQuoteSegments,
-  type ChatQuote,
-  type ChatQuoteSegment,
-} from '@/lib/chatQuotes';
+import { parseChatQuoteSegments, type ChatQuote, type ChatQuoteSegment } from '@/lib/chatQuotes';
+import type { PastedTextRange, SlashCommandRange } from '@/lib/imageRef';
 
 export const COMPOSER_QUOTE_NODE_TYPE = 'composerQuote';
 
@@ -26,6 +23,10 @@ export interface ComposerQuoteAttrs {
 export interface ComposerSerializedBlock {
   kind: 'text' | 'quote';
   text: string;
+  /** Ranges are relative to this block's text. */
+  pastedTextRanges?: PastedTextRange[];
+  /** Ranges are relative to this block's text. */
+  slashCommandRanges?: SlashCommandRange[];
 }
 
 export interface ComposerHistoryEntry {
@@ -158,10 +159,9 @@ export function quoteSegmentsToComposerDocument(
       // parseChatQuoteSegments 用纯换行 text island 表达「两个 quote 块之间
       // 超出 Markdown 结构分隔的真实空行」。用 hardBreak 留在同一段内，
       // 避免 split 产生尾部空 paragraph，并让再次序列化能精确恢复数量。
-      inlineContent.push(...Array.from(
-        { length: segment.text.length },
-        () => ({ type: 'hardBreak' }),
-      ));
+      inlineContent.push(
+        ...Array.from({ length: segment.text.length }, () => ({ type: 'hardBreak' })),
+      );
       continue;
     }
     const lines = segment.text.split('\n');
@@ -178,9 +178,7 @@ export function quoteSegmentsToComposerDocument(
 /** Restore an ↑/↓ history row without exposing private quote marker text. */
 export function composerHistoryEntryToDocument(entry: ComposerHistoryEntry): JSONContent {
   if (entry.quotesEncoded === true) {
-    const quotedDocument = quoteSegmentsToComposerDocument(
-      parseChatQuoteSegments(entry.content),
-    );
+    const quotedDocument = quoteSegmentsToComposerDocument(parseChatQuoteSegments(entry.content));
     if (quotedDocument) return quotedDocument;
   }
   return {
@@ -194,20 +192,32 @@ export function composerHistoryEntryToDocument(entry: ComposerHistoryEntry): JSO
  * 空行；两个 quote 之间的纯换行 text island 已经表示额外回车，只需共享
  * 一份结构分隔，不能在它两侧各补一次导致空行膨胀。
  */
-export function serializeComposerContentBlocks(
+export function serializeComposerContentBlocks(blocks: readonly ComposerSerializedBlock[]): string {
+  return serializeComposerContentBlocksWithRanges(blocks).text;
+}
+
+/** Serialize blocks and project block-relative presentation ranges into wire offsets. */
+export function serializeComposerContentBlocksWithRanges(
   blocks: readonly ComposerSerializedBlock[],
-): string {
+): {
+  text: string;
+  pastedTextRanges: PastedTextRange[];
+  slashCommandRanges: SlashCommandRange[];
+} {
   let serialized = '';
+  const pastedTextRanges: PastedTextRange[] = [];
+  const slashCommandRanges: SlashCommandRange[] = [];
   let previousKind: ComposerSerializedBlock['kind'] | null = null;
   let suppressNextSeparator = false;
 
   blocks.forEach((block, index) => {
     const previous = blocks[index - 1];
     const next = blocks[index + 1];
-    const pureLineBreakIsland = block.kind === 'text'
-      && isPureLineBreakText(block.text)
-      && previous?.kind === 'quote'
-      && next?.kind === 'quote';
+    const pureLineBreakIsland =
+      block.kind === 'text' &&
+      isPureLineBreakText(block.text) &&
+      previous?.kind === 'quote' &&
+      next?.kind === 'quote';
     if (pureLineBreakIsland) {
       serialized += `\n\n${block.text}`;
       suppressNextSeparator = true;
@@ -215,15 +225,48 @@ export function serializeComposerContentBlocks(
       return;
     }
 
-    const separator = previousKind === null || suppressNextSeparator
-      ? ''
-      : previousKind === 'quote' || block.kind === 'quote'
-        ? '\n\n'
-        : '\n';
-    serialized += `${separator}${block.text}`;
+    const separator =
+      previousKind === null || suppressNextSeparator
+        ? ''
+        : previousKind === 'quote' || block.kind === 'quote'
+          ? '\n\n'
+          : '\n';
+    serialized += separator;
+    const blockStart = serialized.length;
+    serialized += block.text;
+    for (const range of block.pastedTextRanges ?? []) {
+      pastedTextRanges.push({
+        start: blockStart + range.start,
+        end: blockStart + range.end,
+        display: range.display,
+      });
+    }
+    for (const range of block.slashCommandRanges ?? []) {
+      slashCommandRanges.push({
+        start: blockStart + range.start,
+        end: blockStart + range.end,
+      });
+    }
     suppressNextSeparator = false;
     previousKind = block.kind;
   });
 
-  return serialized.trim();
+  const leadingTrim = serialized.length - serialized.trimStart().length;
+  const text = serialized.trim();
+  return {
+    text,
+    pastedTextRanges: pastedTextRanges
+      .map((range) => ({
+        ...range,
+        start: range.start - leadingTrim,
+        end: range.end - leadingTrim,
+      }))
+      .filter((range) => range.start >= 0 && range.end <= text.length),
+    slashCommandRanges: slashCommandRanges
+      .map((range) => ({
+        start: range.start - leadingTrim,
+        end: range.end - leadingTrim,
+      }))
+      .filter((range) => range.start >= 0 && range.end <= text.length),
+  };
 }

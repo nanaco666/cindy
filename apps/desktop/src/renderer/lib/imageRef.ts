@@ -52,6 +52,19 @@ export interface FileRef {
   sha256?: string;
 }
 
+/** Local-only presentation metadata for a long-paste atom in user text. */
+export interface PastedTextRange {
+  start: number;
+  end: number;
+  display: string;
+}
+
+/** Local-only presentation metadata for a slash command confirmed by the composer roster. */
+export interface SlashCommandRange {
+  start: number;
+  end: number;
+}
+
 export interface UserMessageContent {
   text: string;
   images: ImageRef[];
@@ -62,6 +75,14 @@ export interface UserMessageContent {
    * 用户手打的 markdown 引用不带该标志 → 原样渲染,存量呈现不变。
    */
   quotesEncoded?: boolean;
+  /** Long-paste ranges affect rendering only; `text` remains the Agent payload. */
+  pastedTextRanges?: PastedTextRange[];
+  /**
+   * Exact slash-command ranges confirmed by the composer roster. An empty array
+   * is meaningful: this is a new message with no confirmed slash commands, so
+   * the history renderer must not fall back to its legacy line-start heuristic.
+   */
+  slashCommandRanges?: SlashCommandRange[];
 }
 
 /**
@@ -129,11 +150,15 @@ export function parseUserContent(content: unknown): UserMessageContent {
       const images = rawImages.map(coerceImageRef).filter((ref): ref is ImageRef => ref !== null);
       const rawFiles = Array.isArray(obj.files) ? obj.files : [];
       const files = rawFiles.filter(isValidFileRef);
+      const pastedTextRanges = coercePastedTextRanges(obj.pastedTextRanges, obj.text);
+      const slashCommandRanges = coerceSlashCommandRanges(obj.slashCommandRanges, obj.text);
       return {
         text: obj.text,
         images,
         files,
         ...(obj.quotesEncoded === true ? { quotesEncoded: true } : {}),
+        ...(pastedTextRanges.length > 0 ? { pastedTextRanges } : {}),
+        ...(slashCommandRanges !== null ? { slashCommandRanges } : {}),
       };
     }
     // Truly unknown object shape — preserve old defensive stringify behaviour.
@@ -235,6 +260,47 @@ function isValidFileRef(x: unknown): x is FileRef {
   );
 }
 
+function coercePastedTextRanges(value: unknown, text: string): PastedTextRange[] {
+  if (!Array.isArray(value)) return [];
+  const ranges: PastedTextRange[] = [];
+  let previousEnd = 0;
+  for (const candidate of value) {
+    if (!candidate || typeof candidate !== 'object') return [];
+    const range = candidate as Record<string, unknown>;
+    if (
+      !Number.isInteger(range.start) ||
+      !Number.isInteger(range.end) ||
+      typeof range.display !== 'string'
+    ) {
+      return [];
+    }
+    const start = range.start as number;
+    const end = range.end as number;
+    if (start < previousEnd || start < 0 || end <= start || end > text.length) return [];
+    ranges.push({ start, end, display: range.display });
+    previousEnd = end;
+  }
+  return ranges;
+}
+
+function coerceSlashCommandRanges(value: unknown, text: string): SlashCommandRange[] | null {
+  if (!Array.isArray(value)) return null;
+  const ranges: SlashCommandRange[] = [];
+  let previousEnd = 0;
+  for (const candidate of value) {
+    if (!candidate || typeof candidate !== 'object') return null;
+    const range = candidate as Record<string, unknown>;
+    if (!Number.isInteger(range.start) || !Number.isInteger(range.end)) return null;
+    const start = range.start as number;
+    const end = range.end as number;
+    if (start < previousEnd || start < 0 || end <= start || end > text.length) return null;
+    if (!/^\/\S+$/.test(text.slice(start, end))) return null;
+    ranges.push({ start, end });
+    previousEnd = end;
+  }
+  return ranges;
+}
+
 /**
  * Serialize a user message into the new content shape. Always emits the JSON
  * form (even for empty `images` / `files`) so future readers see a uniform schema.
@@ -248,7 +314,17 @@ export function stringifyUserContent(
   images: ImageRef[],
   files: FileRef[] = [],
   quotesEncoded = false,
+  pastedTextRanges: PastedTextRange[] = [],
+  slashCommandRanges?: SlashCommandRange[],
 ): string {
-  // quotesEncoded 只在为真时写入,保持旧消息 JSON 形态逐字节稳定。
-  return JSON.stringify({ text, images, files, ...(quotesEncoded ? { quotesEncoded: true } : {}) });
+  // Long-paste metadata is omitted when empty. Slash metadata keeps an explicit
+  // empty array so new messages never fall back to the historical line-start guess.
+  return JSON.stringify({
+    text,
+    images,
+    files,
+    ...(quotesEncoded ? { quotesEncoded: true } : {}),
+    ...(pastedTextRanges.length > 0 ? { pastedTextRanges } : {}),
+    ...(slashCommandRanges !== undefined ? { slashCommandRanges } : {}),
+  });
 }

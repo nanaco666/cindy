@@ -75,8 +75,11 @@ import {
 import { ensureDialogueWorkspaceDir, dialogueWorkspaceRootDir } from '../localDb/dialogueWorkspace.js';
 import { healMissingDialogueWorkdir } from '../localDb/dialogueWorkdirSelfHeal.js';
 import {
+  broadcastMessageDeleted,
+  commitSingleMessageDeletion,
   createMessage as createDbMessage,
   findParkedEngineSession,
+  getDeletableMessage,
   listMessagesForAgentHandoff,
 } from '../localDb/ipc/messages.js';
 import { visibleMessageTextForConversationSearch } from '../localDb/conversationSearch.pure.js';
@@ -262,6 +265,7 @@ import {
   readOrcaWorkerOutputReadOnly,
 } from './orcaDiagnostics.js';
 import { createMakerSendTransaction } from './makerSendTransaction.js';
+import { registerMakerMessageDeleteHandler } from './messageDeleteHandler.js';
 import { normalizeUserMessage, materializeQueuedOssAttachments } from './normalizeAttachments.js';
 import { AGENT_ISLAND_DISPLAY_CONFIG } from '../agent-island/displayConfig.js';
 import {
@@ -3935,6 +3939,31 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
     log,
   };
   registerMakerSessionAgentSwitchHandler(makerSessionRegistry, agentSwitchDeps);
+  registerMakerMessageDeleteHandler(makerSessionRegistry, {
+    getSessionRow: async (sessionId) => {
+      const [row] = await getDbClient().drizzle
+        .select({ status: sessions.status, agentKind: sessions.agentKind })
+        .from(sessions)
+        .where(eq(sessions.id, sessionId))
+        .limit(1);
+      return row ?? null;
+    },
+    getMessage: getDeletableMessage,
+    listMessagesForContext: (sessionId) => listMessagesForAgentHandoff(sessionId, 400),
+    getLiveSession: (sessionId) => maker.getSession(sessionId),
+    closeSession: (sessionId) => maker.closeSession(sessionId),
+    commitDeletion: commitSingleMessageDeletion,
+    setPendingHandoff: (sessionId, handoff) => agentHandoffPending.set(sessionId, handoff),
+    onCommitted: ({ sessionId, clientId, updatedAt }) => {
+      broadcastMessageDeleted({ sessionId, clientId });
+      broadcastSessionPatched(sessionId, {
+        sdkSessionId: null,
+        updatedAt: new Date(updatedAt).toISOString(),
+      });
+    },
+    withCloseSuppressed: withRehydrateCloseSuppressed,
+    log,
+  });
   pendingAgentSwitchApplyHolder = (sessionId, signal) =>
     applyPendingAgentSwitchIfIdle(agentSwitchDeps, sessionId, {
       bootstrapAfterSwitch: true,

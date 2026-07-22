@@ -4,9 +4,11 @@
  *
  * 粘贴文本的**分段**在 pastePipeline.ts(统一管线:长文本 / session /
  * project / path);本文件只负责 session 段落地后的部分:
- *   - markdown 形式自带标题 → chip 直接显示该标题(titled=true);
- *   - 裸 URL → 先显示短会话 ID 占位(titled=false),随后
- *     `resolveSessionChipTitles` 异步查到标题后原地 patch 节点 attrs
+ *   - 整段会话 markdown 形式自带标题 → chip 直接显示该标题(titled=true);
+ *   - 整段会话裸 URL → 先显示短会话 ID 占位(titled=false),随后
+ *     `resolveSessionChipTitles` 异步查到标题后原地 patch 节点 attrs;
+ *   - 消息锚点始终忽略会话标题/markdown label,异步读取目标消息正文,
+ *     发送时仍只序列化原始深链,不把正文复制进当前消息。
  *     (addToHistory:false,不污染撤销栈)——先占位再增量刷新,不产生
  *     空白帧 / 跳变(设计规范规则 7)。
  *
@@ -34,11 +36,20 @@ export function sanitizeSessionChipTitle(title: string): string {
 }
 
 /** 粘贴段 → session chip 的节点 attrs(带标题即 titled,否则短 ID 占位)。 */
-export function pastedSessionChipAttrs(
-  seg: { href: string; label: string | null },
-): MentionChipAttrs {
+export function pastedSessionChipAttrs(seg: {
+  href: string;
+  label: string | null;
+}): MentionChipAttrs {
   const target = parseSessionDeepLinkHref(seg.href);
   const sessionId = target?.sessionId ?? seg.href;
+  if (target?.messageClientId) {
+    return {
+      kind: 'session',
+      label: shortSessionId(target.messageClientId),
+      path: seg.href,
+      titled: false,
+    };
+  }
   const label = seg.label ? sanitizeSessionChipTitle(seg.label) : '';
   return label
     ? { kind: 'session', label, path: seg.href, titled: true }
@@ -47,7 +58,17 @@ export function pastedSessionChipAttrs(
 
 /** session chip → 发送文本:有标题 `[标题](href)`,无标题裸 href。 */
 export function serializeSessionChipText(attrs: MentionChipAttrs): string {
+  if (parseSessionDeepLinkHref(attrs.path)?.messageClientId) return attrs.path;
   return attrs.titled && attrs.label ? `[${attrs.label}](${attrs.path})` : attrs.path;
+}
+
+/** 默认消息正文解析:按会话来源路由到本机或 device-link 被控端。 */
+export async function resolvePastedSessionMessageText(
+  sessionId: string,
+  clientId: string,
+): Promise<string | null> {
+  const { resolveSessionMessageText } = await import('@/lib/sessionMessageText');
+  return resolveSessionMessageText(sessionId, clientId);
 }
 
 /**
@@ -67,9 +88,7 @@ export async function resolvePastedSessionTitle(sessionId: string): Promise<stri
     // 本地库没有(远程 / 未知会话)→ 走远程镜像降级
   }
   const { remoteProjectsStore } = await import('@/features/device-link/remoteProjectsStore');
-  const remote = remoteProjectsStore
-    .getMergedRemoteSessions()
-    .find((s) => s.id === sessionId);
+  const remote = remoteProjectsStore.getMergedRemoteSessions().find((s) => s.id === sessionId);
   return remote?.title?.trim() || null;
 }
 
@@ -85,28 +104,42 @@ export async function resolvePastedSessionTitle(sessionId: string): Promise<stri
 export function resolveSessionChipTitles(
   editor: Editor,
   resolveTitle: (sessionId: string) => Promise<string | null> = resolvePastedSessionTitle,
+  resolveMessageText: (
+    sessionId: string,
+    clientId: string,
+  ) => Promise<string | null> = resolvePastedSessionMessageText,
 ): void {
-  const pendingIds = new Set<string>();
+  const pendingTargets = new Map<
+    string,
+    NonNullable<ReturnType<typeof parseSessionDeepLinkHref>>
+  >();
   editor.state.doc.descendants((node) => {
     if (node.type.name !== 'mentionChip') return;
     const attrs = node.attrs as MentionChipAttrs;
     if (attrs.kind !== 'session' || attrs.titled) return;
     const target = parseSessionDeepLinkHref(attrs.path);
-    if (target) pendingIds.add(target.sessionId);
+    if (target) pendingTargets.set(attrs.path, target);
   });
-  for (const sessionId of pendingIds) {
-    void resolveTitle(sessionId)
-      .then((title) => {
-        const clean = title ? sanitizeSessionChipTitle(title) : '';
-        if (!clean || editor.isDestroyed) return;
+  for (const [path, target] of pendingTargets) {
+    const resolved = target.messageClientId
+      ? resolveMessageText(target.sessionId, target.messageClientId)
+      : resolveTitle(target.sessionId);
+    void resolved
+      .then((value) => {
+        const display = target.messageClientId
+          ? (value?.trim() ?? '')
+          : value
+            ? sanitizeSessionChipTitle(value)
+            : '';
+        if (!display || editor.isDestroyed) return;
         const tr = editor.state.tr;
         let changed = false;
         editor.state.doc.descendants((node, pos) => {
           if (node.type.name !== 'mentionChip') return;
           const attrs = node.attrs as MentionChipAttrs;
           if (attrs.kind !== 'session' || attrs.titled) return;
-          if (parseSessionDeepLinkHref(attrs.path)?.sessionId !== sessionId) return;
-          tr.setNodeMarkup(pos, undefined, { ...attrs, label: clean, titled: true });
+          if (attrs.path !== path) return;
+          tr.setNodeMarkup(pos, undefined, { ...attrs, label: display, titled: true });
           changed = true;
         });
         if (!changed) return;
