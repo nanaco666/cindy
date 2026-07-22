@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Outlet } from 'react-router-dom';
 
 import { useAuth } from '@/contexts/AuthContext';
+import { LocalDbFatalScreen } from '@/components/error/LocalDbFatalScreen';
 import { createLogger } from '@/lib/logger';
 
 const log = createLogger('LocalDbGate');
@@ -12,18 +13,19 @@ const log = createLogger('LocalDbGate');
  *
  * - 入口已经过 ProtectedRoute（已认证）；这里只判断"主功能区是否可进入"。
  * - 调 `localDb.ensureReady(userId)`——按 userId 切换 / 兜底恢复 / 跑 schema
- *   migration。成功后渲染主功能 Outlet；失败：main 已弹 OS 对话框，这里阻断
- *   渲染（返回 null）让用户停留在空白（后续可点重启）。
+ *   migration。成功后渲染主功能 Outlet；失败：渲染 LocalDbFatalScreen 全屏
+ *   恢复界面（MIGRATE_FAILED 时 main 不再弹 OS 对话框，恢复路径是安装已暂存
+ *   的应用更新；其余 code 原生对话框照旧，本界面兜底展示错误详情）。
  * - ensureReady 成功后向 main 发 appReadyForBot 信号（IM bot 连接安全上线的
  *   前置条件），fire-and-forget。
  */
 type GateDecision =
   | { phase: 'checking' }
   | { phase: 'ready' }
-  | { phase: 'fatal' };
+  | { phase: 'fatal'; code?: string; message?: string };
 
 /**
- * decision 失败的有限重试。fatal 会 `return null` 阻断整棵 UI 树(白屏),必须
+ * decision 失败的有限重试。fatal 会切到全屏恢复界面、阻断整棵主功能 UI 树,必须
  * 只留给确定性失败;而这里的失败常常是 transient —— 2026-07-15 实锤过一例:
  * 跨系统睡眠的 db worker RPC 假超时把 ensureReady 打挂,一次挫折直接白屏到手动
  * Cmd+R。重试 2 次(间隔 1s)可消化这类瞬时故障,真死的 DbClient 依然会在
@@ -64,7 +66,7 @@ export function LocalDbGate() {
       if (cancelled) return;
       if (!ready.ready) {
         log.error('ensureReady failed', ready.error);
-        setDecision({ phase: 'fatal' });
+        setDecision({ phase: 'fatal', code: ready.error.code, message: ready.error.message });
         return;
       }
 
@@ -93,7 +95,7 @@ export function LocalDbGate() {
          return;
        }
        log.error('local-db gate decision failed after retries', err);
-       setDecision({ phase: 'fatal' });
+       setDecision({ phase: 'fatal', message: err instanceof Error ? err.message : String(err) });
      }
     })();
 
@@ -111,8 +113,8 @@ export function LocalDbGate() {
   }
 
   if (decision.phase === 'fatal') {
-    // 弹错对话框由 main 负责；这里阻断渲染，避免用户进入半残状态
-    return null;
+    // 全屏恢复界面接管：阻断主功能区渲染，并给出「重启并安装更新」等恢复路径。
+    return <LocalDbFatalScreen code={decision.code} message={decision.message} />;
   }
 
   return <Outlet />;
