@@ -248,6 +248,11 @@ describe('OrcaWorkerCreationService', () => {
     ).resolves.toMatchObject({
       ok: false,
       errorCode: 'WORKER_LIMIT_HARD_EXCEEDED',
+      limit: {
+        workerHardLimit: 4,
+        occupiedSlots: 4,
+        remainingSlots: 0,
+      },
     });
 
     expect(deps.getAvailableModels).not.toHaveBeenCalled();
@@ -257,6 +262,36 @@ describe('OrcaWorkerCreationService', () => {
     expect(deps.bootstrapSession).not.toHaveBeenCalled();
     expect(deps.addOrUpdateWorker).not.toHaveBeenCalled();
     expect(deps.dispatchWorkerTask).not.toHaveBeenCalled();
+  });
+
+  it('returns a hard-limit snapshot when the atomic reservation loses a concurrent slot race', async () => {
+    const { deps, service } = createDeps({
+      readCollaborationSettings: vi.fn(() => ({ workerSoftLimit: 2, workerHardLimit: 3 })),
+      reserveWorkerCreation: vi.fn(async () => ({
+        ok: false as const,
+        errorCode: 'WORKER_LIMIT_HARD_EXCEEDED' as const,
+      })),
+    });
+
+    await expect(
+      service.createWorker({
+        leadSessionId: 'lead-1',
+        role: 'reviewer',
+        agent: 'codex',
+        label: 'reviewer',
+      }),
+    ).resolves.toMatchObject({
+      ok: false,
+      errorCode: 'WORKER_LIMIT_HARD_EXCEEDED',
+      limit: {
+        workerHardLimit: 3,
+        occupiedSlots: 3,
+        remainingSlots: 0,
+      },
+    });
+
+    expect(deps.bootstrapSession).not.toHaveBeenCalled();
+    expect(deps.addOrUpdateWorker).not.toHaveBeenCalled();
   });
 
   it('rejects unavailable explicit models before reading lead defaults', async () => {
@@ -626,6 +661,11 @@ describe('OrcaWorkerCreationService', () => {
       workerId: 'worker-1',
       workerSessionId: WORKER_SESSION_ID,
       softLimitExceeded: false,
+      limit: {
+        workerHardLimit: 5,
+        occupiedSlots: 1,
+        remainingSlots: 4,
+      },
     });
 
     expect(deps.createSessionId).toHaveBeenCalledTimes(1);

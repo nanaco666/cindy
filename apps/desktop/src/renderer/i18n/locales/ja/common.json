@@ -25,6 +25,23 @@
     "backHome": "ホームに戻る",
     "details": "エラー詳細"
   },
+  "localDbFatal": {
+    "updateReady": {
+      "title": "続行にはアップデートが必要です",
+      "description": "ローカルデータは新しいバージョンの Cindy によって更新されているため、現在のバージョンでは開けません。新しいバージョンのダウンロードは完了しています。再起動してインストールすると復旧します。",
+      "confirm": "再起動してアップデート"
+    },
+    "preparing": {
+      "description": "ローカルデータは新しいバージョンの Cindy によって更新されているため、現在のバージョンでは開けません。新しいバージョンを取得しています。しばらくお待ちください…",
+      "progress": "ダウンロード済み {{progress}}%"
+    },
+    "noUpdate": {
+      "title": "ローカルデータを開けません",
+      "description": "ローカルデータがこのバージョンのアプリと一致しません（新しいバージョンで更新された可能性があります）。アップデートを再確認してください。解決しない場合は開発チームにお問い合わせください。",
+      "checkUpdate": "アップデートを確認"
+    },
+    "details": "技術的な詳細"
+  },
   "agentIsland": {
     "native": {
       "newConversationTitle": "新しい会話",
@@ -1285,11 +1302,18 @@
         "reconnect": "Feishu ボットを再接続",
         "clear": "連携解除"
       },
+      "saved": {
+        "heading": "Feishu ボットは連携済み",
+        "connectingNote": "ボットの認証情報は保存されています。接続しています。",
+        "reconnectingNote": "ボットの認証情報は保存されています。接続を復旧しています。",
+        "conflictNote": "ボットの認証情報は保存されていますが、この App ID は別のデバイスで使用中です。",
+        "errorNote": "ボットの認証情報は保存されていますが、接続に失敗しました。再接続してもう一度お試しください。",
+        "idleNote": "ボットの認証情報は保存されていますが、現在接続されていません。再接続してください。"
+      },
       "appIdLabel": "App ID",
       "appIdPlaceholder": "cli_xxxxxxxxxxxxxxxx",
       "appSecretLabel": "App Secret",
       "appSecretPlaceholder": "sec_xxxxxxxxxxxxxxxxxx",
-      "appSecretSavedPlaceholder": "••••••••••••••••••••••••",
       "showSecret": "シークレットを表示",
       "hideSecret": "シークレットを非表示",
       "createLink": "クリックして作成 ↗",
@@ -3402,9 +3426,14 @@
     "modelSelector": {
       "budgetNeedsApiKey": "割引版 GPT は設定で API key を構成してから使用できます",
       "effortLabel": "推論強度",
-      "edit": "Edit",
+      "edit": "編集",
       "options": "オプション",
       "priceTip": "入力 {{input}} · 出力 {{output}} / 100万トークン",
+      "trigger": {
+        "placeholder": "モデルを選択",
+        "aria": "モデルを選択。現在：{{model}}",
+        "ariaWithEffort": "モデルを選択。現在：{{model}}、推論レベル：{{effort}}"
+      },
       "category": {
         "anthropic": "Anthropic",
         "gpt": "OpenAI",
@@ -3426,7 +3455,8 @@
       "meta": {
         "context": "コンテキスト {{value}}",
         "price": "{{input}}/{{output}} / 100万",
-        "fastBadge": "高速"
+        "fastBadge": "高速",
+        "budgetDiscount": "85%オフ"
       },
       "source": {
         "railLabel": "ソース",
@@ -5071,6 +5101,8 @@
       "statusAria": "ステータス: {{status}}",
       "took": "所要時間 {{duration}}",
       "openSession": "セッションを開く",
+      "sessionDeleted": "セッションは削除されました",
+      "sessionUnavailable": "セッションの状態を確認できません。しばらくしてから再試行してください。",
       "markReadTitle": "クリックして既読にする",
       "sessionCost": "セッションコスト {{cost}}",
       "sessionValue": "セッション価値 {{value}}",
@@ -5183,6 +5215,8 @@
           "open": "セッションを開く",
           "unbind": "連携を解除",
           "persistentNote": "セッションがアーカイブされると自動的に再作成して連携を継続します",
+          "deleted": "連携先セッションは削除されました",
+          "deletedPersistentNote": "次回の実行時に新しいセッションを作成して再連携します",
           "fallbackTitle": "セッション {{id}}"
         },
         "switchModelHint": "次回の実行時に、連携先セッションがこのモデルに切り替わります"
@@ -5192,6 +5226,8 @@
         "loading": "セッションを読み込み中…",
         "loadFailed": "読み込みに失敗しました: {{error}}",
         "empty": "利用可能なアクティブセッションがありません",
+        "deletedBinding": "連携先セッションは削除されました。別のセッションを選択してください",
+        "archivedBinding": "連携先セッションはアーカイブされています。復元してから保存するか、別のセッションを選択してください",
         "selectPlaceholder": "— セッションを選択 —"
       },
       "preRunHook": {
@@ -5214,6 +5250,26 @@
         "aiGenerate": "スクリプトを生成",
         "aiGenerating": "生成中…",
         "aiDone": "スクリプトを {{path}} に書き込みました。「テスト」で確認することをおすすめします",
+        "aiFailure": {
+          "no_candidate": "現在利用できる軽量モデルがありません。OpenAI または Cindy AI に接続してから、もう一度お試しください。",
+          "all_candidates_failed": "すべての軽量モデルへのリクエストが失敗しました。プロバイダー接続を確認してください。",
+          "empty_response": "軽量モデルから利用可能な内容が返されませんでした。再試行するか、プロバイダー接続を確認してください。",
+          "timeout": "軽量モデルへのリクエストがタイムアウトしました。接続を確認して再試行してください。",
+          "checkedCandidates": "確認した候補：",
+          "openProviders": "モデルプロバイダーを開く",
+          "attemptReason": {
+            "unsupportedTransport": "この操作では未対応",
+            "agentUnavailable": "Codex を利用できません",
+            "notAuthenticated": "OpenAI へのログインが必要です",
+            "authProbeFailed": "OpenAI のログイン状態を確認できません",
+            "apiKeyMissing": "Cindy AI Key を利用できません",
+            "endpointMissing": "Cindy AI エンドポイントを利用できません",
+            "timeout": "リクエストがタイムアウトしました",
+            "emptyResponse": "応答が空です",
+            "httpError": "HTTP {{status}}",
+            "requestFailed": "リクエストに失敗しました"
+          }
+        },
         "browse": "スクリプトファイルを選択（入力欄へのドラッグ＆ドロップも可）"
       },
       "validation": {

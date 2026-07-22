@@ -7,7 +7,6 @@
  */
 
 import { convertAgentsMd } from './converters/agents-md.js';
-import { convertSkills } from './converters/skills.js';
 import { convertMcp } from './converters/mcp.js';
 import { convertAgents } from './converters/agents.js';
 import { convertHooks } from './converters/hooks.js';
@@ -59,8 +58,6 @@ async function dispatch(item: MigrationItem): Promise<{ status: MigrationStepSta
   switch (item.kind) {
     case 'agents-md':
       return convertAgentsMd(item);
-    case 'skills':
-      return convertSkills(item);
     case 'agents':
       return convertAgents(item);
     case 'hooks':

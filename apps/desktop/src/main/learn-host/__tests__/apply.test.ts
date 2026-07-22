@@ -25,6 +25,7 @@ vi.mock('../../skillhub/installService', () => ({
 }));
 vi.mock('../../maker-host/shared-global-skills.js', () => ({
   prepareSharedGlobalSkillLinks: vi.fn(async () => ({ warnings: [] })),
+  prepareSharedProjectSkillLinks: vi.fn(async () => ({ warnings: [] })),
 }));
 
 import { applyProposal } from '../apply';

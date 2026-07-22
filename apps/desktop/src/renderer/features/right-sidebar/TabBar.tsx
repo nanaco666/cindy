@@ -36,6 +36,8 @@ import {
 import type { LucideIcon } from 'lucide-react';
 import type { TFunction } from 'i18next';
 import { useTranslation } from 'react-i18next';
+import { SortableList } from '@/components/sidebar/SortableList';
+import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { cn } from '@/lib/utils';
 import {
   DropdownMenu,
@@ -53,6 +55,7 @@ interface TabBarProps {
   sessionId?: string | null;
   onActivate: (id: string) => void;
   onClose: (id: string) => void;
+  onReorder: (orderedIds: string[]) => void;
   onAdd: (kind: TabKindId) => void;
   /**
    * 是否在 TabBar 右端渲染 maximize + 折叠按钮。
@@ -88,6 +91,7 @@ interface TabStripProps {
   sessionId?: string | null;
   onActivate: (id: string) => void;
   onClose: (id: string) => void;
+  onReorder: (orderedIds: string[]) => void;
   onAdd: (kind: TabKindId) => void;
   onCloseOthers?: (keepTabId: string) => void;
   onCloseAll?: () => void;
@@ -172,6 +176,7 @@ export function TabBar({
   sessionId,
   onActivate,
   onClose,
+  onReorder,
   onAdd,
   showWindowControls,
   onMaximize,
@@ -199,6 +204,7 @@ export function TabBar({
         sessionId={sessionId}
         onActivate={onActivate}
         onClose={onClose}
+        onReorder={onReorder}
         onAdd={onAdd}
         onCloseOthers={onCloseOthers}
         onCloseAll={onCloseAll}
@@ -255,6 +261,7 @@ export function TabStrip({
   sessionId = null,
   onActivate,
   onClose,
+  onReorder,
   onAdd,
   onCloseOthers,
   onCloseAll,
@@ -264,6 +271,7 @@ export function TabStrip({
   addButtonClassName,
 }: TabStripProps) {
   const { t } = useTranslation();
+  const reducedMotion = useReducedMotion();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const tabsScrollRef = useRef<HTMLDivElement | null>(null);
   const existingKinds = useMemo(() => new Set<TabKindId>(tabs.map((t) => t.kind)), [tabs]);
@@ -339,10 +347,7 @@ export function TabStrip({
               chrome 风格),chip 用 items-center(与宿主栏其它控件同一中线)。 */}
       <div
         ref={tabsScrollRef}
-        className={cn(
-          'flex min-w-0 gap-1 overflow-x-auto scrollbar-hide',
-          pillVariant === 'chip' ? 'items-center' : 'items-end',
-        )}
+        className="min-w-0 overflow-x-auto scrollbar-hide"
         style={
           {
             WebkitAppRegion: 'no-drag',
@@ -355,26 +360,36 @@ export function TabStrip({
           } as React.CSSProperties
         }
       >
-        {tabs.map((tab) => (
-          <TabPill
-            key={tab.id}
-            tab={tab}
-            active={tab.id === activeTabId}
-            pillVariant={pillVariant}
-            sessionId={sessionId}
-            fallbackLabel={t(labelKeyForTabKind(tab.kind))}
-            t={t}
-            onActivate={() => onActivate(tab.id)}
-            onClose={() => onClose(tab.id)}
-            onContextMenu={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              setContextMenu({ pos: { x: e.clientX, y: e.clientY }, tabId: tab.id });
-            }}
-            scrollContainerRef={tabsScrollRef}
-            closeAriaLabel={t('rightSidebar.tabs.tabCloseAria')}
-          />
-        ))}
+        <SortableList
+          items={tabs}
+          getId={(tab) => tab.id}
+          onReorder={onReorder}
+          reducedMotion={reducedMotion}
+          // 整个 tab 标题区都可拖,靠 fallbackTolerance 区分普通 click 与拖动;
+          // 只有关闭按钮显式 data-no-drag,避免用户想关 tab 时误起拖拽。
+          filter="input, textarea, select, a, [data-no-drag]"
+          className={cn('flex w-max gap-1', pillVariant === 'chip' ? 'items-center' : 'items-end')}
+          rowClassName="right-sidebar-tab-sortable-row shrink-0"
+          renderItem={(tab) => (
+            <TabPill
+              tab={tab}
+              active={tab.id === activeTabId}
+              pillVariant={pillVariant}
+              sessionId={sessionId}
+              fallbackLabel={t(labelKeyForTabKind(tab.kind))}
+              t={t}
+              onActivate={() => onActivate(tab.id)}
+              onClose={() => onClose(tab.id)}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setContextMenu({ pos: { x: e.clientX, y: e.clientY }, tabId: tab.id });
+              }}
+              scrollContainerRef={tabsScrollRef}
+              closeAriaLabel={t('rightSidebar.tabs.tabCloseAria')}
+            />
+          )}
+        />
       </div>
       {/* 「+」按钮 wrapper:scroll 容器外、shrink-0 永远可见。relative 给 dropdown
           absolute 定位用;dropdown 现在不被 mask / overflow 切。 */}
@@ -582,6 +597,7 @@ function TabPill({
       </button>
       <button
         type="button"
+        data-no-drag
         onClick={(e) => {
           e.stopPropagation();
           onClose();

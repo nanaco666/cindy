@@ -6,11 +6,13 @@ import { useTranslation } from 'react-i18next';
 
 import { cn } from '@/lib/utils';
 import { toast } from '@/lib/toast';
+import * as sessionService from '@/lib/sessionService';
 import { extractIpcError } from '@/utils/ipcError';
 import { Tip } from '@/components/ui/tooltip';
 import { useAgentCapabilities } from '@/hooks/useAgentCapabilities';
 import { useProviders } from '@/hooks/useProviders';
 import { sessionModelSupportsFastMode } from '@lizi/model-providers';
+import type { UtilityTextAttemptReason, UtilityTextFailure } from '../../../../shared/utilityTextResult';
 import { useFeishuBot } from '@/hooks/useFeishuBot';
 import { useProjectPickerOptions } from '@/hooks/useProjectPickerOptions';
 import type { Schedule, CreateScheduleInput, ScheduleTemplate, UpdateScheduleInput } from '@lizi/maker-scheduler';
@@ -25,8 +27,10 @@ import {
   deriveRunMode,
   hasRealBinding,
 } from '../hooks/useScheduleForm';
+import { useSessionReferences } from '../hooks/useSessionReferences';
 import {
   buildHookCommandForScriptFile,
+  canSubmitSessionBinding,
   isExplicitScheduleModelUnavailable,
   parsePreRunHookTimeoutMs,
 } from '../lib/scheduleFormLogic';
@@ -55,6 +59,20 @@ print(json.dumps({
     "type": "complete",
     "resultText": "done"
 }))`;
+
+/** i18n suffix for every credential-safe utility candidate diagnostic. */
+const UTILITY_ATTEMPT_REASON_KEY: Record<UtilityTextAttemptReason, string> = {
+  unsupported_transport: 'unsupportedTransport',
+  agent_unavailable: 'agentUnavailable',
+  not_authenticated: 'notAuthenticated',
+  auth_probe_failed: 'authProbeFailed',
+  api_key_missing: 'apiKeyMissing',
+  endpoint_missing: 'endpointMissing',
+  timeout: 'timeout',
+  empty_response: 'emptyResponse',
+  http_error: 'httpError',
+  request_failed: 'requestFailed',
+};
 
 /**
  * 前置检查相关 IPC 失败的 toast:先走 extractIpcError 剥掉 `[CODE]` 编码前缀
@@ -101,6 +119,14 @@ export function ScheduleFormDialog({
   // 此时目录 / worktree / fastMode 由绑定会话决定,表单隐藏对应字段。
   const runMode = deriveRunMode(form);
   const isBound = hasRealBinding(form);
+  const boundSessionIds = useMemo(
+    () => (isBound ? [form.targetSessionId] : []),
+    [isBound, form.targetSessionId],
+  );
+  const boundSessionReferences = useSessionReferences(boundSessionIds);
+  const boundSessionReference = isBound
+    ? boundSessionReferences.get(form.targetSessionId)
+    : undefined;
   const hideWorkspaceFields = runMode === 'bound' || isBound;
   const [submitting, setSubmitting] = useState(false);
   const [mode, setMode] = useState<'gallery' | 'form'>('form');
@@ -114,6 +140,7 @@ export function ScheduleFormDialog({
   const [hookGenDesc, setHookGenDesc] = useState('');
   const [hookGenerating, setHookGenerating] = useState(false);
   const [hookGenPath, setHookGenPath] = useState<string | null>(null);
+  const [hookGenFailure, setHookGenFailure] = useState<UtilityTextFailure | null>(null);
   // 命令输入框的拖拽悬停态(高亮提示可放置)。
   const [hookDragOver, setHookDragOver] = useState(false);
 
@@ -177,6 +204,7 @@ export function ScheduleFormDialog({
     setHookGenDesc('');
     setHookGenerating(false);
     setHookGenPath(null);
+    setHookGenFailure(null);
     const prefill = projectWorkingDir ?? initialWorkingDir;
     if (prefill) {
       setField('workspaceKind', 'project');
@@ -190,6 +218,7 @@ export function ScheduleFormDialog({
     if (!description || hookGenerating) return;
     setHookGenerating(true);
     setHookGenPath(null);
+    setHookGenFailure(null);
     try {
       const result = await window.electronAPI.maker.schedule.generatePreRunHook({
         description,
@@ -201,6 +230,10 @@ export function ScheduleFormDialog({
         targetSessionId: hasRealBinding(form) ? form.targetSessionId.trim() : undefined,
         currentCommand: form.preRunHookCommand.trim() || undefined,
       });
+      if (!result.ok) {
+        setHookGenFailure(result);
+        return;
+      }
       setField('preRunHookCommand', result.command);
       // 落盘即自测(installHookScript):直接回显自测结果,无需用户再点「测试」
       setHookTestResult(result.test);
@@ -287,6 +320,22 @@ export function ScheduleFormDialog({
 
   const feishuBotReady = useFeishuBot().status === 'connected';
   const navigate = useNavigate();
+  const openReferencedSession = useCallback(
+    async (sessionId: string) => {
+      try {
+        const [reference] = await sessionService.resolveReferences([sessionId]);
+        if (reference?.state !== 'available') {
+          toast.error(t('scheduler.runs.sessionDeleted'));
+          return;
+        }
+        onOpenChange(false);
+        navigate(`/cc-agent/${sessionId}`);
+      } catch {
+        toast.error(t('scheduler.runs.sessionUnavailable'));
+      }
+    },
+    [navigate, onOpenChange, t],
+  );
   const goConfigFeishuBot = () => {
     onOpenChange(false);
     // 飞书机器人在「IM 机器人」页的「个人」分栏,缺省 imGroup 会落到默认的 Cindy 栏
@@ -340,6 +389,16 @@ export function ScheduleFormDialog({
     const err = validate();
     if (err) {
       toast.warning(t(err.key, err.values));
+      return;
+    }
+    if (!canSubmitSessionBinding(form.executionMode ?? 'agent', runMode, boundSessionReference)) {
+      toast.warning(t(
+        boundSessionReference?.state === 'available' && boundSessionReference.status === 'archived'
+          ? 'scheduler.editor.thread.archivedBinding'
+          : boundSessionReference
+            ? 'scheduler.editor.thread.deletedBinding'
+            : 'scheduler.runs.sessionUnavailable',
+      ));
       return;
     }
     if (
@@ -829,10 +888,8 @@ export function ScheduleFormDialog({
               <ThreadPickerInline
                 value={form.targetSessionId}
                 onSelect={selectBoundSession}
-                onOpen={(id) => {
-                  onOpenChange(false);
-                  navigate(`/cc-agent/${id}`);
-                }}
+                onOpen={(id) => void openReferencedSession(id)}
+                reference={boundSessionReference}
               />
             )}
             {/* persistent 已绑(runner 回写):无选择器,用卡片展示绑定信息。
@@ -842,10 +899,8 @@ export function ScheduleFormDialog({
               <BoundSessionCard
                 sessionId={form.targetSessionId}
                 onUnbind={isProjectAutomationMode ? undefined : () => setRunMode('fresh')}
-                onOpen={() => {
-                  onOpenChange(false);
-                  navigate(`/cc-agent/${form.targetSessionId}`);
-                }}
+                onOpen={() => void openReferencedSession(form.targetSessionId)}
+                reference={boundSessionReference}
               />
             )}
             </div>
@@ -972,6 +1027,7 @@ export function ScheduleFormDialog({
                       onClick={() => {
                         setHookGenOpen((v) => !v);
                         setHookGenPath(null);
+                        setHookGenFailure(null);
                       }}
                       aria-expanded={hookGenOpen}
                       className={cn(
@@ -1018,12 +1074,60 @@ export function ScheduleFormDialog({
                           'text-[var(--settings-input-text)] placeholder-[var(--settings-input-placeholder)]',
                         )}
                       />
+                      {hookGenFailure && (
+                        <div
+                          role="alert"
+                          className="rounded-lg border border-[var(--error-border)] bg-[var(--error-bg)] px-3 py-2.5"
+                        >
+                          <p className="text-12 leading-[1.45] text-[var(--error-fg-strong)]">
+                            {t(`scheduler.editor.preRunHook.aiFailure.${hookGenFailure.reason}`)}
+                          </p>
+                          {hookGenFailure.attempts.length > 0 && (
+                            <div className="mt-2">
+                              <p className="text-11 text-[var(--error-fg)]">
+                                {t('scheduler.editor.preRunHook.aiFailure.checkedCandidates')}
+                              </p>
+                              <ul className="mt-1 space-y-0.5 text-11 leading-[1.4] text-[var(--error-fg)]">
+                                {hookGenFailure.attempts.map((attempt, index) => (
+                                  <li key={`${attempt.providerId}:${attempt.model}:${index}`}>
+                                    <span className="font-mono">
+                                      {attempt.providerId} · {attempt.model}
+                                    </span>
+                                    {' — '}
+                                    {t(
+                                      `scheduler.editor.preRunHook.aiFailure.attemptReason.${UTILITY_ATTEMPT_REASON_KEY[attempt.reason]}`,
+                                      attempt.reason === 'http_error'
+                                        ? { status: attempt.httpStatus ?? '?' }
+                                        : undefined,
+                                    )}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              onOpenChange(false);
+                              navigate('/settings?tab=providers');
+                            }}
+                            className={cn(
+                              'mt-2 inline-flex h-7 select-none items-center rounded-full border px-3 text-11 font-medium',
+                              'border-[var(--settings-btn-secondary-border)] bg-[var(--settings-btn-secondary-bg)]',
+                              'text-[var(--settings-btn-secondary-text)] transition-colors hover:bg-[var(--settings-btn-secondary-hover-bg)]',
+                            )}
+                          >
+                            {t('scheduler.editor.preRunHook.aiFailure.openProviders')}
+                          </button>
+                        </div>
+                      )}
                       <div className="flex items-center justify-end gap-2">
                         <button
                           type="button"
                           onClick={() => {
                             setHookGenOpen(false);
                             setHookGenDesc('');
+                            setHookGenFailure(null);
                           }}
                           disabled={hookGenerating}
                           className={cn(

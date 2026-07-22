@@ -27,6 +27,7 @@ import { useCCSessions } from '@/hooks/useCCSessions';
 import { clearSessionAttentionMany } from '@/lib/sessionAttentionStore';
 
 import { useRuns } from '../hooks/useRuns';
+import { useSessionReferences } from '../hooks/useSessionReferences';
 import { cronToConfig, summarizeConfig } from '../lib/cronCodexPreset';
 import { basenameOf, describeDestination, humanizeAgentKind } from '../lib/formatters';
 import { groupRunsForHistory } from '../lib/runHistoryGrouping';
@@ -78,6 +79,11 @@ export function RunHistoryPane({
   // session 已被删 / 桶未加载完 时 fallback 到 schedule 当前 agentKind。
   // Session.agentKind 是 'cc'|'codex'，scheduler 侧是 'claude-code'|'codex'，需要映射。
   const { sessions: allSessions } = useCCSessions({ includeArchived: 'all' });
+  const runSessionIds = useMemo(
+    () => runs.flatMap((run) => (run.sessionId ? [run.sessionId] : [])),
+    [runs],
+  );
+  const sessionReferences = useSessionReferences(runSessionIds);
   const sessionAgentMap = useMemo(() => {
     const m = new Map<string, AgentKind>();
     for (const sess of allSessions) {
@@ -86,9 +92,16 @@ export function RunHistoryPane({
     return m;
   }, [allSessions]);
   const resolveRunAgent = useCallback(
-    (run: ScheduleRun): AgentKind =>
-      (run.sessionId && sessionAgentMap.get(run.sessionId)) || s.agentKind,
-    [sessionAgentMap, s.agentKind],
+    (run: ScheduleRun): AgentKind => {
+      if (!run.sessionId) return s.agentKind;
+      const referenceAgent = sessionReferences.get(run.sessionId)?.agentKind;
+      return (
+        sessionAgentMap.get(run.sessionId) ||
+        (referenceAgent === 'cc' ? 'claude-code' : referenceAgent) ||
+        s.agentKind
+      );
+    },
+    [sessionAgentMap, sessionReferences, s.agentKind],
   );
   const displayEntries = useMemo(
     () => groupRunsForHistory(
@@ -321,6 +334,7 @@ export function RunHistoryPane({
                       <RunHistoryCard
                         run={r}
                         agentKind={resolveRunAgent(r)}
+                        sessionReference={r.sessionId ? sessionReferences.get(r.sessionId) : undefined}
                         onDelete={handleDeleteRun}
                         onRestart={handleRestartRun}
                       />
@@ -383,6 +397,7 @@ export function RunHistoryPane({
                               <RunHistoryCard
                                 run={r}
                                 agentKind={resolveRunAgent(r)}
+                                sessionReference={r.sessionId ? sessionReferences.get(r.sessionId) : undefined}
                                 onDelete={handleDeleteRun}
                                 onRestart={handleRestartRun}
                               />

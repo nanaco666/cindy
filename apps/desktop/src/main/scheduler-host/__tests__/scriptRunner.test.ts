@@ -848,15 +848,19 @@ describe('ScriptScheduleRunner', () => {
         }),
       }),
     };
+    const notifier = { notify: vi.fn(async () => undefined) };
+    const onSessionBound = vi.fn(async () => undefined);
     const runner = new ScriptScheduleRunner({
       broker: { call: vi.fn() },
       logger: {},
       getDb: () => fakeDb as never,
+      notifier,
     });
     const resultPromise = runner.fire(schedule(), {
       runId: 'run-1',
       firedAt: 1,
       signal: new AbortController().signal,
+      onSessionBound,
     });
 
     child.stdout.write(`${JSON.stringify({
@@ -868,6 +872,10 @@ describe('ScriptScheduleRunner', () => {
     child.emit('close', 0);
 
     await expect(resultPromise).resolves.toEqual({ sessionId: 'sess-real', resultText: 'done' });
+    expect(onSessionBound).toHaveBeenCalledWith('sess-real');
+    expect(onSessionBound.mock.invocationCallOrder[0]).toBeLessThan(
+      notifier.notify.mock.invocationCallOrder[0],
+    );
   });
 
   it('passes only a minimal non-secret environment to the script child', async () => {

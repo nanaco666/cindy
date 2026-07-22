@@ -26,6 +26,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import type { ProjectNode as ProjectNodeData } from '../lib/projectGrouping';
+import { getRemoteProjectMachineIdentity } from '../lib/remoteProjectIdentity';
 import type {
   FilterGroupBy,
   FilterLastActivity,
@@ -258,6 +259,7 @@ export function SidebarFilterPopover({
           <div className="max-h-[256px] overflow-y-auto">
             {allKnownProjects.map((project) => {
               const selected = projects === 'all' || (projectsAsSet?.has(project.projectKey) ?? false);
+              const remoteIdentity = getRemoteProjectMachineIdentity(project);
               return (
                 <DropdownMenuItem
                   key={project.projectKey}
@@ -268,7 +270,7 @@ export function SidebarFilterPopover({
                   className={MENU_ITEM_CLASS}
                 >
                   {project.scope === 'remote' ? (
-                    <Tip text={project.remoteHostId ?? ''}>
+                    <Tip text={remoteIdentity?.displayLabel ?? project.remoteHostId ?? ''}>
                       <Globe
                         size={14}
                         strokeWidth={2}
@@ -276,7 +278,14 @@ export function SidebarFilterPopover({
                       />
                     </Tip>
                   ) : null}
-                  <span className="min-w-0 flex-1 truncate">{project.displayName}</span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate">{project.displayName}</span>
+                    {remoteIdentity ? (
+                      <span className="block truncate text-xs text-[var(--cmd-palette-item-meta)]">
+                        {remoteIdentity.displayLabel}
+                      </span>
+                    ) : null}
+                  </span>
                   <span className="shrink-0 text-xs text-[var(--cmd-palette-item-meta)]">
                     {project.sessions.length}
                   </span>

@@ -1092,16 +1092,6 @@ export function NewMakerDraftRoute() {
               if (r.items.length > 0) {
                 // 阻塞等弹窗关闭（用户点不要 / 完成转换 / 失败）—— 都视为流程结束
                 await crossAgentDialog.runMigrationFlow(r.items);
-                // 草稿态 ChatInput mount 时已对 wd 预扫过一次 SkillsList,
-                // codex app-server 内部按 cwd 缓存的是迁移前的结果。这里强制
-                // 重扫一次,让新 session 进去 / 立刻能看到迁移后的 skills。
-                // claude-code 端不消费 forceReload(每次重扫),传了无副作用。
-                await window.electronAPI.maker
-                  .listAgentSkills(persistedAgentKind === 'codex' ? 'codex' : 'claude-code', {
-                    workingDir: wd,
-                    forceReload: true,
-                  })
-                  .catch(() => {});
               }
             }
           } catch (err) {

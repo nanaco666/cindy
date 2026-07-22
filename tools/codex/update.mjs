@@ -30,7 +30,7 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { fetchJsonWithTimeout, downloadToFileWithTimeout, createDownloadProgressLogger } from '../shared/fetch-with-timeout.mjs';
-import { verifyFileSha256OrRemove, sha256File } from '../shared/verify-sha256.mjs';
+import { normalizeExpectedSha256, verifyFileSha256OrRemove, sha256File } from '../shared/verify-sha256.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '../..');
@@ -96,9 +96,30 @@ function readCachedVersion() {
   }
 }
 
+function runtimeAssetPins(meta, version) {
+  return Object.fromEntries(PLATFORMS.map(({ key, asset: assetName }) => {
+    const asset = (meta.assets || []).find((candidate) => candidate.name === assetName);
+    const sha256 = normalizeExpectedSha256(asset?.digest);
+    if (!asset || typeof asset.browser_download_url !== 'string' || !sha256) {
+      throw new Error(`Cannot pin codex ${version} ${key}: release asset metadata is incomplete`);
+    }
+    return [key, {
+      url: asset.browser_download_url,
+      sha256,
+      ...(typeof asset.size === 'number' && asset.size > 0 ? { size: asset.size } : {}),
+    }];
+  }));
+}
+
 function saveCache(meta, version) {
   // 缓存结构对齐 claude 的 latest.json：保留 version 字段供下次 readCachedVersion 比对
-  const cache = { version, tag_name: meta.tag_name, name: meta.name, published_at: meta.published_at };
+  const cache = {
+    version,
+    tag_name: meta.tag_name,
+    name: meta.name,
+    published_at: meta.published_at,
+    runtimeAssets: runtimeAssetPins(meta, version),
+  };
   fs.writeFileSync(CACHE_FILE, JSON.stringify(cache, null, 2) + '\n');
 }
 

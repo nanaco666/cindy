@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { SessionStatusInfo } from '@/lib/makerChatStore';
 import {
+  markNextSessionTerminalNotificationOwnedByScheduler,
   markNextSessionDoneSilenced,
   resetSilencedSessionDoneStoreForTests,
   scheduleClearSilencedRun,
@@ -101,6 +102,60 @@ describe('useSessionRunningStatus silenced completion handling', () => {
 
     expect(onSessionDone).not.toHaveBeenCalled();
     expect(onSessionError).toHaveBeenCalledWith('session-err');
+  });
+
+  it('keeps done attention but suppresses a scheduler-owned completion callback', async () => {
+    vi.useFakeTimers();
+    const onSessionDone = vi.fn();
+    markNextSessionTerminalNotificationOwnedByScheduler('run-owned', 'session-owned');
+
+    renderHook(() => useSessionRunningStatus(undefined, { onSessionDone }));
+
+    await emitSnapshot(new Map([['session-owned', status(true)]]));
+    await emitSnapshot(new Map([['session-owned', status(false)]]));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(500);
+    });
+
+    expect(vi.mocked(addSessionAttention)).toHaveBeenCalledWith('session-owned', 'done');
+    expect(onSessionDone).not.toHaveBeenCalled();
+  });
+
+  it('does not suppress a later ordinary turn in the same scheduler-bound session', async () => {
+    vi.useFakeTimers();
+    const onSessionDone = vi.fn();
+    markNextSessionTerminalNotificationOwnedByScheduler('run-owned', 'session-reused');
+
+    renderHook(() => useSessionRunningStatus(undefined, { onSessionDone }));
+
+    await emitSnapshot(new Map([['session-reused', status(true)]]));
+    await emitSnapshot(new Map([['session-reused', status(false)]]));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(500);
+    });
+    expect(onSessionDone).not.toHaveBeenCalled();
+
+    await emitSnapshot(new Map([['session-reused', status(true)]]));
+    await emitSnapshot(new Map([['session-reused', status(false)]]));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(500);
+    });
+
+    expect(onSessionDone).toHaveBeenCalledOnce();
+    expect(onSessionDone).toHaveBeenCalledWith('session-reused');
+  });
+
+  it('keeps error attention but suppresses a scheduler-owned error callback', async () => {
+    const onSessionError = vi.fn();
+    markNextSessionTerminalNotificationOwnedByScheduler('run-owned-error', 'session-owned-error');
+
+    renderHook(() => useSessionRunningStatus(undefined, { onSessionError }));
+
+    await emitSnapshot(new Map([['session-owned-error', status(true)]]));
+    await emitSnapshot(new Map([['session-owned-error', status(false, true)]]));
+
+    expect(vi.mocked(addSessionAttention)).toHaveBeenCalledWith('session-owned-error', 'error');
+    expect(onSessionError).not.toHaveBeenCalled();
   });
 
   it('fires the error callback even when a silenced completion is pending for the session', async () => {

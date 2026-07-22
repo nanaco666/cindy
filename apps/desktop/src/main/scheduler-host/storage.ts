@@ -965,6 +965,13 @@ export class DrizzleScheduleStorage implements ScheduleStorage {
     db: SchedulerDrizzleDb,
     schedule: Schedule,
   ): Promise<Map<string, LegacyScheduleSessionAlias>> {
+    const [fallbackState] = await db
+      .select({ enabled: schedules.legacySessionFallback })
+      .from(schedules)
+      .where(eq(schedules.id, schedule.id))
+      .limit(1);
+    if (!fallbackState?.enabled) return new Map();
+
     const directScheduleIdByLegacyKey = await this.listDirectScheduleIdsByLegacyKey(db);
     const aliases = new Map<string, LegacyScheduleSessionAlias>();
     const addAlias = (alias: LegacyScheduleSessionAlias) => {
@@ -1009,6 +1016,7 @@ export class DrizzleScheduleStorage implements ScheduleStorage {
       .select({
         id: schedules.id,
         name: schedules.name,
+        legacySessionFallback: schedules.legacySessionFallback,
         status: schedules.status,
         source: schedules.source,
         nextFireAt: schedules.nextFireAt,
@@ -1027,6 +1035,10 @@ export class DrizzleScheduleStorage implements ScheduleStorage {
         workspaceKind: schedule.workspaceKind,
         workingDir: schedule.workingDir,
       });
+      // 只有 migration 显式标记的存量任务允许按名称/目录认领无 runId 的旧会话。
+      // 新任务（包括删除后同名重建）只认稳定 scheduleId，不能覆盖实例身份隔离。
+      if (!schedule.legacySessionFallback) continue;
+      if (directScheduleIdByLegacyKey.get(key) !== schedule.id) continue;
       if (scheduleByLegacyKey.has(key)) continue;
       scheduleByLegacyKey.set(key, {
         id: schedule.id,
@@ -1044,6 +1056,7 @@ export class DrizzleScheduleStorage implements ScheduleStorage {
       .select({
         id: schedules.id,
         name: schedules.name,
+        legacySessionFallback: schedules.legacySessionFallback,
         status: schedules.status,
         source: schedules.source,
         nextFireAt: schedules.nextFireAt,
@@ -1064,6 +1077,7 @@ export class DrizzleScheduleStorage implements ScheduleStorage {
 
     const linkedKeys = new Set<string>();
     for (const row of linkedLegacyRows) {
+      if (!row.legacySessionFallback) continue;
       const legacyName = legacyScheduleNameFromSessionTitle(row.sessionTitle);
       if (!legacyName) continue;
       const key = legacyScheduleKey({
@@ -1099,6 +1113,7 @@ export class DrizzleScheduleStorage implements ScheduleStorage {
       .select({
         id: schedules.id,
         name: schedules.name,
+        legacySessionFallback: schedules.legacySessionFallback,
         workspaceKind: schedules.workspaceKind,
         workingDir: schedules.workingDir,
         updatedAt: schedules.updatedAt,
@@ -1108,6 +1123,8 @@ export class DrizzleScheduleStorage implements ScheduleStorage {
 
     const directScheduleIdByLegacyKey = new Map<string, string>();
     for (const schedule of scheduleRows) {
+      // 非兼容的新任务不能抢走真正存量任务的 legacy key 所有权。
+      if (!schedule.legacySessionFallback) continue;
       const key = legacyScheduleKey({
         name: schedule.name,
         workspaceKind: schedule.workspaceKind,

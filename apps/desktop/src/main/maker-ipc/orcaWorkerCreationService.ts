@@ -54,6 +54,13 @@ export interface OrcaWorkerRecordInput {
   focused: boolean;
 }
 
+/** create_worker 返回给 MCP 编排层的数量闸快照。 */
+export interface OrcaWorkerLimitSnapshot {
+  workerHardLimit: number;
+  occupiedSlots: number;
+  remainingSlots: number;
+}
+
 /** create_worker 的稳定业务错误码，IPC 与 MCP adapter 各自翻译。 */
 export type OrcaWorkerCreationErrorCode =
   | 'INVALID_PARAMS'
@@ -78,6 +85,7 @@ export type OrcaWorkerCreationResult =
       dispatchOutcome?: DispatchWorkerTaskResult['dispatchOutcome'];
       /** initial_task 入队(未直发)时回传:排队消息的可寻址句柄,供 lead 查看/修改/撤回。 */
       queuedMessageId?: string;
+      limit?: OrcaWorkerLimitSnapshot;
       resolved: {
         agent: AgentKind;
         model: string;
@@ -91,6 +99,7 @@ export type OrcaWorkerCreationResult =
       ok: false;
       errorCode: OrcaWorkerCreationErrorCode;
       message: string;
+      limit?: OrcaWorkerLimitSnapshot;
     };
 
 /** 普通 create_worker 入参，已由 IPC/MCP adapter 做过粗校验。 */
@@ -325,6 +334,14 @@ export function buildNoProviderMessage(
 }
 
 export function createOrcaWorkerCreationService(deps: OrcaWorkerCreationDeps): OrcaWorkerCreationService {
+  function limitSnapshot(workerHardLimit: number, occupiedSlots: number): OrcaWorkerLimitSnapshot {
+    return {
+      workerHardLimit,
+      occupiedSlots,
+      remainingSlots: Math.max(0, workerHardLimit - occupiedSlots),
+    };
+  }
+
   async function cleanupBootstrappedWorkerSession(sessionId: string): Promise<void> {
     await deps.closeWorkerSession(sessionId).catch(() => undefined);
     try {
@@ -360,7 +377,12 @@ export function createOrcaWorkerCreationService(deps: OrcaWorkerCreationDeps): O
     const settings = deps.readCollaborationSettings();
     const activeCount = existing.filter((worker) => deps.isActiveWorkerStatus(worker.status)).length;
     if (activeCount >= settings.workerHardLimit) {
-      return { ok: false, errorCode: 'WORKER_LIMIT_HARD_EXCEEDED', message: `hard limit ${settings.workerHardLimit} reached` };
+      return {
+        ok: false,
+        errorCode: 'WORKER_LIMIT_HARD_EXCEEDED',
+        message: `hard limit ${settings.workerHardLimit} reached`,
+        limit: limitSnapshot(settings.workerHardLimit, activeCount),
+      };
     }
     const availableModels = deps.getAvailableModels(params.agent);
     if (params.model) {
@@ -425,7 +447,12 @@ export function createOrcaWorkerCreationService(deps: OrcaWorkerCreationDeps): O
       if (reservation.errorCode === 'WORKER_CREATION_IN_PROGRESS') {
         return { ok: false, errorCode: 'WORKER_CREATION_IN_PROGRESS', message: `label "${label.value}" is currently being created` };
       }
-      return { ok: false, errorCode: 'WORKER_LIMIT_HARD_EXCEEDED', message: `hard limit ${settings.workerHardLimit} reached` };
+      return {
+        ok: false,
+        errorCode: 'WORKER_LIMIT_HARD_EXCEEDED',
+        message: `hard limit ${settings.workerHardLimit} reached`,
+        limit: limitSnapshot(settings.workerHardLimit, settings.workerHardLimit),
+      };
     }
     const softLimitExceeded = reservation.occupiedSlotsBefore >= settings.workerSoftLimit;
     let reservationValid = true;
@@ -507,6 +534,7 @@ export function createOrcaWorkerCreationService(deps: OrcaWorkerCreationDeps): O
         workerId,
         workerSessionId: workerSession.id,
         softLimitExceeded,
+        limit: limitSnapshot(settings.workerHardLimit, reservation.occupiedSlotsBefore + 1),
         resolved: {
           agent: params.agent,
           model: resolved.model,

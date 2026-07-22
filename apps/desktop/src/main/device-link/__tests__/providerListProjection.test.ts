@@ -22,6 +22,9 @@ vi.mock('electron', () => ({
     getVersion: () => '0.0.0-test',
   },
   powerSaveBlocker: { start: () => 0, stop: () => {}, isStarted: () => false },
+  // notificationService.ts 顶层 IIFE 在 !isPackaged 时调 nativeImage.createFromPath
+  // (经 scheduler-host 传递性 import 被拉进来),补桩避免 collect 阶段报 mock 未定义
+  nativeImage: { createFromPath: () => ({ isEmpty: () => true }) },
 }));
 vi.mock('../../logger', () => ({
   createLogger: () => ({ info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() }),

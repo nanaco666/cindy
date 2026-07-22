@@ -11,11 +11,24 @@
 import { useMemo } from 'react';
 
 import type { Session } from '@/lib/ccAgent.types';
+import { useRemoteSshHosts } from '@/hooks/useRemoteSshHosts';
 import { groupSessions, type ProjectGroupsResult } from '../lib/projectGrouping';
+import { resolveRemoteProjectMachineIdentity } from '../lib/remoteProjectIdentity';
 
 export function useProjectGroups(
   sessions: readonly Session[],
   projectAliases?: ReadonlyMap<string, string>,
 ): ProjectGroupsResult {
-  return useMemo(() => groupSessions(sessions, { projectAliases }), [sessions, projectAliases]);
+  const sshHosts = useRemoteSshHosts();
+
+  return useMemo(() => {
+    const groups = groupSessions(sessions, { projectAliases });
+    return {
+      ...groups,
+      projects: groups.projects.map((project) => ({
+        ...project,
+        remoteMachineIdentity: resolveRemoteProjectMachineIdentity(project, sshHosts),
+      })),
+    };
+  }, [sessions, projectAliases, sshHosts]);
 }

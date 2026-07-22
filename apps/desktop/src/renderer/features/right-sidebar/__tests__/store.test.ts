@@ -422,6 +422,34 @@ describe('RSB store', () => {
     });
   });
 
+  describe('reorderTabs', () => {
+    it('optimistically updates the tab order and persists every id', async () => {
+      const a = await store.addTab('s1', 'file-browser', null);
+      const b = await store.addTab('s1', 'web-browser', null);
+      const c = await store.addTab('s1', 'terminal', null);
+      ipc.reorder.mockClear();
+
+      await store.reorderTabs('s1', [c.id, a.id, b.id]);
+
+      expect(store.getBucket('s1').tabs.map((tab) => tab.id)).toEqual([c.id, a.id, b.id]);
+      expect(store.getBucket('s1').activeTabId).toBe(c.id);
+      expect(ipc.reorder).toHaveBeenCalledWith({
+        sessionId: 's1',
+        orderedIds: [c.id, a.id, b.id],
+      });
+    });
+
+    it('rolls the tab order back when persistence fails', async () => {
+      const a = await store.addTab('s1', 'file-browser', null);
+      const b = await store.addTab('s1', 'web-browser', null);
+      ipc.reorder.mockRejectedValueOnce(new Error('boom'));
+
+      await expect(store.reorderTabs('s1', [b.id, a.id])).rejects.toThrow('boom');
+
+      expect(store.getBucket('s1').tabs.map((tab) => tab.id)).toEqual([a.id, b.id]);
+    });
+  });
+
   describe('subscribe / notify', () => {
     it('fires listener with changed sessionId', async () => {
       const seen: string[] = [];

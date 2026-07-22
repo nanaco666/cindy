@@ -3,7 +3,7 @@
  *
  * 聚焦的"Lead 会话"在消息流里有两类协同消息需要识别并渲染成卡片(否则会糊一坨原始 JSON / 生硬的
  * tool 名给用户看):
- *  - **派活**:Lead 调用 `create_worker` / `send_to_worker`(tool_use)给 worker 派活。
+ *  - **派活**:Lead 调用 `create_worker` / `create_workers` / `send_to_worker`(tool_use)给 worker 派活。
  *  - **回报**:worker 的 `send_to_lead` 落库成一条 `role==='user'` 消息,content 是
  *    `{"orcaSource":"worker","content":"…"}` 的 JSON(DB 持久化格式)。
  *
@@ -24,10 +24,11 @@ function normalizeToolName(toolName: string): string {
   return toolName.replace(/^mcp__/, 'mcp:').replace(/__/g, ':');
 }
 
-/** 识别 Lead 派活类 tool:create_worker(新建并派活)/ send_to_worker(追加派活)。 */
-export function classifyOrcaDispatchTool(toolName: string): 'create' | 'send' | null {
+/** 识别 Lead 派活类 tool:单建、批量新建与追加派活。 */
+export function classifyOrcaDispatchTool(toolName: string): 'create' | 'create-batch' | 'send' | null {
   const normalized = normalizeToolName(toolName);
   if (normalized === 'create_worker' || normalized.endsWith(':create_worker')) return 'create';
+  if (normalized === 'create_workers' || normalized.endsWith(':create_workers')) return 'create-batch';
   if (normalized === 'send_to_worker' || normalized.endsWith(':send_to_worker')) return 'send';
   return null;
 }
@@ -37,6 +38,21 @@ export function buildOrcaDispatchCard(toolName: string, input: unknown): OrcaCol
   const kind = classifyOrcaDispatchTool(toolName);
   if (!kind) return null;
   const record = readRecord(input);
+
+  if (kind === 'create-batch') {
+    const workers = Array.isArray(record?.workers) ? record.workers : [];
+    const summaries = workers.map((value, index) => {
+      const worker = readRecord(value);
+      const label = readString(worker?.label) ?? readString(worker?.role) ?? `worker ${index + 1}`;
+      const task = readString(worker?.initial_task);
+      return task ? `${label}：${task}` : label;
+    });
+    return {
+      variant: 'dispatch',
+      title: workers.length > 0 ? `批量派活给 ${workers.length} 个 worker` : '批量派活给多个 worker',
+      body: summaries.length > 0 ? summaries.join('\n') : '批量创建 worker',
+    };
+  }
 
   if (kind === 'create') {
     const label = readString(record?.label);

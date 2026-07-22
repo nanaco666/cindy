@@ -21,7 +21,7 @@
 //
 // 输入: release/artifacts/<region>/<version>/<platformKey>/build-info.json
 // 上传: app/<platformKey>/<installer>、hotfix/<platformKey>/<hotfix zip>、
-//       claude-code / codex 版本化 gz(与 CDN 比对,immutable 守卫)、
+//       非 Linux:claude-code / codex 版本化 gz(与 CDN 比对,immutable 守卫)、
 //       manifest-<platformKey>-canary.json
 //
 // 安全门禁(全部 fail closed):
@@ -234,13 +234,15 @@ async function main() {
     process.env.REQUIRE_RELOGIN === '1' ||
     process.env.REQUIRE_RELOGIN === 'true';
 
-  // 跨平台代传硬闸:agent 二进制版本探测要执行目标平台的 claude/codex,
-  // 必须在目标平台发版机上发布(dry-run 一并拦,提前暴露而不是 execute 才炸)。
-  try {
-    assertAgentProbeSupported(platform);
-  } catch (err) {
-    console.error(`ERROR: ${err.message}`);
-    process.exit(1);
+  // 非 Linux 平台仍要执行目标平台 agent 二进制做版本探测，必须在目标平台
+  // 发版机上发布。Linux manifest 不发布 agent 资产，因此没有这条限制。
+  if (platform !== 'linux') {
+    try {
+      assertAgentProbeSupported(platform);
+    } catch (err) {
+      console.error(`ERROR: ${err.message}`);
+      process.exit(1);
+    }
   }
 
   // ensureBinary 的 CDN fallback 按此 region 选择清单基址。
@@ -318,17 +320,23 @@ async function main() {
         console.log(`      [${u.role}] ${u.name}  ${(u.size / 1024 / 1024).toFixed(1)} MB → ${u.ossKey}`);
       }
       console.log(`      [manifest] manifest-${platformKey}-canary.json → ${OSS_PREFIX}/manifest-${platformKey}-canary.json`);
-      console.log('      [agents]   claude/codex 与 CDN 比对后按需上传(dry-run 跳过比对)');
+      if (buildInfo.platform === 'linux') {
+        console.log('      [agents]   skipped(Linux runtime uses system/legacy/official fallback)');
+      } else {
+        console.log('      [agents]   claude/codex 与 CDN 比对后按需上传(dry-run 跳过比对)');
+      }
       continue;
     }
 
     const client = createOSSClient();
 
-    // 铁律:先传二进制、后传 manifest——manifest 一旦可见,其指向的对象必须已就位。
-    console.log(`\n==> [${platformKey}] Publishing agent binaries...`);
-    await publishAgentBinaries(client, manifest, platformKey, buildInfo.platform, force);
-    // 出闸断言:claudeCode / codex 段必须完整(兜住全新渠道 + 本地探测失败的静默缺口)。
-    assertManifestAgentEntries(manifest);
+    if (buildInfo.platform !== 'linux') {
+      // 铁律:先传二进制、后传 manifest——manifest 一旦可见,其指向的对象必须已就位。
+      console.log(`\n==> [${platformKey}] Publishing agent binaries...`);
+      await publishAgentBinaries(client, manifest, platformKey, buildInfo.platform, force);
+      // 出闸断言:claudeCode / codex 段必须完整(兜住全新渠道 + 本地探测失败的静默缺口)。
+      assertManifestAgentEntries(manifest);
+    }
 
     console.log(`\n==> [${platformKey}] Uploading app artifacts...`);
     for (const u of uploads) {

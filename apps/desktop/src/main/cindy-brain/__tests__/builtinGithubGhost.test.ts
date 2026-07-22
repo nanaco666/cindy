@@ -26,7 +26,7 @@ interface CindyMessage {
 }
 
 const githubSource = readFileSync(
-  new URL('../../../../resources/builtin-ghosts/cindy-github/main.js', import.meta.url),
+  new URL('../../../../resources/builtin-ghosts/official/cindy-github/main.js', import.meta.url),
   'utf8',
 );
 
@@ -60,7 +60,7 @@ function createGithubHarness(
     }),
   };
 
-  new Script(githubSource, { filename: 'builtin-ghosts/cindy-github/main.js' }).runInContext(
+  new Script(githubSource, { filename: 'builtin-ghosts/official/cindy-github/main.js' }).runInContext(
     createContext({
       cindy,
       BroadcastChannel: FakeBroadcastChannel,

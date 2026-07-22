@@ -35,7 +35,9 @@ export function computeWorkerAttentionUpdates(
     nextStatusByWorkerId.set(worker.workerId, worker.status);
 
     const prevStatus = prevStatusByWorkerId.get(worker.workerId);
-    const enteredDone = prevStatus !== undefined && prevStatus !== 'done' && worker.status === 'done';
+    // `done` persists until the result is viewed and acknowledged, so an initial
+    // snapshot can safely restore unread attention after a late mount or reload.
+    const enteredDone = prevStatus !== 'done' && worker.status === 'done';
     const isViewed = worker.focused && worker.leadSessionId === activeSessionId;
     if (enteredDone && !isViewed) {
       toMark.push(worker.workerId);

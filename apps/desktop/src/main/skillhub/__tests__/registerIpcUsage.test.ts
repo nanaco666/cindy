@@ -62,6 +62,7 @@ vi.mock('../installService', () => installServiceMocks);
 
 const publish = vi.fn();
 const cancel = vi.fn();
+const listAgentSkills = vi.fn();
 const marketService = {
   deletePublished: vi.fn(),
   getPublishedFiles: vi.fn(),
@@ -80,7 +81,7 @@ describe('registerSkillhubIpc usage handlers', () => {
     requestLocalSkillUsageAnalyticsRefresh.mockReturnValue(null);
     const { registerSkillhubIpc } = await import('../registerIpc');
     registerSkillhubIpc({
-      getMaker: () => ({}) as never,
+      getMaker: () => ({ listAgentSkills }) as never,
       marketService: marketService as never,
       publishService: { publish, cancel } as never,
     });
@@ -166,5 +167,57 @@ describe('registerSkillhubIpc usage handlers', () => {
       },
       expect.any(Function),
     );
+  });
+
+  it('refreshes the Codex cwd cache after installing a project skill', async () => {
+    installServiceMocks.install.mockResolvedValueOnce({
+      success: true,
+      name: 'project-skill',
+      version: '1.0.0',
+      absolutePath: '/project/.agents/skills/project-skill',
+      projectWorkingDir: '/project',
+    });
+    listAgentSkills.mockResolvedValueOnce({ skills: [] });
+    const sender = { send: vi.fn() };
+    const handler = handlers.get('skillhub:install');
+
+    const result = await handler?.(
+      { sender },
+      {
+        name: 'project-skill',
+        version: '1.0.0',
+        installPath: '/project/.agents/skills/project-skill',
+      },
+    );
+
+    expect(result).toEqual({
+      success: true,
+      name: 'project-skill',
+      version: '1.0.0',
+      absolutePath: '/project/.agents/skills/project-skill',
+    });
+    expect(listAgentSkills).toHaveBeenCalledWith('codex', {
+      workingDir: '/project',
+      forceReload: true,
+    });
+  });
+
+  it('refreshes the Codex cwd cache after uninstalling a project skill', async () => {
+    installServiceMocks.uninstall.mockResolvedValueOnce({
+      success: true,
+      projectWorkingDir: '/project',
+    });
+    listAgentSkills.mockResolvedValueOnce({ skills: [] });
+    const handler = handlers.get('skillhub:uninstall');
+
+    const result = await handler?.({}, {
+      absolutePath: '/project/.agents/skills/project-skill',
+    });
+
+    expect(result).toEqual({ success: true });
+    expect(listAgentSkills).toHaveBeenCalledWith('codex', {
+      workingDir: '/project',
+      forceReload: true,
+    });
   });
 });

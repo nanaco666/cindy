@@ -16,7 +16,7 @@ const { collectLinuxRuntimeAssetProblems, createLinuxFirstReleaseManifest } =
       baseManifest?: Record<string, unknown>,
     ) => {
       app: Record<string, unknown>;
-      claudeCode: Record<string, unknown>;
+      claudeCode?: Record<string, unknown>;
       codex?: Record<string, unknown>;
     };
   };
@@ -79,8 +79,8 @@ describe('createLinuxFirstReleaseManifest', () => {
     expect(manifest.app.requireRelogin).toBeUndefined();
     expect(manifest.app.installer).toBeUndefined();
     expect((manifest as Record<string, unknown>).installer).toBeUndefined();
-    expect(manifest.claudeCode.version).toBe('2.0.0');
-    expect(manifest.codex?.version).toBe('3.0.0');
+    expect(manifest.claudeCode).toBeUndefined();
+    expect(manifest.codex).toBeUndefined();
   });
 
   it('creates a baseline manifest when no source manifest exists', () => {
@@ -89,12 +89,6 @@ describe('createLinuxFirstReleaseManifest', () => {
     expect(manifest).toEqual({
       app: {
         version: '0.1.0',
-      },
-      claudeCode: {
-        version: '0.0.0',
-        file: '',
-        sha256: '',
-        size: 0,
       },
     });
   });

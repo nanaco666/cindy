@@ -18,7 +18,10 @@ import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 
 import { cn } from '@/lib/utils';
+import * as sessionService from '@/lib/sessionService';
+import { toast } from '@/lib/toast';
 import type { AgentKind, RunStatus, ScheduleRun } from '@lizi/maker-scheduler';
+import type { SessionReference } from '../../../../shared/sessionReference';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -127,6 +130,8 @@ interface Props {
    * 实现侧应直接调 schedule.runNow（再 fire 一次，不恢复旧 run 的现场）。
    */
   onRestart?: (run: ScheduleRun) => void | Promise<void>;
+  /** main 层解析的 session 生命周期；undefined 表示仍在查询。 */
+  sessionReference?: SessionReference;
 }
 
 export function RunHistoryCard({
@@ -134,6 +139,7 @@ export function RunHistoryCard({
   agentKind,
   onDelete,
   onRestart,
+  sessionReference,
 }: Props) {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -185,8 +191,21 @@ export function RunHistoryCard({
     void markScheduleRunReadAndSync(run.id);
   };
 
-  const handleOpenSession = () => {
+  const referenceUnavailable =
+    sessionReference?.state === 'deleted' || sessionReference?.state === 'missing';
+  const handleOpenSession = async () => {
     if (!run.sessionId) return;
+    try {
+      // 展示状态与远程删除可能竞态；跳转前再查一次，避免进入已删除会话路由。
+      const [reference] = await sessionService.resolveReferences([run.sessionId]);
+      if (reference?.state !== 'available') {
+        toast.error(t('scheduler.runs.sessionDeleted'));
+        return;
+      }
+    } catch {
+      toast.error(t('scheduler.runs.sessionUnavailable'));
+      return;
+    }
     // 先打 markRead 异步火(main 自己判断重复;no-op 不广播时由 …AndSync 的本地
     // 通道兜底刷新)→ navigate 切页
     if (!isLegacySessionRun) {
@@ -245,12 +264,17 @@ export function RunHistoryCard({
       <div className="flex items-center justify-between gap-2 text-12 text-[var(--cmd-palette-item-meta)]">
         <div className="flex min-w-0 items-center gap-1.5">
           <span>{metaText}</span>
-          {run.sessionId ? (
+          {run.sessionId && referenceUnavailable ? (
+            <>
+              <span aria-hidden>·</span>
+              <span>{t('scheduler.runs.sessionDeleted')}</span>
+            </>
+          ) : run.sessionId ? (
             <>
               <span aria-hidden>·</span>
               <button
                 type="button"
-                onClick={handleOpenSession}
+                onClick={() => void handleOpenSession()}
                 className={cn(
                   'inline-flex items-center gap-1 text-12',
                   'text-[var(--settings-section-desc)] hover:underline',

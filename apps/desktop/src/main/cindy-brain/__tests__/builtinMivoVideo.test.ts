@@ -19,7 +19,7 @@ interface CindyMessage {
 }
 
 const mivoSource = readFileSync(
-  new URL('../../../../resources/builtin-ghosts/xd-mivo/main.js', import.meta.url),
+  new URL('../../../../resources/builtin-ghosts/xd/xd-mivo/main.js', import.meta.url),
   'utf8',
 );
 
@@ -65,7 +65,7 @@ function createMivoHarness() {
     URL,
     encodeURIComponent,
   });
-  new Script(mivoSource, { filename: 'builtin-ghosts/xd-mivo/main.js' }).runInContext(context);
+  new Script(mivoSource, { filename: 'builtin-ghosts/xd/xd-mivo/main.js' }).runInContext(context);
   if (!handler) throw new Error('XD Mivo did not register its host-message handler');
 
   return {

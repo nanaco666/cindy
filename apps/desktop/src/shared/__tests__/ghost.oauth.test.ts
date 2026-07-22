@@ -467,7 +467,7 @@ describe('ghost · 内置意识 filo-google 身份卡', () => {
   it('resources 里的 ghost.json 永远通过校验', () => {
     const file = path.resolve(
       path.dirname(fileURLToPath(import.meta.url)),
-      '../../../resources/builtin-ghosts/filo-google/ghost.json',
+      '../../../resources/builtin-ghosts/xd/filo-google/ghost.json',
     );
     const parsed = JSON.parse(fs.readFileSync(file, 'utf-8')) as Record<string, unknown>;
     const result = validateGhostManifest(parsed);
@@ -487,7 +487,7 @@ describe('ghost · 内置意识 xd-atlassian 身份卡', () => {
   it('resources 里的 ghost.json 永远通过校验(broker 模式关键约束成立)', () => {
     const file = path.resolve(
       path.dirname(fileURLToPath(import.meta.url)),
-      '../../../resources/builtin-ghosts/xd-atlassian/ghost.json',
+      '../../../resources/builtin-ghosts/xd/xd-atlassian/ghost.json',
     );
     const parsed = JSON.parse(fs.readFileSync(file, 'utf-8')) as Record<string, unknown>;
     const result = validateGhostManifest(parsed);

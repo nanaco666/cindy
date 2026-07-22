@@ -25,6 +25,23 @@
     "backHome": "Back to home",
     "details": "Error details"
   },
+  "localDbFatal": {
+    "updateReady": {
+      "title": "Update required to continue",
+      "description": "Your local data was upgraded by a newer version of Cindy and can't be opened by this version. The new version is downloaded and ready — restart to install it and get back in.",
+      "confirm": "Restart & Install Update"
+    },
+    "preparing": {
+      "description": "Your local data was upgraded by a newer version of Cindy and can't be opened by this version. Fetching the new version, please wait…",
+      "progress": "{{progress}}% downloaded"
+    },
+    "noUpdate": {
+      "title": "Local data can't be opened right now",
+      "description": "Your local data doesn't match this version of the app (it was likely upgraded by a newer version). Try checking for updates again; if this keeps happening, please contact the team.",
+      "checkUpdate": "Check for Updates"
+    },
+    "details": "Technical details"
+  },
   "agentIsland": {
     "native": {
       "newConversationTitle": "New Maker",
@@ -1286,11 +1303,18 @@
         "reconnect": "Reconnect Feishu Bot",
         "clear": "Unbind"
       },
+      "saved": {
+        "heading": "Feishu Bot is bound",
+        "connectingNote": "Bot credentials are saved. Establishing the connection now.",
+        "reconnectingNote": "Bot credentials are saved. Restoring the connection now.",
+        "conflictNote": "Bot credentials are saved, but this App ID is currently in use on another device.",
+        "errorNote": "Bot credentials are saved, but the connection failed. Select reconnect to try again.",
+        "idleNote": "Bot credentials are saved, but the bot is not connected. Select reconnect to try again."
+      },
       "appIdLabel": "App ID",
       "appIdPlaceholder": "cli_xxxxxxxxxxxxxxxx",
       "appSecretLabel": "App Secret",
       "appSecretPlaceholder": "sec_xxxxxxxxxxxxxxxxxx",
-      "appSecretSavedPlaceholder": "••••••••••••••••••••••••",
       "showSecret": "Show secret",
       "hideSecret": "Hide secret",
       "createLink": "Click here to create ↗",
@@ -3406,6 +3430,11 @@
       "edit": "Edit",
       "options": "Options",
       "priceTip": "Input {{input}} · Output {{output}} per 1M tokens",
+      "trigger": {
+        "placeholder": "Select model",
+        "aria": "Select model. Current: {{model}}",
+        "ariaWithEffort": "Select model. Current: {{model}}, effort: {{effort}}"
+      },
       "category": {
         "anthropic": "Anthropic",
         "gpt": "OpenAI",
@@ -3427,7 +3456,8 @@
       "meta": {
         "context": "{{value}} context",
         "price": "{{input}}/{{output}} per 1M",
-        "fastBadge": "Fast"
+        "fastBadge": "Fast",
+        "budgetDiscount": "85% off"
       },
       "source": {
         "railLabel": "Source",
@@ -5081,6 +5111,8 @@
       "statusAria": "Status: {{status}}",
       "took": "Took {{duration}}",
       "openSession": "Open session",
+      "sessionDeleted": "Session deleted",
+      "sessionUnavailable": "Could not verify the session. Try again.",
       "markReadTitle": "Click to mark as read",
       "sessionCost": "Session cost {{cost}}",
       "sessionValue": "Session value {{value}}",
@@ -5193,6 +5225,8 @@
           "open": "Open session",
           "unbind": "Unbind",
           "persistentNote": "Recreates and rebinds automatically if the session is archived",
+          "deleted": "Bound session deleted",
+          "deletedPersistentNote": "Creates and binds a new session on the next run",
           "fallbackTitle": "Session {{id}}"
         },
         "switchModelHint": "The bound session will switch to this model on the next run"
@@ -5202,6 +5236,8 @@
         "loading": "Loading sessions…",
         "loadFailed": "Failed to load: {{error}}",
         "empty": "No active sessions available",
+        "deletedBinding": "Bound session deleted — select another session",
+        "archivedBinding": "Bound session archived — restore it before saving or select another session",
         "selectPlaceholder": "— Select a session —"
       },
       "preRunHook": {
@@ -5224,6 +5260,26 @@
         "aiGenerate": "Generate script",
         "aiGenerating": "Generating…",
         "aiDone": "Script written to {{path}} — run Test to verify",
+        "aiFailure": {
+          "no_candidate": "No utility model is currently available. Connect OpenAI or Cindy AI, then try again.",
+          "all_candidates_failed": "Every utility model request failed. Check the provider connection and try again.",
+          "empty_response": "The utility models returned no usable content. Try again or check the provider connection.",
+          "timeout": "The utility model request timed out. Check the connection and try again.",
+          "checkedCandidates": "Candidates checked:",
+          "openProviders": "Open model providers",
+          "attemptReason": {
+            "unsupportedTransport": "not supported for this operation",
+            "agentUnavailable": "Codex is unavailable",
+            "notAuthenticated": "OpenAI login required",
+            "authProbeFailed": "could not verify OpenAI login",
+            "apiKeyMissing": "Cindy AI key is unavailable",
+            "endpointMissing": "Cindy AI endpoint is unavailable",
+            "timeout": "request timed out",
+            "emptyResponse": "empty response",
+            "httpError": "HTTP {{status}}",
+            "requestFailed": "request failed"
+          }
+        },
         "browse": "Choose a script file (or drag one onto the input)"
       },
       "validation": {

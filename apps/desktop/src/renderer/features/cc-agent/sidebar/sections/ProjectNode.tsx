@@ -56,6 +56,7 @@ import { MENU_CONTENT_CLASS, MENU_ITEM_CLASS, MENU_SEPARATOR_CLASS } from '../me
 import { RemoteProjectIcon } from '../RemoteProjectIcon';
 import { isDeviceLinkWriteBlocked } from '../../lib/remoteSessionWriteGuard';
 import { projectBulkArchiveActionForStatus } from '../../lib/projectBulkArchiveAction';
+import { getRemoteProjectMachineIdentity } from '../../lib/remoteProjectIdentity';
 
 const log = createLogger('ProjectNode');
 
@@ -136,6 +137,7 @@ export function ProjectNode({
   // device-link 远程项目(被控设备的项目):与 SSH remote 一样隐藏本机 FS 入口,
   // 但徽标用设备 icon 而非 SSH 的 Globe,tooltip 显示设备名。
   const isDeviceLink = project.deviceLinkDeviceId != null;
+  const remoteIdentity = getRemoteProjectMachineIdentity(project);
   const projectWritesBlocked = isDeviceLinkWriteBlocked(project);
   const bulkArchiveAction = projectBulkArchiveActionForStatus(statusFilter);
   // 项目图标两态(2026-07 用户定稿,参考 MivoCanvas):收起 Folder / 展开 FolderOpen,
@@ -274,8 +276,8 @@ export function ProjectNode({
           strokeWidth={1.8}
           className="shrink-0 text-[var(--sidebar-list-muted)]"
         />
-        {/* 名字 + remote icon 同组占据 flex-1：名字截断在前、icon 紧跟其后，
-            hover 工具组仍被推到行右端。icon 悬浮显示 host / device（能力不变）。 */}
+        {/* 名字 + remote identity 同组占据 flex-1。远程项目常态展示机器身份,
+            避免相同 workingDir 的项目只能靠 hover 才能区分。 */}
         <div className="flex min-w-0 flex-1 items-center gap-1.5">
           {isEditingName ? (
             <input
@@ -304,10 +306,10 @@ export function ProjectNode({
               )}
             />
           ) : (
-            <span className="min-w-0 truncate">{project.displayName}</span>
+            <span className="min-w-0 flex-1 truncate">{project.displayName}</span>
           )}
           {!isEditingName && isDeviceLink ? (
-            <Tip text={project.deviceLinkDeviceName ?? project.deviceLinkDeviceId ?? ''}>
+            <Tip text={remoteIdentity?.displayLabel ?? project.deviceLinkDeviceId ?? ''}>
               <RemoteProjectIcon
                 kind="device-link"
                 connectionStatus={project.deviceLinkConnectionStatus}
@@ -315,9 +317,17 @@ export function ProjectNode({
               />
             </Tip>
           ) : !isEditingName && isRemote ? (
-            <Tip text={project.remoteHostId ?? ''}>
+            <Tip text={remoteIdentity?.displayLabel ?? project.remoteHostId ?? ''}>
               <RemoteProjectIcon kind="ssh" className="text-[var(--folder-item-icon)]" />
             </Tip>
+          ) : null}
+          {!isEditingName && remoteIdentity ? (
+            <span
+              title={remoteIdentity.displayLabel}
+              className="max-w-[45%] shrink truncate text-[11px] text-[var(--cmd-palette-item-meta)]"
+            >
+              {remoteIdentity.displayLabel}
+            </span>
           ) : null}
           {/* 展开/收起指示箭头:标题右侧、hover 才渐显(参考 MivoCanvas 的
               row-hover-arrow;仅 opacity 渐显,不做位移,守 DESIGN.md §14.4)。 */}

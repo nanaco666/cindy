@@ -3,8 +3,8 @@
  * ---------------------------------------------------------------------------
  * In-process MCP server (`lizi_orca`) 暴露多 worker 协同(Orca team)控制工具。
  *
- * 暴露 12 个 team 工具(直接 server.tool() 注册到顶层,不走 list_tools/call_tool 入口):
- *   start_team / create_worker / send_to_worker / list_worker_queue /
+ * 暴露 13 个 team 工具(直接 server.tool() 注册到顶层,不走 list_tools/call_tool 入口):
+ *   start_team / create_worker / create_workers / send_to_worker / list_worker_queue /
  *   update_queued_message / cancel_queued_message / list_workers / switch_focus /
  *   idle_worker / end_team / archive_worker / list_available_models
  *
@@ -36,11 +36,12 @@ import {
   type XdtHelperToolCategory,
   type XdtHelperToolHandler,
 } from '../lizi_xdtHelperToolRegistry.js';
-// 9 个 team 工具的注册函数留在 xdt-helper/ 目录(register 是 registry-agnostic,
+// 13 个 team 工具的注册函数留在 xdt-helper/ 目录(register 是 registry-agnostic,
 // 物理搬迁收益低)。本 server 通过 DirectToolSink 把它们直接注册到 McpServer。
 import {
   registerStartTeamTool,
   registerCreateWorkerTool,
+  registerCreateWorkersTool,
   registerListWorkersTool,
   registerSwitchFocusTool,
   registerSendToWorkerTool,
@@ -62,7 +63,7 @@ import { errorPayload, okPayload } from '../xdt-helper/_payload.js';
 // ── Host deps ──────────────────────────────────────────────────────────────
 
 /**
- * 协同(team)控制类工具的 host 回调集合。注入即注册 lizi_orca 的 12 个 team 工具
+ * 协同(team)控制类工具的 host 回调集合。注入即注册 lizi_orca 的 13 个 team 工具
  * (per-session 闭包绑定 ctx)。
  *
  * 回调返 Result 而非抛 Promise<T>: 让 host 能用 `HOST_NOT_READY` errorCode 表达
@@ -239,7 +240,7 @@ export interface OrcaMcpSessionCtx {
  * DirectToolSink —— 把 team 工具直接 server.tool() 注册的适配器。
  *
  * 复用既有 register*Tool(registry, deps) 的签名: 本类继承 XdtHelperToolRegistry 但
- * override register() —— 不入内部 Map, 而是转调 server.tool()。这样 9 个工具文件
+ * override register() —— 不入内部 Map, 而是转调 server.tool()。这样 13 个工具文件
  * 一行不改即可顶层直接注册。direct 注册下 category 字段无意义(忽略); list()/
  * call() 等继承方法不会被用到(lizi_orca 不暴露 list_tools/call_tool 入口)。
  */
@@ -371,7 +372,7 @@ export function createOrcaMcpServer(
     version: '1.0.0',
   });
 
-  // 12 个 team 工具经 DirectToolSink 直接注册到顶层。handler 闭包绑定 ctx
+  // 13 个 team 工具经 DirectToolSink 直接注册到顶层。handler 闭包绑定 ctx
   // (sessionId / vendorOptions), 调用时把请求路由回 host。
   const sink = new DirectToolSink(server);
   const getSessionContext = () => resolveLiziMcpSessionContext(ctx);
@@ -382,6 +383,11 @@ export function createOrcaMcpServer(
     startTeam: deps.startTeam,
   });
   registerCreateWorkerTool(sink, {
+    sessionId: ctx.sessionId,
+    getSessionContext,
+    createWorker: deps.createWorker,
+  });
+  registerCreateWorkersTool(sink, {
     sessionId: ctx.sessionId,
     getSessionContext,
     createWorker: deps.createWorker,

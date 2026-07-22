@@ -63,7 +63,7 @@ async function writeSeed(id: string, files: Record<string, string>, manifest?: R
 }
 
 async function provision(extra?: Partial<ProvisionDeps>) {
-  return provisionBuiltinGhosts({ seedRootDir, repoRootDir, ...extra });
+  return provisionBuiltinGhosts({ seedRootDirs: [seedRootDir], repoRootDir, ...extra });
 }
 
 /** 写受众配置文件(种子根下)。 */
@@ -346,10 +346,10 @@ describe('listRestorableBuiltinGhosts · 可恢复清单(设置页灰态行数�
   it('种子 ∩ 墓碑才列;未删过的不列;恢复流程闭环', async () => {
     await writeSeed('art', { 'main.js': 'v1' });
     await writeSeed('other', { 'main.js': 'x' });
-    expect(listRestorableBuiltinGhosts({ seedRootDir, repoRootDir })).toEqual([]);
+    expect(listRestorableBuiltinGhosts({ seedRootDirs: [seedRootDir], repoRootDir })).toEqual([]);
 
     recordBuiltinTombstone(repoRootDir, 'art');
-    const list = listRestorableBuiltinGhosts({ seedRootDir, repoRootDir });
+    const list = listRestorableBuiltinGhosts({ seedRootDirs: [seedRootDir], repoRootDir });
     expect(list.map((r) => r.id)).toEqual(['art']);
     expect(list[0].name).toBe('Builtin art');
     expect(list[0].version).toBe('1.0.0');
@@ -358,21 +358,21 @@ describe('listRestorableBuiltinGhosts · 可恢复清单(设置页灰态行数�
     // 恢复 = 清墓碑 + 对账装回,恢复后不再出现在可恢复清单
     clearBuiltinTombstone(repoRootDir, 'art');
     await provision();
-    expect(listRestorableBuiltinGhosts({ seedRootDir, repoRootDir })).toEqual([]);
+    expect(listRestorableBuiltinGhosts({ seedRootDirs: [seedRootDir], repoRootDir })).toEqual([]);
   });
 
   it('受众不命中的墓碑不列(恢复了也装不上);配置损坏 fail-closed 返回空', async () => {
     await writeSeed('vip', { 'main.js': 'v1' });
     recordBuiltinTombstone(repoRootDir, 'vip');
     await writeConfig({ ghosts: { vip: { audience: { userIds: ['u-alice'] } } } });
-    expect(listRestorableBuiltinGhosts({ seedRootDir, repoRootDir, identity: null })).toEqual([]);
-    expect(listRestorableBuiltinGhosts({ seedRootDir, repoRootDir, identity: bob })).toEqual([]);
-    expect(listRestorableBuiltinGhosts({ seedRootDir, repoRootDir, identity: alice }).map((r) => r.id)).toEqual([
+    expect(listRestorableBuiltinGhosts({ seedRootDirs: [seedRootDir], repoRootDir, identity: null })).toEqual([]);
+    expect(listRestorableBuiltinGhosts({ seedRootDirs: [seedRootDir], repoRootDir, identity: bob })).toEqual([]);
+    expect(listRestorableBuiltinGhosts({ seedRootDirs: [seedRootDir], repoRootDir, identity: alice }).map((r) => r.id)).toEqual([
       'vip',
     ]);
 
     await writeConfig('broken json');
-    expect(listRestorableBuiltinGhosts({ seedRootDir, repoRootDir, identity: alice })).toEqual([]);
+    expect(listRestorableBuiltinGhosts({ seedRootDirs: [seedRootDir], repoRootDir, identity: alice })).toEqual([]);
   });
 });
 
@@ -388,20 +388,20 @@ describe('tier · 企业档分类(仅分组展示,不改播种行为)', () => {
         'not-a-seed': { tier: 'enterprise' }, // 配置里有但种子不存在 → 不列
       },
     });
-    expect(listEnterpriseSeedIds(seedRootDir)).toEqual(['corp']);
+    expect(listEnterpriseSeedIds([seedRootDir])).toEqual(['corp']);
   });
 
   it('配置缺失或损坏 → 降级空列表(全归内置组),不报错', async () => {
     await writeSeed('corp', { 'main.js': 'x' });
-    expect(listEnterpriseSeedIds(seedRootDir)).toEqual([]);
+    expect(listEnterpriseSeedIds([seedRootDir])).toEqual([]);
     await writeConfig('broken json');
-    expect(listEnterpriseSeedIds(seedRootDir)).toEqual([]);
+    expect(listEnterpriseSeedIds([seedRootDir])).toEqual([]);
   });
 
   it('tier 写错 → 整份配置按损坏处理(与 audience 同一 fail-closed 口径)', async () => {
     await writeSeed('corp', { 'main.js': 'x' });
     await writeConfig({ ghosts: { corp: { tier: 'vip' } } });
-    expect(listEnterpriseSeedIds(seedRootDir)).toEqual([]);
+    expect(listEnterpriseSeedIds([seedRootDir])).toEqual([]);
     const outcome = await provision();
     expect(outcome.installed).toEqual([]);
     expect(outcome.skipped).toEqual(['corp']);
@@ -416,7 +416,7 @@ describe('tier · 企业档分类(仅分组展示,不改播种行为)', () => {
 
     recordBuiltinTombstone(repoRootDir, 'corp');
     recordBuiltinTombstone(repoRootDir, 'pub');
-    const list = listRestorableBuiltinGhosts({ seedRootDir, repoRootDir });
+    const list = listRestorableBuiltinGhosts({ seedRootDirs: [seedRootDir], repoRootDir });
     expect(list.find((r) => r.id === 'corp')?.tier).toBe('enterprise');
     expect(list.find((r) => r.id === 'pub')?.tier).toBe('builtin');
   });
@@ -428,8 +428,8 @@ describe('辅助函数', () => {
     await writeSeed('a', {});
     await fs.promises.mkdir(path.join(seedRootDir, '.hidden'));
     await fs.promises.writeFile(path.join(seedRootDir, 'loose-file.txt'), 'x');
-    expect(listBuiltinSeedIds(seedRootDir)).toEqual(['a', 'b']);
-    expect(listBuiltinSeedIds(path.join(workDir, 'nope'))).toEqual([]);
+    expect(listBuiltinSeedIds([seedRootDir])).toEqual(['a', 'b']);
+    expect(listBuiltinSeedIds([path.join(workDir, 'nope')])).toEqual([]);
   });
 
   it('hashDirContent:内容同则同、异则异、点文件不计入、子目录参与', async () => {
@@ -445,5 +445,101 @@ describe('辅助函数', () => {
 
     await fs.promises.writeFile(path.join(d2, 'sub', 'b.txt'), 'changed');
     expect(await hashDirContent(d1)).not.toBe(await hashDirContent(d2));
+  });
+});
+
+describe('provisionBuiltinGhosts · 多种子根(official / xd 拆仓)', () => {
+  /** 在指定根下写种子(多根用例专用;根目录不存在时自动建)。 */
+  async function writeSeedIn(root: string, id: string, files: Record<string, string>): Promise<void> {
+    const dir = path.join(root, id);
+    await fs.promises.mkdir(dir, { recursive: true });
+    await fs.promises.writeFile(path.join(dir, 'ghost.json'), JSON.stringify(goodManifest(id)));
+    for (const [name, content] of Object.entries(files)) {
+      await fs.promises.writeFile(path.join(dir, name), content);
+    }
+  }
+
+  it('两个根的种子都播;各根配置独立(enterprise 归属跟根配置走)', async () => {
+    const rootA = path.join(workDir, 'official');
+    const rootB = path.join(workDir, 'xd');
+    await writeSeedIn(rootA, 'art', { 'main.js': 'a' });
+    await writeSeedIn(rootB, 'pages', { 'main.js': 'b' });
+    await fs.promises.writeFile(
+      path.join(rootB, PROVISIONING_CONFIG_FILE),
+      JSON.stringify({ ghosts: { pages: { tier: 'enterprise' } } }),
+    );
+
+    const outcome = await provisionBuiltinGhosts({ seedRootDirs: [rootA, rootB], repoRootDir });
+    expect(outcome.installed.map((m) => m.id).sort()).toEqual(['art', 'pages']);
+    expect(listBuiltinSeedIds([rootA, rootB])).toEqual(['art', 'pages']);
+    expect(listEnterpriseSeedIds([rootA, rootB])).toEqual(['pages']);
+  });
+
+  it('同 id 撞车:先到的根生效,后到的跳过', async () => {
+    const rootA = path.join(workDir, 'official');
+    const rootB = path.join(workDir, 'xd');
+    await writeSeedIn(rootA, 'dup', { 'main.js': 'from-A' });
+    await writeSeedIn(rootB, 'dup', { 'main.js': 'from-B' });
+
+    const outcome = await provisionBuiltinGhosts({ seedRootDirs: [rootA, rootB], repoRootDir });
+    expect(outcome.installed.map((m) => m.id)).toEqual(['dup']);
+    expect(outcome.skipped).toEqual(['dup']);
+    expect(installedFile('dup', 'main.js')).toBe('from-A');
+  });
+
+  it('单根配置损坏:只跳过该根,其它根照常;损坏根的已装种子不被当孤儿回收', async () => {
+    const rootA = path.join(workDir, 'official');
+    const rootB = path.join(workDir, 'xd');
+    await writeSeedIn(rootA, 'art', { 'main.js': 'a' });
+    await writeSeedIn(rootB, 'pages', { 'main.js': 'b' });
+    // 先正常播一轮,两个都装上、都进 seeded 台账。
+    await provisionBuiltinGhosts({ seedRootDirs: [rootA, rootB], repoRootDir });
+
+    // B 根配置损坏:art 照常对账,pages 跳过但不被回收。
+    await fs.promises.writeFile(path.join(rootB, PROVISIONING_CONFIG_FILE), 'broken json');
+    const outcome = await provisionBuiltinGhosts({ seedRootDirs: [rootA, rootB], repoRootDir });
+    expect(outcome.removed).toEqual([]);
+    expect(outcome.skipped.sort()).toEqual(['art', 'pages']); // art 指纹一致跳过,pages fail-closed 跳过
+    expect(fs.existsSync(path.join(repoRootDir, 'pages'))).toBe(true);
+  });
+
+  it('半初始化保护:任一根为空(submodule 未 init)→ 跳过孤儿回收,不误删', async () => {
+    const rootA = path.join(workDir, 'official');
+    const rootB = path.join(workDir, 'xd');
+    await writeSeedIn(rootA, 'art', { 'main.js': 'a' });
+    await writeSeedIn(rootB, 'pages', { 'main.js': 'b' });
+    await provisionBuiltinGhosts({ seedRootDirs: [rootA, rootB], repoRootDir });
+
+    // 模拟 B 根 submodule 未初始化:目录在但空。
+    await fs.promises.rm(path.join(rootB, 'pages'), { recursive: true, force: true });
+    const outcome = await provisionBuiltinGhosts({ seedRootDirs: [rootA, rootB], repoRootDir });
+    expect(outcome.removed).toEqual([]); // pages 不被当"种子下架"回收
+    expect(fs.existsSync(path.join(repoRootDir, 'pages'))).toBe(true);
+
+    // B 根恢复内容(种子真下架换新)后,孤儿回收恢复工作。
+    await writeSeedIn(rootB, 'pages-v2', { 'main.js': 'b2' });
+    const second = await provisionBuiltinGhosts({ seedRootDirs: [rootA, rootB], repoRootDir });
+    expect(second.installed.map((m) => m.id)).toEqual(['pages-v2']);
+    expect(second.removed).toEqual(['pages']);
+    expect(fs.existsSync(path.join(repoRootDir, 'pages'))).toBe(false);
+  });
+
+  it('全部根为空 → 静默空结果(与单根缺失同口径)', async () => {
+    const rootA = path.join(workDir, 'official');
+    const rootB = path.join(workDir, 'xd');
+    await fs.promises.mkdir(rootA, { recursive: true });
+    const outcome = await provisionBuiltinGhosts({ seedRootDirs: [rootA, rootB], repoRootDir });
+    expect(outcome).toEqual({ installed: [], updated: [], removed: [], skipped: [] });
+  });
+
+  it('listRestorableBuiltinGhosts 跨根聚合;同 id 取先到的根', async () => {
+    const rootA = path.join(workDir, 'official');
+    const rootB = path.join(workDir, 'xd');
+    await writeSeedIn(rootA, 'art', { 'main.js': 'a' });
+    await writeSeedIn(rootB, 'pages', { 'main.js': 'b' });
+    recordBuiltinTombstone(repoRootDir, 'art');
+    recordBuiltinTombstone(repoRootDir, 'pages');
+    const list = listRestorableBuiltinGhosts({ seedRootDirs: [rootA, rootB], repoRootDir });
+    expect(list.map((r) => r.id).sort()).toEqual(['art', 'pages']);
   });
 });

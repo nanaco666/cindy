@@ -56,6 +56,35 @@ describe('create_worker tool', () => {
     expect(registry.get('create_worker')?.description).toContain(
       '注:create_worker 建的是 Orca worker(session 级、持久、UI 可见),不是 subagent。若用户要的是 subagent(一次性、用完即弃),请用原生 subagent 机制(Codex:spawn_agent;Claude Code:Task 工具),不要用 create_worker。',
     );
+    expect(registry.get('create_worker')?.description).toContain(
+      '用户一次要求创建 2 个及以上 Worker 时必须改用 create_workers；不要并行或连续多次调用 create_worker。',
+    );
+  });
+
+  it('surfaces structured hard-limit details to the lead', async () => {
+    const createWorker = vi.fn(async () => ({
+      ok: false as const,
+      errorCode: 'WORKER_LIMIT_HARD_EXCEEDED' as const,
+      message: 'hard limit 3 reached',
+      limit: { workerHardLimit: 3, occupiedSlots: 3, remainingSlots: 0 },
+    }));
+    const registry = new XdtHelperToolRegistry();
+    registerCreateWorkerTool(registry, { sessionId: 'lead-1', createWorker });
+
+    const result = await registry.call('create_worker', {
+      role: 'reviewer',
+      agent: 'codex',
+      label: 'reviewer_1',
+    });
+
+    expect(parse(result)).toMatchObject({
+      ok: false,
+      errorCode: 'WORKER_LIMIT_HARD_EXCEEDED',
+      data: {
+        hint: 'hard limit 3 reached',
+        limit: { hard_limit: 3, occupied_slots: 3, remaining_slots: 0 },
+      },
+    });
   });
 
   it('rejects non-slug labels at schema boundary before calling host', async () => {
