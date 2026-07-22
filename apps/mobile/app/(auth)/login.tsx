@@ -16,6 +16,11 @@ import {
 } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
+  AppleAuthenticationButton,
+  AppleAuthenticationButtonStyle,
+  AppleAuthenticationButtonType,
+} from 'expo-apple-authentication';
+import {
   AuthApiError,
   type AccountDeletionStatus,
   type SocialProvider,
@@ -48,7 +53,7 @@ import {
 /** Auth-server login presentation. Credentials and tickets remain in AuthContext. */
 export default function LoginScreen() {
   const styles = useThemedStyles(makeStyles);
-  const { colors } = useTheme();
+  const { colors, mode } = useTheme();
   const auth = useAuth();
   const { markInteractive } = useObserve();
   const initializedLoginRef = useRef(false);
@@ -327,22 +332,46 @@ export default function LoginScreen() {
         {socialProviders.length > 0 ? (
           <>
             <Divider />
-            {socialProviders.map((provider) => (
-              <MainWindowActionButton
-                action={{
-                  disabled,
-                  label: socialLabel(provider),
-                  onPress: () =>
+            {socialProviders.map((provider) =>
+              provider === 'apple' ? (
+                <AppleAuthenticationButton
+                  accessibilityState={{ disabled }}
+                  buttonStyle={
+                    mode === 'dark'
+                      ? AppleAuthenticationButtonStyle.WHITE
+                      : AppleAuthenticationButtonStyle.BLACK
+                  }
+                  buttonType={AppleAuthenticationButtonType.SIGN_IN}
+                  cornerRadius={24}
+                  key={provider}
+                  onPress={() => {
+                    if (disabled) return;
                     void auth.dispatchLoginAction({
                       type: 'native-social',
                       provider,
-                    }),
-                  testID: `login.${provider}Button`,
-                }}
-                key={provider}
-                style={styles.fullButton}
-              />
-            ))}
+                    });
+                  }}
+                  pointerEvents={disabled ? 'none' : 'auto'}
+                  style={styles.appleButton}
+                  testID="login.appleButton"
+                />
+              ) : (
+                <MainWindowActionButton
+                  action={{
+                    disabled,
+                    label: socialLabel(provider),
+                    onPress: () =>
+                      void auth.dispatchLoginAction({
+                        type: 'native-social',
+                        provider,
+                      }),
+                    testID: `login.${provider}Button`,
+                  }}
+                  key={provider}
+                  style={styles.fullButton}
+                />
+              ),
+            )}
           </>
         ) : null}
         {/* 企业 SSO 入口：输入组织标识发起单点登录（国内版隐藏邮箱后企业用户的登录路径） */}
@@ -1089,6 +1118,7 @@ const makeStyles = (colors: ThemeColors) =>
       letterSpacing: spacing.sm,
       textAlign: 'center',
     },
+    appleButton: { height: 48, width: '100%' },
     fullButton: { minHeight: 48, minWidth: 0 },
     helper: {
       color: colors.textSecondary,
