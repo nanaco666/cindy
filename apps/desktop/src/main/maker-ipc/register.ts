@@ -378,18 +378,20 @@ import {
 
 const log = createLogger('maker-ipc');
 
-async function prepareProjectSkillLinksFailSoft(workingDir: unknown): Promise<void> {
-  if (typeof workingDir !== 'string' || !workingDir) return;
+async function prepareProjectSkillLinksFailSoft(workingDir: unknown): Promise<boolean> {
+  if (typeof workingDir !== 'string' || !workingDir) return false;
   try {
     const result = await prepareSharedProjectSkillLinks({ workingDir });
     for (const warning of result.warnings) {
       log.warn('shared project skill link warning', { workingDir, warning });
     }
+    return result.changed;
   } catch (err) {
     log.warn('prepare shared project skill links failed', {
       workingDir,
       error: err instanceof Error ? err.message : String(err),
     });
+    return false;
   }
 }
 const workerTurnStartSequencer = createWorkerTurnStartSequencer(log);
@@ -3210,7 +3212,10 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
     try {
       const kind = requireAgentKind(agentKind);
       const skillParams = params as { workingDir: string; forceReload?: boolean };
-      await prepareProjectSkillLinksFailSoft(skillParams?.workingDir);
+      const linksChanged = await prepareProjectSkillLinksFailSoft(skillParams?.workingDir);
+      if (kind === 'codex' && linksChanged) {
+        skillParams.forceReload = true;
+      }
       if (kind === 'codex') {
         await desktopCodexAuthAdapter.ensureGlobalCodexAssets();
       } else if (kind === 'claude-code') {
