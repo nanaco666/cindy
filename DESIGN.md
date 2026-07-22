@@ -684,6 +684,9 @@ card/container
 新版品牌区只读取 `brand.icon/logo`,不兼容旧顶层 `logo`、`logoScale` 或开发过程中的 `brand.mark/wordmark`;旧配置与新版组合结构语义不同,禁止猜测映射。「设置 → 外观」只保留本地主题副本、打开目录和刷新三个轻量入口,不放品牌预览或素材选择器。新导出的标准 JSON 在 `brand.icon/logo` 中直接放 `icon-square-50x50px.png` / `logo-horizontal-110x37.5px.png` 示例路径,让配置文件自身同时说明用途与最终显示区域;源图可按同宽高比导出 2x/3x。不另生成 README 或改用 JSONC。
 
 > logo 资产红 `#F70121` 是官方品牌资产固有色(WORD MARK frame 红箭头符号),与 UI 品牌红 `#DF0C27` **并存、不同值**——logo 是图片资产不进 token 体系,保持原色不改色。后人勿误改为 `#DF0C27`。
+
+Splash 品牌块字标是另一套素材(`assets/splash/wordmark.png` 白字 DARK 用 / `wordmark-light.png` 深字 LIGHT 用),2026-07-22 起两版统一为 459×156(@2x),渲染框 `229.5×78` 恰为其 2x 满框——此前白字版为 486×184,塞同框被 object-contain 缩小 ~10%,DARK 字标偏小(用户实机发现,已换图修复)。同日用户拍板:splash 字标 DARK/LIGHT **均不带投影**(原 `drop-shadow-[0_2px_6.5px_rgba(0,0,0,0.25)]` 移除),冻结测试 `SplashScreen.test.tsx` 已同步反向断言。
+
 ### 15.8 status-badge-fg(§7 必炸点,用户确认 2026-07-17)
 
 橙徽章(bg `status-bar-accent` `#EA6B17`,设计定稿 2026-07-17 取代 `#FF6600`)此前借用 `accent-pure-cta-fg`(白字)→ `#FFFFFF`×`#FF6600`=2.94:1 不达标(历史值,旧橙 #FF6600)。拆独立 `status-badge-fg`:

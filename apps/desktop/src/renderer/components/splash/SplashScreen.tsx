@@ -116,7 +116,7 @@ export function SplashScreen() {
           src={wordmark}
           alt=""
           draggable={false}
-          className="pointer-events-none absolute left-1/2 top-[352.5px] h-[78px] w-[229.5px] -translate-x-1/2 object-contain drop-shadow-[0_2px_6.5px_rgba(0,0,0,0.25)]"
+          className="pointer-events-none absolute left-1/2 top-[352.5px] h-[78px] w-[229.5px] -translate-x-1/2 object-contain"
           data-testid="splash-wordmark"
         />
         {/* 手写体 "Dream it Create it":字标右缘 +9px,与字标底部略交叠。 */}
