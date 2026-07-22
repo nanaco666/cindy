@@ -1573,11 +1573,14 @@ export const remoteSessionStore = {
         const completed = applyCodexPlanSnapshotOnDone(currentMessages, data?.plan, turnId);
         if (completed.changed) {
           messages.set(sessionId, [...completed.messages]);
-          if (Array.isArray(data?.plan) && completed.toolUseId) {
+        }
+        if (Array.isArray(data?.plan)) {
+          const toolUseId = completed.toolUseId ?? (turnId ? `plan:${turnId}` : null);
+          if (toolUseId) {
             rememberLivePlanSnapshot(sessionId, {
-              toolUseId: completed.toolUseId,
+              toolUseId,
               content: {
-                toolUseId: completed.toolUseId,
+                toolUseId,
                 toolName: 'update_plan',
                 input: { plan: data.plan },
               },

@@ -580,6 +580,36 @@ describe('remoteSessionStore', () => {
     });
   });
 
+  it('caches a terminal Codex plan before its persisted row arrives', () => {
+    remoteSessionStore.applyRemotePush('dev-1', 'maker:event', {
+      sessionId: 's1',
+      event: {
+        type: 'done',
+        source: 'codex',
+        data: {
+          type: 'codex/event/task_complete',
+          raw: { id: 'turn-1' },
+          plan: [{ step: 'Inspect', status: 'completed' }],
+        },
+      },
+    });
+
+    remoteSessionStore.appendMessage('s1', {
+      ...message('plan-row-1', 's1'),
+      role: 'tool_use',
+      toolUseId: 'plan:turn-1',
+      content: {
+        toolUseId: 'plan:turn-1',
+        toolName: 'update_plan',
+        input: { plan: [{ step: 'Inspect', status: 'in_progress' }] },
+      },
+    });
+
+    expect(remoteSessionStore.getMessages('s1')[0]).toMatchObject({
+      toolUseId: 'plan:turn-1',
+      content: { input: { plan: [{ step: 'Inspect', status: 'completed' }] } },
+    });
+  });
   it('applies live update_plan snapshots to the persisted task row', () => {
     const initialPlan = {
       ...message('plan-row-1', 's1'),

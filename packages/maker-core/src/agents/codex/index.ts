@@ -3240,7 +3240,13 @@ export class CodexAgent extends BaseAgent {
 
       stopRolloutPlanFallback = () => {
         if (timer) clearInterval(timer);
-        stopped = true;
+        // Do not await rollout I/O from handleTurnCompleted: that would overlap
+        // the next turn's usage/state cleanup. A final async poll is allowed to
+        // publish a late plan tool event; the clients reconcile it after done.
+        void poll(true).finally(() => {
+          stopped = true;
+          latestPlanByTurn.delete(turnId);
+        });
       };
 
       void (async () => {
