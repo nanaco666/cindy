@@ -161,11 +161,22 @@ export function resolveIosSigningEnv(regionConfig) {
   return { teamId, profileName, identity, profilePath };
 }
 
-/** 生成 xcodebuild -exportArchive 用的 ExportOptions.plist(development 方法 + 手动签名)。 */
-export function buildExportOptionsPlist({ teamId, bundleId, profileName, method = 'development' }) {
+/**
+ * 生成 xcodebuild -exportArchive 用的 ExportOptions.plist(development 方法 + 手动签名)。
+ * signingCertificate:钉死 export 阶段用的签名证书。打包机钥匙串里常存在多张
+ * "Apple Development" 证书,manual 签名不钉证书时 xcodebuild 会自选,可能挑到
+ * 不在 profile 里的那张导致 EXPORT FAILED。传该区域自己的 iosSigning.signIdentity
+ * (与 archive 的 CODE_SIGN_IDENTITY 同一张);不传时输出与旧版完全一致。
+ */
+export function buildExportOptionsPlist({ teamId, bundleId, profileName, signingCertificate, method = 'development' }) {
   if (!teamId || !bundleId || !profileName) {
     throw new Error('buildExportOptionsPlist requires teamId / bundleId / profileName');
   }
+  const signingCertificateEntry = signingCertificate
+    ? `
+    <key>signingCertificate</key>
+    <string>${signingCertificate}</string>`
+    : '';
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -175,7 +186,7 @@ export function buildExportOptionsPlist({ teamId, bundleId, profileName, method 
     <key>signingStyle</key>
     <string>manual</string>
     <key>teamID</key>
-    <string>${teamId}</string>
+    <string>${teamId}</string>${signingCertificateEntry}
     <key>provisioningProfiles</key>
     <dict>
         <key>${bundleId}</key>

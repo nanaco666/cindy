@@ -86,6 +86,18 @@ describe('buildExportOptionsPlist', () => {
     expect(plist).toContain('<key>com.xd.cindycn</key>');
     expect(plist).toContain('<string>cindycn_dev</string>');
   });
+  it('传 signingCertificate 时钉死 export 证书', () => {
+    const plist = buildExportOptionsPlist({
+      teamId: 'NTC4BJ542G', bundleId: 'com.xd.cindycn', profileName: 'cindycn_dev',
+      signingCertificate: 'Apple Development: Yi Zhou (RQ24UVT6TG)',
+    });
+    expect(plist).toContain('<key>signingCertificate</key>');
+    expect(plist).toContain('<string>Apple Development: Yi Zhou (RQ24UVT6TG)</string>');
+  });
+  it('不传 signingCertificate 时输出不含该键(向后兼容)', () => {
+    const plist = buildExportOptionsPlist({ teamId: 'NTC4BJ542G', bundleId: 'com.xd.cindycn', profileName: 'cindycn_dev' });
+    expect(plist).not.toContain('signingCertificate');
+  });
   it('缺参抛错', () => {
     expect(() => buildExportOptionsPlist({ teamId: 'x', bundleId: 'y' })).toThrow();
   });

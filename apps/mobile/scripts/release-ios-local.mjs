@@ -139,7 +139,13 @@ function buildIpa(env, region) {
   const archivePath = join(outDir, 'app.xcarchive');
   const exportDir = join(outDir, 'export');
   const plistPath = join(outDir, 'ExportOptions.plist');
-  writeFileSync(plistPath, buildExportOptionsPlist({ teamId: sign.teamId, bundleId: region.iosBundleId, profileName: sign.profileName }));
+  writeFileSync(plistPath, buildExportOptionsPlist({
+    teamId: sign.teamId,
+    bundleId: region.iosBundleId,
+    profileName: sign.profileName,
+    // 与 archive 的 CODE_SIGN_IDENTITY 同一张证书:避免钥匙串多证书时 export 自选到 profile 外的那张。
+    signingCertificate: sign.identity,
+  }));
 
   // xcodebuild 的 RN embed 阶段内部触发 expo export:embed 打 JS bundle,无法透传 --clear;
   // 构建前清 Metro/Babel 缓存,确保 EXPO_PUBLIC_ 变更(TAPTAP / API 等)被重新内联,不吃旧缓存。
