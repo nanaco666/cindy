@@ -85,31 +85,25 @@ describe('detect — agents-md kind', () => {
   });
 });
 
-describe('detect — skills', () => {
-  it('to-codex: claude/skills/ has 2 skills, codex side missing → 1 item with 2 subItems', async () => {
-    await fs.mkdir(path.join(tmpDir, '.claude', 'skills', 'a'), { recursive: true });
-    await fs.mkdir(path.join(tmpDir, '.claude', 'skills', 'b'), { recursive: true });
+describe('detect — shared skills', () => {
+  it('does not offer conversion for a Claude project skill', async () => {
+    const skillDir = path.join(tmpDir, '.claude', 'skills', 'a');
+    await fs.mkdir(skillDir, { recursive: true });
+    await fs.writeFile(path.join(skillDir, 'SKILL.md'), '---\nname: a\ndescription: a\n---\n');
+
     const r = await detect({ workingDir: tmpDir, agentKind: 'codex' });
-    const skill = r.items.find((i) => i.kind === 'skills');
-    expect(skill).toBeDefined();
-    expect(skill!.subItems).toHaveLength(2);
+
+    expect(r.items).toEqual([]);
   });
 
-  it('to-codex: codex side already has same-named skill → that one excluded', async () => {
-    await fs.mkdir(path.join(tmpDir, '.claude', 'skills', 'a'), { recursive: true });
-    await fs.mkdir(path.join(tmpDir, '.claude', 'skills', 'b'), { recursive: true });
-    await fs.mkdir(path.join(tmpDir, '.agents', 'skills', 'a'), { recursive: true });
-    const r = await detect({ workingDir: tmpDir, agentKind: 'codex' });
-    const skill = r.items.find((i) => i.kind === 'skills');
-    expect(skill!.subItems).toHaveLength(1);
-    expect(skill!.subItems![0].name).toBe('b');
-  });
+  it('does not offer conversion for a shared Codex project skill', async () => {
+    const skillDir = path.join(tmpDir, '.agents', 'skills', 'a');
+    await fs.mkdir(skillDir, { recursive: true });
+    await fs.writeFile(path.join(skillDir, 'SKILL.md'), '---\nname: a\ndescription: a\n---\n');
 
-  it('all skills exist on both sides → no skills item', async () => {
-    await fs.mkdir(path.join(tmpDir, '.claude', 'skills', 'a'), { recursive: true });
-    await fs.mkdir(path.join(tmpDir, '.agents', 'skills', 'a'), { recursive: true });
-    const r = await detect({ workingDir: tmpDir, agentKind: 'codex' });
-    expect(r.items.find((i) => i.kind === 'skills')).toBeUndefined();
+    const r = await detect({ workingDir: tmpDir, agentKind: 'claude-code' });
+
+    expect(r.items).toEqual([]);
   });
 
   it('target skill is a directory symlink → no skills item', async () => {
@@ -124,7 +118,7 @@ describe('detect — skills', () => {
     );
 
     const r = await detect({ workingDir: tmpDir, agentKind: 'codex' });
-    expect(r.items.find((i) => i.kind === 'skills')).toBeUndefined();
+    expect(r.items).toEqual([]);
   });
 });
 

@@ -9,7 +9,7 @@ import { z } from 'zod';
 
 import { withStore } from './_shared.js';
 import type { MemoryMcpDeps } from '../types.js';
-import type { MemoryToolRegistry } from '../lizi_memoryToolRegistry.js';
+import type { MemoryToolRegistry } from '../cindy_memoryToolRegistry.js';
 
 export function registerMemoryDeleteTool(registry: MemoryToolRegistry, deps: MemoryMcpDeps): void {
   registry.register({

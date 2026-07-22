@@ -118,6 +118,7 @@ import {
 import { messages, orcaTeams, orcaWorkers, sessions } from '../localDb/schema.js';
 import { createLogger } from '../logger.js';
 import { desktopClaudeAuthAdapter, desktopCodexAuthAdapter, readClaudeApiKey } from '../maker-host/auth-adapters.js';
+import { prepareSharedProjectSkillLinks } from '../maker-host/shared-global-skills.js';
 import { syncExternalCodexSessionFromDesktop } from '../maker-host/codex-local-sessions.js';
 import { getCodexProxyAuthInjection } from '../maker-host/codex-proxy-host.js';
 import {
@@ -152,6 +153,11 @@ import {
 } from '../maker-host/newMakerDefaultsCache.js';
 import { withRehydrateCloseSuppressed } from '../maker-host/rehydrateCloseSuppression.js';
 import { handleCloseSessionRequest } from './closeSessionRequest.js';
+import {
+  createOrcaIdleReleaseWatcher,
+  ORCA_IDLE_RELEASE_STATUSES,
+  type OrcaIdleReleaseWatcher,
+} from './orcaIdleReleaseWatcher.js';
 import {
   hasAssistantProgressAfterMessage,
   markSessionTurnEnded,
@@ -376,6 +382,25 @@ import {
 } from '../cindy-brain/index.js';
 
 const log = createLogger('maker-ipc');
+
+async function prepareProjectSkillLinksFailSoft(workingDir: unknown): Promise<boolean> {
+  // Slash/@ palettes are read-only device-link surfaces. Their remote invokes must not
+  // create or remove compatibility links in the controlled project's filesystem.
+  if (isDeviceLinkInvoke() || typeof workingDir !== 'string' || !workingDir) return false;
+  try {
+    const result = await prepareSharedProjectSkillLinks({ workingDir });
+    for (const warning of result.warnings) {
+      log.warn('shared project skill link warning', { workingDir, warning });
+    }
+    return result.changed;
+  } catch (err) {
+    log.warn('prepare shared project skill links failed', {
+      workingDir,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return false;
+  }
+}
 const workerTurnStartSequencer = createWorkerTurnStartSequencer(log);
 // silent-stop 自动续跑守卫(决策语义与防死循环不变量见 silentStopAutoResume.ts 文件头)。
 // 纯内存、app 级单例:额度按 sessionId 记账,kill switch 每次决策时现读(改配置即生效)。
@@ -845,10 +870,8 @@ export async function dispatchInterAgentMessage(params: DispatchOrcaInterAgentMe
   return dispatch(params);
 }
 
-/**
- * 模块级 idle watcher—— 由 startOrcaIdleWatcher 启, stopOrcaIdleWatcher 停。
- * 停掉后 maker 引用可能已过期, 不应再扫。 */
-let idleWatcherTimer: ReturnType<typeof setInterval> | null = null;
+/** 模块级 idle watcher；停止后不再持有可能已经失效的 maker 引用。 */
+let idleReleaseWatcher: OrcaIdleReleaseWatcher | null = null;
 
 /**
  * 取 Orca collab service, ready 前返 null。registerMakerIpc 执行完成后 holder
@@ -881,11 +904,8 @@ function createBridgeWorkerLabel(task: string): string {
 
 /** 停止 idle watcher setInterval (app quit 时调, maker 可能已 shutdown)。 */
 export function stopOrcaIdleWatcher(): void {
-  if (idleWatcherTimer) {
-    clearInterval(idleWatcherTimer);
-    idleWatcherTimer = null;
-    log.info('idleWatcher stopped');
-  }
+  idleReleaseWatcher?.stop();
+  idleReleaseWatcher = null;
 }
 
 function requireAgentKind(value: unknown): AgentKind {
@@ -1298,6 +1318,21 @@ const pendingFailedTurnAssistantPersistId = new Map<string, string>();
  * background-throttling keepalive。
  */
 const sendToSessionLocks = new Map<string, Promise<unknown>>();
+
+/** Serialize every local send / runtime release for one session. */
+function withSendToSessionLock<T>(sessionId: string, task: () => Promise<T>): Promise<T> {
+  const previous = sendToSessionLocks.get(sessionId);
+  const waitPrevious = previous ? previous.catch(() => undefined) : Promise.resolve();
+  const run = waitPrevious.then(task);
+  const tracked = run.finally(() => {
+    if (sendToSessionLocks.get(sessionId) === tracked) {
+      sendToSessionLocks.delete(sessionId);
+    }
+  });
+  sendToSessionLocks.set(sessionId, tracked);
+  return tracked;
+}
+
 let agentInputCoordinatorHolder: AgentInputCoordinator | null = null;
 const rewindInputSessions = new Set<string>();
 const SESSION_REWIND_INPUT_LOCK_ID = 'session-rewind';
@@ -1548,12 +1583,25 @@ function sessionMetaForIsland(session: {
 }
 
 function handleAgentIslandEventAfterBroadcast(
-  session: { id: string; agentKind?: unknown; workDir?: unknown; workspaceKind?: unknown },
+  session: {
+    id: string;
+    agentKind?: unknown;
+    workDir?: unknown;
+    workspaceKind?: unknown;
+    remoteHostId?: unknown;
+  },
   event: AgentEvent,
 ): void {
   if (!shouldNotifyAgentIslandForSession(session.id)) return;
   try {
-    getAgentIslandService()?.handleAgentEvent(sessionMetaForIsland(session), event);
+    const service = getAgentIslandService();
+    if (!service) return;
+    const meta = sessionMetaForIsland(session);
+    if (isRemoteAuthRetryErrorEvent(session, event)) {
+      service.deferRemoteAuthRetryError(meta, event);
+      return;
+    }
+    service.handleAgentEvent(meta, event);
   } catch (error) {
     log.warn('Agent Island event update failed after maker event broadcast', {
       sessionId: session.id,
@@ -1561,6 +1609,18 @@ function handleAgentIslandEventAfterBroadcast(
       error: error instanceof Error ? error.message : String(error),
     });
   }
+}
+
+function isRemoteAuthRetryErrorEvent(
+  session: { remoteHostId?: unknown },
+  event: AgentEvent,
+): boolean {
+  if (!session.remoteHostId || event.type !== 'error' || !isTerminalTurnErrorEvent(event)) return false;
+  const data = event.data as { message?: unknown; sdkError?: unknown } | undefined;
+  return data?.sdkError === 'authentication_failed' ||
+    /authentication_error|invalid.*api.key|401/i.test(
+      typeof data?.message === 'string' ? data.message : '',
+    );
 }
 
 function handleAgentIslandInteractionAfterBroadcast(
@@ -2134,10 +2194,7 @@ export function wireSessionToIpc(session: ReturnType<Maker['getSession']>): void
       // 重开会话会看到虚假错误卡。判定与 renderer 的 isAuthError 保持一致，覆盖
       // sdkError === 'authentication_failed' 以及 message 命中 authentication_error /
       // invalid api key / 401 的情形。本地会话（无 remoteHostId）无 auto-retry，不跳过。
-      isRemoteAuthRetry =
-        (errData?.sdkError === 'authentication_failed' ||
-          /authentication_error|invalid.*api.key|401/i.test(typeof errData?.message === 'string' ? errData.message : '')) &&
-        Boolean(session.remoteHostId);
+      isRemoteAuthRetry = isRemoteAuthRetryErrorEvent(session, event);
       if (!isPlannedUpgradeClose) {
         agentInputCoordinatorHolder?.onTurnEvent(
           session.id,
@@ -3193,6 +3250,11 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
   ipcMain.handle(MAKER_INVOKE.LIST_AGENT_SKILLS, async (_e, agentKind: unknown, params: unknown) => {
     try {
       const kind = requireAgentKind(agentKind);
+      const skillParams = params as { workingDir: string; forceReload?: boolean };
+      const linksChanged = await prepareProjectSkillLinksFailSoft(skillParams?.workingDir);
+      if (kind === 'codex' && linksChanged) {
+        skillParams.forceReload = true;
+      }
       if (kind === 'codex') {
         await desktopCodexAuthAdapter.ensureGlobalCodexAssets();
       } else if (kind === 'claude-code') {
@@ -3200,7 +3262,7 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
       }
       const result = await maker.listAgentSkills(
         kind,
-        params as { workingDir: string; forceReload?: boolean },
+        skillParams,
       );
       return { success: true, ...result };
     } catch (err) {
@@ -3210,7 +3272,9 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
 
   ipcMain.handle(MAKER_INVOKE.SCAN_AT_RESOURCES, async (_e, agentKind: unknown, params: unknown) => {
     try {
-      const result = await maker.scanAtResources(requireAgentKind(agentKind), params as { workingDir: string; cap?: number; query?: string });
+      const resourceParams = params as { workingDir: string; cap?: number; query?: string };
+      await prepareProjectSkillLinksFailSoft(resourceParams?.workingDir);
+      const result = await maker.scanAtResources(requireAgentKind(agentKind), resourceParams);
       return { success: true, ...result };
     } catch (err) {
       return {
@@ -4831,6 +4895,15 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
     return result;
   });
 
+  const hasPendingIdleReleaseInput = async (sessionId: string): Promise<boolean> => {
+    await inputCoordinator.ensureQueueRestored(sessionId).catch(() => undefined);
+    // A failed restore is itself a pending condition: never close a worker while
+    // its durable follow-up snapshot is still unavailable.
+    if (!inputCoordinator.isQueueRestored(sessionId)) return true;
+    return inputCoordinator.hasPendingQueuedWork(sessionId) ||
+      inputCoordinator.hasQueuedItemWhere(sessionId, () => true, { includeRecovery: true });
+  };
+
   const orcaTeamService = createOrcaTeamService({
     getWorkerLinkBySessionId: (workerSessionId) => getWorkerLink({ workerSessionId }),
     getWorkerLinkByWorkerId: (workerId) => getWorkerLink({ workerId }),
@@ -5092,60 +5165,61 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
   });
 
   // ─── Idle watcher ────────────────────────────────────────────────────────
-  // 每 60 秒扫描一次。workerIdleReleaseMinutes=0 表示关闭后台自动释放;
-  // 正数时才扫描 idle_since IS NULL 且 updated_at < now - threshold 的 worker
-  // → closeSession + DB 标 idle_since。
-  if (idleWatcherTimer) clearInterval(idleWatcherTimer);
-  idleWatcherTimer = setInterval(async () => {
-      try {
-        const settings = readCollaborationSettings();
-        if (settings.workerIdleReleaseMinutes <= 0) return;
-        const threshold = Date.now() - settings.workerIdleReleaseMinutes * 60_000;
-        const db = getDbClient().drizzle;
-        const idleCandidates = await db
-          .select()
-          .from(orcaWorkers)
-          .where(
-            sql`${orcaWorkers.idleSince} IS NULL AND ${orcaWorkers.status} IN ('running','idle') AND ${orcaWorkers.updatedAt} < ${threshold}`,
-          );
-        for (const w of idleCandidates) {
-          try {
-            const sess = maker.getSession(w.sessionId);
-            if (sess) {
-              if (sess.isTurnRunning()) {
-                // 正在跑 → 跳过, 更新 updatedAt 重置计时器
-                await db.update(orcaWorkers)
-                  .set({ updatedAt: Date.now() })
-                  .where(eq(orcaWorkers.id, w.id));
-                continue;
-              }
-              await sess.abort();
-              await maker.closeSession(w.sessionId);
-            }
-            const now = Date.now();
-            await db.update(orcaWorkers)
-              .set({ status: 'idle', idleSince: now, updatedAt: now })
-              .where(eq(orcaWorkers.id, w.id));
-            log.info('idleWatcher: released worker', {
-              workerId: w.id, sessionId: w.sessionId, idleThresholdMin: settings.workerIdleReleaseMinutes,
-            });
-            // broadcast → renderer 刷新 worker list
-            try {
-              const [wf] = await db.select({ leadSessionId: orcaTeams.leadSessionId })
-                .from(orcaTeams).where(eq(orcaTeams.id, w.teamId)).limit(1);
-              if (wf) broadcastToAllWindows(MAKER_PUSH.ORCA_WORKER_CHANGED, { leadSessionId: wf.leadSessionId });
-            } catch { /* best-effort */ }
-          } catch (err) {
-            log.warn('idleWatcher: release worker failed', {
-              workerId: w.id, err: err instanceof Error ? err.message : String(err),
-            });
-          }
-        }
-      } catch (err) {
-        log.warn('idleWatcher: scan failed', { err: err instanceof Error ? err.message : String(err) });
-      }
-    }, 60_000);
-  log.info('idleWatcher started');
+  // 只扫描 active team/session，避免已归档 Worker 被终态筛选重新捞起。
+  idleReleaseWatcher?.stop();
+  idleReleaseWatcher = createOrcaIdleReleaseWatcher({
+    readIdleReleaseMinutes: () => readCollaborationSettings().workerIdleReleaseMinutes,
+    listCandidates: async (updatedBefore) => {
+      const db = getDbClient().drizzle;
+      return db
+        .select({
+          id: orcaWorkers.id,
+          sessionId: orcaWorkers.sessionId,
+          leadSessionId: orcaTeams.leadSessionId,
+          status: orcaWorkers.status,
+          idleSince: orcaWorkers.idleSince,
+          updatedAt: orcaWorkers.updatedAt,
+        })
+        .from(orcaWorkers)
+        .innerJoin(orcaTeams, eq(orcaTeams.id, orcaWorkers.teamId))
+        .innerJoin(sessions, eq(sessions.id, orcaWorkers.sessionId))
+        .where(and(
+          isNull(orcaWorkers.idleSince),
+          inArray(orcaWorkers.status, ORCA_IDLE_RELEASE_STATUSES),
+          sql`${orcaWorkers.updatedAt} < ${updatedBefore}`,
+          eq(orcaTeams.status, 'active'),
+          eq(sessions.status, 'active'),
+        ));
+    },
+    getSession: (sessionId) => maker.getSession(sessionId) ?? null,
+    withSessionLock: withSendToSessionLock,
+    hasPendingInput: hasPendingIdleReleaseInput,
+    markReleased: async (candidate, releasedAt) => {
+      // Drizzle proxy 的 UPDATE ... RETURNING 会执行写入但返回空数组；这里直接用
+      // DbClient async exec 的 changes 做原子 compare-and-set 结果判定。
+      const result = await getDbClient().exec(
+        `UPDATE orca_workers
+         SET status = 'idle', idle_since = ?, updated_at = ?
+         WHERE id = ? AND status = ? AND idle_since IS NULL AND updated_at = ?`,
+        [releasedAt, releasedAt, candidate.id, candidate.status, candidate.updatedAt],
+      );
+      return result.changes === 1;
+    },
+    touchWorker: async (workerId, updatedAt) => {
+      await getDbClient().drizzle
+        .update(orcaWorkers)
+        .set({ updatedAt })
+        .where(eq(orcaWorkers.id, workerId));
+    },
+    closeSession: (sessionId) => maker.closeSession(sessionId),
+    broadcastWorkerChanged: (leadSessionId) => {
+      broadcastToAllWindows(MAKER_PUSH.ORCA_WORKER_CHANGED, { leadSessionId });
+    },
+    now: Date.now,
+    timer: { setInterval, clearInterval },
+    log,
+  });
+  idleReleaseWatcher.start();
 
   // ─── 把 internal 业务函数发布到 module-level holder ────────────────────
   // mcp-providers.ts 的 cindy_helper control deps 通过
@@ -5318,7 +5392,7 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
     },
   };
 
-  const { sendToAgentAccepted } = createMakerSendTransaction({
+  const { sendToAgentAccepted: sendToAgentAcceptedUnlocked } = createMakerSendTransaction({
     getSession: (sessionId) => maker.getSession(sessionId),
     closeSession: (sessionId) => maker.closeSession(sessionId),
     getSessionMeta: (sessionId) => maker.getSessionMeta(sessionId),
@@ -5384,6 +5458,11 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
     applyPendingAgentSwitch: (sessionId) => applyPendingAgentSwitchIfIdle(agentSwitchDeps, sessionId),
     log,
   });
+  const sendToAgentAccepted: typeof sendToAgentAcceptedUnlocked = (...args) => {
+    const [sessionId] = args;
+    if (typeof sessionId !== 'string') return sendToAgentAcceptedUnlocked(...args);
+    return withSendToSessionLock(sessionId, () => sendToAgentAcceptedUnlocked(...args));
+  };
 
   /**
    * Same-turn steer contract: resolved STEER means maker-core accepted the
@@ -5936,6 +6015,7 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
       ? agentMetaRaw as AgentMeta
       : null;
     onTurnErrorEvent(sid, errData, agentMeta);
+    getAgentIslandService()?.resolveDeferredRemoteAuthRetryError(sid);
   });
 
   ipcMain.handle(MAKER_INVOKE.INPUT_REMOVE, (_e, sessionId: unknown, clientId: unknown) => {

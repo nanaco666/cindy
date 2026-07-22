@@ -15,6 +15,7 @@ import { Plus, Server, RefreshCw, Trash2, ChevronRight, ChevronDown, KeyRound, P
 
 import { cn } from '@/lib/utils';
 import { toast } from '@/lib/toast';
+import { remoteSshHostsStore } from '@/lib/remoteSshHostsStore';
 import { extractIpcError, mapIpcErrorToI18nKey } from '@/utils/ipcError';
 
 import { RemoteHostDetail } from './RemoteHostDetail';
@@ -690,6 +691,7 @@ export function RemoteSection({ showTitle = true }: { showTitle?: boolean } = {}
     try {
       const res = await window.electronAPI.remoteSsh.list();
       setHosts(res.hosts);
+      remoteSshHostsStore.replace(res.hosts);
     } catch (err) {
       toast.error(t(mapIpcErrorToI18nKey(err, { fallback: 'settings.remote.toast.loadFailed' })));
     }
@@ -715,6 +717,7 @@ export function RemoteSection({ showTitle = true }: { showTitle?: boolean } = {}
     try {
       const res = await window.electronAPI.remoteSsh.reloadConfig();
       setHosts(res.hosts as RemoteHostSnapshot[]);
+      remoteSshHostsStore.replace(res.hosts);
       toast.success(t('settings.remote.toast.reloaded'));
     } catch (err) {
       toast.error(t(mapIpcErrorToI18nKey(err, { fallback: 'settings.remote.toast.loadFailed' })));
@@ -777,6 +780,7 @@ export function RemoteSection({ showTitle = true }: { showTitle?: boolean } = {}
     try {
       await window.electronAPI.remoteSsh.remove(id);
       setHosts((prev) => prev.filter((h) => h.config.id !== id));
+      remoteSshHostsStore.remove(id);
     } catch (err) {
       toast.error(t(mapIpcErrorToI18nKey(err, { fallback: 'settings.remote.toast.removeFailed' })));
     } finally {

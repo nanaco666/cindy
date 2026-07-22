@@ -1,14 +1,19 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import {
+  clearCompletedSchedulerOwnedRunForNewActivity,
+  clearSchedulerOwnedRun,
   clearCompletedSilencedRunForNewActivity,
   clearSilencedRun,
   getScheduleRunSessionAttentionBaseline,
   getSilencedRunSessionIdForAttentionFallback,
+  markNextSessionTerminalNotificationOwnedByScheduler,
   markNextSessionDoneSilenced,
+  observeNextSessionTerminalNotificationOwnedByScheduler,
   observeNextSessionDoneSilenced,
   rememberScheduleRunSessionAttentionBaseline,
   resetSilencedSessionDoneStoreForTests,
+  scheduleClearSchedulerOwnedRun,
   scheduleClearSilencedRun,
 } from '@/lib/silencedSessionDoneStore';
 
@@ -85,5 +90,23 @@ describe('silencedSessionDoneStore', () => {
     });
     expect(clearSilencedRun('run-1')).toBeUndefined();
     expect(getScheduleRunSessionAttentionBaseline('run-1')).toBeUndefined();
+  });
+
+  it('tracks scheduler notification ownership separately from full silence', () => {
+    markNextSessionTerminalNotificationOwnedByScheduler('run-owned', 'session-owned');
+
+    expect(observeNextSessionDoneSilenced('session-owned')).toBe(false);
+    expect(observeNextSessionTerminalNotificationOwnedByScheduler('session-owned')).toBe(true);
+    expect(clearSchedulerOwnedRun('run-owned')).toBe('session-owned');
+    expect(observeNextSessionTerminalNotificationOwnedByScheduler('session-owned')).toBe(false);
+  });
+
+  it('clears completed scheduler ownership before a later ordinary turn', () => {
+    markNextSessionTerminalNotificationOwnedByScheduler('run-owned', 'session-owned');
+    scheduleClearSchedulerOwnedRun('run-owned', 2000);
+
+    clearCompletedSchedulerOwnedRunForNewActivity('session-owned');
+
+    expect(observeNextSessionTerminalNotificationOwnedByScheduler('session-owned')).toBe(false);
   });
 });

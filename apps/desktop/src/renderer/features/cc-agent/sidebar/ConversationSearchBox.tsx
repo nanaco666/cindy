@@ -40,6 +40,10 @@ import type {
 import { highlightSegments } from '../lib/highlightSegments';
 import { resolveSessionRoute } from '@/lib/orcaSessionIdentity';
 import type { ProjectNode as ProjectNodeData } from '../lib/projectGrouping';
+import {
+  getRemoteProjectMachineIdentity,
+  projectDisplayLabelWithMachine,
+} from '../lib/remoteProjectIdentity';
 
 const DEBOUNCE_MS = 250;
 const SEMANTIC_SEARCH_DEBOUNCE_MS = 900;
@@ -642,7 +646,9 @@ export function SearchFilterMenu({
   const lockedProject = lockedProjectKey
     ? allKnownProjects.find((project) => project.projectKey === lockedProjectKey) ?? null
     : null;
-  const lockedProjectLabel = lockedProject?.displayName ?? lockedProjectName;
+  const lockedProjectLabel = lockedProject
+    ? projectDisplayLabelWithMachine(lockedProject)
+    : lockedProjectName;
   const projectValue =
     lockedProjectKey && lockedProjectLabel
       ? lockedProjectLabel
@@ -744,6 +750,7 @@ export function SearchFilterMenu({
           <div className="max-h-[280px] overflow-y-auto">
             {allKnownProjects.map((project) => {
               const selected = selectedProjects?.has(project.projectKey) ?? false;
+              const remoteIdentity = getRemoteProjectMachineIdentity(project);
               return (
                 <DropdownMenuItem
                   key={project.projectKey}
@@ -756,7 +763,7 @@ export function SearchFilterMenu({
                   className={MENU_ITEM_CLASS}
                 >
                   {project.scope === 'remote' ? (
-                    <Tip text={project.remoteHostId ?? ''}>
+                    <Tip text={remoteIdentity?.displayLabel ?? project.remoteHostId ?? ''}>
                       <Globe
                         size={14}
                         strokeWidth={2}
@@ -764,7 +771,14 @@ export function SearchFilterMenu({
                       />
                     </Tip>
                   ) : null}
-                  <span className="min-w-0 flex-1 truncate">{project.displayName}</span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate">{project.displayName}</span>
+                    {remoteIdentity ? (
+                      <span className="block truncate text-xs text-[var(--cmd-palette-item-meta)]">
+                        {remoteIdentity.displayLabel}
+                      </span>
+                    ) : null}
+                  </span>
                   <span className="shrink-0 text-xs text-[var(--cmd-palette-item-meta)]">
                     {project.sessions.length}
                   </span>

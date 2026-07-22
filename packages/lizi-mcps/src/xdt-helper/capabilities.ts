@@ -56,7 +56,7 @@ export const CAPABILITIES: readonly CapabilityEntry[] = [
       '【怎么开】用户表达"用 worker / 协同模式 / 独立 agent / 派一个 agent 帮我 X"等意图时, Lead 调 start_team 工具创建 team, 再调 create_worker 工具添加 worker。worker 创建后可通过 send_to_worker 派活, 通过 list_workers 查看所有 worker, 通过 switch_focus 切换 focused worker。',
       '【怎么关】用户表达"够了 / 关掉 worker / 不要协同了"时, Lead 调 end_team 结束整个 team(归档所有 worker), 或调 archive_worker 归档单个 worker。Lead 自身保留可继续单 session 对话。',
       '【硬边界】Worker session 不能再开 team(嵌套禁止, 返 WORKER_CANNOT_NEST);Claude Code / Codex 本地项目 session 都可以作为 Lead 调 start_team;Worker 不能结束自己所在 team(返 WORKER_CANNOT_DISABLE);要求 Lead session 有 workingDir。',
-      '【工具归属】9 个 team 工具(start_team / create_worker / send_to_worker / list_workers / switch_focus / idle_worker / end_team / archive_worker / list_available_models)在独立的 lizi_orca server 直接顶层注册, 对应"协同模式"可关插件(Settings → Connections → Built-in Tools)。通用 session handoff 原语 send_to_session 在 essential 的 cindy_helper 的 handoff 类目下(走 call_tool, 常开, 供 skill 路由用)。',
+      '【工具归属】13 个 team 工具(start_team / create_worker / create_workers / send_to_worker / list_worker_queue / update_queued_message / cancel_queued_message / list_workers / switch_focus / idle_worker / end_team / archive_worker / list_available_models)在独立的 lizi_orca server 直接顶层注册, 对应"协同模式"可关插件(Settings → Connections → Built-in Tools)。通用 session handoff 原语 send_to_session 在 essential 的 cindy_helper 的 handoff 类目下(走 call_tool, 常开, 供 skill 路由用)。',
       `【与 Claude Code Task tool / Codex subagent 的区别】Task / subagent 是 agent 框架内的子任务派发机制(子 agent 跑在同一 SDK 进程内、有限工具集、生命周期短、对话历史归属父 turn);${BRAND_NAME} 协同模式是业务层的 session 级编排(Lead/Worker 都是完整独立的 ${BRAND_NAME} session, 独立进程、UI 栏位、完整工具、独立对话历史, 长生命周期, 通过 main 进程 IPC + MCP bridge 通信)。两者不互斥, Worker 内部仍可用 Task/subagent 派子任务。`,
       '【手动入口】ChatInput 工具行的橙色 puzzle pill(CollaborationModeToggle), 用户也能手动开/关, 与本工具走同一份业务代码。',
     ].join(' '),
@@ -140,7 +140,7 @@ export const CAPABILITIES: readonly CapabilityEntry[] = [
       '【向量是增益不是依赖】search_chat_history 在用户没开 embedding / sqlite-vec 不可用时静默退化为纯 FTS, 搜索照常工作; 响应里 vector_used 标明向量是否生效。',
       '【分页】所有工具游标分页, 单次硬上限防炸 context, 但 hasMore + nextCursor 串联多次调用可拿全量, 不会丢信息。',
       '【权限】数据按 userId 物理隔离, 工具允许查当前用户所有 session 的全量历史。',
-      '【与 memory-system 的区别】memory-system(lizi_memory)管理的是已经提炼好的 markdown 记忆条目; chat-history-query 给的是原始对话数据本身, 是上游素材。两者通常配合用: 先 get_chat_history 拉素材, 再 memory_write 落条目。',
+      '【与 memory-system 的区别】memory-system(cindy_memory)管理的是已经提炼好的 markdown 记忆条目; chat-history-query 给的是原始对话数据本身, 是上游素材。两者通常配合用: 先 get_chat_history 拉素材, 再 memory_write 落条目。',
     ].join(' '),
   },
   {

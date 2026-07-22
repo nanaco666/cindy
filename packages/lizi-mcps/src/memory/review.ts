@@ -12,7 +12,7 @@
 import { withStore } from './_shared.js';
 import { buildJsonResult } from './_shared.js';
 import type { MemoryMcpDeps } from '../types.js';
-import type { MemoryToolRegistry } from '../lizi_memoryToolRegistry.js';
+import type { MemoryToolRegistry } from '../cindy_memoryToolRegistry.js';
 import { classifyMemoryError } from './errors.js';
 
 export function registerMemoryReviewTool(registry: MemoryToolRegistry, deps: MemoryMcpDeps): void {

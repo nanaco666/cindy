@@ -10,8 +10,8 @@
  * 跟 createDesktopMcpProviders 的关系:
  *  manager 实例由本工厂创建后, 同时注入两处:
  *   1. agents 的 deps.makerMemory (agent 在 startSession 时拼 prompt + 创建 flush controller)
- *   2. createDesktopMcpProviders({ memory: { getManager } }) (lizi_memory MCP server 的写入路径)
- *  两处共享同一个 manager 引用, agents 跟 lizi_memory tool 看到的 enabled 状态一致。
+ *   2. createDesktopMcpProviders({ memory: { getManager } }) (cindy_memory MCP server 的写入路径)
+ *  两处共享同一个 manager 引用, agents 跟 cindy_memory tool 看到的 enabled 状态一致。
  *
  * 鸡生蛋 (manager 需要 agents, agents 需要 manager):
  *  manager 构造期 agents 字段先传空 {}, 后续通过 attachAgents 补上 — 因为

@@ -5,7 +5,7 @@
  * 架构：
  *   Electron main 进程 ↔ http.Server @ 127.0.0.1:<random-port>
  *                          ├ /mcp/lizi_feishu → FeishuMcpServer factory
- *                          └ /mcp/lizi_memory → MemoryMcpServer factory
+ *                          └ /mcp/cindy_memory → MemoryMcpServer factory
  *
  * 鉴权：bearer token (随机 32 字节 hex)，token 通过 LIZI_MCP_TOKEN env 传给
  * codex 子进程，codex config 用 bearer_token_env_var 引用。
@@ -50,7 +50,7 @@ export interface CodexHttpBridge {
 
 export interface StartCodexHttpBridgeOptions {
   /**
-   * 各 MCP server factory，按 codex config 用的名字 keyed (例如 lizi_feishu / lizi_memory)。
+   * 各 MCP server factory，按 codex config 用的名字 keyed (例如 lizi_feishu / cindy_memory)。
    * MCP SDK 的 McpServer/Protocol 实例只能 connect 一个 transport，所以每个
    * streamable-http session 必须拿到独立实例。
    */

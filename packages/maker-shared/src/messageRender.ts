@@ -424,6 +424,57 @@ export function findMessageTodoInsertions<TMessage extends MessageRenderSourceMe
   return out;
 }
 
+export interface CodexPlanSnapshotApplyResult<
+  TMessage extends MessageRenderSourceMessageLike,
+> {
+  messages: readonly TMessage[];
+  changed: boolean;
+  toolUseId: string | null;
+}
+
+export function applyCodexPlanSnapshotOnDone<
+  TMessage extends MessageRenderSourceMessageLike,
+>(
+  messages: readonly TMessage[],
+  snapshot: unknown,
+  turnId?: string | null,
+): CodexPlanSnapshotApplyResult<TMessage> {
+  if (!Array.isArray(snapshot)) return { messages, changed: false, toolUseId: null };
+  const expectedToolUseId = turnId ? `plan:${turnId}` : null;
+
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message.role !== 'tool_use' || toolNameOf(message) !== 'update_plan') continue;
+    const content = readRecord(message.content);
+    const contentToolUseId = typeof content?.toolUseId === 'string' ? content.toolUseId : null;
+    const toolUseId = message.toolUseId ?? contentToolUseId;
+    if (expectedToolUseId && toolUseId !== expectedToolUseId) continue;
+
+    const input = readRecord(toolInputOf(message));
+    if (!Array.isArray(input?.plan)) continue;
+    if (samePlanSnapshot(input.plan, snapshot)) {
+      return { messages, changed: false, toolUseId };
+    }
+
+    const next = [...messages];
+    next[index] = {
+      ...message,
+      ...(message.toolInput !== undefined
+        ? { toolInput: { ...input, plan: snapshot } }
+        : {}),
+      ...(content
+        ? { content: { ...content, input: { ...input, plan: snapshot } } }
+        : {}),
+    };
+    return { messages: next, changed: true, toolUseId };
+  }
+  return { messages, changed: false, toolUseId: null };
+}
+
+function samePlanSnapshot(left: unknown[], right: unknown[]): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
 export function isAgentPlanToolName(toolName: string | undefined): boolean {
   return toolName === 'TodoWrite' || toolName === 'update_plan' || Boolean(toolName && TASK_PLAN_TOOL_NAMES.has(toolName));
 }

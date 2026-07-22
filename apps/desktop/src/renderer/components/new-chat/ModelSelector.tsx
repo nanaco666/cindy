@@ -1058,7 +1058,7 @@ export function ModelSelectorContent({
                 )}
                 {isBudgetModel && (
                   <span className="inline-flex shrink-0 items-center rounded-full bg-[var(--model-budget-badge-bg)] px-2 py-[1px] text-[11px] font-medium text-[var(--model-budget-badge-text)]">
-                    85% off
+                    {t('newChat.modelSelector.meta.budgetDiscount')}
                   </span>
                 )}
                 {rowEffort && (
@@ -1070,7 +1070,7 @@ export function ModelSelectorContent({
                   <Zap
                     size={13}
                     className="shrink-0 text-[var(--text-tertiary)]"
-                    aria-label="Fast"
+                    aria-label={t('newChat.modelSelector.meta.fastBadge')}
                   />
                 )}
               </span>
@@ -1349,7 +1349,7 @@ export function ModelSelector({
   const currentModel = visibleModels.find((m) => m.id === modelId);
   const displayLabel = fallbackOption?.active
     ? fallbackOption.label
-    : (currentModel?.displayName ?? 'Select model');
+    : (currentModel?.displayName ?? t('newChat.modelSelector.trigger.placeholder'));
   const efforts = currentModel?.efforts ?? [];
 
   const currentAgentKind: AgentKind | null = useMemo(() => {
@@ -1435,8 +1435,11 @@ export function ModelSelector({
     : showSourceDisconnected
       ? `${t('newChat.modelSelector.source.disconnected')}: ${displayLabel}`
       : effortLabel
-        ? `Select model. Current: ${displayLabel}, ${effortLabel} effort`
-        : `Select model. Current: ${displayLabel}`;
+        ? t('newChat.modelSelector.trigger.ariaWithEffort', {
+            model: displayLabel,
+            effort: effortLabel,
+          })
+        : t('newChat.modelSelector.trigger.aria', { model: displayLabel });
   const isBudget = modelId.startsWith('codex/');
   const isFieldTrigger = triggerVariant === 'field';
   const isCreateAgentVariant = visualVariant === 'create-agent';
@@ -1639,7 +1642,7 @@ export function ModelSelector({
                       ? 'text-[var(--create-agent-control-icon)]'
                       : 'text-[var(--composer-pill-icon,#3C3F43)] dark:text-[var(--composer-pill-icon,#D9D9D9)]',
                   )}
-                  aria-label="Fast"
+                  aria-label={t('newChat.modelSelector.meta.fastBadge')}
                 />
               )}
             </>

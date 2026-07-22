@@ -86,23 +86,26 @@ PR #101 之后，Orca 的 main 侧业务由独立 service 承接，`register.ts`
 
 ### MCP 与 IPC 控制面
 
-`lizi_orca` 是独立 MCP server，直接顶层注册 15 个工具：12 个 team 控制工具 + 3 个只读诊断工具（后者从已下线的 `orca_bridge` 桥入，保裸名）。它与 renderer IPC 共用同一组 main 侧 service，因此 MCP 和 UI 操作必须有一致的权限、状态和回滚语义。
+`lizi_orca` 是独立 MCP server，直接顶层注册 16 个工具：13 个 team 控制工具 + 3 个只读诊断工具（后者从已下线的 `orca_bridge` 桥入，保裸名）。它与 renderer IPC 共用同一组 main 侧 service，因此 MCP 和 UI 操作必须有一致的权限、状态和回滚语义。
 
 1. `start_team`
 2. `end_team`
 3. `create_worker`
-4. `list_workers`
-5. `switch_focus`
-6. `send_to_worker`
-7. `list_worker_queue`（排队消息控制）
-8. `update_queued_message`（排队消息控制）
-9. `cancel_queued_message`（排队消息控制）
-10. `idle_worker`
-11. `archive_worker`
-12. `list_available_models`
-13. `get_workspace_info`（只读诊断）
-14. `worker_status`（只读诊断）
-15. `read_worker`（只读诊断）
+4. `create_workers`（批量创建；顺序执行、hard limit 后停止并返回逐项汇总）
+5. `list_workers`
+6. `switch_focus`
+7. `send_to_worker`
+8. `list_worker_queue`（排队消息控制）
+9. `update_queued_message`（排队消息控制）
+10. `cancel_queued_message`（排队消息控制）
+11. `idle_worker`
+12. `archive_worker`
+13. `list_available_models`
+14. `get_workspace_info`（只读诊断）
+15. `worker_status`（只读诊断）
+16. `read_worker`（只读诊断）
+
+批量创建必须走一次 `create_workers` 调用，不能让 Lead 并行或连续发多个独立 `create_worker`。批量工具按输入顺序复用同一个 `OrcaLifecycleService.createWorker` 原语；首次收到 `WORKER_LIMIT_HARD_EXCEEDED` 或批次级 `HOST_NOT_READY` 后不再调用 host，剩余项稳定标为 `skipped`。返回值必须包含请求数、实际尝试数、成功数、失败数、跳过数、总未创建数、数量闸快照、代码确定生成的 `user_report`，以及逐项真实 worker/session 或失败终态，供 Lead 如实向用户收口；`success_count + failure_count + skipped_count` 必须等于 `request_count`，其中 `not_created_count = failure_count + skipped_count`。单个 `create_worker` 继续作为兼容入口，并返回相同的结构化 hard-limit 快照。
 
 排队消息控制 3 工具让 Lead 在消息被 worker 消费前管理自己发出的排队消息：`send_to_worker` / `create_worker`（initial_task）在 `wakeKind='queued'` 时回传 `queued_message_id`（coordinator 队列内的 clientId），Lead 可据此列出、整条改写或撤回。实现走 `OrcaTeamService.listWorkerQueuedMessages / updateWorkerQueuedMessage / cancelWorkerQueuedMessage`，语义约束见「协同运行时行为契约 · 消息派发与 auto-bridge」第 6 条。
 
@@ -204,7 +207,7 @@ Worktree 现状：Orca 与普通 session 对齐，worktree 是可选项，不强
 当前文档要求保留以下回归方向：
 
 - Service 边界：`orcaLifecycleService`、`orcaWorkerCreationService`、`orcaTeamService` 的单测覆盖 start/enable/create/dispatch/idle/archive/auto-bridge 关键路径。
-- MCP 工具：`lizi_orca` 15 工具（12 team + 3 只读诊断）的 role gate、ctx 缺失、worker/main 误调用、soft/hard limit、duplicate label、budget model API mode gate；诊断工具的纯只读语义（无 active team 时返回空 workspace、不建 team）；排队消息控制 3 工具的归属校验（跨 lead 拒绝）、非 lead 条目拒绝（`NOT_LEAD_MESSAGE`）、steering 拒绝（`MESSAGE_CONSUMING`）、撤回结清 accepted 暂存。
+- MCP 工具：`lizi_orca` 16 工具（13 team + 3 只读诊断）的 role gate、ctx 缺失、worker/main 误调用、soft/hard limit、duplicate label、budget model API mode gate；`create_workers` 另覆盖默认 hard limit、配置 hard=3、部分成功、连续失败与 hard-limit 后不再调用 host；诊断工具的纯只读语义（无 active team 时返回空 workspace、不建 team）；排队消息控制 3 工具的归属校验（跨 lead 拒绝）、非 lead 条目拒绝（`NOT_LEAD_MESSAGE`）、steering 拒绝（`MESSAGE_CONSUMING`）、撤回结清 accepted 暂存。
 - Codex MCP context：`CodexMcpThreadContextStore` 覆盖按 threadId 查 context、unknown / missing threadId fail-closed、unregister 后清理、`vendorOptions` 引用保持；`codexHttpBridge` 覆盖从 JSON-RPC `params._meta.threadId` 注入真实 session context。
 - Host 归属校验：`send_to_worker`、`idle_worker`、`archive_worker` 经共享 `resolveWorkerRef`（同时接受 worker_id / session_id 两种 id）必须以 caller 自身 Lead 身份校验，拒绝跨 workflow worker id 与 ctx 缺失；即使模型传错 id 或换用另一种 id，也不能越权操作。
 - UI route：Orca worker 不出现在 sidebar，Lead 自动进 split route，worker deep link 解析到 Lead split route；已有测试守住“不用 fork parentSessionId 或标题推断 Orca mapping”，见 `apps/desktop/src/renderer/__tests__/orcaWorkflowRoute.test.ts` 的 `does not use fork parentSessionId or title-linked worker lookup for Orca mapping`。
@@ -257,9 +260,13 @@ Codex thread start / resume 成功后必须注册 `threadId -> session context`�
 
 `parent_session_id` 是 fork/session-branch 关系，不是 worker 归属关系。Orca 归属必须查 `orca_teams/orca_workers`。已有 route 测试防止 split view 用 `parentSessionId` 或标题匹配 worker，见 `apps/desktop/src/renderer/__tests__/orcaWorkflowRoute.test.ts` 的 `does not use fork parentSessionId or title-linked worker lookup for Orca mapping`。
 
-#### 10. Worker 回收要克制（状态：规划不变量）
+#### 10. Worker 回收要克制（状态：无损 idle release 已落地）
 
-Worker 的价值在于上下文可延续、可观察、可介入。自动 kill/archive 在 resume 链路完全可靠前应保守；长期 worker 默认不自动做有损回收。当前手动 `idle_worker/archive_worker/end_team` 已够用；自动 hibernate/reclaim 需要等生命周期分型和 resume E2E 完整后再开。
+Worker 的价值在于上下文可延续、可观察、可介入。PR #340 已落地无损的 idle release：idle watcher 在 Worker 超过设置的空闲阈值、没有运行中的 turn 或排队输入时，关闭本进程持有的 Maker runtime，并以 CAS 原子写入 `status = idle` 和 `idle_since`。`idle_since != null` 是 runtime 已释放的持久化标记，不是 `idle/running/done/error` 之外的第五种 Worker 状态；Worker 记录、session、历史和上下文都继续保留。
+
+再次向该 Worker 派发任务时，既有 resume 链路会复用或重建 runtime，并在任务被接受时恢复运行态。共享 userData 多实例下，watcher 只释放本进程实际持有 runtime 的 Worker；没有本地 runtime 的记录保持不变，由其 runtime owner 负责处理。
+
+这套机制只等价于无损 hibernate，不等价于 archive/delete。`idle_worker/archive_worker/end_team` 仍保留显式控制语义；长期 Worker 的自动有损回收，以及 persistent/ephemeral 分型后的差异化回收策略，仍应保持保守并在后续单独落地。
 
 ## Part 2 · 未来规划
 
@@ -289,14 +296,16 @@ Orca 的长期方向不是“进入一个固定协同模式”，而是在主线
 
 ### Worker 生命周期分型
 
-Worker 分两类：
+当前 schema 尚未落地 persistent/ephemeral 字段和分型策略。PR #340 先提供了与类型无关的 idle release/resume 基础能力：所有合法 Worker 状态都可在空闲超时后释放本地 runtime，以 `idle_since != null` 记录释放结果。下面两类是后续分型后的目标策略：
+
+Worker 计划分两类：
 
 | 类型 | 语义 | 默认回收策略 |
 |---|---|---|
-| persistent | 长期协作者，价值是上下文延续与可介入 | 不自动做有损回收；等 resume 稳定后最多 hibernate |
+| persistent | 长期协作者，价值是上下文延续与可介入 | 允许无损 hibernate/resume；不自动 archive/delete |
 | ephemeral | 可观测的一次性执行单元，像“看得见的 subagent” | done/error 后可优先进入回收候选 |
 
-`role` 与 lifecycle 正交。`developer/reviewer/tester/merger` 是职责，不表示长期或一次性。创建时可以声明 lifecycle；运行中升降级放后续。
+`role` 与 lifecycle 正交。`developer/reviewer/tester/merger` 是职责，不表示长期或一次性。分型落地后，创建时可以声明 lifecycle；运行中升降级放后续。
 
 一次性任务不一定要开 worker。只有满足“需要独立可见历史、多轮追问、Lead 切过去 review、用户接管、共用模型/桥接/审计”等条件时，才值得用 ephemeral worker；否则应走 subagent。
 

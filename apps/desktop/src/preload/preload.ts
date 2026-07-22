@@ -53,6 +53,7 @@ import type { VoiceInputAsrMode, VoiceInputProviderKind } from '../shared/voiceI
 import type { VoiceInputRefinerProviderKind, VoiceInputRefinerTransport } from '../shared/voiceInputRefinerProfiles';
 import { isIpcErrorCode, type IpcErrorCode } from '../shared/ipc-errors';
 import type { VoiceInputSyncErrorResult } from '../shared/voiceInputData';
+import type { UtilityTextFailure } from '../shared/utilityTextResult';
 import type {
   ReviewBranchDiffData,
   ReviewCommitDiffData,
@@ -429,7 +430,7 @@ const fanOutMakerSessionPrefApply = createIpcFanOut('maker:session-pref:apply');
 // 但 preload 是单独编译单元，不便 import；renderer 真正消费在 vite-env.d.ts 重新声明）。
 interface CrossAgentMigrationItem {
   id: string;
-  kind: 'agents-md' | 'skills' | 'agents' | 'hooks' | 'mcp';
+  kind: 'agents-md' | 'agents' | 'hooks' | 'mcp';
   direction: 'to-claude' | 'to-codex';
   label: string;
   source: string;
@@ -1169,7 +1170,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       lifecycleAnnouncement: boolean;
     }> => ipcRenderer.invoke('feishuBot:get-state'),
     save: (payload: { appId: string; appSecret: string }): Promise<{
-      verdict: 'connected' | 'conflict' | 'error';
+      verdict: 'connected' | 'conflict' | 'error' | 'pending';
     }> => ipcRenderer.invoke('feishuBot:save', payload),
     reconnect: (): Promise<{ verdict: 'connected' | 'conflict' | 'error' }> =>
       ipcRenderer.invoke('feishuBot:reconnect'),
@@ -2037,6 +2038,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     channels?: { desktop?: boolean; feishu?: boolean };
   }): Promise<void> =>
     ipcRenderer.invoke('notification:show-session-event', payload),
+  notificationSetDesktopEnabled: (enabled: boolean): Promise<{ ok: true }> =>
+    ipcRenderer.invoke('notification:set-desktop-enabled', enabled),
   notificationMarkSessionAttention: (sessionId: string): Promise<void> =>
     ipcRenderer.invoke('notification:mark-session-attention', sessionId),
   // intent:'explicit' = 用户真实看到了内容(报错 banner 聚焦驻留 / 全部标为已读等);
@@ -4249,6 +4252,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
         targetSessionId?: string;
         currentCommand?: string;
       }): Promise<{
+        ok: true;
         command: string;
         filePath: string;
         content: string;
@@ -4266,7 +4270,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
           spawnError?: string;
           error?: string;
         };
-      }> => ipcRenderer.invoke('maker:schedule:generate-pre-run-hook', params),
+      } | UtilityTextFailure> => ipcRenderer.invoke('maker:schedule:generate-pre-run-hook', params),
       listRuns: (id: string, limit?: number): Promise<unknown[]> =>
         ipcRenderer.invoke('maker:schedule:list-runs', id, limit),
       listSidebarIndexRuns: (): Promise<unknown[]> =>

@@ -2,7 +2,7 @@
  * lizi_contactsMcpServer.ts
  * ---------------------------------------------------------------------------
  * In-process MCP server exposing Maker Contacts(智能通讯录, agent-native 全局
- * 人物实体库)to cc / codex agents. Mirrors lizi_memoryMcpServer.ts:
+ * 人物实体库)to cc / codex agents. Mirrors cindy_memoryMcpServer.ts:
  *
  *  - 只暴露两个 entry tool: list_tools / call_tool (常驻 prompt ~200 token)
  *  - 20+ 个细粒度工具在 contacts/*.ts 注册到 ContactsToolRegistry(import_system 仅

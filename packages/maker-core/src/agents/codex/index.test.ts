@@ -4545,7 +4545,9 @@ describe('CodexAgent turn lifecycle', () => {
       },
     });
 
-    expect(handle.getUsageSnapshot().tokenUsage).toBe(0);
+    await waitForExpectation(() => {
+      expect(handle.getUsageSnapshot().tokenUsage).toBe(0);
+    });
 
     handlers.turnStarted?.({
       threadId: 'start-thread-id',
@@ -6038,6 +6040,84 @@ describe('CodexAgent plan mode', () => {
     await handle.close();
   });
 
+  it('attaches the latest structured plan snapshot to task_complete without changing statuses', async () => {
+    const agent = new CodexAgent(createDeps());
+    const host = installTurnHost(agent);
+    const handle = await agent.startSession({
+      sessionId: 'session-plan-terminal-sync',
+      model: 'gpt-5.4',
+      workingDir: '/repo',
+    });
+    const iterator = handle.events()[Symbol.asyncIterator]();
+    const handlers = host.getThreadHandlers();
+    if (!handlers) throw new Error('expected thread handlers');
+
+    await handle.send({ type: 'user', content: 'implement it' });
+    handlers.turnStarted?.({ threadId: 'start-thread-id', turn: { id: 'turn-1' } });
+    const plan = [
+      { step: 'Inspect', status: 'completed' as const },
+      { step: 'Patch', status: 'in_progress' as const },
+      { step: 'Test', status: 'pending' as const },
+    ];
+    handlers.turnPlanUpdated?.({ threadId: 'start-thread-id', turnId: 'turn-1', plan });
+    handlers.turnCompleted?.({
+      threadId: 'start-thread-id',
+      turn: { id: 'turn-1', status: 'completed' },
+    });
+
+    let done: AgentEvent | null = null;
+    for (let i = 0; i < 20 && !done; i += 1) {
+      const event = await nextEvent(iterator);
+      if (event.type === 'done') done = event;
+    }
+    expect(done).toMatchObject({
+      type: 'done',
+      data: { type: 'codex/event/task_complete', plan },
+    });
+    await handle.close();
+  });
+
+  it('does not attach a prior turn plan to a later task_complete', async () => {
+    const agent = new CodexAgent(createDeps());
+    const host = installTurnHost(agent);
+    const handle = await agent.startSession({
+      sessionId: 'session-plan-terminal-cross-turn',
+      model: 'gpt-5.4',
+      workingDir: '/repo',
+    });
+    const iterator = handle.events()[Symbol.asyncIterator]();
+    const handlers = host.getThreadHandlers();
+    if (!handlers) throw new Error('expected thread handlers');
+
+    await handle.send({ type: 'user', content: 'first turn' });
+    handlers.turnStarted?.({ threadId: 'start-thread-id', turn: { id: 'turn-1' } });
+    handlers.turnPlanUpdated?.({
+      threadId: 'start-thread-id',
+      turnId: 'turn-1',
+      plan: [{ step: 'Patch', status: 'in_progress' }],
+    });
+    handlers.turnCompleted?.({
+      threadId: 'start-thread-id',
+      turn: { id: 'turn-1', status: 'interrupted' },
+    });
+    while ((await nextEvent(iterator)).type !== 'done') { /* drain first turn */ }
+
+    await handle.send({ type: 'user', content: 'second turn without a plan' });
+    handlers.turnStarted?.({ threadId: 'start-thread-id', turn: { id: 'turn-2' } });
+    handlers.turnCompleted?.({
+      threadId: 'start-thread-id',
+      turn: { id: 'turn-2', status: 'completed' },
+    });
+
+    const secondTurnEvents: AgentEvent[] = [];
+    for (let i = 0; i < 20 && secondTurnEvents.at(-1)?.type !== 'done'; i += 1) {
+      const event = await nextEvent(iterator);
+      secondTurnEvents.push(event);
+    }
+    expect(secondTurnEvents.some((event) => event.type === 'tool_use')).toBe(false);
+    await handle.close();
+  });
+
   it('does not intercept native plan items from an active normal turn after arming the next turn', async () => {
     const agent = new CodexAgent(createDeps());
     const host = installTurnHost(agent);
@@ -6156,6 +6236,10 @@ describe('CodexAgent plan mode', () => {
     if (!handlers) throw new Error('expected thread handlers');
     handlers.turnStarted?.({ threadId: 'start-thread-id', turn: { id: 'turn-1' } });
     handlers.turnCompleted?.({ threadId: 'start-thread-id', turn: { id: 'turn-1', status: 'completed' } });
+    await waitForExpectation(() => {
+      expect(turnStartCalls(host)).toHaveLength(1);
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
 
     await handle.send({ type: 'user', content: 'just do it' });
     const [, resetParams] = turnStartCalls(host)[1] as [string, Record<string, unknown>];

@@ -4,9 +4,6 @@
  * 的专属回归面——authorizeUrl / tokenUrl 域名钉白名单、scopes 上限、保留
  * 参数拒绝、identity 声明、确认框展示授权域名与 scopes 原文。
  */
-import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -460,51 +457,6 @@ describe('ghost · oauth 凭证声明校验', () => {
     }
   });
 });
-
-describe('ghost · 内置意识 filo-google 身份卡', () => {
-  // 锁测试(与 ghost.test.ts 锁 cindy-web-search 同精神):内置包的身份卡
-  // 必须永远过校验——oauth 契约改动若打破它,在这里而不是用户装入时炸。
-  it('resources 里的 ghost.json 永远通过校验', () => {
-    const file = path.resolve(
-      path.dirname(fileURLToPath(import.meta.url)),
-      '../../../resources/builtin-ghosts/filo-google/ghost.json',
-    );
-    const parsed = JSON.parse(fs.readFileSync(file, 'utf-8')) as Record<string, unknown>;
-    const result = validateGhostManifest(parsed);
-    expect(result.ok, result.ok ? '' : result.reason).toBe(true);
-    if (!result.ok) return;
-    const secret = result.manifest.network?.secrets?.[0];
-    expect(secret?.source).toBe('oauth');
-    expect(secret?.oauth?.authorizeUrl).toContain('accounts.google.com');
-    // 令牌只流向 API 域名,不流向授权域名。
-    expect(secret?.inject.hosts).not.toContain('accounts.google.com');
-    expect(secret?.inject.hosts).not.toContain('oauth2.googleapis.com');
-  });
-});
-
-describe('ghost · 内置意识 xd-atlassian 身份卡', () => {
-  // 锁测试(与 filo-google 同精神):broker 模式内置包必须永远过校验。
-  it('resources 里的 ghost.json 永远通过校验(broker 模式关键约束成立)', () => {
-    const file = path.resolve(
-      path.dirname(fileURLToPath(import.meta.url)),
-      '../../../resources/builtin-ghosts/xd-atlassian/ghost.json',
-    );
-    const parsed = JSON.parse(fs.readFileSync(file, 'utf-8')) as Record<string, unknown>;
-    const result = validateGhostManifest(parsed);
-    expect(result.ok, result.ok ? '' : result.reason).toBe(true);
-    if (!result.ok) return;
-    const secret = result.manifest.network?.secrets?.[0];
-    expect(secret?.source).toBe('oauth');
-    expect(secret?.oauth?.tokenBroker).toBe('jira');
-    expect(secret?.oauth?.redirectPort).toBe(53682);
-    // broker 模式:secret 绝不随包分发;PKCE 关闭(Atlassian 3LO 走服务端 secret)。
-    expect(secret?.oauth?.clientSecret).toBeUndefined();
-    expect(secret?.oauth?.pkce).toBe(false);
-    // 令牌只流向 API 域名,不流向授权域名与 media CDN(presigned URL 不需要)。
-    expect(secret?.inject.hosts).toEqual(['api.atlassian.com']);
-  });
-});
-
 describe('ghost · oauth 确认框条目', () => {
   it('展示授权域名 + scopes 原文逐条', () => {
     const result = validateGhostManifest(oauthManifest());

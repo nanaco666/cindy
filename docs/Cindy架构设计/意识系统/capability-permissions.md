@@ -322,7 +322,7 @@ cindy 槽解决"用 Cindy 自己的能力";network 槽解决"意识自带服务"
 
 ### 首个消费方
 
-内置意识 **cindy-web-search**(`resources/builtin-ghosts/cindy-web-search`,
+内置意识 **cindy-web-search**(`resources/builtin-ghosts/official/cindy-web-search`,
 audience=all 随应用预装):brave + tavily 双域名、双凭证、不同注入头,用户在
 意识详情页配两个 key 即可搜索公网;`shared/__tests__/ghost.test.ts` 锁其身份卡
 永远过校验。

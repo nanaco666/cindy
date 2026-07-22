@@ -92,8 +92,21 @@ function readCachedVersion() {
   }
 }
 
-function saveCache(meta) {
-  fs.writeFileSync(CACHE_FILE, JSON.stringify(meta, null, 2) + '\n');
+async function saveCache(meta) {
+  const version = meta.version;
+  if (!version) throw new Error('Cannot pin Claude runtime assets without a version');
+  const manifest = await fetchReleaseManifest(version);
+  const runtimeAssets = Object.fromEntries(PLATFORMS.map(({ key, file }) => {
+    const entry = manifest?.platforms?.[key];
+    const sha256 = normalizeExpectedSha256(entry?.checksum);
+    if (!sha256) throw new Error(`Cannot pin Claude ${version} ${key}: manifest checksum is missing`);
+    return [key, {
+      url: `https://downloads.claude.ai/claude-code-releases/${version}/${key}/${file}`,
+      sha256,
+      ...(typeof entry?.size === 'number' && entry.size > 0 ? { size: entry.size } : {}),
+    }];
+  }));
+  fs.writeFileSync(CACHE_FILE, JSON.stringify({ ...meta, runtimeAssets }, null, 2) + '\n');
 }
 
 function formatMB(bytes) {
@@ -293,7 +306,7 @@ async function main() {
     }
     promoteToVendorBin(requestedVersion, targets);
     // 指定版本 == bump pin：写回 latest.json，使其成为唯一真相源（install / ensure 据此对齐）。
-    saveCache(await fetchMetaForVersion(requestedVersion));
+    await saveCache(await fetchMetaForVersion(requestedVersion));
     console.log('');
     console.log('=== Done ===');
     console.log(`Version: ${requestedVersion}`);
@@ -314,7 +327,7 @@ async function main() {
   // 仅当目标平台的 updates 文件齐备时才走快捷路径——否则（如 clean checkout：latest.json 已是最新
   // 但 updates/<ver>/<plat> 缺失）必须 fall through 去真正下载，不能只 promote 出一个空 bin 就报成功。
   if (cachedVersion === latestVersion && !force && targetsExist(latestVersion, targets)) {
-    saveCache(meta); // 刷新缓存（保持 JSON 新鲜）
+    await saveCache(meta); // 刷新缓存（保持 JSON 新鲜）
     promoteToVendorBin(latestVersion, targets); // 即使没下载，也确保 bin 与 updates 一致
     console.log('==> Already up to date.');
     return;
@@ -327,7 +340,7 @@ async function main() {
   }
 
   // 所有平台下载成功后再更新缓存，中途失败下一次会自动重试
-  saveCache(meta);
+  await saveCache(meta);
   promoteToVendorBin(latestVersion, targets);
 
   console.log('');

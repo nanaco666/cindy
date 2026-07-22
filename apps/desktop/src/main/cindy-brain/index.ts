@@ -199,15 +199,19 @@ function brainRootDir(): string {
 }
 
 /**
- * 内置意识种子根目录(第一方可信通道,随包分发的源码目录形态):
+ * 内置意识种子根目录列表(第一方可信通道,随包分发的源码目录形态):
  * - dev:仓库 apps/desktop/resources/builtin-ghosts(appPath = apps/desktop);
  * - packaged:process.resourcesPath/builtin-ghosts(forge extraResource 原样拷入)。
- * 双平台无差异(纯 path.join,无硬编码分隔符)。
+ * 2026-07-22 起种子源拆为两个 submodule 仓,分别挂载在 builtin-ghosts 下:
+ * official(cindy-official-plugin)与 xd(cindy-xd-plugin),各自带一份
+ * provisioning.json。submodule 未初始化 = 对应根为空,播种层按半初始化保护
+ * 处理(见 builtinGhostProvisioner 头注释)。双平台无差异(纯 path.join)。
  */
-function builtinSeedRootDir(): string {
-  return app.isPackaged
+function builtinSeedRootDirs(): string[] {
+  const base = app.isPackaged
     ? path.join(process.resourcesPath, 'builtin-ghosts')
     : path.join(app.getAppPath(), 'resources', 'builtin-ghosts');
+  return [path.join(base, 'official'), path.join(base, 'xd')];
 }
 
 /** 当前登录身份 → 播种受众判定的输入(登出 = null)。 */
@@ -329,7 +333,7 @@ async function reconcileBuiltinGhosts(reason: string): Promise<void> {
   let outcome: Awaited<ReturnType<typeof provisionBuiltinGhosts>>;
   try {
     outcome = await provisionBuiltinGhosts({
-      seedRootDir: builtinSeedRootDir(),
+      seedRootDirs: builtinSeedRootDirs(),
       repoRootDir: brainRootDir(),
       identity: currentProvisionIdentity(),
       // 回收先熄灯沙箱再删目录(Windows 文件锁:运行中的电子脑可能占着句柄)。
@@ -2320,7 +2324,7 @@ export function registerGhostIpc(): void {
       }
     }
     // 内置意识被用户主动卸载 → 记墓碑,启动播种永远跳过(不然重启就弹回来)。
-    if (listBuiltinSeedIds(builtinSeedRootDir()).includes(id)) {
+    if (listBuiltinSeedIds(builtinSeedRootDirs()).includes(id)) {
       recordBuiltinTombstone(brainRootDir(), id, log);
     }
     let recentIds: string[] | null = null;
@@ -2345,10 +2349,10 @@ export function registerGhostIpc(): void {
   ipcMain.on('ghosts:builtin-status', (event) => {
     try {
       event.returnValue = {
-        builtinIds: listBuiltinSeedIds(builtinSeedRootDir()),
-        enterpriseIds: listEnterpriseSeedIds(builtinSeedRootDir(), log),
+        builtinIds: listBuiltinSeedIds(builtinSeedRootDirs()),
+        enterpriseIds: listEnterpriseSeedIds(builtinSeedRootDirs(), log),
         restorable: listRestorableBuiltinGhosts({
-          seedRootDir: builtinSeedRootDir(),
+          seedRootDirs: builtinSeedRootDirs(),
           repoRootDir: brainRootDir(),
           identity: currentProvisionIdentity(),
           log,
@@ -2366,7 +2370,7 @@ export function registerGhostIpc(): void {
     if (typeof id !== 'string' || id.trim().length === 0) {
       throwIpcError('INVALID_PARAMS', 'id must be a non-empty string');
     }
-    if (!listBuiltinSeedIds(builtinSeedRootDir()).includes(id)) {
+    if (!listBuiltinSeedIds(builtinSeedRootDirs()).includes(id)) {
       throwIpcError('NOT_FOUND', `意识 ${id} 不是内置种子`);
     }
     clearBuiltinTombstone(brainRootDir(), id, log);

@@ -58,6 +58,7 @@ import {
 } from '@/hooks/useRightSidebarResize';
 import { isSecondaryWindow } from '@/lib/secondaryWindow';
 import { useUpdateNotice } from '@/hooks/useUpdateNotice';
+import { syncNotificationsEnabledToMain } from '@/hooks/useNotificationSettings';
 import { isAgentIslandSupported, toggleAgentIslandSoundEnabled } from '@/hooks/useAgentIslandSettings';
 import { requestNewWorkerFromShortcut } from '@/features/cc-agent/lib/newWorkerShortcut';
 // chat-data-localization F1 V0.4 / M-FE6
@@ -337,6 +338,10 @@ export function MainLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const { t } = useTranslation();
+
+  useEffect(() => {
+    syncNotificationsEnabledToMain();
+  }, []);
   const isSettingsRoute = location.pathname === '/settings';
   const hasInlineControlledBanner = hasInlineControlledBannerPath(location.pathname);
 

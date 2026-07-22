@@ -17,7 +17,7 @@ import { createFeishuBotMcpServer } from './lizi_feishuBotMcpServer.js';
 import { createSlackMcpGatewayServer } from './lizi_slackMcpServer.js';
 import { createSchedulerMcpServer } from './cindy_schedulerMcpServer.js';
 import { createSshMcpServer } from './lizi_sshMcpServer.js';
-import { createLiziMemoryMcpServer } from './lizi_memoryMcpServer.js';
+import { createCindyMemoryMcpServer } from './cindy_memoryMcpServer.js';
 import { createLiziContactsMcpServer } from './lizi_contactsMcpServer.js';
 import { createXdtHelperMcpServer, type XdtHelperMcpDeps } from './lizi_xdtHelperMcpServer.js';
 import { createOrcaMcpServer, type OrcaMcpDeps } from './orca/index.js';
@@ -350,12 +350,12 @@ export function createLiziMcpProviders(
     });
   }
 
-  if (opts.memory && selected(enabled, 'lizi_memory')) {
+  if (opts.memory && selected(enabled, 'cindy_memory')) {
     providers.push({
-      name: 'lizi_memory',
+      name: 'cindy_memory',
       // 跟 manager.isEnabled() 同步: Maker memory 关闭时 server 整个不注册,
       // LLM 完全看不到 list_tools / call_tool, 不会主动探索 → 不浪费 token,
-      // 不让用户看到"明明关了为啥还有 mcp_lizi_memory_* 调用记录"的困惑。
+      // 不让用户看到"明明关了为啥还有 mcp_cindy_memory_* 调用记录"的困惑。
       //
       // Claude 端: 每次 startSession 时 buildMcpServers 调本函数, manager 状态即时反映。
       // Codex 端: 第一次 host spawn 时 prepareCodexExtraSpawnConfig 调本函数, host
@@ -364,8 +364,8 @@ export function createLiziMcpProviders(
       isEnabled: () => opts.memory!.getManager().isEnabled(),
       toClaudeSdkConfig: (ctx) => ({
         type: 'sdk',
-        name: 'lizi_memory',
-        instance: createLiziMemoryMcpServer({
+        name: 'cindy_memory',
+        instance: createCindyMemoryMcpServer({
           getManager: opts.memory!.getManager,
           workdir: ctx.workingDir,
           getSessionContext: () => resolveLiziMcpSessionContext(ctx),

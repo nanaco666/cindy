@@ -3,7 +3,8 @@ import type Database from 'better-sqlite3';
 import { createLogger } from '../logger';
 
 const log = createLogger('localDb/codex-history-prompt-init');
-const INIT_META_KEY = 'codex_history_has_product_prompt_initialized_v1';
+const LEGACY_INIT_META_KEY = 'codex_history_has_product_prompt_initialized_v1';
+const CINDY_MEMORY_PROMPT_RESET_META_KEY = 'codex_history_cindy_memory_prompt_reset_v2';
 
 function hasColumn(db: Database.Database, table: string, column: string): boolean {
   const rows = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name?: unknown }>;
@@ -22,27 +23,51 @@ export function initializeCodexHistoryPromptState(db: Database.Database): void {
     return;
   }
 
-  const row = db
-    .prepare(`SELECT value FROM migration_meta WHERE key=?`)
-    .get(INIT_META_KEY) as { value: string | null } | undefined;
-  if (row?.value === 'done') return;
-
-  const updated = db.transaction(() => {
-    const result = db
-      .prepare(`
-        UPDATE sessions
-        SET codex_history_has_product_prompt = 1
-        WHERE codex_history_has_product_prompt IS NULL
-      `)
-      .run();
+  const readMeta = (key: string): string | null | undefined => {
+    const row = db
+      .prepare(`SELECT value FROM migration_meta WHERE key=?`)
+      .get(key) as { value: string | null } | undefined;
+    return row?.value;
+  };
+  const writeMeta = (key: string): void => {
     db
       .prepare(
         `INSERT INTO migration_meta (key, value) VALUES (?, ?)
          ON CONFLICT(key) DO UPDATE SET value=excluded.value`,
       )
-      .run(INIT_META_KEY, 'done');
-    return result.changes;
-  })();
+      .run(key, 'done');
+  };
 
-  log.info('codex history prompt state initialized', { updated });
+  if (readMeta(LEGACY_INIT_META_KEY) !== 'done') {
+    const updated = db.transaction(() => {
+      const result = db
+        .prepare(`
+          UPDATE sessions
+          SET codex_history_has_product_prompt = 1
+          WHERE codex_history_has_product_prompt IS NULL
+        `)
+        .run();
+      writeMeta(LEGACY_INIT_META_KEY);
+      return result.changes;
+    })();
+    log.info('codex history prompt state initialized', { updated });
+  }
+
+  // cindy_memory rename: threads whose history contains the old product prompt still
+  // instruct the model to use lizi_memory. Mark them as needing the existing one-shot
+  // non-proxy restore path; successful delivery writes the state back to true.
+  if (readMeta(CINDY_MEMORY_PROMPT_RESET_META_KEY) !== 'done') {
+    const updated = db.transaction(() => {
+      const result = db
+        .prepare(`
+          UPDATE sessions
+          SET codex_history_has_product_prompt = 0
+          WHERE codex_history_has_product_prompt = 1
+        `)
+        .run();
+      writeMeta(CINDY_MEMORY_PROMPT_RESET_META_KEY);
+      return result.changes;
+    })();
+    log.info('codex history prompt state reset for cindy_memory rename', { updated });
+  }
 }

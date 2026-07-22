@@ -47,6 +47,7 @@ import {
   projectIdentityKey,
   type ProjectScope,
 } from '../../../../shared/projectKeys';
+import type { RemoteProjectMachineIdentity } from './remoteProjectIdentity';
 
 export {
   deviceLinkProjectKey,
@@ -83,6 +84,8 @@ export interface ProjectNode {
   deviceLinkDeviceName: string | null;
   /** device-link 远程项目:当前连接状态。断线时仍显示最近一次快照。 */
   deviceLinkConnectionStatus: DeviceLinkConnectionStatus | null;
+  /** 当前 registry 解析出的远程机器身份;undefined 表示调用方尚未执行富化。 */
+  remoteMachineIdentity?: RemoteProjectMachineIdentity | null;
   /** 显示名：basename，必要时含父目录段消歧（如 `parent/basename`） */
   displayName: string;
   /** displayName 中包含的路径段数 */
