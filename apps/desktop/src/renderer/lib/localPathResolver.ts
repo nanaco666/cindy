@@ -549,13 +549,14 @@ export function toFileUrl(absPath: string): string {
  *   - image extension whitelist (png/jpg/jpeg/gif/webp/svg/bmp/ico)
  *   - file existence
  *
- * URL shape: `xdt-file://local/?path=<percent-encoded-abs-path>`
+ * URL shape: `xdt-file://local/?path=<percent-encoded-abs-path>[&v=<revision>]`
  *
  * The path is fully percent-encoded (encodeURIComponent) so backslashes,
  * spaces, Chinese characters, and `?`/`#` are all safe in the query value.
  */
-export function toLocalFileUrl(absPath: string): string {
-  return `xdt-file://local/?path=${encodeURIComponent(absPath)}`;
+export function toLocalFileUrl(absPath: string, revision?: string): string {
+  const url = `xdt-file://local/?path=${encodeURIComponent(absPath)}`;
+  return revision ? `${url}&v=${encodeURIComponent(revision)}` : url;
 }
 
 /**

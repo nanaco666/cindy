@@ -39,6 +39,8 @@ function dispatchStorage(key: string, newValue: string | null) {
 describe('useTheme 跨窗口主题同步(D2-3)', () => {
   beforeEach(() => {
     localStorage.clear();
+    delete document.documentElement.dataset.theme;
+    document.documentElement.classList.remove('dark');
     vi.spyOn(themeService, 'applyTheme').mockImplementation(() => {});
   });
 
@@ -65,6 +67,20 @@ describe('useTheme 跨窗口主题同步(D2-3)', () => {
     localStorage.setItem('theme.familyId', 'default');
     const { result } = renderHook(() => useTheme(), { wrapper });
     expect(result.current.familyId).toBe('default');
+  });
+
+  it('同一主题家族再次应用时仍通知主题订阅者', () => {
+    document.documentElement.dataset.theme = 'cindy-light';
+    document.documentElement.classList.remove('dark');
+    const { result } = renderHook(() => useTheme(), { wrapper });
+    const applySpy = themeService.applyTheme as unknown as ReturnType<typeof vi.fn>;
+    applySpy.mockClear();
+
+    act(() => {
+      result.current.setFamily('cindy');
+    });
+
+    expect(applySpy).toHaveBeenCalledOnce();
   });
 
   it('非法 theme 值不触发 state 变更', () => {

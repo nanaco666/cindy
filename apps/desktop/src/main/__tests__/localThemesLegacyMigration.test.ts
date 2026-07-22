@@ -87,4 +87,59 @@ describe('local themes legacy dir migration (~/.xdmaker/themes -> ~/.cindy/theme
   it('getLocalThemesDir 指向 ~/.cindy/themes', () => {
     expect(getLocalThemesDir()).toBe(path.join(home, '.cindy', 'themes'));
   });
+
+  it('只读取 brand.icon / brand.logo', () => {
+    const dir = path.join(home, '.cindy', 'themes');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(
+      path.join(dir, 'brand.json'),
+      JSON.stringify({
+        id: 'brand',
+        name: 'Brand',
+        type: 'light',
+        colors: {},
+        brand: { icon: '/tmp/icon.png', logo: '/tmp/logo.png' },
+      }),
+      'utf8',
+    );
+
+    const result = loadLocalThemesSync();
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.themes[0]).toMatchObject({
+      id: 'brand-local',
+      brand: { icon: '/tmp/icon.png', logo: '/tmp/logo.png' },
+    });
+  });
+
+  it('为存在的品牌图片附加随文件变化的运行时版本号', () => {
+    const dir = path.join(home, '.cindy', 'themes');
+    const iconPath = path.join(home, 'icon.png');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(iconPath, 'first', 'utf8');
+    fs.writeFileSync(
+      path.join(dir, 'brand.json'),
+      JSON.stringify({
+        id: 'brand',
+        name: 'Brand',
+        type: 'light',
+        colors: {},
+        brand: { icon: iconPath },
+      }),
+      'utf8',
+    );
+
+    const first = loadLocalThemesSync();
+    expect(first.success).toBe(true);
+    if (!first.success) return;
+    const firstRevision = first.themes[0]?.brandRevisions?.icon;
+    expect(firstRevision).toBeTruthy();
+
+    fs.writeFileSync(iconPath, 'second-version', 'utf8');
+    const second = loadLocalThemesSync();
+    expect(second.success).toBe(true);
+    if (!second.success) return;
+    expect(second.themes[0]?.brandRevisions?.icon).toBeTruthy();
+    expect(second.themes[0]?.brandRevisions?.icon).not.toBe(firstRevision);
+  });
 });

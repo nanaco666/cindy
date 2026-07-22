@@ -387,8 +387,9 @@ export function AppearanceSection() {
 
   const handleRefresh = useCallback(async () => {
     await refreshLocalThemes();
+    if (isLocalThemeId(familyId)) setFamily(familyId);
     toast.success(t('settings.appearance.localThemes.refreshed'));
-  }, [t]);
+  }, [familyId, setFamily, t]);
 
   const commitCodeSizeInput = useCallback(() => {
     const trimmed = codeSizeInput.trim();

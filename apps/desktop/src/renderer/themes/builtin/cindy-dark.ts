@@ -147,7 +147,6 @@ export const cindyDark: Theme = {
   name: 'CINDY Dark',
   type: 'dark',
   colors: overrides,
-  // U5 品牌版 logo:白字+红箭头 wordmark(深底可见),logoScale=1 对齐默认 logo 视觉大小。
-  logo: cindyLogoDark,
-  logoScale: 1,
+  // U5 品牌版横向 logo：白字+红箭头，深底可见。
+  brand: { logo: { src: cindyLogoDark } },
 };

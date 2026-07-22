@@ -22,6 +22,7 @@ import {
   resolveLocalPathSmart,
   resolveLocalPathSmartCached,
   toFileUrl,
+  toLocalFileUrl,
 } from '@/lib/localPathResolver';
 
 afterEach(() => {
@@ -490,5 +491,13 @@ describe('toFileUrl', () => {
 
   it('percent-encodes space in path segment', () => {
     expect(toFileUrl('/abs/with space.png')).toBe('file:///abs/with%20space.png');
+  });
+});
+
+describe('toLocalFileUrl', () => {
+  it('adds an encoded revision without changing the encoded file path', () => {
+    expect(toLocalFileUrl('/abs/icon image.png', '12:34.5')).toBe(
+      'xdt-file://local/?path=%2Fabs%2Ficon%20image.png&v=12%3A34.5',
+    );
   });
 });
