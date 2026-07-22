@@ -839,6 +839,10 @@ Source: https://sqlite.org
 SQLite is in the public domain. See https://sqlite.org/copyright.html
 
 ------------------------------------------------------------------------------
+openclaw fs-safe sources (vendored) vendored
+License: MIT
+Source: https://github.com/openclaw/openclaw
+------------------------------------------------------------------------------
 MIT License
 
 Copyright (c) 2026 openclaw
