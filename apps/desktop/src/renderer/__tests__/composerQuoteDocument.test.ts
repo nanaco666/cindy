@@ -12,6 +12,7 @@ import {
   prependLegacyQuotesToComposerDocument,
   quoteSegmentsToComposerDocument,
   serializeComposerContentBlocks,
+  serializeComposerContentBlocksWithRanges,
 } from '@/lib/composerQuoteDocument';
 import { formatQuoteForSend, parseChatQuoteSegments } from '@/lib/chatQuotes';
 
@@ -146,22 +147,21 @@ describe('composerQuoteDocument', () => {
   it('hydrates encoded history rows as quote atoms and leaves unflagged markers as text', () => {
     const encoded = `${formatQuoteForSend({ text: 'quoted' })}\n\nreply`;
 
-    expect(composerHistoryEntryToDocument({ content: encoded, quotesEncoded: true }))
-      .toEqual({
-        type: 'doc',
-        content: [
-          {
-            type: 'paragraph',
-            content: [
-              {
-                type: 'composerQuote',
-                attrs: { text: 'quoted', sourcePath: null, startLine: null, endLine: null },
-              },
-              { type: 'text', text: 'reply' },
-            ],
-          },
-        ],
-      });
+    expect(composerHistoryEntryToDocument({ content: encoded, quotesEncoded: true })).toEqual({
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [
+            {
+              type: 'composerQuote',
+              attrs: { text: 'quoted', sourcePath: null, startLine: null, endLine: null },
+            },
+            { type: 'text', text: 'reply' },
+          ],
+        },
+      ],
+    });
     expect(composerHistoryEntryToDocument({ content: encoded })).toEqual({
       type: 'doc',
       content: [{ type: 'paragraph', content: [{ type: 'text', text: encoded }] }],
@@ -205,6 +205,65 @@ describe('composerQuoteDocument', () => {
     ]);
     expect(serialized).toBe(encoded);
     expect(parseChatQuoteSegments(serialized)).toEqual(segments);
+  });
+
+  it('projects long-paste ranges through composer trimming without changing wire text', () => {
+    const serialized = serializeComposerContentBlocksWithRanges([
+      {
+        kind: 'text',
+        text: '  long pasted text  ',
+        pastedTextRanges: [{ start: 2, end: 18, display: 'Pasted text (1 line)' }],
+      },
+    ]);
+
+    expect(serialized).toEqual({
+      text: 'long pasted text',
+      pastedTextRanges: [{ start: 0, end: 16, display: 'Pasted text (1 line)' }],
+      slashCommandRanges: [],
+    });
+    expect(serialized.text.slice(0, 16)).toBe('long pasted text');
+  });
+
+  it('clips long-paste ranges that include trimmed whitespace', () => {
+    const serialized = serializeComposerContentBlocksWithRanges([
+      {
+        kind: 'text',
+        text: '  long pasted text  ',
+        pastedTextRanges: [{ start: 0, end: 20, display: 'Pasted text (1 line)' }],
+      },
+    ]);
+
+    expect(serialized).toEqual({
+      text: 'long pasted text',
+      pastedTextRanges: [{ start: 0, end: 16, display: 'Pasted text (1 line)' }],
+      slashCommandRanges: [],
+    });
+  });
+
+  it('projects decorated slash ranges through trimming and quote separators', () => {
+    const quote = formatQuoteForSend({ text: 'quoted' });
+    const serialized = serializeComposerContentBlocksWithRanges([
+      {
+        kind: 'text',
+        text: '  /git before',
+        slashCommandRanges: [{ start: 2, end: 6 }],
+      },
+      { kind: 'quote', text: quote },
+      {
+        kind: 'text',
+        text: '/git after',
+        slashCommandRanges: [{ start: 0, end: 4 }],
+      },
+    ]);
+    const trailingStart = serialized.text.lastIndexOf('/git');
+
+    expect(serialized.slashCommandRanges).toEqual([
+      { start: 0, end: 4 },
+      { start: trailingStart, end: trailingStart + 4 },
+    ]);
+    expect(
+      serialized.slashCommandRanges.map((range) => serialized.text.slice(range.start, range.end)),
+    ).toEqual(['/git', '/git']);
   });
 
   it('round-trips quote text and source metadata through HTML clipboard serialization', () => {

@@ -60,6 +60,8 @@ export interface AgentInputChatMessage {
   images?: Array<AgentInputImageRef | AgentInputFallbackImage>;
   files?: Array<{ name: string; path: string }>;
   quotesEncoded?: boolean;
+  pastedTextRanges?: Array<{ start: number; end: number; display: string }>;
+  slashCommandRanges?: Array<{ start: number; end: number }>;
 }
 
 export interface AgentInputCreateOpts {
@@ -156,8 +158,7 @@ export interface AgentInputProjection {
 }
 
 export type AgentInputMakerMessage =
-  | string
-  | { type: 'user'; content: string | Array<{ type: string; [k: string]: unknown }> };
+  string | { type: 'user'; content: string | Array<{ type: string; [k: string]: unknown }> };
 
 export function getAgentInputAttachmentBlockType(
   category: AgentInputFileCategory,
@@ -203,6 +204,12 @@ export function updateQueuedMessageText(
       if (!hasEncodedQuoteMarker && nextParsed.quotesEncoded === true) {
         delete nextParsed.quotesEncoded;
       }
+      // Arbitrary text edits invalidate presentation offsets. A composer-based
+      // queue edit supplies freshly computed metadata through update-content.
+      delete nextParsed.pastedTextRanges;
+      // Preserve the explicit "new renderer metadata" marker while clearing
+      // stale offsets. The empty array prevents legacy line-start guessing.
+      nextParsed.slashCommandRanges = [];
       nextPersisted = JSON.stringify(nextParsed);
     } else {
       nextPersisted = newText;
@@ -215,6 +222,8 @@ export function updateQueuedMessageText(
     content: newText,
   };
   if (!hasEncodedQuoteMarker) delete nextChatMessage.quotesEncoded;
+  delete nextChatMessage.pastedTextRanges;
+  nextChatMessage.slashCommandRanges = [];
   return {
     ...entry,
     text: newText,
@@ -240,7 +249,9 @@ export function updateQueuedMessageContent(
     chatMessage: {
       ...next.chatMessage,
       clientId: entry.clientId,
-      ...(entry.chatMessage.createdAt !== undefined ? { createdAt: entry.chatMessage.createdAt } : {}),
+      ...(entry.chatMessage.createdAt !== undefined
+        ? { createdAt: entry.chatMessage.createdAt }
+        : {}),
     },
   };
   // 附件是"编辑后的完整集合"语义:清空要真的清掉键,不能靠 spread 残留旧值

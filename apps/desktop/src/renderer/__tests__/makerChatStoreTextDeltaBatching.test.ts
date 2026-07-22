@@ -879,6 +879,58 @@ describe('makerChatStore text delta batching', () => {
     );
   });
 
+  it('preserves paste and slash metadata when retrying remote authentication', async () => {
+    vi.mocked(sessionService.get).mockResolvedValue({
+      agentKind: 'codex',
+      remoteHostId: 'remote-host',
+      sdkSessionId: null,
+      fastMode: false,
+      contextTokens: 0,
+      contextWindow: 0,
+      totalCostUsd: 0,
+      workingDir: WORKING_DIR,
+      model: MODEL,
+      effort: EFFORT,
+      permissionMode: PERMISSION_MODE,
+    } as Awaited<ReturnType<typeof sessionService.get>>);
+    makerChatStore.ensureInitialMessages(SESSION_ID);
+    await flushPromises();
+    input.enqueue.mockImplementationOnce(async (sessionId: string) => projection(sessionId));
+    await makerChatStore.sendMessage(
+      SESSION_ID,
+      'retry metadata',
+      MODEL,
+      EFFORT,
+      PERMISSION_MODE,
+      WORKING_DIR,
+      undefined,
+      undefined,
+      {
+        pastedTextRanges: [{ start: 0, end: 5, display: 'retry' }],
+        slashCommandRanges: [],
+      },
+    );
+    input.enqueue.mockClear();
+
+    onEvent?.({
+      sessionId: SESSION_ID,
+      event: {
+        type: 'error',
+        source: 'codex',
+        data: { sdkError: 'authentication_failed', message: '401 expired' },
+      },
+    });
+    await flushPromises();
+    await vi.advanceTimersByTimeAsync(1500);
+    await flushPromises();
+
+    const retried = input.enqueue.mock.calls[0]?.[1];
+    expect(retried?.chatMessage.pastedTextRanges).toEqual([
+      { start: 0, end: 5, display: 'retry' },
+    ]);
+    expect(retried?.chatMessage.slashCommandRanges).toEqual([]);
+  });
+
   it('uses the main projection to preserve a pre-dispatch message in the queue', async () => {
     makerChatStore.sendMessage(SESSION_ID, 'queued', MODEL, EFFORT, PERMISSION_MODE, WORKING_DIR);
     await flushPromises();

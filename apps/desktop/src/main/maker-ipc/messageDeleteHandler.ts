@@ -1,0 +1,133 @@
+/**
+ * 单条聊天消息删除：本地清除目标正文/元数据，保留无内容墓碑与后续可见消息，并让下一次发送从
+ * 删除后的本地历史重建原生 Agent 上下文。
+ *
+ * Claude/Codex 都不能在既有原生 transcript/thread 中间挖掉任意一行；因此本
+ * handler 先关闭 idle live session，再由 DB 原子事务清除消息内容、清 sdkSessionId、
+ * 写隐藏 handoff 标记。下一次任意发送入口复用 agentHandoffPending，把删除后的
+ * 有效历史作为 wire-only 前缀注入到全新原生会话，显示/落库仍只有用户新消息。
+ */
+
+import { buildHandoffText, type HandoffSourceMessage } from './agentHandoff.js';
+import { MAKER_INVOKE } from './channels.js';
+import type { IpcHandlerRegistry } from './ipcHandlerRegistry.js';
+import { throwIpcError } from '../utils/ipcValidate.js';
+
+interface ContextSourceMessage extends HandoffSourceMessage {
+  clientId: string;
+}
+
+interface MessageDeleteSessionRow {
+  status: string;
+  agentKind: string;
+}
+
+interface MessageDeleteCommittedPayload {
+  sessionId: string;
+  clientId: string;
+  updatedAt: number;
+  preview: string | null;
+  messageCount: number;
+}
+
+export interface MessageDeleteHandlerDeps {
+  getSessionRow(sessionId: string): Promise<MessageDeleteSessionRow | null>;
+  getMessage(
+    sessionId: string,
+    clientId: string,
+  ): Promise<{ id: string; role: 'user' | 'assistant' } | null>;
+  listMessagesForContext(sessionId: string): Promise<ContextSourceMessage[]>;
+  getLiveSession(sessionId: string): { isTurnRunning(): boolean } | null | undefined;
+  hasBackgroundActivity(sessionId: string): boolean;
+  closeSession(sessionId: string): Promise<void>;
+  commitDeletion(
+    sessionId: string,
+    clientId: string,
+    handoff: string,
+  ): Promise<MessageDeleteCommittedPayload>;
+  setPendingHandoff(sessionId: string, handoff: string): void;
+  onCommitted(payload: MessageDeleteCommittedPayload): void | Promise<void>;
+  withCloseSuppressed<T>(sessionId: string, fn: () => Promise<T>): Promise<T>;
+  log: {
+    info(message: string, fields?: Record<string, unknown>): void;
+  };
+}
+
+function engineLabel(agentKind: string): string {
+  return agentKind === 'codex' ? 'Codex' : 'Claude Code';
+}
+
+export async function performMessageDeletion(
+  deps: MessageDeleteHandlerDeps,
+  params: { sessionId: unknown; clientId: unknown },
+): Promise<{ sessionId: string; clientId: string }> {
+  const { sessionId, clientId } = params;
+  if (typeof sessionId !== 'string' || sessionId.length === 0) {
+    throwIpcError('INVALID_PARAMS', 'sessionId required');
+  }
+  if (typeof clientId !== 'string' || clientId.length === 0) {
+    throwIpcError('INVALID_PARAMS', 'clientId required');
+  }
+
+  const [sessionRow, target] = await Promise.all([
+    deps.getSessionRow(sessionId),
+    deps.getMessage(sessionId, clientId),
+  ]);
+  if (!sessionRow || sessionRow.status === 'deleted') {
+    throwIpcError('NOT_FOUND', `Session ${sessionId} not found`);
+  }
+  if (!target) {
+    throwIpcError('NOT_FOUND', 'Message 不存在或不可删除');
+  }
+
+  const live = deps.getLiveSession(sessionId);
+  if (live?.isTurnRunning()) {
+    throwIpcError('SESSION_RUNNING', `Session ${sessionId} is running a turn`);
+  }
+  if (deps.hasBackgroundActivity(sessionId)) {
+    throwIpcError('SESSION_RUNNING', `Session ${sessionId} has background activity`);
+  }
+
+  const source = await deps.listMessagesForContext(sessionId);
+  const remaining = source.filter((message) => message.clientId !== clientId);
+  const label = engineLabel(sessionRow.agentKind);
+  const handoff = buildHandoffText(remaining, {
+    fromLabel: label,
+    toLabel: label,
+    sessionId,
+    reason: 'message-deletion',
+  });
+
+  return deps.withCloseSuppressed(sessionId, async () => {
+    // 上面的读取和真正 close 之间仍可能有 dispatch 抢先；提交前再查一次，
+    // 绝不在运行中的 turn 继续落输出时挖消息/切上下文。
+    const currentLive = deps.getLiveSession(sessionId);
+    if (currentLive?.isTurnRunning()) {
+      throwIpcError('SESSION_RUNNING', `Session ${sessionId} is running a turn`);
+    }
+    if (deps.hasBackgroundActivity(sessionId)) {
+      throwIpcError('SESSION_RUNNING', `Session ${sessionId} has background activity`);
+    }
+    if (currentLive) await deps.closeSession(sessionId);
+
+    const committed = await deps.commitDeletion(sessionId, clientId, handoff);
+    deps.setPendingHandoff(sessionId, handoff);
+    await deps.onCommitted(committed);
+    deps.log.info('message delete committed; native context will rebuild on next send', {
+      sessionId,
+      clientId,
+      deletedRole: target.role,
+      remainingMessages: remaining.length,
+    });
+    return { sessionId, clientId };
+  });
+}
+
+export function registerMakerMessageDeleteHandler(
+  registry: IpcHandlerRegistry,
+  deps: MessageDeleteHandlerDeps,
+): void {
+  registry.handle(MAKER_INVOKE.DELETE_MESSAGE, (_event, sessionId, clientId) =>
+    performMessageDeletion(deps, { sessionId, clientId }),
+  );
+}

@@ -15,7 +15,14 @@
  * inside the store.
  */
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useSyncExternalStore } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useSyncExternalStore,
+} from 'react';
 
 import {
   makerChatStore,
@@ -40,11 +47,25 @@ import {
 } from '@/lib/makerChatStore';
 import type { ChatDisplaySnapshot } from '@/components/chat/ChatDisplaySnapshotContext';
 import type { AttachedFile, MentionedResource } from '@/lib/fileTypes';
+import type { PastedTextRange, SlashCommandRange } from '@/lib/imageRef';
 import { createLogger } from '@/lib/logger';
 
 const log = createLogger('UseCCAgentChat');
 
-export type { AgentStatus, AgentTaskUpdate, AskUserDraft, AskUserViewerState, ChatMessage, PendingPermission, PendingAskUser, PendingPlanReview, PendingRenameSessionsConfirm, PendingGhostGrantConfirm, PlanViewerState, QueuedMessage };
+export type {
+  AgentStatus,
+  AgentTaskUpdate,
+  AskUserDraft,
+  AskUserViewerState,
+  ChatMessage,
+  PendingPermission,
+  PendingAskUser,
+  PendingPlanReview,
+  PendingRenameSessionsConfirm,
+  PendingGhostGrantConfirm,
+  PlanViewerState,
+  QueuedMessage,
+};
 
 interface UseCCAgentChatReturn {
   /** 仅用于乐观展示的下一次发送切换目标。 */
@@ -91,7 +112,12 @@ interface UseCCAgentChatReturn {
     workingDir: string,
     files?: AttachedFile[],
     mentions?: MentionedResource[],
-    opts?: { vendorOptions?: Record<string, unknown>; quotesEncoded?: boolean },
+    opts?: {
+      vendorOptions?: Record<string, unknown>;
+      quotesEncoded?: boolean;
+      pastedTextRanges?: PastedTextRange[];
+      slashCommandRanges?: SlashCommandRange[];
+    },
   ) => Promise<boolean>;
   compactSession: (
     model: string,
@@ -108,7 +134,12 @@ interface UseCCAgentChatReturn {
     workingDir: string,
     files?: AttachedFile[],
     mentions?: MentionedResource[],
-    opts?: { vendorOptions?: Record<string, unknown>; quotesEncoded?: boolean },
+    opts?: {
+      vendorOptions?: Record<string, unknown>;
+      quotesEncoded?: boolean;
+      pastedTextRanges?: PastedTextRange[];
+      slashCommandRanges?: SlashCommandRange[];
+    },
   ) => Promise<boolean>;
   steerQueuedMessage: (clientId: string) => Promise<boolean>;
   /** User-initiated stop: aborts the current SDK query and clears streaming state */
@@ -122,7 +153,10 @@ interface UseCCAgentChatReturn {
   /** silent-stop 耗尽横幅「继续」:清横幅并发隐藏续跑指令(充值守卫额度)。 */
   continueAfterSilentStop: () => void;
   /** F-CMD: Insert a local-only system card */
-  insertSystemCard: (cardType: 'help' | 'cost' | 'context' | 'pwd' | 'status' | 'cmd' | 'learn', data?: Record<string, unknown>) => string | null;
+  insertSystemCard: (
+    cardType: 'help' | 'cost' | 'context' | 'pwd' | 'status' | 'cmd' | 'learn',
+    data?: Record<string, unknown>,
+  ) => string | null;
   /** F-CMD: Patch the latest local-only system card in place */
   updateLastSystemCardData: (patch: Record<string, unknown>) => void;
   /** F-CMD: Patch a specific local-only system card in place */
@@ -169,7 +203,13 @@ interface UseCCAgentChatReturn {
   /** issue_confirm: Respond to the pending issue confirm card */
   respondToIssueConfirm: (
     result:
-      | { confirmed: true; title: string; body: string; type: 'bug' | 'feature'; uiLanguage: string }
+      | {
+          confirmed: true;
+          title: string;
+          body: string;
+          type: 'bug' | 'feature';
+          uiLanguage: string;
+        }
       | { confirmed: false },
   ) => void;
   /** rename_sessions_confirm: Currently pending batch rename confirm card */
@@ -179,7 +219,9 @@ interface UseCCAgentChatReturn {
   /** ghost_grant_confirm: Currently pending ghost file-grant confirm card */
   pendingGhostGrantConfirm: PendingGhostGrantConfirm | null;
   /** ghost_grant_confirm: Respond to the pending ghost file-grant confirm card */
-  respondToGhostGrantConfirm: (result: { confirmed: true; allowDirs?: boolean } | { confirmed: false }) => void;
+  respondToGhostGrantConfirm: (
+    result: { confirmed: true; allowDirs?: boolean } | { confirmed: false },
+  ) => void;
   /** FP-3: Current plan viewer display state */
   planViewerState: PlanViewerState;
   /** FP-3: Change plan viewer display state */
@@ -281,13 +323,16 @@ export function useCCAgentChat(
   const chatRealtime = options.chatRealtime ?? true;
   const heavyState = useHeavyChatSnapshot(sessionId, chatRealtime);
   const lightState = useLiveChatLightState(sessionId);
-  const chatDisplaySnapshot = useMemo<ChatDisplaySnapshot>(() => ({
-    sessionId,
-    chatRealtime,
-    messages: heavyState.messages,
-    historyLoaded: heavyState.historyLoaded,
-    hasMoreMessages: heavyState.hasMoreMessages,
-  }), [chatRealtime, heavyState, sessionId]);
+  const chatDisplaySnapshot = useMemo<ChatDisplaySnapshot>(
+    () => ({
+      sessionId,
+      chatRealtime,
+      messages: heavyState.messages,
+      historyLoaded: heavyState.historyLoaded,
+      hasMoreMessages: heavyState.hasMoreMessages,
+    }),
+    [chatRealtime, heavyState, sessionId],
+  );
 
   // Register the onTitleUpdate callback for this session. The store invokes
   // it on `done` events and on sendMessage auto-naming. It is re-registered
@@ -318,7 +363,12 @@ export function useCCAgentChat(
       workingDir: string,
       files?: AttachedFile[],
       mentions?: MentionedResource[],
-      opts?: { vendorOptions?: Record<string, unknown>; quotesEncoded?: boolean },
+      opts?: {
+        vendorOptions?: Record<string, unknown>;
+        quotesEncoded?: boolean;
+        pastedTextRanges?: PastedTextRange[];
+        slashCommandRanges?: SlashCommandRange[];
+      },
     ): Promise<boolean> => {
       if (!sessionId) return Promise.resolve(false);
       return makerChatStore.sendMessage(
@@ -345,7 +395,14 @@ export function useCCAgentChat(
       opts?: { vendorOptions?: Record<string, unknown> },
     ) => {
       if (!sessionId) return Promise.resolve(false);
-      return makerChatStore.compactSession(sessionId, model, effort, permissionMode, workingDir, opts);
+      return makerChatStore.compactSession(
+        sessionId,
+        model,
+        effort,
+        permissionMode,
+        workingDir,
+        opts,
+      );
     },
     [sessionId],
   );
@@ -359,10 +416,25 @@ export function useCCAgentChat(
       workingDir: string,
       files?: AttachedFile[],
       mentions?: MentionedResource[],
-      opts?: { vendorOptions?: Record<string, unknown>; quotesEncoded?: boolean },
+      opts?: {
+        vendorOptions?: Record<string, unknown>;
+        quotesEncoded?: boolean;
+        pastedTextRanges?: PastedTextRange[];
+        slashCommandRanges?: SlashCommandRange[];
+      },
     ) => {
       if (!sessionId) return Promise.resolve(false);
-      return makerChatStore.steerMessage(sessionId, text, model, effort, permissionMode, workingDir, files, mentions, opts);
+      return makerChatStore.steerMessage(
+        sessionId,
+        text,
+        model,
+        effort,
+        permissionMode,
+        workingDir,
+        files,
+        mentions,
+        opts,
+      );
     },
     [sessionId],
   );
@@ -409,7 +481,10 @@ export function useCCAgentChat(
   }, [sessionId]);
 
   const insertSystemCard = useCallback(
-    (cardType: 'help' | 'cost' | 'context' | 'pwd' | 'status' | 'cmd' | 'learn', data?: Record<string, unknown>) => {
+    (
+      cardType: 'help' | 'cost' | 'context' | 'pwd' | 'status' | 'cmd' | 'learn',
+      data?: Record<string, unknown>,
+    ) => {
       if (!sessionId) return null;
       return makerChatStore.insertSystemCard(sessionId, cardType, data);
     },
@@ -448,7 +523,13 @@ export function useCCAgentChat(
   const respondToIssueConfirm = useCallback(
     (
       result:
-        | { confirmed: true; title: string; body: string; type: 'bug' | 'feature'; uiLanguage: string }
+        | {
+            confirmed: true;
+            title: string;
+            body: string;
+            type: 'bug' | 'feature';
+            uiLanguage: string;
+          }
         | { confirmed: false },
     ) => {
       if (!sessionId) return;

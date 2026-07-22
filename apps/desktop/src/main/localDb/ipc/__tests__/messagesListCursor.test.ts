@@ -32,12 +32,18 @@ vi.mock('../../../maker-host/claude-local-sessions', () => ({
 vi.mock('../../../embedders/chat-history-embedder', () => ({
   onMessageCreated: vi.fn(async () => undefined),
 }));
+vi.mock('../../../git-context/prRefsStore', () => ({
+  recomputePrRefsForSession: vi.fn(async () => undefined),
+  recordPrRefsForMessage: vi.fn(async () => undefined),
+}));
 vi.mock('../../client/current', () => ({
   getDbClient: () => ({ drizzle: h.db }),
 }));
 
 import {
-  findPendingAgentSwitchHandoff,
+  findParkedEngineSession,
+  findPendingAgentHandoff,
+  markLatestAgentHandoffConsumed,
   readPriorUserRoundCost,
   registerMessageIpc,
 } from '../messages';
@@ -240,7 +246,7 @@ describe('local-db:messages:list cursor', () => {
   });
 });
 
-describe('findPendingAgentSwitchHandoff 持久消费位', () => {
+describe('findPendingAgentHandoff 持久消费位', () => {
   function insertBoundary(
     sqlite: Database.Database,
     content: Record<string, unknown>,
@@ -268,14 +274,14 @@ describe('findPendingAgentSwitchHandoff 持久消费位', () => {
     sqlite.prepare('INSERT INTO sessions (id, cleared_at) VALUES (?, NULL)').run('s1');
     insertBoundary(sqlite, { handoff: 'HANDOFF', consumed: false });
     insertUser(sqlite);
-    await expect(findPendingAgentSwitchHandoff('s1')).resolves.toBe('HANDOFF');
+    await expect(findPendingAgentHandoff('s1')).resolves.toBe('HANDOFF');
   });
 
   it('consumed=true 即使没有 user 行也不再恢复', async () => {
     const sqlite = createDb();
     sqlite.prepare('INSERT INTO sessions (id, cleared_at) VALUES (?, NULL)').run('s1');
     insertBoundary(sqlite, { handoff: 'HANDOFF', consumed: true });
-    await expect(findPendingAgentSwitchHandoff('s1')).resolves.toBeNull();
+    await expect(findPendingAgentHandoff('s1')).resolves.toBeNull();
   });
 
   it('v1 老边界缺 consumed 时保留 user 行启发式', async () => {
@@ -283,7 +289,50 @@ describe('findPendingAgentSwitchHandoff 持久消费位', () => {
     sqlite.prepare('INSERT INTO sessions (id, cleared_at) VALUES (?, NULL)').run('s1');
     insertBoundary(sqlite, { handoff: 'HANDOFF' });
     insertUser(sqlite);
-    await expect(findPendingAgentSwitchHandoff('s1')).resolves.toBeNull();
+    await expect(findPendingAgentHandoff('s1')).resolves.toBeNull();
+  });
+
+  it('restores a hidden context rebuild marker after app restart', async () => {
+    const sqlite = createDb();
+    sqlite.prepare('INSERT INTO sessions (id, cleared_at) VALUES (?, NULL)').run('s1');
+    sqlite.prepare(`
+      INSERT INTO messages (
+        id, client_id, session_id, role, content, tool_use_id, agent_meta,
+        agent_kind, created_at, rewind_at
+      ) VALUES ('ctx', 'ctx', 's1', 'context_rebuild', ?, NULL, NULL, 'cc', 3000, 3000)
+    `).run(JSON.stringify({ handoff: 'FILTERED-HISTORY', consumed: false }));
+    await expect(findPendingAgentHandoff('s1')).resolves.toBe('FILTERED-HISTORY');
+    await markLatestAgentHandoffConsumed('s1');
+    await expect(findPendingAgentHandoff('s1')).resolves.toBeNull();
+    const stored = sqlite.prepare('SELECT content, rewind_at FROM messages WHERE id = ?').get('ctx') as {
+      content: string;
+      rewind_at: number;
+    };
+    expect(JSON.parse(stored.content)).toMatchObject({
+      handoff: 'FILTERED-HISTORY',
+      consumed: true,
+    });
+    expect(stored.rewind_at).toBe(3000);
+  });
+});
+
+describe('findParkedEngineSession context rebuild boundary', () => {
+  it('does not resume a parked native session from before message deletion', async () => {
+    const sqlite = createDb();
+    sqlite.prepare('INSERT INTO sessions (id, cleared_at) VALUES (?, NULL)').run('s1');
+    sqlite.prepare(`
+      INSERT INTO messages (
+        id, client_id, session_id, role, content, tool_use_id, agent_meta,
+        agent_kind, created_at, rewind_at
+      ) VALUES
+        ('sw', 'sw', 's1', 'agent_switch', ?, NULL, NULL, 'codex', 1000, NULL),
+        ('ctx', 'ctx', 's1', 'context_rebuild', ?, NULL, NULL, NULL, 2000, 2000)
+    `).run(
+      JSON.stringify({ fromAgentKind: 'codex', fromSdkSessionId: 'parked-codex' }),
+      JSON.stringify({ handoff: 'filtered', consumed: true }),
+    );
+
+    await expect(findParkedEngineSession('s1', 'codex')).resolves.toBeNull();
   });
 });
 

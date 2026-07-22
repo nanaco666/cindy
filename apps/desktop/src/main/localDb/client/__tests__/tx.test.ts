@@ -177,6 +177,38 @@ describe('db worker tx handlers', () => {
     });
   });
 
+  it('codex.importMessages does not rewrite tombstoned imported messages', async () => {
+    await withClient(async (client) => {
+      await seedSession(client, 's1');
+      await client.exec(
+        'INSERT INTO messages (id, client_id, session_id, role, content, agent_meta, created_at, rewind_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        ['deleted', 'codex-import:2', 's1', 'message_tombstone', 'null', null, 2000, 5000],
+      );
+
+      const result = await client.tx('codex.importMessages', {
+        sessionId: 's1',
+        importClientIdPrefix: 'codex-import:',
+        sdkSessionId: 'thread-1',
+        model: 'gpt-5',
+        rows: [
+          { lineNo: 2, role: 'assistant', text: 'secret body', content: 'secret body', createdAt: 2000 },
+        ],
+      });
+
+      expect(result).toEqual({ changed: 0 });
+      await expect(
+        client.queryOne('SELECT role, content, agent_meta, rewind_at FROM messages WHERE id = ?', [
+          'deleted',
+        ]),
+      ).resolves.toEqual({
+        role: 'message_tombstone',
+        content: 'null',
+        agent_meta: null,
+        rewind_at: 5000,
+      });
+    });
+  });
+
   it('claude.importMessages upserts imported message parts', async () => {
     await withClient(async (client) => {
       await seedSession(client, 's1');
@@ -203,6 +235,47 @@ describe('db worker tx handlers', () => {
         client_id: 'claude-import:7-0',
         tool_use_id: 'tool-1',
         agent_meta: JSON.stringify({ uuid: 'u1' }),
+      });
+    });
+  });
+
+  it('claude.importMessages does not rewrite rewound imported messages', async () => {
+    await withClient(async (client) => {
+      await seedSession(client, 's1');
+      await client.exec(
+        'INSERT INTO messages (id, client_id, session_id, role, content, tool_use_id, agent_meta, created_at, rewind_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        ['deleted', 'claude-import:7-0', 's1', 'message_tombstone', 'null', null, null, 3000, 5000],
+      );
+
+      const result = await client.tx('claude.importMessages', {
+        sessionId: 's1',
+        importClientIdPrefix: 'claude-import:',
+        sdkSessionId: 'sdk-1',
+        rows: [
+          {
+            lineNo: 7,
+            partIndex: 0,
+            role: 'assistant',
+            content: { text: 'secret body' },
+            toolUseId: 'tool-1',
+            agentMeta: { uuid: 'u1' },
+            createdAt: 3000,
+          },
+        ],
+      });
+
+      expect(result).toEqual({ changed: 0 });
+      await expect(
+        client.queryOne(
+          'SELECT role, content, tool_use_id, agent_meta, rewind_at FROM messages WHERE id = ?',
+          ['deleted'],
+        ),
+      ).resolves.toEqual({
+        role: 'message_tombstone',
+        content: 'null',
+        tool_use_id: null,
+        agent_meta: null,
+        rewind_at: 5000,
       });
     });
   });
@@ -626,6 +699,92 @@ describe('db worker tx handlers', () => {
     });
   });
 
+  it('message.delete scrubs only the target and invalidates native context atomically', async () => {
+    await withClient(async (client) => {
+      await seedSession(client, 's1');
+      await client.exec('UPDATE sessions SET sdk_session_id = ? WHERE id = ?', ['old-native', 's1']);
+      for (const [id, role, createdAt] of [
+        ['before', 'user', 100],
+        ['target', 'assistant', 200],
+        ['after', 'user', 300],
+      ] as const) {
+        await client.exec(
+          'INSERT INTO messages (id, client_id, session_id, role, content, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+          [id, id, 's1', role, JSON.stringify(id), createdAt],
+        );
+      }
+      const job = await client.exec(
+        "INSERT INTO embedding_jobs (source, source_id, model_id, vec_table, scheduled_at) VALUES ('chat', ?, 'test', 'chat_vec', 0)",
+        ['target'],
+      );
+      await client.exec('INSERT INTO chat_vec (rowid, embedding) VALUES (?, ?)', [job.lastInsertRowid, Buffer.from([1, 2, 3])]);
+
+      await client.tx('message.delete', {
+        sessionId: 's1',
+        clientId: 'target',
+        contextMarker: {
+          id: 'ctx-id',
+          clientId: 'ctx-client',
+          content: '{"handoff":"before + after","consumed":false}',
+          createdAt: 400,
+        },
+        updatedAt: 500,
+      });
+
+      await expect(client.query<{
+        id: string;
+        role: string;
+        content: string;
+        agent_meta: string | null;
+        rewind_at: number | null;
+      }>(
+        'SELECT id, role, content, agent_meta, rewind_at FROM messages WHERE session_id = ? ORDER BY created_at',
+        ['s1'],
+      )).resolves.toEqual([
+        { id: 'before', role: 'user', content: '"before"', agent_meta: null, rewind_at: null },
+        { id: 'target', role: 'message_tombstone', content: 'null', agent_meta: null, rewind_at: 500 },
+        { id: 'after', role: 'user', content: '"after"', agent_meta: null, rewind_at: null },
+        {
+          id: 'ctx-id',
+          role: 'context_rebuild',
+          content: '{"handoff":"before + after","consumed":false}',
+          agent_meta: null,
+          rewind_at: 400,
+        },
+      ]);
+      await expect(client.queryOne(
+        'SELECT sdk_session_id, updated_at FROM sessions WHERE id = ?',
+        ['s1'],
+      )).resolves.toEqual({ sdk_session_id: null, updated_at: 500 });
+      await expect(client.query('SELECT rowid FROM embedding_jobs WHERE source_id = ?', ['target'])).resolves.toEqual([]);
+      await expect(client.query('SELECT rowid FROM chat_vec')).resolves.toEqual([]);
+    });
+  });
+
+  it('message.delete rejects non-conversation rows without clearing the sdk binding', async () => {
+    await withClient(async (client) => {
+      await seedSession(client, 's1');
+      await client.exec('UPDATE sessions SET sdk_session_id = ? WHERE id = ?', ['old-native', 's1']);
+      await client.exec(
+        'INSERT INTO messages (id, client_id, session_id, role, content, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+        ['tool', 'tool', 's1', 'tool_use', '{}', 100],
+      );
+      await expect(client.tx('message.delete', {
+        sessionId: 's1',
+        clientId: 'tool',
+        contextMarker: {
+          id: 'ctx-id',
+          clientId: 'ctx-client',
+          content: '{"handoff":"empty","consumed":false}',
+          createdAt: 400,
+        },
+        updatedAt: 500,
+      })).rejects.toMatchObject({ code: 'NOT_FOUND' });
+      await expect(client.queryOne('SELECT sdk_session_id FROM sessions WHERE id = ?', ['s1']))
+        .resolves.toEqual({ sdk_session_id: 'old-native' });
+    });
+  });
+
   it('embedding.markDone marks jobs done without writing vectors', async () => {
     await withClient(async (client) => {
       const rowid = await insertJob(client, { sourceId: 'm1' });
@@ -655,6 +814,26 @@ describe('db worker tx handlers', () => {
         len: 16,
       });
       expect(embedding.buffer.byteLength).toBe(0);
+    });
+  });
+
+  it('embedding.commit does not restore a vector after its job was deleted', async () => {
+    await withClient(async (client) => {
+      const rowid = await insertJob(client, { sourceId: 'deleted-message' });
+      await client.exec('INSERT INTO chat_vec (rowid, embedding) VALUES (?, ?)', [
+        rowid,
+        Buffer.from([1, 2, 3, 4]),
+      ]);
+      await client.exec('DELETE FROM embedding_jobs WHERE rowid = ?', [rowid]);
+
+      const lateEmbedding = new Float32Array([9, 9, 9, 9]);
+      await client.tx(
+        'embedding.commit',
+        { items: [{ rowid, vecTable: 'chat_vec', embedding: lateEmbedding }] },
+        [lateEmbedding.buffer],
+      );
+
+      await expect(client.query('SELECT rowid FROM chat_vec')).resolves.toEqual([]);
     });
   });
 

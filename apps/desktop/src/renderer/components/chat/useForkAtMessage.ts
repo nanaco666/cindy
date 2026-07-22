@@ -4,7 +4,7 @@
  * UserMessage（在提问上分叉：复制提问之前的内容，并把提问文本预填进新会话
  * composer）与 AssistantMessage（在 AI 回复上分叉：复制含该回复所在 turn 的
  * 全部内容，无预填）共用同一套流程：
- *   forkBlocked 拦截 toast → maker:fork IPC → 可选 composer 预填 →
+ *   forkBlocked 拦截 toast → 功能介绍确认框 → maker:fork IPC → 可选 composer 预填 →
  *   sidebar refresh → navigate → 错误码映射 toast。
  *
  * 语义差异（复制边界）由 main 侧 forkSessionAtMessage 按 target role 决定，
@@ -14,6 +14,7 @@
 import { useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { useConfirmDialog } from '@/components/ui/confirm-dialog-provider';
 import { toast } from '@/lib/toast';
 import { ApiError } from '@/lib/httpClient';
 import { forkAtMessage } from '@/lib/sessionService';
@@ -67,6 +68,7 @@ export function useForkAtMessage({
   draftDocument,
 }: UseForkAtMessageOptions): () => Promise<void> {
   const { t } = useTranslation();
+  const { confirm } = useConfirmDialog();
   const navigate = useNavigate();
   const navigationMode = useSessionNavigationMode();
 
@@ -80,6 +82,14 @@ export function useForkAtMessage({
       toast.error(t('chat.userMessage.forkBusy'));
       return;
     }
+    const confirmed = await confirm({
+      title: t('chat.messageActionBar.forkConfirmTitle'),
+      description: t('chat.messageActionBar.forkConfirmDescription'),
+      confirmText: t('chat.messageActionBar.forkConfirm'),
+      cancelText: t('chat.messageActionBar.forkCancel'),
+      autoFocusConfirm: true,
+    });
+    if (!confirmed) return;
     try {
       const newSession = await forkAtMessage(sessionId, messageClientId);
       // Pre-fill the new session's composer so the user lands on a
@@ -89,9 +99,8 @@ export function useForkAtMessage({
       // (image/file attachments intentionally skipped — fork-and-edit is
       // typically a "rephrase the question" flow; carry them forward later
       // if real usage shows we need it.)
-      const draftDoc = draftDocument === undefined
-        ? textToTiptapDoc(draftText ?? '')
-        : draftDocument;
+      const draftDoc =
+        draftDocument === undefined ? textToTiptapDoc(draftText ?? '') : draftDocument;
       if (draftDoc) {
         saveComposerDraft(newSession.id, {
           text: draftDoc,
@@ -112,14 +121,14 @@ export function useForkAtMessage({
         code === 'FORK_UNSUPPORTED_HISTORY'
           ? t('chat.userMessage.forkErrors.unsupportedHistory')
           : code === 'NO_PRIOR_ASSISTANT'
-          ? t('chat.userMessage.forkErrors.noPriorAssistant')
-          : code === 'SOURCE_NEVER_RAN'
-            ? t('chat.userMessage.forkErrors.sourceNeverRan')
-            : code === 'CODEX_FORK_STATE_UNAVAILABLE'
-              ? t('chat.userMessage.forkErrors.codexStateUnavailable', {
-                  detail: err instanceof Error ? err.message : String(err),
-                })
-              : t('chat.userMessage.forkErrors.generic');
+            ? t('chat.userMessage.forkErrors.noPriorAssistant')
+            : code === 'SOURCE_NEVER_RAN'
+              ? t('chat.userMessage.forkErrors.sourceNeverRan')
+              : code === 'CODEX_FORK_STATE_UNAVAILABLE'
+                ? t('chat.userMessage.forkErrors.codexStateUnavailable', {
+                    detail: err instanceof Error ? err.message : String(err),
+                  })
+                : t('chat.userMessage.forkErrors.generic');
       toast.error(msg);
       // Re-throw so MessageActionBar's `forking` state knows to clear via
       // its finally{} (it doesn't actually re-throw further — just resets).
@@ -132,6 +141,7 @@ export function useForkAtMessage({
     forkBlocked,
     draftText,
     draftDocument,
+    confirm,
     navigate,
     t,
   ]);

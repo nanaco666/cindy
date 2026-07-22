@@ -3858,7 +3858,7 @@
       "outputFile": "Output: {{path}}"
     },
     "forkOrigin": {
-      "label": "Forked from conversation"
+      "label": "Created from another conversation"
     },
     "imageMissing": {
       "title": "Image missing"
@@ -3870,10 +3870,23 @@
     },
     "messageActionBar": {
       "copy": "Copy message",
-      "timeCopyHint": "Click to copy message link",
       "linkCopied": "Link copied",
+      "moreActions": "More message actions",
+      "copyLink": "Copy current conversation link",
+      "copyLinkFailed": "Couldn't copy the link",
       "rewind": "Back to here",
-      "fork": "Fork",
+      "fork": "Continue in a new conversation",
+      "forkConfirmTitle": "Start a new conversation from here?",
+      "forkConfirmDescription": "A separate conversation will be created using the context at this point. The original conversation stays unchanged, and future messages in either conversation won't affect the other.",
+      "forkConfirm": "Start new conversation",
+      "forkCancel": "Cancel",
+      "delete": "Delete this message",
+      "deleteConfirmTitle": "Delete this message?",
+      "deleteConfirmDescription": "This deletes the message from the local session and keeps later messages. On the next send, the AI context is rebuilt from the remaining history.",
+      "deleteConfirm": "Delete message",
+      "deleteCancel": "Cancel",
+      "deleteBusy": "Wait for the current response to finish before deleting a message.",
+      "deleteFailed": "Couldn't delete the message. Try again.",
       "edit": "Edit",
       "turnCost": "Cost this turn",
       "turnCostEstimated": "Token value this turn (API-price equivalent)",
@@ -4283,7 +4296,7 @@
       "automationViewTask": "View automation task",
       "expandLongMessage": "Show full message",
       "collapseLongMessage": "Collapse",
-      "forkBusy": "Session is currently running — wait for it to finish before forking",
+      "forkBusy": "Wait for the current response to finish before starting a new conversation from here",
       "editStopTimeout": "Timed out waiting for the task to stop — please try again",
       "editQueueNotEmpty": "This session has queued messages — send or remove them before editing",
       "editNotLast": "A newer message exists in this session — this one is no longer the latest and cannot be edited",
@@ -4292,11 +4305,11 @@
       "editSend": "Send",
       "editRollbackHint": "Sending will undo changes to {{count}} file(s) from the last turn",
       "forkErrors": {
-        "unsupportedHistory": "This point crosses an agent-switch boundary and cannot be forked",
-        "noPriorAssistant": "Please fork from a message that follows an AI reply",
-        "sourceNeverRan": "Source session has not run yet, cannot fork",
-        "codexStateUnavailable": "The Codex session state is unavailable and cannot be forked. {{detail}}",
-        "generic": "Fork failed, please retry"
+        "unsupportedHistory": "This point crosses an agent-switch boundary, so a new conversation can't be started from here",
+        "noPriorAssistant": "Start a new conversation from a message that follows an AI reply",
+        "sourceNeverRan": "The original conversation hasn't run yet, so a new conversation can't be started",
+        "codexStateUnavailable": "The Codex conversation state is unavailable, so a new conversation can't be started. {{detail}}",
+        "generic": "Couldn't start a new conversation. Try again."
       }
     },
     "threadContext": {

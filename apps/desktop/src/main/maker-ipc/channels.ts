@@ -20,6 +20,11 @@ export const MAKER_INVOKE = {
   SESSION_ENABLE_ORCA: 'maker:session:enable-orca',
   SESSION_DISABLE_ORCA: 'maker:session:disable-orca',
   CLOSE_SESSION: 'maker:close-session',
+  /**
+   * 单条 user / assistant 消息本地内容删除。保留后续可见消息，但清当前原生
+   * session 绑定；下一次发送以删除后的本地历史重建上下文。
+   */
+  DELETE_MESSAGE: 'maker:message:delete',
   ABORT_SESSION: 'maker:abort-session',
   SEND: 'maker:send',
   STEER: 'maker:steer',

@@ -31,6 +31,7 @@ describe('REMOTE_INVOKE_ALLOWLIST', () => {
       'local-db:messages:list',
       'local-db:messages:around',
       'local-db:messages:around-client-id',
+      'maker:message:delete',
     ]) {
       expect(REMOTE_INVOKE_ALLOWLIST.has(ch)).toBe(true);
     }
@@ -262,6 +263,7 @@ describe('PUSH_FORWARD_ALLOWLIST', () => {
       'maker:orca:worker-changed',
       'usage:message-turn-cost',
       'local-db:messages:created',
+      'local-db:messages:deleted',
       'local-db:session:error-persisted',
       SESSION_ACTIVITY_CHANNEL,
     ]) {

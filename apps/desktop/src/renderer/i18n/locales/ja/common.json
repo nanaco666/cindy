@@ -3857,7 +3857,7 @@
       "outputFile": "出力: {{path}}"
     },
     "forkOrigin": {
-      "label": "会話から分岐"
+      "label": "元の会話から作成"
     },
     "imageMissing": {
       "title": "画像が失われました"
@@ -3869,10 +3869,23 @@
     },
     "messageActionBar": {
       "copy": "メッセージをコピー",
-      "timeCopyHint": "クリックでメッセージリンクをコピー",
       "linkCopied": "リンクをコピーしました",
+      "moreActions": "その他のメッセージ操作",
+      "copyLink": "現在の会話リンクをコピー",
+      "copyLinkFailed": "リンクをコピーできませんでした",
       "rewind": "ここまで戻る",
-      "fork": "分岐",
+      "fork": "新しい会話で続ける",
+      "forkConfirmTitle": "ここから新しい会話を始めますか？",
+      "forkConfirmDescription": "この時点の会話コンテキストを使って、独立した新しい会話を作成します。元の会話は変更されず、以後のメッセージは互いに影響しません。",
+      "forkConfirm": "新しい会話を始める",
+      "forkCancel": "キャンセル",
+      "delete": "このメッセージを削除",
+      "deleteConfirmTitle": "このメッセージを削除しますか？",
+      "deleteConfirmDescription": "このメッセージはローカルセッションから削除され、後続のメッセージは保持されます。次回送信時に残りの履歴から AI コンテキストを再構築します。",
+      "deleteConfirm": "メッセージを削除",
+      "deleteCancel": "キャンセル",
+      "deleteBusy": "現在の応答が終わってからメッセージを削除してください。",
+      "deleteFailed": "メッセージを削除できませんでした。もう一度お試しください。",
       "edit": "編集",
       "turnCost": "このターンの消費",
       "turnCostEstimated": "このターンの token 価値(API 単価換算)",
@@ -4282,7 +4295,7 @@
       "automationViewTask": "自動化タスクを表示",
       "expandLongMessage": "全文を表示",
       "collapseLongMessage": "折りたたむ",
-      "forkBusy": "セッションが実行中です。終了してから分岐してください",
+      "forkBusy": "現在の応答が終了してから、ここから新しい会話を始めてください",
       "editStopTimeout": "タスクの停止待ちがタイムアウトしました。もう一度お試しください",
       "editQueueNotEmpty": "このセッションには送信待ちのメッセージがあります。先に送信または削除してから編集してください",
       "editNotLast": "セッションに新しいメッセージがあるため、これは最新ではなくなり編集して再送信できません",
@@ -4291,11 +4304,11 @@
       "editSend": "送信",
       "editRollbackHint": "送信すると前のターンで変更された {{count}} 個のファイルが元に戻ります",
       "forkErrors": {
-        "unsupportedHistory": "この位置はエージェント切替境界をまたぐため、分岐できません",
-        "noPriorAssistant": "AI の返信より後のメッセージで分岐してください",
-        "sourceNeverRan": "元のセッションがまだ実行されていないため分岐できません",
-        "codexStateUnavailable": "Codex セッションの状態を利用できないため分岐できません。{{detail}}",
-        "generic": "分岐に失敗しました。再試行してください"
+        "unsupportedHistory": "この位置はエージェント切替境界をまたぐため、ここから新しい会話を始められません",
+        "noPriorAssistant": "AI の返信より後のメッセージから新しい会話を始めてください",
+        "sourceNeverRan": "元の会話がまだ実行されていないため、新しい会話を始められません",
+        "codexStateUnavailable": "Codex 会話の状態を利用できないため、新しい会話を始められません。{{detail}}",
+        "generic": "新しい会話を始められませんでした。再試行してください"
       }
     },
     "threadContext": {

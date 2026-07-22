@@ -1,7 +1,8 @@
 /**
  * SessionLinkChip — 聊天正文里 `cindy://session/<id>[?message=<clientId>]`(历史 xdt-maker:// 同)
- * 深链的行内 chip 渲染(图标 + 会话标题),点击跳转到对应会话;带 `?message=`
- * 锚点时进一步定位并高亮目标消息(复用会话搜索的 searchJump 机制)。
+ * 深链的行内 chip 渲染:整段会话显示跳转图标 + 会话标题;带 `?message=`
+ * 锚点时直接显示目标消息正文的单行摘要,hover 展开全文,点击后定位并高亮
+ * 目标消息(复用会话搜索的 searchJump 机制)。
  *
  * 标题解析三级降级:
  *   1. 作者显式给的 label(`[自定义文案](cindy://…)`)——作者意图优先,不查库;
@@ -22,24 +23,25 @@ import { cn } from '@/lib/utils';
 import { parseSessionDeepLinkHref } from '@/lib/deepLink';
 import { resolveSessionRoute } from '@/lib/orcaSessionIdentity';
 import { shortSessionId } from '@/lib/sessionId';
+import { resolveSessionMessageText } from '@/lib/sessionMessageText';
 import * as sessionService from '@/lib/sessionService';
 import { useRemoteProjectSessions } from '@/features/device-link/remoteProjectsStore';
 import { useSessionNavigationMode } from '@/features/cc-agent/embeddedSessionNavigation';
+import { InlineReferenceChip } from './InlineReferenceChip';
+import { QuoteChip } from './QuoteChip';
 
-const chipClass = cn(
-  'inline-flex max-w-full items-center gap-[3px] px-[5px] py-[0.5px]',
-  'rounded-[4px] border',
-  'bg-[var(--chat-input-chip-bg)]',
-  'border-[var(--chat-input-chip-border)]',
-  'text-[var(--chat-input-chip-text)]',
-  'font-mono text-[13px] leading-[18px]',
-  'relative top-[-1px] align-middle -my-[1px]',
-);
+const MESSAGE_LINK_LABEL_MAX = 240;
 
 export interface SessionLinkChipProps {
   href: string;
   /** 作者显式链接文案(`[label](…)`,label ≠ href 时传入);有值则不查标题。 */
   label?: string;
+}
+
+function compactMessageLinkLabel(text: string): string {
+  const compact = text.replace(/\s+/g, ' ').trim();
+  if (compact.length <= MESSAGE_LINK_LABEL_MAX) return compact;
+  return `${compact.slice(0, MESSAGE_LINK_LABEL_MAX - 1)}…`;
 }
 
 export function SessionLinkChip({ href, label }: SessionLinkChipProps) {
@@ -48,15 +50,17 @@ export function SessionLinkChip({ href, label }: SessionLinkChipProps) {
   const target = useMemo(() => parseSessionDeepLinkHref(href), [href]);
   const remoteSessions = useRemoteProjectSessions();
   const [fetchedTitle, setFetchedTitle] = useState<string | null>(null);
+  const [messageText, setMessageText] = useState<string | null>(null);
 
   const sessionId = target?.sessionId ?? null;
+  const messageClientId = target?.messageClientId ?? null;
   const explicitLabel = label?.trim() || null;
 
   useEffect(() => {
     // 先清旧值:同一实例被复用渲染另一个 href(虚拟列表 / 消息 patch)时,
     // 不能让上一个会话的标题串到新链接上(Codex review P2)。
     setFetchedTitle(null);
-    if (!sessionId || explicitLabel) return;
+    if (!sessionId || messageClientId || explicitLabel) return;
     let cancelled = false;
     sessionService
       .get(sessionId)
@@ -69,29 +73,29 @@ export function SessionLinkChip({ href, label }: SessionLinkChipProps) {
     return () => {
       cancelled = true;
     };
-  }, [sessionId, explicitLabel]);
+  }, [sessionId, messageClientId, explicitLabel]);
+
+  useEffect(() => {
+    setMessageText(null);
+    if (!sessionId || !messageClientId) return;
+    let cancelled = false;
+    resolveSessionMessageText(sessionId, messageClientId)
+      .then((text) => {
+        if (!cancelled && text) setMessageText(text);
+      })
+      .catch(() => {
+        // Missing/offline target: keep the compact client-id fallback.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionId, messageClientId]);
 
   // 深链形状不合法(理论上被 tokenizer / 渲染分支挡住,防御性兜底)→ 纯文本。
   if (!target || !sessionId) return <span>{label ?? href}</span>;
 
   const remoteSession = remoteSessions.find((s) => s.id === sessionId) ?? null;
   const remoteTitle = fetchedTitle ? null : remoteSession?.title?.trim() || null;
-  const display = explicitLabel ?? fetchedTitle ?? remoteTitle ?? shortSessionId(sessionId);
-  const content = (
-    <>
-      <CornerDownRight size={12} className="shrink-0 text-[var(--chat-input-chip-icon)]" />
-      <span className="min-w-0 truncate">{display}</span>
-    </>
-  );
-
-  if (navigationMode === 'sidebar-embedded') {
-    return (
-      <span title={href} className={cn(chipClass, 'cursor-default')}>
-        {content}
-      </span>
-    );
-  }
-
   const handleClick = () => {
     // device-link 远程会话本地无 row,resolveSessionRoute 内部的 sessionService.get
     // 会 miss → 远程 Orca 会话被当普通会话路由,后续 redirect 会丢 searchJump 锚点。
@@ -115,18 +119,53 @@ export function SessionLinkChip({ href, label }: SessionLinkChipProps) {
       );
     });
   };
+  const display = explicitLabel ?? fetchedTitle ?? remoteTitle ?? shortSessionId(sessionId);
+
+  if (messageClientId) {
+    const fullText = messageText ?? shortSessionId(messageClientId);
+    const messageLabel = compactMessageLinkLabel(fullText);
+    const messageContent = <QuoteChip quote={{ text: messageLabel }} />;
+    const messageClass = 'inline-flex max-w-[min(240px,55vw)] align-middle';
+    if (navigationMode === 'sidebar-embedded') {
+      return (
+        <span data-session-message-link="" className={cn(messageClass, 'cursor-default')}>
+          {messageContent}
+        </span>
+      );
+    }
+    return (
+      <button
+        type="button"
+        data-session-message-link=""
+        aria-label={messageLabel}
+        onClick={handleClick}
+        className={cn(messageClass, 'cursor-pointer')}
+      >
+        {messageContent}
+      </button>
+    );
+  }
+
+  if (navigationMode === 'sidebar-embedded') {
+    return (
+      <InlineReferenceChip
+        label={display}
+        icon={<CornerDownRight aria-hidden />}
+        tooltip={display}
+        ariaLabel={display}
+        className="relative top-[-1px] -my-[1px] max-w-[min(240px,55vw)] cursor-default align-middle"
+      />
+    );
+  }
 
   return (
-    <button
-      type="button"
+    <InlineReferenceChip
+      label={display}
+      icon={<CornerDownRight aria-hidden />}
+      tooltip={display}
+      ariaLabel={display}
       onClick={handleClick}
-      title={href}
-      className={cn(
-        chipClass,
-        'cursor-pointer transition-colors hover:bg-[var(--cmd-palette-item-hover)]',
-      )}
-    >
-      {content}
-    </button>
+      className="relative top-[-1px] -my-[1px] max-w-[min(240px,55vw)] align-middle"
+    />
   );
 }

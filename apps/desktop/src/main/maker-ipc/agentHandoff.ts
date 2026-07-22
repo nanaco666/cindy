@@ -1,14 +1,14 @@
 /**
- * session-agent-switch:同一会话在 Claude Code / Codex 引擎间切换时的
- * 交接(handoff)构造与注入工具。
+ * 原生 Agent 会话重建时的交接(handoff)构造与注入工具。当前用于跨引擎切换
+ * 和单条消息删除后的同引擎上下文重建。
  *
  * 设计原则(规则 9:代码保证确定性):
  *  - 交接文本由代码从 DB 消息历史确定性拼接——最近 K 轮逐字(带截断)+ 更早轮次
  *    单行提要,不经 LLM 生成,零额外延迟、可单测、可复现。
  *  - 注入走"wire 前缀"通道:发给新引擎的 payload 前置交接段,落库/渲染仍是用户
  *    原文(display 与 sent 分离,复用 persistUserMessage 既有机制)。
- *  - 交接全文持久化在 role='agent_switch' 边界行 content.handoff 里:UI 可展开
- *    查看,重启后 pending 状态也从它确定性重建(无额外状态列)。
+ *  - 交接全文持久化在 agent_switch 边界或隐藏的 context_rebuild 行中，重启后
+ *    pending 状态可从 DB 确定性重建(无额外状态列)。
  */
 
 /** DB 层引擎标识(sessions.agent_kind / messages.agent_kind 的值域)。 */
@@ -46,6 +46,11 @@ export interface BuildHandoffOptions {
    * 会话过期等不可检测场景),增量交接也保有全局工作现场,不至于失明。
    */
   workStateMessages?: HandoffSourceMessage[];
+  /**
+   * 交接触发原因。message-deletion 表示同一引擎因本地消息被删除而重建原生
+   * 上下文；framing 会要求只采用删除后的有效历史，且不向用户暴露内部重建。
+   */
+  reason?: 'agent-switch' | 'message-deletion';
 }
 
 /** 最近多少个用户轮次进入逐字区(其余进单行提要区)。 */
@@ -288,7 +293,17 @@ function assembleHandoffText(
   const earlier = turns.slice(0, -recentCount);
 
   const sections: string[] = [];
-  if (opts.mode === 'delta') {
+  if (opts.reason === 'message-deletion') {
+    sections.push(
+      `[会话上下文重建·内部上下文]\n` +
+        `本会话的本地记录已由用户编辑,当前原生会话上下文因此失效。` +
+        `下面是编辑后的有效对话历史;只把这些记录视为此前对话,不要尝试恢复、引用或推断未列出的消息。` +
+        `请以第一人称自然续接,不要向用户提及本段重建说明。` +
+        `开始改动前先核对工作区实际状态(如 git status / git diff / 读相关文件):` +
+        `记述与工作区冲突时,一律以工作区现状为准;` +
+        `对更早的细节没有把握时,优先读取实际文件与代码核实,不要凭摘要臆断。`,
+    );
+  } else if (opts.mode === 'delta') {
     // 归位续接:目标引擎 resume 了自己的停泊原生会话,已持有离场前的完整记忆。
     // 只补"离开期间"的进展;同时防御 resume 静默失效——指引它以工作区与检索为准,
     // 而不是断言"你一定记得"。
@@ -390,7 +405,11 @@ function assembleHandoffText(
     );
   }
 
-  sections.push('== 交接说明结束,以下是用户的新消息 ==');
+  sections.push(
+    opts.reason === 'message-deletion'
+      ? '== 上下文重建说明结束,以下是用户的新消息 =='
+      : '== 交接说明结束,以下是用户的新消息 ==',
+  );
   // 不在组装阶段做任何截断——超限收缩由 buildHandoffText 的外层循环负责
   // (收缩逐字区保住首尾),尾部硬切只是外层最后的保险。
   return sections.join('\n\n');

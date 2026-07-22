@@ -62,6 +62,7 @@ describe('mobile maker transport', () => {
       'maker:fork',
       'maker:rewind:preview',
       'maker:rewind:commit',
+      'maker:message:delete',
       'maker:close-session',
       'maker:schedule:list',
       'maker:schedule:get',
@@ -329,17 +330,19 @@ describe('mobile maker transport', () => {
     ]);
   });
 
-  it('routes fork and rewind actions through maker namespace', async () => {
+  it('routes fork, rewind and delete actions through maker namespace', async () => {
     const { calls, maker } = harness();
 
     await maker.fork('s1', 'm2');
     await maker.rewindPreview('s1', 'm2');
     await maker.rewindCommit('s1', 'm2');
+    await maker.deleteMessage('s1', 'm2');
 
     expect(calls.map((call) => [call.channel, call.args])).toEqual([
       ['maker:fork', ['s1', 'm2']],
       ['maker:rewind:preview', ['s1', 'm2']],
       ['maker:rewind:commit', ['s1', 'm2']],
+      ['maker:message:delete', ['s1', 'm2']],
     ]);
   });
 
