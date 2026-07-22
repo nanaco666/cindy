@@ -111,6 +111,26 @@ interface FinalSwitchRollbackState {
 
 type RegistryInstallEntry = Awaited<ReturnType<typeof registryService.getInstall>>;
 
+/** 仅供 main 内部调用层消费的项目级 Skill 变更元数据。 */
+export interface ProjectSkillMutationMetadata {
+  /** 项目级 Skill 发生安装 / 更新 / 删除后需要失效 Codex cwd 缓存。 */
+  projectWorkingDir?: string;
+}
+
+export type InstallResult =
+  | ({
+      success: true;
+      name: string;
+      version: string;
+      absolutePath: string;
+      replacedBackupPath?: string;
+    } & ProjectSkillMutationMetadata)
+  | { success: false; errorCode: InstallErrorCode; message: string };
+
+export type UninstallResult =
+  | ({ success: true } & ProjectSkillMutationMetadata)
+  | { success: false; errorCode: InstallErrorCode; message: string };
+
 // ── 内部状态：记录每个 name 当前正在跑的 AbortController ────────────────────────
 
 const inflight = new Map<string, AbortController>();
@@ -141,6 +161,29 @@ async function pathExists(p: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+/**
+ * Skill 目录变化后维护项目级双 Agent 兼容链接，并返回需要失效缓存的 cwd。
+ * 链接维护本身保持 best-effort；即使失败也返回 cwd，让调用层刷新实际磁盘状态。
+ */
+async function reconcileProjectSkillLinksForPaths(...skillPaths: string[]): Promise<string | undefined> {
+  const projectWorkingDir = skillPaths
+    .map((skillPath) => projectWorkingDirFromSkillPath(skillPath))
+    .find((workingDir): workingDir is string => Boolean(workingDir));
+  if (!projectWorkingDir || path.resolve(projectWorkingDir) === path.resolve(os.homedir())) {
+    return undefined;
+  }
+
+  try {
+    const linkResult = await prepareSharedProjectSkillLinks({ workingDir: projectWorkingDir });
+    for (const warning of linkResult.warnings) {
+      log.warn('[skillInstall] shared project skill link warning:', warning);
+    }
+  } catch (err) {
+    log.warn('[skillInstall] prepare shared project skill links failed:', err);
+  }
+  return projectWorkingDir;
 }
 
 function rand(): string {
@@ -293,7 +336,7 @@ function safeJoin(dest: string, relPath: string): string | null {
 export async function install(
   p: InstallParams,
   onProgress: ProgressCb,
-): Promise<{ success: true; name: string; version: string; absolutePath: string; replacedBackupPath?: string } | { success: false; errorCode: InstallErrorCode; message: string }> {
+): Promise<InstallResult> {
   const userId = getCurrentUserId();
   if (!userId) {
     onProgress({ phase: 'failed', name: p.name, errorCode: 'AUTH_REQUIRED', message: '未登录' });
@@ -617,19 +660,8 @@ export async function install(
       } catch (err) {
         log.warn('[skillInstall] claude symlink failed (non-fatal):', claudeLink, err);
       }
-    } else {
-      const projectWorkingDir = projectWorkingDirFromSkillPath(finalDir);
-      if (projectWorkingDir && path.resolve(projectWorkingDir) !== path.resolve(os.homedir())) {
-        try {
-          const linkResult = await prepareSharedProjectSkillLinks({ workingDir: projectWorkingDir });
-          for (const warning of linkResult.warnings) {
-            log.warn('[skillInstall] shared project skill link warning:', warning);
-          }
-        } catch (err) {
-          log.warn('[skillInstall] prepare shared project skill links failed:', err);
-        }
-      }
     }
+    const projectWorkingDir = await reconcileProjectSkillLinksForPaths(finalDir);
     try {
       const linkResult = await prepareSharedGlobalSkillLinks();
       for (const warning of linkResult.warnings) {
@@ -646,6 +678,7 @@ export async function install(
       version: versionStr,
       absolutePath: finalDir,
       ...(replacedBackupPath ? { replacedBackupPath } : {}),
+      ...(projectWorkingDir ? { projectWorkingDir } : {}),
     };
   } finally {
     inflight.delete(p.name);
@@ -663,7 +696,7 @@ export async function install(
  */
 export async function uninstall(
   absolutePath: string,
-): Promise<{ success: true } | { success: false; errorCode: InstallErrorCode; message: string }> {
+): Promise<UninstallResult> {
   const userId = getCurrentUserId();
   if (!userId) {
     return { success: false, errorCode: 'AUTH_REQUIRED', message: '未登录' };
@@ -704,7 +737,7 @@ async function uninstallLocked(
   resolved: string,
   skillName: string,
   userId: string,
-): Promise<{ success: true } | { success: false; errorCode: InstallErrorCode; message: string }> {
+): Promise<UninstallResult> {
   // 额外校验：registry 中必须有匹配记录，防止删除未注册的用户手写目录
   let registryEntry = await registryService.getInstall(skillName, resolved).catch(() => null);
   if (!registryEntry) {
@@ -724,7 +757,8 @@ async function uninstallLocked(
         log.warn('[skillInstall] record auto-sync ignore failed:', err);
       });
     }
-    return { success: true };
+    const projectWorkingDir = await reconcileProjectSkillLinksForPaths(resolved, absolutePath);
+    return { success: true, ...(projectWorkingDir ? { projectWorkingDir } : {}) };
   }
 
   try {
@@ -770,15 +804,9 @@ async function uninstallLocked(
     } catch { /* ignore */ }
   }
 
-  const projectWorkingDir = projectWorkingDirFromSkillPath(resolved)
-    ?? projectWorkingDirFromSkillPath(absolutePath);
-  if (projectWorkingDir && path.resolve(projectWorkingDir) !== path.resolve(os.homedir())) {
-    await prepareSharedProjectSkillLinks({ workingDir: projectWorkingDir }).catch((err) => {
-      log.warn('[skillInstall] cleanup shared project skill links failed:', err);
-    });
-  }
+  const projectWorkingDir = await reconcileProjectSkillLinksForPaths(resolved, absolutePath);
 
-  return { success: true };
+  return { success: true, ...(projectWorkingDir ? { projectWorkingDir } : {}) };
 }
 
 async function shouldRecordAutoSyncIgnore(skillName: string, registryEntry: StoredInstall, userId: string): Promise<boolean> {

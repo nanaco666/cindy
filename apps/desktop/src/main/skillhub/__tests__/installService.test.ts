@@ -428,7 +428,41 @@ describe('skillhub/installService', () => {
       () => {},
     );
 
-    expect(result.success).toBe(true);
+    expect(result).toMatchObject({
+      success: true,
+      projectWorkingDir: projectRoot,
+    });
+    expect(sharedSkills.prepareSharedProjectSkillLinks).toHaveBeenCalledWith({
+      workingDir: projectRoot,
+    });
+  });
+
+  it('returns the project cwd after uninstalling a project skill', async () => {
+    const projectRoot = path.join(TEST_ROOT, 'project-uninstall');
+    const finalDir = path.join(projectRoot, '.agents', 'skills', 'project-skill');
+    fs.mkdirSync(finalDir, { recursive: true });
+    fs.writeFileSync(path.join(finalDir, 'SKILL.md'), 'content', 'utf-8');
+
+    const { getCurrentUserId } = await import('../../authManager');
+    const { registryService } = await import('../registry');
+    const sharedSkills = await import('../../maker-host/shared-global-skills.js');
+    const { uninstall } = await import('../installService');
+
+    vi.mocked(getCurrentUserId).mockReturnValue('user-1');
+    vi.mocked(registryService.getInstall).mockResolvedValueOnce({
+      version: '1.0.0',
+      authorId: 'owner',
+      folderHash: 'hash',
+      installedAt: 1,
+      updatedAt: 1,
+      origin: 'installed',
+    });
+    vi.mocked(registryService.removeInstall).mockResolvedValue(undefined);
+    vi.mocked(sharedSkills.projectWorkingDirFromSkillPath).mockReturnValueOnce(projectRoot);
+
+    const result = await uninstall(finalDir);
+
+    expect(result).toEqual({ success: true, projectWorkingDir: projectRoot });
     expect(sharedSkills.prepareSharedProjectSkillLinks).toHaveBeenCalledWith({
       workingDir: projectRoot,
     });
