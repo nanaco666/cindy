@@ -94,14 +94,16 @@ describe('create_workers tool', () => {
       request_count: 9,
       attempted_count: 4,
       success_count: 3,
-      failure_count: 6,
+      failure_count: 1,
       skipped_count: 5,
+      not_created_count: 6,
       stopped_early: true,
       stop_reason: 'WORKER_LIMIT_HARD_EXCEEDED',
       limit: { hard_limit: 3, occupied_slots: 3, remaining_slots: 0 },
-      user_report: '本批请求创建 9 个 Worker，实际创建成功 3 个，失败 6 个；当前 hard limit 为 3，已占用 3 个槽位，其中 5 个请求在达到上限后未再尝试。可在协同设置中提高 hard limit、复用已有 Worker，或归档不再需要的 Worker 后分批执行剩余任务。',
+      user_report: '本批请求创建 9 个 Worker，实际创建成功 3 个，创建失败 1 个，未尝试 5 个，共 6 个未创建；当前 hard limit 为 3，已占用 3 个槽位。可在协同设置中提高 hard limit、复用已有 Worker，或归档不再需要的 Worker 后分批执行剩余任务。',
     });
     expect(createWorker).toHaveBeenCalledTimes(4);
+    expect(result.success_count + result.failure_count + result.skipped_count).toBe(result.request_count);
     expect(result.results.map((entry: { status: string }) => entry.status)).toEqual([
       'created', 'created', 'created', 'failed', 'skipped', 'skipped', 'skipped', 'skipped', 'skipped',
     ]);
@@ -126,6 +128,7 @@ describe('create_workers tool', () => {
       success_count: 8,
       failure_count: 1,
       skipped_count: 0,
+      not_created_count: 1,
       limit: { hard_limit: 8, occupied_slots: 8, remaining_slots: 0 },
     });
   });
@@ -148,8 +151,9 @@ describe('create_workers tool', () => {
       success_count: 2,
       failure_count: 1,
       skipped_count: 0,
+      not_created_count: 1,
       stopped_early: false,
-      user_report: '本批请求创建 3 个 Worker，实际创建成功 2 个，失败 1 个。请按逐项结果核对每个 Worker 的真实终态。',
+      user_report: '本批请求创建 3 个 Worker，实际创建成功 2 个，创建失败 1 个，未尝试 0 个，共 1 个未创建。请按逐项结果核对每个 Worker 的真实终态。',
     });
     expect(result.results).toEqual([
       expect.objectContaining({ label: 'worker_1', status: 'created', worker_id: 'worker-id-1' }),
@@ -176,9 +180,45 @@ describe('create_workers tool', () => {
       success_count: 0,
       failure_count: 3,
       skipped_count: 0,
+      not_created_count: 3,
       stopped_early: false,
     });
     expect(result.results.every((entry: { status: string }) => entry.status === 'failed')).toBe(true);
     expect(result.results.some((entry: { worker_id?: string }) => entry.worker_id)).toBe(false);
+  });
+
+  it('stops immediately and returns an explicit tool error when the host is not ready', async () => {
+    const createWorker = vi.fn<CreateWorkerDeps['createWorker']>(async () => ({
+      ok: false as const,
+      errorCode: 'HOST_NOT_READY' as const,
+      message: 'host booting',
+    }));
+    const registry = setup(createWorker);
+
+    const response = await registry.call('create_workers', {
+      workers: [worker(1), worker(2), worker(3)],
+    });
+    const result = parse(response);
+
+    expect(response.isError).toBe(true);
+    expect(result).toMatchObject({
+      ok: false,
+      errorCode: 'HOST_NOT_READY',
+      data: {
+        request_count: 3,
+        attempted_count: 1,
+        success_count: 0,
+        failure_count: 1,
+        skipped_count: 2,
+        not_created_count: 3,
+        stopped_early: true,
+        stop_reason: 'HOST_NOT_READY',
+        hint: expect.stringContaining('主进程协同服务尚未就绪'),
+      },
+    });
+    expect(result.data.results.map((entry: { status: string }) => entry.status)).toEqual([
+      'failed', 'skipped', 'skipped',
+    ]);
+    expect(createWorker).toHaveBeenCalledTimes(1);
   });
 });
