@@ -598,7 +598,10 @@ function WorktreePopRow({
           'inline-flex h-[14px] w-[14px] shrink-0 items-center justify-center rounded',
           'border-[1.5px] transition-colors',
           checked
-            ? 'border-primary bg-primary text-primary-foreground'
+            ? // CREATE AGENT 的深色主题 primary-foreground 与 primary 可能同为浅色，
+              // 直接使用全局 primary 会让勾选符号和背景缺少对比度。
+              // 复用草稿页已有的反色中性色，保证 light/dark 都能看清勾选状态。
+              'border-[var(--create-agent-send-bg)] bg-[var(--create-agent-send-bg)] text-[var(--create-agent-send-icon)]'
             : 'border-muted-foreground bg-transparent',
         )}
       >
