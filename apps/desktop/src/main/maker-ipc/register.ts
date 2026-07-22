@@ -34,6 +34,7 @@ import type {
   UserMessage,
 } from '@lizi/maker-core';
 import { createId } from '@paralleldrive/cuid2';
+import { permissionModeOrAsk } from '@lizi/maker-shared/permission-mode';
 import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { BrowserWindow, ipcMain } from 'electron';
 import type { AgentMeta } from '../../renderer/lib/ccAgent.types';
@@ -4495,7 +4496,7 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
       resumeSessionId: meta.sdkSessionId,
       effort: (row.effort ?? undefined) as CreateOpts['effort'],
       fastMode: !!row.fastMode,
-      permissionMode: (row.permissionMode ?? 'bypassPermissions') as CreateOpts['permissionMode'],
+      permissionMode: permissionModeOrAsk(row.permissionMode),
       planMode: false,
       title: row.title ?? undefined,
       remoteHostId: row.remoteHostId ?? undefined,
@@ -4548,7 +4549,7 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
       persistedContent: params.persistedContent,
       model: createOpts.model,
       effort: createOpts.effort ?? '',
-      permissionMode: createOpts.permissionMode ?? 'bypassPermissions',
+      permissionMode: permissionModeOrAsk(createOpts.permissionMode),
       workingDir: createOpts.workingDir,
       vendorOptions: createOpts.vendorOptions,
       chatMessage: {

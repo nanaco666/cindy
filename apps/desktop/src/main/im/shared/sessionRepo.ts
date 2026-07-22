@@ -14,6 +14,7 @@
 import { eq } from 'drizzle-orm';
 import type { AgentKind, Effort, PermissionMode } from '@lizi/maker-core';
 import type { ProviderView } from '@lizi/model-providers';
+import { permissionModeOrAsk } from '@lizi/maker-shared/permission-mode';
 
 import { getDbClient } from '../../localDb/client/current';
 import { sessions } from '../../localDb/schema';
@@ -375,4 +376,17 @@ export async function updatePermissionMode(
     .update(sessions)
     .set({ permissionMode: mode, updatedAt: Date.now() })
     .where(eq(sessions.id, sessionId));
+}
+
+/** 读取 /permission 切换前的持久化权限；非法历史值按 ask 处理。 */
+export async function readPermissionMode(
+  sessionId: string,
+): Promise<PermissionMode | null> {
+  const db = getDbClient().drizzle;
+  const rows = await db
+    .select({ permissionMode: sessions.permissionMode })
+    .from(sessions)
+    .where(eq(sessions.id, sessionId))
+    .limit(1);
+  return rows[0] ? permissionModeOrAsk(rows[0].permissionMode) : null;
 }

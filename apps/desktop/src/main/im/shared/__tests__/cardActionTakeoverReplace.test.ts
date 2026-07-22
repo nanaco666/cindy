@@ -32,6 +32,8 @@ const mocks = vi.hoisted(() => ({
   readModelRouteSnapshot: vi.fn(
     async (): Promise<{ model: string; effort: string; providerId: string | null } | null> => null,
   ),
+  readPermissionMode: vi.fn(async () => 'auto'),
+  updatePermissionMode: vi.fn(async () => {}),
   updateModelEffort: vi.fn(async () => {}),
   getSessionProvider: vi.fn(() => null),
   setSessionProvider: vi.fn(),
@@ -74,9 +76,10 @@ vi.mock('../fbotTitle', () => ({
 }));
 vi.mock('../sessionRepo', () => ({
   readModelRouteSnapshot: mocks.readModelRouteSnapshot,
+  readPermissionMode: mocks.readPermissionMode,
   touchUserSent: vi.fn(async () => {}),
   updateModelEffort: mocks.updateModelEffort,
-  updatePermissionMode: vi.fn(async () => {}),
+  updatePermissionMode: mocks.updatePermissionMode,
 }));
 vi.mock('../../../maker-host/session-provider-store', () => ({
   getSessionProvider: mocks.getSessionProvider,
@@ -198,10 +201,19 @@ beforeEach(() => {
   mocks.bindingAttach.mockResolvedValue(undefined);
   mocks.executeDetach.mockResolvedValue({ wasAttached: true, targetSessionId: 'sess-target' });
   mocks.readModelRouteSnapshot.mockResolvedValue(null);
+  mocks.readPermissionMode.mockResolvedValue('auto');
+  mocks.updatePermissionMode.mockResolvedValue(undefined);
   mocks.applyRuntimeSetModelChange.mockResolvedValue({ status: 'applied' });
   mocks.getMaker.mockReturnValue({
     createSession: vi.fn(async () => ({ id: 'sess-new' })),
     closeSession: mocks.closeSession,
+    getCapabilities: vi.fn(() => ({
+      permissionModes: [
+        { id: 'ask' },
+        { id: 'auto' },
+        { id: 'bypassPermissions' },
+      ],
+    })),
   });
   mocks.getDesktopCcPrefs.mockReturnValue(null);
   (turnRunner.getMakerSessionById as ReturnType<typeof vi.fn>).mockReturnValue(null);
@@ -410,6 +422,92 @@ describe('control:start 按钮(免打字重新发起远程控制)', () => {
     im.sendInteractiveCard.mockRejectedValueOnce(new Error('slack 500'));
     await pressStart(im);
     expect(im.updateInteractiveCard).not.toHaveBeenCalled();
+  });
+});
+
+describe('/permission Full access 确认', () => {
+  async function pressPermission(
+    im: ChannelIM,
+    buttonId: 'permmode:pick' | 'permmode:confirm-full-access' | 'permmode:cancel-full-access',
+  ): Promise<void> {
+    const attach = createCardActionHandler(adapter, cards, turnRunner);
+    let handler: ((e: IMCardActionEvent) => Promise<void>) | null = null;
+    (im.onCardAction as ReturnType<typeof vi.fn>).mockImplementation((cb) => {
+      handler = cb;
+      return () => {};
+    });
+    attach(im)();
+    await registeredHandler(handler)({
+      messageId: 'permission-card',
+      senderId: 'U_NEW',
+      buttonId,
+      payload: {
+        sessionId: 'sess-target',
+        mode: 'bypassPermissions',
+        modeLabel: 'Full access',
+        agentKind: 'codex',
+      },
+    } as unknown as IMCardActionEvent);
+  }
+
+  it('first replaces the picker with a confirmation card without changing state', async () => {
+    const im = makeIm();
+
+    await pressPermission(im, 'permmode:pick');
+
+    expect(mocks.updatePermissionMode).not.toHaveBeenCalled();
+    expect(im.updateInteractiveCard).toHaveBeenCalledWith(
+      'permission-card',
+      expect.objectContaining({
+        title: slackUi.cards.permissionMode.fullAccessConfirmTitle,
+        buttons: expect.arrayContaining([
+          expect.objectContaining({ id: 'permmode:confirm-full-access', type: 'danger' }),
+          expect.objectContaining({ id: 'permmode:cancel-full-access' }),
+        ]),
+      }),
+    );
+  });
+
+  it('changes runtime before persistence only after explicit confirmation', async () => {
+    const live = { setPermissionMode: vi.fn(async () => {}) };
+    (turnRunner.getMakerSessionById as ReturnType<typeof vi.fn>).mockReturnValue(live);
+    const im = makeIm();
+
+    await pressPermission(im, 'permmode:confirm-full-access');
+
+    expect(live.setPermissionMode).toHaveBeenCalledWith('bypassPermissions');
+    expect(mocks.updatePermissionMode).toHaveBeenCalledWith('sess-target', 'bypassPermissions');
+    expect(live.setPermissionMode.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.updatePermissionMode.mock.invocationCallOrder[0]!,
+    );
+  });
+
+  it('rolls runtime back and reports failure when persistence fails', async () => {
+    const live = { setPermissionMode: vi.fn(async () => {}) };
+    (turnRunner.getMakerSessionById as ReturnType<typeof vi.fn>).mockReturnValue(live);
+    mocks.updatePermissionMode.mockRejectedValueOnce(new Error('db locked'));
+    const im = makeIm();
+
+    await pressPermission(im, 'permmode:confirm-full-access');
+
+    expect(live.setPermissionMode).toHaveBeenNthCalledWith(1, 'bypassPermissions');
+    expect(live.setPermissionMode).toHaveBeenNthCalledWith(2, 'auto');
+    expect(im.updateInteractiveCard).toHaveBeenLastCalledWith(
+      'permission-card',
+      expect.objectContaining({ body: slackUi.cards.permissionMode.failed('db locked') }),
+    );
+  });
+
+  it('cancels without changing runtime or persistence', async () => {
+    const im = makeIm();
+
+    await pressPermission(im, 'permmode:cancel-full-access');
+
+    expect(mocks.updatePermissionMode).not.toHaveBeenCalled();
+    expect(im.updateInteractiveCard).toHaveBeenCalledWith(
+      'permission-card',
+      expect.objectContaining({ body: slackUi.cards.permissionMode.fullAccessCancelled }),
+    );
   });
 });
 

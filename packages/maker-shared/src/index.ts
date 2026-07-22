@@ -23,6 +23,7 @@ export * from './messageWindow.js';
 export * from './mobileHome.js';
 export * from './payloadSummary.js';
 export * from './pathText.js';
+export * from './permissionMode.js';
 export * from './queue.js';
 export * from './scheduleDelete.js';
 export * from './scheduleEvents.js';

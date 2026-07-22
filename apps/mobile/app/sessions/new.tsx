@@ -130,6 +130,7 @@ import {
 } from '@/session/composerPalette';
 import {
   DEFAULT_NEW_SESSION_DRAFT,
+  defaultPermissionModeForNewSessionAgent,
   buildRemoteCreateSessionOptions,
   buildRecentWorkspaceOptions,
   normalizeCreateSessionResult,
@@ -158,6 +159,7 @@ import { remoteSessionStore, useRemoteSessions } from '@/session/remoteSessionSt
 import { buildSessionComposerLayout } from '@/session/sessionComposerLayout';
 import type { RemoteSerializedAttachment, RemoteSession } from '@/session/types';
 import { permissionAccentColor, permissionPresentation } from '@/session/permissionPresentation';
+import { confirmFullAccessChange } from '@/session/fullAccessConfirmation';
 import { MobileVendorIcon } from '@/components/MobileVendorIcon';
 import { PlanModeChip } from '@/session/PlanModeChip';
 import {
@@ -582,6 +584,8 @@ export default function NewRemoteSessionScreen() {
     if (expectedDeviceId && selectedDeviceId !== expectedDeviceId) return;
     if (selectedDeviceId && deviceProviders.loading && deviceProviders.providers.length === 0) return;
     appliedStoredAgentRef.current = storedAgentKind;
+    // 该路径同时负责恢复 agent 权限，下面的通用权限记忆 effect 不再重复弹框。
+    appliedPermissionMemoryRef.current = true;
     if (selectedDeviceId) autoDefaultDeviceRef.current = selectedDeviceId;
     const rows = flattenProviderSections(
       buildMobileModelSections({
@@ -590,26 +594,38 @@ export default function NewRemoteSessionScreen() {
         visibilityOverrides: deviceProviders.modelVisibilityOverrides,
       }).sections,
     );
-    setDraft((current) => {
-      const next = pickAgentDefaultRuntime({
-        agentKind: storedAgentKind,
-        sessions,
-        deviceId: selectedDeviceId || undefined,
-        modelRows: rows,
-        currentEffort: current.effort,
+    const rememberedPermissionMode =
+      newSessionPreferences?.permissionModeByAgent[storedAgentKind] ??
+      defaultPermissionModeForNewSessionAgent(storedAgentKind);
+    let cancelled = false;
+    void (async () => {
+      const confirmed = await confirmFullAccessChange(draft.permissionMode, rememberedPermissionMode);
+      if (cancelled) return;
+      setDraft((current) => {
+        const next = pickAgentDefaultRuntime({
+          agentKind: storedAgentKind,
+          sessions,
+          deviceId: selectedDeviceId || undefined,
+          modelRows: rows,
+          currentEffort: current.effort,
+        });
+        return {
+          ...current,
+          agentKind: next.agentKind,
+          model: next.model,
+          effort: next.effort,
+          // 记忆的 Full access 必须经过一次明确确认；取消时保留当前安全档。
+          permissionMode: confirmed ? rememberedPermissionMode : current.permissionMode,
+          providerId: null,
+        };
       });
-      return {
-        ...current,
-        agentKind: next.agentKind,
-        model: next.model,
-        effort: next.effort,
-        // 权限跟随该 agent 的记忆(对齐桌面 lastByVendor);没记忆保持当前(种子 auto)。
-        permissionMode:
-          newSessionPreferences?.permissionModeByAgent[storedAgentKind] ?? current.permissionMode,
-        providerId: null,
-      };
-    });
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [
+    confirmFullAccessChange,
+    draft.permissionMode,
     deviceProviders.loading,
     deviceProviders.providers,
     deviceProviders.modelVisibilityOverrides,
@@ -626,13 +642,19 @@ export default function NewRemoteSessionScreen() {
   useEffect(() => {
     if (!newSessionPreferencesLoaded || appliedPermissionMemoryRef.current) return;
     appliedPermissionMemoryRef.current = true;
-    setDraft((current) => {
-      const remembered = newSessionPreferences?.permissionModeByAgent[current.agentKind];
-      return remembered && remembered !== current.permissionMode
-        ? { ...current, permissionMode: remembered }
-        : current;
+    // 有存储的 agent 时由上面的 agent 恢复 effect 统一处理，避免同一轮出现两个确认框。
+    if (newSessionPreferences?.agentKind) return;
+    const remembered = newSessionPreferences?.permissionModeByAgent[draft.agentKind];
+    if (!remembered || remembered === draft.permissionMode) return;
+    let cancelled = false;
+    void confirmFullAccessChange(draft.permissionMode, remembered).then((confirmed) => {
+      if (cancelled || !confirmed) return;
+      setDraft((current) => ({ ...current, permissionMode: remembered }));
     });
-  }, [newSessionPreferences, newSessionPreferencesLoaded]);
+    return () => {
+      cancelled = true;
+    };
+  }, [draft.agentKind, draft.permissionMode, newSessionPreferences, newSessionPreferencesLoaded]);
 
   // 新建对话默认运行配置 = 跟随最近一次会话(整套 agent+model+effort,按所选设备 scope);没有最近会话则用
   // 模型列表最上面那个(列表异步就绪后再设)。一旦用户手动选过模型即不再覆盖;切设备(未手动选过)按新设备重算。
@@ -650,8 +672,26 @@ export default function NewRemoteSessionScreen() {
     });
     if (!result) return;
     autoDefaultDeviceRef.current = result.appliedDeviceId;
-    setDraft((current) => ({ ...current, ...result.patch }));
-  }, [draft.effort, modelRows, newSessionPreferencesLoaded, selectedDeviceId, sessions]);
+    const nextAgentKind = result.patch.agentKind ?? draft.agentKind;
+    const rememberedPermissionMode =
+      appliedPermissionMemoryRef.current
+        ? draft.permissionMode
+        : newSessionPreferences?.permissionModeByAgent[nextAgentKind] ??
+          defaultPermissionModeForNewSessionAgent(nextAgentKind);
+    let cancelled = false;
+    void confirmFullAccessChange(draft.permissionMode, rememberedPermissionMode).then((confirmed) => {
+      if (cancelled || userTouchedRuntimeRef.current) return;
+      setDraft((current) => ({
+        ...current,
+        ...result.patch,
+        // 自动恢复历史 Full access 也必须经过明确确认；取消时保留当前档位。
+        permissionMode: confirmed ? rememberedPermissionMode : current.permissionMode,
+      }));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [draft.effort, draft.permissionMode, draft.agentKind, modelRows, newSessionPreferences, newSessionPreferencesLoaded, selectedDeviceId, sessions]);
   const draftContent = useMemo(
     // pending(乐观上传中)也算数:拍完照立刻点创建是常见路径,create() 里会等它们落定。
     () => ({ attachmentCount: attachments.length + pendingUploads.length }),
@@ -1758,26 +1798,30 @@ export default function NewRemoteSessionScreen() {
         visibilityOverrides: deviceProviders.modelVisibilityOverrides,
       }).sections,
     );
-    setDraft((current) => {
-      const next = pickAgentDefaultRuntime({
-        agentKind: nextKind,
-        sessions,
-        deviceId: selectedDeviceId || undefined,
-        modelRows: rows,
-        currentEffort: current.effort,
+    const rememberedPermissionMode =
+      newSessionPreferences?.permissionModeByAgent[nextKind] ??
+      defaultPermissionModeForNewSessionAgent(nextKind);
+    void confirmFullAccessChange(draft.permissionMode, rememberedPermissionMode).then((confirmed) => {
+      setDraft((current) => {
+        const next = pickAgentDefaultRuntime({
+          agentKind: nextKind,
+          sessions,
+          deviceId: selectedDeviceId || undefined,
+          modelRows: rows,
+          currentEffort: current.effort,
+        });
+        return {
+          ...current,
+          agentKind: next.agentKind,
+          model: next.model,
+          effort: next.effort,
+          // 目标 agent 的记忆档若是 Full access，先经过明确确认；取消时保留当前档。
+          permissionMode: confirmed ? rememberedPermissionMode : current.permissionMode,
+          providerId: null,
+        };
       });
-      return {
-        ...current,
-        agentKind: next.agentKind,
-        model: next.model,
-        effort: next.effort,
-        // 权限=目标 agent 的记忆档,没记忆回种子默认 auto(对齐桌面切 vendor 语义;
-        // 目标 agent 不支持的档由 capabilities reconcile 兜底归一)。
-        permissionMode: newSessionPreferences?.permissionModeByAgent[nextKind] ?? 'auto',
-        providerId: null,
-      };
     });
-  }, [draft.agentKind, deviceProviders.providers, deviceProviders.modelVisibilityOverrides, newSessionPreferences, sessions, selectedDeviceId]);
+  }, [draft.agentKind, draft.permissionMode, deviceProviders.providers, deviceProviders.modelVisibilityOverrides, newSessionPreferences, sessions, selectedDeviceId]);
 
   useEffect(() => {
     if (!selectedDeviceId || draft.workspaceKind !== 'project' || draft.workingDir.trim()) return;
@@ -2787,18 +2831,21 @@ export default function NewRemoteSessionScreen() {
         onClose={() => setModelSheetOpen(false)}
         onSelectFlatModel={selectFlatModel}
         onSelectPermissionMode={(mode) => {
-          patchDraft({ permissionMode: mode });
-          if (mode === 'plan') return; // 老被控端兼容档,不入记忆
-          // 同步进本地 state:本次会话内切走再切回也能拿到最新记忆(落盘不回写 state)。
-          setNewSessionPreferences((prev) => prev
-            ? {
-                ...prev,
-                permissionModeByAgent: { ...prev.permissionModeByAgent, [draft.agentKind]: mode },
-              }
-            : prev);
-          void saveNewSessionPreferences({
-            permissionModeForAgent: { agentKind: draft.agentKind, mode },
-          });
+          void (async () => {
+            if (!await confirmFullAccessChange(draft.permissionMode, mode)) return;
+            patchDraft({ permissionMode: mode });
+            if (mode === 'plan') return; // 老被控端兼容档,不入记忆
+            // 同步进本地 state:本次会话内切走再切回也能拿到最新记忆(落盘不回写 state)。
+            setNewSessionPreferences((prev) => prev
+              ? {
+                  ...prev,
+                  permissionModeByAgent: { ...prev.permissionModeByAgent, [draft.agentKind]: mode },
+                }
+              : prev);
+            void saveNewSessionPreferences({
+              permissionModeForAgent: { agentKind: draft.agentKind, mode },
+            });
+          })();
         }}
         onSelectProviderRow={selectProviderModelRow}
         permissionDisabled={creating}

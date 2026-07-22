@@ -841,6 +841,7 @@ export function registerSessionIpc(): void {
     const row = await selectSessionWithCount(db, sid);
     if (!row) throwIpcError('NOT_FOUND', 'Session 不存在');
     const projectTargetChanged = p.workspaceKind !== undefined || p.workingDir !== undefined;
+    const settingsChanged = Object.keys(p).some((key) => REMOTE_PERSIST_FIELDS.has(key));
     if (
       projectTargetChanged &&
       row.workspaceKind === 'project' &&
@@ -849,7 +850,7 @@ export function registerSessionIpc(): void {
     ) {
       await upsertRecentWorkdir(row.workingDir, Date.now());
     }
-    if (projectTargetChanged) {
+    if (projectTargetChanged || settingsChanged) {
       broadcastSessionPatched(sid, p);
     }
     // sidebar-card-mode: 会话被置顶那一刻补生成任务摘要(turn-done 路径只覆盖

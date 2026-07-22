@@ -181,6 +181,12 @@ export interface ImUiTextPack {
       hint: string;
       optionLabel: (label: string) => string;
       resolved: (label: string) => string;
+      failed: (reason: string) => string;
+      fullAccessConfirmTitle: string;
+      fullAccessConfirmBody: string;
+      btnConfirmFullAccess: string;
+      btnCancelFullAccess: string;
+      fullAccessCancelled: string;
     };
     control: {
       title: string;

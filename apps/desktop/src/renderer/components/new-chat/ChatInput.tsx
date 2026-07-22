@@ -14,6 +14,7 @@ import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { Folder, MessageSquarePlus, Mic, Pen, Square, TriangleAlert, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { requiresFullAccessConfirmation } from '@lizi/maker-shared/permission-mode';
 import { ImageLightbox } from '@/components/chat/ImageLightbox';
 import { TextLightbox } from '@/components/chat/TextLightbox';
 import { useEditor, EditorContent } from '@tiptap/react';
@@ -1244,7 +1245,8 @@ export function ChatInput({
     pendingRemoteSwitch?.effort ??
     initialEffort ??
     localVendorDefaults.effort;
-  const activePermissionMode: PermissionMode = initialPermissionMode ?? 'acceptEdits';
+  const activePermissionMode: PermissionMode =
+    initialPermissionMode ?? localVendorDefaults.permissionMode;
 
   // per-session 来源(供应商)选择。session.providerId 尚未在 Session 类型回流前,
   // 这里用本地乐观态承接即时反馈:seed 自 initialProviderId,选择时乐观更新;
@@ -4209,24 +4211,45 @@ export function ChatInput({
 
   const handlePermissionModeChange = useCallback(
     async (newMode: PermissionMode) => {
+      const previousMode = activePermissionModeRef.current;
+      if (requiresFullAccessConfirmation(previousMode, newMode)) {
+        const confirmed = await confirmDialog({
+          title: t('newChat.chatInput.fullAccessConfirmation.title'),
+          description: t('newChat.chatInput.fullAccessConfirmation.description'),
+          confirmText: t('newChat.chatInput.fullAccessConfirmation.confirm'),
+          cancelText: t('newChat.chatInput.fullAccessConfirmation.cancel'),
+        });
+        if (!confirmed) return;
+      }
       try {
         if (sessionId) {
           if (getSessionDeviceId(sessionId)) {
             // 控制端纯镜像:运行时隧道 setPermissionMode,被控端持久化后广播回流更新分片。
             await makerApiFor(sessionId).setPermissionMode(sessionId, newMode);
           } else {
-            await sessionService.update(sessionId, { permissionMode: newMode });
-            // Stage 2 B: 切到 maker.* runtime 切换
+            // runtime-first:运行时成功后才持久化，避免 UI/DB 先显示已切换而实际 agent 仍是旧档。
             await window.electronAPI.maker.setPermissionMode(sessionId, newMode);
+            try {
+              await sessionService.update(sessionId, { permissionMode: newMode });
+            } catch (persistError) {
+              // DB 写入失败时尽力恢复运行时，保持用户看到的旧设置与实际行为一致。
+              try {
+                await window.electronAPI.maker.setPermissionMode(sessionId, previousMode);
+              } catch (rollbackError) {
+                log.warn('permission runtime rollback failed:', rollbackError);
+              }
+              throw persistError;
+            }
           }
         }
         // SSoT: notify parent so it refreshes `session.permissionMode` → props update.
         onPermissionModeDidChange?.(newMode);
       } catch (err) {
         log.warn('permission change failed:', err);
+        toast.error(t('newChat.chatInput.permissionSwitchFailed'));
       }
     },
-    [sessionId, onPermissionModeDidChange],
+    [sessionId, onPermissionModeDidChange, t, confirmDialog],
   );
   useEffect(() => {
     handlePermissionModeChangeRef.current = handlePermissionModeChange;

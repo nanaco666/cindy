@@ -23,6 +23,7 @@ import {
   type InteractionDecision,
   type PermissionMode,
 } from '@lizi/maker-core';
+import { requiresFullAccessConfirmation } from '@lizi/maker-shared/permission-mode';
 
 import { createLogger } from '../../logger';
 import { getMaker } from '../../maker-host';
@@ -58,6 +59,7 @@ import { broadcastSessionCreated } from './sessionBroadcast';
 import type { IdentityKey } from 'lizi-im';
 import {
   readModelRouteSnapshot,
+  readPermissionMode,
   touchUserSent,
   updateModelEffort,
   updatePermissionMode,
@@ -359,6 +361,11 @@ export function createCardActionHandler(
     const agentKind: AgentKind =
       event.payload.agentKind === 'codex' ? 'codex' : adapter.config.agentKind;
 
+    if (event.buttonId === 'permmode:confirm-full-access' && mode !== 'bypassPermissions') {
+      log.warn(`permmode:confirm-full-access received non-full mode=${mode} — ignoring`);
+      return;
+    }
+
     // Validate against the bound agent's actual capabilities — single source of
     // truth is the agent module (e.g. claude-code/index.ts CLAUDE_PERMISSION_MODES).
     const supportedIds = getMaker()
@@ -369,6 +376,74 @@ export function createCardActionHandler(
       return;
     }
 
+    const previousMode = await readPermissionMode(sessionId);
+    if (!previousMode) {
+      log.warn(`permmode:pick session not found sessionId=${sessionId} — ignoring`);
+      return;
+    }
+
+    if (
+      event.buttonId === 'permmode:pick'
+      && requiresFullAccessConfirmation(previousMode, mode)
+    ) {
+      try {
+        await im.updateInteractiveCard(event.messageId, {
+          title: ui.cards.permissionMode.fullAccessConfirmTitle,
+          body: ui.cards.permissionMode.fullAccessConfirmBody,
+          buttons: [
+            {
+              id: 'permmode:confirm-full-access',
+              label: ui.cards.permissionMode.btnConfirmFullAccess,
+              type: 'danger',
+              payload: { sessionId, mode, modeLabel, agentKind },
+            },
+            {
+              id: 'permmode:cancel-full-access',
+              label: ui.cards.permissionMode.btnCancelFullAccess,
+              type: 'default',
+              payload: { sessionId },
+            },
+          ],
+        });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        log.warn(`permmode:pick confirmation card patch failed: ${msg}`);
+      }
+      return;
+    }
+
+    const live = turnRunner.getMakerSessionById(sessionId);
+    let runtimeChanged = false;
+    try {
+      if (live) {
+        await live.setPermissionMode(mode);
+        runtimeChanged = true;
+      }
+      await updatePermissionMode(sessionId, mode);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      log.error(`permmode:pick update failed: ${msg}`);
+      if (runtimeChanged && live) {
+        try {
+          await live.setPermissionMode(previousMode);
+        } catch (rollbackErr) {
+          log.warn(`permmode:pick runtime rollback failed: ${rollbackErr instanceof Error ? rollbackErr.message : String(rollbackErr)}`);
+        }
+      }
+      try {
+        await im.updateInteractiveCard(
+          event.messageId,
+          cards.buildResolvedCard(ui.cards.permissionMode.failed(msg)),
+        );
+      } catch {
+        /* non-fatal: update failure is already logged */
+      }
+      return;
+    }
+
+    if (!live) {
+      log.info(`permmode:pick: no live session for ${sessionId.slice(-8)} — DB updated only`);
+    }
     try {
       await im.updateInteractiveCard(
         event.messageId,
@@ -378,24 +453,20 @@ export function createCardActionHandler(
       const msg = err instanceof Error ? err.message : String(err);
       log.warn(`permmode:pick card patch failed (non-fatal): ${msg}`);
     }
+  }
 
+  async function handlePermissionModeCancel(
+    im: ChannelIM,
+    event: IMCardActionEvent,
+  ): Promise<void> {
     try {
-      await updatePermissionMode(sessionId, mode);
+      await im.updateInteractiveCard(
+        event.messageId,
+        cards.buildResolvedCard(ui.cards.permissionMode.fullAccessCancelled),
+      );
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      log.error(`permmode:pick DB update failed: ${msg}`);
-    }
-
-    const live = turnRunner.getMakerSessionById(sessionId);
-    if (!live) {
-      log.info(`permmode:pick: no live session for ${sessionId.slice(-8)} — DB updated only`);
-      return;
-    }
-    try {
-      await live.setPermissionMode(mode);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      log.warn(`permmode:pick live setPermissionMode failed (non-fatal): ${msg}`);
+      log.warn(`permmode:cancel card patch failed (non-fatal): ${msg}`);
     }
   }
 
@@ -1097,8 +1168,15 @@ export function createCardActionHandler(
           }
 
           // Same shape as model:pick — direct command from /permission picker card.
-          if (event.buttonId === 'permmode:pick') {
+          if (
+            event.buttonId === 'permmode:pick'
+            || event.buttonId === 'permmode:confirm-full-access'
+          ) {
             await handlePermissionModePick(im, event);
+            return;
+          }
+          if (event.buttonId === 'permmode:cancel-full-access') {
+            await handlePermissionModeCancel(im, event);
             return;
           }
 

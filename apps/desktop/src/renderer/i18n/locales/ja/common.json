@@ -3471,7 +3471,7 @@
           },
           "auto": {
             "label": "自動レビュー",
-            "description": "すべての操作を個別確認なしで自動実行します。権限範囲は「フルアクセス」と同じです。削除やマージなどの高リスクな組み込み操作は毎回確認します。"
+            "description": "信頼済みコマンドは自動実行します。未信頼コマンド、権限昇格、高リスクな組み込み操作は引き続き確認します。「フルアクセス」とは異なります。"
           },
           "bypassPermissions": {
             "label": "フルアクセス",
@@ -3612,6 +3612,13 @@
       },
       "remoteSwitchFailed": "リモート設定の変更に失敗しました(未適用)",
       "switchFailed": "設定の変更に失敗しました(未適用)",
+      "permissionSwitchFailed": "権限モードの変更に失敗したため、以前の設定を維持しました",
+      "fullAccessConfirmation": {
+        "title": "Full access を有効にしますか？",
+        "description": "Full access はワークスペースのサンドボックスを無効にし、通常の承認を省略します。Cindy はワークスペース外のファイル変更やネットワークコマンドを確認なしで実行できます。組み込みの高リスク操作では引き続き確認が必要です。",
+        "confirm": "Full access を有効にする",
+        "cancel": "現在の権限を維持"
+      },
       "attachmentRejection": {
         "dismiss": "閉じる"
       },
