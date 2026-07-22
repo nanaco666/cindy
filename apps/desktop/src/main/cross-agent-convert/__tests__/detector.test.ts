@@ -111,6 +111,21 @@ describe('detect — skills', () => {
     const r = await detect({ workingDir: tmpDir, agentKind: 'codex' });
     expect(r.items.find((i) => i.kind === 'skills')).toBeUndefined();
   });
+
+  it('target skill is a directory symlink → no skills item', async () => {
+    const claudeSkill = path.join(tmpDir, '.claude', 'skills', 'a');
+    const agentsSkills = path.join(tmpDir, '.agents', 'skills');
+    await fs.mkdir(claudeSkill, { recursive: true });
+    await fs.mkdir(agentsSkills, { recursive: true });
+    await fs.symlink(
+      claudeSkill,
+      path.join(agentsSkills, 'a'),
+      process.platform === 'win32' ? 'junction' : 'dir',
+    );
+
+    const r = await detect({ workingDir: tmpDir, agentKind: 'codex' });
+    expect(r.items.find((i) => i.kind === 'skills')).toBeUndefined();
+  });
 });
 
 describe('detect — agents', () => {

@@ -62,7 +62,20 @@ async function isDir(p: string): Promise<boolean> {
 async function listSubdirs(p: string): Promise<string[]> {
   try {
     const ents = await fs.readdir(p, { withFileTypes: true });
-    return ents.filter((e) => e.isDirectory()).map((e) => e.name);
+    const names = await Promise.all(
+      ents.map(async (entry) => {
+        if (entry.isDirectory()) return entry.name;
+        if (!entry.isSymbolicLink()) return null;
+
+        try {
+          const target = await fs.stat(path.join(p, entry.name));
+          return target.isDirectory() ? entry.name : null;
+        } catch {
+          return null;
+        }
+      }),
+    );
+    return names.filter((name): name is string => name !== null);
   } catch {
     return [];
   }
