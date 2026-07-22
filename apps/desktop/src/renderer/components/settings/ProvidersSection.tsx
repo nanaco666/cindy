@@ -194,7 +194,10 @@ function DetailHeader({
 }) {
   const { t } = useTranslation();
   const hasModels = !!provider && providerHasModels(provider);
-  const modelCount = hasModels && provider ? buildUnionRows(provider).length : null;
+  const modelCount = useMemo(
+    () => (hasModels && provider ? buildUnionRows(provider).length : null),
+    [hasModels, provider],
+  );
   const subscriptionProduct =
     provider?.access?.kind === 'subscription' ? provider.access.product : null;
   // 单 agent 供应商在头部统一说明(行级不再逐条标注,见 UnifiedModelList 头注释)。
@@ -863,7 +866,10 @@ function ListRow({
   onSelect: () => void;
 }) {
   const { t } = useTranslation();
-  const modelCount = providerHasModels(provider) ? buildUnionRows(provider).length : null;
+  const modelCount = useMemo(
+    () => (providerHasModels(provider) ? buildUnionRows(provider).length : null),
+    [provider],
+  );
   const title = provider.id === 'xd' ? t('settings.providers.xd.title') : provider.name;
   return (
     <button

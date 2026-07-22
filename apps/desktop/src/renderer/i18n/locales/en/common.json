@@ -1137,7 +1137,8 @@
       "models": {
         "search": "Search models",
         "available": "Shown in Model Picker",
-        "modelCount": "{{count}} models",
+        "modelCount_one": "{{count}} model",
+        "modelCount_other": "{{count}} models",
         "agentEnabledCount": "{{agent}} {{on}}/{{total}}",
         "enableAll": "Show All",
         "disableAll": "Hide All",
