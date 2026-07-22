@@ -57,6 +57,7 @@ interface MockSpawnOptions {
   stderr?: string;
   exitCode?: number;
   error?: Error;
+  hang?: boolean;
 }
 
 function mockAdbSpawn(options: MockSpawnOptions) {
@@ -71,6 +72,7 @@ function mockAdbSpawn(options: MockSpawnOptions) {
     child.kill = vi.fn();
 
     queueMicrotask(() => {
+      if (options.hang) return;
       if (options.error) {
         child.emit('error', options.error);
         return;
@@ -107,6 +109,7 @@ function mockAdbSpawnByArgs(
     child.kill = vi.fn();
 
     queueMicrotask(() => {
+      if (options.hang) return;
       if (options.error) {
         child.emit('error', options.error);
         return;
@@ -198,6 +201,36 @@ emulator-5554 device product:sdk_gphone64_arm64 model:Pixel_8 device:emu transpo
         issue: null,
       },
     });
+  });
+
+  it('waits for a cold adb daemon and retries devices once after the initial timeout', async () => {
+    vi.useFakeTimers();
+    mockAdbSpawnByArgs({
+      'adb devices -l': [
+        { hang: true },
+        {
+          stdout: `List of devices attached
+emulator-5554 device product:sdk_gphone64_arm64 model:Pixel_8 device:emu transport_id:1
+`,
+        },
+      ],
+      'adb start-server': {
+        stderr: '* daemon not running; starting now at tcp:5037\n* daemon started successfully\n',
+      },
+    });
+
+    const resultPromise = callAndroidDriverTool('list_devices', {});
+    await vi.advanceTimersByTimeAsync(3_000);
+
+    await expect(resultPromise).resolves.toMatchObject({
+      ok: true,
+      data: [{ device_serial: 'emulator-5554', state: 'device' }],
+    });
+    expect(spawnMock.mock.calls.map((call) => call[1])).toEqual([
+      ['devices', '-l'],
+      ['start-server'],
+      ['devices', '-l'],
+    ]);
   });
 
   it('returns ADB_NOT_FOUND when adb cannot be spawned', async () => {

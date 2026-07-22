@@ -35,6 +35,7 @@ const PREPARED_ANDROID_PLATFORM_TOOLS_ROOT = 'android-platform-tools';
 const MAX_PLATFORM_TOOLS_ZIP_BYTES = 256 * 1024 * 1024;
 const DEFAULT_PLATFORM_TOOLS_DOWNLOAD_TIMEOUT_MS = 60_000;
 const STATUS_TIMEOUT_MS = 3_000;
+const ADB_COLD_START_TIMEOUT_MS = 15_000;
 const CALL_TIMEOUT_MS = 20_000;
 const MAX_STDOUT_BYTES = 10 * 1024 * 1024;
 const MAX_STDERR_BYTES = 512 * 1024;
@@ -183,6 +184,17 @@ class AndroidDriverError extends Error {
     this.name = 'AndroidDriverError';
     this.errorCode = errorCode;
     this.data = data;
+  }
+}
+
+/** Identifies a timed-out adb child process without relying on its user-facing message. */
+class AdbCommandTimeoutError extends AndroidDriverError {
+  constructor(args: string[], timeoutMs: number) {
+    super(
+      'ANDROID_DRIVER_ERROR',
+      `adb ${args.join(' ')} timed out after ${timeoutMs}ms`,
+    );
+    this.name = 'AdbCommandTimeoutError';
   }
 }
 
@@ -638,10 +650,7 @@ function spawnAdbWithCommand(
       if (settled) return;
       settled = true;
       child.kill();
-      reject(new AndroidDriverError(
-        'ANDROID_DRIVER_ERROR',
-        `adb ${args.join(' ')} timed out after ${timeoutMs}ms`,
-      ));
+      reject(new AdbCommandTimeoutError(args, timeoutMs));
     }, timeoutMs);
 
     child.once('error', (err) => {
@@ -778,8 +787,8 @@ async function adbVersion(): Promise<string | null> {
   return line?.trim() ?? (result.stdout.trim() || null);
 }
 
-async function listDevicesRaw(): Promise<AndroidConnectedDevice[]> {
-  const result = await spawnAdb(['devices', '-l'], STATUS_TIMEOUT_MS);
+async function listDevicesWithTimeout(timeoutMs: number): Promise<AndroidConnectedDevice[]> {
+  const result = await spawnAdb(['devices', '-l'], timeoutMs);
   if (result.exitCode !== 0) {
     throw new AndroidDriverError(
       'ANDROID_DRIVER_ERROR',
@@ -787,6 +796,27 @@ async function listDevicesRaw(): Promise<AndroidConnectedDevice[]> {
     );
   }
   return parseDevices(result.stdout);
+}
+
+async function listDevicesRaw(): Promise<AndroidConnectedDevice[]> {
+  try {
+    return await listDevicesWithTimeout(STATUS_TIMEOUT_MS);
+  } catch (err) {
+    if (!(err instanceof AdbCommandTimeoutError)) throw err;
+
+    logger.info('adb devices timed out; waiting for a cold daemon startup before retrying', {
+      initialTimeoutMs: STATUS_TIMEOUT_MS,
+      coldStartTimeoutMs: ADB_COLD_START_TIMEOUT_MS,
+    });
+    const startResult = await spawnAdb(['start-server'], ADB_COLD_START_TIMEOUT_MS);
+    if (startResult.exitCode !== 0) {
+      throw new AndroidDriverError(
+        'ANDROID_DRIVER_ERROR',
+        startResult.stderr.trim() || 'adb start-server failed after devices timed out',
+      );
+    }
+    return listDevicesWithTimeout(ADB_COLD_START_TIMEOUT_MS);
+  }
 }
 
 function classifyDeviceIssue(devices: AndroidConnectedDevice[]): AndroidMcpErrorCode | null {
