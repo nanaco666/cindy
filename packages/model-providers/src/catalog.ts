@@ -16,7 +16,7 @@ import type { Catalog, Provider, CatalogModel, AgentKind, Effort, ProviderPreset
 export { BUNDLED_CATALOG, BUILTIN_PROVIDERS } from './builtin.js';
 
 const AGENT_KINDS: readonly AgentKind[] = ['claude-code', 'codex'];
-const EFFORTS: readonly Effort[] = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
+const EFFORTS: readonly Effort[] = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra'];
 
 function isAgentKind(v: unknown): v is AgentKind {
   return typeof v === 'string' && (AGENT_KINDS as readonly string[]).includes(v);
@@ -238,6 +238,10 @@ function isValidPreset(v: unknown): v is ProviderPreset {
       const mm = m as Record<string, unknown>;
       if (typeof mm.id !== 'string' || mm.id.length === 0) return false;
       if (typeof mm.name !== 'string' || mm.name.length === 0) return false;
+      if (
+        mm.contextWindow !== undefined
+        && (typeof mm.contextWindow !== 'number' || !Number.isFinite(mm.contextWindow) || mm.contextWindow <= 0)
+      ) return false;
     }
     if (r.headers !== undefined) {
       if (!r.headers || typeof r.headers !== 'object' || Array.isArray(r.headers)) return false;

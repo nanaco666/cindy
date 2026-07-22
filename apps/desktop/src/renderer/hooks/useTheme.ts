@@ -115,13 +115,13 @@ function disableTransitionsTemporarily(): void {
   });
 }
 
-export function applyThemeClass(theme: Theme): void {
+export function applyThemeClass(theme: Theme, force = false): void {
   const root = document.documentElement;
   const wasDark = root.classList.contains('dark');
   const { theme: nextTheme } = resolveActiveTheme(theme);
   const nextDark = nextTheme.type === 'dark';
 
-  if (nextDark === wasDark && root.dataset.theme === nextTheme.id) {
+  if (!force && nextDark === wasDark && root.dataset.theme === nextTheme.id) {
     return;
   }
 
@@ -165,7 +165,8 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     } catch {
       // localStorage may be unavailable
     }
-    applyThemeClass(theme);
+    // 本地主题可在 ID 不变时刷新配置，必须重新 apply 才会更新 CSS 与品牌素材订阅者。
+    applyThemeClass(theme, true);
   }, [theme]);
 
   // setFamily / setTheme 各自已经调过 applyThemeClass; 这个 effect 只处理

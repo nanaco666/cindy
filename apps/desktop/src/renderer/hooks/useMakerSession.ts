@@ -30,7 +30,7 @@ interface CreateSessionParams {
   workingDir: string;
   model: string;
   /** 与 maker-core/types/common.ts 的 Effort union 一致 */
-  effort?: 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+  effort?: 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultra';
   fastMode?: boolean;
   permissionMode?: 'ask' | 'auto' | 'bypassPermissions' | 'acceptEdits' | 'plan' | 'default';
   systemPrompt?: string;

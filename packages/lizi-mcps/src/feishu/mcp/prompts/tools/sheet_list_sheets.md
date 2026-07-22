@@ -1,1 +1,0 @@
-列出飞书电子表格的所有页签(工作表/sheet)。传入 spreadsheet(URL、wiki sheet URL 或 token),返回每个页签的 sheet_id、title、index、是否隐藏(hidden)、行列数(row_count / column_count)。内嵌多维表格页签会额外返回 resource_type=bitable 以及从 v2 metainfo 解析出的 app_token/table_id。读多页签电子表格后面的页签前,先用本工具拿到目标页签的 sheet_id,再调 sheet_read_range 时把 sheet_id(或 title)传给 sheet 参数;否则 sheet_read_range 默认只读第一个页签。

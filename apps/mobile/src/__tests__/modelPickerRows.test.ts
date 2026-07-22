@@ -93,9 +93,10 @@ describe('effortLabelFor —— 四级优先(模型覆盖 → capabilities → �
   it('capabilities 缺该档 / 未加载 → 中文词表兜底', () => {
     expect(effortLabelFor({}, 'minimal', capabilities)).toBe('最小');
     expect(effortLabelFor({}, 'high', null)).toBe('高');
+    expect(effortLabelFor({}, 'ultra', null)).toBe('极致');
   });
   it('词表也没有 → 原 id', () => {
-    expect(effortLabelFor({}, 'ultra', null)).toBe('ultra');
+    expect(effortLabelFor({}, 'nonexistent', null)).toBe('nonexistent');
   });
 });
 

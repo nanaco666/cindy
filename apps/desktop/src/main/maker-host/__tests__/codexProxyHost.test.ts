@@ -357,8 +357,8 @@ describe('codex proxy host', () => {
         // upstream 是函数形态(每请求现取,model-access 下发可运行期换 endpoint);
         // 断言其当前求值 = 网关 base + /v1
         upstream: expect.any(Function),
-        // [encrypted activeStrip, image generation activeStrip, instructions 注入, xAI Responses 兼容, provider model rewrite, stripNonAnthropicFields]
-        transformRequest: [expect.any(Function), expect.any(Function), expect.any(Function), expect.any(Function), expect.any(Function), mockState.stripNonAnthropicFields],
+        // [encrypted activeStrip, image generation activeStrip, instructions 注入, xAI Responses 兼容, MiniMax effort 兼容, provider model rewrite, stripNonAnthropicFields]
+        transformRequest: [expect.any(Function), expect.any(Function), expect.any(Function), expect.any(Function), expect.any(Function), expect.any(Function), mockState.stripNonAnthropicFields],
         routingTransform: expect.any(Function),
         recoveryRules: expect.arrayContaining([
           expect.objectContaining({ id: 'encrypted_content' }),
@@ -505,6 +505,121 @@ describe('codex proxy host', () => {
       ],
     });
     clearSessionProvider('session-openai');
+  });
+
+  it.each([
+    'https://api.minimaxi.com/v1',
+    'https://api.minimax.io/v1/',
+  ])('clamps MiniMax Responses xhigh effort to high for %s', async (baseUrl) => {
+    const host = await freshCodexProxyHost();
+    const { buildUserProvider } = await import('@lizi/model-providers');
+    const { setCustomProviders } = await import('../active-catalog.js');
+    const { setSessionProvider, clearSessionProvider } = await import('../session-provider-store.js');
+    setCustomProviders([
+      buildUserProvider({
+        id: 'renamed-minimax',
+        name: 'My MiniMax',
+        runtimes: {
+          codex: {
+            baseUrl,
+            models: [{ id: 'MiniMax-M3', name: 'MiniMax M3' }],
+          },
+        },
+      }),
+    ]);
+    mockState.createAnthropicCompatProxy.mockResolvedValueOnce({
+      url: 'http://127.0.0.1:43210',
+      dispose: vi.fn(async () => undefined),
+    });
+    await host.ensureCodexProxyReady();
+    host.registerComposed('session-minimax', 'thread-minimax', 'PRODUCT_PROMPT');
+    setSessionProvider('session-minimax', 'renamed-minimax');
+
+    const transforms = mockState.createAnthropicCompatProxy.mock.calls[0]?.[0]?.transformRequest ?? [];
+    let current: unknown = {
+      model: 'MiniMax-M3',
+      reasoning: { effort: 'xhigh', summary: 'auto' },
+      input: [{ role: 'user', content: 'hello' }],
+    };
+    const ctx = {
+      method: 'POST',
+      url: '/responses',
+      headers: { 'thread-id': 'thread-minimax' },
+    };
+    for (const transform of transforms) {
+      const next = transform(current, ctx);
+      if (next !== null && next !== undefined) current = next;
+    }
+
+    expect(current).toEqual({
+      model: 'MiniMax-M3',
+      reasoning: { effort: 'high' },
+      input: [{ role: 'user', content: 'hello' }],
+    });
+
+    let supportedEffort: unknown = {
+      model: 'MiniMax-M3',
+      reasoning: { effort: 'high', summary: 'auto' },
+      input: [{ role: 'user', content: 'hello' }],
+    };
+    for (const transform of transforms) {
+      const next = transform(supportedEffort, ctx);
+      if (next !== null && next !== undefined) supportedEffort = next;
+    }
+    expect(supportedEffort).toEqual({
+      model: 'MiniMax-M3',
+      reasoning: { effort: 'high' },
+      input: [{ role: 'user', content: 'hello' }],
+    });
+    clearSessionProvider('session-minimax');
+    setCustomProviders([]);
+  });
+
+  it('keeps xhigh effort for non-MiniMax custom Responses providers', async () => {
+    const host = await freshCodexProxyHost();
+    const { buildUserProvider } = await import('@lizi/model-providers');
+    const { setCustomProviders } = await import('../active-catalog.js');
+    const { setSessionProvider, clearSessionProvider } = await import('../session-provider-store.js');
+    setCustomProviders([
+      buildUserProvider({
+        id: 'custom-responses',
+        name: 'Custom Responses',
+        runtimes: {
+          codex: {
+            baseUrl: 'https://example.com/v1',
+            models: [{ id: 'custom-model', name: 'Custom Model' }],
+          },
+        },
+      }),
+    ]);
+    mockState.createAnthropicCompatProxy.mockResolvedValueOnce({
+      url: 'http://127.0.0.1:43210',
+      dispose: vi.fn(async () => undefined),
+    });
+    await host.ensureCodexProxyReady();
+    host.registerComposed('session-custom', 'thread-custom', 'PRODUCT_PROMPT');
+    setSessionProvider('session-custom', 'custom-responses');
+
+    const transforms = mockState.createAnthropicCompatProxy.mock.calls[0]?.[0]?.transformRequest ?? [];
+    const original = {
+      model: 'custom-model',
+      reasoning: { effort: 'xhigh', summary: 'auto' },
+      input: [{ role: 'user', content: 'hello' }],
+    };
+    let current: unknown = original;
+    const ctx = {
+      method: 'POST',
+      url: '/responses',
+      headers: { 'thread-id': 'thread-custom' },
+    };
+    for (const transform of transforms) {
+      const next = transform(current, ctx);
+      if (next !== null && next !== undefined) current = next;
+    }
+
+    expect(current).toEqual(original);
+    clearSessionProvider('session-custom');
+    setCustomProviders([]);
   });
 
   it('strips reasoning for xAI Codex models that do not support reasoning', async () => {
@@ -687,7 +802,7 @@ describe('codex proxy host', () => {
     await host.ensureCodexProxyReady();
 
     const transforms = mockState.createAnthropicCompatProxy.mock.calls[0]?.[0]?.transformRequest ?? [];
-    expect(transforms).toHaveLength(7); // encrypted activeStrip, image generation activeStrip, instructions 注入, xAI Responses 兼容, provider model rewrite, stripNonAnthropicFields, dump
+    expect(transforms).toHaveLength(8); // encrypted activeStrip, image generation activeStrip, instructions 注入, xAI Responses 兼容, MiniMax effort 兼容, provider model rewrite, stripNonAnthropicFields, dump
     const ctx = {
       method: 'POST',
       url: '/v1/responses',

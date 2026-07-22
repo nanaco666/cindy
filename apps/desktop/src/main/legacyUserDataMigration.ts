@@ -46,6 +46,12 @@ const CINDY_MEDIA_DIR_NAME = 'cindy-media';
 const DIALOGUES_DIR_NAME = 'dialogues';
 
 /**
+ * dialogue 工作目录里的依赖树可由包管理器重建，且 pnpm 会在其中创建大量目录符号链接。
+ * 搬迁这些内容既没有必要，也会让 copyFile 在 macOS 上对目录链接报 ENOTSUP。
+ */
+const DIALOGUE_SKIP_DIR_NAMES: ReadonlySet<string> = new Set(['node_modules']);
+
+/**
  * agent 浏览器登录态的搬运路径:老 `<legacy>/browser-runtime/browser/XDMaker` →
  * 新 `<userData>/browser-runtime/browser/Cindy`(搬运即完成 profile 目录的品牌
  * 改名;Chrome 窗口显示名由 runtime 启动时的 decoration 自愈刷新)。两端字面量
@@ -85,8 +91,13 @@ export interface LegacyMigrationFsDeps {
   pathExists(p: string): Promise<boolean>;
   /** 列目录文件名;目录不存在返回 []。 */
   listDir(dir: string): Promise<string[]>;
-  /** 列目录条目(区分子目录);目录不存在返回 []。media merge 用。 */
-  listDirEntries(dir: string): Promise<Array<{ name: string; isDirectory: boolean }>>;
+  /**
+   * 列目录条目,区分真实子目录与符号链接/junction;目录不存在返回 []。
+   * 符号链接不允许落入 copyFile 分支,否则目录链接在 macOS 上会报 ENOTSUP。
+   */
+  listDirEntries(
+    dir: string,
+  ): Promise<Array<{ name: string; isDirectory: boolean; isSymbolicLink: boolean }>>;
   /** 文件 mtime(ms);用于「扫最新源库」。 */
   statMtimeMs(p: string): Promise<number>;
   /** 文件字节数;media merge 的"已存在但截断"检测用。 */
@@ -210,6 +221,9 @@ async function mergeCopyDir(
   for (const entry of await fs.listDirEntries(srcDir)) {
     const src = path.join(srcDir, entry.name);
     const dest = path.join(destDir, entry.name);
+    // 不解引用符号链接/junction:目标可能位于老 userData 之外或形成环；pnpm 的目录链接
+    // 也不能交给 copyFile。迁移只搬真实目录与普通文件。
+    if (entry.isSymbolicLink) continue;
     if (entry.isDirectory) {
       if (skip?.dirNames?.has(entry.name)) continue;
       await mergeCopyDir(fs, src, dest, skip);
@@ -375,6 +389,7 @@ export async function runLegacyUserDataMigration(
           deps.fs,
           legacyDialoguesDir,
           path.join(deps.userDataDir, DIALOGUES_DIR_NAME),
+          { dirNames: DIALOGUE_SKIP_DIR_NAMES },
         );
         dialoguesCopied = true;
       }
@@ -475,7 +490,38 @@ const realFsDeps: LegacyMigrationFsDeps = {
   listDirEntries: async (dir) => {
     try {
       const entries = await fsp.readdir(dir, { withFileTypes: true });
-      return entries.map((e) => ({ name: e.name, isDirectory: e.isDirectory() }));
+      return await Promise.all(
+        entries.map(async (entry) => {
+          const reportedSymbolicLink = entry.isSymbolicLink();
+          if (reportedSymbolicLink || !entry.isDirectory()) {
+            return {
+              name: entry.name,
+              isDirectory: entry.isDirectory(),
+              isSymbolicLink: reportedSymbolicLink,
+            };
+          }
+
+          // 某些 Node/libuv 组合会把 Windows junction 报成普通目录；只对目录做
+          // lstat 二次核验，避免对工作区里的海量普通文件增加一次额外系统调用。
+          const entryPath = path.join(dir, entry.name);
+          try {
+            const isSymbolicLink = (await fsp.lstat(entryPath)).isSymbolicLink();
+            return {
+              name: entry.name,
+              isDirectory: !isSymbolicLink,
+              isSymbolicLink,
+            };
+          } catch (err) {
+            // 条目在 readdir 与 lstat 之间消失或不可读时 fail-closed，不递归进入未知目标。
+            log.warn(
+              'legacy userData migration: failed to lstat directory entry, skipping %s: %s',
+              entryPath,
+              err instanceof Error ? err.message : String(err),
+            );
+            return { name: entry.name, isDirectory: false, isSymbolicLink: true };
+          }
+        }),
+      );
     } catch {
       return [];
     }

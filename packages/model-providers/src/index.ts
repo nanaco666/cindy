@@ -21,6 +21,7 @@ export type {
   Catalog,
   CustomProviderConfig,
   CustomProviderRuntimeConfig,
+  ProviderRuntimeModelConfig,
   ProviderPreset,
   ProviderPresetRuntime,
   OAuthProviderDescriptor,

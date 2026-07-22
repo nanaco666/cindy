@@ -1594,7 +1594,7 @@ export function CCAgentSessionView({
           role: form.role,
           label: createWorkerLabel(form.role, []),
           model: form.model,
-          effort: form.effort as 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | undefined,
+          effort: form.effort as 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultra' | undefined,
           fast: form.fast,
           delegateTask: form.initialTask || undefined,
         });

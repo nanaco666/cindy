@@ -3,7 +3,7 @@
   "dataLicense": "CC0-1.0",
   "SPDXID": "SPDXRef-DOCUMENT",
   "name": "cindy-desktop-macos",
-  "documentNamespace": "https://cindy.app/spdx/desktop-macos/694fc149055fe30cb6891c90160796c9faf5631c3efb3850b9d7d30a1df1c631",
+  "documentNamespace": "https://cindy.app/spdx/desktop-macos/781348eea9dbee8599dddd5613f771a8f8c4ff7798783fcc5bd0e0dbec7b49ab",
   "creationInfo": {
     "created": "2026-07-21T12:23:21Z",
     "creators": [
@@ -36,16 +36,6 @@
       "SPDXID": "SPDXRef-Package-e01faf6cc0ab33f1",
       "versionInfo": "41.2.0",
       "downloadLocation": "https://github.com/electron/electron",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION"
-    },
-    {
-      "name": "lark-openapi-mcp generated sources (vendored)",
-      "SPDXID": "SPDXRef-Package-6ad95b8cfcf52b4e",
-      "versionInfo": "vendored",
-      "downloadLocation": "https://github.com/larksuite/lark-openapi-mcp",
       "filesAnalyzed": false,
       "licenseConcluded": "MIT",
       "licenseDeclared": "MIT",
@@ -13346,11 +13336,6 @@
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
       "relatedSpdxElement": "SPDXRef-Package-e01faf6cc0ab33f1"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-6ad95b8cfcf52b4e"
     },
     {
       "spdxElementId": "SPDXRef-DOCUMENT",

@@ -15,7 +15,7 @@ import { rebuildQueuedOrcaLeadMessage } from './orcaInterAgentDispatcher.js';
  * 契约锚点：accepted/rollback 与 terminal auto-bridge 不变量见 docs/orca-team-architecture.md「协同运行时行为契约」。
  */
 export type OrcaWorkerStatus = 'idle' | 'running' | 'done' | 'error';
-export type OrcaWorkerEffort = 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+export type OrcaWorkerEffort = 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultra';
 
 /** 从 store 读出的 worker 快照；service 不持有 Drizzle row，方便测试和 provider 复用。 */
 export interface OrcaWorkerRecordSnapshot {

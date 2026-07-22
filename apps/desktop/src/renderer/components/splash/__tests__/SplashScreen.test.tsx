@@ -121,7 +121,8 @@ describe('SplashScreen v2 layout', () => {
     expect(illustration.className).not.toMatch(/\bh-full\b|\bw-full\b|object-cover/);
 
     expect(wordmark.className).toContain('top-[352.5px] h-[78px] w-[229.5px]');
-    expect(wordmark.className).toContain('drop-shadow-[0_2px_6.5px_rgba(0,0,0,0.25)]');
+    // 2026-07-22 用户拍板:字标去投影(DARK/LIGHT 均不带 drop-shadow)。
+    expect(wordmark.className).not.toContain('drop-shadow');
 
     expect(script.className).toContain('left-[352.25px] top-[410px]');
     expect(script.className).toContain('h-[89.5px] w-[225.5px]');

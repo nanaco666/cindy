@@ -44,6 +44,7 @@ const VALID_EFFORTS: ReadonlySet<string> = new Set([
   'high',
   'xhigh',
   'max',
+  'ultra',
 ]);
 
 /** 覆盖日志回调(生产接统一 logger;测试可缺省)。 */

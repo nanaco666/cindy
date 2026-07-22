@@ -110,6 +110,17 @@ describe('validateCustomProviderConfig (per-runtime)', () => {
         runtimes: { codex: { baseUrl: 'https://x/v1', models: [{ id: '', name: 'y' }] } },
       }).ok,
     ).toBe(false);
+    expect(
+      validateCustomProviderConfig({
+        ...valid,
+        runtimes: {
+          codex: {
+            baseUrl: 'https://x/v1',
+            models: [{ id: 'm', name: 'M', contextWindow: 0 }],
+          },
+        },
+      }).ok,
+    ).toBe(false);
   });
 });
 
@@ -153,7 +164,7 @@ describe('custom-provider-store CRUD (per-runtime)', () => {
         codex: {
           baseUrl: 'https://openrouter.ai/api/v1',
           models: [
-            { id: 'a', name: 'A' },
+            { id: 'a', name: 'A', contextWindow: 1_000_000 },
             { id: 'a', name: 'A dup' },
           ],
           headers: { 'X-Org': 'acme' },
@@ -161,7 +172,9 @@ describe('custom-provider-store CRUD (per-runtime)', () => {
       },
     });
     const got = await getCustomProvider('openrouter');
-    expect(got?.runtimes.codex?.models).toEqual([{ id: 'a', name: 'A' }]);
+    expect(got?.runtimes.codex?.models).toEqual([
+      { id: 'a', name: 'A', contextWindow: 1_000_000 },
+    ]);
     expect(got?.runtimes.codex?.headers).toEqual({ 'X-Org': 'acme' });
   });
 

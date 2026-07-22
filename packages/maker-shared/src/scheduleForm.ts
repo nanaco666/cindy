@@ -15,6 +15,7 @@ export const MOBILE_SCHEDULE_EFFORT_VALUES = [
   'high',
   'xhigh',
   'max',
+  'ultra',
 ] as const;
 
 export type MobileScheduleEffort = (typeof MOBILE_SCHEDULE_EFFORT_VALUES)[number];

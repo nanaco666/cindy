@@ -4,11 +4,13 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const source = readFileSync(resolve(__dirname, '..', 'features', 'cc-agent', 'NewMakerDraftRoute.tsx'), 'utf8');
+const brandLockupSource = readFileSync(resolve(__dirname, '..', 'components', 'branding', 'ThemeBrandLockup.tsx'), 'utf8');
 const chatInputSource = readFileSync(resolve(__dirname, '..', 'components', 'new-chat', 'ChatInput.tsx'), 'utf8');
 const sendButtonSource = readFileSync(resolve(__dirname, '..', 'components', 'new-chat', 'SendButton.tsx'), 'utf8');
 const vendorSwitcherSource = readFileSync(resolve(__dirname, '..', 'components', 'new-chat', 'VendorSegmentedSwitcher.tsx'), 'utf8');
 const permissionSelectorSource = readFileSync(resolve(__dirname, '..', 'components', 'new-chat', 'PermissionSelector.tsx'), 'utf8');
 const modelSelectorSource = readFileSync(resolve(__dirname, '..', 'components', 'new-chat', 'ModelSelector.tsx'), 'utf8');
+const worktreeChipsRowSource = readFileSync(resolve(__dirname, '..', 'components', 'new-chat', 'WorktreeChipsRow.tsx'), 'utf8');
 const userInfoSectionSource = readFileSync(resolve(__dirname, '..', 'components', 'sidebar', 'UserInfoSection.tsx'), 'utf8');
 const sidebarTopNavSource = readFileSync(resolve(__dirname, '..', 'components', 'sidebar', 'SidebarTopNav.tsx'), 'utf8');
 const vendorIconSource = readFileSync(resolve(__dirname, '..', 'components', 'sidebar', 'VendorIcon.tsx'), 'utf8');
@@ -21,7 +23,7 @@ describe('NewMakerDraftRoute CREATE AGENT visual contract', () => {
     expect(source).toContain('data-testid="create-agent-shell"');
     expect(source).toContain('data-testid="create-agent-main"');
     expect(source).toContain('data-testid="create-agent-mode-pill"');
-    expect(source).toContain('data-testid="create-agent-brand-lockup"');
+    expect(source).toContain('testId="create-agent-brand-lockup"');
     expect(source).toContain('data-testid="create-agent-quick-starts"');
     expect(source).toContain('createAgentQuickStarts.map');
     expect(source).toContain('<ChatInput');
@@ -41,7 +43,8 @@ describe('NewMakerDraftRoute CREATE AGENT visual contract', () => {
     expect(source).not.toContain('h-2.5 w-2.5 rounded-full');
     expect(source).not.toContain('surface-translucent-sidebar');
     expect(source).not.toContain('agent-island-annie');
-    expect(source).toContain('head-image-dark.png');
+    expect(source).toContain('<ThemeBrandLockup');
+    expect(brandLockupSource).toContain('head-image-dark.png');
   });
 
   it('centers the CREATE AGENT content group without reintroducing route chrome', () => {
@@ -109,9 +112,13 @@ describe('NewMakerDraftRoute CREATE AGENT visual contract', () => {
 
   it('uses exact CREATE AGENT quick-start and avatar tokens from the Figma slices', () => {
     // head_image 切图方案(用户裁决 2026-07-17):边框烧入图,仅投影走 CSS
-    expect(source).toContain('head-image-dark.png');
-    expect(source).toContain('head-image-light.png');
-    expect(source).toContain("drop-shadow(0 2px 3.65px rgba(0, 0, 0, 0.15))");
+    expect(brandLockupSource).toContain('head-image-dark.png');
+    expect(brandLockupSource).toContain('head-image-light.png');
+    expect(brandLockupSource).toContain("drop-shadow(0 2px 3.65px rgba(0, 0, 0, 0.15))");
+    expect(brandLockupSource).toContain('BRAND_ICON_SIZE = 50');
+    expect(brandLockupSource).toContain('BRAND_LOGO_WIDTH = 110');
+    expect(brandLockupSource).toContain('BRAND_LOGO_HEIGHT = 37.5');
+    expect(brandLockupSource).not.toMatch(/logoScale\s*[=:]/);
     expect(source).not.toContain('create-agent-avatar-glass-bg');
     expect(source).toContain('bg-[var(--create-agent-quick-card-bg)]');
     expect(source).toContain('border-[var(--create-agent-quick-card-border)]');
@@ -125,16 +132,9 @@ describe('NewMakerDraftRoute CREATE AGENT visual contract', () => {
   });
 
   it('keeps the decorative head image unselectable', () => {
-    const headImageIndex = source.indexOf('data-testid="create-agent-head-image"');
-    expect(headImageIndex).toBeGreaterThan(-1);
-
-    const headImageBlock = source.slice(
-      headImageIndex,
-      source.indexOf('{!logoError', headImageIndex),
-    );
-    expect(headImageBlock).toContain('pointer-events-none');
-    expect(headImageBlock).toContain('select-none');
-    expect(headImageBlock.match(/draggable=\{false\}/g)).toHaveLength(2);
+    expect(brandLockupSource).toContain('pointer-events-none');
+    expect(brandLockupSource).toContain('select-none');
+    expect(brandLockupSource).toContain('draggable={false}');
   });
 
   it('keeps global sidebar chrome out of the route body', () => {
@@ -235,6 +235,15 @@ describe('NewMakerDraftRoute CREATE AGENT visual contract', () => {
     expect(modelSelectorSource).toContain('<ChevronDown');
     expect(modelSelectorSource).toContain("'shrink-0'");
     expect(chatInputSource).toContain("className={isCreateAgentVariant ? 'ml-[7px]' : undefined}");
+  });
+
+  it('keeps the worktree checkmark readable in both themes', () => {
+    expect(worktreeChipsRowSource).toContain(
+      'border-[var(--create-agent-send-bg)] bg-[var(--create-agent-send-bg)] text-[var(--create-agent-send-icon)]',
+    );
+    expect(worktreeChipsRowSource).not.toContain(
+      'border-primary bg-primary text-primary-foreground',
+    );
   });
 
   it('aligns the real sidebar colors and user capsule with the CREATE AGENT Figma frame', () => {

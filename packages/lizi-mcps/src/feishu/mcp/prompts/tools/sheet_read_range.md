@@ -1,1 +1,0 @@
-读取飞书电子表格指定页签。普通 sheet 页签按 A1 range 返回单元格二维数组;不传 range 时按真实 grid 尺寸精确读取。内嵌多维表格页签通过 v2 metainfo 自动解析 app_token/table_id,并按 URL 的 table/view 参数返回前 20 条 records,此时省略 range。多页签电子表格默认读第一个页签;可传 sheet_id/标题或直接粘贴带 ?sheet=xxx 的 URL 定位。

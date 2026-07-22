@@ -1,1 +1,0 @@
-读取飞书知识库节点内容(docx 节点返回文本 + 图片清单 available_images + 评论列表 comments;bitable 节点返回表列表)。默认 max_images=0 不下载图片,按需调 media_download 单拉,或重调本工具 max_images=20 全量下载。✨ docx 节点的评论默认包含,user_name 已自动解析(@某人 也自动替换为姓名)。总结时务必带上评论。

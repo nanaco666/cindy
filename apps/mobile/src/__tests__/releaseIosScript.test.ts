@@ -2,15 +2,21 @@ import { describe, expect, it } from 'vitest';
 import { spawnSync } from 'node:child_process';
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { delimiter, join, resolve } from 'node:path';
+import { join, resolve } from 'node:path';
+import {
+  bashCommandWorks,
+  resolveBashTestEnvironment,
+  withBashTestBin,
+} from './bashTestUtils';
 
 const scriptPath = resolve(process.cwd(), 'scripts/release-ios.sh');
-const bashAvailable = spawnSync('bash', ['--version'], { encoding: 'utf8' }).status === 0;
-const itWithBash = bashAvailable ? it : it.skip;
+const bashEnvironment = resolveBashTestEnvironment();
+const itWithBash = bashEnvironment.available ? it : it.skip;
+const bashTestTimeoutMs = 35_000;
 // Windows 上 `python3` 常是 Microsoft Store 的 App Execution Alias 假可执行
 // (静默退出码 49、零输出),脚本内 JSON 解析会全体失败;此时在 binDir 架一个
 // 转发到真实 `python` 的 shim(CI ubuntu 的 python3 可用,不会写 shim)。
-const python3Works = spawnSync('python3', ['-c', 'print(1)'], { encoding: 'utf8' }).status === 0;
+const python3Works = bashCommandWorks(bashEnvironment, 'python3 -c "print(1)"');
 
 function writePython3ShimIfNeeded(binDir: string) {
   if (python3Works) return;
@@ -44,17 +50,19 @@ function runReleaseIos(
   chmodSync(curlPath, 0o755);
   writePython3ShimIfNeeded(binDir);
 
-  const result = spawnSync('bash', [scriptPath, ...args.map((arg) => (arg === '<ipa>' ? ipaPath : arg))], {
+  const result = spawnSync(bashEnvironment.command, [
+    bashEnvironment.toPath(scriptPath),
+    ...args.map((arg) => (arg === '<ipa>' ? bashEnvironment.toPath(ipaPath) : arg)),
+  ], {
     cwd: process.cwd(),
     encoding: 'utf8',
-    env: {
+    env: withBashTestBin(bashEnvironment, binDir, {
       ...process.env,
-      NPKG_CONFIG_DIR: configDir,
-      // PATH 分隔符必须按平台取(Windows 是 ';' 且路径自带 'C:'),硬编码 ':' 会
-      // 让 Git Bash 解析不到 fake curl,直接漏到真实 curl / 轮询超时。
-      PATH: `${binDir}${delimiter}${process.env.PATH ?? ''}`,
+      NPKG_CONFIG_DIR: bashEnvironment.toPath(configDir),
+      // The helper restores fake tools after Git Bash rewrites PATH during startup.
       ...extraEnv,
-    },
+    }),
+    timeout: 30_000,
   });
   rmSync(root, { recursive: true, force: true });
   return result;
@@ -82,7 +90,7 @@ echo '{"id":123,"package":"com.example.wrong"}'
     expect(result.stderr).toContain('bundle id');
     expect(result.stderr).toContain('com.xd.cindycn');
     expect(result.stdout).not.toContain('/install/');
-  });
+  }, bashTestTimeoutMs);
 
   itWithBash('honors NPKG_EXPECT_BUNDLE override', () => {
     // 覆盖为历史 bundleId 后,上传默认 com.xd.cindycn 反而应被拒,且错误提示新期望值。
@@ -93,7 +101,7 @@ echo '{"id":123,"package":"com.xd.cindycn"}'
     expect(result.status).not.toBe(0);
     expect(result.stderr).toContain('com.xdtmaker.mobile');
     expect(result.stdout).not.toContain('/install/');
-  });
+  }, bashTestTimeoutMs);
 
   itWithBash('accepts NPKG token via env without a credentials.env file', () => {
     // 无 credentials.env,仅靠环境变量传入 token/base:应过凭证加载、走到 bundle 校验(而非"缺 token"退出)。
@@ -104,7 +112,7 @@ echo '{"id":1,"package":"com.example.wrong"}'
     expect(result.status).not.toBe(0);
     expect(result.stderr).toContain('bundle id');
     expect(result.stdout).not.toContain('/install/');
-  });
+  }, bashTestTimeoutMs);
 
   itWithBash('fails resolve before emitting install links when enterprise signing team is unexpected', () => {
     const result = runReleaseIos(['resolve', '1'], `
@@ -121,5 +129,5 @@ esac
     expect(result.stderr).toContain('签名 Team');
     expect(result.stderr).toContain('UE5H8B62F9');
     expect(result.stdout).not.toContain('/install/');
-  });
+  }, bashTestTimeoutMs);
 });

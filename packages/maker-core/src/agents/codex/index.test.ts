@@ -1165,7 +1165,7 @@ describe('CodexAgent send', () => {
     await handle.close();
   });
 
-  it('keeps max effort mapped to xhigh before turn/start', async () => {
+  it('passes max effort through to turn/start without downgrade (issue #352)', async () => {
     const agent = new CodexAgent(createDeps());
     const host = installFakeHost(agent);
     const handle = await agent.startSession({
@@ -1180,7 +1180,28 @@ describe('CodexAgent send', () => {
     expect(host.request).toHaveBeenCalledWith(
       Method.TurnStart,
       expect.objectContaining({
-        effort: 'xhigh',
+        effort: 'max',
+      }),
+    );
+    await handle.close();
+  });
+
+  it('passes ultra effort through to turn/start without downgrade (issue #352)', async () => {
+    const agent = new CodexAgent(createDeps());
+    const host = installFakeHost(agent);
+    const handle = await agent.startSession({
+      sessionId: 'session-ultra-effort',
+      model: 'gpt-5.4-mini',
+      effort: 'ultra',
+      workingDir: '/repo',
+    });
+
+    await handle.send({ type: 'user', content: 'hello' });
+
+    expect(host.request).toHaveBeenCalledWith(
+      Method.TurnStart,
+      expect.objectContaining({
+        effort: 'ultra',
       }),
     );
     await handle.close();

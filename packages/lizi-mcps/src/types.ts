@@ -1,4 +1,3 @@
-import type * as lark from '@larksuiteoapi/node-sdk';
 import type { BrowserControlRuntime } from '@lizi/browser-control-runtime';
 
 import type { Recipe, SiteGuide } from './browser/recipe-loader.js';
@@ -10,80 +9,6 @@ export interface LiziMcpLogger {
   warn(...args: unknown[]): void;
   error(...args: unknown[]): void;
   fatal?(...args: unknown[]): void;
-}
-
-
-export interface FeishuApiResult {
-  ok: boolean;
-  data?: unknown;
-  errorCode?: string;
-}
-
-export interface FeishuMediaResult {
-  isImage: boolean;
-  mimeType: string;
-  originalPath: string;
-  originalBytes: number;
-  xdtImageUrl?: string;
-  fromCache: boolean;
-  preview?: {
-    path: string;
-    mimeType: string;
-    bytes: number;
-    base64: string;
-  };
-  inline?: {
-    mimeType: string;
-    bytes: number;
-    base64: string;
-  };
-}
-
-export type FeishuMediaFetcher = (
-  fileToken: string,
-) => Promise<{ buffer: Buffer; mimeType: string }>;
-
-export type UploadImageResult =
-  | { ok: true; imageKey: string }
-  | { ok: false; code: 'FILE_NOT_FOUND'; absPath: string }
-  | { ok: false; code: 'INVALID_FILE'; absPath: string; size: number }
-  | { ok: false; code: 'FILE_TOO_LARGE'; absPath: string; size: number; limit: number }
-  | { ok: false; code: 'UPLOAD_FAILED'; absPath: string; message: string };
-
-export interface FeishuMcpDeps {
-  getFeishuClient(): lark.Client;
-  safeCall<T extends { code?: number; msg?: string; data?: unknown }>(
-    fn: () => Promise<T>,
-  ): Promise<FeishuApiResult>;
-  resolveP2pChatId(
-    client: lark.Client,
-    openId: string,
-    authOpts: ReturnType<typeof lark.withUserAccessToken>,
-  ): Promise<FeishuApiResult>;
-  ensureToken(): Promise<{ token: string } | { error: 'AUTH_EXPIRED' }>;
-  forceRefresh(): Promise<{ token: string } | { error: 'AUTH_EXPIRED' }>;
-  getOrDownloadMedia(
-    fileToken: string,
-    fetcher: FeishuMediaFetcher,
-  ): Promise<FeishuMediaResult>;
-  uploadFeishuImage(params: {
-    client: lark.Client;
-    absPath: string;
-    imageType?: 'message' | 'avatar';
-    authOpts?: ReturnType<typeof lark.withUserAccessToken>;
-  }): Promise<UploadImageResult>;
-  feishuImageMaxBytes: number;
-  streamToBuffer(stream: NodeJS.ReadableStream): Promise<Buffer>;
-  mimeFromHeaders(headers: unknown): string;
-  /**
-   * 运行时 session ctx accessor。上传类工具(im_upload_image / im_upload_file /
-   * docx_upload_image)读取本地文件再上传到飞书,是 prompt 注入的外泄路径 —
-   * 必须把 file_path 约束到当前 session 的 workingDir。Claude 路径下 providers.ts
-   * 用闭包绑定;Codex HTTP bridge 下 tool-call 阶段经 AsyncLocalStorage 恢复。
-   * 未注入 / workingDir 为空时,上传类工具一律 fail-closed 拒绝。
-   */
-  getSessionContext?: () => LiziMcpSessionContext;
-  logger?: LiziMcpLogger;
 }
 
 export interface SavedImage {

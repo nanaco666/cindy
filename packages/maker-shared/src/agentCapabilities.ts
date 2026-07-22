@@ -64,7 +64,7 @@ export interface MobileModelSwitchConfirmation {
 
 /**
  * effort 档展示名词表(手机端简体中文,与桌面 i18n `effortLevels.*` 的 zh-CN 值对齐:
- * 低 / 中 / 高 / 超高 / 最高)。手机无 i18n 体系,在 normalize 单点把 capabilities 的
+ * 低 / 中 / 高 / 超高 / 最高 / 极致)。手机无 i18n 体系,在 normalize 单点把 capabilities 的
  * 英文 displayName 换成中文,下游(列表行 / 模型选项 / trigger 药丸 / 会话设置)全部继承;
  * 未知档 id 不在词表内 → 保留被控端给的 displayName 原文。
  */
@@ -75,6 +75,7 @@ export const MOBILE_EFFORT_LABELS: Record<string, string> = {
   high: '高',
   xhigh: '超高',
   max: '最高',
+  ultra: '极致',
 };
 
 const FALLBACK_EFFORT_OPTIONS: MobileChoiceOption[] = [

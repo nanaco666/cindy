@@ -31,12 +31,6 @@
       ]
     },
     "overrides": {
-      "@openai/codex-linux-x64": "link:./tools/codex-platform-stub",
-      "@openai/codex-linux-arm64": "link:./tools/codex-platform-stub",
-      "@openai/codex-darwin-x64": "link:./tools/codex-platform-stub",
-      "@openai/codex-darwin-arm64": "link:./tools/codex-platform-stub",
-      "@openai/codex-win32-x64": "link:./tools/codex-platform-stub",
-      "@openai/codex-win32-arm64": "link:./tools/codex-platform-stub",
       "@electron/rebuild": "^4.0.3",
       "protobufjs": "7.6.5",
       "js-yaml@^4.0.0": "^4.3.0",
@@ -73,7 +67,6 @@
     "mobile:beta:add-dev": "node apps/mobile/scripts/beta-add-dev.mjs",
     "ensure-deps": "node scripts/ensure-deps.mjs",
     "sync:browser-runtime": "node scripts/browser-runtime/sync.mjs",
-    "sync:agent-instructions": "node agent-use/scripts/sync-agent-instructions.mjs",
     "repo:worktrees": "node scripts/repo-worktrees.mjs",
     "update:claude": "node tools/claude/update.mjs",
     "update:codex": "node tools/codex/update.mjs",

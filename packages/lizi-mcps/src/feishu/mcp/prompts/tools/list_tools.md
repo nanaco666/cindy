@@ -1,1 +1,0 @@
-探索飞书可用工具(渐进式发现入口)。不传 category → 返回所有类目+每个类目的工具数量,以及调用提示。传 category → 返回该类目下所有工具的名称和简介,以及该类目下涉及的共享规则(rules 字段,markdown 内容,只在第一次拉取该类目时读一遍即可)。类目: docx(云文档) | wiki(知识库) | bitable(多维表格) | im(即时消息) | contact(通讯录) | calendar(日历) | minutes(妙记/会议纪要) | misc(综合工具)。获取到工具名后,用 call_tool({ name, args }) 执行;参数错误时会返回该工具的完整 JSON Schema。

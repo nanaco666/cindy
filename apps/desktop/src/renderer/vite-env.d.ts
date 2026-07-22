@@ -3546,7 +3546,7 @@ interface ElectronAPI {
         role?: string;
         label?: string;
         model?: string;
-        effort?: 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+        effort?: 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultra';
         fast?: boolean;
       },
     ) => Promise<{ teamId: string; workerSessionId: string; workerId: string }>;

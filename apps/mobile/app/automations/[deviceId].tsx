@@ -1296,7 +1296,7 @@ function ScheduleFormCard({
           autoCapitalize="none"
           editable={!busy}
           onChangeText={(value) => setField('effort', value)}
-          placeholder="minimal / low / medium / high / xhigh / max"
+          placeholder="minimal / low / medium / high / xhigh / max / ultra"
           placeholderTextColor={colors.textTertiary}
           style={styles.input}
           testID="automations.form.effortInput"

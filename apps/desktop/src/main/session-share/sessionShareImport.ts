@@ -800,7 +800,7 @@ async function writeIfMissing(
   }
 }
 
-const EFFORTS = new Set(['minimal', 'low', 'medium', 'high', 'xhigh', 'max']);
+const EFFORTS = new Set(['minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra']);
 const PERMISSION_MODES = new Set(['ask', 'default', 'acceptEdits', 'plan', 'auto', 'bypassPermissions']);
 
 /** draftPrefs 缺省(旧调用方 / 测试)时按 agentKind 兜底的模型。 */

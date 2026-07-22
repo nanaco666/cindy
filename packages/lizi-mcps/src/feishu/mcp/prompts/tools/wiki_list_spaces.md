@@ -1,1 +1,0 @@
-列出当前用户可访问的飞书知识空间,可按名称关键词做本地过滤,用于先获取 space_id 再调用 wiki_recent_changes / wiki_list_children / wiki_create_node。List Feishu wiki spaces visible to the current user, optionally filtered by name, so callers can resolve a space_id before using other wiki tools.

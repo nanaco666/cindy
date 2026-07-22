@@ -15,6 +15,7 @@ import {
 } from '../linux-runtime-fallback';
 
 const tempDirs: string[] = [];
+const describeOnLinuxFileSystem = process.platform === 'win32' ? describe.skip : describe;
 
 afterEach(() => {
   for (const dir of tempDirs.splice(0)) fs.rmSync(dir, { recursive: true, force: true });
@@ -49,24 +50,30 @@ describe('runtimeVersionMatchesPin', () => {
   });
 });
 
-describe('install path helpers', () => {
+describeOnLinuxFileSystem('install path helpers', () => {
   it('places pinned private binaries under userData/agent-runtime/<kind>/bin', () => {
-    expect(runtimeInstallRoot('/userdata', 'codex')).toBe('/userdata/agent-runtime/codex');
-    expect(runtimeInstallRoot('/userdata', 'claude-code')).toBe('/userdata/agent-runtime/claude-code');
-    expect(privateBinaryPath('/userdata', 'codex')).toBe(
-      '/userdata/agent-runtime/codex/bin/codex',
+    const userDataPath = path.join(os.tmpdir(), 'cindy-runtime-path-test');
+    expect(runtimeInstallRoot(userDataPath, 'codex')).toBe(
+      path.join(userDataPath, 'agent-runtime', 'codex'),
     );
-    expect(privateBinaryPath('/userdata', 'claude-code')).toBe(
-      '/userdata/agent-runtime/claude-code/bin/claude',
+    expect(runtimeInstallRoot(userDataPath, 'claude-code')).toBe(
+      path.join(userDataPath, 'agent-runtime', 'claude-code'),
+    );
+    expect(privateBinaryPath(userDataPath, 'codex')).toBe(
+      path.join(userDataPath, 'agent-runtime', 'codex', 'bin', 'codex'),
+    );
+    expect(privateBinaryPath(userDataPath, 'claude-code')).toBe(
+      path.join(userDataPath, 'agent-runtime', 'claude-code', 'bin', 'claude'),
     );
   });
 
   it('resolves the exact legacy CDN cache path for migration', () => {
-    expect(legacyManagedBinaryPath('/userdata', 'claude-code')).toBe(
-      '/userdata/claude-code/2.1.215/claude',
+    const userDataPath = path.join(os.tmpdir(), 'cindy-runtime-path-test');
+    expect(legacyManagedBinaryPath(userDataPath, 'claude-code')).toBe(
+      path.join(userDataPath, 'claude-code', '2.1.215', 'claude'),
     );
-    expect(legacyManagedBinaryPath('/userdata', 'codex')).toBe(
-      '/userdata/codex/0.144.6/codex',
+    expect(legacyManagedBinaryPath(userDataPath, 'codex')).toBe(
+      path.join(userDataPath, 'codex', '0.144.6', 'codex'),
     );
   });
 
@@ -110,7 +117,7 @@ describe('official asset descriptors', () => {
   });
 });
 
-describe('extractCodexBinaryFromTarGz', () => {
+describeOnLinuxFileSystem('extractCodexBinaryFromTarGz', () => {
   it('extracts the verified archive binary without a system tar dependency', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cindy-codex-tar-'));
     tempDirs.push(dir);
@@ -124,6 +131,8 @@ describe('extractCodexBinaryFromTarGz', () => {
     await extractCodexBinaryFromTarGz(archivePath, destinationPath);
 
     expect(fs.readFileSync(destinationPath, 'utf8')).toBe('codex-binary');
-    expect(fs.statSync(destinationPath).mode & 0o111).not.toBe(0);
+    if (process.platform !== 'win32') {
+      expect(fs.statSync(destinationPath).mode & 0o111).not.toBe(0);
+    }
   });
 });
