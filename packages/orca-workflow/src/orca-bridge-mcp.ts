@@ -558,7 +558,7 @@ async function ensureCapturedSession(
 }
 
 
-// 契约锚点：归属校验与 auto-bridge settle 见 docs/orca-team-architecture.md「协同运行时行为契约」「坑点与不变量 #3」。
+// 契约锚点：归属校验与 auto-bridge settle 见 docs/dev-rules/orca-team-architecture.md「协同运行时行为契约」「坑点与不变量 #3」。
 // Codex MCP HTTP bridge 仍然从全局 ctx 注册 server 名称，所以 worker bridge 必须
 // 对 Codex 可见。真正的执行边界在工具调用时 fail-closed：resolveWorkerLink 会读
 // 本次调用绑定的 session ctx，并校验它确实拥有解析出的 worker link。

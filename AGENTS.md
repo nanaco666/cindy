@@ -159,7 +159,7 @@ restart 脚本会在非交互式 agent（Claude / Codex）终端里自动打开�
 
 ## Dogfooding：在本仓库的 worktree 会话里工作（Agent 规则）
 
-如果你是 Cindy 内嵌的 agent，且 cwd 位于 `<baseRepo>/.cindy-worktrees/<name>`（或品牌迁移前的 `.xdt-worktrees/<name>`）下（会话级 git worktree），遵守以下契约（完整工作流与原理见 `docs/dogfooding-workflow.md`）：
+如果你是 Cindy 内嵌的 agent，且 cwd 位于 `<baseRepo>/.cindy-worktrees/<name>`（或品牌迁移前的 `.xdt-worktrees/<name>`）下（会话级 git worktree），遵守以下契约：
 
 1. **先等 checkout 完成，再确认依赖**：worktree 创建返回时后台的完整 checkout 可能仍在进行（staged copy 只含 `CLAUDE.md` / `.claude` 等少量文件，**不含 `package.json`**）。跑任何 `pnpm` 命令前先确认 `package.json` 存在且 `git status --short` 干净，未就绪就稍等再查。worktree 与 baseRepo 共享 `.git` 但**不共享 node_modules**，创建流程不会自动安装：checkout 完成后若 `node_modules` 缺失，先 `pnpm install`（首次可能数分钟，注意命令超时，必要时分步执行）。
 2. **你的编辑对运行中的 app 无效**：Vite HMR 只 watch 启动 dev 实例的那个 checkout，worktree 下的任何改动既不会热更也不会随重启生效。「改了没反应」不是 bug。验证一律在本 worktree 内跑 `pnpm --filter desktop typecheck` / 定向 `vitest run`；需要运行时验证时，commit + push 后告知用户，由用户启 verify 实例或重启（你无法重启宿主，见上文 refusal 规则）。
@@ -287,7 +287,7 @@ restart 脚本会在非交互式 agent（Claude / Codex）终端里自动打开�
 
 ### 文档与规范治理
 
-22. **改 Orca 协同代码前必读 `docs/orca-team-architecture.md`**：它是 Orca 多 agent 协同的权威架构文档（owner: yuhaobo），治理 `apps/desktop` 的 `maker-ipc/orca*` 服务与 `mcp-integrations` codex MCP、`packages/lizi-mcps` 的 `orca`、`packages/orca-workflow`、`packages/maker-core` 的 codex MCP context。改这些模块前先读它，实现要与其中「协同运行时行为契约」「坑点与不变量」声明的不变量保持一致；文档与代码冲突时以代码为准，但要在同一改动里同步修正文档。`docs/` 其余文档的分类与状态见 `docs/README.md`，默认仅供参考。
+22. **改 Orca 协同代码前必读 `docs/dev-rules/orca-team-architecture.md`**：它是 Orca 多 agent 协同的权威架构文档（owner: yuhaobo），治理 `apps/desktop` 的 `maker-ipc/orca*` 服务与 `mcp-integrations` codex MCP、`packages/lizi-mcps` 的 `orca`、`packages/orca-workflow`、`packages/maker-core` 的 codex MCP context。改这些模块前先读它，实现要与其中「协同运行时行为契约」「坑点与不变量」声明的不变量保持一致；文档与代码冲突时以代码为准，但要在同一改动里同步修正文档。`docs/` 其余文档的分类与状态见 `docs/README.md`，默认仅供参考。
 
 24. **意识(Ghost)机制改动必须同步《意识编写手册》(FORGE_GUIDE)与装入校验,二者是同一规则的两半**。手册(`apps/desktop/src/main/cindy-brain/forge.ts` 的 `FORGE_GUIDE`)由总机工具 `ghost_forge_guide` 现拿现读,是 agent 替用户编写意识的唯一教材——**手册过期 = AI 按旧规则写出过不了新校验的意识包**(校验拒装是兜底,但用户体验是"AI 反复打包反复被拒")。凡改动**意识作者可见的契约**,同一改动内必须同步更新手册对应章节:(a) `ghost.json` 身份卡字段或校验规则(`shared/ghost.ts` 的 `validateGhostManifest`);(b) 管子协议(`cindy.send` / `cindy.onHostMessage` 的消息形态,`shared/ghost.ts` 管子类型);(c) 模型代办菜单(`cindy-brain/modelSlot.ts` 的 kind / 参数 / 模型白名单);(d) 面板供片协议与注入的主题 token(`cindy-ghost://` 分支、`ghostPanelTheme.ts` 白名单);(e) 打包限制(`cindy-brain/forge.ts` 的 `packGhostDir`)。反向同理:改校验必须同步手册,改手册宣称的新能力必须真有实现。**PR 约束**:命中上述任一路径的 PR,Description 必须写明"手册已同步(改了哪节)"或"无需同步 + 为什么不涉及作者契约";review 时按此检查,漏同步 = P1。`forge.test.ts` 的关键章节存在性测试只是最低闸,不替代逐条人工核对。
 

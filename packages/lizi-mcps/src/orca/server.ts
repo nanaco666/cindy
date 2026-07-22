@@ -24,7 +24,7 @@
  * Codex HTTP bridge 会在 tool-call 时通过 AsyncLocalStorage 恢复真实 ctx。
  * start_team / end_team 需读 vendorOptions.orcaRole 判断是否允许调用。
  *
- * 契约锚点：全局可见 + handler 拒绝语义见 docs/orca-team-architecture.md「MCP 与 IPC 控制面」。
+ * 契约锚点：全局可见 + handler 拒绝语义见 docs/dev-rules/orca-team-architecture.md「MCP 与 IPC 控制面」。
  */
 
 import { BRAND_NAME } from '@lizi/maker-shared/branding';
