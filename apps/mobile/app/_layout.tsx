@@ -67,7 +67,7 @@ function NavigationGate() {
   useEffect(() => {
     if (!auth.isAuthenticated || !auth.accountDeletionRestored) return;
     auth.consumeAccountDeletionRestored();
-    Alert.alert('账号已恢复', '本次登录已取消账号注销，账号和数据将继续保留。');
+    Alert.alert('账号已恢复', '本次登录已取消账号注销，Cindy 登录账号将继续保留。');
   }, [
     auth.accountDeletionRestored,
     auth.consumeAccountDeletionRestored,

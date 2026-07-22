@@ -2570,7 +2570,7 @@
     "entryButton": "注销账号",
     "entryAria": "注销当前账号",
     "introTitle": "注销账号？",
-    "introDescription": "此操作会安排永久删除你的 Cindy 账号和个人数据。",
+    "introDescription": "此操作会安排永久删除你的 Cindy 登录账号。",
     "confirmTitle": "确认注销账号",
     "sendCodeButton": "发送注销验证码",
     "confirmButton": "确认注销账号",
@@ -2584,11 +2584,11 @@
       "sms": "短信"
     },
     "sessionNotice": "确认后，本机将立即退出登录；其他客户端会在当前访问凭证到期并尝试续期时退出。",
-    "gracePeriodNotice": "确认后，账号将进入 30 天等待期。等待期内重新登录可取消注销；到期后账号和个人数据将永久删除。",
+    "gracePeriodNotice": "确认后，账号将进入 30 天等待期。等待期内重新登录可取消注销；到期后 Cindy 登录账号将永久删除。",
     "verificationNotice": "注销验证码将通过{{channel}}发送至 {{target}}。",
     "appleRevocationNotice": "如果你曾使用 Apple 登录，还需要在 Apple ID 设置中手动撤销 Cindy 的访问权限。",
-    "acknowledgement": "我已了解：等待期结束后，账号和个人数据将被永久删除且无法恢复。",
-    "restoredNotice": "账号注销已取消，你的账号和数据将继续保留。",
+    "acknowledgement": "我已了解：等待期结束后，Cindy 登录账号将被永久删除且无法恢复。",
+    "restoredNotice": "账号注销已取消，你的 Cindy 登录账号将继续保留。",
     "errors": {
       "fallback": "注销请求未能完成，请检查网络后重试。",
       "UNAUTHENTICATED": "登录已过期，请重新登录后再试。",
@@ -2613,8 +2613,8 @@
       "processingTitle": "账号正在注销",
       "completedTitle": "账号已注销",
       "pendingCopy": "账号计划于 {{date}} 永久删除。在此之前重新登录可取消注销。",
-      "processingCopy": "等待期已结束，账号和个人数据正在清理中。",
-      "completedCopy": "账号和个人数据清理已完成。",
+      "processingCopy": "等待期已结束，Cindy 登录账号正在删除。",
+      "completedCopy": "Cindy 登录账号已删除。",
       "dismissButton": "我知道了"
     }
   },

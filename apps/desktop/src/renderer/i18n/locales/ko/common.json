@@ -2570,7 +2570,7 @@
     "entryButton": "계정 삭제",
     "entryAria": "현재 계정 삭제",
     "introTitle": "계정을 삭제하시겠습니까?",
-    "introDescription": "Cindy 계정과 개인 데이터의 영구 삭제를 예약합니다.",
+    "introDescription": "Cindy 로그인 계정의 영구 삭제를 예약합니다.",
     "confirmTitle": "계정 삭제 확인",
     "sendCodeButton": "삭제 인증 코드 보내기",
     "confirmButton": "계정 삭제",
@@ -2584,11 +2584,11 @@
       "sms": "SMS"
     },
     "sessionNotice": "확인 후 이 컴퓨터에서는 즉시 로그아웃됩니다. 다른 클라이언트는 현재 접근 자격 증명이 만료되어 갱신을 시도할 때 로그아웃됩니다.",
-    "gracePeriodNotice": "확인 후 계정은 30일의 대기 기간에 들어갑니다. 이 기간에 로그인하면 삭제가 취소되며, 기간이 끝나면 계정과 개인 데이터가 영구 삭제됩니다.",
+    "gracePeriodNotice": "확인 후 계정은 30일의 대기 기간에 들어갑니다. 이 기간에 로그인하면 삭제가 취소되며, 기간이 끝나면 Cindy 로그인 계정이 영구 삭제됩니다.",
     "verificationNotice": "{{channel}}을(를) 통해 {{target}}에 삭제 인증 코드를 보냅니다.",
     "appleRevocationNotice": "Apple로 로그인을 사용했다면 Apple ID 설정에서도 Cindy의 접근 권한을 직접 철회해야 합니다.",
-    "acknowledgement": "대기 기간이 끝나면 계정과 개인 데이터가 복구할 수 없도록 영구 삭제됨을 이해했습니다.",
-    "restoredNotice": "계정 삭제가 취소되었습니다. 계정과 데이터는 계속 보관됩니다.",
+    "acknowledgement": "대기 기간이 끝나면 Cindy 로그인 계정이 복구할 수 없도록 영구 삭제됨을 이해했습니다.",
+    "restoredNotice": "계정 삭제가 취소되었습니다. Cindy 로그인 계정은 계속 유지됩니다.",
     "errors": {
       "fallback": "삭제 요청을 완료하지 못했습니다. 네트워크를 확인한 후 다시 시도하세요.",
       "UNAUTHENTICATED": "로그인이 만료되었습니다. 다시 로그인한 후 시도하세요.",
@@ -2613,8 +2613,8 @@
       "processingTitle": "계정 삭제 진행 중",
       "completedTitle": "계정 삭제 완료",
       "pendingCopy": "{{date}}에 영구 삭제될 예정입니다. 그 전에 로그인하면 삭제를 취소할 수 있습니다.",
-      "processingCopy": "대기 기간이 끝나 계정과 개인 데이터를 삭제하고 있습니다.",
-      "completedCopy": "계정과 개인 데이터 삭제가 완료되었습니다.",
+      "processingCopy": "대기 기간이 끝나 Cindy 로그인 계정을 삭제하고 있습니다.",
+      "completedCopy": "Cindy 로그인 계정이 삭제되었습니다.",
       "dismissButton": "확인"
     }
   },

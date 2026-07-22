@@ -180,7 +180,7 @@ export default function AccountDeletionScreen() {
                   ) : null}
                 </View>
                 <Text style={styles.acknowledgementText}>
-                  我已了解：确认后所有设备会立即退出；30 天内重新登录可撤销；到期后账号和数据将永久删除且无法恢复。
+                  我已了解：这台手机会立即退出；其他客户端会在访问凭证到期且刷新失败后退出；30 天内重新登录可撤销；到期后 Cindy 登录账号将永久删除且无法恢复。
                 </Text>
               </Pressable>
 
@@ -214,10 +214,9 @@ export default function AccountDeletionScreen() {
             <>
               <View style={styles.card}>
                 <Text style={styles.cardTitle}>注销前请确认</Text>
-                <ImpactRow text="确认后，这台手机和其他在线设备会立即退出登录。" />
+                <ImpactRow text="确认后，这台手机立即退出；其他客户端会在现有访问凭证到期且刷新失败后退出。" />
                 <ImpactRow text="账号进入 30 天等待期；期间重新登录即可取消注销。" />
-                <ImpactRow text="等待期结束后，账号、会话和云端个人数据将被永久删除。" />
-                <ImpactRow text="依法需要保留的交易记录会去标识化保存。" />
+                <ImpactRow text="等待期结束后，Cindy 登录账号将被永久删除。" />
               </View>
               {availability.manualAppleRevocationRequired ? (
                 <View style={styles.notice} testID="accountDeletion.appleNotice">

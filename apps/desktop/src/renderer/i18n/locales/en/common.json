@@ -2571,7 +2571,7 @@
     "entryButton": "Delete account",
     "entryAria": "Delete the current account",
     "introTitle": "Delete your account?",
-    "introDescription": "This schedules permanent deletion of your Cindy account and personal data.",
+    "introDescription": "This schedules permanent deletion of your Cindy sign-in account.",
     "confirmTitle": "Confirm account deletion",
     "sendCodeButton": "Send deletion code",
     "confirmButton": "Delete account",
@@ -2585,11 +2585,11 @@
       "sms": "SMS"
     },
     "sessionNotice": "This computer signs out immediately. Other clients sign out when their current access credential expires and they attempt to refresh it.",
-    "gracePeriodNotice": "After confirmation, your account enters a 30-day waiting period. Signing in during that period cancels deletion; afterwards, the account and personal data are permanently deleted.",
+    "gracePeriodNotice": "After confirmation, your account enters a 30-day waiting period. Signing in during that period cancels deletion; afterwards, your Cindy sign-in account is permanently deleted.",
     "verificationNotice": "A deletion code will be sent to {{target}} via {{channel}}.",
     "appleRevocationNotice": "If you used Sign in with Apple, you must also revoke Cindy's access in your Apple ID settings.",
-    "acknowledgement": "I understand that after the waiting period, my account and personal data will be permanently deleted and cannot be recovered.",
-    "restoredNotice": "Account deletion was cancelled. Your account and data will be retained.",
+    "acknowledgement": "I understand that after the waiting period, my Cindy sign-in account will be permanently deleted and cannot be recovered.",
+    "restoredNotice": "Account deletion was cancelled. Your Cindy sign-in account will be retained.",
     "errors": {
       "fallback": "The deletion request could not be completed. Check your network and try again.",
       "UNAUTHENTICATED": "Your login expired. Sign in and try again.",
@@ -2614,8 +2614,8 @@
       "processingTitle": "Account deletion in progress",
       "completedTitle": "Account deleted",
       "pendingCopy": "Scheduled for permanent deletion on {{date}}. Sign in before then to cancel deletion.",
-      "processingCopy": "The waiting period ended. Your account and personal data are being removed.",
-      "completedCopy": "Your account and personal data have been removed.",
+      "processingCopy": "The waiting period ended. Your Cindy sign-in account is being removed.",
+      "completedCopy": "Your Cindy sign-in account has been removed.",
       "dismissButton": "Got it"
     }
   },
