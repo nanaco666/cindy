@@ -498,8 +498,8 @@ export function getMaker(): Maker {
         registerCodexProxyComposed(sessionId, threadId, text),
       // host 自家、用户已通过 OAuth/账号授权过的可信 MCP server,自动通过 codex
       // 的 MCP elicitation 审批,避免每次写操作(lizi_feishu send / cindy_scheduler
-      // create / lizi_memory write 等)都弹 PermissionPrompt。
-      // 多数命名仍是历史前缀 `lizi_*`(lizi_feishu / lizi_memory / ...)，
+      // create / cindy_memory write 等)都弹 PermissionPrompt。
+      // 多数命名仍是历史前缀 `lizi_*`(lizi_feishu / ...)，
       // scheduler 已迁为 `cindy_scheduler`；`<平台>_lizi` 显式白名单(PR #501)已清空——`github_lizi` /
       // `gitlab_lizi` 先后于 2026-07-14 退役,迁入内置意识 cindy-github /
       // cindy-gitlab。

@@ -12,7 +12,7 @@
  *   - 其他改动: main 是单一写入点, renderer 不会从其它路径篡改
  *
  * 二态 (跟 MemorySection UI 的 Maker toggle 对齐):
- *   - true  : Maker Memory 启用 (写 prompt 注入 + 关闭原生 auto-memory + 暴露 lizi_memory MCP)
+ *   - true  : Maker Memory 启用 (写 prompt 注入 + 关闭原生 auto-memory + 暴露 cindy_memory MCP)
  *   - false : Maker Memory 关闭, 各 agent 原生 auto-memory 各自由 Claude / Codex 行控制
  *
  * **默认 true** — Maker Memory 已是正式功能；已有用户的明确设置仍以 main 端为准。

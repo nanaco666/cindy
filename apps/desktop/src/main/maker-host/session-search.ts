@@ -1,14 +1,14 @@
 /**
  * apps/desktop/src/main/maker-host/session-search.ts
  *
- * Desktop 端 messages FTS5 搜索能力实现, 通过 lizi_memory MCP 的 session_search tool
+ * Desktop 端 messages FTS5 搜索能力实现, 通过 cindy_memory MCP 的 session_search tool
  * 暴露给 LLM。数据源是 0017_add_messages_fts 创建的 messages_fts 虚拟表 (跟 messages
  * 表通过触发器同步; 0066 起仅索引 user / assistant / ask_user / plan_review 四类
  * role, tool_result / tool_use / thinking 等工具输出不进索引)。
  *
  * 跟 maker-core 的关系:
  *  - maker-core 完全不知道 messages 表存在 (那是 chat history 持久化, 不属于 memory 范畴)
- *  - host 在装配 lizi_memory provider 时把 searchSessions 函数注入, MCP server
+ *  - host 在装配 cindy_memory provider 时把 searchSessions 函数注入, MCP server
  *    的 session_search tool 调用时 dispatch 到这里
  *
  * 失败原则:

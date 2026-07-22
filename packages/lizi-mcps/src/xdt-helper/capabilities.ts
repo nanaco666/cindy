@@ -140,7 +140,7 @@ export const CAPABILITIES: readonly CapabilityEntry[] = [
       '【向量是增益不是依赖】search_chat_history 在用户没开 embedding / sqlite-vec 不可用时静默退化为纯 FTS, 搜索照常工作; 响应里 vector_used 标明向量是否生效。',
       '【分页】所有工具游标分页, 单次硬上限防炸 context, 但 hasMore + nextCursor 串联多次调用可拿全量, 不会丢信息。',
       '【权限】数据按 userId 物理隔离, 工具允许查当前用户所有 session 的全量历史。',
-      '【与 memory-system 的区别】memory-system(lizi_memory)管理的是已经提炼好的 markdown 记忆条目; chat-history-query 给的是原始对话数据本身, 是上游素材。两者通常配合用: 先 get_chat_history 拉素材, 再 memory_write 落条目。',
+      '【与 memory-system 的区别】memory-system(cindy_memory)管理的是已经提炼好的 markdown 记忆条目; chat-history-query 给的是原始对话数据本身, 是上游素材。两者通常配合用: 先 get_chat_history 拉素材, 再 memory_write 落条目。',
     ].join(' '),
   },
   {

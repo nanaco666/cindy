@@ -103,10 +103,10 @@ function createOrcaDeps(overrides: Partial<OrcaMcpDeps> = {}): OrcaMcpDeps {
 describe('dynamic lizi MCP session context', () => {
   // github_lizi / gitlab_lizi 的同款用例已分别随 lizi_github / lizi_gitlab 退役
   // 删除(2026-07-14,能力迁入内置意识 cindy-github / cindy-gitlab)。原覆盖的
-  // 两条路径由 lizi_memory 版承接:Claude 绑定语境路径见下面第一个用例,Codex
+  // 两条路径由 cindy_memory 版承接:Claude 绑定语境路径见下面第一个用例,Codex
   // call-time 动态语境路径见既有的 dynamic 用例。
 
-  it('lets lizi_memory resolve the workingDir from the bound Claude session', async () => {
+  it('lets cindy_memory resolve the workingDir from the bound Claude session', async () => {
     // Claude 绑定语境:toClaudeSdkConfig 传入的 workingDir 即会话绑定值,tool
     // 调用时应原样传给 deps 回调(getStore),不经 AsyncLocalStorage。
     const getStore = vi.fn(async (_workdir: string) => ({
@@ -117,8 +117,8 @@ describe('dynamic lizi MCP session context', () => {
       getStore,
     }) as never;
     const provider = createLiziMcpProviders({ memory: { getManager } })
-      .find((p) => p.name === 'lizi_memory');
-    if (!provider) throw new Error('lizi_memory provider missing');
+      .find((p) => p.name === 'cindy_memory');
+    if (!provider) throw new Error('cindy_memory provider missing');
 
     const cfg = provider.toClaudeSdkConfig({
       agentKind: 'claude-code',
@@ -135,7 +135,7 @@ describe('dynamic lizi MCP session context', () => {
     expect(getStore).toHaveBeenLastCalledWith('/claude-repo');
   });
 
-  it('lets lizi_memory resolve the current Codex workingDir dynamically', async () => {
+  it('lets cindy_memory resolve the current Codex workingDir dynamically', async () => {
     const getStore = vi.fn(async (workdir: string) => {
       if (!workdir) throw new Error('MakerMemoryManager.getStore: absWorkdir required');
       return {
@@ -158,8 +158,8 @@ describe('dynamic lizi MCP session context', () => {
       getStore,
     }) as never;
     const provider = createLiziMcpProviders({ memory: { getManager } })
-      .find((p) => p.name === 'lizi_memory');
-    if (!provider) throw new Error('lizi_memory provider missing');
+      .find((p) => p.name === 'cindy_memory');
+    if (!provider) throw new Error('cindy_memory provider missing');
 
     const cfg = provider.toClaudeSdkConfig({
       agentKind: 'codex',

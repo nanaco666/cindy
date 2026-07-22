@@ -75,7 +75,7 @@ export type KnownProviderName =
   | 'lizi_slack'
   | 'cindy_scheduler'
   | 'lizi_ssh'
-  | 'lizi_memory'
+  | 'cindy_memory'
   | 'lizi_contacts'
   | 'cindy_helper'
   | 'lizi_orca'
@@ -84,7 +84,7 @@ export type KnownProviderName =
 /**
  * MCP provider `name`(lizi-mcps/providers.ts) → 用户可见 plugin id 的映射。
  *
- * lizi-mcps 会给多数 provider name 加 `lizi_` 前缀(如 'lizi_feishu'、'lizi_memory')，
+ * lizi-mcps 会给多数 provider name 加 `lizi_` 前缀(如 'lizi_feishu')，
  * Cindy 自有 provider 使用 `cindy_` 前缀；用户配置使用短 id('feishu'、'memory')。
  * 这张表桥接两者，让 mcp-providers.ts
  * 可以调用：
@@ -104,7 +104,7 @@ export const PROVIDER_NAME_TO_PLUGIN_ID: Record<KnownProviderName, PluginId> = {
   lizi_slack: 'slack',
   cindy_scheduler: 'scheduler',
   lizi_ssh: 'ssh',
-  lizi_memory: 'memory',
+  cindy_memory: 'memory',
   lizi_contacts: 'contacts',
   cindy_helper: 'xdt_helper',
   lizi_orca: 'collab',
@@ -154,7 +154,7 @@ const PLUGIN_ID_TO_MCP_ID: Record<PluginId, LiziMcpId | undefined> = {
   slack: 'lizi_slack',
   scheduler: 'cindy_scheduler',
   ssh: 'lizi_ssh',
-  memory: 'lizi_memory',
+  memory: 'cindy_memory',
   contacts: 'lizi_contacts',
   xdt_helper: 'cindy_helper',
   collab: 'lizi_orca',
