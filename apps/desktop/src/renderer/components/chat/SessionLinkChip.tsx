@@ -30,10 +30,18 @@ import { useSessionNavigationMode } from '@/features/cc-agent/embeddedSessionNav
 import { InlineReferenceChip } from './InlineReferenceChip';
 import { QuoteChip } from './QuoteChip';
 
+const MESSAGE_LINK_LABEL_MAX = 240;
+
 export interface SessionLinkChipProps {
   href: string;
   /** 作者显式链接文案(`[label](…)`,label ≠ href 时传入);有值则不查标题。 */
   label?: string;
+}
+
+function compactMessageLinkLabel(text: string): string {
+  const compact = text.replace(/\s+/g, ' ').trim();
+  if (compact.length <= MESSAGE_LINK_LABEL_MAX) return compact;
+  return `${compact.slice(0, MESSAGE_LINK_LABEL_MAX - 1)}…`;
 }
 
 export function SessionLinkChip({ href, label }: SessionLinkChipProps) {
@@ -115,7 +123,8 @@ export function SessionLinkChip({ href, label }: SessionLinkChipProps) {
 
   if (messageClientId) {
     const fullText = messageText ?? shortSessionId(messageClientId);
-    const messageContent = <QuoteChip quote={{ text: fullText }} />;
+    const messageLabel = compactMessageLinkLabel(fullText);
+    const messageContent = <QuoteChip quote={{ text: messageLabel }} />;
     const messageClass = 'inline-flex max-w-[min(240px,55vw)] align-middle';
     if (navigationMode === 'sidebar-embedded') {
       return (
@@ -128,7 +137,7 @@ export function SessionLinkChip({ href, label }: SessionLinkChipProps) {
       <button
         type="button"
         data-session-message-link=""
-        aria-label={fullText}
+        aria-label={messageLabel}
         onClick={handleClick}
         className={cn(messageClass, 'cursor-pointer')}
       >

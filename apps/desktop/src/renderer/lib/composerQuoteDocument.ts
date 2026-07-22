@@ -34,6 +34,16 @@ export interface ComposerHistoryEntry {
   quotesEncoded?: boolean;
 }
 
+function trimRangeToText(
+  range: { start: number; end: number },
+  leadingTrim: number,
+  textLength: number,
+): { start: number; end: number } | null {
+  const start = Math.max(0, range.start - leadingTrim);
+  const end = Math.min(textLength, range.end - leadingTrim);
+  return start < end ? { start, end } : null;
+}
+
 export function composerQuoteAttrsToChatQuote(attrs: ComposerQuoteAttrs): ChatQuote {
   return {
     text: attrs.text,
@@ -256,17 +266,13 @@ export function serializeComposerContentBlocksWithRanges(
   return {
     text,
     pastedTextRanges: pastedTextRanges
-      .map((range) => ({
-        ...range,
-        start: range.start - leadingTrim,
-        end: range.end - leadingTrim,
-      }))
-      .filter((range) => range.start >= 0 && range.end <= text.length),
+      .map((range) => {
+        const trimmed = trimRangeToText(range, leadingTrim, text.length);
+        return trimmed ? { ...range, ...trimmed } : null;
+      })
+      .filter((range): range is PastedTextRange => range !== null),
     slashCommandRanges: slashCommandRanges
-      .map((range) => ({
-        start: range.start - leadingTrim,
-        end: range.end - leadingTrim,
-      }))
-      .filter((range) => range.start >= 0 && range.end <= text.length),
+      .map((range) => trimRangeToText(range, leadingTrim, text.length))
+      .filter((range): range is SlashCommandRange => range !== null),
   };
 }

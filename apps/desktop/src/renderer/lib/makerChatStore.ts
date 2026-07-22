@@ -5630,7 +5630,11 @@ async function resendBlockedMessage(
   sessionId: string,
   clientId: string,
   newText: string,
-  opts?: { quotesEncoded?: boolean },
+  opts?: {
+    quotesEncoded?: boolean;
+    pastedTextRanges?: PastedTextRange[];
+    slashCommandRanges?: SlashCommandRange[];
+  },
 ): Promise<void> {
   if (!sessionId || !clientId) throw new Error('resendBlockedMessage: missing session/client id');
   if (resendBlockedInFlight.has(clientId)) return;
@@ -5657,7 +5661,13 @@ async function resendBlockedMessage(
         row.workingDir,
         msg.retryFiles,
         msg.retryMentions,
-        opts?.quotesEncoded ? { quotesEncoded: true } : undefined,
+        opts?.quotesEncoded || opts?.pastedTextRanges?.length || opts?.slashCommandRanges !== undefined
+          ? {
+              ...(opts?.quotesEncoded ? { quotesEncoded: true } : {}),
+              ...(opts?.pastedTextRanges?.length ? { pastedTextRanges: opts.pastedTextRanges } : {}),
+              ...(opts?.slashCommandRanges !== undefined ? { slashCommandRanges: opts.slashCommandRanges } : {}),
+            }
+          : undefined,
       );
       if (!dispatched) throw new Error('resendBlockedMessage: enqueue failed');
     } catch (err) {

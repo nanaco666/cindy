@@ -160,7 +160,7 @@ describe('sidebar-embedded session navigation boundary', () => {
       container
         .querySelector('[data-session-message-link] [aria-label]')
         ?.getAttribute('aria-label'),
-    ).toBe('Target message\nfull text');
+    ).toBe('Target message full text');
     expect(container.querySelector('svg.lucide-message-square-quote')).not.toBeNull();
 
     fireEvent.click(screen.getByRole('button'));
@@ -178,6 +178,21 @@ describe('sidebar-embedded session navigation boundary', () => {
         },
       },
     });
+  });
+
+  it('caps anchored message labels before mounting them in the DOM', async () => {
+    const longMessage = `  ${'x'.repeat(320)}  `;
+    mocks.resolveSessionMessageText.mockResolvedValueOnce(longMessage);
+    const { container } = render(
+      <SessionLinkChip href="cindy://session/session-message?message=client-long" />,
+    );
+
+    await waitFor(() =>
+      expect(
+        container.querySelector('button[data-session-message-link]')?.getAttribute('aria-label'),
+      ).toBe(`${'x'.repeat(239)}…`),
+    );
+    expect(container.textContent).not.toContain('x'.repeat(320));
   });
 
   it('keeps route-owner handoff and automation actions interactive', async () => {

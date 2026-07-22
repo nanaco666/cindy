@@ -174,6 +174,24 @@ describe('commitEditAndResend', () => {
     expect(sendArgs[8]).toBeUndefined();
   });
 
+  it('原消息 chip ranges 由编辑框确认未修改后透传到重发 opts', async () => {
+    const { deps } = makeDeps();
+    const pastedTextRanges = [{ start: 0, end: 11, display: 'Pasted text (1 line)' }];
+    await commitEditAndResend(
+      {
+        sessionId: SESSION_ID,
+        clientId: CLIENT_ID,
+        text: 'pasted body',
+        fallbackWorkingDir: '/repo',
+        pastedTextRanges,
+        slashCommandRanges: [],
+      },
+      deps,
+    );
+    const sendArgs = (deps.sendMessage as unknown as Mock).mock.calls[0];
+    expect(sendArgs[8]).toEqual({ pastedTextRanges, slashCommandRanges: [] });
+  });
+
   it('session 行 workingDir 为 null 时回落到 fallbackWorkingDir', async () => {
     const { deps } = makeDeps(fakeSession({ workingDir: null }));
     await commitEditAndResend(

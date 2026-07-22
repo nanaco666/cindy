@@ -177,6 +177,38 @@ describe('db worker tx handlers', () => {
     });
   });
 
+  it('codex.importMessages does not rewrite tombstoned imported messages', async () => {
+    await withClient(async (client) => {
+      await seedSession(client, 's1');
+      await client.exec(
+        'INSERT INTO messages (id, client_id, session_id, role, content, agent_meta, created_at, rewind_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        ['deleted', 'codex-import:2', 's1', 'message_tombstone', 'null', null, 2000, 5000],
+      );
+
+      const result = await client.tx('codex.importMessages', {
+        sessionId: 's1',
+        importClientIdPrefix: 'codex-import:',
+        sdkSessionId: 'thread-1',
+        model: 'gpt-5',
+        rows: [
+          { lineNo: 2, role: 'assistant', text: 'secret body', content: 'secret body', createdAt: 2000 },
+        ],
+      });
+
+      expect(result).toEqual({ changed: 0 });
+      await expect(
+        client.queryOne('SELECT role, content, agent_meta, rewind_at FROM messages WHERE id = ?', [
+          'deleted',
+        ]),
+      ).resolves.toEqual({
+        role: 'message_tombstone',
+        content: 'null',
+        agent_meta: null,
+        rewind_at: 5000,
+      });
+    });
+  });
+
   it('claude.importMessages upserts imported message parts', async () => {
     await withClient(async (client) => {
       await seedSession(client, 's1');
@@ -203,6 +235,47 @@ describe('db worker tx handlers', () => {
         client_id: 'claude-import:7-0',
         tool_use_id: 'tool-1',
         agent_meta: JSON.stringify({ uuid: 'u1' }),
+      });
+    });
+  });
+
+  it('claude.importMessages does not rewrite rewound imported messages', async () => {
+    await withClient(async (client) => {
+      await seedSession(client, 's1');
+      await client.exec(
+        'INSERT INTO messages (id, client_id, session_id, role, content, tool_use_id, agent_meta, created_at, rewind_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        ['deleted', 'claude-import:7-0', 's1', 'message_tombstone', 'null', null, null, 3000, 5000],
+      );
+
+      const result = await client.tx('claude.importMessages', {
+        sessionId: 's1',
+        importClientIdPrefix: 'claude-import:',
+        sdkSessionId: 'sdk-1',
+        rows: [
+          {
+            lineNo: 7,
+            partIndex: 0,
+            role: 'assistant',
+            content: { text: 'secret body' },
+            toolUseId: 'tool-1',
+            agentMeta: { uuid: 'u1' },
+            createdAt: 3000,
+          },
+        ],
+      });
+
+      expect(result).toEqual({ changed: 0 });
+      await expect(
+        client.queryOne(
+          'SELECT role, content, tool_use_id, agent_meta, rewind_at FROM messages WHERE id = ?',
+          ['deleted'],
+        ),
+      ).resolves.toEqual({
+        role: 'message_tombstone',
+        content: 'null',
+        tool_use_id: null,
+        agent_meta: null,
+        rewind_at: 5000,
       });
     });
   });

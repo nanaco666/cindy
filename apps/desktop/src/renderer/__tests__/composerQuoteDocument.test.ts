@@ -224,6 +224,22 @@ describe('composerQuoteDocument', () => {
     expect(serialized.text.slice(0, 16)).toBe('long pasted text');
   });
 
+  it('clips long-paste ranges that include trimmed whitespace', () => {
+    const serialized = serializeComposerContentBlocksWithRanges([
+      {
+        kind: 'text',
+        text: '  long pasted text  ',
+        pastedTextRanges: [{ start: 0, end: 20, display: 'Pasted text (1 line)' }],
+      },
+    ]);
+
+    expect(serialized).toEqual({
+      text: 'long pasted text',
+      pastedTextRanges: [{ start: 0, end: 16, display: 'Pasted text (1 line)' }],
+      slashCommandRanges: [],
+    });
+  });
+
   it('projects decorated slash ranges through trimming and quote separators', () => {
     const quote = formatQuoteForSend({ text: 'quoted' });
     const serialized = serializeComposerContentBlocksWithRanges([

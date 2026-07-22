@@ -730,10 +730,14 @@ function codexImportMessages(readyDb, args) {
       agent_meta = excluded.agent_meta,
       created_at = excluded.created_at
     WHERE
-      messages.role IS NOT excluded.role OR
-      messages.content IS NOT excluded.content OR
-      messages.agent_meta IS NOT excluded.agent_meta OR
-      messages.created_at IS NOT excluded.created_at
+      messages.role != 'message_tombstone' AND
+      messages.rewind_at IS NULL AND
+      (
+        messages.role IS NOT excluded.role OR
+        messages.content IS NOT excluded.content OR
+        messages.agent_meta IS NOT excluded.agent_meta OR
+        messages.created_at IS NOT excluded.created_at
+      )
   \`);
   const changed = readyDb.transaction(() => {
     let count = 0;
@@ -778,11 +782,15 @@ function claudeImportMessages(readyDb, args) {
       agent_meta = excluded.agent_meta,
       created_at = excluded.created_at
     WHERE
-      messages.role IS NOT excluded.role OR
-      messages.content IS NOT excluded.content OR
-      messages.tool_use_id IS NOT excluded.tool_use_id OR
-      messages.agent_meta IS NOT excluded.agent_meta OR
-      messages.created_at IS NOT excluded.created_at
+      messages.role != 'message_tombstone' AND
+      messages.rewind_at IS NULL AND
+      (
+        messages.role IS NOT excluded.role OR
+        messages.content IS NOT excluded.content OR
+        messages.tool_use_id IS NOT excluded.tool_use_id OR
+        messages.agent_meta IS NOT excluded.agent_meta OR
+        messages.created_at IS NOT excluded.created_at
+      )
   \`);
   const changed = readyDb.transaction(() => {
     let count = 0;

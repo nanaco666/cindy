@@ -1184,6 +1184,8 @@ export function UserMessage({
                 files={files}
                 workingDir={workingDir}
                 quotesEncoded={quotesEncoded}
+                pastedTextRanges={pastedTextRanges}
+                slashCommandRanges={slashCommandRanges}
                 sessionRunning={sessionRunning}
                 onRequestStop={stopForEdit}
                 onCancel={exitEditing}
@@ -1195,7 +1197,15 @@ export function UserMessage({
                           sessionId,
                           messageClientId,
                           submission.text,
-                          submission.quotesEncoded ? { quotesEncoded: true } : undefined,
+                          {
+                            ...(submission.quotesEncoded ? { quotesEncoded: true } : {}),
+                            ...(submission.pastedTextRanges?.length
+                              ? { pastedTextRanges: submission.pastedTextRanges }
+                              : {}),
+                            ...(submission.slashCommandRanges !== undefined
+                              ? { slashCommandRanges: submission.slashCommandRanges }
+                              : {}),
+                          },
                         ),
                     }
                   : {})}
