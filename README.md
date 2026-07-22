@@ -93,12 +93,19 @@ git submodule update --remote --merge --recursive
 ### 桌面端
 
 ```bash
-# 连接远程 API（默认）
-pnpm restart:desktop:remote
+# 中国版 Cindy 账号
+pnpm restart:desktop:remote --region=cn
+
+# 海外版 Cindy 账号
+pnpm restart:desktop:remote --region=global
 ```
 
-`restart:desktop:remote` 支持 `--region=cn`（默认）/ `--region=global`，以及独立
-沙箱、被动多开等模式。完整启动参数与桌面端 dev / 运行时契约见
+Remote 开发会使用你自己的 Cindy 云端账号和现有登录态，因此可以继续已有的会话与工作。
+这是一种“左脚踩右脚”的 dogfooding 模式：一边开发 Cindy 客户端，一边用正在使用的 Cindy
+验证它自己。请务必根据账号所在区域显式选择参数：中国版使用 `cn`，海外版使用 `global`，
+不要依赖内部默认值。需要隔离日常数据时，可再加 `--isolated=<name>`。
+
+`restart:desktop:remote` 还支持被动多开等模式。完整启动参数与桌面端 dev / 运行时契约见
 [`AGENTS.md`](AGENTS.md)。
 
 登录页的「本地模式」不是连接本地服务端，而是无需登录 Cindy 账号即可使用本机

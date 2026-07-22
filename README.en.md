@@ -101,12 +101,21 @@ lockstep to avoid wire-protocol drift.
 ### Desktop
 
 ```bash
-# Connect to the remote API (default)
-pnpm restart:desktop:remote
+# China-region Cindy account
+pnpm restart:desktop:remote --region=cn
+
+# Global-region Cindy account
+pnpm restart:desktop:remote --region=global
 ```
 
-`restart:desktop:remote` accepts `--region=cn` (default) / `--region=global`, and
-supports isolated sandboxes and passive multi-instance modes. See
+Remote development uses your own Cindy cloud account and existing login state, so
+you can continue existing sessions and work while developing the client. It is a
+“left foot stepping on right foot” dogfooding loop: use Cindy to develop Cindy.
+Always pass the region explicitly: use `cn` for China accounts and `global` for
+overseas accounts. Do not rely on the internal default. Add `--isolated=<name>`
+when you need to keep development data separate from your everyday data.
+
+`restart:desktop:remote` also supports passive multi-instance modes. See
 [`AGENTS.md`](AGENTS.md) for the full launch-flag reference and the desktop
 dev/runtime contract.
 
