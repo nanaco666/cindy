@@ -27,12 +27,22 @@ function run(status: ScheduleRun['status']): ScheduleRun {
   };
 }
 
-function createNotifier(): DesktopNotifier {
-  return new DesktopNotifier({
+function createNotifier(opts?: { sendMarkdownText?: ReturnType<typeof vi.fn> }): {
+  notifier: DesktopNotifier;
+  sendMarkdownText: ReturnType<typeof vi.fn>;
+  warn: ReturnType<typeof vi.fn>;
+} {
+  const sendMarkdownText = opts?.sendMarkdownText ?? vi.fn(async () => ({ messageId: 'msg-1' }));
+  const warn = vi.fn();
+  const notifier = new DesktopNotifier({
     getMainWindow: () => null as BrowserWindow | null,
-    feishuIm: {} as FeishuIM,
-    logger: { warn: vi.fn() },
+    feishuIm: {
+      getOwnerOpenId: vi.fn(() => 'ou_owner'),
+      sendMarkdownText,
+    } as unknown as FeishuIM,
+    logger: { warn },
   });
+  return { notifier, sendMarkdownText, warn };
 }
 
 describe('DesktopNotifier desktop status mapping', () => {
@@ -41,7 +51,7 @@ describe('DesktopNotifier desktop status mapping', () => {
   });
 
   it('maps a successful run to done', async () => {
-    const notifier = createNotifier();
+    const { notifier } = createNotifier();
 
     await notifier.notify(schedule, run('success'));
 
@@ -55,7 +65,7 @@ describe('DesktopNotifier desktop status mapping', () => {
   it.each(['failed', 'aborted', 'interrupted'] as const)(
     'maps an incomplete %s run to error',
     async (status) => {
-      const notifier = createNotifier();
+      const { notifier } = createNotifier();
 
       await notifier.notify(schedule, run(status));
 
@@ -66,4 +76,37 @@ describe('DesktopNotifier desktop status mapping', () => {
       });
     },
   );
+
+  it('renders and sends a successful Feishu notification', async () => {
+    const { notifier, sendMarkdownText } = createNotifier();
+    const feishuSchedule = {
+      ...schedule,
+      notify: { desktop: false, feishu: true },
+    } as Schedule;
+
+    await notifier.notify(feishuSchedule, run('success'));
+
+    expect(sendMarkdownText).toHaveBeenCalledWith(
+      'ou_owner',
+      expect.stringContaining('✅ **每日检查**'),
+    );
+  });
+
+  it('swallows a Feishu send failure after logging it', async () => {
+    const sendError = new Error('Feishu unavailable');
+    const sendMarkdownText = vi.fn(async () => Promise.reject(sendError));
+    const { notifier, warn } = createNotifier({ sendMarkdownText });
+    const feishuSchedule = {
+      ...schedule,
+      notify: { desktop: false, feishu: true },
+    } as Schedule;
+
+    await expect(notifier.notify(feishuSchedule, run('failed'))).resolves.toBeUndefined();
+
+    expect(sendMarkdownText).toHaveBeenCalledWith(
+      'ou_owner',
+      expect.stringContaining('❌ **每日检查**'),
+    );
+    expect(warn).toHaveBeenCalledWith('feishu notify failed', sendError);
+  });
 });
