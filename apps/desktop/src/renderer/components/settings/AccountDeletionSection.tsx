@@ -125,10 +125,9 @@ export function AccountDeletionSection() {
         }}
         aria-label={t('accountDeletion.entryAria')}
         className={cn(
-          'flex h-[42px] w-full items-center justify-center rounded-full border',
-          'border-[hsl(var(--destructive))] bg-transparent',
-          'text-13 font-medium text-[hsl(var(--destructive))]',
-          'transition-colors hover:bg-[var(--error-bg)]',
+          'flex h-8 self-center items-center justify-center rounded-full px-3',
+          'text-12 font-normal text-[var(--text-tertiary)]',
+          'transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--text-secondary)]',
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring-soft)]',
         )}
       >

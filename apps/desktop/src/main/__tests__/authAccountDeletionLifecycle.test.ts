@@ -46,7 +46,19 @@ describe('desktop auth account-deletion lifecycle', () => {
     expect(source.slice(logoutStart, logoutEnd)).toContain('clearAccountDeletionReceipt();');
   });
 
-  it('clears stale receipts on login and emits the restoration notice before broadcasting', () => {
+  it('clears stale receipts as soon as a login selects an account', () => {
+    const start = source.indexOf('async function acceptLoginOutcome');
+    const end = source.indexOf('\n}\n\nasync function runLoginAction', start);
+    const body = source.slice(start, end);
+
+    expect(body).toContain("if (outcome.status === 'ok' || outcome.status === 'select_account')");
+    expect(body).toContain('removeSafe(ACCOUNT_DELETION_RECEIPT_KEY);');
+    expect(body.indexOf('removeSafe(ACCOUNT_DELETION_RECEIPT_KEY);')).toBeLessThan(
+      body.indexOf("if (outcome.status === 'select_account')"),
+    );
+  });
+
+  it('emits the restoration notice only after the final login commits', () => {
     const start = source.indexOf('async function completeLogin(');
     const end = source.indexOf('\n}\n\nasync function acceptLoginOutcome', start);
     const body = source.slice(start, end);
@@ -55,6 +67,29 @@ describe('desktop auth account-deletion lifecycle', () => {
     expect(body).toContain('accountDeletionRestoredNoticePending = deletionWasRestored;');
     expect(body.indexOf('accountDeletionRestoredNoticePending =')).toBeLessThan(
       body.indexOf('notifyRenderer();'),
+    );
+  });
+
+  it('single-flights terminal rejection through full account teardown', () => {
+    const start = source.indexOf('export function invalidateSession(');
+    const end = source.indexOf('\n}\n\n// ── Public API', start);
+    const body = source.slice(start, end);
+
+    expect(body).toContain('if (sessionInvalidationPromise) return sessionInvalidationPromise;');
+    expect(body).toContain('await authSessionTeardown(reason);');
+    expect(body).toContain('closeLocalDb();');
+    expect(body).toContain('clearAuth();');
+  });
+
+  it('routes direct protected auth-client calls through terminal invalidation', () => {
+    const helperStart = source.indexOf('async function runProtectedAuthRequest');
+    const helperEnd = source.indexOf('\n}\n\n/** Server-controlled visibility', helperStart);
+    const helperBody = source.slice(helperStart, helperEnd);
+
+    expect(helperBody).toContain("error.code === 'ACCOUNT_UNAVAILABLE'");
+    expect(helperBody).toContain("void invalidateSession('account-unavailable')");
+    expect(source).toContain(
+      'return runProtectedAuthRequest(() =>\n    createAuthClient().getAccountDeletionAvailability(token)',
     );
   });
 });

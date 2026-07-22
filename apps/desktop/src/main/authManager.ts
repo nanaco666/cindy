@@ -161,7 +161,11 @@ type AccountSwitchTeardown = (context: {
   nextUserId: string;
 }) => void | Promise<void>;
 
+/** Releases every account-scoped runtime before terminal local sign-out. */
+type AuthSessionTeardown = (reason: string) => void | Promise<void>;
+
 let accountSwitchTeardown: AccountSwitchTeardown | null = null;
+let authSessionTeardown: AuthSessionTeardown | null = null;
 
 // ── Module-level state ──────────────────────────────────────────────────────
 
@@ -169,6 +173,7 @@ let accessToken: string | null = null;
 let currentUser: CurrentUser | null = null;
 let refreshTimer: ReturnType<typeof setTimeout> | null = null;
 let refreshPromise: Promise<boolean> | null = null;
+let sessionInvalidationPromise: Promise<void> | null = null;
 /**
  * 设备标识。默认绑定物理机(machineIdSync)。
  *
@@ -297,6 +302,12 @@ async function apiFetch<T>(
       signal: effectiveTimeout > 0 ? controller.signal : undefined,
     });
     const data = (await response.json()) as T;
+    const errorCode = (data as AuthErrorResponse | null)?.error?.code;
+    if (response.status === 401 && errorCode === 'ACCOUNT_UNAVAILABLE' && currentUser) {
+      // Internal auth-server calls (profile/feature flags/refresh) do not pass
+      // through serverApiClient, but share the same terminal auth contract.
+      void invalidateSession('account-unavailable');
+    }
     return { ok: response.ok, status: response.status, data };
   } catch {
     return { ok: false, status: 0, data: null as T };
@@ -358,6 +369,10 @@ function mergeMembershipWithExisting(
 
 export function setAccountSwitchTeardown(teardown: AccountSwitchTeardown | null): void {
   accountSwitchTeardown = teardown;
+}
+
+export function setAuthSessionTeardown(teardown: AuthSessionTeardown | null): void {
+  authSessionTeardown = teardown;
 }
 
 // ── User-level API key sync ─────────────────────────────────────────────────
@@ -723,10 +738,6 @@ function notifyRendererAuthBoundaryPending(): void {
   broadcastToRenderers('auth:state-change', snapshotLoggedOutAuthState());
 }
 
-function notifySessionExpired(message: string): void {
-  broadcastToRenderers('auth:session-expired', { message });
-}
-
 // ── In-process auth state subscription ─────────────────────────────────────
 //
 // In addition to renderer broadcast (auth:state-change), main-process modules
@@ -846,6 +857,47 @@ function clearAuth(opts: { notify?: boolean } = {}): void {
   }
 }
 
+/**
+ * Terminal auth rejection (deleted/disabled account or definitively invalid
+ * credentials) must cross the same full account boundary as an explicit
+ * logout. The single-flight guard prevents parallel API/refresh failures from
+ * racing teardown and local credential deletion.
+ */
+export function invalidateSession(reason: string): Promise<void> {
+  if (sessionInvalidationPromise) return sessionInvalidationPromise;
+
+  // Schedule teardown one microtask later so the single-flight promise can be
+  // published and credentials can be cleared synchronously first. API calls
+  // that detect the rejection may themselves run inside a scheduler/service
+  // being torn down; they must be able to unwind without a stop-await cycle.
+  const run = Promise.resolve().then(async () => {
+    try {
+      if (authSessionTeardown) {
+        await authSessionTeardown(reason);
+      } else {
+        log.warn(
+          `auth session teardown hook is not registered for ${reason}; falling back to localDb close`,
+        );
+      }
+    } catch (error) {
+      log.error(`auth session teardown on ${reason} failed (non-fatal)`, error);
+    }
+    try {
+      closeLocalDb();
+    } catch (error) {
+      log.error(`closeLocalDb on ${reason} failed (non-fatal)`, error);
+    }
+  });
+  sessionInvalidationPromise = run;
+  clearAuth();
+
+  const clearIfCurrent = (): void => {
+    if (sessionInvalidationPromise === run) sessionInvalidationPromise = null;
+  };
+  void run.then(clearIfCurrent, clearIfCurrent);
+  return run;
+}
+
 // ── Public API ──────────────────────────────────────────────────────────────
 
 export function getAccessToken(): string | null {
@@ -902,9 +954,28 @@ function commitAccountDeletionConfirmation(
   return status;
 }
 
+/** Run an authenticated auth-client request through the terminal auth boundary. */
+async function runProtectedAuthRequest<T>(request: () => Promise<T>): Promise<T> {
+  try {
+    return await request();
+  } catch (error) {
+    if (
+      error instanceof AuthApiError &&
+      error.statusCode === 401 &&
+      error.code === 'ACCOUNT_UNAVAILABLE'
+    ) {
+      void invalidateSession('account-unavailable');
+    }
+    throw error;
+  }
+}
+
 /** Server-controlled visibility and verification channel for personal-account deletion. */
 export function getAccountDeletionAvailability(): Promise<AccountDeletionAvailability> {
-  return createAuthClient().getAccountDeletionAvailability(requireAccountDeletionAccessToken());
+  const token = requireAccountDeletionAccessToken();
+  return runProtectedAuthRequest(() =>
+    createAuthClient().getAccountDeletionAvailability(token),
+  );
 }
 
 /**
@@ -914,8 +985,9 @@ export function getAccountDeletionAvailability(): Promise<AccountDeletionAvailab
  */
 export async function requestAccountDeletionChallenge(): Promise<DesktopAccountDeletionChallenge> {
   confirmedAccountDeletionAuthIdentity = null;
-  const challenge = await createAuthClient().requestAccountDeletionChallenge(
-    requireAccountDeletionAccessToken(),
+  const token = requireAccountDeletionAccessToken();
+  const challenge = await runProtectedAuthRequest(() =>
+    createAuthClient().requestAccountDeletionChallenge(token),
   );
   if (!writeSafe(ACCOUNT_DELETION_RECEIPT_KEY, challenge.receiptToken)) {
     throw new AuthApiError(
@@ -957,11 +1029,13 @@ export async function confirmAccountDeletion(input: {
   const client = createAuthClient();
   let status: AccountDeletionStatus;
   try {
-    status = await client.confirmAccountDeletion(token, {
-      ...input,
-      receiptToken,
-      acknowledged: true,
-    });
+    status = await runProtectedAuthRequest(() =>
+      client.confirmAccountDeletion(token, {
+        ...input,
+        receiptToken,
+        acknowledged: true,
+      }),
+    );
   } catch (error) {
     const ambiguous =
       error instanceof AuthApiError &&
@@ -1060,6 +1134,9 @@ export async function updateServerProfile(
   });
   if (!result.ok) {
     const code = result.data?.error?.code;
+    if (result.status === 401 && code === 'ACCOUNT_UNAVAILABLE') {
+      void invalidateSession('account-unavailable');
+    }
     return { ok: false, status: result.status, ...(code !== undefined ? { code } : {}) };
   }
   const membership = result.data?.membership;
@@ -1342,6 +1419,11 @@ async function completeLogin(
 }
 
 async function acceptLoginOutcome(outcome: LoginOutcome): Promise<AuthFlowState> {
+  if (outcome.status === 'ok' || outcome.status === 'select_account') {
+    // Membership selection already establishes which passport owns the new
+    // login. A receipt from the previous login must not survive this boundary.
+    removeSafe(ACCOUNT_DELETION_RECEIPT_KEY);
+  }
   if (
     (outcome.status === 'ok' || outcome.status === 'select_account') &&
     outcome.accountDeletionRestored === true
@@ -1589,6 +1671,11 @@ async function runLoginAction(action: DesktopLoginAction): Promise<DesktopLoginA
 }
 
 export async function dispatchLoginAction(action: unknown): Promise<DesktopLoginActionResult> {
+  // Terminal logout clears credentials synchronously, then tears down the old
+  // account boundary in the background so the rejecting request can unwind.
+  // Do not let a fast re-login open a new account DB that the old teardown
+  // would subsequently close.
+  if (sessionInvalidationPromise) await sessionInvalidationPromise;
   const parsedAction = parseDesktopLoginAction(action);
   if (!parsedAction) {
     return { success: false, code: 'INVALID_AUTH_ACTION', state: loginFlowState };
@@ -1652,13 +1739,10 @@ export async function refresh(): Promise<boolean> {
         const action: RefreshFailureAction = failureAction ?? { kind: 'transient-failure' };
         const code = getRefreshErrorCode(result);
         if (action.kind === 'definitive-failure') {
-          const error = result.data as AuthErrorResponse | null;
           log.warn(
-            `runtime refresh: definitive credential failure code=${code} — clearing auth, notifying session expired`,
+            `runtime refresh: definitive credential failure code=${code} — invalidating local session`,
           );
-          const message = error?.error?.message ?? '登录已过期，请重新登录';
-          clearAuth({ notify: false });
-          notifySessionExpired(message);
+          void invalidateSession('refresh-definitive-failure');
         } else if (action.kind === 'replacement-retry') {
           log.warn(
             `runtime refresh failed for a stale token after replacement retries status=${result.status} code=${code ?? '<none>'} — retrying in ${RUNTIME_REFRESH_RETRY_MS / 1000}s`,

@@ -788,6 +788,7 @@ async function teardownAuthAccountBoundary(reason: string): Promise<void> {
 authManager.setAccountSwitchTeardown(async () => {
   await teardownAuthAccountBoundary('runtime-replacement-account-switch');
 });
+authManager.setAuthSessionTeardown(teardownAuthAccountBoundary);
 
 try {
   reapClaudeOrphansSync();
@@ -3147,15 +3148,20 @@ ipcMain.on('theme:apply-vibrancy', (_event, payload: { familyId: string; isDark:
       return result.canceled || !result.filePaths[0] ? null : result.filePaths[0];
     },
     readFile: (filePath) => fs.promises.readFile(filePath),
-    uploadAvatar: ({ buffer, mimeType }) =>
-      uploadPublicAsset(
+    uploadAvatar: async ({ buffer, mimeType }) => {
+      const result = await uploadPublicAsset(
         {
           fetchImpl: (input, init) => net.fetch(input, init),
           getBaseUrl: () => getClientEndpoint('ossApiBaseUrl'),
           getToken: () => authManager.getAccessToken(),
         },
         { scene: 'avatar', contentType: mimeType, body: buffer },
-      ),
+      );
+      if (!result.ok && result.status === 401 && result.code === 'ACCOUNT_UNAVAILABLE') {
+        void authManager.invalidateSession('account-unavailable');
+      }
+      return result;
+    },
     patchProfile: (patch) => authManager.updateServerProfile(patch),
     logWarn: (message, err) => profileEditLog.warn(message, err),
   };

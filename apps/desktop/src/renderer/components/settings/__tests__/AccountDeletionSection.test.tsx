@@ -83,7 +83,7 @@ describe('AccountDeletionSection', () => {
     vi.clearAllMocks();
   });
 
-  it('keeps the destructive entry hidden for an ineligible account', async () => {
+  it('keeps the secondary entry hidden for an ineligible account', async () => {
     auth.value.getAccountDeletionAvailability.mockResolvedValue({
       success: true,
       value: {
@@ -120,6 +120,8 @@ describe('AccountDeletionSection', () => {
   it('requires OTP plus explicit acknowledgement before confirming deletion', async () => {
     render(<AccountDeletionSection />);
     const entry = await screen.findByRole('button', { name: 'accountDeletion.entryAria' });
+    expect(entry.className).toContain('text-[var(--text-tertiary)]');
+    expect(entry.className).not.toContain('var(--destructive)');
     fireEvent.click(entry);
 
     fireEvent.click(screen.getByRole('button', { name: 'accountDeletion.sendCodeButton' }));

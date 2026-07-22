@@ -14,8 +14,10 @@ describe('mobile account deletion', () => {
       settings.indexOf('const copyRow'),
     );
 
-    expect(settings).toContain("testID: 'settings.deleteAccountButton'");
-    expect(settings).toContain('...(accountDeletionAvailable');
+    expect(settings).toContain('testID="settings.deleteAccountButton"');
+    expect(settings).toContain('{accountDeletionAvailable ? (');
+    expect(settings).toContain('style={styles.accountDeletionLinkText}');
+    expect(settings).not.toContain("testID: 'settings.deleteAccountButton',\n                      tone: 'danger'");
     expect(visibilityBlock).toContain('availability.available');
     expect(visibilityBlock).not.toContain('membershipKind');
   });
@@ -47,7 +49,16 @@ describe('mobile account deletion', () => {
     );
     expect(
       acceptBody.indexOf('await persistAccountDeletionReceipt(null);'),
-    ).toBeLessThan(acceptBody.indexOf('if (outcome.accountDeletionRestored)'));
+    ).toBeLessThan(
+      acceptBody.indexOf("if (outcome.status === 'select_account')"),
+    );
+    expect(acceptBody).toContain('pendingAccountDeletionRestoredRef.current =');
+    expect(acceptBody).toContain(
+      "outcome.accountDeletionRestored === true ||\n        pendingAccountDeletionRestoredRef.current",
+    );
+    expect(acceptBody.indexOf('setToken(outcome.accessToken)')).toBeLessThan(
+      acceptBody.indexOf('setAccountDeletionRestored(deletionWasRestored)'),
+    );
     expect(requestBody.indexOf('persistAccountDeletionReceipt')).toBeLessThan(
       requestBody.indexOf('return challenge'),
     );
@@ -85,8 +96,41 @@ describe('mobile account deletion', () => {
       'disabled: busy || code.length !== 6 || !acknowledged',
     );
     expect(deletion).toContain("testID: 'accountDeletion.confirmButton'");
-    expect(deletion).toContain('30 天内重新登录可撤销');
+    expect(deletion).toContain("loginText('accountDeletionAcknowledgeCopy')");
+    expect(deletion).not.toMatch(/[\u4e00-\u9fff]/);
     expect(confirmBody).not.toContain("router.replace('/login')");
+  });
+
+  it('localizes the deletion entry, screen, and restored notice in both languages', () => {
+    const settings = source('app/settings.tsx');
+    const layout = source('app/_layout.tsx');
+    const loginMessages = source('src/auth/loginMessages.ts');
+
+    expect(settings).toContain("loginText('accountDeletionSettingsAction')");
+    expect(layout).toContain("loginText('accountDeletionRestoredTitle')");
+    expect(layout).toContain("loginText('accountDeletionRestoredCopy')");
+    expect(
+      loginMessages.match(/accountDeletionAcknowledgeCopy:/g),
+    ).toHaveLength(2);
+    expect(loginMessages).toContain('其他客户端会在登录状态失效后退出');
+    expect(loginMessages).toContain(
+      'other clients will sign out when their sign-in session becomes invalid',
+    );
+    expect(loginMessages).not.toContain('通常不超过 1 分钟');
+    expect(loginMessages).not.toContain('normally within one minute');
+  });
+
+  it('handles terminal REST auth failures without logout loops', () => {
+    const context = source('src/auth/AuthContext.tsx');
+
+    expect(context).toContain('terminalLogoutInFlightRef');
+    expect(context).toContain("error.code === 'ACCOUNT_UNAVAILABLE'");
+    expect(context).toContain("code === 'INVALID_TOKEN'");
+    expect(context).toContain("code === 'UNAUTHORIZED'");
+    expect(context).toContain('const runProtectedAuthRequest = useCallback');
+    expect(context).toContain(
+      "await terminateSessionImplRef.current('ACCOUNT_UNAVAILABLE')",
+    );
   });
 
   it('shows persisted status and forwards Apple authorization codes when available', () => {

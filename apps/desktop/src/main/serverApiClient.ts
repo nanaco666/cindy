@@ -2,7 +2,8 @@
  * main 进程统一的服务端 API 客户端。
  *
  * - 复用 `authManager.getAccessToken()` 自动注入 Bearer Authorization
- * - 401 + `TOKEN_EXPIRED` 自动 refresh 一次再重试
+ * - 可恢复的 401 自动 refresh 一次再重试
+ * - `ACCOUNT_UNAVAILABLE` 或刷新后仍被 401 拒绝时执行完整本地退登
  * - `baseUrl` **必传**:老主 server(apiBaseUrl)2026-07-18 退役后没有"默认
  *   业务 server"了,每个调用方显式指向自己的独立服务(device-link relay /
  *   model-access / oauth-broker / github-server / skillhub-server ...)。
@@ -91,21 +92,25 @@ async function rawFetch<T>(apiPath: string, opts: ApiFetchOptions): Promise<RawR
 
 /**
  * 高层 API：成功 → 返回 data；失败 → throw ServerApiError。
- * 401 TOKEN_EXPIRED 自动 refresh 一次再重试（除非 `skipAutoRefresh`）。
+ * 可恢复的 401 自动 refresh 一次再重试（除非 `skipAutoRefresh`）。
  */
 export async function serverApiFetch<T>(
   apiPath: string,
   opts: ApiFetchOptions,
 ): Promise<T> {
   let result = await rawFetch<T>(apiPath, opts);
+  let refreshedAndRetried = false;
+  const firstCode = readErrorCode(result.data) ?? statusToCode(result.status);
 
   if (
     result.status === 401 &&
     !opts.skipAutoRefresh &&
-    isTokenExpired(result.data)
+    firstCode !== 'ACCOUNT_UNAVAILABLE' &&
+    isRefreshableUnauthorizedCode(firstCode)
   ) {
     const refreshed = await authManager.refresh();
     if (refreshed) {
+      refreshedAndRetried = true;
       result = await rawFetch<T>(apiPath, opts);
     }
   }
@@ -113,6 +118,17 @@ export async function serverApiFetch<T>(
   if (!result.ok) {
     const errCode = readErrorCode(result.data) ?? statusToCode(result.status);
     const errMsg = readErrorMessage(result.data) ?? `请求失败 (${result.status})`;
+    if (
+      result.status === 401 &&
+      (errCode === 'ACCOUNT_UNAVAILABLE' ||
+        (refreshedAndRetried && isRefreshableUnauthorizedCode(errCode)))
+    ) {
+      void authManager.invalidateSession(
+        errCode === 'ACCOUNT_UNAVAILABLE'
+          ? 'account-unavailable'
+          : 'resource-unauthorized-after-refresh',
+      );
+    }
     // 网络异常 rawFetch 已 log;这里补 not-ok 响应(401/5xx 等)的日志,
     // 否则上层 catch 一吞,排查调用链时完全看不到原因。
     log.warn(
@@ -131,8 +147,8 @@ export async function serverApiFetch<T>(
   return result.data;
 }
 
-function isTokenExpired(data: unknown): boolean {
-  return readErrorCode(data) === 'TOKEN_EXPIRED';
+function isRefreshableUnauthorizedCode(code: string): boolean {
+  return code === 'TOKEN_EXPIRED' || code === 'INVALID_TOKEN' || code === 'UNAUTHORIZED';
 }
 
 function readErrorCode(data: unknown): string | null {

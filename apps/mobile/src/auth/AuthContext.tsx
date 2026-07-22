@@ -25,7 +25,12 @@ import {
   type VerificationKind,
 } from '@cindy/auth-client';
 
-import { apiFetchRaw, ApiError, type ApiFetchOptions } from '@/api/client';
+import {
+  apiFetchRaw,
+  ApiError,
+  registerAccountUnavailableHandler,
+  type ApiFetchOptions,
+} from '@/api/client';
 import {
   AUTH_API_BASE_URL,
   AUTH_REGION,
@@ -136,6 +141,8 @@ export interface AuthContextValue {
   dispatchLoginAction(action: MobileLoginAction): Promise<boolean>;
   completeOAuthCallback(callbackUrl: string): Promise<void>;
   logout(): Promise<void>;
+  /** 认证服务已明确拒绝当前会话时，单飞执行完整本地退登。 */
+  terminateSession(reason?: 'ACCOUNT_UNAVAILABLE'): Promise<void>;
   getAccountDeletionAvailability(): Promise<AccountDeletionAvailability>;
   requestAccountDeletionChallenge(): Promise<AccountDeletionChallenge>;
   confirmAccountDeletion(input: {
@@ -170,6 +177,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       dispatchLoginAction: async () => true,
       completeOAuthCallback: async () => undefined,
       logout: async () => undefined,
+      terminateSession: async () => undefined,
       getAccountDeletionAvailability: async () => ({
         available: true,
         verification: {
@@ -223,10 +231,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const pendingLoginTicketRef = useRef<string | null>(null);
   const pendingBindTicketRef = useRef<string | null>(null);
   const pendingSsoVerificationTicketRef = useRef<string | null>(null);
+  const pendingAccountDeletionRestoredRef = useRef(false);
   const loginActionInFlightRef = useRef<Promise<boolean> | null>(null);
   const browserCompletionRef = useRef<Promise<void> | null>(null);
   // auth-server rotates refresh tokens, so every caller must share one request.
   const refreshInFlightRef = useRef<Promise<string | null> | null>(null);
+  const terminalLogoutInFlightRef = useRef<Promise<void> | null>(null);
+  // refresh 定义早于完整清理函数；运行时通过 ref 调用本次 render 的最新实现。
+  const terminateSessionImplRef = useRef<
+    (reason?: 'ACCOUNT_UNAVAILABLE') => Promise<void>
+  >(async () => undefined);
   // Logout bumps this generation so a late refresh cannot resurrect the session.
   const authGenerationRef = useRef(0);
   // SecureStore operations are asynchronous. Serialize mutations so logout always
@@ -346,7 +360,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .getMe(token)
         .then(
           (value) => ({ status: 'fulfilled' as const, value }),
-          () => ({ status: 'rejected' as const }),
+          (error: unknown) => ({ status: 'rejected' as const, error }),
         );
       if (authGenerationRef.current !== expectedGeneration) return;
 
@@ -357,6 +371,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           identityResult.value.passportId,
         );
         applyUser(next);
+      } else if (isAccountUnavailableAuthError(identityResult.error)) {
+        await terminateSessionImplRef.current('ACCOUNT_UNAVAILABLE');
       }
     },
     [applyUser],
@@ -369,9 +385,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // 成功登录后，当前会话已明确属于本次登录的 passport。无论是否恢复了
         // 注销中的账号，都不能继续保留此前其他账号留下的查询 receipt。
         await persistAccountDeletionReceipt(null);
-        if (outcome.accountDeletionRestored) {
-          setAccountDeletionRestored(true);
-        }
       }
 
       pendingAccountTokenRef.current =
@@ -380,6 +393,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           : null;
 
       if (outcome.status === 'select_account') {
+        pendingAccountDeletionRestoredRef.current =
+          pendingAccountDeletionRestoredRef.current ||
+          outcome.accountDeletionRestored === true;
         pendingLoginTicketRef.current = outcome.loginTicket;
         pendingBindTicketRef.current = null;
         pendingSsoVerificationTicketRef.current = null;
@@ -389,6 +405,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
       if (outcome.status === 'binding_required') {
+        pendingAccountDeletionRestoredRef.current = false;
         pendingBindTicketRef.current = outcome.bindTicket;
         pendingLoginTicketRef.current = null;
         pendingSsoVerificationTicketRef.current = null;
@@ -398,6 +415,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
       if (outcome.status === 'sso_verification_required') {
+        pendingAccountDeletionRestoredRef.current = false;
         pendingSsoVerificationTicketRef.current = outcome.verificationTicket;
         pendingLoginTicketRef.current = null;
         pendingBindTicketRef.current = null;
@@ -407,6 +425,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
+      const deletionWasRestored =
+        outcome.accountDeletionRestored === true ||
+        pendingAccountDeletionRestoredRef.current;
+      pendingAccountDeletionRestoredRef.current = false;
       const generation = ++authGenerationRef.current;
       refreshInFlightRef.current = null;
       const persisted = await serializeRefreshTokenMutation(async () => {
@@ -429,6 +451,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       updateLoginState(
         reduceAuthFlow(loginStateRef.current, { type: 'outcome', outcome }),
       );
+      // 只有 resource token、用户资料与 refresh token 全部落地后才发布恢复提示。
+      setAccountDeletionRestored(deletionWasRestored);
       // Identity is already durable. Product preferences/profile hydration is best effort
       // and must not turn a successful login into an error on a transient downstream outage.
       void loadMe(outcome.accessToken, did, generation).catch(() => undefined);
@@ -484,18 +508,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } catch (error) {
           if (authGenerationRef.current !== generation) return null;
           if (isRejectedRefresh(error)) {
-            const cleared = await serializeRefreshTokenMutation(async () => {
-              if (authGenerationRef.current !== generation) return false;
-              await deleteSecureItem(REFRESH_TOKEN_KEY).catch(() => undefined);
-              return authGenerationRef.current === generation;
-            });
-            if (!cleared) return null;
-            setToken(null);
-            applyUser(null);
-            await clearCanaryChannel().catch(() => undefined);
-            updateLoginState(null);
-            pendingLoginTicketRef.current = null;
-            pendingBindTicketRef.current = null;
+            await terminateSessionImplRef.current();
             return null;
           }
           throw error;
@@ -511,7 +524,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       scheduleCanaryChannelSync,
       serializeRefreshTokenMutation,
       setToken,
-      updateLoginState,
     ],
   );
 
@@ -711,6 +723,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             pendingLoginTicketRef.current = null;
             pendingBindTicketRef.current = null;
             pendingSsoVerificationTicketRef.current = null;
+            pendingAccountDeletionRestoredRef.current = false;
+            setAccountDeletionRestored(false);
             await deleteSecureItem(PENDING_OAUTH_KEY).catch(() => undefined);
             const providers = await client.getProviders();
             updateLoginState(
@@ -906,12 +920,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             code === 'INVALID_BIND_TICKET' ||
             code === 'INVALID_SSO_VERIFICATION_TICKET' ||
             code === 'INVALID_TOKEN' ||
-            code === 'TOKEN_EXPIRED'
+            code === 'TOKEN_EXPIRED' ||
+            code === 'AUTH_FLOW_SUPERSEDED'
           ) {
             pendingAccountTokenRef.current = null;
             pendingLoginTicketRef.current = null;
             pendingBindTicketRef.current = null;
             pendingSsoVerificationTicketRef.current = null;
+            pendingAccountDeletionRestoredRef.current = false;
+            setAccountDeletionRestored(false);
             updateLoginState(null);
           }
           setAuthError(code);
@@ -938,6 +955,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     pendingLoginTicketRef.current = null;
     pendingBindTicketRef.current = null;
     pendingSsoVerificationTicketRef.current = null;
+    pendingAccountDeletionRestoredRef.current = false;
     await clearAllMobileVoiceCredentials().catch(() => undefined);
     await clearMobileVoiceLiteLlmSettings().catch(() => undefined);
     await clearAllMobileVoiceInputHistories().catch(() => undefined);
@@ -968,6 +986,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     updateLoginState,
   ]);
 
+  const terminateSession = useCallback(
+    (reason?: 'ACCOUNT_UNAVAILABLE'): Promise<void> => {
+      if (reason) setAuthError(reason);
+      const existing = terminalLogoutInFlightRef.current;
+      if (existing) return existing;
+
+      let run: Promise<void>;
+      const clearIfCurrent = () => {
+        if (terminalLogoutInFlightRef.current === run) {
+          terminalLogoutInFlightRef.current = null;
+        }
+      };
+      run = clearLocalSession();
+      terminalLogoutInFlightRef.current = run;
+      run.then(clearIfCurrent, clearIfCurrent);
+      return run;
+    },
+    [clearLocalSession],
+  );
+  terminateSessionImplRef.current = terminateSession;
+
+  useEffect(
+    () =>
+      registerAccountUnavailableHandler(() =>
+        terminateSession('ACCOUNT_UNAVAILABLE'),
+      ),
+    [terminateSession],
+  );
+
   const logout = useCallback(async () => {
     const token = accessTokenRef.current;
     const did = deviceIdRef.current;
@@ -987,27 +1034,44 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return refresh();
   }, [refresh]);
 
+  /** Keep direct authenticated auth-client calls on the same terminal boundary. */
+  const runProtectedAuthRequest = useCallback(
+    async <T,>(request: () => Promise<T>): Promise<T> => {
+      try {
+        return await request();
+      } catch (error) {
+        if (isAccountUnavailableAuthError(error)) {
+          await terminateSession('ACCOUNT_UNAVAILABLE');
+        }
+        throw error;
+      }
+    },
+    [terminateSession],
+  );
+
   const getAccountDeletionAvailability = useCallback(async () => {
     const token = await getAccessToken();
     if (!token) throw authCodeError('UNAUTHENTICATED');
     const did = deviceIdRef.current ?? (await ensureDeviceId());
     deviceIdRef.current = did;
-    return authClientFor(did).getAccountDeletionAvailability(token);
-  }, [getAccessToken]);
+    return runProtectedAuthRequest(() =>
+      authClientFor(did).getAccountDeletionAvailability(token),
+    );
+  }, [getAccessToken, runProtectedAuthRequest]);
 
   const requestAccountDeletionChallenge = useCallback(async () => {
     const token = await getAccessToken();
     if (!token) throw authCodeError('UNAUTHENTICATED');
     const did = deviceIdRef.current ?? (await ensureDeviceId());
     deviceIdRef.current = did;
-    const challenge = await authClientFor(did).requestAccountDeletionChallenge(
-      token,
+    const challenge = await runProtectedAuthRequest(() =>
+      authClientFor(did).requestAccountDeletionChallenge(token),
     );
     // 先持久化查询凭证，再把 challenge 交给 UI。即使确认成功后的响应丢失，
     // 下一次冷启动仍能查询注销状态。
     await persistAccountDeletionReceipt(challenge.receiptToken);
     return challenge;
-  }, [getAccessToken, persistAccountDeletionReceipt]);
+  }, [getAccessToken, persistAccountDeletionReceipt, runProtectedAuthRequest]);
 
   const confirmAccountDeletion = useCallback(
     async (input: {
@@ -1022,10 +1086,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const client = authClientFor(did);
       let status: AccountDeletionStatus;
       try {
-        status = await client.confirmAccountDeletion(token, {
-          ...input,
-          acknowledged: true,
-        });
+        status = await runProtectedAuthRequest(() =>
+          client.confirmAccountDeletion(token, {
+            ...input,
+            acknowledged: true,
+          }),
+        );
       } catch (cause) {
         const ambiguous =
           cause instanceof AuthApiError &&
@@ -1040,13 +1106,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!recovered || recovered.status === 'cancelled') throw cause;
         status = recovered;
       }
-      // confirm 已在服务端撤销 refresh token 并广播即时断连；客户端只做本地
+      // confirm 已在服务端撤销 refresh token；当前客户端只做本地
       // 清理，不再调用普通 logout，以免覆盖或依赖已撤销的会话。receipt 已在
       // challenge 返回前持久化，不做可能阻断本地登出的冗余二次写入。
       await clearLocalSession();
       return status;
     },
-    [clearLocalSession, getAccessToken],
+    [clearLocalSession, getAccessToken, runProtectedAuthRequest],
   );
 
   const getAccountDeletionStatus = useCallback(async () => {
@@ -1074,14 +1140,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         return await apiFetchRaw<T>(path, { ...opts, token });
       } catch (error) {
-        if (error instanceof ApiError && error.status === 401) {
-          const fresh = await refresh();
-          if (fresh) return apiFetchRaw<T>(path, { ...opts, token: fresh });
+        if (!(error instanceof ApiError) || error.status !== 401) throw error;
+        if (error.code === 'ACCOUNT_UNAVAILABLE') {
+          if (userRef.current) {
+            await terminateSession('ACCOUNT_UNAVAILABLE');
+          }
+          throw error;
         }
-        throw error;
+        if (!isRefreshableUnauthorizedCode(error.code)) throw error;
+
+        const fresh = await refresh();
+        if (!fresh) {
+          if (userRef.current) await terminateSession();
+          throw error;
+        }
+        try {
+          return await apiFetchRaw<T>(path, { ...opts, token: fresh });
+        } catch (retryError) {
+          if (
+            retryError instanceof ApiError &&
+            retryError.status === 401 &&
+            (retryError.code === 'ACCOUNT_UNAVAILABLE' ||
+              isRefreshableUnauthorizedCode(retryError.code))
+          ) {
+            if (userRef.current) {
+              await terminateSession(
+                retryError.code === 'ACCOUNT_UNAVAILABLE'
+                  ? 'ACCOUNT_UNAVAILABLE'
+                  : undefined,
+              );
+            }
+          }
+          throw retryError;
+        }
       }
     },
-    [getAccessToken, refresh],
+    [getAccessToken, refresh, terminateSession],
   );
 
   const value = useMemo<AuthContextValue>(
@@ -1101,6 +1195,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       dispatchLoginAction,
       completeOAuthCallback,
       logout,
+      terminateSession,
       getAccountDeletionAvailability,
       requestAccountDeletionChallenge,
       confirmAccountDeletion,
@@ -1131,6 +1226,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       loginState,
       logout,
       requestAccountDeletionChallenge,
+      terminateSession,
       user,
     ],
   );
@@ -1192,6 +1288,24 @@ function isRejectedRefresh(error: unknown): boolean {
     (error.statusCode === 401 ||
       error.code.includes('REFRESH_TOKEN') ||
       error.code === 'MEMBERSHIP_DISABLED')
+  );
+}
+
+function isAccountUnavailableAuthError(error: unknown): boolean {
+  return (
+    error instanceof AuthApiError &&
+    error.statusCode === 401 &&
+    error.code === 'ACCOUNT_UNAVAILABLE'
+  );
+}
+
+/** Returns whether a resource-server 401 may be recovered by refreshing once. */
+function isRefreshableUnauthorizedCode(code: string): boolean {
+  return (
+    code === 'TOKEN_EXPIRED' ||
+    code === 'INVALID_TOKEN' ||
+    code === 'UNAUTHORIZED' ||
+    code === 'HTTP_401'
   );
 }
 

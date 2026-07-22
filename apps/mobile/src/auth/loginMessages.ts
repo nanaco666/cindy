@@ -58,6 +58,42 @@ const messages = {
       'Cindy 登录账号正在删除，处理完成后将永久注销。',
     accountDeletionCompletedCopy: 'Cindy 登录账号已删除。',
     accountDeletionDismiss: '我知道了',
+    accountDeletionSettingsAction: '注销账号',
+    accountDeletionScreenTitle: '注销账号',
+    accountDeletionLoading: '正在确认账号状态…',
+    accountDeletionUnavailableTitle: '当前无法进行此操作',
+    accountDeletionUnavailableCopy: '请返回设置页稍后重试。',
+    accountDeletionVerifyTitle: '验证账号所有权',
+    accountDeletionCodeSent: '验证码已发送至 {target}，10 分钟内有效。',
+    accountDeletionAcknowledgeA11y: '确认了解账号注销影响',
+    accountDeletionAcknowledgeCopy:
+      '我已了解：这台手机会立即退出；其他客户端会在登录状态失效后退出；30 天内重新登录可撤销；到期后 Cindy 登录账号将永久删除且无法恢复。',
+    accountDeletionConfirmingA11y: '正在确认注销',
+    accountDeletionConfirmA11y: '确认注销账号',
+    accountDeletionConfirming: '确认中',
+    accountDeletionConfirm: '确认注销账号',
+    accountDeletionBeforeTitle: '注销前请确认',
+    accountDeletionImpactCurrentClient:
+      '确认后，这台手机立即退出；其他客户端会在登录状态失效后退出。',
+    accountDeletionImpactGrace:
+      '账号进入 30 天等待期；期间重新登录即可取消注销。',
+    accountDeletionImpactPermanent:
+      '等待期结束后，Cindy 登录账号将被永久删除。',
+    accountDeletionAppleNotice:
+      '使用 Apple 登录的授权可能需要你在 Apple ID 设置中手动停止使用 Cindy。',
+    accountDeletionCodeWillSend: '验证码将发送至 {target}。',
+    accountDeletionSendingCode: '发送中',
+    accountDeletionErrorChallenge: '验证码错误或已过期，请检查后重试。',
+    accountDeletionErrorAttempts: '验证次数过多，请重新发送验证码。',
+    accountDeletionErrorRate: '操作过于频繁，请稍后再试。',
+    accountDeletionErrorPending: '账号已进入注销等待期。',
+    accountDeletionErrorProcessing: '账号正在注销处理中。',
+    accountDeletionErrorUnavailable: '当前无法进行此操作。',
+    accountDeletionErrorNetwork: '网络连接异常，请稍后重试。',
+    accountDeletionErrorFallback: '操作未完成，请稍后重试。',
+    accountDeletionRestoredTitle: '账号已恢复',
+    accountDeletionRestoredCopy:
+      '本次登录已取消账号注销，Cindy 登录账号将继续保留。',
     errorFallback: '登录未完成，请重试。',
   },
   en: {
@@ -118,8 +154,51 @@ const messages = {
       'Scheduled for permanent deletion on {date}. Sign in now to cancel deletion.',
     accountDeletionProcessingCopy:
       'Your Cindy sign-in account is being deleted and will be permanently deleted when processing is complete.',
-    accountDeletionCompletedCopy: 'Your Cindy sign-in account has been deleted.',
+    accountDeletionCompletedCopy:
+      'Your Cindy sign-in account has been deleted.',
     accountDeletionDismiss: 'Got it',
+    accountDeletionSettingsAction: 'Delete account',
+    accountDeletionScreenTitle: 'Delete account',
+    accountDeletionLoading: 'Checking account status…',
+    accountDeletionUnavailableTitle: 'This action is unavailable',
+    accountDeletionUnavailableCopy: 'Return to Settings and try again later.',
+    accountDeletionVerifyTitle: 'Verify account ownership',
+    accountDeletionCodeSent:
+      'We sent a code to {target}. It is valid for 10 minutes.',
+    accountDeletionAcknowledgeA11y:
+      'Acknowledge the effects of account deletion',
+    accountDeletionAcknowledgeCopy:
+      'I understand: this phone will sign out immediately; other clients will sign out when their sign-in session becomes invalid; signing in within 30 days cancels deletion; after that, the Cindy sign-in account is permanently deleted and cannot be recovered.',
+    accountDeletionConfirmingA11y: 'Confirming account deletion',
+    accountDeletionConfirmA11y: 'Confirm account deletion',
+    accountDeletionConfirming: 'Confirming',
+    accountDeletionConfirm: 'Delete account',
+    accountDeletionBeforeTitle: 'Before deleting your account',
+    accountDeletionImpactCurrentClient:
+      'This phone signs out immediately. Other clients sign out when their sign-in session becomes invalid.',
+    accountDeletionImpactGrace:
+      'The account enters a 30-day waiting period. Signing in during this period cancels deletion.',
+    accountDeletionImpactPermanent:
+      'After the waiting period, the Cindy sign-in account is permanently deleted.',
+    accountDeletionAppleNotice:
+      'If you use Sign in with Apple, you may also need to stop using Cindy in your Apple ID settings.',
+    accountDeletionCodeWillSend: 'We will send a code to {target}.',
+    accountDeletionSendingCode: 'Sending',
+    accountDeletionErrorChallenge:
+      'The verification code is incorrect or expired. Try again.',
+    accountDeletionErrorAttempts:
+      'Too many verification attempts. Send a new code.',
+    accountDeletionErrorRate: 'Too many requests. Try again later.',
+    accountDeletionErrorPending:
+      'The account is already scheduled for deletion.',
+    accountDeletionErrorProcessing: 'Account deletion is already in progress.',
+    accountDeletionErrorUnavailable: 'This action is currently unavailable.',
+    accountDeletionErrorNetwork: 'Check your connection and try again.',
+    accountDeletionErrorFallback:
+      'The action did not complete. Try again later.',
+    accountDeletionRestoredTitle: 'Account restored',
+    accountDeletionRestoredCopy:
+      'This sign-in canceled account deletion. Your Cindy sign-in account will be kept.',
     errorFallback: 'Sign-in did not complete. Please try again.',
   },
 } as const;
@@ -189,6 +268,10 @@ const authErrorMessages: Record<string, { zh: string; en: string }> = {
   AUTH_REQUEST_FAILED: {
     zh: '登录服务暂时不可用，请稍后重试。',
     en: 'The sign-in service is temporarily unavailable.',
+  },
+  ACCOUNT_UNAVAILABLE: {
+    zh: '当前账号不可用，已退出登录。',
+    en: 'This account is unavailable. You have been signed out.',
   },
   ORG_SSO_NOT_FOUND: {
     zh: '未找到该企业，或该企业未启用 SSO 登录。',

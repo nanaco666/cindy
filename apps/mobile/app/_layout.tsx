@@ -11,6 +11,7 @@ import { useEffect, useMemo, type ReactElement } from 'react';
 import { Alert, StyleSheet } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider, useAuth } from '@/auth/AuthContext';
+import { loginText } from '@/auth/loginMessages';
 import { DeviceLinkProvider } from '@/device-link/DeviceLinkContext';
 import { GestureHandlerRootView } from '@/platform/gestureHandler';
 import { ThemeProvider, useTheme } from '@/theme/ThemeProvider';
@@ -67,7 +68,10 @@ function NavigationGate() {
   useEffect(() => {
     if (!auth.isAuthenticated || !auth.accountDeletionRestored) return;
     auth.consumeAccountDeletionRestored();
-    Alert.alert('账号已恢复', '本次登录已取消账号注销，Cindy 登录账号将继续保留。');
+    Alert.alert(
+      loginText('accountDeletionRestoredTitle'),
+      loginText('accountDeletionRestoredCopy'),
+    );
   }, [
     auth.accountDeletionRestored,
     auth.consumeAccountDeletionRestored,

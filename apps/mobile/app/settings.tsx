@@ -18,6 +18,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ChevronDown, ChevronRight, X } from 'lucide-react-native';
 import type { DeviceView } from '@lizi/device-link';
 import { useAuth } from '@/auth/AuthContext';
+import { loginText } from '@/auth/loginMessages';
 import { goBackGuarded } from '@/utils/backGuard';
 import { configureCollapseAnimation } from '@/utils/collapseAnimation';
 import {
@@ -730,24 +731,13 @@ export default function SettingsScreen() {
           ) : null}
         </SettingsGroup>
 
-        {/* 账号操作:低调置底 */}
+        {/* 账号操作:退出保持明确；注销账号仅保留低调的次要文字入口。 */}
         <View style={styles.dangerArea} testID="settings.accountActions">
           <Text style={styles.dangerHint}>
             退出只会清除这台手机上的登录态和本地远程镜像，不会影响电脑端会话。
           </Text>
           <MainWindowActionGroup
             dangerActions={[
-              ...(accountDeletionAvailable
-                ? [
-                    {
-                      accessibilityLabel: '注销账号',
-                      label: '注销账号',
-                      onPress: openAccountDeletion,
-                      testID: 'settings.deleteAccountButton',
-                      tone: 'danger' as const,
-                    },
-                  ]
-                : []),
               {
                 accessibilityLabel: loggingOut ? '正在退出登录' : '退出登录',
                 busy: loggingOut,
@@ -760,6 +750,22 @@ export default function SettingsScreen() {
             ]}
             testID="settings.logoutActions"
           />
+          {accountDeletionAvailable ? (
+            <Pressable
+              accessibilityLabel={loginText('accountDeletionSettingsAction')}
+              accessibilityRole="button"
+              onPress={openAccountDeletion}
+              style={({ pressed }) => [
+                styles.accountDeletionLink,
+                pressed && styles.pressed,
+              ]}
+              testID="settings.deleteAccountButton"
+            >
+              <Text style={styles.accountDeletionLinkText}>
+                {loginText('accountDeletionSettingsAction')}
+              </Text>
+            </Pressable>
+          ) : null}
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -1088,6 +1094,18 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   // —— 退出 ——
   dangerArea: { gap: spacing.md, paddingTop: spacing.sm },
   dangerHint: { color: colors.textSecondary, fontSize: typeScale.caption, lineHeight: lineHeight.caption, paddingHorizontal: spacing.md },
+  accountDeletionLink: {
+    alignItems: 'center',
+    alignSelf: 'center',
+    justifyContent: 'center',
+    minHeight: 44,
+    paddingHorizontal: spacing.md,
+  },
+  accountDeletionLinkText: {
+    color: colors.textTertiary,
+    fontSize: typeScale.caption,
+    lineHeight: lineHeight.caption,
+  },
   nameEditorContent: {
     gap: spacing.sm,
     paddingHorizontal: spacing.lg,

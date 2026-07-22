@@ -17,6 +17,7 @@ import {
 } from '@cindy/auth-client';
 
 import { useAuth } from '@/auth/AuthContext';
+import { loginText } from '@/auth/loginMessages';
 import { Text, TextInput } from '@/components/AppText';
 import {
   MainWindowActionButton,
@@ -107,7 +108,7 @@ export default function AccountDeletionScreen() {
       <ScreenHeader
         backTestID="accountDeletion.backButton"
         onBack={() => goBackGuarded(router)}
-        title="注销账号"
+        title={loginText('accountDeletionScreenTitle')}
         titleTestID="accountDeletion.title"
       />
       <KeyboardAvoidingView
@@ -121,19 +122,28 @@ export default function AccountDeletionScreen() {
         >
           {loading ? (
             <Text style={styles.helper} testID="accountDeletion.loading">
-              正在确认账号状态…
+              {loginText('accountDeletionLoading')}
             </Text>
           ) : !available ? (
             <View style={styles.card} testID="accountDeletion.unavailable">
-              <Text style={styles.cardTitle}>当前无法进行此操作</Text>
-              <Text style={styles.helper}>请返回设置页稍后重试。</Text>
+              <Text style={styles.cardTitle}>
+                {loginText('accountDeletionUnavailableTitle')}
+              </Text>
+              <Text style={styles.helper}>
+                {loginText('accountDeletionUnavailableCopy')}
+              </Text>
             </View>
           ) : challenge ? (
             <>
               <View style={styles.card}>
-                <Text style={styles.cardTitle}>验证账号所有权</Text>
+                <Text style={styles.cardTitle}>
+                  {loginText('accountDeletionVerifyTitle')}
+                </Text>
                 <Text style={styles.body}>
-                  验证码已发送至 {challenge.maskedTarget}，10 分钟内有效。
+                  {loginText('accountDeletionCodeSent').replace(
+                    '{target}',
+                    challenge.maskedTarget,
+                  )}
                 </Text>
                 <TextInput
                   autoComplete="one-time-code"
@@ -144,7 +154,7 @@ export default function AccountDeletionScreen() {
                     setCode(value.replace(/\D/g, ''))
                   }
                   onSubmitEditing={() => void confirm()}
-                  placeholder="6 位验证码"
+                  placeholder={loginText('codePlaceholder')}
                   placeholderTextColor={colors.textTertiary}
                   returnKeyType="done"
                   style={styles.codeInput}
@@ -154,7 +164,7 @@ export default function AccountDeletionScreen() {
               </View>
 
               <Pressable
-                accessibilityLabel="确认了解账号注销影响"
+                accessibilityLabel={loginText('accountDeletionAcknowledgeA11y')}
                 accessibilityRole="checkbox"
                 accessibilityState={{ checked: acknowledged }}
                 disabled={busy}
@@ -180,7 +190,7 @@ export default function AccountDeletionScreen() {
                   ) : null}
                 </View>
                 <Text style={styles.acknowledgementText}>
-                  我已了解：这台手机会立即退出；其他客户端会在访问凭证到期且刷新失败后退出；30 天内重新登录可撤销；到期后 Cindy 登录账号将永久删除且无法恢复。
+                  {loginText('accountDeletionAcknowledgeCopy')}
                 </Text>
               </Pressable>
 
@@ -191,10 +201,14 @@ export default function AccountDeletionScreen() {
               ) : null}
               <MainWindowActionButton
                 action={{
-                  accessibilityLabel: busy ? '正在确认注销' : '确认注销账号',
+                  accessibilityLabel: busy
+                    ? loginText('accountDeletionConfirmingA11y')
+                    : loginText('accountDeletionConfirmA11y'),
                   busy,
                   disabled: busy || code.length !== 6 || !acknowledged,
-                  label: busy ? '确认中' : '确认注销账号',
+                  label: busy
+                    ? loginText('accountDeletionConfirming')
+                    : loginText('accountDeletionConfirm'),
                   onPress: () => void confirm(),
                   testID: 'accountDeletion.confirmButton',
                   tone: 'danger',
@@ -203,7 +217,7 @@ export default function AccountDeletionScreen() {
               <MainWindowActionButton
                 action={{
                   disabled: busy,
-                  label: '重新发送验证码',
+                  label: loginText('resendCode'),
                   onPress: () => void requestChallenge(),
                   testID: 'accountDeletion.resendButton',
                 }}
@@ -213,20 +227,27 @@ export default function AccountDeletionScreen() {
           ) : (
             <>
               <View style={styles.card}>
-                <Text style={styles.cardTitle}>注销前请确认</Text>
-                <ImpactRow text="确认后，这台手机立即退出；其他客户端会在现有访问凭证到期且刷新失败后退出。" />
-                <ImpactRow text="账号进入 30 天等待期；期间重新登录即可取消注销。" />
-                <ImpactRow text="等待期结束后，Cindy 登录账号将被永久删除。" />
+                <Text style={styles.cardTitle}>
+                  {loginText('accountDeletionBeforeTitle')}
+                </Text>
+                <ImpactRow
+                  text={loginText('accountDeletionImpactCurrentClient')}
+                />
+                <ImpactRow text={loginText('accountDeletionImpactGrace')} />
+                <ImpactRow text={loginText('accountDeletionImpactPermanent')} />
               </View>
               {availability.manualAppleRevocationRequired ? (
                 <View style={styles.notice} testID="accountDeletion.appleNotice">
                   <Text style={styles.body}>
-                    使用 Apple 登录的授权可能需要你在 Apple ID 设置中手动停止使用 Cindy。
+                    {loginText('accountDeletionAppleNotice')}
                   </Text>
                 </View>
               ) : null}
               <Text style={styles.helper}>
-                验证码将发送至 {availability.verification?.maskedTarget}。
+                {loginText('accountDeletionCodeWillSend').replace(
+                  '{target}',
+                  availability.verification?.maskedTarget ?? '',
+                )}
               </Text>
               {error ? (
                 <Text style={styles.error} testID="accountDeletion.error">
@@ -237,7 +258,9 @@ export default function AccountDeletionScreen() {
                 action={{
                   busy,
                   disabled: busy,
-                  label: busy ? '发送中' : '发送验证码',
+                  label: busy
+                    ? loginText('accountDeletionSendingCode')
+                    : loginText('sendCode'),
                   onPress: () => void requestChallenge(),
                   testID: 'accountDeletion.sendCodeButton',
                   tone: 'danger',
@@ -265,25 +288,25 @@ function accountDeletionErrorText(cause: unknown): string {
   if (cause instanceof AuthApiError) {
     switch (cause.code) {
       case 'ACCOUNT_DELETION_CHALLENGE_INVALID':
-        return '验证码错误或已过期，请检查后重试。';
+        return loginText('accountDeletionErrorChallenge');
       case 'CODE_ATTEMPTS_EXCEEDED':
-        return '验证次数过多，请重新发送验证码。';
+        return loginText('accountDeletionErrorAttempts');
       case 'RATE_LIMITED':
-        return '操作过于频繁，请稍后再试。';
+        return loginText('accountDeletionErrorRate');
       case 'ACCOUNT_DELETION_PENDING':
-        return '账号已进入注销等待期。';
+        return loginText('accountDeletionErrorPending');
       case 'ACCOUNT_DELETION_PROCESSING':
-        return '账号正在注销处理中。';
+        return loginText('accountDeletionErrorProcessing');
       case 'ACCOUNT_DELETION_UNAVAILABLE':
-        return '当前无法进行此操作。';
+        return loginText('accountDeletionErrorUnavailable');
       case 'NETWORK_ERROR':
       case 'REQUEST_TIMEOUT':
-        return '网络连接异常，请稍后重试。';
+        return loginText('accountDeletionErrorNetwork');
       default:
         break;
     }
   }
-  return '操作未完成，请稍后重试。';
+  return loginText('accountDeletionErrorFallback');
 }
 
 const makeStyles = (colors: ThemeColors) =>
