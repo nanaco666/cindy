@@ -448,7 +448,7 @@ export function NewMakerDraftRoute() {
 
   // device-link:在远程设备上新建会话时,能力 / 模型必须来自该被控端(草稿带 deviceLinkDeviceId);
   // 本地草稿 effectiveDeviceLinkDeviceId 为 undefined → 走本地能力(行为不变)。
-  const { capabilities } = useAgentCapabilities(capabilityAgentKind, effectiveDeviceLinkDeviceId);
+  const { capabilities, loading: capabilitiesLoading } = useAgentCapabilities(capabilityAgentKind, effectiveDeviceLinkDeviceId);
   // device-link「以被控端为准」:远程草稿用被控端经隧道带来的 providers(per-provider,含 fast 能力);
   // 本地草稿用本机 providers。fast 判定统一交给 resolveFastSupported(不在控制端另写远程逻辑)。
   const { providers: localProviders } = useProviders();
@@ -1112,6 +1112,9 @@ export function NewMakerDraftRoute() {
       opts?: { providerId?: string | null; onAccepted?: () => void },
     ): boolean | undefined => {
       if (sendInFlightRef.current) return false;
+      // device-link 切设备后,capabilities/providers hook 可能还没 re-render 到新设备快照;
+      // 此时 effectiveFastMode / supportsFastMode 仍基于旧设备,发送会造成 model/fast 不一致。
+      if (isDeviceLinkDraft && capabilitiesLoading) return false;
       // 草稿里选定的来源(供应商):ChatInput 在发送时把"仍连接的显式选择"经 opts 传上来
       // (未选 / 已断开 → null = 跟随默认路由)。透传给 createSession 落盘 sessions.provider_id,
       // 让新会话首个请求就走对来源,与"会话内切来源"行为一致。device-link 远程会话不支持(下方分支跳过)。
@@ -1595,6 +1598,7 @@ export function NewMakerDraftRoute() {
       effectiveRemoteHostId,
       isRemoteProjectDraft,
       isDeviceLinkDraft,
+      capabilitiesLoading,
       effectiveDeviceLinkDeviceId,
       effectiveDeviceLinkDeviceName,
       effectiveExtraDirs,
@@ -1624,6 +1628,9 @@ export function NewMakerDraftRoute() {
   // 失败抛错 → NewGoalDialog 内联报错并保持打开。
   const handleCreateGoal = useCallback(
     async (objective: string, limits: GoalLimitValues): Promise<void> => {
+      if (isDeviceLinkDraft && capabilitiesLoading) {
+        throw new Error('device capabilities still loading');
+      }
       const { proceed } = await vendorAuthGate.checkAndConfirm(authVendor, {
         deviceId: effectiveDeviceLinkDeviceId,
       });
@@ -1738,6 +1745,7 @@ export function NewMakerDraftRoute() {
     },
     [
       isDeviceLinkDraft,
+      capabilitiesLoading,
       vendorAuthGate,
       authVendor,
       effectiveDeviceLinkDeviceId,
