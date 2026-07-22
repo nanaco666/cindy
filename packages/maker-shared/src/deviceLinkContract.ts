@@ -447,6 +447,11 @@ export function describeRemoteError(error: string | null): string | null {
   if (error.includes('MEDIA_FETCH_FAILED')) return '获取电脑端文件失败，可以稍后重试。';
   if (error.includes('VOICE_TRANSCRIBE_FAILED')) return '语音转写失败，可以重试或改用键盘输入。';
   if (error.includes('LINK_NOT_OPEN')) return '与被控电脑的控制链路已断开，正在重新建立。';
+  if (error.includes('PRECONDITION_FAILED')) {
+    if (error.includes('ACCOUNT_CHANGED')) return 'Codex 账号或工作区已变化，请刷新额度后重新确认。';
+    if (error.includes('OFFER_EXPIRED')) return 'Codex 重置凭证已失效，请刷新额度后重新确认。';
+    return '操作条件已变化，请刷新后重新确认。';
+  }
   if (TRANSIENT_REMOTE_ERROR_MARKERS.some((marker) => error.includes(marker))) {
     return '网络或被控端暂时不可用，可以稍后重新同步。';
   }
@@ -480,6 +485,13 @@ export function isAccessRevokedRemoteError(error: unknown): boolean {
   if (code === 'ACCESS_REVOKED') return true;
   const message = error instanceof Error ? error.message : typeof error === 'string' ? error : '';
   return message.includes('ACCESS_REVOKED') || message.includes('DEVICE_LINK_ACCESS_REVOKED');
+}
+
+export function isPreconditionFailedRemoteError(error: unknown): boolean {
+  const code = readStringField(error, 'code');
+  if (code === 'PRECONDITION_FAILED') return true;
+  const message = error instanceof Error ? error.message : typeof error === 'string' ? error : '';
+  return message.includes('PRECONDITION_FAILED');
 }
 
 export function isTransientRemoteError(error: unknown): boolean {

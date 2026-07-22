@@ -63,7 +63,12 @@ import { DEVICE_LINK_API_BASE_URL, MOBILE_VISUAL_MOCK_ENABLED } from '@/config/e
 import { ConnectionBanner, useShowConnectionBanner } from '@/components/ConnectionBanner';
 import { useDeviceLink } from '@/device-link/DeviceLinkContext';
 import { useRevokedDevices } from '@/device-link/revokedDevicesStore';
-import { describeRemoteError, formatRemoteError, humanizeRemoteError } from '@/device-link/remoteStatus';
+import {
+  describeRemoteError,
+  formatRemoteError,
+  humanizeRemoteError,
+  isPreconditionFailedRemoteError,
+} from '@/device-link/remoteStatus';
 import { agentAuthGateHint, agentAuthGateVerdict } from '@/session/agentAuthGate';
 import { isTransientRemoteError, withTransientRemoteRetry } from '@/device-link/remoteRetry';
 import { useRemoteSyncTask } from '@/device-link/remoteSyncTask';
@@ -4724,8 +4729,8 @@ export default function SessionScreen() {
     }
   }, [localCodexRateLimitControl, maker, sessionId]);
 
-  // reset 只接受 desktop read 签发的 UUID。失败时不替换 codexRateLimits/offer,
-  // 用户重试会继续使用同一幂等键;成功后优先采用 desktop 已重新读取的权威快照。
+  // reset 只接受 desktop read 签发的 UUID。网络等结果不明的失败保留同一幂等键；
+  // Desktop 明确拒绝的 stale offer 则立即作废并刷新，避免反复提交已失效凭证。
   const resetCodexRateLimits = useCallback(async () => {
     const offer = codexRateLimits?.resetOffer;
     const idempotencyKey = codexResetRetryKey ?? offer?.idempotencyKey;
@@ -4760,7 +4765,16 @@ export default function SessionScreen() {
       Alert.alert(result.outcome === 'reset' ? '重置完成' : '重置结果', message);
     } catch (err) {
       if (contextUsageSessionRef.current === sessionId) {
-        Alert.alert('重置失败', humanizeRemoteError(err));
+        if (isPreconditionFailedRemoteError(err)) {
+          setCodexResetRetryKey(null);
+          setCodexRateLimits((current) => current ? { ...current, resetOffer: null } : null);
+          await refreshAccountUsage();
+          if (contextUsageSessionRef.current === sessionId) {
+            Alert.alert('请重新确认', humanizeRemoteError(err));
+          }
+        } else {
+          Alert.alert('重置失败', humanizeRemoteError(err));
+        }
       }
     } finally {
       if (contextUsageSessionRef.current === sessionId) setCodexResetBusy(false);

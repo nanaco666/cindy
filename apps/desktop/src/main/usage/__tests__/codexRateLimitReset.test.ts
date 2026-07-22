@@ -94,11 +94,11 @@ describe('Codex rate-limit reset control plane', () => {
     });
   });
 
-  it('reuses one offer across reads and omits creditId when detail is unavailable', async () => {
+  it('does not mint an account-ambiguous offer when credit detail is unavailable', async () => {
     const createIdempotencyKey = vi.fn()
       .mockReturnValueOnce(KEY)
       .mockReturnValueOnce(NEXT_KEY);
-    const { deps, service } = harness({
+    const { service } = harness({
       createIdempotencyKey,
       readRateLimits: vi.fn().mockResolvedValue(response({
         rateLimitResetCredits: { availableCount: 1, credits: null },
@@ -107,11 +107,12 @@ describe('Codex rate-limit reset control plane', () => {
 
     const first = await service.read();
     const second = await service.read();
-    expect(second.resetOffer).toEqual(first.resetOffer);
-    expect(createIdempotencyKey).toHaveBeenCalledOnce();
-
-    await service.consume(KEY);
-    expect(deps.consumeResetCredit).toHaveBeenCalledWith({ idempotencyKey: KEY });
+    expect(first).toMatchObject({
+      rateLimitResetCredits: { availableCount: 1, credits: null },
+      resetOffer: null,
+    });
+    expect(second.resetOffer).toBeNull();
+    expect(createIdempotencyKey).not.toHaveBeenCalled();
   });
 
   it('coalesces concurrent consumes and caches the terminal result for retries', async () => {
@@ -204,6 +205,7 @@ describe('Codex rate-limit reset control plane', () => {
     }
 
     const retry = service.consume('key-0');
+    activeIdentity = { email: 'person-0@example.com', accountId: 'workspace-0' };
     resolveConsume({ outcome: 'reset' });
     const [firstResult, retryResult] = await Promise.all([firstConsume, retry]);
     expect(retryResult).toEqual(firstResult);
@@ -212,6 +214,7 @@ describe('Codex rate-limit reset control plane', () => {
 
   it('fails closed when either account or workspace identity changes', async () => {
     const readAccountIdentity = vi.fn()
+      .mockResolvedValueOnce({ email: 'person@example.com', accountId: 'workspace-a' })
       .mockResolvedValueOnce({ email: 'person@example.com', accountId: 'workspace-a' })
       .mockResolvedValueOnce({ email: 'person@example.com', accountId: 'workspace-b' });
     const { deps, service } = harness({ readAccountIdentity });
@@ -222,6 +225,34 @@ describe('Codex rate-limit reset control plane', () => {
       message: expect.stringContaining('Codex account changed'),
     });
     expect(deps.consumeResetCredit).not.toHaveBeenCalled();
+  });
+
+  it('does not record or mint an offer when identity changes during a rate-limit read', async () => {
+    const readAccountIdentity = vi.fn()
+      .mockResolvedValueOnce({ email: 'person@example.com', accountId: 'workspace-a' })
+      .mockResolvedValueOnce({ email: 'person@example.com', accountId: 'workspace-b' });
+    const { deps, service } = harness({ readAccountIdentity });
+
+    await expect(service.read()).rejects.toMatchObject({ reason: 'ACCOUNT_CHANGED' });
+    expect(deps.recordRateLimitSnapshot).not.toHaveBeenCalled();
+    expect(deps.createIdempotencyKey).not.toHaveBeenCalled();
+  });
+
+  it('invalidates a terminal offer when identity changes across consume', async () => {
+    let identity = { email: 'person@example.com', accountId: 'workspace-a' };
+    const consumeResetCredit = vi.fn(async () => {
+      identity = { email: 'person@example.com', accountId: 'workspace-b' };
+      return { outcome: 'reset' as const };
+    });
+    const { service } = harness({
+      consumeResetCredit,
+      readAccountIdentity: vi.fn(async () => identity),
+    });
+    await service.read();
+
+    await expect(service.consume(KEY)).rejects.toMatchObject({ reason: 'ACCOUNT_CHANGED' });
+    await expect(service.consume(KEY)).rejects.toMatchObject({ reason: 'OFFER_EXPIRED' });
+    expect(consumeResetCredit).toHaveBeenCalledOnce();
   });
 
   it('does not issue an offer when returned credit details have no eligible row', async () => {

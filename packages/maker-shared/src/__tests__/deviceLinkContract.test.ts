@@ -12,6 +12,7 @@ import {
   formatRemoteError,
   humanizeRemoteError,
   isAccessRevokedRemoteError,
+  isPreconditionFailedRemoteError,
   isMobileRemoteInvokeChannel,
   isTransientRemoteError,
   relayStatusHint,
@@ -55,9 +56,21 @@ describe('device-link shared contract', () => {
     expect(describeRemoteError('[MEDIA_FETCH_FAILED] oss upload failed')).toContain('获取电脑端文件失败');
     expect(describeRemoteError('[VOICE_TRANSCRIBE_FAILED] asr error')).toContain('语音转写失败');
     expect(describeRemoteError('[LINK_NOT_OPEN] no link')).toContain('控制链路已断开');
+    expect(describeRemoteError('[PRECONDITION_FAILED] OFFER_EXPIRED: expired')).toContain('重新确认');
+    expect(describeRemoteError('[PRECONDITION_FAILED] ACCOUNT_CHANGED: changed')).toContain('账号或工作区');
     expect(describeRemoteError('[INTERNAL] relay crashed')).toContain('远程调用失败');
     expect(describeRemoteError('[INTERNAL] relay crashed')).toContain('[INTERNAL] relay crashed');
     expect(describeRemoteError('unknown failure')).toBe('unknown failure');
+  });
+
+  it('detects structured and encoded precondition failures', () => {
+    expect(isPreconditionFailedRemoteError(
+      Object.assign(new Error('offer expired'), { code: 'PRECONDITION_FAILED' }),
+    )).toBe(true);
+    expect(isPreconditionFailedRemoteError(
+      new Error('[PRECONDITION_FAILED] OFFER_EXPIRED: refresh usage'),
+    )).toBe(true);
+    expect(isPreconditionFailedRemoteError(new Error('[INTERNAL] failed'))).toBe(false);
   });
 
   it('maps agent not-authenticated errors to guidance copy', () => {
