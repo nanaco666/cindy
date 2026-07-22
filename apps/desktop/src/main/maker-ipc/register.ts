@@ -240,6 +240,7 @@ import type {
 } from './collabSendOutcome.js';
 import { runAcceptedCallback } from './acceptedCallbackRunner.js';
 import { createElectronIpcHandlerRegistry } from './electronIpcRegistry.js';
+import { refreshCodexMcpEnvironment } from './codexMcpRefresh.js';
 import { validateExtraDirs } from './extraDirsValidator.js';
 import { prepareHandoffWorktree, shouldRecycleHandoffWorktreeOnFailure } from './handoffWorktree.js';
 import { registerProjectPluginPolicyHandlers } from './projectPluginPolicyHandlers.js';
@@ -6443,8 +6444,15 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
     if (!ok) {
       throwIpcError('PERMISSION_DENIED', `Cannot modify essential plugin: ${id}`);
     }
-    await shutdownCodexEnvironment();
-    await restartCodexAfterAuthModeChange();
+    // The preference is already durable at this point. Codex freezes MCP flags
+    // in its shared app-server, so refresh best-effort; a busy turn must keep
+    // using the existing bridge and must not turn a successful save into an IPC
+    // failure. Renderer surfaces the deferred state explicitly.
+    return refreshCodexMcpEnvironment({
+      restartCodex: restartCodexAfterAuthModeChange,
+      shutdownCodexEnvironment,
+      logger: log,
+    });
   });
 
   ipcMain.handle(MAKER_INVOKE.PLUGINS_CLEAR_ENABLED, async (_e, id: unknown) => {
@@ -6458,8 +6466,11 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
     if (!ok) {
       throwIpcError('PERMISSION_DENIED', `Cannot modify essential plugin: ${id}`);
     }
-    await shutdownCodexEnvironment();
-    await restartCodexAfterAuthModeChange();
+    return refreshCodexMcpEnvironment({
+      restartCodex: restartCodexAfterAuthModeChange,
+      shutdownCodexEnvironment,
+      logger: log,
+    });
   });
 
   registerProjectPluginPolicyHandlers(createElectronIpcHandlerRegistry(), {

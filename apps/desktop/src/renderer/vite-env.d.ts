@@ -748,6 +748,10 @@ interface PluginEnableState {
   globalOverride?: { enabled: boolean } | null;
 }
 
+interface PluginEnableUpdateResult {
+  codexMcpRefreshed: boolean;
+}
+
 interface BrowserAvailability {
   detected: boolean;
   browserKind: string | null;
@@ -4232,8 +4236,8 @@ interface ElectronAPI {
     plugins: {
       list: (workingDir?: string) => Promise<PluginListItem[]>;
       getState: (id: string, workingDir?: string) => Promise<PluginEnableState>;
-      setEnabled: (id: string, enabled: boolean) => Promise<void>;
-      clearEnabled: (id: string) => Promise<void>;
+      setEnabled: (id: string, enabled: boolean) => Promise<PluginEnableUpdateResult>;
+      clearEnabled: (id: string) => Promise<PluginEnableUpdateResult>;
       setProjectEnabled: (workingDir: string, id: string, enabled: boolean) => Promise<void>;
       clearProjectEnabled: (workingDir: string, id: string) => Promise<void>;
     };

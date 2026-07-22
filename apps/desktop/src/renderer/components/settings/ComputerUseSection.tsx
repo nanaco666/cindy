@@ -670,6 +670,20 @@ export function ComputerUseSection({ workingDir }: ComputerUseSectionProps) {
     void joinDriverUpdate(false);
   }, [driverUpdatePending, joinDriverUpdate]);
 
+  const persistComputerEnabled = useCallback(async (next: boolean) => {
+    const result = await window.electronAPI.maker.plugins.setEnabled(COMPUTER_PLUGIN_ID, next);
+    setComputerEnabled(next);
+    if (result.codexMcpRefreshed === false) {
+      toast.warning(t('settings.computerUse.codexRefreshDeferred'));
+      return;
+    }
+    toast.success(
+      next
+        ? t('settings.computerUse.directControl.toast.enabled')
+        : t('settings.computerUse.directControl.toast.disabled'),
+    );
+  }, [t]);
+
   useEffect(() => {
     return () => {
       if (computerPermissionPollTimerRef.current !== null) {
@@ -707,9 +721,7 @@ export function ComputerUseSection({ workingDir }: ComputerUseSectionProps) {
           // 开关却回到关闭,而 main 侧插件已被启用,前后端状态错开(2026-07-03 实踩)。
           // 这里的 setState 即使撞上组件卸载也只是 React 18 的 no-op,无需早退。
           if (computerEnableIntentRef.current || computerEnabled) {
-            await window.electronAPI.maker.plugins.setEnabled(COMPUTER_PLUGIN_ID, true);
-            setComputerEnabled(true);
-            toast.success(t('settings.computerUse.directControl.toast.enabled'));
+            await persistComputerEnabled(true);
           }
           setComputerPermissionPending(false);
           resetComputerPermissionFlow();
@@ -755,6 +767,7 @@ export function ComputerUseSection({ workingDir }: ComputerUseSectionProps) {
     computerEnabled,
     computerPermissionPending,
     openComputerPermissionSettings,
+    persistComputerEnabled,
     refreshComputerPermissionStatus,
     resetComputerPermissionFlow,
     t,
@@ -859,18 +872,22 @@ export function ComputerUseSection({ workingDir }: ComputerUseSectionProps) {
     async (next: boolean) => {
       setAndroidTogglePending(true);
       try {
-        await window.electronAPI.maker.plugins.setEnabled(ANDROID_PLUGIN_ID, next);
+        const result = await window.electronAPI.maker.plugins.setEnabled(ANDROID_PLUGIN_ID, next);
         setAndroidEnabled(next);
         if (next) {
           setAndroidPreparePending(true);
           await window.electronAPI.maker.android.prepareAdb();
           await handleRefreshAndroidStatus(false);
         }
-        toast.success(
-          next
-            ? t('settings.computerUse.android.toast.enabled')
-            : t('settings.computerUse.android.toast.disabled'),
-        );
+        if (result.codexMcpRefreshed === false) {
+          toast.warning(t('settings.computerUse.codexRefreshDeferred'));
+        } else {
+          toast.success(
+            next
+              ? t('settings.computerUse.android.toast.enabled')
+              : t('settings.computerUse.android.toast.disabled'),
+          );
+        }
       } catch (err) {
         log.warn('plugins.setEnabled(android) failed', err);
         toast.error(t('settings.computerUse.android.toast.toggleFailed'));
@@ -946,8 +963,7 @@ export function ComputerUseSection({ workingDir }: ComputerUseSectionProps) {
           lastOpenedComputerPermissionUrlRef.current = null;
         }
 
-        await window.electronAPI.maker.plugins.setEnabled(COMPUTER_PLUGIN_ID, next);
-        setComputerEnabled(next);
+        await persistComputerEnabled(next);
         if (!next) {
           computerEnableIntentRef.current = false;
           setComputerPermissionPending(false);
@@ -957,11 +973,6 @@ export function ComputerUseSection({ workingDir }: ComputerUseSectionProps) {
         if (nextStatus !== computerStatus) {
           setComputerStatus(nextStatus);
         }
-        toast.success(
-          next
-            ? t('settings.computerUse.directControl.toast.enabled')
-            : t('settings.computerUse.directControl.toast.disabled'),
-        );
       } catch (err) {
         log.warn('setProjectEnabled(computer) failed', err);
         computerEnableIntentRef.current = false;
@@ -984,6 +995,7 @@ export function ComputerUseSection({ workingDir }: ComputerUseSectionProps) {
       computerStatus,
       confirm,
       openComputerPermissionSettings,
+      persistComputerEnabled,
       refreshComputerPermissionStatus,
       requestComputerPermissionGrant,
       resetComputerPermissionFlow,
@@ -1028,9 +1040,7 @@ export function ComputerUseSection({ workingDir }: ComputerUseSectionProps) {
           resetComputerPermissionFlow();
           lastOpenedComputerPermissionUrlRef.current = null;
           if (computerEnableIntentRef.current || computerEnabled) {
-            await window.electronAPI.maker.plugins.setEnabled(COMPUTER_PLUGIN_ID, true);
-            setComputerEnabled(true);
-            toast.success(t('settings.computerUse.directControl.toast.enabled'));
+            await persistComputerEnabled(true);
           }
           return;
         }
@@ -1042,9 +1052,7 @@ export function ComputerUseSection({ workingDir }: ComputerUseSectionProps) {
           resetComputerPermissionFlow();
           lastOpenedComputerPermissionUrlRef.current = null;
           if (computerEnableIntentRef.current || computerEnabled) {
-            await window.electronAPI.maker.plugins.setEnabled(COMPUTER_PLUGIN_ID, true);
-            setComputerEnabled(true);
-            toast.success(t('settings.computerUse.directControl.toast.enabled'));
+            await persistComputerEnabled(true);
           }
           return;
         }
@@ -1069,6 +1077,7 @@ export function ComputerUseSection({ workingDir }: ComputerUseSectionProps) {
     [
       computerEnabled,
       openComputerPermissionSettings,
+      persistComputerEnabled,
       refreshComputerPermissionStatus,
       requestComputerPermissionGrant,
       resetComputerPermissionFlow,
@@ -1082,9 +1091,7 @@ export function ComputerUseSection({ workingDir }: ComputerUseSectionProps) {
       if (status.installed && isComputerPermissionReady(status)) {
         lastOpenedComputerPermissionUrlRef.current = null;
         if (computerEnableIntentRef.current || computerEnabled) {
-          await window.electronAPI.maker.plugins.setEnabled(COMPUTER_PLUGIN_ID, true);
-          setComputerEnabled(true);
-          toast.success(t('settings.computerUse.directControl.toast.enabled'));
+          await persistComputerEnabled(true);
         }
       } else {
         log.debug('computer permission recheck found missing permissions', getComputerPermissionLogSummary(status));
@@ -1096,7 +1103,7 @@ export function ComputerUseSection({ workingDir }: ComputerUseSectionProps) {
       lastOpenedComputerPermissionUrlRef.current = null;
       toast.error(t('settings.computerUse.directControl.toast.toggleFailed'));
     }
-  }, [computerEnabled, refreshComputerPermissionStatus, t]);
+  }, [computerEnabled, persistComputerEnabled, refreshComputerPermissionStatus, t]);
 
   // First render: blank until all reads land (no flash, rule 7).
   if (

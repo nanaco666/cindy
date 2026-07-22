@@ -1563,6 +1563,7 @@
     "computerUse": {
       "title": "自动操作",
       "description": "让 agent 使用电脑和已连接设备替你完成任务。浏览器自动化使用独立浏览器；Android 自动化使用 ADB；电脑自动化依赖本机 driver。",
+      "codexRefreshDeferred": "设置已保存，但 Codex 正忙；重启应用后将对 Codex 新会话生效",
       "browser": {
         "title": "自动操作浏览器",
         "description": "一个 agent 专用的独立浏览器，与你日常的 Chrome 互不影响",
