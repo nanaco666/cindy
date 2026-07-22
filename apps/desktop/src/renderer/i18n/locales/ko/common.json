@@ -1137,7 +1137,7 @@
       "models": {
         "search": "모델 검색",
         "available": "모델 선택기에 표시",
-        "modelCount": "모델 {{count}}개",
+        "modelCount_other": "모델 {{count}}개",
         "agentEnabledCount": "{{agent}} {{on}}/{{total}}",
         "enableAll": "모두 표시",
         "disableAll": "모두 숨기기",

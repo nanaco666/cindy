@@ -1137,7 +1137,7 @@
       "models": {
         "search": "モデルを検索",
         "available": "モデル選択に表示",
-        "modelCount": "{{count}} モデル",
+        "modelCount_other": "{{count}} モデル",
         "agentEnabledCount": "{{agent}} {{on}}/{{total}}",
         "enableAll": "すべて表示",
         "disableAll": "すべて非表示",
