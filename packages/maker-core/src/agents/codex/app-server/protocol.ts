@@ -13,6 +13,15 @@
  *   - E:\AIWork\codex\codex-rs\app-server-protocol\src\protocol\common.rs:1406-1487 (Notification 方法名表)
  */
 
+import type {
+  AccountCreditsSnapshot,
+  AccountRateLimitsResponse,
+  AccountRateLimitSnapshot,
+  AccountRateLimitWindow,
+  ConsumeAccountRateLimitResetCreditParams,
+  ConsumeAccountRateLimitResetCreditResponse,
+} from '../../../types/account-rate-limits.js';
+
 // ── JSON-RPC envelope (字段对齐 Rust JSONRPCRequest/Notification/Response/Error) ──
 
 /** 自增 id 我们用 number; Rust 那边 RequestId 是 string|number untagged。 */
@@ -853,39 +862,9 @@ export interface ReasoningTextDeltaNotification {
  * host 端走全局 fan-out 路径 (无 threadId 不能走 routeNotification 的 per-thread 分发),
  * 所有 active subscriber 各收到一份 — 账号级数据天然跨 session 共享。
  */
-export interface RateLimitWindow {
-  /** 0-100 百分比。 */
-  usedPercent: number;
-  windowMinutes?: number | null;
-  /** Unix epoch (秒)。 */
-  resetsAt?: number | null;
-}
-
-export interface CreditsSnapshot {
-  hasCredits: boolean;
-  unlimited: boolean;
-  /** 余额字符串 (server 端 String 类型, 不是数值)。 */
-  balance?: string | null;
-}
-
-export interface RateLimitSnapshot {
-  limitId?: string | null;
-  limitName?: string | null;
-  /** 主窗口(典型 5h 滚动;窗口策略随 OpenAI 调整, 是否下发/时长多少以服务端返回为准)。 */
-  primary?: RateLimitWindow | null;
-  /** 次窗口(典型 weekly;同上, 以服务端返回为准)。 */
-  secondary?: RateLimitWindow | null;
-  credits?: CreditsSnapshot | null;
-  /** 'free' | 'plus' | 'pro' | 'business' | 'enterprise' | ... (codex 端 PlanType, 透传字符串)。 */
-  planType?: string | null;
-  /**
-   * 命中限额时填: 'rate_limit_reached' | 'workspace_owner_credits_depleted' |
-   * 'workspace_member_credits_depleted' | 'workspace_owner_usage_limit_reached' |
-   * 'workspace_member_usage_limit_reached' (snake_case, codex 协议 RateLimitReachedType)。
-   * null = 未命中。
-   */
-  rateLimitReachedType?: string | null;
-}
+export type RateLimitWindow = AccountRateLimitWindow;
+export type CreditsSnapshot = AccountCreditsSnapshot;
+export type RateLimitSnapshot = AccountRateLimitSnapshot;
 
 export interface AccountRateLimitsUpdatedNotification {
   method: 'account/rateLimits/updated';
@@ -981,6 +960,8 @@ export const Method = {
   TurnStart: 'turn/start',
   TurnSteer: 'turn/steer',
   TurnInterrupt: 'turn/interrupt',
+  AccountRateLimitsRead: 'account/rateLimits/read',
+  AccountRateLimitResetCreditConsume: 'account/rateLimitResetCredit/consume',
   // Memory (实验性, experimentalApi 必须 true 才能用):
   // app-server/README.md:202-203 + 155
   ConfigRead: 'config/read',
@@ -994,3 +975,9 @@ export const Method = {
   ToolRequestUserInput: 'item/tool/requestUserInput',
   DynamicToolCall: 'item/tool/call',
 } as const;
+
+export type {
+  AccountRateLimitsResponse,
+  ConsumeAccountRateLimitResetCreditParams,
+  ConsumeAccountRateLimitResetCreditResponse,
+};

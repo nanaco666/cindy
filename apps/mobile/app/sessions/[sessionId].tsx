@@ -370,6 +370,7 @@ import type {
   MobileSlashCommand,
   RemoteDirectoryEntry,
 } from '@/device-link/mobileMakerTransport';
+import type { MobileCodexRateLimitsResult } from '@lizi/maker-shared/device-link-contract';
 import { useTheme, useThemedStyles, type ThemeColors } from '@/theme';
 import { fontWeight, iconSize, iconStroke, lineHeight, radius, spacing, typeScale } from '@/theme/tokens';
 
@@ -773,6 +774,12 @@ export default function SessionScreen() {
   // 账号级限额快照(`maker:usage:account` 原始返回):账号级数据本身跨会话共享,但
   // 会话 agentKind 不同时语义不同(只对 codex 会话拉取/展示),随 sessionId 一起清。
   const [accountUsage, setAccountUsage] = useState<unknown>(null);
+  // Codex app-server 权威额度 + reset credit 快照。单独保留完整 DTO,同时把其中
+  // rateLimits 投影到 accountUsage,复用已有窗口 UI 并兼容老被控端只读通道。
+  const [codexRateLimits, setCodexRateLimits] = useState<MobileCodexRateLimitsResult | null>(null);
+  const [codexResetBusy, setCodexResetBusy] = useState(false);
+  // consume 回包丢失时保留本次 UUID;即使面板重新拉取额度,重试也不能换 key。
+  const [codexResetRetryKey, setCodexResetRetryKey] = useState<string | null>(null);
   // contextUsage 的归属会话号:同屏 sessionId 变化(深链 setParams 等原地切换路径)时
   // 清空缓存并作废在途请求,防止上一会话的用量数据在新会话的「会话信息」里串档。
   const contextUsageSessionRef = useRef(sessionId);
@@ -782,6 +789,9 @@ export default function SessionScreen() {
     setContextUsage(null);
     setContextLoading(false);
     setAccountUsage(null);
+    setCodexRateLimits(null);
+    setCodexResetBusy(false);
+    setCodexResetRetryKey(null);
   }, [sessionId]);
   const [capabilities, setCapabilities] = useState<MobileAgentCapabilities | null>(null);
   const [capabilitiesLoading, setCapabilitiesLoading] = useState(false);
@@ -4683,20 +4693,70 @@ export default function SessionScreen() {
     }
   }, [contextLoading, currentSession, maker, sessionId]);
 
-  // 账号限额按需拉取(会话信息面板打开时):只对 codex 会话有意义(ChatGPT 订阅窗口);
-  // 老被控端 CHANNEL_NOT_ALLOWED / 瞬时失败一律静默降级 —— 限额是补充信息,不设
-  // error 态、菜单里对应区块直接不显示(summarizeAccountRateLimits 解析 null)。
+  // 账号限额按需拉取(会话信息面板打开时):优先走 Codex app-server 权威控制面,
+  // 同时拿窗口和 reset credits。老被控端没有新通道时回退既有只读 usage channel;
+  // 两条都失败则静默保留当前快照——限额是补充信息,不打断会话操作。
   const refreshAccountUsage = useCallback(async () => {
     if (!currentSession || currentSession.agentKind !== 'codex') return;
     try {
-      const snapshot = await maker.getAccountUsage('codex');
+      const snapshot = await maker.getCodexRateLimits();
       // 迟到结果归属校验,同 contextUsage(见 contextUsageSessionRef 注释)。
       if (contextUsageSessionRef.current !== sessionId) return;
-      setAccountUsage(snapshot);
+      setCodexRateLimits(snapshot);
+      setAccountUsage(snapshot.rateLimits);
     } catch {
-      // 静默:通道不支持 / 网络瞬断都不打扰用户。
+      try {
+        const snapshot = await maker.getAccountUsage('codex');
+        if (contextUsageSessionRef.current !== sessionId) return;
+        setAccountUsage(snapshot);
+      } catch {
+        // 静默:通道不支持 / 网络瞬断都不打扰用户。
+      }
     }
   }, [currentSession, maker, sessionId]);
+
+  // reset 只接受 desktop read 签发的 UUID。失败时不替换 codexRateLimits/offer,
+  // 用户重试会继续使用同一幂等键;成功后优先采用 desktop 已重新读取的权威快照。
+  const resetCodexRateLimits = useCallback(async () => {
+    const offer = codexRateLimits?.resetOffer;
+    const idempotencyKey = codexResetRetryKey ?? offer?.idempotencyKey;
+    if (!idempotencyKey || codexResetBusy) return;
+    // Desktop 的 offer 有界保留。过期或 refresh 已明确换 key 时不盲重试旧请求,
+    // 先刷新并要求用户重新确认一张当前可用 credit。
+    if (!offer || offer.validUntil <= Date.now()
+      || (codexResetRetryKey !== null && offer.idempotencyKey !== codexResetRetryKey)) {
+      setCodexResetRetryKey(null);
+      await refreshAccountUsage();
+      Alert.alert('请重新确认', '重置凭证已过期，请确认刷新后的额度信息。');
+      return;
+    }
+    setCodexResetRetryKey(idempotencyKey);
+    setCodexResetBusy(true);
+    try {
+      const result = await maker.resetCodexRateLimits(idempotencyKey);
+      if (contextUsageSessionRef.current !== sessionId) return;
+      setCodexResetRetryKey(null);
+      if (result.rateLimits) {
+        setCodexRateLimits(result.rateLimits);
+        setAccountUsage(result.rateLimits.rateLimits);
+      } else {
+        await refreshAccountUsage();
+      }
+      const message = {
+        reset: 'Codex 用量窗口已重置。',
+        nothingToReset: '当前没有需要重置的用量窗口。',
+        noCredit: '当前没有可用的重置次数。',
+        alreadyRedeemed: '这次重置请求已经处理过，用量已刷新。',
+      }[result.outcome];
+      Alert.alert(result.outcome === 'reset' ? '重置完成' : '重置结果', message);
+    } catch (err) {
+      if (contextUsageSessionRef.current === sessionId) {
+        Alert.alert('重置失败', humanizeRemoteError(err));
+      }
+    } finally {
+      if (contextUsageSessionRef.current === sessionId) setCodexResetBusy(false);
+    }
+  }, [codexRateLimits, codexResetBusy, codexResetRetryKey, maker, refreshAccountUsage, sessionId]);
 
   const loadExtraDirBrowsePath = useCallback(async (targetPath: string) => {
     if (!deviceId || !currentSession || currentSession.workspaceKind !== 'project') return;
@@ -5219,6 +5279,8 @@ export default function SessionScreen() {
           <SessionMenuSheet
             accountUsage={currentSession.agentKind === 'codex' ? accountUsage : null}
             busy={controlBusy}
+            codexRateLimits={currentSession.agentKind === 'codex' ? codexRateLimits : null}
+            codexResetBusy={codexResetBusy}
             contextLoading={contextLoading}
             contextUsage={contextUsage}
             extraDirBrowser={extraDirBrowser}
@@ -5230,6 +5292,7 @@ export default function SessionScreen() {
             onLoadExtraDirPath={(path) => void loadExtraDirBrowsePath(path)}
             onRefreshAccountUsage={() => void refreshAccountUsage()}
             onRefreshContextUsage={() => void refreshContextUsage()}
+            onResetCodexRateLimits={() => void resetCodexRateLimits()}
             onOpenWorkspace={() => {
               if (!currentSession.workingDir) return;
               setSettingsOpen(false);

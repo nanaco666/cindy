@@ -35,6 +35,11 @@ import type {
   MemorySetResult,
   MemoryResetResult,
 } from '../types/memory.js';
+import type {
+  AccountRateLimitsResponse,
+  ConsumeAccountRateLimitResetCreditParams,
+  ConsumeAccountRateLimitResetCreditResponse,
+} from '../types/account-rate-limits.js';
 import type { HookEvent, HookCallbackMatcher, Query } from '@anthropic-ai/claude-agent-sdk';
 
 import type { AuthAdapter } from '../interfaces/auth-adapter.js';
@@ -942,6 +947,22 @@ export abstract class BaseAgent {
    */
   async refreshLocalModels(): Promise<boolean> {
     return false;
+  }
+
+  /**
+   * Read provider account rate limits without starting a model turn.
+   * Codex implements this through the app-server control plane.
+   */
+  async readAccountRateLimits(): Promise<AccountRateLimitsResponse> {
+    return this.throwNotSupported('account:rate-limits:read', 'not-implemented');
+  }
+
+  /** Consume one banked provider reset credit without starting a model turn. */
+  async consumeAccountRateLimitResetCredit(
+    params: ConsumeAccountRateLimitResetCreditParams,
+  ): Promise<ConsumeAccountRateLimitResetCreditResponse> {
+    void params;
+    return this.throwNotSupported('account:rate-limit-reset:consume', 'not-implemented');
   }
 
   /**

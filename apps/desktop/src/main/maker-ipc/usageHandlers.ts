@@ -6,12 +6,16 @@
  */
 
 import type { AgentKind } from '@lizi/maker-core';
+import type {
+  MobileCodexRateLimitResetResult,
+  MobileCodexRateLimitsResult,
+} from '@lizi/maker-shared/device-link-contract';
 import type { ClaudeSubscriptionUsageSnapshot } from '../../shared/claudeSubscriptionUsage.js';
 import type { ClaudeAccountUsageSnapshot } from '../usage/claudeAccountUsage.js';
 import type { ModelPricingMap } from '../usage/modelPricing.js';
 import type { UsageHistoryPayload, UsageHistoryReadOptions } from '../usage/usageHistory.js';
 import type { AgentTodayUsage, RateLimitSnapshot } from '../usageBroadcaster.js';
-import { requireString } from '../utils/ipcValidate.js';
+import { requireString, throwIpcError } from '../utils/ipcValidate.js';
 import { MAKER_INVOKE } from './channels.js';
 import type { IpcHandlerRegistry } from './ipcHandlerRegistry.js';
 
@@ -19,6 +23,8 @@ import type { IpcHandlerRegistry } from './ipcHandlerRegistry.js';
 export interface MakerUsageHandlerDeps {
   readAgentTodayUsage(agentKind: AgentKind): Promise<AgentTodayUsage>;
   readCodexAccountUsageSnapshot(): Promise<RateLimitSnapshot | null>;
+  readCodexRateLimits(): Promise<MobileCodexRateLimitsResult>;
+  consumeCodexRateLimitReset(idempotencyKey: string): Promise<MobileCodexRateLimitResetResult>;
   readClaudeSubscriptionUsageSnapshot(): Promise<ClaudeSubscriptionUsageSnapshot | null>;
   readClaudeAccountUsageSnapshot(): ClaudeAccountUsageSnapshot | null;
   triggerClaudeAccountUsageRefresh(force: boolean): Promise<void>;
@@ -47,6 +53,21 @@ export function registerMakerUsageHandlers(
     }
     return null;
   });
+
+  registry.handle(MAKER_INVOKE.USAGE_CODEX_RATE_LIMITS, async () => {
+    return await deps.readCodexRateLimits();
+  });
+
+  registry.handle(
+    MAKER_INVOKE.USAGE_CODEX_RATE_LIMIT_RESET,
+    async (_e, idempotencyKey: unknown) => {
+      const key = requireString(idempotencyKey, 'idempotencyKey');
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(key)) {
+        throwIpcError('INVALID_PARAMS', 'idempotencyKey must be a UUID');
+      }
+      return await deps.consumeCodexRateLimitReset(key);
+    },
+  );
 
   // Claude 订阅账号余量 (5h/周/分模型窗口) — cached-first, 内部按需后台刷新。
   registry.handle(MAKER_INVOKE.USAGE_CLAUDE_SUBSCRIPTION, async () => {

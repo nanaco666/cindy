@@ -63,6 +63,11 @@ import type {
   MemorySetResult,
   MemoryResetResult,
 } from '../../types/memory.js';
+import type {
+  AccountRateLimitsResponse,
+  ConsumeAccountRateLimitResetCreditParams,
+  ConsumeAccountRateLimitResetCreditResponse,
+} from '../../types/account-rate-limits.js';
 import { createAsyncQueue, type AsyncQueue } from '../shared/async-queue.js';
 import { UsageTracker } from '../shared/usage-tracker.js';
 import { getDefaultImageResizer } from '../shared/image-resizer.js';
@@ -1479,6 +1484,26 @@ export class CodexAgent extends BaseAgent {
     if (this.hosts.get(key) !== host || !this.deps.onCodexLocalModelsListed) return false;
     await this.deps.onCodexLocalModelsListed(models);
     return true;
+  }
+
+  /** Read ChatGPT subscription windows and banked reset credits via app-server RPC. */
+  override async readAccountRateLimits(): Promise<AccountRateLimitsResponse> {
+    // This RPC is credential-specific, unlike model/list or memory utilities. Requiring
+    // oauth-bearer prevents a gateway/provider host from reading or mutating the wrong
+    // account context; getHost refuses to replace a differently-authenticated active host.
+    const host = await this.getHost(undefined, 'oauth-bearer');
+    return await host.request<AccountRateLimitsResponse>(Method.AccountRateLimitsRead, undefined);
+  }
+
+  /** Consume one reset credit on the non-model app-server control plane. */
+  override async consumeAccountRateLimitResetCredit(
+    params: ConsumeAccountRateLimitResetCreditParams,
+  ): Promise<ConsumeAccountRateLimitResetCreditResponse> {
+    const host = await this.getHost(undefined, 'oauth-bearer');
+    return await host.request<ConsumeAccountRateLimitResetCreditResponse>(
+      Method.AccountRateLimitResetCreditConsume,
+      params,
+    );
   }
 
   private async createHost(

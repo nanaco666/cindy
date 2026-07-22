@@ -340,6 +340,8 @@ describe('maker usage IPC handlers', () => {
     return {
       readAgentTodayUsage: vi.fn(),
       readCodexAccountUsageSnapshot: vi.fn(),
+      readCodexRateLimits: vi.fn(),
+      consumeCodexRateLimitReset: vi.fn(),
       readClaudeSubscriptionUsageSnapshot: vi.fn().mockResolvedValue(null),
       readClaudeAccountUsageSnapshot: vi.fn(),
       triggerClaudeAccountUsageRefresh: vi.fn(),
@@ -390,6 +392,52 @@ describe('maker usage IPC handlers', () => {
 
     await expect(harness.invoke(MAKER_INVOKE.USAGE_MODEL_PRICING)).resolves.toEqual(pricing);
     expect(readModelPricing).toHaveBeenCalledTimes(1);
+  });
+
+  it('reads Codex reset credits and consumes only a UUID offer key', async () => {
+    const harness = new IpcHarness();
+    const snapshot = {
+      account: { email: 'pe***@example.com', accountId: '…456789', planType: 'plus' },
+      rateLimits: { planType: 'plus', primary: { usedPercent: 100 } },
+      rateLimitsByLimitId: null,
+      rateLimitResetCredits: { availableCount: 1, credits: null },
+      resetOffer: {
+        idempotencyKey: '018f4ec7-c6d8-7f10-8d43-9f8791d33000',
+        expiresAt: null,
+        validUntil: 123,
+      },
+    };
+    const readCodexRateLimits = vi.fn().mockResolvedValue(snapshot);
+    const consumeCodexRateLimitReset = vi.fn().mockResolvedValue({
+      outcome: 'reset',
+      rateLimits: snapshot,
+    });
+
+    registerMakerUsageHandlers(harness, makeUsageDeps({
+      readCodexRateLimits,
+      consumeCodexRateLimitReset,
+    }));
+
+    await expect(harness.invoke(MAKER_INVOKE.USAGE_CODEX_RATE_LIMITS)).resolves.toEqual(snapshot);
+    await expect(harness.invoke(
+      MAKER_INVOKE.USAGE_CODEX_RATE_LIMIT_RESET,
+      '018f4ec7-c6d8-7f10-8d43-9f8791d33000',
+    )).resolves.toEqual({ outcome: 'reset', rateLimits: snapshot });
+    expect(consumeCodexRateLimitReset).toHaveBeenCalledWith(
+      '018f4ec7-c6d8-7f10-8d43-9f8791d33000',
+    );
+  });
+
+  it('rejects arbitrary reset input before it reaches the mutation dependency', async () => {
+    const harness = new IpcHarness();
+    const consumeCodexRateLimitReset = vi.fn();
+    registerMakerUsageHandlers(harness, makeUsageDeps({ consumeCodexRateLimitReset }));
+
+    await expect(harness.invoke(
+      MAKER_INVOKE.USAGE_CODEX_RATE_LIMIT_RESET,
+      'credit-id-from-client',
+    )).rejects.toThrow(/idempotencyKey must be a UUID/);
+    expect(consumeCodexRateLimitReset).not.toHaveBeenCalled();
   });
 
   it('passes numeric days through to readUsageHistory and drops invalid values', async () => {

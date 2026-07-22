@@ -1296,10 +1296,21 @@ describe('CodexAgent MCP thread context hooks', () => {
 
     const handle = await agent.startSession({
       sessionId: 'session-utility-host',
+      providerId: 'openai',
       model: 'gpt-5.4',
       workingDir: '/repo',
     });
     expect(createdTransports).toHaveLength(1);
+
+    const rateLimits = {
+      rateLimits: { planType: 'plus', primary: { usedPercent: 100, windowMinutes: 300 } },
+      rateLimitsByLimitId: null,
+      rateLimitResetCredits: { availableCount: 2, credits: null },
+    };
+    createdTransports[0].setMockResponse(Method.AccountRateLimitsRead, { result: rateLimits });
+    createdTransports[0].setMockResponse(Method.AccountRateLimitResetCreditConsume, {
+      result: { outcome: 'reset' },
+    });
 
     await agent.setMemory(true);
     const pushCountAfterSet = createdTransports[0].lines
@@ -1314,14 +1325,42 @@ describe('CodexAgent MCP thread context hooks', () => {
       source: 'host-runtime',
     });
     await expect(agent.resetMemory()).resolves.toEqual({});
+    await expect(agent.readAccountRateLimits()).resolves.toEqual(rateLimits);
+    await expect(agent.consumeAccountRateLimitResetCredit({
+      idempotencyKey: '018f4ec7-c6d8-7f10-8d43-9f8791d33000',
+      creditId: 'credit-earliest',
+    })).resolves.toEqual({ outcome: 'reset' });
 
     expect(createdTransports).toHaveLength(1);
     expect(createdTransports[0].lines.some((line) => line.includes('skills/list'))).toBe(true);
     expect(createdTransports[0].lines.some((line) => line.includes('config/read'))).toBe(true);
     expect(createdTransports[0].lines.some((line) => line.includes('memory/reset'))).toBe(true);
+    expect(createdTransports[0].lines.some((line) => line.includes('account/rateLimits/read'))).toBe(true);
+    expect(createdTransports[0].lines.some((line) => (
+      line.includes('account/rateLimitResetCredit/consume')
+      && line.includes('018f4ec7-c6d8-7f10-8d43-9f8791d33000')
+      && line.includes('credit-earliest')
+    ))).toBe(true);
     expect(
       createdTransports[0].lines.filter((line) => line.includes('experimentalFeature/enablement/set')).length,
     ).toBe(pushCountAfterSet);
+
+    await handle.close();
+    await agent.dispose();
+  });
+
+  it('refuses account reset RPCs on a differently-authenticated active host', async () => {
+    const agent = new CodexAgent(createDeps());
+    const handle = await agent.startSession({
+      sessionId: 'session-gateway-host',
+      providerId: 'xd',
+      model: 'codex/gpt-5.5',
+      workingDir: '/repo',
+    });
+
+    await expect(agent.readAccountRateLimits()).rejects.toThrow(/active Codex session/i);
+    expect(createdTransports).toHaveLength(1);
+    expect(createdTransports[0].closed).toBe(false);
 
     await handle.close();
     await agent.dispose();

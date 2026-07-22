@@ -3154,7 +3154,7 @@ ipcMain.on('theme:apply-vibrancy', (_event, payload: { familyId: string; isDark:
       registerMakerForkIpc();
       registerMakerAuthIpc(getMakerCore());
       registerMakerStatusIpc(getMakerCore());
-      registerMakerUsageIpc();
+      registerMakerUsageIpc(getMakerCore());
       registerMakerBinaryVersionIpc();
       registerCrossAgentConvertIpc();
       // Workdir File Browser (vscode-style lazy file tree + content viewer for

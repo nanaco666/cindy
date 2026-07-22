@@ -32,6 +32,7 @@ import type {
 import { Session, generateSessionId } from './session.js';
 import type { BaseAgent, StartSessionOptions, OneShotOptions } from './agents/base-agent.js';
 import type { MemoryStatus, MemorySetResult, MemoryResetResult } from './types/memory.js';
+import type { ConsumeAccountRateLimitResetCreditParams } from './types/account-rate-limits.js';
 import type { SessionStorage, SessionMeta } from './interfaces/session-storage.js';
 import type { Logger } from './interfaces/logger.js';
 import type { MakerMemoryManager } from './memory/manager.js';
@@ -593,6 +594,19 @@ export class Maker {
   /** 刷新指定 agent 的本机运行时模型清单；不支持或结果已过期时返回 false。 */
   async refreshAgentLocalModels(agentKind: AgentKind): Promise<boolean> {
     return this.requireAgent(agentKind).refreshLocalModels();
+  }
+
+  /** Read account quota and banked reset credits through the selected agent runtime. */
+  async readAgentAccountRateLimits(agentKind: AgentKind) {
+    return this.requireAgent(agentKind).readAccountRateLimits();
+  }
+
+  /** Consume one banked account reset credit through the selected agent runtime. */
+  async consumeAgentAccountRateLimitResetCredit(
+    agentKind: AgentKind,
+    params: ConsumeAccountRateLimitResetCreditParams,
+  ) {
+    return this.requireAgent(agentKind).consumeAccountRateLimitResetCredit(params);
   }
 
   /** Codex 浏览器登录中途取消; Claude 之类同步弹窗式登录调到底层 no-op。 */
