@@ -801,11 +801,12 @@ export function NewMakerDraftRoute() {
         // 渲染时序:prefetch 后 cache 已更新,但 useAgentCapabilities 的 setState 可能
         // 还没 re-render,seed effect 若先用旧 capabilities 跑一次就会锁住 seedKey。
         const freshCaps = getCachedCapabilities(capabilityAgentKind, target.deviceId);
-        if (freshCaps) {
-          const seedKey = `${target.deviceId}:${capabilityAgentKind}`;
-          dlSeedKeyRef.current = seedKey;
-          setDlSel(resolveDeviceLinkDraftDefaults(freshCaps, freshDefaults, undefined, capabilityAgentKind));
+        if (!freshCaps) {
+          throw new Error('failed to fetch device capabilities');
         }
+        const seedKey = `${target.deviceId}:${capabilityAgentKind}`;
+        dlSeedKeyRef.current = seedKey;
+        setDlSel(resolveDeviceLinkDraftDefaults(freshCaps, freshDefaults, undefined, capabilityAgentKind));
         patchDraft({
           workingDir: target.path,
           remoteHostId: null,
@@ -1630,7 +1631,7 @@ export function NewMakerDraftRoute() {
   const handleCreateGoal = useCallback(
     async (objective: string, limits: GoalLimitValues): Promise<void> => {
       if (isDeviceLinkDraft && (capabilitiesLoading || deviceProvidersLoading)) {
-        throw new Error('device capabilities still loading');
+        throw new Error(t('ccAgent.draft.deviceStillLoading'));
       }
       const { proceed } = await vendorAuthGate.checkAndConfirm(authVendor, {
         deviceId: effectiveDeviceLinkDeviceId,
@@ -1747,6 +1748,7 @@ export function NewMakerDraftRoute() {
     [
       isDeviceLinkDraft,
       capabilitiesLoading,
+      deviceProvidersLoading,
       vendorAuthGate,
       authVendor,
       effectiveDeviceLinkDeviceId,

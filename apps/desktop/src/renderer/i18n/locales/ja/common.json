@@ -4394,6 +4394,7 @@
     },
     "draft": {
       "createSessionFailed": "セッションの作成に失敗しました。再試行してください",
+      "deviceStillLoading": "リモートデバイスの読み込み中です。しばらくお待ちください",
       "worktreeMissingRepo": "worktree を作成できません：現在のディレクトリのリポジトリルートがありません",
       "worktreeRepoHint": "作業ディレクトリを再選択し、右下のフォルダ表示が更新されてから再試行してください",
       "sessionInactive": "セッションはすでにアクティブではありません",
