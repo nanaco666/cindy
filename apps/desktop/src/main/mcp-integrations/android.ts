@@ -832,18 +832,37 @@ async function waitForAdbDevicesReady(deadlineMs: number): Promise<AndroidConnec
   throw lastError;
 }
 
+async function waitForAdbServerStarted(deadlineMs: number): Promise<void> {
+  let lastError: unknown = new AdbCommandTimeoutError(
+    ['start-server'],
+    ADB_COLD_START_TIMEOUT_MS,
+  );
+  while (Date.now() < deadlineMs) {
+    const remainingMs = deadlineMs - Date.now();
+    try {
+      const result = await spawnAdb(['start-server'], remainingMs);
+      if (result.exitCode === 0) return;
+      const error = new AndroidDriverError(
+        'ANDROID_DRIVER_ERROR',
+        result.stderr.trim() || 'adb start-server failed after devices timed out',
+      );
+      if (!isTransientAdbStartupError(error)) throw error;
+      lastError = error;
+    } catch (err) {
+      if (!isTransientAdbStartupError(err)) throw err;
+      lastError = err;
+    }
+
+    const delayMs = Math.min(ADB_COLD_START_POLL_INTERVAL_MS, deadlineMs - Date.now());
+    if (delayMs <= 0) break;
+    await waitForDelay(delayMs);
+  }
+  throw lastError;
+}
+
 async function runAdbColdStartRecovery(): Promise<AndroidConnectedDevice[]> {
   const deadlineMs = Date.now() + ADB_COLD_START_TIMEOUT_MS;
-  const startResult = await spawnAdb(
-    ['start-server'],
-    Math.max(1, deadlineMs - Date.now()),
-  );
-  if (startResult.exitCode !== 0) {
-    throw new AndroidDriverError(
-      'ANDROID_DRIVER_ERROR',
-      startResult.stderr.trim() || 'adb start-server failed after devices timed out',
-    );
-  }
+  await waitForAdbServerStarted(deadlineMs);
   return waitForAdbDevicesReady(deadlineMs);
 }
 

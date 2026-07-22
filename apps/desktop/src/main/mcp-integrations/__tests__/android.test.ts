@@ -268,6 +268,43 @@ emulator-5554 device product:sdk_gphone64_arm64 model:Pixel_8 device:emu transpo
     ]);
   });
 
+  it('retries start-server after a transient protocol reset', async () => {
+    vi.useFakeTimers();
+    mockAdbSpawnByArgs({
+      'adb devices -l': [
+        { hang: true },
+        {
+          stdout: `List of devices attached
+emulator-5554 device product:sdk_gphone64_arm64 model:Pixel_8 device:emu transport_id:1
+`,
+        },
+      ],
+      'adb start-server': [
+        {
+          stderr: "error: protocol fault (couldn't read status): Connection reset by peer\n",
+          exitCode: 1,
+        },
+        {
+          stderr: '* daemon not running; starting now at tcp:5037\n* daemon started successfully\n',
+        },
+      ],
+    });
+
+    const resultPromise = callAndroidDriverTool('list_devices', {});
+    await vi.advanceTimersByTimeAsync(3_250);
+
+    await expect(resultPromise).resolves.toMatchObject({
+      ok: true,
+      data: [{ device_serial: 'emulator-5554', state: 'device' }],
+    });
+    expect(spawnMock.mock.calls.map((call) => call[1])).toEqual([
+      ['devices', '-l'],
+      ['start-server'],
+      ['start-server'],
+      ['devices', '-l'],
+    ]);
+  });
+
   it('shares one cold-start recovery across concurrent device queries', async () => {
     vi.useFakeTimers();
     mockAdbSpawnByArgs({
