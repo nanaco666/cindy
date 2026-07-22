@@ -1007,7 +1007,54 @@ function rememberPendingCodexTerminalPlan(sessionId: string, toolUseId: string, 
   pending.set(toolUseId, plan);
 }
 
-function applyPendingCodexTerminalPlans(sessionId: string, mapped: ChatMessage[]): ChatMessage[] {
+type PendingCodexPlanHydrationSource = 'live-echo' | 'history';
+
+function readCodexPlan(message: ChatMessage): unknown[] | null {
+  if (!message.toolInput || typeof message.toolInput !== 'object') return null;
+  const plan = (message.toolInput as { plan?: unknown }).plan;
+  return Array.isArray(plan) ? plan : null;
+}
+
+function codexPlanStatusRank(value: unknown): number {
+  if (typeof value !== 'string') return 0;
+  switch (value.replace(/[-_]/g, '').toLowerCase()) {
+    case 'completed':
+    case 'failed':
+      return 3;
+    case 'inprogress':
+      return 2;
+    case 'pending':
+      return 1;
+    default:
+      return 0;
+  }
+}
+
+function isCodexPlanAtLeastAsFresh(incoming: unknown[], cached: unknown[]): boolean {
+  if (JSON.stringify(incoming) === JSON.stringify(cached)) return true;
+  if (cached.length === 0) return incoming.length === 0;
+  if (incoming.length < cached.length) return false;
+
+  for (let index = 0; index < cached.length; index += 1) {
+    const incomingItem = incoming[index];
+    const cachedItem = cached[index];
+    if (!incomingItem || typeof incomingItem !== 'object' || Array.isArray(incomingItem)) return false;
+    if (!cachedItem || typeof cachedItem !== 'object' || Array.isArray(cachedItem)) return false;
+    const incomingRecord = incomingItem as Record<string, unknown>;
+    const cachedRecord = cachedItem as Record<string, unknown>;
+    const incomingRank = codexPlanStatusRank(incomingRecord.status);
+    const cachedRank = codexPlanStatusRank(cachedRecord.status);
+    if (incomingRank < cachedRank) return false;
+    if (incomingRecord.step !== cachedRecord.step && incomingRank <= cachedRank) return false;
+  }
+  return true;
+}
+
+function applyPendingCodexTerminalPlans(
+  sessionId: string,
+  mapped: ChatMessage[],
+  source: PendingCodexPlanHydrationSource = 'history',
+): ChatMessage[] {
   const pending = pendingCodexTerminalPlans.get(sessionId);
   if (!pending || pending.size === 0) return mapped;
 
@@ -1016,6 +1063,11 @@ function applyPendingCodexTerminalPlans(sessionId: string, mapped: ChatMessage[]
     const toolUseId = message.toolUseId;
     const plan = toolUseId ? pending.get(toolUseId) : undefined;
     if (!toolUseId || !plan) return message;
+    const persistedPlan = readCodexPlan(message);
+    if (source === 'history' && persistedPlan && isCodexPlanAtLeastAsFresh(persistedPlan, plan)) {
+      pending.delete(toolUseId);
+      return message;
+    }
     const applied = applyCodexPlanSnapshotOnDone([message], plan, toolUseId.replace(/^plan:/, ''));
     if (!applied.toolUseId) return message;
     pending.delete(toolUseId);
@@ -3304,7 +3356,7 @@ function initGlobalListeners(): void {
     if (isBeforeOrAtRendererClearBoundary(sessionId, message.createdAt)) return;
     const [mapped] = mapServerMessages([message]);
     if (!mapped) return;
-    const [hydratedMapped] = applyPendingCodexTerminalPlans(sessionId, [mapped]);
+    const [hydratedMapped] = applyPendingCodexTerminalPlans(sessionId, [mapped], 'live-echo');
     setState(sessionId, (s) => {
       const idx = s.messages.findIndex((m) => m.clientId === hydratedMapped.clientId);
       if (idx >= 0) {
@@ -6765,6 +6817,8 @@ export const makerChatStore = {
     setState(sessionId, (s) => handleStatusUpdate(s, update)),
   /** Exposed for tests only. */
   __hydratePersistedMessageForTest: hydratePersistedMessage,
+  /** Exposed for tests only. */
+  __applyPendingCodexTerminalPlansForTest: applyPendingCodexTerminalPlans,
   /** Exposed for tests only. */
   __mapServerMessagesForTest: mapServerMessages,
   /** Exposed for tests only. */

@@ -181,6 +181,7 @@ import {
   noteSessionAgentKind,
   noteSessionClearBoundary,
   noteTurnStarted,
+  rememberPlanTurnCompletion,
   onAssistantTextEvent,
   onInteractionMessage,
   onInteractionResolved,
@@ -2284,6 +2285,13 @@ export function wireSessionToIpc(session: ReturnType<Maker['getSession']>): void
       // _turnStartedAtBySession 之前保存一份，让 deferred 路径能正确做 /clear 竞态 cap。
       if (event.type === 'error' && isRemoteAuthRetry) {
         saveTurnStartedAtForDeferred(session.id);
+      }
+      if (event.type === 'done') {
+        if (event.source === 'codex') {
+          const doneData = event.data as { raw?: { id?: unknown } } | null;
+          const turnId = typeof doneData?.raw?.id === 'string' ? doneData.raw.id : null;
+          if (turnId) rememberPlanTurnCompletion(session.id, turnId);
+        }
       }
       // turn 收尾打标:本 turn 已知持久化(assistant flush / orphan tool_result /
       // error 行)已全部入队,在此统一定格并等排空后写。done 与 terminal error

@@ -52,6 +52,7 @@ import {
   noteSessionAgentKind,
   enqueueDurableWrite,
   noteTurnStarted,
+  rememberPlanTurnCompletion,
   saveTurnStartedAtForDeferred,
 } from '../messagePersistBroadcaster.js';
 
@@ -130,12 +131,18 @@ describe('update_plan tool_use persistence', () => {
     expect(updateMessageContent).not.toHaveBeenCalled();
   });
 
-  it('persists a turn-scoped plan_snapshot and updates the same row on reconciliation', async () => {
-    const firstPersistId = onPlanSnapshotEvent(
+  it('updates the existing plan row when plan_snapshot arrives after the done reset', async () => {
+    const firstPersistId = onToolUseEvent(
       SESSION,
-      { turnId: 'turn-late', plan: [{ step: 'Inspect', status: 'in_progress' }] },
+      {
+        toolUseId: 'plan:turn-late',
+        toolName: 'update_plan',
+        input: { plan: [{ step: 'Inspect', status: 'in_progress' }] },
+      },
       null,
     );
+    rememberPlanTurnCompletion(SESSION, 'turn-late', 2_000);
+    resetTurnPersistState(SESSION);
     const secondPersistId = onPlanSnapshotEvent(
       SESSION,
       { turnId: 'turn-late', plan: [{ step: 'Inspect', status: 'completed' }] },
@@ -169,6 +176,28 @@ describe('update_plan tool_use persistence', () => {
         toolName: 'update_plan',
         input: { plan: [{ step: 'Inspect', status: 'completed' }] },
       },
+    );
+  });
+
+  it('positions a first-seen drained plan at the completed turn boundary', async () => {
+    rememberPlanTurnCompletion(SESSION, 'turn-first-seen-late', 2_000);
+    resetTurnPersistState(SESSION);
+
+    const persistId = onPlanSnapshotEvent(
+      SESSION,
+      { turnId: 'turn-first-seen-late', plan: [{ step: 'Inspect', status: 'completed' }] },
+      null,
+    );
+
+    await flushWrites();
+    expect(createMessage).toHaveBeenCalledWith(
+      SESSION,
+      expect.objectContaining({
+        clientId: persistId,
+        toolUseId: 'plan:turn-first-seen-late',
+        createdAt: 2_000,
+      }),
+      broadcastGuard(),
     );
   });
 });

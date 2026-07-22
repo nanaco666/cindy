@@ -1199,6 +1199,70 @@ describe('makerChatStore text delta batching', () => {
     ]);
   });
 
+  it('lets newer history replace a stale pending terminal plan cache', () => {
+    makerChatStore.setSessionRuntime(SESSION_ID, { agentKind: 'codex' });
+    onEvent?.({
+      sessionId: SESSION_ID,
+      event: {
+        type: 'done',
+        source: 'codex',
+        data: {
+          type: 'codex/event/task_complete',
+          raw: { id: 'turn-history-newer' },
+          plan: [{ step: 'Inspect', status: 'in_progress' }],
+        },
+      },
+    });
+
+    const [hydrated] = makerChatStore.__applyPendingCodexTerminalPlansForTest(
+      SESSION_ID,
+      [{
+        clientId: 'plan-row-history-newer',
+        role: 'tool_use',
+        toolName: 'update_plan',
+        toolUseId: 'plan:turn-history-newer',
+        toolInput: { plan: [{ step: 'Inspect', status: 'completed' }] },
+        content: 'Update plan',
+        createdAt: '2026-07-22T00:00:03.000Z',
+      }],
+      'history',
+    );
+
+    expect(hydrated.toolInput).toEqual({ plan: [{ step: 'Inspect', status: 'completed' }] });
+  });
+
+  it('keeps a fresher pending terminal plan over stale history', () => {
+    makerChatStore.setSessionRuntime(SESSION_ID, { agentKind: 'codex' });
+    onEvent?.({
+      sessionId: SESSION_ID,
+      event: {
+        type: 'done',
+        source: 'codex',
+        data: {
+          type: 'codex/event/task_complete',
+          raw: { id: 'turn-history-stale' },
+          plan: [{ step: 'Inspect', status: 'completed' }],
+        },
+      },
+    });
+
+    const [hydrated] = makerChatStore.__applyPendingCodexTerminalPlansForTest(
+      SESSION_ID,
+      [{
+        clientId: 'plan-row-history-stale',
+        role: 'tool_use',
+        toolName: 'update_plan',
+        toolUseId: 'plan:turn-history-stale',
+        toolInput: { plan: [{ step: 'Inspect', status: 'in_progress' }] },
+        content: 'Update plan',
+        createdAt: '2026-07-22T00:00:03.000Z',
+      }],
+      'history',
+    );
+
+    expect(hydrated.toolInput).toEqual({ plan: [{ step: 'Inspect', status: 'completed' }] });
+  });
+
   it('preserves terminal Codex plan content when stale DB hydration arrives', () => {
     const hydrated = makerChatStore.__hydratePersistedMessageForTest(
       {
