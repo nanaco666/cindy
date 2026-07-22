@@ -113,6 +113,7 @@ import {
   getDesktopMcpToolApprovalPolicy,
 } from './mcp-tool-approval-policy.js';
 import { mapCodexAppServerModelsToCatalog } from './codex-model-discovery.js';
+import { prepareSharedProjectSkillLinks } from './shared-global-skills.js';
 export { withRehydrateCloseSuppressed };
 
 type RemoteCcQuery = Awaited<
@@ -627,9 +628,25 @@ export function getMaker(): Maker {
       storage: desktopSessionStorage,
       logger: desktopMakerLogger,
       makerMemory: makerMemoryManager,
-      // Desktop-specific session 关闭时副作用钩子。maker-core 不知道 worktree / OS temp
-      // 文件存在,只在 status 'closed' 时调一次;具体清理逻辑都在 desktop host 这一处声明。
+      // Desktop-specific session 生命周期副作用钩子。maker-core 不知道文件系统细节，
+      // 启动前的 Skill 共享与关闭后的清理都由 desktop host 注入。
       lifecycleHooks: {
+        onBeforeStart: async ({ agentKind, workingDir, remoteHostId }) => {
+          // SSH remote 的 workingDir 属于远端文件系统，本机不能为它创建兼容链接。
+          if (remoteHostId || !workingDir) return;
+          const result = await prepareSharedProjectSkillLinks({ workingDir });
+          for (const warning of result.warnings) {
+            desktopMakerLogger.warn('shared project skill link warning', {
+              workingDir,
+              warning,
+            });
+          }
+          // Codex app-server 会按 cwd 缓存 skills/list；本轮新建链接后必须在
+          // startSession 前失效缓存，确保首个 session 就能使用刚共享的 Skill。
+          if (agentKind === 'codex' && result.changed) {
+            await codexAgent.listAgentSkills({ workingDir, forceReload: true });
+          }
+        },
         getCodexHistoryHasProductPrompt: (sessionId) =>
           readCodexHistoryHasProductPrompt(sessionId),
         onCodexProductPromptDelivery: async ({ sessionId, historyHasProductPrompt }) => {

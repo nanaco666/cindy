@@ -429,7 +429,7 @@ const fanOutMakerSessionPrefApply = createIpcFanOut('maker:session-pref:apply');
 // 但 preload 是单独编译单元，不便 import；renderer 真正消费在 vite-env.d.ts 重新声明）。
 interface CrossAgentMigrationItem {
   id: string;
-  kind: 'agents-md' | 'skills' | 'agents' | 'hooks' | 'mcp';
+  kind: 'agents-md' | 'agents' | 'hooks' | 'mcp';
   direction: 'to-claude' | 'to-codex';
   label: string;
   source: string;

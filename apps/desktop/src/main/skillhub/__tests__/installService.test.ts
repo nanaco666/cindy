@@ -50,6 +50,8 @@ vi.mock('../folderHash', () => ({
 
 vi.mock('../../maker-host/shared-global-skills.js', () => ({
   prepareSharedGlobalSkillLinks: vi.fn(async () => ({ warnings: [] })),
+  prepareSharedProjectSkillLinks: vi.fn(async () => ({ warnings: [] })),
+  projectWorkingDirFromSkillPath: vi.fn(() => null),
 }));
 
 async function makeZip(files: Record<string, string>): Promise<Uint8Array> {
@@ -384,6 +386,86 @@ describe('skillhub/installService', () => {
     const backups = fs.readdirSync(backupRoot);
     expect(backups).toHaveLength(1);
     expect(fs.readFileSync(path.join(backupRoot, backups[0], 'SKILL.md'), 'utf-8')).toBe('old content');
+  });
+
+  it('prepares the Claude compatibility link after installing a project skill', async () => {
+    const projectRoot = path.join(TEST_ROOT, 'project');
+    const finalDir = path.join(projectRoot, '.agents', 'skills', 'project-skill');
+    const zipBuf = await makeZip({ 'SKILL.md': 'project content' });
+    const { net } = await import('electron');
+    const { getCurrentUserId } = await import('../../authManager');
+    const { serverApiFetch } = await import('../../serverApiClient');
+    const { registryService } = await import('../registry');
+    const sharedSkills = await import('../../maker-host/shared-global-skills.js');
+    const { install } = await import('../installService');
+
+    vi.mocked(getCurrentUserId).mockReturnValue('user-1');
+    vi.mocked(serverApiFetch).mockImplementation(async (apiPath: string) => {
+      if (apiPath.includes('/download')) {
+        return {
+          url: 'https://oss.example.com/project-skill.zip',
+          expiresAt: '2030-01-01T00:00:00.000Z',
+          fileHash: 'file-hash',
+          fileSize: zipBuf.byteLength,
+          zipSha256: sha256(zipBuf),
+        };
+      }
+      if (apiPath.includes('/batch-detail')) {
+        return { items: [{ slug: 'project-skill', owner: { slug: 'owner' }, isMine: false }] };
+      }
+      throw new Error(`unexpected api path ${apiPath}`);
+    });
+    vi.mocked(net.fetch).mockResolvedValue(mockDownload(zipBuf));
+    vi.mocked(registryService.addInstall).mockResolvedValue(undefined);
+    vi.mocked(sharedSkills.projectWorkingDirFromSkillPath).mockReturnValue(projectRoot);
+
+    const result = await install(
+      {
+        name: 'project-skill',
+        installPath: finalDir,
+        version: '1.0.0',
+      },
+      () => {},
+    );
+
+    expect(result).toMatchObject({
+      success: true,
+      projectWorkingDir: projectRoot,
+    });
+    expect(sharedSkills.prepareSharedProjectSkillLinks).toHaveBeenCalledWith({
+      workingDir: projectRoot,
+    });
+  });
+
+  it('returns the project cwd after uninstalling a project skill', async () => {
+    const projectRoot = path.join(TEST_ROOT, 'project-uninstall');
+    const finalDir = path.join(projectRoot, '.agents', 'skills', 'project-skill');
+    fs.mkdirSync(finalDir, { recursive: true });
+    fs.writeFileSync(path.join(finalDir, 'SKILL.md'), 'content', 'utf-8');
+
+    const { getCurrentUserId } = await import('../../authManager');
+    const { registryService } = await import('../registry');
+    const sharedSkills = await import('../../maker-host/shared-global-skills.js');
+    const { uninstall } = await import('../installService');
+
+    vi.mocked(getCurrentUserId).mockReturnValue('user-1');
+    vi.mocked(registryService.getInstall).mockResolvedValueOnce({
+      version: '1.0.0',
+      authorId: 'owner',
+      folderHash: 'hash',
+      installedAt: 1,
+      updatedAt: 1,
+      origin: 'installed',
+    });
+    vi.mocked(registryService.removeInstall).mockResolvedValue(undefined);
+    vi.mocked(sharedSkills.projectWorkingDirFromSkillPath).mockReturnValueOnce(projectRoot);
+
+    const result = await uninstall(finalDir);
+
+    expect(result).toEqual({ success: true, projectWorkingDir: projectRoot });
+    expect(sharedSkills.prepareSharedProjectSkillLinks).toHaveBeenCalledWith({
+      workingDir: projectRoot,
+    });
   });
 
   it('clears a previous auto-sync ignore marker after a successful manual install', async () => {

@@ -36,6 +36,22 @@ export interface RegisterSkillhubIpcOptions {
 export function registerSkillhubIpc(options: RegisterSkillhubIpcOptions): void {
   const marketService = options.marketService ?? new SkillhubMarketService();
 
+  const refreshCodexProjectSkillCache = async (workingDir?: string): Promise<void> => {
+    if (!workingDir) return;
+    try {
+      await options.getMaker().listAgentSkills('codex', {
+        workingDir,
+        forceReload: true,
+      });
+    } catch (err) {
+      // 安装 / 卸载已经成功落盘，缓存刷新失败不能反向把文件操作标成失败。
+      log.warn('[skillhub:project-skill-cache] Codex refresh failed:', {
+        workingDir,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  };
+
   const broadcastPublishProgress = (payload: unknown) => {
     for (const win of BrowserWindow.getAllWindows()) {
       try {
@@ -504,9 +520,18 @@ export function registerSkillhubIpc(options: RegisterSkillhubIpcOptions): void {
         ...(params.installPath !== undefined ? { installPath: params.installPath } : {}),
         ...(params.skipBackup !== undefined ? { skipBackup: params.skipBackup } : {}),
       };
-      return installService.install(publicParams, (e) => {
+      const result = await installService.install(publicParams, (e) => {
         event.sender.send('skillhub:install-progress', e);
       });
+      if (!result.success) return result;
+      await refreshCodexProjectSkillCache(result.projectWorkingDir);
+      return {
+        success: true,
+        name: result.name,
+        version: result.version,
+        absolutePath: result.absolutePath,
+        ...(result.replacedBackupPath ? { replacedBackupPath: result.replacedBackupPath } : {}),
+      };
     },
   );
 
@@ -523,7 +548,10 @@ export function registerSkillhubIpc(options: RegisterSkillhubIpcOptions): void {
   ipcMain.handle(
     'skillhub:uninstall',
     async (_event, { absolutePath }: { absolutePath: string }) => {
-      return installService.uninstall(absolutePath);
+      const result = await installService.uninstall(absolutePath);
+      if (!result.success) return result;
+      await refreshCodexProjectSkillCache(result.projectWorkingDir);
+      return { success: true };
     },
   );
 

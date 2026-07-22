@@ -118,6 +118,7 @@ import {
 import { messages, orcaTeams, orcaWorkers, sessions } from '../localDb/schema.js';
 import { createLogger } from '../logger.js';
 import { desktopClaudeAuthAdapter, desktopCodexAuthAdapter, readClaudeApiKey } from '../maker-host/auth-adapters.js';
+import { prepareSharedProjectSkillLinks } from '../maker-host/shared-global-skills.js';
 import { syncExternalCodexSessionFromDesktop } from '../maker-host/codex-local-sessions.js';
 import { getCodexProxyAuthInjection } from '../maker-host/codex-proxy-host.js';
 import {
@@ -376,6 +377,25 @@ import {
 } from '../cindy-brain/index.js';
 
 const log = createLogger('maker-ipc');
+
+async function prepareProjectSkillLinksFailSoft(workingDir: unknown): Promise<boolean> {
+  // Slash/@ palettes are read-only device-link surfaces. Their remote invokes must not
+  // create or remove compatibility links in the controlled project's filesystem.
+  if (isDeviceLinkInvoke() || typeof workingDir !== 'string' || !workingDir) return false;
+  try {
+    const result = await prepareSharedProjectSkillLinks({ workingDir });
+    for (const warning of result.warnings) {
+      log.warn('shared project skill link warning', { workingDir, warning });
+    }
+    return result.changed;
+  } catch (err) {
+    log.warn('prepare shared project skill links failed', {
+      workingDir,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return false;
+  }
+}
 const workerTurnStartSequencer = createWorkerTurnStartSequencer(log);
 // silent-stop 自动续跑守卫(决策语义与防死循环不变量见 silentStopAutoResume.ts 文件头)。
 // 纯内存、app 级单例:额度按 sessionId 记账,kill switch 每次决策时现读(改配置即生效)。
@@ -3193,6 +3213,11 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
   ipcMain.handle(MAKER_INVOKE.LIST_AGENT_SKILLS, async (_e, agentKind: unknown, params: unknown) => {
     try {
       const kind = requireAgentKind(agentKind);
+      const skillParams = params as { workingDir: string; forceReload?: boolean };
+      const linksChanged = await prepareProjectSkillLinksFailSoft(skillParams?.workingDir);
+      if (kind === 'codex' && linksChanged) {
+        skillParams.forceReload = true;
+      }
       if (kind === 'codex') {
         await desktopCodexAuthAdapter.ensureGlobalCodexAssets();
       } else if (kind === 'claude-code') {
@@ -3200,7 +3225,7 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
       }
       const result = await maker.listAgentSkills(
         kind,
-        params as { workingDir: string; forceReload?: boolean },
+        skillParams,
       );
       return { success: true, ...result };
     } catch (err) {
@@ -3210,7 +3235,9 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
 
   ipcMain.handle(MAKER_INVOKE.SCAN_AT_RESOURCES, async (_e, agentKind: unknown, params: unknown) => {
     try {
-      const result = await maker.scanAtResources(requireAgentKind(agentKind), params as { workingDir: string; cap?: number; query?: string });
+      const resourceParams = params as { workingDir: string; cap?: number; query?: string };
+      await prepareProjectSkillLinksFailSoft(resourceParams?.workingDir);
+      const result = await maker.scanAtResources(requireAgentKind(agentKind), resourceParams);
       return { success: true, ...result };
     } catch (err) {
       return {

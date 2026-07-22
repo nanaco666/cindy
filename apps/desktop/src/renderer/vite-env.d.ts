@@ -699,7 +699,7 @@ interface AutoUpdateSettingsPayload {
 }
 
 /* ── 跨 Agent 工作区互转 wire 类型（同 main/cross-agent-convert/types.ts） ── */
-type CrossAgentMigrationKind = 'agents-md' | 'skills' | 'agents' | 'hooks' | 'mcp';
+type CrossAgentMigrationKind = 'agents-md' | 'agents' | 'hooks' | 'mcp';
 type CrossAgentDirection = 'to-claude' | 'to-codex';
 type CrossAgentStepStatus = 'pending' | 'running' | 'success' | 'skipped' | 'failed';
 
