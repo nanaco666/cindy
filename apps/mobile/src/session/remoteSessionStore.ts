@@ -1565,12 +1565,14 @@ export const remoteSessionStore = {
     // setSessionRunning owns the final flush/finalize and run-state transition;
     // keeping the done path in one call avoids notifying subscribers twice.
     if (type === 'done' || isTerminalMakerErrorEvent(event)) {
+      let terminalPlanChanged = false;
       if (type === 'done' && readString(event, 'source') === 'codex') {
         const data = isRecord(event.data) ? event.data : null;
         const rawTurn = isRecord(data?.raw) ? data.raw : null;
         const turnId = readString(rawTurn, 'id');
         const currentMessages = messages.get(sessionId) ?? [];
         const completed = applyCodexPlanSnapshotOnDone(currentMessages, data?.plan, turnId);
+        terminalPlanChanged = completed.changed;
         if (completed.changed) {
           messages.set(sessionId, [...completed.messages]);
         }
@@ -1593,6 +1595,10 @@ export const remoteSessionStore = {
         false,
         isRecord(event.agentMeta) ? event.agentMeta : null,
       );
+      if (terminalPlanChanged) {
+        bumpMessageVersion();
+        emit();
+      }
       return;
     }
 

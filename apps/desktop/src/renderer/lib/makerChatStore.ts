@@ -1346,6 +1346,20 @@ function hydratePersistedMessage(
     ...(existing.retryMentions ? { retryMentions: existing.retryMentions } : {}),
   };
   if (
+    existing.role === 'tool_use' &&
+    persisted.role === 'tool_use' &&
+    existing.toolName === 'update_plan' &&
+    persisted.toolName === 'update_plan' &&
+    existing.toolUseId === persisted.toolUseId &&
+    typeof existing.toolInput === 'object' && existing.toolInput !== null &&
+    typeof persisted.toolInput === 'object' && persisted.toolInput !== null &&
+    Array.isArray((existing.toolInput as { plan?: unknown }).plan) &&
+    Array.isArray((persisted.toolInput as { plan?: unknown }).plan)
+  ) {
+    hydrated.toolInput = existing.toolInput;
+    hydrated.content = existing.content;
+  }
+  if (
     existing.role === 'ask_user' &&
     persisted.role === 'ask_user' &&
     shouldPreserveLiveAskUserState(existing.askUserStatus, persisted.askUserStatus)

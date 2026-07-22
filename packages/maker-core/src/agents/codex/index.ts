@@ -3173,7 +3173,7 @@ export class CodexAgent extends BaseAgent {
       let offset = 0;
       let remainder = '';
 
-      const scanText = (text: string, allowFallbackTurnId: boolean): void => {
+      const scanText = (text: string, allowFallbackTurnId: boolean, allowCompletedTurn = false): void => {
         const lines = `${remainder}${text}`.split(/\r?\n/);
         remainder = lines.pop() ?? '';
         for (const line of lines) {
@@ -3190,7 +3190,7 @@ export class CodexAgent extends BaseAgent {
             { requireTurnId: true },
           );
           if (!parsed) continue;
-          if (parsed.turnId && shouldIgnoreStaleTurnEvent(parsed.turnId)) continue;
+          if (parsed.turnId && !allowCompletedTurn && shouldIgnoreStaleTurnEvent(parsed.turnId)) continue;
           if (parsed.turnId && parsed.turnId !== turnId) continue;
           if (parsed.callId) {
             if (seenRolloutPlanCallIds.has(parsed.callId)) {
@@ -3209,7 +3209,7 @@ export class CodexAgent extends BaseAgent {
         }
       };
 
-      const poll = async (allowFallbackTurnId: boolean): Promise<void> => {
+      const poll = async (allowFallbackTurnId: boolean, allowCompletedTurn = false): Promise<void> => {
         if (stopped || !rolloutPath) return;
         let stat: Awaited<ReturnType<typeof fs.stat>>;
         try {
@@ -3230,7 +3230,7 @@ export class CodexAgent extends BaseAgent {
           handle = await fs.open(rolloutPath, 'r');
           const read = await handle.read(buffer, 0, length, offset);
           offset += read.bytesRead;
-          scanText(buffer.subarray(0, read.bytesRead).toString('utf8'), allowFallbackTurnId);
+          scanText(buffer.subarray(0, read.bytesRead).toString('utf8'), allowFallbackTurnId, allowCompletedTurn);
         } catch (e) {
           log.debug('rollout plan fallback poll failed', { error: String(e), threadId, turnId });
         } finally {
@@ -3240,10 +3240,7 @@ export class CodexAgent extends BaseAgent {
 
       stopRolloutPlanFallback = () => {
         if (timer) clearInterval(timer);
-        // Do not await rollout I/O from handleTurnCompleted: that would overlap
-        // the next turn's usage/state cleanup. A final async poll is allowed to
-        // publish a late plan tool event; the clients reconcile it after done.
-        void poll(true).finally(() => {
+        void poll(true, true).finally(() => {
           stopped = true;
           latestPlanByTurn.delete(turnId);
         });
