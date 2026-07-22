@@ -533,11 +533,17 @@ export function NewMakerDraftRoute() {
   }>({ loaded: false, value: null });
   const [dlSel, setDlSel] = useState<DeviceLinkDraftSelection | null>(null);
   const dlSeedKeyRef = useRef<string | null>(null);
+  const skipDefaultsRefetchRef = useRef(false);
 
   // 拉被控端当前草稿值(每次 deviceId / vendor 变化重拉;失败 / 旧版 → value=null 触发 fallback)。
   useEffect(() => {
     if (!isDeviceLinkDraft || !effectiveDeviceLinkDeviceId) {
       setRemoteDraftState({ loaded: false, value: null });
+      return;
+    }
+    // handoff 路径已 inline 拉取并 set 了 remoteDraftState,跳过本次 effect 重拉。
+    if (skipDefaultsRefetchRef.current) {
+      skipDefaultsRefetchRef.current = false;
       return;
     }
     let cancelled = false;
@@ -814,6 +820,17 @@ export function NewMakerDraftRoute() {
         setWtEnabled(false);
         setWtBaseRepo(null);
         setWtSourceBranch('');
+        // patchDraft 会改 effectiveDeviceLinkDeviceId → 触发 defaults effect 重拉;
+        // 我们已 inline 拉取了 freshDefaults,跳过那次重拉避免覆盖。
+        // 清除草稿中基于本地/前设备文件系统的 @file/@dir mention chips。
+        const dlDraft = getComposerDraft(NEW_MAKER_DRAFT_KEY);
+        if (dlDraft?.text) {
+          saveComposerDraft(NEW_MAKER_DRAFT_KEY, {
+            ...dlDraft,
+            text: stripLocalMentionChips(dlDraft.text),
+          }, { silent: true });
+        }
+        skipDefaultsRefetchRef.current = true;
         patchDraft({
           workingDir: target.path,
           remoteHostId: null,
@@ -887,23 +904,16 @@ export function NewMakerDraftRoute() {
           fastMode: sshFastMode,
           planModeEnabled: effectivePlanMode,
         });
-        {
-          const sendAt = new Date();
-          sessionsStore.patchLocal(newSession.id, { userSendAt: sendAt.toISOString(), updatedAt: sendAt.toISOString() });
-          sessionService.touchUserSend(newSession.id, sendAt.getTime()).catch((e) => {
-            log.warn('[add remote project] touchUserSend failed', e);
-          });
-        }
         // 把草稿页已输入的文本/附件移交到新会话,避免 navigate 后丢失。
         // rehomeDraftAttachments 把 base64 和 xdt-image://__new_maker_draft__/ 迁移到
         // 新 session 的 image cache,避免持久化孤立引用。browserComments 的 screenshot
         // 也是 AttachedFile,同样需要 rehome。
         const existingDraft = getComposerDraft(NEW_MAKER_DRAFT_KEY);
         if (existingDraft) {
-          const rehomedAttachments = await rehomeDraftAttachments(
-            existingDraft.attachments,
-            newSession.id,
-          );
+          // SSH agent 无法读取控制端本地文件;只保留 image 类附件(可 rehome 到 cache URL),
+          // 丢弃 path-based 非 image 附件(PDF / text 等)。
+          const imageOnly = existingDraft.attachments.filter((f) => f.category === 'image');
+          const rehomedAttachments = await rehomeDraftAttachments(imageOnly, newSession.id);
           let rehomedComments = existingDraft.browserComments;
           if (rehomedComments && rehomedComments.length > 0) {
             rehomedComments = await Promise.all(
