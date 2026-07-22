@@ -18,6 +18,7 @@ import {
   getModel,
   modelSupportsFastMode,
   nativeDefaultSourceId,
+  sourcesForModel,
   type ProviderView,
 } from '@lizi/model-providers/registry';
 import {
@@ -119,6 +120,26 @@ export function flattenProviderSections(sections: readonly ProviderSection[]): P
   return sections.flatMap((section) =>
     section.models.map((model) => ({ provider: section.provider, model })),
   );
+}
+
+/**
+ * Whether a persisted explicit source is known to be disconnected for the selected model.
+ * Loading and fetch errors are unknown states, so they fail open instead of showing a false error.
+ */
+export function isSelectedSourceDisconnected(args: {
+  providers: readonly ProviderView[];
+  providerId: string | null | undefined;
+  modelId: string;
+  agentKind: AgentKind;
+  loading: boolean;
+  error: string | null;
+}): boolean {
+  if (!args.providerId || args.loading || args.error !== null) return false;
+  return !sourcesForModel(
+    [...args.providers],
+    args.modelId,
+    args.agentKind,
+  ).some((provider) => provider.id === args.providerId);
 }
 
 /**

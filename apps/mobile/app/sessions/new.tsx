@@ -1623,6 +1623,8 @@ export default function NewRemoteSessionScreen() {
             icon={getModel(activeSourceProvider, draft.model, draft.agentKind)?.icon}
             name={activeSourceProvider.name}
             providerId={activeSourceProvider.id}
+            routing={activeSourceProvider.routing}
+            logoKind={activeSourceProvider.logoKind}
           />
         ) : null}
         <Text style={styles.modelPillText} numberOfLines={1}>{runtimeSummary.modelSummary}</Text>

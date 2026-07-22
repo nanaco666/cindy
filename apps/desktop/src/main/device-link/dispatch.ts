@@ -40,6 +40,10 @@ import {
   type Topic,
 } from '@lizi/device-link';
 import type { MobileVoiceDictionaryLearningRequest } from '@lizi/maker-shared/device-link-contract';
+import {
+  resolveProviderLogoKind,
+  type ProviderLogoRouting,
+} from '@lizi/model-providers/branding';
 import { app } from 'electron';
 import type { DeviceLinkClient } from '@lizi/device-link';
 import { createLogger } from '../logger';
@@ -196,11 +200,12 @@ function projectRoutingForDisplay(
 }
 
 /**
- * 隧道返回投影:`maker:provider:list` 只回「显示用」字段——剥掉每个 provider 的 `routing`
- * 执行字段(upstream / authStrategy / 密钥策略 / 自定义供应商 endpoint 等),执行细节
- * (路由 / 密钥)不出被控端(控制端只渲染、不执行,见设计文档 D3)。Fast 显隐由控制端从隧道
- * 带来的 `models[agent].supportsFastMode`(per-provider 能力)现查,不依赖 routing,故 routing
- * 整条剥成空壳即可。其它通道原样返回。
+ * 隧道返回投影:`maker:provider:list` 只回「显示用」字段——先从 provider id / upstream
+ * 解析非敏感 `logoKind`,再剥掉每个 provider 的 `routing` 执行字段(upstream /
+ * authStrategy / 密钥策略 / 自定义供应商 endpoint 等)。执行细节(路由 / 密钥)不出被控端
+ * (控制端只渲染、不执行,见设计文档 D3),但用户重命名 preset 后手机仍能按 logoKind 展示
+ * 正确品牌。Fast 显隐由控制端从隧道带来的 `models[agent].supportsFastMode` 现查。
+ * 其它通道原样返回。
  */
 function projectInvokeResultForTunnel(channel: string, result: unknown): unknown {
   if (channel !== 'maker:provider:list') return result;
@@ -208,6 +213,12 @@ function projectInvokeResultForTunnel(channel: string, result: unknown): unknown
   if (!Array.isArray(r.providers)) return result;
   const providers = (r.providers as Record<string, unknown>[]).map((p) => {
     const rest = { ...p };
+    const logoKind = typeof p.id === 'string'
+      ? resolveProviderLogoKind(p.id, p.routing as ProviderLogoRouting | undefined)
+      : null;
+    // Never trust/pass through an arbitrary pre-existing value: only shared resolver output crosses.
+    delete rest.logoKind;
+    if (logoKind) rest.logoKind = logoKind;
     rest.routing = projectRoutingForDisplay(p.routing);
     return rest;
   });

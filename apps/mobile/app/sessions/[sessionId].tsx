@@ -106,6 +106,7 @@ import { clearSessionMirror, makeSessionMirrorAccessors } from '@/session/sessio
 import { rowFastEditable } from '@/session/modelPickerRows';
 import {
   buildMobileModelSections,
+  isSelectedSourceDisconnected,
   resolveRowSelection,
   type ProviderModelRow,
 } from '@/session/providerModelSections';
@@ -1324,7 +1325,41 @@ export default function SessionScreen() {
       : null,
     [composerModelSections],
   );
-  const composerPillFastOn = !!currentSession?.fastMode
+  // 会话持久化的显式来源可能在电脑端被断开。此时不能把 activeSourceId 的默认回退
+  // 画成真实来源，否则手机会显示「默认来源 Logo」，发送却仍按已断开的 providerId 路由。
+  // provider 列表加载期间不判，避免首帧短暂闪出断开态。
+  const composerSelectedSourceDisconnected = useMemo(() => {
+    if (!currentSession) return false;
+    return isSelectedSourceDisconnected({
+      providers: composerDeviceProviders.providers,
+      providerId: currentSession.providerId,
+      modelId: currentSession.model,
+      agentKind: sessionAgentKind,
+      loading: composerDeviceProviders.loading,
+      error: composerDeviceProviders.error,
+    });
+  }, [
+    composerDeviceProviders.error,
+    composerDeviceProviders.loading,
+    composerDeviceProviders.providers,
+    currentSession,
+    sessionAgentKind,
+  ]);
+  const composerPillSourceProvider = useMemo(() => {
+    if (!composerSelectedSourceDisconnected) return composerActiveSourceProvider;
+    return composerDeviceProviders.providers.find(
+      (provider) => provider.id === currentSession?.providerId,
+    ) ?? null;
+  }, [
+    composerActiveSourceProvider,
+    composerDeviceProviders.providers,
+    composerSelectedSourceDisconnected,
+    currentSession?.providerId,
+  ]);
+  const composerPillSourceId = composerSelectedSourceDisconnected
+    ? currentSession?.providerId ?? null
+    : composerPillSourceProvider?.id ?? null;
+  const composerPillFastOn = !composerSelectedSourceDisconnected && !!currentSession?.fastMode
     && rowFastEditable({
       provider: composerActiveSourceProvider ?? undefined,
       modelId: currentSession?.model ?? '',
@@ -1545,14 +1580,18 @@ export default function SessionScreen() {
         <ComposerRuntimePill
           fastOn={composerPillFastOn}
           label={composerRuntimeSummary.modelSummary}
-          leading={composerActiveSourceProvider ? (
-            // 图标统一规则(桌面同源):模型条目 icon(AI Gateway 设定)优先,缺省回落来源标。
+          leading={composerPillSourceId ? (
+            // 正常态显示真正生效来源；断开态显示 DB 中的真实来源并使用状态色，
+            // 不静默换成 activeSourceId 的默认回退 Logo。
             <MobileModelIconMark
-              icon={currentSession
-                ? getModel(composerActiveSourceProvider, currentSession.model, sessionAgentKind)?.icon
+              color={composerSelectedSourceDisconnected ? colors.statusError : undefined}
+              icon={currentSession && composerPillSourceProvider
+                ? getModel(composerPillSourceProvider, currentSession.model, sessionAgentKind)?.icon
                 : undefined}
-              name={composerActiveSourceProvider.name}
-              providerId={composerActiveSourceProvider.id}
+              name={composerPillSourceProvider?.name ?? composerPillSourceId}
+              providerId={composerPillSourceId}
+              routing={composerPillSourceProvider?.routing}
+              logoKind={composerPillSourceProvider?.logoKind}
             />
           ) : null}
           onPress={toggleComposerModelPicker}

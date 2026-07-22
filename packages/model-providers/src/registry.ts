@@ -13,6 +13,7 @@
  */
 
 import type { Catalog, Provider, CatalogModel, AgentKind, RoutingDescriptor } from './types.js';
+import type { ProviderLogoKind } from './providerBranding.js';
 
 /** 各供应商是否已连接，由 host 注入。 */
 export type ConnectionState = Record<string, boolean>;
@@ -20,6 +21,8 @@ export type ConnectionState = Record<string, boolean>;
 /** 供应商 + 连接状态。 */
 export interface ProviderView extends Provider {
   connected: boolean;
+  /** Non-secret presentation metadata resolved before routing details cross device-link. */
+  logoKind?: ProviderLogoKind;
 }
 
 /** 把目录与连接状态合成 registry。 */

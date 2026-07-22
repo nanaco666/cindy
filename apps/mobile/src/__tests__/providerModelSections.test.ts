@@ -14,6 +14,7 @@ import type { MobileModelMemoryAccessors } from '@/session/draftModelMemory';
 import {
   buildMobileModelSections,
   flattenProviderSections,
+  isSelectedSourceDisconnected,
   reconcileEffortForModel,
   resolveRowSelection,
   type ProviderModelRow,
@@ -200,6 +201,33 @@ describe('buildMobileModelSections', () => {
     });
     const rows = flattenProviderSections(sections);
     expect(rows.map((r) => `${r.provider.id}:${r.model.id}`)).toContain('xd:claude-fable-5');
+  });
+});
+
+describe('isSelectedSourceDisconnected', () => {
+  const providers = [provider('openai', { codex: [model('gpt-5.5')] })];
+
+  it('only reports disconnected from a successful provider snapshot', () => {
+    const base = {
+      providers,
+      providerId: 'missing-provider',
+      modelId: 'gpt-5.5',
+      agentKind: 'codex' as const,
+    };
+    expect(isSelectedSourceDisconnected({ ...base, loading: false, error: null })).toBe(true);
+    expect(isSelectedSourceDisconnected({ ...base, loading: true, error: null })).toBe(false);
+    expect(isSelectedSourceDisconnected({ ...base, loading: false, error: 'fetch failed' })).toBe(false);
+  });
+
+  it('keeps a connected source in the normal state', () => {
+    expect(isSelectedSourceDisconnected({
+      providers,
+      providerId: 'openai',
+      modelId: 'gpt-5.5',
+      agentKind: 'codex',
+      loading: false,
+      error: null,
+    })).toBe(false);
   });
 });
 
