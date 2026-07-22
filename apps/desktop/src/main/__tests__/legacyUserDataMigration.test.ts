@@ -21,10 +21,11 @@ const BASE = path.join(path.sep, 'base');
 const USER_DATA = path.join(BASE, 'Cindy');
 const LEGACY = path.join(BASE, 'xdt-maker');
 
-/** 内存 fs 假体:Map 存文件(内容 + mtime),Set 存目录;merge 复制不覆盖。 */
+/** 内存 fs 假体:Map 存文件(内容 + mtime),Set 存目录/符号链接;merge 复制不覆盖。 */
 function createMemFs() {
   const files = new Map<string, { content: string; mtimeMs: number }>();
   const dirs = new Set<string>();
+  const symbolicLinks = new Set<string>();
   const norm = (p: string) => path.normalize(p);
 
   const addDir = (p: string): void => {
@@ -41,14 +42,21 @@ function createMemFs() {
     files.set(norm(p), { content, mtimeMs });
     addDir(path.dirname(p));
   };
+  const addSymbolicLink = (p: string): void => {
+    symbolicLinks.add(norm(p));
+    addDir(path.dirname(p));
+  };
 
   const fsDeps: LegacyMigrationFsDeps = {
-    pathExists: async (p) => files.has(norm(p)) || dirs.has(norm(p)),
+    pathExists: async (p) => files.has(norm(p)) || dirs.has(norm(p)) || symbolicLinks.has(norm(p)),
     listDir: async (dir) => {
       const nd = norm(dir);
       const out: string[] = [];
       for (const f of files.keys()) if (path.dirname(f) === nd) out.push(path.basename(f));
       for (const d of dirs) if (path.dirname(d) === nd && d !== nd) out.push(path.basename(d));
+      for (const link of symbolicLinks) {
+        if (path.dirname(link) === nd) out.push(path.basename(link));
+      }
       return out;
     },
     statMtimeMs: async (p) => {
@@ -58,12 +66,21 @@ function createMemFs() {
     },
     listDirEntries: async (dir) => {
       const nd = norm(dir);
-      const out: Array<{ name: string; isDirectory: boolean }> = [];
+      const out: Array<{ name: string; isDirectory: boolean; isSymbolicLink: boolean }> = [];
       for (const f of files.keys()) {
-        if (path.dirname(f) === nd) out.push({ name: path.basename(f), isDirectory: false });
+        if (path.dirname(f) === nd) {
+          out.push({ name: path.basename(f), isDirectory: false, isSymbolicLink: false });
+        }
       }
       for (const d of dirs) {
-        if (path.dirname(d) === nd && d !== nd) out.push({ name: path.basename(d), isDirectory: true });
+        if (path.dirname(d) === nd && d !== nd) {
+          out.push({ name: path.basename(d), isDirectory: true, isSymbolicLink: false });
+        }
+      }
+      for (const link of symbolicLinks) {
+        if (path.dirname(link) === nd) {
+          out.push({ name: path.basename(link), isDirectory: false, isSymbolicLink: true });
+        }
       }
       return out;
     },
@@ -100,6 +117,7 @@ function createMemFs() {
     files,
     addDir,
     addFile,
+    addSymbolicLink,
     fsDeps,
     read: (p: string) => files.get(norm(p))?.content,
     has: (p: string) => files.has(norm(p)),
@@ -382,6 +400,50 @@ describe('runLegacyUserDataMigration', () => {
     // 老目录只读:源文件原样保留。
     expect(memfs.read(path.join(LEGACY, 'dialogues', '2026-06-22', 'sess-1', 'note.md'))).toBe(
       'agent-output',
+    );
+    expect(readMarker(memfs)).toMatchObject({ dialoguesCopied: true });
+  });
+
+  it('dialogues 跳过任意层级 node_modules 与符号链接,其余文件继续迁移', async () => {
+    const memfs = createMemFs();
+    memfs.addDir(USER_DATA);
+    memfs.addDir(LEGACY);
+    const workspace = path.join(LEGACY, 'dialogues', '2026-07-06', 'sess-1', 'XDMaker');
+    memfs.addFile(path.join(workspace, 'src', 'index.ts'), 'source');
+    memfs.addFile(
+      path.join(workspace, 'apps', 'desktop', 'node_modules', 'plain-package', 'index.js'),
+      'dependency',
+    );
+    // 复现线上报错形态:pnpm package 目录链接被 Dirent.isDirectory() 判为 false。
+    memfs.addSymbolicLink(
+      path.join(workspace, 'packages', 'feature', 'node_modules', '@fmfsaisai', 'orca-workflow'),
+    );
+    // node_modules 之外的链接也必须明确跳过，不能解引用到老目录外或形成递归环。
+    memfs.addSymbolicLink(path.join(workspace, 'linked-workspace'));
+    const copySpy = vi.spyOn(memfs.fsDeps, 'copyFile');
+    const { deps } = makeDeps(memfs);
+
+    const result = await runLegacyUserDataMigration('u1', deps);
+
+    expect(result).toMatchObject({ status: 'migrated', dialoguesCopied: true });
+    const migratedWorkspace = path.join(USER_DATA, 'dialogues', '2026-07-06', 'sess-1', 'XDMaker');
+    expect(memfs.read(path.join(migratedWorkspace, 'src', 'index.ts'))).toBe('source');
+    expect(
+      memfs.has(
+        path.join(
+          migratedWorkspace,
+          'apps',
+          'desktop',
+          'node_modules',
+          'plain-package',
+          'index.js',
+        ),
+      ),
+    ).toBe(false);
+    expect(memfs.has(path.join(migratedWorkspace, 'linked-workspace'))).toBe(false);
+    expect(copySpy).not.toHaveBeenCalledWith(
+      path.join(workspace, 'linked-workspace'),
+      expect.any(String),
     );
     expect(readMarker(memfs)).toMatchObject({ dialoguesCopied: true });
   });
