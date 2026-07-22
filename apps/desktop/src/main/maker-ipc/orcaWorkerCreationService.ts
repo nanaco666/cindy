@@ -472,6 +472,18 @@ export function createOrcaWorkerCreationService(deps: OrcaWorkerCreationDeps): O
     const explicitModelProvider = explicitModelDefaultProviderId === null
       ? undefined
       : agentProviders.find((provider) => provider.id === explicitModelDefaultProviderId);
+    const cachedProviderRouteIsStale = params.model === undefined
+      && defaults.providerId !== undefined
+      && defaults.providerId !== null
+      && !agentProviders.some(
+        (provider) => provider.id === defaults.providerId && provider.models.includes(resolvedConfig.model),
+      );
+    const cachedProviderFallbackId = cachedProviderRouteIsStale
+      ? providerRouting.resolveDefaultProviderIdForModel(params.agent, resolvedConfig.model)
+      : null;
+    const cachedProviderFallback = cachedProviderFallbackId === null
+      ? undefined
+      : agentProviders.find((provider) => provider.id === cachedProviderFallbackId);
     const resolved = {
       ...resolvedConfig,
       // 仅显式指定 model 不等于显式选择来源：providerId=null 必须保留 spawn-aware 默认路由。
@@ -480,11 +492,15 @@ export function createOrcaWorkerCreationService(deps: OrcaWorkerCreationDeps): O
         && explicitModelProviders.length === 1
         && explicitModelProvider?.requiresExplicitRoute
         ? explicitModelProvider.id
-        : (params.model !== undefined ? null : resolvedConfig.providerId),
+        : params.model !== undefined
+          ? null
+          : cachedProviderRouteIsStale
+            ? (cachedProviderFallback?.requiresExplicitRoute ? cachedProviderFallback.id : null)
+            : resolvedConfig.providerId,
     };
     const budgetRouteProviderId = params.model !== undefined
       ? explicitModelDefaultProviderId
-      : resolved.providerId;
+      : (cachedProviderRouteIsStale ? cachedProviderFallbackId : resolved.providerId);
 
     // codex/ 预算模型依赖 Cindy AI API key；XD/default 路由即使因 provider 缺失，
     // 也要先返回这条可操作的凭证错误，避免被下方通用的精确路由失败遮蔽。
@@ -500,6 +516,19 @@ export function createOrcaWorkerCreationService(deps: OrcaWorkerCreationDeps): O
     }
 
     if (params.model !== undefined && explicitModelDefaultProviderId === null) {
+      return {
+        ok: false,
+        errorCode: 'PROVIDER_ROUTE_UNAVAILABLE',
+        message: buildProviderRouteUnavailableMessage(
+          params.agent,
+          null,
+          resolved.model,
+          undefined,
+        ),
+      };
+    }
+
+    if (cachedProviderRouteIsStale && cachedProviderFallbackId === null) {
       return {
         ok: false,
         errorCode: 'PROVIDER_ROUTE_UNAVAILABLE',

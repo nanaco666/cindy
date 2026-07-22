@@ -840,6 +840,61 @@ describe('OrcaWorkerCreationService', () => {
     }));
   });
 
+  it('falls back from a stale New Maker provider to the current native default route', async () => {
+    const { deps, service } = createDeps({
+      getWorkerDefaults: vi.fn(() => ({ model: 'gpt-5.4', providerId: 'deleted-custom' })),
+      getProviderRoutingContext: vi.fn(async () => providerRoutingContext({
+        'claude-code': [],
+        codex: [{ id: 'xd', name: 'XD Gateway', models: ['gpt-5.4'] }],
+      })),
+    });
+
+    await expect(service.createWorker({
+      leadSessionId: 'lead-1',
+      role: 'reviewer',
+      agent: 'codex',
+      label: 'reviewer',
+    })).resolves.toMatchObject({
+      ok: true,
+      resolved: { providerId: null, model: 'gpt-5.4' },
+    });
+
+    expect(deps.buildCreateOptsWithStderr).toHaveBeenCalledWith(expect.objectContaining({
+      providerId: null,
+      model: 'gpt-5.4',
+    }));
+  });
+
+  it('falls back from a stale New Maker provider to a sole custom credential route', async () => {
+    const { deps, service } = createDeps({
+      getWorkerDefaults: vi.fn(() => ({ model: 'gpt-5.4', providerId: 'deleted-custom' })),
+      getProviderRoutingContext: vi.fn(async () => providerRoutingContext({
+        'claude-code': [],
+        codex: [{
+          id: 'current-custom',
+          name: 'Current Custom',
+          models: ['gpt-5.4'],
+          requiresExplicitRoute: true,
+        }],
+      })),
+    });
+
+    await expect(service.createWorker({
+      leadSessionId: 'lead-1',
+      role: 'reviewer',
+      agent: 'codex',
+      label: 'reviewer',
+    })).resolves.toMatchObject({
+      ok: true,
+      resolved: { providerId: 'current-custom', model: 'gpt-5.4' },
+    });
+
+    expect(deps.buildCreateOptsWithStderr).toHaveBeenCalledWith(expect.objectContaining({
+      providerId: 'current-custom',
+      model: 'gpt-5.4',
+    }));
+  });
+
   it('falls back to the Lead provider for a same-agent worker when older defaults omit providerId', async () => {
     const { deps, service } = createDeps({
       getWorkerDefaults: vi.fn(() => ({ model: 'gpt-5.5' })),
@@ -976,7 +1031,7 @@ describe('OrcaWorkerCreationService', () => {
     expect(deps.bootstrapSession).not.toHaveBeenCalled();
   });
 
-  it('rejects an unavailable exact provider + model route before bootstrapping', async () => {
+  it('rejects a stale cached provider when no current source offers its model', async () => {
     const { deps, service } = createDeps({
       getWorkerDefaults: vi.fn(() => ({ model: 'gpt-5.4', providerId: 'custom-codex' })),
       getProviderRoutingContext: vi.fn(async () => providerRoutingContext({
@@ -993,7 +1048,7 @@ describe('OrcaWorkerCreationService', () => {
     })).resolves.toMatchObject({
       ok: false,
       errorCode: 'PROVIDER_ROUTE_UNAVAILABLE',
-      message: expect.stringContaining('不提供模型 "gpt-5.4"'),
+      message: expect.stringContaining('没有已连接的供应商提供模型 "gpt-5.4"'),
     });
 
     expect(deps.bootstrapSession).not.toHaveBeenCalled();
