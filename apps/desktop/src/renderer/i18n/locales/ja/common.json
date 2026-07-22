@@ -5064,6 +5064,8 @@
       "statusAria": "ステータス: {{status}}",
       "took": "所要時間 {{duration}}",
       "openSession": "セッションを開く",
+      "sessionDeleted": "セッションは削除されました",
+      "sessionUnavailable": "セッションの状態を確認できません。しばらくしてから再試行してください。",
       "markReadTitle": "クリックして既読にする",
       "sessionCost": "セッションコスト {{cost}}",
       "sessionValue": "セッション価値 {{value}}",
@@ -5176,6 +5178,8 @@
           "open": "セッションを開く",
           "unbind": "連携を解除",
           "persistentNote": "セッションがアーカイブされると自動的に再作成して連携を継続します",
+          "deleted": "連携先セッションは削除されました",
+          "deletedPersistentNote": "次回の実行時に新しいセッションを作成して再連携します",
           "fallbackTitle": "セッション {{id}}"
         },
         "switchModelHint": "次回の実行時に、連携先セッションがこのモデルに切り替わります"
@@ -5185,6 +5189,7 @@
         "loading": "セッションを読み込み中…",
         "loadFailed": "読み込みに失敗しました: {{error}}",
         "empty": "利用可能なアクティブセッションがありません",
+        "deletedBinding": "連携先セッションは削除されました。別のセッションを選択してください",
         "selectPlaceholder": "— セッションを選択 —"
       },
       "preRunHook": {

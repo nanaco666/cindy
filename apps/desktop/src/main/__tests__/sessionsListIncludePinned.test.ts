@@ -1,5 +1,5 @@
 /**
- * local-db:sessions:list includePinned 回归测试。
+ * sessions 读 IPC 回归测试：列表置顶补齐与 scheduler 引用状态解析。
  *
  * device-link 控制端首拉只取最近 200 条 active 会话；被控端 active 会话很多时，
  * 较旧的置顶会话可能落在窗口外。第三参数 `{ includePinned: true }` 必须把
@@ -116,6 +116,18 @@ function sessionsListHandler() {
   ) => Promise<Array<{ id: string }>>;
 }
 
+function resolveReferencesHandler() {
+  registerSessionIpc();
+  const call = h.ipcHandle.mock.calls.find(
+    ([channel]) => channel === 'local-db:sessions:resolve-references',
+  );
+  if (!call) throw new Error('local-db:sessions:resolve-references handler not registered');
+  return call[1] as (
+    event: unknown,
+    sessionIds: unknown,
+  ) => Promise<Array<{ sessionId: string; state: string; status?: string }>>;
+}
+
 describe('local-db:sessions:list includePinned', () => {
   it('returns recent active rows plus missing active pinned rows without duplicates', async () => {
     const handler = sessionsListHandler();
@@ -161,5 +173,36 @@ describe('local-db:sessions:list includePinned', () => {
     ]);
     expect(h.fakeDb.select).toHaveBeenCalledTimes(2);
     expect(h.queryResults).toHaveLength(0);
+  });
+});
+
+describe('local-db:sessions:resolve-references', () => {
+  it('classifies live, archived, deleted, and missing ids in caller order', async () => {
+    const handler = resolveReferencesHandler();
+    h.queryResults.push([
+      { id: 'active', status: 'active', title: 'Active', agentKind: 'cc' },
+      { id: 'archived', status: 'archived', title: 'Archived', agentKind: 'codex' },
+      { id: 'deleted', status: 'deleted', title: 'Deleted', agentKind: 'cc' },
+    ]);
+
+    const result = await handler({}, ['active', 'missing', 'deleted', 'archived', 'active']);
+
+    expect(result).toEqual([
+      expect.objectContaining({ sessionId: 'active', state: 'available', status: 'active' }),
+      { sessionId: 'missing', state: 'missing' },
+      expect.objectContaining({ sessionId: 'deleted', state: 'deleted', status: 'deleted' }),
+      expect.objectContaining({ sessionId: 'archived', state: 'available', status: 'archived' }),
+    ]);
+    expect(h.fakeDb.select).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects unbounded or malformed input before querying SQLite', async () => {
+    const handler = resolveReferencesHandler();
+
+    await expect(handler({}, 'session')).rejects.toThrow('[INVALID_PARAMS]');
+    await expect(handler({}, Array.from({ length: 201 }, (_, i) => `s-${i}`))).rejects.toThrow(
+      '[INVALID_PARAMS]',
+    );
+    expect(h.fakeDb.select).not.toHaveBeenCalled();
   });
 });

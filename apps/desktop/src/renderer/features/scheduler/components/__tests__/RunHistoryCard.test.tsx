@@ -4,6 +4,7 @@ import { cleanup, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ScheduleRun } from '@lizi/maker-scheduler';
+import type { SessionReference } from '../../../../../shared/sessionReference';
 
 import { RunHistoryCard } from '../RunHistoryCard';
 
@@ -13,13 +14,39 @@ vi.mock('react-i18next', () => ({
 
 afterEach(cleanup);
 
-function renderRun(run: ScheduleRun) {
+function renderRun(run: ScheduleRun, sessionReference?: SessionReference) {
   return render(
     <MemoryRouter>
-      <RunHistoryCard run={run} agentKind="codex" />
+      <RunHistoryCard run={run} agentKind="codex" sessionReference={sessionReference} />
     </MemoryRouter>,
   );
 }
+
+describe('RunHistoryCard 会话引用状态', () => {
+  it('保留历史记录但将软删除会话显示为不可点击状态', () => {
+    renderRun(
+      {
+        id: 'run-deleted-session',
+        scheduleId: 'schedule-1',
+        sessionId: 'session-deleted',
+        firedAt: 1,
+        finishedAt: 11,
+        status: 'success',
+        readAt: 11,
+      },
+      {
+        sessionId: 'session-deleted',
+        state: 'deleted',
+        status: 'deleted',
+        title: 'Deleted session',
+        agentKind: 'codex',
+      },
+    );
+
+    expect(screen.getByText('scheduler.runs.sessionDeleted')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'scheduler.runs.openSession' })).toBeNull();
+  });
+});
 
 describe('RunHistoryCard 前置检查结果', () => {
   it('通过结果显示摘要且默认折叠', () => {

@@ -32,6 +32,7 @@ import { upsertRecentWorkdir } from './recentWorkdirs';
 import { createLogger } from '../../logger';
 import { DESKTOP_VISIBLE_SESSION_SOURCES } from '../../../shared/sessionSource.js';
 import { normalizeWorkingDirForStorage } from '../../../shared/workingDir.js';
+import type { SessionReference } from '../../../shared/sessionReference.js';
 import { tapWindowBroadcast } from '../../device-link/broadcast-tap.js';
 import { notifyAgentIslandSessionPatch } from '../agentIslandSessionPatch';
 import { noteSessionClearBoundary } from '../../messagePersistBroadcaster';
@@ -677,6 +678,44 @@ export function registerSessionIpc(): void {
     const row = await selectSessionWithCount(db, sid);
     if (!row) throwIpcError('NOT_FOUND', 'Session 不存在');
     return sessionToCamel(row);
+  });
+
+  /**
+   * 批量解析 scheduler 持有的会话引用。普通列表会隐藏软删除墓碑，renderer 不能
+   * 再靠“列表中是否存在”推断可打开状态；单次有界查询也避免每张 run 卡各发 IPC。
+   */
+  ipcMain.handle('local-db:sessions:resolve-references', async (_e, value: unknown) => {
+    if (!Array.isArray(value)) throwIpcError('INVALID_PARAMS', 'sessionIds must be an array');
+    if (value.length > 200) throwIpcError('INVALID_PARAMS', 'sessionIds exceeds limit 200');
+
+    const sessionIds = Array.from(
+      new Set(value.map((id, index) => requireString(id, `sessionIds[${index}]`))),
+    );
+    if (sessionIds.length === 0) return [] satisfies SessionReference[];
+
+    const db = getDbClient().drizzle;
+    const rows = await db
+      .select({
+        id: sessions.id,
+        status: sessions.status,
+        title: sessions.title,
+        agentKind: sessions.agentKind,
+      })
+      .from(sessions)
+      .where(inArray(sessions.id, sessionIds));
+    const rowsById = new Map(rows.map((row) => [row.id, row]));
+
+    return sessionIds.map((sessionId): SessionReference => {
+      const row = rowsById.get(sessionId);
+      if (!row) return { sessionId, state: 'missing' };
+      return {
+        sessionId,
+        state: row.status === 'deleted' ? 'deleted' : 'available',
+        status: row.status,
+        title: row.title,
+        agentKind: row.agentKind === 'codex' ? 'codex' : 'cc',
+      };
+    });
   });
 
   /**

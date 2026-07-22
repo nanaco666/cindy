@@ -2885,6 +2885,9 @@ interface ElectronAPI {
         extraDirs?: string[];
       }) => Promise<import('@/lib/ccAgent.types').Session>;
       get: (id: string) => Promise<import('@/lib/ccAgent.types').Session>;
+      resolveReferences: (
+        sessionIds: string[],
+      ) => Promise<import('../shared/sessionReference').SessionReference[]>;
       restoreIfArchived: (
         id: string,
         expected: {

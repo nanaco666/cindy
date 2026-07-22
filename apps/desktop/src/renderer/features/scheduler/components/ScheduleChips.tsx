@@ -41,6 +41,7 @@ import {
 } from '../lib/cronCodexPreset';
 import { getScheduleDefaultModel, type EffortValue } from '../hooks/useScheduleForm';
 import { PENDING_SESSION_ID } from '../lib/scheduleFormLogic';
+import type { SessionReference } from '../../../../shared/sessionReference';
 
 export type Destination = 'local' | 'worktree' | 'thread';
 export type AgentKind = 'claude-code' | 'codex';
@@ -1217,7 +1218,7 @@ export function ModelEffortChip({
   );
 }
 
-export function ThreadPickerInline({ value, onSelect, onOpen }: {
+export function ThreadPickerInline({ value, onSelect, onOpen, reference }: {
   /** 当前 form.targetSessionId;'__pending__' 占位在组件内映射为空选。 */
   value: string;
   /**
@@ -1227,6 +1228,8 @@ export function ThreadPickerInline({ value, onSelect, onOpen }: {
   onSelect: (session: Session | null) => void;
   /** 已选真实会话时显示"打开会话"按钮;调用方负责 navigate + 关 dialog。 */
   onOpen?: (sessionId: string) => void;
+  /** 当前绑定由 main 层解析出的生命周期状态。 */
+  reference?: SessionReference;
 }) {
   const { t } = useTranslation();
   const [sessions, setSessions] = useState<Session[]>([]);
@@ -1252,6 +1255,8 @@ export function ThreadPickerInline({ value, onSelect, onOpen }: {
   }, []);
 
   const hasRealValue = !!value && value !== PENDING_SESSION_ID;
+  const referenceUnavailable =
+    reference?.state === 'deleted' || reference?.state === 'missing';
 
   // 单行布局:select 占满 + 已选真实会话时右侧"打开会话"按钮。换选即换绑,
   // 不需要单独的"解除绑定"——切换三态/重新选择都是非破坏性的(hook 层 remembered)。
@@ -1282,7 +1287,12 @@ export function ThreadPickerInline({ value, onSelect, onOpen }: {
                 option 保住 select 显示,避免空白;disabled 防止 find 失败误写占位 */}
             {hasRealValue && !sessions.some((s) => s.id === value) && (
               <option value={value} disabled>
-                {t('scheduler.editor.runSession.card.fallbackTitle', { id: value.slice(0, 8) })}
+                {referenceUnavailable
+                  ? t('scheduler.editor.thread.deletedBinding')
+                  : reference?.title?.trim() ||
+                    t('scheduler.editor.runSession.card.fallbackTitle', {
+                      id: value.slice(0, 8),
+                    })}
               </option>
             )}
             {sessions.map((s) => (
@@ -1291,7 +1301,7 @@ export function ThreadPickerInline({ value, onSelect, onOpen }: {
               </option>
             ))}
           </select>
-          {onOpen && hasRealValue && (
+          {onOpen && hasRealValue && !referenceUnavailable && (
             <button
               type="button"
               onClick={() => onOpen(value)}
