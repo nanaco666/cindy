@@ -48,6 +48,7 @@ interface ResetOfferEntry {
   creditId: string | null;
   creditExpiresAt: number | null;
   validUntil: number;
+  settled: boolean;
   pending: Promise<MobileCodexRateLimitResetResult> | null;
   result: MobileCodexRateLimitResetResult | null;
 }
@@ -91,7 +92,7 @@ function sameAccount(
 }
 
 function normalizeAvailableCount(value: unknown): number {
-  const count = typeof value === 'bigint' ? Number(value) : Number(value);
+  const count = Number(value);
   if (!Number.isFinite(count) || count <= 0) return 0;
   return Math.floor(count);
 }
@@ -181,12 +182,14 @@ export function createCodexRateLimitResetService(
   const pruneOffers = (): void => {
     const current = now();
     for (const [key, offer] of offers) {
-      if (offer.validUntil <= current) offers.delete(key);
+      if (!offer.pending && offer.validUntil <= current) offers.delete(key);
     }
-    while (offers.size >= MAX_RESET_OFFERS) {
-      const oldest = offers.keys().next().value as string | undefined;
-      if (!oldest) break;
-      offers.delete(oldest);
+    for (const [key, offer] of offers) {
+      if (offers.size < MAX_RESET_OFFERS) break;
+      // Keep an in-flight redemption addressable until it settles. The registry may
+      // temporarily exceed the soft limit when every retained offer is pending.
+      if (offer.pending) continue;
+      offers.delete(key);
     }
   };
 
@@ -214,13 +217,16 @@ export function createCodexRateLimitResetService(
     if (availableCount > 0 && canBindResetOffer(identity)) {
       // Repeated reads must not mint a new retry key. This preserves idempotency when the
       // consume response was lost and mobile refreshes/reconnects before retrying.
-      const existing = [...offers.entries()].find(([, offer]) => sameAccount(offer.account, identity));
+      const existing = [...offers.entries()].find(([, offer]) => (
+        !offer.settled && sameAccount(offer.account, identity)
+      ));
       const idempotencyKey = existing?.[0] ?? createIdempotencyKey();
       const entry = existing?.[1] ?? {
         account: identity,
         creditId: selectedCredit?.id ?? null,
         creditExpiresAt: selectedCredit?.expiresAt ?? null,
         validUntil: now() + RESET_OFFER_TTL_MS,
+        settled: false,
         pending: null,
         result: null,
       };
@@ -261,6 +267,10 @@ export function createCodexRateLimitResetService(
         idempotencyKey,
         ...(offer.creditId ? { creditId: offer.creditId } : {}),
       });
+      // Mark the attempt settled before refreshing. That refresh may expose another
+      // available credit and must receive a fresh idempotency key, while concurrent
+      // retries of this attempt still join offer.pending until the final result is ready.
+      offer.settled = true;
       let rateLimits: MobileCodexRateLimitsResult | null = null;
       try {
         rateLimits = await read();

@@ -5,6 +5,7 @@ import { createCodexRateLimitResetService } from '../codexRateLimitReset.js';
 
 const NOW_MS = Date.UTC(2026, 6, 22, 12, 0, 0);
 const KEY = '018f4ec7-c6d8-7f10-8d43-9f8791d33000';
+const NEXT_KEY = '018f4ec7-c6d8-7f10-8d43-9f8791d33001';
 
 function response(over: Partial<AccountRateLimitsResponse> = {}): AccountRateLimitsResponse {
   return {
@@ -50,7 +51,9 @@ function harness(over: Partial<Parameters<typeof createCodexRateLimitResetServic
     }),
     recordRateLimitSnapshot: vi.fn().mockResolvedValue(undefined),
     now: () => NOW_MS,
-    createIdempotencyKey: () => KEY,
+    createIdempotencyKey: vi.fn()
+      .mockReturnValueOnce(KEY)
+      .mockReturnValueOnce(NEXT_KEY),
     ...over,
   };
   return { deps, service: createCodexRateLimitResetService(deps) };
@@ -89,7 +92,9 @@ describe('Codex rate-limit reset control plane', () => {
   });
 
   it('reuses one offer across reads and omits creditId when detail is unavailable', async () => {
-    const createIdempotencyKey = vi.fn(() => KEY);
+    const createIdempotencyKey = vi.fn()
+      .mockReturnValueOnce(KEY)
+      .mockReturnValueOnce(NEXT_KEY);
     const { deps, service } = harness({
       createIdempotencyKey,
       readRateLimits: vi.fn().mockResolvedValue(response({
@@ -123,6 +128,82 @@ describe('Codex rate-limit reset control plane', () => {
     expect(firstResult).toEqual(secondResult);
     expect(consumeResetCredit).toHaveBeenCalledOnce();
     await expect(service.consume(KEY)).resolves.toEqual(firstResult);
+    expect(consumeResetCredit).toHaveBeenCalledOnce();
+  });
+
+  it('issues a fresh offer for the next credit after a settled redemption', async () => {
+    const readRateLimits = vi.fn()
+      .mockResolvedValueOnce(response())
+      .mockResolvedValueOnce(response({
+        rateLimitResetCredits: {
+          availableCount: 1,
+          credits: [{
+            id: 'later',
+            status: 'available',
+            resetType: 'codexRateLimits',
+            grantedAt: 20,
+            expiresAt: 300,
+            title: 'Later',
+            description: null,
+          }],
+        },
+      }))
+      .mockResolvedValueOnce(response({
+        rateLimitResetCredits: { availableCount: 0, credits: [] },
+      }));
+    const createIdempotencyKey = vi.fn()
+      .mockReturnValueOnce(KEY)
+      .mockReturnValueOnce(NEXT_KEY);
+    const { deps, service } = harness({ readRateLimits, createIdempotencyKey });
+
+    await service.read();
+    const firstResult = await service.consume(KEY);
+    expect(firstResult.rateLimits?.resetOffer).toEqual({
+      idempotencyKey: NEXT_KEY,
+      expiresAt: 300,
+      validUntil: NOW_MS + 10 * 60 * 1000,
+    });
+
+    await service.consume(NEXT_KEY);
+    expect(deps.consumeResetCredit).toHaveBeenNthCalledWith(1, {
+      idempotencyKey: KEY,
+      creditId: 'earlier',
+    });
+    expect(deps.consumeResetCredit).toHaveBeenNthCalledWith(2, {
+      idempotencyKey: NEXT_KEY,
+      creditId: 'later',
+    });
+  });
+
+  it('does not evict an in-flight offer when the registry reaches its soft limit', async () => {
+    let activeIdentity = { email: 'person-0@example.com', accountId: 'workspace-0' };
+    let resolveConsume!: (value: { outcome: 'reset' }) => void;
+    const consumeResetCredit = vi.fn(() => new Promise<{ outcome: 'reset' }>((resolve) => {
+      resolveConsume = resolve;
+    }));
+    let keyIndex = 0;
+    const { service } = harness({
+      consumeResetCredit,
+      createIdempotencyKey: () => `key-${keyIndex++}`,
+      readAccountIdentity: vi.fn(async () => activeIdentity),
+    });
+
+    await service.read();
+    const firstConsume = service.consume('key-0');
+    await vi.waitFor(() => expect(consumeResetCredit).toHaveBeenCalledOnce());
+
+    for (let index = 1; index <= 64; index += 1) {
+      activeIdentity = {
+        email: `person-${index}@example.com`,
+        accountId: `workspace-${index}`,
+      };
+      await service.read();
+    }
+
+    const retry = service.consume('key-0');
+    resolveConsume({ outcome: 'reset' });
+    const [firstResult, retryResult] = await Promise.all([firstConsume, retry]);
+    expect(retryResult).toEqual(firstResult);
     expect(consumeResetCredit).toHaveBeenCalledOnce();
   });
 
