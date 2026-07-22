@@ -48,7 +48,7 @@ monorepo 组织。
 
 ## 前置要求
 
-- **Node.js** 22 LTS 或更高
+- **Node.js** 22.x
 - **pnpm** 10.x（暂不支持 v11）
 - **Git LFS**
 
@@ -142,14 +142,16 @@ pnpm --filter mobile  test
 ## 架构
 
 - [`DESIGN.md`](DESIGN.md) —— 视觉设计系统、颜色 token 与 UI 规范
+- [`CONTRIBUTING.md`](CONTRIBUTING.md) —— 面向社区贡献者的环境、验证与提交流程
 - [`AGENTS.md`](AGENTS.md) —— 工程规范、启动 / 运行时契约、模块边界
 - [`docs/dev-rules/`](docs/dev-rules/) —— 架构深度文档（如 Orca 多 agent 协同）
 
 ## 贡献
 
-改动通过 pull request 合入 `main`。提 PR 前：
+改动通过 pull request 合入 `main`。完整流程见
+[`CONTRIBUTING.md`](CONTRIBUTING.md)。提 PR 前至少需要：
 
-1. 跑 `pnpm test:unit` 并确认全部通过。
+1. 跑 `pnpm test:unit` 并确认全部通过，或在 PR 中说明未执行原因。
 2. 按 [`.github/PULL_REQUEST_TEMPLATE.md`](.github/PULL_REQUEST_TEMPLATE.md) 填写 PR 描述。
 
 [`AGENTS.md`](AGENTS.md) 中的工程规范是代码风格、双平台（macOS/Windows）兼容，
@@ -157,8 +159,8 @@ i18n、主题、review 严重度的权威依据。
 
 ## 安全
 
-任何凭证 / 授权文件都不得提交进工作区。发现安全问题请**私下**报告，不要开公开
-issue。 <!-- TODO: 补一份 SECURITY.md，写明联系人 / 披露渠道 -->
+任何凭证 / 授权文件都不得提交进工作区。发现安全问题请按照
+[`SECURITY.md`](SECURITY.md) 的说明私下报告，不要开公开 issue。
 
 ## 许可证 / License
 

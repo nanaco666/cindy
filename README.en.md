@@ -50,7 +50,7 @@ repository and is not part of this monorepo. The client is free software.
 
 ## Prerequisites
 
-- **Node.js** 22 LTS or newer
+- **Node.js** 22.x
 - **pnpm** 10.x (v11 is not yet supported)
 - **Git LFS**
 
@@ -154,14 +154,16 @@ migration rather than editing an existing one.
 ## Architecture
 
 - [`DESIGN.md`](DESIGN.md) — visual design system, color tokens, and UI conventions
+- [`CONTRIBUTING.md`](CONTRIBUTING.md) — contributor setup, validation, and submission workflow
 - [`AGENTS.md`](AGENTS.md) — engineering rules, launch/runtime contracts, and module boundaries
 - [`docs/dev-rules/`](docs/dev-rules/) — deep-dive architecture docs (e.g. Orca multi-agent orchestration)
 
 ## Contributing
 
-Contributions go through pull requests into `main`. Before opening a PR:
+Contributions go through pull requests into `main`. See
+[`CONTRIBUTING.md`](CONTRIBUTING.md) for the complete workflow. Before opening a PR:
 
-1. Run `pnpm test:unit` and make sure it passes.
+1. Run `pnpm test:unit` and make sure it passes, or explain why it was not run.
 2. Fill in the PR description per [`.github/PULL_REQUEST_TEMPLATE.md`](.github/PULL_REQUEST_TEMPLATE.md).
 
 The engineering rules in [`AGENTS.md`](AGENTS.md) are authoritative for code
@@ -170,8 +172,8 @@ style, platform (macOS/Windows) parity, i18n, theming, and review severity.
 ## Security
 
 Never commit credentials or authorization files to the working tree. If you
-discover a security issue, please report it privately rather than opening a
-public issue. <!-- TODO: add SECURITY.md with a contact/disclosure address -->
+discover a security issue, follow [`SECURITY.md`](SECURITY.md) to report it
+privately rather than opening a public issue.
 
 ## License / 许可证
 
