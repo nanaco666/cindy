@@ -14,7 +14,7 @@ import { beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { validateGhostManifest } from '../../../shared/ghost.js';
 
-const ghostDir = new URL('../../../../resources/builtin-ghosts/xd-feishu/', import.meta.url);
+const ghostDir = new URL('../../../../resources/builtin-ghosts/xd/xd-feishu/', import.meta.url);
 const mainSource = readFileSync(new URL('main.js', ghostDir), 'utf8');
 const rawManifest = JSON.parse(readFileSync(new URL('ghost.json', ghostDir), 'utf8')) as Record<string, unknown>;
 
