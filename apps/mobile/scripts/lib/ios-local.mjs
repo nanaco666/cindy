@@ -138,6 +138,10 @@ export function replaceBuildNumberInAppJson(rawText, nextBuildNumber) {
  * 按 region 的 self-host-regions.json 的 iosSigning 取值**(纯值、非机密、不入仓,详见 self-host-region.mjs)。
  * teamId / profileName / signIdentity 缺任一即抛错(fail-closed);profilePath 可选
  * (空 = 假设描述文件已装入 ~/Library/MobileDevice/Provisioning Profiles)。
+ * signIdentity 只接受**完整证书通用名**("Apple Development: 姓名 (ID)",含冒号)或
+ * 40 位 SHA-1:裸类型名("Apple Development")对 xcodebuild 是自动选择器——archive 的
+ * CODE_SIGN_IDENTITY 子串匹配、export 的 signingCertificate 挑最新一张,多证书钥匙串下
+ * 都钉不住证书,必须在预检就拒掉(security find-identity -v -p codesigning 可查完整名)。
  * 签名套件本体(profile + p12)在打包机的仓库外目录,不入仓。
  * @param {{ authRegion?: string, iosSigning?: { teamId?: string, profileName?: string, signIdentity?: string, profilePath?: string } }} regionConfig
  * @returns {{ teamId: string, profileName: string, identity: string, profilePath: string }}
@@ -158,7 +162,23 @@ export function resolveIosSigningEnv(regionConfig) {
       `self-host-regions.json 的 ${region}.iosSigning 缺少非空字段:${missing.join(', ')}(iOS 签名描述符从 region JSON 取值,非机密;profilePath 可选,缺省视为描述文件已装入系统)`,
     );
   }
+  const isSha1 = /^[0-9A-Fa-f]{40}$/.test(identity);
+  if (!isSha1 && !identity.includes(':')) {
+    throw new Error(
+      `self-host-regions.json 的 ${region}.iosSigning.signIdentity 必须是完整证书名(形如 "Apple Development: 姓名 (ID)")或 40 位 SHA-1,收到 ${JSON.stringify(identity)}——裸类型名/部分名对 xcodebuild 是自动选择器或模糊匹配,多证书钥匙串下钉不住证书(完整名用 security find-identity -v -p codesigning 查)`,
+    );
+  }
   return { teamId, profileName, identity, profilePath };
+}
+
+/** plist <string> 值的 XML 转义(证书名等来自配置的外部输入,防意外特殊字符产出坏 plist)。 */
+function escapePlistString(value) {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
 }
 
 /**
@@ -175,7 +195,7 @@ export function buildExportOptionsPlist({ teamId, bundleId, profileName, signing
   const signingCertificateEntry = signingCertificate
     ? `
     <key>signingCertificate</key>
-    <string>${signingCertificate}</string>`
+    <string>${escapePlistString(signingCertificate)}</string>`
     : '';
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">

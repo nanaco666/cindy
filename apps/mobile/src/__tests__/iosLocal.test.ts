@@ -55,14 +55,15 @@ describe('compareBuildNumbers / assertBuildNumberMonotonic', () => {
 });
 
 describe('resolveIosSigningEnv（从 region JSON 的 iosSigning 取值,非机密)', () => {
+  const FULL_IDENTITY = 'Apple Development: Yi Zhou (RQ24UVT6TG)';
   const REGION = {
     authRegion: 'cn',
-    iosSigning: { teamId: 'TEAM123456', profileName: 'some_profile', signIdentity: 'Apple Development' },
+    iosSigning: { teamId: 'TEAM123456', profileName: 'some_profile', signIdentity: FULL_IDENTITY },
   };
   const withSigning = (patch) => ({ ...REGION, iosSigning: { ...REGION.iosSigning, ...patch } });
   it('三项齐全 → 透传;profilePath 可选缺省为空串', () => {
     expect(resolveIosSigningEnv(REGION)).toEqual({
-      teamId: 'TEAM123456', profileName: 'some_profile', identity: 'Apple Development', profilePath: '',
+      teamId: 'TEAM123456', profileName: 'some_profile', identity: FULL_IDENTITY, profilePath: '',
     });
     expect(resolveIosSigningEnv(withSigning({ profilePath: '/tmp/p.mobileprovision' })).profilePath)
       .toBe('/tmp/p.mobileprovision');
@@ -74,6 +75,17 @@ describe('resolveIosSigningEnv（从 region JSON 的 iosSigning 取值,非机密
   });
   it('全缺 → 错误信息按序列出全部三项', () => {
     expect(() => resolveIosSigningEnv({ authRegion: 'cn', iosSigning: {} })).toThrow(/teamId, profileName, signIdentity/);
+  });
+  it('signIdentity 是裸类型名(自动选择器)→ 拒:多证书钥匙串下钉不住证书', () => {
+    expect(() => resolveIosSigningEnv(withSigning({ signIdentity: 'Apple Development' }))).toThrow(/完整证书名/);
+    expect(() => resolveIosSigningEnv(withSigning({ signIdentity: 'Apple Distribution' }))).toThrow(/完整证书名/);
+  });
+  it('signIdentity 是不含冒号的部分名 → 拒(CODE_SIGN_IDENTITY 模糊匹配同样有歧义)', () => {
+    expect(() => resolveIosSigningEnv(withSigning({ signIdentity: 'Yi Zhou (RQ24UVT6TG)' }))).toThrow(/完整证书名/);
+  });
+  it('signIdentity 是 40 位 SHA-1 → 放行', () => {
+    const sha1 = 'A1B2C3D4E5F60718293A4B5C6D7E8F9012345678';
+    expect(resolveIosSigningEnv(withSigning({ signIdentity: sha1 })).identity).toBe(sha1);
   });
 });
 
@@ -97,6 +109,13 @@ describe('buildExportOptionsPlist', () => {
   it('不传 signingCertificate 时输出不含该键(向后兼容)', () => {
     const plist = buildExportOptionsPlist({ teamId: 'NTC4BJ542G', bundleId: 'com.xd.cindycn', profileName: 'cindycn_dev' });
     expect(plist).not.toContain('signingCertificate');
+  });
+  it('signingCertificate 值做 XML 转义(意外特殊字符不产出坏 plist)', () => {
+    const plist = buildExportOptionsPlist({
+      teamId: 'NTC4BJ542G', bundleId: 'com.xd.cindycn', profileName: 'cindycn_dev',
+      signingCertificate: 'Apple Development: A & B <Co> (ID)',
+    });
+    expect(plist).toContain('<string>Apple Development: A &amp; B &lt;Co&gt; (ID)</string>');
   });
   it('缺参抛错', () => {
     expect(() => buildExportOptionsPlist({ teamId: 'x', bundleId: 'y' })).toThrow();
