@@ -13,6 +13,7 @@ import {
   applyRemoteSessionActivity,
   clearRemoteSessionActivity,
   getRemoteSessionActivity,
+  isRemoteSessionActivityActive,
   removeRemoteSessionActivityEntry,
   removeRemoteSessionActivityForDevice,
 } from '../features/device-link/remoteSessionActivityStore';
@@ -66,6 +67,42 @@ describe('remoteSessionActivityStore', () => {
       attention: false,
     });
     expect(getRemoteSessionActivity('s1')).toBeUndefined();
+  });
+
+  it('classifies only in-flight phases as active turns', () => {
+    expect(
+      isRemoteSessionActivityActive({
+        sessionId: 's1',
+        phase: 'running',
+        compactDetail: '',
+        attention: false,
+      }),
+    ).toBe(true);
+    expect(
+      isRemoteSessionActivityActive({
+        sessionId: 's1',
+        phase: 'needs-interaction',
+        compactDetail: '',
+        attention: true,
+      }),
+    ).toBe(true);
+    expect(
+      isRemoteSessionActivityActive({
+        sessionId: 's1',
+        phase: 'completed',
+        compactDetail: '',
+        attention: true,
+      }),
+    ).toBe(false);
+    expect(
+      isRemoteSessionActivityActive({
+        sessionId: 's1',
+        phase: 'error',
+        compactDetail: '',
+        attention: true,
+      }),
+    ).toBe(false);
+    expect(isRemoteSessionActivityActive(undefined)).toBe(false);
   });
 
   it('ignores malformed payloads', () => {

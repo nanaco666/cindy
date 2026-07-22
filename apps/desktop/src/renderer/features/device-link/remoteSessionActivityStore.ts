@@ -31,6 +31,13 @@ export interface RemoteSessionActivity {
   attention: boolean;
 }
 
+/** Active remote turns must win over the persisted "started without ended" heuristic. */
+export function isRemoteSessionActivityActive(
+  activity: RemoteSessionActivity | undefined,
+): boolean {
+  return activity?.phase === 'running' || activity?.phase === 'needs-interaction';
+}
+
 const listeners = new Set<() => void>();
 /** sessionId → 活动条目(引用稳定,内容变化才替换)。 */
 const activityMap = new Map<string, RemoteSessionActivity>();
