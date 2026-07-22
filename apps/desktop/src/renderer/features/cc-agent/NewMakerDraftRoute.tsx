@@ -864,7 +864,9 @@ export function NewMakerDraftRoute() {
         }
         sshModel = sshVisibleModels[0].id;
       }
-      const rawProviderId = chatPrefs.providerId ?? null;
+      // 使用 chatInitialProviderId(显示给用户的来源,device-link 活跃时取镜像值)而非
+      // chatPrefs.providerId(可能是旧的 controller-local 值)。
+      const rawProviderId = chatInitialProviderId ?? null;
       const sshLocalSourceId = effectiveSourceIdForModel(
         localProviders, rawProviderId, sshModel, capabilityAgentKind,
       );
@@ -946,7 +948,7 @@ export function NewMakerDraftRoute() {
         throw err;
       }
     },
-    [draft.vendor, chatPrefs, chatInitialPermissionMode, draftInitialModel, localProviders, capabilityAgentKind, effectivePlanMode, attachmentState, createSession, navigate, t],
+    [draft.vendor, chatPrefs, chatInitialPermissionMode, chatInitialProviderId, draftInitialModel, effectiveDeviceLinkDeviceId, localProviders, capabilityAgentKind, effectivePlanMode, attachmentState, createSession, navigate, t],
   );
 
   // ─── 切 vendor ──────────────────────────────────────────────────────
