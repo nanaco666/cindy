@@ -497,6 +497,45 @@ export async function restoreWorkerDoneIfIdle(workerId: string): Promise<boolean
 }
 
 /**
+ * Records that this process owns a live Worker runtime again. The task status is
+ * intentionally preserved because focusing or bootstrapping a dormant runtime does
+ * not mean that a turn is already running.
+ */
+export async function touchWorkerRuntimeActivity(
+  workerId: string,
+  updatedAt: number,
+): Promise<void> {
+  const db = getDbClient().drizzle;
+  await db
+    .update(orcaWorkers)
+    .set({ idleSince: null, updatedAt })
+    .where(eq(orcaWorkers.id, workerId));
+}
+
+/**
+ * Reclaims a release marker only when it still matches the observed marker. This is
+ * used after confirming that the local runtime has a live turn, so the persisted
+ * task status must return to running as part of the same CAS.
+ */
+export async function restoreReleasedWorkerRunning(
+  workerId: string,
+  releasedAt: number,
+  restoredAt: number,
+): Promise<boolean> {
+  const db = getDbClient().drizzle;
+  const result = await db
+    .update(orcaWorkers)
+    .set({ status: 'running', idleSince: null, updatedAt: restoredAt })
+    .where(and(
+      eq(orcaWorkers.id, workerId),
+      eq(orcaWorkers.status, 'idle'),
+      eq(orcaWorkers.idleSince, releasedAt),
+    ))
+    .run();
+  return result.changes > 0;
+}
+
+/**
  * create_worker 派发失败补偿：移除尚未成功 dispatch 的 worker link，并归档对应 session。
  * 这条路径只服务失败清理，不影响正常协同结束时保留历史 worker link 的语义。
  */

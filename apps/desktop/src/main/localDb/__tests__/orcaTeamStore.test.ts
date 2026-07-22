@@ -124,6 +124,48 @@ describe('orcaTeamStore', () => {
     ]);
   });
 
+  it('restores running status only for the matching release marker', async () => {
+    const { restoreReleasedWorkerRunning } = await import('../orcaTeamStore.js');
+    const client = createTestDbClient();
+    setCurrentDbClient(client, 'test-user');
+
+    await seedOrcaWorkers(client);
+    await client.exec(
+      'UPDATE orca_workers SET status = ?, idle_since = ?, updated_at = ? WHERE id = ?',
+      ['idle', 90_000, 90_000, 'worker-1'],
+    );
+
+    await expect(restoreReleasedWorkerRunning('worker-1', 80_000, 120_000)).resolves.toBe(false);
+    await expect(restoreReleasedWorkerRunning('worker-1', 90_000, 120_000)).resolves.toBe(true);
+    await expect(client.queryOne<{
+      status: string;
+      idle_since: number | null;
+      updated_at: number;
+    }>('SELECT status, idle_since, updated_at FROM orca_workers WHERE id = ?', ['worker-1']))
+      .resolves.toEqual({ status: 'running', idle_since: null, updated_at: 120_000 });
+  });
+
+  it('touches a resumed runtime even when it has no release marker', async () => {
+    const { touchWorkerRuntimeActivity } = await import('../orcaTeamStore.js');
+    const client = createTestDbClient();
+    setCurrentDbClient(client, 'test-user');
+
+    await seedOrcaWorkers(client);
+    await client.exec(
+      'UPDATE orca_workers SET status = ?, idle_since = NULL, updated_at = ? WHERE id = ?',
+      ['idle', 1, 'worker-1'],
+    );
+
+    await touchWorkerRuntimeActivity('worker-1', 120_000);
+
+    await expect(client.queryOne<{
+      status: string;
+      idle_since: number | null;
+      updated_at: number;
+    }>('SELECT status, idle_since, updated_at FROM orca_workers WHERE id = ?', ['worker-1']))
+      .resolves.toEqual({ status: 'idle', idle_since: null, updated_at: 120_000 });
+  });
+
   function createTestDbClient(): DbClient {
     const dbHandle = new Database(':memory:');
     rawDb = dbHandle;

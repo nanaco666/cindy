@@ -111,8 +111,10 @@ import {
   removeWorker,
   renewWorkerCreationReservation,
   reserveWorkerCreation,
+  restoreReleasedWorkerRunning,
   setSessionOrcaRole,
   setWorkerFocus,
+  touchWorkerRuntimeActivity,
   updateWorkerStatus,
 } from '../localDb/orcaTeamStore.js';
 import { messages, orcaTeams, orcaWorkers, sessions } from '../localDb/schema.js';
@@ -3672,11 +3674,7 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
   }
 
   async function clearOrcaWorkerReleaseMarker(workerId: string): Promise<void> {
-    const now = Date.now();
-    await getDbClient().drizzle
-      .update(orcaWorkers)
-      .set({ idleSince: null, updatedAt: now })
-      .where(and(eq(orcaWorkers.id, workerId), isNotNull(orcaWorkers.idleSince)));
+    await touchWorkerRuntimeActivity(workerId, Date.now());
   }
 
   // switchFocus 和 sendToWorker 都可能唤醒 idle worker；统一走这里才能保留 extraDirs，
@@ -5195,13 +5193,8 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
       return result.changes === 1;
     },
     clearReleased: async (candidate, restoredAt) => {
-      const result = await getDbClient().exec(
-        `UPDATE orca_workers
-         SET idle_since = NULL, updated_at = ?
-         WHERE id = ? AND idle_since = ?`,
-        [restoredAt, candidate.id, candidate.idleSince],
-      );
-      return result.changes === 1;
+      if (candidate.idleSince === null) return false;
+      return restoreReleasedWorkerRunning(candidate.id, candidate.idleSince, restoredAt);
     },
     touchWorker: async (workerId, updatedAt) => {
       await getDbClient().drizzle
