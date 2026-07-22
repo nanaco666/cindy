@@ -44,6 +44,12 @@ export interface OrcaWorkerProviderSnapshot {
   models: readonly string[];
 }
 
+/** 同一次 provider registry 快照派生出的可用性与默认模型路由，避免两次读取产生竞态。 */
+export interface OrcaWorkerProviderRoutingContext {
+  availability: Record<AgentKind, OrcaWorkerProviderSnapshot[]>;
+  resolveDefaultProviderIdForModel(agent: AgentKind, model: string): string | null;
+}
+
 /** worker 创建边界只依赖 model 的运行能力，不直接耦合完整 capabilities 类型。 */
 export interface OrcaWorkerModelCapabilities {
   id: string;
@@ -79,6 +85,7 @@ export type OrcaWorkerCreationErrorCode =
   | 'WORKER_LIMIT_HARD_EXCEEDED'
   | 'BUDGET_MODEL_REQUIRES_API_MODE'
   | 'NO_PROVIDER_FOR_AGENT'
+  | 'PROVIDER_ROUTE_UNAVAILABLE'
   | 'BUSY'
   | 'INTERNAL';
 
@@ -139,12 +146,11 @@ export interface OrcaWorkerCreationDeps {
   getWorkerDefaults(agent: AgentKind): OrcaWorkerDefaultsSnapshot;
   getAvailableModels(agent: AgentKind): OrcaWorkerModelCapabilities[];
   /**
-   * 各 agent 当前**已连接**的模型供应商展示名(空数组 = 该 agent 无可用 provider)。
-   * host 注入实现:listProviders() + connectedProvidersForAgent(views, agent),并裁剪为
-   * provider id/name/model ids 的最小视图。
-   * 是 worker 启动 preflight 的唯一判定来源(catalog 驱动,不写死供应商)。
+   * 从同一次 provider registry 读取构造 Worker 路由上下文。
+   * availability 只保留已连接 provider 的最小视图；显式 model 的默认来源解析复用
+   * model-providers 的 effectiveSourceIdForModel，避免在创建服务里复制供应商优先级。
    */
-  getProviderAvailability(): Promise<Record<AgentKind, OrcaWorkerProviderSnapshot[]>>;
+  getProviderRoutingContext(): Promise<OrcaWorkerProviderRoutingContext>;
   readClaudeApiKey(): string | null;
   reserveWorkerCreation(input: {
     reservationId: string;
@@ -357,10 +363,13 @@ export function buildNoProviderMessage(
 
 function buildProviderRouteUnavailableMessage(
   agent: AgentKind,
-  providerId: string,
+  providerId: string | null,
   model: string,
   provider: OrcaWorkerProviderSnapshot | undefined,
 ): string {
+  if (providerId === null) {
+    return `${agentDisplayName(agent)} 当前没有已连接的供应商提供模型 "${model}",请调整模型或在「设置 → 模型供应商」连接对应供应商后重试。`;
+  }
   if (!provider) {
     return `${agentDisplayName(agent)} Worker 选择的供应商 "${providerId}" 当前未连接或不支持该 agent,请在「设置 → 模型供应商」检查后重试。`;
   }
@@ -431,7 +440,8 @@ export function createOrcaWorkerCreationService(deps: OrcaWorkerCreationDeps): O
     }
 
     // 先保留无 provider 的快速失败；精确的 provider + model 校验要等 Lead/defaults 解析完成。
-    const providerAvailability = await deps.getProviderAvailability();
+    const providerRouting = await deps.getProviderRoutingContext();
+    const providerAvailability = providerRouting.availability;
     const agentProviders = providerAvailability[params.agent] ?? [];
     if (agentProviders.length === 0) {
       return {
@@ -447,9 +457,30 @@ export function createOrcaWorkerCreationService(deps: OrcaWorkerCreationDeps): O
     }
 
     const defaults = deps.getWorkerDefaults(params.agent);
-    const resolved = resolveWorkerConfig({ input: params, lead, defaults, availableModels });
-    if (!resolved.ok) {
-      return { ok: false, errorCode: 'INVALID_PARAMS', message: resolved.message };
+    const resolvedConfig = resolveWorkerConfig({ input: params, lead, defaults, availableModels });
+    if (!resolvedConfig.ok) {
+      return { ok: false, errorCode: 'INVALID_PARAMS', message: resolvedConfig.message };
+    }
+    const resolved = {
+      ...resolvedConfig,
+      // 显式 model 属于本次 Worker 创建请求，不能沿用无关的 New Maker/Lead provider。
+      // 来源选择必须基于当前已连接且实际提供该 model 的 provider 集合重新派生。
+      providerId: params.model !== undefined
+        ? providerRouting.resolveDefaultProviderIdForModel(params.agent, resolvedConfig.model)
+        : resolvedConfig.providerId,
+    };
+
+    if (params.model !== undefined && resolved.providerId === null) {
+      return {
+        ok: false,
+        errorCode: 'PROVIDER_ROUTE_UNAVAILABLE',
+        message: buildProviderRouteUnavailableMessage(
+          params.agent,
+          null,
+          resolved.model,
+          undefined,
+        ),
+      };
     }
 
     // 按 Worker 最终解析出的 provider + model 做精确 preflight。只检查“任意 provider 可用”会
@@ -459,7 +490,7 @@ export function createOrcaWorkerCreationService(deps: OrcaWorkerCreationDeps): O
       if (!provider || !provider.models.includes(resolved.model)) {
         return {
           ok: false,
-          errorCode: 'NO_PROVIDER_FOR_AGENT',
+          errorCode: 'PROVIDER_ROUTE_UNAVAILABLE',
           message: buildProviderRouteUnavailableMessage(
             params.agent,
             resolved.providerId,

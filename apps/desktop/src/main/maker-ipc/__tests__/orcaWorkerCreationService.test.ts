@@ -5,6 +5,8 @@ import {
   buildNoProviderMessage,
   createOrcaWorkerCreationService,
   type OrcaWorkerCreationDeps,
+  type OrcaWorkerProviderRoutingContext,
+  type OrcaWorkerProviderSnapshot,
 } from '../orcaWorkerCreationService';
 import type { DispatchWorkerTaskResult, OrcaWorkerStatus } from '../orcaTeamService';
 import type { MakerSessionCreateOpts } from '../sessionRequest';
@@ -13,6 +15,17 @@ import { isActiveWorkerStatus } from '../../../shared/orca-worker-status';
 
 const UUID_V4_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const WORKER_SESSION_ID = '123e4567-e89b-42d3-a456-426614174000';
+
+function providerRoutingContext(
+  availability: Record<AgentKind, OrcaWorkerProviderSnapshot[]>,
+): OrcaWorkerProviderRoutingContext {
+  return {
+    availability,
+    resolveDefaultProviderIdForModel: (agent, model) => (
+      availability[agent].find((provider) => provider.models.includes(model))?.id ?? null
+    ),
+  };
+}
 
 function createDeps(overrides: Partial<OrcaWorkerCreationDeps> = {}) {
   const calls: string[] = [];
@@ -46,7 +59,7 @@ function createDeps(overrides: Partial<OrcaWorkerCreationDeps> = {}) {
           ]
         : [{ id: 'claude-sonnet-4-6', efforts: ['low', 'medium', 'high', 'xhigh'], defaultEffort: 'high' }]
     )),
-    getProviderAvailability: vi.fn(async () => ({
+    getProviderRoutingContext: vi.fn(async () => providerRoutingContext({
       'claude-code': [{ id: 'xd', name: 'XD Gateway', models: ['claude-sonnet-4-6'] }],
       codex: [{
         id: 'xd',
@@ -261,7 +274,7 @@ describe('OrcaWorkerCreationService', () => {
     });
 
     expect(deps.getAvailableModels).not.toHaveBeenCalled();
-    expect(deps.getProviderAvailability).not.toHaveBeenCalled();
+    expect(deps.getProviderRoutingContext).not.toHaveBeenCalled();
     expect(deps.getLeadSessionRow).not.toHaveBeenCalled();
     expect(deps.reserveWorkerCreation).not.toHaveBeenCalled();
     expect(deps.bootstrapSession).not.toHaveBeenCalled();
@@ -322,7 +335,7 @@ describe('OrcaWorkerCreationService', () => {
 
   it('rejects worker creation when the target agent has no connected provider, suggesting another agent', async () => {
     const { deps, service } = createDeps({
-      getProviderAvailability: vi.fn(async () => ({
+      getProviderRoutingContext: vi.fn(async () => providerRoutingContext({
         'claude-code': [{ id: 'xd', name: 'XD Gateway', models: ['claude-sonnet-4-6'] }],
         codex: [],
       })),
@@ -349,7 +362,7 @@ describe('OrcaWorkerCreationService', () => {
 
   it('rejects worker creation when no agent has a connected provider, without an agent suggestion', async () => {
     const { deps, service } = createDeps({
-      getProviderAvailability: vi.fn(async () => ({ 'claude-code': [], codex: [] })),
+      getProviderRoutingContext: vi.fn(async () => providerRoutingContext({ 'claude-code': [], codex: [] })),
     });
 
     const result = await service.createWorker({
@@ -754,7 +767,7 @@ describe('OrcaWorkerCreationService', () => {
         fastMode: false,
         providerId: 'custom-codex',
       })),
-      getProviderAvailability: vi.fn(async () => ({
+      getProviderRoutingContext: vi.fn(async () => providerRoutingContext({
         'claude-code': [],
         codex: [{ id: 'custom-codex', name: 'Custom Codex', models: ['codex/budget'] }],
       })),
@@ -797,10 +810,64 @@ describe('OrcaWorkerCreationService', () => {
     }));
   });
 
+  it('recomputes the provider from connected model sources when the worker model is explicit', async () => {
+    const availability = {
+      'claude-code': [],
+      codex: [
+        { id: 'custom-codex', name: 'Custom Codex', models: ['gpt-5.5'] },
+        { id: 'xd', name: 'XD Gateway', models: ['gpt-5.4'] },
+      ],
+    } satisfies Record<AgentKind, OrcaWorkerProviderSnapshot[]>;
+    const { deps, service } = createDeps({
+      getWorkerDefaults: vi.fn(() => ({ model: 'gpt-5.5', providerId: 'custom-codex' })),
+      getProviderRoutingContext: vi.fn(async () => providerRoutingContext(availability)),
+    });
+
+    await expect(service.createWorker({
+      leadSessionId: 'lead-1',
+      role: 'reviewer',
+      agent: 'codex',
+      label: 'reviewer',
+      model: 'gpt-5.4',
+    })).resolves.toMatchObject({
+      ok: true,
+      resolved: { providerId: 'xd', model: 'gpt-5.4' },
+    });
+
+    expect(deps.buildCreateOptsWithStderr).toHaveBeenCalledWith(expect.objectContaining({
+      providerId: 'xd',
+      model: 'gpt-5.4',
+    }));
+  });
+
+  it('returns a route-specific error when no connected provider offers an explicit worker model', async () => {
+    const { deps, service } = createDeps({
+      getWorkerDefaults: vi.fn(() => ({ model: 'gpt-5.5', providerId: 'custom-codex' })),
+      getProviderRoutingContext: vi.fn(async () => providerRoutingContext({
+        'claude-code': [],
+        codex: [{ id: 'custom-codex', name: 'Custom Codex', models: ['gpt-5.5'] }],
+      })),
+    });
+
+    await expect(service.createWorker({
+      leadSessionId: 'lead-1',
+      role: 'reviewer',
+      agent: 'codex',
+      label: 'reviewer',
+      model: 'gpt-5.4',
+    })).resolves.toMatchObject({
+      ok: false,
+      errorCode: 'PROVIDER_ROUTE_UNAVAILABLE',
+      message: expect.stringContaining('没有已连接的供应商提供模型 "gpt-5.4"'),
+    });
+
+    expect(deps.bootstrapSession).not.toHaveBeenCalled();
+  });
+
   it('rejects an unavailable exact provider + model route before bootstrapping', async () => {
     const { deps, service } = createDeps({
       getWorkerDefaults: vi.fn(() => ({ model: 'gpt-5.4', providerId: 'custom-codex' })),
-      getProviderAvailability: vi.fn(async () => ({
+      getProviderRoutingContext: vi.fn(async () => providerRoutingContext({
         'claude-code': [],
         codex: [{ id: 'custom-codex', name: 'Custom Codex', models: ['gpt-5.5'] }],
       })),
@@ -813,7 +880,7 @@ describe('OrcaWorkerCreationService', () => {
       label: 'reviewer',
     })).resolves.toMatchObject({
       ok: false,
-      errorCode: 'NO_PROVIDER_FOR_AGENT',
+      errorCode: 'PROVIDER_ROUTE_UNAVAILABLE',
       message: expect.stringContaining('不提供模型 "gpt-5.4"'),
     });
 

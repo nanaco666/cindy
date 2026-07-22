@@ -3672,6 +3672,9 @@
         "NO_PROVIDER_FOR_AGENT": "이 기기에 해당 Agent용으로 연결된 모델 Provider가 없습니다. 설정에서 연결한 후 재시도하세요.",
         "NO_PROVIDER_FOR_AGENT_CONTINUE": "이 기기에 해당 Agent용으로 연결된 모델 Provider가 없습니다. 협업은 시작되지 않았고 이 메시지는 단일 세션으로 계속됩니다. 설정에서 연결한 후 재시도하세요.",
         "NO_PROVIDER_FOR_AGENT_REMOTE": "제어 대상 기기에 해당 Agent용으로 연결된 모델 Provider가 없습니다. 제어 대상 기기에서 연결한 후 재시도하세요.",
+        "PROVIDER_ROUTE_UNAVAILABLE": "선택한 Provider와 모델의 경로를 현재 사용할 수 없습니다. 사용 가능한 모델 또는 Provider를 선택한 후 재시도하세요.",
+        "PROVIDER_ROUTE_UNAVAILABLE_CONTINUE": "선택한 Provider와 모델의 경로를 현재 사용할 수 없습니다. 협업은 시작되지 않았고 이 메시지는 단일 세션으로 계속됩니다. 사용 가능한 모델 또는 Provider를 선택한 후 재시도하세요.",
+        "PROVIDER_ROUTE_UNAVAILABLE_REMOTE": "제어 대상 기기에서 선택한 Provider와 모델의 경로를 사용할 수 없습니다. 해당 기기에서 사용 가능한 경로를 선택한 후 재시도하세요.",
         "BUDGET_MODEL_REQUIRES_API_MODE": "할인형 Codex 모델을 사용하려면 API key가 필요합니다. 설정에서 구성한 뒤 다시 시도하세요.",
         "BUDGET_MODEL_REQUIRES_API_MODE_CONTINUE": "할인형 Codex 모델을 사용하려면 API key가 필요합니다. 협업은 시작되지 않았고 이 메시지는 단일 세션으로 계속됩니다. 설정에서 구성한 뒤 다시 시도하세요.",
         "BUDGET_MODEL_REQUIRES_API_MODE_REMOTE": "제어 대상 기기에 할인형 Codex 모델에 필요한 API key가 설정되어 있지 않습니다. 제어 대상 기기에서 설정한 후 재시도하세요."

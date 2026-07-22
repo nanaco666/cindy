@@ -29,6 +29,7 @@ describe('collaboration error i18n', () => {
       for (const code of [
         'INVALID_PARAMS',
         'NO_PROVIDER_FOR_AGENT',
+        'PROVIDER_ROUTE_UNAVAILABLE',
         'BUDGET_MODEL_REQUIRES_API_MODE',
       ]) {
         expect(collaboration?.errors?.[code], `${locale}:${code}`).toEqual(expect.any(String));
