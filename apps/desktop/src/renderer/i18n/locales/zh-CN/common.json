@@ -652,10 +652,46 @@
       "description": "设置识别语言、麦克风、快捷键、语音润色和语音输入时静音。",
       "saveFailed": "语音输入设置保存失败：{{message}}",
       "sections": {
+        "serviceSource": "服务来源",
         "basics": "基础",
         "refinement": "润色",
         "preferences": "偏好",
         "usageData": "使用情况"
+      },
+      "serviceSource": {
+        "label": "语音服务",
+        "hint": "默认使用 Cindy 提供的语音服务；也可以切换为自己的 Key 与模型。",
+        "ariaLabel": "语音服务来源选择",
+        "options": {
+          "cindy": "Cindy 官方服务",
+          "byok": "自定义（用自己的 Key）"
+        },
+        "optionDescriptions": {
+          "cindy": "使用 Cindy 账号登录态，无需配置任何密钥",
+          "byok": "使用你自己的密钥与模型，费用计入你的账户"
+        },
+        "asr": {
+          "label": "识别模型",
+          "hint": "语音转文字使用的 ASR 模型。",
+          "ariaLabel": "语音识别模型选择"
+        },
+        "refiner": {
+          "label": "润色模型",
+          "hint": "整理口语文本使用的模型。",
+          "ariaLabel": "语音润色模型选择"
+        },
+        "credential": {
+          "gatewayKey": "使用 AI 网关 Key",
+          "codexLogin": "使用 Codex 登录",
+          "elevenlabsKey": "使用 ElevenLabs Key（环境变量）"
+        },
+        "credentialError": {
+          "gatewayMissing": "未找到可用的 AI 网关 Key，当前模型无法使用。",
+          "codexMissing": "Codex 未登录，当前模型无法使用。",
+          "elevenlabsMissing": "未配置 ElevenLabs Key（环境变量），当前模型无法使用。"
+        },
+        "manageProviders": "前往模型供应商",
+        "reset": "恢复默认"
       },
       "historyToggle": {
         "show": "展开近期历史",
@@ -3435,7 +3471,7 @@
           },
           "auto": {
             "label": "自动审批",
-            "description": "所有操作自动执行、不再逐项确认，权限范围与「完全访问」相同；删除、合并等高风险内置操作仍会逐次询问。"
+            "description": "自动执行可信命令；非可信命令、提权请求及高风险内置操作仍会询问。与「完全访问」不同。"
           },
           "bypassPermissions": {
             "label": "完全访问",
@@ -3561,6 +3597,7 @@
       "defaultPlaceholder": "今天我们做点什么呢~",
       "voiceInput": {
         "start": "开始语音输入",
+        "pillLabel": "语音",
         "stop": "停止语音输入",
         "releaseToStop": "语音输入中，松开结束",
         "releaseToSend": "松开发送",
@@ -3575,6 +3612,13 @@
       },
       "remoteSwitchFailed": "远程设置切换失败,未生效",
       "switchFailed": "设置切换失败,未生效",
+      "permissionSwitchFailed": "权限模式切换失败，已保留原设置",
+      "fullAccessConfirmation": {
+        "title": "开启 Full access？",
+        "description": "Full access 会关闭工作区沙箱并跳过常规审批。Cindy 可以修改工作区外的文件、执行联网命令且不再询问；内置高风险操作仍会要求确认。",
+        "confirm": "开启 Full access",
+        "cancel": "保留当前权限"
+      },
       "attachmentRejection": {
         "dismiss": "关闭"
       },
@@ -6270,6 +6314,7 @@
   },
   "extraDirs": {
     "menuAria": "操作菜单",
+    "expandLabel": "添加",
     "tooltipEmpty": "更多操作",
     "tooltipCount": "{{count}} 个附加引用目录",
     "pluginsTitle": "已安装的插件",

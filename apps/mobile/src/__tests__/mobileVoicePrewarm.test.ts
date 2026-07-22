@@ -15,6 +15,14 @@ vi.mock('@/session/mobileVoiceLiteLlmSettings', () => ({
 vi.mock('@/session/mobileRealtimeAsrProvider', () => ({
   createMobileAsrProvider: (...args: unknown[]) => createProvider(...args),
 }));
+const createCindyCredential = vi.fn();
+vi.mock('@/session/mobileCindyVoiceSession', () => ({
+  createMobileCindyVoiceCredential: (...args: unknown[]) => createCindyCredential(...args),
+  MobileCindyVoiceRunContext: class {
+    createAsrConnection = vi.fn();
+    createRefinerTarget = vi.fn();
+  },
+}));
 
 import {
   __testing,
@@ -197,5 +205,46 @@ describe('mobileVoicePrewarm', () => {
     prewarmMobileVoiceStart('device-1');
     const claimed = await takePrewarmedMobileVoiceAsr('device-1');
     expect(claimed).toBeNull();
+  });
+
+  it('managed prewarm (auth present) uses the cindy credential and exposes a voiceContext', async () => {
+    const provider = new FakeProvider();
+    const managedCredential = {
+      hostDeviceId: 'host-managed',
+      refiner: { provider: 'litellm-gpt-5.4-mini' },
+      settings: { language: 'zh-CN' },
+    } as never;
+    createCindyCredential.mockReturnValue(managedCredential);
+    createProvider.mockReturnValue(provider);
+
+    prewarmMobileVoiceStart('device-1', {
+      getAccessToken: async () => 'token',
+      refreshAccessToken: async () => 'token',
+      apiFetch: async () => ({} as never),
+    });
+    const claimed = await takePrewarmedMobileVoiceAsr('device-1');
+
+    expect(createCindyCredential).toHaveBeenCalledWith('device-1');
+    expect(resolveCredential).not.toHaveBeenCalled();
+    expect(claimed?.credential).toBe(managedCredential);
+    expect(claimed?.voiceContext).toBeDefined();
+    // The managed provider dials through voice-server tickets.
+    expect(createProvider.mock.calls[0][1]).toHaveProperty('connectionProvider');
+  });
+
+  it('byok prewarm (no auth) never touches the managed credential plane', async () => {
+    const provider = new FakeProvider();
+    resolveCredential.mockResolvedValue(CREDENTIAL);
+    createProvider.mockReturnValue(provider);
+
+    prewarmMobileVoiceStart('device-1');
+    const claimed = await takePrewarmedMobileVoiceAsr('device-1');
+
+    expect(resolveCredential).toHaveBeenCalledWith('device-1');
+    expect(createCindyCredential).not.toHaveBeenCalled();
+    expect(claimed?.credential).toBe(CREDENTIAL);
+    expect(claimed?.voiceContext).toBeUndefined();
+    // BYOK dials directly with the credential's own key — no ticket provider.
+    expect(createProvider.mock.calls[0][1]).not.toHaveProperty('connectionProvider');
   });
 });

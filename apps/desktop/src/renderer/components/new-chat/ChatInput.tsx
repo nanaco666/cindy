@@ -14,6 +14,7 @@ import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { Folder, MessageSquarePlus, Mic, Pen, Square, TriangleAlert, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { requiresFullAccessConfirmation } from '@lizi/maker-shared/permission-mode';
 import { ImageLightbox } from '@/components/chat/ImageLightbox';
 import { TextLightbox } from '@/components/chat/TextLightbox';
 import { useEditor, EditorContent } from '@tiptap/react';
@@ -1244,7 +1245,8 @@ export function ChatInput({
     pendingRemoteSwitch?.effort ??
     initialEffort ??
     localVendorDefaults.effort;
-  const activePermissionMode: PermissionMode = initialPermissionMode ?? 'acceptEdits';
+  const activePermissionMode: PermissionMode =
+    initialPermissionMode ?? localVendorDefaults.permissionMode;
 
   // per-session 来源(供应商)选择。session.providerId 尚未在 Session 类型回流前,
   // 这里用本地乐观态承接即时反馈:seed 自 initialProviderId,选择时乐观更新;
@@ -4209,24 +4211,45 @@ export function ChatInput({
 
   const handlePermissionModeChange = useCallback(
     async (newMode: PermissionMode) => {
+      const previousMode = activePermissionModeRef.current;
+      if (requiresFullAccessConfirmation(previousMode, newMode)) {
+        const confirmed = await confirmDialog({
+          title: t('newChat.chatInput.fullAccessConfirmation.title'),
+          description: t('newChat.chatInput.fullAccessConfirmation.description'),
+          confirmText: t('newChat.chatInput.fullAccessConfirmation.confirm'),
+          cancelText: t('newChat.chatInput.fullAccessConfirmation.cancel'),
+        });
+        if (!confirmed) return;
+      }
       try {
         if (sessionId) {
           if (getSessionDeviceId(sessionId)) {
             // 控制端纯镜像:运行时隧道 setPermissionMode,被控端持久化后广播回流更新分片。
             await makerApiFor(sessionId).setPermissionMode(sessionId, newMode);
           } else {
-            await sessionService.update(sessionId, { permissionMode: newMode });
-            // Stage 2 B: 切到 maker.* runtime 切换
+            // runtime-first:运行时成功后才持久化，避免 UI/DB 先显示已切换而实际 agent 仍是旧档。
             await window.electronAPI.maker.setPermissionMode(sessionId, newMode);
+            try {
+              await sessionService.update(sessionId, { permissionMode: newMode });
+            } catch (persistError) {
+              // DB 写入失败时尽力恢复运行时，保持用户看到的旧设置与实际行为一致。
+              try {
+                await window.electronAPI.maker.setPermissionMode(sessionId, previousMode);
+              } catch (rollbackError) {
+                log.warn('permission runtime rollback failed:', rollbackError);
+              }
+              throw persistError;
+            }
           }
         }
         // SSoT: notify parent so it refreshes `session.permissionMode` → props update.
         onPermissionModeDidChange?.(newMode);
       } catch (err) {
         log.warn('permission change failed:', err);
+        toast.error(t('newChat.chatInput.permissionSwitchFailed'));
       }
     },
-    [sessionId, onPermissionModeDidChange],
+    [sessionId, onPermissionModeDidChange, t, confirmDialog],
   );
   useEffect(() => {
     handlePermissionModeChangeRef.current = handlePermissionModeChange;
@@ -4701,6 +4724,7 @@ export function ChatInput({
                 disabled={disabled}
                 dense={effectiveDenseToolbar}
                 visualVariant={isCreateAgentVariant ? 'create-agent' : 'default'}
+                useMorphPopover={!isCreateAgentVariant}
               />
             )}
             <PermissionSelector
@@ -4711,6 +4735,7 @@ export function ChatInput({
               disabled={disabled}
               dense={effectiveDenseToolbar}
               visualVariant={isCreateAgentVariant ? 'create-agent' : 'default'}
+              useMorphPopover={!isCreateAgentVariant}
             />
           </div>
           <div
@@ -4771,6 +4796,7 @@ export function ChatInput({
               switching={remoteSwitchInFlight}
               disabled={disabled}
               visualVariant={isCreateAgentVariant ? 'create-agent' : 'default'}
+              useMorphPopover={!isCreateAgentVariant}
             />
             <VoiceInputButton
               state={voiceInput.state}
@@ -5012,6 +5038,56 @@ function VoiceInputButton({
   const activeRecording = listening || longPressActive;
   const disabledOrBusy = disabled || (busy && !longPressActive);
   const isCreateAgentVariant = visualVariant === 'create-agent';
+
+  // ── hover 宽度形变 + 录音计时(DESIGN.md §14.4 窄变体,≤240ms)──
+  // 仅 default 变体:hover 时圆钮横向展出「语音」标签;录音中固定展开为
+  // 红点(呼吸,仅 opacity 动画挂 wrapper,规则 7)+ 计时。create-agent 保持
+  // Figma 合同原样(30×30 圆钮)。计时数字 tabular-nums 等宽,配合"分钟位数
+  // 变化才重新量宽",秒跳动不会让外框抖动。
+  const [hovered, setHovered] = useState(false);
+  const [recSeconds, setRecSeconds] = useState(0);
+  const micBtnRef = useRef<HTMLButtonElement>(null);
+  const pillLabelRef = useRef<HTMLSpanElement>(null);
+  const [pillWidth, setPillWidth] = useState<number | null>(null);
+  const expandable = !isCreateAgentVariant;
+  // busy(停止后的 submitting/refining)不取消悬停展开:停止录音时鼠标往往还悬在
+  // 按钮上,若 busy 立即收缩、busy 结束又因 hovered 重新展开,会弹跳一下
+  // (2026-07-22 用户反馈)。busy + hovered = 保持展开的置灰态(spinner + opacity-40)。
+  const expanded = expandable && (activeRecording || (hovered && !disabled));
+  const minuteDigits = String(Math.floor(recSeconds / 60)).length;
+
+  // disabled 按钮在 Chromium 不派发 mouseleave —— busy/录音结束时主动核对一次
+  // 真实悬停态,防止 hovered 卡在 true 让按钮悬空保持展开。
+  useEffect(() => {
+    if (disabledOrBusy || activeRecording) return;
+    setHovered(micBtnRef.current?.matches(':hover') ?? false);
+  }, [disabledOrBusy, activeRecording]);
+
+  useEffect(() => {
+    if (!activeRecording) return;
+    setRecSeconds(0);
+    const id = window.setInterval(() => setRecSeconds((s) => s + 1), 1000);
+    return () => window.clearInterval(id);
+  }, [activeRecording]);
+
+  useLayoutEffect(() => {
+    if (!expandable) return;
+    if (!expanded) {
+      setPillWidth(null);
+      return;
+    }
+    // 28px 图标位 + 标签实测宽(含右 padding)+ 2px 余量
+    setPillWidth(28 + (pillLabelRef.current?.scrollWidth ?? 0) + 2);
+  }, [expandable, expanded, activeRecording, minuteDigits]);
+
+  const recTimeText = `${Math.floor(recSeconds / 60)}:${String(recSeconds % 60).padStart(2, '0')}`;
+  // 宽度过渡走 inline transition(与 class transition-colors 合并声明,避免
+  // tailwind transition-property 工具类互相覆盖的顺序不确定性);reduced-motion 直切
+  const reduceMotion =
+    typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  const pillTransition = reduceMotion
+    ? undefined
+    : 'width 240ms cubic-bezier(0.3, 0.9, 0.25, 1), background-color 150ms ease, color 150ms ease, border-color 150ms ease';
   let label = t('newChat.chatInput.voiceInput.start');
   if (longPressActive) {
     label = t('newChat.chatInput.voiceInput.releaseToStop');
@@ -5119,26 +5195,41 @@ function VoiceInputButton({
       controlledOpen={controlledTooltipOpen}
     >
       <button
+        ref={micBtnRef}
         type="button"
         className={cn(
-          'flex shrink-0 items-center justify-center rounded-full transition-colors',
+          'flex shrink-0 items-center rounded-full',
           isCreateAgentVariant
             ? [
+                'justify-center transition-colors',
                 'h-[30px] w-[30px] border border-[var(--create-agent-control-border)]',
                 'bg-[var(--create-agent-control-bg)] text-[var(--create-agent-control-icon)]',
                 'hover:bg-[var(--create-agent-control-bg-hover)] active:bg-[var(--create-agent-control-bg-pressed)]',
                 'focus-visible:ring-2 focus-visible:ring-[var(--create-agent-focus-ring)]',
               ]
             : [
-                'h-[30px] w-[30px]',
+                // hover 形变变体:宽度由 inline style 驱动,标签溢出裁剪。
+                // 语音按钮保留常驻外框(2026-07-22 用户定稿:裸态只用于 +/权限/模型)
+                'h-[30px] justify-start overflow-hidden p-0',
                 'bg-[var(--composer-pill-bg,#FCFCFC)] dark:bg-[var(--composer-pill-bg,#393838)] border border-[var(--border-default)] text-[var(--composer-pill-icon,#3C3F43)] dark:text-[var(--composer-pill-icon,#D9D9D9)]' /* spec 2026-07-17, token by 一哥 */,
                 'hover:bg-[var(--model-trigger-hover)]',
+                // 录音态:与主题同极性的 chip 填充(light 亮灰 / dark 深灰,
+                // 2026-07-22 用户定稿,取代 demo 的反相底),红点 + 计时承担状态信号
+                activeRecording &&
+                  'bg-[var(--surface-chip)] text-[var(--text-primary)] hover:bg-[var(--surface-chip)]',
               ],
           'focus-visible:outline-none',
           disabledOrBusy && 'cursor-not-allowed opacity-40',
-          activeRecording && 'text-[var(--settings-badge-error)]',
+          isCreateAgentVariant && activeRecording && 'text-[var(--settings-badge-error)]',
           className,
         )}
+        style={
+          expandable
+            ? { width: pillWidth ?? 30, transition: pillTransition }
+            : undefined
+        }
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
         disabled={disabledOrBusy}
         aria-label={label}
         aria-pressed={activeRecording}
@@ -5182,12 +5273,41 @@ function VoiceInputButton({
           void (listening ? onStop() : onStart());
         }}
       >
-        {refining ? (
-          <Spinner size={isCreateAgentVariant ? 11 : 15} />
-        ) : activeRecording ? (
-          <Square size={isCreateAgentVariant ? 11 : 14} />
+        {isCreateAgentVariant ? (
+          refining ? (
+            <Spinner size={11} />
+          ) : activeRecording ? (
+            <Square size={11} />
+          ) : (
+            <Mic size={11} />
+          )
         ) : (
-          <Mic size={isCreateAgentVariant ? 11 : 15} />
+          <>
+            {/* 28px 图标位: idle 麦克风 / 录音红点(呼吸动画挂 wrapper,仅 opacity) / refining spinner */}
+            <span className="flex h-[28px] w-[28px] shrink-0 items-center justify-center">
+              {refining ? (
+                <Spinner size={15} />
+              ) : activeRecording ? (
+                <span className="inline-flex animate-pulse motion-reduce:animate-none">
+                  <span className="h-2 w-2 rounded-full bg-[var(--settings-badge-error)]" />
+                </span>
+              ) : (
+                <Mic size={15} />
+              )}
+            </span>
+            {/* hover 展出标签 / 录音计时(tabular-nums 等宽,秒跳不抖框) */}
+            <span
+              ref={pillLabelRef}
+              className={cn(
+                'whitespace-nowrap pr-3 text-[12.5px] tabular-nums',
+                '-translate-x-1 opacity-0 transition-[opacity,transform] duration-[180ms] ease-out',
+                expanded && 'translate-x-0 opacity-100',
+                'motion-reduce:transition-none',
+              )}
+            >
+              {activeRecording ? recTimeText : t('newChat.chatInput.voiceInput.pillLabel')}
+            </span>
+          </>
         )}
       </button>
     </Tip>

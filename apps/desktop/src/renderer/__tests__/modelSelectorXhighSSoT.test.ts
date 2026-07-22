@@ -32,12 +32,13 @@ import { describe, expect, it, vi } from 'vitest';
 // 类型镜像（避免拉真模块的 React/Tiptap 副作用）
 // ---------------------------------------------------------------------------
 type Effort = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
-type PermissionMode = 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan';
+type PermissionMode = 'ask' | 'auto' | 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan';
 
 /** 本地草稿 per-vendor 偏好(newMakerDraft.lastByVendor 单槽的最小镜像)。 */
 interface DraftVendorPrefs {
   model: string;
   effort: Effort;
+  permissionMode: PermissionMode;
 }
 
 interface ChatInputDerivedProps {
@@ -62,7 +63,7 @@ function deriveActive(p: ChatInputDerivedProps): ChatInputDerived {
   return {
     activeModel: p.initialModel ?? p.localVendorDefaults.model,
     activeEffort: p.initialEffort ?? p.localVendorDefaults.effort,
-    activePermissionMode: p.initialPermissionMode ?? 'acceptEdits',
+    activePermissionMode: p.initialPermissionMode ?? p.localVendorDefaults.permissionMode,
   };
 }
 
@@ -76,6 +77,7 @@ interface HandlerDeps {
   ipcSetEffort?: (id: string, eff: Effort) => Promise<void>;
   ipcSetModel?: (id: string, model: string) => Promise<void>;
   ipcUpdatePerm?: (id: string, mode: PermissionMode) => Promise<void>;
+  currentPermissionMode?: PermissionMode;
   onModelDidChange?: (id: string) => void;
   onEffortDidChange?: (eff: Effort) => void;
   onPermissionModeDidChange?: (mode: PermissionMode) => void;
@@ -104,8 +106,13 @@ async function handlePermissionModeChange(
 ): Promise<void> {
   try {
     if (deps.sessionId) {
-      await deps.sessionUpdate(deps.sessionId, { permissionMode: newMode });
       await deps.ipcUpdatePerm?.(deps.sessionId, newMode);
+      try {
+        await deps.sessionUpdate(deps.sessionId, { permissionMode: newMode });
+      } catch (error) {
+        await deps.ipcUpdatePerm?.(deps.sessionId, deps.currentPermissionMode ?? 'ask');
+        throw error;
+      }
     }
     deps.onPermissionModeDidChange?.(newMode);
   } catch (err) {
@@ -141,7 +148,11 @@ async function handleModelChange(
 // ===========================================================================
 
 describe('SSoT derive: activeXxx 永远从 props + 本地草稿兜底派生', () => {
-  const baseline: DraftVendorPrefs = { model: 'claude-opus-4-7', effort: 'high' };
+  const baseline: DraftVendorPrefs = {
+    model: 'claude-opus-4-7',
+    effort: 'high',
+    permissionMode: 'auto',
+  };
 
   it('initialEffort 提供时取 initialEffort（即会话持久化值）', () => {
     const derived = deriveActive({
@@ -159,15 +170,15 @@ describe('SSoT derive: activeXxx 永远从 props + 本地草稿兜底派生', ()
     const derived = deriveActive({ localVendorDefaults: baseline });
     expect(derived.activeEffort).toBe('high');
     expect(derived.activeModel).toBe('claude-opus-4-7');
-    expect(derived.activePermissionMode).toBe('acceptEdits');
+    expect(derived.activePermissionMode).toBe('auto');
   });
 
-  it('initialPermissionMode 缺失时默认 acceptEdits（与项目当前默认一致）', () => {
+  it('initialPermissionMode 缺失时回退当前 agent 的本地草稿默认', () => {
     const derived = deriveActive({
       initialModel: 'claude-sonnet-4-6',
       localVendorDefaults: baseline,
     });
-    expect(derived.activePermissionMode).toBe('acceptEdits');
+    expect(derived.activePermissionMode).toBe('auto');
   });
 
   it('修复场景核心：initialEffort=xhigh 时立刻反映 xhigh（不留任何 local override 路径）', () => {
@@ -247,24 +258,41 @@ describe('handlePermissionModeChange: 上抛 onPermissionModeDidChange', () => {
     );
     expect(sessionUpdate).toHaveBeenCalledWith('sess-1', { permissionMode: 'bypassPermissions' });
     expect(ipcUpdatePerm).toHaveBeenCalledWith('sess-1', 'bypassPermissions');
+    expect(ipcUpdatePerm.mock.invocationCallOrder[0]).toBeLessThan(
+      sessionUpdate.mock.invocationCallOrder[0],
+    );
     expect(onPermissionModeDidChange).toHaveBeenCalledWith('bypassPermissions');
   });
 
   it('失败路径：sessionUpdate 抛错 → onPermissionModeDidChange 不调用', async () => {
     const onPermissionModeDidChange = vi.fn();
+    const ipcUpdatePerm = vi.fn().mockResolvedValue(undefined);
     await handlePermissionModeChange(
       {
         sessionId: 'sess-1',
         sessionUpdate: vi.fn().mockRejectedValue(new Error('boom')),
+        ipcUpdatePerm,
+        currentPermissionMode: 'ask',
         onPermissionModeDidChange,
       },
-      'plan',
+      'bypassPermissions',
     );
+    expect(ipcUpdatePerm.mock.calls).toEqual([
+      ['sess-1', 'bypassPermissions'],
+      ['sess-1', 'ask'],
+    ]);
     expect(onPermissionModeDidChange).not.toHaveBeenCalled();
   });
 
-  it('四个 permissionMode 都能上抛（确认对称化覆盖完整）', async () => {
-    const modes: PermissionMode[] = ['default', 'acceptEdits', 'bypassPermissions', 'plan'];
+  it('permissionMode 都能上抛（确认对称化覆盖完整）', async () => {
+    const modes: PermissionMode[] = [
+      'ask',
+      'auto',
+      'default',
+      'acceptEdits',
+      'bypassPermissions',
+      'plan',
+    ];
     for (const mode of modes) {
       const onPermissionModeDidChange = vi.fn();
       await handlePermissionModeChange(
@@ -359,7 +387,11 @@ describe('SSoT 闭环：模拟父组件 refresh 后，下次 derive 拿到新值
     const refreshServerSession = vi.fn().mockImplementation(() => {
       serverSessionEffort = 'xhigh';
     });
-    const localVendorDefaults: DraftVendorPrefs = { model: 'claude-opus-4-7', effort: 'medium' };
+    const localVendorDefaults: DraftVendorPrefs = {
+      model: 'claude-opus-4-7',
+      effort: 'medium',
+      permissionMode: 'auto',
+    };
 
     let derived = deriveActive({ initialEffort: serverSessionEffort, localVendorDefaults });
     expect(derived.activeEffort).toBe('medium');
@@ -380,7 +412,11 @@ describe('SSoT 闭环：模拟父组件 refresh 后，下次 derive 拿到新值
 
   it('草稿态:点档位 → 父组件 patchVendorPrefs 更新 lastByVendor → props 流回新值(全程零网络)', async () => {
     // 模拟 NewMakerDraftRoute:onEffortDidChange → patchActivePrefs 落 lastByVendor(localStorage)。
-    const draftPrefs: DraftVendorPrefs = { model: 'claude-fable-5', effort: 'medium' };
+    const draftPrefs: DraftVendorPrefs = {
+      model: 'claude-fable-5',
+      effort: 'medium',
+      permissionMode: 'auto',
+    };
     const patchActivePrefs = vi.fn().mockImplementation((eff: Effort) => {
       draftPrefs.effort = eff;
     });
@@ -398,7 +434,11 @@ describe('SSoT 闭环：模拟父组件 refresh 后，下次 derive 拿到新值
 
   it('回归：如果父组件忘记接 onEffortDidChange（未来重构风险），UI 会卡住——本测试守护这条契约', async () => {
     const serverSessionEffort: Effort = 'medium';
-    const localVendorDefaults: DraftVendorPrefs = { model: 'claude-opus-4-7', effort: 'medium' };
+    const localVendorDefaults: DraftVendorPrefs = {
+      model: 'claude-opus-4-7',
+      effort: 'medium',
+      permissionMode: 'auto',
+    };
 
     await handleEffortChange(
       {

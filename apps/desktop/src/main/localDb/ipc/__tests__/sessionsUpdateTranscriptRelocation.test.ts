@@ -138,6 +138,18 @@ beforeEach(() => {
 });
 
 describe('local-db:sessions:update transcript relocation wiring', () => {
+  it('broadcasts permission setting patches to every mounted client', async () => {
+    await invokeUpdate('codex-local', { permissionMode: 'ask' });
+
+    expect(h.tapWindowBroadcast).toHaveBeenCalledWith(
+      'local-db:sessions:patched',
+      expect.objectContaining({
+        sessionId: 'codex-local',
+        patch: { permissionMode: 'ask' },
+      }),
+    );
+  });
+
   it('relocates transcripts when workingDir actually changes on a local cc session', async () => {
     await invokeUpdate('cc-local', { workingDir: '/new/dir', workspaceKind: 'project' });
 

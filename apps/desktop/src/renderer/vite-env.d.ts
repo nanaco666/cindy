@@ -163,8 +163,11 @@ type VoiceInputProviderKindData = import('../shared/voiceInputAsrProfiles').Voic
 type VoiceInputAsrModeData = import('../shared/voiceInputAsrProfiles').VoiceInputAsrMode;
 type VoiceInputRefinerProviderKindData = import('../shared/voiceInputRefinerProfiles').VoiceInputRefinerProviderKind;
 type VoiceInputRefinerTransportData = import('../shared/voiceInputRefinerProfiles').VoiceInputRefinerTransport;
+type VoiceInputServiceModeData = 'cindy' | 'byok';
 type VoiceInputModelSelectionResultData = {
   selection: {
+    serviceMode: VoiceInputServiceModeData;
+    serviceModeConfigured: boolean;
     asrProvider: VoiceInputProviderKindData;
     refinerProvider: VoiceInputRefinerProviderKindData;
     refinerModel?: string;
@@ -1219,6 +1222,7 @@ interface ElectronAPI {
       | null;
     getModelSelection: () => Promise<VoiceInputModelSelectionResultData>;
     setModelSelection: (patch: {
+      serviceMode?: VoiceInputServiceModeData | null;
       asrProvider?: string | null;
       refinerProvider?: string | null;
       refinerModel?: string | null;

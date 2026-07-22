@@ -59,6 +59,7 @@ import {
 import { isSecondaryWindow } from '@/lib/secondaryWindow';
 import { useUpdateNotice } from '@/hooks/useUpdateNotice';
 import { isAgentIslandSupported, toggleAgentIslandSoundEnabled } from '@/hooks/useAgentIslandSettings';
+import { requestNewWorkerFromShortcut } from '@/features/cc-agent/lib/newWorkerShortcut';
 // chat-data-localization F1 V0.4 / M-FE6
 import { useCorruptionRestoredToast } from '@/hooks/useCorruptionRestoredToast';
 // #37 schema-drift release-side toast
@@ -827,6 +828,27 @@ export function MainLayout() {
     void window.electronAPI.pageZoomReset();
   }, []);
 
+  const newMakerShortcutInFlightRef = useRef(false);
+  const handleNewMakerShortcut = useCallback(() => {
+    if (newMakerShortcutInFlightRef.current) return;
+    newMakerShortcutInFlightRef.current = true;
+    void requestNewWorkerFromShortcut()
+      .then((handled) => {
+        if (handled) {
+          applicationMenuLog.info('new-maker shortcut handled by visible collaboration panel');
+          return;
+        }
+        applicationMenuLog.info('new-maker shortcut invoked, navigating to /cc-agent/new');
+        navigate('/cc-agent/new');
+      })
+      .catch((err: unknown) => {
+        applicationMenuLog.warn('new-maker shortcut routing failed', err);
+      })
+      .finally(() => {
+        newMakerShortcutInFlightRef.current = false;
+      });
+  }, [navigate]);
+
   useEffect(() => {
     return window.electronAPI.onApplicationMenuCommand((command) => {
       switch (command) {
@@ -863,6 +885,9 @@ export function MainLayout() {
           applicationMenuLog.info('new-maker invoked, navigating to /cc-agent/new');
           navigate('/cc-agent/new');
           break;
+        case 'new-maker-shortcut':
+          handleNewMakerShortcut();
+          break;
         case 'toggle-agent-island-sound':
           toggleAgentIslandSoundEnabled();
           break;
@@ -874,7 +899,7 @@ export function MainLayout() {
           break;
       }
     });
-  }, [isMac, navigate, openNotice, t, handleToggleSidebar]);
+  }, [isMac, navigate, openNotice, t, handleNewMakerShortcut, handleToggleSidebar]);
 
   // ⌘B / Ctrl+B 切换侧边栏折叠 (组合键定义在 shared/appShortcuts registry,
   // 用户可改绑)。capture 阶段处理, 但需要为真正用到 Bold 的 contenteditable

@@ -38,6 +38,12 @@ export interface WorkersRefreshResult {
   workers: WorkerInfo[];
 }
 
+export interface WorkerCreationRefreshResult {
+  status: 'applied' | 'failed';
+  workers: WorkerInfo[];
+  hardLimit: number | null;
+}
+
 const DEFAULT_SNAPSHOT: WorkersSnapshot = {
   workers: [],
   softLimit: DEFAULT_SOFT_LIMIT,
@@ -216,6 +222,25 @@ export function useWorkers(leadSessionId: string | undefined) {
     return refreshWorkersSnapshot(leadSessionId);
   }, [leadSessionId]);
 
+  const refreshCreationState = useCallback(async (): Promise<WorkerCreationRefreshResult> => {
+    if (!leadSessionId) return { status: 'failed', workers: [], hardLimit: null };
+    const [workersResult, settings] = await Promise.all([
+      refreshWorkersSnapshot(leadSessionId),
+      orcaWorkflowsFor(leadSessionId)
+        .getCollaborationSettings()
+        .catch(() => null),
+    ]);
+    const rawHardLimit = (settings as Record<string, unknown> | null)?.workerHardLimit;
+    const hardLimit =
+      typeof rawHardLimit === 'number' && Number.isFinite(rawHardLimit) && rawHardLimit >= 0
+        ? rawHardLimit
+        : null;
+    if (workersResult.status !== 'applied' || hardLimit === null) {
+      return { status: 'failed', workers: workersResult.workers, hardLimit };
+    }
+    return { status: 'applied', workers: workersResult.workers, hardLimit };
+  }, [leadSessionId]);
+
   useEffect(() => {
     updateHookSnapshot(setHookSnapshot, leadSessionId);
     if (!leadSessionId) return;
@@ -252,5 +277,13 @@ export function useWorkers(leadSessionId: string | undefined) {
   // primitive 返回值不需要 useMemo 稳定身份。
   const activeWorkerCount = workers.filter((w) => isActiveWorkerStatus(w.status)).length;
 
-  return { workers, focusedWorker, activeWorkerCount, softLimit, hardLimit, refresh };
+  return {
+    workers,
+    focusedWorker,
+    activeWorkerCount,
+    softLimit,
+    hardLimit,
+    refresh,
+    refreshCreationState,
+  };
 }

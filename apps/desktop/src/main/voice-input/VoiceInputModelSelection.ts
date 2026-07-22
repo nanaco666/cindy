@@ -21,7 +21,22 @@ const CONFIG_FILE_NAME = 'voice-input-models.json';
 
 export type VoiceInputProviderChainSource = 'default' | 'configured';
 
+/**
+ * Which credential plane powers voice dictation.
+ * - 'cindy': the managed Cindy voice service (login-token → one-shot tickets).
+ * - 'byok': the user's own credentials (gateway key / Codex login / env keys),
+ *   restoring the pre-managed-migration direct-dial behavior.
+ * The persisted file keeps '' for "follow the product default" (currently
+ * 'cindy') so future default changes reach users who never customized it.
+ */
+export type VoiceInputServiceMode = 'cindy' | 'byok';
+
+export const DEFAULT_VOICE_INPUT_SERVICE_MODE: VoiceInputServiceMode = 'cindy';
+
 export type VoiceInputModelSelectionValues = {
+  serviceMode: VoiceInputServiceMode;
+  /** True when serviceMode came from an explicit file/env override (vs the product default). */
+  serviceModeConfigured: boolean;
   asrProvider: VoiceInputProviderKind;
   refinerProvider: VoiceInputRefinerProviderKind;
   refinerModel?: string;
@@ -42,13 +57,14 @@ export type VoiceInputModelSelection = VoiceInputModelSelectionValues & {
 };
 
 export type VoiceInputModelSelectionPatch = {
+  serviceMode?: VoiceInputServiceMode | null;
   asrProvider?: VoiceInputProviderKind | null;
   refinerProvider?: VoiceInputRefinerProviderKind | null;
   refinerModel?: string | null;
 };
 
 export type VoiceInputModelSelectionWarning = {
-  field: 'asrProvider' | 'refinerProvider' | 'asrProviderChain' | 'refinerProviderChain';
+  field: 'serviceMode' | 'asrProvider' | 'refinerProvider' | 'asrProviderChain' | 'refinerProviderChain';
   value: string;
   fallback: string;
 };
@@ -59,6 +75,7 @@ type VoiceInputModelSelectionResolution = {
 };
 
 type RawVoiceInputModelSelectionFile = {
+  serviceMode?: unknown;
   asrProvider?: unknown;
   utilityModelProvider?: unknown;
   utilityModel?: unknown;
@@ -81,6 +98,9 @@ export function resolveVoiceInputModelSelectionValues(
   env: NodeJS.ProcessEnv = readDefaultVoiceInputModelSelectionEnv(),
 ): VoiceInputModelSelectionResolution {
   warnIgnoredLegacyAsrProviderEnv(env);
+  const serviceMode = resolveServiceMode(
+    readConfigString(raw, 'serviceMode') ?? env.XDT_VOICE_INPUT_SERVICE_MODE ?? '',
+  );
   const asrProvider = resolveAsrProvider(readConfigString(raw, 'asrProvider') ?? env.XDT_VOICE_INPUT_ASR_PROVIDER ?? '');
   const refinerProvider = resolveRefinerProvider(
     readConfigString(raw, 'utilityModelProvider')
@@ -115,6 +135,8 @@ export function resolveVoiceInputModelSelectionValues(
   });
   return {
     values: {
+      serviceMode: serviceMode.value,
+      serviceModeConfigured: serviceMode.configured,
       asrProvider: asrProvider.value,
       refinerProvider: refinerProvider.value,
       refinerModel,
@@ -123,6 +145,7 @@ export function resolveVoiceInputModelSelectionValues(
       refinerProviderChainSource: refinerChain.source,
     },
     warnings: [
+      ...(serviceMode.warning ? [serviceMode.warning] : []),
       ...(asrProvider.warning ? [asrProvider.warning] : []),
       ...(refinerProvider.warning ? [refinerProvider.warning] : []),
       ...asrChain.warnings,
@@ -171,6 +194,7 @@ function readDefaultVoiceInputModelSelectionEnv(): NodeJS.ProcessEnv {
     // Electron main is bundled by Vite. vite.main.config.ts injects XDT_*
     // values by replacing direct process.env.XDT_* reads, so keep these
     // explicit instead of only passing the process.env object through.
+    XDT_VOICE_INPUT_SERVICE_MODE: process.env.XDT_VOICE_INPUT_SERVICE_MODE,
     XDT_VOICE_INPUT_ASR_PROVIDER: process.env.XDT_VOICE_INPUT_ASR_PROVIDER,
     XDT_UTILITY_MODEL_PROVIDER: process.env.XDT_UTILITY_MODEL_PROVIDER,
     XDT_UTILITY_MODEL: process.env.XDT_UTILITY_MODEL,
@@ -203,12 +227,14 @@ export function setVoiceInputModelSelection(patch: VoiceInputModelSelectionPatch
   const configPath = getVoiceInputModelSelectionConfigPath();
   const current = readVoiceInputModelSelectionFile(configPath) ?? defaultRuntimeConfigFile();
   const next: RawVoiceInputModelSelectionFile = { ...current };
+  if ('serviceMode' in patch) next.serviceMode = patch.serviceMode ?? '';
   if ('asrProvider' in patch) next.asrProvider = patch.asrProvider ?? '';
   if ('refinerProvider' in patch) next.refinerProvider = patch.refinerProvider ?? '';
   if ('refinerModel' in patch) next.refinerModel = patch.refinerModel?.trim() ?? '';
   fs.writeFileSync(configPath, `${JSON.stringify(next, null, 2)}\n`, 'utf8');
   log.info('voice input model selection written', {
     path: configPath,
+    serviceMode: next.serviceMode,
     asrProvider: next.asrProvider,
     refinerProvider: next.refinerProvider,
     refinerModel: next.refinerModel,
@@ -218,6 +244,7 @@ export function setVoiceInputModelSelection(patch: VoiceInputModelSelectionPatch
 
 export function voiceInputModelSelectionSignature(config: VoiceInputModelSelectionValues): string {
   return JSON.stringify({
+    serviceMode: config.serviceMode,
     asrProvider: config.asrProvider,
     refinerProvider: config.refinerProvider,
     refinerModel: config.refinerModel ?? '',
@@ -225,6 +252,29 @@ export function voiceInputModelSelectionSignature(config: VoiceInputModelSelecti
     refinerProviderChain: config.refinerProviderChain,
     refinerProviderChainSource: config.refinerProviderChainSource,
   });
+}
+
+// '' (or absent) means "follow the product default"; unknown non-empty values
+// fall back to the default with a warning instead of failing the selection.
+function resolveServiceMode(value: string): {
+  value: VoiceInputServiceMode;
+  configured: boolean;
+  warning?: VoiceInputModelSelectionWarning;
+} {
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) return { value: DEFAULT_VOICE_INPUT_SERVICE_MODE, configured: false };
+  if (normalized === 'cindy' || normalized === 'byok') {
+    return { value: normalized, configured: true };
+  }
+  return {
+    value: DEFAULT_VOICE_INPUT_SERVICE_MODE,
+    configured: false,
+    warning: {
+      field: 'serviceMode',
+      value: normalized,
+      fallback: DEFAULT_VOICE_INPUT_SERVICE_MODE,
+    },
+  };
 }
 
 function resolveAsrProvider(value: string): {
@@ -274,6 +324,7 @@ function loadVoiceInputModelSelection(configPath: string, mtimeMs: number): Voic
   cachedMtimeMs = mtimeMs;
   log.info('voice input model selection loaded', {
     path: configPath,
+    serviceMode: config.serviceMode,
     asrProvider: config.asrProvider,
     refinerProvider: config.refinerProvider,
     refinerModel: config.refinerModel,
@@ -331,6 +382,7 @@ function defaultRuntimeConfigFile(): RawVoiceInputModelSelectionFile {
   // default model changes for users who never explicitly customize voice
   // input models.
   return {
+    serviceMode: '',
     asrProvider: '',
     refinerProvider: '',
     refinerModel: '',

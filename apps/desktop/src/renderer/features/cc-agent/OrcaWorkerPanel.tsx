@@ -16,7 +16,9 @@ import { CCAgentSessionView } from './CCAgentSessionView';
 import { CreateWorkerPopover } from './CreateWorkerPopover';
 import { WorkerListToolbar } from './RolePillDropdown';
 import { useOrcaWorkerSelection } from './hooks/useOrcaWorkerSelection';
+import { subscribeNewWorkerShortcut } from './lib/newWorkerShortcut';
 import type { ConversationSearchJump } from '../../../shared/conversationSearchJump';
+import { isActiveWorkerStatus } from '../../../shared/orca-worker-status';
 
 export interface OrcaWorkerPanelProps {
   leadSessionId: string;
@@ -63,6 +65,7 @@ export function OrcaWorkerPanel({
     activeWorkerCount,
     softLimit,
     hardLimit,
+    refreshCreationState,
     selectedWorkerRecord,
     selectedWorkerId,
     workerSessionId,
@@ -82,6 +85,29 @@ export function OrcaWorkerPanel({
     onSelectionIntentCleared,
   });
   const lastAgentIslandPayloadRef = useRef<string | string[] | null>(null);
+
+  useEffect(() => {
+    if (!viewVisible) return;
+    let active = true;
+    const unsubscribe = subscribeNewWorkerShortcut(async () => {
+      // Refresh both worker status and authoritative collaboration settings so the shortcut
+      // cannot bypass a newly reached or newly lowered hard limit.
+      const result = await refreshCreationState();
+      if (!active) return true;
+      if (result.status !== 'applied') return false;
+      const activeCount = result.workers.filter((worker) =>
+        isActiveWorkerStatus(worker.status),
+      ).length;
+      if (result.hardLimit !== null && activeCount < result.hardLimit) setCreateOpen(true);
+      return true;
+    });
+    return () => {
+      // Prevent an in-flight refresh from opening the dialog after this panel stopped owning the
+      // visible collaboration context. No intent is retained for a later mount.
+      active = false;
+      unsubscribe();
+    };
+  }, [refreshCreationState, setCreateOpen, viewVisible]);
 
   useEffect(() => {
     if (!isAgentIslandSupported()) return;

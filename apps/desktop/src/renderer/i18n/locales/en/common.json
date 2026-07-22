@@ -652,10 +652,46 @@
       "description": "Set language, microphone, shortcut, refinement, and muting during voice input.",
       "saveFailed": "Could not save voice input settings: {{message}}",
       "sections": {
+        "serviceSource": "Service source",
         "basics": "Basics",
         "refinement": "Refinement",
         "preferences": "Preferences",
         "usageData": "Usage"
+      },
+      "serviceSource": {
+        "label": "Voice service",
+        "hint": "Uses the Cindy voice service by default; switch to your own key and models if you prefer.",
+        "ariaLabel": "Voice service source",
+        "options": {
+          "cindy": "Cindy official service",
+          "byok": "Custom (your own key)"
+        },
+        "optionDescriptions": {
+          "cindy": "Uses your Cindy sign-in, no keys to configure",
+          "byok": "Uses your own keys and models, billed to your account"
+        },
+        "asr": {
+          "label": "Recognition model",
+          "hint": "ASR model used for speech-to-text.",
+          "ariaLabel": "Speech recognition model"
+        },
+        "refiner": {
+          "label": "Refinement model",
+          "hint": "Model used to clean up dictated text.",
+          "ariaLabel": "Voice refinement model"
+        },
+        "credential": {
+          "gatewayKey": "Uses your AI gateway key",
+          "codexLogin": "Uses your Codex sign-in",
+          "elevenlabsKey": "Uses your ElevenLabs key (environment variable)"
+        },
+        "credentialError": {
+          "gatewayMissing": "No AI gateway key found; this model is unavailable.",
+          "codexMissing": "Codex is not signed in; this model is unavailable.",
+          "elevenlabsMissing": "No ElevenLabs key configured (environment variable); this model is unavailable."
+        },
+        "manageProviders": "Open model providers",
+        "reset": "Reset to default"
       },
       "historyToggle": {
         "show": "Show recent history",
@@ -3436,7 +3472,7 @@
           },
           "auto": {
             "label": "Auto-review",
-            "description": "Runs every action automatically without per-action confirmation — same permission scope as Full access. High-risk built-in actions such as deletes or merges still ask every time."
+            "description": "Runs trusted commands automatically. Untrusted commands, escalation requests, and high-risk built-in actions still ask. Unlike Full access."
           },
           "bypassPermissions": {
             "label": "Full access",
@@ -3562,6 +3598,7 @@
       "defaultPlaceholder": "What shall we work on today~",
       "voiceInput": {
         "start": "Start voice input",
+        "pillLabel": "Voice",
         "stop": "Stop voice input",
         "releaseToStop": "Recording. Release to stop.",
         "releaseToSend": "Release to send",
@@ -3576,6 +3613,13 @@
       },
       "remoteSwitchFailed": "Remote setting change failed; not applied",
       "switchFailed": "Setting change failed; not applied",
+      "permissionSwitchFailed": "Permission mode change failed; the previous setting was kept",
+      "fullAccessConfirmation": {
+        "title": "Enable Full access?",
+        "description": "Full access disables the workspace sandbox and skips routine approvals. Cindy can modify files outside the workspace and run network commands without asking; built-in high-risk operations will still require confirmation.",
+        "confirm": "Enable Full access",
+        "cancel": "Keep current permissions"
+      },
       "attachmentRejection": {
         "dismiss": "Dismiss"
       },
@@ -6281,6 +6325,7 @@
   },
   "extraDirs": {
     "menuAria": "Composer actions",
+    "expandLabel": "Add",
     "tooltipEmpty": "More actions",
     "tooltipCount": "{{count}} reference directories",
     "pluginsTitle": "Installed Plugins",

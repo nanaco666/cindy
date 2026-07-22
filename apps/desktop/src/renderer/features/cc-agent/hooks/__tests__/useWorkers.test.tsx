@@ -161,6 +161,30 @@ describe('useWorkers', () => {
     remount.unmount();
   });
 
+  it('refreshes workers and the authoritative hard limit together for creation checks', async () => {
+    const hook = renderHook(() => useWorkers('lead-1'));
+    await waitFor(() => expect(hook.result.current.hardLimit).toBe(6));
+
+    mocks.listWorkersByLead.mockResolvedValue([
+      { ...workerRecord('worker-b', 'session-b', true), status: 'running' },
+    ]);
+    mocks.getCollaborationSettings.mockResolvedValue({
+      workerSoftLimit: 1,
+      workerHardLimit: 1,
+    });
+
+    let creationState!: Awaited<ReturnType<typeof hook.result.current.refreshCreationState>>;
+    await act(async () => {
+      creationState = await hook.result.current.refreshCreationState();
+    });
+
+    expect(creationState).toMatchObject({
+      status: 'applied',
+      hardLimit: 1,
+      workers: [{ sessionId: 'session-b', status: 'running' }],
+    });
+  });
+
   it('only applies the latest out-of-order worker refresh for a lead', async () => {
     const first = deferred<unknown[]>();
     const second = deferred<unknown[]>();

@@ -125,7 +125,7 @@ function defaultVendorPrefs(vendor: MakerVendor): VendorPrefs {
   return {
     model: getDefaultModelForVendor('cc').id,
     effort: 'medium',
-    // 种子默认 auto(2026-07 与 codex / 手机版对齐为「自动审批」);已有用户落盘的
+    // 三种 vendor 都保留 Auto-review 种子默认；已有用户落盘的
     // lastByVendor 记忆不受影响(sanitize 只在缺失 / 脏值时回落本默认)。
     permissionMode: 'auto',
     planMode: false,

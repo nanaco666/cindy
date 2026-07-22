@@ -353,6 +353,7 @@ describe('newMakerDraft store', () => {
     expect(d.workingDir).toBeNull();
     expect(d.lastByVendor.cc.permissionMode).toBe('auto');
     expect(d.lastByVendor.codex.effort).toBe('high');
+    expect(d.lastByVendor.codex.permissionMode).toBe('auto');
     expect(d.fastModeByModel).toEqual({});
   });
 

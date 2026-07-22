@@ -106,6 +106,7 @@ import { clearSessionMirror, makeSessionMirrorAccessors } from '@/session/sessio
 import { rowFastEditable } from '@/session/modelPickerRows';
 import {
   buildMobileModelSections,
+  isSelectedSourceDisconnected,
   resolveRowSelection,
   type ProviderModelRow,
 } from '@/session/providerModelSections';
@@ -172,6 +173,8 @@ import {
 } from '@/session/chatQuoteStore';
 import { QuoteCapsule } from '@/session/QuoteCapsule';
 import { formatQuotesForSend } from '@lizi/maker-shared/chat-quotes';
+import { permissionModeOrAsk } from '@lizi/maker-shared/permission-mode';
+import { confirmFullAccessChange } from '@/session/fullAccessConfirmation';
 import {
   drainComposerAnnotationSubmissions,
   drainComposerAttachments,
@@ -252,7 +255,7 @@ import {
   resolveComposerVoiceHoldActive,
   shouldArmComposerVoiceHold,
 } from '@/session/composerVoiceHold';
-import { isMobileRealtimeAudioAvailable } from '@/session/mobileRealtimeAudio';
+import { isMobileRealtimeAudioAvailable, prewarmMobileRealtimeAudio } from '@/session/mobileRealtimeAudio';
 import {
   discardPendingPrewarm,
   prewarmMobileVoiceStart,
@@ -261,7 +264,9 @@ import {
 } from '@/session/mobileVoicePrewarm';
 import {
   isMobileVoiceLiteLlmSettingsError,
+  resolveMobileVoiceCredentialFromLiteLlmSettings,
 } from '@/session/mobileVoiceLiteLlmSettings';
+import { getMobileVoiceServiceMode } from '@/session/mobileVoiceServiceMode';
 import {
   createMobileCindyVoiceCredential,
   MobileCindyVoiceRunContext,
@@ -295,6 +300,7 @@ import {
   insertMobileForkOriginItem,
   type MobileMessageRenderItem,
 } from '@/session/messageRenderModel';
+import { reconcileMobileMessageRenderItems } from '@/session/messageRenderReconcile';
 import { shouldSuppressEmptyMessageState } from '@/session/sessionEmptyState';
 import { deferScheduleIndexHydration } from '@/session/scheduleIndexDefer';
 import { markSessionScheduleRunsRead, unreadRunIdFromProjection } from '@/session/scheduleRunRead';
@@ -1324,7 +1330,41 @@ export default function SessionScreen() {
       : null,
     [composerModelSections],
   );
-  const composerPillFastOn = !!currentSession?.fastMode
+  // 会话持久化的显式来源可能在电脑端被断开。此时不能把 activeSourceId 的默认回退
+  // 画成真实来源，否则手机会显示「默认来源 Logo」，发送却仍按已断开的 providerId 路由。
+  // provider 列表加载期间不判，避免首帧短暂闪出断开态。
+  const composerSelectedSourceDisconnected = useMemo(() => {
+    if (!currentSession) return false;
+    return isSelectedSourceDisconnected({
+      providers: composerDeviceProviders.providers,
+      providerId: currentSession.providerId,
+      modelId: currentSession.model,
+      agentKind: sessionAgentKind,
+      loading: composerDeviceProviders.loading,
+      error: composerDeviceProviders.error,
+    });
+  }, [
+    composerDeviceProviders.error,
+    composerDeviceProviders.loading,
+    composerDeviceProviders.providers,
+    currentSession,
+    sessionAgentKind,
+  ]);
+  const composerPillSourceProvider = useMemo(() => {
+    if (!composerSelectedSourceDisconnected) return composerActiveSourceProvider;
+    return composerDeviceProviders.providers.find(
+      (provider) => provider.id === currentSession?.providerId,
+    ) ?? null;
+  }, [
+    composerActiveSourceProvider,
+    composerDeviceProviders.providers,
+    composerSelectedSourceDisconnected,
+    currentSession?.providerId,
+  ]);
+  const composerPillSourceId = composerSelectedSourceDisconnected
+    ? currentSession?.providerId ?? null
+    : composerPillSourceProvider?.id ?? null;
+  const composerPillFastOn = !composerSelectedSourceDisconnected && !!currentSession?.fastMode
     && rowFastEditable({
       provider: composerActiveSourceProvider ?? undefined,
       modelId: currentSession?.model ?? '',
@@ -1545,14 +1585,18 @@ export default function SessionScreen() {
         <ComposerRuntimePill
           fastOn={composerPillFastOn}
           label={composerRuntimeSummary.modelSummary}
-          leading={composerActiveSourceProvider ? (
-            // 图标统一规则(桌面同源):模型条目 icon(AI Gateway 设定)优先,缺省回落来源标。
+          leading={composerPillSourceId ? (
+            // 正常态显示真正生效来源；断开态显示 DB 中的真实来源并使用状态色，
+            // 不静默换成 activeSourceId 的默认回退 Logo。
             <MobileModelIconMark
-              icon={currentSession
-                ? getModel(composerActiveSourceProvider, currentSession.model, sessionAgentKind)?.icon
+              color={composerSelectedSourceDisconnected ? colors.statusError : undefined}
+              icon={currentSession && composerPillSourceProvider
+                ? getModel(composerPillSourceProvider, currentSession.model, sessionAgentKind)?.icon
                 : undefined}
-              name={composerActiveSourceProvider.name}
-              providerId={composerActiveSourceProvider.id}
+              name={composerPillSourceProvider?.name ?? composerPillSourceId}
+              providerId={composerPillSourceId}
+              routing={composerPillSourceProvider?.routing}
+              logoKind={composerPillSourceProvider?.logoKind}
             />
           ) : null}
           onPress={toggleComposerModelPicker}
@@ -2568,9 +2612,13 @@ export default function SessionScreen() {
     const id = findErrorTailClientId(messages);
     return id && !dismissedTailErrorClientIds.has(id) ? id : null;
   }, [collaborationReadOnlyReason, messages, dismissedTailErrorClientIds]);
+  const previousRenderItemsRef = useRef<{
+    sessionId: string;
+    items: readonly MobileMessageRenderItem[];
+  } | null>(null);
   const renderItems = useMemo(
     () => {
-      const items = insertMobileForkOriginItem(
+      let items = insertMobileForkOriginItem(
         // 孤儿 agent_task 兜底用 maker status 驱动的权威 turn 边界 gate,与 store 的
         // turn-start 清理同源闭环——渲染开启时 map 必已清过 stale。不用 isSessionStreaming
         // (含本地 sending / canStopQueue,发送→status 间隙会闪现残留),也不用
@@ -2582,13 +2630,24 @@ export default function SessionScreen() {
         ),
         forkOrigin,
       );
-      if (!errorTailClientId) return items;
-      return items.filter(
-        (item) => !(item.type === 'message' && item.message.source.clientId === errorTailClientId),
-      );
+      if (errorTailClientId) {
+        items = items.filter(
+          (item) => !(item.type === 'message' && item.message.source.clientId === errorTailClientId),
+        );
+      }
+      const previous = previousRenderItemsRef.current?.sessionId === sessionId
+        ? previousRenderItemsRef.current.items
+        : [];
+      const reconciled = reconcileMobileMessageRenderItems(previous, items);
+      return reconciled;
     },
-    [errorTailClientId, forkOrigin, isSessionStreaming, makerTurnRunning, messages, taskUpdates],
+    [errorTailClientId, forkOrigin, isSessionStreaming, makerTurnRunning, messages, sessionId, taskUpdates],
   );
+  // 只在本次 render 真正 commit 后更新 reconcile 基准。写入 useMemo/ref 会让
+  // Concurrent Mode 下被丢弃的 render 泄漏成下一轮的 previous,破坏尾行 memo 的稳定性。
+  useLayoutEffect(() => {
+    previousRenderItemsRef.current = { sessionId, items: renderItems };
+  }, [renderItems, sessionId]);
   // 后台静默刷新:仅在首次加载、还没有任何内容(messages 为空)时显示"正在同步";已有内容
   // (重开已看过的会话,messages 还在内存)时后台对账一律静默,不再弹同步提示打扰用户。
   const showSyncingIndicator = loading && messages.length === 0;
@@ -2873,21 +2932,31 @@ export default function SessionScreen() {
       // Claim the connection prewarmed at pressIn (if any): its credential is
       // already resolved and its ASR WebSocket already connecting, so the
       // handshake overlaps the press gesture instead of following it.
-      const [prewarmedVoice, localVoiceInputHistory] = await Promise.all([
+      const [prewarmedVoice, localVoiceInputHistory, voiceServiceMode] = await Promise.all([
         takePrewarmedMobileVoiceAsr(deviceId) ?? Promise.resolve(null),
         getMobileVoiceInputHistoryForHost(deviceId),
+        getMobileVoiceServiceMode(),
       ]);
       claimedPrewarm = prewarmedVoice;
+      const useByokVoice = voiceServiceMode === 'byok';
       const credential = prewarmedVoice?.credential
-        ?? createMobileCindyVoiceCredential(deviceId);
-      const voiceContext = prewarmedVoice?.voiceContext
-        ?? new MobileCindyVoiceRunContext(
-          () => auth.getAccessToken(),
-          () => auth.refreshAccessToken(),
-          auth.apiFetch,
-          credential.settings?.language,
-          credential.refiner.provider,
-        );
+        ?? (useByokVoice
+          ? await resolveMobileVoiceCredentialFromLiteLlmSettings(deviceId)
+          : createMobileCindyVoiceCredential(deviceId));
+      // BYOK never constructs a managed run context: the user opted into their
+      // own key, and the two credential planes must not fall back into each
+      // other. A claimed prewarm without a voiceContext IS the BYOK prewarm.
+      const voiceContext = prewarmedVoice
+        ? prewarmedVoice.voiceContext
+        : (useByokVoice
+          ? undefined
+          : new MobileCindyVoiceRunContext(
+            () => auth.getAccessToken(),
+            () => auth.refreshAccessToken(),
+            auth.apiFetch,
+            credential.settings?.language,
+            credential.refiner.provider,
+          ));
       if (voiceStartupSeqRef.current !== startupSeq) {
         // The startup was superseded while we awaited: close the claimed
         // connection instead of opening a mic for a dead run. Session switches
@@ -2910,8 +2979,13 @@ export default function SessionScreen() {
         const controller = createMobileVoiceControllerSession({
           credential,
           ...(prewarmedVoice ? { asr: prewarmedVoice.asr } : {}),
-          connectionProvider: (providerId) => voiceContext.createAsrConnection(providerId),
-          refinerTargetProvider: (providerId, options) => voiceContext.createRefinerTarget(providerId, options),
+          // BYOK (no voiceContext) dials directly with the credential's own
+          // key; only the managed path routes through voice-server tickets.
+          ...(voiceContext ? {
+            connectionProvider: (providerId: string) => voiceContext.createAsrConnection(providerId),
+            refinerTargetProvider: (providerId: string, options?: { refreshAccessToken?: boolean }) =>
+              voiceContext.createRefinerTarget(providerId, options),
+          } : {}),
           initialDraft: draft,
           refinementContext: buildMobileVoiceSessionRefinementContext(draft, renderItems),
           localVoiceInputHistory,
@@ -3136,11 +3210,19 @@ export default function SessionScreen() {
     if (voiceIsProcessing) return;
     if (voiceRecordingActiveRef.current || voiceState === 'listening') return;
     if (!deviceId || !isMobileRealtimeAudioAvailable()) return;
-    prewarmMobileVoiceStart(deviceId, {
-      getAccessToken: () => auth.getAccessToken(),
-      refreshAccessToken: () => auth.refreshAccessToken(),
-      apiFetch: auth.apiFetch,
-    });
+    // Keep the native audio-session warmup on the synchronous press-down path
+    // (prewarmMobileVoiceStart re-runs it idempotently below).
+    prewarmMobileRealtimeAudio();
+    // Fire-and-forget: the mode read is a fast secure-storage hit and prewarm
+    // is speculative anyway. BYOK prewarm omits auth so buildPrewarm resolves
+    // the user's own LiteLLM credential instead of a managed ticket context.
+    void getMobileVoiceServiceMode().then((mode) => {
+      prewarmMobileVoiceStart(deviceId, mode === 'byok' ? undefined : {
+        getAccessToken: () => auth.getAccessToken(),
+        refreshAccessToken: () => auth.refreshAccessToken(),
+        apiFetch: auth.apiFetch,
+      });
+    }).catch(() => undefined);
   }, [deviceId, voiceIsProcessing, voiceState]);
 
   const renderComposerVoiceButton = (buttonStyle?: StyleProp<ViewStyle>) => (
@@ -3570,7 +3652,7 @@ export default function SessionScreen() {
         }
         // plan 一次性语义:权限档快照进条目(派发按快照发),chip 立即恢复——
         // 不等附件上传完,与「消息已发出」的乐观语义一致。
-        const permissionModeAtSend = currentSession.permissionMode || 'bypassPermissions';
+        const permissionModeAtSend = permissionModeOrAsk(currentSession.permissionMode);
         if (permissionModeAtSend === 'plan') {
           const fallback = runtimeOptions?.permissionOptions.find((option) => option.id !== 'plan')?.id ?? 'ask';
           const remembered = prePlanPermissionModeRef.current;
@@ -5580,7 +5662,15 @@ export default function SessionScreen() {
             onChangeSelectedFastMode={(enabled) => void runControlAction(() => maker.setFastMode(sessionId, enabled), { fastMode: enabled })}
             onClose={() => setModelSheetOpen(false)}
             onSelectFlatModel={selectComposerFlatModel}
-            onSelectPermissionMode={(mode) => void runControlAction(() => maker.setPermissionMode(sessionId, mode), { permissionMode: mode })}
+            onSelectPermissionMode={(mode) => {
+              void (async () => {
+                if (!await confirmFullAccessChange(currentSession.permissionMode, mode)) return;
+                await runControlAction(
+                  () => maker.setPermissionMode(sessionId, mode),
+                  { permissionMode: mode },
+                );
+              })();
+            }}
             onSelectProviderRow={selectComposerModelRow}
             permissionDisabled={controlBusy || !canUseComposer}
             permissionOptions={runtimeOptions.permissionOptions}

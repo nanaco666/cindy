@@ -72,6 +72,16 @@ describe('inputProjection', () => {
     expect('remoteHostId' in queued.createOpts).toBe(false);
   });
 
+  it.each([undefined, '', 'future-mode'])('fails closed to ask for invalid permission mode %j', (permissionMode) => {
+    const queued = buildQueuedTextMessage(
+      session({ permissionMode: permissionMode as RemoteSession['permissionMode'] }),
+      'hello',
+    );
+
+    expect(queued.permissionMode).toBe('ask');
+    expect(queued.createOpts.permissionMode).toBe('ask');
+  });
+
   it('carries resume / provider / remote-host identity into createOpts for lazy-create', () => {
     // 被控端 lazy-create(桌面重启后)直接用 createOpts 起会话,不从 DB 兜底:
     // 缺 resumeSessionId 会另起全新 SDK thread(上文全丢),缺 remoteHostId 会把

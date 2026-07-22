@@ -6,6 +6,7 @@ import {
   buildNewSessionCreatePreview,
   buildRecentWorkspaceOptions,
   buildRemoteCreateSessionOptions,
+  defaultPermissionModeForNewSessionAgent,
   normalizeCreateSessionResult,
   parseNewSessionDeviceOptions,
   parseExtraDirsInput,
@@ -204,7 +205,13 @@ describe('resolveNewSessionAutoDefault', () => {
     });
     expect(result).toEqual({
       appliedDeviceId: 'devA',
-      patch: { agentKind: 'codex', model: 'gpt-5.4', effort: 'high', providerId: null },
+      patch: {
+        agentKind: 'codex',
+        model: 'gpt-5.4',
+        effort: 'high',
+        permissionMode: 'auto',
+        providerId: null,
+      },
     });
   });
 
@@ -214,7 +221,13 @@ describe('resolveNewSessionAutoDefault', () => {
       sessions: [remoteSession('cx', { agentKind: 'codex', model: 'gpt-legacy', effort: 'high', deviceLinkDeviceId: 'devA', userSendAt: '2026-01-01T00:00:00.000Z' })],
       modelRows: [modelRow('claude-sonnet-4-6', ['low', 'medium'], 'medium')],
     });
-    expect(result?.patch).toEqual({ agentKind: 'codex', model: 'gpt-legacy', effort: 'high', providerId: null });
+    expect(result?.patch).toEqual({
+      agentKind: 'codex',
+      model: 'gpt-legacy',
+      effort: 'high',
+      permissionMode: 'auto',
+      providerId: null,
+    });
   });
 
   it('intent ②: no recent session → top of the model list (model + reconciled effort, agentKind untouched)', () => {
@@ -373,19 +386,39 @@ describe('new session model', () => {
     });
   });
 
+  it('preserves a Codex Auto-review draft when creating the session', () => {
+    expect(buildRemoteCreateSessionOptions({
+      ...DEFAULT_NEW_SESSION_DRAFT,
+      agentKind: 'codex',
+      model: 'gpt-5.4',
+      permissionMode: 'auto',
+      workingDir: '/repo/xdt-maker',
+    })).toMatchObject({
+      agentKind: 'codex',
+      permissionMode: 'auto',
+    });
+  });
+
   it('switches agent defaults without carrying a Claude model into Codex', () => {
     const codex = withAgentDefaults(DEFAULT_NEW_SESSION_DRAFT, 'codex');
     expect(codex).toMatchObject({
       agentKind: 'codex',
       model: 'gpt-5.4',
+      permissionMode: 'auto',
     });
 
     const claude = withAgentDefaults({ ...codex, fastMode: true }, 'claude-code');
     expect(claude).toMatchObject({
       agentKind: 'claude-code',
       model: 'claude-sonnet-4-6',
+      permissionMode: 'auto',
       fastMode: false,
     });
+  });
+
+  it('uses safe per-agent permission defaults for new interactive sessions', () => {
+    expect(defaultPermissionModeForNewSessionAgent('claude-code')).toBe('auto');
+    expect(defaultPermissionModeForNewSessionAgent('codex')).toBe('auto');
   });
 
   it('validates required path, model and first-message payload', () => {
@@ -832,15 +865,20 @@ describe('new session composer surface', () => {
     // Touch-down warm-up: the mic button prewarms the audio session + ASR
     // connection at pressIn, and voice startup claims that connection when fresh.
     expect(newSource).toContain('onPressIn={handleVoiceButtonPressIn}');
-    expect(newSource).toContain('prewarmMobileVoiceStart(selectedDeviceId, {');
+    // Service-mode aware prewarm: managed mode passes auth (voice-server
+    // tickets); explicit BYOK omits it so the user's own LiteLLM credential
+    // is resolved instead — the two planes never fall back into each other.
+    expect(newSource).toContain("prewarmMobileVoiceStart(selectedDeviceId, mode === 'byok' ? undefined : {");
     expect(newSource).toContain('getAccessToken: () => auth.getAccessToken(),');
     expect(newSource).toContain('refreshAccessToken: () => auth.refreshAccessToken(),');
     expect(newSource).toContain('apiFetch: auth.apiFetch,');
-    expect(newSource).toContain('const [prewarmedVoice, localVoiceInputHistory] = await Promise.all([');
+    expect(newSource).toContain('const [prewarmedVoice, localVoiceInputHistory, voiceServiceMode] = await Promise.all([');
     expect(newSource).toContain('takePrewarmedMobileVoiceAsr(selectedDeviceId) ?? Promise.resolve(null),');
-    expect(newSource).toContain('?? createMobileCindyVoiceCredential(selectedDeviceId);');
-    expect(newSource).toContain('connectionProvider: (providerId) => voiceContext.createAsrConnection(providerId),');
-    expect(newSource).toContain('refinerTargetProvider: (providerId, options) => voiceContext.createRefinerTarget(providerId, options),');
+    expect(newSource).toContain('getMobileVoiceServiceMode(),');
+    expect(newSource).toContain('? await resolveMobileVoiceCredentialFromLiteLlmSettings(selectedDeviceId)');
+    expect(newSource).toContain(': createMobileCindyVoiceCredential(selectedDeviceId));');
+    expect(newSource).toContain('connectionProvider: (providerId: string) => voiceContext.createAsrConnection(providerId),');
+    expect(newSource).toContain('voiceContext.createRefinerTarget(providerId, options),');
     expect(newSource).toContain('const composerVoicePlacement = resolveMobileComposerVoiceButtonPlacement({');
     expect(newSource).toContain('hasTrailingAction: composerShowCreateButton');
     expect(newSource).toContain('const voiceStatusVisible = Boolean(voiceError);');

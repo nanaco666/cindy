@@ -17,12 +17,13 @@
  * main 端 extraDirsValidator.ts 兜底 — 这里只做 UX 预判。
  */
 
-import { useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Check, ClipboardList, FolderPlus, Plus, Target, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { cn } from '@/lib/utils';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { MorphPopover } from '@/components/ui/morph-popover';
 import { Tip } from '@/components/ui/tooltip';
 import { useConfirmDialog } from '@/components/ui/confirm-dialog-provider';
 import { createLogger } from '@/lib/logger';
@@ -61,6 +62,8 @@ export interface ExtraDirsButtonProps {
   dense?: boolean;
   /** CREATE AGENT 首页按 Figma 185:2724 使用独立私有 token。 */
   visualVariant?: 'default' | 'create-agent';
+  /** 仅普通 composer 显式开启 chip → panel 容器形变；其它消费方维持 Radix。 */
+  useMorphPopover?: boolean;
 }
 
 function normalizedPathForComparison(raw: string | null | undefined): string | null {
@@ -124,19 +127,63 @@ export function ExtraDirsButton({
   disabled,
   dense = false,
   visualVariant = 'default',
+  useMorphPopover = false,
 }: ExtraDirsButtonProps) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const { confirm } = useConfirmDialog();
 
+  const isCc = agentKind === 'cc';
+  const count = extraDirs.length;
+  const isCreateAgentVariant = visualVariant === 'create-agent';
+  const morphEnabled = useMorphPopover && !isCreateAgentVariant;
+
+  // ── hover 宽度形变(DESIGN.md §14.4 窄变体,≤240ms)──
+  // 仅 default 变体的纯图标态:hover 横向展出「添加」标签;菜单打开期间不展开,
+  // 关闭后若鼠标已移开则回纯「+」。带 ×N 计数的形态与 create-agent 保持原样。
+  // 注意:这些 hooks 必须在下方能力早退 return 之前声明(Rules of Hooks)。
+  const [hovered, setHovered] = useState(false);
+  const triggerBtnRef = useRef<HTMLButtonElement>(null);
+  const expandLabelRef = useRef<HTMLSpanElement>(null);
+  const [pillWidth, setPillWidth] = useState<number | null>(null);
+  const expandable = morphEnabled && !(count > 0 && isCc);
+  // 菜单打开期间(含收合动画的 340ms 余辉)冻结展开态:chip 虽被 MorphPopover
+  // 隐藏,但它的布局宽度决定工具条排布与面板锚点 —— 中途回缩会推挤相邻 chips、
+  // 让收合动画对不上位置(关闭时抖一下,2026-07-22 用户反馈)。面板收完、chip
+  // 复形之后,再按真实悬停态决定是否收回纯「+」(此时收缩是可见的平滑动画)。
+  const [lingerOpen, setLingerOpen] = useState(false);
+  const expanded = expandable && !disabled && (open || lingerOpen || hovered);
+  useEffect(() => {
+    if (!morphEnabled) return;
+    if (open) {
+      setLingerOpen(true);
+      return;
+    }
+    const id = window.setTimeout(() => {
+      setLingerOpen(false);
+      setHovered(triggerBtnRef.current?.matches(':hover') ?? false);
+    }, 340); // MorphPopover 收合 300ms + chip 复形 20ms 之后
+    return () => window.clearTimeout(id);
+  }, [morphEnabled, open]);
+  useLayoutEffect(() => {
+    if (!expanded) {
+      setPillWidth(null);
+      return;
+    }
+    // 28px 图标位 + 标签实测宽(含右 padding)+ 2px 余量
+    setPillWidth(28 + (expandLabelRef.current?.scrollWidth ?? 0) + 2);
+  }, [expanded]);
+  const reduceMotion =
+    typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  const pillTransition = reduceMotion
+    ? undefined
+    : 'width 240ms cubic-bezier(0.3, 0.9, 0.25, 1), background-color 150ms ease, color 150ms ease';
+
   // 能力感知:新建目标(onNewGoal)/ 计划模式(planMode)两端通用;引用目录仅 cc
   // (Codex 忽略 extraDirs)。三样都没有才不渲染。
-  const isCc = agentKind === 'cc';
   if (!onNewGoal && !planMode && !isCc && plugins.length === 0) return null;
 
-  const count = extraDirs.length;
   const atLimit = count >= MAX_EXTRA_DIRS;
-  const isCreateAgentVariant = visualVariant === 'create-agent';
 
   const handleAdd = async () => {
     if (atLimit) return;
@@ -179,16 +226,20 @@ export function ExtraDirsButton({
     await onChange(extraDirs.filter((p) => p !== path));
   };
 
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <Tip
+  const trigger = (
+    <Tip
           text={count === 0 ? t('extraDirs.tooltipEmpty') : t('extraDirs.tooltipCount', { count })}
           side="top"
         >
           <button
+            ref={triggerBtnRef}
             type="button"
             disabled={disabled}
+            onClick={morphEnabled ? () => setOpen((prev) => !prev) : undefined}
+            onMouseEnter={morphEnabled ? () => setHovered(true) : undefined}
+            onMouseLeave={morphEnabled ? () => setHovered(false) : undefined}
+            aria-expanded={open}
+            aria-haspopup="menu"
             className={cn(
               'flex shrink-0 items-center rounded-full transition-colors',
               isCreateAgentVariant
@@ -198,42 +249,70 @@ export function ExtraDirsButton({
                     'hover:bg-[var(--create-agent-control-bg-hover)] active:bg-[var(--create-agent-control-bg-pressed)]',
                     'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--create-agent-focus-ring)]',
                   ]
-                : [
-                    'h-[30px]',
-                    count > 0 && isCc ? 'min-w-max justify-center gap-1 px-2.5' : 'w-[30px] justify-center p-0',
-                    'bg-[var(--composer-pill-bg,#FCFCFC)] dark:bg-[var(--composer-pill-bg,#393838)] border border-[var(--border-default)] text-[var(--composer-pill-icon,#3C3F43)] dark:text-[var(--composer-pill-icon,#D9D9D9)]' /* spec 2026-07-17, token by 一哥 */,
-                    'hover:bg-[var(--model-trigger-hover)]',
-                  ],
+                : morphEnabled
+                  ? [
+                      'h-[30px]',
+                      count > 0 && isCc
+                        ? 'min-w-max justify-center gap-1 px-2.5'
+                        : 'justify-start overflow-hidden p-0',
+                      'border border-transparent bg-transparent text-[var(--composer-pill-icon,#3C3F43)] dark:text-[var(--composer-pill-icon,#D9D9D9)]',
+                      'hover:border-[var(--border-default)] hover:bg-[var(--composer-pill-bg,#FCFCFC)] dark:hover:bg-[var(--composer-pill-bg,#393838)]',
+                    ]
+                  : [
+                      'h-[30px]',
+                      count > 0 && isCc
+                        ? 'min-w-max justify-center gap-1 px-2.5'
+                        : 'w-[30px] justify-center p-0',
+                      'bg-[var(--composer-pill-bg,#FCFCFC)] dark:bg-[var(--composer-pill-bg,#393838)] border border-[var(--border-default)] text-[var(--composer-pill-icon,#3C3F43)] dark:text-[var(--composer-pill-icon,#D9D9D9)]',
+                      'hover:bg-[var(--model-trigger-hover)]',
+                    ],
               'disabled:cursor-not-allowed disabled:opacity-50',
             )}
+            style={expandable ? { width: pillWidth ?? 30, transition: pillTransition } : undefined}
             aria-label={t('extraDirs.menuAria')}
           >
-            <Plus
-              size={isCreateAgentVariant ? 11 : dense ? 14 : 14}
-              className="shrink-0"
-            />
-            {count > 0 && isCc && !isCreateAgentVariant && (
-              <span
-                className={cn(
-                  'font-normal tabular-nums',
-                  dense ? 'text-[12.5px]' : 'text-[13px]',
+            {expandable ? (
+              <>
+                <span className="flex h-[28px] w-[28px] shrink-0 items-center justify-center">
+                  <Plus size={14} className="shrink-0" />
+                </span>
+                <span
+                  ref={expandLabelRef}
+                  className={cn(
+                    'whitespace-nowrap pr-3',
+                    dense ? 'text-[12.5px]' : 'text-[13px]',
+                    '-translate-x-1 opacity-0 transition-[opacity,transform] duration-[180ms] ease-out',
+                    expanded && 'translate-x-0 opacity-100',
+                    'motion-reduce:transition-none',
+                  )}
+                >
+                  {t('extraDirs.expandLabel')}
+                </span>
+              </>
+            ) : (
+              <>
+                <Plus
+                  size={isCreateAgentVariant ? 11 : dense ? 14 : 14}
+                  className="shrink-0"
+                />
+                {count > 0 && isCc && !isCreateAgentVariant && (
+                  <span
+                    className={cn(
+                      'font-normal tabular-nums',
+                      dense ? 'text-[12.5px]' : 'text-[13px]',
+                    )}
+                  >
+                    ×{count}
+                  </span>
                 )}
-              >
-                ×{count}
-              </span>
+              </>
             )}
           </button>
-        </Tip>
-      </PopoverTrigger>
-      <PopoverContent
-        align="start"
-        sideOffset={4}
-        className={cn(
-          'w-[360px] rounded-[12px] p-2',
-          'bg-[var(--model-dropdown-bg)]',
-          'border border-[var(--model-dropdown-border)]',
-        )}
-      >
+    </Tip>
+  );
+
+  const menuContent = (
+    <>
         {/* 新建目标(仅会话中;点击关菜单并由父组件打开 NewGoalDialog) */}
         {onNewGoal && (
           <button
@@ -408,6 +487,38 @@ export function ExtraDirsButton({
             </button>
           </>
         )}
+    </>
+  );
+
+  if (morphEnabled) {
+    return (
+      <MorphPopover
+        open={open}
+        onOpenChange={setOpen}
+        panelWidth={360}
+        panelClassName="p-2"
+        panelAriaLabel={t('extraDirs.menuAria')}
+        wrapperClassName="shrink-0"
+        trigger={trigger}
+      >
+        {menuContent}
+      </MorphPopover>
+    );
+  }
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>{trigger}</PopoverTrigger>
+      <PopoverContent
+        align="start"
+        sideOffset={4}
+        className={cn(
+          'w-[360px] rounded-[12px] p-2',
+          'bg-[var(--model-dropdown-bg)]',
+          'border border-[var(--model-dropdown-border)]',
+        )}
+      >
+        {menuContent}
       </PopoverContent>
     </Popover>
   );

@@ -4,9 +4,11 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { selectionIntersectsFloatingQuoteDisabledArea } from '../components/chat/SelectionQuoteButton';
 
-const userMessageSource = readFileSync(
+// Windows checkout(core.autocrlf)下源码是 CRLF;统一归一成 LF,含 \n 的多行片段断言才跨平台成立。
+const readTextLf = (path: string): string => readFileSync(path, 'utf8').replace(/\r\n/g, '\n');
+
+const userMessageSource = readTextLf(
   resolve(__dirname, '..', 'components', 'chat', 'UserMessage.tsx'),
-  'utf8',
 );
 
 describe('SelectionQuoteButton — user message floating action exclusion', () => {
@@ -35,9 +37,8 @@ describe('SelectionQuoteButton — user message floating action exclusion', () =
   });
 
   it('keeps right-click Add to chat enabled while suppressing the floating button', () => {
-    const buttonSource = readFileSync(
+    const buttonSource = readTextLf(
       resolve(__dirname, '..', 'components', 'chat', 'SelectionQuoteButton.tsx'),
-      'utf8',
     );
     expect(buttonSource).toContain("container.dataset.selectionQuoteContext = '';");
     expect(buttonSource).toContain('readSelectionInStream(true)');
@@ -45,9 +46,8 @@ describe('SelectionQuoteButton — user message floating action exclusion', () =
   });
 
   it('keeps the floating action at its intrinsic width near either viewport edge', () => {
-    const buttonSource = readFileSync(
+    const buttonSource = readTextLf(
       resolve(__dirname, '..', 'components', 'chat', 'SelectionQuoteButton.tsx'),
-      'utf8',
     );
 
     expect(buttonSource).toContain('w-max');

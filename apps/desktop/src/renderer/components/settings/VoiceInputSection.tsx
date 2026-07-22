@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useSearchParams } from 'react-router-dom';
 import * as Dialog from '@radix-ui/react-dialog';
-import { Check, ChevronDown, Copy, Keyboard, Pencil, Plus, Search, Sparkles, Trash2, Upload, X } from 'lucide-react';
+import { Check, ChevronDown, Copy, Keyboard, Pencil, Plus, RotateCcw, Search, Sparkles, Trash2, Upload, X } from 'lucide-react';
 
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Switch } from '@/components/ui/switch';
@@ -22,6 +23,7 @@ import {
   type VoiceInputDictionaryEntrySource,
   type VoiceInputLanguage,
 } from '@/hooks/useVoiceInputSettings';
+import { useVoiceInputModelSelection } from '@/hooks/useVoiceInputModelSelection';
 import { useVoiceInputUsageStats } from '@/hooks/useVoiceInputUsageStats';
 import { useVoiceInputHistory } from '@/hooks/useVoiceInputHistory';
 import { getAppShortcutCombos } from '@/lib/appShortcutStore';
@@ -323,6 +325,178 @@ function VoiceInputInlineSettingRow({
 
       <div className="min-w-0 sm:w-full sm:justify-self-end">{children}</div>
     </div>
+  );
+}
+
+/**
+ * "服务来源" card: managed Cindy voice service (default) vs the user's own
+ * credentials (BYOK). BYOK reveals ASR / refiner provider pickers and a
+ * credential-readiness notice; the reset action clears the user override so
+ * the selection re-follows the product default (never a snapshot).
+ */
+function VoiceInputServiceSourceCard() {
+  const { t } = useTranslation();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const {
+    ready,
+    selection,
+    asrProfiles,
+    refinerProfiles,
+    readiness,
+    saving,
+    setServiceMode,
+    setAsrProvider,
+    setRefinerProvider,
+    resetToDefault,
+  } = useVoiceInputModelSelection();
+
+  const serviceMode: VoiceInputServiceModeData = selection?.serviceMode ?? 'cindy';
+  const byok = serviceMode === 'byok';
+
+  const openProvidersTab = useCallback(() => {
+    const next = new URLSearchParams(searchParams);
+    next.set('tab', 'providers');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
+
+  const modeOptions = useMemo<ReadonlyArray<VoiceInputSelectOption<VoiceInputServiceModeData>>>(() => [
+    {
+      value: 'cindy',
+      label: t('settings.voiceInput.serviceSource.options.cindy'),
+      description: t('settings.voiceInput.serviceSource.optionDescriptions.cindy'),
+    },
+    {
+      value: 'byok',
+      label: t('settings.voiceInput.serviceSource.options.byok'),
+      description: t('settings.voiceInput.serviceSource.optionDescriptions.byok'),
+    },
+  ], [t]);
+
+  const credentialSourceLabel = useCallback((profile: { id: string; auth: 'api-key' | 'codex' }): string => {
+    if (profile.auth === 'codex') return t('settings.voiceInput.serviceSource.credential.codexLogin');
+    if (profile.id.startsWith('elevenlabs')) return t('settings.voiceInput.serviceSource.credential.elevenlabsKey');
+    return t('settings.voiceInput.serviceSource.credential.gatewayKey');
+  }, [t]);
+
+  const asrOptions = useMemo<ReadonlyArray<VoiceInputSelectOption<string>>>(() => (
+    asrProfiles
+      // The batch profile only serves the mobile/remote file-relay path; it is
+      // not a valid inline dictation choice.
+      .filter((profile) => profile.mode !== 'batch-http')
+      .map((profile) => ({
+        value: profile.id,
+        label: profile.model,
+        description: credentialSourceLabel(profile),
+      }))
+  ), [asrProfiles, credentialSourceLabel]);
+
+  const refinerOptions = useMemo<ReadonlyArray<VoiceInputSelectOption<string>>>(() => (
+    refinerProfiles.map((profile) => ({
+      value: profile.id,
+      label: profile.model,
+      description: credentialSourceLabel(profile),
+    }))
+  ), [refinerProfiles, credentialSourceLabel]);
+
+  // BYOK credential problems map to i18n by credential source instead of the
+  // raw main-process message (which is an untranslated profile constant).
+  const byokCredentialErrorText = useMemo(() => {
+    if (!byok || !readiness || readiness.ok) return null;
+    if (readiness.auth === 'codex') return t('settings.voiceInput.serviceSource.credentialError.codexMissing');
+    if (readiness.provider.startsWith('elevenlabs')) {
+      return t('settings.voiceInput.serviceSource.credentialError.elevenlabsMissing');
+    }
+    return t('settings.voiceInput.serviceSource.credentialError.gatewayMissing');
+  }, [byok, readiness, t]);
+
+  const customized = Boolean(selection?.serviceModeConfigured);
+
+  return (
+    <VoiceInputCard
+      title={t('settings.voiceInput.sections.serviceSource')}
+      action={customized ? (
+        <button
+          type="button"
+          disabled={saving}
+          onClick={() => void resetToDefault()}
+          className={cn(
+            'inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-12',
+            'border border-[var(--settings-input-border)] bg-[var(--settings-input-bg)]',
+            'text-[var(--settings-section-sublabel)] outline-none transition-colors',
+            'hover:border-[var(--settings-input-border-focus)] focus-visible:border-[var(--settings-input-border-focus)]',
+            saving && 'cursor-not-allowed opacity-55',
+          )}
+        >
+          <RotateCcw size={12} />
+          {t('settings.voiceInput.serviceSource.reset')}
+        </button>
+      ) : undefined}
+    >
+      <VoiceInputInlineSettingRow
+        label={t('settings.voiceInput.serviceSource.label')}
+        hint={t('settings.voiceInput.serviceSource.hint')}
+      >
+        <VoiceInputSelect
+          value={serviceMode}
+          options={modeOptions}
+          onChange={(value) => void setServiceMode(value)}
+          ariaLabel={t('settings.voiceInput.serviceSource.ariaLabel')}
+        />
+      </VoiceInputInlineSettingRow>
+
+      {ready && byok ? (
+        <>
+          <VoiceInputInlineSettingRow
+            label={t('settings.voiceInput.serviceSource.asr.label')}
+            hint={t('settings.voiceInput.serviceSource.asr.hint')}
+          >
+            <VoiceInputSelect
+              value={selection?.asrProvider ?? ''}
+              options={asrOptions}
+              onChange={(value) => void setAsrProvider(value)}
+              ariaLabel={t('settings.voiceInput.serviceSource.asr.ariaLabel')}
+            />
+          </VoiceInputInlineSettingRow>
+
+          <VoiceInputInlineSettingRow
+            label={t('settings.voiceInput.serviceSource.refiner.label')}
+            hint={t('settings.voiceInput.serviceSource.refiner.hint')}
+          >
+            <VoiceInputSelect
+              value={selection?.refinerProvider ?? ''}
+              options={refinerOptions}
+              onChange={(value) => void setRefinerProvider(value)}
+              ariaLabel={t('settings.voiceInput.serviceSource.refiner.ariaLabel')}
+            />
+          </VoiceInputInlineSettingRow>
+
+          {byokCredentialErrorText ? (
+            <div
+              className={cn(
+                'flex flex-wrap items-center justify-between gap-2 rounded-[12px] px-3.5 py-2.5',
+                'border border-[var(--error-border)] bg-[var(--error-bg)]',
+              )}
+            >
+              <p className="min-w-0 text-12 leading-[1.4] text-[var(--error-fg)]">
+                {byokCredentialErrorText}
+              </p>
+              <button
+                type="button"
+                onClick={openProvidersTab}
+                className={cn(
+                  'shrink-0 rounded-full px-2.5 py-1 text-12 font-medium',
+                  'border border-[var(--settings-input-border)] bg-[var(--settings-input-bg)]',
+                  'text-[var(--settings-section-title)] outline-none transition-colors',
+                  'hover:border-[var(--settings-input-border-focus)] focus-visible:border-[var(--settings-input-border-focus)]',
+                )}
+              >
+                {t('settings.voiceInput.serviceSource.manageProviders')}
+              </button>
+            </div>
+          ) : null}
+        </>
+      ) : null}
+    </VoiceInputCard>
   );
 }
 
@@ -1161,6 +1335,8 @@ export function VoiceInputSection() {
       <p className="text-13 leading-[1.5] text-[var(--settings-section-desc)]">
         {t('settings.voiceInput.description')}
       </p>
+
+      <VoiceInputServiceSourceCard />
 
       <VoiceInputCard title={t('settings.voiceInput.sections.basics')}>
         <VoiceInputInlineSettingRow
