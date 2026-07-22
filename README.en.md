@@ -14,7 +14,7 @@
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="License" /></a>
   <a href="https://github.com/makecindy/cindy/actions/workflows/ci.yml"><img src="https://github.com/makecindy/cindy/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
-  <a href="https://nodejs.org"><img src="https://img.shields.io/badge/node-22%2B-brightgreen.svg" alt="Node" /></a>
+  <a href="https://nodejs.org"><img src="https://img.shields.io/badge/node-22.x-brightgreen.svg" alt="Node.js 22.x" /></a>
   <a href="https://pnpm.io"><img src="https://img.shields.io/badge/pnpm-10-orange.svg" alt="pnpm" /></a>
 </p>
 
@@ -56,49 +56,22 @@ repository and is not part of this monorepo. The client is free software.
 
 ## Getting started
 
+Contributor setup, public submodule initialization, Git LFS, dependency updates,
+and access requirements are maintained in [`CONTRIBUTING.md`](CONTRIBUTING.md).
+Do not use a blanket recursive submodule checkout if you do not have access to the
+private `xd` plugin repository.
+
+Minimal entry point:
+
 ```bash
-git clone --recurse-submodules https://github.com/makecindy/cindy.git
+git clone https://github.com/makecindy/cindy.git
 cd cindy
+git submodule update --init --recursive cindy-protocol apps/desktop/resources/builtin-ghosts/official
 git lfs pull
 pnpm install
 ```
 
-`--recurse-submodules` initializes all submodules declared by the parent repo (the
-protocol repo and built-in plugin seed repos), including nested submodules. They
-are checked out at the commits pinned by the parent repo; this does not track the
-latest commit from each submodule automatically.
-
-Already cloned without submodules:
-
-```bash
-git submodule update --init --recursive
-```
-
-After pulling updates to the parent repo, sync the submodules to the versions it
-pins:
-
-```bash
-git pull --ff-only
-git submodule update --init --recursive
-git lfs pull
-```
-
-Only use the following when you intentionally want to track the latest commits
-from the submodule upstreams. It changes the parent repo's gitlinks, so review and
-commit the result. Protocol submodule updates must also be synchronized with the
-server's pointer.
-
-```bash
-git submodule update --remote --merge --recursive
-```
-
-The protocol version is pinned to the commit recorded by this repo. When
-upgrading the protocol, the server's submodule pointer must be upgraded in
-lockstep to avoid wire-protocol drift.
-
-## Development
-
-### Desktop
+## Development entry points
 
 ```bash
 # China-region Cindy account
@@ -109,47 +82,14 @@ pnpm restart:desktop:remote --region=global
 ```
 
 Remote development uses your own Cindy cloud account and existing login state, so
-you can continue existing sessions and work while developing the client. It is a
-“left foot stepping on right foot” dogfooding loop: use Cindy to develop Cindy.
-Always pass the region explicitly: use `cn` for China accounts and `global` for
-overseas accounts. Do not rely on the internal default. Add `--isolated=<name>`
-when you need to keep development data separate from your everyday data.
-
-`restart:desktop:remote` also supports passive multi-instance modes. See
-[`AGENTS.md`](AGENTS.md) for the full launch-flag reference and the desktop
-dev/runtime contract.
+you can continue existing sessions and work while developing the client. Use `cn`
+for China accounts and `global` for overseas accounts; do not rely on the internal
+default. Full desktop, mobile, data-isolation, and validation workflows are in
+[`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 “Local mode” on the login screen is an unauthenticated local-agent mode, not a
 connection to a local server. Server-backed capabilities are unavailable in this
 mode.
-
-### Mobile
-
-```bash
-pnpm mobile:sim:start
-pnpm --filter mobile typecheck
-pnpm --filter mobile test
-```
-
-Full mobile dev & release workflow:
-[`apps/mobile/docs/dev-and-release-workflow.md`](apps/mobile/docs/dev-and-release-workflow.md)
-and [`apps/mobile/RELEASING.md`](apps/mobile/RELEASING.md).
-
-## Testing & validation
-
-```bash
-pnpm test:unit                              # full unit gate (required before every PR)
-
-pnpm --filter desktop typecheck
-pnpm --filter desktop db:validate
-pnpm --filter desktop test:migration-replay
-pnpm --filter mobile  typecheck
-pnpm --filter mobile  test
-```
-
-Database schema changes are **append-only**: historical migrations are frozen by
-`apps/desktop/drizzle/migration-baseline.json`, and any change must add a new
-migration rather than editing an existing one.
 
 ## Architecture
 
@@ -160,14 +100,9 @@ migration rather than editing an existing one.
 
 ## Contributing
 
-Contributions go through pull requests into `main`. See
-[`CONTRIBUTING.md`](CONTRIBUTING.md) for the complete workflow. Before opening a PR:
-
-1. Run `pnpm test:unit` and make sure it passes, or explain why it was not run.
-2. Fill in the PR description per [`.github/PULL_REQUEST_TEMPLATE.md`](.github/PULL_REQUEST_TEMPLATE.md).
-
-The engineering rules in [`AGENTS.md`](AGENTS.md) are authoritative for code
-style, platform (macOS/Windows) parity, i18n, theming, and review severity.
+Contributions go through pull requests into `main`. Read
+[`CONTRIBUTING.md`](CONTRIBUTING.md) first, then use
+[`.github/PULL_REQUEST_TEMPLATE.md`](.github/PULL_REQUEST_TEMPLATE.md).
 
 ## Security
 

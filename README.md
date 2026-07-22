@@ -14,7 +14,7 @@
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="License" /></a>
   <a href="https://github.com/makecindy/cindy/actions/workflows/ci.yml"><img src="https://github.com/makecindy/cindy/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
-  <a href="https://nodejs.org"><img src="https://img.shields.io/badge/node-22%2B-brightgreen.svg" alt="Node" /></a>
+  <a href="https://nodejs.org"><img src="https://img.shields.io/badge/node-22.x-brightgreen.svg" alt="Node.js 22.x" /></a>
   <a href="https://pnpm.io"><img src="https://img.shields.io/badge/pnpm-10-orange.svg" alt="pnpm" /></a>
 </p>
 
@@ -52,45 +52,23 @@ monorepo 组织。
 - **pnpm** 10.x（暂不支持 v11）
 - **Git LFS**
 
-## 首次安装
+## 开始开发
+
+开发者安装、公开 submodule 初始化、Git LFS、依赖更新和权限说明统一见
+[`CONTRIBUTING.md`](CONTRIBUTING.md)。公开贡献者不要使用会尝试拉取私有 `xd`
+插件仓的全量递归初始化命令。
+
+最短入口：
 
 ```bash
-git clone --recurse-submodules https://github.com/makecindy/cindy.git
+git clone https://github.com/makecindy/cindy.git
 cd cindy
+git submodule update --init --recursive cindy-protocol apps/desktop/resources/builtin-ghosts/official
 git lfs pull
 pnpm install
 ```
 
-`--recurse-submodules` 会初始化当前父仓声明的全部 submodule（协议仓与内置插件种子仓），
-并递归处理嵌套 submodule。它们会检出父仓锁定的 commit，不会自动追踪各子仓最新版本。
-
-已经 clone 但没拉 submodule：
-
-```bash
-git submodule update --init --recursive
-```
-
-拉取主仓更新后，建议同步父仓记录的 submodule 版本：
-
-```bash
-git pull --ff-only
-git submodule update --init --recursive
-git lfs pull
-```
-
-只有需要主动追踪 submodule 上游最新版本时才使用下面的命令；它会修改父仓中的 gitlink，
-需要 review 后提交。协议 submodule 更新时还必须同步服务端的指针。
-
-```bash
-git submodule update --remote --merge --recursive
-```
-
-协议版本固定在父仓记录的 commit。升级协议时必须同步升级服务端的 submodule 指针，
-避免两端 wire protocol 漂移。
-
-## 开发
-
-### 桌面端
+## 开发入口
 
 ```bash
 # 中国版 Cindy 账号
@@ -101,43 +79,11 @@ pnpm restart:desktop:remote --region=global
 ```
 
 Remote 开发会使用你自己的 Cindy 云端账号和现有登录态，因此可以继续已有的会话与工作。
-这是一种“左脚踩右脚”的 dogfooding 模式：一边开发 Cindy 客户端，一边用正在使用的 Cindy
-验证它自己。请务必根据账号所在区域显式选择参数：中国版使用 `cn`，海外版使用 `global`，
-不要依赖内部默认值。需要隔离日常数据时，可再加 `--isolated=<name>`。
-
-`restart:desktop:remote` 还支持被动多开等模式。完整启动参数与桌面端 dev / 运行时契约见
-[`AGENTS.md`](AGENTS.md)。
+中国账号必须使用 `cn`，海外账号必须使用 `global`，不要依赖内部默认值。完整的桌面端、
+手机端、数据隔离和验证流程见 [`CONTRIBUTING.md`](CONTRIBUTING.md)。
 
 登录页的「本地模式」不是连接本地服务端，而是无需登录 Cindy 账号即可使用本机
 agent 的模式。依赖服务端的能力在该模式下不可用。
-
-### 手机端
-
-```bash
-pnpm mobile:sim:start
-pnpm --filter mobile typecheck
-pnpm --filter mobile test
-```
-
-完整开发与发布流程见
-[`apps/mobile/docs/dev-and-release-workflow.md`](apps/mobile/docs/dev-and-release-workflow.md)
-和 [`apps/mobile/RELEASING.md`](apps/mobile/RELEASING.md)。
-
-## 测试与校验
-
-```bash
-pnpm test:unit                              # 完整单测门禁（每次提 PR 前必跑）
-
-pnpm --filter desktop typecheck
-pnpm --filter desktop db:validate
-pnpm --filter desktop test:migration-replay
-pnpm --filter mobile  typecheck
-pnpm --filter mobile  test
-```
-
-数据库 schema 变更是 **append-only**：历史 migration 由
-`apps/desktop/drizzle/migration-baseline.json` 冻结，任何变化只能新增 migration，
-不能改动已有的。
 
 ## 架构
 
@@ -148,14 +94,9 @@ pnpm --filter mobile  test
 
 ## 贡献
 
-改动通过 pull request 合入 `main`。完整流程见
-[`CONTRIBUTING.md`](CONTRIBUTING.md)。提 PR 前至少需要：
-
-1. 跑 `pnpm test:unit` 并确认全部通过，或在 PR 中说明未执行原因。
-2. 按 [`.github/PULL_REQUEST_TEMPLATE.md`](.github/PULL_REQUEST_TEMPLATE.md) 填写 PR 描述。
-
-[`AGENTS.md`](AGENTS.md) 中的工程规范是代码风格、双平台（macOS/Windows）兼容，
-i18n、主题、review 严重度的权威依据。
+改动通过 pull request 合入 `main`。请先阅读
+[`CONTRIBUTING.md`](CONTRIBUTING.md)，再按
+[`.github/PULL_REQUEST_TEMPLATE.md`](.github/PULL_REQUEST_TEMPLATE.md) 提交。
 
 ## 安全
 

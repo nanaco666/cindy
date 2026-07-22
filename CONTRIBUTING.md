@@ -30,6 +30,18 @@ pnpm install
 客户端安装、开发和测试。协议 submodule 的版本由父仓锁定，除非在对应变更中协调，
 不要使用 `git submodule update --remote` 擅自移动 gitlink。
 
+拉取主仓更新后，同步父仓锁定的公开 submodule，并保留父仓记录的 commit：
+
+```bash
+git pull --ff-only
+git submodule update --init --recursive cindy-protocol apps/desktop/resources/builtin-ghosts/official
+git lfs pull
+```
+
+只有在明确要升级 submodule、并准备同步 review 和提交 gitlink 时，才使用
+`git submodule update --remote`。协议版本升级还需要和服务端维护者协调，避免两端
+wire protocol 漂移。
+
 ## 开发与验证
 
 ### 桌面端
@@ -59,10 +71,21 @@ pnpm --filter mobile test
 
 ```bash
 pnpm test:unit
+
+pnpm --filter desktop typecheck
+pnpm --filter desktop db:validate
+pnpm --filter desktop test:migration-replay
+pnpm --filter mobile typecheck
+pnpm --filter mobile test
 ```
 
-涉及桌面端、数据库、端点、移动端或发布流程时，请同时运行 README 和 PR 模板中列出的
-对应检查，并在 PR 中写明实际执行的命令和结果。未执行的验证必须说明原因。
+涉及端点、移动端 scope、发布流程或其他专项规则时，请运行对应检查，并在 PR 中写明
+实际执行的命令和结果。数据库 schema 变更只能新增 migration，不能修改历史 migration。
+未执行的验证必须说明原因。
+
+移动端完整开发与发布流程见
+[`apps/mobile/docs/dev-and-release-workflow.md`](apps/mobile/docs/dev-and-release-workflow.md)
+和 [`apps/mobile/RELEASING.md`](apps/mobile/RELEASING.md)。
 
 ## 提交 Pull Request
 
