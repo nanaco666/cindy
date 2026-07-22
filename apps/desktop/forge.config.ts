@@ -681,6 +681,53 @@ function applyMacPackagedDisplayName(buildPath: string, platform: string): void 
   }
 }
 
+/**
+ * 打包后清掉内置意识种子里的「仓库元信息」——种子源来自两个 submodule 仓
+ * (official / xd),extraResource 把整目录原样拷进包,连带把每个种子根下的
+ * `.tests/`(插件行为测试)、`.git`(submodule gitlink 指针文件)、`README.md`
+ * 也带了进来。这些对运行时播种毫无用处(播种器本就按点前缀跳过 `.tests`/`.git`),
+ * 纯属无谓分发物 —— 打完包在这里删掉,让安装包只含真正的种子内容
+ * (各插件目录 + provisioning.json)。
+ *
+ * 规则:对每个种子根(official / xd),删除所有点开头条目(覆盖 `.git`/`.tests`
+ * 及未来任何 `.foo`)与 `README.md`;插件目录与 provisioning.json 一律保留。
+ * best-effort:目录缺失 / 删除失败只 warn,不让打包失败(种子内容完整性由
+ * prePackage 的 assertGhostSeedSubmodules 兜底)。
+ */
+function prunePackagedGhostSeedMeta(buildPath: string, platform: string): void {
+  const resourcesDir =
+    platform === 'darwin' || platform === 'mas'
+      ? (() => {
+          const app = fs.readdirSync(buildPath).find((n) => n.endsWith('.app'));
+          return app ? path.join(buildPath, app, 'Contents', 'Resources') : null;
+        })()
+      : path.join(buildPath, 'resources');
+  if (!resourcesDir) return;
+
+  const seedBase = path.join(resourcesDir, 'builtin-ghosts');
+  for (const root of ['official', 'xd']) {
+    const rootDir = path.join(seedBase, root);
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(rootDir, { withFileTypes: true });
+    } catch {
+      continue; // 根不存在(理论上 prePackage 已拦)——跳过
+    }
+    for (const entry of entries) {
+      if (!entry.name.startsWith('.') && entry.name !== 'README.md') continue;
+      const target = path.join(rootDir, entry.name);
+      try {
+        fs.rmSync(target, { recursive: true, force: true });
+        console.log(`[forge:postPackage] pruned seed repo-meta: builtin-ghosts/${root}/${entry.name}`);
+      } catch (err) {
+        console.warn(
+          `[forge:postPackage] failed to prune ${target}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
+  }
+}
+
 function targetPlatformKey(targetPlatform: string, targetArch: string): string {
   return `${targetPlatform}-${targetArch}`;
 }
@@ -1234,6 +1281,7 @@ const config: ForgeConfig = {
       for (const buildPath of opts.outputPaths) {
         const noticeName = stagePackagedThirdPartyNotices(buildPath, opts.platform);
         console.log(`[forge:postPackage] staged ${noticeName} + restricted component disclosure`);
+        prunePackagedGhostSeedMeta(buildPath, opts.platform);
         signPackagedExes(buildPath);
         applyMacPackagedDisplayName(buildPath, opts.platform);
       }
