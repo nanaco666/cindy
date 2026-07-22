@@ -5224,6 +5224,26 @@
         "aiGenerate": "Generate script",
         "aiGenerating": "Generating…",
         "aiDone": "Script written to {{path}} — run Test to verify",
+        "aiFailure": {
+          "no_candidate": "No utility model is currently available. Connect OpenAI or Cindy AI, then try again.",
+          "all_candidates_failed": "Every utility model request failed. Check the provider connection and try again.",
+          "empty_response": "The utility models returned no usable content. Try again or check the provider connection.",
+          "timeout": "The utility model request timed out. Check the connection and try again.",
+          "checkedCandidates": "Candidates checked:",
+          "openProviders": "Open model providers",
+          "attemptReason": {
+            "unsupportedTransport": "not supported for this operation",
+            "agentUnavailable": "Codex is unavailable",
+            "notAuthenticated": "OpenAI login required",
+            "authProbeFailed": "could not verify OpenAI login",
+            "apiKeyMissing": "Cindy AI key is unavailable",
+            "endpointMissing": "Cindy AI endpoint is unavailable",
+            "timeout": "request timed out",
+            "emptyResponse": "empty response",
+            "httpError": "HTTP {{status}}",
+            "requestFailed": "request failed"
+          }
+        },
         "browse": "Choose a script file (or drag one onto the input)"
       },
       "validation": {

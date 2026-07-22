@@ -14,6 +14,7 @@ type ModelAccessStatusPayload = import('../shared/modelAccess').ModelAccessStatu
 type RsbWindowCommand = import('../shared/rightSidebarWindow').RsbWindowCommand;
 type DesktopLoginAction = import('../shared/authIpc').DesktopLoginAction;
 type DesktopLoginActionResult = import('../shared/authIpc').DesktopLoginActionResult;
+type UtilityTextFailure = import('../shared/utilityTextResult').UtilityTextFailure;
 
 /* ── Environment check ── */
 
@@ -4160,6 +4161,7 @@ interface ElectronAPI {
         targetSessionId?: string;
         currentCommand?: string;
       }) => Promise<{
+        ok: true;
         command: string;
         filePath: string;
         content: string;
@@ -4177,7 +4179,7 @@ interface ElectronAPI {
           spawnError?: string;
           error?: string;
         };
-      }>;
+      } | UtilityTextFailure>;
       listRuns: (id: string, limit?: number) => Promise<unknown[]>;
       listSidebarIndexRuns: () => Promise<unknown[]>;
       listCostSummaries: () => Promise<unknown[]>;

@@ -60,6 +60,7 @@ import { createLogger } from '../logger.js';
 import type { DrizzleScheduleStorage } from '../scheduler-host/storage.js';
 import { executePreRunHook } from '../scheduler-host/pre-run-hook.js';
 import {
+  HookScriptUtilityModelError,
   installHookScript,
   stabilizeHookCommand,
 } from '../scheduler-host/hook-script-generator.js';
@@ -379,7 +380,7 @@ export function registerScheduleHandlers(getMaker?: () => Maker | null): void {
     if (!maker) throwIpcError('INTERNAL', 'maker not ready for hook script generation');
     const workingDir = await resolveHookWorkingDir(body);
     try {
-      return await installHookScript(
+      const installed = await installHookScript(
         {
           maker,
           fallbackDir: path.join(app.getPath('userData'), 'schedule-hooks'),
@@ -392,7 +393,9 @@ export function registerScheduleHandlers(getMaker?: () => Maker | null): void {
           currentCommand: typeof body.currentCommand === 'string' ? body.currentCommand : undefined,
         },
       );
+      return { ok: true as const, ...installed };
     } catch (err) {
+      if (err instanceof HookScriptUtilityModelError) return err.failure;
       throwIpcError('INTERNAL', err instanceof Error ? err.message : String(err));
     }
   });

@@ -81,10 +81,17 @@ describe('utility one-shot candidates', () => {
     expect(candidates.map((candidate) => candidate.providerId)).toEqual(['litellm-gpt-5.4-mini']);
   });
 
-  it('returns null when every configured candidate is unavailable', async () => {
+  it('returns credential-safe diagnostics when every configured candidate is unavailable', async () => {
     const result = await requestUtilityText(makerMock(false), 'hello');
 
-    expect(result).toBeNull();
+    expect(result).toEqual({
+      ok: false,
+      reason: 'no_candidate',
+      attempts: [
+        expect.objectContaining({ providerId: 'codex-gpt-5.4-mini', reason: 'not_authenticated' }),
+        expect.objectContaining({ providerId: 'litellm-gpt-5.4-mini', reason: 'api_key_missing' }),
+      ],
+    });
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
@@ -100,10 +107,71 @@ describe('utility one-shot candidates', () => {
     const result = await requestUtilityText(maker, 'hello', { maxTokens: 10 });
 
     expect(result).toMatchObject({
+      ok: true,
       text: 'lite text',
       providerId: 'litellm-gpt-5.4-mini',
       model: 'gpt-5.4-mini',
       transport: 'litellm-chat-completions',
+    });
+  });
+
+  it('preserves failed candidate and HTTP status diagnostics without response bodies', async () => {
+    readKey.mockReturnValue('proxy-key');
+    const maker = makerMock(true);
+    vi.mocked(maker.oneShot).mockRejectedValueOnce(new Error('upstream included sensitive details'));
+    fetchMock.mockResolvedValueOnce({
+      ok: false,
+      status: 403,
+      body: { cancel: vi.fn(async () => undefined) },
+    } as never);
+
+    const result = await requestUtilityText(maker, 'hello');
+
+    expect(result).toMatchObject({
+      ok: false,
+      reason: 'all_candidates_failed',
+      attempts: [
+        expect.objectContaining({ providerId: 'codex-gpt-5.4-mini', reason: 'request_failed' }),
+        expect.objectContaining({ providerId: 'litellm-gpt-5.4-mini', reason: 'http_error', httpStatus: 403 }),
+      ],
+    });
+    expect(JSON.stringify(result)).not.toContain('sensitive details');
+  });
+
+  it('distinguishes an empty response from generic request failures', async () => {
+    getProfiles.mockReturnValue([{
+      id: 'codex-gpt-5.4-mini',
+      model: 'gpt-5.4-mini',
+      transport: 'codex-responses',
+      auth: 'codex',
+      settingsTab: 'providers',
+      missingCredentialMessage: 'codex missing',
+    }]);
+    const maker = makerMock(true);
+    vi.mocked(maker.oneShot).mockResolvedValueOnce('   ');
+
+    const result = await requestUtilityText(maker, 'hello');
+
+    expect(result).toMatchObject({
+      ok: false,
+      reason: 'empty_response',
+      attempts: [expect.objectContaining({ reason: 'empty_response' })],
+    });
+  });
+
+  it('distinguishes a timeout when every executable candidate times out', async () => {
+    const maker = makerMock(true);
+    vi.mocked(maker.oneShot).mockRejectedValueOnce(new Error('request timed out'));
+
+    const result = await requestUtilityText(maker, 'hello');
+
+    expect(result).toMatchObject({
+      ok: false,
+      reason: 'timeout',
+      attempts: [
+        expect.objectContaining({ providerId: 'litellm-gpt-5.4-mini', status: 'skipped' }),
+        expect.objectContaining({ providerId: 'codex-gpt-5.4-mini', reason: 'timeout' }),
+      ],
     });
   });
 });

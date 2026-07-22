@@ -5214,6 +5214,26 @@
         "aiGenerate": "スクリプトを生成",
         "aiGenerating": "生成中…",
         "aiDone": "スクリプトを {{path}} に書き込みました。「テスト」で確認することをおすすめします",
+        "aiFailure": {
+          "no_candidate": "現在利用できる軽量モデルがありません。OpenAI または Cindy AI に接続してから、もう一度お試しください。",
+          "all_candidates_failed": "すべての軽量モデルへのリクエストが失敗しました。プロバイダー接続を確認してください。",
+          "empty_response": "軽量モデルから利用可能な内容が返されませんでした。再試行するか、プロバイダー接続を確認してください。",
+          "timeout": "軽量モデルへのリクエストがタイムアウトしました。接続を確認して再試行してください。",
+          "checkedCandidates": "確認した候補：",
+          "openProviders": "モデルプロバイダーを開く",
+          "attemptReason": {
+            "unsupportedTransport": "この操作では未対応",
+            "agentUnavailable": "Codex を利用できません",
+            "notAuthenticated": "OpenAI へのログインが必要です",
+            "authProbeFailed": "OpenAI のログイン状態を確認できません",
+            "apiKeyMissing": "Cindy AI Key を利用できません",
+            "endpointMissing": "Cindy AI エンドポイントを利用できません",
+            "timeout": "リクエストがタイムアウトしました",
+            "emptyResponse": "応答が空です",
+            "httpError": "HTTP {{status}}",
+            "requestFailed": "リクエストに失敗しました"
+          }
+        },
         "browse": "スクリプトファイルを選択（入力欄へのドラッグ＆ドロップも可）"
       },
       "validation": {

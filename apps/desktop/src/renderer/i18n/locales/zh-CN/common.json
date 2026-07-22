@@ -5214,6 +5214,26 @@
         "aiGenerate": "生成脚本",
         "aiGenerating": "生成中…",
         "aiDone": "脚本已写入 {{path}}，建议点「测试」验证一次",
+        "aiFailure": {
+          "no_candidate": "当前没有可用的轻量模型。请先连接 OpenAI 或 Cindy AI，然后重试。",
+          "all_candidates_failed": "所有轻量模型请求均失败。请检查供应商连接后重试。",
+          "empty_response": "轻量模型未返回可用内容。请重试或检查供应商连接。",
+          "timeout": "轻量模型请求超时。请检查网络和供应商连接后重试。",
+          "checkedCandidates": "已检查的候选：",
+          "openProviders": "前往模型供应商",
+          "attemptReason": {
+            "unsupportedTransport": "不支持当前操作",
+            "agentUnavailable": "Codex 不可用",
+            "notAuthenticated": "需要登录 OpenAI",
+            "authProbeFailed": "无法确认 OpenAI 登录状态",
+            "apiKeyMissing": "Cindy AI Key 不可用",
+            "endpointMissing": "Cindy AI endpoint 不可用",
+            "timeout": "请求超时",
+            "emptyResponse": "返回内容为空",
+            "httpError": "HTTP {{status}}",
+            "requestFailed": "请求失败"
+          }
+        },
         "browse": "选择脚本文件（也可直接拖拽到输入框）"
       },
       "validation": {
