@@ -173,7 +173,7 @@ function stripLocalMentionChips(node: JSONContent | null): JSONContent | null {
   if (!node) return null;
   if (node.type === 'mentionChip') {
     const kind = (node.attrs as { kind?: string } | undefined)?.kind;
-    if (kind === 'file' || kind === 'dir') return null;
+    if (kind === 'file' || kind === 'dir' || kind === 'agent') return null;
   }
   if (!node.content) return node;
   const filtered = node.content
