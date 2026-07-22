@@ -1564,6 +1564,7 @@
     "computerUse": {
       "title": "Automation",
       "description": "Let agents use your computer and connected devices to get things done for you. Browser automation uses an isolated browser; Android automation uses ADB; computer automation relies on a local driver.",
+      "codexRefreshDeferred": "Setting saved, but Codex is busy. Restart the app to apply it to new Codex sessions.",
       "browser": {
         "title": "Browser automation",
         "description": "A dedicated browser for agents — separate from your everyday Chrome",
@@ -1662,7 +1663,7 @@
         "title": "Computer automation",
         "description": "Let agents inspect windows, read UI, click, and type",
         "toggleAria": "Toggle direct computer control",
-        "driverInfo": "Computer automation is powered by the open-source CUA Driver. It runs locally to read the screen and perform actions such as clicking and typing. Enabling it requires core permissions; during actual use, macOS may still show additional confirmations for a target app or a specific action.",
+        "driverInfo": "Computer automation is powered by the open-source CUA Driver. It runs locally to read the screen and perform actions such as clicking and typing.",
         "openSourceProject": "View open-source project",
         "detected": "Detected {{version}} ({{path}}, {{daemon}})",
         "daemonRunning": "daemon running",
@@ -1671,8 +1672,9 @@
         "installing": "Installing cua-driver...",
         "authorizing": "Waiting for system permissions. Complete Accessibility and Screen Recording in the Cua Driver permission window.",
         "permissionIntro": {
-          "title": "Prepare computer automation permissions",
-          "description": "{{appName}} will install or open Cua Driver's permission flow next, and may jump to macOS System Settings. First grant the core Accessibility and Screen Recording permissions to CuaDriver. During later use, macOS may still show additional confirmations for a target app or a specific action. Only approve those prompts when you intentionally started a Computer Use task. Then return to {{appName}} and it will check automatically.",
+          "title": "Enable computer automation",
+          "description": "{{appName}} will install or start Cua Driver locally to read the screen and perform actions such as clicking and typing. Enable it only when you intentionally started a computer automation task.",
+          "macosDescription": "{{appName}} will install or open Cua Driver's permission flow next, and may jump to macOS System Settings. First grant the core Accessibility and Screen Recording permissions to CuaDriver. During later use, macOS may still show additional confirmations for a target app or a specific action. Only approve those prompts when you intentionally started a Computer Use task. Then return to {{appName}} and it will check automatically.",
           "confirm": "Continue",
           "cancel": "Not now"
         },

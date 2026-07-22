@@ -462,6 +462,10 @@ interface PluginEnableState {
   globalOverride?: { enabled: boolean } | null;
 }
 
+interface PluginEnableUpdateResult {
+  codexMcpRefreshed: boolean;
+}
+
 interface BrowserAvailability {
   detected: boolean;
   browserKind: string | null;
@@ -4365,9 +4369,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.invoke('maker:plugins:list', workingDir),
       getState: (id: string, workingDir?: string): Promise<PluginEnableState> =>
         ipcRenderer.invoke('maker:plugins:get-state', id, workingDir),
-      setEnabled: (id: string, enabled: boolean): Promise<void> =>
+      setEnabled: (id: string, enabled: boolean): Promise<PluginEnableUpdateResult> =>
         ipcRenderer.invoke('maker:plugins:set-enabled', id, enabled),
-      clearEnabled: (id: string): Promise<void> =>
+      clearEnabled: (id: string): Promise<PluginEnableUpdateResult> =>
         ipcRenderer.invoke('maker:plugins:clear-enabled', id),
       setProjectEnabled: (workingDir: string, id: string, enabled: boolean): Promise<void> =>
         ipcRenderer.invoke('maker:plugins:set-project-enabled', workingDir, id, enabled),

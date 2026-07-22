@@ -1563,6 +1563,7 @@
     "computerUse": {
       "title": "自动操作",
       "description": "让 agent 使用电脑和已连接设备替你完成任务。浏览器自动化使用独立浏览器；Android 自动化使用 ADB；电脑自动化依赖本机 driver。",
+      "codexRefreshDeferred": "设置已保存，但 Codex 正忙；重启应用后将对 Codex 新会话生效",
       "browser": {
         "title": "自动操作浏览器",
         "description": "一个 agent 专用的独立浏览器，与你日常的 Chrome 互不影响",
@@ -1661,7 +1662,7 @@
         "title": "自动操作电脑",
         "description": "让 agent 检查窗口、读取界面并点击或输入",
         "toggleAria": "切换直接操作电脑",
-        "driverInfo": "自动操作电脑由开源 CUA Driver 提供，运行在本机，用于读取屏幕并执行点击、输入等操作。启用前需要授予核心权限；实际使用时，macOS 仍可能按目标 App 或具体动作弹出额外确认。",
+        "driverInfo": "自动操作电脑由开源 CUA Driver 提供，运行在本机，用于读取屏幕并执行点击、输入等操作。",
         "openSourceProject": "查看开源项目",
         "detected": "已检测到 {{version}}（{{path}}，{{daemon}}）",
         "daemonRunning": "后台服务运行中",
@@ -1670,9 +1671,10 @@
         "installing": "正在安装 cua-driver...",
         "authorizing": "正在等待系统授权。请在弹出的 Cua Driver 授权窗口中完成「辅助功能」和「屏幕录制」授权。",
         "permissionIntro": {
-          "title": "准备授予电脑自动操作权限",
-          "description": "接下来 {{appName}} 会安装或打开 Cua Driver 的授权流程，并可能跳转到 macOS 系统设置。请先为 CuaDriver 授予「辅助功能」和「屏幕录制」核心权限；之后在使用过程中，macOS 可能还会按目标 App 或具体动作弹出额外确认。只有在你主动发起 Computer Use 任务时才应确认这些请求。完成后回到 {{appName}}，它会自动检查并启用。",
-          "confirm": "继续授权",
+          "title": "启用自动操作电脑",
+          "description": "{{appName}} 将在本机安装或启动 Cua Driver，用于读取屏幕并执行点击、输入等操作。请仅在你主动发起自动操作电脑任务时启用。",
+          "macosDescription": "接下来 {{appName}} 会安装或打开 Cua Driver 的授权流程，并可能跳转到 macOS 系统设置。请先为 CuaDriver 授予「辅助功能」和「屏幕录制」核心权限；之后在使用过程中，macOS 可能还会按目标 App 或具体动作弹出额外确认。只有在你主动发起 Computer Use 任务时才应确认这些请求。完成后回到 {{appName}}，它会自动检查并启用。",
+          "confirm": "继续",
           "cancel": "稍后再说"
         },
         "permissionGuide": {

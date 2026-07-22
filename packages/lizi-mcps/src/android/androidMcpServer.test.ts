@@ -102,6 +102,31 @@ describe('createAndroidMcpServer', () => {
     await h.cleanup();
   });
 
+  it('forwards the runtime agent kind with the current session context', async () => {
+    const deps: AndroidMcpDeps = {
+      callTool: vi.fn(async () => ({ ok: true, data: [] })),
+    };
+    const h = await makeHarness(deps, {
+      getSessionContext: () => ({
+        agentKind: 'codex',
+        workingDir: '/repo',
+        sessionId: 'android-codex-session',
+      }),
+    });
+
+    await h.client.callTool({
+      name: 'call_tool',
+      arguments: { name: 'list_devices', args: {} },
+    });
+
+    expect(deps.callTool).toHaveBeenCalledWith(
+      'list_devices',
+      {},
+      { sessionId: 'android-codex-session', agentKind: 'codex' },
+    );
+    await h.cleanup();
+  });
+
   it('returns screenshot image blocks for get_device_state', async () => {
     const deps: AndroidMcpDeps = {
       callTool: vi.fn(async () => ({

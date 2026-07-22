@@ -2,7 +2,12 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { jsonObjectArg } from '../json-object-arg.js';
 import { resolvePathInsideRoot, PathBoundaryError } from '../shared/assertInsidePath.js';
-import type { ComputerMcpDeps, ComputerMcpToolName, LiziMcpSessionContext } from '../types.js';
+import type {
+  ComputerMcpCallContext,
+  ComputerMcpDeps,
+  ComputerMcpToolName,
+  LiziMcpSessionContext,
+} from '../types.js';
 import {
   callComputerTool,
   COMPUTER_TOOLS,
@@ -212,8 +217,20 @@ function withSessionArg(
   };
 }
 
+function readCallContext(options: ComputerMcpServerOptions): ComputerMcpCallContext | undefined {
+  const sessionContext = options.getSessionContext?.();
+  const sessionId = sessionContext?.sessionId ?? options.sessionId;
+  const agentKind = sessionContext?.agentKind;
+  return sessionId || agentKind
+    ? {
+        ...(sessionId ? { sessionId } : {}),
+        ...(agentKind ? { agentKind } : {}),
+      }
+    : undefined;
+}
+
 function readSessionId(options: ComputerMcpServerOptions): string | undefined {
-  return options.getSessionContext?.().sessionId ?? options.sessionId;
+  return readCallContext(options)?.sessionId;
 }
 
 export function createComputerMcpServer(
@@ -276,7 +293,8 @@ export function createComputerMcpServer(
     if (!parsed.success) {
       return validationError(name, schema, parsed.error);
     }
-    const sessionId = readSessionId(options);
+    const callContext = readCallContext(options);
+    const sessionId = callContext?.sessionId;
     const parsedData = parsed.data as Record<string, unknown>;
 
     // 快照代际护栏:element_index 指向"某次 get_window_state 的第几项",观察和
@@ -303,7 +321,7 @@ export function createComputerMcpServer(
         deps,
         name as ComputerMcpToolName,
         parsedArgs,
-        sessionId ? { sessionId } : undefined,
+        callContext,
       );
       const snapshotId = recordWindowSnapshot(name as ComputerMcpToolName, parsedData, data, sessionId);
       return textResult({

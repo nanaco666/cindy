@@ -599,14 +599,14 @@ describe('createComputerMcpServer', () => {
       x: 10,
       y: 20,
       session: 'dynamic-session-1',
-    }, { sessionId: 'dynamic-session-1' });
+    }, { sessionId: 'dynamic-session-1', agentKind: 'codex' });
     expect(deps.callTool).toHaveBeenNthCalledWith(2, 'click', {
       pid: 123,
       window_id: 7,
       x: 11,
       y: 21,
       session: 'dynamic-session-2',
-    }, { sessionId: 'dynamic-session-2' });
+    }, { sessionId: 'dynamic-session-2', agentKind: 'codex' });
     await h.cleanup();
   });
 
@@ -686,7 +686,7 @@ describe('createComputerMcpServer', () => {
       output_dir: path.join(root, 'rec'),
       record_video: true,
       session: 'recording-session',
-    }, { sessionId: 'recording-session' });
+    }, { sessionId: 'recording-session', agentKind: 'claude-code' });
     await h.cleanup();
     await fs.rm(root, { recursive: true, force: true });
   });
@@ -806,7 +806,7 @@ describe('createComputerMcpServer', () => {
       dir: path.join(root, 'rec'),
       delay_ms: 100,
       stop_on_error: false,
-    });
+    }, { agentKind: 'claude-code' });
     await h.cleanup();
     await fs.rm(root, { recursive: true, force: true });
   });

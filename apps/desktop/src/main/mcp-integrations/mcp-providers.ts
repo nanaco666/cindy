@@ -67,11 +67,16 @@ export function createDesktopMcpProviders(deps: DesktopMcpProvidersDeps): LiziMc
     // 先传完整内置列表；按会话启停由下面的 isEnabled 包装处理。
     enabled: BUILTIN_LIZI_MCP_IDS,
     android: getAndroidMcpDeps({
-      isAndroidAutomationEnabled: () => pluginRegistry.isEnabled('android'),
+      isAndroidAutomationEnabled: (context) =>
+        // Codex provider presence is the bridge-creation enablement snapshot.
+        // Keep that snapshot for a busy turn when a disable refresh is deferred;
+        // a successfully rebuilt bridge omits this provider via the outer gate.
+        context?.agentKind === 'codex' || pluginRegistry.isEnabled('android'),
     }),
     browser: getBrowserMcpDeps(),
     computer: getComputerMcpDeps({
-      isComputerUseEnabled: () => pluginRegistry.isEnabled('computer'),
+      isComputerUseEnabled: (context) =>
+        context?.agentKind === 'codex' || pluginRegistry.isEnabled('computer'),
     }),
     // lizi_feishu 已于 2026-07-16 摘壳:飞书能力(44 精品 + 123 只读直通)迁入
     // 内置意识 xd-feishu;2026-07-17 起授权切到意识 OAuth broker

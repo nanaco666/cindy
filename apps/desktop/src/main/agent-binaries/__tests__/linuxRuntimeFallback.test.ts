@@ -52,28 +52,24 @@ describe('runtimeVersionMatchesPin', () => {
 
 describeOnLinuxFileSystem('install path helpers', () => {
   it('places pinned private binaries under userData/agent-runtime/<kind>/bin', () => {
-    const userDataPath = path.join(os.tmpdir(), 'cindy-runtime-path-test');
-    expect(runtimeInstallRoot(userDataPath, 'codex')).toBe(
-      path.join(userDataPath, 'agent-runtime', 'codex'),
+    expect(runtimeInstallRoot('/userdata', 'codex')).toBe(path.join('/userdata', 'agent-runtime', 'codex'));
+    expect(runtimeInstallRoot('/userdata', 'claude-code')).toBe(
+      path.join('/userdata', 'agent-runtime', 'claude-code'),
     );
-    expect(runtimeInstallRoot(userDataPath, 'claude-code')).toBe(
-      path.join(userDataPath, 'agent-runtime', 'claude-code'),
+    expect(privateBinaryPath('/userdata', 'codex')).toBe(
+      path.join('/userdata', 'agent-runtime', 'codex', 'bin', 'codex'),
     );
-    expect(privateBinaryPath(userDataPath, 'codex')).toBe(
-      path.join(userDataPath, 'agent-runtime', 'codex', 'bin', 'codex'),
-    );
-    expect(privateBinaryPath(userDataPath, 'claude-code')).toBe(
-      path.join(userDataPath, 'agent-runtime', 'claude-code', 'bin', 'claude'),
+    expect(privateBinaryPath('/userdata', 'claude-code')).toBe(
+      path.join('/userdata', 'agent-runtime', 'claude-code', 'bin', 'claude'),
     );
   });
 
   it('resolves the exact legacy CDN cache path for migration', () => {
-    const userDataPath = path.join(os.tmpdir(), 'cindy-runtime-path-test');
-    expect(legacyManagedBinaryPath(userDataPath, 'claude-code')).toBe(
-      path.join(userDataPath, 'claude-code', '2.1.215', 'claude'),
+    expect(legacyManagedBinaryPath('/userdata', 'claude-code')).toBe(
+      path.join('/userdata', 'claude-code', '2.1.215', 'claude'),
     );
-    expect(legacyManagedBinaryPath(userDataPath, 'codex')).toBe(
-      path.join(userDataPath, 'codex', '0.144.6', 'codex'),
+    expect(legacyManagedBinaryPath('/userdata', 'codex')).toBe(
+      path.join('/userdata', 'codex', '0.144.6', 'codex'),
     );
   });
 

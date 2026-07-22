@@ -1331,12 +1331,14 @@ emulator-5554 device product:sdk_gphone64_arm64 model:Pixel_8 device:emu transpo
   });
 
   it('respects the plugin gate in getAndroidMcpDeps', async () => {
-    const deps = getAndroidMcpDeps({ isAndroidAutomationEnabled: () => false });
-    await expect(deps.callTool('status', {})).resolves.toEqual({
+    const isAndroidAutomationEnabled = vi.fn(() => false);
+    const deps = getAndroidMcpDeps({ isAndroidAutomationEnabled });
+    await expect(deps.callTool('status', {}, { agentKind: 'codex' })).resolves.toEqual({
       ok: false,
       errorCode: 'ANDROID_DRIVER_ERROR',
       message: 'Android automation is disabled in Settings.',
     });
+    expect(isAndroidAutomationEnabled).toHaveBeenCalledWith({ agentKind: 'codex' });
     expect(spawnMock).not.toHaveBeenCalled();
   });
 });

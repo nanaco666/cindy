@@ -2326,9 +2326,12 @@ describe('computer mcp integration', () => {
   });
 
   it('checks current Computer Use opt-in before dispatching MCP tool calls', async () => {
-    const deps = getComputerMcpDeps({ isComputerUseEnabled: () => false });
+    const isComputerUseEnabled = vi.fn(() => false);
+    const deps = getComputerMcpDeps({ isComputerUseEnabled });
 
-    await expect(deps.callTool('list_windows', {})).rejects.toThrow('Computer Use is disabled');
+    await expect(deps.callTool('list_windows', {}, { agentKind: 'codex' }))
+      .rejects.toThrow('Computer Use is disabled');
+    expect(isComputerUseEnabled).toHaveBeenCalledWith({ agentKind: 'codex' });
     expect(spawnMock).not.toHaveBeenCalled();
   });
 

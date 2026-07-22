@@ -549,6 +549,8 @@ export interface ComputerDriverPermissionState {
 
 export interface ComputerMcpCallContext {
   sessionId?: string;
+  /** Identifies the agent runtime whose MCP server dispatched this call. */
+  agentKind?: string;
 }
 
 export interface ComputerMcpDeps {
@@ -676,6 +678,8 @@ export interface AndroidDeviceStateResult {
 
 export interface AndroidMcpCallContext {
   sessionId?: string;
+  /** Identifies the agent runtime whose MCP server dispatched this call. */
+  agentKind?: string;
 }
 
 export interface AndroidMcpDeps {

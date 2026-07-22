@@ -1563,6 +1563,7 @@
     "computerUse": {
       "title": "자동 조작",
       "description": "에이전트가 컴퓨터와 연결된 기기를 사용해 사용자를 대신해 작업합니다. 브라우저 자동화는 독립 브라우저를 사용하고, Android 자동화는 ADB를 사용하며, 컴퓨터 자동화는 로컬 드라이버에 의존합니다.",
+      "codexRefreshDeferred": "설정은 저장되었지만 Codex가 사용 중입니다. 앱을 다시 시작하면 새 Codex 세션에 적용됩니다.",
       "browser": {
         "title": "자동 조작 브라우저",
         "description": "에이전트 전용 독립 브라우저 — 평소 쓰는 Chrome과 분리됩니다",
@@ -1661,7 +1662,7 @@
         "title": "자동 조작 컴퓨터",
         "description": "에이전트가 창을 검사하고 UI를 읽고 클릭하거나 입력할 수 있습니다",
         "toggleAria": "컴퓨터 직접 제어 전환",
-        "driverInfo": "컴퓨터 자동 조작은 오픈 소스 CUA Driver로 제공됩니다. 로컬에서 실행되어 화면을 읽고 클릭, 입력 등의 작업을 수행합니다. 활성화하려면 기본 권한이 필요하며, 실제 사용 중에는 macOS가 대상 앱이나 특정 동작에 대해 추가 확인을 표시할 수 있습니다.",
+        "driverInfo": "컴퓨터 자동 조작은 오픈 소스 CUA Driver로 제공됩니다. 로컬에서 실행되어 화면을 읽고 클릭, 입력 등의 작업을 수행합니다.",
         "openSourceProject": "오픈 소스 프로젝트 보기",
         "detected": "{{version}} 감지됨({{path}}, {{daemon}})",
         "daemonRunning": "백그라운드 서비스 실행 중",
@@ -1670,8 +1671,9 @@
         "installing": "cua-driver 설치 중...",
         "authorizing": "시스템 권한을 기다리는 중입니다. Cua Driver 권한 창에서 손쉬운 사용 및 화면 기록 권한을 완료하세요.",
         "permissionIntro": {
-          "title": "컴퓨터 자동 조작 권한 준비",
-          "description": "다음 단계에서 {{appName}}가 Cua Driver 설치 또는 권한 부여 흐름을 열고, 필요하면 macOS 시스템 설정으로 이동합니다. 먼저 CuaDriver에 손쉬운 사용 및 화면 기록 기본 권한을 부여하세요. 이후 실제 사용 중에는 macOS가 대상 앱이나 특정 동작에 대해 추가 확인을 표시할 수 있습니다. 사용자가 직접 Computer Use 작업을 시작한 경우에만 승인하세요. 완료 후 {{appName}}로 돌아오면 자동으로 확인하고 활성화합니다.",
+          "title": "컴퓨터 자동 조작 활성화",
+          "description": "{{appName}}가 Cua Driver를 로컬에 설치하거나 시작하여 화면을 읽고 클릭, 입력 등의 작업을 수행합니다. 사용자가 직접 컴퓨터 자동 조작 작업을 시작한 경우에만 활성화하세요.",
+          "macosDescription": "다음 단계에서 {{appName}}가 Cua Driver 설치 또는 권한 부여 흐름을 열고, 필요하면 macOS 시스템 설정으로 이동합니다. 먼저 CuaDriver에 손쉬운 사용 및 화면 기록 기본 권한을 부여하세요. 이후 실제 사용 중에는 macOS가 대상 앱이나 특정 동작에 대해 추가 확인을 표시할 수 있습니다. 사용자가 직접 Computer Use 작업을 시작한 경우에만 승인하세요. 완료 후 {{appName}}로 돌아오면 자동으로 확인하고 활성화합니다.",
           "confirm": "계속",
           "cancel": "나중에"
         },
