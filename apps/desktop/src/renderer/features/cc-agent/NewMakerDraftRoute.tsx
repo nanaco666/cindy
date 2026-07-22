@@ -452,7 +452,7 @@ export function NewMakerDraftRoute() {
   // device-link「以被控端为准」:远程草稿用被控端经隧道带来的 providers(per-provider,含 fast 能力);
   // 本地草稿用本机 providers。fast 判定统一交给 resolveFastSupported(不在控制端另写远程逻辑)。
   const { providers: localProviders } = useProviders();
-  const { providers: deviceProviders } = useDeviceProviders(effectiveDeviceLinkDeviceId);
+  const { providers: deviceProviders, loading: deviceProvidersLoading } = useDeviceProviders(effectiveDeviceLinkDeviceId);
   const providers = effectiveDeviceLinkDeviceId ? deviceProviders : localProviders;
 
   // 草稿当前**生效来源 id**(= ModelSelector 高亮 / ChatInput effectiveSourceId 同口径):显式选中且
@@ -1113,8 +1113,8 @@ export function NewMakerDraftRoute() {
     ): boolean | undefined => {
       if (sendInFlightRef.current) return false;
       // device-link 切设备后,capabilities/providers hook 可能还没 re-render 到新设备快照;
-      // 此时 effectiveFastMode / supportsFastMode 仍基于旧设备,发送会造成 model/fast 不一致。
-      if (isDeviceLinkDraft && capabilitiesLoading) return false;
+      // 此时 effectiveFastMode / supportsFastMode / sendProviderId 仍基于旧设备。
+      if (isDeviceLinkDraft && (capabilitiesLoading || deviceProvidersLoading)) return false;
       // 草稿里选定的来源(供应商):ChatInput 在发送时把"仍连接的显式选择"经 opts 传上来
       // (未选 / 已断开 → null = 跟随默认路由)。透传给 createSession 落盘 sessions.provider_id,
       // 让新会话首个请求就走对来源,与"会话内切来源"行为一致。device-link 远程会话不支持(下方分支跳过)。
@@ -1599,6 +1599,7 @@ export function NewMakerDraftRoute() {
       isRemoteProjectDraft,
       isDeviceLinkDraft,
       capabilitiesLoading,
+      deviceProvidersLoading,
       effectiveDeviceLinkDeviceId,
       effectiveDeviceLinkDeviceName,
       effectiveExtraDirs,
@@ -1628,7 +1629,7 @@ export function NewMakerDraftRoute() {
   // 失败抛错 → NewGoalDialog 内联报错并保持打开。
   const handleCreateGoal = useCallback(
     async (objective: string, limits: GoalLimitValues): Promise<void> => {
-      if (isDeviceLinkDraft && capabilitiesLoading) {
+      if (isDeviceLinkDraft && (capabilitiesLoading || deviceProvidersLoading)) {
         throw new Error('device capabilities still loading');
       }
       const { proceed } = await vendorAuthGate.checkAndConfirm(authVendor, {
