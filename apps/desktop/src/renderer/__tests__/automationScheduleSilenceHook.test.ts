@@ -10,6 +10,7 @@ import {
   hasSessionAttention,
 } from '@/lib/sessionAttentionStore';
 import {
+  observeNextSessionTerminalNotificationOwnedByScheduler,
   observeNextSessionDoneSilenced,
   resetSilencedSessionDoneStoreForTests,
 } from '@/lib/silencedSessionDoneStore';
@@ -43,11 +44,32 @@ afterEach(() => {
 });
 
 describe('useAutomationScheduleSessionIndex silence events', () => {
+  it('marks a bound scheduler session as owning its terminal notification', () => {
+    renderHook(() => useAutomationScheduleSessionIndex());
+
+    act(() => {
+      scheduleEventListener?.({
+        type: 'session-bound',
+        scheduleId: 'schedule-1',
+        runId: 'run-1',
+        sessionId: 'session-1',
+      });
+    });
+
+    expect(observeNextSessionTerminalNotificationOwnedByScheduler('session-1')).toBe(true);
+  });
+
   it('registers silenced runs without clearing older session attention', () => {
     addSessionAttention('session-1');
     renderHook(() => useAutomationScheduleSessionIndex());
 
     act(() => {
+      scheduleEventListener?.({
+        type: 'session-bound',
+        scheduleId: 'schedule-1',
+        runId: 'run-1',
+        sessionId: 'session-1',
+      });
       scheduleEventListener?.({
         type: 'silenced',
         scheduleId: 'schedule-1',
@@ -72,6 +94,12 @@ describe('useAutomationScheduleSessionIndex silence events', () => {
 
     act(() => {
       scheduleEventListener?.({
+        type: 'session-bound',
+        scheduleId: 'schedule-1',
+        runId: 'run-1',
+        sessionId: 'session-1',
+      });
+      scheduleEventListener?.({
         type: 'silenced',
         scheduleId: 'schedule-1',
         runId: 'run-1',
@@ -86,6 +114,7 @@ describe('useAutomationScheduleSessionIndex silence events', () => {
     });
 
     expect(observeNextSessionDoneSilenced('session-1')).toBe(false);
+    expect(observeNextSessionTerminalNotificationOwnedByScheduler('session-1')).toBe(true);
   });
 
   it('clears only attention that could have been created by the silenced run fallback', () => {
