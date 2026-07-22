@@ -34,6 +34,16 @@ import {
   buildMobileSettingsOverview,
   type MobileSettingsRow,
 } from '@/settings/mobileSettings';
+import {
+  clearMobileVoiceLiteLlmSettings,
+  hasMobileVoiceLiteLlmSettings,
+  saveMobileVoiceLiteLlmSettings,
+} from '@/session/mobileVoiceLiteLlmSettings';
+import {
+  getMobileVoiceServiceMode,
+  setMobileVoiceServiceMode,
+  type MobileVoiceServiceMode,
+} from '@/session/mobileVoiceServiceMode';
 import { buildMobileUpdateInfoRows, currentMobileOtaVersion } from '@/settings/updateInfo';
 import { runManualUpdateCheck } from '@/update/manualUpdateCheck';
 import { useBundleUpdatePrompt } from '@/update/useBundleUpdatePrompt';
@@ -60,6 +70,12 @@ export default function SettingsScreen() {
   const [copiedRowId, setCopiedRowId] = useState<string | null>(null);
   const [loggingOut, setLoggingOut] = useState(false);
   const [debugExpanded, setDebugExpanded] = useState(false);
+  const [voiceExpanded, setVoiceExpanded] = useState(false);
+  const [voiceServiceMode, setVoiceServiceModeState] = useState<MobileVoiceServiceMode>('cindy');
+  const [voiceLiteLlmConfigured, setVoiceLiteLlmConfigured] = useState(false);
+  const [voiceLiteLlmDraft, setVoiceLiteLlmDraft] = useState('');
+  const [voiceSettingsBusy, setVoiceSettingsBusy] = useState(false);
+  const [voiceSettingsMessage, setVoiceSettingsMessage] = useState<string | null>(null);
   const [updatePhase, setUpdatePhase] = useState<UpdatePhase>('idle');
   const [updateMessage, setUpdateMessage] = useState<string | null>(null);
   const updateCheckInFlightRef = useRef(false);
@@ -183,6 +199,66 @@ export default function SettingsScreen() {
       updateCheckInFlightRef.current = false;
     }
   }, [checkBundleUpdate, updateCheckEnabled, updatesEnabled]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void Promise.all([hasMobileVoiceLiteLlmSettings(), getMobileVoiceServiceMode()])
+      .then(([configured, mode]) => {
+        if (cancelled) return;
+        setVoiceLiteLlmConfigured(configured);
+        setVoiceServiceModeState(mode);
+      })
+      .catch(() => {
+        if (!cancelled) setVoiceLiteLlmConfigured(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const selectVoiceServiceMode = useCallback(async (mode: MobileVoiceServiceMode) => {
+    if (voiceSettingsBusy || mode === voiceServiceMode) return;
+    setVoiceSettingsBusy(true);
+    setVoiceSettingsMessage(null);
+    try {
+      await setMobileVoiceServiceMode(mode);
+      setVoiceServiceModeState(mode);
+    } catch (err) {
+      setVoiceSettingsMessage(err instanceof Error ? err.message : String(err));
+    } finally {
+      setVoiceSettingsBusy(false);
+    }
+  }, [voiceServiceMode, voiceSettingsBusy]);
+
+  const saveVoiceLiteLlmKey = useCallback(async () => {
+    if (voiceSettingsBusy) return;
+    setVoiceSettingsBusy(true);
+    setVoiceSettingsMessage(null);
+    try {
+      await saveMobileVoiceLiteLlmSettings({ proxyApiKey: voiceLiteLlmDraft });
+      setVoiceLiteLlmDraft('');
+      setVoiceLiteLlmConfigured(true);
+      setVoiceSettingsMessage('LiteLLM Key 已保存。');
+    } catch (err) {
+      setVoiceSettingsMessage(err instanceof Error ? err.message : String(err));
+    } finally {
+      setVoiceSettingsBusy(false);
+    }
+  }, [voiceLiteLlmDraft, voiceSettingsBusy]);
+
+  const clearVoiceLiteLlmKey = useCallback(async () => {
+    if (voiceSettingsBusy) return;
+    setVoiceSettingsBusy(true);
+    setVoiceSettingsMessage(null);
+    try {
+      await clearMobileVoiceLiteLlmSettings();
+      setVoiceLiteLlmDraft('');
+      setVoiceLiteLlmConfigured(false);
+      setVoiceSettingsMessage('LiteLLM Key 已清除。');
+    } finally {
+      setVoiceSettingsBusy(false);
+    }
+  }, [voiceSettingsBusy]);
 
   const updateSelfDeviceNameDraft = useCallback((value: string) => {
     selfDeviceNameDraftRef.current = value;
@@ -364,6 +440,11 @@ export default function SettingsScreen() {
     setDebugExpanded((value) => !value);
   }, []);
 
+  const toggleVoice = useCallback(() => {
+    configureCollapseAnimation();
+    setVoiceExpanded((value) => !value);
+  }, []);
+
   const avatarLabel = (overview.header.name.trim()[0] ?? '?').toUpperCase();
   const updateBusy = updatePhase === 'checking' || updatePhase === 'downloading';
   const updateButtonLabel = updatePhase === 'checking' ? '检查中'
@@ -453,14 +534,106 @@ export default function SettingsScreen() {
           ]}
         </SettingsGroup>
 
-        {/* 免费语音由 Cindy 登录态授权；推理项目 Key 永不进入客户端。 */}
+        {/* 语音输入:默认 Cindy 官方服务(登录态授权,零配置);可切换为自己的
+            LiteLLM Key(BYOK,Key 只保存在这台手机)。两种来源互不回退。 */}
         <SettingsGroup title="语音输入">
-          <InfoRow
-            detail="使用 Cindy 登录身份连接语音服务，不需要配置或保存模型 Key。"
-            label="实时语音与智能润色"
-            testID="settings.voiceIncluded"
-            value="已包含"
-          />
+          {[
+            <Pressable
+              key="voice-header"
+              accessibilityRole="button"
+              accessibilityState={{ expanded: voiceExpanded }}
+              onPress={toggleVoice}
+              style={({ pressed }) => [styles.discloseRow, pressed && styles.pressed]}
+              testID="settings.voiceDisclose"
+            >
+              <Text style={styles.rowLabel}>实时语音</Text>
+              <Text style={styles.discloseStatus} numberOfLines={1} testID="settings.voiceServiceModeStatus">
+                {voiceServiceMode === 'cindy'
+                  ? 'Cindy 官方服务'
+                  : (voiceLiteLlmConfigured ? '自己的 Key · 已配置' : '自己的 Key · 未配置')}
+              </Text>
+              {voiceExpanded
+                ? <ChevronDown color={colors.textTertiary} size={iconSize.action} strokeWidth={iconStroke.regular} />
+                : <ChevronRight color={colors.textTertiary} size={iconSize.action} strokeWidth={iconStroke.regular} />}
+            </Pressable>,
+            voiceExpanded ? (
+              <View key="voice-body" style={styles.voiceBody} testID="settings.voiceServiceCard">
+                <Text style={styles.hint}>
+                  默认使用 Cindy 提供的语音服务，无需配置任何 Key；也可以切换为自己的 LiteLLM Key，费用计入你的账户。
+                </Text>
+                <MainWindowActionGroup
+                  density="compact"
+                  primaryActions={[
+                    {
+                      accessibilityLabel: '使用 Cindy 官方语音服务',
+                      disabled: voiceSettingsBusy,
+                      label: 'Cindy 官方服务',
+                      onPress: () => void selectVoiceServiceMode('cindy'),
+                      testID: 'settings.voiceModeCindyButton',
+                      tone: voiceServiceMode === 'cindy' ? 'primary' : undefined,
+                    },
+                    {
+                      accessibilityLabel: '使用自己的 Key 提供语音服务',
+                      disabled: voiceSettingsBusy,
+                      label: '自己的 Key',
+                      onPress: () => void selectVoiceServiceMode('byok'),
+                      testID: 'settings.voiceModeByokButton',
+                      tone: voiceServiceMode === 'byok' ? 'primary' : undefined,
+                    },
+                  ]}
+                  testID="settings.voiceModeActions"
+                />
+                {voiceServiceMode === 'byok' ? (
+                  <View style={styles.voiceBodyInner} testID="settings.voiceLiteLlmCard">
+                    <Text style={styles.hint}>
+                      手机端实时 ASR 和润色都通过 LiteLLM 网关。Key 只保存在这台手机，不从被控电脑同步。
+                    </Text>
+                    <TextInput
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      importantForAutofill="no"
+                      onChangeText={setVoiceLiteLlmDraft}
+                      placeholder={voiceLiteLlmConfigured ? '已保存，输入新 Key 可替换' : '输入 LiteLLM Key'}
+                      placeholderTextColor={colors.textTertiary}
+                      secureTextEntry
+                      spellCheck={false}
+                      style={styles.secretInput}
+                      testID="settings.voiceLiteLlmKeyInput"
+                      textContentType="password"
+                      value={voiceLiteLlmDraft}
+                    />
+                    <MainWindowActionGroup
+                      density="compact"
+                      primaryActions={[
+                        {
+                          accessibilityLabel: voiceSettingsBusy ? '正在保存 LiteLLM Key' : '保存 LiteLLM Key',
+                          busy: voiceSettingsBusy,
+                          disabled: voiceSettingsBusy || voiceLiteLlmDraft.trim().length === 0,
+                          label: voiceSettingsBusy ? '保存中' : '保存',
+                          onPress: () => void saveVoiceLiteLlmKey(),
+                          testID: 'settings.voiceLiteLlmSaveButton',
+                          tone: 'primary',
+                        },
+                      ]}
+                      secondaryActions={[
+                        {
+                          accessibilityLabel: '清除 LiteLLM Key',
+                          disabled: voiceSettingsBusy || !voiceLiteLlmConfigured,
+                          label: '清除',
+                          onPress: () => void clearVoiceLiteLlmKey(),
+                          testID: 'settings.voiceLiteLlmClearButton',
+                        },
+                      ]}
+                      testID="settings.voiceLiteLlmActions"
+                    />
+                  </View>
+                ) : null}
+                {voiceSettingsMessage ? (
+                  <Text style={styles.hint} testID="settings.voiceSettingsMessage">{voiceSettingsMessage}</Text>
+                ) : null}
+              </View>
+            ) : null,
+          ]}
         </SettingsGroup>
 
         {/* 关于这台手机 */}
@@ -830,6 +1003,23 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     minHeight: 52,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
+  },
+  discloseStatus: { color: colors.textTertiary, flex: 1, fontSize: typeScale.code, textAlign: 'right' },
+  // —— 语音输入 ——
+  voiceBody: { gap: spacing.md, paddingBottom: spacing.lg, paddingHorizontal: spacing.lg, paddingTop: spacing.sm },
+  voiceBodyInner: { gap: spacing.md },
+  hint: { color: colors.textSecondary, fontSize: typeScale.caption, lineHeight: lineHeight.caption },
+  secretInput: {
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: radius.pill,
+    borderWidth: StyleSheet.hairlineWidth,
+    color: colors.textPrimary,
+    fontSize: typeScale.body,
+    lineHeight: lineHeight.body,
+    minHeight: 48,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
   },
   // —— 版本行 ——
   versionRow: {

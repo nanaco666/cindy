@@ -652,10 +652,46 @@
       "description": "Set language, microphone, shortcut, refinement, and muting during voice input.",
       "saveFailed": "Could not save voice input settings: {{message}}",
       "sections": {
+        "serviceSource": "Service source",
         "basics": "Basics",
         "refinement": "Refinement",
         "preferences": "Preferences",
         "usageData": "Usage"
+      },
+      "serviceSource": {
+        "label": "Voice service",
+        "hint": "Uses the Cindy voice service by default; switch to your own key and models if you prefer.",
+        "ariaLabel": "Voice service source",
+        "options": {
+          "cindy": "Cindy official service",
+          "byok": "Custom (your own key)"
+        },
+        "optionDescriptions": {
+          "cindy": "Uses your Cindy sign-in, no keys to configure",
+          "byok": "Uses your own keys and models, billed to your account"
+        },
+        "asr": {
+          "label": "Recognition model",
+          "hint": "ASR model used for speech-to-text.",
+          "ariaLabel": "Speech recognition model"
+        },
+        "refiner": {
+          "label": "Refinement model",
+          "hint": "Model used to clean up dictated text.",
+          "ariaLabel": "Voice refinement model"
+        },
+        "credential": {
+          "gatewayKey": "Uses your AI gateway key",
+          "codexLogin": "Uses your Codex sign-in",
+          "elevenlabsKey": "Uses your ElevenLabs key (environment variable)"
+        },
+        "credentialError": {
+          "gatewayMissing": "No AI gateway key found; this model is unavailable.",
+          "codexMissing": "Codex is not signed in; this model is unavailable.",
+          "elevenlabsMissing": "No ElevenLabs key configured (environment variable); this model is unavailable."
+        },
+        "manageProviders": "Open model providers",
+        "reset": "Reset to default"
       },
       "historyToggle": {
         "show": "Show recent history",

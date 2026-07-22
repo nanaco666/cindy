@@ -832,15 +832,20 @@ describe('new session composer surface', () => {
     // Touch-down warm-up: the mic button prewarms the audio session + ASR
     // connection at pressIn, and voice startup claims that connection when fresh.
     expect(newSource).toContain('onPressIn={handleVoiceButtonPressIn}');
-    expect(newSource).toContain('prewarmMobileVoiceStart(selectedDeviceId, {');
+    // Service-mode aware prewarm: managed mode passes auth (voice-server
+    // tickets); explicit BYOK omits it so the user's own LiteLLM credential
+    // is resolved instead — the two planes never fall back into each other.
+    expect(newSource).toContain("prewarmMobileVoiceStart(selectedDeviceId, mode === 'byok' ? undefined : {");
     expect(newSource).toContain('getAccessToken: () => auth.getAccessToken(),');
     expect(newSource).toContain('refreshAccessToken: () => auth.refreshAccessToken(),');
     expect(newSource).toContain('apiFetch: auth.apiFetch,');
-    expect(newSource).toContain('const [prewarmedVoice, localVoiceInputHistory] = await Promise.all([');
+    expect(newSource).toContain('const [prewarmedVoice, localVoiceInputHistory, voiceServiceMode] = await Promise.all([');
     expect(newSource).toContain('takePrewarmedMobileVoiceAsr(selectedDeviceId) ?? Promise.resolve(null),');
-    expect(newSource).toContain('?? createMobileCindyVoiceCredential(selectedDeviceId);');
-    expect(newSource).toContain('connectionProvider: (providerId) => voiceContext.createAsrConnection(providerId),');
-    expect(newSource).toContain('refinerTargetProvider: (providerId, options) => voiceContext.createRefinerTarget(providerId, options),');
+    expect(newSource).toContain('getMobileVoiceServiceMode(),');
+    expect(newSource).toContain('? await resolveMobileVoiceCredentialFromLiteLlmSettings(selectedDeviceId)');
+    expect(newSource).toContain(': createMobileCindyVoiceCredential(selectedDeviceId));');
+    expect(newSource).toContain('connectionProvider: (providerId: string) => voiceContext.createAsrConnection(providerId),');
+    expect(newSource).toContain('voiceContext.createRefinerTarget(providerId, options),');
     expect(newSource).toContain('const composerVoicePlacement = resolveMobileComposerVoiceButtonPlacement({');
     expect(newSource).toContain('hasTrailingAction: composerShowCreateButton');
     expect(newSource).toContain('const voiceStatusVisible = Boolean(voiceError);');

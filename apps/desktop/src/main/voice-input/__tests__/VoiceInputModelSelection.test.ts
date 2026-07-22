@@ -7,9 +7,59 @@ vi.mock('electron', () => ({
   },
 }));
 
-import { resolveVoiceInputModelSelectionValues } from '../VoiceInputModelSelection.js';
+import {
+  resolveVoiceInputModelSelectionValues,
+  voiceInputModelSelectionSignature,
+} from '../VoiceInputModelSelection.js';
 
 describe('VoiceInputModelSelection', () => {
+  describe('serviceMode', () => {
+    it('defaults to the managed cindy mode when unset', () => {
+      const result = resolveVoiceInputModelSelectionValues({});
+      expect(result.values.serviceMode).toBe('cindy');
+      expect(result.values.serviceModeConfigured).toBe(false);
+      expect(result.warnings).toEqual([]);
+    });
+
+    it('reads an explicit byok override from the file', () => {
+      const result = resolveVoiceInputModelSelectionValues({ serviceMode: 'byok' });
+      expect(result.values.serviceMode).toBe('byok');
+      expect(result.values.serviceModeConfigured).toBe(true);
+      expect(result.warnings).toEqual([]);
+    });
+
+    it('treats an explicit cindy value as configured', () => {
+      const result = resolveVoiceInputModelSelectionValues({ serviceMode: 'cindy' });
+      expect(result.values.serviceMode).toBe('cindy');
+      expect(result.values.serviceModeConfigured).toBe(true);
+    });
+
+    it('falls back to cindy with a warning for unknown values', () => {
+      const result = resolveVoiceInputModelSelectionValues({ serviceMode: 'mystery' });
+      expect(result.values.serviceMode).toBe('cindy');
+      expect(result.values.serviceModeConfigured).toBe(false);
+      expect(result.warnings).toEqual([
+        { field: 'serviceMode', value: 'mystery', fallback: 'cindy' },
+      ]);
+    });
+
+    it('reads the env override when the file has no value', () => {
+      const result = resolveVoiceInputModelSelectionValues(
+        {},
+        { XDT_VOICE_INPUT_SERVICE_MODE: 'byok' },
+      );
+      expect(result.values.serviceMode).toBe('byok');
+      expect(result.values.serviceModeConfigured).toBe(true);
+    });
+
+    it('changes the selection signature so mode switches bust runtime caches', () => {
+      const cindy = resolveVoiceInputModelSelectionValues({}).values;
+      const byok = resolveVoiceInputModelSelectionValues({ serviceMode: 'byok' }).values;
+      expect(voiceInputModelSelectionSignature(cindy))
+        .not.toBe(voiceInputModelSelectionSignature(byok));
+    });
+  });
+
   it('uses runtime config values before dev env defaults', () => {
     const result = resolveVoiceInputModelSelectionValues(
       {
@@ -25,6 +75,8 @@ describe('VoiceInputModelSelection', () => {
     );
 
     expect(result.values).toEqual({
+      serviceMode: 'cindy',
+      serviceModeConfigured: false,
       asrProvider: 'litellm-gpt-realtime-whisper',
       refinerProvider: 'litellm-qwen3.6-plus',
       refinerModel: 'qwen/qwen3.6-plus',
@@ -77,6 +129,8 @@ describe('VoiceInputModelSelection', () => {
     );
 
     expect(result.values).toEqual({
+      serviceMode: 'cindy',
+      serviceModeConfigured: false,
       asrProvider: 'litellm-batch',
       refinerProvider: 'codex-gpt-5.4-mini',
       refinerModel: undefined,

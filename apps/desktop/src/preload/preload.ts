@@ -147,6 +147,8 @@ type VoiceInputReadinessWire = {
   authErrorReason?: string;
 };
 type VoiceInputModelSelectionWire = {
+  serviceMode: 'cindy' | 'byok';
+  serviceModeConfigured: boolean;
   asrProvider: VoiceInputProviderKind;
   refinerProvider: VoiceInputRefinerProviderKind;
   refinerModel?: string;
@@ -169,6 +171,7 @@ type VoiceInputModelSelectionResultWire = {
   readiness: VoiceInputReadinessWire;
 };
 type VoiceInputModelSelectionPatchWire = {
+  serviceMode?: 'cindy' | 'byok' | null;
   asrProvider?: string | null;
   refinerProvider?: string | null;
   refinerModel?: string | null;

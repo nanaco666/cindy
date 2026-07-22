@@ -652,10 +652,46 @@
       "description": "認識言語、マイク、ショートカット、音声の整え方、音声入力中のミュートを設定します。",
       "saveFailed": "音声入力設定の保存に失敗しました：{{message}}",
       "sections": {
+        "serviceSource": "サービスソース",
         "basics": "基本",
         "refinement": "整え方",
         "preferences": "設定",
         "usageData": "利用状況"
+      },
+      "serviceSource": {
+        "label": "音声サービス",
+        "hint": "既定では Cindy 提供の音声サービスを使用します。自分のキーとモデルに切り替えることもできます。",
+        "ariaLabel": "音声サービスソースの選択",
+        "options": {
+          "cindy": "Cindy 公式サービス",
+          "byok": "カスタム（自分のキー）"
+        },
+        "optionDescriptions": {
+          "cindy": "Cindy のログイン情報を使用し、キーの設定は不要です",
+          "byok": "自分のキーとモデルを使用し、費用は自分のアカウントに計上されます"
+        },
+        "asr": {
+          "label": "認識モデル",
+          "hint": "音声をテキストに変換する ASR モデル。",
+          "ariaLabel": "音声認識モデルの選択"
+        },
+        "refiner": {
+          "label": "整えモデル",
+          "hint": "話し言葉のテキストを整えるモデル。",
+          "ariaLabel": "音声整えモデルの選択"
+        },
+        "credential": {
+          "gatewayKey": "AI ゲートウェイキーを使用",
+          "codexLogin": "Codex ログインを使用",
+          "elevenlabsKey": "ElevenLabs キーを使用（環境変数）"
+        },
+        "credentialError": {
+          "gatewayMissing": "利用可能な AI ゲートウェイキーが見つからないため、このモデルは使用できません。",
+          "codexMissing": "Codex にログインしていないため、このモデルは使用できません。",
+          "elevenlabsMissing": "ElevenLabs キー（環境変数）が未設定のため、このモデルは使用できません。"
+        },
+        "manageProviders": "モデルプロバイダーを開く",
+        "reset": "既定に戻す"
       },
       "historyToggle": {
         "show": "履歴を表示",

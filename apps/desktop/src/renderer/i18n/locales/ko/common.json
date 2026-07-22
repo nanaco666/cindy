@@ -652,10 +652,46 @@
       "description": "인식 언어, 마이크, 단축키, 음성 정리, 음성 입력 중 음소거를 설정합니다.",
       "saveFailed": "음성 입력 설정을 저장하지 못했습니다: {{message}}",
       "sections": {
+        "serviceSource": "서비스 소스",
         "basics": "기본",
         "refinement": "정리",
         "preferences": "환경설정",
         "usageData": "사용량"
+      },
+      "serviceSource": {
+        "label": "음성 서비스",
+        "hint": "기본적으로 Cindy가 제공하는 음성 서비스를 사용합니다. 자신의 키와 모델로 전환할 수도 있습니다.",
+        "ariaLabel": "음성 서비스 소스 선택",
+        "options": {
+          "cindy": "Cindy 공식 서비스",
+          "byok": "사용자 지정(내 키 사용)"
+        },
+        "optionDescriptions": {
+          "cindy": "Cindy 로그인 정보를 사용하며 키 설정이 필요 없습니다",
+          "byok": "자신의 키와 모델을 사용하며 비용은 내 계정으로 청구됩니다"
+        },
+        "asr": {
+          "label": "인식 모델",
+          "hint": "음성을 텍스트로 변환하는 ASR 모델.",
+          "ariaLabel": "음성 인식 모델 선택"
+        },
+        "refiner": {
+          "label": "정리 모델",
+          "hint": "구어체 텍스트를 정리하는 모델.",
+          "ariaLabel": "음성 정리 모델 선택"
+        },
+        "credential": {
+          "gatewayKey": "AI 게이트웨이 키 사용",
+          "codexLogin": "Codex 로그인 사용",
+          "elevenlabsKey": "ElevenLabs 키 사용(환경 변수)"
+        },
+        "credentialError": {
+          "gatewayMissing": "사용 가능한 AI 게이트웨이 키가 없어 이 모델을 사용할 수 없습니다.",
+          "codexMissing": "Codex에 로그인하지 않아 이 모델을 사용할 수 없습니다.",
+          "elevenlabsMissing": "ElevenLabs 키(환경 변수)가 설정되지 않아 이 모델을 사용할 수 없습니다."
+        },
+        "manageProviders": "모델 공급자 열기",
+        "reset": "기본값으로 복원"
       },
       "historyToggle": {
         "show": "최근 기록 펼치기",

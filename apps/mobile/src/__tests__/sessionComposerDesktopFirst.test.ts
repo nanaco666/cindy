@@ -448,18 +448,23 @@ describe('mobile session composer desktop-first surface', () => {
     expect(source).toContain('createMobileCindyVoiceCredential');
     // Voice startup claims the pressIn-prewarmed ASR connection when one is
     // fresh (credential already resolved, WebSocket already connecting) and
-    // falls back to resolving the credential itself otherwise.
-    expect(source).toContain('const [prewarmedVoice, localVoiceInputHistory] = await Promise.all([');
+    // falls back to resolving the credential itself otherwise. Service-mode
+    // aware: managed mode uses the cindy credential + voice-server tickets;
+    // explicit BYOK resolves the user's own LiteLLM credential and never
+    // constructs a managed run context.
+    expect(source).toContain('const [prewarmedVoice, localVoiceInputHistory, voiceServiceMode] = await Promise.all([');
     expect(source).toContain('takePrewarmedMobileVoiceAsr(deviceId) ?? Promise.resolve(null),');
-    expect(source).toContain('?? createMobileCindyVoiceCredential(deviceId);');
+    expect(source).toContain('getMobileVoiceServiceMode(),');
+    expect(source).toContain('? await resolveMobileVoiceCredentialFromLiteLlmSettings(deviceId)');
+    expect(source).toContain(': createMobileCindyVoiceCredential(deviceId));');
     expect(source).toContain('onPressIn={handleVoiceButtonPressIn}');
-    expect(source).toContain(`prewarmMobileVoiceStart(deviceId, {
-      getAccessToken: () => auth.getAccessToken(),
-      refreshAccessToken: () => auth.refreshAccessToken(),
-      apiFetch: auth.apiFetch,
-    });`);
-    expect(source).toContain('connectionProvider: (providerId) => voiceContext.createAsrConnection(providerId),');
-    expect(source).toContain('refinerTargetProvider: (providerId, options) => voiceContext.createRefinerTarget(providerId, options),');
+    expect(source).toContain(`prewarmMobileVoiceStart(deviceId, mode === 'byok' ? undefined : {
+        getAccessToken: () => auth.getAccessToken(),
+        refreshAccessToken: () => auth.refreshAccessToken(),
+        apiFetch: auth.apiFetch,
+      });`);
+    expect(source).toContain('connectionProvider: (providerId: string) => voiceContext.createAsrConnection(providerId),');
+    expect(source).toContain('voiceContext.createRefinerTarget(providerId, options),');
     expect(source).toContain('getMobileVoiceInputHistoryForHost(deviceId),');
     // Device link is opened non-blocking (not awaited): dictation goes through the
     // cloud ASR proxy and does not need the link, so it must not gate mic start.

@@ -652,10 +652,46 @@
       "description": "设置识别语言、麦克风、快捷键、语音润色和语音输入时静音。",
       "saveFailed": "语音输入设置保存失败：{{message}}",
       "sections": {
+        "serviceSource": "服务来源",
         "basics": "基础",
         "refinement": "润色",
         "preferences": "偏好",
         "usageData": "使用情况"
+      },
+      "serviceSource": {
+        "label": "语音服务",
+        "hint": "默认使用 Cindy 提供的语音服务；也可以切换为自己的 Key 与模型。",
+        "ariaLabel": "语音服务来源选择",
+        "options": {
+          "cindy": "Cindy 官方服务",
+          "byok": "自定义（用自己的 Key）"
+        },
+        "optionDescriptions": {
+          "cindy": "使用 Cindy 账号登录态，无需配置任何密钥",
+          "byok": "使用你自己的密钥与模型，费用计入你的账户"
+        },
+        "asr": {
+          "label": "识别模型",
+          "hint": "语音转文字使用的 ASR 模型。",
+          "ariaLabel": "语音识别模型选择"
+        },
+        "refiner": {
+          "label": "润色模型",
+          "hint": "整理口语文本使用的模型。",
+          "ariaLabel": "语音润色模型选择"
+        },
+        "credential": {
+          "gatewayKey": "使用 AI 网关 Key",
+          "codexLogin": "使用 Codex 登录",
+          "elevenlabsKey": "使用 ElevenLabs Key（环境变量）"
+        },
+        "credentialError": {
+          "gatewayMissing": "未找到可用的 AI 网关 Key，当前模型无法使用。",
+          "codexMissing": "Codex 未登录，当前模型无法使用。",
+          "elevenlabsMissing": "未配置 ElevenLabs Key（环境变量），当前模型无法使用。"
+        },
+        "manageProviders": "前往模型供应商",
+        "reset": "恢复默认"
       },
       "historyToggle": {
         "show": "展开近期历史",

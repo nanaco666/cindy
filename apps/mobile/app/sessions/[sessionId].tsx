@@ -253,7 +253,7 @@ import {
   resolveComposerVoiceHoldActive,
   shouldArmComposerVoiceHold,
 } from '@/session/composerVoiceHold';
-import { isMobileRealtimeAudioAvailable } from '@/session/mobileRealtimeAudio';
+import { isMobileRealtimeAudioAvailable, prewarmMobileRealtimeAudio } from '@/session/mobileRealtimeAudio';
 import {
   discardPendingPrewarm,
   prewarmMobileVoiceStart,
@@ -262,7 +262,9 @@ import {
 } from '@/session/mobileVoicePrewarm';
 import {
   isMobileVoiceLiteLlmSettingsError,
+  resolveMobileVoiceCredentialFromLiteLlmSettings,
 } from '@/session/mobileVoiceLiteLlmSettings';
+import { getMobileVoiceServiceMode } from '@/session/mobileVoiceServiceMode';
 import {
   createMobileCindyVoiceCredential,
   MobileCindyVoiceRunContext,
@@ -2928,21 +2930,31 @@ export default function SessionScreen() {
       // Claim the connection prewarmed at pressIn (if any): its credential is
       // already resolved and its ASR WebSocket already connecting, so the
       // handshake overlaps the press gesture instead of following it.
-      const [prewarmedVoice, localVoiceInputHistory] = await Promise.all([
+      const [prewarmedVoice, localVoiceInputHistory, voiceServiceMode] = await Promise.all([
         takePrewarmedMobileVoiceAsr(deviceId) ?? Promise.resolve(null),
         getMobileVoiceInputHistoryForHost(deviceId),
+        getMobileVoiceServiceMode(),
       ]);
       claimedPrewarm = prewarmedVoice;
+      const useByokVoice = voiceServiceMode === 'byok';
       const credential = prewarmedVoice?.credential
-        ?? createMobileCindyVoiceCredential(deviceId);
-      const voiceContext = prewarmedVoice?.voiceContext
-        ?? new MobileCindyVoiceRunContext(
-          () => auth.getAccessToken(),
-          () => auth.refreshAccessToken(),
-          auth.apiFetch,
-          credential.settings?.language,
-          credential.refiner.provider,
-        );
+        ?? (useByokVoice
+          ? await resolveMobileVoiceCredentialFromLiteLlmSettings(deviceId)
+          : createMobileCindyVoiceCredential(deviceId));
+      // BYOK never constructs a managed run context: the user opted into their
+      // own key, and the two credential planes must not fall back into each
+      // other. A claimed prewarm without a voiceContext IS the BYOK prewarm.
+      const voiceContext = prewarmedVoice
+        ? prewarmedVoice.voiceContext
+        : (useByokVoice
+          ? undefined
+          : new MobileCindyVoiceRunContext(
+            () => auth.getAccessToken(),
+            () => auth.refreshAccessToken(),
+            auth.apiFetch,
+            credential.settings?.language,
+            credential.refiner.provider,
+          ));
       if (voiceStartupSeqRef.current !== startupSeq) {
         // The startup was superseded while we awaited: close the claimed
         // connection instead of opening a mic for a dead run. Session switches
@@ -2965,8 +2977,13 @@ export default function SessionScreen() {
         const controller = createMobileVoiceControllerSession({
           credential,
           ...(prewarmedVoice ? { asr: prewarmedVoice.asr } : {}),
-          connectionProvider: (providerId) => voiceContext.createAsrConnection(providerId),
-          refinerTargetProvider: (providerId, options) => voiceContext.createRefinerTarget(providerId, options),
+          // BYOK (no voiceContext) dials directly with the credential's own
+          // key; only the managed path routes through voice-server tickets.
+          ...(voiceContext ? {
+            connectionProvider: (providerId: string) => voiceContext.createAsrConnection(providerId),
+            refinerTargetProvider: (providerId: string, options?: { refreshAccessToken?: boolean }) =>
+              voiceContext.createRefinerTarget(providerId, options),
+          } : {}),
           initialDraft: draft,
           refinementContext: buildMobileVoiceSessionRefinementContext(draft, renderItems),
           localVoiceInputHistory,
@@ -3191,11 +3208,19 @@ export default function SessionScreen() {
     if (voiceIsProcessing) return;
     if (voiceRecordingActiveRef.current || voiceState === 'listening') return;
     if (!deviceId || !isMobileRealtimeAudioAvailable()) return;
-    prewarmMobileVoiceStart(deviceId, {
-      getAccessToken: () => auth.getAccessToken(),
-      refreshAccessToken: () => auth.refreshAccessToken(),
-      apiFetch: auth.apiFetch,
-    });
+    // Keep the native audio-session warmup on the synchronous press-down path
+    // (prewarmMobileVoiceStart re-runs it idempotently below).
+    prewarmMobileRealtimeAudio();
+    // Fire-and-forget: the mode read is a fast secure-storage hit and prewarm
+    // is speculative anyway. BYOK prewarm omits auth so buildPrewarm resolves
+    // the user's own LiteLLM credential instead of a managed ticket context.
+    void getMobileVoiceServiceMode().then((mode) => {
+      prewarmMobileVoiceStart(deviceId, mode === 'byok' ? undefined : {
+        getAccessToken: () => auth.getAccessToken(),
+        refreshAccessToken: () => auth.refreshAccessToken(),
+        apiFetch: auth.apiFetch,
+      });
+    }).catch(() => undefined);
   }, [deviceId, voiceIsProcessing, voiceState]);
 
   const renderComposerVoiceButton = (buttonStyle?: StyleProp<ViewStyle>) => (
