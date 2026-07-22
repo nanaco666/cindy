@@ -27,6 +27,8 @@ import {
   setAgentIslandVisibleSession,
 } from '../state.js';
 
+const REMOTE_DAEMON_CLOSED_REASON = 'remote_daemon_closed';
+
 type PermissionInteractionRequest = Extract<InteractionRequest, { kind: 'permission' }>;
 
 function statusEvent(isRunning: boolean, status: string): AgentEvent {
@@ -45,11 +47,11 @@ function doneEvent(): AgentEvent {
   };
 }
 
-function terminalErrorEvent(message: string): AgentEvent {
+function terminalErrorEvent(message: string, reason?: string): AgentEvent {
   return {
     type: 'error',
     source: 'claude-code',
-    data: { message, isTerminal: true },
+    data: { message, isTerminal: true, ...(reason ? { reason } : {}) },
   };
 }
 
@@ -1858,14 +1860,53 @@ describe('Agent Island error read semantics (已读以 App 内真实展示为准
     expect(display.sessions[0]).toMatchObject({ sessionId: 'err', phase: 'error', attention: true });
   });
 
-  it('converges to completed when a paired done follows the terminal error (planned remote daemon close)', () => {
+  it('keeps a failed turn in error through its accounting status Done and done events', () => {
+    const state = createAgentIslandState();
+    applyAgentIslandEvent(state, { sessionId: 'err', title: 'Err' }, statusEvent(true, 'Running'), 1_900);
+    applyAgentIslandEvent(state, { sessionId: 'err', title: 'Err' }, terminalErrorEvent('upstream unreachable'), 2_000);
+    applyAgentIslandEvent(state, { sessionId: 'err', title: 'Err' }, statusEvent(false, 'Done'), 2_001);
+    applyAgentIslandEvent(state, { sessionId: 'err', title: 'Err' }, doneEvent(), 2_002);
+
+    const display = buildAgentIslandDisplayState(state, 2_100);
+    expect(display.sessions[0]).toMatchObject({
+      sessionId: 'err',
+      phase: 'error',
+      attention: true,
+      detail: 'upstream unreachable',
+    });
+  });
+
+  it('keeps an unplanned remote daemon close in error when its paired done arrives', () => {
+    const state = createAgentIslandState();
+    applyAgentIslandEvent(
+      state,
+      { sessionId: 'remote', title: 'Remote' },
+      terminalErrorEvent('[REMOTE_DAEMON_CLOSED] ...', REMOTE_DAEMON_CLOSED_REASON),
+      2_000,
+    );
+    applyAgentIslandEvent(state, { sessionId: 'remote', title: 'Remote' }, doneEvent(), 2_001);
+
+    expect(buildAgentIslandDisplayState(state, 2_100).sessions[0]).toMatchObject({
+      sessionId: 'remote',
+      phase: 'error',
+      attention: true,
+    });
+  });
+
+  it('converges to completed when a paired done follows a planned remote daemon close', () => {
     // cc-mgr 计划升级:maker-core 对 remote_daemon_closed 先 push error 再成对
     // push done(claude-code/index.ts)。done 会把 phase 收敛为 completed 并按
     // completion 语义重算 unread —— error 的 forceUnread 不会残留成卡死的假报错。
     const state = createAgentIslandState();
     setAgentIslandVisibleSession(state, 'up', 1_900);
     setAgentIslandAppFocused(state, true, 1_950);
-    applyAgentIslandEvent(state, { sessionId: 'up', title: 'Upgrade' }, terminalErrorEvent('[REMOTE_DAEMON_CLOSED] ...'), 2_000);
+    applyAgentIslandEvent(
+      state,
+      { sessionId: 'up', title: 'Upgrade' },
+      terminalErrorEvent('[REMOTE_DAEMON_CLOSED] ...', REMOTE_DAEMON_CLOSED_REASON),
+      2_000,
+      { allowCompletionAfterTerminalError: true },
+    );
     applyAgentIslandEvent(state, { sessionId: 'up', title: 'Upgrade' }, doneEvent(), 2_001);
 
     const display = buildAgentIslandDisplayState(state, 2_100);

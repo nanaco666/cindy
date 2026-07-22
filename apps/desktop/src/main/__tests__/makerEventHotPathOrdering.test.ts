@@ -41,6 +41,24 @@ describe('maker:event hot path ordering', () => {
     expect(wireSessionSource.slice(0, broadcastIndex)).not.toContain('handleAgentEvent(sessionMetaForIsland');
   });
 
+  it('defers remote auth island errors until the renderer reports retry failure', () => {
+    const wireSessionSource = extractWireSessionSource();
+    const deferredHandler = source.match(
+      /ipcMain\.handle\(MAKER_INVOKE\.PERSIST_TURN_ERROR_DEFERRED,[\s\S]*?\n {2}\}\);/,
+    )?.[0];
+
+    expect(source).toContain('function isRemoteAuthRetryErrorEvent(');
+    expect(source).toContain('service.deferRemoteAuthRetryError(meta, event);');
+    expect(wireSessionSource).toContain('isRemoteAuthRetry = isRemoteAuthRetryErrorEvent(session, event);');
+    expect(deferredHandler).toBeTruthy();
+    expect(deferredHandler).toContain('getAgentIslandService()?.resolveDeferredRemoteAuthRetryError(sid);');
+    expectOrder(
+      deferredHandler ?? '',
+      'onTurnErrorEvent(sid, errData, agentMeta);',
+      'getAgentIslandService()?.resolveDeferredRemoteAuthRetryError(sid);',
+    );
+  });
+
   it('only status/done/error paths request idle restore', () => {
     const wireSessionSource = extractWireSessionSource();
     const statusIdleAssignments = [...wireSessionSource.matchAll(/shouldMarkTurnStatusIdleAfterBroadcast = true;/g)]
@@ -141,7 +159,7 @@ describe('maker:event hot path ordering', () => {
     const wireSessionSource = extractWireSessionSource();
     const closedBlock = wireSessionSource.slice(wireSessionSource.indexOf("if (status === 'closed') {"));
     const closeSessionHandler = source.match(
-      /ipcMain\.handle\(MAKER_INVOKE\.CLOSE_SESSION,[\s\S]*?\n  \}\);/,
+      /ipcMain\.handle\(MAKER_INVOKE\.CLOSE_SESSION,[\s\S]*?\n {2}\}\);/,
     )?.[0];
 
     expect(closedBlock).toContain('handleAgentIslandSessionClosedAfterCleanup(session.id);');
@@ -266,7 +284,7 @@ describe('maker:event hot path ordering', () => {
 
   it('refreshes Claude credential cache before dropping mismatched header snapshots', () => {
     const listenerSource = usageSource.match(
-      /setClaudeRateLimitHeadersListener\(\(snapshot, requestBearerToken\) => \{[\s\S]*?\n  \}\);/,
+      /setClaudeRateLimitHeadersListener\(\(snapshot, requestBearerToken\) => \{[\s\S]*?\n {2}\}\);/,
     )?.[0];
     expect(listenerSource).toBeTruthy();
     if (!listenerSource) return;
