@@ -4751,6 +4751,7 @@ export default function SessionScreen() {
       || (codexResetRetryKey !== null && offer.idempotencyKey !== codexResetRetryKey)) {
       setCodexResetRetryKey(null);
       await refreshAccountUsage();
+      if (contextUsageSessionRef.current !== sessionId) return;
       Alert.alert('请重新确认', '重置凭证已过期，请确认刷新后的额度信息。');
       return;
     }
