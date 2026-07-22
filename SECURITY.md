@@ -9,7 +9,7 @@
 
 <https://github.com/makecindy/cindy/security/advisories/new>
 
-如果该入口对你不可用，请发送邮件至 **jiali@magiclizi.com**。邮件标题建议包含
+如果该入口对你不可用，请发送邮件至 **feedback@cindy.app**。邮件标题建议包含
 `[Cindy Security]`。如果复现材料包含敏感信息，请先在邮件中说明，等待维护者提供
 合适的安全传输方式，不要把敏感材料直接发到公开渠道。
 
