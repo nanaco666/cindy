@@ -3264,8 +3264,6 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
           ? p.kinds.filter((s): s is string => typeof s === 'string')
           : undefined,
       };
-      await Promise.all(opts.workingDirs.map((workingDir) =>
-        prepareProjectSkillLinksFailSoft(workingDir)));
       const result = await maker.listCustomizations(opts);
       return { success: true, ...result };
     } catch (err) {
