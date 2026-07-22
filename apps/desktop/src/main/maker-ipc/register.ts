@@ -35,7 +35,7 @@ import type {
 } from '@lizi/maker-core';
 import { createId } from '@paralleldrive/cuid2';
 import { permissionModeOrAsk } from '@lizi/maker-shared/permission-mode';
-import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNotNull, isNull, or, sql } from 'drizzle-orm';
 import { BrowserWindow, ipcMain } from 'electron';
 import type { AgentMeta } from '../../renderer/lib/ccAgent.types';
 import type { AgentInputCreateOpts, AgentInputQueuedMessage } from '../../shared/agentInputQueue.js';
@@ -3671,7 +3671,16 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
     return { session, didInjectOrcaInstructions, didInjectProjectContext };
   }
 
-  // switchFocus 和 sendToWorker 都可能唤醒 idle worker；统一走这里才能保留 extraDirs。
+  async function clearOrcaWorkerReleaseMarker(workerId: string): Promise<void> {
+    const now = Date.now();
+    await getDbClient().drizzle
+      .update(orcaWorkers)
+      .set({ idleSince: null, updatedAt: now })
+      .where(and(eq(orcaWorkers.id, workerId), isNotNull(orcaWorkers.idleSince)));
+  }
+
+  // switchFocus 和 sendToWorker 都可能唤醒 idle worker；统一走这里才能保留 extraDirs，
+  // 并在 runtime 可用前恢复它占用的 Worker 名额。
   async function resumeOrcaWorkerSessionIfMissing(target: {
     id: string;
     teamId: string;
@@ -3679,11 +3688,18 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
     sessionId: string;
   }): Promise<boolean> {
     const live = maker.getSession(target.sessionId);
-    if (live) return false;
+    if (live) {
+      await clearOrcaWorkerReleaseMarker(target.id);
+      return false;
+    }
 
     const db = getDbClient().drizzle;
     const [row] = await db.select().from(sessions).where(eq(sessions.id, target.sessionId)).limit(1);
     if (!row) return false;
+
+    // Clear before bootstrap: a resumed runtime must never remain invisible to the
+    // hard-limit count. If bootstrap fails, the watcher can release it again later.
+    await clearOrcaWorkerReleaseMarker(target.id);
 
     const workerVendorOptions = {
       orcaRole: 'worker' as const,
@@ -5153,9 +5169,14 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
         .innerJoin(orcaTeams, eq(orcaTeams.id, orcaWorkers.teamId))
         .innerJoin(sessions, eq(sessions.id, orcaWorkers.sessionId))
         .where(and(
-          isNull(orcaWorkers.idleSince),
           inArray(orcaWorkers.status, ORCA_IDLE_RELEASE_STATUSES),
-          sql`${orcaWorkers.updatedAt} < ${updatedBefore}`,
+          or(
+            isNotNull(orcaWorkers.idleSince),
+            and(
+              isNull(orcaWorkers.idleSince),
+              sql`${orcaWorkers.updatedAt} < ${updatedBefore}`,
+            ),
+          ),
           eq(orcaTeams.status, 'active'),
           eq(sessions.status, 'active'),
         ));
@@ -5170,6 +5191,15 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
          SET status = 'idle', idle_since = ?, updated_at = ?
          WHERE id = ? AND status = ? AND idle_since IS NULL AND updated_at = ?`,
         [releasedAt, releasedAt, candidate.id, candidate.status, candidate.updatedAt],
+      );
+      return result.changes === 1;
+    },
+    clearReleased: async (candidate, restoredAt) => {
+      const result = await getDbClient().exec(
+        `UPDATE orca_workers
+         SET idle_since = NULL, updated_at = ?
+         WHERE id = ? AND idle_since = ?`,
+        [restoredAt, candidate.id, candidate.idleSince],
       );
       return result.changes === 1;
     },

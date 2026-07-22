@@ -441,7 +441,9 @@ describe('sendToSession ordering', () => {
 
     expect(resumeBranch).toContain('const extraDirs = await readSessionExtraDirsFromDb(target.sessionId);');
     expect(resumeBranch).toContain('...(extraDirs.length > 0 ? { extraDirs } : {}),');
+    expect(resumeBranch).toContain('await clearOrcaWorkerReleaseMarker(target.id);');
     expectOrder(resumeBranch, 'const extraDirs = await readSessionExtraDirsFromDb(target.sessionId);', 'const opts = buildCreateOptsWithStderr({');
+    expectOrder(resumeBranch, 'await clearOrcaWorkerReleaseMarker(target.id);', 'await bootstrapSession(opts);');
     expectOrder(resumeBranch, '...(extraDirs.length > 0 ? { extraDirs } : {}),', 'await bootstrapSession(opts);');
     expect(serviceDepsBlock).toContain('resumeWorkerSession: async (target) => {');
     expect(serviceDepsBlock).toContain('await resumeOrcaWorkerSessionIfMissing(target);');
