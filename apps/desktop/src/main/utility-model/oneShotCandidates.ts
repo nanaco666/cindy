@@ -38,13 +38,18 @@ type UtilityTextCandidateResolution =
   | { candidate: UtilityTextCandidate }
   | { attempt: UtilityTextAttempt };
 
+/** Credential-safe failure raised by a concrete utility transport. */
+type UtilityTextExecutionFailure =
+  | { reason: 'http_error'; httpStatus: number }
+  | {
+    reason: Extract<UtilityTextAttemptReason, 'timeout' | 'empty_response' | 'request_failed'>;
+    httpStatus?: never;
+  };
+
 /** Credential-safe error raised by a concrete utility transport. */
 class UtilityTextExecutionError extends Error {
-  constructor(
-    readonly reason: Extract<UtilityTextAttemptReason, 'timeout' | 'empty_response' | 'http_error' | 'request_failed'>,
-    readonly httpStatus?: number,
-  ) {
-    super(reason);
+  constructor(readonly failure: UtilityTextExecutionFailure) {
+    super(failure.reason);
     this.name = 'UtilityTextExecutionError';
   }
 }
@@ -113,7 +118,7 @@ export async function requestUtilityText(
   for (const candidate of candidates) {
     try {
       const text = (await candidate.execute(prompt, opts)).trim();
-      if (!text) throw new UtilityTextExecutionError('empty_response');
+      if (!text) throw new UtilityTextExecutionError({ reason: 'empty_response' });
       return {
         ok: true,
         text,
@@ -123,14 +128,7 @@ export async function requestUtilityText(
       };
     } catch (error) {
       const failure = classifyExecutionFailure(error);
-      attempts.push({
-        providerId: candidate.providerId,
-        model: candidate.model,
-        transport: candidate.transport,
-        status: 'failed',
-        reason: failure.reason,
-        ...(failure.httpStatus !== undefined ? { httpStatus: failure.httpStatus } : {}),
-      });
+      attempts.push(failedAttempt(candidate, failure));
       log.warn('utility text candidate failed, trying next', {
         providerId: candidate.providerId,
         model: candidate.model,
@@ -243,7 +241,7 @@ async function requestLiteLlmText(input: {
       // Do not retain or log upstream response bodies: gateways may echo request
       // metadata, while the HTTP status is sufficient for user recovery.
       await response.body?.cancel().catch(() => undefined);
-      throw new UtilityTextExecutionError('http_error', response.status);
+      throw new UtilityTextExecutionError({ reason: 'http_error', httpStatus: response.status });
     }
     const parsed = await response.json() as {
       choices?: Array<{ message?: { content?: unknown } }>;
@@ -252,14 +250,14 @@ async function requestLiteLlmText(input: {
       ?.map((choice) => typeof choice.message?.content === 'string' ? choice.message.content : '')
       .join('')
       .trim() ?? '';
-    if (!text) throw new UtilityTextExecutionError('empty_response');
+    if (!text) throw new UtilityTextExecutionError({ reason: 'empty_response' });
     return text;
   } catch (error) {
     if (error instanceof UtilityTextExecutionError) throw error;
     if (error instanceof Error && error.name === 'AbortError') {
-      throw new UtilityTextExecutionError('timeout');
+      throw new UtilityTextExecutionError({ reason: 'timeout' });
     }
-    throw new UtilityTextExecutionError('request_failed');
+    throw new UtilityTextExecutionError({ reason: 'request_failed' });
   } finally {
     clearTimeout(timeout);
   }
@@ -286,20 +284,30 @@ function skippedAttempt(
 }
 
 /** Classify candidate failures without exposing arbitrary exception messages. */
-function classifyExecutionFailure(error: unknown): {
-  reason: Extract<UtilityTextAttemptReason, 'timeout' | 'empty_response' | 'http_error' | 'request_failed'>;
-  httpStatus?: number;
-} {
+function classifyExecutionFailure(error: unknown): UtilityTextExecutionFailure {
   if (error instanceof UtilityTextExecutionError) {
-    return {
-      reason: error.reason,
-      ...(error.httpStatus !== undefined ? { httpStatus: error.httpStatus } : {}),
-    };
+    return error.failure;
   }
   if (error instanceof Error && (error.name === 'AbortError' || /timed?\s*out|timeout/i.test(error.message))) {
     return { reason: 'timeout' };
   }
   return { reason: 'request_failed' };
+}
+
+/** Attach HTTP status only to the matching discriminated-union branch. */
+function failedAttempt(
+  candidate: UtilityTextCandidate,
+  failure: UtilityTextExecutionFailure,
+): UtilityTextAttempt {
+  const base = {
+    providerId: candidate.providerId,
+    model: candidate.model,
+    transport: candidate.transport,
+    status: 'failed' as const,
+  };
+  return failure.reason === 'http_error'
+    ? { ...base, reason: failure.reason, httpStatus: failure.httpStatus }
+    : { ...base, reason: failure.reason };
 }
 
 /** Collapse homogeneous terminal failures while preserving per-candidate attempts. */

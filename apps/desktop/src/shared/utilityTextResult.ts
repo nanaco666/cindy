@@ -13,16 +13,25 @@ export type UtilityTextAttemptReason =
   | 'http_error'
   | 'request_failed';
 
-/** One candidate considered by the utility-model fallback chain. */
-export type UtilityTextAttempt = {
+/** Fields shared by every candidate considered by the utility-model fallback chain. */
+type UtilityTextAttemptBase = {
   providerId: string;
   model: string;
   transport: UtilityModelTransport;
   status: 'skipped' | 'failed';
-  reason: UtilityTextAttemptReason;
-  /** Safe transport metadata; response bodies are deliberately never exposed. */
-  httpStatus?: number;
 };
+
+/** One candidate diagnostic; HTTP status is valid only for HTTP failures. */
+export type UtilityTextAttempt =
+  | (UtilityTextAttemptBase & {
+    reason: 'http_error';
+    /** Safe transport metadata; response bodies are deliberately never exposed. */
+    httpStatus: number;
+  })
+  | (UtilityTextAttemptBase & {
+    reason: Exclude<UtilityTextAttemptReason, 'http_error'>;
+    httpStatus?: never;
+  });
 
 /** Stable high-level failure categories shared by desktop UI and scheduler MCP. */
 export type UtilityTextFailureReason =
