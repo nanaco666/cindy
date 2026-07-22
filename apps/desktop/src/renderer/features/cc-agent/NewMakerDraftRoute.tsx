@@ -125,7 +125,6 @@ import {
   useAgentCapabilities,
   evictDeviceCapabilities,
   prefetchDeviceCapabilities,
-  getCachedCapabilities,
   type AgentCapabilities,
 } from '@/hooks/useAgentCapabilities';
 import { useProviders } from '@/hooks/useProviders';
@@ -133,7 +132,6 @@ import {
   useDeviceProviders,
   evictDeviceProviders,
   prefetchDeviceProviders,
-  getCachedDeviceProviders,
 } from '@/hooks/useDeviceProviders';
 import { evictDeviceGitSafetySettings } from '@/hooks/useGitSafetySettings';
 import {
@@ -808,9 +806,10 @@ export function NewMakerDraftRoute() {
           .invoke(target.deviceId, 'maker:get-new-maker-defaults', [capabilityAgentKind])
           .then((v) => (v as RemoteDraftDefaults | null) ?? null)
           .catch(() => null);
-        // 设备验证通过后 evict + prefetch 以刷新 hook 缓存;await 确保 cache 就绪。
-        // prefetch 内部 swallow error,故额外验证 cache 被填充(直接 invoke 成功不代表
-        // 紧随其后的 prefetch 也成功——evict 清了 cache,prefetch 重新拉取可能失败)。
+        // 设备验证通过(direct invoke 成功)。在所有能 throw 的路径之后才 evict,
+        // 避免失败时破坏当前草稿的 hook 快照。evict + prefetch 刷新 hook 缓存;
+        // 即使 prefetch 内部 swallow error,send/goal 的 capabilitiesLoading/deviceProvidersLoading
+        // gate 会阻止在 hook 尚未就绪时发送。
         evictDeviceCapabilities(target.deviceId);
         evictDeviceProviders(target.deviceId);
         evictDeviceGitSafetySettings(target.deviceId);
@@ -818,9 +817,6 @@ export function NewMakerDraftRoute() {
           prefetchDeviceCapabilities(target.deviceId),
           prefetchDeviceProviders(target.deviceId),
         ]);
-        if (!getCachedCapabilities(capabilityAgentKind, target.deviceId) || !getCachedDeviceProviders(target.deviceId)) {
-          throw new Error('device capabilities/providers cache not populated after refresh');
-        }
         dlSeedKeyRef.current = `${target.deviceId}:${capabilityAgentKind}`;
         setDlSel(resolveDeviceLinkDraftDefaults(freshCaps, freshDefaults, undefined, capabilityAgentKind));
         setRemoteDraftState({ loaded: true, value: freshDefaults });
