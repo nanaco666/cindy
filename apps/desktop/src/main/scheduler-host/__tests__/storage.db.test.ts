@@ -57,6 +57,7 @@ const SCHEDULER_DDL = [
       id TEXT PRIMARY KEY,
       title TEXT NOT NULL,
       source TEXT NOT NULL DEFAULT 'desktop',
+      status TEXT NOT NULL DEFAULT 'active',
       workspace_kind TEXT NOT NULL DEFAULT 'project',
       working_dir TEXT,
       user_send_at INTEGER,
@@ -89,6 +90,7 @@ const SCHEDULER_DDL = [
       script_config TEXT,
       source TEXT DEFAULT 'user',
       project_config_id TEXT,
+      legacy_session_fallback INTEGER NOT NULL DEFAULT 0,
       kind TEXT NOT NULL DEFAULT 'cron',
       cron_expr TEXT NOT NULL,
       timezone TEXT NOT NULL,
@@ -154,6 +156,17 @@ function createStorageHarness() {
     db,
     storage: new DrizzleScheduleStorage(() => db),
   };
+}
+
+function enableLegacySessionFallback(
+  harness: ReturnType<typeof createStorageHarness>,
+  scheduleId: string,
+): void {
+  harness.db.run(sql`
+    UPDATE schedules
+    SET legacy_session_fallback = 1
+    WHERE id = ${scheduleId}
+  `);
 }
 
 describe('DrizzleScheduleStorage (in-memory)', () => {
@@ -751,6 +764,7 @@ describe('DrizzleScheduleStorage (in-memory)', () => {
         VALUES ('sess-legacy', '[Schedule] legacy task', 'scheduler', 'project', '/repo', 1, 60, 4.25)
       `);
       await harness.storage.insert(schedule);
+      enableLegacySessionFallback(harness, schedule.id);
       harness.db.run(sql`
         INSERT INTO messages (id, client_id, session_id, role, content, agent_meta, created_at)
         VALUES
@@ -796,6 +810,7 @@ describe('DrizzleScheduleStorage (in-memory)', () => {
         VALUES ('sess-unlinked', '[Schedule] unlinked legacy', 'scheduler', 'project', '/repo', 1, 60, 3.5)
       `);
       await harness.storage.insert(schedule);
+      enableLegacySessionFallback(harness, schedule.id);
 
       harness.db.run(sql`
         INSERT INTO messages (id, client_id, session_id, role, content, agent_meta, created_at)
@@ -819,6 +834,63 @@ describe('DrizzleScheduleStorage (in-memory)', () => {
           ],
         },
       ]);
+    } finally {
+      harness.close();
+    }
+  });
+
+  it('does not attach retained legacy sessions to a deleted and recreated same-name schedule', async () => {
+    const harness = createStorageHarness();
+    const oldSchedule = baseSchedule({
+      id: 'sch-old-generation',
+      name: 'weekly summary',
+      workingDir: '/repo',
+    });
+    const newSchedule = baseSchedule({
+      id: 'sch-new-generation',
+      name: oldSchedule.name,
+      workingDir: oldSchedule.workingDir,
+      createdAt: oldSchedule.createdAt + 10_000,
+      updatedAt: oldSchedule.updatedAt + 10_000,
+    });
+
+    try {
+      await harness.storage.insert(oldSchedule);
+      // 模拟 0079 migration：升级时已经存在的任务保留 legacy fallback 资格。
+      enableLegacySessionFallback(harness, oldSchedule.id);
+      harness.db.run(sql`
+        INSERT INTO sessions (
+          id, title, source, workspace_kind, working_dir, created_at, updated_at, total_cost_usd
+        ) VALUES
+          (
+            'sess-old-retained', '[Schedule] weekly summary', 'scheduler', 'project', '/repo',
+            ${oldSchedule.createdAt + 1}, ${oldSchedule.createdAt + 2}, 4.25
+          ),
+          (
+            'sess-old-archived', '[Schedule] weekly summary', 'scheduler', 'project', '/repo',
+            ${oldSchedule.createdAt + 3}, ${oldSchedule.createdAt + 4}, 2.5
+          ),
+          (
+            'sess-old-deleted', '[Schedule] weekly summary', 'scheduler', 'project', '/repo',
+            ${oldSchedule.createdAt + 5}, ${oldSchedule.createdAt + 6}, 1.25
+          )
+      `);
+
+      expect(
+        (await harness.storage.listRuns(oldSchedule.id)).map((run) => run.sessionId),
+      ).toEqual(
+        expect.arrayContaining(['sess-old-retained', 'sess-old-archived', 'sess-old-deleted']),
+      );
+
+      // 分别模拟删除弹窗的三种会话处置：保留、归档、删除。
+      await harness.storage.delete(oldSchedule.id);
+      harness.db.run(sql`UPDATE sessions SET status = 'archived' WHERE id = 'sess-old-archived'`);
+      harness.db.run(sql`DELETE FROM sessions WHERE id = 'sess-old-deleted'`);
+      await harness.storage.insert(newSchedule);
+
+      await expect(harness.storage.listRuns(newSchedule.id)).resolves.toEqual([]);
+      expect(await harness.storage.listSidebarIndexRuns()).toEqual([]);
+      expect(await harness.storage.listCostSummaries()).toEqual([]);
     } finally {
       harness.close();
     }

@@ -532,6 +532,16 @@ export const schedules = sqliteTable(
     scriptConfig: text('script_config'),
     source: text('source').default('user'),
     projectConfigId: text('project_config_id'),
+    /**
+     * 是否允许用“任务名 + workspace + 工作目录”认领没有 schedule_runs 的旧会话。
+     *
+     * 该兜底只服务于引入稳定 scheduleId/runId 之前已经存在的任务。迁移会把升级
+     * 当时的存量任务标为 true；此后新建任务保持默认 false，确保删除后同名重建
+     * 仍是全新身份，不会继承上一代任务的会话、历史或费用。
+     */
+    legacySessionFallback: integer('legacy_session_fallback', { mode: 'boolean' })
+      .notNull()
+      .default(false),
     kind: text('kind', { enum: ['cron'] })
       .notNull()
       .default('cron'),
