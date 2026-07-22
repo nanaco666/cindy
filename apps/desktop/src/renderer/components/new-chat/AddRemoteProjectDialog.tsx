@@ -288,7 +288,7 @@ export function AddRemoteProjectDialog({ open, onOpenChange, onProjectAdded }: P
   const noTargets = targets.length === 0;
 
   return (
-    <Dialog.Root open={open} onOpenChange={onOpenChange}>
+    <Dialog.Root open={open} onOpenChange={busy ? undefined : onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay
           className="fixed inset-0 z-50"
@@ -301,6 +301,8 @@ export function AddRemoteProjectDialog({ open, onOpenChange, onProjectAdded }: P
             border: '1px solid var(--border-default, #d4d4d4)',
             maxHeight: '88vh',
           }}
+          onEscapeKeyDown={busy ? (e) => e.preventDefault() : undefined}
+          onInteractOutside={busy ? (e) => e.preventDefault() : undefined}
           onOpenAutoFocus={(e) => {
             // Radix 默认聚焦内容区首个可聚焦元素(这里是关闭 X)。覆盖成聚焦目标选择器,
             // 让焦点落在主输入上;无目标(select 未渲染)时保留默认行为。
@@ -322,11 +324,12 @@ export function AddRemoteProjectDialog({ open, onOpenChange, onProjectAdded }: P
               >
                 {t('newChat.addRemoteProject.title')}
               </Dialog.Title>
-              <Dialog.Close asChild>
+              <Dialog.Close asChild disabled={busy}>
                 <button
                   type="button"
+                  disabled={busy}
                   aria-label={t('newChat.addRemoteProject.cancel')}
-                  className="flex h-6 w-6 items-center justify-center rounded-md transition-colors hover:bg-[var(--surface-chip)]"
+                  className="flex h-6 w-6 items-center justify-center rounded-md transition-colors hover:bg-[var(--surface-chip)] disabled:opacity-40"
                   style={{ color: 'var(--text-secondary)' }}
                 >
                   <X size={16} />
@@ -607,9 +610,10 @@ export function AddRemoteProjectDialog({ open, onOpenChange, onProjectAdded }: P
             className="flex justify-end gap-2.5 px-5 py-3"
             style={{ borderTop: '1px solid var(--border-default)' }}
           >
-            <Dialog.Close asChild>
+            <Dialog.Close asChild disabled={busy}>
               <button
                 type="button"
+                disabled={busy}
                 className={cn(
                   'inline-flex min-w-[96px] items-center justify-center rounded-full px-6 py-2.5 text-13 font-medium',
                   'transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2',
@@ -617,6 +621,7 @@ export function AddRemoteProjectDialog({ open, onOpenChange, onProjectAdded }: P
                   'border bg-transparent',
                   'border-[var(--confirm-btn-secondary-border)] text-[var(--confirm-btn-secondary-text)]',
                   'hover:bg-[var(--confirm-btn-secondary-hover)] focus-visible:ring-[var(--confirm-btn-secondary-border)]',
+                  'disabled:opacity-40',
                 )}
               >
                 {t('newChat.addRemoteProject.cancel')}

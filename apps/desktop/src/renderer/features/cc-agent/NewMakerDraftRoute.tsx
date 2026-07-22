@@ -801,12 +801,11 @@ export function NewMakerDraftRoute() {
           fastMode: effectiveFastMode,
           planModeEnabled: effectivePlanMode,
           remoteHostId: target.hostId,
-          providerId: chatPrefs.providerId ?? null,
+          providerId: effectiveSourceId,
           extraDirs: effectiveExtraDirs,
         });
         if (!newSession) {
-          toast.error(t('ccAgent.draft.createSessionFailed'));
-          return;
+          throw new Error('createSession returned null');
         }
         if (effectivePlanMode) patchCurrentVendorPrefs({ planMode: false });
         makerChatStore.setSessionRuntime(newSession.id, {
@@ -822,19 +821,25 @@ export function NewMakerDraftRoute() {
           });
         }
         // 把草稿页已输入的文本/附件移交到新会话,避免 navigate 后丢失。
+        // rehomeDraftAttachments 把 base64 和 xdt-image://__new_maker_draft__/ 迁移到
+        // 新 session 的 image cache,避免持久化孤立引用。
         const existingDraft = getComposerDraft(NEW_MAKER_DRAFT_KEY);
         if (existingDraft) {
-          saveComposerDraft(newSession.id, existingDraft);
+          const rehomedAttachments = await rehomeDraftAttachments(
+            existingDraft.attachments,
+            newSession.id,
+          );
+          saveComposerDraft(newSession.id, { ...existingDraft, attachments: rehomedAttachments ?? [] });
           clearComposerDraftAndNotify(NEW_MAKER_DRAFT_KEY);
           attachmentState.clearFiles();
         }
         navigate(`/cc-agent/${newSession.id}`, { replace: true });
       } catch (err) {
         log.error('[add remote project]', err);
-        toast.error(t('ccAgent.draft.createSessionFailed'));
+        throw err;
       }
     },
-    [draft.vendor, chatPrefs, draftInitialEffort, effectiveExtraDirs, effectiveFastMode, effectivePlanMode, attachmentState, createSession, navigate, t],
+    [draft.vendor, chatPrefs, draftInitialEffort, effectiveExtraDirs, effectiveSourceId, effectiveFastMode, effectivePlanMode, attachmentState, createSession, navigate, t],
   );
 
   // ─── 切 vendor ──────────────────────────────────────────────────────
