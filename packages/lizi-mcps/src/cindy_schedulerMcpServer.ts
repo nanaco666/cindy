@@ -2,8 +2,7 @@
  * cindy_schedulerMcpServer.ts
  * ---------------------------------------------------------------------------
  * In-process MCP server exposing xdt-maker's local Scheduler to cc / codex
- * agents. Mirrors the shape of `lizi_feishuBotMcpServer.ts` /
- * `feishu/mcp/server.ts`：
+ * agents. Mirrors the shape of `lizi_feishuBotMcpServer.ts`：
  *
  *  - server only exposes two entry tools: `list_tools` / `call_tool`
  *  - fine-grained tools live in scheduler/*.ts and register on a registry

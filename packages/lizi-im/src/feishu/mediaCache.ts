@@ -4,7 +4,7 @@
  * Resolve an `xdt-image://feishu-media-{images,files}/<filename>` URL back to
  * its absolute path inside `host.paths.feishuMediaDir`.
  *
- * The URL convention is fixed by lizi-mcps's `createFeishuService` callback
+ * The URL convention is fixed by the host's feishu media wiring
  * (see mcp-integrations/feishu.ts in the host). lizi-im replicates the
  * resolution rather than depending on `imageCacheStore` so it stays a pure
  * package.

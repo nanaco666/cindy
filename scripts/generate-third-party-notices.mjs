@@ -674,18 +674,9 @@ function buildDesktopCommonEntries(apacheText, sharpPackageName) {
     }),
   );
 
-  // 两处 vendored 上游源码不作为独立 npm 包出现,需显式声明。
-  entries.push(
-    bundledComponent({
-      name: "lark-openapi-mcp generated sources (vendored)",
-      version: "vendored",
-      license: "MIT",
-      url: "https://github.com/larksuite/lark-openapi-mcp",
-      licenseText: readBundledLicense(
-        "packages/lizi-mcps/src/feishu/mcp/generated/LICENSE.lark-openapi-mcp",
-      ),
-    }),
-  );
+  // vendored 上游源码不作为独立 npm 包出现,需显式声明。
+  // (lark-openapi-mcp vendored 源已于 2026-07-22 随飞书 OpenAPI 工具链整体迁出
+  // 本仓 → cindy-xd-plugin 插件仓,不再随桌面包分发,故其声明从此处移除。)
   entries.push(
     bundledComponent({
       name: "openclaw fs-safe sources (vendored)",
