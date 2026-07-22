@@ -41,11 +41,12 @@ apps plus their shared packages, organized as a pnpm monorepo.
 | `cindy-protocol/` | Wire protocol shared with the server (git submodule) |
 
 **Not in this repo:** the backend service (`cindy-server`) lives in a separate
-repository and is not part of this monorepo. The client is free software. Cindy's
-hosted service requires a Cindy cloud account; see the website for downloads and
-pricing. When connected to your own local server (`pnpm restart:desktop:local`),
-the client does not depend on a Cindy cloud account; whether the local server uses
-local sign-in or another development auth mode is controlled by its configuration.
+repository and is not part of this monorepo. The client is free software.
+
+| Mode | Account requirement | Description |
+| --- | --- | --- |
+| Hosted service | Cindy cloud account | Use Cindy's hosted service. See the website for downloads and pricing. |
+| Local mode | No Cindy cloud account required | Connect to your own local server with `pnpm restart:desktop:local`. Whether it uses local sign-in or another development auth mode is controlled by the server configuration. |
 
 ## Prerequisites
 
