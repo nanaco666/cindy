@@ -102,7 +102,10 @@ describe('projectDisplayLabelWithMachine', () => {
 });
 
 describe('remoteSshHostsStore', () => {
-  afterEach(() => remoteSshHostsStore.reset());
+  afterEach(() => {
+    remoteSshHostsStore.reset();
+    vi.unstubAllGlobals();
+  });
 
   it('publishes a full registry replacement after settings mutations', () => {
     const subscriber = vi.fn();
@@ -114,5 +117,33 @@ describe('remoteSshHostsStore', () => {
     expect(remoteSshHostsStore.get()).toEqual([host]);
     expect(subscriber).toHaveBeenCalledOnce();
     unsubscribe();
+  });
+
+  it('does not let an older in-flight list overwrite a settings replacement', async () => {
+    let resolveList!: (value: { hosts: RemoteHostSnapshot[] }) => void;
+    const list = vi.fn(
+      () =>
+        new Promise<{ hosts: RemoteHostSnapshot[] }>((resolve) => {
+          resolveList = resolve;
+        }),
+    );
+    vi.stubGlobal('window', { electronAPI: { remoteSsh: { list } } });
+
+    const ensurePromise = remoteSshHostsStore.ensure();
+    expect(list).toHaveBeenCalledOnce();
+    const freshHost = sshHost('fresh-host');
+    remoteSshHostsStore.replace([freshHost]);
+    resolveList({ hosts: [sshHost('stale-host')] });
+    await ensurePromise;
+
+    expect(remoteSshHostsStore.get()).toEqual([freshHost]);
+  });
+
+  it('removes a deleted host from the shared snapshot', () => {
+    remoteSshHostsStore.replace([sshHost('keep'), sshHost('remove')]);
+
+    remoteSshHostsStore.remove('remove');
+
+    expect(remoteSshHostsStore.get()?.map((host) => host.config.id)).toEqual(['keep']);
   });
 });

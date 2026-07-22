@@ -780,6 +780,7 @@ export function RemoteSection({ showTitle = true }: { showTitle?: boolean } = {}
     try {
       await window.electronAPI.remoteSsh.remove(id);
       setHosts((prev) => prev.filter((h) => h.config.id !== id));
+      remoteSshHostsStore.remove(id);
     } catch (err) {
       toast.error(t(mapIpcErrorToI18nKey(err, { fallback: 'settings.remote.toast.removeFailed' })));
     } finally {

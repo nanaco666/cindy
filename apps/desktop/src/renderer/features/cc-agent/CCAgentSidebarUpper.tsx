@@ -2897,6 +2897,7 @@ function RailPanels({
               {projectsView.visibleEntries.map((p) => {
                 const agg = projectAgg(p.sessions);
                 const isOpen = panelState.openProjectKey === p.projectKey;
+                const projectDisplayLabel = projectDisplayLabelWithMachine(p);
                 return (
                   <button
                     key={p.projectKey}
@@ -2930,10 +2931,10 @@ function RailPanels({
                       <Folder size={13} strokeWidth={2} aria-hidden />
                     </span>
                     <span
-                      title={projectDisplayLabelWithMachine(p)}
+                      title={projectDisplayLabel}
                       className="min-w-0 flex-1 truncate text-sm font-medium text-foreground"
                     >
-                      {projectDisplayLabelWithMachine(p)}
+                      {projectDisplayLabel}
                     </span>
                     {agg.dotTone && <AttentionDot size={5} tone={agg.dotTone} className="shrink-0" />}
                     <span className="shrink-0 text-[10px] tabular-nums text-[var(--text-tertiary)]">

@@ -9,6 +9,8 @@
 
 let cache: RemoteHostSnapshot[] | null = null;
 let inflight: Promise<RemoteHostSnapshot[]> | null = null;
+/** replace/remove/reset 每次推进版本,让更早发出的 list 结果不能写回覆盖新状态。 */
+let revision = 0;
 const subscribers = new Set<() => void>();
 
 function notify(): void {
@@ -36,30 +38,45 @@ export const remoteSshHostsStore = {
 
   /** Settings 已经拿到完整 list 时复用结果,避免 mutation 后再发一次重复 IPC。 */
   replace(hosts: readonly RemoteHostSnapshot[]): void {
+    revision += 1;
     cache = [...hosts];
     inflight = null;
+    notify();
+  },
+
+  /** Settings 删除 host 后同步移除共享快照,让项目身份立即回退到 remoteHostId。 */
+  remove(id: string): void {
+    revision += 1;
+    inflight = null;
+    if (cache === null) return;
+    const next = cache.filter((host) => host.config.id !== id);
+    if (next.length === cache.length) return;
+    cache = next;
     notify();
   },
 
   async ensure(): Promise<void> {
     if (cache !== null) return;
     if (!inflight) {
-      inflight = fetchHosts()
-        .then((hosts) => {
+      const requestRevision = revision;
+      const request = fetchHosts();
+      inflight = request;
+      try {
+        const hosts = await request;
+        if (inflight === request && revision === requestRevision) {
           cache = hosts;
-          inflight = null;
           notify();
-          return hosts;
-        })
-        .catch((error: unknown) => {
-          inflight = null;
-          throw error;
-        });
+        }
+      } finally {
+        if (inflight === request) inflight = null;
+      }
+      return;
     }
     await inflight;
   },
 
   reset(): void {
+    revision += 1;
     cache = null;
     inflight = null;
     notify();
