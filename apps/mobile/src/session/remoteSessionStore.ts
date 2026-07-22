@@ -250,10 +250,65 @@ function overlayLivePlanSnapshot(sessionId: string, message: RemoteMessage): Rem
     ?? sessionSnapshots.get(`persist:${message.clientId}`)
     ?? (message.toolUseId ? sessionSnapshots.get(`tool:${message.toolUseId}`) : undefined)
     ?? (contentToolUseId ? sessionSnapshots.get(`tool:${contentToolUseId}`) : undefined);
-  return snapshot
-    ? { ...message, content: snapshot.content, toolUseId: snapshot.toolUseId }
-    : message;
+  if (!snapshot) return message;
+
+  // A later history/window response is authoritative. If it contains a plan that
+  // has progressed beyond the provisional terminal snapshot, promote that row into
+  // the cache instead of overlaying the older snapshot back onto it. Keeping the
+  // promoted value cached still protects against an older delayed DB echo arriving
+  // immediately afterward.
+  const persistedPlan = readPlanFromMessageContent(message.content);
+  const cachedPlan = readPlanFromMessageContent(snapshot.content);
+  if (persistedPlan && cachedPlan && isPlanSnapshotAtLeastAsFresh(persistedPlan, cachedPlan)) {
+    const promoted: LivePlanSnapshot = {
+      ...snapshot,
+      content: message.content as Record<string, unknown>,
+      toolUseId: message.toolUseId ?? contentToolUseId ?? snapshot.toolUseId,
+    };
+    rememberLivePlanSnapshot(sessionId, promoted);
+    return message;
+  }
+
+  return { ...message, content: snapshot.content, toolUseId: snapshot.toolUseId };
 }
+
+function readPlanFromMessageContent(content: unknown): unknown[] | null {
+  const record = isRecord(content) ? content : null;
+  const input = isRecord(record?.input) ? record.input : null;
+  return Array.isArray(input?.plan) ? input.plan : null;
+}
+
+function isPlanSnapshotAtLeastAsFresh(incoming: unknown[], cached: unknown[]): boolean {
+  if (deepValueEqual(incoming, cached)) return true;
+  // A structural change can only be learned from the authoritative persisted row;
+  // do not let a provisional terminal cache hide added, removed, or renamed steps.
+  if (incoming.length !== cached.length) return true;
+
+  for (let index = 0; index < incoming.length; index += 1) {
+    const incomingItem = isRecord(incoming[index]) ? incoming[index] as Record<string, unknown> : null;
+    const cachedItem = isRecord(cached[index]) ? cached[index] as Record<string, unknown> : null;
+    if (!incomingItem || !cachedItem) return true;
+    if (incomingItem['step'] !== cachedItem['step']) return true;
+    if (planStatusRank(incomingItem['status']) < planStatusRank(cachedItem['status'])) return false;
+  }
+  return true;
+}
+
+function planStatusRank(value: unknown): number {
+  if (typeof value !== 'string') return 0;
+  switch (value.replace(/[-_]/g, '').toLowerCase()) {
+    case 'completed':
+    case 'failed':
+      return 3;
+    case 'inprogress':
+      return 2;
+    case 'pending':
+      return 1;
+    default:
+      return 0;
+  }
+}
+
 
 /** End any pre-compaction streaming rows without changing the overall running turn. */
 function finishMessageStreamingAtCompactBoundary(message: RemoteMessage): RemoteMessage {

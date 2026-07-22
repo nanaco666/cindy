@@ -610,6 +610,79 @@ describe('remoteSessionStore', () => {
       content: { input: { plan: [{ step: 'Inspect', status: 'completed' }] } },
     });
   });
+  it('lets a newer history plan supersede a provisional terminal snapshot', () => {
+    remoteSessionStore.applyRemotePush('dev-1', 'maker:event', {
+      sessionId: 's1',
+      event: {
+        type: 'done',
+        source: 'codex',
+        data: {
+          type: 'codex/event/task_complete',
+          raw: { id: 'turn-1' },
+          plan: [{ step: 'Inspect', status: 'in_progress' }],
+        },
+      },
+    });
+
+    remoteSessionStore.setLatestMessageWindow('s1', [{
+      ...message('plan-row-history', 's1'),
+      role: 'tool_use',
+      toolUseId: 'plan:turn-1',
+      content: {
+        toolUseId: 'plan:turn-1',
+        toolName: 'update_plan',
+        input: { plan: [{ step: 'Inspect', status: 'completed' }] },
+      },
+    }]);
+
+    expect(remoteSessionStore.getMessages('s1')[0]).toMatchObject({
+      toolUseId: 'plan:turn-1',
+      content: { input: { plan: [{ step: 'Inspect', status: 'completed' }] } },
+    });
+  });
+
+  it('lets an authoritative history plan shape replace the provisional terminal snapshot', () => {
+    remoteSessionStore.applyRemotePush('dev-1', 'maker:event', {
+      sessionId: 's1',
+      event: {
+        type: 'done',
+        source: 'codex',
+        data: {
+          type: 'codex/event/task_complete',
+          raw: { id: 'turn-1' },
+          plan: [{ step: 'Inspect', status: 'completed' }],
+        },
+      },
+    });
+
+    remoteSessionStore.setLatestMessageWindow('s1', [{
+      ...message('plan-row-history-shape', 's1'),
+      role: 'tool_use',
+      toolUseId: 'plan:turn-1',
+      content: {
+        toolUseId: 'plan:turn-1',
+        toolName: 'update_plan',
+        input: {
+          plan: [
+            { step: 'Inspect', status: 'completed' },
+            { step: 'Verify', status: 'pending' },
+          ],
+        },
+      },
+    }]);
+
+    expect(remoteSessionStore.getMessages('s1')[0]).toMatchObject({
+      content: {
+        input: {
+          plan: [
+            { step: 'Inspect', status: 'completed' },
+            { step: 'Verify', status: 'pending' },
+          ],
+        },
+      },
+    });
+  });
+
   it('applies live update_plan snapshots to the persisted task row', () => {
     const initialPlan = {
       ...message('plan-row-1', 's1'),
