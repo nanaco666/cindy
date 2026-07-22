@@ -5047,11 +5047,15 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
             id: provider.id,
             name: provider.name,
             models: (provider.models['claude-code'] ?? []).map((model) => model.id),
+            requiresExplicitRoute: provider.routing['claude-code']?.authStrategy === 'api-key-header'
+              || provider.routing['claude-code']?.authStrategy === 'oauth-token',
           })),
           codex: connectedProvidersForAgent(views, 'codex').map((provider) => ({
             id: provider.id,
             name: provider.name,
             models: (provider.models.codex ?? []).map((model) => model.id),
+            requiresExplicitRoute: provider.routing.codex?.authStrategy === 'api-key-header'
+              || provider.routing.codex?.authStrategy === 'oauth-token',
           })),
         },
         resolveDefaultProviderIdForModel: (agent, model) => (

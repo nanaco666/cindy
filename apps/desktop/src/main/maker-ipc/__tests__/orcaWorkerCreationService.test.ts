@@ -890,6 +890,68 @@ describe('OrcaWorkerCreationService', () => {
     }));
   });
 
+  it('persists the sole custom route when an explicit worker model requires session credentials', async () => {
+    const { deps, service } = createDeps({
+      getWorkerDefaults: vi.fn(() => ({ model: 'gpt-5.5', providerId: 'xd' })),
+      getProviderRoutingContext: vi.fn(async () => providerRoutingContext({
+        'claude-code': [],
+        codex: [{
+          id: 'custom-codex',
+          name: 'Custom Codex',
+          models: ['gpt-5.4'],
+          requiresExplicitRoute: true,
+        }],
+      })),
+    });
+
+    await expect(service.createWorker({
+      leadSessionId: 'lead-1',
+      role: 'reviewer',
+      agent: 'codex',
+      label: 'reviewer',
+      model: 'gpt-5.4',
+    })).resolves.toMatchObject({
+      ok: true,
+      resolved: { providerId: 'custom-codex', model: 'gpt-5.4' },
+    });
+
+    expect(deps.buildCreateOptsWithStderr).toHaveBeenCalledWith(expect.objectContaining({
+      providerId: 'custom-codex',
+      model: 'gpt-5.4',
+    }));
+  });
+
+  it('does not require a Cindy API key for an explicit budget model on a custom route', async () => {
+    const { deps, service } = createDeps({
+      getProviderRoutingContext: vi.fn(async () => providerRoutingContext({
+        'claude-code': [],
+        codex: [{
+          id: 'custom-codex',
+          name: 'Custom Codex',
+          models: ['codex/budget'],
+          requiresExplicitRoute: true,
+        }],
+      })),
+      readClaudeApiKey: vi.fn((): string | null => null),
+    });
+
+    await expect(service.createWorker({
+      leadSessionId: 'lead-1',
+      role: 'reviewer',
+      agent: 'codex',
+      label: 'reviewer',
+      model: 'codex/budget',
+    })).resolves.toMatchObject({
+      ok: true,
+      resolved: { providerId: 'custom-codex', model: 'codex/budget' },
+    });
+
+    expect(deps.buildCreateOptsWithStderr).toHaveBeenCalledWith(expect.objectContaining({
+      providerId: 'custom-codex',
+      model: 'codex/budget',
+    }));
+  });
+
   it('returns a route-specific error when no connected provider offers an explicit worker model', async () => {
     const { deps, service } = createDeps({
       getWorkerDefaults: vi.fn(() => ({ model: 'gpt-5.5', providerId: 'custom-codex' })),

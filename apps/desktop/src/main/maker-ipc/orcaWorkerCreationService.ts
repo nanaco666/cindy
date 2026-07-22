@@ -42,6 +42,8 @@ export interface OrcaWorkerProviderSnapshot {
   id: string;
   name: string;
   models: readonly string[];
+  /** true 表示该来源必须写入 session provider store 才能注入自己的 API key/OAuth token。 */
+  requiresExplicitRoute?: boolean;
 }
 
 /** 同一次 provider registry 快照派生出的可用性与默认模型路由，避免两次读取产生竞态。 */
@@ -461,21 +463,34 @@ export function createOrcaWorkerCreationService(deps: OrcaWorkerCreationDeps): O
     if (!resolvedConfig.ok) {
       return { ok: false, errorCode: 'INVALID_PARAMS', message: resolvedConfig.message };
     }
-    const explicitModelAvailableProviderId = params.model !== undefined
+    const explicitModelDefaultProviderId = params.model !== undefined
       ? providerRouting.resolveDefaultProviderIdForModel(params.agent, resolvedConfig.model)
       : null;
+    const explicitModelProviders = params.model !== undefined
+      ? agentProviders.filter((provider) => provider.models.includes(resolvedConfig.model))
+      : [];
+    const explicitModelProvider = explicitModelDefaultProviderId === null
+      ? undefined
+      : agentProviders.find((provider) => provider.id === explicitModelDefaultProviderId);
     const resolved = {
       ...resolvedConfig,
       // 仅显式指定 model 不等于显式选择来源：providerId=null 必须保留 spawn-aware 默认路由。
-      // resolveDefaultProviderIdForModel 只用于确认至少一个已连接来源提供该模型，不能把其结果持久化。
-      providerId: params.model !== undefined ? null : resolvedConfig.providerId,
+      // 例外是该模型只有一个来源且它必须依赖 session provider store 注入自己的凭证。
+      providerId: params.model !== undefined
+        && explicitModelProviders.length === 1
+        && explicitModelProvider?.requiresExplicitRoute
+        ? explicitModelProvider.id
+        : (params.model !== undefined ? null : resolvedConfig.providerId),
     };
+    const budgetRouteProviderId = params.model !== undefined
+      ? explicitModelDefaultProviderId
+      : resolved.providerId;
 
     // codex/ 预算模型依赖 Cindy AI API key；XD/default 路由即使因 provider 缺失，
     // 也要先返回这条可操作的凭证错误，避免被下方通用的精确路由失败遮蔽。
     if (
       budgetModelRequiresApiKey(params.agent, resolved.model, deps.readClaudeApiKey() != null)
-      && (resolved.providerId === null || resolved.providerId === 'xd')
+      && (budgetRouteProviderId === null || budgetRouteProviderId === 'xd')
     ) {
       return {
         ok: false,
@@ -484,7 +499,7 @@ export function createOrcaWorkerCreationService(deps: OrcaWorkerCreationDeps): O
       };
     }
 
-    if (params.model !== undefined && explicitModelAvailableProviderId === null) {
+    if (params.model !== undefined && explicitModelDefaultProviderId === null) {
       return {
         ok: false,
         errorCode: 'PROVIDER_ROUTE_UNAVAILABLE',
