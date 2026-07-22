@@ -275,7 +275,7 @@ export const MAKER_INVOKE = {
   /**
    * 智能通讯录(maker-contacts) ——
    *  - SETTINGS_GET/SET: 功能开关(<userData>/contacts-settings.json), 只 gate agent 侧
-   *    lizi_contacts MCP(新 session 生效); 下面的数据 CRUD 通道不受 gate, 设置页
+   *    cindy_contacts MCP(新 session 生效); 下面的数据 CRUD 通道不受 gate, 设置页
    *    管理 UI 关着开关也能浏览/清理。
    *  - 数据通道: 实体/身份/事件/分组 CRUD + resolve/search/stats, 直达全局
    *    MakerContactsManager(maker-core), 与 session 无关。

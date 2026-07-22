@@ -28,7 +28,7 @@ export function createAndroidMcpServer(
   options: AndroidMcpServerOptions = {},
 ): McpServer {
   const server = new McpServer({
-    name: 'lizi_android',
+    name: 'cindy_android',
     version: '0.1.0',
   });
   const registry = new AndroidToolRegistry();

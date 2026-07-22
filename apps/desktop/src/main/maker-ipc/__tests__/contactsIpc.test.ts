@@ -84,7 +84,7 @@ describe('contacts-ipc handlers', () => {
 
   it('开关值变化时失效 Codex MCP, 同值重写不失效, 失效失败不影响落盘', async () => {
     // 回归: Codex spawn 配置冻在 codexEnvironment cached 里, 开关变化必须触发失效,
-    // 否则后续 codex 会话直到重启 app 都拿不到(或残留) lizi_contacts。
+    // 否则后续 codex 会话直到重启 app 都拿不到(或残留) cindy_contacts。
     const invalidateCodexMcp = vi.fn(async () => {});
     handlers = createContactsIpcHandlers({
       getManager: () => manager,

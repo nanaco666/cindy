@@ -11,7 +11,7 @@ from dependency-closure analysis against upstream commit
 Product-facing neutrality: the upstream project name appears ONLY in this
 `upstream/` metadata directory and the sync script. Generated code keeps
 load-bearing internal identifiers but is never surfaced to users; package name,
-MCP tool name, and settings ids stay neutral (`browser` / `lizi_browser`).
+MCP tool name, and settings ids stay neutral (`browser` / `cindy_browser`).
 
 ## Layout
 

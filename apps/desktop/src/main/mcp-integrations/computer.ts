@@ -19,7 +19,7 @@ import type {
 } from 'lizi-mcps';
 import { createLogger } from '../logger.js';
 
-const logger = createLogger('mcp/lizi_computer');
+const logger = createLogger('mcp/cindy_computer');
 const DRIVER_COMMAND = 'cua-driver';
 const STATUS_TIMEOUT_MS = 3_000;
 const DOCTOR_TIMEOUT_MS = 10_000;

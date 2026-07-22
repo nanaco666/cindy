@@ -26,7 +26,7 @@ import {
 } from '../android-automation-settings-store.js';
 import { createLogger } from '../logger.js';
 
-const logger = createLogger('mcp/lizi_android');
+const logger = createLogger('mcp/cindy_android');
 
 const ADB_COMMAND = 'adb';
 const BUNDLED_ANDROID_PLATFORM_TOOLS_RESOURCE_ROOT = ['tools', 'android-platform-tools'];

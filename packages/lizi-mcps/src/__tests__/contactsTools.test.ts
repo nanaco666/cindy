@@ -1,5 +1,5 @@
 /**
- * lizi_contacts 工具层集成测试 — 真 better-sqlite3 临时库跑 registry.call 全链路:
+ * cindy_contacts 工具层集成测试 — 真 better-sqlite3 临时库跑 registry.call 全链路:
  * strict 参数校验 / 开关拦截 / create→resolve→append_event→merge 主路径 /
  * IDENTITY_CONFLICT 结构化返回 / manage 工具。
  */
@@ -10,7 +10,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import DatabaseCtor from 'better-sqlite3';
 import { MakerContactsManager } from '@lizi/maker-core';
 
-import { ContactsToolRegistry } from '../lizi_contactsToolRegistry.js';
+import { ContactsToolRegistry } from '../cindy_contactsToolRegistry.js';
 import {
   registerContactsAddIdentityTool,
   registerContactsAppendEventTool,
@@ -52,7 +52,7 @@ function parseResult(res: { content: Array<{ type: string; text?: string }> }): 
   return JSON.parse(text);
 }
 
-describe('lizi_contacts tools', () => {
+describe('cindy_contacts tools', () => {
   let tmpDir: string;
   let manager: MakerContactsManager;
   let registry: ContactsToolRegistry;

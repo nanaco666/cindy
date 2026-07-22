@@ -1287,7 +1287,7 @@ describe('CodexAgent send', () => {
 describe('CodexAgent MCP thread context hooks', () => {
   it('passes target context to Codex extra spawn config and reuses the shared local host', async () => {
     const prepareCodexExtraSpawnConfig = vi.fn(async () => ({
-      extraArgs: ['-c', 'mcp_servers.lizi_test.url="http://127.0.0.1:1234/mcp/lizi_test"'],
+      extraArgs: ['-c', 'mcp_servers.cindy_test.url="http://127.0.0.1:1234/mcp/cindy_test"'],
       extraEnv: { LIZI_MCP_TOKEN: 'token' },
     }));
     const agent = new CodexAgent(createDeps({}, {
@@ -2820,7 +2820,7 @@ describe('CodexAgent MCP thread context hooks', () => {
     const result = await handlers.mcpServerElicitation({
       threadId: 'start-thread-id',
       turnId: 'turn-1',
-      serverName: 'lizi_contacts',
+      serverName: 'cindy_contacts',
       mode: 'form',
       _meta: {
         codex_approval_kind: 'mcp_tool_call',
@@ -2832,7 +2832,7 @@ describe('CodexAgent MCP thread context hooks', () => {
 
     expect(result).toEqual({ action: 'accept', content: null, _meta: null });
     expect(policy).toHaveBeenCalledWith({
-      serverName: 'lizi_contacts',
+      serverName: 'cindy_contacts',
       toolParams: { name: 'contacts_search', args: { query: 'Dash' } },
     });
     await handle.close();
@@ -2855,10 +2855,10 @@ describe('CodexAgent MCP thread context hooks', () => {
     const resolver = vi.fn(async (req: InteractionRequest) => {
       expect(req).toMatchObject({
         kind: 'permission',
-        toolName: 'mcp:lizi_contacts',
+        toolName: 'mcp:cindy_contacts',
         title: 'Allow Codex to use contacts_delete?',
         input: {
-          serverName: 'lizi_contacts',
+          serverName: 'cindy_contacts',
           toolParams: { name: 'contacts_delete', args: { id: 'contact-1' } },
         },
       });
@@ -2876,7 +2876,7 @@ describe('CodexAgent MCP thread context hooks', () => {
     const request = {
       threadId: 'start-thread-id',
       turnId: 'turn-1',
-      serverName: 'lizi_contacts',
+      serverName: 'cindy_contacts',
       mode: 'form' as const,
       _meta: {
         codex_approval_kind: 'mcp_tool_call',
@@ -2917,7 +2917,7 @@ describe('CodexAgent MCP thread context hooks', () => {
     const handlers = host.getThreadHandlers();
     if (!handlers?.mcpServerElicitation) throw new Error('expected mcpServerElicitation handler');
     const resolver = vi.fn(async (req: InteractionRequest) => {
-      expect(req).toMatchObject({ kind: 'permission', toolName: 'mcp:lizi_contacts' });
+      expect(req).toMatchObject({ kind: 'permission', toolName: 'mcp:cindy_contacts' });
       return { kind: 'permission' as const, behavior: 'deny' as const };
     });
     handle.setInteractionResolver(resolver);
@@ -2925,7 +2925,7 @@ describe('CodexAgent MCP thread context hooks', () => {
     const result = await handlers.mcpServerElicitation({
       threadId: 'start-thread-id',
       turnId: 'turn-1',
-      serverName: 'lizi_contacts',
+      serverName: 'cindy_contacts',
       mode: 'form',
       _meta: {
         codex_approval_kind: 'mcp_tool_call',
@@ -2962,7 +2962,7 @@ describe('CodexAgent MCP thread context hooks', () => {
     const responsePromise = handlers.mcpServerElicitation({
       threadId: 'start-thread-id',
       turnId: 'turn-1',
-      serverName: 'lizi_contacts',
+      serverName: 'cindy_contacts',
       mode: 'form',
       _meta: {
         codex_approval_kind: 'mcp_tool_call',

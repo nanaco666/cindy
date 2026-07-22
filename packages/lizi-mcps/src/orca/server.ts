@@ -1,7 +1,7 @@
 /**
  * orca/server.ts
  * ---------------------------------------------------------------------------
- * In-process MCP server (`lizi_orca`) 暴露多 worker 协同(Orca team)控制工具。
+ * In-process MCP server (`cindy_orca`) 暴露多 worker 协同(Orca team)控制工具。
  *
  * 暴露 13 个 team 工具(直接 server.tool() 注册到顶层,不走 list_tools/call_tool 入口):
  *   start_team / create_worker / create_workers / send_to_worker / list_worker_queue /
@@ -15,7 +15,7 @@
  * 进系统提示前缀(固定成本、缓存稳定),换路由可靠性。
  *
  * 为什么独立成 server(从 cindy_helper 拆出): 让协同能力成为用户可关的插件
- * ("协同模式"开关 gate 整个 lizi_orca server), 而 cindy_helper 是 essential 的
+ * ("协同模式"开关 gate 整个 cindy_orca server), 而 cindy_helper 是 essential 的
  * 自省 + send_to_session handoff 基础设施, 不可关。整个 server 仅在 host 注入
  * deps(且插件开关开启)时注册; 未绑定具体 xdt-maker session 的调用会让
  * start_team 等控制工具按 LEAD_NOT_SUPPORTED 返回。
@@ -63,14 +63,14 @@ import { errorPayload, okPayload } from '../xdt-helper/_payload.js';
 // ── Host deps ──────────────────────────────────────────────────────────────
 
 /**
- * 协同(team)控制类工具的 host 回调集合。注入即注册 lizi_orca 的 13 个 team 工具
+ * 协同(team)控制类工具的 host 回调集合。注入即注册 cindy_orca 的 13 个 team 工具
  * (per-session 闭包绑定 ctx)。
  *
  * 回调返 Result 而非抛 Promise<T>: 让 host 能用 `HOST_NOT_READY` errorCode 表达
  * "主进程协同服务尚未 ready"(典型: app 启动过渡窗口), tool handler 收到 Result
  * 后用业务错误码透传给 LLM, 而不是抛 raw Error 落到 INTERNAL。
  *
- * (从原 lizi_xdtHelperMcpServer.ts 拆出, 随 team 工具一起独立成 lizi_orca server。)
+ * (从原 lizi_xdtHelperMcpServer.ts 拆出, 随 team 工具一起独立成 cindy_orca server。)
  */
 export interface OrcaMcpDeps {
   logger?: import('../types.js').LiziMcpLogger;
@@ -242,7 +242,7 @@ export interface OrcaMcpSessionCtx {
  * 复用既有 register*Tool(registry, deps) 的签名: 本类继承 XdtHelperToolRegistry 但
  * override register() —— 不入内部 Map, 而是转调 server.tool()。这样 13 个工具文件
  * 一行不改即可顶层直接注册。direct 注册下 category 字段无意义(忽略); list()/
- * call() 等继承方法不会被用到(lizi_orca 不暴露 list_tools/call_tool 入口)。
+ * call() 等继承方法不会被用到(cindy_orca 不暴露 list_tools/call_tool 入口)。
  */
 class DirectToolSink extends XdtHelperToolRegistry {
   constructor(private readonly mcp: McpServer) {
@@ -368,7 +368,7 @@ export function createOrcaMcpServer(
   ctx: OrcaMcpSessionCtx,
 ): McpServer {
   const server = new McpServer({
-    name: 'lizi_orca',
+    name: 'cindy_orca',
     version: '1.0.0',
   });
 

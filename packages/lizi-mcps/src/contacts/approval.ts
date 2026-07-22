@@ -1,5 +1,5 @@
 /**
- * Codex ask-mode approval policy for the progressive lizi_contacts MCP surface.
+ * Codex ask-mode approval policy for the progressive cindy_contacts MCP surface.
  *
  * Codex only sees the outer `list_tools` / `call_tool` tools. Its approval
  * metadata carries the outer arguments, so this classifier unwraps
@@ -47,7 +47,7 @@ function asRecord(value: unknown): Record<string, unknown> | null {
 }
 
 /**
- * Return true only when an lizi_contacts MCP call is safe to auto-approve.
+ * Return true only when an cindy_contacts MCP call is safe to auto-approve.
  * False means the existing Codex PermissionPrompt must handle this invocation.
  */
 export function canAutoApproveContactsMcpTool(

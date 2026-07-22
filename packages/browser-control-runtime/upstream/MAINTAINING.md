@@ -5,7 +5,7 @@
 
 ## 1. 这是什么
 
-给 agent(Claude Code / Codex)用的浏览器自动化能力,对外是 `lizi_browser` MCP 工具。核心运行时是**vendored 上游(代号见 `sync.mjs`)的浏览器内核**——不是重写,以便跟随上游更新。产品可见的任何地方都**不出现上游名 / 🦞**(见 §6)。
+给 agent(Claude Code / Codex)用的浏览器自动化能力,对外是 `cindy_browser` MCP 工具。核心运行时是**vendored 上游(代号见 `sync.mjs`)的浏览器内核**——不是重写,以便跟随上游更新。产品可见的任何地方都**不出现上游名 / 🦞**(见 §6)。
 
 默认行为:启动**一个专属、持久、headed 的自动化浏览器**(profile 名 "XDMaker"),登录态长期保留,与用户日常 Chrome 互不影响。
 
@@ -16,7 +16,7 @@ agent 调 browser 工具
   │  Claude Code: 进程内 SDK MCP server 直连
   │  Codex(本地): codex HTTP bridge → 同一个进程内 server   ← 远端 Codex 拿不到, 见 §7
   ▼
-[Layer 2] lizi_browser MCP 面   packages/lizi-mcps/src/browser/
+[Layer 2] cindy_browser MCP 面   packages/lizi-mcps/src/browser/
   │  createBrowserMcpServer(deps).deps.getRuntime()
   ▼
 [Layer 3] desktop host          apps/desktop/src/main/mcp-integrations/browser.ts
@@ -31,7 +31,7 @@ playwright-core → 托管 Chrome(XDMaker profile, 持久 user-data-dir)
 | 层 | 路径 | 职责 / 关键文件 |
 |---|---|---|
 | **L1 vendored runtime** | `packages/browser-control-runtime/` | `src/types.ts`(中性契约 `BrowserControlRuntime` / `BrowserRuntimeConfig` / Request / Result)、`src/runtime.ts`(`createBrowserControlRuntime` 把 vendored dispatcher 包到契约后面)、`src/unavailable.ts`(未配置时的安全 stub)、`src/shim/**`(手写替换上游 plugin-sdk 面,见 `shim-spec.md`)、`_generated/**`(**生成物,禁止手改**) |
-| **L2 MCP 面** | `packages/lizi-mcps/src/browser/` | `tools.ts`(唯一一个 `browser` 工具,17 个 action,`rules:['browser-workflow']`)、`server.ts`(`list_tools`/`call_tool` + 把 rules 打进响应)、`tool-registry.ts`、`index.ts`(`createBrowserMcpServer`)、`prompts/rules/browser-workflow.md`(**喂给 agent 的用法规则**)。在 `packages/lizi-mcps/src/providers.ts` 注册成 `lizi_browser` provider |
+| **L2 MCP 面** | `packages/lizi-mcps/src/browser/` | `tools.ts`(唯一一个 `browser` 工具,17 个 action,`rules:['browser-workflow']`)、`server.ts`(`list_tools`/`call_tool` + 把 rules 打进响应)、`tool-registry.ts`、`index.ts`(`createBrowserMcpServer`)、`prompts/rules/browser-workflow.md`(**喂给 agent 的用法规则**)。在 `packages/lizi-mcps/src/providers.ts` 注册成 `cindy_browser` provider |
 | **L3 desktop host** | `apps/desktop/src/main/mcp-integrations/` | `browser-runtime-env.ts`(**import 前置副作用**,见坑 #2)、`browser.ts`(托管 config + runtime 单例 + `getBrowserMcpDeps`/`getBrowserAvailability`/`openBrowserForLogin`)、`browser-availability.ts`(status → UI 数据)。IPC:`maker-ipc/{channels,register}.ts` 的 `BROWSER_STATUS` + `BROWSER_OPEN_FOR_LOGIN`。UI:`renderer/components/settings/ComputerUseSection.tsx`(设置 →「自动操作」)+ 4 语言 i18n。开关 gate:`maker-host/plugins/plugin-registry.ts`(plugin id `browser`) |
 
 ## 3. 配置流(以及那个静默 bug)
@@ -68,8 +68,8 @@ host 在 `browser.ts` 用 `buildManagedConfig()` 造出 `{ browser: { enabled, d
 
 ## 7. agent 暴露面(Claude / Codex)
 
-- **Claude Code**:`lizi_browser` provider 经 `toClaudeSdkConfig` 直接以进程内 SDK McpServer 暴露。
-- **本地 Codex**:`apps/desktop/src/main/mcp-integrations/codexEnvironment.ts` 把所有 lizi provider(含 browser)架到一个 HTTP bridge,`-c mcp_servers.lizi_browser.url=...` 注入。调同一个进程内 server / 同一个 runtime / **同一份持久 profile**——Claude 登录过的站,Codex 也是登录态。⚠️ 但 provider 的 `isEnabled` gate 在首次 spawn 时用空 `workingDir` 一次性求值并冻结,所以**项目级浏览器开关对本地 Codex 不生效**(见 §5 的已知限制)。
+- **Claude Code**:`cindy_browser` provider 经 `toClaudeSdkConfig` 直接以进程内 SDK McpServer 暴露。
+- **本地 Codex**:`apps/desktop/src/main/mcp-integrations/codexEnvironment.ts` 把所有 lizi provider(含 browser)架到一个 HTTP bridge,`-c mcp_servers.cindy_browser.url=...` 注入。调同一个进程内 server / 同一个 runtime / **同一份持久 profile**——Claude 登录过的站,Codex 也是登录态。⚠️ 但 provider 的 `isEnabled` gate 在首次 spawn 时用空 `workingDir` 一次性求值并冻结,所以**项目级浏览器开关对本地 Codex 不生效**(见 §5 的已知限制)。
 - **远端 Codex**:`packages/maker-core/src/agents/codex/index.ts` 明确不支持 lizi MCP 桥接,远端只用 codex 自带 + 远端用户配置的 MCP。浏览器(及所有 `lizi_*`)拿不到。
 
 ## 8. 跟随上游更新

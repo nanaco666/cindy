@@ -205,7 +205,7 @@ export function getRemoteSshPool(): ConnectionPool {
 /**
  * Like getRemoteSshPool() but guarantees the pool has been hydrated from
  * ~/.ssh/config first. Required by callers that read `pool.list()` before any
- * connect happens (e.g. lizi_ssh MCP tools resolving an alias on cold start) —
+ * connect happens (e.g. cindy_ssh MCP tools resolving an alias on cold start) —
  * plain getRemoteSshPool() returns an empty pool until Settings → Remote or a
  * connect path triggers hydration.
  */

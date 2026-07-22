@@ -220,7 +220,7 @@ export function createComputerMcpServer(
   deps: ComputerMcpDeps,
   options: ComputerMcpServerOptions = {},
 ): McpServer {
-  const server = new McpServer({ name: 'lizi_computer', version: '0.1.0' });
+  const server = new McpServer({ name: 'cindy_computer', version: '0.1.0' });
   // 快照代际状态。claude 路径下每 session 一个 server 实例;codex HTTP bridge 下
   // 单实例跨 session 共享,所以 tracker 内部按 sessionId 分键。
   const snapshotTracker = new WindowSnapshotTracker();
@@ -252,7 +252,7 @@ export function createComputerMcpServer(
       // 模型自纠之前在这里落一条日志(见 tool-error-telemetry.ts)。
       logToolResultErrorCode({
         logger: deps.logger,
-        server: 'lizi_computer',
+        server: 'cindy_computer',
         tool: name,
         result,
         sessionId: readSessionId(options),
@@ -400,7 +400,7 @@ export function createComputerMcpServer(
       // 过渡兼容:老调用方 / 未升级的 agent 不带 snapshot_id,放行但留痕,
       // 后续可据此评估何时收紧为强制。
       deps.logger?.warn('element_index action without snapshot_id', {
-        server: 'lizi_computer',
+        server: 'cindy_computer',
         tool: name,
         ...(sessionId ? { sessionId } : {}),
       });

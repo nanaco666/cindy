@@ -98,7 +98,7 @@ function registerCallToolEntry(server: McpServer, registry: BrowserToolRegistry)
 
 export function createBrowserMcpServer(deps: BrowserMcpDeps): McpServer {
   const server = new McpServer({
-    name: 'lizi_browser',
+    name: 'cindy_browser',
     version: '1.0.0',
   });
   const registry = new BrowserToolRegistry();

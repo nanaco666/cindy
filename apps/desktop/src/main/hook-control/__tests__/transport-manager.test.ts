@@ -624,7 +624,7 @@ describe('hook-control transport + manager(真实 ws server)', () => {
     expect(manager.snapshot().binding?.teamName).toBe('xindong');
   });
 
-  it('lizi_slack provider gate 跟随绑定与 server capability，断线抖动不重复刷新', async () => {
+  it('cindy_slack provider gate 跟随绑定与 server capability，断线抖动不重复刷新', async () => {
     const { wss, url } = await startServer();
     const store = memoryStore({ url });
     const changes: boolean[] = [];

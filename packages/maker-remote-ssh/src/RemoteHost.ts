@@ -65,7 +65,7 @@ export interface ExecOpts {
    * is torn down (TERM + close), resolving with `truncated: true`. Without
    * this, an arbitrary command (`cat` on a multi-GB log, `yes`) accumulates
    * unbounded strings in the Electron main process until timeout. Callers
-   * running untrusted / model-authored commands (lizi_ssh MCP) MUST set it.
+   * running untrusted / model-authored commands (cindy_ssh MCP) MUST set it.
    * Default: unlimited (legacy behavior for short trusted probes).
    */
   maxOutputBytes?: number;
@@ -127,7 +127,7 @@ export function isAuthFailure(msg: string): boolean {
     lower.includes('no matching authentication') ||
     // authFailureHint() 的改写产物也必须被识别:connect() 失败时 lastError /
     // reject message 已被换成友好文案,后续判定(reconnect 跳过、IPC 分类、
-    // lizi_ssh 错误码)都跑在改写后的字符串上。不识别会把确定性的认证失败
+    // cindy_ssh 错误码)都跑在改写后的字符串上。不识别会把确定性的认证失败
     // 降级成"可重试的连接失败"。与 authFailureHint 的三种文案一一对应,
     // 改 hint 措辞时必须同步这里(有 invariant 单测拦截)。
     lower.includes('has no key the remote accepts') ||

@@ -1,8 +1,8 @@
 /**
- * lizi_feishuBotToolRegistry.ts
+ * cindy_feishuBotToolRegistry.ts
  * ---------------------------------------------------------------------------
  * Mirrors the art tool registry —— 把细粒度的 feishu-bot 工具从 MCP server
- * 自身剥离,只暴露 `lizi_feishu_bot_list_tools` + `lizi_feishu_bot_call_tool`
+ * 自身剥离,只暴露 `cindy_feishu_bot_list_tools` + `cindy_feishu_bot_call_tool`
  * 两个入口,省 Agent 上下文。
  *
  * INVALID_ARGS 时把目标工具的 JSON Schema 一并回吐,模型可以一轮自纠。
@@ -39,7 +39,7 @@ export interface FeishuBotToolDef {
   description: string;
   /**
    * 共享 rule 文档的 key。registry 只存 key,markdown 真身在并行的 rules map,
-   * `lizi_feishu_bot_list_tools` 时按 category 一次性 bundle 进顶层 `rules`,
+   * `cindy_feishu_bot_list_tools` 时按 category 一次性 bundle 进顶层 `rules`,
    * 不在每个工具描述里复读。
    */
   rules?: string[];
@@ -68,7 +68,7 @@ export class FeishuBotToolRegistry {
     handler: FeishuBotToolHandler<{ [K in keyof T]: z.infer<T[K]> }>;
   }): void {
     if (this.tools.has(def.name)) {
-      throw new Error(`[lizi_feishuBotToolRegistry] duplicate tool name: ${def.name}`);
+      throw new Error(`[cindy_feishuBotToolRegistry] duplicate tool name: ${def.name}`);
     }
     this.tools.set(def.name, def as unknown as FeishuBotToolDef);
   }

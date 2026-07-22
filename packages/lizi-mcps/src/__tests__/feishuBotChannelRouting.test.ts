@@ -1,5 +1,5 @@
 /**
- * lizi_feishu_bot 渠道路由提示的回归测试。
+ * cindy_feishu_bot 渠道路由提示的回归测试。
  *
  * 背景(2026-07-16 实踩):Slack 会话里模型把「把文件发给我」路由到了飞书通道
  * 并失败。修复方式是构建期按 sessionSource 给飞书侧全部工具描述追加路由提示
@@ -16,7 +16,7 @@ import {
   createFeishuBotMcpServer,
   SLACK_HOOK_SESSION_CHANNEL_NOTE,
   type FeishuBotMcpDeps,
-} from '../lizi_feishuBotMcpServer';
+} from '../cindy_feishuBotMcpServer';
 
 function makeDeps(sessionSource?: string): FeishuBotMcpDeps {
   return {
@@ -69,7 +69,7 @@ const ALL_TOOL_KEYS = [
   'registry:send_message_to_user',
 ] as const;
 
-describe('lizi_feishu_bot channel routing note', () => {
+describe('cindy_feishu_bot channel routing note', () => {
   it.each([
     ['slack-hook', SLACK_HOOK_SESSION_CHANNEL_NOTE],
   ] as const)(

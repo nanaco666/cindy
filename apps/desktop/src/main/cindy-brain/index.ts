@@ -259,7 +259,7 @@ const RENAMED_BUILTIN_GHOSTS: ReadonlyArray<readonly [string, string]> = [
  * 目录。每轮对账幂等执行,长期保留(老设备可能隔很多版本才升级)。
  */
 const RETIRED_BUILTIN_GHOSTS: readonly string[] = [
-  'cindy-slack', // 2026-07-19 退役:Slack 能力并轨 hook 通道(lizi_slack 网关工具)
+  'cindy-slack', // 2026-07-19 退役:Slack 能力并轨 hook 通道(cindy_slack 网关工具)
 ];
 
 /** 退役意识的存量用户数据清理(uninstall 三连的对账版;全程 best-effort)。 */

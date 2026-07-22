@@ -1,5 +1,5 @@
 /**
- * lizi_slackMcpServer.ts
+ * cindy_slackMcpServer.ts
  * ---------------------------------------------------------------------------
  * In-process MCP server for Slack tools over the hook channel. Attached to
  * every session once the user's Slack hook binding is confirmed (isEnabled in
@@ -28,9 +28,9 @@ import { jsonObjectArg } from './json-object-arg.js';
 import { PathBoundaryError, resolvePathInsideRoot } from './shared/assertInsidePath.js';
 import type { SlackHookMcpDeps, SlackToolBridgeLike } from './types.js';
 
-import descStatus from './prompts/lizi_slack/tools/slack_status.md?raw';
-import descListTools from './prompts/lizi_slack/tools/slack_list_tools.md?raw';
-import descCallTool from './prompts/lizi_slack/tools/slack_call_tool.md?raw';
+import descStatus from './prompts/cindy_slack/tools/slack_status.md?raw';
+import descListTools from './prompts/cindy_slack/tools/slack_list_tools.md?raw';
+import descCallTool from './prompts/cindy_slack/tools/slack_call_tool.md?raw';
 
 /** 交卷体量护栏: 超过即落盘工作目录只交路径(写盘不可用才回落截断)。 */
 const RESULT_MAX_CHARS = 50_000;
@@ -137,7 +137,7 @@ async function deliver(
 }
 
 export function createSlackMcpGatewayServer(deps: SlackHookMcpDeps): McpServer {
-  const server = new McpServer({ name: 'lizi_slack', version: '1.0.0' });
+  const server = new McpServer({ name: 'cindy_slack', version: '1.0.0' });
 
   /** team_id 入参的统一描述(multi-team 语境下 3 个工具共用口径)。 */
   const TEAM_ID_DESC =

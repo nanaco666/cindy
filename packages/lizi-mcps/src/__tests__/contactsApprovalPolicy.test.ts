@@ -6,7 +6,7 @@ const callTool = (name: string, args: Record<string, unknown> = {}) => ({
   toolParams: { name, args },
 });
 
-describe("lizi_contacts Codex approval policy", () => {
+describe("cindy_contacts Codex approval policy", () => {
   it("auto-approves discovery, reads, and ordinary local writes", () => {
     expect(
       canAutoApproveContactsMcpTool({ toolName: "list_tools", toolParams: {} }),

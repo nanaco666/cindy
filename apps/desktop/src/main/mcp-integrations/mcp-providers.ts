@@ -96,7 +96,7 @@ export function createDesktopMcpProviders(deps: DesktopMcpProvidersDeps): LiziMc
         try {
           return await feishuIm.sendFile(chatId, absPath, displayName);
         } catch (err) {
-          createLogger('mcp/lizi_feishu_bot').warn(
+          createLogger('mcp/cindy_feishu_bot').warn(
             'sendFile failed target=...%s detail=%s',
             chatId.slice(-8),
             err instanceof Error ? err.message : String(err),
@@ -120,7 +120,7 @@ export function createDesktopMcpProviders(deps: DesktopMcpProvidersDeps): LiziMc
             : err instanceof Error
               ? err.message
               : String(err);
-          createLogger('mcp/lizi_feishu_bot').warn(
+          createLogger('mcp/cindy_feishu_bot').warn(
             'sendMessage failed target=...%s detail=%s',
             chatId.slice(-8),
             detail,
@@ -128,14 +128,14 @@ export function createDesktopMcpProviders(deps: DesktopMcpProvidersDeps): LiziMc
           return { ok: false, reason: 'SEND_FAIL' };
         }
       },
-      logger: createLogger('mcp/lizi_feishu_bot'),
+      logger: createLogger('mcp/cindy_feishu_bot'),
     },
-    // lizi_slack(2026-07-19): Slack 网关工具。桥经 hook-control 的零依赖
+    // cindy_slack(2026-07-19): Slack 网关工具。桥经 hook-control 的零依赖
     // 注册表取用(静态 import ipc.ts 会与 maker-host 闭环, 见 slackToolBridge
     // 模块头); 未注册 = null, provider isEnabled fail-closed。
     slackHook: {
       getBridge: () => getSlackToolBridge(),
-      logger: createLogger('mcp/lizi_slack'),
+      logger: createLogger('mcp/cindy_slack'),
     },
     scheduler: {
       getScheduler: () => getScheduler(),
@@ -182,7 +182,7 @@ export function createDesktopMcpProviders(deps: DesktopMcpProvidersDeps): LiziMc
       },
       logger: createLogger('mcp/cindy_scheduler'),
     },
-    // lizi_ssh: agent 直接在已配置 SSH 主机上执行命令(远端零安装)。
+    // cindy_ssh: agent 直接在已配置 SSH 主机上执行命令(远端零安装)。
     // ⚠️ 必须 lazy await import():静态 import remote-ssh 会形成
     // mcp-providers → remote-ssh/index.ts(imports maker-host) →
     // maker-host/index.ts(imports createDesktopMcpProviders) → mcp-providers 环
@@ -199,7 +199,7 @@ export function createDesktopMcpProviders(deps: DesktopMcpProvidersDeps): LiziMc
       // 这种远端执行工具必须在调用时刻按真实会话 workdir 再查一次 registry;
       // workingDir undefined = 无会话上下文,回落全局开关判定。
       isEnabledForWorkdir: (workingDir) => pluginRegistry.isEnabled('ssh', workingDir),
-      logger: createLogger('mcp/lizi_ssh'),
+      logger: createLogger('mcp/cindy_ssh'),
     },
     memory: {
       getManager: deps.getMakerMemoryManager,
@@ -217,11 +217,11 @@ export function createDesktopMcpProviders(deps: DesktopMcpProvidersDeps): LiziMc
       // agent 经 MCP 直写 store 不经 IPC 层, 变更靠这个回调广播给 renderer
       // (设置页统计/待确认角标/管理浮层的实时刷新)
       onMutated: broadcastContactsChanged,
-      logger: createLogger('mcp/lizi_contacts'),
+      logger: createLogger('mcp/cindy_contacts'),
     },
     lsp: {
       pool: deps.lspPool,
-      logger: createLogger('mcp/lizi_lsp'),
+      logger: createLogger('mcp/cindy_lsp'),
       isUserEnabled: () => readLspModeSettings().enabled,
     },
     // xdt-helper: 自省 + history + send_to_session (essential 常开)。
@@ -314,7 +314,7 @@ export function createDesktopMcpProviders(deps: DesktopMcpProvidersDeps): LiziMc
       // holder 同样是延迟查找，registerMakerIpc 里 init。
       githubIssue: (req) => submitGithubIssueForSession(req),
     },
-    // lizi_orca: 多 worker 协同 team 工具集。"协同模式"可关插件 gate 它。
+    // cindy_orca: 多 worker 协同 team 工具集。"协同模式"可关插件 gate 它。
     orca: {
       startTeam: wrap((s, params) => s.startTeam(params)),
       createWorker: wrap((s, params) => s.createWorker(params)),
