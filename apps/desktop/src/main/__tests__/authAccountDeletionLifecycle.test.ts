@@ -78,7 +78,20 @@ describe('desktop auth account-deletion lifecycle', () => {
     expect(body).toContain('if (sessionInvalidationPromise) return sessionInvalidationPromise;');
     expect(body).toContain('await authSessionTeardown(reason);');
     expect(body).toContain('closeLocalDb();');
-    expect(body).toContain('clearAuth();');
+    expect(body).toContain('clearAuth({ notify: false });');
+    expect(body).toContain('notifyAuthListeners();');
+    expect(body).toContain('notifySessionExpired();');
+    expect(body.indexOf('clearAuth({ notify: false });')).toBeLessThan(
+      body.indexOf('notifySessionExpired();'),
+    );
+  });
+
+  it('restores the localized renderer notification without leaking internal reason codes', () => {
+    const start = source.indexOf('function notifySessionExpired()');
+    const end = source.indexOf('\n}\n\n// ── In-process auth state subscription', start);
+    const body = source.slice(start, end);
+
+    expect(body).toContain("broadcastToRenderers('auth:session-expired', { message: '' });");
   });
 
   it('routes direct protected auth-client calls through terminal invalidation', () => {

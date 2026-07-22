@@ -738,6 +738,15 @@ function notifyRendererAuthBoundaryPending(): void {
   broadcastToRenderers('auth:state-change', snapshotLoggedOutAuthState());
 }
 
+/**
+ * Preserve the dedicated forced-logout UX while leaving copy localization to
+ * the renderer. An empty message intentionally selects its localized fallback
+ * instead of exposing internal invalidation reason codes to the user.
+ */
+function notifySessionExpired(): void {
+  broadcastToRenderers('auth:session-expired', { message: '' });
+}
+
 // ── In-process auth state subscription ─────────────────────────────────────
 //
 // In addition to renderer broadcast (auth:state-change), main-process modules
@@ -889,7 +898,12 @@ export function invalidateSession(reason: string): Promise<void> {
     }
   });
   sessionInvalidationPromise = run;
-  clearAuth();
+  // Keep the current renderer surface in place until its session-expired
+  // dialog is acknowledged. Main-process consumers still need the immediate
+  // logged-out transition so no account-scoped work can restart meanwhile.
+  clearAuth({ notify: false });
+  notifyAuthListeners();
+  notifySessionExpired();
 
   const clearIfCurrent = (): void => {
     if (sessionInvalidationPromise === run) sessionInvalidationPromise = null;
