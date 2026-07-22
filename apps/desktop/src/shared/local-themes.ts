@@ -18,6 +18,11 @@ export interface LocalThemeBrandBounds {
   logo?: ImageVisibleBounds;
 }
 
+export interface LocalThemeBrandRevisions {
+  icon?: string;
+  logo?: string;
+}
+
 export interface LocalThemeWire {
   id: string;
   name: string;
@@ -27,6 +32,8 @@ export interface LocalThemeWire {
   brand?: LocalThemeBrandConfig;
   /** loader 从透明像素计算出的运行时裁边信息，不写回用户 JSON。 */
   brandBounds?: LocalThemeBrandBounds;
+  /** loader 从文件状态生成的运行时版本号，用于刷新同一路径下被替换的图片。 */
+  brandRevisions?: LocalThemeBrandRevisions;
 }
 
 export interface LocalThemeDiagnostic {

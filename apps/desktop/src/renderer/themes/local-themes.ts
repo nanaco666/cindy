@@ -22,14 +22,14 @@ function mapWireTheme(theme: LocalThemeWire): Theme {
   const iconPath = theme.brand?.icon;
   const logoPath = theme.brand?.logo;
   const icon = iconPath
-      ? {
-        src: toLocalFileUrl(iconPath),
+    ? {
+        src: toLocalFileUrl(iconPath, theme.brandRevisions?.icon),
         ...(theme.brandBounds?.icon ? { visibleBounds: theme.brandBounds.icon } : {}),
       }
     : undefined;
   const logo = logoPath
-      ? {
-        src: toLocalFileUrl(logoPath),
+    ? {
+        src: toLocalFileUrl(logoPath, theme.brandRevisions?.logo),
         ...(theme.brandBounds?.logo ? { visibleBounds: theme.brandBounds.logo } : {}),
       }
     : undefined;
@@ -54,8 +54,9 @@ function signatureOf(themes: Theme[]): string {
 function updateCachedThemes(payload: LocalThemesResult): boolean {
   const next = payload.success ? payload.themes.map(mapWireTheme) : [];
   const nextSignature = signatureOf(next);
-  if (nextSignature === cachedSignature) return false;
+  // 即使签名相同也替换对象引用，让显式刷新可以重试此前加载失败的同路径素材。
   cachedThemes = next;
+  if (nextSignature === cachedSignature) return false;
   cachedSignature = nextSignature;
   return true;
 }

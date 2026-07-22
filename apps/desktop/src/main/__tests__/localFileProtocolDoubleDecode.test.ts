@@ -89,4 +89,16 @@ describe('localFileProtocol — no double-decode regression', () => {
     const res = await handler(makeRequest(urlFor('img.png')));
     expect(res.status).toBe(200);
   });
+
+  it('ignores a cache-busting revision query and serves the original path', async () => {
+    (fs.stat as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+      isFile: () => true,
+      size: 8,
+    });
+    const handler = getHandler();
+    const res = await handler(makeRequest(`${urlFor('img.png')}&v=12%3A34.5`));
+
+    expect(res.status).toBe(200);
+    expect(fs.realpath).toHaveBeenCalledWith(`${ABS_DIR}img.png`);
+  });
 });

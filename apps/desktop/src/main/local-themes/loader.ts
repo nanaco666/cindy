@@ -7,6 +7,7 @@ import {
   LOCAL_THEME_SUFFIX,
   type LocalThemeBrandBounds,
   type LocalThemeBrandConfig,
+  type LocalThemeBrandRevisions,
   type LocalThemeDiagnostic,
   type LocalThemeWire,
   type LocalThemesResult,
@@ -46,6 +47,11 @@ const visibleBoundsCache = new Map<
   string,
   { size: number; mtimeMs: number; bounds: ImageVisibleBounds | undefined }
 >();
+
+interface InspectedBrandAsset {
+  revision: string;
+  bounds?: ImageVisibleBounds;
+}
 
 /** 仅供测试：清掉进程内"已搬迁"标记。 */
 export function resetLocalThemesMigrationForTest(): void {
@@ -140,16 +146,20 @@ function parseLocalThemeJson(raw: unknown): LocalThemeJson {
 const MAX_ALPHA_SCAN_PIXELS = 8_000_000;
 
 /**
- * 读取图片透明像素边界，只生成运行时布局元数据，不改写/复制原图。
- * 大图跳过扫描，避免同步主题 bootstrap 出现不可控主进程停顿。
+ * 读取品牌图片的文件版本与透明像素边界，只生成运行时元数据，不改写/复制原图。
+ * 大图仍提供版本号，但跳过 alpha 扫描，避免同步主题 bootstrap 出现不可控主进程停顿。
  */
-function inspectVisibleBounds(filePath: string) {
+function inspectBrandAsset(filePath: string): InspectedBrandAsset | undefined {
   try {
     const stat = fs.statSync(filePath);
     if (!stat.isFile()) return undefined;
+    const revision = `${stat.size}:${stat.mtimeMs}`;
     const cached = visibleBoundsCache.get(filePath);
     if (cached && cached.size === stat.size && cached.mtimeMs === stat.mtimeMs) {
-      return cached.bounds;
+      return {
+        revision,
+        ...(cached.bounds ? { bounds: cached.bounds } : {}),
+      };
     }
     const image = nativeImage.createFromPath(filePath);
     if (image.isEmpty()) {
@@ -158,7 +168,7 @@ function inspectVisibleBounds(filePath: string) {
         mtimeMs: stat.mtimeMs,
         bounds: undefined,
       });
-      return undefined;
+      return { revision };
     }
     const { width, height } = image.getSize();
     if (width <= 0 || height <= 0 || width * height > MAX_ALPHA_SCAN_PIXELS) {
@@ -167,25 +177,41 @@ function inspectVisibleBounds(filePath: string) {
         mtimeMs: stat.mtimeMs,
         bounds: undefined,
       });
-      return undefined;
+      return { revision };
     }
     const bitmap = image.toBitmap({ scaleFactor: 1 });
     const bounds = findVisibleAlphaBounds(bitmap, width, height);
     visibleBoundsCache.set(filePath, { size: stat.size, mtimeMs: stat.mtimeMs, bounds });
-    return bounds;
+    return { revision, ...(bounds ? { bounds } : {}) };
   } catch {
     return undefined;
   }
 }
 
-function inspectBrandBounds(theme: LocalThemeJson): LocalThemeBrandBounds | undefined {
+function inspectBrandAssets(theme: LocalThemeJson): {
+  bounds?: LocalThemeBrandBounds;
+  revisions?: LocalThemeBrandRevisions;
+} {
   const iconPath = theme.brand?.icon;
   const logoPath = theme.brand?.logo;
-  const icon = iconPath ? inspectVisibleBounds(iconPath) : undefined;
-  const logo = logoPath ? inspectVisibleBounds(logoPath) : undefined;
-  return icon || logo
-    ? { ...(icon ? { icon } : {}), ...(logo ? { logo } : {}) }
+  const icon = iconPath ? inspectBrandAsset(iconPath) : undefined;
+  const logo = logoPath ? inspectBrandAsset(logoPath) : undefined;
+  const bounds = icon?.bounds || logo?.bounds
+    ? {
+        ...(icon?.bounds ? { icon: icon.bounds } : {}),
+        ...(logo?.bounds ? { logo: logo.bounds } : {}),
+      }
     : undefined;
+  const revisions = icon || logo
+    ? {
+        ...(icon ? { icon: icon.revision } : {}),
+        ...(logo ? { logo: logo.revision } : {}),
+      }
+    : undefined;
+  return {
+    ...(bounds ? { bounds } : {}),
+    ...(revisions ? { revisions } : {}),
+  };
 }
 
 function normalizeError(error: unknown): string {
@@ -215,8 +241,13 @@ function processEntries(
         continue;
       }
       seenIds.add(id);
-      const brandBounds = inspectBrandBounds(parsed);
-      themes.push({ ...parsed, id, ...(brandBounds ? { brandBounds } : {}) });
+      const { bounds: brandBounds, revisions: brandRevisions } = inspectBrandAssets(parsed);
+      themes.push({
+        ...parsed,
+        id,
+        ...(brandBounds ? { brandBounds } : {}),
+        ...(brandRevisions ? { brandRevisions } : {}),
+      });
     } catch (error) {
       const message = normalizeError(error);
       log.warn(`Failed to load local theme '${entry.file}': ${message}`);

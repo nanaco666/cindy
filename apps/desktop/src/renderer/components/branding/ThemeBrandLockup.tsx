@@ -93,8 +93,8 @@ export function ThemeBrandLockup({ theme, className, testId }: ThemeBrandLockupP
   const [iconFailed, setIconFailed] = useState(false);
   const [logoFailed, setLogoFailed] = useState(false);
 
-  useEffect(() => setIconFailed(false), [customIcon?.src, defaultIcon.src]);
-  useEffect(() => setLogoFailed(false), [customLogo?.src, defaultLogo.src]);
+  useEffect(() => setIconFailed(false), [customIcon, defaultIcon.src]);
+  useEffect(() => setLogoFailed(false), [customLogo, defaultLogo.src]);
 
   const icon = customIcon && !iconFailed ? customIcon : defaultIcon;
   const logo = customLogo && !logoFailed ? customLogo : defaultLogo;

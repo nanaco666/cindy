@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, render } from '@testing-library/react';
+import { cleanup, fireEvent, render } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { ThemeBrandLockup } from '../ThemeBrandLockup';
@@ -62,5 +62,27 @@ describe('ThemeBrandLockup', () => {
     expect(image.style.height).toBe('68.75px');
     expect(Number.parseFloat(image.style.left)).toBeCloseTo(-13.75);
     expect(Number.parseFloat(image.style.top)).toBeCloseTo(-8.75);
+  });
+
+  it('retries a failed custom asset when refresh supplies a new object with the same src', () => {
+    const makeTheme = (): Theme => ({
+      id: 'retry-local',
+      name: 'Retry',
+      type: 'light',
+      colors: {},
+      brand: { icon: { src: 'same-icon.png' } },
+    });
+    const view = render(<ThemeBrandLockup theme={makeTheme()} testId="brand" />);
+    const customImage = view.getByTestId('brand-icon').querySelector('img') as HTMLImageElement;
+
+    fireEvent.error(customImage);
+    expect(view.getByTestId('brand-icon').querySelector('img')?.getAttribute('src')).not.toBe(
+      'same-icon.png',
+    );
+
+    view.rerender(<ThemeBrandLockup theme={makeTheme()} testId="brand" />);
+    expect(view.getByTestId('brand-icon').querySelector('img')?.getAttribute('src')).toBe(
+      'same-icon.png',
+    );
   });
 });
