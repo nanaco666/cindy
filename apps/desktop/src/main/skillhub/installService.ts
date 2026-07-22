@@ -221,14 +221,15 @@ async function rollbackFinalSwitch(finalDir: string, state: FinalSwitchRollbackS
 
 async function restoreRegistryAfterFinalSwitchRollback(
   skillName: string,
-  finalDir: string,
+  physicalFinalDir: string,
+  registryInstallPath: string,
   previousEntry: RegistryInstallEntry,
 ): Promise<void> {
   try {
-    await registryService.removeInstall(skillName, finalDir);
+    await registryService.removeInstall(skillName, registryInstallPath);
   } catch (err) {
     try {
-      const quarantinePath = await quarantineRolledBackInstall(finalDir, skillName);
+      const quarantinePath = await quarantineRolledBackInstall(physicalFinalDir, skillName);
       log.warn('[skillInstall] quarantined rolled back install after registry removal failed:', quarantinePath);
     } catch (quarantineErr) {
       log.error('[skillInstall] quarantine after registry removal failed:', quarantineErr);
@@ -237,10 +238,10 @@ async function restoreRegistryAfterFinalSwitchRollback(
   }
   if (previousEntry) {
     try {
-      await registryService.addInstall(skillName, finalDir, previousEntry);
+      await registryService.addInstall(skillName, registryInstallPath, previousEntry);
     } catch (err) {
       try {
-        const quarantinePath = await quarantineRolledBackInstall(finalDir, skillName);
+        const quarantinePath = await quarantineRolledBackInstall(physicalFinalDir, skillName);
         log.warn('[skillInstall] quarantined rolled back install after registry restore failed:', quarantinePath);
       } catch (quarantineErr) {
         log.error('[skillInstall] quarantine after registry restore failed:', quarantineErr);
@@ -267,6 +268,87 @@ function globalSkillsDir(): string {
   return path.join(os.homedir(), '.agents', 'skills');
 }
 
+/** Structural metadata for a direct project/global Skill discovery path. */
+interface DirectSkillDiscoveryPath {
+  workingDir: string;
+  discoveryRoot: '.agents' | '.claude';
+}
+
+function pathTextEquals(actual: string, expected: string): boolean {
+  return process.platform === 'win32'
+    ? actual.toLowerCase() === expected.toLowerCase()
+    : actual === expected;
+}
+
+function resolvedPathEquals(actual: string, expected: string): boolean {
+  const normalize = (value: string) => {
+    let resolved = path.resolve(value);
+    if (process.platform === 'win32') {
+      resolved = resolved
+        .replace(/^\\\\\?\\UNC\\/i, '\\\\')
+        .replace(/^\\\\\?\\/i, '')
+        .toLowerCase();
+    }
+    return resolved;
+  };
+  return normalize(actual) === normalize(expected);
+}
+
+/** Parse only direct `<workingDir>/.{agents,claude}/skills/<name>` children. */
+function parseDirectSkillDiscoveryPath(skillPath: string): DirectSkillDiscoveryPath | null {
+  const absolutePath = path.resolve(skillPath);
+  const skillsDir = path.dirname(absolutePath);
+  if (!pathTextEquals(path.basename(skillsDir), 'skills')) return null;
+
+  const discoveryDir = path.dirname(skillsDir);
+  const discoveryRoot = path.basename(discoveryDir);
+  if (!pathTextEquals(discoveryRoot, '.agents') && !pathTextEquals(discoveryRoot, '.claude')) {
+    return null;
+  }
+
+  return {
+    workingDir: path.dirname(discoveryDir),
+    discoveryRoot: pathTextEquals(discoveryRoot, '.agents') ? '.agents' : '.claude',
+  };
+}
+
+/**
+ * Preserve a managed cross-agent compatibility link during an install/update.
+ *
+ * Only one link hop is followed. If the opposite-side source is itself a user
+ * symlink, the final switch replaces that symlink rather than touching its
+ * external target.
+ */
+async function resolvePhysicalInstallDir(logicalFinalDir: string, skillName: string): Promise<string> {
+  let stat: fs.Stats;
+  try {
+    stat = await fs.promises.lstat(logicalFinalDir);
+  } catch {
+    return logicalFinalDir;
+  }
+  if (!stat.isSymbolicLink()) return logicalFinalDir;
+
+  const logicalShape = parseDirectSkillDiscoveryPath(logicalFinalDir);
+  if (!logicalShape) return logicalFinalDir;
+
+  let rawTarget: string;
+  try {
+    rawTarget = await fs.promises.readlink(logicalFinalDir);
+  } catch {
+    return logicalFinalDir;
+  }
+  const target = path.isAbsolute(rawTarget)
+    ? path.normalize(rawTarget)
+    : path.resolve(path.dirname(logicalFinalDir), rawTarget);
+  const targetShape = parseDirectSkillDiscoveryPath(target);
+  if (!targetShape) return logicalFinalDir;
+
+  const sameWorkingDir = resolvedPathEquals(logicalShape.workingDir, targetShape.workingDir);
+  const isOppositeRoot = logicalShape.discoveryRoot !== targetShape.discoveryRoot;
+  const isSameSkill = pathTextEquals(path.basename(target), skillName);
+  return sameWorkingDir && isOppositeRoot && isSameSkill ? target : logicalFinalDir;
+}
+
 /** 共享安装锁被占时的用户可读文案（按持有方区分）。 */
 function skillLockBusyMessage(skillName: string): string {
   const owner = getSkillInstallLockOwner(skillName);
@@ -282,7 +364,7 @@ function skillLockBusyMessage(skillName: string): string {
  */
 function resolveTargetDir(
   p: InstallParams,
-): { finalDir: string; stagingParent: string } | { error: InstallErrorCode; message: string } {
+): { finalDir: string } | { error: InstallErrorCode; message: string } {
   if (p.installPath) {
     const finalDir = path.normalize(p.installPath);
     if (path.basename(finalDir) !== p.name) {
@@ -291,10 +373,10 @@ function resolveTargetDir(
         message: `installPath 的 basename "${path.basename(finalDir)}" 与 name "${p.name}" 不符`,
       };
     }
-    return { finalDir, stagingParent: path.dirname(finalDir) };
+    return { finalDir };
   }
   const finalDir = path.join(globalSkillsDir(), p.name);
-  return { finalDir, stagingParent: globalSkillsDir() };
+  return { finalDir };
 }
 
 /**
@@ -349,7 +431,9 @@ export async function install(
     onProgress({ phase: 'failed', name: p.name, errorCode: resolved.error, message: resolved.message });
     return { success: false, errorCode: resolved.error, message: resolved.message };
   }
-  const { finalDir, stagingParent } = resolved;
+  const logicalFinalDir = resolved.finalDir;
+  const finalDir = await resolvePhysicalInstallDir(logicalFinalDir, p.name);
+  const stagingParent = path.dirname(finalDir);
 
   // 共享安装锁（与 learn apply / uninstall 互斥,按 name 串行,fail-fast 不排队）
   const releaseLock = tryAcquireSkillInstallLock(p.name, 'market-install');
@@ -578,7 +662,9 @@ export async function install(
     const folderHash = (await computeFolderHash(finalDir).catch(() => null)) ?? '';
     const nowSec = Math.floor(Date.now() / 1000);
     const versionStr = downloadVersion || info.fileHash.slice(0, 8);
-    const existingRegistryEntry = await Promise.resolve(registryService.getInstall(p.name, finalDir)).catch(() => null);
+    const existingRegistryEntry = await Promise.resolve(
+      registryService.getInstall(p.name, logicalFinalDir),
+    ).catch(() => null);
     const previousRegistryEntry = rollbackState.backupDir ? existingRegistryEntry : null;
     const nextAutoSynced = p.autoSync === true
       ? true
@@ -587,7 +673,7 @@ export async function install(
         : false;
 
     try {
-      await registryService.addInstall(p.name, finalDir, {
+      await registryService.addInstall(p.name, logicalFinalDir, {
         version: versionStr,
         authorId,
         folderHash,
@@ -632,7 +718,12 @@ export async function install(
             log.error('[skillInstall] rollback after backup move failed:', restoreErr);
           }
           try {
-            await restoreRegistryAfterFinalSwitchRollback(p.name, finalDir, previousRegistryEntry);
+            await restoreRegistryAfterFinalSwitchRollback(
+              p.name,
+              finalDir,
+              logicalFinalDir,
+              previousRegistryEntry,
+            );
           } catch (restoreErr) {
             message = fileRollbackFailed
               ? `备份旧目录失败，且安装文件 / registry 回滚失败：${backupMessage}；registry 错误：${restoreErr instanceof Error ? restoreErr.message : String(restoreErr)}`
@@ -661,7 +752,7 @@ export async function install(
         log.warn('[skillInstall] claude symlink failed (non-fatal):', claudeLink, err);
       }
     }
-    const projectWorkingDir = await reconcileProjectSkillLinksForPaths(finalDir);
+    const projectWorkingDir = await reconcileProjectSkillLinksForPaths(logicalFinalDir, finalDir);
     try {
       const linkResult = await prepareSharedGlobalSkillLinks();
       for (const warning of linkResult.warnings) {
@@ -671,12 +762,12 @@ export async function install(
       log.warn('[skillInstall] prepare shared global skill links failed:', err);
     }
 
-    onProgress({ phase: 'done', name: p.name, version: versionStr, absolutePath: finalDir });
+    onProgress({ phase: 'done', name: p.name, version: versionStr, absolutePath: logicalFinalDir });
     return {
       success: true,
       name: p.name,
       version: versionStr,
-      absolutePath: finalDir,
+      absolutePath: logicalFinalDir,
       ...(replacedBackupPath ? { replacedBackupPath } : {}),
       ...(projectWorkingDir ? { projectWorkingDir } : {}),
     };

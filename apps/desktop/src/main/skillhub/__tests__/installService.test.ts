@@ -89,6 +89,38 @@ function mockDownload(zipBuf: Uint8Array) {
   } as unknown as Response;
 }
 
+function makeDirectoryLink(linkPath: string, targetPath: string) {
+  fs.mkdirSync(path.dirname(linkPath), { recursive: true });
+  const linkTarget = process.platform === 'win32'
+    ? targetPath
+    : path.relative(path.dirname(linkPath), targetPath);
+  fs.symlinkSync(linkTarget, linkPath, process.platform === 'win32' ? 'junction' : 'dir');
+}
+
+async function setupInstallDownload(skillName: string, zipBuf: Uint8Array) {
+  const { net } = await import('electron');
+  const { getCurrentUserId } = await import('../../authManager');
+  const { serverApiFetch } = await import('../../serverApiClient');
+
+  vi.mocked(getCurrentUserId).mockReturnValue('user-1');
+  vi.mocked(serverApiFetch).mockImplementation(async (apiPath: string) => {
+    if (apiPath.includes('/download')) {
+      return {
+        url: `https://oss.example.com/${skillName}.zip`,
+        expiresAt: '2030-01-01T00:00:00.000Z',
+        fileHash: 'file-hash',
+        fileSize: zipBuf.byteLength,
+        zipSha256: sha256(zipBuf),
+      };
+    }
+    if (apiPath.includes('/batch-detail')) {
+      return { items: [{ slug: skillName, owner: { slug: 'owner' }, isMine: false }] };
+    }
+    throw new Error(`unexpected api path ${apiPath}`);
+  });
+  vi.mocked(net.fetch).mockResolvedValue(mockDownload(zipBuf));
+}
+
 describe('skillhub/installService', () => {
   beforeEach(() => {
     vi.resetModules();
@@ -435,6 +467,152 @@ describe('skillhub/installService', () => {
     expect(sharedSkills.prepareSharedProjectSkillLinks).toHaveBeenCalledWith({
       workingDir: projectRoot,
     });
+  });
+
+  it('force-updates the physical skill while preserving a project compatibility link', async () => {
+    const skillName = 'linked-project-skill';
+    const projectRoot = path.join(TEST_ROOT, 'linked-project');
+    const logicalDir = path.join(projectRoot, '.agents', 'skills', skillName);
+    const physicalDir = path.join(projectRoot, '.claude', 'skills', skillName);
+    fs.mkdirSync(physicalDir, { recursive: true });
+    fs.writeFileSync(path.join(physicalDir, 'SKILL.md'), 'old content');
+    makeDirectoryLink(logicalDir, physicalDir);
+
+    const zipBuf = await makeZip({ 'SKILL.md': 'new content' });
+    await setupInstallDownload(skillName, zipBuf);
+    const { registryService } = await import('../registry');
+    const { computeFolderHash } = await import('../folderHash');
+    const { install } = await import('../installService');
+    vi.mocked(registryService.addInstall).mockResolvedValue(undefined);
+
+    const result = await install(
+      {
+        name: skillName,
+        installPath: logicalDir,
+        version: '2.0.0',
+        force: true,
+        skipBackup: true,
+      },
+      () => {},
+    );
+
+    expect(result).toMatchObject({ success: true, absolutePath: logicalDir });
+    expect(fs.lstatSync(logicalDir).isSymbolicLink()).toBe(true);
+    expect(fs.readFileSync(path.join(logicalDir, 'SKILL.md'), 'utf-8')).toBe('new content');
+    expect(fs.readFileSync(path.join(physicalDir, 'SKILL.md'), 'utf-8')).toBe('new content');
+    expect(computeFolderHash).toHaveBeenCalledWith(physicalDir);
+    expect(registryService.getInstall).toHaveBeenCalledWith(skillName, logicalDir);
+    expect(registryService.addInstall).toHaveBeenCalledWith(
+      skillName,
+      logicalDir,
+      expect.objectContaining({ version: '2.0.0' }),
+    );
+  });
+
+  it('restores the physical skill and preserves its compatibility link when registry registration fails', async () => {
+    const skillName = 'linked-rollback-skill';
+    const projectRoot = path.join(TEST_ROOT, 'linked-rollback-project');
+    const logicalDir = path.join(projectRoot, '.agents', 'skills', skillName);
+    const physicalDir = path.join(projectRoot, '.claude', 'skills', skillName);
+    fs.mkdirSync(physicalDir, { recursive: true });
+    fs.writeFileSync(path.join(physicalDir, 'SKILL.md'), 'old content');
+    makeDirectoryLink(logicalDir, physicalDir);
+
+    const zipBuf = await makeZip({ 'SKILL.md': 'new content' });
+    await setupInstallDownload(skillName, zipBuf);
+    const { registryService } = await import('../registry');
+    const { install } = await import('../installService');
+    vi.mocked(registryService.addInstall).mockRejectedValue(new Error('registry down'));
+
+    const result = await install(
+      {
+        name: skillName,
+        installPath: logicalDir,
+        version: '2.0.0',
+        force: true,
+        skipBackup: true,
+      },
+      () => {},
+    );
+
+    expect(result.success).toBe(false);
+    if (!result.success) expect(result.errorCode).toBe('WRITE_FAILED');
+    expect(fs.lstatSync(logicalDir).isSymbolicLink()).toBe(true);
+    expect(fs.readFileSync(path.join(logicalDir, 'SKILL.md'), 'utf-8')).toBe('old content');
+    expect(fs.readFileSync(path.join(physicalDir, 'SKILL.md'), 'utf-8')).toBe('old content');
+    expect(registryService.getInstall).toHaveBeenCalledWith(skillName, logicalDir);
+    expect(registryService.addInstall).toHaveBeenCalledWith(
+      skillName,
+      logicalDir,
+      expect.objectContaining({ version: '2.0.0' }),
+    );
+  });
+
+  it('does not follow a non-compatibility skill symlink during a forced update', async () => {
+    const skillName = 'external-linked-skill';
+    const projectRoot = path.join(TEST_ROOT, 'external-linked-project');
+    const logicalDir = path.join(projectRoot, '.agents', 'skills', skillName);
+    const externalDir = path.join(TEST_ROOT, 'external-skills', skillName);
+    fs.mkdirSync(externalDir, { recursive: true });
+    fs.writeFileSync(path.join(externalDir, 'SKILL.md'), 'external content');
+    makeDirectoryLink(logicalDir, externalDir);
+
+    const zipBuf = await makeZip({ 'SKILL.md': 'new content' });
+    await setupInstallDownload(skillName, zipBuf);
+    const { registryService } = await import('../registry');
+    const { install } = await import('../installService');
+    vi.mocked(registryService.addInstall).mockResolvedValue(undefined);
+
+    const result = await install(
+      {
+        name: skillName,
+        installPath: logicalDir,
+        version: '2.0.0',
+        force: true,
+        skipBackup: true,
+      },
+      () => {},
+    );
+
+    expect(result).toMatchObject({ success: true, absolutePath: logicalDir });
+    expect(fs.lstatSync(logicalDir).isSymbolicLink()).toBe(false);
+    expect(fs.readFileSync(path.join(logicalDir, 'SKILL.md'), 'utf-8')).toBe('new content');
+    expect(fs.readFileSync(path.join(externalDir, 'SKILL.md'), 'utf-8')).toBe('external content');
+  });
+
+  it('follows only one compatibility-link hop and leaves an external target untouched', async () => {
+    const skillName = 'chained-linked-skill';
+    const projectRoot = path.join(TEST_ROOT, 'chained-linked-project');
+    const logicalDir = path.join(projectRoot, '.agents', 'skills', skillName);
+    const physicalDir = path.join(projectRoot, '.claude', 'skills', skillName);
+    const externalDir = path.join(TEST_ROOT, 'chained-external-skills', skillName);
+    fs.mkdirSync(externalDir, { recursive: true });
+    fs.writeFileSync(path.join(externalDir, 'SKILL.md'), 'external content');
+    makeDirectoryLink(physicalDir, externalDir);
+    makeDirectoryLink(logicalDir, physicalDir);
+
+    const zipBuf = await makeZip({ 'SKILL.md': 'new content' });
+    await setupInstallDownload(skillName, zipBuf);
+    const { registryService } = await import('../registry');
+    const { install } = await import('../installService');
+    vi.mocked(registryService.addInstall).mockResolvedValue(undefined);
+
+    const result = await install(
+      {
+        name: skillName,
+        installPath: logicalDir,
+        version: '2.0.0',
+        force: true,
+        skipBackup: true,
+      },
+      () => {},
+    );
+
+    expect(result).toMatchObject({ success: true, absolutePath: logicalDir });
+    expect(fs.lstatSync(logicalDir).isSymbolicLink()).toBe(true);
+    expect(fs.lstatSync(physicalDir).isSymbolicLink()).toBe(false);
+    expect(fs.readFileSync(path.join(logicalDir, 'SKILL.md'), 'utf-8')).toBe('new content');
+    expect(fs.readFileSync(path.join(externalDir, 'SKILL.md'), 'utf-8')).toBe('external content');
   });
 
   it('returns the project cwd after uninstalling a project skill', async () => {
