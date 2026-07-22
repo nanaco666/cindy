@@ -28,6 +28,7 @@ import {
 } from '../../shared/learnTypes';
 import type { FileChange } from '../skillhub/snapshot';
 import { getSkillInstallLockOwner, tryAcquireSkillInstallLock } from '../skillhub/installLock';
+import { prependHandoffToUserMessage } from '../maker-ipc/agentHandoff';
 import type { EvidenceSearchFn } from './evidence';
 import { collectEvidence } from './evidence';
 import { extractKeywords } from './evidence.pure';
@@ -132,6 +133,8 @@ export interface LearnControllerDeps {
   backfillSessionMeta(sessionId: string): Promise<void>;
   beforeDispatchUserTurn?: (sessionId: string) => void | Promise<void>;
   onUndispatchedUserTurn?: (sessionId: string) => void;
+  peekPendingHandoff?: (sessionId: string) => Promise<string | null>;
+  consumePendingHandoff?: (sessionId: string) => void;
   /** 应用当前语言(shared/locale SupportedLocale)—— 蒸馏自述语言跟随系统语言配置。 */
   getAppLocale(): string;
   /** 当前登录账号 id(run 归属标记 + 按 owner 过滤;未登录返回 null)。 */
@@ -550,8 +553,12 @@ export class LearnController {
 
     let baselineStarted = false;
     try {
+      const pendingHandoff = await this.deps.peekPendingHandoff?.(session.id) ?? null;
+      const outgoingMessage = pendingHandoff
+        ? (prependHandoffToUserMessage({ type: 'user', content: prompt }, pendingHandoff) as { type: 'user'; content: string })
+        : { type: 'user' as const, content: prompt };
       const sendResult = await session.send(
-        { type: 'user', content: prompt },
+        outgoingMessage,
         {
           onAccepted: async () => {
             await this.deps.persistUserMessage(session.id, cleanMessage).catch((err) => {
@@ -570,6 +577,9 @@ export class LearnController {
           baselineStarted = false;
         }
         throw new Error(`distillation send was not accepted${sendResult.reason ? `: ${sendResult.reason}` : ''}`);
+      }
+      if (pendingHandoff) {
+        this.deps.consumePendingHandoff?.(session.id);
       }
       baselineStarted = false;
       await Promise.race([turnFinished, timedOut]);

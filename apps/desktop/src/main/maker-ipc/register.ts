@@ -301,6 +301,7 @@ import {
   registerMakerSessionAgentSwitchHandler,
   type MakerSessionAgentSwitchHandlerDeps,
 } from './sessionAgentSwitchHandler.js';
+import { prependHandoffToUserMessage } from './agentHandoff.js';
 import { agentHandoffPending } from './agentHandoffPendingSingleton.js';
 import { type MakerSessionCreateOpts, withCreateSessionStderr } from './sessionRequest.js';
 import { persistAndHydrateSessionProvider } from './sessionProviderBootstrap.js';
@@ -4044,8 +4045,12 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
     opts: SessionSendOptions,
   ): Promise<SessionSendResult> {
     let baselineStarted = false;
+    const pendingHandoff = await agentHandoffPending.peek(session.id);
+    const outgoingMessage: UserMessage = pendingHandoff
+      ? (prependHandoffToUserMessage({ type: 'user', content: message }, pendingHandoff) as UserMessage)
+      : { type: 'user', content: message };
     try {
-      const sendResult = await session.send({ type: 'user', content: message }, {
+      const sendResult = await session.send(outgoingMessage, {
         ...opts,
         onAccepted: async () => {
           await opts.onAccepted?.();
@@ -4057,6 +4062,9 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
       });
       if (baselineStarted && !sendResult.accepted) {
         gitSnapshotCoordinator?.onTurnAbort(session.id);
+      }
+      if (pendingHandoff && sendResult.accepted) {
+        agentHandoffPending.consume(session.id);
       }
       return sendResult;
     } catch (err) {

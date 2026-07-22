@@ -27,6 +27,7 @@ import { getDbClient } from '../localDb/client/current';
 import { and, desc, eq, isNull, inArray } from 'drizzle-orm';
 import { messages as messagesTable, sessions as sessionsTable } from '../localDb/schema';
 import { getSessionProvider, setSessionProvider } from '../maker-host/session-provider-store.js';
+import { agentHandoffPending } from '../maker-ipc/agentHandoffPendingSingleton.js';
 import { readMemorySettings } from '../maker-host/memory-settings-store.js';
 import { visibleMessageTextForConversationSearch } from '../localDb/conversationSearch.pure';
 import { searchChatHistoryHybrid } from '../localDb/chatHistorySearch';
@@ -135,6 +136,8 @@ export function startLearnHost(deps: StartLearnHostDeps): LearnController {
     isTerminalErrorEvent: (ev) => isTerminalAgentErrorEvent(ev as Parameters<typeof isTerminalAgentErrorEvent>[0]),
     beforeDispatchUserTurn: deps.beforeDispatchUserTurn,
     onUndispatchedUserTurn: deps.onUndispatchedUserTurn,
+    peekPendingHandoff: (sessionId) => agentHandoffPending.peek(sessionId),
+    consumePendingHandoff: (sessionId) => agentHandoffPending.consume(sessionId),
     getAppLocale: () => getResolvedMainLocale(),
     getCurrentUserId,
     waitForStartupSweep: () => startupReady,

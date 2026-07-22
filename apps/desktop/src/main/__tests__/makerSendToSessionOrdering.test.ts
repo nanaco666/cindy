@@ -270,7 +270,10 @@ describe('sendToSession ordering', () => {
     expect(helperBlock).toContain('onAccepted: async () => {');
     expect(helperBlock).toContain('await opts.onAccepted?.();');
     expect(helperBlock).toContain('await gitSnapshotCoordinator.onTurnStart(session.id);');
-    expect(helperBlock).toContain("const sendResult = await session.send({ type: 'user', content: message }, {");
+    expect(helperBlock).toContain('const pendingHandoff = await agentHandoffPending.peek(session.id);');
+    expect(helperBlock).toContain('prependHandoffToUserMessage({ type: \'user\', content: message }, pendingHandoff)');
+    expect(helperBlock).toContain('const sendResult = await session.send(outgoingMessage, {');
+    expect(helperBlock).toContain('agentHandoffPending.consume(session.id);');
     expect(helperBlock).toContain('if (baselineStarted && !sendResult.accepted) {');
     expect(helperBlock).toContain('gitSnapshotCoordinator?.onTurnAbort(session.id);');
     expectOrder(

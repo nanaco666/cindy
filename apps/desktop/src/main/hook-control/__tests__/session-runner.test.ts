@@ -43,6 +43,8 @@ const h = vi.hoisted(() => {
     }),
     setSessionProvider: vi.fn(),
     hydrateSessionProvider: vi.fn(),
+    peekPendingHandoff: vi.fn(async () => null as string | null),
+    consumePendingHandoff: vi.fn(),
     listProviders: vi.fn(async (): Promise<unknown[]> => []),
     getModelVisibilityOverride: vi.fn(() => undefined),
     readImDefaultSettings: vi.fn(),
@@ -94,6 +96,12 @@ vi.mock('../../localDb/ipc/sessions.js', () => ({
 vi.mock('../../maker-host/session-provider-store.js', () => ({
   setSessionProvider: h.setSessionProvider,
   hydrateSessionProvider: h.hydrateSessionProvider,
+}));
+vi.mock('../../maker-ipc/agentHandoffPendingSingleton.js', () => ({
+  agentHandoffPending: {
+    peek: h.peekPendingHandoff,
+    consume: h.consumePendingHandoff,
+  },
 }));
 vi.mock('../../imageCacheStore.js', () => ({
   resolveSafe: vi.fn(),
@@ -159,7 +167,7 @@ function makeFakeSession(id: string) {
         await opts.onAccepted?.();
         // 收口: 模拟 agent 立刻完成本 turn
         queueMicrotask(() => h.eventCbs.get(id)?.({ type: 'done', data: null }));
-        return {};
+        return { accepted: true };
       },
     ),
   };
@@ -244,6 +252,7 @@ beforeEach(() => {
   h.useActualDefaults = false;
   h.resolvedConfig.permissionMode = 'bypassPermissions';
   h.resolvedConfig.providerId = null;
+  h.peekPendingHandoff.mockResolvedValue(null);
 });
 
 describe('hook session-runner 的 userSendAt 时序(未分类误判回归)', () => {
@@ -345,6 +354,19 @@ describe('hook session-runner 的 userSendAt 时序(未分类误判回归)', () 
     // 落库的用户消息保持 Slack 原话,不带说明(渲染层展示口径)
     const createCalls = h.createMessage.mock.calls as unknown as Array<[string, { content: unknown }]>;
     expect(createCalls[0][1].content).toBe('hello');
+  });
+
+  it('pending handoff 只注入 agent wire 内容, accepted 后消费', async () => {
+    h.peekPendingHandoff.mockResolvedValueOnce('HANDOFF');
+    const runner = createMakerHookSessionRunner({ log });
+    const outcome = await runner.run(baseReq({}));
+
+    expect(outcome.status).toBe('ok');
+    const session = await fakeMaker.createSession.mock.results[0].value;
+    expect(session.send.mock.calls[0][0]).toMatchObject({ content: `HANDOFF\n\n${HELLO_WITH_NOTE}` });
+    const createCalls = h.createMessage.mock.calls as unknown as Array<[string, { content: unknown }]>;
+    expect(createCalls[0][1].content).toBe('hello');
+    expect(h.consumePendingHandoff).toHaveBeenCalledWith('sess-new');
   });
 
   it('复用/接管(isNew=false):createSession 不带 vendorOptions,不给可能的桌面会话打 Slack 标', async () => {

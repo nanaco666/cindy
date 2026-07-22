@@ -607,7 +607,7 @@ export async function commitSingleMessageDeletion(
 
   // sessions:patched 的消费者只做 shallow merge，不会主动重拉。删除后同步带出
   // canonical session-list projection，避免其它窗口 / device-link 控制端继续显示
-  // 已删除的末条消息预览或旧 _count。count 口径与 sessions:list 保持一致（全部 DB 行）。
+  // 已删除的末条消息预览或旧 _count。count 口径与 sessions:list / preview 的可见消息保持一致。
   let preview: string | null = null;
   let messageCount = 0;
   try {
@@ -620,21 +620,22 @@ export async function commitSingleMessageDeletion(
     const visibleAfterClear = sessionRow?.clearedAt == null
       ? undefined
       : gt(messages.createdAt, sessionRow.clearedAt);
+    const visibleMessageProjection = and(
+      eq(messages.sessionId, sessionId),
+      sql`${messages.role} IN ('user', 'assistant')`,
+      isNull(messages.rewindAt),
+      sql`(${messages.agentMeta} IS NULL OR json_extract(${messages.agentMeta}, '$.autoResume') IS NOT 1)`,
+      visibleAfterClear,
+    );
     const [[countRow], [latestRow]] = await Promise.all([
       db
         .select({ messageCount: count(messages.id) })
         .from(messages)
-        .where(eq(messages.sessionId, sessionId)),
+        .where(visibleMessageProjection),
       db
         .select({ content: messages.content, role: messages.role })
         .from(messages)
-        .where(and(
-          eq(messages.sessionId, sessionId),
-          sql`${messages.role} IN ('user', 'assistant')`,
-          isNull(messages.rewindAt),
-          sql`(${messages.agentMeta} IS NULL OR json_extract(${messages.agentMeta}, '$.autoResume') IS NOT 1)`,
-          visibleAfterClear,
-        ))
+        .where(visibleMessageProjection)
         .orderBy(desc(messages.createdAt), desc(messageRowid))
         .limit(1),
     ]);

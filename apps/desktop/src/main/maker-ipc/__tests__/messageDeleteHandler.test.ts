@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 
 import {
@@ -34,6 +36,18 @@ function makeDeps(
 }
 
 describe('performMessageDeletion', () => {
+  it('keeps deleted-session patch count on the visible message projection', () => {
+    const source = readFileSync(resolve(process.cwd(), 'src/main/localDb/ipc/messages.ts'), 'utf8');
+    const deletionBlock = source.slice(
+      source.indexOf('export async function commitSingleMessageDeletion'),
+      source.indexOf('export function broadcastMessageDeleted'),
+    );
+
+    expect(deletionBlock).toContain('const visibleMessageProjection = and(');
+    expect(deletionBlock).toContain(".where(visibleMessageProjection)");
+    expect(deletionBlock).not.toContain('.where(eq(messages.sessionId, sessionId))');
+  });
+
   it('closes the old native session and rebuilds handoff from history without the target', async () => {
     const deps = makeDeps();
 
