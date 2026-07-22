@@ -310,7 +310,7 @@ import {
   getDesktopProviderService,
   refreshCustomProvidersIntoCatalog,
 } from '../maker-host/createDesktopProviderService.js';
-import { connectedProvidersForAgent } from '@lizi/model-providers';
+import { connectedProvidersForAgent, effectiveSourceIdForModel } from '@lizi/model-providers';
 import { hydrateSessionProvider, getSessionProvider } from '../maker-host/session-provider-store.js';
 import { getActiveCatalog, setDiscoveredProviderModels } from '../maker-host/active-catalog.js';
 import { testProviderConnection } from '../maker-host/provider-diagnostics.js';
@@ -5034,15 +5034,33 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
         effort: leadRow.effort,
         permissionMode: leadRow.permissionMode,
         fastMode: !!leadRow.fastMode,
+        providerId: leadRow.providerId ?? null,
       };
     },
     getWorkerDefaults: getWorkerDefaultsFromNewMaker,
     getAvailableModels: (agent) => maker.getCapabilities(agent).availableModels,
-    getProviderAvailability: async () => {
+    getProviderRoutingContext: async () => {
       const views = await getDesktopProviderService().listProviders();
       return {
-        'claude-code': connectedProvidersForAgent(views, 'claude-code').map((p) => p.name),
-        codex: connectedProvidersForAgent(views, 'codex').map((p) => p.name),
+        availability: {
+          'claude-code': connectedProvidersForAgent(views, 'claude-code').map((provider) => ({
+            id: provider.id,
+            name: provider.name,
+            models: (provider.models['claude-code'] ?? []).map((model) => model.id),
+            requiresExplicitRoute: provider.routing['claude-code']?.authStrategy === 'api-key-header'
+              || provider.routing['claude-code']?.authStrategy === 'oauth-token',
+          })),
+          codex: connectedProvidersForAgent(views, 'codex').map((provider) => ({
+            id: provider.id,
+            name: provider.name,
+            models: (provider.models.codex ?? []).map((model) => model.id),
+            requiresExplicitRoute: provider.routing.codex?.authStrategy === 'api-key-header'
+              || provider.routing.codex?.authStrategy === 'oauth-token',
+          })),
+        },
+        resolveDefaultProviderIdForModel: (agent, model) => (
+          effectiveSourceIdForModel(views, null, model, agent)
+        ),
       };
     },
     readClaudeApiKey,

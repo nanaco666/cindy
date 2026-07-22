@@ -3673,6 +3673,9 @@
         "NO_PROVIDER_FOR_AGENT": "This device has no connected model provider for that agent. Connect one in Settings, then retry.",
         "NO_PROVIDER_FOR_AGENT_CONTINUE": "This device has no connected model provider for that agent. Collaboration was not started, and this message is continuing as a single session. Connect one in Settings, then retry.",
         "NO_PROVIDER_FOR_AGENT_REMOTE": "The controlled device has no connected model provider for that agent. Connect one on the controlled device, then retry.",
+        "PROVIDER_ROUTE_UNAVAILABLE": "The selected provider and model route is unavailable. Choose an available model or provider, then retry.",
+        "PROVIDER_ROUTE_UNAVAILABLE_CONTINUE": "The selected provider and model route is unavailable. Collaboration was not started, and this message is continuing as a single session. Choose an available model or provider, then retry.",
+        "PROVIDER_ROUTE_UNAVAILABLE_REMOTE": "The selected provider and model route is unavailable on the controlled device. Choose a route available on that device, then retry.",
         "BUDGET_MODEL_REQUIRES_API_MODE": "Budget Codex models require an API key. Configure it in Settings, then try again.",
         "BUDGET_MODEL_REQUIRES_API_MODE_CONTINUE": "Budget Codex models require an API key. Collaboration was not started, and this message is continuing as a single session. Configure it in Settings, then try again.",
         "BUDGET_MODEL_REQUIRES_API_MODE_REMOTE": "The controlled device does not have the API key required for budget Codex models. Configure it on that device, then retry."

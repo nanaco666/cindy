@@ -51,6 +51,7 @@ describe('compressOutboundImage', () => {
     // Avoid deep-equality walking the 2 MiB input buffer under the full desktop
     // test suite; verify the buffer identity separately and keep the remaining
     // transform options covered by a small object comparison.
+    expect(transform).toHaveBeenCalledTimes(1);
     const transformInput = transform.mock.calls[0]?.[0];
     expect(transformInput?.bytes).toBe(bigJpeg);
     expect(transformInput).toMatchObject({
@@ -59,7 +60,8 @@ describe('compressOutboundImage', () => {
       quality: OUTBOUND_IMAGE_JPEG_QUALITY,
       skipWithoutResize: false,
     });
-    expect(result).toEqual({ bytes: out, contentType: 'image/jpeg', ext: 'jpg' });
+    expect(result?.bytes).toBe(out);
+    expect(result).toMatchObject({ contentType: 'image/jpeg', ext: 'jpg' });
   }, 15_000);
 
   it('png 产物保持 png 类型标注', async () => {

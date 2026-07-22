@@ -3672,6 +3672,9 @@
         "NO_PROVIDER_FOR_AGENT": "このデバイスには、その Agent 用の接続済みモデル Provider がありません。設定で接続してから再試行してください。",
         "NO_PROVIDER_FOR_AGENT_CONTINUE": "このデバイスには、その Agent 用の接続済みモデル Provider がありません。協同は開始されず、このメッセージは単一セッションとして続行されます。設定で接続してから再試行してください。",
         "NO_PROVIDER_FOR_AGENT_REMOTE": "被操作デバイスには、その Agent 用の接続済みモデル Provider がありません。被操作デバイスで接続してから再試行してください。",
+        "PROVIDER_ROUTE_UNAVAILABLE": "選択した Provider とモデルのルートは現在利用できません。利用可能なモデルまたは Provider を選んで再試行してください。",
+        "PROVIDER_ROUTE_UNAVAILABLE_CONTINUE": "選択した Provider とモデルのルートは現在利用できません。協同は開始されず、このメッセージは単一セッションとして続行されます。利用可能なモデルまたは Provider を選んで再試行してください。",
+        "PROVIDER_ROUTE_UNAVAILABLE_REMOTE": "被操作デバイスでは、選択した Provider とモデルのルートを利用できません。そのデバイスで利用可能なルートを選んで再試行してください。",
         "BUDGET_MODEL_REQUIRES_API_MODE": "割引版 Codex モデルを使うには API key が必要です。設定で構成してから再試行してください。",
         "BUDGET_MODEL_REQUIRES_API_MODE_CONTINUE": "割引版 Codex モデルを使うには API key が必要です。協同は開始されず、このメッセージは単一セッションとして続行します。設定で構成してから再試行してください。",
         "BUDGET_MODEL_REQUIRES_API_MODE_REMOTE": "被操作デバイスに割引版 Codex モデル用の API key が設定されていません。被操作デバイスで設定してから再試行してください。"

@@ -49,7 +49,8 @@ export interface MakerSessionCreateOpts extends CreateSessionOptions {
    * per-session 来源(供应商)显式选择。device-link 远程 create 由控制端透传被控端供应商 id
    * (见 deviceLinkCreateArgs);bootstrapSession 据此把 sessions.provider_id 落库,使新会话首个
    * 请求即按所选来源路由。本机交互建会话不经此路径(走 sessionService→sessionCreateToRow 落盘),
-   * scheduler / Feishu / Orca 不传 → 不写(provider_id 留 NULL = 默认路由)。
+   * scheduler / Feishu 不传 → 不写(provider_id 留 NULL = 默认路由);Orca Worker 会传入
+   * 已解析的来源,保证 Worker 与其模型选择使用同一条凭证路由。
    */
   providerId?: string | null;
   [key: string]: unknown;
