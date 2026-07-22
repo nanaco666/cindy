@@ -2,15 +2,13 @@
   <img src="apps/mobile/assets/splash/cindy-splash-illustration.webp" alt="Cindy" width="200" />
 </p>
 
-<h1 align="center">Cindy Client</h1>
-
 <p align="center">
-  <strong>CONSIDER IT DONE.</strong><br />
-  An all-in-one AI assistant that operates your computer to get real work done — not just answer questions.
+  <strong>想到,就能做到。</strong><br />
+  你的全能 AI 助理 —— 她能操作你的电脑,代替你完成真实工作,而不只是给答案。
 </p>
 
 <p align="center">
-  <strong>English</strong> · <a href="README.zh-CN.md">简体中文</a>
+  <strong>简体中文</strong> · <a href="README.en.md">English</a>
 </p>
 
 <p align="center">
@@ -21,38 +19,36 @@
 </p>
 
 <p align="center">
-  🌐 <a href="https://cindy.com.cn">cindy.com.cn</a> (China) · <a href="https://cindy.app">cindy.app</a> (Global)
+  🌐 <a href="https://cindy.com.cn">国内版</a> | <a href="https://cindy.app">海外版</a>
 </p>
 
-Cindy runs locally on your own machine, uses your files and logged-in apps, and
-is powered by [Claude Code](https://www.anthropic.com/claude-code) and Codex as
-its underlying agent engines. It can drive your browser, computer, and phone,
-coordinate multiple agents as a team, and dispatch tasks from IM and schedules.
+Cindy 运行在你自己的电脑上,使用你本地的文件和已登录的应用,底层由
+Claude Code 与 Codex 作为 agent 引擎驱动。
+她能操作浏览器、电脑和手机,以「多 agent 团队」协同工作,并支持从 IM 和定时任务派活。
 
-This repository is the open-source **client** for Cindy — the desktop and mobile
-apps plus their shared packages, organized as a pnpm monorepo.
+本仓库是 Cindy 的开源**客户端** —— 桌面端、手机端及其共享 packages,以 pnpm
+monorepo 组织。
 
-## What's in this repo
+## 本仓包含什么
 
-| Path | Description |
+| 路径 | 说明 |
 | --- | --- |
-| `apps/desktop` | Electron desktop client |
-| `apps/mobile` | Expo / React Native mobile client |
-| `packages/*` | Shared client capabilities (auth, device-link, agent orchestration, model providers, …) |
-| `apps/*-bin` | Vendored agent/tool binaries bundled with the desktop app (claude-code, codex, ripgrep, android-platform-tools) |
-| `cindy-protocol/` | Wire protocol shared with the server (git submodule) |
+| `apps/desktop` | Electron 桌面客户端 |
+| `apps/mobile` | Expo / React Native 手机客户端 |
+| `packages/*` | 客户端共享能力(鉴权、device-link、agent 编排、模型供应商等) |
+| `apps/*-bin` | 随桌面端打包的 agent / 工具二进制(claude-code、codex、ripgrep、android-platform-tools) |
+| `cindy-protocol/` | 与服务端共用的协议(git submodule) |
 
-**Not in this repo:** the backend service (`cindy-server`) lives in a separate
-repository and is not part of this monorepo. The client is free software; the
-hosted experience requires a Cindy account (download & pricing on the website).
+**本仓不包含:** 服务端(`cindy-server`)位于独立仓库,不属于本 monorepo。软件本身
+免费,托管体验需要 Cindy 账号(下载与定价见官网)。
 
-## Prerequisites
+## 前置要求
 
-- **Node.js** 22 LTS or newer
-- **pnpm** 10.x (v11 is not yet supported)
+- **Node.js** 22 LTS 或更高
+- **pnpm** 10.x(暂不支持 v11)
 - **Git LFS**
 
-## Getting started
+## 首次安装
 
 ```bash
 git clone --recurse-submodules https://github.com/makecindy/cindy.git
@@ -61,34 +57,32 @@ git lfs pull
 pnpm install
 ```
 
-Already cloned without submodules:
+已经 clone 但没拉 submodule:
 
 ```bash
 git submodule update --init --recursive
 ```
 
-The protocol version is pinned to the commit recorded by this repo. When
-upgrading the protocol, the server's submodule pointer must be upgraded in
-lockstep to avoid wire-protocol drift.
+协议版本固定在父仓记录的 commit。升级协议时必须同步升级服务端的 submodule 指针,
+避免两端 wire protocol 漂移。
 
-## Development
+## 开发
 
-### Desktop
+### 桌面端
 
 ```bash
-# Connect to the remote API (default)
+# 连接远程 API(默认)
 pnpm restart:desktop:remote
 
-# Connect to a locally running server
+# 连接开发者自己启动的本地服务端
 pnpm restart:desktop:local
 ```
 
-`restart:desktop:remote` accepts `--region=cn` (default) / `--region=global`, and
-supports isolated sandboxes and passive multi-instance modes. See
-[`AGENTS.md`](AGENTS.md) for the full launch-flag reference and the desktop
-dev/runtime contract.
+`restart:desktop:remote` 支持 `--region=cn`(默认)/ `--region=global`,以及独立
+沙箱、被动多开等模式。完整启动参数与桌面端 dev / 运行时契约见
+[`AGENTS.md`](AGENTS.md)。
 
-### Mobile
+### 手机端
 
 ```bash
 pnpm mobile:sim:start
@@ -96,14 +90,14 @@ pnpm --filter mobile typecheck
 pnpm --filter mobile test
 ```
 
-Full mobile dev & release workflow:
+完整开发与发布流程见
 [`apps/mobile/docs/dev-and-release-workflow.md`](apps/mobile/docs/dev-and-release-workflow.md)
-and [`apps/mobile/RELEASING.md`](apps/mobile/RELEASING.md).
+和 [`apps/mobile/RELEASING.md`](apps/mobile/RELEASING.md)。
 
-## Testing & validation
+## 测试与校验
 
 ```bash
-pnpm test:unit                              # full unit gate (required before every PR)
+pnpm test:unit                              # 完整单测门禁(每次提 PR 前必跑)
 
 pnpm --filter desktop typecheck
 pnpm --filter desktop db:validate
@@ -112,41 +106,37 @@ pnpm --filter mobile  typecheck
 pnpm --filter mobile  test
 ```
 
-Database schema changes are **append-only**: historical migrations are frozen by
-`apps/desktop/drizzle/migration-baseline.json`, and any change must add a new
-migration rather than editing an existing one.
+数据库 schema 变更是 **append-only**:历史 migration 由
+`apps/desktop/drizzle/migration-baseline.json` 冻结,任何变化只能新增 migration,
+不能改动已有的。
 
-## Architecture
+## 架构
 
-- [`DESIGN.md`](DESIGN.md) — visual design system, color tokens, and UI conventions
-- [`AGENTS.md`](AGENTS.md) — engineering rules, launch/runtime contracts, and module boundaries
-- [`docs/dev-rules/`](docs/dev-rules/) — deep-dive architecture docs (e.g. Orca multi-agent orchestration)
+- [`DESIGN.md`](DESIGN.md) —— 视觉设计系统、颜色 token 与 UI 规范
+- [`AGENTS.md`](AGENTS.md) —— 工程规范、启动 / 运行时契约、模块边界
+- [`docs/dev-rules/`](docs/dev-rules/) —— 架构深度文档(如 Orca 多 agent 协同)
 
-## Contributing
+## 贡献
 
-Contributions go through pull requests into `main`. Before opening a PR:
+改动通过 pull request 合入 `main`。提 PR 前:
 
-1. Run `pnpm test:unit` and make sure it passes.
-2. Fill in the PR description per [`.github/PULL_REQUEST_TEMPLATE.md`](.github/PULL_REQUEST_TEMPLATE.md).
+1. 跑 `pnpm test:unit` 并确认全部通过。
+2. 按 [`.github/PULL_REQUEST_TEMPLATE.md`](.github/PULL_REQUEST_TEMPLATE.md) 填写 PR 描述。
 
-The engineering rules in [`AGENTS.md`](AGENTS.md) are authoritative for code
-style, platform (macOS/Windows) parity, i18n, theming, and review severity.
+[`AGENTS.md`](AGENTS.md) 中的工程规范是代码风格、双平台(macOS/Windows)兼容、
+i18n、主题、review 严重度的权威依据。
 
-## Security
+## 安全
 
-Never commit credentials or authorization files to the working tree. If you
-discover a security issue, please report it privately rather than opening a
-public issue. <!-- TODO: add SECURITY.md with a contact/disclosure address -->
+任何凭证 / 授权文件都不得提交进工作区。发现安全问题请**私下**报告,不要开公开
+issue。 <!-- TODO: 补一份 SECURITY.md,写明联系人 / 披露渠道 -->
 
-## License / 许可证
+## 许可证 / License
 
-Except as otherwise noted, the source code in this repository is licensed under
-the [Apache License, Version 2.0](LICENSE).
+除非另有说明,本仓库的源代码依据 [Apache License 2.0](LICENSE) 授权。
 
-Model weights, datasets, prompts, trademarks, and other separately identified
-materials may be subject to their own license terms and are not automatically
-covered by the repository-level Apache-2.0 grant. Third-party open-source
-components retain their own copyright and license. Their attribution notices and
-SPDX SBOMs are managed under [`docs/legal/`](docs/legal/), with artifact-specific
-outputs in [`docs/legal/notices/`](docs/legal/notices/). See [`NOTICE`](NOTICE)
-for this project's copyright and attribution information.
+模型权重、数据集、提示词、商标,以及其他单独标识的材料,可能适用各自的许可条款,
+不因根目录的 Apache-2.0 而被自动覆盖。第三方开源组件保留各自的版权与许可,其归属
+声明与 SPDX SBOM 统一收口在 [`docs/legal/`](docs/legal/);各分发产物的精确清单
+见 [`docs/legal/notices/`](docs/legal/notices/)。本项目的版权与归属信息见
+[`NOTICE`](NOTICE)。
