@@ -24,6 +24,7 @@ import {
   mobileMessageListEndOffset,
   mobileMessageListBottomPadding,
   mobileMessageListNearBottomThreshold,
+  mobilePreviousUserButtonTop,
   previousUserMessageJumpTarget,
   shouldAutoFollowMessages,
   shouldAutoLoadEarlier,
@@ -317,6 +318,19 @@ describe('mobileMessageListTopPadding', () => {
     expect(mobileMessageListTopPadding(undefined)).toBe(0);
     expect(mobileMessageListTopPadding(0)).toBe(0);
     expect(mobileMessageListTopPadding(Number.NaN)).toBe(0);
+  });
+});
+
+describe('mobilePreviousUserButtonTop', () => {
+  it('places the previous-question button below the measured top chrome', () => {
+    expect(mobilePreviousUserButtonTop(104)).toBe(112);
+    expect(mobilePreviousUserButtonTop(50.4)).toBe(59);
+  });
+
+  it('keeps the button hidden until the top chrome has a valid measurement', () => {
+    expect(mobilePreviousUserButtonTop(undefined)).toBeNull();
+    expect(mobilePreviousUserButtonTop(0)).toBeNull();
+    expect(mobilePreviousUserButtonTop(Number.NaN)).toBeNull();
   });
 });
 

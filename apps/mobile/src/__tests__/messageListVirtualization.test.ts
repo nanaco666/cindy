@@ -49,4 +49,18 @@ describe('mobile message list container', () => {
     expect(focusEffectSource).toContain('userScrollForOlderRef.current = true');
     expect(focusEffectSource).toContain('lastAutoLoadEarlierKeyRef.current = null');
   });
+
+  it('keeps the previous-question button below the measured top chrome', () => {
+    const source = readFileSync(resolve(process.cwd(), 'src/session/MessageRenderer.tsx'), 'utf8');
+    const buttonStart = source.indexOf('{previousUserTarget && previousUserButtonTop !== null ? (');
+    expect(buttonStart).toBeGreaterThan(-1);
+    const buttonSource = source.slice(buttonStart, source.indexOf('</MessageListActionButton>', buttonStart));
+
+    expect(source).toContain('mobilePreviousUserButtonTop(topOverlayHeight)');
+    expect(buttonSource).toContain('style={[styles.previousUserButton, { top: previousUserButtonTop }]}');
+
+    const stylesStart = source.indexOf('previousUserButton: {');
+    const stylesEnd = source.indexOf('},', stylesStart);
+    expect(source.slice(stylesStart, stylesEnd)).not.toContain('top: spacing.lg');
+  });
 });

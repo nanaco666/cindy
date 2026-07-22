@@ -239,6 +239,7 @@ import {
   evaluateMessageWindowUpdate,
   evaluateMobileFollowEndContentSizePin,
   mobileMessageListTopPadding,
+  mobilePreviousUserButtonTop,
   MOBILE_FOLLOW_END_PIN_SUPPRESS_MS,
   MOBILE_MESSAGE_LIST_BOTTOM_PADDING,
   type MessageScrollMetrics,
@@ -617,6 +618,7 @@ export function MessageRenderer({
   }, [galleryImages, payload]);
   const bottomPadding = mobileMessageListBottomPadding(bottomOverlayHeight);
   const topPadding = mobileMessageListTopPadding(topOverlayHeight);
+  const previousUserButtonTop = mobilePreviousUserButtonTop(topOverlayHeight);
   // 上一次 topPadding,供顶部 chrome 高度变化时补偿 scroll offset(见下方 effect)。
   const prevTopPaddingRef = useRef(topPadding);
   const floatingBottomOffset = Math.max(
@@ -1121,11 +1123,11 @@ export function MessageRenderer({
         viewabilityConfig={viewabilityConfigRef.current}
         onViewableItemsChanged={handleViewableItemsChangedRef.current}
       />
-      {previousUserTarget ? (
+      {previousUserTarget && previousUserButtonTop !== null ? (
         <MessageListActionButton
           accessibilityLabel={`跳到上一条提问：${previousUserTarget.preview || '无预览'}`}
           onPress={jumpToPreviousUserMessage}
-          style={styles.previousUserButton}
+          style={[styles.previousUserButton, { top: previousUserButtonTop }]}
           testID="message.previousUserButton"
         >
           <ArrowUp color={colors.textPrimary} size={iconSize.md} strokeWidth={iconStroke.regular} />
@@ -5557,7 +5559,6 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     justifyContent: 'center',
     position: 'absolute',
     right: spacing.lg,
-    top: spacing.lg,
     width: 34,
     zIndex: 20,
   },
