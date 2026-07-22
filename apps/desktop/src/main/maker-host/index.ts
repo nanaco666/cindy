@@ -633,7 +633,7 @@ export function getMaker(): Maker {
       lifecycleHooks: {
         onBeforeStart: async ({ workingDir, remoteHostId }) => {
           // SSH remote 的 workingDir 属于远端文件系统，本机不能为它创建兼容链接。
-          if (remoteHostId) return;
+          if (remoteHostId || !workingDir) return;
           const result = await prepareSharedProjectSkillLinks({ workingDir });
           for (const warning of result.warnings) {
             desktopMakerLogger.warn('shared project skill link warning', {
