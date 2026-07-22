@@ -9,6 +9,7 @@
 import { scryptSync } from 'node:crypto';
 import path from 'node:path';
 
+import type { Maker } from '@lizi/maker-core';
 import { createLogger } from '../logger.js';
 import { getCachedBinaryStatus } from '../agent-binaries/index.js';
 import {
@@ -40,6 +41,7 @@ import {
 import { desktopCodexAuthAdapter } from '../maker-host/auth-adapters.js';
 import { readClaudeAiOAuth } from '../maker-host/claude-credentials-store.js';
 import { setClaudeRateLimitHeadersListener } from '../maker-host/claude-rate-limit-headers-observer.js';
+import { createCodexRateLimitResetService } from '../usage/codexRateLimitReset.js';
 
 import { createElectronIpcHandlerRegistry } from './electronIpcRegistry.js';
 import { registerMakerUsageHandlers } from './usageHandlers.js';
@@ -184,12 +186,32 @@ export function triggerCodexAccountUsageRefresh(): void {
   });
 }
 
-export function registerMakerUsageIpc(): void {
+export function registerMakerUsageIpc(maker: Maker): void {
   log.info('registering maker:usage:* IPC handlers');
+
+  const codexRateLimitResetService = createCodexRateLimitResetService({
+    readRateLimits: () => maker.readAgentAccountRateLimits('codex'),
+    consumeResetCredit: (params) => (
+      maker.consumeAgentAccountRateLimitResetCredit('codex', params)
+    ),
+    readAccountIdentity: async () => {
+      const state = await maker.getAgentAuthState('codex');
+      const accountId = state.authSource === 'oauth'
+        ? await desktopCodexAuthAdapter.getAccountId()
+        : null;
+      const identity = state.authSource === 'oauth' && state.identity?.includes('@')
+        ? state.identity
+        : null;
+      return { email: identity, accountId };
+    },
+    recordRateLimitSnapshot: recordCodexAccountUsageSnapshot,
+  });
 
   registerMakerUsageHandlers(createElectronIpcHandlerRegistry(), {
     readAgentTodayUsage,
     readCodexAccountUsageSnapshot: readCodexAccountUsageSnapshotWithWebRefresh,
+    readCodexRateLimits: codexRateLimitResetService.read,
+    consumeCodexRateLimitReset: codexRateLimitResetService.consume,
     readClaudeSubscriptionUsageSnapshot: () => claudeSubscriptionUsageReader.read(),
     readClaudeAccountUsageSnapshot,
     triggerClaudeAccountUsageRefresh,

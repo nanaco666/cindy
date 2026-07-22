@@ -41,6 +41,8 @@ describe('mobile maker transport', () => {
       'maker:set-session-model-pref',
       'maker:apply-new-maker-draft-pref',
       'maker:usage:model-pricing',
+      'maker:usage:codex-rate-limits',
+      'maker:usage:codex-rate-limit-reset',
       'maker:api-key:present',
       'maker:list-agent-commands',
       'maker:list-agent-skills',
@@ -277,6 +279,8 @@ describe('mobile maker transport', () => {
     await maker.input.setEditLock('s1', 'queued-1', false);
     await maker.fs.readTextFilePreview('/repo/spec.md');
     await maker.getModelPricing();
+    await maker.getCodexRateLimits();
+    await maker.resetCodexRateLimits('018f4ec7-c6d8-7f10-8d43-9f8791d33000');
     await maker.getApiKeyPresent();
     await maker.setSessionModelPref({
       sessionId: 's1', agent: 'codex', providerId: 'openai', model: 'gpt-5.5', effort: 'high',
@@ -313,6 +317,8 @@ describe('mobile maker transport', () => {
       ['maker:input:set-edit-lock', ['s1', 'queued-1', false]],
       ['text-file:read-preview', [{ filePath: '/repo/spec.md' }]],
       ['maker:usage:model-pricing', []],
+      ['maker:usage:codex-rate-limits', []],
+      ['maker:usage:codex-rate-limit-reset', ['018f4ec7-c6d8-7f10-8d43-9f8791d33000']],
       ['maker:api-key:present', []],
       ['maker:set-session-model-pref', [{
         sessionId: 's1', agent: 'codex', providerId: 'openai', model: 'gpt-5.5', effort: 'high',

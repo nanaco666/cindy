@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildContextUsageCreateOpts,
+  canUseLocalCodexRateLimitControl,
+  shouldFallbackToLegacyCodexUsage,
   summarizeContextUsage,
   summarizeSessionSpend,
 } from '@/session/sessionControls';
@@ -40,6 +42,46 @@ describe('sessionControls', () => {
       agentKind: 'codex',
       fastMode: true,
     });
+  });
+
+  it('exposes local Codex quota controls only for local subscription sessions', () => {
+    expect(canUseLocalCodexRateLimitControl(session({
+      agentKind: 'codex',
+      model: 'gpt-5.5',
+    }))).toBe(true);
+    expect(canUseLocalCodexRateLimitControl(session({
+      agentKind: 'codex',
+      model: 'gpt-5.5',
+      providerId: 'openai',
+    }))).toBe(true);
+    expect(canUseLocalCodexRateLimitControl(session({
+      agentKind: 'codex',
+      model: 'gpt-5.5',
+      remoteHostId: 'ssh-host-1',
+    }))).toBe(false);
+    expect(canUseLocalCodexRateLimitControl(session({
+      agentKind: 'codex',
+      model: 'gpt-5.5',
+      providerId: 'xd',
+    }))).toBe(false);
+    expect(canUseLocalCodexRateLimitControl(session({
+      agentKind: 'codex',
+      model: 'codex/gpt-5.5',
+    }))).toBe(false);
+    expect(canUseLocalCodexRateLimitControl(session({
+      agentKind: 'codex',
+      model: 'xai/grok-4.3',
+      providerId: 'xai',
+    }))).toBe(false);
+    expect(canUseLocalCodexRateLimitControl(session({ agentKind: 'cc' }))).toBe(false);
+  });
+
+  it('does not reuse legacy quota after an account-change precondition', () => {
+    expect(shouldFallbackToLegacyCodexUsage({
+      code: 'PRECONDITION_FAILED',
+      message: 'ACCOUNT_CHANGED: refresh usage',
+    })).toBe(false);
+    expect(shouldFallbackToLegacyCodexUsage(new Error('new channel unavailable'))).toBe(true);
   });
 
   it('summarizes common context usage shapes for mobile display', () => {

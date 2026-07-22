@@ -87,6 +87,11 @@ describe('REMOTE_INVOKE_ALLOWLIST', () => {
     expect(REMOTE_INVOKE_ALLOWLIST.has('maker:usage:model-pricing')).toBe(true);
   });
 
+  it('放行 Codex 官方额度读取与 desktop 绑定的人工 reset offer', () => {
+    expect(REMOTE_INVOKE_ALLOWLIST.has('maker:usage:codex-rate-limits')).toBe(true);
+    expect(REMOTE_INVOKE_ALLOWLIST.has('maker:usage:codex-rate-limit-reset')).toBe(true);
+  });
+
   it('放行 Git safety 只读查询(远程 Codex Rewind 按被控端 snapshot 设置 gate)', () => {
     expect(REMOTE_INVOKE_ALLOWLIST.has('maker:git-safety:get')).toBe(true);
     expect(REMOTE_INVOKE_ALLOWLIST.has('maker:git-safety:set')).toBe(false);

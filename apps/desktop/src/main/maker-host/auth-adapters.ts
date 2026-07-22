@@ -83,7 +83,9 @@ function getSystemCodexAuthPath(): string {
 
 /**
  * 从 codex auth.json 提取账号标识。
- * 优先 tokens.account_id (codex 现行 schema), fallback 解 id_token JWT 的 sub。
+ * 优先 tokens.account_id (codex 现行 schema),fallback 解 id_token 的
+ * chatgpt_account_id workspace claim。绝不回落 JWT sub:sub 只标识用户主体,
+ * 同一用户切换 ChatGPT workspace 时不会变化,不能用于 reset credit 账号绑定。
  * 解析失败返回 null —— 调用方按"无法识别"保守处理 (不动任何文件)。
  */
 async function readCodexAccountId(authPath: string): Promise<string | null> {
@@ -94,17 +96,38 @@ async function readCodexAccountId(authPath: string): Promise<string | null> {
       return obj.tokens.account_id;
     }
     if (typeof obj.tokens?.id_token === 'string') {
-      const parts = obj.tokens.id_token.split('.');
-      if (parts.length >= 2) {
-        const b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
-        const payload = JSON.parse(Buffer.from(b64, 'base64').toString('utf-8')) as { sub?: unknown };
-        if (typeof payload.sub === 'string') return payload.sub;
-      }
+      return chatgptWorkspaceIdFromIdToken(obj.tokens.id_token);
     }
   } catch {
     /* 解析失败 → null */
   }
   return null;
+}
+
+interface ChatgptIdTokenClaims {
+  chatgpt_account_id?: unknown;
+  sub?: unknown;
+  'https://api.openai.com/auth'?: { chatgpt_account_id?: unknown };
+}
+
+function readChatgptIdTokenClaims(idToken: string): ChatgptIdTokenClaims | null {
+  try {
+    const part = idToken.split('.')[1];
+    if (!part) return null;
+    const b64 = part.replace(/-/g, '+').replace(/_/g, '/');
+    return JSON.parse(Buffer.from(b64, 'base64').toString('utf-8')) as ChatgptIdTokenClaims;
+  } catch {
+    return null;
+  }
+}
+
+/** Strict workspace identity; unlike header compatibility it never falls back to JWT sub. */
+function chatgptWorkspaceIdFromIdToken(idToken: string): string | null {
+  const claims = readChatgptIdTokenClaims(idToken);
+  const nested = claims?.['https://api.openai.com/auth']?.chatgpt_account_id;
+  if (typeof nested === 'string' && nested.length > 0) return nested;
+  const topLevel = claims?.chatgpt_account_id;
+  return typeof topLevel === 'string' && topLevel.length > 0 ? topLevel : null;
 }
 
 /**
@@ -113,23 +136,10 @@ async function readCodexAccountId(authPath: string): Promise<string | null> {
  * export 供 anthropic-responses-bridge-host 复用(同一 auth.json、同一 claim 布局,单点维护)。
  */
 export function chatgptAccountIdFromIdToken(idToken: string): string | null {
-  try {
-    const part = idToken.split('.')[1];
-    if (!part) return null;
-    const b64 = part.replace(/-/g, '+').replace(/_/g, '/');
-    const claims = JSON.parse(Buffer.from(b64, 'base64').toString('utf-8')) as {
-      chatgpt_account_id?: unknown;
-      sub?: unknown;
-      'https://api.openai.com/auth'?: { chatgpt_account_id?: unknown };
-    };
-    const nested = claims['https://api.openai.com/auth']?.chatgpt_account_id;
-    if (typeof nested === 'string' && nested.length > 0) return nested;
-    if (typeof claims.chatgpt_account_id === 'string' && claims.chatgpt_account_id.length > 0) return claims.chatgpt_account_id;
-    if (typeof claims.sub === 'string' && claims.sub.length > 0) return claims.sub;
-  } catch {
-    /* 解析失败 → null */
-  }
-  return null;
+  const workspaceId = chatgptWorkspaceIdFromIdToken(idToken);
+  if (workspaceId) return workspaceId;
+  const sub = readChatgptIdTokenClaims(idToken)?.sub;
+  return typeof sub === 'string' && sub.length > 0 ? sub : null;
 }
 
 /**
@@ -1169,15 +1179,14 @@ export class DesktopCodexAuthAdapter implements AuthAdapter {
   }
 
   /**
-   * Return the ChatGPT account id from the active Codex auth, if any.
+   * Return the ChatGPT workspace id from the active Codex auth, if any.
    *
    * Needed by host-owned integrations that talk to the Codex backend Responses
    * API (`chatgpt.com/backend-api/codex/responses`): that endpoint expects a
    * `ChatGPT-Account-Id` header alongside the bearer token so the request is
-   * routed against the correct ChatGPT workspace. Returns null when the auth
-   * file is missing the field — callers should treat that as "skip the header"
-   * rather than fail the request, mirroring how Codex CLI itself behaves on
-   * single-account logins.
+   * routed against the correct ChatGPT workspace. Returns null when neither
+   * tokens.account_id nor a chatgpt_account_id claim is present; JWT sub is a
+   * user id, not a workspace id, and must not bind reset-credit operations.
    */
   async getAccountId(): Promise<string | null> {
     this.ensureInvalidationMarkerLoaded();

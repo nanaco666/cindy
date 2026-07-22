@@ -141,6 +141,68 @@ export interface MobileGoalLimitsInput {
   noProgressLimit: number | null;
 }
 
+/** One Codex subscription quota window sent from the controlled desktop. */
+export interface MobileCodexRateLimitWindow {
+  usedPercent: number;
+  windowMinutes?: number | null;
+  resetsAt?: number | null;
+}
+
+/** One Codex subscription quota bucket sent to a control-only client. */
+export interface MobileCodexRateLimitSnapshot {
+  limitId?: string | null;
+  limitName?: string | null;
+  primary?: MobileCodexRateLimitWindow | null;
+  secondary?: MobileCodexRateLimitWindow | null;
+  planType?: string | null;
+  rateLimitReachedType?: string | null;
+}
+
+/** Display-safe identity for the exact ChatGPT account/workspace used by desktop Codex. */
+export interface MobileCodexRateLimitAccount {
+  email: string | null;
+  accountId: string | null;
+  planType: string | null;
+}
+
+/** Display-safe metadata for one banked reset credit; its opaque backend id stays on desktop. */
+export interface MobileCodexRateLimitResetCredit {
+  status: 'available' | 'redeeming' | 'redeemed' | 'unknown';
+  resetType: 'codexRateLimits' | 'unknown';
+  grantedAt: number;
+  expiresAt: number | null;
+  title: string | null;
+  description: string | null;
+}
+
+/** Desktop-issued, account-bound reset offer used as the idempotency key for one attempt. */
+export interface MobileCodexRateLimitResetOffer {
+  idempotencyKey: string;
+  /** Unix epoch seconds for the selected banked credit, when details are available. */
+  expiresAt: number | null;
+  /** Unix epoch milliseconds after which desktop discards this retry key. */
+  validUntil: number;
+}
+
+/** Full read-only Codex quota view plus an optional manually redeemable reset offer. */
+export interface MobileCodexRateLimitsResult {
+  account: MobileCodexRateLimitAccount;
+  rateLimits: MobileCodexRateLimitSnapshot;
+  rateLimitsByLimitId: Record<string, MobileCodexRateLimitSnapshot> | null;
+  rateLimitResetCredits: {
+    availableCount: number;
+    credits: MobileCodexRateLimitResetCredit[] | null;
+  } | null;
+  resetOffer: MobileCodexRateLimitResetOffer | null;
+}
+
+/** Stable terminal result for one desktop-issued reset offer. */
+export interface MobileCodexRateLimitResetResult {
+  outcome: 'reset' | 'nothingToReset' | 'noCredit' | 'alreadyRedeemed';
+  /** Fresh snapshot when the post-consume read succeeded. */
+  rateLimits: MobileCodexRateLimitsResult | null;
+}
+
 export const MOBILE_REMOTE_INVOKE_CHANNELS = [
   'maker:create-session',
   'maker:get-capabilities',
@@ -171,6 +233,10 @@ export const MOBILE_REMOTE_INVOKE_CHANNELS = [
   'maker:apply-new-maker-draft-pref',
   // 模型选择列表元信息:被控端视角的模型单价表(只读;拉不到 → 隐藏价格)。
   'maker:usage:model-pricing',
+  // Codex app-server 官方控制面:只读额度/reset 次数 + 人工确认后的单次 reset。
+  // reset 使用 desktop 预签发、账号绑定的幂等 offer,手机不能自行指定 creditId。
+  'maker:usage:codex-rate-limits',
+  'maker:usage:codex-rate-limit-reset',
   // 网关 API key presence-only 探测(只回 boolean;拉不到 → unknown,骨折版不置灰)。
   'maker:api-key:present',
   'maker:list-agent-commands',
@@ -381,6 +447,11 @@ export function describeRemoteError(error: string | null): string | null {
   if (error.includes('MEDIA_FETCH_FAILED')) return '获取电脑端文件失败，可以稍后重试。';
   if (error.includes('VOICE_TRANSCRIBE_FAILED')) return '语音转写失败，可以重试或改用键盘输入。';
   if (error.includes('LINK_NOT_OPEN')) return '与被控电脑的控制链路已断开，正在重新建立。';
+  if (error.includes('PRECONDITION_FAILED')) {
+    if (error.includes('ACCOUNT_CHANGED')) return 'Codex 账号或工作区已变化，请刷新额度后重新确认。';
+    if (error.includes('OFFER_EXPIRED')) return 'Codex 重置凭证已失效，请刷新额度后重新确认。';
+    return '操作条件已变化，请刷新后重新确认。';
+  }
   if (TRANSIENT_REMOTE_ERROR_MARKERS.some((marker) => error.includes(marker))) {
     return '网络或被控端暂时不可用，可以稍后重新同步。';
   }
@@ -414,6 +485,13 @@ export function isAccessRevokedRemoteError(error: unknown): boolean {
   if (code === 'ACCESS_REVOKED') return true;
   const message = error instanceof Error ? error.message : typeof error === 'string' ? error : '';
   return message.includes('ACCESS_REVOKED') || message.includes('DEVICE_LINK_ACCESS_REVOKED');
+}
+
+export function isPreconditionFailedRemoteError(error: unknown): boolean {
+  const code = readStringField(error, 'code');
+  if (code === 'PRECONDITION_FAILED') return true;
+  const message = error instanceof Error ? error.message : typeof error === 'string' ? error : '';
+  return message.includes('PRECONDITION_FAILED');
 }
 
 export function isTransientRemoteError(error: unknown): boolean {
