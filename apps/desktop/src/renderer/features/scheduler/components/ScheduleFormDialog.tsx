@@ -29,6 +29,7 @@ import {
 import { useSessionReferences } from '../hooks/useSessionReferences';
 import {
   buildHookCommandForScriptFile,
+  canSubmitSessionBinding,
   isExplicitScheduleModelUnavailable,
   parsePreRunHookTimeoutMs,
 } from '../lib/scheduleFormLogic';
@@ -366,6 +367,14 @@ export function ScheduleFormDialog({
     const err = validate();
     if (err) {
       toast.warning(t(err.key, err.values));
+      return;
+    }
+    if (!canSubmitSessionBinding(runMode, boundSessionReference)) {
+      toast.warning(t(
+        boundSessionReference
+          ? 'scheduler.editor.thread.deletedBinding'
+          : 'scheduler.runs.sessionUnavailable',
+      ));
       return;
     }
     if (

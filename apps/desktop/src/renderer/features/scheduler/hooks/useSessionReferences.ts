@@ -58,7 +58,7 @@ export function useSessionReferences(
       offPatched();
       offCreated();
     };
-  }, [ids.length, refresh]);
+  }, [refresh]);
 
   return references;
 }

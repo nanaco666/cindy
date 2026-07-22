@@ -15,6 +15,7 @@
  */
 
 import type { CreateScheduleInput, ScheduleTemplate, ScheduleWorkspaceKind, ScriptCapability } from '@lizi/maker-scheduler';
+import type { SessionReference } from '../../../../shared/sessionReference';
 
 /** Effort 白名单 — 与 Phase 2 mapper enum 一致;UI 提交前的最后一道关卡。 */
 export const EFFORT_VALUES = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const;
@@ -95,6 +96,18 @@ export const PENDING_SESSION_ID = '__pending__';
 
 /** "运行会话"三态。 */
 export type RunMode = 'fresh' | 'persistent' | 'bound';
+
+/**
+ * Bound schedules may only be persisted after the selected session has been
+ * resolved as available. `undefined` is intentionally rejected: it represents
+ * an in-flight or failed lookup, where preserving a stale target would be unsafe.
+ */
+export function canSubmitSessionBinding(
+  runMode: RunMode,
+  reference: SessionReference | undefined,
+): boolean {
+  return runMode !== 'bound' || reference?.state === 'available';
+}
 
 /** targetSessionId 是真实会话 id(非空且非占位)。 */
 export function hasRealBinding(form: Pick<ScheduleFormState, 'targetSessionId'>): boolean {
