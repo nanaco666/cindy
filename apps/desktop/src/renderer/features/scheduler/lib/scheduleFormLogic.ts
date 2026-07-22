@@ -98,15 +98,18 @@ export const PENDING_SESSION_ID = '__pending__';
 export type RunMode = 'fresh' | 'persistent' | 'bound';
 
 /**
- * Bound schedules may only be persisted after the selected session has been
- * resolved as available. `undefined` is intentionally rejected: it represents
- * an in-flight or failed lookup, where preserving a stale target would be unsafe.
+ * Agent-mode bound schedules may only be persisted after the selected session
+ * has resolved as available. Script mode intentionally clears targetSessionId,
+ * so a stale binding must not block that mode conversion.
  */
 export function canSubmitSessionBinding(
+  executionMode: ScheduleFormState['executionMode'],
   runMode: RunMode,
   reference: SessionReference | undefined,
 ): boolean {
-  return runMode !== 'bound' || reference?.state === 'available';
+  return executionMode === 'script'
+    || runMode !== 'bound'
+    || reference?.state === 'available';
 }
 
 /** targetSessionId 是真实会话 id(非空且非占位)。 */

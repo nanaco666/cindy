@@ -369,7 +369,7 @@ export function ScheduleFormDialog({
       toast.warning(t(err.key, err.values));
       return;
     }
-    if (!canSubmitSessionBinding(runMode, boundSessionReference)) {
+    if (!canSubmitSessionBinding(form.executionMode ?? 'agent', runMode, boundSessionReference)) {
       toast.warning(t(
         boundSessionReference
           ? 'scheduler.editor.thread.deletedBinding'
