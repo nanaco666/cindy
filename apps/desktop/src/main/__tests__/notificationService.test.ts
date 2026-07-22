@@ -15,9 +15,8 @@
  *   - 改坏 channels 兼容性默认 → 后续任何不传 channels 的调用方会静默失效
  *   - 飞书分支抛错冒泡 → renderer invoke 会 reject,污染调用方
  *
- * 注: scheduler-host/notifier.ts:58 的 webContents.send 不走这个 IPC handler
- *     (那是 main→renderer.send, 本 handler 是 renderer→main.invoke 注册的);
- *     scheduler 桌面通道实际是 no-op 死路, 修复属于另一个 PR 范围。
+ * Scheduler 不经过这个 IPC handler，而是直接调用导出的 main 进程入口；
+ * 它的终态映射由 scheduler-host/__tests__/notifier.test.ts 单独覆盖。
  *
  * mock 策略参考 lifecycle.test.ts: vi.mock('electron') 喂最小桩;
  * Notification 的实例方法和 isSupported 必须支持(constructor 是顶层 IIFE 触发)。
@@ -162,7 +161,33 @@ describe('notificationService — channels 分发', () => {
     });
 
     expect(notificationCtor).toHaveBeenCalledTimes(1);
+    expect(notificationCtor).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: 'Cindy · Hello',
+        body: '已完成 ✓',
+      }),
+    );
     expect(feishuIm.sendMarkdownText).not.toHaveBeenCalled();
+  });
+
+  it('needs-reply kind → 桌面显示需要你回复并标识 Cindy', async () => {
+    const { initNotificationService } = await freshService();
+    const feishuIm = makeFeishuIm('ou_owner');
+    initNotificationService(baseDeps(feishuIm));
+
+    await invokeHandler({
+      sessionId: 's1',
+      title: 'Needs input',
+      kind: 'needs-reply',
+      channels: { desktop: true, feishu: false },
+    });
+
+    expect(notificationCtor).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: 'Cindy · Needs input',
+        body: '需要你回复',
+      }),
+    );
   });
 
   it('{ desktop:false, feishu:true } → 仅飞书,不弹 toast', async () => {
@@ -182,7 +207,7 @@ describe('notificationService — channels 分发', () => {
     // 文案断言 — 锁住对外可见的飞书消息格式,后续如要改文案需主动调整测试。
     expect(feishuIm.sendMarkdownText).toHaveBeenCalledWith(
       'ou_owner',
-      '会话「Hello」需要你回复',
+      'Cindy · 会话「Hello」需要你回复',
     );
   });
 
@@ -202,7 +227,7 @@ describe('notificationService — channels 分发', () => {
     expect(feishuIm.sendMarkdownText).toHaveBeenCalledTimes(1);
     expect(feishuIm.sendMarkdownText).toHaveBeenCalledWith(
       'ou_owner',
-      '会话「Hello」已完成 ✓',
+      'Cindy · 会话「Hello」已完成 ✓',
     );
   });
 
@@ -220,13 +245,13 @@ describe('notificationService — channels 分发', () => {
 
     expect(notificationCtor).toHaveBeenCalledWith(
       expect.objectContaining({
-        title: 'Broken model',
+        title: 'Cindy · Broken model',
         body: '执行失败',
       }),
     );
     expect(feishuIm.sendMarkdownText).toHaveBeenCalledWith(
       'ou_owner',
-      '会话「Broken model」执行失败',
+      'Cindy · 会话「Broken model」执行失败',
     );
   });
 

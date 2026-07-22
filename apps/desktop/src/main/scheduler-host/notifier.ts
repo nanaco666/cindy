@@ -3,7 +3,7 @@
  *
  * 实现 `Notifier` 接口（来自 @lizi/maker-scheduler）。
  *
- * 桌面通道：复用 notificationService 的 `notification:show-session-event` 频道。
+ * 桌面通道：直接复用 notificationService 的 main 进程入口。
  * 飞书通道：Phase 3 暂时只 log 一行（owner openId 解析逻辑要等 Phase 4 IPC
  * 时补充 schedule.notifyFeishuTarget 字段 + ownerGuard 暴露 owner 接口）。
  *
@@ -17,6 +17,7 @@ import type { FeishuIM } from 'lizi-im';
 import type { Logger } from '@lizi/maker-scheduler';
 
 import { stripTrailingPathSeparators } from '../../shared/pathText';
+import { showDesktopSessionEvent } from '../notificationService';
 
 export interface DesktopNotifierDeps {
   getMainWindow: () => BrowserWindow | null;
@@ -45,16 +46,11 @@ export class DesktopNotifier implements Notifier {
   }
 
   private notifyDesktop(schedule: Schedule, run: ScheduleRun): void {
-    const win = this.deps.getMainWindow();
-    if (!win || win.isDestroyed()) return;
-    const title =
-      run.status === 'failed'
-        ? `[Schedule 失败] ${schedule.name}`
-        : `[Schedule] ${schedule.name}`;
-    win.webContents.send('notification:show-session-event', {
+    showDesktopSessionEvent(this.deps.getMainWindow, {
       sessionId: run.sessionId ?? '',
-      title,
-      kind: 'done' as const,
+      title: schedule.name,
+      // Notifier 只接收终态 run；除 success 外都表示任务没有完成，不能显示“已完成”。
+      kind: run.status === 'success' ? 'done' : 'error',
     });
   }
 
