@@ -59,12 +59,12 @@ describe('MakerContactsManager', () => {
     const created = mgr.getStore().createContact({
       kind: 'person',
       displayName: '张三',
-      identities: [{ platform: 'email', value: 'zhang@xd.com' }],
+      identities: [{ platform: 'email', value: 'zhang@example.com' }],
     });
     mgr.dispose();
 
     const mgr2 = makeManager();
-    const hits = mgr2.getStore().resolve('zhang@xd.com');
+    const hits = mgr2.getStore().resolve('zhang@example.com');
     expect(hits[0]!.profile.id).toBe(created.id);
     mgr2.dispose();
   });

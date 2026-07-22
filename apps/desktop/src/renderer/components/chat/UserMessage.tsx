@@ -395,7 +395,7 @@ function renderContent(
       if (part.startsWith('@')) {
         const { ref } = parseMentionToken(part); // 去 @ 与外层引号、反转义
 
-        // @ embedded mid-word (e.g. email `user@xd.com`) → plain text.
+        // @ embedded mid-word (e.g. email `user@example.com`) → plain text.
         // A real mention is always preceded by whitespace or sits at line start.
         const prev = parts[pi - 1];
         if (prev && prev.length > 0 && !/\s$/.test(prev)) {

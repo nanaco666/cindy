@@ -174,11 +174,11 @@ describe('buildHookSessionTitle', () => {
   });
 
   it('(multi-team)teamName 非空时并入方括号首段; 空/空白不加', () => {
-    expect(buildHookSessionTitle('slack', '修登录页', 'C1:1.1', 'xindong')).toBe(
-      '[xindong·Slack] 修登录页',
+    expect(buildHookSessionTitle('slack', '修登录页', 'C1:1.1', 'acme')).toBe(
+      '[acme·Slack] 修登录页',
     );
-    expect(buildHookSessionTitle('slack', '修登录页', 'dm:U1:g0', 'xindong')).toBe(
-      '[xindong·Slack·DM] 修登录页',
+    expect(buildHookSessionTitle('slack', '修登录页', 'dm:U1:g0', 'acme')).toBe(
+      '[acme·Slack·DM] 修登录页',
     );
     expect(buildHookSessionTitle('slack', '修登录页', 'C1:1.1', null)).toBe('[Slack] 修登录页');
     expect(buildHookSessionTitle('slack', '修登录页', 'C1:1.1', '  ')).toBe('[Slack] 修登录页');

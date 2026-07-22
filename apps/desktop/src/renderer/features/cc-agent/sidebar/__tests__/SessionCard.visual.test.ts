@@ -302,7 +302,7 @@ describe('SessionCard visual cases', () => {
       projectOptions: [],
     };
 
-    // card 变体(黄一孟 review 定稿):标题纯文字,自动化标志下沉到底部 meta 行。
+    // card 变体(评审定稿):标题纯文字,自动化标志下沉到底部 meta 行。
     const { container: cardContainer } = render(createElement(SessionCard, commonProps));
     const cardTitle = Array.from(cardContainer.querySelectorAll('div')).find((node) =>
       node.className.includes('[-webkit-line-clamp:2]'),

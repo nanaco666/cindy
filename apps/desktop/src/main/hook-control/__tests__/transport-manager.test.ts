@@ -516,7 +516,7 @@ describe('hook-control transport + manager(真实 ws server)', () => {
     // 用户装完 App → server 自动补完绑定推 confirmed → 正常已绑定
     sock.send(
       serializeHookMessage(
-        makeBindUpdate({ state: 'confirmed', slackUserId: 'U1', slackUserName: 'lizi', message: null }),
+        makeBindUpdate({ state: 'confirmed', slackUserId: 'U1', slackUserName: 'devuser', message: null }),
       ),
     );
     await expect.poll(() => manager.snapshot().binding?.state, { timeout: 3000 }).toBe('confirmed');
@@ -610,9 +610,9 @@ describe('hook-control transport + manager(真实 ws server)', () => {
         makeBindUpdate({
           state: 'confirmed',
           slackUserId: 'U1',
-          slackUserName: 'lizi',
+          slackUserName: 'devuser',
           message: null,
-          teamName: 'xindong',
+          teamName: 'acme',
         }),
       ),
     );
@@ -621,7 +621,7 @@ describe('hook-control transport + manager(真实 ws server)', () => {
     expect(server.frames.some((f) => f.type === 'bind.start')).toBe(false);
     expect(opened).toEqual([]);
     // workspace 名透传进绑定快照(状态行「已绑定 <team> @<name>」数据源)
-    expect(manager.snapshot().binding?.teamName).toBe('xindong');
+    expect(manager.snapshot().binding?.teamName).toBe('acme');
   });
 
   it('cindy_slack provider gate 跟随绑定与 server capability，断线抖动不重复刷新', async () => {
@@ -645,7 +645,7 @@ describe('hook-control transport + manager(真实 ws server)', () => {
     const confirmed = makeBindUpdate({
       state: 'confirmed',
       slackUserId: 'U1',
-      slackUserName: 'lizi',
+      slackUserName: 'devuser',
       message: null,
     });
     sock.send(serializeHookMessage(confirmed));
@@ -856,7 +856,7 @@ describe('hook-control transport + manager(真实 ws server)', () => {
     await server.waitFor('bind.start');
     sock.send(
       serializeHookMessage(
-        makeBindUpdate({ state: 'confirmed', slackUserId: 'U1', slackUserName: 'lizi', message: null }),
+        makeBindUpdate({ state: 'confirmed', slackUserId: 'U1', slackUserName: 'devuser', message: null }),
       ),
     );
     await expect.poll(() => manager.snapshot().binding?.state, { timeout: 3000 }).toBe('confirmed');
@@ -882,7 +882,7 @@ describe('hook-control transport + manager(真实 ws server)', () => {
     await expect.poll(() => manager.snapshot().status, { timeout: 3000 }).toBe('connected');
     sock.send(
       serializeHookMessage(
-        makeBindUpdate({ state: 'confirmed', slackUserId: 'U1', slackUserName: 'lizi', message: null }),
+        makeBindUpdate({ state: 'confirmed', slackUserId: 'U1', slackUserName: 'devuser', message: null }),
       ),
     );
     await expect.poll(() => manager.snapshot().binding?.state, { timeout: 3000 }).toBe('confirmed');
@@ -1233,7 +1233,7 @@ describe('Slack 网关工具代理(tool.request/tool.response)', () => {
 });
 
 describe('多 workspace 绑定(multi-team)', () => {
-  const T1 = { teamId: 'T1', teamName: 'xindong', slackUserId: 'U1', slackUserName: 'lizi' };
+  const T1 = { teamId: 'T1', teamName: 'acme', slackUserId: 'U1', slackUserName: 'devuser' };
   const T2 = { teamId: 'T2', teamName: 'sideproj', slackUserId: 'U2', slackUserName: 'lizi2' };
 
   /** 建连到 connected 的 multi-team 起手(welcome 宣告 multi-team [+ 可选 slack-tools])。 */
@@ -1280,7 +1280,7 @@ describe('多 workspace 绑定(multi-team)', () => {
     expect(snap.binding).toMatchObject({
       state: 'confirmed',
       slackUserId: 'U1',
-      teamName: 'xindong',
+      teamName: 'acme',
     });
     // 本地缓存随快照落盘
     expect(store.get().bindingsCache).toEqual([T1, T2]);
@@ -1606,10 +1606,10 @@ describe('多 workspace 绑定(multi-team)', () => {
         makeBindUpdate({
           state: 'confirmed',
           slackUserId: 'U1',
-          slackUserName: 'lizi',
+          slackUserName: 'devuser',
           message: null,
           teamId: 'T1',
-          teamName: 'xindong',
+          teamName: 'acme',
         }),
       ),
     );
@@ -1632,10 +1632,10 @@ describe('多 workspace 绑定(multi-team)', () => {
         makeBindUpdate({
           state: 'confirmed',
           slackUserId: 'U1',
-          slackUserName: 'lizi',
+          slackUserName: 'devuser',
           message: null,
           teamId: 'T1',
-          teamName: 'xindong',
+          teamName: 'acme',
         }),
       ),
     );
@@ -1653,7 +1653,7 @@ describe('多 workspace 绑定(multi-team)', () => {
       bound: true,
       multiTeam: true,
       bindings: [
-        { teamId: 'T1', teamName: 'xindong' },
+        { teamId: 'T1', teamName: 'acme' },
         { teamId: 'T2', teamName: 'sideproj' },
       ],
     });

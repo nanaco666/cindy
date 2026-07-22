@@ -128,11 +128,11 @@ describe('contacts-ipc handlers', () => {
     const created = (await handlers[MAKER_INVOKE.CONTACTS_CREATE]!({
       kind: 'person',
       displayName: '张三',
-      identities: [{ platform: 'email', value: 'zhang@xd.com' }],
+      identities: [{ platform: 'email', value: 'zhang@example.com' }],
     })) as { id: string };
     expect(broadcasts).toBe(1);
 
-    const resolved = (await handlers[MAKER_INVOKE.CONTACTS_RESOLVE]!('zhang@xd.com', undefined)) as Array<{
+    const resolved = (await handlers[MAKER_INVOKE.CONTACTS_RESOLVE]!('zhang@example.com', undefined)) as Array<{
       profile: { id: string };
     }>;
     expect(resolved[0]!.profile.id).toBe(created.id);
@@ -151,13 +151,13 @@ describe('contacts-ipc handlers', () => {
     await handlers[MAKER_INVOKE.CONTACTS_CREATE]!({
       kind: 'person',
       displayName: 'A',
-      identities: [{ platform: 'email', value: 'a@xd.com' }],
+      identities: [{ platform: 'email', value: 'a@example.com' }],
     });
     await expect(
       handlers[MAKER_INVOKE.CONTACTS_CREATE]!({
         kind: 'person',
         displayName: 'B',
-        identities: [{ platform: 'email', value: 'a@xd.com' }],
+        identities: [{ platform: 'email', value: 'a@example.com' }],
       }),
     ).rejects.toThrow(/\[IDENTITY_CONFLICT\]/);
   });
