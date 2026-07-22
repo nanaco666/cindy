@@ -2,7 +2,6 @@
 id: connections
 title: Connecting external accounts
 summary: External accounts (Google, Jira / Confluence, GitHub, GitLab) are connected on their plugin detail pages under Plugins; Slack is bound under Settings > IM bots; Codex sign-in lives in Settings > Model Providers.
-tab: connections
 ---
 External account connections have moved out of the old "Third-Party Platforms" section — each integration now lives on its own plugin detail page under **Plugins**, and the plugin's tools use the account you connect there.
 

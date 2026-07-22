@@ -8,7 +8,7 @@ Type `/` at the start of the composer to open the command palette.
 **What's in the palette (priority order on collisions):**
 
 1. **Your installed skills** (highest priority) — anything in your global or project skills directory (see the Skills topic).
-2. **Built-in app commands** — `/help` (show available commands), `/clear` (start a fresh draft, like + New Maker), `/cmd` (run a shell command in the working directory), `/issue` (file an issue), `/goal` (start a goal-driven run), `/learn`, `/workflows`, and `/jump-session`.
+2. **Built-in app commands** — `/help` (show available commands), `/clear` (clear the current session context — resets the conversation in place without creating a new session), `/cmd` (run a shell command in the working directory), `/issue` (file an issue), `/goal` (start a goal-driven run), `/learn`, `/workflows`, and `/jump-session`.
 3. **The agent's own commands** — e.g. `/compact`, `/agents`, `/memory` (the exact list depends on the agent; Claude Code and Codex each contribute their own).
 
 **Using the palette:**
