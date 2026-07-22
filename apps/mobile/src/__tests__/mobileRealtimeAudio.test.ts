@@ -53,8 +53,31 @@ describe('mobileRealtimeAudio', () => {
     expect(source).toContain('removeAudioSessionObservers()');
     expect(source).toContain('handleAudioSessionInterruption');
     expect(source).toContain('handleAudioRouteChange');
+    expect(source).toContain('OnAppEntersBackground');
+    expect(source).toContain('stopCapture(deactivateImmediately: true)');
     expect(source).toContain('stopCapture()');
     expect(source).toContain('unsignedIntegerValue(notification.userInfo?[AVAudioSessionInterruptionTypeKey])');
     expect(source).toContain('unsignedIntegerValue(notification.userInfo?[AVAudioSessionRouteChangeReasonKey])');
+  });
+
+  it('cancels voice runs in both composers when the app enters the background', () => {
+    const newSessionSource = readFileSync(
+      resolve(process.cwd(), 'app/sessions/new.tsx'),
+      'utf8',
+    );
+    const existingSessionSource = readFileSync(
+      resolve(process.cwd(), 'app/sessions/[sessionId].tsx'),
+      'utf8',
+    );
+
+    for (const source of [newSessionSource, existingSessionSource]) {
+      expect(source).toContain("AppState.addEventListener('change'");
+      expect(source).toContain("nextState !== 'background'");
+      expect(source).toContain('voiceControllerSessionRef.current = null');
+      expect(source).toContain('discardPendingPrewarm()');
+      expect(source).toContain("setAudioModeAsync({ allowsRecording: false })");
+    }
+    expect(newSessionSource).toContain('cancelVoiceForDeviceSwitch();');
+    expect(existingSessionSource).toContain('cancelVoiceForAppBackground();');
   });
 });

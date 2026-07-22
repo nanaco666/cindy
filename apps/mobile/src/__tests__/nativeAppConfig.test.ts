@@ -268,6 +268,32 @@ describe('mobile native app config', () => {
     expect(eas.build['production-global'].extends).toBe('store-global-base');
   });
 
+  it('keeps audio capture foreground-only in native builds', () => {
+    const appJson = JSON.parse(
+      readFileSync(resolve(process.cwd(), 'app.json'), 'utf8'),
+    );
+    const audioPlugin = appJson.expo.plugins.find(
+      (plugin: unknown) => Array.isArray(plugin) && plugin[0] === 'expo-audio',
+    );
+
+    expect(audioPlugin).toEqual([
+      'expo-audio',
+      {
+        microphonePermission: 'Cindy needs microphone access for voice input in remote sessions.',
+        recordAudioAndroid: true,
+        enableBackgroundPlayback: false,
+        enableBackgroundRecording: false,
+      },
+    ]);
+    const foregroundOnlyPluginIndex = appJson.expo.plugins.indexOf(
+      './plugins/with-foreground-only-audio',
+    );
+    const audioPluginIndex = appJson.expo.plugins.indexOf(audioPlugin);
+    expect(foregroundOnlyPluginIndex).toBeGreaterThanOrEqual(0);
+    expect(foregroundOnlyPluginIndex).toBeLessThan(audioPluginIndex);
+    expect(appJson.expo.ios.infoPlist.UIBackgroundModes ?? []).not.toContain('audio');
+  });
+
   it('keeps Metro React resolution on the mobile app dependency', () => {
     const metroConfig = readFileSync(
       resolve(process.cwd(), 'metro.config.js'),

@@ -96,11 +96,14 @@
           }
         }
       ],
+      "./plugins/with-foreground-only-audio",
       [
         "expo-audio",
         {
           "microphonePermission": "Cindy needs microphone access for voice input in remote sessions.",
-          "recordAudioAndroid": true
+          "recordAudioAndroid": true,
+          "enableBackgroundPlayback": false,
+          "enableBackgroundRecording": false
         }
       ],
       [

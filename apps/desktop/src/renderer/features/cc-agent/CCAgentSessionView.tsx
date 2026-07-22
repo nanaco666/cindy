@@ -147,6 +147,10 @@ import {
   remoteProjectsStore,
 } from '@/features/device-link/remoteProjectsStore';
 import {
+  isRemoteSessionActivityActive,
+  useRemoteSessionActivity,
+} from '@/features/device-link/remoteSessionActivityStore';
+import {
   makeMirrorAccessors,
   replaceScope,
   clearScope,
@@ -576,6 +580,12 @@ export function CCAgentSessionView({
   const remoteConn = useRemoteSessionConnection(remoteDeviceId);
   const remoteLinkIssue = useDeviceLinkConnectionIssue(!!remoteDeviceId);
   const remoteSessionUnavailable = remoteConn === 'reconnecting' || remoteConn === 'host-offline';
+  // 列表级 activity 在重 topic 的 maker status 之前就可用。远程 turn 正在执行 / 等待
+  // 交互时,session 行天然是 startedAt > endedAt,不能把这个正常在飞窗口误判成
+  // 「应用退出中断」。直接门控首帧,再锁存本次视图,避免 activity 终态与 ended patch
+  // 先后到达时横幅闪现。
+  const remoteSessionActivity = useRemoteSessionActivity(sessionId ?? '');
+  const remoteTurnActive = isRemoteSessionActivityActive(remoteSessionActivity);
 
   // device-link 远程会话:非选中行镜像**被控端自己的全局模型预设**。先 pull 一次,再订阅
   // NEW_MAKER_DRAFT_CHANGED 全量回流;本地控制端只显示 / 乐观更新镜像,绝不污染自己的预设。
@@ -1077,16 +1087,22 @@ export function CCAgentSessionView({
   // 「应用退出中断」横幅会闪现一帧(假阳性)。带上 sessionId 让每次切换后按新会话当前
   // isRunning 重新锁存。
   useEffect(() => {
-    if (agentStatus.isRunning) setSessionInterruptAcked(true);
-  }, [sessionId, agentStatus.isRunning]);
+    if (agentStatus.isRunning || remoteTurnActive) setSessionInterruptAcked(true);
+  }, [sessionId, agentStatus.isRunning, remoteTurnActive]);
   const interruptedFromSession = useMemo(() => {
-    if (sessionInterruptAcked) return false;
+    if (sessionInterruptAcked || remoteTurnActive) return false;
     const started = session?.activeTurnStartedAt ?? null;
     if (!started) return false;
     const ended = session?.lastTurnEndedAt ?? 0;
     const cleared = session?.clearedAt ? Date.parse(session.clearedAt) : 0;
     return started > ended && started > cleared;
-  }, [session?.activeTurnStartedAt, session?.lastTurnEndedAt, session?.clearedAt, sessionInterruptAcked]);
+  }, [
+    session?.activeTurnStartedAt,
+    session?.lastTurnEndedAt,
+    session?.clearedAt,
+    sessionInterruptAcked,
+    remoteTurnActive,
+  ]);
   // 兜底清启动红点:打开会话且中断判定不成立(peer 已忽略 / 续跑已完成 / 用户已
   // 操作)时,banner 不会 mount、useAckErrorAttention 没有清除时机 —— 这里清掉
   // useInterruptedSessionsAttention 打的红点(只清 hook 自有的,不误伤任务失败红点)。

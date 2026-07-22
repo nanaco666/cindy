@@ -101,6 +101,11 @@ describe('CCAgentSessionView 接线不变式', () => {
       /<ErrorBanner[\s\S]*?remoteHostId=\{session\?\.remoteHostId \?\? undefined\}[\s\S]*?deviceLinkDeviceId=\{remoteDeviceId\}/,
     );
   });
+  it('远程活动镜像在 turn 执行或等待交互时压过中断时间戳启发式', () => {
+    expect(sessionViewSrc).toContain('useRemoteSessionActivity(sessionId');
+    expect(sessionViewSrc).toContain('agentStatus.isRunning || remoteTurnActive');
+    expect(sessionViewSrc).toContain('sessionInterruptAcked || remoteTurnActive');
+  });
   it('断线 device-link project 不能从项目标题 + 入口创建远程 draft', () => {
     expect(projectNodeSrc).toContain('const projectWritesBlocked = isDeviceLinkWriteBlocked(project)');
     expect(projectNodeSrc).toContain('disabled={projectWritesBlocked}');
