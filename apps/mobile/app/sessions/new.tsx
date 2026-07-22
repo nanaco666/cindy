@@ -157,6 +157,7 @@ import {
 } from '@/session/newSessionPreferenceStore';
 import { remoteSessionStore, useRemoteSessions } from '@/session/remoteSessionStore';
 import { buildSessionComposerLayout } from '@/session/sessionComposerLayout';
+import { keyboardAvoidingBehaviorForPlatform } from '@/session/mobileNativeShellLayout';
 import type { RemoteSerializedAttachment, RemoteSession } from '@/session/types';
 import { permissionAccentColor, permissionPresentation } from '@/session/permissionPresentation';
 import { confirmFullAccessChange } from '@/session/fullAccessConfirmation';
@@ -2292,7 +2293,9 @@ export default function NewRemoteSessionScreen() {
   return (
     <SafeAreaView style={styles.safeArea} testID="newSession.screen">
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={keyboardAvoidingBehaviorForPlatform(
+          Platform.OS === 'ios' ? 'ios' : Platform.OS === 'android' ? 'android' : 'web',
+        )}
         style={styles.keyboard}
       >
         <View style={styles.screen}>
