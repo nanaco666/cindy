@@ -490,11 +490,38 @@ const realFsDeps: LegacyMigrationFsDeps = {
   listDirEntries: async (dir) => {
     try {
       const entries = await fsp.readdir(dir, { withFileTypes: true });
-      return entries.map((e) => ({
-        name: e.name,
-        isDirectory: e.isDirectory(),
-        isSymbolicLink: e.isSymbolicLink(),
-      }));
+      return await Promise.all(
+        entries.map(async (entry) => {
+          const reportedSymbolicLink = entry.isSymbolicLink();
+          if (reportedSymbolicLink || !entry.isDirectory()) {
+            return {
+              name: entry.name,
+              isDirectory: entry.isDirectory(),
+              isSymbolicLink: reportedSymbolicLink,
+            };
+          }
+
+          // 某些 Node/libuv 组合会把 Windows junction 报成普通目录；只对目录做
+          // lstat 二次核验，避免对工作区里的海量普通文件增加一次额外系统调用。
+          const entryPath = path.join(dir, entry.name);
+          try {
+            const isSymbolicLink = (await fsp.lstat(entryPath)).isSymbolicLink();
+            return {
+              name: entry.name,
+              isDirectory: !isSymbolicLink,
+              isSymbolicLink,
+            };
+          } catch (err) {
+            // 条目在 readdir 与 lstat 之间消失或不可读时 fail-closed，不递归进入未知目标。
+            log.warn(
+              'legacy userData migration: failed to lstat directory entry, skipping %s: %s',
+              entryPath,
+              err instanceof Error ? err.message : String(err),
+            );
+            return { name: entry.name, isDirectory: false, isSymbolicLink: true };
+          }
+        }),
+      );
     } catch {
       return [];
     }

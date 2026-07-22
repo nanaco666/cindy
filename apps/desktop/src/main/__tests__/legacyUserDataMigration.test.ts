@@ -420,6 +420,14 @@ describe('runLegacyUserDataMigration', () => {
     );
     // node_modules 之外的链接也必须明确跳过，不能解引用到老目录外或形成递归环。
     memfs.addSymbolicLink(path.join(workspace, 'linked-workspace'));
+    const listDirEntries = memfs.fsDeps.listDirEntries;
+    vi.spyOn(memfs.fsDeps, 'listDirEntries').mockImplementation(async (dir) =>
+      (await listDirEntries(dir)).map((entry) =>
+        entry.name === 'linked-workspace'
+          ? { ...entry, isDirectory: true, isSymbolicLink: true }
+          : entry,
+      ),
+    );
     const copySpy = vi.spyOn(memfs.fsDeps, 'copyFile');
     const { deps } = makeDeps(memfs);
 
