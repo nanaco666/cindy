@@ -9,7 +9,7 @@ import {
   submitGithubIssueWithConfirm,
   type GithubIssueSubmitServiceDeps,
 } from '../githubIssueSubmitService';
-import type { IssueConfirmDecision } from '../issueConfirmBridge';
+import type { IssueConfirmDecision, IssueSubmissionIdentity } from '../issueConfirmBridge';
 
 const REQ = {
   sessionId: 'sess-1',
@@ -17,9 +17,10 @@ const REQ = {
   body: '## 现象\nagent 整理的正文,长度足够覆盖最小要求。',
   type: 'bug' as const,
 };
+const PLATFORM_IDENTITY = { kind: 'platform', login: 'cindy-issue' } as const;
 
 function makeDeps(over: Partial<GithubIssueSubmitServiceDeps> = {}) {
-  const confirm = vi.fn(
+  const confirm = vi.fn<GithubIssueSubmitServiceDeps['confirm']>(
     async (): Promise<IssueConfirmDecision> => ({
       confirmed: true,
       title: REQ.title,
@@ -28,13 +29,12 @@ function makeDeps(over: Partial<GithubIssueSubmitServiceDeps> = {}) {
       uiLanguage: 'zh-CN',
     }),
   );
-  const postIssue = vi.fn<GithubIssueSubmitServiceDeps['postIssue']>(
-    async () => ({
-      githubIssue: { number: 80, url: 'https://github.com/xindong/XDMaker/issues/80' },
-    }),
-  );
+  const postIssue = vi.fn<GithubIssueSubmitServiceDeps['postIssue']>(async () => ({
+    githubIssue: { number: 80, url: 'https://github.com/xindong/XDMaker/issues/80' },
+  }));
   const deps: GithubIssueSubmitServiceDeps = {
     confirm,
+    resolveSubmissionIdentity: async () => PLATFORM_IDENTITY,
     postIssue,
     getAppVersion: () => '0.0.112',
     getOsInfo: () => ({ platform: 'darwin', arch: 'arm64', osVersion: '25.5.0' }),
@@ -76,9 +76,11 @@ describe('submitGithubIssueWithConfirm', () => {
       'sess-1',
       { title: REQ.title, body: REQ.body, type: 'bug' },
       { appVersion: '0.0.112', platform: 'darwin', arch: 'arm64', osVersion: '25.5.0' },
+      PLATFORM_IDENTITY,
     );
     expect(postIssue).toHaveBeenCalledTimes(1);
-    const posted = postIssue.mock.calls[0]![0]();
+    expect(postIssue.mock.calls[0]![0]).toEqual(PLATFORM_IDENTITY);
+    const posted = postIssue.mock.calls[0]![1]();
     expect(posted.title).toBe('用户改过的标题');
     expect(posted.type).toBe('feature');
     expect(posted.appVersion).toBe('0.0.112');
@@ -106,14 +108,14 @@ describe('submitGithubIssueWithConfirm', () => {
     });
     const res = await submitGithubIssueWithConfirm(deps, REQ);
     expect(res).toMatchObject({ ok: true, editedByUser: false });
-    expect(postIssue.mock.calls[0]![0]().description).toContain('**界面语言**: en');
+    expect(postIssue.mock.calls[0]![1]().description).toContain('**界面语言**: en');
   });
 
   it('membership 没有展示名时省略 userName,由 server 回退到 membership id', async () => {
     const { deps, postIssue } = makeDeps({ getSubmitterName: () => undefined });
     const res = await submitGithubIssueWithConfirm(deps, REQ);
     expect(res).toMatchObject({ ok: true });
-    expect(postIssue.mock.calls[0]![0]()).not.toHaveProperty('userName');
+    expect(postIssue.mock.calls[0]![1]()).not.toHaveProperty('userName');
   });
 
   it('网络重试重建 body 时重新读取当前 membership 展示名', async () => {
@@ -121,11 +123,13 @@ describe('submitGithubIssueWithConfirm', () => {
       .fn<() => string | undefined>()
       .mockReturnValueOnce('Account A')
       .mockReturnValueOnce('Account B');
-    const postIssue = vi.fn<GithubIssueSubmitServiceDeps['postIssue']>(async (bodyFactory) => {
-      expect(bodyFactory().userName).toBe('Account A');
-      expect(bodyFactory().userName).toBe('Account B');
-      return { githubIssue: { number: 80, url: 'https://example.com/issues/80' } };
-    });
+    const postIssue = vi.fn<GithubIssueSubmitServiceDeps['postIssue']>(
+      async (_identity, bodyFactory) => {
+        expect(bodyFactory().userName).toBe('Account A');
+        expect(bodyFactory().userName).toBe('Account B');
+        return { githubIssue: { number: 80, url: 'https://example.com/issues/80' } };
+      },
+    );
     const { deps } = makeDeps({ getSubmitterName, postIssue });
     const res = await submitGithubIssueWithConfirm(deps, REQ);
     expect(res).toMatchObject({ ok: true });
@@ -146,7 +150,7 @@ describe('submitGithubIssueWithConfirm', () => {
     });
     const res = await submitGithubIssueWithConfirm(deps, REQ);
     expect(res).toMatchObject({ ok: true, finalTitle: 't'.repeat(200) });
-    const posted = postIssue.mock.calls[0]![0]();
+    const posted = postIssue.mock.calls[0]![1]();
     expect(posted.description!.length).toBeLessThanOrEqual(5000);
     expect(posted.description).toContain('**界面语言**: zh-CN');
   });
@@ -162,5 +166,46 @@ describe('submitGithubIssueWithConfirm', () => {
       const res = await submitGithubIssueWithConfirm(deps, REQ);
       expect(res).toMatchObject({ ok: false, errorCode });
     }
+  });
+
+  it('已绑定身份会展示并严格按该身份提交', async () => {
+    const identity = { kind: 'github-user', login: 'dashhuang' } as const;
+    const { deps, confirm, postIssue } = makeDeps({
+      resolveSubmissionIdentity: async (): Promise<IssueSubmissionIdentity> => identity,
+    });
+    const res = await submitGithubIssueWithConfirm(deps, REQ);
+    expect(res).toMatchObject({ ok: true });
+    expect(confirm.mock.calls[0]![3]).toEqual(identity);
+    expect(postIssue.mock.calls[0]![0]).toEqual(identity);
+  });
+
+  it('身份解析失败时不弹确认卡、不提交', async () => {
+    const error = Object.assign(new Error('GitHub token 已失效，请重新绑定'), {
+      issueErrorCode: 'AUTH_NOT_READY' as const,
+    });
+    const { deps, confirm, postIssue } = makeDeps({
+      resolveSubmissionIdentity: async () => Promise.reject(error),
+    });
+    const res = await submitGithubIssueWithConfirm(deps, REQ);
+    expect(res).toMatchObject({ ok: false, errorCode: 'AUTH_NOT_READY' });
+    expect(confirm).not.toHaveBeenCalled();
+    expect(postIssue).not.toHaveBeenCalled();
+  });
+
+  it('用户身份提交失败时只调用一次该身份，不切换平台重试', async () => {
+    const identity = { kind: 'github-user', login: 'dashhuang' } as const;
+    const postIssue = vi.fn<GithubIssueSubmitServiceDeps['postIssue']>(async () => {
+      throw Object.assign(new Error('repo issue 权限不足'), {
+        issueErrorCode: 'AUTH_NOT_READY' as const,
+      });
+    });
+    const { deps } = makeDeps({
+      resolveSubmissionIdentity: async () => identity,
+      postIssue,
+    });
+    const res = await submitGithubIssueWithConfirm(deps, REQ);
+    expect(res).toMatchObject({ ok: false, errorCode: 'AUTH_NOT_READY' });
+    expect(postIssue).toHaveBeenCalledTimes(1);
+    expect(postIssue.mock.calls[0]![0]).toEqual(identity);
   });
 });

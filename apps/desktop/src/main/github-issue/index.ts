@@ -11,6 +11,8 @@ import os from 'node:os';
 import { app } from 'electron';
 
 import { getCurrentMembershipDisplayName } from '../authManager';
+import { getGhostManager, getGhostPipeDispatcher } from '../cindy-brain';
+import { ghostSecretSaved } from '../secrets/providerSecretStore';
 import { serverApiFetch } from '../serverApiClient';
 import { getClientEndpoint } from '../clientEndpointsService';
 import type { IssueConfirmBridge } from './issueConfirmBridge';
@@ -19,6 +21,13 @@ import {
   type GithubIssueSubmitResult,
   type SubmitIssueRequest,
 } from './githubIssueSubmitService';
+import {
+  CINDY_GITHUB_GHOST_ID,
+  CINDY_GITHUB_SECRET_KEY,
+  postGithubIssueAsUser,
+  resolveGithubIssueSubmissionIdentity,
+  type GithubUserIssueSubmitterDeps,
+} from './githubUserIssueSubmitter';
 
 export { IssueConfirmBridge } from './issueConfirmBridge';
 export type { IssueConfirmDecision } from './issueConfirmBridge';
@@ -40,11 +49,25 @@ export async function submitGithubIssueForSession(
       message: 'Cindy 主进程 issue 提交服务尚未就绪,请告知用户稍等几秒后重试。',
     };
   }
+  const githubUserSubmitterDeps: GithubUserIssueSubmitterDeps = {
+    isGithubGhostEnabled: () =>
+      getGhostManager()
+        .list()
+        .some((ghost) => ghost.manifest.id === CINDY_GITHUB_GHOST_ID && ghost.enabled),
+    isGithubCredentialSaved: () => ghostSecretSaved(CINDY_GITHUB_GHOST_ID, CINDY_GITHUB_SECRET_KEY),
+    callGhostTool: (request) => getGhostPipeDispatcher().callGhostTool(request),
+  };
   return submitGithubIssueWithConfirm(
     {
-      confirm: (sessionId, draft, env) => bridge.request(sessionId, draft, env),
-      postIssue: (bodyFactory) =>
-        serverApiFetch<{ githubIssue: { number: number; url: string } }>(
+      confirm: (sessionId, draft, env, submissionIdentity) =>
+        bridge.request(sessionId, draft, env, submissionIdentity),
+      resolveSubmissionIdentity: () =>
+        resolveGithubIssueSubmissionIdentity(githubUserSubmitterDeps),
+      postIssue: (submissionIdentity, bodyFactory) => {
+        if (submissionIdentity.kind === 'github-user') {
+          return postGithubIssueAsUser(githubUserSubmitterDeps, submissionIdentity, bodyFactory());
+        }
+        return serverApiFetch<{ githubIssue: { number: number; url: string } }>(
           '/api/github/issues',
           {
             method: 'POST',
@@ -54,7 +77,8 @@ export async function submitGithubIssueForSession(
             // userName 与最终 Bearer membership 一致。
             baseUrl: getClientEndpoint('githubApiBaseUrl'),
           },
-        ),
+        );
+      },
       getAppVersion: () => app.getVersion(),
       getOsInfo: () => ({
         platform: process.platform,

@@ -61,6 +61,10 @@ import { createLogger } from '@/lib/logger';
 import { getUserPrompt } from '@/lib/userPromptStore';
 import { getMakerMemoryEnabled } from '@/lib/memorySettingsStore';
 import { buildUserMessageAttachmentPayload } from '@/lib/messageAttachmentPayload';
+import {
+  parseIssueSubmissionIdentity,
+  type IssueSubmissionIdentity,
+} from '@/lib/issueConfirmPayload';
 import { resolveStaleCodexSubscriptionValueEstimate } from '../../shared/codexSubscriptionValue';
 import { normalizeTurnUsageDetails, type TurnUsageDetails } from '../../shared/turnUsageDetails';
 import { isSessionUpgrading } from '@/state/ccMgrUpgradeStore';
@@ -446,6 +450,8 @@ export interface PendingIssueConfirm {
   draft: { title: string; body: string; type: 'bug' | 'feature' };
   /** 只读展示的环境信息(main 会附进 issue body)。 */
   env: { appVersion: string; platform: string; arch: string; osVersion: string };
+  /** main 已经选定、确认后不会自动切换的实际 GitHub 作者身份。 */
+  submissionIdentity: IssueSubmissionIdentity;
 }
 
 /**
@@ -3172,10 +3178,16 @@ function initGlobalListeners(): void {
       // 不走 handleStreamEvent —— 它不属于 agent 事件流。
       const draft = request.draft as PendingIssueConfirm['draft'] | undefined;
       const env = request.env as PendingIssueConfirm['env'] | undefined;
-      if (!draft || !env) return;
+      const submissionIdentity = parseIssueSubmissionIdentity(request.submissionIdentity);
+      if (!draft || !env || !submissionIdentity) return;
       setState(sessionId, (s) => ({
         ...s,
-        pendingIssueConfirm: { requestId: request.requestId, draft, env },
+        pendingIssueConfirm: {
+          requestId: request.requestId,
+          draft,
+          env,
+          submissionIdentity,
+        },
       }));
       return;
     }

@@ -2,15 +2,20 @@
  * githubIssueSubmitService —— submit_github_issue 工具的 main 侧业务体。
  *
  * 流程(规则 9 的代码强制点全部在此):
- *  1. 组环境信息(客户端版本 / OS / 界面语言 fallback)—— agent 不参与;
- *  2. await confirm(确认卡片)—— **唯一**通往 postIssue 的路径,取消/超时直接返回;
+ *  1. 组环境信息并解析本次真实提交身份—— agent 不参与;
+ *  2. await confirm(确认卡片,含真实身份)—— **唯一**通往 postIssue 的路径;
  *  3. confirmed 后以用户确认的 title/body/type 为准(用户编辑版优先);
- *  4. body 末尾附 env 块,注入当前登录用户展示名,clamp 到 server 上限后 POST。
+ *  4. body 末尾附 env 块,clamp 后严格按已确认身份 POST,失败不切换身份。
  *
  * 模块保持 electron-free,全部依赖注入(规则 14),单测直接调 submitGithubIssueWithConfirm。
  */
 
-import type { IssueConfirmDecision, IssueDraft, IssueEnvInfo } from './issueConfirmBridge';
+import type {
+  IssueConfirmDecision,
+  IssueDraft,
+  IssueEnvInfo,
+  IssueSubmissionIdentity,
+} from './issueConfirmBridge';
 
 /** 与 lizi-mcps SubmitGithubIssueDeps['submit'] 的返回契约结构一致(注入点做结构化类型检查)。 */
 export type GithubIssueSubmitResult =
@@ -49,16 +54,24 @@ export interface GithubIssuePostBody {
   userName?: string;
 }
 
+export interface GithubIssuePostResponse {
+  githubIssue: { number: number; url: string };
+}
+
 export interface GithubIssueSubmitServiceDeps {
   confirm: (
     sessionId: string,
     draft: IssueDraft,
     env: IssueEnvInfo,
+    submissionIdentity: IssueSubmissionIdentity,
   ) => Promise<IssueConfirmDecision>;
+  /** 每次发起确认前现查；已绑定但凭证失效时应抛 AUTH_NOT_READY，不能冒充未绑定。 */
+  resolveSubmissionIdentity: () => Promise<IssueSubmissionIdentity>;
   /** body factory must be evaluated for each network attempt after auth refresh. */
   postIssue: (
+    submissionIdentity: IssueSubmissionIdentity,
     bodyFactory: () => GithubIssuePostBody,
-  ) => Promise<{ githubIssue: { number: number; url: string } }>;
+  ) => Promise<GithubIssuePostResponse>;
   getAppVersion: () => string;
   getOsInfo: () => { platform: string; arch: string; osVersion: string };
   /** main 侧 OS locale,仅当 renderer 未回传 uiLanguage 时兜底。 */
@@ -80,10 +93,18 @@ export async function submitGithubIssueWithConfirm(
     ...deps.getOsInfo(),
   };
 
+  let submissionIdentity: IssueSubmissionIdentity;
+  try {
+    submissionIdentity = await deps.resolveSubmissionIdentity();
+  } catch (err) {
+    return mapSubmitError(err);
+  }
+
   const decision = await deps.confirm(
     req.sessionId,
     { title: req.title, body: req.body, type: req.type },
     env,
+    submissionIdentity,
   );
 
   if (!decision.confirmed) {
@@ -120,7 +141,7 @@ export async function submitGithubIssueWithConfirm(
   const description = decision.body.slice(0, Math.max(0, bodyBudget)) + envBlock;
 
   try {
-    const result = await deps.postIssue(() => {
+    const result = await deps.postIssue(submissionIdentity, () => {
       const submitterName = deps.getSubmitterName()?.trim();
       return {
         title: finalTitle,
@@ -138,15 +159,30 @@ export async function submitGithubIssueWithConfirm(
       editedByUser,
     };
   } catch (err) {
-    return mapPostError(err);
+    return mapSubmitError(err);
   }
 }
 
 /**
- * postIssue 抛错映射。按 ServerApiError 的 statusCode 字段 duck-typing,
- * 避免本模块 import serverApiClient(它依赖 electron net)。
+ * 提交链路抛错映射。平台路径按 ServerApiError 的 statusCode 字段 duck-typing,
+ * 用户路径按 issueErrorCode 映射,避免本模块 import 真实网络实现。
  */
-function mapPostError(err: unknown): GithubIssueSubmitResult & { ok: false } {
+function mapSubmitError(err: unknown): GithubIssueSubmitResult & { ok: false } {
+  const issueErrorCode =
+    err && typeof err === 'object' && 'issueErrorCode' in err
+      ? (err as { issueErrorCode?: unknown }).issueErrorCode
+      : undefined;
+  if (
+    issueErrorCode === 'AUTH_NOT_READY' ||
+    issueErrorCode === 'NETWORK_ERROR' ||
+    issueErrorCode === 'SERVER_ERROR'
+  ) {
+    return {
+      ok: false,
+      errorCode: issueErrorCode,
+      message: err instanceof Error ? err.message : String(err),
+    };
+  }
   const statusCode =
     err && typeof err === 'object' && 'statusCode' in err
       ? (err as { statusCode?: unknown }).statusCode
