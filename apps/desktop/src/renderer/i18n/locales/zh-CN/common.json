@@ -3857,7 +3857,7 @@
       "outputFile": "输出：{{path}}"
     },
     "forkOrigin": {
-      "label": "从对话中派生"
+      "label": "基于原对话创建"
     },
     "imageMissing": {
       "title": "图片已丢失"
@@ -3869,10 +3869,23 @@
     },
     "messageActionBar": {
       "copy": "复制消息",
-      "timeCopyHint": "点击复制消息链接",
       "linkCopied": "链接已复制",
+      "moreActions": "更多消息操作",
+      "copyLink": "复制当前对话链接",
+      "copyLinkFailed": "无法复制链接",
       "rewind": "回到此处",
-      "fork": "分叉",
+      "fork": "在新对话中继续",
+      "forkConfirmTitle": "从这里开启一个新对话？",
+      "forkConfirmDescription": "系统会根据这里的对话上下文创建一个独立的新对话。原对话不会改变，之后两边的消息互不影响。",
+      "forkConfirm": "开启新对话",
+      "forkCancel": "取消",
+      "delete": "删除本条对话",
+      "deleteConfirmTitle": "删除本条对话？",
+      "deleteConfirmDescription": "这条消息会从本地会话中删除，后续消息继续保留。下次发送时，AI 上下文会从剩余记录重建。",
+      "deleteConfirm": "删除本条对话",
+      "deleteCancel": "取消",
+      "deleteBusy": "请等当前回复结束后再删除消息",
+      "deleteFailed": "无法删除这条消息，请重试",
       "edit": "编辑",
       "turnCost": "本轮消耗",
       "turnCostEstimated": "本轮 token 价值(按 API 单价折算)",
@@ -4282,7 +4295,7 @@
       "automationViewTask": "查看自动化任务",
       "expandLongMessage": "展开全文",
       "collapseLongMessage": "收起",
-      "forkBusy": "当前会话正在运行，等结束后再分叉",
+      "forkBusy": "当前会话正在运行，等结束后再从这里开启新对话",
       "editStopTimeout": "等待任务停止超时，请稍后重试",
       "editQueueNotEmpty": "会话有排队中的消息，先发送或移除队列内容后再编辑",
       "editNotLast": "会话里已有更新的消息，这条不再是最后一条，无法编辑重发",
@@ -4291,11 +4304,11 @@
       "editSend": "发送",
       "editRollbackHint": "发送将撤销上一轮对 {{count}} 个文件的改动",
       "forkErrors": {
-        "unsupportedHistory": "目标位置跨过了引擎切换边界，无法从这里分叉",
-        "noPriorAssistant": "请在 AI 回复之后的消息上分叉",
-        "sourceNeverRan": "原会话尚未运行，无法分叉",
-        "codexStateUnavailable": "Codex 会话状态不可用，无法分叉。{{detail}}",
-        "generic": "分叉失败，请重试"
+        "unsupportedHistory": "目标位置跨过了引擎切换边界，无法从这里开启新对话",
+        "noPriorAssistant": "请在 AI 回复之后的消息上开启新对话",
+        "sourceNeverRan": "原会话尚未运行，无法开启新对话",
+        "codexStateUnavailable": "Codex 会话状态不可用，无法开启新对话。{{detail}}",
+        "generic": "无法开启新对话，请重试"
       }
     },
     "threadContext": {

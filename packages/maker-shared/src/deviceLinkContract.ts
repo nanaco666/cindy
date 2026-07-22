@@ -257,6 +257,7 @@ export const MOBILE_REMOTE_INVOKE_CHANNELS = [
   'maker:fork',
   'maker:rewind:preview',
   'maker:rewind:commit',
+  'maker:message:delete',
   'maker:close-session',
   'maker:schedule:list',
   'maker:schedule:get',

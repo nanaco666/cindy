@@ -3231,6 +3231,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
       /** Broadcast: main 端创建消息后通知 (e.g. feishu /ctr 接管路径写库时)。
        *  renderer 用这个触发 makerChatStore push 到 in-memory state。 */
       onCreated: createIpcFanOut('local-db:messages:created'),
+      /** Broadcast:一条 user / assistant 消息内容已从本地会话删除。 */
+      onDeleted: createIpcFanOut('local-db:messages:deleted'),
       /** Broadcast: terminal error 行落库后,renderer 把该会话 historyLoaded 置 false,
        *  下次打开时 ensureInitialMessages 从 DB 重拉,error 卡正常浮现。 */
       onErrorPersisted: createIpcFanOut('local-db:session:error-persisted'),
@@ -3725,6 +3727,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // 回收 / 临时附件清理等 onClose 重副作用,会话逻辑上还活着。
     closeSession: (sessionId: string, opts?: { preserveWorkspace?: boolean }): Promise<void> =>
       ipcRenderer.invoke('maker:close-session', sessionId, opts),
+
+    /** 删除单条消息并让下一次发送从剩余本地历史重建 Agent 上下文。 */
+    deleteMessage: (
+      sessionId: string,
+      clientId: string,
+    ): Promise<{ sessionId: string; clientId: string }> =>
+      ipcRenderer.invoke('maker:message:delete', sessionId, clientId),
 
     listActive: (): Promise<Array<{
       sessionId: string;

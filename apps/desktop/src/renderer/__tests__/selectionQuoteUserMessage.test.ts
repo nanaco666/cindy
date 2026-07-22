@@ -19,7 +19,7 @@ describe('SelectionQuoteButton — user message floating action exclusion', () =
   it('renders sent quotes with the same compact chip as the composer', () => {
     expect(userMessageSource).toContain('<QuoteChip quote={segment.quote} />');
     expect(userMessageSource).toContain(
-      'inline-block max-w-[min(240px,55vw)] select-none px-2 align-middle',
+      'mx-1 inline-flex max-w-[min(240px,55vw)] select-none align-middle',
     );
     expect(userMessageSource).not.toContain('min-w-0 rounded-lg border px-3 py-2');
   });

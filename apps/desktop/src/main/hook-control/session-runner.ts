@@ -33,7 +33,7 @@ import path from 'node:path';
 import { app, BrowserWindow } from 'electron';
 
 import { isTerminalAgentErrorEvent } from '@lizi/maker-core';
-import type { AgentEvent, AgentKind, PermissionMode, UserContentBlock } from '@lizi/maker-core';
+import type { AgentEvent, AgentKind, PermissionMode, UserContentBlock, UserMessage } from '@lizi/maker-core';
 import {
   effectiveSourceIdForModel,
   isModelVisible,
@@ -50,6 +50,8 @@ import {
   noteSilentStopUserSend,
   onSilentStopSettled,
 } from '../maker-ipc/register.js';
+import { prependHandoffToUserMessage } from '../maker-ipc/agentHandoff.js';
+import { agentHandoffPending } from '../maker-ipc/agentHandoffPendingSingleton.js';
 import { toDesktopSessionDispatchOutcome } from '../maker-host/send-outcome.js';
 import { createMessage } from '../localDb/ipc/messages.js';
 import {
@@ -756,8 +758,12 @@ export function createMakerHookSessionRunner(deps: {
           : req.prompt;
 
       try {
+        const pendingHandoff = await agentHandoffPending.peek(session.id);
+        const outgoingMessage: UserMessage = pendingHandoff
+          ? (prependHandoffToUserMessage({ type: 'user', content: sendContent }, pendingHandoff) as UserMessage)
+          : { type: 'user', content: sendContent };
         const sendResult = await session.send(
-          { type: 'user', content: sendContent },
+          outgoingMessage,
           {
             origin,
             planMode: false,
@@ -784,6 +790,9 @@ export function createMakerHookSessionRunner(deps: {
             },
           },
         );
+        if (pendingHandoff && sendResult.accepted) {
+          agentHandoffPending.consume(session.id);
+        }
         const outcome = toDesktopSessionDispatchOutcome(sendResult, {
           source: 'hook-dispatcher',
           context: `hook:${req.origin.connectionId}`,

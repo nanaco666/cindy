@@ -4098,6 +4098,7 @@ describe('AgentInputCoordinator queue mutations', () => {
       text: 'new text',
       images: [{ url: 'xdt-image://1' }],
       files: [],
+      slashCommandRanges: [],
     });
   });
 
@@ -4572,6 +4573,7 @@ describe('AgentInputCoordinator 意识拦截钩(订阅槽①,will-user-message)'
     )?.[1] as { content: string };
     expect(JSON.parse(persisted.content)).toEqual({
       text: '> ordinary markdown after rewrite',
+      slashCommandRanges: [],
     });
     const rewrittenItem = h.onUserMessageRewritten.mock.calls[0]?.[1];
     expect(rewrittenItem?.chatMessage.quotesEncoded).toBeUndefined();

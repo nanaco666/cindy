@@ -5443,6 +5443,31 @@ export default function SessionScreen() {
     void copyMessageText(buildMobileSessionMessageDeepLink(sessionId, clientId));
   }, [sessionId]);
 
+  const deleteMessage = useCallback((clientId: string) => {
+    if (!deviceId || messageActionBusy) return;
+    Alert.alert('删除这条消息？', '删除后会从这台电脑的本地对话记录移除，下一次发送会用剩余历史重建上下文。', [
+      { text: '取消', style: 'cancel' },
+      {
+        text: '删除',
+        style: 'destructive',
+        onPress: () => {
+          void (async () => {
+            setMessageActionBusy(clientId);
+            setError(null);
+            try {
+              await maker.deleteMessage(sessionId, clientId);
+              remoteSessionStore.removeMessage(sessionId, clientId, deviceId);
+            } catch (err) {
+              setError(formatRemoteError(err));
+            } finally {
+              setMessageActionBusy(null);
+            }
+          })();
+        },
+      },
+    ]);
+  }, [deviceId, maker, messageActionBusy, sessionId]);
+
   const confirmRewind = useCallback(async () => {
     if (!deviceId || messageActionBusy || !isCommitReadyRewindState(rewindState)) return;
     const state = rewindState;
@@ -5831,6 +5856,7 @@ export default function SessionScreen() {
                     items={renderItems}
                     loadingEarlier={loadingEarlier}
                     onCopyMessageLink={copyMessageLink}
+                    onDeleteMessage={collaborationReadOnlyReason ? undefined : deleteMessage}
                     onForkMessage={collaborationReadOnlyReason ? undefined : forkAtMessage}
                     onLoadEarlier={loadEarlierMessages}
                     onOpenForkOrigin={forkOrigin ? openForkOrigin : undefined}

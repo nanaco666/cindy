@@ -14,12 +14,16 @@
  */
 
 import type { AttachedFile, MentionedResource } from '@/lib/fileTypes';
+import type { PastedTextRange, SlashCommandRange } from '@/lib/imageRef';
 
 export interface PendingPayload {
   text: string;
   files?: AttachedFile[];
   mentions?: MentionedResource[];
   vendorOptions?: Record<string, unknown>;
+  quotesEncoded?: boolean;
+  pastedTextRanges?: PastedTextRange[];
+  slashCommandRanges?: SlashCommandRange[];
   /** 调试用——createPending 时刻,过期清理时可参考(目前未做 GC,实际场景 navigate 立即消费)。 */
   createdAt: number;
 }

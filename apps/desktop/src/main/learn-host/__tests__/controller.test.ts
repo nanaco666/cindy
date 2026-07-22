@@ -243,6 +243,25 @@ describe('LearnController 状态机', () => {
     expect(run.assistantText).toBe('created my-skill');
   });
 
+  it('distillation 直发路径注入 pending handoff,但落库仍保留干净 /learn 文案', async () => {
+    const peekPendingHandoff = vi.fn(async () => 'HANDOFF');
+    const consumePendingHandoff = vi.fn();
+    const persistUserMessage = vi.fn(async () => {});
+    const h = makeHarness({ peekPendingHandoff, consumePendingHandoff, persistUserMessage });
+    h.setScan(goodScan());
+    const { runId } = await h.controller.startLearn({ input: 'learn my deploy flow', sourceKind: 'freetext' });
+
+    await h.waitForStatus(runId, 'distilling');
+    expect(h.session.sent[0]?.startsWith('HANDOFF\n\n')).toBe(true);
+    expect(h.session.sent[0]).toContain('learn my deploy flow');
+    expect(persistUserMessage).toHaveBeenCalledWith('fake-session-1', '/learn learn my deploy flow');
+    expect(consumePendingHandoff).toHaveBeenCalledWith('fake-session-1');
+
+    h.session.emit({ type: 'text', data: { text: 'created my-skill', isFinal: true } });
+    h.session.emit({ type: 'done' });
+    await h.waitForStatus(runId, 'awaiting-review');
+  });
+
   it('蒸馏 send 未接受时回滚 git baseline 并失败收口', async () => {
     const order: string[] = [];
     const beforeDispatchUserTurn = vi.fn(async () => undefined);

@@ -75,8 +75,11 @@ import {
 import { ensureDialogueWorkspaceDir, dialogueWorkspaceRootDir } from '../localDb/dialogueWorkspace.js';
 import { healMissingDialogueWorkdir } from '../localDb/dialogueWorkdirSelfHeal.js';
 import {
+  broadcastMessageDeleted,
+  commitSingleMessageDeletion,
   createMessage as createDbMessage,
   findParkedEngineSession,
+  getDeletableMessage,
   listMessagesForAgentHandoff,
 } from '../localDb/ipc/messages.js';
 import { visibleMessageTextForConversationSearch } from '../localDb/conversationSearch.pure.js';
@@ -263,6 +266,7 @@ import {
   readOrcaWorkerOutputReadOnly,
 } from './orcaDiagnostics.js';
 import { createMakerSendTransaction } from './makerSendTransaction.js';
+import { registerMakerMessageDeleteHandler } from './messageDeleteHandler.js';
 import { normalizeUserMessage, materializeQueuedOssAttachments } from './normalizeAttachments.js';
 import { AGENT_ISLAND_DISPLAY_CONFIG } from '../agent-island/displayConfig.js';
 import {
@@ -297,6 +301,7 @@ import {
   registerMakerSessionAgentSwitchHandler,
   type MakerSessionAgentSwitchHandlerDeps,
 } from './sessionAgentSwitchHandler.js';
+import { prependHandoffToUserMessage } from './agentHandoff.js';
 import { agentHandoffPending } from './agentHandoffPendingSingleton.js';
 import { type MakerSessionCreateOpts, withCreateSessionStderr } from './sessionRequest.js';
 import { persistAndHydrateSessionProvider } from './sessionProviderBootstrap.js';
@@ -3936,6 +3941,34 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
     log,
   };
   registerMakerSessionAgentSwitchHandler(makerSessionRegistry, agentSwitchDeps);
+  registerMakerMessageDeleteHandler(makerSessionRegistry, {
+    getSessionRow: async (sessionId) => {
+      const [row] = await getDbClient().drizzle
+        .select({ status: sessions.status, agentKind: sessions.agentKind })
+        .from(sessions)
+        .where(eq(sessions.id, sessionId))
+        .limit(1);
+      return row ?? null;
+    },
+    getMessage: getDeletableMessage,
+    listMessagesForContext: (sessionId) => listMessagesForAgentHandoff(sessionId, 400),
+    getLiveSession: (sessionId) => maker.getSession(sessionId),
+    hasBackgroundActivity: getClaudeSessionBackgroundActivity,
+    closeSession: (sessionId) => maker.closeSession(sessionId),
+    commitDeletion: commitSingleMessageDeletion,
+    setPendingHandoff: (sessionId, handoff) => agentHandoffPending.set(sessionId, handoff),
+    onCommitted: ({ sessionId, clientId, updatedAt, preview, messageCount }) => {
+      broadcastMessageDeleted({ sessionId, clientId });
+      broadcastSessionPatched(sessionId, {
+        sdkSessionId: null,
+        updatedAt: new Date(updatedAt).toISOString(),
+        preview,
+        _count: { messages: messageCount },
+      });
+    },
+    withCloseSuppressed: withRehydrateCloseSuppressed,
+    log,
+  });
   pendingAgentSwitchApplyHolder = (sessionId, signal) =>
     applyPendingAgentSwitchIfIdle(agentSwitchDeps, sessionId, {
       bootstrapAfterSwitch: true,
@@ -4013,8 +4046,12 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
     opts: SessionSendOptions,
   ): Promise<SessionSendResult> {
     let baselineStarted = false;
+    const pendingHandoff = await agentHandoffPending.peek(session.id);
+    const outgoingMessage: UserMessage = pendingHandoff
+      ? (prependHandoffToUserMessage({ type: 'user', content: message }, pendingHandoff) as UserMessage)
+      : { type: 'user', content: message };
     try {
-      const sendResult = await session.send({ type: 'user', content: message }, {
+      const sendResult = await session.send(outgoingMessage, {
         ...opts,
         onAccepted: async () => {
           await opts.onAccepted?.();
@@ -4026,6 +4063,9 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
       });
       if (baselineStarted && !sendResult.accepted) {
         gitSnapshotCoordinator?.onTurnAbort(session.id);
+      }
+      if (pendingHandoff && sendResult.accepted) {
+        agentHandoffPending.consume(session.id);
       }
       return sendResult;
     } catch (err) {

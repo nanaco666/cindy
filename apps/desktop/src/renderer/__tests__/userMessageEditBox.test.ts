@@ -147,6 +147,51 @@ describe('UserMessageEditBox — idle 发送', () => {
     await waitFor(() => expect(editedOverride).toHaveBeenCalledWith({ text: 'edited reply' }));
   });
 
+  it('文本未修改时保留长粘贴与 slash ranges，文本修改后丢弃', async () => {
+    const ranges = {
+      pastedTextRanges: [{ start: 0, end: 13, display: 'Pasted text (1 line)' }],
+      slashCommandRanges: [] as [],
+    };
+    const first = renderBox({ initialText: 'original text', ...ranges });
+    fireEvent.click(first.sendBtn);
+    await waitFor(() => expect(commitMock).toHaveBeenCalledTimes(1));
+    expect(commitMock.mock.calls[0][0]).toMatchObject({
+      text: 'original text',
+      pastedTextRanges: ranges.pastedTextRanges,
+      slashCommandRanges: [],
+    });
+    first.unmount();
+
+    vi.clearAllMocks();
+    const second = renderBox({ initialText: 'original text', ...ranges });
+    fireEvent.change(second.textarea, { target: { value: 'edited text' } });
+    fireEvent.click(second.sendBtn);
+    await waitFor(() => expect(commitMock).toHaveBeenCalledTimes(1));
+    expect(commitMock.mock.calls[0][0].pastedTextRanges).toBeUndefined();
+    expect(commitMock.mock.calls[0][0].slashCommandRanges).toBeUndefined();
+  });
+
+  it('被拦消息覆盖重发在文本未修改时透传 chip ranges', async () => {
+    const override = vi.fn(async () => {});
+    const ranges = {
+      pastedTextRanges: [{ start: 0, end: 13, display: 'Pasted text (1 line)' }],
+      slashCommandRanges: [] as [],
+    };
+    const box = renderBox({
+      initialText: 'original text',
+      onCommitOverride: override,
+      ...ranges,
+    });
+    fireEvent.click(box.sendBtn);
+    await waitFor(() =>
+      expect(override).toHaveBeenCalledWith({
+        text: 'original text',
+        pastedTextRanges: ranges.pastedTextRanges,
+        slashCommandRanges: [],
+      }),
+    );
+  });
+
   it('提交挂起期间重复点发送不会二次提交(同步 ref 防重入)', async () => {
     let release: () => void = () => {};
     commitMock.mockImplementationOnce(

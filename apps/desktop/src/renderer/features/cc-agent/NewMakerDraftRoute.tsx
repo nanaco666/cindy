@@ -110,6 +110,7 @@ import {
 } from 'lucide-react';
 import type { Effort, PermissionMode } from '@/lib/userPreferences.types';
 import type { AttachedFile, MentionedResource } from '@/lib/fileTypes';
+import type { PastedTextRange, SlashCommandRange } from '@/lib/imageRef';
 import { toast } from '@/lib/toast';
 import { cn } from '@/lib/utils';
 import { InvisibleWindowDragStrip } from '@/components/layout/windowDrag';
@@ -1115,7 +1116,13 @@ export function NewMakerDraftRoute() {
       permissionMode: PermissionMode,
       files?: AttachedFile[],
       mentions?: MentionedResource[],
-      opts?: { providerId?: string | null; onAccepted?: () => void },
+      opts?: {
+        providerId?: string | null;
+        quotesEncoded?: boolean;
+        pastedTextRanges?: PastedTextRange[];
+        slashCommandRanges?: SlashCommandRange[];
+        onAccepted?: () => void;
+      },
     ): boolean | undefined => {
       if (sendInFlightRef.current) return false;
       // device-link 切设备后,capabilities/providers hook 可能还没 re-render 到新设备快照;
@@ -1257,7 +1264,18 @@ export function NewMakerDraftRoute() {
               remoteProjectsStore.setDeviceSessions(deviceId, deviceName, list as Session[]);
             }
             const rehydratedFiles = await rehomeDraftAttachments(files, remoteSessionId);
-            setPending(remoteSessionId, { text: message, files: rehydratedFiles, mentions });
+            setPending(remoteSessionId, {
+              text: message,
+              files: rehydratedFiles,
+              mentions,
+              ...(opts?.quotesEncoded ? { quotesEncoded: true } : {}),
+              ...(opts?.pastedTextRanges?.length
+                ? { pastedTextRanges: opts.pastedTextRanges }
+                : {}),
+              ...(opts?.slashCommandRanges !== undefined
+                ? { slashCommandRanges: opts.slashCommandRanges }
+                : {}),
+            });
             opts?.onAccepted?.();
             clearComposerDraftAndNotify(NEW_MAKER_DRAFT_KEY);
             attachmentState.clearFiles();
@@ -1465,6 +1483,15 @@ export function NewMakerDraftRoute() {
                   newDir,
                   rehomedFiles,
                   mentions,
+                  {
+                    ...(opts?.quotesEncoded ? { quotesEncoded: true } : {}),
+                    ...(opts?.pastedTextRanges?.length
+                      ? { pastedTextRanges: opts.pastedTextRanges }
+                      : {}),
+                    ...(opts?.slashCommandRanges !== undefined
+                      ? { slashCommandRanges: opts.slashCommandRanges }
+                      : {}),
+                  },
                 );
                 if (accepted) opts?.onAccepted?.();
                 // sendMessage 会先同步 push user message,再异步返回 enqueue 是否接受。
@@ -1557,6 +1584,11 @@ export function NewMakerDraftRoute() {
             text: message,
             files: rehydratedFiles,
             mentions,
+            ...(opts?.quotesEncoded ? { quotesEncoded: true } : {}),
+            ...(opts?.pastedTextRanges?.length ? { pastedTextRanges: opts.pastedTextRanges } : {}),
+            ...(opts?.slashCommandRanges !== undefined
+              ? { slashCommandRanges: opts.slashCommandRanges }
+              : {}),
           });
           opts?.onAccepted?.();
           // 草稿已经成功移交给新会话(setPending),清掉 NEW_MAKER_DRAFT_KEY

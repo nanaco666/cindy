@@ -3,7 +3,7 @@ import { stripChatQuoteMarkerLines } from '@lizi/maker-shared/chat-quotes';
 
 export type CopyMessageStatus = 'copied' | 'empty' | 'failed';
 
-export type MobileMessageControlActionId = 'copy' | 'rewind' | 'fork';
+export type MobileMessageControlActionId = 'copy' | 'delete' | 'rewind' | 'fork';
 
 export interface MobileMessageControlInput {
   canCopy: boolean;

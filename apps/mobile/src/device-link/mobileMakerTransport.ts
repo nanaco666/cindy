@@ -383,6 +383,7 @@ export interface MobileMakerTransport {
   fork(sourceSessionId: string, messageClientId: string): Promise<RemoteSession>;
   rewindPreview(sessionId: string, clientId: string): Promise<RewindPreviewPayload>;
   rewindCommit(sessionId: string, clientId: string): Promise<RemoteSession>;
+  deleteMessage(sessionId: string, clientId: string): Promise<{ sessionId: string; clientId: string }>;
   closeSession(sessionId: string): Promise<void>;
   /**
    * 会话未读已读回执:手机端真实展示会话内容后,清掉被控端该会话的未读态
@@ -546,6 +547,7 @@ export function createMobileMakerTransport({
       call('maker:fork', [sourceSessionId, messageClientId]),
     rewindPreview: (sessionId, clientId) => call('maker:rewind:preview', [sessionId, clientId]),
     rewindCommit: (sessionId, clientId) => call('maker:rewind:commit', [sessionId, clientId]),
+    deleteMessage: (sessionId, clientId) => call('maker:message:delete', [sessionId, clientId]),
     closeSession: (sessionId) => call('maker:close-session', [sessionId]),
     clearSessionAttention: (sessionId, intent) =>
       call('notification:clear-session-attention', [sessionId, intent]),
