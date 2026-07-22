@@ -6,6 +6,7 @@ import { formatMobileBuildLabel, normalizeBuildInfo } from '@/config/buildInfo';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type SetStateAction } from 'react';
 import {
   ActivityIndicator,
+  AppState,
   FlatList,
   KeyboardAvoidingView,
   Linking,
@@ -826,12 +827,35 @@ export default function NewRemoteSessionScreen() {
     const controller = voiceControllerSessionRef.current;
     voiceControllerSessionRef.current = null;
     voiceStartupInFlightRef.current = false;
+    voiceStopInFlightRef.current = false;
     voiceRecordingActiveRef.current = false;
+    setComposerVoiceHoldArmed(false);
     setVoiceState('idle');
     setVoiceError(null);
+    discardPendingPrewarm();
     if (controller) void controller.cancel().catch(() => undefined);
     void setAudioModeAsync({ allowsRecording: false }).catch(() => undefined);
-  }, []);
+  }, [setVoiceState]);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      // iOS permission sheets and Control Center can briefly report `inactive`.
+      // Only a real background transition owns the foreground-only voice teardown.
+      if (nextState !== 'background') return;
+      if (
+        voiceStartupInFlightRef.current
+        || voiceRecordingActiveRef.current
+        || voiceControllerSessionRef.current
+      ) {
+        cancelVoiceForDeviceSwitch();
+      } else {
+        // pressIn may have opened a speculative ASR connection without creating
+        // a controller yet; backgrounding must not leave that parked connection.
+        discardPendingPrewarm();
+      }
+    });
+    return () => subscription.remove();
+  }, [cancelVoiceForDeviceSwitch]);
 
   const selectDevice = useCallback((option: NewSessionDeviceOption) => {
     if (creating) return;

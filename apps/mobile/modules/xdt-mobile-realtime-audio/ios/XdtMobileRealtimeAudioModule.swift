@@ -52,6 +52,13 @@ public class XdtMobileRealtimeAudioModule: Module {
       self.prewarmAudioSession()
     }
 
+    // Voice input is foreground-only. Stop both live capture and a speculative
+    // prewarm immediately when the app reaches the background; relying on iOS
+    // suspension alone leaves the AVAudioSession active during lifecycle races.
+    OnAppEntersBackground {
+      self.stopCapture(deactivateImmediately: true)
+    }
+
     OnDestroy {
       self.stopCapture(deactivateImmediately: true)
     }

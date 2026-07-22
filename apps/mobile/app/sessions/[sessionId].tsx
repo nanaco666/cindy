@@ -2996,6 +2996,47 @@ export default function SessionScreen() {
     }
   }, [deviceId, draft, openLink, renderItems, voiceIsProcessing, voiceState]);
 
+  const cancelVoiceForAppBackground = useCallback(() => {
+    const controller = voiceControllerSessionRef.current;
+    const ownsActiveRun = Boolean(
+      controller
+      || voiceStartupInFlightRef.current
+      || voiceRecordingActiveRef.current,
+    );
+    if (!ownsActiveRun) {
+      // pressIn may have opened a speculative ASR connection without creating
+      // a controller yet; backgrounding must not leave that parked connection.
+      discardPendingPrewarm();
+      return;
+    }
+
+    voiceStartupSeqRef.current += 1;
+    voiceControllerSessionRef.current = null;
+    voiceStartupInFlightRef.current = false;
+    voiceStopInFlightRef.current = false;
+    voiceRecordingActiveRef.current = false;
+    voiceLongPressActiveRef.current = false;
+    voiceSuppressNextPressRef.current = false;
+    voiceStopAfterStartRef.current = false;
+    setVoiceReleaseToSendActive(false);
+    setComposerVoiceHoldArmed(false);
+    setVoiceState('idle');
+    setVoiceError(null);
+    discardPendingPrewarm();
+    if (controller) void controller.cancel().catch(() => undefined);
+    void setAudioModeAsync({ allowsRecording: false }).catch(() => undefined);
+  }, [setVoiceState]);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      // iOS permission sheets and Control Center can briefly report `inactive`.
+      // Only a real background transition owns the foreground-only voice teardown.
+      if (nextState !== 'background') return;
+      cancelVoiceForAppBackground();
+    });
+    return () => subscription.remove();
+  }, [cancelVoiceForAppBackground]);
+
   useEffect(() => {
     return () => {
       const controller = voiceControllerSessionRef.current;
