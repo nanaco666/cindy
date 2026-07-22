@@ -1,6 +1,6 @@
 /**
  * Maker Memory 写入规范段 — 注入到 agent system prompt 末尾, 教 LLM 怎么用
- * lizi_memory MCP server (writing rules + override + tool usage)。
+ * cindy_memory MCP server (writing rules + override + tool usage)。
  *
  * 真正内容在同目录 system-prompt.md, vite 编译时通过 ?raw 内联为字符串。
  *

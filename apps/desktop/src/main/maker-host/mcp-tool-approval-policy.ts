@@ -22,7 +22,7 @@ const DESKTOP_CLAUDE_READ_ONLY_ALLOWED_TOOLS = [
   'mcp__cindy_scheduler__list_tools',
   'mcp__lizi_ssh__list_tools',
   'mcp__cindy_helper__list_tools',
-  'mcp__lizi_memory__list_tools',
+  'mcp__cindy_memory__list_tools',
   'mcp__lizi_contacts__list_tools',
   'mcp__lizi_slack__slack_status',
 ] as const;
@@ -48,6 +48,7 @@ export function getDesktopMcpToolApprovalPolicy(
   // (github_lizi / gitlab_lizi 先后迁入内置意识 cindy-github / cindy-gitlab)。
   if (
     serverName === 'cindy_scheduler'
+    || serverName === 'cindy_memory'
     || (serverName.startsWith('lizi_') && serverName !== 'lizi_ssh')
   ) {
     return 'auto-approve';

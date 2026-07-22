@@ -204,7 +204,7 @@ export function createDesktopMcpProviders(deps: DesktopMcpProvidersDeps): LiziMc
     memory: {
       getManager: deps.getMakerMemoryManager,
       searchSessions: searchSessionsFn,
-      logger: createLogger('mcp/lizi_memory'),
+      logger: createLogger('mcp/cindy_memory'),
     },
     // 智能通讯录: 全局单库 manager 懒加载单例; 开关现读 settings store —
     // 每次 session start 时 provider isEnabled 评估, 关着时 server 整个不注册。

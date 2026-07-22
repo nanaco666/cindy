@@ -1,5 +1,5 @@
 /**
- * lizi_memoryMcpServer.ts
+ * cindy_memoryMcpServer.ts
  * ---------------------------------------------------------------------------
  * In-process MCP server exposing Maker Memory (cross-agent shared workdir-scoped
  * memory) to cc / codex agents. Mirrors cindy_schedulerMcpServer.ts:
@@ -24,7 +24,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { jsonObjectArg } from './json-object-arg.js';
 
-import { MemoryToolRegistry } from './lizi_memoryToolRegistry.js';
+import { MemoryToolRegistry } from './cindy_memoryToolRegistry.js';
 import {
   registerMemoryConsolidateTool,
   registerMemoryDeleteTool,
@@ -40,12 +40,12 @@ import type { MemoryMcpDeps } from './types.js';
 // ── Entry-tool descriptions (内嵌, 跟 scheduler 同模式) ─────────────────────
 
 const D_LIST_TOOLS =
-  '探索 lizi_memory 可用工具 (渐进式发现入口)。不传 category → 返回所有类目+每个类目工具数量。' +
+  '探索 cindy_memory 可用工具 (渐进式发现入口)。不传 category → 返回所有类目+每个类目工具数量。' +
   '传 category=read/write/maintain/search → 返回该类目下所有工具的名称和简介。' +
   '获取工具名后用 call_tool({name, args}) 执行;参数错误会返回完整 JSON Schema 自纠。';
 
 const D_CALL_TOOL =
-  '调用 lizi_memory 中的某个具体工具。先用 list_tools 拿工具名 + 简介, 再用本工具执行。' +
+  '调用 cindy_memory 中的某个具体工具。先用 list_tools 拿工具名 + 简介, 再用本工具执行。' +
   '错误码:' +
   '`MAKER_MEMORY_NOT_READY` = maker memory 未启用 (mode != "maker"), 提示用户切换 settings;' +
   '`NOT_FOUND` = 指定 memory 文件不存在;' +
@@ -117,9 +117,9 @@ function registerCallToolEntry(server: McpServer, registry: MemoryToolRegistry):
 
 // ── Factory ────────────────────────────────────────────────────────────────
 
-export function createLiziMemoryMcpServer(deps: MemoryMcpDeps): McpServer {
+export function createCindyMemoryMcpServer(deps: MemoryMcpDeps): McpServer {
   const server = new McpServer({
-    name: 'lizi_memory',
+    name: 'cindy_memory',
     version: '1.0.0',
   });
 

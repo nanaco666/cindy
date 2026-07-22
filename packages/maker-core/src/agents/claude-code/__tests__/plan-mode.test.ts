@@ -163,7 +163,7 @@ describe('ClaudeCodeAgent plan mode', () => {
   });
 
   it('passes a session-stable copy of host-owned allowedTools to the local SDK query', async () => {
-    const source = ['mcp__cindy__ghost_list', 'mcp__lizi_memory__list_tools'];
+    const source = ['mcp__cindy__ghost_list', 'mcp__cindy_memory__list_tools'];
     const { handle, queryOptions } = await startPlanSession(false, {
       claudeAllowedTools: source,
     });
@@ -171,7 +171,7 @@ describe('ClaudeCodeAgent plan mode', () => {
 
     expect(queryOptions.allowedTools).toEqual([
       'mcp__cindy__ghost_list',
-      'mcp__lizi_memory__list_tools',
+      'mcp__cindy_memory__list_tools',
     ]);
     expect(queryOptions.allowedTools).not.toBe(source);
     await handle.close();

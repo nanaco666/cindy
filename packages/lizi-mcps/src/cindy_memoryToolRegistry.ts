@@ -1,5 +1,5 @@
 /**
- * lizi_memoryToolRegistry.ts
+ * cindy_memoryToolRegistry.ts
  * ---------------------------------------------------------------------------
  * Mirror of SchedulerToolRegistry / FeishuBotToolRegistry — memory tools
  * register here (not on McpServer directly), keeping the entry-tool surface to
@@ -58,7 +58,7 @@ export class MemoryToolRegistry {
     handler: MemoryToolHandler<{ [K in keyof T]: z.infer<T[K]> }>;
   }): void {
     if (this.tools.has(def.name)) {
-      throw new Error(`[lizi_memoryToolRegistry] duplicate tool name: ${def.name}`);
+      throw new Error(`[cindy_memoryToolRegistry] duplicate tool name: ${def.name}`);
     }
     this.tools.set(def.name, def as unknown as MemoryToolDef);
   }
