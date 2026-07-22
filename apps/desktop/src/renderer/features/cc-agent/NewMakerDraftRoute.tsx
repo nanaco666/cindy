@@ -169,12 +169,15 @@ function makeDraftSessionId(): string {
   return crypto.randomUUID();
 }
 
-function stripMentionChips(node: JSONContent | null): JSONContent | null {
+function stripLocalMentionChips(node: JSONContent | null): JSONContent | null {
   if (!node) return null;
-  if (node.type === 'mentionChip') return null;
+  if (node.type === 'mentionChip') {
+    const kind = (node.attrs as { kind?: string } | undefined)?.kind;
+    if (kind === 'file' || kind === 'dir') return null;
+  }
   if (!node.content) return node;
   const filtered = node.content
-    .map((child) => stripMentionChips(child))
+    .map((child) => stripLocalMentionChips(child))
     .filter((c): c is JSONContent => c !== null);
   return { ...node, content: filtered };
 }
@@ -797,12 +800,14 @@ export function NewMakerDraftRoute() {
           .invoke(target.deviceId, 'maker:get-new-maker-defaults', [capabilityAgentKind])
           .then((v) => (v as RemoteDraftDefaults | null) ?? null)
           .catch(() => null);
-        // 设备验证通过后才 evict + prefetch 以刷新 hook 缓存。
+        // 设备验证通过后 evict + prefetch 以刷新 hook 缓存;await 确保 cache 就绪。
         evictDeviceCapabilities(target.deviceId);
         evictDeviceProviders(target.deviceId);
         evictDeviceGitSafetySettings(target.deviceId);
-        void prefetchDeviceCapabilities(target.deviceId);
-        void prefetchDeviceProviders(target.deviceId);
+        await Promise.all([
+          prefetchDeviceCapabilities(target.deviceId),
+          prefetchDeviceProviders(target.deviceId),
+        ]);
         dlSeedKeyRef.current = `${target.deviceId}:${capabilityAgentKind}`;
         setDlSel(resolveDeviceLinkDraftDefaults(freshCaps, freshDefaults, undefined, capabilityAgentKind));
         setRemoteDraftState({ loaded: true, value: freshDefaults });
@@ -910,7 +915,7 @@ export function NewMakerDraftRoute() {
           }
           // SSH 环境下本地 @file/@dir mention 无效,从 Tiptap 文档中剥离。
           const strippedText = existingDraft.text
-            ? stripMentionChips(existingDraft.text)
+            ? stripLocalMentionChips(existingDraft.text)
             : existingDraft.text;
           saveComposerDraft(newSession.id, {
             ...existingDraft,
