@@ -42,6 +42,7 @@ import {
   providerOffersModel,
   resolveModelIconKind,
   sourcesForModel,
+  visibleModelUnion,
   type ProviderView,
 } from '@lizi/model-providers';
 import { buildProviderSections } from './sourceSwitch';
@@ -685,11 +686,25 @@ export function ModelSelectorContent({
       browsing && agentKind
         ? visibleModels.filter((m) => sourcesForModel(providers, m.id, agentKind).length > 0)
         : visibleModels;
-    if (!q) return base;
-    return base.filter(
+    // 本地 flat 入口（子代理模型、Worker 等）没有 provider sections 帮忙过滤，必须显式复用
+    // 会话选择器 / IM `/model` 的同一套「已连接来源 × 用户可见模型」规则。否则设置页里
+    // 已忽略或仅由断开来源提供的目录项仍会被列出来，选中后没有可用路由。
+    // device-link 的目录来自被控端，不能叠加控制端本机的可见性偏好，保持原样。
+    const selectableIds = deviceId
+      ? null
+      : new Set(
+          (agentKind ? [agentKind] : (['claude-code', 'codex'] as const)).flatMap((agent) =>
+            visibleModelUnion(providers, agent, (providerId, model) =>
+              isModelEnabled(agent, providerId, model),
+            ).map((model) => model.id),
+          ),
+        );
+    const selectable = selectableIds ? base.filter((model) => selectableIds.has(model.id)) : base;
+    if (!q) return selectable;
+    return selectable.filter(
       (m) => m.displayName.toLowerCase().includes(q) || m.id.toLowerCase().includes(q),
     );
-  }, [sections, visibleModels, query, browsing, agentKind, providers]);
+  }, [sections, visibleModels, query, browsing, agentKind, providers, deviceId, visibilityVersion]);
 
   // 选中判定:flat 模式只比模型 id;分段模式还要比供应商(同模型多供应商下只高亮当前来源那行)。
   // 浏览目标引擎态恒 false:当前会话模型属于旧引擎,目标列表里同 id 行(如 gpt-5.5

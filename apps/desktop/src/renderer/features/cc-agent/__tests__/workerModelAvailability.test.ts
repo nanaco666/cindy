@@ -68,6 +68,41 @@ describe('selectWorkerModels', () => {
     ).toEqual([]);
   });
 
+  it('only offers local Claude models backed by a connected provider', () => {
+    const opus = model('claude-opus-4-8');
+    const sonnet = model('claude-sonnet-4-6');
+
+    expect(
+      selectWorkerModels({
+        agent: 'claude-code',
+        capabilities: capabilities([opus, sonnet]),
+        providers: [provider('anthropic', true, 'claude-code', [sonnet])],
+        providersLoading: false,
+        providersError: null,
+      }).map((entry) => entry.id),
+    ).toEqual(['claude-sonnet-4-6']);
+  });
+
+  it('excludes ignored local models while retaining a model enabled by another provider', () => {
+    const hidden = model('hidden-model');
+    const shared = model('shared-model');
+
+    expect(
+      selectWorkerModels({
+        agent: 'claude-code',
+        capabilities: capabilities([hidden, shared]),
+        providers: [
+          provider('provider-a', true, 'claude-code', [hidden, shared]),
+          provider('provider-b', true, 'claude-code', [shared]),
+        ],
+        providersLoading: false,
+        providersError: null,
+        isVisible: (providerId, entry) =>
+          entry.id === 'shared-model' && providerId === 'provider-b',
+      }).map((entry) => entry.id),
+    ).toEqual(['shared-model']);
+  });
+
   it('uses each controlled device provider snapshot without leaking models across devices', () => {
     const deviceA = selectWorkerModels({
       agent: 'codex',

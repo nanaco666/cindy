@@ -8,6 +8,7 @@ import { useAgentCapabilities } from '@/hooks/useAgentCapabilities';
 import { useDeviceProviders } from '@/hooks/useDeviceProviders';
 import { useProviders } from '@/hooks/useProviders';
 import { cn } from '@/lib/utils';
+import { isModelEnabled, useModelVisibilityVersion } from '@/state/modelVisibilityPrefs';
 import type { Effort } from '@/lib/userPreferences.types';
 import { selectWorkerModels } from './workerModelAvailability';
 
@@ -112,6 +113,7 @@ export function CreateWorkerPopover({
   const providers = deviceId ? remoteProviders.providers : localProviders.providers;
   const providersLoading = deviceId ? remoteProviders.loading : localProviders.loading;
   const providersError = deviceId ? remoteProviders.error : null;
+  const visibilityVersion = useModelVisibilityVersion();
   const activeCapabilitiesState = agent === 'codex' ? codexCaps : ccCaps;
   const activeCaps = activeCapabilitiesState.capabilities;
   const activeModels = useMemo(() => {
@@ -122,12 +124,21 @@ export function CreateWorkerPopover({
       providers,
       providersLoading,
       providersError,
+      isVisible: deviceId
+        ? undefined
+        : (providerId, catalogModel) => isModelEnabled(agent, providerId, catalogModel),
     });
-  }, [activeCaps, agent, deviceId, providers, providersError, providersLoading]);
+  }, [
+    activeCaps,
+    agent,
+    deviceId,
+    providers,
+    providersError,
+    providersLoading,
+    visibilityVersion,
+  ]);
   const currentModel = activeModels.find((m) => m.id === model);
-  const modelCatalogLoading =
-    activeCapabilitiesState.loading ||
-    (deviceId ? providersLoading : agent === 'codex' && providersLoading);
+  const modelCatalogLoading = activeCapabilitiesState.loading || providersLoading;
   const currentModelSupportsFast = Boolean(
     agent === 'codex' && activeCaps?.hasFastMode && currentModel?.supportsFastMode,
   );
