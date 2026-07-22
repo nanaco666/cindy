@@ -5081,6 +5081,8 @@
       "statusAria": "Status: {{status}}",
       "took": "Took {{duration}}",
       "openSession": "Open session",
+      "sessionDeleted": "Session deleted",
+      "sessionUnavailable": "Could not verify the session. Try again.",
       "markReadTitle": "Click to mark as read",
       "sessionCost": "Session cost {{cost}}",
       "sessionValue": "Session value {{value}}",
@@ -5193,6 +5195,8 @@
           "open": "Open session",
           "unbind": "Unbind",
           "persistentNote": "Recreates and rebinds automatically if the session is archived",
+          "deleted": "Bound session deleted",
+          "deletedPersistentNote": "Creates and binds a new session on the next run",
           "fallbackTitle": "Session {{id}}"
         },
         "switchModelHint": "The bound session will switch to this model on the next run"
@@ -5202,6 +5206,7 @@
         "loading": "Loading sessions…",
         "loadFailed": "Failed to load: {{error}}",
         "empty": "No active sessions available",
+        "deletedBinding": "Bound session deleted — select another session",
         "selectPlaceholder": "— Select a session —"
       },
       "preRunHook": {

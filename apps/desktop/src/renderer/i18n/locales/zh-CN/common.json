@@ -5071,6 +5071,8 @@
       "statusAria": "状态：{{status}}",
       "took": "用时 {{duration}}",
       "openSession": "打开会话",
+      "sessionDeleted": "会话已删除",
+      "sessionUnavailable": "暂时无法确认会话状态，请稍后重试",
       "markReadTitle": "点击标记为已读",
       "sessionCost": "会话开销 {{cost}}",
       "sessionValue": "会话价值 {{value}}",
@@ -5183,6 +5185,8 @@
           "open": "打开会话",
           "unbind": "解除绑定",
           "persistentNote": "会话归档后会自动重建并续绑",
+          "deleted": "绑定会话已删除",
+          "deletedPersistentNote": "下次运行时会自动创建新会话并续绑",
           "fallbackTitle": "会话 {{id}}"
         },
         "switchModelHint": "下次触发时会将绑定会话切换到此模型"
@@ -5192,6 +5196,7 @@
         "loading": "加载会话中…",
         "loadFailed": "加载失败：{{error}}",
         "empty": "暂无可用的活跃会话",
+        "deletedBinding": "绑定会话已删除，请重新选择",
         "selectPlaceholder": "— 选择一个会话 —"
       },
       "preRunHook": {

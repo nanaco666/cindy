@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 
 import { cn } from '@/lib/utils';
 import { toast } from '@/lib/toast';
+import * as sessionService from '@/lib/sessionService';
 import { extractIpcError } from '@/utils/ipcError';
 import { Tip } from '@/components/ui/tooltip';
 import { useAgentCapabilities } from '@/hooks/useAgentCapabilities';
@@ -25,8 +26,10 @@ import {
   deriveRunMode,
   hasRealBinding,
 } from '../hooks/useScheduleForm';
+import { useSessionReferences } from '../hooks/useSessionReferences';
 import {
   buildHookCommandForScriptFile,
+  canSubmitSessionBinding,
   isExplicitScheduleModelUnavailable,
   parsePreRunHookTimeoutMs,
 } from '../lib/scheduleFormLogic';
@@ -101,6 +104,14 @@ export function ScheduleFormDialog({
   // 此时目录 / worktree / fastMode 由绑定会话决定,表单隐藏对应字段。
   const runMode = deriveRunMode(form);
   const isBound = hasRealBinding(form);
+  const boundSessionIds = useMemo(
+    () => (isBound ? [form.targetSessionId] : []),
+    [isBound, form.targetSessionId],
+  );
+  const boundSessionReferences = useSessionReferences(boundSessionIds);
+  const boundSessionReference = isBound
+    ? boundSessionReferences.get(form.targetSessionId)
+    : undefined;
   const hideWorkspaceFields = runMode === 'bound' || isBound;
   const [submitting, setSubmitting] = useState(false);
   const [mode, setMode] = useState<'gallery' | 'form'>('form');
@@ -287,6 +298,22 @@ export function ScheduleFormDialog({
 
   const feishuBotReady = useFeishuBot().status === 'connected';
   const navigate = useNavigate();
+  const openReferencedSession = useCallback(
+    async (sessionId: string) => {
+      try {
+        const [reference] = await sessionService.resolveReferences([sessionId]);
+        if (reference?.state !== 'available') {
+          toast.error(t('scheduler.runs.sessionDeleted'));
+          return;
+        }
+        onOpenChange(false);
+        navigate(`/cc-agent/${sessionId}`);
+      } catch {
+        toast.error(t('scheduler.runs.sessionUnavailable'));
+      }
+    },
+    [navigate, onOpenChange, t],
+  );
   const goConfigFeishuBot = () => {
     onOpenChange(false);
     // 飞书机器人在「IM 机器人」页的「个人」分栏,缺省 imGroup 会落到默认的 Cindy 栏
@@ -340,6 +367,14 @@ export function ScheduleFormDialog({
     const err = validate();
     if (err) {
       toast.warning(t(err.key, err.values));
+      return;
+    }
+    if (!canSubmitSessionBinding(form.executionMode ?? 'agent', runMode, boundSessionReference)) {
+      toast.warning(t(
+        boundSessionReference
+          ? 'scheduler.editor.thread.deletedBinding'
+          : 'scheduler.runs.sessionUnavailable',
+      ));
       return;
     }
     if (
@@ -829,10 +864,8 @@ export function ScheduleFormDialog({
               <ThreadPickerInline
                 value={form.targetSessionId}
                 onSelect={selectBoundSession}
-                onOpen={(id) => {
-                  onOpenChange(false);
-                  navigate(`/cc-agent/${id}`);
-                }}
+                onOpen={(id) => void openReferencedSession(id)}
+                reference={boundSessionReference}
               />
             )}
             {/* persistent 已绑(runner 回写):无选择器,用卡片展示绑定信息。
@@ -842,10 +875,8 @@ export function ScheduleFormDialog({
               <BoundSessionCard
                 sessionId={form.targetSessionId}
                 onUnbind={isProjectAutomationMode ? undefined : () => setRunMode('fresh')}
-                onOpen={() => {
-                  onOpenChange(false);
-                  navigate(`/cc-agent/${form.targetSessionId}`);
-                }}
+                onOpen={() => void openReferencedSession(form.targetSessionId)}
+                reference={boundSessionReference}
               />
             )}
             </div>
