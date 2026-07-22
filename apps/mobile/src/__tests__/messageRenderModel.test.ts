@@ -6,6 +6,7 @@ import {
   insertMobileForkOriginItem,
   type MobileMessageRenderItem,
 } from '@/session/messageRenderModel';
+import { reconcileMobileMessageRenderItems } from '@/session/messageRenderReconcile';
 import { buildAgentTaskCardModel, type AgentTaskUpdate } from '@lizi/maker-shared/agent-task';
 import { CONTINUE_AFTER_ERROR_PROMPT } from '@lizi/maker-shared/synthetic-trigger';
 import type { RemoteMessage, RemoteMessageRole } from '@/session/types';
@@ -38,6 +39,59 @@ function toolUse(id: string, toolName: string, input: unknown, seconds: number):
 }
 
 describe('messageRenderModel', () => {
+  it('reuses unchanged history rows and attachment view models during a streaming tail update', () => {
+    const user = message({
+      id: 'user-1',
+      role: 'user',
+      content: {
+        text: '带附件的请求',
+        images: [{ url: 'https://example.com/image.png', name: 'image.png' }],
+        files: [],
+      },
+      createdAt: at(1),
+    });
+    const firstAssistant = message({
+      id: 'assistant-1',
+      role: 'assistant',
+      content: '第一段',
+      agentMeta: { isStreaming: true },
+      createdAt: at(2),
+    });
+    const first = buildMobileMessageRenderItems([user, firstAssistant], { isSessionStreaming: true });
+
+    const nextAssistant = { ...firstAssistant, content: '第一段继续' };
+    const next = buildMobileMessageRenderItems([user, nextAssistant], { isSessionStreaming: true });
+    const reconciled = reconcileMobileMessageRenderItems(first, next);
+
+    expect(reconciled[0]).toBe(first[0]);
+    expect(reconciled[1]).not.toBe(first[1]);
+    const previousUser = expectType(first[0], 'message');
+    const nextUser = expectType(reconciled[0], 'message');
+    expect(nextUser.message).toBe(previousUser.message);
+    expect(nextUser.message.attachments).toBe(previousUser.message.attachments);
+  });
+
+  it('reuses rows after an equivalent history refresh with newly deserialized messages', () => {
+    const messages = [
+      message({
+        id: 'user-1',
+        role: 'user',
+        content: { text: '历史请求', images: [], files: [] },
+        createdAt: at(1),
+      }),
+      message({ id: 'assistant-1', role: 'assistant', content: '历史回答', createdAt: at(2) }),
+    ];
+    const first = buildMobileMessageRenderItems(messages);
+    const refreshed = buildMobileMessageRenderItems(
+      JSON.parse(JSON.stringify(messages)) as RemoteMessage[],
+    );
+    const reconciled = reconcileMobileMessageRenderItems(first, refreshed);
+
+    expect(reconciled).toBe(first);
+    expect(reconciled[0]).toBe(first[0]);
+    expect(reconciled[1]).toBe(first[1]);
+  });
+
   it('groups consecutive tool calls and preserves matching tool_result previews', () => {
     const items = buildMobileMessageRenderItems([
       toolUse('read-1', 'Read', { file_path: '/repo/a.ts' }, 1),

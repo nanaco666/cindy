@@ -296,6 +296,7 @@ import {
   insertMobileForkOriginItem,
   type MobileMessageRenderItem,
 } from '@/session/messageRenderModel';
+import { reconcileMobileMessageRenderItems } from '@/session/messageRenderReconcile';
 import { shouldSuppressEmptyMessageState } from '@/session/sessionEmptyState';
 import { deferScheduleIndexHydration } from '@/session/scheduleIndexDefer';
 import { markSessionScheduleRunsRead, unreadRunIdFromProjection } from '@/session/scheduleRunRead';
@@ -2607,9 +2608,13 @@ export default function SessionScreen() {
     const id = findErrorTailClientId(messages);
     return id && !dismissedTailErrorClientIds.has(id) ? id : null;
   }, [collaborationReadOnlyReason, messages, dismissedTailErrorClientIds]);
+  const previousRenderItemsRef = useRef<{
+    sessionId: string;
+    items: readonly MobileMessageRenderItem[];
+  } | null>(null);
   const renderItems = useMemo(
     () => {
-      const items = insertMobileForkOriginItem(
+      let items = insertMobileForkOriginItem(
         // 孤儿 agent_task 兜底用 maker status 驱动的权威 turn 边界 gate,与 store 的
         // turn-start 清理同源闭环——渲染开启时 map 必已清过 stale。不用 isSessionStreaming
         // (含本地 sending / canStopQueue,发送→status 间隙会闪现残留),也不用
@@ -2621,13 +2626,24 @@ export default function SessionScreen() {
         ),
         forkOrigin,
       );
-      if (!errorTailClientId) return items;
-      return items.filter(
-        (item) => !(item.type === 'message' && item.message.source.clientId === errorTailClientId),
-      );
+      if (errorTailClientId) {
+        items = items.filter(
+          (item) => !(item.type === 'message' && item.message.source.clientId === errorTailClientId),
+        );
+      }
+      const previous = previousRenderItemsRef.current?.sessionId === sessionId
+        ? previousRenderItemsRef.current.items
+        : [];
+      const reconciled = reconcileMobileMessageRenderItems(previous, items);
+      return reconciled;
     },
-    [errorTailClientId, forkOrigin, isSessionStreaming, makerTurnRunning, messages, taskUpdates],
+    [errorTailClientId, forkOrigin, isSessionStreaming, makerTurnRunning, messages, sessionId, taskUpdates],
   );
+  // 只在本次 render 真正 commit 后更新 reconcile 基准。写入 useMemo/ref 会让
+  // Concurrent Mode 下被丢弃的 render 泄漏成下一轮的 previous,破坏尾行 memo 的稳定性。
+  useLayoutEffect(() => {
+    previousRenderItemsRef.current = { sessionId, items: renderItems };
+  }, [renderItems, sessionId]);
   // 后台静默刷新:仅在首次加载、还没有任何内容(messages 为空)时显示"正在同步";已有内容
   // (重开已看过的会话,messages 还在内存)时后台对账一律静默,不再弹同步提示打扰用户。
   const showSyncingIndicator = loading && messages.length === 0;
