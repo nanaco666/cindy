@@ -2247,10 +2247,6 @@ function WorkGroupCard({
   const header = presentation.header;
   const isStreaming = item.isStreaming === true;
   const [expanded, toggleExpanded] = useFoldableExpandedState(item.key, false);
-  const [livePreviewDismissed, toggleLivePreviewDismissed] = useFoldableExpandedState(
-    `${item.key}:live-preview-dismissed`,
-    false,
-  );
   const layout = useMemo(() => buildMessageHierarchyLayout({
     screenWidth: actions.screenWidth,
     summaryCount: header.summaryCount,
@@ -2268,8 +2264,7 @@ function WorkGroupCard({
       : null),
     [expanded, isStreaming, item.children],
   );
-  const isLivePreviewVisible =
-    isStreaming && !expanded && !livePreviewDismissed && liveActivities.length > 0;
+  const isLivePreviewVisible = isStreaming && !expanded && liveActivities.length > 0;
   const startedAtIso = item.startedAtMs !== undefined
     ? new Date(item.startedAtMs).toISOString()
     : undefined;
@@ -2291,21 +2286,7 @@ function WorkGroupCard({
     presentation.title,
     explorationSummary,
   ].filter(Boolean).join(' · ');
-  const onToggle = useCallback(() => {
-    if (isLivePreviewVisible) {
-      toggleLivePreviewDismissed();
-      return;
-    }
-    if (isStreaming && expanded && !livePreviewDismissed) toggleLivePreviewDismissed();
-    toggleExpanded();
-  }, [
-    expanded,
-    isLivePreviewVisible,
-    isStreaming,
-    livePreviewDismissed,
-    toggleExpanded,
-    toggleLivePreviewDismissed,
-  ]);
+  const onToggle = toggleExpanded;
   const livePreview = isLivePreviewVisible ? (
     <Rail layout={layout}>
       <View style={styles.workActivityStack}>
