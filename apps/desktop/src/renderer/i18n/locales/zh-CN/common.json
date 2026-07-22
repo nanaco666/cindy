@@ -4522,6 +4522,7 @@
     },
     "draft": {
       "createSessionFailed": "创建会话失败，请重试",
+      "deviceStillLoading": "远程设备仍在加载中，请稍候",
       "worktreeMissingRepo": "无法开 worktree：缺少当前目录的仓库根",
       "worktreeRepoHint": "可尝试重新选一次工作目录，等右下角文件夹标识刷新后再试",
       "sessionInactive": "会话已不再处于活动状态",

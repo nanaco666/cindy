@@ -4532,6 +4532,7 @@
     },
     "draft": {
       "createSessionFailed": "Failed to create session, please retry",
+      "deviceStillLoading": "Remote device is still loading, please wait",
       "worktreeMissingRepo": "Cannot create worktree: missing repository root for the current directory",
       "worktreeRepoHint": "Try re-selecting the working directory and wait for the folder badge to refresh, then retry",
       "sessionInactive": "Session is no longer active",
