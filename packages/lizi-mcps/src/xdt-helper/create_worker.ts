@@ -93,7 +93,7 @@ export const createWorkerSpecSchema = z.object({
     .min(1)
     .optional()
     .describe('可选, 创建后立即派给 worker 的第一条消息'),
-});
+}).strict();
 
 export type CreateWorkerSpec = z.infer<typeof createWorkerSpecSchema>;
 

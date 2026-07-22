@@ -77,6 +77,22 @@ describe('create_workers tool', () => {
     expect(createWorker).not.toHaveBeenCalled();
   });
 
+  it('rejects unknown fields inside worker specs instead of silently dropping them', async () => {
+    const createWorker = vi.fn<CreateWorkerDeps['createWorker']>();
+    const registry = setup(createWorker);
+
+    const result = await registry.call('create_workers', {
+      workers: [
+        { ...worker(1), initialTask: 'camelCase should fail' },
+        worker(2),
+      ],
+    });
+
+    expect(result.isError).toBe(true);
+    expect(parse(result)).toMatchObject({ ok: false, errorCode: 'INVALID_ARGS' });
+    expect(createWorker).not.toHaveBeenCalled();
+  });
+
   it('stops a hard=3 batch after the first limit failure and summarizes all nine requests', async () => {
     let call = 0;
     const createWorker = vi.fn<CreateWorkerDeps['createWorker']>(async () => {
