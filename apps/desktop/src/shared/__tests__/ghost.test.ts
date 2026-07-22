@@ -1715,7 +1715,14 @@ describe('内置插件 · 配置入口引导', () => {
 
     for (const rootName of ['official', 'xd']) {
       const root = path.join(base, rootName);
-      const entries = fs.readdirSync(root, { withFileTypes: true }).filter((e) => e.isDirectory());
+      // 目录不存在(极端:连空目录都没建)与目录为空同判——都归成同一条
+      // 友好断言,不让裸 ENOENT 盖掉「去 init submodule」的提示。
+      let entries: fs.Dirent[] = [];
+      try {
+        entries = fs.readdirSync(root, { withFileTypes: true }).filter((e) => e.isDirectory());
+      } catch {
+        entries = [];
+      }
       expect(entries.length, `${rootName} 种子根为空 —— 先跑 git submodule update --init`).toBeGreaterThan(0);
       for (const entry of entries) {
         for (const fileName of ['ghost.json', 'main.js']) {
