@@ -229,12 +229,16 @@ export function createCodexRateLimitResetService(
     }
     const accountId = identity.accountId;
     const normalizedRateLimits = displayRateLimitSnapshot(response.rateLimits);
-    await deps.recordRateLimitSnapshot({
-      ...normalizedRateLimits,
-      source: 'codex-app-server',
-      updatedAt: now(),
-      accountId,
-    });
+    // The persisted broadcaster merges absent fields with the previous snapshot. Never feed
+    // it an unbound app-server read, or a workspace switch can inherit the old account id.
+    if (accountId) {
+      await deps.recordRateLimitSnapshot({
+        ...normalizedRateLimits,
+        source: 'codex-app-server',
+        updatedAt: now(),
+        accountId,
+      });
+    }
 
     const availableCount = normalizeAvailableCount(
       response.rateLimitResetCredits?.availableCount ?? 0,
@@ -310,7 +314,16 @@ export function createCodexRateLimitResetService(
         'Codex reset offer expired; refresh usage before retrying',
       );
     }
-    if (offer.result) return offer.result;
+    if (offer.result) {
+      const currentAccount = await deps.readAccountIdentity();
+      if (!sameAccount(offer.account, currentAccount)) {
+        throw new CodexRateLimitResetRejectedError(
+          'ACCOUNT_CHANGED',
+          'Codex account changed; refresh usage before reading the reset result',
+        );
+      }
+      return offer.result;
+    }
     if (offer.pending) return await offer.pending;
 
     const run = (async (): Promise<MobileCodexRateLimitResetResult> => {

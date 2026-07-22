@@ -269,7 +269,23 @@ describe('Codex rate-limit reset control plane', () => {
       await service.read();
     }
 
+    activeIdentity = { email: 'person-0@example.com', accountId: 'workspace-0' };
     await expect(service.consume('key-0')).resolves.toEqual(firstResult);
+    expect(deps.consumeResetCredit).toHaveBeenCalledOnce();
+  });
+
+  it('rejects a cached terminal result after the account changes', async () => {
+    let identity = { email: 'person@example.com', accountId: 'workspace-a' };
+    const { deps, service } = harness({
+      readAccountIdentity: vi.fn(async () => identity),
+    });
+    await service.read();
+    await service.consume(KEY);
+
+    identity = { email: 'person@example.com', accountId: 'workspace-b' };
+    await expect(service.consume(KEY)).rejects.toMatchObject({
+      reason: 'ACCOUNT_CHANGED',
+    });
     expect(deps.consumeResetCredit).toHaveBeenCalledOnce();
   });
 
@@ -394,5 +410,7 @@ describe('Codex rate-limit reset control plane', () => {
 
     await expect(missingEmail.service.read()).resolves.toMatchObject({ resetOffer: null });
     await expect(missingWorkspace.service.read()).resolves.toMatchObject({ resetOffer: null });
+    expect(missingEmail.deps.recordRateLimitSnapshot).toHaveBeenCalledOnce();
+    expect(missingWorkspace.deps.recordRateLimitSnapshot).not.toHaveBeenCalled();
   });
 });

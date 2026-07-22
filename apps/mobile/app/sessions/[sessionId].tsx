@@ -4719,6 +4719,10 @@ export default function SessionScreen() {
       setCodexRateLimits(snapshot);
       setAccountUsage(snapshot.rateLimits);
     } catch {
+      if (contextUsageSessionRef.current !== sessionId) return;
+      // 权威控制面读取失败后只能降级为只读用量；旧 offer / retry key 不得继续可消费。
+      setCodexRateLimits(null);
+      setCodexResetRetryKey(null);
       try {
         const snapshot = await maker.getAccountUsage('codex');
         if (contextUsageSessionRef.current !== sessionId) return;
