@@ -4755,6 +4755,7 @@ export default function SessionScreen() {
         setAccountUsage(result.rateLimits.rateLimits);
       } else {
         await refreshAccountUsage();
+        if (contextUsageSessionRef.current !== sessionId) return;
       }
       const message = {
         reset: 'Codex 用量窗口已重置。',
