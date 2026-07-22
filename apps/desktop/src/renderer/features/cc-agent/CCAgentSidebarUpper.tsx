@@ -89,6 +89,7 @@ import {
   pinnedSessionIdsInDisplayOrder,
   type ProjectNode,
 } from './lib/projectGrouping';
+import { projectDisplayLabelWithMachine } from './lib/remoteProjectIdentity';
 import {
   projectBulkArchiveActionForStatus,
   selectProjectBulkArchiveCandidates,
@@ -565,7 +566,7 @@ function ExpandedView({
   const handleOpenConversationSearch = useCallback((project: ProjectNode) => {
     requestConversationSearch({
       projectKey: project.projectKey,
-      projectName: project.displayName,
+      projectName: projectDisplayLabelWithMachine(project),
       sessionIds: project.sessions.map((session) => session.id),
     });
   }, []);
@@ -2928,8 +2929,11 @@ function RailPanels({
                     >
                       <Folder size={13} strokeWidth={2} aria-hidden />
                     </span>
-                    <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
-                      {p.displayName}
+                    <span
+                      title={projectDisplayLabelWithMachine(p)}
+                      className="min-w-0 flex-1 truncate text-sm font-medium text-foreground"
+                    >
+                      {projectDisplayLabelWithMachine(p)}
                     </span>
                     {agg.dotTone && <AttentionDot size={5} tone={agg.dotTone} className="shrink-0" />}
                     <span className="shrink-0 text-[10px] tabular-nums text-[var(--text-tertiary)]">
@@ -2976,7 +2980,7 @@ function RailPanels({
             railPanelStore.scheduleClose();
           }}
         >
-          {panelHead(openProject.displayName, openProject.sessions.length)}
+          {panelHead(projectDisplayLabelWithMachine(openProject), openProject.sessions.length)}
           <div className="max-h-[420px] overflow-y-auto [scrollbar-width:thin]">
             {/* key 按项目:hover 直切另一项目时列表组件被复用,内部「显示全部」
                 状态会泄漏给下一个项目、绕过折叠上限(codex review)——换 key 强制

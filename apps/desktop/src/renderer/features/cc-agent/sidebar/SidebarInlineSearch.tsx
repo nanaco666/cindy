@@ -25,6 +25,7 @@ import {
   type useConversationSearch,
 } from './ConversationSearchBox';
 import type { ProjectNode as ProjectNodeData } from '../lib/projectGrouping';
+import { projectDisplayLabelWithMachine } from '../lib/remoteProjectIdentity';
 
 export interface SidebarInlineSearchProps {
   /** useConversationSearch 的返回值(状态 + setter + 回调)。 */
@@ -71,7 +72,9 @@ export function SidebarInlineSearch({
   const lockedProject = search.lockedProjectKey
     ? (allKnownProjects.find((project) => project.projectKey === search.lockedProjectKey) ?? null)
     : null;
-  const lockedProjectLabel = lockedProject?.displayName ?? search.lockedProjectName;
+  const lockedProjectLabel = lockedProject
+    ? projectDisplayLabelWithMachine(lockedProject)
+    : search.lockedProjectName;
 
   // 程序化展开信号:展开并聚焦输入框(input 在展开态才挂载,置 forceOpen 触发挂载后再 focus)。
   useEffect(() => {
