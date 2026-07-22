@@ -299,9 +299,12 @@ function isPlanSnapshotAtLeastAsFresh(
   // an older plan shape. Only an explicit history/window refresh may establish a
   // structural change; live echoes must not add or drop terminal steps.
   if (incoming.length !== cached.length) {
+    // Terminal reconciliation is the last known state for every cached step. A
+    // shorter persisted row cannot prove that omitted steps were intentionally
+    // removed, so keep the complete terminal snapshot even during history sync.
+    if (incoming.length < cached.length) return false;
     if (!authoritativeHistory) return false;
-    const sharedLength = Math.min(incoming.length, cached.length);
-    for (let index = 0; index < sharedLength; index += 1) {
+    for (let index = 0; index < cached.length; index += 1) {
       const incomingItem = isRecord(incoming[index]) ? incoming[index] as Record<string, unknown> : null;
       const cachedItem = isRecord(cached[index]) ? cached[index] as Record<string, unknown> : null;
       if (!incomingItem || !cachedItem) return false;

@@ -711,6 +711,46 @@ describe('remoteSessionStore', () => {
     });
   });
 
+  it('keeps a longer terminal plan when history still has fewer completed steps', () => {
+    remoteSessionStore.applyRemotePush('dev-1', 'maker:event', {
+      sessionId: 's1',
+      event: {
+        type: 'done',
+        source: 'codex',
+        data: {
+          type: 'codex/event/task_complete',
+          raw: { id: 'turn-fewer-history' },
+          plan: [
+            { step: 'Inspect', status: 'completed' },
+            { step: 'Verify', status: 'completed' },
+          ],
+        },
+      },
+    });
+
+    remoteSessionStore.setLatestMessageWindow('s1', [{
+      ...message('plan-row-fewer-history', 's1'),
+      role: 'tool_use',
+      toolUseId: 'plan:turn-fewer-history',
+      content: {
+        toolUseId: 'plan:turn-fewer-history',
+        toolName: 'update_plan',
+        input: { plan: [{ step: 'Inspect', status: 'completed' }] },
+      },
+    }]);
+
+    expect(remoteSessionStore.getMessages('s1')[0]).toMatchObject({
+      content: {
+        input: {
+          plan: [
+            { step: 'Inspect', status: 'completed' },
+            { step: 'Verify', status: 'completed' },
+          ],
+        },
+      },
+    });
+  });
+
   it('keeps a terminal plan when a stale live echo has extra steps', () => {
     remoteSessionStore.applyRemotePush('dev-1', 'maker:event', {
       sessionId: 's1',
