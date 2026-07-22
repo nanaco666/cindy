@@ -1,1 +1,0 @@
-搜索/查询飞书用户。两种用法二选一:(1) 传 query=姓名做模糊搜索;(2) 传 open_id 直接按 ID 拉取该用户的完整信息。返回包含 open_id/name/avatar/email 等字段。Search Feishu users by name, OR fetch a specific user by open_id. 以当前登录用户的飞书权限操作。本工具不按邮箱搜索;如果目的是发飞书消息且姓名搜不到,可以向用户索要邮箱,再调用 im_send_message(receive_id_type=email) 直接发送。
