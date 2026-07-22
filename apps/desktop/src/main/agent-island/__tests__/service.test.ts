@@ -1823,6 +1823,90 @@ describe('AgentIslandService native publishing', () => {
     });
   });
 
+  it('surfaces a deferred remote auth error when no renderer acknowledges the retry', async () => {
+    vi.useFakeTimers();
+    try {
+      const { AgentIslandService } = await import('../service.js');
+      const publish = vi.fn((state: AgentIslandDisplayState, frameOrFrames: AgentIslandNativeFrame | AgentIslandNativeFrame[]) => {
+        void state;
+        void frameOrFrames;
+        return true;
+      });
+      const playSound = vi.fn<(sound: AgentIslandSoundChoice) => boolean>(() => true);
+      const service = new AgentIslandService({
+        getMainWindow: () => null,
+        nativeHost: { failed: false, publish, playSound },
+      });
+      syncEnabledForTest(service, publish);
+      service.setSoundSettings({
+        enabled: true,
+        sounds: {
+          ...DEFAULT_AGENT_ISLAND_SOUND_SETTINGS.sounds,
+          error: customSound('error.wav'),
+        },
+      });
+      service.handleUserPrompt({ sessionId: 's1', agentKind: 'claude-code' }, 'run tests');
+      playSound.mockClear();
+
+      service.handleAgentEvent(
+        { sessionId: 's1', agentKind: 'claude-code' },
+        {
+          type: 'error',
+          source: 'claude-code',
+          data: { message: 'authentication failed', sdkError: 'authentication_failed', isTerminal: true },
+        },
+        { deferRemoteAuthRetry: true },
+      );
+      service.handleAgentEvent({ sessionId: 's1', agentKind: 'claude-code' }, doneEvent());
+
+      await vi.advanceTimersByTimeAsync(10_000);
+
+      expect(playSound).toHaveBeenCalledTimes(1);
+      expect(playSound).toHaveBeenCalledWith(customSound('error.wav'));
+      expect(publish.mock.calls.at(-1)?.[0].sessions[0]).toMatchObject({
+        sessionId: 's1',
+        phase: 'error',
+        detail: 'authentication failed',
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps a deferred remote auth error through a soft reconnect close', async () => {
+    const { AgentIslandService } = await import('../service.js');
+    const publish = vi.fn((state: AgentIslandDisplayState, frameOrFrames: AgentIslandNativeFrame | AgentIslandNativeFrame[]) => {
+      void state;
+      void frameOrFrames;
+      return true;
+    });
+    const service = new AgentIslandService({
+      getMainWindow: () => null,
+      nativeHost: { failed: false, publish },
+    });
+    syncEnabledForTest(service, publish);
+    service.handleUserPrompt({ sessionId: 's1', agentKind: 'claude-code' }, 'run tests');
+
+    service.handleAgentEvent(
+      { sessionId: 's1', agentKind: 'claude-code' },
+      {
+        type: 'error',
+        source: 'claude-code',
+        data: { message: 'authentication failed', sdkError: 'authentication_failed', isTerminal: true },
+      },
+      { deferRemoteAuthRetry: true },
+    );
+    service.handleAgentEvent({ sessionId: 's1', agentKind: 'claude-code' }, doneEvent());
+    service.handleSessionClosed('s1', { preservePendingRemoteAuthRetry: true });
+
+    expect(service.handleDeferredRemoteAuthError('s1')).toBe(true);
+    expect(publish.mock.calls.at(-1)?.[0].sessions[0]).toMatchObject({
+      sessionId: 's1',
+      phase: 'error',
+      detail: 'authentication failed',
+    });
+  });
+
   it('keeps an unplanned remote daemon close in error and does not play completion sound', async () => {
     const { AgentIslandService } = await import('../service.js');
     const publish = vi.fn((state: AgentIslandDisplayState, frameOrFrames: AgentIslandNativeFrame | AgentIslandNativeFrame[]) => {

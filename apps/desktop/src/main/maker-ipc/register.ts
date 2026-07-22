@@ -150,7 +150,7 @@ import {
   setNewMakerDraftCache,
   setProviderModelMemoryCache,
 } from '../maker-host/newMakerDefaultsCache.js';
-import { withRehydrateCloseSuppressed } from '../maker-host/rehydrateCloseSuppression.js';
+import { rehydrateCloseSuppression, withRehydrateCloseSuppressed } from '../maker-host/rehydrateCloseSuppression.js';
 import { handleCloseSessionRequest } from './closeSessionRequest.js';
 import {
   hasAssistantProgressAfterMessage,
@@ -1605,9 +1605,12 @@ function handleAgentIslandInteractionDismissedByRequestId(requestId: string): vo
   }
 }
 
-function handleAgentIslandSessionClosedAfterCleanup(sessionId: string): void {
+function handleAgentIslandSessionClosedAfterCleanup(
+  sessionId: string,
+  options: { preservePendingRemoteAuthRetry?: boolean } = {},
+): void {
   try {
-    getAgentIslandService()?.handleSessionClosed(sessionId);
+    getAgentIslandService()?.handleSessionClosed(sessionId, options);
   } catch (error) {
     log.warn('Agent Island session close cleanup failed after mandatory session cleanup', {
       sessionId,
@@ -2741,7 +2744,9 @@ export function wireSessionToIpc(session: ReturnType<Maker['getSession']>): void
       // 后台活动检测:会话进程已关闭(closeSession / 删除),清账并广播横幅熄灭。
       clearClaudeSessionBackgroundActivity(session.id);
       clearSessionPersistState(session.id);
-      handleAgentIslandSessionClosedAfterCleanup(session.id);
+      handleAgentIslandSessionClosedAfterCleanup(session.id, {
+        preservePendingRemoteAuthRetry: rehydrateCloseSuppression.isSuppressed(session.id),
+      });
     }
   });
 
