@@ -12,12 +12,46 @@
 
 import { customProviderSecretStorageKey } from '@/../shared/providerSecrets';
 
-import type { AgentKind, CustomProviderConfig } from '@lizi/model-providers';
+import { DEFAULT_CUSTOM_CONTEXT_WINDOW } from '@lizi/model-providers';
+import type {
+  AgentKind,
+  CatalogModel,
+  CustomProviderConfig,
+  ProviderRuntimeModelConfig,
+} from '@lizi/model-providers';
 
 const ALL_AGENTS: readonly AgentKind[] = ['claude-code', 'codex'];
 
 /** per-runtime 密钥输入：键为 agent，值为该 runtime 的 API key（空串 = 不改 / 不存）。 */
 export type RuntimeKeys = Partial<Record<AgentKind, string>>;
+
+/**
+ * 模型 id 代表模型身份；一旦改变，旧模型携带的 contextWindow 等隐藏元数据不再可信。
+ * id 未变时保留原引用，避免无意义地丢掉仍有效的预设元数据。
+ */
+export function replaceCustomProviderModelId(
+  model: ProviderRuntimeModelConfig,
+  nextId: string,
+): ProviderRuntimeModelConfig {
+  if (nextId === model.id) return model;
+  return { id: nextId, name: model.name };
+}
+
+/**
+ * 运行期 CatalogModel 已把缺省 contextWindow 物化为通用默认值；转回用户配置时不能把该
+ * 默认快照写成 override，否则未来默认升级后老配置无法跟随。厂商明确的非默认值则保留。
+ */
+export function customProviderModelConfigFromCatalogModel(
+  model: Pick<CatalogModel, 'id' | 'name' | 'contextWindow'>,
+): ProviderRuntimeModelConfig {
+  return {
+    id: model.id,
+    name: model.name,
+    ...(model.contextWindow !== DEFAULT_CUSTOM_CONTEXT_WINDOW
+      ? { contextWindow: model.contextWindow }
+      : {}),
+  };
+}
 
 /**
  * 读取该自定义供应商**某 runtime** 本机已存的明文密钥（用户自己的 key）；无 / 读失败返回 null。

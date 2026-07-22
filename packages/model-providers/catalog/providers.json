@@ -350,7 +350,7 @@
     {
       "id": "minimax-cn",
       "name": "MiniMax（中国大陆）",
-      "docsUrl": "https://platform.minimaxi.com/document",
+      "docsUrl": "https://platform.minimaxi.com/docs/api-reference/responses-create",
       "regionHint": "cn",
       "runtimes": {
         "claude-code": {
@@ -365,13 +365,27 @@
               "name": "MiniMax M2.5"
             }
           ]
+        },
+        "codex": {
+          "baseUrl": "https://api.minimaxi.com/v1",
+          "models": [
+            {
+              "id": "MiniMax-M3",
+              "name": "MiniMax M3",
+              "contextWindow": 1000000
+            },
+            {
+              "id": "MiniMax-M2.5",
+              "name": "MiniMax M2.5"
+            }
+          ]
         }
       }
     },
     {
       "id": "minimax-global",
       "name": "MiniMax (Global)",
-      "docsUrl": "https://platform.minimax.io/docs",
+      "docsUrl": "https://platform.minimax.io/docs/api-reference/responses-create",
       "regionHint": "global",
       "runtimes": {
         "claude-code": {
@@ -380,6 +394,20 @@
             {
               "id": "MiniMax-M3",
               "name": "MiniMax M3"
+            },
+            {
+              "id": "MiniMax-M2.5",
+              "name": "MiniMax M2.5"
+            }
+          ]
+        },
+        "codex": {
+          "baseUrl": "https://api.minimax.io/v1",
+          "models": [
+            {
+              "id": "MiniMax-M3",
+              "name": "MiniMax M3",
+              "contextWindow": 1000000
             },
             {
               "id": "MiniMax-M2.5",

@@ -65,6 +65,25 @@ describe('buildUserProvider (per-runtime)', () => {
     });
   });
 
+  it('uses explicit runtime model contextWindow and defaults only when absent', () => {
+    const p = buildUserProvider({
+      ...codexOnly,
+      runtimes: {
+        codex: {
+          ...codexOnly.runtimes.codex!,
+          models: [
+            { id: 'long-context', name: 'Long Context', contextWindow: 1_000_000 },
+            { id: 'default-context', name: 'Default Context' },
+          ],
+        },
+      },
+    });
+    expect(p.models.codex?.map((m) => [m.id, m.contextWindow])).toEqual([
+      ['long-context', 1_000_000],
+      ['default-context', DEFAULT_CUSTOM_CONTEXT_WINDOW],
+    ]);
+  });
+
   it('attaches per-runtime custom headers (still no api key)', () => {
     const p = buildUserProvider({
       ...codexOnly,
