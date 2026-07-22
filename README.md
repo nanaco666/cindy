@@ -112,8 +112,9 @@ GitHub 仓库需要配置 Actions secret `CINDY_PROTOCOL_DEPLOY_KEY`，内容为
 
 模型权重、数据集、提示词、商标，以及其他单独标识的材料，可能适用各自的许可条款，
 不因根目录的 Apache-2.0 而被自动覆盖。第三方开源组件保留各自的版权与许可，其归属
-声明汇总在根目录 [`THIRD-PARTY-NOTICES.txt`](THIRD-PARTY-NOTICES.txt) 与
-[`notices/`](notices/) 目录（说明见 [`notices/README.md`](notices/README.md)）。
+声明与 SPDX SBOM 统一收口在 [`docs/legal/`](docs/legal/)；各分发产物的精确清单
+见 [`docs/legal/notices/`](docs/legal/notices/)（说明见
+[`docs/legal/notices/README.md`](docs/legal/notices/README.md)）。
 
 本项目的版权与归属信息见 [`NOTICE`](NOTICE)。
 
@@ -125,7 +126,7 @@ the [Apache License, Version 2.0](LICENSE).
 Model weights, datasets, prompts, trademarks, and other separately identified
 materials may be subject to their own license terms and are not automatically
 covered by the repository-level Apache-2.0 grant. Third-party open-source
-components retain their own copyright and license; their attribution notices are
-collected in [`THIRD-PARTY-NOTICES.txt`](THIRD-PARTY-NOTICES.txt) and the
-[`notices/`](notices/) directory. See [`NOTICE`](NOTICE) for this project's
-copyright and attribution information.
+components retain their own copyright and license. Their attribution notices and
+SPDX SBOMs are managed under [`docs/legal/`](docs/legal/), with artifact-specific
+outputs in [`docs/legal/notices/`](docs/legal/notices/). See [`NOTICE`](NOTICE)
+for this project's copyright and attribution information.

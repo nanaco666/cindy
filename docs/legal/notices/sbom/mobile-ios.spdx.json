@@ -2,25 +2,15 @@
   "spdxVersion": "SPDX-2.3",
   "dataLicense": "CC0-1.0",
   "SPDXID": "SPDXRef-DOCUMENT",
-  "name": "cindy-mobile-android",
-  "documentNamespace": "https://cindy.app/spdx/mobile-android/b1a38d3acbcfcd13bcf1fa34e4ee49aac35ca048fb5f8fcd1f9416b72db2dca8",
+  "name": "cindy-mobile-ios",
+  "documentNamespace": "https://cindy.app/spdx/mobile-ios/4fc41ae56ccfa6fa0e3df85e7f69552b117e8721564f3129f5f8c67dc2abd3a9",
   "creationInfo": {
-    "created": "2026-07-21T09:03:48Z",
+    "created": "2026-07-22T16:21:17Z",
     "creators": [
       "Tool: scripts/generate-third-party-notices.mjs"
     ]
   },
   "packages": [
-    {
-      "name": "com.taptap.sdk:tap-core and declared TapTap modules",
-      "SPDXID": "SPDXRef-Package-a7c06f99e5a4cd74",
-      "versionInfo": "4.10.5",
-      "downloadLocation": "https://github.com/taptap/TapSDK-Android",
-      "filesAnalyzed": false,
-      "licenseConcluded": "Apache-2.0",
-      "licenseDeclared": "Apache-2.0",
-      "copyrightText": "NOASSERTION"
-    },
     {
       "name": "JetBrains Mono fonts",
       "SPDXID": "SPDXRef-Package-4aed76e603981340",
@@ -29,6 +19,16 @@
       "filesAnalyzed": false,
       "licenseConcluded": "OFL-1.1",
       "licenseDeclared": "OFL-1.1",
+      "copyrightText": "NOASSERTION"
+    },
+    {
+      "name": "TapTapSDK/Core",
+      "SPDXID": "SPDXRef-Package-962056ba719a6ad6",
+      "versionInfo": "4.10.5",
+      "downloadLocation": "https://github.com/taptap/tapsdk-frameworks/tree/4.10.5",
+      "filesAnalyzed": false,
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
       "copyrightText": "NOASSERTION"
     },
     {
@@ -2000,6 +2000,23 @@
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
           "referenceLocator": "pkg:npm/%40legendapp/list@3.3.3"
+        }
+      ]
+    },
+    {
+      "name": "@noble/hashes",
+      "SPDXID": "SPDXRef-Package-25ee07bb1d0db01a",
+      "versionInfo": "1.8.0",
+      "downloadLocation": "https://github.com/paulmillr/noble-hashes",
+      "filesAnalyzed": false,
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "NOASSERTION",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/%40noble/hashes@1.8.0"
         }
       ]
     },
@@ -10236,12 +10253,12 @@
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-a7c06f99e5a4cd74"
+      "relatedSpdxElement": "SPDXRef-Package-4aed76e603981340"
     },
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-4aed76e603981340"
+      "relatedSpdxElement": "SPDXRef-Package-962056ba719a6ad6"
     },
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
@@ -10822,6 +10839,11 @@
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
       "relatedSpdxElement": "SPDXRef-Package-0c68eb85c54800d9"
+    },
+    {
+      "spdxElementId": "SPDXRef-DOCUMENT",
+      "relationshipType": "DESCRIBES",
+      "relatedSpdxElement": "SPDXRef-Package-25ee07bb1d0db01a"
     },
     {
       "spdxElementId": "SPDXRef-DOCUMENT",

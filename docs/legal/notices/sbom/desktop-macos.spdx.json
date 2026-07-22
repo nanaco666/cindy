@@ -2,18 +2,18 @@
   "spdxVersion": "SPDX-2.3",
   "dataLicense": "CC0-1.0",
   "SPDXID": "SPDXRef-DOCUMENT",
-  "name": "cindy-desktop-linux",
-  "documentNamespace": "https://cindy.app/spdx/desktop-linux/75ee91daa37d7bedc5a7e54cf7ebb9a77cfe160a10b93422b2ec1d710ae38abe",
+  "name": "cindy-desktop-macos",
+  "documentNamespace": "https://cindy.app/spdx/desktop-macos/781348eea9dbee8599dddd5613f771a8f8c4ff7798783fcc5bd0e0dbec7b49ab",
   "creationInfo": {
-    "created": "2026-07-21T12:23:21Z",
+    "created": "2026-07-22T16:21:17Z",
     "creators": [
       "Tool: scripts/generate-third-party-notices.mjs"
     ]
   },
   "packages": [
     {
-      "name": "@img/sharp-libvips-linux-x64 embedded native libraries",
-      "SPDXID": "SPDXRef-Package-643f8990f2c4980c",
+      "name": "@img/sharp-libvips-darwin-arm64 embedded native libraries",
+      "SPDXID": "SPDXRef-Package-9f5e2914f1c79767",
       "versionInfo": "1.2.4",
       "downloadLocation": "https://github.com/lovell/sharp-libvips/tree/v1.2.4",
       "filesAnalyzed": false,
@@ -979,25 +979,8 @@
       ]
     },
     {
-      "name": "@img/sharp-libvips-linux-x64",
-      "SPDXID": "SPDXRef-Package-9250e7e9ecb9bae8",
-      "versionInfo": "1.2.4",
-      "downloadLocation": "https://github.com/lovell/sharp-libvips",
-      "filesAnalyzed": false,
-      "licenseConcluded": "LGPL-3.0-or-later",
-      "licenseDeclared": "LGPL-3.0-or-later",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/%40img/sharp-libvips-linux-x64@1.2.4"
-        }
-      ]
-    },
-    {
-      "name": "@img/sharp-linux-x64",
-      "SPDXID": "SPDXRef-Package-ba90646454c99638",
+      "name": "@img/sharp-darwin-arm64",
+      "SPDXID": "SPDXRef-Package-2a66da62f577c26b",
       "versionInfo": "0.34.5",
       "downloadLocation": "https://github.com/lovell/sharp",
       "filesAnalyzed": false,
@@ -1008,7 +991,58 @@
         {
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
-          "referenceLocator": "pkg:npm/%40img/sharp-linux-x64@0.34.5"
+          "referenceLocator": "pkg:npm/%40img/sharp-darwin-arm64@0.34.5"
+        }
+      ]
+    },
+    {
+      "name": "@img/sharp-darwin-x64",
+      "SPDXID": "SPDXRef-Package-66cc2721b030fbf0",
+      "versionInfo": "0.34.5",
+      "downloadLocation": "https://github.com/lovell/sharp",
+      "filesAnalyzed": false,
+      "licenseConcluded": "Apache-2.0",
+      "licenseDeclared": "Apache-2.0",
+      "copyrightText": "NOASSERTION",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/%40img/sharp-darwin-x64@0.34.5"
+        }
+      ]
+    },
+    {
+      "name": "@img/sharp-libvips-darwin-arm64",
+      "SPDXID": "SPDXRef-Package-a49de551d26c27c6",
+      "versionInfo": "1.2.4",
+      "downloadLocation": "https://github.com/lovell/sharp-libvips",
+      "filesAnalyzed": false,
+      "licenseConcluded": "LGPL-3.0-or-later",
+      "licenseDeclared": "LGPL-3.0-or-later",
+      "copyrightText": "NOASSERTION",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/%40img/sharp-libvips-darwin-arm64@1.2.4"
+        }
+      ]
+    },
+    {
+      "name": "@img/sharp-libvips-darwin-x64",
+      "SPDXID": "SPDXRef-Package-aa749fa20bac88b6",
+      "versionInfo": "1.2.4",
+      "downloadLocation": "https://github.com/lovell/sharp-libvips",
+      "filesAnalyzed": false,
+      "licenseConcluded": "LGPL-3.0-or-later",
+      "licenseDeclared": "LGPL-3.0-or-later",
+      "copyrightText": "NOASSERTION",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/%40img/sharp-libvips-darwin-x64@1.2.4"
         }
       ]
     },
@@ -1455,8 +1489,8 @@
       ]
     },
     {
-      "name": "@napi-rs/canvas-linux-x64-gnu",
-      "SPDXID": "SPDXRef-Package-0b82bb0fba6b6b67",
+      "name": "@napi-rs/canvas-darwin-arm64",
+      "SPDXID": "SPDXRef-Package-fa2bcd8090d745ab",
       "versionInfo": "0.1.100",
       "downloadLocation": "https://github.com/Brooooooklyn/canvas",
       "filesAnalyzed": false,
@@ -1467,7 +1501,24 @@
         {
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
-          "referenceLocator": "pkg:npm/%40napi-rs/canvas-linux-x64-gnu@0.1.100"
+          "referenceLocator": "pkg:npm/%40napi-rs/canvas-darwin-arm64@0.1.100"
+        }
+      ]
+    },
+    {
+      "name": "@napi-rs/canvas-darwin-x64",
+      "SPDXID": "SPDXRef-Package-39978a015654477b",
+      "versionInfo": "0.1.100",
+      "downloadLocation": "https://github.com/Brooooooklyn/canvas",
+      "filesAnalyzed": false,
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "NOASSERTION",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/%40napi-rs/canvas-darwin-x64@0.1.100"
         }
       ]
     },
@@ -1489,8 +1540,8 @@
       ]
     },
     {
-      "name": "@napi-rs/woff-build-linux-x64-gnu",
-      "SPDXID": "SPDXRef-Package-a907c309b6587886",
+      "name": "@napi-rs/woff-build-darwin-arm64",
+      "SPDXID": "SPDXRef-Package-041fcf2373de45f5",
       "versionInfo": "0.2.2",
       "downloadLocation": "https://github.com/Brooooooklyn/woff-build",
       "filesAnalyzed": false,
@@ -1501,7 +1552,24 @@
         {
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
-          "referenceLocator": "pkg:npm/%40napi-rs/woff-build-linux-x64-gnu@0.2.2"
+          "referenceLocator": "pkg:npm/%40napi-rs/woff-build-darwin-arm64@0.2.2"
+        }
+      ]
+    },
+    {
+      "name": "@napi-rs/woff-build-darwin-x64",
+      "SPDXID": "SPDXRef-Package-7c5e49148c61c936",
+      "versionInfo": "0.2.2",
+      "downloadLocation": "https://github.com/Brooooooklyn/woff-build",
+      "filesAnalyzed": false,
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "NOASSERTION",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/%40napi-rs/woff-build-darwin-x64@0.2.2"
         }
       ]
     },
@@ -1557,8 +1625,8 @@
       ]
     },
     {
-      "name": "@parcel/watcher-linux-x64-glibc",
-      "SPDXID": "SPDXRef-Package-08c8714122be24b8",
+      "name": "@parcel/watcher-darwin-arm64",
+      "SPDXID": "SPDXRef-Package-dc2932d970c3dc71",
       "versionInfo": "2.5.6",
       "downloadLocation": "https://github.com/parcel-bundler/watcher",
       "filesAnalyzed": false,
@@ -1569,7 +1637,24 @@
         {
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
-          "referenceLocator": "pkg:npm/%40parcel/watcher-linux-x64-glibc@2.5.6"
+          "referenceLocator": "pkg:npm/%40parcel/watcher-darwin-arm64@2.5.6"
+        }
+      ]
+    },
+    {
+      "name": "@parcel/watcher-darwin-x64",
+      "SPDXID": "SPDXRef-Package-a446f6b003ad1f8a",
+      "versionInfo": "2.5.6",
+      "downloadLocation": "https://github.com/parcel-bundler/watcher",
+      "filesAnalyzed": false,
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "NOASSERTION",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/%40parcel/watcher-darwin-x64@2.5.6"
         }
       ]
     },
@@ -13240,7 +13325,7 @@
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-643f8990f2c4980c"
+      "relatedSpdxElement": "SPDXRef-Package-9f5e2914f1c79767"
     },
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
@@ -13545,12 +13630,22 @@
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-9250e7e9ecb9bae8"
+      "relatedSpdxElement": "SPDXRef-Package-2a66da62f577c26b"
     },
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-ba90646454c99638"
+      "relatedSpdxElement": "SPDXRef-Package-66cc2721b030fbf0"
+    },
+    {
+      "spdxElementId": "SPDXRef-DOCUMENT",
+      "relationshipType": "DESCRIBES",
+      "relatedSpdxElement": "SPDXRef-Package-a49de551d26c27c6"
+    },
+    {
+      "spdxElementId": "SPDXRef-DOCUMENT",
+      "relationshipType": "DESCRIBES",
+      "relatedSpdxElement": "SPDXRef-Package-aa749fa20bac88b6"
     },
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
@@ -13685,7 +13780,12 @@
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-0b82bb0fba6b6b67"
+      "relatedSpdxElement": "SPDXRef-Package-fa2bcd8090d745ab"
+    },
+    {
+      "spdxElementId": "SPDXRef-DOCUMENT",
+      "relationshipType": "DESCRIBES",
+      "relatedSpdxElement": "SPDXRef-Package-39978a015654477b"
     },
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
@@ -13695,7 +13795,12 @@
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-a907c309b6587886"
+      "relatedSpdxElement": "SPDXRef-Package-041fcf2373de45f5"
+    },
+    {
+      "spdxElementId": "SPDXRef-DOCUMENT",
+      "relationshipType": "DESCRIBES",
+      "relatedSpdxElement": "SPDXRef-Package-7c5e49148c61c936"
     },
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
@@ -13715,7 +13820,12 @@
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-08c8714122be24b8"
+      "relatedSpdxElement": "SPDXRef-Package-dc2932d970c3dc71"
+    },
+    {
+      "spdxElementId": "SPDXRef-DOCUMENT",
+      "relationshipType": "DESCRIBES",
+      "relatedSpdxElement": "SPDXRef-Package-a446f6b003ad1f8a"
     },
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
@@ -17151,7 +17261,7 @@
   "hasExtractedLicensingInfos": [
     {
       "licenseId": "LicenseRef-Sharp-Third-Party-Licenses",
-      "extractedText": "# `@img/sharp-libvips-linux-x64`\n\nPrebuilt libvips and dependencies for use with sharp on Linux (glibc) x64.\n\n## Licensing\n\nThis software contains third-party libraries\nused under the terms of the following licences:\n\n| Library       | Used under the terms of                                                                                   |\n|---------------|-----------------------------------------------------------------------------------------------------------|\n| aom           | BSD 2-Clause + [Alliance for Open Media Patent License 1.0](https://aomedia.org/license/patent-license/)  |\n| cairo         | Mozilla Public License 2.0                                                                                |\n| cgif          | MIT Licence                                                                                               |\n| expat         | MIT Licence                                                                                               |\n| fontconfig    | [fontconfig Licence](https://gitlab.freedesktop.org/fontconfig/fontconfig/blob/main/COPYING) (BSD-like)   |\n| freetype      | [freetype Licence](https://git.savannah.gnu.org/cgit/freetype/freetype2.git/tree/docs/FTL.TXT) (BSD-like) |\n| fribidi       | LGPLv3                                                                                                    |\n| glib          | LGPLv3                                                                                                    |\n| harfbuzz      | MIT Licence                                                                                               |\n| highway       | Apache-2.0 License, BSD 3-Clause                                                                          |\n| lcms          | MIT Licence                                                                                               |\n| libarchive    | BSD 2-Clause                                                                                              |\n| libexif       | LGPLv3                                                                                                    |\n| libffi        | MIT Licence                                                                                               |\n| libheif       | LGPLv3                                                                                                    |\n| libimagequant | [BSD 2-Clause](https://github.com/lovell/libimagequant/blob/main/COPYRIGHT)                               |\n| libnsgif      | MIT Licence                                                                                               |\n| libpng        | [libpng License](https://github.com/pnggroup/libpng/blob/master/LICENSE)                                  |\n| librsvg       | LGPLv3                                                                                                    |\n| libspng       | [BSD 2-Clause, libpng License](https://github.com/randy408/libspng/blob/master/LICENSE)                   |\n| libtiff       | [libtiff License](https://gitlab.com/libtiff/libtiff/blob/master/LICENSE.md) (BSD-like)                   |\n| libvips       | LGPLv3                                                                                                    |\n| libwebp       | New BSD License                                                                                           |\n| libxml2       | MIT Licence                                                                                               |\n| mozjpeg       | [zlib License, IJG License, BSD-3-Clause](https://github.com/mozilla/mozjpeg/blob/master/LICENSE.md)      |\n| pango         | LGPLv3                                                                                                    |\n| pixman        | MIT Licence                                                                                               |\n| proxy-libintl | LGPLv3                                                                                                    |\n| zlib-ng       | [zlib Licence](https://github.com/zlib-ng/zlib-ng/blob/develop/LICENSE.md)                                |\n\nUse of libraries under the terms of the LGPLv3 is via the\n\"any later version\" clause of the LGPLv2 or LGPLv2.1.\n\nPlease report any errors or omissions via\nhttps://github.com/lovell/sharp-libvips/issues/new\n\nExact bundled library versions:\n{\n  \"aom\": \"3.13.1\",\n  \"archive\": \"3.8.2\",\n  \"cairo\": \"1.18.4\",\n  \"cgif\": \"0.5.0\",\n  \"exif\": \"0.6.25\",\n  \"expat\": \"2.7.3\",\n  \"ffi\": \"3.5.2\",\n  \"fontconfig\": \"2.17.1\",\n  \"freetype\": \"2.14.1\",\n  \"fribidi\": \"1.0.16\",\n  \"glib\": \"2.86.1\",\n  \"harfbuzz\": \"12.1.0\",\n  \"heif\": \"1.20.2\",\n  \"highway\": \"1.3.0\",\n  \"imagequant\": \"2.4.1\",\n  \"lcms\": \"2.17\",\n  \"mozjpeg\": \"0826579\",\n  \"pango\": \"1.57.0\",\n  \"pixman\": \"0.46.4\",\n  \"png\": \"1.6.50\",\n  \"proxy-libintl\": \"0.5\",\n  \"rsvg\": \"2.61.2\",\n  \"spng\": \"0.7.4\",\n  \"tiff\": \"4.7.1\",\n  \"vips\": \"8.17.3\",\n  \"webp\": \"1.6.0\",\n  \"xml2\": \"2.15.1\",\n  \"zlib-ng\": \"2.2.5\"\n}\n\nCorresponding build recipes and pinned upstream source locations are available at the exact sharp-libvips tag above. The bundled libvips version is 8.17.3."
+      "extractedText": "# `@img/sharp-libvips-darwin-arm64`\n\nPrebuilt libvips and dependencies for use with sharp on macOS 64-bit ARM.\n\n## Licensing\n\nThis software contains third-party libraries\nused under the terms of the following licences:\n\n| Library       | Used under the terms of                                                                                   |\n|---------------|-----------------------------------------------------------------------------------------------------------|\n| aom           | BSD 2-Clause + [Alliance for Open Media Patent License 1.0](https://aomedia.org/license/patent-license/)  |\n| cairo         | Mozilla Public License 2.0                                                                                |\n| cgif          | MIT Licence                                                                                               |\n| expat         | MIT Licence                                                                                               |\n| fontconfig    | [fontconfig Licence](https://gitlab.freedesktop.org/fontconfig/fontconfig/blob/main/COPYING) (BSD-like)   |\n| freetype      | [freetype Licence](https://git.savannah.gnu.org/cgit/freetype/freetype2.git/tree/docs/FTL.TXT) (BSD-like) |\n| fribidi       | LGPLv3                                                                                                    |\n| glib          | LGPLv3                                                                                                    |\n| harfbuzz      | MIT Licence                                                                                               |\n| highway       | Apache-2.0 License, BSD 3-Clause                                                                          |\n| lcms          | MIT Licence                                                                                               |\n| libarchive    | BSD 2-Clause                                                                                              |\n| libexif       | LGPLv3                                                                                                    |\n| libffi        | MIT Licence                                                                                               |\n| libheif       | LGPLv3                                                                                                    |\n| libimagequant | [BSD 2-Clause](https://github.com/lovell/libimagequant/blob/main/COPYRIGHT)                               |\n| libnsgif      | MIT Licence                                                                                               |\n| libpng        | [libpng License](https://github.com/pnggroup/libpng/blob/master/LICENSE)                                  |\n| librsvg       | LGPLv3                                                                                                    |\n| libspng       | [BSD 2-Clause, libpng License](https://github.com/randy408/libspng/blob/master/LICENSE)                   |\n| libtiff       | [libtiff License](https://gitlab.com/libtiff/libtiff/blob/master/LICENSE.md) (BSD-like)                   |\n| libvips       | LGPLv3                                                                                                    |\n| libwebp       | New BSD License                                                                                           |\n| libxml2       | MIT Licence                                                                                               |\n| mozjpeg       | [zlib License, IJG License, BSD-3-Clause](https://github.com/mozilla/mozjpeg/blob/master/LICENSE.md)      |\n| pango         | LGPLv3                                                                                                    |\n| pixman        | MIT Licence                                                                                               |\n| proxy-libintl | LGPLv3                                                                                                    |\n| zlib-ng       | [zlib Licence](https://github.com/zlib-ng/zlib-ng/blob/develop/LICENSE.md)                                |\n\nUse of libraries under the terms of the LGPLv3 is via the\n\"any later version\" clause of the LGPLv2 or LGPLv2.1.\n\nPlease report any errors or omissions via\nhttps://github.com/lovell/sharp-libvips/issues/new\n\nExact bundled library versions:\n{\n  \"aom\": \"3.13.1\",\n  \"archive\": \"3.8.2\",\n  \"cairo\": \"1.18.4\",\n  \"cgif\": \"0.5.0\",\n  \"exif\": \"0.6.25\",\n  \"expat\": \"2.7.3\",\n  \"ffi\": \"3.5.2\",\n  \"fontconfig\": \"2.17.1\",\n  \"freetype\": \"2.14.1\",\n  \"fribidi\": \"1.0.16\",\n  \"glib\": \"2.86.1\",\n  \"harfbuzz\": \"12.1.0\",\n  \"heif\": \"1.20.2\",\n  \"highway\": \"1.3.0\",\n  \"imagequant\": \"2.4.1\",\n  \"lcms\": \"2.17\",\n  \"mozjpeg\": \"0826579\",\n  \"pango\": \"1.57.0\",\n  \"pixman\": \"0.46.4\",\n  \"png\": \"1.6.50\",\n  \"proxy-libintl\": \"0.5\",\n  \"rsvg\": \"2.61.2\",\n  \"spng\": \"0.7.4\",\n  \"tiff\": \"4.7.1\",\n  \"vips\": \"8.17.3\",\n  \"webp\": \"1.6.0\",\n  \"xml2\": \"2.15.1\",\n  \"zlib-ng\": \"2.2.5\"\n}\n\nCorresponding build recipes and pinned upstream source locations are available at the exact sharp-libvips tag above. The bundled libvips version is 8.17.3."
     },
     {
       "licenseId": "LicenseRef-Public-Domain",
