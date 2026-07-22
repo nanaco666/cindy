@@ -553,7 +553,22 @@ describe('codex proxy host', () => {
 
     expect(current).toEqual({
       model: 'MiniMax-M3',
+      reasoning: { effort: 'high' },
+      input: [{ role: 'user', content: 'hello' }],
+    });
+
+    let supportedEffort: unknown = {
+      model: 'MiniMax-M3',
       reasoning: { effort: 'high', summary: 'auto' },
+      input: [{ role: 'user', content: 'hello' }],
+    };
+    for (const transform of transforms) {
+      const next = transform(supportedEffort, ctx);
+      if (next !== null && next !== undefined) supportedEffort = next;
+    }
+    expect(supportedEffort).toEqual({
+      model: 'MiniMax-M3',
+      reasoning: { effort: 'high' },
       input: [{ role: 'user', content: 'hello' }],
     });
     clearSessionProvider('session-minimax');

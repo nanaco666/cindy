@@ -758,7 +758,11 @@ function providerViewToConfig(p: ProviderView): CustomProviderConfig {
     const models = p.models[agent] ?? [];
     runtimes[agent] = {
       baseUrl: routing?.upstream ?? '',
-      models: models.map((m) => ({ id: m.id, name: m.name })),
+      models: models.map((m) => ({
+        id: m.id,
+        name: m.name,
+        contextWindow: m.contextWindow,
+      })),
       ...(routing?.headerOverride && Object.keys(routing.headerOverride).length > 0
         ? { headers: { ...routing.headerOverride } }
         : {}),

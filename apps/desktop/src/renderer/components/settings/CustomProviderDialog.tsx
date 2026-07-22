@@ -29,7 +29,12 @@ import {
 } from '@/lib/customProviders';
 
 import { sortPresetsForLocale } from '@lizi/model-providers';
-import type { AgentKind, CustomProviderConfig, ProviderPreset } from '@lizi/model-providers';
+import type {
+  AgentKind,
+  CustomProviderConfig,
+  ProviderPreset,
+  ProviderRuntimeModelConfig,
+} from '@lizi/model-providers';
 
 const AGENTS: AgentKind[] = ['claude-code', 'codex'];
 
@@ -56,10 +61,7 @@ interface CustomProviderDialogProps {
   onClose: () => void;
 }
 
-interface ModelRow {
-  id: string;
-  name: string;
-}
+type ModelRow = ProviderRuntimeModelConfig;
 interface HeaderRow {
   name: string;
   value: string;
@@ -504,16 +506,28 @@ export function CustomProviderDialog({ initial, existingIds, onSaved, onClose }:
       if (result.ok && result.models && result.models.length > 0) {
         // 用**响应到达时**的最新表单行构建弹层（rtRef），不是请求发出时的 rf 快照。
         const current = rtRef.current[agent].models
-          .map((m) => ({ id: m.id.trim(), name: m.name.trim() }))
+          .map((m) => ({
+            id: m.id.trim(),
+            name: m.name.trim(),
+            ...(m.contextWindow !== undefined ? { contextWindow: m.contextWindow } : {}),
+          }))
           .filter((m) => m.id.length > 0);
         const currentById = new Map(current.map((m) => [m.id, m]));
         const fetchedIds = new Set(result.models.map((m) => m.id));
         // 行集合 = 表单已填但不在拉取结果里的（置顶保留）+ 拉取结果（撞 id 时保留用户显示名）。
         const rows: ModelRow[] = [
-          ...current.filter((m) => !fetchedIds.has(m.id)).map((m) => ({ id: m.id, name: m.name || m.id })),
+          ...current
+            .filter((m) => !fetchedIds.has(m.id))
+            .map((m) => ({ ...m, name: m.name || m.id })),
           ...result.models.map((m) => {
             const cur = currentById.get(m.id);
-            return { id: m.id, name: cur?.name || m.name };
+            return {
+              id: m.id,
+              name: cur?.name || m.name,
+              ...(cur?.contextWindow !== undefined
+                ? { contextWindow: cur.contextWindow }
+                : {}),
+            };
           }),
         ];
         setPicker({ agent, models: rows, selected: new Set(currentById.keys()), query: '' });
@@ -552,12 +566,21 @@ export function CustomProviderDialog({ initial, existingIds, onSaved, onClose }:
       }
       const merged: ModelRow[] = chosen.map((m) => {
         const latest = latestById.get(m.id);
-        return { id: m.id, name: latest?.name.trim() ? latest.name.trim() : m.name };
+        const contextWindow = latest?.contextWindow ?? m.contextWindow;
+        return {
+          id: m.id,
+          name: latest?.name.trim() ? latest.name.trim() : m.name,
+          ...(contextWindow !== undefined ? { contextWindow } : {}),
+        };
       });
       for (const m of x.models) {
         const id = m.id.trim();
         if (id && !pickerIds.has(id) && !merged.some((r) => r.id === id)) {
-          merged.push({ id, name: m.name.trim() || id });
+          merged.push({
+            id,
+            name: m.name.trim() || id,
+            ...(m.contextWindow !== undefined ? { contextWindow: m.contextWindow } : {}),
+          });
         }
       }
       return { ...x, models: merged };
@@ -590,7 +613,11 @@ export function CustomProviderDialog({ initial, existingIds, onSaved, onClose }:
         return;
       }
       const models = rf.models
-        .map((m) => ({ id: m.id.trim(), name: m.name.trim() }))
+        .map((m) => ({
+          id: m.id.trim(),
+          name: m.name.trim(),
+          ...(m.contextWindow !== undefined ? { contextWindow: m.contextWindow } : {}),
+        }))
         .filter((m) => m.id && m.name);
       // OAuth 形态模型可留空——授权成功后自动发现并持久化（与内置订阅统一）。
       if (models.length === 0 && authMode !== 'oauth') {

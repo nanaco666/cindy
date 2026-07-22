@@ -235,7 +235,7 @@ describe('MiniMax OpenAI Responses 预设契约 (issue #345)', () => {
     expect(preset?.runtimes.codex).toEqual({
       baseUrl: codexBaseUrl,
       models: [
-        { id: 'MiniMax-M3', name: 'MiniMax M3' },
+        { id: 'MiniMax-M3', name: 'MiniMax M3', contextWindow: 1_000_000 },
         { id: 'MiniMax-M2.5', name: 'MiniMax M2.5' },
       ],
     });

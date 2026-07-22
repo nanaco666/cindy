@@ -344,13 +344,23 @@ function isMiniMaxResponsesSession(ctx: RequestTransformCtx): boolean {
   return upstream !== undefined && MINIMAX_RESPONSES_UPSTREAMS.has(upstream);
 }
 
-/** MiniMax Responses 不接受 Codex 的 xhigh 档，路由前降级到其最高支持档 high。 */
+/** MiniMax Responses 不接受 xhigh 或 reasoning summary，路由前收敛到官方支持字段。 */
 function createMiniMaxResponsesCompatTransform(): RequestTransform {
   return (body, ctx) => {
     if (!isPlainObject(body) || !isMiniMaxResponsesSession(ctx)) return null;
     const reasoning = body.reasoning;
-    if (!isPlainObject(reasoning) || reasoning.effort !== 'xhigh') return null;
-    return { ...body, reasoning: { ...reasoning, effort: 'high' } };
+    if (!isPlainObject(reasoning)) return null;
+    let changed = false;
+    const nextReasoning = { ...reasoning };
+    if (nextReasoning.effort === 'xhigh') {
+      nextReasoning.effort = 'high';
+      changed = true;
+    }
+    if ('summary' in nextReasoning) {
+      delete nextReasoning.summary;
+      changed = true;
+    }
+    return changed ? { ...body, reasoning: nextReasoning } : null;
   };
 }
 
