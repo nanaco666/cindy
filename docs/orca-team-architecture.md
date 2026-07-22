@@ -260,9 +260,13 @@ Codex thread start / resume 成功后必须注册 `threadId -> session context`�
 
 `parent_session_id` 是 fork/session-branch 关系，不是 worker 归属关系。Orca 归属必须查 `orca_teams/orca_workers`。已有 route 测试防止 split view 用 `parentSessionId` 或标题匹配 worker，见 `apps/desktop/src/renderer/__tests__/orcaWorkflowRoute.test.ts` 的 `does not use fork parentSessionId or title-linked worker lookup for Orca mapping`。
 
-#### 10. Worker 回收要克制（状态：规划不变量）
+#### 10. Worker 回收要克制（状态：无损 idle release 已落地）
 
-Worker 的价值在于上下文可延续、可观察、可介入。自动 kill/archive 在 resume 链路完全可靠前应保守；长期 worker 默认不自动做有损回收。当前手动 `idle_worker/archive_worker/end_team` 已够用；自动 hibernate/reclaim 需要等生命周期分型和 resume E2E 完整后再开。
+Worker 的价值在于上下文可延续、可观察、可介入。PR #340 已落地无损的 idle release：idle watcher 在 Worker 超过设置的空闲阈值且没有运行中的 turn 时关闭本进程持有的 Maker runtime，并以 CAS 原子写入 `status = idle` 和 `idle_since`。`idle_since != null` 是 runtime 已释放（dormant）的持久化标记，不是 `idle/running/done/error` 之外的第五种 Worker 状态；Worker 记录、session、历史和上下文都继续保留，且该 Worker 不再占用创建槽位。
+
+用户聚焦该 Worker 或再次向它派发任务时，统一的 resume 链路会先清除 `idle_since`、恢复槽位占用，再复用或重建 runtime。共享 userData 多实例下，无本地 runtime 的候选会经过一个完整扫描周期的 grace period；标记释放后，真正持有 runtime 的实例负责关闭空闲 runtime，若已有 turn 则清除释放标记。
+
+这套机制只等价于无损 hibernate，不等价于 archive/delete。`idle_worker/archive_worker/end_team` 仍保留显式控制语义；长期 Worker 的自动有损回收，以及 persistent/ephemeral 分型后的差异化回收策略，仍应保持保守并在后续单独落地。
 
 ## Part 2 · 未来规划
 
@@ -292,14 +296,16 @@ Orca 的长期方向不是“进入一个固定协同模式”，而是在主线
 
 ### Worker 生命周期分型
 
-Worker 分两类：
+当前 schema 尚未落地 persistent/ephemeral 字段和分型策略。PR #340 先提供了与类型无关的 dormant/resume 基础能力：所有合法 Worker 状态都可在空闲超时后释放 runtime，以 `idle_since != null` 表示 dormant，并在恢复时清除该标记。下面两类是后续分型后的目标策略：
+
+Worker 计划分两类：
 
 | 类型 | 语义 | 默认回收策略 |
 |---|---|---|
-| persistent | 长期协作者，价值是上下文延续与可介入 | 不自动做有损回收；等 resume 稳定后最多 hibernate |
+| persistent | 长期协作者，价值是上下文延续与可介入 | 允许无损 hibernate/resume；不自动 archive/delete |
 | ephemeral | 可观测的一次性执行单元，像“看得见的 subagent” | done/error 后可优先进入回收候选 |
 
-`role` 与 lifecycle 正交。`developer/reviewer/tester/merger` 是职责，不表示长期或一次性。创建时可以声明 lifecycle；运行中升降级放后续。
+`role` 与 lifecycle 正交。`developer/reviewer/tester/merger` 是职责，不表示长期或一次性。分型落地后，创建时可以声明 lifecycle；运行中升降级放后续。
 
 一次性任务不一定要开 worker。只有满足“需要独立可见历史、多轮追问、Lead 切过去 review、用户接管、共用模型/桥接/审计”等条件时，才值得用 ephemeral worker；否则应走 subagent。
 
