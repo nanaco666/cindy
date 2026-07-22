@@ -1137,7 +1137,8 @@
       "models": {
         "search": "搜索模型",
         "available": "在选择器中显示",
-        "enabledCount": "已显示 {{on}}/{{total}}",
+        "modelCount": "{{count}} 个模型",
+        "agentEnabledCount": "{{agent}} {{on}}/{{total}}",
         "enableAll": "全部显示",
         "disableAll": "全部隐藏",
         "subscription": "订阅",

@@ -138,6 +138,22 @@ export function isRowDiverged(providerId: string, row: UnionModelRow): boolean {
   return values.some((v) => v !== values[0]);
 }
 
+/** 每个 Agent 各自的模型显示数；UI 必须保留 Agent 维度，不能汇总成模型条目总数。 */
+export function countModelsByAgent(provider: ProviderView): Array<{
+  agent: AgentKind;
+  on: number;
+  total: number;
+}> {
+  return provider.agents.map((agent) => {
+    const models = provider.models[agent] ?? [];
+    return {
+      agent,
+      on: models.filter((model) => isModelEnabled(agent, provider.id, model)).length,
+      total: models.length,
+    };
+  });
+}
+
 /** 普通模式的单开关显示值:任一可用 agent 开启即视为开(拨动才归一)。 */
 function rowAnyEnabled(providerId: string, row: UnionModelRow): boolean {
   return row.avail.some((a) => rowEnabled(providerId, row, a) === true);
@@ -211,21 +227,12 @@ export function UnifiedModelList({
   const showGroupHeaders = groups.length > 1;
   const showSearch = unionRows.length > 8;
 
-  // 计数口径与左栏列表一致:跨 agent 的 (model, agent) 对。
-  const counts = useMemo(() => {
-    let on = 0;
-    let total = 0;
-    for (const r of unionRows) {
-      for (const a of r.avail) {
-        total += 1;
-        if (rowEnabled(provider.id, r, a)) on += 1;
-      }
-    }
-    return { on, total };
-    // eslint 视角 visibilityVersion 未在函数体使用,但它是 rowEnabled 读取的外部
-    // store 的失效信号,必须进依赖数组。
-  }, [unionRows, provider.id, visibilityVersion]);
-  const allOn = counts.total > 0 && counts.on === counts.total;
+  // 每个 Agent 单独计数。不能把「模型 × Agent」压成一个总数，否则 6 个双端模型
+  // 会显示为 12，用户会自然地把它误读成 12 个模型。
+  // visibilityVersion 是 countModelsByAgent 读取的外部 store 失效信号，必须进依赖数组。
+  const agentCounts = useMemo(() => countModelsByAgent(provider), [provider, visibilityVersion]);
+  const totalModelsAcrossAgents = agentCounts.reduce((sum, count) => sum + count.total, 0);
+  const allOn = totalModelsAcrossAgents > 0 && agentCounts.every((count) => count.on === count.total);
 
   /** 单开关:一次写该行全部可用 agent(分歧行拨动即归一)。写入用各 agent 的**真实模型 id**
    *  (桥接投影行两端 id 不同:chatgpt/gpt-5.5 vs gpt-5.5),不能用规范化后的 row.id。 */
@@ -275,7 +282,11 @@ export function UnifiedModelList({
           </span>
         )}
         <span className="shrink-0 text-12 font-medium tabular-nums" style={{ color: 'var(--text-tertiary)' }}>
-          {t('settings.providers.models.enabledCount', { on: counts.on, total: counts.total })}
+          {agentCounts
+            .map(({ agent, on, total }) =>
+              t('settings.providers.models.agentEnabledCount', { agent: AGENT_LABEL[agent], on, total }),
+            )
+            .join(' · ')}
         </span>
         {onRefresh && (
           <button

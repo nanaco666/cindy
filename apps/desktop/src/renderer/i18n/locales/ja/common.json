@@ -1137,7 +1137,8 @@
       "models": {
         "search": "モデルを検索",
         "available": "モデル選択に表示",
-        "enabledCount": "{{on}}/{{total}} 件を表示",
+        "modelCount": "{{count}} モデル",
+        "agentEnabledCount": "{{agent}} {{on}}/{{total}}",
         "enableAll": "すべて表示",
         "disableAll": "すべて非表示",
         "subscription": "サブスク",

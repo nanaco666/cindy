@@ -1,13 +1,13 @@
 // @vitest-environment jsdom
 
 /**
- * UnifiedModelList 纯逻辑单测:并集构建(buildUnionRows)与分歧判定(isRowDiverged)。
+ * UnifiedModelList 纯逻辑单测:并集构建、按 Agent 计数与分歧判定。
  * 可见性 override 走真实 modelVisibilityPrefs(localStorage 由 jsdom 提供,用例间重置)。
  */
 
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { buildUnionRows, isRowDiverged } from '@/components/settings/UnifiedModelList';
+import { buildUnionRows, countModelsByAgent, isRowDiverged } from '@/components/settings/UnifiedModelList';
 import { __resetForTest, setModelVisibility } from '@/state/modelVisibilityPrefs';
 
 import type { CatalogModel, ProviderView } from '@lizi/model-providers';
@@ -92,5 +92,20 @@ describe('isRowDiverged', () => {
     const ccOnly = rows[1];
     setModelVisibility('claude-code', 'p1', 'cc-only', false);
     expect(isRowDiverged('p1', ccOnly)).toBe(false);
+  });
+});
+
+describe('countModelsByAgent', () => {
+  it('分别保留每个 Agent 的计数，不汇总成容易误解的模型总数', () => {
+    expect(countModelsByAgent(provider)).toEqual([
+      { agent: 'claude-code', on: 2, total: 2 },
+      { agent: 'codex', on: 2, total: 2 },
+    ]);
+
+    setModelVisibility('codex', 'p1', 'shared', false);
+    expect(countModelsByAgent(provider)).toEqual([
+      { agent: 'claude-code', on: 2, total: 2 },
+      { agent: 'codex', on: 1, total: 2 },
+    ]);
   });
 });
