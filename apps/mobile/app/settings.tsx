@@ -166,9 +166,7 @@ export default function SettingsScreen() {
       .getAccountDeletionAvailability()
       .then((availability) => {
         if (!cancelled) {
-          setAccountDeletionAvailable(
-            availability.enabled && availability.available,
-          );
+          setAccountDeletionAvailable(availability.available);
         }
       })
       .catch(() => {

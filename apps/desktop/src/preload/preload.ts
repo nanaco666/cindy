@@ -77,7 +77,15 @@ import type {
   RsbWindowCommandRouteRequest,
   RsbWindowCommandRouteResult,
 } from '../shared/rightSidebarWindow';
-import type { DesktopLoginAction, DesktopLoginActionResult } from '../shared/authIpc';
+import type {
+  DesktopAccountDeletionAvailabilityResult,
+  DesktopAccountDeletionChallengeResult,
+  DesktopAccountDeletionConfirmInput,
+  DesktopAccountDeletionConfirmResult,
+  DesktopAccountDeletionStatusResult,
+  DesktopLoginAction,
+  DesktopLoginActionResult,
+} from '../shared/authIpc';
 
 // Codex 元 IPC 全部升级到 maker.* (agentKind 参数化), preload 不再 import vendor/codex/ipcChannels。
 //   auth      → maker:auth:*(agentKind)
@@ -1116,6 +1124,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     isAuthenticated: boolean;
     isCanary: boolean;
     deviceId: string;
+    hasAccountDeletionReceipt: boolean;
+    accountDeletionRestored: boolean;
   }> =>
     ipcRenderer.invoke('auth:initialize'),
   authGetLoginState: (): Promise<DesktopLoginActionResult> =>
@@ -1124,6 +1134,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('auth:dispatch-login-action', action),
   authLogout: (): Promise<void> => ipcRenderer.invoke('auth:logout'),
   authRefresh: (): Promise<boolean> => ipcRenderer.invoke('auth:refresh'),
+  authGetAccountDeletionAvailability: (): Promise<DesktopAccountDeletionAvailabilityResult> =>
+    ipcRenderer.invoke('auth:account-deletion:get-availability'),
+  authRequestAccountDeletionChallenge: (): Promise<DesktopAccountDeletionChallengeResult> =>
+    ipcRenderer.invoke('auth:account-deletion:request-challenge'),
+  authConfirmAccountDeletion: (
+    input: DesktopAccountDeletionConfirmInput,
+  ): Promise<DesktopAccountDeletionConfirmResult> =>
+    ipcRenderer.invoke('auth:account-deletion:confirm', input),
+  authGetAccountDeletionStatus: (): Promise<DesktopAccountDeletionStatusResult> =>
+    ipcRenderer.invoke('auth:account-deletion:get-status'),
+  authClearAccountDeletionReceipt: (): Promise<void> =>
+    ipcRenderer.invoke('auth:account-deletion:clear-receipt'),
+  authConsumeAccountDeletionRestoredNotice: (): Promise<boolean> =>
+    ipcRenderer.invoke('auth:account-deletion:consume-restored-notice'),
 
   // ── Profile 编辑(设置 → 用户卡片编辑名字 / 头像;直写服务端,跨设备生效) ──
   profileGetState: (): Promise<{

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 're
 import { useTranslation } from 'react-i18next';
 import { ArrowLeft, Building2, ExternalLink, Mail, Phone, UserRound } from 'lucide-react';
 import { BRAND_NAME } from '@lizi/maker-shared/branding';
-import type { SocialProvider, VerificationKind } from '@cindy/auth-client';
+import type { AccountDeletionStatus, SocialProvider, VerificationKind } from '@cindy/auth-client';
 
 import { cn } from '@/lib/utils';
 import { Spinner } from '@/components/ui/spinner';
@@ -42,7 +42,16 @@ function BusyLabel({ children }: { children: ReactNode }) {
 
 /** Auth-server login UI. It handles presentation only; main owns all credentials and tickets. */
 export function LoginPage() {
-  const { isLoading, errorCode, loginState, dispatch, clearError } = useLogin();
+  const {
+    isLoading,
+    errorCode,
+    loginState,
+    hasAccountDeletionReceipt = false,
+    getAccountDeletionStatus,
+    clearAccountDeletionReceipt,
+    dispatch,
+    clearError,
+  } = useLogin();
   const brandLogo = useBrandLogo();
   const { t } = useTranslation();
   const isMac = window.electronAPI?.platform === 'darwin';
@@ -55,6 +64,64 @@ export function LoginPage() {
   const [ssoVerificationCode, setSsoVerificationCode] = useState('');
   const [bindingContact, setBindingContact] = useState('');
   const [bindingCode, setBindingCode] = useState('');
+  const [accountDeletionStatus, setAccountDeletionStatus] = useState<AccountDeletionStatus | null>(
+    null,
+  );
+
+  useEffect(() => {
+    if (!hasAccountDeletionReceipt || !getAccountDeletionStatus || !clearAccountDeletionReceipt) {
+      setAccountDeletionStatus(null);
+      return;
+    }
+    let disposed = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    const scheduleNext = () => {
+      if (!disposed) timer = setTimeout(() => void poll(), 30_000);
+    };
+    const poll = async () => {
+      const result = await getAccountDeletionStatus().catch(() => null);
+      if (!result) {
+        scheduleNext();
+        return;
+      }
+      if (disposed) return;
+      if (!result.success) {
+        if (result.code === 'ACCOUNT_DELETION_RECEIPT_INVALID') {
+          await clearAccountDeletionReceipt().catch(() => undefined);
+          if (!disposed) setAccountDeletionStatus(null);
+          return;
+        }
+        // Contract drift is not a retryable network failure. Preserve the
+        // receipt for a later app mount, but stop this page's polling loop.
+        if (result.code === 'INVALID_RESPONSE') {
+          setAccountDeletionStatus(null);
+          return;
+        }
+        scheduleNext();
+        return;
+      }
+      const status = result.value;
+      if (!status) {
+        await clearAccountDeletionReceipt().catch(() => undefined);
+        setAccountDeletionStatus(null);
+        return;
+      }
+      if (status.status === 'cancelled') {
+        await clearAccountDeletionReceipt().catch(() => undefined);
+        if (!disposed) setAccountDeletionStatus(null);
+        return;
+      }
+      setAccountDeletionStatus(status);
+      if (status.status !== 'completed') scheduleNext();
+    };
+
+    void poll();
+    return () => {
+      disposed = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [clearAccountDeletionReceipt, getAccountDeletionStatus, hasAccountDeletionReceipt]);
 
   useEffect(() => {
     if (loginState?.step !== 'identifier') return;
@@ -668,6 +735,19 @@ export function LoginPage() {
               {t('login.globalRegion')}
             </span>
           )}
+          {accountDeletionStatus && (
+            <AccountDeletionStatusPanel
+              status={accountDeletionStatus}
+              onDismiss={
+                accountDeletionStatus.status === 'completed'
+                  ? () => {
+                      void clearAccountDeletionReceipt?.().catch(() => undefined);
+                      setAccountDeletionStatus(null);
+                    }
+                  : undefined
+              }
+            />
+          )}
           <div className="flex w-full flex-1 flex-col items-center justify-center">
             {renderContent()}
           </div>
@@ -683,6 +763,61 @@ export function LoginPage() {
       </div>
     </div>
   );
+}
+
+function AccountDeletionStatusPanel({
+  status,
+  onDismiss,
+}: {
+  status: AccountDeletionStatus;
+  onDismiss?: () => void;
+}) {
+  const { t } = useTranslation();
+  const titleKey =
+    status.status === 'pending'
+      ? 'accountDeletion.status.pendingTitle'
+      : status.status === 'processing'
+        ? 'accountDeletion.status.processingTitle'
+        : 'accountDeletion.status.completedTitle';
+  const copyKey =
+    status.status === 'pending'
+      ? 'accountDeletion.status.pendingCopy'
+      : status.status === 'processing'
+        ? 'accountDeletion.status.processingCopy'
+        : 'accountDeletion.status.completedCopy';
+
+  return (
+    <section
+      aria-label={t(titleKey)}
+      className="mb-5 w-full rounded-xl border border-[var(--border-default)] bg-[var(--surface-chip)] px-4 py-3"
+    >
+      <h2 className="text-14 font-medium text-[var(--text-primary)]">{t(titleKey)}</h2>
+      <p className="mt-1 text-12 leading-5 text-[var(--text-secondary)]">
+        {t(copyKey, {
+          date: formatAccountDeletionDate(status.deleteAfter),
+        })}
+      </p>
+      {onDismiss && (
+        <button
+          type="button"
+          onClick={onDismiss}
+          className={cn(
+            'mt-2 rounded-full px-2 py-1 text-12 text-[var(--text-secondary)]',
+            'transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]',
+            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring-soft)]',
+          )}
+        >
+          {t('accountDeletion.status.dismissButton')}
+        </button>
+      )}
+    </section>
+  );
+}
+
+function formatAccountDeletionDate(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(date);
 }
 
 function Header({ title, subtitle }: { title: string; subtitle: string }) {

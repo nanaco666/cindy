@@ -2566,6 +2566,58 @@
     "viewControllers": "表示",
     "versionMismatch": "相手のバージョンが異なります。一部機能が制限される場合があります"
   },
+  "accountDeletion": {
+    "entryButton": "アカウントを削除",
+    "entryAria": "現在のアカウントを削除",
+    "introTitle": "アカウントを削除しますか？",
+    "introDescription": "Cindy アカウントと個人データの完全削除を予約します。",
+    "confirmTitle": "アカウント削除の確認",
+    "sendCodeButton": "削除確認コードを送信",
+    "confirmButton": "アカウントを削除",
+    "cancelButton": "キャンセル",
+    "resendCodeButton": "コードを再送信",
+    "codePlaceholder": "6 桁のコード",
+    "codeInputAria": "アカウント削除の確認コード",
+    "codeSent": "{{channel}}で {{target}} に確認コードを送信しました。",
+    "channels": {
+      "email": "メール",
+      "sms": "SMS"
+    },
+    "sessionNotice": "確認後、このパソコンはすぐにログアウトします。他のクライアントは、現在のアクセス認証情報が期限切れになり更新を試みた時点でログアウトします。",
+    "gracePeriodNotice": "確認後、アカウントは 30 日間の待機期間に入ります。期間内にログインすると削除を取り消せます。期間終了後、アカウントと個人データは完全に削除されます。",
+    "verificationNotice": "削除確認コードを{{channel}}で {{target}} に送信します。",
+    "appleRevocationNotice": "Apple でサインインを使用した場合は、Apple ID の設定でも Cindy のアクセス権を取り消してください。",
+    "acknowledgement": "待機期間の終了後、アカウントと個人データが復元できない形で完全に削除されることを理解しました。",
+    "restoredNotice": "アカウント削除は取り消されました。アカウントとデータは引き続き保持されます。",
+    "errors": {
+      "fallback": "削除リクエストを完了できませんでした。ネットワークを確認して再試行してください。",
+      "UNAUTHENTICATED": "ログインの有効期限が切れました。再度ログインしてお試しください。",
+      "ACCOUNT_DELETION_UNAVAILABLE": "このアカウントはセルフサービスで削除できません。",
+      "ACCOUNT_DELETION_PENDING": "このアカウントはすでに削除待ちです。",
+      "ACCOUNT_DELETION_PROCESSING": "アカウントの削除処理が進行中です。",
+      "ACCOUNT_DELETION_CHALLENGE_INVALID": "コードが無効または期限切れです。新しいコードを取得してください。",
+      "ACCOUNT_DELETION_RECEIPT_MISSING": "削除確認の有効期限が切れました。新しいコードを取得してください。",
+      "ACCOUNT_DELETION_RECEIPT_INVALID": "この削除リクエストを確認できません。最初からやり直してください。",
+      "ACCOUNT_DELETION_RECEIPT_STORE_FAILED": "削除状態の認証情報を安全に保存できませんでした。再試行してください。",
+      "AUTH_FLOW_SUPERSEDED": "ログイン中のアカウントが変更されたため、別のアカウントに影響しないようこのパソコンではログアウトしませんでした。",
+      "INVALID_CODE": "コードが間違っているか期限切れです。確認して再試行してください。",
+      "CODE_ATTEMPTS_EXCEEDED": "試行回数を超えました。新しいコードを取得してください。",
+      "NETWORK_ERROR": "ネットワーク接続を確認して再試行してください。",
+      "REQUEST_TIMEOUT": "リクエストがタイムアウトしました。再試行してください。",
+      "INVALID_RESPONSE": "ログインサービスから認識できない結果が返されました。しばらくしてから再試行してください。",
+      "RATE_LIMITED": "操作が多すぎます。しばらく待ってから再試行してください。",
+      "INVALID_PARAMS": "入力内容を確認して再試行してください。"
+    },
+    "status": {
+      "pendingTitle": "アカウントは削除待ちです",
+      "processingTitle": "アカウントを削除しています",
+      "completedTitle": "アカウントを削除しました",
+      "pendingCopy": "{{date}} に完全削除される予定です。それまでにログインすると削除を取り消せます。",
+      "processingCopy": "待機期間が終了し、アカウントと個人データを削除しています。",
+      "completedCopy": "アカウントと個人データの削除が完了しました。",
+      "dismissButton": "確認"
+    }
+  },
   "login": {
     "title": "Cindy へようこそ",
     "subtitle": "安全なログイン方法を選択してください",

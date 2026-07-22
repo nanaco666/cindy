@@ -146,7 +146,6 @@ export const meResponseSchema = z.object({
 export type AuthMe = z.infer<typeof meResponseSchema>;
 
 export const accountDeletionAvailabilitySchema = z.object({
-  enabled: z.boolean(),
   available: z.boolean(),
   verification: z
     .object({

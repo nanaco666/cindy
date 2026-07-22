@@ -16,9 +16,7 @@ describe('mobile account deletion', () => {
 
     expect(settings).toContain("testID: 'settings.deleteAccountButton'");
     expect(settings).toContain('...(accountDeletionAvailable');
-    expect(visibilityBlock).toContain(
-      'availability.enabled && availability.available',
-    );
+    expect(visibilityBlock).toContain('availability.available');
     expect(visibilityBlock).not.toContain('membershipKind');
   });
 

@@ -171,7 +171,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       completeOAuthCallback: async () => undefined,
       logout: async () => undefined,
       getAccountDeletionAvailability: async () => ({
-        enabled: true,
         available: true,
         verification: {
           channel: 'email',

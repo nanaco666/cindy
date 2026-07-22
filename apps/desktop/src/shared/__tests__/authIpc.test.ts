@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { parseDesktopLoginAction } from '../authIpc';
+import { parseDesktopAccountDeletionConfirmInput, parseDesktopLoginAction } from '../authIpc';
 
 describe('desktop auth IPC validation', () => {
   it('projects recognized actions onto their typed fields', () => {
@@ -89,5 +89,33 @@ describe('desktop auth IPC validation', () => {
         code: '123456',
       }),
     ).not.toBeNull();
+  });
+});
+
+describe('parseDesktopAccountDeletionConfirmInput', () => {
+  it('keeps only a bounded challenge id and verification code', () => {
+    expect(
+      parseDesktopAccountDeletionConfirmInput({
+        challengeId: 'challenge-id',
+        code: '123456',
+        acknowledged: false,
+        receiptToken: 'must-not-cross-renderer-boundary',
+      }),
+    ).toEqual({ challengeId: 'challenge-id', code: '123456' });
+  });
+
+  it('rejects missing, empty, and oversized confirmation fields', () => {
+    expect(parseDesktopAccountDeletionConfirmInput(null)).toBeNull();
+    expect(parseDesktopAccountDeletionConfirmInput({ challengeId: '', code: '123456' })).toBeNull();
+    expect(parseDesktopAccountDeletionConfirmInput({ challengeId: 'id', code: '' })).toBeNull();
+    expect(
+      parseDesktopAccountDeletionConfirmInput({ challengeId: 'id', code: '12345a' }),
+    ).toBeNull();
+    expect(
+      parseDesktopAccountDeletionConfirmInput({
+        challengeId: 'x'.repeat(257),
+        code: '123456',
+      }),
+    ).toBeNull();
   });
 });

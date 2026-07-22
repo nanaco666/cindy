@@ -101,7 +101,7 @@ export default function AccountDeletionScreen() {
     }
   }, [acknowledged, auth, busy, challenge, code]);
 
-  const available = availability?.enabled && availability.available;
+  const available = availability?.available;
   return (
     <SafeAreaView style={styles.safeArea} testID="accountDeletion.screen">
       <ScreenHeader

@@ -2566,6 +2566,58 @@
     "viewControllers": "查看",
     "versionMismatch": "对方版本不一致,部分功能可能受限"
   },
+  "accountDeletion": {
+    "entryButton": "注销账号",
+    "entryAria": "注销当前账号",
+    "introTitle": "注销账号？",
+    "introDescription": "此操作会安排永久删除你的 Cindy 账号和个人数据。",
+    "confirmTitle": "确认注销账号",
+    "sendCodeButton": "发送注销验证码",
+    "confirmButton": "确认注销账号",
+    "cancelButton": "取消",
+    "resendCodeButton": "重新发送验证码",
+    "codePlaceholder": "6 位验证码",
+    "codeInputAria": "注销验证码",
+    "codeSent": "验证码已通过{{channel}}发送至 {{target}}。",
+    "channels": {
+      "email": "邮箱",
+      "sms": "短信"
+    },
+    "sessionNotice": "确认后，本机将立即退出登录；其他客户端会在当前访问凭证到期并尝试续期时退出。",
+    "gracePeriodNotice": "确认后，账号将进入 30 天等待期。等待期内重新登录可取消注销；到期后账号和个人数据将永久删除。",
+    "verificationNotice": "注销验证码将通过{{channel}}发送至 {{target}}。",
+    "appleRevocationNotice": "如果你曾使用 Apple 登录，还需要在 Apple ID 设置中手动撤销 Cindy 的访问权限。",
+    "acknowledgement": "我已了解：等待期结束后，账号和个人数据将被永久删除且无法恢复。",
+    "restoredNotice": "账号注销已取消，你的账号和数据将继续保留。",
+    "errors": {
+      "fallback": "注销请求未能完成，请检查网络后重试。",
+      "UNAUTHENTICATED": "登录已过期，请重新登录后再试。",
+      "ACCOUNT_DELETION_UNAVAILABLE": "当前账号不支持自助注销。",
+      "ACCOUNT_DELETION_PENDING": "账号已进入注销等待期。",
+      "ACCOUNT_DELETION_PROCESSING": "账号正在注销处理中。",
+      "ACCOUNT_DELETION_CHALLENGE_INVALID": "验证码无效或已过期，请重新发送验证码。",
+      "ACCOUNT_DELETION_RECEIPT_MISSING": "注销验证已失效，请重新发送验证码。",
+      "ACCOUNT_DELETION_RECEIPT_INVALID": "无法查询该注销请求，请重新发起操作。",
+      "ACCOUNT_DELETION_RECEIPT_STORE_FAILED": "无法安全保存注销状态凭证，请重试。",
+      "AUTH_FLOW_SUPERSEDED": "登录状态已变化；为避免退出其他账号，本机未执行退登。",
+      "INVALID_CODE": "验证码错误或已过期，请检查后重试。",
+      "CODE_ATTEMPTS_EXCEEDED": "验证码错误次数过多，请重新发送验证码。",
+      "NETWORK_ERROR": "网络连接失败，请检查网络后重试。",
+      "REQUEST_TIMEOUT": "请求超时，请重试。",
+      "INVALID_RESPONSE": "登录服务返回了无法识别的结果，请稍后重试。",
+      "RATE_LIMITED": "操作过于频繁，请稍后再试。",
+      "INVALID_PARAMS": "输入内容不正确，请检查后重试。"
+    },
+    "status": {
+      "pendingTitle": "账号正在等待注销",
+      "processingTitle": "账号正在注销",
+      "completedTitle": "账号已注销",
+      "pendingCopy": "账号计划于 {{date}} 永久删除。在此之前重新登录可取消注销。",
+      "processingCopy": "等待期已结束，账号和个人数据正在清理中。",
+      "completedCopy": "账号和个人数据清理已完成。",
+      "dismissButton": "我知道了"
+    }
+  },
   "login": {
     "title": "欢迎使用 Cindy",
     "subtitle": "选择一种方式安全登录",

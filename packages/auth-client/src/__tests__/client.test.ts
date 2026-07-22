@@ -4,6 +4,7 @@ import {
   CindyAuthClient,
   reduceAuthFlow,
   ssoOrgDiscoveryToMethods,
+  type AuthFetch,
   type AuthFetchResponse,
 } from "../index.js";
 
@@ -119,7 +120,7 @@ describe("CindyAuthClient", () => {
   });
 
   it("keeps Apple native login compatible when the SDK omits authorizationCode", async () => {
-    const fetch = vi.fn(async () =>
+    const fetch = vi.fn<AuthFetch>(async () =>
       response(200, {
         status: "binding_required",
         bindType: "email",
@@ -153,7 +154,6 @@ describe("CindyAuthClient", () => {
       .fn()
       .mockResolvedValueOnce(
         response(200, {
-          enabled: true,
           available: true,
           verification: {
             channel: "email",
