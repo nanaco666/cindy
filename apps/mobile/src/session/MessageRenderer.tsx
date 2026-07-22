@@ -2285,9 +2285,7 @@ function WorkGroupCard({
     presentation.title,
     explorationSummary,
   ].filter(Boolean).join(' · ');
-  const onToggle = useCallback(() => {
-    toggleExpanded();
-  }, [toggleExpanded]);
+  const onToggle = toggleExpanded;
   const livePreview = isLivePreviewVisible ? (
     <Rail layout={layout}>
       <View style={styles.workActivityStack}>

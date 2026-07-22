@@ -233,7 +233,7 @@ describe('WorkGroupBlock — running latest-five preview', () => {
     expect(document.querySelector('[data-live-work-preview="true"]')).toBeTruthy();
     expect(
       screen.getByText('chat.workGroup.working').closest('button')?.getAttribute('aria-expanded'),
-    ).toBe('false');
+    ).toBe('true');
 
     // The first click replaces the compact latest-five window with full details.
     clickGroup('chat.workGroup.working');

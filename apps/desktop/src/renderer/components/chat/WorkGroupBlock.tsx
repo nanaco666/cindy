@@ -333,7 +333,7 @@ export function WorkGroupBlock({
             'hover:opacity-80 transition-opacity',
             'text-left',
           )}
-          aria-expanded={expanded}
+          aria-expanded={expanded || isLivePreviewVisible}
         >
           <span className="inline-flex h-[1lh] items-center shrink-0">
             {isStreaming ? (
