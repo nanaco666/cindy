@@ -28,6 +28,23 @@ export interface AccountRateLimitSnapshot {
   rateLimitReachedType?: string | null;
 }
 
+/** Normalize Codex 0.144 wire duration without reallocating already-normalized snapshots. */
+export function normalizeAccountRateLimitSnapshot(
+  snapshot: AccountRateLimitSnapshot,
+): AccountRateLimitSnapshot {
+  const primary = normalizeAccountRateLimitWindow(snapshot.primary);
+  const secondary = normalizeAccountRateLimitWindow(snapshot.secondary);
+  if (primary === snapshot.primary && secondary === snapshot.secondary) return snapshot;
+  return { ...snapshot, primary, secondary };
+}
+
+function normalizeAccountRateLimitWindow(
+  window: AccountRateLimitWindow | null | undefined,
+): AccountRateLimitWindow | null | undefined {
+  if (!window || window.windowMinutes != null || window.windowDurationMins == null) return window;
+  return { ...window, windowMinutes: window.windowDurationMins };
+}
+
 /** Lifecycle state of one banked Codex rate-limit reset credit. */
 export type AccountRateLimitResetCreditStatus =
   | 'available'

@@ -4735,9 +4735,9 @@ export default function SessionScreen() {
     const offer = codexRateLimits?.resetOffer;
     const idempotencyKey = codexResetRetryKey ?? offer?.idempotencyKey;
     if (!idempotencyKey || codexResetBusy) return;
-    // Desktop 的 offer 有界保留。过期或 refresh 已明确换 key 时不盲重试旧请求,
-    // 先刷新并要求用户重新确认一张当前可用 credit。
-    if (!offer || offer.validUntil <= Date.now()
+    // Offer TTL 只由签发它的 Desktop 时钟判定，避免手机/桌面时钟偏差误杀有效凭证。
+    // refresh 已明确换 key 时仍先刷新并要求用户重新确认当前 credit。
+    if (!offer
       || (codexResetRetryKey !== null && offer.idempotencyKey !== codexResetRetryKey)) {
       setCodexResetRetryKey(null);
       await refreshAccountUsage();

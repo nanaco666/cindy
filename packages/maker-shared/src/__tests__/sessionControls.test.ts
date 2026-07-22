@@ -79,7 +79,7 @@ describe('summarizeCodexRateLimitReset', () => {
     expect(summary?.rows[3].value).toMatch(/^\d{2}:\d{2}$/);
   });
 
-  it('does not offer reset before exhaustion or after the offer expires', () => {
+  it('does not offer reset before exhaustion and leaves offer expiry to desktop', () => {
     expect(summarizeCodexRateLimitReset({
       ...base,
       rateLimits: { primary: { usedPercent: 99.9 } },
@@ -87,7 +87,7 @@ describe('summarizeCodexRateLimitReset', () => {
     expect(summarizeCodexRateLimitReset({
       ...base,
       resetOffer: { ...base.resetOffer, validUntil: NOW_MS },
-    }, NOW_MS)).toMatchObject({ shouldPrompt: true, canReset: false });
+    }, NOW_MS)).toMatchObject({ shouldPrompt: true, canReset: true });
   });
 
   it('shows exhausted-without-credit but ignores prepaid-credit depletion', () => {

@@ -61,6 +61,8 @@ interface ResetOfferEntry {
   creditId: string | null;
   creditExpiresAt: number | null;
   validUntil: number;
+  /** True once a backend consume may have happened; freezes retry parameters for idempotency. */
+  attempted: boolean;
   settled: boolean;
   pending: Promise<MobileCodexRateLimitResetResult> | null;
   result: MobileCodexRateLimitResetResult | null;
@@ -207,7 +209,7 @@ export function createCodexRateLimitResetService(
       // Keep both an in-flight redemption and its cached terminal result addressable
       // for the full TTL. The registry may temporarily exceed the soft limit when every
       // retained offer is still required for an idempotent retry.
-      if (offer.pending || offer.result) continue;
+      if (offer.pending || offer.attempted || offer.result) continue;
       offers.delete(key);
     }
   };
@@ -243,18 +245,36 @@ export function createCodexRateLimitResetService(
     // Detailed rows must contain an eligible Codex credit. Count-only responses may still
     // mint an offer because app-server officially supports backend credit selection.
     const hasEligibleCredit = credits === null || selectedCredit !== null;
-    if (availableCount > 0 && hasEligibleCredit && canBindResetOffer(identity)) {
-      // Repeated reads must not mint a new retry key. This preserves idempotency when the
-      // consume response was lost and mobile refreshes/reconnects before retrying.
-      const existing = [...offers.entries()].find(([, offer]) => (
-        !offer.settled && sameAccount(offer.account, identity)
-      ));
+    let existing = [...offers.entries()].find(([, offer]) => (
+      !offer.settled && sameAccount(offer.account, identity)
+    ));
+    if (existing && (existing[1].pending || existing[1].attempted)) {
+      // A backend consume may already have happened. Return the frozen offer even when the
+      // refreshed count/credit rows changed, so Mobile can safely recover an ambiguous result.
+      resetOffer = {
+        idempotencyKey: existing[0],
+        expiresAt: existing[1].creditExpiresAt,
+        validUntil: existing[1].validUntil,
+      };
+    } else if (availableCount > 0 && hasEligibleCredit && canBindResetOffer(identity)) {
+      const selectedCreditId = selectedCredit?.id ?? null;
+      const selectedCreditExpiresAt = selectedCredit?.expiresAt ?? null;
+      // Before any consume starts, a fresh authoritative read may replace a stale detailed
+      // credit (expired/redeemed elsewhere). Once a consume is pending or ambiguous, freeze
+      // both the backend idempotency key and credit parameters until the offer TTL ends.
+      if (existing && !existing[1].pending && !existing[1].attempted
+        && (existing[1].creditId !== selectedCreditId
+          || existing[1].creditExpiresAt !== selectedCreditExpiresAt)) {
+        offers.delete(existing[0]);
+        existing = undefined;
+      }
       const idempotencyKey = existing?.[0] ?? createIdempotencyKey();
       const entry = existing?.[1] ?? {
         account: identity,
-        creditId: selectedCredit?.id ?? null,
-        creditExpiresAt: selectedCredit?.expiresAt ?? null,
+        creditId: selectedCreditId,
+        creditExpiresAt: selectedCreditExpiresAt,
         validUntil: now() + RESET_OFFER_TTL_MS,
+        attempted: false,
         settled: false,
         pending: null,
         result: null,
@@ -265,6 +285,9 @@ export function createCodexRateLimitResetService(
         expiresAt: entry.creditExpiresAt,
         validUntil: entry.validUntil,
       };
+    } else if (existing) {
+      // No consume started and the authoritative read no longer offers this credit.
+      offers.delete(existing[0]);
     }
 
     return {
@@ -300,6 +323,9 @@ export function createCodexRateLimitResetService(
           'Codex account changed; refresh usage before resetting',
         );
       }
+      // From this point a transport failure is ambiguous: the backend may have consumed the
+      // credit. Every later read/retry must keep this exact key + credit selection.
+      offer.attempted = true;
       const response = await deps.consumeResetCredit({
         idempotencyKey,
         ...(offer.creditId ? { creditId: offer.creditId } : {}),

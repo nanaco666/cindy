@@ -23,6 +23,7 @@
  */
 
 import type { AgentEvent, AgentTaskStatus, AgentTaskUpdateEventData } from '../../types/events.js';
+import { normalizeAccountRateLimitSnapshot } from '../../types/account-rate-limits.js';
 import type { AsyncQueue } from '../shared/async-queue.js';
 import { stripTerminalControlSequences } from '../shared/terminal-output.js';
 import { isNetworkishErrorMessage } from '../shared/network-error.js';
@@ -1249,7 +1250,7 @@ export function translateAccountRateLimitsUpdated(
   void ctx;
   queue.push({
     type: 'account_usage',
-    data: params.rateLimits,
+    data: normalizeAccountRateLimitSnapshot(params.rateLimits),
     source: 'codex',
   });
 }

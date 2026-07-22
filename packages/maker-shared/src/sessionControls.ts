@@ -192,7 +192,9 @@ export function summarizeCodexRateLimitReset(
     shouldPrompt,
     canReset: shouldPrompt
       && availableCount > 0
-      && Boolean(value.resetOffer && value.resetOffer.validUntil > nowMs),
+      // Offer TTL belongs to the issuing Desktop clock. Mobile only checks presence;
+      // consume returns a typed precondition error when Desktop has actually expired it.
+      && Boolean(value.resetOffer),
   };
 }
 

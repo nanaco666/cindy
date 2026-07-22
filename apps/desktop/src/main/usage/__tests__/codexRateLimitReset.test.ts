@@ -122,6 +122,37 @@ describe('Codex rate-limit reset control plane', () => {
     expect(deps.consumeResetCredit).toHaveBeenCalledWith({ idempotencyKey: KEY });
   });
 
+  it('replaces an unused offer when a fresh read selects a different credit', async () => {
+    const replacement = {
+      id: 'replacement',
+      status: 'available' as const,
+      resetType: 'codexRateLimits' as const,
+      grantedAt: 30,
+      expiresAt: 400,
+      title: 'Replacement',
+      description: null,
+    };
+    const readRateLimits = vi.fn()
+      .mockResolvedValueOnce(response())
+      .mockResolvedValue(response({
+        rateLimitResetCredits: { availableCount: 1, credits: [replacement] },
+      }));
+    const { deps, service } = harness({ readRateLimits });
+
+    await expect(service.read()).resolves.toMatchObject({
+      resetOffer: { idempotencyKey: KEY, expiresAt: 200 },
+    });
+    await expect(service.read()).resolves.toMatchObject({
+      resetOffer: { idempotencyKey: NEXT_KEY, expiresAt: 400 },
+    });
+    await expect(service.consume(KEY)).rejects.toMatchObject({ reason: 'OFFER_EXPIRED' });
+    await service.consume(NEXT_KEY);
+    expect(deps.consumeResetCredit).toHaveBeenCalledWith({
+      idempotencyKey: NEXT_KEY,
+      creditId: 'replacement',
+    });
+  });
+
   it('coalesces concurrent consumes and caches the terminal result for retries', async () => {
     let resolveConsume!: (value: { outcome: 'reset' }) => void;
     const consumeResetCredit = vi.fn(() => new Promise<{ outcome: 'reset' }>((resolve) => {
@@ -326,17 +357,31 @@ describe('Codex rate-limit reset control plane', () => {
   });
 
   it('reuses the same backend idempotency key after an ambiguous consume failure', async () => {
+    const readRateLimits = vi.fn()
+      .mockResolvedValueOnce(response())
+      .mockResolvedValue(response({
+        rateLimitResetCredits: { availableCount: 0, credits: [] },
+      }));
     const consumeResetCredit = vi.fn()
       .mockRejectedValueOnce(new Error('response lost'))
       .mockResolvedValueOnce({ outcome: 'alreadyRedeemed' as const });
-    const { service } = harness({ consumeResetCredit });
+    const { service } = harness({ consumeResetCredit, readRateLimits });
     await service.read();
 
     await expect(service.consume(KEY)).rejects.toThrow('response lost');
+    await expect(service.read()).resolves.toMatchObject({
+      resetOffer: { idempotencyKey: KEY, expiresAt: 200 },
+    });
     await expect(service.consume(KEY)).resolves.toMatchObject({ outcome: 'alreadyRedeemed' });
     expect(consumeResetCredit).toHaveBeenCalledTimes(2);
-    expect(consumeResetCredit.mock.calls[0][0].idempotencyKey).toBe(KEY);
-    expect(consumeResetCredit.mock.calls[1][0].idempotencyKey).toBe(KEY);
+    expect(consumeResetCredit.mock.calls[0][0]).toEqual({
+      idempotencyKey: KEY,
+      creditId: 'earlier',
+    });
+    expect(consumeResetCredit.mock.calls[1][0]).toEqual({
+      idempotencyKey: KEY,
+      creditId: 'earlier',
+    });
   });
 
   it('does not issue a consumable offer unless both email and workspace are known', async () => {
