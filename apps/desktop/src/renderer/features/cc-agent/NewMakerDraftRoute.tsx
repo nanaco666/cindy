@@ -120,9 +120,17 @@ import {
 import { isGlobalDropIntercepted } from '@/lib/globalDropIntercept';
 import { createLogger } from '@/lib/logger';
 import { matchNavigationCommandName, tryHandleNavigationCommand } from '@/lib/navigationCommands';
-import { useAgentCapabilities, evictDeviceCapabilities } from '@/hooks/useAgentCapabilities';
+import {
+  useAgentCapabilities,
+  evictDeviceCapabilities,
+  prefetchDeviceCapabilities,
+} from '@/hooks/useAgentCapabilities';
 import { useProviders } from '@/hooks/useProviders';
-import { useDeviceProviders, evictDeviceProviders } from '@/hooks/useDeviceProviders';
+import {
+  useDeviceProviders,
+  evictDeviceProviders,
+  prefetchDeviceProviders,
+} from '@/hooks/useDeviceProviders';
 import { evictDeviceGitSafetySettings } from '@/hooks/useGitSafetySettings';
 import {
   getProjectPickerDisplayName,
@@ -763,11 +771,13 @@ export function NewMakerDraftRoute() {
         //
         // 打开远程草稿前先驱逐该设备的能力 / 供应商 / Git safety 缓存:这些是「订阅时拉一次、
         // 无 TTL、只在设备下线才 evict」的快照,被控端在线期间改了模型目录或 Rewind safety
-        // 设置控制端不会自动刷新。这里同步 evict → 紧接着 patchDraft 触发的 ChatInput /
-        // ModelSelector 重渲染会 cache-miss 重新拉取,保证草稿打开时信息 = 被控端「当下」状态。
+        // 设置控制端不会自动刷新。evict 后显式 prefetch:若选的是同一 deviceId,hook 的
+        // useEffect 不会因 deps 不变重跑 fetch,只有 subscriber 通知路径能送达新数据。
         evictDeviceCapabilities(target.deviceId);
         evictDeviceProviders(target.deviceId);
         evictDeviceGitSafetySettings(target.deviceId);
+        void prefetchDeviceCapabilities(target.deviceId);
+        void prefetchDeviceProviders(target.deviceId);
         patchDraft({
           workingDir: target.path,
           remoteHostId: null,
@@ -787,7 +797,7 @@ export function NewMakerDraftRoute() {
           workspaceKind: 'project',
           permissionMode: chatPrefs.permissionMode,
           model: chatPrefs.model,
-          effort: chatPrefs.effort,
+          effort: draftInitialEffort,
           fastMode: effectiveFastMode,
           planModeEnabled: effectivePlanMode,
           remoteHostId: target.hostId,
@@ -803,12 +813,16 @@ export function NewMakerDraftRoute() {
           fastMode: effectiveFastMode,
           planModeEnabled: effectivePlanMode,
         });
+        {
+          const iso = new Date().toISOString();
+          sessionsStore.patchLocal(newSession.id, { userSendAt: iso, updatedAt: iso });
+        }
         navigate(`/cc-agent/${newSession.id}`, { replace: true });
       } catch (err) {
         log.warn('add remote project failed', { error: String(err), vendor: draftVendor });
       }
     },
-    [draft.vendor, chatPrefs, effectiveFastMode, effectivePlanMode, createSession, navigate, t],
+    [draft.vendor, chatPrefs, draftInitialEffort, effectiveFastMode, effectivePlanMode, createSession, navigate, t],
   );
 
   // ─── 切 vendor ──────────────────────────────────────────────────────
