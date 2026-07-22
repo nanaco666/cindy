@@ -89,9 +89,9 @@ const CLASSIFIER_MAX_TOKENS_CEILING = 16384;
  * 副判据 —— max_tokens 上界(防御性,收窄理论碰撞面):不用固定值(分类器三种形态 max_tokens
  * 各不相同,早期实现取定值 64 只覆盖一条、漏检 fast/thinking,漏检时降级不触发、会话继续
  * fail-closed),改用覆盖全部形态的宽松上界,把"同会话中恰好以分类器前缀开头的大输出请求"
- * 排除掉,避免把它的 429/5xx 误判成分类器故障而错误降级。
+ * 排除掉,避免把它的错误响应(4xx/5xx)误判成分类器故障而错误降级。
  *
- * 只在 429/5xx 错误路径调用,parse 一次 body 成本可忽略;畸形/无 max_tokens/超上界/无前缀一律 false。
+ * 只在错误响应(status ≥ 400)路径调用,parse 一次 body 成本可忽略;畸形/无 max_tokens/超上界/无前缀一律 false。
  */
 export function isClaudeAutoClassifierRequest(requestBody: Buffer): boolean {
   let parsed: unknown;
@@ -108,14 +108,20 @@ export function isClaudeAutoClassifierRequest(requestBody: Buffer): boolean {
 }
 
 /**
- * 创建只读响应观察器。成功响应和非 429/5xx 错误均为 O(1) 短路，不 parse body、
- * 不返回 sink，因此不会 tee SSE 热路径。
+ * 创建只读响应观察器。非错误响应(status < 400，含 2xx 成功与 3xx 重定向)均为 O(1) 短路，
+ * 不 parse body、不返回 sink，因此不会 tee SSE 热路径。
  */
 export function createClaudeAutoClassifierFailureObserver(
   resolveSessionId: (sdkSessionId: string) => string | null,
 ): ResponseObserver {
   return (ctx: ResponseObserverCtx) => {
-    if (ctx.status !== 429 && ctx.status < 500) return undefined;
+    // 分类器请求的任何错误响应都意味着这一轮没拿到 verdict、CLI 会 fail-closed 把工具拦下,
+    // 一律当作「分类器不可用」触发降级——不再限于 429/5xx:
+    //   - 429 限流 / 5xx 服务故障(过载、宕机);
+    //   - 4xx 模型/参数层不可用(404 模型不存在、400 参数被拒、401/403 鉴权失效)。
+    // 降级到 ask 是安全方向(把 auto 收紧成人工授权,绝不放宽),瞬时 4xx 造成的单向降级
+    // 用户随时可手动切回 auto;coordinator 侧仍会复核持久态为 auto 并按 session 去重。
+    if (ctx.status < 400) return undefined;
     const sdkSessionId = ctx.requestHeaders['x-claude-code-session-id'];
     if (!sdkSessionId) return undefined;
     const sessionId = resolveSessionId(sdkSessionId);
