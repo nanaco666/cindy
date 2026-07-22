@@ -3695,10 +3695,6 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
     const [row] = await db.select().from(sessions).where(eq(sessions.id, target.sessionId)).limit(1);
     if (!row) return false;
 
-    // Clear before bootstrap: a resumed runtime must never remain invisible to the
-    // hard-limit count. If bootstrap fails, the watcher can release it again later.
-    await clearOrcaWorkerReleaseMarker(target.id);
-
     const workerVendorOptions = {
       orcaRole: 'worker' as const,
       orcaWorkflowId: target.teamId,
@@ -3722,6 +3718,9 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
       ...(extraDirs.length > 0 ? { extraDirs } : {}),
     });
     const { session: resumedSession } = await bootstrapSession(opts);
+    // Only a successfully recreated runtime occupies capacity. Keeping the release
+    // marker during bootstrap means a failed resume remains dormant and retryable.
+    await clearOrcaWorkerReleaseMarker(target.id);
     await markOrcaRoleIfNeeded(resumedSession.id, 'worker');
     return true;
   }
@@ -4887,6 +4886,15 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
     return result;
   });
 
+  const hasPendingWorkerInput = async (sessionId: string): Promise<boolean> => {
+    await inputCoordinator.ensureQueueRestored(sessionId).catch(() => undefined);
+    // A failed restore is itself a pending condition: never close a worker while
+    // its durable follow-up snapshot is still unavailable.
+    if (!inputCoordinator.isQueueRestored(sessionId)) return true;
+    return inputCoordinator.hasPendingQueuedWork(sessionId) ||
+      inputCoordinator.hasQueuedItemWhere(sessionId, () => true, { includeRecovery: true });
+  };
+
   const orcaTeamService = createOrcaTeamService({
     getWorkerLinkBySessionId: (workerSessionId) => getWorkerLink({ workerSessionId }),
     getWorkerLinkByWorkerId: (workerId) => getWorkerLink({ workerId }),
@@ -4917,14 +4925,7 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
       const sess = maker.getSession(sessionId);
       return sess ? sess.closeIfIdle() : true;
     },
-    hasPendingWorkerInput: async (sessionId) => {
-      await inputCoordinator.ensureQueueRestored(sessionId).catch(() => undefined);
-      // A failed restore is itself a pending condition: never close a worker while
-      // its durable follow-up snapshot is still unavailable.
-      if (!inputCoordinator.isQueueRestored(sessionId)) return true;
-      return inputCoordinator.hasPendingQueuedWork(sessionId) ||
-        inputCoordinator.hasQueuedItemWhere(sessionId, () => true, { includeRecovery: true });
-    },
+    hasPendingWorkerInput,
     hasSendToSessionLock: (sessionId) => sendToSessionLocks.has(sessionId),
     archiveWorkerSession: archiveSingleWorkerSession,
     getManualInterrupt,
@@ -5181,6 +5182,7 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
     },
     getSession: (sessionId) => maker.getSession(sessionId) ?? null,
     withSessionLock: withSendToSessionLock,
+    hasPendingInput: hasPendingWorkerInput,
     markReleased: async (candidate, releasedAt) => {
       // Drizzle proxy 的 UPDATE ... RETURNING 会执行写入但返回空数组；这里直接用
       // DbClient async exec 的 changes 做原子 compare-and-set 结果判定。
@@ -5197,10 +5199,7 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
       return restoreReleasedWorkerRunning(candidate.id, candidate.idleSince, restoredAt);
     },
     touchWorker: async (workerId, updatedAt) => {
-      await getDbClient().drizzle
-        .update(orcaWorkers)
-        .set({ updatedAt })
-        .where(eq(orcaWorkers.id, workerId));
+      await touchWorkerRuntimeActivity(workerId, updatedAt);
     },
     closeSession: (sessionId) => maker.closeSession(sessionId),
     broadcastWorkerChanged: (leadSessionId) => {

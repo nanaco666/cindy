@@ -30,6 +30,7 @@ function createDeps(overrides: Partial<OrcaIdleReleaseWatcherDeps> = {}) {
     listCandidates: vi.fn(async () => [createCandidate()]),
     getSession: vi.fn(() => session),
     withSessionLock: vi.fn(async (_sessionId, task) => task()),
+    hasPendingInput: vi.fn(async () => false),
     markReleased: vi.fn(async () => true),
     clearReleased: vi.fn(async () => true),
     touchWorker: vi.fn(async () => undefined),
@@ -94,6 +95,36 @@ describe('createOrcaIdleReleaseWatcher', () => {
     expect(deps.markReleased).not.toHaveBeenCalled();
     expect(deps.closeSession).not.toHaveBeenCalled();
     expect(deps.broadcastWorkerChanged).not.toHaveBeenCalled();
+  });
+
+  it('keeps a terminal worker with queued follow-up input counted and open', async () => {
+    const candidate = createCandidate({ status: 'done' });
+    const { deps, watcher } = createDeps({
+      listCandidates: vi.fn(async () => [candidate]),
+      hasPendingInput: vi.fn(async () => true),
+    });
+
+    await watcher.scanNow();
+
+    expect(deps.touchWorker).toHaveBeenCalledWith(candidate.id, 120_000);
+    expect(deps.closeSession).not.toHaveBeenCalled();
+    expect(deps.markReleased).not.toHaveBeenCalled();
+    expect(deps.broadcastWorkerChanged).not.toHaveBeenCalled();
+  });
+
+  it('clears a stale release marker when local queued input still targets the worker', async () => {
+    const candidate = createCandidate({ status: 'idle', idleSince: 90_000, updatedAt: 90_000 });
+    const { deps, watcher } = createDeps({
+      listCandidates: vi.fn(async () => [candidate]),
+      hasPendingInput: vi.fn(async () => true),
+    });
+
+    await watcher.scanNow();
+
+    expect(deps.touchWorker).toHaveBeenCalledWith(candidate.id, 120_000);
+    expect(deps.closeSession).not.toHaveBeenCalled();
+    expect(deps.clearReleased).not.toHaveBeenCalled();
+    expect(deps.broadcastWorkerChanged).toHaveBeenCalledWith(candidate.leadSessionId);
   });
 
   it('does not release a missing runtime on its first observation', async () => {
@@ -172,6 +203,23 @@ describe('createOrcaIdleReleaseWatcher', () => {
     await watcher.scanNow();
 
     expect(deps.clearReleased).toHaveBeenCalledWith(candidate, 120_000);
+    expect(deps.closeSession).not.toHaveBeenCalled();
+    expect(deps.broadcastWorkerChanged).toHaveBeenCalledWith(candidate.leadSessionId);
+  });
+
+  it('restores running state before handling queued input on a marked live turn', async () => {
+    const candidate = createCandidate({ status: 'idle', idleSince: 90_000, updatedAt: 90_000 });
+    const { deps, session, watcher } = createDeps({
+      listCandidates: vi.fn(async () => [candidate]),
+      hasPendingInput: vi.fn(async () => true),
+    });
+    session.isTurnRunning.mockReturnValue(true);
+
+    await watcher.scanNow();
+
+    expect(deps.clearReleased).toHaveBeenCalledWith(candidate, 120_000);
+    expect(deps.hasPendingInput).not.toHaveBeenCalled();
+    expect(deps.touchWorker).not.toHaveBeenCalled();
     expect(deps.closeSession).not.toHaveBeenCalled();
     expect(deps.broadcastWorkerChanged).toHaveBeenCalledWith(candidate.leadSessionId);
   });

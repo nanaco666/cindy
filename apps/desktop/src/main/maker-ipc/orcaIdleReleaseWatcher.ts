@@ -30,6 +30,7 @@ export interface OrcaIdleReleaseWatcherDeps {
   listCandidates(updatedBefore: number): Promise<readonly OrcaIdleReleaseCandidate[]>;
   getSession(sessionId: string): OrcaIdleReleaseSession | null;
   withSessionLock<T>(sessionId: string, task: () => Promise<T>): Promise<T>;
+  hasPendingInput(sessionId: string): Promise<boolean>;
   markReleased(candidate: OrcaIdleReleaseCandidate, releasedAt: number): Promise<boolean>;
   clearReleased(candidate: OrcaIdleReleaseCandidate, restoredAt: number): Promise<boolean>;
   touchWorker(workerId: string, updatedAt: number): Promise<void>;
@@ -110,18 +111,34 @@ export function createOrcaIdleReleaseWatcher(
           await deps.withSessionLock(candidate.sessionId, async () => {
             const session = deps.getSession(candidate.sessionId);
 
+            // A live turn is stronger evidence than queued input. If another process
+            // wrote a release marker, restore the running state before considering
+            // the queue so the active Worker is not persisted as idle.
+            if (candidate.idleSince !== null && session?.isTurnRunning()) {
+              missingRuntimeObservations.delete(candidate.id);
+              const restored = await deps.clearReleased(candidate, deps.now());
+              if (restored) deps.broadcastWorkerChanged(candidate.leadSessionId);
+              return;
+            }
+
+            // A terminal DB status can coexist with a follow-up that has already
+            // entered the durable input queue. Keep that Worker counted until the
+            // queued turn is accepted instead of tearing down its runtime.
+            if (await deps.hasPendingInput(candidate.sessionId)) {
+              missingRuntimeObservations.delete(candidate.id);
+              await deps.touchWorker(candidate.id, deps.now());
+              if (candidate.idleSince !== null) {
+                deps.broadcastWorkerChanged(candidate.leadSessionId);
+              }
+              return;
+            }
+
             // A different process can mark a stale persisted Worker. If this process
             // still owns its runtime, finish the teardown here; a concurrently started
             // turn wins by clearing the marker instead.
             if (candidate.idleSince !== null) {
               missingRuntimeObservations.delete(candidate.id);
               if (!session) return;
-              if (session.isTurnRunning()) {
-                const restoredAt = deps.now();
-                const restored = await deps.clearReleased(candidate, restoredAt);
-                if (restored) deps.broadcastWorkerChanged(candidate.leadSessionId);
-                return;
-              }
               await deps.closeSession(candidate.sessionId);
               deps.log.info('idleWatcher: closed released worker runtime', {
                 workerId: candidate.id,

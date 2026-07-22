@@ -805,7 +805,7 @@ describe('OrcaTeamService', () => {
   );
 
   it.each(['input_stop', 'abort_session'])(
-    'keeps %s manual interrupt silent and marks the worker idle',
+    'keeps %s manual interrupt silent without marking its live runtime released',
     async (reason) => {
       const leadMessages: string[] = [];
       const { calls, deps, service, setManualInterrupt } = createDeps({
@@ -828,9 +828,10 @@ describe('OrcaTeamService', () => {
         'dispatchWorkerMessage:worker-1',
         'updateWorkerStatus:running',
         'broadcastOrcaWorkerChanged',
-        'markWorkerIdle',
+        'updateWorkerStatus:idle',
         'broadcastOrcaWorkerChanged',
       ]);
+      expect(deps.markWorkerIdle).not.toHaveBeenCalled();
       expect(deps.clearManualInterrupt).toHaveBeenCalledWith('worker-session-1');
       expect(deps.log.info).toHaveBeenCalledWith('worker manual interrupt: suppressed auto-bridge', {
         workerId: 'worker-1',
