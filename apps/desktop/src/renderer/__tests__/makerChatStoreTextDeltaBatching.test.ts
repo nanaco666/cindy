@@ -1165,7 +1165,7 @@ describe('makerChatStore text delta batching', () => {
         toolName: 'update_plan',
         toolUseId: 'plan:turn-1',
         toolInput: { plan: [{ step: 'Inspect', status: 'completed' }] },
-        content: { input: { plan: [{ step: 'Inspect', status: 'completed' }] } },
+        content: JSON.stringify({ input: { plan: [{ step: 'Inspect', status: 'completed' }] } }),
         createdAt: '2026-07-22T00:00:02.000Z',
       },
       {
@@ -1174,13 +1174,40 @@ describe('makerChatStore text delta batching', () => {
         toolName: 'update_plan',
         toolUseId: 'plan:turn-1',
         toolInput: { plan: [{ step: 'Inspect', status: 'in_progress' }] },
-        content: { input: { plan: [{ step: 'Inspect', status: 'in_progress' }] } },
+        content: JSON.stringify({ input: { plan: [{ step: 'Inspect', status: 'in_progress' }] } }),
+        createdAt: '2026-07-22T00:00:03.000Z',
+      },
+      { preserveExistingCodexPlanContent: true },
+    );
+
+    expect(hydrated.toolInput).toEqual({ plan: [{ step: 'Inspect', status: 'completed' }] });
+    expect(hydrated.content).toBe(JSON.stringify({ input: { plan: [{ step: 'Inspect', status: 'completed' }] } }));
+  });
+
+  it('allows authoritative history to replace an older in-memory Codex plan', () => {
+    const hydrated = makerChatStore.__hydratePersistedMessageForTest(
+      {
+        clientId: 'plan-row-history',
+        role: 'tool_use',
+        toolName: 'update_plan',
+        toolUseId: 'plan:turn-2',
+        toolInput: { plan: [{ step: 'Inspect', status: 'in_progress' }] },
+        content: JSON.stringify({ input: { plan: [{ step: 'Inspect', status: 'in_progress' }] } }),
+        createdAt: '2026-07-22T00:00:02.000Z',
+      },
+      {
+        clientId: 'plan-row-history',
+        role: 'tool_use',
+        toolName: 'update_plan',
+        toolUseId: 'plan:turn-2',
+        toolInput: { plan: [{ step: 'Inspect', status: 'completed' }] },
+        content: JSON.stringify({ input: { plan: [{ step: 'Inspect', status: 'completed' }] } }),
         createdAt: '2026-07-22T00:00:03.000Z',
       },
     );
 
     expect(hydrated.toolInput).toEqual({ plan: [{ step: 'Inspect', status: 'completed' }] });
-    expect(hydrated.content).toEqual({ input: { plan: [{ step: 'Inspect', status: 'completed' }] } });
+    expect(hydrated.content).toBe(JSON.stringify({ input: { plan: [{ step: 'Inspect', status: 'completed' }] } }));
   });
 
   it('preserves dismissed interaction state on stale pending hydration', () => {

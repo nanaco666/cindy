@@ -1332,6 +1332,7 @@ function replaceMessage(
 
 type HydratePersistedMessageOptions = {
   preserveExistingToolResultContent?: boolean;
+  preserveExistingCodexPlanContent?: boolean;
 };
 
 function hydratePersistedMessage(
@@ -1346,6 +1347,7 @@ function hydratePersistedMessage(
     ...(existing.retryMentions ? { retryMentions: existing.retryMentions } : {}),
   };
   if (
+    options.preserveExistingCodexPlanContent === true &&
     existing.role === 'tool_use' &&
     persisted.role === 'tool_use' &&
     existing.toolName === 'update_plan' &&
@@ -3250,6 +3252,7 @@ function initGlobalListeners(): void {
       if (idx >= 0) {
         const nextMessages = mergeMessages([mapped], s.messages, {
           preserveExistingToolResultContent: true,
+          preserveExistingCodexPlanContent: true,
         });
         return {
           ...s,
@@ -3261,6 +3264,7 @@ function initGlobalListeners(): void {
         ...s,
         messages: mergeMessages([mapped], s.messages, {
           preserveExistingToolResultContent: true,
+          preserveExistingCodexPlanContent: true,
         }),
         isFirstMessage: mapped.role === 'user' ? false : s.isFirstMessage,
       };

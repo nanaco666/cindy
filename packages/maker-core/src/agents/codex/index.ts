@@ -1895,7 +1895,7 @@ export class CodexAgent extends BaseAgent {
     let subscriptionInvalidatedByTransport = false;
     let subscription: ThreadSubscription | null = null;
     let interactionResolver: InteractionResolver | null = null;
-    let stopRolloutPlanFallback: (() => void) | null = null;
+    let stopRolloutPlanFallback: ((drainCompletedTurn?: boolean) => void) | null = null;
     const seenRolloutPlanCallIds = new Set<string>();
     const latestPlanByTurn = new Map<string, TurnPlanUpdatedNotification['params']['plan']>();
     // 当前 session 的 one-shot tip 状态 (turn-start status 用):
@@ -3157,10 +3157,10 @@ export class CodexAgent extends BaseAgent {
       return currentTurnId !== null && turnId !== currentTurnId;
     };
 
-    const stopActiveRolloutPlanFallback = (): void => {
+    const stopActiveRolloutPlanFallback = (opts: { drainCompletedTurn?: boolean } = {}): void => {
       const stop = stopRolloutPlanFallback;
       stopRolloutPlanFallback = null;
-      try { stop?.(); } catch { /* no-op */ }
+      try { stop?.(opts.drainCompletedTurn === true); } catch { /* no-op */ }
     };
 
     const startRolloutPlanFallback = (turnId: string): void => {
@@ -3238,8 +3238,13 @@ export class CodexAgent extends BaseAgent {
         }
       };
 
-      stopRolloutPlanFallback = () => {
+      stopRolloutPlanFallback = (drainCompletedTurn = false) => {
         if (timer) clearInterval(timer);
+        if (!drainCompletedTurn) {
+          stopped = true;
+          latestPlanByTurn.delete(turnId);
+          return;
+        }
         void poll(true, true).finally(() => {
           stopped = true;
           latestPlanByTurn.delete(turnId);
@@ -3304,7 +3309,11 @@ export class CodexAgent extends BaseAgent {
       const suppressTerminalUi = terminalErroredTurnIds.has(turn.id);
       deferredTerminalTurnCompletions.delete(turn.id);
       if (currentTurnId === turn.id || currentTurnId === null) {
-        stopActiveRolloutPlanFallback();
+        const canDrainCompletedTurn =
+          !terminalErroredTurnIds.has(turn.id) &&
+          turn.status !== 'failed' &&
+          turn.status !== 'interrupted';
+        stopActiveRolloutPlanFallback({ drainCompletedTurn: canDrainCompletedTurn });
       }
       dismissPendingUserInputForTurn(turn.id, `turn_${turn.status}`);
       clearActiveToolContextsForTurn(turn.id);
