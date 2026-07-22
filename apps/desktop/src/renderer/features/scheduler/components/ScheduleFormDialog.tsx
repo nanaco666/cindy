@@ -393,7 +393,7 @@ export function ScheduleFormDialog({
     }
     if (!canSubmitSessionBinding(form.executionMode ?? 'agent', runMode, boundSessionReference)) {
       toast.warning(t(
-        boundSessionReference?.status === 'archived'
+        boundSessionReference?.state === 'available' && boundSessionReference.status === 'archived'
           ? 'scheduler.editor.thread.archivedBinding'
           : boundSessionReference
             ? 'scheduler.editor.thread.deletedBinding'
