@@ -2,7 +2,6 @@
 id: integrations
 title: What Cindy integrates with
 summary: Supported external services — FeiShu, Slack, Discord, Google, Jira / Confluence, GitHub, GitLab — and what's not supported.
-tab: connections
 ---
 At a glance, Cindy integrates with:
 

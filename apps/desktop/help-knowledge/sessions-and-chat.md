@@ -19,7 +19,7 @@ Each **session** is a persistent chat thread driven by **one agent** (Claude Cod
 
 **Conversation controls:**
 
-- **`/clear`** — the same as **+ New Maker**: opens a fresh empty draft and switches to it, discarding the current conversation context. It doesn't reset the existing session in place — the old session stays in the sidebar untouched.
+- **`/clear`** — clears the current session's conversation context in place (resets messages and state without creating or switching to a new session). The session itself stays in the sidebar; only its content is wiped.
 - **`/compact`** — ask the agent to summarize and compress earlier turns into a shorter context (Claude Code).
 - **Edit** — you can edit your **last** user message. Doing so **rewinds** the conversation: it drops that message and everything after it, **and rolls back the file changes made since**, then resends your edited message. It's a true rewind, not a branching fork.
 
