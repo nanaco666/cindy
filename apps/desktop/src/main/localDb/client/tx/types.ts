@@ -234,13 +234,14 @@ export interface SessionAgentSwitchFallbackArgs {
 }
 
 /**
- * 单条消息本地内容清除。正文/元数据清空为最小 tombstone、清原生会话绑定、
- * 写入隐藏的上下文重建标记
+ * 一次消息删除动作涉及的全部本地记录。删除 assistant 时，这里会包含同一真实
+ * 用户轮中的 thinking / tool / 自动续跑 / 多段 assistant；删除 user 时只有目标行。
+ * 正文/元数据清空为最小 tombstone、清原生会话绑定、写入隐藏的上下文重建标记
  * 必须在同一事务内提交，避免崩溃后继续 resume 含被删消息的旧 transcript。
  */
 export interface MessageDeleteArgs {
   sessionId: string;
-  clientId: string;
+  clientIds: string[];
   contextMarker: {
     id: string;
     clientId: string;
@@ -251,7 +252,10 @@ export interface MessageDeleteArgs {
 }
 
 export interface MessageDeleteResult {
-  messageId: string;
+  messages: Array<{
+    messageId: string;
+    clientId: string;
+  }>;
 }
 
 export interface SessionsSetStatusResultItem {

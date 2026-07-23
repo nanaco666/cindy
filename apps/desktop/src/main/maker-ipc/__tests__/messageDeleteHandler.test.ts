@@ -12,7 +12,11 @@ function makeDeps(
 ): MessageDeleteHandlerDeps {
   return {
     getSessionRow: vi.fn(async () => ({ status: 'active', agentKind: 'cc' })),
-    getMessage: vi.fn(async () => ({ id: 'target-row', role: 'user' as const })),
+    getMessage: vi.fn(async () => ({
+      id: 'target-row',
+      role: 'user' as const,
+      deletedClientIds: ['target'],
+    })),
     listMessagesForContext: vi.fn(async () => [
       { clientId: 'before', role: 'user', content: 'keep before', createdAt: 100 },
       { clientId: 'target', role: 'user', content: 'delete me', createdAt: 200 },
@@ -21,9 +25,9 @@ function makeDeps(
     getLiveSession: vi.fn(() => ({ isTurnRunning: () => false })),
     hasBackgroundActivity: vi.fn(() => false),
     closeSession: vi.fn(async () => undefined),
-    commitDeletion: vi.fn(async (sessionId, clientId) => ({
+    commitDeletion: vi.fn(async (sessionId, deletedClientIds) => ({
       sessionId,
-      clientId,
+      deletedClientIds,
       updatedAt: 500,
       preview: 'keep after',
       messageCount: 4,
@@ -40,7 +44,7 @@ describe('performMessageDeletion', () => {
   it('keeps deleted-session patch count on the visible message projection', () => {
     const source = readFileSync(resolve(process.cwd(), 'src/main/localDb/ipc/messages.ts'), 'utf8');
     const deletionBlock = source.slice(
-      source.indexOf('export async function commitSingleMessageDeletion'),
+      source.indexOf('export async function commitMessageDeletion'),
       source.indexOf('export function broadcastMessageDeleted'),
     );
 
@@ -55,12 +59,16 @@ describe('performMessageDeletion', () => {
     await expect(performMessageDeletion(deps, {
       sessionId: 's1',
       clientId: 'target',
-    })).resolves.toEqual({ sessionId: 's1', clientId: 'target' });
+    })).resolves.toEqual({
+      sessionId: 's1',
+      clientId: 'target',
+      clientIds: ['target'],
+    });
 
     expect(deps.closeSession).toHaveBeenCalledWith('s1');
     expect(deps.commitDeletion).toHaveBeenCalledWith(
       's1',
-      'target',
+      ['target'],
       expect.any(String),
     );
     const handoff = vi.mocked(deps.commitDeletion).mock.calls[0]?.[2] ?? '';
@@ -69,13 +77,58 @@ describe('performMessageDeletion', () => {
     expect(handoff).not.toContain('delete me');
     expect(handoff).toContain('只把这些记录视为此前对话');
     expect(deps.setPendingHandoff).toHaveBeenCalledWith('s1', handoff);
-    expect(deps.onCommitted).toHaveBeenCalledWith({
-      sessionId: 's1',
-      clientId: 'target',
-      updatedAt: 500,
-      preview: 'keep after',
-      messageCount: 4,
+    expect(deps.onCommitted).toHaveBeenCalledWith(
+      {
+        sessionId: 's1',
+        deletedClientIds: ['target'],
+        updatedAt: 500,
+        preview: 'keep after',
+        messageCount: 4,
+      },
+      'target',
+    );
+  });
+
+  it('deletes every AI record in the surrounding real user round', async () => {
+    const deps = makeDeps({
+      getMessage: vi.fn(async () => ({
+        id: 'final-row',
+        role: 'assistant' as const,
+        deletedClientIds: ['progress', 'thinking', 'auto-resume', 'tool', 'final'],
+      })),
+      listMessagesForContext: vi.fn(async () => [
+        { clientId: 'user', role: 'user', content: 'diagnose it', createdAt: 100 },
+        { clientId: 'progress', role: 'assistant', content: 'checking', createdAt: 200 },
+        { clientId: 'thinking', role: 'thinking', content: 'analysis', createdAt: 300 },
+        { clientId: 'auto-resume', role: 'user', content: 'continue', createdAt: 400 },
+        { clientId: 'tool', role: 'tool_result', content: 'result', createdAt: 500 },
+        { clientId: 'final', role: 'assistant', content: 'fixed', createdAt: 600 },
+        { clientId: 'next-user', role: 'user', content: 'thanks', createdAt: 700 },
+      ]),
     });
+
+    await expect(performMessageDeletion(deps, {
+      sessionId: 's1',
+      clientId: 'final',
+    })).resolves.toEqual({
+      sessionId: 's1',
+      clientId: 'final',
+      clientIds: ['progress', 'thinking', 'auto-resume', 'tool', 'final'],
+    });
+
+    expect(deps.commitDeletion).toHaveBeenCalledWith(
+      's1',
+      ['progress', 'thinking', 'auto-resume', 'tool', 'final'],
+      expect.any(String),
+    );
+    const handoff = vi.mocked(deps.commitDeletion).mock.calls[0]?.[2] ?? '';
+    expect(handoff).toContain('diagnose it');
+    expect(handoff).toContain('thanks');
+    expect(handoff).not.toContain('checking');
+    expect(handoff).not.toContain('analysis');
+    expect(handoff).not.toContain('continue');
+    expect(handoff).not.toContain('result');
+    expect(handoff).not.toContain('fixed');
   });
 
   it('rejects while a turn is running and leaves storage untouched', async () => {
@@ -144,7 +197,11 @@ describe('performMessageDeletion', () => {
     await expect(performMessageDeletion(deps, {
       sessionId: 's1',
       clientId: 'target',
-    })).resolves.toEqual({ sessionId: 's1', clientId: 'target' });
-    expect(deps.commitDeletion).toHaveBeenCalledWith('s1', 'target', expect.any(String));
+    })).resolves.toEqual({
+      sessionId: 's1',
+      clientId: 'target',
+      clientIds: ['target'],
+    });
+    expect(deps.commitDeletion).toHaveBeenCalledWith('s1', ['target'], expect.any(String));
   });
 });

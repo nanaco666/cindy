@@ -1153,25 +1153,67 @@ export const remoteSessionStore = {
   },
 
   /**
-   * 被控端已原子清除单条消息后，按稳定 clientId 精确移除控制端镜像。
+   * 被控端已原子清除一轮消息后，按稳定 clientId 集合移除控制端镜像。
    * 同时失效 latest-window marker；sessions patch 与 deletion push 无顺序保证，
    * 不能让旧 marker 把已变更的窗口误判为已同步。
    */
-  removeMessage(sessionId: string, clientId: string, deviceId?: string): void {
-    if (!sessionId || !clientId) return;
+  removeMessages(sessionId: string, clientIds: readonly string[], deviceId?: string): void {
+    const deletedClientIds = new Set(clientIds.filter(Boolean));
+    if (!sessionId || deletedClientIds.size === 0) return;
     const existing = messages.get(sessionId) ?? emptyMessages;
+    const removed = existing.filter((message) => (
+      deletedClientIds.has(message.clientId) || deletedClientIds.has(message.id)
+    ));
     const next = existing.filter((message) => (
-      message.clientId !== clientId && message.id !== clientId
+      !deletedClientIds.has(message.clientId) && !deletedClientIds.has(message.id)
     ));
     sessionMessageSyncMarkers.delete(sessionId);
-    if (next.length === existing.length) return;
-    messages.set(sessionId, next);
-    forgetPendingLiveAssistantMessageIdentity(sessionId, clientId);
+    const messagesChanged = next.length !== existing.length;
+    if (messagesChanged) messages.set(sessionId, next);
+    const deletedTaskAliases = new Set<string>(deletedClientIds);
+    for (const message of removed) {
+      if (message.toolUseId) deletedTaskAliases.add(message.toolUseId);
+      const parentToolUseId = message.agentMeta?.parentUuid;
+      if (typeof parentToolUseId === 'string') deletedTaskAliases.add(parentToolUseId);
+    }
+    let tasksChanged = false;
+    for (const taskMap of [sessionTaskUpdates, sessionParkedTaskUpdates]) {
+      const existingTasks = taskMap.get(sessionId);
+      if (!existingTasks) continue;
+      const nextTasks = new Map<string, AgentTaskUpdate>();
+      for (const [key, task] of existingTasks) {
+        if (
+          deletedTaskAliases.has(key) ||
+          deletedTaskAliases.has(task.taskId) ||
+          (task.parentToolUseId !== undefined &&
+            deletedTaskAliases.has(task.parentToolUseId))
+        ) {
+          continue;
+        }
+        nextTasks.set(key, task);
+      }
+      if (nextTasks.size !== existingTasks.size) {
+        tasksChanged = true;
+        if (nextTasks.size === 0) taskMap.delete(sessionId);
+        else taskMap.set(sessionId, nextTasks);
+      }
+    }
+    for (const deletedClientId of deletedClientIds) {
+      forgetPendingLiveAssistantMessageIdentity(sessionId, deletedClientId);
+    }
+    if (!messagesChanged && !tasksChanged) return;
     bumpMessageVersion();
     emit();
     // useSessionMessageCacheSync 对空数组会跳过持久化；删除最后一条消息时在这里
     // 主动清理 AsyncStorage，避免下次冷开又 hydrate 出已删除正文。
-    if (deviceId) void cacheSessionMessages(deviceId, sessionId, next).catch(() => undefined);
+    if (messagesChanged) {
+      if (deviceId) void cacheSessionMessages(deviceId, sessionId, next).catch(() => undefined);
+    }
+  },
+
+  /** 旧调用点兼容：精确移除一个 clientId。 */
+  removeMessage(sessionId: string, clientId: string, deviceId?: string): void {
+    this.removeMessages(sessionId, [clientId], deviceId);
   },
 
   appendLocalSystemCard(
@@ -1406,7 +1448,16 @@ export const remoteSessionStore = {
     if (channel === 'local-db:messages:deleted' && isRecord(payload)) {
       const sessionId = readString(payload, 'sessionId');
       const clientId = readString(payload, 'clientId');
-      if (sessionId && clientId) this.removeMessage(sessionId, clientId, deviceId);
+      const clientIds = Array.isArray(payload.clientIds)
+        ? payload.clientIds.filter((value): value is string =>
+            typeof value === 'string' && value.length > 0,
+          )
+        : clientId
+          ? [clientId]
+          : [];
+      if (sessionId && clientIds.length > 0) {
+        this.removeMessages(sessionId, clientIds, deviceId);
+      }
       return;
     }
     if (channel === 'local-db:session:error-persisted' && isRecord(payload)) {

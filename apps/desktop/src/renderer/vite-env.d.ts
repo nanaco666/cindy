@@ -3648,7 +3648,7 @@ interface ElectronAPI {
     deleteMessage: (
       sessionId: string,
       clientId: string,
-    ) => Promise<{ sessionId: string; clientId: string }>;
+    ) => Promise<{ sessionId: string; clientId: string; clientIds: string[] }>;
     listActive: () => Promise<Array<{
       sessionId: string;
       agentKind: 'claude-code' | 'codex';

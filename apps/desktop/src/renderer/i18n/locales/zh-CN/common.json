@@ -3936,7 +3936,7 @@
       "forkCancel": "取消",
       "delete": "删除本条对话",
       "deleteConfirmTitle": "删除本条对话？",
-      "deleteConfirmDescription": "这条消息会从本地会话中删除，后续消息继续保留。下次发送时，AI 上下文会从剩余记录重建。",
+      "deleteConfirmDescription": "用户消息只删除本条；AI 消息会删除上一次用户输入之后产生的整轮输出。之后的对话继续保留。下次发送时，AI 上下文会从剩余记录重建。",
       "deleteConfirm": "删除本条对话",
       "deleteCancel": "取消",
       "deleteBusy": "请等当前回复结束后再删除消息",

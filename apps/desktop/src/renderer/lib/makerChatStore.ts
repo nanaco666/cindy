@@ -3453,12 +3453,23 @@ function initGlobalListeners(): void {
     emitPatch(sessionId, { updatedAt: new Date().toISOString() });
   }
 
-  // 单条消息本地删除推送:本机多窗口与 device-link 控制端共用同一 reducer。
-  // 只移除 clientId 对应行,不碰其后消息、streaming 或分页窗口。
+  // 消息本地删除推送:本机多窗口与 device-link 控制端共用同一 reducer。
+  // 新 payload 一次带齐整轮 clientIds；旧 host 仍回退到单个 clientId。
   function handleMessageDeletedRaw(raw: unknown): void {
-    const payload = raw as { sessionId?: string; clientId?: string } | null;
-    if (!payload?.sessionId || !payload.clientId) return;
-    removeMessageByClientId(payload.sessionId, payload.clientId);
+    const payload = raw as {
+      sessionId?: string;
+      clientId?: string;
+      clientIds?: unknown;
+    } | null;
+    if (!payload?.sessionId) return;
+    const clientIds = Array.isArray(payload.clientIds)
+      ? payload.clientIds.filter((value): value is string =>
+          typeof value === 'string' && value.length > 0,
+        )
+      : typeof payload.clientId === 'string' && payload.clientId.length > 0
+        ? [payload.clientId]
+        : [];
+    removeMessagesByClientIds(payload.sessionId, clientIds);
   }
 
   function handleUsageMessageTurnCostRaw(raw: unknown): void {
@@ -4586,21 +4597,65 @@ function reloadMessages(sessionId: string): void {
   ensureInitialMessages(sessionId);
 }
 
-/**
- * 消息菜单单条内容删除的本地镜像。只移除
- * 一个 clientId，后续消息保持原位；重复事件幂等。
- */
-function removeMessageByClientId(sessionId: string, clientId: string): void {
+/** 消息菜单删除的本地镜像：移除本动作覆盖的 clientId，并清掉关联的 live task 别名。 */
+function removeMessagesByClientIds(
+  sessionId: string,
+  clientIds: readonly string[],
+  options: { invalidateHistory?: boolean } = {},
+): void {
+  const deletedClientIds = new Set(clientIds.filter(Boolean));
+  if (deletedClientIds.size === 0) return;
   discardPendingTextDelta(sessionId);
+  // 作废删除提交前发起的历史分页，避免旧页响应把已经清除的行重新 merge 回来。
+  if (options.invalidateHistory !== false) bumpMessagesEpoch(sessionId);
   setState(sessionId, (s) => {
-    const messages = s.messages.filter((message) => message.clientId !== clientId);
-    if (messages.length === s.messages.length) return s;
+    const removedMessages = s.messages.filter((message) =>
+      deletedClientIds.has(message.clientId),
+    );
+    const messages = s.messages.filter((message) =>
+      !deletedClientIds.has(message.clientId),
+    );
+    const deletedTaskAliases = new Set<string>(deletedClientIds);
+    for (const message of removedMessages) {
+      if (message.toolUseId) deletedTaskAliases.add(message.toolUseId);
+      if (message.parentToolUseId) deletedTaskAliases.add(message.parentToolUseId);
+    }
+    let taskUpdates = s.taskUpdates;
+    if (taskUpdates && taskUpdates.size > 0) {
+      const nextTaskUpdates = new Map<string, AgentTaskUpdate>();
+      let changed = false;
+      for (const [key, task] of taskUpdates) {
+        if (
+          deletedTaskAliases.has(key) ||
+          deletedTaskAliases.has(task.taskId) ||
+          (task.parentToolUseId !== undefined &&
+            deletedTaskAliases.has(task.parentToolUseId))
+        ) {
+          changed = true;
+          continue;
+        }
+        nextTaskUpdates.set(key, task);
+      }
+      if (changed) taskUpdates = nextTaskUpdates;
+    }
+    if (
+      messages.length === s.messages.length &&
+      taskUpdates === s.taskUpdates
+    ) {
+      return s;
+    }
     return {
       ...s,
       messages,
+      taskUpdates,
       isFirstMessage: !messages.some((message) => message.role === 'user'),
     };
   });
+}
+
+/** 旧调用点兼容：精确移除一个 clientId。 */
+function removeMessageByClientId(sessionId: string, clientId: string): void {
+  removeMessagesByClientIds(sessionId, [clientId], { invalidateHistory: false });
 }
 
 /**
@@ -7067,7 +7122,9 @@ export const makerChatStore = {
   wasLastStopSideTask,
   ensureInitialMessages,
   reloadMessages,
-  /** 消息菜单:本地精确移除一条消息(持久化由 deleteMessageFor 负责)。 */
+  /** 消息菜单:本地移除一次删除动作覆盖的整轮记录。 */
+  removeMessagesByClientIds,
+  /** 旧调用点兼容:本地精确移除一条消息。 */
   removeMessageByClientId,
   /** edit-last-message: 本地裁掉从 clientId(含)开始的消息段(镜像 rewind 软删)。 */
   dropMessagesFromClientId,

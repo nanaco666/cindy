@@ -1,9 +1,9 @@
 /**
- * useDeleteMessage — 消息菜单的单条本地删除动作。
+ * useDeleteMessage — 消息菜单的本地删除动作。
  *
- * 这里不复用 rewind：rewind 会裁掉 target 及其后的整段并回滚文件；本功能只
- * 清除当前 user / assistant 正文与元数据，保留无内容墓碑和后续消息，并让 main 在下一次发送前以
- * 剩余本地历史重建原生 Agent 上下文。
+ * 这里不复用 rewind：rewind 会裁掉 target 及其后的所有轮次并回滚文件；本功能让
+ * user 只清目标行、assistant 清所属真实用户轮的全部输出，保留其它轮次，并让 main
+ * 在下一次发送前以剩余本地历史重建原生 Agent 上下文。
  */
 
 import { useCallback } from 'react';
@@ -51,10 +51,19 @@ export function useDeleteMessage({
     if (!ok) return;
 
     try {
-      await deleteMessageFor(sessionId, messageClientId);
+      const result = await deleteMessageFor(sessionId, messageClientId);
+      const returnedClientIds = Array.isArray(result.clientIds)
+        ? result.clientIds.filter((clientId): clientId is string =>
+            typeof clientId === 'string' && clientId.length > 0,
+          )
+        : [];
       // main 广播通常会先一步移除；这里再做一次幂等镜像，覆盖旧 preload / 老
-      // 被控端没有 push 通道但 invoke 已成功的兼容窗口。
-      makerChatStore.removeMessageByClientId(sessionId, messageClientId);
+      // 被控端没有 push 通道但 invoke 已成功的兼容窗口。老 host 不返回
+      // clientIds 时至少清掉用户实际点击的目标行。
+      makerChatStore.removeMessagesByClientIds(
+        sessionId,
+        returnedClientIds.length > 0 ? returnedClientIds : [messageClientId],
+      );
       emitSessionsRefresh();
       const deviceId = getSessionDeviceId(sessionId);
       if (deviceId) void refreshRemoteDeviceSessions(deviceId);

@@ -87,11 +87,23 @@ function sessionAgentSwitchFallback(db: Database.Database, args: unknown): void 
   transaction();
 }
 
-/** 单条消息内容清除 + 原生上下文失效 + 隐藏重建标记，三者同成同败。 */
-function messageDelete(db: Database.Database, args: unknown): { messageId: string } {
+/** 一轮消息内容清除 + 原生上下文失效 + 隐藏重建标记，三者同成同败。 */
+function messageDelete(
+  db: Database.Database,
+  args: unknown,
+): { messages: Array<{ messageId: string; clientId: string }> } {
   const payload = asRecord(args, 'message.delete args');
   const sessionId = expectString(payload.sessionId, 'sessionId');
-  const clientId = expectString(payload.clientId, 'clientId');
+  const clientIds = [...new Set(
+    expectArray(payload.clientIds, 'clientIds').map((value) =>
+      expectString(value, 'clientId'),
+    ),
+  )];
+  if (clientIds.length === 0) {
+    throw Object.assign(new Error('message.delete requires at least one clientId'), {
+      code: 'INVALID_ARGS',
+    });
+  }
   const marker = asRecord(payload.contextMarker, 'contextMarker');
   const markerId = expectString(marker.id, 'contextMarker.id');
   const markerClientId = expectString(marker.clientId, 'contextMarker.clientId');
@@ -100,39 +112,54 @@ function messageDelete(db: Database.Database, args: unknown): { messageId: strin
   const updatedAt = expectNumber(payload.updatedAt, 'updatedAt');
 
   const transaction = db.transaction(() => {
-    const target = db.prepare(
-      "SELECT id FROM messages WHERE session_id = ? AND client_id = ? AND role IN ('user', 'assistant') AND rewind_at IS NULL LIMIT 1",
-    ).get(sessionId, clientId) as { id: string } | undefined;
-    if (!target) {
-      throw Object.assign(new Error(`Message 不存在或不可删除: ${clientId}`), { code: 'NOT_FOUND' });
-    }
+    const selectTarget = db.prepare(
+      "SELECT id, client_id AS clientId FROM messages WHERE session_id = ? AND client_id = ? AND role IN ('user', 'assistant', 'tool_use', 'tool_result', 'ask_user', 'plan_review', 'thinking', 'error') AND rewind_at IS NULL LIMIT 1",
+    );
+    const targets = clientIds.map((clientId) => {
+      const target = selectTarget.get(sessionId, clientId) as
+        | { id: string; clientId: string }
+        | undefined;
+      if (!target) {
+        throw Object.assign(new Error(`Message 不存在或不可删除: ${clientId}`), {
+          code: 'NOT_FOUND',
+        });
+      }
+      return target;
+    });
 
-    const jobs = db.prepare(
-      "SELECT rowid, vec_table AS vecTable FROM embedding_jobs WHERE source = 'chat' AND source_id = ?",
-    ).all(target.id) as Array<{ rowid: number; vecTable: string }>;
-    const deleteVecByTable = new Map<string, Database.Statement>();
-    for (const job of jobs) {
-      assertIdentifier(job.vecTable);
-      if (!db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(job.vecTable)) {
-        continue;
+    for (const target of targets) {
+      const jobs = db.prepare(
+        "SELECT rowid, vec_table AS vecTable FROM embedding_jobs WHERE source = 'chat' AND source_id = ?",
+      ).all(target.id) as Array<{ rowid: number; vecTable: string }>;
+      const deleteVecByTable = new Map<string, Database.Statement>();
+      for (const job of jobs) {
+        assertIdentifier(job.vecTable);
+        if (!db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(job.vecTable)) {
+          continue;
+        }
+        let stmt = deleteVecByTable.get(job.vecTable);
+        if (!stmt) {
+          stmt = db.prepare(`DELETE FROM "${job.vecTable}" WHERE rowid = ?`);
+          deleteVecByTable.set(job.vecTable, stmt);
+        }
+        stmt.run(job.rowid);
       }
-      let stmt = deleteVecByTable.get(job.vecTable);
-      if (!stmt) {
-        stmt = db.prepare(`DELETE FROM "${job.vecTable}" WHERE rowid = ?`);
-        deleteVecByTable.set(job.vecTable, stmt);
-      }
-      stmt.run(job.rowid);
+      db.prepare("DELETE FROM embedding_jobs WHERE source = 'chat' AND source_id = ?").run(target.id);
     }
-    db.prepare("DELETE FROM embedding_jobs WHERE source = 'chat' AND source_id = ?").run(target.id);
 
     // 旧重建标记的 handoff 可能包含本次目标消息；先删旧标记，只保留基于
     // 当前有效历史重新生成的最新版本，避免隐藏派生记录把内容留在本地。
     db.prepare("DELETE FROM messages WHERE role = 'context_rebuild' AND session_id = ?").run(sessionId);
-    const scrubbed = db.prepare(
-      "UPDATE messages SET role = 'message_tombstone', content = 'null', tool_use_id = NULL, agent_meta = NULL, agent_kind = NULL, rewind_at = ? WHERE id = ? AND session_id = ? AND client_id = ? AND role IN ('user', 'assistant') AND rewind_at IS NULL",
-    ).run(updatedAt, target.id, sessionId, clientId);
-    if (scrubbed.changes !== 1) {
-      throw Object.assign(new Error(`Message 删除竞态: ${clientId}`), { code: 'PRECONDITION_FAILED' });
+    const scrubTarget = db.prepare(
+      "UPDATE messages SET role = 'message_tombstone', content = 'null', tool_use_id = NULL, agent_meta = NULL, agent_kind = NULL, rewind_at = ? WHERE id = ? AND session_id = ? AND client_id = ? AND role IN ('user', 'assistant', 'tool_use', 'tool_result', 'ask_user', 'plan_review', 'thinking', 'error') AND rewind_at IS NULL",
+    );
+    for (const target of targets) {
+      const scrubbed = scrubTarget.run(updatedAt, target.id, sessionId, target.clientId);
+      if (scrubbed.changes !== 1) {
+        throw Object.assign(new Error(`Message 删除竞态: ${target.clientId}`), {
+          code: 'PRECONDITION_FAILED',
+        });
+      }
     }
     const sessionResult = db.prepare(
       'UPDATE sessions SET sdk_session_id = NULL, updated_at = ? WHERE id = ?',
@@ -143,7 +170,12 @@ function messageDelete(db: Database.Database, args: unknown): { messageId: strin
     db.prepare(
       "INSERT INTO messages (id, client_id, session_id, role, content, created_at, rewind_at) VALUES (?, ?, ?, 'context_rebuild', ?, ?, ?)",
     ).run(markerId, markerClientId, sessionId, markerContent, markerCreatedAt, markerCreatedAt);
-    return { messageId: target.id };
+    return {
+      messages: targets.map((target) => ({
+        messageId: target.id,
+        clientId: target.clientId,
+      })),
+    };
   });
   return transaction();
 }

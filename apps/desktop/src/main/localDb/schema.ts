@@ -325,7 +325,7 @@ export const messages = sqliteTable(
       // content 存 { fromAgentKind, toAgentKind, fromModel, toModel, handoff }。
       // handoff 交接文本只进这里(供 UI 展开查看/debug),不作为可见消息渲染正文,
       // 也不落 user 消息——wire 注入与显示分离。
-      // 'context_rebuild':单条消息内容删除后的内部重建标记。rewind_at 固定非 NULL,
+      // 'context_rebuild':消息内容删除后的内部重建标记。rewind_at 固定非 NULL,
       // 所有普通历史读取都不可见；content.handoff 只在下一次发送的 wire 前缀消费。
       // 'message_tombstone':被删除消息的无内容墓碑，保留 id/client_id 仅用于阻止
       // 外部原生 transcript importer 把同一消息重新导入；正文/元数据均已清空。

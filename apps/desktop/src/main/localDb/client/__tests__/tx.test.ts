@@ -699,13 +699,16 @@ describe('db worker tx handlers', () => {
     });
   });
 
-  it('message.delete scrubs only the target and invalidates native context atomically', async () => {
+  it('message.delete scrubs the selected AI round and invalidates native context atomically', async () => {
     await withClient(async (client) => {
       await seedSession(client, 's1');
       await client.exec('UPDATE sessions SET sdk_session_id = ? WHERE id = ?', ['old-native', 's1']);
       for (const [id, role, createdAt] of [
         ['before', 'user', 100],
         ['target', 'assistant', 200],
+        ['thinking', 'thinking', 225],
+        ['auto-resume', 'user', 250],
+        ['tool', 'tool_result', 275],
         ['after', 'user', 300],
       ] as const) {
         await client.exec(
@@ -719,9 +722,9 @@ describe('db worker tx handlers', () => {
       );
       await client.exec('INSERT INTO chat_vec (rowid, embedding) VALUES (?, ?)', [job.lastInsertRowid, Buffer.from([1, 2, 3])]);
 
-      await client.tx('message.delete', {
+      await expect(client.tx('message.delete', {
         sessionId: 's1',
-        clientId: 'target',
+        clientIds: ['target', 'thinking', 'auto-resume', 'tool'],
         contextMarker: {
           id: 'ctx-id',
           clientId: 'ctx-client',
@@ -729,6 +732,13 @@ describe('db worker tx handlers', () => {
           createdAt: 400,
         },
         updatedAt: 500,
+      })).resolves.toEqual({
+        messages: [
+          { messageId: 'target', clientId: 'target' },
+          { messageId: 'thinking', clientId: 'thinking' },
+          { messageId: 'auto-resume', clientId: 'auto-resume' },
+          { messageId: 'tool', clientId: 'tool' },
+        ],
       });
 
       await expect(client.query<{
@@ -743,6 +753,9 @@ describe('db worker tx handlers', () => {
       )).resolves.toEqual([
         { id: 'before', role: 'user', content: '"before"', agent_meta: null, rewind_at: null },
         { id: 'target', role: 'message_tombstone', content: 'null', agent_meta: null, rewind_at: 500 },
+        { id: 'thinking', role: 'message_tombstone', content: 'null', agent_meta: null, rewind_at: 500 },
+        { id: 'auto-resume', role: 'message_tombstone', content: 'null', agent_meta: null, rewind_at: 500 },
+        { id: 'tool', role: 'message_tombstone', content: 'null', agent_meta: null, rewind_at: 500 },
         { id: 'after', role: 'user', content: '"after"', agent_meta: null, rewind_at: null },
         {
           id: 'ctx-id',
@@ -761,17 +774,17 @@ describe('db worker tx handlers', () => {
     });
   });
 
-  it('message.delete rejects non-conversation rows without clearing the sdk binding', async () => {
+  it('message.delete rejects non-deletable rows without clearing the sdk binding', async () => {
     await withClient(async (client) => {
       await seedSession(client, 's1');
       await client.exec('UPDATE sessions SET sdk_session_id = ? WHERE id = ?', ['old-native', 's1']);
       await client.exec(
         'INSERT INTO messages (id, client_id, session_id, role, content, created_at) VALUES (?, ?, ?, ?, ?, ?)',
-        ['tool', 'tool', 's1', 'tool_use', '{}', 100],
+        ['switch', 'switch', 's1', 'agent_switch', '{}', 100],
       );
       await expect(client.tx('message.delete', {
         sessionId: 's1',
-        clientId: 'tool',
+        clientIds: ['switch'],
         contextMarker: {
           id: 'ctx-id',
           clientId: 'ctx-client',

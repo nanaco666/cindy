@@ -3752,11 +3752,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     closeSession: (sessionId: string, opts?: { preserveWorkspace?: boolean }): Promise<void> =>
       ipcRenderer.invoke('maker:close-session', sessionId, opts),
 
-    /** 删除单条消息并让下一次发送从剩余本地历史重建 Agent 上下文。 */
+    /** 删除 user 目标行或 assistant 所属整轮输出，并从剩余本地历史重建 Agent 上下文。 */
     deleteMessage: (
       sessionId: string,
       clientId: string,
-    ): Promise<{ sessionId: string; clientId: string }> =>
+    ): Promise<{ sessionId: string; clientId: string; clientIds: string[] }> =>
       ipcRenderer.invoke('maker:message:delete', sessionId, clientId),
 
     listActive: (): Promise<Array<{

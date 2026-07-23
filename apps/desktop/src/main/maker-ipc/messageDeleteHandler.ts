@@ -1,6 +1,6 @@
 /**
- * 单条聊天消息删除：本地清除目标正文/元数据，保留无内容墓碑与后续可见消息，并让下一次发送从
- * 删除后的本地历史重建原生 Agent 上下文。
+ * 聊天消息删除：user 只清目标行；assistant 清除同一真实用户轮内的全部 AI 产出。
+ * 本地保留无内容墓碑与其它轮次，并让下一次发送从删除后的本地历史重建原生 Agent 上下文。
  *
  * Claude/Codex 都不能在既有原生 transcript/thread 中间挖掉任意一行；因此本
  * handler 先关闭 idle live session，再由 DB 原子事务清除消息内容、清 sdkSessionId、
@@ -24,7 +24,7 @@ interface MessageDeleteSessionRow {
 
 interface MessageDeleteCommittedPayload {
   sessionId: string;
-  clientId: string;
+  deletedClientIds: string[];
   updatedAt: number;
   preview: string | null;
   messageCount: number;
@@ -35,18 +35,25 @@ export interface MessageDeleteHandlerDeps {
   getMessage(
     sessionId: string,
     clientId: string,
-  ): Promise<{ id: string; role: 'user' | 'assistant' } | null>;
+  ): Promise<{
+    id: string;
+    role: 'user' | 'assistant';
+    deletedClientIds: string[];
+  } | null>;
   listMessagesForContext(sessionId: string): Promise<ContextSourceMessage[]>;
   getLiveSession(sessionId: string): { isTurnRunning(): boolean } | null | undefined;
   hasBackgroundActivity(sessionId: string): boolean;
   closeSession(sessionId: string): Promise<void>;
   commitDeletion(
     sessionId: string,
-    clientId: string,
+    clientIds: string[],
     handoff: string,
   ): Promise<MessageDeleteCommittedPayload>;
   setPendingHandoff(sessionId: string, handoff: string): void;
-  onCommitted(payload: MessageDeleteCommittedPayload): void | Promise<void>;
+  onCommitted(
+    payload: MessageDeleteCommittedPayload,
+    requestedClientId: string,
+  ): void | Promise<void>;
   withCloseSuppressed<T>(sessionId: string, fn: () => Promise<T>): Promise<T>;
   log: {
     info(message: string, fields?: Record<string, unknown>): void;
@@ -60,7 +67,7 @@ function engineLabel(agentKind: string): string {
 export async function performMessageDeletion(
   deps: MessageDeleteHandlerDeps,
   params: { sessionId: unknown; clientId: unknown },
-): Promise<{ sessionId: string; clientId: string }> {
+): Promise<{ sessionId: string; clientId: string; clientIds: string[] }> {
   const { sessionId, clientId } = params;
   if (typeof sessionId !== 'string' || sessionId.length === 0) {
     throwIpcError('INVALID_PARAMS', 'sessionId required');
@@ -89,7 +96,8 @@ export async function performMessageDeletion(
   }
 
   const source = await deps.listMessagesForContext(sessionId);
-  const remaining = source.filter((message) => message.clientId !== clientId);
+  const deletedClientIds = new Set(target.deletedClientIds);
+  const remaining = source.filter((message) => !deletedClientIds.has(message.clientId));
   const label = engineLabel(sessionRow.agentKind);
   const handoff = buildHandoffText(remaining, {
     fromLabel: label,
@@ -110,16 +118,25 @@ export async function performMessageDeletion(
     }
     if (currentLive) await deps.closeSession(sessionId);
 
-    const committed = await deps.commitDeletion(sessionId, clientId, handoff);
+    const committed = await deps.commitDeletion(
+      sessionId,
+      target.deletedClientIds,
+      handoff,
+    );
     deps.setPendingHandoff(sessionId, handoff);
-    await deps.onCommitted(committed);
+    await deps.onCommitted(committed, clientId);
     deps.log.info('message delete committed; native context will rebuild on next send', {
       sessionId,
       clientId,
       deletedRole: target.role,
+      deletedMessages: committed.deletedClientIds.length,
       remainingMessages: remaining.length,
     });
-    return { sessionId, clientId };
+    return {
+      sessionId,
+      clientId,
+      clientIds: committed.deletedClientIds,
+    };
   });
 }
 

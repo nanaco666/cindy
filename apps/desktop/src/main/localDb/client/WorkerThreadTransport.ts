@@ -342,7 +342,16 @@ function sessionAgentSwitchFallback(readyDb, args) {
 function messageDelete(readyDb, args) {
   const payload = asRecord(args, 'message.delete args');
   const sessionId = expectString(payload.sessionId, 'sessionId');
-  const clientId = expectString(payload.clientId, 'clientId');
+  const clientIds = [...new Set(
+    expectArray(payload.clientIds, 'clientIds').map((value) =>
+      expectString(value, 'clientId'),
+    ),
+  )];
+  if (clientIds.length === 0) {
+    throw Object.assign(new Error('message.delete requires at least one clientId'), {
+      code: 'INVALID_ARGS',
+    });
+  }
   const marker = asRecord(payload.contextMarker, 'contextMarker');
   const markerId = expectString(marker.id, 'contextMarker.id');
   const markerClientId = expectString(marker.clientId, 'contextMarker.clientId');
@@ -351,42 +360,55 @@ function messageDelete(readyDb, args) {
   const updatedAt = expectNumber(payload.updatedAt, 'updatedAt');
 
   return readyDb.transaction(() => {
-    const target = readyDb.prepare(
-      "SELECT id FROM messages WHERE session_id = ? AND client_id = ? AND role IN ('user', 'assistant') AND rewind_at IS NULL LIMIT 1",
-    ).get(sessionId, clientId);
-    if (!target) {
-      throw Object.assign(new Error('Message 不存在或不可删除: ' + clientId), { code: 'NOT_FOUND' });
-    }
+    const selectTarget = readyDb.prepare(
+      "SELECT id, client_id AS clientId FROM messages WHERE session_id = ? AND client_id = ? AND role IN ('user', 'assistant', 'tool_use', 'tool_result', 'ask_user', 'plan_review', 'thinking', 'error') AND rewind_at IS NULL LIMIT 1",
+    );
+    const targets = clientIds.map((clientId) => {
+      const target = selectTarget.get(sessionId, clientId);
+      if (!target) {
+        throw Object.assign(new Error('Message 不存在或不可删除: ' + clientId), {
+          code: 'NOT_FOUND',
+        });
+      }
+      return target;
+    });
 
-    // 向量只保存语义而非原文，但也属于该消息的本地派生数据；先按 job 记录
-    // 清各 vec 表，再删 job。缺失的旧 vec 表按已经清理处理，不能反向阻断正文删除。
-    const jobs = readyDb.prepare(
-      "SELECT rowid, vec_table AS vecTable FROM embedding_jobs WHERE source = 'chat' AND source_id = ?",
-    ).all(target.id);
-    const deleteVecByTable = new Map();
-    for (const job of jobs) {
-      assertIdentifier(job.vecTable);
-      if (!readyDb.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(job.vecTable)) {
-        continue;
+    for (const target of targets) {
+      // 向量只保存语义而非原文，但也属于该消息的本地派生数据；先按 job 记录
+      // 清各 vec 表，再删 job。缺失的旧 vec 表按已经清理处理，不能反向阻断正文删除。
+      const jobs = readyDb.prepare(
+        "SELECT rowid, vec_table AS vecTable FROM embedding_jobs WHERE source = 'chat' AND source_id = ?",
+      ).all(target.id);
+      const deleteVecByTable = new Map();
+      for (const job of jobs) {
+        assertIdentifier(job.vecTable);
+        if (!readyDb.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(job.vecTable)) {
+          continue;
+        }
+        let stmt = deleteVecByTable.get(job.vecTable);
+        if (!stmt) {
+          stmt = readyDb.prepare('DELETE FROM "' + job.vecTable + '" WHERE rowid = ?');
+          deleteVecByTable.set(job.vecTable, stmt);
+        }
+        stmt.run(job.rowid);
       }
-      let stmt = deleteVecByTable.get(job.vecTable);
-      if (!stmt) {
-        stmt = readyDb.prepare('DELETE FROM "' + job.vecTable + '" WHERE rowid = ?');
-        deleteVecByTable.set(job.vecTable, stmt);
-      }
-      stmt.run(job.rowid);
+      readyDb.prepare("DELETE FROM embedding_jobs WHERE source = 'chat' AND source_id = ?").run(target.id);
     }
-    readyDb.prepare("DELETE FROM embedding_jobs WHERE source = 'chat' AND source_id = ?").run(target.id);
 
     readyDb.prepare("DELETE FROM messages WHERE role = 'context_rebuild' AND session_id = ?").run(sessionId);
     // 保留不含正文/元数据的最小 tombstone，阻止外部 Claude/Codex transcript
     // importer 下次 messages:list 时把同一 clientId 重新导入；本地有效记录中
     // 消息内容已物理清空，普通历史读取因 rewind_at 非空完全不可见。
-    const scrubbed = readyDb.prepare(
-      "UPDATE messages SET role = 'message_tombstone', content = 'null', tool_use_id = NULL, agent_meta = NULL, agent_kind = NULL, rewind_at = ? WHERE id = ? AND session_id = ? AND client_id = ? AND role IN ('user', 'assistant') AND rewind_at IS NULL",
-    ).run(updatedAt, target.id, sessionId, clientId);
-    if (scrubbed.changes !== 1) {
-      throw Object.assign(new Error('Message 删除竞态: ' + clientId), { code: 'PRECONDITION_FAILED' });
+    const scrubTarget = readyDb.prepare(
+      "UPDATE messages SET role = 'message_tombstone', content = 'null', tool_use_id = NULL, agent_meta = NULL, agent_kind = NULL, rewind_at = ? WHERE id = ? AND session_id = ? AND client_id = ? AND role IN ('user', 'assistant', 'tool_use', 'tool_result', 'ask_user', 'plan_review', 'thinking', 'error') AND rewind_at IS NULL",
+    );
+    for (const target of targets) {
+      const scrubbed = scrubTarget.run(updatedAt, target.id, sessionId, target.clientId);
+      if (scrubbed.changes !== 1) {
+        throw Object.assign(new Error('Message 删除竞态: ' + target.clientId), {
+          code: 'PRECONDITION_FAILED',
+        });
+      }
     }
     const sessionResult = readyDb.prepare(
       'UPDATE sessions SET sdk_session_id = NULL, updated_at = ? WHERE id = ?',
@@ -397,7 +419,12 @@ function messageDelete(readyDb, args) {
     readyDb.prepare(
       "INSERT INTO messages (id, client_id, session_id, role, content, created_at, rewind_at) VALUES (?, ?, ?, 'context_rebuild', ?, ?, ?)",
     ).run(markerId, markerClientId, sessionId, markerContent, markerCreatedAt, markerCreatedAt);
-    return { messageId: target.id };
+    return {
+      messages: targets.map((target) => ({
+        messageId: target.id,
+        clientId: target.clientId,
+      })),
+    };
   })();
 }
 

@@ -5445,7 +5445,10 @@ export default function SessionScreen() {
 
   const deleteMessage = useCallback((clientId: string) => {
     if (!deviceId || messageActionBusy) return;
-    Alert.alert('删除这条消息？', '删除后会从这台电脑的本地对话记录移除，下一次发送会用剩余历史重建上下文。', [
+    Alert.alert('删除本条对话？', [
+      '用户消息只删除本条；AI 消息会删除上一次用户输入之后产生的整轮输出。',
+      '之后的对话继续保留。下次发送时，AI 上下文会从剩余记录重建。',
+    ].join(''), [
       { text: '取消', style: 'cancel' },
       {
         text: '删除',
@@ -5455,8 +5458,17 @@ export default function SessionScreen() {
             setMessageActionBusy(clientId);
             setError(null);
             try {
-              await maker.deleteMessage(sessionId, clientId);
-              remoteSessionStore.removeMessage(sessionId, clientId, deviceId);
+              const result = await maker.deleteMessage(sessionId, clientId);
+              const returnedClientIds = Array.isArray(result.clientIds)
+                ? result.clientIds.filter((value): value is string =>
+                    typeof value === 'string' && value.length > 0,
+                  )
+                : [];
+              remoteSessionStore.removeMessages(
+                sessionId,
+                returnedClientIds.length > 0 ? returnedClientIds : [clientId],
+                deviceId,
+              );
             } catch (err) {
               setError(formatRemoteError(err));
             } finally {

@@ -134,6 +134,20 @@ describe('mobile session main layer desktop-first noise budget', () => {
     expect(source).not.toContain('searchSheetEyebrow');
   });
 
+  it('mirrors the complete grouped deletion returned by the desktop host', () => {
+    const source = readFileSync(resolve(process.cwd(), 'app/sessions/[sessionId].tsx'), 'utf8');
+    const deleteStart = source.indexOf('const deleteMessage = useCallback');
+    const deleteEnd = source.indexOf('const confirmRewind', deleteStart);
+    const deleteSource = source.slice(deleteStart, deleteEnd);
+
+    expect(deleteSource).toContain("Alert.alert('删除本条对话？'");
+    expect(deleteSource).toContain('用户消息只删除本条；AI 消息会删除上一次用户输入之后产生的整轮输出。');
+    expect(deleteSource).toContain('const result = await maker.deleteMessage(sessionId, clientId);');
+    expect(deleteSource).toContain('Array.isArray(result.clientIds)');
+    expect(deleteSource).toContain('remoteSessionStore.removeMessages(');
+    expect(deleteSource).toContain('returnedClientIds.length > 0 ? returnedClientIds : [clientId]');
+  });
+
   it('renders system cards by their desktop title without a generic debug eyebrow', () => {
     const source = readFileSync(resolve(process.cwd(), 'src/session/MessageRenderer.tsx'), 'utf8');
     const desktopSource = readFileSync(resolve(process.cwd(), '../../apps/desktop/src/renderer/components/chat/SystemCard.tsx'), 'utf8');

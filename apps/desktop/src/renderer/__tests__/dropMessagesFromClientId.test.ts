@@ -61,10 +61,12 @@ vi.mock('@/lib/composerDraftStore', () => ({
 import { makerChatStore } from '@/lib/makerChatStore';
 
 let messageCreatedHandler: ((payload: unknown) => void) | null = null;
+let messageDeletedHandler: ((payload: unknown) => void) | null = null;
 let makerEventHandler: ((payload: unknown) => void) | null = null;
 
 function installElectronBridge(): void {
   messageCreatedHandler = null;
+  messageDeletedHandler = null;
   makerEventHandler = null;
   const w = globalThis as unknown as { window?: Record<string, unknown> };
   if (!w.window) w.window = {};
@@ -85,6 +87,10 @@ function installElectronBridge(): void {
       messages: {
         onCreated: vi.fn((cb: (payload: unknown) => void) => {
           messageCreatedHandler = cb;
+          return vi.fn();
+        }),
+        onDeleted: vi.fn((cb: (payload: unknown) => void) => {
+          messageDeletedHandler = cb;
           return vi.fn();
         }),
       },
@@ -143,6 +149,41 @@ function seedTaskUpdate(sid: string, taskId: string): void {
 }
 
 describe('makerChatStore.dropMessagesFromClientId', () => {
+  it('整轮删除推送一次移除全部 AI 行，并清掉关联 task update', () => {
+    const sid = `delete-${Math.random().toString(36).slice(2, 8)}`;
+    seedConversation(sid);
+    seedTaskUpdate(sid, 'a1');
+
+    messageDeletedHandler?.({
+      sessionId: sid,
+      clientId: 'a2',
+      clientIds: ['a1', 'a2'],
+    });
+
+    const snap = makerChatStore.getSnapshot(sid);
+    expect(snap.messages.map((message) => message.clientId)).toEqual(['u1', 'u2']);
+    expect(snap.taskUpdates?.size ?? 0).toBe(0);
+  });
+
+  it('被删消息不在当前窗口时仍清掉同 id 的孤儿 task update', () => {
+    const sid = `delete-orphan-${Math.random().toString(36).slice(2, 8)}`;
+    seedConversation(sid);
+    seedTaskUpdate(sid, 'orphan-task');
+    const beforeClientIds = makerChatStore
+      .getSnapshot(sid)
+      .messages.map((message) => message.clientId);
+
+    messageDeletedHandler?.({
+      sessionId: sid,
+      clientId: 'orphan-task',
+      clientIds: ['orphan-task'],
+    });
+
+    const snap = makerChatStore.getSnapshot(sid);
+    expect(snap.messages.map((message) => message.clientId)).toEqual(beforeClientIds);
+    expect(snap.taskUpdates?.size ?? 0).toBe(0);
+  });
+
   it('从 target clientId(含)裁到尾 — 镜像 rewind.commit 的软删范围', () => {
     const sid = `drop-${Math.random().toString(36).slice(2, 8)}`;
     seedConversation(sid);

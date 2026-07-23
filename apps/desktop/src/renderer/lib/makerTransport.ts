@@ -202,11 +202,25 @@ export function dismissErrorMessageFor(sessionId: string, clientId: string): Pro
   return invokeRemote(deviceId, 'local-db:messages:dismiss-error', [sessionId, clientId]);
 }
 
-/** 单条消息内容删除：device-link 会话在被控端关闭原生上下文并改写真相库。 */
-export function deleteMessageFor(sessionId: string, clientId: string): Promise<unknown> {
+/** 消息删除：user 只删目标行，assistant 删除所属整轮输出。 */
+export interface MessageDeletionResult {
+  sessionId: string;
+  clientId: string;
+  /** 老被控端只回 clientId；新 host 返回本次原子删除的完整范围。 */
+  clientIds?: string[];
+}
+
+export function deleteMessageFor(
+  sessionId: string,
+  clientId: string,
+): Promise<MessageDeletionResult> {
   const deviceId = getSessionDeviceId(sessionId);
   if (!deviceId) return window.electronAPI.maker.deleteMessage(sessionId, clientId);
-  return invokeRemote(deviceId, 'maker:message:delete', [sessionId, clientId]);
+  return invokeRemote(
+    deviceId,
+    'maker:message:delete',
+    [sessionId, clientId],
+  ) as Promise<MessageDeletionResult>;
 }
 
 /** interrupted-turn-resume:中断提示「忽略」的显式确认(写一次 last_turn_ended_at),

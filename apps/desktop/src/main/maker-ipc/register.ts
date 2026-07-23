@@ -76,10 +76,10 @@ import { ensureDialogueWorkspaceDir, dialogueWorkspaceRootDir } from '../localDb
 import { healMissingDialogueWorkdir } from '../localDb/dialogueWorkdirSelfHeal.js';
 import {
   broadcastMessageDeleted,
-  commitSingleMessageDeletion,
+  commitMessageDeletion,
   createMessage as createDbMessage,
   findParkedEngineSession,
-  getDeletableMessage,
+  getMessageDeletionTarget,
   listMessagesForAgentHandoff,
 } from '../localDb/ipc/messages.js';
 import { visibleMessageTextForConversationSearch } from '../localDb/conversationSearch.pure.js';
@@ -3953,15 +3953,22 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
         .limit(1);
       return row ?? null;
     },
-    getMessage: getDeletableMessage,
+    getMessage: getMessageDeletionTarget,
     listMessagesForContext: (sessionId) => listMessagesForAgentHandoff(sessionId, 400),
     getLiveSession: (sessionId) => maker.getSession(sessionId),
     hasBackgroundActivity: getClaudeSessionBackgroundActivity,
     closeSession: (sessionId) => maker.closeSession(sessionId),
-    commitDeletion: commitSingleMessageDeletion,
+    commitDeletion: commitMessageDeletion,
     setPendingHandoff: (sessionId, handoff) => agentHandoffPending.set(sessionId, handoff),
-    onCommitted: ({ sessionId, clientId, updatedAt, preview, messageCount }) => {
-      broadcastMessageDeleted({ sessionId, clientId });
+    onCommitted: (
+      { sessionId, deletedClientIds, updatedAt, preview, messageCount },
+      requestedClientId,
+    ) => {
+      broadcastMessageDeleted({
+        sessionId,
+        clientId: requestedClientId,
+        clientIds: deletedClientIds,
+      });
       broadcastSessionPatched(sessionId, {
         sdkSessionId: null,
         updatedAt: new Date(updatedAt).toISOString(),

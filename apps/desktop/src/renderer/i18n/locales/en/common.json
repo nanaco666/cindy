@@ -3937,7 +3937,7 @@
       "forkCancel": "Cancel",
       "delete": "Delete this message",
       "deleteConfirmTitle": "Delete this message?",
-      "deleteConfirmDescription": "This deletes the message from the local session and keeps later messages. On the next send, the AI context is rebuilt from the remaining history.",
+      "deleteConfirmDescription": "A user message is removed on its own. For an AI message, the entire AI output after the preceding user input is removed. Later conversation stays in place. On the next send, the AI context is rebuilt from the remaining history.",
       "deleteConfirm": "Delete message",
       "deleteCancel": "Cancel",
       "deleteBusy": "Wait for the current response to finish before deleting a message.",
