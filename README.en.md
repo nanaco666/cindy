@@ -22,6 +22,10 @@
   🌐 <a href="https://cindy.com.cn">国内版</a> | <a href="https://cindy.app">海外版</a>
 </p>
 
+<p align="center">
+  ⬇️ <a href="https://cindy.com.cn/#download">China download</a> | <a href="https://cindy.app/#download">Global download</a>
+</p>
+
 Cindy runs locally on your own machine, uses your files and logged-in apps, and
 is powered by Claude Code and Codex as
 its underlying agent engines. It can drive your browser, computer, and phone,
@@ -30,14 +34,11 @@ coordinate multiple agents as a team, and dispatch tasks from IM and schedules.
 This repository is the open-source **client** for Cindy — the desktop and mobile
 apps plus their shared packages, organized as a pnpm monorepo.
 
-## Interface preview
-
-<p align="center">
-  <img src="docs/assets/readme-cindy-ui-redacted.png" alt="Cindy desktop interface (privacy-redacted)" width="1200" />
-</p>
-
-> The screenshot masks account, project, session, and runtime details. It is
-> included only to show Cindy's interface structure and workflow.
+The client is free to use, and its source code is open under Apache-2.0. Charges
+apply only when you use Cindy-provided tokens or APIs. You can also configure
+your own API key. See the [China site](https://cindy.com.cn/#pricing) or the
+[global site](https://cindy.app/#pricing) for service details, pricing, and
+downloads.
 
 ## What's in this repo
 
@@ -50,11 +51,11 @@ apps plus their shared packages, organized as a pnpm monorepo.
 | `cindy-protocol/` | Wire protocol shared with the server (git submodule) |
 
 **Not in this repo:** the backend service (`cindy-server`) lives in a separate
-repository and is not part of this monorepo. The client is free software.
+repository and is not part of this monorepo.
 
 | Mode | Account requirement | Availability |
 | --- | --- | --- |
-| Hosted service | Cindy cloud account | Use Cindy's full hosted service. See the website for downloads and pricing. |
+| Hosted service | Cindy cloud account | Use Cindy's full hosted service. See [China pricing](https://cindy.com.cn/#pricing) or [global pricing](https://cindy.app/#pricing). |
 | Local mode | No Cindy sign-in required | Choose “Local mode” on the login screen to use local agents. Server-backed capabilities are unavailable in this mode. |
 
 ## Prerequisites

@@ -22,6 +22,10 @@
   🌐 <a href="https://cindy.com.cn">国内版</a> | <a href="https://cindy.app">海外版</a>
 </p>
 
+<p align="center">
+  ⬇️ <a href="https://cindy.com.cn/#download">国内版下载</a> | <a href="https://cindy.app/#download">海外版下载</a>
+</p>
+
 Cindy 运行在你自己的电脑上，使用你本地的文件和已登录的应用，底层由
 Claude Code 与 Codex 作为 agent 引擎驱动。
 她能操作浏览器、电脑和手机，以「多 agent 团队」协同工作，并支持从 IM 和定时任务派活。
@@ -29,13 +33,9 @@ Claude Code 与 Codex 作为 agent 引擎驱动。
 本仓库是 Cindy 的开源**客户端** —— 桌面端、手机端及其共享 packages，以 pnpm
 monorepo 组织。
 
-## 界面预览
-
-<p align="center">
-  <img src="docs/assets/readme-cindy-ui-redacted.png" alt="Cindy 桌面端界面（已脱敏）" width="1200" />
-</p>
-
-> 截图已遮蔽账号、项目、会话和运行信息，仅用于展示 Cindy 的界面结构与工作方式。
+客户端本身免费使用，源码以 Apache-2.0 开源。只有使用 Cindy 提供的 Token / API
+时才需要按官网规则付费；你也可以配置自己的 API Key。具体的服务说明、价格和下载
+入口请按所在区域查看[国内官网](https://cindy.com.cn/#pricing)或[海外官网](https://cindy.app/#pricing)。
 
 ## 本仓包含什么
 
@@ -47,11 +47,11 @@ monorepo 组织。
 | `apps/*-bin` | 随桌面端打包的 agent / 工具二进制（claude-code、codex、ripgrep、android-platform-tools） |
 | `cindy-protocol/` | 与服务端共用的协议（git submodule） |
 
-**服务端不在本仓库：** 服务端（`cindy-server`）位于独立仓库，不属于本 monorepo。软件本身免费。
+**服务端不在本仓库：** 服务端（`cindy-server`）位于独立仓库，不属于本 monorepo。
 
 | 使用方式 | 账号要求 | 可用范围 |
 | --- | --- | --- |
-| 远程托管 | Cindy 云端账号 | 使用 Cindy 的完整托管服务。下载方式与定价见官网。 |
+| 远程托管 | Cindy 云端账号 | 使用 Cindy 的完整托管服务；[国内定价](https://cindy.com.cn/#pricing) · [海外定价](https://cindy.app/#pricing)。 |
 | 本地模式 | 无需登录 Cindy 账号 | 在登录页选择「本地模式」即可使用本机 agent 功能。依赖服务端的能力在该模式下不可用。 |
 
 ## 前置要求
