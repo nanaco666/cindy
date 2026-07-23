@@ -6,7 +6,7 @@ describe("isValidEmail", () => {
   it("accepts well-formed addresses", () => {
     for (const ok of [
       "a@b.co",
-      "praise@example.com",
+      "sam@example.com",
       "user.name+tag@sub.domain.io",
       "USER@EXAMPLE.COM",
       "x_y@z-w.com",
@@ -18,7 +18,7 @@ describe("isValidEmail", () => {
   it("rejects the design's malformed samples and other bad shapes", () => {
     for (const bad of [
       "2222@", // figma 347:1727 反例：@ 后无 domain
-      "Praise@", // 同上
+      "Sam@", // 同上
       "", // 空
       "   ", // 纯空白
       "plainstring", // 无 @
@@ -34,7 +34,7 @@ describe("isValidEmail", () => {
   });
 
   it("trims surrounding whitespace before judging", () => {
-    expect(isValidEmail("  praise@example.com  ")).toBe(true);
+    expect(isValidEmail("  sam@example.com  ")).toBe(true);
     expect(isValidEmail("\tuser@ex.io\n")).toBe(true);
   });
 });

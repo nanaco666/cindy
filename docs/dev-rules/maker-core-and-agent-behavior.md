@@ -92,7 +92,7 @@ event loop（`AsyncQueue`）与 translator 是**每事件／每 token 都过一�
 
 ## 4. system prompt 改动门禁
 
-**任何人都不得擅自修改 Cindy 的 system prompt；需要改动必须先与 owner（Lizi）讨论
+**任何人都不得擅自修改 Cindy 的 system prompt；需要改动必须先与仓库维护者讨论
 确认后才能动手。** 未经确认的 system prompt 改动一律不许提 PR 或直推。
 
 - **范围**：随每个 Agent 会话下发给模型、决定其全局行为的那部分文本，包括

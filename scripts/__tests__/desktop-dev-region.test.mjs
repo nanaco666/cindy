@@ -33,7 +33,7 @@ test("desktop dev region rejects missing, duplicate, and unsupported values", ()
   );
   assert.throws(
     () => resolveDesktopDevRegion(["--region=us"], {}),
-    /expected cn or global/,
+    /expected cn, global or dev/,
   );
   assert.throws(
     () => resolveDesktopDevRegion(["--region=cn", "--region", "global"], {}),

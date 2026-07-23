@@ -12,7 +12,7 @@ Tauri 实现）与 Electron 侧的更新服务（`apps/desktop/src/main/updateSe
 
 ## 核心门禁
 
-**任何对 `cindy-updater` 及其相关更新链路的修改，都必须先与 owner（Lizi）确认后再
+**任何对 `cindy-updater` 及其相关更新链路的修改，都必须先与仓库维护者确认后再
 动手。** 未经确认不得提 PR 或直推。
 
 - 收到「改更新器 / 调整更新逻辑 / 改更新服务」的诉求时**先停下**，不要直接动代码。
