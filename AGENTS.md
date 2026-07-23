@@ -47,6 +47,9 @@
   `docs/dev-rules/plugin-security-and-authoring.md`。
 - 修改客户端自动更新链路（`cindy-updater` 或 Electron 侧更新服务）前，必须先读
   `docs/dev-rules/cindy-updater.md`。
+- 新增或修改 Desktop 日志、IPC 错误处理、main 侧业务逻辑与测试、跨平台（macOS／
+  Windows）行为，或任何 UI 文案的 i18n 落地前，必须先读
+  `docs/dev-rules/engineering-conventions.md`。
 - 其余规则仍在逐项迁移；专题尚未建立时按下方“重构期间”处理。
 
 ## 通用工作流程

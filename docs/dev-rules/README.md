@@ -36,5 +36,8 @@
   编写手册（`FORGE_GUIDE`）同步。
 - [`cindy-updater.md`](cindy-updater.md)：客户端自动更新链路的 owner 确认门禁与高风险
   约束。
+- [`engineering-conventions.md`](engineering-conventions.md)：统一日志、IPC 错误协议
+  （`throwIpcError`）、main 侧默认带测试、macOS／Windows 双端兼容，以及 UI 文案的
+  i18n 落地与 `pnpm check:i18n` 门禁。
 
 其他旧规则正在从仓库根 `AGENTS-old.md` 逐项盘点迁入。
