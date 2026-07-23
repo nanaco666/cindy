@@ -1340,6 +1340,16 @@ interface PendingRpc {
   sentAtMs: number;
 }
 
+interface QueuedRpc {
+  req: RpcRequest;
+  transferList: unknown[];
+  resolve: (value: unknown) => void;
+  reject: (err: Error) => void;
+  /** RPC 总预算从进入 transport 开始计,而不是等 dispatch 后才开始。 */
+  budgetStartedAtMs: number;
+  queueTimeout?: ReturnType<typeof setTimeout>;
+}
+
 /**
  * 睡眠判定余量:超时定时器实际触发时刻比预算晚出这么多,只可能是进程被整体
  * 挂起过(系统睡眠 / dark wake 间隙),不是事件循环正常的毫秒级调度延迟。
@@ -1386,16 +1396,26 @@ export interface WorkerThreadTransportOptions {
   workerScriptPath?: string;
   /** 临时回滚口：跳过真实 worker 文件，走旧 inline worker。 */
   useInlineWorker?: boolean;
+  /** DB worker 同时在途 RPC 上限。默认值覆盖正常 burst，测试可缩小。 */
+  maxInFlightRpcs?: number;
+  /** 背压等待队列上限；超出后快速拒绝，避免异常生产者耗尽主进程内存。 */
+  maxQueuedRpcs?: number;
+  /** 单个 RPC 从入队到完成的总预算；生产默认 30s，测试可缩短。 */
+  rpcTimeoutMs?: number;
 }
 
 export class WorkerThreadTransport implements DbTransport {
   private static readonly RPC_TIMEOUT_MS = 30_000;
+  private static readonly DEFAULT_MAX_IN_FLIGHT_RPCS = 128;
+  private static readonly DEFAULT_MAX_QUEUED_RPCS = 512;
 
   private worker: Worker;
   private nextId = 1;
   private closed = false;
+  private closing = false;
   private vecLoaded = false;
   private readonly pending = new Map<number, PendingRpc>();
+  private readonly queued: QueuedRpc[] = [];
   private readonly eventListeners = new Map<EventName, Set<(payload: unknown) => void>>();
   private readonly terminatedListeners = new Set<(info: DbTransportTerminationInfo) => void>();
   private readonly opts: WorkerThreadTransportOptions;
@@ -1406,55 +1426,34 @@ export class WorkerThreadTransport implements DbTransport {
   }
 
   send<R = unknown>(op: string, args?: unknown, transferList?: unknown[]): Promise<R> {
-    if (this.closed) {
+    if (this.closed || this.closing) {
       return Promise.reject(new Error('db worker transport is closed'));
     }
     const id = this.nextId++;
     const req: RpcRequest = { id, op, args };
     return new Promise<R>((resolve, reject) => {
-      const onTimeout = (): void => {
-        const pending = this.pending.get(id);
-        if (!pending) return;
-        const verdict = evaluateRpcTimeout(
-          pending.sentAtMs,
-          Date.now(),
-          WorkerThreadTransport.RPC_TIMEOUT_MS,
-        );
-        if (verdict.kind === 'rearm') {
-          // 跨睡眠假超时:重置预算续等,请求在唤醒后照常完成或在真超时时拒绝。
-          this.emitClientLog('warn', {
-            event: 'rpc.timeout.rearmedAfterSleep',
-            op,
-            id,
-            wallElapsedMs: verdict.wallElapsedMs,
-          });
-          pending.sentAtMs = Date.now();
-          pending.timeout = setTimeout(onTimeout, WorkerThreadTransport.RPC_TIMEOUT_MS);
-          return;
-        }
-        this.pending.delete(id);
-        pending.reject(
-          new Error(
-            `db worker RPC timeout: op="${op}" id=${id} exceeded ${WorkerThreadTransport.RPC_TIMEOUT_MS / 1000}s` +
-              ` wallElapsedMs=${verdict.wallElapsedMs}`,
-          ),
-        );
-      };
-      const timeout = setTimeout(onTimeout, WorkerThreadTransport.RPC_TIMEOUT_MS);
-      this.pending.set(id, {
+      const queued: QueuedRpc = {
+        req,
+        transferList: transferList ?? [],
         resolve: resolve as (value: unknown) => void,
         reject,
-        timeout,
-        sentAtMs: Date.now(),
-      });
-      try {
-        this.worker.postMessage(req, (transferList ?? []) as never);
-      } catch (err) {
-        const pending = this.pending.get(id);
-        if (pending) clearTimeout(pending.timeout);
-        this.pending.delete(id);
-        reject(err instanceof Error ? err : new Error(String(err)));
+        budgetStartedAtMs: Date.now(),
+      };
+      if (this.pending.size < this.maxInFlightRpcs) {
+        this.dispatch(queued);
+        return;
       }
+      if (this.queued.length >= this.maxQueuedRpcs) {
+        reject(
+          new Error(
+            `db worker RPC queue overloaded: op="${op}" inFlight=${this.pending.size}` +
+              ` queued=${this.queued.length}`,
+          ),
+        );
+        return;
+      }
+      this.queued.push(queued);
+      this.armQueuedTimeout(queued);
     });
   }
 
@@ -1476,9 +1475,14 @@ export class WorkerThreadTransport implements DbTransport {
   }
 
   async close(): Promise<void> {
-    if (this.closed) return;
+    if (this.closed || this.closing) return;
+    const canCloseGracefully = this.pending.size === 0 && this.queued.length === 0;
+    const gracefulClose = canCloseGracefully ? this.send('closeDb') : null;
+    // closeDb 仅在 transport 空闲时直发。已有 backlog 时不再把关闭请求排到队尾,
+    // 直接拒绝遗留工作并 terminate,避免登出 / 退出被慢 RPC 拖住。
+    this.closing = true;
     try {
-      await this.send('closeDb');
+      await gracefulClose;
     } catch {
       // Worker may already be down; terminate below still releases resources.
     } finally {
@@ -1494,6 +1498,105 @@ export class WorkerThreadTransport implements DbTransport {
 
   get isVecAvailable(): boolean {
     return this.vecLoaded;
+  }
+
+  private get maxInFlightRpcs(): number {
+    return this.opts.maxInFlightRpcs ?? WorkerThreadTransport.DEFAULT_MAX_IN_FLIGHT_RPCS;
+  }
+
+  private get maxQueuedRpcs(): number {
+    return this.opts.maxQueuedRpcs ?? WorkerThreadTransport.DEFAULT_MAX_QUEUED_RPCS;
+  }
+
+  private get rpcTimeoutMs(): number {
+    return this.opts.rpcTimeoutMs ?? WorkerThreadTransport.RPC_TIMEOUT_MS;
+  }
+
+  private armQueuedTimeout(item: QueuedRpc): void {
+    const onTimeout = (): void => {
+      const index = this.queued.indexOf(item);
+      if (index < 0) return;
+      const verdict = evaluateRpcTimeout(
+        item.budgetStartedAtMs,
+        Date.now(),
+        this.rpcTimeoutMs,
+      );
+      if (verdict.kind === 'rearm') {
+        item.budgetStartedAtMs = Date.now();
+        item.queueTimeout = setTimeout(onTimeout, this.rpcTimeoutMs);
+        return;
+      }
+      this.queued.splice(index, 1);
+      item.reject(
+        new Error(
+          `db worker RPC queue timeout: op="${item.req.op}" id=${item.req.id}` +
+            ` exceeded ${this.rpcTimeoutMs / 1000}s total budget`,
+        ),
+      );
+    };
+    item.queueTimeout = setTimeout(onTimeout, this.rpcTimeoutMs);
+  }
+
+  private dispatch(item: QueuedRpc): void {
+    const { id, op } = item.req;
+    if (item.queueTimeout) clearTimeout(item.queueTimeout);
+    const onTimeout = (): void => {
+      const pending = this.pending.get(id);
+      if (!pending) return;
+      const verdict = evaluateRpcTimeout(
+        pending.sentAtMs,
+        Date.now(),
+        this.rpcTimeoutMs,
+      );
+      if (verdict.kind === 'rearm') {
+        // 跨睡眠假超时:重置预算续等,请求在唤醒后照常完成或在真超时时拒绝。
+        this.emitClientLog('warn', {
+          event: 'rpc.timeout.rearmedAfterSleep',
+          op,
+          id,
+          wallElapsedMs: verdict.wallElapsedMs,
+        });
+        pending.sentAtMs = Date.now();
+        pending.timeout = setTimeout(onTimeout, this.rpcTimeoutMs);
+        return;
+      }
+      this.pending.delete(id);
+      pending.reject(
+        new Error(
+          `db worker RPC timeout: op="${op}" id=${id} exceeded ${this.rpcTimeoutMs / 1000}s` +
+            ` wallElapsedMs=${verdict.wallElapsedMs}`,
+        ),
+      );
+      this.drainQueue();
+    };
+    const budgetElapsedMs = Date.now() - item.budgetStartedAtMs;
+    const remainingBudgetMs = Math.max(
+      1,
+      this.rpcTimeoutMs - budgetElapsedMs,
+    );
+    const timeout = setTimeout(onTimeout, remainingBudgetMs);
+    this.pending.set(id, {
+      resolve: item.resolve,
+      reject: item.reject,
+      timeout,
+      sentAtMs: item.budgetStartedAtMs,
+    });
+    try {
+      this.worker.postMessage(item.req, item.transferList as never);
+    } catch (err) {
+      clearTimeout(timeout);
+      this.pending.delete(id);
+      item.reject(toError(err));
+      this.drainQueue();
+    }
+  }
+
+  private drainQueue(): void {
+    while (!this.closed && this.pending.size < this.maxInFlightRpcs) {
+      const next = this.queued.shift();
+      if (!next) return;
+      this.dispatch(next);
+    }
   }
 
   private spawnWorker(): Worker {
@@ -1559,6 +1662,7 @@ export class WorkerThreadTransport implements DbTransport {
         });
         pending.reject(err);
       }
+      this.drainQueue();
       return;
     }
 
@@ -1585,6 +1689,10 @@ export class WorkerThreadTransport implements DbTransport {
       pending.reject(err);
     }
     this.pending.clear();
+    for (const queued of this.queued.splice(0)) {
+      if (queued.queueTimeout) clearTimeout(queued.queueTimeout);
+      queued.reject(err);
+    }
   }
 
   private emitTerminated(info: DbTransportTerminationInfo): void {

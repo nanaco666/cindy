@@ -5,7 +5,10 @@ import { createElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { UseBrowserWebviewResult } from '../useBrowserWebview';
-import { useBrowserWebview } from '../useBrowserWebview';
+import {
+  BROWSER_NAVIGATION_FUSE_LIMIT,
+  useBrowserWebview,
+} from '../useBrowserWebview';
 
 interface MockWebview {
   addEventListener: ReturnType<typeof vi.fn>;
@@ -102,5 +105,55 @@ describe('useBrowserWebview', () => {
 
     expect(current().url).toBe('https://www.taptap.cn/');
     expect(current().isLoading).toBe(false);
+  });
+
+  it('does not publish redirect intermediates as committed URLs', () => {
+    let result: UseBrowserWebviewResult | null = null;
+    const current = () => {
+      if (result === null) throw new Error('hook result was not captured');
+      return result;
+    };
+    render(createElement(HookProbe, { onResult: (next) => { result = next; } }));
+
+    act(() => {
+      mockWebview.dispatch('did-redirect-navigation', {
+        url: 'https://accounts.example.com/authorize',
+      });
+    });
+    expect(current().url).toBe('https://www.taptap.cn/');
+
+    act(() => {
+      mockWebview.dispatch('did-navigate', {
+        url: 'https://www.taptap.cn/auth/callback',
+      });
+    });
+    expect(current().url).toBe('https://www.taptap.cn/auth/callback');
+  });
+
+  it('stops programmatic navigation bursts and reload clears the fuse', () => {
+    let result: UseBrowserWebviewResult | null = null;
+    const current = () => {
+      if (result === null) throw new Error('hook result was not captured');
+      return result;
+    };
+    render(createElement(HookProbe, { onResult: (next) => { result = next; } }));
+
+    act(() => {
+      for (let i = 0; i <= BROWSER_NAVIGATION_FUSE_LIMIT; i += 1) {
+        current().navigate(`https://example.com/${i}`);
+      }
+    });
+
+    expect(mockWebview.loadURL).toHaveBeenCalledTimes(BROWSER_NAVIGATION_FUSE_LIMIT);
+    expect(mockWebview.stop).toHaveBeenCalledOnce();
+    expect(current().crash).toEqual({ reason: 'navigation-loop' });
+    expect(current().isLoading).toBe(false);
+
+    act(() => current().reload());
+    expect(mockWebview.reload).toHaveBeenCalledOnce();
+    expect(current().crash).toBeNull();
+
+    act(() => current().navigate('https://example.com/recovered'));
+    expect(mockWebview.loadURL).toHaveBeenCalledTimes(BROWSER_NAVIGATION_FUSE_LIMIT + 1);
   });
 });

@@ -334,4 +334,24 @@ describe('BrowserTabBody navigation', () => {
     expect(browserNavigate).toHaveBeenCalledWith('https://accounts.taptap.cn/login');
     expect(patchState).not.toHaveBeenCalledWith({ url: 'about:blank' });
   });
+
+  it('never turns lagging persisted redirect state into a new navigation command', () => {
+    const login = 'http://127.0.0.1:3360/auth/login';
+    const authorize = 'http://127.0.0.1:3370/authorize?state=s';
+    const callback = 'http://127.0.0.1:3360/auth/callback?code=c&state=s';
+    const patchState = vi.fn();
+
+    browserState = makeBrowserState({ url: login, isLoading: true });
+    const view = render(renderBrowserTab(login, patchState));
+    browserNavigate.mockClear();
+
+    browserState = makeBrowserState({ url: authorize, isLoading: true });
+    view.rerender(renderBrowserTab(login, patchState));
+    browserState = makeBrowserState({ url: callback, isLoading: true });
+    view.rerender(renderBrowserTab(authorize, patchState));
+    browserState = makeBrowserState({ url: authorize, isLoading: true });
+    view.rerender(renderBrowserTab(callback, patchState));
+
+    expect(browserNavigate).not.toHaveBeenCalled();
+  });
 });

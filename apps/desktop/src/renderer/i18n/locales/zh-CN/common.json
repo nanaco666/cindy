@@ -3033,6 +3033,8 @@
         "crashedDesc": "网页进程意外终止,请重新加载",
         "unresponsiveTitle": "页面无响应",
         "unresponsiveDesc": "页面长时间未响应,可重新加载或稍候等待",
+        "navigationLoopTitle": "已停止重复跳转",
+        "navigationLoopDesc": "页面在短时间内反复跳转,已暂停导航。请重新加载页面后重试",
         "reload": "重新加载"
       }
     },

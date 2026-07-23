@@ -3034,6 +3034,8 @@
         "crashedDesc": "The page process terminated unexpectedly. Please reload.",
         "unresponsiveTitle": "Page unresponsive",
         "unresponsiveDesc": "The page has not responded for a while. Reload or wait a moment.",
+        "navigationLoopTitle": "Repeated Navigation Stopped",
+        "navigationLoopDesc": "The page navigated repeatedly in a short time. Reload the page to try again.",
         "reload": "Reload"
       }
     },
