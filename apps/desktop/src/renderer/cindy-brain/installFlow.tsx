@@ -18,8 +18,8 @@ import {
 import { ghostInstallErrorKey } from './installErrorKey';
 
 /**
- * 装入/更新意识的统一编排:inspect(验明正身)→ 确认弹窗 →
- * install / update。
+ * 装入/更新意识的统一编排:inspect(验明正身)→ Renderer 权限清单 →
+ * install / update。若含 Node，Main 会在真正写盘前再弹一次系统安全确认。
  *
  * 「装意识前弹确认」是 README 定下的安全原则:确认框展示的是**意识自称的身份**
  * (名字/版本/形态/是否带面板),不是文件名 —— 文件名可以随便改,身份卡不会陪它演。
@@ -71,25 +71,6 @@ function findInstalled(id: string): InstalledGhost | null {
   }
 }
 
-/**
- * Node 插件的第二次人工确认。第一层逐项权限清单说明“它要什么”，这一层用
- * 不会误解的直话确认“它拥有当前用户账号级本机权限”。每次安装/更新 Node
- * 代码都重新询问，不能用“以前同意过”替新版本背书。
- */
-async function confirmNodeRuntimeRisk(
-  manifest: GhostManifest,
-  deps: InstallFlowDeps,
-): Promise<boolean> {
-  if (!manifest.node) return true;
-  return deps.confirm({
-    title: deps.t('settings.ghosts.installConfirm.nodeRiskTitle'),
-    description: deps.t('settings.ghosts.installConfirm.nodeRiskDescription'),
-    maxWidth: GHOST_CONFIRM_MAX_WIDTH,
-    confirmText: deps.t('settings.ghosts.installConfirm.nodeRiskConfirm'),
-    cancelText: deps.t('settings.ghosts.installConfirm.nodeRiskCancel'),
-  });
-}
-
 /** 确认 + 原位更新(installed 是当前已装版本,manifest 是新文件的身份卡)。 */
 async function confirmAndRunUpdate(
   lizFilePath: string,
@@ -121,11 +102,13 @@ async function confirmAndRunUpdate(
     cancelText: t('settings.ghosts.updateConfirm.cancel'),
   });
   if (!ok) return;
-  if (!(await confirmNodeRuntimeRisk(manifest, deps))) return;
   try {
-    const { ghost } = await window.electronAPI.ghosts.update(lizFilePath, {
+    const result = await window.electronAPI.ghosts.update(lizFilePath, {
       expectedPackageSha256: packageSha256,
     });
+    // Node 的 Main 原生安全确认取消属于正常返回，不显示错误或成功提示。
+    if ('canceled' in result) return;
+    const { ghost } = result;
     toast.success(
       t('settings.ghosts.toast.updated', {
         name: ghost.manifest.name,
@@ -193,14 +176,15 @@ export async function confirmAndInstallGhost(
     checkboxLabel: t('settings.ghosts.installConfirm.enableNow'),
   });
   if (!ok) return;
-  if (!(await confirmNodeRuntimeRisk(manifest, deps))) return;
 
-  // 3) 真装(main 侧同一主体:校验 + 落盘 + 停靠)。
+  // 3) 真装(main 侧同一主体:来源校验 + Node 原生确认 + 落盘 + 停靠)。
   try {
-    const { ghost } = await window.electronAPI.ghosts.install(lizFilePath, {
+    const result = await window.electronAPI.ghosts.install(lizFilePath, {
       enable,
       expectedPackageSha256: packageSha256,
     });
+    if ('canceled' in result) return;
+    const { ghost } = result;
     toast.success(
       enable
         ? t('settings.ghosts.toast.installed', { name: ghost.manifest.name })

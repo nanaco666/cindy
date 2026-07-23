@@ -1,12 +1,14 @@
 /** nodeRuntimeBroker.test — 随包 Node / MCP stdio 中继的纯进程假体单测。 */
 
 import { EventEmitter } from 'node:events';
+import os from 'node:os';
 import { PassThrough } from 'node:stream';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { InstalledGhost } from '../../../shared/ghost';
 import {
+  createUtilityNodeWorkerProcess,
   GhostNodeRuntimeBroker,
   type NodeWorkerProcess,
 } from '../nodeRuntimeBroker';
@@ -20,7 +22,10 @@ class FakeNodeProcess extends EventEmitter {
   received: Array<Record<string, unknown>> = [];
   private inputBuffer = '';
 
-  constructor(private readonly onMessage?: (message: Record<string, unknown>) => void) {
+  constructor(
+    private readonly onMessage?: (message: Record<string, unknown>) => void,
+    emitSpawn = true,
+  ) {
     super();
     this.stdin.on('data', (chunk) => {
       this.inputBuffer += String(chunk);
@@ -35,7 +40,7 @@ class FakeNodeProcess extends EventEmitter {
         this.onMessage?.(message);
       }
     });
-    queueMicrotask(() => this.emit('spawn'));
+    if (emitSpawn) queueMicrotask(() => this.emit('spawn'));
   }
 
   send(message: Record<string, unknown>): void {
@@ -47,6 +52,14 @@ class FakeNodeProcess extends EventEmitter {
     queueMicrotask(() => this.emit('exit', null, signal ?? 'SIGTERM'));
     return true;
   }
+}
+
+class FakeUtilityProcess extends EventEmitter {
+  stdout = new PassThrough();
+  stderr = new PassThrough();
+  pid: number | undefined = 4321;
+  postMessage = vi.fn();
+  kill = vi.fn(() => true);
 }
 
 function fakeGhost(
@@ -94,6 +107,61 @@ function makeAutoReplyProcess(methods?: string[]) {
 
 afterEach(() => {
   vi.useRealTimers();
+  vi.unstubAllEnvs();
+});
+
+describe('nodeRuntimeBroker · Electron utilityProcess 适配', () => {
+  it('不依赖 RunAsNode，过滤宿主秘密，并只用 parentPort 推送 stdin', () => {
+    vi.stubEnv('PATH', '/usr/bin');
+    vi.stubEnv('NODE_OPTIONS', '--inspect=0.0.0.0:9229');
+    vi.stubEnv('ANTHROPIC_API_KEY', 'secret');
+    const child = new FakeUtilityProcess();
+    const fork = vi.fn((modulePath: unknown, entryArgs: unknown, options: unknown) => {
+      void modulePath;
+      void entryArgs;
+      void options;
+      return child;
+    });
+    const worker = createUtilityNodeWorkerProcess(
+      '/plugins/demo/node/worker.cjs',
+      '/plugins/demo',
+      'demo',
+      fork as never,
+    );
+
+    expect(fork).toHaveBeenCalledWith(
+      expect.stringMatching(/nodeRuntimeWorkerProcess\.js$/),
+      ['/plugins/demo/node/worker.cjs'],
+      expect.objectContaining({
+        cwd: os.tmpdir(),
+        stdio: ['ignore', 'pipe', 'pipe'],
+        serviceName: 'cindy-ghost-node:demo',
+        env: expect.objectContaining({
+          CINDY_GHOST_ID: 'demo',
+          CINDY_GHOST_DIR: '/plugins/demo',
+          PATH: '/usr/bin',
+        }),
+      }),
+    );
+    const forkOptions = fork.mock.calls[0][2] as { env: Record<string, string> };
+    expect(forkOptions.env).not.toHaveProperty('ELECTRON_RUN_AS_NODE');
+    expect(forkOptions.env).not.toHaveProperty('NODE_OPTIONS');
+    expect(forkOptions.env).not.toHaveProperty('ANTHROPIC_API_KEY');
+
+    const spawned = vi.fn();
+    worker.once('spawn', spawned);
+    child.emit('message', { type: 'ready' });
+    expect(spawned).toHaveBeenCalledTimes(1);
+    expect(child.listenerCount('message')).toBe(0);
+
+    expect(worker.stdin.write('{"jsonrpc":"2.0"}\n')).toBe(true);
+    expect(child.postMessage).toHaveBeenCalledWith({
+      type: 'stdin',
+      chunk: '{"jsonrpc":"2.0"}\n',
+    });
+    expect(worker.kill('SIGTERM')).toBe(true);
+    expect(child.kill).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('nodeRuntimeBroker · 进程生命周期', () => {
@@ -170,6 +238,26 @@ describe('nodeRuntimeBroker · 进程生命周期', () => {
     expect(child.killed).toBe(false);
     expect(broker.stateOf('node-ghost')).toBe('running');
     broker.destroyAll();
+  });
+
+  it('工作进程一直不就绪时 10 秒后失败并强制关闭', async () => {
+    vi.useFakeTimers();
+    const ghost = fakeGhost();
+    const child = new FakeNodeProcess(undefined, false);
+    const broker = new GhostNodeRuntimeBroker({
+      getGhost: () => ghost,
+      spawnProcess: () => child as unknown as NodeWorkerProcess,
+    });
+
+    const pending = broker.handleRequest('node-ghost', rpcRequest());
+    await vi.advanceTimersByTimeAsync(10_000);
+    await expect(pending).resolves.toMatchObject({
+      ok: false,
+      errorCode: 'PROCESS_START_FAILED',
+      message: expect.stringContaining('启动超时'),
+    });
+    expect(child.killed).toBe(true);
+    expect(broker.stateOf('node-ghost')).toBe('off');
   });
 });
 

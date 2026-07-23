@@ -11,10 +11,12 @@
  * - MCP 只开放 client→server 调用。server 反向请求 Cindy 能力恒回 -32601。
  */
 
-import { spawn } from 'node:child_process';
+import { EventEmitter } from 'node:events';
 import os from 'node:os';
 import path from 'node:path';
 import { StringDecoder } from 'node:string_decoder';
+
+import { utilityProcess } from 'electron';
 
 import type {
   GhostPipeEventPush,
@@ -24,6 +26,7 @@ import type {
 
 const DEFAULT_IDLE_TIMEOUT_MS = 2 * 60_000;
 const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
+const DEFAULT_START_TIMEOUT_MS = 10_000;
 const MAX_REQUEST_TIMEOUT_MS = 120_000;
 const MAX_PENDING_REQUESTS = 32;
 const MAX_REQUEST_BYTES = 256 * 1024;
@@ -39,7 +42,7 @@ interface NodeWorkerWritable {
   write(chunk: string): boolean;
 }
 
-/** 生产使用 ChildProcessWithoutNullStreams；最小接口便于纯单测注入假进程。 */
+/** 生产使用 utilityProcess 适配器；最小接口便于纯单测注入假进程。 */
 export interface NodeWorkerProcess {
   stdin: NodeWorkerWritable;
   stdout: NodeWorkerReadable;
@@ -96,9 +99,22 @@ class NodeRpcError extends Error {
   }
 }
 
-function defaultSpawnProcess(entryPath: string, cwd: string, ghostId: string): NodeWorkerProcess {
+type UtilityFork = typeof utilityProcess.fork;
+
+/**
+ * 用 Electron 官方 utilityProcess 承载第三方 Node 代码。
+ *
+ * 正式包关闭 RunAsNode fuse，因此不能把 process.execPath 当 node 二进制 spawn。
+ * utilityProcess 是 Electron 保留的 Node service process 通道，不要求放宽 fuse。
+ */
+export function createUtilityNodeWorkerProcess(
+  entryPath: string,
+  cwd: string,
+  ghostId: string,
+  fork: UtilityFork = utilityProcess.fork,
+): NodeWorkerProcess {
   // 不继承 API key / token 等宿主环境变量。Node 本身仍有用户级本机权限，
-  // 这里只是在”无意泄露宿主秘密”和”系统运行必需变量”之间取最小集合。
+  // 这里只是在“无意泄露宿主秘密”和“系统运行必需变量”之间取最小集合。
   const inheritedKeys = [
     'PATH',
     'SystemRoot',
@@ -110,7 +126,6 @@ function defaultSpawnProcess(entryPath: string, cwd: string, ghostId: string): N
     'LC_ALL',
   ] as const;
   const env: NodeJS.ProcessEnv = {
-    ELECTRON_RUN_AS_NODE: '1',
     CINDY_GHOST_ID: ghostId,
     // 插件通过此变量定位自身资源;cwd 故意不指向安装目录,
     // 防止无意写入覆盖 ghost.json / trust 文件。
@@ -119,14 +134,94 @@ function defaultSpawnProcess(entryPath: string, cwd: string, ghostId: string): N
   for (const key of inheritedKeys) {
     if (process.env[key] !== undefined) env[key] = process.env[key];
   }
-  return spawn(process.execPath, [entryPath], {
+  const workerEntry = path.join(__dirname, 'nodeRuntimeWorkerProcess.js');
+  const child = fork(workerEntry, [entryPath], {
     cwd: os.tmpdir(),
     env,
-    shell: false,
-    stdio: ['pipe', 'pipe', 'pipe'],
-    windowsHide: true,
-  }) as NodeWorkerProcess;
+    stdio: ['ignore', 'pipe', 'pipe'],
+    serviceName: `cindy-ghost-node:${ghostId}`,
+    ...(process.platform === 'darwin' ? { disclaim: true } : {}),
+  });
+  const stdout = child.stdout;
+  const stderr = child.stderr;
+  if (!stdout || !stderr) {
+    child.kill();
+    throw new Error('Node utilityProcess 没有可用的 stdout/stderr');
+  }
+
+  const events = new EventEmitter();
+  let destroyed = false;
+  let killed = false;
+  let ready = false;
+  const onReadyMessage = (message: unknown) => {
+    if (
+      !ready &&
+      message &&
+      typeof message === 'object' &&
+      !Array.isArray(message) &&
+      (message as Record<string, unknown>).type === 'ready'
+    ) {
+      ready = true;
+      // 就绪后不再接收插件的 parentPort 消息；正式通信面只保留 stdio。
+      child.removeListener('message', onReadyMessage);
+      events.emit('spawn');
+    }
+  };
+  child.on('message', onReadyMessage);
+  child.on('exit', (code) => {
+    destroyed = true;
+    killed = true;
+    events.emit('exit', code, null);
+  });
+  child.on('error', (type, location) => {
+    events.emit('error', new Error(`Node utilityProcess ${type} at ${location}`));
+  });
+
+  const adapter = {
+    stdin: {
+      get destroyed() {
+        return destroyed;
+      },
+      write(chunk: string): boolean {
+        if (destroyed) return false;
+        child.postMessage({ type: 'stdin', chunk });
+        return true;
+      },
+    },
+    stdout,
+    stderr,
+    get pid() {
+      return child.pid;
+    },
+    get killed() {
+      return killed;
+    },
+    on(event: 'exit' | 'error', listener: (...args: unknown[]) => void) {
+      events.on(event, listener);
+      return adapter;
+    },
+    once(event: 'spawn' | 'exit' | 'error', listener: (...args: unknown[]) => void) {
+      events.once(event, listener);
+      return adapter;
+    },
+    kill(signal?: NodeJS.Signals): boolean {
+      destroyed = true;
+      killed = true;
+      if (signal === 'SIGKILL' && child.pid !== undefined) {
+        try {
+          process.kill(child.pid, 'SIGKILL');
+          return true;
+        } catch {
+          // 已退出或平台不支持时落回 utilityProcess 自带的终止。
+        }
+      }
+      return child.kill();
+    },
+  };
+  return adapter as NodeWorkerProcess;
 }
+
+const defaultSpawnProcess = createUtilityNodeWorkerProcess;
 
 function errorResult(
   errorCode: Extract<GhostPipeNodeResult, { ok: false }>['errorCode'],
@@ -309,10 +404,25 @@ export class GhostNodeRuntimeBroker {
 
     try {
       await new Promise<void>((resolve, reject) => {
-        child.once('spawn', resolve);
-        child.once('error', reject);
+        let settled = false;
+        let startTimer: NodeJS.Timeout | null = null;
+        const settle = (outcome: () => void) => {
+          if (settled) return;
+          settled = true;
+          if (startTimer) this.clearTimer(startTimer);
+          outcome();
+        };
+        startTimer = this.setTimer(
+          () => settle(() => reject(new Error('Node 工作进程启动超时'))),
+          DEFAULT_START_TIMEOUT_MS,
+        );
+        startTimer.unref?.();
+        child.once('spawn', () => settle(resolve));
+        child.once('error', (error) => settle(() => reject(error)));
         child.once('exit', (code, signal) => {
-          reject(new Error(`Node 工作进程启动前退出(code=${code}, signal=${signal ?? 'none'})`));
+          settle(() =>
+            reject(new Error(`Node 工作进程启动前退出(code=${code}, signal=${signal ?? 'none'})`)),
+          );
         });
       });
     } catch (error) {

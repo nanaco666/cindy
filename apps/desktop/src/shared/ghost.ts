@@ -1464,8 +1464,8 @@ export function validateGhostManifest(raw: unknown): ManifestValidation {
     if (!isSafeGhostRelativePath(nodeRaw.entry)) {
       return { ok: false, reason: 'node.entry 必须是安装目录内的安全相对路径' };
     }
-    if (!/\.(?:c?js|mjs)$/.test(nodeRaw.entry)) {
-      return { ok: false, reason: 'node.entry 必须是 .js / .cjs / .mjs 文件' };
+    if (!/\.(?:c?js)$/.test(nodeRaw.entry)) {
+      return { ok: false, reason: 'node.entry 必须是 CommonJS .js / .cjs 文件' };
     }
     if (nodeRaw.entry === raw.entry) {
       return { ok: false, reason: 'node.entry 不能与浏览器沙箱 entry 使用同一个文件' };

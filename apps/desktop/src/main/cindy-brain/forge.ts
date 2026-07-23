@@ -659,7 +659,7 @@ Node 工作进程或 stdio MCP,见 §4.12)。
 
 \`\`\`json
 "node": {
-  "entry": "node/worker.cjs",          // 包内 JS 入口，只认 .js/.cjs/.mjs
+  "entry": "node/worker.cjs",          // 包内 CommonJS 入口，只认 .js/.cjs
   "protocol": "json-rpc-stdio",       // json-rpc-stdio / mcp-stdio
   "lifecycle": "on-demand",           // 可选:on-demand(缺省)/resident(常驻,单列高风险权限)
   "idleTimeoutSeconds": 120            // 可选:按需档空闲关闭时间,30–3600;resident 禁写
@@ -1804,7 +1804,8 @@ MCP server 的 sampling / elicitation / roots 等 server→client 反向请求�
 - 每个插件最多 32 条在途请求；单次 params 256KB、单行 stdout 1MB。进程崩溃只影响
   自己，所有在途请求收到结构化失败，下次请求可重新启动；
 - **最重要的安全事实**：Node 进程不是浏览器沙箱，它拥有当前登录系统账号能拿到的
-  本机权限，能读写文件、联网、起别的进程。安装时用户会看到第二次强风险确认；
+  本机权限，能读写文件、联网、起别的进程。安装时先展示权限清单，真正写盘前还会
+  由 Cindy 主进程弹出一次系统级强风险确认；
   不需要本机能力的插件不要申请 node 槽。
 
 ## 5. 面板(panel.html/css/js)
@@ -1902,7 +1903,7 @@ MCP server 的 sampling / elicitation / roots 等 server→client 反向请求�
 - keywords(已废弃字段,旧包兼容保留,新意识别写)有单字词 · kind 写了但不是 "chip"(可省略) · schemaVersion 不是 2
 - cindy 详单格式错(未知类目/动作、空数组、有详单但 slots 没有 "cindy")
 - agent 详单格式错(有详单但 slots 没有 "agent"，或 background 不是 true；只需点击触发时应省略 agent 字段)
-- node 详单格式错(槽/详单不成对、entry 不是包内 JS、protocol 不在 json-rpc-stdio / mcp-stdio、
+- node 详单格式错(槽/详单不成对、entry 不是包内 CommonJS .js/.cjs、protocol 不在 json-rpc-stdio / mcp-stdio、
   写了 command/args/shell/env、resident 又写 idleTimeoutSeconds)
 - id 用了 \`cindy-\` / \`filo-\` / \`xd-\` 前缀(官方保留,正式版用户通道拒装;给自己的意识换个前缀)
 - network 详单格式错(hosts 缺失/裸 TLD/IP/带端口/通配不在最左、secret 缺 inject、

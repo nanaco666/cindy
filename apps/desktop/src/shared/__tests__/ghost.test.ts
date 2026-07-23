@@ -345,6 +345,7 @@ describe('ghost · 芯片型清单(schemaVersion 2)', () => {
     expect(withNode({ entry: 'node/a.cjs', protocol: 'json-rpc-stdio' }).ok).toBe(true);
     expect(withNode({ entry: '../a.cjs', protocol: 'json-rpc-stdio' }).ok).toBe(false);
     expect(withNode({ entry: 'node/a.txt', protocol: 'json-rpc-stdio' }).ok).toBe(false);
+    expect(withNode({ entry: 'node/a.mjs', protocol: 'json-rpc-stdio' }).ok).toBe(false);
     expect(withNode({ entry: 'node/a.cjs', protocol: 'stdio' }).ok).toBe(false);
     expect(
       withNode({ entry: 'node/a.cjs', protocol: 'json-rpc-stdio', command: 'node' }).ok,

@@ -1,7 +1,8 @@
-/** installFlow.test — Node 高风险权限必须经过第二次人工确认。 */
+/** installFlow.test — Renderer 只展示权限清单，Node 真授权由 Main 原生弹窗负责。 */
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { toast } from '@/lib/toast';
 import { confirmAndInstallGhost } from '../installFlow';
 
 vi.mock('@/lib/toast', () => ({
@@ -19,8 +20,11 @@ const baseManifest = {
   node: { entry: 'node/worker.cjs', protocol: 'json-rpc-stdio' as const },
 };
 
-function setupWindow(manifest: object) {
-  const install = vi.fn(async () => ({ ghost: { manifest } }));
+function setupWindow(
+  manifest: object,
+  installResult: { ghost: { manifest: object } } | { canceled: true } = { ghost: { manifest } },
+) {
+  const install = vi.fn(async () => installResult);
   const electronAPI = {
     ghosts: {
       inspect: vi.fn(async () => ({
@@ -53,40 +57,39 @@ function deps(confirm: (options: unknown) => Promise<boolean>) {
 }
 
 afterEach(() => {
+  vi.clearAllMocks();
   vi.restoreAllMocks();
   Reflect.deleteProperty(globalThis, 'window');
 });
 
-describe('installFlow · Node 二次确认', () => {
-  it('用户在第二层风险提示取消时，不会安装 Node 插件', async () => {
-    const { install } = setupWindow(baseManifest);
-    const confirm = vi.fn(async () => false);
+describe('installFlow · Node 原生确认交接', () => {
+  it('Main 原生风险提示取消时，不显示安装完成提示', async () => {
+    const { install } = setupWindow(baseManifest, { canceled: true });
+    const confirm = vi.fn(async () => true);
 
     await confirmAndInstallGhost('/tmp/node.cindy', deps(confirm));
 
-    expect(confirm).toHaveBeenCalledWith(
-      expect.objectContaining({
-        title: 'settings.ghosts.installConfirm.nodeRiskTitle',
-        confirmText: 'settings.ghosts.installConfirm.nodeRiskConfirm',
-      }),
-    );
-    expect(install).not.toHaveBeenCalled();
+    expect(confirm).not.toHaveBeenCalled();
+    expect(install).toHaveBeenCalledTimes(1);
+    expect(toast.success).not.toHaveBeenCalled();
+    expect(toast.error).not.toHaveBeenCalled();
   });
 
-  it('两层都确认后才安装 Node 插件', async () => {
+  it('Renderer 权限清单确认后把 Node 安装交给 Main', async () => {
     const { install } = setupWindow(baseManifest);
     const confirm = vi.fn(async () => true);
 
     await confirmAndInstallGhost('/tmp/node.cindy', deps(confirm));
 
-    expect(confirm).toHaveBeenCalledTimes(1);
+    // confirmWithCheckbox 是第一层权限清单；普通 confirm 不再伪装成安全边界。
+    expect(confirm).not.toHaveBeenCalled();
     expect(install).toHaveBeenCalledWith('/tmp/node.cindy', {
       enable: false,
       expectedPackageSha256: 'a'.repeat(64),
     });
   });
 
-  it('普通浏览器沙箱插件没有多余的第二层 Node 提示', async () => {
+  it('普通浏览器沙箱插件同样只走现有权限清单', async () => {
     const manifest = { ...baseManifest, slots: ['card'], node: undefined };
     const { install } = setupWindow(manifest);
     const confirm = vi.fn(async () => true);

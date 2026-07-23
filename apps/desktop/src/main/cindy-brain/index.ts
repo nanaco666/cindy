@@ -61,6 +61,8 @@ import { GhostOauthAccountManager, type GhostOauthDecl } from './ghostOauthAccou
 import { reclaimLoopbackPort } from './portReclaim.js';
 import { GhostConnectionManager } from './ghostConnections.js';
 import { t } from '../i18n.js';
+import { assertTrustedAppRendererEvent } from '../security/trustedAppRenderer.js';
+import { requestNodeInstallAuthorization } from './nodeInstallAuthorization.js';
 import {
   FILO_GOOGLE_GHOST_ID,
   migrateFiloGoogleAccounts,
@@ -2333,7 +2335,8 @@ export function registerGhostIpc(): void {
     return { overrides };
   });
 
-  ipcMain.handle('ghosts:install', async (_event, lizFilePath: unknown, opts: unknown) => {
+  ipcMain.handle('ghosts:install', async (event, lizFilePath: unknown, opts: unknown) => {
+    assertTrustedAppRendererEvent(event);
     if (typeof lizFilePath !== 'string' || lizFilePath.trim().length === 0) {
       throwIpcError('INVALID_PARAMS', 'lizFilePath must be a non-empty string');
     }
@@ -2353,6 +2356,9 @@ export function registerGhostIpc(): void {
     }
     rejectReservedGhostId(probe.manifest.id);
     rejectUnauthorizedTokenBroker(probe.manifest);
+    if (!(await requestNodeInstallAuthorization(event.sender, probe.manifest, 'install'))) {
+      return { canceled: true };
+    }
     const enable = installOpts.enable === true;
     return {
       ghost: await installAndDock(manager, lizFilePath, {
@@ -2365,7 +2371,8 @@ export function registerGhostIpc(): void {
   // 原位更新(同 id 换版):先熄灯沙箱(新代码由下一次派活/面板重挂拉起),
   // 再换目录;唤醒状态与布局位置由 manager.update 保证延续。更新后走一次
   // 停靠(新版本首次声明面板时补位;已停靠则不动树)。
-  ipcMain.handle('ghosts:update', async (_event, lizFilePath: unknown, opts: unknown) => {
+  ipcMain.handle('ghosts:update', async (event, lizFilePath: unknown, opts: unknown) => {
+    assertTrustedAppRendererEvent(event);
     if (typeof lizFilePath !== 'string' || lizFilePath.trim().length === 0) {
       throwIpcError('INVALID_PARAMS', 'lizFilePath must be a non-empty string');
     }
@@ -2384,6 +2391,9 @@ export function registerGhostIpc(): void {
     }
     rejectReservedGhostId(inspected.manifest.id);
     rejectUnauthorizedTokenBroker(inspected.manifest);
+    if (!(await requestNodeInstallAuthorization(event.sender, inspected.manifest, 'update'))) {
+      return { canceled: true };
+    }
     runtime.stop(inspected.manifest.id);
     getGhostNodeRuntimeBroker().stop(inspected.manifest.id);
     const result = await manager.update(lizFilePath, { expectedPackageSha256 });
@@ -2405,6 +2415,7 @@ export function registerGhostIpc(): void {
   // 后续 inspect → 确认弹窗 → install 由 renderer 编排(三个装入入口共用
   // "先验明正身再确认"的契约)。取消选择返回 { canceled: true },不算错误。
   ipcMain.handle('ghosts:pick-file', async (event) => {
+    assertTrustedAppRendererEvent(event);
     const win = BrowserWindow.fromWebContents(event.sender);
     const opts = {
       filters: [{ name: 'Cindy Ghost', extensions: ['cindy'] }],
@@ -2417,12 +2428,14 @@ export function registerGhostIpc(): void {
 
   // 双击 .cindy 的待装路径:renderer 在 install-requested 信号或挂载时原子
   // 取走(取即清空),随后走与按钮/拖入完全相同的确认装入编排。
-  ipcMain.handle('ghosts:take-pending-install', () => ({
-    filePath: takePendingCindyInstall(),
-  }));
+  ipcMain.handle('ghosts:take-pending-install', (event) => {
+    assertTrustedAppRendererEvent(event);
+    return { filePath: takePendingCindyInstall() };
+  });
 
   // 只验不装:读出 .cindy 的清单给确认弹窗展示,零副作用。
-  ipcMain.handle('ghosts:inspect', async (_event, lizFilePath: unknown) => {
+  ipcMain.handle('ghosts:inspect', async (event, lizFilePath: unknown) => {
+    assertTrustedAppRendererEvent(event);
     if (typeof lizFilePath !== 'string' || lizFilePath.trim().length === 0) {
       throwIpcError('INVALID_PARAMS', 'lizFilePath must be a non-empty string');
     }
@@ -2519,7 +2532,10 @@ export function registerGhostIpc(): void {
   });
 
   // 启用 / 停用(停用 = 面板休眠,布局位置保留;详见 GhostManager.setEnabled)。
-  ipcMain.handle('ghosts:set-enabled', async (_event, id: unknown, enabled: unknown) => {
+  ipcMain.handle('ghosts:set-enabled', async (event, id: unknown, enabled: unknown) => {
+    // 启用 Node 插件会获得本机进程能力；即使按钮在 Renderer 里，来源判定也
+    // 必须由 Main 按真实顶层 frame 完成，不能信任页面自报。
+    assertTrustedAppRendererEvent(event);
     if (typeof id !== 'string' || id.trim().length === 0) {
       throwIpcError('INVALID_PARAMS', 'id must be a non-empty string');
     }
