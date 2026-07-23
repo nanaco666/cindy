@@ -38,10 +38,11 @@ details must not be disclosed in a public issue either.
 ## Response process
 
 We will acknowledge the report, reproduce it, assess its impact, and update the
-report when a fix or mitigation can be disclosed. Please allow the maintainers
-reasonable time to investigate and address the issue. If a coordinated public
-disclosure date is needed, we will discuss it with the reporter after
-confirmation.
+report when a fix or mitigation can be disclosed. Our target cadence:
+**acknowledgement with an initial assessment within 5 business days**, and a
+**90-day coordinated disclosure window** for confirmed vulnerabilities
+(adjustable in coordination with the reporter). If you hear nothing for more
+than 7 days, please ping us through the other channel (email or GitHub).
 
 ## Contributor notes
 

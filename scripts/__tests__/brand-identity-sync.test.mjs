@@ -1,7 +1,7 @@
 // brand-identity-sync.test.mjs — 品牌标识符「TS 单点 ↔ .mjs 脚本镜像字面量」一致性断言。
 //
 // 背景:packages/maker-shared/src/brandIdentity.ts 是标识符层身份的单一事实源,
-// 但发布 / CI / smoke / restart 等 .mjs 脚本无法 import TS,只能在各自文件顶部
+// 但 smoke / restart 等 .mjs 脚本无法 import TS,只能在各自文件顶部
 // 镜像字面量(均带注释指回单点)。本测试用正则读 TS 源码抽出字面量,与各脚本的
 // 镜像常量逐一比对——单点翻转后漏改任何一处镜像,这里立刻红灯。
 //
@@ -39,24 +39,6 @@ const USER_DATA_DIR_NAME = extractLiteral(
   /userDataDirName:\s*'([^']+)'/,
   'brandIdentity.ts userDataDirName',
 );
-// 区域派生值(2026-07-18 同机双装):从 ByRegion 块里抽 global 值,
-// 供 .mjs 镜像(ci/lib.mjs / package-lib.mjs)一致性断言。
-const EXECUTABLE_NAME_GLOBAL = extractLiteral(
-  brandIdentitySource,
-  /executableNameByRegion:\s*Object\.freeze\(\{[^}]*global:\s*'([^']+)'/,
-  'brandIdentity.ts executableNameByRegion.global',
-);
-
-test('ci/lib.mjs PACKAGED_APP_NAME mirrors brandIdentity.executableName', () => {
-  const libSource = readSource('apps/desktop/scripts/ci/lib.mjs');
-  const value = extractLiteral(
-    libSource,
-    /export const PACKAGED_APP_NAME = '([^']+)';/,
-    'ci/lib.mjs PACKAGED_APP_NAME',
-  );
-  assert.equal(value, EXECUTABLE_NAME);
-});
-
 test('smoke-packaged.mjs PACKAGED_APP_NAME mirrors brandIdentity.executableName', () => {
   const smokeSource = readSource('apps/desktop/scripts/smoke-packaged.mjs');
   const value = extractLiteral(
@@ -75,22 +57,6 @@ test('restart-desktop-remote.mjs BRAND_USER_DATA_DIR_NAME mirrors brandIdentity.
     'restart-desktop-remote.mjs BRAND_USER_DATA_DIR_NAME',
   );
   assert.equal(value, USER_DATA_DIR_NAME);
-});
-
-test('ci/lib.mjs PACKAGED_APP_NAME_BY_REGION mirrors brandIdentity.executableNameByRegion', () => {
-  const libSource = readSource('apps/desktop/scripts/ci/lib.mjs');
-  const cnValue = extractLiteral(
-    libSource,
-    /PACKAGED_APP_NAME_BY_REGION = Object\.freeze\(\{[^}]*cn:\s*'([^']+)'/,
-    'ci/lib.mjs PACKAGED_APP_NAME_BY_REGION.cn',
-  );
-  const globalValue = extractLiteral(
-    libSource,
-    /PACKAGED_APP_NAME_BY_REGION = Object\.freeze\(\{[^}]*global:\s*'([^']+)'/,
-    'ci/lib.mjs PACKAGED_APP_NAME_BY_REGION.global',
-  );
-  assert.equal(cnValue, EXECUTABLE_NAME);
-  assert.equal(globalValue, EXECUTABLE_NAME_GLOBAL);
 });
 
 test('desktop package.json productName mirrors brandIdentity.userDataDirName', () => {

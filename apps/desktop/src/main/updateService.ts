@@ -633,7 +633,7 @@ export async function checkForUpdate(
 }
 
 /**
- * 版本无关打包(scripts/package-desktop.mjs 缺省模式)写入的占位版本。
+ * 版本无关打包(本地无版本 packaging)写入的占位版本。
  * 这类包(占位 0.0.0)不参与热更新:任何 CDN manifest 版本与它都不相等,
  * 不做豁免的话 packaged 版本无关包启动即被拉去下载线上版本自更——
  * 与"开源社区拉仓即可打包试用"的定位相悖。'0.0.0-*' 前缀一并覆盖,

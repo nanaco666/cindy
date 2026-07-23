@@ -10,7 +10,7 @@
  * dev 实例即可在 Cindy AI 模型列表看到效果。**packaged 一律不走本覆盖**
  * (调用点用 isDev() 门控,见 model-access/index.ts applyGatewayModels)。
  *
- * 合并语义与服务端 listGatewayChatModels 逐条对齐(cindy-server
+ * 合并语义与服务端 listGatewayChatModels 逐条对齐(服务端仓
  * services/modelAccess.ts):
  *   - **只覆盖服务端清单里已存在的 id**——清单成员资格仍由网关证明可用性,
  *     本地表多出的 id 不会凭空出现在列表里;

@@ -85,16 +85,7 @@ test("help groups copyable desktop, binary, and Mobile workflows", async () => {
 
 	for (const command of [
 		"pnpm dev:desktop:remote --region=global",
-		"pnpm package:desktop --region cn --version patch",
-		"pnpm package:desktop --region dev",
 		"pnpm install:agent-binaries",
-		"pnpm release:claude-code -- --dry-run",
-		"pnpm release:codex -- --platform linux-x64",
-		"pnpm release:ripgrep:win",
-		"pnpm release:package --region cn --version patch",
-		"pnpm release:canary -- --region cn --version 0.2.3 --execute",
-		"pnpm release:promote:mac -- --yes",
-		"pnpm release:promote:win -- --yes",
 		"pnpm mobile:release:ios:local -- --region cn --execute",
 		"pnpm mobile:release:ios:local -- --region global --execute",
 		"pnpm mobile:release:ios:local -- --region dev --execute",
@@ -104,7 +95,6 @@ test("help groups copyable desktop, binary, and Mobile workflows", async () => {
 	]) {
 		assert.match(output, new RegExp(command.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
 	}
-	assert.match(output, /没有“只 promote 某个二进制”的命令/);
 	assert.match(output, /pnpm test:guard/);
 });
 

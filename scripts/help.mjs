@@ -18,46 +18,6 @@ export function printHelp(log = console.log) {
   log('    # 连接本地 http://localhost:3333（只起客户端，不起 server）');
   log('    pnpm restart:desktop:local --region=cn');
 
-  log('\n  桌面端只打包、不上传 OSS/CDN:');
-  log('    # 当前平台，国内版，版本无关本地包');
-  log('    pnpm package:desktop --region cn');
-  log('    # 当前平台，海外版，版本无关本地包');
-  log('    pnpm package:desktop --region global');
-  log('    # 当前平台，dev 版，版本无关本地包');
-  log('    pnpm package:desktop --region dev');
-  log('    # mac 上缺省双架构连打（arm64 + x64）；下面两条只打单架构');
-  log('    pnpm package:mac:arm64 --region cn');
-  log('    pnpm package:mac:x64 --region cn');
-  log('    pnpm package:win --region cn');
-  log('    pnpm package:linux --region cn');
-  log('    # 当前平台，国内有版本包；基于 CDN 当前版本自动 bump patch');
-  log('    pnpm package:desktop --region cn --version patch');
-  log('    # 当前平台，海外有版本包；基于 CDN 当前版本自动 bump patch');
-  log('    pnpm package:desktop --region global --version patch');
-  log('    # 调试时可在末尾追加 --skip-smoke；明确允许无签名时追加 --allow-unsigned');
-
-  log('\n  桌面端发布三步管线：打包 → canary → promote（Mac 包在 Mac 打、Win 包在 Win 打）:');
-  log('    # 第一步 打包：有版本本地包，产出 release/artifacts/<region>/<version>/');
-  log('    #   mac 上一条命令双架构连打（arm64 + x64 共用同一版本号）');
-  log('    # 国内版；基于 CDN 当前版本自动 bump patch，也可显式 --version x.y.z');
-  log('    pnpm release:package --region cn --version patch');
-  log('    # 海外版');
-  log('    pnpm release:package --region global --version patch');
-  log('    # 第二步 canary 发布：缺省 dry-run 只校验；--execute 才上传 OSS 并更新 canary manifest');
-  log('    #   --version 填第一步打包定死的显式版本；跨平台代传可加 --platform win32|darwin');
-  log('    pnpm release:canary -- --region cn --version 0.2.3');
-  log('    pnpm release:canary -- --region cn --version 0.2.3 --execute');
-  log('    # 强制用户更新后重新登录');
-  log('    pnpm release:canary -- --region cn --version 0.2.3 --execute --require-relogin');
-  log('    # 第三步 promote：canary 验证后切 stable；先 dry-run，再 --yes');
-  log('    pnpm release:promote:mac');
-  log('    pnpm release:promote:mac -- --yes');
-  log('    pnpm release:promote:win');
-  log('    pnpm release:promote:win -- --yes');
-  log('    # 海外版 promote');
-  log('    pnpm release:promote:mac:global -- --yes');
-  log('    pnpm release:promote:win:global -- --yes');
-
   log('\n  Agent 二进制安装 / 升级（Claude Code、Codex、ripgrep）:');
   log('    # 按 latest.json 当前 pin 安装到本机，不修改 pin');
   log('    # 安装当前平台的全部三种二进制');
@@ -76,42 +36,6 @@ export function printHelp(log = console.log) {
   log('    pnpm update:claude 2.1.199');
   log('    pnpm update:codex 0.144.1');
   log('    pnpm update:ripgrep 15.1.0');
-
-  log('\n  Agent 二进制单独发布（不重新打包 App）:');
-  log('    # 先 dry-run：检查全部四个平台，不上传');
-  log('    pnpm release:claude-code -- --dry-run');
-  log('    pnpm release:codex -- --dry-run');
-  log('    pnpm release:ripgrep -- --dry-run');
-  log('    # 正式发布：上传全部四个平台，并更新各平台 canary manifest');
-  log('    pnpm release:claude-code');
-  log('    pnpm release:codex');
-  log('    pnpm release:ripgrep');
-  log('    # 只发布单个平台');
-  log('    pnpm release:claude-code:arm64');
-  log('    pnpm release:claude-code:x64');
-  log('    pnpm release:claude-code:win');
-  log('    pnpm release:claude-code -- --platform linux-x64');
-  log('    pnpm release:codex:arm64');
-  log('    pnpm release:codex:x64');
-  log('    pnpm release:codex:win');
-  log('    pnpm release:codex -- --platform linux-x64');
-  log('    # Windows Claude/Codex 可显式选择 cn / global / dev 发布目标');
-  log('    pnpm release:claude-code:win:cn');
-  log('    pnpm release:claude-code:win:global');
-  log('    pnpm release:claude-code:win:dev');
-  log('    pnpm release:codex:win:cn');
-  log('    pnpm release:codex:win:global');
-  log('    pnpm release:codex:win:dev');
-  log('    pnpm release:ripgrep:arm64');
-  log('    pnpm release:ripgrep:x64');
-  log('    pnpm release:ripgrep:win');
-  log('    pnpm release:ripgrep -- --platform linux-x64');
-  log('    # 发布目标：版本化 .gz + manifest-<platform>-canary.json');
-  log('    #   不是独立沙盒目录；canary 用户先看到，stable 用户暂时不受影响');
-  log('    # 没有“只 promote 某个二进制”的命令；以下会提升整份平台 manifest');
-  log('    pnpm release:promote:mac -- --yes');
-  log('    pnpm release:promote:win -- --yes');
-  log('    pnpm release:promote:linux -- --yes');
 
   log('\n  Mobile 本地开发:');
   log('    # 国服：生成 iOS 工程、打开 Xcode 并启动 Metro');
@@ -143,8 +67,6 @@ export function printHelp(log = console.log) {
   log('    pnpm mobile:release:ios:check -- --region dev');
   log('    pnpm mobile:release:ios:local -- --region dev --execute');
   log('    pnpm mobile:release:ios:ota -- --region dev --execute');
-  log('    # 手动把最近一次 EAS iOS 产物送 NPKG 重签');
-  log('    pnpm mobile:release:ios:npkg -- from-eas');
 
   log('\n  Mobile 自建 Android（完整命令；region 必填，无默认值）:');
   log('    # local / ota 先写 canary 指针；promote --yes 验证后才切 stable');
@@ -162,8 +84,6 @@ export function printHelp(log = console.log) {
   log('    pnpm mobile:release:android:check -- --region dev');
   log('    pnpm mobile:release:android:local -- --region dev --execute');
   log('    pnpm mobile:release:android:ota -- --region dev --execute');
-  log('    # 仅在需要时手动补传 APK 到 NPKG，不参与正常冷更链路');
-  log('    pnpm mobile:release:android:npkg -- upload /absolute/path/Cindy.apk');
 
   log('\n  开发检查:');
   log('    pnpm lint');

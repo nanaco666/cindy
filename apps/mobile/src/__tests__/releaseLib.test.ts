@@ -3,7 +3,6 @@ import { createRequire } from 'node:module';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
-  addBetaDeveloperProfile,
   assertBuildPlatformWithinReleasePlatforms,
   assertColdReleaseAllowed,
   assertEasLoggedIn,
@@ -13,7 +12,6 @@ import {
   assertProductionSubmitTarget,
   assertReleaseTargetsAllowed,
   assertVersionMonotonic,
-  buildBetaChannelLinkCommands,
   buildColdBuildCommand,
   buildEasCommandEnv,
   buildEasWhoamiArgs,
@@ -33,7 +31,6 @@ import {
   parseArgs,
   parseFingerprintOutput,
   quoteWindowsCmdArg,
-  requireExplicitDev,
   resolveBuildProfile,
   resolveCommandPublicEnv,
   resolveReleaseEnvExecRuns,
@@ -41,9 +38,7 @@ import {
   resolveDesktopVersion,
   resolveReleaseEnvExecEnvironment,
   resolveTarget,
-  runBetaChannelLink,
   shouldAutoSubmitColdBuild,
-  slugifyDevName,
   summarizeLatestBuildRuntime,
   targetPlatformsForRelease,
 } from '../../scripts/release-lib.mjs';
@@ -108,18 +103,18 @@ const easJson = {
         EXPO_PUBLIC_TAPTAP_CLIENT_TOKEN: 'tap-client-token',
       },
     },
-    'beta-base': {
+    'preview-base': {
       extends: 'base',
       distribution: 'store',
       env: {
-        EXPO_PUBLIC_APP_VARIANT: 'beta',
+        EXPO_PUBLIC_PREVIEW_TIER: 'canary',
       },
     },
-    'beta-carol': {
-      extends: 'beta-base',
-      channel: 'beta-carol',
+    'preview-carol': {
+      extends: 'preview-base',
+      channel: 'preview-carol',
       env: {
-        EXPO_PUBLIC_BETA_DEV: 'carol',
+        EXPO_PUBLIC_PREVIEW_OWNER: 'carol',
       },
     },
     production: {
@@ -134,12 +129,12 @@ const easJson = {
 };
 
 describe('mobile release scripts core logic', () => {
-  it('resolves inherited beta build profiles without losing base env', () => {
-    const profile = resolveBuildProfile(easJson, 'beta-carol');
+  it('resolves inherited build profiles without losing base env', () => {
+    const profile = resolveBuildProfile(easJson, 'preview-carol');
     expect(profile).toMatchObject({
       node: '22.19.0',
       distribution: 'store',
-      channel: 'beta-carol',
+      channel: 'preview-carol',
       env: {
         EXPO_PUBLIC_CINDY_AUTH_REGION: 'cn',
         EXPO_PUBLIC_CINDY_AUTH_BASE_URL: 'https://auth.example.com',
@@ -147,32 +142,8 @@ describe('mobile release scripts core logic', () => {
         EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL: 'https://relay.example.com',
         EXPO_PUBLIC_TAPTAP_CLIENT_ID: 'tap-client-id',
         EXPO_PUBLIC_TAPTAP_CLIENT_TOKEN: 'tap-client-token',
-        EXPO_PUBLIC_APP_VARIANT: 'beta',
-        EXPO_PUBLIC_BETA_DEV: 'carol',
-      },
-    });
-  });
-
-  it('resolves per-dev beta targets to same-name profile/channel/branch', () => {
-    const target = resolveTarget({ easJson }, { kind: 'beta', dev: 'carol' });
-    expect(target).toEqual({
-      kind: 'beta',
-      region: 'cn',
-      dev: 'carol',
-      profile: 'beta-carol',
-      channel: 'beta-carol',
-      branch: 'beta-carol',
-      environment: 'preview',
-      variant: 'beta',
-      publicEnv: {
-        EXPO_PUBLIC_APP_VARIANT: 'beta',
-        EXPO_PUBLIC_BETA_DEV: 'carol',
-        EXPO_PUBLIC_CINDY_AUTH_REGION: 'cn',
-        EXPO_PUBLIC_CINDY_AUTH_BASE_URL: 'https://auth.example.com',
-        EXPO_PUBLIC_XDT_API_BASE_URL: 'https://api.example.com',
-        EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL: 'https://relay.example.com',
-        EXPO_PUBLIC_TAPTAP_CLIENT_ID: 'tap-client-id',
-        EXPO_PUBLIC_TAPTAP_CLIENT_TOKEN: 'tap-client-token',
+        EXPO_PUBLIC_PREVIEW_TIER: 'canary',
+        EXPO_PUBLIC_PREVIEW_OWNER: 'carol',
       },
     });
   });
@@ -191,43 +162,26 @@ describe('mobile release scripts core logic', () => {
       branch: 'staging',
       environment: 'preview',
     });
+    // beta per-dev 打包线已整体移除,beta kind 不再是合法 target。
+    expect(() => resolveTarget({ easJson }, { kind: 'beta' })).toThrow(/Unknown mobile release target/);
   });
 
-  it('requires OTA public env and beta variant env', () => {
+  it('requires OTA public env and rejects stray beta variant flags', () => {
     // 2026-07 端点清单重构:发版闸门必填集收缩为身份 + 清单自举基址 + TapTap。
     expect(() =>
-      assertPublicEnv(
-        {
-          EXPO_PUBLIC_CINDY_AUTH_REGION: 'cn',
-          EXPO_PUBLIC_ENDPOINT_MANIFEST_BASE_URL: 'https://hotfix.example.invalid/app',
-          EXPO_PUBLIC_TAPTAP_CLIENT_ID: 'tap-client-id',
-          EXPO_PUBLIC_TAPTAP_CLIENT_TOKEN: 'tap-client-token',
-          EXPO_PUBLIC_APP_VARIANT: 'beta',
-          EXPO_PUBLIC_BETA_DEV: 'carol',
-        },
-        { variant: 'beta' },
-      ),
+      assertPublicEnv({
+        EXPO_PUBLIC_CINDY_AUTH_REGION: 'cn',
+        EXPO_PUBLIC_ENDPOINT_MANIFEST_BASE_URL: 'https://hotfix.example.invalid/app',
+        EXPO_PUBLIC_TAPTAP_CLIENT_ID: 'tap-client-id',
+        EXPO_PUBLIC_TAPTAP_CLIENT_TOKEN: 'tap-client-token',
+      }),
     ).not.toThrow();
     expect(() =>
-      assertPublicEnv(
-        {
-          EXPO_PUBLIC_CINDY_AUTH_REGION: 'cn',
-        },
-        { variant: 'beta' },
-      ),
+      assertPublicEnv({
+        EXPO_PUBLIC_CINDY_AUTH_REGION: 'cn',
+      }),
     ).toThrow(/EXPO_PUBLIC_ENDPOINT_MANIFEST_BASE_URL/);
-    expect(() =>
-      assertPublicEnv(
-        {
-          EXPO_PUBLIC_CINDY_AUTH_REGION: 'cn',
-          EXPO_PUBLIC_ENDPOINT_MANIFEST_BASE_URL: 'https://hotfix.example.invalid/app',
-          EXPO_PUBLIC_TAPTAP_CLIENT_ID: 'tap-client-id',
-          EXPO_PUBLIC_TAPTAP_CLIENT_TOKEN: 'tap-client-token',
-          EXPO_PUBLIC_APP_VARIANT: 'beta',
-        },
-        { variant: 'beta' },
-      ),
-    ).toThrow(/EXPO_PUBLIC_BETA_DEV/);
+    // beta 线已移除:任何 OTA 环境残留 APP_VARIANT=beta 都必须硬失败。
     expect(() =>
       assertPublicEnv(
         {
@@ -246,28 +200,26 @@ describe('mobile release scripts core logic', () => {
     const profileEnv = {
       EXPO_PUBLIC_CINDY_AUTH_REGION: 'cn',
       EXPO_PUBLIC_ENDPOINT_MANIFEST_BASE_URL: 'https://hotfix.example.invalid/app',
-      EXPO_PUBLIC_APP_VARIANT: 'beta',
-      EXPO_PUBLIC_BETA_DEV: 'carol',
+      EXPO_PUBLIC_TAPDB_CHANNEL: 'SelfHost',
     };
     const ambientEnv: NodeJS.ProcessEnv = {
       NODE_ENV: 'test',
       PATH: '/usr/bin',
       EXPO_PUBLIC_TAPTAP_CLIENT_ID: 'tap-client-id',
       EXPO_PUBLIC_TAPTAP_CLIENT_TOKEN: 'tap-client-token',
-      EXPO_PUBLIC_TAPDB_CHANNEL: 'TestFlight',
+      EXPO_PUBLIC_TAPDB_CHANNEL: 'ambient-should-not-win',
       EXPO_PUBLIC_TAPDB_REGION: 'global',
       EXPO_PUBLIC_XDT_DEV_LOGIN_ENABLED: '1',
-      EXPO_PUBLIC_BETA_DEV: 'ambient-should-not-win',
       KEEP_ME: 'yes',
     };
 
     const commandPublicEnv = resolveCommandPublicEnv(profileEnv, ambientEnv);
-    expect(() => assertPublicEnv(commandPublicEnv, { variant: 'beta' })).not.toThrow();
+    expect(() => assertPublicEnv(commandPublicEnv)).not.toThrow();
     expect(commandPublicEnv).toMatchObject({
       ...profileEnv,
       EXPO_PUBLIC_TAPTAP_CLIENT_ID: 'tap-client-id',
       EXPO_PUBLIC_TAPTAP_CLIENT_TOKEN: 'tap-client-token',
-      EXPO_PUBLIC_TAPDB_CHANNEL: 'TestFlight',
+      EXPO_PUBLIC_TAPDB_CHANNEL: 'SelfHost',
       EXPO_PUBLIC_TAPDB_REGION: 'global',
     });
 
@@ -277,29 +229,26 @@ describe('mobile release scripts core logic', () => {
       EXPO_NO_DOTENV: '1',
       EXPO_PUBLIC_TAPTAP_CLIENT_ID: 'tap-client-id',
       EXPO_PUBLIC_TAPTAP_CLIENT_TOKEN: 'tap-client-token',
-      EXPO_PUBLIC_TAPDB_CHANNEL: 'TestFlight',
+      EXPO_PUBLIC_TAPDB_CHANNEL: 'SelfHost',
       EXPO_PUBLIC_TAPDB_REGION: 'global',
-      EXPO_PUBLIC_BETA_DEV: 'carol',
     });
     expect(commandEnv).not.toHaveProperty('EXPO_PUBLIC_XDT_DEV_LOGIN_ENABLED');
   });
 
   it('routes fixed mobile release scripts through the matching EAS environment', () => {
-    expect(resolveReleaseEnvExecEnvironment('beta', {})).toBe('preview');
     expect(resolveReleaseEnvExecEnvironment('prod', {})).toBe('production');
     expect(resolveReleaseEnvExecEnvironment('prod', { targets: 'production,staging' })).toBe('production');
     expect(resolveReleaseEnvExecEnvironment('prod', { targets: 'staging' })).toBe('preview');
-    expect(resolveReleaseEnvExecEnvironment('check', { target: 'beta', dev: 'carol' })).toBe('preview');
     expect(resolveReleaseEnvExecEnvironment('check', { target: 'staging' })).toBe('preview');
     expect(resolveReleaseEnvExecEnvironment('check', { target: 'production' })).toBe('production');
     expect(resolveReleaseEnvExecEnvironment('check', {})).toBe('production');
     expect(() => resolveReleaseEnvExecEnvironment('unknown', {})).toThrow(/Unknown mobile release command/);
 
-    expect(buildReleaseEnvExecShellCommand('beta', ['--dev', 'carol', '--message', 'TapDB check'], 'linux')).toBe(
-      "cd ../.. && node apps/mobile/scripts/release-beta.mjs --dev carol --message 'TapDB check'",
+    expect(buildReleaseEnvExecShellCommand('check', ['--target', 'staging', '--message', 'TapDB check'], 'linux')).toBe(
+      "cd ../.. && node apps/mobile/scripts/release-check.mjs --target staging --message 'TapDB check'",
     );
-    expect(buildReleaseEnvExecShellCommand('beta', ['--dev', 'carol', '--message', 'TapDB check'], 'win32')).toBe(
-      'cd /d ..\\.. && node apps/mobile/scripts/release-beta.mjs --dev carol --message "TapDB check"',
+    expect(buildReleaseEnvExecShellCommand('check', ['--target', 'staging', '--message', 'TapDB check'], 'win32')).toBe(
+      'cd /d ..\\.. && node apps/mobile/scripts/release-check.mjs --target staging --message "TapDB check"',
     );
     expect(resolveReleaseEnvExecRuns('prod', [])).toEqual([
       { environment: 'production', forwardedArgs: ['--targets', 'production'] },
@@ -323,10 +272,10 @@ describe('mobile release scripts core logic', () => {
     expect(() => buildReleaseEnvExecShellCommand('unknown')).toThrow(/Unknown mobile release command/);
   });
 
-  it('prefixes beta OTA commands with deterministic variant env', () => {
-    const target = resolveTarget({ easJson }, { kind: 'beta', dev: 'carol' });
-    expect(buildUpdateCommand(target, 'beta update', { platform: 'ios' })).toMatchObject({
-      args: ['--yes', EAS_CLI_SPEC, 'update', '--branch', 'beta-carol', '--platform', 'ios', '--message', 'beta update', '--environment', 'preview', '--non-interactive'],
+  it('builds OTA update commands with deterministic profile env', () => {
+    const staging = resolveTarget({ easJson }, { kind: 'staging' });
+    expect(buildUpdateCommand(staging, 'staging update', { platform: 'ios' })).toMatchObject({
+      args: ['--yes', EAS_CLI_SPEC, 'update', '--branch', 'staging', '--platform', 'ios', '--message', 'staging update', '--environment', 'preview', '--non-interactive'],
       env: {
         EXPO_PUBLIC_CINDY_AUTH_REGION: 'cn',
         EXPO_PUBLIC_CINDY_AUTH_BASE_URL: 'https://auth.example.com',
@@ -334,8 +283,6 @@ describe('mobile release scripts core logic', () => {
         EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL: 'https://relay.example.com',
         EXPO_PUBLIC_TAPTAP_CLIENT_ID: 'tap-client-id',
         EXPO_PUBLIC_TAPTAP_CLIENT_TOKEN: 'tap-client-token',
-        EXPO_PUBLIC_APP_VARIANT: 'beta',
-        EXPO_PUBLIC_BETA_DEV: 'carol',
       },
     });
     const prodCmd = buildUpdateCommand(
@@ -374,7 +321,6 @@ describe('mobile release scripts core logic', () => {
     ];
     const production = resolveTarget({ easJson }, { kind: 'production' });
     const staging = resolveTarget({ easJson }, { kind: 'staging' });
-    const beta = resolveTarget({ easJson }, { kind: 'beta', dev: 'carol' });
 
     const productionEnv = buildEasCommandEnv(buildUpdateCommand(production, 'prod update', { platform: 'ios' }).env, ambientEnv);
     expect(productionEnv).toMatchObject({
@@ -399,25 +345,12 @@ describe('mobile release scripts core logic', () => {
     expect(coldBuildEnv).not.toHaveProperty('EXPO_PUBLIC_BETA_DEV');
     for (const key of devPublicKeys) expect(coldBuildEnv).not.toHaveProperty(key);
 
-    const betaEnv = buildEasCommandEnv(buildUpdateCommand(beta, 'beta update', { platform: 'ios' }).env, ambientEnv);
-    expect(betaEnv).toMatchObject({
-      EXPO_NO_DOTENV: '1',
-      EXPO_PUBLIC_APP_VARIANT: 'beta',
-      EXPO_PUBLIC_BETA_DEV: 'carol',
-      EXPO_PUBLIC_CINDY_AUTH_REGION: 'cn',
-      EXPO_PUBLIC_CINDY_AUTH_BASE_URL: 'https://auth.example.com',
-      EXPO_PUBLIC_XDT_API_BASE_URL: 'https://api.example.com',
-      EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL: 'https://relay.example.com',
-      EXPO_PUBLIC_TAPTAP_CLIENT_ID: 'tap-client-id',
-      EXPO_PUBLIC_TAPTAP_CLIENT_TOKEN: 'tap-client-token',
-    });
-    for (const key of devPublicKeys) expect(betaEnv).not.toHaveProperty(key);
   });
 
   it('pins OTA update platform to the checked release platforms', () => {
     const appJsonWithoutAndroidVersion = { expo: { android: {} } };
     const appJsonWithAndroidVersion = { expo: { android: { versionCode: 2026062701 } } };
-    const beta = resolveTarget({ easJson }, { kind: 'beta', dev: 'carol' });
+    const staging = resolveTarget({ easJson }, { kind: 'staging' });
     const production = resolveTarget({ easJson }, { kind: 'production' });
     const updatePlatform = (target: ReturnType<typeof resolveTarget>, appJson: object) => easBuildPlatformForReleasePlatforms(targetPlatformsForRelease(target, appJson));
     const platformArg = (target: ReturnType<typeof resolveTarget>, appJson: object) => {
@@ -425,10 +358,10 @@ describe('mobile release scripts core logic', () => {
       return args[args.indexOf('--platform') + 1];
     };
 
-    expect(platformArg(beta, appJsonWithoutAndroidVersion)).toBe('ios');
-    expect(platformArg(beta, appJsonWithAndroidVersion)).toBe('all');
+    expect(platformArg(staging, appJsonWithoutAndroidVersion)).toBe('ios');
+    expect(platformArg(staging, appJsonWithAndroidVersion)).toBe('all');
     expect(platformArg(production, appJsonWithAndroidVersion)).toBe('ios');
-    expect(() => buildUpdateCommand(beta, 'update', {} as { platform: string })).toThrow(/requires platform/);
+    expect(() => buildUpdateCommand(staging, 'update', {} as { platform: string })).toThrow(/requires platform/);
   });
 
   it('quotes Windows command arguments for npx.cmd shell execution', () => {
@@ -527,14 +460,12 @@ describe('mobile release scripts core logic', () => {
     }, ['ios'])).toBe('OTA_OK');
   });
 
-  it('keeps beta/staging iOS-only until Android versionCode is declared', () => {
+  it('keeps staging iOS-only until Android versionCode is declared', () => {
     const appJsonWithoutAndroidVersion = { expo: { android: {} } };
     const appJsonWithAndroidVersion = { expo: { android: { versionCode: 2026062701 } } };
     expect(targetPlatformsForRelease(resolveTarget({ easJson }, { kind: 'production' }), appJsonWithAndroidVersion)).toEqual(['ios']);
     expect(targetPlatformsForRelease(resolveTarget({ easJson }, { kind: 'production' }), appJsonWithoutAndroidVersion)).toEqual(['ios']);
-    expect(targetPlatformsForRelease(resolveTarget({ easJson }, { kind: 'beta', dev: 'carol' }), appJsonWithoutAndroidVersion)).toEqual(['ios']);
     expect(targetPlatformsForRelease(resolveTarget({ easJson }, { kind: 'staging' }), appJsonWithoutAndroidVersion)).toEqual(['ios']);
-    expect(targetPlatformsForRelease(resolveTarget({ easJson }, { kind: 'beta', dev: 'carol' }), appJsonWithAndroidVersion)).toEqual(['ios', 'android']);
     expect(targetPlatformsForRelease(resolveTarget({ easJson }, { kind: 'staging' }), appJsonWithAndroidVersion)).toEqual(['ios', 'android']);
   });
 
@@ -546,11 +477,11 @@ describe('mobile release scripts core logic', () => {
     expect(() => assertBuildPlatformWithinReleasePlatforms('android', 'ios')).toThrow(/exceeds checked release platform/);
     expect(() => assertBuildPlatformWithinReleasePlatforms('windows', 'ios')).toThrow(/must be ios/);
     expect(() => assertBuildPlatformWithinReleasePlatforms('ios', 'all')).not.toThrow();
-    expect(() => buildColdBuildCommand(resolveTarget({ easJson }, { kind: 'beta', dev: 'carol' }), {} as { platform: string })).toThrow(/requires platform/);
+    expect(() => buildColdBuildCommand(resolveTarget({ easJson }, { kind: 'staging' }), {} as { platform: string })).toThrow(/requires platform/);
 
-    expect(buildColdBuildCommand(resolveTarget({ easJson }, { kind: 'beta', dev: 'carol' }), {
+    expect(buildColdBuildCommand(resolveTarget({ easJson }, { kind: 'staging' }), {
       platform: easBuildPlatformForReleasePlatforms(['ios']),
-      message: 'beta carol',
+      message: 'staging build',
     }).args).toEqual([
       '--yes',
       EAS_CLI_SPEC,
@@ -558,10 +489,10 @@ describe('mobile release scripts core logic', () => {
       '--platform',
       'ios',
       '--profile',
-      'beta-carol',
+      'adhoc',
       '--non-interactive',
       '--message',
-      'beta carol',
+      'staging build',
     ]);
   });
 
@@ -717,79 +648,11 @@ describe('mobile release scripts core logic', () => {
     ).toBe(false);
   });
 
-  it('adds beta developer profiles deterministically', () => {
-    const next = JSON.parse(JSON.stringify(easJson));
-    const result = addBetaDeveloperProfile(next, 'Alice Zhang');
-    expect(result).toEqual({
-      dev: 'alice-zhang',
-      profile: 'beta-alice-zhang',
-      channel: 'beta-alice-zhang',
-      branch: 'beta-alice-zhang',
-      created: true,
-      region: 'cn',
-      easJson: next,
-    });
-    expect(next.build['beta-alice-zhang']).toEqual({
-      extends: 'beta-base',
-      channel: 'beta-alice-zhang',
-      env: { EXPO_PUBLIC_BETA_DEV: 'alice-zhang' },
-    });
-  });
-
-  it('plans beta channel creation and branch association for new developers', () => {
-    const commands = buildBetaChannelLinkCommands({ channel: 'beta-alice', branch: 'beta-alice' });
-    expect(commands.map((command) => command.args)).toEqual([
-      ['--yes', EAS_CLI_SPEC, 'branch:create', 'beta-alice', '--non-interactive'],
-      ['--yes', EAS_CLI_SPEC, 'channel:create', 'beta-alice', '--non-interactive'],
-      ['--yes', EAS_CLI_SPEC, 'channel:edit', 'beta-alice', '--branch', 'beta-alice', '--non-interactive'],
-    ]);
-
-    const dryRunCalls: string[][] = [];
-    const dryRun = runBetaChannelLink({
-      channel: 'beta-alice',
-      execute: false,
-      run: (command) => {
-        dryRunCalls.push((command as { args: string[] }).args);
-        return { status: 0 };
-      },
-    });
-    expect(dryRun.executed).toBe(false);
-    expect(dryRunCalls).toEqual([]);
-
-    const executeCalls: string[][] = [];
-    const executed = runBetaChannelLink({
-      channel: 'beta-alice',
-      execute: true,
-      run: (command) => {
-        const args = (command as { args: string[] }).args;
-        executeCalls.push(args);
-        if (args.includes('branch:create')) {
-          return { status: 1, stderr: 'Branch beta-alice already exists' };
-        }
-        if (args.includes('channel:create')) {
-          return { status: 1, stderr: 'Channel beta-alice already exists' };
-        }
-        return { status: 0 };
-      },
-    });
-    expect(executed).toMatchObject({ executed: true, branchCreated: false, channelCreated: false, created: false, linked: true });
-    expect(executeCalls).toEqual(commands.map((command) => command.args));
-  });
-
-  it('slugifies developer names', () => {
-    expect(slugifyDevName(' Jane_Doe ')).toBe('jane-doe');
-  });
-
   it('treats standalone -- as a separator so positional args survive pnpm forwarding', () => {
-    // `pnpm run beta:add-dev -- alice` 会把 `--` 一起转发,positional 必须仍能拿到。
+    // pnpm run 转发时会把 `--` 一起带上,positional 必须仍能拿到。
     expect(parseArgs(['--', 'alice'])._[0]).toBe('alice');
     expect(parseArgs(['--', '--dev', 'carol']).dev).toBe('carol');
     expect(parseArgs(['--', '--dev', 'carol'])._).toEqual([]);
-  });
-
-  it('requires explicit beta developer names at CLI boundaries', () => {
-    expect(() => requireExplicitDev({}, 'mobile:release:beta')).toThrow(/requires --dev/);
-    expect(() => requireExplicitDev({ dev: 'carol' }, 'mobile:release:beta')).not.toThrow();
   });
 
   it('fails fast with a stable EAS login preflight message', () => {

@@ -56,6 +56,16 @@ Git LFS 和依赖安装。该文档是安装命令的唯一权威说明；本指
 小型文档修正也欢迎直接提交 PR。较大的架构、协议、数据库 migration、权限或用户数据
 变更，建议先开 issue 讨论范围和兼容性。
 
+## 贡献的许可与署名（DCO）
+
+本仓库使用 [Apache-2.0](LICENSE) 许可证。按照其第 5 条，你有意提交到本仓库的任何
+贡献，默认按 Apache-2.0 的条款并入并对外分发，无需额外签署 CLA。
+
+我们要求每个 commit 通过 [Developer Certificate of Origin](https://developercertificate.org/)
+声明来源合法：提交时使用 `git commit -s`，在 commit message 末尾生成
+`Signed-off-by: 你的名字 <你的邮箱>` 行，表示你有权按上述条款提交这份贡献。
+请不要提交你无权授权的代码（例如未经许可复制的专有代码）。
+
 ## 安全问题
 
 不要在公开 issue、PR 或讨论中披露漏洞、凭证或可利用细节。请按
