@@ -704,7 +704,7 @@ export class ClaudeCodeAgent extends BaseAgent {
       modelContextWindows: providerRoutedModels,
     });
     // 远端单独一份 env:用 'remote' 模式从空字典起(不继承 desktop OS env),否则
-    // Windows HOME=C:\Users\XINDONG 之类污染远端 cc CLI 的 ~ 展开(session/memory
+    // Windows HOME=C:\Users\REMOTE_USER 之类污染远端 cc CLI 的 ~ 展开(session/memory
     // 落怪路径)。详见 env-builder.ts buildClaudeEnv 文档。
     const remoteEnv = opts.remoteHostId
       ? await buildClaudeEnv(this.deps.auth, this.deps.runtimeConfig, {
@@ -1526,8 +1526,8 @@ export class ClaudeCodeAgent extends BaseAgent {
           model: currentSdkModel,
           // 关键: 远端必须用 remoteEnv (零 process.env 继承), 不能用本地分支的
           // env。否则 desktop 的 HOME / PATH / APPDATA 等会污染远端 SDK spawn 的
-          // cc CLI(典型: Windows HOME=C:\Users\XINDONG 透到 mac, 远端 cc CLI
-          // 把 ~ 展开成 <cwd>/C:\Users\XINDONG/.claude/, session 全落怪目录)。
+          // cc CLI(典型: Windows HOME=C:\Users\REMOTE_USER 透到 mac, 远端 cc CLI
+          // 把 ~ 展开成 <cwd>/C:\Users\REMOTE_USER/.claude/, session 全落怪目录)。
           // remoteEnv 在 startSession 顶部已经 build (opts.remoteHostId 非空时
           // 才 build), 这里 ! 是合理的 — 走到这分支 remoteCcQueryFactory 也已经
           // gate 过 remoteHostId 非空。

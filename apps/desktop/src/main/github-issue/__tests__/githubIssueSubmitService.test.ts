@@ -31,7 +31,7 @@ function makeDeps(over: Partial<GithubIssueSubmitServiceDeps> = {}) {
     }),
   );
   const postIssue = vi.fn<GithubIssueSubmitServiceDeps['postIssue']>(async () => ({
-    githubIssue: { number: 80, url: 'https://github.com/xindong/XDMaker/issues/80' },
+    githubIssue: { number: 80, url: 'https://github.com/makecindy/cindy/issues/80' },
   }));
   const deps: GithubIssueSubmitServiceDeps = {
     confirm,
@@ -92,7 +92,7 @@ describe('submitGithubIssueWithConfirm', () => {
     expect(res).toEqual({
       ok: true,
       issueNumber: 80,
-      issueUrl: 'https://github.com/xindong/XDMaker/issues/80',
+      issueUrl: 'https://github.com/makecindy/cindy/issues/80',
       finalTitle: '用户改过的标题',
       editedByUser: true,
     });

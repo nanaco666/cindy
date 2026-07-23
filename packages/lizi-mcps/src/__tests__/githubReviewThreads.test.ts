@@ -21,7 +21,7 @@ function graphqlResponse(body: unknown): Response {
 }
 
 function client() {
-  return new GithubClient({ token: 't', owner: 'xindong', repo: 'XDMaker' });
+  return new GithubClient({ token: 't', owner: 'makecindy', repo: 'cindy' });
 }
 
 afterEach(() => {

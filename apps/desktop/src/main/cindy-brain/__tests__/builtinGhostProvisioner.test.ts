@@ -448,7 +448,7 @@ describe('辅助函数', () => {
   });
 });
 
-describe('provisionBuiltinGhosts · 多种子根(official / xd 拆仓)', () => {
+describe('provisionBuiltinGhosts · 多种子根', () => {
   /** 在指定根下写种子(多根用例专用;根目录不存在时自动建)。 */
   async function writeSeedIn(root: string, id: string, files: Record<string, string>): Promise<void> {
     const dir = path.join(root, id);
@@ -460,8 +460,8 @@ describe('provisionBuiltinGhosts · 多种子根(official / xd 拆仓)', () => {
   }
 
   it('两个根的种子都播;各根配置独立(enterprise 归属跟根配置走)', async () => {
-    const rootA = path.join(workDir, 'official');
-    const rootB = path.join(workDir, 'xd');
+    const rootA = path.join(workDir, 'source-a');
+    const rootB = path.join(workDir, 'source-b');
     await writeSeedIn(rootA, 'art', { 'main.js': 'a' });
     await writeSeedIn(rootB, 'pages', { 'main.js': 'b' });
     await fs.promises.writeFile(
@@ -476,8 +476,8 @@ describe('provisionBuiltinGhosts · 多种子根(official / xd 拆仓)', () => {
   });
 
   it('同 id 撞车:先到的根生效,后到的跳过', async () => {
-    const rootA = path.join(workDir, 'official');
-    const rootB = path.join(workDir, 'xd');
+    const rootA = path.join(workDir, 'source-a');
+    const rootB = path.join(workDir, 'source-b');
     await writeSeedIn(rootA, 'dup', { 'main.js': 'from-A' });
     await writeSeedIn(rootB, 'dup', { 'main.js': 'from-B' });
 
@@ -488,8 +488,8 @@ describe('provisionBuiltinGhosts · 多种子根(official / xd 拆仓)', () => {
   });
 
   it('单根配置损坏:只跳过该根,其它根照常;损坏根的已装种子不被当孤儿回收', async () => {
-    const rootA = path.join(workDir, 'official');
-    const rootB = path.join(workDir, 'xd');
+    const rootA = path.join(workDir, 'source-a');
+    const rootB = path.join(workDir, 'source-b');
     await writeSeedIn(rootA, 'art', { 'main.js': 'a' });
     await writeSeedIn(rootB, 'pages', { 'main.js': 'b' });
     // 先正常播一轮,两个都装上、都进 seeded 台账。
@@ -503,14 +503,14 @@ describe('provisionBuiltinGhosts · 多种子根(official / xd 拆仓)', () => {
     expect(fs.existsSync(path.join(repoRootDir, 'pages'))).toBe(true);
   });
 
-  it('半初始化保护:任一根为空(submodule 未 init)→ 跳过孤儿回收,不误删', async () => {
-    const rootA = path.join(workDir, 'official');
-    const rootB = path.join(workDir, 'xd');
+  it('空种子保护:任一根为空 → 跳过孤儿回收,不误删', async () => {
+    const rootA = path.join(workDir, 'source-a');
+    const rootB = path.join(workDir, 'source-b');
     await writeSeedIn(rootA, 'art', { 'main.js': 'a' });
     await writeSeedIn(rootB, 'pages', { 'main.js': 'b' });
     await provisionBuiltinGhosts({ seedRootDirs: [rootA, rootB], repoRootDir });
 
-    // 模拟 B 根 submodule 未初始化:目录在但空。
+    // 模拟 B 根暂时无种子:目录在但空。
     await fs.promises.rm(path.join(rootB, 'pages'), { recursive: true, force: true });
     const outcome = await provisionBuiltinGhosts({ seedRootDirs: [rootA, rootB], repoRootDir });
     expect(outcome.removed).toEqual([]); // pages 不被当"种子下架"回收
@@ -525,16 +525,16 @@ describe('provisionBuiltinGhosts · 多种子根(official / xd 拆仓)', () => {
   });
 
   it('全部根为空 → 静默空结果(与单根缺失同口径)', async () => {
-    const rootA = path.join(workDir, 'official');
-    const rootB = path.join(workDir, 'xd');
+    const rootA = path.join(workDir, 'source-a');
+    const rootB = path.join(workDir, 'source-b');
     await fs.promises.mkdir(rootA, { recursive: true });
     const outcome = await provisionBuiltinGhosts({ seedRootDirs: [rootA, rootB], repoRootDir });
     expect(outcome).toEqual({ installed: [], updated: [], removed: [], skipped: [] });
   });
 
   it('listRestorableBuiltinGhosts 跨根聚合;同 id 取先到的根', async () => {
-    const rootA = path.join(workDir, 'official');
-    const rootB = path.join(workDir, 'xd');
+    const rootA = path.join(workDir, 'source-a');
+    const rootB = path.join(workDir, 'source-b');
     await writeSeedIn(rootA, 'art', { 'main.js': 'a' });
     await writeSeedIn(rootB, 'pages', { 'main.js': 'b' });
     recordBuiltinTombstone(repoRootDir, 'art');

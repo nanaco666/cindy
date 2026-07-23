@@ -40,7 +40,7 @@
   （`throwIpcError`）、main 侧默认带测试、macOS／Windows 双端兼容，以及 UI 文案的
   i18n 落地与 `pnpm check:i18n` 门禁。
 - [`protocol-and-submodules.md`](protocol-and-submodules.md)：`cindy-protocol` 协议权威源、
-  device-link relay 层、内置插件种子 submodule 与 wire protocol 兼容。
+  device-link relay 层、内建插件来源与 wire protocol 兼容。
 - [`architecture-invariants.md`](architecture-invariants.md)：package 与 render／main 解耦、
   main 进程静态依赖，以及主界面布局树不变量。
 - [`configuration-and-overrides.md`](configuration-and-overrides.md)：配置可见性分层、默认值

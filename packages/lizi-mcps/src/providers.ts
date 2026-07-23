@@ -175,14 +175,14 @@ export function createLiziMcpProviders(
   }
 
   // lizi_feishu 已于 2026-07-16 摘壳:飞书全部能力(44 精品 + 123 只读直通)
-  // 迁入内置意识 xd-feishu。2026-07-17 起授权也切到意识 OAuth broker
+  // 迁入插件 xd-feishu。2026-07-17 起授权也切到插件 OAuth broker
   // (source:'oauth' + tokenBroker:'feishu'),主机 token 刷新链与 scheduler
   // registry 直调均已退役。2026-07-22 起 feishu/ 死代码模块整体删除,其直通面
-  // 生成器 + vendored OpenAPI 数据源(原 mcp/generated)迁入 cindy-xd-plugin
-  // 插件仓的 .tooling/ —— lizi-mcps 不再持有任何飞书 OpenAPI 生成物。
+  // 生成器 + vendored OpenAPI 数据源(原 mcp/generated)迁入独立插件包 ——
+  // lizi-mcps 不再持有任何飞书 OpenAPI 生成物。
 
   // lizi_mivo 已于 2026-07-13 退役:mivo 全部 13 工具(图/视频/音乐/音效/3D
-  // 生成、格式转换、按钮动作、下载)整体迁入内置意识 xd-mivo(network 槽
+  // 生成、格式转换、按钮动作、下载)整体迁入插件 xd-mivo(network 槽
   // exchange 二段式凭证 + as:'media'/as:'file' 双路落地),MCP 壳与 mivo
   // 后端一并删除(与 web-search 同模式,MivoClient 无其它消费方,不留后端);
   // 凭证经官方别名表映射老 mivo_api_key 存储键,老用户零迁移。

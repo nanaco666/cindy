@@ -165,7 +165,7 @@ describe('GithubClient.request() end-to-end redirect safety', () => {
       }),
     );
     vi.stubGlobal('fetch', spy);
-    const client = new GithubClient({ token: 'SECRET-TOKEN', owner: 'xindong', repo: 'XDMaker' });
+    const client = new GithubClient({ token: 'SECRET-TOKEN', owner: 'makecindy', repo: 'cindy' });
     await expect(rawRequest(client)('GET', '/user')).rejects.toBeInstanceOf(GithubApiError);
     expect(spy).toHaveBeenCalledTimes(1);
     expect(spy.mock.calls[0][0]).toBe('https://api.github.com/user');

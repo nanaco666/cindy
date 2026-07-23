@@ -20,7 +20,7 @@ function makeDeps(over: Partial<GithubUserIssueSubmitterDeps> = {}): GithubUserI
       return {
         ok: true as const,
         result: {
-          data: { number: 469, html_url: 'https://github.com/xindong/cindy-moved/issues/469' },
+          data: { number: 469, html_url: 'https://github.com/makecindy/cindy/issues/469' },
         },
       };
     }),
@@ -133,7 +133,7 @@ describe('postGithubIssueAsUser', () => {
     await expect(postGithubIssueAsUser(deps, IDENTITY, BODY)).resolves.toEqual({
       githubIssue: {
         number: 469,
-        url: 'https://github.com/xindong/cindy-moved/issues/469',
+        url: 'https://github.com/makecindy/cindy/issues/469',
       },
     });
     expect(deps.callGhostTool).toHaveBeenCalledTimes(2);
@@ -143,8 +143,8 @@ describe('postGithubIssueAsUser', () => {
       args: {
         name: 'create_issue',
         args: {
-          owner: 'xindong',
-          repo: 'cindy-moved',
+          owner: 'makecindy',
+          repo: 'cindy',
           title: BODY.title,
           body: expect.stringContaining('**反馈类型**: feature'),
           labels: ['feature'],

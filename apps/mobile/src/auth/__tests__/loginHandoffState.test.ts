@@ -27,6 +27,10 @@ function apply(actions: LoginHandoffAction[], from?: LoginHandoffState): LoginHa
   return actions.reduce(reduceLoginHandoff, from ?? INITIAL_LOGIN_HANDOFF_STATE);
 }
 
+function readSource(relativePath: string): string {
+  return readFileSync(resolve(process.cwd(), relativePath), 'utf8').replace(/\r\n/g, '\n');
+}
+
 describe('loginHandoff 状态表(冻结逐条)', () => {
   it('endpoint pending→error→retry(pending)→ready:全程可上报,readiness 随闸推进', () => {
     let state = INITIAL_LOGIN_HANDOFF_STATE;
@@ -163,17 +167,11 @@ describe('loginHandoff 时序契约(demo splashHandoff 逐值冻结)', () => {
 });
 
 describe('loginHandoff 接线(Provider/reporter 拓扑 + 清理,读源码断言)', () => {
-  const layoutSource = readFileSync(resolve(process.cwd(), 'app/_layout.tsx'), 'utf8');
-  const providerSource = readFileSync(
-    resolve(process.cwd(), 'src/auth/MobileLoginHandoffContext.tsx'),
-    'utf8',
-  );
-  const stageSource = readFileSync(
-    resolve(process.cwd(), 'src/components/MobileLoginHandoffStage.tsx'),
-    'utf8',
-  );
-  const loginSource = readFileSync(resolve(process.cwd(), 'app/(auth)/login.tsx'), 'utf8');
-  const authSource = readFileSync(resolve(process.cwd(), 'src/auth/AuthContext.tsx'), 'utf8');
+  const layoutSource = readSource('app/_layout.tsx');
+  const providerSource = readSource('src/auth/MobileLoginHandoffContext.tsx');
+  const stageSource = readSource('src/components/MobileLoginHandoffStage.tsx');
+  const loginSource = readSource('app/(auth)/login.tsx');
+  const authSource = readSource('src/auth/AuthContext.tsx');
 
   it('reporter 拓扑写死:root 挂 Provider,endpoint 在 root 层、OTA 在 RootAfterEndpoints、auth-init 在 AuthProvider 内、面板在登录页上报', () => {
     expect(layoutSource).toContain('<MobileLoginHandoffProvider>');

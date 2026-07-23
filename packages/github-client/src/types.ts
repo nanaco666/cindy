@@ -5,9 +5,9 @@ export interface GithubClientConfig {
   baseUrl?: string;
   /** Personal Access Token(classic 或 fine-grained) */
   token: string;
-  /** 仓库 owner,如 'xindong'。user-scope / search / cross-repo 调用可省略。 */
+  /** 仓库 owner,如 'makecindy'。user-scope / search / cross-repo 调用可省略。 */
   owner?: string;
-  /** 仓库名,如 'XDMaker'。user-scope / search / cross-repo 调用可省略。 */
+  /** 仓库名,如 'cindy'。user-scope / search / cross-repo 调用可省略。 */
   repo?: string;
 }
 

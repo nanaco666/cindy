@@ -12,14 +12,12 @@ import {
 /**
  * builtinGhostProvisioner — 内置意识的启动播种(第一方可信通道)。
  *
- * 模型(2026-07-12 Lizi 定案;2026-07-22 种子源拆分为多仓):
- * - 种子 = 随包分发的意识源码目录(dev 读仓库 resources/builtin-ghosts,
- *   packaged 读 process.resourcesPath/builtin-ghosts),不经 .cindy zip;
- * - **多种子根**:种子源按归属拆成多个 submodule 仓(official = cindy-official-plugin,
- *   xd = cindy-xd-plugin),每个根自带一份 provisioning.json,配置损坏按根隔离
- *   fail-closed(只跳过该根的种子,不拖累其它根);同 id 撞车取先到的根(warn 留痕);
- * - **半初始化保护**:submodule 未 init 时根目录存在但为空 —— 任一根为空整轮跳过
- *   孤儿回收(空根无法区分"仓里真没有"和"没 checkout",宁可不删),只做装/覆盖;
+ * 模型(2026-07-12 Lizi 定案):
+ * - 种子 = 可选的第一方意识源码目录(dev 或 packaged 均可注入),不经 .cindy zip；
+ * - **多种子根**:不同来源可提供多个种子根,每个根自带一份 provisioning.json,
+ *   配置损坏按根隔离 fail-closed(只跳过该根的种子,不拖累其它根);同 id 撞车取先到
+ *   的根(warn 留痕)。公开客户端默认不注入任何种子根；
+ * - **空种子保护**:任一根为空时跳过孤儿回收(宁可不删,不误删用户手动安装的插件);
  * - 「永远以最新包为准」:对每个种子做内容指纹比对(逐字节收敛),本地没装
  *   就装、指纹不同就覆盖 —— 不看 version 字段,dev 改源码重启即生效;
  * - **受众(audience)**:种子根下可选的 provisioning.json 按 id 声明给谁装
@@ -85,9 +83,8 @@ interface SeedConfigEntry {
 
 export interface ProvisionDeps {
   /**
-   * 种子根目录列表(builtin-ghosts 下的各 submodule 根,如 official / xd)。
-   * 根不存在或为空 = 该根无种子(submodule 未初始化的典型形态);全部为空则
-   * 静默返回,部分为空只跳过孤儿回收(半初始化保护,见模块头注释)。
+   * 可选种子根目录列表。根不存在或为空 = 该根无种子；全部为空时静默返回，
+   * 部分为空只跳过孤儿回收，避免误删用户手动安装的插件。
    */
   seedRootDirs: string[];
   /** 意识仓库根(userData/cindy-brain)。 */
@@ -278,8 +275,8 @@ export async function provisionBuiltinGhosts(deps: ProvisionDeps): Promise<Provi
   const identity = deps.identity ?? null;
   const outcome: ProvisionOutcome = { installed: [], updated: [], removed: [], skipped: [] };
 
-  // 每根独立列种子 + 读配置。空根不读配置(未初始化 submodule 的目录里连
-  // provisioning.json 都没有,读了必 warn,徒增噪音)。
+  // 每根独立列种子 + 读配置。空根不读配置（没有种子时也不会有
+  // provisioning.json，读取只会徒增告警）。
   const rootStates = seedRootDirs.map((root) => {
     const ids = listSeedIdsInRoot(root);
     return {
@@ -389,10 +386,10 @@ export async function provisionBuiltinGhosts(deps: ProvisionDeps): Promise<Provi
   // (意识改名 / 下架)时,当初"播种装上的"旧包也要收走,否则新旧两个
   // 意识并存(工具面重复、旧包永不再更新)。只收 seeded 台账内的——用户
   // 手动装的同 id 意识与本机制无关,照旧不动。
-  // 半初始化保护(多根拆分后新增):任一根为空说明该根 submodule 很可能没
-  // checkout,其种子全集不可知 —— 本轮跳过孤儿回收,宁可留旧包也不误删。
+  // 空种子保护：任一根为空时，该来源的种子全集不可知；本轮跳过孤儿回收，
+  // 宁可留旧包也不误删。
   if (hasEmptyRoot) {
-    log?.info('builtin ghost orphan recovery skipped: empty seed root (submodule not initialized?)', {
+    log?.info('builtin ghost orphan recovery skipped: empty seed root', {
       emptyRoots: rootStates.filter((s) => s.ids.length === 0).map((s) => s.root),
     });
   } else {

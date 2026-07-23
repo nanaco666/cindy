@@ -309,7 +309,7 @@ describe('MakerContactsStore', () => {
       expect(cross[0]).toMatchObject({ matchType: 'name', kind: 'person' });
       expect(store.findSimilar({ kind: 'person', displayName: '王小明' })).toHaveLength(0);
       // 纯拉丁短别名不做子串匹配: org 别名 "XD" 不应误命中含 "XD" 的任意长名
-      store.createContact({ kind: 'org', displayName: '星澜(XD Inc)', aliases: ['XD', 'xindong'] });
+      store.createContact({ kind: 'org', displayName: '星澜(XD Inc)', aliases: ['XD', 'makecindy'] });
       expect(store.findSimilar({ kind: 'person', displayName: 'XDMaker端到端测试员' })).toHaveLength(0);
     });
 

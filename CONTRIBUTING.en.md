@@ -16,12 +16,13 @@ is outside the scope of this repository.
 - Read the installation section in [`README.en.md`](README.en.md) and the
   applicable [engineering rules](AGENTS.md). `AGENTS.md` contains detailed
   engineering constraints; it is not a replacement for this contribution guide.
+- Follow [`CODE_OF_CONDUCT.en.md`](CODE_OF_CONDUCT.en.md) when participating in
+  the community. For ordinary usage questions, see [`SUPPORT.en.md`](SUPPORT.en.md).
 - Do not commit credentials, tokens, authorization files, personal data, or
   generated local databases.
-- The parent repository pins submodule commits. If you do not have the required
-  access, do not put private-submodule credentials in Git configuration or
-  repository files. The `xd` plugin submodule is an optional private
-  development resource.
+- The public repository pins only the public protocol submodule. Plugins are
+  installed through SkillHub or manually. Do not put credentials in Git
+  configuration or repository files.
 
 ## Getting the code and installing dependencies
 

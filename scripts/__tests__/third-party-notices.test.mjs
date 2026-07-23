@@ -74,7 +74,7 @@ test("project-owned iOS podspecs declare the repository Apache-2.0 license", () 
     assert.match(podspec, /:type\s*=>\s*['\"]Apache-2\.0['\"]/);
     assert.match(podspec, /:file\s*=>\s*['\"]\.\.\/\.\.\/\.\.\/\.\.\/\.\.\/LICENSE['\"]/);
     assert.doesNotMatch(podspec, /UNLICENSED/i);
-    assert.match(podspec, /https:\/\/github\.com\/xindong\/cindy-moved\.git/);
+    assert.match(podspec, /https:\/\/github\.com\/makecindy\/cindy\.git/);
   }
 });
 

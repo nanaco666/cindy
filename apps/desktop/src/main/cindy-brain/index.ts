@@ -198,20 +198,9 @@ function brainRootDir(): string {
   return brainRootCache;
 }
 
-/**
- * 内置意识种子根目录列表(第一方可信通道,随包分发的源码目录形态):
- * - dev:仓库 apps/desktop/resources/builtin-ghosts(appPath = apps/desktop);
- * - packaged:process.resourcesPath/builtin-ghosts(forge extraResource 原样拷入)。
- * 2026-07-22 起种子源拆为两个 submodule 仓,分别挂载在 builtin-ghosts 下:
- * official(cindy-official-plugin)与 xd(cindy-xd-plugin),各自带一份
- * provisioning.json。submodule 未初始化 = 对应根为空,播种层按半初始化保护
- * 处理(见 builtinGhostProvisioner 头注释)。双平台无差异(纯 path.join)。
- */
+/** 公开客户端不随源码或安装包分发内建插件种子。 */
 function builtinSeedRootDirs(): string[] {
-  const base = app.isPackaged
-    ? path.join(process.resourcesPath, 'builtin-ghosts')
-    : path.join(app.getAppPath(), 'resources', 'builtin-ghosts');
-  return [path.join(base, 'official'), path.join(base, 'xd')];
+  return [];
 }
 
 /** 当前登录身份 → 播种受众判定的输入(登出 = null)。 */

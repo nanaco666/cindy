@@ -26,47 +26,22 @@ jobs:
     timeout-minutes: 40
 
     steps:
-      # 主仓用默认 GITHUB_TOKEN 拉取;不能把 deploy key 传给 checkout 的 ssh-key——
-      # 那会让主仓也走这把 key 的 SSH,而 deploy key 只绑定 cindy-protocol 一个仓,
-      # 拉 cindy-moved 会被 GitHub 拒为 "Repository not found"。
+      # 主仓与公开 submodule 都使用 GitHub 默认的只读访问路径。
       - name: Checkout client
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
           lfs: true
 
-      # 本 job 只做 typecheck / 单测 / 各类 guard,唯一的构建硬依赖是 cindy-protocol:
-      # 它的 packages/* 是 pnpm workspace 成员,apps/desktop 通过 workspace:* 依赖
-      # @cindy/slack-hook-protocol,缺了它 pnpm install --frozen-lockfile 直接失败。
-      # 两个内置插件种子仓(official / xd)只是运行期打包资源,本 job 不打包、单测也
-      # 只在 os.tmpdir 里自造种子夹具,不读真实仓库内容,所以这里不拉 —— 少两把
-      # deploy key、少两个失败点(fork PR 也更稳)。打包 / 发布流程需要时另行拉取。
+      # 本 job 只做本仓 typecheck / 单测 / 各类 guard。cindy-protocol 是公开的
+      # workspace 依赖,需要 checkout 以供 pnpm install 解析,但不在本 job 运行
+      # 协议仓自己的 CI。
+      # 公开客户端不包含内建插件种子；相关单测只在 os.tmpdir 里自造夹具。
+      # 公开仓不提供官方发布流程。
       - name: Fetch cindy-protocol submodule
-        env:
-          PROTOCOL_DEPLOY_KEY: ${{ secrets.CINDY_PROTOCOL_DEPLOY_KEY }}
         run: |
-          [ -n "$PROTOCOL_DEPLOY_KEY" ] || { echo "CINDY_PROTOCOL_DEPLOY_KEY secret unavailable (fork PR?)" >&2; exit 1; }
-          mkdir -p ~/.ssh
-          install -m 600 /dev/null ~/.ssh/deploy_key_protocol
-          printf '%s\n' "$PROTOCOL_DEPLOY_KEY" > ~/.ssh/deploy_key_protocol
-          # 固定 GitHub 官方 ed25519 host key,避免 ssh-keyscan 的 TOFU 与偶发空输出
-          echo 'github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl' >> ~/.ssh/known_hosts
-          {
-            echo "Host github-protocol"
-            echo "  HostName github.com"
-            echo "  User git"
-            echo "  IdentityFile ~/.ssh/deploy_key_protocol"
-            echo "  IdentitiesOnly yes"
-            echo "  HostKeyAlgorithms ssh-ed25519"
-          } >> ~/.ssh/config
-          # .gitmodules 里 cindy-protocol 声明的是 https URL;https 与 ssh 两种写法都
-          # 重写到 github-protocol 别名,命中 deploy key,避免回落到无凭证的真实 https。
-          git config --global url."git@github-protocol:xindong/cindy-protocol.git".insteadOf https://github.com/xindong/cindy-protocol.git
-          git config --global --add url."git@github-protocol:xindong/cindy-protocol.git".insteadOf git@github.com:xindong/cindy-protocol.git
           git submodule sync -- cindy-protocol
           git submodule update --init --force --recursive -- cindy-protocol
-          # submodule 拉完立刻销毁私钥,不让它存活到 pnpm install 等会执行第三方脚本的步骤
-          rm -f ~/.ssh/deploy_key_protocol
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v6
@@ -105,9 +80,6 @@ jobs:
         env:
           XDT_MIGRATION_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before || 'origin/main' }}
         run: pnpm --filter desktop db:validate
-
-      - name: Verify protocol packages
-        run: pnpm --filter @cindy/device-link-protocol build && pnpm --filter @cindy/slack-hook-protocol test
 
       - name: Run client and package unit tests
         run: pnpm test:unit

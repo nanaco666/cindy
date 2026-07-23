@@ -53,7 +53,7 @@
 - 新增或修改 Desktop 日志、IPC 错误处理、main 侧业务逻辑与测试、跨平台（macOS／
   Windows）行为，或任何 UI 文案的 i18n 落地前，必须先读
   `docs/dev-rules/engineering-conventions.md`。
-- 升级 `cindy-protocol` 或内置插件种子 submodule 指针、修改 device-link 协议／relay／隧道
+- 升级 `cindy-protocol`、修改内建插件播种边界或 device-link 协议／relay／隧道
   payload／IPC allowlist，或任何改动跨端 wire protocol 前，必须先读
   `docs/dev-rules/protocol-and-submodules.md`。
 - 修改 package 依赖方向、main 进程模块加载方式，或主界面布局树结构前，必须先读

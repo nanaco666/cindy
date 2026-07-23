@@ -70,15 +70,15 @@ repository and is not part of this monorepo.
 Contributor setup, public submodule initialization, Git LFS, dependency updates,
 and access requirements are maintained in
 [`CONTRIBUTING.en.md`](CONTRIBUTING.en.md).
-Do not use a blanket recursive submodule checkout if you do not have access to the
-private `xd` plugin repository.
+The public checkout only needs the protocol submodule; plugins are installed through
+SkillHub or manually.
 
 Minimal entry point:
 
 ```bash
 git clone https://github.com/makecindy/cindy.git
 cd cindy
-git submodule update --init --recursive cindy-protocol apps/desktop/resources/builtin-ghosts/official
+git submodule update --init --recursive cindy-protocol
 git lfs pull
 pnpm install
 ```
@@ -116,6 +116,9 @@ mode.
 Contributions go through pull requests into `main`. Read
 [`CONTRIBUTING.en.md`](CONTRIBUTING.en.md) first, then use
 [`.github/PULL_REQUEST_TEMPLATE.md`](.github/PULL_REQUEST_TEMPLATE.md).
+Please also follow [`CODE_OF_CONDUCT.en.md`](CODE_OF_CONDUCT.en.md). For ordinary
+usage questions, see [`SUPPORT.en.md`](SUPPORT.en.md); report security issues
+privately through [`SECURITY.en.md`](SECURITY.en.md).
 
 ## Security
 

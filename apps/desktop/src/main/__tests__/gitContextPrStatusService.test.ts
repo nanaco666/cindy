@@ -11,13 +11,13 @@ import {
   type PrRemoteState,
 } from '../git-context/prStatusService';
 
-const Q = { owner: 'xindong', repo: 'XDMaker', prNumber: 85 };
+const Q = { owner: 'makecindy', repo: 'cindy', prNumber: 85 };
 
 function remote(partial: Partial<PrRemoteState>): PrRemoteState {
   return {
     state: 'open',
     title: 't',
-    html_url: 'https://github.com/xindong/XDMaker/pull/85',
+    html_url: 'https://github.com/makecindy/cindy/pull/85',
     branch: 'feat/x',
     ...partial,
   };

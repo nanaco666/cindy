@@ -1,9 +1,3 @@
 [submodule "cindy-protocol"]
 	path = cindy-protocol
-	url = https://github.com/xindong/cindy-protocol.git
-[submodule "apps/desktop/resources/builtin-ghosts/official"]
-	path = apps/desktop/resources/builtin-ghosts/official
-	url = https://github.com/xindong/cindy-official-plugin.git
-[submodule "apps/desktop/resources/builtin-ghosts/xd"]
-	path = apps/desktop/resources/builtin-ghosts/xd
-	url = git@github.com:xindong/cindy-xd-plugin.git
+	url = https://github.com/makecindy/cindy-protocol.git

@@ -22,7 +22,23 @@ packages/browser-control-runtime/src/_generated/** linguist-generated=true
 
 # ── 开源公开仓排除(内部专用,不进对外发布)────────────────────────────
 # export-ignore 让 `git archive` 导出时自动剔除;若以「复制工作树 + git init」方式建
-# 公开仓,则在新仓首次提交前执行:  git rm -r public-check
-# 注：public-check 仅供内部使用,不被 package.json scripts 引用(开源建仓 checklist 的内部备份)。
+# 公开仓,则在新仓首次提交前排除 public-check、旧归档、服务端桥接和官方发布链路
+# (详见 public-check/open-source-checklist.md)。
 public-check/ export-ignore
 public-check/** export-ignore
+AGENTS-old.md export-ignore
+README-old.md export-ignore
+docs/login-redesign/ export-ignore
+docs/login-redesign/** export-ignore
+scripts/run-external-server.mjs export-ignore
+apps/desktop/scripts/release-*.mjs export-ignore
+apps/desktop/scripts/publish-desktop.mjs export-ignore
+apps/desktop/scripts/promote-*.mjs export-ignore
+apps/desktop/scripts/package-desktop.mjs export-ignore
+apps/desktop/scripts/release-regions.json.example export-ignore
+apps/desktop/scripts/npkg-sign.sh export-ignore
+apps/desktop/scripts/sign.py export-ignore
+apps/mobile/scripts/release-*.mjs export-ignore
+apps/mobile/scripts/release-*.sh export-ignore
+apps/mobile/scripts/promote-*.mjs export-ignore
+apps/mobile/scripts/beta-*.mjs export-ignore
