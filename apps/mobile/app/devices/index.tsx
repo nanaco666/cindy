@@ -25,7 +25,6 @@ import {
   Check,
   ChevronDown,
   ChevronRight,
-  Clock,
   Folder,
   FolderOpen,
   LoaderCircle,
@@ -123,6 +122,7 @@ import {
 } from '@/session/scheduleIndex';
 import { createScheduleIndexDeferRegistry } from '@/session/scheduleIndexDefer';
 import { resolveMobileSessionRightStatus } from '@/session/sessionRightStatus';
+import { AutomationTimerIcon } from '@/session/AutomationTimerIcon';
 import { SessionActionSheet } from '@/session/SessionActionSheet';
 import { SwipeableSessionRow, type SessionSwipeControls } from '@/session/SwipeableSessionRow';
 import {
@@ -525,10 +525,13 @@ export default function HomeScreen() {
         remoteSessionStore.requestReseed(deviceId);
         continue;
       }
-      // read / all-read 是用户操作驱动的低频权威信号,force 穿透节流保证徽标即时清除;
-      // fired / running 等高频事件照常吃 TTL(全量 force 会把 listRuns 风暴请回来)。
+      // schedule 列表变化(changed,含 pause / resume / 改绑)与 read / all-read 都是低频
+      // 权威信号,force 穿透节流保证状态即时更新;fired / running 等高频事件照常吃 TTL
+      // (全量 force 会把 listRuns 风暴请回来)。
       refreshDeviceScheduleIndex(deviceId, sessionIds, {
-        force: projection.unreadImpact === 'may-clear-schedule' || projection.unreadImpact === 'clear-all',
+        force: projection.refresh.scheduleList === true
+          || projection.unreadImpact === 'may-clear-schedule'
+          || projection.unreadImpact === 'clear-all',
       });
     }
   }), [refreshDeviceScheduleIndex]);
@@ -2168,6 +2171,9 @@ function HomeSessionRowInner({
     || readBooleanField(item.session, 'hasPausedQueue')
     || readBooleanField(item.session, 'composerDraft');
   const showSchedule = !!item.scheduleInfo || item.session.source === 'scheduler';
+  // 对齐桌面多绑定语义:只有同一会话的所有 schedule 都 paused / expired，
+  // 才在 Timer 固定槽位叠 Pause 角标；任一 active 绑定仍保留普通 Timer。
+  const scheduleStopped = item.scheduleInfo?.allSchedulesStopped === true;
   const showPinned = !!item.session.pinnedAt;
   // 自动化组行:同一任务的多次运行折叠而成(共享层 groupAutomationListItems 产出)。
   // 没接展开回调的调用点退化为普通行为(点击打开 primary 会话)。
@@ -2309,10 +2315,16 @@ function HomeSessionRowInner({
               {preview}
             </Text>
             {showSchedule || showPinned ? (
-              // 组行与单次自动化会话行同款标记:Clock 放右下(时间下方的尾部图标位),
+              // 组行与单次自动化会话行同款标记:Timer 放右下(时间下方的尾部图标位),
               // 行首保留正常的会话状态图标(primary 运行的 vendor / 运行态)。
               <View style={[styles.sessionTrailingIcons, cindyList && styles.sessionTrailingIconsCindy]}>
-                {showSchedule ? <Clock color={colors.textTertiary} size={cindyList ? iconSize.xs : iconSize.lg} strokeWidth={iconStroke.thin} /> : null}
+                {showSchedule ? (
+                  <AutomationTimerIcon
+                    paused={scheduleStopped}
+                    size={cindyList ? iconSize.xs : iconSize.lg}
+                    testID={`home.sessionAutomationTimer.${item.session.id}`}
+                  />
+                ) : null}
                 {showPinned ? <Pin color={colors.textTertiary} size={cindyList ? iconSize.xs : iconSize.lg} strokeWidth={iconStroke.thin} /> : null}
               </View>
             ) : null}

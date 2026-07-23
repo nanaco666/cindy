@@ -555,6 +555,7 @@ function fallbackScheduleInfo(session: RemoteSessionListSessionLike): RemoteSess
     running: false,
     scheduleId: '',
     scheduleName: title || '自动化任务',
+    allSchedulesStopped: false,
     unreadCount: 0,
     unreadRunIds: [],
   };

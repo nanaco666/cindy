@@ -11,4 +11,14 @@ describe('mobile remote session bootstrap', () => {
     expect(homeSource).toMatch(listWithPinned);
     expect(detailSource).toMatch(listWithPinned);
   });
+
+  it('forces detail schedule-index refreshes for schedule-list and unread-clear events', () => {
+    const detailSource = readFileSync(resolve(process.cwd(), 'app/devices/[deviceId].tsx'), 'utf8');
+
+    expect(detailSource).toContain('scheduleEventSnapshot.scheduleListVersion === 0');
+    expect(detailSource).toContain('scheduleEventSnapshot.unreadClearVersion === 0');
+    expect(detailSource).toContain('{ force: true }');
+    expect(detailSource).toContain('scheduleEventSnapshot.scheduleListVersion,');
+    expect(detailSource).toContain('scheduleEventSnapshot.unreadClearVersion,');
+  });
 });

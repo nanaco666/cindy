@@ -175,6 +175,7 @@ describe('mobile home desktop-first surface', () => {
     expect(source).toContain('if (version === 0) {');
     expect(source).toContain('scheduleEventVersionsRef.current.delete(deviceId)');
     expect(source).toContain("projection?.refresh.sessionIndex !== true && projection?.runPatch.status !== 'running'");
+    expect(source).toContain('force: projection.refresh.scheduleList === true');
     expect(source).toContain('scheduleIndex,');
     expect(source).toContain('const attention = item.pendingInteractionCount > 0');
     expect(source).toContain('|| (item.scheduleInfo?.unreadCount ?? 0) > 0');
@@ -241,6 +242,7 @@ describe('mobile home desktop-first surface', () => {
 
   it('keeps project and session rows at desktop sidebar information density', () => {
     const source = readSource('app/devices/index.tsx');
+    const automationTimerSource = readSource('src/session/AutomationTimerIcon.tsx');
     const desktopProjectNode = readSource(
       '../../apps/desktop/src/renderer/features/cc-agent/sidebar/sections/ProjectNode.tsx',
     );
@@ -280,6 +282,17 @@ describe('mobile home desktop-first surface', () => {
     expect(sessionRowSource).toContain('item.scheduleInfo?.unreadCount');
     expect(sessionRowSource).toContain('item.session.pinnedAt');
     expect(sessionRowSource).toContain('styles.sessionTrailingIcons');
+    expect(sessionRowSource).toContain('<AutomationTimerIcon');
+    expect(sessionRowSource).toContain('paused={scheduleStopped}');
+    expect(sessionRowSource).toContain('item.scheduleInfo?.allSchedulesStopped === true');
+    expect(source).not.toContain('Clock,');
+    expect(automationTimerSource).toContain("import { Pause, Timer } from 'lucide-react-native';");
+    expect(automationTimerSource).toContain('<Timer color={colors.textTertiary}');
+    expect(automationTimerSource).toContain('<Pause color={colors.textTertiary}');
+    expect(automationTimerSource).not.toContain('opacity: 0.6');
+    expect(automationTimerSource).toContain('position: \'absolute\'');
+    expect(automationTimerSource).toContain('backgroundColor: colors.surfaceChip');
+    expect(automationTimerSource).toContain('borderColor: colors.border');
     expect(sessionRowSource).not.toContain('SessionBadge');
     expect(source).toContain('const HOME_SESSION_ROW_HEIGHT = 78;');
     expect(source).toContain('const CINDY_LIST_ROW_HEIGHT = 60;');
