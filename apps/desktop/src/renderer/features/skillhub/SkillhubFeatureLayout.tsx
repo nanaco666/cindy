@@ -29,14 +29,18 @@ const log = createLogger('SkillhubFeatureLayout');
 import {
   bootstrapSkillhub,
   refresh as refreshSkillhub,
+  setSkillhubDataOwner,
   syncProjects,
   useSkillhub,
   type SkillhubProject,
 } from './hooks/useSkillhub';
 import { useSkillSync } from './hooks/useSkillSync';
 import { projectHash } from './lib/projectHash';
+import { useAuth } from '@/contexts/AuthContext';
 
 export function SkillhubFeatureLayout() {
+  const { dataOwnerId, mode } = useAuth();
+  const cloudSyncEnabled = mode === 'cloud';
   // 技能改为右侧整页(无左树导航),左侧 app 侧栏沿用 cc-agent 项目/对话列表。
   // 显式注册同一个 CCAgentSidebarUpper:warm 导航时与 cc-agent 注册的是同一组件
   // 类型,只 reconcile、不 remount(实例状态保留);冷启动直接进 /skillhub 时则首次
@@ -45,7 +49,7 @@ export function SkillhubFeatureLayout() {
 
   // v0.2.1: trigger batch sync whenever the skill list changes
   const { skills, syncResults, bootstrapped } = useSkillhub();
-  useSkillSync(skills);
+  useSkillSync(skills, cloudSyncEnabled);
 
   // 一次性回填:server 端 authorId 是权威结论,把本地 registry 跟它对齐。两类:
   //   1) 没 registry 记录(老 publish 没主动建)
@@ -57,7 +61,7 @@ export function SkillhubFeatureLayout() {
   // 本地 authorId 必须是当前登录用户,补齐后归属判定才会回归 mine 状态。
   const reconciledKeysRef = useRef(new Set<string>());
   useEffect(() => {
-    if (!bootstrapped) return;
+    if (!cloudSyncEnabled || !bootstrapped) return;
     if (syncResults.size === 0) return; // sync 还没完成
     const items: Array<{ name: string; absolutePath: string; version: string; authorId: string; folderHash?: string }> = [];
     const itemKeys: Array<{ name: string; key: string }> = [];
@@ -101,7 +105,7 @@ export function SkillhubFeatureLayout() {
       .catch((err) => {
         log.warn('reconcileMineRegistry failed:', err);
       });
-  }, [bootstrapped, skills, syncResults]);
+  }, [bootstrapped, cloudSyncEnabled, skills, syncResults]);
 
   // sessions[] 来自 useCCSessions；groupSessions 会按归一化 workingDir 聚合成
   // 项目节点（含消歧后的 displayName，并按 latestActivityAt 排序）。SkillHub 只需要
@@ -129,13 +133,14 @@ export function SkillhubFeatureLayout() {
   }, [sessions, sessionsLoading]);
 
   useEffect(() => {
-    bootstrapSkillhub();
-  }, []);
-
-  useEffect(() => {
-    if (skillhubProjects === null) return;
+    setSkillhubDataOwner(dataOwnerId);
+    if (dataOwnerId === null || skillhubProjects === null) return;
     syncProjects(skillhubProjects);
-  }, [skillhubProjects]);
+    // reset() clears the module bootstrap guard on owner changes. Calling this
+    // after project sync keeps local-mode scans alive even when the project
+    // list is unchanged or empty.
+    bootstrapSkillhub();
+  }, [dataOwnerId, skillhubProjects]);
 
   return (
     <div className="flex h-full w-full flex-col">

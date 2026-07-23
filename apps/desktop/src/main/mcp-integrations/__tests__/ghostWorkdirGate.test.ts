@@ -19,6 +19,9 @@ const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'ghost-workdir-gate-')
 const prefsFile = () => path.join(tmpUserData, 'ghost-workdir-prefs.json');
 
 vi.mock('electron', () => ({ app: { getPath: () => tmpUserData } }));
+vi.mock('../../appSessionState.js', () => ({
+  ownerScopedUserDataPath: (...parts: string[]) => path.join(tmpUserData, ...parts),
+}));
 vi.mock('../../maker-host/logger-adapter.js', () => ({
   desktopMakerLogger: { child: () => ({ info: () => {}, warn: () => {}, error: () => {} }) },
 }));
@@ -34,6 +37,7 @@ vi.mock('../../cindy-brain/index.js', () => ({
   getGhostManager: () => ({ list: listMock }),
   getGhostPipeDispatcher: () => ({ callGhostTool: dispatchMock }),
   getGhostCardService: () => ({ registerCall: () => {}, finalizeCall: () => null }),
+  isGhostAvailableForActiveSession: () => true,
 }));
 // 以下依赖在本测试路径上不会被触达,但 import 副作用重,一律断开。
 vi.mock('../../cindy-brain/attachmentGrant.js', () => ({

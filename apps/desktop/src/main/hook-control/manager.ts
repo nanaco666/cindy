@@ -56,6 +56,8 @@ export const SLACK_HOOK_CONNECTION_ID = 'slack';
 
 export interface HookControlManagerDeps {
   store: SlackHookStore;
+  /** Runtime capability gate; false stops the transport without changing user prefs/bindings. */
+  isAvailable?: () => boolean;
   /** transport 工厂 —— 生产为 createHookTransport, 测试可注入假实现。 */
   createTransport: (opts: HookTransportOpts) => HookTransport;
   /** 登录 accessToken 源(transport 每次建连实时取; null = 未登录)。 */
@@ -277,6 +279,7 @@ function toViewStatus(s: HookTransportStatus | null, enabled: boolean): HookConn
 export function createHookControlManager(deps: HookControlManagerDeps): HookControlManager {
   const {
     store,
+    isAvailable = () => true,
     createTransport,
     getAuthToken,
     refreshAuthToken,
@@ -1188,7 +1191,7 @@ export function createHookControlManager(deps: HookControlManagerDeps): HookCont
     sync() {
       // 统一策略: 停旧建新 —— url/别名/登录态变更全部经重建生效, 不做增量 diff
       stop();
-      if (store.get().enabled && !disposed) start();
+      if (store.get().enabled && !disposed && isAvailable()) start();
       // multi-team 的 gate 含 enabled 因子(关开关不再清绑定), setEnabled 后的
       // sync 是它唯一的重算点; 老路径下本调用是幂等 no-op
       notifySlackToolProviderEnabledIfChanged();

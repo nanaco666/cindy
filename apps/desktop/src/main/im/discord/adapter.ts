@@ -10,10 +10,13 @@ import { app } from 'electron';
 import type { DiscordIM } from '@cindy/im';
 
 import type { ImChannelAdapter, ImOrchestratorConfig } from '../shared/types';
+import { claimLegacyImPath, ownerScopedImUserDataPath } from '../ownerScopedStorage';
 import { ui, PROCESSING_EMOJI } from './uiText';
 
 function ensureWorkingDir(appId: string): string {
-  const dir = path.join(app.getPath('userData'), 'im-working-dir', `discord-${appId}`);
+  const leaf = `discord-${appId}`;
+  const dir = ownerScopedImUserDataPath('im-working-dir', leaf);
+  claimLegacyImPath(path.join(app.getPath('userData'), 'im-working-dir', leaf), dir);
   fs.mkdirSync(dir, { recursive: true });
   return dir;
 }

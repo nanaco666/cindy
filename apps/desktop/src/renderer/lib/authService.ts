@@ -1,11 +1,11 @@
+import type { AuthFlowState } from '@cindy/auth-client';
 import type {
-  AccountDeletionAvailability,
-  AccountDeletionStatus,
-  AuthFlowState,
-} from '@cindy/auth-client';
-import type {
+  DesktopAccountDeletionAvailabilityResult,
   DesktopAccountDeletionChallenge,
-  DesktopAccountDeletionResult,
+  DesktopAccountDeletionChallengeResult,
+  DesktopAccountDeletionConfirmInput,
+  DesktopAccountDeletionConfirmResult,
+  DesktopAccountDeletionStatusResult,
   DesktopLoginAction,
   DesktopLoginActionResult,
 } from '../../shared/authIpc';
@@ -32,6 +32,9 @@ export interface User {
 
 export interface AuthState {
   user: User | null;
+  mode: 'signed-out' | 'local' | 'cloud';
+  dataOwnerId: string | null;
+  canEnterApp: boolean;
   isAuthenticated: boolean;
   isCanary: boolean;
   deviceId: string;
@@ -44,17 +47,12 @@ export interface AuthService {
   getLoginState(): Promise<DesktopLoginActionResult>;
   dispatchLoginAction(action: DesktopLoginAction): Promise<DesktopLoginActionResult>;
   logout(): Promise<void>;
-  getAccountDeletionAvailability(): Promise<
-    DesktopAccountDeletionResult<AccountDeletionAvailability>
-  >;
-  requestAccountDeletionChallenge(): Promise<
-    DesktopAccountDeletionResult<DesktopAccountDeletionChallenge>
-  >;
-  confirmAccountDeletion(input: {
-    challengeId: string;
-    code: string;
-  }): Promise<DesktopAccountDeletionResult<AccountDeletionStatus>>;
-  getAccountDeletionStatus(): Promise<DesktopAccountDeletionResult<AccountDeletionStatus | null>>;
+  enterLocalMode(): Promise<AuthState>;
+  exitLocalMode(): Promise<AuthState>;
+  getAccountDeletionAvailability(): Promise<DesktopAccountDeletionAvailabilityResult>;
+  requestAccountDeletionChallenge(): Promise<DesktopAccountDeletionChallengeResult>;
+  confirmAccountDeletion(input: DesktopAccountDeletionConfirmInput): Promise<DesktopAccountDeletionConfirmResult>;
+  getAccountDeletionStatus(): Promise<DesktopAccountDeletionStatusResult>;
   clearAccountDeletionReceipt(): Promise<void>;
   consumeAccountDeletionRestoredNotice(): Promise<boolean>;
   onAuthStateChange(callback: (state: AuthState) => void): () => void;
@@ -67,6 +65,9 @@ export function createAuthService(): AuthService {
   const unsubscribeIpc = window.electronAPI.onAuthStateChange((rawState) => {
     const normalized: AuthState = {
       user: rawState.user as User | null,
+      mode: rawState.mode,
+      dataOwnerId: rawState.dataOwnerId,
+      canEnterApp: rawState.canEnterApp,
       isAuthenticated: rawState.isAuthenticated,
       isCanary: rawState.isCanary === true,
       deviceId: rawState.deviceId,
@@ -81,6 +82,9 @@ export function createAuthService(): AuthService {
       const raw = await window.electronAPI.authInitialize();
       return {
         user: raw.user as User | null,
+        mode: raw.mode,
+        dataOwnerId: raw.dataOwnerId,
+        canEnterApp: raw.canEnterApp,
         isAuthenticated: raw.isAuthenticated,
         isCanary: raw.isCanary === true,
         deviceId: raw.deviceId,
@@ -101,26 +105,29 @@ export function createAuthService(): AuthService {
       await window.electronAPI.authLogout();
     },
 
+    async enterLocalMode(): Promise<AuthState> {
+      return window.electronAPI.authEnterLocal() as Promise<AuthState>;
+    },
+
+    async exitLocalMode(): Promise<AuthState> {
+      return window.electronAPI.authExitLocal() as Promise<AuthState>;
+    },
+
     getAccountDeletionAvailability() {
       return window.electronAPI.authGetAccountDeletionAvailability();
     },
-
     requestAccountDeletionChallenge() {
       return window.electronAPI.authRequestAccountDeletionChallenge();
     },
-
     confirmAccountDeletion(input) {
       return window.electronAPI.authConfirmAccountDeletion(input);
     },
-
     getAccountDeletionStatus() {
       return window.electronAPI.authGetAccountDeletionStatus();
     },
-
     clearAccountDeletionReceipt() {
       return window.electronAPI.authClearAccountDeletionReceipt();
     },
-
     consumeAccountDeletionRestoredNotice() {
       return window.electronAPI.authConsumeAccountDeletionRestoredNotice();
     },
@@ -138,11 +145,8 @@ export function createAuthService(): AuthService {
 }
 
 export type {
-  AccountDeletionAvailability,
-  AccountDeletionStatus,
   AuthFlowState,
   DesktopAccountDeletionChallenge,
-  DesktopAccountDeletionResult,
   DesktopLoginAction,
   DesktopLoginActionResult,
 };

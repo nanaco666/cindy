@@ -44,7 +44,12 @@ import {
 import { classifyLocalAttachmentPath } from '../cindy-brain/ghostLocalPathGrant.js';
 import { withCardToken } from '../cindy-brain/cardService.js';
 import { drainGhostCallMedia } from '../cindy-brain/ghostMediaLedger.js';
-import { getGhostCardService, getGhostManager, getGhostPipeDispatcher } from '../cindy-brain/index.js';
+import {
+  getGhostCardService,
+  getGhostManager,
+  getGhostPipeDispatcher,
+  isGhostAvailableForActiveSession,
+} from '../cindy-brain/index.js';
 import { isGhostDisabledForWorkdir } from '../cindy-brain/ghostWorkdirPrefs.js';
 import { FORGE_GUIDE, packGhostDir } from '../cindy-brain/forge.js';
 import { handleIncomingCindyFile } from '../cindy-brain/openFileInstall.js';
@@ -451,6 +456,7 @@ export function getCindyGhostsMcpDeps(sessionCtx?: LiziMcpSessionContext): Cindy
         .filter(
           (g) =>
             g.enabled &&
+            isGhostAvailableForActiveSession(g.manifest.id) &&
             g.manifest.kind === 'chip' &&
             (g.manifest.tools?.length ?? 0) > 0 &&
             !isGhostDisabledForWorkdir(g.manifest.id, workdir),
@@ -474,6 +480,7 @@ export function getCindyGhostsMcpDeps(sessionCtx?: LiziMcpSessionContext): Cindy
         .filter(
           (g) =>
             g.enabled &&
+            isGhostAvailableForActiveSession(g.manifest.id) &&
             g.manifest.kind === 'chip' &&
             (g.manifest.tools?.length ?? 0) > 0 &&
             !isGhostDisabledForWorkdir(g.manifest.id, workdir),
@@ -490,6 +497,16 @@ export function getCindyGhostsMcpDeps(sessionCtx?: LiziMcpSessionContext): Cindy
         }));
     },
     async callGhostTool({ ghostId, tool, args, attachments, dir, saveDir, agentToolUseId, grantOnly }) {
+      // Check the account/session capability before granting attachments or
+      // directory tickets. A stale roster from a cloud session must not let a
+      // local session create durable grants or wake an account-managed Ghost.
+      if (!isGhostAvailableForActiveSession(ghostId)) {
+        return {
+          ok: false,
+          errorCode: 'GHOST_NOT_FOUND',
+          message: '该插件需要 Cindy 账号，本地模式不可用；不要重试，改用本地可用方式。',
+        };
+      }
       // 用户图片过户:attachments 里的地址逐张落媒体总仓 + 记
       // ghost-grant 引用(显式引渡 = 授权,按张、永久),指纹注入
       // args.attachments 交给意识。任何一张失败整批拒(ATTACHMENT_INVALID),

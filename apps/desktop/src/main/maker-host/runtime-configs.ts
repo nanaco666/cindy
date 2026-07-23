@@ -71,8 +71,6 @@ export function getRipgrepBinaryPath(): string {
 // memorySettings 在 main 启动期已 ready (userData 同步可访问)。
 // 原生 auto-memory 与 Maker Memory 都从持久化 store 读, 重启后用户上次设置 100% 恢复。
 // 默认值由 memory-settings-store.ts 维护 (maker=false / claudeCode=true / codex=true)。
-const memorySettings = readMemorySettings();
-
 function readMakerMemoryEnabled(): boolean {
   return readMemorySettings().maker;
 }
@@ -132,7 +130,9 @@ export function buildDesktopClaudeRuntimeConfig(endpointFn: () => string): Agent
     systemPrompt: composeHostPrompt(claudeSystemPrompt),
     // Maker Memory 需要的 user-data 绝对路径 (maker-core 没 Electron 依赖, 必须 host 注入)。
     userDataPath: app.getPath('userData'),
-    memoryEnabled: memorySettings.claudeCode,
+    get memoryEnabled() {
+      return readMemorySettings().claudeCode;
+    },
     // main-side session starts can omit per-session makerMemoryEnabled. Keep the fallback live
     // so settings changed after app startup apply without requiring a restart.
     get makerMemoryEnabled() {
@@ -175,7 +175,9 @@ export const desktopCodexRuntimeConfig: AgentRuntimeConfig = {
   systemPrompt: composeHostPrompt(codexSystemPrompt),
   pathPrepends: [bundledRipgrepDir()],
   userDataPath: app.getPath('userData'),
-  memoryEnabled: memorySettings.codex,
+  get memoryEnabled() {
+    return readMemorySettings().codex;
+  },
   // Keep this fallback live for main-side session starts that do not pass CreateOpts.makerMemoryEnabled.
   get makerMemoryEnabled() {
     return readMakerMemoryEnabled();

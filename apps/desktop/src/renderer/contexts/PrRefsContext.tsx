@@ -58,10 +58,9 @@ function groupBySession(rows: SessionPrRef[]): Map<string, SessionPrRef[]> {
 }
 
 export function PrRefsProvider({ children }: { children: ReactNode }) {
-  // 同进程登出/切换账号 → 另一份本地 db。effect 以 userId 为 key 重跑:
-  // 清空旧账号缓存并对新账号重新全量加载(Codex review P2)。
-  const { user } = useAuth();
-  const userId = user?.id ?? null;
+  // 同进程切换 data owner → 另一份本地 db。云账号和本地模式都以 owner id
+  // 为 key 重跑，先清旧缓存，再从新 owner 的库重新全量加载。
+  const { dataOwnerId } = useAuth();
   const [refsBySession, setRefsBySession] = useState<Map<string, SessionPrRef[]>>(new Map());
   const [statuses, setStatuses] = useState<Map<string, PrStatusResult>>(new Map());
   // fetchStatusesForSession 经 ref 读最新 refs,保持回调身份稳定
@@ -72,10 +71,10 @@ export function PrRefsProvider({ children }: { children: ReactNode }) {
   const inFlightSessions = useRef(new Set<string>());
 
   useEffect(() => {
-    // 账号切换边界:先清掉上一账号的缓存,未登录态直接保持空、不发 IPC。
+    // owner 切换边界:先清掉上一 owner 的缓存,无 owner 时保持空、不发 IPC。
     setRefsBySession(new Map());
     setStatuses(new Map());
-    if (userId === null) return;
+    if (dataOwnerId === null) return;
 
     let cancelled = false;
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
@@ -124,7 +123,7 @@ export function PrRefsProvider({ children }: { children: ReactNode }) {
       if (retryTimer) clearTimeout(retryTimer);
       unsubscribe();
     };
-  }, [userId]);
+  }, [dataOwnerId]);
 
   // 回调身份稳定(空闭包依赖):refs 经 refsRef 读,statuses 经函数式 setState 写。
   const fetchStatusesForSession = useRef((sessionId: string) => {

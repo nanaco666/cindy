@@ -14,7 +14,7 @@ describe('AuthContext auth-state races', () => {
   );
 
   it('applies identity synchronously and resets session snapshot on account switch', () => {
-    expect(source).toContain('activeUserIdRef.current !== incoming.id');
+    expect(source).toContain('activeDataOwnerIdRef.current !== state.dataOwnerId');
     expect(source).toContain('sessionsStore.reset();');
     expect(source).toContain('setUser(incoming);');
     // 防复活:renderer 不得再对业务 server 发起 role/资料水合请求。

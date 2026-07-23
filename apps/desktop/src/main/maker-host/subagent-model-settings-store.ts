@@ -4,9 +4,6 @@
  * 文件：<userData>/subagent-model-settings.json。默认值为 null，表示完全沿用 agent 原生逻辑。
  */
 
-import { app } from 'electron';
-import path from 'node:path';
-
 import {
   SUBAGENT_MODEL_SETTINGS_DEFAULTS,
   normalizeSubagentModelId,
@@ -18,11 +15,12 @@ import {
   createOverrideSettingsFile,
   type OverrideSettingsState,
 } from './override-settings-file.js';
+import { ownerScopedUserDataPath } from '../appSessionState.js';
 
 const log = desktopMakerLogger.child('subagent-model-settings-store');
 
 function settingsFilePath(): string {
-  return path.join(app.getPath('userData'), 'subagent-model-settings.json');
+  return ownerScopedUserDataPath('subagent-model-settings.json');
 }
 
 function normalize(raw: unknown): SubagentModelSettings {

@@ -37,6 +37,7 @@ import { CollaborationSection } from './CollaborationSection';
 import { BuiltinToolsSection } from './BuiltinToolsSection';
 import { ContactsSection } from './contacts/ContactsSection';
 import { ComputerUseSection } from './ComputerUseSection';
+import { useAuth } from '@/contexts/AuthContext';
 import { getLastWorkingDir, subscribeToLastWorkingDir } from '@/state/lastWorkingDir';
 
 const DEFAULT_SETTINGS_MENU_WIDTH = 260;
@@ -50,6 +51,7 @@ export function SettingsView() {
   const outletContext = useOutletContext<SettingsOutletContext | null>();
   const [searchParams, setSearchParams] = useSearchParams();
   const { t } = useTranslation();
+  const { mode, dataOwnerId } = useAuth();
   const menuWidth = outletContext?.sidebarWidth ?? DEFAULT_SETTINGS_MENU_WIDTH;
   const isMac = window.electronAPI?.platform === 'darwin';
   const [helpAssistantOpen, setHelpAssistantOpen] = useState(false);
@@ -300,13 +302,15 @@ export function SettingsView() {
                   <MemorySection />
                 </section>
                 <section className="pb-[18px]" aria-label={t('settings.sections.subagentModels')}>
-                  <SubagentModelSection />
+                  <SubagentModelSection key={`subagent-models:${mode}:${dataOwnerId ?? 'none'}`} />
                 </section>
-                <section className="pb-[18px]" aria-label={t('settings.contacts.title')}>
-                  <ContactsSection />
-                </section>
+                {mode !== 'local' && (
+                  <section className="pb-[18px]" aria-label={t('settings.contacts.title')}>
+                    <ContactsSection key={`contacts:${dataOwnerId ?? 'none'}`} />
+                  </section>
+                )}
                 <section className="pb-[18px]" aria-label={t('settings.sections.compaction')}>
-                  <CompactionSection />
+                  <CompactionSection key={`compaction:${mode}:${dataOwnerId ?? 'none'}`} />
                 </section>
                 {/* RSB 默认终端 shell —— 改默认只影响新建 tab,已有 tab 不动 */}
                 <section className="pb-[18px]" aria-label={t('settings.sections.terminalShell')}>
@@ -332,7 +336,7 @@ export function SettingsView() {
                 aria-labelledby="settings-tab-voice-input"
               >
                 <section aria-label={t('settings.sections.voiceInput')}>
-                  <VoiceInputSection />
+                  <VoiceInputSection key={`voice-input:${mode}:${dataOwnerId ?? 'none'}`} />
                 </section>
               </div>
             )}

@@ -382,6 +382,9 @@ interface FeishuBotRegistrationStatusPayload {
 /** Auth state pushed from main → renderer via 'auth:state-change'. */
 interface AuthStateChangePayload {
   user: AuthUser | null;
+  mode: 'signed-out' | 'local' | 'cloud';
+  dataOwnerId: string | null;
+  canEnterApp: boolean;
   isAuthenticated: boolean;
   /** 当前账号是否加入 Canary 发布通道；由 main 的 feature-flags 同步结果驱动。 */
   isCanary: boolean;
@@ -1390,6 +1393,9 @@ interface ElectronAPI {
   // ── Auth (delegated to main process authManager) ──
   authInitialize: () => Promise<{
     user: AuthUser | null;
+    mode: 'signed-out' | 'local' | 'cloud';
+    dataOwnerId: string | null;
+    canEnterApp: boolean;
     isAuthenticated: boolean;
     isCanary: boolean;
     /** SkillHub 跨设备识别：本机 deviceId，登录前后都有值 */
@@ -1400,6 +1406,8 @@ interface ElectronAPI {
   authGetLoginState: () => Promise<DesktopLoginActionResult>;
   authDispatchLoginAction: (action: DesktopLoginAction) => Promise<DesktopLoginActionResult>;
   authLogout: () => Promise<void>;
+  authEnterLocal: () => Promise<AuthStateChangePayload>;
+  authExitLocal: () => Promise<AuthStateChangePayload>;
   authRefresh: () => Promise<boolean>;
   authGetAccountDeletionAvailability: () => Promise<DesktopAccountDeletionAvailabilityResult>;
   authRequestAccountDeletionChallenge: () => Promise<DesktopAccountDeletionChallengeResult>;

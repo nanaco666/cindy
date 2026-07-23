@@ -24,6 +24,10 @@ vi.mock('../../serverApiClient.js', () => ({
   ServerApiError: class extends Error {},
 }));
 
+vi.mock('../../appCapabilities.js', () => ({
+  requireAppCapability: vi.fn(),
+}));
+
 vi.mock('../index.js', () => ({
   deviceLinkApiBase: () => 'http://relay.test:3335',
 }));

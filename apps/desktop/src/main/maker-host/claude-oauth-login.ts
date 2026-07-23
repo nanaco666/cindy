@@ -27,6 +27,7 @@ import {
 } from '../oauthResultPage.js';
 import { desktopMakerLogger } from './logger-adapter.js';
 import { writeClaudeAiOAuth } from './claude-credentials-store.js';
+import { bindNativeProviderAuth } from './nativeProviderAuthBinding.js';
 import { backfillClaudeSubscriptionProfile } from './claude-oauth-refresh.js';
 
 const log = desktopMakerLogger.child('claude-oauth-login');
@@ -351,6 +352,7 @@ export async function runClaudeOAuthLogin(opts?: {
       subscriptionType: null,
       rateLimitTier: null,
     });
+    bindNativeProviderAuth('anthropic');
     void backfillClaudeSubscriptionProfile(tokens.access_token).catch((e) =>
       log.warn('post-login subscription profile backfill failed', {
         error: e instanceof Error ? e.message : String(e),

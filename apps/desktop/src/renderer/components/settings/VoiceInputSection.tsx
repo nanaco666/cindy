@@ -7,6 +7,7 @@ import { Check, ChevronDown, Copy, Keyboard, Pencil, Plus, RotateCcw, Search, Sp
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Switch } from '@/components/ui/switch';
 import { Tip } from '@/components/ui/tooltip';
+import { useAuth } from '@/contexts/AuthContext';
 import { SUPPORTED_LOCALES } from '@/i18n';
 import { cn } from '@/lib/utils';
 import {
@@ -335,6 +336,7 @@ function VoiceInputInlineSettingRow({
  */
 function VoiceInputServiceSourceCard() {
   const { t } = useTranslation();
+  const { mode: appMode } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const {
     ready,
@@ -349,7 +351,10 @@ function VoiceInputServiceSourceCard() {
     resetToDefault,
   } = useVoiceInputModelSelection();
 
-  const serviceMode: VoiceInputServiceModeData = selection?.serviceMode ?? 'cindy';
+  const localMode = appMode === 'local';
+  const serviceMode: VoiceInputServiceModeData = localMode
+    ? 'byok'
+    : (selection?.serviceMode ?? 'cindy');
   const byok = serviceMode === 'byok';
 
   const openProvidersTab = useCallback(() => {
@@ -358,18 +363,22 @@ function VoiceInputServiceSourceCard() {
     setSearchParams(next, { replace: true });
   }, [searchParams, setSearchParams]);
 
-  const modeOptions = useMemo<ReadonlyArray<VoiceInputSelectOption<VoiceInputServiceModeData>>>(() => [
-    {
-      value: 'cindy',
-      label: t('settings.voiceInput.serviceSource.options.cindy'),
-      description: t('settings.voiceInput.serviceSource.optionDescriptions.cindy'),
-    },
-    {
+  const modeOptions = useMemo<ReadonlyArray<VoiceInputSelectOption<VoiceInputServiceModeData>>>(() => {
+    const byokOption: VoiceInputSelectOption<VoiceInputServiceModeData> = {
       value: 'byok',
       label: t('settings.voiceInput.serviceSource.options.byok'),
       description: t('settings.voiceInput.serviceSource.optionDescriptions.byok'),
-    },
-  ], [t]);
+    };
+    if (localMode) return [byokOption];
+    return [
+      {
+        value: 'cindy',
+        label: t('settings.voiceInput.serviceSource.options.cindy'),
+        description: t('settings.voiceInput.serviceSource.optionDescriptions.cindy'),
+      },
+      byokOption,
+    ];
+  }, [localMode, t]);
 
   const credentialSourceLabel = useCallback((profile: { id: string; auth: 'api-key' | 'codex' }): string => {
     if (profile.auth === 'codex') return t('settings.voiceInput.serviceSource.credential.codexLogin');
@@ -408,7 +417,7 @@ function VoiceInputServiceSourceCard() {
     return t('settings.voiceInput.serviceSource.credentialError.gatewayMissing');
   }, [byok, readiness, t]);
 
-  const customized = Boolean(selection?.serviceModeConfigured);
+  const customized = !localMode && Boolean(selection?.serviceModeConfigured);
 
   return (
     <VoiceInputCard
@@ -433,7 +442,9 @@ function VoiceInputServiceSourceCard() {
     >
       <VoiceInputInlineSettingRow
         label={t('settings.voiceInput.serviceSource.label')}
-        hint={t('settings.voiceInput.serviceSource.hint')}
+        hint={t(localMode
+          ? 'settings.voiceInput.serviceSource.localHint'
+          : 'settings.voiceInput.serviceSource.hint')}
       >
         <VoiceInputSelect
           value={serviceMode}

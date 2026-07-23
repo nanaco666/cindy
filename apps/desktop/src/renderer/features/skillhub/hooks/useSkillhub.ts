@@ -17,7 +17,7 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
-import { registerSyncStoreSetters } from './useSkillSync';
+import { invalidateSkillSyncRequests, registerSyncStoreSetters } from './useSkillSync';
 
 interface SkillhubProject {
   /** 项目资产归属根目录，来自会话分组后的 project root。 */
@@ -129,6 +129,7 @@ export function syncProjects(projects: SkillhubProject[]): void {
 }
 
 let bootstrapped = false;
+let activeDataOwnerId: string | null | undefined;
 /**
  * Idempotent — call from the Layout's mount effect. Fires the initial scan
  * (with whatever projects have been pushed by the time we get here, possibly
@@ -177,10 +178,14 @@ export function setSyncError(err: string | null): void {
 }
 
 /**
- * Full state reset — called on auth change (user logout / account switch).
- * Clears sync results, skills, bootstrapped flag, etc.
+ * Full state reset — called on data-owner changes. Clears sync results,
+ * skills and both bootstrap guards. In-flight scans are invalidated so an old
+ * owner's late result cannot repopulate the new owner's store.
  */
 export function reset(): void {
+  scanRequestId += 1;
+  invalidateSkillSyncRequests();
+  bootstrapped = false;
   state = {
     skills: [],
     sources: [],
@@ -195,16 +200,21 @@ export function reset(): void {
   notify();
 }
 
-// ── v0.2.1: auth change listener — reset store on logout / account switch ────
+/** Reset the singleton exactly once for each committed data-owner boundary. */
+export function setSkillhubDataOwner(dataOwnerId: string | null): void {
+  if (activeDataOwnerId === dataOwnerId) return;
+  activeDataOwnerId = dataOwnerId;
+  reset();
+}
+
+// ── Auth change listener — reset store on every data-owner boundary ─────────
 
 let authListenerUnsubscribe: (() => void) | null = null;
 
 function ensureAuthListener(): void {
   if (authListenerUnsubscribe) return;
   authListenerUnsubscribe = window.electronAPI.onAuthStateChange((authState) => {
-    if (!authState.isAuthenticated) {
-      reset();
-    }
+    setSkillhubDataOwner(authState.dataOwnerId);
   });
 }
 

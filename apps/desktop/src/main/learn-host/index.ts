@@ -19,7 +19,7 @@ import { isTerminalAgentErrorEvent } from '@cindy/maker-core';
 
 import { tapWindowBroadcast } from '../device-link/broadcast-tap.js';
 import { createLogger } from '../logger.js';
-import { getCurrentUserId } from '../authManager';
+import { getCurrentDataOwnerId } from '../authManager';
 import { getResolvedMainLocale } from '../i18n.js';
 import { wireSessionToIpc } from '../maker-ipc/register.js';
 import { createMessage } from '../localDb/ipc/messages.js';
@@ -139,7 +139,7 @@ export function startLearnHost(deps: StartLearnHostDeps): LearnController {
     peekPendingHandoff: (sessionId) => agentHandoffPending.peek(sessionId),
     consumePendingHandoff: (sessionId) => agentHandoffPending.consume(sessionId),
     getAppLocale: () => getResolvedMainLocale(),
-    getCurrentUserId,
+    getCurrentDataOwnerId,
     waitForStartupSweep: () => startupReady,
     collectProfile: (originWorkdir) =>
       readMemorySettings().maker

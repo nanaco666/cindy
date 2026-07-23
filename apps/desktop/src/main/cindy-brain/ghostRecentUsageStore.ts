@@ -9,6 +9,7 @@
 import Store from 'electron-store';
 
 import { isValidGhostId } from '../../shared/ghost.js';
+import { ownerScopedUserDataPath } from '../appSessionState.js';
 
 interface GhostRecentUsageShape {
   ids: string[];
@@ -17,15 +18,19 @@ interface GhostRecentUsageShape {
 const MAX_RECENT_GHOST_IDS = 100;
 
 let storeInstance: Store<GhostRecentUsageShape> | null = null;
+let storePath: string | null = null;
 
 function getStore(): Store<GhostRecentUsageShape> {
-  if (!storeInstance) {
+  const currentPath = ownerScopedUserDataPath();
+  if (!storeInstance || storePath !== currentPath) {
     storeInstance = new Store<GhostRecentUsageShape>({
       name: 'ghost-recent-usage',
+      cwd: currentPath,
       defaults: { ids: [] },
       schema: { ids: { type: 'array', items: { type: 'string' } } },
       clearInvalidConfig: true,
     });
+    storePath = currentPath;
   }
   return storeInstance;
 }

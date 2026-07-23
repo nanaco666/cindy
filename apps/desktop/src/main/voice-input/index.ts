@@ -19,7 +19,11 @@ import {
   type VoiceTimelineEvent,
 } from '@cindy/voice-input-core';
 import { createLogger } from '../logger.js';
-import { desktopCodexAuthAdapter, readClaudeApiKey } from '../maker-host/auth-adapters.js';
+import { getAppCapabilities } from '../appCapabilities.js';
+import {
+  desktopCodexAuthAdapter,
+  readOwnerScopedXdGatewayKey,
+} from '../maker-host/auth-adapters.js';
 import { claudeUpstreamEndpoint } from '../maker-host/runtime-configs.js';
 import { throwIpcError } from '../utils/ipcValidate.js';
 import {
@@ -93,6 +97,7 @@ import {
 import {
   getVoiceInputModelSelection,
   getVoiceInputModelSelectionConfigPath,
+  effectiveVoiceInputServiceMode,
   reloadVoiceInputModelSelection,
   setVoiceInputModelSelection,
   voiceInputModelSelectionSignature,
@@ -135,7 +140,11 @@ function isManagedVoiceAsrProfile(profile: VoiceInputAsrProfile): boolean {
  * not fall back into each other in either direction.
  */
 function isVoiceInputByokMode(): boolean {
-  return readActiveVoiceInputModelSelection('service-mode').serviceMode === 'byok';
+  const selection = readActiveVoiceInputModelSelection('service-mode');
+  return effectiveVoiceInputServiceMode(
+    selection.serviceMode,
+    getAppCapabilities().canUseCindyAccountServices,
+  ) === 'byok';
 }
 
 type StartResult =
@@ -709,7 +718,9 @@ function readElevenLabsBaseUrl(): string | undefined {
 
 function readLiteLlmProxyConfig(): { proxyApiKey: string | null; proxyBaseUrl: string } {
   return {
-    proxyApiKey: readClaudeApiKey(),
+    // Local mode disables Cindy gateway capabilities, but BYOK voice still
+    // needs the active owner's explicitly saved gateway key.
+    proxyApiKey: readOwnerScopedXdGatewayKey(),
     // Voice input talks to XD LiteLLM endpoints directly, including WebSocket
     // passthrough routes. Do not reuse getClaudeEndpoint(): when Claude compat
     // mode is enabled it returns a local HTTP-only anthropic-compat proxy,
@@ -1242,7 +1253,14 @@ function normalizeRefinerModelFromIpc(value: unknown): string | null {
 async function buildVoiceInputModelSelectionIpcResult(
   reason: string,
 ): Promise<VoiceInputModelSelectionIpcResult> {
-  const selection = readActiveVoiceInputModelSelection(`model-selection:${reason}`);
+  const configuredSelection = readActiveVoiceInputModelSelection(`model-selection:${reason}`);
+  const effectiveServiceMode = effectiveVoiceInputServiceMode(
+    configuredSelection.serviceMode,
+    getAppCapabilities().canUseCindyAccountServices,
+  );
+  const selection = effectiveServiceMode === configuredSelection.serviceMode
+    ? configuredSelection
+    : { ...configuredSelection, serviceMode: effectiveServiceMode };
   const readiness = await refreshVoiceInputReadinessCache(`model-selection:${reason}`);
   return {
     selection,

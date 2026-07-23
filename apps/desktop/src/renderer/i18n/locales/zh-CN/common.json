@@ -541,6 +541,13 @@
     "userProfile": {
       "fallbackName": "用户",
       "avatarAlt": "{{name}} 的头像",
+      "local": {
+        "exitFailed": "退出本地模式失败，请重试",
+        "name": "本地模式",
+        "description": "数据仅保存在本机，不使用 Cindy 账号服务",
+        "signIn": "登录 Cindy",
+        "exit": "退出本地模式"
+      },
       "copyUserId": {
         "action": "复制用户 ID",
         "success": "用户 ID 已复制",
@@ -687,6 +694,7 @@
       "serviceSource": {
         "label": "语音服务",
         "hint": "默认使用 Cindy 提供的语音服务；也可以切换为自己的 Key 与模型。",
+        "localHint": "本地模式不使用 Cindy 账号服务；请配置自己的 Key 与模型。",
         "ariaLabel": "语音服务来源选择",
         "options": {
           "cindy": "Cindy 官方服务",
@@ -2009,6 +2017,7 @@
       "defaults": {
         "title": "新会话配置",
         "description": "从飞书、Slack 或 Discord 发起新会话时，会使用这里的 Agent 和模型配置。修改后只影响新会话；已有 Discord 私聊请发送 /new 才会应用新配置。",
+        "localDescription": "从飞书或 Discord 发起新会话时，会使用这里的 Agent 和模型配置。修改后只影响新会话；已有 Discord 私聊请发送 /new 才会应用新配置。",
         "agentLabel": "Agent",
         "modelLabel": "模型配置",
         "loading": "正在读取新会话配置…",
@@ -2567,10 +2576,7 @@
     "codePlaceholder": "6 位验证码",
     "codeInputAria": "注销验证码",
     "codeSent": "验证码已通过{{channel}}发送至 {{target}}。",
-    "channels": {
-      "email": "邮箱",
-      "sms": "短信"
-    },
+    "channels": { "email": "邮箱", "sms": "短信" },
     "sessionNotice": "确认后，本机将立即退出登录；其他客户端会在当前访问凭证到期并尝试续期时退出。",
     "gracePeriodNotice": "确认后，账号将进入 30 天等待期。等待期内重新登录可取消注销；到期后 Cindy 登录账号将永久删除。",
     "verificationNotice": "注销验证码将通过{{channel}}发送至 {{target}}。",
@@ -2606,6 +2612,12 @@
       "dismissButton": "我知道了"
     }
   },
+  "localDbGate": {
+    "title": "本地数据暂时无法打开",
+    "description": "可以重试，或返回登录方式后重新选择使用模式。",
+    "retry": "重试",
+    "backToLogin": "返回登录方式"
+  },
   "login": {
     "title": "欢迎使用 Cindy",
     "subtitle": "选择一种方式安全登录",
@@ -2633,6 +2645,10 @@
     "personalDesc": "向邮箱发送验证码",
     "ssoRequired": "该企业要求通过 SSO 登录",
     "ssoEntry": "使用企业 SSO 登录",
+    "localModeEntry": "跳过登录",
+    "localModeOpening": "正在打开本地模式...",
+    "returnToLocalMode": "返回本地模式",
+    "localModeDescription": "无需 Cindy 账号，数据保存在本机。云模型、跨设备与市场服务不可用。",
     "ssoOrgTitle": "企业 SSO 登录",
     "ssoOrgSubtitle": "输入企业 ID、组织 slug 或已验证域名，跳转到企业单点登录",
     "ssoOrgPlaceholder": "请输入企业 ID、组织 slug 或已验证域名",
@@ -6262,8 +6278,8 @@
     "dialogUnavailable": "window.electronAPI.dialog 不可用",
     "notReadyHeading": "Maker Experimental",
     "notReadyBody": "window.electronAPI.maker 不可用。请重启应用并检查控制台中的 IPC 注册错误。",
-    "title": "Maker Experimental — Agent 链路诊断",
-    "description": "用于诊断 Maker IPC 与 Agent 事件链路，不影响标准聊天会话。",
+    "title": "Maker Experimental — 一阶段重构新链路",
+    "description": "新链路验证页面。老链路（cc-agent / codex）不受影响。详见 doc/agent/xdt-maker-architecture.md",
     "agentLabel": "代理：",
     "workingDirLabel": "工作目录：",
     "workingDirPlaceholder": "点右侧按钮选择目录",

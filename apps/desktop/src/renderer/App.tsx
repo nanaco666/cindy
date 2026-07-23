@@ -61,9 +61,12 @@ import { router } from './router';
  * useAuth 取值下传(Step 3b WHAT2 宿主契约)。
  */
 function LoginHandoffHost({ children }: { children: React.ReactNode }) {
-  const { isInitializing, isAuthenticated } = useAuth();
+  const { isInitializing, isAuthenticated, canEnterApp } = useAuth();
   return (
-    <LoginHandoffProvider authResolved={!isInitializing} authenticated={isAuthenticated}>
+    <LoginHandoffProvider
+      authResolved={!isInitializing}
+      authenticated={isAuthenticated || canEnterApp}
+    >
       {children}
     </LoginHandoffProvider>
   );

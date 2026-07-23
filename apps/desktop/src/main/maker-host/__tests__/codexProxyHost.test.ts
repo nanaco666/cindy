@@ -49,6 +49,10 @@ vi.mock('electron', () => ({
   },
 }));
 
+vi.mock('../../appCapabilities.js', () => ({
+  getAppCapabilities: () => ({ canUseCindyGateway: true }),
+}));
+
 vi.mock('../../logger.js', () => ({
   createLogger: () => mockState.logger,
   getLogLevel: () => 'debug',

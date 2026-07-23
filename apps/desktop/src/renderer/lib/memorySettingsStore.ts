@@ -18,8 +18,28 @@
  * **默认 true** — Maker Memory 已是正式功能；已有用户的明确设置仍以 main 端为准。
  */
 
-const STORAGE_KEY = 'memorySettings.makerEnabled';
-const LEGACY_MIGRATION_KEY = 'memorySettings.makerLegacyMigrationV1';
+const STORAGE_KEY_PREFIX = 'memorySettings.makerEnabled';
+const LEGACY_MIGRATION_KEY_PREFIX = 'memorySettings.makerLegacyMigrationV1';
+const LEGACY_STORAGE_KEY = STORAGE_KEY_PREFIX;
+const LEGACY_MIGRATION_GLOBAL_KEY = LEGACY_MIGRATION_KEY_PREFIX;
+const LOCAL_DATA_OWNER_ID = 'local-v1';
+let activeOwnerId: string | null = null;
+
+function storageKey(): string {
+  return `${STORAGE_KEY_PREFIX}.${activeOwnerId ?? 'signed-out'}`;
+}
+
+function legacyMigrationKey(): string {
+  return `${LEGACY_MIGRATION_KEY_PREFIX}.${activeOwnerId ?? 'signed-out'}`;
+}
+
+export function setMemorySettingsOwner(ownerId: string | null): void {
+  if (activeOwnerId === ownerId) return;
+  activeOwnerId = ownerId;
+  legacyMigrationCompletedInMemory = false;
+  inMemoryValue = readStoredMakerMemoryEnabled() ?? true;
+  subscribers.forEach((cb) => cb(inMemoryValue));
+}
 
 type Subscriber = (value: boolean) => void;
 const subscribers = new Set<Subscriber>();
@@ -30,7 +50,10 @@ let legacyMigrationCompletedInMemory = false;
 function hasCompletedLegacyMigration(): boolean {
   if (legacyMigrationCompletedInMemory) return true;
   try {
-    return localStorage.getItem(LEGACY_MIGRATION_KEY) === '1';
+    return (
+      localStorage.getItem(legacyMigrationKey()) === '1' ||
+      localStorage.getItem(LEGACY_MIGRATION_GLOBAL_KEY) === '1'
+    );
   } catch {
     return false;
   }
@@ -39,7 +62,8 @@ function hasCompletedLegacyMigration(): boolean {
 function markLegacyMigrationCompleted(): void {
   legacyMigrationCompletedInMemory = true;
   try {
-    localStorage.setItem(LEGACY_MIGRATION_KEY, '1');
+    localStorage.setItem(legacyMigrationKey(), '1');
+    localStorage.setItem(LEGACY_MIGRATION_GLOBAL_KEY, '1');
   } catch {
     // localStorage 不可用时保留进程内标记；下次启动仍会安全重试。
   }
@@ -48,7 +72,18 @@ function markLegacyMigrationCompleted(): void {
 /** localStorage 中只接受显式 boolean 字符串；缺失/坏值不伪装成用户选择。 */
 function readStoredMakerMemoryEnabled(): boolean | undefined {
   try {
-    const stored = localStorage.getItem(STORAGE_KEY);
+    const stored = localStorage.getItem(storageKey());
+    if (stored === 'true') return true;
+    if (stored === 'false') return false;
+    return undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function readLegacyStoredMakerMemoryEnabled(): boolean | undefined {
+  try {
+    const stored = localStorage.getItem(LEGACY_STORAGE_KEY);
     if (stored === 'true') return true;
     if (stored === 'false') return false;
     return undefined;
@@ -71,7 +106,7 @@ export function setMakerMemoryEnabled(next: boolean): void {
   localWriteRevision += 1;
   inMemoryValue = next;
   try {
-    localStorage.setItem(STORAGE_KEY, next ? 'true' : 'false');
+    localStorage.setItem(storageKey(), next ? 'true' : 'false');
   } catch {
     // localStorage 不可用 — 忽略, 调用方应自行处理 UI 反馈
   }
@@ -84,7 +119,7 @@ export function subscribeMakerMemoryEnabled(cb: Subscriber): () => void {
 
   // 跨实例 storage 事件 (多窗口兜底; Electron 单窗口下几乎不触发)
   const storageHandler = (e: StorageEvent) => {
-    if (e.key !== STORAGE_KEY) return;
+    if (e.key !== storageKey()) return;
     localWriteRevision += 1;
     cb(getMakerMemoryEnabled());
   };
@@ -108,8 +143,12 @@ export function subscribeMakerMemoryEnabled(cb: Subscriber): () => void {
 export async function bootstrapMemorySettingsFromMain(): Promise<void> {
   try {
     const revisionAtStart = localWriteRevision;
-    const migrationCompleted = hasCompletedLegacyMigration();
-    const legacyRendererValue = migrationCompleted ? undefined : readStoredMakerMemoryEnabled();
+    const canMigrateLegacyRendererSetting =
+      activeOwnerId !== null && activeOwnerId !== LOCAL_DATA_OWNER_ID;
+    const migrationCompleted = !canMigrateLegacyRendererSetting || hasCompletedLegacyMigration();
+    const legacyRendererValue = migrationCompleted
+      ? undefined
+      : (readStoredMakerMemoryEnabled() ?? readLegacyStoredMakerMemoryEnabled());
     let settings = await window.electronAPI.maker.memoryGetSettings();
     // 用户或其它窗口已在请求期间写入时，旧快照不再有资格触发迁移或覆盖本地镜像。
     if (localWriteRevision !== revisionAtStart) return;
@@ -122,10 +161,7 @@ export async function bootstrapMemorySettingsFromMain(): Promise<void> {
       } catch {
         // Migration persistence is best-effort. Never let a structured IPC
         // failure prevent the main renderer tree from mounting.
-        if (
-          localWriteRevision === revisionAtStart &&
-          legacyRendererValue === false
-        ) {
+        if (localWriteRevision === revisionAtStart && legacyRendererValue === false) {
           // Keep the legacy opt-out in the process-local mirror even when the
           // main profile cannot be written, so sessions stay disabled now.
           setMakerMemoryEnabled(false);

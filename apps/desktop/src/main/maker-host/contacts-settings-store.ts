@@ -13,7 +13,6 @@
  * 同步 R/W + .tmp 原子写 + 内存 cache + 坏文件回退默认值)。
  */
 
-import { app } from 'electron';
 import path from 'node:path';
 
 import { desktopMakerLogger } from './logger-adapter.js';
@@ -21,6 +20,7 @@ import {
   createOverrideSettingsFile,
   type OverrideSettingsState,
 } from './override-settings-file.js';
+import { getActiveAppSession, ownerScopedUserDataPath } from '../appSessionState.js';
 
 const log = desktopMakerLogger.child('contacts-settings-store');
 
@@ -32,8 +32,8 @@ const DEFAULTS: ContactsSettings = {
   enabled: false,
 };
 
-function settingsFilePath(): string {
-  return path.join(app.getPath('userData'), 'contacts-settings.json');
+function settingsFilePath(rootPath?: string): string {
+  return path.join(rootPath ?? ownerScopedUserDataPath(), 'contacts-settings.json');
 }
 
 function normalize(raw: unknown): ContactsSettings {
@@ -44,29 +44,40 @@ function normalize(raw: unknown): ContactsSettings {
   };
 }
 
-const store = createOverrideSettingsFile<ContactsSettings>({
-  filePath: settingsFilePath,
-  defaults: DEFAULTS,
-  normalize,
-  log,
-  label: 'contacts',
-});
+const stores = new Map<string, ReturnType<typeof createOverrideSettingsFile<ContactsSettings>>>();
+
+function currentStore() {
+  const ownerRoot = getActiveAppSession().dataOwnerId ? ownerScopedUserDataPath() : null;
+  const key = ownerRoot ?? '<no-session>';
+  let store = stores.get(key);
+  if (!store) {
+    store = createOverrideSettingsFile<ContactsSettings>({
+      filePath: () => settingsFilePath(ownerRoot ?? undefined),
+      defaults: DEFAULTS,
+      normalize,
+      log,
+      label: 'contacts',
+    });
+    stores.set(key, store);
+  }
+  return store;
+}
 
 /** 同步读 —— 第一次从磁盘, 后续走内存 cache。 */
 export function readContactsSettings(): ContactsSettings {
-  return store.read();
+  return currentStore().read();
 }
 
 export function readContactsSettingsState(): OverrideSettingsState<ContactsSettings> {
-  return store.readState();
+  return currentStore().readState();
 }
 
 /** 同步写 enabled + 更新 cache; 失败抛错让 IPC handler 反馈给 UI。 */
 export function writeContactsEnabled(enabled: boolean): void {
-  store.writePatch({ enabled });
+  currentStore().writePatch({ enabled });
   log.info('contacts setting written', { enabled });
 }
 
 export function resetContactsSettings(): ContactsSettings {
-  return store.reset();
+  return currentStore().reset();
 }

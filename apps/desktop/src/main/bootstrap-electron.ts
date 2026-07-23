@@ -275,7 +275,11 @@ import {
   startAutoConnectHostsBackground,
   isCcMgrUpgradeInFlight,
 } from './remote-ssh';
-import { registerHookControlIpc, disposeHookControl } from './hook-control';
+import {
+  registerHookControlIpc,
+  resetHookControlOwnerBoundary,
+  disposeHookControl,
+} from './hook-control';
 import { registerSkillhubIpc } from './skillhub/registerIpc';
 import { SkillhubMarketService } from './skillhub/marketService';
 import { skillhubAutoSyncService } from './skillhub/autoSyncService';
@@ -286,6 +290,7 @@ import { rehydrateCloseSuppression } from './maker-host/rehydrateCloseSuppressio
 import {
   getMaker as getMakerCore,
   getMakerIfReady,
+  resetMaker,
   shutdownLspServerPool,
   prepareCodexForAuthModeChange,
   cancelCodexAuthModeChange,
@@ -297,6 +302,7 @@ import {
   restartCodexAfterAuthModeChange,
   waitForInitialCustomMcpRefresh,
 } from './maker-host/index.js';
+import { createDynamicMaker } from './maker-host/dynamic-maker.js';
 import {
   ensureActiveCatalogLoaded,
   refreshCustomProvidersIntoCatalog,
@@ -371,6 +377,7 @@ import {
   resetSilentEncryptedRetrySettings,
   writeSilentEncryptedRetryEnabled,
 } from './maker-host/silent-encrypted-retry-store.js';
+import { resolveOwnerScopedSecretStorageKey } from './secrets/providerSecretStore.js';
 import {
   readCompactionPct,
   readCompactionState,
@@ -401,6 +408,7 @@ import {
 } from './embedders/chat-history-embedder.js';
 import { registerMakerTitleIpc } from './maker-ipc/title.js';
 import { registerContactsIpc } from './maker-ipc/contacts-ipc.js';
+import { disposeDesktopContactsManager } from './maker-host/maker-contacts-host.js';
 import { registerMakerHelpIpc } from './maker-ipc/help.js';
 import { registerHelpFeedbackIpc } from './maker-ipc/help-feedback.js';
 import { registerMakerPlanWriteIpc } from './maker-ipc/plan-write.js';
@@ -492,6 +500,14 @@ import {
   noteManualXdKeyRemoved,
 } from './model-access/index.js';
 import { effectiveXdGatewayBaseUrl } from './model-access/effectiveEndpoint.js';
+import { isLocalDbOwnerCurrent } from './appSessionPolicy.js';
+import { getAppCapabilities, requireAppCapability } from './appCapabilities.js';
+import {
+  beginAppSessionBoundary,
+  getActiveAppSession,
+  isAppSessionBoundaryPending,
+  ownerScopedUserDataPath,
+} from './appSessionState.js';
 import {
   resolveNewMakerMenuCommand,
   type ApplicationMenuCommand,
@@ -509,7 +525,7 @@ import {
 } from './app-shortcuts/index.js';
 import { installNewMakerWindowShortcut } from './app-shortcuts/new-maker-window-shortcut.js';
 import { registerLayoutIpc } from './layout/index.js';
-import { registerGhostIpc } from './cindy-brain/index.js';
+import { registerGhostIpc, suspendAllGhosts } from './cindy-brain/index.js';
 import { findCindyFileInArgv } from './cindy-brain/argv.js';
 import { handleIncomingCindyFile } from './cindy-brain/openFileInstall.js';
 import { registerCindyFileAssociation } from './cindy-brain/fileAssociation.js';
@@ -759,6 +775,11 @@ async function ensureLifecycleDbClient(userId: string) {
 
 async function teardownAuthAccountBoundary(reason: string): Promise<void> {
   skillhubAutoSyncService.cancelInFlight();
+  resetHookControlOwnerBoundary();
+  // Every Ghost sandbox can retain live OAuth, subscription, or in-memory
+  // state. Stop them before changing owners; resident Ghosts are recreated by
+  // the auth-change activation pass after the new boundary is committed.
+  suspendAllGhosts();
   // IM owns long-lived transports plus account-scoped session/binding caches.
   // Stop it before any service or DbClient teardown so late Feishu/Discord
   // callbacks cannot enter the old account boundary. Relogin restarts it via
@@ -819,6 +840,22 @@ async function teardownAuthAccountBoundary(reason: string): Promise<void> {
     await resetLearnController();
   } catch (err) {
     authBoundaryLog.error(`resetLearnController on ${reason} failed (non-fatal):`, err);
+  }
+  try {
+    disposeDesktopContactsManager();
+  } catch (err) {
+    authBoundaryLog.error(`dispose contacts manager on ${reason} failed (non-fatal):`, err);
+  }
+  // Maker session storage resolves the current DbClient lazily. A late callback
+  // from the previous owner must not survive long enough to write into the next
+  // owner's database, so shut down and discard the entire runtime before DB swap.
+  try {
+    const maker = getMakerIfReady();
+    if (maker) await maker.shutdown();
+    resetMaker();
+  } catch (err) {
+    authBoundaryLog.error(`maker shutdown on ${reason} failed (non-fatal):`, err);
+    resetMaker();
   }
   // device-link 单持有者仲裁:必须在 dispose DbClient **之前**释放持有权行
   // (dispose 同步 clearCurrentDbClient,之后 store 不可用,只能等 15s+ 心跳
@@ -2493,9 +2530,11 @@ const registerIpcHandlers = () => {
   // SET 路径既落 JSON 也立即把 chat-history-embedder 的运行时 enabled 切换 ——
   // toggle off 后下一条新消息就不再入队, 不需要重启。
   ipcMain.handle(MAKER_IPC_INVOKE.CHAT_EMBEDDING_GET, async () => {
+    requireAppCapability('canUseCindyGateway', 'Chat embedding requires a Cindy account.');
     return chatEmbeddingWire();
   });
   ipcMain.handle(MAKER_IPC_INVOKE.CHAT_EMBEDDING_SET, async (_e, enabled: unknown) => {
+    requireAppCapability('canUseCindyGateway', 'Chat embedding requires a Cindy account.');
     if (typeof enabled !== 'boolean') {
       throwIpcError('INVALID_PARAMS', 'chat embedding enabled required (boolean)');
     }
@@ -2523,6 +2562,7 @@ const registerIpcHandlers = () => {
     return chatEmbeddingWire();
   });
   ipcMain.handle(MAKER_IPC_INVOKE.CHAT_EMBEDDING_RESET, async () => {
+    requireAppCapability('canUseCindyGateway', 'Chat embedding requires a Cindy account.');
     const settings = resetChatEmbeddingSettings();
     if (settings.enabled) {
       if (!isEmbeddingHostStarted()) {
@@ -2991,6 +3031,12 @@ const registerIpcHandlers = () => {
 
   // safeStorage IPC handlers
   const isValidKey = (key: string): boolean => /^[a-zA-Z0-9_-]+$/.test(key);
+  const resolveSafeStorageFilepath = (key: string): string | null => {
+    const scopedKey = resolveOwnerScopedSecretStorageKey(key);
+    return scopedKey
+      ? path.join(app.getPath('userData'), 'safe-storage', `${scopedKey}.enc`)
+      : null;
+  };
 
   // 共用的 api_key 变更后, 若 Codex app-server 以 env-key 启动(无 OAuth,gateway key 冻入
   // 子进程 env)则重建 —— settings 改/删了 key 进程感知不到, 必须重建才生效。oauth-bearer
@@ -3042,12 +3088,13 @@ const registerIpcHandlers = () => {
     async (_event: Electron.IpcMainInvokeEvent, key: string, value: string): Promise<boolean> => {
       try {
         if (!isValidKey(key)) return false;
+        const filepath = resolveSafeStorageFilepath(key);
+        if (!filepath) return false;
         if (!safeStorage.isEncryptionAvailable()) return false;
         const encrypted = safeStorage.encryptString(value);
         const prepareResult = await prepareApiKeyChangeMaybeRestartCodex(key);
         if (!prepareResult.ok) return false;
-        const dir = path.join(app.getPath('userData'), 'safe-storage');
-        const filepath = path.join(dir, `${key}.enc`);
+        const dir = path.dirname(filepath);
         const hadPrevious = fs.existsSync(filepath);
         const previousContent = hadPrevious ? fs.readFileSync(filepath, 'utf-8') : null;
         let mutated = false;
@@ -3086,8 +3133,9 @@ const registerIpcHandlers = () => {
     async (_event: Electron.IpcMainInvokeEvent, key: string): Promise<string | null> => {
       try {
         if (!isValidKey(key)) return null;
+        const filepath = resolveSafeStorageFilepath(key);
+        if (!filepath) return null;
         if (!safeStorage.isEncryptionAvailable()) return null;
-        const filepath = path.join(app.getPath('userData'), 'safe-storage', `${key}.enc`);
         if (!fs.existsSync(filepath)) return null;
         const content = fs.readFileSync(filepath, 'utf-8');
         const buffer = Buffer.from(content, 'base64');
@@ -3109,7 +3157,8 @@ const registerIpcHandlers = () => {
         if (!isValidKey(key)) {
           return { success: false, error: 'invalid key' };
         }
-        const filepath = path.join(app.getPath('userData'), 'safe-storage', `${key}.enc`);
+        const filepath = resolveSafeStorageFilepath(key);
+        if (!filepath) return { success: true };
         const prepareResult = await prepareApiKeyChangeMaybeRestartCodex(key);
         if (!prepareResult.ok) {
           return { success: false, error: 'codex_restart_failed' };
@@ -3192,8 +3241,40 @@ const registerIpcHandlers = () => {
   });
 
   ipcMain.handle('auth:logout', async () => {
-    await teardownAuthAccountBoundary('logout');
-    await authManager.logout();
+    const releaseBoundary = beginAppSessionBoundary();
+    try {
+      await teardownAuthAccountBoundary('logout');
+      await authManager.logout();
+    } finally {
+      releaseBoundary();
+    }
+  });
+
+  ipcMain.handle('auth:enter-local', async () => {
+    if (getActiveAppSession().mode === 'local') {
+      return authManager.getAuthState();
+    }
+    await authManager.waitForSessionInvalidation();
+    const releaseBoundary = beginAppSessionBoundary();
+    try {
+      await teardownAuthAccountBoundary('enter-local-mode');
+      return authManager.enterLocalMode();
+    } finally {
+      releaseBoundary();
+    }
+  });
+
+  ipcMain.handle('auth:exit-local', async () => {
+    if (getActiveAppSession().mode !== 'local') {
+      throwIpcError('PRECONDITION_FAILED', 'Local mode is not active.');
+    }
+    const releaseBoundary = beginAppSessionBoundary();
+    try {
+      await teardownAuthAccountBoundary('exit-local-mode');
+      return authManager.exitLocalMode();
+    } finally {
+      releaseBoundary();
+    }
   });
 
   ipcMain.handle('auth:refresh', async () => {
@@ -3269,15 +3350,26 @@ const registerIpcHandlers = () => {
     logWarn: (message, err) => profileEditLog.warn(message, err),
   };
 
-  ipcMain.handle('profile:get-state', async () => profileEdit.getProfileEditState(profileEditDeps));
+  const requireCloudProfile = (): void => {
+    if (!getAppCapabilities().canUseCindyAccountServices) {
+      throwIpcError('PERMISSION_DENIED', 'Profile editing requires a Cindy account.');
+    }
+  };
 
-  ipcMain.handle('profile:choose-avatar', async () =>
-    profileEdit.chooseAvatarFile(profileEditDeps),
-  );
+  ipcMain.handle('profile:get-state', async () => {
+    requireCloudProfile();
+    return profileEdit.getProfileEditState(profileEditDeps);
+  });
 
-  ipcMain.handle('profile:update', async (_event, params: unknown) =>
-    profileEdit.updateProfile(profileEditDeps, params),
-  );
+  ipcMain.handle('profile:choose-avatar', async () => {
+    requireCloudProfile();
+    return profileEdit.chooseAvatarFile(profileEditDeps);
+  });
+
+  ipcMain.handle('profile:update', async (_event, params: unknown) => {
+    requireCloudProfile();
+    return profileEdit.updateProfile(profileEditDeps, params);
+  });
 
   // Google OAuth 集成已于 2026-07-13 随 lizi_google 退役——Google 能力整体
   // 迁入内置意识 filo-google(设置入口在 意识 → Filo Google)。
@@ -3329,21 +3421,32 @@ const registerIpcHandlers = () => {
       // await 确保第一个会话的 mcpProviders 数组已填入已保存的自定义 MCP（P2 冷启动竞态修复）。
       getMakerCore();
       await waitForInitialCustomMcpRefresh();
-      registerMakerCoreIpc(getMakerCore(), {
+      // IPC handlers live for the whole process, while the concrete Maker is
+      // replaced at every data-owner boundary. The facade resolves it lazily.
+      const ipcMaker = createDynamicMaker(() => {
+        if (isAppSessionBoundaryPending()) {
+          throwIpcError(
+            'PRECONDITION_FAILED',
+            'App session is switching; retry after the owner boundary settles.',
+          );
+        }
+        return getMakerCore();
+      });
+      registerMakerCoreIpc(ipcMaker, {
         onAnySessionTurnKeepaliveChange: (isRunning) => {
           setMainWindowBackgroundThrottlingForActiveTurn(isRunning);
           notifyUpdateAutoRelaunchBusyStateChanged();
         },
       });
       registerMakerTitleIpc();
-      registerMakerHelpIpc(getMakerCore());
+      registerMakerHelpIpc(ipcMaker);
       registerHelpFeedbackIpc();
       registerMakerPlanWriteIpc();
       registerMakerRewindIpc();
       registerMakerForkIpc();
-      registerMakerAuthIpc(getMakerCore());
-      registerMakerStatusIpc(getMakerCore());
-      registerMakerUsageIpc(getMakerCore());
+      registerMakerAuthIpc(ipcMaker);
+      registerMakerStatusIpc(ipcMaker);
+      registerMakerUsageIpc(ipcMaker);
       registerMakerBinaryVersionIpc();
       registerCrossAgentConvertIpc();
       // Workdir File Browser (vscode-style lazy file tree + content viewer for
@@ -5077,6 +5180,13 @@ app.on('ready', async () => {
   // 保证 beforeEnsureReady 推送 confirm 态时 renderer 已能 invoke 确认通道。
   registerLegacyMigrationIpc();
   registerLocalDbIpc({
+    isOwnerCurrent: (userId) => isLocalDbOwnerCurrent(
+      authManager.getAuthState(),
+      userId,
+      isAppSessionBoundaryPending(),
+    ),
+    discardStaleOwner: (userId) =>
+      lifecycleDbClientManager.dispose(`stale-owner-after-ready:${userId}`),
     beforeEnsureReady: async (userId) => {
       const user = authManager.getAuthState().user;
       if (user == null || user.id !== userId) return;
@@ -5133,6 +5243,10 @@ app.on('ready', async () => {
           db: getDbClient(),
           userDataDir: app.getPath('userData'),
           legacyUserDataDirNames: BRAND_IDENTITY.legacyUserDataDirNames,
+          currentDialoguesRoot: ownerScopedUserDataPath('dialogues'),
+          additionalLegacyDialogueRoots: [
+            path.join(app.getPath('userData'), 'dialogues'),
+          ],
           log: createLogger('dialogue-workdir-self-heal'),
         });
       } catch (err) {

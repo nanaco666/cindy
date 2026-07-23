@@ -29,7 +29,8 @@ import path from 'node:path';
 import { app, net } from 'electron';
 import JSZip from 'jszip';
 import { skillhubApiFetch } from './hubApi';
-import { getCurrentUserId } from '../authManager';
+import { getCurrentDataOwnerId, getCurrentUserId } from '../authManager';
+import { getAppCapabilities } from '../appCapabilities.js';
 import { registryService } from './registry';
 import type { StoredInstall } from './registry/types';
 import { computeFolderHash } from './folderHash';
@@ -467,6 +468,11 @@ export async function install(
     onProgress({ phase: 'failed', name: p.name, errorCode: 'AUTH_REQUIRED', message: '未登录' });
     return { success: false, errorCode: 'AUTH_REQUIRED', message: '未登录' };
   }
+  const installOwnerId = getCurrentDataOwnerId();
+  if (!installOwnerId) {
+    onProgress({ phase: 'failed', name: p.name, errorCode: 'AUTH_REQUIRED', message: '无可用数据空间' });
+    return { success: false, errorCode: 'AUTH_REQUIRED', message: '无可用数据空间' };
+  }
 
   // 推导目标目录
   const resolved = resolveTargetDir(p);
@@ -489,7 +495,12 @@ export async function install(
   inflight.set(p.name, ac);
 
   const checkAbort = (): boolean => {
-    if (signal.aborted) {
+    if (
+      signal.aborted ||
+      !getAppCapabilities().canUseSkillHubCloud ||
+      getCurrentDataOwnerId() !== installOwnerId
+    ) {
+      ac.abort();
       onProgress({ phase: 'failed', name: p.name, errorCode: 'CANCELLED', message: '已取消' });
       return true;
     }
@@ -688,8 +699,24 @@ export async function install(
       return { success: false, errorCode: 'WRITE_FAILED', message };
     }
 
+    // Owner boundaries can happen while the final switch is in progress. Do
+    // not allow the old owner's files to become visible to the new owner.
+    if (checkAbort()) {
+      await rollbackFinalSwitch(finalDir, rollbackState).catch((rollbackErr) => {
+        log.error('[skillInstall] rollback after owner change failed:', rollbackErr);
+      });
+      await fs.promises.rm(stagingDir, { recursive: true, force: true }).catch(() => {});
+      return { success: false, errorCode: 'CANCELLED', message: '已取消' };
+    }
+
     // 7) 同步 registry
     onProgress({ phase: 'registering', name: p.name });
+    if (checkAbort()) {
+      await rollbackFinalSwitch(finalDir, rollbackState).catch((rollbackErr) => {
+        log.error('[skillInstall] rollback before registry commit failed:', rollbackErr);
+      });
+      return { success: false, errorCode: 'CANCELLED', message: '已取消' };
+    }
 
     // 拉 hub 元数据 — 落盘 authorId 给渲染层兜底用（离线 fallback）。
     // isMine=true 时存当前 userId（与 renderer 的 currentUserId 同命名空间），
@@ -735,6 +762,13 @@ export async function install(
       : existingRegistryEntry
         ? existingRegistryEntry.autoSynced
         : false;
+
+    if (checkAbort()) {
+      await rollbackFinalSwitch(finalDir, rollbackState).catch((rollbackErr) => {
+        log.error('[skillInstall] rollback before registry metadata commit failed:', rollbackErr);
+      });
+      return { success: false, errorCode: 'CANCELLED', message: '已取消' };
+    }
 
     let logicalRegistryWritten = false;
     try {
@@ -874,10 +908,18 @@ export async function install(
 export async function uninstall(
   absolutePath: string,
 ): Promise<UninstallResult> {
-  const userId = getCurrentUserId();
-  if (!userId) {
-    return { success: false, errorCode: 'AUTH_REQUIRED', message: '未登录' };
+  const ownerId = getCurrentDataOwnerId();
+  if (!ownerId) {
+    return { success: false, errorCode: 'AUTH_REQUIRED', message: '无可用数据空间' };
   }
+  if (!getAppCapabilities().canUseSkillHubCloud) {
+    return {
+      success: false,
+      errorCode: 'AUTH_REQUIRED',
+      message: 'SkillHub 卸载需要 Cindy 云端账号',
+    };
+  }
+  const cloudUserId = getCurrentUserId();
 
   // 防御：resolve 后验证路径是精确的 skill 根目录（只允许一层 slug，防 traversal）
   let resolved: string;
@@ -902,7 +944,7 @@ export async function uninstall(
     return { success: false, errorCode: 'INTERNAL', message: skillLockBusyMessage(skillName) };
   }
   try {
-    return await uninstallLocked(absolutePath, resolved, skillName, userId);
+    return await uninstallLocked(absolutePath, resolved, skillName, cloudUserId);
   } finally {
     releaseLock();
   }
@@ -951,7 +993,7 @@ async function uninstallLocked(
   absolutePath: string,
   resolved: string,
   skillName: string,
-  userId: string,
+  cloudUserId: string | null,
 ): Promise<UninstallResult> {
   // 额外校验：registry 中必须有匹配记录，防止删除未注册的用户手写目录
   const registryMatch = await findRegistryInstallForPath(skillName, absolutePath, resolved);
@@ -963,8 +1005,8 @@ async function uninstallLocked(
   if (!(await pathExists(resolved))) {
     // 目录已经不在 → 静默成功，顺便清 registry 残留
     await registryService.removeInstall(skillName, registryInstallPath).catch(() => {});
-    if (await shouldRecordAutoSyncIgnore(skillName, registryEntry, userId)) {
-      await ignoreAutoSyncSkill(skillName, userId).catch((err) => {
+    if (cloudUserId && await shouldRecordAutoSyncIgnore(skillName, registryEntry, cloudUserId)) {
+      await ignoreAutoSyncSkill(skillName, cloudUserId).catch((err) => {
         log.warn('[skillInstall] record auto-sync ignore failed:', err);
       });
     }
@@ -991,8 +1033,8 @@ async function uninstallLocked(
     log.warn('[skillInstall] uninstall registry.removeInstall failed:', err);
   }
 
-  if (await shouldRecordAutoSyncIgnore(skillName, registryEntry, userId)) {
-    await ignoreAutoSyncSkill(skillName, userId).catch((err) => {
+  if (cloudUserId && await shouldRecordAutoSyncIgnore(skillName, registryEntry, cloudUserId)) {
+    await ignoreAutoSyncSkill(skillName, cloudUserId).catch((err) => {
       log.warn('[skillInstall] record auto-sync ignore failed:', err);
     });
   }

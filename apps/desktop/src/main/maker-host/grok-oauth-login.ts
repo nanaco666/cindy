@@ -29,6 +29,7 @@ import {
 } from '../oauthResultPage.js';
 import { desktopMakerLogger } from './logger-adapter.js';
 import { getProviderSecretStore } from '../secrets/providerSecretStore.js';
+import { bindNativeProviderAuth, isNativeProviderAuthBound, unbindNativeProviderAuth } from './nativeProviderAuthBinding.js';
 
 const log = desktopMakerLogger.child('grok-oauth-login');
 
@@ -79,6 +80,12 @@ interface GrokTokenBlob {
 // writeBlob / logoutGrok 时更新。undefined = 尚未从磁盘读过。
 let _blobCache: GrokTokenBlob | null | undefined;
 
+/** Drop the process-local xAI OAuth blob cache after an owner boundary. */
+export function resetGrokOAuthMemoryCache(): void {
+  _blobCache = undefined;
+  _refreshChain = Promise.resolve();
+}
+
 function readBlob(): GrokTokenBlob | null {
   if (_blobCache !== undefined) return _blobCache;
   const raw = getProviderSecretStore().get(SECRET_ID);
@@ -102,6 +109,12 @@ function writeBlob(b: GrokTokenBlob): void {
 
 /** 本机是否已登录 xAI(有可用 access_token)。供应商连接态用。 */
 export function hasGrokOAuthLogin(): boolean {
+  if (!isNativeProviderAuthBound('xai')) return false;
+  return readBlob() !== null;
+}
+
+/** Legacy upgrade probe; only used while claiming the first verified owner. */
+export function hasGrokOAuthLoginUnbound(): boolean {
   return readBlob() !== null;
 }
 
@@ -109,6 +122,7 @@ export function hasGrokOAuthLogin(): boolean {
 export function logoutGrok(): void {
   getProviderSecretStore().remove(SECRET_ID);
   _blobCache = null;
+  unbindNativeProviderAuth('xai');
 }
 
 // ── OIDC discovery(校验端点在 *.x.ai over https)────────────────────────────────
@@ -438,6 +452,7 @@ export async function runGrokOAuthLogin(opts?: {
     // 不会中断已 resolve 的响应体 —— 落盘前最后检查,保证"已取消"的登录绝不写凭证。
     if (abort.signal.aborted) throw new Error('login_cancelled');
     writeBlob(blobFromTokenResponse(tok));
+    bindNativeProviderAuth('xai');
     listener.succeed();
     log.info('xai oauth login success', { scope: tok.scope });
     return { ok: true };
@@ -538,6 +553,9 @@ async function refreshIfNeeded(current: GrokTokenBlob): Promise<GrokTokenBlob> {
  * 未登录 / 刷新后仍无 token → 抛错(bridge 据此回 502)。
  */
 export async function getGrokAccessToken(): Promise<string> {
+  if (!isNativeProviderAuthBound('xai')) {
+    throw new Error('xAI OAuth is not bound to the active data owner');
+  }
   const blob = readBlob();
   if (!blob) throw new Error('xAI 未登录:请先在「设置 → 模型供应商」登录 xAI(SuperGrok)');
   const fresh = await refreshIfNeeded(blob);

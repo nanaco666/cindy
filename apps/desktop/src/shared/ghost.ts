@@ -764,6 +764,25 @@ export function isOfficialGhostId(id: string): boolean {
 }
 
 /**
+ * Bundled Ghosts whose execution depends on Cindy account-plane services.
+ *
+ * Local app sessions may still use external Ghosts and direct/BYOK built-ins
+ * (GitHub, GitLab, Google, web search, Mermaid). These entries are hidden and
+ * rejected by the main process unless a verified cloud session is active.
+ */
+export const CINDY_ACCOUNT_GHOST_IDS: ReadonlySet<string> = new Set([
+  'cindy-art',
+  'xd-pages',
+  'xd-feishu',
+  'xd-atlassian',
+  'xd-mivo',
+]);
+
+export function isCindyAccountGhostId(id: string): boolean {
+  return CINDY_ACCOUNT_GHOST_IDS.has(id);
+}
+
+/**
  * 装入确认框的单项权限。
  * 纯数据描述:renderer 拼 `settings.ghosts.perm.<labelKey>` 翻译,`detail` 是
  * 作者自由文本(如工具描述)如实展示不翻译,`detailKey` 是主机固定说明的

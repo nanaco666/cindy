@@ -72,8 +72,30 @@ import {
   type DesktopLoginAction,
   type DesktopLoginActionResult,
 } from '../shared/authIpc';
+import {
+  beginAppSessionBoundary,
+  commitActiveAppSession,
+  getActiveAppSession,
+  type AppSessionMode,
+} from './appSessionState.js';
+import { claimLegacyOwnerNamespace } from './ownerNamespaceMigration.js';
 
 const log = createLogger('authManager');
+
+async function claimLegacyNamespaceForVerifiedUser(userId: string): Promise<void> {
+  try {
+    await claimLegacyOwnerNamespace({
+      mode: 'cloud',
+      dataOwnerId: userId,
+      user: { id: userId },
+    });
+  } catch (error) {
+    log.warn('legacy owner namespace claim failed; continuing with scoped storage', {
+      userId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
 
 // ── Config ──────────────────────────────────────────────────────────────────
 
@@ -132,6 +154,12 @@ interface CurrentUser extends User {
 
 export interface AuthState {
   user: User | null;
+  /** Stable application session. Local is an app session, not cloud authentication. */
+  mode: AppSessionMode;
+  /** Owner for local databases and owner-scoped private state. */
+  dataOwnerId: string | null;
+  /** Local and cloud sessions may enter the main application. */
+  canEnterApp: boolean;
   isAuthenticated: boolean;
   /** 当前账号是否加入 Canary 发布通道；不属于身份资料。 */
   isCanary: boolean;
@@ -723,6 +751,9 @@ function broadcastToRenderers(channel: string, payload: unknown): void {
  * 修改直接写 auth-server(updateServerProfile),本地覆写层已退役。
  */
 function snapshotAuthState(): AuthState {
+  const appSession = getActiveAppSession();
+  const isCloudAuthenticated =
+    appSession.mode === 'cloud' && accessToken !== null && currentUser !== null;
   return {
     // orgSlug 在出口处统一从当前 access token 解码注入(token 与 currentUser
     // 总是成对更新,快照读取时两者一致)。这里显式投影公开字段,避免 main-only
@@ -743,7 +774,10 @@ function snapshotAuthState(): AuthState {
           passportId: currentUser.passportId,
         }
       : null,
-    isAuthenticated: accessToken !== null && currentUser !== null,
+    mode: appSession.mode,
+    dataOwnerId: appSession.dataOwnerId,
+    canEnterApp: appSession.mode !== 'signed-out',
+    isAuthenticated: isCloudAuthenticated,
     isCanary: currentUser !== null && canaryFlagStore.read(),
     deviceId,
     hasAccountDeletionReceipt: readSafe(ACCOUNT_DELETION_RECEIPT_KEY) !== null,
@@ -755,6 +789,9 @@ function snapshotAuthState(): AuthState {
 function snapshotLoggedOutAuthState(): AuthState {
   return {
     user: null,
+    mode: 'signed-out',
+    dataOwnerId: null,
+    canEnterApp: false,
     isAuthenticated: false,
     isCanary: false,
     deviceId,
@@ -773,8 +810,7 @@ function notifyRendererAuthBoundaryPending(): void {
 
 /**
  * Preserve the dedicated forced-logout UX while leaving copy localization to
- * the renderer. An empty message intentionally selects its localized fallback
- * instead of exposing internal invalidation reason codes to the user.
+ * the renderer. Never expose auth-server messages or internal reason codes.
  */
 function notifySessionExpired(): void {
   broadcastToRenderers('auth:session-expired', { message: '' });
@@ -867,7 +903,9 @@ function scheduleReplacementIntegrationReloadRetries(userId: string): void {
   replacementIntegrationReloadTimers = timers;
 }
 
-function clearAuth(opts: { notify?: boolean } = {}): void {
+function clearAuth(
+  opts: { notify?: boolean; nextMode?: Extract<AppSessionMode, 'signed-out' | 'local'> } = {},
+): void {
   const notify = opts.notify ?? true;
   authStateEpoch += 1; // 迟到的冷启动流程从此作废(见 authStateEpoch 注释)
   accessToken = null;
@@ -893,9 +931,45 @@ function clearAuth(opts: { notify?: boolean } = {}): void {
   // 串号边界改由 login / 冷启动时 providerSecretStore.reconcileOwner 处理:owner 变了才清。
   // clearAuth 必须保持同步(大量调用方依赖立即 notify),但 promise rejection 仍要吞掉并记日志。
   clearPerAccountIntegrationsInBackground();
+  commitActiveAppSession(opts.nextMode ?? 'signed-out');
   if (notify) {
     notifyRenderer();
     notifyAuthListeners();
+  }
+}
+
+/**
+ * Expire a live cloud session after a definitive refresh failure.
+ *
+ * Auth expiry is an owner boundary just like logout: clear the auth state
+ * before awaiting teardown so no new owner-bound work can start, then stop
+ * every account-scoped runtime and publish the final signed-out state.
+ */
+async function expireRuntimeAuth(previousUserId: string): Promise<void> {
+  const releaseBoundary = beginAppSessionBoundary();
+  notifyRendererAuthBoundaryPending();
+  clearAuth({ notify: false });
+  try {
+    if (accountSwitchTeardown) {
+      await accountSwitchTeardown({ previousUserId, nextUserId: 'signed-out' });
+    } else {
+      log.warn('runtime auth expiry teardown hook is not registered; falling back to localDb close');
+    }
+  } catch (err) {
+    // A teardown failure must not restore an expired credential. Continue with
+    // the local DB close and signed-out notifications, while keeping evidence
+    // for diagnosing the stale owner runtime.
+    log.error('runtime auth expiry owner teardown failed', err);
+  }
+  try {
+    closeLocalDb();
+  } catch (err) {
+    log.error('closeLocalDb on runtime auth expiry failed', err);
+  } finally {
+    releaseBoundary();
+    notifyRenderer();
+    notifyAuthListeners();
+    notifySessionExpired();
   }
 }
 
@@ -945,6 +1019,11 @@ export function invalidateSession(reason: string): Promise<void> {
   return run;
 }
 
+/** Ensure a terminal auth teardown has finished before a new local owner commits. */
+export async function waitForSessionInvalidation(): Promise<void> {
+  if (sessionInvalidationPromise) await sessionInvalidationPromise;
+}
+
 // ── Public API ──────────────────────────────────────────────────────────────
 
 export function getAccessToken(): string | null {
@@ -971,6 +1050,36 @@ export function getDeviceId(): string {
 }
 
 export function getAuthState(): AuthState {
+  return snapshotAuthState();
+}
+
+export function getCurrentDataOwnerId(): string | null {
+  return getActiveAppSession().dataOwnerId;
+}
+
+export function isLocalMode(): boolean {
+  return getActiveAppSession().mode === 'local';
+}
+
+/** Enter the account-free local session after the host has torn down old runtime state. */
+export function enterLocalMode(): AuthState {
+  browserAuthorizationSlot.cancelActive();
+  // Local mode has a different data owner. Drop process-local generic OAuth
+  // tokens before switching the committed owner so cloud credentials cannot
+  // be reused by the account-free session.
+  getProviderSecretStore().invalidateCaches();
+  clearAuth({ notify: false, nextMode: 'local' });
+  notifyRenderer();
+  notifyAuthListeners();
+  return snapshotAuthState();
+}
+
+/** Leave local mode without deleting its owner-scoped data. */
+export function exitLocalMode(): AuthState {
+  if (getActiveAppSession().mode !== 'local') return snapshotAuthState();
+  clearAuth({ notify: false, nextMode: 'signed-out' });
+  notifyRenderer();
+  notifyAuthListeners();
   return snapshotAuthState();
 }
 
@@ -1214,6 +1323,11 @@ export async function updateServerProfile(
 }
 
 export async function initialize(options: AuthInitializeOptions = {}): Promise<AuthState> {
+  // Local mode is a committed account-free session. It must win before any
+  // persisted cloud refresh token is inspected or any auth network call runs.
+  if (getActiveAppSession().mode === 'local') {
+    return snapshotAuthState();
+  }
   // 进程内已登录快路径:auth 状态是 main 进程全局的,主窗登录后其它 renderer
   // (会话多开副窗 / 右侧栏子窗口)mount 时各自都会调一次 auth:initialize ——
   // 没有这条快路径,每个新窗口都会重跑一整轮网络 refresh(token 轮换 + /me),
@@ -1222,6 +1336,7 @@ export async function initialize(options: AuthInitializeOptions = {}): Promise<A
   // 冷启动时 accessToken/currentUser 必为空,不影响下方完整初始化流程
   // (relogin marker 消费、持久化 refresh_token 校验)。
   if (accessToken && currentUser) {
+    commitActiveAppSession('cloud', currentUser.id);
     return snapshotAuthState();
   }
 
@@ -1242,6 +1357,7 @@ export async function initialize(options: AuthInitializeOptions = {}): Promise<A
     removeSafe(LEGACY_ACCOUNT_REFRESH_TOKEN_KEY);
     removeSafe(LEGACY_REFRESH_TOKEN_KEY);
     clearReloginFlag();
+    commitActiveAppSession('signed-out');
     return snapshotLoggedOutAuthState();
   }
 
@@ -1251,6 +1367,7 @@ export async function initialize(options: AuthInitializeOptions = {}): Promise<A
   removeSafe(LEGACY_ACCOUNT_REFRESH_TOKEN_KEY);
   const storedToken = readSafe(REFRESH_TOKEN_KEY);
   if (!storedToken) {
+    commitActiveAppSession('signed-out');
     return snapshotLoggedOutAuthState();
   }
 
@@ -1290,6 +1407,7 @@ export async function initialize(options: AuthInitializeOptions = {}): Promise<A
  */
 async function runColdStartRefreshFlow(storedToken: string): Promise<AuthState> {
   const epochAtStart = authStateEpoch;
+  let releaseBoundary: (() => void) | null = null;
   const epochChanged = (point: string): boolean => {
     if (authStateEpoch === epochAtStart) return false;
     log.warn(
@@ -1323,7 +1441,7 @@ async function runColdStartRefreshFlow(storedToken: string): Promise<AuthState> 
     // 迟到守卫①:refresh 期间用户手动登录 / 登出过 → 丢弃结果。成功也丢
     // (旧 token family 已被新登录取代);失败更不能把新登录的 token 删掉。
     if (epochChanged('after-refresh')) {
-      return snapshotLoggedOutAuthState();
+      return snapshotAuthState();
     }
     if (!refreshResult.ok) {
       // 只在「确定性凭据失效」时清除 token。429 限流 / 5xx / 断网等瞬时失败保留 token,
@@ -1345,16 +1463,40 @@ async function runColdStartRefreshFlow(storedToken: string): Promise<AuthState> 
           `cold-start refresh still failing after ${attempts} attempt(s) — keeping refresh token, starting logged out`,
         );
       }
+      commitActiveAppSession('signed-out');
       return snapshotLoggedOutAuthState();
     }
 
     const refreshData = refreshResult.data as RefreshResponse;
+    if (accountSwitchTeardown) {
+      // Cold-start refresh may outlive initialize()'s startup timeout. Keep
+      // the owner boundary held for the entire late commit sequence so stale
+      // IPC cannot reopen the previous owner's database while teardown,
+      // namespace claiming, and session publication are still in flight.
+      releaseBoundary = beginAppSessionBoundary();
+      await accountSwitchTeardown({
+        previousUserId: getActiveAppSession().dataOwnerId ?? 'signed-out',
+        nextUserId: refreshData.membership.id,
+      });
+      if (epochChanged('after-cold-start-teardown')) {
+        releaseBoundary();
+        releaseBoundary = null;
+        return snapshotAuthState();
+      }
+    }
+    await claimLegacyNamespaceForVerifiedUser(refreshData.membership.id);
+    if (epochChanged('after-owner-namespace-claim')) {
+      releaseBoundary?.();
+      releaseBoundary = null;
+      return snapshotAuthState();
+    }
     writeSafe(REFRESH_TOKEN_KEY, refreshData.refreshToken);
     lastAcceptedRefreshToken = refreshData.refreshToken;
 
     accessToken = refreshData.accessToken;
     // 2026-07 起身份完全以 auth membership 为准(产品 /api/user/me 已退役)。
     currentUser = mapMembershipToAuthUser(refreshData.membership);
+    commitActiveAppSession('cloud', currentUser.id);
     persistedRefreshTokenNeedsIdentityCheck = false;
     clearReplacementIntegrationReloadTimers();
     scheduleCanaryFlagSync({
@@ -1372,6 +1514,8 @@ async function runColdStartRefreshFlow(storedToken: string): Promise<AuthState> 
     // 广播拿到冷启动状态——不广播就永远收不到 auto-login 事件。
     notifyRenderer();
     notifyAuthListeners();
+    releaseBoundary?.();
+    releaseBoundary = null;
     return snapshotAuthState();
   } catch (err) {
     // 网络类失败都在 apiFetch 内部消化(返回 status 0),能走到这里的是 refresh 成功
@@ -1388,7 +1532,12 @@ async function runColdStartRefreshFlow(storedToken: string): Promise<AuthState> 
         refreshTimer = null;
       }
     }
-    return snapshotLoggedOutAuthState();
+    releaseBoundary?.();
+    releaseBoundary = null;
+    if (!epochChanged('catch-return')) commitActiveAppSession('signed-out');
+    return epochChanged('catch-return-state')
+      ? snapshotAuthState()
+      : snapshotLoggedOutAuthState();
   }
 }
 
@@ -1425,9 +1574,30 @@ async function completeLogin(
   const loginEpoch = ++authStateEpoch;
   const deletionWasRestored =
     outcome.accountDeletionRestored === true || pendingAccountDeletionRestored;
+  const nextUser = mapMembershipToAuthUser(outcome.membership);
+  const previousSession = getActiveAppSession();
+  let releaseBoundary: (() => void) | null = null;
+  if (previousSession.dataOwnerId !== nextUser.id) {
+    releaseBoundary = beginAppSessionBoundary();
+    try {
+      if (accountSwitchTeardown) {
+        await accountSwitchTeardown({
+          previousUserId: previousSession.dataOwnerId ?? previousSession.mode,
+          nextUserId: nextUser.id,
+        });
+      } else {
+        closeLocalDb();
+      }
+    } catch (err) {
+      releaseBoundary();
+      releaseBoundary = null;
+      throw err;
+    }
+  }
   // legacy 飞书集成清理已随主机 token 链退役(2026-07-17):这里不再有登录前
   // 的异步清理窗口,epoch 守卫保留给未来在提交前重新引入 await 的改动兜底。
   if (authStateEpoch !== loginEpoch) {
+    releaseBoundary?.();
     throw new AuthApiError(
       'AUTH_FLOW_SUPERSEDED',
       409,
@@ -1435,20 +1605,40 @@ async function completeLogin(
     );
   }
 
-  pendingAccountToken = null;
-  pendingAccountDeletionRestored = false;
-  accessToken = outcome.accessToken;
-  persistedRefreshTokenNeedsIdentityCheck = false;
-  clearReplacementIntegrationReloadTimers();
-  writeSafe(REFRESH_TOKEN_KEY, outcome.refreshToken);
-  removeSafe(LEGACY_REFRESH_TOKEN_KEY);
-  lastAcceptedRefreshToken = outcome.refreshToken;
-  // A successful login either cancels this account's pending deletion or
-  // establishes a different account. In both cases, the old receipt is stale.
-  removeSafe(ACCOUNT_DELETION_RECEIPT_KEY);
-  accountDeletionRestoredNoticePending = deletionWasRestored;
-  clearReloginFlag();
-  currentUser = mapMembershipToAuthUser(outcome.membership);
+  try {
+    await claimLegacyNamespaceForVerifiedUser(nextUser.id);
+  } catch (error) {
+    // The boundary must not remain pending if legacy namespace claiming fails.
+    releaseBoundary?.();
+    releaseBoundary = null;
+    throw error;
+  }
+  if (authStateEpoch !== loginEpoch) {
+    releaseBoundary?.();
+    throw new AuthApiError(
+      'AUTH_FLOW_SUPERSEDED',
+      409,
+      'Login was superseded by a newer auth action',
+    );
+  }
+
+  try {
+    pendingAccountToken = null;
+    pendingAccountDeletionRestored = false;
+    accessToken = outcome.accessToken;
+    persistedRefreshTokenNeedsIdentityCheck = false;
+    clearReplacementIntegrationReloadTimers();
+    writeSafe(REFRESH_TOKEN_KEY, outcome.refreshToken);
+    removeSafe(LEGACY_REFRESH_TOKEN_KEY);
+    lastAcceptedRefreshToken = outcome.refreshToken;
+    removeSafe(ACCOUNT_DELETION_RECEIPT_KEY);
+    accountDeletionRestoredNoticePending = deletionWasRestored;
+    clearReloginFlag();
+    currentUser = nextUser;
+    commitActiveAppSession('cloud', currentUser.id);
+  } finally {
+    releaseBoundary?.();
+  }
   scheduleCanaryFlagSync({
     token: outcome.accessToken,
     expectedAuthEpoch: loginEpoch,
@@ -1749,6 +1939,10 @@ export async function dispatchLoginAction(action: unknown): Promise<DesktopLogin
 }
 
 export async function refresh(): Promise<boolean> {
+  if (getActiveAppSession().mode === 'local') {
+    log.debug('runtime refresh skipped in local mode');
+    return false;
+  }
   if (refreshPromise !== null) return refreshPromise;
 
   refreshPromise = (async () => {
@@ -1787,9 +1981,10 @@ export async function refresh(): Promise<boolean> {
         const code = getRefreshErrorCode(result);
         if (action.kind === 'definitive-failure') {
           log.warn(
-            `runtime refresh: definitive credential failure code=${code} — invalidating local session`,
+            `runtime refresh: definitive credential failure code=${code} — clearing auth, notifying session expired`,
           );
-          void invalidateSession('refresh-definitive-failure');
+          const previousUserId = currentUser?.id ?? getActiveAppSession().dataOwnerId ?? 'signed-out';
+          await expireRuntimeAuth(previousUserId);
         } else if (action.kind === 'replacement-retry') {
           log.warn(
             `runtime refresh failed for a stale token after replacement retries status=${result.status} code=${code ?? '<none>'} — retrying in ${RUNTIME_REFRESH_RETRY_MS / 1000}s`,
@@ -1820,11 +2015,13 @@ export async function refresh(): Promise<boolean> {
         const previousUserId = currentUser?.id ?? null;
         const nextUser = mergeMembershipWithExisting(data.membership, currentUser);
         const accountSwitched = previousUserId !== null && previousUserId !== nextUser.id;
+        let releaseBoundary: (() => void) | null = null;
         if (accountSwitched) {
           log.warn(
             `runtime replacement refresh switched authenticated user from ${previousUserId} to ${nextUser.id}; reconciling auth state`,
           );
           notifyRendererAuthBoundaryPending();
+          releaseBoundary = beginAppSessionBoundary();
           try {
             if (accountSwitchTeardown) {
               await accountSwitchTeardown({ previousUserId, nextUserId: nextUser.id });
@@ -1835,16 +2032,44 @@ export async function refresh(): Promise<boolean> {
             }
             closeLocalDb();
           } catch (err) {
+            releaseBoundary();
+            releaseBoundary = null;
             log.error('runtime replacement account switch teardown failed', err);
             notifyRenderer();
             scheduleRefreshRetryAfterTransientFailure();
             return false;
           }
-          if (refreshWasSuperseded('after-account-switch-teardown')) return false;
+          if (refreshWasSuperseded('after-account-switch-teardown')) {
+            releaseBoundary();
+            return false;
+          }
+        }
+
+        if (accountSwitched) {
+          try {
+            await claimLegacyNamespaceForVerifiedUser(nextUser.id);
+          } catch (err) {
+            // Namespace claiming is still inside the owner boundary. Always
+            // release it before retrying so a failed claim cannot permanently
+            // block all owner-bound IPC work.
+            releaseBoundary?.();
+            releaseBoundary = null;
+            throw err;
+          }
+          if (refreshWasSuperseded('after-owner-namespace-claim')) {
+            releaseBoundary?.();
+            releaseBoundary = null;
+            return false;
+          }
         }
 
         accessToken = data.accessToken;
         currentUser = nextUser;
+        try {
+          commitActiveAppSession('cloud', currentUser.id);
+        } finally {
+          releaseBoundary?.();
+        }
         persistedRefreshTokenNeedsIdentityCheck = false;
         getProviderSecretStore().reconcileOwner(currentUser.id);
         if (accountSwitched) {
@@ -1872,6 +2097,7 @@ export async function refresh(): Promise<boolean> {
 
       accessToken = data.accessToken;
       currentUser = mergeMembershipWithExisting(data.membership, currentUser);
+      commitActiveAppSession('cloud', currentUser.id);
       persistedRefreshTokenNeedsIdentityCheck = false;
       writeSafe(REFRESH_TOKEN_KEY, data.refreshToken);
       lastAcceptedRefreshToken = data.refreshToken;

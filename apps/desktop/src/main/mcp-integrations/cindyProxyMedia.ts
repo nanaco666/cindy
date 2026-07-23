@@ -10,6 +10,7 @@ import {
 import { createLogger } from '../logger.js';
 import { getProviderSecretStore } from '../secrets/providerSecretStore.js';
 import { effectiveXdGatewayBaseUrl } from '../model-access/effectiveEndpoint.js';
+import { getAppCapabilities } from '../appCapabilities.js';
 
 const log = createLogger('art');
 
@@ -19,6 +20,7 @@ let artServiceBaseUrl: string | null = null;
 
 function readApiKey(): string | null {
   // 本地 only:经统一的 providerSecretStore 读 XD 网关 key。
+  if (!getAppCapabilities().canUseCindyGateway) return null;
   return getProviderSecretStore().get('xd');
 }
 

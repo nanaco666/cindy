@@ -62,6 +62,20 @@ export function LoginPage() {
   const { t } = useTranslation();
   const handoff = useLoginHandoff();
   const isMac = window.electronAPI?.platform === 'darwin';
+  const [localModePending, setLocalModePending] = useState(false);
+
+  const openLocalMode = async () => {
+    if (isLoading || localModePending || !window.electronAPI?.authEnterLocal) return;
+    setLocalModePending(true);
+    try {
+      await window.electronAPI.authEnterLocal();
+      // The auth state event normally redirects through GuestRoute. Keep the
+      // transition deterministic when the IPC response wins that race.
+      window.location.hash = '#/';
+    } finally {
+      setLocalModePending(false);
+    }
+  };
 
   // handoff「面板已挂载」信号(未登录分支进 panel 步的前置锚,Step 3b WHAT2);
   // 卸载(路由离开 /login)时回报,品牌 overlay 据此卸载。
@@ -784,6 +798,21 @@ export function LoginPage() {
           </div>
         )}
       </div>
+      {loginState?.step !== 'browser-redirect' && (
+        <div className="absolute bottom-8 left-0 right-0 z-30 flex flex-col items-center gap-2">
+          <button
+            type="button"
+            disabled={localModePending || isLoading}
+            onClick={() => void openLocalMode()}
+            className="rounded-full border border-[var(--border-default)] bg-[var(--surface-elevated)] px-5 py-2 text-13 font-medium text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-hover)] disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {localModePending ? t('login.localModeOpening') : t('login.localModeEntry')}
+          </button>
+          <span className="text-12 text-[var(--text-secondary)]">
+            {t('login.localModeDescription')}
+          </span>
+        </div>
+      )}
     </div>
   );
 }

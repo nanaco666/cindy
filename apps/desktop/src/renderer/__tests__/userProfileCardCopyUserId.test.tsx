@@ -2,20 +2,34 @@
 
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
+import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   writeText: vi.fn(),
   toastSuccess: vi.fn(),
   toastError: vi.fn(),
-  user: {
-    id: 'user-123',
-    name: 'Lizi',
-    avatar: null,
-    membershipKind: 'personal' as 'personal' | 'org',
-    membershipRole: 'owner' as 'owner' | 'admin' | 'member',
-    orgName: null as string | null,
-    orgSlug: null as string | null,
+  exitLocalMode: vi.fn(),
+  authState: {
+    user: {
+      id: 'user-123',
+      name: 'Lizi',
+      avatar: null,
+      membershipKind: 'personal' as 'personal' | 'org',
+      membershipRole: 'owner' as 'owner' | 'admin' | 'member',
+      orgName: null as string | null,
+      orgSlug: null as string | null,
+    } as {
+      id: string;
+      name: string;
+      avatar: string | null;
+      membershipKind: 'personal' | 'org';
+      membershipRole: 'owner' | 'admin' | 'member';
+      orgName: string | null;
+      orgSlug: string | null;
+    } | null,
+    mode: 'cloud' as 'cloud' | 'local',
+    exitLocalMode: vi.fn(),
   },
 }));
 
@@ -24,9 +38,7 @@ vi.mock('react-i18next', () => ({
 }));
 
 vi.mock('@/contexts/AuthContext', () => ({
-  useAuth: () => ({
-    user: mocks.user,
-  }),
+  useAuth: () => mocks.authState,
 }));
 
 vi.mock('@/lib/toast', () => ({
@@ -40,17 +52,32 @@ vi.mock('@/components/settings/ProfileEditDialog', () => ({
 
 import { UserProfileCard } from '@/components/settings/UserProfileCard';
 
-describe('UserProfileCard', () => {
+function renderCard() {
+  return render(
+    <MemoryRouter>
+      <UserProfileCard />
+    </MemoryRouter>,
+  );
+}
+
+describe('UserProfileCard copy user ID', () => {
   beforeEach(() => {
-    mocks.user.membershipKind = 'personal';
-    mocks.user.membershipRole = 'owner';
-    mocks.user.orgName = null;
-    mocks.user.orgSlug = null;
     Object.defineProperty(navigator, 'clipboard', {
       configurable: true,
       value: { writeText: mocks.writeText },
     });
     mocks.writeText.mockResolvedValue(undefined);
+    mocks.authState.user = {
+      id: 'user-123',
+      name: 'Lizi',
+      avatar: null,
+      membershipKind: 'personal',
+      membershipRole: 'owner',
+      orgName: null,
+      orgSlug: null,
+    };
+    mocks.authState.mode = 'cloud';
+    mocks.authState.exitLocalMode.mockReset();
   });
 
   afterEach(() => {
@@ -59,7 +86,7 @@ describe('UserProfileCard', () => {
   });
 
   it('copies the user ID and shows a success toast when the name is clicked', async () => {
-    render(<UserProfileCard />);
+    renderCard();
 
     const nameButton = screen.getByRole('button', {
       name: 'settings.userProfile.copyUserId.action',
@@ -74,7 +101,7 @@ describe('UserProfileCard', () => {
   });
 
   it('opens the profile edit dialog when the avatar is clicked', () => {
-    render(<UserProfileCard />);
+    renderCard();
 
     expect(screen.queryByTestId('profile-edit-dialog')).toBeNull();
 
@@ -92,7 +119,7 @@ describe('UserProfileCard', () => {
 
   it('shows an error toast when clipboard access fails', async () => {
     mocks.writeText.mockRejectedValueOnce(new Error('clipboard denied'));
-    render(<UserProfileCard />);
+    renderCard();
 
     fireEvent.click(screen.getByRole('button', { name: 'settings.userProfile.copyUserId.action' }));
 
@@ -101,41 +128,59 @@ describe('UserProfileCard', () => {
     );
   });
 
-  it('shows the organization name and role only for an organization membership', () => {
-    const { rerender } = render(<UserProfileCard />);
+  it('offers sign-in without exposing a logout action in local mode', () => {
+    mocks.authState.user = null;
+    mocks.authState.mode = 'local';
+    renderCard();
 
+    const signInButton = screen.getByRole('button', {
+      name: 'settings.userProfile.local.signIn',
+    });
+    expect(signInButton).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'settings.userProfile.local.exit' })).toBeNull();
+    expect(mocks.authState.exitLocalMode).not.toHaveBeenCalled();
+
+    fireEvent.click(signInButton);
+
+    return waitFor(() => expect(mocks.authState.exitLocalMode).toHaveBeenCalledOnce());
+  });
+
+  it('shows the organization name and role only for an organization membership', () => {
+    renderCard();
     expect(screen.queryByText('settings.userProfile.organization.roles.owner')).toBeNull();
 
-    mocks.user.membershipKind = 'org';
-    mocks.user.membershipRole = 'admin';
-    mocks.user.orgName = 'Acme';
-    mocks.user.orgSlug = 'acme';
-    rerender(<UserProfileCard />);
+    cleanup();
+    mocks.authState.user!.membershipKind = 'org';
+    mocks.authState.user!.membershipRole = 'admin';
+    mocks.authState.user!.orgName = 'Acme';
+    mocks.authState.user!.orgSlug = 'acme';
+    renderCard();
 
     expect(screen.getByTitle('Acme')).toBeTruthy();
     expect(screen.getByText('settings.userProfile.organization.roles.admin')).toBeTruthy();
   });
 
-  it('falls back from the organization name to its slug and then the localized default', () => {
-    mocks.user.membershipKind = 'org';
-    mocks.user.membershipRole = 'member';
-    mocks.user.orgName = null;
-    mocks.user.orgSlug = 'acme';
-    const { rerender } = render(<UserProfileCard />);
+  it('falls back from the organization name to its slug and localized default', () => {
+    mocks.authState.user!.membershipKind = 'org';
+    mocks.authState.user!.membershipRole = 'member';
+    mocks.authState.user!.orgName = null;
+    mocks.authState.user!.orgSlug = 'acme';
+    renderCard();
 
     expect(screen.getByTitle('acme')).toBeTruthy();
 
-    mocks.user.orgSlug = null;
-    rerender(<UserProfileCard />);
+    cleanup();
+    mocks.authState.user!.orgSlug = null;
+    renderCard();
 
     expect(screen.getByTitle('settings.userProfile.organization.fallbackName')).toBeTruthy();
   });
 
   it('falls back to the localized member role for an unknown runtime role', () => {
-    mocks.user.membershipKind = 'org';
-    mocks.user.orgName = 'Acme';
-    (mocks.user as { membershipRole: string }).membershipRole = 'billing_admin';
-    render(<UserProfileCard />);
+    mocks.authState.user!.membershipKind = 'org';
+    mocks.authState.user!.orgName = 'Acme';
+    (mocks.authState.user! as { membershipRole: string }).membershipRole = 'billing_admin';
+    renderCard();
 
     expect(screen.getByText('settings.userProfile.organization.roles.member')).toBeTruthy();
     expect(screen.queryByText('settings.userProfile.organization.roles.billing_admin')).toBeNull();

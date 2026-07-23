@@ -541,6 +541,13 @@
     "userProfile": {
       "fallbackName": "User",
       "avatarAlt": "{{name}} avatar",
+      "local": {
+        "exitFailed": "Failed to exit local mode, please try again",
+        "name": "Local mode",
+        "description": "Data stays on this device without Cindy account services",
+        "signIn": "Sign in to Cindy",
+        "exit": "Exit local mode"
+      },
       "copyUserId": {
         "action": "Copy user ID",
         "success": "User ID copied",
@@ -687,6 +694,7 @@
       "serviceSource": {
         "label": "Voice service",
         "hint": "Uses the Cindy voice service by default; switch to your own key and models if you prefer.",
+        "localHint": "Local mode does not use Cindy account services; configure your own key and models.",
         "ariaLabel": "Voice service source",
         "options": {
           "cindy": "Cindy official service",
@@ -2010,6 +2018,7 @@
       "defaults": {
         "title": "New Conversation Configuration",
         "description": "New conversations started from Feishu, Slack, or Discord use this agent and model configuration. Changes apply only to new conversations; send /new in an existing Discord DM to apply them.",
+        "localDescription": "New conversations started from Feishu or Discord use this agent and model configuration. Changes apply only to new conversations; send /new in an existing Discord DM to apply them.",
         "agentLabel": "Agent",
         "modelLabel": "Model Configuration",
         "loading": "Loading new conversation configuration…",
@@ -2568,10 +2577,7 @@
     "codePlaceholder": "6-digit code",
     "codeInputAria": "Account deletion verification code",
     "codeSent": "We sent a code to {{target}} via {{channel}}.",
-    "channels": {
-      "email": "email",
-      "sms": "SMS"
-    },
+    "channels": { "email": "email", "sms": "SMS" },
     "sessionNotice": "This computer signs out immediately. Other clients sign out when their current access credential expires and they attempt to refresh it.",
     "gracePeriodNotice": "After confirmation, your account enters a 30-day waiting period. Signing in during that period cancels deletion; afterwards, your Cindy sign-in account is permanently deleted.",
     "verificationNotice": "A deletion code will be sent to {{target}} via {{channel}}.",
@@ -2607,6 +2613,12 @@
       "dismissButton": "Got it"
     }
   },
+  "localDbGate": {
+    "title": "Local data could not be opened",
+    "description": "Retry, or return to the sign-in choices and select a mode again.",
+    "retry": "Retry",
+    "backToLogin": "Back to sign-in"
+  },
   "login": {
     "title": "Welcome to Cindy",
     "subtitle": "Choose a secure way to sign in",
@@ -2634,6 +2646,10 @@
     "personalDesc": "Send a verification code to your email",
     "ssoRequired": "This organization requires SSO sign-in",
     "ssoEntry": "Sign in with enterprise SSO",
+    "localModeEntry": "Skip Sign-In",
+    "localModeOpening": "Opening local mode...",
+    "returnToLocalMode": "Return to local mode",
+    "localModeDescription": "No Cindy account required. Data stays on this device; cloud models, cross-device access, and marketplace services are unavailable.",
     "ssoOrgTitle": "Enterprise SSO",
     "ssoOrgSubtitle": "Enter a company ID, organization slug, or verified domain to continue with single sign-on",
     "ssoOrgPlaceholder": "Company ID, organization slug, or verified domain",
@@ -6272,8 +6288,8 @@
     "dialogUnavailable": "window.electronAPI.dialog not available",
     "notReadyHeading": "Maker Experimental",
     "notReadyBody": "window.electronAPI.maker is not available. Restart the app and check console for IPC registration errors.",
-    "title": "Maker Experimental — Agent pipeline diagnostics",
-    "description": "Diagnoses the Maker IPC and agent event pipeline without affecting standard chat sessions.",
+    "title": "Maker Experimental — Stage 1 refactor pipeline",
+    "description": "New pipeline validation page. The legacy pipeline (cc-agent / codex) is unaffected. See doc/agent/xdt-maker-architecture.md",
     "agentLabel": "Agent:",
     "workingDirLabel": "Working dir:",
     "workingDirPlaceholder": "Click the button on the right to pick a directory",

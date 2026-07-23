@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Building2, Pencil } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 import { cn } from '@/lib/utils';
 import { toast } from '@/lib/toast';
@@ -24,7 +25,8 @@ function getOrganizationRoleI18nKey(role: string) {
 }
 
 export function UserProfileCard() {
-  const { user } = useAuth();
+  const { user, mode, exitLocalMode } = useAuth();
+  const navigate = useNavigate();
   const [avatarError, setAvatarError] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const { t } = useTranslation();
@@ -35,6 +37,44 @@ export function UserProfileCard() {
   useEffect(() => {
     setAvatarError(false);
   }, [avatarUrl]);
+
+  const handleLocalSignIn = async () => {
+    await exitLocalMode();
+    navigate('/login');
+  };
+
+  if (!user && mode === 'local') {
+    return (
+      <div
+        className={cn(
+          'flex w-full items-center gap-[14px] rounded-xl p-5',
+          'bg-[var(--settings-profile-card-bg)]',
+          'border border-[var(--settings-profile-card-border)]',
+        )}
+      >
+        <div className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-full border border-[var(--settings-profile-card-border)] bg-[var(--settings-profile-avatar-bg)] text-18 font-medium text-[var(--settings-profile-avatar-text)]">
+          L
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-18 font-medium text-[var(--settings-profile-name)]">
+            {t('settings.userProfile.local.name')}
+          </p>
+          <p className="mt-1 text-12 text-[var(--text-tertiary)]">
+            {t('settings.userProfile.local.description')}
+          </p>
+        </div>
+        <div className="flex shrink-0 items-center">
+          <button
+            type="button"
+            onClick={() => void handleLocalSignIn()}
+            className="rounded-full border border-[var(--border-default)] px-3 py-1.5 text-12 text-[var(--text-primary)] transition-colors hover:bg-[var(--settings-profile-avatar-bg)]"
+          >
+            {t('settings.userProfile.local.signIn')}
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (!user) return null;
 

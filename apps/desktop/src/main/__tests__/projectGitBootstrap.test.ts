@@ -4,6 +4,9 @@ import path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+// Windows 全量并发时，初始化临时 Git 仓库可能超过 Vitest 默认的 5 秒预算。
+vi.setConfig({ testTimeout: 30_000 });
+
 import {
   ensureProjectGitInitialized,
   shouldBootstrapProjectGit,

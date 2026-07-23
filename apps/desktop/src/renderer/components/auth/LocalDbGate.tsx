@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Outlet } from 'react-router-dom';
+import { Outlet, useNavigate } from 'react-router-dom';
 
 import { useAuth } from '@/contexts/AuthContext';
 import { LocalDbFatalScreen } from '@/components/error/LocalDbFatalScreen';
@@ -35,25 +35,26 @@ const MAX_DECISION_RETRIES = 2;
 const DECISION_RETRY_DELAY_MS = 1_000;
 
 export function LocalDbGate() {
-  const { user } = useAuth();
+  const { dataOwnerId, mode, logout, exitLocalMode } = useAuth();
+  const navigate = useNavigate();
   const [decision, setDecision] = useState<GateDecision>({ phase: 'checking' });
   const [retryNonce, setRetryNonce] = useState(0);
   const retryCountRef = useRef(0);
-  const previousUserIdRef = useRef<string | null>(null);
+  const previousOwnerIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     let retryTimer: ReturnType<typeof setTimeout> | undefined;
-    const userId = user?.id ?? null;
-    const userChanged = previousUserIdRef.current !== userId;
-    previousUserIdRef.current = userId;
+    const ownerId = dataOwnerId;
+    const ownerChanged = previousOwnerIdRef.current !== ownerId;
+    previousOwnerIdRef.current = ownerId;
     // user 变化 = 一次全新决策,重试额度整体归零;只有 retryNonce 驱动的重跑才
     // 继承计数(否则重试永远数不满,fatal 不可达)。
-    if (userChanged) {
+    if (ownerChanged) {
       retryCountRef.current = 0;
       setDecision({ phase: 'checking' });
     }
-    if (!user) {
+    if (!ownerId) {
       return () => {
         cancelled = true;
       };
@@ -62,7 +63,7 @@ export function LocalDbGate() {
     (async () => {
      try {
       // ensureReady（按 userId 切换 db；失败 main 已弹对话框）
-      const ready = await window.electronAPI.localDb.ensureReady(user.id);
+      const ready = await window.electronAPI.localDb.ensureReady(ownerId);
       if (cancelled) return;
       if (!ready.ready) {
         log.error('ensureReady failed', ready.error);
@@ -105,16 +106,33 @@ export function LocalDbGate() {
     };
     // 依赖 user.id——切账号 blank;同账号 refresh 不因对象引用变化卸载 Outlet。
     // retryNonce 驱动失败后的有限重试重跑。
-  }, [user?.id, retryNonce]);
+  }, [dataOwnerId, retryNonce]);
 
-  if (!user || decision.phase === 'checking') {
+  if (!dataOwnerId || decision.phase === 'checking') {
     // 短暂检查窗口（通常 < 100ms）；返回 null 即可，App 已有 splash 兜底视觉
     return null;
   }
 
   if (decision.phase === 'fatal') {
     // 全屏恢复界面接管：阻断主功能区渲染，并给出「重启并安装更新」等恢复路径。
-    return <LocalDbFatalScreen code={decision.code} message={decision.message} />;
+    return (
+      <LocalDbFatalScreen
+        code={decision.code}
+        message={decision.message}
+        onBackToLogin={() => {
+          const leave = mode === 'local' ? exitLocalMode() : logout();
+          void leave.then(
+            () => navigate('/login', { replace: true }),
+            (err) => {
+              // The fatal screen must always have an escape hatch. A failed
+              // teardown is still logged, but must not trap the user here.
+              log.warn('failed to leave the current session from local-db fatal screen', err);
+              navigate('/login', { replace: true });
+            },
+          );
+        }}
+      />
+    );
   }
 
   return <Outlet />;

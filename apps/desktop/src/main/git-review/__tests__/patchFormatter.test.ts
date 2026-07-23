@@ -2,7 +2,10 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+// Windows 全量并发时，真实 Git 仓库操作可能超过 Vitest 默认的 5 秒预算。
+vi.setConfig({ testTimeout: 30_000 });
 
 import { parseGitDiff } from '../diffParser';
 import { formatPatchForSelection, PatchFormatError } from '../patchFormatter';

@@ -15,11 +15,9 @@
  *   校验,失效静默落回默认并留日志,不在读取层抛错。
  */
 
-import { app } from 'electron';
-import path from 'node:path';
-
 import { desktopMakerLogger } from '../maker-host/logger-adapter.js';
 import { createOverrideSettingsFile } from '../maker-host/override-settings-file.js';
+import { ownerScopedUserDataPath } from '../appSessionState.js';
 
 const log = desktopMakerLogger.child('cindy-prefs-store');
 
@@ -63,7 +61,7 @@ function normalize(raw: unknown): GhostCindyPrefs {
 }
 
 const store = createOverrideSettingsFile<GhostCindyPrefs>({
-  filePath: () => path.join(app.getPath('userData'), 'ghost-cindy-prefs.json'),
+  filePath: () => ownerScopedUserDataPath('ghost-cindy-prefs.json'),
   defaults: DEFAULTS,
   normalize,
   log,

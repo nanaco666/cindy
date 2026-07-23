@@ -1119,6 +1119,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // ── Auth (delegated to main process authManager) ──
   authInitialize: (): Promise<{
     user: unknown;
+    mode: 'signed-out' | 'local' | 'cloud';
+    dataOwnerId: string | null;
+    canEnterApp: boolean;
     isAuthenticated: boolean;
     isCanary: boolean;
     deviceId: string;
@@ -1131,6 +1134,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   authDispatchLoginAction: (action: DesktopLoginAction): Promise<DesktopLoginActionResult> =>
     ipcRenderer.invoke('auth:dispatch-login-action', action),
   authLogout: (): Promise<void> => ipcRenderer.invoke('auth:logout'),
+  authEnterLocal: () => ipcRenderer.invoke('auth:enter-local'),
+  authExitLocal: () => ipcRenderer.invoke('auth:exit-local'),
   authRefresh: (): Promise<boolean> => ipcRenderer.invoke('auth:refresh'),
   authGetAccountDeletionAvailability: (): Promise<DesktopAccountDeletionAvailabilityResult> =>
     ipcRenderer.invoke('auth:account-deletion:get-availability'),

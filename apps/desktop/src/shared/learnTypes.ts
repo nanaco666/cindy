@@ -59,8 +59,9 @@ export interface LearnRunPublic {
   runId: string;
   status: LearnRunStatus;
   sourceKind: LearnSourceKind;
-  /** 发起 run 的账号 id(runs.json 是 per-profile 文件,切账号后按 owner 过滤,
-   *  其它账号的 run 不可见不可操作;缺省(历史数据)不过滤)。 */
+  /** 发起 run 的 data owner id(local-v1 或云账号 id)。 */
+  dataOwnerId?: string;
+  /** @deprecated 旧版云账号 run 的归属字段;读取时仅作兼容回退。 */
   ownerUserId?: string;
   /** 用户输入的原始请求文本(hub 源为空串或补充说明)。 */
   input: string;

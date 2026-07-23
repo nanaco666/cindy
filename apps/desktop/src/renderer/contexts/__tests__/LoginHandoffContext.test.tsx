@@ -252,9 +252,12 @@ describe('LoginHandoff 时序(fake-timer)', () => {
 /* ── 冷启动集成(real AuthProvider + LoginBrandStage + SplashScreen + LoginPage) ── */
 
 function HandoffHost({ children }: { children: React.ReactNode }) {
-  const { isInitializing, isAuthenticated } = useAuth();
+  const { isInitializing, isAuthenticated, canEnterApp } = useAuth();
   return (
-    <LoginHandoffProvider authResolved={!isInitializing} authenticated={isAuthenticated}>
+    <LoginHandoffProvider
+      authResolved={!isInitializing}
+      authenticated={isAuthenticated || canEnterApp}
+    >
       {children}
     </LoginHandoffProvider>
   );
@@ -468,5 +471,26 @@ describe('冷启动集成(resolved snapshot,禁 mock-reject)', () => {
     expect(screen.getByTestId('login-group').style.opacity).toBe('1');
     expect(screen.getByTestId('login-stage-root')).toBeTruthy();
     expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('local cold start uses the entered-app handoff branch', async () => {
+    svc.service.initialize.mockResolvedValue({
+      isAuthenticated: false,
+      mode: 'local',
+      dataOwnerId: 'local-v1',
+      canEnterApp: true,
+      isCanary: false,
+      deviceId: 'test-device',
+      user: null,
+    });
+    renderColdStart();
+    await flush();
+
+    loadBrandAssets();
+    await act(async () => {
+      vi.advanceTimersByTime(3_000);
+    });
+    expect(probe.current!.branch).toBe('authenticated');
+    expect(probe.current!.phase).toBe('brand-exit');
   });
 });

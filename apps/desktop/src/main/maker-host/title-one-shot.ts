@@ -34,12 +34,12 @@ import {
   type Effort,
   type Provider,
   type ProviderView,
-  connectedProvidersForAgent,
   nativeDefaultSourceId,
 } from '@cindy/model-providers';
 import { toSdkModelString } from '@cindy/maker-core';
 
 import { createLogger } from '../logger.js';
+import { getAppCapabilities } from '../appCapabilities.js';
 
 import { getActiveCatalog } from './active-catalog.js';
 import { readClaudeApiKey, readCodexOneShotCreds } from './auth-adapters.js';
@@ -142,6 +142,7 @@ export function buildTitleTarget(providerId: string): TitleTarget | null {
         : null;
     }
     case 'xd': {
+      if (!getAppCapabilities().canUseCindyGateway) return null;
       // titleModel 为 gpt-5.4-mini(OpenAI 系)→ 走网关 litellm 的 chat-completions。
       // 上游不取 catalog routing.upstream:XD 网关入口一律用 model-access server
       // 随凭据下发的 endpoint(与 key 同租户,见 effectiveEndpoint.ts);凭据未

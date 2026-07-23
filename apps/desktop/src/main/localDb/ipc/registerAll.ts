@@ -9,7 +9,7 @@
 
 import { ipcMain } from 'electron';
 
-import { ensureReady } from '../index';
+import { closeDb, ensureReady, getCurrentUserId } from '../index';
 import { registerSessionIpc } from './sessions';
 import { registerMessageIpc } from './messages';
 import { registerOrcaWorkflowIpc } from './orcaTeams';
@@ -23,16 +23,21 @@ import { registerSearchIpc } from './search';
 
 import { createLogger } from '../../logger';
 import { recordDesktopDevLocalDbStartupResult } from '../../devStartupStatus';
+import { createOwnerEnsureCoordinator } from './ownerEnsureCoordinator';
 
 const log = createLogger('registerAll');
 
 export interface RegisterLocalDbIpcOpts {
+  /** Current stable app-session owner. False makes queued/in-flight work stale. */
+  isOwnerCurrent?: (userId: string) => boolean;
+  /** Dispose any secondary DB client committed by a stale onReady callback. */
+  discardStaleOwner?: (userId: string) => void | Promise<void>;
   /** ensureReady 打开/创建目标库前执行；失败时阻断，避免跳过认领后创建空库。 */
   beforeEnsureReady?: (userId: string) => void | Promise<void>;
   /**
    * 可选回调：localDb.ensureReady 成功（含已就绪复用路径）后触发。
-   * 用途：启动依赖 localDb 的 host 单例（如 scheduler-host），失败仅记日志，
-   * 不影响 ensure-ready 自身返回值。
+   * 用途：启动依赖 localDb 的 host 单例（如 scheduler-host）。失败时协调器会
+   * 丢弃已提交的 owner DB 并返回 DB_INIT_FAILED，允许 renderer 完整重试。
    *
    * 设计原因：scheduler-host 的 startScheduler 需要 localDb + maker 都 ready，
    * 二者就绪时序不固定（splash check-environment 走在 user login 前/后都可能）；
@@ -43,6 +48,27 @@ export interface RegisterLocalDbIpcOpts {
 }
 
 export function registerLocalDbIpc(opts: RegisterLocalDbIpcOpts = {}): void {
+  const runEnsureReady = createOwnerEnsureCoordinator({
+    isOwnerCurrent: opts.isOwnerCurrent ?? (() => true),
+    beforeEnsureReady: opts.beforeEnsureReady,
+    ensureReady,
+    onReady: opts.onReady,
+    onReadyError: (userId, err) => {
+      log.warn(
+        JSON.stringify({
+          event: 'localDb.ipc.ensure-ready.onReady.failed',
+          userId,
+          error: err instanceof Error ? err.message : String(err),
+        }),
+      );
+    },
+    discardReadyOwner: async (userId) => {
+      // The queue prevents a newer IPC ensure from starting first. Keep the
+      // identity check for non-IPC callers so stale cleanup never closes them.
+      if (getCurrentUserId() === userId) closeDb();
+      await opts.discardStaleOwner?.(userId);
+    },
+  });
   ipcMain.handle('local-db:ensure-ready', async (_e, userId: unknown) => {
     log.info(
       JSON.stringify({
@@ -64,25 +90,21 @@ export function registerLocalDbIpc(opts: RegisterLocalDbIpcOpts = {}): void {
       recordDesktopDevLocalDbStartupResult(result);
       return result;
     }
-    if (opts.beforeEnsureReady) {
-      try {
-        await opts.beforeEnsureReady(userId);
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        log.error(JSON.stringify({
-          event: 'localDb.ipc.ensure-ready.before.failed',
-          userId,
-          error: message,
-        }));
-        const result = {
-          ready: false,
-          error: { code: 'DB_INIT_FAILED', message },
-        } as const;
-        recordDesktopDevLocalDbStartupResult(result);
-        return result;
-      }
+    let result;
+    try {
+      result = await runEnsureReady(userId);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      log.error(JSON.stringify({
+        event: 'localDb.ipc.ensure-ready.failed',
+        userId,
+        error: message,
+      }));
+      result = {
+        ready: false,
+        error: { code: 'DB_INIT_FAILED', message },
+      } as const;
     }
-    const result = await ensureReady(userId);
     recordDesktopDevLocalDbStartupResult(result);
     log.info(
       JSON.stringify({
@@ -92,19 +114,6 @@ export function registerLocalDbIpc(opts: RegisterLocalDbIpcOpts = {}): void {
         ...(result.ready ? {} : { error: result.error }),
       }),
     );
-    if (result.ready && opts.onReady) {
-      try {
-        await opts.onReady(userId);
-      } catch (err) {
-        log.warn(
-          JSON.stringify({
-            event: 'localDb.ipc.ensure-ready.onReady.failed',
-            userId,
-            error: err instanceof Error ? err.message : String(err),
-          }),
-        );
-      }
-    }
     return result;
   });
 

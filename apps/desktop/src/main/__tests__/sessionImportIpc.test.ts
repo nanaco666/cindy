@@ -29,6 +29,10 @@ vi.mock('electron', () => ({
   },
 }));
 
+vi.mock('../appSessionState.js', () => ({
+  ownerScopedUserDataPath: (...parts: string[]) => path.join(mocks.userDataDir, ...parts),
+}));
+
 vi.mock('../localDb/index.js', () => ({
   getRawDb: vi.fn(),
 }));

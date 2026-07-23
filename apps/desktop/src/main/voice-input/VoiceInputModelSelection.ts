@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import { createLogger } from '../logger.js';
+import { getActiveAppSession, ownerScopedUserDataPath } from '../appSessionState.js';
 import {
   DEFAULT_VOICE_INPUT_ASR_PROVIDER_CHAIN,
   DEFAULT_VOICE_INPUT_PROVIDER_KIND,
@@ -32,6 +33,18 @@ export type VoiceInputProviderChainSource = 'default' | 'configured';
 export type VoiceInputServiceMode = 'cindy' | 'byok';
 
 export const DEFAULT_VOICE_INPUT_SERVICE_MODE: VoiceInputServiceMode = 'cindy';
+
+/**
+ * Account-free sessions must always use the user's own credential plane.
+ * Keep the persisted preference untouched so returning to a cloud account
+ * restores the user's previous managed/BYOK choice.
+ */
+export function effectiveVoiceInputServiceMode(
+  configuredMode: VoiceInputServiceMode,
+  canUseCindyAccountServices: boolean,
+): VoiceInputServiceMode {
+  return canUseCindyAccountServices ? configuredMode : 'byok';
+}
 
 export type VoiceInputModelSelectionValues = {
   serviceMode: VoiceInputServiceMode;
@@ -90,7 +103,8 @@ let cachedConfig: VoiceInputModelSelection | null = null;
 let cachedMtimeMs = -1;
 
 export function getVoiceInputModelSelectionConfigPath(): string {
-  return path.join(app.getPath('userData'), CONFIG_FILE_NAME);
+  const ownerId = getActiveAppSession().dataOwnerId;
+  return ownerId ? ownerScopedUserDataPath(CONFIG_FILE_NAME) : path.join(app.getPath('userData'), CONFIG_FILE_NAME);
 }
 
 export function resolveVoiceInputModelSelectionValues(
@@ -210,7 +224,7 @@ export function getVoiceInputModelSelection(): VoiceInputModelSelection {
   ensureVoiceInputModelSelectionFile();
   const configPath = getVoiceInputModelSelectionConfigPath();
   const mtimeMs = readConfigMtimeMs(configPath);
-  if (!cachedConfig || cachedMtimeMs !== mtimeMs) {
+  if (!cachedConfig || cachedConfig.configPath !== configPath || cachedMtimeMs !== mtimeMs) {
     cachedConfig = loadVoiceInputModelSelection(configPath, mtimeMs);
   }
   return cachedConfig;

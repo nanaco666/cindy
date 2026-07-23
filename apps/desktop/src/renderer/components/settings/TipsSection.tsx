@@ -15,12 +15,14 @@
 import { useTranslation } from 'react-i18next';
 
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/contexts/AuthContext';
 
 import { ChatEmbeddingCell } from './ChatEmbeddingCell';
 import { SilentEncryptedRetryCell } from './SilentEncryptedRetryCell';
 
 export function TipsSection() {
   const { t } = useTranslation();
+  const { mode } = useAuth();
   return (
     <div className="flex flex-col gap-[14px]">
       <div className="flex flex-col gap-1">
@@ -43,7 +45,7 @@ export function TipsSection() {
         )}
       >
         <SilentEncryptedRetryCell />
-        <ChatEmbeddingCell />
+        {mode !== 'local' ? <ChatEmbeddingCell /> : null}
       </div>
     </div>
   );

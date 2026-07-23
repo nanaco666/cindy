@@ -15,6 +15,7 @@ import { app } from 'electron';
 import type { FeishuIM } from '@cindy/im';
 
 import type { ImChannelAdapter, ImOrchestratorConfig } from '../shared/types';
+import { claimLegacyImPath, ownerScopedImUserDataPath } from '../ownerScopedStorage';
 import { ui, REACTION_PROCESSING } from './uiText';
 
 /**
@@ -26,7 +27,8 @@ import { ui, REACTION_PROCESSING } from './uiText';
  * 在 owner 私聊场景下共享更符合直觉。
  */
 function ensureWorkingDir(botAppId: string): string {
-  const dir = path.join(app.getPath('userData'), 'im-working-dir', botAppId);
+  const dir = ownerScopedImUserDataPath('im-working-dir', botAppId);
+  claimLegacyImPath(path.join(app.getPath('userData'), 'im-working-dir', botAppId), dir);
   fs.mkdirSync(dir, { recursive: true });
   return dir;
 }

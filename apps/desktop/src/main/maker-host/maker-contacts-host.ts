@@ -17,6 +17,10 @@ import { MakerContactsManager, type ContactsSqliteFactory } from '@cindy/maker-c
 
 import { desktopMakerLogger } from './logger-adapter.js';
 import { createBetterSqliteDatabase } from '../localDb/betterSqliteFactory.js';
+import {
+  isAppSessionBoundaryPending,
+  ownerScopedUserDataPath,
+} from '../appSessionState.js';
 
 const sqliteFactory: ContactsSqliteFactory = (filePath) => {
   // WAL + busy_timeout 与 memory fts.db 同配置; schema 内 initContactsSchema 会再
@@ -31,9 +35,12 @@ let singleton: MakerContactsManager | null = null;
 
 /** 拿 desktop 全局 MakerContactsManager 单例(懒创建, 首次调用挂 will-quit 清理)。 */
 export function getDesktopContactsManager(): MakerContactsManager {
+  if (isAppSessionBoundaryPending()) {
+    throw new Error('contacts unavailable while app session is switching');
+  }
   if (singleton) return singleton;
   singleton = new MakerContactsManager({
-    basePath: app.getPath('userData'),
+    basePath: ownerScopedUserDataPath(),
     sqliteFactory,
     logger: desktopMakerLogger.child('maker-contacts'),
   });

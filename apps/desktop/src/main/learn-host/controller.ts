@@ -137,8 +137,8 @@ export interface LearnControllerDeps {
   consumePendingHandoff?: (sessionId: string) => void;
   /** 应用当前语言(shared/locale SupportedLocale)—— 蒸馏自述语言跟随系统语言配置。 */
   getAppLocale(): string;
-  /** 当前登录账号 id(run 归属标记 + 按 owner 过滤;未登录返回 null)。 */
-  getCurrentUserId(): string | null;
+  /** 当前 data owner id(run 归属标记 + 按 owner 过滤;未登录返回 null)。 */
+  getCurrentDataOwnerId(): string | null;
   /** learn-host 启动期 resume+sweep 完成门:防新 run staging 被启动 sweep 误删。 */
   waitForStartupSweep?(): Promise<void>;
   /** 用户画像收集(profile.ts;originWorkdir=触发会话的 workdir,无则 null)。 */
@@ -266,19 +266,19 @@ export class LearnController {
 
   async listRuns(): Promise<LearnRunPublic[]> {
     await this.deps.store.load();
-    return this.deps.store.list().filter((r) => this.ownedByCurrentUser(r));
+    return this.deps.store.list().filter((r) => this.ownedByCurrentDataOwner(r));
   }
 
-  /** runs.json 是 per-profile 文件:其它账号的 run 不可见不可操作(缺 owner 的
-   *  历史数据不过滤)。resume/sweep 的 keep 集仍看全量,不误删别账号的 staging。 */
-  private ownedByCurrentUser(run: LearnRunPublic): boolean {
-    if (!run.ownerUserId) return true;
-    return run.ownerUserId === this.deps.getCurrentUserId();
+  /** runs.json 已按 data owner 分文件;字段校验再防旧文件/测试数据混入。 */
+  private ownedByCurrentDataOwner(run: LearnRunPublic): boolean {
+    const runOwnerId = run.dataOwnerId ?? run.ownerUserId;
+    if (!runOwnerId) return true;
+    return runOwnerId === this.deps.getCurrentDataOwnerId();
   }
 
   private mustGet(runId: string): LearnRunPublic {
     const run = this.deps.store.get(runId);
-    if (!run || !this.ownedByCurrentUser(run)) {
+    if (!run || !this.ownedByCurrentDataOwner(run)) {
       throw new LearnError('NOT_FOUND', `learn run ${runId} not found`);
     }
     return run;
@@ -330,18 +330,22 @@ export class LearnController {
     // 活跃管线并发 1:有 run 在 collecting/distilling 就拒绝(awaiting-review 不占额度)。
     const inFlight = this.deps.store
       .list()
-      .find((r) => r.status === 'collecting' || r.status === 'distilling');
+      .find(
+        (r) =>
+          this.ownedByCurrentDataOwner(r) &&
+          (r.status === 'collecting' || r.status === 'distilling'),
+      );
     if (inFlight) {
       throw new LearnError('LEARN_BUSY', `learn run ${inFlight.runId} is already in progress`);
     }
 
     const runId = randomUUID();
-    const ownerUserId = this.deps.getCurrentUserId();
+    const dataOwnerId = this.deps.getCurrentDataOwnerId();
     const run: LearnRunPublic = {
       runId,
       status: 'collecting',
       sourceKind: req.sourceKind,
-      ...(ownerUserId ? { ownerUserId } : {}),
+      ...(dataOwnerId ? { dataOwnerId } : {}),
       input,
       ...(req.hubSlug ? { hubSlug: req.hubSlug } : {}),
       ...(req.originSessionId ? { originSessionId: req.originSessionId } : {}),

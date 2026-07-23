@@ -14,6 +14,14 @@
 
 import { describe, expect, it, vi } from 'vitest';
 
+const { mockGetAppCapabilities } = vi.hoisted(() => ({
+  mockGetAppCapabilities: vi.fn(() => ({ canUseCindyGateway: true })),
+}));
+
+vi.mock('../../appCapabilities.js', () => ({
+  getAppCapabilities: mockGetAppCapabilities,
+}));
+
 // xd 网关上游运行期来自 model-access server 下发(effectiveXdGatewayBaseUrl),
 // 端点清单已不承载网关端点(2026-07-17 退役)——单测 mock 成 fixture 值。
 import { TEST_XD_GATEWAY_BASE_URL as XD_GATEWAY_BASE_URL } from '../../../test/vitest/clientEndpointsFixture';
@@ -183,6 +191,10 @@ describe('generateTitleViaProvider — provider 解析', () => {
 // ── buildTitleTarget(锁定 catalog titleModel 配置)────────────────────────
 
 describe('buildTitleTarget(锁定 catalog titleModel 配置)', () => {
+  it('本地模式不构造 XD 网关标题请求', () => {
+    mockGetAppCapabilities.mockReturnValueOnce({ canUseCindyGateway: false });
+    expect(buildTitleTarget('xd')).toBeNull();
+  });
   it('anthropic → haiku / Messages,haiku 无 effort', () => {
     expect(buildTitleTarget('anthropic')).toEqual({
       providerId: 'anthropic',

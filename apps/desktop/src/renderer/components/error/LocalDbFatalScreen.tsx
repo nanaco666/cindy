@@ -15,7 +15,15 @@ import { resolveLocalDbFatalView } from './localDbFatalView';
  * 形态沿用 SplashScreen 的不可逃逸错误模式：不透明 --surface 全屏底（盖住
  * 半残 UI，可拖拽移动窗口）+ 常开的 ConfirmDialog（无取消、ESC/外点不可关）。
  */
-export function LocalDbFatalScreen({ code, message }: { code?: string; message?: string }) {
+export function LocalDbFatalScreen({
+  code,
+  message,
+  onBackToLogin,
+}: {
+  code?: string;
+  message?: string;
+  onBackToLogin?: () => void;
+}) {
   const { t } = useTranslation();
   const { status, progress } = useUpdateStatus();
   // 点了「重启并安装更新」后应用即将退出重启，期间锁住按钮防止重复触发。
@@ -60,7 +68,9 @@ export function LocalDbFatalScreen({ code, message }: { code?: string; message?:
         onOpenChange={() => {}}
         title={title}
         description={description}
-        showCancel={false}
+        showCancel={onBackToLogin !== undefined}
+        cancelText={t('localDbGate.backToLogin')}
+        onCancel={onBackToLogin}
         autoFocusConfirm
         loading={(installing && view === 'install-update') || view === 'preparing-update'}
         confirmText={confirmText}

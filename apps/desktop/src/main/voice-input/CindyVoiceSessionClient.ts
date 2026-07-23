@@ -3,6 +3,7 @@ import { app } from 'electron';
 import * as authManager from '../authManager.js';
 import { getClientEndpoint } from '../clientEndpointsService.js';
 import { ServerApiError, serverApiFetch } from '../serverApiClient.js';
+import { getAppCapabilities, requireAppCapability } from '../appCapabilities.js';
 
 const VOICE_SESSION_REQUEST_TIMEOUT_MS = 10_000;
 
@@ -71,7 +72,11 @@ export class CindyVoiceRunContext {
 }
 
 export function isCindyVoiceServiceReady(): boolean {
-  return Boolean(getClientEndpoint('voiceApiBaseUrl') && authManager.getAccessToken());
+  return Boolean(
+    getAppCapabilities().canUseCindyAccountServices
+    && getClientEndpoint('voiceApiBaseUrl')
+    && authManager.getAccessToken(),
+  );
 }
 
 async function createCindyVoiceSession(input: {
@@ -79,6 +84,7 @@ async function createCindyVoiceSession(input: {
   refinerProvider?: string;
   sourceLanguage?: string;
 }): Promise<CindyVoiceAsrSession> {
+  requireAppCapability('canUseCindyAccountServices', 'Cindy voice requires a Cindy account.');
   const baseUrl = getClientEndpoint('voiceApiBaseUrl');
   if (!baseUrl) throw new Error('Cindy voice service is unavailable in this region.');
   const request = {

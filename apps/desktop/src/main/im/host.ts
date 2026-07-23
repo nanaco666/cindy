@@ -11,8 +11,7 @@
  */
 
 import path from 'node:path';
-import fs from 'node:fs';
-import { app, safeStorage, ipcMain, BrowserWindow, net } from 'electron';
+import { app, ipcMain, BrowserWindow, net } from 'electron';
 
 import { createIM, createDiscordIM, createFeishuIM, type IMHost } from '@cindy/im';
 
@@ -28,8 +27,7 @@ import { pinBlob } from '../cindy-media/ledger';
 import { t } from '../i18n';
 import { discordUiText } from './discord/uiText';
 import { imHostAccountScope } from './accountScopeBridge';
-
-const SAFE_STORAGE_DIR = (): string => path.join(app.getPath('userData'), 'safe-storage');
+import { ownerScopedImSecrets } from './ownerScopedStorage';
 
 const log = createLogger('im/host');
 
@@ -88,41 +86,7 @@ const host: IMHost = {
       }
     },
   },
-  secrets: {
-    isAvailable: () => safeStorage.isEncryptionAvailable(),
-    write(name, plaintext) {
-      try {
-        if (!safeStorage.isEncryptionAvailable()) return false;
-        const dir = SAFE_STORAGE_DIR();
-        fs.mkdirSync(dir, { recursive: true });
-        fs.writeFileSync(
-          path.join(dir, `${name}.enc`),
-          safeStorage.encryptString(plaintext).toString('base64'),
-          'utf-8',
-        );
-        return true;
-      } catch {
-        return false;
-      }
-    },
-    read(name) {
-      try {
-        if (!safeStorage.isEncryptionAvailable()) return null;
-        const fp = path.join(SAFE_STORAGE_DIR(), `${name}.enc`);
-        if (!fs.existsSync(fp)) return null;
-        return safeStorage.decryptString(Buffer.from(fs.readFileSync(fp, 'utf-8'), 'base64'));
-      } catch {
-        return null;
-      }
-    },
-    remove(name) {
-      try {
-        fs.unlinkSync(path.join(SAFE_STORAGE_DIR(), `${name}.enc`));
-      } catch {
-        /* ENOENT ok */
-      }
-    },
-  },
+  secrets: ownerScopedImSecrets,
   ipc: {
     handle(channel, handler) {
       ipcMain.handle(channel, (_e, payload) => handler(payload));

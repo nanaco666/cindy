@@ -84,7 +84,7 @@ describe('UserInfoSection — version label', () => {
 describe('UserInfoSection — Canary avatar badge', () => {
   it('shows only the shield decoration when isCanary is true', () => {
     expect(source).toContain("import { Flame, Shield } from 'lucide-react';");
-    expect(source).toContain('const { user, isCanary } = useAuth();');
+    expect(source).toContain('const { user, mode, isCanary } = useAuth();');
     expect(source).toContain('{isCanary && (');
     expect(source).toContain("aria-label={t('sidebar.user.canaryBadge')}");
     expect(source).not.toContain("isCanary && 'ring-[1.5px] ring-foreground'");
@@ -121,7 +121,9 @@ describe('UserInfoSection — inner main button no longer owns hover background'
   it('main button preserves onClick / role="link" / aria-label (跳转和无障碍不破)', () => {
     expect(source).toContain('onClick={handleClick}');
     expect(source).toContain('role="link"');
-    expect(source).toContain("aria-label={t('sidebar.user.settingsLink', { name: user.name })}");
+    expect(source).toContain(
+      "aria-label={t('sidebar.user.settingsLink', { name: displayName })}",
+    );
     expect(locale.sidebar.user.settingsLink).toBe('设置, 当前用户: {{name}}');
   });
 });

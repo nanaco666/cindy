@@ -19,7 +19,7 @@ vi.mock('electron', () => ({
 }));
 
 vi.mock('../../authManager', () => ({
-  getCurrentUserId: vi.fn(() => 'user-1'),
+  getCurrentDataOwnerId: vi.fn(() => 'local-v1'),
 }));
 
 const ensureReady = vi.fn();
@@ -96,7 +96,7 @@ describe('registerSkillhubIpc usage handlers', () => {
     expect(handler).toBeTypeOf('function');
     const result = await handler?.({}, { name: 'word-doc' });
 
-    expect(ensureReady).toHaveBeenCalledWith('user-1');
+    expect(ensureReady).toHaveBeenCalledWith('local-v1');
     expect(getLocalSkillUsageSummary).toHaveBeenCalledTimes(2);
     expect(result).toEqual({ success: true, summary: { totalUseCount: 1 }, refreshing: false });
   });
