@@ -364,8 +364,6 @@ const fanOutGhostAssistantPending = createIpcFanOut('ghosts:assistant-message-pe
 const fanOutGhostHookFused = createIpcFanOut('ghosts:hook-fused');
 // 意识系统提示(notify 槽:宿主 Toast 渲染,带意识身份头)。
 const fanOutGhostNotify = createIpcFanOut('ghosts:notify');
-// 内置意识播种进行中(真实装/覆盖/回收时 active=true,完成 false;renderer 显示胶囊提示)。
-const fanOutGhostProvisioning = createIpcFanOut('ghosts:provisioning');
 const fanOutVoiceInputModifierShortcutKeys = createIpcFanOut('voice-input:modifier-shortcut-keys');
 // Remote SSH (Phase A) — host status fan-out. Channel literal kept in
 // sync with REMOTE_SSH_PUSH.STATUS_CHANGED in main/remote-ssh/index.ts;
@@ -776,9 +774,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     inspect: (lizFilePath: string): Promise<{ manifest: unknown; iconDataUrl?: string }> =>
       ipcRenderer.invoke('ghosts:inspect', lizFilePath),
     uninstall: (id: string): Promise<{ ok: true }> => ipcRenderer.invoke('ghosts:uninstall', id),
-    builtinStatusSync: (): { builtinIds: string[]; enterpriseIds: string[]; restorable: unknown[] } =>
-      ipcRenderer.sendSync('ghosts:builtin-status'),
-    restoreBuiltin: (id: string): Promise<{ ok: true }> => ipcRenderer.invoke('ghosts:restore-builtin', id),
     setEnabled: (id: string, enabled: boolean): Promise<{ ok: true }> =>
       ipcRenderer.invoke('ghosts:set-enabled', id, enabled),
     /** 目录级禁用清单(插件页项目范围视图;sendSync 保证切换同帧渲染)。 */
@@ -793,7 +788,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     onInstallRequested: fanOutGhostInstallRequested,
     onRuntimeChanged: fanOutGhostRuntimeChanged,
     onPreviewMedia: fanOutGhostPreviewMedia,
-    onProvisioning: fanOutGhostProvisioning,
     onCardUpdated: fanOutGhostCardUpdated,
     onSessionActivity: fanOutGhostSessionActivity,
     onUserMessageBlocked: fanOutGhostMessageBlocked,

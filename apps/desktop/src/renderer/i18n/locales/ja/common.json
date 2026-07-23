@@ -2119,31 +2119,11 @@
         "installedExpand": "インストール済みプラグインをさらに {{count}} 件表示",
         "installedCollapse": "追加のインストール済みプラグインを隠す",
         "allTitle": "すべてのプラグイン",
-        "filterAll": "すべて",
-        "filtersAria": "提供元でプラグインを絞り込む",
         "emptyFiltered": "一致するプラグインがありません",
         "useAction": "使用",
-        "useAria": "{{name}} を使用",
-        "installAction": "インストール",
-        "installAria": "{{name}} をインストール",
-        "restoreAria": "{{name}} を復元",
-        "origin": {
-          "builtin": "内蔵",
-          "enterprise": "チーム共有",
-          "external": "外部 / ローカル"
-        }
-      },
-      "provisioning": {
-        "updating": "内蔵プラグインを更新中…"
+        "useAria": "{{name}} を使用"
       },
       "install": "プラグインをインストール…",
-      "builtinGroup": "内蔵プラグイン",
-      "enterpriseGroup": "企業プラグイン",
-      "externalGroup": "外部インストール · {{count}}",
-      "builtinTag": "内蔵",
-      "enterpriseTag": "企業",
-      "removedTag": "アンインストール済み",
-      "restore": "復元",
       "empty": "まだプラグインがインストールされていません",
       "emptyHint": "右上の「プラグインをインストール…」から .cindy ファイルを選択してください",
       "disabledTag": "無効",
@@ -2164,7 +2144,6 @@
       "uninstallConfirm": {
         "title": "「{{name}}」をアンインストールしますか?",
         "description": "パネルと機能が削除されます。レイアウト位置は保持され、再インストール時に元の位置へ復元されます。",
-        "descriptionBuiltin": "パネルと機能が削除されます。これは内蔵プラグインのため自動では戻りません。リストからいつでも復元できます。",
         "cancel": "キャンセル"
       },
       "setupGate": {
@@ -2181,7 +2160,6 @@
         "uninstalled": "「{{name}}」をアンインストールしました",
         "installedAsleep": "「{{name}}」をインストールしました(無効状態。ここでいつでも有効化できます)",
         "updated": "「{{name}}」を v{{version}} に更新しました",
-        "restored": "「{{name}}」を復元しました",
         "projectDisabled": "「{{name}}」をこのプロジェクトで無効にしました(新しいセッションから適用)",
         "projectEnabled": "「{{name}}」はこのプロジェクトでグローバル設定に従います"
       },

@@ -1,7 +1,7 @@
 # 协议兼容与 submodule
 
 > **状态**：权威开发规则（authoritative）
-> **读取时机**：升级 `cindy-protocol`、修改内建插件播种边界、修改 device-link
+> **读取时机**：升级 `cindy-protocol`、修改插件分发来源边界、修改 device-link
 > 协议／relay／隧道 payload／IPC allowlist，或任何改动客户端与服务端之间 wire protocol
 > 的地方之前
 
@@ -20,7 +20,7 @@
 | 协议权威源 | 根 submodule `cindy-protocol`（`github.com/makecindy/cindy-protocol`） |
 | desktop 消费的协议包 | `@cindy/slack-hook-protocol` |
 | device-link relay 层定义 | `@cindy/device-link-protocol`；客户端重连、IPC allowlist、隧道 payload 在 `packages/device-link` |
-| 内建插件来源 | 公开客户端不随仓分发种子；通过 SkillHub 或用户手动安装 `.cindy` 包 |
+| 插件来源 | 客户端不预装插件；一律通过 SkillHub 或用户手动安装 `.cindy` 包 |
 
 ## 1. `cindy-protocol` 是协议权威源
 
@@ -32,21 +32,22 @@
 - **升级 submodule 指针前必须确认服务端同步升级**，避免两端 wire protocol 漂移。协议是
   跨仓契约，单端先行会让线上连接对不上。
 
-## 2. 内建插件来源
+## 2. 插件来源
 
-- 公开客户端不包含 `official` / `xd` 内建插件种子 submodule，也不在安装包中预置插件。
-- 插件运行时仍保留，用户通过 SkillHub 或手动安装 `.cindy` 包；没有种子时启动和开发
-  不应因为缺少插件而失败。
-- 如果未来私有发行渠道需要预置插件，应由私有发行层显式接入种子根与资源，不要把
-  私有仓重新加回公开客户端的 submodule。
+- 客户端不包含内建插件种子 submodule，不在安装包中预置插件，启动期也没有播种
+  （provisioning）逻辑——预装机制已整体移除（2026-07）。
+- 插件运行时保留，用户通过 SkillHub 或手动安装 `.cindy` 包；没有任何插件时启动和
+  开发不应因此失败。
+- 不要重新引入预装／播种机制或私有种子 submodule；需要推荐插件时走 SkillHub 的
+  分发与安装确认流程。
 
 ## Review 清单
 
 1. 改动是否触及跨端 wire protocol？是否要同步 `cindy-protocol` 与服务端？
 2. 升级 submodule 指针时，是否确认了服务端同步、不会造成协议漂移？
 3. 客户端是否在 `packages/device-link` 之外另造了协议或绕过 relay 层定义？
-4. 插件能力是否通过 `.cindy` 包和 SkillHub／手动安装分发，而不是重新引入私有种子
-   submodule 或绕过插件权限边界？
+4. 插件能力是否通过 `.cindy` 包和 SkillHub／手动安装分发，而不是重新引入预装／播种
+   机制、私有种子 submodule 或绕过插件权限边界？
 
 协议改动按 [`desktop-development.md`](desktop-development.md) 跑相关测试，并与服务端确认
 兼容；submodule 相关操作见 [`environment-setup.md`](environment-setup.md)。

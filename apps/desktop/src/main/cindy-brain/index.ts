@@ -21,17 +21,7 @@ import {
 } from '../../shared/ghost.js';
 import { getLayoutStore } from '../layout/index.js';
 import { GhostManager, type InstallRejection, type UninstallRejection } from './GhostManager.js';
-import {
-  clearBuiltinTombstone,
-  listBuiltinSeedIds,
-  listEnterpriseSeedIds,
-  listRestorableBuiltinGhosts,
-  provisionBuiltinGhosts,
-  readBuiltinTombstones,
-  recordBuiltinTombstone,
-  type ProvisionIdentity,
-} from './builtinGhostProvisioner.js';
-import { getAccessToken, getAuthState, onAuthStateChange } from '../authManager.js';
+import { getAccessToken, getAuthState } from '../authManager.js';
 import { serverApiFetch } from '../serverApiClient.js';
 import { getClientEndpoint } from '../clientEndpointsService.js';
 import { createGhostOauthBrokerClient } from './ghostOauthBroker.js';
@@ -198,43 +188,10 @@ function brainRootDir(): string {
   return brainRootCache;
 }
 
-/** 公开客户端不随源码或安装包分发内建插件种子。 */
-function builtinSeedRootDirs(): string[] {
-  return [];
-}
-
-/** 当前登录身份 → 播种受众判定的输入(登出 = null)。 */
-function currentProvisionIdentity(): ProvisionIdentity | null {
-  const state = getAuthState();
-  if (!state.isAuthenticated || !state.user) return null;
-  return {
-    userId: state.user.id,
-    email: state.user.email,
-  };
-}
-
 /**
- * 内置意识对账的串行链:startup 与 auth-change 的触发共用一条 promise 链,
- * 保证任意时刻只有一个 reconcile 在跑(登录抖动 / 快速切号不并发写盘)。
- * 单次失败吞掉并 warn(下次触发重试),链永不断。
- */
-let builtinReconcileChain: Promise<void> = Promise.resolve();
-
-function scheduleBuiltinReconcile(reason: string): void {
-  builtinReconcileChain = builtinReconcileChain
-    .then(() => reconcileBuiltinGhosts(reason))
-    .catch((err) => {
-      log.warn('builtin ghost reconcile error', {
-        reason,
-        error: err instanceof Error ? err.message : String(err),
-      });
-    });
-}
-
-/**
- * 内置意识改名台账([旧 id, 新 id]):播种器的孤儿回收负责"旧包收走、新包
- * 装上",这里驱动存量数据迁移(历史卡片归属 / KV 偏好)。改完名的条目长期
- * 保留——老设备可能隔很多版本才升级,迁移必须一直在场。
+ * 内置意识改名台账([旧 id, 新 id]):历史版本曾随包预装这些插件,改名后
+ * 这里驱动存量数据迁移(历史卡片归属 / KV 偏好)。改完名的条目长期保留——
+ * 老设备可能隔很多版本才升级,迁移必须一直在场。
  */
 const RENAMED_BUILTIN_GHOSTS: ReadonlyArray<readonly [string, string]> = [
   ['cindy-mivo', 'xd-mivo'], // 2026-07-13 更名 XD Mivo
@@ -242,10 +199,10 @@ const RENAMED_BUILTIN_GHOSTS: ReadonlyArray<readonly [string, string]> = [
 ];
 
 /**
- * 内置意识退役台账(整包下线、无接替 id)。种子目录删除后播种器的孤儿回收
- * 只负责"包收走",不清用户数据 —— 这里补上 uninstall 同款的三连清理:
- * safeStorage 凭证(OAuth 账号/refresh token)、ghost-kv 偏好、fs 槽私有
- * 目录。每轮对账幂等执行,长期保留(老设备可能隔很多版本才升级)。
+ * 内置意识退役台账(整包下线、无接替 id)。历史版本的预装包下线后不清用户
+ * 数据 —— 这里补上 uninstall 同款的三连清理:safeStorage 凭证(OAuth 账号/
+ * refresh token)、ghost-kv 偏好、fs 槽私有目录。每次启动幂等执行,长期保留
+ * (老设备可能隔很多版本才升级)。
  */
 const RETIRED_BUILTIN_GHOSTS: readonly string[] = [
   'cindy-slack', // 2026-07-19 退役:Slack 能力并轨 hook 通道(cindy_slack 网关工具)
@@ -295,53 +252,15 @@ function migrateGhostKvOnRename(fromId: string, toId: string): void {
   }
 }
 
-/** 单轮对账:播种 → (有变化时)广播 + 首装停靠 + 常驻点火。 */
-async function reconcileBuiltinGhosts(reason: string): Promise<void> {
-  const manager = getGhostManager();
-  // 改名前置:用户自主状态(墓碑=卸载过 / .disabled=停用)随改名带到新 id,
-  // 不能让"明确卸载/停用过"的用户在升级后被以新 id 重新装上并点亮(播种器
-  // "用户自主权豁免"支柱)。墓碑:旧 id 有 → 给新 id 记墓碑并清掉旧墓碑
-  // (旧种子已不随包,旧墓碑是死数据;清掉也避免用户日后手动恢复新 id 时被
-  // 本处反复重新盖墓)。停用态:抓在播种前(孤儿回收会删旧目录),装上后补。
-  const renameDisabledCarry = new Map<string, boolean>();
-  for (const [fromId, toId] of RENAMED_BUILTIN_GHOSTS) {
-    const tombstones = readBuiltinTombstones(brainRootDir());
-    if (tombstones.includes(fromId)) {
-      if (!tombstones.includes(toId)) recordBuiltinTombstone(brainRootDir(), toId, log);
-      clearBuiltinTombstone(brainRootDir(), fromId, log);
-      log.info('builtin ghost tombstone carried over rename', { fromId, toId });
-    }
-    renameDisabledCarry.set(
-      toId,
-      fs.existsSync(path.join(brainRootDir(), fromId, '.disabled')),
-    );
-  }
-  // "播种进行中"胶囊提示:只在真的动手(装/覆盖/回收)时亮起,no-op 对账
-  // 不闪(onApplyStart 整轮至多一次);结束广播放 finally,异常也不留悬挂提示。
-  let tipShown = false;
-  let outcome: Awaited<ReturnType<typeof provisionBuiltinGhosts>>;
-  try {
-    outcome = await provisionBuiltinGhosts({
-      seedRootDirs: builtinSeedRootDirs(),
-      repoRootDir: brainRootDir(),
-      identity: currentProvisionIdentity(),
-      // 回收先熄灯沙箱再删目录(Windows 文件锁:运行中的电子脑可能占着句柄)。
-      beforeRemove: (id) => getGhostRuntime().stop(id),
-      onApplyStart: () => {
-        tipShown = true;
-        broadcastGhostProvisioning(true);
-      },
-      log,
-    });
-  } finally {
-    if (tipShown) broadcastGhostProvisioning(false);
-  }
-  // 内置意识改名的存量迁移(每轮无条件跑,两个操作都幂等:UPDATE 查无旧行
-  // no-op、KV 有"目标已存在即跳过"守卫——不吃"改名落地那一轮"的一次性触发
-  // 窗口,首轮失败/中途退出下轮自愈):历史卡片归属改挂新 id(老卡 chip 与
-  // 交互按钮按 ghostId 找主,不迁全废)+ KV 偏好搬家。密钥零迁移(官方别名
-  // 映射到底层同一存储键);媒体账本旧引用保留(历史聊天图继续可读,新任务
-  // 在新 id 名下重新记账)。
+/**
+ * 启动期的历史预装插件存量迁移(预装/播种机制已移除,插件一律经 SkillHub
+ * 或手动安装;本函数只照顾老版本升级上来的存量数据)。两类操作都幂等:
+ * - 改名:历史卡片归属改挂新 id(UPDATE 查无旧行 no-op)+ KV 偏好搬家
+ *   (目标已存在即跳过)。密钥零迁移(官方别名映射到底层同一存储键);
+ *   媒体账本旧引用保留(历史聊天图继续可读)。
+ * - 退役:凭证 / KV / fs 私有目录三连清理。
+ */
+function migrateLegacyBuiltinGhostData(): void {
   for (const [fromId, toId] of RENAMED_BUILTIN_GHOSTS) {
     void reassignGhostCards(fromId, toId).catch((err) =>
       log.warn('ghost card reassign failed', {
@@ -350,48 +269,8 @@ async function reconcileBuiltinGhosts(reason: string): Promise<void> {
     );
     migrateGhostKvOnRename(fromId, toId);
   }
-  // 退役意识的存量数据清理(孤儿回收只删包不删数据;每轮幂等,见台账注释)
   for (const retiredId of RETIRED_BUILTIN_GHOSTS) {
     cleanupRetiredGhostData(retiredId);
-  }
-  // 改名停用态补挂:新 id 本轮首装且旧 id 此前处于停用 → 新目录补 .disabled
-  // (播种首装默认启用,这里还原用户选择;放在广播/停靠之前,清单首帧即正确)。
-  for (const manifest of outcome.installed) {
-    if (!renameDisabledCarry.get(manifest.id)) continue;
-    try {
-      fs.writeFileSync(path.join(brainRootDir(), manifest.id, '.disabled'), '');
-      log.info('builtin ghost disabled state carried over rename', { id: manifest.id });
-    } catch (err) {
-      log.warn('builtin ghost disabled carry failed', {
-        id: manifest.id, error: err instanceof Error ? err.message : String(err),
-      });
-    }
-  }
-  if (outcome.installed.length === 0 && outcome.updated.length === 0 && outcome.removed.length === 0) return;
-  log.info('builtin ghost reconcile applied changes', {
-    reason,
-    installed: outcome.installed.map((m) => m.id),
-    updated: outcome.updated.map((m) => m.id),
-    removed: outcome.removed,
-  });
-  // 播种绕过 manager 写盘,广播由这里补上(renderer 首帧 sendSync 早于对账
-  // 完成时,靠 ghosts:changed 热更新兜底,多窗口同一套通道)。
-  broadcastGhostsChanged(manager.list());
-  // 首装的意识停进布局树(与 installAndDock 同一套停靠逻辑;覆盖更新 id 未变,
-  // 布局位置天然保留,不动树;回收不动树 —— 与 uninstall 口径一致,位置记录
-  // 由布局引擎保留)。
-  const store = getLayoutStore();
-  for (const manifest of outcome.installed) {
-    const docked = layoutWithGhostPanel(store.getLayout(), manifest);
-    if (docked) {
-      const applied = store.setLayout(docked);
-      if ('rejection' in applied) {
-        log.warn('builtin ghost panel dock rejected', { id: manifest.id, reason: applied.rejection });
-      }
-    }
-    // 登录触发的对账装上常驻意识时,这里就是它的点火时机(启动那趟扫描早过了)。
-    const ghost = manager.list().find((g) => g.manifest.id === manifest.id);
-    if (ghost) spawnIfResident(ghost);
   }
 }
 
@@ -1465,8 +1344,7 @@ export function getGhostFsSlot(): GhostFsSlot {
  * 通道(install/update/inspect 三个 IPC,即拖入/选文件/forge 转交的共同出口)
  * 对 `cindy-` 前缀 id 一律拒装——卸载内置意识后抢注同 id 的第三方包,会冒充
  * 官方身份并蹭走凭证别名(用户历史填过的机器级 key 被注入攻击者白名单域名)。
- * dev 构建豁免:内置意识(cindy-art / cindy-web-search)的开发迭代靠打包重装。
- * 官方预装(builtinGhostProvisioner)走内部安装路径,不经这些 IPC。
+ * dev 构建豁免:官方意识(cindy-art / cindy-web-search)的开发迭代靠打包重装。
  */
 function rejectReservedGhostId(id: string): void {
   if (!app.isPackaged) return;
@@ -1534,8 +1412,6 @@ export async function installAndDock(
   // "立即开启"才带电;沉睡态面板不渲染、总机不列、沙箱不拉起。
   const result = await manager.install(lizFilePath, { initiallyEnabled: opts?.enable ?? false });
   if ('rejection' in result) throwInstallError(result.rejection);
-  // 用户手动重装同 id 的内置意识 = 重新跟随包内版本(清墓碑,播种恢复对账)。
-  clearBuiltinTombstone(brainRootDir(), result.ghost.manifest.id, log);
   // 声明了面板的意识装入后立即停进布局树(树上已有 = 重装,原位复活不动树)。
   // 顺序刻意:manager.install 内已广播 ghosts:changed(renderer 先注册面板),
   // 这里再 setLayout 触发 layout:changed(pane 出现时面板组件必然已就位,规则 7)。
@@ -1735,17 +1611,12 @@ export function registerGhostIpc(): void {
   // 启动序列(必须等 app ready:registerGhostIpc 在 bootstrap 顶层(ready 前)
   // 执行,而沙箱创建(session.fromPartition / new BrowserWindow)在 ready 前会
   // 直接 throw(review P0——早点火会把该意识状态机与协议分区一起打死)):
-  // 1) 内置意识播种对账:「永远以最新包为准」+ 受众(provisioning.json)。
-  //    启动跑一次(authManager 已在 bootstrap 恢复持久化登录态,此刻身份可读),
-  //    此后登录 / 登出 / 切账号每次变化再对账 —— 定向种子登录后装上、登出回收;
-  //    'all' 种子与身份无关,登出也在。对账串行化(chain),auth 抖动不并发。
+  // 1) 历史预装插件的存量数据迁移(改名 / 退役,幂等,见函数注释)。
   // 2) 常驻意识开机点火:把"已唤醒 + launch: resident"的电子脑拉起(§4 懒加载
-  //    的显式例外——作者声明过、装入确认框摊过牌)。刻意排在首次对账之后,新
-  //    播种的常驻意识同一趟点火;后续对账装上的由 reconcile 自己点火。
+  //    的显式例外——作者声明过、装入确认框摊过牌)。
   void app.whenReady().then(() => {
-    scheduleBuiltinReconcile('startup');
-    onAuthStateChange(() => scheduleBuiltinReconcile('auth-change'));
-    builtinReconcileChain = builtinReconcileChain.then(() => {
+    migrateLegacyBuiltinGhostData();
+    void Promise.resolve().then(() => {
       for (const ghost of manager.list()) spawnIfResident(ghost);
       // 老 Google 集成 → Filo Google 意识的一次性搬账(lizi_google 退役配套):
       // filoCurrent 档案的账号同 client、refresh token 通用,直接迁入意识
@@ -2292,8 +2163,8 @@ export function registerGhostIpc(): void {
     }
     runtime.stop(id); // 抽离先熄灯,再删目录
     getGhostSubscriptionGateway().dropGhost(id); // 订阅态随抽离清零
-    // GhostManager 先只删目录；内置 tombstone 与 host 清理完成后再
-    // 只广播一次一致快照，避免详情页中途掉回列表且无恢复入口。
+    // GhostManager 先只删目录；host 清理完成后再只广播一次一致快照,
+    // 避免详情页中途掉回列表。
     const result = await manager.uninstall(id, { notify: false });
     if ('rejection' in result) throwUninstallError(result.rejection);
     // network 槽凭证随抽离清空(按前缀扫,含旧版本声明过的孤儿键;幂等)。
@@ -2312,10 +2183,6 @@ export function registerGhostIpc(): void {
         log.warn('ghost-fs 私有目录回收失败', { id, error: err instanceof Error ? err.message : String(err) });
       }
     }
-    // 内置意识被用户主动卸载 → 记墓碑,启动播种永远跳过(不然重启就弹回来)。
-    if (listBuiltinSeedIds(builtinSeedRootDirs()).includes(id)) {
-      recordBuiltinTombstone(brainRootDir(), id, log);
-    }
     let recentIds: string[] | null = null;
     try {
       recentIds = forgetGhostRecentUsage(id);
@@ -2329,42 +2196,6 @@ export function registerGhostIpc(): void {
     }
     broadcastGhostsChanged(manager.list());
     if (recentIds) broadcastGhostRecentUsageChanged(recentIds);
-    return { ok: true };
-  });
-
-  // 内置意识状态(sendSync:设置页与已装清单同帧渲染,规则 7 无跳变)——
-  // builtinIds 给列表分组/打"内置"标,enterpriseIds(其子集)把企业档单列
-  // 一组,restorable 给"已抽离可恢复"灰态行。
-  ipcMain.on('ghosts:builtin-status', (event) => {
-    try {
-      event.returnValue = {
-        builtinIds: listBuiltinSeedIds(builtinSeedRootDirs()),
-        enterpriseIds: listEnterpriseSeedIds(builtinSeedRootDirs(), log),
-        restorable: listRestorableBuiltinGhosts({
-          seedRootDirs: builtinSeedRootDirs(),
-          repoRootDir: brainRootDir(),
-          identity: currentProvisionIdentity(),
-          log,
-        }),
-      };
-    } catch (err) {
-      // sendSync 必须回值,否则 renderer 卡死;失败降级空态(fallback data 例外,规则 13)。
-      log.warn('ghosts:builtin-status failed', { error: err instanceof Error ? err.message : String(err) });
-      event.returnValue = { builtinIds: [], enterpriseIds: [], restorable: [] };
-    }
-  });
-
-  // 恢复被抽离的内置意识:清墓碑 + 立即对账(串行链上排队,装回原位)。
-  ipcMain.handle('ghosts:restore-builtin', async (_event, id: unknown) => {
-    if (typeof id !== 'string' || id.trim().length === 0) {
-      throwIpcError('INVALID_PARAMS', 'id must be a non-empty string');
-    }
-    if (!listBuiltinSeedIds(builtinSeedRootDirs()).includes(id)) {
-      throwIpcError('NOT_FOUND', `意识 ${id} 不是内置种子`);
-    }
-    clearBuiltinTombstone(brainRootDir(), id, log);
-    scheduleBuiltinReconcile('restore');
-    await builtinReconcileChain; // 等本轮装完再返回,renderer 拿到结果时列表已就位
     return { ok: true };
   });
 
@@ -2559,14 +2390,6 @@ export function resolveGhostWebviewAttach(partition: unknown, src: unknown): Ins
   if (!allowedPaths.includes(url.pathname)) return null;
   ensureGhostProtocolRegistered(ghost);
   return ghost;
-}
-
-/** 播种进行中提示广播(renderer 显示/收起非阻塞胶囊;与退出 overlay 同款视觉)。 */
-function broadcastGhostProvisioning(active: boolean): void {
-  BrowserWindow.getAllWindows().forEach((window) => {
-    if (window.isDestroyed()) return;
-    window.webContents.send('ghosts:provisioning', { active });
-  });
 }
 
 function broadcastGhostsChanged(ghosts: InstalledGhost[]): void {

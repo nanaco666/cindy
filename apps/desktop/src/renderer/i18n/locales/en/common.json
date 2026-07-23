@@ -2120,31 +2120,11 @@
         "installedExpand": "Show {{count}} more installed plugins",
         "installedCollapse": "Hide additional installed plugins",
         "allTitle": "All plugins",
-        "filterAll": "All",
-        "filtersAria": "Filter plugins by source",
         "emptyFiltered": "No matching plugins",
         "useAction": "Use",
-        "useAria": "Use {{name}}",
-        "installAction": "Install",
-        "installAria": "Install {{name}}",
-        "restoreAria": "Restore {{name}}",
-        "origin": {
-          "builtin": "Built-in",
-          "enterprise": "Team shared",
-          "external": "External / local"
-        }
-      },
-      "provisioning": {
-        "updating": "Updating built-in plugins…"
+        "useAria": "Use {{name}}"
       },
       "install": "Install Plugin…",
-      "builtinGroup": "Built-in Plugins",
-      "enterpriseGroup": "Enterprise Plugins",
-      "externalGroup": "External · {{count}}",
-      "builtinTag": "Built-in",
-      "enterpriseTag": "Enterprise",
-      "removedTag": "Uninstalled",
-      "restore": "Restore",
       "empty": "No plugins installed yet",
       "emptyHint": "Click \"Install Plugin…\" above and pick a .cindy file",
       "disabledTag": "Disabled",
@@ -2165,7 +2145,6 @@
       "uninstallConfirm": {
         "title": "Uninstall \"{{name}}\"?",
         "description": "Its panel and capabilities will be removed. Its layout spot is kept and restored if you install it again.",
-        "descriptionBuiltin": "Its panel and capabilities will be removed. This is a built-in plugin — it won't come back automatically, and you can restore it from the list anytime.",
         "cancel": "Cancel"
       },
       "setupGate": {
@@ -2182,7 +2161,6 @@
         "uninstalled": "Uninstalled \"{{name}}\"",
         "installedAsleep": "Installed \"{{name}}\" (disabled — enable it here anytime)",
         "updated": "\"{{name}}\" updated to v{{version}}",
-        "restored": "Restored \"{{name}}\"",
         "projectDisabled": "Turned off \"{{name}}\" for this project (applies to new sessions)",
         "projectEnabled": "\"{{name}}\" now follows the global setting in this project"
       },

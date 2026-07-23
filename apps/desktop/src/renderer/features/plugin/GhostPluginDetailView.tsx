@@ -10,7 +10,6 @@ import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 import {
   ArrowLeft,
-  Building2,
   ChevronDown,
   Copy,
   FileCode2,
@@ -21,7 +20,6 @@ import {
   LayoutTemplate,
   Megaphone,
   MoreVertical,
-  Package,
   PanelLeft,
   PanelRight,
   Radio,
@@ -49,7 +47,7 @@ import { Switch } from '@/components/ui/switch';
 import { toast } from '@/lib/toast';
 import { cn } from '@/lib/utils';
 import type { GhostPermissionItem, GhostToolDecl, InstalledGhost } from '../../../shared/ghost';
-import { type GhostPluginDetail, type GhostPluginOrigin } from './lib/ghostPluginViewModel';
+import { type GhostPluginDetail } from './lib/ghostPluginViewModel';
 import { GhostPluginIcon } from './GhostPluginIcon';
 import { ghostPluginSummary } from './lib/ghostPluginDetailModel';
 import './plugin-motion.css';
@@ -64,8 +62,6 @@ interface GhostPluginDetailViewProps {
   onUse: () => void;
   onUpdate: () => void;
   onUninstall: () => void;
-  onInstall: () => void;
-  installing: boolean;
   toggleDisabled: boolean;
 }
 
@@ -115,8 +111,6 @@ export function GhostPluginDetailView({
   onUse,
   onUpdate,
   onUninstall,
-  onInstall,
-  installing,
   toggleDisabled,
 }: GhostPluginDetailViewProps) {
   const { t } = useTranslation();
@@ -124,7 +118,7 @@ export function GhostPluginDetailView({
   const [descriptionOverflows, setDescriptionOverflows] = useState(false);
   const descriptionRef = useRef<HTMLParagraphElement>(null);
   const enabled = enabledOverride ?? detail.enabled;
-  const canUse = detail.installed && enabled && detail.canUse;
+  const canUse = enabled && detail.canUse;
   const cindyCapabilities = detail.cindyCapabilities;
   const hasConfiguration = detail.hasSettingsUi || cindyCapabilities.length > 0;
   const summary = ghostPluginSummary(detail.description, detail.id);
@@ -196,86 +190,65 @@ export function GhostPluginDetailView({
               <h1 className="truncate text-28 font-medium leading-[34px] text-[var(--text-primary)]">
                 {detail.name}
               </h1>
-              <GhostPluginMetadata
-                origin={detail.origin}
-                author={detail.author}
-                version={detail.version}
-              />
+              <GhostPluginMetadata author={detail.author} version={detail.version} />
             </div>
 
             <div
               className="plugin-detail-actions flex shrink-0 items-center gap-3"
               style={WINDOW_NO_DRAG_STYLE}
             >
-              {detail.installed ? (
-                <>
+              <button
+                type="button"
+                onClick={onUse}
+                disabled={!canUse}
+                title={!enabled ? t('settings.ghosts.detail.useDisabled') : undefined}
+                className={cn(
+                  'inline-flex h-10 min-w-[88px] items-center justify-center rounded-full px-5 text-13 font-medium',
+                  'bg-[var(--accent-cta-bg)] text-[var(--accent-pure-cta-fg)]',
+                  'transition-[background-color,transform,opacity] duration-150 hover:bg-[var(--accent-hover)] active:scale-[0.98]',
+                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]',
+                  'disabled:cursor-not-allowed disabled:opacity-40 disabled:active:scale-100',
+                )}
+              >
+                {t('settings.ghosts.detail.useAction')}
+              </button>
+              <Switch
+                checked={enabled}
+                onCheckedChange={onToggle}
+                disabled={toggleDisabled}
+                aria-label={t('settings.ghosts.enableAria', { name: detail.name })}
+              />
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
                   <button
                     type="button"
-                    onClick={onUse}
-                    disabled={!canUse}
-                    title={!enabled ? t('settings.ghosts.detail.useDisabled') : undefined}
-                    className={cn(
-                      'inline-flex h-10 min-w-[88px] items-center justify-center rounded-full px-5 text-13 font-medium',
-                      'bg-[var(--accent-cta-bg)] text-[var(--accent-pure-cta-fg)]',
-                      'transition-[background-color,transform,opacity] duration-150 hover:bg-[var(--accent-hover)] active:scale-[0.98]',
-                      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]',
-                      'disabled:cursor-not-allowed disabled:opacity-40 disabled:active:scale-100',
-                    )}
+                    aria-label={t('settings.ghosts.detail.moreActions')}
+                    className="grid size-10 shrink-0 place-items-center rounded-full text-[var(--text-secondary)] transition-colors duration-150 hover:bg-[var(--surface-hover-soft)] hover:text-[var(--text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] data-[state=open]:bg-[var(--surface-chip)]"
                   >
-                    {t('settings.ghosts.detail.useAction')}
+                    <MoreVertical size={18} aria-hidden="true" />
                   </button>
-                  <Switch
-                    checked={enabled}
-                    onCheckedChange={onToggle}
-                    disabled={toggleDisabled}
-                    aria-label={t('settings.ghosts.enableAria', { name: detail.name })}
-                  />
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <button
-                        type="button"
-                        aria-label={t('settings.ghosts.detail.moreActions')}
-                        className="grid size-10 shrink-0 place-items-center rounded-full text-[var(--text-secondary)] transition-colors duration-150 hover:bg-[var(--surface-hover-soft)] hover:text-[var(--text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] data-[state=open]:bg-[var(--surface-chip)]"
-                      >
-                        <MoreVertical size={18} aria-hidden="true" />
-                      </button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent
-                      align="end"
-                      sideOffset={8}
-                      className="w-56 rounded-xl border border-[var(--border-default)] bg-[var(--surface-elevated)] p-1.5 text-[var(--text-primary)] shadow-[var(--shadow-menu)]"
-                    >
-                      <DropdownMenuItem
-                        onSelect={onUpdate}
-                        className="h-10 rounded-lg px-3 text-13 focus:bg-[var(--surface-hover-soft)]"
-                      >
-                        {t('settings.ghosts.detail.updateFromFile')}
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator className="mx-2 my-1 h-px bg-[var(--border-default)]" />
-                      <DropdownMenuItem
-                        onSelect={onUninstall}
-                        className="h-10 gap-2.5 rounded-lg px-3 text-13 text-[var(--error-fg)] focus:bg-[var(--error-bg)] focus:text-[var(--error-fg-strong)]"
-                      >
-                        <Trash2 size={15} aria-hidden="true" />
-                        {t('settings.ghosts.uninstall')}
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </>
-              ) : (
-                <button
-                  type="button"
-                  onClick={onInstall}
-                  disabled={installing}
-                  className="inline-flex h-10 min-w-[88px] items-center justify-center rounded-full border border-[var(--border-default)] px-5 text-13 font-medium text-[var(--text-primary)] transition-[background-color,transform,opacity] duration-150 hover:bg-[var(--surface-hover-soft)] active:scale-[0.98] disabled:cursor-wait disabled:opacity-50"
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  align="end"
+                  sideOffset={8}
+                  className="w-56 rounded-xl border border-[var(--border-default)] bg-[var(--surface-elevated)] p-1.5 text-[var(--text-primary)] shadow-[var(--shadow-menu)]"
                 >
-                  {t(
-                    detail.origin === 'external'
-                      ? 'settings.ghosts.page.installAction'
-                      : 'settings.ghosts.restore',
-                  )}
-                </button>
-              )}
+                  <DropdownMenuItem
+                    onSelect={onUpdate}
+                    className="h-10 rounded-lg px-3 text-13 focus:bg-[var(--surface-hover-soft)]"
+                  >
+                    {t('settings.ghosts.detail.updateFromFile')}
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator className="mx-2 my-1 h-px bg-[var(--border-default)]" />
+                  <DropdownMenuItem
+                    onSelect={onUninstall}
+                    className="h-10 gap-2.5 rounded-lg px-3 text-13 text-[var(--error-fg)] focus:bg-[var(--error-bg)] focus:text-[var(--error-fg-strong)]"
+                  >
+                    <Trash2 size={15} aria-hidden="true" />
+                    {t('settings.ghosts.uninstall')}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </div>
 
@@ -364,35 +337,23 @@ export function GhostPluginDetailView({
   );
 }
 
-function OriginIcon({ origin }: { origin: GhostPluginOrigin }) {
-  if (origin === 'enterprise') return <Building2 size={13} strokeWidth={1.8} aria-hidden="true" />;
-  return <Package size={13} strokeWidth={1.8} aria-hidden="true" />;
-}
-
 /** Compact factual metadata with one shared color and stable product order. */
 export function GhostPluginMetadata({
-  origin,
   author,
   version,
 }: {
-  origin: GhostPluginOrigin;
   author?: string | null;
   version: string;
 }) {
   const { t } = useTranslation();
   return (
     <div className="mt-2 flex flex-wrap items-center gap-2 text-13 leading-5 text-[var(--text-tertiary)]">
-      <span className="inline-flex items-center gap-1.5">
-        <OriginIcon origin={origin} />
-        {t(`settings.ghosts.page.origin.${origin}`)}
-      </span>
       {author ? (
         <>
-          <MetadataDivider />
           <span>{t('settings.ghosts.detail.byAuthor', { author })}</span>
+          <MetadataDivider />
         </>
       ) : null}
-      <MetadataDivider />
       <span>v{version}</span>
     </div>
   );

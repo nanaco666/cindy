@@ -1027,25 +1027,6 @@ interface ElectronAPI {
     ) => Promise<{ disabled: string[] }>;
     /** 双击 .cindy 的待装路径,原子取走(取即清空;无则 null)。 */
     takePendingInstall: () => Promise<{ filePath: string | null }>;
-    /**
-     * 内置意识状态(sendSync 首帧同步):builtinIds 打标/分组,enterpriseIds
-     * (builtinIds 子集)把企业档单列一组,restorable 是已抽离可恢复清单。
-     */
-    builtinStatusSync: () => {
-      builtinIds: string[];
-      enterpriseIds: string[];
-      restorable: Array<{
-        id: string;
-        name: string;
-        description?: string;
-        version: string;
-        manifest: import('../shared/ghost').GhostManifest;
-        tier: 'builtin' | 'enterprise';
-        iconDataUrl?: string;
-      }>;
-    };
-    /** 恢复被抽离的内置意识(清墓碑 + 立即对账装回)。 */
-    restoreBuiltin: (id: string) => Promise<{ ok: true }>;
     onChanged: (
       callback: (payload: { ghosts: import('../shared/ghost').InstalledGhost[] }) => void,
     ) => () => void;
@@ -1055,8 +1036,6 @@ interface ElectronAPI {
     onRuntimeChanged: (
       callback: (payload: { states: Record<string, string> }) => void,
     ) => () => void;
-    /** 内置意识播种进行中(真实装/覆盖/回收时 true,完成 false;胶囊提示用)。 */
-    onProvisioning: (callback: (payload: { active: boolean }) => void) => () => void;
     /** 面板「点开产物大图」推送:main 拦下 /preview/ 导航并过闸后,推主机拼装的
      *  cindy-media:// 地址与媒体类别,GhostMediaLightboxHost 按 kind 弹
      *  ImageLightbox / VideoLightbox。 */

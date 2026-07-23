@@ -745,8 +745,8 @@ export function isValidGhostId(id: unknown): id is string {
  * 第一方意识。用户装入通道(拖入/选文件/forge 转交)对该前缀**在 packaged
  * 版本上拒装**——否则卸载内置意识后,同 id 的第三方包可抢注官方身份,连带
  * 蹭走凭证别名(providerSecrets 的 GHOST_SECRET_STORAGE_ALIASES 按 id 生效,
- * 抢注者能拿到用户历史填过的机器级 key)。dev 构建豁免:内置意识的开发迭代
- * 本来就靠打包重装。官方预装(builtinGhostProvisioner)走内部路径,不经此闸。
+ * 抢注者能拿到用户历史填过的机器级 key)。dev 构建豁免:官方意识的开发迭代
+ * 本来就靠打包重装。
  */
 export const GHOST_OFFICIAL_ID_PREFIX = 'cindy-';
 

@@ -2119,31 +2119,11 @@
         "installedExpand": "展开另外 {{count}} 个已安装插件",
         "installedCollapse": "收起其他已安装插件",
         "allTitle": "全部插件",
-        "filterAll": "全部",
-        "filtersAria": "按来源筛选插件",
         "emptyFiltered": "没有找到匹配的插件",
         "useAction": "使用",
-        "useAria": "使用 {{name}}",
-        "installAction": "安装",
-        "installAria": "安装 {{name}}",
-        "restoreAria": "恢复 {{name}}",
-        "origin": {
-          "builtin": "内置",
-          "enterprise": "团队共享",
-          "external": "外部/本地"
-        }
-      },
-      "provisioning": {
-        "updating": "正在更新内置插件…"
+        "useAria": "使用 {{name}}"
       },
       "install": "安装插件…",
-      "builtinGroup": "内置插件",
-      "enterpriseGroup": "企业插件",
-      "externalGroup": "外部安装 · {{count}}",
-      "builtinTag": "内置",
-      "enterpriseTag": "企业",
-      "removedTag": "已卸载",
-      "restore": "恢复",
       "empty": "还没有安装任何插件",
       "emptyHint": "点击右上角「安装插件…」选择一个 .cindy 文件",
       "disabledTag": "未生效",
@@ -2164,7 +2144,6 @@
       "uninstallConfirm": {
         "title": "卸载「{{name}}」?",
         "description": "面板与能力将随之移除;布局位置会保留,重新安装时原位复活。",
-        "descriptionBuiltin": "面板与能力将随之移除;这是内置插件,卸载后不会自动装回,可随时在列表中「恢复」。",
         "cancel": "取消"
       },
       "setupGate": {
@@ -2181,7 +2160,6 @@
         "uninstalled": "已卸载「{{name}}」",
         "installedAsleep": "已安装「{{name}}」(未生效,可在此开启)",
         "updated": "「{{name}}」已更新到 v{{version}}",
-        "restored": "已恢复「{{name}}」",
         "projectDisabled": "已在此项目停用「{{name}}」(新会话生效)",
         "projectEnabled": "「{{name}}」在此项目恢复跟随全局"
       },

@@ -30,7 +30,6 @@ vi.mock('react-i18next', () => ({
         'settings.ghosts.perm.tool': `Tool ${String(options?.name ?? '')}`,
         'settings.ghosts.perm.cindyImageGenerate': 'Generate images',
         'settings.ghosts.detail.infoTitle': 'Details',
-        'settings.ghosts.page.origin.builtin': 'Built-in',
         'settings.ghosts.detail.byAuthor': `By ${String(options?.author ?? '')}`,
         'settings.ghosts.detail.infoVersion': 'Version',
         'settings.ghosts.detail.infoAuthor': 'Author',
@@ -96,10 +95,8 @@ const detail: GhostPluginDetail = {
   name: 'Example',
   description: 'Example plugin',
   version: '1.2.3',
-  origin: 'builtin',
   enabled: true,
   canUse: true,
-  installed: true,
   author: 'XD',
   contents: ['code'],
   permissions: [],
@@ -139,8 +136,6 @@ describe('Ghost plugin detail sections', () => {
         onUse={vi.fn()}
         onUpdate={vi.fn()}
         onUninstall={vi.fn()}
-        onInstall={vi.fn()}
-        installing={false}
         toggleDisabled={false}
       />,
     );
@@ -155,13 +150,11 @@ describe('Ghost plugin detail sections', () => {
     expect(backButton?.className).toContain('-ml-3');
   });
 
-  it('uses one metadata color and orders origin, author, then version', () => {
-    const { container } = render(
-      <GhostPluginMetadata origin="builtin" author="Cindy" version="1.1.4" />,
-    );
+  it('uses one metadata color and orders author, then version', () => {
+    const { container } = render(<GhostPluginMetadata author="Cindy" version="1.1.4" />);
 
     const metadata = container.firstElementChild as HTMLElement;
-    expect(metadata.textContent).toBe('Built-in·By Cindy·v1.1.4');
+    expect(metadata.textContent).toBe('By Cindy·v1.1.4');
     expect(metadata.className).toContain('text-[var(--text-tertiary)]');
     expect(metadata.innerHTML).not.toContain('text-[var(--text-secondary)]');
   });

@@ -2119,31 +2119,11 @@
         "installedExpand": "설치된 플러그인 {{count}}개 더 보기",
         "installedCollapse": "추가 설치 플러그인 숨기기",
         "allTitle": "모든 플러그인",
-        "filterAll": "전체",
-        "filtersAria": "출처별 플러그인 필터",
         "emptyFiltered": "일치하는 플러그인이 없습니다",
         "useAction": "사용",
-        "useAria": "{{name}} 사용",
-        "installAction": "설치",
-        "installAria": "{{name}} 설치",
-        "restoreAria": "{{name}} 복원",
-        "origin": {
-          "builtin": "기본 제공",
-          "enterprise": "팀 공유",
-          "external": "외부 / 로컬"
-        }
-      },
-      "provisioning": {
-        "updating": "내장 플러그인 업데이트 중…"
+        "useAria": "{{name}} 사용"
       },
       "install": "플러그인 설치…",
-      "builtinGroup": "내장 플러그인",
-      "enterpriseGroup": "기업 플러그인",
-      "externalGroup": "외부 설치 · {{count}}",
-      "builtinTag": "내장",
-      "enterpriseTag": "기업",
-      "removedTag": "제거됨",
-      "restore": "복원",
       "empty": "아직 설치된 플러그인이 없습니다",
       "emptyHint": "오른쪽 위 \"플러그인 설치…\"에서 .cindy 파일을 선택하세요",
       "disabledTag": "비활성",
@@ -2164,7 +2144,6 @@
       "uninstallConfirm": {
         "title": "\"{{name}}\"을(를) 제거할까요?",
         "description": "패널과 기능이 제거됩니다. 레이아웃 위치는 유지되며 다시 설치하면 원래 자리로 복원됩니다.",
-        "descriptionBuiltin": "패널과 기능이 제거됩니다. 내장 플러그인은 자동으로 되돌아오지 않으며, 언제든지 목록에서 복원할 수 있습니다.",
         "cancel": "취소"
       },
       "setupGate": {
@@ -2181,7 +2160,6 @@
         "uninstalled": "\"{{name}}\" 제거됨",
         "installedAsleep": "\"{{name}}\" 설치 완료 (비활성 상태이며 여기에서 언제든 활성화할 수 있습니다)",
         "updated": "\"{{name}}\"이(가) v{{version}}(으)로 업데이트되었습니다",
-        "restored": "\"{{name}}\"을(를) 복원했습니다",
         "projectDisabled": "이 프로젝트에서 \"{{name}}\"을(를) 껐습니다(새 세션부터 적용)",
         "projectEnabled": "\"{{name}}\"이(가) 이 프로젝트에서 전역 설정을 따릅니다"
       },

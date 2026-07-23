@@ -22,6 +22,8 @@
 
 ## 当前规则索引
 
+- 首次接触本仓、需要定位功能代码位置或判断新代码归属模块时，先读仓库地图
+  `docs/dev-rules/repo-map.md`。
 - 首次安装、修复依赖或准备新 worktree 时，必须先读
   `docs/dev-rules/environment-setup.md`。
 - 启动、调试或验证 Desktop 时，必须先读 `docs/dev-rules/desktop-development.md`。
@@ -53,7 +55,7 @@
 - 新增或修改 Desktop 日志、IPC 错误处理、main 侧业务逻辑与测试、跨平台（macOS／
   Windows）行为，或任何 UI 文案的 i18n 落地前，必须先读
   `docs/dev-rules/engineering-conventions.md`。
-- 升级 `cindy-protocol`、修改内建插件播种边界或 device-link 协议／relay／隧道
+- 升级 `cindy-protocol`、修改插件分发来源边界或 device-link 协议／relay／隧道
   payload／IPC allowlist，或任何改动跨端 wire protocol 前，必须先读
   `docs/dev-rules/protocol-and-submodules.md`。
 - 修改 package 依赖方向、main 进程模块加载方式，或主界面布局树结构前，必须先读
