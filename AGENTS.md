@@ -42,6 +42,11 @@
 - 修改 `packages/maker-core` 的 Agent 编排、prompt 组装、tool／MCP 暴露、translator、
   model 映射、usage 计量，或任何进入模型 system 段的提示词前，必须先读
   `docs/dev-rules/maker-core-and-agent-behavior.md`。
+- 修改插件（`.cindy`）运行时、沙箱、权限、能力 slot、面板供片、网络／凭证／文件交接，
+  或身份卡、管子协议、打包与编写手册前，必须先读
+  `docs/dev-rules/plugin-security-and-authoring.md`。
+- 修改客户端自动更新链路（`cindy-updater` 或 Electron 侧更新服务）前，必须先读
+  `docs/dev-rules/cindy-updater.md`。
 - 其余规则仍在逐项迁移；专题尚未建立时按下方“重构期间”处理。
 
 ## 通用工作流程
