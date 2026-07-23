@@ -24,6 +24,8 @@
 - 首次安装、修复依赖或准备新 worktree 时，必须先读
   `docs/dev-rules/environment-setup.md`。
 - 启动、调试或验证 Desktop 时，必须先读 `docs/dev-rules/desktop-development.md`。
+- 修改 Desktop Renderer、preload、BrowserWindow、WebView、IPC、CSP、导航或 Electron
+  特权能力前，必须先读 `docs/dev-rules/electron-security-and-process-boundaries.md`。
 - 开发、调试或验证 Mobile 时，必须先读 `docs/dev-rules/mobile-development.md`。
 - 新增或调整产品功能、判断能力应进入 Core / Skill / 插件、设计人机交互或多端体验
   前，必须先读 `docs/product-rules/core-product-principles.md`。
