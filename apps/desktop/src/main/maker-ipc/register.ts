@@ -371,6 +371,7 @@ import { isDeviceLinkInvoke } from '../device-link/invoke-context.js';
 import { isRemoteWorkingDirAllowed } from '../device-link/remote-workdir-guard.js';
 import { createWorkerTurnStartSequencer } from './workerTurnStartSequencer.js';
 import { createBusinessSessionId } from '../sessionIds.js';
+import { forkSessionAtMessage } from '../maker-orchestration/fork.js';
 import { scheduleEligibleDeviceLinkAutoTitle } from './deviceLinkAutoTitle.js';
 import {
   SILENT_STOP_RESUME_PROMPT,
@@ -385,6 +386,7 @@ import {
   hasEnabledGhostAssistantHook,
   runGhostAssistantReplyHook,
   screenGhostUserMessage,
+  setGhostAgentTurnRunner,
 } from '../cindy-brain/index.js';
 
 const log = createLogger('maker-ipc');
@@ -4089,6 +4091,8 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
       onAcceptedRollback?: () => void | Promise<void>;
       origin?: AgentInputQueuedMessage['origin'];
       createDefaults?: SendToSessionCreateDefaults;
+      /** 安全调用方可要求新会话不比来源会话拥有更高的权限。 */
+      inheritSourcePermissionMode?: boolean;
     },
   ): Promise<SendToSessionInternalResult> {
     const {
@@ -4103,6 +4107,7 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
       onAcceptedRollback,
       origin,
       createDefaults,
+      inheritSourcePermissionMode,
     } = params;
     if (!message) {
       return {
@@ -4180,7 +4185,9 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
             effort: (row?.effort ?? undefined) as SendToSessionCreateDefaults['effort'],
             fastMode: !!row?.fastMode,
             providerId: row?.providerId ?? undefined,
-            permissionMode: 'bypassPermissions',
+            permissionMode: inheritSourcePermissionMode
+              ? permissionModeOrAsk(row?.permissionMode)
+              : 'bypassPermissions',
           };
         } else {
           if (useWorktree) {
@@ -4228,7 +4235,7 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
         const sendResult = await sendUserMessageWithAwaitedGitBaseline(session, message, {
           planMode: false,
           onAccepted: async () => {
-            notifyAgentIslandUserPrompt(session, message, {
+            notifyAgentIslandUserPrompt(session, persistedContent ?? message, {
               source: 'send_to_session:create:onPersisting',
               clientId,
             });
@@ -4236,7 +4243,7 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
             await createDbMessage(session.id, {
               clientId,
               role: 'user',
-              content: message,
+              content: persistedContent ?? message,
             });
             // F4: send_to_session 的 create 分支也建了一条用户可见新会话(有 title + 落了 user
             // 消息),同属"新建会话需同步所有窗侧栏"的 purpose。广播跟 user row 持久化
@@ -4564,6 +4571,114 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
     sendToSessionLocks.set(targetSessionId, tracked);
     return tracked;
   }
+
+  // Ghost 的 Agent 槽只负责验证权限和整理 prompt；真正的新回合仍走
+  // sendToSessionInternal 这一条主机通路，因此会话恢复、繁忙排队、消息落库与
+  // 费用行为都和用户亲自在聊天框发送一致。runner 通过回调注入，避免
+  // cindy-brain 反向依赖 maker-ipc 形成模块环。
+  setGhostAgentTurnRunner(async (request) => {
+    const dispositionForWakeKind = (
+      wakeKind: Extract<SendToSessionInternalResult, { ok: true }>['wakeKind'],
+    ): 'created' | 'resumed' | 'active' | 'queued' => {
+      switch (wakeKind) {
+        case 'created':
+          return 'created';
+        case 'resumed':
+          return 'resumed';
+        case 'already-active':
+          return 'active';
+        case 'queued':
+          return 'queued';
+      }
+    };
+
+    if (request.mode === 'new') {
+      const result = await sendToSessionInternal({
+        dispatcherSessionId: request.sourceSessionId,
+        message: request.prompt,
+        persistedContent: request.persistedContent,
+        inheritSourcePermissionMode: true,
+        ...(request.title ? { title: request.title } : {}),
+      });
+      if (!result.ok) return result;
+      return {
+        ok: true,
+        sessionId: result.targetSessionId,
+        disposition: dispositionForWakeKind(result.wakeKind),
+      };
+    }
+
+    if (request.mode === 'continue') {
+      const result = await sendToSessionInternal({
+        targetSessionId: request.sourceSessionId,
+        message: request.prompt,
+        persistedContent: request.persistedContent,
+      });
+      if (!result.ok) return result;
+      return {
+        ok: true,
+        sessionId: result.targetSessionId,
+        disposition: dispositionForWakeKind(result.wakeKind),
+      };
+    }
+
+    // fork 必须基于一条已经完成的 assistant 回复。这里固定选择当前有效历史里
+    // 最新一条回复，让插件只能表达“从现在这里分叉”，不能偷偷挑更早的消息。
+    const [latestAssistant] = await getDbClient().drizzle
+      .select({ clientId: messages.clientId })
+      .from(messages)
+      .where(
+        and(
+          eq(messages.sessionId, request.sourceSessionId),
+          eq(messages.role, 'assistant'),
+          isNull(messages.rewindAt),
+        ),
+      )
+      .orderBy(desc(messages.createdAt), desc(messages.id))
+      .limit(1);
+    if (!latestAssistant?.clientId) {
+      return {
+        ok: false,
+        errorCode: 'NO_PRIOR_ASSISTANT',
+        message: '原会话还没有可用于分叉的 Agent 回复',
+      };
+    }
+
+    let forkedSessionId: string;
+    try {
+      const forked = await forkSessionAtMessage(
+        request.sourceSessionId,
+        latestAssistant.clientId,
+      );
+      forkedSessionId = forked.id;
+      broadcastSessionCreated(forked.id);
+    } catch (err) {
+      const code = (err as { code?: string }).code;
+      const message = err instanceof Error ? err.message : String(err);
+      if (code === 'SOURCE_NOT_FOUND' || code === 'MESSAGE_NOT_FOUND') {
+        return { ok: false, errorCode: 'NOT_FOUND', message };
+      }
+      if (code === 'SOURCE_NEVER_RAN' || code === 'NO_PRIOR_ASSISTANT') {
+        return { ok: false, errorCode: code, message };
+      }
+      if (code === 'UNSUPPORTED_HISTORY') {
+        return { ok: false, errorCode: 'FORK_UNSUPPORTED_HISTORY', message };
+      }
+      return { ok: false, errorCode: `FORK_${code ?? 'FAILED'}`, message };
+    }
+
+    const sent = await sendToSessionInternal({
+      targetSessionId: forkedSessionId,
+      message: request.prompt,
+      persistedContent: request.persistedContent,
+    });
+    if (!sent.ok) return sent;
+    return {
+      ok: true,
+      sessionId: forkedSessionId,
+      disposition: 'forked',
+    };
+  });
 
   // 排队项会进 pendingQueue projection, 经 Electron IPC 结构化克隆发给 renderer,
   // vendorOptions 里只能保留原始值条目 —— buildCreateOptsWithStderr 注入的

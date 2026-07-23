@@ -21,11 +21,11 @@ This module owns the renderer-only Plugin management surface and the shared Plug
 ## Inventory
 
 - `GhostPluginPage.tsx` — coordinates catalog filtering, installed/restorable states, installation, global enablement, and command launch. Command launch is gated by `ghosts.setupStatus` (host-evaluated readiness): when required credentials/connections/kv params are missing the page shows a confirm dialog and routes into the detail configuration section instead. Supports `/plugins?ghost=<id>` deep links into a plugin detail.
-- `GhostPluginDetailView.tsx` — renders configuration, Tool descriptions, complete permissions, and factual installed metadata.
+- `GhostPluginDetailView.tsx` — renders configuration, Tool descriptions, complete permissions, host-verified package trust/signature status, and factual installed metadata.
 - `PluginManagementLayout.tsx` — shared Plugin/Skill tabs, search toolbar, width, and page shell.
 - `plugin-motion.css` — shared compositor-friendly page, tab, and stagger transitions.
 - `GhostPluginIcon.tsx` — renders package-owned PNG/SVG assets and the shared functional fallback symbol across catalog, detail, and composer surfaces.
-- `lib/ghostPluginViewModel.ts` — adapts Ghost install records and manifests into renderer-safe list/detail models and classifies functional fallback icon kinds.
+- `lib/ghostPluginViewModel.ts` — adapts Ghost install records, host-owned origin/trust facts, and manifests into renderer-safe list/detail models and classifies functional fallback icon kinds.
 - `lib/ghostPluginDetailModel.ts` — normalizes the manifest-authored Plugin description for detail presentation; permissions render directly from the shared Ghost contract.
 - `lib/ghostSetupGateModel.ts` — formats the setup-gate dialog description from the host-evaluated `GhostSetupStatus` (missing vs reauth wording).
 - `__tests__/PluginManagementLayout.test.tsx` — shared shell regression coverage.

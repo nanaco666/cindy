@@ -63,7 +63,17 @@ describe('GhostPermissionList(装入全量清单)', () => {
   it('安装简介过长时默认收起,可展开完整原文', () => {
     const description = '这是很长的意识介绍。'.repeat(20);
     const { container } = render(
-      <GhostInstallReview description={description} meta="作者 Cindy · 版本 1.0.0" items={[]} />,
+      <GhostInstallReview
+        description={description}
+        meta="作者 Cindy · 版本 1.0.0"
+        trust={{
+          level: 'unverified',
+          publisherSigned: false,
+          publisherVerified: false,
+          reviewed: false,
+        }}
+        items={[]}
+      />,
     );
     const scrollArea = container.firstElementChild as HTMLElement;
     expect(scrollArea.classList.contains('overflow-y-auto')).toBe(true);

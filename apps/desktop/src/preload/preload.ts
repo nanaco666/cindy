@@ -757,10 +757,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
     /** 配置就绪检查(插件页「使用」前置门;main 现查凭证/账号/连接/kv)。 */
     setupStatus: (id: string): Promise<unknown> =>
       ipcRenderer.invoke('ghosts:setup-status', id),
-    install: (lizFilePath: string, opts?: { enable?: boolean }): Promise<{ ghost: unknown }> =>
+    install: (
+      lizFilePath: string,
+      opts: { enable?: boolean; expectedPackageSha256: string },
+    ): Promise<{ ghost: unknown }> =>
       ipcRenderer.invoke('ghosts:install', lizFilePath, opts),
-    update: (lizFilePath: string): Promise<{ ghost: unknown }> =>
-      ipcRenderer.invoke('ghosts:update', lizFilePath),
+    update: (
+      lizFilePath: string,
+      opts: { expectedPackageSha256: string },
+    ): Promise<{ ghost: unknown }> => ipcRenderer.invoke('ghosts:update', lizFilePath, opts),
     cindyPrefsSync: (
       id: string,
     ): {
@@ -773,7 +778,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke('ghosts:cindy-prefs:set', id, capability, model),
     pickFile: (): Promise<{ canceled: true } | { filePath: string }> =>
       ipcRenderer.invoke('ghosts:pick-file'),
-    inspect: (lizFilePath: string): Promise<{ manifest: unknown; iconDataUrl?: string }> =>
+    inspect: (lizFilePath: string): Promise<{
+      manifest: unknown;
+      trust: unknown;
+      packageSha256: string;
+      iconDataUrl?: string;
+    }> =>
       ipcRenderer.invoke('ghosts:inspect', lizFilePath),
     uninstall: (id: string): Promise<{ ok: true }> => ipcRenderer.invoke('ghosts:uninstall', id),
     builtinStatusSync: (): { builtinIds: string[]; enterpriseIds: string[]; restorable: unknown[] } =>

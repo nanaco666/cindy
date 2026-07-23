@@ -25,7 +25,7 @@ afterEach(async () => {
   await fs.promises.rm(workDir, { recursive: true, force: true });
 });
 
-/** 一份全绿的清单基底(芯片,意识唯一形态)。install 不校验 entry 文件在场(那是 forge 打包期的事),测试包无需真放 main.js。 */
+/** 一份全绿的清单基底(芯片,意识唯一形态)。普通 main.js 仍由 forge 提前核对。 */
 function goodManifest(id = 'hello'): Record<string, unknown> {
   return {
     schemaVersion: 2,
@@ -155,6 +155,36 @@ describe('GhostManager · install', () => {
     });
     await expectRejection(await manager.install(cindy), 'file-invalid');
   });
+
+  it('Node 清单声明的 worker 不在包内 → inspect/install 都拒绝', async () => {
+    const manifest = {
+      ...goodManifest(),
+      slots: ['node'],
+      tools: undefined,
+      node: { entry: 'node/worker.cjs', protocol: 'json-rpc-stdio' },
+    };
+    const cindy = await makeCindy('missing-node.cindy', manifest);
+    expect(await manager.inspect(cindy)).toMatchObject({
+      rejection: { code: 'file-invalid', reason: expect.stringContaining('node/worker.cjs') },
+    });
+    await expectRejection(await manager.install(cindy), 'file-invalid');
+  });
+
+  it.each(['.disabled', '.cindy-trust.json', '.CINDY-TRUST.JSON'])(
+    '包不能自带主机保留文件 %s',
+    async (reservedFile) => {
+      const cindy = await makeCindy('reserved.cindy', goodManifest(), {
+        [reservedFile]: '{}',
+      });
+      expect(await manager.inspect(cindy)).toMatchObject({
+        rejection: {
+          code: 'file-invalid',
+          reason: expect.stringContaining('主机保留文件'),
+        },
+      });
+      await expectRejection(await manager.install(cindy), 'file-invalid');
+    },
+  );
 
   it('zip-slip(条目路径带 ../)→ file-invalid,且仓库外不落任何文件', async () => {
     const cindy = await makeCindy('slip.cindy', goodManifest(), { '../evil.txt': 'pwned' });
@@ -313,8 +343,23 @@ describe('GhostManager · inspect(只验不装)', () => {
     const result = await manager.inspect(cindy);
     expect('manifest' in result).toBe(true);
     expect((result as { manifest: { id: string } }).manifest.id).toBe('hello');
+    expect((result as { packageSha256: string }).packageSha256).toMatch(/^[a-f0-9]{64}$/);
     expect(fs.existsSync(rootDir)).toBe(false); // 未装入,仓库根都不该出现
     expect(onChanged).not.toHaveBeenCalled();
+  });
+
+  it('确认后源文件被替换时，整包指纹不一致会拒绝安装', async () => {
+    const cindy = await makeCindy('swap.cindy', goodManifest(), { 'payload.txt': 'before' });
+    const inspected = await manager.inspect(cindy);
+    expect('packageSha256' in inspected).toBe(true);
+    const expectedPackageSha256 = (inspected as { packageSha256: string }).packageSha256;
+
+    await makeCindy('swap.cindy', goodManifest(), { 'payload.txt': 'after' });
+    await expectRejection(
+      await manager.install(cindy, { expectedPackageSha256 }),
+      'file-invalid',
+    );
+    expect(fs.existsSync(rootDir)).toBe(false);
   });
 
   it('坏文件 → 与 install 同分类拒绝', async () => {

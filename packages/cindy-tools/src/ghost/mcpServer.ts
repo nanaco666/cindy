@@ -1,7 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 
-import type { CindyGhostsMcpDeps } from '../types.js';
+import type { CindyForgeScaffoldTemplate, CindyGhostsMcpDeps } from '../types.js';
 
 /**
  * ghost 总机(AGENTS.md 规则 28 的网关模式):
@@ -49,9 +49,17 @@ const D_GHOST_CALL = [
 
 const D_GHOST_FORGE_GUIDE = [
   '获取《插件(Ghost)编写手册》——为用户制作/修改插件(.cindy 能力包)前必读。',
-  '手册随主机版本走,包含:ghost.json 身份卡全字段、五个卡槽、管子 API(cindy.send)、',
+  '手册随主机版本走,包含:ghost.json 身份卡全字段、十个卡槽、管子 API(cindy.send)、',
   '面板与主题、沙箱红线、打包与测试流程。用户说"帮我做一个 XX 插件 / 改一下某插件"时,',
-  '先调本工具拿手册,再动手写源码文件,最后用 ghost_forge_pack 打包装入。',
+  '先调本工具拿手册,新插件可用 ghost_forge_scaffold 生成骨架,修改完成后再用',
+  'ghost_forge_pack 打包装入。',
+].join('\n');
+
+const D_GHOST_FORGE_SCAFFOLD = [
+  '在一个全新的目录里生成可直接修改的 Cindy 插件源码骨架，绝不覆盖已有目录或文件。',
+  'template 可选:plain(普通沙箱工具)、agent-action(卡片点击后让 Agent 继续/分叉/新建)、',
+  'node-json-rpc(普通随包 Node 服务)、node-mcp(随包 stdio MCP)。Node 模板只写零依赖示例',
+  '源码，不会执行 npm install / npx / postinstall。生成后按需求修改，再调用 ghost_forge_pack。',
 ].join('\n');
 
 const D_GHOST_FORGE_PACK = [
@@ -87,7 +95,6 @@ export function formatGhostRoster(
     ...lines,
   ].join('\n');
 }
-
 interface McpTextResult {
   // SDK 的 CallToolResult 带开放索引签名,这里保持结构兼容。
   [key: string]: unknown;
@@ -319,6 +326,32 @@ export async function handleForgeGuide(deps: CindyGhostsMcpDeps): Promise<McpTex
   }
 }
 
+/** ghost_forge_scaffold 的 handler 主体(导出供单测)。 */
+export async function handleForgeScaffold(
+  deps: CindyGhostsMcpDeps,
+  input: {
+    dir: string;
+    template: CindyForgeScaffoldTemplate;
+    id: string;
+    name: string;
+    description?: string;
+  },
+): Promise<McpTextResult> {
+  try {
+    const result = await deps.forgeScaffold(input);
+    if (!result.ok) {
+      deps.logger?.warn('ghost_forge_scaffold rejected', { dir: input.dir, errorCode: result.errorCode });
+      return textResult(result, true);
+    }
+    return textResult(result);
+  } catch (err) {
+    return textResult(
+      { ok: false, errorCode: 'INTERNAL', message: err instanceof Error ? err.message : String(err) },
+      true,
+    );
+  }
+}
+
 /** ghost_forge_pack 的 handler 主体(导出供单测)。 */
 export async function handleForgePack(
   deps: CindyGhostsMcpDeps,
@@ -396,6 +429,21 @@ export function createCindyGhostsMcpServer(deps: CindyGhostsMcpDeps): McpServer 
   );
 
   server.tool('ghost_forge_guide', D_GHOST_FORGE_GUIDE, {}, async () => handleForgeGuide(deps));
+
+  server.tool(
+    'ghost_forge_scaffold',
+    D_GHOST_FORGE_SCAFFOLD,
+    {
+      dir: z.string().describe('要新建的插件源码目录绝对路径；目标已存在时会拒绝，不覆盖'),
+      template: z
+        .enum(['plain', 'agent-action', 'node-json-rpc', 'node-mcp'])
+        .describe('起步模板:普通插件 / Agent 交互卡 / 普通 Node 服务 / stdio MCP'),
+      id: z.string().describe('插件 id:小写字母、数字、连字符，1–32 位'),
+      name: z.string().describe('给用户看的插件名称'),
+      description: z.string().optional().describe('一句话说明插件用途；省略时会生成占位说明'),
+    },
+    async (input) => handleForgeScaffold(deps, input),
+  );
 
   server.tool(
     'ghost_forge_pack',

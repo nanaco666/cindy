@@ -988,10 +988,13 @@ interface ElectronAPI {
     install: (
       lizFilePath: string,
       /** enable:装入后立即开启(确认框勾选决定;缺省沉睡)。 */
-      opts?: { enable?: boolean },
+      opts: { enable?: boolean; expectedPackageSha256: string },
     ) => Promise<{ ghost: import('../shared/ghost').InstalledGhost }>;
     /** 原位更新(同 id 换版):唤醒状态与面板位置延续,沙箱熄灯待重拉。 */
-    update: (lizFilePath: string) => Promise<{ ghost: import('../shared/ghost').InstalledGhost }>;
+    update: (
+      lizFilePath: string,
+      opts: { expectedPackageSha256: string },
+    ) => Promise<{ ghost: import('../shared/ghost').InstalledGhost }>;
     /**
      * cindy 槽后端覆盖:首帧同步读(规则 7);overrides 键为 "image.generate"
      * 等能力键;image/video 各一份下拉数据,defaultModel = 目录默认
@@ -1010,10 +1013,16 @@ interface ElectronAPI {
     ) => Promise<{ overrides: Record<string, string> }>;
     /** 系统文件选择框(.cindy 过滤),只选不装;取消返回 { canceled: true }。 */
     pickFile: () => Promise<{ canceled: true } | { filePath: string }>;
-    /** 只验不装:读出清单(含 icon data URL)供装入确认弹窗展示,零副作用。 */
+    /** 只验不装:读出清单、签名信任等级与 icon data URL,供确认弹窗展示。 */
     inspect: (
       lizFilePath: string,
-    ) => Promise<{ manifest: import('../shared/ghost').GhostManifest; iconDataUrl?: string }>;
+    ) => Promise<{
+      manifest: import('../shared/ghost').GhostManifest;
+      trust: import('../shared/ghost').GhostTrustInfo;
+      /** 本次检查的整包指纹；安装/更新时回传，防止确认后文件被替换。 */
+      packageSha256: string;
+      iconDataUrl?: string;
+    }>;
     uninstall: (id: string) => Promise<{ ok: true }>;
     /** 启用/停用(停用 = 面板休眠,布局位置保留)。 */
     setEnabled: (id: string, enabled: boolean) => Promise<{ ok: true }>;

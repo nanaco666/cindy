@@ -7,9 +7,14 @@ import {
   diffGhostPermissionItems,
   ghostPermissionItems,
   type GhostManifest,
+  type GhostTrustInfo,
   type InstalledGhost,
 } from '../../shared/ghost';
-import { GhostInstallReview, GhostPermissionDiffView } from './GhostPermissionList';
+import {
+  GhostInstallReview,
+  GhostPermissionDiffView,
+  GhostTrustSummary,
+} from './GhostPermissionList';
 import { ghostInstallErrorKey } from './installErrorKey';
 
 /**
@@ -66,10 +71,31 @@ function findInstalled(id: string): InstalledGhost | null {
   }
 }
 
+/**
+ * Node 插件的第二次人工确认。第一层逐项权限清单说明“它要什么”，这一层用
+ * 不会误解的直话确认“它拥有当前用户账号级本机权限”。每次安装/更新 Node
+ * 代码都重新询问，不能用“以前同意过”替新版本背书。
+ */
+async function confirmNodeRuntimeRisk(
+  manifest: GhostManifest,
+  deps: InstallFlowDeps,
+): Promise<boolean> {
+  if (!manifest.node) return true;
+  return deps.confirm({
+    title: deps.t('settings.ghosts.installConfirm.nodeRiskTitle'),
+    description: deps.t('settings.ghosts.installConfirm.nodeRiskDescription'),
+    maxWidth: GHOST_CONFIRM_MAX_WIDTH,
+    confirmText: deps.t('settings.ghosts.installConfirm.nodeRiskConfirm'),
+    cancelText: deps.t('settings.ghosts.installConfirm.nodeRiskCancel'),
+  });
+}
+
 /** 确认 + 原位更新(installed 是当前已装版本,manifest 是新文件的身份卡)。 */
 async function confirmAndRunUpdate(
   lizFilePath: string,
   manifest: GhostManifest,
+  trust: GhostTrustInfo,
+  packageSha256: string,
   installed: InstalledGhost,
   deps: InstallFlowDeps,
 ): Promise<void> {
@@ -82,14 +108,24 @@ async function confirmAndRunUpdate(
       from: installed.manifest.version,
       to: manifest.version,
     }),
-    content: <GhostPermissionDiffView diff={diff} />,
+    content: (
+      <div>
+        <GhostTrustSummary trust={trust} />
+        <div className="mt-3">
+          <GhostPermissionDiffView diff={diff} />
+        </div>
+      </div>
+    ),
     maxWidth: GHOST_CONFIRM_MAX_WIDTH,
     confirmText: t('settings.ghosts.updateConfirm.confirm'),
     cancelText: t('settings.ghosts.updateConfirm.cancel'),
   });
   if (!ok) return;
+  if (!(await confirmNodeRuntimeRisk(manifest, deps))) return;
   try {
-    const { ghost } = await window.electronAPI.ghosts.update(lizFilePath);
+    const { ghost } = await window.electronAPI.ghosts.update(lizFilePath, {
+      expectedPackageSha256: packageSha256,
+    });
     toast.success(
       t('settings.ghosts.toast.updated', {
         name: ghost.manifest.name,
@@ -109,8 +145,13 @@ export async function confirmAndInstallGhost(
 
   // 1) 只验不装,拿身份卡;坏文件在这一步就被拒,不会弹确认。
   let manifest: GhostManifest;
+  let trust: GhostTrustInfo;
+  let packageSha256: string;
   try {
-    manifest = (await window.electronAPI.ghosts.inspect(lizFilePath)).manifest;
+    const inspected = await window.electronAPI.ghosts.inspect(lizFilePath);
+    manifest = inspected.manifest;
+    trust = inspected.trust;
+    packageSha256 = inspected.packageSha256;
   } catch (err) {
     toast.error(t(ghostInstallErrorKey(extractIpcError(err)?.code)));
     return;
@@ -120,7 +161,7 @@ export async function confirmAndInstallGhost(
   // "已经注入",直接给换版确认)。
   const installed = findInstalled(manifest.id);
   if (installed) {
-    await confirmAndRunUpdate(lizFilePath, manifest, installed, deps);
+    await confirmAndRunUpdate(lizFilePath, manifest, trust, packageSha256, installed, deps);
     return;
   }
 
@@ -142,6 +183,7 @@ export async function confirmAndInstallGhost(
       <GhostInstallReview
         description={manifest.description}
         meta={factsLine}
+        trust={trust}
         items={ghostPermissionItems(manifest)}
       />
     ),
@@ -151,10 +193,14 @@ export async function confirmAndInstallGhost(
     checkboxLabel: t('settings.ghosts.installConfirm.enableNow'),
   });
   if (!ok) return;
+  if (!(await confirmNodeRuntimeRisk(manifest, deps))) return;
 
   // 3) 真装(main 侧同一主体:校验 + 落盘 + 停靠)。
   try {
-    const { ghost } = await window.electronAPI.ghosts.install(lizFilePath, { enable });
+    const { ghost } = await window.electronAPI.ghosts.install(lizFilePath, {
+      enable,
+      expectedPackageSha256: packageSha256,
+    });
     toast.success(
       enable
         ? t('settings.ghosts.toast.installed', { name: ghost.manifest.name })
@@ -175,8 +221,13 @@ export async function pickAndUpdateGhost(expectedId: string, deps: InstallFlowDe
   if (!picked || 'canceled' in picked) return;
 
   let manifest: GhostManifest;
+  let trust: GhostTrustInfo;
+  let packageSha256: string;
   try {
-    manifest = (await window.electronAPI.ghosts.inspect(picked.filePath)).manifest;
+    const inspected = await window.electronAPI.ghosts.inspect(picked.filePath);
+    manifest = inspected.manifest;
+    trust = inspected.trust;
+    packageSha256 = inspected.packageSha256;
   } catch (err) {
     toast.error(t(ghostInstallErrorKey(extractIpcError(err)?.code)));
     return;
@@ -193,5 +244,12 @@ export async function pickAndUpdateGhost(expectedId: string, deps: InstallFlowDe
     toast.error(t('settings.ghosts.errors.generic'));
     return;
   }
-  await confirmAndRunUpdate(picked.filePath, manifest, installed, deps);
+  await confirmAndRunUpdate(
+    picked.filePath,
+    manifest,
+    trust,
+    packageSha256,
+    installed,
+    deps,
+  );
 }

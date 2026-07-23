@@ -237,7 +237,7 @@ describe('ghost · 芯片型清单(schemaVersion 2)', () => {
     expect(validateGhostManifest({ ...goodChipManifest(), entry: 'src/main.js' }).ok).toBe(true);
   });
 
-  it('slots 必填非空、只认六卡槽、不许重复', () => {
+  it('slots 必填非空、只认已知卡槽、不许重复', () => {
     expect(validateGhostManifest({ ...goodChipManifest(), slots: undefined }).ok).toBe(false);
     expect(validateGhostManifest({ ...goodChipManifest(), slots: [] }).ok).toBe(false);
     expect(validateGhostManifest({ ...goodChipManifest(), slots: ['panel', 'filesystem'] }).ok).toBe(false);
@@ -247,6 +247,121 @@ describe('ghost · 芯片型清单(schemaVersion 2)', () => {
     noPanel.tools = [{ name: 'do_thing', description: '做点事' }];
     delete noPanel.panel;
     expect(validateGhostManifest(noPanel).ok).toBe(true);
+  });
+
+  it('agent 槽默认只允许真人点击；background 是单独的高风险加档', () => {
+    const userActionOnly = validateGhostManifest({
+      ...goodChipManifest(),
+      slots: ['panel', 'agent'],
+    });
+    expect(userActionOnly.ok).toBe(true);
+    if (!userActionOnly.ok) return;
+    expect(userActionOnly.manifest.agent).toBeUndefined();
+    expect(ghostContentKeys(userActionOnly.manifest)).toContain('slotAgent');
+    expect(ghostPermissionItems(userActionOnly.manifest)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          key: 'agent:user-action',
+          kind: 'agent',
+          labelKey: 'agentUserAction',
+          detailKey: 'agentUserActionDetail',
+        }),
+      ]),
+    );
+
+    const background = validateGhostManifest({
+      ...goodChipManifest(),
+      slots: ['panel', 'agent'],
+      agent: { background: true },
+    });
+    expect(background.ok).toBe(true);
+    if (!background.ok) return;
+    expect(background.manifest.agent).toEqual({ background: true });
+    expect(ghostPermissionItems(background.manifest).map((item) => item.key)).toEqual(
+      expect.arrayContaining(['agent:user-action', 'agent:background']),
+    );
+
+    const diff = diffGhostPermissionItems(userActionOnly.manifest, background.manifest);
+    expect(diff.added.map((item) => item.key)).toEqual(['agent:background']);
+    expect(diff.removed).toHaveLength(0);
+  });
+
+  it('agent 详单必须与槽成对，且目前只接受 background: true', () => {
+    expect(
+      validateGhostManifest({
+        ...goodChipManifest(),
+        agent: { background: true },
+      }).ok,
+    ).toBe(false);
+    expect(
+      validateGhostManifest({
+        ...goodChipManifest(),
+        slots: ['panel', 'agent'],
+        agent: { background: false },
+      }).ok,
+    ).toBe(false);
+    expect(
+      validateGhostManifest({
+        ...goodChipManifest(),
+        slots: ['panel', 'agent'],
+        agent: 'background',
+      }).ok,
+    ).toBe(false);
+    expect(
+      validateGhostManifest({
+        ...goodChipManifest(),
+        slots: ['panel', 'agent'],
+        agent: { background: true, command: 'hidden' },
+      }).ok,
+    ).toBe(false);
+  });
+
+  it('node 槽只允许包内入口与固定 stdio 协议，并如实生成高风险权限项', () => {
+    const raw = {
+      ...goodChipManifest(),
+      slots: ['panel', 'node'],
+      node: {
+        entry: 'node/worker.cjs',
+        protocol: 'mcp-stdio',
+        lifecycle: 'resident',
+      },
+    };
+    const result = validateGhostManifest(raw);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.manifest.node).toEqual(raw.node);
+    expect(ghostContentKeys(result.manifest)).toContain('slotNode');
+    expect(ghostPermissionItems(result.manifest)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ key: 'node:execute', kind: 'node', labelKey: 'nodeMcp' }),
+        expect.objectContaining({ key: 'node:resident', kind: 'node', labelKey: 'nodeResident' }),
+      ]),
+    );
+  });
+
+  it('node 清单拒绝任意命令字段、越界配置和槽/详单不成对', () => {
+    const withNode = (node: unknown, slots: string[] = ['panel', 'node']) =>
+      validateGhostManifest({ ...goodChipManifest(), slots, node });
+    expect(withNode({ entry: 'node/a.cjs', protocol: 'json-rpc-stdio' }).ok).toBe(true);
+    expect(withNode({ entry: '../a.cjs', protocol: 'json-rpc-stdio' }).ok).toBe(false);
+    expect(withNode({ entry: 'node/a.txt', protocol: 'json-rpc-stdio' }).ok).toBe(false);
+    expect(withNode({ entry: 'node/a.cjs', protocol: 'stdio' }).ok).toBe(false);
+    expect(
+      withNode({ entry: 'node/a.cjs', protocol: 'json-rpc-stdio', command: 'node' }).ok,
+    ).toBe(false);
+    expect(
+      withNode({ entry: 'node/a.cjs', protocol: 'json-rpc-stdio', args: ['--x'] }).ok,
+    ).toBe(false);
+    expect(
+      withNode({
+        entry: 'node/a.cjs',
+        protocol: 'json-rpc-stdio',
+        lifecycle: 'resident',
+        idleTimeoutSeconds: 60,
+      }).ok,
+    ).toBe(false);
+    expect(withNode({ entry: 'node/a.cjs', protocol: 'json-rpc-stdio' }, ['panel']).ok).toBe(false);
+    expect(validateGhostManifest({ ...goodChipManifest(), slots: ['panel', 'node'] }).ok).toBe(false);
   });
 
   it('工具声明(卡槽②)与 tool 槽成对;名/描述/条数校验', () => {

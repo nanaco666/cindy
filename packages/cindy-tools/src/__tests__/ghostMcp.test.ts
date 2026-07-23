@@ -5,6 +5,7 @@ import {
   extractAgentToolUseId,
   handleForgeGuide,
   handleForgePack,
+  handleForgeScaffold,
   handleGhostCall,
   handleGhostList,
 } from '../ghost/mcpServer.js';
@@ -22,6 +23,13 @@ function fakeDeps(overrides: Partial<CindyGhostsMcpDeps> = {}): CindyGhostsMcpDe
     ],
     callGhostTool: async () => ({ ok: true, result: { done: true } }),
     forgeGuide: async () => '# 手册',
+    forgeScaffold: async (request) => ({
+      ok: true,
+      dir: request.dir,
+      template: request.template,
+      files: ['ghost.json', 'main.js'],
+      nextSteps: ['继续修改', '打包'],
+    }),
     forgePack: async () => ({
       ok: true,
       cindyPath: '/tmp/x.cindy',
@@ -77,7 +85,6 @@ describe('cindy_ghosts · ghost_list(总机接线簿,现查现报)', () => {
     expect(parsePayload(result).errorCode).toBe('INTERNAL');
   });
 });
-
 describe('cindy_ghosts · ghost_call(派活透传)', () => {
   it('成功:透传 result,args 缺省补空对象', async () => {
     const callGhostTool = vi.fn().mockResolvedValue({ ok: true, result: { url: 'x' } });
@@ -401,6 +408,34 @@ describe('cindy_ghosts · ghost_forge(锻造)', () => {
     const result = await handleForgeGuide(fakeDeps());
     expect(result.content[0].text).toBe('# 手册');
     expect(result.isError).toBeUndefined();
+  });
+
+  it('forge_scaffold 透传模板和创建文件；目标存在时标 isError', async () => {
+    const okResult = await handleForgeScaffold(fakeDeps(), {
+      dir: '/src/my-ghost',
+      template: 'agent-action',
+      id: 'my-ghost',
+      name: 'My Ghost',
+    });
+    expect(parsePayload(okResult)).toMatchObject({
+      ok: true,
+      dir: '/src/my-ghost',
+      template: 'agent-action',
+      files: ['ghost.json', 'main.js'],
+    });
+
+    const failed = await handleForgeScaffold(
+      fakeDeps({
+        forgeScaffold: async () => ({
+          ok: false,
+          errorCode: 'TARGET_EXISTS',
+          message: '不会覆盖',
+        }),
+      }),
+      { dir: '/src/exists', template: 'plain', id: 'exists', name: 'Exists' },
+    );
+    expect(failed.isError).toBe(true);
+    expect(parsePayload(failed)).toMatchObject({ ok: false, errorCode: 'TARGET_EXISTS' });
   });
 
   it('forge_pack 成功透传产物信息;失败标 isError 并带结构化错误', async () => {

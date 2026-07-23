@@ -98,6 +98,9 @@ import { XDPROXY_IMAGE_MODELS, XDPROXY_VIDEO_MODELS } from '../cindy-proxy-media
 import { submitAndAwaitVideo } from '../cindy-proxy-media/video/run.js';
 
 import { GhostCindySlot } from './cindySlot.js';
+import { GhostAgentSlot, type GhostAgentTurnRunner } from './agentSlot.js';
+import { GhostNodeRuntimeBroker } from './nodeRuntimeBroker.js';
+import type { GhostTrustRegistry } from './ghostSignature.js';
 import { GhostNotifySlot, sanitizeGhostNoticeText } from './notifySlot.js';
 import { GhostNetworkSlot } from './networkSlot.js';
 import { GhostFsSlot } from './fsSlot.js';
@@ -337,7 +340,10 @@ async function reconcileBuiltinGhosts(reason: string): Promise<void> {
       repoRootDir: brainRootDir(),
       identity: currentProvisionIdentity(),
       // 回收先熄灯沙箱再删目录(Windows 文件锁:运行中的电子脑可能占着句柄)。
-      beforeRemove: (id) => getGhostRuntime().stop(id),
+      beforeRemove: (id) => {
+        getGhostRuntime().stop(id);
+        getGhostNodeRuntimeBroker().stop(id);
+      },
       onApplyStart: () => {
         tipShown = true;
         broadcastGhostProvisioning(true);
@@ -411,10 +417,45 @@ export function getGhostManager(): GhostManager {
     managerSingleton = new GhostManager({
       getRootDir: brainRootDir,
       onChanged: broadcastGhostsChanged,
+      trustRegistry: loadGhostTrustRegistry(),
       log,
     });
   }
   return managerSingleton;
+}
+
+/**
+ * 发布者/审核公钥信任表随 Cindy 版本发布，只有公钥没有私钥。坏文件降级为空表：
+ * 发布者签名仍会验包完整性，但不会显示“已验证/已审核”。
+ */
+function loadGhostTrustRegistry(): GhostTrustRegistry {
+  const trustPath = app.isPackaged
+    ? path.join(process.resourcesPath, 'ghost-trust.json')
+    : path.join(app.getAppPath(), 'resources', 'ghost-trust.json');
+  try {
+    const raw = JSON.parse(fs.readFileSync(trustPath, 'utf8')) as Record<string, unknown>;
+    const readKeys = (value: unknown): NonNullable<GhostTrustRegistry['publishers']> => {
+      if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+      const out: NonNullable<GhostTrustRegistry['publishers']> = {};
+      for (const [keyId, entry] of Object.entries(value as Record<string, unknown>)) {
+        if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue;
+        const item = entry as Record<string, unknown>;
+        if (typeof item.name !== 'string' || typeof item.publicKey !== 'string') continue;
+        out[keyId] = { name: item.name, publicKey: item.publicKey };
+      }
+      return out;
+    };
+    return {
+      publishers: readKeys(raw.publishers),
+      reviewers: readKeys(raw.reviewers),
+    };
+  } catch (err) {
+    log.warn('ghost trust registry unavailable; signed publishers stay unverified', {
+      trustPath,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return {};
+  }
 }
 
 /** 仅供 main 出网/OAuth 链使用；不要把补过 client 的 manifest 广播给 renderer。 */
@@ -472,6 +513,40 @@ export function getGhostPipeDispatcher(): GhostPipeDispatcher {
     });
   }
   return dispatcherSingleton;
+}
+
+let agentSlotSingleton: GhostAgentSlot | null = null;
+
+/** Agent 新回合槽单例：一次性点击票、后台权限与模板替换的统一守门点。 */
+export function getGhostAgentSlot(): GhostAgentSlot {
+  if (!agentSlotSingleton) {
+    agentSlotSingleton = new GhostAgentSlot({
+      getGhost: (id) => getGhostManager().list().find((g) => g.manifest.id === id) ?? null,
+      log,
+    });
+  }
+  return agentSlotSingleton;
+}
+
+/** maker-ipc 完成初始化后注入真实会话 runner；保持 cindy-brain 不反向依赖它。 */
+export function setGhostAgentTurnRunner(runner: GhostAgentTurnRunner | null): void {
+  getGhostAgentSlot().setRunner(runner);
+}
+
+let nodeRuntimeBrokerSingleton: GhostNodeRuntimeBroker | null = null;
+
+/** 随包 Node 工作进程单例：每个活跃插件一个进程，main.js 经主机中继调用。 */
+export function getGhostNodeRuntimeBroker(): GhostNodeRuntimeBroker {
+  if (!nodeRuntimeBrokerSingleton) {
+    nodeRuntimeBrokerSingleton = new GhostNodeRuntimeBroker({
+      getGhost: (id) => getGhostManager().list().find((g) => g.manifest.id === id) ?? null,
+      sendToGhost: (ghostId, payload) => {
+        sendToGhostLogic(ghostId, payload);
+      },
+      log,
+    });
+  }
+  return nodeRuntimeBrokerSingleton;
 }
 
 /** 意识聊天卡片更新推送通道(main → 全窗口 renderer;ghostCardStore 消费)。 */
@@ -559,6 +634,8 @@ export function getGhostCardActionDispatcher(): GhostCardActionDispatcher {
           throw new Error('ghost pipe send failed');
         }
       },
+      issueUserActionToken: (ghostId, sessionId) =>
+        getGhostAgentSlot().issueUserActionToken(ghostId, sessionId),
       // 呼吸起点:点击成功投递即把该会话标为"意识活动中"(结束由 card-update
       // state / TTL 收口)。
       onActivityStart: (key, sessionId) =>
@@ -1539,11 +1616,16 @@ function throwUninstallError(rejection: UninstallRejection): never {
 export async function installAndDock(
   manager: GhostManager,
   lizFilePath: string,
-  opts?: { enable?: boolean },
+  opts?: { enable?: boolean; expectedPackageSha256?: string },
 ): Promise<InstalledGhost> {
   // 默认沉睡(2026-07-09 Lizi 定案):装入 ≠ 授权运行,用户在确认框显式勾选
   // "立即开启"才带电;沉睡态面板不渲染、总机不列、沙箱不拉起。
-  const result = await manager.install(lizFilePath, { initiallyEnabled: opts?.enable ?? false });
+  const result = await manager.install(lizFilePath, {
+    initiallyEnabled: opts?.enable ?? false,
+    ...(opts?.expectedPackageSha256
+      ? { expectedPackageSha256: opts.expectedPackageSha256 }
+      : {}),
+  });
   if ('rejection' in result) throwInstallError(result.rejection);
   // 用户手动重装同 id 的内置意识 = 重新跟随包内版本(清墓碑,播种恢复对账)。
   clearBuiltinTombstone(brainRootDir(), result.ghost.manifest.id, log);
@@ -1570,7 +1652,18 @@ export async function installAndDock(
  * spawn 幂等,重复调用零成本;失败走熔断记账,不抛出(fire-and-forget)。
  */
 function spawnIfResident(ghost: InstalledGhost): void {
-  if (!ghost.enabled || ghost.manifest.launch !== 'resident') return;
+  if (!ghost.enabled) return;
+  // Node 常驻档与浏览器电子脑的 launch:resident 是两份独立声明、两项独立
+  // 权限。Node 默认按需；只有明确声明 resident 才在这里提前点火。
+  if (ghost.manifest.node?.lifecycle === 'resident') {
+    void getGhostNodeRuntimeBroker().startResident(ghost).catch((err) => {
+      log.warn('resident ghost node spawn error', {
+        id: ghost.manifest.id,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    });
+  }
+  if (ghost.manifest.launch !== 'resident') return;
   void getGhostRuntime()
     .spawn(ghost)
     .then((r) => {
@@ -1741,7 +1834,10 @@ export function registerGhostIpc(): void {
   });
   // 主机正常退出:逐个销毁沙箱(AGENTS.md 规则 28 的"关完才走";
   // 主进程被强杀时 Chromium 会级联回收渲染子进程,无孤儿)。
-  app.on('before-quit', () => runtime.destroyAll());
+  app.on('before-quit', () => {
+    runtime.destroyAll();
+    getGhostNodeRuntimeBroker().destroyAll();
+  });
 
   // 启动序列(必须等 app ready:registerGhostIpc 在 bootstrap 顶层(ready 前)
   // 执行,而沙箱创建(session.fromPartition / new BrowserWindow)在 ready 前会
@@ -1928,7 +2024,8 @@ export function registerGhostIpc(): void {
   // 上行白名单:tool-result(交卷,派发器配对验身)/ host-request(公开宿主上下文)/ cindy-request(cindy 槽
   // 代办,返回值即结果)/ card-update(卡槽③供片,cardService 校验链)/
   // notify(系统提示,notifySlot 资格审+限速)/ fs-request(fs 槽代写文件,
-  // fsSlot 三档守门)。其它类型一律拒。
+  // fsSlot 三档守门)/ agent-request(Agent 新回合,一次性用户票或后台权限
+  // 守门)/ node-request(随包 Node JSON-RPC/MCP stdio 中继)。其它类型一律拒。
   ipcMain.handle('ghost-pipe:ping', (event) => {
     const id = ghostIdForLogicWebContents(event.sender.id);
     if (!id) throwIpcError('PERMISSION_DENIED', '非意识电子脑上下文');
@@ -1963,6 +2060,16 @@ export function registerGhostIpc(): void {
     // invoke 返回值即结构化结果,失败带人话原因供意识作者调试)。
     if (type === 'fs-request') {
       return getGhostFsSlot().handleFsRequest(id, payload);
+    }
+    // agent-request = 让 Cindy Agent 开始一个普通 user 回合；插件文本绝不
+    // 进入 system prompt。票据、会话归属、模板和后台权限都在 agentSlot。
+    if (type === 'agent-request') {
+      return getGhostAgentSlot().handleRequest(id, payload);
+    }
+    // node-request 只在 main.js → contextBridge → 主机方向开放。子进程反向
+    // JSON-RPC 请求恒被 broker 拒绝，因此 Node 不能绕过 main.js 控制 Cindy。
+    if (type === 'node-request') {
+      return getGhostNodeRuntimeBroker().handleRequest(id, payload);
     }
     if (type === 'card-update') {
       // 卡槽③供片:校验链(归属/卡槽/限速/净化)在 cardService,拒绝原因
@@ -2229,27 +2336,56 @@ export function registerGhostIpc(): void {
     if (typeof lizFilePath !== 'string' || lizFilePath.trim().length === 0) {
       throwIpcError('INVALID_PARAMS', 'lizFilePath must be a non-empty string');
     }
+    const installOpts = opts as
+      | { enable?: unknown; expectedPackageSha256?: unknown }
+      | undefined;
+    if (
+      typeof installOpts?.expectedPackageSha256 !== 'string' ||
+      !/^[a-f0-9]{64}$/.test(installOpts.expectedPackageSha256)
+    ) {
+      throwIpcError('INVALID_PARAMS', 'expectedPackageSha256 must come from ghosts:inspect');
+    }
     const probe = await manager.inspect(lizFilePath);
     if ('rejection' in probe) throwInstallError(probe.rejection);
+    if (probe.packageSha256 !== installOpts.expectedPackageSha256) {
+      throwIpcError('GHOST_FILE_INVALID', '插件文件在确认后发生了变化，请重新选择并确认');
+    }
     rejectReservedGhostId(probe.manifest.id);
     rejectUnauthorizedTokenBroker(probe.manifest);
-    const enable = (opts as { enable?: unknown } | undefined)?.enable === true;
-    return { ghost: await installAndDock(manager, lizFilePath, { enable }) };
+    const enable = installOpts.enable === true;
+    return {
+      ghost: await installAndDock(manager, lizFilePath, {
+        enable,
+        expectedPackageSha256: installOpts.expectedPackageSha256,
+      }),
+    };
   });
 
   // 原位更新(同 id 换版):先熄灯沙箱(新代码由下一次派活/面板重挂拉起),
   // 再换目录;唤醒状态与布局位置由 manager.update 保证延续。更新后走一次
   // 停靠(新版本首次声明面板时补位;已停靠则不动树)。
-  ipcMain.handle('ghosts:update', async (_event, lizFilePath: unknown) => {
+  ipcMain.handle('ghosts:update', async (_event, lizFilePath: unknown, opts: unknown) => {
     if (typeof lizFilePath !== 'string' || lizFilePath.trim().length === 0) {
       throwIpcError('INVALID_PARAMS', 'lizFilePath must be a non-empty string');
     }
+    const expectedPackageSha256 = (opts as { expectedPackageSha256?: unknown } | undefined)
+      ?.expectedPackageSha256;
+    if (
+      typeof expectedPackageSha256 !== 'string' ||
+      !/^[a-f0-9]{64}$/.test(expectedPackageSha256)
+    ) {
+      throwIpcError('INVALID_PARAMS', 'expectedPackageSha256 must come from ghosts:inspect');
+    }
     const inspected = await manager.inspect(lizFilePath);
     if ('rejection' in inspected) throwInstallError(inspected.rejection);
+    if (inspected.packageSha256 !== expectedPackageSha256) {
+      throwIpcError('GHOST_FILE_INVALID', '插件文件在确认后发生了变化，请重新选择并确认');
+    }
     rejectReservedGhostId(inspected.manifest.id);
     rejectUnauthorizedTokenBroker(inspected.manifest);
     runtime.stop(inspected.manifest.id);
-    const result = await manager.update(lizFilePath);
+    getGhostNodeRuntimeBroker().stop(inspected.manifest.id);
+    const result = await manager.update(lizFilePath, { expectedPackageSha256 });
     if ('rejection' in result) throwInstallError(result.rejection);
     runtime.resetFuse(inspected.manifest.id); // 换了代码,给新版本干净的熔断记账
     const store = getLayoutStore();
@@ -2294,7 +2430,7 @@ export function registerGhostIpc(): void {
     // 官方前缀在 inspect 就拒(确认弹窗都不该弹出来),install/update 双保险再拦。
     rejectReservedGhostId(result.manifest.id);
     rejectUnauthorizedTokenBroker(result.manifest);
-    return { manifest: result.manifest };
+    return result;
   });
 
   ipcMain.handle('ghosts:uninstall', async (_event, id: unknown) => {
@@ -2302,6 +2438,7 @@ export function registerGhostIpc(): void {
       throwIpcError('INVALID_PARAMS', 'id must be a non-empty string');
     }
     runtime.stop(id); // 抽离先熄灯,再删目录
+    getGhostNodeRuntimeBroker().stop(id); // Node 同步停掉,不留安装目录使用者
     getGhostSubscriptionGateway().dropGhost(id); // 订阅态随抽离清零
     // GhostManager 先只删目录；内置 tombstone 与 host 清理完成后再
     // 只广播一次一致快照，避免详情页中途掉回列表且无恢复入口。
@@ -2389,6 +2526,7 @@ export function registerGhostIpc(): void {
     }
     if (!enabled) {
       runtime.stop(id); // 沉睡立即熄灯
+      getGhostNodeRuntimeBroker().stop(id); // 随包 Node 也立即关闭
       getGhostSubscriptionGateway().dropGhost(id); // 订阅态清零(缓冲/熔断/seq)
     }
     const result = await manager.setEnabled(id, enabled);

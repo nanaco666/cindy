@@ -10,6 +10,7 @@ import {
   ghostContentKeys,
   ghostPermissionItems,
   type GhostPermissionItem,
+  type GhostTrustInfo,
   type GhostToolDecl,
   type InstalledGhost,
 } from '../../../../shared/ghost';
@@ -30,9 +31,11 @@ export interface GhostPluginListItem {
   origin: GhostPluginOrigin;
   enabled: boolean;
   canUse: boolean;
+  trust?: GhostTrustInfo;
   iconDataUrl?: string;
 }
 export interface GhostPluginDetail extends GhostPluginListItem {
+  trust: GhostTrustInfo;
   installed: boolean;
   author: string | null;
   contents: readonly string[];
@@ -166,6 +169,21 @@ export function toGhostPluginListItem(
     origin,
     enabled: ghost.enabled,
     canUse: Boolean(manifest.command),
+    trust:
+      origin !== 'external'
+        ? {
+            level: 'cindy-official',
+            publisherSigned: true,
+            publisherVerified: true,
+            reviewed: true,
+            publisherName: 'Cindy',
+          }
+        : ghost.trust ?? {
+            level: 'unverified',
+            publisherSigned: false,
+            publisherVerified: false,
+            reviewed: false,
+          },
     ...(ghost.iconDataUrl !== undefined ? { iconDataUrl: ghost.iconDataUrl } : {}),
   };
 }
@@ -180,6 +198,13 @@ export function toRestorableGhostPluginListItem(ghost: RestorableGhostPlugin): G
     origin: ghost.tier,
     enabled: false,
     canUse: false,
+    trust: {
+      level: 'cindy-official',
+      publisherSigned: true,
+      publisherVerified: true,
+      reviewed: true,
+      publisherName: 'Cindy',
+    },
     ...(ghost.iconDataUrl !== undefined ? { iconDataUrl: ghost.iconDataUrl } : {}),
   };
 }
@@ -196,6 +221,7 @@ export function toGhostPluginDetail(
   const { manifest } = ghost;
   return {
     ...listItem,
+    trust: listItem.trust!,
     installed: true,
     author: manifest.author ?? null,
     contents: ghostContentKeys(manifest),
@@ -218,8 +244,10 @@ export function toGhostPluginDetail(
  */
 export function toRestorableGhostPluginDetail(ghost: RestorableGhostPlugin): GhostPluginDetail {
   const { manifest } = ghost;
+  const listItem = toRestorableGhostPluginListItem(ghost);
   return {
-    ...toRestorableGhostPluginListItem(ghost),
+    ...listItem,
+    trust: listItem.trust!,
     installed: false,
     author: manifest.author ?? null,
     contents: ghostContentKeys(manifest),

@@ -18,7 +18,6 @@ export interface CindyGhostToolInfo {
   /** JSON Schema(object)形态的参数声明;无参工具省略。 */
   parameters?: Record<string, unknown>;
 }
-
 /** ghost_list 返回的单段意识条目(仅"已装且唤醒"的意识在列)。 */
 export interface CindyGhostInfo {
   id: string;
@@ -76,6 +75,28 @@ export type CindyForgePackResult =
       note: string;
     }
   | { ok: false; errorCode: CindyForgePackErrorCode; message: string };
+
+/** ghost_forge_scaffold 可生成的四种起步模板。 */
+export type CindyForgeScaffoldTemplate =
+  | 'plain'
+  | 'agent-action'
+  | 'node-json-rpc'
+  | 'node-mcp';
+
+export type CindyForgeScaffoldResult =
+  | {
+      ok: true;
+      dir: string;
+      template: CindyForgeScaffoldTemplate;
+      /** 创建的相对文件路径；不会包含临时文件。 */
+      files: string[];
+      nextSteps: string[];
+    }
+  | {
+      ok: false;
+      errorCode: 'INVALID_INPUT' | 'TARGET_EXISTS' | 'INTERNAL';
+      message: string;
+    };
 
 /** host 注入的依赖:总机的全部真实能力都在这几个回调里。 */
 export interface CindyGhostsMcpDeps {
@@ -144,6 +165,17 @@ export interface CindyGhostsMcpDeps {
   getRosterItems?(): Array<{ id: string; name: string; command?: string; description?: string }>;
   /** 意识编写手册(markdown,随主机版本走;agent 写意识前先读)。 */
   forgeGuide(): Promise<string>;
+  /**
+   * 在新的目标目录创建一份安全起步骨架。目标已存在时必须拒绝，绝不覆盖
+   * 用户文件；Node 模板只生成随包源码，不安装依赖。
+   */
+  forgeScaffold(request: {
+    dir: string;
+    template: CindyForgeScaffoldTemplate;
+    id: string;
+    name: string;
+    description?: string;
+  }): Promise<CindyForgeScaffoldResult>;
   /**
    * 把一个源码目录校验 + 打包成 .cindy,并弹出与拖入/双击完全相同的
    * 装入(同 id 已装则更新)确认框——装不装永远由用户决定,agent 只能

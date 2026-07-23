@@ -819,6 +819,8 @@ function extraResourcesForTarget(targetPlatform: string): string[] {
     // 内置意识种子(源码目录形态,启动时由 builtinGhostProvisioner 播种到
     // userData/cindy-brain;「永远以最新包为准」的内容指纹对账)。
     'resources/builtin-ghosts',
+    // .cindy 发布者/审核 Ed25519 公钥信任表(私钥永不进客户端)。
+    'resources/ghost-trust.json',
     // 第三方开源声明,由 scripts/generate-third-party-notices.mjs 生成
     // (pnpm licenses:generate),随安装包分发以满足各开源协议的署名义务。
     'resources/THIRD-PARTY-NOTICES.txt',

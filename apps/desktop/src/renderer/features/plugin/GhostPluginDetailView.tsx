@@ -9,10 +9,12 @@
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 import {
+  Bot,
   ArrowLeft,
   Building2,
   ChevronDown,
   Copy,
+  Cpu,
   FileCode2,
   FilePen,
   FolderOpen,
@@ -71,6 +73,8 @@ interface GhostPluginDetailViewProps {
 
 const PERMISSION_ICON: Record<GhostPermissionItem['kind'], LucideIcon> = {
   cindy: Sparkles,
+  agent: Bot,
+  node: Cpu,
   tool: Wrench,
   command: Terminal,
   panel: PanelRight,
@@ -610,6 +614,16 @@ export function DetailsSection({
   panelStatus: string | null;
 }) {
   const { t } = useTranslation();
+  const trustLabelKey =
+    detail.trust.level === 'cindy-official'
+      ? 'official'
+      : detail.trust.level === 'reviewed'
+        ? 'reviewed'
+        : detail.trust.level === 'verified-publisher'
+          ? 'verifiedPublisher'
+          : detail.trust.publisherSigned
+            ? 'signedUnverified'
+            : 'unsigned';
   const facts: Array<{
     key: string;
     label: string;
@@ -631,6 +645,13 @@ export function DetailsSection({
           },
         ]
       : []),
+    {
+      key: 'trust',
+      label: t('settings.ghosts.detail.infoTrust'),
+      value: t(`settings.ghosts.trust.${trustLabelKey}`, {
+        publisher: detail.trust.publisherName ?? t('settings.ghosts.trust.unknownPublisher'),
+      }),
+    },
     {
       key: 'identifier',
       label: t('settings.ghosts.detail.infoId'),
