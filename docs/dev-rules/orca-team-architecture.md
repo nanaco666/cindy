@@ -242,15 +242,15 @@ Codex thread start / resume 成功后必须注册 `threadId -> session context`�
 
 #### 5. Lead prompt 的诊断工具名（状态：已解决）
 
-历史问题：`renderOrcaLeadSystemPrompt`（`packages/orca-workflow/src/orca-bridge-prompt.ts`）的 Lead prompt 用裸工具名引用 `get_workspace_info` / `worker_status` / `read_worker`，而这些过去只在 Claude-lead 专属的 `orca_bridge` 里、Codex Lead 看不到，会制造稳定噪音。统一后这 3 个诊断工具以**同名裸工具**桥入全局可见的 `cindy_orca`，Claude 与 Codex Lead 都能解析到真实工具，噪音消除。prompt 正文保持不动（无 provider namespace、只用裸名），因此本次未触发规则 11。
+历史问题：`renderOrcaLeadSystemPrompt`（`packages/orca-workflow/src/orca-bridge-prompt.ts`）的 Lead prompt 用裸工具名引用 `get_workspace_info` / `worker_status` / `read_worker`，而这些过去只在 Claude-lead 专属的 `orca_bridge` 里、Codex Lead 看不到，会制造稳定噪音。统一后这 3 个诊断工具以**同名裸工具**桥入全局可见的 `cindy_orca`，Claude 与 Codex Lead 都能解析到真实工具，噪音消除。prompt 正文保持不动（无 provider namespace、只用裸名），因此本次未触发 system prompt 改动门禁（[`maker-core-and-agent-behavior.md`](maker-core-and-agent-behavior.md) §4）。
 
 #### 6. Model 不可中途换，effort 可调（状态：不变量）
 
 对同一个 live worker session，中途换 model 应视为重建执行单元，不是普通请求参数。原因：model 切换会破坏 prompt/cache 前缀稳定，Claude SDK 也可能解析失败。effort 是 per-turn 参数，可以中途调。创建执行单元前可以选 model/effort；运行中 effort 可调，model 不可调。
 
-#### 7. Prompt / tool / MCP 注册路径必须评估规则 10 四指标（状态：不变量）
+#### 7. Prompt / tool / MCP 注册路径必须评估 maker-core 四指标（状态：不变量）
 
-任何改动落在 prompt 拼接、tool/MCP 暴露、translator、event loop、model 映射、usage/token 计量路径时，都必须评估缓存率、性能/返回速度、返回内容准确性，并按项目规则 10 给出实测证据。尤其不要把 per-turn 易变内容塞进稳定 system/developer 前缀，不要在会话中途随意增删/重排 tool 定义。
+任何改动落在 prompt 拼接、tool/MCP 暴露、translator、event loop、model 映射、usage/token 计量路径时，都必须评估缓存率、性能/返回速度、返回内容准确性，并按 [`maker-core-and-agent-behavior.md`](maker-core-and-agent-behavior.md) §3 给出实测证据。尤其不要把 per-turn 易变内容塞进稳定 system/developer 前缀，不要在会话中途随意增删/重排 tool 定义。
 
 #### 8. `forkedAtMessageId` schema 注释滞后（状态：follow-up）
 
