@@ -22,14 +22,7 @@ packages/browser-control-runtime/src/_generated/** linguist-generated=true
 
 # ── 开源公开仓排除(内部专用,不进对外发布)────────────────────────────
 # export-ignore 让 `git archive` 导出时自动剔除;若以「复制工作树 + git init」方式建
-# 公开仓,则在新仓首次提交前排除 public-check、旧归档、服务端桥接和官方发布链路
-# (详见 public-check/open-source-checklist.md)。
-public-check/ export-ignore
-public-check/** export-ignore
-AGENTS-old.md export-ignore
-README-old.md export-ignore
-docs/login-redesign/ export-ignore
-docs/login-redesign/** export-ignore
+# 公开仓,则在新仓首次提交前排除服务端桥接和官方发布链路。
 scripts/run-external-server.mjs export-ignore
 apps/desktop/scripts/release-*.mjs export-ignore
 apps/desktop/scripts/publish-desktop.mjs export-ignore

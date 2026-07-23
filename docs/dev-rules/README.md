@@ -49,5 +49,3 @@
   device-link allowlist、手机版入口与功能类 PR 的远程／手机三选一门禁。
 - [`development-workflow.md`](development-workflow.md)：worktree dogfooding 会话契约、提 PR
   与直推 `main` 门禁，以及 Review P0／P1／P2 严重度口径。
-
-旧手册（`AGENTS-old.md`）中仍有效的高风险约束已迁入上述专题；若发现遗漏，以归档为准补迁。
