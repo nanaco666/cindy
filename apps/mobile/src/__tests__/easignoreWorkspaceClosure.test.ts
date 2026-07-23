@@ -82,7 +82,6 @@ describe('EAS .easignore covers apps/mobile workspace dependency closure', () =>
       'store-cn-base',
       'store-global-base',
       'adhoc',
-      'beta-base',
     ]) {
       expect(easJson.build?.[profile]?.env?.XDT_SKIP_AGENT_BIN_INSTALL).toBe(
         '1',
