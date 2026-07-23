@@ -146,17 +146,5 @@ apps/desktop/scripts/release-regions.json
 /dev-*.bat
 /dev-*.ps1
 
-# ── review-pr skill 运行时状态(auto 模式落盘,per-machine) ──────────
-# thread-resolve 提醒去重状态
-scripts/review-pr/.reminded.json
-# 停滞飞书催办去重状态
-scripts/review-pr/.remind-feishu.json
-# 空转指纹(context.mjs --scan-all 落盘、pre-check.mjs 比对)
-scripts/review-pr/.last-scan.json
-# 自动跟进修复(fix-handoff)的 PR→跟进会话绑定与投递去重状态
-scripts/review-pr/.fix-sessions.json
-# auto 模式并发锁(prepare.mjs 写 .lock / .lock.takeover)
-scripts/review-pr/.lock*
-
 # worktree 回收豁免哨兵(会话工具生成,永不入仓)
 .worktree-keep

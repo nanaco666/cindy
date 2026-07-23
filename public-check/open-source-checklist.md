@@ -34,10 +34,9 @@
 - 复制工作树到新位置，**排除**以下(export-ignore 对 copy+init 无效，必须手动排除)：
   - `.git/`、`node_modules/`
   - `public-check/`（本目录）
-  - `agent-use/`、`scripts/review-pr/`（内部 PR 自动化，绑定公司 Feishu/Slack/名册）
   - 所有 gitignored 的本地密钥 / 凭据 / `.env` / `scripts/self-host-regions.json`
 - 新位置：`git init` → `git add -A` → 单个初始 commit。旧历史（commit 作者 / 邮箱 / 信息）全部不带过去。
-- 一行排除参考：`.git node_modules public-check agent-use scripts/review-pr`（外加各 `.env` / 密钥文件）。
+- 一行排除参考：`.git node_modules public-check`（外加各 `.env` / 密钥文件）。
 
 ### B3. `.gitmodules`：删私有 `cindy-xd`
 - 删掉 `[submodule "apps/desktop/resources/builtin-ghosts/xd"]` 整段（SSH + 私有仓）。
@@ -50,7 +49,7 @@
 ```
 git grep -iE 'tapsvc|git\.xindong\.com|dashhuang|magiclizi|jiali@'
 ```
-（`agent-use/`、`scripts/review-pr/` 已在 B2 排除，故不会命中。）
+（内部 review-pr Skill 位于独立私有仓库，故不会命中。）
 
 ### B5. Mobile EAS
 - `app.json` 已不带 `owner` / `projectId` / `updates`。官方 EAS 构建在 **EAS environment** 设

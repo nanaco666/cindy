@@ -15,7 +15,6 @@ node_modules
 .claude
 # 项目元数据目录（带斜杠限定目录，避免误伤 *.cindy ghost 包文件）
 .cindy/
-agent-use
 docs
 !docs/
 docs/*
