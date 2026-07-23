@@ -878,6 +878,7 @@
         },
         "errors": {
           "selectedUnavailable": "The selected microphone is unavailable. Reconnect it, or choose Auto in Voice Input settings.",
+          "deviceUnavailable": "No microphone device is available. Connect a microphone or choose another input device, then try again.",
           "fallbackToAuto": "The selected microphone is unavailable, so Auto microphone is being used for this recording."
         }
       },

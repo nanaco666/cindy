@@ -195,16 +195,19 @@ function buildMediaConstraints(options: {
 
 export function isSelectedMicrophoneUnavailableError(error: unknown): boolean {
   if (error instanceof VoiceInputSelectedMicrophoneUnavailableError) return true;
-  if (!(error instanceof Error)) return false;
-  return error.name === 'VoiceInputSelectedMicrophoneUnavailableError';
+  return readErrorString(error, 'name') === 'VoiceInputSelectedMicrophoneUnavailableError';
+}
+
+export function isMicrophoneDeviceUnavailableError(error: unknown): boolean {
+  return isSelectedMicrophoneUnavailableError(error) || isDeviceConstraintError(error);
 }
 
 function isDeviceConstraintError(error: unknown): boolean {
-  if (!(error instanceof Error)) return false;
-  const message = error.message.toLowerCase();
+  const name = readErrorString(error, 'name');
+  const message = readErrorString(error, 'message')?.toLowerCase() ?? '';
   return (
-    error.name === 'OverconstrainedError' ||
-    error.name === 'NotFoundError' ||
+    name === 'OverconstrainedError' ||
+    name === 'NotFoundError' ||
     message.includes('requested device not found') ||
     message.includes('device not found')
   );
@@ -214,7 +217,22 @@ function normalizeMicrophoneStartError(error: unknown, deviceId?: string): Error
   if (isSpecificMicrophoneDeviceId(deviceId) && isDeviceConstraintError(error)) {
     return new VoiceInputSelectedMicrophoneUnavailableError();
   }
-  return error instanceof Error ? error : new Error(String(error));
+  if (error instanceof Error) return error;
+  const normalized = new Error(readErrorString(error, 'message') ?? String(error));
+  const name = readErrorString(error, 'name');
+  if (name) normalized.name = name;
+  return normalized;
+}
+
+/**
+ * DOMException and errors crossing an Electron/Chromium boundary may not be
+ * `instanceof Error` in this realm. Read the standard fields structurally so a
+ * stale selected microphone still takes the automatic fallback path.
+ */
+function readErrorString(error: unknown, key: 'name' | 'message'): string | undefined {
+  if (typeof error !== 'object' || error === null) return undefined;
+  const value = (error as Record<string, unknown>)[key];
+  return typeof value === 'string' ? value : undefined;
 }
 
 async function assertSelectedMicrophoneAvailable(deviceId?: string): Promise<void> {

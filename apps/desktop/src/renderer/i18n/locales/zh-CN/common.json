@@ -878,6 +878,7 @@
         },
         "errors": {
           "selectedUnavailable": "已选择的麦克风不可用。请重新连接，或在语音输入设置里改为自动麦克风。",
+          "deviceUnavailable": "没有可用的麦克风设备。请连接麦克风或更换输入设备后重试。",
           "fallbackToAuto": "已选择的麦克风不可用，已临时切换到自动麦克风。"
         }
       },

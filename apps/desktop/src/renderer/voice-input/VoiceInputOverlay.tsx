@@ -45,6 +45,7 @@ import {
 import {
   WebMicAudioEngine,
   disposeKeepAliveVoiceInputMicrophone,
+  isMicrophoneDeviceUnavailableError,
   isSelectedMicrophoneUnavailableError,
   prewarmVoiceInputBenchmarkFixture,
   prewarmVoiceInputMicrophoneWithAutomaticFallback,
@@ -598,8 +599,12 @@ export function VoiceInputOverlay() {
   }, [i18n.language, i18n.resolvedLanguage]);
 
   const formatMicrophoneStartError = useCallback((error: unknown): string => {
-    if (settingsRef.current.microphoneDeviceId && isSelectedMicrophoneUnavailableError(error)) {
-      return t('settings.voiceInput.microphone.errors.selectedUnavailable');
+    if (isMicrophoneDeviceUnavailableError(error)) {
+      return t(
+        isSelectedMicrophoneUnavailableError(error)
+          ? 'settings.voiceInput.microphone.errors.selectedUnavailable'
+          : 'settings.voiceInput.microphone.errors.deviceUnavailable',
+      );
     }
     return error instanceof Error ? error.message : String(error);
   }, [t]);
