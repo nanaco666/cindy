@@ -26,6 +26,10 @@
 - 启动、调试或验证 Desktop 时，必须先读 `docs/dev-rules/desktop-development.md`。
 - 修改 Desktop Renderer、preload、BrowserWindow、WebView、IPC、CSP、导航或 Electron
   特权能力前，必须先读 `docs/dev-rules/electron-security-and-process-boundaries.md`。
+- 修改凭证或授权信息处理、文件落盘位置、用户持久数据、临时文件或测试目录前，必须
+  先读 `docs/dev-rules/credentials-and-local-storage.md`。
+- 新增或修改媒体生成、导入、缓存、附件、持久化、协议解析或回收逻辑前，必须先读
+  `docs/dev-rules/media-storage-and-protocols.md`。
 - 修改 Desktop 数据库 schema、migration、companion script 或运行期数据库访问前，必须
   先读 `docs/dev-rules/database-and-migrations.md`。
 - 开发、调试或验证 Mobile 时，必须先读 `docs/dev-rules/mobile-development.md`。
