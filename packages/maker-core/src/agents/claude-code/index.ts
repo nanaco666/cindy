@@ -548,7 +548,7 @@ export class ClaudeCodeAgent extends BaseAgent {
    * 鉴权: Claude AuthAdapter 是纯 API key 模式 (auth-adapters.ts), getAuthEnv() 只放
    * ANTHROPIC_API_KEY, 没有 OAuth 路径 —— 直接抠出来用即可。
    *
-   * baseURL: 复用 runtimeConfig.endpoint (host 已经配成 https://llm-proxy.tapsvc.com),
+   * baseURL: 复用 runtimeConfig.endpoint (host 已经配成网关 endpoint),
    * 跟 startSession 同一接入点; 不另外硬编码。
    *
    * 失败: 抛 OneShotError (reason: timeout/auth/network/malformed); 宽容调用方

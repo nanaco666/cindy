@@ -113,10 +113,10 @@ describe('codex gateway config', () => {
 
     const args = buildCodexProxySpawnArgs('http://127.0.0.1:12345', 'oauth-bearer');
 
-    expect(args).toContain('model_providers.tapsvc.base_url="http://127.0.0.1:12345"');
-    expect(args).toContain('model_providers.tapsvc.requires_openai_auth=true');
-    expect(args).not.toContain('model_providers.tapsvc.env_key="XDT_CODEX_API_KEY"');
-    expect(args).toContain('model_providers.tapsvc.supports_websockets=false');
+    expect(args).toContain('model_providers.cindy_gateway.base_url="http://127.0.0.1:12345"');
+    expect(args).toContain('model_providers.cindy_gateway.requires_openai_auth=true');
+    expect(args).not.toContain('model_providers.cindy_gateway.env_key="XDT_CODEX_API_KEY"');
+    expect(args).toContain('model_providers.cindy_gateway.supports_websockets=false');
   });
 
   it('env-key 模式: env_key=XDT_CODEX_API_KEY, 不带 requires_openai_auth', async () => {
@@ -124,9 +124,9 @@ describe('codex gateway config', () => {
 
     const args = buildCodexProxySpawnArgs('http://127.0.0.1:12345', 'env-key');
 
-    expect(args).toContain('model_providers.tapsvc.env_key="XDT_CODEX_API_KEY"');
-    expect(args).not.toContain('model_providers.tapsvc.requires_openai_auth=true');
-    expect(args).toContain('model_providers.tapsvc.supports_websockets=false');
+    expect(args).toContain('model_providers.cindy_gateway.env_key="XDT_CODEX_API_KEY"');
+    expect(args).not.toContain('model_providers.cindy_gateway.requires_openai_auth=true');
+    expect(args).toContain('model_providers.cindy_gateway.supports_websockets=false');
   });
 
   it('provider-oauth 模式: 仍用 env_key 占位,由 proxy 覆盖供应商 OAuth token', async () => {
@@ -134,9 +134,9 @@ describe('codex gateway config', () => {
 
     const args = buildCodexProxySpawnArgs('http://127.0.0.1:12345', 'provider-oauth');
 
-    expect(args).toContain('model_providers.tapsvc.env_key="XDT_CODEX_API_KEY"');
-    expect(args).not.toContain('model_providers.tapsvc.requires_openai_auth=true');
-    expect(args).toContain('model_providers.tapsvc.supports_websockets=false');
+    expect(args).toContain('model_providers.cindy_gateway.env_key="XDT_CODEX_API_KEY"');
+    expect(args).not.toContain('model_providers.cindy_gateway.requires_openai_auth=true');
+    expect(args).toContain('model_providers.cindy_gateway.supports_websockets=false');
   });
 });
 

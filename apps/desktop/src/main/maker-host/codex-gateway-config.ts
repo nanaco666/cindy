@@ -2,16 +2,16 @@
  * codex-gateway-config —— Codex "API 模式"(走 AI Gateway)的 provider 配置 single source。
  *
  * 背景:Codex 默认走 OAuth 订阅(ChatGPT 后端)。开启 API 模式后,我们要让内嵌的
- * codex app-server 改走 AI Gateway —— 等价于同事飞书 wiki 里给独立 Codex CLI 写的
- * config.toml 自定义 model_provider,只是我们用 codex 二进制的 `-c key=value` 顶层
- * override 注入(免动用户 ~/.codex/config.toml,且天然可逆:关掉 API 模式下次 spawn
+ * codex app-server 改走 AI Gateway —— 等价于给独立 Codex CLI 写的 config.toml
+ * 自定义 model_provider,只是我们用 codex 二进制的 `-c key=value` 顶层 override
+ * 注入(免动用户 ~/.codex/config.toml,且天然可逆:关掉 API 模式下次 spawn
  * 不带这些 flag 即可)。
  *
  * 等价的 config.toml:
- *   model_provider = "tapsvc"
- *   [model_providers.tapsvc]
- *   name     = "TAPSVC"
- *   base_url = "https://llm-proxy.tapsvc.com/v1"
+ *   model_provider = "cindy_gateway"
+ *   [model_providers.cindy_gateway]
+ *   name     = "Cindy Gateway"
+ *   base_url = "<网关 endpoint>/v1"   # 登录随凭据下发,非硬编码
  *   wire_api = "responses"
  *   env_key  = "XDT_CODEX_API_KEY"
  *
@@ -21,12 +21,12 @@
 
 import { claudeUpstreamEndpoint } from './runtime-configs.js';
 
-/** 内部 provider id(codex config 里的 key)。 */
-export const CODEX_GATEWAY_PROVIDER_ID = 'tapsvc';
+/** 内部 provider id(codex config 里的 key)。仅 codex 子进程配置的本地标签,不外发。 */
+export const CODEX_GATEWAY_PROVIDER_ID = 'cindy_gateway';
 
 /**
  * 注入 codex 子进程的环境变量名 —— codex 通过 config 的 `env_key` 来这里读 API key。
- * 用专名(非 wiki 示例里的 TAPTAP_API_KEY)避免撞用户机器上已有的同名变量。
+ * 用专名避免撞用户机器上已有的同名变量。
  */
 export const CODEX_GATEWAY_ENV_KEY = 'XDT_CODEX_API_KEY';
 export const CODEX_PROVIDER_OAUTH_PLACEHOLDER_KEY = 'xdt-provider-oauth-placeholder-key';
@@ -67,7 +67,7 @@ export function buildCodexProxySpawnArgs(baseUrl: string, authMode: CodexProxySp
     : `model_providers.${p}.env_key="${CODEX_GATEWAY_ENV_KEY}"`;
   return [
     '-c', `model_provider="${p}"`,
-    '-c', `model_providers.${p}.name="TAPSVC"`,
+    '-c', `model_providers.${p}.name="Cindy Gateway"`,
     '-c', `model_providers.${p}.base_url="${baseUrl}"`,
     '-c', `model_providers.${p}.wire_api="responses"`,
     '-c', authArg,

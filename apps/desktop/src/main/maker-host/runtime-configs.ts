@@ -80,7 +80,7 @@ function readMakerMemoryEnabled(): boolean {
 const staticClaudeBehaviorFlags = {
   CLAUDE_CODE_SKIP_FAST_MODE_NETWORK_ERRORS: '1',
   CLAUDE_CODE_ATTRIBUTION_HEADER: '0',
-  // llm-proxy.tapsvc.com 透传 tool_reference 块, 显式开启 ToolSearch
+  // 网关 upstream 透传 tool_reference 块, 显式开启 ToolSearch
   // 否则 CC 看到非 first-party host 默认 disable, 每次请求都全量塞工具定义。
   ENABLE_TOOL_SEARCH: 'auto',
 };
