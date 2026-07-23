@@ -9,6 +9,7 @@ const sessionItemSource = readFileSync(resolve(sidebarDir, 'SessionItem.tsx'), '
 const sessionRenameInputSource = readFileSync(resolve(sidebarDir, '..', 'SessionRenameInput.tsx'), 'utf8');
 const sessionStatusIconSource = readFileSync(resolve(sidebarDir, 'SessionStatusIcon.tsx'), 'utf8');
 const automationGroupSource = readFileSync(resolve(sidebarDir, 'AutomationSessionGroupItem.tsx'), 'utf8');
+const automationTimerIconSource = readFileSync(resolve(sidebarDir, 'AutomationTimerIcon.tsx'), 'utf8');
 const scheduleBindingBadgeSource = readFileSync(resolve(sidebarDir, 'ScheduleBindingBadge.tsx'), 'utf8');
 const globalsSource = readFileSync(resolve(__dirname, '..', '..', '..', '..', 'styles', 'globals.css'), 'utf8');
 
@@ -40,13 +41,12 @@ describe('SessionCard review regressions', () => {
     expect(sessionCardSource).toContain('style={{ WebkitLineClamp: cardPreviewLineClamp }}');
   });
 
-  it('keeps Dash icon precedence for scheduled and automation sessions', () => {
+  it('keeps one Timer glyph for scheduled and automation sessions', () => {
     expect(sessionCardSource).toContain('const showScheduleBindingBadge = boundSchedules.length > 0');
-    expect(sessionCardSource).toContain('const showAutomationClock = !showScheduleBindingBadge && isAutomationGenerated');
-    // Timer(schedule 绑定)优先于自动化 Clock 的判定收敛在 renderAutomationMeta,
-    // list 标题前缀(10px)与 card 底部 meta 行(11px)共用同一份优先级逻辑。
+    expect(sessionCardSource).toContain('const showAutomationTimer = !showScheduleBindingBadge && isAutomationGenerated');
+    // schedule 绑定与普通自动化都复用 AutomationTimerIcon;绑定态优先承载更多状态。
     expect(sessionCardSource).toMatch(
-      /const renderAutomationMeta = \(iconSize: number\) =>[\s\S]*?showScheduleBindingBadge \? \([\s\S]*?<ScheduleBindingBadge[\s\S]*?schedules=\{boundSchedules\}[\s\S]*?size=\{iconSize\}[\s\S]*?activeForeground=\{isActive\}[\s\S]*?\) : showAutomationClock \? \([\s\S]*?<Clock size=\{iconSize\}/,
+      /const renderAutomationMeta = \(iconSize: number\) =>[\s\S]*?showScheduleBindingBadge \? \([\s\S]*?<ScheduleBindingBadge[\s\S]*?schedules=\{boundSchedules\}[\s\S]*?size=\{iconSize\}[\s\S]*?activeForeground=\{isActive\}[\s\S]*?\) : showAutomationTimer \? \([\s\S]*?<AutomationTimerIcon size=\{iconSize\}/,
     );
     expect(sessionCardSource).toContain('{renderAutomationMeta(10)}');
     expect(sessionCardSource).toContain('{renderAutomationMeta(11)}');
@@ -91,6 +91,30 @@ describe('SessionCard review regressions', () => {
     expect(sessionCardSource).toContain('text-[var(--sidebar-item-active-foreground)]');
   });
 
+  it('keeps active session rows aligned by painting the border without changing layout', () => {
+    expect(sessionItemSource).toContain(
+      'shadow-[inset_0_0_0_1px_var(--sidebar-item-active-border)]',
+    );
+    expect(sessionItemSource).not.toContain(
+      'text-sidebar-item-active-foreground border border-[var(--sidebar-item-active-border)]',
+    );
+  });
+
+  it('keeps every sidebar Agent-to-Timer gap as compact as the former Clock', () => {
+    expect(sessionItemSource).toContain(
+      'const hasAutomationMeta = boundSchedules.length > 0 || isAutomationGenerated;',
+    );
+    expect(sessionItemSource).toContain(
+      "!isEditing && hasAutomationMeta ? 'gap-1.5' : 'gap-2.5'",
+    );
+    expect(automationGroupSource).toContain(
+      'className="flex min-w-0 items-center gap-1.5 text-left disabled:cursor-default"',
+    );
+    expect(automationGroupSource).toContain(
+      'className="flex min-w-0 items-center gap-1.5"',
+    );
+  });
+
   it('keeps active sidebar rename controls inside the active foreground color system', () => {
     expect(sessionItemSource).toContain('activeForeground={isActive}');
     expect((sessionCardSource.match(/activeForeground=\{isActive\}/g) || []).length).toBeGreaterThanOrEqual(2);
@@ -125,20 +149,21 @@ describe('SessionCard review regressions', () => {
     );
   });
 
-  it('PR-123 greptile: card 路径的绑定徽章与 Clock 进反白体系', () => {
+  it('PR-123 greptile: card 路径的绑定徽章与 Timer 进反白体系', () => {
     // P1:renderAutomationMeta 卡片/列表两路都要把选中态透传给 ScheduleBindingBadge,
-    // 否则红胶囊上 Timer 仍是 meta 灰;Clock 分支同族对齐 SessionItem 写法。
+    // 否则红胶囊上 Timer 仍是 meta 灰;普通自动化分支也必须透传 activeForeground。
     expect(sessionCardSource).toContain('activeForeground={isActive}');
     expect(sessionCardSource).toMatch(
-      /showAutomationClock \? \([\s\S]*?isActive[\s\S]*?\? 'text-\[var\(--sidebar-item-active-foreground\)\]'[\s\S]*?: 'text-\[var\(--cmd-palette-item-meta\)\] hover:text-foreground transition-colors'/,
+      /showAutomationTimer \? \([\s\S]*?<AutomationTimerIcon[\s\S]*?activeForeground=\{isActive\}/,
     );
   });
 
   it('PR-123 greptile: 暂停角标随反白态切换红胶囊配色', () => {
     // P2:allPaused mini-badge 在 activeForeground 下改用选中态三 token,
     // 不再把页面级 chip 灰底灰字嵌进红胶囊。
-    expect(scheduleBindingBadgeSource).toMatch(
-      /allPaused && \([\s\S]*?activeForeground[\s\S]*?\? 'border border-\[var\(--sidebar-item-active-border\)\] bg-sidebar-item-active text-\[var\(--sidebar-item-active-foreground\)\]'[\s\S]*?: 'border border-\[var\(--cmd-palette-border\)\] bg-\[var\(--chat-input-chip-bg\)\] text-\[var\(--cmd-palette-item-meta\)\]'/,
+    expect(scheduleBindingBadgeSource).toContain('paused={allPaused}');
+    expect(automationTimerIconSource).toMatch(
+      /activeForeground[\s\S]*?\? 'border border-\[var\(--sidebar-item-active-border\)\] bg-sidebar-item-active text-\[var\(--sidebar-item-active-foreground\)\]'[\s\S]*?: 'border border-\[var\(--cmd-palette-border\)\] bg-\[var\(--chat-input-chip-bg\)\] text-\[var\(--cmd-palette-item-meta\)\]'/,
     );
   });
 
@@ -146,9 +171,10 @@ describe('SessionCard review regressions', () => {
     expect(automationGroupSource).toContain(
       "colorClassName={hasActiveHidden ? 'text-[var(--sidebar-item-active-foreground)]' : undefined}",
     );
-    // 用户拍板 2026-07-20:running 橙优先于选中态反相前景。
-    expect(automationGroupSource).toMatch(
-      /isRunning\s*\? 'text-\[var\(--status-bar-accent\)\]'\s*:\s*hasActiveHidden/,
+    // running 语义下沉到统一 Timer；组头必须透传，图标组件保持橙色优先级。
+    expect(automationGroupSource).toContain('running={isRunning}');
+    expect(automationTimerIconSource).toMatch(
+      /isActivelyRunning[\s\S]*?\? 'text-\[var\(--status-bar-accent\)\]'/,
     );
     expect(automationGroupSource).toContain(
       "hasActiveHidden ? 'text-sidebar-item-active-foreground' : 'text-sidebar-action-icon'",

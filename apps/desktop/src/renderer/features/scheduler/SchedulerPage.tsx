@@ -1,7 +1,7 @@
 /**
  * SchedulerPage — /schedules 主路由（master-detail 改版）
  * ---------------------------------------------------------------------------
- * - 列表为空 → 居中 EmptyState（保留旧设计：圆形钟表 + 文案 + New Automation 按钮）
+ * - 列表为空 → 居中 EmptyState（统一秒表图标 + 文案 + New Automation 按钮）
  * - 列表非空 → master-detail：
  *     左 TaskListPane (300w，按 lastFiredAt desc 排) + 右 RunHistoryPane (flex)
  *
@@ -25,7 +25,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Plus, Clock } from 'lucide-react';
+import { Plus, Timer } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 
@@ -514,7 +514,7 @@ export function SchedulerPage() {
         style={WINDOW_DRAG_STYLE}
       >
         <div className="flex min-w-0 items-center gap-3">
-          <Clock
+          <Timer
             size={18}
             strokeWidth={1.75}
             className="shrink-0 text-[var(--settings-section-desc)]"
@@ -650,7 +650,7 @@ function EmptyState({
       <div className="mx-auto flex w-full max-w-[800px] flex-col gap-8">
         <div className="flex flex-col items-center gap-3 text-center">
           <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[var(--chat-input-chip-bg)]">
-            <Clock size={28} strokeWidth={1.5} className="text-[var(--cmd-palette-item-meta)]" />
+            <Timer size={28} strokeWidth={1.5} className="text-[var(--cmd-palette-item-meta)]" />
           </div>
           <h2 className="text-lg font-medium text-[var(--msg-assistant-text)]">
             {t('scheduler.empty.promptHeading')}

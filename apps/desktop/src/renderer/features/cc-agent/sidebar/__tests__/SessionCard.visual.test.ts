@@ -186,7 +186,7 @@ describe('SessionCard visual cases', () => {
       'summary-long-body',
       'running-loading',
       'attention-dot',
-      'automation-clock',
+      'automation-timer',
       'schedule-bound-active',
       'schedule-bound-paused',
       'remote-device-link',
@@ -220,13 +220,14 @@ describe('SessionCard visual cases', () => {
     expect(screen.getByText(/汇总玩家/)).toBeTruthy();
   });
 
-  it('uses Clock only for automation cases without a bound schedule', () => {
-    renderCase('automation-clock');
+  it('uses the unified Timer for automation cases without a bound schedule', () => {
+    renderCase('automation-timer');
     expect(screen.getByRole('button', { name: '查看自动化任务' }).getAttribute('title')).toBe('由自动化创建');
+    expect(screen.getByRole('button', { name: '查看自动化任务' }).querySelector('.lucide-timer')).not.toBeNull();
   });
 
   it('stops keyboard activation on the automation title action from opening the card', () => {
-    const visualCase = sessionCardVisualCases.find((item) => item.id === 'automation-clock');
+    const visualCase = sessionCardVisualCases.find((item) => item.id === 'automation-timer');
     if (!visualCase) throw new Error('Missing automation visual case');
     const onClick = vi.fn();
 
@@ -276,16 +277,16 @@ describe('SessionCard visual cases', () => {
     expect(onClick).not.toHaveBeenCalled();
   });
 
-  it('lets bound schedules override the automation Clock', () => {
+  it('uses the same Timer while bound schedules provide the binding metadata', () => {
     renderCase('schedule-bound-active');
     const root = screen.getByTestId('visual-case');
-    expect(within(root).getByRole('button', { name: '查看自动化任务' }).getAttribute('title')).not.toBe(
-      '由自动化创建',
-    );
+    const automationButton = within(root).getByRole('button', { name: '查看自动化任务' });
+    expect(automationButton.getAttribute('title')).not.toBe('由自动化创建');
+    expect(automationButton.querySelector('.lucide-timer')).not.toBeNull();
   });
 
   it('moves the automation action to the card meta row while list keeps it in the title prefix', () => {
-    const visualCase = sessionCardVisualCases.find((item) => item.id === 'automation-clock');
+    const visualCase = sessionCardVisualCases.find((item) => item.id === 'automation-timer');
     if (!visualCase) throw new Error('Missing automation visual case');
 
     const commonProps = {

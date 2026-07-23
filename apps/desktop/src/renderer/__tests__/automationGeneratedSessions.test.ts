@@ -752,12 +752,16 @@ describe('automation-generated sessions', () => {
     // 否则裸 VendorIcon 会比其它会话向左偏约 1.5px，Claude mark 还会小 1px。
     expect(source).toContain('className="flex w-[15px] shrink-0 items-center justify-center"');
     expect(source).toContain("size={latestSession?.agentKind === 'codex' ? 12 : 13}");
-    expect(source).toContain('<Clock');
-    // 已停止(paused/expired)时整个 Clock chip 换成大 Pause 图标(size 10 + fill),
-    // 不再是原先叠在 Clock 上的迷你角标 —— 视觉必须明显。
-    expect(source).toContain('isScheduleStopped ? (');
-    expect(source).toContain('<Pause\n                  size={10}');
-    expect(source).toContain('fill="currentColor"');
+    // 所有自动任务统一 Timer；暂停只叠角标，主图标和 12px 槽位不替换。
+    expect(source).toContain('<AutomationTimerIcon');
+    expect(source).toContain('paused={isScheduleStopped}');
+    expect(source).not.toContain('<Clock');
+    expect(source).not.toContain('<Pause');
+    // 沿用原 Clock 的紧凑节奏：vendor → Timer、Timer → 标题均为 6px。
+    expect(source).toContain(
+      'className="flex min-w-0 items-center gap-1.5 text-left disabled:cursor-default"',
+    );
+    expect(source).toContain('className="flex min-w-0 items-center gap-1.5"');
     expect(source).toContain('runningSessionIds,');
   });
 

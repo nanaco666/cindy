@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown, ChevronRight, Clock, EllipsisVertical, Pause, Play } from 'lucide-react';
+import { ChevronDown, ChevronRight, EllipsisVertical, Play } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 
@@ -29,6 +29,7 @@ import { MENU_CONTENT_CLASS, MENU_ITEM_CLASS, MENU_SEPARATOR_CLASS } from './men
 import { useSessionAttentionUrgency } from '../contexts/SessionAttentionUrgencyContext';
 import { useSessionAttentionKind } from '@/lib/sessionAttentionStore';
 import { resolveSidebarRightStatus } from './sidebarRightStatus';
+import { AutomationTimerIcon } from './AutomationTimerIcon';
 
 export interface AutomationSessionGroupItemProps {
   group: AutomationSessionGroup;
@@ -117,12 +118,12 @@ export function AutomationSessionGroupItem({
   const latestChatKind = useSessionAttentionKind(latestSessionId ?? '');
   const scheduleId = group.scheduleId;
   // 「已停止」= paused(用户主动暂停)+ expired(计划到期不再触发);两者对用户体验
-  // 而言都是「不会再自动跑」,视觉上都在 Clock chip 上叠 Pause 徽标,并在 tooltip
+  // 而言都是「不会再自动跑」,视觉上都在 Timer chip 上叠 Pause 徽标,并在 tooltip
   // 里显示「已停止」文案,避免用户误判为普通空闲态。
   const isScheduleStopped =
     group.scheduleStatus === 'paused' || group.scheduleStatus === 'expired';
   const hasVisibleChildren = visibleSessions.length > 0;
-  // running / loading 也只看最新那条:组头 vendor mark 呼吸 + Clock chip 呼吸 + 右侧
+  // running / loading 也只看最新那条:组头 vendor mark 呼吸 + Timer chip 呼吸 + 右侧
   // spinner 都据此,与最新 session 子行一致(需求:「loading 状态和最新的 session 保持一致」)。
   const isRunning = latestSessionId != null && runningSessionIds.has(latestSessionId);
   const primaryActivityIso = latestSession?.updatedAt;
@@ -277,7 +278,7 @@ export function AutomationSessionGroupItem({
   );
 
   // 点击空白行区域 = 点击标题,统一打开组内「最新一条」运行(需求:「点击这条自动化
-  // 折叠也打开最新的 session」)。行内可交互控件(chevron toggle / Clock logo / Run /
+  // 折叠也打开最新的 session」)。行内可交互控件(chevron toggle / Timer logo / Run /
   // More)在自己的 handler 里 stopPropagation,不会误触发。
   const openLatestSession = () => {
     if (!latestSession) return;
@@ -338,54 +339,36 @@ export function AutomationSessionGroupItem({
                 colorClassName={hasActiveHidden ? 'text-[var(--sidebar-item-active-foreground)]' : undefined}
               />
             </span>
-            {/* Clock 点击跳自动化页对应条目。宿主已是 title <button>,不能嵌套
-                button,用 span role="button" + stopPropagation 拦下行点击。 */}
-            <span
-              role="button"
-              tabIndex={-1}
-              aria-label={t('ccAgent.sidebar.scheduleBinding.viewTask')}
-              title={t('ccAgent.sidebar.scheduleBinding.viewTask')}
-              onClick={(e) => {
-                e.stopPropagation();
-                navigate(
-                  group.scheduleId
-                    ? scheduleFocusPath(group.scheduleId)
-                    : '/cc-agent/scheduled',
-                );
-              }}
-              onPointerDown={(e) => e.stopPropagation()}
-              className="relative inline-flex size-3 shrink-0 cursor-pointer items-center justify-center"
-            >
-              {/* 已停止(paused/expired)时整个 chip 换成 Pause 图标(fill + 无描边),
-                  和普通 Clock 同尺寸(size 10)—— 原先的角标写法(size 6 迷你 Pause 徽标
-                  叠在 Clock 上)视觉过小,用户无法一眼辨识「已停止」状态。Clock chip
-                  上不再叠 AttentionDot:整组 attention 已由右侧 5 档状态图标承担。 */}
-              {isScheduleStopped ? (
-                <Pause
+            {/* 延续原 Clock 的紧凑节奏:vendor → Timer 与 Timer → 标题均留 6px。 */}
+            <span className="flex min-w-0 items-center gap-1.5">
+              {/* Timer 点击跳自动化页对应条目。宿主已是 title <button>,不能嵌套
+                  button,用 span role="button" + stopPropagation 拦下行点击。 */}
+              <span
+                role="button"
+                tabIndex={-1}
+                aria-label={t('ccAgent.sidebar.scheduleBinding.viewTask')}
+                title={t('ccAgent.sidebar.scheduleBinding.viewTask')}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  navigate(
+                    group.scheduleId
+                      ? scheduleFocusPath(group.scheduleId)
+                      : '/cc-agent/scheduled',
+                  );
+                }}
+                onPointerDown={(e) => e.stopPropagation()}
+                className="relative inline-flex size-3 shrink-0 cursor-pointer items-center justify-center"
+              >
+                {/* Timer 始终占同一个 12px 槽；暂停/过期只叠状态角标，不替换主图标。 */}
+                <AutomationTimerIcon
                   size={10}
-                  strokeWidth={0}
-                  fill="currentColor"
-                  className={hasActiveHidden ? 'text-[var(--sidebar-item-active-foreground)]' : 'text-[var(--cmd-palette-item-meta)] hover:text-foreground transition-colors'}
+                  paused={isScheduleStopped}
+                  activeForeground={hasActiveHidden}
+                  running={isRunning}
                 />
-              ) : (
-                // 常驻呼吸动画挂 HTML wrapper,SVG 保持静态(AGENTS 规则 7 SVG 动画红线,PR#226 review)
-                <span
-                  className={cn(
-                    'inline-flex',
-                    // 用户拍板 2026-07-20:running 橙优先于选中态反相前景
-                    isRunning
-                      ? 'text-[var(--status-bar-accent)]'
-                      : hasActiveHidden
-                        ? 'text-[var(--sidebar-item-active-foreground)]'
-                        : 'text-[var(--cmd-palette-item-meta)] hover:text-foreground transition-colors',
-                    isRunning && 'session-status-breathing',
-                  )}
-                >
-                  <Clock size={10} strokeWidth={1.75} />
-                </span>
-              )}
+              </span>
+              <span className="min-w-0 truncate">{group.title}</span>
             </span>
-            <span className="min-w-0 truncate">{group.title}</span>
           </button>
           {/* 展开箭头挪到标题后,视觉上属于「标题右侧的次要控件」,和右侧 meta/操作
               槽用 ml-auto 分开;shrink-0 保证长标题挤压时不会先把 chevron 挤没。 */}
@@ -503,7 +486,7 @@ export function AutomationSessionGroupItem({
                 )}
               >
                 {/* 高频 Run 继续直点;Edit/Pause/Resume/Delete 收进 More 菜单,避免 Edit
-                    和左侧 Clock chip 形成重复入口,同时保留原来菜单里的低频操作空间。 */}
+                    和左侧 Timer chip 形成重复入口,同时保留原来菜单里的低频操作空间。 */}
                 <Tip text={t('ccAgent.sidebar.automationGroup.menu.runNow')} side="bottom">
                   <button
                     type="button"
