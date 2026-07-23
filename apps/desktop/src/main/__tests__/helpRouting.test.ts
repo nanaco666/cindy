@@ -50,6 +50,8 @@ describe('buildRouterPrompt', () => {
 });
 
 describe('HELP_KNOWLEDGE invariants', () => {
+  // Mirror of ALLOWED_TABS in maker-ipc/help.ts (and HelpTabId in
+  // shared/helpTypes.ts). Keep in sync when the deep-link whitelist changes.
   const ALLOWED = new Set([
     'general',
     'personalization',
@@ -60,6 +62,8 @@ describe('HELP_KNOWLEDGE invariants', () => {
     'connections',
     'im-bot',
     'about',
+    'ghosts',
+    'remote-control',
   ]);
 
   it('is non-empty', () => {

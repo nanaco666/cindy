@@ -35,6 +35,8 @@ const ALLOWED_TABS = new Set<HelpTabId>([
   'connections',
   'im-bot',
   'about',
+  'ghosts',
+  'remote-control',
 ]);
 
 // Knowledge routing (progressive disclosure):

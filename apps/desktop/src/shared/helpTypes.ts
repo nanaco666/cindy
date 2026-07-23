@@ -24,7 +24,12 @@ export type HelpTabId =
   | 'import'
   | 'connections'
   | 'im-bot'
-  | 'about';
+  | 'about'
+  // 'ghosts' (Plugins page) and 'remote-control' (Remote & device control)
+  // are real deep-link targets. 'ghosts' redirects to /plugins in SettingsView,
+  // same as the retained 'api-keys' / 'connections' aliases.
+  | 'ghosts'
+  | 'remote-control';
 
 export type HelpAction =
   | { kind: 'settings-tab'; tab: HelpTabId }

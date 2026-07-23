@@ -1,21 +1,19 @@
 ---
 id: connections
 title: Connecting external accounts
-summary: External accounts (Google, Jira / Confluence, GitHub, GitLab) are connected on their plugin detail pages under Plugins; Slack is bound via the Slack toggle in Settings; Codex sign-in lives in Settings > Model Providers.
-tab: connections
-status: draft
+summary: External accounts (Google, Jira / Confluence, GitHub, GitLab) are connected on their plugin detail pages under Plugins; Slack is bound under Settings > IM bots; Codex sign-in lives in Settings > Model Providers.
 ---
 External account connections have moved out of the old "Third-Party Platforms" section — each integration now lives on its own plugin detail page under **Plugins**, and the plugin's tools use the account you connect there.
 
 **Where to connect what:**
 
-- **Slack** — bound via the Slack toggle in Settings (one browser authorization covers both the Slack channel bot and agent Slack tools). Bindings made before 2026-07 lack tool permission — toggle off and on once to re-authorize.
+- **Slack** — bound with a single toggle under **Settings > IM bots** (the "Cindy" tab). One browser sign-in covers both directions: the Slack channel bot that receives tasks, and the agent Slack tools (search / read / post). If Slack tools don't work on an older binding, toggle it off and on once to re-authorize.
 - **Google** (Gmail / Calendar / Drive / Sheets) — handled by the Filo Google plugin (Plugins > Filo Google).
 - **Jira / Confluence** — handled by the XD Atlassian plugin (Plugins > XD Atlassian; existing connections are migrated automatically).
 - **GitHub** — handled by the Cindy GitHub plugin (Plugins > Cindy GitHub; existing PAT connections are migrated automatically).
 - **GitLab** — handled by the Cindy GitLab plugin (Plugins > Cindy GitLab; existing PAT connections are migrated automatically).
 - **Codex** — sign in under Settings > Model Providers (separate from the Codex CLI binary the app ships with).
-- **FeiShu** (sign-in + bot) — see the FeiShu bot topic; it lives in its own settings section.
+- **FeiShu** — bot only (App ID / Secret under Settings > IM bots; see the FeiShu bot topic). FeiShu is no longer a sign-in method for Cindy itself.
 - **Cindy AI** — Settings > Model Providers. Mivo and web-search keys are configured on the matching plugin detail pages (XD Mivo / Cindy Web Search).
 
 **Managing connections:**
