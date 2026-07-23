@@ -75,3 +75,60 @@ export function resolveProviderSwitchEffort(args: {
   if (ok(defaultEffort ?? undefined)) return defaultEffort as Effort;
   return efforts[0];
 }
+
+/** effort 强弱序(低 → 高);未知档排在最高之上(保守不上调)。 */
+const EFFORT_ORDER: readonly Effort[] = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra'];
+
+function effortRank(e: Effort): number {
+  const i = EFFORT_ORDER.indexOf(e);
+  return i === -1 ? EFFORT_ORDER.length : i;
+}
+
+/**
+ * 把请求的 effort clamp 到某模型「实际声明支持」的档位 —— 供**未门控入口**(定时任务
+ * fire、跨 agent worker 创建等)在发到运行时前做安全 reconcile,避免把模型不支持的档
+ * (如 gpt-5.5 + max/ultra)透给上游被拒(issue #456)。
+ *
+ * 口径与交互式 UI 一致:**模型已声明支持的档原样保留**(不降级 —— 保 issue #352「不静默
+ * 降级用户在支持模型上的显式选择」);只有不受支持时才 clamp 到最高兼容档。
+ *
+ * 规则:
+ *   - `effort` 为空(null/undefined/空串)→ 原样返回(调用方语义:留空 = 不改)。
+ *   - `efforts` 空/缺失 → 原样返回(模型未声明 effort 门控,不动它,no-break)。
+ *   - `effort ∈ efforts` → 原样(支持则不动)。
+ *   - 否则 clamp 到「rank ≤ 请求档 的最高受支持档」。
+ *   - 请求档低于全部受支持档 → 最低受支持档(floor;绝不上调,见下方注释)。
+ */
+export function clampEffortToSupported(
+  effort: Effort | null | undefined,
+  efforts: readonly Effort[] | undefined,
+): Effort | null | undefined {
+  // falsy(null / undefined / 空串)一律透传:空串不在 EFFORT_ORDER 内,若不在此拦下会被
+  // 当成"未知档"(rank 最高)clamp 到模型最高受支持档 —— 与"留空 = 不改"的语义相反(#456 review)。
+  if (!effort) return effort;
+  if (!efforts || efforts.length === 0) return effort;
+  if (efforts.includes(effort)) return effort;
+
+  const wantRank = effortRank(effort);
+  // 受支持档里挑「rank ≤ 请求档」的最高档(clamp down 到最高兼容档)。
+  let best: Effort | undefined;
+  let bestRank = -1;
+  for (const e of efforts) {
+    const r = effortRank(e);
+    if (r <= wantRank && r > bestRank) {
+      best = e;
+      bestRank = r;
+    }
+  }
+  if (best !== undefined) return best;
+
+  // 请求档低于全部受支持档(如 minimal 落在只支持 low+ 的模型)→ clamp 到最低受支持档(floor)。
+  // 绝不上调到模型默认:请求档比 floor 还低时上调 = 违背用户"尽量便宜"的意图,且会把存量
+  // 定时任务里存的 minimal 静默升成 default(通常 high)—— codex 旧行为是 minimal→low,
+  // reconcile 不该反而把它升级(#456 review)。
+  let lowest: Effort = efforts[0];
+  for (const e of efforts) {
+    if (effortRank(e) < effortRank(lowest)) lowest = e;
+  }
+  return lowest;
+}

@@ -99,7 +99,9 @@ function createSessionHarness(): FakeSessionHarness {
     await opts?.onAccepted?.();
     return { accepted: true };
   });
-  const setModel = vi.fn(async () => undefined);
+  // setModel 声明 string 入参(签名与真实 Session.setModel 一致),下面 mockImplementation 才能
+  // 按 (m) 更新 session.model;测试可再用 mockRejectedValue / mockImplementation 覆盖。
+  const setModel = vi.fn(async (_m: string): Promise<void> => {});
   const setEffort = vi.fn(async () => undefined);
   const session = {
     id: 'scheduler-session',
@@ -118,6 +120,14 @@ function createSessionHarness(): FakeSessionHarness {
     abort: vi.fn(async () => undefined),
     close: vi.fn(async () => undefined),
   } as unknown as Session;
+
+  // 忠实镜像真实 Session:`get model()` 随 setModel 成功更新 handle.model。runner 现按 live
+  // session.model(而非 getSessionMeta 快照)确定复用会话实际在跑的模型,harness 必须同样更新。
+  // 需要模拟"setModel 抛错"的用例用 mockRejectedValue 覆盖本实现(reject → 不更新 = Claude 语义);
+  // 模拟 Codex"await 前先改 model 再抛"的用例用 mockImplementation 显式先改 model 再 throw。
+  setModel.mockImplementation(async (m: string) => {
+    (session as { model: string }).model = m;
+  });
 
   return {
     session,
@@ -176,7 +186,11 @@ interface RunnerHarness {
 function createRunnerHarness(
   h: FakeSessionHarness,
   meta: { model?: string; effort?: string; workDir?: string; sdkSessionId?: string } | null = null,
-  opts: { sessionAlive?: boolean; activeSessions?: Session[] } = {},
+  opts: {
+    sessionAlive?: boolean;
+    activeSessions?: Session[];
+    availableModels?: Array<{ id: string; efforts?: readonly string[]; defaultEffort?: string | null }>;
+  } = {},
 ): RunnerHarness {
   const createSession = vi.fn(async () => h.session);
   const closeSession = vi.fn(async () => undefined);
@@ -186,6 +200,8 @@ function createRunnerHarness(
     getSession: vi.fn(() => h.session),
     listActiveSessions: vi.fn(() => opts.activeSessions ?? [h.session]),
     closeSession,
+    // issue #456:runner fire 时按所选模型 efforts reconcile effort;测试经 availableModels 注入能力。
+    getCapabilities: vi.fn((_agent: string) => ({ availableModels: opts.availableModels ?? [] })),
     // 默认 false = fresh spawn（opts.model/effort 已生效）；true 模拟进程内
     // 复用 active session 的路径（createSession 忽略 opts, setModel/setEffort 是唯一通道）。
     isSessionAlive: vi.fn(() => opts.sessionAlive ?? false),
@@ -205,12 +221,12 @@ async function fireToCompletion(
   harness: RunnerHarness,
   h: FakeSessionHarness,
   schedule: Schedule,
-): Promise<{ model: string }> {
+): Promise<{ model: string; effort?: string }> {
   const firePromise = harness.runner.fire(schedule, createFireContext());
   await vi.waitFor(() => expect(h.send).toHaveBeenCalled());
   h.emit({ type: 'done', data: {} });
   await firePromise;
-  return harness.createSession.mock.calls[0][0] as { model: string };
+  return harness.createSession.mock.calls[0][0] as { model: string; effort?: string };
 }
 
 describe('MakerScheduleRunner model selection', () => {
@@ -222,6 +238,36 @@ describe('MakerScheduleRunner model selection', () => {
     mocks.getSessionProvider.mockReturnValue(null);
     mocks.isSessionInTurn.mockReturnValue(false);
     mocks.getSessionRowSnapshot.mockResolvedValue({ status: 'active' });
+  });
+
+  describe('effort reconcile —— fire 时按所选模型能力 clamp(issue #456)', () => {
+    it('超额档(gpt-5.5 只到 xhigh + effort=max)→ createSession 收到 clamp 后的 xhigh', async () => {
+      const h = createSessionHarness();
+      const harness = createRunnerHarness(h, null, {
+        availableModels: [{ id: 'gpt-5.5', efforts: ['low', 'medium', 'high', 'xhigh'], defaultEffort: 'high' }],
+      });
+      const opts = await fireToCompletion(
+        harness,
+        h,
+        baseSchedule({ agentKind: 'codex', model: 'gpt-5.5', effort: 'max' }),
+      );
+      expect(opts.effort).toBe('xhigh');
+    });
+
+    it('模型支持该档(gpt-5.6-sol + effort=ultra)→ 原样透传,不降级(保 #352)', async () => {
+      const h = createSessionHarness();
+      const harness = createRunnerHarness(h, null, {
+        availableModels: [
+          { id: 'gpt-5.6-sol', efforts: ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'], defaultEffort: 'high' },
+        ],
+      });
+      const opts = await fireToCompletion(
+        harness,
+        h,
+        baseSchedule({ agentKind: 'codex', model: 'gpt-5.6-sol', effort: 'ultra' }),
+      );
+      expect(opts.effort).toBe('ultra');
+    });
   });
 
   describe('non-heartbeat (每次新建 session)', () => {
@@ -413,6 +459,242 @@ describe('MakerScheduleRunner model selection', () => {
         expect.anything(),
         'scheduler-session',
         expect.objectContaining({ model: 'claude-opus-4-8', effort: 'xhigh' }),
+        expect.anything(),
+      );
+    });
+
+    it('复用会话 + 超额 effort → setEffort / 落库用 clamp 后的档,不把超额档透给运行时(issue #456)', async () => {
+      // heartbeat 直发路径的 reconcile 覆盖:meta.effort=high、schedule.effort=max,而
+      // 绑定模型仅到 xhigh → setEffort 必须收 clamp 后的 xhigh(不是裸 max),落库同理。
+      const h = createSessionHarness();
+      // 复用会话实际在跑的模型 = live session.model(此用例无 setModel 切换,= meta.model)。
+      (h.session as { model: string }).model = 'claude-opus-4-7';
+      const harness = createRunnerHarness(h, HEARTBEAT_META, {
+        sessionAlive: true,
+        availableModels: [
+          { id: 'claude-opus-4-7', efforts: ['low', 'medium', 'high', 'xhigh'], defaultEffort: 'high' },
+        ],
+      });
+
+      await fireToCompletion(
+        harness,
+        h,
+        baseSchedule({
+          model: 'claude-opus-4-7', // 与 meta.model 相同,不触发 setModel,隔离 effort 断言
+          effort: 'max',
+          targetSessionId: 'scheduler-session',
+        }),
+      );
+
+      expect(h.setEffort).toHaveBeenCalledWith('xhigh');
+      expect(h.setEffort).not.toHaveBeenCalledWith('max');
+      // 复用路径 setEffort 成功 → 落 clamp 后的实际运行值(session 行反映真跑的档)。
+      expect(mocks.backfillSessionMeta).toHaveBeenCalledWith(
+        expect.anything(),
+        'scheduler-session',
+        expect.objectContaining({ effort: 'xhigh' }),
+        expect.anything(),
+      );
+    });
+
+    it('复用会话 + 模型支持的 effort → 原样下发,不降级(保 #352,heartbeat 路径)', async () => {
+      const h = createSessionHarness();
+      // 复用会话实际在跑的模型 = live session.model(此用例无 setModel 切换,= meta.model)。
+      (h.session as { model: string }).model = 'claude-opus-4-7';
+      const harness = createRunnerHarness(h, HEARTBEAT_META, {
+        sessionAlive: true,
+        availableModels: [
+          { id: 'claude-opus-4-7', efforts: ['low', 'medium', 'high', 'xhigh'], defaultEffort: 'high' },
+        ],
+      });
+
+      await fireToCompletion(
+        harness,
+        h,
+        baseSchedule({
+          model: 'claude-opus-4-7',
+          effort: 'xhigh', // 模型支持 → 不动
+          targetSessionId: 'scheduler-session',
+        }),
+      );
+
+      expect(h.setEffort).toHaveBeenCalledWith('xhigh');
+    });
+
+    it('复用会话 + setModel 失败 → effort 按仍在运行的旧模型 clamp,不套新模型的档(PR #479 review)', async () => {
+      // 旧模型(meta.model)支持 max、新模型(schedule.model)仅到 xhigh;复用会话且 setModel 被拒
+      // → 运行时仍停在旧模型 → setEffort 必须用「为旧模型 clamp 的 max」,而非「为新模型 clamp 的 xhigh」。
+      // (efforts 由 availableModels 桩注入,与真实模型能力无关,只驱动本用例的 clamp 场景。)
+      const h = createSessionHarness();
+      h.setModel.mockRejectedValue(new Error('switchModel rejected'));
+      // Claude setModel 抛错 → handle.model 不变,运行时仍停在旧模型 claude-opus-4-7。
+      (h.session as { model: string }).model = 'claude-opus-4-7';
+      const harness = createRunnerHarness(
+        h,
+        { model: 'claude-opus-4-7', effort: 'high', workDir: '/work', sdkSessionId: 'sdk-1' },
+        {
+          sessionAlive: true,
+          availableModels: [
+            { id: 'claude-opus-4-7', efforts: ['low', 'medium', 'high', 'xhigh', 'max'], defaultEffort: 'high' },
+            { id: 'claude-opus-4-8', efforts: ['low', 'medium', 'high', 'xhigh'], defaultEffort: 'high' },
+          ],
+        },
+      );
+
+      await fireToCompletion(
+        harness,
+        h,
+        baseSchedule({ model: 'claude-opus-4-8', effort: 'max', targetSessionId: 'scheduler-session' }),
+      );
+
+      expect(h.setModel).toHaveBeenCalledWith('claude-opus-4-8'); // 尝试切换(被拒)
+      // 运行时仍是旧模型 claude-opus-4-7(支持 max)→ effort 按它 clamp = max,不误降为新模型的 xhigh。
+      expect(h.setEffort).toHaveBeenCalledWith('max');
+      expect(h.setEffort).not.toHaveBeenCalledWith('xhigh');
+      // model 落库跳过(setModel 失败,留待下次重试);effort 落按实际运行模型 clamp 后的 max。
+      expect(mocks.backfillSessionMeta).toHaveBeenCalledWith(
+        expect.anything(),
+        'scheduler-session',
+        expect.objectContaining({ model: undefined, effort: 'max' }),
+        expect.anything(),
+      );
+    });
+
+    it('换 model 但 effort 留空(follow)→ 沿用的会话 effort 也按新模型 clamp(PR #479 review)', async () => {
+      // 会话当前在 max(旧模型支持),schedule 只换到 capped 新模型、不显式配 effort(follow)。
+      // 若不把「沿用的 max」按新模型 clamp,会话会带 max 跑到只到 xhigh 的新模型上被上游拒 ——
+      // 正是 #456 要消除的回归。这里 setModel 成功 → 运行时是新模型 → setEffort 必须收 clamp 后的 xhigh。
+      const h = createSessionHarness();
+      const harness = createRunnerHarness(
+        h,
+        { model: 'claude-opus-4-7', effort: 'max', workDir: '/work', sdkSessionId: 'sdk-1' },
+        {
+          sessionAlive: true,
+          availableModels: [
+            { id: 'claude-opus-4-7', efforts: ['low', 'medium', 'high', 'xhigh', 'max'], defaultEffort: 'high' },
+            { id: 'claude-opus-4-8', efforts: ['low', 'medium', 'high', 'xhigh'], defaultEffort: 'high' },
+          ],
+        },
+      );
+
+      await fireToCompletion(
+        harness,
+        h,
+        // effort 显式留空 = follow;model 换到只到 xhigh 的新模型。
+        baseSchedule({ model: 'claude-opus-4-8', effort: undefined, targetSessionId: 'scheduler-session' }),
+      );
+
+      expect(h.setModel).toHaveBeenCalledWith('claude-opus-4-8'); // 切换成功
+      // 沿用的会话档 max 被新模型 clamp 到 xhigh(而非放任 max 跑到 capped 模型)。
+      expect(h.setEffort).toHaveBeenCalledWith('xhigh');
+      expect(h.setEffort).not.toHaveBeenCalledWith('max');
+      expect(mocks.backfillSessionMeta).toHaveBeenCalledWith(
+        expect.anything(),
+        'scheduler-session',
+        expect.objectContaining({ model: 'claude-opus-4-8', effort: 'xhigh' }),
+        expect.anything(),
+      );
+    });
+
+    it('复用会话 + follow-model + 会话已被切到 capped 模型 → effort 按 live session.model clamp,不按旧 meta 快照(PR #479 review)', async () => {
+      // schedule 不显式配 model(沿用会话模型)。meta 快照还是支持 max 的旧模型,但会话此前已被
+      // 用户切到只到 xhigh 的 live 模型(session.model)。沿用的 effort=max 必须按 live 会话模型 clamp
+      // 到 xhigh,不能按旧 meta 快照放任 max 跑到已 capped 的实际运行模型上。
+      const h = createSessionHarness();
+      // 会话 live 模型 = 已切到的 capped 模型(harness 默认即 claude-sonnet-4-6,这里显式点明用途)。
+      (h.session as unknown as { model: string }).model = 'claude-sonnet-4-6';
+      const harness = createRunnerHarness(
+        h,
+        { model: 'claude-opus-4-7', effort: 'max', workDir: '/work', sdkSessionId: 'sdk-1' }, // meta 旧快照(支持 max)
+        {
+          sessionAlive: true,
+          availableModels: [
+            { id: 'claude-opus-4-7', efforts: ['low', 'medium', 'high', 'xhigh', 'max'], defaultEffort: 'high' },
+            { id: 'claude-sonnet-4-6', efforts: ['low', 'medium', 'high', 'xhigh'], defaultEffort: 'high' },
+          ],
+        },
+      );
+
+      await fireToCompletion(
+        harness,
+        h,
+        // model + effort 都 follow(留空)。
+        baseSchedule({ model: undefined, effort: undefined, targetSessionId: 'scheduler-session' }),
+      );
+
+      expect(h.setModel).not.toHaveBeenCalled(); // follow-model → 不切
+      // 按 live session.model(claude-sonnet-4-6,仅到 xhigh)clamp 沿用的 max → xhigh。
+      expect(h.setEffort).toHaveBeenCalledWith('xhigh');
+      expect(h.setEffort).not.toHaveBeenCalledWith('max');
+    });
+
+    it('复用会话 + setModel 抛错但 handle 已改 model(模拟 Codex partial-apply)→ effort 按 live session.model clamp(PR #479 review)', async () => {
+      // Codex 的 setModel 在 await push 前就先改了 handle.model,"失败"时会话其实已在新模型上。runner
+      // 现按 live session.model(而非 modelSwitchApplied 启发式)定实际运行模型 —— 故 effort 按新 capped
+      // 模型 clamp,不因 setModel"失败"就误按旧模型放行 max。
+      const h = createSessionHarness();
+      (h.session as { model: string }).model = 'claude-opus-4-7'; // 初始旧模型(支持 max)
+      // setModel 先改 handle.model 再抛(partial-apply)。
+      h.setModel.mockImplementation(async (m: string) => {
+        (h.session as { model: string }).model = m;
+        throw new Error('switch push rejected after model already applied');
+      });
+      const harness = createRunnerHarness(
+        h,
+        { model: 'claude-opus-4-7', effort: 'high', workDir: '/work', sdkSessionId: 'sdk-1' },
+        {
+          sessionAlive: true,
+          availableModels: [
+            { id: 'claude-opus-4-7', efforts: ['low', 'medium', 'high', 'xhigh', 'max'], defaultEffort: 'high' },
+            { id: 'claude-opus-4-8', efforts: ['low', 'medium', 'high', 'xhigh'], defaultEffort: 'high' },
+          ],
+        },
+      );
+
+      await fireToCompletion(
+        harness,
+        h,
+        baseSchedule({ model: 'claude-opus-4-8', effort: 'max', targetSessionId: 'scheduler-session' }),
+      );
+
+      expect(h.setModel).toHaveBeenCalledWith('claude-opus-4-8');
+      // handle 已切到 claude-opus-4-8(仅到 xhigh)→ effort 按它 clamp = xhigh,不按旧模型放行 max。
+      expect(h.setEffort).toHaveBeenCalledWith('xhigh');
+      expect(h.setEffort).not.toHaveBeenCalledWith('max');
+    });
+
+    it('冷 resume + follow-effort + setEffort 失败 → 不落库 effort,留待下次重试(PR #479 review)', async () => {
+      // 冷 resume(会话不在进程内,reusedLiveSession=false):createSession 只拿到 undefined effort
+      // (follow → schedule.effort 空),真正要落的 clamp 后档只经 setEffort 生效。setEffort 抛错 = 没生效,
+      // 必须跳过落库,否则 DB 记了假值、下次 fire 判"已同步"不再重试(effortSwitchApplied 旧逻辑只护复用路径)。
+      const h = createSessionHarness();
+      h.setEffort.mockRejectedValue(new Error('setEffort rejected'));
+      const harness = createRunnerHarness(
+        h,
+        { model: 'claude-opus-4-7', effort: 'max', workDir: '/work', sdkSessionId: 'sdk-1' }, // 会话当前档 max
+        {
+          sessionAlive: false, // 冷 resume(非复用)
+          availableModels: [
+            { id: 'claude-opus-4-7', efforts: ['low', 'medium', 'high', 'xhigh', 'max'], defaultEffort: 'high' },
+            { id: 'claude-opus-4-8', efforts: ['low', 'medium', 'high', 'xhigh'], defaultEffort: 'high' },
+          ],
+        },
+      );
+
+      await fireToCompletion(
+        harness,
+        h,
+        // follow-effort(留空)+ 换到只到 xhigh 的模型。
+        baseSchedule({ model: 'claude-opus-4-8', effort: undefined, targetSessionId: 'scheduler-session' }),
+      );
+
+      // follow 的 max 按新模型 clamp 到 xhigh,经 setEffort 下发但失败。
+      expect(h.setEffort).toHaveBeenCalledWith('xhigh');
+      // setEffort 是本次 effort 的唯一生效通道(createSession 只拿到 undefined)→ 失败不落库,下次重试。
+      expect(mocks.backfillSessionMeta).toHaveBeenCalledWith(
+        expect.anything(),
+        'scheduler-session',
+        expect.objectContaining({ effort: undefined }),
         expect.anything(),
       );
     });
