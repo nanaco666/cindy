@@ -17,6 +17,10 @@
   准备。
 - [`desktop-development.md`](desktop-development.md)：Desktop 的 Agent 安全启动入口与
   分层验证命令。
+- [`electron-security-and-process-boundaries.md`](electron-security-and-process-boundaries.md)：
+  Electron 进程职责、Renderer 信任模型、BrowserWindow、preload、IPC 与远程内容安全边界。
+- [`database-and-migrations.md`](database-and-migrations.md)：Desktop SQLite schema、
+  append-only migration、companion script、隔离运行与异步数据库访问规则。
 - [`mobile-development.md`](mobile-development.md)：Mobile 的模拟器开发、分层验证与
   专项文档入口。
 - [`orca-team-architecture.md`](orca-team-architecture.md)：Orca 多 Agent 协同架构与运行时约束。

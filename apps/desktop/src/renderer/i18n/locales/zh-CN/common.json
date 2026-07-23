@@ -871,7 +871,6 @@
         "linuxUnsupported": "Linux 首版暂不支持语音输入期间的系统静音。"
       },
       "usage": {
-        "label": "累计用量",
         "duration": "时长",
         "estimatedCost": "估算费用",
         "costBreakdown": "识别 {{asr}} · 润色 {{refine}}",

@@ -871,7 +871,6 @@
         "linuxUnsupported": "Linux first release does not support muting system audio during voice input."
       },
       "usage": {
-        "label": "Usage",
         "duration": "Duration",
         "estimatedCost": "Estimated cost",
         "costBreakdown": "ASR {{asr}} · Refine {{refine}}",

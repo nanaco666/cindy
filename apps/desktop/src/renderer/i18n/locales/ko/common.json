@@ -871,7 +871,6 @@
         "linuxUnsupported": "Linux 첫 릴리스에서는 음성 입력 중 시스템 음소거를 지원하지 않습니다."
       },
       "usage": {
-        "label": "사용량",
         "duration": "시간",
         "estimatedCost": "예상 비용",
         "costBreakdown": "인식 {{asr}} · 정리 {{refine}}",
