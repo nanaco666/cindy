@@ -3659,6 +3659,7 @@
       "startButton": "협업 시작",
       "startFailed": "협업을 시작하지 못했습니다",
       "startFailedContinue": "협업을 시작하지 못했습니다. 단일 세션으로 계속합니다.",
+      "createWorkerRefreshFailed": "Worker 상태를 새로 고칠 수 없습니다. 다시 시도해 주세요.",
       "openHint": "Worker 를 불러 함께 작업",
       "stopHint": "협업 중지",
       "stopAria": "협업 중지",

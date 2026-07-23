@@ -3660,6 +3660,7 @@
       "startButton": "Start collab",
       "startFailed": "Failed to start collaboration",
       "startFailedContinue": "Failed to start collaboration. Continuing as a single session.",
+      "createWorkerRefreshFailed": "Unable to refresh Worker status. Please try again.",
       "openHint": "Bring in a Worker to help",
       "stopHint": "Stop collaboration",
       "stopAria": "Stop collaboration",

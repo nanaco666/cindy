@@ -3659,6 +3659,7 @@
       "startButton": "協同を開始",
       "startFailed": "協同の開始に失敗しました",
       "startFailedContinue": "協同の開始に失敗しました。単一セッションとして続行します。",
+      "createWorkerRefreshFailed": "Worker の状態を更新できませんでした。もう一度お試しください。",
       "openHint": "Worker を呼んで協同する",
       "stopHint": "協同を停止",
       "stopAria": "協同を停止",

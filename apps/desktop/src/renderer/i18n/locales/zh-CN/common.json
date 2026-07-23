@@ -3659,6 +3659,7 @@
       "startButton": "开启协同",
       "startFailed": "开启协同失败",
       "startFailedContinue": "开启协同失败，已改为单会话继续",
+      "createWorkerRefreshFailed": "Worker 状态刷新失败，请稍后重试",
       "openHint": "召集 Worker 协作",
       "stopHint": "停止协同",
       "stopAria": "停止协同",
