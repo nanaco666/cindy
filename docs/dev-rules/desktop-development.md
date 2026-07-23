@@ -47,6 +47,20 @@ pnpm restart:desktop:local
 
 已手动设 `XDT_USER_DATA_DIR` 时尊重用户值，不覆盖。
 
+### 并行多开 dev
+
+restart 命令默认会停掉本 checkout 能识别到的全部 Cindy dev 进程，所以**用同一 checkout 的
+restart 无法同时多开**。真要并行多个 dev 实例，走下面三条之一：
+
+- 由能证明实例归属的上层编排调用 `--preserve-running`（不停已有实例，共享 userData／
+  登录态，可从多个 worktree 重复启动）；
+- 让用户在自己终端直跑 human-only 的 `pnpm dev:desktop:remote --isolated=<名字>`（不杀旧
+  进程，每个名字一条完全独立的沙箱）；
+- 使用多个 checkout。
+
+Agent 自身仍只走 restart 命令，不直接调 human-only 的 `dev:desktop*`。共享同一 userData
+多开时，非 primary 实例用 `--passive` 让出定时任务调度（见上）。
+
 ## 何时需要重启
 
 - 修改 main、preload、MCP、原生依赖或 package 运行时代码后需要重启。

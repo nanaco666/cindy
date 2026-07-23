@@ -28,6 +28,10 @@ git lfs pull
 pnpm install
 ```
 
+`pnpm install` 的 postinstall 会按当前平台 **best-effort 自动下载 agent 二进制**
+（claude／codex／ripgrep，不入 git；失败只告警不阻断），dev 启动前的 guard 会再确认。
+正常情况下无需手动安装二进制。
+
 新 worktree 不共享 `node_modules`。确认 checkout 已完成且根 `package.json` 存在后，
 在该 worktree 内重新运行 `pnpm install`。
 
