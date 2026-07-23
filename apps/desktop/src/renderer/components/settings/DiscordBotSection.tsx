@@ -38,6 +38,12 @@ function statusColor(s: DiscordBotTransportStatus): string {
   }
 }
 
+function statusTextColor(s: DiscordBotTransportStatus): string {
+  return s.kind === 'connected'
+    ? 'var(--settings-badge-connected-text)'
+    : statusColor(s);
+}
+
 export function DiscordBotSection() {
   const {
     token,
@@ -112,7 +118,7 @@ export function DiscordBotSection() {
             'border border-[var(--settings-badge-border)]',
             'text-12 font-medium tracking-[0.12px]',
           )}
-          style={{ letterSpacing: '0.12px', color: statusColor(status) }}
+          style={{ letterSpacing: '0.12px', color: statusTextColor(status) }}
           role="status"
           aria-live="polite"
           aria-label={t('settings.discordBot.statusAria', { status: t(statusKey[status.kind]) })}

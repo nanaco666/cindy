@@ -1262,9 +1262,13 @@ registerColor('settings-badge-saved', {
   dark: 'var(--text-secondary)',
 }, 'Stone — neutral default once persisted');
 registerColor('settings-badge-connected', {
+  light: 'var(--card-status-done)',
+  dark: 'var(--card-status-done)',
+}, 'Done green — connected status indicator');
+registerColor('settings-badge-connected-text', {
   light: 'var(--text-primary)',
   dark: 'var(--text-primary)',
-}, 'Near Black — maximum emphasis for success');
+}, 'Near Black — connected badge text remains neutral');
 registerColor('settings-badge-error', {
   light: 'var(--error-flat)',
   dark: 'var(--error-flat)',
