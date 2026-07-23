@@ -546,6 +546,15 @@
         "success": "사용자 ID를 복사했습니다",
         "failed": "사용자 ID를 복사하지 못했습니다"
       },
+      "organization": {
+        "label": "조직: {{name}}",
+        "fallbackName": "조직 계정",
+        "roles": {
+          "owner": "소유자",
+          "admin": "관리자",
+          "member": "구성원"
+        }
+      },
       "edit": {
         "open": "이름과 아바타 편집",
         "title": "프로필 편집",

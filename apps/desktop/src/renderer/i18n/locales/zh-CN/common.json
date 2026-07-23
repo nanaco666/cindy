@@ -546,6 +546,15 @@
         "success": "用户 ID 已复制",
         "failed": "复制用户 ID 失败"
       },
+      "organization": {
+        "label": "组织：{{name}}",
+        "fallbackName": "组织账号",
+        "roles": {
+          "owner": "所有者",
+          "admin": "管理员",
+          "member": "成员"
+        }
+      },
       "edit": {
         "open": "编辑名字和头像",
         "title": "编辑个人资料",

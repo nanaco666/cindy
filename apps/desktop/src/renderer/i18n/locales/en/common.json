@@ -546,6 +546,15 @@
         "success": "User ID copied",
         "failed": "Failed to copy user ID"
       },
+      "organization": {
+        "label": "Organization: {{name}}",
+        "fallbackName": "Organization account",
+        "roles": {
+          "owner": "Owner",
+          "admin": "Admin",
+          "member": "Member"
+        }
+      },
       "edit": {
         "open": "Edit name and avatar",
         "title": "Edit profile",

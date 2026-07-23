@@ -546,6 +546,15 @@
         "success": "ユーザー ID をコピーしました",
         "failed": "ユーザー ID をコピーできませんでした"
       },
+      "organization": {
+        "label": "組織：{{name}}",
+        "fallbackName": "組織アカウント",
+        "roles": {
+          "owner": "オーナー",
+          "admin": "管理者",
+          "member": "メンバー"
+        }
+      },
       "edit": {
         "open": "名前とアバターを編集",
         "title": "プロフィールを編集",

@@ -8,6 +8,15 @@ const mocks = vi.hoisted(() => ({
   writeText: vi.fn(),
   toastSuccess: vi.fn(),
   toastError: vi.fn(),
+  user: {
+    id: 'user-123',
+    name: 'Lizi',
+    avatar: null,
+    membershipKind: 'personal' as 'personal' | 'org',
+    membershipRole: 'owner' as 'owner' | 'admin' | 'member',
+    orgName: null as string | null,
+    orgSlug: null as string | null,
+  },
 }));
 
 vi.mock('react-i18next', () => ({
@@ -16,11 +25,7 @@ vi.mock('react-i18next', () => ({
 
 vi.mock('@/contexts/AuthContext', () => ({
   useAuth: () => ({
-    user: {
-      id: 'user-123',
-      name: 'Lizi',
-      avatar: null,
-    },
+    user: mocks.user,
   }),
 }));
 
@@ -35,8 +40,12 @@ vi.mock('@/components/settings/ProfileEditDialog', () => ({
 
 import { UserProfileCard } from '@/components/settings/UserProfileCard';
 
-describe('UserProfileCard copy user ID', () => {
+describe('UserProfileCard', () => {
   beforeEach(() => {
+    mocks.user.membershipKind = 'personal';
+    mocks.user.membershipRole = 'owner';
+    mocks.user.orgName = null;
+    mocks.user.orgSlug = null;
     Object.defineProperty(navigator, 'clipboard', {
       configurable: true,
       value: { writeText: mocks.writeText },
@@ -90,5 +99,45 @@ describe('UserProfileCard copy user ID', () => {
     await waitFor(() =>
       expect(mocks.toastError).toHaveBeenCalledWith('settings.userProfile.copyUserId.failed'),
     );
+  });
+
+  it('shows the organization name and role only for an organization membership', () => {
+    const { rerender } = render(<UserProfileCard />);
+
+    expect(screen.queryByText('settings.userProfile.organization.roles.owner')).toBeNull();
+
+    mocks.user.membershipKind = 'org';
+    mocks.user.membershipRole = 'admin';
+    mocks.user.orgName = 'Acme';
+    mocks.user.orgSlug = 'acme';
+    rerender(<UserProfileCard />);
+
+    expect(screen.getByTitle('Acme')).toBeTruthy();
+    expect(screen.getByText('settings.userProfile.organization.roles.admin')).toBeTruthy();
+  });
+
+  it('falls back from the organization name to its slug and then the localized default', () => {
+    mocks.user.membershipKind = 'org';
+    mocks.user.membershipRole = 'member';
+    mocks.user.orgName = null;
+    mocks.user.orgSlug = 'acme';
+    const { rerender } = render(<UserProfileCard />);
+
+    expect(screen.getByTitle('acme')).toBeTruthy();
+
+    mocks.user.orgSlug = null;
+    rerender(<UserProfileCard />);
+
+    expect(screen.getByTitle('settings.userProfile.organization.fallbackName')).toBeTruthy();
+  });
+
+  it('falls back to the localized member role for an unknown runtime role', () => {
+    mocks.user.membershipKind = 'org';
+    mocks.user.orgName = 'Acme';
+    (mocks.user as { membershipRole: string }).membershipRole = 'billing_admin';
+    render(<UserProfileCard />);
+
+    expect(screen.getByText('settings.userProfile.organization.roles.member')).toBeTruthy();
+    expect(screen.queryByText('settings.userProfile.organization.roles.billing_admin')).toBeNull();
   });
 });
