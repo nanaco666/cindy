@@ -884,7 +884,7 @@ export const embeddingMeta = sqliteTable('embedding_meta', {
  *
  * 时区: day = 用户**本地时区** YYYY-MM-DD 字符串 (避免 UTC 跨日错配显示)。
  *
- * 与 web 看板 (console.tapsvc.com) 数据关系:
+ * 与 web 看板 数据关系:
  *   - web 是 llm-proxy 网关侧统计 (含此账号所有调用方)
  *   - 本表是单机 xdt-maker 实例累加 (子集)
  *   - 同账号用多设备时本表数字会不一致 — 设计取舍, chip 点击跳 web 看完整账。

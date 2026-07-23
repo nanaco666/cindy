@@ -871,7 +871,6 @@
         "linuxUnsupported": "Linux 初版では音声入力中のシステムミュートは未対応です。"
       },
       "usage": {
-        "label": "使用量",
         "duration": "時間",
         "estimatedCost": "概算費用",
         "costBreakdown": "認識 {{asr}} · 整文 {{refine}}",
