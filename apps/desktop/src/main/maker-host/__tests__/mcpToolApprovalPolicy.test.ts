@@ -45,7 +45,7 @@ describe('desktop MCP approval policy', () => {
     expect(
       getDesktopMcpToolApprovalPolicy({
         serverName: 'cindy_contacts',
-        toolParams: { name: 'contacts_search', args: { query: 'Dash' } },
+        toolParams: { name: 'contacts_search', args: { query: 'Carol' } },
       }),
     ).toBe('auto-approve');
   });

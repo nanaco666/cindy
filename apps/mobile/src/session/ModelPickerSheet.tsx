@@ -294,7 +294,7 @@ export function ModelPickerSheet({
 
   // 权限入口:header 右侧「图标 + 文案 + 下拉箭头」,与桌面 composer 的 PermissionSelector
   // trigger 同构——透明底、整体着色(中性 = textSecondary,auto / bypass = 语义色),点开二级
-  // 权限选择。按 Dash 反馈刻意轻量化——不占列表整行,浮窗主体只留模型。
+  // 权限选择。按产品反馈刻意轻量化——不占列表整行,浮窗主体只留模型。
   const permissionColor = permissionAccentColor(permission.accent, colors);
   const permissionTrigger = (
     <Pressable

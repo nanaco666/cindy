@@ -3984,7 +3984,7 @@ export default function SessionScreen() {
         // 按成功继续——不回滚、不报错,后续收尾(plan 恢复 / 映射清理)照常执行。
       }
       if (sessionAtSend.permissionMode === 'plan') {
-        // 一次性语义(对齐桌面 PR#494 / Dash 拍板):计划模式只对本条消息生效,发送后
+        // 一次性语义(对齐桌面 PR#494 / 产品决策):计划模式只对本条消息生效,发送后
         // 自动恢复进入前的权限档;本条消息通常已按 plan 派发,切换只影响后续消息。
         // best-effort:失败不打断发送流程,chip 会保留、用户可手动退出。
         const fallback = runtimeOptions?.permissionOptions.find((option) => option.id !== 'plan')?.id ?? 'ask';
@@ -5674,7 +5674,7 @@ export default function SessionScreen() {
               />
               <ContextSheetGroup label="模式">
                 {planModeSupported ? (
-                  // 点击即切换计划模式并关面板(Dash 拍板,不做开关);已开启时显示 ✓,再点退出。
+                  // 点击即切换计划模式并关面板(产品决策,不做开关);已开启时显示 ✓,再点退出。
                   <ContextSheetRow
                     accessibilityHint={composerSendUnavailableReason ?? undefined}
                     disabled={!canUseComposer || controlBusy}

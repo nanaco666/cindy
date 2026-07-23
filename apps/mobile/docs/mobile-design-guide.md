@@ -51,7 +51,7 @@
 - **语义不变色**(`statusReady` / `statusAccent`)跨 light / dark 一致——它们是状态语义,不随主题漂移。
 - **CTA 在 dark 反相为白**:`cta` 白底 + `ctaText` 深字。注意别让白 pill 看起来像 disabled——新增主操作 / 选中态后在 dark 下目检。
 - **Home 对话列表用 base token**:列表背景 / 分隔 / 文字使用 `surface` / `border` / `text*`,菜单选中用 `surfaceChip`,不另起暗色调色板;菜单 / FAB 只用 1px `border` 分层、零阴影,保持桌面「单一 flat Surface + 1px Board」哲学。
-- 不要在组件里硬编码 hex / rgba;找不到合适 token 时跟 Lizi/Dash 确认是否新增,而不是写死。
+- 不要在组件里硬编码 hex / rgba;找不到合适 token 时跟维护者确认是否新增,而不是写死。
 
 ---
 

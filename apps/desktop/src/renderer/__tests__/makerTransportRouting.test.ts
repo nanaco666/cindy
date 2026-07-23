@@ -65,7 +65,7 @@ describe('makerApiFor 路由(完整对等会话级操作)', () => {
     api.closeSession('rs');
     api.enableOrca('rs', { workerAgent: 'codex' });
     api.disableOrca('rs');
-    api.input.compact('rs', { agentKind: 'claude-code', workingDir: '/w', model: 'm' }, { userName: 'Dash' });
+    api.input.compact('rs', { agentKind: 'claude-code', workingDir: '/w', model: 'm' }, { userName: 'Carol' });
     api.input.clearSession('rs');
 
     expect(invoke).toHaveBeenCalledWith('dev-1', 'maker:fork', ['rs', 'msg']);
@@ -86,7 +86,7 @@ describe('makerApiFor 路由(完整对等会话级操作)', () => {
     expect(invoke).toHaveBeenCalledWith('dev-1', 'maker:input:compact', [
       'rs',
       { agentKind: 'claude-code', workingDir: '/w', model: 'm' },
-      { userName: 'Dash' },
+      { userName: 'Carol' },
     ]);
     expect(invoke).toHaveBeenCalledWith('dev-1', 'maker:input:clear-session', ['rs']);
   });

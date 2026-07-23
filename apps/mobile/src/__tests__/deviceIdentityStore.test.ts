@@ -29,7 +29,7 @@ function device(patch: Partial<DeviceView> = {}): DeviceView {
 
 describe('mobile device identity cache', () => {
   it('keeps only real device display names', () => {
-    expect(normalizeDeviceDisplayName(' DashFlow16 ')).toBe('DashFlow16');
+    expect(normalizeDeviceDisplayName(' CarolFlow16 ')).toBe('CarolFlow16');
     expect(normalizeDeviceDisplayName('unknown')).toBeNull();
     expect(normalizeDeviceDisplayName('no')).toBeNull();
     expect(normalizeDeviceDisplayName('')).toBeNull();

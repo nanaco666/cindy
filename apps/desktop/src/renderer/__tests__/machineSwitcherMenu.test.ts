@@ -224,7 +224,7 @@ describe('远程机器切换入口并入 SidebarTopNav(置顶段上方,固定不
     expect(menuSource).toContain('applyToggle(device.deviceId)');
   });
 
-  it('MachineSwitcherMenu hover 自动展开(2026-07-12 Dash 定稿,推翻早前 Codex P2 点击展开)', () => {
+  it('MachineSwitcherMenu hover 自动展开(2026-07-12 产品定稿,推翻早前 Codex P2 点击展开)', () => {
     // 鼠标移到本行短延迟即弹机器菜单、移开即收;受控开合走 useHoverOpenMenu,
     // trigger / content 必须完整接线(triggerRef 供「点击触发按钮不误关」判定)。
     expect(menuSource).toContain('useHoverOpenMenu');

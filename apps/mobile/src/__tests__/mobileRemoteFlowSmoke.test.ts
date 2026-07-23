@@ -51,7 +51,7 @@ const SESSION_ID = 'smoke-session-1';
 function device(patch: Partial<DeviceView> = {}): DeviceView {
   return {
     deviceId: DEVICE_ID,
-    name: 'DashdeMacBook-Pro.local',
+    name: 'CaroldeMacBook-Pro.local',
     platform: 'darwin',
     appVersion: '0.0.0-test',
     lastSeenAt: '2026-06-16T10:00:00.000Z',
@@ -525,7 +525,7 @@ describe('mobile remote-control headless UI flow smoke', () => {
         'active',
         { includePinned: true },
       ]);
-      remoteSessionStore.setDeviceSessions(DEVICE_ID, 'DashdeMacBook-Pro.local', sessions);
+      remoteSessionStore.setDeviceSessions(DEVICE_ID, 'CaroldeMacBook-Pro.local', sessions);
     });
     const firstDeviceSync = syncDevice.run();
     const secondDeviceSync = syncDevice.run();
@@ -678,7 +678,7 @@ describe('mobile remote-control headless UI flow smoke', () => {
       workDir: '/repo/xdt-maker',
     });
     const createdSession = await maker.getSession(created!.sessionId);
-    remoteSessionStore.upsertDeviceSession(DEVICE_ID, 'DashdeMacBook-Pro.local', createdSession);
+    remoteSessionStore.upsertDeviceSession(DEVICE_ID, 'CaroldeMacBook-Pro.local', createdSession);
     const createdAttachment = buildMobileRemoteFileAttachment('/repo/xdt-maker/spec.pdf', { id: 'mobile-created-file-1' });
     expect(createdAttachment).not.toBeNull();
     remoteSessionStore.setInputProjection(
@@ -775,13 +775,13 @@ describe('mobile remote-control headless UI flow smoke', () => {
     expect(normalizeScheduleList(await maker.schedule.list())).toEqual([]);
     remoteSessionStore.upsertDeviceSession(
       DEVICE_ID,
-      'DashdeMacBook-Pro.local',
+      'CaroldeMacBook-Pro.local',
       await maker.getSession(SESSION_ID),
     );
     expect(remoteSessionStore.getSessions().some((item) => item.id === SESSION_ID)).toBe(true);
 
     const forked = await maker.fork(SESSION_ID, 'm2');
-    remoteSessionStore.upsertDeviceSession(DEVICE_ID, 'DashdeMacBook-Pro.local', forked);
+    remoteSessionStore.upsertDeviceSession(DEVICE_ID, 'CaroldeMacBook-Pro.local', forked);
     expect(remoteSessionStore.getSessions().map((item) => item.id).slice(0, 3)).toEqual([
       'forked-session',
       SESSION_ID,

@@ -243,7 +243,7 @@ describe('device-link IPC handlers', () => {
           {
             deviceId: 'dev-1',
             name: 'MacBook Pro',
-            selfName: 'Dash-MacBook-Pro',
+            selfName: 'Carol-MacBook-Pro',
             deviceInfo: { cpuLabel: 'Apple M3 Pro', memoryGb: 36 },
             platform: 'darwin',
             appVersion: '1.0.0-test',
@@ -265,7 +265,7 @@ describe('device-link IPC handlers', () => {
         {
           deviceId: 'dev-1',
           name: 'MacBook Pro',
-          selfName: 'Dash-MacBook-Pro',
+          selfName: 'Carol-MacBook-Pro',
           deviceInfo: { cpuLabel: 'Apple M3 Pro', memoryGb: 36 },
           platform: 'darwin',
           appVersion: '1.0.0-test',
@@ -381,10 +381,10 @@ describe('device-link IPC handlers', () => {
       name: 'New',
     });
 
-    const resetApiFetch = vi.fn().mockResolvedValue({ deviceId: 'dev-1', name: 'Dash-MacBook-Pro', manualName: null });
+    const resetApiFetch = vi.fn().mockResolvedValue({ deviceId: 'dev-1', name: 'Carol-MacBook-Pro', manualName: null });
     await expect(handleRenameDevice(makeDeps({ apiFetch: resetApiFetch }), 'dev-1', null)).resolves.toEqual({
       deviceId: 'dev-1',
-      name: 'Dash-MacBook-Pro',
+      name: 'Carol-MacBook-Pro',
       manualName: null,
     });
     expect(resetApiFetch).toHaveBeenCalledWith('/api/device-link/devices/dev-1', {

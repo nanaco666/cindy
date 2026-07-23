@@ -17,7 +17,7 @@ import {
 export type AttentionKind = 'done' | 'awaiting' | 'error';
 
 /**
- * 清除 attention 的意图。「已读以 App 内真实展示为准」(2026-07 Dash 反馈):
+ * 清除 attention 的意图。「已读以 App 内真实展示为准」(2026-07 产品反馈):
  *   - 'passive'  导航 / 窗口聚焦 / 路由可见等被动信号 —— **不允许**清 'error' 红角标,
  *                error 必须等报错 UI 真实展示(useErrorReadAck)或用户显式操作。
  *   - 'explicit' 用户确实看到了内容:报错 banner 聚焦驻留、运行历史面板展示失败状态、

@@ -820,7 +820,7 @@ export class MakerScheduleRunner implements ScheduleRunner {
       // 落库放在 onAccepted(dispatch 前)是**刻意**的:落库失败即判 send 失败
       // (SchedulerOnAcceptedError → failed run),且错误信息脱敏(不泄露 prompt 原文),
       // 不让 agent 在"用户消息没存下"的情况下空跑。
-      // 已知取舍(PR #129 review Thread F,经 Dash 确认接受):在
+      // 已知取舍(PR #129 review Thread F,经产品确认接受):在
       // 「session.ts:137 isTurnRunning 检查时 turn 未跑、紧接着 handle.send 又 reject
       // SESSION_RUNNING」这个 µs 级竞态窗口里,onAccepted 已落库但本轮被顺延,会留下
       // 一条 agent 实际没收到的孤儿 scheduler 消息(顺延重试再落一条)。触发面极窄——

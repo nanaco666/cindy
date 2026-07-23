@@ -3750,7 +3750,7 @@ export function ChatInput({
   // session-agent-switch 意图制:选中「只属于另一家引擎」的模型 → 只向 main 登记
   // 切换意图并乐观呈现(chip / 选择器立即跟随目标引擎),真正的交接、关旧引擎、
   // 边界行与重建全部推迟到下一条消息发送时刻由 send 事务执行——用户反复改选
-  // 零成本,不反复切换/交接(2026-07-20 Dash 反馈)。effort / Fast 的目标值在此
+  // 零成本,不反复切换/交接(2026-07-20 产品反馈)。effort / Fast 的目标值在此
   // 按目标引擎目录与 per-(引擎,来源,模型) 预设解析好,随意图带给 main,apply 时
   // 一并落库;renderer 不再做切换后补写。
   // handleModelChange / handleProviderChange 声明在本回调之后,经 ref 引用避免

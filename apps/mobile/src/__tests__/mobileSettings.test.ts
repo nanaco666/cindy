@@ -10,7 +10,7 @@ const readTextLf = (...args: Parameters<typeof readFileSync>): string =>
 
 describe('mobile settings overview', () => {
   it('keeps the device-link hello name and settings device name on one source', () => {
-    expect(buildMobileDeviceName({ constantsDeviceName: ' Dash iPhone ', platform: 'ios' })).toBe('Dash iPhone');
+    expect(buildMobileDeviceName({ constantsDeviceName: ' Carol iPhone ', platform: 'ios' })).toBe('Carol iPhone');
     expect(buildMobileDeviceName({ constantsDeviceName: '   ', platform: 'android' })).toBe('Cindy android');
   });
 
@@ -19,19 +19,19 @@ describe('mobile settings overview', () => {
       authBaseUrl: 'https://auth-cn.example.com',
       authRegion: 'cn',
       deviceId: 'mobile-device-1',
-      deviceName: 'Dash iPhone',
+      deviceName: 'Carol iPhone',
       lastSyncedAt: new Date(2026, 0, 1, 3, 4, 5).getTime(),
       platform: 'ios',
       relayStatus: 'online',
       userEmail: 'neo@example.com',
       userId: 'user-1',
-      userName: 'Dash',
+      userName: 'Carol',
     });
 
     expect(overview.header).toMatchObject({
-      deviceName: 'Dash iPhone',
+      deviceName: 'Carol iPhone',
       email: 'neo@example.com',
-      name: 'Dash',
+      name: 'Carol',
       relayDetail: '上次同步 03:04:05',
       relayLabel: 'Relay 已连接',
       relayTone: 'ready',
@@ -45,7 +45,7 @@ describe('mobile settings overview', () => {
       detail: '电脑端授权列表会显示这个名称。',
       id: 'about.deviceName',
       label: '设备名称',
-      value: 'Dash iPhone',
+      value: 'Carol iPhone',
     });
     expect(overview.sections.find((section) => section.id === 'about')?.rows).toContainEqual({
       id: 'about.platform',

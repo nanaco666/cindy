@@ -125,7 +125,7 @@ describe('postGithubIssueAsUser', () => {
     description: '## 诉求\n使用绑定账号提交\n\n---\n**OS**: darwin arm64 (25.5.0)',
     type: 'feature' as const,
     appVersion: '0.1.6',
-    userName: 'Dash',
+    userName: 'Carol',
   };
 
   it('创建前复核 login，并解析 create_issue 的 data 结果', async () => {

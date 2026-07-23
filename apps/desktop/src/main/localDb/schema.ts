@@ -191,7 +191,7 @@ export const sessions = sqliteTable(
      */
     activeTurnStartedAt: integer('active_turn_started_at'),
     /**
-     * @deprecated 早期实现的标记 pid 列(多进程所有权协议已按 2026-07-06 Dash
+     * @deprecated 早期实现的标记 pid 列(多进程所有权协议已按 2026-07-06 产品
      * 决策整体移除),不再读写;保留列避免历史库 DROP COLUMN 迁移风险。
      */
     activeTurnPid: integer('active_turn_pid'),

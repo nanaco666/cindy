@@ -1102,7 +1102,7 @@ export function CCAgentSessionView({
     backgroundActivity.active && !agentStatus.isRunning && !isStreaming && Boolean(sessionId);
 
   // error-tail-banner:会话尾部停在未忽略的 role='error' 行 → 输入框上方显示
-  // 可操作红条(与 live ErrorBanner 同风格;2026-07-05 Dash 拍板统一——所有尾部
+  // 可操作红条(与 live ErrorBanner 同风格;2026-07-05 产品决策统一——所有尾部
   // 错误都要有主操作 + 关闭按钮)。两种语义:
   //   - 中断标记行(reason=app-exit-interrupted,启动扫尾补写)→「继续任务/忽略」
   //   - 普通失败行(process exited / turn-failed 等,重启后 live 报错只剩历史行)

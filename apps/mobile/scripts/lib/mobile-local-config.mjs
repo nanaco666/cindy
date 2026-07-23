@@ -103,7 +103,7 @@ function readWorktreeEntries(worktreeRoot) {
 
 function candidateRank(entry) {
   const basename = path.basename(entry.path);
-  if (entry.branch?.startsWith('refs/heads/dash/personal-client-') || basename.endsWith('personal-client')) return 0;
+  if (basename.endsWith('personal-client')) return 0;
   if (entry.branch === 'refs/heads/main' || entry.branch === 'refs/heads/master') return 1;
   return 2;
 }

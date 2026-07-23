@@ -68,7 +68,7 @@ describe('patchDeviceViewsWithPresence', () => {
       [device()],
       presence({
         deviceName: 'Studio Mac',
-        selfName: 'Dash-MacBook-Pro',
+        selfName: 'Carol-MacBook-Pro',
         deviceInfo: { cpuLabel: 'Apple M3 Pro', memoryGb: 36 },
       }),
       'mobile-1',
@@ -76,7 +76,7 @@ describe('patchDeviceViewsWithPresence', () => {
 
     expect(result.devices[0]).toMatchObject({
       name: 'Studio Mac',
-      selfName: 'Dash-MacBook-Pro',
+      selfName: 'Carol-MacBook-Pro',
       deviceInfo: { cpuLabel: 'Apple M3 Pro', memoryGb: 36 },
     });
   });

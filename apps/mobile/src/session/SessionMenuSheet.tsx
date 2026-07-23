@@ -9,9 +9,9 @@
  * backdrop 先回一级再关浮窗(settleSessionMenuBack)。刻意不用嵌套 Modal,原因同
  * ModelPickerSheet 头注释(iOS 同级双 Modal 不显示、Android 返回键派发不可控)。
  *
- * 交互取舍(2026-07-06 与 Dash 确认的重设计):重命名 = 一级内原地编辑(输入框替换头部,
+ * 交互取舍(2026-07-06 与产品确认的重设计):重命名 = 一级内原地编辑(输入框替换头部,
  * 编辑期隐藏操作列表);删除 = 系统 Alert 确认(取代旧「点两次」按钮);复制只保留对话深链,
- * 旧面板的 XDT ID / Agent ID 复制按 Dash 决策整体移除(调试向信息不再进手机端 UI);
+ * 旧面板的 XDT ID / Agent ID 复制按产品决策整体移除(调试向信息不再进手机端 UI);
  * 附加引用目录从 textarea 草稿改为列表 + 移除 + 浏览添加,每次增删立即写穿被控端。
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
@@ -323,7 +323,7 @@ export function SessionMenuSheet({
   }, [session.title]);
 
   // 自动起名:生成结果只回填输入框,停留在编辑态等用户按「确定」提交(2026-07-06
-  // Dash 确认,与桌面「生成即提交」刻意不同);生成期间用户手动提交 / 取消 →
+  // 产品确认,与桌面「生成即提交」刻意不同);生成期间用户手动提交 / 取消 →
   // 轮次号变化,迟到结果丢弃。
   const handleAiRename = useCallback(async () => {
     if (renameGenerating) return;

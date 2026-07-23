@@ -2736,7 +2736,7 @@ export default function NewRemoteSessionScreen() {
             />
             <ContextSheetGroup label="模式">
               {planModeSupported ? (
-                // 点击即切换计划模式并关面板(Dash 拍板,不做开关);已开启时显示 ✓,再点退出。
+                // 点击即切换计划模式并关面板(产品决策,不做开关);已开启时显示 ✓,再点退出。
                 <ContextSheetRow
                   disabled={creating}
                   icon={<ListTodo color={colors.textPrimary} size={iconSize.lg} strokeWidth={iconStroke.regular} />}

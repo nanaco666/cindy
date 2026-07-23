@@ -892,7 +892,7 @@ export default function HomeScreen() {
   // 优先,与 openSession 同口径);本地更新按物理 shard 路由(被认领的 stale 会话物理仍在
   // 旧 shard),与设备详情页 executeBulkAction 的写法一致。
   //
-  // 乐观更新写序契约(2026-07-07 Dash 要求即点即变;并发覆盖问题为 review 必改):
+  // 乐观更新写序契约(2026-07-07 产品要求即点即变;并发覆盖问题为 review 必改):
   //  1. begin:每笔写先在 LatestWriteGuard 按**字段**登记最新写(review P1:title 与
   //     pinnedAt 等无交集字段的写互不取代),再乐观 applySessionPatch(行立即消失/重排/
   //     改标题),然后经 sessionMetaWriteQueue 串行出网(同会话至多一笔在途,发出序 = 操作序,
@@ -1021,7 +1021,7 @@ export default function HomeScreen() {
     setActionSheetSession(null);
     if (!session) return;
     if (action === 'delete') {
-      // 菜单不再展示会话标题(2026-07-07 Dash 反馈),删除确认在这里带上标题作上下文。
+      // 菜单不再展示会话标题(2026-07-07 产品反馈),删除确认在这里带上标题作上下文。
       const title = session.title?.trim() || '未命名对话';
       Alert.alert('删除对话？', `将删除「${title}」，删除后不可恢复。`, [
         { style: 'cancel', text: '取消' },
@@ -1075,7 +1075,7 @@ export default function HomeScreen() {
   }, []);
 
   // 滑动控制 bundle:稳定引用向嵌套渲染路径(项目组子行 / 自动化组子行)透传,
-  // 让这些行与顶层普通会话行拥有同一套左右滑操作(2026-07-09 Dash 需求)。
+  // 让这些行与顶层普通会话行拥有同一套左右滑操作(2026-07-09 产品需求)。
   const sessionSwipeControls = useMemo<SessionSwipeControls>(() => ({
     onArchive: archiveSession,
     onShowOptions: showSessionOptions,
@@ -3160,7 +3160,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   // 右侧状态槽(替代时间位):18×18 定位槽把点与 spinner 居中到同一锚点;
   // 点 10px(桌面 size-2=8px,手机屏幕密度高、观看距离远,放大一档保证可辨识,
-  // 2026-07 Dash 模拟器实测拍板)。
+  // 2026-07 产品模拟器实测拍板)。
   sessionRightStatusCell: {
     alignItems: 'center',
     flexShrink: 0,

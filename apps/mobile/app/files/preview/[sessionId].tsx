@@ -362,7 +362,7 @@ export default function RemoteFilePreviewScreen() {
               onDownload={() => void downloadAndShare(item)}
               // chat-text-quote:markdown 渲染态选中文字 → 引用进会话草稿
               // (携带当前文件路径,— source: 行),随即切回对话界面——与
-              // 「发送到会话」(sendToSession)的图片/路径处理一致(Dash 拍板);
+              // 「发送到会话」(sendToSession)的图片/路径处理一致(产品决策);
               // 引用在全局 store,导航后 composer 胶囊即时可见。
               onQuoteSelection={(text) => {
                 appendQuote(sessionId, {

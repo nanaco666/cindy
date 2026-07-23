@@ -1303,7 +1303,7 @@ describe('AgentInputCoordinator send transaction', () => {
     const sid = 'compact-silent';
     const createOpts = makeItem('q-compact', 'ignored').createOpts;
 
-    await h.coordinator.compact(sid, createOpts, { userName: 'Dash' });
+    await h.coordinator.compact(sid, createOpts, { userName: 'Carol' });
     await flush();
 
     expect(h.sendToAgent).toHaveBeenCalledWith(
@@ -1311,7 +1311,7 @@ describe('AgentInputCoordinator send transaction', () => {
       { type: 'user', content: '/compact' },
       createOpts,
       expect.objectContaining({
-        userName: 'Dash',
+        userName: 'Carol',
         throwOnStartFailure: true,
       }),
     );
@@ -1352,7 +1352,7 @@ describe('AgentInputCoordinator send transaction', () => {
     const sid = 'compact-queued-during-active-turn';
     h.setRunning(true);
 
-    await h.coordinator.compact(sid, makeItem('q-compact', 'ignored').createOpts, { userName: 'Dash' });
+    await h.coordinator.compact(sid, makeItem('q-compact', 'ignored').createOpts, { userName: 'Carol' });
     await flush();
 
     expect(h.sendToAgent).not.toHaveBeenCalled();
@@ -1368,7 +1368,7 @@ describe('AgentInputCoordinator send transaction', () => {
       sid,
       { type: 'user', content: '/compact' },
       expect.anything(),
-      expect.objectContaining({ userName: 'Dash', throwOnStartFailure: true }),
+      expect.objectContaining({ userName: 'Carol', throwOnStartFailure: true }),
     );
     expect(h.sendToAgent.mock.calls[0]?.[3].persistUserMessage).toBeUndefined();
     expect(mocks.createMessage).not.toHaveBeenCalled();
@@ -1384,7 +1384,7 @@ describe('AgentInputCoordinator send transaction', () => {
       throw sessionRunningError();
     });
 
-    await h.coordinator.compact(sid, createOpts, { userName: 'Dash' });
+    await h.coordinator.compact(sid, createOpts, { userName: 'Carol' });
     await flush();
 
     let projection = latestProjection(h.projections);
@@ -1403,7 +1403,7 @@ describe('AgentInputCoordinator send transaction', () => {
       sid,
       { type: 'user', content: '/compact' },
       createOpts,
-      expect.objectContaining({ userName: 'Dash', throwOnStartFailure: true }),
+      expect.objectContaining({ userName: 'Carol', throwOnStartFailure: true }),
     );
     expect(h.sendToAgent.mock.calls[1]?.[3].persistUserMessage).toBeUndefined();
     expect(mocks.createMessage).not.toHaveBeenCalled();
@@ -1421,7 +1421,7 @@ describe('AgentInputCoordinator send transaction', () => {
       return hostSendFailure('SESSION_RUNNING', '[SESSION_RUNNING] Session is already running a turn');
     });
 
-    await h.coordinator.compact(sid, createOpts, { userName: 'Dash' });
+    await h.coordinator.compact(sid, createOpts, { userName: 'Carol' });
     await flush();
 
     let projection = latestProjection(h.projections);
@@ -1440,7 +1440,7 @@ describe('AgentInputCoordinator send transaction', () => {
       sid,
       { type: 'user', content: '/compact' },
       createOpts,
-      expect.objectContaining({ userName: 'Dash', throwOnStartFailure: true }),
+      expect.objectContaining({ userName: 'Carol', throwOnStartFailure: true }),
     );
     expect(h.sendToAgent.mock.calls[1]?.[3].persistUserMessage).toBeUndefined();
     expect(mocks.createMessage).not.toHaveBeenCalled();
@@ -1458,7 +1458,7 @@ describe('AgentInputCoordinator send transaction', () => {
       throw sessionRunningError();
     });
 
-    await h.coordinator.compact(sid, createOpts, { userName: 'Dash' });
+    await h.coordinator.compact(sid, createOpts, { userName: 'Carol' });
     await flush();
 
     let projection = latestProjection(h.projections);
@@ -1477,7 +1477,7 @@ describe('AgentInputCoordinator send transaction', () => {
       sid,
       { type: 'user', content: '/compact' },
       createOpts,
-      expect.objectContaining({ userName: 'Dash', throwOnStartFailure: true }),
+      expect.objectContaining({ userName: 'Carol', throwOnStartFailure: true }),
     );
     expect(h.sendToAgent.mock.calls[1]?.[3].persistUserMessage).toBeUndefined();
     expect(mocks.createMessage).not.toHaveBeenCalled();
@@ -1491,7 +1491,7 @@ describe('AgentInputCoordinator send transaction', () => {
     const createOpts = makeItem('q-compact', 'ignored').createOpts;
 
     h.setRunning(true);
-    await h.coordinator.compact(sid, createOpts, { userName: 'Dash' });
+    await h.coordinator.compact(sid, createOpts, { userName: 'Carol' });
     await flush();
 
     let projection = latestProjection(h.projections);
@@ -1510,7 +1510,7 @@ describe('AgentInputCoordinator send transaction', () => {
       sid,
       { type: 'user', content: '/compact' },
       createOpts,
-      expect.objectContaining({ userName: 'Dash', throwOnStartFailure: true }),
+      expect.objectContaining({ userName: 'Carol', throwOnStartFailure: true }),
     );
     expect(h.sendToAgent.mock.calls[0]?.[3].persistUserMessage).toBeUndefined();
     expect(mocks.createMessage).not.toHaveBeenCalled();
@@ -1526,7 +1526,7 @@ describe('AgentInputCoordinator send transaction', () => {
       const createOpts = makeItem('q-compact', 'ignored').createOpts;
 
       h.setRunning(true);
-      await h.coordinator.compact(sid, createOpts, { userName: 'Dash' });
+      await h.coordinator.compact(sid, createOpts, { userName: 'Carol' });
       await flush();
 
       let projection = latestProjection(h.projections);
@@ -1560,7 +1560,7 @@ describe('AgentInputCoordinator send transaction', () => {
       const createOpts = makeItem('q-compact', 'ignored').createOpts;
 
       h.setRunning(true);
-      await h.coordinator.compact(sid, createOpts, { userName: 'Dash' });
+      await h.coordinator.compact(sid, createOpts, { userName: 'Carol' });
       await flush();
 
       let projection = latestProjection(h.projections);
@@ -1594,7 +1594,7 @@ describe('AgentInputCoordinator send transaction', () => {
 
       h.coordinator.enqueue(sid, first);
       await flush();
-      await h.coordinator.compact(sid, createOpts, { userName: 'Dash' });
+      await h.coordinator.compact(sid, createOpts, { userName: 'Carol' });
       await flush();
 
       let projection = latestProjection(h.projections);
@@ -1617,7 +1617,7 @@ describe('AgentInputCoordinator send transaction', () => {
         sid,
         { type: 'user', content: '/compact' },
         createOpts,
-        expect.objectContaining({ userName: 'Dash', throwOnStartFailure: true }),
+        expect.objectContaining({ userName: 'Carol', throwOnStartFailure: true }),
       );
       expect(h.sendToAgent.mock.calls[1]?.[3].persistUserMessage).toBeUndefined();
       expect(mocks.createMessage).toHaveBeenCalledTimes(1);

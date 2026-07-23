@@ -94,7 +94,7 @@ describe('mobile message media thumbnail wiring', () => {
     expect(lightboxSource).toContain('message.imageLightbox');
     expect(lightboxSource).toContain('shouldDismissLightbox');
     expect(lightboxSource).toContain('Gesture.Pinch()');
-    // 分享按 Dash 拍板走系统分享单;expo-sharing 必须动态 import(旧构建缺原生模块)
+    // 分享按产品决策走系统分享单;expo-sharing 必须动态 import(旧构建缺原生模块)
     const screenShare = screenSource.includes("await import('expo-sharing')");
     expect(screenShare).toBe(true);
     expect(screenSource).not.toMatch(/^import \* as Sharing from 'expo-sharing';/m);

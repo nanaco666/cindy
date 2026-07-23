@@ -37,7 +37,7 @@ export const LEARN_TERMINAL_STATUSES: readonly LearnRunStatus[] = [
 /**
  * 蒸馏产物的溯源记录 —— 落 skillhub registry manifest(StoredInstall.provenance)。
  * personal=true 的 skill 含本地会话衍生内容。当前**不拦截**发布 —— 该字段是
- * 将来「发布前泛化」流程(Dash 定的产品方向,另行独立 PR)的判定依据。
+ * 将来「发布前泛化」流程(产品定的方向,另行独立 PR)的判定依据。
  */
 export interface LearnProvenance {
   method: 'learn';

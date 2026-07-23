@@ -205,7 +205,7 @@ export const SessionItem = memo(function SessionItem({
   //   1. error(出错终止 / 定时任务失败未读)→ 红点   —— 红专职表示"坏了"
   //   2. awaiting(等待回复/权限/计划审阅)→ TapTap 蓝点 —— "在等你",邀请而非告警
   //   3. isRunning → spinner(中性灰,running 的橙色语义由左侧 vendor mark 呼吸表达,
-  //      右槽 spinner 保持低调不抢色 —— 2026-07 Dash 拍板不染橙)
+  //      右槽 spinner 保持低调不抢色 —— 2026-07 产品决策不染橙)
   //   4. attention 完成未读(done / 未读定时任务)→ 绿点
   //   5. else → 时间文字
   //

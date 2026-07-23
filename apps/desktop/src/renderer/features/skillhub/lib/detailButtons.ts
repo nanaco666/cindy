@@ -165,7 +165,7 @@ export function deriveDetailActionState(
       // learned 的 registry hash 对应本地蒸馏结果,不是 server 已发布版本。
       // 即使 localChanged=false 也不能显示 published-tag;若用户确实拥有同名
       // 市场 skill,应走发布新版本路径。(个人上下文产物的发布语义 —— 发布前
-      // 泛化 —— 按 Dash 的 review 方向另行独立 PR,不在本系列做硬拦截。)
+      // 泛化 —— 按产品 review 方向另行独立 PR,不在本系列做硬拦截。)
       status = { kind: 'publish-new-version' };
     } else if (detailState.isMine === true) {
       status = isMineDirty

@@ -3392,8 +3392,8 @@ const MessageItem = memo(function MessageItem({
     case 'plan_review':
       return <PlanReviewBubble message={message} />;
     case 'error':
-      // interrupted-turn-resume:app 退出中断标记行不进消息流(2026-07-05 Dash
-      // 拍板)——它作为「会话尾部是否停在中断态」的判定源保留在 messages 数组里,
+      // interrupted-turn-resume:app 退出中断标记行不进消息流(2026-07-05 产品
+      // 决策)——它作为「会话尾部是否停在中断态」的判定源保留在 messages 数组里,
       // 呈现走 CCAgentSessionView 输入框上方的 InterruptedTurnBanner(与 ErrorBanner
       // 同风格)+ sidebar 'error' 红点,这里渲染 null。
       if (message.errorReason === APP_EXIT_INTERRUPTED_REASON) return null;
