@@ -29,6 +29,14 @@ Claude Code 与 Codex 作为 agent 引擎驱动。
 本仓库是 Cindy 的开源**客户端** —— 桌面端、手机端及其共享 packages，以 pnpm
 monorepo 组织。
 
+## 界面预览
+
+<p align="center">
+  <img src="docs/assets/readme-cindy-ui-redacted.png" alt="Cindy 桌面端界面（已脱敏）" width="1200" />
+</p>
+
+> 截图已遮蔽账号、项目、会话和运行信息，仅用于展示 Cindy 的界面结构与工作方式。
+
 ## 本仓包含什么
 
 | 路径 | 说明 |
@@ -87,7 +95,8 @@ agent 的模式。依赖服务端的能力在该模式下不可用。
 
 ## 架构
 
-- [`docs/design-rules/cindy-design-system.md`](docs/design-rules/cindy-design-system.md) —— 视觉设计系统、颜色 token 与 UI 规范
+- [`DESIGN.md`](DESIGN.md) —— 视觉设计系统、颜色 token 与 UI 规范
+- [`docs/README.md`](docs/README.md) —— 完整文档与规则索引
 - [`CONTRIBUTING.md`](CONTRIBUTING.md) —— 面向社区贡献者的环境、验证与提交流程
 - [`AGENTS.md`](AGENTS.md) —— 工程规范、启动 / 运行时契约、模块边界
 - [`docs/dev-rules/`](docs/dev-rules/) —— 架构深度文档（如 Orca 多 agent 协同）

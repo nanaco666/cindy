@@ -30,6 +30,15 @@ coordinate multiple agents as a team, and dispatch tasks from IM and schedules.
 This repository is the open-source **client** for Cindy — the desktop and mobile
 apps plus their shared packages, organized as a pnpm monorepo.
 
+## Interface preview
+
+<p align="center">
+  <img src="docs/assets/readme-cindy-ui-redacted.png" alt="Cindy desktop interface (privacy-redacted)" width="1200" />
+</p>
+
+> The screenshot masks account, project, session, and runtime details. It is
+> included only to show Cindy's interface structure and workflow.
+
 ## What's in this repo
 
 | Path | Description |
@@ -94,7 +103,8 @@ mode.
 
 ## Architecture
 
-- [`docs/design-rules/cindy-design-system.md`](docs/design-rules/cindy-design-system.md) — visual design system, color tokens, and UI conventions
+- [`DESIGN.md`](DESIGN.md) — visual design system, color tokens, and UI conventions
+- [`docs/README.md`](docs/README.md) — complete documentation and rules index
 - [`CONTRIBUTING.en.md`](CONTRIBUTING.en.md) — contributor setup, validation, and submission workflow
 - [`AGENTS.md`](AGENTS.md) — engineering rules, launch/runtime contracts, and module boundaries
 - [`docs/dev-rules/`](docs/dev-rules/) — deep-dive architecture docs (e.g. Orca multi-agent orchestration)

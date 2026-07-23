@@ -12,5 +12,5 @@
 
 ## 当前规范
 
-- [`cindy-design-system.md`](cindy-design-system.md)：Cindy 的视觉语言、颜色与主题
-  Token、排版、组件、布局、动效、交互和内容规范。
+- [`DESIGN.md`](../../DESIGN.md)：Cindy 的视觉语言、颜色与主题 Token、排版、组件、
+  布局、动效、交互和内容规范。`cindy-design-system.md` 仅保留为历史引用兼容入口。
