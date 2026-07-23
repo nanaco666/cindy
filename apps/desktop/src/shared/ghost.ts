@@ -71,8 +71,52 @@ const GHOST_ID_RE = /^[a-z0-9][a-z0-9-]{0,31}$/;
  * 字节永远由主机落盘,沙箱本身仍无 fs——本槽是"申请主机代写"的资格,
  * 不是文件系统访问权。
  */
-export const GHOST_SLOTS = ['subscribe', 'tool', 'card', 'panel', 'cindy', 'network', 'notify', 'fs'] as const;
+export const GHOST_SLOTS = [
+  'subscribe',
+  'tool',
+  'card',
+  'panel',
+  'cindy',
+  'agent',
+  'node',
+  'network',
+  'notify',
+  'fs',
+] as const;
 export type GhostSlot = (typeof GHOST_SLOTS)[number];
+
+/**
+ * Agent 新回合能力详单。
+ *
+ * 申请 `agent` 槽默认只允许消费宿主在真实用户点击插件卡片时签发的
+ * 一次性通行票。`background: true` 额外允许插件在没有当次点击票据时，
+ * 对已经由用户建立过关联的会话发起回合；这是更高一档权限，安装时单列。
+ */
+export interface GhostAgentNeeds {
+  background?: boolean;
+}
+
+/** 插件随包本地 Node 工作进程使用的 stdio 协议。 */
+export const GHOST_NODE_PROTOCOLS = ['json-rpc-stdio', 'mcp-stdio'] as const;
+export type GhostNodeProtocol = (typeof GHOST_NODE_PROTOCOLS)[number];
+
+/** Node 工作进程生命周期；常驻档会在安装确认中单列高风险权限。 */
+export const GHOST_NODE_LIFECYCLES = ['on-demand', 'resident'] as const;
+export type GhostNodeLifecycle = (typeof GHOST_NODE_LIFECYCLES)[number];
+
+/**
+ * 随插件安装的本地 Node 工作进程声明。
+ *
+ * 只允许指定包内入口和固定协议，不接受 command / args / shell / env，避免把
+ * ghost.json 变成任意命令启动器。Node 进程拥有当前系统用户级本机权限，主机
+ * 只保证它不能绕过 main.js 调 Cindy API，并不能把它变成系统级沙箱。
+ */
+export interface GhostNodeNeeds {
+  entry: string;
+  protocol: GhostNodeProtocol;
+  lifecycle?: GhostNodeLifecycle;
+  idleTimeoutSeconds?: number;
+}
 
 /**
  * 电子脑启动模式(2026-07-12):
@@ -635,6 +679,10 @@ export interface GhostManifest {
   entry: string;
   /** 电子脑启动模式;缺省 = 'on-demand'(被需要才拉起)。 */
   launch?: GhostLaunchMode;
+  /** Agent 新回合能力详单；须与 slots 中的 `agent` 成对。 */
+  agent?: GhostAgentNeeds;
+  /** 随包本地 Node 工作进程详单；须与 slots 中的 `node` 成对。 */
+  node?: GhostNodeNeeds;
   /**
    * 设置页「自定义设置区」界面入口(可选;安装目录内相对路径,意识自绘)。
    * 与面板同款沙箱 webview 渲染(零桥、分区断网、CSP 'self'),主题 token
@@ -701,11 +749,32 @@ export interface InstalledGhost {
    * 布局位置保留;重新启用即恢复。真身是安装目录里的 `.disabled` 标记文件。
    */
   enabled: boolean;
+  /** 安装时由主机验出的来源/签名等级；作者清单不能自报。 */
+  trust?: GhostTrustInfo;
   /**
    * 图标的 data URL(main 按 manifest.icon 读安装目录生成;未声明图标、
    * 文件缺失或超限时缺省)。renderer 直接作 <img src> 用,无需 loading 态。
    */
   iconDataUrl?: string;
+}
+
+/** 插件包的来源与审核等级；决定 UI 徽标，不改变运行时 slot 权限。 */
+export type GhostTrustLevel =
+  | 'cindy-official'
+  | 'reviewed'
+  | 'verified-publisher'
+  | 'unverified';
+
+export interface GhostTrustInfo {
+  level: GhostTrustLevel;
+  publisherSigned: boolean;
+  publisherVerified: boolean;
+  reviewed: boolean;
+  publisherName?: string;
+  publisherKeyId?: string;
+  reviewerName?: string;
+  /** 包含 review 声明但当前客户端不认识该审核 key，不因此抬高等级。 */
+  unknownReviewer?: boolean;
 }
 
 /** 意识面板的 panelKind(布局树寻址用)。 */
@@ -725,6 +794,8 @@ export function ghostContentKeys(manifest: GhostManifest): string[] {
   keys.push('code');
   for (const slot of manifest.slots) {
     if (slot === 'cindy') keys.push('slotCindy');
+    else if (slot === 'agent') keys.push('slotAgent');
+    else if (slot === 'node') keys.push('slotNode');
     else if (slot === 'tool') keys.push('slotTool');
     else if (slot === 'subscribe') keys.push('slotSubscribe');
     else if (slot === 'card') keys.push('slotCard');
@@ -792,7 +863,7 @@ export interface GhostPermissionItem {
   /** 稳定键:更新 diff 按它对齐(内容变化视为移除+新增,如面板换边)。 */
   key: string;
   /** 图标分组(renderer 按 kind 选图标)。 */
-  kind: 'cindy' | 'tool' | 'command' | 'panel' | 'code' | 'subscribe' | 'card' | 'network' | 'notify' | 'fs';
+  kind: 'cindy' | 'agent' | 'node' | 'tool' | 'command' | 'panel' | 'code' | 'subscribe' | 'card' | 'network' | 'notify' | 'fs';
   /** i18n key 后缀,消费方拼 `settings.ghosts.perm.<labelKey>`。 */
   labelKey: string;
   /** i18n 插值参数(工具名、指令名、面板标题等)。 */
@@ -838,6 +909,41 @@ export function ghostPermissionItems(manifest: GhostManifest): GhostPermissionIt
       labelKey: 'networkHost',
       labelArgs: { host },
     });
+  }
+  // agent 槽:真人点击触发是基础档；后台自动触发另列一项高风险权限。
+  if (manifest.slots.includes('agent')) {
+    items.push({
+      key: 'agent:user-action',
+      kind: 'agent',
+      labelKey: 'agentUserAction',
+      detailKey: 'agentUserActionDetail',
+    });
+    if (manifest.agent?.background === true) {
+      items.unshift({
+        key: 'agent:background',
+        kind: 'agent',
+        labelKey: 'agentBackground',
+        detailKey: 'agentBackgroundDetail',
+      });
+    }
+  }
+  // Node 是本机用户级执行权，不与浏览器沙箱的 `code` 混称。基础执行与
+  // 常驻分别列出，用户能看懂“能运行”与“会一直运行”是两件事。
+  if (manifest.slots.includes('node') && manifest.node) {
+    items.unshift({
+      key: 'node:execute',
+      kind: 'node',
+      labelKey: manifest.node.protocol === 'mcp-stdio' ? 'nodeMcp' : 'nodeRuntime',
+      detailKey: 'nodeRuntimeDetail',
+    });
+    if (manifest.node.lifecycle === 'resident') {
+      items.unshift({
+        key: 'node:resident',
+        kind: 'node',
+        labelKey: 'nodeResident',
+        detailKey: 'nodeResidentDetail',
+      });
+    }
   }
   // 多连接声明:逐条列"可连接你添加的 <连接类型>"——地址是用户后来自己加的
   // (且每次新增都过主机受信确认弹窗),装入时只能告知形态,不能列出具体域名。
@@ -960,13 +1066,20 @@ export function ghostPermissionItems(manifest: GhostManifest): GhostPermissionIt
   if (manifest.launch === 'resident') {
     items.push({ key: 'resident', kind: 'code', labelKey: 'resident', detailKey: 'residentDetail' });
   }
-  // 可执行代码的沙箱说明分档:声明了 network 槽的意识不能再宣称"无网络
-  // 访问"(那句会变成假话),换成"网络仅限白名单域名经主机代发"的版本。
+  // 可执行代码的沙箱说明分档:
+  // - 有 node 槽时浏览器沙箱部分仍隔离,但不能再笼统说"无文件无网络"
+  //   (Node 侧已摊过牌);
+  // - 声明了 network 槽时不能宣称"无网络访问";
+  // - 默认:纯沙箱、无文件无网络。
+  let codeDetailKey: string;
+  if (manifest.slots.includes('node')) codeDetailKey = 'codeDetailWithNode';
+  else if (manifest.slots.includes('network')) codeDetailKey = 'codeDetailNetwork';
+  else codeDetailKey = 'codeDetail';
   items.push({
     key: 'code',
     kind: 'code',
     labelKey: 'code',
-    detailKey: manifest.slots.includes('network') ? 'codeDetailNetwork' : 'codeDetail',
+    detailKey: codeDetailKey,
   });
   return items;
 }
@@ -1316,6 +1429,104 @@ export function validateGhostManifest(raw: unknown): ManifestValidation {
     if (cindy.image === undefined && cindy.video === undefined) {
       return { ok: false, reason: 'cindy 能力详单不能是空对象' };
     }
+  }
+
+  // agent 槽详单:有槽无详单 = 仅允许真实用户点击触发；background 是
+  // 独立高风险加档。写了详单却没申请槽属于清单自相矛盾。
+  let agent: GhostAgentNeeds | undefined;
+  if (raw.agent !== undefined) {
+    if (!isPlainObject(raw.agent)) {
+      return { ok: false, reason: 'agent 能力详单必须是对象(如 { "background": true })' };
+    }
+    if (!slots.includes('agent')) {
+      return { ok: false, reason: '声明了 agent 能力详单但 slots 未包含 "agent"' };
+    }
+    const agentRaw = raw.agent as Record<string, unknown>;
+    const unknownAgentField = Object.keys(agentRaw).find((key) => key !== 'background');
+    if (unknownAgentField) {
+      return {
+        ok: false,
+        reason: `agent 含不允许的字段 ${JSON.stringify(unknownAgentField)}`,
+      };
+    }
+    if (agentRaw.background !== undefined && typeof agentRaw.background !== 'boolean') {
+      return { ok: false, reason: 'agent.background 必须是布尔值' };
+    }
+    if (agentRaw.background !== true) {
+      return {
+        ok: false,
+        reason: 'agent 能力详单目前只有 background: true 这一项；仅需用户点击触发时请省略 agent 字段',
+      };
+    }
+    agent = { background: true };
+  }
+
+  // node 槽详单:只收包内入口 + 固定 stdio 协议 + 生命周期。这里刻意采用
+  // 字段白名单，command/args/shell/env 等任意命令启动面一律在装入前拒绝。
+  let node: GhostNodeNeeds | undefined;
+  if (raw.node !== undefined) {
+    if (!isPlainObject(raw.node)) {
+      return { ok: false, reason: 'node 能力详单必须是对象' };
+    }
+    if (!slots.includes('node')) {
+      return { ok: false, reason: '声明了 node 能力详单但 slots 未包含 "node"' };
+    }
+    const nodeRaw = raw.node as Record<string, unknown>;
+    const allowedNodeFields = new Set(['entry', 'protocol', 'lifecycle', 'idleTimeoutSeconds']);
+    const unknownNodeField = Object.keys(nodeRaw).find((key) => !allowedNodeFields.has(key));
+    if (unknownNodeField) {
+      return {
+        ok: false,
+        reason: `node 含不允许的字段 ${JSON.stringify(unknownNodeField)}；不能声明 command/args/shell/env`,
+      };
+    }
+    if (!isSafeGhostRelativePath(nodeRaw.entry)) {
+      return { ok: false, reason: 'node.entry 必须是安装目录内的安全相对路径' };
+    }
+    if (!/\.(?:c?js)$/.test(nodeRaw.entry)) {
+      return { ok: false, reason: 'node.entry 必须是 CommonJS .js / .cjs 文件' };
+    }
+    if (nodeRaw.entry === raw.entry) {
+      return { ok: false, reason: 'node.entry 不能与浏览器沙箱 entry 使用同一个文件' };
+    }
+    if (
+      typeof nodeRaw.protocol !== 'string' ||
+      !(GHOST_NODE_PROTOCOLS as readonly string[]).includes(nodeRaw.protocol)
+    ) {
+      return { ok: false, reason: `node.protocol 必须是 ${GHOST_NODE_PROTOCOLS.join(' / ')}` };
+    }
+    if (
+      nodeRaw.lifecycle !== undefined &&
+      (typeof nodeRaw.lifecycle !== 'string' ||
+        !(GHOST_NODE_LIFECYCLES as readonly string[]).includes(nodeRaw.lifecycle))
+    ) {
+      return { ok: false, reason: `node.lifecycle 必须是 ${GHOST_NODE_LIFECYCLES.join(' / ')}` };
+    }
+    if (
+      nodeRaw.idleTimeoutSeconds !== undefined &&
+      (typeof nodeRaw.idleTimeoutSeconds !== 'number' ||
+        !Number.isInteger(nodeRaw.idleTimeoutSeconds) ||
+        nodeRaw.idleTimeoutSeconds < 30 ||
+        nodeRaw.idleTimeoutSeconds > 3600)
+    ) {
+      return { ok: false, reason: 'node.idleTimeoutSeconds 必须是 30–3600 的整数' };
+    }
+    if (nodeRaw.lifecycle === 'resident' && nodeRaw.idleTimeoutSeconds !== undefined) {
+      return { ok: false, reason: 'node.lifecycle 为 resident 时不能再声明 idleTimeoutSeconds' };
+    }
+    node = {
+      entry: nodeRaw.entry,
+      protocol: nodeRaw.protocol as GhostNodeProtocol,
+      ...(nodeRaw.lifecycle !== undefined
+        ? { lifecycle: nodeRaw.lifecycle as GhostNodeLifecycle }
+        : {}),
+      ...(nodeRaw.idleTimeoutSeconds !== undefined
+        ? { idleTimeoutSeconds: nodeRaw.idleTimeoutSeconds }
+        : {}),
+    };
+  }
+  if (slots.includes('node') && node === undefined) {
+    return { ok: false, reason: 'slots 声明了 "node" 但缺少 node 工作进程详单' };
   }
 
   // 订阅槽详单(卡槽①):与 slots 含 'subscribe' 成对(有详单必有槽;有槽
@@ -2165,6 +2376,8 @@ export function validateGhostManifest(raw: unknown): ManifestValidation {
       slots,
       ...(tools !== undefined ? { tools } : {}),
       ...(cindy !== undefined ? { cindy } : {}),
+      ...(agent !== undefined ? { agent } : {}),
+      ...(node !== undefined ? { node } : {}),
       ...(subscribe !== undefined ? { subscribe } : {}),
       ...(network !== undefined ? { network } : {}),
       ...(setup !== undefined ? { setup } : {}),
@@ -2219,6 +2432,87 @@ export interface GhostPipeHostRequest {
   type: 'host-request';
   kind: 'app-context';
 }
+
+/** 插件请求 Agent 新回合时可选的会话处理方式。 */
+export const GHOST_AGENT_RUN_MODES = ['continue', 'fork', 'new'] as const;
+export type GhostAgentRunMode = (typeof GHOST_AGENT_RUN_MODES)[number];
+
+/** Agent 回合的触发来源；后台触发需要清单中的额外权限。 */
+export const GHOST_AGENT_TRIGGER_KINDS = ['user-action', 'background'] as const;
+export type GhostAgentTriggerKind = (typeof GHOST_AGENT_TRIGGER_KINDS)[number];
+
+/**
+ * 上行:请求 Cindy Agent 开始一个普通用户回合。
+ *
+ * promptTemplate 必须且只能含一个 `{{user_message}}`；宿主完成替换并把
+ * `{{event_json}}` 替换成 event 的 JSON。插件文本始终进入普通 user 回合，
+ * 不会进入 system prompt。
+ */
+export interface GhostPipeAgentRequest {
+  type: 'agent-request';
+  mode: GhostAgentRunMode;
+  trigger?: GhostAgentTriggerKind;
+  promptTemplate: string;
+  userMessage: string;
+  event?: unknown;
+  /** user-action 触发必填；来自宿主下发的 card-action 事件。 */
+  userActionToken?: string;
+  /** background 触发必填；必须是该插件曾由真人点击建立过关联的会话。 */
+  sessionId?: string;
+  /** new 模式的新会话标题；其它模式忽略。 */
+  title?: string;
+}
+
+/** 插件请求 Agent 新回合的结构化返回。 */
+export type GhostPipeAgentResult =
+  | {
+      ok: true;
+      sessionId: string;
+      mode: GhostAgentRunMode;
+      disposition: 'created' | 'resumed' | 'active' | 'queued' | 'forked';
+    }
+  | {
+      ok: false;
+      errorCode:
+        | 'INVALID_REQUEST'
+        | 'PERMISSION_DENIED'
+        | 'TOKEN_EXPIRED'
+        | 'RATE_LIMITED'
+        | 'HOST_NOT_READY'
+        | 'SESSION_NOT_FOUND'
+        | 'SESSION_UNAVAILABLE'
+        | 'FORK_FAILED'
+        | 'INTERNAL';
+      message: string;
+    };
+
+/** 上行:main.js 通过主机中继调用随包 Node 工作进程。 */
+export interface GhostPipeNodeRequest {
+  type: 'node-request';
+  /** JSON-RPC 方法名；mcp-stdio 时使用 tools/list、tools/call 等 MCP 方法。 */
+  method: string;
+  params?: unknown;
+  /** 单次等待上限，缺省 30 秒；允许 1–120 秒。 */
+  timeoutMs?: number;
+}
+
+/** Node / stdio MCP 请求的结构化返回。 */
+export type GhostPipeNodeResult =
+  | { ok: true; result: unknown }
+  | {
+      ok: false;
+      errorCode:
+        | 'INVALID_REQUEST'
+        | 'PERMISSION_DENIED'
+        | 'PROCESS_START_FAILED'
+        | 'PROCESS_EXITED'
+        | 'PROTOCOL_ERROR'
+        | 'TIMEOUT'
+        | 'RATE_LIMITED'
+        | 'INTERNAL';
+      message: string;
+      data?: unknown;
+    };
 
 /** host-request 与 settings 页面 `/app-context` 共用的只读返回形态。 */
 export interface GhostAppContextResult {
@@ -2561,6 +2855,22 @@ export type GhostPipeEventPush =
       data: { sessionId: string; text: string };
     }
   | {
+      /** 随包 Node 进程发来的 JSON-RPC notification / MCP 进度事件。 */
+      type: 'event';
+      name: 'node-notification';
+      method: string;
+      params?: unknown;
+      ts: number;
+    }
+  | {
+      /** Node 工作进程生命周期变化；供 main.js 更新自己的卡片/面板状态。 */
+      type: 'event';
+      name: 'node-status';
+      state: 'starting' | 'running' | 'stopped' | 'crashed';
+      message?: string;
+      ts: number;
+    }
+  | {
       /**
        * 交互卡按钮点击(v2,card 槽):真实用户点了自绘卡上的 data-ghost-action
        * 元素,宿主把点击回传给意识电子脑。fire-and-forget(无 hookId/裁决)——
@@ -2572,6 +2882,13 @@ export type GhostPipeEventPush =
       name: 'card-action';
       callId: string;
       actionId: string;
+      /** 被点卡片所属会话；老卡可能没有归属，缺省时不能唤起 Agent。 */
+      sessionId?: string;
+      /**
+       * 宿主为这次真实点击签发的一次性通行票。仅声明了 agent 槽且卡片有
+       * 会话归属时提供；短时有效、消费一次即作废、绑定当前插件与会话。
+       */
+      userActionToken?: string;
       /**
        * 用户输入的文字(仅当按钮声明了 data-ghost-prompt:宿主点击时弹输入框
        * 收集,非空才带;≤ GHOST_CARD_ACTION_PROMPT_MAX_LEN)。无声明的普通

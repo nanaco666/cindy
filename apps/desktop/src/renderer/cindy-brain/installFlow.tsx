@@ -7,14 +7,19 @@ import {
   diffGhostPermissionItems,
   ghostPermissionItems,
   type GhostManifest,
+  type GhostTrustInfo,
   type InstalledGhost,
 } from '../../shared/ghost';
-import { GhostInstallReview, GhostPermissionDiffView } from './GhostPermissionList';
+import {
+  GhostInstallReview,
+  GhostPermissionDiffView,
+  GhostTrustSummary,
+} from './GhostPermissionList';
 import { ghostInstallErrorKey } from './installErrorKey';
 
 /**
- * 装入/更新意识的统一编排:inspect(验明正身)→ 确认弹窗 →
- * install / update。
+ * 装入/更新意识的统一编排:inspect(验明正身)→ Renderer 权限清单 →
+ * install / update。若含 Node，Main 会在真正写盘前再弹一次系统安全确认。
  *
  * 「装意识前弹确认」是 README 定下的安全原则:确认框展示的是**意识自称的身份**
  * (名字/版本/形态/是否带面板),不是文件名 —— 文件名可以随便改,身份卡不会陪它演。
@@ -70,6 +75,8 @@ function findInstalled(id: string): InstalledGhost | null {
 async function confirmAndRunUpdate(
   lizFilePath: string,
   manifest: GhostManifest,
+  trust: GhostTrustInfo,
+  packageSha256: string,
   installed: InstalledGhost,
   deps: InstallFlowDeps,
 ): Promise<void> {
@@ -82,14 +89,26 @@ async function confirmAndRunUpdate(
       from: installed.manifest.version,
       to: manifest.version,
     }),
-    content: <GhostPermissionDiffView diff={diff} />,
+    content: (
+      <div>
+        <GhostTrustSummary trust={trust} />
+        <div className="mt-3">
+          <GhostPermissionDiffView diff={diff} />
+        </div>
+      </div>
+    ),
     maxWidth: GHOST_CONFIRM_MAX_WIDTH,
     confirmText: t('settings.ghosts.updateConfirm.confirm'),
     cancelText: t('settings.ghosts.updateConfirm.cancel'),
   });
   if (!ok) return;
   try {
-    const { ghost } = await window.electronAPI.ghosts.update(lizFilePath);
+    const result = await window.electronAPI.ghosts.update(lizFilePath, {
+      expectedPackageSha256: packageSha256,
+    });
+    // Node 的 Main 原生安全确认取消属于正常返回，不显示错误或成功提示。
+    if ('canceled' in result) return;
+    const { ghost } = result;
     toast.success(
       t('settings.ghosts.toast.updated', {
         name: ghost.manifest.name,
@@ -109,8 +128,13 @@ export async function confirmAndInstallGhost(
 
   // 1) 只验不装,拿身份卡;坏文件在这一步就被拒,不会弹确认。
   let manifest: GhostManifest;
+  let trust: GhostTrustInfo;
+  let packageSha256: string;
   try {
-    manifest = (await window.electronAPI.ghosts.inspect(lizFilePath)).manifest;
+    const inspected = await window.electronAPI.ghosts.inspect(lizFilePath);
+    manifest = inspected.manifest;
+    trust = inspected.trust;
+    packageSha256 = inspected.packageSha256;
   } catch (err) {
     toast.error(t(ghostInstallErrorKey(extractIpcError(err)?.code)));
     return;
@@ -120,7 +144,7 @@ export async function confirmAndInstallGhost(
   // "已经注入",直接给换版确认)。
   const installed = findInstalled(manifest.id);
   if (installed) {
-    await confirmAndRunUpdate(lizFilePath, manifest, installed, deps);
+    await confirmAndRunUpdate(lizFilePath, manifest, trust, packageSha256, installed, deps);
     return;
   }
 
@@ -142,6 +166,7 @@ export async function confirmAndInstallGhost(
       <GhostInstallReview
         description={manifest.description}
         meta={factsLine}
+        trust={trust}
         items={ghostPermissionItems(manifest)}
       />
     ),
@@ -152,9 +177,14 @@ export async function confirmAndInstallGhost(
   });
   if (!ok) return;
 
-  // 3) 真装(main 侧同一主体:校验 + 落盘 + 停靠)。
+  // 3) 真装(main 侧同一主体:来源校验 + Node 原生确认 + 落盘 + 停靠)。
   try {
-    const { ghost } = await window.electronAPI.ghosts.install(lizFilePath, { enable });
+    const result = await window.electronAPI.ghosts.install(lizFilePath, {
+      enable,
+      expectedPackageSha256: packageSha256,
+    });
+    if ('canceled' in result) return;
+    const { ghost } = result;
     toast.success(
       enable
         ? t('settings.ghosts.toast.installed', { name: ghost.manifest.name })
@@ -175,8 +205,13 @@ export async function pickAndUpdateGhost(expectedId: string, deps: InstallFlowDe
   if (!picked || 'canceled' in picked) return;
 
   let manifest: GhostManifest;
+  let trust: GhostTrustInfo;
+  let packageSha256: string;
   try {
-    manifest = (await window.electronAPI.ghosts.inspect(picked.filePath)).manifest;
+    const inspected = await window.electronAPI.ghosts.inspect(picked.filePath);
+    manifest = inspected.manifest;
+    trust = inspected.trust;
+    packageSha256 = inspected.packageSha256;
   } catch (err) {
     toast.error(t(ghostInstallErrorKey(extractIpcError(err)?.code)));
     return;
@@ -193,5 +228,12 @@ export async function pickAndUpdateGhost(expectedId: string, deps: InstallFlowDe
     toast.error(t('settings.ghosts.errors.generic'));
     return;
   }
-  await confirmAndRunUpdate(picked.filePath, manifest, installed, deps);
+  await confirmAndRunUpdate(
+    picked.filePath,
+    manifest,
+    trust,
+    packageSha256,
+    installed,
+    deps,
+  );
 }

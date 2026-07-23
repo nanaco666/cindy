@@ -117,6 +117,25 @@ describe('cardActionDispatch · 资格审 + 投递', () => {
     });
   });
 
+  it('卡片有会话归属时签发 Agent 一次性票,并随点击事件一起交给插件', async () => {
+    const issueUserActionToken = vi.fn(() => 'one-shot-token');
+    const { dispatcher, sendToGhost } = makeDispatcher({
+      resolveLiveInfo: () => ({ ghostId: 'cindy-mivo', sessionId: 'sess-1' }),
+      issueUserActionToken,
+    });
+
+    expect((await dispatcher.dispatch(CALL_ID, CUSTOM_ID)).ok).toBe(true);
+    expect(issueUserActionToken).toHaveBeenCalledWith('cindy-mivo', 'sess-1');
+    expect(sendToGhost).toHaveBeenCalledWith(
+      'cindy-mivo',
+      expect.objectContaining({
+        name: 'card-action',
+        sessionId: 'sess-1',
+        userActionToken: 'one-shot-token',
+      }),
+    );
+  });
+
   it('衍生卡上的按钮再被点:新 spawn 基于根 callId 铸,平铺不嵌套', async () => {
     const { dispatcher, sendToGhost, reopenForAction } = makeDispatcher();
     const r = await dispatcher.dispatch(SPAWN_ID, CUSTOM_ID); // 点的是衍生卡

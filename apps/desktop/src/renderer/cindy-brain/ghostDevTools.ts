@@ -44,8 +44,12 @@ export function installGhostDevTools(): void {
   window.__cindyGhosts = {
     list: () => window.electronAPI.ghosts.listSync().ghosts,
     install: async (lizFilePath: string) => {
-      const { ghost } = await window.electronAPI.ghosts.install(lizFilePath);
-      return ghost;
+      const inspected = await window.electronAPI.ghosts.inspect(lizFilePath);
+      const result = await window.electronAPI.ghosts.install(lizFilePath, {
+        expectedPackageSha256: inspected.packageSha256,
+      });
+      if ('canceled' in result) throw new Error('用户取消了 Node 安全确认');
+      return result.ghost;
     },
     uninstall: async (id: string) => {
       await window.electronAPI.ghosts.uninstall(id);

@@ -20,7 +20,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 
-import type { CindyForgePackResult, CindyGhostInfo, CindyGhostsMcpDeps } from 'cindy-tools';
+import type {
+  CindyForgePackResult,
+  CindyForgeScaffoldResult,
+  CindyGhostInfo,
+  CindyGhostsMcpDeps,
+} from 'cindy-tools';
 import { getLiziMcpSessionContext, type LiziMcpSessionContext } from '@cindy/mcps';
 
 import {
@@ -51,7 +56,7 @@ import {
   isGhostAvailableForActiveSession,
 } from '../cindy-brain/index.js';
 import { isGhostDisabledForWorkdir } from '../cindy-brain/ghostWorkdirPrefs.js';
-import { FORGE_GUIDE, packGhostDir } from '../cindy-brain/forge.js';
+import { FORGE_GUIDE, packGhostDir, scaffoldGhostDir } from '../cindy-brain/forge.js';
 import { handleIncomingCindyFile } from '../cindy-brain/openFileInstall.js';
 import * as blobStore from '../cindy-media/blobStore.js';
 import * as ledger from '../cindy-media/ledger.js';
@@ -80,11 +85,9 @@ const GRANT_PREVIEW_MAX_ITEMS = 8;
 const GRANT_BATCH_MAX_TOTAL_BYTES = 1024 * 1024 * 1024;
 
 /** 已读入的文件字节 → dataURL 缩略预览(确认卡展示真实字节;非图/超阈值缺省)。 */
-function buildGrantPreviewDataUrl(
-  buffer: Uint8Array,
-  mimeType: string,
-): string | undefined {
-  if (!mimeType.startsWith('image/') || buffer.byteLength > GRANT_PREVIEW_MAX_BYTES) return undefined;
+function buildGrantPreviewDataUrl(buffer: Uint8Array, mimeType: string): string | undefined {
+  if (!mimeType.startsWith('image/') || buffer.byteLength > GRANT_PREVIEW_MAX_BYTES)
+    return undefined;
   return `data:${mimeType};base64,${Buffer.from(buffer).toString('base64')}`;
 }
 
@@ -100,14 +103,21 @@ function buildGrantPreviewDataUrl(
  */
 const dirGrantMemory = new Set<string>();
 
-function dirGrantMemoryKey(sessionId: string, ghostId: string, lane: string, realPath: string): string {
+function dirGrantMemoryKey(
+  sessionId: string,
+  ghostId: string,
+  lane: string,
+  realPath: string,
+): string {
   const folded = process.platform === 'win32' ? realPath.toLowerCase() : realPath;
   return [sessionId, ghostId, lane, folded].join('\u0000');
 }
 
 /** 意识显示名(确认卡标题用;查不到回落 id)。 */
 function ghostDisplayName(ghostId: string): string {
-  const g = getGhostManager().list().find((x) => x.manifest.id === ghostId);
+  const g = getGhostManager()
+    .list()
+    .find((x) => x.manifest.id === ghostId);
   return g?.manifest.name ?? ghostId;
 }
 
@@ -135,13 +145,15 @@ async function requestGrantConfirm(params: {
   if (!bridge) {
     return {
       ok: false,
-      message: '该路径在当前会话工作目录之外,需要用户确认才能过户,但确认通道未就绪;请让用户把文件移入工作目录或作为附件发进聊天',
+      message:
+        '该路径在当前会话工作目录之外,需要用户确认才能过户,但确认通道未就绪;请让用户把文件移入工作目录或作为附件发进聊天',
     };
   }
   if (!params.sessionId) {
     return {
       ok: false,
-      message: '该路径在当前会话工作目录之外,需要用户确认才能过户,但当前调用没有会话语境无法弹出确认框;请让用户把文件作为附件发进聊天',
+      message:
+        '该路径在当前会话工作目录之外,需要用户确认才能过户,但当前调用没有会话语境无法弹出确认框;请让用户把文件作为附件发进聊天',
     };
   }
   const decision = await bridge.request(params.sessionId, {
@@ -173,11 +185,19 @@ async function prepareLocalPathAttachments(params: {
   sessionId: string | null;
   /** 张数上限(普通调用 MAX_GRANT_ATTACHMENTS;grant_only 批量预授权放宽)。 */
   maxCount: number;
-}): Promise<{ ok: true; resolved: Map<string, ResolvedGrantSource> } | { ok: false; message: string }> {
+}): Promise<
+  { ok: true; resolved: Map<string, ResolvedGrantSource> } | { ok: false; message: string }
+> {
   const resolved = new Map<string, ResolvedGrantSource>();
   // 超张数上限时不弹确认,直接交给 grant 流程报标准错(别让用户白点一次)。
   if (params.urls.length > params.maxCount) return { ok: true, resolved };
-  const outside: Array<{ url: string; absPath: string; mimeType: string; size: number; name: string }> = [];
+  const outside: Array<{
+    url: string;
+    absPath: string;
+    mimeType: string;
+    size: number;
+    name: string;
+  }> = [];
   for (const url of params.urls) {
     // 原有三层(会话图缓存/总仓 blob/缩图缓存)能解析的地址不归本分支管。
     let handledByChain = true;
@@ -187,7 +207,9 @@ async function prepareLocalPathAttachments(params: {
       handledByChain = false;
     }
     if (handledByChain) continue;
-    const c = classifyLocalAttachmentPath(url, params.workdirAbs, { mimeForExt: blobStore.mimeForExt });
+    const c = classifyLocalAttachmentPath(url, params.workdirAbs, {
+      mimeForExt: blobStore.mimeForExt,
+    });
     if (c.kind === 'not-local') continue; // 非本地文件 → 交回 grant 流程的教学错误
     if (c.kind === 'unsupported-type') {
       // attachments 的字节归宿是媒体总仓(规则 25:非媒体不入仓),类型死角由
@@ -217,7 +239,12 @@ async function prepareLocalPathAttachments(params: {
     // 授权行的直接放行——同一张图允许过一次,后续调用不再重复弹卡。指纹
     // 算法与 blobStore.writeBlob 同(sha256 hex),读到的字节顺便喂预览。
     const needConfirm: Array<{
-      url: string; absPath: string; mimeType: string; size: number; name: string; buffer: Uint8Array;
+      url: string;
+      absPath: string;
+      mimeType: string;
+      size: number;
+      name: string;
+      buffer: Uint8Array;
     }> = [];
     for (const o of outside) {
       let buffer: Uint8Array;
@@ -232,11 +259,21 @@ async function prepareLocalPathAttachments(params: {
         (await ledger.hasRef({ hash, refKind: 'ghost-grant', refId: params.ghostId })) ||
         (params.sessionId !== null &&
           dirGrantMemory.has(
-            dirGrantMemoryKey(params.sessionId, params.ghostId, 'attachments-dir', path.dirname(o.absPath)),
+            dirGrantMemoryKey(
+              params.sessionId,
+              params.ghostId,
+              'attachments-dir',
+              path.dirname(o.absPath),
+            ),
           ));
       if (granted) {
         // 短路命中也带 T1 字节:授权判定用的字节 = 实际过户的字节(防换文件)。
-        resolved.set(o.url, { absPath: o.absPath, mimeType: o.mimeType, originKind: 'user', buffer });
+        resolved.set(o.url, {
+          absPath: o.absPath,
+          mimeType: o.mimeType,
+          originKind: 'user',
+          buffer,
+        });
       } else {
         needConfirm.push({ ...o, buffer });
       }
@@ -247,8 +284,11 @@ async function prepareLocalPathAttachments(params: {
       // 其余条目显示图标 + 名称 + 路径)。
       let previewCount = 0;
       const items: GhostGrantFileItem[] = needConfirm.map((o) => {
-        const canPreview = o.mimeType.startsWith('image/') && previewCount < GRANT_PREVIEW_MAX_ITEMS;
-        const previewDataUrl = canPreview ? buildGrantPreviewDataUrl(o.buffer, o.mimeType) : undefined;
+        const canPreview =
+          o.mimeType.startsWith('image/') && previewCount < GRANT_PREVIEW_MAX_ITEMS;
+        const previewDataUrl = canPreview
+          ? buildGrantPreviewDataUrl(o.buffer, o.mimeType)
+          : undefined;
         if (previewDataUrl) previewCount += 1;
         return {
           name: o.name,
@@ -268,14 +308,24 @@ async function prepareLocalPathAttachments(params: {
       for (const o of needConfirm) {
         // 用户点了允许 = 显式授权,出生记 user(与拖图进聊天同语义);带 T1
         // 字节落仓——确认卡预览的字节就是过户的字节,中途换文件无效。
-        resolved.set(o.url, { absPath: o.absPath, mimeType: o.mimeType, originKind: 'user', buffer: o.buffer });
+        resolved.set(o.url, {
+          absPath: o.absPath,
+          mimeType: o.mimeType,
+          originKind: 'user',
+          buffer: o.buffer,
+        });
       }
       // 「允许该目录」勾选:把每张图的精确父目录记入会话级记忆,后续同目录
       // 媒体文件对该意识本会话免弹(跨调用批量任务只需点一次)。
       if (confirm.allowDirs && params.sessionId) {
         for (const o of needConfirm) {
           dirGrantMemory.add(
-            dirGrantMemoryKey(params.sessionId, params.ghostId, 'attachments-dir', path.dirname(o.absPath)),
+            dirGrantMemoryKey(
+              params.sessionId,
+              params.ghostId,
+              'attachments-dir',
+              path.dirname(o.absPath),
+            ),
           );
         }
       }
@@ -496,7 +546,16 @@ export function getCindyGhostsMcpDeps(sessionCtx?: LiziMcpSessionContext): Cindy
           })),
         }));
     },
-    async callGhostTool({ ghostId, tool, args, attachments, dir, saveDir, agentToolUseId, grantOnly }) {
+    async callGhostTool({
+      ghostId,
+      tool,
+      args,
+      attachments,
+      dir,
+      saveDir,
+      agentToolUseId,
+      grantOnly,
+    }) {
       // Check the account/session capability before granting attachments or
       // directory tickets. A stale roster from a cloud session must not let a
       // local session create durable grants or wake an account-managed Ghost.
@@ -521,7 +580,8 @@ export function getCindyGhostsMcpDeps(sessionCtx?: LiziMcpSessionContext): Cindy
         return {
           ok: false,
           errorCode: 'GHOST_DISABLED_IN_WORKDIR',
-          message: '用户已在当前工作目录停用该插件;不要重试,改用其它可用方式完成任务,必要时如实转告用户。',
+          message:
+            '用户已在当前工作目录停用该插件;不要重试,改用其它可用方式完成任务,必要时如实转告用户。',
         };
       }
       // 批量预授权(grant_only):只过户不派发——agent 跑批量任务(逐张图
@@ -530,12 +590,18 @@ export function getCindyGhostsMcpDeps(sessionCtx?: LiziMcpSessionContext): Cindy
       if (grantOnly) {
         // 资格闸:grant_only 不经管子派发器(不派发工具),这里自查——
         // 不存在/沉睡的意识不该拿到授权行,也不该让用户白点一次确认卡。
-        const target = getGhostManager().list().find((g) => g.manifest.id === ghostId);
+        const target = getGhostManager()
+          .list()
+          .find((g) => g.manifest.id === ghostId);
         if (!target) {
           return { ok: false, errorCode: 'GHOST_NOT_FOUND', message: '目标插件不存在或已卸载' };
         }
         if (!target.enabled) {
-          return { ok: false, errorCode: 'GHOST_ASLEEP', message: '目标插件未启用,可提示用户到主界面侧边栏「插件」中启用' };
+          return {
+            ok: false,
+            errorCode: 'GHOST_ASLEEP',
+            message: '目标插件未启用,可提示用户到主界面侧边栏「插件」中启用',
+          };
         }
         if (!attachments || attachments.length === 0) {
           return {
@@ -657,12 +723,22 @@ export function getCindyGhostsMcpDeps(sessionCtx?: LiziMcpSessionContext): Cindy
       // 在意识未声明媒体字段时以 xdt_media_produced 注入,兜底 IM/hook 送达。
       const producedMedia = drainGhostCallMedia(ghostId, callId);
       const finalized = withCardToken(result, cardService.finalizeCall(callId), callId);
-      return finalized.ok && producedMedia.length > 0
-        ? { ...finalized, producedMedia }
-        : finalized;
+      return finalized.ok && producedMedia.length > 0 ? { ...finalized, producedMedia } : finalized;
     },
     async forgeGuide(): Promise<string> {
       return FORGE_GUIDE;
+    },
+    async forgeScaffold(request): Promise<CindyForgeScaffoldResult> {
+      const sessionWorkdir = resolveSessionContext()?.workingDir ?? null;
+      const result = await scaffoldGhostDir(request, { sessionWorkdir });
+      if (result.ok) {
+        log.info('ghost forge scaffold created', {
+          dir: result.dir,
+          template: result.template,
+          files: result.files,
+        });
+      }
+      return result;
     },
     async forgePack({ dir }): Promise<CindyForgePackResult> {
       const packed = await packGhostDir(dir);

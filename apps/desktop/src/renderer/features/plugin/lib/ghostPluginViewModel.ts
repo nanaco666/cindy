@@ -10,6 +10,7 @@ import {
   ghostContentKeys,
   ghostPermissionItems,
   type GhostPermissionItem,
+  type GhostTrustInfo,
   type GhostToolDecl,
   type InstalledGhost,
 } from '../../../../shared/ghost';
@@ -21,9 +22,11 @@ export interface GhostPluginListItem {
   version: string;
   enabled: boolean;
   canUse: boolean;
+  trust?: GhostTrustInfo;
   iconDataUrl?: string;
 }
 export interface GhostPluginDetail extends GhostPluginListItem {
+  trust: GhostTrustInfo;
   author: string | null;
   contents: readonly string[];
   permissions: GhostPermissionItem[];
@@ -107,6 +110,12 @@ export function toGhostPluginListItem(ghost: InstalledGhost): GhostPluginListIte
     version: manifest.version,
     enabled: ghost.enabled,
     canUse: Boolean(manifest.command),
+    trust: ghost.trust ?? {
+      level: 'unverified',
+      publisherSigned: false,
+      publisherVerified: false,
+      reviewed: false,
+    },
     ...(ghost.iconDataUrl !== undefined ? { iconDataUrl: ghost.iconDataUrl } : {}),
   };
 }
@@ -120,6 +129,7 @@ export function toGhostPluginDetail(ghost: InstalledGhost): GhostPluginDetail {
   const { manifest } = ghost;
   return {
     ...listItem,
+    trust: listItem.trust!,
     author: manifest.author ?? null,
     contents: ghostContentKeys(manifest),
     permissions: ghostPermissionItems(manifest),

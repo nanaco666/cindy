@@ -8,7 +8,10 @@
  */
 import {
   Bell,
+  BadgeCheck,
+  Bot,
   ChevronDown,
+  Cpu,
   FileCode2,
   FilePen,
   Globe,
@@ -18,6 +21,7 @@ import {
   PanelLeft,
   PanelRight,
   Sparkles,
+  ShieldAlert,
   Terminal,
   Wrench,
   type LucideIcon,
@@ -27,10 +31,16 @@ import { useTranslation } from 'react-i18next';
 
 import { flashScrollbar } from '@/lib/scrollbarAutoHide';
 import { cn } from '@/lib/utils';
-import type { GhostPermissionDiff, GhostPermissionItem } from '../../shared/ghost';
+import type {
+  GhostPermissionDiff,
+  GhostPermissionItem,
+  GhostTrustInfo,
+} from '../../shared/ghost';
 
 const KIND_ICON: Record<GhostPermissionItem['kind'], LucideIcon> = {
   cindy: Sparkles, // 与详情页「Cindy 能力」区同款图标
+  agent: Bot,
+  node: Cpu,
   tool: Wrench,
   command: Terminal,
   panel: PanelRight,
@@ -179,6 +189,42 @@ export function GhostPermissionList({ items }: { items: GhostPermissionItem[] })
   );
 }
 
+/** 主机验出的包来源/签名摘要；不读取作者可伪造的 ghost.json 文案。 */
+export function GhostTrustSummary({ trust }: { trust: GhostTrustInfo }) {
+  const { t } = useTranslation();
+  const trusted = trust.level !== 'unverified';
+  const Icon = trusted ? BadgeCheck : ShieldAlert;
+  const labelKey =
+    trust.level === 'cindy-official'
+      ? 'official'
+      : trust.level === 'reviewed'
+        ? 'reviewed'
+        : trust.level === 'verified-publisher'
+          ? 'verifiedPublisher'
+          : trust.publisherSigned
+            ? 'signedUnverified'
+            : 'unsigned';
+  return (
+    <div className="mt-3 flex items-start gap-2 rounded-xl border border-[var(--border-default)] p-3">
+      <Icon size={16} className="mt-0.5 shrink-0 text-[var(--text-secondary)]" aria-hidden="true" />
+      <div className="min-w-0">
+        <p className="text-13 font-medium leading-5 text-[var(--confirm-desc)]">
+          {t(`settings.ghosts.trust.${labelKey}`, {
+            publisher: trust.publisherName ?? t('settings.ghosts.trust.unknownPublisher'),
+          })}
+        </p>
+        <p className="text-12 leading-[1.5] text-[var(--text-tertiary)]">
+          {t(
+            trust.unknownReviewer
+              ? 'settings.ghosts.trust.unknownReviewerDetail'
+              : `settings.ghosts.trust.${labelKey}Detail`,
+          )}
+        </p>
+      </div>
+    </div>
+  );
+}
+
 /**
  * 安装确认的紧凑内容区:简介可折叠,作者/版本单列,详情只在弹窗内部滚动。
  * 安全相关权限不做总折叠,避免为了短而牺牲知情确认。
@@ -186,10 +232,12 @@ export function GhostPermissionList({ items }: { items: GhostPermissionItem[] })
 export function GhostInstallReview({
   description,
   meta,
+  trust,
   items,
 }: {
   description?: string;
   meta: string;
+  trust: GhostTrustInfo;
   items: GhostPermissionItem[];
 }) {
   const { t } = useTranslation();
@@ -244,6 +292,7 @@ export function GhostInstallReview({
       <p className={cn('text-12 leading-[1.5] text-[var(--text-tertiary)]', description && 'mt-2')}>
         {meta}
       </p>
+      <GhostTrustSummary trust={trust} />
       <div className="mt-3 border-t border-[var(--border-default)] pt-3">
         <GhostPermissionList items={items} />
       </div>

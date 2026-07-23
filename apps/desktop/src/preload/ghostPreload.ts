@@ -19,6 +19,10 @@ import { contextBridge, ipcRenderer } from 'electron';
  *   …req}) 的语法糖,零新通道零新权限(白名单/凭证注入全在主机侧守门)。
  * - fs(req):fs 槽代写文件的便捷口——send({type:'fs-request', …req}) 的
  *   语法糖,同样零新通道零新权限(三档守门全在主机侧 fsSlot)。
+ * - agent.run(req):Agent 新回合的便捷口——send({type:'agent-request',
+ *   …req}) 的语法糖；一次性用户票、后台权限和会话归属由主机校验。
+ * - node.request(req):随包 Node / stdio MCP 的便捷口。Node 只能经本管子与
+ *   main.js 收发 JSON-RPC，不能直接拿到 Cindy API。
  */
 
 type HostMessageListener = (payload: unknown) => void;
@@ -40,4 +44,12 @@ contextBridge.exposeInMainWorld('cindy', {
     ipcRenderer.invoke('ghost-pipe:send', { ...req, type: 'fetch-request' }),
   fs: (req: Record<string, unknown>): Promise<unknown> =>
     ipcRenderer.invoke('ghost-pipe:send', { ...req, type: 'fs-request' }),
+  agent: {
+    run: (req: Record<string, unknown>): Promise<unknown> =>
+      ipcRenderer.invoke('ghost-pipe:send', { ...req, type: 'agent-request' }),
+  },
+  node: {
+    request: (req: Record<string, unknown>): Promise<unknown> =>
+      ipcRenderer.invoke('ghost-pipe:send', { ...req, type: 'node-request' }),
+  },
 });

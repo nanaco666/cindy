@@ -746,6 +746,8 @@ function extraResourcesForTarget(targetPlatform: string): string[] {
     'resources/cc-manager',
     'resources/anthropic-compat-proxy',
     'resources/remote-file-service',
+    // .cindy 发布者/审核 Ed25519 公钥信任表(私钥永不进客户端)。
+    'resources/ghost-trust.json',
     // 第三方开源声明,由 scripts/generate-third-party-notices.mjs 生成
     // (pnpm licenses:generate),随安装包分发以满足各开源协议的署名义务。
     'resources/THIRD-PARTY-NOTICES.txt',
@@ -1239,6 +1241,13 @@ const config: ForgeConfig = {
           config: 'vite.watcher-host.config.ts',
           // 同 dbWorker:借 preload target 出 CJS 单文件；运行时是 Electron
           // utilityProcess（@parcel/watcher 的 native 崩溃隔离，见 watcher-host/）。
+          target: 'preload',
+        },
+        {
+          entry: 'src/main/cindy-brain/nodeRuntimeWorkerProcess.ts',
+          config: 'vite.preload.config.ts',
+          // 正式包关闭 RunAsNode fuse；随包插件改由 Electron utilityProcess
+          // 承载。独立 CJS entry 与 main bundle 同目录，dev / packaged 同路径。
           target: 'preload',
         },
         {

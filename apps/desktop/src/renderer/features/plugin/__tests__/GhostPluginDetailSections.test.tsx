@@ -105,6 +105,13 @@ const detail: GhostPluginDetail = {
   cindyCapabilities: [],
   panelMinWidth: 320,
   installDir: '/tmp/cindy-brain/builtin.example',
+  trust: {
+    level: 'cindy-official',
+    publisherSigned: true,
+    publisherVerified: true,
+    reviewed: true,
+    publisherName: 'Cindy',
+  },
 };
 
 afterEach(() => {
