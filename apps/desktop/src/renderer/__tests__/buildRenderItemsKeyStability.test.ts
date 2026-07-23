@@ -184,6 +184,32 @@ describe('collectTurnFinalAssistantClientIds', () => {
     expect(finals.has('a2-draft')).toBe(false);
   });
 
+  it('marks every sealed SDK turn when background work auto-continues without a user boundary', () => {
+    const messages = [
+      mkUser('u1'),
+      { ...mkAssistant('main-summary'), turnCompleted: true },
+      mkTool('gate', 'Bash'),
+      { ...mkAssistant('gate-followup'), turnCompleted: true },
+    ];
+
+    const finals = collectTurnFinalAssistantClientIds(messages);
+    expect([...finals]).toEqual(expect.arrayContaining(['main-summary', 'gate-followup']));
+    expect(finals.size).toBe(2);
+  });
+
+  it('does not add an unsealed progress message once the user turn contains sealed answers', () => {
+    const messages = [
+      mkUser('u1'),
+      { ...mkAssistant('main-summary'), turnCompleted: true },
+      mkAssistant('unsealed-progress'),
+      { ...mkAssistant('gate-followup'), turnCompleted: true },
+    ];
+
+    const finals = collectTurnFinalAssistantClientIds(messages);
+    expect([...finals]).toEqual(expect.arrayContaining(['main-summary', 'gate-followup']));
+    expect(finals.has('unsealed-progress')).toBe(false);
+  });
+
   it('does not treat steer messages as turn boundaries', () => {
     const steer: ChatMessage = { ...mkUser('steer'), delivery: 'steer' };
     const messages = [

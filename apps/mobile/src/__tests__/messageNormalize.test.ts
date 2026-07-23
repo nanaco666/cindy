@@ -695,6 +695,26 @@ describe('normalizeRemoteMessages', () => {
     expect(items[0].label).toBe('user');
   });
 
+  it('projects the host SDK-turn seal onto assistant messages only', () => {
+    const items = normalizeRemoteMessages([
+      message({
+        id: 'assistant-sealed',
+        role: 'assistant',
+        content: '正式总结',
+        agentMeta: { turnCompleted: true },
+      }),
+      message({
+        id: 'user-ignored',
+        role: 'user',
+        content: '继续',
+        agentMeta: { turnCompleted: true },
+      }),
+    ]);
+
+    expect(items[0].turnCompleted).toBe(true);
+    expect(items[1].turnCompleted).toBeUndefined();
+  });
+
   it('renders silent-stop auto-resume rows as system cards instead of user bubbles', () => {
     const items = normalizeRemoteMessages([
       message({

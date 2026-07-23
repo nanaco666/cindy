@@ -210,6 +210,11 @@ export interface ChatMessage {
    */
   model?: string;
   /**
+   * Host 在 SDK `done` 边界写入的持久化 turn seal。一个真实用户请求可能因后台任务
+   * 完成而自动续跑多个 SDK turn；每个 seal 都代表一条应保留在「已工作」外的正式回复。
+   */
+  turnCompleted?: boolean;
+  /**
    * 若本消息由 subagent(Agent/Task 工具)spawn 的子代理产生,则为父 Agent
    * 工具调用的 toolUseId(读自 agentMeta.parentUuid = SDK parent_tool_use_id)。
    * 主线程消息无此字段。MessageStream 据此建 parentToolUseId→model 映射,
@@ -1814,18 +1819,22 @@ export function handleStreamEvent(
   // assistant 累积流时拿这份当 fallback。直接 mutate state 不行，下面各 case
   // 在 return 时把它合并进去；如果 case 没主动处理 lastAgentMeta，由下面统一兜底。
   const incomingMeta = event.agentMeta ?? null;
-  // subagent-model-chip(A 补全):把本轮事件携带的 model / parentUuid 投影到 streaming
-  // 阶段构造的 assistant / thinking 消息上。纯文本(零工具)子代理没有 tool_use 子消息,
-  // 模型只在这些消息的 agentMeta 上;不投影的话 buildSubagentModelMap 在运行时拿不到、
-  // chip 缺失(重载后才由历史路径补上)。主线程消息只有 model、无 parentUuid → 不进 map,
-  // 无副作用。delta/final 更新都 `{...m}` 透传,所以只需在构造点写入一次。
-  const subagentMetaFields: { model?: string; parentToolUseId?: string } = {
+  // assistant 展示元数据投影:
+  // - model / parentUuid 让纯文本子代理在 streaming 阶段也能反查模型 chip;
+  // - turnCompleted 由 main 在 done 边界盖到该 SDK turn 的最后一条 assistant 上,
+  //   让后台任务自动续跑时前一轮正式总结不会被后续补充回复顶掉。
+  const assistantMetaFields: {
+    model?: string;
+    parentToolUseId?: string;
+    turnCompleted?: boolean;
+  } = {
     ...(typeof incomingMeta?.model === 'string' && incomingMeta.model
       ? { model: incomingMeta.model }
       : {}),
     ...(typeof incomingMeta?.parentUuid === 'string' && incomingMeta.parentUuid
       ? { parentToolUseId: incomingMeta.parentUuid }
       : {}),
+    ...(incomingMeta?.turnCompleted === true ? { turnCompleted: true } : {}),
   };
   switch (event.type) {
     case 'text': {
@@ -1857,7 +1866,7 @@ export function handleStreamEvent(
                 content: text,
                 isStreaming: false,
                 createdAt: new Date().toISOString(),
-                ...subagentMetaFields,
+                ...assistantMetaFields,
               },
             ],
           };
@@ -1867,19 +1876,20 @@ export function handleStreamEvent(
         // 注释:delta 类无此字段),只有这条来自 SDK assistant message 的 isFinal 带 ——
         // 把 model/parentToolUseId 补写到在途流式 assistant 消息上,否则纯文本(零工具)
         // 子代理在流式渲染期间 buildSubagentModelMap 始终为空、chip 缺失(仅重载后才补上)。
-        const hasSubagentFields =
-          subagentMetaFields.model !== undefined ||
-          subagentMetaFields.parentToolUseId !== undefined;
-        if (!incomingMeta && !hasSubagentFields) return state;
+        const hasAssistantFields =
+          assistantMetaFields.model !== undefined ||
+          assistantMetaFields.parentToolUseId !== undefined ||
+          assistantMetaFields.turnCompleted === true;
+        if (!incomingMeta && !hasAssistantFields) return state;
         return {
           ...state,
           ...(incomingMeta ? { lastAgentMeta: incomingMeta } : {}),
-          ...(hasSubagentFields && state.streamingClientId
+          ...(hasAssistantFields && state.streamingClientId
             ? {
                 messages: replaceMessage(
                   state.messages,
                   (m) => m.clientId === state.streamingClientId,
-                  (m) => ({ ...m, ...subagentMetaFields }),
+                  (m) => ({ ...m, ...assistantMetaFields }),
                 ),
               }
             : {}),
@@ -1903,7 +1913,7 @@ export function handleStreamEvent(
               content: text,
               isStreaming: true,
               createdAt: new Date().toISOString(),
-              ...subagentMetaFields,
+              ...assistantMetaFields,
             },
           ],
         };
@@ -1954,7 +1964,7 @@ export function handleStreamEvent(
               isStreaming: true,
               thinkingStartedAt: data.startedAt,
               createdAt: isoFromEpochMs(data.startedAt),
-              ...subagentMetaFields,
+              ...assistantMetaFields,
             },
           ],
         };
@@ -2005,7 +2015,7 @@ export function handleStreamEvent(
                 thinkingDurationMs: data.durationMs,
                 thinkingStartedAt: Date.now() - data.durationMs,
                 createdAt: new Date().toISOString(),
-                ...subagentMetaFields,
+                ...assistantMetaFields,
               },
             ],
           };
@@ -2022,7 +2032,7 @@ export function handleStreamEvent(
                   // subagent-model-chip: thinking 'start' 的 delta 常不带 agentMeta,
                   // 真正的 model/parentUuid 在这条 final(来自 SDK message)才到 —— 补写,
                   // 覆盖纯 thinking(无 text/tool)子代理被 stop/fail 的运行时场景。
-                  ...subagentMetaFields,
+                  ...assistantMetaFields,
                 }
               : m,
           ),
@@ -2041,7 +2051,7 @@ export function handleStreamEvent(
             isStreaming: false,
             thinkingRedacted: true,
             createdAt: new Date().toISOString(),
-            ...subagentMetaFields,
+            ...assistantMetaFields,
           },
         ],
       };
@@ -7781,6 +7791,14 @@ function mapServerMessages(serverMsgs: Message[]): ChatMessage[] {
       // tool_result 消息也带 toolUseId(DB 列),让 MessageStream 能按 id 配对
       ...(m.role === 'tool_result' && typeof m.toolUseId === 'string' && m.toolUseId.length > 0
         ? { toolUseId: m.toolUseId }
+        : {}),
+      // SDK done turn seal:新数据用 turnCompleted；存量会话已有 turnCostUsd 的收尾
+      // assistant 等价可推导，直接补投影让本修复对历史复现会话立即生效。
+      ...(m.role === 'assistant' && (
+        m.agentMeta?.turnCompleted === true ||
+        (typeof m.agentMeta?.turnCostUsd === 'number' && m.agentMeta.turnCostUsd > 0)
+      )
+        ? { turnCompleted: true }
         : {}),
       // assistant 上挂的 per-turn 费用(main turn 结束时 patch 进 agent_meta)
       ...(m.role === 'assistant' &&

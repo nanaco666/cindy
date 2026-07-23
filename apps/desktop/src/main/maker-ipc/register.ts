@@ -188,6 +188,7 @@ import {
   flushOrphanToolResults,
   getLastAssistantTranscriptUuid,
   getSessionDbAgentKind,
+  markAssistantTurnCompleted,
   noteAgentMeta,
   noteSessionAgentKind,
   noteSessionClearBoundary,
@@ -2327,6 +2328,11 @@ export function wireSessionToIpc(session: ReturnType<Maker['getSession']>): void
         pendingFailedTurnAssistantPersistId.delete(session.id);
       }
       flushOrphanToolResults(session.id, eventAgentMeta);
+      if (event.type === 'done' && turnAssistantPersistId) {
+        // 在同一 durable FIFO 内先盖 turn seal、再复用 local-db:messages:created 广播
+        // 更新后的完整行；无需新增 IPC / device-link channel。
+        void markAssistantTurnCompleted(session.id, turnAssistantPersistId);
+      }
       // error 行在 flushOrphanToolResults 之后入队,保证 orphan tool_result 排在
       // error 行之前(历史时间线:tool 输出 → 错误卡,而非错误卡插到 tool 输出之前)。
       if (event.type === 'error' && !isPlannedUpgradeClose && !isRemoteAuthRetry) {

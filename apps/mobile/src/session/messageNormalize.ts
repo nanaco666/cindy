@@ -49,6 +49,8 @@ export interface NormalizedRemoteMessage {
   align: 'user' | 'agent';
   createdAt: string;
   isStreaming?: boolean;
+  /** Host 在 SDK done 边界写入；后台自动续跑时每个 sealed assistant 都是正式回复。 */
+  turnCompleted?: boolean;
   turnCostUsd?: number;
   turnCostIsEstimate?: boolean;
   /** assistant 专用:本轮模型降级标记(agentMeta.modelMismatch,桌面 main 在 turn 结束检测命中时落库)。 */
@@ -315,6 +317,12 @@ export function normalizeRemoteMessages(messages: readonly RemoteMessage[]): Nor
       align: message.role === 'user' ? 'user' : 'agent',
       createdAt: message.createdAt,
       isStreaming: readMessageStreaming(message) || undefined,
+      ...(message.role === 'assistant' && (
+        message.agentMeta?.turnCompleted === true ||
+        (readNumber(message.agentMeta?.turnCostUsd) ?? 0) > 0
+      )
+        ? { turnCompleted: true }
+        : {}),
       ...readTurnCost(message),
       ...readModelMismatch(message),
       ...(message.role === 'user' ? readAutomationOrigin(message) : {}),

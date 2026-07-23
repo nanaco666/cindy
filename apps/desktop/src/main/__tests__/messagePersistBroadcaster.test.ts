@@ -15,7 +15,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('../localDb/ipc/messages.js', () => ({
+  broadcastMessageAgentMetaUpdate: vi.fn(async () => true),
   createMessage: vi.fn(async () => ({}) as unknown),
+  patchMessageAgentMetaWithResult: vi.fn(async (_sessionId, _clientId, patch) => ({
+    previous: {},
+    next: patch,
+  })),
   updateMessageContent: vi.fn(async () => ({}) as unknown),
 }));
 
@@ -28,7 +33,12 @@ vi.mock('electron', () => ({
   BrowserWindow: { getAllWindows: () => [{ isDestroyed: () => false, webContents: { send: mockSend } }] },
 }));
 
-import { createMessage, updateMessageContent } from '../localDb/ipc/messages.js';
+import {
+  broadcastMessageAgentMetaUpdate,
+  createMessage,
+  patchMessageAgentMetaWithResult,
+  updateMessageContent,
+} from '../localDb/ipc/messages.js';
 import {
   recordMediaToolResult,
   __resetMediaToolResultPoolForTesting,
@@ -47,6 +57,7 @@ import {
   resetTurnPersistState,
   clearSessionPersistState,
   consumeLastAssistantPersistId,
+  markAssistantTurnCompleted,
   noteSessionClearBoundary,
   noteSessionAgentKind,
   enqueueDurableWrite,
@@ -760,6 +771,21 @@ describe('consumeLastAssistantPersistId(per-turn 费用挂载的目标消息追�
     onAssistantTextEvent(SESSION, { text: 'gone', isFinal: true }, null);
     clearSessionPersistState(SESSION);
     expect(consumeLastAssistantPersistId(SESSION)).toBeUndefined();
+  });
+
+  it('done seal 以 durable patch 落库', async () => {
+    await expect(markAssistantTurnCompleted(SESSION, 'assistant-final')).resolves.toBe(true);
+    expect(patchMessageAgentMetaWithResult).toHaveBeenCalledWith(
+      SESSION,
+      'assistant-final',
+      { turnCompleted: true },
+    );
+    expect(broadcastMessageAgentMetaUpdate).toHaveBeenCalledWith(SESSION, 'assistant-final');
+  });
+
+  it('纯 tool turn 没有 assistant 时不写 seal', async () => {
+    await expect(markAssistantTurnCompleted(SESSION, undefined)).resolves.toBe(false);
+    expect(patchMessageAgentMetaWithResult).not.toHaveBeenCalled();
   });
 });
 

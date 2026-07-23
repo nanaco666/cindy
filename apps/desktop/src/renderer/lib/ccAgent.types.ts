@@ -55,7 +55,9 @@ export interface CcMeta {
     cacheCreationInputTokens?: number;
   };
 
-  // result 专属
+  // result / host turn 边界
+  /** Host 在 done 边界写到该 SDK turn 最后一条 assistant 上的持久化收尾标记。 */
+  turnCompleted?: boolean;
   numTurns?: number;
   durationMs?: number;
   durationApiMs?: number;

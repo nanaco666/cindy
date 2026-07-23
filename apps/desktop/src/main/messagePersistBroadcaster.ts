@@ -33,7 +33,9 @@ import { BrowserWindow } from 'electron';
 import { desc, eq } from 'drizzle-orm';
 
 import {
+  broadcastMessageAgentMetaUpdate,
   createMessage as createDbMessage,
+  patchMessageAgentMetaWithResult,
   updateMessageContent as updateDbMessageContent,
 } from './localDb/ipc/messages.js';
 import { getDbClient } from './localDb/client/current.js';
@@ -217,6 +219,25 @@ export function consumeLastAssistantPersistId(sessionId: string): string | undef
   const id = lastAssistantPersistIdBySession.get(sessionId);
   lastAssistantPersistIdBySession.delete(sessionId);
   return id;
+}
+
+/**
+ * SDK done 是比 user 消息更细的真实 turn 边界。把它盖到本 turn 的收尾 assistant
+ * 上，供 Desktop / Mobile 在后台任务自动续跑新 SDK turn 时分别保留两轮正式回复。
+ * 返回 false 表示本轮没有 assistant 文本；调用方无需广播。
+ */
+export function markAssistantTurnCompleted(
+  sessionId: string,
+  clientId: string | undefined,
+): Promise<boolean> {
+  if (!sessionId || !clientId) return Promise.resolve(false);
+  return enqueueDurableWrite(`turn-completed:${sessionId}:${clientId}`, async () => {
+    const patched = await patchMessageAgentMetaWithResult(sessionId, clientId, {
+      turnCompleted: true,
+    });
+    if (!patched) return false;
+    return broadcastMessageAgentMetaUpdate(sessionId, clientId);
+  });
 }
 
 /**

@@ -1132,6 +1132,29 @@ export async function patchMessageAgentMeta(
 }
 
 /**
+ * agent_meta patch 后把权威完整行复用 messages:created 通道广播。现有 renderer 与
+ * device-link reducer 都按 clientId merge，因此不需要新增 IPC channel。
+ */
+export async function broadcastMessageAgentMetaUpdate(
+  sessionId: string,
+  clientId: string,
+): Promise<boolean> {
+  const db = getDbClient().drizzle;
+  const [row] = await db
+    .select()
+    .from(messages)
+    .where(and(
+      eq(messages.sessionId, sessionId),
+      eq(messages.clientId, clientId),
+      isNull(messages.rewindAt),
+    ))
+    .limit(1);
+  if (!row) return false;
+  broadcastMessageRow(sessionId, messageToCamel(row));
+  return true;
+}
+
+/**
  * Sums prior assistant cost segments back to the latest real user message.
  *
  * An agent can emit several SDK `done` segments while completing one visible

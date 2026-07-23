@@ -31,10 +31,15 @@ const mkUser = (id: string, content = '深度调研下 Higgsfield AI'): ChatMess
   content,
 });
 
-const mkAssistant = (id: string, content: string): ChatMessage => ({
+const mkAssistant = (
+  id: string,
+  content: string,
+  turnCompleted = false,
+): ChatMessage => ({
   clientId: id,
   role: 'assistant',
   content,
+  ...(turnCompleted ? { turnCompleted: true } : {}),
 });
 
 const mkThinking = (id: string, content = 'Thought'): ChatMessage => ({
@@ -154,6 +159,84 @@ describe('运行中子 Agent — 已回答 turn(groupAnsweredTurnItems)', () => 
 
     expect(findFlatAgentTask(items, 'task1')).toBeUndefined();
     expect(isFoldedIntoWorkGroup(items, 'task1')).toBe(true);
+  });
+});
+
+// ── Scenario C:流式尾 turn 的 legacy 折叠路径 ───────────────────────────────
+
+describe('后台任务自动续跑 — 每个 SDK turn 的正式总结都保留', () => {
+  it('主任务总结不会被后台门禁完成后的补充回复顶进「已工作」', () => {
+    const messages: ChatMessage[] = [
+      mkUser('u1', '实现功能并跑完整门禁'),
+      mkThinking('main-thinking'),
+      mkTool('main-edit', 'Edit'),
+      mkResult('main-edit-result', 'tu-main-edit'),
+      mkAssistant('main-summary', '功能已实现并通过验证。正式总结如下。', true),
+      mkTool('gate-check', 'Bash'),
+      mkResult('gate-result', 'tu-gate-check', 'exit 0'),
+      mkAssistant('gate-followup', '后台预跑的仓库级门禁已通过。', true),
+    ];
+
+    const items = groupWorkRuns(buildRenderItems(messages).items, false);
+    const topLevelMessages = items
+      .filter((item) => item.type === 'message')
+      .map((item) => item.message.clientId);
+
+    expect(topLevelMessages).toEqual(['u1', 'main-summary', 'gate-followup']);
+    expect(workGroups(items)).toHaveLength(2);
+    expect(items.some(
+      (item) => item.type === 'work_group' && item.children.some(
+        (child) => child.type === 'message' && child.message.clientId === 'main-summary',
+      ),
+    )).toBe(false);
+  });
+
+  it('同一 sealed SDK turn 的连续多段正式正文都留在组外', () => {
+    const messages: ChatMessage[] = [
+      mkUser('u1'),
+      mkTool('work', 'Bash'),
+      mkResult('work-result', 'tu-work'),
+      mkAssistant('summary-part-1', '第一段正式总结'),
+      mkAssistant('summary-part-2', '第二段正式总结', true),
+    ];
+
+    const items = groupWorkRuns(buildRenderItems(messages).items, false);
+    const topLevelMessages = items
+      .filter((item) => item.type === 'message')
+      .map((item) => item.message.clientId);
+    expect(topLevelMessages).toEqual(['u1', 'summary-part-1', 'summary-part-2']);
+  });
+
+  it('现有 turnCostUsd 也能让已落库历史恢复每个 SDK turn 的 seal', () => {
+    const messages: ChatMessage[] = [
+      mkUser('u1'),
+      { ...mkAssistant('cost-summary', '历史正式总结'), turnCostUsd: 1 },
+      mkTool('cost-tool', 'Bash'),
+      mkResult('cost-result', 'tu-cost-tool'),
+      { ...mkAssistant('cost-followup', '历史后台补充'), turnCostUsd: 0.1 },
+    ];
+
+    const items = groupWorkRuns(buildRenderItems(messages).items, false);
+    const topLevelMessages = items
+      .filter((item) => item.type === 'message')
+      .map((item) => item.message.clientId);
+    expect(topLevelMessages).toEqual(['u1', 'cost-summary', 'cost-followup']);
+  });
+
+  it('无 turn seal 的旧历史继续只保留最后一条 assistant 回退', () => {
+    const messages: ChatMessage[] = [
+      mkUser('u1'),
+      mkAssistant('legacy-summary', '旧版正式总结'),
+      mkTool('legacy-tool', 'Bash'),
+      mkResult('legacy-result', 'tu-legacy-tool'),
+      mkAssistant('legacy-last', '旧版最后补充'),
+    ];
+
+    const items = groupWorkRuns(buildRenderItems(messages).items, false);
+    const topLevelMessages = items
+      .filter((item) => item.type === 'message')
+      .map((item) => item.message.clientId);
+    expect(topLevelMessages).toEqual(['u1', 'legacy-last']);
   });
 });
 

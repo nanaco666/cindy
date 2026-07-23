@@ -551,24 +551,40 @@ export function shouldBlockAssistantFork(
  * 尾部 turn 是否"已结束"由调用方叠加 shouldBlockAssistantFork 判定,本函数
  * 只回答"是不是本 turn 最后一条正文"。export 仅供单测使用。
  */
+function isCompletedAssistantMessage(message: ChatMessage): boolean {
+  return message.turnCompleted === true ||
+    (typeof message.turnCostUsd === 'number' && message.turnCostUsd > 0);
+}
+
 export function collectTurnFinalAssistantClientIds(messages: readonly ChatMessage[]): Set<string> {
   const out = new Set<string>();
-  let turnFinalFound = false;
+  let sealedAnswerFound = false;
+  let pendingLegacyFallback: string | null = null;
   for (let i = messages.length - 1; i >= 0; i--) {
     const message = messages[i];
     if (message.role === 'user' && message.delivery !== 'steer') {
-      // 跨过 turn 边界,前一个 turn 的收尾正文待寻。
-      turnFinalFound = false;
-    } else if (
-      !turnFinalFound &&
-      message.role === 'assistant' &&
-      !message.systemCardType &&
-      message.content.trim().length > 0
-    ) {
-      out.add(message.clientId);
-      turnFinalFound = true;
+      if (!sealedAnswerFound && pendingLegacyFallback) out.add(pendingLegacyFallback);
+      sealedAnswerFound = false;
+      pendingLegacyFallback = null;
+      continue;
     }
+    if (
+      message.role !== 'assistant' ||
+      message.systemCardType ||
+      message.content.trim().length === 0
+    ) {
+      continue;
+    }
+    if (isCompletedAssistantMessage(message)) {
+      out.add(message.clientId);
+      sealedAnswerFound = true;
+      pendingLegacyFallback = null;
+      continue;
+    }
+    // 倒序扫描先暂存本 user turn 最后一条正文；只有整段没有 seal 时才采用。
+    pendingLegacyFallback ??= message.clientId;
   }
+  if (!sealedAnswerFound && pendingLegacyFallback) out.add(pendingLegacyFallback);
   return out;
 }
 
@@ -1494,6 +1510,14 @@ function groupAnsweredTurnItems(turnItems: RenderItem[]): {
   items: RenderItem[];
   handled: boolean;
 } {
+  const sealedAnswers = new Set<number>();
+  for (let i = 0; i < turnItems.length; i++) {
+    const item = turnItems[i];
+    if (isAssistantAnswerCandidate(item) && isCompletedAssistantMessage(item.message)) {
+      sealedAnswers.add(i);
+    }
+  }
+
   let lastAnswerIdx = -1;
   for (let i = turnItems.length - 1; i >= 0; i--) {
     if (isAssistantAnswerCandidate(turnItems[i])) {
@@ -1503,34 +1527,61 @@ function groupAnsweredTurnItems(turnItems: RenderItem[]): {
   }
   if (lastAnswerIdx < 0) return { items: turnItems, handled: false };
 
-  const hasWorkAfterLastAnswer = turnItems.some(
-    (item, index) => index > lastAnswerIdx && isWorkActivityItem(item),
-  );
-  if (hasWorkAfterLastAnswer) return { items: turnItems, handled: false };
-
-  let lastWorkActivityIdx = -1;
-  for (let i = lastAnswerIdx - 1; i >= 0; i--) {
-    if (isWorkActivityItem(turnItems[i])) {
-      lastWorkActivityIdx = i;
-      break;
+  // 新数据按 SDK done seal 分段；旧数据没有 seal 时继续沿用最后一句回退。
+  if (sealedAnswers.size > 0) {
+    // 每个 seal 只盖 SDK turn 最后一条 assistant；与它连续、且位于本段最后一次真实
+    // 动作之后的前置正文同属正式答复阶段，也必须保留在「已工作」外。
+    let segmentStart = 0;
+    for (const sealedIndex of [...sealedAnswers]) {
+      let lastWorkActivityIdx = -1;
+      for (let i = sealedIndex - 1; i >= segmentStart; i--) {
+        if (isWorkActivityItem(turnItems[i])) {
+          lastWorkActivityIdx = i;
+          break;
+        }
+      }
+      let answerStart = sealedIndex;
+      while (
+        answerStart > lastWorkActivityIdx + 1 &&
+        answerStart > segmentStart &&
+        isAssistantAnswerCandidate(turnItems[answerStart - 1])
+      ) {
+        answerStart--;
+      }
+      for (let i = answerStart; i <= sealedIndex; i++) {
+        if (isAssistantAnswerCandidate(turnItems[i])) sealedAnswers.add(i);
+      }
+      segmentStart = sealedIndex + 1;
     }
-  }
+  } else {
+    const hasWorkAfterLastAnswer = turnItems.some(
+      (item, index) => index > lastAnswerIdx && isWorkActivityItem(item),
+    );
+    if (hasWorkAfterLastAnswer) return { items: turnItems, handled: false };
 
-  // 最后一个真实动作之后连续输出的多段 assistant 正文共同构成最终答复。
-  // 没有真实动作时只保留最后一条,避免 assistant-only 的工作进度永远散在外面。
-  let finalAnswerStartIdx = lastAnswerIdx;
-  if (lastWorkActivityIdx >= 0) {
-    while (
-      finalAnswerStartIdx > lastWorkActivityIdx + 1 &&
-      isAssistantAnswerCandidate(turnItems[finalAnswerStartIdx - 1])
-    ) {
-      finalAnswerStartIdx--;
+    let lastWorkActivityIdx = -1;
+    for (let i = lastAnswerIdx - 1; i >= 0; i--) {
+      if (isWorkActivityItem(turnItems[i])) {
+        lastWorkActivityIdx = i;
+        break;
+      }
+    }
+    let finalAnswerStartIdx = lastAnswerIdx;
+    if (lastWorkActivityIdx >= 0) {
+      while (
+        finalAnswerStartIdx > lastWorkActivityIdx + 1 &&
+        isAssistantAnswerCandidate(turnItems[finalAnswerStartIdx - 1])
+      ) {
+        finalAnswerStartIdx--;
+      }
+    }
+    for (let i = finalAnswerStartIdx; i <= lastAnswerIdx; i++) {
+      if (isAssistantAnswerCandidate(turnItems[i])) sealedAnswers.add(i);
     }
   }
 
   const out: RenderItem[] = [];
   let run: WorkChildItem[] = [];
-
   const flushRun = (nextItem: RenderItem | undefined) => {
     if (run.length === 0) return;
     out.push(createCompletedWorkGroup(run, nextItem));
@@ -1539,9 +1590,7 @@ function groupAnsweredTurnItems(turnItems: RenderItem[]): {
 
   for (let i = 0; i < turnItems.length; i++) {
     const it = turnItems[i];
-    const isFinalAnswerItem =
-      i >= finalAnswerStartIdx && i <= lastAnswerIdx && isAssistantAnswerCandidate(it);
-    if (!isFinalAnswerItem && !isRunningAgentTask(it) && isWorkChild(it)) {
+    if (!sealedAnswers.has(i) && !isRunningAgentTask(it) && isWorkChild(it)) {
       run.push(it);
     } else {
       flushRun(it);
