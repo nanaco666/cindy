@@ -8,7 +8,7 @@ import { app, safeStorage } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
 
-import type { IMHost } from 'lizi-im';
+import type { IMHost } from '@cindy/im';
 
 import {
   dataOwnerStorageKey,
@@ -143,7 +143,7 @@ function prepareSecretPath(name: string): string | null {
   return scoped;
 }
 
-/** lizi-im secret adapter whose logical keys follow the active data owner. */
+/** @cindy/im secret adapter whose logical keys follow the active data owner. */
 export const ownerScopedImSecrets: ImSecrets = {
   isAvailable: () => safeStorage.isEncryptionAvailable() && scopedSecretPath('probe') !== null,
   write(name, plaintext) {

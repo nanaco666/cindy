@@ -34,7 +34,7 @@ vi.mock('electron', () => ({
   },
 }));
 
-vi.mock('@lizi/heartbeat-client', () => ({
+vi.mock('@cindy/heartbeat-client', () => ({
   createHeartbeatClient: mocks.createHeartbeatClient,
 }));
 
