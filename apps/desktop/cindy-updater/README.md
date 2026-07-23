@@ -1,7 +1,7 @@
 # cindy-updater
 
 > 源码目录、二进制与产物均已统一为 `cindy-updater`（经 owner 确认，
-> AGENTS.md 规则 21）。
+> docs/dev-rules/cindy-updater.md）。
 
 Tauri-based Windows updater for `Cindy`. Replaces the inline `.cmd` script
 that the Electron main process previously generated in `executeUpdateWindows`

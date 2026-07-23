@@ -7,7 +7,7 @@ import { isSafeGhostRelativePath } from '../../../shared/ghost.js';
  * 与 Electron 解耦,单测直接覆盖(规范 14);唯一调用方是
  * electronSandboxAdapter 的 cindy-ghost:// 协议 handler。
  *
- * 安全模型(AGENTS.md 规则 28):沙箱能读的只有自己安装
+ * 安全模型(docs/dev-rules/plugin-security-and-authoring.md):沙箱能读的只有自己安装
  * 目录里的静态文件。URL 路径必须解码后仍是安全相对路径(复用清单同一套
  * 判定),再经 resolve + 前缀断言双保险,杜绝 ../ 与百分号编码穿越。
  */

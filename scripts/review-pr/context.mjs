@@ -302,7 +302,7 @@ try {
       formatIssues.push(`Self-review 勾选率 ${checklistDone}/${checklistTotal}(<80%)`);
     }
   }
-  if (hitsUpdater && !bodyHasOwnerOk) formatIssues.push('命中 cindy-updater 路径但 description 无「已和 owner 确认」(cindy-updater 是高风险模块,改动须经 Lizi 确认,见 AGENTS.md 规则 21)[阻断]');
+  if (hitsUpdater && !bodyHasOwnerOk) formatIssues.push('命中 cindy-updater 路径但 description 无「已和 owner 确认」(cindy-updater 是高风险模块,改动须经 Lizi 确认,见 docs/dev-rules/cindy-updater.md)[阻断]');
   const formatPass = formatIssues.length === 0;
 
   // ── 1.5 + 1.6.5:GraphQL 拉历史 ──

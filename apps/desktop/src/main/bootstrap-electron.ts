@@ -977,7 +977,7 @@ registerGhostIpc();
 //                     supportFetchAPI 丢失即静默白屏,勿动
 //   cindy-remote-media: device-link 入方向媒体(被控端字节经 OSS 中转)
 //   cindy-ghost:      意识沙箱文件供片(handler 挂在每意识专属 session 分区,
-//                     只认自己安装目录;AGENTS.md 规则 28)
+//                     只认自己安装目录;docs/dev-rules/plugin-security-and-authoring.md)
 //   cindy-media:      媒体总仓字节仓取件窗口(内容寻址 blob;新写入媒体的
 //                     统一协议,历史 xdt-* 协议只读兼容)
 protocol.registerSchemesAsPrivileged([
@@ -1805,7 +1805,7 @@ app.on('open-file', (event, filePath) => {
 // schema_version、完整 migration history 与 SQL/companion TS runtime 指纹;
 // pending / 超前 / drift 都拒绝启动。passive 自己不迁移/repair schema,并用多
 // reader lease 阻止之后的 primary 抢跑 migration。
-// 隔离数据实例走 `--isolated[=<名字>]`(独立 userData → 独立锁域,见 AGENTS.md)。
+// 隔离数据实例走 `--isolated[=<名字>]`(独立 userData → 独立锁域,见 docs/dev-rules/desktop-development.md)。
 if (
   shouldRequestSingleInstanceLock({
     isPackaged: app.isPackaged,

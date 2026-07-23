@@ -1,7 +1,7 @@
 /**
  * chatAttachments.ts — 聊天图片附件的媒体总仓写入口。
  * ---------------------------------------------------------------------------
- * 契约:AGENTS.md 规则 25;引用与回收语义见本文件注释及 recycler.ts。
+ * 契约:docs/dev-rules/media-storage-and-protocols.md;引用与回收语义见本文件注释及 recycler.ts。
  *
  * 历史缓存的 draft/committed 状态机(xdt-meta.json + markFilesCommitted +
  * 启动孤儿清扫)在引用计数模型下坍缩成两个动作:

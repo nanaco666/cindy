@@ -1,7 +1,7 @@
 /**
  * previewGate.ts — 意识面板「点图看大图」的主机闸口(产物 lightbox 预览)。
  *
- * 面板 webview 是零桥沙箱(AGENTS.md 规则 28),不给它开任何
+ * 面板 webview 是零桥沙箱(docs/dev-rules/plugin-security-and-authoring.md),不给它开任何
  * JS API;预览走**声明式链接拦截**:面板作者把 <img> 包进
  * `<a href="cindy-ghost://<id>/preview/<指纹><后缀>">`,导航被主机的
  * will-navigate 闸(webview-security)拦下、翻译成"在主窗口弹 ImageLightbox"。

@@ -1,5 +1,5 @@
 /**
- * ghost.ts — cindy-tools ghost 总机的 host 侧接线(AGENTS.md 规则 28)。
+ * ghost.ts — cindy-tools ghost 总机的 host 侧接线(docs/dev-rules/plugin-security-and-authoring.md)。
  * ---------------------------------------------------------------------------
  * 网关模式:agent 工具箱里永远只有 ghost_list / ghost_call 两件固定工具
  * (缓存前缀零变化),内容现查现报——本文件就是"现查"的真身:

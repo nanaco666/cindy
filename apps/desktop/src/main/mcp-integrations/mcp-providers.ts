@@ -359,7 +359,7 @@ export function createDesktopMcpProviders(deps: DesktopMcpProvidersDeps): LiziMc
   });
 
   // cindy:意识总机(cindy-tools;网关模式,
-  // AGENTS.md 规则 28;2026-07-12 由 cindy_ghosts 更名——server 名进
+  // docs/dev-rules/plugin-security-and-authoring.md;2026-07-12 由 cindy_ghosts 更名——server 名进
   // 工具全名 mcp__<server>__<tool>,短名让调用行少啰嗦一截,历史消息的旧
   // 全名由 shared/ghost.ts isGhostCallToolName 兼容匹配)。常注册不设
   // plugin gate——工具面恒定是缓存前缀稳定的前提,"没装任何意识"表现为

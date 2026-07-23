@@ -28,7 +28,7 @@ import { useGhostRuntimeState } from './runtimeStates';
 /**
  * 意识面板接入布局引擎。
  *
- * 数据流(布局与沙箱边界见 AGENTS.md 规则 27 / 28):
+ * 数据流(布局与沙箱边界见 docs/dev-rules/architecture-invariants.md / docs/dev-rules/plugin-security-and-authoring.md):
  * - 启动:LayoutRoot 首帧前 ensureGhostPanelsRegistered() 同步拉已装清单
  *   (sendSync)→ 声明了面板的意识逐个注册进面板注册表 —— 与内置面板同帧
  *   就位,布局第一帧即完整(设计规范规则 7);

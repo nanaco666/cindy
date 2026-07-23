@@ -1,7 +1,7 @@
 /**
  * generatedMedia.ts — AI 生成产物(art / mivo / codex 生成图)的媒体总仓存储适配器。
  * ---------------------------------------------------------------------------
- * 契约:AGENTS.md 规则 25。
+ * 契约:docs/dev-rules/media-storage-and-protocols.md。
  *
  * 形状对齐 lizi-mcps 的 art 存储契约(`storage.saveImage/resolveImageRef`、
  * `videoStorage.saveVideo`),替换 `createArtMediaStore/createArtVideoStore`

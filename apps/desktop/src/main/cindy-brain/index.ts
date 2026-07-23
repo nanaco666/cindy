@@ -1472,7 +1472,7 @@ export function getGhostFsSlot(): GhostFsSlot {
 }
 
 /**
- * 官方保留前缀守门(AGENTS.md 规则 28):packaged 版本上,用户装入
+ * 官方保留前缀守门(docs/dev-rules/plugin-security-and-authoring.md):packaged 版本上,用户装入
  * 通道(install/update/inspect 三个 IPC,即拖入/选文件/forge 转交的共同出口)
  * 对 `cindy-` 前缀 id 一律拒装——卸载内置意识后抢注同 id 的第三方包,会冒充
  * 官方身份并蹭走凭证别名(用户历史填过的机器级 key 被注入攻击者白名单域名)。
@@ -1739,7 +1739,7 @@ export function registerGhostIpc(): void {
       log,
     });
   });
-  // 主机正常退出:逐个销毁沙箱(AGENTS.md 规则 28 的"关完才走";
+  // 主机正常退出:逐个销毁沙箱(docs/dev-rules/plugin-security-and-authoring.md 的"关完才走";
   // 主进程被强杀时 Chromium 会级联回收渲染子进程,无孤儿)。
   app.on('before-quit', () => runtime.destroyAll());
 
@@ -1923,7 +1923,7 @@ export function registerGhostIpc(): void {
     });
   });
 
-  // ── 管子(脑机接口)main 侧 handler(AGENTS.md 规则 28)──────────────
+  // ── 管子(脑机接口)main 侧 handler(docs/dev-rules/plugin-security-and-authoring.md)──────────────
   // 身份不信任 sender 自报,一律按 webContents id 反查绑定表验身。
   // 上行白名单:tool-result(交卷,派发器配对验身)/ host-request(公开宿主上下文)/ cindy-request(cindy 槽
   // 代办,返回值即结果)/ card-update(卡槽③供片,cardService 校验链)/

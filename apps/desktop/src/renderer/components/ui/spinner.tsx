@@ -29,7 +29,7 @@ export interface SpinnerProps extends Omit<React.HTMLAttributes<HTMLSpanElement>
 /**
  * Spinner keeps the infinite rotation on an HTML wrapper instead of the SVG.
  *
- * AGENTS.md 设计实现规范规则 7(常驻动画必须 compositor-only,SVG 一律静止):
+ * DESIGN.md 设计实现规范(常驻动画必须 compositor-only,SVG 一律静止):
  * CSS animation on SVG roots or SVG children wakes the renderer main thread every
  * frame. Keep the icon SVG static, and animate only this inline-flex wrapper with
  * transform-based Tailwind `animate-spin`.

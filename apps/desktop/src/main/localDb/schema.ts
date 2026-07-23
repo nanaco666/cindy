@@ -1181,7 +1181,7 @@ export const deviceLinkOwnership = sqliteTable('device_link_ownership', {
 });
 
 /**
- * ── cindy-media 媒体总仓账本(契约:AGENTS.md 规则 25)─────────────────────
+ * ── cindy-media 媒体总仓账本(契约:docs/dev-rules/media-storage-and-protocols.md)─────────────────────
  *
  * 字节与含义分家:硬盘上的字节仓(userData/cindy-media/blobs,内容寻址,
  * 文件名=SHA-256 指纹)不含任何归属信息;文件的出生、性质、引用全部是

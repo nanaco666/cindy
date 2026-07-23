@@ -1,7 +1,7 @@
 /**
  * integrationCache.ts — 集成下载缓存的媒体总仓存取口。
  * ---------------------------------------------------------------------------
- * 契约:AGENTS.md 规则 25;缓存引用与逐出语义见本文件及 recycler.ts。
+ * 契约:docs/dev-rules/media-storage-and-protocols.md;缓存引用与逐出语义见本文件及 recycler.ts。
  *
  * 服务飞书 / Slack / Discord / Confluence / Jira 等集成的"按 token 缓存媒体"
  * 场景。历史缓存用 `<token>.<ext>` 文件名回答"下过没有";指纹制下文件名与

@@ -48,7 +48,7 @@ export interface AppShortcutStoreOptions {
 /**
  * 应用级快捷键用户 override 存储。
  *
- * 存储红线 (AGENTS.md 规则 20): 文件里永远只有用户显式
+ * 存储红线 (docs/dev-rules/configuration-and-overrides.md): 文件里永远只有用户显式
  * 改过的 id → combo, 默认值绝不落盘。生效值 = registry 默认 (随版本演进) +
  * override 合并; 恢复默认 = 删除 override key。load 时 normalize 会丢弃未知
  * id / 非法 combo, 版本升级删除某 id 后存量文件自动自愈。

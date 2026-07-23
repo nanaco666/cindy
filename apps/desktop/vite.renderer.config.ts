@@ -214,7 +214,7 @@ const { specifiers: INTERNAL_PURE_PACKAGE_EXCLUDES, names: INTERNAL_PURE_PACKAGE
  * 预打包(见上方注释:排除它们会把 CJS 子依赖拖出预打包,不安全)。但 Vite 的预打包缓存失效
  * 判据不含软链包的源码内容 —— 这些包的源码变了(git pull / 本地编辑)后,冷启动仍会被服务旧
  * 缓存,renderer 在模块求值期抛 `does not provide an export named X`,整窗黑屏且主进程日志
- * 零痕迹(AGENTS.md「stale prebundle 白屏陷阱」)。
+ * 零痕迹(docs/dev-rules/development-workflow.md「stale prebundle 白屏陷阱」)。
  *
  * 这里在 dev server 启动前对这些包的源码做一次轻量指纹(相对路径 + mtime + size,不读内容,
  * 跳过 node_modules / dist / .git),与上次启动留在 cache 目录里的 marker 比对:变了就直接删掉

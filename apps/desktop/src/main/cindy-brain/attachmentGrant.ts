@@ -1,5 +1,5 @@
 /**
- * attachmentGrant.ts — 用户图片过户(AGENTS.md 规则 28)。
+ * attachmentGrant.ts — 用户图片过户(docs/dev-rules/plugin-security-and-authoring.md)。
  * ---------------------------------------------------------------------------
  * 归属铁律不动:意识永远只能读自己名下的账。用户想让意识处理**自己的图**,
  * 走"显式引渡":AI 调 ghost_call 时把当前会话里用户图片的 xdt-image:// 地址

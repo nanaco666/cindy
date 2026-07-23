@@ -122,7 +122,7 @@ export function applyWebviewHardening(
 }
 
 /**
- * 意识面板 webview 的加固(AGENTS.md 规则 28):与浏览器 webview
+ * 意识面板 webview 的加固(docs/dev-rules/plugin-security-and-authoring.md):与浏览器 webview
  * 同一套安全锁,区别两处——
  *   1. **保留意识专属分区**(浏览器路径是强制覆盖为 BROWSER_PARTITION;意识
  *      路径的分区已在 will-attach 阶段经 resolveGhostWebviewAttach 验明正身);

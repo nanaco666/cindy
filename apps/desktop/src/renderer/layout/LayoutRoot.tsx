@@ -19,7 +19,7 @@ import { PaneWidthProvider, useContentAvailableWidth } from './paneWidths';
 /**
  * LayoutRoot —— 主界面布局树的渲染引擎入口。
  *
- * 布局树不变量见 AGENTS.md 规则 27。
+ * 布局树不变量见 docs/dev-rules/architecture-invariants.md。
  *
  * 职责(随 Step B / C 逐步扩展):
  * - 首帧同步拉取布局(sendSync,规则 7:第一帧就是用户布局,禁止默认→用户布局跳变);

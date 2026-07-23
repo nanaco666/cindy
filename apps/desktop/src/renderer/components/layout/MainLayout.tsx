@@ -346,7 +346,7 @@ export function MainLayout() {
   const hasInlineControlledBanner = hasInlineControlledBannerPath(location.pathname);
 
   // 可用总宽 = 窗口宽 − 左侧占位块宽(pinning spacer + Sidebar 的 wrapper)。
-  // 布局去方位化(AGENTS.md 规则 27):
+  // 布局去方位化(docs/dev-rules/architecture-invariants.md):
   // 旧实现用「main 左边界」推左栏占宽,隐含"工具面板在 main 右侧"的方位假设 ——
   // 布局树把工具面板换到 main 左侧后,其展开动画每帧推动 main 左边界,
   // ResizeObserver 每帧触发 → 整个 MainLayout 每帧重渲染(实测明显卡顿),
