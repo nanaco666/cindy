@@ -891,8 +891,9 @@
       "usage": {
         "duration": "Duration",
         "estimatedCost": "Estimated cost",
-        "costBreakdown": "ASR {{asr}} · Refine {{refine}}",
+        "costBreakdown": "ASR {{asr}} · Refine {{refine}} · Estimated from sent audio",
         "sessions": "Count",
+        "outcomes": "No speech {{noSpeech}} · Failed {{failed}}",
         "reset": "Reset stats"
       },
       "history": {
@@ -3844,6 +3845,7 @@
       }
     },
     "copy": "Copy",
+    "retry": "Try again",
     "openPermissionSettings": "Grant permission",
     "openSettings": "Open Settings",
     "settingsRecoveryHint": "Finish setup, then press the shortcut again to retry.",
@@ -3855,7 +3857,8 @@
     "codexRequired": "Connect Codex in {{appName}} before using voice input.",
     "apiKeyRequired": "Configure an API Key before using voice input.",
     "cindyServiceUnavailable": "The Cindy voice service is unavailable. Check your network or switch service source.",
-    "asrServiceUnavailable": "Voice recognition service failed to connect. Check your network and try again."
+    "asrServiceUnavailable": "Voice recognition service failed to connect. Check your network and try again.",
+    "emptyTranscript": "Speech was detected, but no text was recognized. Please try again."
   },
   "chat": {
     "askUserQuestion": {

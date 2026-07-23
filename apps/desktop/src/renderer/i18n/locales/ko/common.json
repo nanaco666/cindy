@@ -891,8 +891,9 @@
       "usage": {
         "duration": "시간",
         "estimatedCost": "예상 비용",
-        "costBreakdown": "인식 {{asr}} · 정리 {{refine}}",
+        "costBreakdown": "인식 {{asr}} · 정리 {{refine}} · 전송된 오디오 기준 추정",
         "sessions": "횟수",
+        "outcomes": "음성 없음 {{noSpeech}} · 실패 {{failed}}",
         "reset": "통계 재설정"
       },
       "history": {
@@ -3843,6 +3844,7 @@
       }
     },
     "copy": "복사",
+    "retry": "다시 시도",
     "openPermissionSettings": "권한 허용",
     "openSettings": "설정으로 이동",
     "settingsRecoveryHint": "설정을 완료한 뒤 단축키를 다시 눌러 재시도하세요.",
@@ -3854,7 +3856,8 @@
     "codexRequired": "음성 입력을 사용하려면 먼저 {{appName}}에서 Codex에 연결하세요.",
     "apiKeyRequired": "음성 입력을 사용하려면 먼저 API Key를 설정하세요.",
     "cindyServiceUnavailable": "Cindy 음성 서비스를 사용할 수 없습니다. 네트워크를 확인하거나 서비스 소스를 전환하세요.",
-    "asrServiceUnavailable": "음성 인식 서비스에 연결하지 못했습니다. 네트워크를 확인한 뒤 다시 시도하세요."
+    "asrServiceUnavailable": "음성 인식 서비스에 연결하지 못했습니다. 네트워크를 확인한 뒤 다시 시도하세요.",
+    "emptyTranscript": "음성이 감지되었지만 텍스트를 인식하지 못했습니다. 다시 시도하세요."
   },
   "chat": {
     "askUserQuestion": {

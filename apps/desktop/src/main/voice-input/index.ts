@@ -1733,8 +1733,8 @@ export function registerVoiceInputIpc(): void {
       refiner,
       logger,
       callbacks: {
-        onStateChanged: (state) => {
-          if (runId) emit({ type: 'state', runId, state });
+        onStateChanged: (state, outcome) => {
+          if (runId) emit({ type: 'state', runId, state, outcome });
         },
         onDraftChanged: (text, segment, source) => {
           if (runId) emit({ type: 'draft', runId, text, segment, source });
@@ -1764,8 +1764,8 @@ export function registerVoiceInputIpc(): void {
           });
           return true;
         },
-        onError: (message) => {
-          if (runId) emit({ type: 'error', runId, message });
+        onError: (message, code) => {
+          if (runId) emit({ type: 'error', runId, message, code });
         },
       },
     });

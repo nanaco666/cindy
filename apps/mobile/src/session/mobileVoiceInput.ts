@@ -15,6 +15,7 @@ import {
 import { formatRemoteError } from '@cindy/maker-shared/device-link-contract';
 
 export const MOBILE_MAX_VOICE_AUDIO_BYTES = 64 * 1024 * 1024;
+export const MOBILE_VOICE_EMPTY_TRANSCRIPT_ERROR = '检测到语音但未识别出文本，请重试。';
 export const MOBILE_VOICE_MIC_PERMISSION_ERROR = '麦克风权限未开启，请在系统设置里允许 Cindy 使用麦克风。';
 export const MOBILE_VOICE_REALTIME_AUDIO_UNAVAILABLE_ERROR = '当前安装包不支持实时语音输入，请安装包含原生录音模块的测试版。';
 export const MOBILE_VOICE_CREDENTIAL_SYNC_UNSUPPORTED_ERROR =

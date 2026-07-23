@@ -2151,10 +2151,10 @@ export function ChatInput({
     [voiceInput.stop, playVoiceInputEndCueNow],
   );
   const handleVoiceInputPlainStop = useCallback(() => (
-    handleVoiceInputStop({ waitForRefinement: true })
+    handleVoiceInputStop({ waitForRefinement: true }).catch(() => undefined)
   ), [handleVoiceInputStop]);
   const handleVoiceInputStopWithRefinement = useCallback((options?: { waitForRefinement?: boolean }) => (
-    handleVoiceInputStop({ waitForRefinement: options?.waitForRefinement ?? true })
+    handleVoiceInputStop({ waitForRefinement: options?.waitForRefinement ?? true }).catch(() => undefined)
   ), [handleVoiceInputStop]);
 
   const voiceShortcutRef = useRef(voiceInputSettings.shortcut);
@@ -3469,7 +3469,14 @@ export function ChatInput({
           return;
         }
         const stopAndSend = (async () => {
-          await handleVoiceInputStop({ waitForRefinement: true });
+          try {
+            await handleVoiceInputStop({ waitForRefinement: true });
+          } catch {
+            // Voice stop failures already surface through the voice input UI.
+            // Do not send the pre-existing draft/attachments when transcription
+            // failed after the user pressed Send.
+            return;
+          }
           await dispatchSend(deliveryMode);
         })().finally(() => {
           if (voiceInputStopAndSendPromiseRef.current === stopAndSend) {

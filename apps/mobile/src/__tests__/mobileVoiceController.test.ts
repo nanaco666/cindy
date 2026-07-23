@@ -8,6 +8,7 @@ import type {
 } from '@cindy/voice-input-core';
 import type { StoredMobileVoiceCredential } from '@/session/mobileVoiceCredentialStore';
 import { createMobileVoiceControllerSession } from '@/session/mobileVoiceController';
+import { MOBILE_VOICE_EMPTY_TRANSCRIPT_ERROR } from '@/session/mobileVoiceInput';
 
 vi.mock('@/session/mobileRealtimeAudio', () => ({
   startMobileRealtimeAudio: vi.fn(),
@@ -40,6 +41,14 @@ class FakeAsrProvider implements AsrProvider {
 
   emit(event: AsrEvent): void {
     this.callback(event);
+  }
+}
+
+class EmptyTranscriptAsrProvider extends FakeAsrProvider {
+  appendAudio(_chunk: ArrayBuffer, _trace?: AudioTrace): void {}
+
+  async flushAudio(): Promise<void> {
+    this.emit({ type: 'stable', text: '', at: Date.now() });
   }
 }
 
@@ -132,6 +141,36 @@ function credential(): StoredMobileVoiceCredential {
 }
 
 describe('mobileVoiceController', () => {
+  it('propagates and localizes empty-transcript failures from stop()', async () => {
+    const errors: string[] = [];
+    const states: string[] = [];
+    let onChunk: ((chunk: { pcm16: ArrayBuffer; trace: AudioTrace }) => void) | undefined;
+    const session = createMobileVoiceControllerSession({
+      credential: credential(),
+      initialDraft: '',
+      asr: new EmptyTranscriptAsrProvider(),
+      refiner: null,
+      startAudio: async ({ onChunk: nextOnChunk }) => {
+        onChunk = nextOnChunk;
+        return async () => undefined;
+      },
+      onDraftChanged: vi.fn(),
+      onStateChanged: (state) => states.push(state),
+      onError: (message) => errors.push(message),
+    });
+
+    await session.start();
+    onChunk?.({
+      pcm16: new Int16Array([1000, 1000]).buffer,
+      trace: { capturedAt: 1, convertedAt: 2, chunkIndex: 0, sampleRate: 16_000, durationMs: 20 },
+    });
+
+    await expect(session.stop()).rejects.toThrow(MOBILE_VOICE_EMPTY_TRANSCRIPT_ERROR);
+    expect(errors).toEqual([MOBILE_VOICE_EMPTY_TRANSCRIPT_ERROR]);
+    expect(states).toContain('error');
+    expect(states).not.toContain('done');
+  });
+
   it('plays optional start feedback after native capture starts', async () => {
     const order: string[] = [];
     const session = createMobileVoiceControllerSession({

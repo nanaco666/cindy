@@ -891,8 +891,9 @@
       "usage": {
         "duration": "时长",
         "estimatedCost": "估算费用",
-        "costBreakdown": "识别 {{asr}} · 润色 {{refine}}",
+        "costBreakdown": "识别 {{asr}} · 润色 {{refine}} · 按已发送音频估算",
         "sessions": "次数",
+        "outcomes": "无语音 {{noSpeech}} · 失败 {{failed}}",
         "reset": "重置统计"
       },
       "history": {
@@ -3843,6 +3844,7 @@
       }
     },
     "copy": "复制",
+    "retry": "重试",
     "openPermissionSettings": "去授权",
     "openSettings": "前往设置",
     "settingsRecoveryHint": "完成配置后，再按快捷键即可重试。",
@@ -3854,7 +3856,8 @@
     "codexRequired": "需要先在 {{appName}} 里连接 Codex，才能使用语音输入。",
     "apiKeyRequired": "需要先配置 API Key，才能使用语音输入。",
     "cindyServiceUnavailable": "Cindy 官方语音服务暂不可用，请检查网络或切换服务来源。",
-    "asrServiceUnavailable": "语音识别服务连接失败，请检查网络或稍后重试。"
+    "asrServiceUnavailable": "语音识别服务连接失败，请检查网络或稍后重试。",
+    "emptyTranscript": "检测到了语音，但没有识别出文字，请重试。"
   },
   "chat": {
     "askUserQuestion": {

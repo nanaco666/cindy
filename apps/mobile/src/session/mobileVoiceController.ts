@@ -8,6 +8,7 @@ import {
   type DictationRefinementContext,
   type EditableRange,
   type RefinementResult,
+  type VoiceInputErrorCode,
   type VoiceInputDraftSource,
   type VoiceInputState,
   type VoiceTimelineEvent,
@@ -20,6 +21,7 @@ import {
   buildMobileRefinerAttempts,
   buildMobileVoiceRefinementContext,
   createMobileRefinerTextModelClient,
+  MOBILE_VOICE_EMPTY_TRANSCRIPT_ERROR,
   type MobileVoiceDraftInsertion,
 } from '@/session/mobileVoiceInput';
 import { startMobileRealtimeAudio } from '@/session/mobileRealtimeAudio';
@@ -117,6 +119,7 @@ export function createMobileVoiceControllerSession(
   let draftPublishThrottleTimer: ReturnType<typeof setTimeout> | null = null;
   let stopAudio: (() => Promise<void>) | null = null;
   let state: VoiceInputState = 'idle';
+  let controllerError: Error | null = null;
   // Run lifecycle as an explicit phase machine instead of a set of overlapping
   // boolean flags. Legal transitions:
   //   idle → running                     (start())
@@ -343,8 +346,12 @@ export function createMobileVoiceControllerSession(
           && range.segmentIds.every((id, index) => voiceInsertionSegmentIds[index] === id);
         return sameRange && !isInsertionIntact(readCurrentDraft(), voiceInsertion);
       },
-      onError(message) {
-        options.onError?.(redactMobileVoiceCredentialText(message, options.credential));
+      onError(message, code: VoiceInputErrorCode | undefined) {
+        const localizedMessage = code === 'empty_transcript'
+          ? MOBILE_VOICE_EMPTY_TRANSCRIPT_ERROR
+          : redactMobileVoiceCredentialText(message, options.credential);
+        controllerError = new Error(localizedMessage);
+        options.onError?.(localizedMessage);
       },
     },
   });
@@ -360,6 +367,7 @@ export function createMobileVoiceControllerSession(
       runPhase = 'running';
       asrStartError = null;
       audioFailureError = null;
+      controllerError = null;
       // Connect the ASR socket and open the mic CONCURRENTLY instead of serially.
       // The shared controller sets 'listening' synchronously, so the mic goes live
       // immediately instead of waiting for the ~2.4s WebSocket connect + session
@@ -469,6 +477,10 @@ export function createMobileVoiceControllerSession(
       }
       notifyReadyForEndCue();
       await controller.stop();
+      if (state === 'error' || controllerError) {
+        runPhase = 'failed';
+        throw controllerError ?? new Error('语音输入未完成，请重试。');
+      }
       if (state === 'submitting' || state === 'refining') await waitForDone(doneWaiters);
       if (runPhase === 'stopping') runPhase = 'idle';
       return latestDraft;

@@ -891,8 +891,9 @@
       "usage": {
         "duration": "時間",
         "estimatedCost": "概算費用",
-        "costBreakdown": "認識 {{asr}} · 整文 {{refine}}",
+        "costBreakdown": "認識 {{asr}} · 整文 {{refine}} · 送信済み音声からの推定",
         "sessions": "回数",
+        "outcomes": "音声なし {{noSpeech}} · 失敗 {{failed}}",
         "reset": "統計をリセット"
       },
       "history": {
@@ -3843,6 +3844,7 @@
       }
     },
     "copy": "コピー",
+    "retry": "再試行",
     "openPermissionSettings": "権限を許可",
     "openSettings": "設定を開く",
     "settingsRecoveryHint": "設定を完了してから、もう一度ショートカットを押してください。",
@@ -3854,7 +3856,8 @@
     "codexRequired": "音声入力を使用するには、先に {{appName}} で Codex に接続してください。",
     "apiKeyRequired": "音声入力を使用するには、先に API Key を設定してください。",
     "cindyServiceUnavailable": "Cindy 音声サービスを利用できません。ネットワークを確認するか、サービス提供元を切り替えてください。",
-    "asrServiceUnavailable": "音声認識サービスに接続できません。ネットワークを確認してから再試行してください。"
+    "asrServiceUnavailable": "音声認識サービスに接続できません。ネットワークを確認してから再試行してください。",
+    "emptyTranscript": "音声は検出されましたが、テキストを認識できませんでした。もう一度お試しください。"
   },
   "chat": {
     "askUserQuestion": {

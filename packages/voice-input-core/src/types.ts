@@ -6,6 +6,10 @@ export type VoiceInputState =
   | 'done'
   | 'error';
 
+export type VoiceInputTerminalOutcome = 'success' | 'no_speech' | 'failed' | 'cancelled';
+
+export type VoiceInputErrorCode = 'empty_transcript';
+
 export type AsrEvent =
   | { type: 'connected'; at: number }
   | { type: 'disconnected'; at: number }
@@ -197,13 +201,13 @@ export type VoiceTimelineEvent =
   | { type: 'error'; runId: string; at: number; message: string };
 
 export type VoiceInputCallbacks = {
-  onStateChanged?: (state: VoiceInputState) => void;
+  onStateChanged?: (state: VoiceInputState, outcome?: VoiceInputTerminalOutcome) => void;
   onDraftChanged: (text: string, segment: SpeechSegment, source: VoiceInputDraftSource) => void;
   onSubmitted: (text: string, segment: SpeechSegment) => EditableRange | undefined;
   isRangeUserTouched?: (range: EditableRange) => boolean;
   onRefinementPreview?: (text: string, segment: SpeechSegment, range: EditableRange) => void;
   applyRefinement?: (range: EditableRange, refinedText: string) => boolean;
-  onError?: (message: string) => void;
+  onError?: (message: string, code?: VoiceInputErrorCode) => void;
 };
 
 export type RefinementTokenUsage = {
@@ -214,7 +218,7 @@ export type RefinementTokenUsage = {
 };
 
 export type VoiceInputRendererEvent =
-  | { type: 'state'; runId: string; state: VoiceInputState }
+  | { type: 'state'; runId: string; state: VoiceInputState; outcome?: VoiceInputTerminalOutcome }
   | { type: 'auth-required'; runId: string; reason: string; provider: string }
   | { type: 'draft'; runId: string; text: string; segment: SpeechSegment; source: VoiceInputDraftSource }
   | { type: 'submitted'; runId: string; text: string; segment: SpeechSegment }
@@ -222,4 +226,4 @@ export type VoiceInputRendererEvent =
   | { type: 'refined'; runId: string; text: string; segment: SpeechSegment; range: EditableRange }
   | { type: 'usage'; runId: string; refinement: RefinementTokenUsage }
   | { type: 'timeline'; runId: string; event: VoiceTimelineEvent }
-  | { type: 'error'; runId: string; message: string };
+  | { type: 'error'; runId: string; message: string; code?: VoiceInputErrorCode };

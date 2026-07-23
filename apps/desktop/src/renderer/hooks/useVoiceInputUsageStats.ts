@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import type { VoiceInputTerminalOutcome as VoiceInputUsageOutcome } from '@cindy/voice-input-core';
 import {
   DEFAULT_VOICE_INPUT_PROVIDER_KIND,
   estimateVoiceInputAsrCostUsd,
@@ -17,6 +18,8 @@ export interface VoiceInputUsageStats {
   totalAudioMs: number;
   asrAudioMsByProvider: Partial<Record<VoiceInputProviderKind, number>>;
   sessionCount: number;
+  noSpeechSessionCount: number;
+  failedSessionCount: number;
   lastRecordedAt: number | null;
   refinementPromptTokens: number;
   refinementCachedTokens: number;
@@ -38,6 +41,8 @@ export interface VoiceInputRefinementTokenDelta {
   refinerProvider?: string;
 }
 
+export type { VoiceInputUsageOutcome };
+
 const STORAGE_KEY = 'voiceInput.usageStats.v1';
 const CHANGE_EVENT = 'voice-input-usage-stats-change';
 
@@ -45,6 +50,8 @@ const DEFAULT_STATS: VoiceInputUsageStats = {
   totalAudioMs: 0,
   asrAudioMsByProvider: {},
   sessionCount: 0,
+  noSpeechSessionCount: 0,
+  failedSessionCount: 0,
   lastRecordedAt: null,
   refinementPromptTokens: 0,
   refinementCachedTokens: 0,
@@ -92,6 +99,8 @@ function normalizeStats(raw: unknown): VoiceInputUsageStats {
     totalAudioMs: readNonNegative(candidate.totalAudioMs),
     asrAudioMsByProvider,
     sessionCount: Math.floor(readNonNegative(candidate.sessionCount)),
+    noSpeechSessionCount: Math.floor(readNonNegative(candidate.noSpeechSessionCount)),
+    failedSessionCount: Math.floor(readNonNegative(candidate.failedSessionCount)),
     lastRecordedAt: Number.isFinite(lastRecordedAt) && lastRecordedAt > 0 ? lastRecordedAt : null,
     refinementPromptTokens: Math.floor(readNonNegative(candidate.refinementPromptTokens)),
     refinementCachedTokens: Math.floor(readNonNegative(candidate.refinementCachedTokens)),
@@ -204,7 +213,10 @@ export function estimateVoiceInputCostBreakdown(stats: VoiceInputUsageStats): Vo
   };
 }
 
-export function recordVoiceInputUsage(audioMs: number): void {
+export function recordVoiceInputUsage(
+  audioMs: number,
+  outcome: VoiceInputUsageOutcome = 'success',
+): void {
   if (!Number.isFinite(audioMs) || audioMs <= 0) return;
   const current = getVoiceInputUsageStats();
   const provider = getCurrentVoiceInputProviderKind();
@@ -216,6 +228,8 @@ export function recordVoiceInputUsage(audioMs: number): void {
       [provider]: (current.asrAudioMsByProvider[provider] ?? 0) + audioMs,
     },
     sessionCount: current.sessionCount + 1,
+    noSpeechSessionCount: current.noSpeechSessionCount + (outcome === 'no_speech' ? 1 : 0),
+    failedSessionCount: current.failedSessionCount + (outcome === 'failed' ? 1 : 0),
     lastRecordedAt: Date.now(),
   });
 }

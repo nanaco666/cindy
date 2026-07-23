@@ -11,7 +11,11 @@ import {
 } from 'react';
 import { Check, Copy, Settings, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import type { DictationRefinementContext, VoiceInputState } from '@cindy/voice-input-core';
+import type {
+  DictationRefinementContext,
+  VoiceInputErrorCode,
+  VoiceInputState,
+} from '@cindy/voice-input-core';
 
 import { Spinner } from '@/components/ui/spinner';
 import { Tip } from '@/components/ui/tooltip';
@@ -33,6 +37,7 @@ import {
 import {
   recordVoiceInputRefinementUsage,
   recordVoiceInputUsage,
+  type VoiceInputUsageOutcome,
 } from '@/hooks/useVoiceInputUsageStats';
 import {
   playVoiceInputEndCue,
@@ -162,6 +167,7 @@ export function VoiceInputOverlay() {
   const [permissionPrompt, setPermissionPrompt] = useState<PermissionPromptKind | null>(null);
   const [settingsRecoveryTab, setSettingsRecoveryTab] = useState<VoiceInputRecoverySettingsTab | null>(null);
   const [actionTipsDisabled, setActionTipsDisabled] = useState(false);
+  const [stopInFlight, setStopInFlight] = useState(false);
   const [shortcutLabel, setShortcutLabel] = useState(() => (
     formatVoiceInputShortcut(getVoiceInputSettings().shortcut)
   ));
@@ -170,12 +176,15 @@ export function VoiceInputOverlay() {
   const engineRef = useRef<WebMicAudioEngine | null>(null);
   const runIdRef = useRef<string | null>(null);
   const stateRef = useRef<VoiceInputState>('idle');
+  const stopInFlightRef = useRef(false);
+  const errorCloseTimerRef = useRef<number | null>(null);
   const draftTextRef = useRef('');
   const finalTextRef = useRef('');
   const rawTranscriptTextRef = useRef('');
   const pendingPasteTextRef = useRef('');
   const historyEntryIdRef = useRef<string | null>(null);
   const sentAudioMsRef = useRef(0);
+  const terminalOutcomeRef = useRef<VoiceInputUsageOutcome>('success');
   const systemAudioMutedRef = useRef(false);
   const pendingSystemAudioMutePromiseRef = useRef<Promise<void> | null>(null);
   const systemAudioMuteGateOpenRef = useRef(true);
@@ -198,6 +207,7 @@ export function VoiceInputOverlay() {
 
   const setVoiceState = useCallback((next: VoiceInputState) => {
     stateRef.current = next;
+    if (next === 'error') terminalOutcomeRef.current = 'failed';
     setState(next);
   }, []);
 
@@ -207,6 +217,12 @@ export function VoiceInputOverlay() {
     // action tips until the next real pointer move so stale hover/focus state
     // from the previous presentation cannot reopen a tooltip immediately.
     setActionTipsDisabled(true);
+  }, []);
+
+  const clearErrorCloseTimer = useCallback(() => {
+    if (errorCloseTimerRef.current === null) return;
+    window.clearTimeout(errorCloseTimerRef.current);
+    errorCloseTimerRef.current = null;
   }, []);
 
   const resetHiddenOverlaySession = useCallback(() => {
@@ -226,14 +242,18 @@ export function VoiceInputOverlay() {
     rawTranscriptTextRef.current = '';
     pendingPasteTextRef.current = '';
     historyEntryIdRef.current = null;
+    terminalOutcomeRef.current = 'success';
     runIdRef.current = null;
     ownedRunIdRef.current = null;
     startReadyRef.current = null;
     closingRef.current = false;
     cancelRequestedRef.current = false;
+    stopInFlightRef.current = false;
+    clearErrorCloseTimer();
+    setStopInFlight(false);
     setVoiceState('idle');
     resetOverlayInteraction();
-  }, [resetOverlayInteraction, setVoiceState]);
+  }, [clearErrorCloseTimer, resetOverlayInteraction, setVoiceState]);
 
   const enableActionTips = useCallback(() => {
     setActionTipsDisabled(false);
@@ -349,8 +369,13 @@ export function VoiceInputOverlay() {
   const commitUsageStats = useCallback(() => {
     const audioMs = sentAudioMsRef.current;
     sentAudioMsRef.current = 0;
-    if (audioMs > 0) recordVoiceInputUsage(audioMs);
+    if (audioMs > 0) recordVoiceInputUsage(audioMs, terminalOutcomeRef.current);
   }, []);
+
+  const formatVoiceInputError = useCallback((message: string, code?: VoiceInputErrorCode): string => {
+    if (code === 'empty_transcript') return t('voiceInputOverlay.emptyTranscript');
+    return message;
+  }, [t]);
 
   const appendAudioChunk = useCallback((chunk: PcmChunk) => {
     sentAudioMsRef.current += chunk.trace.durationMs;
@@ -458,6 +483,14 @@ export function VoiceInputOverlay() {
     }
   }, [hasPasteError]);
 
+  const scheduleErrorClose = useCallback(() => {
+    clearErrorCloseTimer();
+    errorCloseTimerRef.current = window.setTimeout(() => {
+      errorCloseTimerRef.current = null;
+      void closeOverlay();
+    }, OVERLAY_ERROR_CLOSE_MS);
+  }, [clearErrorCloseTimer, closeOverlay]);
+
   const closeOverlayAndReset = useCallback(async (options?: CloseOverlayOptions) => {
     await closeOverlay(options);
     resetHiddenOverlaySession();
@@ -499,7 +532,7 @@ export function VoiceInputOverlay() {
       log.warn('show global voice input start failure overlay failed:', showResult.error);
     }
     if (!shouldPromptCodexSessionExpired && !readinessRecovery) {
-      window.setTimeout(closeOverlay, OVERLAY_ERROR_CLOSE_MS);
+      scheduleErrorClose();
     }
   }, [
     closeOverlay,
@@ -507,6 +540,7 @@ export function VoiceInputOverlay() {
     promptCodexSessionExpired,
     resetOverlayInteraction,
     restoreSystemAudioForRecording,
+    scheduleErrorClose,
     setVoiceState,
     stopEngine,
     t,
@@ -580,12 +614,13 @@ export function VoiceInputOverlay() {
       await restoreSystemAudioForRecording();
       commitUsageStats();
     }
-    window.setTimeout(closeOverlay, OVERLAY_ERROR_CLOSE_MS);
+    scheduleErrorClose();
   }, [
     closeOverlay,
     commitUsageStats,
     resolveDoneWaiters,
     restoreSystemAudioForRecording,
+    scheduleErrorClose,
     setVoiceState,
     stopEngine,
   ]);
@@ -642,6 +677,7 @@ export function VoiceInputOverlay() {
     if (stateRef.current === 'listening' || stateRef.current === 'submitting' || stateRef.current === 'refining') {
       return;
     }
+    clearErrorCloseTimer();
     resetOverlayInteraction();
     const attemptId = startAttemptIdRef.current + 1;
     startAttemptIdRef.current = attemptId;
@@ -672,6 +708,7 @@ export function VoiceInputOverlay() {
     pendingPasteTextRef.current = '';
     historyEntryIdRef.current = null;
     sentAudioMsRef.current = 0;
+    terminalOutcomeRef.current = 'success';
     runIdRef.current = null;
     ownedRunIdRef.current = null;
     systemAudioMuteGateOpenRef.current = true;
@@ -782,7 +819,7 @@ export function VoiceInputOverlay() {
       await restoreSystemAudioForRecording();
       setError(captureStart.error);
       setVoiceState('error');
-      window.setTimeout(closeOverlay, OVERLAY_ERROR_CLOSE_MS);
+      scheduleErrorClose();
       return;
     }
 
@@ -824,6 +861,7 @@ export function VoiceInputOverlay() {
     buildRefinementContext,
     canAcceptAudioChunk,
     cancelStartedRun,
+    clearErrorCloseTimer,
     closeOverlay,
     createStartReadyState,
     failRecording,
@@ -836,6 +874,7 @@ export function VoiceInputOverlay() {
     resetOverlayInteraction,
     resolveStartReadyState,
     restoreSystemAudioForRecording,
+    scheduleErrorClose,
     setVoiceState,
     stopEngine,
     t,
@@ -987,7 +1026,7 @@ export function VoiceInputOverlay() {
         setVoiceState('error');
         commitUsageStats();
         closingRef.current = false;
-        window.setTimeout(closeOverlay, OVERLAY_ERROR_CLOSE_MS);
+        scheduleErrorClose();
         return;
       }
       runId = startResult.runId;
@@ -1004,7 +1043,15 @@ export function VoiceInputOverlay() {
       commitUsageStats();
     } else {
       const donePromise = waitForDone();
-      const result = await window.electronAPI.voiceInput.stop();
+      stopInFlightRef.current = true;
+      setStopInFlight(true);
+      let result: Awaited<ReturnType<typeof window.electronAPI.voiceInput.stop>>;
+      try {
+        result = await window.electronAPI.voiceInput.stop();
+      } finally {
+        stopInFlightRef.current = false;
+        setStopInFlight(false);
+      }
       if (cancelRequestedRef.current) return;
       if (!result.ok) {
         setError(result.error);
@@ -1014,6 +1061,14 @@ export function VoiceInputOverlay() {
         return;
       }
       await donePromise;
+      // A stop-time transcription failure resolves the shared done waiter
+      // through the error event. Keep the overlay open so the error notice and
+      // retry action remain visible instead of closing an empty draft.
+      if (stateRef.current === 'error') {
+        commitUsageStats();
+        closingRef.current = false;
+        return;
+      }
     }
 
     // Critical bail point: if cancelAndClose ran while we were waiting on
@@ -1034,8 +1089,8 @@ export function VoiceInputOverlay() {
     const text = (finalTextRef.current || draftTextRef.current).trim();
     if (!text) {
       stateRef.current = 'done';
+      commitUsageStats();
       void closeOverlayAndReset();
-      window.setTimeout(commitUsageStats, 0);
       return;
     }
     pendingPasteTextRef.current = text;
@@ -1056,6 +1111,7 @@ export function VoiceInputOverlay() {
     invalidateStartAttempt,
     pastePendingTextInBackground,
     restoreSystemAudioAndMaybePlayEndCue,
+    scheduleErrorClose,
     setVoiceState,
     waitForStartReadyWhileStopping,
     waitForDone,
@@ -1103,6 +1159,7 @@ export function VoiceInputOverlay() {
           codexSessionPromptActiveRef.current = promptCodexSessionExpired(event.reason);
           break;
         case 'state':
+          if (event.outcome) terminalOutcomeRef.current = event.outcome;
           if (closingRef.current && event.state === 'done') {
             // Once the user has confirmed global dictation, the overlay is only
             // waiting for ASR/refine to settle so it can paste. Rendering the
@@ -1164,7 +1221,9 @@ export function VoiceInputOverlay() {
           break;
         case 'error': {
           log.warn('global voice input error:', event.message);
-          if (promptCodexSessionExpired(event.message)) {
+          terminalOutcomeRef.current = 'failed';
+          const formattedMessage = formatVoiceInputError(event.message, event.code);
+          if (promptCodexSessionExpired(formattedMessage)) {
             codexSessionPromptActiveRef.current = true;
           }
           // Preserve already-recognized text for the user to copy. The
@@ -1183,7 +1242,7 @@ export function VoiceInputOverlay() {
             // done/refined here; waitForDone still has its timeout fallback.
             break;
           }
-          setError(formatVoiceInputStartError(event.message));
+          setError(formatVoiceInputStartError(formattedMessage));
           if (recognizedText) {
             pendingPasteTextRef.current = recognizedText;
             setPasteErrorCode('failed');
@@ -1212,7 +1271,7 @@ export function VoiceInputOverlay() {
           break;
       }
     });
-  }, [formatVoiceInputStartError, promptCodexSessionExpired, resolveDoneWaiters, setVoiceState]);
+  }, [formatVoiceInputError, formatVoiceInputStartError, promptCodexSessionExpired, resolveDoneWaiters, setVoiceState]);
 
   useEffect(() => {
     const unsubscribe = window.electronAPI.voiceInput.onGlobalOverlayCommand((command: GlobalOverlayCommand) => {
@@ -1222,6 +1281,7 @@ export function VoiceInputOverlay() {
       }
       if (command.type === 'submit') {
         if (stateRef.current === 'error') {
+          if (stopInFlightRef.current) return;
           void startRecording();
           return;
         }
@@ -1399,12 +1459,26 @@ export function VoiceInputOverlay() {
           className={transcriptClassName}
         >
           {hasBlockingError ? (
-            <div className="flex h-full items-center justify-center">
+            <div className="flex h-full flex-col items-center justify-center gap-3">
               <VoiceInputStatusNotice
                 message={error!}
                 className="w-full justify-start rounded-[12px] shadow-none"
                 maxWidthClassName="max-w-none"
               />
+              <button
+                type="button"
+                tabIndex={-1}
+                className="inline-flex h-9 shrink-0 items-center rounded-full border border-[var(--cmd-palette-border)] bg-[var(--send-btn-bg)] px-3 text-12 font-medium text-[var(--send-btn-icon)] transition hover:opacity-85 active:scale-[0.98]"
+                onFocus={preventOverlayButtonFocus}
+                onPointerDown={(event) => {
+                  beginOverlayButtonAction(event);
+                  void startRecording();
+                }}
+                onClick={suppressOverlayButtonClick}
+                disabled={stopInFlight}
+              >
+                {t('voiceInputOverlay.retry')}
+              </button>
             </div>
           ) : displayText ? (
             displayContent

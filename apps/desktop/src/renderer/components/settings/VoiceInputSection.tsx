@@ -2030,6 +2030,12 @@ export function VoiceInputSection() {
             <dd className="mt-1 truncate text-17 font-medium leading-[1.2] text-[var(--settings-section-title)]">
               {stats.sessionCount}
             </dd>
+            <dd className="mt-1 text-11 leading-[1.3] text-[var(--settings-section-sublabel)] opacity-70">
+              {t('settings.voiceInput.usage.outcomes', {
+                noSpeech: stats.noSpeechSessionCount,
+                failed: stats.failedSessionCount,
+              })}
+            </dd>
           </div>
         </dl>
 
