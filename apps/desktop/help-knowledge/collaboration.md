@@ -14,7 +14,7 @@ Collaboration ("协同" / Collab) lets one session — the **lead** — bring in
 **Adding more workers:**
 
 - From the collaboration tab's worker list, use **Create new worker** (+) to add more.
-- Default limits are a **soft cap of 5** and a **hard cap of 8** workers per lead — you'll see a warning past the soft cap, and creation is blocked at the hard cap. Both are adjustable (1–20) in **Settings > Collaboration**.
+- Default limits are a **soft cap of 5** and a **hard cap of 8** workers per lead — you'll see a warning past the soft cap, and creation is blocked at the hard cap. Both are adjustable (1–20) in the Collaboration section under **Settings > General**.
 
 **While collaborating:**
 

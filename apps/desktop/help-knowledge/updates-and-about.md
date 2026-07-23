@@ -17,6 +17,6 @@ Cindy checks for updates automatically and downloads them in the background. Whe
 
 **Notes:**
 
-- Auto-update only triggers a relaunch prompt — it never restarts you mid-session unexpectedly.
+- By default, a downloaded update only triggers a relaunch prompt — it won't restart you unexpectedly. If you enable **Auto-relaunch when idle**, Cindy will restart itself automatically once the idle and busy gates pass, without an additional prompt.
 - If you want to skip auto-update temporarily, you can dismiss the relaunch prompt; the update applies next time you start the app.
 - The Claude Code / Codex versions you see here are what the **app's bundled agents** run as — they're independent from any Claude / Codex CLI you have installed globally on your shell.
