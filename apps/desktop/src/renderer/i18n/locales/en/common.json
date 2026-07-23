@@ -3813,12 +3813,16 @@
     },
     "copy": "Copy",
     "openPermissionSettings": "Grant permission",
+    "openSettings": "Open Settings",
+    "settingsRecoveryHint": "Finish setup, then press the shortcut again to retry.",
+    "settingsOpenFailed": "Could not open Settings. Open it manually from the main window.",
     "close": "Close",
     "submit": "Finish and input",
     "submitWithShortcut": "Finish and input ({{shortcut}})",
     "closeWithShortcut": "Close and discard ({{shortcut}})",
     "codexRequired": "Connect Codex in {{appName}} before using voice input.",
     "apiKeyRequired": "Configure an API Key before using voice input.",
+    "cindyServiceUnavailable": "The Cindy voice service is unavailable. Check your network or switch service source.",
     "asrServiceUnavailable": "Voice recognition service failed to connect. Check your network and try again."
   },
   "chat": {

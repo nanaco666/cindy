@@ -1232,6 +1232,7 @@ interface ElectronAPI {
       refinerModel?: string | null;
     }) => Promise<VoiceInputModelSelectionResultData>;
     reloadModelSelection: () => Promise<VoiceInputModelSelectionResultData>;
+    openSettings: (tab: 'voice-input' | 'providers') => Promise<{ ok: true }>;
     start: (params?: {
       sourceLanguage?: string;
       refinementEnabled?: boolean;
@@ -1839,7 +1840,8 @@ interface ElectronAPI {
         | { type: 'session'; id: string; messageClientId?: string }
         | { type: 'project'; workingDir: string }
         | { type: 'new-session'; workingDir: string }
-        | { type: 'share-import'; filePath: string },
+        | { type: 'share-import'; filePath: string }
+        | { type: 'settings'; tab: 'voice-input' | 'providers' },
     ) => void,
   ) => () => void;
 
@@ -1854,6 +1856,7 @@ interface ElectronAPI {
     | { type: 'project'; workingDir: string }
     | { type: 'new-session'; workingDir: string }
     | { type: 'share-import'; filePath: string }
+    | { type: 'settings'; tab: 'voice-input' | 'providers' }
     | null
   >;
 

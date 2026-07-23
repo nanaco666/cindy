@@ -69,6 +69,12 @@ export type DeepLinkPayload =
   | { type: 'new-session'; workingDir: string }
   | { type: 'share-import'; filePath: string }
   /**
+   * 主进程内部发起的设置页导航。它不由自定义 URL 解析产生；复用现有的
+   * main-window focus + renderer dispatch 通道，供全局浮层等独立窗口把用户
+   * 带回主窗口的准确设置页。
+   */
+  | { type: 'settings'; tab: 'voice-input' | 'providers' }
+  /**
    * 纯"把窗口拉回前台"意图,不携带导航语义 (典型来源:OAuth 授权成功页的
    * "打开 xdt-maker" 按钮 / 自动唤起)。main 进程内消化,不发给 renderer、
    * 不进 pending 缓存 (冷启动时 app 启动本身就会前台,缓存无意义)。
@@ -285,6 +291,14 @@ export function focusMainWindow(): boolean {
   win.focus();
   if (process.platform === 'darwin') app.focus({ steal: true });
   return true;
+}
+
+/**
+ * 从独立窗口把用户带回主窗口中的语音相关设置页。
+ * tab 是封闭联合类型，避免 IPC 调用方把任意 renderer 路由注入主窗口。
+ */
+export function openMainWindowVoiceSettings(tab: 'voice-input' | 'providers'): void {
+  dispatchDeepLink({ type: 'settings', tab });
 }
 
 function dispatchDeepLink(payload: DeepLinkPayload): void {

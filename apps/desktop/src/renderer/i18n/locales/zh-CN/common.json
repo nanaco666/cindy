@@ -3812,12 +3812,16 @@
     },
     "copy": "复制",
     "openPermissionSettings": "去授权",
+    "openSettings": "前往设置",
+    "settingsRecoveryHint": "完成配置后，再按快捷键即可重试。",
+    "settingsOpenFailed": "无法打开设置，请从主窗口手动进入设置。",
     "close": "关闭",
     "submit": "完成并输入",
     "submitWithShortcut": "完成并输入（{{shortcut}}）",
     "closeWithShortcut": "关闭并放弃（{{shortcut}}）",
     "codexRequired": "需要先在 {{appName}} 里连接 Codex，才能使用语音输入。",
     "apiKeyRequired": "需要先配置 API Key，才能使用语音输入。",
+    "cindyServiceUnavailable": "Cindy 官方语音服务暂不可用，请检查网络或切换服务来源。",
     "asrServiceUnavailable": "语音识别服务连接失败，请检查网络或稍后重试。"
   },
   "chat": {

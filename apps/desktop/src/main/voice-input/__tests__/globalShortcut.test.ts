@@ -18,7 +18,10 @@ const mocks = vi.hoisted(() => {
   const modifierSetShortcut = vi.fn();
   const modifierStop = vi.fn();
   const modifierIsRunning = vi.fn();
-  const registerShortcut = vi.fn((_accelerator: string) => true);
+  const registerShortcut = vi.fn((accelerator: string) => {
+    void accelerator;
+    return true;
+  });
 
   return {
     handlers,
@@ -234,5 +237,22 @@ describe('voice input global shortcut registration', () => {
     expect(result).toMatchObject({ ok: false });
     expect(mocks.registeredShortcuts.has('F16')).toBe(true);
     expect(mocks.registeredShortcuts.has('F17')).toBe(false);
+  });
+
+  it('rejects settings navigation from a non-overlay sender with a typed IPC error', async () => {
+    const { registerGlobalVoiceInputIpc } = await import('../global.js');
+    registerGlobalVoiceInputIpc();
+    const openSettings = mocks.handlers.get('voice-input:open-settings');
+
+    await expect(openSettings?.({ sender: mocks.focusedWindow.webContents }, 'providers'))
+      .rejects.toThrow('[PERMISSION_DENIED]');
+  });
+
+  it('suppresses paste-target focus restore for settings navigation', async () => {
+    const { shouldRestoreOverlayPasteTarget } = await import('../global.js');
+
+    expect(shouldRestoreOverlayPasteTarget({ restorePasteTarget: false }, 'darwin')).toBe(false);
+    expect(shouldRestoreOverlayPasteTarget(undefined, 'darwin')).toBe(true);
+    expect(shouldRestoreOverlayPasteTarget(undefined, 'win32')).toBe(false);
   });
 });

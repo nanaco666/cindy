@@ -508,7 +508,8 @@ export function MainLayout() {
         | { type: 'session'; id: string; messageClientId?: string }
         | { type: 'project'; workingDir: string }
         | { type: 'new-session'; workingDir: string }
-        | { type: 'share-import'; filePath: string },
+        | { type: 'share-import'; filePath: string }
+        | { type: 'settings'; tab: 'voice-input' | 'providers' },
     ) => {
       if (payload.type === 'session') {
         navigateToSession(payload.id, payload.messageClientId);
@@ -531,6 +532,10 @@ export function MainLayout() {
       }
       if (payload.type === 'share-import') {
         openShareImport(payload.filePath);
+        return;
+      }
+      if (payload.type === 'settings') {
+        navigate(`/settings?tab=${payload.tab}`);
       }
     },
     [navigate, navigateToSession, openShareImport],

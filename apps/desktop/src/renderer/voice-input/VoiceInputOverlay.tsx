@@ -16,6 +16,7 @@ import type { DictationRefinementContext, VoiceInputState } from '@cindy/voice-i
 import { Spinner } from '@/components/ui/spinner';
 import { Tip } from '@/components/ui/tooltip';
 import { createLogger } from '@/lib/logger';
+import { extractIpcError } from '@/utils/ipcError';
 import {
   isCodexSessionExpiredError,
   useCodexSessionExpiredPrompt,
@@ -62,6 +63,10 @@ import { VoiceInputMicWaveIcon } from './VoiceInputMicWaveIcon';
 import { getVoiceInputWorkletUrl } from './workletUrl';
 import { VoiceInputPointerHintLayer } from './VoiceInputPointerHintLayer';
 import { isVoiceInputServiceConnectionError } from './overlayErrors';
+import {
+  resolveVoiceInputReadinessRecovery,
+  type VoiceInputRecoverySettingsTab,
+} from './readinessRecovery';
 import { buildRefinementPreviewText } from './refinementPreviewText';
 import { isVoiceInputEventScopeActive, shouldHandleVoiceInputEvent } from './eventScope';
 import { VoiceInputStatusErrorIcon, VoiceInputStatusNotice } from './VoiceInputStatusNotice';
@@ -154,6 +159,7 @@ export function VoiceInputOverlay() {
   const [hasPasteError, setHasPasteError] = useState(false);
   const [pasteErrorCode, setPasteErrorCode] = useState<PasteErrorCode | null>(null);
   const [permissionPrompt, setPermissionPrompt] = useState<PermissionPromptKind | null>(null);
+  const [settingsRecoveryTab, setSettingsRecoveryTab] = useState<VoiceInputRecoverySettingsTab | null>(null);
   const [actionTipsDisabled, setActionTipsDisabled] = useState(false);
   const [shortcutLabel, setShortcutLabel] = useState(() => (
     formatVoiceInputShortcut(getVoiceInputSettings().shortcut)
@@ -186,6 +192,8 @@ export function VoiceInputOverlay() {
   // stopAndPaste itself to gate re-entry, so reusing it would deadlock cancel.
   const cancelRequestedRef = useRef(false);
   const suppressedStartErrorAttemptsRef = useRef(new Set<number>());
+  const settingsRecoveryTabRef = useRef<VoiceInputRecoverySettingsTab | null>(null);
+  const openSettingsInFlightRef = useRef(false);
 
   const setVoiceState = useCallback((next: VoiceInputState) => {
     stateRef.current = next;
@@ -206,6 +214,9 @@ export function VoiceInputOverlay() {
     setHasPasteError(false);
     setPasteErrorCode(null);
     setPermissionPrompt(null);
+    setSettingsRecoveryTab(null);
+    settingsRecoveryTabRef.current = null;
+    openSettingsInFlightRef.current = false;
     setDraftText('');
     setFinalText('');
     setRefinementPreviewText('');
@@ -452,16 +463,30 @@ export function VoiceInputOverlay() {
   }, [closeOverlay, resetHiddenOverlaySession]);
 
   const showStartFailure = useCallback(async (message: string, authErrorReason?: string) => {
+    const failureAttemptId = startAttemptIdRef.current;
     resetOverlayInteraction();
     log.warn('global voice input start failed:', message);
+    await stopEngine();
+    await restoreSystemAudioForRecording();
+    const modelSelection = await window.electronAPI.voiceInput.getModelSelection().catch((selectionError) => {
+      log.warn(
+        'read voice input model selection after start failure failed:',
+        selectionError instanceof Error ? selectionError.message : String(selectionError),
+      );
+      return null;
+    });
+    const readinessRecovery = modelSelection && !modelSelection.readiness.ok
+      ? resolveVoiceInputReadinessRecovery(modelSelection.readiness, modelSelection.selection.serviceMode)
+      : null;
+    if (startAttemptIdRef.current !== failureAttemptId) return;
     const promptReason = authErrorReason ?? message;
     const shouldPromptCodexSessionExpired = promptCodexSessionExpired(promptReason);
     if (shouldPromptCodexSessionExpired) {
       codexSessionPromptActiveRef.current = true;
     }
-    await stopEngine();
-    await restoreSystemAudioForRecording();
-    setError(formatVoiceInputStartError(message));
+    setError(readinessRecovery ? t(readinessRecovery.messageKey) : formatVoiceInputStartError(message));
+    settingsRecoveryTabRef.current = readinessRecovery?.settingsTab ?? null;
+    setSettingsRecoveryTab(readinessRecovery?.settingsTab ?? null);
     setMicrophoneNotice(null);
     setHasPasteError(false);
     setPasteErrorCode(null);
@@ -472,7 +497,7 @@ export function VoiceInputOverlay() {
     if (!showResult.ok) {
       log.warn('show global voice input start failure overlay failed:', showResult.error);
     }
-    if (!shouldPromptCodexSessionExpired) {
+    if (!shouldPromptCodexSessionExpired && !readinessRecovery) {
       window.setTimeout(closeOverlay, OVERLAY_ERROR_CLOSE_MS);
     }
   }, [
@@ -483,7 +508,26 @@ export function VoiceInputOverlay() {
     restoreSystemAudioForRecording,
     setVoiceState,
     stopEngine,
+    t,
   ]);
+
+  const openReadinessSettings = useCallback(async () => {
+    const tab = settingsRecoveryTab;
+    if (!tab || openSettingsInFlightRef.current) return;
+    openSettingsInFlightRef.current = true;
+    try {
+      await window.electronAPI.voiceInput.openSettings(tab);
+    } catch (settingsError) {
+      const ipcError = extractIpcError(settingsError);
+      log.warn(
+        'open voice input recovery settings failed:',
+        ipcError?.message ?? (settingsError instanceof Error ? settingsError.message : String(settingsError)),
+      );
+      setError(t('voiceInputOverlay.settingsOpenFailed'));
+    } finally {
+      openSettingsInFlightRef.current = false;
+    }
+  }, [settingsRecoveryTab, t]);
 
   const cancelAndClose = useCallback(async () => {
     // Re-entry guard is the dedicated cancelRequestedRef, NOT closingRef —
@@ -611,6 +655,9 @@ export function VoiceInputOverlay() {
     setHasPasteError(false);
     setPasteErrorCode(null);
     setPermissionPrompt(null);
+    setSettingsRecoveryTab(null);
+    settingsRecoveryTabRef.current = null;
+    openSettingsInFlightRef.current = false;
     setDraftText('');
     setFinalText('');
     setRefinementPreviewText('');
@@ -674,24 +721,8 @@ export function VoiceInputOverlay() {
         ? t('voiceInputOverlay.codexRequired')
         : t('voiceInputOverlay.apiKeyRequired');
       const authErrorReason = guards.readiness.authErrorReason;
-      const canPromptCodexSessionExpired = Boolean(
-        guards.readiness.auth === 'codex' &&
-        authErrorReason &&
-        isCodexSessionExpiredError(authErrorReason),
-      );
-      const didPromptCodexSessionExpired = canPromptCodexSessionExpired && authErrorReason
-        ? promptCodexSessionExpired(authErrorReason)
-        : false;
-      codexSessionPromptActiveRef.current = didPromptCodexSessionExpired;
+      await showStartFailure(error, authErrorReason);
       resolveStartReadyState(attemptId, { ok: false, error });
-      setError(
-        error,
-      );
-      setVoiceState('error');
-      await restoreSystemAudioForRecording();
-      if (!didPromptCodexSessionExpired) {
-        window.setTimeout(closeOverlay, OVERLAY_ERROR_CLOSE_MS);
-      }
       return;
     }
 
@@ -772,8 +803,8 @@ export function VoiceInputOverlay() {
       return;
     }
     if (!result.ok) {
-      resolveStartReadyState(attemptId, result);
       await showStartFailure(result.error, result.authErrorReason);
+      resolveStartReadyState(attemptId, result);
       suppressedStartErrorAttemptsRef.current.delete(attemptId);
       return;
     }
@@ -941,6 +972,11 @@ export function VoiceInputOverlay() {
       const startResult = await waitForStartReadyWhileStopping(startReady);
       if (cancelRequestedRef.current) return;
       if (!startResult.ok) {
+        if (settingsRecoveryTabRef.current) {
+          commitUsageStats();
+          closingRef.current = false;
+          return;
+        }
         invalidateStartAttempt();
         setError(formatVoiceInputStartError(startResult.error));
         setVoiceState('error');
@@ -1237,6 +1273,7 @@ export function VoiceInputOverlay() {
   const dragHandlers = useVoiceInputOverlayDrag();
 
   const hasPermissionPrompt = Boolean(permissionPrompt);
+  const hasSettingsRecovery = Boolean(settingsRecoveryTab);
   const hasBlockingError = Boolean(error) && !hasPasteError && !hasPermissionPrompt;
   const displayText = hasPasteError
     ? pendingPasteTextRef.current || finalText || draftText
@@ -1275,7 +1312,7 @@ export function VoiceInputOverlay() {
   const permissionPromptHint = permissionPrompt
     ? t(`voiceInputOverlay.permissionPrompts.${permissionPrompt}.hint`)
     : '';
-  const transcriptClassName = hasPasteError || hasPermissionPrompt
+  const transcriptClassName = hasPasteError || hasPermissionPrompt || hasSettingsRecovery
     ? 'min-h-[44px] max-h-[72px] cursor-default overflow-y-auto whitespace-pre-wrap break-words text-15 leading-6 text-[var(--cmd-palette-item-text)]'
     : 'h-[88px] cursor-default overflow-y-auto whitespace-pre-wrap break-words text-15 leading-6 text-[var(--cmd-palette-item-text)]';
   const showLiveMicWave = state === 'listening' && !hasBlockingError && !hasPasteError && !hasPermissionPrompt;
@@ -1409,6 +1446,27 @@ export function VoiceInputOverlay() {
                 {t('voiceInputOverlay.openPermissionSettings')}
               </button>
             </div>
+          </div>
+        )}
+        {hasSettingsRecovery && hasBlockingError && (
+          <div className="mt-3 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
+            <span className="min-w-0 text-12 leading-5 text-[var(--cmd-palette-item-meta)]">
+              {t('voiceInputOverlay.settingsRecoveryHint')}
+            </span>
+            <button
+              type="button"
+              tabIndex={-1}
+              className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-[var(--cmd-palette-border)] bg-[var(--send-btn-bg)] px-3 text-12 font-medium text-[var(--send-btn-icon)] shadow-sm transition hover:opacity-85 active:scale-[0.98]"
+              onFocus={preventOverlayButtonFocus}
+              onPointerDown={(event) => {
+                beginOverlayButtonAction(event);
+                void openReadinessSettings();
+              }}
+              onClick={suppressOverlayButtonClick}
+            >
+              <Settings className="h-3.5 w-3.5" />
+              {t('voiceInputOverlay.openSettings')}
+            </button>
           </div>
         )}
         {hasPasteError && (

@@ -879,6 +879,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke('voice-input:model-selection:set', patch),
     reloadModelSelection: (): Promise<VoiceInputModelSelectionResultWire> =>
       ipcRenderer.invoke('voice-input:model-selection:reload'),
+    openSettings: (tab: 'voice-input' | 'providers'): Promise<{ ok: true }> =>
+      ipcRenderer.invoke('voice-input:open-settings', tab),
     start: (params?: {
       sourceLanguage?: string;
       refinementEnabled?: boolean;
@@ -2133,7 +2135,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
         | { type: 'session'; id: string; messageClientId?: string }
         | { type: 'project'; workingDir: string }
         | { type: 'new-session'; workingDir: string }
-        | { type: 'share-import'; filePath: string },
+        | { type: 'share-import'; filePath: string }
+        | { type: 'settings'; tab: 'voice-input' | 'providers' },
     ) => void,
   ): (() => void) =>
     fanOutDeepLinkNavigate((payload) => {
@@ -2143,6 +2146,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
         id?: unknown;
         workingDir?: unknown;
         filePath?: unknown;
+        tab?: unknown;
         messageClientId?: unknown;
       };
       if (p.type === 'session' && typeof p.id === 'string' && p.id.length > 0) {
@@ -2153,6 +2157,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
             ? { messageClientId: p.messageClientId }
             : {}),
         });
+      } else if (p.type === 'settings' && (p.tab === 'voice-input' || p.tab === 'providers')) {
+        callback({ type: 'settings', tab: p.tab });
       } else if (
         p.type === 'project' &&
         typeof p.workingDir === 'string' &&
@@ -2182,6 +2188,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     | { type: 'project'; workingDir: string }
     | { type: 'new-session'; workingDir: string }
     | { type: 'share-import'; filePath: string }
+    | { type: 'settings'; tab: 'voice-input' | 'providers' }
     | null
   > => ipcRenderer.invoke('deep-link:take-pending'),
 

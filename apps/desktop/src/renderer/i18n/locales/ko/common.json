@@ -3812,12 +3812,16 @@
     },
     "copy": "복사",
     "openPermissionSettings": "권한 허용",
+    "openSettings": "설정으로 이동",
+    "settingsRecoveryHint": "설정을 완료한 뒤 단축키를 다시 눌러 재시도하세요.",
+    "settingsOpenFailed": "설정을 열 수 없습니다. 메인 창에서 직접 설정을 여세요.",
     "close": "닫기",
     "submit": "완료 후 입력",
     "submitWithShortcut": "완료 후 입력({{shortcut}})",
     "closeWithShortcut": "닫고 취소({{shortcut}})",
     "codexRequired": "음성 입력을 사용하려면 먼저 {{appName}}에서 Codex에 연결하세요.",
     "apiKeyRequired": "음성 입력을 사용하려면 먼저 API Key를 설정하세요.",
+    "cindyServiceUnavailable": "Cindy 음성 서비스를 사용할 수 없습니다. 네트워크를 확인하거나 서비스 소스를 전환하세요.",
     "asrServiceUnavailable": "음성 인식 서비스에 연결하지 못했습니다. 네트워크를 확인한 뒤 다시 시도하세요."
   },
   "chat": {
