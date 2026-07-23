@@ -303,7 +303,7 @@ export function UnifiedModelList({
           >
             {/* 常驻动画只在 refreshing(有状态含义)时挂载,且挂在 wrapper 上(规则 7)。 */}
             {refreshing ? (
-              <span className="inline-flex animate-spin">
+              <span className="inline-flex animate-spin motion-reduce:animate-none">
                 <RefreshCw size={14} />
               </span>
             ) : (

@@ -27,12 +27,13 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { ChevronDown, ChevronRight, Layers, Sparkles } from 'lucide-react';
+import { ChevronRight, Layers, Sparkles } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { cn } from '@/lib/utils';
 import type { ChatMessage } from '@/lib/makerChatStore';
 import { useExpandedBlockMemory } from '@/hooks/useExpandedBlockMemory';
+import { Collapse } from '@/components/ui/collapse';
 import { Spinner } from '@/components/ui/spinner';
 
 import { AgentActionRow } from './AgentActionRow';
@@ -210,7 +211,13 @@ function ExpandedThinkingRow({ message }: { message: ChatMessage }) {
       </span>
       {canExpand && (
         <span className="inline-flex h-[18px] shrink-0 items-center text-[var(--msg-tool-card-chevron)]">
-          {expanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+          <ChevronRight
+            size={13}
+            className={cn(
+              'transition-transform duration-[var(--motion-fast,150ms)]',
+              expanded && 'rotate-90',
+            )}
+          />
         </span>
       )}
     </button>
@@ -351,11 +358,14 @@ export function WorkGroupBlock({
               {formatDuration(elapsedMs)}
             </span>
           )}
-          {expanded ? (
-            <ChevronDown size={14} className="shrink-0 text-[var(--msg-tool-card-chevron)]" />
-          ) : (
-            <ChevronRight size={14} className="shrink-0 text-[var(--msg-tool-card-chevron)]" />
-          )}
+          <ChevronRight
+            size={14}
+            className={cn(
+              'shrink-0 text-[var(--msg-tool-card-chevron)]',
+              'transition-transform duration-[var(--motion-fast,150ms)]',
+              expanded && 'rotate-90',
+            )}
+          />
         </button>
 
         {isLivePreviewVisible && (
@@ -376,7 +386,7 @@ export function WorkGroupBlock({
           </div>
         )}
 
-        {expanded && (
+        <Collapse open={expanded}>
           <div
             className={cn(
               'mt-1 pl-3 py-[2px]',
@@ -397,7 +407,7 @@ export function WorkGroupBlock({
               </Fragment>
             ))}
           </div>
-        )}
+        </Collapse>
       </div>
     </div>
   );

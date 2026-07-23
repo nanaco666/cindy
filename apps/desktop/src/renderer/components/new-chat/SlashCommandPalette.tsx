@@ -208,6 +208,9 @@ export function SlashCommandPalette({
           'rounded-[12px] border p-[6px]',
           'bg-[var(--cmd-palette-bg)]',
           'border-[var(--cmd-palette-border)]',
+          // mount-only 入场:面板锚在输入框上方,从左下角轻长出(DESIGN.md
+          // §14.4 轻浮层原型);输入过滤只重渲不重挂,动画不会重放。
+          'origin-bottom-left animate-float-in',
         )}
         style={{ boxShadow: 'var(--cmd-palette-shadow)', maxHeight }}
       >

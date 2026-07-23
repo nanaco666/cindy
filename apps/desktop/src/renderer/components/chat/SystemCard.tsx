@@ -10,6 +10,7 @@ import { ArrowLeftRight, ChevronRight, Layers, RefreshCw, Target } from 'lucide-
 import { useTranslation } from 'react-i18next';
 
 import { cn } from '@/lib/utils';
+import { Collapse } from '@/components/ui/collapse';
 import { LearnStatusCard } from '@/features/learn/LearnStatusCard';
 
 interface SystemCardProps {
@@ -306,7 +307,7 @@ function ContextCard({ data }: { data?: Record<string, unknown> }) {
         ))}
       </div>
 
-      {expanded && (
+      <Collapse open={expanded}>
         <div className="mt-2">
           {usage.model && (
             <div className="mb-2 truncate text-[12px] leading-[1.3] text-[var(--msg-tool-text)]">
@@ -410,7 +411,7 @@ function ContextCard({ data }: { data?: Record<string, unknown> }) {
             </div>
           )}
         </div>
-      )}
+      </Collapse>
     </div>
   );
 }
@@ -802,21 +803,23 @@ function AgentSwitchCard({ data }: { data?: Record<string, unknown> }) {
         </button>
         <div className="h-px flex-1 bg-[var(--msg-tool-card-border)]" />
       </div>
-      {expanded && handoff && (
-        <div
-          className={cn(
-            'mx-auto mt-2 max-w-full rounded-[10px] border border-[var(--msg-tool-card-border)]',
-            'bg-[var(--msg-tool-card-bg)] px-4 py-3 select-text',
-          )}
-        >
-          <div className="mb-1.5 text-[11px] font-medium text-muted-foreground">
-            {t('chat.systemCard.agentSwitch.handoffTitle')}
+      <Collapse open={expanded && !!handoff}>
+        {handoff ? (
+          <div
+            className={cn(
+              'mx-auto mt-2 max-w-full rounded-[10px] border border-[var(--msg-tool-card-border)]',
+              'bg-[var(--msg-tool-card-bg)] px-4 py-3 select-text',
+            )}
+          >
+            <div className="mb-1.5 text-[11px] font-medium text-muted-foreground">
+              {t('chat.systemCard.agentSwitch.handoffTitle')}
+            </div>
+            <pre className="max-h-64 overflow-y-auto whitespace-pre-wrap break-words font-mono text-[12px] leading-[1.55] text-[var(--msg-tool-text)]">
+              {handoff}
+            </pre>
           </div>
-          <pre className="max-h-64 overflow-y-auto whitespace-pre-wrap break-words font-mono text-[12px] leading-[1.55] text-[var(--msg-tool-text)]">
-            {handoff}
-          </pre>
-        </div>
-      )}
+        ) : null}
+      </Collapse>
     </div>
   );
 }

@@ -150,7 +150,7 @@ export function WorktreeRestoreBanner({
         )}
         title={t('chat.worktreeRestoreBanner.restoreTitle')}
       >
-        <span className={cn('inline-flex', restoring && 'animate-spin')}>
+        <span className={cn('inline-flex', restoring && 'animate-spin motion-reduce:animate-none')}>
           <RefreshCw size={12} />
         </span>
         {restoring

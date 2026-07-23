@@ -39,12 +39,15 @@ export function FeishuConflictDialog({
           className={cn(
             'fixed inset-0 z-50',
             'bg-black/40 backdrop-blur-sm',
-            'data-[state=open]:animate-in data-[state=open]:fade-in',
+            'data-[state=open]:animate-confirm-overlay-in',
           )}
         />
         <AlertDialog.Content
           className={cn(
             'fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2',
+            // 与 ConfirmDialog 同款入场(250ms 淡入+缩放);keyframe 自带
+            // translate(-50%,-50%) 居中,与上面的 -translate-x/y-1/2 终态一致。
+            'data-[state=open]:animate-confirm-content-in',
             'w-[440px] max-w-[90vw]',
             'rounded-[14px] p-6',
             'bg-[var(--settings-input-bg)]',

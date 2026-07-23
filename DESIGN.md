@@ -625,9 +625,48 @@ card/container
 
 ### 14.4 动效与过渡(motion)
 
-- 允许**功能性状态过渡**:hover / 选中 / 展开等的颜色、背景、透明度变化,时长 **≤150ms**,目的是让状态变化不突兀(全 app 的 `transition-colors` 即此类,合规)。
-- **禁止装饰性 / 大幅位移动画**:无意义的位移、缩放、弹跳、视差、循环动画。交互仍应"快、直接"(承接 §1 / §7 的克制气质 —— 把原先"零过渡"修正为"零装饰性动效",功能性过渡是允许的)。
-- **容器形变(container transform)** —— 2026-07-21 新增的第二类 sanctioned motion,专用于 composer 工具条上「chip 原位长成弹层」的开合(权限选择器 / 模型选择器 / + 菜单这类 trigger 即弹层锚点的控件):
+> 2026-07 扩写。Cindy 的动效性格承接 §1 / §7 的纸感与克制:**东西不飞不弹,只淡入、只轻推、只平滑改变尺寸**。允许功能性状态过渡,禁止装饰性动效;本节把"功能性"钉成可执行的档位与原型,避免各组件时长/曲线各自为政。
+
+#### Motion token(唯一档位来源)
+
+全局 token 定义在 `apps/desktop/src/renderer/styles/globals.css` 的 `:root`;移动端(`apps/mobile`)应在 `src/theme/tokens.ts` 落同名同值常量(双端同构,与颜色 token 的双端策略一致,随移动端动效改造落地)。**新增过渡/动画一律引用 token,不再硬编码时长与 cubic-bezier**;5 档时长 + 3 条曲线,与 §5 三档圆角同一哲学,档位之外的值先过设计评审。
+
+| Token | 值 | 用途 |
+|---|---|---|
+| `--motion-instant` | 80ms | hover 即时反馈、轻浮层退场 |
+| `--motion-fast` | 150ms | 颜色/透明度状态切换(`transition-colors` 即此档)、轻浮层入场 |
+| `--motion-base` | 200ms | 尺寸变化:展开折叠、面板收展 |
+| `--motion-enter` | 250ms | 重浮层(弹窗)入场 |
+| `--motion-exit` | 150ms | 重浮层(弹窗)退场 |
+| `--motion-ease-out` | `cubic-bezier(0.16, 1, 0.3, 1)` | 入场/展开 |
+| `--motion-ease-in` | `cubic-bezier(0.4, 0, 1, 1)` | 退场 |
+| `--motion-ease-move` | `cubic-bezier(0.4, 0, 0.2, 1)` | 位置/尺寸插值 |
+
+#### 语义 → 动效原型(同一语义全 app 同一动效)
+
+| 语义 | 规格 | 参照实现 |
+|---|---|---|
+| 轻浮层(menu / popover / tooltip) | 入 `animate-float-in`(opacity + scale 0.97→1,fast/ease-out;tooltip 纯 opacity 用 `animate-fade-in`),出 `animate-float-out`(纯 opacity,instant/ease-in)。**退场永远快于入场,退场不缩放**(缩放退场读作"被吸走",纸应该原地淡掉) | `components/ui/dropdown-menu.tsx` |
+| 重浮层(modal / confirm) | 入 250ms 淡入+scale 0.95→1,出 150ms | `components/ui/confirm-dialog.tsx` |
+| 展开/折叠 | base/ease-move,grid `0fr↔1fr` 高度 + opacity | `features/cc-agent/sidebar/SectionCollapse.tsx` |
+| 列表重排 | FLIP,transform 平移 | `components/ui/toast/ToastContainer.tsx` |
+| 按压 | `active:scale-[0.98]`(交互 pill / 按钮通用) | ConfirmDialog 按钮 |
+| 完成 | **全 app 唯一允许 overshoot 的语义**(`status-done-pop`) | `globals.css` |
+| 运行中 | opacity 呼吸,必须挂 HTML wrapper(AGENTS.md 规则 7) | `session-breathing` |
+| hover / 状态色 | `transition-colors`,≤ fast(150ms) | 全 app 现状 |
+| 容器形变(chip 长成弹层) | 300ms,见下方独立类目(显式例外) | composer 权限/模型选择器 |
+
+#### 红线(性能与克制)
+
+- **常驻/循环动画只允许 HTML 元素上的 `transform` / `opacity`**(compositor-only,AGENTS.md 规则 7 全文适用;SVG 上不挂任何动画)。
+- 高度/grid 等非 compositor 属性只允许**一次性瞬态动画**(用户触发、有明确结束),不允许常驻。
+- 新增 `@keyframes` / `animate-*` 类必须同步登记 `globals.css` 的 `prefers-reduced-motion` 白名单(全局 `* { transition: none }` 兜不住 keyframes)。
+- 实时跟手的交互(resizer 拖动、拖拽跟随)**不加缓动**——跟手即反馈。
+- 禁止:无意义位移、弹跳、视差、循环装饰动画、`transition-all`、给流式文本加打字机逐字动画(流式本身已是动效)。交互仍应"快、直接"。
+
+#### 例外类目:容器形变(container transform)
+
+- 2026-07-21 新增的第二类 sanctioned motion,专用于 composer 工具条上「chip 原位长成弹层」的开合(权限选择器 / 模型选择器 / + 菜单这类 trigger 即弹层锚点的控件):
   - **定义**:弹层不是"凭空浮现盖在 trigger 上",而是以 trigger chip 的精确几何(位置 / 尺寸 / 胶囊圆角 / pill 底色)为起点,宽 / 高 / 圆角 / 底色 / 阴影同步过渡到面板形态;chip 本体在形变期间隐藏,由弹层内的"chip 幽灵层"承接视觉,随生长 crossfade 成菜单内容。**全程整体不透明度恒为 1** —— 只有内容层 crossfade,无整体 fade-in/out。
   - **参数**:时长 **300ms**(开合对称),缓动 `cubic-bezier(0.3, 0.9, 0.25, 1)`(快起步长缓收);菜单行淡入可带 ≤20ms/行 的错峰。这是 ≤150ms 基线的**显式例外**,仅限本类目,不得外溢到其它过渡。
   - **圆角插值**:形变起点圆角写 chip 高度的一半(如 30px chip → 15px),**禁止写 9999px**(9999→12 的插值会让中途帧圆成一坨);终点为容器 12px。

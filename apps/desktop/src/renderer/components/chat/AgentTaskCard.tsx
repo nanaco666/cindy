@@ -3,7 +3,6 @@ import {
   AlertCircle,
   Bot,
   CheckCircle2,
-  ChevronDown,
   ChevronRight,
   CircleStop,
   LoaderCircle,
@@ -12,6 +11,7 @@ import {
 import { useTranslation } from 'react-i18next';
 
 import { useExpandedBlockMemory } from '@/hooks/useExpandedBlockMemory';
+import { Collapse } from '@/components/ui/collapse';
 import { Spinner } from '@/components/ui/spinner';
 import type { AgentTaskUpdate, ChatMessage } from '@/hooks/useCCAgentChat';
 import { cn } from '@/lib/utils';
@@ -191,14 +191,18 @@ export function AgentTaskCard({ toolCall, update, result, subagentModel, session
               ))}
             </span>
           </span>
-          {expanded ? (
-            <ChevronDown size={14} className="mt-1 shrink-0 text-[var(--text-tertiary)]" aria-hidden="true" />
-          ) : (
-            <ChevronRight size={14} className="mt-1 shrink-0 text-[var(--text-tertiary)]" aria-hidden="true" />
-          )}
+          <ChevronRight
+            size={14}
+            className={cn(
+              'mt-1 shrink-0 text-[var(--text-tertiary)]',
+              'transition-transform duration-[var(--motion-fast,150ms)]',
+              expanded && 'rotate-90',
+            )}
+            aria-hidden="true"
+          />
         </button>
 
-        {expanded && (
+        <Collapse open={expanded}>
           <div className="mt-2 border-l-2 border-[var(--agent-actions-rail)] pl-3 text-13 leading-5 text-[var(--text-secondary)]">
             {description && <p className="mb-1">{description}</p>}
             {summary && <p className="mb-1 whitespace-pre-wrap">{summary}</p>}
@@ -222,7 +226,7 @@ export function AgentTaskCard({ toolCall, update, result, subagentModel, session
               />
             )}
           </div>
-        )}
+        </Collapse>
       </div>
     </div>
   );

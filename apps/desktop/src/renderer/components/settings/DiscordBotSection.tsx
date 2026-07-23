@@ -246,7 +246,7 @@ export function DiscordBotSection() {
           )}
         >
           {isSaving ? (
-            <span className="inline-flex animate-spin" aria-hidden>
+            <span className="inline-flex animate-spin motion-reduce:animate-none" aria-hidden>
               <Loader2 size={14} />
             </span>
           ) : null}
@@ -357,7 +357,7 @@ function ConnectedCard(props: {
           )}
         >
           {props.isDisconnecting ? (
-            <span className="inline-flex animate-spin" aria-hidden>
+            <span className="inline-flex animate-spin motion-reduce:animate-none" aria-hidden>
               <Loader2 size={13} />
             </span>
           ) : (

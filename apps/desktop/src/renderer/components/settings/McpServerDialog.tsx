@@ -400,7 +400,7 @@ export function McpServerDialog({ initial, existingIds, onSaved, onClose }: McpS
             )}
           >
             {saving && (
-              <span className="absolute left-[18px] inline-flex animate-spin">
+              <span className="absolute left-[18px] inline-flex animate-spin motion-reduce:animate-none">
                 <Loader2 className="h-[14px] w-[14px]" />
               </span>
             )}

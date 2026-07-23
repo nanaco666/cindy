@@ -40,6 +40,7 @@ import { createContext, useContext, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ChevronDown, ChevronUp, Ghost } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Collapse } from '@/components/ui/collapse';
 import {
   commandDirectiveSegments,
   mentionDirectiveSegments,
@@ -218,7 +219,9 @@ export function GhostSummonCard({
           )}
           <span className="min-w-0 truncate">{t('chat.ghostSummon.mention', { names })}</span>
         </button>
-        {expanded && (
+        {/* 父容器 gap-1.5 与 -mt-1.5 恒等相消,间距改由内层 pt-1.5 承担
+            (在 overflow-hidden 里随高度动画),挂载/卸载瞬间零跳变。 */}
+        <Collapse open={expanded} className="-mt-1.5" innerClassName="pt-1.5">
           <div
             className="max-w-full rounded-[12px] border px-3 py-2"
             style={{ borderColor: 'var(--border-default)' }}
@@ -235,7 +238,7 @@ export function GhostSummonCard({
               injectedClassName="text-[var(--text-secondary)]"
             />
           </div>
-        )}
+        </Collapse>
       </div>
     );
   }
@@ -324,6 +327,8 @@ export function GhostSummonCard({
             {/* $指令 徽章 + 版本号仅展开态显示:收起态卡头降噪(指令词在
                 展开区原文里也查得到,收起时不重复报幕);版本号来自实时
                 安装态,意识已卸下时不显示。 */}
+            {/* 行内徽章不套 Collapse:父级是 span 行内流,块级 grid 容器会
+                非法嵌套且把徽章挤成换行;行内显隐保持瞬时条件渲染。 */}
             {expanded && (
               <>
                 {badgeCommand && (
@@ -364,7 +369,7 @@ export function GhostSummonCard({
           {prompt}
         </div>
       )}
-      {expanded && (
+      <Collapse open={expanded}>
         <div
           className="px-3.5 pb-3 pt-2.5"
           style={{ borderTop: '1px solid var(--border-default)' }}
@@ -403,7 +408,7 @@ export function GhostSummonCard({
             </div>
           )}
         </div>
-      )}
+      </Collapse>
     </div>
   );
 }

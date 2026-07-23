@@ -10,9 +10,10 @@
  */
 
 import { useState } from 'react';
-import { ChevronDown, ChevronRight, MessageSquare } from 'lucide-react';
+import { ChevronRight, MessageSquare } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
+import { Collapse } from '@/components/ui/collapse';
 import SlackIcon from './SlackIcon';
 
 interface ThreadContextEntry {
@@ -88,14 +89,19 @@ export default function HookTaskCard({ im, userText, threadContext }: HookTaskCa
                 'hover:text-[var(--text-secondary)] transition-colors focus:outline-none',
               )}
             >
-              {expanded ? (
-                <ChevronDown size={12} className="shrink-0" />
-              ) : (
-                <ChevronRight size={12} className="shrink-0" />
-              )}
+              <ChevronRight
+                size={12}
+                className={cn(
+                  'shrink-0',
+                  'transition-transform duration-[var(--motion-fast,150ms)]',
+                  expanded && 'rotate-90',
+                )}
+              />
               <span>{t('chat.threadContext.viewThread', { count: entries.length })}</span>
             </button>
-            {expanded && (
+            {/* 父容器 gap-2 与 -mt-2 恒等相消,间距改由内层 pt-2 承担
+                (在 overflow-hidden 里随高度动画),挂载/卸载瞬间零跳变。 */}
+            <Collapse open={expanded} className="-mt-2" innerClassName="pt-2">
               <div className="flex flex-col gap-0.5 pl-[18px]">
                 {entries.map((entry, i) => (
                   // biome-ignore lint/suspicious/noArrayIndexKey: 消息内容不可变,index 稳定。
@@ -104,7 +110,7 @@ export default function HookTaskCard({ im, userText, threadContext }: HookTaskCa
                   </div>
                 ))}
               </div>
-            )}
+            </Collapse>
           </>
         )}
       </div>

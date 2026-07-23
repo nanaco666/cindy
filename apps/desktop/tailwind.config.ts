@@ -88,6 +88,21 @@ const config: Config = {
         10: '10',
       },
       keyframes: {
+        // 浮层通用入退场(时长/曲线走 globals.css 的 --motion-* token,规范见
+        // DESIGN.md §14.4)。只允许 opacity / transform,保证 compositor-only。
+        'float-in': {
+          from: { opacity: '0', transform: 'scale(0.97)' },
+          to: { opacity: '1', transform: 'scale(1)' },
+        },
+        // float-out 故意不写 from:省略时浏览器从属性当前计算值起插,
+        // 入场进行到一半就关闭时不会先跳到 1 再淡出(review 反馈的闪变)。
+        'float-out': {
+          to: { opacity: '0' },
+        },
+        'fade-in': {
+          from: { opacity: '0' },
+          to: { opacity: '1' },
+        },
         'confirm-overlay-in': {
           from: { opacity: '0' },
           to: { opacity: '1' },
@@ -106,10 +121,24 @@ const config: Config = {
         },
       },
       animation: {
-        'confirm-overlay-in': 'confirm-overlay-in 250ms cubic-bezier(0, 0, 0.2, 1)',
-        'confirm-overlay-out': 'confirm-overlay-out 150ms cubic-bezier(0.4, 0, 1, 1)',
-        'confirm-content-in': 'confirm-content-in 250ms cubic-bezier(0, 0, 0.2, 1)',
-        'confirm-content-out': 'confirm-content-out 150ms cubic-bezier(0.4, 0, 1, 1)',
+        // float-out 需要 forwards:Radix 等 animationend 才卸载,fill 不驻留
+        // 会在动画结束到卸载之间闪回原状。
+        'float-in':
+          'float-in var(--motion-fast, 150ms) var(--motion-ease-out, cubic-bezier(0.16, 1, 0.3, 1))',
+        'float-out':
+          'float-out var(--motion-instant, 80ms) var(--motion-ease-in, cubic-bezier(0.4, 0, 1, 1)) forwards',
+        'fade-in':
+          'fade-in var(--motion-fast, 150ms) var(--motion-ease-out, cubic-bezier(0.16, 1, 0.3, 1))',
+        // 时长接 motion token(值与原 250/150ms 一致,曲线不变):reduced-motion
+        // 经 token 归零即可覆盖 data-[state=*]: 变体形态的用法。
+        'confirm-overlay-in':
+          'confirm-overlay-in var(--motion-enter, 250ms) cubic-bezier(0, 0, 0.2, 1)',
+        'confirm-overlay-out':
+          'confirm-overlay-out var(--motion-exit, 150ms) cubic-bezier(0.4, 0, 1, 1)',
+        'confirm-content-in':
+          'confirm-content-in var(--motion-enter, 250ms) cubic-bezier(0, 0, 0.2, 1)',
+        'confirm-content-out':
+          'confirm-content-out var(--motion-exit, 150ms) cubic-bezier(0.4, 0, 1, 1)',
       },
     },
   },
