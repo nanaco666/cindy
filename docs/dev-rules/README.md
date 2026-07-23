@@ -13,6 +13,7 @@
 
 ## 当前文档
 
+- [`repo-map.md`](repo-map.md)：仓库地图——apps、packages 与顶层目录的定位导航。
 - [`environment-setup.md`](environment-setup.md)：公共开发环境、依赖安装与 submodule
   准备。
 - [`desktop-development.md`](desktop-development.md)：Desktop 的 Agent 安全启动入口与

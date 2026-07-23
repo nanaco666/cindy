@@ -42,6 +42,8 @@ pnpm install
   避免继续使用 `.git/config` 缓存的旧仓库地址。
 - 公开版本不包含内建插件种子；插件通过 SkillHub 或手动安装。不要把任何访问令牌写入
   仓库、Git 配置或脚本。
+- agent 二进制（claude／codex／ripgrep）的版本由仓库维护者统一判断与升级；贡献者和
+  Agent 不要修改 `tools/<kind>/latest.json` 的版本 pin，也不要主动升级二进制。
 - 依赖和命令的事实源是当前 checkout 的 `package.json` 与脚本。文档和脚本冲突时，
   先核对代码并修正文档，不要继续执行已失效命令。
 - 不要把其他 checkout 的 `node_modules`、用户数据、授权文件或数据库复制进当前工作区。

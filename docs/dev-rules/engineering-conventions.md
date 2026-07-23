@@ -2,7 +2,8 @@
 
 > **状态**：权威开发规则（authoritative）
 > **读取时机**：新增或修改 Desktop 日志、IPC 错误处理、main 侧业务逻辑与测试、
-> 跨平台（macOS／Windows）相关行为，或任何 UI 文案的 i18n 落地之前
+> 跨平台（macOS／Windows）相关行为、任何 UI 文案的 i18n 落地，或新增／修改动画与
+> 界面加载时序等渲染性能相关行为之前
 
 本文收拢一组适用于整个客户端的通用工程约束。IPC 的安全与授权边界另见
 [`electron-security-and-process-boundaries.md`](electron-security-and-process-boundaries.md)，
@@ -96,6 +97,34 @@ UI 文案的语气与措辞另见根 [`DESIGN.md`](../../DESIGN.md) 的 Voice & 
   报错阻断；空值与“与默认语言完全相同”只发警告。它保证 key 结构齐整，但**翻译是否
   准确仍需人核**，改完至少跑一次 `pnpm check:i18n`。
 
+## 6. 注释
+
+- 所有类／对象都需要有明确的注释说明其职责；核心类的实现内部要有注释描述逻辑。
+- 注释写"代码本身表达不了的约束与原因"，不复述下一行代码在做什么。
+
+## 7. 渲染性能与视觉连续性
+
+界面切换与动画的性能约束。动效的视觉规范（允许哪些过渡、时长、容器形变）见根
+[`DESIGN.md`](../../DESIGN.md) §14.4；本节只管性能红线与加载时序。
+
+- **杜绝跳变与空白帧**：所有界面／子界面／边栏切换，过程中不产生让人难受的视觉跳变。
+- **取数时序**：Render 层先异步获取数据（绝不能卡主线程渲染），获取期间界面不发生
+  变化，拿到数据后再刷新显示。应用内数据大部分来自本地，默认**不做 loading 态界面**；
+  需要不同设计时先和用户确认。
+- **常驻动画必须 compositor-only（编码与 review 必查）**：常驻／循环的单元素简单动效
+  （spinner、呼吸、shimmer 等）只允许写成 **HTML 元素**上的 `transform` / `opacity`；
+  其它写法（`mask` / `background-position` 等，以及任何挂在 SVG 上的动画——SVG 上连
+  `transform` / `opacity` 也不行）都会每帧惊动主线程，造成持续 CPU／能耗泄漏。图标
+  动效一律挂外层 wrapper：
+  `❌ <Loader2 className="animate-spin" />`；
+  `✅ <span className="animate-spin inline-flex"><Loader2 /></span>`。
+- **复杂动效**：多元素组合动效（错峰、内部形变等）不死限实现宿主（含 SVG），按表现力
+  灵活选，但遵守性能原则：常驻 infinite 动画越少越好、能不错峰就不错峰、能限挂载时长
+  就限。
+- 动画只在有状态含义时挂载（如仅 running），响应 `prefers-reduced-motion`；性能有疑虑
+  时用 DevTools Performance 实测，以数据为准。弹窗按钮 loading 等秒级瞬态存量不强制
+  改，新代码一律照此。
+
 ## Review 清单
 
 1. 有没有裸 `console.log`？临时排查日志是否清理干净？
@@ -106,6 +135,9 @@ UI 文案的语气与措辞另见根 [`DESIGN.md`](../../DESIGN.md) 的 Voice & 
 4. 路径、子进程、FS、性能、快捷键是否在 macOS / Windows 两端都成立？未实测平台是否
    标注？
 5. UI 文案是否全部走 `t()`、4 种语言齐全且翻译准确、无孤儿 key？是否跑过 `pnpm check:i18n`？
+6. 新增类／核心逻辑是否有职责注释？
+7. 新增常驻动画是否 compositor-only（HTML 元素 + `transform`/`opacity` + wrapper）、
+   响应 `prefers-reduced-motion`？界面切换是否无跳变／空白帧、未引入不必要的 loading 态？
 
 验证按 [`desktop-development.md`](desktop-development.md) 的分层选择：改 TypeScript 至少跑相关
 类型检查与定向测试；改 i18n 跑 `pnpm check:i18n`；跨模块或高风险改动再扩大验证范围。

@@ -20,7 +20,7 @@ What makes this system distinctive is the combination of a single geometric sans
 
 ## 2. Color Palette & Roles
 
-> **多主题架构注意**:本节列出的色值是 **Default Light / Default Dark**(默认主题,设计灵感来自 Ollama 官网)的具体值,作为视觉规范的参考样本。运行时**每个色值都通过 token 引用**(见第 10 节 Theme System & Token Reference),所以同一组件在其它主题(如 Eclipse / One Dark Pro / Monokai Pro)下会自动呈现该主题的对应色。**实现组件时永远写 token 不写 hex**——具体规则见 CLAUDE.md 规则 #18。
+> **多主题架构注意**:本节列出的色值是 **Default Light / Default Dark**(默认主题,设计灵感来自 Ollama 官网)的具体值,作为视觉规范的参考样本。运行时**每个色值都通过 token 引用**(见第 10 节 Theme System & Token Reference),所以同一组件在其它主题(如 Eclipse / One Dark Pro / Monokai Pro)下会自动呈现该主题的对应色。**实现组件时永远写 token 不写 hex**——具体规则见第 10 节。
 
 ### Primary Text
 
@@ -500,18 +500,19 @@ CSS variable 名一律 kebab-case。点号风格(如 VSCode 的 `sidebar.itemAct
 4. **找不到合适 token 时,不要硬塞**:跟用户讨论是否要新增 slot/singleton
 5. **不接受** `bg-[#xxx] dark:bg-[#xxx]` 这种硬编码 pair——这是 P2 前的反模式,已经全量迁移过一次,新代码不允许引入
 
-详见 CLAUDE.md 规则 #18。
+本节即 token 使用规则的权威正文；UI 文案的 i18n 落地规则见
+`docs/dev-rules/engineering-conventions.md` §5。
 
 ## 11. Voice & Content（微文案规范）
 
-> **状态:草案**,2026-06 引入(参考 Vercel Geist `design.md` 的 Voice & Content 一节)。本节规定**界面文案怎么写**,与 CLAUDE.md 规则 #18(i18n 体系)配套——#18 管"文案必须 4 语言对齐、走 token",本节管"每条文案本身的语气/措辞"。本节不新增任何 UI 字符串,只约束写法。
+> **状态:草案**,2026-06 引入(参考 Vercel Geist `design.md` 的 Voice & Content 一节)。本节规定**界面文案怎么写**,与 `docs/dev-rules/engineering-conventions.md` §5(i18n 体系)配套——那边管"文案必须 4 语言对齐、经 i18n key 落地",本节管"每条文案本身的语气/措辞"。本节不新增任何 UI 字符串,只约束写法。
 
 Cindy 的产品气质和视觉一致:**克制、直接、不自夸**。文案是工具的一部分,不是营销。
 
 ### 11.1 语言无关原则(zh-CN / en / ja / ko 全部适用)
 
 - **动作 = 动词 + 宾语,不要裸动词**。按钮/菜单项说清"对什么做什么":`Deploy Project` / `删除会话` / `セッションを削除`,**禁止** `Confirm` / `OK` / `确定` / `提交` 这类无宾语的孤立动词(确认弹窗的主按钮尤其要带宾语,让用户脱离上下文也能看懂)。
-- **错误信息 = 发生了什么 + 怎么办**。只报"出错了 / Failed"不合格;要给出下一步("连接超时,检查网络后重试")。对应规则 #13:IPC 错误码是给代码用的,面向用户的那句话必须人话 + 可操作。
+- **错误信息 = 发生了什么 + 怎么办**。只报"出错了 / Failed"不合格;要给出下一步("连接超时,检查网络后重试")。对应 `docs/dev-rules/engineering-conventions.md` §2(IPC 错误协议):IPC 错误码是给代码用的,面向用户的那句话必须人话 + 可操作。
 - **进行中态 = 现在进行时 + 省略号**。`Deploying…` / `正在部署…` / `デプロイ中…`。我们 ChatView 的 Thinking 状态栏(`Spelunking…`,Thinking Orange)已是这个范式,新增加载/处理态沿用。
 - **结果反馈点名对象、不说"成功"**。Toast 说"变了什么"而不是"操作成功了":`会话已删除` 而非 `删除成功`;`Project deleted` 而非 `Deleted successfully`。**禁止** "successfully / 成功了" 这类废话词。(Toast 的视觉规范见 §2,本条只管文案。)
 - **空状态指向第一个动作**,别只画一句"暂无数据"——告诉用户现在能做什么("还没有会话,点 + 新建一个")。
@@ -521,7 +522,7 @@ Cindy 的产品气质和视觉一致:**克制、直接、不自夸**。文案是
 
 - **English**:标签 / 按钮 / 标题 / Tab 用 **Title Case**(`Deploy Project`);正文 / 帮助文字 / Toast 用 **sentence case**(只首字母大写)。用弯引号 `" "` 和省略号字符 `…`,不用 `"` 和 `...`。
 - **zh-CN**:**没有 Title Case 概念**,不要逐词首字母大写、不要给中文塞英文式标点;中英混排时英文术语保留原样(`部署 Project`)。句末 Toast / 标签不加句号。
-- **ja / ko**:同样无 Title Case;遵循各自的助词/敬体习惯,术语译法没把握时先查证(对应规则 #18:ja/ko 不许硬凑)。
+- **ja / ko**:同样无 Title Case;遵循各自的助词/敬体习惯,术语译法没把握时先查证(对应 `docs/dev-rules/engineering-conventions.md` §5:ja/ko 不许硬凑)。
 - **数字 / 单位**:四语言都用阿拉伯数字 + 半角,数字与单位间距按各语言习惯。
 
 ### 11.3 自查清单(改动文案时)
@@ -530,7 +531,7 @@ Cindy 的产品气质和视觉一致:**克制、直接、不自夸**。文案是
 - [ ] 错误文案给了"怎么办",不是只报错
 - [ ] 没有 "successfully / 成功" 废话词
 - [ ] 进行中态是"现在进行时 + …"
-- [ ] 4 个 `common.json` 都补齐且符合本语言的大小写/标点(规则 #18)
+- [ ] 4 个 `common.json` 都补齐且符合本语言的大小写/标点(见 `docs/dev-rules/engineering-conventions.md` §5)
 
 ## 12. Component Spec(结构化样板 — 待定)
 
@@ -579,7 +580,7 @@ card/container
 
 ## 13. Known Spec / Token Gaps（跟踪中）
 
-> §12 结构化重写过程中暴露的设计系统欠债。本节**持久存在**(独立于 §12 是否被采用),每条解决后打勾并把结论并入 §2 / §4 / §10。下列"现状"均已 grep 源码核实(以源码为准),非臆测。涉及新增/改 token 的(G3 / G4)按规则 #16 须先与 owner 确认再动 `colors.ts`。
+> §12 结构化重写过程中暴露的设计系统欠债。本节**持久存在**(独立于 §12 是否被采用),每条解决后打勾并把结论并入 §2 / §4 / §10。下列"现状"均已 grep 源码核实(以源码为准),非臆测。涉及新增/改 token 的(G3 / G4)按第 10 节的 token 规则须先与 owner 确认再动 `colors.ts`。
 
 - [x] **G1 — 白底次按钮文字 `#404040`「Button Text Dark」是文档漂移,非真 token**(已解决 2026-06)
   现状:§2 / §4 称其"专用于白底按钮文字",但全仓库只有 `features/maker-experimental/MakerExperimentalView.tsx`(实验视图,裸 hardcode)出现 #404040,**无任何真实次按钮**用它做文字色;§10 也无对应 token。
@@ -591,17 +592,17 @@ card/container
 
 - [x] **G3 — placeholder token 碎片化 + 取值自相矛盾(真欠债)**(已解决 2026-06)
   现状:4 个 per-surface alias 无统一 slot,且取值打架——`--settings-input-placeholder` = #c4c4c4(§4 认证的"淡到读着像空"),但 `--chat-input-placeholder` = `var(--text-tertiary)` = **#a3a3a3(Silver)**,而 §4 白纸黑字说 Silver **太显眼、读着像已填、不可做 placeholder**。即聊天输入框 placeholder 实际违反了我们自己的 §4 规范。
-  处理:`colors.ts` 新增语义 slot `--text-placeholder`(#c4c4c4 / #525252),4 个 alias(chat/ask/settings/plan-action-fb)default 收口为 `var(--text-placeholder)`;7 套非默认主题原 `settings-input-placeholder` override 就地改名为 `text-placeholder`(沿用原常量,避免回退,符合规则 #16 对每套主题的评估)。默认主题下 chat placeholder 由 #a3a3a3 修正为 #c4c4c4。2 套亮色主题(atom-one-light / solarized-light)的 `text-placeholder` 进一步从 tertiary 改用各自 **disabled 档**(更淡)——亮色背景下 tertiary≈2.6:1 命中 §4 禁用 Silver 的对比度,placeholder 须更淡才读着像空(2026-06 review 反馈)。**本地/复制主题兼容**:slot 引入前创建的本地主题快照只冻结了旧 per-surface placeholder key、无 `text-placeholder`,加载期 `mapWireTheme` 经 `local-themes-normalize.ts` 归一化——缺 `text-placeholder` 时从旧 `settings-input-placeholder`(或任一 per-surface 值)播种并丢弃 4 个旧 per-surface override,使四个输入面统一走新 slot(不改写盘上 JSON、幂等;2026-06 review 反馈)。
+  处理:`colors.ts` 新增语义 slot `--text-placeholder`(#c4c4c4 / #525252),4 个 alias(chat/ask/settings/plan-action-fb)default 收口为 `var(--text-placeholder)`;7 套非默认主题原 `settings-input-placeholder` override 就地改名为 `text-placeholder`(沿用原常量,避免回退,符合第 10 节对每套主题的 override 评估)。默认主题下 chat placeholder 由 #a3a3a3 修正为 #c4c4c4。2 套亮色主题(atom-one-light / solarized-light)的 `text-placeholder` 进一步从 tertiary 改用各自 **disabled 档**(更淡)——亮色背景下 tertiary≈2.6:1 命中 §4 禁用 Silver 的对比度,placeholder 须更淡才读着像空(2026-06 review 反馈)。**本地/复制主题兼容**:slot 引入前创建的本地主题快照只冻结了旧 per-surface placeholder key、无 `text-placeholder`,加载期 `mapWireTheme` 经 `local-themes-normalize.ts` 归一化——缺 `text-placeholder` 时从旧 `settings-input-placeholder`(或任一 per-surface 值)播种并丢弃 4 个旧 per-surface override,使四个输入面统一走新 slot(不改写盘上 JSON、幂等;2026-06 review 反馈)。
 
 - [x] **G4 — `--radius`(8px)与容器圆角同名不同义(已解决 2026-06)**
   现状:`--radius` 实为 `0.5rem`(8px,shadcn 原语用);容器 12px 圆角实际靠 Tailwind `rounded-xl` 直接量实现。
-  处理:**圆角体系正式从"二元"改为"三档"**(8px 内层控件 / 12px 容器 / 9999px pill,见 §5 + §7 + §1)。8px 这一档窄范围限定多行输入框、下拉 / 菜单选中行、段内小单元,实现为 `rounded-lg`;shadcn `--radius`(8px)与这个内层档数值相同但语义独立(原语专用),容器仍走 `rounded-xl`(12px)。**本次纯文档,未动 token**。是否进一步 token 化为 `--radius-inner`(8px)/ `--radius-container`(12px)/ `--radius-pill`(9999px),收益偏低、**暂缓**,要做走规则 #16。
+  处理:**圆角体系正式从"二元"改为"三档"**(8px 内层控件 / 12px 容器 / 9999px pill,见 §5 + §7 + §1)。8px 这一档窄范围限定多行输入框、下拉 / 菜单选中行、段内小单元,实现为 `rounded-lg`;shadcn `--radius`(8px)与这个内层档数值相同但语义独立(原语专用),容器仍走 `rounded-xl`(12px)。**本次纯文档,未动 token**。是否进一步 token 化为 `--radius-inner`(8px)/ `--radius-container`(12px)/ `--radius-pill`(9999px),收益偏低、**暂缓**,要做走第 10 节的新增 token 流程。
 
-> **旁注(不在本次范围,仅记录)**:`MakerExperimentalView.tsx` 通篇裸 hardcode hex(#404040 / #d4d4d4 / #262626 / #333),违反规则 #16。因是 experimental 视图、且非本次任务,**不在此清理**,仅备忘。
+> **旁注(不在本次范围,仅记录)**:`MakerExperimentalView.tsx` 通篇裸 hardcode hex(#404040 / #d4d4d4 / #262626 / #333),违反第 10 节 token 规则。因是 experimental 视图、且非本次任务,**不在此清理**,仅备忘。
 
 ## 14. Interaction Conventions(交互约定)
 
-> 2026-06 引入。本规范此前只规范"长什么样"(色 / 圆角 / 字体 / 间距),不规范"怎么交互"——文本能不能选中、弹窗开了焦点落哪、回车是发送还是换行,这些反复要靠人逐个指出。本节把这些**非视觉的交互行为**钉成全局约定,与 §11(文案语气)互补。能用代码统一保证的就别靠人记(对应 CLAUDE.md 规则 #9)。
+> 2026-06 引入。本规范此前只规范"长什么样"(色 / 圆角 / 字体 / 间距),不规范"怎么交互"——文本能不能选中、弹窗开了焦点落哪、回车是发送还是换行,这些反复要靠人逐个指出。本节把这些**非视觉的交互行为**钉成全局约定,与 §11(文案语气)互补。能用代码统一保证的就别靠人记(对应 `docs/dev-rules/maker-core-and-agent-behavior.md` 的「代码优先确定性」)。
 
 ### 14.1 文本可选性(user-select)
 
@@ -620,7 +621,7 @@ card/container
 
 - **Enter = 提交**,**Shift+Enter = 换行**。
 - **输入法组字期间的 Enter 不触发提交** —— 判 `event.nativeEvent.isComposing`(中 / 日 / 韩用户选字按的回车不能被当成发送)。
-- 这套逻辑用代码统一,不要每个框各写一遍导致行为漂移(对应规则 #9)。
+- 这套逻辑用代码统一,不要每个框各写一遍导致行为漂移(对应 `docs/dev-rules/maker-core-and-agent-behavior.md` 的「代码优先确定性」)。
 
 ### 14.4 动效与过渡(motion)
 
@@ -630,7 +631,7 @@ card/container
   - **定义**:弹层不是"凭空浮现盖在 trigger 上",而是以 trigger chip 的精确几何(位置 / 尺寸 / 胶囊圆角 / pill 底色)为起点,宽 / 高 / 圆角 / 底色 / 阴影同步过渡到面板形态;chip 本体在形变期间隐藏,由弹层内的"chip 幽灵层"承接视觉,随生长 crossfade 成菜单内容。**全程整体不透明度恒为 1** —— 只有内容层 crossfade,无整体 fade-in/out。
   - **参数**:时长 **300ms**(开合对称),缓动 `cubic-bezier(0.3, 0.9, 0.25, 1)`(快起步长缓收);菜单行淡入可带 ≤20ms/行 的错峰。这是 ≤150ms 基线的**显式例外**,仅限本类目,不得外溢到其它过渡。
   - **圆角插值**:形变起点圆角写 chip 高度的一半(如 30px chip → 15px),**禁止写 9999px**(9999→12 的插值会让中途帧圆成一坨);终点为容器 12px。
-  - **实现红线**:(a) 必须 `prefers-reduced-motion` 降级为直切;(b) 测量目标几何时必须临时禁用 transition(否则 offsetHeight 在宽度过渡第 0 帧按旧宽度排版,含换行文本时量出假高度);(c) 属一次性开合动画,不受规则 7"常驻动画 compositor-only"约束,但仍需在低端 Windows 实测 300ms 内不掉帧;(d) 焦点 / Esc / outside-click / 焦点归还语义与 §14.2 相同,形变不豁免任何 a11y 要求。
+  - **实现红线**:(a) 必须 `prefers-reduced-motion` 降级为直切;(b) 测量目标几何时必须临时禁用 transition(否则 offsetHeight 在宽度过渡第 0 帧按旧宽度排版,含换行文本时量出假高度);(c) 属一次性开合动画,不受"常驻动画 compositor-only"红线(`docs/dev-rules/engineering-conventions.md` §7)约束,但仍需在低端 Windows 实测 300ms 内不掉帧;(d) 焦点 / Esc / outside-click / 焦点归还语义与 §14.2 相同,形变不豁免任何 a11y 要求。
   - **适用边界**:仅限"trigger 自身长成弹层"的控件。普通 Dialog / ConfirmDialog / Toast / lightbox 不适用(它们没有 chip 锚点,维持现状);hover 类小形变(圆钮横向展出文字标签,如 + / 语音按钮)视为同类目的窄变体,时长 ≤240ms。
 
 
@@ -722,7 +723,7 @@ Splash 品牌块字标是另一套素材(`assets/splash/wordmark.png` 白字 DAR
   - 正文(会话标题)= `text-foreground`(=`text-primary` light `#3C3F43`/dark `#D4D4D4`,不动);
   - 二级暗灰(行首图标普通态/时间戳/meta/分组标签)= light `#9A9DA3`/dark `#6F6F6F`(与 `text-secondary` 同值);CINDY override `sidebar-muted`/`sidebar-action-icon`(HSL `220.0 4.7% 62.2%`/`0 0% 43.5%`)+ 新增 `cmd-palette-item-meta` CINDY override(hex);
   - 选中胶囊 = 反相胶囊(2026-07-20 定稿):`sidebar-item-active` light `#3C3F43`/dark `#EEEEEE`,前景 `sidebar-item-active-foreground` light `#FCFCFC`/dark `#252222`,描边 `sidebar-item-active-border` transparent;**凡 `bg-sidebar-item-active` 上的前景必须配 `text-sidebar-item-active-foreground`,禁用 `text-foreground`**(PR#190 全量整改,该 token 缺省=foreground,非 CINDY 零变化);
-  - 强调行(running)行首图标(厂商 glyph/Puzzle/RadioTower/Clock)= **Thinking Orange `--warning-accent` `#EA6B17`**(用户拍板 2026-07-20,取代红系时期规则),呼吸动画 `session-status-breathing`;**选中态同样橙(running 取色优先级高于反相前景)**;移动端 `statusAccent` 同值同规则。常驻呼吸动画必须挂 HTML wrapper,SVG 保持静态(AGENTS 规则 7 红线,PR#226 治理)。
+  - 强调行(running)行首图标(厂商 glyph/Puzzle/RadioTower/Clock)= **Thinking Orange `--warning-accent` `#EA6B17`**(用户拍板 2026-07-20,取代红系时期规则),呼吸动画 `session-status-breathing`;**选中态同样橙(running 取色优先级高于反相前景)**;移动端 `statusAccent` 同值同规则。常驻呼吸动画必须挂 HTML wrapper,SVG 保持静态(常驻动画 compositor-only 红线,见 `docs/dev-rules/engineering-conventions.md` §7;PR#226 治理)。
   - 断言:③ CINDY_EXPECTED 守 4 token 值;⑦ 新增层级断言(二级暗灰 contrast 明显弱于正文 + 选中胶囊前景×红底 ≥4.5)。
 - **backlog(R2 §4.3 五点差异,lead 裁决 2026-07-17 本轮不做,入 backlog)**:Project_List 三态拆分(active-task-pill/project-card/flat-list-row 不共用 `sidebar-item-active`);项目 header/list card 选中应中性底(#312F2F/#F6F6F6 非 #DF0C27 大红);去 Project_List 选中组 `focus-ring-soft` 蓝 ring,改 card stroke #DCDFE3/#434343;小箭头 #A61629 强调(非整行红底)。详见 `2026-07-17-r2-ui-specs.md` §4.3。本轮收敛不扩战线,后续另开。
 
