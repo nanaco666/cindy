@@ -5,7 +5,7 @@
 // - production / TestFlight 必须由发布环境注入对应 App Store 数字 ID,缺失即中止。
 // - 本地 Xcode / Simulator 与自建分发变体共用 scripts/self-host-regions.json 的 app 身份、
 //   TapDB / Google 公开配置;EAS 云构建看不到 gitignored 文件,继续使用 EAS environment。
-// - 自建分发变体(`EXPO_PUBLIC_XDT_OTA_SELFHOST=1`,详见 docs/self-hosted-ios-build-and-ota.md):
+// - 自建分发变体(`EXPO_PUBLIC_XDT_OTA_SELFHOST=1`):
 //     · iOS 与 Android app identity 各自一个字段,可独立调整,互不影响。
 //     · updates.url 只放稳定占位值;真实 mobile-update-server 地址由启动端点清单的
 //       mobileUpdateBaseUrl 运行时覆写,不参与 build/fingerprint;

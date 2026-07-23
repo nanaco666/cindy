@@ -17,7 +17,7 @@ const GREEN_DEEP = '#5e6a00';
 
 const SURFACE_BG = '#fdf6e3'; // base3
 // ELEVATED (Card 层) 与 Chip 同色 = base2。Solarized 官方只有两档色板,
-// DESIGN.md §2.54 也明文承认 Dark Mode 里 "Card layer color and chip color
+// docs/design-rules/cindy-design-system.md §2.54 也明文承认 Dark Mode 里 "Card layer color and chip color
 // collapse to the same value — both represent one step lifted off Surface"
 // 这里把同一惯例搬到 light 模式:Card 比 Surface 略深一档 (94% → 88% L,
 // 差 6%) 产生"下沉式抬起"视觉,与 macOS 浅色模式 input 类似。
@@ -121,7 +121,7 @@ const singletonOverrides = {
   'settings-btn-primary-text': '#FFFFFF',
   'settings-btn-secondary-hover-bg': HOVER_BG,
   // 用 disabled(比 tertiary 更淡)而非 tertiary:亮色背景下 tertiary 偏深,
-  // 命中 DESIGN.md §4 禁用 Silver 的对比度,placeholder 需更淡才"读着像空"。
+  // 命中 docs/design-rules/cindy-design-system.md §4 禁用 Silver 的对比度,placeholder 需更淡才"读着像空"。
   'text-placeholder': TEXT_DISABLED,
   'settings-integration-avatar-bg': CHIP_BG,
   'settings-logout-bg': CHIP_BG,

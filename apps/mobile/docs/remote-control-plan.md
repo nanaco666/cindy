@@ -50,7 +50,7 @@
 2. **Shared core 收口先于继续加 UI**:凡是 session/message、pending interaction、queue/input、session controls、file browser、automation/schedule、device-link contract 这类可用纯对象表达的语义,先迁到 `packages/maker-shared`,mobile 只保留 native shell、navigation、touch UI 和 device-link 生命周期。
 3. **移动端 UI 重新按桌面信息架构整理**:首页对齐桌面左侧会话列表,直接展示所有可继续操作的会话;会话详情对齐桌面会话页主阅读流;Automations、Files、Settings 只保留桌面端已有概念的移动承载。调试、本地联调和 mock login 入口只能留在 dev/debug surface。
 4. **会话页做一次完整减法重构**:固定 header + message list + bottom interaction/composer 是主干;connection、queue、session controls、payload、diff、context/cost、file preview 只有在需要时进入 sheet/full-screen route,不在页面里常驻堆卡片。
-5. **视觉规范按桌面 `DESIGN.md` 统一**:整体保持黑白灰、无阴影、12px container radius、pill-shaped interactive control、克制字重和层级。React Native 不强制复用桌面组件,但颜色、层级、spacing、图标、状态表达必须可回指到桌面 token / lucide icon 语义。
+5. **视觉规范按桌面 `docs/design-rules/cindy-design-system.md` 统一**:整体保持黑白灰、无阴影、12px container radius、pill-shaped interactive control、克制字重和层级。React Native 不强制复用桌面组件,但颜色、层级、spacing、图标、状态表达必须可回指到桌面 token / lucide icon 语义。
 6. **自动化测试作为每次交付门槛**:用户不再手工承担回归。每次阶段交付至少跑 shared build/test、mobile typecheck/unit、web smoke、Maestro 静态检查、local full check-only;有 Maestro CLI 和固定模拟器时再跑 native flow 和 visual baseline。
 
 ### 1.2 本轮意见后的目标重校准

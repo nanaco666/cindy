@@ -33,7 +33,7 @@ import path from 'node:path';
 import { app, BrowserWindow } from 'electron';
 
 import { isTerminalAgentErrorEvent } from '@lizi/maker-core';
-import type { AgentEvent, AgentKind, PermissionMode, UserContentBlock } from '@lizi/maker-core';
+import type { AgentEvent, AgentKind, PermissionMode, UserContentBlock, UserMessage } from '@lizi/maker-core';
 import {
   effectiveSourceIdForModel,
   isModelVisible,
@@ -50,6 +50,8 @@ import {
   noteSilentStopUserSend,
   onSilentStopSettled,
 } from '../maker-ipc/register.js';
+import { prependHandoffToUserMessage } from '../maker-ipc/agentHandoff.js';
+import { agentHandoffPending } from '../maker-ipc/agentHandoffPendingSingleton.js';
 import { toDesktopSessionDispatchOutcome } from '../maker-host/send-outcome.js';
 import { createMessage } from '../localDb/ipc/messages.js';
 import {
@@ -404,7 +406,7 @@ export function createMakerHookSessionRunner(deps: {
             ? { workspaceKind: req.workspaceKind }
             : {}),
           title: req.isNew ? (req.title ?? undefined) : undefined,
-          // 渠道标记(仅 hook 亲生新会话): lizi_feishu_bot 据此在构建期给
+          // 渠道标记(仅 hook 亲生新会话): cindy_feishu_bot 据此在构建期给
           // 工具描述注入渠道路由提示。两个刻意限定:
           //   - 不用 'slack'(那是已退役的 organic SlackIM relay 渠道的历史
           //     标记,留给存量会话的侧边栏显示,新会话不再产生);
@@ -741,7 +743,7 @@ export function createMakerHookSessionRunner(deps: {
       }
       // 渠道说明只进喂给 agent 的内容,不进落库的 userMessageContent ——
       // 渲染层展示的用户消息保持 Slack 原话。逐 turn 追加固定文本,教模型
-      // 用 xdt-file 引用回传文件而非误用 lizi_feishu_bot(规则 9,实踩背景
+      // 用 xdt-file 引用回传文件而非误用 cindy_feishu_bot(规则 9,实踩背景
       // 见 outbound.ts 的常量注释)。
       const promptWithNote = `${req.prompt}\n\n${SLACK_HOOK_PROMPT_NOTE}`;
       const sendContent =
@@ -756,8 +758,12 @@ export function createMakerHookSessionRunner(deps: {
           : req.prompt;
 
       try {
+        const pendingHandoff = await agentHandoffPending.peek(session.id);
+        const outgoingMessage: UserMessage = pendingHandoff
+          ? (prependHandoffToUserMessage({ type: 'user', content: sendContent }, pendingHandoff) as UserMessage)
+          : { type: 'user', content: sendContent };
         const sendResult = await session.send(
-          { type: 'user', content: sendContent },
+          outgoingMessage,
           {
             origin,
             planMode: false,
@@ -784,6 +790,9 @@ export function createMakerHookSessionRunner(deps: {
             },
           },
         );
+        if (pendingHandoff && sendResult.accepted) {
+          agentHandoffPending.consume(session.id);
+        }
         const outcome = toDesktopSessionDispatchOutcome(sendResult, {
           source: 'hook-dispatcher',
           context: `hook:${req.origin.connectionId}`,

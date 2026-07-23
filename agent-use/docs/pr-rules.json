@@ -49,7 +49,7 @@
   "uiPaths": [
     "apps/desktop/src/renderer/",
     "apps/mobile/",
-    "DESIGN.md"
+    "docs/design-rules/cindy-design-system.md"
   ],
   "archGate": {
     "whitelist": [

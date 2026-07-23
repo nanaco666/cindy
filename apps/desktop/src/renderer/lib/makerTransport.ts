@@ -36,6 +36,7 @@ export interface RoutableMaker {
   setPlanMode: FullMaker['setPlanMode'];
   resolveInteraction: FullMaker['resolveInteraction'];
   getPendingInteractions: FullMaker['getPendingInteractions'];
+  deleteMessage: FullMaker['deleteMessage'];
   // —— 完整对等:会话级功能(fork / rewind / context-usage / extra-dirs / close / orca)——
   // 本地分支返回完整 maker 天然带这些;远程分支在 remoteMakerApi 里逐一隧道映射。
   fork: FullMaker['fork'];
@@ -88,6 +89,7 @@ function remoteMakerApi(deviceId: string): RoutableMaker {
     setPlanMode: t('maker:set-plan-mode') as FullMaker['setPlanMode'],
     resolveInteraction: t('maker:resolve-interaction') as FullMaker['resolveInteraction'],
     getPendingInteractions: t('maker:get-pending-interactions') as FullMaker['getPendingInteractions'],
+    deleteMessage: t('maker:message:delete') as FullMaker['deleteMessage'],
     fork: t('maker:fork') as FullMaker['fork'],
     forkStripEncrypted: t('maker:fork-strip-encrypted') as FullMaker['forkStripEncrypted'],
     rewindPreview: t('maker:rewind:preview') as FullMaker['rewindPreview'],
@@ -198,6 +200,13 @@ export function dismissErrorMessageFor(sessionId: string, clientId: string): Pro
   const deviceId = getSessionDeviceId(sessionId);
   if (!deviceId) return messageService.dismissError(sessionId, clientId);
   return invokeRemote(deviceId, 'local-db:messages:dismiss-error', [sessionId, clientId]);
+}
+
+/** 单条消息内容删除：device-link 会话在被控端关闭原生上下文并改写真相库。 */
+export function deleteMessageFor(sessionId: string, clientId: string): Promise<unknown> {
+  const deviceId = getSessionDeviceId(sessionId);
+  if (!deviceId) return window.electronAPI.maker.deleteMessage(sessionId, clientId);
+  return invokeRemote(deviceId, 'maker:message:delete', [sessionId, clientId]);
 }
 
 /** interrupted-turn-resume:中断提示「忽略」的确认(写一次 last_turn_ended_at),

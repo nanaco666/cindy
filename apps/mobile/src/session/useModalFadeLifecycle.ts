@@ -15,7 +15,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Animated, Easing } from 'react-native';
 
 export interface ModalFadeLifecycleOptions {
-  /** 进场时长(ms)。DESIGN.md §14.4:纯透明度过渡 ≤150ms。 */
+  /** 进场时长(ms)。docs/design-rules/cindy-design-system.md §14.4:纯透明度过渡 ≤150ms。 */
   inMs: number;
   /** 退场时长(ms),习惯上略短于进场。 */
   outMs: number;

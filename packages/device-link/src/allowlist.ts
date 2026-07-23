@@ -169,6 +169,8 @@ const CORE_INVOKE_CHANNELS: readonly string[] = [
   // 红条复活。老被控端无此 handler → CHANNEL_NOT_ALLOWED → 控制端吞错退化为
   // 本视图内存隐藏。
   'local-db:messages:dismiss-error',
+  // 消息菜单单条内容删除:在被控端清旧原生上下文并写 context rebuild handoff。
+  'maker:message:delete',
   // 订阅控制帧(push 驱动):被控端 dispatch 拦截执行,不落到 ipcMain handler。
   // 列入 allowlist 作契约登记 + 老被控端不识别时回 CHANNEL_NOT_ALLOWED 供控制端探测能力(回退 poll)。
   DL_SUBSCRIBE_CHANNEL,
@@ -262,6 +264,10 @@ const EXTENDED_INVOKE_CHANNELS: readonly string[] = [
   'maker:auth:get-state',
   'maker:usage:today',
   'maker:usage:account',
+  // Codex app-server 官方控制面:额度/reset 次数读取 + 经 desktop 账号绑定 offer 的
+  // 人工 reset。mutation 不接收 creditId,不能泛化成任意账号/凭证控制入口。
+  'maker:usage:codex-rate-limits',
+  'maker:usage:codex-rate-limit-reset',
   // 模型单价表(只读,main 侧 LiteLLM /model_group/info 缓存):控制端模型选择器展示被控端
   // 视角的单价(与被控端桌面 tooltip 同源)。无 sender 依赖、无副作用;老被控端无此 channel
   // → CHANNEL_NOT_ALLOWED → 控制端隐藏价格(与桌面「无价不显示」口径一致)。
@@ -377,6 +383,7 @@ export const PUSH_FORWARD_ALLOWLIST: ReadonlySet<string> = new Set([
   'local-db:sessions:patched',
   SESSION_ACTIVITY_CHANNEL,
   'local-db:messages:created',
+  'local-db:messages:deleted',
   // 被控端 terminal error 落库脏信号:控制端据此把已加载历史的远程会话标脏,下次打开重拉。
   'local-db:session:error-persisted',
   // 被控端「当前 New Maker 草稿」全量变更:被控端草稿 effort/fast/选中 等任意变化时广播,

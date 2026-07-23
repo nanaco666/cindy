@@ -11,13 +11,18 @@ describe('mobile message actions desktop-first surface', () => {
     expect(source).toContain('buildMessageActionBarPresentation');
     expect(sharedSource).toContain("input.canCopy ? 'copy' : null");
     expect(sharedSource).toContain("input.canFork ? 'fork' : null");
+    expect(sharedSource).toContain("input.canDelete ? 'delete' : null");
     expect(sharedSource).toContain("input.hasTime ? 'time' : null");
     expect(sharedSource).toContain("input.hasTurnCost ? 'cost' : null");
     expect(sharedSource).toContain("input.hasTime ? 'time' : null");
     expect(sharedSource).toContain("input.canRewind ? 'rewind' : null");
+    expect(source).toContain("&& (item.message.kind === 'user' || item.message.kind === 'assistant')");
+    expect(source).toContain('&& actions.isSessionStreaming !== true');
     expect(source).toContain('hitSlop={MESSAGE_CONTROL_HIT_SLOP}');
     expect(source).toContain('buttonSize={actionBar.buttonSize}');
     expect(source).toContain('iconSize={actionBar.iconSize}');
+    expect(source).toContain("return id === 'copy' || id === 'delete' || id === 'rewind' || id === 'fork';");
+    expect(source).toContain("if (id === 'delete') return 'message.deleteButton';");
     expect(source).toContain('{ height: buttonSize, width: buttonSize }');
     expect(source).toContain('height: 24');
     expect(source).toContain('width: 24');
@@ -74,11 +79,12 @@ describe('mobile message actions desktop-first surface', () => {
     expect(workGroupSource).toContain('chevronSize={header.chevronSize}');
     expect(workGroupSource).toContain('title={title}');
     expect(workGroupSource).toContain('subtitle={header.subtitle ?? undefined}');
-    // Work group 需要受控展开:运行中第一次点击先隐藏最近动作,再次点击才展开全部历史。
+    // Work group 需要受控展开:运行中只在最近 5 条与全部历史之间切换。
     expect(workGroupSource).not.toContain('defaultExpanded');
     expect(workGroupSource).toContain('controlledExpanded={expanded}');
     expect(workGroupSource).toContain('collapsedBody={livePreview}');
     expect(workGroupSource).toContain('onControlledToggle={onToggle}');
+    expect(workGroupSource).not.toContain('live-preview-dismissed');
     expect(workGroupSource).toContain('? <CompactActivityIndicator color={colors.textTertiary}');
     expect(workGroupSource).toContain(': <Layers color={colors.textTertiary}');
     expect(workGroupSource).toContain('variant={header.variant}');

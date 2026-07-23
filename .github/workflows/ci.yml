@@ -35,44 +35,38 @@ jobs:
           fetch-depth: 0
           lfs: true
 
-      # 私有 submodule(协议 + 两个内置插件种子仓)各用自己的 deploy key 走 SSH 拉取。
-      # deploy key 是 per-repo 的,一把 key 拉不了三个仓 —— 用 ssh config Host 别名
-      # + git insteadOf 重写,让每个 submodule URL 命中各自的 IdentityFile。
-      - name: Fetch private submodules
+      # 本 job 只做 typecheck / 单测 / 各类 guard,唯一的构建硬依赖是 cindy-protocol:
+      # 它的 packages/* 是 pnpm workspace 成员,apps/desktop 通过 workspace:* 依赖
+      # @cindy/slack-hook-protocol,缺了它 pnpm install --frozen-lockfile 直接失败。
+      # 两个内置插件种子仓(official / xd)只是运行期打包资源,本 job 不打包、单测也
+      # 只在 os.tmpdir 里自造种子夹具,不读真实仓库内容,所以这里不拉 —— 少两把
+      # deploy key、少两个失败点(fork PR 也更稳)。打包 / 发布流程需要时另行拉取。
+      - name: Fetch cindy-protocol submodule
         env:
           PROTOCOL_DEPLOY_KEY: ${{ secrets.CINDY_PROTOCOL_DEPLOY_KEY }}
-          OFFICIAL_PLUGIN_DEPLOY_KEY: ${{ secrets.CINDY_OFFICIAL_PLUGIN_DEPLOY_KEY }}
-          XD_PLUGIN_DEPLOY_KEY: ${{ secrets.CINDY_XD_PLUGIN_DEPLOY_KEY }}
         run: |
           [ -n "$PROTOCOL_DEPLOY_KEY" ] || { echo "CINDY_PROTOCOL_DEPLOY_KEY secret unavailable (fork PR?)" >&2; exit 1; }
-          [ -n "$OFFICIAL_PLUGIN_DEPLOY_KEY" ] || { echo "CINDY_OFFICIAL_PLUGIN_DEPLOY_KEY secret unavailable (fork PR?)" >&2; exit 1; }
-          [ -n "$XD_PLUGIN_DEPLOY_KEY" ] || { echo "CINDY_XD_PLUGIN_DEPLOY_KEY secret unavailable (fork PR?)" >&2; exit 1; }
           mkdir -p ~/.ssh
-          for name in protocol official xd; do
-            install -m 600 /dev/null ~/.ssh/deploy_key_$name
-          done
+          install -m 600 /dev/null ~/.ssh/deploy_key_protocol
           printf '%s\n' "$PROTOCOL_DEPLOY_KEY" > ~/.ssh/deploy_key_protocol
-          printf '%s\n' "$OFFICIAL_PLUGIN_DEPLOY_KEY" > ~/.ssh/deploy_key_official
-          printf '%s\n' "$XD_PLUGIN_DEPLOY_KEY" > ~/.ssh/deploy_key_xd
           # 固定 GitHub 官方 ed25519 host key,避免 ssh-keyscan 的 TOFU 与偶发空输出
           echo 'github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl' >> ~/.ssh/known_hosts
-          for name in protocol official xd; do
-            {
-              echo "Host github-$name"
-              echo "  HostName github.com"
-              echo "  User git"
-              echo "  IdentityFile ~/.ssh/deploy_key_$name"
-              echo "  IdentitiesOnly yes"
-              echo "  HostKeyAlgorithms ssh-ed25519"
-            } >> ~/.ssh/config
-          done
-          git config --global url."git@github-protocol:xindong/cindy-protocol.git".insteadOf git@github.com:xindong/cindy-protocol.git
-          git config --global url."git@github-official:xindong/cindy-official-plugin.git".insteadOf git@github.com:xindong/cindy-official-plugin.git
-          git config --global url."git@github-xd:xindong/cindy-xd-plugin.git".insteadOf git@github.com:xindong/cindy-xd-plugin.git
-          git submodule sync --recursive
-          git submodule update --init --force --recursive
+          {
+            echo "Host github-protocol"
+            echo "  HostName github.com"
+            echo "  User git"
+            echo "  IdentityFile ~/.ssh/deploy_key_protocol"
+            echo "  IdentitiesOnly yes"
+            echo "  HostKeyAlgorithms ssh-ed25519"
+          } >> ~/.ssh/config
+          # .gitmodules 里 cindy-protocol 声明的是 https URL;https 与 ssh 两种写法都
+          # 重写到 github-protocol 别名,命中 deploy key,避免回落到无凭证的真实 https。
+          git config --global url."git@github-protocol:xindong/cindy-protocol.git".insteadOf https://github.com/xindong/cindy-protocol.git
+          git config --global --add url."git@github-protocol:xindong/cindy-protocol.git".insteadOf git@github.com:xindong/cindy-protocol.git
+          git submodule sync -- cindy-protocol
+          git submodule update --init --force --recursive -- cindy-protocol
           # submodule 拉完立刻销毁私钥,不让它存活到 pnpm install 等会执行第三方脚本的步骤
-          rm -f ~/.ssh/deploy_key_protocol ~/.ssh/deploy_key_official ~/.ssh/deploy_key_xd
+          rm -f ~/.ssh/deploy_key_protocol
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v6

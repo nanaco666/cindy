@@ -1,7 +1,7 @@
 /**
  * ScheduleStatusChip — pill chip 显示 schedule 当前状态
  * ---------------------------------------------------------------------------
- * 文字 only，**禁色**（DESIGN.md grayscale 原则；status chip 不用红绿）。
+ * 文字 only，**禁色**（docs/design-rules/cindy-design-system.md grayscale 原则；status chip 不用红绿）。
  * 区分通过：背景灰阶深浅 + 文字色。
  *
  * - active   → Light Gray pill, Near Black text

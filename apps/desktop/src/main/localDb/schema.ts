@@ -325,6 +325,10 @@ export const messages = sqliteTable(
       // content 存 { fromAgentKind, toAgentKind, fromModel, toModel, handoff }。
       // handoff 交接文本只进这里(供 UI 展开查看/debug),不作为可见消息渲染正文,
       // 也不落 user 消息——wire 注入与显示分离。
+      // 'context_rebuild':单条消息内容删除后的内部重建标记。rewind_at 固定非 NULL,
+      // 所有普通历史读取都不可见；content.handoff 只在下一次发送的 wire 前缀消费。
+      // 'message_tombstone':被删除消息的无内容墓碑，保留 id/client_id 仅用于阻止
+      // 外部原生 transcript importer 把同一消息重新导入；正文/元数据均已清空。
       enum: [
         'user',
         'assistant',
@@ -335,6 +339,8 @@ export const messages = sqliteTable(
         'thinking',
         'error',
         'agent_switch',
+        'context_rebuild',
+        'message_tombstone',
       ],
     }).notNull(),
     content: text('content').notNull(), // JSON string
@@ -878,7 +884,7 @@ export const embeddingMeta = sqliteTable('embedding_meta', {
  *
  * 时区: day = 用户**本地时区** YYYY-MM-DD 字符串 (避免 UTC 跨日错配显示)。
  *
- * 与 web 看板 (console.tapsvc.com) 数据关系:
+ * 与 web 看板 数据关系:
  *   - web 是 llm-proxy 网关侧统计 (含此账号所有调用方)
  *   - 本表是单机 xdt-maker 实例累加 (子集)
  *   - 同账号用多设备时本表数字会不一致 — 设计取舍, chip 点击跳 web 看完整账。

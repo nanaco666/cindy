@@ -6,7 +6,7 @@
  * - 选项点击回调 onPermissionModeChange 并收合
  * - Esc / outside pointerdown 关闭
  * - 形变期间 trigger wrapper 隐形,收合后复形(「不是盖一层」的核心语义)
- * jsdom 无布局引擎(rect 全 0),几何/丝滑度不在此测——那部分靠 DESIGN.md
+ * jsdom 无布局引擎(rect 全 0),几何/丝滑度不在此测——那部分靠 docs/design-rules/cindy-design-system.md
  * §14.4 的实测要求与人工走查兜底。
  */
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';

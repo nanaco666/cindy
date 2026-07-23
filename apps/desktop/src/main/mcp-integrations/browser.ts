@@ -49,7 +49,7 @@ import {
 
 export { extractBrowserAvailability, type BrowserAvailability } from './browser-availability.js';
 
-const logger = createLogger('mcp/lizi_browser');
+const logger = createLogger('mcp/cindy_browser');
 
 /**
  * Managed profile identity. The profile key doubles as (a) the Chrome profile
@@ -304,7 +304,7 @@ export async function setActiveBrowserBackendKind(kind: BackendKind): Promise<vo
 }
 
 /**
- * Browser automation deps for lizi_browser MCP.
+ * Browser automation deps for cindy_browser MCP.
  *
  * The concrete runtime is intentionally hidden behind the neutral
  * BrowserControlRuntime contract so the desktop host does not depend on an

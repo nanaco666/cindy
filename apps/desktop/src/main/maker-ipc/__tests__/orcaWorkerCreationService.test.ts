@@ -5,6 +5,8 @@ import {
   buildNoProviderMessage,
   createOrcaWorkerCreationService,
   type OrcaWorkerCreationDeps,
+  type OrcaWorkerProviderRoutingContext,
+  type OrcaWorkerProviderSnapshot,
 } from '../orcaWorkerCreationService';
 import type { DispatchWorkerTaskResult, OrcaWorkerStatus } from '../orcaTeamService';
 import type { MakerSessionCreateOpts } from '../sessionRequest';
@@ -13,6 +15,17 @@ import { isActiveWorkerStatus } from '../../../shared/orca-worker-status';
 
 const UUID_V4_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const WORKER_SESSION_ID = '123e4567-e89b-42d3-a456-426614174000';
+
+function providerRoutingContext(
+  availability: Record<AgentKind, OrcaWorkerProviderSnapshot[]>,
+): OrcaWorkerProviderRoutingContext {
+  return {
+    availability,
+    resolveDefaultProviderIdForModel: (agent, model) => (
+      availability[agent].find((provider) => provider.models.includes(model))?.id ?? null
+    ),
+  };
+}
 
 function createDeps(overrides: Partial<OrcaWorkerCreationDeps> = {}) {
   const calls: string[] = [];
@@ -33,6 +46,7 @@ function createDeps(overrides: Partial<OrcaWorkerCreationDeps> = {}) {
       effort: 'medium',
       permissionMode: 'default',
       fastMode: false,
+      providerId: 'xd',
     })),
     getWorkerDefaults: vi.fn(() => ({})),
     getAvailableModels: vi.fn((agent: AgentKind) => (
@@ -45,9 +59,13 @@ function createDeps(overrides: Partial<OrcaWorkerCreationDeps> = {}) {
           ]
         : [{ id: 'claude-sonnet-4-6', efforts: ['low', 'medium', 'high', 'xhigh'], defaultEffort: 'high' }]
     )),
-    getProviderAvailability: vi.fn(async () => ({
-      'claude-code': ['XD Gateway'],
-      codex: ['XD Gateway'],
+    getProviderRoutingContext: vi.fn(async () => providerRoutingContext({
+      'claude-code': [{ id: 'xd', name: 'XD Gateway', models: ['claude-sonnet-4-6'] }],
+      codex: [{
+        id: 'xd',
+        name: 'XD Gateway',
+        models: ['gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini', 'codex/budget', 'gpt-no-fast'],
+      }],
     })),
     readClaudeApiKey: vi.fn((): string | null => 'sk-test'),
     reserveWorkerCreation: vi.fn(async ({ label }) => {
@@ -256,7 +274,7 @@ describe('OrcaWorkerCreationService', () => {
     });
 
     expect(deps.getAvailableModels).not.toHaveBeenCalled();
-    expect(deps.getProviderAvailability).not.toHaveBeenCalled();
+    expect(deps.getProviderRoutingContext).not.toHaveBeenCalled();
     expect(deps.getLeadSessionRow).not.toHaveBeenCalled();
     expect(deps.reserveWorkerCreation).not.toHaveBeenCalled();
     expect(deps.bootstrapSession).not.toHaveBeenCalled();
@@ -317,7 +335,10 @@ describe('OrcaWorkerCreationService', () => {
 
   it('rejects worker creation when the target agent has no connected provider, suggesting another agent', async () => {
     const { deps, service } = createDeps({
-      getProviderAvailability: vi.fn(async () => ({ 'claude-code': ['XD Gateway'], codex: [] })),
+      getProviderRoutingContext: vi.fn(async () => providerRoutingContext({
+        'claude-code': [{ id: 'xd', name: 'XD Gateway', models: ['claude-sonnet-4-6'] }],
+        codex: [],
+      })),
     });
 
     await expect(
@@ -341,7 +362,7 @@ describe('OrcaWorkerCreationService', () => {
 
   it('rejects worker creation when no agent has a connected provider, without an agent suggestion', async () => {
     const { deps, service } = createDeps({
-      getProviderAvailability: vi.fn(async () => ({ 'claude-code': [], codex: [] })),
+      getProviderRoutingContext: vi.fn(async () => providerRoutingContext({ 'claude-code': [], codex: [] })),
     });
 
     const result = await service.createWorker({
@@ -385,7 +406,7 @@ describe('OrcaWorkerCreationService', () => {
 
   it('rejects a budget Codex model when no api key is configured', async () => {
     const { deps, service } = createDeps({
-      getWorkerDefaults: vi.fn(() => ({ model: 'codex/budget' })),
+      getWorkerDefaults: vi.fn(() => ({ model: 'codex/budget', providerId: null })),
       readClaudeApiKey: vi.fn((): string | null => null),
     });
 
@@ -405,6 +426,56 @@ describe('OrcaWorkerCreationService', () => {
     expect(deps.bootstrapSession).not.toHaveBeenCalled();
     expect(deps.addOrUpdateWorker).not.toHaveBeenCalled();
     expect(deps.dispatchWorkerTask).not.toHaveBeenCalled();
+  });
+
+  it('returns the budget-model error before explicit route fallback when the api key is missing', async () => {
+    const { deps, service } = createDeps({
+      getWorkerDefaults: vi.fn(() => ({ model: 'gpt-5.5', providerId: 'openai' })),
+      getProviderRoutingContext: vi.fn(async () => providerRoutingContext({
+        'claude-code': [],
+        codex: [{ id: 'openai', name: 'OpenAI', models: ['gpt-5.5'] }],
+      })),
+      readClaudeApiKey: vi.fn((): string | null => null),
+    });
+
+    await expect(service.createWorker({
+      leadSessionId: 'lead-1',
+      role: 'reviewer',
+      agent: 'codex',
+      label: 'reviewer',
+      model: 'codex/budget',
+    })).resolves.toMatchObject({
+      ok: false,
+      errorCode: 'BUDGET_MODEL_REQUIRES_API_MODE',
+      message: expect.stringContaining('codex/budget'),
+    });
+
+    expect(deps.bootstrapSession).not.toHaveBeenCalled();
+    expect(deps.addOrUpdateWorker).not.toHaveBeenCalled();
+  });
+
+  it('returns the budget-model error for an XD-routed default when another provider is connected', async () => {
+    const { deps, service } = createDeps({
+      getWorkerDefaults: vi.fn(() => ({ model: 'codex/budget', providerId: 'xd' })),
+      getProviderRoutingContext: vi.fn(async () => providerRoutingContext({
+        'claude-code': [],
+        codex: [{ id: 'openai', name: 'OpenAI', models: ['gpt-5.5'] }],
+      })),
+      readClaudeApiKey: vi.fn((): string | null => null),
+    });
+
+    await expect(service.createWorker({
+      leadSessionId: 'lead-1',
+      role: 'reviewer',
+      agent: 'codex',
+      label: 'reviewer',
+    })).resolves.toMatchObject({
+      ok: false,
+      errorCode: 'BUDGET_MODEL_REQUIRES_API_MODE',
+      message: expect.stringContaining('codex/budget'),
+    });
+
+    expect(deps.bootstrapSession).not.toHaveBeenCalled();
   });
 
   it('rejects explicit minimal effort for a Codex GPT worker at the creation boundary', async () => {
@@ -465,6 +536,7 @@ describe('OrcaWorkerCreationService', () => {
         effort: 'minimal',
         permissionMode: 'default',
         fastMode: false,
+        providerId: 'xd',
       })),
     });
 
@@ -672,7 +744,12 @@ describe('OrcaWorkerCreationService', () => {
 
   it('creates a worker with resolved defaults without dispatching or broadcasting from the creation boundary', async () => {
     const { calls, deps, service } = createDeps({
-      getWorkerDefaults: vi.fn(() => ({ model: 'gpt-5.4', effort: 'high', fastMode: true })),
+      getWorkerDefaults: vi.fn(() => ({
+        model: 'gpt-5.4',
+        effort: 'high',
+        fastMode: true,
+        providerId: 'xd',
+      })),
     });
 
     await expect(
@@ -702,6 +779,7 @@ describe('OrcaWorkerCreationService', () => {
       agentKind: 'codex',
       workingDir: 'C:\\repo',
       model: 'gpt-5.4',
+      providerId: 'xd',
       effort: 'high',
       fastMode: true,
       permissionMode: 'bypassPermissions',
@@ -729,6 +807,251 @@ describe('OrcaWorkerCreationService', () => {
       'addOrUpdateWorker:worker-1',
       `markOrcaRoleIfNeeded:${WORKER_SESSION_ID}:worker`,
     ]);
+  });
+
+  it('inherits the target-agent New Maker provider and persists it on the worker session', async () => {
+    const { deps, service } = createDeps({
+      getWorkerDefaults: vi.fn(() => ({
+        model: 'codex/budget',
+        effort: 'high',
+        fastMode: false,
+        providerId: 'custom-codex',
+      })),
+      getProviderRoutingContext: vi.fn(async () => providerRoutingContext({
+        'claude-code': [],
+        codex: [{ id: 'custom-codex', name: 'Custom Codex', models: ['codex/budget'] }],
+      })),
+      readClaudeApiKey: vi.fn((): string | null => null),
+    });
+
+    await expect(service.createWorker({
+      leadSessionId: 'lead-1',
+      role: 'reviewer',
+      agent: 'codex',
+      label: 'reviewer',
+    })).resolves.toMatchObject({
+      ok: true,
+      resolved: { providerId: 'custom-codex', model: 'codex/budget' },
+    });
+
+    expect(deps.buildCreateOptsWithStderr).toHaveBeenCalledWith(expect.objectContaining({
+      providerId: 'custom-codex',
+      model: 'codex/budget',
+    }));
+  });
+
+  it('falls back from a stale New Maker provider to the current native default route', async () => {
+    const { deps, service } = createDeps({
+      getWorkerDefaults: vi.fn(() => ({ model: 'gpt-5.4', providerId: 'deleted-custom' })),
+      getProviderRoutingContext: vi.fn(async () => providerRoutingContext({
+        'claude-code': [],
+        codex: [{ id: 'xd', name: 'XD Gateway', models: ['gpt-5.4'] }],
+      })),
+    });
+
+    await expect(service.createWorker({
+      leadSessionId: 'lead-1',
+      role: 'reviewer',
+      agent: 'codex',
+      label: 'reviewer',
+    })).resolves.toMatchObject({
+      ok: true,
+      resolved: { providerId: null, model: 'gpt-5.4' },
+    });
+
+    expect(deps.buildCreateOptsWithStderr).toHaveBeenCalledWith(expect.objectContaining({
+      providerId: null,
+      model: 'gpt-5.4',
+    }));
+  });
+
+  it('falls back from a stale New Maker provider to a sole custom credential route', async () => {
+    const { deps, service } = createDeps({
+      getWorkerDefaults: vi.fn(() => ({ model: 'gpt-5.4', providerId: 'deleted-custom' })),
+      getProviderRoutingContext: vi.fn(async () => providerRoutingContext({
+        'claude-code': [],
+        codex: [{
+          id: 'current-custom',
+          name: 'Current Custom',
+          models: ['gpt-5.4'],
+          requiresExplicitRoute: true,
+        }],
+      })),
+    });
+
+    await expect(service.createWorker({
+      leadSessionId: 'lead-1',
+      role: 'reviewer',
+      agent: 'codex',
+      label: 'reviewer',
+    })).resolves.toMatchObject({
+      ok: true,
+      resolved: { providerId: 'current-custom', model: 'gpt-5.4' },
+    });
+
+    expect(deps.buildCreateOptsWithStderr).toHaveBeenCalledWith(expect.objectContaining({
+      providerId: 'current-custom',
+      model: 'gpt-5.4',
+    }));
+  });
+
+  it('falls back to the Lead provider for a same-agent worker when older defaults omit providerId', async () => {
+    const { deps, service } = createDeps({
+      getWorkerDefaults: vi.fn(() => ({ model: 'gpt-5.5' })),
+    });
+
+    await expect(service.createWorker({
+      leadSessionId: 'lead-1',
+      role: 'reviewer',
+      agent: 'codex',
+      label: 'reviewer',
+    })).resolves.toMatchObject({
+      ok: true,
+      resolved: { providerId: 'xd', model: 'gpt-5.5' },
+    });
+
+    expect(deps.buildCreateOptsWithStderr).toHaveBeenCalledWith(expect.objectContaining({
+      providerId: 'xd',
+    }));
+  });
+
+  it('keeps the default route while validating connected sources when only the worker model is explicit', async () => {
+    const availability = {
+      'claude-code': [],
+      codex: [
+        { id: 'custom-codex', name: 'Custom Codex', models: ['gpt-5.5'] },
+        { id: 'xd', name: 'XD Gateway', models: ['gpt-5.4'] },
+      ],
+    } satisfies Record<AgentKind, OrcaWorkerProviderSnapshot[]>;
+    const { deps, service } = createDeps({
+      getWorkerDefaults: vi.fn(() => ({ model: 'gpt-5.5', providerId: 'custom-codex' })),
+      getProviderRoutingContext: vi.fn(async () => providerRoutingContext(availability)),
+    });
+
+    await expect(service.createWorker({
+      leadSessionId: 'lead-1',
+      role: 'reviewer',
+      agent: 'codex',
+      label: 'reviewer',
+      model: 'gpt-5.4',
+    })).resolves.toMatchObject({
+      ok: true,
+      resolved: { providerId: null, model: 'gpt-5.4' },
+    });
+
+    expect(deps.buildCreateOptsWithStderr).toHaveBeenCalledWith(expect.objectContaining({
+      providerId: null,
+      model: 'gpt-5.4',
+    }));
+  });
+
+  it('persists the sole custom route when an explicit worker model requires session credentials', async () => {
+    const { deps, service } = createDeps({
+      getWorkerDefaults: vi.fn(() => ({ model: 'gpt-5.5', providerId: 'xd' })),
+      getProviderRoutingContext: vi.fn(async () => providerRoutingContext({
+        'claude-code': [],
+        codex: [{
+          id: 'custom-codex',
+          name: 'Custom Codex',
+          models: ['gpt-5.4'],
+          requiresExplicitRoute: true,
+        }],
+      })),
+    });
+
+    await expect(service.createWorker({
+      leadSessionId: 'lead-1',
+      role: 'reviewer',
+      agent: 'codex',
+      label: 'reviewer',
+      model: 'gpt-5.4',
+    })).resolves.toMatchObject({
+      ok: true,
+      resolved: { providerId: 'custom-codex', model: 'gpt-5.4' },
+    });
+
+    expect(deps.buildCreateOptsWithStderr).toHaveBeenCalledWith(expect.objectContaining({
+      providerId: 'custom-codex',
+      model: 'gpt-5.4',
+    }));
+  });
+
+  it('does not require a Cindy API key for an explicit budget model on a custom route', async () => {
+    const { deps, service } = createDeps({
+      getProviderRoutingContext: vi.fn(async () => providerRoutingContext({
+        'claude-code': [],
+        codex: [{
+          id: 'custom-codex',
+          name: 'Custom Codex',
+          models: ['codex/budget'],
+          requiresExplicitRoute: true,
+        }],
+      })),
+      readClaudeApiKey: vi.fn((): string | null => null),
+    });
+
+    await expect(service.createWorker({
+      leadSessionId: 'lead-1',
+      role: 'reviewer',
+      agent: 'codex',
+      label: 'reviewer',
+      model: 'codex/budget',
+    })).resolves.toMatchObject({
+      ok: true,
+      resolved: { providerId: 'custom-codex', model: 'codex/budget' },
+    });
+
+    expect(deps.buildCreateOptsWithStderr).toHaveBeenCalledWith(expect.objectContaining({
+      providerId: 'custom-codex',
+      model: 'codex/budget',
+    }));
+  });
+
+  it('returns a route-specific error when no connected provider offers an explicit worker model', async () => {
+    const { deps, service } = createDeps({
+      getWorkerDefaults: vi.fn(() => ({ model: 'gpt-5.5', providerId: 'custom-codex' })),
+      getProviderRoutingContext: vi.fn(async () => providerRoutingContext({
+        'claude-code': [],
+        codex: [{ id: 'custom-codex', name: 'Custom Codex', models: ['gpt-5.5'] }],
+      })),
+    });
+
+    await expect(service.createWorker({
+      leadSessionId: 'lead-1',
+      role: 'reviewer',
+      agent: 'codex',
+      label: 'reviewer',
+      model: 'gpt-5.4',
+    })).resolves.toMatchObject({
+      ok: false,
+      errorCode: 'PROVIDER_ROUTE_UNAVAILABLE',
+      message: expect.stringContaining('没有已连接的供应商提供模型 "gpt-5.4"'),
+    });
+
+    expect(deps.bootstrapSession).not.toHaveBeenCalled();
+  });
+
+  it('rejects a stale cached provider when no current source offers its model', async () => {
+    const { deps, service } = createDeps({
+      getWorkerDefaults: vi.fn(() => ({ model: 'gpt-5.4', providerId: 'custom-codex' })),
+      getProviderRoutingContext: vi.fn(async () => providerRoutingContext({
+        'claude-code': [],
+        codex: [{ id: 'custom-codex', name: 'Custom Codex', models: ['gpt-5.5'] }],
+      })),
+    });
+
+    await expect(service.createWorker({
+      leadSessionId: 'lead-1',
+      role: 'reviewer',
+      agent: 'codex',
+      label: 'reviewer',
+    })).resolves.toMatchObject({
+      ok: false,
+      errorCode: 'PROVIDER_ROUTE_UNAVAILABLE',
+      message: expect.stringContaining('没有已连接的供应商提供模型 "gpt-5.4"'),
+    });
+
+    expect(deps.bootstrapSession).not.toHaveBeenCalled();
   });
 
   it('reports soft-limit overflow while still creating the worker', async () => {
@@ -868,7 +1191,10 @@ describe('OrcaWorkerCreationService', () => {
 
 describe('buildNoProviderMessage', () => {
   it('suggests the other agent when it has a connected provider', () => {
-    const msg = buildNoProviderMessage('codex', { 'claude-code': ['XD Gateway'], codex: [] });
+    const msg = buildNoProviderMessage('codex', {
+      'claude-code': [{ id: 'xd', name: 'XD Gateway', models: ['claude-sonnet-4-6'] }],
+      codex: [],
+    });
     expect(msg).toContain('Codex 当前没有可用的模型供应商');
     expect(msg).toContain('改用');
     expect(msg).toContain('Claude Code(已连接:XD Gateway)');

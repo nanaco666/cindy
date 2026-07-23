@@ -37,7 +37,7 @@ const MAX_OUT_TOTAL_BYTES = 30 * 1024 * 1024;
  * hook 派发 turn 时附在用户消息末尾的渠道说明(session-runner 消费)。
  * 本收集器的出站契约只认最终回复文本里的 xdt-file / xdt-image 引用,但
  * 没有任何提示教模型这个约定 —— 实踩(2026-07-16)里模型两次把「把文件
- * 发给我」路由到 lizi_feishu_bot(hook 会话里唯一可见的推送工具)并失败。
+ * 发给我」路由到 cindy_feishu_bot(hook 会话里唯一可见的推送工具)并失败。
  * 固定文本、逐 turn 追加,保证行为确定(规则 9);修改措辞时同步
  * collectOutboundAttachments 的实际语义,别让说明和收集器漂移。
  */
@@ -47,7 +47,7 @@ export const SLACK_HOOK_PROMPT_NOTE =
   '`![说明](cindy-media://… 或 xdt-image://…)`,无需复制文件。' +
   '系统会在回复结束后自动把它们作为 Slack 附件发回,无需调用任何工具;' +
   'xdt-file 文件必须位于当前工作目录内(目录外的引用会被静默丢弃)。' +
-  '不要用 lizi_feishu_bot 发送,除非用户明确要求发到飞书。';
+  '不要用 cindy_feishu_bot 发送,除非用户明确要求发到飞书。';
 
 /** 扩展名 -> 图片 MIME(agent 产图只有这几种; 其它按二进制流)。 */
 const IMAGE_MIME_BY_EXT: Record<string, string> = {

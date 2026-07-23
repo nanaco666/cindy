@@ -9,9 +9,9 @@ import { describe, expect, it } from 'vitest';
 import { compressInlineImage } from '../mcp-integrations/inlineImageCompressor.js';
 
 let sharpAvailable = true;
-let sharp: typeof import('sharp');
+let sharp: (typeof import('sharp'))['default'];
 try {
-  sharp = (await import('sharp')).default as unknown as typeof import('sharp');
+  sharp = (await import('sharp')).default as unknown as (typeof import('sharp'))['default'];
 } catch {
   sharpAvailable = false;
 }

@@ -871,7 +871,6 @@
         "linuxUnsupported": "Linux 首版暂不支持语音输入期间的系统静音。"
       },
       "usage": {
-        "label": "累计用量",
         "duration": "时长",
         "estimatedCost": "估算费用",
         "costBreakdown": "识别 {{asr}} · 润色 {{refine}}",
@@ -1563,6 +1562,7 @@
     "computerUse": {
       "title": "自动操作",
       "description": "让 agent 使用电脑和已连接设备替你完成任务。浏览器自动化使用独立浏览器；Android 自动化使用 ADB；电脑自动化依赖本机 driver。",
+      "codexRefreshDeferred": "设置已保存，但 Codex 正忙；重启应用后将对 Codex 新会话生效",
       "browser": {
         "title": "自动操作浏览器",
         "description": "一个 agent 专用的独立浏览器，与你日常的 Chrome 互不影响",
@@ -1661,7 +1661,7 @@
         "title": "自动操作电脑",
         "description": "让 agent 检查窗口、读取界面并点击或输入",
         "toggleAria": "切换直接操作电脑",
-        "driverInfo": "自动操作电脑由开源 CUA Driver 提供，运行在本机，用于读取屏幕并执行点击、输入等操作。启用前需要授予核心权限；实际使用时，macOS 仍可能按目标 App 或具体动作弹出额外确认。",
+        "driverInfo": "自动操作电脑由开源 CUA Driver 提供，运行在本机，用于读取屏幕并执行点击、输入等操作。",
         "openSourceProject": "查看开源项目",
         "detected": "已检测到 {{version}}（{{path}}，{{daemon}}）",
         "daemonRunning": "后台服务运行中",
@@ -1670,9 +1670,10 @@
         "installing": "正在安装 cua-driver...",
         "authorizing": "正在等待系统授权。请在弹出的 Cua Driver 授权窗口中完成「辅助功能」和「屏幕录制」授权。",
         "permissionIntro": {
-          "title": "准备授予电脑自动操作权限",
-          "description": "接下来 {{appName}} 会安装或打开 Cua Driver 的授权流程，并可能跳转到 macOS 系统设置。请先为 CuaDriver 授予「辅助功能」和「屏幕录制」核心权限；之后在使用过程中，macOS 可能还会按目标 App 或具体动作弹出额外确认。只有在你主动发起 Computer Use 任务时才应确认这些请求。完成后回到 {{appName}}，它会自动检查并启用。",
-          "confirm": "继续授权",
+          "title": "启用自动操作电脑",
+          "description": "{{appName}} 将在本机安装或启动 Cua Driver，用于读取屏幕并执行点击、输入等操作。请仅在你主动发起自动操作电脑任务时启用。",
+          "macosDescription": "接下来 {{appName}} 会安装或打开 Cua Driver 的授权流程，并可能跳转到 macOS 系统设置。请先为 CuaDriver 授予「辅助功能」和「屏幕录制」核心权限；之后在使用过程中，macOS 可能还会按目标 App 或具体动作弹出额外确认。只有在你主动发起 Computer Use 任务时才应确认这些请求。完成后回到 {{appName}}，它会自动检查并启用。",
+          "confirm": "继续",
           "cancel": "稍后再说"
         },
         "permissionGuide": {
@@ -3670,6 +3671,9 @@
         "NO_PROVIDER_FOR_AGENT": "当前设备没有为该 Agent 连接可用的模型 Provider。请先在设置中完成连接。",
         "NO_PROVIDER_FOR_AGENT_CONTINUE": "当前设备没有为该 Agent 连接可用的模型 Provider；协同未开启，已改为单会话继续。请先在设置中完成连接。",
         "NO_PROVIDER_FOR_AGENT_REMOTE": "被控设备没有为该 Agent 连接可用的模型 Provider。请在被控设备上完成连接后重试。",
+        "PROVIDER_ROUTE_UNAVAILABLE": "所选模型与供应商的精确路由当前不可用，请改选可用的模型或供应商后重试。",
+        "PROVIDER_ROUTE_UNAVAILABLE_CONTINUE": "所选模型与供应商的精确路由当前不可用；协同未开启，已改为单会话继续。请改选可用的模型或供应商后重试。",
+        "PROVIDER_ROUTE_UNAVAILABLE_REMOTE": "被控设备上的所选模型与供应商精确路由当前不可用，请改选该设备可用的路由后重试。",
         "BUDGET_MODEL_REQUIRES_API_MODE": "骨折版 Codex 模型需要先在设置中配置 API key 才能使用。请配置后重试。",
         "BUDGET_MODEL_REQUIRES_API_MODE_CONTINUE": "骨折版 Codex 模型需要先在设置中配置 API key；协同未开启，已改为单会话继续。请配置 API key 后重试。",
         "BUDGET_MODEL_REQUIRES_API_MODE_REMOTE": "被控设备尚未配置骨折版 Codex 模型所需的 API key。请在被控设备上配置后重试。"
@@ -3852,7 +3856,7 @@
       "outputFile": "输出：{{path}}"
     },
     "forkOrigin": {
-      "label": "从对话中派生"
+      "label": "基于原对话创建"
     },
     "imageMissing": {
       "title": "图片已丢失"
@@ -3864,10 +3868,23 @@
     },
     "messageActionBar": {
       "copy": "复制消息",
-      "timeCopyHint": "点击复制消息链接",
       "linkCopied": "链接已复制",
+      "moreActions": "更多消息操作",
+      "copyLink": "复制当前对话链接",
+      "copyLinkFailed": "无法复制链接",
       "rewind": "回到此处",
-      "fork": "分叉",
+      "fork": "在新对话中继续",
+      "forkConfirmTitle": "从这里开启一个新对话？",
+      "forkConfirmDescription": "系统会根据这里的对话上下文创建一个独立的新对话。原对话不会改变，之后两边的消息互不影响。",
+      "forkConfirm": "开启新对话",
+      "forkCancel": "取消",
+      "delete": "删除本条对话",
+      "deleteConfirmTitle": "删除本条对话？",
+      "deleteConfirmDescription": "这条消息会从本地会话中删除，后续消息继续保留。下次发送时，AI 上下文会从剩余记录重建。",
+      "deleteConfirm": "删除本条对话",
+      "deleteCancel": "取消",
+      "deleteBusy": "请等当前回复结束后再删除消息",
+      "deleteFailed": "无法删除这条消息，请重试",
       "edit": "编辑",
       "turnCost": "本轮消耗",
       "turnCostEstimated": "本轮 token 价值(按 API 单价折算)",
@@ -4277,7 +4294,7 @@
       "automationViewTask": "查看自动化任务",
       "expandLongMessage": "展开全文",
       "collapseLongMessage": "收起",
-      "forkBusy": "当前会话正在运行，等结束后再分叉",
+      "forkBusy": "当前会话正在运行，等结束后再从这里开启新对话",
       "editStopTimeout": "等待任务停止超时，请稍后重试",
       "editQueueNotEmpty": "会话有排队中的消息，先发送或移除队列内容后再编辑",
       "editNotLast": "会话里已有更新的消息，这条不再是最后一条，无法编辑重发",
@@ -4286,11 +4303,11 @@
       "editSend": "发送",
       "editRollbackHint": "发送将撤销上一轮对 {{count}} 个文件的改动",
       "forkErrors": {
-        "unsupportedHistory": "目标位置跨过了引擎切换边界，无法从这里分叉",
-        "noPriorAssistant": "请在 AI 回复之后的消息上分叉",
-        "sourceNeverRan": "原会话尚未运行，无法分叉",
-        "codexStateUnavailable": "Codex 会话状态不可用，无法分叉。{{detail}}",
-        "generic": "分叉失败，请重试"
+        "unsupportedHistory": "目标位置跨过了引擎切换边界，无法从这里开启新对话",
+        "noPriorAssistant": "请在 AI 回复之后的消息上开启新对话",
+        "sourceNeverRan": "原会话尚未运行，无法开启新对话",
+        "codexStateUnavailable": "Codex 会话状态不可用，无法开启新对话。{{detail}}",
+        "generic": "无法开启新对话，请重试"
       }
     },
     "threadContext": {
@@ -4520,6 +4537,7 @@
     },
     "draft": {
       "createSessionFailed": "创建会话失败，请重试",
+      "deviceStillLoading": "远程设备仍在加载中，请稍候",
       "worktreeMissingRepo": "无法开 worktree：缺少当前目录的仓库根",
       "worktreeRepoHint": "可尝试重新选一次工作目录，等右下角文件夹标识刷新后再试",
       "sessionInactive": "会话已不再处于活动状态",
@@ -5685,6 +5703,8 @@
       "typeFeature": "功能建议",
       "titleLabel": "标题",
       "bodyLabel": "正文(Markdown)",
+      "identityGithubUser": "提交身份:GitHub 用户 @{{login}}(本人)",
+      "identityPlatform": "提交身份:Cindy 平台代提交(GitHub App {{login}})",
       "envLine": "提交时将自动附加:客户端 {{appVersion}} · {{platform}} {{arch}} · 界面语言 {{uiLanguage}}",
       "submit": "提交",
       "cancel": "取消"

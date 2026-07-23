@@ -9,10 +9,9 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { INTERNAL_GITLAB_HOST } from '../../shared/endpoints';
 
-// 内部 GitLab 的 MR URL fixture:域名走单点常量,便于未来统一替换
-const INTERNAL_MR_URL = `https://${INTERNAL_GITLAB_HOST}/smash/xdt-maker/-/merge_requests/42`;
+// GitLab MR URL fixture(边界/截断逻辑对 gitlab.com 适用)
+const GITLAB_MR_URL = `https://gitlab.com/acme/app/-/merge_requests/42`;
 import type { Root, Link, Text, Paragraph } from 'mdast';
 import { unified } from 'unified';
 import remarkParse from 'remark-parse';
@@ -449,8 +448,8 @@ describe('remarkTruncateCjkUrls', () => {
         'https://github.com/xindong/XDMaker/pull/283/',
       ],
       [
-        `${INTERNAL_MR_URL}/(base,OPEN)`,
-        `${INTERNAL_MR_URL}/`,
+        `${GITLAB_MR_URL}/(base,OPEN)`,
+        `${GITLAB_MR_URL}/`,
       ],
     ]) {
       const tree = autolinkTree(url);
@@ -476,13 +475,13 @@ describe('remarkTruncateCjkUrls', () => {
   });
 
   it('GitLab merge request 后紧跟完整 ASCII 括号说明时剥掉括号说明', () => {
-    const tree = autolinkTree(`${INTERNAL_MR_URL}(base,OPEN)`);
+    const tree = autolinkTree(`${GITLAB_MR_URL}(base,OPEN)`);
     transform(tree);
     const para = tree.children[0] as Paragraph;
     const link = para.children[0] as Link;
     const tail = para.children[1] as Text;
-    expect(link.url).toBe(INTERNAL_MR_URL);
-    expect((link.children[0] as Text).value).toBe(INTERNAL_MR_URL);
+    expect(link.url).toBe(GITLAB_MR_URL);
+    expect((link.children[0] as Text).value).toBe(GITLAB_MR_URL);
     expect(tail.value).toBe('(base,OPEN)');
   });
 
@@ -736,8 +735,8 @@ describe('remarkTruncateCjkUrls', () => {
       linksFromMarkdown('已提交。 PR #283 → https://github.com/xindong/XDMaker/pull/283/(base,OPEN)'),
     ).toEqual(['https://github.com/xindong/XDMaker/pull/283/']);
     expect(
-      linksFromMarkdown(`已提交。 MR !42 → ${INTERNAL_MR_URL}/(base,OPEN)`),
-    ).toEqual([`${INTERNAL_MR_URL}/`]);
+      linksFromMarkdown(`已提交。 MR !42 → ${GITLAB_MR_URL}/(base,OPEN)`),
+    ).toEqual([`${GITLAB_MR_URL}/`]);
   });
 
   it('真实 remark-gfm 解析：PR URL 后接括号说明和句末标点只链接 PR URL', () => {

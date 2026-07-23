@@ -11,7 +11,7 @@ Settings > General controls how the app looks and how it notifies you.
 **Appearance:**
 
 - **Theme**: light, dark, or system (follows your OS).
-- **Theme family**: pick from the registered theme families; each family supplies its own colors for light and dark. The app uses a VSCode-style token system (see DESIGN.md) so themes only override what they need.
+- **Theme family**: pick from the registered theme families; each family supplies its own colors for light and dark. The app uses a VSCode-style token system (see docs/design-rules/cindy-design-system.md) so themes only override what they need.
 - **Local theme brand identity**: this is an optional power-user feature configured in the local theme JSON. The settings page intentionally keeps only create-copy, open-folder, and refresh actions. New copies include self-explanatory example paths directly in the JSON.
 - **Export / open local theme files**: export the current theme's tokens to a file or open a local theme JSON for inspection / sharing. To replace the icon and logo used on the new-chat page:
 

@@ -13,7 +13,7 @@ We are grateful to all open source authors and maintainers.
 
 ------------------------------------------------------------------------------
 SCOPE NOTES:
-  - 发布包可按 notices/desktop-<platform>.txt 使用平台精确版本。
+  - 发布包可按 docs/legal/notices/desktop-<platform>.txt 使用平台精确版本。
 
 受限或专有第三方组件不列入开源包数量,另见配套的 THIRD-PARTY-RESTRICTED.txt。
 Restricted or proprietary components are disclosed in the companion file.

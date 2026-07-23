@@ -313,8 +313,8 @@ export async function toClaudeSdkContent(
  * 这避免 Bash 长 build / MCP 拉大表 / 子 agent / AskUserQuestion 发呆等本地操作
  * 被误伤 (这些场景 SDK 不发新 API 请求, 不算 idle 配额)。
  *
- * 历史背景: 无 watchdog 时上游 SSE 挂死实测可挂 57 分钟+ (issue
- * smash/xdt-maker #45); 旧默认 300s 现已下沉到 cc-code 原生 watchdog 承担。
+ * 历史背景: 无 watchdog 时上游 SSE 挂死实测可挂 57 分钟+
+ * 旧默认 300s 现已下沉到 cc-code 原生 watchdog 承担。
  *
  * 触发后走 q.interrupt() (与用户手动 stop 同路径), 而不是 abortController.abort()
  * —— 后者会让整个 SDK Query 进黑洞 session, 后续 send 全部失败 (见 handle.abort)。

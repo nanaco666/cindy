@@ -1,4 +1,4 @@
-// 启动即生效的 JS 热更(方案 B,见 docs/self-hosted-android-build-and-ota.md 讨论)。
+// 启动即生效的 JS 热更新。
 //
 // 默认 expo-updates 是「后台下载、下次启动生效」;这里在冷启动早期主动 check → fetch → reload,
 // 让本次启动就跑上最新 JS。判定逻辑抽成纯函数(依赖可注入),便于单测;真实 API 由 hook 传入。

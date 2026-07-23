@@ -124,7 +124,7 @@ export interface FeishuBotMcpHostDeps {
   logger?: LiziMcpLogger;
 }
 
-// ── lizi_slack(Slack 网关工具, 2026-07 并轨 hook 通道) ──────────────────────
+// ── cindy_slack(Slack 网关工具, 2026-07 并轨 hook 通道) ──────────────────────
 
 /** Slack 网关工具的结构化错误(hook-control manager 定义的同构形状)。 */
 export interface SlackToolBridgeError {
@@ -160,7 +160,7 @@ export interface SlackToolBridgeLike {
 }
 
 /**
- * lizi_slack 的 host 依赖: getBridge 每次现取(hook-control 未初始化 / 已
+ * cindy_slack 的 host 依赖: getBridge 每次现取(hook-control 未初始化 / 已
  * dispose 时为 null, 工具 fail-closed); workingDir 由 provider 从 ctx 绑定
  * (大结果落盘的钳制根)。
  */
@@ -263,7 +263,7 @@ export interface LspMcpDeps {
   logger?: LiziMcpLogger;
 }
 
-// ── lizi_ssh MCP deps ───────────────────────────────────────────────────────
+// ── cindy_ssh MCP deps ───────────────────────────────────────────────────────
 //
 // 结构化鸭子类型镜像 @lizi/maker-remote-ssh 的 HostSnapshot / RemoteHost /
 // ConnectionPool 子集——不 import 那个包（连 type-only 也不要）：lizi-mcps 是纯
@@ -321,7 +321,7 @@ export interface SshPoolLike {
 }
 
 /**
- * lizi_ssh MCP server 工厂参数。
+ * cindy_ssh MCP server 工厂参数。
  *
  *  - getPool / ensureReady 都是 async：desktop 侧必须 lazy `await import()`
  *    remote-ssh 模块（静态 import 会形成 mcp-providers → remote-ssh →
@@ -347,7 +347,7 @@ export interface SshMcpDeps {
 }
 
 /**
- * lizi_contacts(智能通讯录)MCP server 工厂参数。
+ * cindy_contacts(智能通讯录)MCP server 工厂参数。
  *
  * 与 memory 的差异: 通讯录是全局单库(人不属于 workdir), 不需要 workdir /
  * getSessionContext。开关由 host 设置层注入 isEnabled — provider 注册门控 +
@@ -410,27 +410,27 @@ export type SessionSearchFn = (
 // 'feishu' 已于 2026-07-16 摘壳(能力迁内置意识 xd-feishu;后端留任给
 // scheduler capability broker,见 providers.ts 注释),不再是可注册 MCP id。
 // 'lizi_slack_bot' 已于 2026-07-17 随老 SlackIM relay 渠道退役(apiBaseUrl 清理)。
-// 'lizi_slack'(与老 lizi_slack_bot 无关)2026-07-19 上线: Slack 网关工具,
+// 'cindy_slack'(与老 lizi_slack_bot 无关)2026-07-19 上线: Slack 网关工具,
 // 经 hook 通道由 slack-hook-server 以托管 user token 调 Slack 官方 MCP,
 // 接替退役的 cindy-slack 意识。
 export type LiziMcpId =
   | 'android'
   | 'browser'
   | 'computer'
-  | 'lizi_feishu_bot'
-  | 'lizi_slack'
+  | 'cindy_feishu_bot'
+  | 'cindy_slack'
   | 'cindy_scheduler'
-  | 'lizi_ssh'
+  | 'cindy_ssh'
   | 'cindy_memory'
-  | 'lizi_contacts'
+  | 'cindy_contacts'
   | 'cindy_helper'
-  | 'lizi_orca'
-  | 'lizi_lsp';
+  | 'cindy_orca'
+  | 'cindy_lsp';
 
 // ── Host-callback Result pattern ────────────────────────────────────────────
 //
 // Several MCP tools delegate to host-side business code via injected callbacks
-// (e.g. cindy_helper's sendToSession, lizi_orca's team tools, history
+// (e.g. cindy_helper's sendToSession, cindy_orca's team tools, history
 // readers). Those callbacks return a Result variant rather than throw — host
 // can use `HOST_NOT_READY` to express "service still bootstrapping" and the
 // tool handler maps it to a business errorCode + LLM hint, instead of bubbling
@@ -549,6 +549,8 @@ export interface ComputerDriverPermissionState {
 
 export interface ComputerMcpCallContext {
   sessionId?: string;
+  /** Identifies the agent runtime whose MCP server dispatched this call. */
+  agentKind?: string;
 }
 
 export interface ComputerMcpDeps {
@@ -676,6 +678,8 @@ export interface AndroidDeviceStateResult {
 
 export interface AndroidMcpCallContext {
   sessionId?: string;
+  /** Identifies the agent runtime whose MCP server dispatched this call. */
+  agentKind?: string;
 }
 
 export interface AndroidMcpDeps {

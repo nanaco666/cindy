@@ -28,5 +28,3 @@ export const ENDPOINT_MANIFEST_BASE_URL = injectedEndpoint(
 /** TapDB 埋点上报端点;第三方固定协议地址不属于生产端点私有配置。 */
 export const TAPDB_EVENT_URL = 'https://e.tapdb.com/event';
 
-/** 公司内部 GitLab 域名,仅用于 renderer 识别链接边界,不发起请求。 */
-export const INTERNAL_GITLAB_HOST = 'git.xindong.com';

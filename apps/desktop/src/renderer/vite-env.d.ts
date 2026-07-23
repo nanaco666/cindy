@@ -748,6 +748,10 @@ interface PluginEnableState {
   globalOverride?: { enabled: boolean } | null;
 }
 
+interface PluginEnableUpdateResult {
+  codexMcpRefreshed: boolean;
+}
+
 interface BrowserAvailability {
   detected: boolean;
   browserKind: string | null;
@@ -3159,6 +3163,9 @@ interface ElectronAPI {
           message: import('@/lib/ccAgent.types').Message;
         }) => void,
       ) => () => void;
+      onDeleted: (
+        callback: (payload: { sessionId: string; clientId: string }) => void,
+      ) => () => void;
       onErrorPersisted: (
         callback: (payload: { sessionId: string }) => void,
       ) => () => void;
@@ -3631,6 +3638,11 @@ interface ElectronAPI {
 
     abortSession: (sessionId: string) => Promise<void>;
     closeSession: (sessionId: string, opts?: { preserveWorkspace?: boolean }) => Promise<void>;
+    /** 删除单条消息并让下一次发送从剩余本地历史重建 Agent 上下文。 */
+    deleteMessage: (
+      sessionId: string,
+      clientId: string,
+    ) => Promise<{ sessionId: string; clientId: string }>;
     listActive: () => Promise<Array<{
       sessionId: string;
       agentKind: 'claude-code' | 'codex';
@@ -4232,8 +4244,8 @@ interface ElectronAPI {
     plugins: {
       list: (workingDir?: string) => Promise<PluginListItem[]>;
       getState: (id: string, workingDir?: string) => Promise<PluginEnableState>;
-      setEnabled: (id: string, enabled: boolean) => Promise<void>;
-      clearEnabled: (id: string) => Promise<void>;
+      setEnabled: (id: string, enabled: boolean) => Promise<PluginEnableUpdateResult>;
+      clearEnabled: (id: string) => Promise<PluginEnableUpdateResult>;
       setProjectEnabled: (workingDir: string, id: string, enabled: boolean) => Promise<void>;
       clearProjectEnabled: (workingDir: string, id: string) => Promise<void>;
     };

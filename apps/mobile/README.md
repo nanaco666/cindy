@@ -17,18 +17,11 @@ pnpm --filter mobile start -- --host localhost --port 8081
 
 For current-source iOS Simulator debugging, use the development-client loop in
 the [simulator debugging guide](./docs/simulator-debugging.md). Do not use
-Expo Go or TestFlight as proof that local source changes are running.
+Expo Go or an installed distribution build as proof that local source changes are running.
 
 Required Expo public env:
 
-- `EXPO_PUBLIC_ENDPOINT_MANIFEST_BASE_URL`: endpoint manifest bootstrap base (per-region hotfix CDN). Runtime business endpoints (auth / device-link / gateway) are resolved from `<base>/endpoint.json` at startup; in dev they default to the repo's `config/endpoint.json` and can still be overridden with explicit `EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL` / `EXPO_PUBLIC_CINDY_AUTH_BASE_URL`. Set `EXPO_PUBLIC_ENDPOINTS_CDN=1` to make dev fetch the online manifest like production.
-- EAS/TestFlight reads TapDB analytics from `EXPO_PUBLIC_TAPTAP_CLIENT_ID` and `EXPO_PUBLIC_TAPTAP_CLIENT_TOKEN`. Self-hosted builds read the same public values from the selected region's `scripts/self-host-regions.json` `tapdb` block instead. Optional EAS `EXPO_PUBLIC_TAPDB_CHANNEL` overrides the default `AppStore` / `NPKG` channel; optional `EXPO_PUBLIC_TAPDB_REGION` defaults to `cn`.
-
-Release env:
-
-- Do not commit the TapTap client token to `eas.json`.
-- Configure `EXPO_PUBLIC_TAPTAP_CLIENT_ID` and `EXPO_PUBLIC_TAPTAP_CLIENT_TOKEN` in EAS project environments for both `production` and `preview`, so cloud builds can bundle TapDB. Configure optional `EXPO_PUBLIC_TAPDB_CHANNEL` / `EXPO_PUBLIC_TAPDB_REGION` there too when they need to differ from defaults.
-- Run releases through the fixed root `pnpm mobile:release:*` scripts. They automatically wrap the underlying release command with the matching EAS environment and only allow the TapDB public env keys through.
+- `EXPO_PUBLIC_ENDPOINT_MANIFEST_BASE_URL`: endpoint manifest bootstrap base (per-region hotfix CDN). Runtime business endpoints (auth / device-link / gateway) are resolved from `<base>/endpoint.json` at startup; in dev they default to the repo's `config/endpoint.json` and can still be overridden with explicit `EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL` / `EXPO_PUBLIC_CINDY_AUTH_BASE_URL`. Set `EXPO_PUBLIC_ENDPOINTS_CDN=1` to make dev fetch the online manifest used by packaged clients.
 
 The mobile redirect URI is region-specific: `cindycn://auth` for CN and
 `cindy://auth` for Global. Cindy Auth and native social login callbacks must

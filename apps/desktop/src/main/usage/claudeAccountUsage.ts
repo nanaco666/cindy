@@ -99,7 +99,7 @@ interface LiteLlmDailyActivity {
   }>;
 }
 
-/** UTC YYYY-MM-DD。跟 web 看板 (console.tapsvc.com) 的 daily 边界对齐。 */
+/** UTC YYYY-MM-DD。跟 web 看板 的 daily 边界对齐。 */
 function utcTodayKey(): string {
   const d = new Date();
   const y = d.getUTCFullYear();

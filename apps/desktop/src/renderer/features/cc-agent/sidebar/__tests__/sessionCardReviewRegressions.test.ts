@@ -53,7 +53,7 @@ describe('SessionCard review regressions', () => {
   });
 
   it('keeps running cards free of the removed progress bar', () => {
-    // 黄一孟 review:Running 卡片不再渲染扫动进度条(w-[52px] 一并移除)。
+    // 评审:Running 卡片不再渲染扫动进度条(w-[52px] 一并移除)。
     expect(sessionCardSource).not.toContain('w-[52px]');
     expect(sessionCardSource).not.toContain('session-card-progress');
   });

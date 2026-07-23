@@ -146,7 +146,7 @@ const schedSrc = collectSourceFiles(path.join(ROOT, 'packages/maker-scheduler/sr
 // Anti-pattern grep #4 — scheduler renderer 色值白名单
 //
 // Phase 7 plan 原文用 WARN，本守门按用户硬规则升级到 ERROR + exit 1。
-// 白名单来自 Phase 6 changelog L1601（DESIGN.md §2 / §9 全部允许色 + #3b82f6 焦点环）。
+// 白名单来自 Phase 6 changelog L1601（docs/design-rules/cindy-design-system.md §2 / §9 全部允许色 + #3b82f6 焦点环）。
 // ---------------------------------------------------------------------------
 
 {
@@ -155,7 +155,7 @@ const schedSrc = collectSourceFiles(path.join(ROOT, 'packages/maker-scheduler/sr
     '#1f1f1e',
     '#262626',
     '#2c2c2a',
-    '#3b82f6', // 焦点环唯一允许 chromatic（DESIGN.md §2）
+    '#3b82f6', // 焦点环唯一允许 chromatic（docs/design-rules/cindy-design-system.md §2）
     '#3c3c3a',
     '#404040',
     '#525252',
@@ -203,13 +203,13 @@ const schedSrc = collectSourceFiles(path.join(ROOT, 'packages/maker-scheduler/sr
   if (violations.length) {
     failure(
       '#4 color-whitelist',
-      'apps/desktop/src/renderer/features/scheduler/ 出现 DESIGN.md §2 白名单外的色值。\n' +
+      'apps/desktop/src/renderer/features/scheduler/ 出现 docs/design-rules/cindy-design-system.md §2 白名单外的色值。\n' +
         '允许色见 scripts/scheduler-ci-guard.mjs 的 ALLOWED 常量；' +
         '若是有意豁免（如 ConfirmDialog Danger 变体）请在该行末尾追加 `// allow-color` 注释。\n命中：\n' +
         violations.map((v) => '  ' + v).join('\n'),
     );
   } else {
-    ok('#4 color-whitelist', `scheduler renderer 全部色值在 DESIGN.md 白名单（${ALLOWED.size} 色）`);
+    ok('#4 color-whitelist', `scheduler renderer 全部色值在 docs/design-rules/cindy-design-system.md 白名单（${ALLOWED.size} 色）`);
   }
 }
 

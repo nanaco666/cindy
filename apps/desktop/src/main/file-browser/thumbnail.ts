@@ -17,7 +17,7 @@ import { createLogger } from '../logger.js';
 
 const log = createLogger('file-browser/thumbnail');
 
-type SharpModule = typeof import('sharp');
+type SharpModule = (typeof import('sharp'))['default'];
 let sharpInstance: SharpModule | null = null;
 let sharpLoadAttempted = false;
 

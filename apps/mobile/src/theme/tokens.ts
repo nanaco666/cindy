@@ -269,7 +269,7 @@ export const spacing = {
 } as const;
 
 /**
- * 圆角四档,对齐桌面 DESIGN.md 三档(8 内层控件 / 12 容器 / pill)+ 移动端微元素档:
+ * 圆角四档,对齐桌面 docs/design-rules/cindy-design-system.md 三档(8 内层控件 / 12 容器 / pill)+ 移动端微元素档:
  * - micro(4):缩略图内 chip、行内高亮等微元素;
  * - control(8):卡片内层控件 / 小按钮 / 缩略图;
  * - container(12):卡片 / 弹窗 / 输入容器;

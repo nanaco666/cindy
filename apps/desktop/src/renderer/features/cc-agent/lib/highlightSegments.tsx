@@ -4,7 +4,7 @@
  * 配合 fuzzyMatch 的 indices 输出使用。纯展示函数,无副作用,可单测。
  *
  * 视觉:命中字符加粗 + 字色 #262626 (Light) / #f5f5f5 (Dark)——复用 sidebar
- * 标题色,避免 DESIGN.md 禁止的色彩 token。非命中字符沿用父级 text-foreground。
+ * 标题色,避免 docs/design-rules/cindy-design-system.md 禁止的色彩 token。非命中字符沿用父级 text-foreground。
  *
  * 健壮性约定:
  *   - indices 必须严格升序、都在 [0, title.length) 内(由 fuzzyMatch 保证);

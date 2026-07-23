@@ -16,11 +16,11 @@ export interface GitlabProjectUpload {
 }
 
 export interface GitlabClientConfig {
-  /** GitLab 实例地址，如 'https://git.xindong.com' */
+  /** GitLab 实例地址，如 'https://gitlab.com' */
   baseUrl: string;
   /** Personal Access Token */
   token: string;
-  /** 项目路径，如 'smash/xdt-maker'。cross-project / user-scope 调用可省略。 */
+  /** 项目路径，如 'group/project'。cross-project / user-scope 调用可省略。 */
   projectPath?: string;
 }
 

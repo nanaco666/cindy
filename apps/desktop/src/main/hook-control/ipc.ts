@@ -73,7 +73,7 @@ let latestSlackToolProviderEnabled = false;
 const CODEX_MCP_REFRESH_RETRY_MS = 2_000;
 
 /**
- * Slack 绑定态会改变 lizi_slack 是否出现在 Codex 的冻结 MCP 清单里。
+ * Slack 绑定态会改变 cindy_slack 是否出现在 Codex 的冻结 MCP 清单里。
  *
  * 先软关 Codex app-server(含 busy turn 的 fail-closed 检查)，成功后再关 HTTP
  * bridge / 清 spawn cache；反过来会让仍在运行的 session 指向已停 bridge。
@@ -290,12 +290,12 @@ function ensureInstances(): { store: SlackHookStore; manager: HookControlManager
       },
       log,
     });
-    // Slack 网关工具桥: lizi_slack provider 经叶子注册表取用(不直接 import
+    // Slack 网关工具桥: cindy_slack provider 经叶子注册表取用(不直接 import
     // 本模块, 避免 mcp-providers <-> ipc 的静态引用闭环)
     const m = manager;
     registerSlackToolBridge({
       availability: () => m.getSlackToolAvailability(),
-      // teamId: (multi-team)以哪个 workspace 身份执行(lizi_slack 工具入参透传)
+      // teamId: (multi-team)以哪个 workspace 身份执行(cindy_slack 工具入参透传)
       callTool: (tool, args, teamId) => m.callSlackTool(tool, args, teamId),
     });
   }

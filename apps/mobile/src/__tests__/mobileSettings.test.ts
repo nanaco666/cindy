@@ -23,14 +23,14 @@ describe('mobile settings overview', () => {
       lastSyncedAt: new Date(2026, 0, 1, 3, 4, 5).getTime(),
       platform: 'ios',
       relayStatus: 'online',
-      userEmail: 'dash@example.com',
+      userEmail: 'neo@example.com',
       userId: 'user-1',
       userName: 'Dash',
     });
 
     expect(overview.header).toMatchObject({
       deviceName: 'Dash iPhone',
-      email: 'dash@example.com',
+      email: 'neo@example.com',
       name: 'Dash',
       relayDetail: '上次同步 03:04:05',
       relayLabel: 'Relay 已连接',
@@ -74,11 +74,11 @@ describe('mobile settings overview', () => {
       deviceName: 'Local Phone',
       platform: 'android',
       relayStatus: 'stopped',
-      userEmail: 'dash@example.com',
+      userEmail: 'neo@example.com',
       userName: null,
     });
     // 没有展示名 → name 回退邮箱;此时 header.email 不再重复一行。
-    expect(overview.header.name).toBe('dash@example.com');
+    expect(overview.header.name).toBe('neo@example.com');
     expect(overview.header.email).toBeUndefined();
   });
 

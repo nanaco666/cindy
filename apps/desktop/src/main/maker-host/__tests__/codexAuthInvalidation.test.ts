@@ -36,6 +36,10 @@ function fixture() {
   return { codexHome, systemAuth, localAuth };
 }
 
+function idToken(claims: Record<string, unknown>): string {
+  return `header.${Buffer.from(JSON.stringify(claims)).toString('base64url')}.signature`;
+}
+
 afterEach(() => {
   vi.restoreAllMocks();
   for (const dir of dirs.splice(0)) fs.rmSync(dir, { recursive: true, force: true });
@@ -184,6 +188,37 @@ describe('Codex system credential suppression marker', () => {
     await expect(adapter.getAccountId()).resolves.toBeNull();
     expect(readCodexOneShotCreds()).toBeNull();
     expect(fs.existsSync(localAuth)).toBe(true);
+  });
+
+  it('uses the ChatGPT workspace claim and never falls back account identity to JWT sub', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'xdt-codex-workspace-id-'));
+    dirs.push(root);
+    h.userDataDir = path.join(root, 'user-data');
+    vi.spyOn(os, 'homedir').mockReturnValue(path.join(root, 'empty-home'));
+    const codexHome = path.join(h.userDataDir, 'codex-home');
+    const localAuth = path.join(codexHome, 'auth.json');
+    fs.mkdirSync(codexHome, { recursive: true });
+
+    const { DesktopCodexAuthAdapter } = await import('../auth-adapters.js');
+    const adapter = new DesktopCodexAuthAdapter();
+    fs.writeFileSync(localAuth, JSON.stringify({
+      tokens: {
+        access_token: 'local-token',
+        id_token: idToken({ sub: 'user-subject' }),
+      },
+    }));
+    await expect(adapter.getAccountId()).resolves.toBeNull();
+
+    fs.writeFileSync(localAuth, JSON.stringify({
+      tokens: {
+        access_token: 'local-token',
+        id_token: idToken({
+          sub: 'user-subject',
+          'https://api.openai.com/auth': { chatgpt_account_id: 'workspace-actual' },
+        }),
+      },
+    }));
+    await expect(adapter.getAccountId()).resolves.toBe('workspace-actual');
   });
 
   it('finishes logout cleanup after a durable disconnect when Windows keeps auth.json locked', async () => {

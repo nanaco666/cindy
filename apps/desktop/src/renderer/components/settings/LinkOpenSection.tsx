@@ -58,7 +58,7 @@ export function LinkOpenSection() {
           {t('settings.linkOpen.card.description')}
         </p>
 
-        {/* 分段控件的 token 与外观分区「侧边栏卡片模式」完全同款(DESIGN.md 复用原则):
+        {/* 分段控件的 token 与外观分区「侧边栏卡片模式」完全同款(docs/design-rules/cindy-design-system.md 复用原则):
             选中态 chip 底 + 正文字色,未选中态次级字色 + hover 项底。 */}
         <div
           role="radiogroup"

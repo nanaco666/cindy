@@ -1,5 +1,5 @@
 /**
- * lizi_contacts 工具层集成测试 — 真 better-sqlite3 临时库跑 registry.call 全链路:
+ * cindy_contacts 工具层集成测试 — 真 better-sqlite3 临时库跑 registry.call 全链路:
  * strict 参数校验 / 开关拦截 / create→resolve→append_event→merge 主路径 /
  * IDENTITY_CONFLICT 结构化返回 / manage 工具。
  */
@@ -10,7 +10,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import DatabaseCtor from 'better-sqlite3';
 import { MakerContactsManager } from '@lizi/maker-core';
 
-import { ContactsToolRegistry } from '../lizi_contactsToolRegistry.js';
+import { ContactsToolRegistry } from '../cindy_contactsToolRegistry.js';
 import {
   registerContactsAddIdentityTool,
   registerContactsAppendEventTool,
@@ -52,7 +52,7 @@ function parseResult(res: { content: Array<{ type: string; text?: string }> }): 
   return JSON.parse(text);
 }
 
-describe('lizi_contacts tools', () => {
+describe('cindy_contacts tools', () => {
   let tmpDir: string;
   let manager: MakerContactsManager;
   let registry: ContactsToolRegistry;
@@ -113,16 +113,16 @@ describe('lizi_contacts tools', () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  const createDash = async () => {
+  const createNeo = async () => {
     const res = parseResult(
       await registry.call('contacts_create', {
         kind: 'person',
-        display_name: '黄一孟',
-        aliases: ['Dash'],
+        display_name: '林子航',
+        aliases: ['Neo'],
         summary: '长期老搭档',
         identities: [
-          { platform: 'email', value: 'dash@xd.com', label: '当前' },
-          { platform: 'x', value: '@dashhuang' },
+          { platform: 'email', value: 'neo@example.com', label: '当前' },
+          { platform: 'x', value: '@neolin' },
         ],
       }),
     );
@@ -141,9 +141,9 @@ describe('lizi_contacts tools', () => {
   });
 
   it('create → resolve → get → append_event 主路径', async () => {
-    const dash = await createDash();
+    const dash = await createNeo();
 
-    const resolved = parseResult(await registry.call('contacts_resolve', { value: 'DASH@XD.COM' }));
+    const resolved = parseResult(await registry.call('contacts_resolve', { value: 'NEO@EXAMPLE.COM' }));
     expect(resolved.ok).toBe(true);
     const hits = resolved.data as Array<{ matchType: string; profile: { id: string; totalEvents: number } }>;
     expect(hits[0]!.matchType).toBe('identity');
@@ -168,15 +168,15 @@ describe('lizi_contacts tools', () => {
   });
 
   it('身份相同 → 不新建, 自动并入既有档案(merged:true)', async () => {
-    const dash = await createDash();
+    const dash = await createNeo();
     const res = parseResult(
       await registry.call('contacts_create', {
         kind: 'person',
-        display_name: 'Dash Huang',
+        display_name: 'Neo Lin',
         summary: '来自邮件签名的采集',
         identities: [
-          { platform: 'email', value: 'dash@xd.com' },
-          { platform: 'github', value: 'dashhuang' },
+          { platform: 'email', value: 'neo@example.com' },
+          { platform: 'github', value: 'neolin' },
         ],
       }),
     );
@@ -197,18 +197,18 @@ describe('lizi_contacts tools', () => {
   });
 
   it('名字相似且无身份 → DUPLICATE_SUSPECT 拦截, allow_duplicate 放行', async () => {
-    await createDash();
+    await createNeo();
     const blocked = parseResult(
-      await registry.call('contacts_create', { kind: 'person', display_name: 'Dash Huang' }),
+      await registry.call('contacts_create', { kind: 'person', display_name: 'Neo Lin' }),
     );
     expect(blocked.ok).toBe(false);
     expect(blocked.code).toBe('DUPLICATE_SUSPECT');
-    expect((blocked.candidates as Array<{ displayName: string }>)[0]!.displayName).toBe('黄一孟');
+    expect((blocked.candidates as Array<{ displayName: string }>)[0]!.displayName).toBe('林子航');
 
     const forced = parseResult(
       await registry.call('contacts_create', {
         kind: 'person',
-        display_name: 'Dash Huang',
+        display_name: 'Neo Lin',
         allow_duplicate: true,
       }),
     );
@@ -234,14 +234,14 @@ describe('lizi_contacts tools', () => {
   });
 
   it('merge + delete + 分组管理(manage 类)', async () => {
-    const dash = await createDash();
-    // "Dash H." 与黄一孟的别名 "Dash" 相似, 会被 DUPLICATE_SUSPECT 拦 — 显式放行造重复
+    const dash = await createNeo();
+    // "Neo H." 与林子航的别名 "Neo" 相似, 会被 DUPLICATE_SUSPECT 拦 — 显式放行造重复
     const dup = (
       parseResult(
         await registry.call('contacts_create', {
           kind: 'person',
-          display_name: 'Dash H.',
-          identities: [{ platform: 'github', value: 'dashhuang' }],
+          display_name: 'Neo H.',
+          identities: [{ platform: 'github', value: 'neolin' }],
           allow_duplicate: true,
         }),
       ).data as { profile: { id: string } }
@@ -273,7 +273,7 @@ describe('lizi_contacts tools', () => {
   });
 
   it('关系边: add_relation 双向可见, remove_relation 清除', async () => {
-    const dash = await createDash();
+    const dash = await createNeo();
     const org = (
       parseResult(await registry.call('contacts_create', { kind: 'org', display_name: '心动网络' }))
         .data as { profile: { id: string } }
@@ -292,10 +292,10 @@ describe('lizi_contacts tools', () => {
     const got = parseResult(await registry.call('contacts_get', { id: org.id })).data as {
       relations: Array<{ direction: string; displayName: string; relation: string }>;
     };
-    expect(got.relations[0]).toMatchObject({ direction: 'in', displayName: '黄一孟', relation: '任职' });
+    expect(got.relations[0]).toMatchObject({ direction: 'in', displayName: '林子航', relation: '任职' });
 
     // resolve 返回的 compactProfile 也带 relations
-    const resolved = parseResult(await registry.call('contacts_resolve', { value: 'dash@xd.com' }))
+    const resolved = parseResult(await registry.call('contacts_resolve', { value: 'neo@example.com' }))
       .data as Array<{ profile: { relations: Array<{ displayName: string }> } }>;
     expect(resolved[0]!.profile.relations[0]!.displayName).toBe('心动网络');
 
@@ -305,7 +305,7 @@ describe('lizi_contacts tools', () => {
   });
 
   it('vcf 导出→导入 round-trip(agent 备份/迁移通道)', async () => {
-    const dash = await createDash();
+    const dash = await createNeo();
     const vcfPath = path.join(tmpDir, 'export.vcf');
     const exported = parseResult(
       await registry.call('contacts_export_vcf', { ids: [dash.id], path: vcfPath }),
@@ -327,7 +327,7 @@ describe('lizi_contacts tools', () => {
   });
 
   it('系统回写: 强制显式范围 / pending 跳过 / 锚点回填 / 二次回写变更新', async () => {
-    const dash = await createDash();
+    const dash = await createNeo();
     parseResult(
       await registry.call('contacts_create', {
         kind: 'person', display_name: '待确认者', status: 'pending', allow_duplicate: true,
@@ -345,7 +345,7 @@ describe('lizi_contacts tools', () => {
     const dry = parseResult(
       await registry.call('contacts_export_system', { group: '回写组', dry_run: true }),
     ).data as { toCreate: string[]; toUpdate: string[] };
-    expect(dry.toCreate).toEqual(['黄一孟']);
+    expect(dry.toCreate).toEqual(['林子航']);
 
     // 真回写: created + 锚点回填
     const run1 = parseResult(await registry.call('contacts_export_system', { ids: [dash.id] })).data as {
@@ -366,7 +366,7 @@ describe('lizi_contacts tools', () => {
   it('回写/vcf 导出: 只有任职语义的 org 边才映射公司/职位(客户等非雇佣边不出卡)', async () => {
     // 回归: 曾取"第一条指向 org 的出边"当雇主, 先建的 客户/供应商 关系会污染
     // 系统联系人卡的 公司/职位 字段
-    const dash = await createDash();
+    const dash = await createNeo();
     const clientOrg = (
       parseResult(await registry.call('contacts_create', { kind: 'org', display_name: '甲方客户公司' }))
         .data as { profile: { id: string } }
@@ -406,7 +406,7 @@ describe('lizi_contacts tools', () => {
 
   it('系统回写/vcf 导出: 显式 ids 去重, 重复 id 不生成重复卡片', async () => {
     // 回归: 重复 id 会生成重复写计划 → 系统侧同一人建两张卡且只有一张能回填锚点
-    const dash = await createDash();
+    const dash = await createNeo();
     parseResult(await registry.call('contacts_export_system', { ids: [dash.id, dash.id, dash.id] }));
     expect(writeCalls[0]).toHaveLength(1);
 
@@ -479,10 +479,10 @@ describe('lizi_contacts tools', () => {
   it('write/manage 工具成功后触发 onMutated, 只读工具不触发(UI 刷新通道)', async () => {
     // 回归: onMutated 注入后从未被调用 — agent 经 MCP 直写 store 不经 IPC 层,
     // 设置页列表/待确认角标/统计全部不自动刷新
-    const dash = await createDash();
+    const dash = await createNeo();
     expect(mutations).toBe(1); // contacts_create
 
-    await registry.call('contacts_search', { query: 'Dash' });
+    await registry.call('contacts_search', { query: 'Neo' });
     await registry.call('contacts_get', { id: dash.id });
     await registry.call('contacts_export_vcf', { ids: [dash.id] }); // 只写文件不动库
     expect(mutations).toBe(1); // 只读/导出不触发
@@ -501,7 +501,7 @@ describe('lizi_contacts tools', () => {
   it('export_vcf: ids 路径同样默认排除 pending, include_pending:true 才导出', async () => {
     // 回归: ids 路径曾跳过状态过滤, 显式 id 列表会把 pending(低置信度)档案
     // 无条件泄漏进 vCard, 与工具描述"默认只导 confirmed"不一致
-    const dash = await createDash();
+    const dash = await createNeo();
     const pending = (
       parseResult(
         await registry.call('contacts_create', {
@@ -514,7 +514,7 @@ describe('lizi_contacts tools', () => {
       await registry.call('contacts_export_vcf', { ids: [dash.id, pending.id] }),
     ).data as { count: number; vcf: string };
     expect(defaultExport.count).toBe(1);
-    expect(defaultExport.vcf).toContain('黄一孟');
+    expect(defaultExport.vcf).toContain('林子航');
     expect(defaultExport.vcf).not.toContain('低置信度');
 
     const withPending = parseResult(
@@ -528,7 +528,7 @@ describe('lizi_contacts tools', () => {
     await registry.call('contacts_create', {
       kind: 'person',
       display_name: '导出防覆盖',
-      identities: [{ platform: 'email', value: 'ow@xd.com' }],
+      identities: [{ platform: 'email', value: 'ow@example.com' }],
     });
     const target = path.join(tmpDir, 'existing.vcf');
     fs.writeFileSync(target, 'precious data', 'utf8');

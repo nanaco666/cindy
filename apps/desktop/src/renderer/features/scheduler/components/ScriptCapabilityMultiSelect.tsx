@@ -6,7 +6,7 @@
  * 回退显示原始能力 id(保证新能力先可用后翻译)。
  *
  * 交互:点击 trigger 展开,面板内搜索框过滤(命中 label / 描述 / id),点选项
- * 切换勾选、面板保持展开(多选惯例);面板宽度绑定 trigger 宽度(DESIGN.md §4)。
+ * 切换勾选、面板保持展开(多选惯例);面板宽度绑定 trigger 宽度(docs/design-rules/cindy-design-system.md §4)。
  */
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';

@@ -7,7 +7,7 @@
  *   version 可选：major | minor | patch | x.y.z(默认 patch;该渠道首次发布必须传显式 x.y.z)
  *   --region 可选：cn(默认,国内渠道) | global(海外渠道)。区域决定应用身份
  *   (Cindy / CindyGlobal)、烘焙端点(config/endpoint*.json)与发布目标
- *   (XDT_* vs XDT_GLOBAL_* 的 OSS/CDN),见 docs/desktop-release-cn-global.md。
+ *   (XDT_* vs XDT_GLOBAL_* 的 OSS/CDN)。
  *
  * 环境变量:
  *   NPKG_TOKEN            — 必填,npkg 内网签名服务 token(缺失/签名失败/验签

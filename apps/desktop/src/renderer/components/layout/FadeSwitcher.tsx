@@ -15,7 +15,7 @@
  *
  * 性能边界（F4）：仅 opacity 变化，禁止 width/height/top/left/margin/padding 动画。
  *
- * 动画时序与性能边界以本组件注释和 DESIGN.md 为准。
+ * 动画时序与性能边界以本组件注释和 docs/design-rules/cindy-design-system.md 为准。
  */
 
 import { useEffect, useMemo, useState, type ReactNode, type TransitionEvent } from 'react';

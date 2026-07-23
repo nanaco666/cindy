@@ -21,6 +21,7 @@ import {
   Split,
   Sparkles,
   Timer,
+  Trash2,
   TriangleAlert,
   Undo2,
   X,
@@ -384,6 +385,7 @@ interface MessageActions {
    */
   onQuoteSelection?: (quote: { text: string }) => void;
   onForkMessage?: (clientId: string, draft?: MobileMessageDraft) => void;
+  onDeleteMessage?: (clientId: string) => void;
   onLoadEarlier?: () => void | Promise<void>;
   onOpenForkOrigin?: () => void;
   onOpenPayload?: (payload: MessagePayload) => void;
@@ -408,6 +410,7 @@ export function MessageRenderer({
   items,
   onCopyMessageLink,
   onForkMessage,
+  onDeleteMessage,
   onLoadEarlier,
   onOpenForkOrigin,
   onOpenSessionLink,
@@ -644,6 +647,7 @@ export function MessageRenderer({
   const actions: MessageActions & { firstUserMessageClientId?: string } = useMemo(() => ({
     onCopyMessageLink,
     onForkMessage,
+    onDeleteMessage,
     onOpenForkOrigin,
     onOpenSessionLink,
     onPreviewRewind,
@@ -658,6 +662,7 @@ export function MessageRenderer({
     firstUserMessageClientId,
     isSessionStreaming,
     onCopyMessageLink,
+    onDeleteMessage,
     onForkMessage,
     onOpenForkOrigin,
     onOpenSessionLink,
@@ -1422,6 +1427,13 @@ function MessageBubble({
     && item.message.kind === 'user'
     && !isFirstUserMessage
   );
+  const canDelete = !!(
+    showCompletedActionBar
+    && clientId
+    && actions.onDeleteMessage
+    && actions.isSessionStreaming !== true
+    && (item.message.kind === 'user' || item.message.kind === 'assistant')
+  );
   const canCopyLink = !!(canUseCompletedActions && clientId && actions.onCopyMessageLink);
   const contentLayout = useMemo(() => buildMessageContentLayout({
     screenWidth: actions.screenWidth,
@@ -1469,12 +1481,13 @@ function MessageBubble({
   const actionBar = useMemo(() => buildMessageActionBarPresentation({
     align: isUser ? 'user' : 'agent',
     canCopy,
+    canDelete,
     canFork,
     canRewind,
     hasTime: !!relativeTime,
     hasTurnCost: !!turnCost,
     isStreaming: isStreamingAssistant,
-  }), [canCopy, canFork, canRewind, isStreamingAssistant, isUser, relativeTime, turnCost]);
+  }), [canCopy, canDelete, canFork, canRewind, isStreamingAssistant, isUser, relativeTime, turnCost]);
   const hasActions = actionBar.items.length > 0;
   const actionBusy = !!clientId && actions.busyClientId === clientId;
   const disabled = !!actions.busyClientId;
@@ -1522,6 +1535,10 @@ function MessageBubble({
             }
           : undefined,
       );
+      return;
+    }
+    if (id === 'delete' && clientId) {
+      actions.onDeleteMessage?.(clientId);
     }
   }, [
     actions,
@@ -2247,10 +2264,6 @@ function WorkGroupCard({
   const header = presentation.header;
   const isStreaming = item.isStreaming === true;
   const [expanded, toggleExpanded] = useFoldableExpandedState(item.key, false);
-  const [livePreviewDismissed, toggleLivePreviewDismissed] = useFoldableExpandedState(
-    `${item.key}:live-preview-dismissed`,
-    false,
-  );
   const layout = useMemo(() => buildMessageHierarchyLayout({
     screenWidth: actions.screenWidth,
     summaryCount: header.summaryCount,
@@ -2268,8 +2281,7 @@ function WorkGroupCard({
       : null),
     [expanded, isStreaming, item.children],
   );
-  const isLivePreviewVisible =
-    isStreaming && !expanded && !livePreviewDismissed && liveActivities.length > 0;
+  const isLivePreviewVisible = isStreaming && !expanded && liveActivities.length > 0;
   const startedAtIso = item.startedAtMs !== undefined
     ? new Date(item.startedAtMs).toISOString()
     : undefined;
@@ -2291,21 +2303,7 @@ function WorkGroupCard({
     presentation.title,
     explorationSummary,
   ].filter(Boolean).join(' · ');
-  const onToggle = useCallback(() => {
-    if (isLivePreviewVisible) {
-      toggleLivePreviewDismissed();
-      return;
-    }
-    if (isStreaming && expanded && !livePreviewDismissed) toggleLivePreviewDismissed();
-    toggleExpanded();
-  }, [
-    expanded,
-    isLivePreviewVisible,
-    isStreaming,
-    livePreviewDismissed,
-    toggleExpanded,
-    toggleLivePreviewDismissed,
-  ]);
+  const onToggle = toggleExpanded;
   const livePreview = isLivePreviewVisible ? (
     <Rail layout={layout}>
       <View style={styles.workActivityStack}>
@@ -5023,7 +5021,7 @@ function MessageControlButton({
 }
 
 function isMessageControlActionId(id: MessageActionBarItemId): id is MobileMessageControlActionId {
-  return id === 'copy' || id === 'rewind' || id === 'fork';
+  return id === 'copy' || id === 'delete' || id === 'rewind' || id === 'fork';
 }
 
 function messageControlActionLabel(
@@ -5031,12 +5029,14 @@ function messageControlActionLabel(
   copyState: CopyMessageStatus | 'idle' | 'copying',
 ): string {
   if (id === 'copy') return copyActionLabel(copyState);
+  if (id === 'delete') return '删除消息';
   if (id === 'rewind') return '回退到这里';
   return '分叉对话';
 }
 
 function messageControlActionTestID(id: MobileMessageControlActionId): string {
   if (id === 'copy') return 'message.copyButton';
+  if (id === 'delete') return 'message.deleteButton';
   if (id === 'rewind') return 'message.rewindButton';
   return 'message.forkButton';
 }
@@ -5054,6 +5054,7 @@ function messageControlActionIcon(
         ? <Check color={colors.textSecondary} size={iconSize} strokeWidth={iconStroke.regular} />
         : <Copy color={colors.textSecondary} size={iconSize} strokeWidth={iconStroke.regular} />;
   }
+  if (id === 'delete') return <Trash2 color={colors.textSecondary} size={iconSize} strokeWidth={iconStroke.regular} />;
   if (id === 'rewind') return <Undo2 color={colors.textSecondary} size={iconSize} strokeWidth={iconStroke.regular} />;
   return <Split color={colors.textSecondary} size={iconSize} strokeWidth={iconStroke.regular} />;
 }

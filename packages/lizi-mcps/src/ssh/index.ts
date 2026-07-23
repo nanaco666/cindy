@@ -1,8 +1,8 @@
 /**
  * ssh/index.ts
  *
- * Bundle export for the lizi_ssh tool family. The MCP server factory
- * (lizi_sshMcpServer.ts) imports from here and registers everything in one go.
+ * Bundle export for the cindy_ssh tool family. The MCP server factory
+ * (cindy_sshMcpServer.ts) imports from here and registers everything in one go.
  */
 
 export { registerSshListHostsTool } from './list_hosts.js';

@@ -54,7 +54,6 @@ import { requestRendererMicrophonePermission } from '@/voice-input/startGuards';
 
 const LANGUAGE_OPTIONS: ReadonlyArray<VoiceInputLanguage> = ['auto', ...SUPPORTED_LOCALES];
 const AUTO_MICROPHONE_VALUE = '__auto__';
-const AI_GATEWAY_OVERVIEW_URL = 'https://console.tapsvc.com/nova/#/ai-gateway?tab=overview';
 const DICTIONARY_FILTERS = ['all', 'automatic', 'manual'] as const;
 
 type DictionaryFilter = (typeof DICTIONARY_FILTERS)[number];
@@ -2022,19 +2021,6 @@ export function VoiceInputSection() {
             </dd>
           </div>
         </dl>
-
-        <button
-          type="button"
-          onClick={() => window.electronAPI.openExternal(AI_GATEWAY_OVERVIEW_URL)}
-          className={cn(
-            'self-start text-12 leading-[1.3]',
-            'text-[var(--settings-source-link)] underline',
-            'decoration-[var(--settings-source-link)] decoration-1 underline-offset-2',
-            'opacity-75 hover:opacity-100',
-          )}
-        >
-          {t('settings.voiceInput.usage.label')}
-        </button>
 
         <div className="border-t border-[var(--settings-theme-card-border)] pt-4">
           <button

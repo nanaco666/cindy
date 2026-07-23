@@ -20,7 +20,7 @@ afterEach(() => {
 function createFixture() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'xdmaker-forge-notices-'));
   fixtures.push(root);
-  const noticesRoot = path.join(root, 'notices');
+  const noticesRoot = path.join(root, 'docs', 'legal', 'notices');
   fs.mkdirSync(noticesRoot, { recursive: true });
   for (const platform of ['win', 'macos', 'linux']) {
     fs.writeFileSync(path.join(noticesRoot, `desktop-${platform}.txt`), `${platform} open\n`);

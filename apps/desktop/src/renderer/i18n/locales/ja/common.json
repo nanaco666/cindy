@@ -871,7 +871,6 @@
         "linuxUnsupported": "Linux 初版では音声入力中のシステムミュートは未対応です。"
       },
       "usage": {
-        "label": "使用量",
         "duration": "時間",
         "estimatedCost": "概算費用",
         "costBreakdown": "認識 {{asr}} · 整文 {{refine}}",
@@ -1563,6 +1562,7 @@
     "computerUse": {
       "title": "自動操作",
       "description": "エージェントがコンピュータと接続済みデバイスを使ってあなたの代わりに作業します。ブラウザ自動操作は独立したブラウザを使い、Android 自動操作は ADB を使い、コンピュータ自動操作はローカルドライバーに依存します。",
+      "codexRefreshDeferred": "設定は保存されましたが、Codex が使用中です。アプリを再起動すると、新しい Codex セッションに反映されます。",
       "browser": {
         "title": "自動操作ブラウザ",
         "description": "エージェント専用の独立したブラウザ。普段の Chrome とは分離されています",
@@ -1661,7 +1661,7 @@
         "title": "自動操作コンピュータ",
         "description": "エージェントがウィンドウを調べ、UI を読み取り、クリックや入力を実行できます",
         "toggleAria": "コンピュータの直接操作を切り替える",
-        "driverInfo": "コンピュータ自動操作はオープンソースの CUA Driver で提供されます。ローカルで動作し、画面の読み取りやクリック、入力などを行います。有効化には基本権限が必要です。実際の使用中には、macOS が対象アプリや具体的な操作ごとに追加の確認を表示することがあります。",
+        "driverInfo": "コンピュータ自動操作はオープンソースの CUA Driver で提供されます。ローカルで動作し、画面の読み取りやクリック、入力などを行います。",
         "openSourceProject": "オープンソースプロジェクトを見る",
         "detected": "{{version}} を検出しました（{{path}}、{{daemon}}）",
         "daemonRunning": "バックグラウンドサービスは実行中です",
@@ -1670,8 +1670,9 @@
         "installing": "cua-driver をインストール中...",
         "authorizing": "システム権限を待っています。Cua Driver の権限ウィンドウで「アクセシビリティ」と「画面収録」を許可してください。",
         "permissionIntro": {
-          "title": "コンピュータ自動操作の権限を準備",
-          "description": "次に {{appName}} は Cua Driver のインストールまたは権限付与フローを開き、必要に応じて macOS のシステム設定へ移動します。まず CuaDriver に「アクセシビリティ」と「画面収録」の基本権限を許可してください。その後の使用中に、macOS が対象アプリや具体的な操作ごとに追加の確認を表示することがあります。自分で Computer Use タスクを開始した場合にのみ承認してください。完了後 {{appName}} に戻ると、自動で確認して有効化します。",
+          "title": "コンピュータ自動操作を有効化",
+          "description": "{{appName}} は Cua Driver をローカルにインストールまたは起動し、画面の読み取りやクリック、入力などを行います。自分でコンピュータ自動操作タスクを開始した場合にのみ有効にしてください。",
+          "macosDescription": "次に {{appName}} は Cua Driver のインストールまたは権限付与フローを開き、必要に応じて macOS のシステム設定へ移動します。まず CuaDriver に「アクセシビリティ」と「画面収録」の基本権限を許可してください。その後の使用中に、macOS が対象アプリや具体的な操作ごとに追加の確認を表示することがあります。自分で Computer Use タスクを開始した場合にのみ承認してください。完了後 {{appName}} に戻ると、自動で確認して有効化します。",
           "confirm": "続行",
           "cancel": "後で"
         },
@@ -3670,6 +3671,9 @@
         "NO_PROVIDER_FOR_AGENT": "このデバイスには、その Agent 用の接続済みモデル Provider がありません。設定で接続してから再試行してください。",
         "NO_PROVIDER_FOR_AGENT_CONTINUE": "このデバイスには、その Agent 用の接続済みモデル Provider がありません。協同は開始されず、このメッセージは単一セッションとして続行されます。設定で接続してから再試行してください。",
         "NO_PROVIDER_FOR_AGENT_REMOTE": "被操作デバイスには、その Agent 用の接続済みモデル Provider がありません。被操作デバイスで接続してから再試行してください。",
+        "PROVIDER_ROUTE_UNAVAILABLE": "選択した Provider とモデルのルートは現在利用できません。利用可能なモデルまたは Provider を選んで再試行してください。",
+        "PROVIDER_ROUTE_UNAVAILABLE_CONTINUE": "選択した Provider とモデルのルートは現在利用できません。協同は開始されず、このメッセージは単一セッションとして続行されます。利用可能なモデルまたは Provider を選んで再試行してください。",
+        "PROVIDER_ROUTE_UNAVAILABLE_REMOTE": "被操作デバイスでは、選択した Provider とモデルのルートを利用できません。そのデバイスで利用可能なルートを選んで再試行してください。",
         "BUDGET_MODEL_REQUIRES_API_MODE": "割引版 Codex モデルを使うには API key が必要です。設定で構成してから再試行してください。",
         "BUDGET_MODEL_REQUIRES_API_MODE_CONTINUE": "割引版 Codex モデルを使うには API key が必要です。協同は開始されず、このメッセージは単一セッションとして続行します。設定で構成してから再試行してください。",
         "BUDGET_MODEL_REQUIRES_API_MODE_REMOTE": "被操作デバイスに割引版 Codex モデル用の API key が設定されていません。被操作デバイスで設定してから再試行してください。"
@@ -3852,7 +3856,7 @@
       "outputFile": "出力: {{path}}"
     },
     "forkOrigin": {
-      "label": "会話から分岐"
+      "label": "元の会話から作成"
     },
     "imageMissing": {
       "title": "画像が失われました"
@@ -3864,10 +3868,23 @@
     },
     "messageActionBar": {
       "copy": "メッセージをコピー",
-      "timeCopyHint": "クリックでメッセージリンクをコピー",
       "linkCopied": "リンクをコピーしました",
+      "moreActions": "その他のメッセージ操作",
+      "copyLink": "現在の会話リンクをコピー",
+      "copyLinkFailed": "リンクをコピーできませんでした",
       "rewind": "ここまで戻る",
-      "fork": "分岐",
+      "fork": "新しい会話で続ける",
+      "forkConfirmTitle": "ここから新しい会話を始めますか？",
+      "forkConfirmDescription": "この時点の会話コンテキストを使って、独立した新しい会話を作成します。元の会話は変更されず、以後のメッセージは互いに影響しません。",
+      "forkConfirm": "新しい会話を始める",
+      "forkCancel": "キャンセル",
+      "delete": "このメッセージを削除",
+      "deleteConfirmTitle": "このメッセージを削除しますか？",
+      "deleteConfirmDescription": "このメッセージはローカルセッションから削除され、後続のメッセージは保持されます。次回送信時に残りの履歴から AI コンテキストを再構築します。",
+      "deleteConfirm": "メッセージを削除",
+      "deleteCancel": "キャンセル",
+      "deleteBusy": "現在の応答が終わってからメッセージを削除してください。",
+      "deleteFailed": "メッセージを削除できませんでした。もう一度お試しください。",
       "edit": "編集",
       "turnCost": "このターンの消費",
       "turnCostEstimated": "このターンの token 価値(API 単価換算)",
@@ -4277,7 +4294,7 @@
       "automationViewTask": "自動化タスクを表示",
       "expandLongMessage": "全文を表示",
       "collapseLongMessage": "折りたたむ",
-      "forkBusy": "セッションが実行中です。終了してから分岐してください",
+      "forkBusy": "現在の応答が終了してから、ここから新しい会話を始めてください",
       "editStopTimeout": "タスクの停止待ちがタイムアウトしました。もう一度お試しください",
       "editQueueNotEmpty": "このセッションには送信待ちのメッセージがあります。先に送信または削除してから編集してください",
       "editNotLast": "セッションに新しいメッセージがあるため、これは最新ではなくなり編集して再送信できません",
@@ -4286,11 +4303,11 @@
       "editSend": "送信",
       "editRollbackHint": "送信すると前のターンで変更された {{count}} 個のファイルが元に戻ります",
       "forkErrors": {
-        "unsupportedHistory": "この位置はエージェント切替境界をまたぐため、分岐できません",
-        "noPriorAssistant": "AI の返信より後のメッセージで分岐してください",
-        "sourceNeverRan": "元のセッションがまだ実行されていないため分岐できません",
-        "codexStateUnavailable": "Codex セッションの状態を利用できないため分岐できません。{{detail}}",
-        "generic": "分岐に失敗しました。再試行してください"
+        "unsupportedHistory": "この位置はエージェント切替境界をまたぐため、ここから新しい会話を始められません",
+        "noPriorAssistant": "AI の返信より後のメッセージから新しい会話を始めてください",
+        "sourceNeverRan": "元の会話がまだ実行されていないため、新しい会話を始められません",
+        "codexStateUnavailable": "Codex 会話の状態を利用できないため、新しい会話を始められません。{{detail}}",
+        "generic": "新しい会話を始められませんでした。再試行してください"
       }
     },
     "threadContext": {
@@ -4520,6 +4537,7 @@
     },
     "draft": {
       "createSessionFailed": "セッションの作成に失敗しました。再試行してください",
+      "deviceStillLoading": "リモートデバイスの読み込み中です。しばらくお待ちください",
       "worktreeMissingRepo": "worktree を作成できません：現在のディレクトリのリポジトリルートがありません",
       "worktreeRepoHint": "作業ディレクトリを再選択し、右下のフォルダ表示が更新されてから再試行してください",
       "sessionInactive": "セッションはすでにアクティブではありません",
@@ -5685,6 +5703,8 @@
       "typeFeature": "機能要望",
       "titleLabel": "タイトル",
       "bodyLabel": "本文(Markdown)",
+      "identityGithubUser": "送信者:GitHub ユーザー @{{login}}(本人)",
+      "identityPlatform": "送信者:Cindy プラットフォームによる代理送信(GitHub App {{login}})",
       "envLine": "送信時に自動で付加されます:クライアント {{appVersion}} · {{platform}} {{arch}} · 表示言語 {{uiLanguage}}",
       "submit": "送信",
       "cancel": "キャンセル"

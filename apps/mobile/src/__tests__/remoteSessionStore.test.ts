@@ -191,6 +191,25 @@ describe('remoteSessionStore', () => {
     expect(remoteSessionStore.getMessageVersion()).toBeGreaterThan(versionAfterCreate);
   });
 
+  it('removes deleted messages from the device-link transcript mirror', () => {
+    remoteSessionStore.setMessages('s1', [message('m1', 's1'), message('m2', 's1')]);
+    remoteSessionStore.markSessionMessagesSynced('s1', {
+      _count: { messages: 2 },
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    });
+
+    remoteSessionStore.applyRemotePush('dev-1', 'local-db:messages:deleted', {
+      sessionId: 's1',
+      clientId: 'm1',
+    });
+
+    expect(remoteSessionStore.getMessages('s1').map((item) => item.clientId)).toEqual(['m2']);
+    expect(remoteSessionStore.isSessionMessageWindowSynced('s1', {
+      _count: { messages: 2 },
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    })).toBe(false);
+  });
+
   it('batches maker text deltas into one streaming assistant row', () => {
     vi.useFakeTimers();
     const notify = vi.fn();

@@ -8,7 +8,7 @@
  *    bootstrap-electron 启动期调一次。
  *
  * 语义:
- *  - 设置开关只 gate agent 侧(lizi_contacts MCP), 数据 CRUD 通道不受 gate —
+ *  - 设置开关只 gate agent 侧(cindy_contacts MCP), 数据 CRUD 通道不受 gate —
  *    用户关着开关也能在设置页浏览/清理数据。
  *  - ContactsError → throwIpcError 映射(identity-conflict → IDENTITY_CONFLICT,
  *    message 已含占用者 contact id)。
@@ -51,7 +51,7 @@ export interface ContactsIpcDeps {
    *
    * Claude 每个会话按 provider isEnabled 现读, 开关下次 session 即生效; 但 Codex 的
    * mcp_servers flags 冻在 codexEnvironment 的模块级 cached spawn 配置里, 且 app-server
-   * 进程跨会话长活复用 —— 不失效则开了开关的用户后续 codex 会话仍拿不到 lizi_contacts
+   * 进程跨会话长活复用 —— 不失效则开了开关的用户后续 codex 会话仍拿不到 cindy_contacts
    * (关闭方向同理: 工具残留), 直到重启 app。生产实现与自定义 MCP CRUD 的
    * invalidateCodex 同款: 先 dispose app-server(含 busy 检查), 成功后再清 bridge/cache。
    *

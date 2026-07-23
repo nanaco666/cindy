@@ -502,7 +502,8 @@ describe('skillhub/installService', () => {
     expect(fs.lstatSync(logicalDir).isSymbolicLink()).toBe(true);
     expect(fs.readFileSync(path.join(logicalDir, 'SKILL.md'), 'utf-8')).toBe('new content');
     expect(fs.readFileSync(path.join(physicalDir, 'SKILL.md'), 'utf-8')).toBe('new content');
-    expect(computeFolderHash).toHaveBeenCalledWith(fs.realpathSync(physicalDir));
+    const [hashedDir] = vi.mocked(computeFolderHash).mock.calls[0] ?? [];
+    expect(fs.realpathSync(hashedDir)).toBe(fs.realpathSync(physicalDir));
     expect(registryService.getInstall).toHaveBeenCalledWith(skillName, logicalDir);
     expect(registryService.addInstall).toHaveBeenCalledWith(
       skillName,

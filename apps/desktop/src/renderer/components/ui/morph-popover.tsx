@@ -4,7 +4,7 @@ import { createPortal } from 'react-dom';
 import { cn } from '@/lib/utils';
 
 /**
- * MorphPopover —— 「chip 原位长成弹层」的容器形变原语(DESIGN.md §14.4 容器形变类目)。
+ * MorphPopover —— 「chip 原位长成弹层」的容器形变原语(docs/design-rules/cindy-design-system.md §14.4 容器形变类目)。
  *
  * 与 Radix Popover 的本质区别:弹层不是浮现盖在 trigger 上,而是以 trigger chip 的
  * 精确几何(位置/尺寸/胶囊圆角/pill 底色)为起点,宽/高/圆角/底色/阴影同步过渡到

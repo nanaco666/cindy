@@ -1125,22 +1125,22 @@ describe('identity.displayTemplate 展示名', () => {
     const onConnected = vi.fn();
     const mgr = new GhostOauthAccountManager({
       vault,
-      fetchImpl: slackFetch({ team: 'xindong', user: 'lizi', user_id: 'U9ZC94EDR' }) as unknown as typeof fetch,
+      fetchImpl: slackFetch({ team: 'acme', user: 'devuser', user_id: 'U0EXAMPLE1' }) as unknown as typeof fetch,
       openExternal: autoBrowser(),
       onAccountConnected: onConnected,
     });
     const result = await mgr.connectAccount(GHOST, KEY, SLACK_DECL);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.account.label).toBe('xindong · lizi');
-    expect(mgr.listAccounts(GHOST, KEY)[0]?.label).toBe('xindong · lizi');
+    expect(result.account.label).toBe('acme · devuser');
+    expect(mgr.listAccounts(GHOST, KEY)[0]?.label).toBe('acme · devuser');
     // 清单持久层:合并键 label 仍是稳定 user_id,展示名单独落 displayLabel。
     const manifest = JSON.parse(vault.read(GHOST, `${KEY}-accounts`) ?? '{}') as {
       accounts: Array<{ label: string; displayLabel: string }>;
     };
-    expect(manifest.accounts[0]).toMatchObject({ label: 'U9ZC94EDR', displayLabel: 'xindong · lizi' });
+    expect(manifest.accounts[0]).toMatchObject({ label: 'U0EXAMPLE1', displayLabel: 'acme · devuser' });
     // 授权成功提示用展示名。
-    expect(onConnected).toHaveBeenCalledWith({ ghostId: GHOST, secretKey: KEY, label: 'xindong · lizi' });
+    expect(onConnected).toHaveBeenCalledWith({ ghostId: GHOST, secretKey: KEY, label: 'acme · devuser' });
   });
 
   it('同身份重连:按稳定键合并到老账号(旧行 label 是 user_id),并补上展示名', async () => {
@@ -1148,13 +1148,13 @@ describe('identity.displayTemplate 展示名', () => {
       [`${KEY}-client-id`]: 'cid',
       [`${KEY}-accounts`]: JSON.stringify({
         defaultAccountId: 'acc-legacy',
-        accounts: [{ id: 'acc-legacy', label: 'U9ZC94EDR', status: 'connected', createdAt: 1 }],
+        accounts: [{ id: 'acc-legacy', label: 'U0EXAMPLE1', status: 'connected', createdAt: 1 }],
       }),
       [`${KEY}-rt-acc-legacy`]: 'rt-old',
     });
     const mgr = new GhostOauthAccountManager({
       vault,
-      fetchImpl: slackFetch({ team: 'xindong', user: 'lizi', user_id: 'U9ZC94EDR' }) as unknown as typeof fetch,
+      fetchImpl: slackFetch({ team: 'acme', user: 'devuser', user_id: 'U0EXAMPLE1' }) as unknown as typeof fetch,
       openExternal: autoBrowser(),
     });
     const result = await mgr.connectAccount(GHOST, KEY, SLACK_DECL);
@@ -1162,20 +1162,20 @@ describe('identity.displayTemplate 展示名', () => {
     if (!result.ok) return;
     // 合并进老行(不新增),展示名刷新。
     expect(result.account.id).toBe('acc-legacy');
-    expect(result.account.label).toBe('xindong · lizi');
+    expect(result.account.label).toBe('acme · devuser');
     expect(mgr.listAccounts(GHOST, KEY)).toHaveLength(1);
   });
 
   it('模板占位符取不到值 → 展示名降级,view.label 回落稳定身份键', async () => {
     const mgr = new GhostOauthAccountManager({
       vault: memoryVault({ [`${KEY}-client-id`]: 'cid' }),
-      fetchImpl: slackFetch({ user_id: 'U9ZC94EDR' }) as unknown as typeof fetch,
+      fetchImpl: slackFetch({ user_id: 'U0EXAMPLE1' }) as unknown as typeof fetch,
       openExternal: autoBrowser(),
     });
     const result = await mgr.connectAccount(GHOST, KEY, SLACK_DECL);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.account.label).toBe('U9ZC94EDR');
+    expect(result.account.label).toBe('U0EXAMPLE1');
   });
 
   it('老账号回填:令牌刷新成功后 best-effort 补展示名(不用重连)', async () => {
@@ -1183,19 +1183,19 @@ describe('identity.displayTemplate 展示名', () => {
       [`${KEY}-client-id`]: 'cid',
       [`${KEY}-accounts`]: JSON.stringify({
         defaultAccountId: 'acc-legacy',
-        accounts: [{ id: 'acc-legacy', label: 'U9ZC94EDR', status: 'connected', createdAt: 1 }],
+        accounts: [{ id: 'acc-legacy', label: 'U0EXAMPLE1', status: 'connected', createdAt: 1 }],
       }),
       [`${KEY}-rt-acc-legacy`]: 'rt-old',
     });
     const mgr = new GhostOauthAccountManager({
       vault,
-      fetchImpl: slackFetch({ team: 'xindong', user: 'lizi', user_id: 'U9ZC94EDR' }) as unknown as typeof fetch,
+      fetchImpl: slackFetch({ team: 'acme', user: 'devuser', user_id: 'U0EXAMPLE1' }) as unknown as typeof fetch,
       openExternal: vi.fn(),
     });
     await expect(mgr.getFreshAccessToken(GHOST, KEY, SLACK_DECL)).resolves.toMatchObject({ ok: true });
     // 回填是 fire-and-forget,轮询等它落库。
     await vi.waitFor(() => {
-      expect(mgr.listAccounts(GHOST, KEY)[0]?.label).toBe('xindong · lizi');
+      expect(mgr.listAccounts(GHOST, KEY)[0]?.label).toBe('acme · devuser');
     });
   });
 
@@ -1205,12 +1205,12 @@ describe('identity.displayTemplate 展示名', () => {
       [`${KEY}-accounts`]: JSON.stringify({
         defaultAccountId: 'acc-1',
         accounts: [
-          { id: 'acc-1', label: 'U9ZC94EDR', displayLabel: 'xindong · lizi', status: 'connected', createdAt: 1 },
+          { id: 'acc-1', label: 'U0EXAMPLE1', displayLabel: 'acme · devuser', status: 'connected', createdAt: 1 },
         ],
       }),
       [`${KEY}-rt-acc-1`]: 'rt-old',
     });
-    const fetchImpl = slackFetch({ team: 'xindong', user: 'lizi', user_id: 'U9ZC94EDR' });
+    const fetchImpl = slackFetch({ team: 'acme', user: 'devuser', user_id: 'U0EXAMPLE1' });
     const mgr = new GhostOauthAccountManager({
       vault,
       fetchImpl: fetchImpl as unknown as typeof fetch,
@@ -1220,7 +1220,7 @@ describe('identity.displayTemplate 展示名', () => {
     // 给潜在的异步回填一个宏任务窗口,再断言没有第二次网络调用。
     await new Promise((r) => setTimeout(r, 20));
     expect(fetchImpl).toHaveBeenCalledTimes(1);
-    expect(mgr.listAccounts(GHOST, KEY)[0]?.label).toBe('xindong · lizi');
+    expect(mgr.listAccounts(GHOST, KEY)[0]?.label).toBe('acme · devuser');
   });
 });
 

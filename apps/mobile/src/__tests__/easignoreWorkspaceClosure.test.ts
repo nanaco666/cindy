@@ -41,6 +41,25 @@ function localDepNames(pkg: ReturnType<typeof readJson>, nameToDir: Map<string, 
 }
 
 describe('EAS .easignore covers apps/mobile workspace dependency closure', () => {
+  it('includes the generated legal notices consumed by the Expo config plugin', () => {
+    const easignore = readFileSync(resolve(repoRoot, '.easignore'), 'utf8');
+
+    expect(easignore).toMatch(/^docs$/m);
+    expect(easignore).toMatch(/^!docs\/$/m);
+    expect(easignore).toMatch(/^!docs\/legal\/$/m);
+    expect(easignore).toMatch(/^!docs\/legal\/notices\/$/m);
+    for (const artifact of [
+      'mobile-ios.txt',
+      'mobile-ios-restricted.txt',
+      'mobile-android.txt',
+      'mobile-android-restricted.txt',
+    ]) {
+      expect(easignore).toMatch(
+        new RegExp(`^!docs/legal/notices/${artifact.replace('.', '\\.')}\\s*$`, 'm'),
+      );
+    }
+  });
+
   it('includes the root postinstall skip path used by mobile EAS builds', () => {
     const easignore = readFileSync(resolve(repoRoot, '.easignore'), 'utf8');
     const easJson = readJson(resolve(mobileDir, 'eas.json')) as {

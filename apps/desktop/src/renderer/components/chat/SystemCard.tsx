@@ -751,7 +751,7 @@ function AutoResumeCard() {
  * session-agent-switch 边界分隔条:复用 CompactBoundaryCard 的"分隔线 + 居中
  * chip"语言标记"此处引擎从 X 切换到 Y"。chip 可点展开交接内容面板(发给新引擎
  * 的上下文摘要全文)——默认不打扰,想看时可核查我们替用户做了什么交接。
- * 全灰度(DESIGN.md §4),无 chromatic 色;展开面板复用 msg-tool 系 token。
+ * 全灰度(docs/design-rules/cindy-design-system.md §4),无 chromatic 色;展开面板复用 msg-tool 系 token。
  */
 function AgentSwitchCard({ data }: { data?: Record<string, unknown> }) {
   const { t } = useTranslation();
@@ -853,7 +853,7 @@ export function SystemCard({ cardType, data, sessionId }: SystemCardProps) {
 }
 
 // ── CmdCard ──────────────────────────────────────────────────────────────
-// /cmd shell 执行结果 —— 终端风格, 严格遵守 DESIGN.md 的"全灰度"规则:
+// /cmd shell 执行结果 —— 终端风格, 严格遵守 docs/design-rules/cindy-design-system.md 的"全灰度"规则:
 //   - 不允许任何 chromatic 色 (无绿/红/橙)
 //   - 状态/cmdLine/输出全部走 msg-* 灰度 token
 //   - exit 0 / exit !=0 / TIMEOUT 通过文案区分, 不通过颜色
@@ -870,7 +870,7 @@ function CmdCard({ data }: { data?: Record<string, unknown> }) {
   const timedOut = Boolean(data?.timedOut);
   const spawnError = data?.spawnError as string | undefined;
 
-  // 状态 chip —— 全灰度, pill 形状 (DESIGN.md §4 Chip & Button Neutrals)。
+  // 状态 chip —— 全灰度, pill 形状 (docs/design-rules/cindy-design-system.md §4 Chip & Button Neutrals)。
   // 文案区分 ok / timeout / spawn-err / exit code。
   const statusText = timedOut ? 'timeout' : spawnError ? 'spawn err' : `exit ${exitCode}`;
   const statusChip = (
@@ -886,7 +886,7 @@ function CmdCard({ data }: { data?: Record<string, unknown> }) {
   );
 
   // cmdLine + 各种输出块共用同一个等宽 + 灰度 Card-tone block (12px radius 是
-  // DESIGN.md §5 内置容器圆角)。stderr 和 stdout 视觉一致, 仅靠上方 label 区分,
+  // docs/design-rules/cindy-design-system.md §5 内置容器圆角)。stderr 和 stdout 视觉一致, 仅靠上方 label 区分,
   // 不用红色 (违反 §2 grayscale 硬规则)。
   const blockClass = cn(
     'mt-1 max-h-[320px] overflow-auto whitespace-pre-wrap break-words',

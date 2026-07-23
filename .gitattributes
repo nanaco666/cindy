@@ -19,3 +19,13 @@ apps/android-platform-tools-bin/**/*.dll filter=lfs diff=lfs merge=lfs -text
 # Vendored browser-control-runtime：由 scripts/browser-runtime/sync.mjs 从上游同步生成，非手写源码。
 # 标记为 generated，让 GitHub 在 PR diff 中默认折叠、排除出仓库语言统计，避免淹没 reviewer。
 packages/browser-control-runtime/src/_generated/** linguist-generated=true
+
+# ── 开源公开仓排除(内部专用,不进对外发布)────────────────────────────
+# 内部 PR 评审自动化：绑定公司 Feishu / Slack / 组织名册,对外无价值且含内部信息。
+# export-ignore 让 `git archive` 导出时自动剔除;若以「复制工作树 + git init」方式建
+# 公开仓,则在新仓首次提交前执行:  git rm -r agent-use scripts/review-pr
+# 注：这两处仅供内部使用,不被 package.json scripts 引用(review-pr 由 /review-pr skill 调用)。
+agent-use/ export-ignore
+agent-use/** export-ignore
+scripts/review-pr/ export-ignore
+scripts/review-pr/** export-ignore

@@ -20,10 +20,10 @@
  *       Bash / Grep / Glob / WebFetch / WebSearch → plain neutral text
  *         (`--msg-tool-card-chevron`, same as the verb label) inline; row or
  *         chevron activation toggles inline input + tool_result details.
- *         (v8 2026-04-20: was `--info-700` blue —— DESIGN.md §2 严禁 chromatic
+ *         (v8 2026-04-20: was `--info-700` blue —— docs/design-rules/cindy-design-system.md §2 严禁 chromatic
  *         color，secondary 文本只允许 Stone/Mid Gray/Silver 三档纯灰，蓝色违规。
  *         改用 `--msg-tool-card-chevron` (#525252 Light / #a3a3a3 Dark) 与动词
- *         同色，保持 DESIGN.md 要求的纯灰色系。)
+ *         同色，保持 docs/design-rules/cindy-design-system.md 要求的纯灰色系。)
  *   - +N / -N stats: JetBrains Mono 13 / weight 500 / `--diff-add-fg` and
  *     `--diff-del-fg`. Rendered for Edit / Write / MultiEdit (ADR-5).
  *   - Trailing chevron: lucide ChevronRight 13 / `--msg-tool-card-chevron`,

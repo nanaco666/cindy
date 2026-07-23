@@ -130,7 +130,7 @@ describe('repairMermaidSource', () => {
     const src = [
       'flowchart TD',
       'subgraph Pub["发布侧"]',
-      'CFG[仓内正本 config/client-endpoints.json] → OSS[OSS smash-dev 桶]',
+      'CFG[仓内正本 config/client-endpoints.json] → OSS[OSS assets 桶]',
       'end',
       'OSS -->|CDN 公开读| CDN',
     ].join('\n');
@@ -139,7 +139,7 @@ describe('repairMermaidSource', () => {
         'flowchart TD',
         'subgraph Pub ["发布侧"]',
         // CFG 标签含 `/` 触发加引号;OSS 标签无危险字符,保持原样
-        'CFG["仓内正本 config/client-endpoints.json"] --> OSS[OSS smash-dev 桶]',
+        'CFG["仓内正本 config/client-endpoints.json"] --> OSS[OSS assets 桶]',
         'end',
         'OSS -->|"CDN 公开读"| CDN',
       ].join('\n'),

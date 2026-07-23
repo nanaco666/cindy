@@ -1,7 +1,7 @@
 /**
  * Unified standalone OAuth callback/result page used by Desktop-owned browser
  * flows. These pages run in the system browser, so renderer theme tokens are
- * unavailable; the inlined values mirror DESIGN.md's default light/dark theme.
+ * unavailable; the inlined values mirror docs/design-rules/cindy-design-system.md's default light/dark theme.
  */
 
 import { DEEP_LINK_URL_PREFIX } from '../shared/deepLinkSchemes';

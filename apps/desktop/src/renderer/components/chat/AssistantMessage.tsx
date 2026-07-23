@@ -36,7 +36,7 @@
  *   直到 finally — 那个体验更差, 没有借鉴。
  */
 
-import { memo, useMemo, useState, useSyncExternalStore } from 'react';
+import { memo, useCallback, useMemo, useState, useSyncExternalStore } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Loader2, TriangleAlert } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -51,9 +51,11 @@ import { useAgentCapabilities, type AgentKind as MakerAgentKind } from '@/hooks/
 import { useSessionFileOrigin } from './ChatSessionFileContext';
 import { originDeviceId } from '@/lib/sessionFileOrigin';
 import { buildSessionMessageDeepLink } from '@/lib/deepLink';
+import { insertSessionLinkIntoComposer } from '@/lib/composerActionsBus';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { MessageActionBar } from './MessageActionBar';
 import { useForkAtMessage } from './useForkAtMessage';
+import { useDeleteMessage } from './useDeleteMessage';
 import { useSessionNavigationMode } from '@/features/cc-agent/embeddedSessionNavigation';
 
 /**
@@ -162,6 +164,8 @@ interface AssistantMessageProps {
   remoteHostId?: string | null;
   /** True when this assistant belongs to the still-active tail turn. */
   forkBlocked?: boolean;
+  /** Whole-session running state; single-message deletion waits until idle. */
+  sessionRunning?: boolean;
   /** 是否挂载 hover action bar(复制 / 分叉 / 时间 / 费用)。父层只对每个 turn
    *  的收尾 assistant 正文传 true —— 任务执行过程中的中间句不挂 bar(bar 即使
    *  opacity-0 也占 24px 布局高度,每句都挂会拉散消息流)。默认 false。 */
@@ -194,6 +198,7 @@ export const AssistantMessage = memo(function AssistantMessage({
   agentKind,
   remoteHostId,
   forkBlocked,
+  sessionRunning,
   showActionBar = false,
   turnCostUsd,
   turnCostIsEstimate,
@@ -232,11 +237,26 @@ export const AssistantMessage = memo(function AssistantMessage({
     messageClientId,
     forkBlocked: forkBlocked || isStreaming,
   });
+  const handleDelete = useDeleteMessage({
+    sessionId: currentSessionId,
+    messageClientId,
+    blocked: sessionRunning || isStreaming,
+  });
   const navigationMode = useSessionNavigationMode();
   const canFork =
     navigationMode === 'route-owner' &&
     Boolean(currentSessionId && messageClientId) &&
     forkSupported;
+  const messageDeepLink = currentSessionId && messageClientId
+    ? buildSessionMessageDeepLink(currentSessionId, messageClientId)
+    : undefined;
+  const handleAddToChat = useCallback(() => {
+    if (!currentSessionId || !messageDeepLink) return;
+    insertSessionLinkIntoComposer({
+      targetSessionId: currentSessionId,
+      href: messageDeepLink,
+    });
+  }, [currentSessionId, messageDeepLink]);
 
   // /goal:隐藏助手输出末尾由 goal 协议要求模型吐出的裁决 JSON 块(仅显示层剥离,
   // 原文仍保留在 DB / transcript)。pattern:末尾的 ```json {...goal_status...} ``` 围栏块。
@@ -334,14 +354,12 @@ export const AssistantMessage = memo(function AssistantMessage({
         <MessageActionBar
           createdAt={createdAt}
           copyText={content}
-          copyLinkText={
-            currentSessionId && messageClientId
-              ? buildSessionMessageDeepLink(currentSessionId, messageClientId)
-              : undefined
-          }
+          copyLinkText={messageDeepLink}
           align="left"
           hovered={hovered}
           onFork={canFork ? handleFork : undefined}
+          onAddToChat={messageDeepLink ? handleAddToChat : undefined}
+          onDelete={currentSessionId && messageClientId ? handleDelete : undefined}
           turnCostUsd={turnCostUsd}
           turnCostIsEstimate={turnCostIsEstimate}
           userTurnCostUsd={userTurnCostUsd}

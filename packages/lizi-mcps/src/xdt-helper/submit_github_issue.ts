@@ -4,6 +4,7 @@
  * 流程上的确定性约束全部由 host 侧代码保证(规则 9):
  *  - 工具被调用后 host 会在 App 内弹出系统确认卡片,用户可编辑/确认/取消,
  *    确认是通往提交的唯一路径(handler 在 main 进程挂起等待)。
+ *  - host 在确认前确定并展示真实提交身份；确认后失败也不会静默切换身份。
  *  - 环境信息(客户端版本 / OS / 界面语言)由 host 自动附加,agent 无法也无需填写。
  * 本文件只承载工具 schema + 描述(对 LLM 的流程指引)和 host 回调的 payload 整形。
  */
@@ -52,6 +53,7 @@ export interface SubmitGithubIssueDeps {
   /** host 回调:弹确认卡片 → 用户确认后提交到 server。 */
   submit: (req: {
     sessionId: string;
+    workingDir: string;
     title: string;
     body: string;
     type: 'bug' | 'feature';
@@ -63,8 +65,9 @@ const DESCRIPTION = [
   '【流程硬约束】',
   '1) 调用前必须先与用户对话澄清:反馈类型(bug / 功能建议)、现象、复现步骤或使用场景、期望行为——信息不完整时先追问,不要急着调用。',
   '2) 本工具被调用后会在 App 内弹出系统确认卡片,用户可以编辑标题/正文并确认或取消;最终提交内容以用户确认的版本为准(返回的 final_title 可能与你传入的不同)。',
-  '3) errorCode 语义: USER_CANCELLED = 用户主动取消了本次提交,如实告知即可,不要换参数自动重试; CONFIRM_TIMEOUT = 确认卡片超时无人响应(用户可能不在电脑前),告知用户可以再说一声重新发起; AUTH_NOT_READY / NETWORK_ERROR / SERVER_ERROR / HOST_NOT_READY = 提交失败,如实转告原因,不存在任何绕过确认或绕过失败的提交途径。',
-  '4) 环境信息(客户端版本 / OS / 界面语言)由系统在提交时自动附加到正文末尾,提交人信息由服务端附加——都无需也无法由你填写。',
+  '3) 提交身份由系统确定并显示在确认卡片:已启用 Cindy GitHub 且绑定有效账号时,用该 GitHub 用户本人身份提交(受其 token 仓库权限约束);未绑定或插件不可用时,显示并使用 Cindy 平台代提交。用户身份一旦确认,提交失败不会静默降级成平台身份。',
+  '4) errorCode 语义: USER_CANCELLED = 用户主动取消了本次提交,如实告知即可,不要换参数自动重试; CONFIRM_TIMEOUT = 确认卡片超时无人响应(用户可能不在电脑前),告知用户可以再说一声重新发起; AUTH_NOT_READY / NETWORK_ERROR / SERVER_ERROR / HOST_NOT_READY = 提交失败,如实转告原因,不存在任何绕过确认、权限或失败的提交途径。',
+  '5) 环境信息(客户端版本 / OS / 界面语言)由系统自动附加;GitHub 作者就是确认卡片显示的身份——都无需也无法由你填写。',
 ].join('\n');
 
 const D_TITLE =
@@ -102,6 +105,7 @@ export function registerSubmitGithubIssueTool(
 
       const result = await deps.submit({
         sessionId: ctx.sessionId,
+        workingDir: ctx.workingDir,
         title: title.trim(),
         body: body.trim(),
         type,

@@ -1,7 +1,7 @@
 # XDMaker 手机版设计指南
 
 > 状态:权威设计规范。新增 / 修改任何 UI 前先读本文。
-> 定位:这是桌面 `DESIGN.md`(根目录)的**轻量移动版**——同一套 Ollama 视觉语言,但不照搬桌面的 351-token ColorRegistry 重型架构。手机端用一套 light/dark 双色板 + 收敛阶梯 + RN 主题 hook。
+> 定位:这是 `docs/design-rules/cindy-design-system.md` 的**轻量移动版**——同一套 Ollama 视觉语言,但不照搬桌面的 351-token ColorRegistry 重型架构。手机端用一套 light/dark 双色板 + 收敛阶梯 + RN 主题 hook。
 > 色值与桌面 Ollama Light / Dark **保持一致**,保证跨端观感统一。
 
 ---
@@ -206,4 +206,4 @@ function Foo() {
 
 ---
 
-**交叉引用**:桌面 `DESIGN.md` §2(颜色)/ §3(排版)/ §10(token 架构)。本文是其轻量移动版,色值跟随桌面 Ollama Light / Dark。
+**交叉引用**:桌面 `docs/design-rules/cindy-design-system.md` §2(颜色)/ §3(排版)/ §10(token 架构)。本文是其轻量移动版,色值跟随桌面 Ollama Light / Dark。

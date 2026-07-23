@@ -3,11 +3,10 @@
  *
  * The quote stays compact and immutable while prose remains editable directly
  * before/after it. The chip truncates long text and exposes the full quote on
- * hover; users can delete it with Backspace/Delete or its remove button.
+ * hover; users can select the atom and delete it with Backspace/Delete.
  */
 import { Node, mergeAttributes } from '@tiptap/core';
 import { NodeViewWrapper, ReactNodeViewRenderer, type NodeViewProps } from '@tiptap/react';
-import { useTranslation } from 'react-i18next';
 import {
   COMPOSER_QUOTE_NODE_TYPE,
   composerQuoteAttrsToChatQuote,
@@ -22,23 +21,20 @@ function parsePositiveLineAttribute(element: HTMLElement, name: string): number 
   return Number.isInteger(value) && value > 0 ? value : null;
 }
 
-function ComposerQuoteNodeView({ node, deleteNode, selected }: NodeViewProps) {
-  const { t } = useTranslation();
+function ComposerQuoteNodeView({ node, selected }: NodeViewProps) {
   const quote = composerQuoteAttrsToChatQuote(node.attrs as ComposerQuoteAttrs);
 
   return (
     <NodeViewWrapper
       as="span"
       data-composer-quote=""
+      data-drag-handle=""
+      draggable={true}
       contentEditable={false}
-      className="inline-block max-w-[min(240px,55vw)] select-none px-2 align-middle"
+      style={{ userSelect: 'none', WebkitUserSelect: 'none' }}
+      className="inline-flex max-w-[min(240px,55vw)] cursor-grab select-none align-middle active:cursor-grabbing"
     >
-      <QuoteChip
-        quote={quote}
-        selected={selected}
-        onRemove={deleteNode}
-        removeLabel={t('chat.quote.remove')}
-      />
+      <QuoteChip quote={quote} selected={selected} />
     </NodeViewWrapper>
   );
 }
@@ -48,8 +44,8 @@ export const ComposerQuoteNode = Node.create<Record<string, never>, Record<strin
   inline: true,
   group: 'inline',
   atom: true,
-  selectable: false,
-  draggable: false,
+  selectable: true,
+  draggable: true,
 
   addAttributes() {
     return {

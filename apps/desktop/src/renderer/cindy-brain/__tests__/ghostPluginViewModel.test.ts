@@ -35,7 +35,7 @@ function manifest(overrides: Partial<GhostManifest> = {}): GhostManifest {
       { name: 'download_file', description: 'Download a file.' },
     ],
     network: {
-      hosts: ['aigc.xindong.com'],
+      hosts: ['aigc.example.com'],
       secrets: [
         {
           key: 'mivo_api_key',

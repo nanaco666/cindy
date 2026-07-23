@@ -462,6 +462,10 @@ interface PluginEnableState {
   globalOverride?: { enabled: boolean } | null;
 }
 
+interface PluginEnableUpdateResult {
+  codexMcpRefreshed: boolean;
+}
+
 interface BrowserAvailability {
   detected: boolean;
   browserKind: string | null;
@@ -3227,6 +3231,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
       /** Broadcast: main 端创建消息后通知 (e.g. feishu /ctr 接管路径写库时)。
        *  renderer 用这个触发 makerChatStore push 到 in-memory state。 */
       onCreated: createIpcFanOut('local-db:messages:created'),
+      /** Broadcast:一条 user / assistant 消息内容已从本地会话删除。 */
+      onDeleted: createIpcFanOut('local-db:messages:deleted'),
       /** Broadcast: terminal error 行落库后,renderer 把该会话 historyLoaded 置 false,
        *  下次打开时 ensureInitialMessages 从 DB 重拉,error 卡正常浮现。 */
       onErrorPersisted: createIpcFanOut('local-db:session:error-persisted'),
@@ -3722,6 +3728,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
     closeSession: (sessionId: string, opts?: { preserveWorkspace?: boolean }): Promise<void> =>
       ipcRenderer.invoke('maker:close-session', sessionId, opts),
 
+    /** 删除单条消息并让下一次发送从剩余本地历史重建 Agent 上下文。 */
+    deleteMessage: (
+      sessionId: string,
+      clientId: string,
+    ): Promise<{ sessionId: string; clientId: string }> =>
+      ipcRenderer.invoke('maker:message:delete', sessionId, clientId),
+
     listActive: (): Promise<Array<{
       sessionId: string;
       agentKind: 'claude-code' | 'codex';
@@ -3934,7 +3947,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // 智能通讯录(maker-contacts)—— 设置页管理 UI 的数据通道。
     // DTO 形状即 @lizi/maker-core contacts/types.ts(renderer 直接 type-import),
     // 这里保持 unknown 透传, 类型收敛在 renderer service 层做。
-    // 开关只 gate agent 侧 lizi_contacts MCP; 数据通道恒可用。
+    // 开关只 gate agent 侧 cindy_contacts MCP; 数据通道恒可用。
     contacts: {
       settingsGet: (): Promise<{ enabled: boolean; isCustomized: boolean }> =>
         ipcRenderer.invoke('maker:contacts:settings:get'),
@@ -4365,9 +4378,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.invoke('maker:plugins:list', workingDir),
       getState: (id: string, workingDir?: string): Promise<PluginEnableState> =>
         ipcRenderer.invoke('maker:plugins:get-state', id, workingDir),
-      setEnabled: (id: string, enabled: boolean): Promise<void> =>
+      setEnabled: (id: string, enabled: boolean): Promise<PluginEnableUpdateResult> =>
         ipcRenderer.invoke('maker:plugins:set-enabled', id, enabled),
-      clearEnabled: (id: string): Promise<void> =>
+      clearEnabled: (id: string): Promise<PluginEnableUpdateResult> =>
         ipcRenderer.invoke('maker:plugins:clear-enabled', id),
       setProjectEnabled: (workingDir: string, id: string, enabled: boolean): Promise<void> =>
         ipcRenderer.invoke('maker:plugins:set-project-enabled', workingDir, id, enabled),

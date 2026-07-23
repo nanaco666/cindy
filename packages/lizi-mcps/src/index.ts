@@ -16,14 +16,14 @@ export * from './providers.js';
 // 迁入 cindy-xd-plugin 插件仓的 .tooling/。活着的飞书 bot 走 lizi_feishuBot*
 // + @lizi/lizi-im,与本已删模块无关。
 
-export * from './lizi_feishuBotMcpServer.js';
-export * from './lizi_feishuBotToolRegistry.js';
+export * from './cindy_feishuBotMcpServer.js';
+export * from './cindy_feishuBotToolRegistry.js';
 
 export * from './cindy_schedulerMcpServer.js';
 export * from './cindy_schedulerToolRegistry.js';
 export * from './scheduler/index.js';
 
-export * from './lizi_sshMcpServer.js';
+export * from './cindy_sshMcpServer.js';
 export * from './ssh/registry.js';
 export * from './ssh/index.js';
 

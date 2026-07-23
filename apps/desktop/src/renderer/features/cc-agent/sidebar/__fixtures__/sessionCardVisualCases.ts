@@ -61,7 +61,7 @@ export const sessionCardVisualCases: SessionCardVisualCase[] = [
     session: makeSession({
       id: 'short-idle-cc',
       title: '部门QBR制作',
-      preview: '王飞, on it',
+      preview: '李雷, on it',
       agentKind: 'cc',
       updatedAt: '2026-06-29T05:59:00.000Z',
     }),

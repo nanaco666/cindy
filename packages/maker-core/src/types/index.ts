@@ -5,3 +5,4 @@ export * from './permissions.js';
 export * from './palette.js';
 export * from './customizations.js';
 export * from './memory.js';
+export * from './account-rate-limits.js';

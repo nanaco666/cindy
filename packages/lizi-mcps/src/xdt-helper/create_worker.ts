@@ -25,7 +25,8 @@ type CreateWorkerErrorCode =
   | 'DUPLICATE_LABEL'
   | 'WORKER_CREATION_IN_PROGRESS'
   | 'BUDGET_MODEL_REQUIRES_API_MODE'
-  | 'NO_PROVIDER_FOR_AGENT';
+  | 'NO_PROVIDER_FOR_AGENT'
+  | 'PROVIDER_ROUTE_UNAVAILABLE';
 
 interface CreateWorkerSuccessData {
   workerId: string;
@@ -130,6 +131,7 @@ const DESCRIPTION = [
   '- role / label / model 等参数不合法 → 返 INVALID_PARAMS',
   '- 选了骨折版 (codex/ 前缀模型) 但当前 Codex 不在 API key 模式 → 返 BUDGET_MODEL_REQUIRES_API_MODE: 应如实告知用户「当前无法开启骨折版, 需切换到 API key 模式」, 不要擅自改用官方版顶替 (除非用户明确同意)。',
   '- 该 agent 没有任何已连接的模型供应商 (provider) → 返 NO_PROVIDER_FOR_AGENT: 应如实把 message 转告用户 (去「设置 → 模型供应商」连接一个支持该 agent 的供应商), 或按 message 建议改用「已连接供应商的另一个 agent」创建 worker; 不要反复重试同一 agent。',
+  '- Worker 解析出的精确 provider + model 路由当前不可用 → 返 PROVIDER_ROUTE_UNAVAILABLE: 应如实把 message 转告用户并调整模型或供应商; 不要按“完全没有供应商”处理，也不要反复重试同一路由。',
 ].join('\n');
 
 export function registerCreateWorkerTool(

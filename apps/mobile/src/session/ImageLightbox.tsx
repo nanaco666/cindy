@@ -9,7 +9,7 @@
  * 手势判定全部走 imageLightboxModel.ts 纯函数;取件复用会话屏的队列 + 磁盘缓存
  * (onResolveRemoteMedia),点开时通常已被列表缩略图取过、秒出。
  * 仅图片走本组件;video / audio / 文件仍走 MessagePayloadModal。
- * lightbox 是常黑沉浸语境,黑白系颜色为刻意豁免(对齐桌面 DESIGN.md overlay/lightbox 语义豁免),不走主题 token。
+ * lightbox 是常黑沉浸语境,黑白系颜色为刻意豁免(对齐桌面 docs/design-rules/cindy-design-system.md overlay/lightbox 语义豁免),不走主题 token。
  */
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {

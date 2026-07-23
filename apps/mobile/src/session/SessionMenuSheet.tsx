@@ -42,11 +42,13 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text, TextInput } from '@/components/AppText';
 import { MainWindowActionGroup } from '@/components/MobilePrimitives';
 import type { RemoteDirectoryEntry } from '@/device-link/mobileMakerTransport';
+import type { MobileCodexRateLimitsResult } from '@lizi/maker-shared/device-link-contract';
 import { computeContextSheetSnapHeights, type ContextSheetSnap } from '@/session/contextSheetModel';
 import { writeClipboardText } from '@/session/messageActions';
 import { normalizeExtraDirs } from '@/session/newSession';
 import {
   summarizeAccountRateLimits,
+  summarizeCodexRateLimitReset,
   summarizeContextUsage,
   summarizeSessionSpend,
 } from '@/session/sessionControls';
@@ -99,6 +101,10 @@ export interface SessionMenuSheetProps {
    * 非订阅形态都静默降级,不占位不显示 loading)。
    */
   accountUsage: unknown;
+  /** app-server 权威额度/reset credit 快照;老被控端不支持时为 null。 */
+  codexRateLimits: MobileCodexRateLimitsResult | null;
+  codexResetBusy: boolean;
+  onResetCodexRateLimits(): void;
   onRefreshAccountUsage(): void;
   extraDirBrowser?: SessionExtraDirBrowserState | null;
   onLoadExtraDirPath(path: string): void;
@@ -127,6 +133,9 @@ export function SessionMenuSheet({
   contextLoading,
   onRefreshContextUsage,
   accountUsage,
+  codexRateLimits,
+  codexResetBusy,
+  onResetCodexRateLimits,
   onRefreshAccountUsage,
   extraDirBrowser,
   onLoadExtraDirPath,
@@ -404,11 +413,32 @@ export function SessionMenuSheet({
     () => summarizeAccountRateLimits(accountUsage, Date.now()),
     [accountUsage],
   );
+  const resetSummary = useMemo(
+    () => summarizeCodexRateLimitReset(codexRateLimits, Date.now()),
+    [codexRateLimits],
+  );
   const workspace = buildSessionInfoWorkspace(session);
   const showExtraDirs = sessionInfoShowsExtraDirs(session);
 
   const mainActions = actions.filter((action) => action.id !== 'delete');
   const deleteAction = actions.find((action) => action.id === 'delete');
+
+  const confirmCodexReset = useCallback(() => {
+    if (!resetSummary?.canReset || codexResetBusy) return;
+    const account = [
+      codexRateLimits?.account.email,
+      codexRateLimits?.account.accountId,
+      codexRateLimits?.account.planType,
+    ].filter(Boolean).join(' · ');
+    Alert.alert(
+      '重置 Codex 用量？',
+      `将为 ${account || '当前 Codex 账号'} 消耗 1 次重置。额度窗口会立即重开，此操作不能撤销。`,
+      [
+        { text: '取消', style: 'cancel' },
+        { text: '消耗 1 次重置', onPress: onResetCodexRateLimits },
+      ],
+    );
+  }, [codexRateLimits, codexResetBusy, onResetCodexRateLimits, resetSummary]);
 
   const menuContent = (
     <View style={styles.menuBody} testID="session.menuSheetBody">
@@ -563,13 +593,34 @@ export function SessionMenuSheet({
         ) : null}
       </View>
 
-      {accountLimits ? (
+      {accountLimits || resetSummary ? (
         <View style={styles.infoSection} testID="session.accountLimitsSection">
           <Text style={styles.infoSectionTitle}>账号限额</Text>
-          {accountLimits.rows.map((row, index) => (
+          {accountLimits?.rows.map((row, index) => (
             // 两个窗口都缺时长数据时 label 会同为「限额」,key 需带 index 去重。
             <InfoRow key={`${row.label}:${index}`} label={row.label} value={row.value} />
           ))}
+          {resetSummary?.rows.map((row, index) => (
+            <InfoRow key={`reset:${row.label}:${index}`} label={row.label} value={row.value} />
+          ))}
+          {resetSummary?.canReset ? (
+            <>
+              <Text style={styles.infoCaption}>
+                当前额度已耗尽。重置会立即消耗 1 次，且不能撤销。
+              </Text>
+              <View style={styles.infoActionRow}>
+                <MenuPillButton
+                  disabled={codexResetBusy}
+                  label={codexResetBusy ? '正在重置…' : '重置 Codex 用量'}
+                  onPress={confirmCodexReset}
+                  testID="session.codexRateLimitResetButton"
+                  tone="primary"
+                />
+              </View>
+            </>
+          ) : resetSummary?.shouldPrompt && resetSummary.availableCount === 0 ? (
+            <Text style={styles.infoCaption}>当前额度已耗尽，但没有可用重置次数。</Text>
+          ) : null}
         </View>
       ) : null}
 

@@ -20,21 +20,21 @@ function noopLogger(): Logger {
 const APPLE_VCF = [
   'BEGIN:VCARD',
   'VERSION:3.0',
-  'N:黄;一孟;;;',
-  'FN:黄一孟',
+  'N:林;子航;;;',
+  'FN:林子航',
   'ORG:心动网络;执行办',
   'TITLE:联合创始人',
-  'EMAIL;type=INTERNET;type=WORK;type=pref:dash@xd.com',
-  'EMAIL;type=INTERNET;type=HOME:dashhuang@gmail.com',
+  'EMAIL;type=INTERNET;type=WORK;type=pref:neo@example.com',
+  'EMAIL;type=INTERNET;type=HOME:neolin@example.net',
   'TEL;type=CELL;type=pref:+86 138 0000 0000',
   'NOTE:VeryCD 时期的老搭档\\, 长期合作\\;备注分号',
   'END:VCARD',
   'BEGIN:VCARD',
   'VERSION:3.0',
-  'N:Chiang;MayLaw;;;',
-  'FN:MayLaw Chiang',
+  'N:Chan;Sonia;;;',
+  'FN:Sonia Chan',
   'ORG:心动网络',
-  'EMAIL;type=WORK:maylaw@xd.com',
+  'EMAIL;type=WORK:sonia@example.com',
   'END:VCARD',
   'BEGIN:VCARD',
   'VERSION:3.0',
@@ -46,22 +46,22 @@ describe('parseVCards', () => {
   it('解析 Apple 导出样式: 姓名/多邮箱标签/电话/组织/职位/note 转义', () => {
     const recs = parseVCards(APPLE_VCF);
     expect(recs).toHaveLength(2);
-    const dash = recs[0]!;
-    expect(dash.displayName).toBe('黄一孟');
-    expect(dash.emails).toEqual([
-      { value: 'dash@xd.com', label: 'work' },
-      { value: 'dashhuang@gmail.com', label: 'home' },
+    const neo = recs[0]!;
+    expect(neo.displayName).toBe('林子航');
+    expect(neo.emails).toEqual([
+      { value: 'neo@example.com', label: 'work' },
+      { value: 'neolin@example.net', label: 'home' },
     ]);
-    expect(dash.phones[0]).toEqual({ value: '+86 138 0000 0000', label: 'cell' });
-    expect(dash.org).toBe('心动网络');
-    expect(dash.title).toBe('联合创始人');
-    expect(dash.note).toBe('VeryCD 时期的老搭档, 长期合作;备注分号');
+    expect(neo.phones[0]).toEqual({ value: '+86 138 0000 0000', label: 'cell' });
+    expect(neo.org).toBe('心动网络');
+    expect(neo.title).toBe('联合创始人');
+    expect(neo.note).toBe('VeryCD 时期的老搭档, 长期合作;备注分号');
   });
 
   it('CJK 姓名用 N 拼接(无 FN 时), 拉丁名 名+姓', () => {
-    const recs = parseVCards('BEGIN:VCARD\nN:赵;宇尧;;;\nEND:VCARD\nBEGIN:VCARD\nN:Dai;Kros;;;\nEND:VCARD');
-    expect(recs[0]!.displayName).toBe('赵宇尧');
-    expect(recs[1]!.displayName).toBe('Kros Dai');
+    const recs = parseVCards('BEGIN:VCARD\nN:周;子墨;;;\nEND:VCARD\nBEGIN:VCARD\nN:Kim;Remy;;;\nEND:VCARD');
+    expect(recs[0]!.displayName).toBe('周子墨');
+    expect(recs[1]!.displayName).toBe('Remy Kim');
   });
 
   it('折行展开与损坏卡片跳过', () => {
@@ -84,13 +84,13 @@ describe('importContacts', () => {
   afterEach(() => db.close());
 
   it('三分支: identity 并入 / 名字相似 needsReview / 全新创建 + 组织任职 + 分组', () => {
-    // 预置: 已有 Dash(带 email)和一个叫 Kros 的人(无身份)
+    // 预置: 已有 Neo(带 email)和一个叫 Remy 的人(无身份)
     const existing = store.createContact({
       kind: 'person',
-      displayName: 'Dash',
-      identities: [{ platform: 'email', value: 'dash@xd.com' }],
+      displayName: 'Neo',
+      identities: [{ platform: 'email', value: 'neo@example.com' }],
     });
-    store.createContact({ kind: 'person', displayName: 'Kros' });
+    store.createContact({ kind: 'person', displayName: 'Remy' });
     const group = store.createGroup('导入批次');
 
     const summary = importContacts(
@@ -98,18 +98,18 @@ describe('importContacts', () => {
       [
         // → identity 撞 existing, 自动并入
         {
-          displayName: '黄一孟',
-          emails: [{ value: 'DASH@XD.COM' }],
+          displayName: '林子航',
+          emails: [{ value: 'NEO@EXAMPLE.COM' }],
           phones: [],
           org: '心动网络',
           title: '联合创始人',
         },
-        // → 名字相似(Kros ⊆ Kros Dai)且无身份撞 → needsReview
-        { displayName: 'Kros Dai', emails: [], phones: [] },
+        // → 名字相似(Remy ⊆ Remy Kim)且无身份撞 → needsReview
+        { displayName: 'Remy Kim', emails: [], phones: [] },
         // → 全新创建 + 同名组织复用(不重复建)
         {
-          displayName: 'MayLaw Chiang',
-          emails: [{ value: 'maylaw@xd.com', label: 'work' }],
+          displayName: 'Sonia Chan',
+          emails: [{ value: 'sonia@example.com', label: 'work' }],
           phones: [],
           org: '心动网络',
           anchor: { platform: 'apple-contacts', value: 'ABC-123' },
@@ -122,20 +122,20 @@ describe('importContacts', () => {
 
     expect(summary.enriched).toBe(1);
     expect(summary.created).toBe(1);
-    expect(summary.needsReview).toEqual([{ displayName: 'Kros Dai', candidates: ['Kros'] }]);
+    expect(summary.needsReview).toEqual([{ displayName: 'Remy Kim', candidates: ['Remy'] }]);
     expect(summary.skipped).toHaveLength(1);
     expect(summary.orgsCreated).toBe(1); // 心动网络只建一次
     expect(summary.relationsAdded).toBe(2);
 
     // 并入方: 名字成别名, 任职关系挂上
-    const dash = store.getContact(existing.id);
-    expect(dash.aliases).toContain('黄一孟');
-    expect(dash.relations[0]).toMatchObject({ relation: '任职', note: '联合创始人' });
+    const neo = store.getContact(existing.id);
+    expect(neo.aliases).toContain('林子航');
+    expect(neo.relations[0]).toMatchObject({ relation: '任职', note: '联合创始人' });
     // 新建方: 锚点身份 + 分组
-    const maylaw = store.resolve('maylaw@xd.com')[0]!.profile;
-    expect(maylaw.identities.some((i) => i.platform === 'apple-contacts' && i.value === 'ABC-123')).toBe(true);
-    expect(maylaw.groups.map((g) => g.name)).toEqual(['导入批次']);
-    expect(maylaw.source).toBe('import');
+    const sonia = store.resolve('sonia@example.com')[0]!.profile;
+    expect(sonia.identities.some((i) => i.platform === 'apple-contacts' && i.value === 'ABC-123')).toBe(true);
+    expect(sonia.groups.map((g) => g.name)).toEqual(['导入批次']);
+    expect(sonia.source).toBe('import');
     // 组织按名字反查可得
     expect(store.resolve('心动网络')[0]!.profile.kind).toBe('org');
   });
@@ -145,20 +145,20 @@ describe('importContacts', () => {
     // 同批后续该名字(无身份)的记录会漏检直接新建重复档案
     store.createContact({
       kind: 'person',
-      displayName: 'Dash',
-      identities: [{ platform: 'email', value: 'dash@xd.com' }],
+      displayName: 'Neo',
+      identities: [{ platform: 'email', value: 'neo@example.com' }],
     });
 
     const summary = importContacts(store, [
-      // identity 撞 Dash → enrich, "黄一孟"成为其新别名
-      { displayName: '黄一孟', emails: [{ value: 'dash@xd.com' }], phones: [] },
+      // identity 撞 Neo → enrich, "林子航"成为其新别名
+      { displayName: '林子航', emails: [{ value: 'neo@example.com' }], phones: [] },
       // 同批后续无身份的同名记录 → 必须名字面撞见刷新后的快照进 needsReview
-      { displayName: '黄一孟', emails: [], phones: [] },
+      { displayName: '林子航', emails: [], phones: [] },
     ]);
 
     expect(summary.enriched).toBe(1);
     expect(summary.created).toBe(0);
-    expect(summary.needsReview).toEqual([{ displayName: '黄一孟', candidates: ['Dash'] }]);
+    expect(summary.needsReview).toEqual([{ displayName: '林子航', candidates: ['Neo'] }]);
     expect(store.stats().people).toBe(1);
   });
 
@@ -206,13 +206,13 @@ describe('serializeVCards(导出) round-trip', () => {
     const org = store.createContact({ kind: 'org', displayName: '心动网络' });
     const p = store.createContact({
       kind: 'person',
-      displayName: '黄一孟',
+      displayName: '林子航',
       summary: '长期老搭档; 含转义,逗号',
       narrative: '绝密叙事不应出现在导出里',
       identities: [
-        { platform: 'email', value: 'dash@xd.com', label: 'work' },
+        { platform: 'email', value: 'neo@example.com', label: 'work' },
         { platform: 'phone', value: '+86 138 0000 0000', label: 'cell' },
-        { platform: 'github', value: 'dashhuang' },
+        { platform: 'github', value: 'neolin' },
       ],
     });
     store.addRelation(p.id, { toId: org.id, relation: '任职', note: '联合创始人' });
@@ -221,18 +221,18 @@ describe('serializeVCards(导出) round-trip', () => {
 
     const vcf = serializeVCards([store.getContact(p.id)]);
     expect(vcf).not.toContain('绝密叙事');
-    expect(vcf).toContain('X-XDMAKER-GITHUB:dashhuang');
+    expect(vcf).toContain('X-XDMAKER-GITHUB:neolin');
     expect(vcf).toContain('CATEGORIES:老搭档');
 
     const back = parseVCards(vcf);
     expect(back).toHaveLength(1);
     expect(back[0]).toMatchObject({
-      displayName: '黄一孟',
+      displayName: '林子航',
       org: '心动网络',
       title: '联合创始人',
       note: '长期老搭档; 含转义,逗号',
     });
-    expect(back[0]!.emails).toEqual([{ value: 'dash@xd.com', label: 'work' }]);
+    expect(back[0]!.emails).toEqual([{ value: 'neo@example.com', label: 'work' }]);
     expect(back[0]!.phones).toEqual([{ value: '+86 138 0000 0000', label: 'cell' }]);
     db.close();
   });
@@ -244,8 +244,8 @@ describe('serializeVCards(导出) round-trip', () => {
     store.init();
     const p = store.createContact({
       kind: 'person',
-      displayName: '黄一孟',
-      identities: [{ platform: 'email', value: 'dash@xd.com' }],
+      displayName: '林子航',
+      identities: [{ platform: 'email', value: 'neo@example.com' }],
     });
     const g1 = store.createGroup('老搭档');
     const g2 = store.createGroup('心动,创始团队'); // 组名含逗号 → 导出转义 \,
@@ -262,7 +262,7 @@ describe('serializeVCards(导出) round-trip', () => {
     store2.init();
     const summary = importContacts(store2, back);
     expect(summary.created).toBe(1);
-    const restored = store2.resolve('dash@xd.com')[0]!.profile;
+    const restored = store2.resolve('neo@example.com')[0]!.profile;
     expect(restored.groups.map((g) => g.name).sort()).toEqual(['心动,创始团队', '老搭档']);
     // 二次导入幂等: 分组复用不重复建
     importContacts(store2, back);

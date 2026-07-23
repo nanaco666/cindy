@@ -63,6 +63,11 @@ import type {
   MemorySetResult,
   MemoryResetResult,
 } from '../../types/memory.js';
+import type {
+  AccountRateLimitsResponse,
+  ConsumeAccountRateLimitResetCreditParams,
+  ConsumeAccountRateLimitResetCreditResponse,
+} from '../../types/account-rate-limits.js';
 import { createAsyncQueue, type AsyncQueue } from '../shared/async-queue.js';
 import { UsageTracker } from '../shared/usage-tracker.js';
 import { getDefaultImageResizer } from '../shared/image-resizer.js';
@@ -1444,6 +1449,14 @@ export class CodexAgent extends BaseAgent {
     return { key, host };
   }
 
+  /** Start the local OAuth host used by non-model account control-plane RPCs. */
+  private async getStartedAccountHost(): Promise<AppServerHost> {
+    const host = await this.getHost(undefined, 'oauth-bearer');
+    const init = await host.ensureStarted();
+    if (init.codexHome) this.codexHome = init.codexHome;
+    return host;
+  }
+
   /**
    * 向本地 app-server 实时读取完整模型清单并交给宿主。
    *
@@ -1481,6 +1494,26 @@ export class CodexAgent extends BaseAgent {
     if (this.hosts.get(key) !== host || !this.deps.onCodexLocalModelsListed) return false;
     await this.deps.onCodexLocalModelsListed(models);
     return true;
+  }
+
+  /** Read ChatGPT subscription windows and banked reset credits via app-server RPC. */
+  override async readAccountRateLimits(): Promise<AccountRateLimitsResponse> {
+    // This RPC is credential-specific, unlike model/list or memory utilities. Requiring
+    // oauth-bearer prevents a gateway/provider host from reading or mutating the wrong
+    // account context; getHost refuses to replace a differently-authenticated active host.
+    const host = await this.getStartedAccountHost();
+    return await host.request<AccountRateLimitsResponse>(Method.AccountRateLimitsRead, undefined);
+  }
+
+  /** Consume one reset credit on the non-model app-server control plane. */
+  override async consumeAccountRateLimitResetCredit(
+    params: ConsumeAccountRateLimitResetCreditParams,
+  ): Promise<ConsumeAccountRateLimitResetCreditResponse> {
+    const host = await this.getStartedAccountHost();
+    return await host.request<ConsumeAccountRateLimitResetCreditResponse>(
+      Method.AccountRateLimitResetCreditConsume,
+      params,
+    );
   }
 
   private async createHost(

@@ -7,7 +7,7 @@
  * allows block layouts that do not belong inside compact activity rows.
  *
  * Supported syntax is intentionally narrow and deterministic:
- *   - paired `**text**` → medium-weight text (500, per DESIGN.md);
+ *   - paired `**text**` → medium-weight text (500, per docs/design-rules/cindy-design-system.md);
  *   - paired backtick runs → inline monospace text;
  *   - malformed / unmatched delimiters remain literal text.
  *

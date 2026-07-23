@@ -4,7 +4,7 @@
  * 飞书渠道的 ImChannelAdapter — im/shared 编排层所需的全部渠道差异在此收敛:
  *   - session 行策略: id `feishu_{botAppId}_{openId}` / source='feishu' /
  *     feishu 专属列 / im-working-dir/{botAppId} 共享工作目录
- *   - vendorOptions: { feishuChatId, source:'feishu' } → 注入 lizi_feishu_bot
+ *   - vendorOptions: { feishuChatId, source:'feishu' } → 注入 cindy_feishu_bot
  *     MCP (send_file_to_user)
  *   - ack emoji: REACTION_PROCESSING
  */

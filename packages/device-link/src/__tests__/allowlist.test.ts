@@ -31,6 +31,7 @@ describe('REMOTE_INVOKE_ALLOWLIST', () => {
       'local-db:messages:list',
       'local-db:messages:around',
       'local-db:messages:around-client-id',
+      'maker:message:delete',
     ]) {
       expect(REMOTE_INVOKE_ALLOWLIST.has(ch)).toBe(true);
     }
@@ -85,6 +86,11 @@ describe('REMOTE_INVOKE_ALLOWLIST', () => {
 
   it('放行模型单价表只读(控制端模型选择器展示被控端视角单价)', () => {
     expect(REMOTE_INVOKE_ALLOWLIST.has('maker:usage:model-pricing')).toBe(true);
+  });
+
+  it('放行 Codex 官方额度读取与 desktop 绑定的人工 reset offer', () => {
+    expect(REMOTE_INVOKE_ALLOWLIST.has('maker:usage:codex-rate-limits')).toBe(true);
+    expect(REMOTE_INVOKE_ALLOWLIST.has('maker:usage:codex-rate-limit-reset')).toBe(true);
   });
 
   it('放行 Git safety 只读查询(远程 Codex Rewind 按被控端 snapshot 设置 gate)', () => {
@@ -257,6 +263,7 @@ describe('PUSH_FORWARD_ALLOWLIST', () => {
       'maker:orca:worker-changed',
       'usage:message-turn-cost',
       'local-db:messages:created',
+      'local-db:messages:deleted',
       'local-db:session:error-persisted',
       SESSION_ACTIVITY_CHANNEL,
     ]) {

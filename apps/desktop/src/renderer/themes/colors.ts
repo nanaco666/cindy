@@ -69,7 +69,7 @@ registerColor('md-table-bg', {
 registerColor('border-default', {
   light: '#d7d7d4',
   dark: '#3c3c3a',
-}, 'DESIGN.md Board 1px 边框');
+}, 'docs/design-rules/cindy-design-system.md Board 1px 边框');
 registerColor('border-default-hsl', {
   light: '60 3% 84%',
   dark: '60 2% 23%',
@@ -283,19 +283,19 @@ registerColor('titlebar-control-hover', {
 registerColor('splash-bg', {
   light: '60 12.45% 96.86%',
   dark: '60 1.64% 11.96%',
-}, 'Light Surface #f8f8f6 — DESIGN.md layer system (high-precision HSL for exact hex match)');
+}, 'Light Surface #f8f8f6 — docs/design-rules/cindy-design-system.md layer system (high-precision HSL for exact hex match)');
 registerColor('splash-text', {
   light: '0 0% 45.1%',
   dark: '0 0% 63.92%',
-}, 'Stone #737373 — DESIGN.md secondary text');
+}, 'Stone #737373 — docs/design-rules/cindy-design-system.md secondary text');
 registerColor('splash-text-muted', {
   light: '30 3.6% 62.55%',
   dark: '30 2.78% 43.73%',
-}, 'Warm Gray #a39e98 — DESIGN.md muted text');
+}, 'Warm Gray #a39e98 — docs/design-rules/cindy-design-system.md muted text');
 registerColor('splash-text-destructive', {
   light: '0 0% 14.9%',
   dark: '0 0% 100%',
-}, 'Near Black #262626 — DESIGN.md max emphasis (grayscale)');
+}, 'Near Black #262626 — docs/design-rules/cindy-design-system.md max emphasis (grayscale)');
 registerColor('splash-fade-duration', {
   light: '400ms',
   dark: null,
@@ -401,11 +401,11 @@ registerColor('search-match-fg', {
 registerColor('update-btn-border', {
   light: '#d4d4d4',
   dark: '#3c3c3a',
-}, 'Border Light — per DESIGN.md White Pill');
+}, 'Border Light — per docs/design-rules/cindy-design-system.md White Pill');
 registerColor('update-btn-text', {
   light: '#404040',
   dark: '#ffffff',
-}, 'Button Text Dark — per DESIGN.md White Pill');
+}, 'Button Text Dark — per docs/design-rules/cindy-design-system.md White Pill');
 registerColor('update-btn-hover', {
   light: 'rgba(0, 0, 0, 0.04)',
   dark: 'rgba(255, 255, 255, 0.06)',
@@ -537,7 +537,7 @@ registerColor('file-remove-bg', {
 registerColor('chat-input-chip-bg', {
   light: 'var(--surface-chip)',
   dark: 'var(--surface-chip)',
-}, 'Light Gray — DESIGN.md Chip');
+}, 'Light Gray — docs/design-rules/cindy-design-system.md Chip');
 registerColor('chat-input-chip-border', {
   light: '#d7d7d4',
   dark: '#525250',
@@ -727,7 +727,7 @@ registerColor('folder-picker-border', {
 registerColor('folder-item-hover', {
   light: 'var(--surface-hover)',
   dark: 'var(--surface-hover)',
-}, 'Light Gray — DESIGN.md Chip');
+}, 'Light Gray — docs/design-rules/cindy-design-system.md Chip');
 registerColor('folder-item-name', {
   light: 'var(--text-primary)',
   dark: 'var(--text-primary)',
@@ -930,7 +930,7 @@ registerColor('annotation-accent', {
 registerColor('status-bar-accent', {
   light: 'var(--warning-accent)',
   dark: 'var(--warning-accent)',
-}, 'Thinking Orange — DESIGN.md');
+}, 'Thinking Orange — docs/design-rules/cindy-design-system.md');
 // 状态徽章前景(§7 必炸点):橙底(status-bar-accent #FF6600)深字。
 // 此前橙徽章借用 accent-pure-cta-fg(白字)→ #FFFFFF×#FF6600=2.94:1 不达标;
 // 拆独立 token 走深字(=text-primary/text-primary-inv),× status-bar-accent ≥4.5:1。
@@ -1256,12 +1256,12 @@ registerColor('settings-integration-subtitle', {
 registerColor('settings-integration-warning', {
   light: 'var(--warning-accent)',
   dark: 'var(--warning-accent)',
-}, 'Thinking Orange — "Reconnect required" (DESIGN.md §2 sanctioned brand orange)');
+}, 'Thinking Orange — "Reconnect required" (docs/design-rules/cindy-design-system.md §2 sanctioned brand orange)');
 
 // Remote SSH host status dot — semantic colors (sanctioned exception to the
 // "no hue" rule for this widget specifically: user explicitly asked for
 // 绿/橙/红/灰 status signaling, akin to focus-ring/error/warning豁免 in
-// DESIGN.md §2). Hues are kept identical across light/dark — the dot is
+// docs/design-rules/cindy-design-system.md §2). Hues are kept identical across light/dark — the dot is
 // small enough that saturation issues don't arise; legibility comes from
 // the dot's high-contrast position against surface, not from luminance.
 registerColor('remote-status-ready', {
@@ -1278,7 +1278,7 @@ registerColor('remote-status-failed', {
 }, 'Status — connect failed (red)');
 
 // 会话状态点(AttentionDot / 列表行右槽 / 灵动岛)三态语义色 —— 同 remote-status 走
-// DESIGN.md §2 "小状态点 hue 豁免":跨主题同色,靠位置高对比区分。
+// docs/design-rules/cindy-design-system.md §2 "小状态点 hue 豁免":跨主题同色,靠位置高对比区分。
 // 全端统一色表(与灵动岛 native 对齐):running=Thinking Orange(status-bar-accent)、
 // awaiting=TapTap 蓝、error=红、完成未读=绿。
 registerColor('card-status-awaiting', {
@@ -1542,7 +1542,7 @@ registerColor('plan-min-icon', {
   dark: 'var(--text-secondary-cross)',
 }, 'Minimized bar');
 
-// History bubbles (FP-8) — grayscale per DESIGN.md
+// History bubbles (FP-8) — grayscale per docs/design-rules/cindy-design-system.md
 registerColor('plan-bubble-badge-bg', {
   light: 'var(--surface-chip)',
   dark: 'var(--surface-chip)',
@@ -1566,7 +1566,7 @@ registerColor('color-primary', {
 registerColor('color-neutral-300', {
   light: 'var(--text-disabled)',
   dark: 'var(--text-disabled)',
-}, 'History bubbles (FP-8) — grayscale per DESIGN.md');
+}, 'History bubbles (FP-8) — grayscale per docs/design-rules/cindy-design-system.md');
 registerColor('color-neutral-400', {
   light: 'var(--text-tertiary)',
   dark: 'var(--text-tertiary)',

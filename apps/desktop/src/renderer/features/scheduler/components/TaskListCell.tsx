@@ -296,7 +296,7 @@ export function TaskListCell({
             'absolute right-2 bottom-2.5 z-[1]',
             // 与侧栏对话列表的悬浮 Run 按钮完全同款(AutomationSessionGroupItem):
             // size-5 幽灵按钮 + Silver 图标 + hover 浅灰底,连 token 都复用同一组,
-            // 两处"运行"入口视觉与后续调整保持同步。零阴影(DESIGN.md §6)、
+            // 两处"运行"入口视觉与后续调整保持同步。零阴影(docs/design-rules/cindy-design-system.md §6)、
             // 零缩放位移(§14.4),只保留 ≤150ms 的 opacity/颜色功能性过渡。
             'flex size-5 items-center justify-center rounded-md',
             'text-sidebar-action-icon',
