@@ -20,6 +20,7 @@
 | [database-and-migrations.md](./dev-rules/database-and-migrations.md) | 数据库规则 | authoritative | Desktop SQLite schema、migration、companion 与运行期访问 | — |
 | [mobile-development.md](./dev-rules/mobile-development.md) | Mobile 开发规则 | authoritative | Mobile 模拟器、验证与专项入口 | — |
 | [orca-team-architecture.md](./dev-rules/orca-team-architecture.md) | 契约/规范 | authoritative | `apps/desktop` 的 `maker-ipc/orca*` 服务 + `mcp-integrations` codex MCP、`packages/lizi-mcps` 的 `orca`、`packages/orca-workflow`、`packages/maker-core` 的 codex MCP context | yuhaobo(fmfsaisai) |
+| [maker-core-and-agent-behavior.md](./dev-rules/maker-core-and-agent-behavior.md) | maker-core 规则 | authoritative | `packages/maker-core` 的 Agent 编排、prompt 组装、translator、model 映射、缓存率/性能/准确性指标与 system prompt 门禁 | Lizi |
 | [legal/README.md](./legal/README.md) | 法律/合规索引 | authoritative | 法律合规资料归档边界与固定路径例外 | — |
 | [legal/wechat-open-sdk-compliance.md](./legal/wechat-open-sdk-compliance.md) | 合规记录 | restricted-review-required | Mobile 微信 Open SDK 版本、隐私披露和发布前签核 | — |
 | [legal/notices/README.md](./legal/notices/README.md) | 第三方许可/SBOM | generated | `pnpm licenses:generate`、Desktop/Mobile 随包声明 | — |

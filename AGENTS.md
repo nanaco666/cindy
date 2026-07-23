@@ -39,6 +39,9 @@
   `docs/design-rules/cindy-design-system.md`。
 - 修改 Orca 多 Agent 协同时，必须先读
   `docs/dev-rules/orca-team-architecture.md`。
+- 修改 `packages/maker-core` 的 Agent 编排、prompt 组装、tool／MCP 暴露、translator、
+  model 映射、usage 计量，或任何进入模型 system 段的提示词前，必须先读
+  `docs/dev-rules/maker-core-and-agent-behavior.md`。
 - 其余规则仍在逐项迁移；专题尚未建立时按下方“重构期间”处理。
 
 ## 通用工作流程

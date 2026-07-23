@@ -28,5 +28,8 @@
 - [`mobile-development.md`](mobile-development.md)：Mobile 的模拟器开发、分层验证与
   专项文档入口。
 - [`orca-team-architecture.md`](orca-team-architecture.md)：Orca 多 Agent 协同架构与运行时约束。
+- [`maker-core-and-agent-behavior.md`](maker-core-and-agent-behavior.md)：`packages/maker-core`
+  的 Agent 能力归属、代码优先确定性、缓存率／性能／准确性指标不可回退，以及 system
+  prompt 改动门禁。
 
 其他旧规则正在从仓库根 `AGENTS-old.md` 逐项盘点迁入。
