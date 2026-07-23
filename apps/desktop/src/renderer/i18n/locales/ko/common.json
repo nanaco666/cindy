@@ -6320,7 +6320,7 @@
     "notReadyHeading": "Maker Experimental",
     "notReadyBody": "window.electronAPI.maker를 사용할 수 없습니다. 앱을 재시작하고 콘솔에서 IPC 등록 오류를 확인하세요.",
     "title": "Maker Experimental — 1단계 리팩터 새 파이프라인",
-    "description": "새 파이프라인 검증 페이지. 기존 파이프라인 (cc-agent / codex) 은 영향받지 않습니다. 자세한 내용은 doc/agent/xdt-maker-architecture.md",
+    "description": "새 파이프라인 검증 페이지. 기존 파이프라인 (cc-agent / codex) 은 영향받지 않습니다.",
     "agentLabel": "에이전트:",
     "workingDirLabel": "작업 디렉토리:",
     "workingDirPlaceholder": "오른쪽 버튼으로 디렉토리 선택",

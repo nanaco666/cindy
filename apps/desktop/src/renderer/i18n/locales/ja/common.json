@@ -6320,7 +6320,7 @@
     "notReadyHeading": "Maker Experimental",
     "notReadyBody": "window.electronAPI.maker が利用できません。アプリを再起動し、コンソールで IPC 登録エラーを確認してください。",
     "title": "Maker Experimental — ステージ 1 リファクタ新パイプライン",
-    "description": "新パイプライン検証ページ。旧パイプライン（cc-agent / codex）には影響なし。詳細は doc/agent/xdt-maker-architecture.md",
+    "description": "新パイプライン検証ページ。旧パイプライン（cc-agent / codex）には影響なし。",
     "agentLabel": "エージェント:",
     "workingDirLabel": "作業ディレクトリ:",
     "workingDirPlaceholder": "右のボタンでディレクトリを選択",

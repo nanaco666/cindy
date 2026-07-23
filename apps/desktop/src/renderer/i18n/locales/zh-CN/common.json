@@ -6320,7 +6320,7 @@
     "notReadyHeading": "Maker Experimental",
     "notReadyBody": "window.electronAPI.maker 不可用。请重启应用并检查控制台中的 IPC 注册错误。",
     "title": "Maker Experimental — 一阶段重构新链路",
-    "description": "新链路验证页面。老链路（cc-agent / codex）不受影响。详见 doc/agent/xdt-maker-architecture.md",
+    "description": "新链路验证页面。老链路（cc-agent / codex）不受影响。",
     "agentLabel": "代理：",
     "workingDirLabel": "工作目录：",
     "workingDirPlaceholder": "点右侧按钮选择目录",
