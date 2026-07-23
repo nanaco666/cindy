@@ -14,15 +14,9 @@ pnpm restart:desktop:remote --region=cn
 pnpm restart:desktop:remote --region=global
 ```
 
-只有用户明确要求连接其已经准备好的本地 server 时，才使用：
-
-```bash
-pnpm restart:desktop:local
-```
-
-这与登录页中免 Cindy 账号的“本地模式”不是同一个概念。Agent 不负责启动相邻服务端
-仓库，也不得自行改用 `pnpm dev:desktop`、`pnpm dev:desktop:remote` 或
-`pnpm dev:server` 绕过包装脚本。
+Desktop 连接的是你自己的 Cindy 云端账号（remote）。这与登录页中免 Cindy 账号的
+「本地模式」（无需账号即可使用本机 agent）不是同一个概念。Agent 不得自行改用
+`pnpm dev:desktop` 或 `pnpm dev:desktop:remote` 绕过包装脚本。
 
 启动包装可能停止已有 Desktop dev 进程。必须尊重宿主提供的并行或保活工作流；如果
 脚本因为当前 Agent 运行在 Cindy 内部而拒绝重启，不要换命令绕过，应把提示交给用户。
