@@ -9,6 +9,8 @@ const managedEnvKeys = [
   'CINDY_CN_APP_STORE_ID',
   'CINDY_GLOBAL_APP_STORE_ID',
   'EAS_BUILD_PROFILE',
+  'EAS_OWNER',
+  'EAS_PROJECT_ID',
   'EXPO_PUBLIC_APP_VARIANT',
   'EXPO_PUBLIC_BETA_DEV',
   'EXPO_PUBLIC_CINDY_AUTH_REGION',
@@ -68,6 +70,38 @@ describe('mobile native app config', () => {
     );
   });
 
+  it('injects EAS owner / projectId / updates from env and omits them when unset', () => {
+    const appJson = JSON.parse(
+      readFileSync(resolve(process.cwd(), 'app.json'), 'utf8'),
+    );
+    const buildConfig = require(resolve(process.cwd(), 'app.config.js'));
+
+    // 仓库不带账号绑定:app.json 无 owner / updates / extra.eas。
+    expect(appJson.expo.owner).toBeUndefined();
+    expect(appJson.expo.updates).toBeUndefined();
+    expect(appJson.expo.extra?.eas).toBeUndefined();
+
+    // env 未设(dev / 外部 fork)→ resolved config 不带账号绑定。
+    const bare = buildConfig({ config: appJson.expo });
+    expect(bare.owner).toBeUndefined();
+    expect(bare.updates).toBeUndefined();
+    expect(bare.extra.eas).toBeUndefined();
+
+    // env 注入(官方发布路径)→ owner / projectId / updates.url 就位;
+    // 注回原值时 resolved config 逐字节不变,故不触发冷更(见 mobile-development.md)。
+    process.env.EAS_OWNER = 'acme-org';
+    process.env.EAS_PROJECT_ID = '11111111-2222-3333-4444-555555555555';
+    const injected = buildConfig({ config: appJson.expo });
+    expect(injected.owner).toBe('acme-org');
+    expect(injected.extra.eas).toEqual({
+      projectId: '11111111-2222-3333-4444-555555555555',
+    });
+    expect(injected.updates).toEqual({
+      url: 'https://u.expo.dev/11111111-2222-3333-4444-555555555555',
+      enabled: true,
+    });
+  });
+
   it('self-host builds use endpoint-driven OTA without baking the update server URL', () => {
     const appJson = JSON.parse(
       readFileSync(resolve(process.cwd(), 'app.json'), 'utf8'),
@@ -75,7 +109,8 @@ describe('mobile native app config', () => {
     const buildConfig = require(resolve(process.cwd(), 'app.config.js'));
 
     const regular = buildConfig({ config: appJson.expo });
-    expect(regular.updates).toEqual(appJson.expo.updates);
+    // 账号绑定改为 env 注入后,app.json 不再带 updates;env 未设 → 无 OTA 配置。
+    expect(regular.updates).toBeUndefined();
 
     const configDir = mkdtempSync(join(tmpdir(), 'cindy-selfhost-regions-'));
     temporaryDirs.push(configDir);
@@ -196,7 +231,7 @@ describe('mobile native app config', () => {
     expect(cn.extra.cindy.regionConfigSource).toBe('self-host-regions');
     expect(cn.extra.cindy.tapdb.clientId).toBe('cn-json-id');
     expect(cn.extra.cindy).not.toHaveProperty('google');
-    expect(cn.updates).toEqual(appJson.expo.updates);
+    expect(cn.updates).toBeUndefined();
     expect(cn.plugins).not.toContainEqual(
       expect.arrayContaining(['@react-native-google-signin/google-signin']),
     );
@@ -211,7 +246,7 @@ describe('mobile native app config', () => {
       '@react-native-google-signin/google-signin',
       { iosUrlScheme: 'com.googleusercontent.apps.local-ios' },
     ]);
-    expect(global.updates).toEqual(appJson.expo.updates);
+    expect(global.updates).toBeUndefined();
   });
 
   it('fails closed when a store build lacks its regional App Store numeric ID', () => {

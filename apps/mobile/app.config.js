@@ -183,8 +183,15 @@ module.exports = (context = {}) => {
   const regionGoogle = regionBuildConfig?.google;
   const regionTapdb = regionBuildConfig?.tapdb;
   resolveAppStoreId(region);
+  // EAS 账号绑定不入仓:owner / eas.projectId / updates.url 由构建期环境变量注入
+  // (EAS_OWNER / EAS_PROJECT_ID)。官方发布环境注回原值 → resolved ExpoConfig 逐字节不变
+  // → runtime fingerprint 不变、不触发冷更;缺省(dev / 外部 fork)不带账号绑定,由使用者
+  // 用自己的 Expo 项目(eas init)填 env。详见 docs/dev-rules/mobile-development.md。
+  const easOwner = process.env.EAS_OWNER?.trim();
+  const easProjectId = process.env.EAS_PROJECT_ID?.trim();
   let next = {
     ...baseConfig,
+    ...(easOwner ? { owner: easOwner } : {}),
     scheme: regional.scheme,
     ios: {
       ...baseConfig.ios,
@@ -195,6 +202,11 @@ module.exports = (context = {}) => {
       ...baseConfig.android,
       package: regional.androidPackage,
     },
+    // 非自建线的 EAS Update 入口:由下发的 projectId 推导;自建分支下方会把它覆写成
+    // selfhost 占位(真实地址运行时由 mobileUpdateBaseUrl 注入)。projectId 缺省则不配 OTA。
+    ...(easProjectId
+      ? { updates: { url: `https://u.expo.dev/${easProjectId}`, enabled: true } }
+      : {}),
     plugins: withNativeAuthPlugins(baseConfig.plugins || [], {
       googleIosUrlScheme: usesRegionConfig
         ? regionGoogle?.iosUrlScheme
@@ -205,6 +217,7 @@ module.exports = (context = {}) => {
     }),
     extra: {
       ...baseConfig.extra,
+      ...(easProjectId ? { eas: { projectId: easProjectId } } : {}),
       cindy: {
         authRegion: region,
         ...(usesRegionConfig

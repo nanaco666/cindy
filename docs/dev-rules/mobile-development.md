@@ -46,6 +46,22 @@ pnpm --filter mobile test:smoke
 - 模拟器与真机排错：
   [`simulator-debugging.md`](../../apps/mobile/docs/simulator-debugging.md)。
 
+## 原生配置与 runtime fingerprint(冷更边界)
+
+Mobile 用 `runtimeVersion.policy: "fingerprint"`:OTA 热更只在**指纹一致**的装机上生效,
+指纹一旦变化就必须**冷更出包**(新商店包 / 自建重装),存量装机拿不到该次热更。
+
+- 改 `app.json` / `app.config.js` 前先判断是否会动指纹。被哈希的是**解析后的
+  ExpoConfig**(app.config.js 的输出),不是源文件本身:凡进入 resolved config 的字段,
+  改了值就会变指纹;只有被 app.config.js **覆写 / 剥离、传不到 resolved config** 的值才指纹
+  中性(如自建线的 `updates.url` 被占位覆盖)。改动前后可用仓内 `@expo/fingerprint` 比对
+  (见 `scripts/ci-fingerprint.mjs`;PR 有 fingerprint guard 自动比对)。
+- **EAS 账号绑定与凭据不入仓**:`owner` / `extra.eas.projectId` / `updates.url` 及 provider
+  凭证由**构建期环境变量**注入(`EAS_OWNER` / `EAS_PROJECT_ID`,provider secrets 走 EAS
+  environment / 自建区域配置),仓库留空,外部使用者用自己的 Expo 项目(`eas init`)填 env。
+  因为哈希的是 resolved config,发布环境注回**相同值**时逐字节不变 → 指纹不变、不冷更;缺省
+  (dev / fork)则不带账号绑定、不配 OTA。变量清单见 `apps/mobile/.env.example`。
+
 ## 边界
 
 本文只覆盖本地开发、调试和验证。商业发布、版本分发、签名与渠道运维属于维护者内部
