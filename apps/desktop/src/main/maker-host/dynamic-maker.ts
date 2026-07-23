@@ -1,4 +1,4 @@
-import type { Maker } from '@lizi/maker-core';
+import type { Maker } from '@cindy/maker-core';
 
 /**
  * Stable Maker facade for process-lifetime IPC registrations.

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { Maker } from '@lizi/maker-core';
+import type { Maker } from '@cindy/maker-core';
 
 import { createDynamicMaker } from '../dynamic-maker.js';
 
