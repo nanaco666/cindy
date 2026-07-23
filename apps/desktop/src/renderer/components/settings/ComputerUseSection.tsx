@@ -634,6 +634,14 @@ export function ComputerUseSection({ workingDir }: ComputerUseSectionProps) {
     } catch (err) {
       log.warn('computer driver update failed', err);
       toast.error(t('settings.computerUse.directControl.update.toast.failed'));
+      // 预检发现缓存目标已失效时 main 已把 updateAvailable 置 false;同步清掉
+      // 渲染层残留入口,避免失败 toast 后按钮仍显示并可重复点。
+      try {
+        const latest = await window.electronAPI.maker.computer.checkUpdate();
+        setDriverUpdate(latest.updateAvailable ? latest : null);
+      } catch (refreshErr) {
+        log.warn('computer.checkUpdate after failed update failed', refreshErr);
+      }
     } finally {
       setDriverUpdatePending(false);
     }
