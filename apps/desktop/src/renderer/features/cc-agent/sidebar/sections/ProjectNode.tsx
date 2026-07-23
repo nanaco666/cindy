@@ -330,7 +330,7 @@ export function ProjectNode({
             </span>
           ) : null}
           {/* 展开/收起指示箭头:标题右侧、hover 才渐显(参考 MivoCanvas 的
-              row-hover-arrow;仅 opacity 渐显,不做位移,守 DESIGN.md §14.4)。 */}
+              row-hover-arrow;仅 opacity 渐显,不做位移,守 docs/design-rules/cindy-design-system.md §14.4)。 */}
           {!isEditingName && (
             <Chevron
               size={13}

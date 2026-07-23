@@ -15,7 +15,7 @@ interface WindowControlsProps {
    * Tailwind text color class for the icons. Defaults to the title-bar
    * warm-gray token so LoginPage / regular title bars stay unchanged.
    * Splash screens override this with `text-[hsl(var(--splash-text))]`
-   * to match the Stone/Silver tones from DESIGN.md.
+   * to match the Stone/Silver tones from docs/design-rules/cindy-design-system.md.
    */
   iconClassName?: string;
 }

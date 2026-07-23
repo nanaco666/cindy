@@ -393,7 +393,7 @@ Cindy 桌面端用 **VSCode 风格的 ColorRegistry + Theme override** 模型管
 | | `--surface-hover-soft` | `#f8f8f6` | `#3c3c3a` | 柔和 hover bg |
 | | `--surface-hover-hsl` | `0 0% 90%` | `60 2% 17%` | hover HSL 形式 |
 | | `--surface-on-card` | `#ffffff` | `#1f1f1e` | CTA / checked icon 深色前景 |
-| **Border (4)** | `--border-default` | `#d7d7d4` | `#3c3c3a` | DESIGN.md Board 1px 边框 |
+| **Border (4)** | `--border-default` | `#d7d7d4` | `#3c3c3a` | 本规范 Board 1px 边框 |
 | | `--border-default-hsl` | `60 3% 84%` | `60 2% 23%` | Board HSL 形式 |
 | | `--border-shadcn-hsl` | `0 0% 90%` | `30 4% 28%` | shadcn input/border HSL |
 | | `--border-transparent-mixed` | `transparent` | `#3c3c3a` | progress track 等单边边框 |
@@ -588,7 +588,7 @@ card/container
 
 ## 14. Interaction Conventions(交互约定)
 
-> 2026-06 引入。DESIGN.md 此前只规范"长什么样"(色 / 圆角 / 字体 / 间距),不规范"怎么交互"——文本能不能选中、弹窗开了焦点落哪、回车是发送还是换行,这些反复要靠人逐个指出。本节把这些**非视觉的交互行为**钉成全局约定,与 §11(文案语气)互补。能用代码统一保证的就别靠人记(对应 CLAUDE.md 规则 #9)。
+> 2026-06 引入。本规范此前只规范"长什么样"(色 / 圆角 / 字体 / 间距),不规范"怎么交互"——文本能不能选中、弹窗开了焦点落哪、回车是发送还是换行,这些反复要靠人逐个指出。本节把这些**非视觉的交互行为**钉成全局约定,与 §11(文案语气)互补。能用代码统一保证的就别靠人记(对应 CLAUDE.md 规则 #9)。
 
 ### 14.1 文本可选性(user-select)
 

@@ -23,7 +23,7 @@
 // 默认 dry-run(校验环境 + 解析 workspace/scheme + 打印计划,不构建、不上传);
 // --execute 才跑完整链路(需 macOS + Xcode + 已装 dev 证书/描述文件 + NPKG 白名单)。
 //
-// 签名(见 docs/self-hosted-ios-build-and-ota.md §3/§7):dev 签 + NPKG strip 后企业重签
+// 签名:dev 签 + NPKG strip 后企业重签
 // (UE5H8B62F9.*)。签名参数**零代码默认值**,一律由环境变量提供(--execute 构建时必填):
 //   XDT_IOS_TEAM_ID / XDT_IOS_PROFILE_NAME / XDT_IOS_SIGN_IDENTITY(缺任一项抛错);
 //   XDT_IOS_PROFILE_PATH 可选(描述文件路径,--execute 时会安装到系统目录;缺省视为已装)。

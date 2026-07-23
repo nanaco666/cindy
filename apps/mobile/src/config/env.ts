@@ -328,7 +328,7 @@ export let OTA_SERVER_BASE_URL = '';
 // 是否自建变体 —— 必须与 app.config.js 的构建门控读同一个 EXPO_PUBLIC_XDT_OTA_SELFHOST 标志。
 // 真实更新地址只来自 endpoint 清单,不能拿它反推包身份,否则会破坏 EAS / 自建两条线隔离。
 // EXPO_PUBLIC_ 前缀保证该标志会被 inline 进 JS bundle,
-// 与包的真实身份严格对齐。详见 docs/self-hosted-ios-build-and-ota.md。
+// 与包的真实身份严格对齐。
 export const IS_OTA_SELFHOST = process.env.EXPO_PUBLIC_XDT_OTA_SELFHOST === '1';
 
 // 二级版本号:本次自建线打包所配对的桌面产品线版本(如 `0.0.147`)。仅自建线发版脚本

@@ -219,7 +219,7 @@ function GuidePermissionRow({ label, granted, waitingLabel, grantedLabel }: {
  * 授权引导常驻弹窗:轮询期间一直挂着,实时显示两项权限的授予状态,全部就位后由
  * 外层(pending=false)自动收掉;用户也可随时取消。带 CuaDriver 的真实安装图标,
  * 方便用户在系统设置的权限列表里认出要开的是哪一个 App。
- * 结构沿用 ConfirmDialog(DESIGN.md §Dialog);overlay 走 --overlay-modal token。
+ * 结构沿用 ConfirmDialog(docs/design-rules/cindy-design-system.md §Dialog);overlay 走 --overlay-modal token。
  */
 function ComputerPermissionGuideDialog({ open, status, iconDataUrl, onCancel }: {
   open: boolean;

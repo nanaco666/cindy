@@ -21,7 +21,7 @@
 // 默认 dry-run(校验环境 + 打印计划,不构建、不上传);--execute 才跑完整链路
 // (需 macOS + Android SDK + JDK 17 + keystore 口令 env + OSS AK/SK env,除非 --skip-upload)。
 //
-// 签名(见 docs/self-hosted-android-build-and-ota.md §7):自有 release keystore 自签即终版。
+// 签名:自有 release keystore 自签即终版。
 // 签名参数**零代码默认值**,路径 / alias / 两个口令全部由环境变量提供(--execute 构建时缺任一项
 // 抛错;--apk 复用现成包时豁免):XDT_ANDROID_KEYSTORE_PATH / XDT_ANDROID_KEY_ALIAS /
 // XDT_ANDROID_KEYSTORE_PASSWORD / XDT_ANDROID_KEY_PASSWORD。

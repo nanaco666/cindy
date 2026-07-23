@@ -49,7 +49,7 @@ const GHOST_THEME_TOKENS = [
   '--settings-theme-card-bg',
 ] as const;
 
-/** DESIGN.md §3 的字体栈(意识面板与主机同字)。 */
+/** docs/design-rules/cindy-design-system.md §3 的字体栈(意识面板与主机同字)。 */
 const GHOST_FONT_STACK = `Inter, system-ui, -apple-system, "Segoe UI", sans-serif`;
 
 /**

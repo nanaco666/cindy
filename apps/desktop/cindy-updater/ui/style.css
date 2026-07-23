@@ -1,4 +1,4 @@
-/* cindy-updater UI — strictly grayscale per DESIGN.md (Ollama-inspired).
+/* cindy-updater UI — strictly grayscale per docs/design-rules/cindy-design-system.md (Ollama-inspired).
    No chromatic colors. No shadows. No gradients.
    Border radius: 12px containers OR 9999px interactive — nothing in between. */
 
@@ -7,7 +7,7 @@
   font-family: Inter, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
 
   /* Light mode palette — matches .pen frames Light Mode - Updater - *.
-     Surface (#f8f8f6) is the warm off-white from DESIGN.md §2; we deliberately
+     Surface (#f8f8f6) is the warm off-white from docs/design-rules/cindy-design-system.md §2; we deliberately
      avoid pure #ffffff because (a) the project memory bans #ffffff backgrounds
      and (b) Surface is what carries Ollama's warmth — pure white reads cold. */
   --card-bg: #f8f8f6;
@@ -27,7 +27,7 @@
   --progress-track: #d7d7d4;
   --progress-fill: #525252;
 
-  /* Failed-state narrow exception (DESIGN.md §2 Toast/ConfirmDialog scope) */
+  /* Failed-state narrow exception (docs/design-rules/cindy-design-system.md §2 Toast/ConfirmDialog scope) */
   --chip-failed-bg: #fee2e2;
   --chip-failed-border: #ef4444;
   --chip-failed-text: #b91c1c;

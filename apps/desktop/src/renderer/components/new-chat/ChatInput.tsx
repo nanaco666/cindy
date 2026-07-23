@@ -5268,7 +5268,7 @@ function VoiceInputButton({
   const disabledOrBusy = disabled || (busy && !longPressActive);
   const isCreateAgentVariant = visualVariant === 'create-agent';
 
-  // ── hover 宽度形变 + 录音计时(DESIGN.md §14.4 窄变体,≤240ms)──
+  // ── hover 宽度形变 + 录音计时(docs/design-rules/cindy-design-system.md §14.4 窄变体,≤240ms)──
   // 仅 default 变体:hover 时圆钮横向展出「语音」标签;录音中固定展开为
   // 红点(呼吸,仅 opacity 动画挂 wrapper,规则 7)+ 计时。create-agent 保持
   // Figma 合同原样(30×30 圆钮)。计时数字 tabular-nums 等宽,配合"分钟位数

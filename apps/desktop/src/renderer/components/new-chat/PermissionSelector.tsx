@@ -68,7 +68,7 @@ function getModeTone(mode: PermissionMode): 'auto' | 'bypassPermissions' | null 
 
 /**
  * 权限模式选择器 —— 容器形变(MorphPopover)试点组件。
- * 弹层不再是 Radix Popover 浮层,而是从 trigger chip 原位生长(DESIGN.md §14.4
+ * 弹层不再是 Radix Popover 浮层,而是从 trigger chip 原位生长(docs/design-rules/cindy-design-system.md §14.4
  * 容器形变类目);trigger 视觉与旧版逐像素一致,变化只在开合方式。
  */
 export function PermissionSelector({

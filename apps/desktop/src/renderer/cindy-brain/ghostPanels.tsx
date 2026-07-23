@@ -72,7 +72,7 @@ function GhostPanelError({
         >
           {t('settings.ghosts.panelError.reload')}
         </button>
-        {/* 关闭 = 转沉睡,可逆动作,按 DESIGN.md 红色纪律走灰度次按钮(红只留错误图标)。 */}
+        {/* 关闭 = 转沉睡,可逆动作,按 docs/design-rules/cindy-design-system.md 红色纪律走灰度次按钮(红只留错误图标)。 */}
         <button
           type="button"
           onClick={() => void window.electronAPI.ghosts.setEnabled(manifest.id, false).catch(() => {})}

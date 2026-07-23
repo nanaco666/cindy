@@ -134,7 +134,7 @@ export function Sidebar({
           ? cn(
               // 抽屉:fixed overlay 通顶,不挤压主区;z 低于 ChromeActions(z-20),
               // 触发钮保持可点(点击 = pin)。阴影复用 --shadow-menu(中型悬浮卡,
-              // 同色 Surface 上的辅助分离),1px hairline 仍是主分隔手段(DESIGN.md)。
+              // 同色 Surface 上的辅助分离),1px hairline 仍是主分隔手段(docs/design-rules/cindy-design-system.md)。
               'fixed inset-y-0 left-0 z-[15]',
               'border-r border-sidebar-border shadow-[var(--shadow-menu)]',
               peekState === 'peeking' &&
@@ -232,7 +232,7 @@ export function Sidebar({
           onDoubleClick={onResetWidth}
         >
           {/* Visual highlight line — default transparent so the aside's existing
-              border-r provides the 1px divider (DESIGN.md: Board hairline).
+              border-r provides the 1px divider (docs/design-rules/cindy-design-system.md: Board hairline).
               Only becomes visible on hover to indicate the draggable handle. */}
           <div className="absolute right-0 top-0 h-full w-px bg-transparent transition-colors group-hover/handle:bg-sidebar-action-icon" />
         </div>

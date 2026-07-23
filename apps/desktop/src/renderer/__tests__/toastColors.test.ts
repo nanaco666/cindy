@@ -2,7 +2,7 @@
  * toastColors.test.ts
  * ---------------------------------------------------------------------------
  * E5D 状态色定稿落地(扩簇)2026-07-17:Toast 四色(info/success/warning/error)
- * 原Toast 列为 DESIGN.md §2 语义豁免(B 组,跨主题 hardcode)。设计师 R3 A 组
+ * 原Toast 列为 docs/design-rules/cindy-design-system.md §2 语义豁免(B 组,跨主题 hardcode)。设计师 R3 A 组
  * 扩充定稿后豁免解除,四色并入状态色族:
  *   info #417CDD / success #2AAE5B / warning #F3A115 / error #D91F37
  * 与全局状态色同值(success=done 绿、error=状态族 error、warning=warning 前景)。

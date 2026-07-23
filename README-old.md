@@ -79,8 +79,7 @@ pnpm --filter mobile test
 pnpm --filter mobile test:scope
 ```
 
-完整开发与发布说明见 `apps/mobile/docs/dev-and-release-workflow.md` 和
-`apps/mobile/RELEASING.md`。
+当前开发说明见 `docs/dev-rules/mobile-development.md`。
 
 ## 验证
 

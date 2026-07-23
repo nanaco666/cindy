@@ -1,13 +1,20 @@
 # Docs 规范索引
 
-本索引用于发现 `docs/` 下仍保留的运维、合规与开发规则文档。Orca 文档是当前权威开发契约；配置设计原则见 `AGENTS.md` 规则 20。
+本索引用于发现 `docs/` 下仍保留的产品规则、设计规则、开发规则、运维与合规文档。
 
 **状态含义**：`authoritative` = 权威、对治理模块有约束力；`参考` = 设计 / 记录 / spike，非约束、仅供背景参考（不区分是否完成，要看正文）。
 
 | 文档 | 类型 | 状态 | 治理/相关代码 | owner |
 |---|---|---|---|---|
 | [README.md](./README.md) | 索引 | — | `docs/` 文档目录 | — |
-| [desktop-release-cn-global.md](./desktop-release-cn-global.md) | 操作手册/规范 | 参考 | Desktop cn/global 双渠道发布指令矩阵、`apps/desktop/scripts/release-*` `promote-canary-*`、`scripts/shared/oss.mjs` 区域化发布目标 | — |
+| [product-rules/README.md](./product-rules/README.md) | 产品规则索引 | authoritative | Cindy 产品行为、体验与边界 | — |
+| [core-product-principles.md](./product-rules/core-product-principles.md) | 产品原则 | authoritative | Cindy Core、Agent、Skill、插件与多端产品边界 | — |
+| [design-rules/README.md](./design-rules/README.md) | 设计规则索引 | authoritative | Cindy UI 视觉、交互与内容设计 | — |
+| [cindy-design-system.md](./design-rules/cindy-design-system.md) | 设计规范 | authoritative | Desktop 与 Mobile 的视觉语言、Token、组件和交互约定 | — |
+| [dev-rules/README.md](./dev-rules/README.md) | 开发规则索引 | authoritative | Cindy 客户端工程规则 | — |
+| [environment-setup.md](./dev-rules/environment-setup.md) | 开发环境 | authoritative | 公共依赖、submodule 与首次安装 | — |
+| [desktop-development.md](./dev-rules/desktop-development.md) | Desktop 开发规则 | authoritative | Desktop 启动、重启与验证 | — |
+| [mobile-development.md](./dev-rules/mobile-development.md) | Mobile 开发规则 | authoritative | Mobile 模拟器、验证与专项入口 | — |
 | [orca-team-architecture.md](./dev-rules/orca-team-architecture.md) | 契约/规范 | authoritative | `apps/desktop` 的 `maker-ipc/orca*` 服务 + `mcp-integrations` codex MCP、`packages/lizi-mcps` 的 `orca`、`packages/orca-workflow`、`packages/maker-core` 的 codex MCP context | yuhaobo(fmfsaisai) |
 | [legal/README.md](./legal/README.md) | 法律/合规索引 | authoritative | 法律合规资料归档边界与固定路径例外 | — |
 | [legal/wechat-open-sdk-compliance.md](./legal/wechat-open-sdk-compliance.md) | 合规记录 | restricted-review-required | Mobile 微信 Open SDK 版本、隐私披露和发布前签核 | — |

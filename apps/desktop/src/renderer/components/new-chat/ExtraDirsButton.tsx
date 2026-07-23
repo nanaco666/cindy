@@ -138,7 +138,7 @@ export function ExtraDirsButton({
   const isCreateAgentVariant = visualVariant === 'create-agent';
   const morphEnabled = useMorphPopover && !isCreateAgentVariant;
 
-  // ── hover 宽度形变(DESIGN.md §14.4 窄变体,≤240ms)──
+  // ── hover 宽度形变(docs/design-rules/cindy-design-system.md §14.4 窄变体,≤240ms)──
   // 仅 default 变体的纯图标态:hover 横向展出「添加」标签;菜单打开期间不展开,
   // 关闭后若鼠标已移开则回纯「+」。带 ×N 计数的形态与 create-agent 保持原样。
   // 注意:这些 hooks 必须在下方能力早退 return 之前声明(Rules of Hooks)。

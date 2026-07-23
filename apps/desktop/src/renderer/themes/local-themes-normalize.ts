@@ -1,7 +1,7 @@
 /**
  * 本地主题(用户自定义 / 复制主题)的加载期归一化。
  *
- * 背景:`--text-placeholder` 统一 slot 是后引入的(见 colors.ts + DESIGN.md §13 G3)。
+ * 背景:`--text-placeholder` 统一 slot 是后引入的(见 colors.ts + docs/design-rules/cindy-design-system.md §13 G3)。
  * 在它之前创建的本地主题快照只冻结了旧的 per-surface placeholder key
  * (`chat-input-placeholder` / `ask-input-placeholder` / `settings-input-placeholder` /
  * `plan-action-fb-placeholder`),没有 `text-placeholder`。这些旧 override 在加载时会

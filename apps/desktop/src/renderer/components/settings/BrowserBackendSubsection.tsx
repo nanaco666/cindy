@@ -8,7 +8,7 @@
  *
  * segmented control 样式跟 ImDefaultSettingsSection 的 agentKind 切换器一致 ——
  * container `surface-chip` 胶囊,active chip `surface-elevated + border-default`
- * + 加粗,inactive transparent border + secondary text。对齐 DESIGN.md §5
+ * + 加粗,inactive transparent border + secondary text。对齐 docs/design-rules/cindy-design-system.md §5
  * Tab Pills:"Active: Light Gray bg; Inactive: transparent"。
  */
 

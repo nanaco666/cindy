@@ -1,8 +1,8 @@
 # Mobile Simulator Debugging
 
 This guide is the fixed local loop for testing `apps/mobile` in an iOS
-Simulator. It exists because Expo Go, the iOS development client, and TestFlight
-look similar during manual testing but prove different things.
+Simulator. It exists because Expo Go, the iOS development client, and an installed
+distribution build look similar during manual testing but prove different things.
 
 ## Current Source Verification Contract
 
@@ -93,14 +93,14 @@ Use these runtimes for different jobs:
 - Current source debugging: iOS development client, bundle id
   resolved from the selected local region config (`com.xd.cindycn` for the
   current cn config, `com.xd.cindy` for global), attached to Metro.
-- Distribution validation: TestFlight. It does not consume local Metro changes.
+- An installed distribution build does not consume local Metro changes.
 - Expo Go: only for explicit Expo Go compatibility checks. It is not the normal
   regression target because this app depends on native config, secure storage,
   Feishu/Lark app handoff, audio, image picker, app scheme, and build-time iOS
   metadata.
 
-When testing a code change, say "development client" or "TestFlight" explicitly.
-Do not just say "the app".
+When testing a code change, state explicitly whether it is the development client or an installed
+distribution build. Do not just say "the app".
 
 ## Clean Simulator Loop
 
@@ -205,7 +205,7 @@ pnpm --filter mobile ios -- --device "iPhone 17 Pro"
 If Feishu login opens Safari and lands on `Cannot GET /api/auth/callback`, do
 not assume the backend auth exchange failed yet. First check:
 
-- The app is the development client, not Expo Go or TestFlight.
+- The app is the development client, not Expo Go or an installed distribution build.
 - The installed build contains the selected region scheme (`cindycn` or `cindy`).
 - Metro was restarted after env changes.
 - Metro logs show whether `WebBrowser.openAuthSessionAsync` returned success,
@@ -300,7 +300,7 @@ regression targets.
 screens need an explicit destination such as `/devices`.
 
 Local source change is not visible
-: Usually one of: wrong runtime, stale Metro bundle, TestFlight instead of
+: Usually one of: wrong runtime, stale Metro bundle, an installed distribution build instead of
 development client, or native rebuild required.
 
 No controllable devices
@@ -322,7 +322,7 @@ keyboard layout with only the hardware keyboard.
 
 Run this checklist:
 
-- Confirm the exact runtime: development client, Expo Go, or TestFlight.
+- Confirm the exact runtime: development client, Expo Go, or an installed distribution build.
 - Confirm `CFBundleIdentifier`, `CFBundleShortVersionString`, and
   `CFBundleVersion`.
 - Restart Metro after env changes.

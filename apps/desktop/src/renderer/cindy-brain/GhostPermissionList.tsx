@@ -83,7 +83,7 @@ function PermRow({ item, badge }: { item: GhostPermissionItem; badge?: 'added' |
         )}
       </div>
       {badge && (
-        // diff 语义豁免色(DESIGN.md §2 / 规则 16):权限新增/移除就是一次 diff,
+        // diff 语义豁免色(docs/design-rules/cindy-design-system.md §2 / 规则 16):权限新增/移除就是一次 diff,
         // 用 GitHub diff 红绿 token,跨主题一致;徽章是 chrome,select-none。
         <span
           className={cn(

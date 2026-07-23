@@ -87,7 +87,7 @@ agent 的模式。依赖服务端的能力在该模式下不可用。
 
 ## 架构
 
-- [`DESIGN.md`](DESIGN.md) —— 视觉设计系统、颜色 token 与 UI 规范
+- [`docs/design-rules/cindy-design-system.md`](docs/design-rules/cindy-design-system.md) —— 视觉设计系统、颜色 token 与 UI 规范
 - [`CONTRIBUTING.md`](CONTRIBUTING.md) —— 面向社区贡献者的环境、验证与提交流程
 - [`AGENTS.md`](AGENTS.md) —— 工程规范、启动 / 运行时契约、模块边界
 - [`docs/dev-rules/`](docs/dev-rules/) —— 架构深度文档（如 Orca 多 agent 协同）

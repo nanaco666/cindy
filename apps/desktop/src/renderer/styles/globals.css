@@ -763,7 +763,7 @@ body.resizing-pane [data-ghost-webview] {
    in dark mode and rendering nearly invisible on dark backgrounds.
 
    Mirrors highlight.js/styles/github-dark.css 1:1, except `.hljs` background
-   uses --msg-code-block-bg (Card #2c2c2a per DESIGN.md §6) instead of
+   uses --msg-code-block-bg (Card #2c2c2a per docs/design-rules/cindy-design-system.md §6) instead of
    github-dark's default #0d1117 — so TextLightbox and message code blocks
    sit on the design system surface. */
 .dark .hljs {

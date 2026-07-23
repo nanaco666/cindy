@@ -4,7 +4,7 @@
 # ---------------------------------------------------------------------------
 # 流程:  构建 .apk(gradlew,我们自己) → 上传 NPKG → 取下载/安装链接
 #
-# 与 release-ios.sh 的关键差异(见 docs/self-hosted-android-build-and-ota.md §11):
+# 与 release-ios.sh 的关键差异:
 #   - Android APK 由自有 keystore(Cindy.jks / alias Cindy)**自签即终版**,NPKG **不重签**。
 #     因此 **没有** iOS 的"轮询 type=enterprise 企业子包 + 校验签名 Team UE5H8B62F9.*"环节。
 #   - 上传后直接用父包 id 输出安装页 /install/<id> 与直下 /api/v1/packages/<id>/download/。
