@@ -70,7 +70,7 @@ test("desktop restart recognizes dev processes from sibling repository worktrees
 		"",
 		`worktree ${featureRoot}`,
 		"HEAD def456",
-		"branch refs/heads/dash/feature",
+		"branch refs/heads/carol/feature",
 	].join("\n"));
 
 	assert.deepEqual(worktrees, [mainRoot, featureRoot]);
@@ -249,11 +249,11 @@ test("desktop whoami identifies multiple passive previews sharing one userData",
 	const worktrees = parseWorktreeEntries([
 		`worktree ${previewRoot}`,
 		"HEAD abc123",
-		"branch refs/heads/dash/preview/example",
+		"branch refs/heads/carol/preview/example",
 		"",
 		`worktree ${previewRootTwo}`,
 		"HEAD def456",
-		"branch refs/heads/dash/preview/two",
+		"branch refs/heads/carol/preview/two",
 	].join("\n"));
 	const electronMain = path.join(previewRoot, "node_modules", "electron", "dist", "Electron");
 	const electronHelper = path.join(previewRoot, "node_modules", "electron", "helper");
@@ -276,7 +276,7 @@ test("desktop whoami identifies multiple passive previews sharing one userData",
 	assert.deepEqual(instances, [{
 		pid: 10,
 		rootDir: previewRoot,
-		branch: "dash/preview/example",
+		branch: "carol/preview/example",
 		state: "ready",
 		ready: true,
 		mode: "remote",
@@ -289,7 +289,7 @@ test("desktop whoami identifies multiple passive previews sharing one userData",
 	}, {
 		pid: 20,
 		rootDir: previewRootTwo,
-		branch: "dash/preview/two",
+		branch: "carol/preview/two",
 		state: "ready",
 		ready: true,
 		mode: "remote",
@@ -315,11 +315,11 @@ test("passive previews do not use a one-slot userData lock", () => {
 });
 
 test("desktop whoami prefers launch-time commit metadata over process inference", () => {
-	const worktrees = [{ rootDir: "/repo/cindy-preview", branch: "dash/preview/example" }];
+	const worktrees = [{ rootDir: "/repo/cindy-preview", branch: "carol/preview/example" }];
 	const scanned = [{
 		pid: 10,
 		rootDir: "/repo/cindy-preview",
-		branch: "dash/preview/example",
+		branch: "carol/preview/example",
 		state: "ready",
 		ready: true,
 		mode: "unknown",

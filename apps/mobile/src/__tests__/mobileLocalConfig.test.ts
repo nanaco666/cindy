@@ -33,7 +33,7 @@ describe('mobile local config bootstrap', () => {
       worktreeEntries: [
         { path: mainRoot, branch: 'refs/heads/main' },
         { path: personalRoot, branch: 'refs/heads/dash/personal-client-1' },
-        { path: targetRoot, branch: 'refs/heads/dash/feature' },
+        { path: targetRoot, branch: 'refs/heads/carol/feature' },
       ],
     });
 

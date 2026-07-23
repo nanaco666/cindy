@@ -141,17 +141,17 @@ describe('cindy_contacts tools', () => {
   });
 
   it('create → resolve → get → append_event 主路径', async () => {
-    const dash = await createNeo();
+    const neo = await createNeo();
 
     const resolved = parseResult(await registry.call('contacts_resolve', { value: 'NEO@EXAMPLE.COM' }));
     expect(resolved.ok).toBe(true);
     const hits = resolved.data as Array<{ matchType: string; profile: { id: string; totalEvents: number } }>;
     expect(hits[0]!.matchType).toBe('identity');
-    expect(hits[0]!.profile.id).toBe(dash.id);
+    expect(hits[0]!.profile.id).toBe(neo.id);
 
     const ev = parseResult(
       await registry.call('contacts_append_event', {
-        contact_id: dash.id,
+        contact_id: neo.id,
         date: '2026-07-01',
         text: '一起过了通讯录设计方案',
         source: 'session',
@@ -159,7 +159,7 @@ describe('cindy_contacts tools', () => {
     );
     expect(ev.ok).toBe(true);
 
-    const got = parseResult(await registry.call('contacts_get', { id: dash.id }));
+    const got = parseResult(await registry.call('contacts_get', { id: neo.id }));
     expect(got.ok).toBe(true);
     expect((got.data as { events: unknown[] }).events).toHaveLength(1);
 
@@ -168,7 +168,7 @@ describe('cindy_contacts tools', () => {
   });
 
   it('身份相同 → 不新建, 自动并入既有档案(merged:true)', async () => {
-    const dash = await createNeo();
+    const neo = await createNeo();
     const res = parseResult(
       await registry.call('contacts_create', {
         kind: 'person',
@@ -188,7 +188,7 @@ describe('cindy_contacts tools', () => {
       profile: { identities: unknown[] };
     };
     expect(data.merged).toBe(true);
-    expect(data.mergedInto.id).toBe(dash.id);
+    expect(data.mergedInto.id).toBe(neo.id);
     expect(data.enrich.addedIdentities).toBe(1); // github 新增, email 已在本人跳过
     expect(data.profile.identities).toHaveLength(3);
     // 全库仍然只有这一个人
@@ -234,7 +234,7 @@ describe('cindy_contacts tools', () => {
   });
 
   it('merge + delete + 分组管理(manage 类)', async () => {
-    const dash = await createNeo();
+    const neo = await createNeo();
     // "Neo H." 与林子航的别名 "Neo" 相似, 会被 DUPLICATE_SUSPECT 拦 — 显式放行造重复
     const dup = (
       parseResult(
@@ -248,7 +248,7 @@ describe('cindy_contacts tools', () => {
     ).profile;
 
     const merged = parseResult(
-      await registry.call('contacts_merge', { target_id: dash.id, source_id: dup.id }),
+      await registry.call('contacts_merge', { target_id: neo.id, source_id: dup.id }),
     );
     expect(merged.ok).toBe(true);
     expect((merged.data as { movedIdentities: number }).movedIdentities).toBe(1);
@@ -257,7 +257,7 @@ describe('cindy_contacts tools', () => {
       id: string;
     };
     const setRes = parseResult(
-      await registry.call('contacts_set_group_members', { group_id: g.id, add: [dash.id] }),
+      await registry.call('contacts_set_group_members', { group_id: g.id, add: [neo.id] }),
     );
     expect(setRes.ok).toBe(true);
 
@@ -266,14 +266,14 @@ describe('cindy_contacts tools', () => {
     }>;
     expect(groups[0]!.memberCount).toBe(1);
 
-    const del = parseResult(await registry.call('contacts_delete', { id: dash.id }));
+    const del = parseResult(await registry.call('contacts_delete', { id: neo.id }));
     expect(del.ok).toBe(true);
     const stats = parseResult(await registry.call('contacts_stats', {})).data as { people: number };
     expect(stats.people).toBe(0);
   });
 
   it('关系边: add_relation 双向可见, remove_relation 清除', async () => {
-    const dash = await createNeo();
+    const neo = await createNeo();
     const org = (
       parseResult(await registry.call('contacts_create', { kind: 'org', display_name: '星澜网络' }))
         .data as { profile: { id: string } }
@@ -281,7 +281,7 @@ describe('cindy_contacts tools', () => {
 
     const rel = parseResult(
       await registry.call('contacts_add_relation', {
-        from_id: dash.id,
+        from_id: neo.id,
         to_id: org.id,
         relation: '任职',
         note: '执行办',
@@ -305,10 +305,10 @@ describe('cindy_contacts tools', () => {
   });
 
   it('vcf 导出→导入 round-trip(agent 备份/迁移通道)', async () => {
-    const dash = await createNeo();
+    const neo = await createNeo();
     const vcfPath = path.join(tmpDir, 'export.vcf');
     const exported = parseResult(
-      await registry.call('contacts_export_vcf', { ids: [dash.id], path: vcfPath }),
+      await registry.call('contacts_export_vcf', { ids: [neo.id], path: vcfPath }),
     );
     expect(exported.ok).toBe(true);
     expect((exported.data as { count: number }).count).toBe(1);
@@ -327,14 +327,14 @@ describe('cindy_contacts tools', () => {
   });
 
   it('系统回写: 强制显式范围 / pending 跳过 / 锚点回填 / 二次回写变更新', async () => {
-    const dash = await createNeo();
+    const neo = await createNeo();
     parseResult(
       await registry.call('contacts_create', {
         kind: 'person', display_name: '待确认者', status: 'pending', allow_duplicate: true,
       }),
     );
     const g = parseResult(await registry.call('contacts_create_group', { name: '回写组' })).data as { id: string };
-    await registry.call('contacts_set_group_members', { group_id: g.id, add: [dash.id] });
+    await registry.call('contacts_set_group_members', { group_id: g.id, add: [neo.id] });
 
     // 无 ids/group → 拒绝(不存在"全部回写")
     const noScope = parseResult(await registry.call('contacts_export_system', {}));
@@ -348,7 +348,7 @@ describe('cindy_contacts tools', () => {
     expect(dry.toCreate).toEqual(['林子航']);
 
     // 真回写: created + 锚点回填
-    const run1 = parseResult(await registry.call('contacts_export_system', { ids: [dash.id] })).data as {
+    const run1 = parseResult(await registry.call('contacts_export_system', { ids: [neo.id] })).data as {
       created: number; anchorsAdded: number;
     };
     expect(run1.created).toBe(1);
@@ -356,7 +356,7 @@ describe('cindy_contacts tools', () => {
     expect(writeCalls[0]![0]!.emails.length).toBeGreaterThan(0);
 
     // 二次回写: 锚点在 → 走更新, 不再新建
-    const run2 = parseResult(await registry.call('contacts_export_system', { ids: [dash.id] })).data as {
+    const run2 = parseResult(await registry.call('contacts_export_system', { ids: [neo.id] })).data as {
       created: number; updated: number;
     };
     expect(run2.created).toBe(0);
@@ -366,7 +366,7 @@ describe('cindy_contacts tools', () => {
   it('回写/vcf 导出: 只有任职语义的 org 边才映射公司/职位(客户等非雇佣边不出卡)', async () => {
     // 回归: 曾取"第一条指向 org 的出边"当雇主, 先建的 客户/供应商 关系会污染
     // 系统联系人卡的 公司/职位 字段
-    const dash = await createNeo();
+    const neo = await createNeo();
     const clientOrg = (
       parseResult(await registry.call('contacts_create', { kind: 'org', display_name: '甲方客户公司' }))
         .data as { profile: { id: string } }
@@ -376,16 +376,16 @@ describe('cindy_contacts tools', () => {
         .data as { profile: { id: string } }
     ).profile;
     // 客户边先建(旧逻辑会命中它), 任职边后建
-    await registry.call('contacts_add_relation', { from_id: dash.id, to_id: clientOrg.id, relation: '客户' });
+    await registry.call('contacts_add_relation', { from_id: neo.id, to_id: clientOrg.id, relation: '客户' });
     await registry.call('contacts_add_relation', {
-      from_id: dash.id, to_id: employer.id, relation: '任职', note: '制作人',
+      from_id: neo.id, to_id: employer.id, relation: '任职', note: '制作人',
     });
 
-    parseResult(await registry.call('contacts_export_system', { ids: [dash.id] }));
+    parseResult(await registry.call('contacts_export_system', { ids: [neo.id] }));
     expect(writeCalls[0]![0]).toMatchObject({ org: '星澜网络', title: '制作人' });
 
     const vcf = (
-      parseResult(await registry.call('contacts_export_vcf', { ids: [dash.id] })).data as { vcf: string }
+      parseResult(await registry.call('contacts_export_vcf', { ids: [neo.id] })).data as { vcf: string }
     ).vcf;
     expect(vcf).toContain('ORG:星澜网络');
     expect(vcf).not.toContain('甲方客户公司');
@@ -406,12 +406,12 @@ describe('cindy_contacts tools', () => {
 
   it('系统回写/vcf 导出: 显式 ids 去重, 重复 id 不生成重复卡片', async () => {
     // 回归: 重复 id 会生成重复写计划 → 系统侧同一人建两张卡且只有一张能回填锚点
-    const dash = await createNeo();
-    parseResult(await registry.call('contacts_export_system', { ids: [dash.id, dash.id, dash.id] }));
+    const neo = await createNeo();
+    parseResult(await registry.call('contacts_export_system', { ids: [neo.id, neo.id, neo.id] }));
     expect(writeCalls[0]).toHaveLength(1);
 
     const vcfExport = parseResult(
-      await registry.call('contacts_export_vcf', { ids: [dash.id, dash.id] }),
+      await registry.call('contacts_export_vcf', { ids: [neo.id, neo.id] }),
     ).data as { count: number };
     expect(vcfExport.count).toBe(1);
   });
@@ -479,17 +479,17 @@ describe('cindy_contacts tools', () => {
   it('write/manage 工具成功后触发 onMutated, 只读工具不触发(UI 刷新通道)', async () => {
     // 回归: onMutated 注入后从未被调用 — agent 经 MCP 直写 store 不经 IPC 层,
     // 设置页列表/待确认角标/统计全部不自动刷新
-    const dash = await createNeo();
+    const neo = await createNeo();
     expect(mutations).toBe(1); // contacts_create
 
     await registry.call('contacts_search', { query: 'Neo' });
-    await registry.call('contacts_get', { id: dash.id });
-    await registry.call('contacts_export_vcf', { ids: [dash.id] }); // 只写文件不动库
+    await registry.call('contacts_get', { id: neo.id });
+    await registry.call('contacts_export_vcf', { ids: [neo.id] }); // 只写文件不动库
     expect(mutations).toBe(1); // 只读/导出不触发
 
-    await registry.call('contacts_update', { id: dash.id, summary: '更新简介' });
+    await registry.call('contacts_update', { id: neo.id, summary: '更新简介' });
     expect(mutations).toBe(2);
-    await registry.call('contacts_delete', { id: dash.id });
+    await registry.call('contacts_delete', { id: neo.id });
     expect(mutations).toBe(3);
   });
 
@@ -501,7 +501,7 @@ describe('cindy_contacts tools', () => {
   it('export_vcf: ids 路径同样默认排除 pending, include_pending:true 才导出', async () => {
     // 回归: ids 路径曾跳过状态过滤, 显式 id 列表会把 pending(低置信度)档案
     // 无条件泄漏进 vCard, 与工具描述"默认只导 confirmed"不一致
-    const dash = await createNeo();
+    const neo = await createNeo();
     const pending = (
       parseResult(
         await registry.call('contacts_create', {
@@ -511,14 +511,14 @@ describe('cindy_contacts tools', () => {
     ).profile;
 
     const defaultExport = parseResult(
-      await registry.call('contacts_export_vcf', { ids: [dash.id, pending.id] }),
+      await registry.call('contacts_export_vcf', { ids: [neo.id, pending.id] }),
     ).data as { count: number; vcf: string };
     expect(defaultExport.count).toBe(1);
     expect(defaultExport.vcf).toContain('林子航');
     expect(defaultExport.vcf).not.toContain('低置信度');
 
     const withPending = parseResult(
-      await registry.call('contacts_export_vcf', { ids: [dash.id, pending.id], include_pending: true }),
+      await registry.call('contacts_export_vcf', { ids: [neo.id, pending.id], include_pending: true }),
     ).data as { count: number; vcf: string };
     expect(withPending.count).toBe(2);
     expect(withPending.vcf).toContain('低置信度');

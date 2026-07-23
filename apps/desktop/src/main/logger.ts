@@ -736,7 +736,7 @@ export function maskPath(p: string | null | undefined): string {
  * correlate "same user across log lines" without learning who.
  *
  * Examples:
- *   lizi@anthropic.com → l***@anthropic.com
+ *   carol@example.com → c***@example.com
  *   l@x.com            → ***@x.com   (too short for a 1-char prefix)
  *   null / undefined   → '<none>'
  */

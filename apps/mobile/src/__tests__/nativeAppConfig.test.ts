@@ -64,9 +64,9 @@ describe('mobile native app config', () => {
     expect(global.extra.cindy.authRegion).toBe('global');
 
     process.env.EXPO_PUBLIC_APP_VARIANT = 'beta';
-    process.env.EXPO_PUBLIC_BETA_DEV = 'dash';
+    process.env.EXPO_PUBLIC_BETA_DEV = 'carol';
     expect(buildConfig({ config: appJson.expo }).name).toBe(
-      'Cindy Beta (dash)',
+      'Cindy Beta (carol)',
     );
   });
 

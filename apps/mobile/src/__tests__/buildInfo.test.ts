@@ -4,14 +4,14 @@ import { formatMobileBuildLabel, normalizeBuildInfo } from '@/config/buildInfo';
 describe('mobile build info', () => {
   it('normalizes branch / commit / version / buildNumber / metroHost', () => {
     expect(normalizeBuildInfo({
-      branch: 'dash/mobile-sim-rebuild-tool',
+      branch: 'carol/mobile-sim-rebuild-tool',
       commit: 'abc1234',
       version: '1.0.0',
       buildNumber: '2026062608',
       metroHost: '127.0.0.1:8082',
     })).toEqual({
       source: null,
-      branch: 'dash/mobile-sim-rebuild-tool',
+      branch: 'carol/mobile-sim-rebuild-tool',
       commit: 'abc1234',
       version: '1.0.0',
       buildNumber: '2026062608',
@@ -26,11 +26,11 @@ describe('mobile build info', () => {
 
   it('formats the compact label with branch + build + metro host', () => {
     expect(formatMobileBuildLabel(normalizeBuildInfo({
-      branch: 'dash/mobile-sim-rebuild-tool',
+      branch: 'carol/mobile-sim-rebuild-tool',
       version: '1.0.0',
       buildNumber: '2026062608',
       metroHost: '127.0.0.1:8082',
-    }))).toBe('dash/mobile-sim-rebuild-tool · v1.0.0 (2026062608) · 127.0.0.1:8082');
+    }))).toBe('carol/mobile-sim-rebuild-tool · v1.0.0 (2026062608) · 127.0.0.1:8082');
   });
 
   it('falls back to commit, then unknown; omits build/metro when absent', () => {

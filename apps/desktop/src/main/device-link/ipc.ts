@@ -413,7 +413,7 @@ export async function handleInvoke(
   let callArgs = Array.isArray(args) ? args : [];
 
   // 出方向附件:发往远程前先把本机附件上传 OSS、替换成引用串(bytes 不内联进 relay)。
-  // 上传失败 → MEDIA_TRANSFER_FAILED,整条消息不发(@dash 决策:不静默丢附件)。
+  // 上传失败 → MEDIA_TRANSFER_FAILED,整条消息不发(产品决策:不静默丢附件)。
   if (deps.rewriteOutboundMedia) {
     try {
       callArgs = await deps.rewriteOutboundMedia(channel, callArgs);
