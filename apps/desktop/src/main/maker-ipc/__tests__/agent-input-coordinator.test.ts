@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AgentInputCoordinator } from '../agent-input-coordinator.js';
 import type {
   AgentInputCoordinatorDeps,
@@ -9,7 +9,10 @@ import type {
   AgentInputProjection,
   AgentInputQueuedMessage,
 } from '../../../shared/agentInputQueue.js';
-import { CONTINUE_AFTER_ERROR_PROMPT } from '../../../shared/interruptedTurn.js';
+import {
+  CONTINUE_AFTER_APP_EXIT_PROMPT,
+  CONTINUE_AFTER_ERROR_PROMPT,
+} from '../../../shared/interruptedTurn.js';
 
 const mocks = vi.hoisted(() => {
   const logger = {
@@ -168,6 +171,7 @@ function createHarness() {
   const beforeDispatchUserTurn = vi.fn<NonNullable<AgentInputCoordinatorDeps['beforeDispatchUserTurn']>>(() => {});
   const onUndispatchedUserTurn = vi.fn<NonNullable<AgentInputCoordinatorDeps['onUndispatchedUserTurn']>>(() => {});
   const onAcceptedQueuedMessage = vi.fn<NonNullable<AgentInputCoordinatorDeps['onAcceptedQueuedMessage']>>(() => {});
+  const onDispatchedUserTurn = vi.fn<NonNullable<AgentInputCoordinatorDeps['onDispatchedUserTurn']>>(() => {});
   const noteSessionClearBoundary = vi.fn<NonNullable<AgentInputCoordinatorDeps['noteSessionClearBoundary']>>();
   const emitProjection = vi.fn((projection: AgentInputProjection) => {
     projections.push(projection);
@@ -205,6 +209,7 @@ function createHarness() {
     beforeDispatchUserTurn,
     onUndispatchedUserTurn,
     onAcceptedQueuedMessage,
+    onDispatchedUserTurn,
     noteSessionClearBoundary,
     hasPendingCredentialSwitch: () => hasPendingCredentialSwitch?.() === true,
     screenUserMessage: (sessionId, item) =>
@@ -229,6 +234,7 @@ function createHarness() {
     beforeDispatchUserTurn,
     onUndispatchedUserTurn,
     onAcceptedQueuedMessage,
+    onDispatchedUserTurn,
     noteSessionClearBoundary,
     emitProjection,
     projections,
@@ -292,6 +298,10 @@ function latestWarnPayload() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
 });
 
 describe('AgentInputCoordinator send transaction', () => {
@@ -509,6 +519,31 @@ describe('AgentInputCoordinator send transaction', () => {
     expect(h.sendToAgent).toHaveBeenCalledTimes(1);
     projection = latestProjection(h.projections);
     expect(projection.credentialSwitchWait).toBeNull();
+  });
+
+  it('clears a displaced credential-switch wait when continue is prepended ahead of the waited head', async () => {
+    const h = createHarness();
+    const sid = 'send-credential-switch-continue-prepend';
+
+    h.sendToAgent.mockImplementation(async () =>
+      hostSendFailure('CREDENTIAL_SWITCH_BUSY', 'CREDENTIAL_SWITCH_BUSY: busy', {
+        busySessionIds: ['other-session'],
+      }));
+
+    h.coordinator.enqueue(sid, makeItem('q-1', 'first'));
+    await flush();
+    expect(latestProjection(h.projections).credentialSwitchWait).toEqual({
+      clientId: 'q-1',
+      blockedBySessionIds: ['other-session'],
+    });
+
+    h.coordinator.enqueue(sid, makeItem('q-continue', CONTINUE_AFTER_APP_EXIT_PROMPT));
+    await flush();
+
+    const projection = latestProjection(h.projections);
+    expect(projection.pendingQueue.map((q) => q.clientId)).toEqual(['q-continue', 'q-1']);
+    // 旧 wait 目标已被顶走；drain 会为新队首重建 wait（仍 busy）。
+    expect(projection.credentialSwitchWait?.clientId).toBe('q-continue');
   });
 
   it('retries a restored queue head when SESSION_RUNNING clears without a done event', async () => {
@@ -1782,6 +1817,9 @@ describe('AgentInputCoordinator send transaction', () => {
     const persist = h.sendToAgent.mock.calls[1]?.[3]?.persistUserMessage;
     expect(persist?.content).toBe(CONTINUE_AFTER_ERROR_PROMPT);
     expect(h.sendToAgent.mock.calls[1]?.[2]?.planMode).toBe(false);
+    expect(h.onDispatchedUserTurn.mock.calls[1]?.[1]?.originalSyntheticTrigger).toBe(
+      'continue',
+    );
   });
 
   it('active-turn retry falls back to resending the original text when the turn produced nothing', async () => {
@@ -4281,6 +4319,153 @@ describe('AgentInputCoordinator crash-recovery queue snapshots (issue #761)', ()
     expect(h.sendToAgent).toHaveBeenCalledTimes(1);
     expect(h.sendToAgent.mock.calls[0]?.[1]).toEqual({ type: 'user', content: 'restored' });
     expect(projection.pendingQueue.map((q) => q.clientId)).toEqual(['q-user']);
+  });
+
+  it.each([
+    ['app-exit continuation', CONTINUE_AFTER_APP_EXIT_PROMPT],
+    ['error continuation', CONTINUE_AFTER_ERROR_PROMPT],
+  ])('dispatches %s before an existing restored queue', async (_label, prompt) => {
+    const h = createHarness();
+    const sid = `snapshot-restore-priority-${_label}`;
+    h.setLoadQueueSnapshot(async () => [
+      makeItem('r-1', 'queued first'),
+      makeItem('r-2', 'queued second'),
+    ]);
+
+    await h.coordinator.ensureQueueRestored(sid);
+    await flush();
+    expect(latestProjection(h.projections).queuePaused).toBe(true);
+
+    h.coordinator.enqueue(sid, makeItem('q-continue', prompt), {
+      resumeRestorePausedQueue: true,
+    });
+    await flush();
+
+    const projection = latestProjection(h.projections);
+    expect(projection.queuePaused).toBe(false);
+    expect(h.sendToAgent).toHaveBeenCalledTimes(1);
+    expect(h.sendToAgent.mock.calls[0]?.[1]).toEqual({ type: 'user', content: prompt });
+    expect(projection.pendingQueue.map((q) => q.clientId)).toEqual(['r-1', 'r-2']);
+  });
+
+  it('projects a continuation as in-flight after it leaves the queue until the turn settles', async () => {
+    const h = createHarness();
+    const sid = 'continue-in-flight-projection';
+
+    h.coordinator.enqueue(
+      sid,
+      makeItem('q-continue', CONTINUE_AFTER_APP_EXIT_PROMPT),
+      { resumeRestorePausedQueue: true },
+    );
+    await flush();
+
+    let projection = latestProjection(h.projections);
+    expect(projection.pendingQueue).toEqual([]);
+    expect(projection.continuationInFlightClientId).toBe('q-continue');
+
+    h.setRunning(false);
+    h.coordinator.onTurnEvent(sid, 'done');
+    await flush();
+
+    projection = latestProjection(h.projections);
+    expect(projection.continuationInFlightClientId).toBeNull();
+  });
+
+  it('does not retain an in-flight continuation marker when the user cancels it in the queue', async () => {
+    const h = createHarness();
+    const sid = 'continue-cancelled-while-queued';
+    h.setRunning(true);
+
+    h.coordinator.enqueue(
+      sid,
+      makeItem('q-continue', CONTINUE_AFTER_APP_EXIT_PROMPT),
+      { resumeRestorePausedQueue: true },
+    );
+    await flush();
+
+    let projection = latestProjection(h.projections);
+    expect(projection.pendingQueue.map((item) => item.clientId)).toEqual(['q-continue']);
+    expect(projection.continuationInFlightClientId).toBeNull();
+
+    h.coordinator.remove(sid, 'q-continue');
+    await flush();
+
+    projection = latestProjection(h.projections);
+    expect(projection.pendingQueue).toEqual([]);
+    expect(projection.continuationInFlightClientId).toBeNull();
+  });
+
+  it('preserves the original Continue intent when a Ghost rewrites the dispatch text', async () => {
+    const h = createHarness();
+    const sid = 'continue-ghost-rewrite';
+    h.setScreenUserMessage(async () => ({
+      action: 'rewrite',
+      ghostId: 'ghost-1',
+      ghostName: 'Guard',
+      text: 'Continue with the reviewed constraints.',
+    }));
+
+    h.coordinator.enqueue(
+      sid,
+      makeItem('q-continue', CONTINUE_AFTER_ERROR_PROMPT),
+      { resumeRestorePausedQueue: true },
+    );
+    await flush();
+
+    expect(h.sendToAgent).toHaveBeenCalledWith(
+      sid,
+      { type: 'user', content: 'Continue with the reviewed constraints.' },
+      expect.any(Object),
+      expect.any(Object),
+    );
+    expect(h.onDispatchedUserTurn).toHaveBeenCalledWith(
+      sid,
+      expect.objectContaining({
+        clientId: 'q-continue',
+        text: 'Continue with the reviewed constraints.',
+        originalSyntheticTrigger: 'continue',
+      }),
+      expect.any(Number),
+    );
+  });
+
+  it('recomputes original trigger intent instead of trusting a forged enqueue field', async () => {
+    const h = createHarness();
+    const sid = 'normal-message-forged-continue-intent';
+
+    h.coordinator.enqueue(
+      sid,
+      makeItem('q-normal', 'ordinary message', {
+        originalSyntheticTrigger: 'continue',
+      }),
+    );
+    await flush();
+
+    const dispatchedItem = h.onDispatchedUserTurn.mock.calls[0]?.[1];
+    expect(dispatchedItem?.originalSyntheticTrigger).toBeUndefined();
+    expect(latestProjection(h.projections).continuationInFlightClientId).toBeNull();
+  });
+
+  it('passes a pre-vendor timestamp to the irreversible dispatch hook', async () => {
+    const h = createHarness();
+    const sid = 'continue-dispatch-ack-timestamp';
+    vi.spyOn(Date, 'now').mockReturnValue(50_000);
+
+    const item = makeItem('q-continue', CONTINUE_AFTER_APP_EXIT_PROMPT);
+    h.coordinator.enqueue(sid, item, { resumeRestorePausedQueue: true });
+    await flush();
+
+    expect(h.onDispatchedUserTurn).toHaveBeenCalledWith(
+      sid,
+      expect.objectContaining({
+        clientId: item.clientId,
+        originalSyntheticTrigger: 'continue',
+      }),
+      49_999,
+    );
+    expect(h.onDispatchedUserTurn.mock.invocationCallOrder[0]).toBeGreaterThan(
+      h.sendToAgent.mock.invocationCallOrder[0]!,
+    );
   });
 
   it('keeps a crash-restored paused queue when the enqueue lacks the explicit-input flag (orca path)', async () => {

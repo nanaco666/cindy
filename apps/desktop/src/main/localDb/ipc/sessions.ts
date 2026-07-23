@@ -661,7 +661,8 @@ export function registerSessionIpc(): void {
   // 幂等窄写,device-link 远程会话经隧道调用(allowlist 收录)。
   ipcMain.handle('local-db:sessions:ack-interrupted', async (_e, id: unknown) => {
     const sid = requireString(id, 'id');
-    // 只有「忽略」走这里(「继续任务」依赖续跑 turn 自身的时间戳演进,不 ack)。
+    // renderer 的「忽略」立即走本 IPC；「继续任务」由执行端 maker send 事务 /
+    // coordinator 在 dispatch 成功后用进入 vendor 前冻结的本机时间戳直调 durable 写。
     // awaited 版:等落库完成才广播 / 返回 —— 用户点忽略后立刻退出/重载时,写不能
     // 还停在内存链上,否则重启后同一提示复现(review P2)。
     // 广播不在此显式调用:ended 落库即经 setOnSessionTurnEndedPersisted 注入的回调

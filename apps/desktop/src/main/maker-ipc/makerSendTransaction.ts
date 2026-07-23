@@ -29,6 +29,13 @@ type MakerSendOptions = {
   messageUuid?: string;
   userName?: string;
   throwOnStartFailure?: boolean;
+  /**
+   * Direct Continue fallback only: acknowledge the interrupted marker on the
+   * executor after vendor dispatch is irreversible. The executor must own the
+   * timestamp so device-link controller/controlled clock skew cannot corrupt
+   * active_turn_started_at > last_turn_ended_at ordering.
+   */
+  ackInterruptedTurnOnDispatch?: boolean;
   signal?: AbortSignal;
   /**
    * scheduler 排队消息的来源标记(coordinator drain 透传,见 AgentInputSendOpts.origin)。
@@ -110,6 +117,7 @@ export interface MakerSendTransactionDeps {
   ): Promise<unknown>;
   beforeDispatchDirectUserTurn?: (sessionId: string) => void | Promise<void>;
   onUndispatchedDirectUserTurn?: (sessionId: string) => void;
+  ackInterruptedTurnDispatched?: (sessionId: string, endedAt: number) => void | Promise<void>;
   previewUserPrompt?(
     session: { id: string; agentKind?: unknown; workDir?: unknown; workspaceKind?: unknown },
     content: unknown,
@@ -418,6 +426,12 @@ export function createMakerSendTransaction(deps: MakerSendTransactionDeps): Make
         : normalized;
       const meta = await deps.getSessionMeta(sessionId).catch(() => null);
       const so = (sendOpts ?? {}) as MakerSendOptions;
+      if (
+        so.ackInterruptedTurnOnDispatch !== undefined &&
+        typeof so.ackInterruptedTurnOnDispatch !== 'boolean'
+      ) {
+        throwIpcError('INVALID_PARAMS', 'ackInterruptedTurnOnDispatch must be a boolean');
+      }
       const persistUserMessage = readPersistUserMessageOption(so);
       const directPreDispatchHook = persistUserMessage ? null : deps.beforeDispatchDirectUserTurn;
       let directPreDispatchHookStarted = false;
@@ -428,6 +442,12 @@ export function createMakerSendTransaction(deps: MakerSendTransactionDeps): Make
           await directPreDispatchHook(sessionId);
           directPreDispatchHookStarted = true;
         }
+        // Capture on the executor immediately before vendor code. sess.send may
+        // synchronously publish the continuation's new started marker before it
+        // resolves, so the old-turn ack must use this strictly earlier value.
+        const interruptedAckAt = so.ackInterruptedTurnOnDispatch
+          ? Math.max(0, Date.now() - 1)
+          : null;
         const sendResult = await sess.send(outgoing as never, {
           logTitle: meta?.title,
           messageUuid: so.messageUuid,
@@ -473,6 +493,18 @@ export function createMakerSendTransaction(deps: MakerSendTransactionDeps): Make
               }
             : undefined,
         });
+        if (sendResult.accepted && interruptedAckAt !== null) {
+          try {
+            await deps.ackInterruptedTurnDispatched?.(sessionId, interruptedAckAt);
+          } catch (err) {
+            // Dispatch is irreversible; marker persistence remains best-effort
+            // and cannot turn an accepted send into a renderer-visible failure.
+            deps.log.warn('send: interrupted-turn dispatch ack failed', {
+              sessionId,
+              err: err instanceof Error ? err.message : String(err),
+            });
+          }
+        }
         if (pendingHandoff && sendResult.accepted) {
           // 只有跨过不可逆 dispatch 边界才消费;未派发保留 pending 下次重试。
           deps.consumePendingHandoff?.(sessionId);

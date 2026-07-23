@@ -654,6 +654,12 @@ export interface SessionChatState {
    * 会话挡住;队首保留、结束后 main 自动重发。渲染为等待横幅(非错误)。
    */
   credentialSwitchWait: { clientId?: string; blockedBySessionIds: string[] } | null;
+  /**
+   * Main coordinator 中已经离开 pendingQueue、但仍占有 dispatch/turn 边界的
+   * Continue clientId。用于让中断横幅在「离队 → running/session patch」窗口
+   * 保持熄灭，同时不影响用户取消仍在队列中的 Continue 后恢复横幅。
+   */
+  continuationInFlightClientId: string | null;
   isLoadingMore: boolean;
   hasMoreMessages: boolean;
   isFirstMessage: boolean;
@@ -814,6 +820,7 @@ export type SessionChatLightState = Pick<
   | 'recoverableError'
   | 'errorRetryText'
   | 'credentialSwitchWait'
+  | 'continuationInFlightClientId'
   | 'isLoadingMore'
   | 'hasMoreMessages'
   | 'isFirstMessage'
@@ -860,6 +867,7 @@ function createInitialState(): SessionChatState {
     activeTurnRetryText: null,
     errorRetryText: null,
     credentialSwitchWait: null,
+    continuationInFlightClientId: null,
     isLoadingMore: false,
     hasMoreMessages: true,
     isFirstMessage: true,
@@ -917,6 +925,7 @@ export const EMPTY_SESSION_STATE: SessionChatState = Object.freeze({
   activeTurnRetryText: null,
   errorRetryText: null,
   credentialSwitchWait: null,
+  continuationInFlightClientId: null,
   isLoadingMore: false,
   hasMoreMessages: false,
   isFirstMessage: true,
@@ -1321,6 +1330,7 @@ function applyInputProjection(projection: AgentInputProjection): void {
         projection.error || projection.credentialSwitchWait ? null : s.recoverableError,
       errorRetryText: projection.errorRetryText,
       credentialSwitchWait: projection.credentialSwitchWait ?? null,
+      continuationInFlightClientId: projection.continuationInFlightClientId ?? null,
       ...(authRetryProjectionError ? { _authRetryPersistOnProjectionError: undefined } : {}),
     };
   });
@@ -3924,6 +3934,7 @@ function selectLightState(state: SessionChatState): SessionChatLightState {
     recoverableError: state.recoverableError,
     errorRetryText: state.errorRetryText,
     credentialSwitchWait: state.credentialSwitchWait,
+    continuationInFlightClientId: state.continuationInFlightClientId,
     isLoadingMore: state.isLoadingMore,
     hasMoreMessages: state.hasMoreMessages,
     isFirstMessage: state.isFirstMessage,
@@ -3957,6 +3968,7 @@ function lightStateEquals(a: SessionChatLightState, b: SessionChatLightState): b
     a.recoverableError === b.recoverableError &&
     a.errorRetryText === b.errorRetryText &&
     a.credentialSwitchWait === b.credentialSwitchWait &&
+    a.continuationInFlightClientId === b.continuationInFlightClientId &&
     a.isLoadingMore === b.isLoadingMore &&
     a.hasMoreMessages === b.hasMoreMessages &&
     a.isFirstMessage === b.isFirstMessage &&
@@ -6771,6 +6783,7 @@ function closeSessionQuery(sessionId: string): void {
 // 排除合成行,review P2);此处 import + re-export 保持既有 renderer 调用点不变。
 import {
   CONTINUE_AFTER_ERROR_PROMPT,
+  syntheticTriggerKind,
   UI_ACTION_TRIGGER_PREFIX,
 } from '../../shared/interruptedTurn.js';
 export { UI_ACTION_TRIGGER_PREFIX };
@@ -6801,6 +6814,16 @@ export { UI_ACTION_TRIGGER_PREFIX };
 function sendUiTrigger(sessionId: string, prompt: string): Promise<void> {
   if (!sessionId) return Promise.reject(new Error('sendUiTrigger: empty sessionId'));
   const state = getOrCreateState(sessionId);
+  const originalTail = state.messages[state.messages.length - 1];
+  // Freeze the row the user acted on before session lookup / dispatch. A fast
+  // continuation failure may append a new error before send resolves; that new
+  // error must keep its retry banner.
+  const continuedErrorTailClientId =
+    syntheticTriggerKind(prompt) === 'continue' &&
+    originalTail?.role === 'error' &&
+    !originalTail.errorDismissed
+      ? originalTail.clientId
+      : null;
   // device-link 远程会话:get/enqueue 都走传输层(getSessionFor 远程读被控 row,
   // makerApiFor(...) 远程隧道到被控端 coordinator)。
   return getSessionFor(sessionId)
@@ -6811,13 +6834,27 @@ function sendUiTrigger(sessionId: string, prompt: string): Promise<void> {
     .then((session) => {
       if (!session?.workingDir) {
         // 行缺失兜底:direct send,行为与旧实现一致。
-        return makerApiFor(sessionId)
-          .send(sessionId, { type: 'user', content: prompt }, undefined, {
-            userName: currentUserName ?? undefined,
-          })
-          .then((result) => {
-            if (result.accepted === false) {
-              throw new Error(result.reason ?? 'Maker send was not accepted before dispatch');
+        // 无 pendingQueue 可取消，continue 在直发 accepted 后 durable ack；成功后再 dismiss
+        // 尾部 error（主路径 enqueue 不能在排队阶段 dismiss，否则取消后续跑后入口丢失）。
+        const sendDirect = (ackInterruptedTurnOnDispatch = false) =>
+          makerApiFor(sessionId)
+            .send(sessionId, { type: 'user', content: prompt }, undefined, {
+              userName: currentUserName ?? undefined,
+              ...(ackInterruptedTurnOnDispatch ? { ackInterruptedTurnOnDispatch: true } : {}),
+            })
+            .then((result) => {
+              if (result.accepted === false) {
+                throw new Error(result.reason ?? 'Maker send was not accepted before dispatch');
+              }
+            });
+        if (syntheticTriggerKind(prompt) !== 'continue') return sendDirect();
+        // 执行端 maker:send 在进入 vendor 前冻结自己的时钟，并仅在 accepted 后
+        // durable ack；device-link 控制端不再跨设备传时间戳。老执行端忽略该选项
+        // 时安全降级为“不确认旧中断”，不会因时钟偏差抹掉新的中断。
+        return sendDirect(true)
+          .then(() => {
+            if (continuedErrorTailClientId) {
+              dismissErrorTailMessage(sessionId, continuedErrorTailClientId);
             }
           });
       }

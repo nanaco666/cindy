@@ -86,6 +86,12 @@ export interface AgentInputCreateOpts {
 export interface AgentInputQueuedMessage {
   clientId: string;
   text: string;
+  /**
+   * Main 在首次入队时从原始 text 冻结的合成指令意图。Ghost rewrite、队列编辑
+   * 与 dispatch 前的其它正文变换都不得改写它；执行端用它判断 Continue 的
+   * 优先级与 durable ack，避免从已经被改写的 text 反推原始用户动作。
+   */
+  readonly originalSyntheticTrigger?: 'continue' | 'generic';
   persistedContent: string;
   model: string;
   effort: string;
@@ -134,6 +140,12 @@ export type AgentInputRecovery =
 export interface AgentInputProjection {
   sessionId: string;
   pendingQueue: AgentInputQueuedMessage[];
+  /**
+   * Continue 已离开 pendingQueue、但仍占有 coordinator dispatch/turn 边界时
+   * 的 clientId。renderer 用它区分「用户取消排队 Continue」与「Continue 正在
+   * 派发」；旧被控端可能缺省该字段，消费方必须回落为 null。
+   */
+  continuationInFlightClientId?: string | null;
   steeringQueueClientIds: string[];
   queuePaused: boolean;
   queueExpanded: boolean;

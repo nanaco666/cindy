@@ -209,10 +209,11 @@ export function deleteMessageFor(sessionId: string, clientId: string): Promise<u
   return invokeRemote(deviceId, 'maker:message:delete', [sessionId, clientId]);
 }
 
-/** interrupted-turn-resume:中断提示「忽略」的确认(写一次 last_turn_ended_at),
+/** interrupted-turn-resume:中断提示「忽略」的显式确认(写一次 last_turn_ended_at),
  *  远程会话经隧道落被控端 DB;老被控端 CHANNEL_NOT_ALLOWED 由调用方吞错降级。
- *  「继续任务」**不走本函数**:续跑 turn 自身的 started/ended 演进是权威状态,
- *  提前写 ack 会在续跑仅入队未派发时丢失重启提示(见 CCAgentSessionView 注释)。 */
+ *  「继续任务」主路径在执行端 main 的 onDispatchedUserTurn 里 durable ack
+ *  （排队阶段不 ack，便于取消后恢复横幅）；session 行缺失走 direct-send 兜底时，
+ *  ack 由执行端 maker:send 事务在 accepted 后完成，本函数只服务显式「忽略」。 */
 export function ackInterruptedTurnFor(sessionId: string): Promise<unknown> {
   const deviceId = getSessionDeviceId(sessionId);
   if (!deviceId) return window.electronAPI.localDb.sessions.ackInterrupted(sessionId);

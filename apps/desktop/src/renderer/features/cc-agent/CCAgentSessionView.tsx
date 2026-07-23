@@ -1036,6 +1036,7 @@ export function CCAgentSessionView({
     errorIsRecoverable,
     errorRetryText,
     credentialSwitchWait,
+    continuationInFlightClientId,
     loadOlderMessages,
     isLoadingMore,
     hasMoreMessages,
@@ -1136,6 +1137,11 @@ export function CCAgentSessionView({
       ),
     [pendingQueue],
   );
+  // coordinator 在 dispatch 前先把队首移出 pendingQueue。只看 queued 会在
+  // vendor running / durable session ack 尚未回投的窗口误判为「用户取消」，
+  // 让旧横幅重新出现；active marker 把这段交接窗口纳入同一个抑制状态。
+  const syntheticContinuationPending =
+    syntheticContinuationQueued || continuationInFlightClientId !== null;
   const errorTailKind: 'interrupted' | 'error' =
     errorTailMsg?.errorReason === APP_EXIT_INTERRUPTED_REASON ? 'interrupted' : 'error';
   // 普通失败行传给 ErrorBanner 的错误文本:**保持 raw**(只解码 [REMOTE_*]
@@ -1155,16 +1161,15 @@ export function CCAgentSessionView({
   const errorTailBannerHidden =
     errorTailBannerHiddenFor !== null && errorTailBannerHiddenFor === errorTailMsg?.clientId;
   // 抑制交棒(review P2):本地 hidden 态只服务「点击 → enqueue 被接受」的短窗口;
-  // 合成续跑项一旦出现在 pendingQueue(syntheticContinuationQueued 接管抑制)就
-  // 释放 hidden 态 —— 否则用户从队列里移除/取消该续跑项后,messages 尾部仍是
-  // 同一 error 行、队列抑制已消失,但 hidden 态还匹配,banner 直到重挂都不恢复。
-  // 交棒后:队列项在 → queued 抑制;被移除 → banner 恢复;落库派发 → 合成行成
-  // 为 messages 尾部,errorTailMsg 判定自然不命中。
+  // 合成续跑项进入队列或 coordinator dispatch 边界后就释放 hidden 态，由
+  // main projection 接管抑制。排队项被取消 / dispatch 前被 Ghost block 时，
+  // queued 与 in-flight 都消失，旧 error 行的 banner 立即恢复；成功派发则由
+  // 合成消息落库与 session/running 状态继续接管。
   useEffect(() => {
-    if (syntheticContinuationQueued && errorTailBannerHiddenFor !== null) {
+    if (syntheticContinuationPending && errorTailBannerHiddenFor !== null) {
       setErrorTailBannerHiddenFor(null);
     }
-  }, [syntheticContinuationQueued, errorTailBannerHiddenFor]);
+  }, [syntheticContinuationPending, errorTailBannerHiddenFor]);
   const handleErrorTailContinue = useCallback(async () => {
     if (!sessionId || !errorTailMsg) return;
     setErrorTailBannerHiddenFor(errorTailMsg.clientId);
@@ -1198,6 +1203,15 @@ export function CCAgentSessionView({
   useEffect(() => {
     setSessionInterruptAcked(false);
   }, [sessionId]);
+  // 与 errorTailBannerHiddenFor 相同的抑制交棒：点击后的本地 latch 只覆盖
+  // enqueue 可见前的短窗口。续跑项进入队列或 coordinator dispatch 边界后由
+  // main projection 抑制横幅；此时释放 latch，用户取消 / dispatch 前拦截后
+  // marker 消失，旧中断横幅会立即恢复。
+  useEffect(() => {
+    if (syntheticContinuationPending && sessionInterruptAcked) {
+      setSessionInterruptAcked(false);
+    }
+  }, [syntheticContinuationPending, sessionInterruptAcked]);
   // sessionId 必须在 deps 里:running→running 切会话时 isRunning 布尔值不变(true→true),
   // 只依赖它会漏掉新会话的"跑起来即熄灭"锁存——上面的 reset effect 把 acked 清成 false 后
   // 没人再置回。此时切入时拉的 session 快照天然 startedAt > endedAt(turn 在飞,ended 未写),
@@ -1232,12 +1246,10 @@ export function CCAgentSessionView({
     if (!sessionId) return;
     setSessionInterruptAcked(true);
     try {
-      // 「继续任务」**不写 ack**(review P2 三轮收敛后的终态):sendUiTrigger 只
-      // 保证入队,续跑在排队期丢失(app 又退出)时标记必须还在,重启才会再提示;
-      // 而续跑真正跑起来后,它自己的 turn started/ended 演进就是权威状态 ——
-      // dispatch 时 started 刷新(飞行中退出→再提示),正常收尾时 ended 覆盖
-      // (跨重启不再提示)。本视图熄灭靠内存 acked,peer 视图靠 isRunning 门控。
-      // 只有「忽略」需要显式写 ended(见 handleSessionInterruptDismiss)。
+      // main 侧把续跑项插到队首；durable ack 延后到 vendor dispatch 成功后，
+      // 避免排队取消 / cancelled-before-dispatch 时旧中断提示被提前抹掉。
+      // 续跑 turn 真正启动时会写更新的 started；若再次被 app 退出打断，仍会产生新提示。
+      // 本视图先靠内存 acked 即时熄灭，peer 视图靠 dispatch 后的 ack 广播收敛。
       await makerChatStore.sendUiTrigger(sessionId, CONTINUE_AFTER_APP_EXIT_PROMPT);
     } catch (err) {
       setSessionInterruptAcked(false);
@@ -2761,7 +2773,7 @@ export function CCAgentSessionView({
                 (typed token),发隐藏续跑指令;onCancel = dismiss 持久化。 */}
             {errorTailMsg &&
               !errorTailBannerHidden &&
-              !syntheticContinuationQueued &&
+              !syntheticContinuationPending &&
               !error &&
               !credentialSwitchWait &&
               !isStreaming &&
@@ -2802,7 +2814,7 @@ export function CCAgentSessionView({
               历史中断行(上方 errorTailMsg 判定)优先;互斥条件与 error-tail 同款。 */}
             {!errorTailMsg &&
               interruptedFromSession &&
-              !syntheticContinuationQueued &&
+              !syntheticContinuationPending &&
               !error &&
               !credentialSwitchWait &&
               !isStreaming &&

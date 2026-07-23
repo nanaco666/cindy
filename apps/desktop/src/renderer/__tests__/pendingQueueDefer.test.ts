@@ -309,6 +309,7 @@ describe('renderer input queue facade', () => {
     makerChatStore.initGlobalListeners();
     projectionHandler?.(projection(sid, {
       pendingQueue: [item],
+      continuationInFlightClientId: 'q-continue',
       steeringQueueClientIds: ['q-1'],
       queuePaused: true,
       queueExpanded: true,
@@ -322,6 +323,7 @@ describe('renderer input queue facade', () => {
 
     const snap = makerChatStore.getSnapshot(sid);
     expect(snap.pendingQueue).toEqual([item]);
+    expect(snap.continuationInFlightClientId).toBe('q-continue');
     expect(snap.steeringQueueClientIds).toEqual(['q-1']);
     expect(snap.queuePaused).toBe(true);
     expect(snap.queueExpanded).toBe(true);
@@ -330,6 +332,11 @@ describe('renderer input queue facade', () => {
     expect(snap.queueAbortPending).toBe(true);
     expect(snap.error).toBe('paused');
     expect(snap.errorRetryText).toBe('from main');
+
+    // 旧被控端 projection 缺省新字段时回落 null，不能把前一轮 in-flight
+    // Continue 标记永久留在 renderer。
+    projectionHandler?.(projection(sid));
+    expect(makerChatStore.getSnapshot(sid).continuationInFlightClientId).toBeNull();
   });
 
   it('delegates queue row operations to main input intents', async () => {

@@ -17,6 +17,7 @@ vi.mock('@/lib/messageService', () => ({
   list: vi.fn(async () => []),
   create: vi.fn(async () => ({}) as unknown),
   updateContent: vi.fn(async () => ({}) as unknown),
+  dismissError: vi.fn(async () => ({}) as unknown),
 }));
 
 vi.mock('@/lib/sessionService', () => ({
@@ -70,7 +71,9 @@ vi.mock('@/lib/composerDraftStore', () => ({
 }));
 
 import { makerChatStore, type ChatMessage } from '@/lib/makerChatStore';
+import * as messageService from '@/lib/messageService';
 import * as sessionService from '@/lib/sessionService';
+import { CONTINUE_AFTER_APP_EXIT_PROMPT } from '../../shared/interruptedTurn';
 
 const SESSION_ID = 'text-delta-batching';
 const MODEL = 'gpt-5';
@@ -178,6 +181,9 @@ function installElectronBridge(): void {
             onDbMessageCreated = cb;
             return vi.fn();
           },
+        },
+        sessions: {
+          ackInterrupted: vi.fn(async () => undefined),
         },
       },
     },
@@ -1864,6 +1870,150 @@ describe('makerChatStore text delta batching', () => {
     await expect(makerChatStore.sendUiTrigger(SESSION_ID, '[UI_ACTION_TRIGGER] retry')).rejects.toThrow(
       /workdir-missing/,
     );
+  });
+
+  it('requests executor-side interrupted-turn ack for a direct-send continue fallback', async () => {
+    const api = window.electronAPI.maker;
+    const ackInterrupted = window.electronAPI.localDb.sessions.ackInterrupted;
+    vi.mocked(sessionService.get).mockResolvedValueOnce(null as unknown as Awaited<ReturnType<typeof sessionService.get>>);
+    vi.mocked(api.send).mockResolvedValueOnce({ accepted: true });
+
+    await makerChatStore.sendUiTrigger(SESSION_ID, CONTINUE_AFTER_APP_EXIT_PROMPT);
+
+    expect(api.send).toHaveBeenCalledWith(
+      SESSION_ID,
+      { type: 'user', content: CONTINUE_AFTER_APP_EXIT_PROMPT },
+      undefined,
+      expect.objectContaining({ ackInterruptedTurnOnDispatch: true }),
+    );
+    expect(ackInterrupted).not.toHaveBeenCalled();
+  });
+
+  it('keeps executor-side interrupted-turn ack requested when direct dispatch is rejected', async () => {
+    const api = window.electronAPI.maker;
+    const ackInterrupted = window.electronAPI.localDb.sessions.ackInterrupted;
+    vi.mocked(sessionService.get).mockResolvedValueOnce(null as unknown as Awaited<ReturnType<typeof sessionService.get>>);
+    vi.mocked(api.send).mockResolvedValueOnce({ accepted: false, reason: 'session-busy' });
+
+    await expect(
+      makerChatStore.sendUiTrigger(SESSION_ID, CONTINUE_AFTER_APP_EXIT_PROMPT),
+    ).rejects.toThrow(/session-busy/);
+
+    expect(api.send).toHaveBeenCalledWith(
+      SESSION_ID,
+      { type: 'user', content: CONTINUE_AFTER_APP_EXIT_PROMPT },
+      undefined,
+      expect.objectContaining({ ackInterruptedTurnOnDispatch: true }),
+    );
+    expect(ackInterrupted).not.toHaveBeenCalled();
+  });
+
+  it('does not durable-dismiss the error tail while a continue trigger is only enqueued', async () => {
+    vi.mocked(sessionService.get).mockResolvedValueOnce({
+      agentKind: 'codex',
+      remoteHostId: null,
+      sdkSessionId: null,
+      fastMode: false,
+      contextTokens: 0,
+      contextWindow: 0,
+      totalCostUsd: 0,
+      workingDir: WORKING_DIR,
+      model: MODEL,
+      effort: EFFORT,
+      permissionMode: PERMISSION_MODE,
+    } as Awaited<ReturnType<typeof sessionService.get>>);
+    input.enqueue.mockImplementationOnce(async (sessionId: string) => projection(sessionId));
+    emitDbMessageCreated({
+      clientId: 'persisted-error-tail',
+      role: 'error',
+      content: 'interrupted',
+      createdAt: '2026-07-23T00:00:00.000Z',
+    });
+
+    await makerChatStore.sendUiTrigger(SESSION_ID, CONTINUE_AFTER_APP_EXIT_PROMPT);
+
+    expect(makerChatStore.getSnapshot(SESSION_ID).messages.at(-1)).toEqual(
+      expect.objectContaining({
+        clientId: 'persisted-error-tail',
+        role: 'error',
+      }),
+    );
+    expect(makerChatStore.getSnapshot(SESSION_ID).messages.at(-1)?.errorDismissed).not.toBe(true);
+    expect(messageService.dismissError).not.toHaveBeenCalled();
+  });
+
+  it('dismisses the error tail after a direct-send continue fallback is accepted', async () => {
+    const api = window.electronAPI.maker;
+    const ackInterrupted = window.electronAPI.localDb.sessions.ackInterrupted;
+    vi.mocked(sessionService.get).mockResolvedValueOnce(null as unknown as Awaited<ReturnType<typeof sessionService.get>>);
+    vi.mocked(api.send).mockResolvedValueOnce({ accepted: true });
+    emitDbMessageCreated({
+      clientId: 'persisted-error-tail-direct',
+      role: 'error',
+      content: 'interrupted',
+      createdAt: '2026-07-23T00:00:00.000Z',
+    });
+
+    await makerChatStore.sendUiTrigger(SESSION_ID, CONTINUE_AFTER_APP_EXIT_PROMPT);
+
+    expect(api.send).toHaveBeenCalledWith(
+      SESSION_ID,
+      { type: 'user', content: CONTINUE_AFTER_APP_EXIT_PROMPT },
+      undefined,
+      expect.objectContaining({ ackInterruptedTurnOnDispatch: true }),
+    );
+    expect(ackInterrupted).not.toHaveBeenCalled();
+    expect(makerChatStore.getSnapshot(SESSION_ID).messages.at(-1)).toEqual(
+      expect.objectContaining({
+        clientId: 'persisted-error-tail-direct',
+        errorDismissed: true,
+      }),
+    );
+    expect(messageService.dismissError).toHaveBeenCalledWith(
+      SESSION_ID,
+      'persisted-error-tail-direct',
+    );
+  });
+
+  it('keeps a new direct-send continuation failure visible while dismissing the original error', async () => {
+    const api = window.electronAPI.maker;
+    vi.mocked(sessionService.get).mockResolvedValueOnce(null as unknown as Awaited<ReturnType<typeof sessionService.get>>);
+    emitDbMessageCreated({
+      clientId: 'original-error-tail-direct',
+      role: 'error',
+      content: 'interrupted',
+      createdAt: '2026-07-23T00:00:00.000Z',
+    });
+    vi.mocked(api.send).mockImplementationOnce(async () => {
+      emitDbMessageCreated({
+        clientId: 'new-continuation-error',
+        role: 'error',
+        content: 'continuation failed',
+        createdAt: '2026-07-23T00:00:01.000Z',
+      });
+      return { accepted: true };
+    });
+
+    await makerChatStore.sendUiTrigger(SESSION_ID, CONTINUE_AFTER_APP_EXIT_PROMPT);
+
+    expect(messageService.dismissError).toHaveBeenCalledWith(
+      SESSION_ID,
+      'original-error-tail-direct',
+    );
+    expect(messageService.dismissError).not.toHaveBeenCalledWith(
+      SESSION_ID,
+      'new-continuation-error',
+    );
+    expect(makerChatStore.getSnapshot(SESSION_ID).messages).toEqual([
+      expect.objectContaining({
+        clientId: 'original-error-tail-direct',
+        errorDismissed: true,
+      }),
+      expect.objectContaining({
+        clientId: 'new-continuation-error',
+      }),
+    ]);
+    expect(makerChatStore.getSnapshot(SESSION_ID).messages.at(-1)?.errorDismissed).not.toBe(true);
   });
 
   it('forces DB-hydrated SSH UI triggers off controller-local Maker Memory', async () => {

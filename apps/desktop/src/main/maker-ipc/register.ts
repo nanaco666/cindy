@@ -162,6 +162,7 @@ import {
   type OrcaIdleReleaseWatcher,
 } from './orcaIdleReleaseWatcher.js';
 import {
+  ackSessionTurnEndedDurable,
   hasAssistantProgressAfterMessage,
   markSessionTurnEnded,
   markSessionTurnEndedAfterBarrier,
@@ -5614,6 +5615,9 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
     },
     beforeDispatchDirectUserTurn: (sessionId) => gitSnapshotCoordinator?.onTurnStart(sessionId),
     onUndispatchedDirectUserTurn: (sessionId) => gitSnapshotCoordinator?.onTurnAbort(sessionId),
+    ackInterruptedTurnDispatched: async (sessionId, endedAt) => {
+      await ackSessionTurnEndedDurable(sessionId, endedAt);
+    },
     previewUserPrompt: (session, content, options) => {
       notifyAgentIslandUserPrompt(session, content, options);
     },
@@ -5867,6 +5871,23 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
       // pending auto-bridge 副作用必须先于 turn 启动完成；失败仍吞错落日志，不拦派发。
       return orcaInterAgentDispatcher.runQueuedOrcaInterAgentAcceptedCallback(sessionId, item);
     },
+    onDispatchedUserTurn: async (sessionId, item, preVendorDispatchAt): Promise<void> => {
+      // 「继续任务」只能在 vendor dispatch 不可逆后 durable ack：
+      // - enqueue 时 ack：排队可取消，旧中断横幅回不来；
+      // - onAccepted 时 ack：仍可能 cancelled-before-dispatch，且无新 started，
+      //   旧横幅被抹掉、隐藏续跑行也不可操作，任务会静默丢失。
+      // dispatch 返回前 agent 事件可能已经写入新 started；因此 durable ack 使用
+      // 进入 vendor 前冻结的时间戳，既确认旧中断，又不会盖过新 turn 的 started。
+      if (item.originalSyntheticTrigger !== 'continue') return;
+      try {
+        await ackSessionTurnEndedDurable(sessionId, preVendorDispatchAt);
+      } catch (err) {
+        log.warn('continue dispatched ack failed', {
+          sessionId,
+          err: err instanceof Error ? err.message : String(err),
+        });
+      }
+    },
     noteSessionClearBoundary,
     // 队列项未派发即被丢弃(stop/remove/clearSession) → 释放暂存的 accepted 副作用, 防回调表泄漏。
     onDiscardedQueuedMessage: (_sessionId, item) => {
@@ -6082,7 +6103,8 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
   // 本机会话无 OSS 引用 → materializeQueuedOssAttachments 原样返回,零开销。
   ipcMain.handle(MAKER_INVOKE.INPUT_ENQUEUE, async (_e, sessionId: unknown, item: unknown, opts?: unknown) => {
     const sid = requireSessionId(sessionId);
-    // 恢复先于入队:保证崩溃前的排队输入排在本条新输入前面(FIFO 不乱序)。
+    // 恢复先于入队:普通新输入保持 FIFO；「继续任务」由 coordinator 在完整旧队列
+    // 恢复后再明确插到队首，避免恢复竞态把它重新压到后面。
     await inputCoordinator.ensureQueueRestored(sid).catch(() => undefined);
     const queued = (await materializeQueuedOssAttachments(sid, requireQueuedMessage(item))) as AgentInputQueuedMessage;
     let shouldAutoTitle = false;
@@ -6097,6 +6119,9 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
       }
     }
 
+    // 「继续任务」durable ack 延后到 vendor dispatch 成功（onDispatchedUserTurn）：
+    // 排队可取消时旧中断提示必须能恢复；accepted 但仍可能 cancelled-before-dispatch
+    // 时也不能提前 ack。续跑项本身由 coordinator 插到队首（普通输入仍 FIFO）。
     const projection = inputCoordinator.enqueue(sid, queued, {
       ...(opts && typeof opts === 'object' ? opts as { sendAtMs?: number } : undefined),
       // INPUT_ENQUEUE 只承载显式用户输入(composer 发送 / UI trigger / device-link

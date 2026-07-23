@@ -3704,6 +3704,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
         userName?: string;
         /** Codex renderer 队列路径需要“已接受或已拒绝”的语义,再决定是否落库。 */
         throwOnStartFailure?: boolean;
+        /** Direct Continue fallback:执行端在 dispatch 成功后确认旧中断。 */
+        ackInterruptedTurnOnDispatch?: boolean;
       },
     ): Promise<{ accepted: true } | { accepted: false; reason?: string }> =>
       ipcRenderer.invoke('maker:send', sessionId, message, createOpts, sendOpts),

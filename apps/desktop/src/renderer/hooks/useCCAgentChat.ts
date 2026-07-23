@@ -172,6 +172,8 @@ interface UseCCAgentChatReturn {
   errorRetryText: string | null;
   /** 凭证切换等待态(main 透传):挡路会话结束后自动重发,渲染等待横幅。 */
   credentialSwitchWait: { clientId?: string; blockedBySessionIds: string[] } | null;
+  /** 已离队、正在 coordinator dispatch/turn 边界内的 Continue clientId。 */
+  continuationInFlightClientId: string | null;
   /** F-SYNC-2: Load older messages (prepend to top) */
   loadOlderMessages: () => void;
   isLoadingMore: boolean;
@@ -776,6 +778,7 @@ export function useCCAgentChat(
     errorIsRecoverable: !lightState.error && lightState.recoverableError != null,
     errorRetryText: lightState.errorRetryText,
     credentialSwitchWait: lightState.credentialSwitchWait,
+    continuationInFlightClientId: lightState.continuationInFlightClientId,
     loadOlderMessages,
     isLoadingMore: lightState.isLoadingMore,
     hasMoreMessages: lightState.hasMoreMessages,

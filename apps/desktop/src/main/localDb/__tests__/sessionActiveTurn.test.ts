@@ -196,6 +196,23 @@ describe('sessionActiveTurn', () => {
     expect(row!.last_turn_ended_at!).toBeGreaterThanOrEqual(row!.active_turn_started_at!);
   });
 
+  it('ackSessionTurnEndedDurable preserves a pre-dispatch override below a newer turn start', async () => {
+    const { markSessionTurnStarted, ackSessionTurnEndedDurable } = await import('../sessionActiveTurn.js');
+    const client = createTestDbClient();
+    const ackAt = Date.now() - 1_000;
+    await seedSession(client, 's-pre-dispatch-ack', { startedAt: ackAt - 1_000 });
+
+    // 模拟 vendor send 已同步发出新 turn started，随后 dispatched hook 才落旧中断 ack。
+    // ack 必须保留 send 前冻结值，不能改用 hook 执行时刻盖过新 started。
+    markSessionTurnStarted('s-pre-dispatch-ack');
+    const endedAt = await ackSessionTurnEndedDurable('s-pre-dispatch-ack', ackAt);
+    const row = await readMarks(client, 's-pre-dispatch-ack');
+
+    expect(endedAt).toBe(ackAt);
+    expect(row?.last_turn_ended_at).toBe(ackAt);
+    expect(row!.active_turn_started_at!).toBeGreaterThan(row!.last_turn_ended_at!);
+  });
+
   it('markSessionTurnEndedAfterBarrier survives a freeze raised while the barrier is pending', async () => {
     const { markSessionTurnStarted, markSessionTurnEndedAfterBarrier, freezeSessionActiveTurnMarkers } =
       await import('../sessionActiveTurn.js');

@@ -25,6 +25,7 @@ export {
   APP_EXIT_INTERRUPTED_REASON,
   UI_ACTION_TRIGGER_PREFIX,
   isSyntheticTriggerText,
+  syntheticTriggerKind,
   CONTINUE_AFTER_APP_EXIT_PROMPT,
   CONTINUE_AFTER_ERROR_PROMPT,
 } from '@cindy/maker-shared/synthetic-trigger';

@@ -42,7 +42,10 @@ import {
   updateQueuedMessageContent,
   updateQueuedMessageText,
 } from '../../shared/agentInputQueue.js';
-import { CONTINUE_AFTER_ERROR_PROMPT } from '../../shared/interruptedTurn.js';
+import {
+  CONTINUE_AFTER_ERROR_PROMPT,
+  syntheticTriggerKind,
+} from '../../shared/interruptedTurn.js';
 
 const log = createLogger('maker-input-coordinator');
 const SESSION_RUNNING_RETRY_DELAY_MS = 250;
@@ -167,6 +170,16 @@ export interface AgentInputCoordinatorDeps {
    */
   onUndispatchedUserTurn?: (sessionId: string, item: AgentInputQueuedMessage) => void;
   onAcceptedQueuedMessage?: (sessionId: string, item: AgentInputQueuedMessage) => void | Promise<void>;
+  /**
+   * Awaited only after vendor dispatch is irreversible (`accepted=true`).
+   * Hosts use this for side effects that must not run on cancelled-before-dispatch
+   * (e.g. durable-acking an interrupted turn once Continue has really started).
+   */
+  onDispatchedUserTurn?: (
+    sessionId: string,
+    item: AgentInputQueuedMessage,
+    preVendorDispatchAt: number,
+  ) => void | Promise<void>;
   noteSessionClearBoundary?: (sessionId: string, clearedAt: string | number) => void;
   /**
    * 队列项未派发即被丢弃(stop 清队列 / 手动 remove / clearSession)时回调。
@@ -299,6 +312,35 @@ function createInitialInputState(generation = 0): SessionInputState {
     recentEnqueuedClientIds: [],
     generation,
   };
+}
+
+/**
+ * 首次进入 main 队列边界时冻结原始合成指令意图。IPC payload 属不可信输入，
+ * 因此即使 renderer 带了同名字段也必须从当下原始 text 重新计算。
+ */
+function captureOriginalSyntheticTrigger(
+  item: AgentInputQueuedMessage,
+): AgentInputQueuedMessage {
+  return {
+    ...item,
+    originalSyntheticTrigger: syntheticTriggerKind(item.text) ?? undefined,
+  };
+}
+
+/**
+ * 老崩溃快照没有 originalSyntheticTrigger；从仍保留的原始 text 补齐。新版
+ * 快照则保留首次入队时冻结的值，因为正文可能已经被 Ghost rewrite。
+ */
+function normalizeRestoredSyntheticTrigger(
+  item: AgentInputQueuedMessage,
+): AgentInputQueuedMessage {
+  if (
+    item.originalSyntheticTrigger === 'continue' ||
+    item.originalSyntheticTrigger === 'generic'
+  ) {
+    return item;
+  }
+  return captureOriginalSyntheticTrigger(item);
 }
 
 type PersistAcceptedUserMessageResult = 'persisted' | 'stale' | 'failed';
@@ -456,7 +498,9 @@ export class AgentInputCoordinator {
     const preGeneration = preState.generation;
     let items: AgentInputQueuedMessage[];
     try {
-      items = await this.deps.loadQueueSnapshot!(sessionId);
+      items = (await this.deps.loadQueueSnapshot!(sessionId)).map(
+        normalizeRestoredSyntheticTrigger,
+      );
     } catch (err) {
       log.warn('load queue snapshot failed; will retry on next entry', {
         sessionId,
@@ -692,6 +736,7 @@ export class AgentInputCoordinator {
     opts?: { wasFirst?: boolean; sendAtMs?: number; resumeRestorePausedQueue?: boolean },
   ): AgentInputProjection {
     const state = this.getState(sessionId);
+    item = captureOriginalSyntheticTrigger(item);
     // 幂等去重(弱网重发防线,PR #881):同 clientId 重复投递说明是控制端(手机
     // 断连自动重试 / 用户对 ack 丢失的消息重发)在补发同一条消息,不是新消息。
     // 直接返回当前 projection、不再入队——否则同一条消息双入队、agent 跑两轮。
@@ -721,7 +766,23 @@ export class AgentInputCoordinator {
     }
     this.abandonActiveTurnRecoveryForNewInput(state);
     this.clearErrorUnlessQueueHeadBlocked(state);
-    state.pendingQueue.push(item);
+    // 用户点「继续任务」表达的是恢复刚才中断/失败的 turn，必须先于此前
+    // 已排队的新任务执行；普通 composer / Orca / scheduler 输入仍保持 FIFO。
+    // 复用 prepend helper 同时把本项加入 pending compact 的等待集合，避免
+    // 已排队的 /compact 抢在续跑前执行，破坏原任务现场。
+    if (item.originalSyntheticTrigger === 'continue') {
+      this.prependQueueHeadIfMissing(state, item);
+      // 与 move() 对称：插队后原 credential-switch 等待目标不再是队首时，
+      // 必须清掉 wait，否则横幅/取消仍绑定旧 clientId，会误删错误排队项。
+      if (
+        state.credentialSwitchWait &&
+        state.pendingQueue[0]?.clientId !== state.credentialSwitchWait.clientId
+      ) {
+        this.clearCredentialSwitchWait(state);
+      }
+    } else {
+      state.pendingQueue.push(item);
+    }
     // scheduler 撞忙排队不算"用户活跃":userSendAt 是 B1 活跃礼让的判据,自动化
     // 入队若 bump 它,接下来 10 分钟内同会话其它心跳会被误当"用户正在远程控制"
     // 而静默顺延(PR #972 review P2)。侧栏排序的 bump 语义保留在派发时刻 ——
@@ -1211,6 +1272,7 @@ export class AgentInputCoordinator {
           ...recovery.item,
           clientId,
           text: continueText,
+          originalSyntheticTrigger: 'continue',
           persistedContent: continueText,
           // 附件 / mention 属于原始消息,已在失败 turn 里送达过模型,续跑指令不重带。
           files: undefined,
@@ -1665,6 +1727,10 @@ export class AgentInputCoordinator {
     return {
       sessionId,
       pendingQueue: [...state.pendingQueue],
+      continuationInFlightClientId:
+        state.activeTurn?.item?.originalSyntheticTrigger === 'continue'
+          ? state.activeTurn.item.clientId
+          : null,
       steeringQueueClientIds: [...state.steeringQueueClientIds],
       queuePaused: state.queuePaused,
       queueExpanded: state.queueExpanded,
@@ -1827,6 +1893,10 @@ export class AgentInputCoordinator {
       if (!this.isActiveTurnCurrent(sessionId, active)) return;
       active.sendStarted = true;
       active.dispatchLifecycle = 'sending';
+      // Freeze side-effect timestamps before entering vendor code. A dispatch
+      // may synchronously emit the new turn's started marker before it returns;
+      // post-dispatch acknowledgements must remain older than that marker.
+      const preVendorDispatchAt = Math.max(0, Date.now() - 1);
       const result = await this.deps.sendToAgent(
         sessionId,
         buildMakerUserMessage(head),
@@ -1882,6 +1952,18 @@ export class AgentInputCoordinator {
       active.dispatchLifecycle = 'dispatched';
       // 派发成功 = 凭证切换等待(若有)结束。
       this.clearCredentialSwitchWait(this.getState(sessionId));
+      // vendor dispatch 已不可逆：此时再 durable-ack 旧中断。onAccepted 仍可能
+      // cancelled-before-dispatch，过早 ack 会在无新 started 时抹掉中断提示。
+      try {
+        await this.deps.onDispatchedUserTurn?.(sessionId, head, preVendorDispatchAt);
+      } catch (err) {
+        log.warn('onDispatchedUserTurn failed', {
+          sessionId,
+          clientId: head.clientId,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+      if (!this.isActiveTurnCurrent(sessionId, active)) return;
       if (active.pendingTerminalEvent) {
         this.settlePendingTerminalEventAfterPersist(sessionId, active);
         return;
