@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   APP_EXIT_INTERRUPTED_REASON,
   CONTINUE_AFTER_ERROR_PROMPT,
-} from '@lizi/maker-shared/synthetic-trigger';
+} from '@cindy/maker-shared/synthetic-trigger';
 import {
   isContinuationQueueItem,
   resolveSessionTailBanner,

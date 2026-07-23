@@ -49,7 +49,7 @@ export interface SessionOptions {
   capabilities: Capabilities;
   logger: Logger;
   /**
-   * 远端 SSH 主机的 alias (来自 `@lizi/maker-remote-ssh` ConnectionPool)。
+   * 远端 SSH 主机的 alias (来自 `@cindy/maker-remote-ssh` ConnectionPool)。
    * 非空 → 这个 session 实际跑在远端机器上, workDir 是远端机器上的路径。
    * 主进程的 send 路径用它判断 "local fs guard 应不应该跑" — 远端 workdir
    * 是不可能存在于本地 fs 的, 没必要也不该 stat。

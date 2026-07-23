@@ -1,1 +1,1 @@
-export * from '@lizi/maker-shared/schedule-model';
+export * from '@cindy/maker-shared/schedule-model';

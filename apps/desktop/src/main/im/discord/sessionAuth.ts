@@ -1,7 +1,7 @@
 import { ipcMain } from 'electron';
 
-import type { AgentKind } from '@lizi/maker-core';
-import type { ProviderView } from '@lizi/model-providers';
+import type { AgentKind } from '@cindy/maker-core';
+import type { ProviderView } from '@cindy/model-providers';
 
 import { createLogger } from '../../logger';
 import { getMaker } from '../../maker-host';

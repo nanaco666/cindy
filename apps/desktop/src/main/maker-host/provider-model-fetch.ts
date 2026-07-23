@@ -11,7 +11,7 @@
  *   - fetch 可注入（单测不联网）。
  */
 
-import type { AgentKind } from '@lizi/model-providers';
+import type { AgentKind } from '@cindy/model-providers';
 
 import {
   classifyProviderError,

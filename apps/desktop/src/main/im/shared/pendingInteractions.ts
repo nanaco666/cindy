@@ -10,7 +10,7 @@
  * tool call), but each is uniquely keyed.
  */
 
-import type { InteractionDecision } from '@lizi/maker-core';
+import type { InteractionDecision } from '@cindy/maker-core';
 
 interface PendingEntry {
   resolve: (decision: InteractionDecision) => void;

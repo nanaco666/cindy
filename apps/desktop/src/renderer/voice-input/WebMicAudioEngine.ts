@@ -1,4 +1,4 @@
-import type { AudioTrace } from '@lizi/voice-input-core';
+import type { AudioTrace } from '@cindy/voice-input-core';
 
 import { PCM16K_WORKLET_NAME, prewarmVoiceInputAudio } from './audioContextPool';
 

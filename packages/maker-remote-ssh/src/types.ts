@@ -1,5 +1,5 @@
 /**
- * Public wire/data types for @lizi/maker-remote-ssh.
+ * Public wire/data types for @cindy/maker-remote-ssh.
  *
  * Kept narrow on purpose — Phase A only covers connection management.
  * Channel / exec / sftp types will live alongside their impls when added.

@@ -1,4 +1,4 @@
-import type { AgentKind, ProviderView } from '@lizi/model-providers';
+import type { AgentKind, ProviderView } from '@cindy/model-providers';
 import { describe, expect, it } from 'vitest';
 
 import type { ModelDescriptor } from '@/hooks/useAgentCapabilities';

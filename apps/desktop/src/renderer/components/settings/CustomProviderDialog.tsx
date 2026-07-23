@@ -29,13 +29,13 @@ import {
   type RuntimeKeys,
 } from '@/lib/customProviders';
 
-import { sortPresetsForLocale } from '@lizi/model-providers';
+import { sortPresetsForLocale } from '@cindy/model-providers';
 import type {
   AgentKind,
   CustomProviderConfig,
   ProviderPreset,
   ProviderRuntimeModelConfig,
-} from '@lizi/model-providers';
+} from '@cindy/model-providers';
 
 const AGENTS: AgentKind[] = ['claude-code', 'codex'];
 

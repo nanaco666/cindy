@@ -18,7 +18,7 @@ import {
   brandBundleIdPrefix,
   brandExecutableName,
   resolveCindyRegion,
-} from '@lizi/maker-shared/brand-identity';
+} from '@cindy/maker-shared/brand-identity';
 import { stagePackagedThirdPartyNotices } from './forge-third-party-notices';
 
 const _require = createRequire(__filename);
@@ -124,7 +124,7 @@ const NATIVE_RUNTIME_DEPS = [
   // app 带。bufferutil / utf-8-validate 是可选 native 加速依赖, 缺失自动 fallback
   // 纯 JS, 故不强带。
   'ws',
-  // playwright-core (@lizi/browser-control-runtime 的运行时依赖): vendored 浏览器
+  // playwright-core (@cindy/browser-control-runtime 的运行时依赖): vendored 浏览器
   // runtime 通过 `require('playwright-core')` 加载它来驱动 act / snapshot / 截图 /
   // 交互等 Playwright 路径。vite externalize 后, packaged app 的 node_modules 只含
   // 本表的包 —— 不带它则打包版任何 Playwright 路径 `Cannot find module 'playwright-core'`
@@ -143,7 +143,7 @@ const NATIVE_RUNTIME_DEPS = [
   // 会 Cannot find module 直接炸 (better-sqlite3 不踩是因为它用 bindings 而非 node-addon-api)。
   // header-only, rebuild 后即无用但体积极小, 随包带无妨。
   'node-addon-api',
-  // undici (同 @lizi/browser-control-runtime 运行时依赖): vendored runtime 的
+  // undici (同 @cindy/browser-control-runtime 运行时依赖): vendored runtime 的
   // CDP 网络层 (_generated/leaf/src/infra/net/undici-runtime.ts) 通过
   // `createRequire(...).require('undici')` 懒加载它建 pinned dispatcher —— 任何
   // CDP 路径 (navigate/snapshot/act 等托管 Chrome 起来后) 都会用到。和
@@ -590,7 +590,6 @@ function signPackagedExes(buildPath: string): void {
   const exes = [
     path.join(buildPath, `${CINDY_EXE}.exe`),
     path.join(buildPath, 'resources', UPDATER_EXE),
-    path.join(buildPath, 'resources', 'xdt-helper.exe'),
     path.join(
       buildPath,
       'resources',
@@ -756,7 +755,7 @@ function extraResourcesForTarget(targetPlatform: string): string[] {
   ];
 
   if (targetPlatform === 'win32') {
-    base.unshift('resources/xdt-helper.exe', `resources/${UPDATER_EXE}`);
+    base.unshift(`resources/${UPDATER_EXE}`);
   }
 
   return base;

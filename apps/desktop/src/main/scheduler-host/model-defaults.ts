@@ -9,7 +9,7 @@
  * runner(agent 任务 fire)与 script-capability-broker(sessions.dispatch 的
  * createDefaults)——先前各持一份拷贝,review 后收敛到本文件。
  */
-import type { AgentKind } from '@lizi/maker-scheduler';
+import type { AgentKind } from '@cindy/maker-scheduler';
 
 export function defaultModelFor(agentKind: AgentKind): string {
   return agentKind === 'codex' ? 'gpt-5.5' : 'claude-sonnet-4-6';

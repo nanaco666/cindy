@@ -11,7 +11,7 @@ import { z } from 'zod';
 import { withContacts } from './_shared.js';
 import type { ContactsMcpDeps } from '../types.js';
 import type { ContactsToolRegistry } from '../cindy_contactsToolRegistry.js';
-import type { ContactProfile } from '@lizi/maker-core';
+import type { ContactProfile } from '@cindy/maker-core';
 
 const RECENT_EVENTS_LIMIT = 10;
 

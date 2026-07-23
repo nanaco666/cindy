@@ -5,7 +5,7 @@
  *   - **构造接收 `getDb: () => DrizzleDb`**，沿用 maker-host / sessions IPC 的 lazy
  *     模式（参见 `localDb/index.ts:35` getDrizzle）。这样 storage 实例可在
  *     localDb 还没 ensureReady 时就 new 出来，调用方法时才解引用 DB。
- *   - **只 import 来自 `@lizi/maker-scheduler` 的 type/interface**（type-only），
+ *   - **只 import 来自 `@cindy/maker-scheduler` 的 type/interface**（type-only），
  *     **绝不** import 引擎类（Scheduler / nextRun）。Phase 2 hardrule。
  *   - **storage 不生成 run id**：Plan 明示 id 由 Scheduler 引擎传入 `insertRun(run)`。
  *   - **`update(id, patch)` 找不到 row 时返回 `null`，不 throw**：与 Phase 1 接口
@@ -18,7 +18,7 @@ import { eq, desc, and, isNull, isNotNull, inArray, notInArray, or, sql } from '
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import { broadcastSessionPatched } from '../localDb/ipc/sessions.js';
 
-import type { Schedule, ScheduleRun, ScheduleStorage, ListFilter } from '@lizi/maker-scheduler';
+import type { Schedule, ScheduleRun, ScheduleStorage, ListFilter } from '@cindy/maker-scheduler';
 
 import * as schema from '../localDb/schema';
 import { messages, schedules, scheduleRuns, sessions } from '../localDb/schema';

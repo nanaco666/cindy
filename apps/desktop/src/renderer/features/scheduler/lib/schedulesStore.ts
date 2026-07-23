@@ -41,7 +41,7 @@
  */
 
 import { useSyncExternalStore } from 'react';
-import type { Schedule, SchedulerEvent } from '@lizi/maker-scheduler';
+import type { Schedule, SchedulerEvent } from '@cindy/maker-scheduler';
 
 let cache: Schedule[] | null = null;
 let inflight: Promise<Schedule[]> | null = null;

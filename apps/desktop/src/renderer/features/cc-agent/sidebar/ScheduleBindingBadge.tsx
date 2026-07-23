@@ -14,7 +14,7 @@ import { Pause, Timer } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 
-import type { Schedule } from '@lizi/maker-scheduler';
+import type { Schedule } from '@cindy/maker-scheduler';
 
 import { cn } from '@/lib/utils';
 import { Tooltip } from '@/components/ui/tooltip';

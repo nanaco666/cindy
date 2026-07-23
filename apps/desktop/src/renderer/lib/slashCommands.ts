@@ -16,13 +16,13 @@
  * 各自消费这里的纯函数, 方便单测。
  */
 
-import type { UnifiedCommand, AgentKind } from '@lizi/maker-core';
+import type { UnifiedCommand, AgentKind } from '@cindy/maker-core';
 
 import { createLogger } from '@/lib/logger';
 
 const log = createLogger('SlashCommands');
 
-export type { UnifiedCommand } from '@lizi/maker-core';
+export type { UnifiedCommand } from '@cindy/maker-core';
 
 // device-link 远程会话下 desktop 命令**全量可用**:业务语义在「会话归属设备」的命令
 // (/goal /learn /cmd)由控制端 main(commands/builtins.ts)按 ctx.deviceId 经隧道路由

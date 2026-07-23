@@ -5,7 +5,7 @@
  * providers and models exposed as selectable capabilities to product surfaces.
  */
 
-import type { Catalog } from '@lizi/model-providers';
+import type { Catalog } from '@cindy/model-providers';
 
 export type ProviderAccessMembershipKind = 'personal' | 'org';
 

@@ -25,7 +25,7 @@ import {
   type AgentKind,
   type BaseAgent,
   type SqliteFactory,
-} from '@lizi/maker-core';
+} from '@cindy/maker-core';
 
 import { desktopMakerLogger } from './logger-adapter.js';
 import { readMemorySettings } from './memory-settings-store.js';

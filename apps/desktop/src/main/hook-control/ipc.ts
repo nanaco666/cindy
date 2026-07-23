@@ -17,8 +17,8 @@ import { randomUUID } from 'node:crypto';
 
 import { app, ipcMain, BrowserWindow, shell } from 'electron';
 
-import { isModelVisible, visibleModelUnion } from '@lizi/model-providers';
-import { BRAND_NAME } from '@lizi/maker-shared/branding';
+import { isModelVisible, visibleModelUnion } from '@cindy/model-providers';
+import { BRAND_NAME } from '@cindy/maker-shared/branding';
 
 import { createLogger } from '../logger.js';
 import { getMaker, restartCodexAfterAuthModeChange } from '../maker-host/index.js';

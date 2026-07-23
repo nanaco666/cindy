@@ -1,7 +1,7 @@
 /**
  * inlineImageCompressor.ts
  * ---------------------------------------------------------------------------
- * Host-side implementation of lizi-mcps' `CompressInlineImageFn`: shrinks the
+ * Host-side implementation of @cindy/mcps' `CompressInlineImageFn`: shrinks the
  * inline (LLM-facing) copy of generated / downloaded images to a hard byte
  * target so the tool-result stream-json line stays under Claude Code's 256KiB
  * atomic-write boundary(超过会分块写,分块间隙可能被同进程其它 stdout 写入插队,

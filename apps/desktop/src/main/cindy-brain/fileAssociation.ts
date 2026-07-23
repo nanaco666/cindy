@@ -3,7 +3,7 @@ import { promisify } from 'node:util';
 
 import { app } from 'electron';
 
-import { brandExecutableName } from '@lizi/maker-shared/brand-identity';
+import { brandExecutableName } from '@cindy/maker-shared/brand-identity';
 import { CINDY_MIME_TYPE, SHARE_MIME_TYPE } from '../../shared/fileTypes.js';
 import { CURRENT_CINDY_REGION } from '../../shared/brandRegion.js';
 import { createLogger } from '../logger.js';

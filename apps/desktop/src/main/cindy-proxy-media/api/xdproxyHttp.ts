@@ -10,7 +10,7 @@
  * too instead of each rolling its own copy.
  */
 
-import type { LiziMcpLogger } from 'lizi-mcps';
+import type { LiziMcpLogger } from '@cindy/mcps';
 import type { CindyProxyMediaMaybePromise } from '../types.js';
 
 export class XdproxyHttpError extends Error {

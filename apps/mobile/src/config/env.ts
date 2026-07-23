@@ -1,6 +1,6 @@
 import Constants from 'expo-constants';
 
-import { parseClientEndpointManifest } from '@lizi/maker-shared/client-endpoints';
+import { parseClientEndpointManifest } from '@cindy/maker-shared/client-endpoints';
 
 import type { LoginMessageKey } from '@/auth/loginMessages';
 

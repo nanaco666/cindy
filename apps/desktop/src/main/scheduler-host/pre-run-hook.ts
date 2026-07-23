@@ -18,7 +18,7 @@
  */
 
 import { spawn } from 'node:child_process';
-import type { PreRunHookRunResult } from '@lizi/maker-scheduler';
+import type { PreRunHookRunResult } from '@cindy/maker-scheduler';
 import { capAppend as capAppendBase, killProcessTree } from './proc-util';
 import os from 'node:os';
 

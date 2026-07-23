@@ -9,7 +9,7 @@
  * → enterControl(scope = 锚点 ts)。后续选择/接管由 cardActionHandler 驱动。
  */
 
-import type { ChannelIM } from 'lizi-im';
+import type { ChannelIM } from '@cindy/im';
 
 import { createLogger } from '../../logger';
 import { listProjectsForControl } from './controlProjects';

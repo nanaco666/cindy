@@ -55,7 +55,7 @@ describe('compareBuildNumbers / assertBuildNumberMonotonic', () => {
 });
 
 describe('resolveIosSigningEnv（从 region JSON 的 iosSigning 取值,非机密)', () => {
-  const FULL_IDENTITY = 'Apple Development: Yi Zhou (RQ24UVT6TG)';
+  const FULL_IDENTITY = 'Apple Development: Jane Doe (ABCD1234EF)';
   const REGION = {
     authRegion: 'cn',
     iosSigning: { teamId: 'TEAM123456', profileName: 'some_profile', signIdentity: FULL_IDENTITY },
@@ -81,11 +81,11 @@ describe('resolveIosSigningEnv（从 region JSON 的 iosSigning 取值,非机密
     expect(() => resolveIosSigningEnv(withSigning({ signIdentity: 'Apple Distribution' }))).toThrow(/完整证书名/);
   });
   it('signIdentity 是不含冒号的部分名 → 拒(CODE_SIGN_IDENTITY 模糊匹配同样有歧义)', () => {
-    expect(() => resolveIosSigningEnv(withSigning({ signIdentity: 'Yi Zhou (RQ24UVT6TG)' }))).toThrow(/完整证书名/);
+    expect(() => resolveIosSigningEnv(withSigning({ signIdentity: 'Jane Doe (ABCD1234EF)' }))).toThrow(/完整证书名/);
   });
   it('signIdentity 含冒号但掐掉末尾括号 ID → 拒(仍是部分名,钉不住)', () => {
-    expect(() => resolveIosSigningEnv(withSigning({ signIdentity: 'Apple Development: Jiali LIU' }))).toThrow(/完整证书名/);
-    expect(() => resolveIosSigningEnv(withSigning({ signIdentity: 'Apple Development: Yi Zhou (rq24)' }))).toThrow(/完整证书名/);
+    expect(() => resolveIosSigningEnv(withSigning({ signIdentity: 'Apple Development: Jane Doe' }))).toThrow(/完整证书名/);
+    expect(() => resolveIosSigningEnv(withSigning({ signIdentity: 'Apple Development: Jane Doe (abcd)' }))).toThrow(/完整证书名/);
   });
   it('signIdentity 是 40 位 SHA-1 → 放行', () => {
     const sha1 = 'A1B2C3D4E5F60718293A4B5C6D7E8F9012345678';
@@ -105,10 +105,10 @@ describe('buildExportOptionsPlist', () => {
   it('传 signingCertificate 时钉死 export 证书', () => {
     const plist = buildExportOptionsPlist({
       teamId: 'NTC4BJ542G', bundleId: 'com.xd.cindycn', profileName: 'cindycn_dev',
-      signingCertificate: 'Apple Development: Yi Zhou (RQ24UVT6TG)',
+      signingCertificate: 'Apple Development: Jane Doe (ABCD1234EF)',
     });
     expect(plist).toContain('<key>signingCertificate</key>');
-    expect(plist).toContain('<string>Apple Development: Yi Zhou (RQ24UVT6TG)</string>');
+    expect(plist).toContain('<string>Apple Development: Jane Doe (ABCD1234EF)</string>');
   });
   it('不传 signingCertificate 时输出不含该键(向后兼容)', () => {
     const plist = buildExportOptionsPlist({ teamId: 'NTC4BJ542G', bundleId: 'com.xd.cindycn', profileName: 'cindycn_dev' });

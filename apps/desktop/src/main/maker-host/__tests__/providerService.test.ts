@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 
-import { BUNDLED_CATALOG } from '@lizi/model-providers';
+import { BUNDLED_CATALOG } from '@cindy/model-providers';
 
 import { createProviderService } from '../provider-service.js';
 

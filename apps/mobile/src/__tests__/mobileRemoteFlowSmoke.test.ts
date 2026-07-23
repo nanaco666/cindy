@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { DeviceLinkError, type DeviceView } from '@lizi/device-link';
+import { DeviceLinkError, type DeviceView } from '@cindy/device-link';
 import { createMobileMakerTransport, type RemoteInvoke } from '@/device-link/mobileMakerTransport';
 import { toDeviceListItems } from '@/device-link/devices';
 import { formatRemoteError, describeRemoteError } from '@/device-link/remoteStatus';
@@ -405,11 +405,11 @@ describe('mobile remote-control headless UI flow smoke', () => {
       }
       if (channel === 'fs:list-dir') {
         return {
-          resolvedPath: '/Users/dash/Code',
-          parent: '/Users/dash',
+          resolvedPath: '/Users/alice/Code',
+          parent: '/Users/alice',
           entries: [
-            { name: 'xdt-maker', kind: 'dir', path: '/Users/dash/Code/xdt-maker' },
-            { name: 'shared', kind: 'symlink', path: '/Users/dash/Code/shared' },
+            { name: 'xdt-maker', kind: 'dir', path: '/Users/alice/Code/xdt-maker' },
+            { name: 'shared', kind: 'symlink', path: '/Users/alice/Code/shared' },
           ],
         };
       }
@@ -598,16 +598,16 @@ describe('mobile remote-control headless UI flow smoke', () => {
     });
 
     await expect(maker.fs.listDir('~')).resolves.toMatchObject({
-      resolvedPath: '/Users/dash/Code',
-      parent: '/Users/dash',
+      resolvedPath: '/Users/alice/Code',
+      parent: '/Users/alice',
       entries: [
-        { name: 'xdt-maker', kind: 'dir', path: '/Users/dash/Code/xdt-maker' },
-        { name: 'shared', kind: 'symlink', path: '/Users/dash/Code/shared' },
+        { name: 'xdt-maker', kind: 'dir', path: '/Users/alice/Code/xdt-maker' },
+        { name: 'shared', kind: 'symlink', path: '/Users/alice/Code/shared' },
       ],
     });
-    await expect(maker.fs.statPath('/Users/dash/Code/xdt-maker')).resolves.toMatchObject({
+    await expect(maker.fs.statPath('/Users/alice/Code/xdt-maker')).resolves.toMatchObject({
       kind: 'dir',
-      resolvedPath: '/Users/dash/Code/xdt-maker',
+      resolvedPath: '/Users/alice/Code/xdt-maker',
     });
     await expect(maker.fs.statPath('/repo/xdt-maker/spec.pdf')).resolves.toMatchObject({
       kind: 'file',

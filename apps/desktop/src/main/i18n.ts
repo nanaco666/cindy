@@ -13,7 +13,7 @@
  * shared/i18n/locales/ and update both call sites.
  */
 import { app } from 'electron';
-import { BRAND_NAME } from '@lizi/maker-shared/branding';
+import { BRAND_NAME } from '@cindy/maker-shared/branding';
 
 import {
   DEFAULT_LOCALE,

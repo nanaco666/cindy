@@ -19,7 +19,7 @@ describe('MobileProviderMark', () => {
   it('renders shared official paths and keeps unknown providers on the monogram fallback', () => {
     const source = readSource('src/session/MobileProviderMark.tsx');
 
-    expect(source).toContain("from '@lizi/model-providers/branding';");
+    expect(source).toContain("from '@cindy/model-providers/branding';");
     expect(source).toContain("logoKind ?? resolveProviderLogoKind(providerId ?? '', routing)");
     expect(source).toContain('<Path d={PROVIDER_LOGO_PATHS[kind]} fill={fill} />');
     expect(source).toContain('{providerMonogram(name)}');

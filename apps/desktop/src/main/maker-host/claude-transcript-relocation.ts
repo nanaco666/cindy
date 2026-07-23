@@ -25,7 +25,7 @@
  */
 import path from 'node:path';
 
-import { relocateClaudeSessionTranscripts } from '@lizi/maker-core';
+import { relocateClaudeSessionTranscripts } from '@cindy/maker-core';
 
 import { getDbClient } from '../localDb/client/current.js';
 import { createLogger } from '../logger.js';

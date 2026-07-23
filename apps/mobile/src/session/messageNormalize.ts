@@ -9,8 +9,8 @@ import {
   sortMessagesByCreatedAt,
   type MessageNormalizeToolUse,
   type MessageToolResultPairing,
-} from '@lizi/maker-shared/message-normalize';
-import { isSyntheticTriggerText } from '@lizi/maker-shared/synthetic-trigger';
+} from '@cindy/maker-shared/message-normalize';
+import { isSyntheticTriggerText } from '@cindy/maker-shared/synthetic-trigger';
 import {
   buildPayloadToolDiff,
   extractPayloadToolResultMedia,

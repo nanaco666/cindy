@@ -11,13 +11,13 @@
  *       5. 无记忆 + 当前模型仍被 offer → 全不动
  *       6. 记忆 stale(模型不被 offer / 不可见)→ 回退到 4/5 规则
  *
- * 纯函数 + 仅依赖 @lizi/model-providers 的 providerOffersModel(agent-scoped),可在 node env 直接测。
+ * 纯函数 + 仅依赖 @cindy/model-providers 的 providerOffersModel(agent-scoped),可在 node env 直接测。
  * 本组用例全部以 claude-code 会话视角(visibleModels = claude-* )验证。
  */
 
 import { describe, it, expect } from 'vitest';
 
-import type { AgentKind, ProviderView } from '@lizi/model-providers';
+import type { AgentKind, ProviderView } from '@cindy/model-providers';
 import {
   buildProviderSections,
   categorize,

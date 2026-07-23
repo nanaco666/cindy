@@ -19,7 +19,7 @@
  *    Implemented in errors.ts.
  */
 
-import { parseCron, type Scheduler } from '@lizi/maker-scheduler';
+import { parseCron, type Scheduler } from '@cindy/maker-scheduler';
 
 import type { SchedulerToolResult } from '../cindy_schedulerToolRegistry.js';
 import type { SchedulerMcpDeps } from '../types.js';

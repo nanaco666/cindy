@@ -14,7 +14,7 @@
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
-import type { OAuthProviderDescriptor } from '@lizi/model-providers';
+import type { OAuthProviderDescriptor } from '@cindy/model-providers';
 
 import {
   cancelGenericOAuthLogin,

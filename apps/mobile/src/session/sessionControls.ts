@@ -1,11 +1,11 @@
 import type { RemoteSession } from '@/session/types';
-import { isPreconditionFailedRemoteError } from '@lizi/maker-shared/device-link-contract';
+import { isPreconditionFailedRemoteError } from '@cindy/maker-shared/device-link-contract';
 export {
   summarizeAccountRateLimits,
   summarizeCodexRateLimitReset,
   summarizeContextUsage,
   summarizeSessionSpend,
-} from '@lizi/maker-shared/session-controls';
+} from '@cindy/maker-shared/session-controls';
 
 /** Local ChatGPT quota controls are only relevant to local Codex subscription sessions. */
 export function canUseLocalCodexRateLimitControl(

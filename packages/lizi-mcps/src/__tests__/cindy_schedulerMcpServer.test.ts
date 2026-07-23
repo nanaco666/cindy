@@ -24,15 +24,15 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 
-import { Scheduler } from '@lizi/maker-scheduler';
+import { Scheduler } from '@cindy/maker-scheduler';
 import type {
   CreateScheduleInput,
   ListFilter,
   Schedule,
   ScheduleRun,
-} from '@lizi/maker-scheduler';
-import type { ScheduleStorage } from '@lizi/maker-scheduler';
-import type { FireContext, ScheduleRunner } from '@lizi/maker-scheduler';
+} from '@cindy/maker-scheduler';
+import type { ScheduleStorage } from '@cindy/maker-scheduler';
+import type { FireContext, ScheduleRunner } from '@cindy/maker-scheduler';
 
 import { createSchedulerMcpServer } from '../cindy_schedulerMcpServer.js';
 import { SchedulerToolRegistry } from '../cindy_schedulerToolRegistry.js';

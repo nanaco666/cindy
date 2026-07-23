@@ -5,14 +5,14 @@ import {
   extractJsonStringFieldSnapshot,
   type DictationRefinementContext,
   type TextModelClient,
-} from '@lizi/voice-input-core';
+} from '@cindy/voice-input-core';
 import type { StoredMobileVoiceCredential } from '@/session/mobileVoiceCredentialStore';
 import { redactMobileVoiceCredentialText } from '@/session/mobileVoiceCredentialRedaction';
 import {
   composerVoiceStateLabel,
   type ComposerVoiceState,
-} from '@lizi/maker-shared/session-operation';
-import { formatRemoteError } from '@lizi/maker-shared/device-link-contract';
+} from '@cindy/maker-shared/session-operation';
+import { formatRemoteError } from '@cindy/maker-shared/device-link-contract';
 
 export const MOBILE_MAX_VOICE_AUDIO_BYTES = 64 * 1024 * 1024;
 export const MOBILE_VOICE_MIC_PERMISSION_ERROR = '麦克风权限未开启，请在系统设置里允许 Cindy 使用麦克风。';

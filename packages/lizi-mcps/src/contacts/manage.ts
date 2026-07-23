@@ -20,7 +20,7 @@ import {
   type MakerContactsStore,
   type SystemContactWriteItem,
   type SystemContactWriteResult,
-} from '@lizi/maker-core';
+} from '@cindy/maker-core';
 
 import { withContacts } from './_shared.js';
 import type { ContactsMcpDeps } from '../types.js';

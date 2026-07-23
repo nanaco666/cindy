@@ -140,7 +140,7 @@
 
 每迁移一个模块,至少要有三层验证:
 
-- Shared unit: `pnpm --filter @lizi/maker-shared build` 和 `pnpm --filter @lizi/maker-shared test`。
+- Shared unit: `pnpm --filter @cindy/maker-shared build` 和 `pnpm --filter @cindy/maker-shared test`。
 - Mobile adapter: `pnpm --filter mobile typecheck` 和对应 `apps/mobile/src/__tests__/*`。
 - Parity fixture:同一份 fixture 在 shared 输出稳定,移动端 UI 测试只断言布局/交互,不再重复断言业务语义。
 

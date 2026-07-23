@@ -3,7 +3,7 @@ import type { ReadableStream as NodeReadableStream } from 'node:stream/web';
 
 import { fetch as undiciFetch, type Agent, type Response as UndiciResponse } from 'undici';
 
-import type { TextModelClient } from '@lizi/voice-input-core';
+import type { TextModelClient } from '@cindy/voice-input-core';
 
 import { createLogger } from '../logger.js';
 import { describeErrorWithCause, markRefinerModelOutputError } from './refinerErrorKind.js';

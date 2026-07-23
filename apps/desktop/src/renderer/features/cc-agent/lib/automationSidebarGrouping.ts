@@ -1,5 +1,5 @@
 import type { Session } from '@/lib/ccAgent.types';
-import type { Schedule } from '@lizi/maker-scheduler';
+import type { Schedule } from '@cindy/maker-scheduler';
 
 import {
   getAutomationSessionDisplayTitle,

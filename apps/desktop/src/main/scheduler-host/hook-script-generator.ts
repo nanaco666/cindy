@@ -20,8 +20,8 @@
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import path from 'node:path';
 
-import type { Maker } from '@lizi/maker-core';
-import type { PreRunHookRunResult } from '@lizi/maker-scheduler';
+import type { Maker } from '@cindy/maker-core';
+import type { PreRunHookRunResult } from '@cindy/maker-scheduler';
 import type { UtilityTextFailure, UtilityTextResult } from '../../shared/utilityTextResult.js';
 
 /** 生成请求的输入(IPC 层已完成参数校验)。 */

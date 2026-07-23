@@ -163,7 +163,7 @@ describe('drift 守卫:makerTransport 隧道的每个 channel 都在 REMOTE_INVO
   it('适配器里 t(...) / invokeRemote(deviceId, ...) 的 channel 串无一逃出 allowlist', async () => {
     const { readFileSync } = await import('node:fs');
     const { resolve } = await import('node:path');
-    const { REMOTE_INVOKE_ALLOWLIST } = await import('@lizi/device-link');
+    const { REMOTE_INVOKE_ALLOWLIST } = await import('@cindy/device-link');
     const src = readFileSync(resolve(__dirname, '..', 'lib', 'makerTransport.ts'), 'utf8');
     // 抓两种隧道写法的字面量 channel:通用 t('<ch>') 与手动打包的 invokeRemote(deviceId, '<ch>', ...)。
     const channels = new Set<string>();

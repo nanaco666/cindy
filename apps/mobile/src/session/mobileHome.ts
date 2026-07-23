@@ -1,6 +1,6 @@
 import type { RemoteSession } from '@/session/types';
 
-export * from '@lizi/maker-shared/mobile-home';
+export * from '@cindy/maker-shared/mobile-home';
 
 /**
  * 手机端隐藏 Orca worker 子会话(本期不支持进 worker 子会话聊天),Lead 会话与普通会话保留。

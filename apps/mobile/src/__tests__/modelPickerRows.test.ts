@@ -4,7 +4,7 @@
  * budgetRowDisabled 三态)。纯逻辑,node env。
  */
 import { describe, expect, it } from 'vitest';
-import type { ProviderView } from '@lizi/model-providers/registry';
+import type { ProviderView } from '@cindy/model-providers/registry';
 
 import type { MobileAgentCapabilities } from '@/session/agentCapabilities';
 import type { MobileModelMemoryAccessors } from '@/session/draftModelMemory';

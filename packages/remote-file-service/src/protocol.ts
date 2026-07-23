@@ -30,7 +30,7 @@ import type {
   FileStat,
   ListAllFilesResult,
   SearchEvent,
-} from '@lizi/file-browser-core';
+} from '@cindy/file-browser-core';
 
 /** 协议兼容版本:client 与 daemon 严格相等才可用。改动任何请求/响应形状时 +1。 */
 export const FILE_SERVICE_SCHEMA_VERSION = 2;

@@ -81,7 +81,7 @@ import {
   retryUnsubscribeAfterWindowGone,
   type DeviceLinkIpcDeps,
 } from '../device-link/ipc';
-import { DeviceLinkError } from '@lizi/device-link';
+import { DeviceLinkError } from '@cindy/device-link';
 import { ServerApiError } from '../serverApiClient';
 import { __testing as settingsTesting } from '../device-link/settings-store';
 import { __testing as refcountTesting } from '../device-link/subscriptionRefcount';

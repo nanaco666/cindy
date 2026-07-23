@@ -15,7 +15,7 @@ import { useCallback, useRef, useState } from 'react';
 import { FileText, MessageSquareQuote, X } from 'lucide-react-native';
 import { Modal, Pressable, ScrollView, View, useWindowDimensions } from 'react-native';
 import { Text } from '@/components/AppText';
-import { quoteSourceDisplayLabel, type ChatQuote } from '@lizi/maker-shared/chat-quotes';
+import { quoteSourceDisplayLabel, type ChatQuote } from '@cindy/maker-shared/chat-quotes';
 import { fontWeight, iconSize, iconStroke, lineHeight, radius, spacing, typeScale, useTheme, useThemedStyles, type ThemeColors } from '@/theme';
 
 /** 预览卡最大宽度(对照桌面 w-80);屏窄时被左右边距 clamp。 */

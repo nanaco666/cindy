@@ -1,7 +1,7 @@
 /**
  * Phase 3: MakerScheduleRunner
  *
- * 实现 `ScheduleRunner` 接口（来自 @lizi/maker-scheduler）。
+ * 实现 `ScheduleRunner` 接口（来自 @cindy/maker-scheduler）。
  *
  * 一次 fire 的工作流：
  *   1. effort 白名单校验 — 防止 user-input 把非法 effort 透传给 maker.createSession
@@ -31,8 +31,8 @@
 
 import { randomUUID } from 'node:crypto';
 
-import { isTerminalAgentErrorEvent } from '@lizi/maker-core';
-import type { Maker, AgentEvent, AgentKind, Effort, PermissionMode } from '@lizi/maker-core';
+import { isTerminalAgentErrorEvent } from '@cindy/maker-core';
+import type { Maker, AgentEvent, AgentKind, Effort, PermissionMode } from '@cindy/maker-core';
 import type {
   Schedule,
   ScheduleRun,
@@ -42,7 +42,7 @@ import type {
   FireContext,
   FireResult,
   Scheduler,
-} from '@lizi/maker-scheduler';
+} from '@cindy/maker-scheduler';
 
 import { createMessage } from '../localDb/ipc/messages.js';
 import { getSessionRowSnapshot, touchUserSendInDb } from '../localDb/ipc/sessions.js';

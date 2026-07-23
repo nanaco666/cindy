@@ -1,4 +1,4 @@
-import type { AgentKind, ProviderView } from '@lizi/model-providers';
+import type { AgentKind, ProviderView } from '@cindy/model-providers';
 
 const AGENT_DISPLAY_LABELS: Record<AgentKind, string> = {
   'claude-code': 'Claude Code',

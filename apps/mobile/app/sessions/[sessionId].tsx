@@ -1,4 +1,4 @@
-import { isInFlightDeviceLinkError } from '@lizi/device-link';
+import { isInFlightDeviceLinkError } from '@cindy/device-link';
 import {
   ArrowDown,
   Camera,
@@ -106,7 +106,7 @@ import type { DeviceApiKeyStatus } from '@/device-link/deviceModelMetaCache';
 import type { MobileModelMemoryAccessors } from '@/session/draftModelMemory';
 import { ModelPickerSheet } from '@/session/ModelPickerSheet';
 import { MobileModelIconMark } from '@/session/MobileProviderMark';
-import { getModel } from '@lizi/model-providers/registry';
+import { getModel } from '@cindy/model-providers/registry';
 import { clearSessionMirror, makeSessionMirrorAccessors } from '@/session/sessionModelMirror';
 import { rowFastEditable } from '@/session/modelPickerRows';
 import {
@@ -177,8 +177,8 @@ import {
   useSessionQuotes,
 } from '@/session/chatQuoteStore';
 import { QuoteCapsule } from '@/session/QuoteCapsule';
-import { formatQuotesForSend } from '@lizi/maker-shared/chat-quotes';
-import { permissionModeOrAsk } from '@lizi/maker-shared/permission-mode';
+import { formatQuotesForSend } from '@cindy/maker-shared/chat-quotes';
+import { permissionModeOrAsk } from '@cindy/maker-shared/permission-mode';
 import { confirmFullAccessChange } from '@/session/fullAccessConfirmation';
 import {
   drainComposerAnnotationSubmissions,
@@ -198,7 +198,7 @@ import { SessionTailBanner } from '@/session/SessionTailBanner';
 import {
   CONTINUE_AFTER_APP_EXIT_PROMPT,
   CONTINUE_AFTER_ERROR_PROMPT,
-} from '@lizi/maker-shared/synthetic-trigger';
+} from '@cindy/maker-shared/synthetic-trigger';
 import {
   ComposerResizeGrabber,
   ComposerToolbarSpacer,
@@ -342,7 +342,7 @@ import {
   useSessionRunning,
   useSessionTaskUpdates,
 } from '@/session/remoteSessionStore';
-import type { MobileGoalLimitsInput, MobileGoalStatusPayload } from '@lizi/maker-shared/device-link-contract';
+import type { MobileGoalLimitsInput, MobileGoalStatusPayload } from '@cindy/maker-shared/device-link-contract';
 import {
   resolveMobileRemoteMedia,
   type MobileRemoteMediaPresignResult,
@@ -406,7 +406,7 @@ import type {
   MobileSlashCommand,
   RemoteDirectoryEntry,
 } from '@/device-link/mobileMakerTransport';
-import type { MobileCodexRateLimitsResult } from '@lizi/maker-shared/device-link-contract';
+import type { MobileCodexRateLimitsResult } from '@cindy/maker-shared/device-link-contract';
 import { useTheme, useThemedStyles, type ThemeColors } from '@/theme';
 import { fontWeight, iconSize, iconStroke, lineHeight, radius, spacing, typeScale } from '@/theme/tokens';
 

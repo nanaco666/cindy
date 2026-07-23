@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
-import type { Logger, McpProvider } from '@lizi/maker-core';
+import type { Logger, McpProvider } from '@cindy/maker-core';
 import {
   getCodexExtraSpawnConfig,
   shutdownCodexEnvironment,

@@ -22,8 +22,8 @@
  *   - 不做 dim 校验 (consumer 自己保证 vec_table 的 dim 匹配 model.dim)
  */
 
-import type { EmbeddingClient } from '@lizi/embedding-client';
-import { EmbeddingError } from '@lizi/embedding-client';
+import type { EmbeddingClient } from '@cindy/embedding-client';
+import { EmbeddingError } from '@cindy/embedding-client';
 
 import type { createLogger } from '../logger';
 import type { DbClient } from '../localDb/client/DbClient';

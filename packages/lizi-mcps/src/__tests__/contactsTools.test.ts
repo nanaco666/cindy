@@ -8,7 +8,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import DatabaseCtor from 'better-sqlite3';
-import { MakerContactsManager } from '@lizi/maker-core';
+import { MakerContactsManager } from '@cindy/maker-core';
 
 import { ContactsToolRegistry } from '../cindy_contactsToolRegistry.js';
 import {
@@ -32,7 +32,7 @@ import {
   registerContactsUpdateTool,
 } from '../contacts/index.js';
 import type { ContactsMcpDeps } from '../types.js';
-import type { SystemContactWriteItem, SystemContactWriteResult } from '@lizi/maker-core';
+import type { SystemContactWriteItem, SystemContactWriteResult } from '@cindy/maker-core';
 
 function noopLogger() {
   const noop = () => {};

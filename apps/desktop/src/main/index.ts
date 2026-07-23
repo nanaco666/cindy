@@ -45,7 +45,7 @@ log.debug(`[fix-path] after PATH=${process.env.PATH ?? ''}`);
 //
 // 这里同步 import 不走动态 import,确保 strip 在任何 module top-level 代码读
 // process.env 之前执行。
-import { stripSensitiveAnthropicEnv } from '@lizi/maker-core';
+import { stripSensitiveAnthropicEnv } from '@cindy/maker-core';
 
 // device-link 远程控制:必须在任何 ipcMain.handle 调用之前 monkey-patch,
 // 才能捕获到全量 channel → handler 映射(供被控端 dispatch 远程 invoke)。

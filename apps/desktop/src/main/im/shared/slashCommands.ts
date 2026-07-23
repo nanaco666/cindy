@@ -20,7 +20,7 @@ import {
   connectedProvidersForAgent,
   getModel,
   isModelVisible,
-} from '@lizi/model-providers';
+} from '@cindy/model-providers';
 import { createLogger } from '../../logger';
 
 import { resetSessionToDefaults } from './sessionRepo';
@@ -31,7 +31,7 @@ import { listProjectsForControl, readSessionTitle } from './controlProjects';
 import { startThreadControlFlow } from './controlFlow';
 import { enterControl } from './controlState';
 import { bindingStore, executeDetach } from '../binding';
-import type { IdentityKey } from 'lizi-im';
+import type { IdentityKey } from '@cindy/im';
 import type { ImChannelAdapter } from './types';
 
 /** Quick text-only check; treat anything starting with '/' (no spaces before) as a command. */

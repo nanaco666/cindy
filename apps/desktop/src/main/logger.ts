@@ -714,7 +714,7 @@ export function writeFromRenderer(level: LogLevel, scope: string, msg: string): 
  *
  * Examples:
  *   C:\Users\admin\AppData\Roaming\xdt-maker → ...\Roaming\xdt-maker
- *   /Users/lizi/projects/xdt-maker            → .../projects/xdt-maker
+ *   /Users/sam/projects/xdt-maker            → .../projects/xdt-maker
  *   /tmp                                      → /tmp (already short)
  *
  * Use for: workingDir, execPath, resourcesPath, userData, file paths in logs.

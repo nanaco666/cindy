@@ -1,4 +1,4 @@
-import type { AsrEvent, AsrProvider, AudioTrace } from '@lizi/voice-input-core';
+import type { AsrEvent, AsrProvider, AudioTrace } from '@cindy/voice-input-core';
 import type { StoredMobileVoiceCredential } from '@/session/mobileVoiceCredentialStore';
 import { redactMobileVoiceCredentialText } from '@/session/mobileVoiceCredentialRedaction';
 import { gzip, ungzip } from 'pako';

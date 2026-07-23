@@ -3,8 +3,8 @@ import {
   providerOffersModel,
   sourcesForModel,
   type ProviderView,
-} from '@lizi/model-providers';
-import type { AgentKind } from '@lizi/maker-core';
+} from '@cindy/model-providers';
+import type { AgentKind } from '@cindy/maker-core';
 
 import type { ImSessionRow } from './sessionRepo';
 

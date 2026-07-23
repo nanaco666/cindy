@@ -1,15 +1,15 @@
 import { useEffect, useRef, useSyncExternalStore } from 'react';
-import { SESSION_ACTIVITY_CHANNEL, type SessionActivityPayload } from '@lizi/device-link';
+import { SESSION_ACTIVITY_CHANNEL, type SessionActivityPayload } from '@cindy/device-link';
 import {
   applyAgentTaskUpdateEvent,
   isSameAgentTaskAlias,
   normalizeAgentTaskUpdate,
   type AgentTaskUpdate,
-} from '@lizi/maker-shared/agent-task';
-import type { MobileGoalStatusPayload } from '@lizi/maker-shared/device-link-contract';
-import { applyCodexPlanSnapshotOnDone } from '@lizi/maker-shared/message-render';
-import type { RemoteSessionLiveActivity } from '@lizi/maker-shared/session-list';
-import { buildDeviceIdentity, resolveCanonicalDeviceId } from '@lizi/maker-shared/mobile-home';
+} from '@cindy/maker-shared/agent-task';
+import type { MobileGoalStatusPayload } from '@cindy/maker-shared/device-link-contract';
+import { applyCodexPlanSnapshotOnDone } from '@cindy/maker-shared/message-render';
+import type { RemoteSessionLiveActivity } from '@cindy/maker-shared/session-list';
+import { buildDeviceIdentity, resolveCanonicalDeviceId } from '@cindy/maker-shared/mobile-home';
 import { EMPTY_INPUT_PROJECTION, normalizeInputProjection } from '@/session/inputProjection';
 import { sortPendingInteractions } from '@/session/interactionModel';
 import { applySessionModelPrefPush } from '@/session/sessionModelMirror';
@@ -113,7 +113,7 @@ const sessionRunning = new Map<string, boolean>();
 const sessionRunStatus = new Map<string, RemoteSessionRunStatus>();
 const sessionMessageSyncMarkers = new Map<string, SessionMessageSyncMarker>();
 // Per-session live sub-agent task state, decoded from `agent_task_update` events (live-only,
-// never persisted — see @lizi/maker-shared/agent-task). Keyed taskId/parentToolUseId → update.
+// never persisted — see @cindy/maker-shared/agent-task). Keyed taskId/parentToolUseId → update.
 const sessionTaskUpdates = new Map<string, ReadonlyMap<string, AgentTaskUpdate>>();
 // `maker:event` reaches the control phone before the desktop's async DB write completes.
 // Keep one temporary assistant row per session and reconcile it with the persisted row by

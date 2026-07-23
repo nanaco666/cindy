@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import type { ResponseObserverCtx } from '@lizi/anthropic-compat-proxy';
-import type { PermissionMode } from '@lizi/maker-core';
+import type { ResponseObserverCtx } from '@cindy/anthropic-compat-proxy';
+import type { PermissionMode } from '@cindy/maker-core';
 
 import {
   createClaudeAutoClassifierFailureObserver,

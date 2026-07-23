@@ -16,7 +16,7 @@ import {
 
 const SESSION_URL = 'xdt-maker://session/ee59672a-5591-48a7-a44d-aa97e3808c64';
 const PROJECT_URL = 'xdt-maker://project/%2FUsers%2Fdash%2FCode%2FTools%2Fxdt-maker';
-const WORKDIR = '/Users/dash/Code/Tools/xdt-maker';
+const WORKDIR = '/Users/alice/Code/Tools/xdt-maker';
 const WIN_WORKDIR = 'C:\\Code\\XDMaker';
 
 describe('isLongPasteText / countPasteLines', () => {

@@ -12,7 +12,7 @@
 
 import { spawn } from 'node:child_process';
 import { BrowserWindow, webContents } from 'electron';
-import { BRAND_NAME } from '@lizi/maker-shared/branding';
+import { BRAND_NAME } from '@cindy/maker-shared/branding';
 import { MAKER_PUSH } from '../maker-ipc/channels.js';
 import { createLogger } from '../logger.js';
 // type-only:不引入对 goal-host / learn-host 的运行时依赖(避免潜在 import 环),

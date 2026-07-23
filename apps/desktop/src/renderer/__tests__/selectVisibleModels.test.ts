@@ -8,13 +8,13 @@
  * (控制端自定义供应商 / 版本差异会让 picker 列出被控端跑不了的模型,或漏掉被控端独有模型)。
  * 本组用例锁死:deviceId 非空 → 只用被控端 caps、完全忽略本地 providers;deviceId 空 → 走本地派生。
  *
- * 纯函数 + 仅依赖 @lizi/model-providers 的 providersForAgent,可在 node env 直接测。
+ * 纯函数 + 仅依赖 @cindy/model-providers 的 providersForAgent,可在 node env 直接测。
  */
 import { describe, expect, it } from 'vitest';
 
 import type { ModelDescriptor } from '@/hooks/useAgentCapabilities';
 import { selectVisibleModels } from '@/lib/providerModels';
-import type { AgentKind, ProviderView } from '@lizi/model-providers';
+import type { AgentKind, ProviderView } from '@cindy/model-providers';
 
 /** 被控端 capabilities.availableModels 形态(renderer ModelDescriptor)。 */
 function devModel(id: string): ModelDescriptor {

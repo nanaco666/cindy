@@ -16,7 +16,7 @@
  * key 形如 `${agent}:${providerId}:${modelId}`,与 renderer modelVisibilityPrefs.keyOf 一致。
  */
 
-import type { AgentKind } from '@lizi/model-providers';
+import type { AgentKind } from '@cindy/model-providers';
 
 /** override 表:key=`${agent}:${providerId}:${modelId}` → 用户显式设定的可见性。 */
 type VisibilityMap = Record<string, boolean>;

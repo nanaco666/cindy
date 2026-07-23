@@ -8,7 +8,7 @@
  */
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { BUNDLED_CATALOG, type Catalog, type CatalogModel } from '@lizi/model-providers';
+import { BUNDLED_CATALOG, type Catalog, type CatalogModel } from '@cindy/model-providers';
 
 import {
   getActiveCatalog,

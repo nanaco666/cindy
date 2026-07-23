@@ -47,7 +47,7 @@ import {
   normalizeDisplayCommand,
   type CommandIntent,
   type ToolUseDescriptor,
-} from '@lizi/maker-shared';
+} from '@cindy/maker-shared';
 
 import { cn, basename } from '@/lib/utils';
 import { Spinner } from '@/components/ui/spinner';

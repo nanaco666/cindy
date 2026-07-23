@@ -10,7 +10,7 @@ import {
   DeviceLinkError,
   type InvokeResultPayload,
   type LinkAcceptPayload,
-} from '@lizi/device-link';
+} from '@cindy/device-link';
 import { serverApiFetch, ServerApiError } from '../serverApiClient';
 import { throwIpcError } from '../utils/ipcValidate';
 import type { IpcErrorCode } from '../../shared/ipc-errors';

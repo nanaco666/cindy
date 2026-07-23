@@ -15,9 +15,9 @@ import path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { runFileService } from '@lizi/remote-file-service';
-import { FILE_SERVICE_BUNDLE_VERSION, FILE_SERVICE_SCHEMA_VERSION } from '@lizi/remote-file-service/protocol';
-import type { FileServiceStream } from '@lizi/remote-file-service/client';
+import { runFileService } from '@cindy/remote-file-service';
+import { FILE_SERVICE_BUNDLE_VERSION, FILE_SERVICE_SCHEMA_VERSION } from '@cindy/remote-file-service/protocol';
+import type { FileServiceStream } from '@cindy/remote-file-service/client';
 
 import { RemoteFileBrowserManager, type RemoteFsDeps, type RemoteFsProbe } from '../remote.js';
 

@@ -6,7 +6,7 @@
  * 服务端误下发两种方式也不再并列呈现,一律取区域首选;服务端 providers
  * 仅作缺失兜底(区域首选方式未下发时落到另一侧的单形态)。
  */
-import type { CindyRegion } from '@lizi/maker-shared/brand-identity';
+import type { CindyRegion } from '@cindy/maker-shared/brand-identity';
 
 /** providers 中与 identifier 形态相关的开关位(auth-client LoginProviders 子集)。 */
 export interface IdentifierProviderFlags {

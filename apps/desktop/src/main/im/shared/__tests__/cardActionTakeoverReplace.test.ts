@@ -9,7 +9,7 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { ChannelIM, IMCardActionEvent } from 'lizi-im';
+import type { ChannelIM, IMCardActionEvent } from '@cindy/im';
 import type { DesktopCcPrefs } from '../../index';
 
 const mocks = vi.hoisted(() => ({

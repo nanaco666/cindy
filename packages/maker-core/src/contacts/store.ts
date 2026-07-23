@@ -9,7 +9,7 @@
  *
  * 不管:
  *  - db 文件路径与生命周期(manager 创建并持有 close)
- *  - 功能开关(host 设置层)与工具暴露(lizi-mcps 层)
+ *  - 功能开关(host 设置层)与工具暴露(@cindy/mcps 层)
  *
  * 并发: better-sqlite3 同步 API + 单进程单实例(manager 池保证), 无跨进程写者。
  */

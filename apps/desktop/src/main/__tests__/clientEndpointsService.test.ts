@@ -1,7 +1,7 @@
 /**
  * clientEndpointsService 单测(规则 14:依赖注入 + 内存 harness)。
  *
- * 校验语义(缺省字段归一/协议白名单/allowHttp)在 @lizi/maker-shared 侧已覆盖;
+ * 校验语义(缺省字段归一/协议白名单/allowHttp)在 @cindy/maker-shared 侧已覆盖;
  * 这里只测 desktop 宿主层:清单来源解析(resolveEndpointSource 表驱动)、
  * 阻断式重试循环(失败 → prompt → 重试/退出,无静默降级、无烘焙合并)、
  * file 模式的 allowHttp 放行、init 前 getter 抛错(启动时序守卫)、sendSync IPC 形状。

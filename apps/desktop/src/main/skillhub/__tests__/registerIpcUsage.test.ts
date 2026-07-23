@@ -132,9 +132,9 @@ describe('registerSkillhubIpc usage handlers', () => {
   it('drops internal autoSync flag from renderer install params', async () => {
     installServiceMocks.install.mockResolvedValueOnce({
       success: true,
-      name: 'xdoa-skill',
+      name: 'demo-oa-skill',
       version: '1.0.0',
-      absolutePath: '/tmp/xdoa-skill',
+      absolutePath: '/tmp/demo-oa-skill',
     });
     const sender = { send: vi.fn() };
     const handler = handlers.get('skillhub:install');
@@ -142,10 +142,10 @@ describe('registerSkillhubIpc usage handlers', () => {
     const result = await handler?.(
       { sender },
       {
-        name: 'xdoa-skill',
+        name: 'demo-oa-skill',
         version: '1.0.0',
         force: true,
-        installPath: '/tmp/xdoa-skill',
+        installPath: '/tmp/demo-oa-skill',
         skipBackup: true,
         autoSync: true,
       },
@@ -153,16 +153,16 @@ describe('registerSkillhubIpc usage handlers', () => {
 
     expect(result).toEqual({
       success: true,
-      name: 'xdoa-skill',
+      name: 'demo-oa-skill',
       version: '1.0.0',
-      absolutePath: '/tmp/xdoa-skill',
+      absolutePath: '/tmp/demo-oa-skill',
     });
     expect(installServiceMocks.install).toHaveBeenCalledWith(
       {
-        name: 'xdoa-skill',
+        name: 'demo-oa-skill',
         version: '1.0.0',
         force: true,
-        installPath: '/tmp/xdoa-skill',
+        installPath: '/tmp/demo-oa-skill',
         skipBackup: true,
       },
       expect.any(Function),

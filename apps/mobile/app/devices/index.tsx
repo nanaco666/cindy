@@ -19,7 +19,7 @@ import {
   type ViewStyle,
 } from 'react-native';
 import { Text, TextInput } from '@/components/AppText';
-import { DeviceLinkError, type DeviceView, type PresenceSnapshot } from '@lizi/device-link';
+import { DeviceLinkError, type DeviceView, type PresenceSnapshot } from '@cindy/device-link';
 import {
   Archive,
   Check,

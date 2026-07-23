@@ -1,4 +1,4 @@
-import { stripTrailingPathSeparators } from '@lizi/maker-shared/path-text';
+import { stripTrailingPathSeparators } from '@cindy/maker-shared/path-text';
 import type { RemoteFileRef, RemoteImageRef, RemoteSerializedAttachment } from '@/session/types';
 import { buildLegacyAttachmentOssRef } from '@/session/attachmentOssRef';
 

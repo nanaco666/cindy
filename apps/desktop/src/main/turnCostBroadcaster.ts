@@ -14,7 +14,7 @@
  */
 
 import { BrowserWindow } from 'electron';
-import type { SendOrigin } from '@lizi/maker-core';
+import type { SendOrigin } from '@cindy/maker-core';
 
 import type { TurnUsageDetails } from '../shared/turnUsageDetails.js';
 import {

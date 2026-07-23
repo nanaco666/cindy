@@ -30,7 +30,7 @@ import {
   XdproxyHttpError,
   type XdproxyHttpAuth,
 } from '../../api/xdproxyHttp.js';
-import type { LiziMcpLogger } from 'lizi-mcps';
+import type { LiziMcpLogger } from '@cindy/mcps';
 import type {
   VideoGenerationRequest,
   VideoProvider,

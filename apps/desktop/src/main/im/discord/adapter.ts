@@ -7,7 +7,7 @@
 import path from 'node:path';
 import fs from 'node:fs';
 import { app } from 'electron';
-import type { DiscordIM } from 'lizi-im';
+import type { DiscordIM } from '@cindy/im';
 
 import type { ImChannelAdapter, ImOrchestratorConfig } from '../shared/types';
 import { ui, PROCESSING_EMOJI } from './uiText';

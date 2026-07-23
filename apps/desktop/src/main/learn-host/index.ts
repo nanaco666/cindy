@@ -14,8 +14,8 @@ import path from 'node:path';
 
 import { BrowserWindow } from 'electron';
 
-import type { Maker } from '@lizi/maker-core';
-import { isTerminalAgentErrorEvent } from '@lizi/maker-core';
+import type { Maker } from '@cindy/maker-core';
+import { isTerminalAgentErrorEvent } from '@cindy/maker-core';
 
 import { tapWindowBroadcast } from '../device-link/broadcast-tap.js';
 import { createLogger } from '../logger.js';

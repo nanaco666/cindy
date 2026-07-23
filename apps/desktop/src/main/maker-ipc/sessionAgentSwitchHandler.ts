@@ -26,7 +26,7 @@
  * turn 进行中登记 pending 推迟到下一条消息发送时刻执行。
  */
 
-import type { AgentKind } from '@lizi/maker-core';
+import type { AgentKind } from '@cindy/maker-core';
 
 import { MAKER_INVOKE } from './channels.js';
 import type { IpcHandlerRegistry } from './ipcHandlerRegistry.js';

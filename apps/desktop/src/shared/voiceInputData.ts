@@ -4,7 +4,7 @@ import type {
   DictationDictionaryLearningCandidateState,
   DictationDictionaryLearningEntryState,
   DictationRefinementContext,
-} from '@lizi/voice-input-core';
+} from '@cindy/voice-input-core';
 
 import { SUPPORTED_LOCALES, type SupportedLocale } from './locale';
 import type { IpcErrorCode } from './ipc-errors';

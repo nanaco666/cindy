@@ -12,13 +12,13 @@
 
 import { customProviderSecretStorageKey } from '@/../shared/providerSecrets';
 
-import { DEFAULT_CUSTOM_CONTEXT_WINDOW } from '@lizi/model-providers';
+import { DEFAULT_CUSTOM_CONTEXT_WINDOW } from '@cindy/model-providers';
 import type {
   AgentKind,
   CatalogModel,
   CustomProviderConfig,
   ProviderRuntimeModelConfig,
-} from '@lizi/model-providers';
+} from '@cindy/model-providers';
 
 const ALL_AGENTS: readonly AgentKind[] = ['claude-code', 'codex'];
 

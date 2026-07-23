@@ -1,4 +1,4 @@
-import type { Maker } from '@lizi/maker-core';
+import type { Maker } from '@cindy/maker-core';
 import { BrowserWindow, ipcMain } from 'electron';
 import { getCurrentUserId } from '../authManager';
 import { ensureReady as ensureLocalDbReady, getRawDb } from '../localDb';

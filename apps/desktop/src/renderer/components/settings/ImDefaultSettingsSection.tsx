@@ -8,7 +8,7 @@
 import {
   connectedProvidersForAgent,
   providerOffersModel,
-} from '@lizi/model-providers';
+} from '@cindy/model-providers';
 import { MessageSquare } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';

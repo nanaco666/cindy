@@ -2,7 +2,7 @@ import { useSyncExternalStore } from 'react';
 import {
   projectScheduleEvent,
   type ScheduleEventProjection,
-} from '@lizi/maker-shared/schedule-events';
+} from '@cindy/maker-shared/schedule-events';
 
 export interface RemoteScheduleEventSnapshot {
   lastProjection: ScheduleEventProjection | null;

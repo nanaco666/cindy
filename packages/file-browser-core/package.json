@@ -1,5 +1,5 @@
 {
-  "name": "@lizi/file-browser-core",
+  "name": "@cindy/file-browser-core",
   "version": "0.0.0",
   "private": true,
   "description": "xdt-maker file-browser core: workdir scanner, ignore matcher, ripgrep list/search — shared by desktop main (local backend) and the remote file-service daemon",

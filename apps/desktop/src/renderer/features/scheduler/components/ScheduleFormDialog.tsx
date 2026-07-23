@@ -11,12 +11,12 @@ import { extractIpcError } from '@/utils/ipcError';
 import { Tip } from '@/components/ui/tooltip';
 import { useAgentCapabilities } from '@/hooks/useAgentCapabilities';
 import { useProviders } from '@/hooks/useProviders';
-import { sessionModelSupportsFastMode } from '@lizi/model-providers';
+import { sessionModelSupportsFastMode } from '@cindy/model-providers';
 import type { UtilityTextAttemptReason, UtilityTextFailure } from '../../../../shared/utilityTextResult';
 import { useFeishuBot } from '@/hooks/useFeishuBot';
 import { useProjectPickerOptions } from '@/hooks/useProjectPickerOptions';
-import type { Schedule, CreateScheduleInput, ScheduleTemplate, UpdateScheduleInput } from '@lizi/maker-scheduler';
-import { applyTemplateParams } from '@lizi/maker-scheduler/template-engine';
+import type { Schedule, CreateScheduleInput, ScheduleTemplate, UpdateScheduleInput } from '@cindy/maker-scheduler';
+import { applyTemplateParams } from '@cindy/maker-scheduler/template-engine';
 import { ScriptCapabilityMultiSelect } from './ScriptCapabilityMultiSelect';
 
 import {

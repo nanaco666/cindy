@@ -21,7 +21,7 @@ import rehypeSlug from 'rehype-slug';
 import 'katex/dist/katex.min.css';
 import remarkTruncateCjkUrls from './remarkTruncateCjkUrls';
 import remarkStrictInlineMath from './remarkStrictInlineMath';
-import { normalizeMathDelimiters } from '@lizi/maker-shared/math-markdown';
+import { normalizeMathDelimiters } from '@cindy/maker-shared/math-markdown';
 import remarkLocalPathLinks from './remarkLocalPathLinks';
 import remarkHtmlImages from './remarkHtmlImages';
 import remarkPreserveLocalImagePaths, {
@@ -166,7 +166,7 @@ function isMermaidCodeChild(child: ReactNode): boolean {
 // remarkMath: `$...$` / `$$...$$` → inlineMath / math 节点(micromark 语法扩展,
 // parse 阶段生效,与其它 transformer 的相对顺序无关)。`\(...\)` / `\[...\]` 定界
 // 符在 parse 前由 normalizeMathDelimiters 归一化成 dollar 形式(desktop / mobile
-// 共用实现,见 @lizi/maker-shared 的 mathMarkdown.ts)。remarkStrictInlineMath
+// 共用实现,见 @cindy/maker-shared 的 mathMarkdown.ts)。remarkStrictInlineMath
 // 紧随其后,把松散配对的 inlineMath(货币文本、跨 code span)降级回原文,
 // 规则与 mobile parser 对齐。
 // remarkGfm singleTilde:false — 删除线只认标准 GFM 的 `~~text~~`,单个 `~` 保持

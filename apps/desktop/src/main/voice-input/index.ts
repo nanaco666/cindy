@@ -17,7 +17,7 @@ import {
   type TextModelClient,
   type VoiceInputRendererEvent,
   type VoiceTimelineEvent,
-} from '@lizi/voice-input-core';
+} from '@cindy/voice-input-core';
 import { createLogger } from '../logger.js';
 import { desktopCodexAuthAdapter, readClaudeApiKey } from '../maker-host/auth-adapters.js';
 import { claudeUpstreamEndpoint } from '../maker-host/runtime-configs.js';

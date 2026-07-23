@@ -74,7 +74,7 @@ vi.mock('../../model-access/effectiveEndpoint.js', async () => {
   return { effectiveXdGatewayBaseUrl: () => TEST_XD_GATEWAY_BASE_URL };
 });
 
-vi.mock('@lizi/anthropic-compat-proxy', () => ({
+vi.mock('@cindy/anthropic-compat-proxy', () => ({
   createAnthropicCompatProxy: mockState.createAnthropicCompatProxy,
   createInstructionsInjectionTransform: mockState.createInstructionsInjectionTransform,
   createActiveStripTransform: () => (() => null),
@@ -512,7 +512,7 @@ describe('codex proxy host', () => {
     'https://api.minimax.io/v1/',
   ])('clamps MiniMax Responses xhigh effort to high for %s', async (baseUrl) => {
     const host = await freshCodexProxyHost();
-    const { buildUserProvider } = await import('@lizi/model-providers');
+    const { buildUserProvider } = await import('@cindy/model-providers');
     const { setCustomProviders } = await import('../active-catalog.js');
     const { setSessionProvider, clearSessionProvider } = await import('../session-provider-store.js');
     setCustomProviders([
@@ -577,7 +577,7 @@ describe('codex proxy host', () => {
 
   it('keeps xhigh effort for non-MiniMax custom Responses providers', async () => {
     const host = await freshCodexProxyHost();
-    const { buildUserProvider } = await import('@lizi/model-providers');
+    const { buildUserProvider } = await import('@cindy/model-providers');
     const { setCustomProviders } = await import('../active-catalog.js');
     const { setSessionProvider, clearSessionProvider } = await import('../session-provider-store.js');
     setCustomProviders([

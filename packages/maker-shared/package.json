@@ -1,5 +1,5 @@
 {
-  "name": "@lizi/maker-shared",
+  "name": "@cindy/maker-shared",
   "version": "0.0.0",
   "private": true,
   "description": "Cindy shared presentation and contract models for desktop and mobile clients. Zero React/Electron/Expo runtime dependencies.",

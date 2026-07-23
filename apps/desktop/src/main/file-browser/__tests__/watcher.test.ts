@@ -20,7 +20,7 @@ const h = vi.hoisted(() => ({
   matcherIgnores: vi.fn((_rel: string, _isDir: boolean) => false),
 }));
 
-vi.mock('@lizi/file-browser-core', () => ({
+vi.mock('@cindy/file-browser-core', () => ({
   XDT_TMP_SUFFIX: '.xdt-tmp',
   loadIgnoreMatcher: vi.fn(async () => ({ ignores: h.matcherIgnores })),
 }));

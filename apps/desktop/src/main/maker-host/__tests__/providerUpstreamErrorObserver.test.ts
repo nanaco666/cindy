@@ -11,7 +11,7 @@ import { gzipSync } from 'node:zlib';
 
 import { describe, it, expect, afterEach } from 'vitest';
 
-import type { ResponseObserverCtx } from '@lizi/anthropic-compat-proxy';
+import type { ResponseObserverCtx } from '@cindy/anthropic-compat-proxy';
 
 import {
   createProviderUpstreamErrorObserver,

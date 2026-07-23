@@ -5,7 +5,7 @@
  * 单个 worker 归档走 archive_worker。
  */
 
-import { BRAND_NAME } from '@lizi/maker-shared/branding';
+import { BRAND_NAME } from '@cindy/maker-shared/branding';
 import type { XdtHelperToolRegistry } from '../lizi_xdtHelperToolRegistry.js';
 import type { ControlResult } from '../lizi_xdtHelperMcpServer.js';
 import { okPayload, errorPayload } from './_payload.js';

@@ -28,7 +28,7 @@
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { app, BrowserWindow, ipcMain } from 'electron';
-import { BRAND_IDENTITY } from '@lizi/maker-shared/brand-identity';
+import { BRAND_IDENTITY } from '@cindy/maker-shared/brand-identity';
 import { CURRENT_CINDY_REGION } from '../shared/brandRegion.js';
 
 import { createLogger } from './logger';

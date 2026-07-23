@@ -29,21 +29,21 @@ const MONOREPO_ROOT = resolve(DESKTOP_ROOT, '..', '..');
 // expects to find it relative to apps/desktop/.
 const TARGETS = [
   {
-    pkgName: '@lizi/maker-cc-manager',
+    pkgName: '@cindy/maker-cc-manager',
     pkgDir: resolve(MONOREPO_ROOT, 'packages', 'maker-cc-manager'),
     bundleFile: 'dist/cc-mgr.mjs',
     destDir: resolve(DESKTOP_ROOT, 'resources', 'cc-manager'),
     destFile: 'cc-mgr.mjs',
   },
   {
-    pkgName: '@lizi/anthropic-compat-proxy',
+    pkgName: '@cindy/anthropic-compat-proxy',
     pkgDir: resolve(MONOREPO_ROOT, 'packages', 'anthropic-compat-proxy'),
     bundleFile: 'dist/proxy.mjs',
     destDir: resolve(DESKTOP_ROOT, 'resources', 'anthropic-compat-proxy'),
     destFile: 'proxy.mjs',
   },
   {
-    pkgName: '@lizi/remote-file-service',
+    pkgName: '@cindy/remote-file-service',
     pkgDir: resolve(MONOREPO_ROOT, 'packages', 'remote-file-service'),
     bundleFile: 'dist/file-service.mjs',
     destDir: resolve(DESKTOP_ROOT, 'resources', 'remote-file-service'),

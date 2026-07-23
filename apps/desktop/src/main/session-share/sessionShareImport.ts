@@ -13,7 +13,7 @@ import { promises as fsp } from 'node:fs';
 import path from 'node:path';
 
 import JSZip from 'jszip';
-import { isClaudeProjectKeyExact, sanitizeClaudeProjectKey } from '@lizi/maker-core';
+import { isClaudeProjectKeyExact, sanitizeClaudeProjectKey } from '@cindy/maker-core';
 import { app } from 'electron';
 
 import { getDbClient } from '../localDb/client/current.js';

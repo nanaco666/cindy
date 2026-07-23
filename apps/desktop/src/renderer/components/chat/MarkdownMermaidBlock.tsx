@@ -23,7 +23,7 @@
 import { memo, useEffect, useId, useRef, useState } from 'react';
 import { Check, Code2, Copy, Expand, Eye, Pen } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { repairMermaidSource } from '@lizi/maker-shared/mermaid-autofix';
+import { repairMermaidSource } from '@cindy/maker-shared/mermaid-autofix';
 
 import { cn } from '@/lib/utils';
 import { toast } from '@/lib/toast';

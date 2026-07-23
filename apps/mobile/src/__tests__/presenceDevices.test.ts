@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { DeviceView, PresenceSnapshot } from '@lizi/device-link';
+import type { DeviceView, PresenceSnapshot } from '@cindy/device-link';
 import {
   collectFreshPresenceDeviceIds,
   createPresenceFreshnessTracker,

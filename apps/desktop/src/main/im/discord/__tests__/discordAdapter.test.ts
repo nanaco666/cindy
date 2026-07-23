@@ -13,7 +13,7 @@ vi.mock('electron', () => ({
   },
 }));
 
-import type { DiscordIM } from 'lizi-im';
+import type { DiscordIM } from '@cindy/im';
 import { buildDiscordAdapter } from '../adapter';
 
 const fakeIm = {} as unknown as DiscordIM;

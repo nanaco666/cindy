@@ -10,8 +10,8 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { AgentEvent, Session, SessionSendResult } from '@lizi/maker-core';
-import type { ChannelIM } from 'lizi-im';
+import type { AgentEvent, Session, SessionSendResult } from '@cindy/maker-core';
+import type { ChannelIM } from '@cindy/im';
 
 const mocks = vi.hoisted(() => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },

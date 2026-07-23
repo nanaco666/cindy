@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import DatabaseCtor from 'better-sqlite3';
-import { MakerContactsManager } from '@lizi/maker-core';
+import { MakerContactsManager } from '@cindy/maker-core';
 
 // contacts-ipc 传递性 import electron(BrowserWindow/ipcMain + settings store);
 // handler 工厂本身不用它们, mock 空壳即可。

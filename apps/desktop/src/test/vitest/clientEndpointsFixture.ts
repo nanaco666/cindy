@@ -11,7 +11,7 @@
  * 值全部是 .invalid 保留域名(RFC 2606),不会撞 check-endpoint-literals 的
  * 生产域名门禁,也不可能被真实网络解析。
  */
-import type { ClientEndpointMap } from '@lizi/maker-shared/client-endpoints';
+import type { ClientEndpointMap } from '@cindy/maker-shared/client-endpoints';
 
 /**
  * XD 网关测试值:清单已不承载网关端点(2026-07-17 退役 xdGatewayBaseUrl),

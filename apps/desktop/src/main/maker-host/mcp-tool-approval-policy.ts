@@ -1,7 +1,7 @@
 /** Desktop 端的 Claude 只读工具白名单与 Codex MCP 审批策略。 */
 
-import type { McpToolApprovalContext, McpToolApprovalPolicy } from '@lizi/maker-core';
-import { canAutoApproveContactsMcpTool } from 'lizi-mcps';
+import type { McpToolApprovalContext, McpToolApprovalPolicy } from '@cindy/maker-core';
+import { canAutoApproveContactsMcpTool } from '@cindy/mcps';
 
 /**
  * Claude Code `options.allowedTools` 的第一方只读白名单。

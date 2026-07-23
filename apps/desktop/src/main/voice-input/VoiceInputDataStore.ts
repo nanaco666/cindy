@@ -2,7 +2,7 @@ import { app, BrowserWindow, ipcMain } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
 
-import type { DictationDictionaryLearningAction } from '@lizi/voice-input-core';
+import type { DictationDictionaryLearningAction } from '@cindy/voice-input-core';
 
 import { createLogger } from '../logger.js';
 import { throwIpcError } from '../utils/ipcValidate.js';

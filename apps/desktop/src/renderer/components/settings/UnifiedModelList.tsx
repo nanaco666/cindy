@@ -35,7 +35,7 @@ import {
   useModelVisibilityVersion,
 } from '@/state/modelVisibilityPrefs';
 
-import type { AgentKind, CatalogModel, ProviderView } from '@lizi/model-providers';
+import type { AgentKind, CatalogModel, ProviderView } from '@cindy/model-providers';
 
 const AGENT_LABEL: Record<AgentKind, string> = {
   'claude-code': 'Claude Code',

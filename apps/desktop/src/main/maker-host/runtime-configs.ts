@@ -4,7 +4,7 @@
  * maker-core 只消费抽象配置,不依赖 Electron 或部署环境。
  */
 
-import type { AgentRuntimeConfig } from '@lizi/maker-core';
+import type { AgentRuntimeConfig } from '@cindy/maker-core';
 import { app } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';

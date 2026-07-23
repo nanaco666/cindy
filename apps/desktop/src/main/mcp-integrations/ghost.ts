@@ -21,7 +21,7 @@ import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 
 import type { CindyForgePackResult, CindyGhostInfo, CindyGhostsMcpDeps } from 'cindy-tools';
-import { getLiziMcpSessionContext, type LiziMcpSessionContext } from 'lizi-mcps';
+import { getLiziMcpSessionContext, type LiziMcpSessionContext } from '@cindy/mcps';
 
 import {
   GrantPolicyError,

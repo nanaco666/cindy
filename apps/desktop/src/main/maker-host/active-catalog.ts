@@ -23,7 +23,7 @@
  * createDesktopProviderService.ts,这样依赖本 holder 的纯逻辑模块(及其单测)不被 electron 污染。
  */
 
-import { BUNDLED_CATALOG, type AgentKind, type Catalog, type CatalogModel, type Provider } from '@lizi/model-providers';
+import { BUNDLED_CATALOG, type AgentKind, type Catalog, type CatalogModel, type Provider } from '@cindy/model-providers';
 
 import { CHATGPT_MODEL_PREFIX } from '../../shared/subscriptionModels.js';
 

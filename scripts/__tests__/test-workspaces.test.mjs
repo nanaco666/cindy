@@ -142,7 +142,7 @@ test("validateManifestCoverage fails when a pnpm workspace is missing", () => {
 test("discoverTestFiles ignores generated and nested non-workspace directories", () => {
 	const files = [
 		"packages/orca-workflow/src/__tests__/orca-bridge-mcp.test.ts",
-		"packages/orca-workflow/node_modules/@lizi/maker-core/src/session.test.ts",
+		"packages/orca-workflow/node_modules/@cindy/maker-core/src/session.test.ts",
 		"apps/server/release/src/__tests__/ignored.test.ts",
 		"apps/desktop/cindy-updater/src/__tests__/ignored.test.ts",
 		"apps/server/src/__tests__/services/oss.spec.ts",
@@ -576,14 +576,14 @@ test("parseCliOptions supports workspace include and exclude selectors", () => {
 			"--workspace",
 			"desktop,apps/server",
 			"--workspace",
-			"@lizi/maker-core",
+			"@cindy/maker-core",
 			"--exclude-workspace",
 			"packages/orca-workflow",
 		]),
 		{
 			all: false,
 			tier: "unit",
-			workspaces: ["desktop", "apps/server", "@lizi/maker-core"],
+			workspaces: ["desktop", "apps/server", "@cindy/maker-core"],
 			excludeWorkspaces: ["packages/orca-workflow"],
 		},
 	);

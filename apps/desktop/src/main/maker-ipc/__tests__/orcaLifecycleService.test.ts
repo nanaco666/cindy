@@ -1,4 +1,4 @@
-import type { AgentKind } from '@lizi/maker-core';
+import type { AgentKind } from '@cindy/maker-core';
 import { describe, expect, it, vi } from 'vitest';
 
 import {

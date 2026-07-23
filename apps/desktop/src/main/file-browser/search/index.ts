@@ -14,7 +14,7 @@
 
 import { ipcMain, BrowserWindow } from 'electron';
 import type { WebContents } from 'electron';
-import { RipgrepSearcher, type SearchEvent } from '@lizi/file-browser-core';
+import { RipgrepSearcher, type SearchEvent } from '@cindy/file-browser-core';
 
 import { createLogger } from '../../logger.js';
 import { getRipgrepBinaryPath } from '../../maker-host/runtime-configs.js';
@@ -212,4 +212,4 @@ export function registerSearchIpc(): void {
   log.info('search IPC registered');
 }
 
-export type { SearchEvent, SearchMatch, SearchEnd, SearchError, SubmatchSpan } from '@lizi/file-browser-core';
+export type { SearchEvent, SearchMatch, SearchEnd, SearchError, SubmatchSpan } from '@cindy/file-browser-core';

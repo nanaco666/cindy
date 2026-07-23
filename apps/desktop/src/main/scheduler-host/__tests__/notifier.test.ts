@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { BrowserWindow } from 'electron';
-import type { Schedule, ScheduleRun } from '@lizi/maker-scheduler';
-import type { FeishuIM } from 'lizi-im';
+import type { Schedule, ScheduleRun } from '@cindy/maker-scheduler';
+import type { FeishuIM } from '@cindy/im';
 
 import { showDesktopSessionEvent } from '../../notificationService';
 import { DesktopNotifier } from '../notifier';

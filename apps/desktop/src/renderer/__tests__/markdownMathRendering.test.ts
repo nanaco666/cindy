@@ -25,7 +25,7 @@ import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 
-import { normalizeMathDelimiters } from '@lizi/maker-shared/math-markdown';
+import { normalizeMathDelimiters } from '@cindy/maker-shared/math-markdown';
 import remarkStrictInlineMath from '../components/chat/remarkStrictInlineMath';
 
 function renderMath(markdown: string): string {

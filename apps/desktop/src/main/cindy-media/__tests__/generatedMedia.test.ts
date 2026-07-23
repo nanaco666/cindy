@@ -1,6 +1,6 @@
 /**
  * generatedMedia.test.ts — AI 生成产物媒体总仓适配器单测。
- * 覆盖:saveImage/saveVideo 零引用入仓(字段形状对齐 lizi-mcps 契约)、
+ * 覆盖:saveImage/saveVideo 零引用入仓(字段形状对齐 @cindy/mcps 契约)、
  * resolveImageRef 三分支(blob 地址 / 老 xdt-image 地址 / 绝对路径)与拒绝面、
  * 空输入/缺 mime 的错误语义(与老 store 报错文案同族,模型可自纠)。
  * 文件落 os.tmpdir() 收尾清理(规则 23);账本内存 SQLite + 真实 migration。
@@ -66,7 +66,7 @@ const legacyResolve = (ref: string) => ({
 });
 
 describe('createBlobImageStorage.saveImage(生成图入仓)', () => {
-  it('零引用入仓,返回字段形状对齐 lizi-mcps SavedImage 契约', async () => {
+  it('零引用入仓,返回字段形状对齐 @cindy/mcps SavedImage 契约', async () => {
     const storage = generatedMedia.createBlobImageStorage({ resolveLegacyImageRef: legacyResolve }, db);
     const saved = await storage.saveImage(PNG_BYTES.toString('base64'), 'image/png');
     expect(saved.xdtImageUrl).toBe(`cindy-media://blobs/${PNG_HASH}.png`);

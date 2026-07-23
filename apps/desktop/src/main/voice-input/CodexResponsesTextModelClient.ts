@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 
 import { fetch as undiciFetch, type Agent } from 'undici';
 
-import type { TextModelClient } from '@lizi/voice-input-core';
+import type { TextModelClient } from '@cindy/voice-input-core';
 
 import { createLogger } from '../logger.js';
 import { describeErrorWithCause, markRefinerModelOutputError } from './refinerErrorKind.js';

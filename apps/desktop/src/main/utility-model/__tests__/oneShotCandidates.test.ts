@@ -30,7 +30,7 @@ vi.mock('../../model-access/effectiveEndpoint.js', async () => {
   return { effectiveXdGatewayBaseUrl: () => TEST_XD_GATEWAY_BASE_URL };
 });
 
-import type { Maker } from '@lizi/maker-core';
+import type { Maker } from '@cindy/maker-core';
 import { fetch as undiciFetch } from 'undici';
 
 import { readClaudeApiKey } from '../../maker-host/auth-adapters.js';

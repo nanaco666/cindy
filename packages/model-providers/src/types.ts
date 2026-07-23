@@ -1,5 +1,5 @@
 /**
- * @lizi/model-providers — 类型定义。
+ * @cindy/model-providers — 类型定义。
  *
  * 形状对齐 models.dev（OpenCode 同源）：provider 为单位、每个 model 带
  * cost / limit / modalities / 能力 / release_date / status。在此之上加两处

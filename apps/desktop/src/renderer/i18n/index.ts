@@ -11,7 +11,7 @@
 
 import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
-import { BRAND_NAME } from '@lizi/maker-shared/branding';
+import { BRAND_NAME } from '@cindy/maker-shared/branding';
 
 import enCommon from './locales/en/common.json';
 import zhCNCommon from './locales/zh-CN/common.json';
@@ -46,7 +46,7 @@ void i18n.use(initReactI18next).init({
   interpolation: {
     escapeValue: false, // React 已转义
     // 品牌名单一事实源:locale 文案里的 {{appName}} 全部由此注入,改名只改
-    // @lizi/maker-shared/branding 的 BRAND_NAME(见该文件对"不跟随改名"标识符的说明)。
+    // @cindy/maker-shared/branding 的 BRAND_NAME(见该文件对"不跟随改名"标识符的说明)。
     defaultVariables: { appName: BRAND_NAME },
   },
   returnNull: false,

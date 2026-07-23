@@ -16,10 +16,10 @@ export default tseslint.config(
             {
               group: ['electron', 'electron/*', 'electron-*'],
               message:
-                '@lizi/remote-file-service 跑在远端 bundled Node 上,不能依赖 Electron。desktop 侧只消费 ./client 与 ./protocol。',
+                '@cindy/remote-file-service 跑在远端 bundled Node 上,不能依赖 Electron。desktop 侧只消费 ./client 与 ./protocol。',
             },
             {
-              group: ['@lizi/maker-remote-ssh', '@lizi/maker-remote-ssh/*'],
+              group: ['@cindy/maker-remote-ssh', '@cindy/maker-remote-ssh/*'],
               message:
                 'daemon 与 SSH 传输解耦:client 只依赖 duck-typed stream handle(见 client.ts 的 FileServiceStream),不 import ssh 包。',
             },

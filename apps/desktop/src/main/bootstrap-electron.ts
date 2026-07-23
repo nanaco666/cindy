@@ -26,7 +26,7 @@ import { pipeline } from 'node:stream/promises';
 import { execFile, execFileSync, spawn } from 'node:child_process';
 import { machineIdSync } from 'node-machine-id';
 import windowStateKeeper from 'electron-window-state';
-import { BRAND_NAME } from '@lizi/maker-shared/branding';
+import { BRAND_NAME } from '@cindy/maker-shared/branding';
 import {
   shouldRequestSingleInstanceLock,
   resolveSingleInstanceLockUserDataDir,
@@ -144,7 +144,7 @@ import {
 import { RendererBootGuard } from './renderer-boot-guard';
 import yaml from 'js-yaml';
 import matter from 'gray-matter';
-import type { Maker } from '@lizi/maker-core';
+import type { Maker } from '@cindy/maker-core';
 import { im, feishuIm, startImOrchestrators, startImConnection, stopImConnection } from './im';
 import * as authManager from './authManager';
 import { createAccountDeletionIpcHandlers } from './accountDeletionIpc';
@@ -174,7 +174,7 @@ import {
 import { createChatAttachmentSaveHandler } from './chatAttachmentSave';
 import { sweepStartupDraftImages } from './imageCacheOrphanSweep';
 import { sweepLegacyDialogueWorkingDirs } from './localDb/dialogueWorkdirSelfHeal';
-import { BRAND_IDENTITY } from '@lizi/maker-shared/brand-identity';
+import { BRAND_IDENTITY } from '@cindy/maker-shared/brand-identity';
 import * as videoCacheStore from './videoCacheStore';
 import { imageSchemePrivilege, registerImageProtocolHandler } from './imageProtocol';
 import { videoSchemePrivilege, registerVideoProtocolHandler } from './videoProtocol';
@@ -301,7 +301,7 @@ import {
   ensureActiveCatalogLoaded,
   refreshCustomProvidersIntoCatalog,
 } from './maker-host/createDesktopProviderService.js';
-import { setClaudeSupportedModelsListener } from '@lizi/maker-core';
+import { setClaudeSupportedModelsListener } from '@cindy/maker-core';
 import {
   noteAnthropicSdkSupportedModels,
   refreshAnthropicModelsFromHttp,
@@ -5272,7 +5272,7 @@ app.on('ready', async () => {
       );
     }
   }
-  // IM channels (lizi-im): 完全独立 workspace 包，跟随 app 生命周期。
+  // IM channels (@cindy/im): 完全独立 workspace 包，跟随 app 生命周期。
   // 注册 IPC handlers 必须在 init 之前——init 失败时 emit 的状态事件依赖 IPC bridge 转发。
   // IPC handlers 必须无条件注册:用户在 Settings 页保存凭证时, renderer 走这些
   // channel 跟 main 通信, 跟用户登录态无关。

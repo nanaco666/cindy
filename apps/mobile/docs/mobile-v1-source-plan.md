@@ -61,7 +61,7 @@ V1 不应做:
 
 桌面端和手机版不共享 UI 组件,但共享 model 输出和测试 fixture。桌面端把 model 渲染为 sidebar / right rail / hover action / split pane,手机版把同一份 model 渲染为 stack / sheet / full-screen modal / touch action。
 
-详细迁移顺序见 [shared-core-migration-plan.md](./shared-core-migration-plan.md)。当前已完成 `@lizi/maker-shared` 包 scaffold,并已迁入 queue summary / move index / Orca queue item 判断、device list presentation、session controls overview、session list / bulk selection model、agent capability projection、pending interaction serializers / priority / plan outline / issue normalization、message normalize content preview / stable sort / tool pairing model、message render grouping model、message window/search model、system card presentation、file browser / file preview model、automation/schedule model、device-link controller contract、composer palette model、payload summary/body/preview/tool-input-diff/tool-result-media/attachment projection model,以及 shared remote-control fixture baseline。raw desktop-like message fixture、schedule/file raw payload 和 desktop renderer parity 已接入;下一步继续 iOS session detail 产品化 polish 和失败态调优。
+详细迁移顺序见 [shared-core-migration-plan.md](./shared-core-migration-plan.md)。当前已完成 `@cindy/maker-shared` 包 scaffold,并已迁入 queue summary / move index / Orca queue item 判断、device list presentation、session controls overview、session list / bulk selection model、agent capability projection、pending interaction serializers / priority / plan outline / issue normalization、message normalize content preview / stable sort / tool pairing model、message render grouping model、message window/search model、system card presentation、file browser / file preview model、automation/schedule model、device-link controller contract、composer palette model、payload summary/body/preview/tool-input-diff/tool-result-media/attachment projection model,以及 shared remote-control fixture baseline。raw desktop-like message fixture、schedule/file raw payload 和 desktop renderer parity 已接入;下一步继续 iOS session detail 产品化 polish 和失败态调优。
 
 ### 1.2 Mobile Design Parity Gate
 
@@ -1248,8 +1248,8 @@ V2 再做:
 shared core 迁移后的单元测试不只跑 mobile。每次迁移必须同时跑:
 
 ```bash
-pnpm --filter @lizi/maker-shared build
-pnpm --filter @lizi/maker-shared test
+pnpm --filter @cindy/maker-shared build
+pnpm --filter @cindy/maker-shared test
 pnpm --filter mobile typecheck
 pnpm --filter mobile test -- <对应 mobile adapter 测试>
 ```

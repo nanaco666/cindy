@@ -10,8 +10,8 @@
  * 或回了空目录时判 'unknown',调用方不拦截 —— 拦错了会把可用的发送路径堵死,而放过
  * 去顶多撞上层一的友好错误提示(describeAgentAuthError)兜底。
  */
-import { connectedProvidersForAgent } from '@lizi/model-providers/registry';
-import type { ProviderView } from '@lizi/model-providers/registry';
+import { connectedProvidersForAgent } from '@cindy/model-providers/registry';
+import type { ProviderView } from '@cindy/model-providers/registry';
 
 export type AgentAuthGateVerdict = 'ready' | 'unauthenticated' | 'unknown';
 

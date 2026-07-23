@@ -1,7 +1,7 @@
 // BackendRouter — routes `BrowserControlRuntime.call` to the active backend.
 //
 // The router is itself a `BrowserBackend` (and therefore a `BrowserControlRuntime`,
-// since `.call` matches verbatim). Handing the router to lizi-mcps as
+// since `.call` matches verbatim). Handing the router to @cindy/mcps as
 // `getRuntime()` means the MCP tool layer never sees the backend split — the
 // abstraction sits entirely inside the host.
 //

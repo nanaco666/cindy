@@ -39,7 +39,7 @@ import type {
   CreateScheduleInput,
   ScheduleTemplate,
   UpdateScheduleInput,
-} from '@lizi/maker-scheduler';
+} from '@cindy/maker-scheduler';
 
 import { useHorizontalResize } from '@/hooks/useHorizontalResize';
 

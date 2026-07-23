@@ -1,4 +1,4 @@
-import type { SessionSendOptions, SessionSendResult, UserMessage } from '@lizi/maker-core';
+import type { SessionSendOptions, SessionSendResult, UserMessage } from '@cindy/maker-core';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { AgentInputQueuedMessage } from '../../../shared/agentInputQueue.js';

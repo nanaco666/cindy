@@ -44,7 +44,7 @@ import {
   sourcesForModel,
   visibleModelUnion,
   type ProviderView,
-} from '@lizi/model-providers';
+} from '@cindy/model-providers';
 import { buildProviderSections } from './sourceSwitch';
 
 // 厂商分类 / 分组标题 key 表的纯逻辑在 ./sourceSwitch。这里 re-export 给 ChatInput

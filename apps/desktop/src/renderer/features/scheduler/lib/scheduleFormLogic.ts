@@ -14,7 +14,7 @@
  *   - buildScheduleInput:表单 → CreateScheduleInput(原 toInput 迁入)
  */
 
-import type { CreateScheduleInput, ScheduleTemplate, ScheduleWorkspaceKind, ScriptCapability } from '@lizi/maker-scheduler';
+import type { CreateScheduleInput, ScheduleTemplate, ScheduleWorkspaceKind, ScriptCapability } from '@cindy/maker-scheduler';
 import type { SessionReference } from '../../../../shared/sessionReference';
 
 /** Effort 白名单 — 与 Phase 2 mapper enum 一致;UI 提交前的最后一道关卡。 */

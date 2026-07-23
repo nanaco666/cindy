@@ -13,8 +13,8 @@
  *
  * 每个 handler 按 `remoteHostId` 双路由:空 = 本地 fs(scanner 直调,零变化);
  * 非空 = SSH remote 会话,经 RemoteFileBrowserManager 转发到远端 file-service
- * daemon(@lizi/remote-file-service),语义与本地逐字节一致(daemon 打包同一份
- * @lizi/file-browser-core)。Path traversal 两侧都在 scanner 层拦
+ * daemon(@cindy/remote-file-service),语义与本地逐字节一致(daemon 打包同一份
+ * @cindy/file-browser-core)。Path traversal 两侧都在 scanner 层拦
  * (`assertInsideWorkdir` + realpath symlink 检查)。本地 watcher 状态在
  * watcherManager;远程 watch 桥接见 remote-watch.ts。
  */
@@ -32,11 +32,11 @@ import {
   setFileBrowserCoreLoggerFactory,
   statEntry,
   writeFile,
-} from '@lizi/file-browser-core';
+} from '@cindy/file-browser-core';
 
 import { promises as fsPromises } from 'node:fs';
 
-import { DL_MEDIA_FETCH_CHANNEL, FILE_BROWSER_REMOTE_OP_CHANNEL } from '@lizi/device-link';
+import { DL_MEDIA_FETCH_CHANNEL, FILE_BROWSER_REMOTE_OP_CHANNEL } from '@cindy/device-link';
 
 import { createLogger } from '../logger.js';
 import { getRipgrepBinaryPath } from '../maker-host/runtime-configs.js';
@@ -750,5 +750,5 @@ export function registerFileBrowserIpc(): void {
   log.info('file-browser IPC registered');
 }
 
-export type { DirEntry, FileReadResult, FileStat } from '@lizi/file-browser-core';
+export type { DirEntry, FileReadResult, FileStat } from '@cindy/file-browser-core';
 export type { FileTreeEvent, FileTreeEventType } from './watcher.js';

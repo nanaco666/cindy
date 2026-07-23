@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { stopRuntimeForQuit } from '../browser-dispose.js';
-import type { BrowserControlRequest, BrowserControlResult } from '@lizi/browser-control-runtime';
+import type { BrowserControlRequest, BrowserControlResult } from '@cindy/browser-control-runtime';
 
 function fakeLogger() {
   return { warn: vi.fn() };

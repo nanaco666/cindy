@@ -15,7 +15,7 @@ import {
   scheduleRunCreateToRow,
   scheduleRunPatchToRow,
 } from '../../localDb/mapper';
-import type { Schedule, ScheduleRun } from '@lizi/maker-scheduler';
+import type { Schedule, ScheduleRun } from '@cindy/maker-scheduler';
 
 // 用 ScheduleInsert 的"行级"形态（snake_case + null + numbers）构造一份基准 row，
 // 不引入 drizzle inferSelect 类型——保持单测对 schema 实现细节解耦。

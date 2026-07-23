@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type { Catalog, CatalogModel, Provider } from '@lizi/model-providers';
+import type { Catalog, CatalogModel, Provider } from '@cindy/model-providers';
 
 import { deriveAvailableModels } from '../catalog-to-descriptors.js';
 import {

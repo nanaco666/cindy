@@ -25,7 +25,7 @@ import {
   type Catalog,
   type CatalogIO,
   type CatalogSourceConfig,
-} from '@lizi/model-providers';
+} from '@cindy/model-providers';
 
 import { createLogger } from '../logger.js';
 import { getBaseUrl, isDev } from '../manifestService.js';

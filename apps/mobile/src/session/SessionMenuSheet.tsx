@@ -42,7 +42,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text, TextInput } from '@/components/AppText';
 import { MainWindowActionGroup } from '@/components/MobilePrimitives';
 import type { RemoteDirectoryEntry } from '@/device-link/mobileMakerTransport';
-import type { MobileCodexRateLimitsResult } from '@lizi/maker-shared/device-link-contract';
+import type { MobileCodexRateLimitsResult } from '@cindy/maker-shared/device-link-contract';
 import { computeContextSheetSnapHeights, type ContextSheetSnap } from '@/session/contextSheetModel';
 import { writeClipboardText } from '@/session/messageActions';
 import { normalizeExtraDirs } from '@/session/newSession';

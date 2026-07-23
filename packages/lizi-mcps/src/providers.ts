@@ -179,7 +179,7 @@ export function createLiziMcpProviders(
   // (source:'oauth' + tokenBroker:'feishu'),主机 token 刷新链与 scheduler
   // registry 直调均已退役。2026-07-22 起 feishu/ 死代码模块整体删除,其直通面
   // 生成器 + vendored OpenAPI 数据源(原 mcp/generated)迁入独立插件包 ——
-  // lizi-mcps 不再持有任何飞书 OpenAPI 生成物。
+  // @cindy/mcps 不再持有任何飞书 OpenAPI 生成物。
 
   // lizi_mivo 已于 2026-07-13 退役:mivo 全部 13 工具(图/视频/音乐/音效/3D
   // 生成、格式转换、按钮动作、下载)整体迁入插件 xd-mivo(network 槽

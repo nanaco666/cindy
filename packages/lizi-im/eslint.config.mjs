@@ -9,7 +9,7 @@ export default tseslint.config(
   },
   {
     rules: {
-      // lizi-im 必须零 Electron 依赖 —— 任何 electron / electron-* import 都报错。
+      // @cindy/im 必须零 Electron 依赖 —— 任何 electron / electron-* import 都报错。
       // 所有 Electron 适配在 host 层（apps/desktop/src/main/im-host.ts）实现，
       // 通过 IMHost adapter 注入（secrets / ipc / paths）。
       'no-restricted-imports': [
@@ -18,7 +18,7 @@ export default tseslint.config(
           patterns: [
             {
               group: ['electron', 'electron/*', 'electron-*'],
-              message: 'lizi-im 不能依赖 Electron。所有 Electron 适配在 host 层（apps/desktop/src/main/im-host.ts）实现，通过 IMHost 注入。',
+              message: '@cindy/im 不能依赖 Electron。所有 Electron 适配在 host 层（apps/desktop/src/main/im-host.ts）实现，通过 IMHost 注入。',
             },
           ],
         },

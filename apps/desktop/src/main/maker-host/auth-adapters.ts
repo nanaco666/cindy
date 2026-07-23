@@ -21,7 +21,7 @@ import { promises as fsp, existsSync } from 'node:fs';
 import { spawn, execFile, type ChildProcess } from 'node:child_process';
 import { promisify } from 'node:util';
 
-import type { AuthAdapter, AuthAdapterOptions, AuthState } from '@lizi/maker-core';
+import type { AuthAdapter, AuthAdapterOptions, AuthState } from '@cindy/maker-core';
 import { getCachedBinaryStatus } from '../agent-binaries/index.js';
 import { createLogger } from '../logger.js';
 import { prepareCodexGlobalSkillsLinks } from './codex-global-skills.js';

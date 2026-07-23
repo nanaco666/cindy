@@ -1,5 +1,5 @@
 /**
- * @lizi/device-link —— 跨设备远程控制(同账号设备互联)的协议层 + WS 客户端。
+ * @cindy/device-link —— 跨设备远程控制(同账号设备互联)的协议层 + WS 客户端。
  *
  * 三部分:
  *  - protocol: envelope 协议 / 错误码 / payload 类型(desktop 双端共享;

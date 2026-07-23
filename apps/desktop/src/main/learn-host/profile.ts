@@ -18,7 +18,7 @@ import path from 'node:path';
 import { app } from 'electron';
 import matter from 'gray-matter';
 
-import { sanitizeWorkdir } from '@lizi/maker-core';
+import { sanitizeWorkdir } from '@cindy/maker-core';
 
 import { createLogger } from '../logger';
 import { readMemorySettings } from '../maker-host/memory-settings-store';

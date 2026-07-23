@@ -16,10 +16,10 @@ import { randomUUID } from 'node:crypto';
 import { app } from 'electron';
 import type { BrowserWindow } from 'electron';
 
-import { Scheduler } from '@lizi/maker-scheduler';
-import type { Logger, ScheduleRunner } from '@lizi/maker-scheduler';
-import type { Maker } from '@lizi/maker-core';
-import type { FeishuIM } from 'lizi-im';
+import { Scheduler } from '@cindy/maker-scheduler';
+import type { Logger, ScheduleRunner } from '@cindy/maker-scheduler';
+import type { Maker } from '@cindy/maker-core';
+import type { FeishuIM } from '@cindy/im';
 
 import { dialogueWorkspaceRootDir } from '../localDb/dialogueWorkspace';
 import { getAgentIslandService } from '../agent-island/service.js';

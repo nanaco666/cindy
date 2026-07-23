@@ -5,7 +5,7 @@
  * (secrets / ipc / paths) and instantiate one FeishuIM. Other channels would
  * be added to the `createIM([...])` array.
  *
- * lizi-im is electron-free; this file is the *only* place that translates
+ * @cindy/im is electron-free; this file is the *only* place that translates
  * between Electron APIs (safeStorage / ipcMain / BrowserWindow / app.getPath)
  * and the IMHost contract.
  */
@@ -14,7 +14,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { app, safeStorage, ipcMain, BrowserWindow, net } from 'electron';
 
-import { createIM, createDiscordIM, createFeishuIM, type IMHost } from 'lizi-im';
+import { createIM, createDiscordIM, createFeishuIM, type IMHost } from '@cindy/im';
 
 import { createLogger } from '../logger';
 import { resolveSafe as resolveXdtImageUrl } from '../imageCacheStore';

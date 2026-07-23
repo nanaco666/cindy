@@ -25,7 +25,7 @@ import {
   parseVCards,
   type ImportContactRecord,
   type MakerContactsManager,
-} from '@lizi/maker-core';
+} from '@cindy/maker-core';
 
 import { MAKER_INVOKE } from './channels.js';
 import { throwIpcError, requireObject, requireString } from '../utils/ipcValidate.js';

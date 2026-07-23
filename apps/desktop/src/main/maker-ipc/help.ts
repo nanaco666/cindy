@@ -1,8 +1,8 @@
 import { ipcMain } from 'electron';
 import { and, desc, inArray, ne } from 'drizzle-orm';
 
-import type { AgentKind, Maker, OneShotOptions } from '@lizi/maker-core';
-import { BRAND_NAME } from '@lizi/maker-shared/branding';
+import type { AgentKind, Maker, OneShotOptions } from '@cindy/maker-core';
+import { BRAND_NAME } from '@cindy/maker-shared/branding';
 
 import { createLogger } from '../logger.js';
 import { getDbClient } from '../localDb/client/current.js';

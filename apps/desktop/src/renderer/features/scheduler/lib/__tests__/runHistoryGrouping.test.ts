@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { ScheduleRun } from '@lizi/maker-scheduler';
+import type { ScheduleRun } from '@cindy/maker-scheduler';
 
 import { groupRunsForHistory } from '../runHistoryGrouping';
 

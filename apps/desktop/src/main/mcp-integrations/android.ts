@@ -19,7 +19,7 @@ import type {
   AndroidScreenState,
   AndroidStatusSummary,
   AndroidUiNode,
-} from 'lizi-mcps';
+} from '@cindy/mcps';
 import {
   readAndroidAutomationSettings,
   type AndroidAutomationSettings,

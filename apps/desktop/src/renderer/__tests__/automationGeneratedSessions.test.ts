@@ -155,21 +155,21 @@ describe('automation-generated sessions', () => {
           id: 'daily-old',
           title: 'Daily summary',
           source: 'scheduler',
-          workingDir: '/Users/dash/repo',
+          workingDir: '/Users/alice/repo',
           userSendAt: '2026-01-02T00:00:00.000Z',
         }),
         makeSession({
           id: 'daily-new',
           title: 'Daily summary',
           source: 'scheduler',
-          workingDir: '/Users/dash/repo',
+          workingDir: '/Users/alice/repo',
           userSendAt: '2026-01-04T00:00:00.000Z',
           agentKind: 'codex',
         }),
         makeSession({
           id: 'legacy',
           title: '[Schedule] Legacy summary',
-          workingDir: '/Users/dash/repo',
+          workingDir: '/Users/alice/repo',
           userSendAt: '2026-01-03T00:00:00.000Z',
         }),
         makeSession({
@@ -195,7 +195,7 @@ describe('automation-generated sessions', () => {
     expect(groups[0].schedules[0].sessions.map((session) => session.id)).toEqual(['dialogue-run']);
 
     expect(groups[1]).toMatchObject({
-      workingDir: '/Users/dash/repo',
+      workingDir: '/Users/alice/repo',
       displayName: 'repo',
     });
     expect(groups[1].schedules.map((schedule) => schedule.scheduleName)).toEqual([
@@ -223,14 +223,14 @@ describe('automation-generated sessions', () => {
         id: 'project-manual',
         title: 'Manual project session',
         source: 'desktop',
-        workingDir: '/Users/dash/repo',
+        workingDir: '/Users/alice/repo',
         userSendAt: '2026-01-02T00:00:00.000Z',
       }),
       makeSession({
         id: 'project-auto',
         title: 'Automated project session',
         source: 'scheduler',
-        workingDir: '/Users/dash/repo',
+        workingDir: '/Users/alice/repo',
         userSendAt: '2026-01-03T00:00:00.000Z',
       }),
       makeSession({
@@ -246,7 +246,7 @@ describe('automation-generated sessions', () => {
     expect(grouped.dialogues.map((session) => session.id)).toEqual(['dialogue-auto']);
     expect(grouped.projects).toHaveLength(1);
     expect(grouped.projects[0]).toMatchObject({
-      workingDir: '/Users/dash/repo',
+      workingDir: '/Users/alice/repo',
       displayName: 'repo',
     });
     expect(grouped.projects[0].sessions.map((session) => session.id)).toEqual([
@@ -261,7 +261,7 @@ describe('automation-generated sessions', () => {
         id: 'manual-draft',
         title: 'Manual draft',
         source: 'desktop',
-        workingDir: '/Users/dash/repo',
+        workingDir: '/Users/alice/repo',
         userSendAt: null,
         _count: { messages: 0 },
       }),
@@ -269,7 +269,7 @@ describe('automation-generated sessions', () => {
         id: 'scheduler-bound',
         title: '[Schedule] GitHub 巡检',
         source: 'scheduler',
-        workingDir: '/Users/dash/repo',
+        workingDir: '/Users/alice/repo',
         userSendAt: null,
         _count: { messages: 0 },
       }),
@@ -278,7 +278,7 @@ describe('automation-generated sessions', () => {
     expect(grouped.unclassified.map((session) => session.id)).toEqual(['manual-draft']);
     expect(grouped.projects).toHaveLength(1);
     expect(grouped.projects[0]).toMatchObject({
-      workingDir: '/Users/dash/repo',
+      workingDir: '/Users/alice/repo',
       displayName: 'repo',
     });
     expect(grouped.projects[0].sessions.map((session) => session.id)).toEqual(['scheduler-bound']);

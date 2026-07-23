@@ -393,7 +393,7 @@ function assembleHandoffText(
 
   if (opts.sessionId) {
     // 早期原文检索指引:逐字窗口外的内容只剩单行提要,用户追问细节时模型必须能
-    // 翻到原文。工具名 / 参数是确定性事实(lizi-mcps xdt-helper,session_ids 过滤,
+    // 翻到原文。工具名 / 参数是确定性事实(@cindy/mcps xdt-helper,session_ids 过滤,
     // 两个工具均支持),写死在指引里比让模型自己发现可靠(规则 9)。
     sections.push(
       `== 早期原文检索(需要时用)==\n` +

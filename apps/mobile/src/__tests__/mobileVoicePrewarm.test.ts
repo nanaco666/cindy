@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { AsrEvent, AsrProvider, AudioTrace } from '@lizi/voice-input-core';
+import type { AsrEvent, AsrProvider, AudioTrace } from '@cindy/voice-input-core';
 
 const prewarmMobileRealtimeAudio = vi.fn();
 const resolveCredential = vi.fn();

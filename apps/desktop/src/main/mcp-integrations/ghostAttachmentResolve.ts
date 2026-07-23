@@ -21,7 +21,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { getDefaultImageResizer } from '@lizi/maker-core';
+import { getDefaultImageResizer } from '@cindy/maker-core';
 
 import { getBlobsRoot, parseBlobUrl, resolveHashRef } from '../cindy-media/blobStore.js';
 import { resolveSessionImageLenient } from '../imageCacheStore.js';

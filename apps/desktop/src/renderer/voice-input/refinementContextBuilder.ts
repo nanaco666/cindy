@@ -1,4 +1,4 @@
-import type { DictationRefinementContext } from '@lizi/voice-input-core';
+import type { DictationRefinementContext } from '@cindy/voice-input-core';
 
 import { getVoiceInputHistoryForRefinement } from '@/hooks/useVoiceInputHistory';
 import {

@@ -41,7 +41,7 @@ import { app } from 'electron';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 
-import type { CatalogModel, Effort } from '@lizi/model-providers';
+import type { CatalogModel, Effort } from '@cindy/model-providers';
 
 import { createLogger } from '../../logger.js';
 import { getActiveCatalog, setAnthropicDiscoveredModels } from '../active-catalog.js';

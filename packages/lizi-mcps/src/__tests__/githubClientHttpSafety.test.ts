@@ -1,7 +1,7 @@
 /**
  * github-client HTTP 安全加固回归测试(2026-07 对外安全评估 P2)。
  *
- * github-client 包本身无测试基建,故在 lizi-mcps(已有 vitest 且依赖该 client)覆盖:
+ * github-client 包本身无测试基建,故在 @cindy/mcps(已有 vitest 且依赖该 client)覆盖:
  *  1. assertSafeBaseUrl:GitHub 侧默认强制 https(非 loopback http 拒绝),
  *     userinfo / 非 http(s) / 不可解析一律拒绝。
  *  2. fetchWithSafeRedirect:非 3xx 原样返回;同源 3xx 带凭据继续跟随;跨源 3xx
@@ -15,7 +15,7 @@ import {
   GithubApiError,
   assertSafeBaseUrl,
   fetchWithSafeRedirect,
-} from '@lizi/github-client';
+} from '@cindy/github-client';
 
 type RequestFn = (method: string, path: string, body?: unknown) => Promise<unknown>;
 function rawRequest(c: GithubClient): RequestFn {

@@ -22,7 +22,7 @@
  * 纯函数 + 注入依赖(规则 14), Electron / maker 绑定在 session-runner 组装。
  */
 
-import type { Effort } from '@lizi/maker-core';
+import type { Effort } from '@cindy/maker-core';
 
 /** 依赖注入面: IM 默认值 + 各 agent 当前可用模型清单。 */
 export interface HookDefaultsDeps {

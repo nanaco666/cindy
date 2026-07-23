@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react';
 
-import { isTransientRemoteError, withTransientRemoteRetry } from '@lizi/maker-shared/device-link-contract';
+import { isTransientRemoteError, withTransientRemoteRetry } from '@cindy/maker-shared/device-link-contract';
 
 import { getSessionDeviceId } from '@/features/device-link/remoteProjectsStore';
 import {

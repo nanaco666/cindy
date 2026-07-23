@@ -35,7 +35,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ChevronDown } from 'lucide-react';
 
-import { visibleModelUnion, type AgentKind, type CatalogModel } from '@lizi/model-providers';
+import { visibleModelUnion, type AgentKind, type CatalogModel } from '@cindy/model-providers';
 
 import {
   DropdownMenu,

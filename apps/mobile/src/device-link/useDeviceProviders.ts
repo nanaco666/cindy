@@ -10,7 +10,7 @@
  */
 import { useEffect, useState } from 'react';
 
-import type { ProviderView } from '@lizi/model-providers/registry';
+import type { ProviderView } from '@cindy/model-providers/registry';
 
 import {
   fetchDeviceProviders,

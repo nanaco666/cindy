@@ -10,8 +10,8 @@
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
-import type { AgentEvent, Maker, Session, SessionSendResult } from '@lizi/maker-core';
-import type { FireContext, Logger, Notifier, Schedule } from '@lizi/maker-scheduler';
+import type { AgentEvent, Maker, Session, SessionSendResult } from '@cindy/maker-core';
+import type { FireContext, Logger, Notifier, Schedule } from '@cindy/maker-scheduler';
 
 const mocks = vi.hoisted(() => ({
   createMessage: vi.fn(),

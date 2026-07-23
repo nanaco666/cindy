@@ -139,7 +139,7 @@ import {
   useProjectPickerOptions,
 } from '@/hooks/useProjectPickerOptions';
 import { resolveFastSupported, deriveModelsFromProviders } from '@/lib/providerModels';
-import { effectiveSourceIdForModel, getModel, sessionModelSupportsFastMode, connectedProvidersForAgent } from '@lizi/model-providers';
+import { effectiveSourceIdForModel, getModel, sessionModelSupportsFastMode, connectedProvidersForAgent } from '@cindy/model-providers';
 import { isSubscriptionDirectModel } from '../../../shared/subscriptionModels';
 import {
   resolveDeviceLinkDraftDefaults,

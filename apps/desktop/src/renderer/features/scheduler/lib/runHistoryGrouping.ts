@@ -1,4 +1,4 @@
-import type { ScheduleRun } from '@lizi/maker-scheduler';
+import type { ScheduleRun } from '@cindy/maker-scheduler';
 
 export type RunHistoryDisplayEntry =
   | { kind: 'run'; key: string; run: ScheduleRun }

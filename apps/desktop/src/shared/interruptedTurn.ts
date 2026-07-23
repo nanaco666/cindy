@@ -13,7 +13,7 @@
  */
 /**
  * 合成 UI 指令行(隐藏续跑 / Mivo 图片按钮等)的 magic 前缀与规范化续跑指令。
- * **唯一定义点已上移到 `@lizi/maker-shared/synthetic-trigger`**(手机端消息流 /
+ * **唯一定义点已上移到 `@cindy/maker-shared/synthetic-trigger`**(手机端消息流 /
  * 排队区 / 会话预览同一判定),此处 re-export 保持桌面既有 import 路径稳定
  * (renderer makerChatStore 再 re-export 前缀常量)。带此前缀的 user 行经
  * coordinator enqueue 正常落库参与时序,但对一切「面向用户的文本消费」不可见:
@@ -27,7 +27,7 @@ export {
   isSyntheticTriggerText,
   CONTINUE_AFTER_APP_EXIT_PROMPT,
   CONTINUE_AFTER_ERROR_PROMPT,
-} from '@lizi/maker-shared/synthetic-trigger';
+} from '@cindy/maker-shared/synthetic-trigger';
 
 /**
  * error-tail-banner:把 role='error' 行的原始 content(DB 存的 JSON 字符串)

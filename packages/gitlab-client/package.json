@@ -1,5 +1,5 @@
 {
-  "name": "@lizi/gitlab-client",
+  "name": "@cindy/gitlab-client",
   "version": "0.0.0",
   "private": true,
   "description": "GitLab REST API v4 client for xdt-maker, zero runtime deps",

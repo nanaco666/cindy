@@ -1,6 +1,6 @@
 import { afterEach, describe, it, expect } from 'vitest';
 
-import { BUNDLED_CATALOG, buildUserProvider, type AgentKind, type RoutingDescriptor } from '@lizi/model-providers';
+import { BUNDLED_CATALOG, buildUserProvider, type AgentKind, type RoutingDescriptor } from '@cindy/model-providers';
 
 import {
   buildRouteDecision,

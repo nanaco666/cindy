@@ -3,7 +3,7 @@ import {
   type AgentKind,
   type CatalogModel,
   type ProviderView,
-} from '@lizi/model-providers';
+} from '@cindy/model-providers';
 
 import type { AgentCapabilities, ModelDescriptor } from '@/hooks/useAgentCapabilities';
 

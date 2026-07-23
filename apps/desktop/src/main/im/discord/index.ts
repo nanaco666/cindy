@@ -4,7 +4,7 @@
  * Wire the Discord IM channel up to the shared orchestrator.
  */
 
-import type { DiscordIM } from 'lizi-im';
+import type { DiscordIM } from '@cindy/im';
 
 import { createImOrchestrator } from '../shared/orchestrator';
 import type { ImOrchestratorConfig } from '../shared/types';

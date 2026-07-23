@@ -11,7 +11,7 @@
  *                     时读一遍 — 零 system prompt 改动的规则注入通道。
  */
 
-import type { MakerContactsStore } from '@lizi/maker-core';
+import type { MakerContactsStore } from '@cindy/maker-core';
 
 import type { ContactsToolResult } from '../cindy_contactsToolRegistry.js';
 import type { ContactsMcpDeps } from '../types.js';

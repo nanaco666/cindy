@@ -30,7 +30,7 @@ import { Readable, Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import path from 'node:path';
 import { net } from 'electron';
-import type { AttachmentIntegrity } from '@lizi/device-link';
+import type { AttachmentIntegrity } from '@cindy/device-link';
 
 import { serverApiFetch } from '../serverApiClient.js';
 import { deviceLinkApiBase } from './index.js';

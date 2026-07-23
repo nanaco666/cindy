@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { REMOTE_INVOKE_ALLOWLIST } from '@lizi/device-link';
+import { REMOTE_INVOKE_ALLOWLIST } from '@cindy/device-link';
 import {
   createMobileMakerTransport,
   MOBILE_MAKER_CHANNELS,

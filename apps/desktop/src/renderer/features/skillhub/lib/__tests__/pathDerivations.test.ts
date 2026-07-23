@@ -15,15 +15,15 @@ import { deriveScope, deriveProjectWorkingDir } from '../pathDerivations';
 
 describe('deriveScope (POSIX)', () => {
   it('global skill path → global', () => {
-    expect(deriveScope('/home/lizi/.claude/skills/my-skill')).toBe('global');
+    expect(deriveScope('/home/sam/.claude/skills/my-skill')).toBe('global');
   });
 
   it('global skill macOS home → global', () => {
-    expect(deriveScope('/Users/lizi/.claude/skills/my-skill')).toBe('global');
+    expect(deriveScope('/Users/sam/.claude/skills/my-skill')).toBe('global');
   });
 
   it('project skill path → project', () => {
-    expect(deriveScope('/Users/lizi/projects/foo/.claude/skills/my-skill')).toBe('project');
+    expect(deriveScope('/Users/sam/projects/foo/.claude/skills/my-skill')).toBe('project');
   });
 
   it('unrelated path → project', () => {
@@ -31,22 +31,22 @@ describe('deriveScope (POSIX)', () => {
   });
 
   it('path like global but without .claude → project', () => {
-    expect(deriveScope('/home/lizi/skills/my-skill')).toBe('project');
+    expect(deriveScope('/home/sam/skills/my-skill')).toBe('project');
   });
 
   it('path with .claude but no skills → project', () => {
-    expect(deriveScope('/home/lizi/.claude/commands/my-cmd')).toBe('project');
+    expect(deriveScope('/home/sam/.claude/commands/my-cmd')).toBe('project');
   });
 
   it('nested global subdir → global', () => {
     // path inside a skill dir is still "global" (same as main implementation)
-    expect(deriveScope('/home/lizi/.claude/skills/my-skill/subdir')).toBe('global');
+    expect(deriveScope('/home/sam/.claude/skills/my-skill/subdir')).toBe('global');
   });
 });
 
 describe('deriveScope (Windows)', () => {
   it('global skill Windows path → global', () => {
-    expect(deriveScope('C:\\Users\\lizi\\.claude\\skills\\my-skill')).toBe('global');
+    expect(deriveScope('C:\\Users\\sam\\.claude\\skills\\my-skill')).toBe('global');
   });
 
   it('project skill Windows path → project', () => {
@@ -55,7 +55,7 @@ describe('deriveScope (Windows)', () => {
 
   it('mixed separators Windows → global', () => {
     // forward slashes in a Windows-style path (drive letter present)
-    expect(deriveScope('C:/Users/lizi/.claude/skills/my-skill')).toBe('global');
+    expect(deriveScope('C:/Users/sam/.claude/skills/my-skill')).toBe('global');
   });
 });
 
@@ -64,14 +64,14 @@ describe('deriveScope (Windows)', () => {
 // (structural depth) and main-process derivations.ts (os.homedir() comparison).
 
 describe('deriveScope — non-standard home path edge cases', () => {
-  it('deep POSIX home /opt/users/lizi → classified as project (known limitation)', () => {
-    // Actual home is /opt/users/lizi but depth > 2, so renderer cannot detect
+  it('deep POSIX home /opt/users/sam → classified as project (known limitation)', () => {
+    // Actual home is /opt/users/sam but depth > 2, so renderer cannot detect
     // it as global. main-process would correctly return global via os.homedir().
-    expect(deriveScope('/opt/users/lizi/.claude/skills/my-skill')).toBe('project');
+    expect(deriveScope('/opt/users/sam/.claude/skills/my-skill')).toBe('project');
   });
 
-  it('depth-3 home /data/home/lizi → classified as project (known limitation)', () => {
-    expect(deriveScope('/data/home/lizi/.claude/skills/my-skill')).toBe('project');
+  it('depth-3 home /data/home/sam → classified as project (known limitation)', () => {
+    expect(deriveScope('/data/home/sam/.claude/skills/my-skill')).toBe('project');
   });
 });
 
@@ -79,17 +79,17 @@ describe('deriveScope — non-standard home path edge cases', () => {
 
 describe('deriveProjectWorkingDir (POSIX)', () => {
   it('global skill → null', () => {
-    expect(deriveProjectWorkingDir('/home/lizi/.claude/skills/my-skill')).toBeNull();
+    expect(deriveProjectWorkingDir('/home/sam/.claude/skills/my-skill')).toBeNull();
   });
 
   it('project skill → project root (dirname 3 levels)', () => {
-    const root = '/Users/lizi/projects/foo';
+    const root = '/Users/sam/projects/foo';
     const p = `${root}/.claude/skills/my-skill`;
     expect(deriveProjectWorkingDir(p)).toBe(root);
   });
 
   it('deeper project path → correct root', () => {
-    const root = '/home/lizi/work/nested/project';
+    const root = '/home/sam/work/nested/project';
     const p = `${root}/.claude/skills/cool-skill`;
     expect(deriveProjectWorkingDir(p)).toBe(root);
   });
@@ -97,7 +97,7 @@ describe('deriveProjectWorkingDir (POSIX)', () => {
 
 describe('deriveProjectWorkingDir (Windows)', () => {
   it('global skill Windows → null', () => {
-    expect(deriveProjectWorkingDir('C:\\Users\\lizi\\.claude\\skills\\my-skill')).toBeNull();
+    expect(deriveProjectWorkingDir('C:\\Users\\sam\\.claude\\skills\\my-skill')).toBeNull();
   });
 
   it('project skill Windows → project root', () => {

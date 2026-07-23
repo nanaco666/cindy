@@ -206,7 +206,7 @@ project-context refresh
   ...
 
   refreshed: 7, skipped: 0, failed: 1
-    x packages--lizi-mcps  claude-code adapter: timed out after 600000ms
+    x packages--@cindy/mcps  claude-code adapter: timed out after 600000ms
 ```
 
 **成本提醒**：

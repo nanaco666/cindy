@@ -58,7 +58,7 @@ import {
   joinChatQuoteTextSegments,
   parseChatQuoteSegments,
   type ChatQuote,
-} from '@lizi/maker-shared/chat-quotes';
+} from '@cindy/maker-shared/chat-quotes';
 import { QuoteCapsule } from '@/session/QuoteCapsule';
 import {
   SELECTION_QUOTE_MENU_LABEL,
@@ -187,13 +187,13 @@ import {
   type MobileWorkChildItem,
   type MobileWorkGroupItem,
 } from '@/session/messageRenderModel';
-import { dedupeToolMediaByUrl } from '@lizi/maker-shared/message-render';
-import { tokenizeThinkingText } from '@lizi/maker-shared/thinking-text';
+import { dedupeToolMediaByUrl } from '@cindy/maker-shared/message-render';
+import { tokenizeThinkingText } from '@cindy/maker-shared/thinking-text';
 import {
   buildAgentTaskCardModel,
   type AgentTaskCardModel,
   type AgentTaskStatus,
-} from '@lizi/maker-shared/agent-task';
+} from '@cindy/maker-shared/agent-task';
 import {
   buildMessageActionBarPresentation,
   summarizeMessageBubblePresentation,
@@ -256,7 +256,7 @@ import {
   type MermaidDiagramWebViewHandle,
 } from '@/session/mermaidWebView';
 import { MathFormulaWebView } from '@/session/mathWebView';
-import { latexToUnicodeApproximation } from '@lizi/maker-shared/math-markdown';
+import { latexToUnicodeApproximation } from '@cindy/maker-shared/math-markdown';
 import type { RemoteTextFilePreviewResult } from '@/device-link/mobileMakerTransport';
 import { fontWeight, lineHeight, radius, spacing, typeScale } from '@/theme/tokens';
 import { iconSize, iconStroke, monoFont, useTheme, useThemedStyles, type ThemeColors } from '@/theme';

@@ -1,1 +1,0 @@
-fixture-evidence desktop.legacy-migration.confirm-state mac cn

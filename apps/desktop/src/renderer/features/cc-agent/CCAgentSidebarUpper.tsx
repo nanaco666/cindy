@@ -18,7 +18,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import type { ReactNode } from 'react';
-import type { SchedulerEvent } from '@lizi/maker-scheduler';
+import type { SchedulerEvent } from '@cindy/maker-scheduler';
 import { createPortal } from 'react-dom';
 import { Archive, ChevronRight, CirclePlus, Clock, Folder, Plug, Trash2, X } from 'lucide-react';
 import { useNavigate, useMatch } from 'react-router-dom';

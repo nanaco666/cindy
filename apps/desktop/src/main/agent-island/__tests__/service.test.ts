@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { BrowserWindow } from 'electron';
-import { SESSION_ACTIVITY_CHANNEL } from '@lizi/device-link';
-import type { AgentEvent, InteractionRequest } from '@lizi/maker-core';
-import { BRAND_NAME } from '@lizi/maker-shared/branding';
+import { SESSION_ACTIVITY_CHANNEL } from '@cindy/device-link';
+import type { AgentEvent, InteractionRequest } from '@cindy/maker-core';
+import { BRAND_NAME } from '@cindy/maker-shared/branding';
 
 import { computeAgentIslandWindowBounds, type AgentIslandLayoutPreference } from '../geometry.js';
 import {
@@ -1085,7 +1085,7 @@ describe('AgentIslandService native publishing', () => {
       status: 'active',
       title: 'New Maker',
       userSendAt: null,
-      workingDir: '/Users/dash/Library/Application Support/xdt-maker/dialogues/2026-06-16/14ad7035-b7aa-4f5d-bc9f-6e39cffdd9ea',
+      workingDir: '/Users/alice/Library/Application Support/xdt-maker/dialogues/2026-06-16/14ad7035-b7aa-4f5d-bc9f-6e39cffdd9ea',
       workspaceKind: 'dialogue',
     });
     const service = new AgentIslandService({
@@ -1098,7 +1098,7 @@ describe('AgentIslandService native publishing', () => {
       {
         sessionId: 's1',
         agentKind: 'codex',
-        workingDir: '/Users/dash/Library/Application Support/xdt-maker/dialogues/2026-06-16/14ad7035-b7aa-4f5d-bc9f-6e39cffdd9ea',
+        workingDir: '/Users/alice/Library/Application Support/xdt-maker/dialogues/2026-06-16/14ad7035-b7aa-4f5d-bc9f-6e39cffdd9ea',
         workspaceKind: 'dialogue',
       },
       '/goal 测试一下是不是支持目标模式',
@@ -1117,7 +1117,7 @@ describe('AgentIslandService native publishing', () => {
 
     service.handleSessionMetadataPatch('s1', {
       title: '目标模式测试',
-      workingDir: '/Users/dash/Library/Application Support/xdt-maker/dialogues/2026-06-16/14ad7035-b7aa-4f5d-bc9f-6e39cffdd9ea',
+      workingDir: '/Users/alice/Library/Application Support/xdt-maker/dialogues/2026-06-16/14ad7035-b7aa-4f5d-bc9f-6e39cffdd9ea',
       workspaceKind: 'dialogue',
     });
 

@@ -5,10 +5,10 @@ import {
   type LiziMcpProvider,
   type LiziMcpSessionContext,
   type LspServerPool,
-} from 'lizi-mcps';
-import type { OrcaMcpDeps } from 'lizi-mcps';
+} from '@cindy/mcps';
+import type { OrcaMcpDeps } from '@cindy/mcps';
 import { createCindyGhostsMcpServer } from 'cindy-tools';
-import type { MakerMemoryManager } from '@lizi/maker-core';
+import type { MakerMemoryManager } from '@cindy/maker-core';
 import { getCindyGhostsMcpDeps } from './ghost.js';
 import { getAndroidMcpDeps } from './android.js';
 import { getBrowserMcpDeps } from './browser.js';

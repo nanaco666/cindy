@@ -26,7 +26,7 @@ import fs from 'node:fs';
 import { spawn } from 'node:child_process';
 import os from 'node:os';
 
-import { BRAND_IDENTITY } from '@lizi/maker-shared/brand-identity';
+import { BRAND_IDENTITY } from '@cindy/maker-shared/brand-identity';
 
 import { fetchManifest, getBaseUrl, isDev } from './manifestService';
 import type { Manifest } from './manifestService';

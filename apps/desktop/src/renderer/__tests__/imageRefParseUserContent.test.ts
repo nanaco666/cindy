@@ -39,12 +39,12 @@ const validImage: ImageRef = {
 
 const validFile: FileRef = {
   name: 'notes.txt',
-  path: '/Users/lizi/Desktop/notes.txt',
+  path: '/Users/sam/Desktop/notes.txt',
 };
 
 const validFile2: FileRef = {
   name: 'spec.pdf',
-  path: '/Users/lizi/Documents/spec.pdf',
+  path: '/Users/sam/Documents/spec.pdf',
 };
 
 // ── Branch 1: string ────────────────────────────────────────────────────────

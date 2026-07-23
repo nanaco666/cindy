@@ -9,7 +9,7 @@
  * 本文件只承载工具 schema + 描述(对 LLM 的流程指引)和 host 回调的 payload 整形。
  */
 
-import { BRAND_NAME } from '@lizi/maker-shared/branding';
+import { BRAND_NAME } from '@cindy/maker-shared/branding';
 import { z } from 'zod';
 
 import type { XdtHelperToolRegistry } from '../lizi_xdtHelperToolRegistry.js';

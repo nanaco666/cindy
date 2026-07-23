@@ -17,7 +17,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { createServer, type Server, type IncomingMessage, type ServerResponse } from 'node:http';
 import { shell } from 'electron';
 
-import { BRAND_NAME } from '@lizi/maker-shared/branding';
+import { BRAND_NAME } from '@cindy/maker-shared/branding';
 
 import {
   buildOAuthReturnAction,

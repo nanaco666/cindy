@@ -140,7 +140,7 @@ export function replaceBuildNumberInAppJson(rawText, nextBuildNumber) {
  * (空 = 假设描述文件已装入 ~/Library/MobileDevice/Provisioning Profiles)。
  * signIdentity 只接受**完整证书通用名**("<类型>: <名字> (<ID>)",末尾括号 ID 不能省)
  * 或 40 位 SHA-1:裸类型名("Apple Development")对 xcodebuild 是自动选择器,掐掉 ID 的
- * 部分名("Apple Development: Jiali LIU")走 CODE_SIGN_IDENTITY 子串匹配同样有歧义,
+ * 部分名("Apple Development: Jane Doe")走 CODE_SIGN_IDENTITY 子串匹配同样有歧义,
  * 多证书钥匙串下都钉不住证书,必须在预检就拒掉(security find-identity -v -p codesigning 可查完整名)。
  * 签名套件本体(profile + p12)在打包机的仓库外目录,不入仓。
  * @param {{ authRegion?: string, iosSigning?: { teamId?: string, profileName?: string, signIdentity?: string, profilePath?: string } }} regionConfig
@@ -164,7 +164,7 @@ export function resolveIosSigningEnv(regionConfig) {
   }
   const isSha1 = /^[0-9A-Fa-f]{40}$/.test(identity);
   // 完整证书通用名固定形如 "<类型>: <名字> (<ID>)",末尾括号 ID 必须在:只查冒号会放过
-  // "Apple Development: Jiali LIU" 这类掐掉 ID 的部分名——它同样是模糊匹配,钉不住。
+  // "Apple Development: Jane Doe" 这类掐掉 ID 的部分名——它同样是模糊匹配,钉不住。
   const isFullName = /^.+: .+ \([A-Z0-9]{4,}\)$/.test(identity);
   if (!isSha1 && !isFullName) {
     throw new Error(

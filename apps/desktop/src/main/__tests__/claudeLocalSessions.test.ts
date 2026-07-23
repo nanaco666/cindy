@@ -362,25 +362,25 @@ describe('parseClaudeCodeMessageLine', () => {
 
   it('uses the latest Claude cwd for XD project grouping', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-local-session-'));
-    const projectDir = path.join(dir, '-Users-zkyo');
+    const projectDir = path.join(dir, '-Users-carol');
     fs.mkdirSync(projectDir, { recursive: true });
     const file = path.join(projectDir, `${sdkSessionId}.jsonl`);
     fs.writeFileSync(file, [
       line({
         type: 'user',
         uuid: 'user-home',
-        cwd: '/Users/zkyo',
+        cwd: '/Users/carol',
         message: { role: 'user', content: '<local-command-caveat>ignore</local-command-caveat>' },
       }),
       line({
         type: 'system',
-        cwd: '/Users/zkyo/Projects/Github/FiloAI/cli-slg',
+        cwd: '/Users/carol/Projects/Github/ExampleOrg/cli-app',
         subtype: 'turn_duration',
       }),
       line({
         type: 'user',
         uuid: 'user-project',
-        cwd: '/Users/zkyo/Projects/Github/FiloAI/cli-slg',
+        cwd: '/Users/carol/Projects/Github/ExampleOrg/cli-app',
         message: { role: 'user', content: '继续写 V4 文档' },
       }),
     ].join('\n'));
@@ -389,7 +389,7 @@ describe('parseClaudeCodeMessageLine', () => {
       const summary = await readClaudeCodeSessionSummary(file);
       expect(summary).toMatchObject({
         sdkSessionId,
-        cwd: '/Users/zkyo/Projects/Github/FiloAI/cli-slg',
+        cwd: '/Users/carol/Projects/Github/ExampleOrg/cli-app',
         title: '继续写 V4 文档',
         archived: false,
       });

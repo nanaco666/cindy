@@ -8,7 +8,7 @@ import {
   type ProjectedWorkActivity,
   type WorkActivityMessageLike,
   type WorkActivityProjection,
-} from '@lizi/maker-shared/work-activity-projection';
+} from '@cindy/maker-shared/work-activity-projection';
 
 import type { NormalizedRemoteMessage } from '@/session/messageNormalize';
 import type { MobileWorkChildItem } from '@/session/messageRenderModel';

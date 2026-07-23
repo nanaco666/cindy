@@ -17,7 +17,7 @@ import {
   parseOrcaInitialWorkerRef,
   renderOrcaLeadSystemPrompt,
   renderOrcaWorkerSystemPrompt,
-} from '@fmfsaisai/orca-workflow';
+} from '@cindy/orca-workflow';
 
 import { randomUUID } from 'node:crypto';
 
@@ -32,9 +32,9 @@ import type {
   SessionSendOptions,
   SessionSendResult,
   UserMessage,
-} from '@lizi/maker-core';
+} from '@cindy/maker-core';
 import { createId } from '@paralleldrive/cuid2';
-import { permissionModeOrAsk } from '@lizi/maker-shared/permission-mode';
+import { permissionModeOrAsk } from '@cindy/maker-shared/permission-mode';
 import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { BrowserWindow, ipcMain } from 'electron';
 import type { AgentMeta } from '../../renderer/lib/ccAgent.types';
@@ -315,7 +315,7 @@ import {
   getDesktopProviderService,
   refreshCustomProvidersIntoCatalog,
 } from '../maker-host/createDesktopProviderService.js';
-import { connectedProvidersForAgent, effectiveSourceIdForModel } from '@lizi/model-providers';
+import { connectedProvidersForAgent, effectiveSourceIdForModel } from '@cindy/model-providers';
 import { hydrateSessionProvider, getSessionProvider } from '../maker-host/session-provider-store.js';
 import { getActiveCatalog, setDiscoveredProviderModels } from '../maker-host/active-catalog.js';
 import { testProviderConnection } from '../maker-host/provider-diagnostics.js';

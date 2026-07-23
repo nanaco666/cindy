@@ -1,7 +1,7 @@
 /**
  * deepLink (renderer) — cindy:// (+ 历史 xdt-maker://) URL 拼装 helper
  *
- * scheme 单点在 shared/deepLinkSchemes.ts(事实源 @lizi/maker-shared 的
+ * scheme 单点在 shared/deepLinkSchemes.ts(事实源 @cindy/maker-shared 的
  * brand-identity):**生成一律主 scheme cindy://,解析主 + 历史 scheme 都认**
  * (存量消息里复制的 xdt-maker:// 老链接不能死)。
  * 解析在 main 端做（src/main/deepLink.ts），renderer 只需要"复制深度链接"

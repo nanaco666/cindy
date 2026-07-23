@@ -324,7 +324,7 @@ const fanOutUsageMessageModelMismatch = createIpcFanOut('usage:message-model-mis
 const fanOutFeishuBotStatusChange = createIpcFanOut('feishuBot:status-change');
 const fanOutFeishuBotConflict = createIpcFanOut('feishuBot:conflict');
 const fanOutFeishuBotRegistrationStatus = createIpcFanOut('feishuBot:registration-status');
-// Discord Bot：本机凭证模式；这里只暴露 lizi-im DiscordIM 的 transport 状态。
+// Discord Bot：本机凭证模式；这里只暴露 @cindy/im DiscordIM 的 transport 状态。
 const fanOutDiscordBotStatusChange = createIpcFanOut('discordBot:status-change');
 const fanOutVoiceInputEvent = createIpcFanOut('voice-input:event');
 const fanOutVoiceInputGlobalShortcutTrigger = createIpcFanOut('voice-input:global-shortcut-trigger');
@@ -3326,20 +3326,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke('maker:get-workflow-progress', sessionId, taskId),
 
     // 模型供应商目录（只读）—— 内置目录元数据 + 各供应商实时连接状态。
-    listProviders: (): Promise<{ providers: import('@lizi/model-providers').ProviderView[] }> =>
+    listProviders: (): Promise<{ providers: import('@cindy/model-providers').ProviderView[] }> =>
       ipcRenderer.invoke('maker:provider:list'),
 
     // 自定义供应商配置 CRUD（密钥另走通用 safeStorage IPC，不经这里）。
     createCustomProvider: (
-      config: import('@lizi/model-providers').CustomProviderConfig,
+      config: import('@cindy/model-providers').CustomProviderConfig,
     ): Promise<{ ok: true }> => ipcRenderer.invoke('maker:provider:custom:create', config),
     updateCustomProvider: (
-      config: import('@lizi/model-providers').CustomProviderConfig,
+      config: import('@cindy/model-providers').CustomProviderConfig,
     ): Promise<{ ok: true }> => ipcRenderer.invoke('maker:provider:custom:update', config),
     deleteCustomProvider: (providerId: string): Promise<{ ok: true }> =>
       ipcRenderer.invoke('maker:provider:custom:delete', providerId),
     /** 自定义供应商创建模板（目录 presets 段，纯 UI 模板数据）。 */
-    listProviderPresets: (): Promise<{ presets: import('@lizi/model-providers').ProviderPreset[] }> =>
+    listProviderPresets: (): Promise<{ presets: import('@cindy/model-providers').ProviderPreset[] }> =>
       ipcRenderer.invoke('maker:provider:presets'),
     /**
      * 供应商「测试连接」—— 与真实会话同路由口径的最小探测请求。
@@ -3584,7 +3584,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       title?: string;
       parentSessionId?: string;
       orcaRole?: 'lead' | 'worker' | null;
-      // 与 @lizi/maker-core types/common.ts Effort union 一致
+      // 与 @cindy/maker-core types/common.ts Effort union 一致
       effort?: string;
       fastMode?: boolean;
       permissionMode?: string;
@@ -3711,7 +3711,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
         remoteHostId?: string;
         resumeSessionId?: string;
       },
-    ): Promise<import('@lizi/maker-core').ContextUsageData> =>
+    ): Promise<import('@cindy/maker-core').ContextUsageData> =>
       ipcRenderer.invoke('maker:get-context-usage', sessionId, createOpts),
 
     abortSession: (sessionId: string): Promise<void> =>
@@ -3939,7 +3939,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     }> => ipcRenderer.invoke('maker:git-safety:reset'),
 
     // 智能通讯录(maker-contacts)—— 设置页管理 UI 的数据通道。
-    // DTO 形状即 @lizi/maker-core contacts/types.ts(renderer 直接 type-import),
+    // DTO 形状即 @cindy/maker-core contacts/types.ts(renderer 直接 type-import),
     // 这里保持 unknown 透传, 类型收敛在 renderer service 层做。
     // 开关只 gate agent 侧 cindy_contacts MCP; 数据通道恒可用。
     contacts: {
@@ -4221,7 +4221,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // ── Scheduler (Phase 4) ────────────────────────────────────────────────
     // 写入路径全部走 scheduler 实例（main/scheduler-host:64）；renderer 不直接操作
     // schedules 表。`Schedule` / `ScheduleRun` / `CreateScheduleInput` 等 wire 形态
-    // 与 `@lizi/maker-scheduler` types.ts 完全同形，preload 不在这里重声明。
+    // 与 `@cindy/maker-scheduler` types.ts 完全同形，preload 不在这里重声明。
     schedule: {
       list: (filter?: { status?: 'active' | 'paused' | 'expired' }): Promise<unknown[]> =>
         ipcRenderer.invoke('maker:schedule:list', filter),

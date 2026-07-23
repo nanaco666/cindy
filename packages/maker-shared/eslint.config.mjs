@@ -15,7 +15,7 @@ export default tseslint.config(
           patterns: [
             {
               group: ['electron', 'electron/*', 'electron-*'],
-              message: '@lizi/maker-shared is shared by desktop and future clients. Keep Electron dependencies in app hosts.',
+              message: '@cindy/maker-shared is shared by desktop and future clients. Keep Electron dependencies in app hosts.',
             },
           ],
         },

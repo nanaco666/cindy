@@ -921,7 +921,7 @@ export function getGhostNotifySlot(): GhostNotifySlot {
  * 来源**:providers.json 运行时目录(getActiveCatalog,OSS 热更 + 内置兜底),
  * 汇总各供应商的 imageModels/imageDefaults 或 videoModels/videoDefaults
  * (今天只有 xd 网关一家有)。默认/档位选型全部来自目录,主机代码零模型
- * 字面量;目录尚无对应区(极端:远端老目录缓存)时落回 lizi-mcps 打包
+ * 字面量;目录尚无对应区(极端:远端老目录缓存)时落回 @cindy/mcps 打包
  * 常量、默认取清单首项,保证能力永不瘫痪。
  */
 function getCatalogMediaConfig(kind: 'image' | 'video'): {
@@ -1001,7 +1001,7 @@ async function readImageFileAsDataUri(absPath: string): Promise<string> {
 /**
  * 视频代办执行(cindy 槽 → art 视频 provider 层):alias 已过白名单校验,
  * registry 缺席(极端:art 服务未配视频 provider)时人话报错。
- * submit→轮询→下载一条龙在 lizi-mcps submitAndAwaitVideo(原 lizi_art 工具层
+ * submit→轮询→下载一条龙在 @cindy/mcps submitAndAwaitVideo(原 lizi_art 工具层
  * 的执行链,工具壳已退役);分钟级长任务,期间 cindySlot 在途名额持续占用。
  */
 async function runGhostVideo(params: {

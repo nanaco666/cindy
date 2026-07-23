@@ -82,7 +82,7 @@
 
 | 顺序 | 状态 | 里程碑 | 交付内容 | 验收 |
 | --- | --- | --- | --- | --- |
-| A | 已完成第一轮 | Shared core completion pass | automation/schedule model、device-link controller contract、shared fixture baseline、raw desktop-like message parity、schedule/file raw payload parity 已迁;保留 mobile re-export 兼容。 | `@lizi/maker-shared` build/test;mobile adapter 测试全绿;desktop parity 单测覆盖 schedule/file;shared 不依赖 RN/Electron/DOM。 |
+| A | 已完成第一轮 | Shared core completion pass | automation/schedule model、device-link controller contract、shared fixture baseline、raw desktop-like message parity、schedule/file raw payload parity 已迁;保留 mobile re-export 兼容。 | `@cindy/maker-shared` build/test;mobile adapter 测试全绿;desktop parity 单测覆盖 schedule/file;shared 不依赖 RN/Electron/DOM。 |
 | B | iOS baseline 已完成 | Mobile IA and shell baseline | RN primitives、Session Action Strip、会话页 chrome/main/bottom 层级、Queue/Search/Controls sheet、Usage 直达入口、debug/local path 分离、pending bottom surface、payload full-screen viewer shell 已完成;Session 六态 visual scenario / Maestro flow / baseline checker 已落地;payload modal 已补 `visual_session_payload.yaml` flow,Settings 已进入 `visual_smoke.yaml` 截图 flow。 | `ios-iphone-17-pro-expo-go` 下 12 张截图基线已接受并通过 hash 校验,包括设备列表、Settings、设备详情、会话、控制面板、payload full-screen viewer 和 idle/running/pending/queue/offline/revoked;revoked flow 已真实等待到“访问已撤销”。Android 当前只保留 profile/脚本护栏,不阻塞 iOS 高标准 polish。 |
 | C | 当前进行 | Home and session desktop-first polish | 在视觉基线保护下先修首页和会话页:首页回到桌面左侧会话列表;会话页重做消息层级、消息动作、可见文本选择、composer、pending、payload/diff/media/file viewer、context/cost、queue/controls 的触控节奏。所有手机端额外统计、说明和调试信息先默认删除或收进详情。新展示语义先进入 shared model,手机只做承载。 | 首页常驻信息不超过桌面左侧栏;长消息可直接选择复制;消息动作在消息结束处且视觉轻量;composer icon-first;长消息、长工具、大 diff、媒体、键盘、sheet 打开/关闭在 iPhone SE 宽度无重叠、无空白帧、消息列表不被卸载。 |
 | D | C 后收口 | Desktop parity pruning and hardening | 回到桌面源码矩阵,逐项补 new session、media/file、automations、fork/rewind、settings 的细节缺口;同时删除或下沉手机端比桌面端更多的状态表达。协作模式继续只读安全降级。 | 每个缺口必须有桌面来源、shared model 判断、mobile 承载说明和 unit / E2E / parity fixture 中至少一层验证;每个新增 UI 必须说明为什么没有让手机端更复杂。 |
@@ -258,7 +258,7 @@
 | 远程会话列表 | `remoteProjectsStore` 是控制端内存镜像,不写本地 SQLite;`sessions` topic 先订阅再 bootstrap;`sessions:created` 无 row,只触发 reseed。 | `remoteSessionStore` 按 `deviceId` 分片,`sessionId -> deviceId` 建索引;列表页只订阅 `sessions`;push patch 幂等合并,created 触发 refresh。 | store snapshot/patch/reseed/乱序回放单测;手机列表和桌面新建/改名/归档/删除同步 E2E。 |
 | 打开会话重订阅 | `useRemoteSessionSync` 打开会话才订阅 `session:<id>`;WS online、presence online、turn end、window focus、手动 resync 触发 reconcile。 | 会话页进入时 `openLink + subscribe(session:<id>) + getSession + getPendingInteractions + getProjection`;退出时 unsubscribe;App foreground 走同样 rehydrate。 | `rehydrateDeviceLinkTopics` 单测;reconnect Maestro flow;server relay E2E 覆盖 push 后补账。 |
 | 远程传输层 | `makerTransport.ts` 通过 `getSessionDeviceId(sessionId)` 路由本地 IPC 或 `deviceLink.invoke`。 | 手机版所有远程调用进入 `mobileMakerTransport`;页面组件禁止直接拼 channel;channel drift 由测试锁定。 | `mobileMakerTransport.test` 断言 channel、参数顺序、错误码保留。 |
-| 侧边栏/会话列表 | `CCAgentSidebarUpper` + sections 支持 pinned、dialogue、projects、date grouped、archived/all、search、batch、automation group、schedule unread。 | V1 用 `SectionList` 实现设备/置顶/对话/项目分组,已补搜索、archived/all、project/date 切换、长按选择模式和批量归档/删除;同一 schedule 的自动化生成会话已聚合成组行,并显示 running/unread run。筛选、搜索、分组、自动化聚合、列表上下文/空状态和批量操作 patch projection 已迁入 `@lizi/maker-shared/session-list` 与 `session-selection`,mobile 只保留 RN 列表、确认卡、远程 patch 调用和刷新。 | shared + mobile 分组/选择单测;1000 session fixture;E2E 覆盖搜索、置顶、归档、批量操作、切筛选。 |
+| 侧边栏/会话列表 | `CCAgentSidebarUpper` + sections 支持 pinned、dialogue、projects、date grouped、archived/all、search、batch、automation group、schedule unread。 | V1 用 `SectionList` 实现设备/置顶/对话/项目分组,已补搜索、archived/all、project/date 切换、长按选择模式和批量归档/删除;同一 schedule 的自动化生成会话已聚合成组行,并显示 running/unread run。筛选、搜索、分组、自动化聚合、列表上下文/空状态和批量操作 patch projection 已迁入 `@cindy/maker-shared/session-list` 与 `session-selection`,mobile 只保留 RN 列表、确认卡、远程 patch 调用和刷新。 | shared + mobile 分组/选择单测;1000 session fixture;E2E 覆盖搜索、置顶、归档、批量操作、切筛选。 |
 | 新建会话 | `NewMakerDraftRoute` 远程 device-link 路径调用 `maker:create-session`;`deviceLinkCreateArgs` 负责 workspace、agent、extraDirs 归一;首条消息再走 input queue。桌面本地对话由 main/localDb 分配 `userData/dialogues/<date>/<sessionId>` cwd。 | `/sessions/new` 已支持项目/对话工作区切换、手动远程项目路径、远端目录浏览、最近项目 quick pick、extra dirs、agent/model/effort/permission/fast 和首条消息;运行设置已通过被控端 `maker:get-capabilities` 纠正 model/effort/permission/fast 组合;对话模式不让手机端猜路径,由被控桌面端 `maker:create-session` 分配真实 cwd。会话 composer 已补附件、slash、@ 和语音首版;worktree 创建继续后补。协议仍是 create session 后 enqueue first message。 | `newSession.test` 覆盖 project/dialogue create args、defaults、recent workspaces、extra dirs、无 effort 模型参数省略;`agentCapabilities.test` 覆盖 capability 纠偏;桌面 `sessionRequest/sessionCreateHandler` 覆盖 dialogue cwd 分配;`mobileMakerTransport` 和 smoke 覆盖 `fs:list-dir` 参数形态;E2E 覆盖新建后桌面侧出现会话并收到首条消息。 |
 | 会话 Header | `SessionContentHeader` 管 title、pin、schedule badge、deep link、SDK id、archive/delete、right sidebar;远程会话只显示远端路径,不本机 open。 | 手机顶部只放返回、设备、标题、状态;`SessionControlsPanel` 已承载 rename/pin/archive/delete/copy deep link/copy XDT id/copy SDK id/model/effort/permission/fast/context/spend,删除需要二次确认;controls sheet 的 overview、tabs、输入行、按钮和远程目录 browser 已用 `sessionControlsTouchLayout.ts` 做窄屏触控布局,动作按钮统一由局部 `ControlActionButton` 表达,inline 入口 / section tabs / 远程目录进入行补齐 expanded / selected / disabled accessibility state。 | header/control source anchors + smoke 覆盖;`sessionLinks.test` 锁定 deep link 格式;`sessionControlsTouchLayout.test` 锁定 320/393/未就绪宽度。 |
 | 连接状态 | `RemoteSessionBanner` 区分 disconnected、host offline、not connected、remote disabled、access revoked,支持 resync。 | 顶部固定连接 banner,错误保留 code;resync 执行重订阅、消息 reconcile、pending interaction 和列表 refresh;重新同步按钮用 busy-aware `MainWindowActionButton` 表达 loading/disabled/busy state。 | remote error formatting 单测;relay 断开/电脑关闭远控/撤权 E2E。 |
@@ -972,7 +972,7 @@ V2 再做:
 
 ## 10. 手机版实现结构
 
-当前实现结构按 shared core 修订。`apps/mobile` 只放 iOS / Android 原生壳、device-link 生命周期、mobile adapter 和触控 UI;可复用的 session/message render、message presentation、pending interaction、queue/input projection、session controls、file browser、automation/schedule、payload summary/body/preview/tool input diff/summary projection/tool_result media extraction/attachment projection 等纯模型从 `@lizi/maker-shared` 引入。
+当前实现结构按 shared core 修订。`apps/mobile` 只放 iOS / Android 原生壳、device-link 生命周期、mobile adapter 和触控 UI;可复用的 session/message render、message presentation、pending interaction、queue/input projection、session controls、file browser、automation/schedule、payload summary/body/preview/tool input diff/summary projection/tool_result media extraction/attachment projection 等纯模型从 `@cindy/maker-shared` 引入。
 
 建议按这些模块推进:
 
@@ -1031,7 +1031,7 @@ apps/mobile/src/
 - 不直接复用桌面 React DOM 组件。
 - 复用桌面 wire protocol 和状态机语义。
 - 所有 `deviceLink.invoke` 进入 `mobileMakerTransport`。
-- message renderer 先消费 `@lizi/maker-shared` 的 render model;raw desktop payload 只允许在 mobile adapter 层归一,不要在组件里散落 `unknown` 判断。
+- message renderer 先消费 `@cindy/maker-shared` 的 render model;raw desktop payload 只允许在 mobile adapter 层归一,不要在组件里散落 `unknown` 判断。
 - pending interaction 的 answer/decision serialization 必须进入 shared core 并有单测锁定;mobile 只负责 sheet / wizard 和本地 draft。
 - queue、session controls、file preview、automation/schedule、payload summary/body/preview/tool input diff/summary projection/tool_result media extraction/attachment projection 的排序、摘要、disabled reason、error copy、primary action 等语义先进入 shared core,再由 mobile 渲染。
 - 展开态、composer draft、ask draft、queue sheet 状态只存在手机本地。
@@ -1073,8 +1073,8 @@ apps/mobile/src/
   - 已新增 `media_smoke.yaml` + `pnpm --filter mobile test:e2e:local:media`:mock host 在会话里制造 direct image / xdt-video / xdt-audio 媒体消息,Maestro 打开图片 payload 并验证缩放控件。
   - 已新增 `pnpm --filter mobile test:e2e:local:full`:mock host 默认使用 `controls` 场景,把 create、remote session、pending controls、media、file preview、fork/rewind、automations 串进同一个 full flow suite;`--check-only` 可在未安装 Maestro 时验证 local server + relay + mock host preflight。
 - 当前验证命令已通过:
-  - `pnpm --filter @lizi/maker-shared build`
-  - `pnpm --filter @lizi/maker-shared test`
+  - `pnpm --filter @cindy/maker-shared build`
+  - `pnpm --filter @cindy/maker-shared test`
   - `pnpm --filter mobile typecheck`
   - `pnpm --filter mobile test`(63 files / 306 tests)
   - `pnpm --filter desktop test -- src/renderer/__tests__/makerSharedFixtureParity.test.ts`
@@ -1088,7 +1088,7 @@ apps/mobile/src/
   - `pnpm --filter mobile test:e2e:local:full -- --start-server --check-only`(local server + controls mock host preflight)
   - `pnpm --filter mobile test:e2e:local -- --dry-run`(local smoke runner dry run)
   - `pnpm --filter mobile test:e2e:local:fixture -- --dry-run`(mock host fixture dry run)
-  - `pnpm --filter @lizi/device-link test`(3 files / 36 tests)
+  - `pnpm --filter @cindy/device-link test`(3 files / 36 tests)
   - `pnpm --filter server exec vitest run src/__tests__/deviceLinkClientRelayE2E.test.ts`(1 file / 8 tests)
 - 本轮 schedule/file shared parity 补充验证实际命令:
   - `cd packages/maker-shared && ../../node_modules/.bin/tsc --noEmit --pretty false`
@@ -1120,7 +1120,7 @@ apps/mobile/src/
 - 已锁定 busy 不影响可控性,只作为状态提示;离线 / 未开启远程控制 / 本机不可进入。
 - 已接入控制端撤权镜像:收到 `link-close('revoked')` 或 `ACCESS_REVOKED` 后,手机标记该设备“已撤销访问权限”、清掉该设备的远程会话分片;后续 open/subscribe/invoke 成功后自动清除该标记。
 - 已把设备列表补齐到可控制、运行中、已撤销访问权限、未开启远程控制、离线、本机,排序基于最终状态而不是原始 presence。
-- 设备列表可控性分类、排序、平台标签、不可用设备可见性、header/filter/empty/toggle 文案已迁入 `@lizi/maker-shared/device-list`;mobile 只保留 `FlatList`、设置入口、重新同步、设备详情导航和状态点视觉。
+- 设备列表可控性分类、排序、平台标签、不可用设备可见性、header/filter/empty/toggle 文案已迁入 `@cindy/maker-shared/device-list`;mobile 只保留 `FlatList`、设置入口、重新同步、设备详情导航和状态点视觉。
 - 已把设备详情页会话列表升级为 `SectionList`,按置顶、对话、项目分组,并显示 agent、model、状态、最近活动、消息数。
 - 已接入会话搜索、active/archived/all 状态筛选和 project/date 分组切换;状态筛选透传到被控端 `local-db:sessions:list(limit, status)`,搜索和分组在手机端本地完成。当前搜索覆盖 title / project path / model / agent / status / worktree / schedule / Orca label / last message preview;preview 来源兼容未来 session row 字段和当前已同步 message window。
 - 已接入会话列表长按选择模式和批量 archive / delete / clear selection;批量操作复用被控端 `local-db:sessions:patch-meta`,成功后刷新远程镜像。
@@ -1389,7 +1389,7 @@ apps/mobile/src/
 pnpm --filter mobile test
 pnpm --filter mobile test:smoke
 pnpm --filter mobile test:web-smoke
-pnpm --filter @lizi/device-link test
+pnpm --filter @cindy/device-link test
 pnpm --filter server test -- deviceLinkClientRelayE2E
 ```
 

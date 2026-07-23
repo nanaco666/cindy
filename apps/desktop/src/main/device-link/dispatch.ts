@@ -38,14 +38,14 @@ import {
   type InvokeResultPayload,
   type LinkOpenPayload,
   type Topic,
-} from '@lizi/device-link';
-import type { MobileVoiceDictionaryLearningRequest } from '@lizi/maker-shared/device-link-contract';
+} from '@cindy/device-link';
+import type { MobileVoiceDictionaryLearningRequest } from '@cindy/maker-shared/device-link-contract';
 import {
   resolveProviderLogoKind,
   type ProviderLogoRouting,
-} from '@lizi/model-providers/branding';
+} from '@cindy/model-providers/branding';
 import { app } from 'electron';
-import type { DeviceLinkClient } from '@lizi/device-link';
+import type { DeviceLinkClient } from '@cindy/device-link';
 import { createLogger } from '../logger';
 import { readDeviceLinkSettings } from './settings-store';
 import { dispatchLocalInvoke } from './invoke-registry';

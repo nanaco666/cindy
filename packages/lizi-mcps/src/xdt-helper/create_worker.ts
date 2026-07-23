@@ -2,7 +2,7 @@
  * xdt-helper/create_worker.ts —— 在 active workflow 内创建新 worker session。
  */
 
-import { BRAND_NAME } from '@lizi/maker-shared/branding';
+import { BRAND_NAME } from '@cindy/maker-shared/branding';
 import { z } from 'zod';
 
 import type { XdtHelperToolRegistry } from '../lizi_xdtHelperToolRegistry.js';

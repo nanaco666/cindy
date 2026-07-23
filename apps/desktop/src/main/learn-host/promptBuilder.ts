@@ -10,7 +10,7 @@
  * 代码化检索后作为 evidenceBlock 注入(规则 9)。
  */
 
-import { BRAND_NAME } from '@lizi/maker-shared/branding';
+import { BRAND_NAME } from '@cindy/maker-shared/branding';
 
 /**
  * XDMaker 的 skill 编写规范 —— 蒸馏产物必须符合本地加载器(Claude Code /

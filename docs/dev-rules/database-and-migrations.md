@@ -33,6 +33,10 @@
 - migration 序号必须从 `0000` 连续递增，不得重复或跳号。
 - 生成 migration 前先基于最新 `origin/main`。多人分支撞号时，保留自己的 schema 意图，
   以最新主干 migration 链重新生成；不得手改文件名、journal 或 snapshot 强行换号。
+- **migration 文件本体（`NNNN_*.sql` 与同名 companion）不写注释**。这些文件入 `main`
+  即永久冻结，事后连注释都无法修改或删除——写进去的任何内部系统名、内部链接、
+  评审编号、人名都会永远留在公开仓里。背景与动机写在 PR 描述或 `docs/`；存量
+  migration 里已有的注释按冻结不变量原样保留，不得回头清理。
 
 ## 标准变更流程
 
@@ -99,6 +103,7 @@ companion CommonJS 格式和历史 runtime identity 冻结；不能用单独 typ
 1. 这次是否真的需要 schema 变化，还是只需运行时代码调整？
 2. migration 是否基于最新主干生成，且只追加未合入的新序号？
 3. SQL、snapshot、journal、schema 与可选 companion 是否表达同一最终结构？
+   新增 migration 文件本体是否零注释？
 4. companion 是否为 CommonJS、确定性且具备必要的历史兼容守卫？
 5. 是否只在隔离数据库或 replay fixture 上运行了未合入 migration？
 6. `db:validate` 与 migration replay 是否都通过？未执行时是否明确说明原因？

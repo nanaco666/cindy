@@ -2,7 +2,7 @@
  * MobileProviderMark —— provider-aware 模型下拉里每行前缀 / trigger 药丸的「来源徽标」。
  *
  * 对齐桌面 ProviderMark:目录供应商用**官方单色 mark**，品牌路径与 provider id/upstream
- * 识别由 @lizi/model-providers/branding 双端共享；未知自定义供应商回退首字母 monogram。与桌面的
+ * 识别由 @cindy/model-providers/branding 双端共享；未知自定义供应商回退首字母 monogram。与桌面的
  * 一处刻意差异:monogram 容器沿用 pill 圆角(桌面是 4px 方盒)——手机圆角走二元规则
  * (container/pill),不引入中间值。XD mark 非正方形(158:282),渲染时在 size×size 盒内
  * 垂直居中,保证与正方形 mark 同行对齐。
@@ -25,8 +25,8 @@ import {
   resolveProviderLogoKind,
   type ProviderLogoKind,
   type ProviderLogoRouting,
-} from '@lizi/model-providers/branding';
-import { resolveModelIconKind } from '@lizi/model-providers/sections';
+} from '@cindy/model-providers/branding';
+import { resolveModelIconKind } from '@cindy/model-providers/sections';
 
 import { providerMonogram } from './providerModelSections';
 

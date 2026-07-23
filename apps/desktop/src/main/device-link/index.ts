@@ -2,7 +2,7 @@
  * device-link host —— 跨设备远程控制的 main 进程接线层。
  *
  * 职责(对齐 heartbeatService 的纯 host 风格):
- *  - 把 @lizi/device-link 的 DeviceLinkClient 接入 authManager / ws / 系统信息
+ *  - 把 @cindy/device-link 的 DeviceLinkClient 接入 authManager / ws / 系统信息
  *  - 登录后自动连 relay,登出即断;token 取现值,过期由 getToken 内部 refresh
  *  - presence / 连接状态变化广播给 renderer(设置页实时刷新)
  *  - 「允许被控」开关的读写入口(落盘 + 实时 presence-set)
@@ -28,7 +28,7 @@ import {
   type Envelope,
   type PushPayload,
   INVOKE_TIMEOUT_OVERRIDES_MS,
-} from '@lizi/device-link';
+} from '@cindy/device-link';
 import * as authManager from '../authManager';
 import { createLogger } from '../logger';
 import { onQuit } from '../lifecycle';

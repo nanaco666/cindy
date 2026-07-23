@@ -1,4 +1,4 @@
-import type { AccountRateLimitsResponse } from '@lizi/maker-core';
+import type { AccountRateLimitsResponse } from '@cindy/maker-core';
 import { describe, expect, it, vi } from 'vitest';
 
 import {

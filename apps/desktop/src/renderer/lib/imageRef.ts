@@ -13,7 +13,7 @@
  * images / files lists, so no server-side migration is needed.
  */
 
-import { isValidAttachmentIntegrity } from '@lizi/device-link';
+import { isValidAttachmentIntegrity } from '@cindy/device-link';
 
 export interface ImageRef {
   /** Custom-protocol URL: 'xdt-image://{sessionId}/{filename}'. */

@@ -45,8 +45,8 @@ import {
   getSentAttachmentThumbUri,
   useSentAttachmentThumbsVersion,
 } from '@/session/sentAttachmentThumbStore';
-import { syntheticTriggerKind } from '@lizi/maker-shared/synthetic-trigger';
-import { stripChatQuoteMarkerLines } from '@lizi/maker-shared/chat-quotes';
+import { syntheticTriggerKind } from '@cindy/maker-shared/synthetic-trigger';
+import { stripChatQuoteMarkerLines } from '@cindy/maker-shared/chat-quotes';
 import type { MobileOutboxDisplayItem, MobileOutboxThumb } from '@/session/sessionOutbox';
 import type { InputProjection, QueuedRemoteMessage } from '@/session/types';
 import { iconSize, iconStroke, fontWeight, lineHeight, useTheme, useThemedStyles, type ThemeColors } from '@/theme';

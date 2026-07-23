@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   CONTINUE_AFTER_ERROR_PROMPT,
   UI_ACTION_TRIGGER_PREFIX,
-} from '@lizi/maker-shared/synthetic-trigger';
+} from '@cindy/maker-shared/synthetic-trigger';
 import { normalizeRemoteMessages } from '@/session/messageNormalize';
 import type { RemoteMessage } from '@/session/types';
 

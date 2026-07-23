@@ -40,7 +40,7 @@ import path from 'node:path';
 
 import { ipcMain, BrowserWindow, app } from 'electron';
 
-import type { Maker } from '@lizi/maker-core';
+import type { Maker } from '@cindy/maker-core';
 import type {
   Scheduler,
   CreateScheduleInput,
@@ -48,13 +48,13 @@ import type {
   ListFilter,
   ScheduleTemplate,
   SchedulerEvent,
-} from '@lizi/maker-scheduler';
+} from '@cindy/maker-scheduler';
 import {
   BUILTIN_TEMPLATES,
   applyTemplateParams,
   stabilizePreRunHookForCreate,
   stabilizePreRunHookForUpdate,
-} from '@lizi/maker-scheduler';
+} from '@cindy/maker-scheduler';
 
 import { createLogger } from '../logger.js';
 import type { DrizzleScheduleStorage } from '../scheduler-host/storage.js';

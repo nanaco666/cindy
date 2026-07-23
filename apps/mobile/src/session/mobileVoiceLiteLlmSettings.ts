@@ -3,7 +3,7 @@ import type {
   MobileVoiceCredentialSyncAsr,
   MobileVoiceCredentialSyncRefiner,
   MobileVoiceCredentialSyncResult,
-} from '@lizi/maker-shared/device-link-contract';
+} from '@cindy/maker-shared/device-link-contract';
 import { MOBILE_VOICE_LITELLM_BASE_URL } from '@/config/env';
 import type { StoredMobileVoiceCredential } from '@/session/mobileVoiceCredentialStore';
 

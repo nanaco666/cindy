@@ -32,14 +32,14 @@ import path from 'node:path';
 
 import { app, BrowserWindow } from 'electron';
 
-import { isTerminalAgentErrorEvent } from '@lizi/maker-core';
-import type { AgentEvent, AgentKind, PermissionMode, UserContentBlock, UserMessage } from '@lizi/maker-core';
+import { isTerminalAgentErrorEvent } from '@cindy/maker-core';
+import type { AgentEvent, AgentKind, PermissionMode, UserContentBlock, UserMessage } from '@cindy/maker-core';
 import {
   effectiveSourceIdForModel,
   isModelVisible,
   type ProviderView,
   visibleModelUnion,
-} from '@lizi/model-providers';
+} from '@cindy/model-providers';
 
 import { tapWindowBroadcast } from '../device-link/broadcast-tap.js';
 import { getMaker } from '../maker-host/index.js';

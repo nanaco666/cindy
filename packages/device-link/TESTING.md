@@ -1,6 +1,6 @@
 # device-link 自动化测试策略(本地可全量跑)
 
-> 跨设备远程控制(device-link)横跨三层:**relay 服务端(`apps/server`)→ 共享协议/客户端包(`@lizi/device-link`)→ 桌面端(`apps/desktop` main + renderer)**。本文件是这条链路的测试架构与覆盖契约,所有 device-link 改动都应据此补/改测,保持「本地一条命令全量绿」。
+> 跨设备远程控制(device-link)横跨三层:**relay 服务端(`apps/server`)→ 共享协议/客户端包(`@cindy/device-link`)→ 桌面端(`apps/desktop` main + renderer)**。本文件是这条链路的测试架构与覆盖契约,所有 device-link 改动都应据此补/改测,保持「本地一条命令全量绿」。
 
 ## 第一性原则
 - **被控端 = 单一真相源,控制端 = 纯镜像**。测试要守住:控制端任何状态都能从被控端重新同步出来;丢帧 / 断连 / 重启后能 heal;连接异常对用户可见。
@@ -21,10 +21,10 @@
 ```bash
 # 桌面端(main + renderer + package via workspace)
 pnpm --filter desktop exec vitest run            # 或仅 device-link 相关:见下
-pnpm --filter @lizi/device-link exec vitest run
+pnpm --filter @cindy/device-link exec vitest run
 cd apps/server && pnpm test                       # relay 服务端 + 跨层真·端到端 E2E
 ```
-> 跨层 E2E(`deviceLinkClientRelayE2E.test.ts`)在 `apps/server` 下跑——它同时需要真 relay 与真 `@lizi/device-link` 客户端,故把 package 作为 server 的 **test-only devDependency**(`workspace:*`)引入,不构成运行期耦合。
+> 跨层 E2E(`deviceLinkClientRelayE2E.test.ts`)在 `apps/server` 下跑——它同时需要真 relay 与真 `@cindy/device-link` 客户端,故把 package 作为 server 的 **test-only devDependency**(`workspace:*`)引入,不构成运行期耦合。
 device-link 子集(快速回归)按文件名前缀:`deviceLink* / remote* / reconcile* / fastModeMirror* / vendorAuthGate* / controllableDevice* / agentCapabilitiesDeviceCache / modelDefinitionsDeviceId / slashCommandsDeviceId / fsBrowse / touchUserSendBroadcast / projectGrouping / sidebar* / newMakerProjectPicker / client / allowlist / topics`。
 
 ## 静态完整性闸门(免人肉逐语言点界面)

@@ -13,7 +13,7 @@ import { promises as fsp } from 'node:fs';
 import path from 'node:path';
 
 import { BrowserWindow, dialog, ipcMain } from 'electron';
-import { BRAND_NAME } from '@lizi/maker-shared/branding';
+import { BRAND_NAME } from '@cindy/maker-shared/branding';
 
 import { isIpcErrorCode } from '../../../shared/ipc-errors.js';
 import { createLogger } from '../../logger.js';

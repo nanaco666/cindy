@@ -9,7 +9,7 @@
  * 故意不支持批量 keys:简单优先,模型多调几次成本极低,且分次拉取也省 token。
  */
 
-import { BRAND_NAME } from '@lizi/maker-shared/branding';
+import { BRAND_NAME } from '@cindy/maker-shared/branding';
 import { z } from 'zod';
 
 import { findCapability, listCapabilityIndex } from './capabilities.js';

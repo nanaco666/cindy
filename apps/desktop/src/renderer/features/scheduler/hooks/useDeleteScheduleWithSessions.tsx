@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import * as AlertDialog from '@radix-ui/react-alert-dialog';
 import { Archive, MessageSquare, Trash2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import type { Schedule, ScheduleRun } from '@lizi/maker-scheduler';
+import type { Schedule, ScheduleRun } from '@cindy/maker-scheduler';
 
 import { cn } from '@/lib/utils';
 import { Spinner } from '@/components/ui/spinner';

@@ -11,7 +11,7 @@
  */
 
 import { app, ipcMain } from 'electron';
-import { isKnownEmbeddingModel } from '@lizi/embedding-client';
+import { isKnownEmbeddingModel } from '@cindy/embedding-client';
 
 import {
   getEmbeddingService,

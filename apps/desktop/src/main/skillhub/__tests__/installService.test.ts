@@ -1186,36 +1186,6 @@ describe('skillhub/installService', () => {
     expect(stored.ignoredSkills).toMatchObject([{ name: 'auto-skill', userId: 'user-1' }]);
   });
 
-  it('records an auto-sync ignore marker when uninstalling a legacy auto-synced skill', async () => {
-    const finalDir = path.join(TEST_ROOT, '.agents', 'skills', 'xdoa-skill');
-    fs.mkdirSync(finalDir, { recursive: true });
-    fs.writeFileSync(path.join(finalDir, 'SKILL.md'), 'content', 'utf-8');
-
-    const { getCurrentUserId } = await import('../../authManager');
-    const { registryService } = await import('../registry');
-    const { uninstall } = await import('../installService');
-
-    vi.mocked(getCurrentUserId).mockReturnValue('user-1');
-    vi.mocked(registryService.getInstall).mockResolvedValue({
-      version: '1.0.0',
-      authorId: 'owner',
-      folderHash: 'hash',
-      installedAt: 1,
-      updatedAt: 1,
-      origin: 'installed',
-    });
-    vi.mocked(registryService.removeInstall).mockResolvedValue(undefined);
-
-    const result = await uninstall(finalDir);
-
-    expect(result.success).toBe(true);
-    const prefPath = path.join(TEST_ROOT, 'userData', 'skillhub', 'auto-sync-preferences.json');
-    const stored = JSON.parse(fs.readFileSync(prefPath, 'utf-8')) as {
-      ignoredSkills: Array<{ name: string; userId: string }>;
-    };
-    expect(stored.ignoredSkills).toMatchObject([{ name: 'xdoa-skill', userId: 'user-1' }]);
-  });
-
   it('records an auto-sync ignore marker when uninstalling a remote-config legacy auto-synced skill', async () => {
     const finalDir = path.join(TEST_ROOT, '.agents', 'skills', 'remote-auto-skill');
     const prefPath = path.join(TEST_ROOT, 'userData', 'skillhub', 'auto-sync-preferences.json');
@@ -1276,14 +1246,14 @@ describe('skillhub/installService', () => {
 
     const { recordAutoSyncCandidateSkills } = await import('../autoSyncPreferences');
 
-    await recordAutoSyncCandidateSkills('user-1', ['xdoa-skill'], { replace: false });
+    await recordAutoSyncCandidateSkills('user-1', ['demo-oa-skill'], { replace: false });
 
     const stored = JSON.parse(fs.readFileSync(prefPath, 'utf-8')) as {
       autoSyncCandidates: Array<{ name: string; userId: string }>;
     };
     expect(stored.autoSyncCandidates).toEqual(expect.arrayContaining([
       expect.objectContaining({ name: 'remote-auto-skill', userId: 'user-1' }),
-      expect.objectContaining({ name: 'xdoa-skill', userId: 'user-1' }),
+      expect.objectContaining({ name: 'demo-oa-skill', userId: 'user-1' }),
       expect.objectContaining({ name: 'other-user-skill', userId: 'user-2' }),
     ]));
   });
@@ -1320,14 +1290,14 @@ describe('skillhub/installService', () => {
 
     const { recordAutoSyncCandidateSkills } = await import('../autoSyncPreferences');
 
-    await recordAutoSyncCandidateSkills('user-1', ['xdoa-skill']);
+    await recordAutoSyncCandidateSkills('user-1', ['demo-oa-skill']);
 
     const stored = JSON.parse(fs.readFileSync(prefPath, 'utf-8')) as {
       autoSyncCandidates: Array<{ name: string; userId: string }>;
     };
     expect(stored.autoSyncCandidates).toEqual(expect.arrayContaining([
       expect.objectContaining({ name: 'remote-auto-skill', userId: 'user-1' }),
-      expect.objectContaining({ name: 'xdoa-skill', userId: 'user-1' }),
+      expect.objectContaining({ name: 'demo-oa-skill', userId: 'user-1' }),
     ]));
   });
 

@@ -1,4 +1,4 @@
-import type { AsrProvider } from '@lizi/voice-input-core';
+import type { AsrProvider } from '@cindy/voice-input-core';
 import type { ApiFetchOptions } from '@/api/client';
 import type { StoredMobileVoiceCredential } from '@/session/mobileVoiceCredentialStore';
 import { createMobileAsrProvider } from '@/session/mobileRealtimeAsrProvider';

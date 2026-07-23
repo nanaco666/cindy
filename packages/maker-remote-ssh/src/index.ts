@@ -1,5 +1,5 @@
 /**
- * @lizi/maker-remote-ssh — SSH remote host management for xdt-maker.
+ * @cindy/maker-remote-ssh — SSH remote host management for xdt-maker.
  *
  * Phase A: connection lifecycle + ~/.ssh/config IO + credential resolution.
  * Phase B (next): bootstrap agent CLI on remote + RemoteAgent that spawns

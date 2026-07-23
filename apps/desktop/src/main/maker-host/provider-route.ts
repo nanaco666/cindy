@@ -19,8 +19,8 @@
  * token 覆盖 authorization,避免把子进程里其它供应商的 OAuth bearer 泄漏过去(如 Codex → xAI)。
  */
 
-import type { AgentKind, RoutingDescriptor } from '@lizi/model-providers';
-import type { RoutingDecision } from '@lizi/anthropic-compat-proxy';
+import type { AgentKind, RoutingDescriptor } from '@cindy/model-providers';
+import type { RoutingDecision } from '@cindy/anthropic-compat-proxy';
 
 import { getActiveCatalog } from './active-catalog.js';
 import { getSessionProvider } from './session-provider-store.js';

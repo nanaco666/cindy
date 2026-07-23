@@ -16,7 +16,7 @@ import {
 import { Text, TextInput } from '@/components/AppText';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ChevronDown, ChevronRight, X } from 'lucide-react-native';
-import type { DeviceView } from '@lizi/device-link';
+import type { DeviceView } from '@cindy/device-link';
 import { useAuth } from '@/auth/AuthContext';
 import { loginText } from '@/auth/loginMessages';
 import { goBackGuarded } from '@/utils/backGuard';

@@ -31,7 +31,7 @@ import { createPortal } from 'react-dom';
 import { GitFork } from 'lucide-react';
 import { SelectionQuoteButton } from './SelectionQuoteButton';
 import { useTranslation } from 'react-i18next';
-import { findMessageTodoInsertions, isAgentPlanToolName } from '@lizi/maker-shared/message-render';
+import { findMessageTodoInsertions, isAgentPlanToolName } from '@cindy/maker-shared/message-render';
 
 import type { AgentTaskUpdate, ChatMessage } from '@/hooks/useCCAgentChat';
 import { Spinner } from '@/components/ui/spinner';

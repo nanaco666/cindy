@@ -13,7 +13,7 @@
 
 import { app } from 'electron';
 
-import { MakerContactsManager, type ContactsSqliteFactory } from '@lizi/maker-core';
+import { MakerContactsManager, type ContactsSqliteFactory } from '@cindy/maker-core';
 
 import { desktopMakerLogger } from './logger-adapter.js';
 import { createBetterSqliteDatabase } from '../localDb/betterSqliteFactory.js';

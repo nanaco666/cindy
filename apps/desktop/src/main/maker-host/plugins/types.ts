@@ -10,10 +10,10 @@
  *   3. default                                → true
  */
 
-import type { LiziMcpProvider } from 'lizi-mcps';
+import type { LiziMcpProvider } from '@cindy/mcps';
 
 /** Stable plugin identifier — user-facing short name (e.g. 'feishu', 'feishu_bot').
- *  Bridged to lizi-mcps LiziMcpId values via PLUGIN_ID_TO_MCP_ID table. */
+ *  Bridged to @cindy/mcps LiziMcpId values via PLUGIN_ID_TO_MCP_ID table. */
 export type PluginId = string;
 
 export type PluginSource = 'builtin' | 'hub' | 'local';
@@ -56,7 +56,7 @@ export interface XdtMakerSettings {
 /** Essential (infrastructure) plugin ids — cannot be disabled, hidden from Settings UI.
  *  `lsp` is essential here because LSP already has its own Beta toggle
  *  (Settings → Experimental → LSP Mode); exposing a second toggle in
- *  Connections would be redundant and confusing. lizi-mcps still enforces
+ *  Connections would be redundant and confusing. @cindy/mcps still enforces
  *  the Beta gate via `isUserEnabled` inside the provider. */
 export const ESSENTIAL_PLUGIN_IDS: ReadonlySet<string> = new Set([
   'memory',

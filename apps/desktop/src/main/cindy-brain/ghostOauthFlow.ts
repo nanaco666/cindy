@@ -12,7 +12,7 @@
  * cindy.fetch,令牌由 networkSlot 按 inject 声明现取现注。
  *
  * 流程形态:标准 authorization code + PKCE(S256,缺省开启)+ 本机 loopback
- * 回调(127.0.0.1 随机端口),与 lizi-mcps 的 google / jira 两份 flow 同宗,
+ * 回调(127.0.0.1 随机端口),与 @cindy/mcps 的 google / jira 两份 flow 同宗,
  * 抽参数化后不再绑定任何具体服务商。
  *
  * 安全纪律:

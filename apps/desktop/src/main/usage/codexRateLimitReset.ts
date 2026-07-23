@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
-import { normalizeAccountRateLimitSnapshot } from '@lizi/maker-core';
+import { normalizeAccountRateLimitSnapshot } from '@cindy/maker-core';
 import type {
   AccountRateLimitWindow,
   AccountRateLimitResetCredit,
@@ -8,13 +8,13 @@ import type {
   AccountRateLimitsResponse,
   ConsumeAccountRateLimitResetCreditParams,
   ConsumeAccountRateLimitResetCreditResponse,
-} from '@lizi/maker-core';
+} from '@cindy/maker-core';
 import type {
   MobileCodexRateLimitAccount,
   MobileCodexRateLimitResetCredit,
   MobileCodexRateLimitResetResult,
   MobileCodexRateLimitsResult,
-} from '@lizi/maker-shared/device-link-contract';
+} from '@cindy/maker-shared/device-link-contract';
 
 const RESET_OFFER_TTL_MS = 10 * 60 * 1000;
 const MAX_RESET_OFFERS = 64;

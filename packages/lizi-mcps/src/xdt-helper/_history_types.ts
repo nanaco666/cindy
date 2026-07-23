@@ -2,7 +2,7 @@
  * xdt-helper/_history_types.ts —— history 类工具的 host-injected deps 类型契约。
  *
  * 与 apps/desktop/src/main/localDb/chatHistoryReader.ts 的返回值形态 1:1 对齐;
- * lizi-mcps 不能反向 import desktop, 所以在这里独立定义 (host 注入时把 reader
+ * @cindy/mcps 不能反向 import desktop, 所以在这里独立定义 (host 注入时把 reader
  * 结果适配到这层类型即可)。
  */
 

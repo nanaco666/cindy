@@ -5,7 +5,7 @@
  * 只提供共享编排层的非 thread 文案字段。
  */
 
-import type { IMUnsupportedEntry } from 'lizi-im';
+import type { IMUnsupportedEntry } from '@cindy/im';
 
 import type { ImUiTextPack } from '../shared/types';
 

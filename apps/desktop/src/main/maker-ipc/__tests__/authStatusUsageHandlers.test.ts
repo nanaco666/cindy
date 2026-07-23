@@ -1,4 +1,4 @@
-import type { Maker } from '@lizi/maker-core';
+import type { Maker } from '@cindy/maker-core';
 import { describe, expect, it, vi } from 'vitest';
 import { registerMakerAuthHandlers } from '../authHandlers';
 import { MAKER_INVOKE, MAKER_PUSH } from '../channels';

@@ -47,7 +47,6 @@ const log = createLogger('skillhub:installService');
 const MAX_SKILL_ZIP = 200 * 1024 * 1024; // 200 MB
 const MAX_SKILL_UNCOMPRESSED = 500 * 1024 * 1024; // 500 MB
 const MAX_SKILL_ZIP_ENTRIES = 10_000;
-const FALLBACK_LEGACY_AUTO_SYNC_SKILLS = new Set(['xdoa-skill']);
 
 // ── 类型 ─────────────────────────────────────────────────────────────────────
 
@@ -1025,6 +1024,5 @@ async function shouldRecordAutoSyncIgnore(skillName: string, registryEntry: Stor
   if (registryEntry.autoSynced === true) return true;
   if (registryEntry.origin !== 'installed' || registryEntry.autoSynced !== undefined) return false;
   // 兼容 auto-sync 首版：当时 registry 没有 autoSynced 字段，候选集合来自最近一次 auto-sync 配置。
-  if (await isKnownAutoSyncCandidateSkill(skillName, userId).catch(() => false)) return true;
-  return FALLBACK_LEGACY_AUTO_SYNC_SKILLS.has(skillName);
+  return isKnownAutoSyncCandidateSkill(skillName, userId).catch(() => false);
 }

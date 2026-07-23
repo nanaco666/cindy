@@ -89,7 +89,7 @@ const schedSrc = collectSourceFiles(path.join(ROOT, 'packages/maker-scheduler/sr
   if (allHits.length) {
     failure(
       '#1 scheduler-pure',
-      `packages/maker-scheduler/src 不能 import host 类（electron / drizzle / maker-core[非 type-only] / lizi-im / lizi-mcps）。\n命中：\n` +
+      `packages/maker-scheduler/src 不能 import host 类（electron / drizzle / maker-core[非 type-only] / @cindy/im / @cindy/mcps）。\n命中：\n` +
         allHits.map((h) => '  ' + h).join('\n'),
     );
   } else {
@@ -214,7 +214,7 @@ const schedSrc = collectSourceFiles(path.join(ROOT, 'packages/maker-scheduler/sr
 }
 
 // ---------------------------------------------------------------------------
-// 反向依赖 grep —— maker-core 不能 import @lizi/maker-scheduler
+// 反向依赖 grep —— maker-core 不能 import @cindy/maker-scheduler
 // （ESLint 配置 packages/maker-core/eslint.config.mjs 的 no-restricted-imports
 //   是开发者本地的 first-line 兜底；CI 用 grep 防止无关 pre-existing lint error
 //   干扰守门信号）
@@ -226,12 +226,12 @@ const schedSrc = collectSourceFiles(path.join(ROOT, 'packages/maker-scheduler/sr
   if (hits.length) {
     failure(
       '#6 core-no-scheduler',
-      'packages/maker-core 不能 import @lizi/maker-scheduler（反向依赖）。\n' +
+      'packages/maker-core 不能 import @cindy/maker-scheduler（反向依赖）。\n' +
         '调度在 host 层（apps/desktop/src/main/scheduler-host/）组装并消费 maker-core，maker-core 不感知调度。\n命中：\n' +
         hits.map((h) => '  ' + h).join('\n'),
     );
   } else {
-    ok('#6 core-no-scheduler', 'maker-core 0 处 import @lizi/maker-scheduler');
+    ok('#6 core-no-scheduler', 'maker-core 0 处 import @cindy/maker-scheduler');
   }
 }
 
@@ -240,7 +240,7 @@ const schedSrc = collectSourceFiles(path.join(ROOT, 'packages/maker-scheduler/sr
 // ---------------------------------------------------------------------------
 
 {
-  const r = spawnSync('pnpm', ['--filter', '@lizi/maker-scheduler', 'lint'], {
+  const r = spawnSync('pnpm', ['--filter', '@cindy/maker-scheduler', 'lint'], {
     cwd: ROOT,
     encoding: 'utf8',
     shell: process.platform === 'win32',
@@ -248,17 +248,17 @@ const schedSrc = collectSourceFiles(path.join(ROOT, 'packages/maker-scheduler/sr
   });
   if (r.status !== 0) {
     failure(
-      'lint:@lizi/maker-scheduler',
+      'lint:@cindy/maker-scheduler',
       `maker-scheduler lint 失败 (exit ${r.status})\nSTDOUT:\n${r.stdout}\nSTDERR:\n${r.stderr}`,
     );
   } else {
-    ok('lint:@lizi/maker-scheduler', '@lizi/maker-scheduler eslint 通过（含 no-restricted-imports 反向依赖规则）');
+    ok('lint:@cindy/maker-scheduler', '@cindy/maker-scheduler eslint 通过（含 no-restricted-imports 反向依赖规则）');
   }
 }
 
 // ---------------------------------------------------------------------------
-// 反向依赖 grep —— lizi-mcps 不能 deep-import @lizi/maker-scheduler/engine/*
-// （lizi-mcps 没有独立 ESLint 配置，用 grep 兜底；同 RFC §6 self-check）
+// 反向依赖 grep —— @cindy/mcps 不能 deep-import @cindy/maker-scheduler/engine/*
+// （@cindy/mcps 没有独立 ESLint 配置，用 grep 兜底；同 RFC §6 self-check）
 // ---------------------------------------------------------------------------
 
 {
@@ -267,11 +267,11 @@ const schedSrc = collectSourceFiles(path.join(ROOT, 'packages/maker-scheduler/sr
   if (hits.length) {
     failure(
       '#5 mcps-no-engine-deepimport',
-      'packages/lizi-mcps 不能深入 import @lizi/maker-scheduler/engine/*；只允许从顶层 `@lizi/maker-scheduler` 拿 type。\n命中：\n' +
+      'packages/lizi-mcps 不能深入 import @cindy/maker-scheduler/engine/*；只允许从顶层 `@cindy/maker-scheduler` 拿 type。\n命中：\n' +
         hits.map((h) => '  ' + h).join('\n'),
     );
   } else {
-    ok('#5 mcps-no-engine-deepimport', 'lizi-mcps 全部 import 走顶层 @lizi/maker-scheduler');
+    ok('#5 mcps-no-engine-deepimport', '@cindy/mcps 全部 import 走顶层 @cindy/maker-scheduler');
   }
 }
 

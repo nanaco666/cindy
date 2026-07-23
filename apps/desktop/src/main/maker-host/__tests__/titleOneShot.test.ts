@@ -28,7 +28,7 @@ vi.mock('electron', () => ({
 }));
 
 // 只取 toSdkModelString,避免在 vitest 里加载整个 maker-core runtime(含 agent SDK 图)。
-vi.mock('@lizi/maker-core', () => ({
+vi.mock('@cindy/maker-core', () => ({
   toSdkModelString: (m: string) => (m === 'claude-haiku-4-5' ? 'claude-haiku-4-5-20251001' : m),
 }));
 
@@ -67,7 +67,7 @@ async function withDiscoveredMini<T>(fn: () => T | Promise<T>): Promise<T> {
     setDiscoveredCodexModels([]);
   }
 }
-import type { ProviderView } from '@lizi/model-providers';
+import type { ProviderView } from '@cindy/model-providers';
 
 /** 造一个 fetch 替身:按传入 handler 返回类 Response 对象,并记录调用。 */
 function fakeFetch(

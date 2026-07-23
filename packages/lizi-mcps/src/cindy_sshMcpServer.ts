@@ -16,7 +16,7 @@
  *
  * 硬规则：
  *  - 只通过 deps.getPool() / deps.ensureReady() 操作，不 import
- *    @lizi/maker-remote-ssh（连接生命周期归 desktop main 管）
+ *    @cindy/maker-remote-ssh（连接生命周期归 desktop main 管）
  *  - 错误 payload / 日志不携带 command 原文（见 ssh/exec.ts 头注释）
  */
 

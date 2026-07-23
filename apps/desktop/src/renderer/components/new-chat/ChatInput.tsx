@@ -14,7 +14,7 @@ import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { Folder, MessageSquarePlus, Mic, Pen, Square, TriangleAlert, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { requiresFullAccessConfirmation } from '@lizi/maker-shared/permission-mode';
+import { requiresFullAccessConfirmation } from '@cindy/maker-shared/permission-mode';
 import { ImageLightbox } from '@/components/chat/ImageLightbox';
 import { TextLightbox } from '@/components/chat/TextLightbox';
 import { useEditor, EditorContent } from '@tiptap/react';
@@ -143,7 +143,7 @@ import { useAgentCapabilities, type AgentKind } from '@/hooks/useAgentCapabiliti
 import { useConnectedSource } from '@/hooks/useConnectedSource';
 import { useProviders } from '@/hooks/useProviders';
 import { useDeviceProviders } from '@/hooks/useDeviceProviders';
-import { effectiveSourceIdForModel, sourcesForModel } from '@lizi/model-providers';
+import { effectiveSourceIdForModel, sourcesForModel } from '@cindy/model-providers';
 import { deriveModelsFromProviders, resolveFastSupported } from '@/lib/providerModels';
 import {
   getProviderModelEffort,
@@ -165,7 +165,7 @@ import { assessModelSwitchContext } from '../../../shared/modelSwitchAssessment'
 import { useVoiceInput } from '@/voice-input/useVoiceInput';
 import { useVoiceInputSettings } from '@/hooks/useVoiceInputSettings';
 import { VoiceInputStatusNotice } from '@/voice-input/VoiceInputStatusNotice';
-import type { VoiceInputState } from '@lizi/voice-input-core';
+import type { VoiceInputState } from '@cindy/voice-input-core';
 import {
   playVoiceInputEndCue,
   playVoiceInputStartCue,
@@ -5238,7 +5238,7 @@ function VoiceInputButton({
   visualVariant,
   className,
 }: {
-  state: import('@lizi/voice-input-core').VoiceInputState;
+  state: import('@cindy/voice-input-core').VoiceInputState;
   disabled: boolean;
   shortcutLabel: string;
   onStart: () => Promise<void>;

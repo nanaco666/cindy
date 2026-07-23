@@ -18,8 +18,8 @@
 
 import { brotliDecompressSync, gunzipSync, inflateSync } from 'node:zlib';
 
-import type { ResponseObserver, ResponseObserverCtx } from '@lizi/anthropic-compat-proxy';
-import type { AgentKind } from '@lizi/model-providers';
+import type { ResponseObserver, ResponseObserverCtx } from '@cindy/anthropic-compat-proxy';
+import type { AgentKind } from '@cindy/model-providers';
 
 import {
   classifyProviderError,

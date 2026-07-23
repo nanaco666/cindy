@@ -344,7 +344,7 @@ export const MAKER_INVOKE = {
   XAI_OAUTH_LOGOUT: 'maker:xai-oauth:logout',
   XAI_OAUTH_CANCEL: 'maker:xai-oauth:cancel',
   /**
-   * 模型供应商目录（@lizi/model-providers）—— 只读聚合：内置目录元数据 + 各供应商
+   * 模型供应商目录（@cindy/model-providers）—— 只读聚合：内置目录元数据 + 各供应商
    * 实时连接状态（XD=gateway key / Anthropic=Claude.ai OAuth / OpenAI=Codex OAuth）。
    * 供应商的「连接 / 断开」复用各 agent 已有的鉴权通道（CLAUDE_OAUTH_* / AUTH_* / 登录托管），
    * 不另立重复通道。

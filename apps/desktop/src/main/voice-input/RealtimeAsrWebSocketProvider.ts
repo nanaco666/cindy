@@ -1,6 +1,6 @@
 import WebSocket from 'ws';
 import type { ClientRequest, IncomingMessage } from 'node:http';
-import type { AsrEvent, AsrProvider, AudioTrace } from '@lizi/voice-input-core';
+import type { AsrEvent, AsrProvider, AudioTrace } from '@cindy/voice-input-core';
 import type { VoiceInputRealtimeProtocolProfile } from '../../shared/voiceInputAsrProfiles.js';
 import { createLogger } from '../logger.js';
 import { openAiLanguageCode } from './language.js';

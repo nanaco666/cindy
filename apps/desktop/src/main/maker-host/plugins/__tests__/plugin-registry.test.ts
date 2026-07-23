@@ -13,7 +13,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { createLiziMcpProviders } from 'lizi-mcps';
+import { createLiziMcpProviders } from '@cindy/mcps';
 import { SettingsReader } from '../settings-reader.js';
 import { PluginRegistry } from '../plugin-registry.js';
 import { BUILTIN_LIZI_MCP_IDS, PROVIDER_NAME_TO_PLUGIN_ID, pluginIdForProviderName } from '../builtin-plugins.js';

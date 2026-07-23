@@ -1163,7 +1163,6 @@ function assertTrackedBinariesRegistered() {
   const registeredPrefixes = [
     "apps/android-platform-tools-bin/",
     "apps/desktop/native/sqlite-vec/",
-    "apps/desktop/resources/xdt-helper.exe",
     "apps/desktop/resources/cindy-updater.exe",
     "apps/mobile/assets/fonts/JetBrainsMono-",
   ];

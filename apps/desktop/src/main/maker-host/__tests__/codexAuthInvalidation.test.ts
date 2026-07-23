@@ -23,7 +23,7 @@ vi.mock('electron', () => ({
   safeStorage: { isEncryptionAvailable: () => false },
 }));
 
-vi.mock('@lizi/maker-core', () => ({}));
+vi.mock('@cindy/maker-core', () => ({}));
 
 function fixture() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'xdt-codex-auth-marker-'));

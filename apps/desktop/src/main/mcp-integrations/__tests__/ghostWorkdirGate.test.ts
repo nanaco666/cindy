@@ -26,7 +26,7 @@ vi.mock('../../logger.js', () => ({
   createLogger: () => ({ info: () => {}, warn: () => {}, error: () => {}, debug: () => {} }),
 }));
 // ALS 语境:恒缺省 → resolveSessionContext 走建线闭包 ctx(claude 路径同款)。
-vi.mock('lizi-mcps', () => ({ getLiziMcpSessionContext: () => undefined }));
+vi.mock('@cindy/mcps', () => ({ getLiziMcpSessionContext: () => undefined }));
 
 const listMock = vi.fn<() => unknown[]>(() => []);
 const dispatchMock = vi.fn(async () => ({ ok: true as const, result: 'done' }));
@@ -61,7 +61,7 @@ vi.mock('../ghostAttachmentResolve.js', () => ({ resolveGhostAttachmentUrl: vi.f
 const { getCindyGhostsMcpDeps } = await import('../ghost');
 const { setGhostDisabledForWorkdir, listDisabledGhostIdsForWorkdir, isGhostDisabledForWorkdir } =
   await import('../../cindy-brain/ghostWorkdirPrefs');
-import type { LiziMcpSessionContext } from 'lizi-mcps';
+import type { LiziMcpSessionContext } from '@cindy/mcps';
 
 const WORKDIR = '/proj/alpha';
 

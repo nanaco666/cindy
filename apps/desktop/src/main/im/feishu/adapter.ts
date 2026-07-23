@@ -12,7 +12,7 @@
 import path from 'node:path';
 import fs from 'node:fs';
 import { app } from 'electron';
-import type { FeishuIM } from 'lizi-im';
+import type { FeishuIM } from '@cindy/im';
 
 import type { ImChannelAdapter, ImOrchestratorConfig } from '../shared/types';
 import { ui, REACTION_PROCESSING } from './uiText';

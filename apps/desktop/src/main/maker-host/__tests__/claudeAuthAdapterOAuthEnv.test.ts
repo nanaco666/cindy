@@ -35,7 +35,7 @@ vi.mock('electron', () => ({
   safeStorage: { isEncryptionAvailable: () => h.encryptionAvailable },
 }));
 
-vi.mock('@lizi/maker-core', () => ({}));
+vi.mock('@cindy/maker-core', () => ({}));
 
 vi.mock('../claude-credentials-store.js', () => ({
   hasClaudeAiOAuth: () => h.hasOAuth,

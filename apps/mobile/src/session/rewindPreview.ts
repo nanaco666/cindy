@@ -1,4 +1,4 @@
-import type { ChatQuote } from '@lizi/maker-shared/chat-quotes';
+import type { ChatQuote } from '@cindy/maker-shared/chat-quotes';
 
 export interface RewindPreviewPayload {
   canRewind: boolean;

@@ -21,7 +21,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { SchedulerEvent } from '@lizi/maker-scheduler';
+import type { SchedulerEvent } from '@cindy/maker-scheduler';
 
 export interface RunNowBusyGuard {
   /** 当前处于派发窗口内的 scheduleId 集合;驱动按钮 disabled。 */

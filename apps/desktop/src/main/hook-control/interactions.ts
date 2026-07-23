@@ -26,7 +26,7 @@
  */
 
 import type { InteractionButton, InteractionRequestPayload } from '@cindy/slack-hook-protocol';
-import type { InteractionDecision, InteractionRequest } from '@lizi/maker-core';
+import type { InteractionDecision, InteractionRequest } from '@cindy/maker-core';
 
 /** ask 卡渲染的最大选项数(与 im/shared/cardBuilders MAX_OPTIONS 一致)。 */
 const MAX_OPTIONS = 6;

@@ -5,7 +5,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, readlinkSync, rmSync, statSync } from 'node:fs';
 import type { Stream } from 'node:stream';
 import { app } from 'electron';
-import { BRAND_NAME } from '@lizi/maker-shared/branding';
+import { BRAND_NAME } from '@cindy/maker-shared/branding';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import type {
@@ -16,7 +16,7 @@ import type {
   ComputerDriverStatus,
   ComputerMcpDeps,
   ComputerMcpToolName,
-} from 'lizi-mcps';
+} from '@cindy/mcps';
 import { createLogger } from '../logger.js';
 
 const logger = createLogger('mcp/cindy_computer');

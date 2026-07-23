@@ -11,7 +11,7 @@ import type {
   SendOrigin,
   SessionSendResult,
   UserMessage,
-} from '@lizi/maker-core';
+} from '@cindy/maker-core';
 
 /**
  * 目标状态机:

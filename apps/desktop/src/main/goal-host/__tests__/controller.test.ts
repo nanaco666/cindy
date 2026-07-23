@@ -1,6 +1,6 @@
 import { describe, expect, it, beforeEach, vi } from 'vitest';
 
-import type { AgentEvent, SessionSendResult } from '@lizi/maker-core';
+import type { AgentEvent, SessionSendResult } from '@cindy/maker-core';
 
 import { GoalController, decideNextGoalState, deriveObjectiveFromAnswers, questionsLookLikeGoalClarification, type TurnOutcome, type GoalCounters } from '../controller';
 import { buildContinuationDirective, buildFirstTurnDirective } from '../directive';

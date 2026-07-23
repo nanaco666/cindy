@@ -18,7 +18,7 @@
  * 归一化(剥 [1m] / 日期后缀)后再查目录集合。
  */
 
-import type { Catalog } from '@lizi/model-providers';
+import type { Catalog } from '@cindy/model-providers';
 
 /** Anthropic 模型在 oauth-spawn 下直连的上游。 */
 export const ANTHROPIC_DIRECT_UPSTREAM = 'https://api.anthropic.com';

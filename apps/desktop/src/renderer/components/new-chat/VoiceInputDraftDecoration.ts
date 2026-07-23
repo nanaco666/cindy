@@ -2,7 +2,7 @@ import { Extension, type Editor } from '@tiptap/core';
 import { Plugin, PluginKey, type EditorState, type Transaction } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import type { Node as PMNode } from '@tiptap/pm/model';
-import type { VoiceInputDraftSource } from '@lizi/voice-input-core';
+import type { VoiceInputDraftSource } from '@cindy/voice-input-core';
 
 import { MIC_WAVE_ICON_SVG } from '../../voice-input/VoiceInputMicWaveIcon';
 

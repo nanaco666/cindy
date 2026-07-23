@@ -18,7 +18,7 @@ import {
   scanAllSkills,
   writeSkillFile,
 } from '../scanner';
-import type { Maker } from '@lizi/maker-core';
+import type { Maker } from '@cindy/maker-core';
 
 const tempRoots: string[] = [];
 

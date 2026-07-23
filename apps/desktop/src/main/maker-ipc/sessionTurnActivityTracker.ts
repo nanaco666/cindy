@@ -1,4 +1,4 @@
-import { isTerminalAgentErrorEvent, type AgentEvent } from '@lizi/maker-core';
+import { isTerminalAgentErrorEvent, type AgentEvent } from '@cindy/maker-core';
 
 export const TURN_IDLE_THROTTLE_RESTORE_GRACE_MS = 1_000;
 

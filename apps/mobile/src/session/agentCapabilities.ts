@@ -2,7 +2,7 @@ import {
   reconcileRuntimeDraftWithCapabilities as reconcileSharedRuntimeDraft,
   type MobileAgentCapabilities,
   type MobileRuntimeDraft,
-} from '@lizi/maker-shared/agent-capabilities';
+} from '@cindy/maker-shared/agent-capabilities';
 
 export {
   MOBILE_MODEL_CATEGORY_LABEL,
@@ -16,7 +16,7 @@ export {
   type MobileModelOption,
   type MobileModelSwitchConfirmation,
   type MobileSessionRuntimeOptions,
-} from '@lizi/maker-shared/agent-capabilities';
+} from '@cindy/maker-shared/agent-capabilities';
 
 export type { MobileAgentCapabilities, MobileRuntimeDraft };
 

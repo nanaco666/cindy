@@ -13,8 +13,8 @@ import {
   type MessageRenderToolMediaItem,
   type MessageRenderWorkChildItem,
   type MessageRenderWorkGroupItem,
-} from '@lizi/maker-shared/message-render';
-import type { AgentTaskUpdate } from '@lizi/maker-shared/agent-task';
+} from '@cindy/maker-shared/message-render';
+import type { AgentTaskUpdate } from '@cindy/maker-shared/agent-task';
 import { normalizeRemoteMessages, type NormalizedRemoteMessage } from '@/session/messageNormalize';
 import type { RemoteMessage } from '@/session/types';
 import {

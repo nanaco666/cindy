@@ -76,15 +76,15 @@ host 在 `browser.ts` 用 `buildManagedConfig()` 造出 `{ browser: { enabled, d
 
 ```bash
 pnpm sync:browser-runtime                 # = node scripts/browser-runtime/sync.mjs
-pnpm --filter @lizi/browser-control-runtime build   # tsc --noEmit, 暴露 shim 缺口
-pnpm --filter @lizi/browser-control-runtime test    # 契约 + SSRF guard
+pnpm --filter @cindy/browser-control-runtime build   # tsc --noEmit, 暴露 shim 缺口
+pnpm --filter @cindy/browser-control-runtime test    # 契约 + SSRF guard
 ```
 
 - 版本锁:`upstream/browser-runtime.lock.json`(pinned commit + fs-safe 版本 + content hash)。
 - `_generated/**` 整体重生成,**永不手改**;要改行为改 `src/shim/*` 或 `sync.mjs`(vendor 集合 / import 重写)。
 - shim 导出契约在 `upstream/shim-spec.md`;sync 后若多出新的 `openclaw/plugin-sdk/*` import,补对应 shim。
 - 安全:SSRF / 路径包含的**决策逻辑是 vendored 的**,`src/shim/ssrf-runtime.ts` 只重写了组合这些原语的 fetch 外壳;`ssrf-guard.test.ts` 断言拦截 cloud-metadata / 私网 IP 的"牙齿"还在,削弱会挂 CI。
-- 同步后回归一遍 §4 的坑(尤其 #1 配置应用、#3 cdpPort),再跑 `runtime-config-application.test.ts` + lizi-mcps browser 测试 + desktop `browserAvailability` 测试。
+- 同步后回归一遍 §4 的坑(尤其 #1 配置应用、#3 cdpPort),再跑 `runtime-config-application.test.ts` + @cindy/mcps browser 测试 + desktop `browserAvailability` 测试。
 
 ## 9. 提效能力(network / extract / recipe / sitemap)
 
@@ -94,7 +94,7 @@ pnpm --filter @lizi/browser-control-runtime test    # 契约 + SSRF guard
 - **`extract`(L2 MCP,`extract.ts`)**:纯组合现有 `act:evaluate`。`buildExtractFnSource(spec)` 是**纯函数**,把字段 schema 编译成注入 JS(选择器一律 `JSON.stringify` 注入,防注入),handler 改写成 `act:{kind:'evaluate',fn}`。不碰 runtime 包。**报错教模型(对齐上游 `SELECTOR_UNSUPPORTED_MESSAGE` 范式)**:生成的 fn 给 `querySelector` 包 try/catch,非法选择器 → 返回 `{ok:false, error, hint}`(`EXTRACT_FIELD_HINT` 教正确字段格式);handler 跑前用 `collectSelectors` 预检 selector 含 `@`(观察到模型爱写 `h3 a@title`)→ 直接返回教学报错,不空跑。**不加 `@attr` 语法糖**(上游无此约定)。
 - **`recipe` / `siteguide`(L2 MCP)**:`recipe-loader.ts`(`parseRecipes`/`parseSiteGuides` 纯函数 + `loadRecipes`/`loadSiteGuides` 用 `import.meta.glob('./recipes/*/{recipe,siteguide}.json',{query:'?raw',eager:true})` 打包)+ `recipe-runner.ts`(`runRecipe(recipe,inputs,{call})` 纯执行器,注入 `call` 可单测)。数据在 `packages/lizi-mcps/src/browser/recipes/<site>/`。**交互步(click/type/select)直接用稳定 CSS `selector`**——vendored `act` 对 `SELECTOR_ALLOWED_KINDS`(click/type/select/hover/wait)支持 selector 直传,**无需 snapshot→ref**,所以配方不写死 ref、跨会话不腐烂(`fill` 是 ref-only,配方用 `type` 输入文本)。registry 懒加载(首次 recipe/siteguide 调用才解析,坏配方不拖垮整个工具)。`siteguide` **按需 action 拉取**,不进常驻 rules,保持缓存前缀小。**命名 `siteguide` 而非 `sitemap`**:避免和网站自己的 `/sitemap.xml` 撞概念(实测中模型会把 `sitemap` 误解成去抓 sitemap.xml)。
 - **配方分层 + 自我成长(L1 内置 + L2 用户,rule 20)**:配方/指南是"可成长"的——内置 L1(随 app 版本发布)+ 用户本地 L2(`userData/browser-recipes/<site>/`)按 **recipe id / siteguide site 整条覆盖**合并,provenance 三态 `builtin`/`user`/`overridden`(`recipe-loader.ts` 的纯函数 `mergeRecipes`/`mergeSiteGuides`)。**恢复默认 = 删 L2 该站文件**(回落 L1,不写快照)。
-  - **解耦**:`lizi-mcps` 不碰 fs/electron;host 经 `BrowserMcpDeps.getUserRecipes?`(读)/`saveUserRecipe?`(写)注入。host 侧在 `apps/desktop/src/main/browser-recipes/{loader,writer}.ts`(蓝本 `local-themes/{loader,writer}`),loader 扫盘 + 调 lizi-mcps `parseRecipes` + 算 `version` 内容指纹。
+  - **解耦**:`@cindy/mcps` 不碰 fs/electron;host 经 `BrowserMcpDeps.getUserRecipes?`(读)/`saveUserRecipe?`(写)注入。host 侧在 `apps/desktop/src/main/browser-recipes/{loader,writer}.ts`(蓝本 `local-themes/{loader,writer}`),loader 扫盘 + 调 @cindy/mcps `parseRecipes` + 算 `version` 内容指纹。
   - **缓存失效靠 version**:`tools.ts` 的 registry 按 L2 `version`(内容指纹)缓存;`saveRecipe` 写盘后内容变 → version 变 → 下次任意会话重新 merge(跨 per-session server 实例也一致)。
   - **`saveRecipe` action**:agent/用户把配方写进 L2(先 `RecipeSchema` 代码校验 draft,坏的 teach-via-error)。配套 **`recipe-author.md`**(按需 rule)教 agent 用我们 schema 写配方(recon→选策略→发现接口→鉴权→snapshot 验选择器→跑一遍验证→saveRecipe)。
   - **`evaluate` 配方步(取数策略)**:`RecipeStepSchema` 的 `evaluate` 跑一段页面内函数表达式源码(可 async,Playwright 路径会 await,见 `pw-tools-core.interactions.ts` 的 `result.then` 分支),映射到 `act:evaluate`、返回值在 `result.data.result`。这是 agent 本就能用 `act:evaluate` 直接做的事,配方只是能表达它了——**无新增能力面/风险**。两类取数:**public** = `navigate` 到接口 URL + `extract {body}`(公开 GET,如 HN/SO/devto/arxiv/wikipedia);**cookie/反爬** = `navigate` 到主域 + `evaluate` 内同源 `fetch(path,{credentials:'include'})`(带登录 cookie、不被反爬挡,如 Reddit)。

@@ -6,7 +6,7 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { ProviderView } from '@lizi/model-providers/registry';
+import type { ProviderView } from '@cindy/model-providers/registry';
 
 beforeEach(() => {
   vi.resetModules();

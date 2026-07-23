@@ -11,7 +11,7 @@
  * (上号、存档、副本、AFK 之类), 让用户感觉跟队友对话, 而不是跟 dialog box。
  */
 
-import type { IMUnsupportedEntry } from 'lizi-im';
+import type { IMUnsupportedEntry } from '@cindy/im';
 
 import type { ImUiTextPack } from '../shared/types';
 
@@ -88,7 +88,7 @@ export const ui = {
       `其它部分收到啦，正在处理~`,
   },
 
-  // ── card text (sent via lizi-im InteractiveCardSpec) ──────────────────────
+  // ── card text (sent via @cindy/im InteractiveCardSpec) ──────────────────────
   cards: {
     permission: {
       title: (toolName: string) => `🔧 工具调用：${toolName}`,
@@ -211,7 +211,7 @@ export const ui = {
   },
 
   // NOTE: streaming card placeholder texts (thinking / preparingImage /
-  // preparingFile / fileSentDone / emptyReply) live in lizi-im's feishu
+  // preparingFile / fileSentDone / emptyReply) live in @cindy/im's feishu
   // transport layer — see packages/lizi-im/src/feishu/messages.ts. They're
   // owned by the streaming-card subsystem there, not duplicated in host.
 } satisfies ImUiTextPack;

@@ -8,7 +8,7 @@ import {
   parseLocalSystemCommand,
   type SystemCardPresentation,
   type SystemCardType,
-} from '@lizi/maker-shared/system-card';
+} from '@cindy/maker-shared/system-card';
 
 /**
  * 手机端系统卡类型 = 共享 slash 命令卡 + goal 持久记录卡 + silent-stop 自动续跑卡。

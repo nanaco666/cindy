@@ -13,7 +13,7 @@
  *   - 切账号: localDb closeDb 时务必先 stopEmbeddingHost (避免 Worker tick 撞 'not ready')
  */
 
-import { EmbeddingClient, type EmbeddingClientOptions } from '@lizi/embedding-client';
+import { EmbeddingClient, type EmbeddingClientOptions } from '@cindy/embedding-client';
 
 import type { createLogger } from '../logger';
 import type { DbClient } from '../localDb/client/DbClient';

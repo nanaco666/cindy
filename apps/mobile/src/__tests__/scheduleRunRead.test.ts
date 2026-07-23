@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { projectScheduleEvent } from '@lizi/maker-shared/schedule-events';
+import { projectScheduleEvent } from '@cindy/maker-shared/schedule-events';
 import type { MobileMakerTransport } from '@/device-link/mobileMakerTransport';
 import { markSessionScheduleRunsRead, unreadRunIdFromProjection } from '@/session/scheduleRunRead';
 

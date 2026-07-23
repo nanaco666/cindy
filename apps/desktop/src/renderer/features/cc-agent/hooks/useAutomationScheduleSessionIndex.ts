@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { SchedulerEvent } from '@lizi/maker-scheduler';
+import type { SchedulerEvent } from '@cindy/maker-scheduler';
 
 import { createLogger } from '@/lib/logger';
 import {

@@ -20,7 +20,7 @@ function makeSession(overrides: Partial<Session> & Pick<Session, 'id' | 'title'>
     id,
     userId: 'visual-user',
     title,
-    workingDir: '/Users/ficowang/Documents/xdt-maker',
+    workingDir: '/Users/dave/Documents/xdt-maker',
     workspaceKind: 'project',
     model: 'claude-opus-4-8',
     effort: 'medium',

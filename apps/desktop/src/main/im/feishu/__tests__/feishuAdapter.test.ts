@@ -4,7 +4,7 @@
  *   - session id 格式 `feishu_{botAppId}_{openId}`(决定老用户能否续上历史会话)
  *   - sessions 表渠道专属列(feishuBotAppId / feishuOpenId)与 source='feishu'
  *   - vendorOptions { feishuChatId, source:'feishu' }(决定 cindy_feishu_bot
- *     MCP 注入, 见 lizi-mcps providers.ts isEnabled 门控)
+ *     MCP 注入, 见 @cindy/mcps providers.ts isEnabled 门控)
  *   - 默认 title / ack emoji
  */
 import { describe, expect, it, vi } from 'vitest';
@@ -18,7 +18,7 @@ vi.mock('electron', () => ({
   },
 }));
 
-import type { FeishuIM } from 'lizi-im';
+import type { FeishuIM } from '@cindy/im';
 import { buildFeishuAdapter } from '../adapter';
 
 const fakeIm = {} as unknown as FeishuIM;

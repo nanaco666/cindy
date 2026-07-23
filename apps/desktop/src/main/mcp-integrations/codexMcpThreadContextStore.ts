@@ -1,4 +1,4 @@
-import type { LiziMcpSessionContext } from 'lizi-mcps';
+import type { LiziMcpSessionContext } from '@cindy/mcps';
 
 export interface CodexMcpThreadContextStore {
   registerThreadContext(threadId: string, ctx: LiziMcpSessionContext): void;

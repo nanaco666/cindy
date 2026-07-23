@@ -1,4 +1,4 @@
-// Local Vite-style declarations. lizi-mcps already requires Vite at build/test
+// Local Vite-style declarations. @cindy/mcps already requires Vite at build/test
 // time (uses `?raw` imports); we declare the bits we use rather than depending
 // on `vite/client` so the package types stay self-contained.
 

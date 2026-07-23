@@ -19,7 +19,7 @@ import readline from 'node:readline';
 import {
   allUserDataDirNames,
   brandUserDataDirName,
-} from '@lizi/maker-shared/brand-identity';
+} from '@cindy/maker-shared/brand-identity';
 import { CURRENT_CINDY_REGION } from '../../shared/brandRegion.js';
 
 import { getCurrentDbClientUserId, getDbClient } from '../localDb/client/current.js';

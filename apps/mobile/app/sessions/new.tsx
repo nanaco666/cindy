@@ -1,4 +1,4 @@
-import { stripTrailingPathSeparators } from '@lizi/maker-shared/path-text';
+import { stripTrailingPathSeparators } from '@cindy/maker-shared/path-text';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import Constants from 'expo-constants';
 import { MOBILE_VISUAL_MOCK_ENABLED } from '@/config/env';
@@ -60,7 +60,7 @@ import type {
 } from '@/device-link/mobileMakerTransport';
 import { describeAgentAuthError, formatRemoteError } from '@/device-link/remoteStatus';
 import { agentAuthGateHint, agentAuthGateVerdict } from '@/session/agentAuthGate';
-import { connectedProvidersForAgent, getModel } from '@lizi/model-providers/registry';
+import { connectedProvidersForAgent, getModel } from '@cindy/model-providers/registry';
 import { withTransientRemoteRetry } from '@/device-link/remoteRetry';
 import { useMobileMakerTransport } from '@/device-link/useMobileMakerTransport';
 import { evictDeviceProviders, useDeviceProviders } from '@/device-link/useDeviceProviders';
@@ -106,7 +106,7 @@ import {
 } from '@/session/ContextSheet';
 import { RecentPhotosStrip, ScreenshotsGrid } from '@/session/ContextSheetMediaViews';
 import { ContextSheetGoalCreateForm } from '@/session/ContextSheetGoalView';
-import type { MobileGoalLimitsInput } from '@lizi/maker-shared/device-link-contract';
+import type { MobileGoalLimitsInput } from '@cindy/maker-shared/device-link-contract';
 import { ComposerAttachmentCollapsedBadge, ComposerAttachmentTray } from '@/session/ComposerAttachmentTray';
 import { ImageLightbox } from '@/session/ImageLightbox';
 import {

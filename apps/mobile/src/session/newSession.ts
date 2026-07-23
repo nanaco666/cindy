@@ -1,4 +1,4 @@
-import { stripTrailingPathSeparators } from '@lizi/maker-shared/path-text';
+import { stripTrailingPathSeparators } from '@cindy/maker-shared/path-text';
 import type { CreateSessionOptions } from '@/device-link/mobileMakerTransport';
 import { reconcileEffortForModel, type ProviderModelRow } from './providerModelSections';
 import type { RemoteSession } from './types';

@@ -318,7 +318,7 @@ describe('translateItemNotification commandExecution output normalization', () =
     const q = createAsyncQueue<AgentEvent>();
     const ctx = makeCtx(rt);
     const rawCommand =
-      '"C:\\Program Files\\WindowsApps\\Microsoft.PowerShell_7.6.3.0_x64__8wekyb3d8bbwe\\pwsh.exe" -Command \'pnpm --filter @lizi/maker-core build\'';
+      '"C:\\Program Files\\WindowsApps\\Microsoft.PowerShell_7.6.3.0_x64__8wekyb3d8bbwe\\pwsh.exe" -Command \'pnpm --filter @cindy/maker-core build\'';
 
     translateItemNotification(
       'started',
@@ -346,7 +346,7 @@ describe('translateItemNotification commandExecution output normalization', () =
         input: {
           command: rawCommand,
           cwd: 'E:\\xdt-maker',
-          displayCommand: 'pnpm --filter @lizi/maker-core build',
+          displayCommand: 'pnpm --filter @cindy/maker-core build',
         },
       },
     });

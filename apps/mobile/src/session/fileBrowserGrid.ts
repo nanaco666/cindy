@@ -1,1 +1,1 @@
-export * from '@lizi/maker-shared/file-browser-grid';
+export * from '@cindy/maker-shared/file-browser-grid';

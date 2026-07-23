@@ -3,7 +3,7 @@
  *
  * 职责:
  *  - 从运行期端点清单读 endpoint(getClientEndpoint('heartbeatUrl'))
- *  - 把 @lizi/heartbeat-client 接入 authManager:
+ *  - 把 @cindy/heartbeat-client 接入 authManager:
  *      · 已登录 → uid = currentUser.id
  *      · 未登录 → uid = deviceId (machineIdSync,App 一打开就有)
  *      这保证了"打开 App 即在线"的产品语义,不依赖登录流程完成
@@ -11,12 +11,12 @@
  *
  * 设计原则:
  *  - 跟主 server / IM / scheduler 一样,纯 host 层,不写任何业务逻辑
- *  - 任何异常都被 @lizi/heartbeat-client 内部静默吃掉,不会抛到 init
+ *  - 任何异常都被 @cindy/heartbeat-client 内部静默吃掉,不会抛到 init
  *  - 即便 heartbeat-server 完全挂了,这里也不会影响 App 启动或任何业务
  */
 
 import { app, BrowserWindow } from 'electron';
-import { createHeartbeatClient, type HeartbeatHandle } from '@lizi/heartbeat-client';
+import { createHeartbeatClient, type HeartbeatHandle } from '@cindy/heartbeat-client';
 import * as authManager from './authManager';
 import { createLogger } from './logger';
 import { onQuit } from './lifecycle';

@@ -2,14 +2,14 @@ import {
   findMessageSearchHits,
   findTextSearchHit,
   type MessageSearchHit,
-} from '@lizi/maker-shared/message-search';
+} from '@cindy/maker-shared/message-search';
 import type { MobileMessageRenderItem, MobileSubagentGroupItem } from '@/session/messageRenderModel';
 
 export {
   nextMessageSearchIndex,
   normalizeMessageSearchIndex,
   type MessageSearchHit as MobileMessageSearchHit,
-} from '@lizi/maker-shared/message-search';
+} from '@cindy/maker-shared/message-search';
 
 /**
  * 顶层搜索流:普通 render item 委托 shared 搜索;子 agent 嵌套卡(subagent_group,mobile-only)递归搜

@@ -36,8 +36,8 @@ import {
   type ProviderView,
   connectedProvidersForAgent,
   nativeDefaultSourceId,
-} from '@lizi/model-providers';
-import { toSdkModelString } from '@lizi/maker-core';
+} from '@cindy/model-providers';
+import { toSdkModelString } from '@cindy/maker-core';
 
 import { createLogger } from '../logger.js';
 

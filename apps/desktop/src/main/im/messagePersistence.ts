@@ -22,7 +22,7 @@
 
 import { createId } from '@paralleldrive/cuid2';
 
-import type { IMAttachment } from 'lizi-im';
+import type { IMAttachment } from '@cindy/im';
 
 import { createMessage } from '../localDb/ipc/messages';
 import { createLogger } from '../logger';

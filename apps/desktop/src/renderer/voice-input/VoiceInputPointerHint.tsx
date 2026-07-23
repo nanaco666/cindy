@@ -1,6 +1,6 @@
 import { createPortal } from 'react-dom';
 import { Mic } from 'lucide-react';
-import type { VoiceInputState } from '@lizi/voice-input-core';
+import type { VoiceInputState } from '@cindy/voice-input-core';
 
 import { cn } from '@/lib/utils';
 import { Spinner } from '@/components/ui/spinner';

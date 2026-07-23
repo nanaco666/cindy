@@ -6,7 +6,7 @@
  * 引擎侧(收 body → JSON.parse → handle({parsedBody, ctx, res, prefs}))——与 desktop host
  * 的接线逐字段一致(prefs 闭包传入,无伪 header)。
  *
- * 默认跳过(不联网、不依赖凭证);需要时:BRIDGE_LIVE=1 pnpm --filter @lizi/anthropic-responses-bridge test
+ * 默认跳过(不联网、不依赖凭证);需要时:BRIDGE_LIVE=1 pnpm --filter @cindy/anthropic-responses-bridge test
  */
 import { createServer, type Server } from 'node:http';
 import fs from 'node:fs';

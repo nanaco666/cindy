@@ -8,7 +8,7 @@
  * sides from quietly inventing different meanings for the same queued row.
  */
 
-import { stripChatQuoteMarkerLines } from '@lizi/maker-shared/chat-quotes';
+import { stripChatQuoteMarkerLines } from '@cindy/maker-shared/chat-quotes';
 
 export type AgentInputFileCategory = 'image' | 'pdf' | 'text' | 'office' | 'file';
 

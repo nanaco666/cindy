@@ -5,7 +5,7 @@
  * 旁路图片(session-runner 收集的 absPath)读盘、编码 base64、施加限额, 产出
  * 协议 TaskAttachment[] 与"引用已剥离/替换"的正文。
  *
- * 引用语义与 IM 渠道收口(lizi-im slack/streamingText.doFinalize)一致:
+ * 引用语义与 IM 渠道收口(@cindy/im slack/streamingText.doFinalize)一致:
  *   - 图片引用 `![alt](xdt-image://...)` → 附件, 正文替换成"已作为附件发送"提示
  *   - 文件引用 `[name](xdt-file:///abs/path)` → 附件, 正文整体剥离
  * (正则与 packages/lizi-im/src/xdtRefs.ts 对齐 —— 该包未导出这些工具,
@@ -24,7 +24,7 @@ import { promises as fsp } from 'node:fs';
 
 import type { TaskAttachment } from '@cindy/slack-hook-protocol';
 
-// 双协议:老 xdt-image + 新 cindy-media(媒体总仓),与 lizi-im/xdtRefs.ts 对齐
+// 双协议:老 xdt-image + 新 cindy-media(媒体总仓),与 @cindy/im/xdtRefs.ts 对齐
 const XDT_IMAGE_REGEX = /!\[([^\]]*)\]\(((?:xdt-image|cindy-media):\/\/[^)]+)\)/g;
 const XDT_FILE_REGEX = /\[([^\]]*)\]\((xdt-file:\/\/[^)]+)\)/g;
 
@@ -69,7 +69,7 @@ export function xdtFileUrlToAbsPath(url: string): string {
   // 约定写法 xdt-file:///<绝对路径>:Unix 下剥掉协议后的首个 `/` 就是根;
   // Windows 盘符路径剥完协议剩 `/C:\...`(或 /C:/...),多余的前导 `/` 会让
   // allowedFileRoots 比对必失败 → 附件静默丢失(2026-07-16 实踩,规则 15),
-  // 这里剥掉。与 lizi-im/xdtRefs.ts 同步修改。
+  // 这里剥掉。与 @cindy/im/xdtRefs.ts 同步修改。
   return decoded.replace(/^\/+([A-Za-z]:[\\/])/, '$1');
 }
 

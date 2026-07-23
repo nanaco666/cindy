@@ -27,8 +27,8 @@ import { providerMonogram } from '@/lib/providerModels';
 import { isChatGptConnectionConnected, useCodexAuth } from '@/hooks/useCodexAuth';
 import { hasProviderLogo, ProviderLogoMark } from '@/components/icons/ProviderLogoMark';
 
-import { sortPresetsForLocale } from '@lizi/model-providers';
-import type { AgentKind, CustomProviderConfig, ProviderPreset, ProviderView } from '@lizi/model-providers';
+import { sortPresetsForLocale } from '@cindy/model-providers';
+import type { AgentKind, CustomProviderConfig, ProviderPreset, ProviderView } from '@cindy/model-providers';
 
 /** 外部直达入口(左栏检测建议点击):直接进入该内置渠道的授权步。 */
 export interface WizardEntry {

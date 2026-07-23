@@ -14,7 +14,7 @@
  * 兼容已发出的旧卡片, 见 cardBuilders 头注释)。
  */
 
-import type { ChannelIM, IMCardActionEvent } from 'lizi-im';
+import type { ChannelIM, IMCardActionEvent } from '@cindy/im';
 import {
   createSessionPermissionUpdate,
   hasSessionPermissionUpdates,
@@ -22,8 +22,8 @@ import {
   type Effort,
   type InteractionDecision,
   type PermissionMode,
-} from '@lizi/maker-core';
-import { requiresFullAccessConfirmation } from '@lizi/maker-shared/permission-mode';
+} from '@cindy/maker-core';
+import { requiresFullAccessConfirmation } from '@cindy/maker-shared/permission-mode';
 
 import { createLogger } from '../../logger';
 import { getMaker } from '../../maker-host';
@@ -56,7 +56,7 @@ import { startThreadControlFlow } from './controlFlow';
 import { bindingStore, executeDetach } from '../binding';
 import { generateTakeoverSummary } from './sessionSummary';
 import { broadcastSessionCreated } from './sessionBroadcast';
-import type { IdentityKey } from 'lizi-im';
+import type { IdentityKey } from '@cindy/im';
 import {
   readModelRouteSnapshot,
   readPermissionMode,

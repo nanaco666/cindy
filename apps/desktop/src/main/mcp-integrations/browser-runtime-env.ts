@@ -1,5 +1,5 @@
 /**
- * Side-effect module: set XDT_BROWSER_RUNTIME_DIR BEFORE @lizi/browser-control-runtime
+ * Side-effect module: set XDT_BROWSER_RUNTIME_DIR BEFORE @cindy/browser-control-runtime
  * is imported.
  *
  * The runtime reads this env var into an EAGER module-level const (CONFIG_DIR, in

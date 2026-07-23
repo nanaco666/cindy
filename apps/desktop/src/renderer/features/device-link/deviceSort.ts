@@ -1,1 +1,1 @@
-export { compareDevicesByName } from '@lizi/maker-shared/device-list';
+export { compareDevicesByName } from '@cindy/maker-shared/device-list';

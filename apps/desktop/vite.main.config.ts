@@ -86,7 +86,7 @@ export default defineConfig(({ mode }) => {
     build: {
       rollupOptions: {
         output: {
-          // Keep the vendored @lizi/browser-control-runtime (including its
+          // Keep the vendored @cindy/browser-control-runtime (including its
           // dynamically-imported pw-ai.js / chrome-mcp.js) in ONE chunk. Otherwise
           // vite code-splits those dynamic imports into separate chunks that
           // `require()` the bootstrap-electron entry chunk again at load time →
@@ -142,7 +142,7 @@ export default defineConfig(({ mode }) => {
           'ssh2',
           'cpu-features',
           // ssh-config (remote-ssh): 解析 ~/.ssh/config。纯 JS, 但跟 ssh2
-          // 同包 (@lizi/maker-remote-ssh) 出现, 同样不让 bundle 以保持依赖闭包对称。
+          // 同包 (@cindy/maker-remote-ssh) 出现, 同样不让 bundle 以保持依赖闭包对称。
           'ssh-config',
           // ws (codex remote transport, P2): SshDaemonTransport 用 ws/lib/receiver
           // + ws/lib/sender 给 ssh exec channel 上的 NDJSON over WebSocket 做帧编解码。
