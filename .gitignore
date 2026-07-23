@@ -134,6 +134,9 @@ CLAUDE.local.md
 # ── Cindy/XDMaker 开发者本地工作区 ───────────────────────────
 # local 模式的端点清单(restart:desktop:local 从 config/endpoint.json 生成,api/auth/device-link 指 localhost)
 config/endpoint.local.json
+# dev 区端点清单为本地文件(内部/自托管环境各自维护,不入仓)。
+# mobile 打包静态引用该文件;缺失时从 config/endpoint.dev.json.example 复制一份。
+config/endpoint.dev.json
 # 发布机本地地区 / 签名配置；仓库只保留对应的 .example 文件。
 apps/mobile/scripts/self-host-regions.json
 apps/desktop/scripts/release-regions.json
