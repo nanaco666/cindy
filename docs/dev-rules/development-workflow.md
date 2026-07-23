@@ -18,9 +18,9 @@ worktree 会话契约、直推 `main` 的额外门禁与 review 严重度口径�
   共享 `.git` 但**不共享 `node_modules`**，缺失就先 `pnpm install`（首次可能数分钟，注意
   命令超时）。
 - **你的编辑对运行中的 app 无效**：Vite HMR 只 watch 启动 dev 实例的那个 checkout，
-  worktree 下的改动既不热更也不随重启生效。「改了没反应」不是 bug。验证一律在本 worktree
-  内跑 `pnpm --filter desktop typecheck` / 定向 `vitest run`；需要运行时验证时 commit + push
-  后交用户（你无法重启宿主）。
+  worktree 下的改动既不热更也不随重启生效。「改了没反应」不是 bug。开发过程中的增量验证在本
+  worktree 内跑 `pnpm --filter desktop typecheck` / 定向 `vitest run`；**提交前仍须通过
+  第 2 节的提交前测试门禁**。需要运行时验证时 commit + push 后交用户（你无法重启宿主）。
 - **宿主 app 日志不在你的 cwd 下**：dev 日志在启动 checkout（通常是 baseRepo）的
   `apps/desktop/logs/`，读日志时拼 baseRepo 的绝对路径。
 - **结束前必须 commit**：会话被删除或归档时脏 worktree 会先存内容快照再删目录。**PR
@@ -40,9 +40,18 @@ worktree 会话契约、直推 `main` 的额外门禁与 review 严重度口径�
   为准（这次改了什么／怎么验证的／风险）；涉及 SQLite migration、system prompt、协议、
   原生层或跨平台差异时必须在「风险」里说明。Reviewer 只看 Title + Description 决定要不要
   review，写不清直接退回。
-- **本地验证按风险分层**：始终跑与改动直接相关的检查；跨模块、高风险或基础设施改动追加
-  更广泛验证（如仓库根 `pnpm test:unit`），**最终以 CI 门禁为准**。不得通过 skip、删除或
-  弱化测试制造通过；PR「怎么验证的」一节必须**如实**填写，没跑不许写已跑。
+- **提交前测试门禁（硬性要求）**：无论是提 PR 还是直接 commit，提交前都必须在本地跑完
+  仓库根 `pnpm test:unit`（全部单元测试），并对本次改动涉及的每个 package 跑
+  `pnpm --filter <包名> run --if-present typecheck`（`<包名>` 用该 package 在
+  `package.json` 里的 `name`，如 `desktop`、`@cindy/maker-core`；没有 `typecheck`
+  script 的 package 该步自动跳过），全部通过后才允许提交；任何一项失败都不得提交，
+  必须先修复。worktree 会话内的 commit 同样适用。唯一例外是**防丢数据的兜底保存**：
+  宿主删除／归档会话时自动存的内容快照（见第 1 节），以及会话必须收尾、测试却来不及
+  修好时的收尾 commit——后者 commit message 必须标注 `WIP`，且在门禁通过前不得
+  push、不得提 PR。
+- **在门禁之上按风险追加验证**：跨模块、高风险或基础设施改动追加更广泛验证（如仓库根
+  `pnpm test:all`），**最终以 CI 门禁为准**。不得通过 skip、删除或弱化测试制造通过；
+  PR「怎么验证的」一节必须**如实**填写，没跑不许写已跑。
 - **直推 `main` 的额外门禁**：push 前由独立 reviewer 对最终 diff 做一次对抗性 review，对照
   `docs/` 下规则找实际问题；发现 P0／P1 必须先修复并重新 review，直到没有 P0／P1。commit
   可以先创建，但 push 的必须是 review 通过的最终 commit。

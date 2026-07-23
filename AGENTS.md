@@ -86,8 +86,15 @@
 - commit、push 和创建 PR 的执行时机由开发者或 Codex、Claude Code、Cindy 等宿主
   工作流决定；仓库规则本身不额外授权外部写操作。
 - 提交 PR 时遵循 `.github/PULL_REQUEST_TEMPLATE.md`，如实说明改动、验证和风险。
-- 本地验证按风险分层：始终运行与改动直接相关的检查；跨模块、高风险或基础设施改动
-  追加更广泛验证，最终以 CI 门禁为准。不得通过跳过、删除或弱化测试制造通过。
+- **提交前测试门禁（硬性要求）**：无论是提 PR 还是直接 commit，提交前都必须在本地
+  跑完仓库根 `pnpm test:unit`（全部单元测试），并对本次改动涉及的每个 package 跑
+  `pnpm --filter <包名> run --if-present typecheck`（`<包名>` 用该 package 在
+  `package.json` 里的 `name`，如 `desktop`、`@cindy/maker-core`；没有 `typecheck`
+  script 的 package 该步自动跳过），全部通过后才允许提交；任何一项失败都不得提交，
+  必须先修复。细则与唯一例外（防丢数据的兜底保存）见
+  `docs/dev-rules/development-workflow.md`。
+- 在上述门禁之上按风险追加验证：跨模块、高风险或基础设施改动追加更广泛验证（如
+  `pnpm test:all`），最终以 CI 门禁为准。不得通过跳过、删除或弱化测试制造通过。
 
 ## 绝对安全底线
 

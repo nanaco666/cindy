@@ -65,7 +65,9 @@ Agent 自身仍只走 restart 命令，不直接调 human-only 的 `dev:desktop*
 
 ## 分层验证
 
-根据实际改动选择最小但充分的检查：
+本节指导**开发过程中的增量验证**；提交（commit／PR）前的强制门禁以
+`development-workflow.md` 的「提交前测试门禁」为准（仓库根 `pnpm test:unit` 与相关
+package 的 typecheck 全部通过）。开发过程中根据实际改动选择最小但充分的检查：
 
 ```bash
 pnpm --filter desktop typecheck
