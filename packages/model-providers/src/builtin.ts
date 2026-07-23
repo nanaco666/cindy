@@ -104,13 +104,17 @@ const XD_PROVIDER: Provider = {
     standard: 'seedance-fast',
     best: 'seedance-pro',
   },
+  // XD 网关真实推理入口运行时由 model-access server 随凭据成对下发
+  // (见 main/model-access/effectiveEndpoint.ts;端点清单/静态值已退役)。
+  // gateway-key 路由只换鉴权头、不 override upstream,故此处 upstream 不参与路由,
+  // 仅为满足类型的占位(不写内部域名);品牌按 provider id 判定,不读此值。
   routing: {
     'claude-code': {
-      upstream: 'https://llm-proxy.tapsvc.com',
+      upstream: 'https://xd-gateway.invalid',
       authStrategy: 'gateway-key',
     },
     codex: {
-      upstream: 'https://llm-proxy.tapsvc.com/v1',
+      upstream: 'https://xd-gateway.invalid/v1',
       authStrategy: 'gateway-key',
     },
   },
