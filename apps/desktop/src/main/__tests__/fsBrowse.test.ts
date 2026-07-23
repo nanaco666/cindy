@@ -52,6 +52,7 @@ describe('listDir', () => {
   it('只回目录 + 指向目录的 symlink(文件 / dangling symlink 跳过),每项带绝对 path,按名排序', async () => {
     h.readdir.mockResolvedValueOnce([
       dirent('Code', 'dir'),
+      dirent('.config', 'dir'),
       dirent('readme.md', 'file'),
       dirent('Applications', 'dir'),
       dirent('linkToDir', 'symlink'),
@@ -64,7 +65,7 @@ describe('listDir', () => {
 
     const res = await listDir('~');
     expect(res.resolvedPath).toBe(HOME);
-    expect(res.entries.map((e) => e.name)).toEqual(['Applications', 'Code', 'linkToDir']);
+    expect(res.entries.map((e) => e.name)).toEqual(['.config', 'Applications', 'Code', 'linkToDir']);
     expect(res.entries.find((e) => e.name === 'Code')).toMatchObject({
       kind: 'dir',
       path: homePath('Code'),

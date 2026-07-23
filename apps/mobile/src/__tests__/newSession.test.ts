@@ -6,6 +6,7 @@ import {
   buildNewSessionCreatePreview,
   buildRecentWorkspaceOptions,
   buildRemoteCreateSessionOptions,
+  filterRemoteDirectoryEntries,
   defaultPermissionModeForNewSessionAgent,
   normalizeCreateSessionResult,
   parseNewSessionDeviceOptions,
@@ -334,6 +335,17 @@ describe('new session default device follows the home device filter', () => {
 });
 
 describe('new session model', () => {
+  it('hides dot directories by default and restores them when enabled', () => {
+    const entries = [
+      { name: '.config', kind: 'dir' as const, path: '/Users/cindy/.config' },
+      { name: '.workspace', kind: 'symlink' as const, path: '/Users/cindy/.workspace' },
+      { name: 'Code', kind: 'dir' as const, path: '/Users/cindy/Code' },
+    ];
+
+    expect(filterRemoteDirectoryEntries(entries, false).map((entry) => entry.name)).toEqual(['Code']);
+    expect(filterRemoteDirectoryEntries(entries, true)).toEqual(entries);
+  });
+
   it('builds device-link create-session args with desktop remote-project semantics', () => {
     expect(buildRemoteCreateSessionOptions({
       ...DEFAULT_NEW_SESSION_DRAFT,
@@ -747,6 +759,16 @@ describe('new session composer surface', () => {
     const selectDeviceStart = newSource.indexOf('const selectDevice = useCallback((option: NewSessionDeviceOption) => {');
     const selectDeviceEnd = newSource.indexOf('// 切 agent:', selectDeviceStart);
     const selectDeviceSource = newSource.slice(selectDeviceStart, selectDeviceEnd);
+    const selectWorkingDirStart = newSource.indexOf('const selectWorkingDir = useCallback((workingDir: string) => {');
+    const selectDialogueWorkspaceStart = newSource.indexOf('const selectDialogueWorkspace = useCallback(() => {');
+    const selectRecentProjectStart = newSource.indexOf('const selectRecentProject = useCallback((workingDir: string) => {');
+    const openProjectBrowseStart = newSource.indexOf('const openProjectBrowse = useCallback(() => {');
+    const selectWorkingDirSource = newSource.slice(selectWorkingDirStart, selectDialogueWorkspaceStart);
+    const selectDialogueWorkspaceSource = newSource.slice(selectDialogueWorkspaceStart, selectRecentProjectStart);
+    const selectRecentProjectSource = newSource.slice(selectRecentProjectStart, openProjectBrowseStart);
+    const browseHiddenToggleStyleStart = newSource.indexOf('browseHiddenToggle: {');
+    const browseHiddenToggleStyleEnd = newSource.indexOf('browseCheckbox: {', browseHiddenToggleStyleStart);
+    const browseHiddenToggleStyle = newSource.slice(browseHiddenToggleStyleStart, browseHiddenToggleStyleEnd);
     const createStart = newSource.indexOf('const create = useCallback(async () => {');
     const createEnd = newSource.indexOf('return (', createStart);
     const createSource = newSource.slice(createStart, createEnd);
@@ -843,6 +865,18 @@ describe('new session composer surface', () => {
     expect(newSource).toContain('if (!newSessionPreferencesLoaded) return;');
     expect(newSource).toContain('if (userTouchedDeviceRef.current) return;');
     expect(selectDeviceSource).toContain('userTouchedDeviceRef.current = true;');
+    expect(selectWorkingDirSource).toContain('setShowHiddenDirectories(false);');
+    expect(selectDialogueWorkspaceSource).toContain('setShowHiddenDirectories(false);');
+    expect(selectRecentProjectSource).toContain('setShowHiddenDirectories(false);');
+    expect(newSource).toContain("import { newSessionText } from '@/session/newSessionMessages';");
+    expect(newSource).toContain('accessibilityRole="checkbox"');
+    expect(newSource).toContain("accessibilityLabel={newSessionText('showHiddenDirectories')}");
+    expect(newSource).toContain('accessibilityState={{ checked: showHiddenDirectories, disabled: creating || undefined }}');
+    expect(newSource).toContain("{newSessionText('showHiddenDirectories')}");
+    expect(newSource).toContain("{newSessionText('emptyDirectory')}");
+    expect(newSource).not.toContain('显示隐藏文件夹');
+    expect(newSource).not.toContain('没有可显示的子目录。');
+    expect(browseHiddenToggleStyle).toContain('minHeight: 44');
     expect(storedAgentSource).toContain('if (selectedDeviceId) autoDefaultDeviceRef.current = selectedDeviceId;');
     expect(storedAgentSource).not.toContain('userTouchedRuntimeRef.current = true;');
     expect(newSource).toContain('void saveNewSessionPreferences({ agentKind: nextKind });');

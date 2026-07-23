@@ -133,6 +133,7 @@ import {
   defaultPermissionModeForNewSessionAgent,
   buildRemoteCreateSessionOptions,
   buildRecentWorkspaceOptions,
+  filterRemoteDirectoryEntries,
   normalizeCreateSessionResult,
   parseNewSessionDeviceOptions,
   pickAgentDefaultRuntime,
@@ -146,6 +147,7 @@ import {
   type NewSessionDeviceOption,
   type NewSessionStoredPreferences,
 } from '@/session/newSession';
+import { newSessionText } from '@/session/newSessionMessages';
 import {
   createNewSessionId,
   drainStashedNewSessionDraft,
@@ -337,6 +339,7 @@ export default function NewRemoteSessionScreen() {
   const [browseEntries, setBrowseEntries] = useState<RemoteDirectoryEntry[]>([]);
   const [browseLoading, setBrowseLoading] = useState(false);
   const [browseError, setBrowseError] = useState<string | null>(null);
+  const [showHiddenDirectories, setShowHiddenDirectories] = useState(false);
   // Context 面板(+ 号弹出的可拖动 sheet):open + 子视图(主视图 / 截图列表 / 目标草稿)。
   const [contextSheetOpen, setContextSheetOpen] = useState(false);
   const [contextSheetView, setContextSheetView] = useState<'main' | 'screenshots' | 'goal'>('main');
@@ -824,6 +827,10 @@ export default function NewRemoteSessionScreen() {
       : [],
     [atResources, composerTrigger],
   );
+  const visibleBrowseEntries = useMemo(
+    () => filterRemoteDirectoryEntries(browseEntries, showHiddenDirectories),
+    [browseEntries, showHiddenDirectories],
+  );
 
   const patchDraft = useCallback((patch: Partial<NewSessionDraft>) => {
     if (patch.firstMessage !== undefined) {
@@ -920,6 +927,7 @@ export default function NewRemoteSessionScreen() {
     setError(null);
     setCapabilities(null);
     setBrowseOpen(false);
+    setShowHiddenDirectories(false);
     setBrowsePath('');
     setBrowseParent(null);
     setBrowseEntries([]);
@@ -1241,18 +1249,21 @@ export default function NewRemoteSessionScreen() {
     patchDraft({ workingDir });
     setBrowseOpen(false);
     setBrowseError(null);
+    setShowHiddenDirectories(false);
   }, [patchDraft]);
 
   const selectDialogueWorkspace = useCallback(() => {
     patchDraft({ workspaceKind: 'dialogue', workingDir: '' });
     setWorkspacePickerOpen(false);
     setBrowseOpen(false);
+    setShowHiddenDirectories(false);
   }, [patchDraft]);
 
   const selectRecentProject = useCallback((workingDir: string) => {
     patchDraft({ workspaceKind: 'project', workingDir });
     setWorkspacePickerOpen(false);
     setBrowseOpen(false);
+    setShowHiddenDirectories(false);
   }, [patchDraft]);
 
   const openProjectBrowse = useCallback(() => {
@@ -2564,11 +2575,36 @@ export default function NewRemoteSessionScreen() {
                     <Text style={styles.browseActionText}>使用当前</Text>
                   </Pressable>
                 </View>
+                <Pressable
+                  accessibilityLabel={newSessionText('showHiddenDirectories')}
+                  accessibilityRole="checkbox"
+                  accessibilityState={{ checked: showHiddenDirectories, disabled: creating || undefined }}
+                  disabled={creating}
+                  onPress={() => setShowHiddenDirectories((value) => !value)}
+                  style={({ pressed }) => [
+                    styles.browseHiddenToggle,
+                    pressed && styles.pressed,
+                    creating && styles.disabled,
+                  ]}
+                  testID="newSession.remoteBrowseShowHidden"
+                >
+                  <View style={[
+                    styles.browseCheckbox,
+                    showHiddenDirectories && styles.browseCheckboxChecked,
+                  ]}>
+                    {showHiddenDirectories ? (
+                      <Check color={colors.ctaText} size={iconSize.xs} strokeWidth={iconStroke.bold} />
+                    ) : null}
+                  </View>
+                  <Text style={styles.browseHiddenLabel}>
+                    {newSessionText('showHiddenDirectories')}
+                  </Text>
+                </Pressable>
                 {browseError ? <Text style={styles.errorText}>{browseError}</Text> : null}
                 <FlatList
                   style={styles.browseList}
                   contentContainerStyle={styles.browseListContent}
-                  data={browseEntries}
+                  data={visibleBrowseEntries}
                   keyExtractor={(entry) => entry.path}
                   renderItem={({ item }) => (
                     <RemoteDirectoryRow
@@ -2582,7 +2618,7 @@ export default function NewRemoteSessionScreen() {
                   keyboardShouldPersistTaps="handled"
                   showsVerticalScrollIndicator
                   ListEmptyComponent={!browseLoading && !browseError ? (
-                    <Text style={styles.hint}>没有可进入的子目录。</Text>
+                    <Text style={styles.hint}>{newSessionText('emptyDirectory')}</Text>
                   ) : null}
                 />
               </View>
@@ -3263,6 +3299,31 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     paddingHorizontal: spacing.md,
   },
   browseActionText: {
+    color: colors.textSecondary,
+    fontSize: typeScale.caption,
+    fontWeight: fontWeight.medium,
+  },
+  browseHiddenToggle: {
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    gap: spacing.sm,
+    minHeight: 44,
+  },
+  browseCheckbox: {
+    alignItems: 'center',
+    borderColor: colors.borderStrong,
+    borderRadius: radius.pill,
+    borderWidth: StyleSheet.hairlineWidth,
+    height: 20,
+    justifyContent: 'center',
+    width: 20,
+  },
+  browseCheckboxChecked: {
+    backgroundColor: colors.cta,
+    borderColor: colors.cta,
+  },
+  browseHiddenLabel: {
     color: colors.textSecondary,
     fontSize: typeScale.caption,
     fontWeight: fontWeight.medium,

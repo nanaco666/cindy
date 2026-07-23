@@ -229,6 +229,7 @@ const requiredSourceAnchors = [
   'newSession.remoteBrowseCurrentPath',
   'newSession.remoteBrowseParentButton',
   'newSession.remoteBrowseSelectCurrent',
+  'newSession.remoteBrowseShowHidden',
   'newSession.workspaceQuickPick',
   'deviceDetail.sessionList',
   'deviceDetail.sessionRow',
