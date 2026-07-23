@@ -2,12 +2,14 @@
  * BuiltinToolsSection — Settings → Connections 下的内置工具管理面板。
  * ---------------------------------------------------------------------------
  * 列出可选的 builtin 工具（非 essential），每个工具有 toggle 开关。
- * 仅支持项目级开关（.claude/settings.json → xdtMaker.builtinTools.{id}）。
+ * 支持用户默认与项目覆盖两个作用域。项目覆盖优先于用户默认，清除覆盖后
+ * 自动回落到下一层来源。
  *
- * 项目上下文有两条来源:
+ * 作用域有两条来源:
  *   1. props.workingDir — 来自 lastWorkingDir store, 反映当前 active session
  *      的工作目录。打开 Settings 时默认 honor 这个 (用户的"我刚才在的项目")。
- *   2. 标题行右侧的 project picker dropdown — 列出 recentWorkdirs, 让用户
+ *   2. 标题行右侧的 scope picker dropdown — 首项为新对话默认值，其后列出
+ *      recentWorkdirs, 让用户
  *      手动切换到任意最近项目, 不必先返回 chat 切 session 再回 Settings。
  *      用户选择会 sticky 到本次 BuiltinToolsSection 实例生命周期。
  *
@@ -20,8 +22,7 @@
 
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
-import { Puzzle, ChevronDown, Check, Folder } from 'lucide-react';
+import { Puzzle, ChevronDown, Check, Folder, UserRound } from 'lucide-react';
 
 import { basename, cn } from '@/lib/utils';
 import { toast } from '@/lib/toast';
@@ -46,7 +47,10 @@ interface PluginListItem {
   source: 'builtin' | 'hub' | 'local';
   essential: boolean;
   effectiveEnabled: boolean;
+  productDefaultEnabled: boolean;
   projectOverride?: { enabled: boolean; workingDir: string } | null;
+  userOverride?: { enabled: boolean } | null;
+  globalOverride?: { enabled: boolean } | null;
 }
 
 interface BuiltinToolsSectionProps {
@@ -90,15 +94,14 @@ function useRecentWorkdirs(): RecentWorkdirEntry[] {
 
 export function BuiltinToolsSection({ workingDir }: BuiltinToolsSectionProps) {
   const { t } = useTranslation();
-  const navigate = useNavigate();
   const [plugins, setPlugins] = useState<PluginListItem[] | null>(null);
   const [pendingIds, setPendingIds] = useState<Set<string>>(new Set());
-  const [selectedWorkingDir, setSelectedWorkingDir] = useState<string | undefined>(
-    () => workingDir,
-  );
+  // undefined means the user has not picked a scope yet, so follow workingDir
+  // as it loads or changes. null is an explicit user-default selection.
+  const [selectedScope, setSelectedScope] = useState<string | null | undefined>();
 
   const recentWorkdirs = useRecentWorkdirs();
-  const effectiveWorkingDir = selectedWorkingDir ?? workingDir;
+  const effectiveWorkingDir = selectedScope === undefined ? workingDir : selectedScope ?? undefined;
 
   const reload = useCallback(async () => {
     try {
@@ -116,10 +119,13 @@ export function BuiltinToolsSection({ workingDir }: BuiltinToolsSectionProps) {
 
   const handleToggle = useCallback(
     async (id: string, next: boolean, label: string) => {
-      if (!effectiveWorkingDir) return;
       setPendingIds((prev) => new Set(prev).add(id));
       try {
-        await window.electronAPI.maker.plugins.setProjectEnabled(effectiveWorkingDir, id, next);
+        if (effectiveWorkingDir) {
+          await window.electronAPI.maker.plugins.setProjectEnabled(effectiveWorkingDir, id, next);
+        } else {
+          await window.electronAPI.maker.plugins.setEnabled(id, next);
+        }
         await reload();
         toast.success(
           next
@@ -127,7 +133,7 @@ export function BuiltinToolsSection({ workingDir }: BuiltinToolsSectionProps) {
             : t('settings.builtinTools.toast.disabled', { name: label }),
         );
       } catch (err) {
-        log.warn(`plugins.setProjectEnabled(${id}) failed`, err);
+        log.warn(`plugins.setEnabled(${id}) failed`, err);
         // Decode the [CODE] prefix that throwIpcError encodes on main side. We
         // only translate known business codes (PERMISSION_DENIED for essential
         // plugins; INVALID_PARAMS would only fire on a renderer bug, no need
@@ -150,14 +156,17 @@ export function BuiltinToolsSection({ workingDir }: BuiltinToolsSectionProps) {
 
   const handleClearOverride = useCallback(
     async (id: string, label: string) => {
-      if (!effectiveWorkingDir) return;
       setPendingIds((prev) => new Set(prev).add(id));
       try {
-        await window.electronAPI.maker.plugins.clearProjectEnabled(effectiveWorkingDir, id);
+        if (effectiveWorkingDir) {
+          await window.electronAPI.maker.plugins.clearProjectEnabled(effectiveWorkingDir, id);
+        } else {
+          await window.electronAPI.maker.plugins.clearEnabled(id);
+        }
         await reload();
         toast.success(t('settings.defaults.restored'));
       } catch (err) {
-        log.warn(`plugins.clearProjectEnabled(${id}) failed`, err);
+        log.warn(`plugins.clearEnabled(${id}) failed`, err);
         const ipcError = extractIpcError(err);
         const message = ipcError?.code === 'PERMISSION_DENIED'
           ? t('settings.builtinTools.toast.cannotModifyEssential', { name: label })
@@ -188,11 +197,11 @@ export function BuiltinToolsSection({ workingDir }: BuiltinToolsSectionProps) {
             {t('settings.builtinTools.description')}
           </p>
         </div>
-        <ProjectPicker
+        <ScopePicker
           effectiveWorkingDir={effectiveWorkingDir}
           activeSessionWorkingDir={workingDir}
           recentWorkdirs={recentWorkdirs}
-          onPick={(dir) => setSelectedWorkingDir(dir)}
+          onPick={setSelectedScope}
         />
       </div>
 
@@ -208,7 +217,8 @@ export function BuiltinToolsSection({ workingDir }: BuiltinToolsSectionProps) {
             key={plugin.id}
             plugin={plugin}
             divider={index > 0}
-            disabled={pendingIds.has(plugin.id) || !effectiveWorkingDir}
+            disabled={pendingIds.has(plugin.id)}
+            projectScope={effectiveWorkingDir != null}
             onToggle={handleToggle}
             onClearOverride={handleClearOverride}
           />
@@ -224,25 +234,7 @@ export function BuiltinToolsSection({ workingDir }: BuiltinToolsSectionProps) {
       </div>
 
       <p className="text-12 leading-[1.5] text-[var(--settings-section-desc)]">
-        {effectiveWorkingDir
-          ? t('settings.builtinTools.toggleHint')
-          : t('settings.builtinTools.noProjectHint')}
-        {effectiveWorkingDir && (
-          <>
-            {' '}
-            <button
-              type="button"
-              onClick={() => navigate('/cc-agent/new')}
-              className={cn(
-                'underline underline-offset-2',
-                'text-[var(--settings-section-desc)] hover:text-[var(--text-primary)]',
-                'focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] rounded',
-              )}
-            >
-              {t('settings.builtinTools.startNewSessionToApply')}
-            </button>
-          </>
-        )}
+        {t('settings.builtinTools.toggleHint')}
       </p>
     </div>
   );
@@ -254,18 +246,26 @@ function PluginRow({
   plugin,
   divider,
   disabled,
+  projectScope,
   onToggle,
   onClearOverride,
 }: {
   plugin: PluginListItem;
   divider: boolean;
   disabled: boolean;
+  projectScope: boolean;
   onToggle: (id: string, next: boolean, label: string) => void;
   onClearOverride: (id: string, label: string) => void;
 }) {
   const { t } = useTranslation();
   const { name, description } = useLocalizedPlugin(plugin);
   const hasProjectOverride = plugin.projectOverride != null;
+  const isCustomized = projectScope ? hasProjectOverride : plugin.userOverride != null;
+  const sourceKey = projectScope && hasProjectOverride
+    ? 'project'
+    : plugin.userOverride != null
+      ? 'user'
+      : 'product';
 
   return (
     <div
@@ -288,17 +288,15 @@ function PluginRow({
             <p className="text-14 font-medium leading-[1.25] text-[var(--settings-section-title)] truncate">
               {name}
             </p>
-            {hasProjectOverride && (
-              <span
-                className="shrink-0 text-11 leading-none px-1.5 py-0.5 rounded-full
-                  bg-[var(--settings-input-bg)] text-[var(--settings-section-desc)]"
-                title={t('settings.builtinTools.projectOverrideTooltip', {
-                  dir: plugin.projectOverride?.workingDir,
-                })}
-              >
-                {t('settings.builtinTools.projectOverrideBadge')}
-              </span>
-            )}
+            <span
+              className="shrink-0 text-11 leading-none px-1.5 py-0.5 rounded-full
+                bg-[var(--settings-input-bg)] text-[var(--settings-section-desc)]"
+              title={t(`settings.builtinTools.source.${sourceKey}Tooltip`, {
+                dir: plugin.projectOverride?.workingDir,
+              })}
+            >
+              {t(`settings.builtinTools.source.${sourceKey}`)}
+            </span>
           </div>
           <p className="text-12 leading-[1.35] text-[var(--settings-section-desc)] truncate">
             {description}
@@ -308,7 +306,7 @@ function PluginRow({
 
       <div className="flex items-center gap-2 shrink-0">
         <DefaultOverrideControls
-          isCustomized={hasProjectOverride}
+          isCustomized={isCustomized}
           disabled={disabled}
           onReset={() => onClearOverride(plugin.id, name)}
         />
@@ -323,9 +321,8 @@ function PluginRow({
   );
 }
 
-/** Project picker dropdown — listed in title row, lets the user switch which
- *  project's .claude/settings.json the toggles below operate on. */
-function ProjectPicker({
+/** Scope picker — switches between user defaults and a project's overrides. */
+function ScopePicker({
   effectiveWorkingDir,
   activeSessionWorkingDir,
   recentWorkdirs,
@@ -335,7 +332,7 @@ function ProjectPicker({
   /** lastWorkingDir from active session — gets a "current" badge in the list. */
   activeSessionWorkingDir: string | undefined;
   recentWorkdirs: RecentWorkdirEntry[];
-  onPick: (dir: string) => void;
+  onPick: (dir: string | null) => void;
 }) {
   const { t } = useTranslation();
 
@@ -358,14 +355,14 @@ function ProjectPicker({
 
   const triggerLabel = effectiveWorkingDir
     ? basename(effectiveWorkingDir)
-    : t('settings.builtinTools.projectPicker.noRecentProjects');
+    : t('settings.builtinTools.scopePicker.userDefault');
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <button
           type="button"
-          aria-label={t('settings.builtinTools.projectPicker.ariaLabel')}
+          aria-label={t('settings.builtinTools.scopePicker.ariaLabel')}
           title={effectiveWorkingDir ?? undefined}
           className={cn(
             'flex items-center gap-1.5 shrink-0 max-w-[200px]',
@@ -377,18 +374,29 @@ function ProjectPicker({
             'transition-colors',
           )}
         >
-          <Folder size={12} className="shrink-0" />
+          {effectiveWorkingDir
+            ? <Folder size={12} className="shrink-0" />
+            : <UserRound size={12} className="shrink-0" />}
           <span className="truncate">{triggerLabel}</span>
           <ChevronDown size={12} className="shrink-0 opacity-60" />
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-max min-w-0 max-w-[calc(100vw-32px)]">
-        {candidates.length === 0 ? (
-          <div className="px-2 py-2 text-12 text-[var(--settings-section-desc)]">
-            {t('settings.builtinTools.projectPicker.noRecentProjects')}
+        <DropdownMenuItem
+          onClick={() => onPick(null)}
+          className="grid w-full grid-cols-[14px_max-content] items-center gap-x-2.5 pr-4 cursor-pointer"
+        >
+          <Check size={14} className={cn('shrink-0', !effectiveWorkingDir ? 'opacity-100' : 'opacity-0')} />
+          <div className="flex flex-col gap-0.5">
+            <span className="whitespace-nowrap text-13 font-medium">
+              {t('settings.builtinTools.scopePicker.userDefault')}
+            </span>
+            <span className="whitespace-nowrap text-11 text-[var(--settings-section-desc)]">
+              {t('settings.builtinTools.scopePicker.userDefaultDescription')}
+            </span>
           </div>
-        ) : (
-          candidates.map((dir) => {
+        </DropdownMenuItem>
+        {candidates.map((dir) => {
             const isCurrent = dir === effectiveWorkingDir;
             return (
               <DropdownMenuItem
@@ -412,8 +420,7 @@ function ProjectPicker({
                 </div>
               </DropdownMenuItem>
             );
-          })
-        )}
+          })}
       </DropdownMenuContent>
     </DropdownMenu>
   );

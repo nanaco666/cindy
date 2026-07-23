@@ -70,6 +70,19 @@ Small documentation fixes are welcome as pull requests. For larger changes to
 architecture, protocols, database migrations, permissions, or user data,
 please open an issue first to discuss scope and compatibility.
 
+## Licensing of contributions (DCO)
+
+This repository is licensed under [Apache-2.0](LICENSE). Per Section 5 of the
+license, any contribution you intentionally submit for inclusion is accepted
+under the Apache-2.0 terms — no separate CLA is required.
+
+We do require every commit to carry a
+[Developer Certificate of Origin](https://developercertificate.org/) sign-off:
+commit with `git commit -s`, which appends a
+`Signed-off-by: Your Name <your@email>` trailer stating that you have the right
+to submit the contribution under these terms. Do not submit code you are not
+entitled to license (for example proprietary code copied without permission).
+
 ## Security issues
 
 Do not disclose vulnerabilities, credentials, or exploitable details in public

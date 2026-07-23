@@ -60,6 +60,18 @@ describe('ChatInput session switch focus contract', () => {
     expect(newMakerDraftRouteSource).toContain('focusOnStorageKeyChange');
   });
 
+  it('lets only the route-owned session update the shared project scope', () => {
+    const projectScopeEffect = extractBetween(
+      sessionViewSource,
+      '// Keep lastWorkingDir in sync',
+      '// (订阅 desktop-command-triggered',
+    );
+
+    expect(projectScopeEffect).toContain('if (!ownsRoute) return;');
+    expect(projectScopeEffect).toContain('setLastWorkingDir(session.workingDir);');
+    expect(projectScopeEffect).toContain('setLastWorkingDir(null);');
+  });
+
   it('keeps deferred editor mount autofocus at the draft end', () => {
     expect(chatInputSource).toContain(
       "autofocus: !disableAutofocus && !disabled ? 'end' : false",

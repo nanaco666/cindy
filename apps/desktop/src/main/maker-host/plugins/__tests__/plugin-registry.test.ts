@@ -1,8 +1,8 @@
 /**
- * PluginRegistry 单测：两层启用判定逻辑。
+ * PluginRegistry 单测：多层启用判定逻辑。
  *
  * 覆盖：
- *   - 两层优先级：project > default true
+ *   - 优先级：machine > project > user > product
  *   - essential plugin 覆盖(始终 true，并从 listPlugins 隐藏)
  *   - 未知 plugin id → fail-open(返回 true)
  *   - setProjectEnabled 拒绝 essential plugin
@@ -16,7 +16,12 @@ import os from 'node:os';
 import { createLiziMcpProviders } from '@cindy/mcps';
 import { SettingsReader } from '../settings-reader.js';
 import { PluginRegistry } from '../plugin-registry.js';
-import { BUILTIN_LIZI_MCP_IDS, PROVIDER_NAME_TO_PLUGIN_ID, pluginIdForProviderName } from '../builtin-plugins.js';
+import {
+  BUILTIN_LIZI_MCP_IDS,
+  PROVIDER_NAME_TO_PLUGIN_ID,
+  pluginIdForKnownProviderName,
+  pluginIdForProviderName,
+} from '../builtin-plugins.js';
 import type { KnownProviderName } from '../builtin-plugins.js';
 import { ESSENTIAL_PLUGIN_IDS, HOSTED_ELSEWHERE_PLUGIN_IDS } from '../types.js';
 
@@ -70,7 +75,7 @@ function realBuiltinProviderNames(): KnownProviderName[] {
   return providers.map((provider) => provider.name as KnownProviderName);
 }
 
-describe('PluginRegistry — two-tier priority', () => {
+describe('PluginRegistry — scoped priority', () => {
   let workingDir: string;
   let registry: PluginRegistry;
 
@@ -127,6 +132,97 @@ describe('PluginRegistry — two-tier priority', () => {
     registry = createRegistry(workingDir);
 
     expect(registry.isEnabled('ssh', workingDir)).toBe(true);
+  });
+
+  it('uses a user default across projects and no-project conversations', async () => {
+    const otherWorkingDir = tmpDir();
+    try {
+      await registry.setEnabled('ssh', false);
+      registry = createRegistry(workingDir);
+
+      expect(registry.isEnabled('ssh')).toBe(false);
+      expect(registry.isEnabled('ssh', workingDir)).toBe(false);
+      expect(registry.isEnabled('ssh', otherWorkingDir)).toBe(false);
+      await expect(registry.getEnableState('ssh', workingDir)).resolves.toMatchObject({
+        effectiveEnabled: false,
+        userOverride: { enabled: false },
+        projectOverride: null,
+      });
+    } finally {
+      fs.rmSync(otherWorkingDir, { recursive: true, force: true });
+    }
+  });
+
+  it('project override wins over user default and clearing it follows the user default', async () => {
+    await registry.setEnabled('ssh', false);
+    await registry.setProjectEnabled('ssh', workingDir, true);
+
+    await expect(registry.getEnableState('ssh', workingDir)).resolves.toMatchObject({
+      effectiveEnabled: true,
+      userOverride: { enabled: false },
+      projectOverride: { enabled: true, workingDir },
+    });
+
+    await registry.clearProjectEnabled('ssh', workingDir);
+    await expect(registry.getEnableState('ssh', workingDir)).resolves.toMatchObject({
+      effectiveEnabled: false,
+      userOverride: { enabled: false },
+      projectOverride: null,
+    });
+  });
+
+  it('preserves an explicit project override that matches a mutable user default', async () => {
+    await registry.setEnabled('ssh', false);
+    await registry.setProjectEnabled('ssh', workingDir, false);
+
+    await registry.setEnabled('ssh', true);
+    await expect(registry.getEnableState('ssh', workingDir)).resolves.toMatchObject({
+      effectiveEnabled: false,
+      userOverride: { enabled: true },
+      projectOverride: { enabled: false, workingDir },
+    });
+  });
+
+  it('preserves an explicit user default that matches the product default', async () => {
+    await registry.setEnabled('ssh', true);
+
+    await expect(registry.getEnableState('ssh')).resolves.toMatchObject({
+      effectiveEnabled: true,
+      productDefaultEnabled: true,
+      userOverride: { enabled: true },
+    });
+
+    await registry.clearEnabled('ssh');
+    await expect(registry.getEnableState('ssh')).resolves.toMatchObject({
+      effectiveEnabled: true,
+      productDefaultEnabled: true,
+      userOverride: null,
+    });
+  });
+
+  it('clearing a user default falls back to the product default', async () => {
+    await registry.setEnabled('ssh', false);
+    await registry.clearEnabled('ssh');
+
+    await expect(registry.getEnableState('ssh')).resolves.toMatchObject({
+      effectiveEnabled: true,
+      productDefaultEnabled: true,
+      userOverride: null,
+    });
+  });
+
+  it('freezes only disabled ordinary plugins into a new runtime policy', async () => {
+    await registry.setEnabled('ssh', false);
+    await registry.setEnabled('computer', true);
+    writeProjectSettings(workingDir, { feishu_bot: false, ssh: true });
+
+    const disabled = registry.getDisabledRuntimePluginIds(workingDir);
+    expect(disabled).toContain('feishu_bot');
+    expect(disabled).not.toContain('ssh');
+    expect(disabled).not.toContain('computer');
+    for (const essentialId of ESSENTIAL_PLUGIN_IDS) {
+      expect(disabled).not.toContain(essentialId);
+    }
   });
 
   it('project override does not enable a global default-disabled plugin', () => {
@@ -202,7 +298,9 @@ describe('PluginRegistry — two-tier priority', () => {
     await registry.setProjectEnabled('ssh', workingDir, true);
     await expect(registry.getEnableState('ssh', workingDir)).resolves.toEqual({
       effectiveEnabled: true,
+      productDefaultEnabled: true,
       projectOverride: null,
+      userOverride: null,
       globalOverride: null,
     });
   });
@@ -250,8 +348,8 @@ describe('PluginRegistry — two-tier priority', () => {
 
   // ── listPlugins ───────────────────────────────────────────────────────
 
-  it('listPlugins returns non-essential builtin plugins (essential + hosted-elsewhere hidden)', async () => {
-    const list = await registry.listPlugins();
+  it('listPlugins returns project-scoped builtin plugins (essential + hosted-elsewhere hidden)', async () => {
+    const list = await registry.listPlugins(workingDir);
     const visiblePluginIds = registry
       .getPlugins()
       .filter(
@@ -266,6 +364,19 @@ describe('PluginRegistry — two-tier priority', () => {
       // hosted-elsewhere plugins (e.g. browser →「电脑使用」) are also omitted.
       expect(HOSTED_ELSEWHERE_PLUGIN_IDS.has(item.id)).toBe(false);
     }
+  });
+
+  it('listPlugins exposes browser in the user-default scope', async () => {
+    const list = await registry.listPlugins();
+
+    expect(list.find((item) => item.id === 'browser')).toMatchObject({
+      id: 'browser',
+      effectiveEnabled: true,
+      productDefaultEnabled: true,
+    });
+    expect(list.find((item) => item.id === 'android')).toBeUndefined();
+    expect(list.find((item) => item.id === 'computer')).toBeUndefined();
+    expect(list.find((item) => item.id === 'contacts')).toBeUndefined();
   });
 
   it('listPlugins: non-essential defaults to true', async () => {
@@ -363,6 +474,11 @@ describe('isEnabled wrap integration (provider → registry gate)', () => {
     registry = createRegistry();
 
     expect(wrapIsEnabled('cindy_ssh', workingDir)).toBe(false);
+  });
+
+  it('does not map a custom MCP id that matches a built-in plugin id', () => {
+    expect(pluginIdForKnownProviderName('ssh')).toBeNull();
+    expect(pluginIdForKnownProviderName('cindy_ssh')).toBe('ssh');
   });
 
   it('provider cindy_feishu_bot → feishu_bot mapping works', () => {

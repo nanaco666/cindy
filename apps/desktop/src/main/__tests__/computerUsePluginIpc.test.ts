@@ -87,8 +87,12 @@ describe('computer use plugin IPC invariants', () => {
     for (const body of [setEnabledBody, clearEnabledBody]) {
       expect(body).toContain('GLOBAL_PLUGIN_IDS.has(id)');
       expect(body).toContain('await getPluginRegistry()');
+      expect(body).toContain('return { codexMcpRefreshed: true };');
       expect(body).toContain('return refreshCodexMcpEnvironment({');
       expect(body.indexOf('await getPluginRegistry()')).toBeLessThan(
+        body.indexOf('GLOBAL_PLUGIN_IDS.has(id)'),
+      );
+      expect(body.indexOf('GLOBAL_PLUGIN_IDS.has(id)')).toBeLessThan(
         body.indexOf('return refreshCodexMcpEnvironment({'),
       );
       expect(body).not.toContain('await shutdownCodexEnvironment();');

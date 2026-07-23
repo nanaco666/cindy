@@ -47,7 +47,9 @@ export const SendButton = forwardRef<HTMLButtonElement, SendButtonProps>(functio
       disabled={disabled}
       onClick={onClick}
       className={cn(
-        'flex shrink-0 items-center justify-center transition-colors',
+        // transform 进过渡集:承载 active 按压缩放(DESIGN.md §14.4 按压原型)。
+        'flex shrink-0 items-center justify-center transition-[color,background-color,transform]',
+        !disabled && 'active:scale-[0.98]',
         isCreateAgentVariant ? 'h-[30px] w-[30px]' : 'h-7 w-7',
         isStreaming
           ? isCreateAgentVariant
@@ -79,19 +81,29 @@ export const SendButton = forwardRef<HTMLButtonElement, SendButtonProps>(functio
       )}
       aria-label={ariaLabel ?? (isStreaming ? t('newChat.sendButton.stop') : t('newChat.sendButton.send'))}
     >
-      {isStreaming ? (
+      {/* send / stop 两态图标叠放同格交叉淡切(150ms,opacity+scale,
+          compositor-only),替代条件渲染的瞬间硬换。 */}
+      <span className="relative grid h-3.5 w-3.5 place-items-center" aria-hidden>
         <span
           className={cn(
-            'block h-[10px] w-[10px] rounded-[1.5px]',
+            'col-start-1 row-start-1 flex items-center justify-center',
+            'transition-[opacity,transform] duration-[var(--motion-fast,150ms)] ease-[var(--motion-ease-out)]',
+            isStreaming ? 'scale-75 opacity-0' : 'scale-100 opacity-100',
+          )}
+        >
+          <CreateAgentSendIcon />
+        </span>
+        <span
+          className={cn(
+            'col-start-1 row-start-1 block h-[10px] w-[10px] rounded-[1.5px]',
             isCreateAgentVariant
               ? 'bg-[var(--create-agent-send-icon)]'
               : 'bg-[var(--send-btn-icon)]',
+            'transition-[opacity,transform] duration-[var(--motion-fast,150ms)] ease-[var(--motion-ease-out)]',
+            isStreaming ? 'scale-100 opacity-100' : 'scale-75 opacity-0',
           )}
-          aria-hidden
         />
-      ) : (
-        <CreateAgentSendIcon />
-      )}
+      </span>
     </button>
   );
 });

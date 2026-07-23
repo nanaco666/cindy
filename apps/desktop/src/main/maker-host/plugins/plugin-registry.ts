@@ -1,10 +1,12 @@
 /**
- * PluginRegistry — two-tier enable decision with essential override.
+ * PluginRegistry — scoped enable decision with essential override.
  *
  * Priority (highest to lowest):
  *   1. essential === true          → always enabled
- *   2. project settings explicit   → use project value
- *   3. builtin default             → true, except explicitly opt-in plugins
+ *   2. machine-wide setting        → existing global semantics for OS tools
+ *   3. project settings explicit   → use project value
+ *   4. user default                → default for newly created conversations
+ *   5. builtin default             → true, except explicitly opt-in plugins
  *
  * isEnabled() is synchronous (used by MCP provider gate during session start).
  * getEnableState() is async (used by IPC handlers for the Settings UI).
@@ -24,7 +26,9 @@ export interface PluginRegistryDeps {
 
 export interface PluginEnableState {
   effectiveEnabled: boolean;
+  productDefaultEnabled: boolean;
   projectOverride?: { enabled: boolean; workingDir: string } | null;
+  userOverride?: { enabled: boolean } | null;
   globalOverride?: { enabled: boolean } | null;
 }
 
@@ -35,7 +39,10 @@ export interface PluginListItem {
   source: 'builtin' | 'hub' | 'local';
   essential: boolean;
   effectiveEnabled: boolean;
+  productDefaultEnabled: boolean;
   projectOverride?: { enabled: boolean; workingDir: string } | null;
+  userOverride?: { enabled: boolean } | null;
+  globalOverride?: { enabled: boolean } | null;
 }
 
 export class PluginRegistry {
@@ -48,7 +55,7 @@ export class PluginRegistry {
   }
 
   /**
-   * Synchronous two-tier enable check.
+   * Synchronous scoped enable check.
    * Called from MCP provider isEnabled(ctx) gate during session start.
    */
   isEnabled(pluginId: PluginId, workingDir?: string): boolean {
@@ -74,7 +81,11 @@ export class PluginRegistry {
       if (projectVal !== null) return projectVal;
     }
 
-    // Tier 4 — builtin default.
+    // Tier 4 — user default for ordinary built-in tools.
+    const userVal = this.settingsReader.readGlobalPluginSetting(pluginId);
+    if (userVal !== null) return userVal;
+
+    // Tier 5 — builtin default.
     return !DEFAULT_DISABLED_PLUGIN_IDS.has(pluginId);
   }
 
@@ -84,8 +95,16 @@ export class PluginRegistry {
     const essential = plugin?.essential ?? ESSENTIAL_PLUGIN_IDS.has(pluginId);
 
     if (essential) {
-      return { effectiveEnabled: true, projectOverride: null, globalOverride: null };
+      return {
+        effectiveEnabled: true,
+        productDefaultEnabled: true,
+        projectOverride: null,
+        userOverride: null,
+        globalOverride: null,
+      };
     }
+
+    const productDefaultEnabled = !DEFAULT_DISABLED_PLUGIN_IDS.has(pluginId);
 
     let globalOverride: { enabled: boolean } | null = null;
     if (GLOBAL_PLUGIN_IDS.has(pluginId)) {
@@ -95,11 +114,16 @@ export class PluginRegistry {
       }
       return {
         effectiveEnabled:
-          globalOverride !== null ? globalOverride.enabled : !DEFAULT_DISABLED_PLUGIN_IDS.has(pluginId),
+          globalOverride !== null ? globalOverride.enabled : productDefaultEnabled,
+        productDefaultEnabled,
         projectOverride: null,
+        userOverride: null,
         globalOverride,
       };
     }
+
+    const userValue = this.settingsReader.readGlobalPluginSetting(pluginId);
+    const userOverride = userValue === null ? null : { enabled: userValue };
 
     let projectOverride: { enabled: boolean; workingDir: string } | null = null;
     if (workingDir) {
@@ -110,9 +134,19 @@ export class PluginRegistry {
     }
 
     const effectiveEnabled =
-      projectOverride !== null ? projectOverride.enabled : !DEFAULT_DISABLED_PLUGIN_IDS.has(pluginId);
+      projectOverride !== null
+        ? projectOverride.enabled
+        : userOverride !== null
+          ? userOverride.enabled
+          : productDefaultEnabled;
 
-    return { effectiveEnabled, projectOverride, globalOverride: null };
+    return {
+      effectiveEnabled,
+      productDefaultEnabled,
+      projectOverride,
+      userOverride,
+      globalOverride: null,
+    };
   }
 
   /**
@@ -125,8 +159,15 @@ export class PluginRegistry {
     for (const plugin of this.plugins) {
       if (ESSENTIAL_PLUGIN_IDS.has(plugin.id)) continue;
       // Toggleable but surfaced in a dedicated Settings section (e.g. browser
-      // under「电脑使用」), so omit from the generic builtin-tools list.
-      if (HOSTED_ELSEWHERE_PLUGIN_IDS.has(plugin.id)) continue;
+      // under「电脑使用」), so omit from the generic project list. Browser is
+      // also an ordinary per-conversation tool, however, and must remain
+      // configurable when this list represents the user-default scope.
+      if (
+        HOSTED_ELSEWHERE_PLUGIN_IDS.has(plugin.id)
+        && !(workingDir === undefined && plugin.id === 'browser')
+      ) {
+        continue;
+      }
       const state = await this.getEnableState(plugin.id, workingDir);
       results.push({
         id: plugin.id,
@@ -135,7 +176,10 @@ export class PluginRegistry {
         source: plugin.source,
         essential: false,
         effectiveEnabled: state.effectiveEnabled,
+        productDefaultEnabled: state.productDefaultEnabled,
         projectOverride: state.projectOverride ?? undefined,
+        userOverride: state.userOverride ?? undefined,
+        globalOverride: state.globalOverride ?? undefined,
       });
     }
     return results;
@@ -150,8 +194,12 @@ export class PluginRegistry {
     if (GLOBAL_PLUGIN_IDS.has(pluginId)) {
       return this.setEnabled(pluginId, enabled);
     }
-    const defaultEnabled = !DEFAULT_DISABLED_PLUGIN_IDS.has(pluginId);
-    if (enabled === defaultEnabled) {
+    const userValue = this.settingsReader.readGlobalPluginSetting(pluginId);
+    const productDefaultEnabled = !DEFAULT_DISABLED_PLUGIN_IDS.has(pluginId);
+    // A project selection that matches a mutable user default is still an
+    // explicit override. Keep it so later user-default edits cannot silently
+    // change this project. Only elide the stable product-default case.
+    if (userValue === null && enabled === productDefaultEnabled) {
       await this.settingsReader.clearProjectPluginSetting(workingDir, pluginId);
       return true;
     }
@@ -170,11 +218,9 @@ export class PluginRegistry {
 
   async setEnabled(pluginId: PluginId, enabled: boolean): Promise<boolean> {
     if (ESSENTIAL_PLUGIN_IDS.has(pluginId)) return false;
-    const defaultEnabled = !DEFAULT_DISABLED_PLUGIN_IDS.has(pluginId);
-    if (enabled === defaultEnabled) {
-      await this.clearEnabled(pluginId);
-      return true;
-    }
+    // A toggle is an explicit user choice even when it currently matches the
+    // product default. Only clearEnabled(), exposed as "Restore default" in
+    // Settings, may remove that choice.
     await this.settingsReader.writeGlobalPluginSetting(pluginId, enabled);
     return true;
   }
@@ -183,6 +229,21 @@ export class PluginRegistry {
     if (ESSENTIAL_PLUGIN_IDS.has(pluginId)) return false;
     await this.settingsReader.clearGlobalPluginSetting(pluginId);
     return true;
+  }
+
+  /**
+   * Freeze the ordinary built-in tool policy for a newly created runtime.
+   * Machine-wide plugins are intentionally excluded: their existing lifecycle
+   * rebuilds the Codex environment when the setting changes.
+   */
+  getDisabledRuntimePluginIds(workingDir?: string): string[] {
+    return this.plugins
+      .filter((plugin) =>
+        !ESSENTIAL_PLUGIN_IDS.has(plugin.id) &&
+        !GLOBAL_PLUGIN_IDS.has(plugin.id) &&
+        !this.isEnabled(plugin.id, workingDir),
+      )
+      .map((plugin) => plugin.id);
   }
 
   /** Get all registered plugins (metadata only, no enable state). Returns a copy. */

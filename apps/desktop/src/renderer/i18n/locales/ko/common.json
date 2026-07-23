@@ -1744,18 +1744,23 @@
     },
     "builtinTools": {
       "title": "기본 제공 도구",
-      "description": "현재 프로젝트에서 기본 제공 도구를 활성화하거나 비활성화합니다. 변경 사항은 다음 agent 세션 시작 시 적용됩니다.",
+      "description": "새 대화의 기본값을 설정하거나 프로젝트별로 재정의합니다. 프로젝트 설정이 우선합니다.",
       "empty": "사용 가능한 도구가 없습니다.",
-      "projectOverrideBadge": "프로젝트",
-      "projectOverrideTooltip": "프로젝트 설정으로 재정의됨 ({{dir}})",
       "toggleAria": "{{name}} 도구 전환",
-      "toggleHint": "변경 사항은 다음 agent 세션 시작 시 적용되며, 실행 중인 세션에는 영향을 주지 않습니다 ——",
-      "startNewSessionToApply": "새 세션을 시작하면 바로 적용됩니다.",
-      "noProjectHint": "프로젝트 세션에서 설정을 열면 해당 프로젝트의 도구를 전환할 수 있습니다.",
+      "toggleHint": "변경 사항은 새로 만들거나 다시 시작한 agent 세션에만 적용되며, 실행 중인 세션에는 영향을 주지 않습니다.",
       "loadFailed": "도구 목록을 불러오지 못했습니다",
-      "projectPicker": {
-        "ariaLabel": "도구 전환을 적용할 프로젝트 변경",
-        "noRecentProjects": "최근 프로젝트 없음"
+      "scopePicker": {
+        "ariaLabel": "기본 제공 도구 설정 범위 전환",
+        "userDefault": "새 대화 기본값",
+        "userDefaultDescription": "프로젝트 재정의가 없는 새 세션에 적용"
+      },
+      "source": {
+        "project": "프로젝트",
+        "projectTooltip": "프로젝트 설정으로 재정의됨 ({{dir}})",
+        "user": "사용자 기본값",
+        "userTooltip": "새 대화 기본값을 따름",
+        "product": "제품 기본값",
+        "productTooltip": "Cindy 제품 기본값을 따름"
       },
       "toast": {
         "enabled": "{{name}} 활성화됨 — 다음 세션부터 적용",
@@ -3690,6 +3695,7 @@
       "startButton": "협업 시작",
       "startFailed": "협업을 시작하지 못했습니다",
       "startFailedContinue": "협업을 시작하지 못했습니다. 단일 세션으로 계속합니다.",
+      "createWorkerRefreshFailed": "Worker 상태를 새로 고칠 수 없습니다. 다시 시도해 주세요.",
       "openHint": "Worker 를 불러 함께 작업",
       "stopHint": "협업 중지",
       "stopAria": "협업 중지",

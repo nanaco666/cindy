@@ -6610,17 +6610,20 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
     if (typeof id !== 'string' || typeof enabled !== 'boolean') {
       throwIpcError('INVALID_PARAMS', 'id (string) + enabled (boolean) required');
     }
-    if (!GLOBAL_PLUGIN_IDS.has(id)) {
-      throwIpcError('UNSUPPORTED_CAPABILITY', `Plugin is not machine-wide: ${id}`);
-    }
     const ok = await getPluginRegistry().setEnabled(id, enabled);
     if (!ok) {
       throwIpcError('PERMISSION_DENIED', `Cannot modify essential plugin: ${id}`);
     }
-    // The preference is already durable at this point. Codex freezes MCP flags
-    // in its shared app-server, so refresh best-effort; a busy turn must keep
-    // using the existing bridge and must not turn a successful save into an IPC
-    // failure. Renderer surfaces the deferred state explicitly.
+    // Ordinary plugins are user defaults: existing sessions keep their frozen
+    // policy and only new sessions observe changes, so no shared environment
+    // refresh is needed.
+    if (!GLOBAL_PLUGIN_IDS.has(id)) {
+      return { codexMcpRefreshed: true };
+    }
+    // Machine-wide tools keep their existing lifecycle. The preference is
+    // already durable at this point, so refresh best-effort; a busy turn must
+    // keep using the existing bridge and must not turn a successful save into
+    // an IPC failure. Renderer surfaces the deferred state explicitly.
     return refreshCodexMcpEnvironment({
       restartCodex: restartCodexAfterAuthModeChange,
       shutdownCodexEnvironment,
@@ -6632,12 +6635,12 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
     if (typeof id !== 'string') {
       throwIpcError('INVALID_PARAMS', 'id (string) required');
     }
-    if (!GLOBAL_PLUGIN_IDS.has(id)) {
-      throwIpcError('UNSUPPORTED_CAPABILITY', `Plugin is not machine-wide: ${id}`);
-    }
     const ok = await getPluginRegistry().clearEnabled(id);
     if (!ok) {
       throwIpcError('PERMISSION_DENIED', `Cannot modify essential plugin: ${id}`);
+    }
+    if (!GLOBAL_PLUGIN_IDS.has(id)) {
+      return { codexMcpRefreshed: true };
     }
     return refreshCodexMcpEnvironment({
       restartCodex: restartCodexAfterAuthModeChange,

@@ -1,9 +1,9 @@
 /**
  * modelAccess.ts — 网关凭据自动下发(model-access-server)的 main / renderer 共享类型。
  *
- * 背景:个人用户与已接入企业(目前仅 xd)登录后,由 cindy-server 的
+ * 背景:个人用户与已接入企业登录后,由服务端的
  * model-access-server 自动下发 LLM 网关推理 endpoint + 用户专属 api key,
- * 取代手填 key;手填保留为灰度/故障兜底。服务端契约见 cindy-server
+ * 取代手填 key;手填保留为灰度/故障兜底。服务端契约见服务端仓
  * docs/model-access-server.md。
  */
 

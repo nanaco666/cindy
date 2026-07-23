@@ -9,11 +9,12 @@
  */
 
 import { useRef, useState } from 'react';
-import { ChevronRight, ChevronDown, FileText } from 'lucide-react';
+import { ChevronRight, FileText } from 'lucide-react';
 
 import { cn, basename } from '@/lib/utils';
 import { shouldOpenTextLightboxForOrigin } from '@/lib/filePreview';
 import { useChatSessionFile } from './ChatSessionFileContext';
+import { Collapse } from '@/components/ui/collapse';
 import { Tip } from '@/components/ui/tooltip';
 import { DiffView } from './DiffView';
 import { TextLightbox } from './TextLightbox';
@@ -121,11 +122,14 @@ export function ToolCallCard({ toolName, toolInput, summary, toolResult }: ToolC
             'hover:opacity-80 transition-opacity',
           )}
         >
-          {expanded ? (
-            <ChevronDown size={14} className="shrink-0 text-[var(--msg-tool-card-chevron)]" />
-          ) : (
-            <ChevronRight size={14} className="shrink-0 text-[var(--msg-tool-card-chevron)]" />
-          )}
+          <ChevronRight
+            size={14}
+            className={cn(
+              'shrink-0 text-[var(--msg-tool-card-chevron)]',
+              'transition-transform duration-[var(--motion-fast,150ms)]',
+              expanded && 'rotate-90',
+            )}
+          />
           <span className="text-13 leading-normal">🔧</span>
           <span
             className={cn(
@@ -139,7 +143,7 @@ export function ToolCallCard({ toolName, toolInput, summary, toolResult }: ToolC
         </button>
 
         {/* Expanded content */}
-        {expanded && (
+        <Collapse open={expanded}>
           <div className="border-t border-[var(--msg-tool-card-border)] px-[14px] py-[10px]">
             {/* text-lightbox F1/F2: Chip-Row preview entry — only for the 4
                 supported tools. Click → open TextLightbox. */}
@@ -238,7 +242,7 @@ export function ToolCallCard({ toolName, toolInput, summary, toolResult }: ToolC
               </div>
             )}
           </div>
-        )}
+        </Collapse>
       </div>
       {/* text-lightbox F3/F6 — Lightbox is mounted via Portal so its position
           is independent of the card's transform/overflow. */}

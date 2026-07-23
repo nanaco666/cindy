@@ -41,6 +41,7 @@ import { broadcastContactsChanged } from '../maker-ipc/contacts-ipc.js';
 import { readContactsSettings } from '../maker-host/contacts-settings-store.js';
 import { readSystemContacts, writeSystemContacts } from '../maker-host/system-contacts.js';
 import { BUILTIN_LIZI_MCP_IDS, pluginIdForProviderName } from '../maker-host/plugins/builtin-plugins.js';
+import { GLOBAL_PLUGIN_IDS } from '../maker-host/plugins/types.js';
 
 export interface DesktopMcpProvidersDeps {
   getMakerMemoryManager: () => MakerMemoryManager;
@@ -342,7 +343,7 @@ export function createDesktopMcpProviders(deps: DesktopMcpProvidersDeps): LiziMc
   });
 
   // 用 plugin registry gate 包装每个 provider 的 isEnabled。
-  // essential plugin 始终放行；非 essential plugin 按 project → default 判定。
+  // essential plugin 始终放行；非 essential plugin 按 project → user → default 判定。
   // provider name(如 'lizi_jira') 会先映射成用户可见的 plugin id(如 'jira')。
   const gated = providers.map((p) => {
     const originalIsEnabled = p.isEnabled;
@@ -350,8 +351,14 @@ export function createDesktopMcpProviders(deps: DesktopMcpProvidersDeps): LiziMc
     return {
       ...p,
       isEnabled: (ctx: LiziMcpSessionContext) => {
-        // Plugin gate：registry 负责 essential / project / default 判定。
-        if (!pluginRegistry.isEnabled(pluginId, ctx.workingDir)) return false;
+        // Codex 的共享 app-server 在还没有 thread/workdir 的阶段构建 MCP
+        // 工具清单。普通工具必须先全部注册，真正调用时由 HTTP bridge 按新会话
+        // 冻结的策略阻断；否则某个用户默认会错误地影响所有项目。机器级工具
+        // 仍沿用现有 spawn-time gate + 环境重建语义。
+        const deferOrdinaryCodexGate =
+          ctx.agentKind === 'codex' && !ctx.workingDir && !GLOBAL_PLUGIN_IDS.has(pluginId);
+        // Plugin gate：registry 负责 essential / machine / project / user / default 判定。
+        if (!deferOrdinaryCodexGate && !pluginRegistry.isEnabled(pluginId, ctx.workingDir)) return false;
         // 继续走原 provider gate，例如 memory manager check、feishu bot source check。
         return originalIsEnabled?.(ctx) ?? true;
       },

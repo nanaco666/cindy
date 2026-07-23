@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createElement } from 'react';
 
@@ -129,7 +129,7 @@ function clickGroup(label: string) {
 }
 
 describe('WorkGroupBlock — running latest-five preview', () => {
-  it('keeps the latest five tools/reasoning rows in chronological order and drops empty thinking', () => {
+  it('keeps the latest five tools/reasoning rows in chronological order and drops empty thinking', async () => {
     const children: WorkGroupChild[] = [
       tools('seg-1', [mkTool('t1'), mkTool('t2')]),
       thinking(mkThinking('th1', 'first reasoning summary')),
@@ -154,7 +154,12 @@ describe('WorkGroupBlock — running latest-five preview', () => {
     expect(document.querySelectorAll('[data-live-work-activity]')).toHaveLength(6);
     expect(screen.getAllByTestId('direct-tool')[0].textContent).toBe('t1');
     clickGroup('chat.workGroup.working');
-    expect(document.querySelectorAll('[data-live-work-activity]')).toHaveLength(5);
+    // 收起是一次性 200ms 高度动画,展开体在动画结束后卸载(jsdom 无
+    // transitionend,由 Collapse 的兜底定时器卸载)——等待卸载完成再断言。
+    // 契约不变:收起后的内容不留在 DOM。
+    await waitFor(() =>
+      expect(document.querySelectorAll('[data-live-work-activity]')).toHaveLength(5),
+    );
     expect(screen.queryByText('t1')).toBeNull();
   });
 
@@ -258,7 +263,7 @@ describe('WorkGroupBlock — running latest-five preview', () => {
     expect(screen.getByText('checking the current state')).toBeTruthy();
   });
 
-  it('keeps full details across remounts and collapses back to latest five', () => {
+  it('keeps full details across remounts and collapses back to latest five', async () => {
     const childItems = [
       tools('seg-1', [
         mkTool('t1'),
@@ -291,12 +296,14 @@ describe('WorkGroupBlock — running latest-five preview', () => {
     expect(screen.getAllByTestId('direct-tool')).toHaveLength(6);
 
     clickGroup('chat.workGroup.working');
-    expect(screen.getAllByTestId('direct-tool')).toHaveLength(5);
+    // 收起是 200ms 高度动画,展开行以退场冻结帧存续到动画结束后卸载
+    // (jsdom 走兜底定时器)——等待卸载后断言只剩 latest-five 预览。
+    await waitFor(() => expect(screen.getAllByTestId('direct-tool')).toHaveLength(5));
     expect(screen.queryByText('t1')).toBeNull();
     expect(document.querySelector('[data-live-work-preview="true"]')).toBeTruthy();
   });
 
-  it('falls back to live preview when collapsing restored full details', () => {
+  it('falls back to live preview when collapsing restored full details', async () => {
     expandMemory.setExpanded('work:t1', true);
     render(
       createElement(WorkGroupBlock, {
@@ -317,7 +324,8 @@ describe('WorkGroupBlock — running latest-five preview', () => {
 
     expect(screen.getAllByTestId('direct-tool')).toHaveLength(6);
     clickGroup('chat.workGroup.working');
-    expect(screen.getAllByTestId('direct-tool')).toHaveLength(5);
+    // 同上:退场冻结帧在动画结束后卸载,等待后断言回落到 latest-five。
+    await waitFor(() => expect(screen.getAllByTestId('direct-tool')).toHaveLength(5));
     expect(screen.queryByText('t1')).toBeNull();
     expect(document.querySelector('[data-live-work-preview="true"]')).toBeTruthy();
   });

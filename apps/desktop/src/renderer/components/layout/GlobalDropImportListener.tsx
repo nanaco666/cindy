@@ -198,7 +198,7 @@ export function GlobalDropImportListener({ onOpenShareImport }: GlobalDropImport
           pointer-events-none 保证 drop 仍落到底下元素、由上面的 window 监听兜住。 */}
       {dragHint && (
         <div
-          className="pointer-events-none fixed inset-0 z-[100] flex items-center justify-center"
+          className="pointer-events-none fixed inset-0 z-[100] flex items-center justify-center animate-fade-in"
           style={{
             backgroundColor: 'var(--drop-overlay-bg)',
             border: '2px dashed var(--drop-overlay-border)',

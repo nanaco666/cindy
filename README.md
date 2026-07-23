@@ -45,10 +45,10 @@ monorepo 组织。
 | `apps/desktop` | Electron 桌面客户端 |
 | `apps/mobile` | Expo / React Native 手机客户端 |
 | `packages/*` | 客户端共享能力（鉴权、device-link、agent 编排、模型供应商等） |
-| `apps/*-bin` | 随桌面端打包的 agent / 工具二进制（claude-code、codex、ripgrep、android-platform-tools） |
+| `apps/*-bin` | 桌面端附带的工具二进制；仓库内只含 android-platform-tools（Git LFS），claude-code / codex / ripgrep 由 `pnpm install` 按平台自动下载、不入库 |
 | `cindy-protocol/` | 与服务端共用的协议（git submodule） |
 
-**服务端不在本仓库：** 服务端（`cindy-server`）位于独立仓库，不属于本 monorepo。
+**服务端不在本仓库：** 服务端位于独立仓库，不属于本 monorepo。
 
 | 使用方式 | 账号要求 | 可用范围 |
 | --- | --- | --- |
@@ -118,6 +118,7 @@ agent 的模式。依赖服务端的能力在该模式下不可用。
 ## 许可证 / License
 
 除非另有说明，本仓库的源代码依据 [Apache License 2.0](LICENSE) 授权。
+源文件不单独携带许可证头，统一以仓库根目录的 `LICENSE` 为准。
 
 模型权重、数据集、提示词、商标，以及其他单独标识的材料，可能适用各自的许可条款，
 不因根目录的 Apache-2.0 而被自动覆盖。第三方开源组件保留各自的版权与许可，其归属

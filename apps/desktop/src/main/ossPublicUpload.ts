@@ -1,7 +1,7 @@
 /**
  * ossPublicUpload.ts — 公开资产经 oss-server 预签名直传(当前场景:头像)。
  * ---------------------------------------------------------------------------
- * 流程(接口契约见 cindy-server 仓 docs/oss-server.md):
+ * 流程(接口契约见服务端仓 docs/oss-server.md):
  *   1. POST {ossApiBaseUrl}/api/oss/presign-put  { scene, contentType, size }(Bearer)
  *      → { putUrl, publicUrl, key, headers, expiresAt }
  *   2. PUT putUrl,body 为文件字节,**原样携带返回的 headers**(Content-Type

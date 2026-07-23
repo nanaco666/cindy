@@ -542,24 +542,23 @@ function collectExeFilesRecursively(dir: string): string[] {
 }
 
 /**
- * 用公司 npkg 签名服务签单个 exe（复用 publish-windows.mjs 给 Setup.exe 用的
- * 同一份 sign.py）。postPackage 的包内 exe 循环 与 NSIS maker 的 customSign
+ * 用外部签名命令签单个 exe。命令模板来自 CINDY_WIN_SIGN_CMD 环境变量,其中的
+ * `{file}` 占位符会被替换为目标 exe 的绝对路径(发布方在自己的构建环境注入,
+ * 例如接 signtool 或自建签名服务;仓库本身不绑定任何签名实现)。
+ * postPackage 的包内 exe 循环 与 NSIS maker 的 customSign
  * (installer + uninstaller) 共用这一处,签名逻辑单点、不 fork。
  * 失败即抛（调用方 postPackage / customSign 会让整个 make 失败,避免发出漏签包）。
  */
-function signOneExeWithNpkg(exePath: string, token: string): void {
-  const signScript = path.join(__dirname, 'scripts', 'sign.py');
-  if (!fs.existsSync(signScript)) {
-    throw new Error(`[forge:sign] sign.py missing at ${signScript}`);
-  }
+function signOneExeWithExternalCommand(exePath: string, commandTemplate: string): void {
+  const command = commandTemplate.replaceAll('{file}', `"${exePath}"`);
   console.log(`[forge:sign] signing ${path.basename(exePath)}...`);
-  const r = spawnSync('python', [signScript, exePath, token], { stdio: 'inherit' });
-  if (r.error) throw new Error(`[forge:sign] sign.py spawn failed: ${r.error.message}`);
-  if (r.status !== 0) throw new Error(`[forge:sign] sign.py exited ${r.status} for ${exePath}`);
+  const r = spawnSync(command, { stdio: 'inherit', shell: true });
+  if (r.error) throw new Error(`[forge:sign] sign command spawn failed: ${r.error.message}`);
+  if (r.status !== 0) throw new Error(`[forge:sign] sign command exited ${r.status} for ${exePath}`);
 }
 
 /**
- * 把 packaged 目录内的所有 .exe 都用公司 npkg 签名服务签一遍。
+ * 把 packaged 目录内的所有 .exe 都用外部签名命令签一遍。
  * 触发时机：electron-forge 的 postPackage（package 完、makers 跑前），所以
  * NSIS Setup.exe 拿到的、以及 publish 阶段从 packagedDir 打的热更 ZIP 拿到的，
  * 都是已签名版本——彻底解决 hot-update 后 spawn updater EACCES 的问题
@@ -567,15 +566,15 @@ function signOneExeWithNpkg(exePath: string, token: string): void {
  *
  * NSIS 安装器自身(Setup.exe)与卸载器(Uninstall <App>.exe)不在这里签——它们由
  * makers 阶段生成,由 getAppBuilderConfig 的 win.sign(customSign)统一签,同样走
- * signOneExeWithNpkg。见 makers 定义处注释。
+ * signOneExeWithExternalCommand。见 makers 定义处注释。
  *
- * 没有 NPKG_TOKEN 时静默跳过，不影响本地 dev / 无密钥环境的 packaging。
+ * 没有 CINDY_WIN_SIGN_CMD 时静默跳过，不影响本地 dev / 无签名环境的 packaging。
  */
 function signPackagedExes(buildPath: string): void {
   if (process.platform !== 'win32') return;
-  const token = process.env.NPKG_TOKEN;
-  if (!token) {
-    console.log('[forge:postPackage] NPKG_TOKEN not set — skipping internal exe signing');
+  const signCmd = process.env.CINDY_WIN_SIGN_CMD;
+  if (!signCmd) {
+    console.log('[forge:postPackage] CINDY_WIN_SIGN_CMD not set — skipping exe signing');
     return;
   }
 
@@ -625,7 +624,7 @@ function signPackagedExes(buildPath: string): void {
       console.warn(`[forge:postPackage] skip (missing): ${exe}`);
       continue;
     }
-    signOneExeWithNpkg(exe, token);
+    signOneExeWithExternalCommand(exe, signCmd);
   }
 }
 
@@ -654,7 +653,7 @@ function signPackagedExes(buildPath: string): void {
  * 对 cn 是冗余兜底;2026-07-18 双装支持后 global 构建的 packager name 是
  * 'CindyGlobal'(.app 目录名 / 标识符层),本步骤把 Dock 名、Cmd+Tab、
  * 系统通知的**显示层**统一拉回 Cindy(BRAND_NAME 各区共用)——对
- * global/dev 不再冗余,是显示名的唯一来源。正式签名/公证在 release-macos.mjs 里
+ * global/dev 不再冗余,是显示名的唯一来源。正式签名/公证(外部发布流程)
  * 发生在 postPackage 之后,本改动会被签名一起封印,不存在破坏签名问题。
  */
 function applyMacPackagedDisplayName(buildPath: string, platform: string): void {
@@ -993,22 +992,22 @@ if (isWin) {
         // 这是签卸载器的唯一入口(Issue #998):uninstaller 由 NSIS 编译期两遍生成后
         // 嵌入 installer,postPackage 阶段还不存在、也没有独立成品文件可事后补签,
         // 只能让 electron-builder 在生成时对 installer + uninstaller 都回调 win.sign。
-        // 复用包内 exe 同一条 npkg 通道(signOneExeWithNpkg → sign.py),逻辑单点;
-        // 无 NPKG_TOKEN(dev / 版本无关 / --no-sign 已删 token)时跳过,与 postPackage 一致。
+        // 复用包内 exe 同一条外部签名通道(signOneExeWithExternalCommand),逻辑单点;
+        // 无 CINDY_WIN_SIGN_CMD(dev / 无签名环境)时跳过,与 postPackage 一致。
         win: {
           // 只用 sha256:不设时 electron-builder 默认 ['sha1','sha256'],会对 installer +
           // uninstaller 各回调 customSign 两趟(sha1 一趟 + sha256 一趟)= 每个文件两次
-          // npkg 往返,sha1 那趟纯浪费(Windows 早已弃信 sha1 Authenticode)。收敛到单
-          // sha256:一趟往返、少一半瞬时失败面。customSign 忽略 hash 参数,npkg 用自身
-          // 证书签,与此列表无关——只影响回调次数。
+          // 签名往返,sha1 那趟纯浪费(Windows 早已弃信 sha1 Authenticode)。收敛到单
+          // sha256:一趟往返、少一半瞬时失败面。customSign 忽略 hash 参数,签名实现用
+          // 自身证书签,与此列表无关——只影响回调次数。
           signingHashAlgorithms: ['sha256'],
           sign: async (cfg: { path: string }) => {
-            const t = process.env.NPKG_TOKEN;
-            if (!t) {
-              console.log(`[forge:nsis:sign] NPKG_TOKEN not set — skipping ${path.basename(cfg.path)}`);
+            const signCmd = process.env.CINDY_WIN_SIGN_CMD;
+            if (!signCmd) {
+              console.log(`[forge:nsis:sign] CINDY_WIN_SIGN_CMD not set — skipping ${path.basename(cfg.path)}`);
               return;
             }
-            signOneExeWithNpkg(cfg.path, t);
+            signOneExeWithExternalCommand(cfg.path, signCmd);
           },
         },
         // appId 决定 NSIS 写到 Start Menu 快捷方式上的 System.AppUserModel.ID 属性。

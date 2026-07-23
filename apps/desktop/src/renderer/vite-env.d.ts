@@ -742,12 +742,17 @@ interface PluginListItem {
   source: 'builtin' | 'hub' | 'local';
   essential: boolean;
   effectiveEnabled: boolean;
+  productDefaultEnabled: boolean;
   projectOverride?: { enabled: boolean; workingDir: string } | null;
+  userOverride?: { enabled: boolean } | null;
+  globalOverride?: { enabled: boolean } | null;
 }
 
 interface PluginEnableState {
   effectiveEnabled: boolean;
+  productDefaultEnabled: boolean;
   projectOverride?: { enabled: boolean; workingDir: string } | null;
+  userOverride?: { enabled: boolean } | null;
   globalOverride?: { enabled: boolean } | null;
 }
 

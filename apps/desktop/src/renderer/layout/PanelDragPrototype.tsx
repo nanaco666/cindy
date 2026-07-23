@@ -314,7 +314,8 @@ export function PanelDragPrototype({
   // 视觉(全走主题 token,规则 16;无文案免 i18n):
   //   1. 落点高亮:半透明淡蓝罩层(VSCode 拖 tab 落点同款质感)——透出下方内容,
   //      取色基于 focus-ring 语义蓝低透明度混合,light / dark / 扩展主题都自然;
-  //   2. 拖影:迷你面板骨架卡,微倾斜 + zoom-in 起手动画;点亮目标时描边跟随变色。
+  //   2. 拖影:迷你面板骨架卡,微倾斜 + 淡入起手动画(内层卡的 transform 被
+  //      居中偏移+倾斜占用,起手动画只能碰 opacity,不许上 scale 类 keyframe)。
   //      外层定位壳(translate3d 跟手,热路径直改)与内层视觉卡(居中偏移 + 倾斜)
   //      分离 —— transform 各自独立,互不覆盖。
   return createPortal(
@@ -322,7 +323,7 @@ export function PanelDragPrototype({
       {zone && (
         <div
           aria-hidden
-          className="pointer-events-none fixed z-[9998] rounded-xl border animate-in fade-in duration-150"
+          className="pointer-events-none fixed z-[9998] rounded-xl border animate-fade-in"
           style={{
             left: zone.left,
             top: zone.top,
@@ -345,7 +346,7 @@ export function PanelDragPrototype({
         className="pointer-events-none fixed left-0 top-0 z-[9999] will-change-transform"
       >
         <div
-          className="h-[110px] w-[170px] rounded-xl border animate-in fade-in zoom-in-90 duration-150"
+          className="h-[110px] w-[170px] rounded-xl border animate-fade-in"
           style={{
             transform: 'translate(-50%, -58%) rotate(-2deg)',
             background: 'var(--surface-elevated)',

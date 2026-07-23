@@ -97,6 +97,7 @@ import {
   registerCodexMcpThreadContext,
   unregisterCodexMcpThreadContext,
 } from '../mcp-integrations/codexEnvironment.js';
+import { CODEX_DISABLED_BUILTIN_PLUGIN_IDS_KEY } from '../mcp-integrations/codexBuiltinToolPolicy.js';
 import { buildCodexProxySpawnArgs } from './codex-gateway-config.js';
 import {
   createDesktopMakerMemoryManager,
@@ -486,13 +487,21 @@ export function getMaker(): Maker {
           codexProxyActive: ready,
         };
       },
-      registerCodexMcpThreadContext: ({ threadId, sessionId, workingDir, vendorOptions }) =>
+      registerCodexMcpThreadContext: ({ threadId, sessionId, workingDir, vendorOptions }) => {
+        // Codex shares one app-server across sessions. Freeze the effective
+        // ordinary-tool policy at thread creation so later Settings changes do
+        // not mutate a runtime that is already running.
+        const disabledPluginIds = getPluginRegistry().getDisabledRuntimePluginIds(workingDir);
         registerCodexMcpThreadContext(threadId, {
           agentKind: 'codex',
           sessionId,
           workingDir,
-          vendorOptions,
-        }),
+          vendorOptions: {
+            ...vendorOptions,
+            [CODEX_DISABLED_BUILTIN_PLUGIN_IDS_KEY]: disabledPluginIds,
+          },
+        });
+      },
       unregisterCodexMcpThreadContext,
       prepareCodexResumeSession: prepareExternalCodexSessionForResume,
       registerCodexSystemPromptForThread: ({ sessionId, threadId, text }) =>

@@ -345,7 +345,7 @@ function computeMerged(): Catalog {
 
   // XD 网关权威模型清单重建。即使实时清单为空也必须重建为空:不能证明某个模型
   // 当前在网关可用就不显示。元数据**只信服务端下发 + 确定性默认值**(2026-07-19 起
-  // 不再回落产品目录条目——服务端 MODEL_METADATA 已是唯一权威,见 cindy-server):
+  // 不再回落产品目录条目——服务端 MODEL_METADATA 已是唯一权威):
   //   - perAgent 覆盖块按 tab 应用在基线字段之上;
   //   - efforts 字段缺失 = 未登记 → 合成 3 档(low/medium/high,默认 high);
   //     显式 [] = 登记为不可调 → 尊重为空;

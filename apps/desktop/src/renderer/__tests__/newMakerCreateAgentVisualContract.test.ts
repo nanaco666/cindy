@@ -226,7 +226,11 @@ describe('NewMakerDraftRoute CREATE AGENT visual contract', () => {
     expect(permissionSelectorSource).not.toContain("'h-[30px] min-w-[90px] max-w-none shrink-0");
     expect(permissionSelectorSource).not.toContain("'h-[30px] min-w-[72px] max-w-full shrink border border-[var(--create-agent-control-border)]");
     expect(permissionSelectorSource).not.toContain("'h-[30px] min-w-max shrink-0 px-2.5");
-    expect(sendButtonSource).toContain("'flex shrink-0 items-center justify-center transition-colors'");
+    // 2026-07 动效统一:过渡集扩为 color/background-color/transform,承载
+    // active 按压缩放(DESIGN.md §14.4 按压原型);布局骨架断言不变。
+    expect(sendButtonSource).toContain(
+      "'flex shrink-0 items-center justify-center transition-[color,background-color,transform]'",
+    );
     expect(modelSelectorSource).toContain("'h-[30px] min-w-[72px] max-w-full shrink overflow-hidden");
     expect(modelSelectorSource).not.toContain("'h-[30px] min-w-max shrink-0");
     expect(modelSelectorSource).not.toContain("'h-[30px] w-[206px] min-w-[160px] max-w-[206px]");

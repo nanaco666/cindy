@@ -9,7 +9,6 @@ import {
   loadMobileConfig,
   parseArgs,
   readLatestBuildRuntime,
-  requireExplicitDev,
   assertPublicEnv,
   resolveCommandPublicEnv,
   resolveTarget,
@@ -19,11 +18,9 @@ import {
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const config = loadMobileConfig();
-  if (args.target === 'beta') requireExplicitDev(args, 'mobile:release:check --target beta');
   assertEasLoggedIn({ mobileDir: config.mobileDir });
   const target = resolveTarget(config, {
-    kind: args.target ?? (args.dev ? 'beta' : 'production'),
-    dev: args.dev,
+    kind: args.target ?? 'production',
     region: args.region,
     environment: args.environment,
   });

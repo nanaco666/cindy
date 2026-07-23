@@ -48,10 +48,10 @@ downloads.
 | `apps/desktop` | Electron desktop client |
 | `apps/mobile` | Expo / React Native mobile client |
 | `packages/*` | Shared client capabilities (auth, device-link, agent orchestration, model providers, …) |
-| `apps/*-bin` | Vendored agent/tool binaries bundled with the desktop app (claude-code, codex, ripgrep, android-platform-tools) |
+| `apps/*-bin` | Tool binaries shipped with the desktop app; only android-platform-tools is committed (via Git LFS) — claude-code, codex, and ripgrep are downloaded per platform by `pnpm install` and never checked in |
 | `cindy-protocol/` | Wire protocol shared with the server (git submodule) |
 
-**Not in this repo:** the backend service (`cindy-server`) lives in a separate
+**Not in this repo:** the backend service lives in a separate
 repository and is not part of this monorepo.
 
 | Mode | Account requirement | Availability |
@@ -129,7 +129,8 @@ privately rather than opening a public issue.
 ## License / 许可证
 
 Except as otherwise noted, the source code in this repository is licensed under
-the [Apache License, Version 2.0](LICENSE).
+the [Apache License, Version 2.0](LICENSE). Individual source files do not
+carry per-file license headers; the repository-root `LICENSE` governs.
 
 Model weights, datasets, prompts, trademarks, and other separately identified
 materials may be subject to their own license terms and are not automatically

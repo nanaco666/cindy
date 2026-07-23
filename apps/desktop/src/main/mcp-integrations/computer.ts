@@ -57,7 +57,8 @@ const WINDOWS_INSTALL_URL = 'https://raw.githubusercontent.com/trycua/cua/main/l
 // 都在「翻不够会漏检(backport 乱序 / driver tag 被挤出)」与「翻到底会耗尽
 // 未鉴权 60/h 限额、403 后静默降级成无更新」之间两头堵(review 拉锯实锤)。
 // matching-refs 一次请求返回全量 cua-driver-rs-v* tag(当前约 50 个,单页),
-// 零遗漏、请求量恒定;asset 大小仅在确认有更新时再用一个请求按 tag 精确拉取。
+// 零遗漏、请求量恒定;随后按版本倒序精确核对 release + 当前平台 asset,
+// 防止上游先推 tag、后发布安装包的窗口把不可安装版本暴露给用户。
 const CUA_DRIVER_TAG_REFS_URL =
   'https://api.github.com/repos/trycua/cua/git/matching-refs/tags/cua-driver-rs-v';
 const CUA_DRIVER_RELEASE_BY_TAG_URL =
@@ -2413,6 +2414,13 @@ interface CuaDriverReleaseInfo {
   assets: CuaDriverReleaseAsset[];
 }
 
+/** 只接受完整稳定版 tag,避免把 prerelease 后缀截断后误认成正式版本。 */
+function extractCuaDriverTagVersion(tagName: string): string | null {
+  if (!tagName.startsWith(CUA_DRIVER_RELEASE_TAG_PREFIX)) return null;
+  const version = tagName.slice(CUA_DRIVER_RELEASE_TAG_PREFIX.length);
+  return /^\d+\.\d+\.\d+$/.test(version) ? version : null;
+}
+
 /**
  * 从 GitHub releases 列表中挑出 cua-driver 的最新 release(版本号 + asset
  * 列表,后者供更新进度条换算总字节数)。上游是 monorepo,列表混着
@@ -2425,8 +2433,8 @@ export function pickLatestCuaDriverRelease(
   let latest: CuaDriverReleaseInfo | null = null;
   for (const release of releases) {
     const tag = typeof release?.tag_name === 'string' ? release.tag_name : null;
-    if (!tag || !tag.startsWith(CUA_DRIVER_RELEASE_TAG_PREFIX)) continue;
-    const version = extractDriverSemver(tag.slice(CUA_DRIVER_RELEASE_TAG_PREFIX.length));
+    if (!tag) continue;
+    const version = extractCuaDriverTagVersion(tag);
     if (!version) continue;
     if (!latest || compareSemver(version, latest.version) > 0) {
       const assets = Array.isArray(release.assets)
@@ -2443,6 +2451,137 @@ export function pickLatestCuaDriverRelease(
 /** 兼容旧签名:仅按 tag 列表挑最新版本号(单测与调用方沿用)。 */
 export function pickLatestCuaDriverVersion(tagNames: string[]): string | null {
   return pickLatestCuaDriverRelease(tagNames.map((tag) => ({ tag_name: tag })))?.version ?? null;
+}
+
+/** 将 `os.machine()` / installer 使用的原生机器架构归一化。 */
+function normalizeCuaDriverMachineArch(machineArch: string): 'x64' | 'arm64' | null {
+  const normalized = machineArch.toLowerCase();
+  if (normalized === 'x64' || normalized === 'x86_64' || normalized === 'amd64') return 'x64';
+  if (normalized === 'arm64' || normalized === 'aarch64') return 'arm64';
+  return null;
+}
+
+/**
+ * 解析当前宿主架构:优先 `os.machine()`(与官方 installer 一致),Windows 上
+ * Node 可能返回 `unknown`(nodejs#62232) 时回退 `PROCESSOR_ARCHITECTURE`,
+ * 再回退 `process.arch`。
+ */
+export function resolveCuaDriverHostArch(
+  platform: NodeJS.Platform = process.platform,
+  machineArch: string = os.machine(),
+  options?: { processArch?: string; env?: NodeJS.ProcessEnv },
+): 'x64' | 'arm64' | null {
+  const fromMachine = normalizeCuaDriverMachineArch(machineArch);
+  if (fromMachine) return fromMachine;
+  // 只有 machine 不可用(空 / Node 的 "unknown") 才回退;riscv64 这类明确不支持的值直接 null。
+  const machineLabel = machineArch.trim().toLowerCase();
+  const machineUsable = machineLabel.length > 0 && machineLabel !== 'unknown';
+  if (machineUsable) return null;
+  if (platform === 'win32') {
+    const env = options?.env ?? process.env;
+    const fromEnv = normalizeCuaDriverMachineArch(String(env.PROCESSOR_ARCHITECTURE ?? ''));
+    if (fromEnv) return fromEnv;
+  }
+  return normalizeCuaDriverMachineArch(options?.processArch ?? process.arch);
+}
+
+/**
+ * 返回官方安装脚本在指定平台会下载的 release asset 文件名。优先原生机器架构,
+ * 避免 Windows ARM64 上 x64 仿真进程用错包;machine 未知时再按宿主探测回退。
+ */
+export function getCuaDriverReleaseAssetName(
+  version: string,
+  platform: NodeJS.Platform = process.platform,
+  machineArch: string = os.machine(),
+  options?: { processArch?: string; env?: NodeJS.ProcessEnv },
+): string | null {
+  const prefix = `cua-driver-rs-${version}`;
+  if (platform === 'darwin') return `${prefix}-darwin-universal.tar.gz`;
+  const arch = resolveCuaDriverHostArch(platform, machineArch, options);
+  if (platform === 'linux') {
+    if (arch === 'x64') return `${prefix}-linux-x86_64-binary.tar.gz`;
+    if (arch === 'arm64') return `${prefix}-linux-arm64-binary.tar.gz`;
+    return null;
+  }
+  if (platform === 'win32') {
+    if (arch === 'x64') return `${prefix}-windows-x86_64.zip`;
+    if (arch === 'arm64') return `${prefix}-windows-arm64.zip`;
+  }
+  return null;
+}
+
+/** 携带 HTTP status,供多候选探测区分可继续的上游 5xx 与应立即停止的错误。 */
+class CuaDriverReleaseHttpError extends Error {
+  constructor(readonly status: number, version: string) {
+    super(`GitHub release API responded ${status} for cua-driver ${version}`);
+    this.name = 'CuaDriverReleaseHttpError';
+  }
+}
+
+/** 构造 GitHub API headers;开发环境有 token 时自动提升限额。 */
+function getCuaDriverGithubHeaders(): Record<string, string> {
+  const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
+  return {
+    Accept: 'application/vnd.github+json',
+    'User-Agent': 'xdt-maker',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+}
+
+/**
+ * 精确核对指定版本已经发布且包含当前平台安装器需要的 asset。404、draft
+ * 或缺 asset 都表示该候选不可安装;上游会把稳定 semver tag 的 release 标成
+ * GitHub prerelease,因此不使用该布尔值过滤。其它 HTTP 错误按网络故障抛出。
+ */
+async function fetchInstallableCuaDriverRelease(
+  version: string,
+  fetchImpl: typeof fetch,
+  headers: Record<string, string>,
+): Promise<CuaDriverReleaseInfo | null> {
+  const res = await fetchImpl(
+    `${CUA_DRIVER_RELEASE_BY_TAG_URL}/${CUA_DRIVER_RELEASE_TAG_PREFIX}${version}`,
+    { headers, signal: AbortSignal.timeout(UPDATE_CHECK_TIMEOUT_MS) },
+  );
+  if (res.status === 404) {
+    logger.debug('skipping cua-driver tag without a published release', { version });
+    return null;
+  }
+  if (!res.ok) {
+    throw new CuaDriverReleaseHttpError(res.status, version);
+  }
+
+  const release = (await res.json()) as {
+    tag_name?: unknown;
+    assets?: unknown;
+    draft?: unknown;
+  };
+  if (release.draft === true) {
+    logger.debug('skipping unpublished cua-driver release', { version });
+    return null;
+  }
+  const parsed = pickLatestCuaDriverRelease([release]);
+  const requiredAssetName = getCuaDriverReleaseAssetName(version);
+  const requiredAssetUploaded =
+    requiredAssetName !== null &&
+    Array.isArray(release.assets) &&
+    (release.assets as Array<{ name?: unknown; size?: unknown; state?: unknown }>).some(
+      (asset) =>
+        asset?.name === requiredAssetName &&
+        asset?.state === 'uploaded' &&
+        typeof asset?.size === 'number' &&
+        asset.size > 0,
+    );
+  const installable =
+    parsed?.version === version &&
+    requiredAssetUploaded;
+  if (!installable || !parsed) {
+    logger.debug('skipping cua-driver release without an uploaded platform asset', {
+      version,
+      requiredAssetName,
+    });
+    return null;
+  }
+  return parsed;
 }
 
 // ── cua-driver 更新检查 / 更新执行的 main 侧状态 ──────────────────────────
@@ -2467,6 +2606,8 @@ export function resetComputerDriverUpdateStateForTests(): void {
 /** 真正执行一次「本地版本 + 上游 releases」的检查,无缓存语义。 */
 async function fetchDriverUpdateCheck(
   fetchImpl: typeof fetch,
+  excludedVersions: ReadonlySet<string> = new Set(),
+  knownVerifiedTarget: string | null = null,
 ): Promise<Omit<ComputerDriverUpdateCheck, 'updating'>> {
   let currentVersion: string | null = null;
   try {
@@ -2480,13 +2621,7 @@ async function fetchDriverUpdateCheck(
   }
 
   try {
-    // 环境里有 GITHUB_TOKEN/GH_TOKEN 时带上鉴权(5000/h),对开发机生效。
-    const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
-    const headers = {
-      Accept: 'application/vnd.github+json',
-      'User-Agent': 'xdt-maker',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    };
+    const headers = getCuaDriverGithubHeaders();
     // 全量 driver tag(matching-refs 按前缀过滤,常规单页拿全;分页仅防御
     // tag 数超过单页的远期情形,短页即尾页)。
     const tagNames: string[] = [];
@@ -2507,27 +2642,62 @@ async function fetchDriverUpdateCheck(
       }
       if (batch.length < CUA_DRIVER_REFS_PAGE_SIZE) break;
     }
-    const latestVersion = pickLatestCuaDriverVersion(tagNames);
-    const updateAvailable =
-      latestVersion !== null && compareSemver(currentVersion, latestVersion) < 0;
-    if (updateAvailable && latestVersion) {
-      // 仅在确认有更新时才拉对应 release 的 asset 列表(进度条总字节数);
-      // 失败只影响进度条显示为「已下载 X MB」,不影响更新功能本身。
-      try {
-        const res = await fetchImpl(
-          `${CUA_DRIVER_RELEASE_BY_TAG_URL}/${CUA_DRIVER_RELEASE_TAG_PREFIX}${latestVersion}`,
-          { headers, signal: AbortSignal.timeout(UPDATE_CHECK_TIMEOUT_MS) },
-        );
-        if (res.ok) {
-          const release = (await res.json()) as { tag_name?: unknown; assets?: unknown };
-          const parsed = pickLatestCuaDriverRelease([release]);
-          if (parsed) cachedDriverReleaseAssets = parsed.assets;
-        }
-      } catch {
-        /* asset 大小拿不到时进度条退化,静默 */
-      }
+    const versions = [...new Set(
+      tagNames
+        .map(extractCuaDriverTagVersion)
+        .filter((version): version is string => version !== null),
+    )].sort((a, b) => compareSemver(b, a));
+    const latestTagVersion = versions[0] ?? null;
+    const newerCandidates = versions.filter((version) =>
+      compareSemver(currentVersion, version) < 0 && !excludedVersions.has(version));
+
+    if (newerCandidates.length === 0) {
+      cachedDriverReleaseAssets = [];
+      return { currentVersion, latestVersion: latestTagVersion, updateAvailable: false };
     }
-    return { currentVersion, latestVersion, updateAvailable };
+
+    let hadTransientProbeFailure = false;
+    let knownTargetProbeFailedTransiently = false;
+    for (const candidateVersion of newerCandidates) {
+      let release: CuaDriverReleaseInfo | null;
+      try {
+        release = await fetchInstallableCuaDriverRelease(candidateVersion, fetchImpl, headers);
+      } catch (err) {
+        if (err instanceof CuaDriverReleaseHttpError && err.status >= 500) {
+          hadTransientProbeFailure = true;
+          if (candidateVersion === knownVerifiedTarget) {
+            knownTargetProbeFailedTransiently = true;
+          }
+          logger.debug('continuing cua-driver fallback after transient release API error', {
+            version: candidateVersion,
+            status: err.status,
+          });
+          continue;
+        }
+        throw err;
+      }
+      if (!release) continue;
+
+      // 后台刷新若无法重新核实已知目标,不能用更旧候选覆盖它;首次检查仍可回退。
+      if (
+        knownTargetProbeFailedTransiently &&
+        knownVerifiedTarget &&
+        compareSemver(candidateVersion, knownVerifiedTarget) < 0
+      ) {
+        return { currentVersion, latestVersion: null, updateAvailable: false };
+      }
+      cachedDriverReleaseAssets = release.assets;
+      return { currentVersion, latestVersion: candidateVersion, updateAvailable: true };
+    }
+
+    if (hadTransientProbeFailure) {
+      return { currentVersion, latestVersion: null, updateAvailable: false };
+    }
+
+    // API 请求均成功但没有可安装的新版本:用当前已安装版本覆盖旧缓存。
+    // 网络失败会走 catch 返回 null,commitDriverUpdateCheck 会保留已知结果。
+    cachedDriverReleaseAssets = [];
+    return { currentVersion, latestVersion: currentVersion, updateAvailable: false };
   } catch (err) {
     logger.debug('cua-driver update check failed (silently ignored)', {
       message: err instanceof Error ? err.message : String(err),
@@ -2551,7 +2721,10 @@ function commitDriverUpdateCheck(
 
 function startDriverUpdateCheck(fetchImpl: typeof fetch): Promise<Omit<ComputerDriverUpdateCheck, 'updating'>> {
   if (!driverUpdateCheckInFlight) {
-    driverUpdateCheckInFlight = fetchDriverUpdateCheck(fetchImpl)
+    const knownVerifiedTarget = cachedDriverUpdateCheck?.updateAvailable
+      ? cachedDriverUpdateCheck.latestVersion
+      : null;
+    driverUpdateCheckInFlight = fetchDriverUpdateCheck(fetchImpl, new Set(), knownVerifiedTarget)
       .then((result) => {
         commitDriverUpdateCheck(result);
         return result;
@@ -2588,6 +2761,35 @@ export async function checkComputerDriverUpdate(
   }
   const result = await startDriverUpdateCheck(fetchImpl);
   return { ...result, updating: driverUpdateInstallInFlight !== null };
+}
+
+/** 点击更新时再次核对目标;失效时排除它并回退到下一个可安装版本。 */
+async function revalidateComputerDriverUpdateTarget(fetchImpl: typeof fetch): Promise<string | null> {
+  const cachedTarget = cachedDriverUpdateCheck?.updateAvailable
+    ? cachedDriverUpdateCheck.latestVersion
+    : null;
+  if (!cachedTarget) return null;
+
+  try {
+    const release = await fetchInstallableCuaDriverRelease(
+      cachedTarget,
+      fetchImpl,
+      getCuaDriverGithubHeaders(),
+    );
+    if (release) {
+      cachedDriverReleaseAssets = release.assets;
+      return cachedTarget;
+    }
+
+    const refreshed = await fetchDriverUpdateCheck(fetchImpl, new Set([cachedTarget]));
+    // 已确认 cachedTarget 不可安装,即使 fallback 刷新失败也不能保留旧入口。
+    cachedDriverUpdateCheck = refreshed;
+    if (!refreshed.updateAvailable) cachedDriverReleaseAssets = [];
+    return refreshed.updateAvailable ? refreshed.latestVersion : null;
+  } finally {
+    // 安装前校验也是一次完整的上游刷新,避免面板重开后立即重复请求。
+    driverUpdateCheckLastFetchAt = Date.now();
+  }
 }
 
 // ── 更新下载进度采样 ──────────────────────────────────────────────────────
@@ -2699,7 +2901,7 @@ function startInstallProgressSampler(
  */
 export async function updateComputerDriver(
   onProgress?: (progress: ComputerDriverUpdateProgress) => void,
-  opts?: { joinOnly?: boolean },
+  opts?: { joinOnly?: boolean; fetchImpl?: typeof fetch },
 ): Promise<ComputerDriverInstallResult> {
   if (!driverUpdateInstallInFlight && opts?.joinOnly) {
     const status = await getComputerDriverStatus();
@@ -2707,30 +2909,29 @@ export async function updateComputerDriver(
   }
   if (!driverUpdateInstallInFlight) {
     let stopSampler: () => void = () => {};
-    // 把检查到的版本 pin 给安装脚本,并在装完后校验确实到达了该版本——
-    // 否则「更新到 X」可能装回上游脚本 baked 的旧版还报成功(review P1)。
-    const targetVersion = cachedDriverUpdateCheck?.latestVersion ?? undefined;
-    driverUpdateInstallInFlight = installComputerDriver((pid) => {
-      if (onProgress) stopSampler = startInstallProgressSampler(pid, onProgress);
-    }, targetVersion)
-      .then((result) => {
-        if (targetVersion) {
-          const installedVersion = extractDriverSemver(result.status.version);
-          if (!installedVersion || compareSemver(installedVersion, targetVersion) < 0) {
-            // 失败时保留更新检查缓存,更新入口仍在,用户可重试。
-            throw new ComputerDriverError(
-              `cua-driver update did not reach v${targetVersion} (installed: ${result.status.version ?? 'unknown'})`,
-            );
-          }
-        }
-        cachedDriverUpdateCheck = null;
-        return result;
-      })
-      .finally(() => {
-        driverUpdateInstallInFlight = null;
-        stopSampler();
-        onProgress?.({ phase: 'done', downloadedBytes: null, totalBytes: null });
-      });
+    // preflight + install 立即收进同一个 Promise,避免并发点击各起一轮安装。
+    driverUpdateInstallInFlight = (async () => {
+      const targetVersion = await revalidateComputerDriverUpdateTarget(opts?.fetchImpl ?? fetch);
+      if (!targetVersion) {
+        throw new ComputerDriverError('no verified installable cua-driver update is available');
+      }
+      const result = await installComputerDriver((pid) => {
+        if (onProgress) stopSampler = startInstallProgressSampler(pid, onProgress);
+      }, targetVersion);
+      const installedVersion = extractDriverSemver(result.status.version);
+      if (!installedVersion || compareSemver(installedVersion, targetVersion) < 0) {
+        throw new ComputerDriverError(
+          `cua-driver update did not reach v${targetVersion} (installed: ${result.status.version ?? 'unknown'})`,
+        );
+      }
+      cachedDriverUpdateCheck = null;
+      cachedDriverReleaseAssets = [];
+      return result;
+    })().finally(() => {
+      driverUpdateInstallInFlight = null;
+      stopSampler();
+      onProgress?.({ phase: 'done', downloadedBytes: null, totalBytes: null });
+    });
   }
   return driverUpdateInstallInFlight;
 }

@@ -82,9 +82,9 @@ const schedSrc = collectSourceFiles(path.join(ROOT, 'packages/maker-scheduler/sr
 {
   const electronHits = grepAcross(schedSrc, /from\s+['"]electron['"]/);
   const drizzleHits = grepAcross(schedSrc, /from\s+['"]drizzle/);
-  const makerCoreHits = grepAcross(schedSrc, /from\s+['"]@lizi\/maker-core['"]/, { excludeTypeOnly: true });
-  const liziImHits = grepAcross(schedSrc, /from\s+['"]@?lizi[-/]im['"]/);
-  const liziMcpsHits = grepAcross(schedSrc, /from\s+['"]@?lizi[-/]?mcps['"]/);
+  const makerCoreHits = grepAcross(schedSrc, /from\s+['"]@cindy\/maker-core['"]/, { excludeTypeOnly: true });
+  const liziImHits = grepAcross(schedSrc, /from\s+['"]@cindy\/im['"]/);
+  const liziMcpsHits = grepAcross(schedSrc, /from\s+['"]@cindy\/mcps['"]/);
   const allHits = [...electronHits, ...drizzleHits, ...makerCoreHits, ...liziImHits, ...liziMcpsHits];
   if (allHits.length) {
     failure(
@@ -222,7 +222,7 @@ const schedSrc = collectSourceFiles(path.join(ROOT, 'packages/maker-scheduler/sr
 
 {
   const coreSrc = collectSourceFiles(path.join(ROOT, 'packages/maker-core/src'));
-  const hits = grepAcross(coreSrc, /from\s+['"]@lizi\/maker-scheduler(?:\/[^'"]*)?['"]/);
+  const hits = grepAcross(coreSrc, /from\s+['"]@cindy\/maker-scheduler(?:\/[^'"]*)?['"]/);
   if (hits.length) {
     failure(
       '#6 core-no-scheduler',
@@ -263,7 +263,7 @@ const schedSrc = collectSourceFiles(path.join(ROOT, 'packages/maker-scheduler/sr
 
 {
   const mcpsSrc = collectSourceFiles(path.join(ROOT, 'packages/lizi-mcps/src'));
-  const hits = grepAcross(mcpsSrc, /from\s+['"]@lizi\/maker-scheduler\/engine[^'"]*['"]/);
+  const hits = grepAcross(mcpsSrc, /from\s+['"]@cindy\/maker-scheduler\/engine[^'"]*['"]/);
   if (hits.length) {
     failure(
       '#5 mcps-no-engine-deepimport',

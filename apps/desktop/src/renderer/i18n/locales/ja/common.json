@@ -1744,18 +1744,23 @@
     },
     "builtinTools": {
       "title": "組み込みツール",
-      "description": "現在のプロジェクトで組み込みツールを有効化 / 無効化します。変更は次回の agent セッション開始時に反映されます。",
+      "description": "新しい会話のデフォルトを設定するか、プロジェクトごとに上書きします。プロジェクト設定が優先されます。",
       "empty": "利用可能なツールはありません。",
-      "projectOverrideBadge": "プロジェクト",
-      "projectOverrideTooltip": "プロジェクト設定で上書きされています ({{dir}})",
       "toggleAria": "{{name}} ツールを切り替え",
-      "toggleHint": "変更は次回の agent セッション開始時に反映され、実行中のセッションには影響しません ——",
-      "startNewSessionToApply": "新しいセッションを開始すると即時反映されます。",
-      "noProjectHint": "プロジェクトのセッションから「設定」を開くと、そのプロジェクトのツールを切り替えられます。",
+      "toggleHint": "変更は新規または再起動した agent セッションにのみ反映され、実行中のセッションには影響しません。",
       "loadFailed": "ツール一覧の読み込みに失敗しました",
-      "projectPicker": {
-        "ariaLabel": "ツール切り替えの対象プロジェクトを変更",
-        "noRecentProjects": "最近のプロジェクトはありません"
+      "scopePicker": {
+        "ariaLabel": "組み込みツール設定の適用範囲を切り替え",
+        "userDefault": "新しい会話のデフォルト",
+        "userDefaultDescription": "プロジェクト上書きのない新規セッションに適用"
+      },
+      "source": {
+        "project": "プロジェクト",
+        "projectTooltip": "プロジェクト設定で上書きされています ({{dir}})",
+        "user": "ユーザーデフォルト",
+        "userTooltip": "新しい会話のデフォルトを継承",
+        "product": "製品デフォルト",
+        "productTooltip": "Cindy の製品デフォルトを継承"
       },
       "toast": {
         "enabled": "{{name}} を有効化しました — 次回セッションから反映",
@@ -3690,6 +3695,7 @@
       "startButton": "協同を開始",
       "startFailed": "協同の開始に失敗しました",
       "startFailedContinue": "協同の開始に失敗しました。単一セッションとして続行します。",
+      "createWorkerRefreshFailed": "Worker の状態を更新できませんでした。もう一度お試しください。",
       "openHint": "Worker を呼んで協同する",
       "stopHint": "協同を停止",
       "stopAria": "協同を停止",

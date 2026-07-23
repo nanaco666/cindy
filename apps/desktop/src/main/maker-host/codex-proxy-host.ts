@@ -182,7 +182,7 @@ function moveInstructionsIntoInput(body: Record<string, unknown>): Record<string
   const instructions = body.instructions;
   if (typeof instructions !== 'string' || instructions.length === 0) return null;
   // xAI Responses examples/API schema carry system prompt through input messages, not top-level instructions.
-  const systemMessage = { role: 'system', content: instructions };
+  const systemMessage = { type: 'message', role: 'system', content: instructions };
   const next: Record<string, unknown> = { ...body };
   delete next.instructions;
 
@@ -239,13 +239,207 @@ function isXaiUnsupportedInputItem(item: unknown, opts: { supportsReasoning: boo
     item.type.startsWith('imageGeneration');
 }
 
-function stripUnsupportedXaiInputItems(body: Record<string, unknown>): Record<string, unknown> | null {
+/**
+ * Codex code-mode / app-server 历史里会回放 `custom_tool_call*`，且 tool output 常是
+ * `[{type:"input_text",text}]` 数组。xAI Responses 的 untagged `ModelInput` 只认
+ * message / function_call / function_call_output / reasoning 等标准变体；原样转发会 422:
+ * "data did not match any variant of untagged enum ModelInput"。
+ * 仅在 xAI 路由里把这些历史 item 归一成 xAI 可反序列化的 function_call 形态。
+ */
+function textFromResponsesContent(value: unknown): string {
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  if (value == null) return '';
+  if (Array.isArray(value)) {
+    return value
+      .map((part) => {
+        if (typeof part === 'string') return part;
+        if (!isPlainObject(part)) return '';
+        if (typeof part.text === 'string') return part.text;
+        if (typeof part.input_text === 'string') return part.input_text;
+        if (typeof part.output_text === 'string') return part.output_text;
+        return '';
+      })
+      .filter((part) => part.length > 0)
+      .join('\n');
+  }
+  if (isPlainObject(value)) {
+    if (typeof value.text === 'string') return value.text;
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return String(value);
+    }
+  }
+  return String(value);
+}
+
+function argumentsFromCustomToolInput(value: unknown): string {
+  if (value == null) return '{}';
+
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      return JSON.stringify(isPlainObject(parsed) ? parsed : { input: parsed });
+    } catch {
+      return JSON.stringify({ input: value });
+    }
+  }
+
+  try {
+    return JSON.stringify(isPlainObject(value) ? value : { input: value });
+  } catch {
+    return JSON.stringify({ input: String(value) });
+  }
+}
+
+function normalizeXaiInputItem(item: unknown): { item: unknown; changed: boolean } {
+  if (!isPlainObject(item)) {
+    return { item, changed: false };
+  }
+
+  // EasyInput 兼容:只有 role/content、缺 type 的 message 先补 type。
+  const base: Record<string, unknown> = (!('type' in item) && typeof item.role === 'string' && 'content' in item)
+    ? { type: 'message', ...item }
+    : item;
+  const typedFromEasy = base !== item;
+  const type = typeof base.type === 'string' ? base.type : undefined;
+
+  if (type === 'custom_tool_call') {
+    const name = typeof base.name === 'string' ? base.name : '';
+    const callId = typeof base.call_id === 'string'
+      ? base.call_id
+      : (typeof base.id === 'string' ? base.id : '');
+    const next: Record<string, unknown> = {
+      type: 'function_call',
+      name,
+      arguments: argumentsFromCustomToolInput(base.input),
+      call_id: callId,
+    };
+    if (typeof base.id === 'string') next.id = base.id;
+    return { item: next, changed: true };
+  }
+
+  if (type === 'custom_tool_call_output') {
+    return {
+      item: {
+        type: 'function_call_output',
+        call_id: typeof base.call_id === 'string' ? base.call_id : '',
+        output: textFromResponsesContent(base.output),
+      },
+      changed: true,
+    };
+  }
+
+  if (type === 'function_call') {
+    const normalizedArguments = argumentsFromCustomToolInput(base.arguments);
+    const next: Record<string, unknown> = {
+      type: 'function_call',
+      name: typeof base.name === 'string' ? base.name : '',
+      arguments: normalizedArguments,
+      call_id: typeof base.call_id === 'string'
+        ? base.call_id
+        : (typeof base.id === 'string' ? base.id : ''),
+    };
+    if (typeof base.id === 'string') next.id = base.id;
+    const changed = typedFromEasy
+      || normalizedArguments !== base.arguments
+      || typeof base.call_id !== 'string'
+      || typeof base.name !== 'string'
+      || 'status' in base
+      || Object.keys(base).some((key) => !['type', 'name', 'arguments', 'call_id', 'id'].includes(key));
+    return changed ? { item: next, changed: true } : { item: base, changed: false };
+  }
+
+  if (type === 'function_call_output') {
+    const next: Record<string, unknown> = {
+      type: 'function_call_output',
+      call_id: typeof base.call_id === 'string' ? base.call_id : '',
+      output: typeof base.output === 'string' ? base.output : textFromResponsesContent(base.output),
+    };
+    const changed = typedFromEasy
+      || typeof base.output !== 'string'
+      || typeof base.call_id !== 'string'
+      || Object.keys(base).some((key) => !['type', 'call_id', 'output'].includes(key));
+    return changed ? { item: next, changed: true } : { item: base, changed: false };
+  }
+
+  if (type === 'message') {
+    let changed = typedFromEasy;
+    const next: Record<string, unknown> = { type: 'message' };
+    const role = base.role === 'developer' ? 'system' : base.role;
+    if (role !== base.role) changed = true;
+    if (typeof role === 'string') next.role = role;
+    if ('content' in base) next.content = base.content;
+    if (typeof base.id === 'string') next.id = base.id;
+    for (const key of Object.keys(base)) {
+      if (key === 'type' || key === 'role' || key === 'content' || key === 'id') continue;
+      // phase / internal_* / 其它扩展键一律丢掉。
+      changed = true;
+    }
+    // content part 只保留 text 类;缺 type 的纯文本 part 补 input_text。
+    if (Array.isArray(next.content)) {
+      const parts: unknown[] = [];
+      for (const part of next.content) {
+        if (typeof part === 'string') {
+          parts.push({ type: 'input_text', text: part });
+          changed = true;
+          continue;
+        }
+        if (!isPlainObject(part)) {
+          changed = true;
+          continue;
+        }
+        const partType = typeof part.type === 'string' ? part.type : undefined;
+        if (partType === 'text') {
+          parts.push({ type: role === 'assistant' ? 'output_text' : 'input_text', text: typeof part.text === 'string' ? part.text : '' });
+          changed = true;
+          continue;
+        }
+        if (partType === 'input_text' || partType === 'output_text') {
+          parts.push({ type: partType, text: typeof part.text === 'string' ? part.text : '' });
+          if (Object.keys(part).some((k) => k !== 'type' && k !== 'text')) changed = true;
+          continue;
+        }
+        if (partType === 'input_image') {
+          const imageUrl = typeof part.image_url === 'string' ? part.image_url : undefined;
+          if (imageUrl) parts.push({ type: 'input_image', image_url: imageUrl });
+          else changed = true;
+          if (Object.keys(part).some((k) => k !== 'type' && k !== 'image_url')) changed = true;
+          continue;
+        }
+        changed = true;
+      }
+      next.content = parts;
+    } else if (typeof next.content !== 'string') {
+      // 非法 content → 降级空字符串,避免整个 ModelInput 反序列化失败。
+      next.content = textFromResponsesContent(next.content);
+      changed = true;
+    }
+    return changed ? { item: next, changed: true } : { item: base, changed: false };
+  }
+
+  return { item: base, changed: typedFromEasy };
+}
+
+function normalizeXaiInputItems(body: Record<string, unknown>): Record<string, unknown> | null {
   if (!Array.isArray(body.input)) return null;
 
   // xAI supports encrypted reasoning replay, but not Codex/OpenAI image replay items in `input[]`.
+  // Codex custom_tool_call* must also be rewritten before xAI's ModelInput deserialize.
   const supportsReasoning = supportsXaiReasoning(xaiRealModelId(body.model));
-  const input = body.input.filter((item) => !isXaiUnsupportedInputItem(item, { supportsReasoning }));
-  if (input.length === body.input.length) return null;
+  let changed = false;
+  const input: unknown[] = [];
+  for (const raw of body.input) {
+    if (isXaiUnsupportedInputItem(raw, { supportsReasoning })) {
+      changed = true;
+      continue;
+    }
+    const normalized = normalizeXaiInputItem(raw);
+    if (normalized.changed) changed = true;
+    input.push(normalized.item);
+  }
+  if (!changed) return null;
 
   return { ...body, input };
 }
@@ -321,9 +515,9 @@ function createXaiResponsesCompatTransform(): RequestTransform {
       changed = true;
     }
 
-    const withoutUnsupportedInputItems = stripUnsupportedXaiInputItems(current);
-    if (withoutUnsupportedInputItems) {
-      current = withoutUnsupportedInputItems;
+    const withNormalizedInputItems = normalizeXaiInputItems(current);
+    if (withNormalizedInputItems) {
+      current = withNormalizedInputItems;
       changed = true;
     }
     return changed ? current : null;

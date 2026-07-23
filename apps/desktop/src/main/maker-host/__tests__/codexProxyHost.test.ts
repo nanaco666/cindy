@@ -431,6 +431,39 @@ describe('codex proxy host', () => {
         { type: 'reasoning', id: 'rs_1', encrypted_content: 'gAAA' },
         { type: 'reasoning', id: 'rs_empty' },
         { type: 'image_generation_call', id: 'ig_1', result: 'data:image/png;base64,xxx' },
+        {
+          type: 'custom_tool_call',
+          id: 'ctc_1',
+          status: 'completed',
+          call_id: 'call_exec_1',
+          name: 'exec',
+          input: 'console.log(1)',
+        },
+        {
+          type: 'custom_tool_call_output',
+          call_id: 'call_exec_1',
+          output: [
+            { type: 'input_text', text: 'Script completed' },
+            { type: 'input_text', text: 'ok' },
+          ],
+        },
+        {
+          type: 'function_call_output',
+          call_id: 'call_wait_1',
+          output: [{ type: 'input_text', text: '{"done":true}' }],
+        },
+        {
+          type: 'function_call',
+          call_id: 'call_invalid_args_1',
+          name: 'legacy_tool',
+          arguments: 'raw legacy input',
+        },
+        {
+          type: 'function_call',
+          call_id: 'call_valid_args_1',
+          name: 'structured_tool',
+          arguments: '{"path":"README.md"}',
+        },
         { role: 'user', content: 'hello' },
       ],
     };
@@ -452,12 +485,90 @@ describe('codex proxy host', () => {
         { type: 'web_search', filters: { allowed_domains: ['docs.x.ai'] }, enable_image_search: true },
       ],
       input: [
-        { role: 'system', content: 'BASE_PROMPT\n\nPRODUCT_PROMPT' },
+        { type: 'message', role: 'system', content: 'BASE_PROMPT\n\nPRODUCT_PROMPT' },
         { type: 'reasoning', id: 'rs_1', encrypted_content: 'gAAA' },
-        { role: 'user', content: 'hello' },
+        {
+          type: 'function_call',
+          id: 'ctc_1',
+          name: 'exec',
+          arguments: '{"input":"console.log(1)"}',
+          call_id: 'call_exec_1',
+        },
+        {
+          type: 'function_call_output',
+          call_id: 'call_exec_1',
+          output: 'Script completed\nok',
+        },
+        {
+          type: 'function_call_output',
+          call_id: 'call_wait_1',
+          output: '{"done":true}',
+        },
+        {
+          type: 'function_call',
+          call_id: 'call_invalid_args_1',
+          name: 'legacy_tool',
+          arguments: '{"input":"raw legacy input"}',
+        },
+        {
+          type: 'function_call',
+          call_id: 'call_valid_args_1',
+          name: 'structured_tool',
+          arguments: '{"path":"README.md"}',
+        },
+        { type: 'message', role: 'user', content: 'hello' },
       ],
     });
     clearSessionProvider('session-xai');
+  });
+
+  it('leaves custom_tool_call history untouched for non-xAI requests', async () => {
+    const host = await freshCodexProxyHost();
+    const { setSessionProvider, clearSessionProvider } = await import('../session-provider-store.js');
+    mockState.createAnthropicCompatProxy.mockResolvedValueOnce({
+      url: 'http://127.0.0.1:43210',
+      dispose: vi.fn(async () => undefined),
+    });
+    await host.ensureCodexProxyReady();
+    host.registerComposed('session-openai-custom-tool', 'thread-openai-custom-tool', 'PRODUCT_PROMPT');
+    setSessionProvider('session-openai-custom-tool', 'openai');
+
+    const transforms = mockState.createAnthropicCompatProxy.mock.calls[0]?.[0]?.transformRequest ?? [];
+    const originalInput = [
+      {
+        type: 'custom_tool_call',
+        id: 'ctc_1',
+        status: 'completed',
+        call_id: 'call_exec_1',
+        name: 'exec',
+        input: 'console.log(1)',
+      },
+      {
+        type: 'custom_tool_call_output',
+        call_id: 'call_exec_1',
+        output: [{ type: 'input_text', text: 'ok' }],
+      },
+      { role: 'user', content: 'hello' },
+    ];
+    let current: unknown = {
+      model: 'gpt-5.4',
+      input: originalInput,
+    };
+    const ctx = {
+      method: 'POST',
+      url: '/responses',
+      headers: { 'thread-id': 'thread-openai-custom-tool' },
+    };
+    for (const transform of transforms) {
+      const next = transform(current, ctx);
+      if (next !== null && next !== undefined) current = next;
+    }
+
+    expect(current).toEqual({
+      model: 'gpt-5.4',
+      input: originalInput,
+    });
+    clearSessionProvider('session-openai-custom-tool');
   });
 
   it('keeps Codex namespace tools for non-xAI requests', async () => {
@@ -660,8 +771,8 @@ describe('codex proxy host', () => {
     expect(current).toEqual({
       model: 'grok-code-fast',
       input: [
-        { role: 'system', content: 'BASE_PROMPT\n\nPRODUCT_PROMPT' },
-        { role: 'user', content: 'hello' },
+        { type: 'message', role: 'system', content: 'BASE_PROMPT\n\nPRODUCT_PROMPT' },
+        { type: 'message', role: 'user', content: 'hello' },
       ],
     });
     clearSessionProvider('session-xai-fast');
@@ -701,8 +812,8 @@ describe('codex proxy host', () => {
     expect(current).toEqual({
       model: 'grok-future',
       input: [
-        { role: 'system', content: 'BASE_PROMPT\n\nPRODUCT_PROMPT' },
-        { role: 'user', content: 'hello' },
+        { type: 'message', role: 'system', content: 'BASE_PROMPT\n\nPRODUCT_PROMPT' },
+        { type: 'message', role: 'user', content: 'hello' },
       ],
     });
     clearSessionProvider('session-xai-unknown');
@@ -742,8 +853,8 @@ describe('codex proxy host', () => {
     expect(current).toEqual({
       model: 'grok-code-fast',
       input: [
-        { role: 'system', content: 'BASE_PROMPT\n\nPRODUCT_PROMPT' },
-        { role: 'user', content: 'hello' },
+        { type: 'message', role: 'system', content: 'BASE_PROMPT\n\nPRODUCT_PROMPT' },
+        { type: 'message', role: 'user', content: 'hello' },
       ],
     });
   });

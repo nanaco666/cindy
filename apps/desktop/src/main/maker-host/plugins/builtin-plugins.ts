@@ -117,6 +117,11 @@ export function pluginIdForProviderName(name: string): PluginId {
   return PROVIDER_NAME_TO_PLUGIN_ID[name as KnownProviderName] ?? name;
 }
 
+/** Resolve only first-party built-in providers; custom MCP ids must never inherit this policy. */
+export function pluginIdForKnownProviderName(name: string): PluginId | null {
+  return PROVIDER_NAME_TO_PLUGIN_ID[name as KnownProviderName] ?? null;
+}
+
 /** 从静态 metadata 列表构造 Plugin descriptor。
  *
  * Phase 1 约束：descriptor 上的 `capabilities.mcps` 始终是 `[]`。

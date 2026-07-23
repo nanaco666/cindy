@@ -11,7 +11,7 @@ import { mobileClientBuildEnv } from '../../../scripts/shared/client-endpoint-bu
 
 function main() {
   const [command, ...forwardedArgs] = process.argv.slice(2);
-  if (!command) throw new Error('Usage: release-with-env.mjs <check|beta|prod> [...args]');
+  if (!command) throw new Error('Usage: release-with-env.mjs <check|prod> [...args]');
 
   const mobileBuildEnv = mobileClientBuildEnv();
   const restoreEasJson = injectMobileEndpointsIntoEasFile(`${MOBILE_DIR}/eas.json`);

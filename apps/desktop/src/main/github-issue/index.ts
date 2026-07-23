@@ -83,7 +83,7 @@ export async function submitGithubIssueForSession(
           {
             method: 'POST',
             bodyFactory,
-            // 独立部署的 github-server(cindy-server 仓);登录 JWT 验签与
+            // 独立部署的 github-server(服务端仓);登录 JWT 验签与
             // auth-server 同侧。bodyFactory 随 401 refresh 重建,确保账号切换后
             // userName 与最终 Bearer membership 一致。
             baseUrl: getClientEndpoint('githubApiBaseUrl'),

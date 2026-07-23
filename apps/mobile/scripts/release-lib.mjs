@@ -12,7 +12,6 @@ export const NPX_BIN = process.platform === 'win32' ? 'npx.cmd' : 'npx';
 export const EAS_LOGIN_ERROR_MESSAGE = '未登录 EAS,请先运行: npx eas-cli login';
 export const RELEASE_ENV_EXEC_COMMANDS = Object.freeze({
   check: 'apps/mobile/scripts/release-check.mjs',
-  beta: 'apps/mobile/scripts/release-beta.mjs',
   prod: 'apps/mobile/scripts/release-prod.mjs',
 });
 
@@ -64,8 +63,6 @@ const BAKED_ENV_KEY_NOTES = {
   EXPO_PUBLIC_CINDY_GOOGLE_IOS_URL_SCHEME: 'Google 登录 iOS 回跳 URL scheme',
   EXPO_PUBLIC_CINDY_WECHAT_APP_ID: '微信登录 AppID',
   EXPO_PUBLIC_CINDY_WECHAT_UNIVERSAL_LINK: '微信登录 Universal Link',
-  EXPO_PUBLIC_APP_VARIANT: '构建变体(beta = per-dev Beta 线;不设 = production)',
-  EXPO_PUBLIC_BETA_DEV: 'Beta 线开发者名(per-dev 轨道标识)',
   XDT_ANDROID_VERSION_CODE: 'Android 原生 versionCode(app.config.js 写入,冷更单调号)',
 };
 
@@ -108,7 +105,7 @@ export function formatBakedEnvLines(env, { extraKeys = [] } = {}) {
  *   1. 显式值(CLI `--desktop-version` / env `EXPO_PUBLIC_DESKTOP_VERSION`)——手动指定配对 / 离线发版;
  *   2. 桌面 CDN manifest 的 `app.version`(当前线上桌面版本);
  *   3. 网络 / 解析失败 → `''`(设置页据此不渲染该行,不显示误导性空值)。
- * 仅自建线调用;EAS beta/prod 不注入该值。fetch 走全局 fetch(Node 18+),
+ * 仅自建线调用;EAS prod 不注入该值。fetch 走全局 fetch(Node 18+),
  * baseUrl / platformKey 可注入便于单测(参照 src/update/fetchLatestRelease.ts 风格)。
  * @param {{ explicit?: string; cdnBase?: string; platformKey?: string; timeoutMs?: number }} [opts]
  * @returns {Promise<string>}
@@ -147,7 +144,7 @@ export function parseArgs(argv) {
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     // standalone `--` 是约定分隔符(pnpm run 会把它一起转发进来),跳过,
-    // 否则它会被当成空 key 并吞掉下一个位置参数(如 `beta:add-dev -- alice` 里的 alice)。
+    // 否则它会被当成空 key 并吞掉下一个位置参数(如 `some-cmd -- alice` 里的 alice)。
     if (arg === '--') continue;
     if (!arg.startsWith('--')) {
       args._.push(arg);
@@ -196,26 +193,6 @@ export function resolveBuildProfile(easJson, profileName, seen = new Set()) {
 export function resolveTarget(config, options = {}) {
   const kind = options.kind ?? options.target ?? 'production';
   const region = resolveAuthRegion(options.region);
-  if (kind === 'beta') {
-    const dev = slugifyDevName(
-      options.dev ??
-        process.env.XDT_MOBILE_BETA_DEV ??
-        gitValue(['config', 'user.name']),
-    );
-    const profile = region === 'global' ? `beta-global-${dev}` : `beta-${dev}`;
-    const resolved = resolveBuildProfile(config.easJson, profile);
-    return {
-      kind: 'beta',
-      region,
-      dev,
-      profile,
-      channel: resolved.channel ?? profile,
-      branch: options.branch ?? resolved.channel ?? profile,
-      environment: options.environment ?? 'preview',
-      variant: 'beta',
-      publicEnv: clone(resolved.env ?? {}),
-    };
-  }
   if (kind === 'staging') {
     const profile =
       options.profile ?? (region === 'global' ? 'adhoc-global' : 'adhoc');
@@ -255,14 +232,6 @@ export function assertTargetProfile(config, target) {
   if (profile.channel !== target.channel) {
     throw new Error(`Profile ${target.profile} channel mismatch: expected ${target.channel}, got ${profile.channel ?? '(missing)'}`);
   }
-  if (target.kind === 'beta') {
-    if (profile.env?.EXPO_PUBLIC_APP_VARIANT !== 'beta') {
-      throw new Error(`Profile ${target.profile} must set EXPO_PUBLIC_APP_VARIANT=beta`);
-    }
-    if (profile.env?.EXPO_PUBLIC_BETA_DEV !== target.dev) {
-      throw new Error(`Profile ${target.profile} must set EXPO_PUBLIC_BETA_DEV=${target.dev}`);
-    }
-  }
   if (profile.env?.EXPO_PUBLIC_CINDY_AUTH_REGION !== target.region) {
     throw new Error(
       `Profile ${target.profile} must set EXPO_PUBLIC_CINDY_AUTH_REGION=${target.region}`,
@@ -276,22 +245,6 @@ export function resolveAuthRegion(value = 'cn') {
   if (region !== 'cn' && region !== 'global')
     throw new Error('--region must be cn or global');
   return region;
-}
-
-export function slugifyDevName(value) {
-  const slug = String(value ?? '')
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
-  if (!slug) throw new Error('Beta developer name is required');
-  return slug;
-}
-
-export function requireExplicitDev(args, commandName) {
-  if (!String(args.dev ?? '').trim()) {
-    throw new Error(`${commandName} requires --dev <name> for beta targets`);
-  }
 }
 
 export function assertEasLoggedIn({
@@ -310,7 +263,7 @@ export function assertEasLoggedIn({
 // 用 eas-cli 的权威指纹(与 eas build / eas update 实际烧进包的 runtimeVersion 一致)。
 // 不能用本地 @expo/fingerprint 的 createFingerprintAsync:实测它与 eas-cli 的版本/环境不同会算出
 // 不同 hash(本地 vs eas-cli),导致冷热判定误报 COLD_BUILD_REQUIRED。`--build-profile` 会自动套用
-// 该 profile 在 eas.json 里的 env(beta 的 EXPO_PUBLIC_APP_VARIANT/BETA_DEV 等),并加载 fingerprint.config.cjs。
+// 该 profile 在 eas.json 里的 env,并加载 fingerprint.config.cjs。
 // 代价:要联网 + 调 eas-cli(~30-60s),比本地慢,但这是 release 脚本、非热路径,换的是正确性。
 export async function computeFingerprint({ mobileDir = MOBILE_DIR, target, platform = 'ios' } = {}) {
   const profile = target?.profile;
@@ -367,12 +320,6 @@ export function assertPublicEnv(env, { variant = 'production', requiredKeys = PU
   for (const key of requiredKeys) {
     if (!String(env[key] ?? '').trim()) missing.push(key);
   }
-  if (variant === 'beta' && String(env.EXPO_PUBLIC_APP_VARIANT ?? '').trim() !== 'beta') {
-    missing.push('EXPO_PUBLIC_APP_VARIANT=beta');
-  }
-  if (variant === 'beta' && !String(env.EXPO_PUBLIC_BETA_DEV ?? '').trim()) {
-    missing.push('EXPO_PUBLIC_BETA_DEV');
-  }
   if (variant === 'production' && String(env.EXPO_PUBLIC_APP_VARIANT ?? '').trim() === 'beta') {
     throw new Error('Production OTA environment must not set EXPO_PUBLIC_APP_VARIANT=beta');
   }
@@ -392,7 +339,6 @@ export function resolveCommandPublicEnv(publicEnv = {}, baseEnv = process.env, e
 }
 
 export function resolveReleaseEnvExecEnvironment(command, args = {}) {
-  if (command === 'beta') return 'preview';
   if (command === 'prod') {
     const targets = String(args.targets ?? 'production,staging').split(',').map((item) => item.trim()).filter(Boolean);
     return targets.length > 0 && targets.every((target) => target === 'staging') ? 'preview' : 'production';
@@ -400,7 +346,7 @@ export function resolveReleaseEnvExecEnvironment(command, args = {}) {
   if (command !== 'check') throw new Error(`Unknown mobile release command: ${command}`);
 
   const target = String(args.target ?? '').trim();
-  if (target === 'beta' || target === 'staging' || args.dev) return 'preview';
+  if (target === 'staging') return 'preview';
   return 'production';
 }
 
@@ -678,12 +624,11 @@ export function shouldAutoSubmitColdBuild({ target, mode, latest } = {}) {
  */
 export function buildUpdateCommand(target, message, { platform } = {}) {
   if (!platform) throw new Error('buildUpdateCommand requires platform');
-  // 统一:OTA 直接注入该 profile 的 EXPO_PUBLIC_* env(beta 的 publicEnv 已含 APP_VARIANT/BETA_DEV)。
+  // 统一:OTA 直接注入该 profile 的 EXPO_PUBLIC_* env。
   // 少数不进仓库的客户端公开 env(如 TapTap client token)由 buildEasCommandEnv 从
   // allowlist 外部环境补入,不会出现在 dry-run command spec 里。
   // 同时显式传 target.environment:新版 eas-cli 在 --non-interactive update 下要求该 flag。
-  // EAS Environment 只提供外部敏感/明文变量;profile env 仍由本脚本直接注入,避免 beta 的
-  // EXPO_PUBLIC_BETA_DEV 等 per-dev 变量丢失。
+  // EAS Environment 只提供外部敏感/明文变量;profile env 仍由本脚本直接注入。
   const environment = target.environment ?? (target.kind === 'production' ? 'production' : 'preview');
   return commandSpec(NPX_BIN, [
     '--yes',
@@ -720,97 +665,6 @@ export function buildColdBuildCommand(target, { platform, autoSubmit = false, me
   if (autoSubmit) args.push('--auto-submit');
   if (message) args.push('--message', message);
   return commandSpec(NPX_BIN, args);
-}
-
-/**
- * @param {{ channel: string; branch?: string }} options
- */
-export function buildBetaChannelLinkCommands({ channel, branch = channel } = {}) {
-  if (!channel) throw new Error('buildBetaChannelLinkCommands requires channel');
-  if (!branch) throw new Error('buildBetaChannelLinkCommands requires branch');
-  return [
-    commandSpec(NPX_BIN, [
-      '--yes',
-      EAS_CLI_SPEC,
-      'branch:create',
-      branch,
-      '--non-interactive',
-    ]),
-    commandSpec(NPX_BIN, [
-      '--yes',
-      EAS_CLI_SPEC,
-      'channel:create',
-      channel,
-      '--non-interactive',
-    ]),
-    commandSpec(NPX_BIN, [
-      '--yes',
-      EAS_CLI_SPEC,
-      'channel:edit',
-      channel,
-      '--branch',
-      branch,
-      '--non-interactive',
-    ]),
-  ];
-}
-
-/**
- * @param {{ channel: string; branch?: string; cwd?: string; execute?: boolean; run?: (spec: unknown, options: unknown) => { status: number | null; stdout?: unknown; stderr?: unknown } }} options
- */
-export function runBetaChannelLink({
-  channel,
-  branch = channel,
-  cwd = MOBILE_DIR,
-  execute = false,
-  run = (spec, options) => runCommandSync(spec, options),
-} = {}) {
-  const commands = buildBetaChannelLinkCommands({ channel, branch });
-  if (!execute) return { executed: false, commands };
-
-  const branchCreate = commands[0];
-  const branchCreateResult = run(branchCreate, {
-    cwd,
-    env: buildEasCommandEnv(),
-    encoding: 'utf8',
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-  const branchAlreadyExists = branchCreateResult.status !== 0 && isAlreadyExistsCommandResult(branchCreateResult);
-  if (branchCreateResult.status !== 0 && !branchAlreadyExists) {
-    throw new Error(commandFailedMessage(branchCreate, branchCreateResult));
-  }
-
-  const channelCreate = commands[1];
-  const channelCreateResult = run(channelCreate, {
-    cwd,
-    env: buildEasCommandEnv(),
-    encoding: 'utf8',
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-  const channelAlreadyExists = channelCreateResult.status !== 0 && isAlreadyExistsCommandResult(channelCreateResult);
-  if (channelCreateResult.status !== 0 && !channelAlreadyExists) {
-    throw new Error(commandFailedMessage(channelCreate, channelCreateResult));
-  }
-
-  const edit = commands[2];
-  const editResult = run(edit, {
-    cwd,
-    env: buildEasCommandEnv(),
-    encoding: 'utf8',
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-  if (editResult.status !== 0) {
-    throw new Error(commandFailedMessage(edit, editResult));
-  }
-
-  return {
-    executed: true,
-    commands,
-    branchCreated: !branchAlreadyExists,
-    channelCreated: !channelAlreadyExists,
-    created: !channelAlreadyExists,
-    linked: true,
-  };
 }
 
 export function formatPlan(plan) {
@@ -869,57 +723,6 @@ export function assertProductionGitGate({
   if (!remoteMain) throw new Error('Production release could not read remote origin/main tip');
   if (head !== remoteMain) throw new Error(`Production release requires HEAD == remote origin/main (${head} != ${remoteMain})`);
   return true;
-}
-
-export function addBetaDeveloperProfile(
-  easJson,
-  devName,
-  { allowExisting = false, region: regionValue = 'cn' } = {},
-) {
-  const dev = slugifyDevName(devName);
-  const region = resolveAuthRegion(regionValue);
-  const baseProfile = region === 'global' ? 'beta-global-base' : 'beta-base';
-  const profile = region === 'global' ? `beta-global-${dev}` : `beta-${dev}`;
-  if (!easJson.build?.[baseProfile])
-    throw new Error(`Missing ${baseProfile} profile`);
-  if (easJson.build[profile]) {
-    if (!allowExisting) throw new Error(`Profile already exists: ${profile}`);
-    const existing = easJson.build[profile];
-    if (
-      existing.extends !== baseProfile ||
-      existing.channel !== profile ||
-      existing.env?.EXPO_PUBLIC_BETA_DEV !== dev
-    ) {
-      throw new Error(
-        `Existing profile ${profile} does not match expected beta developer shape`,
-      );
-    }
-    return {
-      easJson,
-      profile,
-      channel: profile,
-      branch: profile,
-      dev,
-      region,
-      created: false,
-    };
-  }
-  easJson.build[profile] = {
-    extends: baseProfile,
-    channel: profile,
-    env: {
-      EXPO_PUBLIC_BETA_DEV: dev,
-    },
-  };
-  return {
-    easJson,
-    profile,
-    channel: profile,
-    branch: profile,
-    dev,
-    region,
-    created: true,
-  };
 }
 
 function compareVersionParts(a, b) {
