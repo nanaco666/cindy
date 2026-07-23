@@ -30,6 +30,7 @@ const MAX_USER_MESSAGE_CHARS = 16_384;
 const MAX_EVENT_JSON_CHARS = 65_536;
 const MAX_FINAL_PROMPT_CHARS = 65_536;
 const BACKGROUND_MIN_INTERVAL_MS = 10_000;
+const MAX_SESSIONS_PER_GHOST = 128;
 
 interface UserActionGrant {
   ghostId: string;
@@ -99,6 +100,12 @@ export class GhostAgentSlot {
     this.runner = runner;
   }
 
+  /** 插件停用/卸载时清除该 ghost 的所有会话关联和节流状态，防止权限残留。 */
+  clearGhost(ghostId: string): void {
+    this.associatedSessions.delete(ghostId);
+    this.lastBackgroundAt.delete(ghostId);
+  }
+
   /**
    * 为一次已由宿主验证的真实卡片点击签发通行票。
    * 没有会话归属或插件未申请 agent 槽时不签发。
@@ -125,6 +132,10 @@ export class GhostAgentSlot {
     if (!sessions) {
       sessions = new Set<string>();
       this.associatedSessions.set(ghostId, sessions);
+    }
+    if (sessions.size >= MAX_SESSIONS_PER_GHOST) {
+      const oldest = sessions.values().next().value as string | undefined;
+      if (oldest) sessions.delete(oldest);
     }
     sessions.add(sessionId);
     return token;

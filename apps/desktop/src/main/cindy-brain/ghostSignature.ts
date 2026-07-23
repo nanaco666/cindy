@@ -64,8 +64,16 @@ export type GhostSignatureVerification =
   | { ok: true; trust: GhostTrustInfo; document?: GhostSignatureDocument }
   | { ok: false; reason: string };
 
+/** Deterministic JSON: object keys sorted lexicographically at all depths. */
 function canonicalJson(value: unknown): string {
-  return JSON.stringify(value);
+  return JSON.stringify(value, (_key, v) => {
+    if (v && typeof v === 'object' && !Array.isArray(v)) {
+      const sorted: Record<string, unknown> = {};
+      for (const k of Object.keys(v).sort()) sorted[k] = (v as Record<string, unknown>)[k];
+      return sorted;
+    }
+    return v;
+  });
 }
 
 function sha256Hex(data: Buffer | string): string {

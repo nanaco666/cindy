@@ -343,6 +343,7 @@ async function reconcileBuiltinGhosts(reason: string): Promise<void> {
       beforeRemove: (id) => {
         getGhostRuntime().stop(id);
         getGhostNodeRuntimeBroker().stop(id);
+        getGhostAgentSlot().clearGhost(id);
       },
       onApplyStart: () => {
         tipShown = true;
@@ -2439,6 +2440,7 @@ export function registerGhostIpc(): void {
     }
     runtime.stop(id); // 抽离先熄灯,再删目录
     getGhostNodeRuntimeBroker().stop(id); // Node 同步停掉,不留安装目录使用者
+    getGhostAgentSlot().clearGhost(id); // 会话关联随抽离清零,防止重装后权限残留
     getGhostSubscriptionGateway().dropGhost(id); // 订阅态随抽离清零
     // GhostManager 先只删目录；内置 tombstone 与 host 清理完成后再
     // 只广播一次一致快照，避免详情页中途掉回列表且无恢复入口。
