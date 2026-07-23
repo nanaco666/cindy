@@ -178,7 +178,7 @@ describe('scaffoldGhostDir', () => {
         id: `demo-${template}`,
         name: `演示 ${template}`,
         description: `${template} 起步插件`,
-      });
+      }, { sessionWorkdir: workDir });
       expect(result, JSON.stringify(result)).toMatchObject({ ok: true, dir, template });
       if (!result.ok) return;
       expect(result.files).toContain('ghost.json');
@@ -217,7 +217,7 @@ describe('scaffoldGhostDir', () => {
         template: 'plain',
         id: 'existing',
         name: 'Existing',
-      }),
+      }, { sessionWorkdir: workDir }),
     ).toMatchObject({ ok: false, errorCode: 'TARGET_EXISTS' });
     expect(await fs.promises.readFile(path.join(existing, 'keep.txt'), 'utf8')).toBe('keep me');
 
@@ -228,7 +228,7 @@ describe('scaffoldGhostDir', () => {
         template: 'plain',
         id: 'INVALID_ID',
         name: 'Invalid',
-      }),
+      }, { sessionWorkdir: workDir }),
     ).toMatchObject({ ok: false, errorCode: 'INVALID_INPUT' });
     await expect(fs.promises.stat(invalid)).rejects.toMatchObject({ code: 'ENOENT' });
   });

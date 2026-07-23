@@ -388,7 +388,10 @@ function hasFsErrorCode(err: unknown, code: string): boolean {
  * 文件先写进同目录临时文件夹，全部成功后再一次 rename 到目标；目标已经
  * 存在时直接拒绝，因此并发调用也不会把用户原文件覆盖一半。
  */
-export async function scaffoldGhostDir(input: ForgeScaffoldInput): Promise<ForgeScaffoldResult> {
+export async function scaffoldGhostDir(
+  input: ForgeScaffoldInput,
+  options?: { sessionWorkdir?: string | null },
+): Promise<ForgeScaffoldResult> {
   const template = input.template;
   if (!FORGE_SCAFFOLD_TEMPLATES.includes(template)) {
     return { ok: false, errorCode: 'INVALID_INPUT', message: `不认识的模板:${String(template)}` };
@@ -398,6 +401,16 @@ export async function scaffoldGhostDir(input: ForgeScaffoldInput): Promise<Forge
     path.resolve(input.dir) === path.parse(path.resolve(input.dir)).root
   ) {
     return { ok: false, errorCode: 'INVALID_INPUT', message: 'dir 必须是一个新的插件目录绝对路径' };
+  }
+  const resolved = path.resolve(input.dir);
+  const workdir = options?.sessionWorkdir;
+  if (workdir) {
+    const resolvedWorkdir = path.resolve(workdir);
+    if (!resolved.startsWith(`${resolvedWorkdir}${path.sep}`) && resolved !== resolvedWorkdir) {
+      return { ok: false, errorCode: 'INVALID_INPUT', message: 'dir 必须在当前会话工作目录内' };
+    }
+  } else {
+    return { ok: false, errorCode: 'INVALID_INPUT', message: '没有会话工作目录,无法确定骨架输出位置' };
   }
   const files = scaffoldFiles(input);
   const validation = validateGhostManifest(JSON.parse(files[GHOST_MANIFEST_FILE]));

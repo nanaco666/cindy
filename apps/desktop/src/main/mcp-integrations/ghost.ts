@@ -716,7 +716,8 @@ export function getCindyGhostsMcpDeps(sessionCtx?: LiziMcpSessionContext): Cindy
       return FORGE_GUIDE;
     },
     async forgeScaffold(request): Promise<CindyForgeScaffoldResult> {
-      const result = await scaffoldGhostDir(request);
+      const sessionWorkdir = resolveSessionContext()?.workingDir ?? null;
+      const result = await scaffoldGhostDir(request, { sessionWorkdir });
       if (result.ok) {
         log.info('ghost forge scaffold created', {
           dir: result.dir,

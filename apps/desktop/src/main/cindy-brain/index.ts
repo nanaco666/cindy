@@ -2156,7 +2156,8 @@ export function registerGhostIpc(): void {
   // 交互卡(v2)按钮点击回传(宿主受信桥 → 校验归属 → 唤醒意识 → 管子下发
   // card-action)。fire-and-forget:恒回 { ok } 给 renderer(reason 仅日志),
   // 派发器内部永不抛;意识随后自绘 card-update 换新卡走既有回放路径。
-  ipcMain.handle('ghosts:card:action', async (_event, callId: unknown, actionId: unknown, prompt?: unknown) => {
+  ipcMain.handle('ghosts:card:action', async (event, callId: unknown, actionId: unknown, prompt?: unknown) => {
+    assertTrustedAppRendererEvent(event);
     const r = await getGhostCardActionDispatcher().dispatch(callId, actionId, prompt);
     return { ok: r.ok };
   });
@@ -2394,10 +2395,22 @@ export function registerGhostIpc(): void {
     if (!(await requestNodeInstallAuthorization(event.sender, inspected.manifest, 'update'))) {
       return { canceled: true };
     }
+    const previousGhost = manager.list().find((g) => g.manifest.id === inspected.manifest.id);
     runtime.stop(inspected.manifest.id);
     getGhostNodeRuntimeBroker().stop(inspected.manifest.id);
-    const result = await manager.update(lizFilePath, { expectedPackageSha256 });
-    if ('rejection' in result) throwInstallError(result.rejection);
+    getGhostAgentSlot().clearGhost(inspected.manifest.id);
+    let result: Awaited<ReturnType<typeof manager.update>>;
+    try {
+      result = await manager.update(lizFilePath, { expectedPackageSha256 });
+    } catch (err) {
+      // 更新失败:恢复旧版本的常驻 Node 工作进程(如果是 resident 且已启用)
+      if (previousGhost) spawnIfResident(previousGhost);
+      throw err;
+    }
+    if ('rejection' in result) {
+      if (previousGhost) spawnIfResident(previousGhost);
+      throwInstallError(result.rejection);
+    }
     runtime.resetFuse(inspected.manifest.id); // 换了代码,给新版本干净的熔断记账
     const store = getLayoutStore();
     const docked = layoutWithGhostPanel(store.getLayout(), result.ghost.manifest);

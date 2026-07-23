@@ -85,6 +85,7 @@ interface WorkerEntry {
   nextId: number;
   pending: Map<string, PendingRpc>;
   idleTimer: NodeJS.Timeout | null;
+  hardKillTimer: NodeJS.Timeout | null;
   mcpInitPromise: Promise<void> | null;
   stopping: boolean;
 }
@@ -127,9 +128,9 @@ export function createUtilityNodeWorkerProcess(
   ] as const;
   const env: NodeJS.ProcessEnv = {
     CINDY_GHOST_ID: ghostId,
-    // 插件通过此变量定位自身资源;cwd 故意不指向安装目录,
-    // 防止无意写入覆盖 ghost.json / trust 文件。
-    CINDY_GHOST_DIR: cwd,
+    // 不暴露安装目录路径——插件通过 __dirname 定位自身资源即可。
+    // 显式传路径会降低篡改 ghost.json/trust 的门槛(相对路径写入已
+    // 靠 cwd=tmpdir 阻断,但绝对路径仍可达;减少攻击面)。
   };
   for (const key of inheritedKeys) {
     if (process.env[key] !== undefined) env[key] = process.env[key];
@@ -342,16 +343,15 @@ export class GhostNodeRuntimeBroker {
     entry.pending.clear();
     try {
       entry.child.kill('SIGTERM');
-      const hardKill = this.setTimer(() => {
+      entry.hardKillTimer = this.setTimer(() => {
+        entry.hardKillTimer = null;
         try {
-          // ChildProcess.killed 只表示“发过信号”，不代表真的退出；两秒后无条件
-          // 再发 SIGKILL，已退出进程会安全返回 false。
           entry.child.kill('SIGKILL');
         } catch {
           // already gone
         }
       }, 2_000);
-      hardKill.unref?.();
+      entry.hardKillTimer.unref?.();
     } catch {
       // 已退出即视为停止成功。
     }
@@ -390,6 +390,7 @@ export class GhostNodeRuntimeBroker {
       nextId: 1,
       pending: new Map(),
       idleTimer: null,
+      hardKillTimer: null,
       mcpInitPromise: null,
       stopping: false,
     };
@@ -606,6 +607,10 @@ export class GhostNodeRuntimeBroker {
     error: Error | null,
   ): void {
     const ghostId = entry.ghost.manifest.id;
+    if (entry.hardKillTimer) {
+      this.clearTimer(entry.hardKillTimer);
+      entry.hardKillTimer = null;
+    }
     if (this.workers.get(ghostId) !== entry) return;
     this.workers.delete(ghostId);
     this.clearIdleTimer(entry);

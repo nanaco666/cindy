@@ -138,12 +138,11 @@ describe('nodeRuntimeBroker · Electron utilityProcess 适配', () => {
         serviceName: 'cindy-ghost-node:demo',
         env: expect.objectContaining({
           CINDY_GHOST_ID: 'demo',
-          CINDY_GHOST_DIR: '/plugins/demo',
-          PATH: '/usr/bin',
         }),
       }),
     );
     const forkOptions = fork.mock.calls[0][2] as { env: Record<string, string> };
+    expect(forkOptions.env).not.toHaveProperty('CINDY_GHOST_DIR');
     expect(forkOptions.env).not.toHaveProperty('ELECTRON_RUN_AS_NODE');
     expect(forkOptions.env).not.toHaveProperty('NODE_OPTIONS');
     expect(forkOptions.env).not.toHaveProperty('ANTHROPIC_API_KEY');
