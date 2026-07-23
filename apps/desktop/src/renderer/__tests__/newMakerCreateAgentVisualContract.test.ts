@@ -238,7 +238,9 @@ describe('NewMakerDraftRoute CREATE AGENT visual contract', () => {
     expect(modelSelectorSource).toContain("? 'truncate'");
     expect(modelSelectorSource).toContain('<ChevronDown');
     expect(modelSelectorSource).toContain("'shrink-0'");
-    expect(chatInputSource).toContain("className={isCreateAgentVariant ? 'ml-[7px]' : undefined}");
+    expect(chatInputSource).toContain(
+      "className={isCreateAgentVariant && !useNarrowToolbar ? 'ml-[7px]' : undefined}",
+    );
   });
 
   it('keeps the worktree checkmark readable in both themes', () => {

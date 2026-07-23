@@ -301,6 +301,16 @@ export function NewMakerDraftRoute() {
   const draft = useNewMakerDraft();
   const navigate = useNavigate();
   const { containerRef, inputWidth } = useProportionalWidth(914);
+  // The available rail can shrink when either sidebar opens while the
+  // viewport itself remains wide. Keep the draft layout responsive to that
+  // actual content width rather than relying on viewport breakpoints.
+  const draftContentWidth = inputWidth ?? 800;
+  const isDraftNarrow = draftContentWidth < 560;
+  const isDraftMedium = draftContentWidth < 700;
+  // Keep the full vendor switcher while the composer still has room for it.
+  // Icon-only mode is reserved for the tighter toolbar state, not merely a
+  // moderately narrow content rail (for example, when attachments are present).
+  const isDraftToolbarNarrow = draftContentWidth < 600;
   const { createSession } = useCCSessions();
   const vendorAuthGate = useVendorAuthGate();
   const refreshWorktrees = useRefreshWorktrees();
@@ -1930,7 +1940,12 @@ export function NewMakerDraftRoute() {
             ))}
           <main
             data-testid="create-agent-main"
-            className="relative flex h-full min-w-0 w-full flex-col items-center justify-start px-8 pt-[calc(max(96px,28vh)_+_46px_-_var(--content-header-h,46px))]"
+            className={cn(
+              'relative flex h-full min-w-0 w-full flex-col items-center justify-start',
+              isDraftNarrow
+                ? 'px-4 pt-[calc(max(64px,18vh)_+_32px_-_var(--content-header-h,46px))]'
+                : 'px-8 pt-[calc(max(96px,28vh)_+_46px_-_var(--content-header-h,46px))]',
+            )}
           >
             <div
               className="relative flex w-full max-w-[800px] flex-col items-start"
@@ -1940,7 +1955,14 @@ export function NewMakerDraftRoute() {
                   2026-07-19 修复:488cb33 对齐 Figma 重排时把 WorktreeChipsRow 注入删丢,
                   branch/worktree 入口消失(wt* 状态与 send 管线一直健在),以 advancedOnly
                   变体接回。 */}
-              <div className="absolute right-0 top-[22px] z-10 inline-flex items-center gap-2">
+              <div
+                className={cn(
+                  'inline-flex items-center gap-2',
+                  isDraftNarrow
+                    ? 'static order-2 mb-3 w-full flex-wrap justify-start'
+                    : 'absolute right-0 top-[22px] z-10',
+                )}
+              >
                 <FolderPickerPopover
                   open={folderPickerOpen}
                   onOpenChange={handleFolderPickerOpenChange}
@@ -1997,10 +2019,10 @@ export function NewMakerDraftRoute() {
               <ThemeBrandLockup
                 theme={activeColorTheme}
                 testId="create-agent-brand-lockup"
-                className="mb-[15px]"
+                className={cn('mb-[15px]', isDraftNarrow && 'order-1')}
               />
 
-              <div className="flex w-full flex-col items-start gap-0">
+              <div className={cn('flex w-full flex-col items-start gap-0', isDraftNarrow && 'order-3')}>
                 {/* device-link:为远程设备项目新建对话时的明显标识。让用户清楚这条对话会建在
                     被控设备上、属于那台机器的项目,而不是本机。 */}
                 {isDeviceLinkDraft && (
@@ -2063,6 +2085,19 @@ export function NewMakerDraftRoute() {
                         disabled={wtCreating}
                       />
                     }
+                    compactMiddleToolbarSlot={
+                      <VendorSegmentedSwitcher
+                        value={draft.vendor}
+                        onChange={handleVendorChange}
+                        width={72}
+                        dense
+                        iconOnly
+                        visualVariant="create-agent"
+                        className="shrink-0"
+                        disabled={wtCreating}
+                      />
+                    }
+                    narrowToolbar={isDraftToolbarNarrow}
                     paletteMaxHeight={240}
                     attachmentState={attachmentState}
                     draftKey={NEW_MAKER_DRAFT_KEY}
@@ -2083,30 +2118,38 @@ export function NewMakerDraftRoute() {
                     }
                   />
                 </div>
-                <div data-testid="create-agent-quick-starts" className="mt-[42px] w-full">
+                <div data-testid="create-agent-quick-starts" className="mt-10 w-full">
                   <div className="mb-4 px-0.5">
-                    <div className="text-[12px] font-medium leading-[14px] text-[var(--text-secondary)]">
+                    <div className="text-[14px] font-medium leading-5 text-[var(--text-secondary)]">
                       {t('newChat.createAgent.quickStart')}
                     </div>
                   </div>
-                  <div className="grid grid-cols-4 gap-3">
+                  <div
+                    className={cn(
+                      'grid w-full gap-3',
+                      isDraftNarrow ? 'grid-cols-1' : isDraftMedium ? 'grid-cols-2' : 'grid-cols-4',
+                    )}
+                  >
                     {createAgentQuickStarts.map(({ key, labelKey, icon: Icon }) => (
                       <button
                         key={key}
                         type="button"
                         onClick={() => handleQuickStart(labelKey)}
-                        className="flex h-20 items-start gap-[7px] rounded-[6px] border border-[var(--create-agent-quick-card-border)] bg-[var(--create-agent-quick-card-bg)] p-[7px] text-left text-[var(--create-agent-quick-card-text)] transition-colors hover:bg-[var(--create-agent-quick-card-bg-hover)]"
+                        className={cn(
+                          'group rounded-xl border border-[var(--create-agent-quick-card-border)] bg-[var(--create-agent-quick-card-bg)] text-left text-[var(--create-agent-quick-card-text)] transition-colors hover:bg-[var(--create-agent-quick-card-bg-hover)]',
+                          isDraftNarrow
+                            ? 'flex min-h-[84px] items-center gap-3 p-3'
+                            : 'flex min-h-[112px] flex-col items-start gap-3 p-4',
+                        )}
                       >
-                        <span className="grid h-[30px] w-[30px] shrink-0 place-items-center rounded-full bg-[var(--create-agent-quick-card-icon-bg)]">
+                        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[var(--create-agent-quick-card-icon-bg)]">
                           <Icon
-                            size={15}
+                            size={16}
                             strokeWidth={2}
                             className="text-[var(--create-agent-quick-card-icon)]"
                           />
                         </span>
-                        {/* min-h 对齐左侧 30px 图标圆:单行/两行文字都相对图标垂直居中,
-                            卡片整体仍 items-start 顶部对齐。 */}
-                        <span className="flex min-h-[30px] min-w-0 items-center text-[11px] font-semibold leading-[14px]">
+                        <span className="flex min-w-0 min-h-10 items-center text-[14px] font-medium leading-5">
                           {t(labelKey)}
                         </span>
                       </button>

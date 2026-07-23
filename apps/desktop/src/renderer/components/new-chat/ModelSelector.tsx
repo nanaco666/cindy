@@ -275,6 +275,10 @@ interface ModelSelectorProps {
   disabled?: boolean;
   /** 窄容器下把 trigger 字号/高度各压一档,默认 false。 */
   dense?: boolean;
+  /** 窄态工具栏的简略触发器:隐藏 effort / Fast 次要信息并限制模型名宽度。 */
+  compactToolbar?: boolean;
+  /** 极窄工具栏进一步隐藏模型文字，只保留模型图标和下拉箭头。 */
+  ultraCompactToolbar?: boolean;
   /** Trigger presentation: toolbar keeps the compact chat pill; field renders a settings input-like control. */
   triggerVariant?: 'toolbar' | 'field';
   /** CREATE AGENT 首页按 Figma 185:2724 使用独立私有 token。 */
@@ -498,7 +502,6 @@ export function ModelSelectorContent({
     };
     document.addEventListener('scroll', onAnyScroll, true);
     return () => document.removeEventListener('scroll', onAnyScroll, true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editing]);
 
   useEffect(
@@ -1297,6 +1300,8 @@ export function ModelSelector({
   switching = false,
   disabled = false,
   dense = false,
+  compactToolbar = false,
+  ultraCompactToolbar = false,
   triggerVariant = 'toolbar',
   visualVariant = 'default',
   useMorphPopover = false,
@@ -1458,6 +1463,8 @@ export function ModelSelector({
   const isBudget = modelId.startsWith('codex/');
   const isFieldTrigger = triggerVariant === 'field';
   const isCreateAgentVariant = visualVariant === 'create-agent';
+  const isCompactToolbar = compactToolbar && isCreateAgentVariant;
+  const isUltraCompactToolbar = ultraCompactToolbar && isCompactToolbar;
   const morphEnabled = useMorphPopover && !isFieldTrigger && !isCreateAgentVariant;
   const budgetGradientStyle: CSSProperties | undefined = isBudget
     ? {
@@ -1475,6 +1482,7 @@ export function ModelSelector({
           onClick={morphEnabled ? () => setOpen((prev) => (disabled ? false : !prev)) : undefined}
           aria-expanded={open && !disabled}
           aria-haspopup="listbox"
+          title={displayLabel}
           className={cn(
             'flex min-w-0 max-w-full items-center gap-1 transition-colors',
             isFieldTrigger
@@ -1488,6 +1496,11 @@ export function ModelSelector({
                   isCreateAgentVariant
                     ? [
                         'h-[30px] min-w-[72px] max-w-full shrink overflow-hidden border border-[var(--create-agent-control-border)]',
+                        isUltraCompactToolbar
+                          ? 'w-[64px]'
+                          : isCompactToolbar
+                            ? 'w-[148px]'
+                            : undefined,
                         'bg-[var(--create-agent-control-bg)] px-2 text-[var(--create-agent-control-text)]',
                         'hover:bg-[var(--create-agent-control-bg-hover)] active:bg-[var(--create-agent-control-bg-pressed)]',
                         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--create-agent-focus-ring)]',
@@ -1526,7 +1539,11 @@ export function ModelSelector({
                     ? 'text-[var(--create-agent-control-text)]'
                     : 'text-[var(--text-primary)]',
                   isCreateAgentVariant
-                    ? 'truncate'
+                    ? isUltraCompactToolbar
+                      ? 'hidden'
+                      : isCompactToolbar
+                        ? 'max-w-[108px] truncate'
+                        : 'truncate'
                     : cn('truncate', isFieldTrigger ? 'max-w-[260px]' : ''),
                   isCreateAgentVariant ? 'text-[12px]' : dense ? 'text-[12.5px]' : 'text-[13px]',
                 )}
@@ -1550,7 +1567,11 @@ export function ModelSelector({
                 className={cn(
                   'min-w-0 font-normal text-[var(--text-primary)]',
                   isCreateAgentVariant
-                    ? 'truncate'
+                    ? isUltraCompactToolbar
+                      ? 'hidden'
+                      : isCompactToolbar
+                        ? 'max-w-[108px] truncate'
+                        : 'truncate'
                     : isFieldTrigger
                       ? 'max-w-[260px] truncate'
                       : 'truncate',
@@ -1594,7 +1615,11 @@ export function ModelSelector({
                 className={cn(
                   'min-w-0 font-normal',
                   isCreateAgentVariant
-                    ? 'truncate'
+                    ? isUltraCompactToolbar
+                      ? 'hidden'
+                      : isCompactToolbar
+                        ? 'max-w-[108px] truncate'
+                        : 'truncate'
                     : isFieldTrigger
                       ? 'max-w-[260px] truncate'
                       : 'truncate',
@@ -1608,7 +1633,7 @@ export function ModelSelector({
               >
                 {displayLabel}
               </span>
-              {effortLabel && (
+              {effortLabel && !isCompactToolbar && (
                 <>
                   <span
                     className={cn(
@@ -1648,7 +1673,7 @@ export function ModelSelector({
                   </span>
                 </>
               )}
-              {triggerFastOn && (
+              {triggerFastOn && !isCompactToolbar && (
                 <Zap
                   size={isCreateAgentVariant ? 11 : dense ? 12 : 13}
                   className={cn(

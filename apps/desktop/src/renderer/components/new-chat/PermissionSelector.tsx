@@ -31,6 +31,8 @@ interface PermissionSelectorProps {
   disabled?: boolean;
   /** 窄容器(如 doc rail)下把 trigger 字号/图标各压一档,默认 false。 */
   dense?: boolean;
+  /** 极窄新建对话工具栏只显示当前权限图标，文字通过 tooltip / aria-label 提供。 */
+  iconOnly?: boolean;
   /** CREATE AGENT 首页按 Figma 185:2724 使用独立私有 token。 */
   visualVariant?: 'default' | 'create-agent';
   /** 仅普通 composer 显式开启 chip → panel 容器形变；其它消费方维持 Radix Popover。 */
@@ -78,6 +80,7 @@ export function PermissionSelector({
   deviceId,
   disabled = false,
   dense = false,
+  iconOnly = false,
   visualVariant = 'default',
   useMorphPopover = false,
 }: PermissionSelectorProps) {
@@ -108,6 +111,7 @@ export function PermissionSelector({
   const triggerLabel = labelOf(current, effectiveMode);
   const triggerDescription = descriptionOf(current, effectiveMode);
   const isCreateAgentVariant = visualVariant === 'create-agent';
+  const isIconOnly = iconOnly && isCreateAgentVariant;
   const morphEnabled = useMorphPopover && !isCreateAgentVariant;
 
   /** trigger tone 文字色(chip 与 ghost 共用,sanctioned 蓝/橙仅文字层) */
@@ -123,25 +127,26 @@ export function PermissionSelector({
         size={isCreateAgentVariant ? 11 : dense ? 13 : 14}
         className="shrink-0 text-current"
       />
-      <span
-        className={cn(
-          // min-w-0 让 span 能在 flex 容器里跌破内容宽度,truncate 才能在窄宽下出现 "完..."
-          'min-w-0 font-normal text-current',
-          'truncate',
-          isCreateAgentVariant ? 'text-[12px]' : dense ? 'text-[12.5px]' : 'text-[13px]',
-        )}
-      >
-        {triggerLabel}
-      </span>
-      <div className="pt-[2px]">
-        <ChevronDown
-          size={isCreateAgentVariant ? 8 : dense ? 13 : 14}
+      {!isIconOnly && (
+        <span
           className={cn(
-            'shrink-0',
-            'text-current',
+            // min-w-0 让 span 能在 flex 容器里跌破内容宽度,truncate 才能在窄宽下出现 "完..."
+            'min-w-0 font-normal text-current',
+            'truncate',
+            isCreateAgentVariant ? 'text-[12px]' : dense ? 'text-[12.5px]' : 'text-[13px]',
           )}
-        />
-      </div>
+        >
+          {triggerLabel}
+        </span>
+      )}
+      {!isIconOnly && (
+        <div className="pt-[2px]">
+          <ChevronDown
+            size={isCreateAgentVariant ? 8 : dense ? 13 : 14}
+            className="shrink-0 text-current"
+          />
+        </div>
+      )}
     </>
   );
 
@@ -161,8 +166,12 @@ export function PermissionSelector({
           'flex min-w-0 items-center gap-1 overflow-hidden rounded-full transition-colors',
           isCreateAgentVariant
             ? [
-                'h-[30px] min-w-[52px] max-w-full shrink border border-[var(--create-agent-control-border)]',
-                'bg-[var(--create-agent-control-bg)] py-0 pl-2.5 pr-2 text-[var(--create-agent-control-text)]',
+                isIconOnly
+                  ? 'h-[30px] w-[34px] min-w-[34px] justify-center px-0'
+                  : 'h-[30px] min-w-[52px] max-w-full shrink',
+                'border border-[var(--create-agent-control-border)]',
+                'bg-[var(--create-agent-control-bg)] py-0 text-[var(--create-agent-control-text)]',
+                !isIconOnly && 'pl-2.5 pr-2',
                 'hover:bg-[var(--create-agent-control-bg-hover)] active:bg-[var(--create-agent-control-bg-pressed)]',
                 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--create-agent-focus-ring)]',
               ]

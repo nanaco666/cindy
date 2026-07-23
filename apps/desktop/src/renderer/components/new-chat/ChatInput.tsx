@@ -488,6 +488,8 @@ interface ChatInputProps {
   onRememberedEffortChange?: (modelId: string, effort: Effort) => void;
   /** Enables wrapping for narrow split-pane layouts such as Orca. Defaults to false. */
   compactToolbar?: boolean;
+  /** 窄态新建对话时使用紧凑单行工具栏，保留所有操作入口。 */
+  narrowToolbar?: boolean;
   /**
    * 工具行采用更紧凑的视觉密度 (字号 -1px, 协同 toggle 只剩 logo)。
    * 用于 doc rail 这种宽度受限的容器,与 compactToolbar (wrap 兜底) 正交:
@@ -498,6 +500,7 @@ interface ChatInputProps {
   denseToolbar?: boolean;
   visualVariant?: 'default' | 'create-agent';
   middleToolbarSlot?: ReactNode;
+  compactMiddleToolbarSlot?: ReactNode;
   /**
    * Slot rendered INSIDE the input card, above the textarea, sharing the same
    * rounded border / focus-within highlight. Used by Orca mode for the
@@ -992,9 +995,11 @@ export function ChatInput({
   rememberedEffortByModel,
   onRememberedEffortChange,
   compactToolbar = false,
+  narrowToolbar = false,
   denseToolbar = false,
   visualVariant = 'default',
   middleToolbarSlot,
+  compactMiddleToolbarSlot,
   topSlot,
   collaboration,
 }: ChatInputProps) {
@@ -4530,6 +4535,13 @@ export function ChatInput({
   const showTopSlot = !!topSlot;
   const showFusedWrapper = showQueuePanel || showTopSlot;
   const isCreateAgentVariant = visualVariant === 'create-agent';
+  const useNarrowToolbar =
+    isCreateAgentVariant &&
+    (narrowToolbar || (toolbarWidth != null && toolbarWidth < 600));
+  const useCompactMiddleToolbar =
+    isCreateAgentVariant && (toolbarWidth == null ? narrowToolbar : toolbarWidth < 600);
+  const useUltraCompactToolbar =
+    useNarrowToolbar && (toolbarWidth == null || toolbarWidth < 420);
 
   return (
     <div className="relative flex w-full flex-col items-center gap-4" data-chat-input-root>
@@ -4896,20 +4908,24 @@ export function ChatInput({
                 // "在元素上起选",从相邻可选区起拖再划入时按钮文字仍会被刷蓝
                 // (同 sortable.css 侧栏行修过的 selection bleed),容器级禁选才挡得住。
                 'mt-[2px] flex select-none items-center',
-                effectiveCompactToolbar
-                  ? isCreateAgentVariant
-                    ? 'min-w-0 flex-nowrap justify-between gap-2 overflow-hidden'
-                    : 'min-w-0 flex-nowrap justify-between gap-1 overflow-hidden'
-                  : 'justify-between',
+                useNarrowToolbar
+                  ? 'min-w-0 flex-nowrap justify-between gap-2 overflow-hidden'
+                  : effectiveCompactToolbar
+                    ? isCreateAgentVariant
+                      ? 'min-w-0 flex-nowrap justify-between gap-2 overflow-hidden'
+                      : 'min-w-0 flex-nowrap justify-between gap-1 overflow-hidden'
+                    : 'justify-between',
               )}
             >
               <div
                 className={cn(
-                  effectiveCompactToolbar
-                    ? isCreateAgentVariant
-                      ? 'flex min-w-0 shrink items-center gap-2'
-                      : 'flex min-w-0 shrink items-center gap-1'
-                    : 'flex items-center gap-2',
+                  useNarrowToolbar
+                    ? 'flex min-w-0 shrink-0 items-center gap-1'
+                    : effectiveCompactToolbar
+                      ? isCreateAgentVariant
+                        ? 'flex min-w-0 shrink items-center gap-2'
+                        : 'flex min-w-0 shrink items-center gap-1'
+                      : 'flex items-center gap-2',
                   // create-agent 按 Figma 使用 hug-content pills;默认会话页仍保留左侧优先压缩。
                 )}
               >
@@ -4960,22 +4976,29 @@ export function ChatInput({
                   deviceId={deviceLinkDeviceId}
                   disabled={disabled}
                   dense={effectiveDenseToolbar}
+                  iconOnly={useUltraCompactToolbar}
                   visualVariant={isCreateAgentVariant ? 'create-agent' : 'default'}
                   useMorphPopover={!isCreateAgentVariant}
                 />
+                {useNarrowToolbar && !useCompactMiddleToolbar && <>{middleToolbarSlot}</>}
               </div>
               <div
                 className={cn(
-                  effectiveCompactToolbar
-                    ? isCreateAgentVariant
-                      ? 'flex min-w-0 shrink items-center justify-end gap-2'
-                      : 'flex min-w-0 shrink items-center justify-end gap-1'
-                    : 'flex items-center gap-2',
+                  useNarrowToolbar
+                    ? 'flex min-w-0 shrink items-center justify-end gap-1'
+                    : effectiveCompactToolbar
+                      ? isCreateAgentVariant
+                        ? 'flex min-w-0 shrink items-center justify-end gap-2'
+                        : 'flex min-w-0 shrink items-center justify-end gap-1'
+                      : 'flex items-center gap-2',
                   // compact 模式下所有输入框工具行保持单行;权限 / 模型 pill 内部截断承压,
                   // vendor tab、圆形操作按钮与协同图标按钮保持固定宽,避免控件重叠或掉到第二行。
                 )}
               >
-                {middleToolbarSlot}
+                {(!useNarrowToolbar || useCompactMiddleToolbar) &&
+                  (useCompactMiddleToolbar
+                    ? compactMiddleToolbarSlot ?? <>{middleToolbarSlot}</>
+                    : <>{middleToolbarSlot}</>)}
                 {collaboration && (
                   <CollaborationModeToggle
                     enabled={collaboration.enabled}
@@ -4987,58 +5010,69 @@ export function ChatInput({
                     iconOnly={effectiveDenseToolbar}
                   />
                 )}
-                <ModelSelector
-                  modelId={activeModel}
-                  effort={activeEffort}
-                  onModelChange={handleModelChange}
-                  onEffortChange={handleEffortChange}
-                  // 意图期显示目标引擎下解析出的 fast(apply 时才落库),无意图走真实态。
-                  fastMode={agentSwitchIntent?.fastMode ?? fastMode}
-                  onFastModeChange={handleFastModeChange}
-                  modelMemory={modelMemory}
-                  vendorKey={vendorKey}
-                  // session-agent-switch:本机已建会话提供显式两步引擎切换(列表顶部
-                  // Claude/Codex 分段,先选 Agent 再选模型)。草稿(无 sessionId)与
-                  // device-link / SSH 远程会话不传(v1 不支持切换)。
-                  agentSwitch={
-                    sessionId && vendorKey && !deviceLinkDeviceId && !remoteHostId
-                      ? {
-                          currentVendor: vendorKey,
-                          confirmBrowseSwitch: confirmAgentBrowseSwitch,
-                          onSwitch: performAgentSwitch,
-                        }
-                      : undefined
+                <div className={useNarrowToolbar ? 'min-w-0 shrink' : undefined}>
+                  <ModelSelector
+                    modelId={activeModel}
+                    effort={activeEffort}
+                    onModelChange={handleModelChange}
+                    onEffortChange={handleEffortChange}
+                    // 意图期显示目标引擎下解析出的 fast(apply 时才落库),无意图走真实态。
+                    fastMode={agentSwitchIntent?.fastMode ?? fastMode}
+                    onFastModeChange={handleFastModeChange}
+                    modelMemory={modelMemory}
+                    vendorKey={vendorKey}
+                    // session-agent-switch:本机已建会话提供显式两步引擎切换(列表顶部
+                    // Claude/Codex 分段,先选 Agent 再选模型)。草稿(无 sessionId)与
+                    // device-link / SSH 远程会话不传(v1 不支持切换)。
+                    agentSwitch={
+                      sessionId && vendorKey && !deviceLinkDeviceId && !remoteHostId
+                        ? {
+                            currentVendor: vendorKey,
+                            confirmBrowseSwitch: confirmAgentBrowseSwitch,
+                            onSwitch: performAgentSwitch,
+                          }
+                        : undefined
+                    }
+                    deviceId={deviceLinkDeviceId}
+                    // SSH 远程会话隐藏订阅直连模型(chatgpt/ / xai/):bridge 只挂在本地 compat-proxy,
+                    // 远程模式走 remoteEndpoint 不经翻译,选了必失败。
+                    excludeSubscriptionDirect={!!remoteHostId}
+                    dense={effectiveDenseToolbar}
+                    // 意图期显示用户在浏览态选中的来源(null = flat 退化行,跟随默认路由)。
+                    currentProviderId={activeProviderId}
+                    sourceDisconnected={selectedSourceDisconnected}
+                    onProviderChange={handleProviderChange}
+                    onNavigateToProviders={handleNavigateToProviders}
+                    switching={remoteSwitchInFlight}
+                    disabled={disabled}
+                    visualVariant={isCreateAgentVariant ? 'create-agent' : 'default'}
+                    compactToolbar={useNarrowToolbar}
+                    ultraCompactToolbar={useUltraCompactToolbar}
+                    useMorphPopover={!isCreateAgentVariant}
+                  />
+                </div>
+                <div
+                  className={
+                    useNarrowToolbar
+                      ? 'flex shrink-0 items-center gap-1'
+                      : 'flex items-center gap-2'
                   }
-                  deviceId={deviceLinkDeviceId}
-                  // SSH 远程会话隐藏订阅直连模型(chatgpt/ / xai/):bridge 只挂在本地 compat-proxy,
-                  // 远程模式走 remoteEndpoint 不经翻译,选了必失败。
-                  excludeSubscriptionDirect={!!remoteHostId}
-                  dense={effectiveDenseToolbar}
-                  // 意图期显示用户在浏览态选中的来源(null = flat 退化行,跟随默认路由)。
-                  currentProviderId={activeProviderId}
-                  sourceDisconnected={selectedSourceDisconnected}
-                  onProviderChange={handleProviderChange}
-                  onNavigateToProviders={handleNavigateToProviders}
-                  switching={remoteSwitchInFlight}
-                  disabled={disabled}
-                  visualVariant={isCreateAgentVariant ? 'create-agent' : 'default'}
-                  useMorphPopover={!isCreateAgentVariant}
-                />
-                <VoiceInputButton
-                  state={voiceInput.state}
-                  disabled={!!disabled || !editor}
-                  shortcutLabel={voiceInputShortcutLabel}
-                  onStart={handleVoiceInputStart}
-                  onStop={handleVoiceInputPlainStop}
-                  onStopAndSend={handleClickSend}
-                  sendTargetRef={sendButtonRef}
-                  canReleaseToSend={canReleaseVoiceToSend}
-                  releaseToSendActive={voiceReleaseToSendActive}
-                  onReleaseToSendChange={setVoiceReleaseToSendActive}
-                  visualVariant={isCreateAgentVariant ? 'create-agent' : 'default'}
-                  className={isCreateAgentVariant ? 'ml-[7px]' : undefined}
-                />
-                {/* Send / Stop 双槽语义:
+                >
+                  <VoiceInputButton
+                    state={voiceInput.state}
+                    disabled={!!disabled || !editor}
+                    shortcutLabel={voiceInputShortcutLabel}
+                    onStart={handleVoiceInputStart}
+                    onStop={handleVoiceInputPlainStop}
+                    onStopAndSend={handleClickSend}
+                    sendTargetRef={sendButtonRef}
+                    canReleaseToSend={canReleaseVoiceToSend}
+                    releaseToSendActive={voiceReleaseToSendActive}
+                    onReleaseToSendChange={setVoiceReleaseToSendActive}
+                    visualVariant={isCreateAgentVariant ? 'create-agent' : 'default'}
+                    className={isCreateAgentVariant && !useNarrowToolbar ? 'ml-[7px]' : undefined}
+                  />
+                  {/* Send / Stop 双槽语义:
                  - 主槽 (最右, 永远占位, sendButtonRef 钉在这里):
                      · 发送瞬间 (inflight=true) → Stop  (Send 原位被替换, 不抖左侧 layout)
                      · streaming idle (无内容 / 无 voice) → Stop  (取代 Send 占主槽)
@@ -5049,74 +5083,77 @@ export function ChatInput({
                  下一条要送入 PendingQueue 时, Send 回到主槽, Stop 退到次槽 (Send 在
                  Stop 右边). dispatchSendInFlight 锁次槽, 避免 send 瞬间主槽
                  Send→Stop 切换的同帧再多出一个 Stop 把模型选择推一下又复位的 bug. */}
-                {(() => {
-                  const mainSlotIsStop =
-                    showStopButton &&
-                    (sendDispatchInFlight || (!canSend && !voiceInput.isListening));
-                  const showSecondaryStop =
-                    showStopButton && (canSend || voiceInput.isListening) && !sendDispatchInFlight;
-                  return (
-                    <>
-                      {showSecondaryStop && (
-                        <SendButton
-                          disabled={false}
-                          onClick={onStop ?? (() => {})}
-                          isStreaming
-                          visualVariant={isCreateAgentVariant ? 'create-agent' : 'default'}
-                        />
-                      )}
-                      <span ref={sendButtonRef} className="inline-flex rounded-full">
-                        {mainSlotIsStop ? (
+                  {(() => {
+                    const mainSlotIsStop =
+                      showStopButton &&
+                      (sendDispatchInFlight || (!canSend && !voiceInput.isListening));
+                    const showSecondaryStop =
+                      showStopButton &&
+                      (canSend || voiceInput.isListening) &&
+                      !sendDispatchInFlight;
+                    return (
+                      <>
+                        {showSecondaryStop && (
                           <SendButton
                             disabled={false}
                             onClick={onStop ?? (() => {})}
                             isStreaming
                             visualVariant={isCreateAgentVariant ? 'create-agent' : 'default'}
                           />
-                        ) : (
-                          <Tip
-                            text={
-                              voiceReleaseToSendActive
-                                ? t('newChat.chatInput.voiceInput.releaseToSend')
-                                : voiceInput.isListening && !sendButtonDisabled
-                                  ? `${t('newChat.chatInput.voiceInput.finishAndSend')} · Enter`
-                                  : showStopButton
-                                    ? t('newChat.sendButton.queueTooltip', {
-                                        shortcut: steerShortcutLabel,
-                                      })
-                                    : !sendButtonDisabled
-                                      ? `${t('newChat.sendButton.send')} · Enter`
-                                      : selectedSourceDisconnected
-                                        ? t('newChat.sourceDisconnected.sendBlocked')
-                                        : null
-                            }
-                            side="top"
-                            forceOpen={voiceReleaseToSendActive}
-                          >
-                            {/* Tip 的 trigger 放在稳定 wrapper 上，而不是 button 本身。
+                        )}
+                        <span ref={sendButtonRef} className="inline-flex rounded-full">
+                          {mainSlotIsStop ? (
+                            <SendButton
+                              disabled={false}
+                              onClick={onStop ?? (() => {})}
+                              isStreaming
+                              visualVariant={isCreateAgentVariant ? 'create-agent' : 'default'}
+                            />
+                          ) : (
+                            <Tip
+                              text={
+                                voiceReleaseToSendActive
+                                  ? t('newChat.chatInput.voiceInput.releaseToSend')
+                                  : voiceInput.isListening && !sendButtonDisabled
+                                    ? `${t('newChat.chatInput.voiceInput.finishAndSend')} · Enter`
+                                    : showStopButton
+                                      ? t('newChat.sendButton.queueTooltip', {
+                                          shortcut: steerShortcutLabel,
+                                        })
+                                      : !sendButtonDisabled
+                                        ? `${t('newChat.sendButton.send')} · Enter`
+                                        : selectedSourceDisconnected
+                                          ? t('newChat.sourceDisconnected.sendBlocked')
+                                          : null
+                              }
+                              side="top"
+                              forceOpen={voiceReleaseToSendActive}
+                            >
+                              {/* Tip 的 trigger 放在稳定 wrapper 上，而不是 button 本身。
                             disabled button 不会可靠地产生 hover/focus 事件；曾经因此让
                             running 时“排队/快捷键插话”提示完全不出现。 */}
-                            <span className="inline-flex rounded-full">
-                              <SendButton
-                                disabled={sendButtonDisabled}
-                                highlighted={voiceReleaseToSendActive}
-                                visualVariant={isCreateAgentVariant ? 'create-agent' : 'default'}
-                                ariaLabel={
-                                  showStopButton
-                                    ? t('newChat.sendButton.queue')
-                                    : t('newChat.sendButton.send')
-                                }
-                                onClick={() => {
-                                  void handleClickSend();
-                                }}
-                              />
-                            </span>
-                          </Tip>
-                        )}
-                      </span>
-                    </>
-                  );
-                })()}
+                              <span className="inline-flex rounded-full">
+                                <SendButton
+                                  disabled={sendButtonDisabled}
+                                  highlighted={voiceReleaseToSendActive}
+                                  visualVariant={isCreateAgentVariant ? 'create-agent' : 'default'}
+                                  ariaLabel={
+                                    showStopButton
+                                      ? t('newChat.sendButton.queue')
+                                      : t('newChat.sendButton.send')
+                                  }
+                                  onClick={() => {
+                                    void handleClickSend();
+                                  }}
+                                />
+                              </span>
+                            </Tip>
+                          )}
+                        </span>
+                      </>
+                    );
+                  })()}
+                </div>
               </div>
             </div>
           </div>
