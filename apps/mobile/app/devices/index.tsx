@@ -915,6 +915,11 @@ export default function HomeScreen() {
     const fields = Object.keys(patch);
     // 写序登记:delete 终态取代全字段(pending 重命名/置顶让位);其余按 patch 字段。
     const write = sessionMetaWriteGuard.begin(session.id, writeGuardFields(patch));
+    // 行将被乐观移出(归档/删除)或重排(置顶):下一次布局提交走统一收展动画,
+    // 兄弟行平滑补位,不瞬间跳变(§14.4;title 等不改布局的字段不触发)。
+    if (patch.status !== undefined || patch.pinnedAt !== undefined) {
+      configureCollapseAnimation();
+    }
     remoteSessionStore.applySessionPatch(shardId, session.id, patch);
     // 在途写登记:settle 前被控端广播的同字段 push(旧写回流)会被
     // sessionPendingWrites.filterPatch 遮蔽,不得滚回本机乐观意图(review P2)。
@@ -965,6 +970,8 @@ export default function HomeScreen() {
             .find((s) => s.deviceLinkDeviceId === shardId)?.deviceLinkDeviceName
             ?? session.deviceLinkDeviceName
             ?? shardId;
+          // 失败回滚插回行,同样走收展动画,与乐观移出对称。
+          configureCollapseAnimation();
           remoteSessionStore.upsertDeviceSession(shardId, shardName, session);
           // 行被乐观移出期间,并行道已落地的无交集写(如重命名成功)对账/push 都是
           // no-op,上面的旧快照插回会把它们的结果吞掉——reseed 向被控端收敛(review

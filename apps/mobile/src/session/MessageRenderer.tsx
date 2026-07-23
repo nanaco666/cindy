@@ -60,6 +60,9 @@ import {
   type ChatQuote,
 } from '@cindy/maker-shared/chat-quotes';
 import { QuoteCapsule } from '@/session/QuoteCapsule';
+import { StreamingStatusText } from '@/session/StreamingStatusText';
+import { useReduceMotionEnabled } from '@/hooks/useReduceMotion';
+import { motionDuration, motionEasing } from '@/theme/tokens';
 import {
   SELECTION_QUOTE_MENU_LABEL,
   SelectionQuoteContext,
@@ -1311,6 +1314,8 @@ function SyncingMessages() {
   );
 }
 
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+
 function MessageListActionButton({
   accessibilityLabel,
   children,
@@ -1328,22 +1333,53 @@ function MessageListActionButton({
 }) {
   const styles = useThemedStyles(makeStyles);
   const interactionDisabled = disabled || !onPress;
+  // mount 入场:150ms 淡入 + 0.92→1 轻缩放(浮标条件挂载,此前瞬间硬现)。
+  // 单 Value 同驱 opacity/scale,native driver 一次性动画;reduce-motion
+  // (含 null 未知态)从 1 起步不播。消失走 unmount 直接卸,不做 exit。
+  const reduceMotionEnabled = useReduceMotionEnabled();
+  const appear = useRef(new Animated.Value(reduceMotionEnabled === false ? 0 : 1)).current;
+  useEffect(() => {
+    if (reduceMotionEnabled !== false) {
+      appear.setValue(1);
+      return;
+    }
+    Animated.timing(appear, {
+      duration: motionDuration.fast,
+      easing: Easing.bezier(...motionEasing.out),
+      isInteraction: false,
+      toValue: 1,
+      useNativeDriver: true,
+    }).start();
+    // 仅 mount 播一次:reduceMotionEnabled 运行中翻转不重放入场。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const appearStyle = {
+    opacity: appear,
+    transform: [{ scale: appear.interpolate({ inputRange: [0, 1], outputRange: [0.92, 1] }) }],
+  };
+  // pressed 用受控 state 而非函数型 style:createAnimatedComponent 只解析
+  // 静态 props 里的 AnimatedNode,函数型 style 的返回值不会被解析,
+  // Animated.Value 会以原始对象漏进底层 View 的 style(非法 prop)。
+  const [pressed, setPressed] = useState(false);
   return (
-    <Pressable
+    <AnimatedPressable
       accessibilityLabel={accessibilityLabel}
       accessibilityRole="button"
       accessibilityState={{ disabled: interactionDisabled }}
       disabled={interactionDisabled}
       onPress={interactionDisabled ? undefined : onPress}
-      style={({ pressed }) => [
+      onPressIn={() => setPressed(true)}
+      onPressOut={() => setPressed(false)}
+      style={[
         style,
-        pressed && styles.pressed,
+        appearStyle,
+        pressed && !interactionDisabled && styles.pressed,
         interactionDisabled && styles.disabled,
       ]}
       testID={testID}
     >
       {children}
-    </Pressable>
+    </AnimatedPressable>
   );
 }
 
@@ -1578,13 +1614,13 @@ function MessageBubble({
     </Text>
   ) : null;
   const streamingStatus = isStreamingAssistant ? (
-    <Text
+    <StreamingStatusText
       accessibilityLabel="消息正在生成"
       style={styles.streamingStatus}
       testID="message.streamingStatus"
     >
       生成中
-    </Text>
+    </StreamingStatusText>
   ) : null;
   // 附件条对齐桌面版:渲染在气泡外、文字气泡上方(用户消息右对齐);
   // 纯图片消息(无正文)不再渲染空气泡背景。

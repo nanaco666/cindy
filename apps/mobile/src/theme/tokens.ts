@@ -497,3 +497,33 @@ export const loginSizes = {
   methodRowRadius: 60,
   panelSocialGap: 40,
 } as const;
+
+/**
+ * Motion token(全局动效档位,ms)——与桌面端 DESIGN.md §14.4 的 --motion-* 同名
+ * 同值,双端同构。新增动效一律引用这些档位,不要在组件里硬编码时长。
+ */
+export const motionDuration = {
+  /** hover / 即时反馈、轻浮层退场 */
+  instant: 80,
+  /** 颜色 / 透明度状态切换、轻浮层入场 */
+  fast: 150,
+  /** 尺寸变化:展开折叠、面板收展 */
+  base: 200,
+  /** 重浮层(弹窗 / sheet)入场 */
+  enter: 250,
+  /** 重浮层(弹窗 / sheet)退场 */
+  exit: 150,
+} as const;
+
+/**
+ * Motion 缓动曲线控制点(cubic-bezier 四元组,与桌面同值)。RN 侧消费:
+ * `Easing.bezier(...motionEasing.out)`。本文件不依赖 react-native,故只存数据。
+ */
+export const motionEasing = {
+  /** 入场 / 展开 */
+  out: [0.16, 1, 0.3, 1],
+  /** 退场 */
+  in: [0.4, 0, 1, 1],
+  /** 位置 / 尺寸插值 */
+  move: [0.4, 0, 0.2, 1],
+} as const;
