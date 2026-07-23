@@ -26,6 +26,8 @@
   ⬇️ <a href="https://cindy.com.cn/#download">国内版下载</a> | <a href="https://cindy.app/#download">海外版下载</a>
 </p>
 
+> 手机版请用手机浏览器打开对应官网，进入下载区域即可看到手机版下载按钮。
+
 Cindy 运行在你自己的电脑上，使用你本地的文件和已登录的应用，底层由
 Claude Code 与 Codex 作为 agent 引擎驱动。
 她能操作浏览器、电脑和手机，以「多 agent 团队」协同工作，并支持从 IM 和定时任务派活。

@@ -26,6 +26,8 @@
   ⬇️ <a href="https://cindy.com.cn/#download">China download</a> | <a href="https://cindy.app/#download">Global download</a>
 </p>
 
+> On mobile, open the corresponding site in your phone browser to see the mobile download button.
+
 Cindy runs locally on your own machine, uses your files and logged-in apps, and
 is powered by Claude Code and Codex as
 its underlying agent engines. It can drive your browser, computer, and phone,
