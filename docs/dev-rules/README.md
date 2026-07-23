@@ -39,5 +39,15 @@
 - [`engineering-conventions.md`](engineering-conventions.md)：统一日志、IPC 错误协议
   （`throwIpcError`）、main 侧默认带测试、macOS／Windows 双端兼容，以及 UI 文案的
   i18n 落地与 `pnpm check:i18n` 门禁。
+- [`protocol-and-submodules.md`](protocol-and-submodules.md)：`cindy-protocol` 协议权威源、
+  device-link relay 层、内置插件种子 submodule 与 wire protocol 兼容。
+- [`architecture-invariants.md`](architecture-invariants.md)：package 与 render／main 解耦、
+  main 进程静态依赖，以及主界面布局树不变量。
+- [`configuration-and-overrides.md`](configuration-and-overrides.md)：配置可见性分层、默认值
+  与用户 override 分离、默认值迁移与恢复默认语义。
+- [`remote-and-mobile-adaptation.md`](remote-and-mobile-adaptation.md)：SSH 远程工作区、
+  device-link allowlist、手机版入口与功能类 PR 的远程／手机三选一门禁。
+- [`development-workflow.md`](development-workflow.md)：worktree dogfooding 会话契约、提 PR
+  与直推 `main` 门禁，以及 Review P0／P1／P2 严重度口径。
 
-其他旧规则正在从仓库根 `AGENTS-old.md` 逐项盘点迁入。
+旧手册（`AGENTS-old.md`）中仍有效的高风险约束已迁入上述专题；若发现遗漏，以归档为准补迁。

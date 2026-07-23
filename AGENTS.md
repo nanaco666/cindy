@@ -50,7 +50,18 @@
 - 新增或修改 Desktop 日志、IPC 错误处理、main 侧业务逻辑与测试、跨平台（macOS／
   Windows）行为，或任何 UI 文案的 i18n 落地前，必须先读
   `docs/dev-rules/engineering-conventions.md`。
-- 其余规则仍在逐项迁移；专题尚未建立时按下方“重构期间”处理。
+- 升级 `cindy-protocol` 或内置插件种子 submodule 指针、修改 device-link 协议／relay／隧道
+  payload／IPC allowlist，或任何改动跨端 wire protocol 前，必须先读
+  `docs/dev-rules/protocol-and-submodules.md`。
+- 修改 package 依赖方向、main 进程模块加载方式，或主界面布局树结构前，必须先读
+  `docs/dev-rules/architecture-invariants.md`。
+- 新增或修改 Settings UI、配置文件、本地偏好、运行时 profile，或 agent／MCP／provider
+  开关前，必须先读 `docs/dev-rules/configuration-and-overrides.md`。
+- 新增或修改涉及 workdir 文件、agent 进程、会话数据的功能，或新增 IPC channel／推送事件
+  前，必须先读 `docs/dev-rules/remote-and-mobile-adaptation.md`。
+- 在 Cindy 内嵌 worktree 会话里工作、准备提交或直推、或做 code review 前，必须先读
+  `docs/dev-rules/development-workflow.md`。
+- 其余零散旧规则若发现遗漏，以仓库根 `AGENTS-old.md` 归档为准，补迁后同步本索引。
 
 ## 通用工作流程
 
