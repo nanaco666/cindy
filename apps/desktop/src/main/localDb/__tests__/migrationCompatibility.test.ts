@@ -1,5 +1,5 @@
 import Database from 'better-sqlite3';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -210,6 +210,58 @@ describe('checkMigrationCompatibility', () => {
     expect(() => prepareMigrationRuntimeManifest(dbFilePath, drizzleDir, 1)).toThrow(
       /applied migration runtime identity changed at seq 1/,
     );
+  });
+
+  it('normalizes the known bad 0062 companion identity back to canonical', () => {
+    const sourceDrizzleDir = path.resolve(__dirname, '../../../../drizzle');
+    const drizzleDir = mkdtempSync(path.join(tmpdir(), 'cindy-runtime-identity-repair-'));
+    cleanupDirs.push(drizzleDir);
+    const scriptsDir = path.join(drizzleDir, 'scripts');
+    mkdirSync(scriptsDir);
+
+    const fileName = '0062_flaky_mimic.sql';
+    const sqlPath = path.join(drizzleDir, fileName);
+    const scriptPath = path.join(scriptsDir, '0062_flaky_mimic.ts');
+    const canonicalScript = readFileSync(
+      path.join(sourceDrizzleDir, 'scripts', '0062_flaky_mimic.ts'),
+      'utf8',
+    );
+    const badScript = canonicalScript.replace('@lizi/maker-scheduler', '@cindy/maker-scheduler');
+    writeFileSync(sqlPath, readFileSync(path.join(sourceDrizzleDir, fileName), 'utf8'), 'utf8');
+    writeFileSync(scriptPath, badScript, 'utf8');
+
+    expect(hashMigrationFile(sqlPath)).toBe(
+      '77b8741ac31c159eb422746c0165d102ad65693236c80d0ff055fd70cd43fe68',
+    );
+    expect(hashMigrationFile(scriptPath)).toBe(
+      '0ea82003cac0419a4a483b0afc1743d6fdba0b50085104720d5b2561e721072d',
+    );
+
+    const dbFilePath = path.join(drizzleDir, 'shared.db');
+    prepareMigrationRuntimeManifest(dbFilePath, drizzleDir, 62);
+    writeFileSync(scriptPath, canonicalScript, 'utf8');
+    expect(hashMigrationFile(scriptPath)).toBe(
+      '0a72ba2d89237b4b7322ffbbeb644c94e01be7d159851e220f51c03edfa80b78',
+    );
+
+    const db = createDb(62);
+    try {
+      db.prepare(
+        `INSERT INTO migration_history (seq, file_name, content_hash, applied_at)
+         VALUES (?, ?, ?, ?)`,
+      ).run(62, fileName, hashMigrationFile(sqlPath), 123);
+
+      expect(checkMigrationCompatibility(db, drizzleDir, dbFilePath).compatible).toBe(true);
+      expect(() => prepareMigrationRuntimeManifest(dbFilePath, drizzleDir, 62)).not.toThrow();
+      const repaired = JSON.parse(readFileSync(`${dbFilePath}.migration-runtime.json`, 'utf8')) as {
+        migrations: Array<{ scriptHash: string | null }>;
+      };
+      expect(repaired.migrations[0]?.scriptHash).toBe(
+        '0a72ba2d89237b4b7322ffbbeb644c94e01be7d159851e220f51c03edfa80b78',
+      );
+    } finally {
+      db.close();
+    }
   });
 
   it('fails closed when the runtime identity has not been published by a primary', () => {

@@ -27,8 +27,9 @@
 
 - 已进入 `main` 的 `NNNN_*.sql` 及其同名 `drizzle/scripts/NNNN_*.ts` 永久冻结：不得修改、
   删除、改名、换序号或事后补 companion。修复只能追加新 migration。
-- 旧仓迁入历史由 `drizzle/migration-baseline.json` 固定 SHA256；新仓已进入 `main` 的
-  migration 继续由 Git 基线冻结。两部分都由 `db:validate` 检查。
+- 旧仓迁入的 SQL、迁仓首个 commit 已存在的 companion script 由
+  `drizzle/migration-baseline.json` 固定 SHA256；新仓已进入 `main` 的 migration
+  继续由 Git 基线冻结。两部分都由 `db:validate` 检查。
 - `drizzle/meta/_journal.json` 与 `*_snapshot.json` 只能由 Drizzle 生成，不得手工修改。
 - migration 序号必须从 `0000` 连续递增，不得重复或跳号。
 - 生成 migration 前先基于最新 `origin/main`。多人分支撞号时，保留自己的 schema 意图，

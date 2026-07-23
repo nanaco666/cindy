@@ -10,6 +10,7 @@ import {
   findFrozenMigrationChanges,
   normalizedSha256,
   resolveMainBaseline,
+  validateMigrationFreeze,
 } from '../../apps/desktop/scripts/lib/migration-freeze.mjs';
 
 function git(repo, ...args) {
@@ -27,12 +28,11 @@ function createFixture() {
   fs.writeFileSync(path.join(drizzleDir, '0000_init.sql'), initialSql);
   const scriptsDir = path.join(drizzleDir, 'scripts');
   fs.mkdirSync(scriptsDir, { recursive: true });
+  const initialScript = 'function run() {}\nmodule.exports = { run };\n';
+  fs.writeFileSync(path.join(scriptsDir, '0000_init.ts'), initialScript);
+  const baselinePath = path.join(drizzleDir, 'migration-baseline.json');
   fs.writeFileSync(
-    path.join(scriptsDir, '0000_init.ts'),
-    'function run() {}\nmodule.exports = { run };\n',
-  );
-  fs.writeFileSync(
-    path.join(drizzleDir, 'migration-baseline.json'),
+    baselinePath,
     `${JSON.stringify({
       version: 1,
       algorithm: 'sha256',
@@ -43,6 +43,21 @@ function createFixture() {
   );
   git(repo, 'add', '.');
   git(repo, 'commit', '-m', 'initial migration');
+  const runtimeSourceCommit = git(repo, 'rev-parse', 'HEAD');
+  fs.writeFileSync(
+    baselinePath,
+    `${JSON.stringify({
+      version: 2,
+      algorithm: 'sha256',
+      lineEndings: 'lf',
+      sourceCommit: '1'.repeat(40),
+      runtimeSourceCommit,
+      migrations: { '0000_init.sql': normalizedSha256(initialSql) },
+      runtimeScripts: { '0000_init.ts': normalizedSha256(initialScript) },
+    }, null, 2)}\n`,
+  );
+  git(repo, 'add', baselinePath);
+  git(repo, 'commit', '-m', 'freeze migrated runtime scripts');
   const anchor = git(repo, 'rev-parse', 'HEAD');
   return {
     repo,
@@ -76,6 +91,57 @@ test('fixed baseline rejects modifying or deleting migrated SQL', () => {
     assert.deepEqual(findBaselineMigrationChanges(fixture.repo).violations, [
       { path: 'apps/desktop/drizzle/0000_init.sql', kind: 'deleted' },
     ]);
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test('fixed baseline rejects modifying or deleting migrated runtime scripts', () => {
+  const fixture = createFixture();
+  const scriptPath = path.join(fixture.repo, 'apps', 'desktop', 'drizzle', 'scripts', '0000_init.ts');
+  try {
+    fs.writeFileSync(scriptPath, 'function run() { return 1; }\nmodule.exports = { run };\n');
+    assert.deepEqual(findBaselineMigrationChanges(fixture.repo).violations, [
+      { path: 'apps/desktop/drizzle/scripts/0000_init.ts', kind: 'modified' },
+    ]);
+    fs.rmSync(scriptPath);
+    assert.deepEqual(findBaselineMigrationChanges(fixture.repo).violations, [
+      { path: 'apps/desktop/drizzle/scripts/0000_init.ts', kind: 'deleted' },
+    ]);
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test('fixed baseline rejects paired runtime script and hash tampering', () => {
+  const fixture = createFixture();
+  const drizzleDir = path.join(fixture.repo, 'apps', 'desktop', 'drizzle');
+  const scriptPath = path.join(drizzleDir, 'scripts', '0000_init.ts');
+  const baselinePath = path.join(drizzleDir, 'migration-baseline.json');
+  try {
+    const changedScript = 'function run() { return 1; }\nmodule.exports = { run };\n';
+    fs.writeFileSync(scriptPath, changedScript);
+    const baseline = JSON.parse(fs.readFileSync(baselinePath, 'utf-8'));
+    baseline.runtimeScripts['0000_init.ts'] = normalizedSha256(changedScript);
+    fs.writeFileSync(baselinePath, `${JSON.stringify(baseline, null, 2)}\n`);
+
+    assert.throws(
+      () => findBaselineMigrationChanges(fixture.repo),
+      /runtime script 指纹与 .* 不一致/,
+    );
+    assert.deepEqual(
+      findFrozenMigrationChanges(
+        fixture.repo,
+        fixture.anchor,
+        new Set(['apps/desktop/drizzle/scripts/0000_init.ts']),
+      ).violations,
+      [
+        {
+          path: 'apps/desktop/drizzle/migration-baseline.json',
+          kind: 'modified-runtime-baseline',
+        },
+      ],
+    );
   } finally {
     fixture.cleanup();
   }
@@ -159,6 +225,37 @@ test('a new migration may add its companion runtime script', () => {
       'function run() {}\nmodule.exports = { run };\n',
     );
     assert.deepEqual(findFrozenMigrationChanges(fixture.repo, fixture.anchor).violations, []);
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test('fixed runtime baseline permits restoring a script after main recorded a bad identity', () => {
+  const fixture = createFixture();
+  const scriptPath = path.join(
+    fixture.repo,
+    'apps',
+    'desktop',
+    'drizzle',
+    'scripts',
+    '0000_init.ts',
+  );
+  try {
+    const canonical = fs.readFileSync(scriptPath, 'utf-8');
+    fs.writeFileSync(
+      scriptPath,
+      'function run() { return 1; }\nmodule.exports = { run };\n',
+    );
+    git(fixture.repo, 'add', scriptPath);
+    git(fixture.repo, 'commit', '-m', 'bad historical edit');
+    const badMain = git(fixture.repo, 'rev-parse', 'HEAD');
+
+    fs.writeFileSync(scriptPath, canonical);
+    const result = validateMigrationFreeze(fixture.repo, {
+      XDT_MIGRATION_BASE_REF: badMain,
+    });
+    assert.deepEqual(result.fixedCheck.violations, []);
+    assert.deepEqual(result.mainCheck?.violations, []);
   } finally {
     fixture.cleanup();
   }

@@ -147,6 +147,48 @@ function sameRuntimeIdentity(
   );
 }
 
+/**
+ * 0062 的 companion 曾在已发布版本中只改动了一处注释，产生了短暂的错误指纹。
+ * 这里只允许该错误指纹单向收敛回最初发布的 canonical 指纹；其它 identity 变化仍失败关闭。
+ */
+function isKnownRuntimeIdentityRepair(
+  applied: MigrationRuntimeIdentity,
+  canonical: MigrationRuntimeIdentity,
+): boolean {
+  return (
+    applied.seq === 62 &&
+    applied.fileName === '0062_flaky_mimic.sql' &&
+    applied.sqlHash === '77b8741ac31c159eb422746c0165d102ad65693236c80d0ff055fd70cd43fe68' &&
+    applied.scriptHash === '0ea82003cac0419a4a483b0afc1743d6fdba0b50085104720d5b2561e721072d' &&
+    canonical.seq === applied.seq &&
+    canonical.fileName === applied.fileName &&
+    canonical.sqlHash === applied.sqlHash &&
+    canonical.scriptHash === '0a72ba2d89237b4b7322ffbbeb644c94e01be7d159851e220f51c03edfa80b78'
+  );
+}
+
+function runtimeIdentityMatches(
+  applied: MigrationRuntimeIdentity,
+  canonical: MigrationRuntimeIdentity,
+): boolean {
+  return (
+    sameRuntimeIdentity(applied, canonical) || isKnownRuntimeIdentityRepair(applied, canonical)
+  );
+}
+
+function runtimeIdentityListsMatch(
+  applied: MigrationRuntimeIdentity[],
+  canonical: MigrationRuntimeIdentity[],
+): boolean {
+  return (
+    applied.length === canonical.length &&
+    applied.every((identity, index) => {
+      const expected = canonical[index];
+      return expected !== undefined && runtimeIdentityMatches(identity, expected);
+    })
+  );
+}
+
 function readMigrationRuntimeManifest(dbFilePath: string): MigrationRuntimeManifest | null {
   try {
     const parsed = JSON.parse(
@@ -191,7 +233,7 @@ export function prepareMigrationRuntimeManifest(
     for (const identity of existing.migrations) {
       if (identity.seq > databaseVersion) continue;
       const current = expectedBySeq.get(identity.seq);
-      if (!current || !sameRuntimeIdentity(identity, current)) {
+      if (!current || !runtimeIdentityMatches(identity, current)) {
         throw new Error(
           `applied migration runtime identity changed at seq ${identity.seq} (${identity.fileName})`,
         );
@@ -200,7 +242,7 @@ export function prepareMigrationRuntimeManifest(
     for (const identity of expected.migrations) {
       if (identity.seq > databaseVersion) continue;
       const applied = existingBySeq.get(identity.seq);
-      if (!applied || !sameRuntimeIdentity(identity, applied)) {
+      if (!applied || !runtimeIdentityMatches(applied, identity)) {
         throw new Error(`applied migration runtime identity missing at seq ${identity.seq}`);
       }
     }
@@ -369,7 +411,7 @@ export function checkMigrationCompatibility(
       if (
         actual.version !== 1 ||
         !Array.isArray(actual.migrations) ||
-        JSON.stringify(actual.migrations) !== JSON.stringify(expected.migrations)
+        !runtimeIdentityListsMatch(actual.migrations, expected.migrations)
       ) {
         issues.push({ kind: 'runtime-manifest-mismatch' });
       }
