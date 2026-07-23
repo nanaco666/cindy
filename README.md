@@ -94,6 +94,12 @@ Remote 开发会使用你自己的 Cindy 云端账号和现有登录态，因此
 登录页的「本地模式」不是连接本地服务端，而是无需登录 Cindy 账号即可使用本机
 agent 的模式。依赖服务端的能力在该模式下不可用。
 
+**关于默认服务器：** 客户端默认连接 Cindy 官方云服务（端点清单见
+[`config/endpoint.json`](config/endpoint.json) 与
+[`config/endpoint.global.json`](config/endpoint.global.json)，桌面端自动更新
+同样来自官方 CDN）。这是有意的设计——外部开发者不需要自建服务端，用 dev
+构建登录自己的 Cindy 账号即可直接对着官方服务器开发和测试。
+
 ## 架构
 
 - [`DESIGN.md`](DESIGN.md) —— 视觉设计系统、颜色 token 与 UI 规范

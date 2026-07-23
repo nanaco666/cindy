@@ -19,10 +19,6 @@ Plugins (internally "意识" / Ghost) extend what the agents can do — they add
 - **Cindy Mermaid** (`$cindy-mermaid`) — build / repair Mermaid diagrams.
 - **Cindy GitHub** (`$cindy-github`) / **Cindy GitLab** (`$cindy-gitlab`) — read / write issues, PRs / MRs, reviews, CI, releases.
 - **Filo Google** (`$filo-google`) — Gmail / Calendar / Drive / Sheets.
-- **XD Atlassian** (`$xd-atlassian`) — Jira + Confluence.
-- **XD Feishu** (`$xd-feishu`) — Feishu docs / wiki / bitable / sheets / messages / calendar.
-- **XD Mivo** (`$xd-mivo`) — image / video / music / sound-effects / 3D generation (add your Mivo key on its detail page).
-- **XD Pages** (`$xd-pages`) — deploy / manage internal sites.
 
 **Enabling and disabling:**
 
@@ -47,8 +43,8 @@ Plugins (internally "意识" / Ghost) extend what the agents can do — they add
 
 **Configuring a plugin's account / API key:**
 
-- Do it on the plugin's **detail page**. Plugins that use a key (Mivo, web-search, GitHub/GitLab tokens) have a field there; the value goes straight into the host's encrypted store and can't be read back.
-- Plugins that use OAuth (Filo Google, XD Atlassian, XD Feishu) show a **Connect account** button instead.
+- Do it on the plugin's **detail page**. Plugins that use a key (web-search, GitHub/GitLab tokens) have a field there; the value goes straight into the host's encrypted store and can't be read back.
+- Plugins that use OAuth (for example Filo Google) show a **Connect account** button instead.
 
 **Notes:**
 

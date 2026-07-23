@@ -15,6 +15,23 @@ that the Electron main process previously generated in `executeUpdateWindows`
   `%TEMP%\cindy-updater-{ts}.exe` before launch, so the in-`resources/` copy is
   no longer file-locked and the new release's updater can overwrite it.
 
+## Building & the prebuilt binary
+
+- The full source lives in this directory (`src-tauri/` — Rust + Tauri, plus
+  the `ui/` webview assets). Nothing about the updater is closed-source.
+- Official Windows packaging **always rebuilds it from this source**:
+  `forge.config.ts` (`buildCindyUpdater`) runs `cargo build --release` during
+  `prePackage` and hard-fails if the toolchain is missing — a release never
+  ships a stale binary.
+- `apps/desktop/resources/cindy-updater.exe` (tracked via Git LFS) is a
+  prebuilt convenience copy so day-to-day desktop development doesn't require
+  a Rust toolchain. To reproduce or replace it yourself:
+
+  ```bash
+  cargo build --release --manifest-path apps/desktop/cindy-updater/src-tauri/Cargo.toml
+  # output: apps/desktop/cindy-updater/src-tauri/target/release/cindy-updater.exe
+  ```
+
 ## CLI contract
 
 ```

@@ -9,10 +9,8 @@ At a glance, Cindy integrates with:
 - **Slack** — one binding (Settings > IM bots, the "Cindy" tab) powers both directions: the Slack channel bot for receiving tasks, and agent Slack tools (search / read history / post as the bound user) available in every session.
 - **Discord** — a Discord bot you bring yourself (your own Discord App + bot token) under Settings > IM bots.
 - **Google** — Gmail / Calendar / Drive / Sheets, via the Filo Google plugin (Plugins > Filo Google).
-- **Jira / Confluence** — via the XD Atlassian plugin (Plugins > XD Atlassian; one OAuth covers both).
 - **GitHub / GitLab** — via the Cindy GitHub and Cindy GitLab plugins (Plugins).
 - **The coding agents** — Claude Code and Codex can reach pay-per-token models through **Cindy AI** in Settings > Model Providers.
-- **Mivo** (optional) — image / video / music / 3D generation via the built-in XD Mivo plugin; add your Mivo key on its plugin detail page under Plugins.
 
 **Not supported:**
 

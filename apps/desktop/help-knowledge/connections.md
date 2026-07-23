@@ -9,12 +9,11 @@ External account connections have moved out of the old "Third-Party Platforms" s
 
 - **Slack** — bound with a single toggle under **Settings > IM bots** (the "Cindy" tab). One browser sign-in covers both directions: the Slack channel bot that receives tasks, and the agent Slack tools (search / read / post). If Slack tools don't work on an older binding, toggle it off and on once to re-authorize.
 - **Google** (Gmail / Calendar / Drive / Sheets) — handled by the Filo Google plugin (Plugins > Filo Google).
-- **Jira / Confluence** — handled by the XD Atlassian plugin (Plugins > XD Atlassian; existing connections are migrated automatically).
 - **GitHub** — handled by the Cindy GitHub plugin (Plugins > Cindy GitHub; existing PAT connections are migrated automatically).
 - **GitLab** — handled by the Cindy GitLab plugin (Plugins > Cindy GitLab; existing PAT connections are migrated automatically).
 - **Codex** — sign in under Settings > Model Providers (separate from the Codex CLI binary the app ships with).
 - **FeiShu** — bot only (App ID / Secret under Settings > IM bots; see the FeiShu bot topic). FeiShu is no longer a sign-in method for Cindy itself.
-- **Cindy AI** — Settings > Model Providers. Mivo and web-search keys are configured on the matching plugin detail pages (XD Mivo / Cindy Web Search).
+- **Cindy AI** — Settings > Model Providers. Web-search keys are configured on the matching plugin detail page (Cindy Web Search).
 
 **Managing connections:**
 
