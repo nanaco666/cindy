@@ -17,8 +17,8 @@ export function DefaultOverrideControls({
   if (!isCustomized) return null;
 
   return (
-    <div className="flex items-center gap-2">
-      <span className="rounded-full bg-[var(--surface-chip)] px-2 py-1 text-11 font-medium leading-none text-[var(--text-secondary)]">
+    <div className="flex shrink-0 items-center gap-2">
+      <span className="whitespace-nowrap rounded-full bg-[var(--surface-chip)] px-2 py-1 text-11 font-medium leading-none text-[var(--text-secondary)]">
         {t('settings.defaults.customizedBadge')}
       </span>
       <Tip text={t('settings.defaults.restore')} side="top">
