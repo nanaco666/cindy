@@ -27,6 +27,26 @@ pnpm restart:desktop:local
 启动包装可能停止已有 Desktop dev 进程。必须尊重宿主提供的并行或保活工作流；如果
 脚本因为当前 Agent 运行在 Cindy 内部而拒绝重启，不要换命令绕过，应把提示交给用户。
 
+## 可选启动参数
+
+两个 restart 命令都支持下列参数；**用户没提就不要主动加**（不带 = 共库 + 正常调度）。
+这些参数只对 dev 生效，不影响用户机器上的正式版。
+
+- `--region=cn|global`（默认 `cn`）：切换构建身份与仓内端点清单（`global` 读
+  `config/endpoint.global.json`）。
+- `--isolated` / `--isolated=<名字>`：使用独立 userData 沙箱，数据库、登录态、会话、定时
+  任务与设备身份都与正式版彻底隔离（首次需重新登录）；命名沙箱每个名字一条独立沙箱，
+  名字限 `A-Za-z0-9_-`、≤32 字符。用户说「独立数据库／隔离数据／沙箱启动／不要动正式版
+  数据」时用。**未合入主干的 migration 必须在 `--isolated` 沙箱里跑，不得连共享 userData**
+  （见 [`database-and-migrations.md`](database-and-migrations.md)）。
+- `--passive`：定时任务被动模式，本实例不自动触发 schedule，但数据仍与其它实例共享；
+  多开导致定时任务重复、需要让位给 primary 时用。
+- `--preserve-running`：并行 dev，不停止任何已有 Cindy dev 进程，每个新实例强制 passive
+  并共享当前 userData／登录态；仅供能证明实例归属的上层编排，或用户明确「不要关当前
+  实例／不要重新登录」时用。仅支持 remote，禁止与 `--isolated` 组合。
+
+已手动设 `XDT_USER_DATA_DIR` 时尊重用户值，不覆盖。
+
 ## 何时需要重启
 
 - 修改 main、preload、MCP、原生依赖或 package 运行时代码后需要重启。

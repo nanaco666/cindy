@@ -18,7 +18,8 @@ UI 文案的语气与措辞另见根 [`DESIGN.md`](../../DESIGN.md) 的 Voice & 
 |---|---|
 | 统一日志模块 | `apps/desktop/src/main/logger.ts`（main）、`apps/desktop/src/renderer/lib/logger.ts`（renderer） |
 | dev 日志目录 | 启动 checkout 的 `apps/desktop/logs/` |
-| IPC 错误协议与错误码 | `apps/desktop/src/shared/ipc-errors.ts`（`IpcErrorCode`、`throwIpcError`） |
+| IPC 错误码枚举 | `apps/desktop/src/shared/ipc-errors.ts`（`IpcErrorCode`） |
+| `throwIpcError` 实现 | `apps/desktop/src/main/utils/ipcValidate.ts` |
 | Renderer 侧错误解码 | `apps/desktop/src/renderer/utils/ipcError.ts`（`extractIpcError`、`mapIpcErrorToI18nKey`） |
 | 支持的语言与默认语言 | `apps/desktop/src/shared/locale.ts`（`SUPPORTED_LOCALES`、`DEFAULT_LOCALE`） |
 | i18n 资源 | `apps/desktop/src/renderer/i18n/locales/<locale>/common.json` |
