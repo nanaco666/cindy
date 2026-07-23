@@ -4362,7 +4362,7 @@
       "editSend": "Send",
       "editRollbackHint": "Sending will undo changes to {{count}} file(s) from the last turn",
       "forkErrors": {
-        "unsupportedHistory": "This point crosses an agent-switch boundary, so a new conversation can't be started from here",
+        "unsupportedHistory": "The historical agent session for this point is unavailable, so a new conversation can't be started from here",
         "noPriorAssistant": "Start a new conversation from a message that follows an AI reply",
         "sourceNeverRan": "The original conversation hasn't run yet, so a new conversation can't be started",
         "codexStateUnavailable": "The Codex conversation state is unavailable, so a new conversation can't be started. {{detail}}",

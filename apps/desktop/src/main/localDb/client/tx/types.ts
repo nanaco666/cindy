@@ -67,7 +67,11 @@ export interface RewindCommitArgs {
 
 export interface ForkSessionArgs {
   sourceSessionId: string;
+  /** /clear 之前的行不属于当前可见/原生上下文，fork 时不得重新带回。 */
+  sourceClearedAt?: number | null;
   targetCreatedAt: number;
+  /** 与 targetCreatedAt 同毫秒时按 SQLite 插入顺序截断；null/缺省表示整毫秒前缀。 */
+  targetRowid?: number | null;
   newSession: {
     id: string;
     title: string;
@@ -100,6 +104,16 @@ export interface ForkSessionArgs {
   legacyTranscriptParentUuids?: string[];
   /** Imported Claude assistant rows may retain an external tool-use parent id. */
   toolParentUuids?: string[];
+  /**
+   * 复制的 agent_switch 只保留展示/交接信息，不继承父会话的停泊原生 session。
+   * 否则父子分支稍后切回旧引擎时会共同续写同一个 vendor session。
+   */
+  detachAgentSwitchSessions?: boolean;
+  /**
+   * user 目标恰好是切换后的首条消息时，该消息不会被复制；把对应边界恢复为
+   * consumed=false，使新分支首次发送时重新注入同一份 handoff。
+   */
+  resetHandoffBoundaryClientId?: string | null;
   /**
    * main 侧预生成的新 message id 列表,顺序对应 source 消息按 created_at ASC 的遍历顺序。
    * 长度必须等于 source message 数。

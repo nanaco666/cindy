@@ -4361,7 +4361,7 @@
       "editSend": "전송",
       "editRollbackHint": "전송하면 이전 턴에서 변경된 파일 {{count}}개가 되돌려집니다",
       "forkErrors": {
-        "unsupportedHistory": "이 지점은 에이전트 전환 경계를 지나므로 여기서 새 대화를 시작할 수 없습니다",
+        "unsupportedHistory": "이 지점에 해당하는 이전 에이전트 세션을 사용할 수 없어 여기서 새 대화를 시작할 수 없습니다",
         "noPriorAssistant": "AI 응답 뒤의 메시지에서 새 대화를 시작해 주세요",
         "sourceNeverRan": "원래 대화가 아직 실행되지 않아 새 대화를 시작할 수 없습니다",
         "codexStateUnavailable": "Codex 대화 상태를 사용할 수 없어 새 대화를 시작할 수 없습니다. {{detail}}",

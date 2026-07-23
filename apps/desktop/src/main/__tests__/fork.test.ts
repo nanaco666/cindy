@@ -60,10 +60,16 @@ const txMock = vi.fn((name: string, args: unknown) => {
   txCalls.push({ name, args });
   return Promise.resolve({});
 });
-const queryOneMock = vi.fn(async () => null as { id: string } | null);
+const queryOneMock = vi.fn(async () => null as Record<string, unknown> | null);
+const queryMock = vi.fn(async () => [] as Array<{ role: string; content: string }>);
 
 vi.mock('../localDb/client/current', () => ({
-  getDbClient: () => ({ drizzle: fakeDb, tx: txMock, queryOne: queryOneMock }),
+  getDbClient: () => ({
+    drizzle: fakeDb,
+    tx: txMock,
+    queryOne: queryOneMock,
+    query: queryMock,
+  }),
 }));
 
 let forkSessionAtMessage: typeof import('../maker-orchestration/fork').forkSessionAtMessage;
@@ -82,6 +88,8 @@ beforeEach(async () => {
   txMock.mockClear();
   queryOneMock.mockReset();
   queryOneMock.mockResolvedValue(null);
+  queryMock.mockReset();
+  queryMock.mockResolvedValue([]);
   forkSdkSessionMock.mockReset();
   // 默认空 uuidMap 让 agentMeta 字段被去掉 (无映射)。具体测试按需 override。
   forkSdkSessionMock.mockResolvedValue({
@@ -143,7 +151,9 @@ function makeMessageRow(over: Partial<Record<string, unknown>> = {}) {
     content: '"hello"',
     toolUseId: null,
     agentMeta: null,
+    agentKind: null,
     createdAt: 1500,
+    rowid: 1,
     ...over,
   };
 }
@@ -193,7 +203,6 @@ describe('forkSessionAtMessage', () => {
 
     selectQueue.push([makeSourceRow()]);                     // source session
     selectQueue.push([target]);                              // target message
-    selectQueue.push([priorUser, priorAssistant]);           // prior assistants asc
     selectQueue.push([priorUser, priorAssistant]);           // prior messages asc (for bulk copy)
     selectQueue.push([
       makeSourceRow({
@@ -281,7 +290,6 @@ describe('forkSessionAtMessage', () => {
       codexHistoryHasProductPrompt: false,
     })]);
     selectQueue.push([target]);
-    selectQueue.push([{ value: 2 }]); // target user turn + one later user turn
     selectQueue.push([priorUser, priorAssistant]); // bulk copy: only target之前
     selectQueue.push([makeSourceRow({
       agentKind: 'codex',
@@ -294,6 +302,10 @@ describe('forkSessionAtMessage', () => {
       newSdkSessionId: 'codex-thread-new',
       uuidMap: new Map<string, string>(),
     });
+    queryMock.mockResolvedValue([
+      { role: 'user', content: '"later"' },
+      { role: 'user', content: '"target"' },
+    ]);
 
     const result = await forkSessionAtMessage('src-session', 'target-user');
 
@@ -329,7 +341,7 @@ describe('forkSessionAtMessage', () => {
       sdkSessionId: 'imported-codex-thread',
     })]);
     selectQueue.push([target]);
-    selectQueue.push([{ value: 1 }]);
+    queryMock.mockResolvedValue([{ role: 'user', content: '"target"' }]);
     forkSdkSessionMock.mockRejectedValueOnce(new Error('thread not found in current Codex home'));
 
     await expect(
@@ -398,6 +410,13 @@ describe('forkSessionAtMessage', () => {
     // 否则 B → C 时反查到的 uuid 在 B jsonl 找不到, SDK forkSession 会报错。
     // ClaudeCodeAgent.forkSdkSession 内部已经把建好的 uuidMap 直接返回, 这里只测
     // fork 用 uuidMap 正确 remap 了 agentMeta 列。
+    await writeClaudeJsonl('sdk-uuid-source', '/work', [{
+      type: 'assistant',
+      uuid: 'old-asst-uuid',
+      parentUuid: 'old-user-uuid',
+      sessionId: 'sdk-uuid-source',
+      message: { id: 'old-asst-request', content: [{ type: 'text', text: 'hi back' }] },
+    }]);
     const target = makeMessageRow({ id: 'target-user', role: 'user', createdAt: 3000 });
     const priorUser = makeMessageRow({
       id: 'user-1',
@@ -416,7 +435,6 @@ describe('forkSessionAtMessage', () => {
 
     selectQueue.push([makeSourceRow()]);
     selectQueue.push([target]);
-    selectQueue.push([priorUser, priorAssistant]);
     selectQueue.push([priorUser, priorAssistant]); // bulk copy
 
     forkSdkSessionMock.mockResolvedValue({
@@ -446,6 +464,7 @@ describe('forkSessionAtMessage', () => {
 
   it('throws SOURCE_NEVER_RAN when source.sdkSessionId is null; maker not invoked', async () => {
     selectQueue.push([makeSourceRow({ sdkSessionId: null })]);
+    selectQueue.push([makeMessageRow({ clientId: 'any-msg' })]);
 
     await expect(
       forkSessionAtMessage('src-session', 'any-msg'),
@@ -455,21 +474,267 @@ describe('forkSessionAtMessage', () => {
     expect(txCalls).toHaveLength(0);
   });
 
-  it('rejects before SDK side effects when copied range crosses an agent_switch boundary', async () => {
-    const target = makeMessageRow({ id: 'target-user', role: 'user', createdAt: 3000 });
-    selectQueue.push([makeSourceRow({ clearedAt: 1000 })]);
-    selectQueue.push([target]);
-    queryOneMock.mockResolvedValueOnce({ id: 'switch-boundary' });
-
-    await expect(forkSessionAtMessage('src-session', 'target-user')).rejects.toMatchObject({
-      code: 'UNSUPPORTED_HISTORY',
+  it('rejects a historical target invalidated by context rebuild', async () => {
+    const target = makeMessageRow({
+      id: 'stale-history',
+      clientId: 'stale-history-client',
+      role: 'assistant',
+      createdAt: 2500,
+      rowid: 20,
     });
+    selectQueue.push([makeSourceRow({
+      agentKind: 'codex',
+      sdkSessionId: 'current-codex-thread',
+    })]);
+    selectQueue.push([target]);
+    queryOneMock.mockResolvedValueOnce({ id: 'later-context-rebuild' });
+
+    await expect(
+      forkSessionAtMessage('src-session', 'stale-history-client'),
+    ).rejects.toMatchObject({ code: 'UNSUPPORTED_HISTORY' });
+
     expect(queryOneMock).toHaveBeenCalledWith(
-      expect.stringContaining("role = 'agent_switch'"),
-      ['src-session', 3000, 1000, 1000],
+      expect.stringContaining("role = 'context_rebuild'"),
+      ['src-session', 2500, 2500, 20],
     );
     expect(forkSdkSessionMock).not.toHaveBeenCalled();
     expect(txCalls).toHaveLength(0);
+  });
+
+  it('rejects a historical engine boundary without a parked native session id', async () => {
+    const target = makeMessageRow({
+      id: 'historical-assistant',
+      clientId: 'historical-assistant-client',
+      role: 'assistant',
+      createdAt: 2500,
+      rowid: 20,
+    });
+    selectQueue.push([makeSourceRow({
+      agentKind: 'codex',
+      sdkSessionId: 'current-codex-thread',
+    })]);
+    selectQueue.push([target]);
+    queryOneMock
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        content: JSON.stringify({
+          fromAgentKind: 'cc',
+          toAgentKind: 'codex',
+          fromModel: 'claude-sonnet-4-6',
+          fromSdkSessionId: null,
+        }),
+        created_at: 2800,
+        rowid: 30,
+      });
+
+    await expect(
+      forkSessionAtMessage('src-session', 'historical-assistant-client'),
+    ).rejects.toMatchObject({ code: 'UNSUPPORTED_HISTORY' });
+
+    expect(forkSdkSessionMock).not.toHaveBeenCalled();
+    expect(txCalls).toHaveLength(0);
+  });
+
+  it('forks a historical Claude node from the parked native session instead of the current Codex thread', async () => {
+    const target = makeMessageRow({
+      id: 'historical-assistant',
+      clientId: 'historical-assistant-cid',
+      role: 'assistant',
+      agentMeta: JSON.stringify({ uuid: 'historical-claude-uuid' }),
+      agentKind: 'cc',
+      createdAt: 2500,
+      rowid: 20,
+    });
+    const priorUser = makeMessageRow({
+      id: 'historical-user',
+      role: 'user',
+      agentKind: 'cc',
+      createdAt: 2000,
+      rowid: 10,
+    });
+    selectQueue.push([makeSourceRow({
+      agentKind: 'codex',
+      model: 'gpt-5.4',
+      sdkSessionId: 'current-codex-thread',
+    })]);
+    selectQueue.push([target]);
+    selectQueue.push([]); // no next user before the engine leaves
+    selectQueue.push([priorUser, target]);
+    selectQueue.push([makeSourceRow({
+      agentKind: 'cc',
+      model: 'claude-sonnet-4-6',
+      sdkSessionId: 'forked-historical-claude',
+      parentSessionId: 'src-session',
+    })]);
+    queryOneMock
+      .mockResolvedValueOnce(null) // no context_rebuild after target
+      .mockResolvedValueOnce({
+        content: JSON.stringify({
+          fromAgentKind: 'cc',
+          toAgentKind: 'codex',
+          fromModel: 'claude-sonnet-4-6',
+          fromSdkSessionId: 'parked-claude-session',
+          handoff: 'handoff',
+        }),
+        created_at: 2800,
+        rowid: 30,
+      });
+    forkSdkSessionMock.mockResolvedValue({
+      newSdkSessionId: 'forked-historical-claude',
+      uuidMap: new Map<string, string>(),
+    });
+
+    await forkSessionAtMessage('src-session', 'historical-assistant-cid');
+
+    expect(forkSdkSessionMock).toHaveBeenCalledWith('claude-code', {
+      sourceSdkSessionId: 'parked-claude-session',
+      upToMessageId: 'historical-claude-uuid',
+      title: '[Fork] Project A',
+      workingDir: '/work',
+    });
+    const txArgs = txCalls.find((call) => call.name === 'fork.session')!.args as {
+      targetCreatedAt: number;
+      targetRowid: number;
+      detachAgentSwitchSessions: boolean;
+      newSession: Record<string, unknown>;
+    };
+    expect(txArgs.targetCreatedAt).toBe(2800);
+    expect(txArgs.targetRowid).toBe(30);
+    expect(txArgs.detachAgentSwitchSessions).toBe(true);
+    expect(txArgs.newSession.agentKind).toBe('cc');
+    expect(txArgs.newSession.model).toBe('claude-sonnet-4-6');
+    expect(txArgs.newSession.providerId).toBeNull();
+  });
+
+  it('re-arms the copied handoff when forking from the first user after an engine switch', async () => {
+    const boundary = makeMessageRow({
+      id: 'switch-boundary',
+      clientId: 'switch-boundary-client',
+      role: 'agent_switch',
+      content: JSON.stringify({
+        fromAgentKind: 'codex',
+        toAgentKind: 'cc',
+        fromModel: 'gpt-5.4',
+        toModel: 'claude-sonnet-4-6',
+        fromSdkSessionId: 'parked-codex',
+        handoff: 'full handoff',
+        consumed: true,
+      }),
+      createdAt: 2500,
+      rowid: 10,
+    });
+    const target = makeMessageRow({
+      id: 'first-claude-user',
+      clientId: 'first-claude-user-client',
+      role: 'user',
+      agentKind: 'cc',
+      createdAt: 3000,
+      rowid: 20,
+    });
+    selectQueue.push([makeSourceRow({ sdkSessionId: 'fresh-claude-session' })]);
+    selectQueue.push([target]);
+    selectQueue.push([boundary]);
+    selectQueue.push([makeSourceRow({
+      sdkSessionId: null,
+      parentSessionId: 'src-session',
+      forkedAtMessageId: 'first-claude-user-client',
+    })]);
+
+    await forkSessionAtMessage('src-session', 'first-claude-user-client');
+
+    expect(forkSdkSessionMock).not.toHaveBeenCalled();
+    const txArgs = txCalls.find((call) => call.name === 'fork.session')!.args as {
+      resetHandoffBoundaryClientId: string | null;
+      newSession: Record<string, unknown>;
+    };
+    expect(txArgs.resetHandoffBoundaryClientId).toBe('switch-boundary-client');
+    expect(txArgs.newSession.sdkSessionId).toBeNull();
+    expect(txArgs.newSession.agentKind).toBe('cc');
+  });
+
+  it('counts rollback turns only from the parked Codex thread across later resumes', async () => {
+    const target = makeMessageRow({
+      id: 'historical-codex-assistant',
+      clientId: 'historical-codex-assistant-cid',
+      role: 'assistant',
+      agentKind: 'codex',
+      createdAt: 2500,
+      rowid: 20,
+    });
+    const nextCodexUser = makeMessageRow({
+      id: 'next-codex-user',
+      role: 'user',
+      agentKind: 'codex',
+      createdAt: 2600,
+      rowid: 25,
+    });
+    const priorUser = makeMessageRow({
+      id: 'prior-codex-user',
+      role: 'user',
+      agentKind: 'codex',
+      createdAt: 2000,
+      rowid: 10,
+    });
+    const parkedCodexBoundary = {
+      fromAgentKind: 'codex',
+      toAgentKind: 'cc',
+      fromModel: 'gpt-5.4',
+      fromSdkSessionId: 'parked-codex-thread',
+      handoff: 'handoff',
+    };
+    selectQueue.push([makeSourceRow({
+      agentKind: 'cc',
+      sdkSessionId: 'current-claude-session',
+    })]);
+    selectQueue.push([target]);
+    selectQueue.push([nextCodexUser]);
+    selectQueue.push([priorUser, target]);
+    selectQueue.push([makeSourceRow({
+      agentKind: 'codex',
+      model: 'gpt-5.4',
+      sdkSessionId: 'forked-codex-thread',
+      parentSessionId: 'src-session',
+    })]);
+    queryOneMock
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        content: JSON.stringify(parkedCodexBoundary),
+        created_at: 2800,
+        rowid: 30,
+      });
+    queryMock.mockResolvedValue([
+      { role: 'user', content: '"current Claude"' },
+      { role: 'agent_switch', content: JSON.stringify(parkedCodexBoundary) },
+      { role: 'user', content: '"resumed Codex"' },
+      { role: 'agent_switch', content: JSON.stringify({
+        fromAgentKind: 'cc',
+        toAgentKind: 'codex',
+        fromModel: 'claude-sonnet-4-6',
+        fromSdkSessionId: 'current-claude-session',
+      }) },
+      { role: 'user', content: '"middle Claude"' },
+      { role: 'agent_switch', content: JSON.stringify(parkedCodexBoundary) },
+      { role: 'user', content: '"next Codex"' },
+    ]);
+    forkSdkSessionMock.mockResolvedValue({
+      newSdkSessionId: 'forked-codex-thread',
+      uuidMap: new Map<string, string>(),
+    });
+
+    await forkSessionAtMessage('src-session', 'historical-codex-assistant-cid');
+
+    expect(forkSdkSessionMock).toHaveBeenCalledWith('codex', {
+      sourceSdkSessionId: 'parked-codex-thread',
+      upToMessageId: undefined,
+      tailTurnsToDrop: 2,
+      title: '[Fork] Project A',
+      workingDir: '/work',
+    });
+    const txArgs = txCalls.find((call) => call.name === 'fork.session')!.args as {
+      newSession: Record<string, unknown>;
+    };
+    expect(txArgs.newSession.agentKind).toBe('codex');
+    expect(txArgs.newSession.model).toBe('gpt-5.4');
   });
 
   // ── assistant 目标（fork-from-reply）────────────────────────────────────
@@ -495,7 +760,6 @@ describe('forkSessionAtMessage', () => {
     selectQueue.push([makeSourceRow()]);                       // source session
     selectQueue.push([target]);                                // target message
     selectQueue.push([nextUser]);                              // next user after target
-    selectQueue.push([target, turnFinalAssistant]);            // assistants before boundary asc
     selectQueue.push([priorUser, target, turnFinalAssistant]); // bulk copy (含 target 所在 turn)
     selectQueue.push([
       makeSourceRow({
@@ -562,7 +826,6 @@ describe('forkSessionAtMessage', () => {
     selectQueue.push([makeSourceRow()]);
     selectQueue.push([target]);
     selectQueue.push([]);
-    selectQueue.push([target]);
     selectQueue.push([priorUser, target]);
     selectQueue.push([makeSourceRow({ sdkSessionId: 'sdk-new-session-uuid' })]);
 
@@ -627,7 +890,6 @@ describe('forkSessionAtMessage', () => {
     selectQueue.push([makeSourceRow()]);
     selectQueue.push([target]);
     selectQueue.push([]);
-    selectQueue.push([legacySubagent, target]);
     selectQueue.push([priorUser, legacySubagent, target]);
     selectQueue.push([makeSourceRow({ sdkSessionId: 'sdk-new-session-uuid' })]);
 
@@ -676,7 +938,6 @@ describe('forkSessionAtMessage', () => {
     selectQueue.push([makeSourceRow()]);
     selectQueue.push([target]);
     selectQueue.push([]);
-    selectQueue.push([target]);
     selectQueue.push([priorUser, target]);
     selectQueue.push([makeSourceRow({ sdkSessionId: 'sdk-new-session-uuid' })]);
 
@@ -729,7 +990,6 @@ describe('forkSessionAtMessage', () => {
 
     selectQueue.push([makeSourceRow()]);
     selectQueue.push([target]);
-    selectQueue.push([topAssistant, toolAssistant]);
     selectQueue.push([priorUser, topAssistant, toolAssistant]);
     selectQueue.push([makeSourceRow({ sdkSessionId: 'sdk-new-session-uuid' })]);
 
@@ -759,7 +1019,6 @@ describe('forkSessionAtMessage', () => {
     selectQueue.push([makeSourceRow()]);          // source
     selectQueue.push([target]);                   // target
     selectQueue.push([]);                         // no next user
-    selectQueue.push([target]);                   // assistants before boundary
     selectQueue.push([priorUser, target]);        // bulk copy = 全部
     selectQueue.push([makeSourceRow({ sdkSessionId: 'sdk-new-session-uuid' })]);
 
@@ -793,7 +1052,6 @@ describe('forkSessionAtMessage', () => {
     })]);
     selectQueue.push([target]);
     selectQueue.push([nextUser]);                 // next user after target
-    selectQueue.push([{ value: 1 }]);             // user turns at/after boundary
     selectQueue.push([priorUser, target]);        // bulk copy (含 target 所在 turn)
     selectQueue.push([makeSourceRow({
       agentKind: 'codex',
@@ -804,6 +1062,7 @@ describe('forkSessionAtMessage', () => {
       newSdkSessionId: 'codex-thread-new',
       uuidMap: new Map<string, string>(),
     });
+    queryMock.mockResolvedValue([{ role: 'user', content: '"next"' }]);
 
     await forkSessionAtMessage('src-session', 'asst-codex-cid');
 

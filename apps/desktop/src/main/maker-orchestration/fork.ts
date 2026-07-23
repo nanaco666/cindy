@@ -8,7 +8,7 @@
  * 变成"孤儿 jsonl"，可接受（数量极少，留给后续清理脚本）。
  */
 
-import { eq, and, lt, gt, gte, asc, isNull, count } from 'drizzle-orm';
+import { eq, and, lt, gt, asc, isNull, or, sql } from 'drizzle-orm';
 import { createId } from '@paralleldrive/cuid2';
 
 import { getDbClient } from '../localDb/client/current';
@@ -46,6 +46,244 @@ function normalizePositiveInt(value: unknown): number {
   return typeof value === 'number' && Number.isFinite(value) && value > 0
     ? Math.floor(value)
     : 0;
+}
+
+const messageRowid = sql<number>`rowid`;
+
+type DbAgentKind = 'cc' | 'codex';
+
+interface MessagePosition {
+  createdAt: number;
+  rowid: number | null;
+}
+
+interface ForkNativeSource {
+  agentKind: DbAgentKind;
+  sdkSessionId: string;
+  model: string;
+  providerId: string | null;
+  /** 目标所在原生 session 离场的位置；copy 不能把这条未来边界带进子会话。 */
+  nextSwitch: MessagePosition | null;
+}
+
+interface ForkTimelineMessage {
+  id: string;
+  clientId: string;
+  role: string;
+  content: string;
+  toolUseId: string | null;
+  agentMeta: string | null;
+  agentKind: string | null;
+  createdAt: number;
+  rowid: number;
+}
+
+interface ParsedAgentSwitchBoundary {
+  fromAgentKind: DbAgentKind;
+  toAgentKind?: DbAgentKind;
+  fromModel: string | null;
+  fromSdkSessionId: string | null;
+  handoff?: string;
+}
+
+function parseAgentSwitchBoundary(content: string): ParsedAgentSwitchBoundary | null {
+  try {
+    const parsed = JSON.parse(content) as Record<string, unknown>;
+    if (parsed.fromAgentKind !== 'cc' && parsed.fromAgentKind !== 'codex') return null;
+    const toAgentKind = parsed.toAgentKind === 'cc' || parsed.toAgentKind === 'codex'
+      ? parsed.toAgentKind
+      : undefined;
+    return {
+      fromAgentKind: parsed.fromAgentKind,
+      toAgentKind,
+      fromModel: typeof parsed.fromModel === 'string' ? parsed.fromModel : null,
+      fromSdkSessionId: typeof parsed.fromSdkSessionId === 'string' && parsed.fromSdkSessionId
+        ? parsed.fromSdkSessionId
+        : null,
+      handoff: typeof parsed.handoff === 'string' && parsed.handoff ? parsed.handoff : undefined,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function isBefore(left: MessagePosition, right: MessagePosition): boolean {
+  if (left.createdAt !== right.createdAt) return left.createdAt < right.createdAt;
+  if (left.rowid === null) return false;
+  if (right.rowid === null) return true;
+  return left.rowid < right.rowid;
+}
+
+/**
+ * 找出目标消息真正所属的 vendor session。
+ *
+ * - 目标之后第一条 agent_switch = 该片段的离场边界，from* 正好描述目标片段；
+ * - 没有后续切换 = 目标位于当前片段，直接使用 sessions 当前绑定；
+ * - context_rebuild 或 /clear 已让旧 transcript 失效时 fail closed，避免把已删除
+ *   的上下文通过历史 vendor session 带回新分支。
+ */
+async function resolveForkNativeSource(
+  sourceSessionId: string,
+  source: {
+    agentKind: string;
+    sdkSessionId: string | null;
+    model: string;
+    providerId: string | null;
+    clearedAt: number | null;
+  },
+  target: { createdAt: number; rowid: number },
+): Promise<ForkNativeSource> {
+  if (source.clearedAt !== null && target.createdAt <= source.clearedAt) {
+    throw forkError('UNSUPPORTED_HISTORY', '目标消息位于已清除的上下文中');
+  }
+  const client = getDbClient();
+  const positionParams = [sourceSessionId, target.createdAt, target.createdAt, target.rowid];
+  const invalidated = await client.queryOne<{ id: string }>(
+    `SELECT id FROM messages
+      WHERE session_id = ?
+        AND role = 'context_rebuild'
+        AND (created_at > ? OR (created_at = ? AND rowid > ?))
+      ORDER BY created_at ASC, rowid ASC
+      LIMIT 1`,
+    positionParams,
+  );
+  if (invalidated) {
+    throw forkError('UNSUPPORTED_HISTORY', '目标消息对应的历史引擎会话已因上下文重建失效');
+  }
+  const nextSwitch = await client.queryOne<{
+    content: string;
+    created_at: number;
+    rowid: number;
+  }>(
+    `SELECT content, created_at, rowid FROM messages
+      WHERE session_id = ?
+        AND role = 'agent_switch'
+        AND rewind_at IS NULL
+        AND (created_at > ? OR (created_at = ? AND rowid > ?))
+      ORDER BY created_at ASC, rowid ASC
+      LIMIT 1`,
+    positionParams,
+  );
+  if (!nextSwitch) {
+    if (!source.sdkSessionId) {
+      throw forkError('SOURCE_NEVER_RAN', '原会话尚未运行，无法 fork');
+    }
+    const agentKind: DbAgentKind = source.agentKind === 'codex' ? 'codex' : 'cc';
+    return {
+      agentKind,
+      sdkSessionId: source.sdkSessionId,
+      model: source.model,
+      providerId: source.providerId,
+      nextSwitch: null,
+    };
+  }
+  const parsed = parseAgentSwitchBoundary(nextSwitch.content);
+  if (!parsed?.fromSdkSessionId) {
+    throw forkError('UNSUPPORTED_HISTORY', '目标消息对应的历史引擎会话不可用');
+  }
+  return {
+    agentKind: parsed.fromAgentKind,
+    sdkSessionId: parsed.fromSdkSessionId,
+    model: parsed.fromModel ?? source.model,
+    // 边界没有保存历史 provider；只有仍处于同一 agent 时才继承当前凭证形态，
+    // 否则跟随目标 agent 默认 provider，不能把另一家引擎的 providerId 带过去。
+    providerId: parsed.fromAgentKind === source.agentKind ? source.providerId : null,
+    nextSwitch: { createdAt: nextSwitch.created_at, rowid: nextSwitch.rowid },
+  };
+}
+
+function beforePosition(position: MessagePosition) {
+  return position.rowid === null
+    ? lt(messages.createdAt, position.createdAt)
+    : or(
+        lt(messages.createdAt, position.createdAt),
+        and(eq(messages.createdAt, position.createdAt), lt(messageRowid, position.rowid)),
+      );
+}
+
+function findFirstUserAfterSwitchBoundary(
+  rows: ForkTimelineMessage[],
+  targetRole: string,
+  targetAgentKind: DbAgentKind,
+): string | null {
+  if (targetRole !== 'user') return null;
+  let boundaryIndex = -1;
+  for (let i = rows.length - 1; i >= 0; i -= 1) {
+    if (rows[i].role === 'agent_switch') {
+      boundaryIndex = i;
+      break;
+    }
+  }
+  if (boundaryIndex < 0 || rows.slice(boundaryIndex + 1).some((row) => row.role === 'user')) {
+    return null;
+  }
+  const boundary = parseAgentSwitchBoundary(rows[boundaryIndex].content);
+  return boundary?.toAgentKind === targetAgentKind && boundary.handoff
+    ? rows[boundaryIndex].clientId
+    : null;
+}
+
+function resolveClaudeAssistantAnchor(
+  rows: ForkTimelineMessage[],
+  sourceSdkSessionId: string,
+  index: ClaudeTranscriptAnchorIndex | null,
+): string | undefined {
+  let timelineSdkSessionId: string | null = sourceSdkSessionId;
+  for (let i = rows.length - 1; i >= 0; i -= 1) {
+    const row = rows[i];
+    if (row.role === 'context_rebuild') {
+      timelineSdkSessionId = null;
+      continue;
+    }
+    if (row.role === 'agent_switch') {
+      timelineSdkSessionId = parseAgentSwitchBoundary(row.content)?.fromSdkSessionId ?? null;
+      continue;
+    }
+    if (row.role !== 'assistant' || timelineSdkSessionId !== sourceSdkSessionId) continue;
+    const resolved = resolveClaudeForkAssistantAnchor(parseClaudeAgentMeta(row.agentMeta), index);
+    if (resolved) return resolved;
+  }
+  return undefined;
+}
+
+async function countCodexTailTurns(
+  sourceSessionId: string,
+  sourceCurrentSdkSessionId: string | null,
+  forkSourceSdkSessionId: string,
+  sourceClearedAt: number | null,
+  boundary: MessagePosition,
+): Promise<number> {
+  const rowPredicate = boundary.rowid === null
+    ? 'created_at >= ?'
+    : '(created_at > ? OR (created_at = ? AND rowid >= ?))';
+  const rowParams = boundary.rowid === null
+    ? [boundary.createdAt]
+    : [boundary.createdAt, boundary.createdAt, boundary.rowid];
+  const rows = await getDbClient().query<{
+    role: string;
+    content: string;
+  }>(
+    `SELECT role, content FROM messages
+      WHERE session_id = ?
+        AND (? IS NULL OR created_at > ?)
+        AND ${rowPredicate}
+        AND (role = 'user' OR role = 'agent_switch' OR role = 'context_rebuild')
+        AND (role = 'context_rebuild' OR rewind_at IS NULL)
+      ORDER BY created_at DESC, rowid DESC`,
+    [sourceSessionId, sourceClearedAt, sourceClearedAt, ...rowParams],
+  );
+  let timelineSdkSessionId = sourceCurrentSdkSessionId;
+  let count = 0;
+  for (const row of rows) {
+    if (row.role === 'context_rebuild') {
+      timelineSdkSessionId = null;
+    } else if (row.role === 'agent_switch') {
+      timelineSdkSessionId = parseAgentSwitchBoundary(row.content)?.fromSdkSessionId ?? null;
+    } else if (timelineSdkSessionId === forkSourceSdkSessionId) {
+      count += 1;
+    }
+  }
+  return count;
 }
 
 /** SDK 副作用前拒绝复制任何跨过 agent_switch 的混合引擎历史。 */
@@ -180,13 +418,16 @@ export async function forkSessionAtMessage(
   if (!source) {
     throw forkError('SOURCE_NOT_FOUND', `Source session ${sourceSessionId} 不存在`);
   }
-  if (!source.sdkSessionId) {
-    throw forkError('SOURCE_NEVER_RAN', '原会话尚未运行，无法 fork');
-  }
 
-  // 2. 读 target message —— 按 clientId 查（详见函数 doc）
+  // 2. 读 target message + rowid —— 同毫秒边界必须按真实插入顺序判断。
   const [target] = await db
-    .select()
+    .select({
+      id: messages.id,
+      clientId: messages.clientId,
+      role: messages.role,
+      createdAt: messages.createdAt,
+      rowid: messageRowid,
+    })
     .from(messages)
     .where(
       and(eq(messages.sessionId, sourceSessionId), eq(messages.clientId, messageClientId)),
@@ -199,36 +440,62 @@ export async function forkSessionAtMessage(
     throw forkError('NOT_USER_MESSAGE', 'fork 只能在 user 或 assistant 消息上发起');
   }
 
-  // 2.5 计算复制边界 boundaryCreatedAt（exclusive，复制 createdAt < boundary 的行）：
-  //   user 目标      → target 自身 createdAt（不含 target，原语义）
-  //   assistant 目标 → target 之后第一条未回滚 user 消息的 createdAt（把 target
-  //                    所在 turn 完整带上）；没有后续 user 消息则取
-  //                    MAX_SAFE_INTEGER 复制全部（= 从最新回复分叉整条会话）。
-  let boundaryCreatedAt: number;
+  const forkSource = await resolveForkNativeSource(sourceSessionId, source, target);
+
+  // 2.5 复制边界(exclusive)：user 不含自身；assistant 带完整 turn，到下一条 user
+  // 为止。若目标片段先离场，则在 agent_switch 之前截断，不能把未来切换带进子分支。
+  let copyBoundary: MessagePosition;
   if (target.role === 'user') {
-    boundaryCreatedAt = target.createdAt;
+    copyBoundary = { createdAt: target.createdAt, rowid: target.rowid };
   } else {
     const [nextUser] = await db
-      .select()
+      .select({ createdAt: messages.createdAt, rowid: messageRowid })
       .from(messages)
       .where(
         and(
           eq(messages.sessionId, sourceSessionId),
           eq(messages.role, 'user'),
-          gt(messages.createdAt, target.createdAt),
+          or(
+            gt(messages.createdAt, target.createdAt),
+            and(eq(messages.createdAt, target.createdAt), gt(messageRowid, target.rowid)),
+          ),
           isNull(messages.rewindAt),
         ),
       )
-      .orderBy(asc(messages.createdAt))
+      .orderBy(asc(messages.createdAt), asc(messageRowid))
       .limit(1);
-    boundaryCreatedAt = nextUser ? nextUser.createdAt : Number.MAX_SAFE_INTEGER;
+    copyBoundary = nextUser
+      ? { createdAt: nextUser.createdAt, rowid: nextUser.rowid }
+      : { createdAt: Number.MAX_SAFE_INTEGER, rowid: null };
+  }
+  if (forkSource.nextSwitch && isBefore(forkSource.nextSwitch, copyBoundary)) {
+    copyBoundary = forkSource.nextSwitch;
   }
 
-  await assertForkRangeDoesNotCrossAgentSwitch(
-    sourceSessionId,
-    source.clearedAt,
-    boundaryCreatedAt,
-  );
+  // SQLite 可见历史与 vendor transcript 分层：UI 仍复制完整可见前缀；agent 侧只
+  // fork 目标所属的原生 session。/clear 前缀不属于当前上下文，不能在子会话复活。
+  const sourceMessages = await db
+    .select({
+      id: messages.id,
+      clientId: messages.clientId,
+      role: messages.role,
+      content: messages.content,
+      toolUseId: messages.toolUseId,
+      agentMeta: messages.agentMeta,
+      agentKind: messages.agentKind,
+      createdAt: messages.createdAt,
+      rowid: messageRowid,
+    })
+    .from(messages)
+    .where(
+      and(
+        eq(messages.sessionId, sourceSessionId),
+        source.clearedAt === null ? undefined : gt(messages.createdAt, source.clearedAt),
+        beforePosition(copyBoundary),
+        isNull(messages.rewindAt),
+      ),
+    )
+    .orderBy(asc(messages.createdAt), asc(messageRowid));
 
   // 3. 计算 agent 侧截断信息。
   //
@@ -238,103 +505,75 @@ export async function forkSessionAtMessage(
   // **跳过 rewind_at 已置位的行**：那些是上一次 rewind 软删的消息，再用它们当
   // 锚点会让 SDK upToMessageId 指向一条逻辑上已不存在的 assistant，jsonl 里找不到。
   //
-  // Codex: 先 fork latest，再对新 thread rollback 尾部 N 个 turn。Codex 一次
-  // user send 对应一个 turn，因此按边界之后（含边界）的未回滚 user 消息计数即可：
-  // user 目标时 = target 自己 + 之后的 user-turn；assistant 目标时 = 该 turn
-  // 之后的 user-turn（边界本身就是下一条 user 消息）。
-  const isCodex = source.agentKind === 'codex';
+  // Codex: 从当前时间线倒扫 agent_switch，把 copy boundary 之后、确实写入所选
+  // 原生 thread 的 user turn 计为 rollback 数；其它引擎片段不能混算。
+  const isCodex = forkSource.agentKind === 'codex';
   let assistantUuid: string | undefined;
   let tailTurnsToDrop: number | undefined;
   let claudeAnchorIndex: ClaudeTranscriptAnchorIndex | null = null;
+  const resetHandoffBoundaryClientId = findFirstUserAfterSwitchBoundary(
+    sourceMessages,
+    target.role,
+    forkSource.agentKind,
+  );
   if (!isCodex) {
     claudeAnchorIndex = await loadClaudeTranscriptAnchorIndex({
-      sdkSessionId: source.sdkSessionId,
+      sdkSessionId: forkSource.sdkSessionId,
       workingDir: source.workingDir,
     }).catch(() => null);
-    const priorAssistants = await db
-      .select()
-      .from(messages)
-      .where(
-        and(
-          eq(messages.sessionId, sourceSessionId),
-          eq(messages.role, 'assistant'),
-          lt(messages.createdAt, boundaryCreatedAt),
-          isNull(messages.rewindAt),
-        ),
-      )
-      .orderBy(asc(messages.createdAt));
-    for (let i = priorAssistants.length - 1; i >= 0; i--) {
-      const meta = parseClaudeAgentMeta(priorAssistants[i].agentMeta);
-      const resolved = resolveClaudeForkAssistantAnchor(meta, claudeAnchorIndex);
-      if (resolved) {
-        assistantUuid = resolved;
-        break;
-      }
-    }
-    if (!assistantUuid) {
+    assistantUuid = resolveClaudeAssistantAnchor(
+      sourceMessages,
+      forkSource.sdkSessionId,
+      claudeAnchorIndex,
+    );
+    // 切换后的首条 user 自身不进子分支。fresh Claude session 在它之前没有可 fork
+    // 的 assistant 锚点，此时创建未绑定的新会话，并把复制边界恢复为 pending handoff。
+    if (!assistantUuid && !resetHandoffBoundaryClientId) {
       throw forkError(
         'NO_PRIOR_ASSISTANT',
         '请在 AI 回复之后的提问上 fork',
       );
     }
   } else {
-    const [tail] = await db
-      .select({ value: count(messages.id) })
-      .from(messages)
-      .where(
-        and(
-          eq(messages.sessionId, sourceSessionId),
-          eq(messages.role, 'user'),
-          gte(messages.createdAt, boundaryCreatedAt),
-          isNull(messages.rewindAt),
-        ),
-      );
-    tailTurnsToDrop = Number(tail?.value ?? 0);
+    tailTurnsToDrop = await countCodexTailTurns(
+      sourceSessionId,
+      source.sdkSessionId,
+      forkSource.sdkSessionId,
+      source.clearedAt,
+      copyBoundary,
+    );
   }
 
-  // 4. 调 SDK forkSession (事务外) — Stage 2 C2 后走 maker.forkSdkSession,
-  //    Claude: 内部一次性做完 sdk.forkSession + 两次 sdk.getSessionMessages + 建 uuidMap;
-  //    Codex:  走 ThreadFork + ThreadRollback, uuidMap 返回空 Map (Codex 不存 message uuid)。
-  // 已经是 [Fork 开头的不再嵌套前缀, 避免 [Fork] [Fork] ... 越叠越长
-  // （部分前缀同时覆盖 forkSessionStripEncrypted 产出的 [Fork·已剥离] 变体）。
+  // 4. 调 SDK forkSession (事务外)。fresh Claude 首条 user 特例没有合法的 prior
+  // assistant 锚点：保留 pending handoff、让新会话首次发送时 lazy-create 即可。
   const newTitle = source.title.startsWith('[Fork') ? source.title : `[Fork] ${source.title}`;
-  const agentKind = isCodex ? 'codex' : 'claude-code';
-  const forkResult = await getMaker().forkSdkSession(agentKind, {
-    sourceSdkSessionId: source.sdkSessionId,
-    upToMessageId: assistantUuid,
-    ...(tailTurnsToDrop !== undefined ? { tailTurnsToDrop } : {}),
-    title: newTitle,
-    workingDir: source.workingDir ?? undefined,
-  }).catch((err: unknown) => {
-    if (!isCodex) throw err;
-    const detail = err instanceof Error ? err.message : String(err);
-    throw forkError(
-      'CODEX_FORK_STATE_UNAVAILABLE',
-      detail,
-    );
-  });
-  const { newSdkSessionId, uuidMap, initialContextTokens } = forkResult;
+  let newSdkSessionId: string | null = null;
+  let uuidMap = new Map<string, string>();
+  let initialContextTokens: number | undefined;
+  if (isCodex || assistantUuid) {
+    const agentKind = isCodex ? 'codex' : 'claude-code';
+    const forkResult = await getMaker().forkSdkSession(agentKind, {
+      sourceSdkSessionId: forkSource.sdkSessionId,
+      upToMessageId: assistantUuid,
+      ...(tailTurnsToDrop !== undefined ? { tailTurnsToDrop } : {}),
+      title: newTitle,
+      workingDir: source.workingDir ?? undefined,
+    }).catch((err: unknown) => {
+      if (!isCodex) throw err;
+      const detail = err instanceof Error ? err.message : String(err);
+      throw forkError(
+        'CODEX_FORK_STATE_UNAVAILABLE',
+        detail,
+      );
+    });
+    ({ newSdkSessionId, uuidMap, initialContextTokens } = forkResult);
+  }
   const forkContextTokens = normalizePositiveInt(initialContextTokens);
   const forkContextWindow = normalizePositiveInt(source.contextWindow);
 
   // 5. SQLite 事务：insert 新 session + bulk copy messages
   const now = Date.now();
   const newSessionId = createBusinessSessionId();
-
-  // 取 source messages: 复制边界之前 (boundary exclusive) 的所有行 — 与 SDK
-  // upToMessageId 截断点 / thread rollback 后的新 thread 对齐。
-  // 跳过 rewind_at 已置位的行 (软删消息不该进新 fork 会话)。
-  const sourceMessages = await db
-    .select()
-    .from(messages)
-    .where(
-      and(
-        eq(messages.sessionId, sourceSessionId),
-        lt(messages.createdAt, boundaryCreatedAt),
-        isNull(messages.rewindAt),
-      ),
-    )
-    .orderBy(asc(messages.createdAt));
 
   const newMessageIds = sourceMessages.map(() => ({ id: createId(), clientId: createId() }));
   const txUuidMap = isCodex
@@ -348,16 +587,17 @@ export async function forkSessionAtMessage(
     : collectClaudeToolParentUuids(sourceMessages, claudeAnchorIndex);
   await getDbClient().tx('fork.session', {
     sourceSessionId,
-    targetCreatedAt: boundaryCreatedAt,
+    sourceClearedAt: source.clearedAt,
+    targetCreatedAt: copyBoundary.createdAt,
+    targetRowid: copyBoundary.rowid,
     newSession: {
       id: newSessionId,
       title: newTitle,
       workingDir: source.workingDir,
-      model: source.model,
-      // providerId 决定凭证形态(gateway-key / oauth-bearer)。fork 必须继承,否则新会话
-      // 与原会话形态不一致,首次发消息会要求重启共享 codex 进程 → 任何会话在忙就永远排队
-      // (2026-07-03 用户实报)。source 为 null 时保持 null(= 跟随系统默认),语义不变。
-      providerId: source.providerId,
+      model: forkSource.model,
+      // 同一 agent 的 fork 继承 providerId，避免凭证形态漂移；历史跨 agent 片段
+      // 没有可靠的 provider 快照，使用 null 跟随目标 agent 的默认 provider。
+      providerId: forkSource.providerId,
       effort: source.effort,
       permissionMode: source.permissionMode,
       status: 'active',
@@ -366,11 +606,11 @@ export async function forkSessionAtMessage(
       totalCostUsd: 0,
       contextTokens: forkContextTokens,
       contextWindow: forkContextWindow,
-      fastMode: source.fastMode,
+      fastMode: forkSource.agentKind === source.agentKind ? source.fastMode : false,
       clearedAt: null,
       pinnedAt: null,
       userSendAt: now,
-      agentKind: source.agentKind,
+      agentKind: forkSource.agentKind,
       workspaceKind: source.workspaceKind,
       codexHistoryHasProductPrompt: source.codexHistoryHasProductPrompt,
       parentSessionId: source.id,
@@ -381,6 +621,8 @@ export async function forkSessionAtMessage(
     uuidMap: Array.from(txUuidMap.entries()),
     ...(legacyTranscriptParentUuids.length > 0 ? { legacyTranscriptParentUuids } : {}),
     ...(toolParentUuids.length > 0 ? { toolParentUuids } : {}),
+    detachAgentSwitchSessions: true,
+    resetHandoffBoundaryClientId,
     newMessageIds,
   });
 
@@ -420,8 +662,12 @@ export async function forkSessionStripEncrypted(sourceSessionId: string): Promis
   const sourceMessages = await db
     .select()
     .from(messages)
-    .where(and(eq(messages.sessionId, sourceSessionId), isNull(messages.rewindAt)))
-    .orderBy(asc(messages.createdAt));
+    .where(and(
+      eq(messages.sessionId, sourceSessionId),
+      source.clearedAt === null ? undefined : gt(messages.createdAt, source.clearedAt),
+      isNull(messages.rewindAt),
+    ))
+    .orderBy(asc(messages.createdAt), asc(messageRowid));
   const maxCreatedAt = sourceMessages.reduce(
     (max, message) => Math.max(max, Number(message.createdAt ?? 0)),
     0,
@@ -456,7 +702,9 @@ export async function forkSessionStripEncrypted(sourceSessionId: string): Promis
   const newMessageIds = sourceMessages.map(() => ({ id: createId(), clientId: createId() }));
   await getDbClient().tx('fork.session', {
     sourceSessionId,
+    sourceClearedAt: source.clearedAt,
     targetCreatedAt: copyBeforeCreatedAt,
+    targetRowid: null,
     newSession: {
       id: newSessionId,
       title: newTitle,

@@ -4361,7 +4361,7 @@
       "editSend": "发送",
       "editRollbackHint": "发送将撤销上一轮对 {{count}} 个文件的改动",
       "forkErrors": {
-        "unsupportedHistory": "目标位置跨过了引擎切换边界，无法从这里开启新对话",
+        "unsupportedHistory": "目标位置对应的历史引擎会话已不可用，无法从这里开启新对话",
         "noPriorAssistant": "请在 AI 回复之后的消息上开启新对话",
         "sourceNeverRan": "原会话尚未运行，无法开启新对话",
         "codexStateUnavailable": "Codex 会话状态不可用，无法开启新对话。{{detail}}",

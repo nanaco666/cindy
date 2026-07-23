@@ -4361,7 +4361,7 @@
       "editSend": "送信",
       "editRollbackHint": "送信すると前のターンで変更された {{count}} 個のファイルが元に戻ります",
       "forkErrors": {
-        "unsupportedHistory": "この位置はエージェント切替境界をまたぐため、ここから新しい会話を始められません",
+        "unsupportedHistory": "この位置に対応する過去のエージェントセッションを利用できないため、ここから新しい会話を始められません",
         "noPriorAssistant": "AI の返信より後のメッセージから新しい会話を始めてください",
         "sourceNeverRan": "元の会話がまだ実行されていないため、新しい会話を始められません",
         "codexStateUnavailable": "Codex 会話の状態を利用できないため、新しい会話を始められません。{{detail}}",

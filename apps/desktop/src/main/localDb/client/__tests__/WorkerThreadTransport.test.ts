@@ -106,7 +106,7 @@ describe('WorkerThreadTransport', () => {
     }
   });
 
-  it('normalizes fork.session workingDir in the inline worker fallback', async () => {
+  it('normalizes fork.session fields in the inline worker fallback', async () => {
     const transport = new WorkerThreadTransport({ useInlineWorker: true });
     try {
       await transport.send('exec', {
@@ -151,6 +151,19 @@ describe('WorkerThreadTransport', () => {
           rewind_at INTEGER
         )`,
       });
+      await transport.send('exec', {
+        sql: `INSERT INTO messages (
+          id, client_id, session_id, role, content, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?)`,
+        params: [
+          'switch',
+          'switch-client',
+          'src',
+          'agent_switch',
+          JSON.stringify({ fromAgentKind: 'cc', fromSdkSessionId: 'parent-claude-session' }),
+          50,
+        ],
+      });
 
       await transport.send('tx', {
         name: 'fork.session',
@@ -184,7 +197,8 @@ describe('WorkerThreadTransport', () => {
             updatedAt: 1,
           },
           uuidMap: [],
-          newMessageIds: [],
+          detachAgentSwitchSessions: true,
+          newMessageIds: [{ id: 'forked-switch', clientId: 'forked-switch-client' }],
         },
       });
 
@@ -192,6 +206,13 @@ describe('WorkerThreadTransport', () => {
         sql: 'SELECT working_dir FROM sessions WHERE id = ?',
         params: ['forked'],
       })).resolves.toEqual({ working_dir: 'D:/repo/project' });
+      const copiedSwitch = await transport.send<{ content: string }>('queryOne', {
+        sql: 'SELECT content FROM messages WHERE id = ?',
+        params: ['forked-switch'],
+      });
+      expect(JSON.parse(copiedSwitch.content)).toMatchObject({
+        fromSdkSessionId: null,
+      });
     } finally {
       await transport.close();
     }

@@ -558,7 +558,9 @@ function parseRewindAgentMeta(raw: string | null): { uuid?: string; transcriptPa
 function forkSession(db: Database.Database, args: unknown): { messageCount: number } {
   const payload = asRecord(args, 'fork.session args');
   const sourceSessionId = expectString(payload.sourceSessionId, 'sourceSessionId');
+  const sourceClearedAt = nullableNumber(payload.sourceClearedAt);
   const targetCreatedAt = expectNumber(payload.targetCreatedAt, 'targetCreatedAt');
+  const targetRowid = nullableNumber(payload.targetRowid);
   const newSession = asRecord(payload.newSession, 'newSession');
   const uuidMap = normalizeUuidMap(payload.uuidMap);
   const legacyTranscriptParentUuids = normalizeStringSet(
@@ -566,15 +568,30 @@ function forkSession(db: Database.Database, args: unknown): { messageCount: numb
     'legacyTranscriptParentUuids',
   );
   const toolParentUuids = normalizeStringSet(payload.toolParentUuids, 'toolParentUuids');
+  const detachAgentSwitchSessions = payload.detachAgentSwitchSessions === true;
+  const resetHandoffBoundaryClientId = nullableString(payload.resetHandoffBoundaryClientId);
   const newMessageIds = normalizeNewMessageIds(payload.newMessageIds);
   const sourceMessages = db.prepare(
-    `SELECT role, content, tool_use_id, agent_meta, agent_kind, created_at
+    `SELECT client_id, role, content, tool_use_id, agent_meta, agent_kind, created_at
        FROM messages
       WHERE session_id = ?
-        AND created_at < ?
+        AND (? IS NULL OR created_at > ?)
+        AND (
+          created_at < ?
+          OR (? IS NOT NULL AND created_at = ? AND rowid < ?)
+        )
         AND rewind_at IS NULL
-      ORDER BY created_at ASC`,
-  ).all(sourceSessionId, targetCreatedAt) as Array<{
+      ORDER BY created_at ASC, rowid ASC`,
+  ).all(
+    sourceSessionId,
+    sourceClearedAt,
+    sourceClearedAt,
+    targetCreatedAt,
+    targetRowid,
+    targetCreatedAt,
+    targetRowid,
+  ) as Array<{
+    client_id: string;
     role: string;
     content: string;
     tool_use_id: string | null;
@@ -640,7 +657,10 @@ function forkSession(db: Database.Database, args: unknown): { messageCount: numb
         ids.clientId,
         expectString(newSession.id, 'newSession.id'),
         message.role,
-        message.content,
+        sanitizeForkedMessageContent(message, {
+          detachAgentSwitchSessions,
+          resetHandoffBoundaryClientId,
+        }),
         message.tool_use_id,
         remapAgentMetaUuid(message.agent_meta, uuidMap, legacyTranscriptParentUuids, toolParentUuids),
         message.agent_kind,
@@ -650,6 +670,28 @@ function forkSession(db: Database.Database, args: unknown): { messageCount: numb
   });
   transaction();
   return { messageCount: sourceMessages.length };
+}
+
+/** 复制边界只保留可见语义；vendor session 绑定必须属于父分支。 */
+function sanitizeForkedMessageContent(
+  message: { client_id: string; role: string; content: string },
+  opts: { detachAgentSwitchSessions: boolean; resetHandoffBoundaryClientId: string | null },
+): string {
+  const resetConsumed = message.client_id === opts.resetHandoffBoundaryClientId;
+  if (message.role !== 'agent_switch' || (!opts.detachAgentSwitchSessions && !resetConsumed)) {
+    return message.content;
+  }
+  try {
+    const parsed = JSON.parse(message.content);
+    if (!isRecord(parsed)) return message.content;
+    return JSON.stringify({
+      ...parsed,
+      ...(opts.detachAgentSwitchSessions ? { fromSdkSessionId: null } : {}),
+      ...(resetConsumed ? { consumed: false } : {}),
+    });
+  } catch {
+    return message.content;
+  }
 }
 
 // 会话分享(.xdtshare)导入落库:单事务插 session 行 + 全量 messages(含 rewind 链)。

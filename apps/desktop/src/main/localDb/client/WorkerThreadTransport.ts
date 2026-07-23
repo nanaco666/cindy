@@ -944,15 +944,19 @@ function parseAgentMeta(raw) {
 function forkSession(readyDb, args) {
   const payload = asRecord(args, 'fork.session args');
   const sourceSessionId = expectString(payload.sourceSessionId, 'sourceSessionId');
+  const sourceClearedAt = nullableNumber(payload.sourceClearedAt);
   const targetCreatedAt = expectNumber(payload.targetCreatedAt, 'targetCreatedAt');
+  const targetRowid = nullableNumber(payload.targetRowid);
   const newSession = asRecord(payload.newSession, 'newSession');
   const uuidMap = normalizeUuidMap(payload.uuidMap);
   const legacyTranscriptParentUuids = normalizeStringSet(payload.legacyTranscriptParentUuids, 'legacyTranscriptParentUuids');
   const toolParentUuids = normalizeStringSet(payload.toolParentUuids, 'toolParentUuids');
+  const detachAgentSwitchSessions = payload.detachAgentSwitchSessions === true;
+  const resetHandoffBoundaryClientId = nullableString(payload.resetHandoffBoundaryClientId);
   const newMessageIds = normalizeNewMessageIds(payload.newMessageIds);
   const sourceMessages = readyDb.prepare(
-    'SELECT role, content, tool_use_id, agent_meta, agent_kind, created_at FROM messages WHERE session_id = ? AND created_at < ? AND rewind_at IS NULL ORDER BY created_at ASC',
-  ).all(sourceSessionId, targetCreatedAt);
+    'SELECT client_id, role, content, tool_use_id, agent_meta, agent_kind, created_at FROM messages WHERE session_id = ? AND (? IS NULL OR created_at > ?) AND (created_at < ? OR (? IS NOT NULL AND created_at = ? AND rowid < ?)) AND rewind_at IS NULL ORDER BY created_at ASC, rowid ASC',
+  ).all(sourceSessionId, sourceClearedAt, sourceClearedAt, targetCreatedAt, targetRowid, targetCreatedAt, targetRowid);
   if (newMessageIds.length !== sourceMessages.length) {
     throw invalidArgs('newMessageIds length mismatch: expected ' + sourceMessages.length + ', got ' + newMessageIds.length);
   }
@@ -991,10 +995,26 @@ function forkSession(readyDb, args) {
     for (let i = 0; i < sourceMessages.length; i += 1) {
       const message = sourceMessages[i];
       const ids = newMessageIds[i];
-      insertMessage.run(ids.id, ids.clientId, expectString(newSession.id, 'newSession.id'), message.role, message.content, message.tool_use_id, remapAgentMetaUuid(message.agent_meta, uuidMap, legacyTranscriptParentUuids, toolParentUuids), message.agent_kind, message.created_at);
+      insertMessage.run(ids.id, ids.clientId, expectString(newSession.id, 'newSession.id'), message.role, sanitizeForkedMessageContent(message, { detachAgentSwitchSessions, resetHandoffBoundaryClientId }), message.tool_use_id, remapAgentMetaUuid(message.agent_meta, uuidMap, legacyTranscriptParentUuids, toolParentUuids), message.agent_kind, message.created_at);
     }
   })();
   return { messageCount: sourceMessages.length };
+}
+
+function sanitizeForkedMessageContent(message, opts) {
+  const resetConsumed = message.client_id === opts.resetHandoffBoundaryClientId;
+  if (message.role !== 'agent_switch' || (!opts.detachAgentSwitchSessions && !resetConsumed)) return message.content;
+  try {
+    const parsed = JSON.parse(message.content);
+    if (!isRecord(parsed)) return message.content;
+    return JSON.stringify({
+      ...parsed,
+      ...(opts.detachAgentSwitchSessions ? { fromSdkSessionId: null } : {}),
+      ...(resetConsumed ? { consumed: false } : {}),
+    });
+  } catch (_) {
+    return message.content;
+  }
 }
 
 function embeddingMarkDone(readyDb, args) {

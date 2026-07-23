@@ -565,6 +565,68 @@ describe('db worker tx handlers', () => {
     });
   });
 
+  it('fork.session filters pre-clear/same-ms tail rows and detaches copied parked sessions', async () => {
+    await withClient(async (client) => {
+      await seedSession(client, 'src');
+      const switchContent = JSON.stringify({
+        fromAgentKind: 'codex',
+        toAgentKind: 'cc',
+        fromModel: 'gpt-5.4',
+        toModel: 'claude-sonnet-4-6',
+        fromSdkSessionId: 'parent-parked-codex',
+        handoff: 'carry context',
+        consumed: true,
+      });
+      await client.exec(
+        `INSERT INTO messages (id, client_id, session_id, role, content, created_at)
+         VALUES (?, ?, ?, ?, ?, ?), (?, ?, ?, ?, ?, ?), (?, ?, ?, ?, ?, ?),
+                (?, ?, ?, ?, ?, ?), (?, ?, ?, ?, ?, ?)`,
+        [
+          'pre-clear', 'pre-clear-client', 'src', 'user', 'old', 50,
+          'switch', 'switch-client', 'src', 'agent_switch', switchContent, 100,
+          'same-before', 'same-before-client', 'src', 'assistant', 'keep', 200,
+          'target', 'target-client', 'src', 'user', 'exclude target', 200,
+          'same-after', 'same-after-client', 'src', 'assistant', 'exclude tail', 200,
+        ],
+      );
+      const target = await client.queryOne<{ rowid: number }>(
+        'SELECT rowid FROM messages WHERE id = ?',
+        ['target'],
+      );
+      expect(target).not.toBeNull();
+
+      await client.tx('fork.session', {
+        sourceSessionId: 'src',
+        sourceClearedAt: 75,
+        targetCreatedAt: 200,
+        targetRowid: target!.rowid,
+        newSession: sessionRow('forked', { parentSessionId: 'src' }),
+        uuidMap: [],
+        detachAgentSwitchSessions: true,
+        resetHandoffBoundaryClientId: 'switch-client',
+        newMessageIds: [
+          { id: 'copy-switch', clientId: 'copy-switch-client' },
+          { id: 'copy-same-before', clientId: 'copy-same-before-client' },
+        ],
+      });
+
+      const copied = await client.query<{
+        id: string;
+        role: string;
+        content: string;
+      }>(
+        'SELECT id, role, content FROM messages WHERE session_id = ? ORDER BY created_at, rowid',
+        ['forked'],
+      );
+      expect(copied.map((row) => row.id)).toEqual(['copy-switch', 'copy-same-before']);
+      expect(JSON.parse(copied[0].content)).toMatchObject({
+        fromSdkSessionId: null,
+        handoff: 'carry context',
+        consumed: false,
+      });
+    });
+  });
+
   it('fork.session normalizes legacy Claude transcript parent metadata before remapping', async () => {
     await withClient(async (client) => {
       await seedSession(client, 'src');
