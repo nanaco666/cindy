@@ -12,6 +12,7 @@ import { useTranslation } from 'react-i18next';
 
 import { useConfirmDialog } from '@/components/ui/confirm-dialog-provider';
 import { clearWorkersCache } from '@/features/cc-agent/hooks/useWorkers';
+import { createLogger } from '@/lib/logger';
 import { toast } from '@/lib/toast';
 import {
   createAuthService,
@@ -70,6 +71,8 @@ export interface AuthContextValue {
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
+
+const log = createLogger('AuthContext');
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -145,6 +148,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setUser(null);
         }
       })
+      .catch((error: unknown) => {
+        // 初始化异常归一未登录(implementation-plan Step 3b v6.3):此前该链仅
+        // then/finally,真实 reject 会产生 unhandled rejection 且 auth 快照悬空。
+        // 统一 logger 记录 + 清为 unauthenticated snapshot,不新增视觉分支
+        // (handoff 走正常 unauthenticated 冷启动)。
+        log.error('auth initialize failed, fall back to unauthenticated', error);
+        // 推送事件比本次 initialize 响应新时不覆盖(与 then 分支同守卫)。
+        if (authStateVersionRef.current !== initializeVersion) return;
+        setIsAuthenticated(false);
+        setIsCanary(false);
+        activeUserIdRef.current = null;
+        setLoginState(null);
+        clearWorkersCache();
+        setUser(null);
+      })
       .finally(() => setIsInitializing(false));
 
     return () => {
@@ -158,8 +176,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setAccountDeletionRestored(false);
     if (isSecondaryWindow() || isSidebarWindow()) return;
     let disposed = false;
-    void authServiceRef.current!
-      .consumeAccountDeletionRestoredNotice()
+    void authServiceRef
+      .current!.consumeAccountDeletionRestoredNotice()
       .then((shouldShow) => {
         if (!disposed && shouldShow) {
           toast.success(t('accountDeletion.restoredNotice'), { duration: 5000 });

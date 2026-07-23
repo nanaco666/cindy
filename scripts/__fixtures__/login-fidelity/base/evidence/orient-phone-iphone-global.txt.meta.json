@@ -1,0 +1,45 @@
+{
+  "evidenceSha256": "72a5df2bc78749fcf528f1fb425d357b0e50a5941238b7a9f33cea56f51e8b6f",
+  "testedCodeCommit": "ffffffffffffffffffffffffffffffffffffffff",
+  "capturedCellRef": {
+    "rowId": "mobile.orientation-layout.phone-fallback-geometry",
+    "device": "iphone",
+    "locale": "zh-CN",
+    "region": "global"
+  },
+  "reuseGroupId": "g-orient-phone-iphone-global",
+  "applicableCellRefs": [
+    {
+      "rowId": "mobile.orientation-layout.phone-fallback-geometry",
+      "device": "iphone",
+      "locale": "zh-CN",
+      "region": "global"
+    },
+    {
+      "rowId": "mobile.orientation-layout.phone-fallback-geometry",
+      "device": "iphone",
+      "locale": "zh-TW",
+      "region": "global"
+    },
+    {
+      "rowId": "mobile.orientation-layout.phone-fallback-geometry",
+      "device": "iphone",
+      "locale": "en",
+      "region": "global"
+    },
+    {
+      "rowId": "mobile.orientation-layout.phone-fallback-geometry",
+      "device": "iphone",
+      "locale": "ja",
+      "region": "global"
+    },
+    {
+      "rowId": "mobile.orientation-layout.phone-fallback-geometry",
+      "device": "iphone",
+      "locale": "ko",
+      "region": "global"
+    }
+  ],
+  "scenario": "fixture 采集(self-test)",
+  "capturedAt": "2026-07-20T00:00:00.000Z"
+}

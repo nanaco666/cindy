@@ -1,0 +1,1 @@
+fixture-evidence mobile.orientation-layout.phone-fallback-geometry iphone cn

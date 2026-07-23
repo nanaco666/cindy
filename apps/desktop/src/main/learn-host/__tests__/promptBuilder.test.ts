@@ -23,7 +23,10 @@ describe('buildLearnPrompt', () => {
   });
 
   it('embeds the evidence block and the redaction guard when present', () => {
-    const p = buildLearnPrompt({ ...base, evidenceBlock: '--- Evidence 1 ---\nUser: run pnpm test' });
+    const p = buildLearnPrompt({
+      ...base,
+      evidenceBlock: '--- Evidence 1 ---\nUser: run pnpm test',
+    });
     expect(p).toContain('LOCAL USAGE EVIDENCE');
     expect(p).toContain('User: run pnpm test');
     expect(p).toContain('[REDACTED:*]');
@@ -58,7 +61,10 @@ describe('buildLearnPrompt', () => {
   });
 
   it('embeds the user profile with the project-scope guard, and personalization directives', () => {
-    const p = buildLearnPrompt({ ...base, userProfileBlock: '--- Chris (user) ---\nprefers concise' });
+    const p = buildLearnPrompt({
+      ...base,
+      userProfileBlock: '--- Chris (user) ---\nprefers concise',
+    });
     expect(p).toContain('USER PROFILE');
     expect(p).toContain('prefers concise');
     expect(p).toContain('never transplant a project-scoped rule');

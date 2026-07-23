@@ -394,9 +394,21 @@ class CallbackListener {
 
   close(): void {
     if (this.pendingRes) {
+      // 裸文本 done 消除(PR3,callback-pages-classification 页壳改造点 5):
+      // code 已回但流程在 succeed/fail 前被终结(取消/超时)= 登录未完成,
+      // 走 shared builder 的失败页(legacy visual),不再返回无品牌纯文本。
       try {
-        this.pendingRes.writeHead(200);
-        this.pendingRes.end('done');
+        const copy = getProviderOAuthResultCopy(this.callbackLang, this.providerName, BRAND_NAME);
+        this.pendingRes.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+        this.pendingRes.end(
+          renderOAuthResultPage({
+            htmlLang: OAUTH_RESULT_HTML_LANG[this.callbackLang],
+            variant: 'error',
+            title: copy.errorTitle,
+            body: copy.exchangeFailedBody,
+            action: buildOAuthReturnAction(this.callbackLang, 'generic-oauth', BRAND_NAME),
+          }),
+        );
       } catch {
         /* no-op */
       }

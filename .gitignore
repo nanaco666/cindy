@@ -157,3 +157,6 @@ scripts/review-pr/.last-scan.json
 scripts/review-pr/.fix-sessions.json
 # auto 模式并发锁(prepare.mjs 写 .lock / .lock.takeover)
 scripts/review-pr/.lock*
+
+# worktree 回收豁免哨兵(会话工具生成,永不入仓)
+.worktree-keep

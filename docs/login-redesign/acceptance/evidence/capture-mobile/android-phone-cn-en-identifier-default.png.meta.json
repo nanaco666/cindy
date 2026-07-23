@@ -1,0 +1,10 @@
+{
+  "evidenceSha256": "726c191637fef3e1025a574b29a9e3fdd0001d743b78cf2f7bb999f232baaa43",
+  "testedCodeCommit": "649220d157f037efd3853e4e8da66d99a06e93fb",
+  "capturedCellRef": "mobile.identifier.state|android-phone|en|cn",
+  "applicableCellRefs": [
+    "mobile.identifier.state|android-phone|en|cn"
+  ],
+  "scenario": "default login state (identifier input, no scenario injected), AVD system locale=en, region=cn (com.xd.cindycn)",
+  "capturedAt": "2026-07-21T13:55:00Z"
+}

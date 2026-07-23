@@ -1,0 +1,5182 @@
+{
+  "version": 1,
+  "rows": [
+    {
+      "rowId": "desktop.brand-background.style",
+      "platform": "desktop",
+      "rowKind": "desktop",
+      "stateFamily": "brand-background",
+      "dimension": "style",
+      "source": "wave4",
+      "ref": "368:1375(底色 #F1F0F1 帧 fill,落码改判消费不透明 var(--surface) token)+379:518(径向 #F70121 α1→α0@0.747 中心(128%,7%) opacity6%)+379:520(线性 #F70121 向左下 opacity5%)",
+      "applicability": {
+        "devices": [
+          "mac",
+          "windows"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr1",
+      "baselineRequirements": [
+        {
+          "dimension": "style",
+          "source": "wave4",
+          "ref": "368:1375(底色 #F1F0F1 帧 fill,落码改判消费不透明 var(--surface) token)+379:518(径向 #F70121 α1→α0@0.747 中心(128%,7%) opacity6%)+379:520(线性 #F70121 向左下 opacity5%)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/desktop/src/renderer/components/login/__tests__/LoginPage.harness.test.tsx",
+          "testId": "wave4 stage 视觉 > brand-background 消费白底体系 token(surface 底 + 双红渐变,viewport 锚定)"
+        }
+      ]
+    },
+    {
+      "rowId": "desktop.window-chrome.style",
+      "platform": "desktop",
+      "rowKind": "desktop",
+      "stateFamily": "window-chrome",
+      "dimension": "style",
+      "source": "wave4",
+      "ref": "368:1375(外描边 #A3A8AD 2px r18)+368:1377(内描边 #FFFFFF 2px inside r16)",
+      "applicability": {
+        "devices": [
+          "mac",
+          "windows"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr2a",
+      "baselineRequirements": [
+        {
+          "dimension": "style",
+          "source": "wave4",
+          "ref": "368:1375(外描边 #A3A8AD 2px r18)+368:1377(内描边 #FFFFFF 2px inside r16)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/desktop/src/renderer/components/login/__tests__/LoginPage.pr2a.harness.test.tsx",
+          "testId": "window-chrome > chrome 双描边 overlay:外 2px token r18 + 内 inset 2px token r16,指针穿透"
+        }
+      ]
+    },
+    {
+      "rowId": "desktop.login-panel-border.style",
+      "platform": "desktop",
+      "rowKind": "desktop",
+      "stateFamily": "login-panel-border",
+      "dimension": "style",
+      "source": "wave4",
+      "ref": "368:1383(#D4D4D4 1px inside;面板 680×440 r36 fill #FBFBFB 不变;面板内组件几何零变化)",
+      "applicability": {
+        "devices": [
+          "mac",
+          "windows"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr1",
+      "baselineRequirements": [
+        {
+          "dimension": "style",
+          "source": "wave4",
+          "ref": "368:1383(#D4D4D4 1px inside;面板 680×440 r36 fill #FBFBFB 不变;面板内组件几何零变化)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/desktop/src/renderer/components/login/__tests__/LoginPage.harness.test.tsx",
+          "testId": "wave4 stage 视觉 > 登录面板带 wave4 1px inside 描边 token(368:1383)"
+        }
+      ]
+    },
+    {
+      "rowId": "desktop.wordmark.asset",
+      "platform": "desktop",
+      "rowKind": "desktop",
+      "stateFamily": "wordmark",
+      "dimension": "asset",
+      "source": "wave4",
+      "ref": "368:1381(黑红版位图 423×145 透明底;容器 680×180@570,1029 内(128,17),绝对≈698,1046;资产/尺寸/位置全 wave4 单一期望)",
+      "applicability": {
+        "devices": [
+          "mac",
+          "windows"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr1",
+      "baselineRequirements": [
+        {
+          "dimension": "asset",
+          "source": "wave4",
+          "ref": "368:1381(黑红版位图 423×145 透明底;容器 680×180@570,1029 内(128,17),绝对≈698,1046;资产/尺寸/位置全 wave4 单一期望)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/desktop/src/renderer/components/login/__tests__/LoginPage.harness.test.tsx",
+          "testId": "wave4 stage 视觉 > 字标为 wave4 黑红版内层几何 423×145 @(698,1046)(368:1381)"
+        }
+      ]
+    },
+    {
+      "rowId": "desktop.slogan.style",
+      "platform": "desktop",
+      "rowKind": "desktop",
+      "stateFamily": "slogan",
+      "dimension": "style",
+      "source": "wave4",
+      "ref": "368:1394(#2A2828 fill + 0.5px stroke 同色,矢量 453.2×129.1)",
+      "applicability": {
+        "devices": [
+          "mac",
+          "windows"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr1",
+      "baselineRequirements": [
+        {
+          "dimension": "style",
+          "source": "wave4",
+          "ref": "368:1394(#2A2828 fill + 0.5px stroke 同色,矢量 453.2×129.1)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/desktop/src/renderer/components/login/__tests__/LoginPage.harness.test.tsx",
+          "testId": "wave4 stage 视觉 > SLOGAN 为 #2A2828 矢量版资产,几何 453.22×129.12 @(1194,866)(368:1394)"
+        }
+      ]
+    },
+    {
+      "rowId": "desktop.slogan.geometry",
+      "platform": "desktop",
+      "rowKind": "desktop",
+      "stateFamily": "slogan",
+      "dimension": "geometry",
+      "source": "demo",
+      "ref": "desktop stage SLOGAN 几何沿旧(1191,863,460×134)",
+      "applicability": {
+        "devices": [
+          "mac",
+          "windows"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr1",
+      "baselineRequirements": [
+        {
+          "dimension": "geometry",
+          "source": "demo",
+          "ref": "desktop stage SLOGAN 几何沿旧(1191,863,460×134)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/desktop/src/renderer/components/login/__tests__/LoginPage.harness.test.tsx",
+          "testId": "wave4 stage 视觉 > slogan 窄窗左移只平移不缩放(demo applyDesktopScale 公式)"
+        },
+        {
+          "file": "apps/desktop/src/renderer/components/login/__tests__/loginScale.test.ts",
+          "testId": "sloganShiftX(窄窗左移只平移不缩放,demo applyDesktopScale 移植) > 窄窗产生负向平移(数值 = 溢出量向上取整)"
+        }
+      ]
+    },
+    {
+      "rowId": "desktop.splash-checking-update.style",
+      "platform": "desktop",
+      "rowKind": "desktop",
+      "stateFamily": "splash-checking-update",
+      "dimension": "style",
+      "source": "wave4",
+      "ref": "379:581(检查更新中)",
+      "applicability": {
+        "devices": [
+          "mac",
+          "windows"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr2b",
+      "baselineRequirements": [
+        {
+          "dimension": "style",
+          "source": "wave4",
+          "ref": "379:581(检查更新中)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/desktop/src/renderer/components/splash/__tests__/SplashScreen.test.tsx",
+          "testId": "SplashScreen wave4 统一面板 > checking_update:统一面板 + 现网 checkingUpdate 文案 + spinner(379:581 样式)"
+        }
+      ]
+    },
+    {
+      "rowId": "desktop.splash-updating.style",
+      "platform": "desktop",
+      "rowKind": "desktop",
+      "stateFamily": "splash-updating",
+      "dimension": "style",
+      "source": "wave4",
+      "ref": "379:525(CINDY 更新中·进度条 轨 501×16 r12 #D9D9D9@(90,346)+填充 #252222+明细行)",
+      "applicability": {
+        "devices": [
+          "mac",
+          "windows"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr2b",
+      "baselineRequirements": [
+        {
+          "dimension": "style",
+          "source": "wave4",
+          "ref": "379:525(CINDY 更新中·进度条 轨 501×16 r12 #D9D9D9@(90,346)+填充 #252222+明细行)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/desktop/src/renderer/components/splash/__tests__/SplashScreen.test.tsx",
+          "testId": "SplashScreen wave4 统一面板 > updating:进度条 轨 501×16 r12 @(90,346) token + 填充 + 明细行 20px(379:525 样式)"
+        }
+      ]
+    },
+    {
+      "rowId": "desktop.splash-update-done.style",
+      "platform": "desktop",
+      "rowKind": "desktop",
+      "stateFamily": "splash-update-done",
+      "dimension": "style",
+      "source": "wave4",
+      "ref": "379:607(更新完成,等待自动重启)",
+      "applicability": {
+        "devices": [
+          "mac",
+          "windows"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr2b",
+      "baselineRequirements": [
+        {
+          "dimension": "style",
+          "source": "wave4",
+          "ref": "379:607(更新完成,等待自动重启)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/desktop/src/renderer/components/splash/__tests__/SplashScreen.test.tsx",
+          "testId": "SplashScreen wave4 统一面板 > update_done:统一面板 + 现网 updateDone 文案 + spinner(379:607 样式)"
+        }
+      ]
+    },
+    {
+      "rowId": "desktop.splash-checking.style",
+      "platform": "desktop",
+      "rowKind": "desktop",
+      "stateFamily": "splash-checking",
+      "dimension": "style",
+      "source": "wave4",
+      "ref": "379:633(运行环境检测中)",
+      "applicability": {
+        "devices": [
+          "mac",
+          "windows"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr2b",
+      "baselineRequirements": [
+        {
+          "dimension": "style",
+          "source": "wave4",
+          "ref": "379:633(运行环境检测中)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/desktop/src/renderer/components/splash/__tests__/SplashScreen.test.tsx",
+          "testId": "SplashScreen wave4 统一面板 > checking:统一面板 + 现网 checkingEnv 文案 + spinner(379:633 样式)"
+        }
+      ]
+    },
+    {
+      "rowId": "desktop.splash-downloading.style",
+      "platform": "desktop",
+      "rowKind": "desktop",
+      "stateFamily": "splash-downloading",
+      "dimension": "style",
+      "source": "wave4",
+      "ref": "379:525(复用更新下载态面板形态,文案用现网 splash.tips;无专属帧,design.md §8.1 延展)",
+      "applicability": {
+        "devices": [
+          "mac",
+          "windows"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr2b",
+      "baselineRequirements": [
+        {
+          "dimension": "style",
+          "source": "wave4",
+          "ref": "379:525(复用更新下载态面板形态,文案用现网 splash.tips;无专属帧,design.md §8.1 延展)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/desktop/src/renderer/components/splash/__tests__/SplashScreen.test.tsx",
+          "testId": "SplashScreen wave4 统一面板 > downloading:复用更新下载态面板形态 + 现网 waking 文案与 (x/2) 标签(379:525 复用)"
+        }
+      ]
+    },
+    {
+      "rowId": "desktop.splash-failed.style",
+      "platform": "desktop",
+      "rowKind": "desktop",
+      "stateFamily": "splash-failed",
+      "dimension": "style",
+      "source": "wave4",
+      "ref": "379:655(环境初始化失败;主按钮样式「重试」540×80@70,300;标题 32 Bold #252222)",
+      "applicability": {
+        "devices": [
+          "mac",
+          "windows"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr2b",
+      "baselineRequirements": [
+        {
+          "dimension": "style",
+          "source": "wave4",
+          "ref": "379:655(环境初始化失败;主按钮样式「重试」540×80@70,300;标题 32 Bold #252222)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/desktop/src/renderer/components/splash/__tests__/SplashScreen.test.tsx",
+          "testId": "SplashScreen wave4 统一面板 > failed:标题「环境初始化失败」+ 主按钮「重试」540×80@70,300 → checkEnvironment(379:655 样式)"
+        }
+      ]
+    },
+    {
+      "rowId": "mobile.brand-background.style",
+      "platform": "mobile",
+      "rowKind": "all-mobile",
+      "stateFamily": "brand-background",
+      "dimension": "style",
+      "source": "wave4",
+      "ref": "368:1375(视觉参数继承桌面:var(--surface) 底色+双 #F70121 渐变归一化百分比锚定物理 viewport;design.md §8.2 延展,移动无专属新帧)",
+      "applicability": {
+        "devices": [
+          "iphone",
+          "android-phone",
+          "ipad",
+          "android-pad"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr4a",
+      "baselineRequirements": [
+        {
+          "dimension": "style",
+          "source": "wave4",
+          "ref": "368:1375(视觉参数继承桌面:var(--surface) 底色+双 #F70121 渐变归一化百分比锚定物理 viewport;design.md §8.2 延展,移动无专属新帧)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/mobile/src/__tests__/loginSkinVisual.test.ts",
+          "testId": "loginSkin 白底体系视觉(源码接线 + token 参数) > brand-background:stage 消费主题 surface 底 + loginGradients 双红渐变锚定物理 viewport"
+        },
+        {
+          "file": "apps/mobile/src/__tests__/loginSkinVisual.test.ts",
+          "testId": "loginSkin 白底体系视觉(源码接线 + token 参数) > brand-background:闸门屏复用同一 full-viewport 宿主(_layout error 分支 stage 化)"
+        }
+      ]
+    },
+    {
+      "rowId": "mobile.login-panel-border.style",
+      "platform": "mobile",
+      "rowKind": "all-mobile",
+      "stateFamily": "login-panel-border",
+      "dimension": "style",
+      "source": "wave4",
+      "ref": "368:1383(#D4D4D4 1px inside,§8.2 延展至移动全部 UI 面板)",
+      "applicability": {
+        "devices": [
+          "iphone",
+          "android-phone",
+          "ipad",
+          "android-pad"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr4a",
+      "baselineRequirements": [
+        {
+          "dimension": "style",
+          "source": "wave4",
+          "ref": "368:1383(#D4D4D4 1px inside,§8.2 延展至移动全部 UI 面板)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/mobile/src/__tests__/loginSkinVisual.test.ts",
+          "testId": "loginSkin 白底体系视觉(源码接线 + token 参数) > login-panel-border:面板 1px panelBorder 描边 + panelBg r36(368:1383)"
+        }
+      ]
+    },
+    {
+      "rowId": "mobile.wordmark.asset",
+      "platform": "mobile",
+      "rowKind": "all-mobile",
+      "stateFamily": "wordmark",
+      "dimension": "asset",
+      "source": "wave4",
+      "ref": "368:1381(黑红版资产;资产行=wave4)",
+      "applicability": {
+        "devices": [
+          "iphone",
+          "android-phone",
+          "ipad",
+          "android-pad"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr4a",
+      "baselineRequirements": [
+        {
+          "dimension": "asset",
+          "source": "wave4",
+          "ref": "368:1381(黑红版资产;资产行=wave4)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/mobile/src/__tests__/loginSkinVisual.test.ts",
+          "testId": "loginSkin 白底体系视觉(源码接线 + token 参数) > wordmark:黑红新资产 login-wordmark 接入 stage 且框内 contain 等比适配(368:1381)"
+        }
+      ]
+    },
+    {
+      "rowId": "mobile.wordmark.geometry",
+      "platform": "mobile",
+      "rowKind": "all-mobile",
+      "stateFamily": "wordmark",
+      "dimension": "geometry",
+      "source": "demo",
+      "ref": "旧移动字标框内 contain 等比适配(长屏 175,814,401×137/短屏 660×158.4 框沿 wave3.5 旧表;禁止非等比拉伸)",
+      "applicability": {
+        "devices": [
+          "iphone",
+          "android-phone",
+          "ipad",
+          "android-pad"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr4a",
+      "baselineRequirements": [
+        {
+          "dimension": "geometry",
+          "source": "demo",
+          "ref": "旧移动字标框内 contain 等比适配(长屏 175,814,401×137/短屏 660×158.4 框沿 wave3.5 旧表;禁止非等比拉伸)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/mobile/src/auth/__tests__/loginSkinLayout.test.ts",
+          "testId": "loginSkin 750 stage 布局引擎 > 短屏档 1334:cindy/slogan/word/loginY 逐字段等于 wave3.5 旧表"
+        },
+        {
+          "file": "apps/mobile/src/auth/__tests__/loginSkinLayout.test.ts",
+          "testId": "loginSkin 750 stage 布局引擎 > 两档间 lerp:designHeight=1479 中点全字段线性插值(含 loginY)"
+        },
+        {
+          "file": "apps/mobile/src/auth/__tests__/loginSkinLayout.test.ts",
+          "testId": "loginSkin 750 stage 布局引擎 > 两档外超长:designHeight clamp 1800 → t=1 长屏几何原样"
+        }
+      ]
+    },
+    {
+      "rowId": "mobile.slogan.style",
+      "platform": "mobile",
+      "rowKind": "all-mobile",
+      "stateFamily": "slogan",
+      "dimension": "style",
+      "source": "wave4",
+      "ref": "368:1394(#2A2828 版;样式行=wave4)",
+      "applicability": {
+        "devices": [
+          "iphone",
+          "android-phone",
+          "ipad",
+          "android-pad"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr4a",
+      "baselineRequirements": [
+        {
+          "dimension": "style",
+          "source": "wave4",
+          "ref": "368:1394(#2A2828 版;样式行=wave4)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/mobile/src/__tests__/loginSkinVisual.test.ts",
+          "testId": "loginSkin 白底体系视觉(源码接线 + token 参数) > slogan:近黑 login-slogan 资产接入 stage 且 contain(368:1394,几何沿旧表)"
+        }
+      ]
+    },
+    {
+      "rowId": "mobile.slogan.geometry",
+      "platform": "mobile",
+      "rowKind": "all-mobile",
+      "stateFamily": "slogan",
+      "dimension": "geometry",
+      "source": "demo",
+      "ref": "旧移动帧 SLOGAN 几何沿旧(长屏 387,686,321×92 等,几何行=沿旧)",
+      "applicability": {
+        "devices": [
+          "iphone",
+          "android-phone",
+          "ipad",
+          "android-pad"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr4a",
+      "baselineRequirements": [
+        {
+          "dimension": "geometry",
+          "source": "demo",
+          "ref": "旧移动帧 SLOGAN 几何沿旧(长屏 387,686,321×92 等,几何行=沿旧)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/mobile/src/auth/__tests__/loginSkinLayout.test.ts",
+          "testId": "loginSkin 750 stage 布局引擎 > 长屏档 1624:双区统一 y=116 的 long 表逐字段命中"
+        },
+        {
+          "file": "apps/mobile/src/auth/__tests__/loginSkinLayout.test.ts",
+          "testId": "loginSkin 750 stage 布局引擎 > 两档间 lerp:designHeight=1479 中点全字段线性插值(含 loginY)"
+        },
+        {
+          "file": "apps/mobile/src/auth/__tests__/loginSkinLayout.test.ts",
+          "testId": "loginSkin 750 stage 布局引擎 > 两档外短屏:功能区优先 v 压缩视觉区,loginY=max(0,dh-600)"
+        }
+      ]
+    },
+    {
+      "rowId": "desktop.identifier.state",
+      "platform": "desktop",
+      "rowKind": "desktop",
+      "stateFamily": "identifier",
+      "dimension": "state",
+      "source": "demo",
+      "ref": "demo 状态「identifier」",
+      "applicability": {
+        "devices": [
+          "mac",
+          "windows"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr1",
+      "baselineRequirements": [
+        {
+          "dimension": "state",
+          "source": "demo",
+          "ref": "demo 状态「identifier」"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/desktop/src/renderer/components/login/__tests__/LoginPage.harness.test.tsx",
+          "testId": "identifier 态(附录 A providers 场景) > providers:both → 无 tabs,区域定形态(测试构建=cn 默认→手机;2026-07-21 分区互斥拍板)"
+        }
+      ]
+    },
+    {
+      "rowId": "desktop.identifier.input-state",
+      "platform": "desktop",
+      "rowKind": "desktop",
+      "stateFamily": "identifier",
+      "dimension": "state",
+      "source": "demo",
+      "ref": "demo 状态「identifier-input」",
+      "applicability": {
+        "devices": [
+          "mac",
+          "windows"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr1",
+      "baselineRequirements": [
+        {
+          "dimension": "state",
+          "source": "demo",
+          "ref": "demo 状态「identifier-input」"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/desktop/src/renderer/components/login/__tests__/LoginPage.harness.test.tsx",
+          "testId": "identifier 态(附录 A providers 场景) > 输入框状态视觉:default 细体/filled 粗体 active 边/error 边(figma §4.1)"
+        }
+      ]
+    },
+    {
+      "rowId": "desktop.method-choice.state",
+      "platform": "desktop",
+      "rowKind": "desktop",
+      "stateFamily": "method-choice",
+      "dimension": "state",
+      "source": "demo",
+      "ref": "demo 状态「method-choice」",
+      "applicability": {
+        "devices": [
+          "mac",
+          "windows"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr2a",
+      "baselineRequirements": [
+        {
+          "dimension": "state",
+          "source": "demo",
+          "ref": "demo 状态「method-choice」"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/desktop/src/renderer/components/login/__tests__/LoginPage.pr2a.harness.test.tsx",
+          "testId": "method-choice > 单 connection:企业行 158 + 个人行 278,副标题带邮箱与企业"
+        },
+        {
+          "file": "apps/desktop/src/renderer/components/login/__tests__/LoginPage.pr2a.harness.test.tsx",
+          "testId": "method-choice > ssoRequired:强制 SSO 提示 380 位 countdown 样式,个人行抑制"
+        }
+      ]
+    },
+    {
+      "rowId": "desktop.method-choice.multi-state",
+      "platform": "desktop",
+      "rowKind": "desktop",
+      "stateFamily": "method-choice",
+      "dimension": "state",
+      "source": "demo",
+      "ref": "demo 状态「method-choice-multi」",
+      "applicability": {
+        "devices": [
+          "mac",
+          "windows"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr2a",
+      "baselineRequirements": [
+        {
+          "dimension": "state",
+          "source": "demo",
+          "ref": "demo 状态「method-choice-multi」"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/desktop/src/renderer/components/login/__tests__/LoginPage.pr2a.harness.test.tsx",
+          "testId": "method-choice > 多 connection:双企业行 158/278,个人行按 demo 仲裁抑制(440 面板仅容两行)"
+        }
+      ]
+    },
+    {
+      "rowId": "desktop.method-choice.personal-state",
+      "platform": "desktop",
+      "rowKind": "desktop",
+      "stateFamily": "method-choice",
+      "dimension": "state",
+      "source": "demo",
+      "ref": "demo 状态「method-choice-personal」",
+      "applicability": {
+        "devices": [
+          "mac",
+          "windows"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr2a",
+      "baselineRequirements": [
+        {
+          "dimension": "state",
+          "source": "demo",
+          "ref": "demo 状态「method-choice-personal」"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/desktop/src/renderer/components/login/__tests__/LoginPage.pr2a.harness.test.tsx",
+          "testId": "method-choice > 纯个人邮箱(无 SSO):单个人行 158,副标题=邮箱本身,无企业句无 hint"
+        }
+      ]
+    },
+    {
+      "rowId": "desktop.verification-code.empty-state",
+      "platform": "desktop",
+      "rowKind": "desktop",
+      "stateFamily": "verification-code",
+      "dimension": "state",
+      "source": "demo",
+      "ref": "demo 状态「verification-code-empty」",
+      "applicability": {
+        "devices": [
+          "mac",
+          "windows"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr2a",
+      "baselineRequirements": [
+        {
+          "dimension": "state",
+          "source": "demo",
+          "ref": "demo 状态「verification-code-empty」"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/desktop/src/renderer/components/login/__tests__/LoginPage.pr2a.harness.test.tsx",
+          "testId": "verification-code > empty:输入空 → 登录钮 disabled;phone 提交成功后入场即带 42s 倒计时"
+        }
+      ]
+    },
+    {
+      "rowId": "desktop.verification-code.filled-state",
+      "platform": "desktop",
+      "rowKind": "desktop",
+      "stateFamily": "verification-code",
+      "dimension": "state",
+      "source": "demo",
+      "ref": "demo 状态「verification-code-filled」",
+      "applicability": {
+        "devices": [
+          "mac",
+          "windows"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr2a",
+      "baselineRequirements": [
+        {
+          "dimension": "state",
+          "source": "demo",
+          "ref": "demo 状态「verification-code-filled」"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/desktop/src/renderer/components/login/__tests__/LoginPage.pr2a.harness.test.tsx",
+          "testId": "verification-code > filled:6 位验证码 → 登录钮 enabled;重发链接为 underline 墨色 Text_link"
+        }
+      ]
+    },
+    {
+      "rowId": "desktop.verification-code.loading-state",
+      "platform": "desktop",
+      "rowKind": "desktop",
+      "stateFamily": "verification-code",
+      "dimension": "state",
+      "source": "demo",
+      "ref": "demo 状态「verification-code-loading」",
+      "applicability": {
+        "devices": [
+          "mac",
+          "windows"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr2a",
+      "baselineRequirements": [
+        {
+          "dimension": "state",
+          "source": "demo",
+          "ref": "demo 状态「verification-code-loading」"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/desktop/src/renderer/components/login/__tests__/LoginPage.pr2a.harness.test.tsx",
+          "testId": "verification-code > loading:isLoading → verifying 文案 + spinner wrapper 动画 + 钮 disabled"
+        }
+      ]
+    },
+    {
+      "rowId": "desktop.sso-org.empty-state",
+      "platform": "desktop",
+      "rowKind": "desktop",
+      "stateFamily": "sso-org",
+      "dimension": "state",
+      "source": "demo",
+      "ref": "demo 状态「sso-org-empty」",
+      "applicability": {
+        "devices": [
+          "mac",
+          "windows"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr1",
+      "baselineRequirements": [
+        {
+          "dimension": "state",
+          "source": "demo",
+          "ref": "demo 状态「sso-org-empty」"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/desktop/src/renderer/components/login/__tests__/LoginPage.harness.test.tsx",
+          "testId": "ssoOrgMode 子视图 > sso-org 空态:圆钮行 SSO 进入,企业 ID 输入 + 继续禁用 + 帮助行"
+        }
+      ]
+    },
+    {
+      "rowId": "desktop.sso-org.filled-state",
+      "platform": "desktop",
+      "rowKind": "desktop",
+      "stateFamily": "sso-org",
+      "dimension": "state",
+      "source": "demo",
+      "ref": "demo 状态「sso-org-filled」",
+      "applicability": {
+        "devices": [
+          "mac",
+          "windows"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr1",
+      "baselineRequirements": [
+        {
+          "dimension": "state",
+          "source": "demo",
+          "ref": "demo 状态「sso-org-filled」"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/desktop/src/renderer/components/login/__tests__/LoginPage.harness.test.tsx",
+          "testId": "ssoOrgMode 子视图 > sso-org 填写态:输入企业 ID 后继续可用,提交派发 discover-sso-org"
+        }
+      ]
+    },
+    {
+      "rowId": "desktop.sso-org.list-state",
+      "platform": "desktop",
+      "rowKind": "desktop",
+      "stateFamily": "sso-org",
+      "dimension": "state",
+      "source": "demo",
+      "ref": "demo 状态「sso-org-list」",
+      "applicability": {
+        "devices": [
+          "mac",
+          "windows"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr1",
+      "baselineRequirements": [
+        {
+          "dimension": "state",
+          "source": "demo",
+          "ref": "demo 状态「sso-org-list」"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/desktop/src/renderer/components/login/__tests__/LoginPage.harness.test.tsx",
+          "testId": "ssoOrgMode 子视图 > sso-org 连接列表态:单 connection 方式行 @148 + ssoOrgDetected 副标题"
+        }
+      ]
+    },
+    {
+      "rowId": "desktop.account-selection.state",
+      "platform": "desktop",
+      "rowKind": "desktop",
+      "stateFamily": "account-selection",
+      "dimension": "state",
+      "source": "demo",
+      "ref": "demo 状态「account-selection」",
+      "applicability": {
+        "devices": [
+          "mac",
+          "windows"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr2a",
+      "baselineRequirements": [
+        {
+          "dimension": "state",
+          "source": "demo",
+          "ref": "demo 状态「account-selection」"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/desktop/src/renderer/components/login/__tests__/LoginPage.pr2a.harness.test.tsx",
+          "testId": "account-selection > outcome select_account → 双身份行 148/268(demo 行样式,左 icon 企业默认形)"
+        }
+      ]
+    },
+    {
+      "rowId": "desktop.binding.contact-state",
+      "platform": "desktop",
+      "rowKind": "desktop",
+      "stateFamily": "binding",
+      "dimension": "state",
+      "source": "demo",
+      "ref": "demo 状态「binding-contact」",
+      "applicability": {
+        "devices": [
+          "mac",
+          "windows"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr2a",
+      "baselineRequirements": [
+        {
+          "dimension": "state",
+          "source": "demo",
+          "ref": "demo 状态「binding-contact」"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/desktop/src/renderer/components/login/__tests__/LoginPage.pr2a.harness.test.tsx",
+          "testId": "binding > contact 子态:bindType 标题 + 联系方式输入 + 发送验证码钮"
+        }
+      ]
+    },
+    {
+      "rowId": "desktop.binding.code-state",
+      "platform": "desktop",
+      "rowKind": "desktop",
+      "stateFamily": "binding",
+      "dimension": "state",
+      "source": "demo",
+      "ref": "demo 状态「binding-code」",
+      "applicability": {
+        "devices": [
+          "mac",
+          "windows"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr2a",
+      "baselineRequirements": [
+        {
+          "dimension": "state",
+          "source": "demo",
+          "ref": "demo 状态「binding-code」"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/desktop/src/renderer/components/login/__tests__/LoginPage.pr2a.harness.test.tsx",
+          "testId": "binding > code 子态:居中验证码输入 + codeSentTo 提示(countdown 样式)+ 完成登录钮,无重发钮(照现网)"
+        }
+      ]
+    },
+    {
+      "rowId": "desktop.browser-redirect.state",
+      "platform": "desktop",
+      "rowKind": "desktop",
+      "stateFamily": "browser-redirect",
+      "dimension": "state",
+      "source": "demo",
+      "ref": "demo 状态「browser-redirect」",
+      "applicability": {
+        "devices": [
+          "mac",
+          "windows"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr2a",
+      "baselineRequirements": [
+        {
+          "dimension": "state",
+          "source": "demo",
+          "ref": "demo 状态「browser-redirect」"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/desktop/src/renderer/components/login/__tests__/LoginPage.pr2a.harness.test.tsx",
+          "testId": "browser-redirect / error / completed > browser-redirect:等待标题 + label 副标题 + 64 环@158 + 取消钮"
+        }
+      ]
+    },
+    {
+      "rowId": "desktop.preparing.state",
+      "platform": "desktop",
+      "rowKind": "desktop",
+      "stateFamily": "preparing",
+      "dimension": "state",
+      "source": "demo",
+      "ref": "demo 状态「preparing」",
+      "applicability": {
+        "devices": [
+          "mac",
+          "windows"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr1",
+      "baselineRequirements": [
+        {
+          "dimension": "state",
+          "source": "demo",
+          "ref": "demo 状态「preparing」"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/desktop/src/renderer/components/login/__tests__/LoginPage.harness.test.tsx",
+          "testId": "preparing 伪态 > loginState 未就绪 → preparing 面板 + 64 loading 环 @(308,193)"
+        }
+      ]
+    },
+    {
+      "rowId": "desktop.error.state",
+      "platform": "desktop",
+      "rowKind": "desktop",
+      "stateFamily": "error",
+      "dimension": "state",
+      "source": "demo",
+      "ref": "demo 状态「error」",
+      "applicability": {
+        "devices": [
+          "mac",
+          "windows"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr2a",
+      "baselineRequirements": [
+        {
+          "dimension": "state",
+          "source": "demo",
+          "ref": "demo 状态「error」"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/desktop/src/renderer/components/login/__tests__/LoginPage.pr2a.harness.test.tsx",
+          "testId": "browser-redirect / error / completed > error 全屏态:暂时无法登录 + 重试钮 + 错误码文案位(380)"
+        }
+      ]
+    },
+    {
+      "rowId": "desktop.completed.state",
+      "platform": "desktop",
+      "rowKind": "desktop",
+      "stateFamily": "completed",
+      "dimension": "state",
+      "source": "demo",
+      "ref": "demo 状态「completed」",
+      "applicability": {
+        "devices": [
+          "mac",
+          "windows"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr2a",
+      "baselineRequirements": [
+        {
+          "dimension": "state",
+          "source": "demo",
+          "ref": "demo 状态「completed」"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/desktop/src/renderer/components/login/__tests__/LoginPage.pr2a.harness.test.tsx",
+          "testId": "browser-redirect / error / completed > completed:LoginPage return null(路由切主界面,demo completedPanel 仅示意)"
+        }
+      ]
+    },
+    {
+      "rowId": "desktop.verification-code.countdown",
+      "platform": "desktop",
+      "rowKind": "desktop",
+      "stateFamily": "verification-code",
+      "dimension": "timing",
+      "source": "demo",
+      "ref": "42s 倒计时契约(Step 3a:绝对 deadline 模型;42→0/重发重置/失败保持/挂起恢复校正)",
+      "applicability": {
+        "devices": [
+          "mac",
+          "windows"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr2a",
+      "baselineRequirements": [
+        {
+          "dimension": "timing",
+          "source": "demo",
+          "ref": "42s 倒计时契约(Step 3a:绝对 deadline 模型;42→0/重发重置/失败保持/挂起恢复校正)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/desktop/src/renderer/components/login/__tests__/useResendCountdown.test.tsx",
+          "testId": "resendRemainingSeconds 显示数学(v5 冻结:max(0, ceil((deadline-now)/1000))) > 41999/1000/1/0ms 边界"
+        },
+        {
+          "file": "apps/desktop/src/renderer/components/login/__tests__/useResendCountdown.test.tsx",
+          "testId": "useResendCountdown(Step 3a 绝对 deadline 契约) > arm 后首帧显示 42,42→0 全程逐秒重算,到 0 切链接态"
+        },
+        {
+          "file": "apps/desktop/src/renderer/components/login/__tests__/useResendCountdown.test.tsx",
+          "testId": "useResendCountdown(Step 3a 绝对 deadline 契约) > 重发成功重置:计数中途再次 arm → deadline 重置回 42"
+        },
+        {
+          "file": "apps/desktop/src/renderer/components/login/__tests__/useResendCountdown.test.tsx",
+          "testId": "useResendCountdown(Step 3a 绝对 deadline 契约) > 重发失败保持:不 arm 则沿当前 deadline 继续倒数"
+        },
+        {
+          "file": "apps/desktop/src/renderer/components/login/__tests__/useResendCountdown.test.tsx",
+          "testId": "useResendCountdown(Step 3a 绝对 deadline 契约) > 离开 verification-code 清理 state:active 退出后归零,重进不残留旧 deadline"
+        },
+        {
+          "file": "apps/desktop/src/renderer/components/login/__tests__/useResendCountdown.test.tsx",
+          "testId": "useResendCountdown(Step 3a 绝对 deadline 契约) > 挂起恢复自校正:系统时间跳跃后单个 tick 直接对齐真实剩余(非递减计数)"
+        },
+        {
+          "file": "apps/desktop/src/renderer/components/login/__tests__/useResendCountdown.test.tsx",
+          "testId": "useResendCountdown(Step 3a 绝对 deadline 契约) > arm 先于 step 切换到 verification-code 的时序:deadline 不被入场沿清掉"
+        },
+        {
+          "file": "apps/desktop/src/renderer/components/login/__tests__/LoginPage.pr2a.harness.test.tsx",
+          "testId": "verification-code > 重发成功重置 / 失败保持(dispatch 返回值驱动 arm)"
+        }
+      ]
+    },
+    {
+      "rowId": "desktop.splash-brand.state",
+      "platform": "desktop",
+      "rowKind": "desktop",
+      "stateFamily": "splash-brand",
+      "dimension": "state",
+      "source": "demo",
+      "ref": "demo 状态「desktop-splash」(冷启动品牌屏;demo 阶段选择器 waking 相对应)",
+      "applicability": {
+        "devices": [
+          "mac",
+          "windows"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr2b",
+      "baselineRequirements": [
+        {
+          "dimension": "state",
+          "source": "demo",
+          "ref": "demo 状态「desktop-splash」(冷启动品牌屏;demo 阶段选择器 waking 相对应)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/desktop/src/renderer/contexts/__tests__/LoginHandoffContext.test.tsx",
+          "testId": "冷启动集成(resolved snapshot,禁 mock-reject) > unauthenticated 冷启动:品牌屏→完整衔接播放;全程单一品牌 DOM/最多一个可见 panel/done 后可点击/overlay 不拦截"
+        }
+      ]
+    },
+    {
+      "rowId": "mobile.identifier.state",
+      "platform": "mobile",
+      "rowKind": "all-mobile",
+      "stateFamily": "identifier",
+      "dimension": "state",
+      "source": "demo",
+      "ref": "demo 状态「identifier」(mobile surface)",
+      "applicability": {
+        "devices": [
+          "iphone",
+          "android-phone",
+          "ipad",
+          "android-pad"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr4a",
+      "baselineRequirements": [
+        {
+          "dimension": "state",
+          "source": "demo",
+          "ref": "demo 状态「identifier」(mobile surface)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/mobile/src/auth/__tests__/loginSkinStates.test.ts",
+          "testId": "loginSkin 全登录态(harness 真链 + 渲染层接线) > identifier:providers 真链加载→identifier 步骤,区域定形态(无 tabs)/输入/主按钮/圆钮行接线"
+        }
+      ]
+    },
+    {
+      "rowId": "mobile.identifier.input-state",
+      "platform": "mobile",
+      "rowKind": "all-mobile",
+      "stateFamily": "identifier",
+      "dimension": "state",
+      "source": "demo",
+      "ref": "demo 状态「identifier-input」(mobile surface)",
+      "applicability": {
+        "devices": [
+          "iphone",
+          "android-phone",
+          "ipad",
+          "android-pad"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr4a",
+      "baselineRequirements": [
+        {
+          "dimension": "state",
+          "source": "demo",
+          "ref": "demo 状态「identifier-input」(mobile surface)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/mobile/src/auth/__tests__/loginSkinStates.test.ts",
+          "testId": "loginSkin 全登录态(harness 真链 + 渲染层接线) > identifier-input:输入 focus/filled 切 controlBorderActive 边与 Bold 墨字(figma §4.1)"
+        },
+        {
+          "file": "apps/mobile/src/auth/__tests__/loginSkinStates.test.ts",
+          "testId": "loginSkin 全登录态(harness 真链 + 渲染层接线) > identifier-phone:+86 固定前缀 + 11 位大陆手机号门槛 + E.164 提交"
+        },
+        {
+          "file": "apps/mobile/src/__tests__/cnPhone.test.ts",
+          "testId": "cnPhone(手机号登录固定 +86) > 完整性校验:恰好 11 位且命中大陆手机号段(1[3-9] 开头)"
+        }
+      ]
+    },
+    {
+      "rowId": "mobile.method-choice.state",
+      "platform": "mobile",
+      "rowKind": "all-mobile",
+      "stateFamily": "method-choice",
+      "dimension": "state",
+      "source": "demo",
+      "ref": "demo 状态「method-choice」(mobile surface)",
+      "applicability": {
+        "devices": [
+          "iphone",
+          "android-phone",
+          "ipad",
+          "android-pad"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr4a",
+      "baselineRequirements": [
+        {
+          "dimension": "state",
+          "source": "demo",
+          "ref": "demo 状态「method-choice」(mobile surface)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/mobile/src/auth/__tests__/loginSkinStates.test.ts",
+          "testId": "loginSkin 全登录态(harness 真链 + 渲染层接线) > method-choice:sso:single 真链→企业/个人双行,dispatch 措辞 verbatim"
+        }
+      ]
+    },
+    {
+      "rowId": "mobile.method-choice.multi-state",
+      "platform": "mobile",
+      "rowKind": "all-mobile",
+      "stateFamily": "method-choice",
+      "dimension": "state",
+      "source": "demo",
+      "ref": "demo 状态「method-choice-multi」(mobile surface)",
+      "applicability": {
+        "devices": [
+          "iphone",
+          "android-phone",
+          "ipad",
+          "android-pad"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr4a",
+      "baselineRequirements": [
+        {
+          "dimension": "state",
+          "source": "demo",
+          "ref": "demo 状态「method-choice-multi」(mobile surface)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/mobile/src/auth/__tests__/loginSkinStates.test.ts",
+          "testId": "loginSkin 全登录态(harness 真链 + 渲染层接线) > method-choice-multi:sso:multi 真链→多 connection 单行「以企业身份登录 · <name>」保留"
+        }
+      ]
+    },
+    {
+      "rowId": "mobile.method-choice.personal-state",
+      "platform": "mobile",
+      "rowKind": "all-mobile",
+      "stateFamily": "method-choice",
+      "dimension": "state",
+      "source": "demo",
+      "ref": "demo 状态「method-choice-personal」(mobile surface)",
+      "applicability": {
+        "devices": [
+          "iphone",
+          "android-phone",
+          "ipad",
+          "android-pad"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr4a",
+      "baselineRequirements": [
+        {
+          "dimension": "state",
+          "source": "demo",
+          "ref": "demo 状态「method-choice-personal」(mobile surface)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/mobile/src/auth/__tests__/loginSkinStates.test.ts",
+          "testId": "loginSkin 全登录态(harness 真链 + 渲染层接线) > method-choice-personal:纯邮箱 discovery→emailCode 主行(无 SSO 上下文)"
+        }
+      ]
+    },
+    {
+      "rowId": "mobile.verification-code.empty-state",
+      "platform": "mobile",
+      "rowKind": "all-mobile",
+      "stateFamily": "verification-code",
+      "dimension": "state",
+      "source": "demo",
+      "ref": "demo 状态「verification-code-empty」(mobile surface)",
+      "applicability": {
+        "devices": [
+          "iphone",
+          "android-phone",
+          "ipad",
+          "android-pad"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr4a",
+      "baselineRequirements": [
+        {
+          "dimension": "state",
+          "source": "demo",
+          "ref": "demo 状态「verification-code-empty」(mobile surface)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/mobile/src/auth/__tests__/loginSkinStates.test.ts",
+          "testId": "loginSkin 全登录态(harness 真链 + 渲染层接线) > verification-code-empty:request-code 真链→步骤态,居中验证码输入接线"
+        }
+      ]
+    },
+    {
+      "rowId": "mobile.verification-code.filled-state",
+      "platform": "mobile",
+      "rowKind": "all-mobile",
+      "stateFamily": "verification-code",
+      "dimension": "state",
+      "source": "demo",
+      "ref": "demo 状态「verification-code-filled」(mobile surface)",
+      "applicability": {
+        "devices": [
+          "iphone",
+          "android-phone",
+          "ipad",
+          "android-pad"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr4a",
+      "baselineRequirements": [
+        {
+          "dimension": "state",
+          "source": "demo",
+          "ref": "demo 状态「verification-code-filled」(mobile surface)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/mobile/src/auth/__tests__/loginSkinStates.test.ts",
+          "testId": "loginSkin 全登录态(harness 真链 + 渲染层接线) > verification-code-filled:6 位门槛与登录钮接线(login.verifyButton)"
+        }
+      ]
+    },
+    {
+      "rowId": "mobile.verification-code.loading-state",
+      "platform": "mobile",
+      "rowKind": "all-mobile",
+      "stateFamily": "verification-code",
+      "dimension": "state",
+      "source": "demo",
+      "ref": "demo 状态「verification-code-loading」(mobile surface)",
+      "applicability": {
+        "devices": [
+          "iphone",
+          "android-phone",
+          "ipad",
+          "android-pad"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr4a",
+      "baselineRequirements": [
+        {
+          "dimension": "state",
+          "source": "demo",
+          "ref": "demo 状态「verification-code-loading」(mobile surface)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/mobile/src/auth/__tests__/loginSkinStates.test.ts",
+          "testId": "loginSkin 全登录态(harness 真链 + 渲染层接线) > verification-code-loading:主按钮 busy spinner = 外层 Animated 旋转 + 静态 SVG"
+        }
+      ]
+    },
+    {
+      "rowId": "mobile.sso-org.empty-state",
+      "platform": "mobile",
+      "rowKind": "all-mobile",
+      "stateFamily": "sso-org",
+      "dimension": "state",
+      "source": "demo",
+      "ref": "demo 状态「sso-org-empty」(mobile surface)",
+      "applicability": {
+        "devices": [
+          "iphone",
+          "android-phone",
+          "ipad",
+          "android-pad"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr4a",
+      "baselineRequirements": [
+        {
+          "dimension": "state",
+          "source": "demo",
+          "ref": "demo 状态「sso-org-empty」(mobile surface)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/mobile/src/auth/__tests__/loginSkinStates.test.ts",
+          "testId": "loginSkin 全登录态(harness 真链 + 渲染层接线) > sso-org-empty:企业 ID 子视图空态接线(placeholder/hint/返回)"
+        }
+      ]
+    },
+    {
+      "rowId": "mobile.sso-org.filled-state",
+      "platform": "mobile",
+      "rowKind": "all-mobile",
+      "stateFamily": "sso-org",
+      "dimension": "state",
+      "source": "demo",
+      "ref": "demo 状态「sso-org-filled」(mobile surface)",
+      "applicability": {
+        "devices": [
+          "iphone",
+          "android-phone",
+          "ipad",
+          "android-pad"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr4a",
+      "baselineRequirements": [
+        {
+          "dimension": "state",
+          "source": "demo",
+          "ref": "demo 状态「sso-org-filled」(mobile surface)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/mobile/src/auth/__tests__/loginSkinStates.test.ts",
+          "testId": "loginSkin 全登录态(harness 真链 + 渲染层接线) > sso-org-filled:企业 ID 提交接线(discover-sso-org dispatch verbatim)"
+        }
+      ]
+    },
+    {
+      "rowId": "mobile.sso-org.list-state",
+      "platform": "mobile",
+      "rowKind": "all-mobile",
+      "stateFamily": "sso-org",
+      "dimension": "state",
+      "source": "demo",
+      "ref": "demo 状态「sso-org-list」(mobile surface)",
+      "applicability": {
+        "devices": [
+          "iphone",
+          "android-phone",
+          "ipad",
+          "android-pad"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr4a",
+      "baselineRequirements": [
+        {
+          "dimension": "state",
+          "source": "demo",
+          "ref": "demo 状态「sso-org-list」(mobile surface)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/mobile/src/auth/__tests__/loginSkinStates.test.ts",
+          "testId": "loginSkin 全登录态(harness 真链 + 渲染层接线) > sso-org-list:discoverSsoOrg 真链→method-choice(无邮箱上下文,行起点 148)"
+        }
+      ]
+    },
+    {
+      "rowId": "mobile.account-selection.state",
+      "platform": "mobile",
+      "rowKind": "all-mobile",
+      "stateFamily": "account-selection",
+      "dimension": "state",
+      "source": "demo",
+      "ref": "demo 状态「account-selection」(mobile surface)",
+      "applicability": {
+        "devices": [
+          "iphone",
+          "android-phone",
+          "ipad",
+          "android-pad"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr4a",
+      "baselineRequirements": [
+        {
+          "dimension": "state",
+          "source": "demo",
+          "ref": "demo 状态「account-selection」(mobile surface)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/mobile/src/auth/__tests__/loginSkinStates.test.ts",
+          "testId": "loginSkin 全登录态(harness 真链 + 渲染层接线) > account-selection:outcome:select-account 真链→双身份列表,方式行渲染"
+        }
+      ]
+    },
+    {
+      "rowId": "mobile.binding.contact-state",
+      "platform": "mobile",
+      "rowKind": "all-mobile",
+      "stateFamily": "binding",
+      "dimension": "state",
+      "source": "demo",
+      "ref": "demo 状态「binding-contact」(mobile surface)",
+      "applicability": {
+        "devices": [
+          "iphone",
+          "android-phone",
+          "ipad",
+          "android-pad"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr4a",
+      "baselineRequirements": [
+        {
+          "dimension": "state",
+          "source": "demo",
+          "ref": "demo 状态「binding-contact」(mobile surface)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/mobile/src/auth/__tests__/loginSkinStates.test.ts",
+          "testId": "loginSkin 全登录态(harness 真链 + 渲染层接线) > binding-contact:outcome:binding-phone 真链→绑定阶段一(输入+发送)"
+        },
+        {
+          "file": "apps/mobile/src/auth/__tests__/loginSkinStates.test.ts",
+          "testId": "loginSkin 全登录态(harness 真链 + 渲染层接线) > binding-phone:+86 固定前缀与登录首屏同规则,11 位完整后才可发送验证码"
+        },
+        {
+          "file": "apps/mobile/src/__tests__/cnPhone.test.ts",
+          "testId": "cnPhone(手机号登录固定 +86) > 提交号码拼回 +86 前缀"
+        }
+      ]
+    },
+    {
+      "rowId": "mobile.binding.code-state",
+      "platform": "mobile",
+      "rowKind": "all-mobile",
+      "stateFamily": "binding",
+      "dimension": "state",
+      "source": "demo",
+      "ref": "demo 状态「binding-code」(mobile surface)",
+      "applicability": {
+        "devices": [
+          "iphone",
+          "android-phone",
+          "ipad",
+          "android-pad"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr4a",
+      "baselineRequirements": [
+        {
+          "dimension": "state",
+          "source": "demo",
+          "ref": "demo 状态「binding-code」(mobile surface)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/mobile/src/auth/__tests__/loginSkinStates.test.ts",
+          "testId": "loginSkin 全登录态(harness 真链 + 渲染层接线) > binding-code:binding-code-requested→阶段二(验证码+「登录」钮)"
+        }
+      ]
+    },
+    {
+      "rowId": "mobile.browser-redirect.state",
+      "platform": "mobile",
+      "rowKind": "all-mobile",
+      "stateFamily": "browser-redirect",
+      "dimension": "state",
+      "source": "demo",
+      "ref": "demo 状态「browser-redirect」(mobile surface)",
+      "applicability": {
+        "devices": [
+          "iphone",
+          "android-phone",
+          "ipad",
+          "android-pad"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr4a",
+      "baselineRequirements": [
+        {
+          "dimension": "state",
+          "source": "demo",
+          "ref": "demo 状态「browser-redirect」(mobile surface)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/mobile/src/auth/__tests__/loginSkinStates.test.ts",
+          "testId": "loginSkin 全登录态(harness 真链 + 渲染层接线) > browser-redirect:browser-started→panel + 64 loading 环 + 取消"
+        }
+      ]
+    },
+    {
+      "rowId": "mobile.preparing.state",
+      "platform": "mobile",
+      "rowKind": "all-mobile",
+      "stateFamily": "preparing",
+      "dimension": "state",
+      "source": "demo",
+      "ref": "demo 状态「preparing」(mobile surface)",
+      "applicability": {
+        "devices": [
+          "iphone",
+          "android-phone",
+          "ipad",
+          "android-pad"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr4a",
+      "baselineRequirements": [
+        {
+          "dimension": "state",
+          "source": "demo",
+          "ref": "demo 状态「preparing」(mobile surface)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/mobile/src/auth/__tests__/loginSkinStates.test.ts",
+          "testId": "loginSkin 全登录态(harness 真链 + 渲染层接线) > preparing:auth 未初始化伪态 loading 环接线(64 @(308,193))"
+        }
+      ]
+    },
+    {
+      "rowId": "mobile.error.state",
+      "platform": "mobile",
+      "rowKind": "all-mobile",
+      "stateFamily": "error",
+      "dimension": "state",
+      "source": "demo",
+      "ref": "demo 状态「error」(mobile surface)",
+      "applicability": {
+        "devices": [
+          "iphone",
+          "android-phone",
+          "ipad",
+          "android-pad"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr4a",
+      "baselineRequirements": [
+        {
+          "dimension": "state",
+          "source": "demo",
+          "ref": "demo 状态「error」(mobile surface)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/mobile/src/auth/__tests__/loginSkinStates.test.ts",
+          "testId": "loginSkin 全登录态(harness 真链 + 渲染层接线) > error:failed→error 步骤,retry + authErrorText 兜底接线"
+        }
+      ]
+    },
+    {
+      "rowId": "mobile.completed.state",
+      "platform": "mobile",
+      "rowKind": "all-mobile",
+      "stateFamily": "completed",
+      "dimension": "state",
+      "source": "demo",
+      "ref": "demo 状态「completed」(mobile surface)",
+      "applicability": {
+        "devices": [
+          "iphone",
+          "android-phone",
+          "ipad",
+          "android-pad"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr4a",
+      "baselineRequirements": [
+        {
+          "dimension": "state",
+          "source": "demo",
+          "ref": "demo 状态「completed」(mobile surface)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/mobile/src/auth/__tests__/loginSkinStates.test.ts",
+          "testId": "loginSkin 全登录态(harness 真链 + 渲染层接线) > completed:outcome ok 真链→completed 瞬态,面板留空品牌保持"
+        }
+      ]
+    },
+    {
+      "rowId": "mobile.verification-code.countdown",
+      "platform": "mobile",
+      "rowKind": "all-mobile",
+      "stateFamily": "verification-code",
+      "dimension": "timing",
+      "source": "demo",
+      "ref": "42s 倒计时契约(同 Step 3a,RN 实现)",
+      "applicability": {
+        "devices": [
+          "iphone",
+          "android-phone",
+          "ipad",
+          "android-pad"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr4a",
+      "baselineRequirements": [
+        {
+          "dimension": "timing",
+          "source": "demo",
+          "ref": "42s 倒计时契约(同 Step 3a,RN 实现)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/mobile/src/auth/__tests__/loginSkinLayout.test.ts",
+          "testId": "loginSkin 42s 重发倒计时纯函数(Step 3a 契约) > 42s 起点:deadline=now+42000,首帧显示 42"
+        },
+        {
+          "file": "apps/mobile/src/auth/__tests__/loginSkinLayout.test.ts",
+          "testId": "loginSkin 42s 重发倒计时纯函数(Step 3a 契约) > 显示数学边界:41999/1000/1/0ms 与超时(ceil 向上,非负 clamp)"
+        },
+        {
+          "file": "apps/mobile/src/auth/__tests__/loginSkinLayout.test.ts",
+          "testId": "loginSkin 42s 重发倒计时纯函数(Step 3a 契约) > 重置/保持语义:新 deadline 恢复满值,旧 deadline 不受 now 回拨影响非递减假设"
+        },
+        {
+          "file": "apps/mobile/src/auth/__tests__/loginSkinLayout.test.ts",
+          "testId": "loginSkin 42s 重发倒计时纯函数(Step 3a 契约) > 模板渲染:{n} 占位替换,5 语 catalog resendCountdown 均带 {n}"
+        }
+      ]
+    },
+    {
+      "rowId": "mobile.splash-brand.state",
+      "platform": "mobile",
+      "rowKind": "all-mobile",
+      "stateFamily": "splash-brand",
+      "dimension": "state",
+      "source": "demo",
+      "ref": "demo 状态「mobile-splash」(移动 Splash 纯品牌屏,无更新链)",
+      "applicability": {
+        "devices": [
+          "iphone",
+          "android-phone",
+          "ipad",
+          "android-pad"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr4a",
+      "baselineRequirements": [
+        {
+          "dimension": "state",
+          "source": "demo",
+          "ref": "demo 状态「mobile-splash」(移动 Splash 纯品牌屏,无更新链)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/mobile/src/__tests__/loginSkinVisual.test.ts",
+          "testId": "loginSkin 白底体系视觉(源码接线 + token 参数) > splash-brand:CenteredScreen splash 变体复用品牌宿主,红底体系退役"
+        }
+      ]
+    },
+    {
+      "rowId": "mobile.gate-endpoint-error.state",
+      "platform": "mobile",
+      "rowKind": "all-mobile",
+      "stateFamily": "gate-endpoint-error",
+      "dimension": "state",
+      "source": "demo",
+      "ref": "demo 状态「endpoint-error」(端点配置拉取失败闸门,错误层可交互+retry)",
+      "applicability": {
+        "devices": [
+          "iphone",
+          "android-phone",
+          "ipad",
+          "android-pad"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr4b",
+      "baselineRequirements": [
+        {
+          "dimension": "state",
+          "source": "demo",
+          "ref": "demo 状态「endpoint-error」(端点配置拉取失败闸门,错误层可交互+retry)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/mobile/src/auth/__tests__/loginHandoffState.test.ts",
+          "testId": "loginHandoff 状态表(冻结逐条) > endpoint pending→error→retry(pending)→ready:全程可上报,readiness 随闸推进"
+        },
+        {
+          "file": "apps/mobile/src/auth/__tests__/loginHandoffState.test.ts",
+          "testId": "loginHandoff 状态表(冻结逐条) > endpoint ready 后单向锁定:晚到 error/pending 不回退"
+        },
+        {
+          "file": "apps/mobile/src/auth/__tests__/loginHandoffState.test.ts",
+          "testId": "loginHandoff 接线(Provider/reporter 拓扑 + 清理,读源码断言) > gate 屏内容层退化:endpoint error 层可交互 retry(错误层文案 key 化不变)"
+        }
+      ]
+    },
+    {
+      "rowId": "mobile.config-missing.state",
+      "platform": "mobile",
+      "rowKind": "all-mobile",
+      "stateFamily": "config-missing",
+      "dimension": "state",
+      "source": "demo",
+      "ref": "demo 状态「config-missing」(配置缺失,仅移动)",
+      "applicability": {
+        "devices": [
+          "iphone",
+          "android-phone",
+          "ipad",
+          "android-pad"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr4b",
+      "baselineRequirements": [
+        {
+          "dimension": "state",
+          "source": "demo",
+          "ref": "demo 状态「config-missing」(配置缺失,仅移动)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/mobile/src/auth/__tests__/loginHandoffState.test.ts",
+          "testId": "loginHandoff 状态表(冻结逐条) > config-missing(login 面板闸门态):panel-mounted 照常上报,readiness 语义不变"
+        },
+        {
+          "file": "apps/mobile/src/auth/__tests__/loginHandoffState.test.ts",
+          "testId": "loginHandoff 接线(Provider/reporter 拓扑 + 清理,读源码断言) > config-missing 面板接线:getMobileConfigIssues → login.configPanel(demo 复用文案口径)"
+        }
+      ]
+    },
+    {
+      "rowId": "mobile.no-loginstate.state",
+      "platform": "mobile",
+      "rowKind": "all-mobile",
+      "stateFamily": "no-loginstate",
+      "dimension": "state",
+      "source": "demo",
+      "ref": "demo 状态「mobile-no-loginstate」(无 loginState 兜底单按钮态,默认/busy 双格)",
+      "applicability": {
+        "devices": [
+          "iphone",
+          "android-phone",
+          "ipad",
+          "android-pad"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr4a",
+      "baselineRequirements": [
+        {
+          "dimension": "state",
+          "source": "demo",
+          "ref": "demo 状态「mobile-no-loginstate」(无 loginState 兜底单按钮态,默认/busy 双格)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/mobile/src/auth/__tests__/loginSkinStates.test.ts",
+          "testId": "loginSkin 全登录态(harness 真链 + 渲染层接线) > no-loginstate:兜底单按钮 默认/busy 双格接线(login.retryButton)"
+        }
+      ]
+    },
+    {
+      "rowId": "mobile.keyboard.geometry",
+      "platform": "mobile",
+      "rowKind": "all-mobile",
+      "stateFamily": "keyboard",
+      "dimension": "geometry",
+      "source": "demo",
+      "ref": "demo 键盘模拟器(iOS/Android);U-8b 硬标准:任何键盘形态弹起时当前输入框+主按钮完整可见;停靠键盘 10px 贴附;Android 悬浮键盘例外(U-11=B,adjustResize 保底)",
+      "applicability": {
+        "devices": [
+          "iphone",
+          "android-phone",
+          "ipad",
+          "android-pad"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr4b",
+      "baselineRequirements": [
+        {
+          "dimension": "geometry",
+          "source": "demo",
+          "ref": "demo 键盘模拟器(iOS/Android);U-8b 硬标准:任何键盘形态弹起时当前输入框+主按钮完整可见;停靠键盘 10px 贴附;Android 悬浮键盘例外(U-11=B,adjustResize 保底)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/mobile/src/auth/__tests__/loginKeyboardAvoidance.test.ts",
+          "testId": "loginKeyboard U-8b 键盘可见性硬标准(参数化冻结向量) > 向量1 停靠键盘:面板底 10px 贴附(shift = panelBottom + 10 - keyboardTop)"
+        },
+        {
+          "file": "apps/mobile/src/auth/__tests__/loginKeyboardAvoidance.test.ts",
+          "testId": "loginKeyboard U-8b 键盘可见性硬标准(参数化冻结向量) > 向量2 浮动键盘遮挡输入框:二维相交,按纵向遮挡量上移"
+        },
+        {
+          "file": "apps/mobile/src/auth/__tests__/loginKeyboardAvoidance.test.ts",
+          "testId": "loginKeyboard U-8b 键盘可见性硬标准(参数化冻结向量) > 向量3 浮动键盘遮挡主按钮:union 底越过键盘顶的深度即位移"
+        },
+        {
+          "file": "apps/mobile/src/auth/__tests__/loginKeyboardAvoidance.test.ts",
+          "testId": "loginKeyboard U-8b 键盘可见性硬标准(参数化冻结向量) > 向量4 浮动键盘横向不相交:不动(shift=0)"
+        },
+        {
+          "file": "apps/mobile/src/auth/__tests__/loginKeyboardAvoidance.test.ts",
+          "testId": "loginKeyboard U-8b 键盘可见性硬标准(参数化冻结向量) > 向量5 分离键盘(半宽矩形):与悬浮同一二维相交判定"
+        },
+        {
+          "file": "apps/mobile/src/auth/__tests__/loginKeyboardAvoidance.test.ts",
+          "testId": "loginKeyboard U-8b 键盘可见性硬标准(参数化冻结向量) > 向量6 320pt 分屏窄窗:停靠键盘贴附规则不变"
+        },
+        {
+          "file": "apps/mobile/src/auth/__tests__/loginKeyboardAvoidance.test.ts",
+          "testId": "loginKeyboard U-8b 键盘可见性硬标准(参数化冻结向量) > 向量7 浮动键盘已显示后横移/重停靠改 frame:逐帧重判定(keyboardWillChangeFrame 驱动)"
+        },
+        {
+          "file": "apps/mobile/src/auth/__tests__/loginKeyboardAvoidance.test.ts",
+          "testId": "loginKeyboard U-8b 键盘可见性硬标准(参数化冻结向量) > U-11=B Android 悬浮键盘显式例外:不自定义上移(adjustResize 保底)"
+        },
+        {
+          "file": "apps/mobile/src/auth/__tests__/loginKeyboardAvoidance.test.ts",
+          "testId": "loginKeyboard U-8b 键盘可见性硬标准(参数化冻结向量) > Android 停靠 + resize 已生效:以 resize 后 viewport 底为键盘顶,位移只计一次"
+        },
+        {
+          "file": "apps/mobile/src/auth/__tests__/loginKeyboardAvoidance.test.ts",
+          "testId": "loginKeyboard U-8b 键盘可见性硬标准(参数化冻结向量) > safe-top 上限:需求位移超限时钳到上限并回退窄窗弹性规则(clamped-fallback)"
+        },
+        {
+          "file": "apps/mobile/src/auth/__tests__/loginKeyboardAvoidance.test.ts",
+          "testId": "loginKeyboard U-8b 键盘可见性硬标准(参数化冻结向量) > 键盘不可见/无矩形:hidden,不动;停靠阈值冻结 0.95"
+        },
+        {
+          "file": "apps/mobile/src/auth/__tests__/loginKeyboardAvoidance.test.ts",
+          "testId": "loginKeyboard 接线(hook 订阅拓扑 + 登录页测量拓扑,读源码断言) > v5 冻结测量拓扑:外层未变换 wrapper measureInWindow,内层 translate 容器施加位移"
+        },
+        {
+          "file": "apps/mobile/src/auth/__tests__/loginKeyboardAvoidance.test.ts",
+          "testId": "loginKeyboard 接线(hook 订阅拓扑 + 登录页测量拓扑,读源码断言) > AndroidManifest 键盘配置零改动(方案 B):不出现 windowSoftInputMode 自定义"
+        }
+      ]
+    },
+    {
+      "rowId": "mobile.orientation-layout.phone-fallback-geometry",
+      "platform": "mobile",
+      "rowKind": "phone-only",
+      "stateFamily": "orientation-layout",
+      "dimension": "geometry",
+      "source": "demo",
+      "ref": "手机横屏/窄窗回退竖排弹性规则(adaptation §3.1-§3.3,demo 两档插值与两档外行为=U-8a 照 demo)",
+      "applicability": {
+        "devices": [
+          "iphone",
+          "android-phone"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr4b",
+      "baselineRequirements": [
+        {
+          "dimension": "geometry",
+          "source": "demo",
+          "ref": "手机横屏/窄窗回退竖排弹性规则(adaptation §3.1-§3.3,demo 两档插值与两档外行为=U-8a 照 demo)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/mobile/src/auth/__tests__/loginSkinLayout.test.ts",
+          "testId": "loginSkin §3.6 平板/横竖屏 surface 构图(PR4b Step 5b.3;adaptation §3.6 + demo resolveMobileStage/ipadPortrait/ipadLandscape 仲裁) > 断点三分支:landscape∧w≥1000∧h≥690→pad-landscape;portrait∧w≥700→pad-portrait;其余→phone"
+        },
+        {
+          "file": "apps/mobile/src/auth/__tests__/loginSkinLayout.test.ts",
+          "testId": "loginSkin §3.6 平板/横竖屏 surface 构图(PR4b Step 5b.3;adaptation §3.6 + demo resolveMobileStage/ipadPortrait/ipadLandscape 仲裁) > phone fallback:手机横屏/窄窗落 phone 构图,loginGroupScale=1,复用 resolveLoginStage(非 pad)"
+        }
+      ]
+    },
+    {
+      "rowId": "mobile.orientation-layout.pad-landscape-geometry",
+      "platform": "mobile",
+      "rowKind": "pad-only",
+      "stateFamily": "orientation-layout",
+      "dimension": "geometry",
+      "source": "demo",
+      "ref": "iPad/Android pad 横屏左右构图 scale=max(0.85,min(w/1180,h/820))(demo 公式,无上限;断点 landscape∧w≥1000pt∧h≥690pt;竖屏 744×1133 ≈0.794 等比)",
+      "applicability": {
+        "devices": [
+          "ipad",
+          "android-pad"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr4b",
+      "baselineRequirements": [
+        {
+          "dimension": "geometry",
+          "source": "demo",
+          "ref": "iPad/Android pad 横屏左右构图 scale=max(0.85,min(w/1180,h/820))(demo 公式,无上限;断点 landscape∧w≥1000pt∧h≥690pt;竖屏 744×1133 ≈0.794 等比)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/mobile/src/auth/__tests__/loginSkinLayout.test.ts",
+          "testId": "loginSkin §3.6 平板/横竖屏 surface 构图(PR4b Step 5b.3;adaptation §3.6 + demo resolveMobileStage/ipadPortrait/ipadLandscape 仲裁) > 断点三分支:landscape∧w≥1000∧h≥690→pad-landscape;portrait∧w≥700→pad-portrait;其余→phone"
+        },
+        {
+          "file": "apps/mobile/src/auth/__tests__/loginSkinLayout.test.ts",
+          "testId": "loginSkin §3.6 平板/横竖屏 surface 构图(PR4b Step 5b.3;adaptation §3.6 + demo resolveMobileStage/ipadPortrait/ipadLandscape 仲裁) > 竖屏 scale = min(w/744, h/1133) 等比居中;loginGroupScale=0.794117;splashOffset=158"
+        },
+        {
+          "file": "apps/mobile/src/auth/__tests__/loginSkinLayout.test.ts",
+          "testId": "loginSkin §3.6 平板/横竖屏 surface 构图(PR4b Step 5b.3;adaptation §3.6 + demo resolveMobileStage/ipadPortrait/ipadLandscape 仲裁) > 横屏 scale = max(0.85, min(w/1180, h/820))——仅下限 0.85、无 1.30 上限(权威链收口项)"
+        },
+        {
+          "file": "apps/mobile/src/auth/__tests__/loginSkinLayout.test.ts",
+          "testId": "loginSkin §3.6 平板/横竖屏 surface 构图(PR4b Step 5b.3;adaptation §3.6 + demo resolveMobileStage/ipadPortrait/ipadLandscape 仲裁) > 横屏居中偏移:offsetX/Y = (viewport - stage*scale)/2(画布居中锚)"
+        }
+      ]
+    },
+    {
+      "rowId": "desktop.handoff.timing",
+      "platform": "desktop",
+      "rowKind": "desktop",
+      "stateFamily": "handoff",
+      "dimension": "timing",
+      "source": "demo",
+      "ref": "demo splashHandoff():settle 0.3s→shift 650ms cubic-bezier(.33,0,.18,1)→panel 420ms 上滑 20px→slogan +100ms/500ms(Slogan 最后出现;冷启动每次播放,尺寸切换不重播;已登录分支不闪登录面板)",
+      "applicability": {
+        "devices": [
+          "mac",
+          "windows"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr2b",
+      "baselineRequirements": [
+        {
+          "dimension": "timing",
+          "source": "demo",
+          "ref": "demo splashHandoff():settle 0.3s→shift 650ms cubic-bezier(.33,0,.18,1)→panel 420ms 上滑 20px→slogan +100ms/500ms(Slogan 最后出现;冷启动每次播放,尺寸切换不重播;已登录分支不闪登录面板)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/desktop/src/renderer/contexts/__tests__/LoginHandoffContext.test.tsx",
+          "testId": "LoginHandoff 时序(fake-timer) > settle 0.3s→shift 650ms→panel 420ms 上滑→slogan +100ms/500ms,Slogan 最后出现(demo splashHandoff 对照)"
+        }
+      ]
+    },
+    {
+      "rowId": "desktop.handoff-reduced-motion.state",
+      "platform": "desktop",
+      "rowKind": "desktop",
+      "stateFamily": "handoff-reduced-motion",
+      "dimension": "state",
+      "source": "demo",
+      "ref": "prefers-reduced-motion: reduce 直落终态(无位移/无渐入过程)",
+      "applicability": {
+        "devices": [
+          "mac",
+          "windows"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr2b",
+      "baselineRequirements": [
+        {
+          "dimension": "state",
+          "source": "demo",
+          "ref": "prefers-reduced-motion: reduce 直落终态(无位移/无渐入过程)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/desktop/src/renderer/contexts/__tests__/LoginHandoffContext.test.tsx",
+          "testId": "LoginHandoff 时序(fake-timer) > prefers-reduced-motion: reduce 直落终态(无位移/无渐入过程)"
+        }
+      ]
+    },
+    {
+      "rowId": "mobile.handoff.timing",
+      "platform": "mobile",
+      "rowKind": "all-mobile",
+      "stateFamily": "handoff",
+      "dimension": "timing",
+      "source": "demo",
+      "ref": "demo splashHandoff() 竖排时序(同桌面参数;readiness 锚 endpoint∧OTA∧auth-init∧assets∧login-panel-mounted)",
+      "applicability": {
+        "devices": [
+          "iphone",
+          "android-phone",
+          "ipad",
+          "android-pad"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr4b",
+      "baselineRequirements": [
+        {
+          "dimension": "timing",
+          "source": "demo",
+          "ref": "demo splashHandoff() 竖排时序(同桌面参数;readiness 锚 endpoint∧OTA∧auth-init∧assets∧login-panel-mounted)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/mobile/src/auth/__tests__/loginHandoffState.test.ts",
+          "testId": "loginHandoff 时序契约(demo splashHandoff 逐值冻结) > timing/easing 参数逐字冻结"
+        },
+        {
+          "file": "apps/mobile/src/auth/__tests__/loginHandoffState.test.ts",
+          "testId": "loginHandoff 时序契约(demo splashHandoff 逐值冻结) > 竖排时序:面板 300+650 起步,Slogan +100,总时长 1610ms"
+        }
+      ]
+    },
+    {
+      "rowId": "mobile.handoff-reduced-motion.state",
+      "platform": "mobile",
+      "rowKind": "all-mobile",
+      "stateFamily": "handoff-reduced-motion",
+      "dimension": "state",
+      "source": "demo",
+      "ref": "AccessibilityInfo.isReduceMotionEnabled 直落终态",
+      "applicability": {
+        "devices": [
+          "iphone",
+          "android-phone",
+          "ipad",
+          "android-pad"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr4b",
+      "baselineRequirements": [
+        {
+          "dimension": "state",
+          "source": "demo",
+          "ref": "AccessibilityInfo.isReduceMotionEnabled 直落终态"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/mobile/src/auth/__tests__/loginHandoffState.test.ts",
+          "testId": "loginHandoff 状态表(冻结逐条) > reduced-motion:标志入库;splash 直落 done 合法(不经 handoff 播放)"
+        },
+        {
+          "file": "apps/mobile/src/auth/__tests__/loginHandoffState.test.ts",
+          "testId": "loginHandoff 接线(Provider/reporter 拓扑 + 清理,读源码断言) > reduced-motion:AccessibilityInfo 拉取 + 订阅,unmount 移除;直落终态由 Provider 收敛"
+        }
+      ]
+    },
+    {
+      "rowId": "mobile.handoff-orientation.phone-timing",
+      "platform": "mobile",
+      "rowKind": "phone-only",
+      "stateFamily": "handoff-orientation",
+      "dimension": "timing",
+      "source": "demo",
+      "ref": "手机横屏回退竖排衔接变体(随竖排规则)",
+      "applicability": {
+        "devices": [
+          "iphone",
+          "android-phone"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr4b",
+      "baselineRequirements": [
+        {
+          "dimension": "timing",
+          "source": "demo",
+          "ref": "手机横屏回退竖排衔接变体(随竖排规则)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/mobile/src/auth/__tests__/loginHandoffState.test.ts",
+          "testId": "loginHandoff 时序契约(demo splashHandoff 逐值冻结) > 手机横屏回退竖排衔接变体:随竖排规则(mode=phone,同 650ms 位移段)"
+        },
+        {
+          "file": "apps/mobile/src/auth/__tests__/loginHandoffState.test.ts",
+          "testId": "loginHandoff 时序契约(demo splashHandoff 逐值冻结) > 竖排时序:面板 300+650 起步,Slogan +100,总时长 1610ms"
+        }
+      ]
+    },
+    {
+      "rowId": "mobile.handoff-orientation.pad-landscape-timing",
+      "platform": "mobile",
+      "rowKind": "pad-only",
+      "stateFamily": "handoff-orientation",
+      "dimension": "timing",
+      "source": "demo",
+      "ref": "iPad 横屏无位移变体(立绘/字标 Splash 期即在登录位静止;loading 完成后直接面板/Slogan 入场;设计帧 358:833)",
+      "applicability": {
+        "devices": [
+          "ipad",
+          "android-pad"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr4b",
+      "baselineRequirements": [
+        {
+          "dimension": "timing",
+          "source": "demo",
+          "ref": "iPad 横屏无位移变体(立绘/字标 Splash 期即在登录位静止;loading 完成后直接面板/Slogan 入场;设计帧 358:833)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/mobile/src/auth/__tests__/loginHandoffState.test.ts",
+          "testId": "loginHandoff 时序契约(demo splashHandoff 逐值冻结) > iPad 横屏无位移变体(358:833):moveMs=0,loading 完直接面板/Slogan 入场"
+        }
+      ]
+    },
+    {
+      "rowId": "desktop.callback-success.light-state",
+      "platform": "desktop",
+      "rowKind": "desktop",
+      "stateFamily": "callback-success",
+      "dimension": "state",
+      "source": "demo",
+      "ref": "demo CALLBACK success·light(680×680 r36 卡;浅底 #EEEEEE/深底 #2A2828;U-10:卡与组件恒定,只动背景,放不下整卡等比缩,不裁 CTA)",
+      "applicability": {
+        "devices": [
+          "mac",
+          "windows"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr3",
+      "baselineRequirements": [
+        {
+          "dimension": "state",
+          "source": "demo",
+          "ref": "demo CALLBACK success·light(680×680 r36 卡;浅底 #EEEEEE/深底 #2A2828;U-10:卡与组件恒定,只动背景,放不下整卡等比缩,不裁 CTA)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/desktop/src/main/__tests__/oauthResultPage.test.ts",
+          "testId": "wave4 brand login callback card (pageKind=desktop-login) > callback success/failure/neutral:forced light/dark themes render acceptance states"
+        }
+      ]
+    },
+    {
+      "rowId": "desktop.callback-success.dark-state",
+      "platform": "desktop",
+      "rowKind": "desktop",
+      "stateFamily": "callback-success",
+      "dimension": "state",
+      "source": "demo",
+      "ref": "demo CALLBACK success·dark(680×680 r36 卡;浅底 #EEEEEE/深底 #2A2828;U-10:卡与组件恒定,只动背景,放不下整卡等比缩,不裁 CTA)",
+      "applicability": {
+        "devices": [
+          "mac",
+          "windows"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr3",
+      "baselineRequirements": [
+        {
+          "dimension": "state",
+          "source": "demo",
+          "ref": "demo CALLBACK success·dark(680×680 r36 卡;浅底 #EEEEEE/深底 #2A2828;U-10:卡与组件恒定,只动背景,放不下整卡等比缩,不裁 CTA)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/desktop/src/main/__tests__/oauthResultPage.test.ts",
+          "testId": "wave4 brand login callback card (pageKind=desktop-login) > callback success/failure/neutral:forced light/dark themes render acceptance states"
+        }
+      ]
+    },
+    {
+      "rowId": "desktop.callback-failure.light-state",
+      "platform": "desktop",
+      "rowKind": "desktop",
+      "stateFamily": "callback-failure",
+      "dimension": "state",
+      "source": "demo",
+      "ref": "demo CALLBACK failure·light(680×680 r36 卡;浅底 #EEEEEE/深底 #2A2828;U-10:卡与组件恒定,只动背景,放不下整卡等比缩,不裁 CTA)",
+      "applicability": {
+        "devices": [
+          "mac",
+          "windows"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr3",
+      "baselineRequirements": [
+        {
+          "dimension": "state",
+          "source": "demo",
+          "ref": "demo CALLBACK failure·light(680×680 r36 卡;浅底 #EEEEEE/深底 #2A2828;U-10:卡与组件恒定,只动背景,放不下整卡等比缩,不裁 CTA)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/desktop/src/main/__tests__/oauthResultPage.test.ts",
+          "testId": "wave4 brand login callback card (pageKind=desktop-login) > callback success/failure/neutral:forced light/dark themes render acceptance states"
+        }
+      ]
+    },
+    {
+      "rowId": "desktop.callback-failure.dark-state",
+      "platform": "desktop",
+      "rowKind": "desktop",
+      "stateFamily": "callback-failure",
+      "dimension": "state",
+      "source": "demo",
+      "ref": "demo CALLBACK failure·dark(680×680 r36 卡;浅底 #EEEEEE/深底 #2A2828;U-10:卡与组件恒定,只动背景,放不下整卡等比缩,不裁 CTA)",
+      "applicability": {
+        "devices": [
+          "mac",
+          "windows"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr3",
+      "baselineRequirements": [
+        {
+          "dimension": "state",
+          "source": "demo",
+          "ref": "demo CALLBACK failure·dark(680×680 r36 卡;浅底 #EEEEEE/深底 #2A2828;U-10:卡与组件恒定,只动背景,放不下整卡等比缩,不裁 CTA)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/desktop/src/main/__tests__/oauthResultPage.test.ts",
+          "testId": "wave4 brand login callback card (pageKind=desktop-login) > callback success/failure/neutral:forced light/dark themes render acceptance states"
+        }
+      ]
+    },
+    {
+      "rowId": "desktop.callback-neutral.light-state",
+      "platform": "desktop",
+      "rowKind": "desktop",
+      "stateFamily": "callback-neutral",
+      "dimension": "state",
+      "source": "demo",
+      "ref": "demo CALLBACK neutral·light(680×680 r36 卡;浅底 #EEEEEE/深底 #2A2828;U-10:卡与组件恒定,只动背景,放不下整卡等比缩,不裁 CTA)",
+      "applicability": {
+        "devices": [
+          "mac",
+          "windows"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr3",
+      "baselineRequirements": [
+        {
+          "dimension": "state",
+          "source": "demo",
+          "ref": "demo CALLBACK neutral·light(680×680 r36 卡;浅底 #EEEEEE/深底 #2A2828;U-10:卡与组件恒定,只动背景,放不下整卡等比缩,不裁 CTA)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/desktop/src/main/__tests__/oauthResultPage.test.ts",
+          "testId": "wave4 brand login callback card (pageKind=desktop-login) > callback success/failure/neutral:forced light/dark themes render acceptance states"
+        }
+      ]
+    },
+    {
+      "rowId": "desktop.callback-neutral.dark-state",
+      "platform": "desktop",
+      "rowKind": "desktop",
+      "stateFamily": "callback-neutral",
+      "dimension": "state",
+      "source": "demo",
+      "ref": "demo CALLBACK neutral·dark(680×680 r36 卡;浅底 #EEEEEE/深底 #2A2828;U-10:卡与组件恒定,只动背景,放不下整卡等比缩,不裁 CTA)",
+      "applicability": {
+        "devices": [
+          "mac",
+          "windows"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr3",
+      "baselineRequirements": [
+        {
+          "dimension": "state",
+          "source": "demo",
+          "ref": "demo CALLBACK neutral·dark(680×680 r36 卡;浅底 #EEEEEE/深底 #2A2828;U-10:卡与组件恒定,只动背景,放不下整卡等比缩,不裁 CTA)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/desktop/src/main/__tests__/oauthResultPage.test.ts",
+          "testId": "wave4 brand login callback card (pageKind=desktop-login) > callback success/failure/neutral:forced light/dark themes render acceptance states"
+        }
+      ]
+    },
+    {
+      "rowId": "desktop.legacy-migration.confirm-state",
+      "platform": "desktop",
+      "rowKind": "desktop",
+      "stateFamily": "legacy-migration",
+      "dimension": "state",
+      "source": "demo",
+      "ref": "demo 状态「legacy-confirm」(LegacyMigrationDialog 回调卡形式+表情包,仅 cn 构建触发)",
+      "applicability": {
+        "devices": [
+          "mac",
+          "windows"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [
+        {
+          "match": {
+            "region": [
+              "global"
+            ]
+          },
+          "reasonCode": "region-exclusive"
+        }
+      ],
+      "slice": "pr3",
+      "baselineRequirements": [
+        {
+          "dimension": "state",
+          "source": "demo",
+          "ref": "demo 状态「legacy-confirm」(LegacyMigrationDialog 回调卡形式+表情包,仅 cn 构建触发)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/desktop/src/renderer/components/auth/__tests__/LegacyMigrationDialog.test.tsx",
+          "testId": "LegacyMigrationDialog states > legacy-confirm:确认态显示说明与唯一确认按钮"
+        }
+      ]
+    },
+    {
+      "rowId": "desktop.legacy-migration.running-state",
+      "platform": "desktop",
+      "rowKind": "desktop",
+      "stateFamily": "legacy-migration",
+      "dimension": "state",
+      "source": "demo",
+      "ref": "demo 状态「legacy-running」(LegacyMigrationDialog 回调卡形式+表情包,仅 cn 构建触发)",
+      "applicability": {
+        "devices": [
+          "mac",
+          "windows"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [
+        {
+          "match": {
+            "region": [
+              "global"
+            ]
+          },
+          "reasonCode": "region-exclusive"
+        }
+      ],
+      "slice": "pr3",
+      "baselineRequirements": [
+        {
+          "dimension": "state",
+          "source": "demo",
+          "ref": "demo 状态「legacy-running」(LegacyMigrationDialog 回调卡形式+表情包,仅 cn 构建触发)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/desktop/src/renderer/components/auth/__tests__/LegacyMigrationDialog.test.tsx",
+          "testId": "LegacyMigrationDialog states > legacy-running:运行态显示禁用 loading 按钮"
+        }
+      ]
+    },
+    {
+      "rowId": "desktop.legacy-migration.failed-state",
+      "platform": "desktop",
+      "rowKind": "desktop",
+      "stateFamily": "legacy-migration",
+      "dimension": "state",
+      "source": "demo",
+      "ref": "demo 状态「legacy-failed」(LegacyMigrationDialog 回调卡形式+表情包,仅 cn 构建触发)",
+      "applicability": {
+        "devices": [
+          "mac",
+          "windows"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [
+        {
+          "match": {
+            "region": [
+              "global"
+            ]
+          },
+          "reasonCode": "region-exclusive"
+        }
+      ],
+      "slice": "pr3",
+      "baselineRequirements": [
+        {
+          "dimension": "state",
+          "source": "demo",
+          "ref": "demo 状态「legacy-failed」(LegacyMigrationDialog 回调卡形式+表情包,仅 cn 构建触发)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/desktop/src/renderer/components/auth/__tests__/LegacyMigrationDialog.test.tsx",
+          "testId": "LegacyMigrationDialog states > legacy-failed:失败态使用回调卡样式和继续按钮"
+        }
+      ]
+    },
+    {
+      "rowId": "desktop.splash-chain.state",
+      "platform": "desktop",
+      "rowKind": "desktop",
+      "stateFamily": "splash-chain",
+      "dimension": "state",
+      "source": "demo",
+      "ref": "demo Splash 阶段选择器 6 可见态覆盖(checking_update/updating/update_done/checking/downloading/failed;demo 对 Splash 仅验阶段覆盖-文案-时序,静态样式以 wave4 帧行为准)",
+      "applicability": {
+        "devices": [
+          "mac",
+          "windows"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr2b",
+      "baselineRequirements": [
+        {
+          "dimension": "state",
+          "source": "demo",
+          "ref": "demo Splash 阶段选择器 6 可见态覆盖(checking_update/updating/update_done/checking/downloading/failed;demo 对 Splash 仅验阶段覆盖-文案-时序,静态样式以 wave4 帧行为准)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/desktop/src/renderer/components/splash/__tests__/SplashScreen.test.tsx",
+          "testId": "SplashScreen wave4 统一面板 > 六可见态遍历:每态渲染统一面板且状态特征互斥(demo 阶段选择器 6 态覆盖)"
+        }
+      ]
+    },
+    {
+      "rowId": "desktop.splash-chain.copy",
+      "platform": "desktop",
+      "rowKind": "desktop",
+      "stateFamily": "splash-chain",
+      "dimension": "copy",
+      "source": "i18n",
+      "ref": "splash.* / splash.tips.* 现网 key verbatim,5 语(zh-CN/zh-TW/en/ja/ko)",
+      "applicability": {
+        "devices": [
+          "mac",
+          "windows"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr2b",
+      "baselineRequirements": [
+        {
+          "dimension": "copy",
+          "source": "i18n",
+          "ref": "splash.* / splash.tips.* 现网 key verbatim,5 语(zh-CN/zh-TW/en/ja/ko)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/desktop/src/renderer/components/splash/__tests__/SplashScreen.test.tsx",
+          "testId": "SplashScreen wave4 统一面板 > splash.* / splash.tips.* 现网 key 5 语齐全(zh-CN/zh-TW/en/ja/ko,含 envFailed 新 key)"
+        }
+      ]
+    },
+    {
+      "rowId": "desktop.splash-manifest-failed.state",
+      "platform": "desktop",
+      "rowKind": "desktop",
+      "stateFamily": "splash-manifest-failed",
+      "dimension": "state",
+      "source": "demo",
+      "ref": "demo 三失败弹窗 manifest_failed(统一面板视觉;CTA=现网重试类动作,文案/action 语义沿现网)",
+      "applicability": {
+        "devices": [
+          "mac",
+          "windows"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr2b",
+      "baselineRequirements": [
+        {
+          "dimension": "state",
+          "source": "demo",
+          "ref": "demo 三失败弹窗 manifest_failed(统一面板视觉;CTA=现网重试类动作,文案/action 语义沿现网)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/desktop/src/renderer/components/splash/__tests__/SplashScreen.test.tsx",
+          "testId": "SplashScreen wave4 统一面板 > manifest_failed:统一面板视觉 + 现网文案 + CTA=重试动作(onRetryManifest)"
+        }
+      ]
+    },
+    {
+      "rowId": "desktop.splash-download-failed.state",
+      "platform": "desktop",
+      "rowKind": "desktop",
+      "stateFamily": "splash-download-failed",
+      "dimension": "state",
+      "source": "demo",
+      "ref": "demo 三失败弹窗 download_failed(统一面板视觉;CTA=现网重试类动作)",
+      "applicability": {
+        "devices": [
+          "mac",
+          "windows"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr2b",
+      "baselineRequirements": [
+        {
+          "dimension": "state",
+          "source": "demo",
+          "ref": "demo 三失败弹窗 download_failed(统一面板视觉;CTA=现网重试类动作)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/desktop/src/renderer/components/splash/__tests__/SplashScreen.test.tsx",
+          "testId": "SplashScreen wave4 统一面板 > download_failed:统一面板视觉 + 现网文案 + CTA=重试动作(onRetryDownload)"
+        }
+      ]
+    },
+    {
+      "rowId": "desktop.splash-spawn-failed.state",
+      "platform": "desktop",
+      "rowKind": "desktop",
+      "stateFamily": "splash-spawn-failed",
+      "dimension": "state",
+      "source": "demo",
+      "ref": "demo 三失败弹窗 spawn_failed(统一面板视觉;CTA=「前往下载」打开现网下载页路径,禁改为重试——v6.12/v6.14)",
+      "applicability": {
+        "devices": [
+          "mac",
+          "windows"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr2b",
+      "baselineRequirements": [
+        {
+          "dimension": "state",
+          "source": "demo",
+          "ref": "demo 三失败弹窗 spawn_failed(统一面板视觉;CTA=「前往下载」打开现网下载页路径,禁改为重试——v6.12/v6.14)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/desktop/src/renderer/components/splash/__tests__/SplashScreen.test.tsx",
+          "testId": "SplashScreen wave4 统一面板 > spawn_failed:统一面板视觉 + CTA=「前往下载」onSpawnFailedDownload,禁 retry(v6.12/v6.14)"
+        }
+      ]
+    },
+    {
+      "rowId": "desktop.error-copy.AUTH_SERVICE_UNAVAILABLE",
+      "platform": "desktop",
+      "rowKind": "desktop",
+      "stateFamily": "error-copy",
+      "dimension": "copy",
+      "source": "i18n",
+      "ref": "login-ui-inventory-f8760bed.md §1.3 code=AUTH_SERVICE_UNAVAILABLE(现网 i18n verbatim,5 语)",
+      "applicability": {
+        "devices": [
+          "mac",
+          "windows"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr2a",
+      "baselineRequirements": [
+        {
+          "dimension": "copy",
+          "source": "i18n",
+          "ref": "login-ui-inventory-f8760bed.md §1.3 code=AUTH_SERVICE_UNAVAILABLE(现网 i18n verbatim,5 语)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/desktop/src/renderer/components/login/__tests__/LoginPage.errorCopy.harness.test.tsx",
+          "testId": "error-copy 桌面 19 码表 + 兜底(现网 i18n verbatim,#D91F37 族) > error-copy AUTH_SERVICE_UNAVAILABLE 文案 verbatim"
+        }
+      ]
+    },
+    {
+      "rowId": "desktop.error-copy.AUTH_REQUEST_FAILED",
+      "platform": "desktop",
+      "rowKind": "desktop",
+      "stateFamily": "error-copy",
+      "dimension": "copy",
+      "source": "i18n",
+      "ref": "login-ui-inventory-f8760bed.md §1.3 code=AUTH_REQUEST_FAILED(现网 i18n verbatim,5 语)",
+      "applicability": {
+        "devices": [
+          "mac",
+          "windows"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr2a",
+      "baselineRequirements": [
+        {
+          "dimension": "copy",
+          "source": "i18n",
+          "ref": "login-ui-inventory-f8760bed.md §1.3 code=AUTH_REQUEST_FAILED(现网 i18n verbatim,5 语)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/desktop/src/renderer/components/login/__tests__/LoginPage.errorCopy.harness.test.tsx",
+          "testId": "error-copy 桌面 19 码表 + 兜底(现网 i18n verbatim,#D91F37 族) > error-copy AUTH_REQUEST_FAILED 文案 verbatim"
+        }
+      ]
+    },
+    {
+      "rowId": "desktop.error-copy.NETWORK_ERROR",
+      "platform": "desktop",
+      "rowKind": "desktop",
+      "stateFamily": "error-copy",
+      "dimension": "copy",
+      "source": "i18n",
+      "ref": "login-ui-inventory-f8760bed.md §1.3 code=NETWORK_ERROR(现网 i18n verbatim,5 语)",
+      "applicability": {
+        "devices": [
+          "mac",
+          "windows"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr2a",
+      "baselineRequirements": [
+        {
+          "dimension": "copy",
+          "source": "i18n",
+          "ref": "login-ui-inventory-f8760bed.md §1.3 code=NETWORK_ERROR(现网 i18n verbatim,5 语)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/desktop/src/renderer/components/login/__tests__/LoginPage.errorCopy.harness.test.tsx",
+          "testId": "error-copy 桌面 19 码表 + 兜底(现网 i18n verbatim,#D91F37 族) > error-copy NETWORK_ERROR 文案 verbatim"
+        }
+      ]
+    },
+    {
+      "rowId": "desktop.error-copy.REQUEST_TIMEOUT",
+      "platform": "desktop",
+      "rowKind": "desktop",
+      "stateFamily": "error-copy",
+      "dimension": "copy",
+      "source": "i18n",
+      "ref": "login-ui-inventory-f8760bed.md §1.3 code=REQUEST_TIMEOUT(现网 i18n verbatim,5 语)",
+      "applicability": {
+        "devices": [
+          "mac",
+          "windows"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr2a",
+      "baselineRequirements": [
+        {
+          "dimension": "copy",
+          "source": "i18n",
+          "ref": "login-ui-inventory-f8760bed.md §1.3 code=REQUEST_TIMEOUT(现网 i18n verbatim,5 语)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/desktop/src/renderer/components/login/__tests__/LoginPage.errorCopy.harness.test.tsx",
+          "testId": "error-copy 桌面 19 码表 + 兜底(现网 i18n verbatim,#D91F37 族) > error-copy REQUEST_TIMEOUT 文案 verbatim"
+        }
+      ]
+    },
+    {
+      "rowId": "desktop.error-copy.INVALID_PARAMS",
+      "platform": "desktop",
+      "rowKind": "desktop",
+      "stateFamily": "error-copy",
+      "dimension": "copy",
+      "source": "i18n",
+      "ref": "login-ui-inventory-f8760bed.md §1.3 code=INVALID_PARAMS(现网 i18n verbatim,5 语)",
+      "applicability": {
+        "devices": [
+          "mac",
+          "windows"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr2a",
+      "baselineRequirements": [
+        {
+          "dimension": "copy",
+          "source": "i18n",
+          "ref": "login-ui-inventory-f8760bed.md §1.3 code=INVALID_PARAMS(现网 i18n verbatim,5 语)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/desktop/src/renderer/components/login/__tests__/LoginPage.errorCopy.harness.test.tsx",
+          "testId": "error-copy 桌面 19 码表 + 兜底(现网 i18n verbatim,#D91F37 族) > error-copy INVALID_PARAMS 文案 verbatim"
+        }
+      ]
+    },
+    {
+      "rowId": "desktop.error-copy.INVALID_CODE",
+      "platform": "desktop",
+      "rowKind": "desktop",
+      "stateFamily": "error-copy",
+      "dimension": "copy",
+      "source": "i18n",
+      "ref": "login-ui-inventory-f8760bed.md §1.3 code=INVALID_CODE(现网 i18n verbatim,5 语)",
+      "applicability": {
+        "devices": [
+          "mac",
+          "windows"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr2a",
+      "baselineRequirements": [
+        {
+          "dimension": "copy",
+          "source": "i18n",
+          "ref": "login-ui-inventory-f8760bed.md §1.3 code=INVALID_CODE(现网 i18n verbatim,5 语)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/desktop/src/renderer/components/login/__tests__/LoginPage.errorCopy.harness.test.tsx",
+          "testId": "error-copy 桌面 19 码表 + 兜底(现网 i18n verbatim,#D91F37 族) > error-copy INVALID_CODE 文案 verbatim"
+        },
+        {
+          "file": "apps/desktop/src/renderer/components/login/__tests__/LoginPage.errorCopy.harness.test.tsx",
+          "testId": "error-copy 桌面 19 码表 + 兜底(现网 i18n verbatim,#D91F37 族) > error-copy 视觉切换:错误态输入框边框转 error 色(§4.1 error 态)"
+        }
+      ]
+    },
+    {
+      "rowId": "desktop.error-copy.CODE_ATTEMPTS_EXCEEDED",
+      "platform": "desktop",
+      "rowKind": "desktop",
+      "stateFamily": "error-copy",
+      "dimension": "copy",
+      "source": "i18n",
+      "ref": "login-ui-inventory-f8760bed.md §1.3 code=CODE_ATTEMPTS_EXCEEDED(现网 i18n verbatim,5 语)",
+      "applicability": {
+        "devices": [
+          "mac",
+          "windows"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr2a",
+      "baselineRequirements": [
+        {
+          "dimension": "copy",
+          "source": "i18n",
+          "ref": "login-ui-inventory-f8760bed.md §1.3 code=CODE_ATTEMPTS_EXCEEDED(现网 i18n verbatim,5 语)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/desktop/src/renderer/components/login/__tests__/LoginPage.errorCopy.harness.test.tsx",
+          "testId": "error-copy 桌面 19 码表 + 兜底(现网 i18n verbatim,#D91F37 族) > error-copy CODE_ATTEMPTS_EXCEEDED 文案 verbatim"
+        }
+      ]
+    },
+    {
+      "rowId": "desktop.error-copy.RATE_LIMITED",
+      "platform": "desktop",
+      "rowKind": "desktop",
+      "stateFamily": "error-copy",
+      "dimension": "copy",
+      "source": "i18n",
+      "ref": "login-ui-inventory-f8760bed.md §1.3 code=RATE_LIMITED(现网 i18n verbatim,5 语)",
+      "applicability": {
+        "devices": [
+          "mac",
+          "windows"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr2a",
+      "baselineRequirements": [
+        {
+          "dimension": "copy",
+          "source": "i18n",
+          "ref": "login-ui-inventory-f8760bed.md §1.3 code=RATE_LIMITED(现网 i18n verbatim,5 语)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/desktop/src/renderer/components/login/__tests__/LoginPage.errorCopy.harness.test.tsx",
+          "testId": "error-copy 桌面 19 码表 + 兜底(现网 i18n verbatim,#D91F37 族) > error-copy RATE_LIMITED 文案 verbatim"
+        }
+      ]
+    },
+    {
+      "rowId": "desktop.error-copy.SSO_LOGIN_REQUIRED",
+      "platform": "desktop",
+      "rowKind": "desktop",
+      "stateFamily": "error-copy",
+      "dimension": "copy",
+      "source": "i18n",
+      "ref": "login-ui-inventory-f8760bed.md §1.3 code=SSO_LOGIN_REQUIRED(现网 i18n verbatim,5 语)",
+      "applicability": {
+        "devices": [
+          "mac",
+          "windows"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr2a",
+      "baselineRequirements": [
+        {
+          "dimension": "copy",
+          "source": "i18n",
+          "ref": "login-ui-inventory-f8760bed.md §1.3 code=SSO_LOGIN_REQUIRED(现网 i18n verbatim,5 语)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/desktop/src/renderer/components/login/__tests__/LoginPage.errorCopy.harness.test.tsx",
+          "testId": "error-copy 桌面 19 码表 + 兜底(现网 i18n verbatim,#D91F37 族) > error-copy SSO_LOGIN_REQUIRED 文案 verbatim"
+        }
+      ]
+    },
+    {
+      "rowId": "desktop.error-copy.ORG_SSO_NOT_FOUND",
+      "platform": "desktop",
+      "rowKind": "desktop",
+      "stateFamily": "error-copy",
+      "dimension": "copy",
+      "source": "i18n",
+      "ref": "login-ui-inventory-f8760bed.md §1.3 code=ORG_SSO_NOT_FOUND(现网 i18n verbatim,5 语)",
+      "applicability": {
+        "devices": [
+          "mac",
+          "windows"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr2a",
+      "baselineRequirements": [
+        {
+          "dimension": "copy",
+          "source": "i18n",
+          "ref": "login-ui-inventory-f8760bed.md §1.3 code=ORG_SSO_NOT_FOUND(现网 i18n verbatim,5 语)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/desktop/src/renderer/components/login/__tests__/LoginPage.errorCopy.harness.test.tsx",
+          "testId": "error-copy 桌面 19 码表 + 兜底(现网 i18n verbatim,#D91F37 族) > error-copy ORG_SSO_NOT_FOUND 文案 verbatim"
+        }
+      ]
+    },
+    {
+      "rowId": "desktop.error-copy.SOCIAL_TOKEN_INVALID",
+      "platform": "desktop",
+      "rowKind": "desktop",
+      "stateFamily": "error-copy",
+      "dimension": "copy",
+      "source": "i18n",
+      "ref": "login-ui-inventory-f8760bed.md §1.3 code=SOCIAL_TOKEN_INVALID(现网 i18n verbatim,5 语)",
+      "applicability": {
+        "devices": [
+          "mac",
+          "windows"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr2a",
+      "baselineRequirements": [
+        {
+          "dimension": "copy",
+          "source": "i18n",
+          "ref": "login-ui-inventory-f8760bed.md §1.3 code=SOCIAL_TOKEN_INVALID(现网 i18n verbatim,5 语)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/desktop/src/renderer/components/login/__tests__/LoginPage.errorCopy.harness.test.tsx",
+          "testId": "error-copy 桌面 19 码表 + 兜底(现网 i18n verbatim,#D91F37 族) > error-copy SOCIAL_TOKEN_INVALID 文案 verbatim"
+        }
+      ]
+    },
+    {
+      "rowId": "desktop.error-copy.SOCIAL_PROVIDER_DISABLED",
+      "platform": "desktop",
+      "rowKind": "desktop",
+      "stateFamily": "error-copy",
+      "dimension": "copy",
+      "source": "i18n",
+      "ref": "login-ui-inventory-f8760bed.md §1.3 code=SOCIAL_PROVIDER_DISABLED(现网 i18n verbatim,5 语)",
+      "applicability": {
+        "devices": [
+          "mac",
+          "windows"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr2a",
+      "baselineRequirements": [
+        {
+          "dimension": "copy",
+          "source": "i18n",
+          "ref": "login-ui-inventory-f8760bed.md §1.3 code=SOCIAL_PROVIDER_DISABLED(现网 i18n verbatim,5 语)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/desktop/src/renderer/components/login/__tests__/LoginPage.errorCopy.harness.test.tsx",
+          "testId": "error-copy 桌面 19 码表 + 兜底(现网 i18n verbatim,#D91F37 族) > error-copy SOCIAL_PROVIDER_DISABLED 文案 verbatim"
+        }
+      ]
+    },
+    {
+      "rowId": "desktop.error-copy.USER_CANCELLED",
+      "platform": "desktop",
+      "rowKind": "desktop",
+      "stateFamily": "error-copy",
+      "dimension": "copy",
+      "source": "i18n",
+      "ref": "login-ui-inventory-f8760bed.md §1.3 code=USER_CANCELLED(现网 i18n verbatim,5 语)",
+      "applicability": {
+        "devices": [
+          "mac",
+          "windows"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr2a",
+      "baselineRequirements": [
+        {
+          "dimension": "copy",
+          "source": "i18n",
+          "ref": "login-ui-inventory-f8760bed.md §1.3 code=USER_CANCELLED(现网 i18n verbatim,5 语)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/desktop/src/renderer/components/login/__tests__/LoginPage.errorCopy.harness.test.tsx",
+          "testId": "error-copy 桌面 19 码表 + 兜底(现网 i18n verbatim,#D91F37 族) > error-copy USER_CANCELLED 文案 verbatim"
+        }
+      ]
+    },
+    {
+      "rowId": "desktop.error-copy.STATE_MISMATCH",
+      "platform": "desktop",
+      "rowKind": "desktop",
+      "stateFamily": "error-copy",
+      "dimension": "copy",
+      "source": "i18n",
+      "ref": "login-ui-inventory-f8760bed.md §1.3 code=STATE_MISMATCH(现网 i18n verbatim,5 语)",
+      "applicability": {
+        "devices": [
+          "mac",
+          "windows"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr2a",
+      "baselineRequirements": [
+        {
+          "dimension": "copy",
+          "source": "i18n",
+          "ref": "login-ui-inventory-f8760bed.md §1.3 code=STATE_MISMATCH(现网 i18n verbatim,5 语)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/desktop/src/renderer/components/login/__tests__/LoginPage.errorCopy.harness.test.tsx",
+          "testId": "error-copy 桌面 19 码表 + 兜底(现网 i18n verbatim,#D91F37 族) > error-copy STATE_MISMATCH 文案 verbatim"
+        }
+      ]
+    },
+    {
+      "rowId": "desktop.error-copy.INVALID_AUTH_CODE",
+      "platform": "desktop",
+      "rowKind": "desktop",
+      "stateFamily": "error-copy",
+      "dimension": "copy",
+      "source": "i18n",
+      "ref": "login-ui-inventory-f8760bed.md §1.3 code=INVALID_AUTH_CODE(现网 i18n verbatim,5 语)",
+      "applicability": {
+        "devices": [
+          "mac",
+          "windows"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr2a",
+      "baselineRequirements": [
+        {
+          "dimension": "copy",
+          "source": "i18n",
+          "ref": "login-ui-inventory-f8760bed.md §1.3 code=INVALID_AUTH_CODE(现网 i18n verbatim,5 语)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/desktop/src/renderer/components/login/__tests__/LoginPage.errorCopy.harness.test.tsx",
+          "testId": "error-copy 桌面 19 码表 + 兜底(现网 i18n verbatim,#D91F37 族) > error-copy INVALID_AUTH_CODE 文案 verbatim"
+        }
+      ]
+    },
+    {
+      "rowId": "desktop.error-copy.INVALID_LOGIN_TICKET",
+      "platform": "desktop",
+      "rowKind": "desktop",
+      "stateFamily": "error-copy",
+      "dimension": "copy",
+      "source": "i18n",
+      "ref": "login-ui-inventory-f8760bed.md §1.3 code=INVALID_LOGIN_TICKET(现网 i18n verbatim,5 语)",
+      "applicability": {
+        "devices": [
+          "mac",
+          "windows"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr2a",
+      "baselineRequirements": [
+        {
+          "dimension": "copy",
+          "source": "i18n",
+          "ref": "login-ui-inventory-f8760bed.md §1.3 code=INVALID_LOGIN_TICKET(现网 i18n verbatim,5 语)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/desktop/src/renderer/components/login/__tests__/LoginPage.errorCopy.harness.test.tsx",
+          "testId": "error-copy 桌面 19 码表 + 兜底(现网 i18n verbatim,#D91F37 族) > error-copy INVALID_LOGIN_TICKET 文案 verbatim"
+        }
+      ]
+    },
+    {
+      "rowId": "desktop.error-copy.INVALID_BIND_TICKET",
+      "platform": "desktop",
+      "rowKind": "desktop",
+      "stateFamily": "error-copy",
+      "dimension": "copy",
+      "source": "i18n",
+      "ref": "login-ui-inventory-f8760bed.md §1.3 code=INVALID_BIND_TICKET(现网 i18n verbatim,5 语)",
+      "applicability": {
+        "devices": [
+          "mac",
+          "windows"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr2a",
+      "baselineRequirements": [
+        {
+          "dimension": "copy",
+          "source": "i18n",
+          "ref": "login-ui-inventory-f8760bed.md §1.3 code=INVALID_BIND_TICKET(现网 i18n verbatim,5 语)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/desktop/src/renderer/components/login/__tests__/LoginPage.errorCopy.harness.test.tsx",
+          "testId": "error-copy 桌面 19 码表 + 兜底(现网 i18n verbatim,#D91F37 族) > error-copy INVALID_BIND_TICKET 文案 verbatim"
+        }
+      ]
+    },
+    {
+      "rowId": "desktop.error-copy.REGION_MISMATCH",
+      "platform": "desktop",
+      "rowKind": "desktop",
+      "stateFamily": "error-copy",
+      "dimension": "copy",
+      "source": "i18n",
+      "ref": "login-ui-inventory-f8760bed.md §1.3 code=REGION_MISMATCH(现网 i18n verbatim,5 语)",
+      "applicability": {
+        "devices": [
+          "mac",
+          "windows"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr2a",
+      "baselineRequirements": [
+        {
+          "dimension": "copy",
+          "source": "i18n",
+          "ref": "login-ui-inventory-f8760bed.md §1.3 code=REGION_MISMATCH(现网 i18n verbatim,5 语)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/desktop/src/renderer/components/login/__tests__/LoginPage.errorCopy.harness.test.tsx",
+          "testId": "error-copy 桌面 19 码表 + 兜底(现网 i18n verbatim,#D91F37 族) > error-copy REGION_MISMATCH 文案 verbatim"
+        }
+      ]
+    },
+    {
+      "rowId": "desktop.error-copy.UNKNOWN_CODE",
+      "platform": "desktop",
+      "rowKind": "desktop",
+      "stateFamily": "error-copy",
+      "dimension": "copy",
+      "source": "i18n",
+      "ref": "login-ui-inventory-f8760bed.md §1.3 fallback「登录失败,请稍后重试」(harness error:<endpoint>:UNKNOWN_CODE 未注册 wire code 兜底行)",
+      "applicability": {
+        "devices": [
+          "mac",
+          "windows"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr2a",
+      "baselineRequirements": [
+        {
+          "dimension": "copy",
+          "source": "i18n",
+          "ref": "login-ui-inventory-f8760bed.md §1.3 fallback「登录失败,请稍后重试」(harness error:<endpoint>:UNKNOWN_CODE 未注册 wire code 兜底行)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/desktop/src/renderer/components/login/__tests__/LoginPage.errorCopy.harness.test.tsx",
+          "testId": "error-copy 桌面 19 码表 + 兜底(现网 i18n verbatim,#D91F37 族) > error-copy UNKNOWN_CODE 落兜底文案(登录失败,请稍后重试)"
+        }
+      ]
+    },
+    {
+      "rowId": "desktop.error-copy.LOGIN_BUSY",
+      "platform": "desktop",
+      "rowKind": "desktop",
+      "stateFamily": "error-copy",
+      "dimension": "copy",
+      "source": "i18n",
+      "ref": "login-ui-inventory-f8760bed.md §1.3 无专属 key 代表项 LOGIN_BUSY(落兜底文案「登录失败,请稍后重试」)",
+      "applicability": {
+        "devices": [
+          "mac",
+          "windows"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr2a",
+      "baselineRequirements": [
+        {
+          "dimension": "copy",
+          "source": "i18n",
+          "ref": "login-ui-inventory-f8760bed.md §1.3 无专属 key 代表项 LOGIN_BUSY(落兜底文案「登录失败,请稍后重试」)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/desktop/src/renderer/components/login/__tests__/LoginPage.errorCopy.harness.test.tsx",
+          "testId": "error-copy 桌面 19 码表 + 兜底(现网 i18n verbatim,#D91F37 族) > error-copy LOGIN_BUSY 落兜底文案(登录失败,请稍后重试)"
+        }
+      ]
+    },
+    {
+      "rowId": "mobile.error-copy.INVALID_CODE",
+      "platform": "mobile",
+      "rowKind": "all-mobile",
+      "stateFamily": "error-copy",
+      "dimension": "copy",
+      "source": "i18n",
+      "ref": "login-ui-inventory-f8760bed.md §4.5 code=INVALID_CODE(loginMessages catalog verbatim,5 语)",
+      "applicability": {
+        "devices": [
+          "iphone",
+          "android-phone",
+          "ipad",
+          "android-pad"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr4a",
+      "baselineRequirements": [
+        {
+          "dimension": "copy",
+          "source": "i18n",
+          "ref": "login-ui-inventory-f8760bed.md §4.5 code=INVALID_CODE(loginMessages catalog verbatim,5 语)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/mobile/src/auth/__tests__/loginSkinErrorCopy.test.ts",
+          "testId": "loginSkin 错误文案 5 语(catalog verbatim 路由) > INVALID_CODE:5 语 catalog verbatim 路由"
+        }
+      ]
+    },
+    {
+      "rowId": "mobile.error-copy.INVALID_PARAMS",
+      "platform": "mobile",
+      "rowKind": "all-mobile",
+      "stateFamily": "error-copy",
+      "dimension": "copy",
+      "source": "i18n",
+      "ref": "login-ui-inventory-f8760bed.md §4.5 code=INVALID_PARAMS(loginMessages catalog verbatim,5 语)",
+      "applicability": {
+        "devices": [
+          "iphone",
+          "android-phone",
+          "ipad",
+          "android-pad"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr4a",
+      "baselineRequirements": [
+        {
+          "dimension": "copy",
+          "source": "i18n",
+          "ref": "login-ui-inventory-f8760bed.md §4.5 code=INVALID_PARAMS(loginMessages catalog verbatim,5 语)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/mobile/src/auth/__tests__/loginSkinErrorCopy.test.ts",
+          "testId": "loginSkin 错误文案 5 语(catalog verbatim 路由) > INVALID_PARAMS:5 语 catalog verbatim 路由"
+        }
+      ]
+    },
+    {
+      "rowId": "mobile.error-copy.INVALID_AUTH_CODE",
+      "platform": "mobile",
+      "rowKind": "all-mobile",
+      "stateFamily": "error-copy",
+      "dimension": "copy",
+      "source": "i18n",
+      "ref": "login-ui-inventory-f8760bed.md §4.5 code=INVALID_AUTH_CODE(loginMessages catalog verbatim,5 语)",
+      "applicability": {
+        "devices": [
+          "iphone",
+          "android-phone",
+          "ipad",
+          "android-pad"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr4a",
+      "baselineRequirements": [
+        {
+          "dimension": "copy",
+          "source": "i18n",
+          "ref": "login-ui-inventory-f8760bed.md §4.5 code=INVALID_AUTH_CODE(loginMessages catalog verbatim,5 语)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/mobile/src/auth/__tests__/loginSkinErrorCopy.test.ts",
+          "testId": "loginSkin 错误文案 5 语(catalog verbatim 路由) > INVALID_AUTH_CODE:5 语 catalog verbatim 路由"
+        }
+      ]
+    },
+    {
+      "rowId": "mobile.error-copy.INVALID_LOGIN_TICKET",
+      "platform": "mobile",
+      "rowKind": "all-mobile",
+      "stateFamily": "error-copy",
+      "dimension": "copy",
+      "source": "i18n",
+      "ref": "login-ui-inventory-f8760bed.md §4.5 code=INVALID_LOGIN_TICKET(loginMessages catalog verbatim,5 语)",
+      "applicability": {
+        "devices": [
+          "iphone",
+          "android-phone",
+          "ipad",
+          "android-pad"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr4a",
+      "baselineRequirements": [
+        {
+          "dimension": "copy",
+          "source": "i18n",
+          "ref": "login-ui-inventory-f8760bed.md §4.5 code=INVALID_LOGIN_TICKET(loginMessages catalog verbatim,5 语)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/mobile/src/auth/__tests__/loginSkinErrorCopy.test.ts",
+          "testId": "loginSkin 错误文案 5 语(catalog verbatim 路由) > INVALID_LOGIN_TICKET:5 语 catalog verbatim 路由"
+        }
+      ]
+    },
+    {
+      "rowId": "mobile.error-copy.INVALID_BIND_TICKET",
+      "platform": "mobile",
+      "rowKind": "all-mobile",
+      "stateFamily": "error-copy",
+      "dimension": "copy",
+      "source": "i18n",
+      "ref": "login-ui-inventory-f8760bed.md §4.5 code=INVALID_BIND_TICKET(loginMessages catalog verbatim,5 语)",
+      "applicability": {
+        "devices": [
+          "iphone",
+          "android-phone",
+          "ipad",
+          "android-pad"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr4a",
+      "baselineRequirements": [
+        {
+          "dimension": "copy",
+          "source": "i18n",
+          "ref": "login-ui-inventory-f8760bed.md §4.5 code=INVALID_BIND_TICKET(loginMessages catalog verbatim,5 语)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/mobile/src/auth/__tests__/loginSkinErrorCopy.test.ts",
+          "testId": "loginSkin 错误文案 5 语(catalog verbatim 路由) > INVALID_BIND_TICKET:5 语 catalog verbatim 路由"
+        }
+      ]
+    },
+    {
+      "rowId": "mobile.error-copy.STATE_MISMATCH",
+      "platform": "mobile",
+      "rowKind": "all-mobile",
+      "stateFamily": "error-copy",
+      "dimension": "copy",
+      "source": "i18n",
+      "ref": "login-ui-inventory-f8760bed.md §4.5 code=STATE_MISMATCH(loginMessages catalog verbatim,5 语)",
+      "applicability": {
+        "devices": [
+          "iphone",
+          "android-phone",
+          "ipad",
+          "android-pad"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr4a",
+      "baselineRequirements": [
+        {
+          "dimension": "copy",
+          "source": "i18n",
+          "ref": "login-ui-inventory-f8760bed.md §4.5 code=STATE_MISMATCH(loginMessages catalog verbatim,5 语)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/mobile/src/auth/__tests__/loginSkinErrorCopy.test.ts",
+          "testId": "loginSkin 错误文案 5 语(catalog verbatim 路由) > STATE_MISMATCH:5 语 catalog verbatim 路由"
+        }
+      ]
+    },
+    {
+      "rowId": "mobile.error-copy.REGION_MISMATCH",
+      "platform": "mobile",
+      "rowKind": "all-mobile",
+      "stateFamily": "error-copy",
+      "dimension": "copy",
+      "source": "i18n",
+      "ref": "login-ui-inventory-f8760bed.md §4.5 code=REGION_MISMATCH(loginMessages catalog verbatim,5 语)",
+      "applicability": {
+        "devices": [
+          "iphone",
+          "android-phone",
+          "ipad",
+          "android-pad"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr4a",
+      "baselineRequirements": [
+        {
+          "dimension": "copy",
+          "source": "i18n",
+          "ref": "login-ui-inventory-f8760bed.md §4.5 code=REGION_MISMATCH(loginMessages catalog verbatim,5 语)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/mobile/src/auth/__tests__/loginSkinErrorCopy.test.ts",
+          "testId": "loginSkin 错误文案 5 语(catalog verbatim 路由) > REGION_MISMATCH:5 语 catalog verbatim 路由"
+        }
+      ]
+    },
+    {
+      "rowId": "mobile.error-copy.NETWORK_ERROR",
+      "platform": "mobile",
+      "rowKind": "all-mobile",
+      "stateFamily": "error-copy",
+      "dimension": "copy",
+      "source": "i18n",
+      "ref": "login-ui-inventory-f8760bed.md §4.5 code=NETWORK_ERROR(loginMessages catalog verbatim,5 语)",
+      "applicability": {
+        "devices": [
+          "iphone",
+          "android-phone",
+          "ipad",
+          "android-pad"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr4a",
+      "baselineRequirements": [
+        {
+          "dimension": "copy",
+          "source": "i18n",
+          "ref": "login-ui-inventory-f8760bed.md §4.5 code=NETWORK_ERROR(loginMessages catalog verbatim,5 语)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/mobile/src/auth/__tests__/loginSkinErrorCopy.test.ts",
+          "testId": "loginSkin 错误文案 5 语(catalog verbatim 路由) > NETWORK_ERROR:5 语 catalog verbatim 路由"
+        }
+      ]
+    },
+    {
+      "rowId": "mobile.error-copy.REQUEST_TIMEOUT",
+      "platform": "mobile",
+      "rowKind": "all-mobile",
+      "stateFamily": "error-copy",
+      "dimension": "copy",
+      "source": "i18n",
+      "ref": "login-ui-inventory-f8760bed.md §4.5 code=REQUEST_TIMEOUT(loginMessages catalog verbatim,5 语)",
+      "applicability": {
+        "devices": [
+          "iphone",
+          "android-phone",
+          "ipad",
+          "android-pad"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr4a",
+      "baselineRequirements": [
+        {
+          "dimension": "copy",
+          "source": "i18n",
+          "ref": "login-ui-inventory-f8760bed.md §4.5 code=REQUEST_TIMEOUT(loginMessages catalog verbatim,5 语)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/mobile/src/auth/__tests__/loginSkinErrorCopy.test.ts",
+          "testId": "loginSkin 错误文案 5 语(catalog verbatim 路由) > REQUEST_TIMEOUT:5 语 catalog verbatim 路由"
+        }
+      ]
+    },
+    {
+      "rowId": "mobile.error-copy.USER_CANCELLED",
+      "platform": "mobile",
+      "rowKind": "all-mobile",
+      "stateFamily": "error-copy",
+      "dimension": "copy",
+      "source": "i18n",
+      "ref": "login-ui-inventory-f8760bed.md §4.5 code=USER_CANCELLED(loginMessages catalog verbatim,5 语)",
+      "applicability": {
+        "devices": [
+          "iphone",
+          "android-phone",
+          "ipad",
+          "android-pad"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr4a",
+      "baselineRequirements": [
+        {
+          "dimension": "copy",
+          "source": "i18n",
+          "ref": "login-ui-inventory-f8760bed.md §4.5 code=USER_CANCELLED(loginMessages catalog verbatim,5 语)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/mobile/src/auth/__tests__/loginSkinErrorCopy.test.ts",
+          "testId": "loginSkin 错误文案 5 语(catalog verbatim 路由) > USER_CANCELLED:5 语 catalog verbatim 路由"
+        }
+      ]
+    },
+    {
+      "rowId": "mobile.error-copy.SOCIAL_PROVIDER_NOT_CONFIGURED",
+      "platform": "mobile",
+      "rowKind": "all-mobile",
+      "stateFamily": "error-copy",
+      "dimension": "copy",
+      "source": "i18n",
+      "ref": "login-ui-inventory-f8760bed.md §4.5 code=SOCIAL_PROVIDER_NOT_CONFIGURED(loginMessages catalog verbatim,5 语)",
+      "applicability": {
+        "devices": [
+          "iphone",
+          "android-phone",
+          "ipad",
+          "android-pad"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr4a",
+      "baselineRequirements": [
+        {
+          "dimension": "copy",
+          "source": "i18n",
+          "ref": "login-ui-inventory-f8760bed.md §4.5 code=SOCIAL_PROVIDER_NOT_CONFIGURED(loginMessages catalog verbatim,5 语)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/mobile/src/auth/__tests__/loginSkinErrorCopy.test.ts",
+          "testId": "loginSkin 错误文案 5 语(catalog verbatim 路由) > SOCIAL_PROVIDER_NOT_CONFIGURED:5 语 catalog verbatim 路由"
+        }
+      ]
+    },
+    {
+      "rowId": "mobile.error-copy.SOCIAL_PROVIDER_UNAVAILABLE",
+      "platform": "mobile",
+      "rowKind": "all-mobile",
+      "stateFamily": "error-copy",
+      "dimension": "copy",
+      "source": "i18n",
+      "ref": "login-ui-inventory-f8760bed.md §4.5 code=SOCIAL_PROVIDER_UNAVAILABLE(loginMessages catalog verbatim,5 语)",
+      "applicability": {
+        "devices": [
+          "iphone",
+          "android-phone",
+          "ipad",
+          "android-pad"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr4a",
+      "baselineRequirements": [
+        {
+          "dimension": "copy",
+          "source": "i18n",
+          "ref": "login-ui-inventory-f8760bed.md §4.5 code=SOCIAL_PROVIDER_UNAVAILABLE(loginMessages catalog verbatim,5 语)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/mobile/src/auth/__tests__/loginSkinErrorCopy.test.ts",
+          "testId": "loginSkin 错误文案 5 语(catalog verbatim 路由) > SOCIAL_PROVIDER_UNAVAILABLE:5 语 catalog verbatim 路由"
+        }
+      ]
+    },
+    {
+      "rowId": "mobile.error-copy.AUTH_REQUEST_FAILED",
+      "platform": "mobile",
+      "rowKind": "all-mobile",
+      "stateFamily": "error-copy",
+      "dimension": "copy",
+      "source": "i18n",
+      "ref": "login-ui-inventory-f8760bed.md §4.5 code=AUTH_REQUEST_FAILED(loginMessages catalog verbatim,5 语)",
+      "applicability": {
+        "devices": [
+          "iphone",
+          "android-phone",
+          "ipad",
+          "android-pad"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr4a",
+      "baselineRequirements": [
+        {
+          "dimension": "copy",
+          "source": "i18n",
+          "ref": "login-ui-inventory-f8760bed.md §4.5 code=AUTH_REQUEST_FAILED(loginMessages catalog verbatim,5 语)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/mobile/src/auth/__tests__/loginSkinErrorCopy.test.ts",
+          "testId": "loginSkin 错误文案 5 语(catalog verbatim 路由) > AUTH_REQUEST_FAILED:5 语 catalog verbatim 路由"
+        }
+      ]
+    },
+    {
+      "rowId": "mobile.error-copy.ORG_SSO_NOT_FOUND",
+      "platform": "mobile",
+      "rowKind": "all-mobile",
+      "stateFamily": "error-copy",
+      "dimension": "copy",
+      "source": "i18n",
+      "ref": "login-ui-inventory-f8760bed.md §4.5 code=ORG_SSO_NOT_FOUND(loginMessages catalog verbatim,5 语)",
+      "applicability": {
+        "devices": [
+          "iphone",
+          "android-phone",
+          "ipad",
+          "android-pad"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr4a",
+      "baselineRequirements": [
+        {
+          "dimension": "copy",
+          "source": "i18n",
+          "ref": "login-ui-inventory-f8760bed.md §4.5 code=ORG_SSO_NOT_FOUND(loginMessages catalog verbatim,5 语)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/mobile/src/auth/__tests__/loginSkinErrorCopy.test.ts",
+          "testId": "loginSkin 错误文案 5 语(catalog verbatim 路由) > ORG_SSO_NOT_FOUND:5 语 catalog verbatim 路由"
+        }
+      ]
+    },
+    {
+      "rowId": "mobile.error-copy.UNKNOWN_CODE",
+      "platform": "mobile",
+      "rowKind": "all-mobile",
+      "stateFamily": "error-copy",
+      "dimension": "copy",
+      "source": "i18n",
+      "ref": "login-ui-inventory-f8760bed.md §4.5 fallback「登录未完成,请重试。」(error:<endpoint>:UNKNOWN_CODE 兜底行)",
+      "applicability": {
+        "devices": [
+          "iphone",
+          "android-phone",
+          "ipad",
+          "android-pad"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr4a",
+      "baselineRequirements": [
+        {
+          "dimension": "copy",
+          "source": "i18n",
+          "ref": "login-ui-inventory-f8760bed.md §4.5 fallback「登录未完成,请重试。」(error:<endpoint>:UNKNOWN_CODE 兜底行)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "apps/mobile/src/auth/__tests__/loginSkinErrorCopy.test.ts",
+          "testId": "loginSkin 错误文案 5 语(catalog verbatim 路由) > UNKNOWN_CODE:未注册 wire code 逐 locale 回退 errorFallback,null 返回 null"
+        }
+      ]
+    }
+  ],
+  "evidenceReuseGroups": []
+}

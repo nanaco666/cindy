@@ -1,0 +1,45 @@
+{
+  "evidenceSha256": "dca94b41ce11e07f53a130847e8333eba71de1dac504e05d19bb48cfb4667210",
+  "testedCodeCommit": "ffffffffffffffffffffffffffffffffffffffff",
+  "capturedCellRef": {
+    "rowId": "mobile.wordmark.geometry",
+    "device": "android-phone",
+    "locale": "zh-CN",
+    "region": "global"
+  },
+  "reuseGroupId": "g-wm-geo-android-phone-global",
+  "applicableCellRefs": [
+    {
+      "rowId": "mobile.wordmark.geometry",
+      "device": "android-phone",
+      "locale": "zh-CN",
+      "region": "global"
+    },
+    {
+      "rowId": "mobile.wordmark.geometry",
+      "device": "android-phone",
+      "locale": "zh-TW",
+      "region": "global"
+    },
+    {
+      "rowId": "mobile.wordmark.geometry",
+      "device": "android-phone",
+      "locale": "en",
+      "region": "global"
+    },
+    {
+      "rowId": "mobile.wordmark.geometry",
+      "device": "android-phone",
+      "locale": "ja",
+      "region": "global"
+    },
+    {
+      "rowId": "mobile.wordmark.geometry",
+      "device": "android-phone",
+      "locale": "ko",
+      "region": "global"
+    }
+  ],
+  "scenario": "fixture 采集(self-test)",
+  "capturedAt": "2026-07-20T00:00:00.000Z"
+}

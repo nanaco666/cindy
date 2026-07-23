@@ -31,6 +31,52 @@ interface TipsInfo {
   tipsDestructive: boolean;
 }
 
+/* ── Splash phase fixture(dev-only 状态遍历,implementation-plan Step 0 WHAT4)── */
+
+/**
+ * `VITE_SPLASH_PHASE_FIXTURE` 的合法值域(附录 A splash 行冻结):
+ * 前六值 = Splash 可见态;后三值 = 三失败弹窗(useSplash 真实 phase 名)。
+ */
+export const SPLASH_PHASE_FIXTURE_VALUES = Object.freeze([
+  'checking_update',
+  'updating',
+  'update_done',
+  'checking',
+  'downloading',
+  'failed',
+  'manifest_failed',
+  'download_failed',
+  'spawn_failed',
+] as const);
+export type SplashPhaseFixtureValue = (typeof SPLASH_PHASE_FIXTURE_VALUES)[number];
+
+/** fixture 值 → useSplash 真实 SplashPhase 映射(消费侧 PR2b 接线)。 */
+export function splashPhaseForFixture(value: SplashPhaseFixtureValue): SplashPhase {
+  return value === 'failed' ? 'splash_failed' : (`splash_${value}` as SplashPhase);
+}
+
+/**
+ * 读取 splash phase fixture(dev-only 状态遍历入口)。
+ *
+ * guard 写死为 `env.DEV && env.VITE_SPLASH_PHASE_FIXTURE`:VITE_* 值会被生产
+ * 构建烘焙进 bundle,**必须 DEV 短路**——PROD 下无论 env 值如何一律返回 null
+ * (production-mode 断言见 useSplashFixture.test.ts)。非法值同样返回 null
+ * (fixture 只认冻结值域,不做模糊匹配)。
+ */
+export function readSplashPhaseFixture(
+  env: { DEV?: boolean; VITE_SPLASH_PHASE_FIXTURE?: unknown } = import.meta.env,
+): SplashPhaseFixtureValue | null {
+  if (!env.DEV) return null;
+  const raw =
+    typeof env.VITE_SPLASH_PHASE_FIXTURE === 'string'
+      ? env.VITE_SPLASH_PHASE_FIXTURE.trim()
+      : '';
+  if (!raw) return null;
+  return (SPLASH_PHASE_FIXTURE_VALUES as readonly string[]).includes(raw)
+    ? (raw as SplashPhaseFixtureValue)
+    : null;
+}
+
 // 2026-07-19 用户拍板:1500 → 3000,splash 立绘一闪而过看不清,最短停留延长到 3s
 // (淡出仍需"加载完成 && 满足地板时长"双条件,慢加载时不叠加额外等待)。
 const MIN_DISPLAY_MS = 3000;

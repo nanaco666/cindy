@@ -1,4 +1,21 @@
-import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, nativeTheme, net, powerMonitor, protocol, safeStorage, screen, session, shell, Tray } from 'electron';
+import {
+  app,
+  BrowserWindow,
+  clipboard,
+  dialog,
+  ipcMain,
+  Menu,
+  nativeImage,
+  nativeTheme,
+  net,
+  powerMonitor,
+  protocol,
+  safeStorage,
+  screen,
+  session,
+  shell,
+  Tray,
+} from 'electron';
 import { resolveVibrancyConfig } from './vibrancyConfig';
 import { applyVibrancyToSecondaryWindows } from './secondary-windows';
 import path from 'node:path';
@@ -118,7 +135,12 @@ import {
   isMacOSUpdateRelaunch,
   readUpdateRelaunchScheduleBusy,
 } from './updateRelaunchSafety';
-import { prepare as binaryPrepare, peekNeedsDownload as binaryPeekNeedsDownload, broadcastResetForStep2 as binaryBroadcastResetForStep2, type PrepareResult } from './agent-binaries';
+import {
+  prepare as binaryPrepare,
+  peekNeedsDownload as binaryPeekNeedsDownload,
+  broadcastResetForStep2 as binaryBroadcastResetForStep2,
+  type PrepareResult,
+} from './agent-binaries';
 import { RendererBootGuard } from './renderer-boot-guard';
 import yaml from 'js-yaml';
 import matter from 'gray-matter';
@@ -195,10 +217,11 @@ import {
 import { createDbClient, createInprocDbClient } from './localDb/client/DbClient';
 import { createLifecycleDbClientManager } from './localDb/client/lifecycleDbClient';
 import { clearCurrentDbClient, getDbClient, setCurrentDbClient } from './localDb/client/current';
-import { resolveBetterSqliteModuleEntry, resolveBetterSqliteNativeBinding } from './localDb/betterSqliteFactory';
 import {
-  freezeSessionActiveTurnMarkers,
-} from './localDb/sessionActiveTurn';
+  resolveBetterSqliteModuleEntry,
+  resolveBetterSqliteNativeBinding,
+} from './localDb/betterSqliteFactory';
+import { freezeSessionActiveTurnMarkers } from './localDb/sessionActiveTurn';
 import { getDrizzleDir } from './localDb/migrate';
 import { resolveSqliteVecExtPath } from './localDb/sqliteVecLoader';
 import { startEmbeddingHost, stopEmbeddingHost, isEmbeddingHostStarted } from './embedding-host';
@@ -228,10 +251,18 @@ import {
   setSessionsSubscribedListener,
   setSubscribedControllersChangedListener,
 } from './device-link/dispatch';
-import { registerDeviceLinkIpc, defaultDeps as deviceLinkIpcDeps, handleInvoke as deviceLinkHandleInvoke } from './device-link/ipc';
+import {
+  registerDeviceLinkIpc,
+  defaultDeps as deviceLinkIpcDeps,
+  handleInvoke as deviceLinkHandleInvoke,
+} from './device-link/ipc';
 import { assertCaptureHealthy } from './device-link/invoke-registry';
 // worktree-parallel-sessions: IPC 注册 + close-session 内的 fire-and-forget 删除钩子
-import { registerWorktreeIpc, WorktreePool, reconcileWorktreesForDeletedSessions } from './worktree';
+import {
+  registerWorktreeIpc,
+  WorktreePool,
+  reconcileWorktreesForDeletedSessions,
+} from './worktree';
 // session-git-pr-context: 会话分支感知 + PR 关联状态 IPC
 import { registerGitContextIpc, disposeGitContext } from './git-context';
 import { registerGitReviewIpc } from './git-review';
@@ -329,7 +360,12 @@ import {
 import { hasClaudeAiOAuth } from './maker-host/claude-credentials-store.js';
 import { disconnectClaudeAiOAuth } from './maker-host/claude-oauth-refresh.js';
 import { runClaudeOAuthLogin, cancelClaudeOAuthLogin } from './maker-host/claude-oauth-login.js';
-import { runGrokOAuthLogin, cancelGrokOAuthLogin, logoutGrok, hasGrokOAuthLogin } from './maker-host/grok-oauth-login.js';
+import {
+  runGrokOAuthLogin,
+  cancelGrokOAuthLogin,
+  logoutGrok,
+  hasGrokOAuthLogin,
+} from './maker-host/grok-oauth-login.js';
 import {
   readSilentEncryptedRetrySettingsState,
   resetSilentEncryptedRetrySettings,
@@ -346,10 +382,7 @@ import {
   resetSubagentModelSettings,
   writeSubagentModelSettingsPatch,
 } from './maker-host/subagent-model-settings-store.js';
-import {
-  readLspModeSettings,
-  writeLspModeEnabled,
-} from './maker-host/lsp-mode-store.js';
+import { readLspModeSettings, writeLspModeEnabled } from './maker-host/lsp-mode-store.js';
 import {
   readChatEmbeddingSettings,
   readChatEmbeddingSettingsState,
@@ -375,7 +408,10 @@ import { registerMakerRewindIpc } from './maker-ipc/rewind.js';
 import { registerMakerForkIpc } from './maker-ipc/fork.js';
 import { registerMakerAuthIpc } from './maker-ipc/auth.js';
 import { registerMakerStatusIpc } from './maker-ipc/status.js';
-import { registerMakerUsageIpc, syncClaudeSubscriptionUsageForAuthChange } from './maker-ipc/usage.js';
+import {
+  registerMakerUsageIpc,
+  syncClaudeSubscriptionUsageForAuthChange,
+} from './maker-ipc/usage.js';
 import { prewarmModelPricing } from './usage/modelPricing.js';
 import { registerMakerBinaryVersionIpc } from './maker-ipc/binary-version.js';
 import { registerCrossAgentConvertIpc } from './cross-agent-convert/ipc.js';
@@ -528,13 +564,19 @@ async function attemptStartScheduler(): Promise<void> {
   try {
     maker = getMakerCore();
   } catch (err) {
-    console.log('[bootstrap-electron] attemptStartScheduler: maker not ready yet, will retry on next trigger:', err instanceof Error ? err.message : String(err));
+    console.log(
+      '[bootstrap-electron] attemptStartScheduler: maker not ready yet, will retry on next trigger:',
+      err instanceof Error ? err.message : String(err),
+    );
     return;
   }
   try {
     getDbClient();
   } catch (err) {
-    console.log('[bootstrap-electron] attemptStartScheduler: DbClient not ready yet, will retry on next trigger:', err instanceof Error ? err.message : String(err));
+    console.log(
+      '[bootstrap-electron] attemptStartScheduler: DbClient not ready yet, will retry on next trigger:',
+      err instanceof Error ? err.message : String(err),
+    );
     return;
   }
   // 若本调用是 getMakerCore() 的首次调用（onReady 在 registerMakerIpcsAfterSplash 之前
@@ -640,7 +682,11 @@ function attemptStartEmbeddingHost(): void {
     const service = startEmbeddingHost({
       getDbClient: () => getDbClient(),
       isVecAvailable: () => {
-        try { return getDbClient().vecAvailable; } catch { return false; }
+        try {
+          return getDbClient().vecAvailable;
+        } catch {
+          return false;
+        }
       },
       // xdproxy /v1/embeddings 走 Bearer ANTHROPIC_API_KEY (与 art / claude 同源)
       getApiKey: () => readClaudeApiKey(),
@@ -658,16 +704,10 @@ function attemptStartEmbeddingHost(): void {
       });
       setChatEmbeddingEnabled(true);
     } catch (err) {
-      console.error(
-        '[bootstrap-electron] setupChatHistoryEmbedder failed (non-fatal):',
-        err,
-      );
+      console.error('[bootstrap-electron] setupChatHistoryEmbedder failed (non-fatal):', err);
     }
   } catch (err) {
-    console.error(
-      '[bootstrap-electron] startEmbeddingHost failed (non-fatal):',
-      err,
-    );
+    console.error('[bootstrap-electron] startEmbeddingHost failed (non-fatal):', err);
   }
 }
 
@@ -678,7 +718,17 @@ function attemptStartEmbeddingHost(): void {
 // 必须在任何 createLogger() 调用之前。没初始化的话 emit() 默认 isDevMode=false
 // 走 packaged 分支,但 logStream 还是 null —— 所有日志都会被静默吞掉。
 // dev: 直接 console;packaged: 写 userData/logs/main.log。
-import { initLogger, writeFromRenderer, setLogLevel, getLogLevel, keepRecentSync, keepRecentSessionCcDebugSync, createLogger, writeCcDebugLine, type LogLevel } from './logger.js';
+import {
+  initLogger,
+  writeFromRenderer,
+  setLogLevel,
+  getLogLevel,
+  keepRecentSync,
+  keepRecentSessionCcDebugSync,
+  createLogger,
+  writeCcDebugLine,
+  type LogLevel,
+} from './logger.js';
 initLogger();
 const dbClientLog = createLogger('DbClient');
 const authBoundaryLog = createLogger('auth-boundary');
@@ -967,10 +1017,16 @@ if (started) {
     // Busy-wait is acceptable here: this only runs during the brief
     // robocopy window and the app has no UI yet.
     const waitUntil = Date.now() + pollMs;
-    while (Date.now() < waitUntil) { /* spin */ }
+    while (Date.now() < waitUntil) {
+      /* spin */
+    }
   }
   // If still locked after 30s, proceed anyway (stale lock).
-  try { fs.unlinkSync(lockPath); } catch { /* ignore */ }
+  try {
+    fs.unlinkSync(lockPath);
+  } catch {
+    /* ignore */
+  }
 }
 
 // ── File-attachment path policy (F-FI-7 安全) ────────────────────────────
@@ -1199,11 +1255,10 @@ function installApplicationMenu(
         },
         {
           label: labels.checkForUpdates,
-          click: () => dispatchApplicationMenuCommand(
-            mainWindow,
-            'check-for-updates',
-            { activateWindow: false },
-          ),
+          click: () =>
+            dispatchApplicationMenuCommand(mainWindow, 'check-for-updates', {
+              activateWindow: false,
+            }),
         },
         { type: 'separator' },
         { role: 'services' },
@@ -1442,19 +1497,17 @@ function quitFromWindowsTray(): void {
         return true;
       }
     },
-    confirmQuit: () => dialog.showMessageBoxSync({
-      type: 'warning',
-      title: t('titleBar.closeConfirm.title'),
-      message: t('titleBar.closeConfirm.title'),
-      detail: t('titleBar.closeConfirm.description'),
-      buttons: [
-        t('titleBar.closeConfirm.cancel'),
-        t('titleBar.closeConfirm.confirm'),
-      ],
-      defaultId: 0,
-      cancelId: 0,
-      noLink: true,
-    }) === 1,
+    confirmQuit: () =>
+      dialog.showMessageBoxSync({
+        type: 'warning',
+        title: t('titleBar.closeConfirm.title'),
+        message: t('titleBar.closeConfirm.title'),
+        detail: t('titleBar.closeConfirm.description'),
+        buttons: [t('titleBar.closeConfirm.cancel'), t('titleBar.closeConfirm.confirm')],
+        defaultId: 0,
+        cancelId: 0,
+        noLink: true,
+      }) === 1,
     quit: () => app.quit(),
   });
 }
@@ -1528,9 +1581,10 @@ function showNativeWindowsCloseBehaviorPrompt(): WindowsCloseBehavior {
     noLink: true,
   };
   const mainWindow = mainWindowRef;
-  const choice = mainWindow && !mainWindow.isDestroyed()
-    ? dialog.showMessageBoxSync(mainWindow, options)
-    : dialog.showMessageBoxSync(options);
+  const choice =
+    mainWindow && !mainWindow.isDestroyed()
+      ? dialog.showMessageBoxSync(mainWindow, options)
+      : dialog.showMessageBoxSync(options);
   return choice === 1 ? 'quit' : 'tray';
 }
 
@@ -1677,10 +1731,7 @@ function roundPageZoomLevel(level: number): number {
 }
 
 function clampPageZoomLevel(level: number): number {
-  return Math.min(
-    PAGE_ZOOM_LEVEL_MAX,
-    Math.max(PAGE_ZOOM_LEVEL_MIN, roundPageZoomLevel(level)),
-  );
+  return Math.min(PAGE_ZOOM_LEVEL_MAX, Math.max(PAGE_ZOOM_LEVEL_MIN, roundPageZoomLevel(level)));
 }
 
 function getPageZoomLevel(mainWindow: BrowserWindow): number {
@@ -1755,10 +1806,12 @@ app.on('open-file', (event, filePath) => {
 // pending / 超前 / drift 都拒绝启动。passive 自己不迁移/repair schema,并用多
 // reader lease 阻止之后的 primary 抢跑 migration。
 // 隔离数据实例走 `--isolated[=<名字>]`(独立 userData → 独立锁域,见 AGENTS.md)。
-if (shouldRequestSingleInstanceLock({
-  isPackaged: app.isPackaged,
-  schedulerPassive: process.env.XDT_SCHEDULER_PASSIVE === '1',
-})) {
+if (
+  shouldRequestSingleInstanceLock({
+    isPackaged: app.isPackaged,
+    schedulerPassive: process.env.XDT_SCHEDULER_PASSIVE === '1',
+  })
+) {
   const realUserDataDir = app.getPath('userData');
   const lockScopeDir = resolveSingleInstanceLockUserDataDir({
     isPackaged: app.isPackaged,
@@ -1886,8 +1939,17 @@ const createWindow = () => {
   // Use nativeTheme to pick initial background color matching OS preference,
   // avoiding white flash on startup for dark mode users.
   // mac:创建期即透明底+sidebar 材质(Electron setBackgroundColor 运行时改 alpha 不可靠,是 vibrancy 不透壁纸的根因;非 CINDY 皮肤 body 不透明会自然盖住,视觉无影响)
-  const bgColor = process.platform === 'darwin' ? '#00000000' : (nativeTheme.shouldUseDarkColors ? '#1f1f1e' : '#f8f8f6');
-  const winBackdropConfig = resolveVibrancyConfig('cindy', nativeTheme.shouldUseDarkColors, process.platform);
+  const bgColor =
+    process.platform === 'darwin'
+      ? '#00000000'
+      : nativeTheme.shouldUseDarkColors
+        ? '#1f1f1e'
+        : '#f8f8f6';
+  const winBackdropConfig = resolveVibrancyConfig(
+    'cindy',
+    nativeTheme.shouldUseDarkColors,
+    process.platform,
+  );
 
   // Window state persistence (F-WST-1): remembers position / size / maximized
   // / fullscreen across launches. Falls back to the defaults below on first
@@ -1915,10 +1977,12 @@ const createWindow = () => {
     autoHideMenuBar: true,
     show: false,
     backgroundColor: bgColor,
-    ...(process.platform === 'win32' && winBackdropConfig.backgroundMaterial ? {
-      backgroundMaterial: winBackdropConfig.backgroundMaterial,
-      backgroundColor: winBackdropConfig.backgroundColor,
-    } : {}),
+    ...(process.platform === 'win32' && winBackdropConfig.backgroundMaterial
+      ? {
+          backgroundMaterial: winBackdropConfig.backgroundMaterial,
+          backgroundColor: winBackdropConfig.backgroundColor,
+        }
+      : {}),
     ...(process.platform === 'darwin' ? { vibrancy: 'hud' as const } : {}), // 创建期材质与缺省定稿一致(hud);运行时按主题族经 applyWindowVibrancy 修正
     acceptFirstMouse: !swallowActivationClick,
     ...platformOptions,
@@ -2122,9 +2186,13 @@ const createWindow = () => {
     // error 恒记;warning 仅 dev(react dev 告警等噪音不进生产日志)。截断防超长堆栈刷屏。
     const { level, message, lineNumber, sourceId } = details;
     if (level === 'error') {
-      rendererGuardLog.error(`renderer console.error ${sourceId}:${lineNumber} ${message.slice(0, 2000)}`);
+      rendererGuardLog.error(
+        `renderer console.error ${sourceId}:${lineNumber} ${message.slice(0, 2000)}`,
+      );
     } else if (level === 'warning' && !app.isPackaged) {
-      rendererGuardLog.warn(`renderer console.warn ${sourceId}:${lineNumber} ${message.slice(0, 2000)}`);
+      rendererGuardLog.warn(
+        `renderer console.warn ${sourceId}:${lineNumber} ${message.slice(0, 2000)}`,
+      );
     }
   });
   let devLoadRetries = 0;
@@ -2164,9 +2232,7 @@ const createWindow = () => {
       rendererBootGuard = null;
     });
   } else {
-    mainWindow.loadFile(
-      path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`),
-    );
+    mainWindow.loadFile(path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`));
   }
 };
 
@@ -2187,9 +2253,7 @@ const registerIpcHandlers = () => {
     // fullscreen-state 这些「主窗口语义」的调用。
     if (mainWindowRef && !mainWindowRef.isDestroyed()) return mainWindowRef;
     const windows = BrowserWindow.getAllWindows();
-    return (
-      windows.find((w) => !w.isDestroyed() && w.isMinimizable()) ?? windows[0]
-    );
+    return windows.find((w) => !w.isDestroyed() && w.isMinimizable()) ?? windows[0];
   };
 
   initAppBadgeService({
@@ -2226,27 +2290,27 @@ const registerIpcHandlers = () => {
     openSessionInNewWindow(sessionId, mainWindowRef);
   });
 
-// E4D 毛玻璃(R1 audit,用户裁决透壁纸 2026-07-17):仅 CINDY family 启用毛玻璃透壁纸;
-// 其他 family 恢复不透明。macOS 走 setVibrancy + 透明底;Windows 11 走 setBackgroundMaterial
-// (acrylic/mica,见 resolveVibrancyConfig),Windows 10/Linux 回退不透明 surface。
-// family 切换时经 IPC theme:apply-vibrancy 运行时动态调用,同步主窗口与全部副窗口。
-function applyWindowVibrancy(familyId: string, isDark: boolean): void {
-  const win = mainWindowRef;
-  if (!win || win.isDestroyed()) return;
-  const config = resolveVibrancyConfig(familyId, isDark, process.platform);
-  if (process.platform === 'darwin') {
-    win.setVibrancy(config.vibrancy as 'under-window' | null);
+  // E4D 毛玻璃(R1 audit,用户裁决透壁纸 2026-07-17):仅 CINDY family 启用毛玻璃透壁纸;
+  // 其他 family 恢复不透明。macOS 走 setVibrancy + 透明底;Windows 11 走 setBackgroundMaterial
+  // (acrylic/mica,见 resolveVibrancyConfig),Windows 10/Linux 回退不透明 surface。
+  // family 切换时经 IPC theme:apply-vibrancy 运行时动态调用,同步主窗口与全部副窗口。
+  function applyWindowVibrancy(familyId: string, isDark: boolean): void {
+    const win = mainWindowRef;
+    if (!win || win.isDestroyed()) return;
+    const config = resolveVibrancyConfig(familyId, isDark, process.platform);
+    if (process.platform === 'darwin') {
+      win.setVibrancy(config.vibrancy as 'under-window' | null);
+    }
+    if (process.platform === 'win32' && config.backgroundMaterial) {
+      win.setBackgroundMaterial(config.backgroundMaterial);
+    }
+    win.setBackgroundColor(config.backgroundColor);
+    applyVibrancyToSecondaryWindows(familyId, isDark);
   }
-  if (process.platform === 'win32' && config.backgroundMaterial) {
-    win.setBackgroundMaterial(config.backgroundMaterial);
-  }
-  win.setBackgroundColor(config.backgroundColor);
-  applyVibrancyToSecondaryWindows(familyId, isDark);
-}
 
-ipcMain.on('theme:apply-vibrancy', (_event, payload: { familyId: string; isDark: boolean }) => {
-  applyWindowVibrancy(payload.familyId, payload.isDark);
-});
+  ipcMain.on('theme:apply-vibrancy', (_event, payload: { familyId: string; isDark: boolean }) => {
+    applyWindowVibrancy(payload.familyId, payload.isDark);
+  });
 
   ipcMain.on('get-app-version', (event) => {
     event.returnValue = app.getVersion();
@@ -2512,7 +2576,9 @@ ipcMain.on('theme:apply-vibrancy', (_event, payload: { familyId: string; isDark:
       if (win.isDestroyed()) continue;
       try {
         win.webContents.send(MAKER_PUSH.CLAUDE_SESSION_ROUTE_CHANGED, { sessionId, route });
-      } catch { /* no-op */ }
+      } catch {
+        /* no-op */
+      }
     }
   });
 
@@ -2590,7 +2656,10 @@ ipcMain.on('theme:apply-vibrancy', (_event, payload: { familyId: string; isDark:
     try {
       logoutGrok();
     } catch (err) {
-      throwIpcError('INTERNAL', `xai oauth logout failed: ${err instanceof Error ? err.message : String(err)}`);
+      throwIpcError(
+        'INTERNAL',
+        `xai oauth logout failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
     // 登出后同步广播给其它窗口,让已挂载的 useProviders 立刻重拉连接态;
     // 并清掉账号级限流快照 —— 登出后没有下一个成功响应来覆盖,不清会一直挂着旧账号余量。
@@ -2727,7 +2796,10 @@ ipcMain.on('theme:apply-vibrancy', (_event, payload: { familyId: string; isDark:
   );
   ipcMain.on(
     'find-in-page:stop',
-    (event, action: 'clearSelection' | 'keepSelection' | 'activateSelection' = 'clearSelection') => {
+    (
+      event,
+      action: 'clearSelection' | 'keepSelection' | 'activateSelection' = 'clearSelection',
+    ) => {
       const wc = event.sender;
       if (!wc || wc.isDestroyed()) return;
       wc.stopFindInPage(action);
@@ -2769,9 +2841,17 @@ ipcMain.on('theme:apply-vibrancy', (_event, payload: { familyId: string; isDark:
   // 要等用户起 session 才会 fopen 这个文件, 启动期改动安全。dev 模式 cc-debug
   // 一直在写, 不 trim 容易吃掉几百 MB 仓库空间。
   // 顺手清掉历史版本留下的 .1 (上一版本 rotation 产物, 现在不再创建)。
-  try { fs.unlinkSync(`${ccDebugLogPath}.1`); } catch { /* not exist */ }
+  try {
+    fs.unlinkSync(`${ccDebugLogPath}.1`);
+  } catch {
+    /* not exist */
+  }
   let ccDebugSizeBefore = 0;
-  try { ccDebugSizeBefore = fs.statSync(ccDebugLogPath).size; } catch { /* not yet */ }
+  try {
+    ccDebugSizeBefore = fs.statSync(ccDebugLogPath).size;
+  } catch {
+    /* not yet */
+  }
   keepRecentSync(ccDebugLogPath);
   if (ccDebugSizeBefore > 5 * 1024 * 1024) {
     ccDebugNetLog.info(`trimmed cc-debug.raw.log on startup (was ${ccDebugSizeBefore} bytes)`);
@@ -2801,7 +2881,11 @@ ipcMain.on('theme:apply-vibrancy', (_event, payload: { familyId: string; isDark:
 
   function tailOneCcFile(filePath: string, sessionId: string): void {
     let stat: fs.Stats;
-    try { stat = fs.statSync(filePath); } catch { return; }
+    try {
+      stat = fs.statSync(filePath);
+    } catch {
+      return;
+    }
     const st = ccTailState.get(filePath);
     if (!st) {
       // 首次发现: 从当前末尾开始, 跳过已有内容 (避免 app 重启后把旧 session 的 raw 重复
@@ -2809,10 +2893,17 @@ ipcMain.on('theme:apply-vibrancy', (_event, payload: { familyId: string; isDark:
       ccTailState.set(filePath, { offset: stat.size, leftover: '' });
       return;
     }
-    if (stat.size < st.offset) { st.offset = 0; st.leftover = ''; }
+    if (stat.size < st.offset) {
+      st.offset = 0;
+      st.leftover = '';
+    }
     if (stat.size === st.offset) return;
     let fd: number;
-    try { fd = fs.openSync(filePath, 'r'); } catch { return; }
+    try {
+      fd = fs.openSync(filePath, 'r');
+    } catch {
+      return;
+    }
     try {
       const len = stat.size - st.offset;
       const buf = Buffer.alloc(len);
@@ -2825,7 +2916,11 @@ ipcMain.on('theme:apply-vibrancy', (_event, payload: { familyId: string; isDark:
         if (line.length > 0) writeCcDebugLine(line, sessionId);
       }
     } finally {
-      try { fs.closeSync(fd); } catch { /* ignore */ }
+      try {
+        fs.closeSync(fd);
+      } catch {
+        /* ignore */
+      }
     }
   }
 
@@ -2833,7 +2928,11 @@ ipcMain.on('theme:apply-vibrancy', (_event, payload: { familyId: string; isDark:
     tailOneCcFile(ccDebugLogPath, ''); // 全局 fallback (无 sessionId 的 cc)
     const sessionsBase = path.join(ccLogRootDir, 'sessions');
     let dirs: fs.Dirent[];
-    try { dirs = fs.readdirSync(sessionsBase, { withFileTypes: true }); } catch { return; }
+    try {
+      dirs = fs.readdirSync(sessionsBase, { withFileTypes: true });
+    } catch {
+      return;
+    }
     for (const d of dirs) {
       if (!d.isDirectory()) continue;
       tailOneCcFile(path.join(sessionsBase, d.name, 'cc-debug.raw.log'), d.name);
@@ -2879,12 +2978,9 @@ ipcMain.on('theme:apply-vibrancy', (_event, payload: { familyId: string; isDark:
 
   // Release notes (per-version, fetched from CDN). Platform is resolved
   // inside the service so renderer never needs to pass it.
-  ipcMain.handle(
-    'release-notes:fetch',
-    async (_event, version: string) => {
-      return fetchReleaseNotes(version);
-    },
-  );
+  ipcMain.handle('release-notes:fetch', async (_event, version: string) => {
+    return fetchReleaseNotes(version);
+  });
 
   // Release notes index — sorted list of every version with a notice on the
   // CDN. Used by the renderer to compute the unread range on cross-version
@@ -2968,7 +3064,8 @@ ipcMain.on('theme:apply-vibrancy', (_event, payload: { familyId: string; isDark:
             if (key === 'api_key') noteManualXdKeySaved();
             return true;
           }
-          if (hadPrevious && previousContent !== null) fs.writeFileSync(filepath, previousContent, 'utf-8');
+          if (hadPrevious && previousContent !== null)
+            fs.writeFileSync(filepath, previousContent, 'utf-8');
           else if (fs.existsSync(filepath)) fs.unlinkSync(filepath);
           return false;
         } finally {
@@ -3025,7 +3122,11 @@ ipcMain.on('theme:apply-vibrancy', (_event, payload: { familyId: string; isDark:
           }
         } catch (err: unknown) {
           // ENOENT 表示文件已不存在，删除语义保持幂等。
-          if (!(err instanceof Error && 'code' in err && (err as NodeJS.ErrnoException).code === 'ENOENT')) {
+          if (!(
+            err instanceof Error &&
+            'code' in err &&
+            (err as NodeJS.ErrnoException).code === 'ENOENT'
+          )) {
             console.error('[safe-storage-remove]', err);
             cancelApiKeyChangeMaybeRestartCodex(key);
             return {
@@ -3067,7 +3168,9 @@ ipcMain.on('theme:apply-vibrancy', (_event, payload: { familyId: string; isDark:
         },
       });
       if (!app.isPackaged) {
-        recordDesktopDevAuthStartupResult(state, pendingCompletion, () => authManager.getAuthState());
+        recordDesktopDevAuthStartupResult(state, pendingCompletion, () =>
+          authManager.getAuthState(),
+        );
       }
       return state;
     } catch (err) {
@@ -3168,7 +3271,9 @@ ipcMain.on('theme:apply-vibrancy', (_event, payload: { familyId: string; isDark:
 
   ipcMain.handle('profile:get-state', async () => profileEdit.getProfileEditState(profileEditDeps));
 
-  ipcMain.handle('profile:choose-avatar', async () => profileEdit.chooseAvatarFile(profileEditDeps));
+  ipcMain.handle('profile:choose-avatar', async () =>
+    profileEdit.chooseAvatarFile(profileEditDeps),
+  );
 
   ipcMain.handle('profile:update', async (_event, params: unknown) =>
     profileEdit.updateProfile(profileEditDeps, params),
@@ -3215,13 +3320,9 @@ ipcMain.on('theme:apply-vibrancy', (_event, payload: { familyId: string; isDark:
         // Treat any subscribed view/control session as busy so unattended
         // relaunch cannot cut the only path back into a home-server install.
         return hasUpdateRelaunchBusyActivity({
-          readSynchronousBusy: () => (
-            getSubscribedControllers().length > 0
-            || anySessionInTurn(getMakerCore())
-          ),
-          readScheduleBusy: () => readUpdateRelaunchScheduleBusy(
-            getScheduleStorageIfInitialized(),
-          ),
+          readSynchronousBusy: () =>
+            getSubscribedControllers().length > 0 || anySessionInTurn(getMakerCore()),
+          readScheduleBusy: () => readUpdateRelaunchScheduleBusy(getScheduleStorageIfInitialized()),
         });
       });
       // getMakerCore() 首次调用触发 Maker 构造，同时发起自定义 MCP 初始加载。
@@ -3323,7 +3424,9 @@ ipcMain.on('theme:apply-vibrancy', (_event, payload: { familyId: string; isDark:
       // "目标澄清问题"时改写;controller 内用 questions 的确定性标记 + 多重 guard 把关)。
       setGoalAskAnswerObserver((sid, answers, questions) => {
         // best-effort:目标改写失败不应冒泡成 unhandled rejection(交互解析链路是 fire-and-forget)。
-        void getGoalController()?.applyClarificationAnswer(sid, answers, questions).catch(() => {});
+        void getGoalController()
+          ?.applyClarificationAnswer(sid, answers, questions)
+          .catch(() => {});
       });
       makerIpcsRegistered = true;
       // device-link 捕获自检放在这里(而非 bootstrap 线性段):maker:create-session / maker:send
@@ -3374,10 +3477,14 @@ ipcMain.on('theme:apply-vibrancy', (_event, payload: { familyId: string; isDark:
     let codexNeeds = false;
     try {
       claudeNeeds = await binaryPeekNeedsDownload('claude-code');
-    } catch { /* 保守: peek 失败按 false 处理，进入 prepare 内部错误流程 */ }
+    } catch {
+      /* 保守: peek 失败按 false 处理，进入 prepare 内部错误流程 */
+    }
     try {
       codexNeeds = await binaryPeekNeedsDownload('codex');
-    } catch { /* 同上 */ }
+    } catch {
+      /* 同上 */
+    }
     const isMultiDownload = claudeNeeds && codexNeeds;
 
     // ── Phase 1: claude 段 ───────────────────────────────────────────────────
@@ -3401,7 +3508,10 @@ ipcMain.on('theme:apply-vibrancy', (_event, payload: { familyId: string; isDark:
 
     if (!claudeRes.ready || !claudeRes.path) {
       return {
-        claudeCode: { status: 'failed' as const, error: claudeRes.error ?? 'Claude Code binary not available' },
+        claudeCode: {
+          status: 'failed' as const,
+          error: claudeRes.error ?? 'Claude Code binary not available',
+        },
         codex: { status: 'skipped' as const },
         allPassed: false,
         platform,
@@ -3491,10 +3601,9 @@ ipcMain.on('theme:apply-vibrancy', (_event, payload: { familyId: string; isDark:
     async (): Promise<{ canceled: boolean; path?: string }> => {
       const targetWin = getWindow() ?? BrowserWindow.getFocusedWindow();
       if (!targetWin) return { canceled: true };
-      const result = await dialog.showOpenDialog(
-        targetWin,
-        { properties: ['openDirectory', 'createDirectory'] },
-      );
+      const result = await dialog.showOpenDialog(targetWin, {
+        properties: ['openDirectory', 'createDirectory'],
+      });
       if (result.canceled || result.filePaths.length === 0) {
         return { canceled: true };
       }
@@ -3589,7 +3698,9 @@ ipcMain.on('theme:apply-vibrancy', (_event, payload: { familyId: string; isDark:
                   if (typeof desc === 'string' && desc.trim()) {
                     description = desc.trim().slice(0, 200);
                   }
-                } catch { /* non-fatal */ }
+                } catch {
+                  /* non-fatal */
+                }
                 items.push({
                   type: 'agent',
                   name,
@@ -3693,7 +3804,9 @@ ipcMain.on('theme:apply-vibrancy', (_event, payload: { familyId: string; isDark:
                 const desc = parsed.description.trim();
                 if (desc) return desc.slice(0, 200);
               }
-            } catch { /* YAML parse error — fall through to body extraction */ }
+            } catch {
+              /* YAML parse error — fall through to body extraction */
+            }
           }
           // Fallback: first non-empty, non-heading body line
           const bodyStart = fmMatch ? raw.indexOf(fmMatch[0]) + fmMatch[0].length : 0;
@@ -3713,7 +3826,8 @@ ipcMain.on('theme:apply-vibrancy', (_event, payload: { familyId: string; isDark:
         ): Array<{ name: string; description?: string; source: 'user' | 'skill' }> => {
           if (!fs.existsSync(dirPath) || !fs.statSync(dirPath).isDirectory()) return [];
           const entries = fs.readdirSync(dirPath, { withFileTypes: true });
-          const results: Array<{ name: string; description?: string; source: 'user' | 'skill' }> = [];
+          const results: Array<{ name: string; description?: string; source: 'user' | 'skill' }> =
+            [];
           for (const ent of entries) {
             if (!ent.isFile() || !ent.name.endsWith('.md')) continue;
             const name = ent.name.replace(/\.md$/, '');
@@ -3721,7 +3835,9 @@ ipcMain.on('theme:apply-vibrancy', (_event, payload: { familyId: string; isDark:
             try {
               const raw = fs.readFileSync(path.join(dirPath, ent.name), 'utf-8');
               description = parseDescription(raw);
-            } catch { /* non-fatal */ }
+            } catch {
+              /* non-fatal */
+            }
             results.push({ name, description, source: 'user' });
           }
           return results;
@@ -3736,7 +3852,8 @@ ipcMain.on('theme:apply-vibrancy', (_event, payload: { familyId: string; isDark:
         ): Array<{ name: string; description?: string; source: 'user' | 'skill' }> => {
           if (!fs.existsSync(dirPath) || !fs.statSync(dirPath).isDirectory()) return [];
           const entries = fs.readdirSync(dirPath, { withFileTypes: true });
-          const results: Array<{ name: string; description?: string; source: 'user' | 'skill' }> = [];
+          const results: Array<{ name: string; description?: string; source: 'user' | 'skill' }> =
+            [];
           for (const ent of entries) {
             if (!ent.isDirectory() || ent.name.startsWith('.')) continue;
             // Look for SKILL.md or skill.md inside the subdirectory
@@ -3749,7 +3866,9 @@ ipcMain.on('theme:apply-vibrancy', (_event, payload: { familyId: string; isDark:
             try {
               const raw = fs.readFileSync(path.join(subDir, skillFile), 'utf-8');
               description = parseDescription(raw);
-            } catch { /* non-fatal */ }
+            } catch {
+              /* non-fatal */
+            }
             results.push({ name: ent.name, description, source: 'skill' });
           }
           return results;
@@ -3759,7 +3878,10 @@ ipcMain.on('theme:apply-vibrancy', (_event, payload: { familyId: string; isDark:
         // collision) — matches Claude Code's own discovery precedence and
         // covers Market-installed skills which always land in ~/.claude/skills/.
         const home = os.homedir();
-        const merged = new Map<string, { name: string; description?: string; source: 'user' | 'skill' }>();
+        const merged = new Map<
+          string,
+          { name: string; description?: string; source: 'user' | 'skill' }
+        >();
         for (const cmd of [
           ...scanCommands(path.join(home, '.claude', 'commands')),
           ...scanSkills(path.join(home, '.claude', 'skills')),
@@ -4068,7 +4190,11 @@ ipcMain.on('theme:apply-vibrancy', (_event, payload: { familyId: string; isDark:
     async (
       _event: Electron.IpcMainInvokeEvent,
       params: { href: string; workingDir: string },
-    ): Promise<{ status: 'unique' | 'multiple' | 'none'; candidates: string[]; kind?: 'file' | 'directory' }> => {
+    ): Promise<{
+      status: 'unique' | 'multiple' | 'none';
+      candidates: string[];
+      kind?: 'file' | 'directory';
+    }> => {
       try {
         return await resolveWorkspacePathCached(params.href, params.workingDir, {
           isPathAllowed,
@@ -4091,7 +4217,9 @@ ipcMain.on('theme:apply-vibrancy', (_event, payload: { familyId: string; isDark:
     async (
       _event: Electron.IpcMainInvokeEvent,
       params: { hrefs: string[]; workingDir: string },
-    ): Promise<Record<string, { status: 'unique' | 'multiple' | 'none'; candidates: string[] }>> => {
+    ): Promise<
+      Record<string, { status: 'unique' | 'multiple' | 'none'; candidates: string[] }>
+    > => {
       try {
         return await resolveWorkspacePathBatchCached(params.hrefs, params.workingDir, {
           isPathAllowed,
@@ -4229,20 +4357,17 @@ ipcMain.on('theme:apply-vibrancy', (_event, payload: { familyId: string; isDark:
   // Settings → About: 打开 <userData>/logs 在系统文件管理器。
   // 路径在主进程派生（renderer 不需要也不应该知道 userData 全路径）。
   // 目录不存在时先创建，避免空安装首次点击失败。
-  ipcMain.handle(
-    'app:open-logs-dir',
-    async (): Promise<{ success: boolean; error?: string }> => {
-      try {
-        const logDir = path.join(app.getPath('userData'), 'logs');
-        fs.mkdirSync(logDir, { recursive: true });
-        const errMsg = await shell.openPath(logDir);
-        if (errMsg) return { success: false, error: errMsg };
-        return { success: true };
-      } catch (err) {
-        return { success: false, error: err instanceof Error ? err.message : String(err) };
-      }
-    },
-  );
+  ipcMain.handle('app:open-logs-dir', async (): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const logDir = path.join(app.getPath('userData'), 'logs');
+      fs.mkdirSync(logDir, { recursive: true });
+      const errMsg = await shell.openPath(logDir);
+      if (errMsg) return { success: false, error: errMsg };
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  });
 
   // ── Native clipboard helpers (media:copy-to-clipboard) ──
   //
@@ -4261,11 +4386,9 @@ ipcMain.on('theme:apply-vibrancy', (_event, payload: { familyId: string; isDark:
       // inside single quotes.
       const escaped = absPath.replace(/'/g, "''");
       const psCommand = `Set-Clipboard -LiteralPath '${escaped}'`;
-      const proc = spawn(
-        'powershell',
-        ['-NoProfile', '-NonInteractive', '-Command', psCommand],
-        { windowsHide: true },
-      );
+      const proc = spawn('powershell', ['-NoProfile', '-NonInteractive', '-Command', psCommand], {
+        windowsHide: true,
+      });
       let stderr = '';
       proc.stderr.on('data', (d) => {
         stderr += d.toString();
@@ -4285,18 +4408,15 @@ ipcMain.on('theme:apply-vibrancy', (_event, payload: { familyId: string; isDark:
    */
   function copyFileToClipboardMacOS(absPath: string): Promise<void> {
     return new Promise((resolve, reject) => {
-      const proc = spawn(
-        'osascript',
-        [
-          '-e',
-          'on run argv',
-          '-e',
-          'set the clipboard to (POSIX file (item 1 of argv))',
-          '-e',
-          'end run',
-          absPath,
-        ],
-      );
+      const proc = spawn('osascript', [
+        '-e',
+        'on run argv',
+        '-e',
+        'set the clipboard to (POSIX file (item 1 of argv))',
+        '-e',
+        'end run',
+        absPath,
+      ]);
       let stderr = '';
       proc.stderr.on('data', (d) => {
         stderr += d.toString();
@@ -4503,7 +4623,10 @@ ipcMain.on('theme:apply-vibrancy', (_event, payload: { familyId: string; isDark:
           if (!response.body) throw new Error('empty response body');
           let buffer: Buffer;
           try {
-            buffer = await collectStreamWithLimit(response.body.getReader(), REMOTE_IMAGE_MAX_BYTES);
+            buffer = await collectStreamWithLimit(
+              response.body.getReader(),
+              REMOTE_IMAGE_MAX_BYTES,
+            );
           } catch (err) {
             controller.abort();
             throw err;
@@ -4539,8 +4662,7 @@ ipcMain.on('theme:apply-vibrancy', (_event, payload: { familyId: string; isDark:
     );
     ipcMain.handle(
       'media:cache-for-session',
-      (_event, params: { url: string; sessionId: string }) =>
-        lightboxMedia.cacheForSession(params),
+      (_event, params: { url: string; sessionId: string }) => lightboxMedia.cacheForSession(params),
     );
     ipcMain.handle('media:read-image-bytes', (_event, params: { url: string }) =>
       lightboxMedia.readImageBytes(params),
@@ -4687,7 +4809,6 @@ ipcMain.on('theme:apply-vibrancy', (_event, payload: { familyId: string; isDark:
       }
     },
   );
-
 };
 
 // ── Smoke-test mode (release-*.mjs post-build verification) ──────────────
@@ -4720,9 +4841,13 @@ async function runSmokeTest(userId: string): Promise<void> {
       .prepare(`SELECT value FROM migration_meta WHERE key='schema_version'`)
       .get() as { value: string } | undefined;
     const schemaVersion = schemaRow ? parseInt(schemaRow.value, 10) : -1;
-    const sessionsCount = (db.prepare('SELECT COUNT(*) AS c FROM sessions').get() as { c: number }).c;
-    const messagesCount = (db.prepare('SELECT COUNT(*) AS c FROM messages').get() as { c: number }).c;
-    const metaCount = (db.prepare('SELECT COUNT(*) AS c FROM migration_meta').get() as { c: number }).c;
+    const sessionsCount = (db.prepare('SELECT COUNT(*) AS c FROM sessions').get() as { c: number })
+      .c;
+    const messagesCount = (db.prepare('SELECT COUNT(*) AS c FROM messages').get() as { c: number })
+      .c;
+    const metaCount = (
+      db.prepare('SELECT COUNT(*) AS c FROM migration_meta').get() as { c: number }
+    ).c;
     process.stdout.write(
       `${JSON.stringify({
         ok: true,
@@ -4739,7 +4864,11 @@ async function runSmokeTest(userId: string): Promise<void> {
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     process.stderr.write(`${JSON.stringify({ ok: false, error: msg })}\n`);
-    try { localDbCloseDb(); } catch { /* noop */ }
+    try {
+      localDbCloseDb();
+    } catch {
+      /* noop */
+    }
     app.exit(1);
   }
 }
@@ -5078,8 +5207,12 @@ app.on('ready', async () => {
         processStartedAtMs: PROCESS_STARTED_AT_MS,
       })
         .then((result) => {
-          if (result.removed === 0 && result.removedDanglingMeta === 0 && result.errors === 0) return;
-          createLogger('image-cache-orphan-sweep').info('startup draft image sweep completed', result);
+          if (result.removed === 0 && result.removedDanglingMeta === 0 && result.errors === 0)
+            return;
+          createLogger('image-cache-orphan-sweep').info(
+            'startup draft image sweep completed',
+            result,
+          );
         })
         .catch((err) => {
           createLogger('image-cache-orphan-sweep').warn('startup draft image sweep failed', {
@@ -5126,12 +5259,17 @@ app.on('ready', async () => {
   // (凭证卫生:该 RT 已无任何消费方,不留死凭证)。幂等,失败仅告警。
   try {
     fs.unlinkSync(path.join(app.getPath('userData'), 'safe-storage', 'feishu_refresh_token.enc'));
-    createLogger('feishu-legacy-cleanup').info('legacy feishu refresh token removed (host feishu token chain retired)');
+    createLogger('feishu-legacy-cleanup').info(
+      'legacy feishu refresh token removed (host feishu token chain retired)',
+    );
   } catch (err) {
     // ENOENT = 从未有过或已清,静默;其它错误(Windows EPERM/EBUSY 等)告警,
     // 下次启动重试(best-effort,不阻断)。
     if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
-      createLogger('feishu-legacy-cleanup').warn('legacy feishu refresh token removal failed:', err);
+      createLogger('feishu-legacy-cleanup').warn(
+        'legacy feishu refresh token removal failed:',
+        err,
+      );
     }
   }
   // IM channels (lizi-im): 完全独立 workspace 包，跟随 app 生命周期。
@@ -5180,7 +5318,12 @@ app.on('ready', async () => {
   // Memory diagnostics — dev only, log per-process memory every 30s
   if (!app.isPackaged) {
     setInterval(() => {
-      const parts = app.getAppMetrics().map((m) => `${m.type}:${(m.memory.workingSetSize / 1024).toFixed(0)}MB/${m.cpu.percentCPUUsage.toFixed(1)}%`);
+      const parts = app
+        .getAppMetrics()
+        .map(
+          (m) =>
+            `${m.type}:${(m.memory.workingSetSize / 1024).toFixed(0)}MB/${m.cpu.percentCPUUsage.toFixed(1)}%`,
+        );
       console.log(`[mem] ${parts.join(' | ')}`);
     }, 30_000);
   }
@@ -5210,21 +5353,41 @@ app.on('ready', async () => {
 // 下方 shutdown-maker 关 session 触发的 markSessionTurnEnded 会把"退出时还在飞
 // 的 turn"伪装成正常收尾,重启后中断卡不出现(只剩硬崩溃能触发)。sync 阶段先于
 // async 的 shutdown-maker,顺序有保证。
-onQuit('session-active-turn-freeze', () => { freezeSessionActiveTurnMarkers(); }, 'sync');
-onQuit('reap-claude-children', () => { reapClaudeOrphansSync(); }, 'sync');
+onQuit(
+  'session-active-turn-freeze',
+  () => {
+    freezeSessionActiveTurnMarkers();
+  },
+  'sync',
+);
+onQuit(
+  'reap-claude-children',
+  () => {
+    reapClaudeOrphansSync();
+  },
+  'sync',
+);
 onQuit('auth-manager', () => authManager.dispose(), 'sync');
 onQuit('app-badge-clear', () => clearAllSessionAttention(), 'sync');
 // 自带 adb 的常驻 server 守护进程随退出收掉(fire-and-forget detached spawn,
 // 不阻塞)。不收会一直锁安装目录里的 adb.exe,弄挂增量更新(os error 32)。
 onQuit('android-adb-kill-server', () => disposeAndroidAdb(), 'sync');
-onQuit('skillhub-auto-sync-listener', () => {
-  disposeSkillhubAutoSyncAuthListener?.();
-  disposeSkillhubAutoSyncAuthListener = null;
-}, 'sync');
-onQuit('provider-access-auth-listener', () => {
-  disposeProviderAccessAuthListener?.();
-  disposeProviderAccessAuthListener = null;
-}, 'sync');
+onQuit(
+  'skillhub-auto-sync-listener',
+  () => {
+    disposeSkillhubAutoSyncAuthListener?.();
+    disposeSkillhubAutoSyncAuthListener = null;
+  },
+  'sync',
+);
+onQuit(
+  'provider-access-auth-listener',
+  () => {
+    disposeProviderAccessAuthListener?.();
+    disposeProviderAccessAuthListener = null;
+  },
+  'sync',
+);
 
 // Async 阶段: 并发跑, 6s 超时兜底。
 //   - shutdown-maker:       Layer 1 关 sessions → Layer 2 dispose agents (Codex
@@ -5397,9 +5560,10 @@ function parseImDefaultAgentSettings(
     if (input.providerId !== null && typeof input.providerId !== 'string') {
       throwIpcError('INVALID_PARAMS', 'im default providerId must be string or null');
     }
-    providerId = typeof input.providerId === 'string' && input.providerId.trim()
-      ? input.providerId.trim()
-      : null;
+    providerId =
+      typeof input.providerId === 'string' && input.providerId.trim()
+        ? input.providerId.trim()
+        : null;
   }
   if ('model' in input) {
     if (typeof input.model !== 'string' || !input.model.trim()) {
@@ -5465,7 +5629,7 @@ export async function bootstrapElectron(): Promise<void> {
     if (app.isReady()) {
       resolve();
     } else {
-      app.once("ready", () => resolve());
+      app.once('ready', () => resolve());
     }
   });
 }

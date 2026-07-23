@@ -24,6 +24,10 @@ import {
   type SocialProvider,
   type VerificationKind,
 } from '@cindy/auth-client';
+// dev-only 登录 scenario harness(implementation-plan Step 0 WHAT4):
+// 生产构建由 metro resolveRequest 把整模块替换为空 stub(metro.config.js),
+// 运行时另有 __DEV__ guard 双保险。
+import { resolveLoginScenarioFetch } from '@cindy/auth-client/fixtures';
 
 import {
   apiFetchRaw,
@@ -578,7 +582,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       }
     };
-    void run();
+    // v6.3:initialize 链外层兜底 catch——ensureDeviceId / 存储异常穿出时归一未登录,
+    // 避免 unhandled rejection;finally 已保证 initialized/isBusy 收敛,此处只清残留会话。
+    void run().catch((error) => {
+      console.warn('[auth] initialize failed; normalized to signed-out', error);
+      if (cancelled) return;
+      userRef.current = null;
+      setUser(null);
+    });
     return () => {
       cancelled = true;
     };
@@ -1241,15 +1252,24 @@ export function useAuth(): AuthContextValue {
 }
 
 function authClientFor(deviceId: string): CindyAuthClient {
+  // auth 协议只有 cn/global 两条线;dev 目标行为语义归 cn 系(实际连的
+  // dev-auth 服务器由 AUTH_API_BASE_URL 决定,与线别参数正交)。
+  const region = AUTH_REGION === 'global' ? 'global' : 'cn';
+  // 登录 scenario harness 注入点(仅 client 构造参数;implementation-plan Step 0
+  // WHAT4)。guard:__DEV__ + EXPO_PUBLIC_LOGIN_SCENARIO(值域见附录 A);
+  // 生产构建由 metro resolveRequest 把 fixtures 整模块替换为空 stub 双保险。
+  const scenarioFetch = resolveLoginScenarioFetch({
+    devModeActive: __DEV__,
+    scenario: process.env.EXPO_PUBLIC_LOGIN_SCENARIO,
+    region,
+  });
   return new CindyAuthClient({
     baseUrl: AUTH_API_BASE_URL,
-    // auth 协议只有 cn/global 两条线;dev 目标行为语义归 cn 系(实际连的
-    // dev-auth 服务器由 AUTH_API_BASE_URL 决定,与线别参数正交)。
-    region: AUTH_REGION === 'global' ? 'global' : 'cn',
+    region,
     deviceId,
     clientType: 'mobile',
     locale: getAuthLocale(),
-    fetch: async (input, init) => fetch(input, init),
+    fetch: scenarioFetch ?? (async (input, init) => fetch(input, init)),
   });
 }
 

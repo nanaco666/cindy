@@ -1,0 +1,28 @@
+{
+  "testResults": [
+    {
+      "name": "apps/desktop/src/main/__tests__/fixture-a.test.ts",
+      "assertionResults": [
+        {
+          "ancestorTitles": [
+            "suite a"
+          ],
+          "title": "escapes markup",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "name": "apps/desktop/src/main/__tests__/fixture-b.test.ts",
+      "assertionResults": [
+        {
+          "ancestorTitles": [
+            "suite b"
+          ],
+          "title": "rejects late result",
+          "status": "passed"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,45 @@
+{
+  "evidenceSha256": "87ac7c8cbd29ad311c7967791f5e403601d01d0695bd9a8cd1dd919ad797f2d1",
+  "testedCodeCommit": "ffffffffffffffffffffffffffffffffffffffff",
+  "capturedCellRef": {
+    "rowId": "mobile.wordmark.asset",
+    "device": "ipad",
+    "locale": "zh-CN",
+    "region": "cn"
+  },
+  "reuseGroupId": "g-wm-asset-ipad-cn",
+  "applicableCellRefs": [
+    {
+      "rowId": "mobile.wordmark.asset",
+      "device": "ipad",
+      "locale": "zh-CN",
+      "region": "cn"
+    },
+    {
+      "rowId": "mobile.wordmark.asset",
+      "device": "ipad",
+      "locale": "zh-TW",
+      "region": "cn"
+    },
+    {
+      "rowId": "mobile.wordmark.asset",
+      "device": "ipad",
+      "locale": "en",
+      "region": "cn"
+    },
+    {
+      "rowId": "mobile.wordmark.asset",
+      "device": "ipad",
+      "locale": "ja",
+      "region": "cn"
+    },
+    {
+      "rowId": "mobile.wordmark.asset",
+      "device": "ipad",
+      "locale": "ko",
+      "region": "cn"
+    }
+  ],
+  "scenario": "fixture 采集(self-test)",
+  "capturedAt": "2026-07-20T00:00:00.000Z"
+}

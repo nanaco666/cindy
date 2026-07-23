@@ -2623,10 +2623,10 @@
   "login": {
     "title": "Welcome to Cindy",
     "subtitle": "Choose a secure way to sign in",
-    "phone": "Phone",
-    "email": "Email",
     "phonePlaceholder": "Enter your phone number",
     "emailPlaceholder": "Enter your email",
+    "invalidEmail": "Please enter a valid email address",
+    "invalidPhone": "Please enter a valid phone number",
     "working": "Please wait...",
     "continue": "Continue",
     "or": "or",
@@ -2660,6 +2660,7 @@
     "verifying": "Verifying...",
     "signIn": "Sign in",
     "resendCode": "Resend code",
+    "resendCountdown": "{{n}} seconds until resend",
     "chooseAccount": "Choose an identity",
     "chooseAccountSubtitle": "Select the personal or organization identity to use",
     "personalAccount": "Personal identity",
@@ -2725,6 +2726,11 @@
       "checkingEnv": "Checking runtime environment...",
       "waking": "Waking Cindy...",
       "envFailed": "Environment setup failed — click to retry"
+    },
+    "downloadStats": "{{percent}}% · {{speed}} MB/s · {{done}} MB / {{total}} MB",
+    "envFailed": {
+      "title": "Environment initialization failed",
+      "retry": "Retry"
     },
     "manifestFailed": {
       "title": "Network connection failed",

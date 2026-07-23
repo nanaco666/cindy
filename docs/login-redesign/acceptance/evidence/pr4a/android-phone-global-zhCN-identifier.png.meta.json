@@ -1,0 +1,20 @@
+{
+  "evidenceSha256": "59bc31301e8962c0f0bee0bedfa0cd5e00661cf5e97d04c77924e84440235914",
+  "testedCodeCommit": "b8a4b0a0c269ffb0779259de24af74fe33d21d4e",
+  "capturedCellRef": {
+    "rowId": "mobile.identifier.state",
+    "device": "android-phone",
+    "locale": "zh-CN",
+    "region": "global"
+  },
+  "applicableCellRefs": [
+    {
+      "rowId": "mobile.identifier.state",
+      "device": "android-phone",
+      "locale": "zh-CN",
+      "region": "global"
+    }
+  ],
+  "scenario": "cindy-phone AVD(Android 15)实机 dev build 截屏;identifier 首屏;bundle=PR head 干净树(Metro 按 region env 分别启动:cn 默认/global EXPO_PUBLIC_CINDY_AUTH_REGION=global);locale 经 per-app locale 切换",
+  "capturedAt": "2026-07-20T23:45:00+08:00"
+}

@@ -404,3 +404,96 @@ export const docThumbSnippetType = {
   fontSize: 4,
   lineHeight: 6,
 } as const;
+
+/**
+ * 登录皮肤专用 token 组(PR0a,implementation-plan Step 0 WHAT1)。
+ *
+ * 跨 light/dark **恒定**——Cindy 品牌登录入口不随主题染色,因此刻意不进
+ * ThemeColors(那是随主题切换的色板)。参数权威:design.md §8(wave4)/
+ * figma-component-spec.md §4·§10/token-decision-table.md(wave4 改判)。
+ * 错误文字用独立 `loginError`(#D91F37 族,figma 登录稿专用错误红),
+ * **不得复用 statusError**(语义违规,守护测试锁死)。
+ * 页面底色不在本组:wave4 改判为消费主题 surface(design.md §8.1),由
+ * 宿主组件用 `useTheme().colors.surface` 取值,不另造 #F1F0F1 字面值。
+ */
+export const loginColors = {
+  /** 品牌红 accent(Global pill/字标红元素;禁止用作页面背景——wave4 改判) */
+  brandAccent: '#DF0C27',
+  /** 品牌深红 pressed/hover(figma §1 Color System) */
+  brandAccentPressed: '#A61629',
+  /** 白色登录面板(680×440 r36 fill,figma §4) */
+  panelBg: '#FBFBFB',
+  /** wave4 全部登录面板 1px inside 描边(368:1383) */
+  panelBorder: '#D4D4D4',
+  /** 输入框/浅底控件底(figma §4.1) */
+  controlBg: '#EEEEEE',
+  /** 输入框默认描边/placeholder/主按钮文字(figma §1「正文」#D4D4D4) */
+  controlBorder: '#D4D4D4',
+  /** 输入框 focus 描边/主按钮底/深色控件(figma §1「背景」#2A2828) */
+  controlBorderActive: '#2A2828',
+  /** disabled 按钮描边(figma §4.3 disable 态) */
+  controlBorderDisabled: '#B4B4B4',
+  /** 标题/输入已填文本(figma §1 #252222) */
+  controlText: '#252222',
+  /** placeholder/倒计时文案 */
+  controlPlaceholder: '#D4D4D4',
+  /** 面板标题 */
+  titleText: '#252222',
+  /** 副标题/说明文案(figma §1「二级信息」) */
+  secondaryText: '#6F6F6F',
+  /** 主按钮/第三方圆钮底 */
+  primaryButtonBg: '#2A2828',
+  /** 主按钮/圆钮描边(figma §1「边框」#434343) */
+  primaryButtonBorder: '#434343',
+  /** 主按钮文字 */
+  primaryButtonText: '#D4D4D4',
+  /** disabled 按钮白 70% 叠层(figma §1.4) */
+  disabledButtonOverlay: 'rgba(255, 255, 255, 0.7)',
+  /** Text_link 默认色 */
+  linkText: '#2A2828',
+  /** Text_link pressed(U-9 裁决 2026-07-20:#1A1818,wave3 实测落地后替换) */
+  linkPressed: '#1A1818',
+  /** 登录错误文字(#D91F37 族,不复用 statusError——语义违规) */
+  loginError: '#D91F37',
+  /** SLOGAN 矢量近黑(wave4 368:1394,#2A2828 + 0.5px stroke 同色) */
+  sloganInk: '#2A2828',
+  /** wave4 双背景渐变的品牌红基色(379:518/379:520,层 opacity 见 loginGradients) */
+  gradientTint: '#F70121',
+} as const;
+
+/**
+ * wave4 背景双渐变参数(代码复现非资产;归一化百分比锚定物理 viewport,
+ * 不随 750 stage 缩放、不随键盘 translate——implementation-plan Step 5 冻结)。
+ * 落码时以 wave4 帧(368:1375)截图对照为准,允许微调参数,字段语义冻结。
+ */
+export const loginGradients = {
+  /** 红径向层(379:518):#F70121 α1→α0@0.747,中心帧右上角外侧,层 opacity 6% */
+  radial: { centerX: 1.28, centerY: 0.07, alphaStop: 0.747, layerOpacity: 0.06 },
+  /** 红线性层(379:520):#F70121 α0→α1 向左下 (86.5%,85.8%)→(0%,100.7%),层 opacity 5% */
+  linear: { fromX: 0.865, fromY: 0.858, toX: 0, toY: 1.007, layerOpacity: 0.05 },
+} as const;
+
+/**
+ * 登录皮肤尺寸常量(figma px,750 移动设计稿坐标系;实现按布局引擎换算,
+ * 不进通用 spacing/radius 阶梯——36/40/50/60 圆角与 80/440/680 尺寸不属于
+ * 现有阶梯,token-decision-table §4 决策)。
+ */
+export const loginSizes = {
+  stageWidth: 750,
+  stageTallHeight: 1624,
+  stageShortHeight: 1334,
+  panelWidth: 680,
+  panelHeight: 440,
+  panelRadius: 36,
+  /** 面板 440 + gap 40 + 圆钮行 80 */
+  flowHeight: 560,
+  controlWidth: 540,
+  controlHeight: 80,
+  controlRadius: 40,
+  socialSize: 80,
+  socialGap: 70,
+  backSize: 60,
+  methodRowHeight: 100,
+  methodRowRadius: 60,
+  panelSocialGap: 40,
+} as const;

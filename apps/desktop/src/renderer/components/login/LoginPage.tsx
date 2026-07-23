@@ -1,46 +1,53 @@
-import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type CSSProperties,
+  type FormEvent,
+  type ReactNode,
+} from 'react';
 import { useTranslation } from 'react-i18next';
-import { ArrowLeft, Building2, ExternalLink, Mail, Phone, UserRound } from 'lucide-react';
-import { BRAND_NAME } from '@lizi/maker-shared/branding';
 import type { AccountDeletionStatus, SocialProvider, VerificationKind } from '@cindy/auth-client';
+import { isValidEmail } from '@cindy/auth-client';
 
 import { cn } from '@/lib/utils';
-import { Spinner } from '@/components/ui/spinner';
 import { WindowControls } from '@/components/title-bar/WindowControls';
-import { useBrandLogo } from '@/hooks/useBrandLogo';
 import { useLogin } from '@/hooks/useLogin';
+import { LOGIN_HANDOFF_TIMINGS, useLoginHandoff } from '@/contexts/LoginHandoffContext';
 
-const primaryButtonClass = cn(
-  'inline-flex h-11 w-full items-center justify-center gap-2 rounded-full px-6',
-  'text-[15px] font-medium transition-colors',
-  'bg-[var(--login-btn-bg)] text-[var(--login-btn-text)] hover:bg-[var(--login-btn-hover)]',
-  'disabled:cursor-not-allowed disabled:opacity-60',
-);
+import appleIcon from '@/assets/login/icons/apple.svg';
+import googleIcon from '@/assets/login/icons/google.svg';
+import wechatIcon from '@/assets/login/icons/wechat.svg';
+import ssoIcon from '@/assets/login/icons/sso.svg';
 
-const secondaryButtonClass = cn(
-  'inline-flex h-11 w-full items-center justify-center gap-2 rounded-full border px-5',
-  'border-[var(--border-default)] bg-[var(--surface-elevated)] text-[15px] font-medium',
-  'text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-hover)]',
-  'disabled:cursor-not-allowed disabled:opacity-60',
-);
+import { LoginStage } from './LoginStage';
+import {
+  LoginBackButton,
+  LoginErrorText,
+  LoginInput,
+  LoginLoadingRing,
+  LoginMethodRow,
+  LoginPanel,
+  LoginPrimaryButton,
+  LoginSocialButton,
+  LoginSocialRow,
+  LoginTextLink,
+  LoginTitleBlock,
+} from './LoginControls';
+import { useResendCountdown } from './useResendCountdown';
+import { CURRENT_CINDY_REGION } from '../../../shared/brandRegion';
+import { resolveIdentifierMethod } from '../../../shared/loginIdentifierMethod';
+import { DRAG_BAR_HEIGHT, LOADING_RING, LOGIN_COLORS, TEXT_LINK } from './loginDesignTokens';
 
-const inputClass = cn(
-  'h-11 w-full rounded-full border border-[var(--border-default)]',
-  'bg-[var(--surface-elevated)] px-4 text-[15px] text-[var(--text-primary)] outline-none',
-  'placeholder:text-[var(--text-placeholder)] focus:ring-2 focus:ring-[var(--focus-ring-soft)]',
-  'disabled:cursor-not-allowed disabled:opacity-60',
-);
-
-function BusyLabel({ children }: { children: ReactNode }) {
-  return (
-    <>
-      <Spinner size={18} />
-      {children}
-    </>
-  );
-}
-
-/** Auth-server login UI. It handles presentation only; main owns all credentials and tickets. */
+/**
+ * LoginPage — 桌面登录(wave4 白底体系 + figma §4 组件库,PR1 stage 框架)。
+ *
+ * 呈现层职责不变:凭证/票据全在 main(useLogin dispatch IPC)。
+ * PR1 精修态 = identifier 主视图 / ssoOrgMode 子视图(含 sso-org-list = method-choice
+ * 的 SSO 入口来源变体)/ preparing 伪态;其余状态以同一组件库承载功能等价渲染,
+ * 组件级变体精修(倒计时契约、Text_link 全态、560↔440 锚定切换、错误码全覆盖、
+ * chrome 双描边 overlay)归 PR2a/2b(implementation-plan Step 3/3b)。
+ */
 export function LoginPage() {
   const {
     isLoading,
@@ -52,18 +59,46 @@ export function LoginPage() {
     dispatch,
     clearError,
   } = useLogin();
-  const brandLogo = useBrandLogo();
   const { t } = useTranslation();
+  const handoff = useLoginHandoff();
   const isMac = window.electronAPI?.platform === 'darwin';
-  const [identifierKind, setIdentifierKind] = useState<VerificationKind>('email');
+
+  // handoff「面板已挂载」信号(未登录分支进 panel 步的前置锚,Step 3b WHAT2);
+  // 卸载(路由离开 /login)时回报,品牌 overlay 据此卸载。
+  const { reportLoginPanelMounted, reportLoginPanelUnmounted } = handoff;
+  useEffect(() => {
+    reportLoginPanelMounted();
+    return () => reportLoginPanelUnmounted();
+  }, [reportLoginPanelMounted, reportLoginPanelUnmounted]);
+  const isGlobalBuild = import.meta.env.VITE_CINDY_AUTH_REGION === 'global';
+  // identifier 形态 = 构建区域确定性推导(用户拍板 2026-07-21:手机/邮箱分区互斥,
+  // 双 tab 切换移除);providers 仅兜底区域首选方式未下发的场景。
+  const identifierKind: VerificationKind = useMemo(
+    () =>
+      loginState?.step === 'identifier'
+        ? resolveIdentifierMethod(CURRENT_CINDY_REGION, loginState.providers)
+        : isGlobalBuild
+          ? 'email'
+          : 'phone',
+    [loginState, isGlobalBuild],
+  );
   const [identifier, setIdentifier] = useState('');
-  // 企业 SSO 入口子视图：在 identifier 步骤内输入组织标识（本地展示态，不进 main）
+  // identifier 本地格式校验错误(设计稿 347:1727:非法邮箱/手机号 → 输入框红边 +
+  // 底部红字「请输入正确邮箱」/「请输入正确手机号」)。提交前本地拦截、不发 discover
+  // (规则 9:能代码化的格式校验不甩给 server 往返);与 server errorCode 互斥展示
+  // (本地错误优先),输入变更即清除。null = 无本地格式错误。
+  const [identifierFormatError, setIdentifierFormatError] = useState<VerificationKind | null>(null);
+  // 企业 SSO 入口子视图:在 identifier 步骤内输入组织标识(本地展示态,不进 main)
   const [ssoOrgMode, setSsoOrgMode] = useState(false);
   const [ssoOrg, setSsoOrg] = useState('');
   const [verificationCode, setVerificationCode] = useState('');
   const [ssoVerificationCode, setSsoVerificationCode] = useState('');
   const [bindingContact, setBindingContact] = useState('');
   const [bindingCode, setBindingCode] = useState('');
+  // 42s 重发倒计时(Step 3a):起算=request-code 成功返回,离开验证码步清理
+  const { remaining: resendRemaining, arm: armResendCountdown } = useResendCountdown(
+    loginState?.step === 'verification-code',
+  );
   const [accountDeletionStatus, setAccountDeletionStatus] = useState<AccountDeletionStatus | null>(
     null,
   );
@@ -125,16 +160,13 @@ export function LoginPage() {
 
   useEffect(() => {
     if (loginState?.step !== 'identifier') return;
-    setIdentifierKind(loginState.providers.attribution);
     setSsoOrgMode(false);
     setVerificationCode('');
     setSsoVerificationCode('');
     setBindingContact('');
     setBindingCode('');
-  }, [
-    loginState?.step,
-    loginState?.step === 'identifier' ? loginState.providers.attribution : null,
-  ]);
+    setIdentifierFormatError(null);
+  }, [loginState?.step]);
 
   const errorMessage = useMemo(() => {
     if (!errorCode) return null;
@@ -145,7 +177,15 @@ export function LoginPage() {
 
   const reset = () => {
     clearError();
+    setIdentifierFormatError(null);
     void dispatch({ type: 'reset' });
+  };
+
+  // request-code 类动作统一走这里:成功返回时刻 = 倒计时起算点(Step 3a);
+  // 失败(含重发失败)不 arm → 保持当前 deadline。
+  const dispatchRequestCode = async (kind: VerificationKind, value: string) => {
+    const ok = await dispatch({ type: 'request-code', kind, identifier: value });
+    if (ok) armResendCountdown();
   };
 
   const submitIdentifier = (event: FormEvent) => {
@@ -153,9 +193,20 @@ export function LoginPage() {
     const value = identifier.trim();
     if (!value) return;
     if (identifierKind === 'email') {
+      // 非法邮箱格式本地拦截 → 红边 + 红字「请输入正确邮箱」(设计稿 347:1727),
+      // 不发 discover(避免明显非法值走一次 server 往返)。
+      if (!isValidEmail(value)) {
+        clearError();
+        setIdentifierFormatError('email');
+        return;
+      }
+      setIdentifierFormatError(null);
       void dispatch({ type: 'discover', email: value });
     } else {
-      void dispatch({ type: 'request-code', kind: 'phone', identifier: value });
+      // 手机号:桌面不做客户端 +86/号段校验(#223 仅移动端做 cnPhone 本地拦截),
+      // 输入原样透传服务端 request-code,由服务端校验号段合法性。
+      setIdentifierFormatError(null);
+      void dispatchRequestCode('phone', value);
     }
   };
 
@@ -166,256 +217,223 @@ export function LoginPage() {
     void dispatch({ type: 'discover-sso-org', org: value });
   };
 
+  /* ── identifier 主视图(680×560 组:面板 + 第三方圆钮行) ── */
   const renderIdentifier = () => {
     if (!loginState || loginState.step !== 'identifier') return null;
     const providers = loginState.providers;
-    const showTabs = providers.email && providers.phone;
-    if (ssoOrgMode) {
-      return (
-        <>
-          <BackButton
-            disabled={isLoading}
-            onClick={() => {
-              clearError();
-              setSsoOrgMode(false);
-            }}
-            label={t('login.back')}
-          />
-          <Header title={t('login.ssoOrgTitle')} subtitle={t('login.ssoOrgSubtitle')} />
-          <form className="w-full space-y-3" onSubmit={submitSsoOrg}>
-            <input
-              autoFocus
-              required
-              disabled={isLoading}
-              maxLength={253}
-              autoComplete="off"
-              value={ssoOrg}
-              onChange={(event) => setSsoOrg(event.target.value)}
-              placeholder={t('login.ssoOrgPlaceholder')}
-              className={inputClass}
-            />
-            <button
-              className={primaryButtonClass}
-              disabled={isLoading || !ssoOrg.trim()}
-              type="submit"
-            >
-              {isLoading ? <BusyLabel>{t('login.working')}</BusyLabel> : t('login.continue')}
-            </button>
-          </form>
-          <p className="mt-4 text-center text-[13px] leading-5 text-[var(--text-secondary)]">
-            {t('login.ssoOrgHint')}
-          </p>
-        </>
-      );
-    }
+    if (ssoOrgMode) return renderSsoOrg();
     return (
       <>
-        <Header title={t('login.title')} subtitle={t('login.subtitle')} />
-
-        {showTabs && (
-          <div className="mb-4 flex w-full rounded-full bg-[var(--surface-chip)] p-1">
-            {(['phone', 'email'] as const).map((kind) => (
-              <button
-                key={kind}
-                type="button"
-                disabled={isLoading}
-                onClick={() => {
-                  setIdentifierKind(kind);
-                  setIdentifier('');
-                  clearError();
-                }}
-                className={cn(
-                  'flex h-8 flex-1 items-center justify-center gap-1.5 rounded-full text-[13px] transition-colors',
-                  identifierKind === kind
-                    ? 'bg-[var(--surface-elevated)] text-[var(--text-primary)]'
-                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]',
-                )}
-              >
-                {kind === 'phone' ? <Phone size={15} /> : <Mail size={15} />}
-                {t(`login.${kind}`)}
-              </button>
-            ))}
-          </div>
-        )}
-
-        <form className="w-full space-y-3" onSubmit={submitIdentifier}>
-          <input
-            autoFocus
-            required
-            disabled={isLoading}
-            type={identifierKind === 'email' ? 'email' : 'tel'}
-            autoComplete={identifierKind === 'email' ? 'email' : 'tel'}
-            value={identifier}
-            onChange={(event) => setIdentifier(event.target.value)}
-            placeholder={t(
-              identifierKind === 'email' ? 'login.emailPlaceholder' : 'login.phonePlaceholder',
+        <LoginPanel testId="login-panel-identifier">
+          {/* noValidate:关掉浏览器对 type="email" 的原生约束校验气泡(英文系统提示,
+              不受主题控制),改由下方本地校验渲染设计稿定义的红边+红字错误态。 */}
+          <form onSubmit={submitIdentifier} noValidate>
+            <LoginTitleBlock
+              title={t('login.title')}
+              subtitle={t('login.subtitle')}
+              globalPill={isGlobalBuild ? t('login.globalRegion') : undefined}
+            />
+            <LoginInput
+              autoFocus
+              disabled={isLoading}
+              type={identifierKind === 'email' ? 'email' : 'tel'}
+              autoComplete={identifierKind === 'email' ? 'email' : 'tel'}
+              value={identifier}
+              // 手机形态:桌面不做客户端 +86/号段清洗(#223 仅移动端做 cnPhone),
+              // 输入原样受控;输入变更即清除本地格式错误态(用户开始修正邮箱
+              // 时红边/红字随之消失)。
+              onChange={(next) => {
+                if (identifierFormatError) setIdentifierFormatError(null);
+                setIdentifier(next);
+              }}
+              placeholder={t(
+                identifierKind === 'email' ? 'login.emailPlaceholder' : 'login.phonePlaceholder',
+              )}
+              error={!!errorCode || identifierFormatError != null}
+            />
+            <LoginPrimaryButton
+              type="submit"
+              disabled={!identifier.trim()}
+              loading={isLoading}
+              testId="login-continue-button"
+            >
+              {isLoading ? t('login.working') : t('login.continue')}
+            </LoginPrimaryButton>
+            {/* 本地格式错误优先展示(设计稿「请输入正确邮箱/手机号」),否则回退 server 错误码文案 */}
+            {(identifierFormatError || errorMessage) && (
+              <LoginErrorText>
+                {identifierFormatError
+                  ? t(
+                      identifierFormatError === 'email'
+                        ? 'login.invalidEmail'
+                        : 'login.invalidPhone',
+                    )
+                  : errorMessage}
+              </LoginErrorText>
             )}
-            className={inputClass}
-          />
-          <button
-            className={primaryButtonClass}
-            disabled={isLoading || !identifier.trim()}
-            type="submit"
+          </form>
+        </LoginPanel>
+        <LoginSocialRow count={providers.social.length + 1}>
+          {providers.social.map((provider) => (
+            <LoginSocialButton
+              key={provider}
+              testId={`login-social-${provider}`}
+              label={t('login.socialButton', { provider: t(`login.social.${provider}`) })}
+              isLoading={isLoading}
+              onClick={() => {
+                // SC-SOC-7: in-flight(isLoading)期间 no-op 防重复发起;行为层 guard,
+                // 零视觉变化(圆钮已无 disabled 态 per §10 拍板,不回填 disabled 视觉)。
+                if (isLoading) return;
+                void dispatch({
+                  type: 'start-browser',
+                  kind: 'social',
+                  providerOrConnectionId: provider,
+                  label: t(`login.social.${provider}`),
+                });
+              }}
+            >
+              <SocialProviderIcon provider={provider} />
+            </LoginSocialButton>
+          ))}
+          {/* 企业 SSO = 行内最后一颗圆钮(329:243;取代旧文字链入口) */}
+          <LoginSocialButton
+            testId="login-social-sso"
+            label={t('login.ssoEntry')}
+            isLoading={isLoading}
+            onClick={() => {
+              // SC-SOC-7: in-flight 期间 no-op(行为层 guard,无 disabled 视觉回填)。
+              if (isLoading) return;
+              clearError();
+              setSsoOrgMode(true);
+            }}
           >
-            {isLoading ? <BusyLabel>{t('login.working')}</BusyLabel> : t('login.continue')}
-          </button>
-        </form>
-
-        {providers.social.length > 0 && (
-          <>
-            <Divider label={t('login.or')} />
-            <div className="grid w-full gap-2">
-              {providers.social.map((provider) => (
-                <button
-                  key={provider}
-                  type="button"
-                  disabled={isLoading}
-                  className={secondaryButtonClass}
-                  onClick={() =>
-                    void dispatch({
-                      type: 'start-browser',
-                      kind: 'social',
-                      providerOrConnectionId: provider,
-                      label: t(`login.social.${provider}`),
-                    })
-                  }
-                >
-                  <SocialMark provider={provider} />
-                  {t('login.socialButton', { provider: t(`login.social.${provider}`) })}
-                </button>
-              ))}
-            </div>
-          </>
-        )}
-
-        {/* 企业 SSO 入口：输入组织标识发起单点登录（国内版隐藏邮箱后企业用户的登录路径） */}
-        <button
-          type="button"
-          disabled={isLoading}
-          onClick={() => {
-            clearError();
-            setSsoOrgMode(true);
-          }}
-          className={cn(
-            'mt-5 w-full text-center text-[13px] text-[var(--text-secondary)]',
-            'transition-colors hover:text-[var(--text-primary)]',
-            'disabled:cursor-not-allowed disabled:opacity-60',
-          )}
-        >
-          {t('login.ssoEntry')}
-        </button>
+            <SsoGlyph />
+          </LoginSocialButton>
+        </LoginSocialRow>
       </>
     );
   };
 
+  /* ── 企业 SSO 入口子视图(sso-org empty/filled;680×440) ── */
+  const renderSsoOrg = () => (
+    <LoginPanel testId="login-panel-sso-org">
+      <form onSubmit={submitSsoOrg} noValidate>
+        <LoginBackButton
+          disabled={isLoading}
+          label={t('login.back')}
+          onClick={() => {
+            clearError();
+            setSsoOrgMode(false);
+          }}
+        />
+        <LoginTitleBlock title={t('login.ssoOrgTitle')} subtitle={t('login.ssoOrgSubtitle')} />
+        <LoginInput
+          autoFocus
+          disabled={isLoading}
+          maxLength={253}
+          autoComplete="off"
+          value={ssoOrg}
+          onChange={setSsoOrg}
+          placeholder={t('login.ssoOrgPlaceholder')}
+          error={!!errorCode}
+          testId="login-sso-org-input"
+        />
+        {/* 帮助行(demo ssoOrgPanel:text-link 位、无下划线、次级色) */}
+        <span
+          className="absolute flex items-center justify-center"
+          style={{
+            left: TEXT_LINK.x,
+            top: TEXT_LINK.y,
+            width: TEXT_LINK.width,
+            height: 36,
+            fontSize: TEXT_LINK.fontSize,
+            color: LOGIN_COLORS.secondaryText,
+          }}
+        >
+          {t('login.ssoOrgHint')}
+        </span>
+        <LoginPrimaryButton
+          type="submit"
+          disabled={!ssoOrg.trim()}
+          loading={isLoading}
+          testId="login-sso-org-continue"
+        >
+          {isLoading ? t('login.working') : t('login.continue')}
+        </LoginPrimaryButton>
+        {errorMessage && <LoginErrorText>{errorMessage}</LoginErrorText>}
+      </form>
+    </LoginPanel>
+  );
+
+  /* ── method-choice(含 sso-org-list 来源变体;方式行精修归 PR2a) ── */
   const renderMethodChoice = () => {
     if (loginState?.step !== 'method-choice') return null;
     const ssoMethods = loginState.methods.filter((method) => method.type === 'sso');
+    // demo 呈现仲裁(methodChoicePanel):多 connection(≥2)时抑制个人行——
+    // 面板 440 高只容两行(158/278),第三行 y=398+100 会溢出;ssoRequired 同样抑制。
     const emailAllowed =
       loginState.methods.some((method) => method.type === 'email_code') &&
-      !ssoMethods.some((method) => method.ssoRequired);
-    // 命中企业域名时按 console 同款框架提示「企业身份 / 个人身份」；无 SSO 时保持纯邮箱确认
+      !ssoMethods.some((method) => method.ssoRequired) &&
+      ssoMethods.length <= 1 &&
+      !!loginState.email;
     const orgName = ssoMethods[0]?.orgName;
+    // sso-org 入口来源(无邮箱上下文)行起点 148,邮箱 discovery 来源 158(demo 呈现仲裁)
+    const fromSsoOrg = !loginState.email;
+    const firstRowTop = fromSsoOrg ? 148 : 158;
+    const rowStep = 120;
+    const subtitle = orgName
+      ? loginState.email
+        ? t('login.orgDetected', { email: loginState.email, org: orgName })
+        : t('login.ssoOrgDetected', { org: orgName })
+      : loginState.email;
     return (
-      <>
-        <BackButton disabled={isLoading} onClick={reset} label={t('login.back')} />
-        <Header
-          title={t('login.chooseMethod')}
-          subtitle={
-            orgName
-              ? loginState.email
-                ? t('login.orgDetected', { email: loginState.email, org: orgName })
-                : // 企业 SSO 入口路径没有邮箱上下文，只提示命中的企业
-                  t('login.ssoOrgDetected', { org: orgName })
-              : loginState.email
-          }
-        />
-        <div className="w-full space-y-2">
-          {ssoMethods.map((method) => (
-            <button
-              key={method.connectionId}
-              type="button"
-              disabled={isLoading}
-              className={cn(
-                primaryButtonClass,
-                'h-auto min-h-12 justify-start rounded-xl px-4 py-3 text-left',
-              )}
-              onClick={() =>
-                void dispatch({
-                  type: 'start-browser',
-                  kind: 'sso',
-                  providerOrConnectionId: method.connectionId,
-                  label: method.connectionName,
-                })
-              }
-            >
-              <Building2 className="shrink-0" size={18} />
-              <span className="min-w-0 flex-1">
-                <span className="block truncate">{t('login.enterpriseLogin')}</span>
-                <span className="block truncate text-[12px] font-normal opacity-75">
-                  {t('login.enterpriseVia', { name: method.connectionName || method.orgName })}
-                </span>
-              </span>
-              <ExternalLink className="shrink-0" size={15} />
-            </button>
-          ))}
-          {emailAllowed &&
-            (ssoMethods.length > 0 ? (
-              <button
-                type="button"
-                disabled={isLoading}
-                className={cn(
-                  secondaryButtonClass,
-                  'h-auto min-h-12 justify-start rounded-xl px-4 py-3 text-left',
-                )}
-                onClick={() =>
-                  void dispatch({
-                    type: 'request-code',
-                    kind: 'email',
-                    identifier: loginState.email,
-                  })
-                }
-              >
-                <UserRound className="shrink-0" size={18} />
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate">{t('login.personalLogin')}</span>
-                  <span className="block truncate text-[12px] font-normal text-[var(--text-secondary)]">
-                    {t('login.personalDesc')}
-                  </span>
-                </span>
-              </button>
-            ) : (
-              <button
-                type="button"
-                disabled={isLoading}
-                className={primaryButtonClass}
-                onClick={() =>
-                  void dispatch({
-                    type: 'request-code',
-                    kind: 'email',
-                    identifier: loginState.email,
-                  })
-                }
-              >
-                <Mail size={18} />
-                {t('login.emailCode')}
-              </button>
-            ))}
-        </div>
-        {ssoMethods.some((method) => method.ssoRequired) && (
-          <p className="mt-4 text-center text-[13px] leading-5 text-[var(--text-secondary)]">
-            {t('login.ssoRequired')}
-          </p>
+      <LoginPanel testId="login-panel-method-choice">
+        <LoginBackButton disabled={isLoading} label={t('login.back')} onClick={reset} />
+        <LoginTitleBlock title={t('login.chooseMethod')} subtitle={subtitle} />
+        {ssoMethods.map((method, index) => (
+          <LoginMethodRow
+            key={method.connectionId}
+            testId={`login-method-sso-${method.connectionId}`}
+            top={firstRowTop + index * rowStep}
+            disabled={isLoading}
+            title={t('login.enterpriseLogin')}
+            subtitle={t('login.enterpriseVia', { name: method.connectionName || method.orgName })}
+            onClick={() =>
+              void dispatch({
+                type: 'start-browser',
+                kind: 'sso',
+                providerOrConnectionId: method.connectionId,
+                label: method.connectionName,
+              })
+            }
+          />
+        ))}
+        {emailAllowed && (
+          <LoginMethodRow
+            testId="login-method-personal"
+            icon="person"
+            top={firstRowTop + ssoMethods.length * rowStep}
+            disabled={isLoading}
+            title={t('login.personalLogin')}
+            subtitle={t('login.personalDesc')}
+            onClick={() => void dispatchRequestCode('email', loginState.email)}
+          />
         )}
-      </>
+        {ssoMethods.some((method) => method.ssoRequired) && (
+          <LoginTextLink variant="countdown" top={380} testId="login-sso-required-hint">
+            {t('login.ssoRequired')}
+          </LoginTextLink>
+        )}
+      </LoginPanel>
     );
   };
 
+  /* ── verification-code(倒计时契约/Text_link 全态归 PR2a Step 3a) ── */
   const renderVerification = () => {
     if (loginState?.step !== 'verification-code') return null;
     const submit = (event: FormEvent) => {
       event.preventDefault();
-      if (!verificationCode) return;
+      if (verificationCode.length !== 6) return;
       void dispatch({
         type: 'verify-code',
         kind: loginState.kind,
@@ -424,88 +442,86 @@ export function LoginPage() {
       });
     };
     return (
-      <>
-        <BackButton disabled={isLoading} onClick={reset} label={t('login.back')} />
-        <Header
-          title={t('login.enterCode')}
-          subtitle={t('login.codeSentTo', { identifier: loginState.identifier })}
-        />
-        <form className="w-full space-y-3" onSubmit={submit}>
-          <input
+      <LoginPanel testId="login-panel-verification">
+        <form onSubmit={submit} noValidate>
+          <LoginBackButton disabled={isLoading} label={t('login.back')} onClick={reset} />
+          <LoginTitleBlock
+            title={t('login.enterCode')}
+            subtitle={t('login.codeSentTo', { identifier: loginState.identifier })}
+          />
+          <LoginInput
             autoFocus
-            required
+            center
             inputMode="numeric"
             autoComplete="one-time-code"
             pattern="[0-9]{6}"
             maxLength={6}
             disabled={isLoading}
             value={verificationCode}
-            onChange={(event) => setVerificationCode(event.target.value.replace(/\D/g, ''))}
+            onChange={(next) => setVerificationCode(next.replace(/\D/g, ''))}
             placeholder={t('login.codePlaceholder')}
-            className={cn(inputClass, 'text-center tracking-[0.35em]')}
+            error={!!errorCode}
           />
-          <button
+          {resendRemaining > 0 ? (
+            // 倒计时态(247:1614):#D4D4D4 无 underline 不可交互;文案随 tick 重算
+            <LoginTextLink variant="countdown" testId="login-resend-countdown">
+              {t('login.resendCountdown', { n: resendRemaining })}
+            </LoginTextLink>
+          ) : (
+            // 重发链接(247:1612;hover 358:792/pressed U-9);成功重置 deadline,失败保持
+            <LoginTextLink
+              disabled={isLoading}
+              testId="login-resend-link"
+              onClick={() => void dispatchRequestCode(loginState.kind, loginState.identifier)}
+            >
+              {t('login.resendCode')}
+            </LoginTextLink>
+          )}
+          <LoginPrimaryButton
             type="submit"
-            disabled={isLoading || verificationCode.length !== 6}
-            className={primaryButtonClass}
+            disabled={verificationCode.length !== 6}
+            loading={isLoading}
           >
-            {isLoading ? <BusyLabel>{t('login.verifying')}</BusyLabel> : t('login.signIn')}
-          </button>
-          <button
-            type="button"
-            disabled={isLoading}
-            className="w-full text-center text-[13px] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-            onClick={() =>
-              void dispatch({
-                type: 'request-code',
-                kind: loginState.kind,
-                identifier: loginState.identifier,
-              })
-            }
-          >
-            {t('login.resendCode')}
-          </button>
+            {isLoading ? t('login.verifying') : t('login.signIn')}
+          </LoginPrimaryButton>
+          {errorMessage && <LoginErrorText>{errorMessage}</LoginErrorText>}
         </form>
-      </>
+      </LoginPanel>
     );
   };
 
+  /* ── account-selection(行样式复用方式行;精修归 PR2a) ── */
   const renderAccountSelection = () => {
     if (loginState?.step !== 'account-selection') return null;
     return (
-      <>
-        <BackButton disabled={isLoading} onClick={reset} label={t('login.back')} />
-        <Header title={t('login.chooseAccount')} subtitle={t('login.chooseAccountSubtitle')} />
-        <div className="w-full space-y-2">
-          {loginState.accounts.map((account) => (
-            <button
-              key={account.id}
-              type="button"
-              disabled={isLoading}
-              className={cn(
-                secondaryButtonClass,
-                'h-auto min-h-12 justify-start rounded-xl px-4 py-3 text-left',
-              )}
-              onClick={() => void dispatch({ type: 'select-account', accountId: account.id })}
-            >
-              {account.kind === 'org' ? (
-                <Building2 className="shrink-0" size={18} />
-              ) : (
-                <UserRound className="shrink-0" size={18} />
-              )}
-              <span className="min-w-0">
-                <span className="block truncate">{account.displayName}</span>
-                <span className="block truncate text-[12px] font-normal text-[var(--text-secondary)]">
-                  {account.orgName || account.email || t('login.personalAccount')}
-                </span>
-              </span>
-            </button>
-          ))}
-        </div>
-      </>
+      <LoginPanel testId="login-panel-account-selection">
+        <LoginBackButton disabled={isLoading} label={t('login.back')} onClick={reset} />
+        <LoginTitleBlock
+          title={t('login.chooseAccount')}
+          subtitle={t('login.chooseAccountSubtitle')}
+        />
+        {/* demo accountPanel 呈现仲裁:行 148/268(step 120),左 icon 统一企业默认形
+            (demo 两行均未传 icon 变体);副行 = 企业 meta / 个人身份 */}
+        {loginState.accounts.map((account, index) => (
+          <LoginMethodRow
+            key={account.id}
+            top={148 + index * 120}
+            disabled={isLoading}
+            title={account.displayName}
+            subtitle={
+              account.kind === 'org'
+                ? account.orgName || account.email || ''
+                : t('login.personalAccount')
+            }
+            onClick={() => void dispatch({ type: 'select-account', accountId: account.id })}
+          />
+        ))}
+      </LoginPanel>
     );
   };
 
+  /* ── sso-verification(验证企业联系方式;复用 verification-code 屏的皮;
+     无倒计时——重发常驻可点,不套 resendRemaining 契约;主按钮 completeSignIn) ── */
   const renderSsoVerification = () => {
     if (loginState?.step !== 'sso-verification') return null;
     const verify = (event: FormEvent) => {
@@ -517,66 +533,62 @@ export function LoginPage() {
       });
     };
     return (
-      <>
-        <BackButton disabled={isLoading} onClick={reset} label={t('login.cancel')} />
-        <Header
-          title={t('login.ssoVerificationTitle')}
-          subtitle={t('login.ssoVerificationSubtitle', {
-            target: loginState.targetMasked,
-          })}
-        />
-        {!loginState.codeRequested ? (
-          <button
-            type="button"
-            disabled={isLoading}
-            className={primaryButtonClass}
-            onClick={() => void dispatch({ type: 'request-sso-verification-code' })}
-          >
-            {isLoading ? <BusyLabel>{t('login.working')}</BusyLabel> : t('login.sendCode')}
-          </button>
-        ) : (
-          <form className="w-full space-y-3" onSubmit={verify}>
-            <p className="truncate text-center text-[13px] text-[var(--text-secondary)]">
-              {loginState.targetMasked}
-            </p>
-            <input
-              autoFocus
-              required
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              pattern="[0-9]{6}"
-              maxLength={6}
+      <LoginPanel testId="login-panel-sso-verification">
+        <form onSubmit={verify} noValidate>
+          <LoginBackButton disabled={isLoading} label={t('login.cancel')} onClick={reset} />
+          <LoginTitleBlock
+            title={t('login.ssoVerificationTitle')}
+            subtitle={t('login.ssoVerificationSubtitle', { target: loginState.targetMasked })}
+          />
+          {!loginState.codeRequested ? (
+            <LoginPrimaryButton
               disabled={isLoading}
-              value={ssoVerificationCode}
-              onChange={(event) => setSsoVerificationCode(event.target.value.replace(/\D/g, ''))}
-              placeholder={t('login.codePlaceholder')}
-              className={cn(inputClass, 'text-center tracking-[0.35em]')}
-            />
-            <button
-              type="submit"
-              disabled={isLoading || ssoVerificationCode.length !== 6}
-              className={primaryButtonClass}
-            >
-              {isLoading ? (
-                <BusyLabel>{t('login.verifying')}</BusyLabel>
-              ) : (
-                t('login.completeSignIn')
-              )}
-            </button>
-            <button
-              type="button"
-              disabled={isLoading}
-              className="w-full text-center text-[13px] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+              loading={isLoading}
               onClick={() => void dispatch({ type: 'request-sso-verification-code' })}
+              testId="login-sso-verification-send"
             >
-              {t('login.resendCode')}
-            </button>
-          </form>
-        )}
-      </>
+              {isLoading ? t('login.working') : t('login.sendCode')}
+            </LoginPrimaryButton>
+          ) : (
+            <>
+              <LoginInput
+                autoFocus
+                center
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                pattern="[0-9]{6}"
+                maxLength={6}
+                disabled={isLoading}
+                value={ssoVerificationCode}
+                onChange={(next) => setSsoVerificationCode(next.replace(/\D/g, ''))}
+                placeholder={t('login.codePlaceholder')}
+                error={!!errorCode}
+              />
+              {/* 无倒计时:重发常驻可点(照 origin/main sso-verification 实现,与
+                  verification-code 屏的 resendRemaining 契约不同——SSO 验证码无冷却) */}
+              <LoginTextLink
+                disabled={isLoading}
+                testId="login-sso-verification-resend"
+                onClick={() => void dispatch({ type: 'request-sso-verification-code' })}
+              >
+                {t('login.resendCode')}
+              </LoginTextLink>
+              <LoginPrimaryButton
+                type="submit"
+                disabled={ssoVerificationCode.length !== 6}
+                loading={isLoading}
+              >
+                {isLoading ? t('login.verifying') : t('login.completeSignIn')}
+              </LoginPrimaryButton>
+            </>
+          )}
+          {errorMessage && <LoginErrorText>{errorMessage}</LoginErrorText>}
+        </form>
+      </LoginPanel>
     );
   };
 
+  /* ── binding 两阶段(精修归 PR2a) ── */
   const renderBinding = () => {
     if (loginState?.step !== 'binding') return null;
     const contact = loginState.contact ?? bindingContact;
@@ -591,122 +603,180 @@ export function LoginPage() {
       void dispatch({ type: 'verify-binding', contact, code: bindingCode });
     };
     return (
-      <>
-        <BackButton disabled={isLoading} onClick={reset} label={t('login.cancel')} />
-        <Header
-          title={t(`login.binding.${loginState.bindType}Title`)}
-          subtitle={t(`login.binding.${loginState.bindType}Subtitle`)}
-        />
-        {!loginState.codeRequested ? (
-          <form className="w-full space-y-3" onSubmit={request}>
-            <input
-              autoFocus
-              required
-              type={loginState.bindType === 'email' ? 'email' : 'tel'}
-              autoComplete={loginState.bindType === 'email' ? 'email' : 'tel'}
-              disabled={isLoading}
-              value={bindingContact}
-              onChange={(event) => setBindingContact(event.target.value)}
-              placeholder={t(
-                loginState.bindType === 'email'
-                  ? 'login.emailPlaceholder'
-                  : 'login.phonePlaceholder',
-              )}
-              className={inputClass}
-            />
-            <button
-              type="submit"
-              disabled={isLoading || !bindingContact.trim()}
-              className={primaryButtonClass}
-            >
-              {isLoading ? <BusyLabel>{t('login.working')}</BusyLabel> : t('login.sendCode')}
-            </button>
-          </form>
-        ) : (
-          <form className="w-full space-y-3" onSubmit={verify}>
-            <p className="truncate text-center text-[13px] text-[var(--text-secondary)]">
-              {contact}
-            </p>
-            <input
-              autoFocus
-              required
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              pattern="[0-9]{6}"
-              maxLength={6}
-              disabled={isLoading}
-              value={bindingCode}
-              onChange={(event) => setBindingCode(event.target.value.replace(/\D/g, ''))}
-              placeholder={t('login.codePlaceholder')}
-              className={cn(inputClass, 'text-center tracking-[0.35em]')}
-            />
-            <button
-              type="submit"
-              disabled={isLoading || bindingCode.length !== 6}
-              className={primaryButtonClass}
-            >
-              {isLoading ? (
-                <BusyLabel>{t('login.verifying')}</BusyLabel>
-              ) : (
-                t('login.completeSignIn')
-              )}
-            </button>
-          </form>
-        )}
-      </>
+      <LoginPanel testId="login-panel-binding">
+        {/* noValidate:同 identifier,关掉 type="email" 绑定输入的原生校验气泡 */}
+        <form onSubmit={loginState.codeRequested ? verify : request} noValidate>
+          <LoginBackButton disabled={isLoading} label={t('login.cancel')} onClick={reset} />
+          <LoginTitleBlock
+            title={t(`login.binding.${loginState.bindType}Title`)}
+            subtitle={t(`login.binding.${loginState.bindType}Subtitle`)}
+          />
+          {!loginState.codeRequested ? (
+            <>
+              <LoginInput
+                autoFocus
+                type={loginState.bindType === 'email' ? 'email' : 'tel'}
+                autoComplete={loginState.bindType === 'email' ? 'email' : 'tel'}
+                disabled={isLoading}
+                value={bindingContact}
+                onChange={setBindingContact}
+                placeholder={t(
+                  loginState.bindType === 'email'
+                    ? 'login.emailPlaceholder'
+                    : 'login.phonePlaceholder',
+                )}
+                error={!!errorCode}
+              />
+              <LoginPrimaryButton
+                type="submit"
+                disabled={!bindingContact.trim()}
+                loading={isLoading}
+              >
+                {isLoading ? t('login.working') : t('login.sendCode')}
+              </LoginPrimaryButton>
+            </>
+          ) : (
+            <>
+              <LoginInput
+                autoFocus
+                center
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                pattern="[0-9]{6}"
+                maxLength={6}
+                disabled={isLoading}
+                value={bindingCode}
+                onChange={(next) => setBindingCode(next.replace(/\D/g, ''))}
+                placeholder={t('login.codePlaceholder')}
+                error={!!errorCode}
+              />
+              {/* demo bindingPanel code 子态:countdown 样式「验证码已发送至 X」;
+                  无重发钮(照现网,Step 3 WHAT1) */}
+              <LoginTextLink variant="countdown" testId="login-binding-sent-to">
+                {t('login.codeSentTo', { identifier: contact })}
+              </LoginTextLink>
+              <LoginPrimaryButton
+                type="submit"
+                disabled={bindingCode.length !== 6}
+                loading={isLoading}
+              >
+                {isLoading ? t('login.verifying') : t('login.completeSignIn')}
+              </LoginPrimaryButton>
+            </>
+          )}
+          {errorMessage && <LoginErrorText>{errorMessage}</LoginErrorText>}
+        </form>
+      </LoginPanel>
     );
   };
 
-  const renderContent = () => {
+  const renderContent = (): { node: ReactNode; ssoOrgGroupY: boolean } => {
+    // preparing 伪态(loginState 尚未就绪;figma 5.2 准备态:loading 64 @(308,193))
     if (!loginState) {
-      return <Header title={t('login.preparing')} subtitle={t('login.preparingSubtitle')} />;
+      return {
+        ssoOrgGroupY: false,
+        node: (
+          <LoginPanel testId="login-panel-preparing">
+            <LoginTitleBlock title={t('login.preparing')} subtitle={t('login.preparingSubtitle')} />
+            <LoginLoadingRing y={LOADING_RING.yPreparing} label={t('login.working')} />
+          </LoginPanel>
+        ),
+      };
     }
     if (loginState.step === 'error') {
-      return (
-        <>
-          <Header title={t('login.unavailable')} subtitle={t('login.errors.fallback')} />
-          <button type="button" disabled={isLoading} className={primaryButtonClass} onClick={reset}>
-            {isLoading ? <BusyLabel>{t('login.working')}</BusyLabel> : t('login.retry')}
-          </button>
-        </>
-      );
+      return {
+        ssoOrgGroupY: false,
+        node: (
+          <LoginPanel testId="login-panel-error">
+            <LoginTitleBlock title={t('login.unavailable')} subtitle={t('login.errors.fallback')} />
+            <LoginPrimaryButton
+              disabled={isLoading}
+              loading={isLoading}
+              onClick={reset}
+              testId="login-error-retry"
+            >
+              {isLoading ? t('login.working') : t('login.retry')}
+            </LoginPrimaryButton>
+            <LoginErrorText>
+              {t(`login.errors.${loginState.code}`, { defaultValue: t('login.errors.fallback') })}
+            </LoginErrorText>
+          </LoginPanel>
+        ),
+      };
     }
     if (loginState.step === 'browser-redirect') {
-      return (
-        <>
-          <Header title={t('login.browserWaiting')} subtitle={loginState.label} />
-          <Spinner
-            size={24}
-            className="mb-6 text-[var(--text-secondary)]"
-            role="status"
-            aria-label={t('login.working')}
-          />
-          <button
-            type="button"
-            className={secondaryButtonClass}
-            onClick={() => void dispatch({ type: 'cancel-browser' })}
-          >
-            {t('login.cancel')}
-          </button>
-        </>
-      );
+      return {
+        ssoOrgGroupY: false,
+        node: (
+          <LoginPanel testId="login-panel-browser-redirect">
+            <LoginTitleBlock title={t('login.browserWaiting')} subtitle={loginState.label} />
+            <LoginLoadingRing y={LOADING_RING.yBrowser} label={t('login.working')} />
+            <LoginPrimaryButton onClick={() => void dispatch({ type: 'cancel-browser' })}>
+              {t('login.cancel')}
+            </LoginPrimaryButton>
+          </LoginPanel>
+        ),
+      };
     }
-    if (loginState.step === 'completed') return null;
-    return (
-      renderIdentifier() ??
-      renderMethodChoice() ??
-      renderVerification() ??
-      renderAccountSelection() ??
-      renderSsoVerification() ??
-      renderBinding()
-    );
+    if (loginState.step === 'completed') return { node: null, ssoOrgGroupY: false };
+    return {
+      ssoOrgGroupY: loginState.step === 'identifier' && ssoOrgMode,
+      node:
+        renderIdentifier() ??
+        renderMethodChoice() ??
+        renderVerification() ??
+        renderAccountSelection() ??
+        renderSsoVerification() ??
+        renderBinding(),
+    };
+  };
+
+  const { node, ssoOrgGroupY } = renderContent();
+  if (loginState?.step === 'completed') return null;
+
+  // handoff 面板入场(demo 步骤 4:opacity 0→1 + 自下而上 20px,420ms
+  // cubic-bezier(.35,.1,.25,1));panelRevealed 前完全隐藏且不吃点击,
+  // 播放期外(回访 /login、无 Provider 单测)直落终态无过渡。
+  const panelHidden = !handoff.panelRevealed;
+  const groupStyle: CSSProperties = {
+    opacity: panelHidden ? 0 : 1,
+    transform: panelHidden
+      ? `translateY(${LOGIN_HANDOFF_TIMINGS.panelRisePx}px)`
+      : 'translateY(0px)',
+    pointerEvents: panelHidden ? 'none' : undefined,
+    transition: handoff.isPlaying
+      ? `opacity ${LOGIN_HANDOFF_TIMINGS.panelMs}ms ${LOGIN_HANDOFF_TIMINGS.panelEasing}, transform ${LOGIN_HANDOFF_TIMINGS.panelMs}ms ${LOGIN_HANDOFF_TIMINGS.panelEasing}`
+      : undefined,
   };
 
   return (
-    <div className="flex min-h-screen flex-col bg-[var(--login-bg)]">
+    // 根级 z-[9990] 建立 LoginPage 自己的 stacking context:整体压过品牌 overlay
+    // (LoginBrandStage z-[9980])、低于 SplashScreen(z-[9999]);内部 stage(z-auto)
+    // / 窗框描边(z-30)/ 拖拽条(z-40)沿 PR2a 相对层序不变(PR2b handoff 合流)。
+    <div className="relative z-[9990] min-h-screen">
+      <LoginStage ssoOrgGroupY={ssoOrgGroupY} groupStyle={groupStyle}>
+        {accountDeletionStatus && (
+          <AccountDeletionStatusPanel
+            status={accountDeletionStatus}
+            onDismiss={
+              accountDeletionStatus.status === 'completed'
+                ? () => {
+                    void clearAccountDeletionReceipt?.().catch(() => undefined);
+                    setAccountDeletionStatus(null);
+                  }
+                : undefined
+            }
+          />
+        )}
+        {node}
+      </LoginStage>
+      {/* 顶部 46px 拖拽条 overlay(附录 C §1.4 条4:独立层不占文档流;返回钮在
+          面板区 y≫46px 不被遮挡;Win 控件 no-drag)。窗框双描边 chrome overlay 已于
+          2026-07-22 随 PR #104 对齐(纯平白底 + 无窗框描边)移除 */}
       <div
-        className="flex h-[46px] w-full shrink-0 items-center justify-end"
-        style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
+        data-testid="login-drag-bar"
+        className="absolute left-0 top-0 z-40 flex w-full items-center justify-end"
+        style={{ height: DRAG_BAR_HEIGHT, WebkitAppRegion: 'drag' } as React.CSSProperties}
       >
         {!isMac && (
           <div style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
@@ -714,54 +784,30 @@ export function LoginPage() {
           </div>
         )}
       </div>
-
-      <div className="flex flex-1 items-center justify-center px-6 py-8">
-        <main
-          className={cn(
-            'relative flex min-h-[560px] w-[440px] max-w-full flex-col items-center rounded-xl px-10 py-8',
-            'border border-[var(--login-card-border)] bg-[var(--login-card-bg)]',
-          )}
-        >
-          {/* Logo — 横向 wordmark,定宽、高度按比例 */}
-          <img
-            src={brandLogo}
-            alt={BRAND_NAME}
-            className="pointer-events-none mb-6 w-[216px] object-contain"
-            draggable={false}
-          />
-          {/* 区域标识仅 global 构建显示，国内版不特意标注 */}
-          {import.meta.env.VITE_CINDY_AUTH_REGION === 'global' && (
-            <span className="mb-6 -mt-1 rounded-full bg-[var(--surface-chip)] px-3 py-1 text-[11px] text-[var(--text-secondary)]">
-              {t('login.globalRegion')}
-            </span>
-          )}
-          {accountDeletionStatus && (
-            <AccountDeletionStatusPanel
-              status={accountDeletionStatus}
-              onDismiss={
-                accountDeletionStatus.status === 'completed'
-                  ? () => {
-                      void clearAccountDeletionReceipt?.().catch(() => undefined);
-                      setAccountDeletionStatus(null);
-                    }
-                  : undefined
-              }
-            />
-          )}
-          <div className="flex w-full flex-1 flex-col items-center justify-center">
-            {renderContent()}
-          </div>
-          {errorMessage && (
-            <p
-              role="alert"
-              className="mt-5 text-center text-[13px] leading-5 text-[var(--login-error-text)]"
-            >
-              {errorMessage}
-            </p>
-          )}
-        </main>
-      </div>
     </div>
+  );
+}
+
+/**
+ * 第三方圆钮图标(§4.5 icon 48×48;figma 现导矢量,登记见 asset-manifest.md):
+ * Apple 247:1692 / Google 247:1714 / WeChat 247:1724(服务端 providers.social
+ * 驱动显隐,资产备好、无返回不渲染——design §5)/ SSO 329:248。
+ */
+const SOCIAL_ICON_SRC: Record<SocialProvider, string> = {
+  apple: appleIcon,
+  google: googleIcon,
+  wechat: wechatIcon,
+};
+
+function SocialProviderIcon({ provider }: { provider: SocialProvider }) {
+  return (
+    <img
+      src={SOCIAL_ICON_SRC[provider]}
+      alt=""
+      aria-hidden
+      draggable={false}
+      className="h-full w-full object-contain"
+    />
   );
 }
 
@@ -820,61 +866,14 @@ function formatAccountDeletionDate(value: string): string {
   return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(date);
 }
 
-function Header({ title, subtitle }: { title: string; subtitle: string }) {
+function SsoGlyph() {
   return (
-    <div className="mb-6 text-center">
-      <h1 className="text-[24px] font-medium leading-8 text-[var(--text-primary)]">{title}</h1>
-      <p className="mt-2 break-words text-[14px] leading-5 text-[var(--text-secondary)]">
-        {subtitle}
-      </p>
-    </div>
-  );
-}
-
-function Divider({ label }: { label: string }) {
-  return (
-    <div className="my-5 flex w-full items-center gap-3">
-      <span className="h-px flex-1 bg-[var(--login-divider)]" />
-      <span className="text-[12px] text-[var(--text-secondary)]">{label}</span>
-      <span className="h-px flex-1 bg-[var(--login-divider)]" />
-    </div>
-  );
-}
-
-/** 固定在登录卡片左上角的图标返回按钮（卡片需 relative）；label 仅作无障碍与 tooltip 文案。 */
-function BackButton({
-  disabled,
-  label,
-  onClick,
-}: {
-  disabled: boolean;
-  label: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      disabled={disabled}
-      onClick={onClick}
-      aria-label={label}
-      title={label}
-      className={cn(
-        'absolute left-4 top-4 inline-flex h-9 w-9 items-center justify-center rounded-full',
-        'text-[var(--text-secondary)] transition-colors',
-        'hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]',
-        'disabled:cursor-not-allowed disabled:opacity-60',
-      )}
-    >
-      <ArrowLeft size={18} />
-    </button>
-  );
-}
-
-function SocialMark({ provider }: { provider: SocialProvider }) {
-  const label = provider === 'apple' ? '' : provider === 'google' ? 'G' : '微';
-  return (
-    <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-[var(--border-default)] text-[12px]">
-      {label}
-    </span>
+    <img
+      src={ssoIcon}
+      alt=""
+      aria-hidden
+      draggable={false}
+      className="h-full w-full object-contain"
+    />
   );
 }

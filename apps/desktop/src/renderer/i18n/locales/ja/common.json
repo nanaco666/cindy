@@ -2622,10 +2622,10 @@
   "login": {
     "title": "Cindy へようこそ",
     "subtitle": "安全なログイン方法を選択してください",
-    "phone": "電話番号",
-    "email": "メール",
     "phonePlaceholder": "電話番号を入力",
     "emailPlaceholder": "メールアドレスを入力",
+    "invalidEmail": "正しいメールアドレスを入力してください",
+    "invalidPhone": "正しい電話番号を入力してください",
     "working": "お待ちください...",
     "continue": "続行",
     "or": "または",
@@ -2659,6 +2659,7 @@
     "verifying": "確認中...",
     "signIn": "ログイン",
     "resendCode": "コードを再送信",
+    "resendCountdown": "{{n}} 秒後に再送信できます",
     "chooseAccount": "ID を選択",
     "chooseAccountSubtitle": "使用する個人または組織 ID を選択",
     "personalAccount": "個人 ID",
@@ -2724,6 +2725,11 @@
       "checkingEnv": "実行環境を確認中...",
       "waking": "Cindyを起こしています...",
       "envFailed": "環境の初期化に失敗しました。クリックして再試行してください"
+    },
+    "downloadStats": "{{percent}}% · {{speed}} MB/s · {{done}} MB / {{total}} MB",
+    "envFailed": {
+      "title": "環境の初期化に失敗しました",
+      "retry": "再試行"
     },
     "manifestFailed": {
       "title": "ネットワーク接続失敗",

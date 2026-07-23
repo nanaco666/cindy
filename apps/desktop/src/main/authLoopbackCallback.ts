@@ -80,25 +80,79 @@ export type AuthLoopbackPageInput = Omit<OAuthResultPageInput, 'variant'> & {
  * RFC 8252 loopback callback. Pure string builder so it stays unit-testable
  * outside Electron; all copy arrives pre-translated from the caller.
  *
- * Visuals mirror the desktop LoginPage (renderer/components/login) so the
- * browser page reads as a continuation of the same flow. The renderer theme
- * registry is unreachable from an external browser, so the default-theme
- * values of the exact tokens LoginPage consumes are inlined here (light/dark
- * via prefers-color-scheme). Source of truth: renderer/themes/colors.ts —
- *   page bg     --surface               #f8f8f6 / #1f1f1e
- *   card        --surface-elevated      #ffffff / #2c2c2a
- *   card border --border-default        #d7d7d4 / #3c3c3a
- *   title       --text-primary          #262626 / #d4d4d4
- *   body        --login-help-text (→ --text-tertiary-stone) #737373 both
- *   detail      --text-tertiary         #a3a3a3 / #737373
- *   badge       --surface-chip          #e5e5e5 / #3c3c3a
- *   CTA         --login-btn-bg/-text (→ --accent-cta-bg-pure / --accent-pure-cta-fg)
- *               #000 on #fff text / inverted in dark
- *   CTA hover   --login-btn-hover (→ --accent-hover) #262626 / #e5e5e5
- * If those defaults ever change, update this table in the same PR.
+ * PR3(wave4):desktop-login source 固定走新品牌卡(pageKind='desktop-login',
+ * 680×680 r36 + chibi 三表情 + U-10 跨视口缩放;参数权威见 oauthResultPage.ts
+ * 的 renderBrandLoginCallbackPage 头注)。visualKind 由 variant 默认映射
+ * (success→success / error→failure);文案仍由调用方经 main i18n 预翻译传入
+ * (login.browserCallback.* 骨架维持现状,copyKind 仅作验收定位标签)。
  */
 export function renderAuthLoopbackPage(input: AuthLoopbackPageInput): string {
-  return renderOAuthResultPage(input);
+  return renderOAuthResultPage({
+    pageKind: 'desktop-login',
+    copyKind: 'login.browserCallback',
+    ...input,
+  });
+}
+
+// ── Dev-only loopback bridge seam(v6.13,implementation-plan Step 4 WHAT6)─────
+//
+// 浏览器失败卡验证路径:附录 A 的 browser-callback bridge fixture 无法自行进入
+// authManager 的 loopback 闭包(port/state 都是每次尝试的进程内私有值),须由
+// authManager 显式注入一条 dev-only 缝。二选一定型结论 = 「可注入纯 helper +
+// authManager 静态注入」:slot 在本文件(纯逻辑、可单测),authManager 模块级
+// 创建并在 openSystemBrowserAuthorization 内挂接。
+// 安全边界:state 与授权码永不经过 bridge 落盘——fixture 只拿得到 ①渲染完成的
+// HTML(不含 state)与 ②进程内 error 触发入口;packaged 构建 register 直接拒绝,
+// 整条路径不可达(seam 三硬测见 authLoopbackCallback.test.ts)。
+
+/** fixture 可注入的 dev bridge 面(仅 HTML 与进程内触发入口,无 state/凭证)。 */
+export interface AuthLoopbackDevBridge {
+  /** 拿到进程内回调触发入口(fixture 用于模拟 loopback error 回调到达)。 */
+  onCallbackReady?(trigger: (result: AuthLoopbackResult) => void): void;
+  /** 收到回调页最终渲染 HTML(仅 HTML,fixture 可落盘 acceptance/evidence 临时文件供截图)。 */
+  onCallbackHtml?(html: string): void;
+}
+
+export interface AuthLoopbackDevBridgeSlot {
+  /** dev 构建注册 bridge;packaged 构建拒绝注册(返回 false),路径不可达。 */
+  register(bridge: AuthLoopbackDevBridge): boolean;
+  /**
+   * loopback 监听就绪后挂接:把「渲染 + 完成回调」组合成进程内触发入口交给
+   * bridge。trigger 结果与真实 HTTP 回调走同一 render/finish 路径。
+   */
+  attach(finish: (result: AuthLoopbackResult) => void, renderHtml: (result: AuthLoopbackResult) => string): void;
+  /** 真实 HTTP 回调渲染后同步一份 HTML 给 bridge(仅 HTML)。 */
+  notifyHtml(html: string): void;
+}
+
+/**
+ * 创建 dev-only bridge slot(isPackaged()=true 时全部 no-op,代码路径不可达)。
+ * isPackaged 取 getter 而非布尔值:authManager 在模块顶层创建 slot,若此处直接
+ * 读 app.isPackaged 会把 electron 依赖提前到 import 期(单测的 electron mock
+ * 没有 app 时整条 import 链崩),延迟到调用期取值即无此耦合。
+ */
+export function createAuthLoopbackDevBridgeSlot(isPackaged: () => boolean): AuthLoopbackDevBridgeSlot {
+  let bridge: AuthLoopbackDevBridge | null = null;
+  return {
+    register(next) {
+      if (isPackaged()) return false;
+      bridge = next;
+      return true;
+    },
+    attach(finish, renderHtml) {
+      if (isPackaged() || !bridge?.onCallbackReady) return;
+      const current = bridge;
+      current.onCallbackReady?.((result) => {
+        const html = renderHtml(result);
+        current.onCallbackHtml?.(html);
+        finish(result);
+      });
+    },
+    notifyHtml(html) {
+      if (isPackaged()) return;
+      bridge?.onCallbackHtml?.(html);
+    },
+  };
 }
 
 /**

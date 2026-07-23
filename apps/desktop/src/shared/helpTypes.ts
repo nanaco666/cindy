@@ -31,9 +31,7 @@ export type HelpTabId =
   | 'ghosts'
   | 'remote-control';
 
-export type HelpAction =
-  | { kind: 'settings-tab'; tab: HelpTabId }
-  | { kind: 'none' };
+export type HelpAction = { kind: 'settings-tab'; tab: HelpTabId } | { kind: 'none' };
 
 export interface HelpMessage {
   /** Stable identifier for this message within the thread. Renderer-only
@@ -60,8 +58,7 @@ export interface HelpAskRequest {
 }
 
 export type HelpAnswerResult =
-  | { kind: 'ai'; answer: string; action?: HelpAction }
-  | { kind: 'no-answer' };
+  { kind: 'ai'; answer: string; action?: HelpAction } | { kind: 'no-answer' };
 
 /**
  * User-flagged "this answer didn't help" draft.

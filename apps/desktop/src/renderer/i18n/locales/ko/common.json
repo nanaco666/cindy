@@ -2622,10 +2622,10 @@
   "login": {
     "title": "Cindy에 오신 것을 환영합니다",
     "subtitle": "안전한 로그인 방법을 선택하세요",
-    "phone": "휴대폰",
-    "email": "이메일",
     "phonePlaceholder": "휴대폰 번호 입력",
     "emailPlaceholder": "이메일 입력",
+    "invalidEmail": "올바른 이메일 주소를 입력하세요",
+    "invalidPhone": "올바른 전화번호를 입력하세요",
     "working": "잠시만 기다려 주세요...",
     "continue": "계속",
     "or": "또는",
@@ -2659,6 +2659,7 @@
     "verifying": "확인 중...",
     "signIn": "로그인",
     "resendCode": "코드 다시 보내기",
+    "resendCountdown": "{{n}}초 후 다시 보낼 수 있습니다",
     "chooseAccount": "신원 선택",
     "chooseAccountSubtitle": "사용할 개인 또는 조직 신원을 선택하세요",
     "personalAccount": "개인 신원",
@@ -2724,6 +2725,11 @@
       "checkingEnv": "실행 환경 확인 중...",
       "waking": "Cindy를 깨우는 중...",
       "envFailed": "환경 초기화에 실패했습니다. 클릭하여 다시 시도하세요"
+    },
+    "downloadStats": "{{percent}}% · {{speed}} MB/s · {{done}} MB / {{total}} MB",
+    "envFailed": {
+      "title": "환경 초기화에 실패했습니다",
+      "retry": "다시 시도"
     },
     "manifestFailed": {
       "title": "네트워크 연결 실패",

@@ -51,10 +51,16 @@ import { awaitWithStartupTimeout } from './authStartupGate';
 import { syncCanaryFlagAfterAuth } from './canaryFlagSync';
 import {
   createAuthBrowserAuthorizationSlot,
+  createAuthLoopbackDevBridgeSlot,
   parseAuthLoopbackCallback,
   raceAuthBrowserCancellation,
   renderAuthLoopbackPage,
+  type AuthLoopbackDevBridge,
 } from './authLoopbackCallback';
+// dev-only 登录 scenario harness(implementation-plan Step 0 WHAT4):静态 import
+// (main 禁运行时动态 import),生产构建由 vite alias 把整模块替换为空 stub
+// (vite.main.config.ts),运行时另有 app.isPackaged guard 双保险。
+import { resolveLoginScenarioFetch } from '@cindy/auth-client/fixtures';
 
 import { createLogger } from './logger';
 import { buildFocusDeepLink } from './deepLink';
@@ -202,13 +208,22 @@ let accountDeletionRestoredNoticePending = false;
 let confirmedAccountDeletionAuthIdentity: string | null = null;
 
 function createAuthClient(): CindyAuthClient {
+  // 登录 scenario harness 注入点(仅 client 构造参数,不替换 client、不 fake 方法;
+  // zod schema/错误归一/REGION_MISMATCH 路径全真)。guard:!app.isPackaged +
+  // XDT_LOGIN_SCENARIO(值域见 implementation-plan 附录 A,经 restart 脚本
+  // devEnvPrefix 白名单透传)。
+  const scenarioFetch = resolveLoginScenarioFetch({
+    devModeActive: !app.isPackaged,
+    scenario: process.env.XDT_LOGIN_SCENARIO,
+    region: AUTH_REGION,
+  });
   return new CindyAuthClient({
     baseUrl: authServerUrl(),
     region: AUTH_REGION,
     deviceId,
     clientType: 'desktop',
     locale: getResolvedMainLocale(),
-    fetch: async (input, init) => net.fetch(input, init as RequestInit),
+    fetch: scenarioFetch ?? (async (input, init) => net.fetch(input, init as RequestInit)),
   });
 }
 
@@ -386,6 +401,18 @@ export function setAuthSessionTeardown(teardown: AuthSessionTeardown | null): vo
 const BROWSER_AUTH_TIMEOUT_MS = 5 * 60_000;
 const browserAuthorizationSlot = createAuthBrowserAuthorizationSlot();
 
+// Dev-only loopback bridge seam(v6.13,PR3):可注入纯 helper 形态,slot 逻辑在
+// authLoopbackCallback.ts(可单测),此处静态注入 app.isPackaged——packaged 构建
+// register 拒绝、attach/notify 全 no-op,整条路径不可达。fixture 经 register
+// 注入后只拿得到 ①进程内 error 触发入口 ②渲染完成的 HTML;state/授权码不经
+// bridge 落盘(state 仅进程内内存传递)。
+const authLoopbackDevBridgeSlot = createAuthLoopbackDevBridgeSlot(() => app.isPackaged);
+
+/** 附录 A browser-callback bridge fixture 的唯一注入入口(dev-only)。 */
+export function registerAuthLoopbackDevBridge(bridge: AuthLoopbackDevBridge): boolean {
+  return authLoopbackDevBridgeSlot.register(bridge);
+}
+
 async function openSystemBrowserAuthorization(
   input: {
     kind: 'social' | 'sso';
@@ -398,6 +425,23 @@ async function openSystemBrowserAuthorization(
   return new Promise((resolve) => {
     let settled = false;
     let timeout: ReturnType<typeof setTimeout> | null = null;
+    // 回调页语言跟随 app 当前 UI 语言(main 迷你 i18n 复用 renderer 五语文案,
+    // {{appName}} 由 t() 注入品牌名);成功 / 失败分别渲染,失败附原始错误码。
+    // 抽成局部渲染器供真实 HTTP 回调与 dev bridge 触发路径共用(同一 HTML)。
+    const renderCallbackPage = (result: { code: string } | { error: string }): string => {
+      const isError = 'error' in result;
+      return renderAuthLoopbackPage({
+        htmlLang: getResolvedMainLocale(),
+        variant: isError ? 'error' : 'success',
+        title: t(isError ? 'login.browserCallback.errorTitle' : 'login.browserCallback.successTitle'),
+        body: t(isError ? 'login.browserCallback.errorBody' : 'login.browserCallback.successBody'),
+        detail: isError ? result.error : undefined,
+        action: {
+          href: buildFocusDeepLink('desktop-login'),
+          label: t('login.browserCallback.returnButton'),
+        },
+      });
+    };
     const server = createServer((req, res) => {
       if (settled || !req.url) {
         res.writeHead(404).end();
@@ -408,23 +452,10 @@ async function openSystemBrowserAuthorization(
         res.writeHead(404).end();
         return;
       }
-      // 回调页语言跟随 app 当前 UI 语言(main 迷你 i18n 复用 renderer 四语文案,
-      // {{appName}} 由 t() 注入品牌名);成功 / 失败分别渲染,失败附原始错误码。
-      const isError = 'error' in result;
+      const html = renderCallbackPage(result);
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-      res.end(
-        renderAuthLoopbackPage({
-          htmlLang: getResolvedMainLocale(),
-          variant: isError ? 'error' : 'success',
-          title: t(isError ? 'login.browserCallback.errorTitle' : 'login.browserCallback.successTitle'),
-          body: t(isError ? 'login.browserCallback.errorBody' : 'login.browserCallback.successBody'),
-          detail: isError ? result.error : undefined,
-          action: {
-            href: buildFocusDeepLink('desktop-login'),
-            label: t('login.browserCallback.returnButton'),
-          },
-        }),
-      );
+      res.end(html);
+      authLoopbackDevBridgeSlot.notifyHtml(html);
       finish(result);
     });
 
@@ -461,6 +492,8 @@ async function openSystemBrowserAuthorization(
       const address = server.address() as AddressInfo;
       const redirectUri = `http://127.0.0.1:${address.port}/auth/callback`;
       const authUrl = createAuthClient().buildAuthorizeUrl({ ...input, redirectUri });
+      // dev bridge 挂接(packaged no-op):fixture 触发与真实回调走同一渲染/finish。
+      authLoopbackDevBridgeSlot.attach(finish, renderCallbackPage);
       timeout = setTimeout(() => finish({ error: 'USER_CANCELLED' }), BROWSER_AUTH_TIMEOUT_MS);
       void shell.openExternal(authUrl).catch((error) => {
         log.warn('open auth URL in system browser failed', error);

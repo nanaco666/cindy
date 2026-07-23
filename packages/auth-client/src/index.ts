@@ -1,4 +1,5 @@
 export { AuthApiError, CindyAuthClient } from "./client.js";
+export { isValidEmail } from "./email.js";
 export type {
   AuthClientOptions,
   AuthFetch,

@@ -301,7 +301,24 @@ function invalidateStalePrebundleCache(): void {
 
 export default defineConfig(({ command }) => {
   if (command === 'serve') invalidateStalePrebundleCache();
-  return rendererConfig;
+  if (command !== 'build') return rendererConfig;
+  // 仅 fixtures 生产排除条件(implementation-plan v6.17 允许范围):renderer 现状
+  // 不 import 登录 scenario fixtures,此 alias 为防御性兜底——未来任何 renderer
+  // 代码引用 '@cindy/auth-client/fixtures',生产构建也只会拿到空 stub
+  // (check-login-production-guard.mjs 以 sentinel 扫描产物兜底)。
+  return {
+    ...rendererConfig,
+    resolve: {
+      ...rendererConfig.resolve,
+      alias: {
+        ...rendererConfig.resolve.alias,
+        '@cindy/auth-client/fixtures': path.resolve(
+          __dirname,
+          '../../packages/auth-client/fixtures/loginScenarios.production-stub.ts',
+        ),
+      },
+    },
+  };
 });
 
 const rendererConfig = {

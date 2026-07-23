@@ -1,0 +1,45 @@
+{
+  "evidenceSha256": "a09b9a980a39bfafbcc0900e2f237cbf2a05868acd68dfe1da492e54154e6f8b",
+  "testedCodeCommit": "ffffffffffffffffffffffffffffffffffffffff",
+  "capturedCellRef": {
+    "rowId": "mobile.wordmark.asset",
+    "device": "android-phone",
+    "locale": "zh-CN",
+    "region": "global"
+  },
+  "reuseGroupId": "g-wm-asset-android-phone-global",
+  "applicableCellRefs": [
+    {
+      "rowId": "mobile.wordmark.asset",
+      "device": "android-phone",
+      "locale": "zh-CN",
+      "region": "global"
+    },
+    {
+      "rowId": "mobile.wordmark.asset",
+      "device": "android-phone",
+      "locale": "zh-TW",
+      "region": "global"
+    },
+    {
+      "rowId": "mobile.wordmark.asset",
+      "device": "android-phone",
+      "locale": "en",
+      "region": "global"
+    },
+    {
+      "rowId": "mobile.wordmark.asset",
+      "device": "android-phone",
+      "locale": "ja",
+      "region": "global"
+    },
+    {
+      "rowId": "mobile.wordmark.asset",
+      "device": "android-phone",
+      "locale": "ko",
+      "region": "global"
+    }
+  ],
+  "scenario": "fixture 采集(self-test)",
+  "capturedAt": "2026-07-20T00:00:00.000Z"
+}

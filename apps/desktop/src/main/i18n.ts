@@ -33,6 +33,17 @@ const resources: Record<SupportedLocale, Record<string, unknown>> = {
   ko: koCommon as Record<string, unknown>,
 };
 
+/**
+ * 与 renderer i18next 的 fallbackLng 对齐:缺 key 先落本 locale 再落 en。
+ * 链尾统一由 t() 落回 key 本身。
+ */
+const FALLBACK_CHAIN: Record<SupportedLocale, readonly SupportedLocale[]> = {
+  'zh-CN': ['zh-CN', 'en'],
+  en: ['en'],
+  ja: ['ja', 'en'],
+  ko: ['ko', 'en'],
+};
+
 let cachedLocale: SupportedLocale | null = null;
 
 function resolveOsLocale(): SupportedLocale {
@@ -90,8 +101,8 @@ function lookup(bundle: Record<string, unknown>, key: string): string | null {
 
 /**
  * Translate a dot-path key (e.g. 'update.moveToApplications.title') using
- * the OS-resolved main-side locale, falling back to English, then to the
- * key itself.
+ * the OS-resolved main-side locale, walking the locale's FALLBACK_CHAIN
+ * (zh-TW → zh-CN → en; others → en), then falling back to the key itself.
  *
  * 与 renderer i18next 的 interpolation.defaultVariables 对齐:locale 文案里的
  * {{appName}} 由品牌常量注入(本迷你 i18n 不支持其它变量,main 消费的 key 若
@@ -99,6 +110,30 @@ function lookup(bundle: Record<string, unknown>, key: string): string | null {
  */
 export function t(key: string): string {
   const loc = getMainLocale();
-  const raw = lookup(resources[loc], key) ?? lookup(resources[DEFAULT_LOCALE], key) ?? key;
+  let raw: string | null = null;
+  for (const chainLocale of FALLBACK_CHAIN[loc]) {
+    raw = lookup(resources[chainLocale], key);
+    if (raw !== null) break;
+  }
+  raw ??= lookup(resources[DEFAULT_LOCALE], key) ?? key;
   return raw.replaceAll('{{appName}}', BRAND_NAME);
+}
+
+/**
+ * 测试专用:用注入的资源表跑同一条 fallback 链(i18nFallback.test.ts 用人为
+ * 删 key 的隔离负 fixture 验证 zh-TW → zh-CN → en → key,不污染真实资源)。
+ */
+export function lookupWithFallbackForTest(
+  bundles: Partial<Record<SupportedLocale, Record<string, unknown>>>,
+  locale: SupportedLocale,
+  key: string,
+): string {
+  for (const chainLocale of FALLBACK_CHAIN[locale]) {
+    const bundle = bundles[chainLocale];
+    if (!bundle) continue;
+    const raw = lookup(bundle, key);
+    if (raw !== null) return raw;
+  }
+  const fallbackBundle = bundles[DEFAULT_LOCALE];
+  return (fallbackBundle ? lookup(fallbackBundle, key) : null) ?? key;
 }

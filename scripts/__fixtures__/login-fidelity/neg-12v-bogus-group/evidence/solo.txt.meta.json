@@ -1,0 +1,20 @@
+{
+  "evidenceSha256": "91d81311327c83d63715eeb374d94e5468eebecc7af5a51f37d24d9c838252b5",
+  "testedCodeCommit": "ffffffffffffffffffffffffffffffffffffffff",
+  "capturedAt": "2026-07-20T00:00:00.000Z",
+  "capturedCellRef": {
+    "rowId": "desktop.brand-background.style",
+    "device": "mac",
+    "locale": "zh-CN",
+    "region": "cn"
+  },
+  "reuseGroupId": "g-nonexistent",
+  "applicableCellRefs": [
+    {
+      "rowId": "desktop.brand-background.style",
+      "device": "mac",
+      "locale": "zh-CN",
+      "region": "cn"
+    }
+  ]
+}

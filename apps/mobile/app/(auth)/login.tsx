@@ -1,31 +1,12 @@
-import { useEffect, useRef, useState } from 'react';
-import {
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  View,
-} from 'react-native';
-import {
-  Building2,
-  ChevronLeft,
-  Mail,
-  Phone,
-  UserRound,
-} from 'lucide-react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Animated, Easing, Platform, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   AppleAuthenticationButton,
   AppleAuthenticationButtonStyle,
   AppleAuthenticationButtonType,
 } from 'expo-apple-authentication';
-import {
-  AuthApiError,
-  type AccountDeletionStatus,
-  type SocialProvider,
-  type VerificationKind,
-} from '@cindy/auth-client';
+import type { AccountDeletionStatus, SocialProvider, VerificationKind } from '@cindy/auth-client';
 
 import { useAuth } from '@/auth/AuthContext';
 import {
@@ -34,41 +15,110 @@ import {
   sanitizeCnPhoneInput,
   toCnE164,
 } from '@/auth/cnPhone';
+import { AuthApiError, isValidEmail } from '@cindy/auth-client';
 import { authErrorText, getAuthLocale, loginText } from '@/auth/loginMessages';
 import { isNativeSocialProviderSupported } from '@/auth/nativeSocial';
 import { Text, TextInput } from '@/components/AppText';
 import { MainWindowActionButton } from '@/components/MobilePrimitives';
-import { getMobileConfigIssues } from '@/config/env';
 import { useObserve } from '@/observability/observe';
 import { useTheme, useThemedStyles, type ThemeColors } from '@/theme';
 import {
-  fontWeight,
-  iconSize,
-  lineHeight,
-  radius,
-  spacing,
-  typeScale,
-} from '@/theme/tokens';
+  LOGIN_HANDOFF_EASING,
+  LOGIN_HANDOFF_TIMING,
+  loginHandoffPanelDelayMs,
+  type LoginHandoffPhase,
+} from '@/auth/loginHandoff';
+import { computeLoginKeyboardShift } from '@/auth/loginKeyboardAvoidance';
+import { useLoginHandoffOptional } from '@/auth/MobileLoginHandoffContext';
+import {
+  createResendDeadline,
+  LOGIN_CONTROL,
+  LOGIN_ERROR_TEXT,
+  LOGIN_GROUP,
+  LOGIN_LOADING_RING,
+  LOGIN_METHOD_ROW,
+  LOGIN_SUBTITLE,
+  LOGIN_TITLE,
+  type LoginSurfaceMode,
+} from '@/auth/loginSkinLayout';
+import { useLoginKeyboardRect } from '@/session/useMobileKeyboardState';
+import {
+  LoginBackButton,
+  LoginErrorText,
+  LoginLoadingRing,
+  LoginMethodRow,
+  LoginPanel,
+  LoginPrimaryButton,
+  LoginResendCountdown,
+  LoginSkinInput,
+  LoginSkinPhoneInput,
+  LoginSocialButton,
+  LoginSocialGlyph,
+  LoginSocialRow,
+  LoginTextLinkSlot,
+  LoginTitleBlock,
+} from '@/components/LoginSkinControls';
+import {
+  MobileLoginHandoffStage,
+  useLoginSurface,
+} from '@/components/MobileLoginHandoffStage';
+import { AUTH_REGION, getMobileConfigIssues } from '@/config/env';
+import { resolveIdentifierMethod } from '@/auth/loginIdentifierMethod';
+import { fontWeight, lineHeight, loginColors, loginSizes, radius, spacing, typeScale } from '@/theme/tokens';
 
-/** Auth-server login presentation. Credentials and tickets remain in AuthContext. */
+/**
+ * Auth-server login presentation(PR4a 全登录态皮肤化,implementation-plan Step 5 WHAT3)。
+ * Credentials and tickets remain in AuthContext——本次仅换渲染层:
+ * 状态机分支 / dispatchLoginAction 调用 / testID / 双端差异措辞全部 verbatim 保留;
+ * 布局改为 MobileLoginHandoffStage(背景+品牌)+ 750 stage 坐标的 Log_in 组
+ * (x=35,loginY,680×560,figma §5.1 移动帧;键盘位移归 PR4b)。
+ */
 export default function LoginScreen() {
-  const styles = useThemedStyles(makeStyles);
-  const { colors, mode } = useTheme();
   const auth = useAuth();
   const { markInteractive } = useObserve();
+  const stage = useLoginSurface();
+  const insets = useSafeAreaInsets();
+  const handoff = useLoginHandoffOptional();
+  const handoffDispatch = handoff?.dispatch;
+  // readiness 锚之一(v6.3):登录面板已挂载(防面板未挂载先播 panel 步)
+  useEffect(() => {
+    handoffDispatch?.({ type: 'panel-mounted' });
+  }, [handoffDispatch]);
+  const handoffPhase: LoginHandoffPhase = handoff?.state.phase ?? 'done';
   const initializedLoginRef = useRef(false);
-  const [identifierKind, setIdentifierKind] =
-    useState<VerificationKind>('email');
+  // identifier 形态 = 构建区域确定性推导(用户拍板 2026-07-21:手机/邮箱分区互斥,
+  // 双 tab 切换移除);providers 仅兜底区域首选方式未下发的场景。
+  const identifierKind: VerificationKind = useMemo(
+    () =>
+      auth.loginState?.step === 'identifier'
+        ? resolveIdentifierMethod(AUTH_REGION, auth.loginState.providers)
+        : AUTH_REGION === 'global'
+          ? 'email'
+          : 'phone',
+    [auth.loginState],
+  );
   const [identifier, setIdentifier] = useState('');
-  // 企业 SSO 入口子视图：在 identifier 步骤内输入组织标识（本地展示态）
+  // identifier 本地格式校验错误(设计稿 347:1727:非法邮箱/手机号 → 输入框红边 +
+  // 底部红字「请输入正确邮箱」/「请输入正确手机号」)。提交前本地拦截、不 dispatch
+  // (规则 9;与桌面 LoginPage 同源语义),与 server authError 互斥展示(本地优先),
+  // 输入变更即清除。null = 无本地格式错误。
+  const [identifierFormatError, setIdentifierFormatError] =
+    useState<VerificationKind | null>(null);
+  // 企业 SSO 入口子视图:在 identifier 步骤内输入组织标识(本地展示态)
   const [ssoOrgMode, setSsoOrgMode] = useState(false);
   const [ssoOrg, setSsoOrg] = useState('');
   const [verificationCode, setVerificationCode] = useState('');
   const [ssoVerificationCode, setSsoVerificationCode] = useState('');
   const [bindingContact, setBindingContact] = useState('');
   const [bindingCode, setBindingCode] = useState('');
+  // 42s 重发倒计时(Step 3a 契约):绝对 deadline,进入 verification-code 步骤
+  // (= request-code 成功返回)起算;重发成功重置、失败保持;离开步骤清空。
+  const [resendDeadline, setResendDeadline] = useState<number | null>(null);
   const [accountDeletionStatus, setAccountDeletionStatus] =
     useState<AccountDeletionStatus | null>(null);
+  const { mode } = useTheme();
+  // 官方 Apple 按钮走 makeStyles 的 appleButton(合规按钮不可皮肤化,复用主干样式)。
+  const styles = useThemedStyles(makeStyles);
   const configIssues = getMobileConfigIssues();
   const disabled = auth.isBusy || !auth.initialized || configIssues.length > 0;
 
@@ -85,13 +135,25 @@ export default function LoginScreen() {
 
   useEffect(() => {
     if (auth.loginState?.step !== 'identifier') return;
-    setIdentifierKind(auth.loginState.providers.attribution);
     setSsoOrgMode(false);
     setVerificationCode('');
     setSsoVerificationCode('');
     setBindingContact('');
     setBindingCode('');
+    setIdentifierFormatError(null);
   }, [auth.loginState]);
+
+  // 倒计时起算/清理:进入 verification-code(request-code 成功)即重置 deadline;
+  // 离开该步骤置 null(unmount 时组件内部 interval 一并清理)。
+  const verificationIdentity =
+    auth.loginState?.step === 'verification-code'
+      ? `${auth.loginState.kind}:${auth.loginState.identifier}`
+      : null;
+  useEffect(() => {
+    setResendDeadline(
+      verificationIdentity == null ? null : createResendDeadline(Date.now()),
+    );
+  }, [verificationIdentity]);
 
   useEffect(() => {
     if (
@@ -164,11 +226,12 @@ export default function LoginScreen() {
 
   const reset = () => {
     auth.clearAuthError();
+    setIdentifierFormatError(null);
     void auth.dispatchLoginAction({ type: 'reset' });
   };
 
-  // 返回按钮固定在屏幕顶栏，不随各步骤内容渲染：首屏(identifier)无返回；
-  // SSO 组织标识子视图退回首屏输入；其余步骤(选方式/验证码/选身份/绑定)整体重置。
+  // 返回按钮改为面板内左上角(figma §4.6 @(20,20)):首屏(identifier)无返回;
+  // SSO 组织标识 子视图退回首屏输入;其余步骤(选方式/验证码/选身份/绑定)整体重置。
   const step = auth.loginState?.step;
   const backAction =
     step === 'identifier'
@@ -178,9 +241,22 @@ export default function LoginScreen() {
             setSsoOrgMode(false);
           }
         : null
-      : step
+      : step && step !== 'browser-redirect' && step !== 'completed'
         ? reset
         : null;
+
+  const error = authErrorText(auth.authError);
+  const errorNode = error ? (
+    <LoginErrorText testID="login.error">{error}</LoginErrorText>
+  ) : null;
+  const backNode = backAction ? (
+    <LoginBackButton
+      disabled={auth.isBusy}
+      label={loginText('back')}
+      onPress={backAction}
+      testID="login.backButton"
+    />
+  ) : null;
 
   const renderIdentifier = () => {
     const state = auth.loginState;
@@ -189,7 +265,11 @@ export default function LoginScreen() {
     const socialProviders = providers.social.filter(
       isNativeSocialProviderSupported,
     );
-    const showTabs = providers.email && providers.phone;
+    // App Store 合规:Apple 必须用官方 Sign in with Apple 按钮(不可皮肤化),
+    // 从统一社交圆钮行中拆出、单独全宽渲染;其余(Google/微信/SSO)保留皮肤圆钮。
+    const nonAppleProviders = socialProviders.filter(
+      (provider) => provider !== 'apple',
+    );
     if (ssoOrgMode) {
       const submitSsoOrg = () => {
         const value = ssoOrg.trim();
@@ -197,49 +277,62 @@ export default function LoginScreen() {
         void auth.dispatchLoginAction({ type: 'discover-sso-org', org: value });
       };
       return (
-        <>
-          <StepHeader
+        <LoginPanel testID="login.panel.ssoOrg">
+          {backNode}
+          <LoginTitleBlock
             title={loginText('ssoOrgTitle')}
             subtitle={loginText('ssoOrgSubtitle')}
           />
-          <TextInput
+          <LoginSkinInput
             autoCapitalize="none"
             autoComplete="off"
             autoCorrect={false}
             editable={!disabled}
+            error={!!error}
             maxLength={253}
             onChangeText={setSsoOrg}
             onSubmitEditing={submitSsoOrg}
             placeholder={loginText('ssoOrgPlaceholder')}
-            placeholderTextColor={colors.textTertiary}
             returnKeyType="go"
-            style={styles.input}
             testID="login.ssoOrgInput"
             value={ssoOrg}
           />
-          <MainWindowActionButton
-            action={{
-              busy: auth.isBusy,
-              disabled: disabled || !ssoOrg.trim(),
-              label: loginText('continue'),
-              onPress: submitSsoOrg,
-              testID: 'login.ssoOrgContinueButton',
-              tone: 'primary',
-            }}
-            style={styles.fullButton}
+          <LoginTextLinkSlot tone="secondary">
+            {loginText('ssoOrgHint')}
+          </LoginTextLinkSlot>
+          <LoginPrimaryButton
+            busy={auth.isBusy}
+            disabled={disabled || !ssoOrg.trim()}
+            label={loginText('continue')}
+            onPress={submitSsoOrg}
+            testID="login.ssoOrgContinueButton"
           />
-          <Text style={styles.helper}>{loginText('ssoOrgHint')}</Text>
-        </>
+          {errorNode}
+        </LoginPanel>
       );
     }
     const submit = () => {
       if (identifierKind === 'email') {
         const value = identifier.trim();
         if (!value) return;
+        // 非法邮箱格式本地拦截 → 红边 + 红字「请输入正确邮箱」(设计稿 347:1727),
+        // 不 dispatch discover(与桌面 LoginPage 同源)。
+        if (!isValidEmail(value)) {
+          auth.clearAuthError();
+          setIdentifierFormatError('email');
+          return;
+        }
+        setIdentifierFormatError(null);
         void auth.dispatchLoginAction({ type: 'discover', email: value });
       } else {
-        // 手机号登录只支持中国大陆号码:UI 固定 +86,输入框只存本地号,提交时拼回完整号码
-        if (!isCompleteCnPhone(identifier)) return;
+        // 手机号登录只支持中国大陆号码:UI 固定 +86,输入框只存本地号,提交时拼回完整号码。
+        // 号段不合法本地拦截并提示「请输入正确手机号」(设计稿同款红边+红字)。
+        if (!isCompleteCnPhone(identifier)) {
+          auth.clearAuthError();
+          setIdentifierFormatError('phone');
+          return;
+        }
+        setIdentifierFormatError(null);
         void auth.dispatchLoginAction({
           type: 'request-code',
           kind: 'phone',
@@ -247,146 +340,135 @@ export default function LoginScreen() {
         });
       }
     };
+    // 本地格式错误优先展示(设计稿「请输入正确邮箱/手机号」),否则回退 server 错误文案。
+    const formatErrorText = identifierFormatError
+      ? loginText(identifierFormatError === 'email' ? 'invalidEmail' : 'invalidPhone')
+      : null;
+    const identifierHasError = !!error || identifierFormatError != null;
+    const identifierErrorNode = formatErrorText ? (
+      <LoginErrorText testID="login.error">{formatErrorText}</LoginErrorText>
+    ) : (
+      errorNode
+    );
     return (
       <>
-        {showTabs ? (
-          <View style={styles.segmented}>
-            {(['phone', 'email'] as const).map((kind) => (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityState={{ selected: identifierKind === kind }}
-                disabled={disabled}
-                key={kind}
-                onPress={() => {
-                  setIdentifierKind(kind);
-                  setIdentifier('');
-                  auth.clearAuthError();
-                }}
-                style={({ pressed }) => [
-                  styles.segment,
-                  identifierKind === kind && styles.segmentSelected,
-                  pressed && styles.pressed,
-                ]}
-                testID={`login.${kind}Tab`}
-              >
-                {kind === 'phone' ? (
-                  <Phone color={colors.textSecondary} size={iconSize.md} />
-                ) : (
-                  <Mail color={colors.textSecondary} size={iconSize.md} />
-                )}
-                <Text style={styles.segmentText}>{loginText(kind)}</Text>
-              </Pressable>
-            ))}
-          </View>
-        ) : null}
-        {identifierKind === 'phone' ? (
-          <View style={styles.phoneRow}>
-            {/* 固定 +86:手机号登录只支持中国大陆号码,前缀不可切换 */}
-            <Text style={styles.phonePrefix}>{CN_PHONE_PREFIX}</Text>
-            <TextInput
+        <LoginPanel testID="login.panel.identifier">
+          <LoginTitleBlock
+            title={loginText('title')}
+            titleTestID="login.title"
+          />
+          {identifierKind === 'phone' ? (
+            <LoginSkinPhoneInput
               autoComplete="tel"
               editable={!disabled}
+              error={identifierHasError}
               keyboardType="phone-pad"
-              onChangeText={(text) => setIdentifier(sanitizeCnPhoneInput(text))}
+              onChangeText={(text) => {
+                if (identifierFormatError) setIdentifierFormatError(null);
+                setIdentifier(sanitizeCnPhoneInput(text));
+              }}
               onSubmitEditing={submit}
               placeholder={loginText('phonePlaceholder')}
-              placeholderTextColor={colors.textTertiary}
+              prefix={CN_PHONE_PREFIX}
               returnKeyType="go"
-              style={styles.phoneRowInput}
               testID="login.identifierInput"
               value={identifier}
             />
-          </View>
-        ) : (
-          <TextInput
-            autoCapitalize="none"
-            autoComplete="email"
-            autoCorrect={false}
-            editable={!disabled}
-            keyboardType="email-address"
-            onChangeText={setIdentifier}
-            onSubmitEditing={submit}
-            placeholder={loginText('emailPlaceholder')}
-            placeholderTextColor={colors.textTertiary}
-            returnKeyType="go"
-            style={styles.input}
-            testID="login.identifierInput"
-            value={identifier}
-          />
-        )}
-        <MainWindowActionButton
-          action={{
-            busy: auth.isBusy,
-            disabled:
+          ) : (
+            <LoginSkinInput
+              autoCapitalize="none"
+              autoComplete="email"
+              autoCorrect={false}
+              editable={!disabled}
+              error={identifierHasError}
+              keyboardType="email-address"
+              onChangeText={(text) => {
+                if (identifierFormatError) setIdentifierFormatError(null);
+                setIdentifier(text);
+              }}
+              onSubmitEditing={submit}
+              placeholder={loginText('emailPlaceholder')}
+              returnKeyType="go"
+              testID="login.identifierInput"
+              value={identifier}
+            />
+          )}
+          <LoginPrimaryButton
+            busy={auth.isBusy}
+            disabled={
               disabled ||
               (identifierKind === 'phone'
                 ? !isCompleteCnPhone(identifier)
-                : !identifier.trim()),
-            label: loginText('continue'),
-            onPress: submit,
-            testID: 'login.continueButton',
-            tone: 'primary',
-          }}
-          style={styles.fullButton}
-        />
-        {socialProviders.length > 0 ? (
-          <>
-            <Divider />
-            {socialProviders.map((provider) =>
-              provider === 'apple' ? (
-                <AppleAuthenticationButton
-                  accessibilityState={{ disabled }}
-                  buttonStyle={
-                    mode === 'dark'
-                      ? AppleAuthenticationButtonStyle.WHITE
-                      : AppleAuthenticationButtonStyle.BLACK
-                  }
-                  buttonType={AppleAuthenticationButtonType.SIGN_IN}
-                  cornerRadius={24}
-                  key={provider}
-                  onPress={() => {
-                    if (disabled) return;
-                    void auth.dispatchLoginAction({
-                      type: 'native-social',
-                      provider,
-                    });
-                  }}
-                  pointerEvents={disabled ? 'none' : 'auto'}
-                  style={styles.appleButton}
-                  testID="login.appleButton"
-                />
-              ) : (
-                <MainWindowActionButton
-                  action={{
-                    disabled,
-                    label: socialLabel(provider),
-                    onPress: () =>
-                      void auth.dispatchLoginAction({
-                        type: 'native-social',
-                        provider,
-                      }),
-                    testID: `login.${provider}Button`,
-                  }}
-                  key={provider}
-                  style={styles.fullButton}
-                />
-              ),
-            )}
-          </>
+                : !identifier.trim())
+            }
+            label={loginText('continue')}
+            onPress={submit}
+            testID="login.continueButton"
+          />
+          {identifierErrorNode}
+        </LoginPanel>
+        {/* App Store 合规:Apple 官方 Sign in with Apple 按钮全宽单列,不可皮肤化
+            (mobileAuthServerLogin 守护测试 + Apple 审核硬要求;socialProviders 已按 iOS
+            过滤,仅 iOS 且可用时渲染)。视觉不完全跟随统一圆钮皮肤是 Apple 硬性规范所致。 */}
+        {socialProviders.includes('apple') ? (
+          <AppleAuthenticationButton
+            accessibilityState={{ disabled }}
+            buttonStyle={
+              mode === 'dark'
+                ? AppleAuthenticationButtonStyle.WHITE
+                : AppleAuthenticationButtonStyle.BLACK
+            }
+            buttonType={AppleAuthenticationButtonType.SIGN_IN}
+            cornerRadius={24}
+            onPress={() => {
+              if (disabled) return;
+              void auth.dispatchLoginAction({
+                type: 'native-social',
+                provider: 'apple',
+              });
+            }}
+            pointerEvents={disabled ? 'none' : 'auto'}
+            style={styles.appleButton}
+            testID="login.appleButton"
+          />
         ) : null}
-        {/* 企业 SSO 入口：输入组织标识发起单点登录（国内版隐藏邮箱后企业用户的登录路径） */}
-        <MainWindowActionButton
-          action={{
-            disabled,
-            label: loginText('ssoEntry'),
-            onPress: () => {
+        {/* 第三方圆钮行:Apple 之外的原生方式驱动;企业 SSO = 行内最后一颗(329:243) */}
+        <LoginSocialRow count={nonAppleProviders.length + 1}>
+          {nonAppleProviders.map((provider) => (
+            <LoginSocialButton
+              key={provider}
+              label={socialLabel(provider)}
+              busy={disabled}
+              onPress={() => {
+                // SC-SOC-7: in-flight(disabled)期间 no-op 防重复发起;行为层 guard,
+                // 零视觉变化(圆钮已无 disabled 态 per §10 拍板,不回填 disabled 视觉)。
+                if (disabled) return;
+                void auth.dispatchLoginAction({
+                  type: 'native-social',
+                  provider,
+                });
+              }}
+              // 对象展开保持 testID: 键形态(mobileAuthServerLogin 守护测试锚定该字面)
+              {...{ testID: `login.${provider}Button` }}
+            >
+              <LoginSocialGlyph provider={provider} />
+            </LoginSocialButton>
+          ))}
+          {/* 企业 SSO 入口:输入组织标识 发起单点登录(国内版隐藏邮箱后企业用户的登录路径) */}
+          <LoginSocialButton
+            label={loginText('ssoEntry')}
+            busy={disabled}
+            onPress={() => {
+              // SC-SOC-7: in-flight 期间 no-op(行为层 guard,无 disabled 视觉回填)。
+              if (disabled) return;
               auth.clearAuthError();
               setSsoOrgMode(true);
-            },
-            testID: 'login.ssoEntryButton',
-          }}
-          style={styles.fullButton}
-        />
+            }}
+            testID="login.ssoEntryButton"
+          >
+            <LoginSocialGlyph provider="sso" />
+          </LoginSocialButton>
+        </LoginSocialRow>
       </>
     );
   };
@@ -398,11 +480,16 @@ export default function LoginScreen() {
     const emailAllowed =
       state.methods.some((method) => method.type === 'email_code') &&
       !ssoMethods.some((method) => method.ssoRequired);
-    // 命中企业域名时按 console 同款框架提示「企业身份 / 个人身份」；无 SSO 时保持纯邮箱确认
+    // 命中企业域名时按 console 同款框架提示「企业身份 / 个人身份」;无 SSO 时保持纯邮箱确认
     const orgName = ssoMethods[0]?.orgName;
+    // sso-org 入口来源(无邮箱上下文)行起点 148,邮箱 discovery 来源 158(demo 呈现仲裁)
+    const firstRowTop = state.email
+      ? LOGIN_METHOD_ROW.firstRowTopDefault
+      : LOGIN_METHOD_ROW.firstRowTopSsoOrg;
     return (
-      <>
-        <StepHeader
+      <LoginPanel testID="login.panel.methodChoice">
+        {backNode}
+        <LoginTitleBlock
           title={loginText('chooseMethod')}
           subtitle={
             orgName
@@ -410,56 +497,54 @@ export default function LoginScreen() {
                 ? loginText('orgDetected')
                     .replace('{org}', orgName)
                     .replace('{email}', state.email)
-                : // 企业 SSO 入口路径没有邮箱上下文，只提示命中的企业
+                : // 企业 SSO 入口路径没有邮箱上下文,只提示命中的企业
                   loginText('ssoOrgDetected').replace('{org}', orgName)
               : state.email
           }
         />
-        {ssoMethods.map((method) => (
-          <MainWindowActionButton
-            action={{
-              disabled,
-              label:
-                ssoMethods.length > 1
-                  ? `${loginText('enterpriseLogin')} · ${method.connectionName || method.orgName}`
-                  : loginText('enterpriseLogin'),
-              onPress: () =>
-                void auth.dispatchLoginAction({
-                  type: 'start-sso',
-                  connectionId: method.connectionId,
-                  label: method.connectionName || method.orgName,
-                }),
-              testID: `login.sso.${method.connectionId}`,
-              tone: 'primary',
-            }}
+        {ssoMethods.map((method, index) => (
+          <LoginMethodRow
+            disabled={disabled}
             key={method.connectionId}
-            style={styles.fullButton}
+            onPress={() =>
+              void auth.dispatchLoginAction({
+                type: 'start-sso',
+                connectionId: method.connectionId,
+                label: method.connectionName || method.orgName,
+              })
+            }
+            testID={`login.sso.${method.connectionId}`}
+            title={
+              ssoMethods.length > 1
+                ? `${loginText('enterpriseLogin')} · ${method.connectionName || method.orgName}`
+                : loginText('enterpriseLogin')
+            }
+            top={firstRowTop + index * LOGIN_METHOD_ROW.rowStep}
           />
         ))}
         {emailAllowed ? (
-          <MainWindowActionButton
-            action={{
-              busy: auth.isBusy,
-              disabled,
-              label: loginText(
-                ssoMethods.length > 0 ? 'personalLogin' : 'emailCode',
-              ),
-              onPress: () =>
-                void auth.dispatchLoginAction({
-                  type: 'request-code',
-                  kind: 'email',
-                  identifier: state.email,
-                }),
-              testID: 'login.emailCodeButton',
-              tone: ssoMethods.length === 0 ? 'primary' : 'secondary',
-            }}
-            style={styles.fullButton}
+          <LoginMethodRow
+            disabled={disabled}
+            icon="person"
+            onPress={() =>
+              void auth.dispatchLoginAction({
+                type: 'request-code',
+                kind: 'email',
+                identifier: state.email,
+              })
+            }
+            testID="login.emailCodeButton"
+            title={loginText(
+              ssoMethods.length > 0 ? 'personalLogin' : 'emailCode',
+            )}
+            top={firstRowTop + ssoMethods.length * LOGIN_METHOD_ROW.rowStep}
           />
         ) : null}
         {ssoMethods.some((method) => method.ssoRequired) ? (
-          <Text style={styles.helper}>{loginText('ssoRequired')}</Text>
+          <LoginTextLinkSlot top={380}>{loginText('ssoRequired')}</LoginTextLinkSlot>
         ) : null}
-      </>
+        {errorNode}
+      </LoginPanel>
     );
   };
 
@@ -475,45 +560,46 @@ export default function LoginScreen() {
         code: verificationCode,
       });
     };
+    // 重发:成功(dispatch 返回 true)重置 deadline,失败保持当前 deadline(Step 3a)
+    const resend = async () => {
+      const ok = await auth.dispatchLoginAction({
+        type: 'request-code',
+        kind: state.kind,
+        identifier: state.identifier,
+      });
+      if (ok) setResendDeadline(createResendDeadline(Date.now()));
+    };
     return (
-      <>
-        <StepHeader
+      <LoginPanel testID="login.panel.verification">
+        {backNode}
+        <LoginTitleBlock
           title={loginText('enterCode')}
           subtitle={`${loginText('codeSentTo')} ${state.identifier}`}
         />
         <CodeInput
           disabled={disabled}
+          error={!!error}
           onChange={setVerificationCode}
           onSubmit={verify}
           value={verificationCode}
         />
-        <MainWindowActionButton
-          action={{
-            busy: auth.isBusy,
-            disabled: disabled || verificationCode.length !== 6,
-            label: loginText('signIn'),
-            onPress: verify,
-            testID: 'login.verifyButton',
-            tone: 'primary',
-          }}
-          style={styles.fullButton}
+        <LoginResendCountdown
+          countdownTemplate={loginText('resendCountdown')}
+          deadline={resendDeadline}
+          disabled={disabled}
+          onResend={() => void resend()}
+          resendLabel={loginText('resendCode')}
+          testID="login.resendButton"
         />
-        <MainWindowActionButton
-          action={{
-            disabled,
-            label: loginText('resendCode'),
-            onPress: () =>
-              void auth.dispatchLoginAction({
-                type: 'request-code',
-                kind: state.kind,
-                identifier: state.identifier,
-              }),
-            testID: 'login.resendButton',
-          }}
-          density="compact"
-          style={styles.fullButton}
+        <LoginPrimaryButton
+          busy={auth.isBusy}
+          disabled={disabled || verificationCode.length !== 6}
+          label={loginText('signIn')}
+          onPress={verify}
+          testID="login.verifyButton"
         />
-      </>
+        {errorNode}
+      </LoginPanel>
     );
   };
 
@@ -521,16 +607,17 @@ export default function LoginScreen() {
     const state = auth.loginState;
     if (state?.step !== 'account-selection') return null;
     return (
-      <>
-        <StepHeader
+      <LoginPanel testID="login.panel.accountSelection">
+        {backNode}
+        <LoginTitleBlock
           title={loginText('chooseAccount')}
           subtitle={loginText('chooseAccountSubtitle')}
         />
-        {state.accounts.map((account) => (
-          <Pressable
+        {state.accounts.map((account, index) => (
+          <LoginMethodRow
             accessibilityLabel={account.displayName}
-            accessibilityRole="button"
             disabled={disabled}
+            icon={account.kind === 'org' ? 'enterprise' : 'person'}
             key={account.id}
             onPress={() =>
               void auth.dispatchLoginAction({
@@ -538,30 +625,19 @@ export default function LoginScreen() {
                 accountId: account.id,
               })
             }
-            style={({ pressed }) => [
-              styles.accountRow,
-              pressed && styles.pressed,
-            ]}
+            subtitle={
+              account.orgName || account.email || loginText('personalAccount')
+            }
             testID={`login.account.${account.id}`}
-          >
-            {account.kind === 'org' ? (
-              <Building2 color={colors.textSecondary} size={iconSize.action} />
-            ) : (
-              <UserRound color={colors.textSecondary} size={iconSize.action} />
-            )}
-            <View style={styles.accountCopy}>
-              <Text numberOfLines={1} style={styles.accountTitle}>
-                {account.displayName}
-              </Text>
-              <Text numberOfLines={1} style={styles.accountSubtitle}>
-                {account.orgName ||
-                  account.email ||
-                  loginText('personalAccount')}
-              </Text>
-            </View>
-          </Pressable>
+            title={account.displayName}
+            top={
+              LOGIN_METHOD_ROW.firstRowTopSsoOrg +
+              index * LOGIN_METHOD_ROW.rowStep
+            }
+          />
         ))}
-      </>
+        {errorNode}
+      </LoginPanel>
     );
   };
 
@@ -575,9 +651,13 @@ export default function LoginScreen() {
         code: ssoVerificationCode,
       });
     };
+    const resend = () => {
+      void auth.dispatchLoginAction({ type: 'request-sso-verification-code' });
+    };
     return (
-      <>
-        <StepHeader
+      <LoginPanel testID="login.panel.sso-verification">
+        {backNode}
+        <LoginTitleBlock
           title={loginText('ssoVerificationTitle')}
           subtitle={loginText('ssoVerificationSubtitle').replace(
             '{target}',
@@ -585,56 +665,47 @@ export default function LoginScreen() {
           )}
         />
         {!state.codeRequested ? (
-          <MainWindowActionButton
-            action={{
-              busy: auth.isBusy,
-              disabled,
-              label: loginText('sendCode'),
-              onPress: () =>
-                void auth.dispatchLoginAction({
-                  type: 'request-sso-verification-code',
-                }),
-              testID: 'login.ssoVerificationSendButton',
-              tone: 'primary',
-            }}
-            style={styles.fullButton}
+          <LoginPrimaryButton
+            busy={auth.isBusy}
+            disabled={disabled}
+            label={loginText('sendCode')}
+            onPress={() =>
+              void auth.dispatchLoginAction({ type: 'request-sso-verification-code' })
+            }
+            testID="login.ssoVerificationSendButton"
           />
         ) : (
           <>
-            <Text style={styles.helper}>{state.targetMasked}</Text>
             <CodeInput
               disabled={disabled}
+              error={!!error}
               onChange={setSsoVerificationCode}
               onSubmit={verify}
               value={ssoVerificationCode}
             />
-            <MainWindowActionButton
-              action={{
-                busy: auth.isBusy,
-                disabled: disabled || ssoVerificationCode.length !== 6,
-                label: loginText('signIn'),
-                onPress: verify,
-                testID: 'login.ssoVerificationVerifyButton',
-                tone: 'primary',
-              }}
-              style={styles.fullButton}
+            {/* 无倒计时:deadline=null → 重发常驻可点(照 origin/main sso-verification,
+                与 verification-code 屏的 resendDeadline 契约不同——SSO 验证码无冷却) */}
+            <LoginResendCountdown
+              countdownTemplate={loginText('resendCountdown')}
+              deadline={null}
+              disabled={disabled}
+              onResend={resend}
+              resendLabel={loginText('resendCode')}
+              testID="login.ssoVerificationResendButton"
             />
-            <MainWindowActionButton
-              action={{
-                disabled,
-                label: loginText('resendCode'),
-                onPress: () =>
-                  void auth.dispatchLoginAction({
-                    type: 'request-sso-verification-code',
-                  }),
-                testID: 'login.ssoVerificationResendButton',
-              }}
-              density="compact"
-              style={styles.fullButton}
+            {/* GAP7:SSO 验证主按钮文案跨端有意差异——mobile 用 signIn(登录)、
+                desktop 用 completeSignIn(完成登录),不统一;勿改文案。 */}
+            <LoginPrimaryButton
+              busy={auth.isBusy}
+              disabled={disabled || ssoVerificationCode.length !== 6}
+              label={loginText('signIn')}
+              onPress={verify}
+              testID="login.ssoVerificationVerifyButton"
             />
           </>
         )}
-      </>
+        {errorNode}
+      </LoginPanel>
     );
   };
 
@@ -642,7 +713,7 @@ export default function LoginScreen() {
     const state = auth.loginState;
     if (state?.step !== 'binding') return null;
     const isEmail = state.bindType === 'email';
-    // 绑定手机号与登录同规则:只支持中国大陆号码,输入框存本地号,提交拼回 +86
+    // 绑定手机号与登录同规则:只支持中国大陆号码,输入框存本地号,提交拼回 +86。
     const contact =
       state.contact ?? (isEmail ? bindingContact : toCnE164(bindingContact));
     const contactReady = isEmail
@@ -664,8 +735,9 @@ export default function LoginScreen() {
       });
     };
     return (
-      <>
-        <StepHeader
+      <LoginPanel testID="login.panel.binding">
+        {backNode}
+        <LoginTitleBlock
           title={loginText(isEmail ? 'bindEmailTitle' : 'bindPhoneTitle')}
           subtitle={loginText(
             isEmail ? 'bindEmailSubtitle' : 'bindPhoneSubtitle',
@@ -674,183 +746,385 @@ export default function LoginScreen() {
         {!state.codeRequested ? (
           <>
             {isEmail ? (
-              <TextInput
+              <LoginSkinInput
                 autoCapitalize="none"
                 autoComplete="email"
                 autoCorrect={false}
                 editable={!disabled}
+                error={!!error}
                 keyboardType="email-address"
                 onChangeText={setBindingContact}
                 onSubmitEditing={request}
                 placeholder={loginText('emailPlaceholder')}
-                placeholderTextColor={colors.textTertiary}
                 returnKeyType="go"
-                style={styles.input}
                 testID="login.bindingContactInput"
                 value={bindingContact}
               />
             ) : (
-              <View style={styles.phoneRow}>
-                {/* 固定 +86:同登录首屏,不可切换 */}
-                <Text style={styles.phonePrefix}>{CN_PHONE_PREFIX}</Text>
-                <TextInput
-                  autoComplete="tel"
-                  editable={!disabled}
-                  keyboardType="phone-pad"
-                  onChangeText={(text) =>
-                    setBindingContact(sanitizeCnPhoneInput(text))
-                  }
-                  onSubmitEditing={request}
-                  placeholder={loginText('phonePlaceholder')}
-                  placeholderTextColor={colors.textTertiary}
-                  returnKeyType="go"
-                  style={styles.phoneRowInput}
-                  testID="login.bindingContactInput"
-                  value={bindingContact}
-                />
-              </View>
+              <LoginSkinPhoneInput
+                autoComplete="tel"
+                editable={!disabled}
+                error={!!error}
+                keyboardType="phone-pad"
+                onChangeText={(text) =>
+                  setBindingContact(sanitizeCnPhoneInput(text))
+                }
+                onSubmitEditing={request}
+                placeholder={loginText('phonePlaceholder')}
+                prefix={CN_PHONE_PREFIX}
+                returnKeyType="go"
+                testID="login.bindingContactInput"
+                value={bindingContact}
+              />
             )}
-            <MainWindowActionButton
-              action={{
-                busy: auth.isBusy,
-                disabled: disabled || !contactReady,
-                label: loginText('sendCode'),
-                onPress: request,
-                testID: 'login.bindingSendButton',
-                tone: 'primary',
-              }}
-              style={styles.fullButton}
+            <LoginPrimaryButton
+              busy={auth.isBusy}
+              disabled={disabled || !contactReady}
+              label={loginText('sendCode')}
+              onPress={request}
+              testID="login.bindingSendButton"
             />
           </>
         ) : (
           <>
-            <Text style={styles.helper}>{contact}</Text>
+            <LoginTextLinkSlot>{contact}</LoginTextLinkSlot>
             <CodeInput
               disabled={disabled}
+              error={!!error}
               onChange={setBindingCode}
               onSubmit={verify}
               value={bindingCode}
             />
-            <MainWindowActionButton
-              action={{
-                busy: auth.isBusy,
-                disabled: disabled || bindingCode.length !== 6,
-                label: loginText('signIn'),
-                onPress: verify,
-                testID: 'login.bindingVerifyButton',
-                tone: 'primary',
-              }}
-              style={styles.fullButton}
+            <LoginPrimaryButton
+              busy={auth.isBusy}
+              disabled={disabled || bindingCode.length !== 6}
+              label={loginText('signIn')}
+              onPress={verify}
+              testID="login.bindingVerifyButton"
             />
           </>
         )}
-      </>
+        {errorNode}
+      </LoginPanel>
     );
   };
 
-  const error = authErrorText(auth.authError);
+  /** browser-redirect:panel + 64 loading 环(figma §5.2 y=158)+ 取消。 */
+  const renderBrowserRedirect = () => {
+    const state = auth.loginState;
+    if (state?.step !== 'browser-redirect') return null;
+    return (
+      <LoginPanel testID="login.panel.browserRedirect">
+        <LoginTitleBlock
+          title={loginText('browserTitle')}
+          subtitle={`${state.label} · ${loginText('browserSubtitle')}`}
+        />
+        <LoginLoadingRing
+          label={loginText('working')}
+          y={LOGIN_LOADING_RING.yBrowser}
+        />
+        <LoginPrimaryButton
+          disabled={auth.isBusy}
+          label={loginText('cancel')}
+          onPress={reset}
+          testID="login.cancelBrowserButton"
+        />
+      </LoginPanel>
+    );
+  };
+
+  /** error 步骤:全屏面板 + 重试(文案走 authErrorText / errorFallback 兜底)。 */
+  const renderErrorStep = () => {
+    const state = auth.loginState;
+    if (state?.step !== 'error') return null;
+    return (
+      <LoginPanel testID="login.panel.error">
+        <LoginTitleBlock title={loginText('title')} />
+        <LoginPrimaryButton
+          busy={auth.isBusy}
+          disabled={auth.isBusy}
+          label={loginText('retry')}
+          onPress={reset}
+          testID="login.errorRetryButton"
+        />
+        <LoginErrorText testID="login.error">
+          {authErrorText(state.code) ?? loginText('errorFallback')}
+        </LoginErrorText>
+      </LoginPanel>
+    );
+  };
+
+  /** config issue 面板(闸门态,样式走 loginError 族;messageKey → 5 语)。 */
+  const renderConfigIssues = () => {
+    if (configIssues.length === 0) return null;
+    return (
+      <LoginPanel testID="login.configPanel">
+        <LoginTitleBlock title={loginText('configTitle')} />
+        <View style={configIssueStyles.list}>
+          {configIssues.map((issue) => (
+            <Text key={issue.key} style={configIssueStyles.line}>
+              {issue.key}: {loginText(issue.messageKey)}
+            </Text>
+          ))}
+        </View>
+      </LoginPanel>
+    );
+  };
+
+  /** preparing 伪态:auth 尚未初始化(loginState 未就绪),figma §5.2 loading 64 @(308,193)。 */
+  const renderPreparing = () => {
+    if (auth.loginState || auth.initialized || configIssues.length > 0)
+      return null;
+    return (
+      <LoginPanel testID="login.panel.preparing">
+        <LoginTitleBlock title={loginText('title')} />
+        <LoginLoadingRing
+          label={loginText('working')}
+          y={LOGIN_LOADING_RING.yPreparing}
+        />
+      </LoginPanel>
+    );
+  };
+
+  /** 无 loginState 兜底单按钮态(默认/busy 双格;reset 重新拉起状态机)。 */
+  const renderNoLoginState = () => {
+    if (auth.loginState || !auth.initialized || configIssues.length > 0)
+      return null;
+    return (
+      <LoginPanel testID="login.panel.noLoginState">
+        <LoginTitleBlock title={loginText('title')} />
+        <LoginPrimaryButton
+          busy={auth.isBusy}
+          disabled={!auth.initialized}
+          label={auth.isBusy ? loginText('working') : loginText('continue')}
+          onPress={reset}
+          testID="login.retryButton"
+        />
+        {errorNode}
+      </LoginPanel>
+    );
+  };
+
+  // completed:瞬态,品牌 stage 保持、面板留空(NavigationGate 随即跳转首页)
   const stateContent =
-    renderIdentifier() ??
-    renderMethodChoice() ??
-    renderVerification() ??
-    renderAccountSelection() ??
-    renderSsoVerification() ??
-    renderBinding();
+    auth.loginState?.step === 'completed'
+      ? null
+      : configIssues.length > 0
+        ? renderConfigIssues()
+        : (renderIdentifier() ??
+          renderMethodChoice() ??
+          renderVerification() ??
+          renderAccountSelection() ??
+          renderSsoVerification() ??
+          renderBinding() ??
+          renderBrowserRedirect() ??
+          renderErrorStep() ??
+          renderPreparing() ??
+          renderNoLoginState());
+
+  // Log_in 组落位:x/y = surface.loginX/loginY(stage 设计 px)→ 物理 px;
+  // 组内容缩放 = stage.scale × loginGroupScale(§3.6 pad 构图 0.794117 / 0.655357,
+  // 手机 1)。Safe Area:背景 edge-to-edge(stage 宿主不裁),功能区保持 insets 内——
+  // 组底边越过 bottom inset 时整组按差值上移(附录 C §3.4 工程定案)。
+  const groupScale = stage.scale * stage.loginGroupScale;
+  const groupLeftPx = stage.offsetX + stage.loginX * stage.scale;
+  const groupTopPxRaw = stage.offsetY + stage.loginY * stage.scale;
+  const bottomLimitPx = stage.viewportHeight - insets.bottom;
+  const liftPx = Math.max(
+    0,
+    groupTopPxRaw + loginSizes.flowHeight * groupScale - bottomLimitPx,
+  );
+  const groupTopPx = Math.max(0, groupTopPxRaw - liftPx);
+
+  // 键盘契约(Step 5b.1,方案 B):唯一位移源 = 自定义 translate。
+  // v5 冻结测量拓扑:基线只在下方「外层未变换测量 wrapper」上 measureInWindow
+  // (天然不含 translate);键盘事件 / viewport 变化(Android resize)后重测,
+  // 基线随 resize 更新 → 位移只计一次,无系统/自定义双算。
+  const keyboard = useLoginKeyboardRect();
+  const outerGroupRef = useRef<View>(null);
+  const [groupBaseline, setGroupBaseline] = useState<{
+    x: number;
+    y: number;
+  } | null>(null);
+  const measureBaseline = useCallback(() => {
+    outerGroupRef.current?.measureInWindow((x, y) => {
+      setGroupBaseline((prev) =>
+        prev != null && prev.x === x && prev.y === y ? prev : { x, y },
+      );
+    });
+  }, []);
+  useEffect(() => {
+    measureBaseline();
+  }, [
+    measureBaseline,
+    keyboard.visible,
+    keyboard.rect,
+    stage.viewportWidth,
+    stage.viewportHeight,
+  ]);
+  // 全高(键盘未显示时的 viewportHeight):Android edge-to-edge 下键盘以 insets 处理、
+  // viewport 不缩窗,需独立跟踪全高以算「全高 - 键盘高 - 系统栏底」键盘顶(见
+  // loginKeyboardAvoidance computeDockedKeyboardTop)。取 max 抗缩窗/旋转噪声。
+  const [fullViewportHeight, setFullViewportHeight] = useState(stage.viewportHeight);
+  useEffect(() => {
+    setFullViewportHeight((prev) =>
+      stage.viewportHeight > prev ? stage.viewportHeight : prev,
+    );
+  }, [stage.viewportHeight]);
+  const shiftResult = useMemo(() => {
+    if (groupBaseline == null) {
+      return { shift: 0, mode: 'hidden' as const };
+    }
+    return computeLoginKeyboardShift({
+      platform: Platform.OS === 'android' ? 'android' : 'ios',
+      visible: keyboard.visible,
+      keyboard: keyboard.rect,
+      // 停靠贴附锚 = 面板底(Step 5b.1:panelBottom + 10 - keyboardTop)
+      panelBottomY: groupBaseline.y + loginSizes.panelHeight * groupScale,
+      // 悬浮相交判定锚 = 当前输入框 ∪ 主按钮(U-8b;输入框顶到主按钮底)
+      controlsUnion: {
+        x: groupBaseline.x + LOGIN_CONTROL.x * groupScale,
+        y: groupBaseline.y + LOGIN_CONTROL.inputY * groupScale,
+        width: LOGIN_CONTROL.width * groupScale,
+        height:
+          (LOGIN_CONTROL.buttonY +
+            LOGIN_CONTROL.height -
+            LOGIN_CONTROL.inputY) *
+          groupScale,
+      },
+      viewportWidth: stage.viewportWidth,
+      viewportHeight: stage.viewportHeight,
+      safeTop: insets.top,
+      fullViewportHeight,
+      systemBarBottom: insets.bottom,
+    });
+  }, [
+    groupBaseline,
+    keyboard,
+    groupScale,
+    stage.viewportWidth,
+    stage.viewportHeight,
+    insets.top,
+    fullViewportHeight,
+    insets.bottom,
+  ]);
+  const keyboardShift = shiftResult.shift;
+
+  // handoff 面板入场(demo:300+moveMs 起步,自下而上 20px + 渐显 420ms;
+  // reduced-motion/已登录直入由 Provider 收敛为 done,此处直落终态)
+  const panelEntrance = usePanelEntrance(handoffPhase, stage.mode, stage.scale);
 
   return (
-    <SafeAreaView style={styles.safeArea} testID="login.screen">
-      {/* 顶栏恒占位(固定高度)：返回按钮出现/消失时不引起下方内容跳动 */}
-      <View style={styles.topBar}>
-        {backAction ? (
-          <BackButton disabled={disabled} onPress={backAction} />
-        ) : null}
-      </View>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={styles.flex}
+    <MobileLoginHandoffStage
+      keyboardShiftPx={keyboardShift}
+      testID="login.screen"
+    >
+      {/* 外层未变换测量 wrapper(v5 冻结拓扑):持布局基线,不参与任何 translate */}
+      <View
+        collapsable={false}
+        onLayout={measureBaseline}
+        ref={outerGroupRef}
+        style={{
+          height: loginSizes.flowHeight * groupScale,
+          left: groupLeftPx,
+          position: 'absolute',
+          top: groupTopPx,
+          width: LOGIN_GROUP.width * groupScale,
+        }}
       >
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          keyboardShouldPersistTaps="handled"
-        >
-          <View style={styles.brandBlock}>
-            <View style={styles.brandRow}>
-              <Text style={styles.product}>{loginText('product')}</Text>
+        {/* 内层 translate 容器:键盘位移唯一施加处(方案 B) */}
+        <View style={{ flex: 1, transform: [{ translateY: -keyboardShift }] }}>
+          <Animated.View
+            style={{
+              flex: 1,
+              opacity: panelEntrance.opacity,
+              transform: [{ translateY: panelEntrance.translateY }],
+            }}
+          >
+            {/* 内层 680×560 设计 px 坐标系,整层 transform 缩放(demo loginGroup 同构) */}
+            <View
+              style={{
+                height: LOGIN_GROUP.height,
+                left: 0,
+                position: 'absolute',
+                top: 0,
+                transform: [{ scale: groupScale }],
+                transformOrigin: 'top left',
+                width: LOGIN_GROUP.width,
+              }}
+            >
+              {accountDeletionStatus ? (
+                <AccountDeletionStatusPanel
+                  onDismiss={
+                    accountDeletionStatus.status === 'completed'
+                      ? () => void auth.clearAccountDeletionReceipt()
+                      : undefined
+                  }
+                  status={accountDeletionStatus}
+                />
+              ) : null}
+              {stateContent}
             </View>
-            <Text style={styles.title} testID="login.title">
-              {loginText('title')}
-            </Text>
-          </View>
-
-          <View style={styles.card}>
-            {accountDeletionStatus ? (
-              <AccountDeletionStatusPanel
-                onDismiss={
-                  accountDeletionStatus.status === 'completed'
-                    ? () => void auth.clearAccountDeletionReceipt()
-                    : undefined
-                }
-                status={accountDeletionStatus}
-              />
-            ) : null}
-            {error ? (
-              <Text style={styles.error} testID="login.error">
-                {error}
-              </Text>
-            ) : null}
-            {configIssues.length > 0 ? (
-              <View style={styles.configPanel} testID="login.configPanel">
-                <Text style={styles.configTitle}>
-                  {loginText('configTitle')}
-                </Text>
-                {configIssues.map((issue) => (
-                  <Text key={issue.key} style={styles.configCopy}>
-                    {issue.key}: {issue.message}
-                  </Text>
-                ))}
-              </View>
-            ) : null}
-
-            {stateContent}
-
-            {auth.loginState?.step === 'browser-redirect' ? (
-              <>
-                <StepHeader
-                  title={loginText('browserTitle')}
-                  subtitle={`${auth.loginState.label} · ${loginText('browserSubtitle')}`}
-                />
-                <MainWindowActionButton
-                  action={{
-                    disabled: auth.isBusy,
-                    label: loginText('cancel'),
-                    onPress: reset,
-                    testID: 'login.cancelBrowserButton',
-                  }}
-                  style={styles.fullButton}
-                />
-              </>
-            ) : null}
-
-            {!auth.loginState && configIssues.length === 0 ? (
-              <MainWindowActionButton
-                action={{
-                  busy: auth.isBusy,
-                  disabled: !auth.initialized,
-                  label: auth.isBusy
-                    ? loginText('working')
-                    : loginText('continue'),
-                  onPress: reset,
-                  testID: 'login.retryButton',
-                  tone: 'primary',
-                }}
-                style={styles.fullButton}
-              />
-            ) : null}
-          </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+          </Animated.View>
+        </View>
+      </View>
+    </MobileLoginHandoffStage>
   );
+}
+
+/**
+ * handoff 面板入场动画(demo splashHandoff:登录 UI 在立绘/字标落定后马上出现——
+ * 自下而上 20px + 渐显,420ms cubic-bezier(.35,.1,.25,1);起步 = 300 + moveMs,
+ * iPad 横屏 moveMs=0)。transform/opacity + useNativeDriver(compositor-only)。
+ */
+function usePanelEntrance(
+  phase: LoginHandoffPhase,
+  mode: LoginSurfaceMode,
+  stageScale: number,
+) {
+  const opacity = useRef(new Animated.Value(phase === 'done' ? 1 : 0)).current;
+  const rise = useRef(new Animated.Value(phase === 'done' ? 0 : 1)).current;
+  useEffect(() => {
+    if (phase === 'handoff') {
+      const easing = Easing.bezier(
+        LOGIN_HANDOFF_EASING.panelIn[0],
+        LOGIN_HANDOFF_EASING.panelIn[1],
+        LOGIN_HANDOFF_EASING.panelIn[2],
+        LOGIN_HANDOFF_EASING.panelIn[3],
+      );
+      Animated.sequence([
+        Animated.delay(loginHandoffPanelDelayMs(mode)),
+        Animated.parallel([
+          Animated.timing(opacity, {
+            toValue: 1,
+            duration: LOGIN_HANDOFF_TIMING.panelInMs,
+            easing,
+            useNativeDriver: true,
+          }),
+          Animated.timing(rise, {
+            toValue: 0,
+            duration: LOGIN_HANDOFF_TIMING.panelInMs,
+            easing,
+            useNativeDriver: true,
+          }),
+        ]),
+      ]).start();
+      return;
+    }
+    if (phase === 'done') {
+      opacity.setValue(1);
+      rise.setValue(0);
+      return;
+    }
+    opacity.setValue(0);
+    rise.setValue(1);
+  }, [phase, mode, opacity, rise]);
+  // 20 设计 px 自下而上(stage 坐标 → 物理 px 随 stage.scale)
+  const translateY = rise.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, LOGIN_HANDOFF_TIMING.panelInOffsetPx * stageScale],
+  });
+  return { opacity, translateY };
 }
 
 function AccountDeletionStatusPanel({
@@ -910,81 +1184,54 @@ function socialLabel(provider: SocialProvider): string {
   return loginText(provider);
 }
 
-function StepHeader({ title, subtitle }: { title: string; subtitle: string }) {
-  const styles = useThemedStyles(makeStyles);
-  return (
-    <View style={styles.stepHeader}>
-      <Text style={styles.stepTitle}>{title}</Text>
-      <Text style={styles.stepSubtitle}>{subtitle}</Text>
-    </View>
-  );
-}
-
-function BackButton({
-  disabled,
-  onPress,
-}: {
-  disabled: boolean;
-  onPress: () => void;
-}) {
-  const styles = useThemedStyles(makeStyles);
-  const { colors } = useTheme();
-  return (
-    <Pressable
-      accessibilityLabel={loginText('back')}
-      accessibilityRole="button"
-      disabled={disabled}
-      onPress={onPress}
-      style={({ pressed }) => [styles.backButton, pressed && styles.pressed]}
-      testID="login.backButton"
-    >
-      <ChevronLeft color={colors.textSecondary} size={iconSize.action} />
-      <Text style={styles.backText}>{loginText('back')}</Text>
-    </Pressable>
-  );
-}
-
+/** 验证码输入(figma §4.2 居中变体;verification 与 binding 阶段二共用,testID 沿旧)。 */
 function CodeInput({
   disabled,
+  error,
   onChange,
   onSubmit,
   value,
 }: {
   disabled: boolean;
+  error?: boolean;
   onChange: (value: string) => void;
   onSubmit: () => void;
   value: string;
 }) {
-  const styles = useThemedStyles(makeStyles);
-  const { colors } = useTheme();
   return (
-    <TextInput
+    <LoginSkinInput
       autoComplete="one-time-code"
+      center
       editable={!disabled}
+      error={error}
       keyboardType="number-pad"
       maxLength={6}
       onChangeText={(next) => onChange(next.replace(/\D/g, ''))}
       onSubmitEditing={onSubmit}
       placeholder={loginText('codePlaceholder')}
-      placeholderTextColor={colors.textTertiary}
       returnKeyType="done"
-      style={[styles.input, styles.codeInput]}
       testID="login.codeInput"
       value={value}
     />
   );
 }
 
-function Divider() {
-  const styles = useThemedStyles(makeStyles);
-  return (
-    <View style={styles.divider}>
-      <View style={styles.dividerLine} />
-      <Text style={styles.dividerText}>{loginText('or')}</Text>
-      <View style={styles.dividerLine} />
-    </View>
-  );
-}
+/** config issue 列表样式(loginError 族;绝对定位落在副标题至输入区之间)。 */
+const configIssueStyles = {
+  list: {
+    gap: 10,
+    left: LOGIN_SUBTITLE.x,
+    position: 'absolute' as const,
+    top: LOGIN_TITLE.y + LOGIN_TITLE.height + 40,
+    width: LOGIN_SUBTITLE.width,
+  },
+  line: {
+    color: loginColors.loginError,
+    fontSize: LOGIN_ERROR_TEXT.font,
+    fontWeight: fontWeight.regular,
+    textAlign: 'center' as const,
+  },
+} as const;
 
 const makeStyles = (colors: ThemeColors) =>
   StyleSheet.create({
@@ -996,8 +1243,6 @@ const makeStyles = (colors: ThemeColors) =>
     scrollContent: {
       flexGrow: 1,
       gap: spacing.xl,
-      // 顶部锚定(不垂直居中):各步骤卡片高度不同,居中布局会让品牌区/标题
-      // 在步骤切换时整体上下重排;固定从顶部排,标题位置跨步骤稳定不跳动。
       paddingHorizontal: spacing.xl,
       paddingVertical: spacing.xxl,
     },
@@ -1090,7 +1335,6 @@ const makeStyles = (colors: ThemeColors) =>
       minHeight: 48,
       paddingHorizontal: spacing.lg,
     },
-    // 手机号输入:外层容器沿用 input 视觉,内嵌固定 +86 前缀 + 无边框输入框
     phoneRow: {
       alignItems: 'center',
       backgroundColor: colors.surfaceElevated,

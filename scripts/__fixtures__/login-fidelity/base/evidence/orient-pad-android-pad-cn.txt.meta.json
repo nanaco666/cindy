@@ -1,0 +1,45 @@
+{
+  "evidenceSha256": "fc6fd2732abddf0f88d133e1c68a3ad1465aa2cecbfc21d7f42f9a0e8f623625",
+  "testedCodeCommit": "ffffffffffffffffffffffffffffffffffffffff",
+  "capturedCellRef": {
+    "rowId": "mobile.orientation-layout.pad-landscape-geometry",
+    "device": "android-pad",
+    "locale": "zh-CN",
+    "region": "cn"
+  },
+  "reuseGroupId": "g-orient-pad-android-pad-cn",
+  "applicableCellRefs": [
+    {
+      "rowId": "mobile.orientation-layout.pad-landscape-geometry",
+      "device": "android-pad",
+      "locale": "zh-CN",
+      "region": "cn"
+    },
+    {
+      "rowId": "mobile.orientation-layout.pad-landscape-geometry",
+      "device": "android-pad",
+      "locale": "zh-TW",
+      "region": "cn"
+    },
+    {
+      "rowId": "mobile.orientation-layout.pad-landscape-geometry",
+      "device": "android-pad",
+      "locale": "en",
+      "region": "cn"
+    },
+    {
+      "rowId": "mobile.orientation-layout.pad-landscape-geometry",
+      "device": "android-pad",
+      "locale": "ja",
+      "region": "cn"
+    },
+    {
+      "rowId": "mobile.orientation-layout.pad-landscape-geometry",
+      "device": "android-pad",
+      "locale": "ko",
+      "region": "cn"
+    }
+  ],
+  "scenario": "fixture 采集(self-test)",
+  "capturedAt": "2026-07-20T00:00:00.000Z"
+}

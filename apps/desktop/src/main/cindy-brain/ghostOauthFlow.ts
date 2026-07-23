@@ -34,9 +34,11 @@ import * as crypto from 'node:crypto';
 import { GHOST_OAUTH_RESERVED_AUTHORIZE_PARAMS } from '../../shared/ghost.js';
 import {
   buildOAuthReturnAction,
+  getGhostOAuthResultCopy,
   OAUTH_RESULT_HTML_LANG,
   pickOAuthResultPageLang,
   renderOAuthResultPage,
+  type GhostOAuthErrorKind,
   type OAuthResultPageLang,
 } from '../oauthResultPage.js';
 
@@ -203,66 +205,13 @@ function isSafeHttpsUrl(raw: string): boolean {
 }
 
 /** 失败页文案键(免把中文散文当参数传, i18n 后统一走键)。 */
-type OauthErrorKind = 'provider-error' | 'invalid-callback' | 'internal';
+type OauthErrorKind = GhostOAuthErrorKind;
 
-const OAUTH_PAGE_STRINGS: Record<
-  OAuthResultPageLang,
-  {
-    successTitle: string;
-    /** {brand} 占位替换品牌名。 */
-    successBody: string;
-    errorTitle: string;
-    errors: Record<OauthErrorKind, string>;
-  }
-> = {
-  zh: {
-    successTitle: '授权成功',
-    successBody: '你可以关闭此页面，回到 {brand} 继续。',
-    errorTitle: '授权失败',
-    errors: {
-      'provider-error': '授权服务器返回错误：{detail}',
-      'invalid-callback': '回调参数不完整或校验失败，请回到 {brand} 重试。',
-      internal: '回调处理异常，请回到 {brand} 重试。',
-    },
-  },
-  en: {
-    successTitle: 'Authorization successful',
-    successBody: 'You can close this page and return to {brand}.',
-    errorTitle: 'Authorization failed',
-    errors: {
-      'provider-error': 'The authorization server returned an error: {detail}',
-      'invalid-callback':
-        'The callback is incomplete or failed validation. Please return to {brand} and try again.',
-      internal:
-        'Something went wrong while handling the callback. Please return to {brand} and try again.',
-    },
-  },
-  ja: {
-    successTitle: '認可が完了しました',
-    successBody: 'このページを閉じて {brand} に戻れます。',
-    errorTitle: '認可に失敗しました',
-    errors: {
-      'provider-error': '認可サーバーがエラーを返しました：{detail}',
-      'invalid-callback':
-        'コールバックのパラメータが不完全か検証に失敗しました。{brand} に戻ってやり直してください。',
-      internal: 'コールバック処理中にエラーが発生しました。{brand} に戻ってやり直してください。',
-    },
-  },
-  ko: {
-    successTitle: '인증 완료',
-    successBody: '이 페이지를 닫고 {brand}(으)로 돌아가세요.',
-    errorTitle: '인증 실패',
-    errors: {
-      'provider-error': '인증 서버가 오류를 반환했습니다: {detail}',
-      'invalid-callback':
-        '콜백 매개변수가 불완전하거나 검증에 실패했습니다. {brand}(으)로 돌아가 다시 시도하세요.',
-      internal: '콜백 처리 중 오류가 발생했습니다. {brand}(으)로 돌아가 다시 시도하세요.',
-    },
-  },
-};
+// 文案表已收敛到 oauthResultPage.ts 的 getGhostOAuthResultCopy(callback copy
+// builder 生产/preview 合一,PR0b-callback),此处只保留占位符替换与页面组装。
 
 function successHtml(brandName: string, lang: OAuthResultPageLang): string {
-  const s = OAUTH_PAGE_STRINGS[lang];
+  const s = getGhostOAuthResultCopy(lang);
   // 替换器必须用函数形式: 字符串形式会把替换值里的 $&/$' 等当特殊模式展开
   // (用户可控的 detail 能借此弄坏/伪造文案);统一 renderer 最后只转义一次。
   const body = s.successBody.replace('{brand}', () => brandName);
@@ -281,7 +230,7 @@ function errorHtml(
   brandName: string,
   detail?: string,
 ): string {
-  const s = OAUTH_PAGE_STRINGS[lang];
+  const s = getGhostOAuthResultCopy(lang);
   const body = s.errors[kind]
     .replace('{brand}', () => brandName)
     .replace('{detail}', () => detail ?? '');

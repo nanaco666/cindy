@@ -1,6 +1,15 @@
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { defineConfig, loadEnv } from 'vite';
 import { desktopClientBuildEnv } from '../../scripts/shared/client-endpoint-build-env.mjs';
 
+const configDir = path.dirname(fileURLToPath(import.meta.url));
+// 登录 scenario fixtures 的生产空 stub(implementation-plan Step 0 WHAT4 生产排除
+// 双保险之 build-time 层;check-login-production-guard.mjs 以 sentinel 双断言校验)。
+const loginFixturesStub = path.resolve(
+  configDir,
+  '../../packages/auth-client/fixtures/loginScenarios.production-stub.ts',
+);
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), 'VITE_');
@@ -15,6 +24,14 @@ export default defineConfig(({ mode }) => {
   const allEnv = loadEnv(mode, process.cwd(), '');
   const readMainEnv = (key: string): string => allEnv[key] || process.env[key] || '';
   return {
+    resolve: {
+      // 仅 fixtures 生产排除条件(v6.17 允许范围):production 构建把
+      // '@cindy/auth-client/fixtures' 整模块替换为空 stub,dev 构建保留真模块。
+      alias:
+        mode === 'production'
+          ? [{ find: '@cindy/auth-client/fixtures', replacement: loginFixturesStub }]
+          : [],
+    },
     define: {
       'import.meta.env.VITE_CINDY_AUTH_REGION': JSON.stringify(
         readViteEnv('VITE_CINDY_AUTH_REGION'),

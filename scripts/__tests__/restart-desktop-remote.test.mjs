@@ -7,6 +7,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 import {
+	devEnvPrefix,
 	isRepositoryDesktopDevProcess,
 	formatDesktopStartupFailure,
 	readDesktopStartupStatus,
@@ -345,4 +346,45 @@ test("desktop whoami prefers launch-time commit metadata over process inference"
 	assert.equal(merged[0].commit, "abc123");
 	assert.equal(merged[0].commitVerified, true);
 	assert.equal(merged[0].source, "record");
+});
+
+// ── 登录 scenario harness env 白名单透传(implementation-plan Step 0 WHAT4)──
+
+test("devEnvPrefix passes XDT_LOGIN_SCENARIO and VITE_SPLASH_PHASE_FIXTURE through on macOS with shell-safe quoting", () => {
+	const prefix = devEnvPrefix(
+		{
+			XDT_LOGIN_SCENARIO: "error:verify-code:INVALID_CODE",
+			VITE_SPLASH_PHASE_FIXTURE: "spawn_failed",
+		},
+		"darwin",
+	);
+	assert.equal(
+		prefix,
+		"XDT_LOGIN_SCENARIO='error:verify-code:INVALID_CODE' VITE_SPLASH_PHASE_FIXTURE='spawn_failed' ",
+	);
+});
+
+test("devEnvPrefix escapes single quotes in scenario values on POSIX shells", () => {
+	const prefix = devEnvPrefix({ XDT_LOGIN_SCENARIO: "providers:both'x" }, "darwin");
+	// shellSingleQuote 语义:内嵌单引号切段转义,拼回后 shell 读到原值。
+	assert.ok(prefix.startsWith("XDT_LOGIN_SCENARIO='"));
+	assert.ok(prefix.includes("'\\''") || prefix.includes("'\"'\"'"));
+});
+
+test("devEnvPrefix passes harness envs through on Windows cmd with quote stripping", () => {
+	const prefix = devEnvPrefix(
+		{
+			XDT_LOGIN_SCENARIO: 'providers:"both"',
+			VITE_SPLASH_PHASE_FIXTURE: "updating",
+		},
+		"win32",
+	);
+	assert.equal(
+		prefix,
+		'set "XDT_LOGIN_SCENARIO=providers:both" && set "VITE_SPLASH_PHASE_FIXTURE=updating" && ',
+	);
+});
+
+test("devEnvPrefix omits harness envs when unset (whitelist stays opt-in)", () => {
+	assert.equal(devEnvPrefix({}, "darwin"), "");
 });

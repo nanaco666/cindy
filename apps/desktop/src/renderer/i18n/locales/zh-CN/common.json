@@ -2622,10 +2622,10 @@
   "login": {
     "title": "欢迎使用 Cindy",
     "subtitle": "选择一种方式安全登录",
-    "phone": "手机号",
-    "email": "邮箱",
     "phonePlaceholder": "请输入手机号",
     "emailPlaceholder": "请输入邮箱",
+    "invalidEmail": "请输入正确邮箱",
+    "invalidPhone": "请输入正确手机号",
     "working": "请稍候...",
     "continue": "继续",
     "or": "或",
@@ -2659,6 +2659,7 @@
     "verifying": "正在验证...",
     "signIn": "登录",
     "resendCode": "重新发送验证码",
+    "resendCountdown": "{{n}} 秒后可重新发送",
     "chooseAccount": "选择身份",
     "chooseAccountSubtitle": "选择本次要使用的个人或企业身份",
     "personalAccount": "个人身份",
@@ -2724,6 +2725,11 @@
       "checkingEnv": "运行环境检测中...",
       "waking": "唤醒 Cindy 中...",
       "envFailed": "环境初始化失败，点击重试"
+    },
+    "downloadStats": "{{percent}}% · {{speed}} MB/s · {{done}} MB / {{total}} MB",
+    "envFailed": {
+      "title": "环境初始化失败",
+      "retry": "重试"
     },
     "manifestFailed": {
       "title": "网络连接失败",

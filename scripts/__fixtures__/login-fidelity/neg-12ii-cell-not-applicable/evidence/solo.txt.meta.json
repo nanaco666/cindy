@@ -1,0 +1,19 @@
+{
+  "evidenceSha256": "f567ffe68c9fb896e09178cba839265554004a22d4e316187f9e51d09cec0026",
+  "testedCodeCommit": "ffffffffffffffffffffffffffffffffffffffff",
+  "capturedAt": "2026-07-20T00:00:00.000Z",
+  "capturedCellRef": {
+    "rowId": "desktop.brand-background.style",
+    "device": "mac",
+    "locale": "en",
+    "region": "cn"
+  },
+  "applicableCellRefs": [
+    {
+      "rowId": "desktop.brand-background.style",
+      "device": "mac",
+      "locale": "en",
+      "region": "cn"
+    }
+  ]
+}

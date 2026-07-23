@@ -1,0 +1,38 @@
+{
+  "evidenceSha256": "b1b9e14f57f824e4f311dcd79c59f265dc7c980093b01d6b9fcb32cabebbc33a",
+  "testedCodeCommit": "ffffffffffffffffffffffffffffffffffffffff",
+  "capturedAt": "2026-07-20T00:00:00.000Z",
+  "capturedCellRef": {
+    "rowId": "desktop.brand-background.style",
+    "device": "mac",
+    "locale": "zh-CN",
+    "region": "cn"
+  },
+  "reuseGroupId": "g-bb-mac-cn",
+  "applicableCellRefs": [
+    {
+      "rowId": "desktop.brand-background.style",
+      "device": "mac",
+      "locale": "zh-CN",
+      "region": "cn"
+    },
+    {
+      "rowId": "desktop.brand-background.style",
+      "device": "mac",
+      "locale": "zh-TW",
+      "region": "cn"
+    },
+    {
+      "rowId": "desktop.brand-background.style",
+      "device": "mac",
+      "locale": "en",
+      "region": "cn"
+    },
+    {
+      "rowId": "desktop.brand-background.style",
+      "device": "mac",
+      "locale": "ja",
+      "region": "cn"
+    }
+  ]
+}

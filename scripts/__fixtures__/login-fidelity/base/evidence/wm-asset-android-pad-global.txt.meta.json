@@ -1,0 +1,45 @@
+{
+  "evidenceSha256": "9489ae787bf3d959c19a7c24a35b6e99b68782ef28fbf4fc7ff6b1f9b17d5452",
+  "testedCodeCommit": "ffffffffffffffffffffffffffffffffffffffff",
+  "capturedCellRef": {
+    "rowId": "mobile.wordmark.asset",
+    "device": "android-pad",
+    "locale": "zh-CN",
+    "region": "global"
+  },
+  "reuseGroupId": "g-wm-asset-android-pad-global",
+  "applicableCellRefs": [
+    {
+      "rowId": "mobile.wordmark.asset",
+      "device": "android-pad",
+      "locale": "zh-CN",
+      "region": "global"
+    },
+    {
+      "rowId": "mobile.wordmark.asset",
+      "device": "android-pad",
+      "locale": "zh-TW",
+      "region": "global"
+    },
+    {
+      "rowId": "mobile.wordmark.asset",
+      "device": "android-pad",
+      "locale": "en",
+      "region": "global"
+    },
+    {
+      "rowId": "mobile.wordmark.asset",
+      "device": "android-pad",
+      "locale": "ja",
+      "region": "global"
+    },
+    {
+      "rowId": "mobile.wordmark.asset",
+      "device": "android-pad",
+      "locale": "ko",
+      "region": "global"
+    }
+  ],
+  "scenario": "fixture 采集(self-test)",
+  "capturedAt": "2026-07-20T00:00:00.000Z"
+}

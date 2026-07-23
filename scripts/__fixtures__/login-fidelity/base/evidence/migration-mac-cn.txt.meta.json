@@ -1,0 +1,45 @@
+{
+  "evidenceSha256": "95cfc21d549ef6aefbf1a418e47d3cfe97a22d91d60f778e3326cd8a88aecf6e",
+  "testedCodeCommit": "ffffffffffffffffffffffffffffffffffffffff",
+  "capturedCellRef": {
+    "rowId": "desktop.legacy-migration.confirm-state",
+    "device": "mac",
+    "locale": "zh-CN",
+    "region": "cn"
+  },
+  "reuseGroupId": "g-migration-mac-cn",
+  "applicableCellRefs": [
+    {
+      "rowId": "desktop.legacy-migration.confirm-state",
+      "device": "mac",
+      "locale": "zh-CN",
+      "region": "cn"
+    },
+    {
+      "rowId": "desktop.legacy-migration.confirm-state",
+      "device": "mac",
+      "locale": "zh-TW",
+      "region": "cn"
+    },
+    {
+      "rowId": "desktop.legacy-migration.confirm-state",
+      "device": "mac",
+      "locale": "en",
+      "region": "cn"
+    },
+    {
+      "rowId": "desktop.legacy-migration.confirm-state",
+      "device": "mac",
+      "locale": "ja",
+      "region": "cn"
+    },
+    {
+      "rowId": "desktop.legacy-migration.confirm-state",
+      "device": "mac",
+      "locale": "ko",
+      "region": "cn"
+    }
+  ],
+  "scenario": "fixture 采集(self-test)",
+  "capturedAt": "2026-07-20T00:00:00.000Z"
+}

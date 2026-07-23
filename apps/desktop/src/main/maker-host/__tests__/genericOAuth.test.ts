@@ -17,6 +17,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import type { OAuthProviderDescriptor } from '@lizi/model-providers';
 
 import {
+  cancelGenericOAuthLogin,
   configureGenericOAuth,
   deriveModelsDiscoveryUrl,
   hasGenericOAuthLogin,
@@ -386,5 +387,47 @@ describe('setDiscoveredProviderModels additions-only merge', () => {
     // 清理进程级单例状态，避免泄漏到其它用例。
     setDiscoveredProviderModels('my-sub', 'claude-code', []);
     setCustomProviders([]);
+  });
+});
+
+// ── PR3:generic 裸文本 done 消除(callback-pages-classification 页壳改造点 5)──
+
+describe('close() 回执路径(裸 done 消除)', () => {
+  it('code 已回、exchange 未决时取消 → 浏览器收到品牌化失败页,绝不再收裸文本 done(唯一输出路径断言)', async () => {
+    let callbackResponse: Promise<Response> | null = null;
+    let exchangeStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      exchangeStarted = resolve;
+    });
+    configureGenericOAuth({
+      openExternal: async (authUrl) => {
+        const u = new URL(authUrl);
+        const redirect = u.searchParams.get('redirect_uri')!;
+        const state = u.searchParams.get('state')!;
+        callbackResponse = fetch(`${redirect}?code=code-1&state=${encodeURIComponent(state)}`);
+      },
+      // token exchange 悬挂直到 abort:复现「code 已回、succeed/fail 前流程被终结」
+      fetchImpl: ((_url: RequestInfo | URL, init?: RequestInit) =>
+        new Promise<Response>((_resolve, reject) => {
+          exchangeStarted();
+          init?.signal?.addEventListener('abort', () =>
+            reject(new DOMException('aborted', 'AbortError')),
+          );
+        })) as typeof fetch,
+    });
+
+    const login = runGenericOAuthLogin({ id: 'acme', name: 'Acme' }, OAUTH);
+    await started;
+    cancelGenericOAuthLogin('acme');
+    const res = await login;
+    expect(res.ok).toBe(false);
+
+    const body = await (await callbackResponse!).text();
+    expect(body).not.toBe('done');
+    expect(body).not.toContain('>done<');
+    // 唯一输出路径 = shared builder(legacy visual):品牌失败页 + provider 文案
+    expect(body).toContain('data-cindy-oauth-result="error"');
+    expect(body).toContain('<span class="badge"');
+    expect(body).toContain('Acme');
   });
 });

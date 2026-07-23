@@ -1,0 +1,1345 @@
+{
+  "version": 1,
+  "rows": [
+    {
+      "rowId": "desktop.brand-background.style",
+      "platform": "desktop",
+      "rowKind": "desktop",
+      "stateFamily": "brand-background",
+      "dimension": "style",
+      "source": "wave4",
+      "ref": "368:1375",
+      "applicability": {
+        "devices": [
+          "mac",
+          "windows"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr1",
+      "baselineRequirements": [
+        {
+          "dimension": "style",
+          "source": "wave4",
+          "ref": "368:1375"
+        }
+      ],
+      "tests": []
+    },
+    {
+      "rowId": "mobile.wordmark.asset",
+      "platform": "mobile",
+      "rowKind": "all-mobile",
+      "stateFamily": "wordmark",
+      "dimension": "asset",
+      "source": "wave4",
+      "ref": "368:1381",
+      "applicability": {
+        "devices": [
+          "iphone",
+          "android-phone",
+          "ipad"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr4a",
+      "baselineRequirements": [
+        {
+          "dimension": "asset",
+          "source": "wave4",
+          "ref": "368:1381"
+        }
+      ],
+      "tests": []
+    },
+    {
+      "rowId": "mobile.wordmark.geometry",
+      "platform": "mobile",
+      "rowKind": "all-mobile",
+      "stateFamily": "wordmark",
+      "dimension": "geometry",
+      "source": "demo",
+      "ref": "mobile-wordmark-frame",
+      "applicability": {
+        "devices": [
+          "iphone",
+          "android-phone",
+          "ipad",
+          "android-pad"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr4a",
+      "baselineRequirements": [
+        {
+          "dimension": "geometry",
+          "source": "demo",
+          "ref": "mobile-wordmark-frame"
+        }
+      ],
+      "tests": []
+    },
+    {
+      "rowId": "mobile.orientation-layout.phone-fallback-geometry",
+      "platform": "mobile",
+      "rowKind": "phone-only",
+      "stateFamily": "orientation-layout",
+      "dimension": "geometry",
+      "source": "demo",
+      "ref": "phone-fallback",
+      "applicability": {
+        "devices": [
+          "iphone",
+          "android-phone"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr4a",
+      "baselineRequirements": [
+        {
+          "dimension": "geometry",
+          "source": "demo",
+          "ref": "phone-fallback"
+        }
+      ],
+      "tests": []
+    },
+    {
+      "rowId": "mobile.orientation-layout.pad-landscape-geometry",
+      "platform": "mobile",
+      "rowKind": "pad-only",
+      "stateFamily": "orientation-layout",
+      "dimension": "geometry",
+      "source": "demo",
+      "ref": "pad-landscape",
+      "applicability": {
+        "devices": [
+          "ipad",
+          "android-pad"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [],
+      "slice": "pr4a",
+      "baselineRequirements": [
+        {
+          "dimension": "geometry",
+          "source": "demo",
+          "ref": "pad-landscape"
+        }
+      ],
+      "tests": []
+    },
+    {
+      "rowId": "desktop.legacy-migration.confirm-state",
+      "platform": "desktop",
+      "rowKind": "desktop",
+      "stateFamily": "legacy-migration",
+      "dimension": "state",
+      "source": "demo",
+      "ref": "migration-confirm",
+      "applicability": {
+        "devices": [
+          "mac",
+          "windows"
+        ],
+        "locales": [
+          "zh-CN",
+          "zh-TW",
+          "en",
+          "ja",
+          "ko"
+        ],
+        "regions": [
+          "cn",
+          "global"
+        ]
+      },
+      "naAllowed": [
+        {
+          "match": {
+            "region": [
+              "global"
+            ]
+          },
+          "reasonCode": "region-exclusive"
+        }
+      ],
+      "slice": "pr1",
+      "baselineRequirements": [
+        {
+          "dimension": "state",
+          "source": "demo",
+          "ref": "migration-confirm"
+        }
+      ],
+      "tests": []
+    }
+  ],
+  "evidenceReuseGroups": [
+    {
+      "groupId": "g-bb-mac-cn",
+      "cells": [
+        {
+          "rowId": "desktop.brand-background.style",
+          "device": "mac",
+          "locale": "zh-CN",
+          "region": "cn"
+        },
+        {
+          "rowId": "desktop.brand-background.style",
+          "device": "mac",
+          "locale": "zh-TW",
+          "region": "cn"
+        },
+        {
+          "rowId": "desktop.brand-background.style",
+          "device": "mac",
+          "locale": "en",
+          "region": "cn"
+        },
+        {
+          "rowId": "desktop.brand-background.style",
+          "device": "mac",
+          "locale": "ja",
+          "region": "cn"
+        },
+        {
+          "rowId": "desktop.brand-background.style",
+          "device": "mac",
+          "locale": "ko",
+          "region": "cn"
+        }
+      ],
+      "dimension": "locale",
+      "rationale": "纯图形行,语言不参与渲染(fixture)"
+    },
+    {
+      "groupId": "g-bb-mac-global",
+      "cells": [
+        {
+          "rowId": "desktop.brand-background.style",
+          "device": "mac",
+          "locale": "zh-CN",
+          "region": "global"
+        },
+        {
+          "rowId": "desktop.brand-background.style",
+          "device": "mac",
+          "locale": "zh-TW",
+          "region": "global"
+        },
+        {
+          "rowId": "desktop.brand-background.style",
+          "device": "mac",
+          "locale": "en",
+          "region": "global"
+        },
+        {
+          "rowId": "desktop.brand-background.style",
+          "device": "mac",
+          "locale": "ja",
+          "region": "global"
+        },
+        {
+          "rowId": "desktop.brand-background.style",
+          "device": "mac",
+          "locale": "ko",
+          "region": "global"
+        }
+      ],
+      "dimension": "locale",
+      "rationale": "纯图形行,语言不参与渲染(fixture)"
+    },
+    {
+      "groupId": "g-bb-windows-cn",
+      "cells": [
+        {
+          "rowId": "desktop.brand-background.style",
+          "device": "windows",
+          "locale": "zh-CN",
+          "region": "cn"
+        },
+        {
+          "rowId": "desktop.brand-background.style",
+          "device": "windows",
+          "locale": "zh-TW",
+          "region": "cn"
+        },
+        {
+          "rowId": "desktop.brand-background.style",
+          "device": "windows",
+          "locale": "en",
+          "region": "cn"
+        },
+        {
+          "rowId": "desktop.brand-background.style",
+          "device": "windows",
+          "locale": "ja",
+          "region": "cn"
+        },
+        {
+          "rowId": "desktop.brand-background.style",
+          "device": "windows",
+          "locale": "ko",
+          "region": "cn"
+        }
+      ],
+      "dimension": "locale",
+      "rationale": "纯图形行,语言不参与渲染(fixture)"
+    },
+    {
+      "groupId": "g-bb-windows-global",
+      "cells": [
+        {
+          "rowId": "desktop.brand-background.style",
+          "device": "windows",
+          "locale": "zh-CN",
+          "region": "global"
+        },
+        {
+          "rowId": "desktop.brand-background.style",
+          "device": "windows",
+          "locale": "zh-TW",
+          "region": "global"
+        },
+        {
+          "rowId": "desktop.brand-background.style",
+          "device": "windows",
+          "locale": "en",
+          "region": "global"
+        },
+        {
+          "rowId": "desktop.brand-background.style",
+          "device": "windows",
+          "locale": "ja",
+          "region": "global"
+        },
+        {
+          "rowId": "desktop.brand-background.style",
+          "device": "windows",
+          "locale": "ko",
+          "region": "global"
+        }
+      ],
+      "dimension": "locale",
+      "rationale": "纯图形行,语言不参与渲染(fixture)"
+    },
+    {
+      "groupId": "g-wm-asset-iphone-cn",
+      "cells": [
+        {
+          "rowId": "mobile.wordmark.asset",
+          "device": "iphone",
+          "locale": "zh-CN",
+          "region": "cn"
+        },
+        {
+          "rowId": "mobile.wordmark.asset",
+          "device": "iphone",
+          "locale": "zh-TW",
+          "region": "cn"
+        },
+        {
+          "rowId": "mobile.wordmark.asset",
+          "device": "iphone",
+          "locale": "en",
+          "region": "cn"
+        },
+        {
+          "rowId": "mobile.wordmark.asset",
+          "device": "iphone",
+          "locale": "ja",
+          "region": "cn"
+        },
+        {
+          "rowId": "mobile.wordmark.asset",
+          "device": "iphone",
+          "locale": "ko",
+          "region": "cn"
+        }
+      ],
+      "dimension": "locale",
+      "rationale": "纯图形行,语言不参与渲染(fixture)"
+    },
+    {
+      "groupId": "g-wm-asset-iphone-global",
+      "cells": [
+        {
+          "rowId": "mobile.wordmark.asset",
+          "device": "iphone",
+          "locale": "zh-CN",
+          "region": "global"
+        },
+        {
+          "rowId": "mobile.wordmark.asset",
+          "device": "iphone",
+          "locale": "zh-TW",
+          "region": "global"
+        },
+        {
+          "rowId": "mobile.wordmark.asset",
+          "device": "iphone",
+          "locale": "en",
+          "region": "global"
+        },
+        {
+          "rowId": "mobile.wordmark.asset",
+          "device": "iphone",
+          "locale": "ja",
+          "region": "global"
+        },
+        {
+          "rowId": "mobile.wordmark.asset",
+          "device": "iphone",
+          "locale": "ko",
+          "region": "global"
+        }
+      ],
+      "dimension": "locale",
+      "rationale": "纯图形行,语言不参与渲染(fixture)"
+    },
+    {
+      "groupId": "g-wm-asset-android-phone-cn",
+      "cells": [
+        {
+          "rowId": "mobile.wordmark.asset",
+          "device": "android-phone",
+          "locale": "zh-CN",
+          "region": "cn"
+        },
+        {
+          "rowId": "mobile.wordmark.asset",
+          "device": "android-phone",
+          "locale": "zh-TW",
+          "region": "cn"
+        },
+        {
+          "rowId": "mobile.wordmark.asset",
+          "device": "android-phone",
+          "locale": "en",
+          "region": "cn"
+        },
+        {
+          "rowId": "mobile.wordmark.asset",
+          "device": "android-phone",
+          "locale": "ja",
+          "region": "cn"
+        },
+        {
+          "rowId": "mobile.wordmark.asset",
+          "device": "android-phone",
+          "locale": "ko",
+          "region": "cn"
+        }
+      ],
+      "dimension": "locale",
+      "rationale": "纯图形行,语言不参与渲染(fixture)"
+    },
+    {
+      "groupId": "g-wm-asset-android-phone-global",
+      "cells": [
+        {
+          "rowId": "mobile.wordmark.asset",
+          "device": "android-phone",
+          "locale": "zh-CN",
+          "region": "global"
+        },
+        {
+          "rowId": "mobile.wordmark.asset",
+          "device": "android-phone",
+          "locale": "zh-TW",
+          "region": "global"
+        },
+        {
+          "rowId": "mobile.wordmark.asset",
+          "device": "android-phone",
+          "locale": "en",
+          "region": "global"
+        },
+        {
+          "rowId": "mobile.wordmark.asset",
+          "device": "android-phone",
+          "locale": "ja",
+          "region": "global"
+        },
+        {
+          "rowId": "mobile.wordmark.asset",
+          "device": "android-phone",
+          "locale": "ko",
+          "region": "global"
+        }
+      ],
+      "dimension": "locale",
+      "rationale": "纯图形行,语言不参与渲染(fixture)"
+    },
+    {
+      "groupId": "g-wm-asset-ipad-cn",
+      "cells": [
+        {
+          "rowId": "mobile.wordmark.asset",
+          "device": "ipad",
+          "locale": "zh-CN",
+          "region": "cn"
+        },
+        {
+          "rowId": "mobile.wordmark.asset",
+          "device": "ipad",
+          "locale": "zh-TW",
+          "region": "cn"
+        },
+        {
+          "rowId": "mobile.wordmark.asset",
+          "device": "ipad",
+          "locale": "en",
+          "region": "cn"
+        },
+        {
+          "rowId": "mobile.wordmark.asset",
+          "device": "ipad",
+          "locale": "ja",
+          "region": "cn"
+        },
+        {
+          "rowId": "mobile.wordmark.asset",
+          "device": "ipad",
+          "locale": "ko",
+          "region": "cn"
+        }
+      ],
+      "dimension": "locale",
+      "rationale": "纯图形行,语言不参与渲染(fixture)"
+    },
+    {
+      "groupId": "g-wm-asset-ipad-global",
+      "cells": [
+        {
+          "rowId": "mobile.wordmark.asset",
+          "device": "ipad",
+          "locale": "zh-CN",
+          "region": "global"
+        },
+        {
+          "rowId": "mobile.wordmark.asset",
+          "device": "ipad",
+          "locale": "zh-TW",
+          "region": "global"
+        },
+        {
+          "rowId": "mobile.wordmark.asset",
+          "device": "ipad",
+          "locale": "en",
+          "region": "global"
+        },
+        {
+          "rowId": "mobile.wordmark.asset",
+          "device": "ipad",
+          "locale": "ja",
+          "region": "global"
+        },
+        {
+          "rowId": "mobile.wordmark.asset",
+          "device": "ipad",
+          "locale": "ko",
+          "region": "global"
+        }
+      ],
+      "dimension": "locale",
+      "rationale": "纯图形行,语言不参与渲染(fixture)"
+    },
+    {
+      "groupId": "g-wm-asset-android-pad-cn",
+      "cells": [
+        {
+          "rowId": "mobile.wordmark.asset",
+          "device": "android-pad",
+          "locale": "zh-CN",
+          "region": "cn"
+        },
+        {
+          "rowId": "mobile.wordmark.asset",
+          "device": "android-pad",
+          "locale": "zh-TW",
+          "region": "cn"
+        },
+        {
+          "rowId": "mobile.wordmark.asset",
+          "device": "android-pad",
+          "locale": "en",
+          "region": "cn"
+        },
+        {
+          "rowId": "mobile.wordmark.asset",
+          "device": "android-pad",
+          "locale": "ja",
+          "region": "cn"
+        },
+        {
+          "rowId": "mobile.wordmark.asset",
+          "device": "android-pad",
+          "locale": "ko",
+          "region": "cn"
+        }
+      ],
+      "dimension": "locale",
+      "rationale": "纯图形行,语言不参与渲染(fixture)"
+    },
+    {
+      "groupId": "g-wm-asset-android-pad-global",
+      "cells": [
+        {
+          "rowId": "mobile.wordmark.asset",
+          "device": "android-pad",
+          "locale": "zh-CN",
+          "region": "global"
+        },
+        {
+          "rowId": "mobile.wordmark.asset",
+          "device": "android-pad",
+          "locale": "zh-TW",
+          "region": "global"
+        },
+        {
+          "rowId": "mobile.wordmark.asset",
+          "device": "android-pad",
+          "locale": "en",
+          "region": "global"
+        },
+        {
+          "rowId": "mobile.wordmark.asset",
+          "device": "android-pad",
+          "locale": "ja",
+          "region": "global"
+        },
+        {
+          "rowId": "mobile.wordmark.asset",
+          "device": "android-pad",
+          "locale": "ko",
+          "region": "global"
+        }
+      ],
+      "dimension": "locale",
+      "rationale": "纯图形行,语言不参与渲染(fixture)"
+    },
+    {
+      "groupId": "g-wm-geo-iphone-cn",
+      "cells": [
+        {
+          "rowId": "mobile.wordmark.geometry",
+          "device": "iphone",
+          "locale": "zh-CN",
+          "region": "cn"
+        },
+        {
+          "rowId": "mobile.wordmark.geometry",
+          "device": "iphone",
+          "locale": "zh-TW",
+          "region": "cn"
+        },
+        {
+          "rowId": "mobile.wordmark.geometry",
+          "device": "iphone",
+          "locale": "en",
+          "region": "cn"
+        },
+        {
+          "rowId": "mobile.wordmark.geometry",
+          "device": "iphone",
+          "locale": "ja",
+          "region": "cn"
+        },
+        {
+          "rowId": "mobile.wordmark.geometry",
+          "device": "iphone",
+          "locale": "ko",
+          "region": "cn"
+        }
+      ],
+      "dimension": "locale",
+      "rationale": "纯图形行,语言不参与渲染(fixture)"
+    },
+    {
+      "groupId": "g-wm-geo-iphone-global",
+      "cells": [
+        {
+          "rowId": "mobile.wordmark.geometry",
+          "device": "iphone",
+          "locale": "zh-CN",
+          "region": "global"
+        },
+        {
+          "rowId": "mobile.wordmark.geometry",
+          "device": "iphone",
+          "locale": "zh-TW",
+          "region": "global"
+        },
+        {
+          "rowId": "mobile.wordmark.geometry",
+          "device": "iphone",
+          "locale": "en",
+          "region": "global"
+        },
+        {
+          "rowId": "mobile.wordmark.geometry",
+          "device": "iphone",
+          "locale": "ja",
+          "region": "global"
+        },
+        {
+          "rowId": "mobile.wordmark.geometry",
+          "device": "iphone",
+          "locale": "ko",
+          "region": "global"
+        }
+      ],
+      "dimension": "locale",
+      "rationale": "纯图形行,语言不参与渲染(fixture)"
+    },
+    {
+      "groupId": "g-wm-geo-android-phone-cn",
+      "cells": [
+        {
+          "rowId": "mobile.wordmark.geometry",
+          "device": "android-phone",
+          "locale": "zh-CN",
+          "region": "cn"
+        },
+        {
+          "rowId": "mobile.wordmark.geometry",
+          "device": "android-phone",
+          "locale": "zh-TW",
+          "region": "cn"
+        },
+        {
+          "rowId": "mobile.wordmark.geometry",
+          "device": "android-phone",
+          "locale": "en",
+          "region": "cn"
+        },
+        {
+          "rowId": "mobile.wordmark.geometry",
+          "device": "android-phone",
+          "locale": "ja",
+          "region": "cn"
+        },
+        {
+          "rowId": "mobile.wordmark.geometry",
+          "device": "android-phone",
+          "locale": "ko",
+          "region": "cn"
+        }
+      ],
+      "dimension": "locale",
+      "rationale": "纯图形行,语言不参与渲染(fixture)"
+    },
+    {
+      "groupId": "g-wm-geo-android-phone-global",
+      "cells": [
+        {
+          "rowId": "mobile.wordmark.geometry",
+          "device": "android-phone",
+          "locale": "zh-CN",
+          "region": "global"
+        },
+        {
+          "rowId": "mobile.wordmark.geometry",
+          "device": "android-phone",
+          "locale": "zh-TW",
+          "region": "global"
+        },
+        {
+          "rowId": "mobile.wordmark.geometry",
+          "device": "android-phone",
+          "locale": "en",
+          "region": "global"
+        },
+        {
+          "rowId": "mobile.wordmark.geometry",
+          "device": "android-phone",
+          "locale": "ja",
+          "region": "global"
+        },
+        {
+          "rowId": "mobile.wordmark.geometry",
+          "device": "android-phone",
+          "locale": "ko",
+          "region": "global"
+        }
+      ],
+      "dimension": "locale",
+      "rationale": "纯图形行,语言不参与渲染(fixture)"
+    },
+    {
+      "groupId": "g-wm-geo-ipad-cn",
+      "cells": [
+        {
+          "rowId": "mobile.wordmark.geometry",
+          "device": "ipad",
+          "locale": "zh-CN",
+          "region": "cn"
+        },
+        {
+          "rowId": "mobile.wordmark.geometry",
+          "device": "ipad",
+          "locale": "zh-TW",
+          "region": "cn"
+        },
+        {
+          "rowId": "mobile.wordmark.geometry",
+          "device": "ipad",
+          "locale": "en",
+          "region": "cn"
+        },
+        {
+          "rowId": "mobile.wordmark.geometry",
+          "device": "ipad",
+          "locale": "ja",
+          "region": "cn"
+        },
+        {
+          "rowId": "mobile.wordmark.geometry",
+          "device": "ipad",
+          "locale": "ko",
+          "region": "cn"
+        }
+      ],
+      "dimension": "locale",
+      "rationale": "纯图形行,语言不参与渲染(fixture)"
+    },
+    {
+      "groupId": "g-wm-geo-ipad-global",
+      "cells": [
+        {
+          "rowId": "mobile.wordmark.geometry",
+          "device": "ipad",
+          "locale": "zh-CN",
+          "region": "global"
+        },
+        {
+          "rowId": "mobile.wordmark.geometry",
+          "device": "ipad",
+          "locale": "zh-TW",
+          "region": "global"
+        },
+        {
+          "rowId": "mobile.wordmark.geometry",
+          "device": "ipad",
+          "locale": "en",
+          "region": "global"
+        },
+        {
+          "rowId": "mobile.wordmark.geometry",
+          "device": "ipad",
+          "locale": "ja",
+          "region": "global"
+        },
+        {
+          "rowId": "mobile.wordmark.geometry",
+          "device": "ipad",
+          "locale": "ko",
+          "region": "global"
+        }
+      ],
+      "dimension": "locale",
+      "rationale": "纯图形行,语言不参与渲染(fixture)"
+    },
+    {
+      "groupId": "g-wm-geo-android-pad-cn",
+      "cells": [
+        {
+          "rowId": "mobile.wordmark.geometry",
+          "device": "android-pad",
+          "locale": "zh-CN",
+          "region": "cn"
+        },
+        {
+          "rowId": "mobile.wordmark.geometry",
+          "device": "android-pad",
+          "locale": "zh-TW",
+          "region": "cn"
+        },
+        {
+          "rowId": "mobile.wordmark.geometry",
+          "device": "android-pad",
+          "locale": "en",
+          "region": "cn"
+        },
+        {
+          "rowId": "mobile.wordmark.geometry",
+          "device": "android-pad",
+          "locale": "ja",
+          "region": "cn"
+        },
+        {
+          "rowId": "mobile.wordmark.geometry",
+          "device": "android-pad",
+          "locale": "ko",
+          "region": "cn"
+        }
+      ],
+      "dimension": "locale",
+      "rationale": "纯图形行,语言不参与渲染(fixture)"
+    },
+    {
+      "groupId": "g-wm-geo-android-pad-global",
+      "cells": [
+        {
+          "rowId": "mobile.wordmark.geometry",
+          "device": "android-pad",
+          "locale": "zh-CN",
+          "region": "global"
+        },
+        {
+          "rowId": "mobile.wordmark.geometry",
+          "device": "android-pad",
+          "locale": "zh-TW",
+          "region": "global"
+        },
+        {
+          "rowId": "mobile.wordmark.geometry",
+          "device": "android-pad",
+          "locale": "en",
+          "region": "global"
+        },
+        {
+          "rowId": "mobile.wordmark.geometry",
+          "device": "android-pad",
+          "locale": "ja",
+          "region": "global"
+        },
+        {
+          "rowId": "mobile.wordmark.geometry",
+          "device": "android-pad",
+          "locale": "ko",
+          "region": "global"
+        }
+      ],
+      "dimension": "locale",
+      "rationale": "纯图形行,语言不参与渲染(fixture)"
+    },
+    {
+      "groupId": "g-orient-phone-iphone-cn",
+      "cells": [
+        {
+          "rowId": "mobile.orientation-layout.phone-fallback-geometry",
+          "device": "iphone",
+          "locale": "zh-CN",
+          "region": "cn"
+        },
+        {
+          "rowId": "mobile.orientation-layout.phone-fallback-geometry",
+          "device": "iphone",
+          "locale": "zh-TW",
+          "region": "cn"
+        },
+        {
+          "rowId": "mobile.orientation-layout.phone-fallback-geometry",
+          "device": "iphone",
+          "locale": "en",
+          "region": "cn"
+        },
+        {
+          "rowId": "mobile.orientation-layout.phone-fallback-geometry",
+          "device": "iphone",
+          "locale": "ja",
+          "region": "cn"
+        },
+        {
+          "rowId": "mobile.orientation-layout.phone-fallback-geometry",
+          "device": "iphone",
+          "locale": "ko",
+          "region": "cn"
+        }
+      ],
+      "dimension": "locale",
+      "rationale": "纯图形行,语言不参与渲染(fixture)"
+    },
+    {
+      "groupId": "g-orient-phone-iphone-global",
+      "cells": [
+        {
+          "rowId": "mobile.orientation-layout.phone-fallback-geometry",
+          "device": "iphone",
+          "locale": "zh-CN",
+          "region": "global"
+        },
+        {
+          "rowId": "mobile.orientation-layout.phone-fallback-geometry",
+          "device": "iphone",
+          "locale": "zh-TW",
+          "region": "global"
+        },
+        {
+          "rowId": "mobile.orientation-layout.phone-fallback-geometry",
+          "device": "iphone",
+          "locale": "en",
+          "region": "global"
+        },
+        {
+          "rowId": "mobile.orientation-layout.phone-fallback-geometry",
+          "device": "iphone",
+          "locale": "ja",
+          "region": "global"
+        },
+        {
+          "rowId": "mobile.orientation-layout.phone-fallback-geometry",
+          "device": "iphone",
+          "locale": "ko",
+          "region": "global"
+        }
+      ],
+      "dimension": "locale",
+      "rationale": "纯图形行,语言不参与渲染(fixture)"
+    },
+    {
+      "groupId": "g-orient-phone-android-phone-cn",
+      "cells": [
+        {
+          "rowId": "mobile.orientation-layout.phone-fallback-geometry",
+          "device": "android-phone",
+          "locale": "zh-CN",
+          "region": "cn"
+        },
+        {
+          "rowId": "mobile.orientation-layout.phone-fallback-geometry",
+          "device": "android-phone",
+          "locale": "zh-TW",
+          "region": "cn"
+        },
+        {
+          "rowId": "mobile.orientation-layout.phone-fallback-geometry",
+          "device": "android-phone",
+          "locale": "en",
+          "region": "cn"
+        },
+        {
+          "rowId": "mobile.orientation-layout.phone-fallback-geometry",
+          "device": "android-phone",
+          "locale": "ja",
+          "region": "cn"
+        },
+        {
+          "rowId": "mobile.orientation-layout.phone-fallback-geometry",
+          "device": "android-phone",
+          "locale": "ko",
+          "region": "cn"
+        }
+      ],
+      "dimension": "locale",
+      "rationale": "纯图形行,语言不参与渲染(fixture)"
+    },
+    {
+      "groupId": "g-orient-phone-android-phone-global",
+      "cells": [
+        {
+          "rowId": "mobile.orientation-layout.phone-fallback-geometry",
+          "device": "android-phone",
+          "locale": "zh-CN",
+          "region": "global"
+        },
+        {
+          "rowId": "mobile.orientation-layout.phone-fallback-geometry",
+          "device": "android-phone",
+          "locale": "zh-TW",
+          "region": "global"
+        },
+        {
+          "rowId": "mobile.orientation-layout.phone-fallback-geometry",
+          "device": "android-phone",
+          "locale": "en",
+          "region": "global"
+        },
+        {
+          "rowId": "mobile.orientation-layout.phone-fallback-geometry",
+          "device": "android-phone",
+          "locale": "ja",
+          "region": "global"
+        },
+        {
+          "rowId": "mobile.orientation-layout.phone-fallback-geometry",
+          "device": "android-phone",
+          "locale": "ko",
+          "region": "global"
+        }
+      ],
+      "dimension": "locale",
+      "rationale": "纯图形行,语言不参与渲染(fixture)"
+    },
+    {
+      "groupId": "g-orient-pad-ipad-cn",
+      "cells": [
+        {
+          "rowId": "mobile.orientation-layout.pad-landscape-geometry",
+          "device": "ipad",
+          "locale": "zh-CN",
+          "region": "cn"
+        },
+        {
+          "rowId": "mobile.orientation-layout.pad-landscape-geometry",
+          "device": "ipad",
+          "locale": "zh-TW",
+          "region": "cn"
+        },
+        {
+          "rowId": "mobile.orientation-layout.pad-landscape-geometry",
+          "device": "ipad",
+          "locale": "en",
+          "region": "cn"
+        },
+        {
+          "rowId": "mobile.orientation-layout.pad-landscape-geometry",
+          "device": "ipad",
+          "locale": "ja",
+          "region": "cn"
+        },
+        {
+          "rowId": "mobile.orientation-layout.pad-landscape-geometry",
+          "device": "ipad",
+          "locale": "ko",
+          "region": "cn"
+        }
+      ],
+      "dimension": "locale",
+      "rationale": "纯图形行,语言不参与渲染(fixture)"
+    },
+    {
+      "groupId": "g-orient-pad-ipad-global",
+      "cells": [
+        {
+          "rowId": "mobile.orientation-layout.pad-landscape-geometry",
+          "device": "ipad",
+          "locale": "zh-CN",
+          "region": "global"
+        },
+        {
+          "rowId": "mobile.orientation-layout.pad-landscape-geometry",
+          "device": "ipad",
+          "locale": "zh-TW",
+          "region": "global"
+        },
+        {
+          "rowId": "mobile.orientation-layout.pad-landscape-geometry",
+          "device": "ipad",
+          "locale": "en",
+          "region": "global"
+        },
+        {
+          "rowId": "mobile.orientation-layout.pad-landscape-geometry",
+          "device": "ipad",
+          "locale": "ja",
+          "region": "global"
+        },
+        {
+          "rowId": "mobile.orientation-layout.pad-landscape-geometry",
+          "device": "ipad",
+          "locale": "ko",
+          "region": "global"
+        }
+      ],
+      "dimension": "locale",
+      "rationale": "纯图形行,语言不参与渲染(fixture)"
+    },
+    {
+      "groupId": "g-orient-pad-android-pad-cn",
+      "cells": [
+        {
+          "rowId": "mobile.orientation-layout.pad-landscape-geometry",
+          "device": "android-pad",
+          "locale": "zh-CN",
+          "region": "cn"
+        },
+        {
+          "rowId": "mobile.orientation-layout.pad-landscape-geometry",
+          "device": "android-pad",
+          "locale": "zh-TW",
+          "region": "cn"
+        },
+        {
+          "rowId": "mobile.orientation-layout.pad-landscape-geometry",
+          "device": "android-pad",
+          "locale": "en",
+          "region": "cn"
+        },
+        {
+          "rowId": "mobile.orientation-layout.pad-landscape-geometry",
+          "device": "android-pad",
+          "locale": "ja",
+          "region": "cn"
+        },
+        {
+          "rowId": "mobile.orientation-layout.pad-landscape-geometry",
+          "device": "android-pad",
+          "locale": "ko",
+          "region": "cn"
+        }
+      ],
+      "dimension": "locale",
+      "rationale": "纯图形行,语言不参与渲染(fixture)"
+    },
+    {
+      "groupId": "g-orient-pad-android-pad-global",
+      "cells": [
+        {
+          "rowId": "mobile.orientation-layout.pad-landscape-geometry",
+          "device": "android-pad",
+          "locale": "zh-CN",
+          "region": "global"
+        },
+        {
+          "rowId": "mobile.orientation-layout.pad-landscape-geometry",
+          "device": "android-pad",
+          "locale": "zh-TW",
+          "region": "global"
+        },
+        {
+          "rowId": "mobile.orientation-layout.pad-landscape-geometry",
+          "device": "android-pad",
+          "locale": "en",
+          "region": "global"
+        },
+        {
+          "rowId": "mobile.orientation-layout.pad-landscape-geometry",
+          "device": "android-pad",
+          "locale": "ja",
+          "region": "global"
+        },
+        {
+          "rowId": "mobile.orientation-layout.pad-landscape-geometry",
+          "device": "android-pad",
+          "locale": "ko",
+          "region": "global"
+        }
+      ],
+      "dimension": "locale",
+      "rationale": "纯图形行,语言不参与渲染(fixture)"
+    },
+    {
+      "groupId": "g-migration-mac-cn",
+      "cells": [
+        {
+          "rowId": "desktop.legacy-migration.confirm-state",
+          "device": "mac",
+          "locale": "zh-CN",
+          "region": "cn"
+        },
+        {
+          "rowId": "desktop.legacy-migration.confirm-state",
+          "device": "mac",
+          "locale": "zh-TW",
+          "region": "cn"
+        },
+        {
+          "rowId": "desktop.legacy-migration.confirm-state",
+          "device": "mac",
+          "locale": "en",
+          "region": "cn"
+        },
+        {
+          "rowId": "desktop.legacy-migration.confirm-state",
+          "device": "mac",
+          "locale": "ja",
+          "region": "cn"
+        },
+        {
+          "rowId": "desktop.legacy-migration.confirm-state",
+          "device": "mac",
+          "locale": "ko",
+          "region": "cn"
+        }
+      ],
+      "dimension": "locale",
+      "rationale": "纯图形行,语言不参与渲染(fixture)"
+    },
+    {
+      "groupId": "g-migration-windows-cn",
+      "cells": [
+        {
+          "rowId": "desktop.legacy-migration.confirm-state",
+          "device": "windows",
+          "locale": "zh-CN",
+          "region": "cn"
+        },
+        {
+          "rowId": "desktop.legacy-migration.confirm-state",
+          "device": "windows",
+          "locale": "zh-TW",
+          "region": "cn"
+        },
+        {
+          "rowId": "desktop.legacy-migration.confirm-state",
+          "device": "windows",
+          "locale": "en",
+          "region": "cn"
+        },
+        {
+          "rowId": "desktop.legacy-migration.confirm-state",
+          "device": "windows",
+          "locale": "ja",
+          "region": "cn"
+        },
+        {
+          "rowId": "desktop.legacy-migration.confirm-state",
+          "device": "windows",
+          "locale": "ko",
+          "region": "cn"
+        }
+      ],
+      "dimension": "locale",
+      "rationale": "纯图形行,语言不参与渲染(fixture)"
+    }
+  ]
+}
