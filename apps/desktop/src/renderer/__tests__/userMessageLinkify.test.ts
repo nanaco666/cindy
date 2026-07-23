@@ -31,11 +31,11 @@ describe('userMessageLinkify', () => {
   });
 
   it('strips closing markdown wrap markers around plain-text URLs', () => {
-    expect(urls('**https://github.com/xindong/XDMaker/pull/163**(ready for review,非 draft)')).toEqual([
-      'https://github.com/xindong/XDMaker/pull/163',
+    expect(urls('**https://github.com/makecindy/cindy/pull/163**(ready for review,非 draft)')).toEqual([
+      'https://github.com/makecindy/cindy/pull/163',
     ]);
-    expect(urls('**https://github.com/xindong/XDMaker/pull/283(base,OPEN)**')).toEqual([
-      'https://github.com/xindong/XDMaker/pull/283',
+    expect(urls('**https://github.com/makecindy/cindy/pull/283(base,OPEN)**')).toEqual([
+      'https://github.com/makecindy/cindy/pull/283',
     ]);
     expect(urls('*https://example.com/Foo* next')).toEqual(['https://example.com/Foo']);
     expect(urls('__https://example.com/Foo__ next')).toEqual(['https://example.com/Foo']);
@@ -206,29 +206,29 @@ describe('userMessageLinkify', () => {
     expect(urls('看 (https://x.com/foo)then')).toEqual(['https://x.com/foo']);
     expect(urls('看 (https://x.com/foo)-bar')).toEqual(['https://x.com/foo']);
     expect(urls('看 https://x.com/foo(中文说明')).toEqual(['https://x.com/foo']);
-    expect(urls('已提交 https://github.com/xindong/XDMaker/pull/283(base main,OPEN)')).toEqual([
-      'https://github.com/xindong/XDMaker/pull/283',
+    expect(urls('已提交 https://github.com/makecindy/cindy/pull/283(base main,OPEN)')).toEqual([
+      'https://github.com/makecindy/cindy/pull/283',
     ]);
-    expect(urls('已提交 https://github.com/xindong/XDMaker/pull/283(base,OPEN)')).toEqual([
-      'https://github.com/xindong/XDMaker/pull/283',
+    expect(urls('已提交 https://github.com/makecindy/cindy/pull/283(base,OPEN)')).toEqual([
+      'https://github.com/makecindy/cindy/pull/283',
     ]);
-    expect(urls('已提交 https://github.com/xindong/XDMaker/pull/283/(base,OPEN)')).toEqual([
-      'https://github.com/xindong/XDMaker/pull/283/',
+    expect(urls('已提交 https://github.com/makecindy/cindy/pull/283/(base,OPEN)')).toEqual([
+      'https://github.com/makecindy/cindy/pull/283/',
     ]);
-    expect(urls('已提交 https://github.com/xindong/XDMaker/pull/283(base,OPEN).')).toEqual([
-      'https://github.com/xindong/XDMaker/pull/283',
+    expect(urls('已提交 https://github.com/makecindy/cindy/pull/283(base,OPEN).')).toEqual([
+      'https://github.com/makecindy/cindy/pull/283',
     ]);
-    expect(urls('已提交 https://github.com/xindong/XDMaker/pull/283#discussion_r1(base,OPEN)')).toEqual([
-      'https://github.com/xindong/XDMaker/pull/283#discussion_r1',
+    expect(urls('已提交 https://github.com/makecindy/cindy/pull/283#discussion_r1(base,OPEN)')).toEqual([
+      'https://github.com/makecindy/cindy/pull/283#discussion_r1',
     ]);
-    expect(urls('已提交 https://github.com/xindong/XDMaker/pull/283#discussion_r1(base main,OPEN)')).toEqual([
-      'https://github.com/xindong/XDMaker/pull/283#discussion_r1',
+    expect(urls('已提交 https://github.com/makecindy/cindy/pull/283#discussion_r1(base main,OPEN)')).toEqual([
+      'https://github.com/makecindy/cindy/pull/283#discussion_r1',
     ]);
-    expect(urls('已提交 https://github.com/xindong/XDMaker/pull/283?diff=split(base,OPEN)')).toEqual([
-      'https://github.com/xindong/XDMaker/pull/283?diff=split',
+    expect(urls('已提交 https://github.com/makecindy/cindy/pull/283?diff=split(base,OPEN)')).toEqual([
+      'https://github.com/makecindy/cindy/pull/283?diff=split',
     ]);
-    expect(urls('已提交 https://github.com/xindong/XDMaker/pull/283?diff=split(base main,OPEN)')).toEqual([
-      'https://github.com/xindong/XDMaker/pull/283?diff=split',
+    expect(urls('已提交 https://github.com/makecindy/cindy/pull/283?diff=split(base main,OPEN)')).toEqual([
+      'https://github.com/makecindy/cindy/pull/283?diff=split',
     ]);
     expect(urls('看 https://example.com/pull/123#frag(base,OPEN) 然后')).toEqual([
       'https://example.com/pull/123#frag(base,OPEN)',
@@ -254,17 +254,17 @@ describe('userMessageLinkify', () => {
     expect(urls('看 https://github.com/org/repo/pull/283?check=linux(base main,OPEN) 然后')).toEqual([
       'https://github.com/org/repo/pull/283?check=linux(base',
     ]);
-    expect(urls('看 (https://github.com/xindong/XDMaker/pull/283(base,OPEN))')).toEqual([
-      'https://github.com/xindong/XDMaker/pull/283',
+    expect(urls('看 (https://github.com/makecindy/cindy/pull/283(base,OPEN))')).toEqual([
+      'https://github.com/makecindy/cindy/pull/283',
     ]);
-    expect(urls('看 (https://github.com/xindong/XDMaker/pull/283(base,OPEN)).')).toEqual([
-      'https://github.com/xindong/XDMaker/pull/283',
+    expect(urls('看 (https://github.com/makecindy/cindy/pull/283(base,OPEN)).')).toEqual([
+      'https://github.com/makecindy/cindy/pull/283',
     ]);
-    expect(urls('看 (https://github.com/xindong/XDMaker/pull/283(base,OPEN))，状态')).toEqual([
-      'https://github.com/xindong/XDMaker/pull/283',
+    expect(urls('看 (https://github.com/makecindy/cindy/pull/283(base,OPEN))，状态')).toEqual([
+      'https://github.com/makecindy/cindy/pull/283',
     ]);
-    expect(urls('**(see https://github.com/xindong/XDMaker/pull/283(base,OPEN))**')).toEqual([
-      'https://github.com/xindong/XDMaker/pull/283',
+    expect(urls('**(see https://github.com/makecindy/cindy/pull/283(base,OPEN))**')).toEqual([
+      'https://github.com/makecindy/cindy/pull/283',
     ]);
     expect(urls(`已提交 ${GITLAB_MR_URL}(base,OPEN)`)).toEqual([
       GITLAB_MR_URL,

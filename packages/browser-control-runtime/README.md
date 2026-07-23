@@ -1,4 +1,4 @@
-# @lizi/browser-control-runtime
+# @cindy/browser-control-runtime
 
 Neutral, in-process browser-automation runtime for Cindy. Exposes a small,
 stable contract (`BrowserControlRuntime`) that the `cindy_browser` MCP and the
@@ -38,8 +38,8 @@ upstream/
 
 ```
 pnpm sync:browser-runtime --ref=<commit-or-branch>
-pnpm --filter @lizi/browser-control-runtime build   # surfaces any shim gaps
-pnpm --filter @lizi/browser-control-runtime test     # contract + SSRF guard
+pnpm --filter @cindy/browser-control-runtime build   # surfaces any shim gaps
+pnpm --filter @cindy/browser-control-runtime test     # contract + SSRF guard
 ```
 
 `_generated/**` is regenerated wholesale; never hand-edit it. To change behavior,

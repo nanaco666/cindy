@@ -10,7 +10,7 @@
  * `~/.ssh/authorized_keys` (RCE) or read `~/.ssh/id_rsa` / `.env` and exfil it
  * through an upload tool.
  *
- * Per AGENTS.md 规则 9 (代码保证确定性, 不靠 prompt/审批兜底) the fix is a
+ * Per docs/dev-rules/maker-core-and-agent-behavior.md (代码保证确定性, 不靠 prompt/审批兜底) the fix is a
  * deterministic, fail-closed boundary: every such path MUST resolve to a
  * location inside the current session `workingDir`. This module is the single
  * shared implementation wired into every offending tool.

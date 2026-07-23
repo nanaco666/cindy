@@ -1,1 +1,1 @@
-export { extractJsonStringFieldSnapshot } from '@lizi/voice-input-core';
+export { extractJsonStringFieldSnapshot } from '@cindy/voice-input-core';

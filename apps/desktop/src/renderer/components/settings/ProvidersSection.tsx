@@ -45,7 +45,7 @@ import { XDIncMark } from '@/components/icons/XDIncMark';
 import { hasProviderLogo, ProviderLogoMark } from '@/components/icons/ProviderLogoMark';
 
 import type { LocalCliDetection } from '../../../shared/localCliDetect';
-import type { CustomProviderConfig, ProviderView } from '@lizi/model-providers';
+import type { CustomProviderConfig, ProviderView } from '@cindy/model-providers';
 
 // ---------------------------------------------------------------------------
 // 工具

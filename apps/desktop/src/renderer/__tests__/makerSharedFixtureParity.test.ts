@@ -5,9 +5,9 @@ import {
   createMobileScheduleDraft,
   normalizeRemoteDirectoryListResult,
   normalizeRemotePathStatResults,
-} from '@lizi/maker-shared';
-import { SHARED_REMOTE_CONTROL_FIXTURE } from '@lizi/maker-shared/fixtures';
-import type { RemoteSchedule } from '@lizi/maker-shared/schedule-types';
+} from '@cindy/maker-shared';
+import { SHARED_REMOTE_CONTROL_FIXTURE } from '@cindy/maker-shared/fixtures';
+import type { RemoteSchedule } from '@cindy/maker-shared/schedule-types';
 
 import { categorizeByFilename, categorizeFile, extractExt } from '@/lib/fileTypes';
 import {

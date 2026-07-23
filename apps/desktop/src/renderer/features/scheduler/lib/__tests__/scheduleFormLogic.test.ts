@@ -17,7 +17,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import type { ScheduleTemplate } from '@lizi/maker-scheduler';
+import type { ScheduleTemplate } from '@cindy/maker-scheduler';
 
 import {
   PENDING_SESSION_ID,

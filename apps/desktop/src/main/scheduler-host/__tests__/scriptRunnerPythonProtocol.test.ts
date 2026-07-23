@@ -13,7 +13,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { afterAll, describe, expect, it, vi } from 'vitest';
-import type { FireContext, Schedule, ScriptCapability } from '@lizi/maker-scheduler';
+import type { FireContext, Schedule, ScriptCapability } from '@cindy/maker-scheduler';
 
 import { ScriptScheduleRunner, type ScriptCapabilityBroker } from '../script-runner';
 

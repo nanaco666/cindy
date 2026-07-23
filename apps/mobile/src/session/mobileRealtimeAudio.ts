@@ -3,7 +3,7 @@ import {
   requireNativeModule,
   type EventSubscription,
 } from 'expo-modules-core';
-import type { AudioTrace } from '@lizi/voice-input-core';
+import type { AudioTrace } from '@cindy/voice-input-core';
 
 export type MobileRealtimeAudioChunk = {
   pcm16: ArrayBuffer;

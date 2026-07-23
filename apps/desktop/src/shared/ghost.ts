@@ -3,7 +3,7 @@ import { findSplitChildByPanelKind, insertRootSplitPane, type Layout } from './l
 /**
  * 意识(Ghost,.cindy 文件)的清单数据模型与校验 —— main / renderer 共用。
  *
- * 跨模块安全与布局不变量见 AGENTS.md 规则 27 / 28:
+ * 跨模块安全与布局不变量见 docs/dev-rules/architecture-invariants.md / docs/dev-rules/plugin-security-and-authoring.md:
  * - `.cindy` 是一个 zip 压缩包,根部放一份 `ghost.json` 清单(身份卡);
  * - 意识只有一种形态(2026-07-12 Lizi 定案):`kind: 'chip'`、schemaVersion 2,
  *   带代码,跑在独立沙箱进程,slots 白名单声明能力,注入必弹权限清单。
@@ -55,7 +55,7 @@ export function parseGhostPartition(partition: unknown): string | null {
 const GHOST_ID_RE = /^[a-z0-9][a-z0-9-]{0,31}$/;
 
 /**
- * 八个卡槽(意识能力的全部出口,AGENTS.md 规则 28)。
+ * 八个卡槽(意识能力的全部出口,docs/dev-rules/plugin-security-and-authoring.md)。
  * 'cindy' = 请 Cindy 本体代办(借主机自带 AI 能力干活;2026-07-11 Lizi 定案
  * 由 'model' 更名——本质是 Cindy 在干活,与选模型无关;旧名在校验层作
  * 静默别名兼容,已装老包不消失)。
@@ -220,7 +220,7 @@ export interface GhostSubscribeNeeds {
   hooks?: GhostSubscribeHook[];
 }
 
-/* ── network 槽详单(AGENTS.md 规则 28)──────────────────────────────────
+/* ── network 槽详单(docs/dev-rules/plugin-security-and-authoring.md)──────────────────────────────────
  * 意识自带服务:作者声明域名白名单 + 凭证需求,装入时钉死、确认框逐项展示。
  * 运行期沙箱仍零直连,所有出网经管子 fetch-request 由主机代发;凭证明文
  * 永不进沙箱——主机只在"该凭证声明的注入位置"拼进请求头。 */
@@ -812,12 +812,12 @@ export function isValidGhostId(id: unknown): id is string {
 }
 
 /**
- * 官方意识 id 前缀(AGENTS.md 规则 28):`cindy-` 保留给随包预装的
+ * 官方意识 id 前缀(docs/dev-rules/plugin-security-and-authoring.md):`cindy-` 保留给随包预装的
  * 第一方意识。用户装入通道(拖入/选文件/forge 转交)对该前缀**在 packaged
  * 版本上拒装**——否则卸载内置意识后,同 id 的第三方包可抢注官方身份,连带
  * 蹭走凭证别名(providerSecrets 的 GHOST_SECRET_STORAGE_ALIASES 按 id 生效,
- * 抢注者能拿到用户历史填过的机器级 key)。dev 构建豁免:内置意识的开发迭代
- * 本来就靠打包重装。官方预装(builtinGhostProvisioner)走内部路径,不经此闸。
+ * 抢注者能拿到用户历史填过的机器级 key)。dev 构建豁免:官方意识的开发迭代
+ * 本来就靠打包重装。
  */
 export const GHOST_OFFICIAL_ID_PREFIX = 'cindy-';
 
@@ -832,6 +832,25 @@ export const GHOST_OFFICIAL_ID_PREFIXES: readonly string[] = [GHOST_OFFICIAL_ID_
 /** id 是否属于官方保留命名空间。 */
 export function isOfficialGhostId(id: string): boolean {
   return GHOST_OFFICIAL_ID_PREFIXES.some((prefix) => id.startsWith(prefix));
+}
+
+/**
+ * Bundled Ghosts whose execution depends on Cindy account-plane services.
+ *
+ * Local app sessions may still use external Ghosts and direct/BYOK built-ins
+ * (GitHub, GitLab, Google, web search, Mermaid). These entries are hidden and
+ * rejected by the main process unless a verified cloud session is active.
+ */
+export const CINDY_ACCOUNT_GHOST_IDS: ReadonlySet<string> = new Set([
+  'cindy-art',
+  'xd-pages',
+  'xd-feishu',
+  'xd-atlassian',
+  'xd-mivo',
+]);
+
+export function isCindyAccountGhostId(id: string): boolean {
+  return CINDY_ACCOUNT_GHOST_IDS.has(id);
 }
 
 /**
@@ -2370,7 +2389,7 @@ export function validateGhostManifest(raw: unknown): ManifestValidation {
 }
 
 /**
- * ── 管子(脑机接口)消息协议(AGENTS.md 规则 28)──
+ * ── 管子(脑机接口)消息协议(docs/dev-rules/plugin-security-and-authoring.md)──
  *
  * 下行(主机 → 电子脑,'ghost-pipe:message' 单向推):
  *   - tool-call:agent 经 ghost 总机派活。电子脑处理完必须用 send 上行

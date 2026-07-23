@@ -2,7 +2,7 @@ import {
   DEFAULT_NEAR_BOTTOM_THRESHOLD,
   isNearMessageListBottom,
   type MessageScrollMetrics,
-} from '@lizi/maker-shared/message-window';
+} from '@cindy/maker-shared/message-window';
 import type {
   MobileMessageRenderItem,
   MobileWorkChildItem,
@@ -23,7 +23,7 @@ export {
   type MessageScrollMetrics,
   type MessageWindowChangeKind,
   type MessageWindowUpdateDecision,
-} from '@lizi/maker-shared/message-window';
+} from '@cindy/maker-shared/message-window';
 
 export const MOBILE_MESSAGE_LIST_BOTTOM_PADDING = 132;
 export const MOBILE_NEAR_BOTTOM_THRESHOLD =

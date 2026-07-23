@@ -1,4 +1,4 @@
-import { isInFlightDeviceLinkError } from '@lizi/device-link';
+import { isInFlightDeviceLinkError } from '@cindy/device-link';
 import {
   ArrowDown,
   Camera,
@@ -106,7 +106,7 @@ import type { DeviceApiKeyStatus } from '@/device-link/deviceModelMetaCache';
 import type { MobileModelMemoryAccessors } from '@/session/draftModelMemory';
 import { ModelPickerSheet } from '@/session/ModelPickerSheet';
 import { MobileModelIconMark } from '@/session/MobileProviderMark';
-import { getModel } from '@lizi/model-providers/registry';
+import { getModel } from '@cindy/model-providers/registry';
 import { clearSessionMirror, makeSessionMirrorAccessors } from '@/session/sessionModelMirror';
 import { rowFastEditable } from '@/session/modelPickerRows';
 import {
@@ -177,8 +177,8 @@ import {
   useSessionQuotes,
 } from '@/session/chatQuoteStore';
 import { QuoteCapsule } from '@/session/QuoteCapsule';
-import { formatQuotesForSend } from '@lizi/maker-shared/chat-quotes';
-import { permissionModeOrAsk } from '@lizi/maker-shared/permission-mode';
+import { formatQuotesForSend } from '@cindy/maker-shared/chat-quotes';
+import { permissionModeOrAsk } from '@cindy/maker-shared/permission-mode';
 import { confirmFullAccessChange } from '@/session/fullAccessConfirmation';
 import {
   drainComposerAnnotationSubmissions,
@@ -198,7 +198,7 @@ import { SessionTailBanner } from '@/session/SessionTailBanner';
 import {
   CONTINUE_AFTER_APP_EXIT_PROMPT,
   CONTINUE_AFTER_ERROR_PROMPT,
-} from '@lizi/maker-shared/synthetic-trigger';
+} from '@cindy/maker-shared/synthetic-trigger';
 import {
   ComposerResizeGrabber,
   ComposerToolbarSpacer,
@@ -342,7 +342,7 @@ import {
   useSessionRunning,
   useSessionTaskUpdates,
 } from '@/session/remoteSessionStore';
-import type { MobileGoalLimitsInput, MobileGoalStatusPayload } from '@lizi/maker-shared/device-link-contract';
+import type { MobileGoalLimitsInput, MobileGoalStatusPayload } from '@cindy/maker-shared/device-link-contract';
 import {
   resolveMobileRemoteMedia,
   type MobileRemoteMediaPresignResult,
@@ -406,7 +406,7 @@ import type {
   MobileSlashCommand,
   RemoteDirectoryEntry,
 } from '@/device-link/mobileMakerTransport';
-import type { MobileCodexRateLimitsResult } from '@lizi/maker-shared/device-link-contract';
+import type { MobileCodexRateLimitsResult } from '@cindy/maker-shared/device-link-contract';
 import { useTheme, useThemedStyles, type ThemeColors } from '@/theme';
 import { fontWeight, iconSize, iconStroke, lineHeight, radius, spacing, typeScale } from '@/theme/tokens';
 
@@ -3984,7 +3984,7 @@ export default function SessionScreen() {
         // 按成功继续——不回滚、不报错,后续收尾(plan 恢复 / 映射清理)照常执行。
       }
       if (sessionAtSend.permissionMode === 'plan') {
-        // 一次性语义(对齐桌面 PR#494 / Dash 拍板):计划模式只对本条消息生效,发送后
+        // 一次性语义(对齐桌面 PR#494 / 产品决策):计划模式只对本条消息生效,发送后
         // 自动恢复进入前的权限档;本条消息通常已按 plan 派发,切换只影响后续消息。
         // best-effort:失败不打断发送流程,chip 会保留、用户可手动退出。
         const fallback = runtimeOptions?.permissionOptions.find((option) => option.id !== 'plan')?.id ?? 'ask';
@@ -5674,7 +5674,7 @@ export default function SessionScreen() {
               />
               <ContextSheetGroup label="模式">
                 {planModeSupported ? (
-                  // 点击即切换计划模式并关面板(Dash 拍板,不做开关);已开启时显示 ✓,再点退出。
+                  // 点击即切换计划模式并关面板(产品决策,不做开关);已开启时显示 ✓,再点退出。
                   <ContextSheetRow
                     accessibilityHint={composerSendUnavailableReason ?? undefined}
                     disabled={!canUseComposer || controlBusy}

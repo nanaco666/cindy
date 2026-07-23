@@ -1,4 +1,4 @@
-import type { DictationRefinementContext } from '@lizi/voice-input-core';
+import type { DictationRefinementContext } from '@cindy/voice-input-core';
 import {
   MAX_REFINEMENT_HISTORY_ITEM_CHARS,
   VOICE_INPUT_HISTORY_COMPACT_CHARS,

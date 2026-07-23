@@ -7,7 +7,7 @@ import type {
   Session,
   SessionSendOptions,
   SessionSendResult,
-} from '@lizi/maker-core';
+} from '@cindy/maker-core';
 import { describe, expect, it, vi } from 'vitest';
 
 import {

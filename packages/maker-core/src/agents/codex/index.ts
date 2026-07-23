@@ -3975,7 +3975,7 @@ export class CodexAgent extends BaseAgent {
           // original queue/composer content and can retry through the normal path.
           throw new Error('No active Codex turn to steer');
         }
-        // 同轮注入(2026-07-12 Dash 拍板,与 Claude 对齐):turn/steer 把消息追加进
+        // 同轮注入(2026-07-12 产品决策,与 Claude 对齐):turn/steer 把消息追加进
         // in-flight turn,不打断当前工作,模型在下一个工具调用边界消化这条输入
         // (与 Codex 官方 CLI 排队消息 "submitted after next tool call" 同语义)。
         // 需要真打断的用户自己点 Stop。挂起的审批 / user-input 不 dismiss——turn

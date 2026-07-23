@@ -10,7 +10,7 @@
  */
 import { describe, it, expect } from 'vitest';
 
-import { BRAND_NAME } from '@lizi/maker-shared/branding';
+import { BRAND_NAME } from '@cindy/maker-shared/branding';
 import { i18n } from '../i18n';
 
 describe('locale 品牌名插值', () => {

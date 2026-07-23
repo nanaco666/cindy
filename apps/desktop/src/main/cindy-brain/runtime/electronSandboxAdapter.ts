@@ -21,7 +21,7 @@ import {
 import type { SandboxHandle, SandboxHostAdapter } from './GhostRuntime.js';
 
 /**
- * Electron 沙箱宿主(AGENTS.md 规则 28):
+ * Electron 沙箱宿主(docs/dev-rules/plugin-security-and-authoring.md):
  * 每段干活中的芯片型意识 = 一个隐藏 BrowserWindow——
  *   sandbox: true(Chromium 系统级沙箱)+ nodeIntegration: false +
  *   contextIsolation: true + 独立内存 session 分区(不落盘、互不可见)。
@@ -232,7 +232,7 @@ function registerGhostProtocol(partition: string, ghost: InstalledGhost): void {
   const ghostId = ghost.manifest.id;
   const installDir = ghost.dir;
   const entry = ghost.manifest.entry;
-  // 分区级断网(AGENTS.md 规则 28 的"网络永远不直连"):本分区发出的一切
+  // 分区级断网(docs/dev-rules/plugin-security-and-authoring.md 的"网络永远不直连"):本分区发出的一切
   // 请求,只放行自己协议同 id 下的资源;http(s) / ws / 其它协议一律掐断。
   // 进程沙箱不管网络,这里才是"零网络"承诺的真正闸门;外部数据未来走
   // 主机代发(管子服务),不走这里。devtools 前端跑在自己的进程,不受影响。
@@ -478,7 +478,7 @@ class ElectronSandboxHandle implements SandboxHandle {
         nodeIntegration: false,
         partition,
         // 管子桥(脑机接口)只接在电子脑逻辑页上;面板 webview 零桥
-        // (AGENTS.md 规则 28 的结构保证)。preload 在 sandbox
+        // (docs/dev-rules/plugin-security-and-authoring.md 的结构保证)。preload 在 sandbox
         // + contextIsolation 下只能经 contextBridge 暴露极小白名单面。
         preload: GHOST_PRELOAD_PATH,
         webSecurity: true,

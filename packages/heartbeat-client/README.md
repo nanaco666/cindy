@@ -1,4 +1,4 @@
-# @lizi/heartbeat-client
+# @cindy/heartbeat-client
 
 Cindy 客户端在线心跳模块。
 
@@ -12,7 +12,7 @@ Cindy 客户端在线心跳模块。
 ## Usage
 
 ```ts
-import { createHeartbeatClient } from '@lizi/heartbeat-client';
+import { createHeartbeatClient } from '@cindy/heartbeat-client';
 
 const handle = createHeartbeatClient({
   endpoint: 'https://heartbeat.example.com',

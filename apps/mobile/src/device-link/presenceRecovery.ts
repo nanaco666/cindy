@@ -1,4 +1,4 @@
-import type { PresenceSnapshot } from '@lizi/device-link';
+import type { PresenceSnapshot } from '@cindy/device-link';
 
 type PresenceAvailabilitySnapshot = Pick<PresenceSnapshot, 'deviceId' | 'online' | 'remoteControlEnabled'>;
 

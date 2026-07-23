@@ -6,4 +6,4 @@ export {
   type SessionActionStripInput,
   type SessionOverviewChip,
   type SessionOverviewModel,
-} from '@lizi/maker-shared/session-action-strip';
+} from '@cindy/maker-shared/session-action-strip';

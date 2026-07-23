@@ -40,7 +40,7 @@ import {
   type InstallProgressEvent,
   type RemoteAgentKind,
   type RemoteHost,
-} from '@lizi/maker-remote-ssh';
+} from '@cindy/maker-remote-ssh';
 
 import { createLogger } from '../logger.js';
 import { throwIpcError, requireString, requireObject, requireEnum } from '../utils/ipcValidate.js';
@@ -451,7 +451,7 @@ async function ensureHydrated(): Promise<void> {
 
 /**
  * Snapshot wrapper used in IPC payloads. `HostSnapshot` lives in the
- * transport-only package (@lizi/maker-remote-ssh) and stays free of
+ * transport-only package (@cindy/maker-remote-ssh) and stays free of
  * desktop-side prefs; we wrap it here so renderer gets autoConnect in a
  * single round-trip instead of having to call a second IPC per row.
  */
@@ -1497,4 +1497,4 @@ export async function disposeRemoteSshPool(): Promise<void> {
 }
 
 
-export type { HostSnapshot, HostConfig } from '@lizi/maker-remote-ssh';
+export type { HostSnapshot, HostConfig } from '@cindy/maker-remote-ssh';

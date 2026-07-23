@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { getLiziMcpSessionContext } from 'lizi-mcps';
+import { getLiziMcpSessionContext } from '@cindy/mcps';
 
-import type { Logger } from '@lizi/maker-core';
+import type { Logger } from '@cindy/maker-core';
 import {
   startCodexHttpBridge,
   type CodexHttpBridge,

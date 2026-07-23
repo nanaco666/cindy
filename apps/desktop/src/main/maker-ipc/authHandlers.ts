@@ -5,7 +5,7 @@
  * push payload 归一化。
  */
 
-import type { AgentKind, AuthState, Maker } from '@lizi/maker-core';
+import type { AgentKind, AuthState, Maker } from '@cindy/maker-core';
 
 import { requireEnum, throwIpcError } from '../utils/ipcValidate.js';
 import { createLogger } from '../logger.js';

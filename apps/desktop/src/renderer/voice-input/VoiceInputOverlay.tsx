@@ -11,7 +11,7 @@ import {
 } from 'react';
 import { Check, Copy, Settings, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import type { DictationRefinementContext, VoiceInputState } from '@lizi/voice-input-core';
+import type { DictationRefinementContext, VoiceInputState } from '@cindy/voice-input-core';
 
 import { Spinner } from '@/components/ui/spinner';
 import { Tip } from '@/components/ui/tooltip';

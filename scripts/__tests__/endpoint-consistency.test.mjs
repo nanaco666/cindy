@@ -17,7 +17,7 @@ test('提交的 EAS build profiles 不包含生产端点 env（含 extends）', 
     assert.equal(env.EXPO_PUBLIC_XDT_MOBILE_VOICE_LITELLM_BASE_URL, undefined, profileName);
     assert.equal(env.EXPO_PUBLIC_ENDPOINT_MANIFEST_BASE_URL, undefined, profileName);
   }
-  assert.equal(resolveEasBuildProfileEnv(eas.build, 'beta-dash').EXPO_PUBLIC_BETA_DEV, 'dash');
+  assert.equal(resolveEasBuildProfileEnv(eas.build, 'beta-global-base').EXPO_PUBLIC_APP_VARIANT, 'beta');
 });
 
 test('EAS extends 解析支持子级覆盖，并拒绝缺失父级与循环', () => {

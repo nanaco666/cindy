@@ -548,7 +548,7 @@ export class ClaudeCodeAgent extends BaseAgent {
    * 鉴权: Claude AuthAdapter 是纯 API key 模式 (auth-adapters.ts), getAuthEnv() 只放
    * ANTHROPIC_API_KEY, 没有 OAuth 路径 —— 直接抠出来用即可。
    *
-   * baseURL: 复用 runtimeConfig.endpoint (host 已经配成 https://llm-proxy.tapsvc.com),
+   * baseURL: 复用 runtimeConfig.endpoint (host 已经配成网关 endpoint),
    * 跟 startSession 同一接入点; 不另外硬编码。
    *
    * 失败: 抛 OneShotError (reason: timeout/auth/network/malformed); 宽容调用方
@@ -704,7 +704,7 @@ export class ClaudeCodeAgent extends BaseAgent {
       modelContextWindows: providerRoutedModels,
     });
     // 远端单独一份 env:用 'remote' 模式从空字典起(不继承 desktop OS env),否则
-    // Windows HOME=C:\Users\XINDONG 之类污染远端 cc CLI 的 ~ 展开(session/memory
+    // Windows HOME=C:\Users\REMOTE_USER 之类污染远端 cc CLI 的 ~ 展开(session/memory
     // 落怪路径)。详见 env-builder.ts buildClaudeEnv 文档。
     const remoteEnv = opts.remoteHostId
       ? await buildClaudeEnv(this.deps.auth, this.deps.runtimeConfig, {
@@ -1526,8 +1526,8 @@ export class ClaudeCodeAgent extends BaseAgent {
           model: currentSdkModel,
           // 关键: 远端必须用 remoteEnv (零 process.env 继承), 不能用本地分支的
           // env。否则 desktop 的 HOME / PATH / APPDATA 等会污染远端 SDK spawn 的
-          // cc CLI(典型: Windows HOME=C:\Users\XINDONG 透到 mac, 远端 cc CLI
-          // 把 ~ 展开成 <cwd>/C:\Users\XINDONG/.claude/, session 全落怪目录)。
+          // cc CLI(典型: Windows HOME=C:\Users\REMOTE_USER 透到 mac, 远端 cc CLI
+          // 把 ~ 展开成 <cwd>/C:\Users\REMOTE_USER/.claude/, session 全落怪目录)。
           // remoteEnv 在 startSession 顶部已经 build (opts.remoteHostId 非空时
           // 才 build), 这里 ! 是合理的 — 走到这分支 remoteCcQueryFactory 也已经
           // gate 过 remoteHostId 非空。
@@ -2519,14 +2519,44 @@ export class ClaudeCodeAgent extends BaseAgent {
       expectedResumeSessionId: string,
       evidence: unknown,
     ): Promise<boolean> {
-      if (!replayableUserInput) return false;
-      if (!(await clearInvalidResumeSession(expectedResumeSessionId, 'sdk_runtime'))) return false;
-      const replayInput = replayableUserInput;
+      // gate 必须在任何 await 之前装上:CAS(onInvalidResumeSession)可能很慢,期间新进入
+      // 的 send 若不被拦在入口,消息会在 Session.send 的 onAccepted 持久化后撞进稍后的
+      // 队列交替窗口(desktop 只对 SESSION_RUNNING 前缀 requeue → 已落库但从未送达)。
+      // 两个分支都持有 gate 直到重建完成或放弃;所有出口 releaseGate。
+      let releaseIdleResumeGate: (() => void) | undefined;
+      idleResumeRebuildGate = new Promise<void>((resolve) => { releaseIdleResumeGate = resolve; });
+      const releaseGate = (): void => {
+        if (!releaseIdleResumeGate) return;
+        idleResumeRebuildGate = null;
+        releaseIdleResumeGate();
+        releaseIdleResumeGate = undefined;
+      };
+      // 先停 deferred-failure 定时器,再进慢速 CAS:两步失败形态(先 is_error result 后精确
+      // throw)下 50ms 计时器可能在 CAS await 期间先到,把本该被静默恢复吞掉的终态错误漏给
+      // UI。CAS 失败放弃恢复时由 surfaceUnrecoverableInvalidResume 推全新终态错误,不丢反馈。
       discardDeferredResumeFailure();
-      log.warn('recovering invalid resume with one fresh retry', {
-        expectedResumeSessionId,
-        evidence: evidence instanceof Error ? evidence.message : String(evidence),
-      });
+      // 清失效 resume id 优先于一切:无论有没有可重放的 turn,不存在的 sdk_session_id
+      // 都必须清掉,否则下一次 send 仍会 resume 同一个死会话反复失败。CAS 不匹配
+      // (并发改了 id)才放弃并交回调用方 surface。
+      if (!(await clearInvalidResumeSession(expectedResumeSessionId, 'sdk_runtime'))) {
+        releaseGate();
+        return false;
+      }
+      // replayableUserInput 为空 = resume 失败发生在任何用户 turn 之前(eager bootstrap /
+      // 重启恢复 / agent 切换后的立即重建:CLI 在收到首条消息前就判定 resume 会话不存在)。
+      // 此时没有任何 turn 会因此失败,surface 终态错误只会让用户看到一条无谓红条并被迫
+      // 手动重试(切到 Claude 的偶发 "No conversation found" 即源于此)。与 spawn 前 'missing'
+      // 预检同一取向:静默重建全新会话,让用户的首条真实消息直接在新会话上跑。
+      const replayInput = replayableUserInput;
+      log.warn(
+        replayInput
+          ? 'recovering invalid resume with one fresh retry'
+          : 'recovering invalid resume before any user turn; rebuilding fresh idle session',
+        {
+          expectedResumeSessionId,
+          evidence: evidence instanceof Error ? evidence.message : String(evidence),
+        },
+      );
       clearUpstreamResponseIdle();
       pendingToolIds.clear();
       try { inputQueue.end(); } catch (error) {
@@ -2535,19 +2565,61 @@ export class ClaudeCodeAgent extends BaseAgent {
       try { await Promise.resolve(currentQ.close()); } catch (error) {
         log.debug('invalid resume recovery: old query close failed', { error: String(error) });
       }
+      if (closed) {
+        // close 赢了竞态:handle.close 已 end 队列 / abort controller,这里不能再重建,
+        // 否则会留下无 handle 管理的本地 CLI 进程或远端 cc-manager 会话(空耗 + 下次
+        // attach 误连)。失效 id 已清,直接收手;forward loop 的 finally 会按 closed
+        // end 掉 eventQueue。
+        releaseGate();
+        log.debug('invalid resume recovery aborted: handle closed while old query was closing');
+        return true;
+      }
       inputQueue = createAsyncQueue<SdkUserInput>();
       abortController = new AbortController();
       runtimeState.lastResultUsageAggregate = null;
-      beginNewTurn();
-      toolLoopGuard?.resetTurn();
-      turnInFlight = true;
+      // 快照 rebuild 起点档位 — 与 rewind rebuild 同款:await buildQuery 期间到达的
+      // runtime setter 会被 controlRequestsBlocked() 短路成只改闭包(远端分支的
+      // remoteCcQueryFactory RPC 往返是真实窗口),重建后按快照 diff 回放漂移,
+      // 避免新 query 带旧 model/flags 起跑而 handle getter 报新值。
+      const runtimeSnapshot: QueryRuntimeSnapshot = {
+        model: mutableModel,
+        effort: mutableEffort,
+        fastMode: mutableFastMode,
+        sdkPermissionMode: currentTurnSdkPermissionMode(),
+      };
+      // 只有真正重放一个 turn 时才登记 turn 状态;idle 重建(无 replay)绝不能置
+      // turnInFlight,否则 isTurnRunning() 会在没有 turn 运行时误报为忙。无 replay 的
+      // 全新 query + startForwardLoop 等价于 startSession 首次起 q 的空闲态。
+      if (replayInput) {
+        beginNewTurn();
+        toolLoopGuard?.resetTurn();
+        turnInFlight = true;
+      }
       try {
-        q = await buildQuery({ permissionMode: currentTurnSdkPermissionMode(), fresh: true });
+        q = await buildQuery({ permissionMode: runtimeSnapshot.sdkPermissionMode, fresh: true });
+        if (closed) {
+          // close 在 buildQuery 期间赢了竞态:teardown 只拆得到当时存在的 query,刚建的
+          // 替换 query 必须在这里立即关掉,不 startForwardLoop。
+          releaseGate();
+          try { inputQueue.end(); } catch (endError) {
+            log.debug('invalid resume recovery: replacement queue end after close failed', { error: String(endError) });
+          }
+          try { q.close(); } catch (closeError) {
+            log.warn('invalid resume recovery: closing replacement query after handle close failed', { error: String(closeError) });
+          }
+          log.debug('invalid resume recovery aborted: handle closed during rebuild');
+          return true;
+        }
         startForwardLoop(q);
-        if (!inputQueue.push(replayInput)) throw new Error('fresh retry input queue rejected replay');
-        armUpstreamResponseIdle();
+        await replayRuntimeDrift(runtimeSnapshot, 'invalid resume rebuild');
+        releaseGate();
+        if (replayInput) {
+          if (!inputQueue.push(replayInput)) throw new Error('fresh retry input queue rejected replay');
+          armUpstreamResponseIdle();
+        }
         return true;
       } catch (error) {
+        releaseGate();
         log.error('invalid resume fresh retry failed to start', {
           expectedResumeSessionId,
           error: error instanceof Error ? error.message : String(error),
@@ -2594,6 +2666,12 @@ export class ClaudeCodeAgent extends BaseAgent {
     // 这个窗口里的 runtime setter 只能更新闭包,不能直接写新 q:否则 plan arm / auto-compact
     // 可能污染当前正在接受的普通 send。send 登记 turn state 后再解除。
     let acceptingRebuiltSend = false;
+    // invalid-resume 恢复期间的门禁(从 CAS 清 id 起、到重建完成或放弃为止):这段
+    // 窗口里旧 inputQueue 会被 end、q 被替换,send 会把消息推进死队列或未连接的新队列。
+    // 非 null = 恢复进行中。send / rewind 入口 await 它而不是抛错 —— Session.send 的
+    // onAccepted 已持久化/ack 消息,抛普通 Error 会把瞬时重建变成孤儿用户消息(desktop
+    // 只对 SESSION_RUNNING 前缀 requeue)。恢复结束(成功或失败)后 resolve 放行。
+    let idleResumeRebuildGate: Promise<void> | null = null;
     // runtime control request 可写性判定: commitRewindFiles 后旧 Query 已 close、新 Query
     // 等下一次 send 重建;或 bridge Stop/watchdog 已 close 当前 Query、等待下一次
     // send 从同一 rewind point 重建。这些窗口里对 q 发 control request 会抛
@@ -2604,7 +2682,7 @@ export class ClaudeCodeAgent extends BaseAgent {
     // 窗口里用户切模型/权限档只会改闭包,不会影响当前和后续 turn。只有当前 q 已被
     // 主动 close 并登记到 canceledBridgeQueries 时才阻塞 control request。
     const controlRequestsBlocked = (): boolean =>
-      pendingRewindTo !== undefined || acceptingRebuiltSend || canceledBridgeQueries.has(q);
+      pendingRewindTo !== undefined || acceptingRebuiltSend || idleResumeRebuildGate !== null || canceledBridgeQueries.has(q);
     type QueryRuntimeSnapshot = {
       model: string;
       effort: Effort;
@@ -2674,6 +2752,12 @@ export class ClaudeCodeAgent extends BaseAgent {
       get model() { return mutableModel; },
 
       async send(message: UserMessage, sendOpts?: SendOptions) {
+        // idle resume fallback 正在重建(亚秒窗):等它完成再走正常受理。重建成功时
+        // 消息透明跑在新会话上;重建失败/close 竞态时 push 撞上已 end 的队列,由下方
+        // userInputAccepted 兜底干净收尾。不抛错 —— 见 idleResumeRebuildGate 声明处。
+        while (idleResumeRebuildGate) {
+          await idleResumeRebuildGate;
+        }
         if (sendOpts?.signal?.aborted) {
           throw new Error('Claude send cancelled before acceptance');
         }
@@ -2939,6 +3023,7 @@ export class ClaudeCodeAgent extends BaseAgent {
             throw new Error('Claude send cancelled before acceptance');
           }
         }
+        let userInputAccepted = false;
         try {
           const content = await toClaudeSdkContent(message.content);
           if (sendOpts?.signal?.aborted) {
@@ -2985,6 +3070,7 @@ export class ClaudeCodeAgent extends BaseAgent {
             // get persisted and removed even though Claude never received them.
             throw new Error('Claude input queue is closed');
           }
+          userInputAccepted = true;
           replayableUserInput = sdkInput;
           // upstream-response-idle watchdog 起表 — 放在 inputQueue.push 之后, 避免把
           // client 端的 toClaudeSdkContent (多模态 image-resizer 同步等几秒) 算进上游
@@ -3000,6 +3086,12 @@ export class ClaudeCodeAgent extends BaseAgent {
             finishSendBeforeUserInput('bridge_send_abandoned', e);
           } else if (sendOpts?.signal?.aborted) {
             finishSendBeforeUserInput('send_cancelled_before_acceptance', e);
+          } else if (!userInputAccepted) {
+            // 用户输入从未进入队列(附件转换失败,或 push 撞上 invalid-resume 无 replay
+            // 重建「旧队列已 end、新队列未替换」的交替窗口返回 false):必须回收本 send
+            // 已登记的 turn 状态。否则 turnInFlight 悬置 true 且永无终态事件,Session 层
+            // 后续 send 一律 SESSION_RUNNING、renderer 静默排队重试,会话被永久卡成 busy。
+            finishSendBeforeUserInput('send_failed_before_user_input', e);
           }
           throw e;
         }
@@ -3353,6 +3445,11 @@ export class ClaudeCodeAgent extends BaseAgent {
       },
 
       async previewRewindFiles(userUuid: string): Promise<RewindFilesResult> {
+        // invalid-resume 重建期间 q 是死掉/半替换的旧 query:与 send 同款等待门禁,
+        // 替换 query 就绪后再操作(dryRun 在全新会话上自然返回 canRewind:false 软拒绝)。
+        while (idleResumeRebuildGate) {
+          await idleResumeRebuildGate;
+        }
         log.info('previewRewindFiles', { userUuid, sdkSessionId });
         try {
           const result = await q.rewindFiles(userUuid, { dryRun: true });
@@ -3380,6 +3477,11 @@ export class ClaudeCodeAgent extends BaseAgent {
       },
 
       async commitRewindFiles(userUuid: string, priorAssistantUuid: string): Promise<undefined> {
+        // 同 previewRewindFiles:重建窗口内不得对死掉/半替换的 q 做 rewindFiles/close,
+        // 否则 pendingRewindTo 会指向一个已不存在的会话时点。等替换 query 就绪再走。
+        while (idleResumeRebuildGate) {
+          await idleResumeRebuildGate;
+        }
         log.info('commitRewindFiles ▶', { userUuid, priorAssistantUuid, sdkSessionId });
         // ① 立即把文件回滚到 target 时点 (失败 warn + 继续, forkSession=true 兜底)
         try {

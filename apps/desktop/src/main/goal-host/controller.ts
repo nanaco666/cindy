@@ -14,8 +14,8 @@
  * 持久化全代码驱动。
  */
 
-import { isTerminalAgentErrorEvent } from '@lizi/maker-core';
-import type { AgentEvent } from '@lizi/maker-core';
+import { isTerminalAgentErrorEvent } from '@cindy/maker-core';
+import type { AgentEvent } from '@cindy/maker-core';
 
 import { buildContinuationDirective, buildFirstTurnDirective } from './directive';
 import { agentHandoffPending } from '../maker-ipc/agentHandoffPendingSingleton';

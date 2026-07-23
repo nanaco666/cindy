@@ -1,13 +1,13 @@
 /**
  * script-capability-status — script 任务能力的运行时可用性探测(纯函数)
  * ---------------------------------------------------------------------------
- * 能力**目录**是静态白名单(@lizi/maker-scheduler 的 SCRIPT_CAPABILITIES,授权
+ * 能力**目录**是静态白名单(@cindy/maker-scheduler 的 SCRIPT_CAPABILITIES,授权
  * 语义、任务的持久配置);本模块解决的是另一半——**可用性**(瞬时状态):jira.*
  * 走 xd-atlassian 意识,意识未装入 / 沉睡时任务触发必失败。表单在能力选择器里
  * 按本探测结果标注警示,但**不过滤清单**——建任务时的意识状态不代表任务运行时
  * 的状态,藏掉选项会挡住"先建任务、稍后唤醒意识"的正常路径。
  */
-import { SCRIPT_CAPABILITIES, type ScriptCapability } from '@lizi/maker-scheduler';
+import { SCRIPT_CAPABILITIES, type ScriptCapability } from '@cindy/maker-scheduler';
 
 /**
  * 能力 → 依赖意识 id。只登记有意识依赖的能力;不在表内 = host 原生实现,恒可用

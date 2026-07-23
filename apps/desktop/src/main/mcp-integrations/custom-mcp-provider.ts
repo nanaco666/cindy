@@ -23,7 +23,7 @@ import type {
   CodexHttpMcpServerConfig,
   McpProvider,
   McpProviderContext,
-} from '@lizi/maker-core';
+} from '@cindy/maker-core';
 
 import type { CustomMcpConfig } from '../maker-host/custom-mcp-store.js';
 

@@ -27,7 +27,7 @@
  * 契约锚点：全局可见 + handler 拒绝语义见 docs/dev-rules/orca-team-architecture.md「MCP 与 IPC 控制面」。
  */
 
-import { BRAND_NAME } from '@lizi/maker-shared/branding';
+import { BRAND_NAME } from '@cindy/maker-shared/branding';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z, type ZodRawShape } from 'zod';
 

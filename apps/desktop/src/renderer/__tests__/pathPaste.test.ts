@@ -13,7 +13,7 @@ import {
   type PendingPathRange,
 } from '@/components/new-chat/pathPaste';
 
-const WORKDIR = '/Users/dash/Code/Tools/xdt-maker';
+const WORKDIR = '/Users/alice/Code/Tools/xdt-maker';
 
 // Editor 必须逐个 destroy:EditorView 的异步回调会在 jsdom 环境拆除后触发
 // `document is not defined` 未处理异常,vitest 全绿也会 exit 1(CI 实撞)。

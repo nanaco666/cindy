@@ -1,7 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron';
 
 /**
- * 意识电子脑的最小管子桥(脑机接口;AGENTS.md 规则 28)。
+ * 意识电子脑的最小管子桥(脑机接口;docs/dev-rules/plugin-security-and-authoring.md)。
  *
  * 只注入**离屏逻辑页**(电子脑);面板页零桥零特权(面板与逻辑页走同源
  * BroadcastChannel,主机零中转)。身份不自报:main 侧按 sender webContents

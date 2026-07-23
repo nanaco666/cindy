@@ -9,7 +9,7 @@
  */
 
 
-import type { Maker } from '@lizi/maker-core';
+import type { Maker } from '@cindy/maker-core';
 import { BrowserWindow } from 'electron';
 import { createLogger } from '../logger.js';
 

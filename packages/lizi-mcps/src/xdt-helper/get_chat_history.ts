@@ -12,7 +12,7 @@
  *  - 默认排除 rewindAt IS NOT NULL 的软删消息, includeRewound=true 时全量返
  */
 
-import { BRAND_NAME } from '@lizi/maker-shared/branding';
+import { BRAND_NAME } from '@cindy/maker-shared/branding';
 import { z } from 'zod';
 
 import type { XdtHelperToolRegistry } from '../lizi_xdtHelperToolRegistry.js';

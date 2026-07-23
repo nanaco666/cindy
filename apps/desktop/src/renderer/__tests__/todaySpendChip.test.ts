@@ -23,12 +23,13 @@ describe('TodaySpendChip dashboard routing', () => {
     expect(source).toContain("'chat.messageActionBar.userTurnCostDetailsTitle'");
   });
 
-  it('routes codex-oauth / cc+chatgpt bridge to OpenAI usage, xai provider/bridge to xAI, claude subscription to claude.ai, codex-api to the proxy dashboard', () => {
+  it('routes codex-oauth / cc+chatgpt bridge to OpenAI usage, xai provider/bridge to xAI, claude subscription to claude.ai, and gateway / codex-api to no dashboard (internal console removed pre-OSS)', () => {
     expect(source).toContain('https://chatgpt.com/codex/settings/usage');
     expect(source).toContain('https://accounts.x.ai');
     expect(source).toContain('https://claude.ai/settings/usage');
+    // 网关 / 托管账号这一路 URL 落到 null(点击无跳转);其余三路指向各自公开看板。
     expect(source).toMatch(
-      /usesXaiQuotaForm\s*\?\s*XAI_ACCOUNT_URL\s*:\s*isCodexOauth \|\| isChatgptBridge\s*\?\s*CODEX_USAGE_DASHBOARD_URL\s*:\s*isClaudeSubscription\s*\?\s*CLAUDE_USAGE_DASHBOARD_URL\s*:\s*PROXY_USAGE_DASHBOARD_URL/,
+      /usesXaiQuotaForm\s*\?\s*XAI_ACCOUNT_URL\s*:\s*isCodexOauth \|\| isChatgptBridge\s*\?\s*CODEX_USAGE_DASHBOARD_URL\s*:\s*isClaudeSubscription\s*\?\s*CLAUDE_USAGE_DASHBOARD_URL\s*:\s*null/,
     );
     expect(source).toContain('todaySpend.openCodexUsage');
     expect(source).toContain('todaySpend.openXaiUsage');
@@ -214,9 +215,17 @@ describe('TodaySpendChip dashboard routing', () => {
     expect(source).toContain('formatPlanType(snapshot.planType)');
   });
 
-  it('keeps Claude sessions on the proxy usage dashboard', () => {
-    expect(source).toContain('https://console.tapsvc.com/nova/#/ai-gateway?tab=overview');
-    expect(source).toMatch(/PROXY_USAGE_DASHBOARD_URL/);
+  it('drops the internal usage-dashboard domain pre-OSS: gateway / XD accounts get no link and stay non-clickable, other metrics unchanged', () => {
+    // 内部用量看板 URL 只活在 PROXY_USAGE_DASHBOARD_URL 常量里 —— 断言该常量已消失
+    // + 三元结尾落 null(见上一个用例的正则),即等价于"内部域名已从源码移除";
+    // 这里不重新写出被禁的内部域名字面量,否则它又会 grep 命中公开仓。
+    expect(source).not.toContain('PROXY_USAGE_DASHBOARD_URL');
+    // 网关账号无看板 → url/label 落 null,chip 不可点(点击无跳转)。
+    expect(source).toContain('const isDashboardClickable = usageDashboardUrl !== null');
+    expect(source).toContain('if (!usageDashboardUrl) return;');
+    // tooltip "打开看板" 行经 helper 统一追加,label 为 null(网关账号)时不追加。
+    expect(source).toContain('function pushDashboardLinkLine(lines: string[], label: string | null)');
+    // 网关账号仍展示 daily/session 指标 + tooltip(仅去掉"打开看板"链接行)。
     expect(source).toContain("const PRIMARY_GATEWAY_METRICS: readonly MetricKey[] = ['daily', 'session']");
     expect(source).toContain('const chipSegments = getGatewayChipSegments(slots)');
     expect(source).toContain("t('todaySpend.dailyLimitLabel'");

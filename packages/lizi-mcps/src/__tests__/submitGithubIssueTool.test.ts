@@ -28,7 +28,7 @@ function setup(opts?: {
       opts?.result ?? {
         ok: true,
         issueNumber: 76,
-        issueUrl: 'https://github.com/xindong/XDMaker/issues/76',
+        issueUrl: 'https://github.com/makecindy/cindy/issues/76',
         finalTitle: VALID_ARGS.title,
         editedByUser: false,
       },
@@ -101,7 +101,7 @@ describe('submit_github_issue tool', () => {
     expect(parse(res)).toEqual({
       ok: true,
       issue_number: 76,
-      issue_url: 'https://github.com/xindong/XDMaker/issues/76',
+      issue_url: 'https://github.com/makecindy/cindy/issues/76',
       final_title: VALID_ARGS.title,
       edited_by_user: false,
     });

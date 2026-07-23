@@ -2,10 +2,10 @@
 //
 // Why this layer exists
 // ---------------------
-// The vendored `@lizi/browser-control-runtime` drives a managed external Chrome
+// The vendored `@cindy/browser-control-runtime` drives a managed external Chrome
 // via Playwright. We want to add a second control target — the RSB sidebar's
 // embedded `<webview>` — without touching the vendored runtime (upstream sync
-// stays clean) and without rewriting the MCP browser tool (lizi-mcps keeps its
+// stays clean) and without rewriting the MCP browser tool (@cindy/mcps keeps its
 // single `runtime.call(req)` contract).
 //
 // The solution is a thin host-side router that implements `BrowserControlRuntime`
@@ -21,7 +21,7 @@ import type {
   BrowserControlRequest,
   BrowserControlResult,
   BrowserControlRuntime,
-} from '@lizi/browser-control-runtime';
+} from '@cindy/browser-control-runtime';
 
 /**
  * Discriminator for the active control target.
@@ -36,7 +36,7 @@ export type BackendKind = 'external' | 'rsb-webview';
  *
  * Intentionally a superset of `BrowserControlRuntime`:
  *  - `call` matches the runtime contract verbatim so a backend (or the router)
- *    can be handed to lizi-mcps as `getRuntime()` with no adapter shim.
+ *    can be handed to @cindy/mcps as `getRuntime()` with no adapter shim.
  *  - `kind` lets the host introspect the active target (Settings UI, diagnostics).
  *  - `dispose` is the cleanup hook the router invokes when switching backends or
  *    on app quit. Idempotent + must never throw — runs inside the disposer chain.
@@ -49,7 +49,7 @@ export interface BrowserBackend {
 
 /**
  * Re-export the runtime contract under a neutral name so backend implementations
- * type their `.call` against the same shape lizi-mcps consumes — without each
+ * type their `.call` against the same shape @cindy/mcps consumes — without each
  * file having to import from the vendored package directly.
  */
 export type BackendRequest = BrowserControlRequest;

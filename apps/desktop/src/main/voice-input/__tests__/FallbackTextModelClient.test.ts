@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { TextModelClient } from '@lizi/voice-input-core';
+import type { TextModelClient } from '@cindy/voice-input-core';
 
 import {
   FallbackTextModelClient,

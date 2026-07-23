@@ -44,6 +44,8 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+# local expo-module(modules/*)的 Android 构建产物(编译遗留,不入库)
+modules/*/android/build/
 
 # 自建冷更/OTA 的本机产物(runtimeVersion 记录等,per-build,不入库)
 /release

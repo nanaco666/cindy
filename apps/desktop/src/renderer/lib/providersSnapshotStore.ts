@@ -4,7 +4,7 @@
  * 状态与 React hook 分离，供 localCatalogSnapshot 原子提交 providers 与两份
  * agent capabilities；这样 useProviders.refetch 可以复用联合刷新而不形成循环依赖。
  */
-import type { ProviderView } from '@lizi/model-providers';
+import type { ProviderView } from '@cindy/model-providers';
 
 let cachedProviders: ProviderView[] | null = null;
 let providersGeneration = 0;

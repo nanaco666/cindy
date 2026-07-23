@@ -7,8 +7,8 @@ import {
   type MobileMessageRenderItem,
 } from '@/session/messageRenderModel';
 import { reconcileMobileMessageRenderItems } from '@/session/messageRenderReconcile';
-import { buildAgentTaskCardModel, type AgentTaskUpdate } from '@lizi/maker-shared/agent-task';
-import { CONTINUE_AFTER_ERROR_PROMPT } from '@lizi/maker-shared/synthetic-trigger';
+import { buildAgentTaskCardModel, type AgentTaskUpdate } from '@cindy/maker-shared/agent-task';
+import { CONTINUE_AFTER_ERROR_PROMPT } from '@cindy/maker-shared/synthetic-trigger';
 import type { RemoteMessage, RemoteMessageRole } from '@/session/types';
 
 function message(

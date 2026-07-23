@@ -3,7 +3,7 @@ import {
   selectActivePendingInteraction as sharedSelectActivePendingInteraction,
   type PendingInteractionLike,
   type PermissionReviewPresentation,
-} from '@lizi/maker-shared/interaction';
+} from '@cindy/maker-shared/interaction';
 
 export {
   answerKey,
@@ -37,7 +37,7 @@ export {
   type AskQuestionReviewPresentation,
   type PermissionReviewPresentation,
   type PlanReviewEvidencePresentation,
-} from '@lizi/maker-shared/interaction';
+} from '@cindy/maker-shared/interaction';
 
 export type MobilePermissionDecisionAction = 'allow-once' | 'always-allow';
 

@@ -5,7 +5,7 @@
  * 工具一律经 MCP 注册,host(apps/desktop main)通过 deps 注入真实实现,
  * 包内不感知 Electron / 沙箱 / DB(设计规范规则 2:package 解耦)。
  *
- * 首个成员:ghost 总机(AGENTS.md 规则 28 的网关模式)——
+ * 首个成员:ghost 总机(docs/dev-rules/plugin-security-and-authoring.md 的网关模式)——
  * agent 工具箱里永远只有 ghost_list / ghost_call 两件固定工具,
  * 已装意识的增删即时反映在 ghost_list 的**返回内容**里,
  * 工具定义(缓存前缀)自始至终零变化。

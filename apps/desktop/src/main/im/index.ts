@@ -264,6 +264,7 @@ export function startImOrchestrators(): void {
 }
 
 async function initializeImConnection(): Promise<void> {
+  await reconcileOwnerScopedImWorkingDirs();
   try {
     await bindingStore.preload();
   } catch (err) {
@@ -295,6 +296,57 @@ async function initializeImConnection(): Promise<void> {
   }
   activateImAccountBoundary();
   await im.init();
+}
+
+/**
+ * Rewrite legacy IM session paths after their managed directories move into
+ * the active data owner's namespace. Each owner has a separate local DB, so
+ * this cannot expose or mutate another owner's session rows.
+ */
+async function reconcileOwnerScopedImWorkingDirs(): Promise<void> {
+  const db = getDbClient().drizzle;
+  const feishuAdapter = getImOrchestrator('feishu')?.adapter;
+  const discordAdapter = getImOrchestrator('discord')?.adapter;
+
+  try {
+    if (feishuAdapter) {
+      const rows = await db
+        .select({
+          id: sessions.id,
+          workingDir: sessions.workingDir,
+          botContextId: sessions.feishuBotAppId,
+        })
+        .from(sessions)
+        .where(eq(sessions.source, 'feishu'));
+      for (const row of rows) {
+        if (!row.botContextId) continue;
+        const scoped = feishuAdapter.sessions.ensureWorkingDir(row.botContextId);
+        if (row.workingDir === scoped) continue;
+        await db.update(sessions).set({ workingDir: scoped }).where(eq(sessions.id, row.id));
+      }
+    }
+
+    if (discordAdapter) {
+      const rows = await db
+        .select({
+          id: sessions.id,
+          workingDir: sessions.workingDir,
+          botContextId: sessions.imBotContextId,
+        })
+        .from(sessions)
+        .where(eq(sessions.source, 'discord'));
+      for (const row of rows) {
+        if (!row.botContextId) continue;
+        const scoped = discordAdapter.sessions.ensureWorkingDir(row.botContextId);
+        if (row.workingDir === scoped) continue;
+        await db.update(sessions).set({ workingDir: scoped }).where(eq(sessions.id, row.id));
+      }
+    }
+  } catch (err) {
+    log.warn('IM owner-scoped working-dir reconciliation failed (non-fatal)', {
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
 }
 
 const connectionLifecycle = createSerializedConnectionLifecycle({

@@ -3,7 +3,7 @@
  * ---------------------------------------------------------------------------
  * 会话消息流各折叠卡(thinking / tool_group / agent_task / work_group /
  * subagent_group)的展开态进程内记忆,与桌面 useExpandedBlockMemory 同一语义,
- * 核心实现在 `@lizi/maker-shared/expanded-block-memory`:
+ * 核心实现在 `@cindy/maker-shared/expanded-block-memory`:
  *
  *   - 默认全部折叠;用户手动展开的卡在 App 运行期内被记住——FlatList 虚拟化
  *     把卡片滚出屏幕再滚回来、切会话往返、turn 收口后卡片被归入 work_group
@@ -16,7 +16,7 @@
  */
 
 import { useCallback, useState, useSyncExternalStore } from 'react';
-import { createExpandedBlockStore } from '@lizi/maker-shared/expanded-block-memory';
+import { createExpandedBlockStore } from '@cindy/maker-shared/expanded-block-memory';
 
 // 订阅者异常不静默吞掉(与桌面 log.warn 对齐);mobile 无统一 logger,
 // 沿用既有 console.* + tag 前缀日志约定(见 assertNever.logUnhandledRenderItem)。

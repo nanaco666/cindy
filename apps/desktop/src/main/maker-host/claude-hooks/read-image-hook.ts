@@ -38,7 +38,7 @@ import type {
   HookCallback,
   PreToolUseHookInput,
 } from '@anthropic-ai/claude-agent-sdk';
-import { getDefaultImageResizer, type Logger } from '@lizi/maker-core';
+import { getDefaultImageResizer, type Logger } from '@cindy/maker-core';
 
 const IMAGE_EXTENSIONS = new Set<string>([
   '.png',

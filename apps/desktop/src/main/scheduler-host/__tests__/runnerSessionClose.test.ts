@@ -13,14 +13,14 @@ import type {
   Maker,
   Session,
   SessionSendResult,
-} from '@lizi/maker-core';
+} from '@cindy/maker-core';
 import type {
   FireContext,
   Logger,
   Notifier,
   Schedule,
   Scheduler,
-} from '@lizi/maker-scheduler';
+} from '@cindy/maker-scheduler';
 
 const mocks = vi.hoisted(() => ({
   createMessage: vi.fn(),

@@ -12,7 +12,7 @@ import { app } from 'electron';
 import {
   installFileServiceBundle,
   probeFileService,
-} from '@lizi/maker-remote-ssh';
+} from '@cindy/maker-remote-ssh';
 
 import { createLogger } from '../logger.js';
 import { ensureRemoteHostReady, getRemoteSshPool } from '../remote-ssh/index.js';

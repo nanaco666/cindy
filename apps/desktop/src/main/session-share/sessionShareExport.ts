@@ -19,7 +19,7 @@ import path from 'node:path';
 import { setImmediate as yieldToEventLoop } from 'node:timers/promises';
 
 import JSZip from 'jszip';
-import { findClaudeSessionJsonl } from '@lizi/maker-core';
+import { findClaudeSessionJsonl } from '@cindy/maker-core';
 
 import { getDbClient } from '../localDb/client/current.js';
 import { createLogger } from '../logger.js';

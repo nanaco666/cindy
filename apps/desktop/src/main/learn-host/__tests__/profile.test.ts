@@ -5,6 +5,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('electron', () => ({
   app: { getPath: vi.fn(() => '/tmp/xdt-learn-profile-test/userData') },
 }));
+vi.mock('../../appSessionState', () => ({
+  ownerScopedUserDataPath: (...parts: string[]) =>
+    `/tmp/xdt-learn-profile-test/userData/owners/test-owner/${parts.join('/')}`,
+}));
 vi.mock('../../logger', () => ({
   createLogger: () => ({ debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }),
 }));
@@ -81,7 +85,14 @@ describe('collectUserProfile', () => {
   });
 
   it('redacts shard frontmatter titles before building the prompt block', async () => {
-    const dir = path.join(TEST_ROOT, 'userData', 'maker-memory', 'workdir');
+    const dir = path.join(
+      TEST_ROOT,
+      'userData',
+      'owners',
+      'test-owner',
+      'maker-memory',
+      'workdir',
+    );
     await fs.promises.mkdir(dir, { recursive: true });
     await fs.promises.writeFile(
       path.join(dir, 'user_contact.md'),

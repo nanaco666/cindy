@@ -1064,7 +1064,7 @@ export async function createAnthropicCompatProxy(opts: ProxyOptions): Promise<Pr
     // (例: 去前缀前的 codex/ model id)。decision 的 override 传给 forward, 默认不 override。
     // 提前到 ▶ inbound 日志**之前**计算: 路由只依赖 rawBody / headers / contentType,与下方
     // runTransforms 的输出无关,提前是安全的; 这样 inbound 日志能直接打出本请求**最终**发往的
-    // upstream(订阅直连 api.anthropic.com / 走网关 llm-proxy.tapsvc.com),而非静态默认上游。
+    // upstream(订阅直连 api.anthropic.com / 走网关 endpoint),而非静态默认上游。
     let decision: RoutingDecision | null = null;
     let rawParsed: unknown = undefined;
     if (opts.routingTransform && contentType.toLowerCase().startsWith('application/json')) {
@@ -1109,7 +1109,7 @@ export async function createAnthropicCompatProxy(opts: ProxyOptions): Promise<Pr
         reqId,
         method,
         // 本请求**最终**发往的 upstream(per-request override 后), 不是静态默认上游 ——
-        // = api.anthropic.com 即走订阅直连; = llm-proxy.tapsvc.com 即走网关。
+        // = api.anthropic.com 即走订阅直连; = 网关 endpoint 即走网关。
         upstreamBase: formatUpstreamBase(route.target),
         url,
         bytes: rawBody.length,

@@ -19,11 +19,11 @@
 </p>
 
 <p align="center">
-  🌐 <a href="https://cindy.com.cn">国内版</a> | <a href="https://cindy.app">海外版</a>
+  🌐 <a href="https://cindy.cn">国内版</a> | <a href="https://cindy.app">海外版</a>
 </p>
 
 <p align="center">
-  ⬇️ <a href="https://cindy.com.cn/#download">国内版下载</a> | <a href="https://cindy.app/#download">海外版下载</a>
+  ⬇️ <a href="https://cindy.cn/#download">国内版下载</a> | <a href="https://cindy.app/#download">海外版下载</a>
 </p>
 
 
@@ -36,7 +36,7 @@ monorepo 组织。
 
 客户端本身免费使用，源码以 Apache-2.0 开源。只有使用 Cindy 提供的 Token / API
 时才需要按官网规则付费；你也可以配置自己的 API Key。具体的服务说明、价格和下载
-入口请按所在区域查看[国内官网](https://cindy.com.cn/#pricing)或[海外官网](https://cindy.app/#pricing)。
+入口请按所在区域查看[国内官网](https://cindy.cn/#pricing)或[海外官网](https://cindy.app/#pricing)。
 
 ## 本仓包含什么
 
@@ -52,7 +52,7 @@ monorepo 组织。
 
 | 使用方式 | 账号要求 | 可用范围 |
 | --- | --- | --- |
-| 远程托管 | Cindy 云端账号 | 使用 Cindy 的完整托管服务；[国内定价](https://cindy.com.cn/#pricing) · [海外定价](https://cindy.app/#pricing)。 |
+| 远程托管 | Cindy 云端账号 | 使用 Cindy 的完整托管服务；[国内定价](https://cindy.cn/#pricing) · [海外定价](https://cindy.app/#pricing)。 |
 | 本地模式 | 无需登录 Cindy 账号 | 在登录页选择「本地模式」即可使用本机 agent 功能。依赖服务端的能力在该模式下不可用。 |
 
 ## 前置要求
@@ -64,15 +64,15 @@ monorepo 组织。
 ## 开始开发
 
 开发者安装、公开 submodule 初始化、Git LFS、依赖更新和权限说明统一见
-[`CONTRIBUTING.md`](CONTRIBUTING.md)。公开贡献者不要使用会尝试拉取私有 `xd`
-插件仓的全量递归初始化命令。
+[`CONTRIBUTING.md`](CONTRIBUTING.md)。公开贡献者只需初始化公开的协议 submodule；
+插件通过 SkillHub 或手动安装，不要使用未列出的递归初始化命令。
 
 最短入口：
 
 ```bash
 git clone https://github.com/makecindy/cindy.git
 cd cindy
-git submodule update --init --recursive cindy-protocol apps/desktop/resources/builtin-ghosts/official
+git submodule update --init --recursive cindy-protocol
 git lfs pull
 pnpm install
 ```
@@ -107,6 +107,8 @@ agent 的模式。依赖服务端的能力在该模式下不可用。
 改动通过 pull request 合入 `main`。请先阅读
 [`CONTRIBUTING.md`](CONTRIBUTING.md)，再按
 [`.github/PULL_REQUEST_TEMPLATE.md`](.github/PULL_REQUEST_TEMPLATE.md) 提交。
+同时请遵守 [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md)；普通使用问题见
+[`SUPPORT.md`](SUPPORT.md)，安全问题仍按 [`SECURITY.md`](SECURITY.md) 私下报告。
 
 ## 安全
 

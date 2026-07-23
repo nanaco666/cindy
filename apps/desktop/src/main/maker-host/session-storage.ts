@@ -17,7 +17,7 @@ import type {
   SessionMeta,
   SessionStorage,
   WorkspaceKind,
-} from '@lizi/maker-core';
+} from '@cindy/maker-core';
 
 import { getDbClient } from '../localDb/client/current.js';
 import { sessions } from '../localDb/schema.js';

@@ -5,7 +5,7 @@
  * can be tested without Electron, maker, or a real Git repository.
  */
 
-import type { AgentKind } from '@lizi/maker-core';
+import type { AgentKind } from '@cindy/maker-core';
 
 import { createAfterEditLabel } from './gitSnapshotLabeler';
 import { enqueueGitRepoWrite } from './gitRepoWriteQueue';

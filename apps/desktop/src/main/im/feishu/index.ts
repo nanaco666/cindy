@@ -11,7 +11,7 @@
  * overrides) — 编排逻辑全部在 im/shared/, 本文件只组装 feishu adapter。
  */
 
-import type { FeishuIM } from 'lizi-im';
+import type { FeishuIM } from '@cindy/im';
 
 import { createImOrchestrator } from '../shared/orchestrator';
 import type { ImOrchestratorConfig } from '../shared/types';

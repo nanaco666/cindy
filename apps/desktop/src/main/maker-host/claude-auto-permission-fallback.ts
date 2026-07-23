@@ -6,8 +6,8 @@
  * 调用继续 fail-closed。
  */
 
-import type { PermissionMode } from '@lizi/maker-core';
-import type { ResponseObserver, ResponseObserverCtx } from '@lizi/anthropic-compat-proxy';
+import type { PermissionMode } from '@cindy/maker-core';
+import type { ResponseObserver, ResponseObserverCtx } from '@cindy/anthropic-compat-proxy';
 
 const CLASSIFIER_SYSTEM_PREFIX = 'You are a security monitor for autonomous AI coding agents.';
 

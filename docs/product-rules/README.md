@@ -13,5 +13,3 @@
 
 - [`core-product-principles.md`](core-product-principles.md)：Cindy 的目的、连接本质、
   Core 边界，以及 Agent、Skill、插件的产品分工。
-
-其余产品规则将从仓库根 `AGENTS-old.md` 逐项确认后迁入。

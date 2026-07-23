@@ -830,7 +830,7 @@ describe('内置「对话」伪目录(chat 保留别名)', () => {
     return {
       allocated,
       dep: {
-        rootDir: DIALOGUE_ROOT,
+        rootDir: () => DIALOGUE_ROOT,
         allocateDir: async (sessionId: string) => {
           const dir = path.join(DIALOGUE_ROOT, '2026-07-07', sessionId);
           allocated.push(dir);
@@ -895,6 +895,42 @@ describe('内置「对话」伪目录(chat 保留别名)', () => {
     );
     await tick();
     expect(c.last('task.ack')?.payload.result).toBe('accepted');
+    fr.finish();
+  });
+
+  it('dispatcher 创建后切换 owner 时按新的对话根校验接管会话', async () => {
+    const signedOutRoot = path.resolve('/userdata/cindy-no-session/123/dialogues');
+    const cloudRoot = path.resolve('/userdata/owners/cloud-a/dialogues');
+    let activeRoot = signedOutRoot;
+    const fr = fakeRunner({
+      sessions: {
+        'sess-cloud': {
+          workingDir: path.join(cloudRoot, '2026-07-22', 'sess-cloud'),
+          usable: true,
+        },
+      },
+    });
+    const { d } = makeDispatcher({
+      dialogue: {
+        rootDir: () => activeRoot,
+        allocateDir: async (sessionId) => path.join(activeRoot, '2026-07-22', sessionId),
+      },
+      runner: fr.runner,
+    });
+    activeRoot = cloudRoot;
+
+    const c = collector();
+    d.handleDispatch(
+      'conn-1',
+      dispatch({ workspace: null, sessionId: 'sess-cloud' }),
+      c.send,
+    );
+    await tick();
+
+    expect(c.last('task.ack')?.payload).toMatchObject({
+      result: 'accepted',
+      sessionId: 'sess-cloud',
+    });
     fr.finish();
   });
 

@@ -185,48 +185,9 @@ function ensureLfsAssets() {
   }
 }
 
-// ③ 内置意识种子 submodule(official / xd 两仓,2026-07-22 拆分):未初始化时
-// 种子根为空,desktop 会静默播不出内置插件(播种层只做半初始化保护不装不删)。
-// official(cindy-official-plugin)是公开仓、必需;xd(cindy-xd-plugin)是私有仓,
-// 外部开发者无访问权 —— xd 缺失只 warn 不阻断,dev 只播种可用种子源即可。
-// 每个根单独 init,避免 xd 拉取失败连累 official。
-function ensureGhostSeedSubmodules() {
-  const seedBase = path.join(ROOT, 'apps', 'desktop', 'resources', 'builtin-ghosts');
-  const REQUIRED = ['official'];
-  const OPTIONAL = ['xd'];
-  const seedRoots = [...REQUIRED, ...OPTIONAL];
-  const missing = () =>
-    seedRoots.filter((name) => !fs.existsSync(path.join(seedBase, name, 'provisioning.json')));
-
-  const broken = missing();
-  if (broken.length === 0) return;
-
-  log(`内置插件种子 submodule 未就位(${broken.join(', ')}),尝试 git submodule update --init...`);
-  for (const name of broken) {
-    run('git', ['submodule', 'update', '--init', path.posix.join('apps/desktop/resources/builtin-ghosts', name)]);
-  }
-
-  const stillMissing = missing();
-  const requiredMissing = stillMissing.filter((name) => REQUIRED.includes(name));
-  const optionalMissing = stillMissing.filter((name) => OPTIONAL.includes(name));
-
-  if (optionalMissing.length > 0) {
-    warn(`可选内置插件种子缺失(${optionalMissing.join(', ')}):属私有 submodule,外部开发者无访问权属正常。`);
-    warn('跳过 —— dev 只播种可用种子源,不影响启动 / 调试 / 开发。');
-  }
-  if (requiredMissing.length > 0) {
-    err(`必需内置插件种子 submodule 仍缺失:${requiredMissing.join(', ')}`);
-    err('请检查 cindy-official-plugin 仓库访问权限,');
-    err('然后在仓库根手动运行 "git submodule update --init"。');
-    process.exit(1);
-  }
-  log(optionalMissing.length > 0 ? '必需内置插件种子已就位。' : '内置插件种子 submodule 已就位。');
-}
-
 async function main() {
   await ensureAgentBinaries();
   ensureLfsAssets();
-  ensureGhostSeedSubmodules();
   // node-pty 的 spawn-helper 可执行位可能被 pnpm install 剥掉（终端面板会因此报
   // posix_spawnp failed）。best-effort 补回，never throw，不阻断 dev 启动。
   fixNodePtyExecutables({ quiet: true });

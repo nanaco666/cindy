@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import type { ScheduleTemplate, TemplateCategory } from '@lizi/maker-scheduler';
-import { TEMPLATE_CATEGORIES } from '@lizi/maker-scheduler/templates';
+import type { ScheduleTemplate, TemplateCategory } from '@cindy/maker-scheduler';
+import { TEMPLATE_CATEGORIES } from '@cindy/maker-scheduler/templates';
 
 interface UseTemplatesResult {
   templates: ScheduleTemplate[];

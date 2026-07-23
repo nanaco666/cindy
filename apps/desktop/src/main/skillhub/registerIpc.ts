@@ -1,6 +1,7 @@
-import type { Maker } from '@lizi/maker-core';
+import type { Maker } from '@cindy/maker-core';
 import { BrowserWindow, ipcMain } from 'electron';
-import { getCurrentUserId } from '../authManager';
+import { getCurrentDataOwnerId } from '../authManager';
+import { isAppSessionBoundaryPending } from '../appSessionState';
 import { ensureReady as ensureLocalDbReady, getRawDb } from '../localDb';
 import { createLogger } from '../logger';
 import { computeFolderHashDetailed } from './folderHash';
@@ -439,6 +440,9 @@ export function registerSkillhubIpc(options: RegisterSkillhubIpcOptions): void {
           if (raw.success) currentSkillContent = raw.content ?? null;
         }
         const readSummary = async () => {
+          if (isAppSessionBoundaryPending()) {
+            throw new Error('localDb not ready: app session is switching');
+          }
           const db = getRawDb();
           scheduleUsageAnalyticsRefresh(db);
           return await getLocalSkillUsageSummary({ skillName: name, currentSkillContent, db });
@@ -470,6 +474,9 @@ export function registerSkillhubIpc(options: RegisterSkillhubIpcOptions): void {
           if (raw.success) currentSkillContent = raw.content ?? null;
         }
         try {
+          if (isAppSessionBoundaryPending()) {
+            return { success: false, error: 'localDb not ready: app session is switching' };
+          }
           return await getLocalSkillUsageDiagnosisContext({
             skillName: name,
             currentSkillContent,
@@ -598,11 +605,14 @@ function isLocalDbNotReady(err: unknown): boolean {
 }
 
 async function ensureSkillUsageLocalDbReady(): Promise<{ success: true } | { success: false; error: string }> {
-  const userId = getCurrentUserId();
-  if (!userId) {
-    return { success: false, error: 'localDb not ready: authenticated user missing' };
+  if (isAppSessionBoundaryPending()) {
+    return { success: false, error: 'localDb not ready: app session is switching' };
   }
-  const result = await ensureLocalDbReady(userId);
+  const ownerId = getCurrentDataOwnerId();
+  if (!ownerId) {
+    return { success: false, error: 'localDb not ready: active data owner missing' };
+  }
+  const result = await ensureLocalDbReady(ownerId);
   if (!result.ready) {
     return { success: false, error: result.error.message };
   }

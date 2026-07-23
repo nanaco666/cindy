@@ -8,7 +8,7 @@
  */
 import * as Clipboard from 'expo-clipboard';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
-import { fsWatchTopic } from '@lizi/device-link';
+import { fsWatchTopic } from '@cindy/device-link';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowDownAZ,

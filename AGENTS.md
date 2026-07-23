@@ -13,29 +13,58 @@
 
 - 开发与工程规则统一放在 `docs/dev-rules/`。
 - 产品行为与体验规则统一放在 `docs/product-rules/`。
-- UI 视觉、交互与内容设计规则统一放在 `docs/design-rules/`。
+- UI 视觉、交互与内容设计规则的入口与配套说明统一放在 `docs/design-rules/`，
+  权威视觉规范正文为根目录 `DESIGN.md`。
 - 根 `AGENTS.md` 只保留所有任务都适用的规则、风险入口和文档索引。
 - 目录或模块专属规则优先放到对应目录的嵌套 `AGENTS.md`；需要跨目录复用的
   专题说明放在 `docs/`，并由本文件写明触发条件。
-- `AGENTS-old.md` 是旧手册归档，不再作为常规指令入口。
 
 ## 当前规则索引
 
+- 首次接触本仓、需要定位功能代码位置或判断新代码归属模块时，先读仓库地图
+  `docs/dev-rules/repo-map.md`。
 - 首次安装、修复依赖或准备新 worktree 时，必须先读
   `docs/dev-rules/environment-setup.md`。
 - 启动、调试或验证 Desktop 时，必须先读 `docs/dev-rules/desktop-development.md`。
 - 修改 Desktop Renderer、preload、BrowserWindow、WebView、IPC、CSP、导航或 Electron
   特权能力前，必须先读 `docs/dev-rules/electron-security-and-process-boundaries.md`。
+- 修改凭证或授权信息处理、文件落盘位置、用户持久数据、临时文件或测试目录前，必须
+  先读 `docs/dev-rules/credentials-and-local-storage.md`。
+- 新增或修改媒体生成、导入、缓存、附件、持久化、协议解析或回收逻辑前，必须先读
+  `docs/dev-rules/media-storage-and-protocols.md`。
 - 修改 Desktop 数据库 schema、migration、companion script 或运行期数据库访问前，必须
   先读 `docs/dev-rules/database-and-migrations.md`。
 - 开发、调试或验证 Mobile 时，必须先读 `docs/dev-rules/mobile-development.md`。
 - 新增或调整产品功能、判断能力应进入 Core / Skill / 插件、设计人机交互或多端体验
   前，必须先读 `docs/product-rules/core-product-principles.md`。
-- 新增或修改任何界面、组件、布局、样式、动效或 UI 文案前，必须先读
-  `docs/design-rules/cindy-design-system.md`。
+- 新增或修改任何界面、组件、布局、样式、动效或 UI 文案前，必须先读权威设计规范
+  `DESIGN.md`；`docs/design-rules/cindy-design-system.md` 仅为历史引用兼容入口。
+- 所有新增或修改的 UI 必须同时完成 Light 与 Dark 两种模式；只实现或只验证一种模式，
+  视为未完成。具体实现与验收要求以 `DESIGN.md` 的双模式交付门槛为准。
 - 修改 Orca 多 Agent 协同时，必须先读
   `docs/dev-rules/orca-team-architecture.md`。
-- 其余规则仍在逐项迁移；专题尚未建立时按下方“重构期间”处理。
+- 修改 `packages/maker-core` 的 Agent 编排、prompt 组装、tool／MCP 暴露、translator、
+  model 映射、usage 计量，或任何进入模型 system 段的提示词前，必须先读
+  `docs/dev-rules/maker-core-and-agent-behavior.md`。
+- 修改插件（`.cindy`）运行时、沙箱、权限、能力 slot、面板供片、网络／凭证／文件交接，
+  或身份卡、管子协议、打包与编写手册前，必须先读
+  `docs/dev-rules/plugin-security-and-authoring.md`。
+- 修改客户端自动更新链路（`cindy-updater` 或 Electron 侧更新服务）前，必须先读
+  `docs/dev-rules/cindy-updater.md`。
+- 新增或修改 Desktop 日志、IPC 错误处理、main 侧业务逻辑与测试、跨平台（macOS／
+  Windows）行为，或任何 UI 文案的 i18n 落地前，必须先读
+  `docs/dev-rules/engineering-conventions.md`。
+- 升级 `cindy-protocol`、修改插件分发来源边界或 device-link 协议／relay／隧道
+  payload／IPC allowlist，或任何改动跨端 wire protocol 前，必须先读
+  `docs/dev-rules/protocol-and-submodules.md`。
+- 修改 package 依赖方向、main 进程模块加载方式，或主界面布局树结构前，必须先读
+  `docs/dev-rules/architecture-invariants.md`。
+- 新增或修改 Settings UI、配置文件、本地偏好、运行时 profile，或 agent／MCP／provider
+  开关前，必须先读 `docs/dev-rules/configuration-and-overrides.md`。
+- 新增或修改涉及 workdir 文件、agent 进程、会话数据的功能，或新增 IPC channel／推送事件
+  前，必须先读 `docs/dev-rules/remote-and-mobile-adaptation.md`。
+- 在 Cindy 内嵌 worktree 会话里工作、准备提交或直推、或做 code review 前，必须先读
+  `docs/dev-rules/development-workflow.md`。
 
 ## 通用工作流程
 
@@ -66,10 +95,5 @@
 - 未经用户明确授权，不执行删除数据、覆盖改动、推送、发布、合并等外部或难以
   恢复的操作。
 - 发现任务会触及系统提示词、更新器、协议兼容、数据库历史 migration、权限边界
-  或用户数据安全时，必须先停下来核对专项规则；规则尚未迁移时，读取
-  `AGENTS-old.md` 对应章节，并在动手前向用户说明风险或请求确认。
-
-## 重构期间
-
-旧规则会逐项盘点后迁入新结构。在对应专题完成前，不得把旧手册中仍有效的高风险
-约束视为已经废弃，也不要直接复制整段旧内容到新文件。
+  或用户数据安全时，必须先停下来核对专项规则，并在动手前向用户说明风险或
+  请求确认。

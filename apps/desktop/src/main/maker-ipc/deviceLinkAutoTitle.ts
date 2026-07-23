@@ -6,7 +6,7 @@
  * 因此这里只补被控端远控首条输入的 DB 标题生成与广播。
  */
 
-import type { AgentKind, Maker } from '@lizi/maker-core';
+import type { AgentKind, Maker } from '@cindy/maker-core';
 
 import {
   isUntitledDraftSessionBeforeFirstInput,

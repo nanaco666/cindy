@@ -1,6 +1,6 @@
 import path from 'node:path';
 
-import type { AgentKind, CreateSessionOptions, WorkspaceKind } from '@lizi/maker-core';
+import type { AgentKind, CreateSessionOptions, WorkspaceKind } from '@cindy/maker-core';
 
 import { requireObject, requireString, throwIpcError } from '../utils/ipcValidate.js';
 

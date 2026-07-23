@@ -5,7 +5,7 @@ import type {
   AsrProvider,
   AudioTrace,
   RefinementResult,
-} from '@lizi/voice-input-core';
+} from '@cindy/voice-input-core';
 import type { StoredMobileVoiceCredential } from '@/session/mobileVoiceCredentialStore';
 import { createMobileVoiceControllerSession } from '@/session/mobileVoiceController';
 

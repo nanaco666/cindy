@@ -65,7 +65,7 @@ import {
 } from '../device-link/dispatch';
 import { isRemoteWorkingDirAllowed } from '../device-link/remote-workdir-guard';
 import { __testing as registry } from '../device-link/invoke-registry';
-import type { InvokeResultPayload } from '@lizi/device-link';
+import type { InvokeResultPayload } from '@cindy/device-link';
 
 const SRC = 'controller-device';
 const TMP_DIR = os.tmpdir(); // 真实存在的目录(模拟"浏览到/新建的远程目录")

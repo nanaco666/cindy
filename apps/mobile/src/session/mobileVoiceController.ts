@@ -11,7 +11,7 @@ import {
   type VoiceInputDraftSource,
   type VoiceInputState,
   type VoiceTimelineEvent,
-} from '@lizi/voice-input-core';
+} from '@cindy/voice-input-core';
 import type { StoredMobileVoiceCredential } from '@/session/mobileVoiceCredentialStore';
 import { redactMobileVoiceCredentialText } from '@/session/mobileVoiceCredentialRedaction';
 import { createMobileAsrProvider } from '@/session/mobileRealtimeAsrProvider';

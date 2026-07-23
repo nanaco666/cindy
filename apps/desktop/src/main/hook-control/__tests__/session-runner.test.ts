@@ -19,8 +19,8 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { Effort } from '@lizi/maker-core';
-import type { CatalogModel, ProviderView } from '@lizi/model-providers';
+import type { Effort } from '@cindy/maker-core';
+import type { CatalogModel, ProviderView } from '@cindy/model-providers';
 
 const h = vi.hoisted(() => {
   /** 跨模块调用顺序记录: 'touch:<id>' / 'created:<id>' */
@@ -68,7 +68,7 @@ const h = vi.hoisted(() => {
 vi.mock('electron', () => ({
   BrowserWindow: { getAllWindows: () => [] },
 }));
-vi.mock('@lizi/maker-core', () => ({
+vi.mock('@cindy/maker-core', () => ({
   isTerminalAgentErrorEvent: (ev: { type: string }) => ev.type === 'error',
 }));
 vi.mock('../../device-link/broadcast-tap.js', () => ({

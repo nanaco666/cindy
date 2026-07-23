@@ -2,7 +2,7 @@
  * subscriptions —— 被控端「控制端订阅 registry」(device-link push 驱动核心)。
  * ---------------------------------------------------------------------------
  * 远程控制改为「被控端单一真相 + 控制端纯镜像」后,被控端按 **topic** 把本机广播
- * scoped 转发给订阅了该 topic 的控制端(见 @lizi/device-link 的 topics.ts):
+ * scoped 转发给订阅了该 topic 的控制端(见 @cindy/device-link 的 topics.ts):
  *   - `sessions`(轻):会话列表读模型变更 —— 侧边栏订阅,**不**触发被控横幅。
  *   - `session:<id>`(重):单会话实时流 —— 打开会话才订阅,**触发**被控横幅(活跃控制)。
  *   - `'*'`(legacy):老控制端走 link-open(无 subscribe 能力)→ 视作订阅「全部」,
@@ -13,7 +13,7 @@
  * controllerDeviceId 由 server 填的 `env.src` 提供(防伪造)。
  */
 
-import type { Topic } from '@lizi/device-link';
+import type { Topic } from '@cindy/device-link';
 
 /** legacy 老控制端(link-open)订阅的「全部」topic 标记。 */
 export const LEGACY_TOPIC = '*';

@@ -56,7 +56,7 @@ function makeManifest(skillName: string, overrides?: Partial<StoredManifest>): S
     schemaVersion: 1,
     skillName,
     installs: {
-      [path.normalize(`/home/lizi/.claude/skills/${skillName}`)]: {
+      [path.normalize(`/home/sam/.claude/skills/${skillName}`)]: {
         version: '3',
         authorId: 'user_lizi',
         folderHash: 'abc123',
@@ -98,7 +98,7 @@ describe('manifestIO', () => {
         schemaVersion: 1,
         skillName: 'legacy-skill',
         installs: {
-          [path.normalize('/home/lizi/.claude/skills/legacy-skill')]: {
+          [path.normalize('/home/sam/.claude/skills/legacy-skill')]: {
             version: '1',
             isMine: true,
             folderHash: 'old-hash',
@@ -114,7 +114,7 @@ describe('manifestIO', () => {
       );
       const result = await readFile('legacy-skill');
       expect(result).not.toBeNull();
-      const installEntry = result!.installs[path.normalize('/home/lizi/.claude/skills/legacy-skill')];
+      const installEntry = result!.installs[path.normalize('/home/sam/.claude/skills/legacy-skill')];
       expect(installEntry.authorId).toBe('');
       expect((installEntry as unknown as Record<string, unknown>).isMine).toBeUndefined();
     });

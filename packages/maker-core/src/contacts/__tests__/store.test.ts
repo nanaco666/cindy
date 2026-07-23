@@ -43,13 +43,13 @@ describe('MakerContactsStore', () => {
       kind: 'person',
       displayName: '林子航',
       aliases: ['Neo', 'Neo Lin'],
-      summary: '长期老搭档, VeryCD/TapTap 一路合作',
-      narrative: '## 与用户的关系\n从 VeryCD 阶段开始的核心协作关系。',
+      summary: '长期老搭档, 蓝川/星岛 一路合作',
+      narrative: '## 与用户的关系\n从 蓝川 阶段开始的核心协作关系。',
       agentNotes: '遇到 @neolin 不要当陌生账号处理',
       source: 'agent',
       identities: [
         { platform: 'email', value: 'neo@example.com', label: '当前' },
-        { platform: 'email', value: 'neo@example.org', label: '心动早期' },
+        { platform: 'email', value: 'neo@example.org', label: '星澜早期' },
         { platform: 'x', value: '@neolin' },
       ],
     });
@@ -70,7 +70,7 @@ describe('MakerContactsStore', () => {
     it('组织实体与 pending 状态', () => {
       const org = store.createContact({
         kind: 'org',
-        displayName: '心动网络',
+        displayName: '星澜网络',
         status: 'pending',
         source: 'agent',
       });
@@ -116,7 +116,7 @@ describe('MakerContactsStore', () => {
       expect(updated.summary).toBe('新简介');
       expect(updated.status).toBe('pending');
       expect(updated.displayName).toBe('林子航');
-      expect(updated.narrative).toContain('VeryCD');
+      expect(updated.narrative).toContain('蓝川');
     });
 
     it('不存在的 id 抛 not-found', () => {
@@ -156,7 +156,7 @@ describe('MakerContactsStore', () => {
 
     it('FTS 兜底: 简介关键词能捞到人', () => {
       const p = createNeo();
-      const hits = store.resolve('TapTap');
+      const hits = store.resolve('星岛');
       expect(hits.length).toBeGreaterThan(0);
       expect(hits[0]!.matchType).toBe('fts');
       expect(hits[0]!.profile.id).toBe(p.id);
@@ -193,9 +193,9 @@ describe('MakerContactsStore', () => {
 
     it('kind / status 过滤', () => {
       createNeo();
-      store.createContact({ kind: 'org', displayName: 'TapTap 团队', summary: 'TapTap 相关组织', status: 'pending' });
-      expect(store.search('TapTap', { kind: 'org' })).toHaveLength(1);
-      expect(store.search('TapTap', { status: 'pending' })).toHaveLength(1);
+      store.createContact({ kind: 'org', displayName: '星岛 团队', summary: '星岛 相关组织', status: 'pending' });
+      expect(store.search('星岛', { kind: 'org' })).toHaveLength(1);
+      expect(store.search('星岛', { status: 'pending' })).toHaveLength(1);
     });
   });
 
@@ -309,7 +309,7 @@ describe('MakerContactsStore', () => {
       expect(cross[0]).toMatchObject({ matchType: 'name', kind: 'person' });
       expect(store.findSimilar({ kind: 'person', displayName: '王小明' })).toHaveLength(0);
       // 纯拉丁短别名不做子串匹配: org 别名 "XD" 不应误命中含 "XD" 的任意长名
-      store.createContact({ kind: 'org', displayName: '心动(XD Inc)', aliases: ['XD', 'xindong'] });
+      store.createContact({ kind: 'org', displayName: '星澜(XD Inc)', aliases: ['XD', 'makecindy'] });
       expect(store.findSimilar({ kind: 'person', displayName: 'XDMaker端到端测试员' })).toHaveLength(0);
     });
 
@@ -366,8 +366,8 @@ describe('MakerContactsStore', () => {
       expect(pairs).toHaveLength(1);
       expect([pairs[0]!.aName, pairs[0]!.bName].sort()).toEqual(['Remy', 'Remy Kim']);
       // 公司被错建成人: 跨 kind 对也要被扫出
-      store.createContact({ kind: 'org', displayName: '心动网络' });
-      store.createContact({ kind: 'person', displayName: '心动网络' });
+      store.createContact({ kind: 'org', displayName: '星澜网络' });
+      store.createContact({ kind: 'person', displayName: '星澜网络' });
       const crossPairs = store.findDuplicatePairs().filter((x) => x.aKind !== x.bKind);
       expect(crossPairs).toHaveLength(1);
     });
@@ -383,7 +383,7 @@ describe('MakerContactsStore', () => {
   describe('relations(关系边)', () => {
     it('人↔组织任职: 双向可见, 组织名进对方 FTS', () => {
       const p = createNeo();
-      const org = store.createContact({ kind: 'org', displayName: '心动网络' });
+      const org = store.createContact({ kind: 'org', displayName: '星澜网络' });
       const rel = store.addRelation(p.id, { toId: org.id, relation: '任职', note: '执行办' });
       expect(rel.relation).toBe('任职');
 
@@ -391,7 +391,7 @@ describe('MakerContactsStore', () => {
       expect(person.relations).toHaveLength(1);
       expect(person.relations[0]).toMatchObject({
         contactId: org.id,
-        displayName: '心动网络',
+        displayName: '星澜网络',
         kind: 'org',
         direction: 'out',
         note: '执行办',
@@ -400,7 +400,7 @@ describe('MakerContactsStore', () => {
       const orgProfile = store.getContact(org.id);
       expect(orgProfile.relations[0]).toMatchObject({ contactId: p.id, direction: 'in' });
       // 搜组织名可捞到人(关系文本进 FTS)
-      expect(store.search('心动网络').map((h) => h.contactId)).toContain(p.id);
+      expect(store.search('星澜网络').map((h) => h.contactId)).toContain(p.id);
     });
 
     it('自关联/重复关系/不存在对端 拒绝', () => {
@@ -435,7 +435,7 @@ describe('MakerContactsStore', () => {
     it('关系边随合并迁移, source↔target 自环被清理', () => {
       const target = createNeo();
       const dup = store.createContact({ kind: 'person', displayName: 'Neo 副本' });
-      const org = store.createContact({ kind: 'org', displayName: '心动' });
+      const org = store.createContact({ kind: 'org', displayName: '星澜' });
       store.addRelation(dup.id, { toId: org.id, relation: '任职' });
       store.addRelation(dup.id, { toId: target.id, relation: '疑似同人' }); // 合并后成自环, 应清理
 
@@ -481,7 +481,7 @@ describe('MakerContactsStore', () => {
   describe('listContacts / stats / resetAll', () => {
     it('过滤与统计', () => {
       createNeo();
-      store.createContact({ kind: 'org', displayName: '心动', status: 'pending' });
+      store.createContact({ kind: 'org', displayName: '星澜', status: 'pending' });
       expect(store.listContacts({ kind: 'person' })).toHaveLength(1);
       expect(store.listContacts({ status: 'pending' })).toHaveLength(1);
       const s = store.stats();

@@ -8,4 +8,4 @@ export {
   isPreconditionFailedRemoteError,
   relayStatusHint,
   relayStatusLabel,
-} from '@lizi/maker-shared/device-link-contract';
+} from '@cindy/maker-shared/device-link-contract';

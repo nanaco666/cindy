@@ -7,7 +7,7 @@ import type {
   VoiceInputDraftSource,
   VoiceInputRendererEvent,
   VoiceInputState,
-} from '@lizi/voice-input-core';
+} from '@cindy/voice-input-core';
 
 import { createLogger } from '@/lib/logger';
 import { toast } from '@/lib/toast';

@@ -17,6 +17,7 @@ import { ghostSecretSaved } from '../secrets/providerSecretStore';
 import { serverApiFetch } from '../serverApiClient';
 import { getClientEndpoint } from '../clientEndpointsService';
 import type { IssueConfirmBridge } from './issueConfirmBridge';
+import { getAppCapabilities } from '../appCapabilities.js';
 import {
   submitGithubIssueWithConfirm,
   type GithubIssueSubmitResult,
@@ -42,6 +43,13 @@ export function initGithubIssueSubmit(bridge: IssueConfirmBridge): void {
 export async function submitGithubIssueForSession(
   req: SubmitIssueRequest,
 ): Promise<GithubIssueSubmitResult> {
+  if (!getAppCapabilities().canUseCindyAccountServices) {
+    return {
+      ok: false,
+      errorCode: 'AUTH_NOT_READY',
+      message: '提交官方反馈需要登录 Cindy 账号。',
+    };
+  }
   const bridge = bridgeHolder;
   if (!bridge) {
     return {

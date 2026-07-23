@@ -8,7 +8,7 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { ChannelIM, IMAttachment, IMMessageEvent } from 'lizi-im';
+import type { ChannelIM, IMAttachment, IMMessageEvent } from '@cindy/im';
 
 const mocks = vi.hoisted(() => ({
   logger: {

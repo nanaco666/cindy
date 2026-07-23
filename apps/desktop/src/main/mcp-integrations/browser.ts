@@ -1,7 +1,7 @@
 // 浏览器自动化 desktop host(L3)。维护者指南(架构 + 踩坑 + 上游同步):
 // packages/browser-control-runtime/upstream/MAINTAINING.md
 //
-// Keep this import FIRST (above @lizi/browser-control-runtime): it sets
+// Keep this import FIRST (above @cindy/browser-control-runtime): it sets
 // XDT_BROWSER_RUNTIME_DIR before the runtime import below reads it into its eager
 // CONFIG_DIR const (see browser-runtime-env.ts). No import-order autofix is
 // configured, so this position is stable.
@@ -13,7 +13,7 @@ import {
   createBrowserControlRuntime,
   type BrowserControlRuntime,
   type BrowserRuntimeConfig,
-} from '@lizi/browser-control-runtime';
+} from '@cindy/browser-control-runtime';
 
 import { createLogger } from '../logger.js';
 import { extractBrowserAvailability, type BrowserAvailability } from './browser-availability.js';
@@ -62,7 +62,7 @@ const logger = createLogger('mcp/cindy_browser');
  * (Same Chrome binary as the user's, so the dock/taskbar icon is unchanged.)
  *
  * ⚠️ 磁盘标识符:这是 2026-07 品牌翻转时钉死的目录名,之后【不要】再跟随
- * @lizi/maker-shared/branding 的 BRAND_NAME 变化——改了会指向新的空 profile
+ * @cindy/maker-shared/branding 的 BRAND_NAME 变化——改了会指向新的空 profile
  * 目录,丢失既有登录态/Cookie。老 profile 的接续路径:
  *  - 老 userData(xdt-maker)里的 `browser-runtime/browser/XDMaker` 由 mToc 首登
  *    迁移(legacyUserDataMigration.ts)复制为新 userData 的 `browser/Cindy`;
@@ -161,7 +161,7 @@ healLegacyManagedProfileDir();
 //
 // `vendoredRuntime` is the raw upstream object. We never hand it out directly —
 // it sits behind the `ExternalChromeBackend` wrapper, which itself sits behind
-// the `BackendRouter`. The router is what callers (lizi-mcps via
+// the `BackendRouter`. The router is what callers (@cindy/mcps via
 // `getBrowserMcpDeps`, host helpers below) receive, so swapping the active
 // backend in Phase 5 is a single `router.setBackend()` call away.
 const vendoredRuntime: BrowserControlRuntime = createBrowserControlRuntime({
@@ -228,7 +228,7 @@ const initialKind = readBrowserBackendSettings().kind;
  * disposer) go through the router so the swap is a single `setBackend` call.
  *
  * The router implements `BrowserControlRuntime` (its `.call` matches the
- * contract verbatim) so lizi-mcps consumes it as the runtime with no adapter.
+ * contract verbatim) so @cindy/mcps consumes it as the runtime with no adapter.
  */
 const router = new BackendRouter(backendForKind(initialKind), logger);
 
@@ -324,7 +324,7 @@ export function getBrowserMcpDeps(): {
     saveUserRecipe: (input) => writeUserRecipe(input),
     // Router implements `BrowserControlRuntime` — the MCP tool layer never sees
     // the backend split. Swapping the active backend (Phase 5) is invisible from
-    // lizi-mcps' perspective.
+    // @cindy/mcps' perspective.
     getRuntime: () => router,
     logger,
   };

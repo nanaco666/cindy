@@ -1,4 +1,4 @@
-import type { DeviceView } from '@lizi/device-link';
+import type { DeviceView } from '@cindy/device-link';
 import { getSecureItem, setSecureItem } from '@/auth/secureStorage';
 
 const DEVICE_IDENTITY_STORAGE_KEY = 'device-link.device-identity.v1';

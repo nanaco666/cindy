@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_MOBILE_VOICE_LITELLM_BASE_URL } from '@/config/env';
-import type { MobileVoiceCredentialSyncResult } from '@lizi/maker-shared/device-link-contract';
+import type { MobileVoiceCredentialSyncResult } from '@cindy/maker-shared/device-link-contract';
 
 const secureItems = vi.hoisted(() => new Map<string, string>());
 

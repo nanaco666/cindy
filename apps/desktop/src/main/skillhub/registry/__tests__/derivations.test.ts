@@ -23,7 +23,7 @@ describe('deriveScope', () => {
   });
 
   it('project skill path → project', () => {
-    const p = path.join('/Users/lizi/projects/foo', '.claude', 'skills', 'my-skill');
+    const p = path.join('/Users/sam/projects/foo', '.claude', 'skills', 'my-skill');
     expect(deriveScope(p)).toBe('project');
   });
 
@@ -50,7 +50,7 @@ describe('deriveProjectWorkingDir', () => {
   });
 
   it('project skill → project root (dirname 3 levels)', () => {
-    const root = path.join('/Users/lizi/projects/foo');
+    const root = path.join('/Users/sam/projects/foo');
     const p = path.join(root, '.claude', 'skills', 'my-skill');
     expect(deriveProjectWorkingDir(p)).toBe(path.normalize(root));
   });

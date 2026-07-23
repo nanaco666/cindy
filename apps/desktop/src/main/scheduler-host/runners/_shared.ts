@@ -7,9 +7,9 @@
 
 import { eq } from 'drizzle-orm';
 
-import { isTerminalAgentErrorEvent } from '@lizi/maker-core';
-import type { Session, AgentEvent } from '@lizi/maker-core';
-import type { Logger } from '@lizi/maker-scheduler';
+import { isTerminalAgentErrorEvent } from '@cindy/maker-core';
+import type { Session, AgentEvent } from '@cindy/maker-core';
+import type { Logger } from '@cindy/maker-scheduler';
 
 import { sessions as sessionsTable } from '../../localDb/schema';
 import type { SchedulerDrizzleDb } from '../storage';

@@ -20,7 +20,8 @@ import { writeSnapshot } from './snapshot';
 import { pack } from './zipPacker';
 import type { PackResult } from './zipPacker';
 import { registryService } from './registry';
-import { getCurrentUserId } from '../authManager';
+import { getCurrentDataOwnerId, getCurrentUserId } from '../authManager';
+import { getAppCapabilities } from '../appCapabilities.js';
 
 import { createLogger } from '../logger';
 
@@ -212,6 +213,25 @@ export class SkillPublishService {
     params: PublishParams,
     onProgress: ProgressCb = () => {},
   ): Promise<{ success: boolean; result?: { name: string; version: string }; errorCode?: string; error?: string }> {
+    if (!getAppCapabilities().canUseSkillHubCloud) {
+      this.emitProgress({
+        phase: 'failed',
+        name: params.name,
+        errorCode: 'CANCELLED',
+        message: 'SkillHub publish is unavailable in local mode',
+      }, onProgress);
+      return { success: false, errorCode: 'CANCELLED' };
+    }
+    const publishOwnerId = getCurrentDataOwnerId();
+    if (!publishOwnerId) {
+      this.emitProgress({
+        phase: 'failed',
+        name: params.name,
+        errorCode: 'CANCELLED',
+        message: 'SkillHub publish requires an active data owner',
+      }, onProgress);
+      return { success: false, errorCode: 'CANCELLED' };
+    }
     if (this.current) {
       this.emitProgress({ phase: 'failed', name: params.name, errorCode: 'INTERNAL', message: '已有发布任务进行中' }, onProgress);
       return { success: false, errorCode: 'INTERNAL' };
@@ -230,6 +250,10 @@ export class SkillPublishService {
     this.current = state;
 
     const signal = abortController.signal;
+    const isCancelled = (): boolean =>
+      signal.aborted ||
+      !getAppCapabilities().canUseSkillHubCloud ||
+      getCurrentDataOwnerId() !== publishOwnerId;
 
     let originalSkillMd: string | null = null;
     let publishSucceeded = false;
@@ -249,14 +273,14 @@ export class SkillPublishService {
       // ── 步骤 2: 打包 ─────────────────────────────────────────────────────
       if (!state.packCache) {
         this.emitProgress({ phase: 'packing' }, onProgress);
-        if (signal.aborted) {
+        if (isCancelled()) {
           this.emitProgress({ phase: 'failed', name: params.name, errorCode: 'CANCELLED', message: '已取消' }, onProgress);
           return { success: false, errorCode: 'CANCELLED' };
         }
         try {
           state.packCache = await pack(params.absolutePath, { timeoutMs: this.packTimeoutMs, signal });
         } catch (err) {
-          if (signal.aborted) throw err;
+          if (isCancelled()) throw err;
           const message = err instanceof Error ? err.message : String(err);
           log.error(`[publish:pack] failed | name=${params.name}:`, err);
           this.emitProgress({
@@ -269,7 +293,7 @@ export class SkillPublishService {
         }
       }
 
-      if (signal.aborted) {
+      if (isCancelled()) {
         this.emitProgress({ phase: 'failed', name: params.name, errorCode: 'CANCELLED', message: '已取消' }, onProgress);
         return { success: false, errorCode: 'CANCELLED' };
       }
@@ -280,7 +304,7 @@ export class SkillPublishService {
       for (;;) {
         if (!state.initCache) {
           this.emitProgress({ phase: 'init' }, onProgress);
-          if (signal.aborted) {
+          if (isCancelled()) {
             this.emitProgress({ phase: 'failed', name: params.name, errorCode: 'CANCELLED', message: '已取消' }, onProgress);
             return { success: false, errorCode: 'CANCELLED' };
           }
@@ -310,7 +334,7 @@ export class SkillPublishService {
             );
           } catch (err) {
             log.error(`[publish:init] failed | name=${params.name} err=`, err);
-            if (signal.aborted) {
+            if (isCancelled()) {
               this.emitProgress({ phase: 'failed', name: params.name, errorCode: 'CANCELLED', message: '已取消' }, onProgress);
               return { success: false, errorCode: 'CANCELLED' };
             }
@@ -327,7 +351,7 @@ export class SkillPublishService {
 
         // ── 步骤 5: OSS PUT ──────────────────────────────────────────────
         this.emitProgress({ phase: 'uploading' }, onProgress);
-        if (signal.aborted) {
+        if (isCancelled()) {
           this.emitProgress({ phase: 'failed', name: params.name, errorCode: 'CANCELLED', message: '已取消' }, onProgress);
           return { success: false, errorCode: 'CANCELLED' };
         }
@@ -395,7 +419,7 @@ export class SkillPublishService {
           );
         }
 
-        if (signal.aborted) {
+        if (isCancelled()) {
           this.emitProgress({ phase: 'failed', name: params.name, errorCode: 'CANCELLED', message: '已取消' }, onProgress);
           return { success: false, errorCode: 'CANCELLED' };
         }
@@ -419,7 +443,7 @@ export class SkillPublishService {
 
         // ── 步骤 6: publish/commit ───────────────────────────────────────
         this.emitProgress({ phase: 'commit' }, onProgress);
-        if (signal.aborted) {
+        if (isCancelled()) {
           this.emitProgress({ phase: 'failed', name: params.name, errorCode: 'CANCELLED', message: '已取消' }, onProgress);
           return { success: false, errorCode: 'CANCELLED' };
         }
@@ -457,18 +481,20 @@ export class SkillPublishService {
 
           // ── 步骤 7: commit 成功 → 立刻确认本地 ───────────────────────────
           const publishedVersion = state.initCache!.nextVersion;
+          // commit 是不可逆的服务端副作用。此后即使用户登出或进入本地模式，
+          // 也必须完成本地对账并报告成功，不能把已上线版本误报为 CANCELLED。
+          publishSucceeded = true;
 
           await writeSnapshot(params.absolutePath, params.name).catch((err) =>
             log.warn('[publish] writeSnapshot failed (non-fatal):', err));
           await syncPublishedRegistry(params.name, params.absolutePath, publishedVersion, folderHash)
             .catch((err) => log.warn('[publish] registry sync failed (non-fatal):', err));
 
-          publishSucceeded = true;
           this.emitProgress({ phase: 'done', name: params.name, version: publishedVersion }, onProgress);
           this.startScanPoll(params.name, publishedVersion);
           return { success: true, result: { name: params.name, version: publishedVersion } };
         } catch (err) {
-          if (signal.aborted) {
+          if (isCancelled()) {
             this.emitProgress({ phase: 'failed', name: params.name, errorCode: 'CANCELLED', message: '已取消' }, onProgress);
             return { success: false, errorCode: 'CANCELLED' };
           }
@@ -490,11 +516,11 @@ export class SkillPublishService {
         }
       }
     } catch (err) {
-      const code = signal.aborted ? 'CANCELLED' : unhandledPublishErrorToCode(err);
-      const message = signal.aborted
+      const code = isCancelled() ? 'CANCELLED' : unhandledPublishErrorToCode(err);
+      const message = isCancelled()
         ? '已取消'
         : err instanceof Error ? err.message : String(err);
-      if (signal.aborted) {
+      if (isCancelled()) {
         log.debug(`[publish] cancelled | name=${params.name}`);
       } else {
         log.error(`[publish] unexpected failure | name=${params.name} code=${code}:`, err);

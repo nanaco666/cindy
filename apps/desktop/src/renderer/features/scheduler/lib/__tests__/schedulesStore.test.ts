@@ -22,7 +22,7 @@
 
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 
-import type { Schedule } from '@lizi/maker-scheduler';
+import type { Schedule } from '@cindy/maker-scheduler';
 
 import {
   schedulesStore,

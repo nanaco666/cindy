@@ -4,7 +4,7 @@
  * ---------------------------------------------------------------------------
  * 在 device-link handleInvoke 里、deps.invoke 之前对 maker:send / maker:steer /
  * maker:input:enqueue 调用(这些 channel 才携带用户消息附件)。失败抛错 → handleInvoke
- * 转 throwIpcError(DEVICE_LINK_MEDIA_TRANSFER_FAILED) → 整条消息不发(@dash 决策)。
+ * 转 throwIpcError(DEVICE_LINK_MEDIA_TRANSFER_FAILED) → 整条消息不发(产品决策)。
  *
  * 被控端 normalizeUserMessage 识别 OSS 引用串 → presign-get 下载 → 物化喂 agent。
  *

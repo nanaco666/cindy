@@ -204,7 +204,7 @@ describe('message gallery', () => {
     ]);
   });
 
-  it('lightbox 翻页只在同一条消息(顶层 render item)内进行,跨轮次不串页(Dash 2026-07-08)', () => {
+  it('lightbox 翻页只在同一条消息(顶层 render item)内进行,跨轮次不串页(产品 2026-07-08)', () => {
     const items: MobileMessageRenderItem[] = [
       messageItem('m1', {
         attachments: [

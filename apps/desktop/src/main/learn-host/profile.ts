@@ -15,11 +15,11 @@
 
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { app } from 'electron';
 import matter from 'gray-matter';
 
-import { sanitizeWorkdir } from '@lizi/maker-core';
+import { sanitizeWorkdir } from '@cindy/maker-core';
 
+import { ownerScopedUserDataPath } from '../appSessionState';
 import { createLogger } from '../logger';
 import { readMemorySettings } from '../maker-host/memory-settings-store';
 import { redactSensitive } from './redaction';
@@ -52,7 +52,7 @@ export interface ProfileBundle {
 }
 
 function memoryRoot(): string {
-  return path.join(app.getPath('userData'), 'maker-memory');
+  return ownerScopedUserDataPath('maker-memory');
 }
 
 function redactProfileLabel(value: string): string {

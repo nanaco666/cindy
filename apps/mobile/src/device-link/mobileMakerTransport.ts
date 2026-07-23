@@ -10,7 +10,7 @@ import {
   DEVICE_LINK_VOICE_DICTIONARY_LEARNING_CHANNEL,
   DEVICE_LINK_VOICE_TRANSCRIBE_CHANNEL,
   MOBILE_REMOTE_INVOKE_CHANNELS,
-} from '@lizi/maker-shared/device-link-contract';
+} from '@cindy/maker-shared/device-link-contract';
 import type {
   MobileGoalLimitsInput,
   MobileGoalStatusPayload,
@@ -18,8 +18,8 @@ import type {
   MobileCodexRateLimitsResult,
   MobileVoiceDictionaryLearningRequest,
   MobileVoiceDictionaryLearningResult,
-} from '@lizi/maker-shared/device-link-contract';
-import type { ProviderView } from '@lizi/model-providers/registry';
+} from '@cindy/maker-shared/device-link-contract';
+import type { ProviderView } from '@cindy/model-providers/registry';
 import type { RewindPreviewPayload } from '@/session/rewindPreview';
 import type { MobileRemoteMediaFetchResult } from '@/session/remoteMedia';
 import type {

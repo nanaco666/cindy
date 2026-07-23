@@ -11,14 +11,14 @@
  *   - 超时**仅在显式配置 timeoutMs 时生效**,未配置 = 不限时(产品决策:
  *     不设默认超时;代价是 hook 卡死会阻塞该轮 fire,由配置方自担)。
  *
- * 跨平台注意(AGENTS.md 规则 15):
+ * 跨平台注意(docs/dev-rules/engineering-conventions.md):
  *   - 超时杀进程:Windows 上 child.kill 的 POSIX 信号语义不可靠且杀不掉 cmd.exe
  *     的孙子进程,走 `taskkill /pid <pid> /T /F` 树杀兜底;POSIX 用 SIGKILL。
  *   - stdout/stderr 各截断 8KB,防脚本刷屏撑爆 run 记录与日志。
  */
 
 import { spawn } from 'node:child_process';
-import type { PreRunHookRunResult } from '@lizi/maker-scheduler';
+import type { PreRunHookRunResult } from '@cindy/maker-scheduler';
 import { capAppend as capAppendBase, killProcessTree } from './proc-util';
 import os from 'node:os';
 

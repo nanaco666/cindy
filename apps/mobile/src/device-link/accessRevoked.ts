@@ -1,4 +1,4 @@
-import type { Envelope, LinkClosePayload } from '@lizi/device-link';
+import type { Envelope, LinkClosePayload } from '@cindy/device-link';
 import { remoteSessionStore } from '@/session/remoteSessionStore';
 import { evictDeviceProviders } from '@/device-link/deviceProvidersCache';
 import { evictDeviceModelMeta } from '@/device-link/deviceModelMetaCache';
@@ -7,7 +7,7 @@ import { evictComposerPaletteCacheForDevice } from '@/session/composerPaletteCac
 import { revokedDevicesStore } from '@/device-link/revokedDevicesStore';
 import {
   isAccessRevokedRemoteError,
-} from '@lizi/maker-shared/device-link-contract';
+} from '@cindy/maker-shared/device-link-contract';
 
 export function markDeviceAccessRevoked(deviceId: string): void {
   revokedDevicesStore.markRevoked(deviceId);

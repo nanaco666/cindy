@@ -179,24 +179,24 @@ describe('remarkTruncateCjkUrls', () => {
     // 原文 `**https://github.com/x/r/pull/90**(完整 feature 模板)`：闭合 **
     // 因不构成 right-flanking 退化为字面文本，GFM autolink 把 `**(完整` 一并
     // 吞进 URL。CJK 切断后必须把残留的 `**(` 也剥进 tail。
-    const tree = autolinkTree('https://github.com/xindong/XDMaker/pull/90**(完整');
+    const tree = autolinkTree('https://github.com/makecindy/cindy/pull/90**(完整');
     transform(tree);
     const para = tree.children[0] as Paragraph;
     const link = para.children[0] as Link;
     const tail = para.children[1] as Text;
-    expect(link.url).toBe('https://github.com/xindong/XDMaker/pull/90');
-    expect((link.children[0] as Text).value).toBe('https://github.com/xindong/XDMaker/pull/90');
+    expect(link.url).toBe('https://github.com/makecindy/cindy/pull/90');
+    expect((link.children[0] as Text).value).toBe('https://github.com/makecindy/cindy/pull/90');
     expect(tail.value).toBe('**(完整');
   });
 
   it('Markdown 装饰残留仍剥掉 trailing _ 和 ~', () => {
-    const tree = autolinkTree('https://github.com/xindong/XDMaker/pull/90_~说明');
+    const tree = autolinkTree('https://github.com/makecindy/cindy/pull/90_~说明');
     transform(tree);
     const para = tree.children[0] as Paragraph;
     const link = para.children[0] as Link;
     const tail = para.children[1] as Text;
-    expect(link.url).toBe('https://github.com/xindong/XDMaker/pull/90');
-    expect((link.children[0] as Text).value).toBe('https://github.com/xindong/XDMaker/pull/90');
+    expect(link.url).toBe('https://github.com/makecindy/cindy/pull/90');
+    expect((link.children[0] as Text).value).toBe('https://github.com/makecindy/cindy/pull/90');
     expect(tail.value).toBe('_~说明');
   });
 
@@ -380,33 +380,33 @@ describe('remarkTruncateCjkUrls', () => {
   });
 
   it('数字 path 后紧跟完整 ASCII 括号说明：https://github.com/x/r/pull/283(base,OPEN) → 剥掉括号说明', () => {
-    const tree = autolinkTree('https://github.com/xindong/XDMaker/pull/283(base,OPEN)');
+    const tree = autolinkTree('https://github.com/makecindy/cindy/pull/283(base,OPEN)');
     transform(tree);
     const para = tree.children[0] as Paragraph;
     const link = para.children[0] as Link;
     const tail = para.children[1] as Text;
-    expect(link.url).toBe('https://github.com/xindong/XDMaker/pull/283');
-    expect((link.children[0] as Text).value).toBe('https://github.com/xindong/XDMaker/pull/283');
+    expect(link.url).toBe('https://github.com/makecindy/cindy/pull/283');
+    expect((link.children[0] as Text).value).toBe('https://github.com/makecindy/cindy/pull/283');
     expect(tail.value).toBe('(base,OPEN)');
   });
 
   it('code-host 数字资源带 query / fragment 时仍剥掉尾部状态说明', () => {
     for (const [url, expected] of [
       [
-        'https://github.com/xindong/XDMaker/pull/283#discussion_r1(base,OPEN)',
-        'https://github.com/xindong/XDMaker/pull/283#discussion_r1',
+        'https://github.com/makecindy/cindy/pull/283#discussion_r1(base,OPEN)',
+        'https://github.com/makecindy/cindy/pull/283#discussion_r1',
       ],
       [
-        'https://github.com/xindong/XDMaker/pull/283#discussion_r1(base main,OPEN)',
-        'https://github.com/xindong/XDMaker/pull/283#discussion_r1',
+        'https://github.com/makecindy/cindy/pull/283#discussion_r1(base main,OPEN)',
+        'https://github.com/makecindy/cindy/pull/283#discussion_r1',
       ],
       [
-        'https://github.com/xindong/XDMaker/pull/283?diff=split(base,OPEN)',
-        'https://github.com/xindong/XDMaker/pull/283?diff=split',
+        'https://github.com/makecindy/cindy/pull/283?diff=split(base,OPEN)',
+        'https://github.com/makecindy/cindy/pull/283?diff=split',
       ],
       [
-        'https://github.com/xindong/XDMaker/pull/283?diff=split(base main,OPEN)',
-        'https://github.com/xindong/XDMaker/pull/283?diff=split',
+        'https://github.com/makecindy/cindy/pull/283?diff=split(base main,OPEN)',
+        'https://github.com/makecindy/cindy/pull/283?diff=split',
       ],
     ]) {
       const tree = autolinkTree(url);
@@ -444,8 +444,8 @@ describe('remarkTruncateCjkUrls', () => {
   it('code-host 数字 path 带 trailing slash 时仍剥掉完整 ASCII 括号说明', () => {
     for (const [url, expected] of [
       [
-        'https://github.com/xindong/XDMaker/pull/283/(base,OPEN)',
-        'https://github.com/xindong/XDMaker/pull/283/',
+        'https://github.com/makecindy/cindy/pull/283/(base,OPEN)',
+        'https://github.com/makecindy/cindy/pull/283/',
       ],
       [
         `${GITLAB_MR_URL}/(base,OPEN)`,
@@ -464,13 +464,13 @@ describe('remarkTruncateCjkUrls', () => {
   });
 
   it('URL 后紧跟 ASCII 括号说明：https://github.com/x/r/pull/283(base → 剥掉 (base', () => {
-    const tree = autolinkTree('https://github.com/xindong/XDMaker/pull/283(base');
+    const tree = autolinkTree('https://github.com/makecindy/cindy/pull/283(base');
     transform(tree);
     const para = tree.children[0] as Paragraph;
     const link = para.children[0] as Link;
     const tail = para.children[1] as Text;
-    expect(link.url).toBe('https://github.com/xindong/XDMaker/pull/283');
-    expect((link.children[0] as Text).value).toBe('https://github.com/xindong/XDMaker/pull/283');
+    expect(link.url).toBe('https://github.com/makecindy/cindy/pull/283');
+    expect((link.children[0] as Text).value).toBe('https://github.com/makecindy/cindy/pull/283');
     expect(tail.value).toBe('(base');
   });
 
@@ -486,13 +486,13 @@ describe('remarkTruncateCjkUrls', () => {
   });
 
   it('加粗 URL 后紧跟 ASCII 括号说明：…/pull/163**(ready → 剥掉 **(ready', () => {
-    const tree = autolinkTree('https://github.com/xindong/XDMaker/pull/163**(ready');
+    const tree = autolinkTree('https://github.com/makecindy/cindy/pull/163**(ready');
     transform(tree);
     const para = tree.children[0] as Paragraph;
     const link = para.children[0] as Link;
     const tail = para.children[1] as Text;
-    expect(link.url).toBe('https://github.com/xindong/XDMaker/pull/163');
-    expect((link.children[0] as Text).value).toBe('https://github.com/xindong/XDMaker/pull/163');
+    expect(link.url).toBe('https://github.com/makecindy/cindy/pull/163');
+    expect((link.children[0] as Text).value).toBe('https://github.com/makecindy/cindy/pull/163');
     expect(tail.value).toBe('**(ready');
   });
 
@@ -720,20 +720,20 @@ describe('remarkTruncateCjkUrls', () => {
 
   it('真实 remark-gfm 解析：PR URL 后接有空格的括号说明只链接 PR URL', () => {
     expect(
-      linksFromMarkdown('已提交。 PR #283 → https://github.com/xindong/XDMaker/pull/283(base main,OPEN)'),
-    ).toEqual(['https://github.com/xindong/XDMaker/pull/283']);
+      linksFromMarkdown('已提交。 PR #283 → https://github.com/makecindy/cindy/pull/283(base main,OPEN)'),
+    ).toEqual(['https://github.com/makecindy/cindy/pull/283']);
   });
 
   it('真实 remark-gfm 解析：PR URL 后接无空格的括号说明只链接 PR URL', () => {
     expect(
-      linksFromMarkdown('已提交。 PR #283 → https://github.com/xindong/XDMaker/pull/283(base,OPEN)'),
-    ).toEqual(['https://github.com/xindong/XDMaker/pull/283']);
+      linksFromMarkdown('已提交。 PR #283 → https://github.com/makecindy/cindy/pull/283(base,OPEN)'),
+    ).toEqual(['https://github.com/makecindy/cindy/pull/283']);
   });
 
   it('真实 remark-gfm 解析：带 trailing slash 的 PR URL 后接括号说明只链接 PR URL', () => {
     expect(
-      linksFromMarkdown('已提交。 PR #283 → https://github.com/xindong/XDMaker/pull/283/(base,OPEN)'),
-    ).toEqual(['https://github.com/xindong/XDMaker/pull/283/']);
+      linksFromMarkdown('已提交。 PR #283 → https://github.com/makecindy/cindy/pull/283/(base,OPEN)'),
+    ).toEqual(['https://github.com/makecindy/cindy/pull/283/']);
     expect(
       linksFromMarkdown(`已提交。 MR !42 → ${GITLAB_MR_URL}/(base,OPEN)`),
     ).toEqual([`${GITLAB_MR_URL}/`]);
@@ -741,62 +741,62 @@ describe('remarkTruncateCjkUrls', () => {
 
   it('真实 remark-gfm 解析：PR URL 后接括号说明和句末标点只链接 PR URL', () => {
     expect(
-      linksFromMarkdown('已提交。 PR #283 → https://github.com/xindong/XDMaker/pull/283(base,OPEN).'),
-    ).toEqual(['https://github.com/xindong/XDMaker/pull/283']);
+      linksFromMarkdown('已提交。 PR #283 → https://github.com/makecindy/cindy/pull/283(base,OPEN).'),
+    ).toEqual(['https://github.com/makecindy/cindy/pull/283']);
   });
 
   it('真实 remark-gfm 解析：PR URL 后接括号说明和全角标点只链接 PR URL', () => {
     expect(
-      linksFromMarkdown('已提交。 PR #283 → https://github.com/xindong/XDMaker/pull/283(base,OPEN)，状态正常'),
-    ).toEqual(['https://github.com/xindong/XDMaker/pull/283']);
+      linksFromMarkdown('已提交。 PR #283 → https://github.com/makecindy/cindy/pull/283(base,OPEN)，状态正常'),
+    ).toEqual(['https://github.com/makecindy/cindy/pull/283']);
   });
 
   it('真实 remark-gfm 解析：被外层括号包住的 PR URL 说明只链接 PR URL', () => {
     expect(
-      linksFromMarkdown('(see https://github.com/xindong/XDMaker/pull/283(base,OPEN))'),
-    ).toEqual(['https://github.com/xindong/XDMaker/pull/283']);
+      linksFromMarkdown('(see https://github.com/makecindy/cindy/pull/283(base,OPEN))'),
+    ).toEqual(['https://github.com/makecindy/cindy/pull/283']);
   });
 
   it('真实 remark-gfm 解析：被外层括号包住的 PR URL 说明后接句末标点只链接 PR URL', () => {
     expect(
-      linksFromMarkdown('(see https://github.com/xindong/XDMaker/pull/283(base,OPEN)).'),
-    ).toEqual(['https://github.com/xindong/XDMaker/pull/283']);
+      linksFromMarkdown('(see https://github.com/makecindy/cindy/pull/283(base,OPEN)).'),
+    ).toEqual(['https://github.com/makecindy/cindy/pull/283']);
     expect(
-      linksFromMarkdown('(see https://github.com/xindong/XDMaker/pull/283(base,OPEN))，状态正常'),
-    ).toEqual(['https://github.com/xindong/XDMaker/pull/283']);
+      linksFromMarkdown('(see https://github.com/makecindy/cindy/pull/283(base,OPEN))，状态正常'),
+    ).toEqual(['https://github.com/makecindy/cindy/pull/283']);
   });
 
   it('真实 remark-gfm 解析：Markdown 包裹 URL 后接无空格括号说明只链接 URL', () => {
     expect(
-      linksFromMarkdown('**https://github.com/xindong/XDMaker/pull/163**(ready)'),
-    ).toEqual(['https://github.com/xindong/XDMaker/pull/163']);
+      linksFromMarkdown('**https://github.com/makecindy/cindy/pull/163**(ready)'),
+    ).toEqual(['https://github.com/makecindy/cindy/pull/163']);
   });
 
   it('Markdown 包裹 code-host 括号说明时先用 marker 边界识别 URL 说明', () => {
     const tree = markdownWrappedAutolinkTree(
       '**',
-      'https://github.com/xindong/XDMaker/pull/283(base,OPEN)**',
+      'https://github.com/makecindy/cindy/pull/283(base,OPEN)**',
     );
     transform(tree);
     const para = tree.children[0] as Paragraph;
     const link = para.children[1] as Link;
     const tail = para.children[2] as Text;
-    expect(link.url).toBe('https://github.com/xindong/XDMaker/pull/283');
-    expect((link.children[0] as Text).value).toBe('https://github.com/xindong/XDMaker/pull/283');
+    expect(link.url).toBe('https://github.com/makecindy/cindy/pull/283');
+    expect((link.children[0] as Text).value).toBe('https://github.com/makecindy/cindy/pull/283');
     expect(tail.value).toBe('(base,OPEN)**');
   });
 
   it('Markdown marker 在外层括号后面时仍先识别 code-host 括号说明', () => {
     const tree = markdownWrappedAutolinkTree(
       '**(see ',
-      'https://github.com/xindong/XDMaker/pull/283(base,OPEN))**',
+      'https://github.com/makecindy/cindy/pull/283(base,OPEN))**',
     );
     transform(tree);
     const para = tree.children[0] as Paragraph;
     const link = para.children[1] as Link;
     const tail = para.children[2] as Text;
-    expect(link.url).toBe('https://github.com/xindong/XDMaker/pull/283');
-    expect((link.children[0] as Text).value).toBe('https://github.com/xindong/XDMaker/pull/283');
+    expect(link.url).toBe('https://github.com/makecindy/cindy/pull/283');
+    expect((link.children[0] as Text).value).toBe('https://github.com/makecindy/cindy/pull/283');
     expect(tail.value).toBe('(base,OPEN))**');
   });
 

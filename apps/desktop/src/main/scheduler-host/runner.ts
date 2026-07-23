@@ -1,7 +1,7 @@
 /**
  * Phase 3: MakerScheduleRunner
  *
- * 实现 `ScheduleRunner` 接口（来自 @lizi/maker-scheduler）。
+ * 实现 `ScheduleRunner` 接口（来自 @cindy/maker-scheduler）。
  *
  * 一次 fire 的工作流：
  *   1. effort 白名单校验 — 防止 user-input 把非法 effort 透传给 maker.createSession
@@ -31,8 +31,8 @@
 
 import { randomUUID } from 'node:crypto';
 
-import { isTerminalAgentErrorEvent } from '@lizi/maker-core';
-import type { Maker, AgentEvent, AgentKind, Effort, PermissionMode } from '@lizi/maker-core';
+import { isTerminalAgentErrorEvent } from '@cindy/maker-core';
+import type { Maker, AgentEvent, AgentKind, Effort, PermissionMode } from '@cindy/maker-core';
 import type {
   Schedule,
   ScheduleRun,
@@ -42,7 +42,7 @@ import type {
   FireContext,
   FireResult,
   Scheduler,
-} from '@lizi/maker-scheduler';
+} from '@cindy/maker-scheduler';
 
 import { createMessage } from '../localDb/ipc/messages.js';
 import { getSessionRowSnapshot, touchUserSendInDb } from '../localDb/ipc/sessions.js';
@@ -820,7 +820,7 @@ export class MakerScheduleRunner implements ScheduleRunner {
       // 落库放在 onAccepted(dispatch 前)是**刻意**的:落库失败即判 send 失败
       // (SchedulerOnAcceptedError → failed run),且错误信息脱敏(不泄露 prompt 原文),
       // 不让 agent 在"用户消息没存下"的情况下空跑。
-      // 已知取舍(PR #129 review Thread F,经 Dash 确认接受):在
+      // 已知取舍(PR #129 review Thread F,经产品确认接受):在
       // 「session.ts:137 isTurnRunning 检查时 turn 未跑、紧接着 handle.send 又 reject
       // SESSION_RUNNING」这个 µs 级竞态窗口里,onAccepted 已落库但本轮被顺延,会留下
       // 一条 agent 实际没收到的孤儿 scheduler 消息(顺延重试再落一条)。触发面极窄——

@@ -1,14 +1,14 @@
 /**
- * @lizi/maker-cc-manager
+ * @cindy/maker-cc-manager
  *
  * NDJSON RPC daemon spawned on remote SSH machine. Wraps the Claude Agent SDK
  * Query, exposes session/control RPC to local desktop client.
  *
  * Two consumer entry points:
  *   - Local desktop client (RemoteSdkTransport): `import { RpcClient } from
- *     '@lizi/maker-cc-manager/client'`
+ *     '@cindy/maker-cc-manager/client'`
  *   - Remote daemon binary (bundled via esbuild from src/bin/cc-mgr.ts):
- *     `import { ManagerServer } from '@lizi/maker-cc-manager'`
+ *     `import { ManagerServer } from '@cindy/maker-cc-manager'`
  *
  * Phase 1 ships protocol + server skeleton + client. Phase 2+ wires SDK
  * Query dispatch on top.

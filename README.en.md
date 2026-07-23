@@ -19,11 +19,11 @@
 </p>
 
 <p align="center">
-  🌐 <a href="https://cindy.com.cn">国内版</a> | <a href="https://cindy.app">海外版</a>
+  🌐 <a href="https://cindy.cn">国内版</a> | <a href="https://cindy.app">海外版</a>
 </p>
 
 <p align="center">
-  ⬇️ <a href="https://cindy.com.cn/#download">China download</a> | <a href="https://cindy.app/#download">Global download</a>
+  ⬇️ <a href="https://cindy.cn/#download">China download</a> | <a href="https://cindy.app/#download">Global download</a>
 </p>
 
 
@@ -37,7 +37,7 @@ apps plus their shared packages, organized as a pnpm monorepo.
 
 The client is free to use, and its source code is open under Apache-2.0. Charges
 apply only when you use Cindy-provided tokens or APIs. You can also configure
-your own API key. See the [China site](https://cindy.com.cn/#pricing) or the
+your own API key. See the [China site](https://cindy.cn/#pricing) or the
 [global site](https://cindy.app/#pricing) for service details, pricing, and
 downloads.
 
@@ -56,7 +56,7 @@ repository and is not part of this monorepo.
 
 | Mode | Account requirement | Availability |
 | --- | --- | --- |
-| Hosted service | Cindy cloud account | Use Cindy's full hosted service. See [China pricing](https://cindy.com.cn/#pricing) or [global pricing](https://cindy.app/#pricing). |
+| Hosted service | Cindy cloud account | Use Cindy's full hosted service. See [China pricing](https://cindy.cn/#pricing) or [global pricing](https://cindy.app/#pricing). |
 | Local mode | No Cindy sign-in required | Choose “Local mode” on the login screen to use local agents. Server-backed capabilities are unavailable in this mode. |
 
 ## Prerequisites
@@ -70,15 +70,15 @@ repository and is not part of this monorepo.
 Contributor setup, public submodule initialization, Git LFS, dependency updates,
 and access requirements are maintained in
 [`CONTRIBUTING.en.md`](CONTRIBUTING.en.md).
-Do not use a blanket recursive submodule checkout if you do not have access to the
-private `xd` plugin repository.
+The public checkout only needs the protocol submodule; plugins are installed through
+SkillHub or manually.
 
 Minimal entry point:
 
 ```bash
 git clone https://github.com/makecindy/cindy.git
 cd cindy
-git submodule update --init --recursive cindy-protocol apps/desktop/resources/builtin-ghosts/official
+git submodule update --init --recursive cindy-protocol
 git lfs pull
 pnpm install
 ```
@@ -116,6 +116,9 @@ mode.
 Contributions go through pull requests into `main`. Read
 [`CONTRIBUTING.en.md`](CONTRIBUTING.en.md) first, then use
 [`.github/PULL_REQUEST_TEMPLATE.md`](.github/PULL_REQUEST_TEMPLATE.md).
+Please also follow [`CODE_OF_CONDUCT.en.md`](CODE_OF_CONDUCT.en.md). For ordinary
+usage questions, see [`SUPPORT.en.md`](SUPPORT.en.md); report security issues
+privately through [`SECURITY.en.md`](SECURITY.en.md).
 
 ## Security
 

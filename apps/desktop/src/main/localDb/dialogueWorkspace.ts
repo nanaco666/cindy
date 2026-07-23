@@ -1,6 +1,6 @@
-import { app } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
+import { ownerScopedUserDataPath } from '../appSessionState.js';
 
 /**
  * Build the local date bucket used for XDT-created standalone dialogues.
@@ -18,7 +18,7 @@ export function dialogueWorkspaceDayKey(nowMs: number): string {
 
 /** Root directory owned by xdt-maker for folderless dialogue workspaces. */
 export function dialogueWorkspaceRootDir(): string {
-  return path.join(app.getPath('userData'), 'dialogues');
+  return ownerScopedUserDataPath('dialogues');
 }
 
 /**

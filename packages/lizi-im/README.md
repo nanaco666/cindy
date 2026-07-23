@@ -1,4 +1,4 @@
-# lizi-im
+# @cindy/im
 
 Pure-Node IM transport package. Provides a `BaseIM` abstraction and ready-to-use channel implementations (currently feishu) for hosts that want to expose an IM bot interface — chat in feishu, work happens in the host.
 
@@ -8,7 +8,7 @@ This package is **fully decoupled from any application** — host code injects e
 
 - **Zero runtime dependencies** outside what the IM protocols actually require:
   - `@larksuiteoapi/node-sdk` (feishu WebSocket + REST) — only this one
-- **No** `electron`, `@lizi/maker-core`, `lizi-mcps`, `drizzle-orm`, `@paralleldrive/cuid2`, or workspace-internal packages
+- **No** `electron`, `@cindy/maker-core`, `@cindy/mcps`, `drizzle-orm`, `@paralleldrive/cuid2`, or workspace-internal packages
 - **No** imports from `apps/**` (enforced by the source directory boundary; verified by ESLint `no-restricted-imports` rule on `electron`)
 - **Pure transport / connection layer** — knows nothing about agents, sessions, business cards, model selection, or DB. Host owns all of those and uses the package's outbound API to drive feishu.
 
@@ -23,7 +23,7 @@ This package is **fully decoupled from any application** — host code injects e
         (host → pkg)   │   │   onMessage / sendText / ...)
                        ▼   ▼
                ┌──────────────────┐
-               │     lizi-im      │
+               │     @cindy/im      │
                │  ┌────────────┐  │
                │  │  BaseIM    │  │   abstract
                │  └─────▲──────┘  │
@@ -36,7 +36,7 @@ This package is **fully decoupled from any application** — host code injects e
 ## Quick start
 
 ```ts
-import { createIM, createFeishuIM, type IMHost } from 'lizi-im';
+import { createIM, createFeishuIM, type IMHost } from '@cindy/im';
 
 // 1. Build an IMHost — this is the ONLY surface the package depends on.
 const host: IMHost = {
@@ -124,9 +124,9 @@ The IPC channel names registered by `registerIpc()` are stable strings (`feishuB
 ## Testing
 
 ```bash
-pnpm -F lizi-im run build   # tsc --noEmit
-pnpm -F lizi-im run lint    # eslint (no-restricted-imports enforces no electron)
-pnpm -F lizi-im run test    # vitest
+pnpm -F @cindy/im run build   # tsc --noEmit
+pnpm -F @cindy/im run lint    # eslint (no-restricted-imports enforces no electron)
+pnpm -F @cindy/im run test    # vitest
 ```
 
 ## Adding a new channel

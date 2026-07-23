@@ -21,9 +21,9 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
-import { runWithLiziMcpSessionContext, type LiziMcpSessionContext } from 'lizi-mcps';
+import { runWithLiziMcpSessionContext, type LiziMcpSessionContext } from '@cindy/mcps';
 
-import type { Logger } from '@lizi/maker-core';
+import type { Logger } from '@cindy/maker-core';
 import { createCodexMcpThreadContextStore } from './codexMcpThreadContextStore.js';
 
 const SERVER_HEADER = 'Lizi_MCPS/1.0';
@@ -61,7 +61,7 @@ export interface StartCodexHttpBridgeOptions {
 export async function startCodexHttpBridge(
   opts: StartCodexHttpBridgeOptions,
 ): Promise<CodexHttpBridge> {
-  const log = opts.logger.child('lizi-mcps-http-bridge');
+  const log = opts.logger.child('@cindy/mcps-http-bridge');
   const token = randomBytes(32).toString('hex');
 
   const serverNames = Object.keys(opts.serverFactories);

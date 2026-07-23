@@ -1,7 +1,7 @@
 /**
  * providerModelSections —— 手机版 provider-aware 模型下拉的派生逻辑(**纯逻辑,零 react-native**)。
  *
- * 复用 `@lizi/model-providers` 的 `buildProviderSections` / `connectedProvidersForAgent` /
+ * 复用 `@cindy/model-providers` 的 `buildProviderSections` / `connectedProvidersForAgent` /
  * `nativeDefaultSourceId`,保证手机和桌面、IM /model 三端「同一 agent 看到同样的供应商 × 模型」。
  * 可见性口径 = **被控端用户**的「设置 → 模型供应商」显示开关:PROVIDER_LIST 隧道把被控端的
  * override 快照(modelVisibilityOverrides,key `${agent}:${providerId}:${modelId}`)一并回传,
@@ -20,18 +20,18 @@ import {
   nativeDefaultSourceId,
   sourcesForModel,
   type ProviderView,
-} from '@lizi/model-providers/registry';
+} from '@cindy/model-providers/registry';
 import {
   buildProviderSections,
   isModelVisible,
   type ProviderSection,
   type SectionModel,
-} from '@lizi/model-providers/sections';
+} from '@cindy/model-providers/sections';
 import {
   resolveEffort,
   resolveProviderSwitchEffort,
-} from '@lizi/model-providers/effort-resolution';
-import type { AgentKind } from '@lizi/model-providers/types';
+} from '@cindy/model-providers/effort-resolution';
+import type { AgentKind } from '@cindy/model-providers/types';
 
 import type { MobileModelMemoryAccessors } from './draftModelMemory';
 

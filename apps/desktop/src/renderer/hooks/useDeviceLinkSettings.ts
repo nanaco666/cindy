@@ -63,7 +63,7 @@ export interface DeviceLinkSettings {
 
 const POLL_INTERVAL_MS = 30_000;
 
-export function useDeviceLinkSettings(): DeviceLinkSettings {
+export function useDeviceLinkSettings(active = true): DeviceLinkSettings {
   const { t } = useTranslation();
   const [enabled, setEnabledState] = useState(false);
   const [linkStatus, setLinkStatus] = useState<DeviceLinkLinkStatus>('stopped');
@@ -91,6 +91,7 @@ export function useDeviceLinkSettings(): DeviceLinkSettings {
 
   const refresh = useCallback(
     async (showSpinner = false) => {
+      if (!active) return;
       if (showSpinner) setRefreshing(true);
       try {
         const { devices: list } = await window.electronAPI.deviceLink.listDevices();
@@ -110,11 +111,17 @@ export function useDeviceLinkSettings(): DeviceLinkSettings {
         if (mounted.current && showSpinner) setRefreshing(false);
       }
     },
-    [t],
+    [active, t],
   );
 
   useEffect(() => {
     mounted.current = true;
+    if (!active) {
+      setDevices([]);
+      return () => {
+        mounted.current = false;
+      };
+    }
     void window.electronAPI.deviceLink
       .getState()
       .then((s) => {
@@ -155,7 +162,7 @@ export function useDeviceLinkSettings(): DeviceLinkSettings {
       offControlTarget();
       clearInterval(timer);
     };
-  }, [applyDisabledControlDeviceIds, refresh]);
+  }, [active, applyDisabledControlDeviceIds, refresh]);
 
   const setEnabled = useCallback(
     async (next: boolean) => {

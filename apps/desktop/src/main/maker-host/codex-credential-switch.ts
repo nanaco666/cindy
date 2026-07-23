@@ -3,7 +3,7 @@ import {
   canReuseHostForCredentialMode,
   resolveAgentCredentialMode,
   type AgentKind,
-} from '@lizi/maker-core';
+} from '@cindy/maker-core';
 
 import { withRehydrateCloseSuppressed } from './rehydrateCloseSuppression.js';
 

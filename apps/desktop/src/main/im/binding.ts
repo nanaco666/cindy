@@ -32,7 +32,7 @@ import type {
   BindingChangeListener,
   BindingStore,
   IdentityKey,
-} from 'lizi-im';
+} from '@cindy/im';
 
 import { getDbClient } from '../localDb/client/current';
 import { imBindings } from '../localDb/schema';

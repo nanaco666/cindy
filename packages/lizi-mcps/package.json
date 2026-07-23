@@ -1,5 +1,5 @@
 {
-  "name": "lizi-mcps",
+  "name": "@cindy/mcps",
   "version": "0.0.0",
   "private": true,
   "description": "Reusable MCP servers for Cindy and other hosts",
@@ -15,7 +15,7 @@
   },
   "author": {
     "name": "Lizi",
-    "email": "jiali@magiclizi.com"
+    "email": "feedback@cindy.app"
   },
   "license": "Apache-2.0",
   "dependencies": {
@@ -23,12 +23,12 @@
     "@googleapis/drive": "^20.2.0",
     "@googleapis/gmail": "^17.0.0",
     "@googleapis/sheets": "^13.0.1",
-    "@lizi/browser-control-runtime": "workspace:*",
-    "@lizi/github-client": "workspace:*",
-    "@lizi/gitlab-client": "workspace:*",
-    "@lizi/maker-core": "workspace:*",
-    "@lizi/maker-scheduler": "workspace:*",
-    "@lizi/maker-shared": "workspace:*",
+    "@cindy/browser-control-runtime": "workspace:*",
+    "@cindy/github-client": "workspace:*",
+    "@cindy/gitlab-client": "workspace:*",
+    "@cindy/maker-core": "workspace:*",
+    "@cindy/maker-scheduler": "workspace:*",
+    "@cindy/maker-shared": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "eventsource-parser": "^3.0.6",
     "google-auth-library": "^10.6.2",

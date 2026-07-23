@@ -41,7 +41,7 @@ interface EnvCheckResult {
 // HostSnapshot 来自 transport-only package; desktop main 端 wrap 时附加
 // autoConnect 偏好字段 (本地 prefs, 不写入 ~/.ssh/config), 渲染层统一用
 // 这个扩展类型即可一次拿到完整信息, 不必再为单个字段单独 IPC。
-type RemoteHostSnapshot = import('@lizi/maker-remote-ssh').HostSnapshot & {
+type RemoteHostSnapshot = import('@cindy/maker-remote-ssh').HostSnapshot & {
   autoConnect: boolean;
 };
 /** 设备互联:REST 设备视图(同 shared/deviceLinkIpc.ts DeviceLinkDeviceView) */
@@ -68,7 +68,7 @@ interface DeviceLinkDeviceView {
   isSelf: boolean;
 }
 
-/** 设备互联:relay 连接问题(镜像 @lizi/device-link 的 DeviceLinkConnectionIssue) */
+/** 设备互联:relay 连接问题(镜像 @cindy/device-link 的 DeviceLinkConnectionIssue) */
 interface DeviceLinkConnectionIssuePayload {
   kind: 'auth-failed' | 'replaced' | 'too-many-connections' | 'version-mismatch';
   closeCode?: number;
@@ -113,10 +113,10 @@ interface LocalSshKeyInfo {
   mtimeIso: string | null;
 }
 type AgentFailureReason = 'agent_unavailable' | 'bad_passphrase' | 'no_such_file' | 'other';
-type RemoteAgentKind = import('@lizi/maker-remote-ssh').RemoteAgentKind;
-type RemoteAgentProbe = import('@lizi/maker-remote-ssh').ProbeResult;
-type RemoteAgentInstallResult = import('@lizi/maker-remote-ssh').InstallResult;
-type RemoteAgentInstallProgress = import('@lizi/maker-remote-ssh').InstallProgressEvent;
+type RemoteAgentKind = import('@cindy/maker-remote-ssh').RemoteAgentKind;
+type RemoteAgentProbe = import('@cindy/maker-remote-ssh').ProbeResult;
+type RemoteAgentInstallResult = import('@cindy/maker-remote-ssh').InstallResult;
+type RemoteAgentInstallProgress = import('@cindy/maker-remote-ssh').InstallProgressEvent;
 
 interface RemoteAgentInstallProgressPush {
   hostId: string;
@@ -154,19 +154,19 @@ interface RemoteAgentOneShotResult extends RemoteAgentExecResult {
   durationMs: number;
 }
 
-type VoiceInputState = import('@lizi/voice-input-core').VoiceInputState;
-type VoiceAudioTrace = import('@lizi/voice-input-core').AudioTrace;
-type VoiceSpeechSegment = import('@lizi/voice-input-core').SpeechSegment;
+type VoiceInputState = import('@cindy/voice-input-core').VoiceInputState;
+type VoiceAudioTrace = import('@cindy/voice-input-core').AudioTrace;
+type VoiceSpeechSegment = import('@cindy/voice-input-core').SpeechSegment;
 type VoiceInputGlobalErrorCode = 'empty' | 'unavailable' | 'unconfirmed' | 'permission' | 'failed';
 type VoiceInputGlobalResult =
   | { ok: true }
   | { ok: false; error: string; errorCode?: VoiceInputGlobalErrorCode };
-type VoiceEditableRange = import('@lizi/voice-input-core').EditableRange;
-type VoiceRefinementContext = import('@lizi/voice-input-core').DictationRefinementContext;
-type VoiceInputDraftSource = import('@lizi/voice-input-core').VoiceInputDraftSource;
-type VoiceInputRendererEvent = import('@lizi/voice-input-core').VoiceInputRendererEvent;
-type VoiceInputDictionaryAdviceInput = import('@lizi/voice-input-core').DictationDictionaryAdviceInput;
-type VoiceInputDictionaryLearningAction = import('@lizi/voice-input-core').DictationDictionaryLearningAction;
+type VoiceEditableRange = import('@cindy/voice-input-core').EditableRange;
+type VoiceRefinementContext = import('@cindy/voice-input-core').DictationRefinementContext;
+type VoiceInputDraftSource = import('@cindy/voice-input-core').VoiceInputDraftSource;
+type VoiceInputRendererEvent = import('@cindy/voice-input-core').VoiceInputRendererEvent;
+type VoiceInputDictionaryAdviceInput = import('@cindy/voice-input-core').DictationDictionaryAdviceInput;
+type VoiceInputDictionaryLearningAction = import('@cindy/voice-input-core').DictationDictionaryLearningAction;
 type VoiceInputSettingsData = import('../shared/voiceInputData').VoiceInputSettings;
 type VoiceInputHistoryEntryData = import('../shared/voiceInputData').VoiceInputHistoryEntry;
 type VoiceInputDataSnapshot = import('../shared/voiceInputData').VoiceInputDataSnapshot;
@@ -344,7 +344,7 @@ type GoogleAuthStatus = 'not_connected' | 'connecting' | 'connected' | 'reconnec
 
 type FeishuBotStatus = 'idle' | 'testing' | 'connected' | 'reconnecting' | 'conflict' | 'error';
 
-/** lizi-im DiscordIM 的 transport 状态(IMStatus union 的 mirror)。 */
+/** @cindy/im DiscordIM 的 transport 状态(IMStatus union 的 mirror)。 */
 type DiscordBotTransportStatus =
   | { kind: 'idle' }
   | { kind: 'connecting' }
@@ -382,6 +382,9 @@ interface FeishuBotRegistrationStatusPayload {
 /** Auth state pushed from main → renderer via 'auth:state-change'. */
 interface AuthStateChangePayload {
   user: AuthUser | null;
+  mode: 'signed-out' | 'local' | 'cloud';
+  dataOwnerId: string | null;
+  canEnterApp: boolean;
   isAuthenticated: boolean;
   /** 当前账号是否加入 Canary 发布通道；由 main 的 feature-flags 同步结果驱动。 */
   isCanary: boolean;
@@ -1036,25 +1039,6 @@ interface ElectronAPI {
     ) => Promise<{ disabled: string[] }>;
     /** 双击 .cindy 的待装路径,原子取走(取即清空;无则 null)。 */
     takePendingInstall: () => Promise<{ filePath: string | null }>;
-    /**
-     * 内置意识状态(sendSync 首帧同步):builtinIds 打标/分组,enterpriseIds
-     * (builtinIds 子集)把企业档单列一组,restorable 是已抽离可恢复清单。
-     */
-    builtinStatusSync: () => {
-      builtinIds: string[];
-      enterpriseIds: string[];
-      restorable: Array<{
-        id: string;
-        name: string;
-        description?: string;
-        version: string;
-        manifest: import('../shared/ghost').GhostManifest;
-        tier: 'builtin' | 'enterprise';
-        iconDataUrl?: string;
-      }>;
-    };
-    /** 恢复被抽离的内置意识(清墓碑 + 立即对账装回)。 */
-    restoreBuiltin: (id: string) => Promise<{ ok: true }>;
     onChanged: (
       callback: (payload: { ghosts: import('../shared/ghost').InstalledGhost[] }) => void,
     ) => () => void;
@@ -1064,8 +1048,6 @@ interface ElectronAPI {
     onRuntimeChanged: (
       callback: (payload: { states: Record<string, string> }) => void,
     ) => () => void;
-    /** 内置意识播种进行中(真实装/覆盖/回收时 true,完成 false;胶囊提示用)。 */
-    onProvisioning: (callback: (payload: { active: boolean }) => void) => () => void;
     /** 面板「点开产物大图」推送:main 拦下 /preview/ 导航并过闸后,推主机拼装的
      *  cindy-media:// 地址与媒体类别,GhostMediaLightboxHost 按 kind 弹
      *  ImageLightbox / VideoLightbox。 */
@@ -1420,6 +1402,9 @@ interface ElectronAPI {
   // ── Auth (delegated to main process authManager) ──
   authInitialize: () => Promise<{
     user: AuthUser | null;
+    mode: 'signed-out' | 'local' | 'cloud';
+    dataOwnerId: string | null;
+    canEnterApp: boolean;
     isAuthenticated: boolean;
     isCanary: boolean;
     /** SkillHub 跨设备识别：本机 deviceId，登录前后都有值 */
@@ -1430,6 +1415,8 @@ interface ElectronAPI {
   authGetLoginState: () => Promise<DesktopLoginActionResult>;
   authDispatchLoginAction: (action: DesktopLoginAction) => Promise<DesktopLoginActionResult>;
   authLogout: () => Promise<void>;
+  authEnterLocal: () => Promise<AuthStateChangePayload>;
+  authExitLocal: () => Promise<AuthStateChangePayload>;
   authRefresh: () => Promise<boolean>;
   authGetAccountDeletionAvailability: () => Promise<DesktopAccountDeletionAvailabilityResult>;
   authRequestAccountDeletionChallenge: () => Promise<DesktopAccountDeletionChallengeResult>;
@@ -3305,18 +3292,18 @@ interface ElectronAPI {
     ) => Promise<import('../shared/workflow-progress').WorkflowProgress | null>;
 
     // 模型供应商目录（只读）—— 内置目录元数据 + 各供应商实时连接状态。
-    listProviders: () => Promise<{ providers: import('@lizi/model-providers').ProviderView[] }>;
+    listProviders: () => Promise<{ providers: import('@cindy/model-providers').ProviderView[] }>;
 
     // 自定义供应商配置 CRUD（密钥另走通用 safeStorage IPC，不经这里）。
     createCustomProvider: (
-      config: import('@lizi/model-providers').CustomProviderConfig,
+      config: import('@cindy/model-providers').CustomProviderConfig,
     ) => Promise<{ ok: true }>;
     updateCustomProvider: (
-      config: import('@lizi/model-providers').CustomProviderConfig,
+      config: import('@cindy/model-providers').CustomProviderConfig,
     ) => Promise<{ ok: true }>;
     deleteCustomProvider: (providerId: string) => Promise<{ ok: true }>;
     /** 自定义供应商创建模板（目录 presets 段，纯 UI 模板数据）。 */
-    listProviderPresets: () => Promise<{ presets: import('@lizi/model-providers').ProviderPreset[] }>;
+    listProviderPresets: () => Promise<{ presets: import('@cindy/model-providers').ProviderPreset[] }>;
     /** 供应商「测试连接」—— 与真实会话同路由口径的最小探测请求（结构化结果，code 走 providerError.* i18n）。 */
     testProviderConnection: (
       input:
@@ -3643,7 +3630,7 @@ interface ElectronAPI {
         remoteHostId?: string;
         resumeSessionId?: string;
       },
-    ) => Promise<import('@lizi/maker-core').ContextUsageData>;
+    ) => Promise<import('@cindy/maker-core').ContextUsageData>;
 
     abortSession: (sessionId: string) => Promise<void>;
     closeSession: (sessionId: string, opts?: { preserveWorkspace?: boolean }) => Promise<void>;
@@ -3870,7 +3857,7 @@ interface ElectronAPI {
     /**
      * 智能通讯录(maker-contacts)— 设置页管理 UI 数据通道。
      * DTO 用 unknown 透传, renderer 在 lib/contactsService.ts 收敛为
-     * @lizi/maker-core 的 contacts 类型(type-only import)。
+     * @cindy/maker-core 的 contacts 类型(type-only import)。
      */
     contacts: {
       settingsGet: () => Promise<{ enabled: boolean; isCustomized: boolean }>;
@@ -4155,7 +4142,7 @@ interface ElectronAPI {
     };
 
     /* ── Scheduler (Phase 4 IPC, Phase 6 UI) ──
-     * payload 同 @lizi/maker-scheduler 的 Schedule / ScheduleRun / SchedulerEvent
+     * payload 同 @cindy/maker-scheduler 的 Schedule / ScheduleRun / SchedulerEvent
      * （为防 vite-env.d.ts 引入 import 副作用导致循环类型解析，这里用 unknown 兜底，
      * renderer 侧由 features/scheduler/lib 重新 narrow 成强类型）。
      */

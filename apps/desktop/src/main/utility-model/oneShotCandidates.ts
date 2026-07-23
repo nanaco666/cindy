@@ -1,6 +1,6 @@
 import { fetch as undiciFetch } from 'undici';
 
-import type { AgentKind, Maker } from '@lizi/maker-core';
+import type { AgentKind, Maker } from '@cindy/maker-core';
 
 import { createLogger } from '../logger.js';
 import { readClaudeApiKey } from '../maker-host/auth-adapters.js';

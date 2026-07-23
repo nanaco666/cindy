@@ -21,19 +21,19 @@ import {
   FileServiceClient,
   FileServiceRpcError,
   type FileServiceStream,
-} from '@lizi/remote-file-service/client';
+} from '@cindy/remote-file-service/client';
 import {
   FILE_SERVICE_BUNDLE_VERSION,
   FILE_SERVICE_SCHEMA_VERSION,
-} from '@lizi/remote-file-service/protocol';
-import type { FsRpcEvent, FsRpcMethods } from '@lizi/remote-file-service/protocol';
+} from '@cindy/remote-file-service/protocol';
+import type { FsRpcEvent, FsRpcMethods } from '@cindy/remote-file-service/protocol';
 
 import { createLogger, type Logger } from '../logger.js';
 import { throwIpcError } from '../utils/ipcValidate.js';
 
 const log = createLogger('file-browser/remote');
 
-/** probe/install 所需的最小 host 面(对齐 @lizi/maker-remote-ssh RemoteHost)。 */
+/** probe/install 所需的最小 host 面(对齐 @cindy/maker-remote-ssh RemoteHost)。 */
 export interface RemoteFsHost {
   execStream(cmd: string, opts?: { env?: Record<string, string> }): Promise<FileServiceStream>;
 }

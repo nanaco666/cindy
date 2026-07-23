@@ -1,7 +1,7 @@
 /**
  * Phase 3: DesktopNotifier
  *
- * 实现 `Notifier` 接口（来自 @lizi/maker-scheduler）。
+ * 实现 `Notifier` 接口（来自 @cindy/maker-scheduler）。
  *
  * 桌面通道：直接复用 notificationService 的 main 进程入口。
  * 飞书通道：Phase 3 暂时只 log 一行（owner openId 解析逻辑要等 Phase 4 IPC
@@ -11,10 +11,10 @@
  */
 
 import type { BrowserWindow } from 'electron';
-import type { Notifier, Schedule, ScheduleRun } from '@lizi/maker-scheduler';
-import type { FeishuIM } from 'lizi-im';
+import type { Notifier, Schedule, ScheduleRun } from '@cindy/maker-scheduler';
+import type { FeishuIM } from '@cindy/im';
 
-import type { Logger } from '@lizi/maker-scheduler';
+import type { Logger } from '@cindy/maker-scheduler';
 
 import { stripTrailingPathSeparators } from '../../shared/pathText';
 import { showDesktopSessionEvent } from '../notificationService';

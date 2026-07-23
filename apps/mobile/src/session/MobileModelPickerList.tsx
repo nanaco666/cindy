@@ -21,7 +21,7 @@ import { Check, SlidersHorizontal, Zap } from 'lucide-react-native';
 
 import type { MobileAgentCapabilities, MobileModelOption } from '@/session/agentCapabilities';
 import type { DeviceApiKeyStatus } from '@/device-link/deviceModelMetaCache';
-import type { AgentKind } from '@lizi/model-providers/types';
+import type { AgentKind } from '@cindy/model-providers/types';
 import { MobileModelIconMark } from '@/session/MobileProviderMark';
 import type { MobileModelMemoryAccessors } from '@/session/draftModelMemory';
 import { useDraftModelMemoryVersion } from '@/session/draftModelMemory';

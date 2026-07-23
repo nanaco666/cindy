@@ -16,8 +16,8 @@ import { app } from 'electron';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 
-import type { CatalogModel } from '@lizi/model-providers';
-import type { CodexModelListItem } from '@lizi/maker-core';
+import type { CatalogModel } from '@cindy/model-providers';
+import type { CodexModelListItem } from '@cindy/maker-core';
 
 import { shouldSuppressLocalCodexAuth } from './codex-auth-invalidation.js';
 

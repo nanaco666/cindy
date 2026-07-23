@@ -2,4 +2,4 @@ export {
   sessionWorktreeInfo,
   sessionWorktreeLabel,
   type SessionWorktreeInfo as MobileSessionWorktreeInfo,
-} from '@lizi/maker-shared/session-identity';
+} from '@cindy/maker-shared/session-identity';

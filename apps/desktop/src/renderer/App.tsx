@@ -9,14 +9,15 @@ import { ThemeProvider } from '@/hooks/useTheme';
 import { FontSettingsProvider } from '@/hooks/useFontSettings';
 import { LocaleProvider } from '@/hooks/useLocale';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
+import { LoginHandoffProvider } from '@/contexts/LoginHandoffContext';
 import { EnvCheckProvider, EnvCheckGuard } from '@/contexts/EnvCheckContext';
 import { WorktreeProvider } from '@/contexts/WorktreeContext';
 import { PrRefsProvider } from '@/contexts/PrRefsContext';
 import { SplashScreen } from '@/components/splash/SplashScreen';
+import { LoginBrandStage } from '@/components/login/LoginBrandStage';
 import { isSecondaryWindow } from '@/lib/secondaryWindow';
 import { isSidebarWindow } from '@/lib/sidebarWindow';
 import { ToastContainer } from '@/components/ui/toast';
-import { BuiltinGhostProvisioningTip } from '@/components/cindy-brain/BuiltinGhostProvisioningTip';
 import { LegacyMigrationDialog } from '@/components/auth/LegacyMigrationDialog';
 import { Tooltip } from '@/components/ui/tooltip';
 import { ConfirmDialogProvider } from '@/components/ui/confirm-dialog-provider';
@@ -53,6 +54,23 @@ import {
 import type { Effort } from '@/lib/userPreferences.types';
 
 import { router } from './router';
+
+/**
+ * LoginHandoffProvider 的 auth 接线壳:LoginHandoffContext 模块本身不 import
+ * AuthContext(避免传递性引入重依赖),推进锚里的「auth 初始化完成」由本壳从
+ * useAuth 取值下传(Step 3b WHAT2 宿主契约)。
+ */
+function LoginHandoffHost({ children }: { children: React.ReactNode }) {
+  const { isInitializing, isAuthenticated, canEnterApp } = useAuth();
+  return (
+    <LoginHandoffProvider
+      authResolved={!isInitializing}
+      authenticated={isAuthenticated || canEnterApp}
+    >
+      {children}
+    </LoginHandoffProvider>
+  );
+}
 
 function MakerBootstrap() {
   const { isAuthenticated } = useAuth();
@@ -242,18 +260,25 @@ export function App() {
                 <WorktreeProvider>
                   <PrRefsProvider>
                     <Tooltip.Provider>
-                      {/* 副窗口(「在新窗口打开」)/ 右侧栏子窗口跳过 splash:env/热更检查
-                          由主窗启动时完成,附属窗 EnvCheckProvider 初始即 'passed',
-                          不需要也不应再走 splash 流程。 */}
-                      {!isSecondaryWindow() && !isSidebarWindow() && <SplashScreen />}
-                      <EnvCheckGuard>
-                        <MakerBootstrap />
-                        <ProjectAutomationNotifyBridge />
-                        <RouterProvider router={router} />
-                      </EnvCheckGuard>
+                      {/* LoginHandoffProvider 包 SplashScreen + RouterProvider(Step 3b
+                          WHAT2 宿主契约):Splash→登录/主界面衔接动画状态机。
+                          LoginBrandStage = 品牌视觉唯一渲染者(白底体系背景 + 立绘/
+                          字标/Slogan),overlay pointer-events:none,仅主窗挂载(与
+                          Splash gating 同源;副窗/sidebar 窗不挂)。 */}
+                      <LoginHandoffHost>
+                        {/* 副窗口(「在新窗口打开」)/ 右侧栏子窗口跳过 splash:env/热更检查
+                            由主窗启动时完成,附属窗 EnvCheckProvider 初始即 'passed',
+                            不需要也不应再走 splash 流程。 */}
+                        {!isSecondaryWindow() && !isSidebarWindow() && <LoginBrandStage />}
+                        {!isSecondaryWindow() && !isSidebarWindow() && <SplashScreen />}
+                        <EnvCheckGuard>
+                          <MakerBootstrap />
+                          <ProjectAutomationNotifyBridge />
+                          <RouterProvider router={router} />
+                        </EnvCheckGuard>
+                      </LoginHandoffHost>
                       <FindInPageBar />
                       <ToastContainer />
-                      <BuiltinGhostProvisioningTip />
                       {/* 首登轻量数据迁移弹窗:只挂主窗(副窗/侧栏窗不重复弹) */}
                       {!isSecondaryWindow() && !isSidebarWindow() && <LegacyMigrationDialog />}
                     </Tooltip.Provider>

@@ -275,7 +275,7 @@ describe('messagePresentation', () => {
     expect(longRow.detail).toBe(longCommand);
 
     // intent 无 target 时首行只显示完整意图标题，次行保留真实命令。
-    const longTestCommand = 'pnpm --filter @lizi/maker-shared exec vitest run src/__tests__/messagePresentation.test.ts --reporter verbose';
+    const longTestCommand = 'pnpm --filter @cindy/maker-shared exec vitest run src/__tests__/messagePresentation.test.ts --reporter verbose';
     const longIntentRow = summarizeToolRowPresentation(message('bash-long-test', {
       source: {
         clientId: 'bash-long-test',

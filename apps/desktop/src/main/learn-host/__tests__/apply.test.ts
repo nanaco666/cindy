@@ -7,6 +7,10 @@ const TEST_ROOT = '/tmp/xdt-learn-apply-test';
 vi.mock('electron', () => ({
   app: { getPath: vi.fn(() => '/tmp/xdt-learn-apply-test/userData') },
 }));
+vi.mock('../../appSessionState', () => ({
+  ownerScopedUserDataPath: (...parts: string[]) =>
+    `/tmp/xdt-learn-apply-test/userData/owners/test-owner/${parts.join('/')}`,
+}));
 vi.mock('../../logger', () => ({
   createLogger: () => ({ debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }),
   maskPath: (p: string) => p,
@@ -114,9 +118,9 @@ describe('applyProposal', () => {
 
     const result = await applyProposal({ proposalDir, skillName: 'linked-skill', provenance });
 
-    // 真实目录已被挪走(备份在 {userData}/learn/backups/),symlink helper 被调用
+    // 真实目录已被挪走(备份在 owner-scoped learn/backups/),symlink helper 被调用
     expect(fs.existsSync(claudeDir)).toBe(false);
-    const backupsRoot = path.join('/tmp', 'xdt-learn-apply-test', 'userData', 'learn', 'backups');
+    const backupsRoot = path.join('/tmp', 'xdt-learn-apply-test', 'userData', 'owners', 'test-owner', 'learn', 'backups');
     const backups = fs.readdirSync(backupsRoot).filter((n) => n.startsWith('linked-skill-claude-'));
     expect(backups).toHaveLength(1);
     expect(fs.readFileSync(path.join(backupsRoot, backups[0], 'SKILL.md'), 'utf8')).toBe('old claude content');
@@ -154,9 +158,9 @@ describe('applyProposal', () => {
 
     const result = await applyProposal({ proposalDir, skillName: 'codex-skill', provenance });
 
-    // 真实目录已被挪走(备份在 {userData}/learn/backups/),symlink helper 被调用
+    // 真实目录已被挪走(备份在 owner-scoped learn/backups/),symlink helper 被调用
     expect(fs.existsSync(codexDir)).toBe(false);
-    const backupsRoot = path.join('/tmp', 'xdt-learn-apply-test', 'userData', 'learn', 'backups');
+    const backupsRoot = path.join('/tmp', 'xdt-learn-apply-test', 'userData', 'owners', 'test-owner', 'learn', 'backups');
     const backups = fs.readdirSync(backupsRoot).filter((n) => n.startsWith('codex-skill-codex-'));
     expect(backups).toHaveLength(1);
     expect(fs.readFileSync(path.join(backupsRoot, backups[0], 'SKILL.md'), 'utf8')).toBe('old codex content');
@@ -383,7 +387,7 @@ describe('EXDEV 回退路径(规则 14 回归)', () => {
     ).rejects.toThrow();
     // 原 Claude 目录原封不动;半拷贝备份已被清理
     expect(fs.readFileSync(path.join(claudeDir, 'SKILL.md'), 'utf8')).toBe('old claude content');
-    const backupsRoot = path.join('/tmp', 'xdt-learn-apply-test', 'userData', 'learn', 'backups');
+    const backupsRoot = path.join('/tmp', 'xdt-learn-apply-test', 'userData', 'owners', 'test-owner', 'learn', 'backups');
     const leftovers = fs.existsSync(backupsRoot)
       ? fs.readdirSync(backupsRoot).filter((n) => n.startsWith('locked-skill-claude-'))
       : [];

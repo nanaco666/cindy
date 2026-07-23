@@ -115,11 +115,11 @@ const easJson = {
         EXPO_PUBLIC_APP_VARIANT: 'beta',
       },
     },
-    'beta-dash': {
+    'beta-carol': {
       extends: 'beta-base',
-      channel: 'beta-dash',
+      channel: 'beta-carol',
       env: {
-        EXPO_PUBLIC_BETA_DEV: 'dash',
+        EXPO_PUBLIC_BETA_DEV: 'carol',
       },
     },
     production: {
@@ -135,11 +135,11 @@ const easJson = {
 
 describe('mobile release scripts core logic', () => {
   it('resolves inherited beta build profiles without losing base env', () => {
-    const profile = resolveBuildProfile(easJson, 'beta-dash');
+    const profile = resolveBuildProfile(easJson, 'beta-carol');
     expect(profile).toMatchObject({
       node: '22.19.0',
       distribution: 'store',
-      channel: 'beta-dash',
+      channel: 'beta-carol',
       env: {
         EXPO_PUBLIC_CINDY_AUTH_REGION: 'cn',
         EXPO_PUBLIC_CINDY_AUTH_BASE_URL: 'https://auth.example.com',
@@ -148,25 +148,25 @@ describe('mobile release scripts core logic', () => {
         EXPO_PUBLIC_TAPTAP_CLIENT_ID: 'tap-client-id',
         EXPO_PUBLIC_TAPTAP_CLIENT_TOKEN: 'tap-client-token',
         EXPO_PUBLIC_APP_VARIANT: 'beta',
-        EXPO_PUBLIC_BETA_DEV: 'dash',
+        EXPO_PUBLIC_BETA_DEV: 'carol',
       },
     });
   });
 
   it('resolves per-dev beta targets to same-name profile/channel/branch', () => {
-    const target = resolveTarget({ easJson }, { kind: 'beta', dev: 'dash' });
+    const target = resolveTarget({ easJson }, { kind: 'beta', dev: 'carol' });
     expect(target).toEqual({
       kind: 'beta',
       region: 'cn',
-      dev: 'dash',
-      profile: 'beta-dash',
-      channel: 'beta-dash',
-      branch: 'beta-dash',
+      dev: 'carol',
+      profile: 'beta-carol',
+      channel: 'beta-carol',
+      branch: 'beta-carol',
       environment: 'preview',
       variant: 'beta',
       publicEnv: {
         EXPO_PUBLIC_APP_VARIANT: 'beta',
-        EXPO_PUBLIC_BETA_DEV: 'dash',
+        EXPO_PUBLIC_BETA_DEV: 'carol',
         EXPO_PUBLIC_CINDY_AUTH_REGION: 'cn',
         EXPO_PUBLIC_CINDY_AUTH_BASE_URL: 'https://auth.example.com',
         EXPO_PUBLIC_XDT_API_BASE_URL: 'https://api.example.com',
@@ -203,7 +203,7 @@ describe('mobile release scripts core logic', () => {
           EXPO_PUBLIC_TAPTAP_CLIENT_ID: 'tap-client-id',
           EXPO_PUBLIC_TAPTAP_CLIENT_TOKEN: 'tap-client-token',
           EXPO_PUBLIC_APP_VARIANT: 'beta',
-          EXPO_PUBLIC_BETA_DEV: 'dash',
+          EXPO_PUBLIC_BETA_DEV: 'carol',
         },
         { variant: 'beta' },
       ),
@@ -247,7 +247,7 @@ describe('mobile release scripts core logic', () => {
       EXPO_PUBLIC_CINDY_AUTH_REGION: 'cn',
       EXPO_PUBLIC_ENDPOINT_MANIFEST_BASE_URL: 'https://hotfix.example.invalid/app',
       EXPO_PUBLIC_APP_VARIANT: 'beta',
-      EXPO_PUBLIC_BETA_DEV: 'dash',
+      EXPO_PUBLIC_BETA_DEV: 'carol',
     };
     const ambientEnv: NodeJS.ProcessEnv = {
       NODE_ENV: 'test',
@@ -279,7 +279,7 @@ describe('mobile release scripts core logic', () => {
       EXPO_PUBLIC_TAPTAP_CLIENT_TOKEN: 'tap-client-token',
       EXPO_PUBLIC_TAPDB_CHANNEL: 'TestFlight',
       EXPO_PUBLIC_TAPDB_REGION: 'global',
-      EXPO_PUBLIC_BETA_DEV: 'dash',
+      EXPO_PUBLIC_BETA_DEV: 'carol',
     });
     expect(commandEnv).not.toHaveProperty('EXPO_PUBLIC_XDT_DEV_LOGIN_ENABLED');
   });
@@ -289,17 +289,17 @@ describe('mobile release scripts core logic', () => {
     expect(resolveReleaseEnvExecEnvironment('prod', {})).toBe('production');
     expect(resolveReleaseEnvExecEnvironment('prod', { targets: 'production,staging' })).toBe('production');
     expect(resolveReleaseEnvExecEnvironment('prod', { targets: 'staging' })).toBe('preview');
-    expect(resolveReleaseEnvExecEnvironment('check', { target: 'beta', dev: 'dash' })).toBe('preview');
+    expect(resolveReleaseEnvExecEnvironment('check', { target: 'beta', dev: 'carol' })).toBe('preview');
     expect(resolveReleaseEnvExecEnvironment('check', { target: 'staging' })).toBe('preview');
     expect(resolveReleaseEnvExecEnvironment('check', { target: 'production' })).toBe('production');
     expect(resolveReleaseEnvExecEnvironment('check', {})).toBe('production');
     expect(() => resolveReleaseEnvExecEnvironment('unknown', {})).toThrow(/Unknown mobile release command/);
 
-    expect(buildReleaseEnvExecShellCommand('beta', ['--dev', 'dash', '--message', 'TapDB check'], 'linux')).toBe(
-      "cd ../.. && node apps/mobile/scripts/release-beta.mjs --dev dash --message 'TapDB check'",
+    expect(buildReleaseEnvExecShellCommand('beta', ['--dev', 'carol', '--message', 'TapDB check'], 'linux')).toBe(
+      "cd ../.. && node apps/mobile/scripts/release-beta.mjs --dev carol --message 'TapDB check'",
     );
-    expect(buildReleaseEnvExecShellCommand('beta', ['--dev', 'dash', '--message', 'TapDB check'], 'win32')).toBe(
-      'cd /d ..\\.. && node apps/mobile/scripts/release-beta.mjs --dev dash --message "TapDB check"',
+    expect(buildReleaseEnvExecShellCommand('beta', ['--dev', 'carol', '--message', 'TapDB check'], 'win32')).toBe(
+      'cd /d ..\\.. && node apps/mobile/scripts/release-beta.mjs --dev carol --message "TapDB check"',
     );
     expect(resolveReleaseEnvExecRuns('prod', [])).toEqual([
       { environment: 'production', forwardedArgs: ['--targets', 'production'] },
@@ -324,9 +324,9 @@ describe('mobile release scripts core logic', () => {
   });
 
   it('prefixes beta OTA commands with deterministic variant env', () => {
-    const target = resolveTarget({ easJson }, { kind: 'beta', dev: 'dash' });
+    const target = resolveTarget({ easJson }, { kind: 'beta', dev: 'carol' });
     expect(buildUpdateCommand(target, 'beta update', { platform: 'ios' })).toMatchObject({
-      args: ['--yes', EAS_CLI_SPEC, 'update', '--branch', 'beta-dash', '--platform', 'ios', '--message', 'beta update', '--environment', 'preview', '--non-interactive'],
+      args: ['--yes', EAS_CLI_SPEC, 'update', '--branch', 'beta-carol', '--platform', 'ios', '--message', 'beta update', '--environment', 'preview', '--non-interactive'],
       env: {
         EXPO_PUBLIC_CINDY_AUTH_REGION: 'cn',
         EXPO_PUBLIC_CINDY_AUTH_BASE_URL: 'https://auth.example.com',
@@ -335,7 +335,7 @@ describe('mobile release scripts core logic', () => {
         EXPO_PUBLIC_TAPTAP_CLIENT_ID: 'tap-client-id',
         EXPO_PUBLIC_TAPTAP_CLIENT_TOKEN: 'tap-client-token',
         EXPO_PUBLIC_APP_VARIANT: 'beta',
-        EXPO_PUBLIC_BETA_DEV: 'dash',
+        EXPO_PUBLIC_BETA_DEV: 'carol',
       },
     });
     const prodCmd = buildUpdateCommand(
@@ -361,7 +361,7 @@ describe('mobile release scripts core logic', () => {
       NODE_ENV: 'test',
       PATH: '/usr/bin',
       EXPO_PUBLIC_APP_VARIANT: 'beta',
-      EXPO_PUBLIC_BETA_DEV: 'dash',
+      EXPO_PUBLIC_BETA_DEV: 'carol',
       EXPO_PUBLIC_XDT_DEV_LOGIN_ENABLED: '1',
       EXPO_PUBLIC_XDT_GIT_BRANCH: 'feature/dev-overlay',
       EXPO_PUBLIC_XDT_MOBILE_E2E_MOCK_AUDIO: '1',
@@ -374,7 +374,7 @@ describe('mobile release scripts core logic', () => {
     ];
     const production = resolveTarget({ easJson }, { kind: 'production' });
     const staging = resolveTarget({ easJson }, { kind: 'staging' });
-    const beta = resolveTarget({ easJson }, { kind: 'beta', dev: 'dash' });
+    const beta = resolveTarget({ easJson }, { kind: 'beta', dev: 'carol' });
 
     const productionEnv = buildEasCommandEnv(buildUpdateCommand(production, 'prod update', { platform: 'ios' }).env, ambientEnv);
     expect(productionEnv).toMatchObject({
@@ -403,7 +403,7 @@ describe('mobile release scripts core logic', () => {
     expect(betaEnv).toMatchObject({
       EXPO_NO_DOTENV: '1',
       EXPO_PUBLIC_APP_VARIANT: 'beta',
-      EXPO_PUBLIC_BETA_DEV: 'dash',
+      EXPO_PUBLIC_BETA_DEV: 'carol',
       EXPO_PUBLIC_CINDY_AUTH_REGION: 'cn',
       EXPO_PUBLIC_CINDY_AUTH_BASE_URL: 'https://auth.example.com',
       EXPO_PUBLIC_XDT_API_BASE_URL: 'https://api.example.com',
@@ -417,7 +417,7 @@ describe('mobile release scripts core logic', () => {
   it('pins OTA update platform to the checked release platforms', () => {
     const appJsonWithoutAndroidVersion = { expo: { android: {} } };
     const appJsonWithAndroidVersion = { expo: { android: { versionCode: 2026062701 } } };
-    const beta = resolveTarget({ easJson }, { kind: 'beta', dev: 'dash' });
+    const beta = resolveTarget({ easJson }, { kind: 'beta', dev: 'carol' });
     const production = resolveTarget({ easJson }, { kind: 'production' });
     const updatePlatform = (target: ReturnType<typeof resolveTarget>, appJson: object) => easBuildPlatformForReleasePlatforms(targetPlatformsForRelease(target, appJson));
     const platformArg = (target: ReturnType<typeof resolveTarget>, appJson: object) => {
@@ -532,9 +532,9 @@ describe('mobile release scripts core logic', () => {
     const appJsonWithAndroidVersion = { expo: { android: { versionCode: 2026062701 } } };
     expect(targetPlatformsForRelease(resolveTarget({ easJson }, { kind: 'production' }), appJsonWithAndroidVersion)).toEqual(['ios']);
     expect(targetPlatformsForRelease(resolveTarget({ easJson }, { kind: 'production' }), appJsonWithoutAndroidVersion)).toEqual(['ios']);
-    expect(targetPlatformsForRelease(resolveTarget({ easJson }, { kind: 'beta', dev: 'dash' }), appJsonWithoutAndroidVersion)).toEqual(['ios']);
+    expect(targetPlatformsForRelease(resolveTarget({ easJson }, { kind: 'beta', dev: 'carol' }), appJsonWithoutAndroidVersion)).toEqual(['ios']);
     expect(targetPlatformsForRelease(resolveTarget({ easJson }, { kind: 'staging' }), appJsonWithoutAndroidVersion)).toEqual(['ios']);
-    expect(targetPlatformsForRelease(resolveTarget({ easJson }, { kind: 'beta', dev: 'dash' }), appJsonWithAndroidVersion)).toEqual(['ios', 'android']);
+    expect(targetPlatformsForRelease(resolveTarget({ easJson }, { kind: 'beta', dev: 'carol' }), appJsonWithAndroidVersion)).toEqual(['ios', 'android']);
     expect(targetPlatformsForRelease(resolveTarget({ easJson }, { kind: 'staging' }), appJsonWithAndroidVersion)).toEqual(['ios', 'android']);
   });
 
@@ -546,11 +546,11 @@ describe('mobile release scripts core logic', () => {
     expect(() => assertBuildPlatformWithinReleasePlatforms('android', 'ios')).toThrow(/exceeds checked release platform/);
     expect(() => assertBuildPlatformWithinReleasePlatforms('windows', 'ios')).toThrow(/must be ios/);
     expect(() => assertBuildPlatformWithinReleasePlatforms('ios', 'all')).not.toThrow();
-    expect(() => buildColdBuildCommand(resolveTarget({ easJson }, { kind: 'beta', dev: 'dash' }), {} as { platform: string })).toThrow(/requires platform/);
+    expect(() => buildColdBuildCommand(resolveTarget({ easJson }, { kind: 'beta', dev: 'carol' }), {} as { platform: string })).toThrow(/requires platform/);
 
-    expect(buildColdBuildCommand(resolveTarget({ easJson }, { kind: 'beta', dev: 'dash' }), {
+    expect(buildColdBuildCommand(resolveTarget({ easJson }, { kind: 'beta', dev: 'carol' }), {
       platform: easBuildPlatformForReleasePlatforms(['ios']),
-      message: 'beta dash',
+      message: 'beta carol',
     }).args).toEqual([
       '--yes',
       EAS_CLI_SPEC,
@@ -558,10 +558,10 @@ describe('mobile release scripts core logic', () => {
       '--platform',
       'ios',
       '--profile',
-      'beta-dash',
+      'beta-carol',
       '--non-interactive',
       '--message',
-      'beta dash',
+      'beta carol',
     ]);
   });
 
@@ -777,25 +777,25 @@ describe('mobile release scripts core logic', () => {
   });
 
   it('slugifies developer names', () => {
-    expect(slugifyDevName(' Dash_Huang ')).toBe('dash-huang');
+    expect(slugifyDevName(' Jane_Doe ')).toBe('jane-doe');
   });
 
   it('treats standalone -- as a separator so positional args survive pnpm forwarding', () => {
     // `pnpm run beta:add-dev -- alice` 会把 `--` 一起转发,positional 必须仍能拿到。
     expect(parseArgs(['--', 'alice'])._[0]).toBe('alice');
-    expect(parseArgs(['--', '--dev', 'dash']).dev).toBe('dash');
-    expect(parseArgs(['--', '--dev', 'dash'])._).toEqual([]);
+    expect(parseArgs(['--', '--dev', 'carol']).dev).toBe('carol');
+    expect(parseArgs(['--', '--dev', 'carol'])._).toEqual([]);
   });
 
   it('requires explicit beta developer names at CLI boundaries', () => {
     expect(() => requireExplicitDev({}, 'mobile:release:beta')).toThrow(/requires --dev/);
-    expect(() => requireExplicitDev({ dev: 'dash' }, 'mobile:release:beta')).not.toThrow();
+    expect(() => requireExplicitDev({ dev: 'carol' }, 'mobile:release:beta')).not.toThrow();
   });
 
   it('fails fast with a stable EAS login preflight message', () => {
     expect(buildEasWhoamiArgs()).toEqual(['--yes', EAS_CLI_SPEC, 'whoami']);
     expect(buildEasWhoamiArgs()).not.toContain('--non-interactive');
-    expect(() => assertEasLoggedIn({ check: () => 'dash' })).not.toThrow();
+    expect(() => assertEasLoggedIn({ check: () => 'carol' })).not.toThrow();
     expect(() => assertEasLoggedIn({ check: () => '' })).toThrow(EAS_LOGIN_ERROR_MESSAGE);
     expect(() => assertEasLoggedIn({ check: () => { throw new Error('not logged in'); } })).toThrow(EAS_LOGIN_ERROR_MESSAGE);
   });
@@ -872,7 +872,7 @@ describe('mobile release scripts core logic', () => {
       cli: { version: '>= 15.0.0' },
       build: {
         production: { channel: 'production' },
-        'beta-dash': { channel: 'beta-dash' },
+        'beta-carol': { channel: 'beta-carol' },
       },
     });
     const transformed = fingerprintConfig.fileHookTransform({

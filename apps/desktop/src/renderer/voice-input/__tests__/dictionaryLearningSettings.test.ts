@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { DictationDictionaryLearningAction } from '@lizi/voice-input-core';
+import type { DictationDictionaryLearningAction } from '@cindy/voice-input-core';
 
 import {
   applyVoiceInputDictionaryLearningActions,

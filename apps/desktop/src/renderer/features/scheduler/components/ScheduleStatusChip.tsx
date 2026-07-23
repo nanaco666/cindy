@@ -12,7 +12,7 @@
  */
 
 import { cn } from '@/lib/utils';
-import type { ScheduleStatus } from '@lizi/maker-scheduler';
+import type { ScheduleStatus } from '@cindy/maker-scheduler';
 
 export type ChipVariant = ScheduleStatus | 'running';
 

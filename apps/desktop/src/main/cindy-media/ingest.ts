@@ -1,7 +1,7 @@
 /**
  * ingest.ts — cindy-media 统一入库助手(媒体总仓的唯一推荐写入口)。
  * ---------------------------------------------------------------------------
- * 契约:AGENTS.md 规则 25。
+ * 契约:docs/dev-rules/media-storage-and-protocols.md。
  *
  * 把「writeBlob 指纹落盘 → recordBlob 入账 → addRef 挂引用」三件套封成一把梭,
  * 后续所有媒体写入方(聊天附件、生成产物、集成缓存、分享导入)一律走这里,

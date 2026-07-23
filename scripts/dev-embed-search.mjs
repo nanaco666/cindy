@@ -112,7 +112,7 @@ function fail(msg) {
  * Electron app.getPath('userData') 在不同平台的等价路径 — 与
  * apps/desktop/src/main/localDb/index.ts 中 dbPath() 的拼接逻辑一致。
  * userData 子目录名来自 productName(2026-07-17 身份翻转后为 'Cindy',
- * 与 @lizi/maker-shared/brand-identity 的 userDataDirName 同源;本脚本是
+ * 与 @cindy/maker-shared/brand-identity 的 userDataDirName 同源;本脚本是
  * 零依赖 dev CLI,不 import TS 包,字面量与之保持一致)。
  */
 const USER_DATA_DIR_NAME = 'Cindy';

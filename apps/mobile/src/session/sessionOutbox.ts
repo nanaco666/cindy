@@ -22,7 +22,7 @@ import {
   parseChatQuoteSegments,
   stripChatQuoteMarkerLines,
   type ChatQuote,
-} from '@lizi/maker-shared/chat-quotes';
+} from '@cindy/maker-shared/chat-quotes';
 
 /** 预生成消息 clientId(与 inputProjection.buildQueuedTextMessage 的缺省实现同构)。 */
 export function createOutboxClientId(): string {

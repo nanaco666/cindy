@@ -1,6 +1,8 @@
 import Constants from 'expo-constants';
 
-import { parseClientEndpointManifest } from '@lizi/maker-shared/client-endpoints';
+import { parseClientEndpointManifest } from '@cindy/maker-shared/client-endpoints';
+
+import type { LoginMessageKey } from '@/auth/loginMessages';
 
 export type CindyAuthRegion = 'cn' | 'global' | 'dev';
 
@@ -78,7 +80,8 @@ export const DEFAULT_MOBILE_VOICE_LITELLM_BASE_URL =
 
 export interface MobileConfigIssue {
   key: string;
-  message: string;
+  /** 展示文案走 loginMessages 5 语 catalog,本层只产出 key(文案 key 化,SC-4)。 */
+  messageKey: LoginMessageKey;
 }
 
 export function normalizeBaseUrlWithDefault(value: string | undefined, fallback: string): string {
@@ -126,7 +129,7 @@ export function getMobileConfigIssues(
   if (explicitBaseUrl && !isHttpUrl(explicitBaseUrl)) {
     issues.push({
       key: 'EXPO_PUBLIC_CINDY_AUTH_BASE_URL',
-      message: '登录服务地址必须是 http(s) URL。',
+      messageKey: 'configIssueAuthBaseUrl',
     });
   }
   return issues;

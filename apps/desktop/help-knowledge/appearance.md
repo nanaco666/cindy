@@ -1,9 +1,8 @@
 ---
 id: appearance
 title: Appearance, theme, language and notifications
-summary: Theme, theme family, display language, and desktop / FeiShu notifications — all in Settings > General.
+summary: Theme, theme family, fonts, display language, and desktop / FeiShu notifications — all in Settings > General.
 tab: general
-status: draft
 ---
 
 Settings > General controls how the app looks and how it notifies you.
@@ -12,6 +11,7 @@ Settings > General controls how the app looks and how it notifies you.
 
 - **Theme**: light, dark, or system (follows your OS).
 - **Theme family**: pick from the registered theme families; each family supplies its own colors for light and dark. The app uses a VSCode-style token system (see docs/design-rules/cindy-design-system.md) so themes only override what they need.
+- **Fonts and sidebar density**: the same section also has UI / code font-family pickers with font-size sliders, and a selector for the sidebar's session card mode.
 - **Local theme brand identity**: this is an optional power-user feature configured in the local theme JSON. The settings page intentionally keeps only create-copy, open-folder, and refresh actions. New copies include self-explanatory example paths directly in the JSON.
 - **Export / open local theme files**: export the current theme's tokens to a file or open a local theme JSON for inspection / sharing. To replace the icon and logo used on the new-chat page:
 
@@ -28,7 +28,7 @@ Settings > General controls how the app looks and how it notifies you.
 
 **Language:**
 
-- Display language: System / English / 中文 / 日本語 / 한국어. Affects UI text only; agent replies follow your prompt and personalization, not this setting.
+- Display language: System / 中文 / English / 日本語 / 한국어. Affects UI text only; agent replies follow your prompt and personalization, not this setting.
 
 **Notifications:**
 

@@ -19,7 +19,7 @@
  * 主机侧随机发放)。
  *
  * 纯 Node(fs/path/crypto),零 Electron(规则 14):单测直接驱动。
- * 收集逻辑源自 lizi-mcps xd-service/collect.ts(该包随 MCP 退役删除,
+ * 收集逻辑源自 @cindy/mcps xd-service/collect.ts(该包随 MCP 退役删除,
  * 逻辑迁居于此并通用化)。
  */
 

@@ -5,19 +5,22 @@
  * providers and models exposed as selectable capabilities to product surfaces.
  */
 
-import type { Catalog } from '@lizi/model-providers';
+import type { Catalog } from '@cindy/model-providers';
 
 export type ProviderAccessMembershipKind = 'personal' | 'org';
 
 export interface ProviderAccessContext {
   isPackaged: boolean;
   membershipKind: ProviderAccessMembershipKind | null | undefined;
+  /** False for account-free local sessions, in every build flavor. */
+  canUseCindyGateway?: boolean;
 }
 
 const CINDY_AI_PROVIDER_ID = 'xd';
 
 /** Cindy AI is an organization-only selectable provider in packaged releases. */
 export function isProviderSelectable(providerId: string, context: ProviderAccessContext): boolean {
+  if (providerId === CINDY_AI_PROVIDER_ID && context.canUseCindyGateway === false) return false;
   return !(
     context.isPackaged &&
     context.membershipKind === 'personal' &&

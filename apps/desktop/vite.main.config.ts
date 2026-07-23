@@ -1,6 +1,15 @@
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { defineConfig, loadEnv } from 'vite';
 import { desktopClientBuildEnv } from '../../scripts/shared/client-endpoint-build-env.mjs';
 
+const configDir = path.dirname(fileURLToPath(import.meta.url));
+// 登录 scenario fixtures 的生产空 stub(implementation-plan Step 0 WHAT4 生产排除
+// 双保险之 build-time 层;check-login-production-guard.mjs 以 sentinel 双断言校验)。
+const loginFixturesStub = path.resolve(
+  configDir,
+  '../../packages/auth-client/fixtures/loginScenarios.production-stub.ts',
+);
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), 'VITE_');
@@ -15,6 +24,14 @@ export default defineConfig(({ mode }) => {
   const allEnv = loadEnv(mode, process.cwd(), '');
   const readMainEnv = (key: string): string => allEnv[key] || process.env[key] || '';
   return {
+    resolve: {
+      // 仅 fixtures 生产排除条件(v6.17 允许范围):production 构建把
+      // '@cindy/auth-client/fixtures' 整模块替换为空 stub,dev 构建保留真模块。
+      alias:
+        mode === 'production'
+          ? [{ find: '@cindy/auth-client/fixtures', replacement: loginFixturesStub }]
+          : [],
+    },
     define: {
       'import.meta.env.VITE_CINDY_AUTH_REGION': JSON.stringify(
         readViteEnv('VITE_CINDY_AUTH_REGION'),
@@ -69,7 +86,7 @@ export default defineConfig(({ mode }) => {
     build: {
       rollupOptions: {
         output: {
-          // Keep the vendored @lizi/browser-control-runtime (including its
+          // Keep the vendored @cindy/browser-control-runtime (including its
           // dynamically-imported pw-ai.js / chrome-mcp.js) in ONE chunk. Otherwise
           // vite code-splits those dynamic imports into separate chunks that
           // `require()` the bootstrap-electron entry chunk again at load time →
@@ -125,7 +142,7 @@ export default defineConfig(({ mode }) => {
           'ssh2',
           'cpu-features',
           // ssh-config (remote-ssh): 解析 ~/.ssh/config。纯 JS, 但跟 ssh2
-          // 同包 (@lizi/maker-remote-ssh) 出现, 同样不让 bundle 以保持依赖闭包对称。
+          // 同包 (@cindy/maker-remote-ssh) 出现, 同样不让 bundle 以保持依赖闭包对称。
           'ssh-config',
           // ws (codex remote transport, P2): SshDaemonTransport 用 ws/lib/receiver
           // + ws/lib/sender 给 ssh exec channel 上的 NDJSON over WebSocket 做帧编解码。

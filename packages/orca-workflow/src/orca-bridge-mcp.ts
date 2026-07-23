@@ -2,8 +2,8 @@ import { randomUUID } from 'node:crypto';
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { isTerminalAgentErrorEvent, toSessionDispatchOutcome } from '@lizi/maker-core';
-import type { AgentEvent, AgentKind, Logger, Maker, McpProvider, McpProviderContext, Session } from '@lizi/maker-core';
+import { isTerminalAgentErrorEvent, toSessionDispatchOutcome } from '@cindy/maker-core';
+import type { AgentEvent, AgentKind, Logger, Maker, McpProvider, McpProviderContext, Session } from '@cindy/maker-core';
 
 const MAX_CAPTURED_TEXT = 64 * 1024;
 

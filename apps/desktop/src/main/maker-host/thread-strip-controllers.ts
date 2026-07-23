@@ -1,4 +1,4 @@
-import { createThreadStripController } from '@lizi/anthropic-compat-proxy';
+import { createThreadStripController } from '@cindy/anthropic-compat-proxy';
 
 /**
  * 主动剥离 controller 单例。**每个剥离条件一个独立实例** —— 共用会交叉污染

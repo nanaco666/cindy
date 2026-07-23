@@ -51,7 +51,7 @@ import { createLogger } from '../../logger';
 import { resolveSafe as resolveXdtImageUrl } from '../../imageCacheStore';
 import { resolveSafe as resolveCindyMediaUrl } from '../../cindy-media/blobStore';
 
-import { isTerminalAgentErrorEvent } from '@lizi/maker-core';
+import { isTerminalAgentErrorEvent } from '@cindy/maker-core';
 import type {
   AgentEvent,
   AgentKind,
@@ -59,8 +59,8 @@ import type {
   InteractionRequest,
   Session as MakerSession,
   UserMessage,
-} from '@lizi/maker-core';
-import type { IMAttachment, InteractiveCardSpec, StreamingTextHandle } from 'lizi-im';
+} from '@cindy/maker-core';
+import type { IMAttachment, InteractiveCardSpec, StreamingTextHandle } from '@cindy/im';
 
 import { persistUserMessage } from '../messagePersistence';
 import { bindingStore } from '../binding';
@@ -1224,7 +1224,7 @@ export function createTurnRunner(
     if (attachments.length === 0) {
       return { type: 'user', content: text };
     }
-    const blocks: import('@lizi/maker-core').UserContentBlock[] = [];
+    const blocks: import('@cindy/maker-core').UserContentBlock[] = [];
     if (text) blocks.push({ type: 'text', text });
     for (const att of attachments) {
       blocks.push({

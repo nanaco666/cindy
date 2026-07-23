@@ -1,4 +1,4 @@
-import type { LiziMcpLogger, SavedImage, SavedVideoRef } from 'lizi-mcps';
+import type { LiziMcpLogger, SavedImage, SavedVideoRef } from '@cindy/mcps';
 import type { VideoProviderRegistry } from './video/registry.js';
 import type { VideoProvider } from './video/types.js';
 

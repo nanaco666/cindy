@@ -14,7 +14,7 @@
  *     provider-route.setCustomProviderKeyReader，host 在 register 时接通）。
  */
 
-import type { AgentKind } from '@lizi/model-providers';
+import type { AgentKind } from '@cindy/model-providers';
 
 import {
   classifyProviderError,

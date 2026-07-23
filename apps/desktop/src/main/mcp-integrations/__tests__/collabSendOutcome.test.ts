@@ -1,4 +1,4 @@
-import type { SessionSendResult } from '@lizi/maker-core';
+import type { SessionSendResult } from '@cindy/maker-core';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const mockState = vi.hoisted(() => ({
@@ -31,7 +31,7 @@ vi.mock('../../maker-ipc/register.js', () => ({
   tryGetOrcaCollabService: () => mockState.collabService,
 }));
 
-vi.mock('lizi-mcps', () => ({
+vi.mock('@cindy/mcps', () => ({
   createLiziMcpProviders: vi.fn((config: Record<string, unknown>) => {
     mockState.capturedProvidersConfig = config;
     return [

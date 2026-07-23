@@ -1,5 +1,5 @@
 {
-  "name": "@lizi/voice-input-core",
+  "name": "@cindy/voice-input-core",
   "version": "0.0.0",
   "private": true,
   "description": "xdt-maker voice input core: provider-neutral dictation state machine and refinement guards",
@@ -16,7 +16,7 @@
   },
   "author": {
     "name": "Lizi",
-    "email": "jiali@magiclizi.com"
+    "email": "feedback@cindy.app"
   },
   "license": "Apache-2.0",
   "devDependencies": {

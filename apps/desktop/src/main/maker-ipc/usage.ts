@@ -9,7 +9,7 @@
 import { scryptSync } from 'node:crypto';
 import path from 'node:path';
 
-import type { Maker } from '@lizi/maker-core';
+import type { Maker } from '@cindy/maker-core';
 import { createLogger } from '../logger.js';
 import { getCachedBinaryStatus } from '../agent-binaries/index.js';
 import {

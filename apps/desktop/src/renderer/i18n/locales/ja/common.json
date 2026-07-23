@@ -541,10 +541,26 @@
     "userProfile": {
       "fallbackName": "ユーザー",
       "avatarAlt": "{{name}} のアバター",
+      "local": {
+        "exitFailed": "ローカルモードの終了に失敗しました。もう一度お試しください",
+        "name": "ローカルモード",
+        "description": "データはこの端末だけに保存され、Cindy アカウントサービスは使用しません",
+        "signIn": "Cindy にログイン",
+        "exit": "ローカルモードを終了"
+      },
       "copyUserId": {
         "action": "ユーザー ID をコピー",
         "success": "ユーザー ID をコピーしました",
         "failed": "ユーザー ID をコピーできませんでした"
+      },
+      "organization": {
+        "label": "組織：{{name}}",
+        "fallbackName": "組織アカウント",
+        "roles": {
+          "owner": "オーナー",
+          "admin": "管理者",
+          "member": "メンバー"
+        }
       },
       "edit": {
         "open": "名前とアバターを編集",
@@ -678,6 +694,7 @@
       "serviceSource": {
         "label": "音声サービス",
         "hint": "既定では Cindy 提供の音声サービスを使用します。自分のキーとモデルに切り替えることもできます。",
+        "localHint": "ローカルモードでは Cindy アカウントサービスを使用しません。自分のキーとモデルを設定してください。",
         "ariaLabel": "音声サービスソースの選択",
         "options": {
           "cindy": "Cindy 公式サービス",
@@ -2000,6 +2017,7 @@
       "defaults": {
         "title": "新規会話設定",
         "description": "Feishu、Slack、または Discord から開始する新規会話では、この Agent とモデル設定を使用します。変更は新規会話にのみ適用されます。既存の Discord DM に適用するには /new を送信してください。",
+        "localDescription": "Feishu または Discord から開始する新規会話では、この Agent とモデル設定を使用します。変更は新規会話にのみ適用されます。既存の Discord DM に適用するには /new を送信してください。",
         "agentLabel": "Agent",
         "modelLabel": "モデル設定",
         "loading": "新規会話設定を読み込み中…",
@@ -2119,31 +2137,11 @@
         "installedExpand": "インストール済みプラグインをさらに {{count}} 件表示",
         "installedCollapse": "追加のインストール済みプラグインを隠す",
         "allTitle": "すべてのプラグイン",
-        "filterAll": "すべて",
-        "filtersAria": "提供元でプラグインを絞り込む",
         "emptyFiltered": "一致するプラグインがありません",
         "useAction": "使用",
-        "useAria": "{{name}} を使用",
-        "installAction": "インストール",
-        "installAria": "{{name}} をインストール",
-        "restoreAria": "{{name}} を復元",
-        "origin": {
-          "builtin": "内蔵",
-          "enterprise": "チーム共有",
-          "external": "外部 / ローカル"
-        }
-      },
-      "provisioning": {
-        "updating": "内蔵プラグインを更新中…"
+        "useAria": "{{name}} を使用"
       },
       "install": "プラグインをインストール…",
-      "builtinGroup": "内蔵プラグイン",
-      "enterpriseGroup": "企業プラグイン",
-      "externalGroup": "外部インストール · {{count}}",
-      "builtinTag": "内蔵",
-      "enterpriseTag": "企業",
-      "removedTag": "アンインストール済み",
-      "restore": "復元",
       "empty": "まだプラグインがインストールされていません",
       "emptyHint": "右上の「プラグインをインストール…」から .cindy ファイルを選択してください",
       "disabledTag": "無効",
@@ -2164,7 +2162,6 @@
       "uninstallConfirm": {
         "title": "「{{name}}」をアンインストールしますか?",
         "description": "パネルと機能が削除されます。レイアウト位置は保持され、再インストール時に元の位置へ復元されます。",
-        "descriptionBuiltin": "パネルと機能が削除されます。これは内蔵プラグインのため自動では戻りません。リストからいつでも復元できます。",
         "cancel": "キャンセル"
       },
       "setupGate": {
@@ -2181,7 +2178,6 @@
         "uninstalled": "「{{name}}」をアンインストールしました",
         "installedAsleep": "「{{name}}」をインストールしました(無効状態。ここでいつでも有効化できます)",
         "updated": "「{{name}}」を v{{version}} に更新しました",
-        "restored": "「{{name}}」を復元しました",
         "projectDisabled": "「{{name}}」をこのプロジェクトで無効にしました(新しいセッションから適用)",
         "projectEnabled": "「{{name}}」はこのプロジェクトでグローバル設定に従います"
       },
@@ -2611,10 +2607,7 @@
     "codePlaceholder": "6 桁のコード",
     "codeInputAria": "アカウント削除の確認コード",
     "codeSent": "{{channel}}で {{target}} に確認コードを送信しました。",
-    "channels": {
-      "email": "メール",
-      "sms": "SMS"
-    },
+    "channels": { "email": "メール", "sms": "SMS" },
     "sessionNotice": "確認後、このパソコンはすぐにログアウトします。他のクライアントは、現在のアクセス認証情報が期限切れになり更新を試みた時点でログアウトします。",
     "gracePeriodNotice": "確認後、アカウントは 30 日間の待機期間に入ります。期間内にログインすると削除を取り消せます。期間終了後、Cindy のログインアカウントは完全に削除されます。",
     "verificationNotice": "削除確認コードを{{channel}}で {{target}} に送信します。",
@@ -2650,13 +2643,19 @@
       "dismissButton": "確認"
     }
   },
+  "localDbGate": {
+    "title": "ローカルデータを開けませんでした",
+    "description": "再試行するか、ログイン方法に戻ってモードを選び直してください。",
+    "retry": "再試行",
+    "backToLogin": "ログイン方法に戻る"
+  },
   "login": {
     "title": "Cindy へようこそ",
     "subtitle": "安全なログイン方法を選択してください",
-    "phone": "電話番号",
-    "email": "メール",
     "phonePlaceholder": "電話番号を入力",
     "emailPlaceholder": "メールアドレスを入力",
+    "invalidEmail": "正しいメールアドレスを入力してください",
+    "invalidPhone": "正しい電話番号を入力してください",
     "working": "お待ちください...",
     "continue": "続行",
     "or": "または",
@@ -2677,6 +2676,10 @@
     "personalDesc": "メールアドレスに認証コードを送信",
     "ssoRequired": "この組織は SSO ログインが必要です",
     "ssoEntry": "企業 SSO でサインイン",
+    "localModeEntry": "ログインをスキップ",
+    "localModeOpening": "ローカルモードを開いています...",
+    "returnToLocalMode": "ローカルモードに戻る",
+    "localModeDescription": "Cindy アカウントは不要です。データはこのデバイスに保存され、クラウドモデル、デバイス間アクセス、マーケットサービスは利用できません。",
     "ssoOrgTitle": "企業 SSO サインイン",
     "ssoOrgSubtitle": "企業 ID、組織 slug、または確認済みドメインを入力してシングルサインオンに進みます",
     "ssoOrgPlaceholder": "企業 ID、組織 slug、または確認済みドメイン",
@@ -2690,6 +2693,7 @@
     "verifying": "確認中...",
     "signIn": "ログイン",
     "resendCode": "コードを再送信",
+    "resendCountdown": "{{n}} 秒後に再送信できます",
     "chooseAccount": "ID を選択",
     "chooseAccountSubtitle": "使用する個人または組織 ID を選択",
     "personalAccount": "個人 ID",
@@ -2755,6 +2759,11 @@
       "checkingEnv": "実行環境を確認中...",
       "waking": "Cindyを起こしています...",
       "envFailed": "環境の初期化に失敗しました。クリックして再試行してください"
+    },
+    "downloadStats": "{{percent}}% · {{speed}} MB/s · {{done}} MB / {{total}} MB",
+    "envFailed": {
+      "title": "環境の初期化に失敗しました",
+      "retry": "再試行"
     },
     "manifestFailed": {
       "title": "ネットワーク接続失敗",
@@ -6300,8 +6309,8 @@
     "dialogUnavailable": "window.electronAPI.dialog が利用できません",
     "notReadyHeading": "Maker Experimental",
     "notReadyBody": "window.electronAPI.maker が利用できません。アプリを再起動し、コンソールで IPC 登録エラーを確認してください。",
-    "title": "Maker Experimental — エージェント経路診断",
-    "description": "Maker IPC とエージェントイベント経路を診断します。通常のチャットセッションには影響しません。",
+    "title": "Maker Experimental — ステージ 1 リファクタ新パイプライン",
+    "description": "新パイプライン検証ページ。旧パイプライン（cc-agent / codex）には影響なし。詳細は doc/agent/xdt-maker-architecture.md",
     "agentLabel": "エージェント:",
     "workingDirLabel": "作業ディレクトリ:",
     "workingDirPlaceholder": "右のボタンでディレクトリを選択",

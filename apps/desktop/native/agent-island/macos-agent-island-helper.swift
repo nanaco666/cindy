@@ -3227,9 +3227,23 @@ struct ExpandedSessionHeaderLine: View {
   let mascotSkin: String
   let onFocus: () -> Void
 
+  private var showsMascot: Bool {
+    switch session.phase {
+    case "needs-interaction", "completed":
+      return false
+    default:
+      return true
+    }
+  }
+
   var body: some View {
     HStack(alignment: .center, spacing: 8) {
-      StatusDot(session: session, compact: false, mascotSkin: mascotSkin)
+      StatusDot(
+        session: session,
+        compact: false,
+        showsRunningAnimation: showsMascot,
+        mascotSkin: mascotSkin
+      )
 
       Text(expandedPrimaryTitle(for: session, strings: strings))
         .font(.system(size: titleFontSize, weight: .bold, design: .monospaced))

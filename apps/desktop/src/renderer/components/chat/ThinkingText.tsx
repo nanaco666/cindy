@@ -15,10 +15,10 @@
  */
 
 import { Fragment, memo, useMemo } from 'react';
-import { tokenizeThinkingText } from '@lizi/maker-shared/thinking-text';
+import { tokenizeThinkingText } from '@cindy/maker-shared/thinking-text';
 
-export { tokenizeThinkingText } from '@lizi/maker-shared/thinking-text';
-export type { ThinkingTextToken } from '@lizi/maker-shared/thinking-text';
+export { tokenizeThinkingText } from '@cindy/maker-shared/thinking-text';
+export type { ThinkingTextToken } from '@cindy/maker-shared/thinking-text';
 
 /** Shared compact renderer for live, expanded, and standalone thinking views. */
 export const ThinkingText = memo(function ThinkingText({ content }: { content: string }) {

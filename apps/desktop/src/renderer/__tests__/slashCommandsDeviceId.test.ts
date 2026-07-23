@@ -12,7 +12,7 @@ beforeEach(() => {
 });
 
 function c(name: string, kind: string) {
-  return { name, kind } as unknown as import('@lizi/maker-core').UnifiedCommand;
+  return { name, kind } as unknown as import('@cindy/maker-core').UnifiedCommand;
 }
 
 function stubElectron() {

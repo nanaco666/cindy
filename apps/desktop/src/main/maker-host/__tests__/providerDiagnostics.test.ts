@@ -11,7 +11,7 @@
 
 import { describe, it, expect, afterEach } from 'vitest';
 
-import { BUNDLED_CATALOG, buildUserProvider } from '@lizi/model-providers';
+import { BUNDLED_CATALOG, buildUserProvider } from '@cindy/model-providers';
 
 import { classifyProviderError } from '../../../shared/providerErrors.js';
 import {

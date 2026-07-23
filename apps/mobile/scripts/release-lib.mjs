@@ -200,8 +200,7 @@ export function resolveTarget(config, options = {}) {
     const dev = slugifyDevName(
       options.dev ??
         process.env.XDT_MOBILE_BETA_DEV ??
-        gitValue(['config', 'user.name']) ??
-        'dash',
+        gitValue(['config', 'user.name']),
     );
     const profile = region === 'global' ? `beta-global-${dev}` : `beta-${dev}`;
     const resolved = resolveBuildProfile(config.easJson, profile);

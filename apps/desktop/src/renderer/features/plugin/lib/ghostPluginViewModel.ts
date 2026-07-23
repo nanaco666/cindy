@@ -1,7 +1,7 @@
 /**
  * Plugin list/detail view models derived only from the installed Ghost contract.
  *
- * Inputs: shared Ghost manifests, install records, and host-owned origin metadata.
+ * Inputs: shared Ghost manifests and install records.
  * Outputs: renderer-safe list/detail facts without marketplace or runtime invention.
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -15,20 +15,11 @@ import {
   type InstalledGhost,
 } from '../../../../shared/ghost';
 
-/**
- * Plugin 页面展示的来源分组。
- *
- * 来源不从 ghost.json 自报,而由宿主的内置播种状态决定:内置/企业来自
- * provisioning.json,外部来自用户安装的 .cindy。这样第三方包不能冒充官方。
- */
-export type GhostPluginOrigin = 'builtin' | 'enterprise' | 'external';
-
 export interface GhostPluginListItem {
   id: string;
   name: string;
   description: string;
   version: string;
-  origin: GhostPluginOrigin;
   enabled: boolean;
   canUse: boolean;
   trust?: GhostTrustInfo;
@@ -36,7 +27,6 @@ export interface GhostPluginListItem {
 }
 export interface GhostPluginDetail extends GhostPluginListItem {
   trust: GhostTrustInfo;
-  installed: boolean;
   author: string | null;
   contents: readonly string[];
   permissions: GhostPermissionItem[];
@@ -45,17 +35,6 @@ export interface GhostPluginDetail extends GhostPluginListItem {
   cindyCapabilities: readonly string[];
   panelMinWidth: number | null;
   installDir: string | null;
-}
-
-/** Existing builtinStatusSync summary for a bundled Plugin that can be restored. */
-export interface RestorableGhostPlugin {
-  id: string;
-  name: string;
-  description?: string;
-  version: string;
-  manifest: import('../../../../shared/ghost').GhostManifest;
-  tier: 'builtin' | 'enterprise';
-  iconDataUrl?: string;
 }
 
 export type GhostFallbackIconKind =
@@ -77,53 +56,19 @@ export function ghostFallbackIconKind(name: string, id: string): GhostFallbackIc
 }
 
 /**
- * 「团队共享」(enterprise)分组的可见性:仅组织(org)成员登录可见。
- * 个人版登录或登录态缺失时按不可见处理(fail-closed)——面向组织受众的
- * 团队共享插件不对个人账号展示筛选 tab 与目录条目。
- */
-export function showsEnterpriseGhostGroup(
-  membershipKind: 'personal' | 'org' | undefined,
-): boolean {
-  return membershipKind === 'org';
-}
-
-/** 按团队共享可见性裁剪列表:不可见时滤掉 enterprise 来源条目。 */
-export function visibleGhostPluginItems<T extends GhostPluginListItem>(
-  items: readonly T[],
-  showEnterprise: boolean,
-): T[] {
-  return showEnterprise ? [...items] : items.filter((item) => item.origin !== 'enterprise');
-}
-
-/**
- * Applies the Plugin list's search and source semantics in one place so the
- * result list and every source-tab count use the same matching set.
+ * Applies the Plugin list's search semantics in one place so the result list
+ * and every count use the same matching set.
  */
 export function filterGhostPluginItems<T extends GhostPluginListItem>(
   items: readonly T[],
   query: string,
-  origin: GhostPluginOrigin | 'all' = 'all',
 ): T[] {
   const normalizedQuery = query.trim().toLocaleLowerCase();
-  return items.filter((item) => {
-    if (origin !== 'all' && item.origin !== origin) return false;
-    return `${item.name} ${item.description} ${item.id}`
+  return items.filter((item) =>
+    `${item.name} ${item.description} ${item.id}`
       .toLocaleLowerCase()
-      .includes(normalizedQuery);
-  });
-}
-
-/** Counts source groups from the already search-matched Plugin list. */
-export function countGhostPluginOrigins(
-  items: readonly GhostPluginListItem[],
-): Record<GhostPluginOrigin, number> {
-  const counts: Record<GhostPluginOrigin, number> = {
-    builtin: 0,
-    enterprise: 0,
-    external: 0,
-  };
-  for (const item of items) counts[item.origin] += 1;
-  return counts;
+      .includes(normalizedQuery),
+  );
 }
 
 /**
@@ -156,54 +101,20 @@ export function sortGhostPluginItemsByRecentUse<T extends Pick<GhostPluginListIt
  * 这里刻意不加入安装量、使用量、认证徽章等旧原型字段;这些字段在 Ghost
  * runtime 中没有事实来源,页面不应继续展示伪数据。
  */
-export function toGhostPluginListItem(
-  ghost: InstalledGhost,
-  origin: GhostPluginOrigin,
-): GhostPluginListItem {
+export function toGhostPluginListItem(ghost: InstalledGhost): GhostPluginListItem {
   const { manifest } = ghost;
   return {
     id: manifest.id,
     name: manifest.name,
     description: manifest.description ?? '',
     version: manifest.version,
-    origin,
     enabled: ghost.enabled,
     canUse: Boolean(manifest.command),
-    trust:
-      origin !== 'external'
-        ? {
-            level: 'cindy-official',
-            publisherSigned: true,
-            publisherVerified: true,
-            reviewed: true,
-            publisherName: 'Cindy',
-          }
-        : ghost.trust ?? {
-            level: 'unverified',
-            publisherSigned: false,
-            publisherVerified: false,
-            reviewed: false,
-          },
-    ...(ghost.iconDataUrl !== undefined ? { iconDataUrl: ghost.iconDataUrl } : {}),
-  };
-}
-
-/** Adapts the existing builtin restore summary without inventing manifest facts. */
-export function toRestorableGhostPluginListItem(ghost: RestorableGhostPlugin): GhostPluginListItem {
-  return {
-    id: ghost.id,
-    name: ghost.name,
-    description: ghost.description ?? '',
-    version: ghost.version,
-    origin: ghost.tier,
-    enabled: false,
-    canUse: false,
-    trust: {
-      level: 'cindy-official',
-      publisherSigned: true,
-      publisherVerified: true,
-      reviewed: true,
-      publisherName: 'Cindy',
+    trust: ghost.trust ?? {
+      level: 'unverified',
+      publisherSigned: false,
+      publisherVerified: false,
+      reviewed: false,
     },
     ...(ghost.iconDataUrl !== undefined ? { iconDataUrl: ghost.iconDataUrl } : {}),
   };
@@ -213,16 +124,12 @@ export function toRestorableGhostPluginListItem(ghost: RestorableGhostPlugin): G
  * 详情页复用列表 adapter 的基础字段,再补充 manifest 明确声明的权限与工具。
  * 权限与详情卡共用 shared/ghost.ts 的纯推导函数,不在 renderer 复制规则。
  */
-export function toGhostPluginDetail(
-  ghost: InstalledGhost,
-  origin: GhostPluginOrigin,
-): GhostPluginDetail {
-  const listItem = toGhostPluginListItem(ghost, origin);
+export function toGhostPluginDetail(ghost: InstalledGhost): GhostPluginDetail {
+  const listItem = toGhostPluginListItem(ghost);
   const { manifest } = ghost;
   return {
     ...listItem,
     trust: listItem.trust!,
-    installed: true,
     author: manifest.author ?? null,
     contents: ghostContentKeys(manifest),
     permissions: ghostPermissionItems(manifest),
@@ -234,31 +141,5 @@ export function toGhostPluginDetail(
     ],
     panelMinWidth: manifest.panel ? (manifest.panel.minWidth ?? 280) : null,
     installDir: ghost.dir,
-  };
-}
-
-/**
- * Builds removed bundled Plugin detail from its still-shipped, validated seed
- * manifest. Uninstall changes runtime/install state only; it does not erase
- * the package's declared configuration, Tools, permissions, or metadata.
- */
-export function toRestorableGhostPluginDetail(ghost: RestorableGhostPlugin): GhostPluginDetail {
-  const { manifest } = ghost;
-  const listItem = toRestorableGhostPluginListItem(ghost);
-  return {
-    ...listItem,
-    trust: listItem.trust!,
-    installed: false,
-    author: manifest.author ?? null,
-    contents: ghostContentKeys(manifest),
-    permissions: ghostPermissionItems(manifest),
-    tools: manifest.tools ?? [],
-    hasSettingsUi: Boolean(manifest.settingsHtml),
-    cindyCapabilities: [
-      ...(manifest.cindy?.image ?? []).map((action) => `image.${action}`),
-      ...(manifest.cindy?.video ?? []).map((action) => `video.${action}`),
-    ],
-    panelMinWidth: manifest.panel ? (manifest.panel.minWidth ?? 280) : null,
-    installDir: null,
   };
 }

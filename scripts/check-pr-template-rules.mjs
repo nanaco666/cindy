@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-// 校验 review-pr 的机器规则与公开 PR 模板保持双向一致。
+// 校验公开 PR 模板的顶层结构。内部 review-pr Skill 有自己的私有配置，
+// 本脚本不读取维护者名单、通知设置或其他内部自动化数据。
 
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -9,37 +10,31 @@ const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(SCRIPT_DIR, '..');
 
 const read = (path) => readFileSync(path, 'utf8');
-const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 const template = read(join(ROOT, '.github', 'PULL_REQUEST_TEMPLATE.md'));
-const rules = JSON.parse(read(join(ROOT, 'agent-use', 'docs', 'pr-rules.json')));
+const requiredSections = ['这次改了什么', '怎么验证的', '风险'];
 const errors = [];
 
 /**
- * 双向核对规则关键词与模板二级标题，避免自动判定和贡献者看到的模板漂移。
+ * 公开贡献契约固定为三个二级标题。内部 Skill 会按目标仓库模板和自己的配置做
+ * 更细的格式判定，但公开 CI 不依赖私有 Skill。
  */
-function checkSections(sectionKeywords, ruleKey) {
-  for (const keyword of sectionKeywords) {
-    if (!new RegExp(`^##\\s.*${escapeRegExp(keyword)}`, 'm').test(template)) {
-      errors.push(`${ruleKey} 的「${keyword}」在 PR 模板中没有对应的二级标题`);
-    }
+const actualSections = [...template.matchAll(/^##\s+(.+)$/gm)].map((match) => match[1].trim());
+for (const section of requiredSections) {
+  if (!actualSections.includes(section)) {
+    errors.push(`缺少二级标题「${section}」`);
   }
-
-  for (const match of template.matchAll(/^##\s+(.+)$/gm)) {
-    const heading = match[1].trim();
-    if (!sectionKeywords.some((keyword) => heading.includes(keyword))) {
-      errors.push(`PR 模板标题「${heading}」在 ${ruleKey} 中没有对应关键词`);
-    }
+}
+for (const section of actualSections) {
+  if (!requiredSections.includes(section)) {
+    errors.push(`存在未声明的二级标题「${section}」`);
   }
 }
 
-checkSections(rules.featureSections, 'featureSections');
-checkSections(rules.bugfixSections, 'bugfixSections');
-
 if (errors.length > 0) {
-  console.error('pr-rules.json 与 PR 模板不一致：');
+  console.error('PR 模板结构不符合公开贡献契约：');
   for (const error of errors) console.error(`- ${error}`);
   process.exit(1);
 }
 
-console.log('pr-rules.json 与 PR 模板一致');
+console.log('PR 模板结构符合公开贡献契约');

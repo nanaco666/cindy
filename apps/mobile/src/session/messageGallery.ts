@@ -20,7 +20,7 @@ export interface MobileMessageGalleryImage {
   subtitle?: string;
   /**
    * 所属消息组(顶层 render item 的 key)。lightbox 翻页只在**同一条消息**的
-   * 图片间进行(Dash 拍板 2026-07-08):跨轮次的图不串进同一个图集。
+   * 图片间进行(产品决策 2026-07-08):跨轮次的图不串进同一个图集。
    * 非聊天来源(composer 托盘 / 文件浏览器)不填,调用方自行决定集合范围。
    */
   groupKey?: string;
@@ -162,7 +162,7 @@ export function galleryImageIndexForPayload(
 
 /**
  * 全屏查看器的图片集:被打开的图在会话图集里 → 取它**所属消息**(groupKey)
- * 内的图片子集(同一条消息多图才可横滑翻页,跨轮次不串,Dash 拍板 2026-07-08);
+ * 内的图片子集(同一条消息多图才可横滑翻页,跨轮次不串,产品决策 2026-07-08);
  * 同一 url 出现在多条消息(多个组)时,payload 只有 url、无法判定点的是哪条
  * 消息 → 保守退化为单图集合,绝不错开到别的消息的图组(review P2)。
  * 完全不在图集里(理论兜底)→ 同样退化单图。

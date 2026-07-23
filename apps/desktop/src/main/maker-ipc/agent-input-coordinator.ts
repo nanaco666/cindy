@@ -893,7 +893,7 @@ export class AgentInputCoordinator {
       return true;
     }
 
-    // 插话统一为同轮注入(2026-07-12 Dash 拍板):Claude 与 Codex 都走
+    // 插话统一为同轮注入(2026-07-12 产品决策):Claude 与 Codex 都走
     // steerToAgent 把消息注入正在跑的 turn,不打断当前工作。需要打断的用户
     // 自己点 Stop。(历史:PR #394 曾把 Claude 改成 abort+新 turn,现回退。)
     const messageUuid = crypto.randomUUID();
@@ -1192,7 +1192,7 @@ export class AgentInputCoordinator {
     // 原文等于让模型"从头再来"(原文可能是很久之前的初始任务指令),改发规范化
     // 续跑指令;零产出(派发即失败 / 首个 API 调用就挂)才维持克隆重发。
     // 续跑指令是共享英文常量(带 [UI_ACTION_TRIGGER] 前缀,renderer 渲染时过滤,
-    // 用户只看到任务继续跑,不看到这条合成消息;2026-07-05 Dash 拍板)。
+    // 用户只看到任务继续跑,不看到这条合成消息;2026-07-05 产品决策)。
     let continueItem: AgentInputQueuedMessage | null = null;
     const continueText = CONTINUE_AFTER_ERROR_PROMPT;
     if (recovery.kind === 'active-turn' && this.deps.hasAssistantProgressAfter) {

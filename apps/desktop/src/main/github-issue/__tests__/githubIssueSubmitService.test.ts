@@ -31,7 +31,7 @@ function makeDeps(over: Partial<GithubIssueSubmitServiceDeps> = {}) {
     }),
   );
   const postIssue = vi.fn<GithubIssueSubmitServiceDeps['postIssue']>(async () => ({
-    githubIssue: { number: 80, url: 'https://github.com/xindong/XDMaker/issues/80' },
+    githubIssue: { number: 80, url: 'https://github.com/makecindy/cindy/issues/80' },
   }));
   const deps: GithubIssueSubmitServiceDeps = {
     confirm,
@@ -40,7 +40,7 @@ function makeDeps(over: Partial<GithubIssueSubmitServiceDeps> = {}) {
     getAppVersion: () => '0.0.112',
     getOsInfo: () => ({ platform: 'darwin', arch: 'arm64', osVersion: '25.5.0' }),
     getFallbackLocale: () => 'en',
-    getSubmitterName: () => 'Dash',
+    getSubmitterName: () => 'Carol',
     ...over,
   };
   return { deps, confirm, postIssue };
@@ -85,14 +85,14 @@ describe('submitGithubIssueWithConfirm', () => {
     expect(posted.title).toBe('用户改过的标题');
     expect(posted.type).toBe('feature');
     expect(posted.appVersion).toBe('0.0.112');
-    expect(posted.userName).toBe('Dash');
+    expect(posted.userName).toBe('Carol');
     expect(posted.description).toContain('用户改过的正文');
     expect(posted.description).toContain('**OS**: darwin arm64 (25.5.0)');
     expect(posted.description).toContain('**界面语言**: ja');
     expect(res).toEqual({
       ok: true,
       issueNumber: 80,
-      issueUrl: 'https://github.com/xindong/XDMaker/issues/80',
+      issueUrl: 'https://github.com/makecindy/cindy/issues/80',
       finalTitle: '用户改过的标题',
       editedByUser: true,
     });
@@ -177,7 +177,7 @@ describe('submitGithubIssueWithConfirm', () => {
   });
 
   it('已绑定身份会展示并严格按该身份提交', async () => {
-    const identity = { kind: 'github-user', login: 'dashhuang' } as const;
+    const identity = { kind: 'github-user', login: 'octocat' } as const;
     const { deps, confirm, postIssue } = makeDeps({
       resolveSubmissionIdentity: async (): Promise<IssueSubmissionIdentity> => identity,
     });
@@ -201,7 +201,7 @@ describe('submitGithubIssueWithConfirm', () => {
   });
 
   it('用户身份提交失败时只调用一次该身份，不切换平台重试', async () => {
-    const identity = { kind: 'github-user', login: 'dashhuang' } as const;
+    const identity = { kind: 'github-user', login: 'octocat' } as const;
     const postIssue = vi.fn<GithubIssueSubmitServiceDeps['postIssue']>(async () => {
       throw Object.assign(new Error('repo issue 权限不足'), {
         issueErrorCode: 'AUTH_NOT_READY' as const,

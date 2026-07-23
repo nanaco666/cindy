@@ -28,7 +28,7 @@ import {
   CircleDashed,
   Circle,
 } from 'lucide-react';
-import type { MessageRenderTodoItem } from '@lizi/maker-shared/message-render';
+import type { MessageRenderTodoItem } from '@cindy/maker-shared/message-render';
 
 import { cn } from '@/lib/utils';
 import { Spinner } from '@/components/ui/spinner';

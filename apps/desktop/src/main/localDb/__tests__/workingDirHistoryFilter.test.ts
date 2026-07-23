@@ -8,6 +8,11 @@ vi.mock('electron', () => ({
   },
 }));
 
+vi.mock('../../appSessionState.js', () => ({
+  ownerScopedUserDataPath: (...parts: string[]) =>
+    ['/tmp/xdt-test-user-data', ...parts].join('/'),
+}));
+
 import {
   normalizeHistoryWorkingDir,
   resolveStoredWorkingDirCandidates,

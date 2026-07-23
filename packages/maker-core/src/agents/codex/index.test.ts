@@ -2894,7 +2894,7 @@ describe('CodexAgent MCP thread context hooks', () => {
       mode: 'form',
       _meta: {
         codex_approval_kind: 'mcp_tool_call',
-        tool_params: { name: 'contacts_search', args: { query: 'Dash' } },
+        tool_params: { name: 'contacts_search', args: { query: 'Carol' } },
       },
       message: 'Allow tool call',
       requestedSchema: {},
@@ -2903,7 +2903,7 @@ describe('CodexAgent MCP thread context hooks', () => {
     expect(result).toEqual({ action: 'accept', content: null, _meta: null });
     expect(policy).toHaveBeenCalledWith({
       serverName: 'cindy_contacts',
-      toolParams: { name: 'contacts_search', args: { query: 'Dash' } },
+      toolParams: { name: 'contacts_search', args: { query: 'Carol' } },
     });
     await handle.close();
   });

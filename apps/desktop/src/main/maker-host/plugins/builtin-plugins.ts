@@ -9,14 +9,14 @@
  *   android | browser | computer | feishu_bot |
  *   scheduler | ssh | memory | contacts | xdt_helper | collab(→ cindy_orca) | lsp
  *
- * lizi-mcps/providers.ts 里的现役 MCP provider `name` 使用 `cindy_` 前缀；
+ * @cindy/mcps/providers.ts 里的现役 MCP provider `name` 使用 `cindy_` 前缀；
  * 用户配置仍使用稳定的短 plugin id。映射关系由 PROVIDER_NAME_TO_PLUGIN_ID 定义，
  * mcp-providers.ts 包装 isEnabled gate 时消费。
  */
 
 import type { Plugin, PluginId } from './types.js';
 import { ESSENTIAL_PLUGIN_IDS } from './types.js';
-import type { LiziMcpId } from 'lizi-mcps';
+import type { LiziMcpId } from '@cindy/mcps';
 
 interface BuiltinPluginMeta {
   id: PluginId;
@@ -63,7 +63,7 @@ const BUILTIN_META: BuiltinPluginMeta[] = [
 ];
 
 /**
- * lizi-mcps/providers.ts 里的已知 MCP provider name。
+ * @cindy/mcps/providers.ts 里的已知 MCP provider name。
  * 每个内置 provider 都必须在 PROVIDER_NAME_TO_PLUGIN_ID 里有映射。
  */
 export type KnownProviderName =
@@ -81,7 +81,7 @@ export type KnownProviderName =
   | 'cindy_lsp';
 
 /**
- * MCP provider `name`(lizi-mcps/providers.ts) → 用户可见 plugin id 的映射。
+ * MCP provider `name`(@cindy/mcps/providers.ts) → 用户可见 plugin id 的映射。
  *
  * 现役 provider name 使用 `cindy_` 前缀；用户配置使用短 id('feishu'、'memory')。
  * 这张表桥接两者，让 mcp-providers.ts
@@ -110,7 +110,7 @@ export const PROVIDER_NAME_TO_PLUGIN_ID: Record<KnownProviderName, PluginId> = {
 };
 
 /**
- * 把 lizi-mcps 的 MCP provider name 解析成用户可见 plugin id。
+ * 把 @cindy/mcps 的 MCP provider name 解析成用户可见 plugin id。
  * 未知 name 原样透传；registry 会按 fail-open 处理为默认启用。
  */
 export function pluginIdForProviderName(name: string): PluginId {

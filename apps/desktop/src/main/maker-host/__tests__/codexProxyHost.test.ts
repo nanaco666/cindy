@@ -49,6 +49,10 @@ vi.mock('electron', () => ({
   },
 }));
 
+vi.mock('../../appCapabilities.js', () => ({
+  getAppCapabilities: () => ({ canUseCindyGateway: true }),
+}));
+
 vi.mock('../../logger.js', () => ({
   createLogger: () => mockState.logger,
   getLogLevel: () => 'debug',
@@ -74,7 +78,7 @@ vi.mock('../../model-access/effectiveEndpoint.js', async () => {
   return { effectiveXdGatewayBaseUrl: () => TEST_XD_GATEWAY_BASE_URL };
 });
 
-vi.mock('@lizi/anthropic-compat-proxy', () => ({
+vi.mock('@cindy/anthropic-compat-proxy', () => ({
   createAnthropicCompatProxy: mockState.createAnthropicCompatProxy,
   createInstructionsInjectionTransform: mockState.createInstructionsInjectionTransform,
   createActiveStripTransform: () => (() => null),
@@ -113,10 +117,10 @@ describe('codex gateway config', () => {
 
     const args = buildCodexProxySpawnArgs('http://127.0.0.1:12345', 'oauth-bearer');
 
-    expect(args).toContain('model_providers.tapsvc.base_url="http://127.0.0.1:12345"');
-    expect(args).toContain('model_providers.tapsvc.requires_openai_auth=true');
-    expect(args).not.toContain('model_providers.tapsvc.env_key="XDT_CODEX_API_KEY"');
-    expect(args).toContain('model_providers.tapsvc.supports_websockets=false');
+    expect(args).toContain('model_providers.cindy_gateway.base_url="http://127.0.0.1:12345"');
+    expect(args).toContain('model_providers.cindy_gateway.requires_openai_auth=true');
+    expect(args).not.toContain('model_providers.cindy_gateway.env_key="XDT_CODEX_API_KEY"');
+    expect(args).toContain('model_providers.cindy_gateway.supports_websockets=false');
   });
 
   it('env-key 模式: env_key=XDT_CODEX_API_KEY, 不带 requires_openai_auth', async () => {
@@ -124,9 +128,9 @@ describe('codex gateway config', () => {
 
     const args = buildCodexProxySpawnArgs('http://127.0.0.1:12345', 'env-key');
 
-    expect(args).toContain('model_providers.tapsvc.env_key="XDT_CODEX_API_KEY"');
-    expect(args).not.toContain('model_providers.tapsvc.requires_openai_auth=true');
-    expect(args).toContain('model_providers.tapsvc.supports_websockets=false');
+    expect(args).toContain('model_providers.cindy_gateway.env_key="XDT_CODEX_API_KEY"');
+    expect(args).not.toContain('model_providers.cindy_gateway.requires_openai_auth=true');
+    expect(args).toContain('model_providers.cindy_gateway.supports_websockets=false');
   });
 
   it('provider-oauth 模式: 仍用 env_key 占位,由 proxy 覆盖供应商 OAuth token', async () => {
@@ -134,9 +138,9 @@ describe('codex gateway config', () => {
 
     const args = buildCodexProxySpawnArgs('http://127.0.0.1:12345', 'provider-oauth');
 
-    expect(args).toContain('model_providers.tapsvc.env_key="XDT_CODEX_API_KEY"');
-    expect(args).not.toContain('model_providers.tapsvc.requires_openai_auth=true');
-    expect(args).toContain('model_providers.tapsvc.supports_websockets=false');
+    expect(args).toContain('model_providers.cindy_gateway.env_key="XDT_CODEX_API_KEY"');
+    expect(args).not.toContain('model_providers.cindy_gateway.requires_openai_auth=true');
+    expect(args).toContain('model_providers.cindy_gateway.supports_websockets=false');
   });
 });
 
@@ -512,7 +516,7 @@ describe('codex proxy host', () => {
     'https://api.minimax.io/v1/',
   ])('clamps MiniMax Responses xhigh effort to high for %s', async (baseUrl) => {
     const host = await freshCodexProxyHost();
-    const { buildUserProvider } = await import('@lizi/model-providers');
+    const { buildUserProvider } = await import('@cindy/model-providers');
     const { setCustomProviders } = await import('../active-catalog.js');
     const { setSessionProvider, clearSessionProvider } = await import('../session-provider-store.js');
     setCustomProviders([
@@ -577,7 +581,7 @@ describe('codex proxy host', () => {
 
   it('keeps xhigh effort for non-MiniMax custom Responses providers', async () => {
     const host = await freshCodexProxyHost();
-    const { buildUserProvider } = await import('@lizi/model-providers');
+    const { buildUserProvider } = await import('@cindy/model-providers');
     const { setCustomProviders } = await import('../active-catalog.js');
     const { setSessionProvider, clearSessionProvider } = await import('../session-provider-store.js');
     setCustomProviders([

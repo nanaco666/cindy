@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
-import type { Schedule } from '@lizi/maker-scheduler';
+import type { Schedule } from '@cindy/maker-scheduler';
 import { SchedulerScriptCapabilityBroker } from '../script-capability-broker';
 
 const sendToSessionMock = vi.hoisted(() => vi.fn());

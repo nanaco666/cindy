@@ -7,7 +7,7 @@
  * 这是手机版(纯控制端)将要复用的同一套 channel/args 契约的回归保护。
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { REMOTE_INVOKE_ALLOWLIST, PUSH_FORWARD_ALLOWLIST } from '@lizi/device-link';
+import { REMOTE_INVOKE_ALLOWLIST, PUSH_FORWARD_ALLOWLIST } from '@cindy/device-link';
 import type { Session } from '@/lib/ccAgent.types';
 
 beforeEach(() => {

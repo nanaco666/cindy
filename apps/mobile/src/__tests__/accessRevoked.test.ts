@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { DeviceLinkError, PROTOCOL_VERSION, type Envelope } from '@lizi/device-link';
+import { DeviceLinkError, PROTOCOL_VERSION, type Envelope } from '@cindy/device-link';
 import {
   applyAccessRevokedFrame,
   isAccessRevokedError,

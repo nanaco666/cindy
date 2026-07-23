@@ -3,7 +3,7 @@
  * ---------------------------------------------------------------------------
  * `userData/cc-agent/` 下有三个**现行代码零引用**的死目录(2026-07 实地盘点
  * 约 40MB;目录改名后旧目录永久滞留的历史证据):
- *   - lizi-image-media(art 图片老仓改名前身)
+ *   - @cindy/image-media(art 图片老仓改名前身)
  *   - mivo-media / mivo(mivo 集成早期目录,现行写 lizi-mivo-models 等)
  *
  * 这是对冻结历史兼容层的**唯一**允许删除操作,门槛按三条全满足:
@@ -25,7 +25,7 @@ import { createLogger } from '../logger';
 const log = createLogger('cindy-media-dead-dirs');
 
 /** 唯一允许清退的目录名单(见文件头三条门槛)。 */
-export const DEAD_DIR_NAMES = ['lizi-image-media', 'mivo-media', 'mivo'] as const;
+export const DEAD_DIR_NAMES = ['@cindy/image-media', 'mivo-media', 'mivo'] as const;
 export type DeadDirName = (typeof DEAD_DIR_NAMES)[number];
 
 /** 全目录文件都要老于此才可清退(设计 §4 第三条)。 */

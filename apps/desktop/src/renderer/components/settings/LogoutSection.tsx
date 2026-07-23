@@ -1,12 +1,18 @@
 import { useTranslation } from 'react-i18next';
 
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/contexts/AuthContext';
 import { useLogout } from '@/hooks/useLogout';
 import { AccountDeletionSection } from './AccountDeletionSection';
 
 export function LogoutSection() {
+  const { mode } = useAuth();
   const { handleLogout } = useLogout();
   const { t } = useTranslation();
+
+  // Local mode has no Cindy account or credentials to revoke. Keep logout and
+  // account-deletion controls exclusive to authenticated cloud sessions.
+  if (mode !== 'cloud') return null;
 
   return (
     <div className="flex flex-col gap-2.5">

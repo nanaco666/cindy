@@ -22,18 +22,18 @@ const APPLE_VCF = [
   'VERSION:3.0',
   'N:林;子航;;;',
   'FN:林子航',
-  'ORG:心动网络;执行办',
-  'TITLE:联合创始人',
+  'ORG:星澜网络;执行办',
+  'TITLE:技术负责人',
   'EMAIL;type=INTERNET;type=WORK;type=pref:neo@example.com',
   'EMAIL;type=INTERNET;type=HOME:neolin@example.net',
   'TEL;type=CELL;type=pref:+86 138 0000 0000',
-  'NOTE:VeryCD 时期的老搭档\\, 长期合作\\;备注分号',
+  'NOTE:蓝川 时期的老搭档\\, 长期合作\\;备注分号',
   'END:VCARD',
   'BEGIN:VCARD',
   'VERSION:3.0',
   'N:Chan;Sonia;;;',
   'FN:Sonia Chan',
-  'ORG:心动网络',
+  'ORG:星澜网络',
   'EMAIL;type=WORK:sonia@example.com',
   'END:VCARD',
   'BEGIN:VCARD',
@@ -53,9 +53,9 @@ describe('parseVCards', () => {
       { value: 'neolin@example.net', label: 'home' },
     ]);
     expect(neo.phones[0]).toEqual({ value: '+86 138 0000 0000', label: 'cell' });
-    expect(neo.org).toBe('心动网络');
-    expect(neo.title).toBe('联合创始人');
-    expect(neo.note).toBe('VeryCD 时期的老搭档, 长期合作;备注分号');
+    expect(neo.org).toBe('星澜网络');
+    expect(neo.title).toBe('技术负责人');
+    expect(neo.note).toBe('蓝川 时期的老搭档, 长期合作;备注分号');
   });
 
   it('CJK 姓名用 N 拼接(无 FN 时), 拉丁名 名+姓', () => {
@@ -101,8 +101,8 @@ describe('importContacts', () => {
           displayName: '林子航',
           emails: [{ value: 'NEO@EXAMPLE.COM' }],
           phones: [],
-          org: '心动网络',
-          title: '联合创始人',
+          org: '星澜网络',
+          title: '技术负责人',
         },
         // → 名字相似(Remy ⊆ Remy Kim)且无身份撞 → needsReview
         { displayName: 'Remy Kim', emails: [], phones: [] },
@@ -111,7 +111,7 @@ describe('importContacts', () => {
           displayName: 'Sonia Chan',
           emails: [{ value: 'sonia@example.com', label: 'work' }],
           phones: [],
-          org: '心动网络',
+          org: '星澜网络',
           anchor: { platform: 'apple-contacts', value: 'ABC-123' },
         },
         // → 空名跳过
@@ -124,20 +124,20 @@ describe('importContacts', () => {
     expect(summary.created).toBe(1);
     expect(summary.needsReview).toEqual([{ displayName: 'Remy Kim', candidates: ['Remy'] }]);
     expect(summary.skipped).toHaveLength(1);
-    expect(summary.orgsCreated).toBe(1); // 心动网络只建一次
+    expect(summary.orgsCreated).toBe(1); // 星澜网络只建一次
     expect(summary.relationsAdded).toBe(2);
 
     // 并入方: 名字成别名, 任职关系挂上
     const neo = store.getContact(existing.id);
     expect(neo.aliases).toContain('林子航');
-    expect(neo.relations[0]).toMatchObject({ relation: '任职', note: '联合创始人' });
+    expect(neo.relations[0]).toMatchObject({ relation: '任职', note: '技术负责人' });
     // 新建方: 锚点身份 + 分组
     const sonia = store.resolve('sonia@example.com')[0]!.profile;
     expect(sonia.identities.some((i) => i.platform === 'apple-contacts' && i.value === 'ABC-123')).toBe(true);
     expect(sonia.groups.map((g) => g.name)).toEqual(['导入批次']);
     expect(sonia.source).toBe('import');
     // 组织按名字反查可得
-    expect(store.resolve('心动网络')[0]!.profile.kind).toBe('org');
+    expect(store.resolve('星澜网络')[0]!.profile.kind).toBe('org');
   });
 
   it('enrich 并入新别名后刷新批内快照: 后续同名无身份记录进 needsReview 不建重复', () => {
@@ -203,7 +203,7 @@ describe('serializeVCards(导出) round-trip', () => {
     const db = new DatabaseCtor(':memory:');
     const store = new MakerContactsStore({ db, logger: noopLogger() });
     store.init();
-    const org = store.createContact({ kind: 'org', displayName: '心动网络' });
+    const org = store.createContact({ kind: 'org', displayName: '星澜网络' });
     const p = store.createContact({
       kind: 'person',
       displayName: '林子航',
@@ -215,7 +215,7 @@ describe('serializeVCards(导出) round-trip', () => {
         { platform: 'github', value: 'neolin' },
       ],
     });
-    store.addRelation(p.id, { toId: org.id, relation: '任职', note: '联合创始人' });
+    store.addRelation(p.id, { toId: org.id, relation: '任职', note: '技术负责人' });
     const g = store.createGroup('老搭档');
     store.addToGroup(g.id, [p.id]);
 
@@ -228,8 +228,8 @@ describe('serializeVCards(导出) round-trip', () => {
     expect(back).toHaveLength(1);
     expect(back[0]).toMatchObject({
       displayName: '林子航',
-      org: '心动网络',
-      title: '联合创始人',
+      org: '星澜网络',
+      title: '技术负责人',
       note: '长期老搭档; 含转义,逗号',
     });
     expect(back[0]!.emails).toEqual([{ value: 'neo@example.com', label: 'work' }]);
@@ -248,13 +248,13 @@ describe('serializeVCards(导出) round-trip', () => {
       identities: [{ platform: 'email', value: 'neo@example.com' }],
     });
     const g1 = store.createGroup('老搭档');
-    const g2 = store.createGroup('心动,创始团队'); // 组名含逗号 → 导出转义 \,
+    const g2 = store.createGroup('星澜,创始团队'); // 组名含逗号 → 导出转义 \,
     store.addToGroup(g1.id, [p.id]);
     store.addToGroup(g2.id, [p.id]);
 
     const vcf = serializeVCards([store.getContact(p.id)]);
     const back = parseVCards(vcf);
-    expect([...(back[0]!.groups ?? [])].sort()).toEqual(['心动,创始团队', '老搭档']);
+    expect([...(back[0]!.groups ?? [])].sort()).toEqual(['星澜,创始团队', '老搭档']);
 
     // 导入到干净库: 分组按名重建 + 归组
     const db2 = new DatabaseCtor(':memory:');
@@ -263,7 +263,7 @@ describe('serializeVCards(导出) round-trip', () => {
     const summary = importContacts(store2, back);
     expect(summary.created).toBe(1);
     const restored = store2.resolve('neo@example.com')[0]!.profile;
-    expect(restored.groups.map((g) => g.name).sort()).toEqual(['心动,创始团队', '老搭档']);
+    expect(restored.groups.map((g) => g.name).sort()).toEqual(['星澜,创始团队', '老搭档']);
     // 二次导入幂等: 分组复用不重复建
     importContacts(store2, back);
     expect(store2.listGroups()).toHaveLength(2);

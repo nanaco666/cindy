@@ -18,7 +18,7 @@
  */
 
 import { useEffect } from 'react';
-import type { Schedule } from '@lizi/maker-scheduler';
+import type { Schedule } from '@cindy/maker-scheduler';
 
 import { schedulesStore, useSchedulesSnapshot } from './schedulesStore';
 

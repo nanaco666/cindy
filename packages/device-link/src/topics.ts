@@ -10,7 +10,7 @@
  *  - `session:<id>`(重):**单个会话**的实时流 —— maker 事件 / 状态 / 输入投影 /
  *    交互审批 / 消息创建。打开该会话的视图才订阅它(= 活跃控制,触发被控横幅)。
  *
- * 为什么放在 `@lizi/device-link` 而非桌面 host:topic 语义是协议契约的一部分,
+ * 为什么放在 `@cindy/device-link` 而非桌面 host:topic 语义是协议契约的一部分,
  * mobile/web 控制端要用**同一份**映射决定订阅什么、被控端要用它决定转发给谁。
  * 本文件零依赖、不 import 任何 app 内部模块(channel 名是字符串字面量,与
  * allowlist.ts 的 PUSH_FORWARD_ALLOWLIST 同源约定)。

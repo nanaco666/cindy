@@ -1,5 +1,5 @@
-import type { DeviceLinkStatus } from '@lizi/device-link';
-import { relayStatusHint, relayStatusLabel } from '@lizi/maker-shared/device-link-contract';
+import type { DeviceLinkStatus } from '@cindy/device-link';
+import { relayStatusHint, relayStatusLabel } from '@cindy/maker-shared/device-link-contract';
 
 export interface MobileSettingsOverviewInput {
   authBaseUrl: string;

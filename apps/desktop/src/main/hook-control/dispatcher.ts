@@ -138,11 +138,12 @@ export interface HookDispatcherDeps {
    */
   prepareWorktree?: (workingDir: string) => Promise<PrepareWorktreeResult>;
   /**
-   * 可选: 内置「对话」伪目录(chat 保留别名)的解析面。rootDir 是 app 托管
-   * 对话目录根(userData/dialogues), allocateDir 为新会话分配独立子目录。
+   * 可选: 内置「对话」伪目录(chat 保留别名)的解析面。rootDir 在每次
+   * dispatch 时解析当前 data owner 的 app 托管目录根，allocateDir 为新会话
+   * 分配独立子目录。
    * 未注入时 chat 别名按 unknown_workspace 拒绝(纯逻辑测试 / 旧行为默认)。
    */
-  dialogue?: { rootDir: string; allocateDir: (sessionId: string) => Promise<string> };
+  dialogue?: { rootDir: () => string; allocateDir: (sessionId: string) => Promise<string> };
   /**
    * 可选: 中断某 session 正在跑的 turn(task.cancel 用; 生产为
    * maker.getSession(id)?.abort())。未注入时 cancel 只能收口排队中的任务。
@@ -444,7 +445,7 @@ export function createHookDispatcher(deps: HookDispatcherDeps): HookDispatcher {
       dir !== null && whitelistDirs.some((base) => isPathWithin(base, dir));
     /** app 托管对话目录(dialogues 根)内的路径 —— chat 伪目录会话的白名单等价物。 */
     const inDialogueRoot = (dir: string | null): boolean =>
-      dir !== null && dialogue !== undefined && isPathWithin(dialogue.rootDir, dir);
+      dir !== null && dialogue !== undefined && isPathWithin(dialogue.rootDir(), dir);
     // 保留别名「对话」: 不查 config.workspaces, 解析成 app 托管对话目录
     const isChat = payload.workspace === HOOK_CHAT_WORKSPACE_ALIAS && dialogue !== undefined;
 
@@ -496,7 +497,7 @@ export function createHookDispatcher(deps: HookDispatcherDeps): HookDispatcher {
             isNew: false,
             // 复用路径 workingDir 仅供参考(runner 以 session meta 为权威);
             // chat 伪目录无别名映射, 给 dialogues 根占位
-            workingDir: dir ?? dialogue?.rootDir ?? '',
+            workingDir: dir ?? dialogue?.rootDir() ?? '',
             agentKind,
             model,
             effort,

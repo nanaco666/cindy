@@ -29,7 +29,7 @@ describe('ci-fingerprint script', () => {
     const env = buildFingerprintEnv({
       PATH: '/usr/bin',
       EXPO_PUBLIC_APP_VARIANT: 'beta',
-      EXPO_PUBLIC_BETA_DEV: 'dash',
+      EXPO_PUBLIC_BETA_DEV: 'carol',
       NODE_ENV: 'test',
     });
     expect(env).toEqual({ PATH: '/usr/bin', NODE_ENV: 'test' });

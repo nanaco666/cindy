@@ -3,7 +3,7 @@ import type {
   SessionSendOptions,
   SessionSendResult,
   UserMessage,
-} from '@lizi/maker-core';
+} from '@cindy/maker-core';
 
 import {
   createHostSendFailure,

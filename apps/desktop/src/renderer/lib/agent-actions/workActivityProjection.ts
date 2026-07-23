@@ -9,7 +9,7 @@ import {
   type ProjectedToolActivity as SharedProjectedToolActivity,
   type ProjectedWorkActivity as SharedProjectedWorkActivity,
   type WorkActivityProjection as SharedWorkActivityProjection,
-} from '@lizi/maker-shared/work-activity-projection';
+} from '@cindy/maker-shared/work-activity-projection';
 
 import type { ChatMessage } from '@/lib/makerChatStore';
 

@@ -31,7 +31,7 @@ describe('send enqueue weak-network retry ordering', () => {
   };
 
   it('重试门槛必须同时要求 NOT_CONNECTED 且非 in-flight(send 与 outbox 派发两条路径)', () => {
-    expect(source).toContain("import { isInFlightDeviceLinkError } from '@lizi/device-link';");
+    expect(source).toContain("import { isInFlightDeviceLinkError } from '@cindy/device-link';");
     const loops = extractRetryLoops();
     expect(loops).toHaveLength(2);
     for (const loopBody of loops) {

@@ -18,9 +18,9 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import type { ReactNode } from 'react';
-import type { SchedulerEvent } from '@lizi/maker-scheduler';
+import type { SchedulerEvent } from '@cindy/maker-scheduler';
 import { createPortal } from 'react-dom';
-import { Archive, ChevronRight, CirclePlus, Clock, Folder, Plug, Trash2, X } from 'lucide-react';
+import { Archive, ChevronRight, CirclePlus, Folder, Plug, Timer, Trash2, X } from 'lucide-react';
 import { useNavigate, useMatch } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 
@@ -2481,7 +2481,7 @@ function CollapsedView({
       {/* 自动化 rail 入口 —— 仅导航,不再显示未读 dot(与展开态 SidebarTopNav 一致,
           未读 / 运行状态由展开后的各 schedule 组头承载)。 */}
       <SidebarIconButton
-        icon={Clock}
+        icon={Timer}
         label={t('ccAgent.layout.automations')}
         aria-label={t('ccAgent.layout.automations')}
         aria-current={onScheduleMatch ? 'page' : undefined}

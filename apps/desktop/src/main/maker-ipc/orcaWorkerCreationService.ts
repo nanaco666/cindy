@@ -1,4 +1,4 @@
-import type { AgentKind } from '@lizi/maker-core';
+import type { AgentKind } from '@cindy/maker-core';
 
 import { isCredentialModeSwitchBusyError } from '../maker-host/codex-credential-switch.js';
 import type { DispatchWorkerTaskResult, OrcaWorkerEffort, OrcaWorkerStatus } from './orcaTeamService.js';

@@ -21,7 +21,7 @@ import { promises as fsp, existsSync } from 'node:fs';
 import { spawn, execFile, type ChildProcess } from 'node:child_process';
 import { promisify } from 'node:util';
 
-import type { AuthAdapter, AuthAdapterOptions, AuthState } from '@lizi/maker-core';
+import type { AuthAdapter, AuthAdapterOptions, AuthState } from '@cindy/maker-core';
 import { getCachedBinaryStatus } from '../agent-binaries/index.js';
 import { createLogger } from '../logger.js';
 import { prepareCodexGlobalSkillsLinks } from './codex-global-skills.js';
@@ -57,6 +57,8 @@ import {
 import { isAnthropicCompatProxyHandleReady } from './anthropic-compat-proxy-host.js';
 import { claudeUpstreamEndpoint } from './runtime-configs.js';
 import { getProviderSecretStore } from '../secrets/providerSecretStore.js';
+import { getAppCapabilities } from '../appCapabilities.js';
+import { bindNativeProviderAuth, isNativeProviderAuthBound, unbindNativeProviderAuth } from './nativeProviderAuthBinding.js';
 
 const execFileP = promisify(execFile);
 const log = createLogger('auth-adapters');
@@ -150,6 +152,7 @@ export function chatgptAccountIdFromIdToken(idToken: string): string | null {
  * （调用方据此跳过 codex 这条标题来源，不抛）。
  */
 export function readCodexOneShotCreds(): { accessToken: string; accountId: string } | null {
+  if (!isNativeProviderAuthBound('openai')) return null;
   try {
     const codexHome = getCodexHome();
     const authPath = path.join(codexHome, 'auth.json');
@@ -241,14 +244,15 @@ const CODEX_LOGIN_TIMEOUT_MS = 5 * 60 * 1000;
 //   写: safeStorage.encryptString(value).toString('base64') → 写 utf-8 文件
 //   读: readFileSync utf-8 → Buffer.from(content, 'base64') → safeStorage.decryptString()
 
-/**
- * 读取当前生效的 Claude / XD 网关 API Key。
- * 经统一的 providerSecretStore 读本机 safeStorage(本地 only,与 renderer useApiKey
- * 共享同一把 `api_key`)。暴露给 main 内其他模块复用(usage / title / proxy 注入等),
- * 保证"key 来源 / 读取方式"始终一致,认证态变化后立即生效。
- */
-export function readClaudeApiKey(): string | null {
+/** Read the active owner's raw local gateway key for explicit BYOK flows only. */
+export function readOwnerScopedXdGatewayKey(): string | null {
   return getProviderSecretStore().get('xd');
+}
+
+/** Read the gateway key only when the current app session may use Cindy gateway services. */
+export function readClaudeApiKey(): string | null {
+  if (!getAppCapabilities().canUseCindyGateway) return null;
+  return readOwnerScopedXdGatewayKey();
 }
 
 /**
@@ -288,6 +292,7 @@ export class DesktopClaudeAuthAdapter implements AuthAdapter {
     invalidateClaudeOAuthRefresh();
     try {
       if (hasClaudeAiOAuth()) clearClaudeAiOAuth();
+      unbindNativeProviderAuth('anthropic');
     } catch (e) {
       log.warn('clear claude oauth on invalidate failed', {
         error: e instanceof Error ? e.message : String(e),
@@ -375,6 +380,7 @@ export class DesktopClaudeAuthAdapter implements AuthAdapter {
       // disconnect = 先失效刷新器再清凭证(唯一正确入口,见 claude-oauth-refresh 文档)
       // —— 否则「已断开」状态下在途刷新回写会让凭证复活。
       disconnectClaudeAiOAuth();
+      unbindNativeProviderAuth('anthropic');
       return;
     }
     // 经统一 store 移除本机 XD 网关 key。store.remove 把"文件本不存在"视为成功
@@ -1028,6 +1034,7 @@ export class DesktopCodexAuthAdapter implements AuthAdapter {
       await this.reconcileWithSystemCodexAfterLogin();
     }
     // `codex login` 的成功必须由真实 access_token 证明；绝不能被 XD Gateway fallback 冒充。
+    bindNativeProviderAuth('openai');
     const state = requireCodexOAuthLoginState(
       await this.readState({ skipReconcile: true, credentialMode: 'oauth-bearer' }),
     );
@@ -1113,6 +1120,7 @@ export class DesktopCodexAuthAdapter implements AuthAdapter {
     // 降低 Windows 文件锁概率；删失败仍由 disconnect marker + 内存快照清空保证 fail-closed，
     // 下次登录前会再次清理并在锁未释放时拒绝继续。
     await removeDesktopCodexModelsCache(this.codexHome);
+    unbindNativeProviderAuth('openai');
   }
 
   async getAuthEnv(options?: AuthAdapterOptions): Promise<Record<string, string>> {
@@ -1151,6 +1159,17 @@ export class DesktopCodexAuthAdapter implements AuthAdapter {
     return (await this.getAccessToken()) != null;
   }
 
+  /** Legacy upgrade probe; only used while claiming the first verified owner. */
+  hasCodexOAuthLoginUnbound(): boolean {
+    try {
+      const raw = fs.readFileSync(path.join(this.codexHome, 'auth.json'), 'utf-8');
+      const parsed = JSON.parse(raw) as { tokens?: { access_token?: unknown } };
+      return typeof parsed.tokens?.access_token === 'string' && parsed.tokens.access_token.length > 0;
+    } catch {
+      return false;
+    }
+  }
+
   /**
    * Return the Codex OAuth access token for host-owned integrations.
    *
@@ -1159,6 +1178,7 @@ export class DesktopCodexAuthAdapter implements AuthAdapter {
    * are covered by the active Codex login.
    */
   async getAccessToken(): Promise<string | null> {
+    if (!isNativeProviderAuthBound('openai')) return null;
     this.ensureInvalidationMarkerLoaded();
     if (this.oauthInvalidatedReason) {
       await this.clearStaleInvalidationIfSystemCodexChanged();
@@ -1189,6 +1209,7 @@ export class DesktopCodexAuthAdapter implements AuthAdapter {
    * user id, not a workspace id, and must not bind reset-credit operations.
    */
   async getAccountId(): Promise<string | null> {
+    if (!isNativeProviderAuthBound('openai')) return null;
     this.ensureInvalidationMarkerLoaded();
     if (this.oauthInvalidatedReason) {
       await this.clearStaleInvalidationIfSystemCodexChanged();

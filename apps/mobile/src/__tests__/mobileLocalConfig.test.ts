@@ -32,8 +32,8 @@ describe('mobile local config bootstrap', () => {
       validateConfig: () => undefined,
       worktreeEntries: [
         { path: mainRoot, branch: 'refs/heads/main' },
-        { path: personalRoot, branch: 'refs/heads/dash/personal-client-1' },
-        { path: targetRoot, branch: 'refs/heads/dash/feature' },
+        { path: personalRoot, branch: 'refs/heads/carol/personal-client-1' },
+        { path: targetRoot, branch: 'refs/heads/carol/feature' },
       ],
     });
 
@@ -73,7 +73,7 @@ describe('mobile local config bootstrap', () => {
 
     const result = ensureMobileLocalRegionConfig({
       mobileDir,
-      worktreeEntries: [{ path: sourceRoot, branch: 'refs/heads/dash/personal-client-1' }],
+      worktreeEntries: [{ path: sourceRoot, branch: 'refs/heads/carol/personal-client-1' }],
       validateConfig(candidate: string) {
         if (candidate === sourcePath && !existsSync(configPath)) {
           writeFileSync(configPath, '{"source":"concurrent-winner"}\n');
@@ -93,10 +93,10 @@ describe('mobile local config bootstrap', () => {
       '',
       'worktree /repo/cindy-personal-client',
       'HEAD def',
-      'branch refs/heads/dash/personal-client-1',
+      'branch refs/heads/carol/personal-client-1',
     ].join('\n'))).toEqual([
       { path: '/repo/cindy', branch: 'refs/heads/main' },
-      { path: '/repo/cindy-personal-client', branch: 'refs/heads/dash/personal-client-1' },
+      { path: '/repo/cindy-personal-client', branch: 'refs/heads/carol/personal-client-1' },
     ]);
   });
 });

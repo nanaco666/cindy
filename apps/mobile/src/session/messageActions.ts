@@ -1,5 +1,5 @@
 import type { NormalizedRemoteMessage } from '@/session/messageNormalize';
-import { stripChatQuoteMarkerLines } from '@lizi/maker-shared/chat-quotes';
+import { stripChatQuoteMarkerLines } from '@cindy/maker-shared/chat-quotes';
 
 export type CopyMessageStatus = 'copied' | 'empty' | 'failed';
 

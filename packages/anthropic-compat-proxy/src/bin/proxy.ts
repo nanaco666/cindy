@@ -14,7 +14,7 @@
  * compatProxyMode='on'. Manager parses the JSON line for the URL and injects
  * it as ANTHROPIC_BASE_URL into the cc subprocess env.
  *
- * Bundled via `pnpm --filter @lizi/anthropic-compat-proxy bundle` →
+ * Bundled via `pnpm --filter @cindy/anthropic-compat-proxy bundle` →
  * dist/proxy.mjs (esbuild --bundle, no runtime deps, ~20-50KB).
  */
 

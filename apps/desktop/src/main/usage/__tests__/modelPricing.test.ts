@@ -30,6 +30,15 @@ vi.mock('../../maker-host/auth-adapters', () => ({
 vi.mock('../../localDb/client/current', () => ({
   getCurrentDbClientUserId: mocks.getCurrentDbClientUserId,
 }));
+vi.mock('../../appSessionState', () => ({
+  getActiveAppSession: () => ({
+    mode: 'cloud',
+    dataOwnerId: mocks.getCurrentDbClientUserId(),
+    generation: 0,
+  }),
+  dataOwnerStorageKey: (ownerId: string) => ownerId,
+  LOCAL_DATA_OWNER_ID: 'local-v1',
+}));
 vi.mock('../../maker-host/runtime-configs', () => ({
   claudeUpstreamEndpoint: () => 'https://example.invalid',
 }));
@@ -53,11 +62,18 @@ function userDataPath(...segments: string[]): string {
 
 async function writeTestKeyFile(value = 'encrypted-test-key'): Promise<void> {
   await mkdir(userDataPath('safe-storage'), { recursive: true });
-  await writeFile(userDataPath('safe-storage', 'api_key.enc'), value, 'utf8');
+  const ownerId = mocks.getCurrentDbClientUserId();
+  if (!ownerId) throw new Error('test owner is not initialized');
+  await writeFile(userDataPath('safe-storage', `owner_${ownerId}_api_key.enc`), value, 'utf8');
 }
 
 async function testCacheScope(userId = 'user-a'): Promise<string> {
-  const keyFileStat = await stat(userDataPath('safe-storage', 'api_key.enc'), { bigint: true });
+  const ownerId = mocks.getCurrentDbClientUserId();
+  if (!ownerId) throw new Error('test owner is not initialized');
+  const keyFileStat = await stat(
+    userDataPath('safe-storage', `owner_${ownerId}_api_key.enc`),
+    { bigint: true },
+  );
   return `v1|base=https://example.invalid|user=${userId}|key=file=${keyFileStat.dev}:${keyFileStat.ino}:${keyFileStat.size}:${keyFileStat.mtimeNs}:${keyFileStat.ctimeNs}`;
 }
 

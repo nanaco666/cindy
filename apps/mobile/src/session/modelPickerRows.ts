@@ -5,11 +5,11 @@
  * budgetDisabledOf / tooltipFor / formatContextWindow),文案对齐桌面 zh-CN common.json
  * (手机无 i18n 体系,硬编码简体中文,与桌面中文逐字一致)。组件只做渲染,这里可 node 单测。
  */
-import { modelSupportsFastMode, type ProviderView } from '@lizi/model-providers/registry';
-import type { SectionModel } from '@lizi/model-providers/sections';
-import type { AgentKind } from '@lizi/model-providers/types';
+import { modelSupportsFastMode, type ProviderView } from '@cindy/model-providers/registry';
+import type { SectionModel } from '@cindy/model-providers/sections';
+import type { AgentKind } from '@cindy/model-providers/types';
 
-import { MOBILE_EFFORT_LABELS } from '@lizi/maker-shared/agent-capabilities';
+import { MOBILE_EFFORT_LABELS } from '@cindy/maker-shared/agent-capabilities';
 
 import type { MobileAgentCapabilities } from './agentCapabilities';
 import type { MobileModelMemoryAccessors } from './draftModelMemory';

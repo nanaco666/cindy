@@ -1,5 +1,5 @@
 /**
- * 装入/更新确认框的逐项权限清单(AGENTS.md 规则 28)。
+ * 装入/更新确认框的逐项权限清单(docs/dev-rules/plugin-security-and-authoring.md)。
  *
  * 纯展示组件:条目由 shared/ghost.ts 的 ghostPermissionItems /
  * diffGhostPermissionItems 静态推导(装入前无需运行意识代码),这里只负责

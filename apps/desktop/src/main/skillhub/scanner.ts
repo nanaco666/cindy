@@ -18,7 +18,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import matter from 'gray-matter';
-import type { AgentCustomization, Maker } from '@lizi/maker-core';
+import type { AgentCustomization, Maker } from '@cindy/maker-core';
 import { registryService, type StoredInstall } from './registry';
 import { isIgnoredSkillPackagePath } from './packageIgnore';
 

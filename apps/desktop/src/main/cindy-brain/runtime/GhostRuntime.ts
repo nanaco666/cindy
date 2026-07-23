@@ -1,7 +1,7 @@
 import type { InstalledGhost } from '../../../shared/ghost.js';
 
 /**
- * GhostRuntime — 意识运行时状态机(AGENTS.md 规则 28)。
+ * GhostRuntime — 意识运行时状态机(docs/dev-rules/plugin-security-and-authoring.md)。
  *
  * 管"每段意识一个独立沙箱进程"的生命周期:拉起 / 熄灯 / 崩溃收尸 / 熔断。
  * 沙箱怎么造(Electron 隐藏沙箱网页)通过 SandboxHostAdapter 注入——

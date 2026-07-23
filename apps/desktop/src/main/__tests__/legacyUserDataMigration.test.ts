@@ -416,7 +416,7 @@ describe('runLegacyUserDataMigration', () => {
     );
     // 复现线上报错形态:pnpm package 目录链接被 Dirent.isDirectory() 判为 false。
     memfs.addSymbolicLink(
-      path.join(workspace, 'packages', 'feature', 'node_modules', '@fmfsaisai', 'orca-workflow'),
+      path.join(workspace, 'packages', 'feature', 'node_modules', '@cindy', 'orca-workflow'),
     );
     // node_modules 之外的链接也必须明确跳过，不能解引用到老目录外或形成递归环。
     memfs.addSymbolicLink(path.join(workspace, 'linked-workspace'));

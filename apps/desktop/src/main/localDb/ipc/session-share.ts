@@ -6,14 +6,14 @@
  * 导入:inspect(选文件/收拖入路径 → 解头)→ unlock(密码)→ commit(落三层)
  * → cancel,编排在 session-share/sessionShareImport.ts,draft 驻留 main 内存。
  * 取消与超限走 `{status}` 返回(renderer 需要结构化信息驱动分支:取消静默、
- * 超限提供"排除媒体重试",符合 AGENTS.md 规则 13 的查询型例外);其余错误一律
+ * 超限提供"排除媒体重试",符合 docs/dev-rules/engineering-conventions.md 的查询型例外);其余错误一律
  * throwIpcError。密码只经参数传递,不落日志。
  */
 import { promises as fsp } from 'node:fs';
 import path from 'node:path';
 
 import { BrowserWindow, dialog, ipcMain } from 'electron';
-import { BRAND_NAME } from '@lizi/maker-shared/branding';
+import { BRAND_NAME } from '@cindy/maker-shared/branding';
 
 import { isIpcErrorCode } from '../../../shared/ipc-errors.js';
 import { createLogger } from '../../logger.js';

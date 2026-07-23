@@ -14,7 +14,7 @@
  * 这是 main 进程内部约束, 没有"用户自定义命令覆盖 desktop 默认"的需求。
  */
 
-import type { DesktopCommandMeta } from '@lizi/maker-core';
+import type { DesktopCommandMeta } from '@cindy/maker-core';
 
 /**
  * 命令执行上下文 —— 调用方 (renderer 通过 IPC) 把当前会话信息透传过来,

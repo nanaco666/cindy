@@ -5,7 +5,7 @@
 
 import { describe, expect, it, vi } from 'vitest';
 
-import type { InteractionRequest } from '@lizi/maker-core';
+import type { InteractionRequest } from '@cindy/maker-core';
 
 import {
   cancelHookInteraction,

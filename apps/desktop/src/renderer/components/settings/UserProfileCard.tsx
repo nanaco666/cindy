@@ -1,14 +1,32 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Pencil } from 'lucide-react';
+import { Building2, Pencil } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 import { cn } from '@/lib/utils';
 import { toast } from '@/lib/toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { ProfileEditDialog } from './ProfileEditDialog';
 
+const ORGANIZATION_ROLE_I18N_KEYS = {
+  owner: 'settings.userProfile.organization.roles.owner',
+  admin: 'settings.userProfile.organization.roles.admin',
+  member: 'settings.userProfile.organization.roles.member',
+} as const;
+
+type OrganizationRole = keyof typeof ORGANIZATION_ROLE_I18N_KEYS;
+
+function isOrganizationRole(role: string): role is OrganizationRole {
+  return role === 'owner' || role === 'admin' || role === 'member';
+}
+
+function getOrganizationRoleI18nKey(role: string) {
+  return ORGANIZATION_ROLE_I18N_KEYS[isOrganizationRole(role) ? role : 'member'];
+}
+
 export function UserProfileCard() {
-  const { user } = useAuth();
+  const { user, mode, exitLocalMode } = useAuth();
+  const navigate = useNavigate();
   const [avatarError, setAvatarError] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const { t } = useTranslation();
@@ -20,11 +38,57 @@ export function UserProfileCard() {
     setAvatarError(false);
   }, [avatarUrl]);
 
+  const handleLocalSignIn = async () => {
+    await exitLocalMode();
+    navigate('/login');
+  };
+
+  if (!user && mode === 'local') {
+    return (
+      <div
+        className={cn(
+          'flex w-full items-center gap-[14px] rounded-xl p-5',
+          'bg-[var(--settings-profile-card-bg)]',
+          'border border-[var(--settings-profile-card-border)]',
+        )}
+      >
+        <div className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-full border border-[var(--settings-profile-card-border)] bg-[var(--settings-profile-avatar-bg)] text-18 font-medium text-[var(--settings-profile-avatar-text)]">
+          L
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-18 font-medium text-[var(--settings-profile-name)]">
+            {t('settings.userProfile.local.name')}
+          </p>
+          <p className="mt-1 text-12 text-[var(--text-tertiary)]">
+            {t('settings.userProfile.local.description')}
+          </p>
+        </div>
+        <div className="flex shrink-0 items-center">
+          <button
+            type="button"
+            onClick={() => void handleLocalSignIn()}
+            className="rounded-full border border-[var(--border-default)] px-3 py-1.5 text-12 text-[var(--text-primary)] transition-colors hover:bg-[var(--settings-profile-avatar-bg)]"
+          >
+            {t('settings.userProfile.local.signIn')}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (!user) return null;
 
   const displayName = user.name || t('settings.userProfile.fallbackName');
   const initial = displayName.charAt(0).toUpperCase();
   const avatarAlt = t('settings.userProfile.avatarAlt', { name: displayName });
+  const organizationName =
+    user.membershipKind === 'org'
+      ? user.orgName?.trim() ||
+        user.orgSlug?.trim() ||
+        t('settings.userProfile.organization.fallbackName')
+      : null;
+  const organizationRole =
+    user.membershipKind === 'org' ? t(getOrganizationRoleI18nKey(user.membershipRole)) : null;
 
   const handleCopyUserId = async () => {
     try {
@@ -97,6 +161,22 @@ export function UserProfileCard() {
             {displayName}
           </span>
         </button>
+        {organizationName && organizationRole && (
+          <div className="mt-1 flex min-w-0 items-center gap-1.5 text-sm leading-5 text-[var(--text-secondary)]">
+            <Building2 aria-hidden="true" className="shrink-0" size={14} />
+            <span className="min-w-0 truncate" title={organizationName}>
+              {t('settings.userProfile.organization.label', { name: organizationName })}
+            </span>
+            <span
+              className={cn(
+                'shrink-0 rounded-full px-2 py-0.5 text-xs leading-4',
+                'bg-[var(--surface-chip)] text-[var(--text-secondary)]',
+              )}
+            >
+              {organizationRole}
+            </span>
+          </div>
+        )}
       </div>
 
       {/* 编辑名字 / 头像(直写服务端,弹窗见 ProfileEditDialog) */}

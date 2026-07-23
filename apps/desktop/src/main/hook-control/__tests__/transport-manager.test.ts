@@ -10,7 +10,7 @@ import { once } from 'node:events';
 import type { Duplex } from 'node:stream';
 
 import { WebSocketServer, type WebSocket as ServerSocket } from 'ws';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   HOOK_FEATURE_MULTI_TEAM,
@@ -111,6 +111,23 @@ let cleanups: Array<() => void> = [];
 afterEach(() => {
   for (const fn of cleanups.reverse()) fn();
   cleanups = [];
+});
+
+describe('hook-control runtime capability gate', () => {
+  it('keeps an enabled cloud preference disconnected when the capability is unavailable', () => {
+    const createTransport = vi.fn(() => {
+      throw new Error('transport must not start');
+    }) as unknown as HookControlManagerDeps['createTransport'];
+    const manager = makeManager(
+      memoryStore({ url: 'wss://hook.example', enabled: true }),
+      { isAvailable: () => false, createTransport },
+    );
+
+    manager.sync();
+
+    expect(createTransport).not.toHaveBeenCalled();
+    manager.dispose();
+  });
 });
 
 async function startServer(): Promise<{ wss: WebSocketServer; url: string }> {
@@ -217,8 +234,10 @@ describe('hook-control transport handshake recovery', () => {
     await new Promise((resolve) => setTimeout(resolve, 80));
     expect(connections).toBe(1);
     await expect.poll(() => connections, { timeout: 3000 }).toBe(2);
+    await expect
+      .poll(() => statuses.filter((status) => status === 'standby').length, { timeout: 3000 })
+      .toBe(2);
     expect(statuses.at(-1)).toBe('standby');
-    expect(statuses.filter((status) => status === 'standby')).toHaveLength(2);
   });
 
   it('upgrade 503 保持 error 并按退避重连，不误判 standby', async () => {

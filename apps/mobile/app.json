@@ -10,10 +10,6 @@
     "runtimeVersion": {
       "policy": "fingerprint"
     },
-    "updates": {
-      "url": "https://u.expo.dev/a7286e46-6144-494c-bf03-dddd2fe4fbfd",
-      "enabled": true
-    },
     "ios": {
       "bundleIdentifier": "com.xd.cindycn",
       "usesAppleSignIn": true,
@@ -124,11 +120,7 @@
       ]
     ],
     "extra": {
-      "router": {},
-      "eas": {
-        "projectId": "a7286e46-6144-494c-bf03-dddd2fe4fbfd"
-      }
-    },
-    "owner": "dashhuang"
+      "router": {}
+    }
   }
 }

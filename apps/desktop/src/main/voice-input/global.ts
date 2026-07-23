@@ -15,7 +15,7 @@ import fs from 'node:fs';
 import {
   inspectExternalEditedInsertedText,
   type DictationDictionaryAdviceInput,
-} from '@lizi/voice-input-core';
+} from '@cindy/voice-input-core';
 
 import { createLogger } from '../logger.js';
 import { scheduleMainAppPresenceRestore } from '../appPresence.js';

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { SESSION_ACTIVITY_CHANNEL } from '@lizi/device-link';
+import { SESSION_ACTIVITY_CHANNEL } from '@cindy/device-link';
 import { buildMobileHomePresentation } from '@/session/mobileHome';
 import { remoteSessionStore } from '@/session/remoteSessionStore';
 import {

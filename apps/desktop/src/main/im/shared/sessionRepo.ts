@@ -12,9 +12,9 @@
  */
 
 import { eq } from 'drizzle-orm';
-import type { AgentKind, Effort, PermissionMode } from '@lizi/maker-core';
-import type { ProviderView } from '@lizi/model-providers';
-import { permissionModeOrAsk } from '@lizi/maker-shared/permission-mode';
+import type { AgentKind, Effort, PermissionMode } from '@cindy/maker-core';
+import type { ProviderView } from '@cindy/model-providers';
+import { permissionModeOrAsk } from '@cindy/maker-shared/permission-mode';
 
 import { getDbClient } from '../../localDb/client/current';
 import { sessions } from '../../localDb/schema';

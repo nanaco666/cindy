@@ -70,19 +70,9 @@
         "XDT_SKIP_AGENT_BIN_INSTALL": "1"
       }
     },
-    "beta-dash": {
-      "extends": "beta-base",
-      "channel": "beta-dash",
-      "env": { "EXPO_PUBLIC_BETA_DEV": "dash" }
-    },
     "beta-global-base": {
       "extends": "beta-base",
       "env": { "EXPO_PUBLIC_CINDY_AUTH_REGION": "global" }
-    },
-    "beta-global-dash": {
-      "extends": "beta-global-base",
-      "channel": "beta-global-dash",
-      "env": { "EXPO_PUBLIC_BETA_DEV": "dash" }
     }
   }
 }

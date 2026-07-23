@@ -1,4 +1,4 @@
-import type { AgentKind } from '@lizi/maker-core';
+import type { AgentKind } from '@cindy/maker-core';
 
 import { createHostSendFailure } from '../maker-host/send-outcome.js';
 import type { DispatchWorkerTaskResult, OrcaWorkerEffort } from './orcaTeamService.js';

@@ -2,7 +2,7 @@
  * scheduler/_enums.ts
  *
  * Shared zod enum tuples (single source of truth for tool input schemas).
- * Mirror the literal-union types in `@lizi/maker-scheduler` types.ts.
+ * Mirror the literal-union types in `@cindy/maker-scheduler` types.ts.
  *
  * EFFORT: 与 maker-core Effort 一致 —
  *   `['minimal','low','medium','high','xhigh','max','ultra']`(max/ultra 见 issue #352)。

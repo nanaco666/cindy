@@ -52,12 +52,12 @@ describe('deriveWorkflowsDir', () => {
   it('reproduces the Claude Code project-slug convention (verified against a real path)', () => {
     const dir = deriveWorkflowsDir(
       '/home/x',
-      '/Users/dash/Library/Application Support/xdt-maker/dialogues/2026-07-01/7c0b5faa-d908-4a69-b4e7-0e942b9af582',
+      '/Users/alice/Library/Application Support/xdt-maker/dialogues/2026-07-01/7c0b5faa-d908-4a69-b4e7-0e942b9af582',
       '5b094418-10ba-4bca-b42a-f37aa0721e77',
     );
     expect(dir).toBe(
       '/home/x/.claude/projects/' +
-        '-Users-dash-Library-Application-Support-xdt-maker-dialogues-2026-07-01-7c0b5faa-d908-4a69-b4e7-0e942b9af582/' +
+        '-Users-alice-Library-Application-Support-xdt-maker-dialogues-2026-07-01-7c0b5faa-d908-4a69-b4e7-0e942b9af582/' +
         '5b094418-10ba-4bca-b42a-f37aa0721e77/workflows',
     );
   });

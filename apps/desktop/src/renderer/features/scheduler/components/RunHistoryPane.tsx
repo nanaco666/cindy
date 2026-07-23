@@ -21,7 +21,7 @@ import { useTranslation } from 'react-i18next';
 
 import { cn } from '@/lib/utils';
 import { toast } from '@/lib/toast';
-import type { AgentKind, Schedule, ScheduleRun } from '@lizi/maker-scheduler';
+import type { AgentKind, Schedule, ScheduleRun } from '@cindy/maker-scheduler';
 import { useConfirmDialog } from '@/components/ui/confirm-dialog-provider';
 import { useCCSessions } from '@/hooks/useCCSessions';
 import { clearSessionAttentionMany } from '@/lib/sessionAttentionStore';

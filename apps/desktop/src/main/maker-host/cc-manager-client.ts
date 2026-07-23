@@ -31,14 +31,14 @@ import {
   createRemoteQuery,
   METHODS,
   SERVER_METHODS,
-} from '@lizi/maker-cc-manager';
+} from '@cindy/maker-cc-manager';
 import type {
   RemoteQuery,
   QueryStartParams,
   SessionListResult,
   ApprovalRequestParams,
   ApprovalRequestResult,
-} from '@lizi/maker-cc-manager';
+} from '@cindy/maker-cc-manager';
 import {
   REMOTE_CC_MGR_BUNDLE_PATH,
   REMOTE_CC_MGR_DIR,
@@ -46,8 +46,8 @@ import {
   REMOTE_CC_MGR_PID_PATH,
   REMOTE_CC_MGR_SOCK_PATH,
   REMOTE_XDT_NODE_PATH,
-} from '@lizi/maker-remote-ssh';
-import type { RemoteHost, ExecStreamHandle } from '@lizi/maker-remote-ssh';
+} from '@cindy/maker-remote-ssh';
+import type { RemoteHost, ExecStreamHandle } from '@cindy/maker-remote-ssh';
 
 import { createLogger } from '../logger.js';
 import { drainPersistQueue } from '../messagePersistBroadcaster.js';

@@ -13,7 +13,7 @@
  *   xdt-file://local/?path=<percent-encoded-abs-path>
  *   xdt-audio://local/?path=<percent-encoded-abs-path>
  *
- * 内容寻址类(cindy-media 媒体总仓,AGENTS.md 规则 25):
+ * 内容寻址类(cindy-media 媒体总仓,docs/dev-rules/media-storage-and-protocols.md):
  *   cindy-media://blobs/{sha256}.{ext}  — 地址=内容指纹,跨机器天然稳定,
  *                                         导入端写回本机字节仓即可,**永不重写**
  *

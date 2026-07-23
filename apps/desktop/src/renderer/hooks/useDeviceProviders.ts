@@ -13,7 +13,7 @@
  */
 import { useEffect, useState } from 'react';
 
-import type { ProviderView } from '@lizi/model-providers';
+import type { ProviderView } from '@cindy/model-providers';
 
 import { createLogger } from '@/lib/logger';
 

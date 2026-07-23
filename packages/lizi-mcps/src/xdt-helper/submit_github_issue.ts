@@ -1,5 +1,5 @@
 /**
- * submit_github_issue —— 把 agent 整理好的用户反馈提交为 XDMaker 官方仓库的 GitHub issue。
+ * submit_github_issue —— 把 agent 整理好的用户反馈提交为 Cindy 官方仓库的 GitHub issue。
  *
  * 流程上的确定性约束全部由 host 侧代码保证(规则 9):
  *  - 工具被调用后 host 会在 App 内弹出系统确认卡片,用户可编辑/确认/取消,
@@ -9,7 +9,7 @@
  * 本文件只承载工具 schema + 描述(对 LLM 的流程指引)和 host 回调的 payload 整形。
  */
 
-import { BRAND_NAME } from '@lizi/maker-shared/branding';
+import { BRAND_NAME } from '@cindy/maker-shared/branding';
 import { z } from 'zod';
 
 import type { XdtHelperToolRegistry } from '../lizi_xdtHelperToolRegistry.js';

@@ -81,7 +81,7 @@ describe('normalizeWorkingDir', () => {
   });
 
   it('leaves already-clean POSIX path unchanged', () => {
-    expect(normalizeWorkingDir('/Users/lizi/work/xdt-maker')).toBe('/Users/lizi/work/xdt-maker');
+    expect(normalizeWorkingDir('/Users/sam/work/xdt-maker')).toBe('/Users/sam/work/xdt-maker');
   });
 
   it('normalizes project worktree paths to the base repo for sidebar grouping', () => {
@@ -101,11 +101,11 @@ describe('normalizeWorkingDir', () => {
 
 describe('normalizeProjectKey', () => {
   it('maps legacy bare workingDir keys to local keys', () => {
-    expect(normalizeProjectKey('/Users/lizi/xdt-maker')).toBe('local:/Users/lizi/xdt-maker');
+    expect(normalizeProjectKey('/Users/sam/xdt-maker')).toBe('local:/Users/sam/xdt-maker');
   });
 
   it('keeps local-prefixed keys canonical', () => {
-    expect(normalizeProjectKey('local:/Users/lizi/xdt-maker/')).toBe('local:/Users/lizi/xdt-maker');
+    expect(normalizeProjectKey('local:/Users/sam/xdt-maker/')).toBe('local:/Users/sam/xdt-maker');
   });
 
   it('keeps remote keys canonical', () => {
@@ -117,14 +117,14 @@ describe('normalizeProjectKey', () => {
 
 describe('extractDisplayName', () => {
   it('returns 1-segment basename when no collision', () => {
-    const r = extractDisplayName('/Users/lizi/xdt-maker', ['/Users/lizi/claude-mem']);
+    const r = extractDisplayName('/Users/sam/xdt-maker', ['/Users/sam/claude-mem']);
     expect(r).toEqual({ name: 'xdt-maker', segments: 1 });
   });
 
   it('uses 2 segments to disambiguate same basename', () => {
-    const all = ['/Users/lizi/xdt-maker', '/workspace/xdt-maker'];
-    expect(extractDisplayName('/Users/lizi/xdt-maker', all)).toEqual({
-      name: 'lizi/xdt-maker',
+    const all = ['/Users/sam/xdt-maker', '/workspace/xdt-maker'];
+    expect(extractDisplayName('/Users/sam/xdt-maker', all)).toEqual({
+      name: 'sam/xdt-maker',
       segments: 2,
     });
     expect(extractDisplayName('/workspace/xdt-maker', all)).toEqual({
@@ -190,8 +190,8 @@ describe('extractDisplayName', () => {
 
   it('honors minSegments=2 to skip 1-segment shortcut', () => {
     // 即使无冲突，也强制至少 2 段——用于"先创建保留 basename，后创建必须加 parent"
-    const r = extractDisplayName('/Users/lizi/xdt-maker', ['/workspace/xdt-maker'], 2);
-    expect(r).toEqual({ name: 'lizi/xdt-maker', segments: 2 });
+    const r = extractDisplayName('/Users/sam/xdt-maker', ['/workspace/xdt-maker'], 2);
+    expect(r).toEqual({ name: 'sam/xdt-maker', segments: 2 });
   });
 });
 
@@ -333,7 +333,7 @@ describe('groupSessions', () => {
   it('disambiguates same-basename projects: earliest createdAt keeps basename, others get parent', () => {
     // A 先创建（createdAt 更早）→ 保留纯 basename；B 后创建 → 加 parent 段
     const a = s({
-      workingDir: '/Users/lizi/xdt-maker',
+      workingDir: '/Users/sam/xdt-maker',
       createdAt: '2026-04-01T00:00:00.000Z',
       updatedAt: '2026-04-20T00:00:00.000Z',
     });
@@ -343,7 +343,7 @@ describe('groupSessions', () => {
       updatedAt: '2026-04-19T00:00:00.000Z',
     });
     const r = groupSessions([a, b]);
-    const aNode = r.projects.find((p) => p.workingDir === '/Users/lizi/xdt-maker');
+    const aNode = r.projects.find((p) => p.workingDir === '/Users/sam/xdt-maker');
     const bNode = r.projects.find((p) => p.workingDir === '/workspace/xdt-maker');
     expect(aNode?.displayName).toBe('xdt-maker');
     expect(aNode?.segments).toBe(1);

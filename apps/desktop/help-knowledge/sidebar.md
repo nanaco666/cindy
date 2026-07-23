@@ -2,7 +2,6 @@
 id: sidebar
 title: Finding and organizing sessions
 summary: Browse, group, filter, search, and pin sessions in the left sidebar.
-status: draft
 ---
 The left sidebar lists your sessions. It's the main way to navigate and organize.
 
@@ -19,7 +18,7 @@ The left sidebar lists your sessions. It's the main way to navigate and organize
 
 **Pinning:**
 
-- Right-click a session and pick **Pin** to keep it at the top. There's no cap on the number of pinned sessions; newly pinned ones go to the end of the pin order.
+- Right-click a session and pick **Pin** to keep it at the top. There's no cap on the number of pinned sessions; a newly pinned session goes to the **front** of the pin order (most recent pin first).
 - Right-click a pinned session and pick **Unpin** to remove the pin.
 
 **Searching:**
@@ -28,8 +27,8 @@ The left sidebar lists your sessions. It's the main way to navigate and organize
 
 **Right-click actions:**
 
-- On a regular session: **Pin / Unpin**, **Rename**, **Copy Session ID** (submenu of identifier formats), **Archive**, **Delete**.
-- On an archived session: **Rename**, **Unarchive**, **Copy Session ID**, **Delete**.
+- On a regular session: **Pin / Unpin**, **Rename**, **Move to project** (submenu), **Copy conversation link** (a `cindy://session/<id>` deep link), **Open in new window**, **Archive**, **Delete**.
+- On an archived session: **Rename**, **Unarchive**, **Copy conversation link**, **Delete**.
 
 **Session statuses:**
 
@@ -38,4 +37,4 @@ The left sidebar lists your sessions. It's the main way to navigate and organize
 **Notes:**
 
 - Click the sidebar collapse arrow to shrink it to an icon-only strip — that's purely visual, you don't lose any features.
-- Pin order and filter settings are persisted (in `<userData>/sidebar-settings.json`) and synced across windows.
+- **Pin order** is persisted in `<userData>/sidebar-settings.json` and is shared across windows. **Filter settings** are stored per-window (in that window's local storage), so they don't sync between, say, a dev window and the installed app.

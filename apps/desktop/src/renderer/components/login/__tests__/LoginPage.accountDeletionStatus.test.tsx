@@ -20,6 +20,14 @@ vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
 
+vi.mock('react-router-dom', () => ({
+  useNavigate: () => vi.fn(),
+}));
+
+vi.mock('@/contexts/AuthContext', () => ({
+  useAuth: () => ({ mode: 'signed-out', enterLocalMode: vi.fn() }),
+}));
+
 vi.mock('@/hooks/useBrandLogo', () => ({
   useBrandLogo: () => 'brand-logo.svg',
 }));

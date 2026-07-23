@@ -206,7 +206,7 @@ async function finishWindows({ artifactDir, baseName, appName, versionless, allo
   fs.copyFileSync(setupExe, installerPath);
 
   // 签名已全部在 forge make 阶段完成,这里不再后置补签:
-  //   - 包内 exe(Cindy/cindy-updater/xdt-helper/loudness/node-pty/adb/rg)由
+  //   - 包内 exe(Cindy/cindy-updater/loudness/node-pty/adb/rg)由
   //     forge.config.ts 的 postPackage signPackagedExes 签;
   //   - 安装器 Setup.exe + 卸载器 Uninstall <App>.exe 由 NSIS maker 的
   //     win.sign(customSign)签(Issue #998)。

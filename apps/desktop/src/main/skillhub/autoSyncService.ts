@@ -26,7 +26,7 @@ const log = createLogger('skillhub:autoSync');
  * Keep this list intentionally explicit. Add published SkillHub slugs here
  * when a release should auto-install / auto-update them for signed-in users.
  */
-export const DEFAULT_SKILLHUB_AUTO_SYNC_SLUGS: readonly string[] = ['xdoa-skill'];
+export const DEFAULT_SKILLHUB_AUTO_SYNC_SLUGS: readonly string[] = [];
 const SKILLHUB_AUTO_SYNC_CONFIG_PATH = 'cfg/auto-sync-skills.json';
 const CONFIG_FETCH_TIMEOUT_MS = 5_000;
 const PENDING_CLEANUP_STORE_VERSION = 1;

@@ -2,9 +2,10 @@
  * TodaySpendChip — 与 ContextCapacityRing 同行的极简用量指示器。
  *
  * 设计意图（用户拍板的方向）：
- *   - 不在 desktop 重做完整看板（Claude 走 web 看板 console.tapsvc.com/nova/#/ai-gateway）
+ *   - 不在 desktop 重做完整看板（点击 chip 跳到对应供应商的 web 用量看板）
  *   - 仅在右下角与 Context 同行显示"今日 $X/$Y · 本会话 $Z"
  *   - 点击 → 在系统默认浏览器打开对应 vendor 的用量看板
+ *     (XD 网关 / 托管账号暂无看板可跳,点击无反应,详见 usageDashboardUrl)
  *
  * Claude / gateway 形态: 主 chip 固定显示 daily + session, monthly 进 tooltip。
  *   - daily: 今日跨客户端已用 / 软日限额 (maxBudget/30*4.5, 与 web 看板同公式)
@@ -64,7 +65,13 @@ import { buildTurnUsageTooltipLines } from '@/lib/turnUsageTooltip';
 import type { TurnUsageDetails } from '../../../shared/turnUsageDetails';
 import { CHATGPT_MODEL_PREFIX, XAI_MODEL_PREFIX } from '../../../shared/subscriptionModels';
 
-const PROXY_USAGE_DASHBOARD_URL = 'https://console.tapsvc.com/nova/#/ai-gateway?tab=overview';
+// XD 网关 / 托管账号之前会跳到内部用量看板(内部域名)—— 开源前移除该硬编码。
+// 登录随凭据只下发 { endpoint, apiKey }(见 main/model-access/credentialsSync.ts),不含
+// 看板地址;推理 endpoint 与看板 console 不同源、无法从中推导。故网关账号暂无看板可跳
+// (点击无反应)。
+// TODO(后续): 若 model-access-server 在下发凭据时附带看板地址(按个人 / 企业租户区分的
+// usageDashboardUrl / consoleUrl),据此恢复网关账号的跳转 + tooltip 链接行
+// (i18n 文案 todaySpend.openProxyUsage 已保留待复用,勿当死 key 删)。
 const CODEX_USAGE_DASHBOARD_URL = 'https://chatgpt.com/codex/settings/usage';
 const XAI_ACCOUNT_URL = 'https://accounts.x.ai';
 const CLAUDE_USAGE_DASHBOARD_URL = 'https://claude.ai/settings/usage';
@@ -363,7 +370,7 @@ function buildCodexTooltipNode(
   sessionTokens: number | null,
   sessionValueUsd: number | null,
   t: TFunction,
-  usageDashboardLabel: string,
+  usageDashboardLabel: string | null,
   nowMs: number,
   latestTurnUsage: LatestTurnUsageSummary | null,
 ): React.ReactNode {
@@ -371,8 +378,7 @@ function buildCodexTooltipNode(
   if (!snapshot) {
     lines.push(t('todaySpend.codex.waitingDetail'));
     appendLatestTurnUsageLines(lines, latestTurnUsage, t);
-    lines.push('');
-    lines.push(usageDashboardLabel);
+    pushDashboardLinkLine(lines, usageDashboardLabel);
     return buildTooltipNode(lines);
   }
 
@@ -427,8 +433,7 @@ function buildCodexTooltipNode(
     lines.push(t('todaySpend.codex.waitingDetail'));
   }
   appendLatestTurnUsageLines(lines, latestTurnUsage, t);
-  if (lines.length > 0) lines.push('');
-  lines.push(usageDashboardLabel);
+  pushDashboardLinkLine(lines, usageDashboardLabel);
   return buildTooltipNode(lines);
 }
 
@@ -558,15 +563,14 @@ function buildClaudeSubscriptionTooltipNode(
   modelId: string | null | undefined,
   sessionValueUsd: number | null,
   t: TFunction,
-  usageDashboardLabel: string,
+  usageDashboardLabel: string | null,
   latestTurnUsage: LatestTurnUsageSummary | null,
 ): React.ReactNode {
   const lines: string[] = [];
   if (!snapshot) {
     lines.push(t('todaySpend.claude.waitingDetail'));
     appendLatestTurnUsageLines(lines, latestTurnUsage, t);
-    lines.push('');
-    lines.push(usageDashboardLabel);
+    pushDashboardLinkLine(lines, usageDashboardLabel);
     return buildTooltipNode(lines);
   }
 
@@ -624,8 +628,7 @@ function buildClaudeSubscriptionTooltipNode(
     lines.push(t('todaySpend.claude.waitingDetail'));
   }
   appendLatestTurnUsageLines(lines, latestTurnUsage, t);
-  if (lines.length > 0) lines.push('');
-  lines.push(usageDashboardLabel);
+  pushDashboardLinkLine(lines, usageDashboardLabel);
   return buildTooltipNode(lines);
 }
 
@@ -725,6 +728,16 @@ function buildTooltipNode(lines: string[]): React.ReactNode {
   return <span className="whitespace-pre-line">{lines.join('\n')}</span>;
 }
 
+/**
+ * 在 tooltip 末尾追加"打开看板"链接行(前置空行与正文隔开)。
+ * label 为 null(如 XD 网关账号暂无看板可跳)时不追加任何内容。
+ */
+function pushDashboardLinkLine(lines: string[], label: string | null): void {
+  if (!label) return;
+  if (lines.length > 0) lines.push('');
+  lines.push(label);
+}
+
 /** 「本会话价值 / token 累计」两行 —— codex 订阅与 xai bridge tooltip 共用(同 i18n key 同格式)。 */
 function pushSessionValueLines(
   lines: string[],
@@ -751,7 +764,7 @@ function buildXaiTooltipNode(
   sessionTokens: number | null,
   sessionValueUsd: number | null,
   t: TFunction,
-  usageDashboardLabel: string,
+  usageDashboardLabel: string | null,
   latestTurnUsage: LatestTurnUsageSummary | null,
 ): React.ReactNode {
   const lines: string[] = [];
@@ -772,8 +785,7 @@ function buildXaiTooltipNode(
     lines.push(t('todaySpend.xai.noQuotaDetail'));
   }
   appendLatestTurnUsageLines(lines, latestTurnUsage, t);
-  if (lines.length > 0) lines.push('');
-  lines.push(usageDashboardLabel);
+  pushDashboardLinkLine(lines, usageDashboardLabel);
   return buildTooltipNode(lines);
 }
 
@@ -931,24 +943,23 @@ export function TodaySpendChip({
   );
   const latestTurnUsage = useLatestTurnUsageSummary(sessionId);
   // codex-oauth / cc+chatgpt bridge → ChatGPT 用量看板; cc+xai bridge → xAI 账户页;
-  // cc Claude 订阅 → claude.ai 用量页; 其余(cc 网关 / codex-api)→ XD Proxy (tapsvc) 看板。
-  const usageDashboardUrl = usesXaiQuotaForm
+  // cc Claude 订阅 → claude.ai 用量页; 其余(cc 网关 / codex-api)→ 暂无看板(null,见文件头 TODO)。
+  const usageDashboardUrl: string | null = usesXaiQuotaForm
     ? XAI_ACCOUNT_URL
     : isCodexOauth || isChatgptBridge
       ? CODEX_USAGE_DASHBOARD_URL
       : isClaudeSubscription
         ? CLAUDE_USAGE_DASHBOARD_URL
-        : PROXY_USAGE_DASHBOARD_URL;
-  const usageDashboardLabel = t(
-    usesXaiQuotaForm
-      ? 'todaySpend.openXaiUsage'
-      : isCodexOauth || isChatgptBridge
-        ? 'todaySpend.openCodexUsage'
-        : isClaudeSubscription
-          ? 'todaySpend.openClaudeUsage'
-
-        : 'todaySpend.openProxyUsage',
-  );
+        : null;
+  // 看板链接行文案:与 usageDashboardUrl 一一对应;网关账号无看板 → null
+  // (tooltip 不显示"打开看板"行,chip 也不可点)。
+  const usageDashboardLabel: string | null = usesXaiQuotaForm
+    ? t('todaySpend.openXaiUsage')
+    : isCodexOauth || isChatgptBridge
+      ? t('todaySpend.openCodexUsage')
+      : isClaudeSubscription
+        ? t('todaySpend.openClaudeUsage')
+        : null;
   const [windowLabelNowMs, setWindowLabelNowMs] = React.useState(() => Date.now());
 
   React.useEffect(() => {
@@ -960,7 +971,9 @@ export function TodaySpendChip({
     return () => window.clearInterval(interval);
   }, [usesCodexQuotaForm, isClaudeSubscription]);
 
+  const isDashboardClickable = usageDashboardUrl !== null;
   const handleClick = () => {
+    if (!usageDashboardUrl) return; // 网关账号暂无看板:点击无反应
     void window.electronAPI.openExternal(usageDashboardUrl);
   };
 
@@ -1071,9 +1084,8 @@ export function TodaySpendChip({
           : 'todaySpend.codex.unavailableDetail',
       ));
     }
-    // 链接行始终在最底, 用空行隔开
-    if (tooltipLines.length > 0) tooltipLines.push('');
-    tooltipLines.push(usageDashboardLabel);
+    // 链接行在最底(用空行隔开);网关账号 label 为 null → 不追加(见 usageDashboardUrl)。
+    pushDashboardLinkLine(tooltipLines, usageDashboardLabel);
     tooltipNode = buildTooltipNode(tooltipLines);
 
     if (chipSegments.length === 0) {
@@ -1109,7 +1121,8 @@ export function TodaySpendChip({
     'text-[12px] font-medium leading-none tabular-nums',
     claudeSubscriptionAlerting
       ? 'text-[var(--error-fg)] hover:text-[var(--error-fg-strong)]'
-      : 'text-[var(--msg-tool-card-chevron)] hover:text-foreground',
+      // 不可点(网关账号)时不加 hover 变色,避免暗示可交互。
+      : cn('text-[var(--msg-tool-card-chevron)]', isDashboardClickable && 'hover:text-foreground'),
     'border-0 bg-transparent p-0 m-0',
     'transition-colors',
     'focus:outline-none',
@@ -1118,14 +1131,20 @@ export function TodaySpendChip({
   return (
     <div className="inline-flex h-5 shrink-0 items-center gap-3">
       <Tip text={tooltipNode}>
-        <button
-          type="button"
-          onClick={handleClick}
-          className={buttonClass}
-          aria-label={usageDashboardLabel}
-        >
-          {labelNode}
-        </button>
+        {isDashboardClickable ? (
+          <button
+            type="button"
+            onClick={handleClick}
+            className={buttonClass}
+            aria-label={usageDashboardLabel ?? undefined}
+          >
+            {labelNode}
+          </button>
+        ) : (
+          // 网关 / 托管账号暂无看板可跳(见 usageDashboardUrl):渲染为非交互文本,
+          // 点击无反应、不显示手型 / hover 态;用量指标与 tooltip 仍照常展示。
+          <span className={cn(buttonClass, 'cursor-default')}>{labelNode}</span>
+        )}
       </Tip>
     </div>
   );

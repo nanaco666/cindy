@@ -52,7 +52,7 @@ class FeishuStreamingTextHandle implements StreamingTextHandle {
    * 工具结果(tool_result_full event)带过来的图片 absPath, finalize 时跟文本里
    * xdt-image markdown 链接一起 upload + 拼到 card 末尾。host 主进程负责把
    * xdt-image:// URL 用 imageCacheStore.resolveSafe 解成 absPath 再投递, 这里
-   * 不参与 namespace 路由(lizi-im 包对 lizi-art / 其它 host 命名空间不感知)。
+   * 不参与 namespace 路由(@cindy/im 包对 lizi-art / 其它 host 命名空间不感知)。
    */
   private extraImageAbsPaths: string[] = [];
 
@@ -206,7 +206,7 @@ class FeishuStreamingTextHandle implements StreamingTextHandle {
 
     // 1b. Upload extras (来自 tool_result event 的图片). 跟文本里 xdt-image 走
     //     同一条 uploadImage 通道, 但 path 由 host 主进程已经解好直接传 absPath,
-    //     这里不再过 resolveFeishuMediaUrl (lizi-im 包对其它 host namespace 不感知)。
+    //     这里不再过 resolveFeishuMediaUrl (@cindy/im 包对其它 host namespace 不感知)。
     //     正文里已内联的同图(按 absPath)跳过,防"正文一张 + 尾部一张"双份。
     const extraImageKeys: string[] = [];
     const extrasToUpload = this.extraImageAbsPaths.filter((p) => !bodyImageAbsPaths.has(p));

@@ -8,9 +8,9 @@
  * Cache key = feishu's image_key / file_key (globally unique tokens). Filename
  * pattern = `{token}{ext}`. Cache hit = file exists on disk.
  *
- * Intentionally simpler than lizi-mcps's media store: no metadata JSON file,
+ * Intentionally simpler than @cindy/mcps's media store: no metadata JSON file,
  * no preview-image generation, no concurrency lock. Re-downloading an image
- * is cheap and rare; lizi-im does not need to mirror every feature of the
+ * is cheap and rare; @cindy/im does not need to mirror every feature of the
  * desktop's MCP-side store.
  */
 

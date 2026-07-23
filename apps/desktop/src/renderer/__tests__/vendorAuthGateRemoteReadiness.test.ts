@@ -8,7 +8,7 @@
  */
 import { describe, it, expect } from 'vitest';
 
-import type { ProviderView } from '@lizi/model-providers';
+import type { ProviderView } from '@cindy/model-providers';
 
 import { VOICE_INPUT_ASR_PROFILES } from '../../shared/voiceInputAsrProfiles';
 import {

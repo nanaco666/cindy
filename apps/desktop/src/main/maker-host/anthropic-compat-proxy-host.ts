@@ -28,7 +28,7 @@ import {
   stripToolUseProviderSpecificFields,
   type ProxyHandle,
   type RoutingTransform,
-} from '@lizi/anthropic-compat-proxy';
+} from '@cindy/anthropic-compat-proxy';
 
 import { ANTHROPIC_DIRECT_UPSTREAM, anthropicCatalogModelIds, isAnthropicWireModel } from './claude-gateway-config.js';
 import { getActiveCatalog } from './active-catalog.js';

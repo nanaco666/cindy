@@ -9,7 +9,7 @@
  * `now` 参数显式传入，便于单元测试时注入固定值，不依赖 Date.now()。
  */
 
-import type { AgentKind } from '@lizi/maker-scheduler';
+import type { AgentKind } from '@cindy/maker-scheduler';
 
 import { stripTrailingPathSeparators } from '../../../../shared/pathText';
 

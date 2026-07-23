@@ -1,5 +1,5 @@
 {
-  "name": "@lizi/heartbeat-client",
+  "name": "@cindy/heartbeat-client",
   "version": "0.0.0",
   "private": true,
   "description": "客户端在线心跳模块: 周期向 heartbeat-server 上报 uid, 维持 App 在线状态。零依赖、Electron-agnostic。",
@@ -14,7 +14,7 @@
   },
   "author": {
     "name": "Lizi",
-    "email": "jiali@magiclizi.com"
+    "email": "feedback@cindy.app"
   },
   "license": "Apache-2.0",
   "devDependencies": {

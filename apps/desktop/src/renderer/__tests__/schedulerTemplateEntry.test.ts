@@ -3,7 +3,7 @@
 import { createElement, type ReactNode } from 'react';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ScheduleTemplate } from '@lizi/maker-scheduler';
+import type { ScheduleTemplate } from '@cindy/maker-scheduler';
 
 import { SchedulerPage } from '@/features/scheduler/SchedulerPage';
 

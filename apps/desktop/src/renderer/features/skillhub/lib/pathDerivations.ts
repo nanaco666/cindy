@@ -97,8 +97,8 @@ function basename(p: string): string {
  * If exactly 2, it's a global install; otherwise it's a project install.
  *
  * **Known edge case — non-standard home directories**: on systems where
- * the home directory is not at depth 2 (e.g. `/opt/users/lizi`,
- * `/data/home/lizi/`, corporate or container environments with deep
+ * the home directory is not at depth 2 (e.g. `/opt/users/sam`,
+ * `/data/home/sam/`, corporate or container environments with deep
  * home hierarchies), `deriveScope` will classify the path as 'project'
  * even though it is actually a global install. This renderer
  * implementation cannot call `os.homedir()`, so it relies on structural

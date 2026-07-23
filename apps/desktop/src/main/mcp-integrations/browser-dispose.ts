@@ -3,7 +3,7 @@
 // browser-runtime-env). browser.ts wires the real singleton runtime + logger into
 // `stopRuntimeForQuit`; tests inject fakes. (Same pattern as the electron-free
 // `extractBrowserAvailability` split.)
-import type { BrowserControlRuntime } from '@lizi/browser-control-runtime';
+import type { BrowserControlRuntime } from '@cindy/browser-control-runtime';
 
 /** Minimal logger surface used here — matches the unified logger's `warn`. */
 interface QuitLogger {

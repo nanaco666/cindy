@@ -2,7 +2,7 @@ import Database from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { afterEach, describe, it, expect, vi } from 'vitest';
 
-import type { CustomProviderConfig, ProviderView } from '@lizi/model-providers';
+import type { CustomProviderConfig, ProviderView } from '@cindy/model-providers';
 
 import type { DbClient } from '../../localDb/client/DbClient.js';
 import { clearCurrentDbClient, setCurrentDbClient } from '../../localDb/client/current.js';

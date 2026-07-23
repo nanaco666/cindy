@@ -8,12 +8,19 @@ vi.mock('electron', () => ({
 }));
 
 import {
+  effectiveVoiceInputServiceMode,
   resolveVoiceInputModelSelectionValues,
   voiceInputModelSelectionSignature,
 } from '../VoiceInputModelSelection.js';
 
 describe('VoiceInputModelSelection', () => {
   describe('serviceMode', () => {
+    it('forces BYOK when account services are unavailable', () => {
+      expect(effectiveVoiceInputServiceMode('cindy', false)).toBe('byok');
+      expect(effectiveVoiceInputServiceMode('byok', false)).toBe('byok');
+      expect(effectiveVoiceInputServiceMode('cindy', true)).toBe('cindy');
+    });
+
     it('defaults to the managed cindy mode when unset', () => {
       const result = resolveVoiceInputModelSelectionValues({});
       expect(result.values.serviceMode).toBe('cindy');

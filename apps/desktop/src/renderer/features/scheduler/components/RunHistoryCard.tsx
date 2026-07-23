@@ -20,7 +20,7 @@ import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 import * as sessionService from '@/lib/sessionService';
 import { toast } from '@/lib/toast';
-import type { AgentKind, RunStatus, ScheduleRun } from '@lizi/maker-scheduler';
+import type { AgentKind, RunStatus, ScheduleRun } from '@cindy/maker-scheduler';
 import type { SessionReference } from '../../../../shared/sessionReference';
 import {
   DropdownMenu,

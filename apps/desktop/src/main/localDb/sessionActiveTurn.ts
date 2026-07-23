@@ -4,7 +4,7 @@
  * 需求:app 退出(崩溃 / ⌘Q)时在飞的任务,重启后在会话里给出「继续任务 / 忽略」
  * 提示,不再靠用户口头输入"继续"。
  *
- * 设计(2026-07-06 Dash 拍板的简化重构,替代早期的多进程标记所有权协议):
+ * 设计(2026-07-06 产品决策的简化重构,替代早期的多进程标记所有权协议):
  *  - sessions 上两个 **append-only 覆盖写**的时间戳,没有"清除"操作:
  *      · active_turn_started_at —— turn 启动(status:isRunning=true)时写 now;
  *      · last_turn_ended_at     —— turn 正常收尾(done / terminal error / close /

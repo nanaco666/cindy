@@ -34,14 +34,14 @@ describe('review 回归', () => {
 
   describe('关系对端 FTS 一致性(rename/merge/delete 后搜组织名捞成员)', () => {
     it('组织改名后, 用新名能搜到成员, 旧名不再脏命中', () => {
-      const org = store.createContact({ kind: 'org', displayName: '旧心动' });
+      const org = store.createContact({ kind: 'org', displayName: '旧星澜' });
       const p = store.createContact({ kind: 'person', displayName: '员工甲' });
       store.addRelation(p.id, { toId: org.id, relation: '任职' });
-      expect(store.search('旧心动').map((h) => h.contactId)).toContain(p.id);
+      expect(store.search('旧星澜').map((h) => h.contactId)).toContain(p.id);
 
-      store.updateContact(org.id, { displayName: '新心动' });
-      expect(store.search('新心动').map((h) => h.contactId)).toContain(p.id);
-      expect(store.search('旧心动').map((h) => h.contactId)).not.toContain(p.id);
+      store.updateContact(org.id, { displayName: '新星澜' });
+      expect(store.search('新星澜').map((h) => h.contactId)).toContain(p.id);
+      expect(store.search('旧星澜').map((h) => h.contactId)).not.toContain(p.id);
     });
 
     it('组织被 merge 掉后, 成员的 FTS 关系文本换成 target 名', () => {
@@ -149,12 +149,12 @@ describe('review 回归', () => {
 
   describe('vCard round-trip 与注入面', () => {
     it('org 档案导出带 KIND:org / X-ABSHOWAS, 读回仍是 org(不再退化成 person)', () => {
-      const org = store.createContact({ kind: 'org', displayName: '心动网络' });
+      const org = store.createContact({ kind: 'org', displayName: '星澜网络' });
       const vcf = serializeVCards([store.getContact(org.id)]);
       expect(vcf).toContain('KIND:org');
       expect(vcf).toContain('X-ABSHOWAS:COMPANY');
       const back = parseVCards(vcf);
-      expect(back[0]).toMatchObject({ displayName: '心动网络', kind: 'org' });
+      expect(back[0]).toMatchObject({ displayName: '星澜网络', kind: 'org' });
     });
 
     it('EMAIL 值与 TYPE label 被转义/净化, 换行注入不产生伪造行', () => {
@@ -207,15 +207,15 @@ describe('review 回归', () => {
   });
 
   describe('import 组织精确归并与批内去重', () => {
-    it('org 名只做精确等值归并: "心动" 不再模糊挂进 "心动网络"', () => {
-      store.createContact({ kind: 'org', displayName: '心动网络' });
+    it('org 名只做精确等值归并: "星澜" 不再模糊挂进 "星澜网络"', () => {
+      store.createContact({ kind: 'org', displayName: '星澜网络' });
       const summary = importContacts(store, [
-        { displayName: 'Employee X', emails: [{ value: 'ex@example.com' }], phones: [], org: '心动' },
+        { displayName: 'Employee X', emails: [{ value: 'ex@example.com' }], phones: [], org: '星澜' },
       ]);
-      expect(summary.orgsCreated).toBe(1); // 新建了 "心动", 没挂错到 "心动网络"
+      expect(summary.orgsCreated).toBe(1); // 新建了 "星澜", 没挂错到 "星澜网络"
       const orgs = store.listContacts({ kind: 'org' }).map((c) => c.displayName);
-      expect(orgs).toContain('心动');
-      expect(orgs).toContain('心动网络');
+      expect(orgs).toContain('星澜');
+      expect(orgs).toContain('星澜网络');
     });
 
     it('org 名与既有 org 精确同名(大小写差异)时归并, 不重复建档', () => {

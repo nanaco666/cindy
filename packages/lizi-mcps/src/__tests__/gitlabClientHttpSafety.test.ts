@@ -1,7 +1,7 @@
 /**
  * gitlab-client HTTP 安全加固回归测试(2026-07 对外安全评估 P2)。
  *
- * gitlab-client 包本身无测试基建,故在 lizi-mcps(已有 vitest 且依赖该 client)覆盖:
+ * gitlab-client 包本身无测试基建,故在 @cindy/mcps(已有 vitest 且依赖该 client)覆盖:
  *  1. assertSafeBaseUrl:非 http(s) 协议 / userinfo / 不可解析一律拒绝;GitLab 侧
  *     允许 http(自建实例惯例)但 https / loopback 恒通过。
  *  2. fetchWithSafeRedirect:非 3xx 原样返回;同源 3xx 带凭据继续跟随;跨源 3xx
@@ -16,7 +16,7 @@ import {
   assertSafeBaseUrl,
   fetchWithSafeRedirect,
   isLoopbackHost,
-} from '@lizi/gitlab-client';
+} from '@cindy/gitlab-client';
 
 type RequestFn = (method: string, path: string, body?: unknown) => Promise<unknown>;
 function rawRequest(c: GitlabClient): RequestFn {

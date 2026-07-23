@@ -7,7 +7,7 @@
  * ImUiTextPack,供 thread 路由类测试当自洽样本断言,不进产品包。
  */
 
-import type { IMUnsupportedEntry } from 'lizi-im';
+import type { IMUnsupportedEntry } from '@cindy/im';
 
 import type { ImUiTextPack } from '../types';
 

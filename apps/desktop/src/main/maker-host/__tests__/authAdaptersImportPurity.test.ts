@@ -29,7 +29,7 @@ vi.mock('electron', () => ({
 }));
 
 // 同 titleOneShot.test:剪断 maker-core runtime 图,只保留 auth-adapters 需要的类型面。
-vi.mock('@lizi/maker-core', () => ({}));
+vi.mock('@cindy/maker-core', () => ({}));
 
 describe('auth-adapters import purity', () => {
   it('importing the module (and its singletons) must not write to the filesystem', async () => {

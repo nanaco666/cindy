@@ -1,7 +1,7 @@
 /**
  * useProviders — 模型供应商列表 hook(设置 → 模型供应商页消费)。
  *
- * 数据来自 main 的 `maker.listProviders()`(读 @lizi/model-providers 注册表,
+ * 数据来自 main 的 `maker.listProviders()`(读 @cindy/model-providers 注册表,
  * 每次调用都现读各 agent 的连接态)。App 根节点统一监听 catalog / 鉴权广播并联合刷新
  * providers + 两份 capabilities；本 hook 只消费共享快照，并暴露 `refetch` 给页面处理
  * 不改变模型目录的连接动作(例如 api-key 断开)。
@@ -13,7 +13,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 
-import type { ProviderView } from '@lizi/model-providers';
+import type { ProviderView } from '@cindy/model-providers';
 import { refreshLocalCatalogSnapshot } from '@/lib/localCatalogSnapshot';
 import {
   getCachedProvidersSnapshot,

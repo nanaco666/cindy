@@ -23,7 +23,7 @@
  *    localStorage 键等)由各自协议/存储模块维护,
  *    不要试图从这里派生它们。
  *  - `updaterName` = `cindy-updater`(2026-07-17 经 owner 确认随品牌翻转改名,
- *    AGENTS.md 规则 21;老渠道已冻结、新应用未发过版,无自更新兼容包袱)。
+ *    docs/dev-rules/cindy-updater.md;老渠道已冻结、新应用未发过版,无自更新兼容包袱)。
  *    消费方:updateService(resources 源名 + %TEMP% 运行名)、forge prePackage
  *    构建/签名/extraResource、notices 脚本登记路径。
  *

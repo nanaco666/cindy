@@ -19,7 +19,7 @@
  *  - 老目录存在:推送 confirm 态给 renderer 弹确认窗,await 用户确认(IPC
  *    `legacy-migration:confirm`)后才开始复制。
  *
- * 可测试性(AGENTS.md 规则 14):核心流程 `runLegacyUserDataMigration` 全部依赖
+ * 可测试性(docs/dev-rules/engineering-conventions.md):核心流程 `runLegacyUserDataMigration` 全部依赖
  * 经 `LegacyUserDataMigrationDeps` 注入(fs / 时钟 / 日志 / UI 桥),单测用内存
  * fs 假体直接驱动;electron 依赖只出现在默认实现的静态 import 里(main 禁运行时
  * 动态 import)。
@@ -28,7 +28,7 @@
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { app, BrowserWindow, ipcMain } from 'electron';
-import { BRAND_IDENTITY } from '@lizi/maker-shared/brand-identity';
+import { BRAND_IDENTITY } from '@cindy/maker-shared/brand-identity';
 import { CURRENT_CINDY_REGION } from '../shared/brandRegion.js';
 
 import { createLogger } from './logger';

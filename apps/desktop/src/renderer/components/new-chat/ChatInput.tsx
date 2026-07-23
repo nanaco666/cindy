@@ -14,7 +14,7 @@ import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { Folder, MessageSquarePlus, Mic, Pen, Square, TriangleAlert, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { requiresFullAccessConfirmation } from '@lizi/maker-shared/permission-mode';
+import { requiresFullAccessConfirmation } from '@cindy/maker-shared/permission-mode';
 import { ImageLightbox } from '@/components/chat/ImageLightbox';
 import { TextLightbox } from '@/components/chat/TextLightbox';
 import { useEditor, EditorContent } from '@tiptap/react';
@@ -143,7 +143,7 @@ import { useAgentCapabilities, type AgentKind } from '@/hooks/useAgentCapabiliti
 import { useConnectedSource } from '@/hooks/useConnectedSource';
 import { useProviders } from '@/hooks/useProviders';
 import { useDeviceProviders } from '@/hooks/useDeviceProviders';
-import { effectiveSourceIdForModel, sourcesForModel } from '@lizi/model-providers';
+import { effectiveSourceIdForModel, sourcesForModel } from '@cindy/model-providers';
 import { deriveModelsFromProviders, resolveFastSupported } from '@/lib/providerModels';
 import {
   getProviderModelEffort,
@@ -165,7 +165,7 @@ import { assessModelSwitchContext } from '../../../shared/modelSwitchAssessment'
 import { useVoiceInput } from '@/voice-input/useVoiceInput';
 import { useVoiceInputSettings } from '@/hooks/useVoiceInputSettings';
 import { VoiceInputStatusNotice } from '@/voice-input/VoiceInputStatusNotice';
-import type { VoiceInputState } from '@lizi/voice-input-core';
+import type { VoiceInputState } from '@cindy/voice-input-core';
 import {
   playVoiceInputEndCue,
   playVoiceInputStartCue,
@@ -3750,7 +3750,7 @@ export function ChatInput({
   // session-agent-switch 意图制:选中「只属于另一家引擎」的模型 → 只向 main 登记
   // 切换意图并乐观呈现(chip / 选择器立即跟随目标引擎),真正的交接、关旧引擎、
   // 边界行与重建全部推迟到下一条消息发送时刻由 send 事务执行——用户反复改选
-  // 零成本,不反复切换/交接(2026-07-20 Dash 反馈)。effort / Fast 的目标值在此
+  // 零成本,不反复切换/交接(2026-07-20 产品反馈)。effort / Fast 的目标值在此
   // 按目标引擎目录与 per-(引擎,来源,模型) 预设解析好,随意图带给 main,apply 时
   // 一并落库;renderer 不再做切换后补写。
   // handleModelChange / handleProviderChange 声明在本回调之后,经 ref 引用避免
@@ -5238,7 +5238,7 @@ function VoiceInputButton({
   visualVariant,
   className,
 }: {
-  state: import('@lizi/voice-input-core').VoiceInputState;
+  state: import('@cindy/voice-input-core').VoiceInputState;
   disabled: boolean;
   shortcutLabel: string;
   onStart: () => Promise<void>;

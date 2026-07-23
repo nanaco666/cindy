@@ -42,7 +42,7 @@
 import { app } from 'electron';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { brandExecutableName } from '@lizi/maker-shared/brand-identity';
+import { brandExecutableName } from '@cindy/maker-shared/brand-identity';
 import { CURRENT_CINDY_REGION } from '../shared/brandRegion.js';
 import { createLogger } from './logger';
 

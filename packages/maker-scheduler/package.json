@@ -1,5 +1,5 @@
 {
-  "name": "@lizi/maker-scheduler",
+  "name": "@cindy/maker-scheduler",
   "version": "0.0.0",
   "private": true,
   "description": "xdt-maker scheduler: cron engine + storage/runner/notifier interfaces, zero runtime deps",
@@ -20,7 +20,7 @@
   },
   "author": {
     "name": "Lizi",
-    "email": "jiali@magiclizi.com"
+    "email": "feedback@cindy.app"
   },
   "license": "Apache-2.0",
   "devDependencies": {

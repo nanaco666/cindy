@@ -357,7 +357,7 @@ export function relayStatusHint(status: DeviceLinkRelayStatus, lastSyncedAt: num
 }
 
 /**
- * 镜像 @lizi/device-link 的 DeviceLinkConnectionIssueKind。
+ * 镜像 @cindy/device-link 的 DeviceLinkConnectionIssueKind。
  * maker-shared 保持零运行时依赖(与 DeviceLinkRelayStatus 同款处理),两边字面量
  * 必须一致;drift 会被 desktop/mobile 消费处的 TS 赋值检查拦下。
  */

@@ -21,7 +21,7 @@
  * - User-initiated stopSession (NOT called on session switch anymore)
  */
 
-import { applyCodexPlanSnapshotOnDone } from '@lizi/maker-shared/message-render';
+import { applyCodexPlanSnapshotOnDone } from '@cindy/maker-shared/message-render';
 import type { MessageRole, Message, MessageAutomationOrigin } from '@/lib/ccAgent.types';
 import type { AttachedFile, MentionedResource, SerializedAttachedFile } from '@/lib/fileTypes';
 import type {
@@ -590,7 +590,7 @@ export interface SessionChatState {
   /** 下一条消息发送时才由 main 应用的跨引擎切换意图。 */
   agentSwitchIntent: AgentSwitchIntentRecord | null;
   /**
-   * Remote codex target (P2): SSH host alias from `@lizi/maker-remote-ssh`
+   * Remote codex target (P2): SSH host alias from `@cindy/maker-remote-ssh`
    * pool。null/undefined = 本地 session。ensureInitialMessages 从 DB
    * sessions.remote_host_id 灌进, lazy-create 时透传给 maker.send.createOpts,
    * agent 据此选 transport (stdio vs SSH-bridged daemon)。

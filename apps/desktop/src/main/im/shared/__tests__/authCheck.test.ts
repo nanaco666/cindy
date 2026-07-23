@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import type { AgentKind } from '@lizi/maker-core';
-import type { ProviderView } from '@lizi/model-providers';
+import type { AgentKind } from '@cindy/maker-core';
+import type { ProviderView } from '@cindy/model-providers';
 
 import { ui as discordUi } from '../../discord/uiText';
 import { ui as feishuUi } from '../../feishu/uiText';

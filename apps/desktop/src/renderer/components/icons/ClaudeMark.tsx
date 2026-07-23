@@ -6,7 +6,7 @@
  *    豁免——同 docs/design-rules/cindy-design-system.md Toast 三色逻辑,不走主题 token),用于需要品牌辨识
  *    度的场景,父级染色 class 对其无效。
  *
- * 2026-07-20(Dash):形状统一用 Claude Code 像素脸(比旧 Anthropic "AA"
+ * 2026-07-20(产品):形状统一用 Claude Code 像素脸(比旧 Anthropic "AA"
  * wordmark 辨识度高);单色为默认,彩色按场景显式启用。
  */
 

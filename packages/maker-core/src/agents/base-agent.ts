@@ -337,7 +337,7 @@ export interface AgentDeps {
    * 调:`for await of` (event 流) / `interrupt` / `setModel` /
    * `setPermissionMode` / `applyFlagSettings` / `stopTask`(可选 — 缺失时用户
    * Stop 退化为 interrupt-only,后台 wake 任务不被连带停止)。`RemoteQuery`
-   * (`@lizi/maker-cc-manager`) 全部已实现, host 直接 cast as Query 即可。
+   * (`@cindy/maker-cc-manager`) 全部已实现, host 直接 cast as Query 即可。
    *
    * **MVP 不支持**:rewind / fork 等需要 SDK 内部重建 Query 的操作 — 远端
    * cc-mgr daemon 协议没暴露, ClaudeCodeAgent 撞到会 throw。
@@ -352,9 +352,9 @@ export interface AgentDeps {
      * 给 cc-mgr daemon 起 SDK Query 时用的全部 options
      * (cwd / model / env / mcpServers / systemPrompt / additionalDirectories /
      *  permissionMode / extraOptions)。结构参见
-     *  `import('@lizi/maker-cc-manager').QueryStartParams`。
+     *  `import('@cindy/maker-cc-manager').QueryStartParams`。
      *
-     * 用 `unknown` 是为了避免 maker-core 顶层 import @lizi/maker-cc-manager
+     * 用 `unknown` 是为了避免 maker-core 顶层 import @cindy/maker-cc-manager
      * (那是 host-only 包, maker-core 不该耦合)。host 层实现时 cast 进去即可。
      */
     startParams: Record<string, unknown>;
@@ -363,7 +363,7 @@ export interface AgentDeps {
      * ExitPlanMode). Host layer registers this on the RPC client; maker-core wires
      * it to the session's interactionResolver.
      *
-     * Params/Result shapes follow `@lizi/maker-cc-manager` ApprovalRequestParams/Result
+     * Params/Result shapes follow `@cindy/maker-cc-manager` ApprovalRequestParams/Result
      * but typed as unknown here to avoid cross-package dependency.
      */
     onApprovalRequest?: (params: unknown) => Promise<unknown>;
@@ -448,7 +448,7 @@ export interface StartSessionOptions {
    */
   workspaceKind?: WorkspaceKind;
   /**
-   * 远端目标 host id (`@lizi/maker-remote-ssh` ConnectionPool 里的 host alias)。
+   * 远端目标 host id (`@cindy/maker-remote-ssh` ConnectionPool 里的 host alias)。
    * 设置后, agent 不在本机 spawn 进程, 改成通过 deps.getRemoteCodexTransport(id) 拿到
    * SSH-bridged transport 跟远端 codex daemon 通信。
    * workingDir 在 remote 场景下是 *远端机器上的绝对路径* (本地 fs 不存在也行)。

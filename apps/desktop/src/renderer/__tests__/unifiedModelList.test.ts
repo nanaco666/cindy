@@ -10,7 +10,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { buildUnionRows, countModelsByAgent, isRowDiverged } from '@/components/settings/UnifiedModelList';
 import { __resetForTest, setModelVisibility } from '@/state/modelVisibilityPrefs';
 
-import type { CatalogModel, ProviderView } from '@lizi/model-providers';
+import type { CatalogModel, ProviderView } from '@cindy/model-providers';
 
 function model(id: string, contextWindow = 100_000): CatalogModel {
   return { id, name: id, contextWindow, efforts: [], defaultEffort: null } as CatalogModel;

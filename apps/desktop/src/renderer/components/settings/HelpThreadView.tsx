@@ -6,22 +6,15 @@ import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 import { Spinner } from '@/components/ui/spinner';
 import { TAB_LABEL_KEY } from '@/lib/tabLabels';
-import {
-  askHelp,
-  markMessageFeedbackSubmitted,
-  useHelpThread,
-} from '@/lib/helpThreadStore';
+import { askHelp, markMessageFeedbackSubmitted, useHelpThread } from '@/lib/helpThreadStore';
 import { createLogger } from '@/lib/logger';
 import { MarkdownRenderer } from '@/components/chat/MarkdownRenderer';
-import type {
-  HelpFeedbackDraftInput,
-  HelpLocale,
-  HelpMessage,
-} from '@/../shared/helpTypes';
+import type { HelpFeedbackDraftInput, HelpLocale, HelpMessage } from '@/../shared/helpTypes';
 
 const log = createLogger('HelpThreadView');
 
 function localeFromI18n(lang: string): HelpLocale {
+  // 中文(含 Hans/Hant/TW/HK/MO)一律 → zh-CN(主干 4 语,无繁体 catalog)。
   if (lang.startsWith('zh')) return 'zh-CN';
   if (lang.startsWith('ja')) return 'ja';
   if (lang.startsWith('ko')) return 'ko';
@@ -80,8 +73,7 @@ export function HelpThreadView() {
           <div className="flex flex-col gap-3.5">
             {messages.map((message, index) => {
               const prior = index > 0 ? messages[index - 1] : undefined;
-              const priorUserQuestion =
-                prior && prior.role === 'user' ? prior.content : '';
+              const priorUserQuestion = prior && prior.role === 'user' ? prior.content : '';
               // Stable id-based key avoids React reusing the same form
               // instance across messages when the array shifts (e.g.
               // truncation dropping older turns shifts every subsequent
@@ -191,7 +183,9 @@ function HelpMessageRow({
             <ArrowUpRight size={12} />
             {t('settings.help.qnaOpenTab', {
               tab:
-                action.tab === 'api-keys' || action.tab === 'connections'
+                action.tab === 'api-keys' ||
+                action.tab === 'connections' ||
+                action.tab === 'ghosts'
                   ? t('sidebar.tabs.plugins')
                   : TAB_LABEL_KEY[action.tab]
                     ? t(TAB_LABEL_KEY[action.tab])
@@ -354,9 +348,7 @@ function FeedbackSection(props: {
           className="w-full resize-y rounded border border-[var(--settings-theme-card-border)] bg-[var(--settings-theme-card-bg)] px-2 py-1.5 font-mono text-11 leading-[1.5] text-[var(--settings-section-title)] outline-none disabled:opacity-60"
         />
       </div>
-      {errorMsg && (
-        <div className="text-11 text-[var(--error-fg)]">{errorMsg}</div>
-      )}
+      {errorMsg && <div className="text-11 text-[var(--error-fg)]">{errorMsg}</div>}
       <div className="flex items-center justify-end gap-2">
         <button
           type="button"

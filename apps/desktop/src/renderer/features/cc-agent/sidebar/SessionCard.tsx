@@ -23,7 +23,7 @@
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import type { MouseEvent as ReactMouseEvent, ReactNode, RefObject } from 'react';
-import { Archive, ChevronRight, Clock, EllipsisVertical, Undo } from 'lucide-react';
+import { Archive, ChevronRight, EllipsisVertical, Undo } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 
@@ -31,6 +31,7 @@ import { cn } from '@/lib/utils';
 import { WorktreeBadge } from '@/components/sidebar/WorktreeBadge';
 import { SessionStatusIcon } from './SessionStatusIcon';
 import { ScheduleBindingBadge } from './ScheduleBindingBadge';
+import { AutomationTimerIcon } from './AutomationTimerIcon';
 import { useAgentIslandActivity } from '@/state/agentIslandActivity';
 import { makerChatStore } from '@/lib/makerChatStore';
 import {
@@ -136,7 +137,7 @@ export function SessionCard({
   const isAutomationGenerated = isAutomationGeneratedSession(session);
   const boundSchedules = useSessionBoundSchedules(session.id);
   const showScheduleBindingBadge = boundSchedules.length > 0;
-  const showAutomationClock = !showScheduleBindingBadge && isAutomationGenerated;
+  const showAutomationTimer = !showScheduleBindingBadge && isAutomationGenerated;
   const displayTitle = getAutomationSessionDisplayTitle(session);
   const canHighlightDisplayTitle = !isScheduledSession(session);
   const isArchived = session.status === 'archived';
@@ -409,8 +410,8 @@ export function SessionCard({
     </span>
   );
 
-  // 自动化标识(schedule 绑定 Timer / 自动化创建 Clock)。card 变体移到底部 meta 行,
-  // list 变体沿用标题前缀。图标尺寸随所在行统一(card 底部与时间/其它图标同大)。
+  // 自动化标识统一为 Timer；schedule 绑定态额外承载暂停等状态。card 变体移到
+  // 底部 meta 行，list 变体沿用标题前缀。图标尺寸随所在行统一。
   const renderAutomationMeta = (iconSize: number) =>
     showScheduleBindingBadge ? (
       <ScheduleBindingBadge
@@ -418,23 +419,17 @@ export function SessionCard({
         size={iconSize}
         activeForeground={isActive}
       />
-    ) : showAutomationClock ? (
+    ) : showAutomationTimer ? (
       <button
         type="button"
-        className={cn(
-          'inline-flex shrink-0 items-center justify-center',
-          isActive
-            ? 'text-[var(--sidebar-item-active-foreground)]'
-            : 'text-[var(--cmd-palette-item-meta)] hover:text-foreground transition-colors',
-          'cursor-pointer focus:outline-none',
-        )}
+        className="inline-flex shrink-0 cursor-pointer items-center justify-center focus:outline-none"
         aria-label={t('ccAgent.sidebar.scheduleBinding.viewTask')}
         title={t('ccAgent.sidebar.automationGenerated')}
         onClick={(e) => void handleAutomationIconClick(e)}
         onKeyDown={(e) => e.stopPropagation()}
         onPointerDown={(e) => e.stopPropagation()}
       >
-        <Clock size={iconSize} strokeWidth={1.75} aria-hidden />
+        <AutomationTimerIcon size={iconSize} activeForeground={isActive} />
       </button>
     ) : null;
 
@@ -442,12 +437,12 @@ export function SessionCard({
   const titlePrefixNode = (
     <>
       {statusIconNode}
-      {showScheduleBindingBadge || showAutomationClock ? (
+      {showScheduleBindingBadge || showAutomationTimer ? (
         <span className={CARD_TITLE_META_SLOT_CLASS}>{renderAutomationMeta(10)}</span>
       ) : null}
       <span
         className="inline-block"
-        style={{ width: showScheduleBindingBadge || showAutomationClock ? 7 : 6 }}
+        style={{ width: showScheduleBindingBadge || showAutomationTimer ? 7 : 6 }}
         aria-hidden
       />
     </>
@@ -681,7 +676,7 @@ export function SessionCard({
         )}
 
         {/* 第 1 行:状态 / 自动化前缀在 list 与 card 变体共用同一段 titlePrefixNode，
-            保证 SessionStatusIcon、Timer/Clock 与标题在不同模式下的横向间距和基线一致。 */}
+            保证 SessionStatusIcon、Timer 与标题在不同模式下的横向间距和基线一致。 */}
         {isEditing ? (
           <div className="flex items-start gap-1.5">
             <span className="mt-[2px] shrink-0">

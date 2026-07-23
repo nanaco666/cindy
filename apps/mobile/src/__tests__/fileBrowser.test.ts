@@ -30,11 +30,11 @@ describe('fileBrowser', () => {
   });
 
   it('builds path crumbs for absolute and home paths', () => {
-    expect(buildMobilePathCrumbs('/Users/dash/Code')).toEqual([
+    expect(buildMobilePathCrumbs('/Users/alice/Code')).toEqual([
       { label: '/', path: '/' },
       { label: 'Users', path: '/Users' },
-      { label: 'dash', path: '/Users/dash' },
-      { label: 'Code', path: '/Users/dash/Code' },
+      { label: 'alice', path: '/Users/alice' },
+      { label: 'Code', path: '/Users/alice/Code' },
     ]);
     expect(buildMobilePathCrumbs('~/Code/xdt-maker')).toEqual([
       { label: '~', path: '~' },

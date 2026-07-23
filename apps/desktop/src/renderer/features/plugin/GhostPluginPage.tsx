@@ -1,8 +1,8 @@
 /**
  * Plugin catalog and detail coordinator backed by the latest Ghost host APIs.
  *
- * Inputs: installed/restorable Ghost snapshots and user actions.
- * Outputs: the Plugin list/detail UI plus install, restore, toggle, and command-launch flows.
+ * Inputs: installed Ghost snapshots and user actions.
+ * Outputs: the Plugin list/detail UI plus install, toggle, and command-launch flows.
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -11,7 +11,6 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ChevronDown, Plus, Sparkles, Upload } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
-import { WINDOW_NO_DRAG_STYLE } from '@/components/layout/windowDrag';
 import { useConfirmDialog } from '@/components/ui/confirm-dialog-provider';
 import { Tip } from '@/components/ui/tooltip';
 import {
@@ -23,7 +22,6 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { toast } from '@/lib/toast';
 import { extractIpcError } from '@/utils/ipcError';
-import { useAuth } from '@/contexts/AuthContext';
 import { useInstalledGhosts } from '@/cindy-brain/useInstalledGhosts';
 import { NEW_MAKER_DRAFT_KEY } from '@/features/cc-agent/newMakerDraftKeys';
 import {
@@ -42,15 +40,9 @@ import { ghostPanelKind, type GhostSetupStatus } from '../../../shared/ghost';
 import {
   toGhostPluginDetail,
   toGhostPluginListItem,
-  toRestorableGhostPluginDetail,
-  toRestorableGhostPluginListItem,
-  countGhostPluginOrigins,
   filterGhostPluginItems,
-  showsEnterpriseGhostGroup,
   sortGhostPluginItemsByRecentUse,
-  visibleGhostPluginItems,
   type GhostPluginListItem,
-  type GhostPluginOrigin,
 } from './lib/ghostPluginViewModel';
 import { formatSetupGateDescription } from './lib/ghostSetupGateModel';
 import { PluginManagementLayout, PluginManagementPage } from './PluginManagementLayout';
@@ -59,19 +51,6 @@ import { GhostPluginIcon } from './GhostPluginIcon';
 import { PluginScopePicker, usePluginRecentWorkdirs } from './PluginScopePicker';
 import './plugin-motion.css';
 
-function originFor(
-  id: string,
-  builtinIds: ReadonlySet<string>,
-  enterpriseIds: ReadonlySet<string>,
-): GhostPluginOrigin {
-  if (enterpriseIds.has(id)) return 'enterprise';
-  return builtinIds.has(id) ? 'builtin' : 'external';
-}
-
-type GhostOriginFilter = 'all' | GhostPluginOrigin;
-export type GhostPluginCardItem = GhostPluginListItem & { installed: boolean };
-
-const ORIGIN_FILTERS: readonly GhostOriginFilter[] = ['all', 'builtin', 'enterprise', 'external'];
 const MAX_VISIBLE_INSTALLED_GHOSTS = 5;
 
 /**
@@ -86,18 +65,9 @@ export function GhostPluginPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { confirm, confirmWithCheckbox } = useConfirmDialog();
-  const { user } = useAuth();
-  // 个人版登录隐藏「团队共享」:tab 不渲染,目录与已安装快捷区不列企业档条目。
-  // 详情深链不拦 —— 存量已装的企业插件仍可进详情停用/卸载,不留不可管理的暗态。
-  const showEnterprise = showsEnterpriseGhostGroup(user?.membershipKind);
   const ghosts = useInstalledGhosts();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [query, setQuery] = useState('');
-  const [originFilter, setOriginFilter] = useState<GhostOriginFilter>('all');
-  const [builtinStatus, setBuiltinStatus] = useState(() =>
-    window.electronAPI.ghosts.builtinStatusSync(),
-  );
-  const [restoringId, setRestoringId] = useState<string | null>(null);
   const [installedExpanded, setInstalledExpanded] = useState(false);
   const activeSessionWorkingDir = useSyncExternalStore(
     subscribeToLastWorkingDir,
@@ -132,7 +102,6 @@ export function GhostPluginPage() {
   useEffect(
     () =>
       window.electronAPI.ghosts.onChanged(() => {
-        setBuiltinStatus(window.electronAPI.ghosts.builtinStatusSync());
         const dir = scopeDirRef.current;
         if (dir) {
           try {
@@ -161,88 +130,31 @@ export function GhostPluginPage() {
     next.delete('ghost');
     setSearchParams(next, { replace: true });
   }, [searchParams, setSearchParams]);
-  const builtinIds = useMemo(() => new Set(builtinStatus.builtinIds), [builtinStatus.builtinIds]);
-  const enterpriseIds = useMemo(
-    () => new Set(builtinStatus.enterpriseIds),
-    [builtinStatus.enterpriseIds],
-  );
-
   const installedItems = useMemo(
     () =>
       ghosts
-        // cindy-mivo was renamed to xd-mivo. Older user data can briefly
-        // contain both ids while the main-process reconciliation catches up;
-        // keep the canonical entry from rendering twice.
+        // cindy-mivo was renamed to xd-mivo. Older user data can still
+        // contain both ids; keep the canonical entry from rendering twice.
         .filter(
           (ghost) =>
             ghost.manifest.id !== 'cindy-mivo' ||
             !ghosts.some((candidate) => candidate.manifest.id === 'xd-mivo'),
         )
-        .map((ghost) => {
-          const item = toGhostPluginListItem(
-            ghost,
-            originFor(ghost.manifest.id, builtinIds, enterpriseIds),
-          );
-          return { ...item, installed: true } satisfies GhostPluginCardItem;
-        }),
-    [builtinIds, enterpriseIds, ghosts],
+        .map((ghost) => toGhostPluginListItem(ghost)),
+    [ghosts],
   );
   const installedShortcutItems = useMemo(
-    () =>
-      sortGhostPluginItemsByRecentUse(
-        visibleGhostPluginItems(installedItems, showEnterprise),
-        recentGhostIds,
-      ),
-    [installedItems, recentGhostIds, showEnterprise],
+    () => sortGhostPluginItemsByRecentUse(installedItems, recentGhostIds),
+    [installedItems, recentGhostIds],
   );
-  const installedIds = useMemo(
-    () => new Set(installedItems.map((item) => item.id)),
-    [installedItems],
-  );
-  const restorableItems = useMemo(
-    () =>
-      builtinStatus.restorable
-        .filter((item) => !installedIds.has(item.id))
-        .map(
-          (item) =>
-            ({
-              ...toRestorableGhostPluginListItem(item),
-              installed: false,
-            }) satisfies GhostPluginCardItem,
-        ),
-    [builtinStatus.restorable, installedIds],
-  );
-  const allItems = useMemo(
-    () => visibleGhostPluginItems([...installedItems, ...restorableItems], showEnterprise),
-    [installedItems, restorableItems, showEnterprise],
-  );
-  const originFilters = useMemo(
-    () => (showEnterprise ? ORIGIN_FILTERS : ORIGIN_FILTERS.filter((f) => f !== 'enterprise')),
-    [showEnterprise],
-  );
-  // tab 隐藏后残留的 enterprise 选中态(如登录身份变化)折算回「全部」。
-  const effectiveOriginFilter =
-    !showEnterprise && originFilter === 'enterprise' ? 'all' : originFilter;
-  const searchedItems = useMemo(() => filterGhostPluginItems(allItems, query), [allItems, query]);
   const items = useMemo(
-    () => filterGhostPluginItems(searchedItems, '', effectiveOriginFilter),
-    [effectiveOriginFilter, searchedItems],
+    () => filterGhostPluginItems(installedItems, query),
+    [installedItems, query],
   );
-  const originCounts = useMemo(() => countGhostPluginOrigins(searchedItems), [searchedItems]);
   const selectedGhost = selectedId
     ? (ghosts.find((ghost) => ghost.manifest.id === selectedId) ?? null)
     : null;
-  const selectedRestorable = selectedId
-    ? (builtinStatus.restorable.find((ghost) => ghost.id === selectedId) ?? null)
-    : null;
-  const selectedDetail = selectedGhost
-    ? toGhostPluginDetail(
-        selectedGhost,
-        originFor(selectedGhost.manifest.id, builtinIds, enterpriseIds),
-      )
-    : selectedRestorable
-      ? toRestorableGhostPluginDetail(selectedRestorable)
-      : null;
+  const selectedDetail = selectedGhost ? toGhostPluginDetail(selectedGhost) : null;
 
   const panelStatus = useMemo(() => {
     if (!selectedDetail || selectedDetail.panelMinWidth === null) return null;
@@ -375,30 +287,11 @@ export function GhostPluginPage() {
     if (selectedGhost) void handleUseGhost(selectedGhost.manifest.id);
   }, [handleUseGhost, selectedGhost]);
 
-  const handleRestore = useCallback(
-    async (id: string, name: string) => {
-      setRestoringId(id);
-      try {
-        await window.electronAPI.ghosts.restoreBuiltin(id);
-        toast.success(t('settings.ghosts.toast.restored', { name }));
-      } catch {
-        toast.error(t('settings.ghosts.errors.generic'));
-      } finally {
-        setRestoringId(null);
-      }
-    },
-    [t],
-  );
-
   const handleUninstall = useCallback(async () => {
     if (!selectedDetail) return;
     const ok = await confirm({
       title: t('settings.ghosts.uninstallConfirm.title', { name: selectedDetail.name }),
-      description: t(
-        selectedDetail.origin === 'external'
-          ? 'settings.ghosts.uninstallConfirm.description'
-          : 'settings.ghosts.uninstallConfirm.descriptionBuiltin',
-      ),
+      description: t('settings.ghosts.uninstallConfirm.description'),
       confirmText: t('settings.ghosts.uninstall'),
       cancelText: t('settings.ghosts.uninstallConfirm.cancel'),
     });
@@ -427,8 +320,6 @@ export function GhostPluginPage() {
         onUse={handleUse}
         onUpdate={() => void handleUpdate()}
         onUninstall={() => void handleUninstall()}
-        onInstall={() => void handleRestore(selectedDetail.id, selectedDetail.name)}
-        installing={restoringId === selectedDetail.id}
         toggleDisabled={scopeDir !== null && selectedGhost !== null && !selectedGhost.enabled}
       />
     );
@@ -555,50 +446,13 @@ export function GhostPluginPage() {
           ) : null}
 
           <section className="plugin-motion-page-section mt-6 min-w-0">
-            <div className="mb-5 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-              <div className="flex items-baseline gap-2">
-                <h2 className="text-20 font-medium text-[var(--text-primary)]">
-                  {t('settings.ghosts.page.allTitle')}
-                </h2>
-                <span className="text-13 tabular-nums text-[var(--text-tertiary)]">
-                  {items.length}
-                </span>
-              </div>
-
-              <div
-                className="flex max-w-full items-center gap-1 overflow-x-auto"
-                role="tablist"
-                aria-label={t('settings.ghosts.page.filtersAria')}
-                style={WINDOW_NO_DRAG_STYLE}
-              >
-                {originFilters.map((filter) => {
-                  const selected = effectiveOriginFilter === filter;
-                  const count = filter === 'all' ? searchedItems.length : originCounts[filter];
-                  return (
-                    <button
-                      key={filter}
-                      type="button"
-                      role="tab"
-                      aria-selected={selected}
-                      onClick={() => setOriginFilter(filter)}
-                      className={cn(
-                        'shrink-0 select-none rounded-full px-3.5 py-2 text-12 transition-colors duration-150',
-                        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]',
-                        selected
-                          ? 'bg-[var(--surface-chip)] text-[var(--text-primary)]'
-                          : 'text-[var(--text-secondary)] hover:bg-[var(--surface-hover-soft)] hover:text-[var(--text-primary)]',
-                      )}
-                    >
-                      {filter === 'all'
-                        ? t('settings.ghosts.page.filterAll')
-                        : t(`settings.ghosts.page.origin.${filter}`)}
-                      <span className="ml-1.5 tabular-nums text-[var(--text-tertiary)]">
-                        {count}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
+            <div className="mb-5 flex items-baseline gap-2">
+              <h2 className="text-20 font-medium text-[var(--text-primary)]">
+                {t('settings.ghosts.page.allTitle')}
+              </h2>
+              <span className="text-13 tabular-nums text-[var(--text-tertiary)]">
+                {items.length}
+              </span>
             </div>
 
             {items.length > 0 ? (
@@ -608,29 +462,21 @@ export function GhostPluginPage() {
                     key={item.id}
                     item={item}
                     onSelect={() => setSelectedId(item.id)}
-                    onAction={() => {
-                      if (item.installed) void handleUseGhost(item.id);
-                      else void handleRestore(item.id, item.name);
-                    }}
-                    effectiveEnabled={
-                      item.installed ? effectiveEnabled(item.id, item.enabled) : undefined
-                    }
+                    onAction={() => void handleUseGhost(item.id)}
+                    effectiveEnabled={effectiveEnabled(item.id, item.enabled)}
                     toggleDisabled={scopeDir !== null && !item.enabled}
-                    onToggle={
-                      item.installed ? (enabled) => void handleToggle(item.id, enabled) : undefined
-                    }
-                    restoring={restoringId === item.id}
+                    onToggle={(enabled) => void handleToggle(item.id, enabled)}
                   />
                 ))}
               </div>
             ) : (
               <div className="rounded-xl border-[0.5px] border-[var(--border-default)] px-5 py-10 text-center">
                 <p className="text-13 text-[var(--text-secondary)]">
-                  {allItems.length === 0
+                  {installedItems.length === 0
                     ? t('settings.ghosts.empty')
                     : t('settings.ghosts.page.emptyFiltered')}
                 </p>
-                {allItems.length === 0 ? (
+                {installedItems.length === 0 ? (
                   <p className="mt-1.5 text-12 text-[var(--text-tertiary)]">
                     {t('settings.ghosts.emptyHint')}
                   </p>
@@ -714,7 +560,7 @@ function GhostPluginActions({
   );
 }
 
-/** Compact Plugin card shared by installed and restorable builtin entries. */
+/** Compact installed Plugin card. */
 export function GhostPluginCard({
   item,
   onSelect,
@@ -722,27 +568,15 @@ export function GhostPluginCard({
   onToggle,
   effectiveEnabled,
   toggleDisabled = false,
-  restoring,
 }: {
-  item: GhostPluginCardItem;
+  item: GhostPluginListItem;
   onSelect: () => void;
   onAction: () => void;
   onToggle?: (enabled: boolean) => void;
   effectiveEnabled?: boolean;
   toggleDisabled?: boolean;
-  restoring: boolean;
 }) {
   const { t } = useTranslation();
-  const actionKey = item.installed
-    ? 'settings.ghosts.page.useAction'
-    : item.origin === 'external'
-      ? 'settings.ghosts.page.installAction'
-      : 'settings.ghosts.restore';
-  const actionAriaKey = item.installed
-    ? 'settings.ghosts.page.useAria'
-    : item.origin === 'external'
-      ? 'settings.ghosts.page.installAria'
-      : 'settings.ghosts.page.restoreAria';
   return (
     <article
       className={cn(
@@ -752,14 +586,12 @@ export function GhostPluginCard({
         'active:translate-y-0 active:scale-[0.992]',
         'motion-reduce:transform-none motion-reduce:transition-none',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]',
-        restoring && 'cursor-wait opacity-60',
       )}
     >
       <button
         type="button"
         onClick={onSelect}
-        disabled={restoring}
-        className="flex min-w-0 flex-1 items-start gap-4 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] disabled:cursor-default"
+        className="flex min-w-0 flex-1 items-start gap-4 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"
         aria-label={item.name}
       >
         <GhostPluginIcon iconDataUrl={item.iconDataUrl} iconId={item.id} iconName={item.name} />
@@ -773,10 +605,10 @@ export function GhostPluginCard({
         </span>
       </button>
       <div className="flex shrink-0 items-center gap-2 self-center">
-        {item.installed && onToggle ? (
+        {onToggle ? (
           <Switch
             checked={effectiveEnabled ?? item.enabled}
-            disabled={restoring || toggleDisabled}
+            disabled={toggleDisabled}
             onCheckedChange={onToggle}
             aria-label={t('settings.ghosts.enableAria', { name: item.name })}
           />
@@ -784,9 +616,7 @@ export function GhostPluginCard({
         <button
           type="button"
           onClick={onAction}
-          disabled={
-            restoring || (item.installed && (!(effectiveEnabled ?? item.enabled) || !item.canUse))
-          }
+          disabled={!(effectiveEnabled ?? item.enabled) || !item.canUse}
           className={cn(
             'inline-flex h-8 shrink-0 items-center justify-center self-center rounded-lg border border-[var(--border-default)] bg-transparent px-3 text-12 font-medium text-[var(--text-primary)]',
             'transition-[background-color,border-color,transform,opacity] duration-150',
@@ -794,9 +624,9 @@ export function GhostPluginCard({
             'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]',
             'disabled:cursor-not-allowed disabled:opacity-40 disabled:active:scale-100',
           )}
-          aria-label={t(actionAriaKey, { name: item.name })}
+          aria-label={t('settings.ghosts.page.useAria', { name: item.name })}
         >
-          {t(actionKey)}
+          {t('settings.ghosts.page.useAction')}
         </button>
       </div>
     </article>
@@ -807,7 +637,7 @@ export function InstalledGhostShortcut({
   item,
   onSelect,
 }: {
-  item: GhostPluginCardItem;
+  item: GhostPluginListItem;
   onSelect: (id: string) => void;
 }) {
   return (
@@ -829,6 +659,6 @@ export function InstalledGhostShortcut({
   );
 }
 
-function renderInstalledGhost(item: GhostPluginCardItem, onSelect: (id: string) => void) {
+function renderInstalledGhost(item: GhostPluginListItem, onSelect: (id: string) => void) {
   return <InstalledGhostShortcut key={item.id} item={item} onSelect={onSelect} />;
 }

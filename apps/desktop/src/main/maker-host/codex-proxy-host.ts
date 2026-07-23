@@ -30,7 +30,7 @@ import {
   type RequestTransformCtx,
   type RoutingDecision,
   type RoutingTransform,
-} from '@lizi/anthropic-compat-proxy';
+} from '@cindy/anthropic-compat-proxy';
 import fs from 'node:fs';
 import path from 'node:path';
 

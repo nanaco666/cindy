@@ -15,7 +15,7 @@ export const PLATFORM_ISSUE_SUBMISSION_IDENTITY = {
   login: 'cindy-issue',
 } as const satisfies IssueSubmissionIdentity;
 
-const FEEDBACK_REPOSITORY = { owner: 'xindong', repo: 'cindy-moved' } as const;
+const FEEDBACK_REPOSITORY = { owner: 'makecindy', repo: 'cindy' } as const;
 
 type GhostToolCallResult =
   { ok: true; result: unknown } | { ok: false; errorCode: string; message: string };

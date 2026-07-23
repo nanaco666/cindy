@@ -26,6 +26,11 @@ import { getManagedWorktreeBasePath } from '../../shared/managedWorktreePaths';
 
 const STORAGE_KEY = 'xdt:newMakerDraft:v1';
 const DEFAULT_CODEX_DRAFT_MODEL = 'gpt-5.4';
+let activeDataOwnerId: string | null = null;
+
+function storageKey(): string {
+  return activeDataOwnerId ? `${STORAGE_KEY}:${encodeURIComponent(activeDataOwnerId)}` : STORAGE_KEY;
+}
 
 export interface VendorPrefs {
   model: string;
@@ -279,7 +284,7 @@ function sanitize(raw: unknown): NewMakerDraft {
 function loadFromStorage(): NewMakerDraft {
   if (typeof window === 'undefined') return makeDefault();
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
+    const raw = window.localStorage.getItem(storageKey());
     if (!raw) return makeDefault();
     return sanitize(JSON.parse(raw));
   } catch {
@@ -294,7 +299,7 @@ function loadFromStorage(): NewMakerDraft {
 function scheduleWrite(snapshot: NewMakerDraft) {
   if (typeof window === 'undefined') return;
   try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
+    window.localStorage.setItem(storageKey(), JSON.stringify(snapshot));
   } catch {
     // localStorage 满 / 私密窗口禁写——忽略,不影响内存状态。
   }
@@ -309,6 +314,15 @@ function emit() {
 
 export function getDraft(): NewMakerDraft {
   return currentDraft;
+}
+
+/** Switch the persistent draft namespace together with the active data owner. */
+export function setNewMakerDraftOwner(ownerId: string | null): void {
+  const normalized = typeof ownerId === 'string' && ownerId.trim().length > 0 ? ownerId : null;
+  if (activeDataOwnerId === normalized) return;
+  activeDataOwnerId = normalized;
+  currentDraft = loadFromStorage();
+  emit();
 }
 
 export function patchDraft(patch: Partial<NewMakerDraft>): void {
@@ -526,7 +540,7 @@ export function getCurrentVendorPrefs(): VendorPrefs {
 export function getPersistedVendorModel(vendor: MakerVendor): string {
   if (typeof window === 'undefined') return '';
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
+    const raw = window.localStorage.getItem(storageKey());
     if (!raw) return '';
     const parsed = JSON.parse(raw) as Partial<NewMakerDraft> | null;
     if (parsed?.modelChosenByVendor?.[vendor] !== true) return '';
@@ -540,6 +554,7 @@ export function getPersistedVendorModel(vendor: MakerVendor): string {
 /** 测试用 —— 重置 store + 清 localStorage(其它代码不应调用)。 */
 export function __resetForTest(): void {
   currentDraft = makeDefault();
+  activeDataOwnerId = null;
   if (typeof window !== 'undefined') {
     try {
       window.localStorage.removeItem(STORAGE_KEY);

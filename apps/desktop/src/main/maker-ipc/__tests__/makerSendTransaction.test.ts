@@ -1,4 +1,4 @@
-import type { AgentKind, SessionSendResult, UserMessage } from '@lizi/maker-core';
+import type { AgentKind, SessionSendResult, UserMessage } from '@cindy/maker-core';
 import { describe, expect, it, vi } from 'vitest';
 import {
   createMakerSendTransaction,

@@ -135,6 +135,21 @@ describe('MacAgentIslandNativeHost', () => {
     expect(nativeSource).not.toContain('agentIslandXDIncMarkSVG');
   });
 
+  it('uses semantic icons for expanded terminal and interaction rows', () => {
+    const source = fs.readFileSync(
+      new URL('../../../../native/agent-island/macos-agent-island-helper.swift', import.meta.url),
+      'utf8',
+    );
+    const expandedHeader = source.match(
+      /struct ExpandedSessionHeaderLine: View \{([\s\S]*?)\n\}\n\nstruct ExpandedSessionMetaLine/,
+    )?.[1];
+
+    expect(expandedHeader).toBeTruthy();
+    expect(expandedHeader).toContain('case "needs-interaction", "completed":');
+    expect(expandedHeader).toContain('return false');
+    expect(expandedHeader).toContain('showsRunningAnimation: showsMascot');
+  });
+
   it('restarts the helper when it exits before ready', async () => {
     const children: FakeNativeProcess[] = [];
     h.spawn.mockImplementation(() => {

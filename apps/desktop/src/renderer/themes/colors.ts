@@ -432,43 +432,185 @@ registerColor('welcome-text', {
   dark: 'var(--text-tertiary-hsl)',
 }, 'Stone #737373');
 
-// Login page — Ollama layer system (Light)
-registerColor('login-bg', {
-  light: 'var(--surface)',
-  dark: 'var(--surface)',
-}, 'Surface — page background');
-registerColor('login-card-bg', {
-  light: 'var(--surface-elevated)',
-  dark: 'var(--surface-elevated)',
-}, 'Card — elevated login card');
-registerColor('login-card-border', {
-  light: 'var(--border-default)',
-  dark: 'var(--border-default)',
-}, 'Board — 1px card outline');
-registerColor('login-divider', {
-  light: 'var(--border-default)',
-  dark: 'var(--border-default)',
-}, 'Board — hairline divider');
-registerColor('login-btn-bg', {
-  light: 'var(--accent-cta-bg-pure)',
-  dark: 'var(--accent-cta-bg-pure)',
-}, 'Black Pill CTA');
-registerColor('login-btn-text', {
-  light: 'var(--accent-pure-cta-fg)',
-  dark: 'var(--accent-pure-cta-fg)',
-}, 'Login page — Ollama layer system (Light)');
-registerColor('login-btn-hover', {
-  light: 'var(--accent-hover)',
-  dark: 'var(--accent-hover)',
-}, 'Near Black — pressed/hover');
-registerColor('login-help-text', {
-  light: 'var(--text-tertiary-stone)',
-  dark: 'var(--text-tertiary-stone)',
-}, 'Stone — secondary text');
-registerColor('login-error-text', {
-  light: 'var(--error-flat)',
-  dark: 'var(--error-flat)',
-}, 'Functional error — not in design spec, kept for runtime error state');
+// ── 旧 `login-*` 9 token 全族退役(PR5,SC-8,implementation-plan Step 6)──
+// 原 login-bg/card-bg/card-border/divider/btn-bg/btn-text/btn-hover/help-text/
+// error-text 均为 surface/accent/error 族纯 alias(light=dark=底层 token);消费者
+// (McpServerDialog/CustomProviderDialog)已迁 var(--surface-elevated)/
+// var(--border-default) 等底层 token,注册与消费双清零,由
+// scripts/check-login-token-retirement.mjs 守护(无 allowlist 例外通道)。
+
+// ── Login skin wave4 token 组(PR0a,implementation-plan Step 0 WHAT1)──
+// 语义 = 跨主题恒定品牌豁免色(规则 16 豁免族):Cindy 品牌登录入口不随编辑器主题
+// 染色,任何 builtin/扩展主题都不应 override 本组 token。
+// 本组为现行登录 token(旧 `login-*` 9 token 已于 PR5 全族退役,见上方注释);
+// 禁止撞名混义。参数权威:design.md §8(wave4)/figma-component-spec.md §10/
+// token-decision-table.md(wave4 改判)。
+//
+// 底色:figma 帧 fill 标注 #F1F0F1,用户拍板 2026-07-22 改为固定 #EDEDED
+// (= PR #104 白底机制在 cindy-light 下的实际渲染值)。2026-07-20 的
+// 「消费 var(--surface)」改判作废——var(--surface) 随主题,cindy-dark 下取
+// #2A2828,登录页背景变深且与 slogan #2A2828 同色隐形(沙盒手测 MT-1/2/5)。
+registerColor('login-bg-base', {
+  light: '#EDEDED',
+  dark: '#EDEDED',
+}, 'Login wave4 — 白底体系底色(固定白,登录页独立于编辑器主题;design.md §8 拍板"白底全设备一致"+ token-decision-table §5.2"登录不随主题";覆盖 §8.1 var(--surface) 改判——该改判系主题耦合源,致暗色下背景#2A2828与slogan#2A2828同色隐形)');
+// 两层品牌红渐变(379:518 径向 / 379:520 线性,代码复现非资产)。图层 opacity
+// 已合入色标 alpha(6%/5%)。CSS 取值为 figma 参数的最近似翻译;PR1 落码时以
+// wave4 帧(368:1375)截图对照为准,允许微调本 token 值,名称与语义冻结。
+// 双红渐变层已于 2026-07-22 用户拍板对齐 PR #104 撤除(背景纯平),token 保留作
+// 主题 override 锚但值恒 none;实际不再渲染任何渐变(LoginBrandStage 已移除消费)。
+registerColor('login-bg-gradient-radial', {
+  light: 'none',
+  dark: 'none',
+}, 'Login — 红径向渐变层(撤 wave4 双红渐变→none,对齐 PR #104;token 保留作 override 锚)');
+registerColor('login-bg-gradient-linear', {
+  light: 'none',
+  dark: 'none',
+}, 'Login — 红线性渐变层(撤 wave4 双红渐变→none,对齐 PR #104;token 保留作 override 锚)');
+// login-window-border-outer/inner 已随撤销登录窗口双描边(LoginWindowChrome,
+// 对齐 PR #104:PR104 无窗框描边)删除,不再注册。
+registerColor('login-panel-border', {
+  light: '#D4D4D4',
+  dark: '#D4D4D4',
+}, 'Login wave4 — 全部登录 UI 面板 1px inside 描边(368:1383)');
+// 品牌红 accent 族:wave4 改判后 #DF0C27 语义限定为 accent(Global pill/字标
+// 红元素等品牌点缀),禁止表达页面/画板背景——命名刻意不含 bg/background
+// (token-decision-table.md 原案名 login-brand-bg 已随改判弃用)。
+registerColor('login-brand-accent', {
+  light: '#DF0C27',
+  dark: '#DF0C27',
+}, 'Login — 品牌红 accent(Global pill/字标红元素;禁止用作页面背景,wave4 改判)');
+registerColor('login-brand-accent-pressed', {
+  light: '#A61629',
+  dark: '#A61629',
+}, 'Login — 品牌红 accent pressed/hover 深红(figma §1 Color System)');
+// Text_link pressed(U-9 裁决 2026-07-20:default #2A2828 加深至 #1A1818,
+// lead 受托定值;wave3 实测节点落地后以实测替换 token 值)。
+registerColor('login-link-pressed', {
+  light: '#1A1818',
+  dark: '#1A1818',
+}, 'Login — Text_link pressed 态(U-9 裁决值,双端通用)');
+// ── 回调卡 component alias(PR3,LegacyMigrationDialog 消费——design §7.4 唯一
+// App 内表情包例外,弹窗用回调卡形式)。参数权威:callback-pages-classification.md
+// 「卡片共用参数」(figma §6.1:White #FBFBFB/#D4D4D4/#252222/#2A2828 CTA;
+// Dark #312F2F/#434343/#D4D4D4/#EEEEEE CTA)。token-decision-table 决策为
+// component alias 且「两套模式时可拆」——此处按 light/dark mode 拆分承载。
+// 浏览器回调页本体不消费 renderer token(独立 HTML,同表决策用内联常量,见
+// oauthResultPage.ts renderBrandLoginCallbackPage);本组仅供 App 内例外消费。
+// 品牌豁免族:非默认主题不 override(与 wave4 组同口径)。
+registerColor('login-callback-card-bg', {
+  light: '#FBFBFB',
+  dark: '#312F2F',
+}, 'Login callback card — 卡底(White/Dark 卡,figma §6.1)');
+registerColor('login-callback-card-border', {
+  light: '#D4D4D4',
+  dark: '#434343',
+}, 'Login callback card — 1px 卡描边');
+registerColor('login-callback-title', {
+  light: '#252222',
+  dark: '#D4D4D4',
+}, 'Login callback card — 标题');
+registerColor('login-callback-body', {
+  light: '#6F6F6F',
+  dark: '#6F6F6F',
+}, 'Login callback card — 副文案(两模式同值)');
+registerColor('login-callback-cta-bg', {
+  light: '#2A2828',
+  dark: '#EEEEEE',
+}, 'Login callback card — CTA 底(反相)');
+registerColor('login-callback-cta-border', {
+  light: '#434343',
+  dark: '#FFFFFF',
+}, 'Login callback card — CTA 1px 描边');
+registerColor('login-callback-cta-text', {
+  light: '#D4D4D4',
+  dark: '#2A2828',
+}, 'Login callback card — CTA 文字(反相)');
+
+// ── Login 组件色 alias(PR1,lead 裁决 2026-07-20 方案 A)──
+// 命名/色值严格照 token-decision-table.md §3;语义 = 跨主题恒定品牌豁免色
+// (规则 16 豁免族,同上方 wave4 组):登录入口 100% 还原设计稿,任何 builtin/
+// 扩展主题都不应 override。error 色按 lead 裁决新增 login-error-fg(旧 login-error-text 已于 PR5 全族退役,
+// 见文件首部退役注释;error 文案/描边现由 login-error-fg 承载)。
+registerColor('login-panel-bg', {
+  light: '#FBFBFB',
+  dark: '#FBFBFB',
+}, 'Login — 白面板底(§5.1 面板 fill #FBFBFB 固定;登录页独立于编辑器主题;回调 Dark 卡 #312F2F 由 oauthResultPage 内联常量+login-callback-card-bg 承载,不在此 token)');
+registerColor('login-control-bg', {
+  light: '#EEEEEE',
+  dark: '#EEEEEE',
+}, 'Login — 输入框/返回钮/方式行底(figma §4.1/§4.6/§4.9)');
+registerColor('login-control-border', {
+  light: '#D4D4D4',
+  dark: '#D4D4D4',
+}, 'Login — 控件 default 描边(figma §4.1)');
+registerColor('login-control-border-active', {
+  light: '#2A2828',
+  dark: '#2A2828',
+}, 'Login — 控件 focus/filled 描边(figma §4.1 focus)');
+registerColor('login-control-border-disabled', {
+  light: '#B4B4B4',
+  dark: '#B4B4B4',
+}, 'Login — disabled 控件描边(figma §4.3 disabled 329:1226)');
+registerColor('login-control-text', {
+  light: '#252222',
+  dark: '#252222',
+}, 'Login — 控件已填文本/标题墨色(figma §2 排版)');
+registerColor('login-control-placeholder', {
+  light: '#D4D4D4',
+  dark: '#D4D4D4',
+}, 'Login — 控件 placeholder(figma §4.1 default 文本)');
+registerColor('login-title-text', {
+  light: '#252222',
+  dark: '#252222',
+}, 'Login — 面板标题 32 Bold(figma §5.1)');
+registerColor('login-secondary-text', {
+  light: '#6F6F6F',
+  dark: '#6F6F6F',
+}, 'Login — 副标题/说明文字(figma §5.1 副标题)');
+registerColor('login-primary-button-bg', {
+  light: '#2A2828',
+  dark: '#2A2828',
+}, 'Login — 主按钮/第三方圆钮底(figma §4.3/§4.5)');
+registerColor('login-primary-button-border', {
+  light: '#434343',
+  dark: '#434343',
+}, 'Login — 主按钮/圆钮描边(figma §4.3)');
+registerColor('login-primary-button-text', {
+  light: '#D4D4D4',
+  dark: '#D4D4D4',
+}, 'Login — 主按钮文字(figma §4.3 Bold 24)');
+registerColor('login-disabled-button-overlay', {
+  light: 'rgba(255, 255, 255, 0.7)',
+  dark: 'rgba(255, 255, 255, 0.7)',
+}, 'Login — disabled 按钮白 70% 叠层(figma §4.3 disabled;决策表 §3 唯一叠层 token)');
+registerColor('login-inverted-button-border', {
+  light: '#FFFFFF',
+  dark: '#FFFFFF',
+}, 'Login — 浅底钮白描边/Global pill 白字(figma §4.6/§4.10,决策表 §3)');
+registerColor('login-link-text', {
+  light: '#2A2828',
+  dark: '#2A2828',
+}, 'Login — Text_link default 墨色(figma §4.7 resend 247:1612,决策表 §3)');
+registerColor('login-link-hover', {
+  light: '#4A4848',
+  dark: '#4A4848',
+}, 'Login — Text_link hover(figma §4.7 wave3 实测 358:792;lead 裁决 2026-07-20 决策表滞后修订追加,仅桌面 hover 消费)');
+registerColor('login-error-fg', {
+  light: '#D91F37',
+  dark: '#D91F37',
+}, 'Login — 错误文本/error 描边(figma §4.8;lead 裁决新增,取代旧 login-error-text——已于 PR5 退役)');
+// Splash 统一面板进度条(PR2b 新增 component alias;权威来源 = design.md §8.1 条 5 +
+// figma-component-spec.md §10.3 wave4 帧 379:525:轨 501×16 r12 #D9D9D9 @(90,346) +
+// 填充 #252222。语义 = 跨主题恒定品牌豁免色,与上方 login 组同口径,非默认主题不 override)。
+registerColor('login-splash-progress-track', {
+  light: '#D9D9D9',
+  dark: '#D9D9D9',
+}, 'Login splash — 更新/下载进度条轨(wave4 379:525,design.md §8.1)');
+registerColor('login-splash-progress-fill', {
+  light: '#252222',
+  dark: '#252222',
+}, 'Login splash — 更新/下载进度条填充(wave4 379:525,design.md §8.1)');
 
 registerColor('lightbox-cta-bg', {
   light: 'var(--accent-cta-bg-pure)',

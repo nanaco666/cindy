@@ -10,7 +10,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type { Maker } from '@lizi/maker-core';
+import type { Maker } from '@cindy/maker-core';
 
 import {
   buildHookCommand,

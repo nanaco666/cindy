@@ -29,13 +29,13 @@ import {
   type RuntimeKeys,
 } from '@/lib/customProviders';
 
-import { sortPresetsForLocale } from '@lizi/model-providers';
+import { sortPresetsForLocale } from '@cindy/model-providers';
 import type {
   AgentKind,
   CustomProviderConfig,
   ProviderPreset,
   ProviderRuntimeModelConfig,
-} from '@lizi/model-providers';
+} from '@cindy/model-providers';
 
 const AGENTS: AgentKind[] = ['claude-code', 'codex'];
 
@@ -696,7 +696,7 @@ export function CustomProviderDialog({ initial, existingIds, onSaved, onClose }:
       <div
         className={cn(
           'flex max-h-[88vh] w-[600px] flex-col rounded-[16px]',
-          'border border-[var(--login-card-border)] bg-[var(--login-card-bg)]',
+          'border border-[var(--border-default)] bg-[var(--surface-elevated)]',
           'shadow-[var(--shadow-menu)]',
         )}
       >
@@ -1179,7 +1179,7 @@ function ModelPickerOverlay({
       <div
         className={cn(
           'flex max-h-[72vh] w-[460px] flex-col rounded-[16px]',
-          'border border-[var(--login-card-border)] bg-[var(--login-card-bg)]',
+          'border border-[var(--border-default)] bg-[var(--surface-elevated)]',
           'shadow-[var(--shadow-menu)]',
         )}
       >

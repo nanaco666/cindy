@@ -17,7 +17,7 @@
  *    因为后者是 XDMaker 最差异化的能力,值得独立索引项让模型一眼能查到。
  */
 
-import { BRAND_NAME } from '@lizi/maker-shared/branding';
+import { BRAND_NAME } from '@cindy/maker-shared/branding';
 
 export interface CapabilityEntry {
   key: string;

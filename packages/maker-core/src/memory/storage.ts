@@ -44,7 +44,7 @@ const SLUG_REGEX = /^[a-z0-9_-]+$/;
 /**
  * 把 workdir 绝对路径转成 sanitize 后的目录名 (Claude Code 风格)。
  *  E:\AIWork\xdt-maker  → 'E--AIWork-xdt-maker'
- *  /Users/lizi/proj     → 'Users-lizi-proj'
+ *  /Users/sam/proj     → 'Users-sam-proj'
  *
  * 用法是 host 算好后传给 MakerMemoryStore: <userData>/maker-memory/<sanitized>/。
  * 不在 storage 里直接拼路径, 保持 storage 的 dir 是 "已就绪的目录" 这一职责单一。

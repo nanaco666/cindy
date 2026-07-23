@@ -17,7 +17,7 @@ import {
   updateCustomProvider,
   validateCustomProviderConfig,
 } from '../custom-provider-store.js';
-import type { CustomProviderConfig } from '@lizi/model-providers';
+import type { CustomProviderConfig } from '@cindy/model-providers';
 
 const CREATE_SQL = `
   CREATE TABLE custom_providers (

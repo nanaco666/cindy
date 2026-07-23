@@ -27,7 +27,7 @@ import {
   connectedProvidersForAgent,
   type AgentKind as ProviderAgentKind,
   type ProviderView,
-} from '@lizi/model-providers';
+} from '@cindy/model-providers';
 
 import { useConfirmDialog } from '@/components/ui/confirm-dialog-provider';
 import { useVendorReadiness, type Readiness } from '@/hooks/useVendorReadiness';

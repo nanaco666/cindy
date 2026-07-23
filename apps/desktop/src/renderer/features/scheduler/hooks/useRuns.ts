@@ -11,7 +11,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { ScheduleRun, SchedulerEvent } from '@lizi/maker-scheduler';
+import type { ScheduleRun, SchedulerEvent } from '@cindy/maker-scheduler';
 
 import { subscribeScheduleRunReadSync } from '../lib/scheduleRunReadSync';
 

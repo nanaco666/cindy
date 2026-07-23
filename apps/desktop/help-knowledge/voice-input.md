@@ -3,13 +3,12 @@ id: voice-input
 title: Using voice input (dictation)
 summary: Push-to-talk dictation that inserts ASR text into the focused composer; configure shortcut, mic, language, refinement, and dictionary in Settings > Voice Input.
 tab: voice-input
-status: draft
 ---
 Voice input lets you dictate instead of typing. Hold a shortcut, talk, release — the recognized text is inserted into whichever composer has focus.
 
 **Activation:**
 
-- Default shortcut: **Alt+Space** on macOS, **Ctrl+Shift+Space** on Windows / Linux. Customizable in Settings > Voice Input.
+- Default shortcut: **Alt+Space** on macOS, **Ctrl+Shift+Space** on Windows. The shortcut is customizable on macOS and Windows. On Linux, global voice shortcuts are not supported yet (the setting is hidden).
 - The shortcut is **global** — it works even when Cindy isn't the focused app, so you can dictate into the composer from anywhere.
 - It's **push-and-hold**: press to start listening, release to stop and submit.
 
@@ -20,6 +19,7 @@ Voice input lets you dictate instead of typing. Hold a shortcut, talk, release �
 - **Refinement** — optional LLM post-process that cleans up the raw ASR text (fixes punctuation, removes ums, joins fragments). You can write a custom refinement prompt to bias it toward your preferences.
 - **Mute system audio while recording** — toggle; reduces feedback / echo from your speakers picking up onto the mic. On by default.
 - **Fast activation** — toggle; keeps the mic warm so press-to-talk has lower latency at the cost of slightly more background mic usage. Off by default.
+- **Interaction sound** — a short sound cue when dictation starts / stops. On by default.
 
 **Dictionary (improves recognition of your terms):**
 

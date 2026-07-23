@@ -17,7 +17,7 @@ import type {
   IssueSubmissionIdentity,
 } from './issueConfirmBridge';
 
-/** 与 lizi-mcps SubmitGithubIssueDeps['submit'] 的返回契约结构一致(注入点做结构化类型检查)。 */
+/** 与 @cindy/mcps SubmitGithubIssueDeps['submit'] 的返回契约结构一致(注入点做结构化类型检查)。 */
 export type GithubIssueSubmitResult =
   | {
       ok: true;

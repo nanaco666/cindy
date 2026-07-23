@@ -3,7 +3,6 @@ id: import-sessions
 title: Importing Codex and Claude conversations
 summary: Scan and import existing Codex or Claude Code chat history from Settings > Session Import.
 tab: import
-status: draft
 ---
 If you already have Codex or Claude Code conversations on disk (from the CLIs), Import brings them into Cindy so they show up in the sidebar alongside your other sessions.
 

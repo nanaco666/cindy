@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { TEST_XD_GATEWAY_BASE_URL as XD_GATEWAY_BASE_URL } from '../../../test/vitest/clientEndpointsFixture';
-import type { Catalog } from '@lizi/model-providers';
+import type { Catalog } from '@cindy/model-providers';
 
 import {
   anthropicCatalogModelIds,

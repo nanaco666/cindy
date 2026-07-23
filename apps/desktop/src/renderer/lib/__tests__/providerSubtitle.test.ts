@@ -6,7 +6,7 @@ import {
   providerSubtitleForDisplay,
 } from '../providerSubtitle';
 
-import type { ProviderView } from '@lizi/model-providers';
+import type { ProviderView } from '@cindy/model-providers';
 
 describe('provider subtitle display', () => {
   it('renders supported agents from provider.agents', () => {

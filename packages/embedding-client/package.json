@@ -1,5 +1,5 @@
 {
-  "name": "@lizi/embedding-client",
+  "name": "@cindy/embedding-client",
   "version": "0.0.0",
   "private": true,
   "description": "OpenAI /v1/embeddings 兼容客户端 (xdproxy 网关), 零运行依赖",
@@ -16,7 +16,7 @@
   },
   "author": {
     "name": "Lizi",
-    "email": "jiali@magiclizi.com"
+    "email": "feedback@cindy.app"
   },
   "license": "Apache-2.0",
   "devDependencies": {

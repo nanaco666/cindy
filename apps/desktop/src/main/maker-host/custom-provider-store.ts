@@ -5,7 +5,7 @@
  * （`<userData>/xdt-maker-<userId>.db`，换账号 closeDb 重开），故本表天然账号隔离、
  * 无 owner 列（与 `sessions` 一致）。API key 不在此——按 runtime 单独走 safeStorage（见 routing）。
  *
- * 形状：行 ↔ `@lizi/model-providers` 的 `CustomProviderConfig`（per-runtime）。`runtimes` 列以
+ * 形状：行 ↔ `@cindy/model-providers` 的 `CustomProviderConfig`（per-runtime）。`runtimes` 列以
  * TEXT 存 JSON，出入口转换、反序列化失败安全兜底（{}），不抛错。
  *
  * 验证（`validateCustomProviderConfig`）是纯函数，便于单测；CRUD 经 `getDbClient().drizzle`
@@ -19,7 +19,7 @@ import type {
   CustomProviderConfig,
   CustomProviderRuntimeConfig,
   OAuthProviderDescriptor,
-} from '@lizi/model-providers';
+} from '@cindy/model-providers';
 
 import { getDbClient } from '../localDb/client/current.js';
 import { customProviders } from '../localDb/schema.js';

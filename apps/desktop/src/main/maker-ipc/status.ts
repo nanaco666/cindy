@@ -6,7 +6,7 @@
  * handler body 在 statusHandlers.ts，便于不启动 Electron 直接测试。
  */
 
-import type { Maker } from '@lizi/maker-core';
+import type { Maker } from '@cindy/maker-core';
 import { createLogger } from '../logger.js';
 
 import { createElectronIpcHandlerRegistry } from './electronIpcRegistry.js';

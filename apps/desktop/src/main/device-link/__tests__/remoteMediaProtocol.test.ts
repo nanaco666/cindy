@@ -14,7 +14,7 @@ vi.mock('electron', () => ({
   protocol: { handle: vi.fn(), registerSchemesAsPrivileged: vi.fn() },
   app: { getPath: () => '/tmp' },
 }));
-vi.mock('@lizi/device-link', () => ({ DL_MEDIA_FETCH_CHANNEL: 'device-link:media:fetch' }));
+vi.mock('@cindy/device-link', () => ({ DL_MEDIA_FETCH_CHANNEL: 'device-link:media:fetch' }));
 
 const remoteInvoke = vi.hoisted(() => vi.fn());
 vi.mock('../index', () => ({ remoteInvoke }));

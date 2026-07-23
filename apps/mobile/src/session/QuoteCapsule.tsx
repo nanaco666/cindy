@@ -8,14 +8,14 @@
  *
  * 预览是**锚定浮窗**(透明 Modal + measureInWindow 定位在胶囊上方,对齐桌面
  * hover 浮层的 bottom-full 语义):点胶囊弹出、点任意处关闭,不占布局流——
- * 不能把输入框 / 消息内容顶开(Dash 真机反馈)。逐条:引用文本中文引号包裹、
+ * 不能把输入框 / 消息内容顶开(产品真机反馈)。逐条:引用文本中文引号包裹、
  * 截 3 行;文件来源条目附 FileText 图标 + basename/行号。
  */
 import { useCallback, useRef, useState } from 'react';
 import { FileText, MessageSquareQuote, X } from 'lucide-react-native';
 import { Modal, Pressable, ScrollView, View, useWindowDimensions } from 'react-native';
 import { Text } from '@/components/AppText';
-import { quoteSourceDisplayLabel, type ChatQuote } from '@lizi/maker-shared/chat-quotes';
+import { quoteSourceDisplayLabel, type ChatQuote } from '@cindy/maker-shared/chat-quotes';
 import { fontWeight, iconSize, iconStroke, lineHeight, radius, spacing, typeScale, useTheme, useThemedStyles, type ThemeColors } from '@/theme';
 
 /** 预览卡最大宽度(对照桌面 w-80);屏窄时被左右边距 clamp。 */

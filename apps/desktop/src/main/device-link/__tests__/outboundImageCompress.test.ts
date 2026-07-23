@@ -48,6 +48,7 @@ describe('compressOutboundImage', () => {
     const out = Buffer.alloc(100 * 1024, 1);
     const transform = vi.fn<OutboundImageTransform>().mockResolvedValue(out);
     const result = await compressOutboundImage(bigJpeg, 'image/jpeg', { transform });
+    expect(transform).toHaveBeenCalledTimes(1);
     // Avoid deep-equality walking the 2 MiB input buffer under the full desktop
     // test suite; verify the buffer identity separately and keep the remaining
     // transform options covered by a small object comparison.

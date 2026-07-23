@@ -244,7 +244,7 @@ export interface Session {
    */
   extraDirs: string[];
   /**
-   * Remote codex (P2): 远端 SSH host alias (`@lizi/maker-remote-ssh`
+   * Remote codex (P2): 远端 SSH host alias (`@cindy/maker-remote-ssh`
    * ConnectionPool 里的 id)。设置后 codex agent 跑在远端机器, workingDir
    * 是远端路径。null/undefined = 本地。仅 Codex 支持。
    */

@@ -12,7 +12,7 @@
  */
 
 import type { RemoteDeviceSummary } from './remoteProjectsStore';
-import { compareDevicesByName, isMobilePlatform } from '@lizi/maker-shared/device-list';
+import { compareDevicesByName, isMobilePlatform } from '@cindy/maker-shared/device-list';
 
 export type DeviceConnectionStatus = 'connected' | 'connecting' | 'rejected';
 

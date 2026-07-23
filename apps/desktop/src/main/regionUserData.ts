@@ -24,7 +24,7 @@ import {
   BRAND_IDENTITY,
   brandUserDataDirName,
   type CindyRegion,
-} from '@lizi/maker-shared/brand-identity';
+} from '@cindy/maker-shared/brand-identity';
 
 /** argv 里是否显式指定了 Chromium 原生 --user-data-dir(= 与空格两种形态)。 */
 function hasExplicitUserDataDir(argv: readonly string[]): boolean {

@@ -4,7 +4,7 @@
  * 重命名自 send_to_session, 语义从"通用 session 间 handoff"收窄为"Lead → Worker 派活"。
  */
 
-import { BRAND_NAME } from '@lizi/maker-shared/branding';
+import { BRAND_NAME } from '@cindy/maker-shared/branding';
 import { z } from 'zod';
 
 import type { XdtHelperToolRegistry } from '../lizi_xdtHelperToolRegistry.js';

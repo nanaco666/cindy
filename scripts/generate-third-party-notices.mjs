@@ -676,7 +676,7 @@ function buildDesktopCommonEntries(apacheText, sharpPackageName) {
 
   // vendored 上游源码不作为独立 npm 包出现,需显式声明。
   // (lark-openapi-mcp vendored 源已于 2026-07-22 随飞书 OpenAPI 工具链整体迁出
-  // 本仓 → cindy-xd-plugin 插件仓,不再随桌面包分发,故其声明从此处移除。)
+  // 本仓,改由独立插件包分发,不再随桌面包分发,故其声明从此处移除。)
   entries.push(
     bundledComponent({
       name: "openclaw fs-safe sources (vendored)",
@@ -1140,7 +1140,7 @@ function assertProjectPodspecLicenses() {
     if (/UNLICENSED/i.test(text)) {
       throw new Error(`project podspec must not declare UNLICENSED: ${relativePath}`);
     }
-    if (!/https:\/\/github\.com\/xindong\/cindy-moved\.git/.test(text)) {
+    if (!/https:\/\/github\.com\/makecindy\/cindy\.git/.test(text)) {
       throw new Error(`project podspec must point to the public source repository: ${relativePath}`);
     }
   }
@@ -1163,7 +1163,6 @@ function assertTrackedBinariesRegistered() {
   const registeredPrefixes = [
     "apps/android-platform-tools-bin/",
     "apps/desktop/native/sqlite-vec/",
-    "apps/desktop/resources/xdt-helper.exe",
     "apps/desktop/resources/cindy-updater.exe",
     "apps/mobile/assets/fonts/JetBrainsMono-",
   ];

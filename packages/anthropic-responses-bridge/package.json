@@ -1,5 +1,5 @@
 {
-  "name": "@lizi/anthropic-responses-bridge",
+  "name": "@cindy/anthropic-responses-bridge",
   "version": "0.0.0",
   "private": true,
   "description": "Loopback HTTP bridge that translates Anthropic Messages API <-> OpenAI Responses API, letting Claude Code SDK drive ChatGPT-subscription (Codex) / xAI models over their native wire protocol using OAuth credentials.",
@@ -17,7 +17,7 @@
   },
   "author": {
     "name": "Lizi",
-    "email": "jiali@magiclizi.com"
+    "email": "feedback@cindy.app"
   },
   "license": "Apache-2.0",
   "devDependencies": {

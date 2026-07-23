@@ -24,7 +24,7 @@
  */
 
 import { app, ipcMain, nativeImage, Notification, type BrowserWindow } from 'electron';
-import type { FeishuIM } from 'lizi-im';
+import type { FeishuIM } from '@cindy/im';
 import * as path from 'node:path';
 
 import { markSessionNeedsAttention } from './appBadgeService';

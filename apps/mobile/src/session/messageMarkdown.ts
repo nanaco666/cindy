@@ -1,4 +1,4 @@
-import { normalizeMathDelimiters } from '@lizi/maker-shared/math-markdown';
+import { normalizeMathDelimiters } from '@cindy/maker-shared/math-markdown';
 import { classifyChatPathLinkTarget, resolveChatAbsPath } from '@/session/chatPathCandidate';
 import { DEEP_LINK_SCHEME_GROUP } from '@/session/sessionLinks';
 

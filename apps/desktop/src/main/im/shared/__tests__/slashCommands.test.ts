@@ -44,7 +44,7 @@ vi.mock('../controlState', () => ({
   enterControl: vi.fn(),
 }));
 
-import type { ChannelIM } from 'lizi-im';
+import type { ChannelIM } from '@cindy/im';
 
 import { ui } from '../../feishu/uiText';
 import { createSlashHandlers } from '../slashCommands';

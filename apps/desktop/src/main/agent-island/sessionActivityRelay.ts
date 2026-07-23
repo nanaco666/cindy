@@ -1,4 +1,4 @@
-import type { SessionActivityPayload } from '@lizi/device-link';
+import type { SessionActivityPayload } from '@cindy/device-link';
 import type { AgentIslandSessionActivity } from '../../shared/agentIsland.js';
 
 const DEFAULT_MIN_INTERVAL_MS = 1_500;

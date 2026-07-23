@@ -1,4 +1,4 @@
-import type { Schedule, ScriptCapability } from '@lizi/maker-scheduler';
+import type { Schedule, ScriptCapability } from '@cindy/maker-scheduler';
 
 import { getGhostPipeDispatcher } from '../cindy-brain/index.js';
 import { tryGetOrcaCollabService } from '../maker-ipc/register.js';

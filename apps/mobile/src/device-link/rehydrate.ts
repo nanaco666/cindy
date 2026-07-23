@@ -1,4 +1,4 @@
-import type { Topic } from '@lizi/device-link';
+import type { Topic } from '@cindy/device-link';
 import type { RehydratePlan } from '@/device-link/topicRegistry';
 import { isTransientRemoteError } from '@/device-link/remoteRetry';
 

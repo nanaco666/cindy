@@ -11,7 +11,7 @@ import type {
   MobileVoiceCredentialSyncSettings,
   MobileVoiceCredentialSyncRefiner,
   MobileVoiceCredentialSyncResult,
-} from '@lizi/maker-shared/device-link-contract';
+} from '@cindy/maker-shared/device-link-contract';
 
 import { claudeUpstreamEndpoint } from '../maker-host/runtime-configs.js';
 import { readClaudeApiKey } from '../maker-host/auth-adapters.js';

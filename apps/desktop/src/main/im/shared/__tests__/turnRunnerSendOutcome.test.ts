@@ -10,8 +10,8 @@ import type {
   MakerEvent,
   Session,
   SessionSendResult,
-} from '@lizi/maker-core';
-import type { ChannelIM } from 'lizi-im';
+} from '@cindy/maker-core';
+import type { ChannelIM } from '@cindy/im';
 
 const mocks = vi.hoisted(() => ({
   logger: {

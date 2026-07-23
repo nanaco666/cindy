@@ -1,5 +1,5 @@
 {
-  "name": "@lizi/maker-core",
+  "name": "@cindy/maker-core",
   "version": "0.0.0",
   "private": true,
   "description": "Cindy core: agent abstractions, session orchestration, zero Electron deps",
@@ -16,7 +16,7 @@
   },
   "author": {
     "name": "Lizi",
-    "email": "jiali@magiclizi.com"
+    "email": "feedback@cindy.app"
   },
   "license": "Apache-2.0",
   "dependencies": {

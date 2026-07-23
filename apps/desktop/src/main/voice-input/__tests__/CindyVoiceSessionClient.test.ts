@@ -32,6 +32,10 @@ vi.mock('../../serverApiClient.js', () => ({
   ServerApiError,
   serverApiFetch,
 }));
+vi.mock('../../appCapabilities.js', () => ({
+  getAppCapabilities: () => ({ canUseCindyAccountServices: true }),
+  requireAppCapability: vi.fn(),
+}));
 
 import { CindyVoiceRunContext } from '../CindyVoiceSessionClient.js';
 

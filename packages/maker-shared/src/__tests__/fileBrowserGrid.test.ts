@@ -101,13 +101,13 @@ describe('summarizeFileBrowserGrid', () => {
 
 describe('buildWorkdirPathLevels', () => {
   it('根目录只有一层且为 current', () => {
-    expect(buildWorkdirPathLevels('/Users/dash/Code/Tools/xdt-maker', '')).toEqual([
+    expect(buildWorkdirPathLevels('/Users/alice/Code/Tools/xdt-maker', '')).toEqual([
       { label: 'xdt-maker', relPath: '', current: true },
     ]);
   });
 
   it('深路径按「当前 → 根」排列', () => {
-    expect(buildWorkdirPathLevels('/Users/dash/Code/Tools/xdt-maker', 'apps/mobile/src')).toEqual([
+    expect(buildWorkdirPathLevels('/Users/alice/Code/Tools/xdt-maker', 'apps/mobile/src')).toEqual([
       { label: 'src', relPath: 'apps/mobile/src', current: true },
       { label: 'mobile', relPath: 'apps/mobile', current: false },
       { label: 'apps', relPath: 'apps', current: false },

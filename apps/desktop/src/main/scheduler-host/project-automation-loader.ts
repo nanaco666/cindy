@@ -11,7 +11,7 @@ import type {
   ScheduleNotifyConfig,
   Scheduler,
   UpdateScheduleInput,
-} from '@lizi/maker-scheduler';
+} from '@cindy/maker-scheduler';
 
 import { projectAutomationConsents, schedules, sessions } from '../localDb/schema';
 import { projectAutomationConsentToRow } from '../localDb/mapper';

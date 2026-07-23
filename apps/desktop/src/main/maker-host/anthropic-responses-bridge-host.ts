@@ -3,7 +3,7 @@
  *
  * 组装订阅直连 handler(**不是独立 server**):compat-proxy 的 routingTransform 在命中订阅
  * 前缀 model 时,把请求经 `RoutingDecision.localHandler` 直接交给本 handler(请求/响应双向
- * 协议翻译在 @lizi/anthropic-responses-bridge 内完成),消息流不多跳、无独立进程内服务。
+ * 协议翻译在 @cindy/anthropic-responses-bridge 内完成),消息流不多跳、无独立进程内服务。
  * 会话态(effort / Fast)由 routingTransform 在决策点闭包传入。
  *
  * 与独立 Codex CLI 授权链路的关系(硬约束:不得影响它):
@@ -22,7 +22,7 @@ import { app } from 'electron';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 
-import { createResponsesHandler, type BridgeProviderConfig, type ResponsesBridgeHandler } from '@lizi/anthropic-responses-bridge';
+import { createResponsesHandler, type BridgeProviderConfig, type ResponsesBridgeHandler } from '@cindy/anthropic-responses-bridge';
 
 import { createMakerLogger } from './logger-adapter.js';
 import { getGrokAccessToken } from './grok-oauth-login.js';

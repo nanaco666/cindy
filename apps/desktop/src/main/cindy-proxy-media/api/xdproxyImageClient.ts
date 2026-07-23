@@ -5,7 +5,7 @@ import type {
   XdproxyImageGenerateParams,
   XdproxyImageResponse,
 } from '../types.js';
-import type { LiziMcpLogger } from 'lizi-mcps';
+import type { LiziMcpLogger } from '@cindy/mcps';
 import type { CindyProxyMediaMaybePromise, CindyProxyMediaProxyConfig } from '../types.js';
 
 export class XdproxyImageError extends Error {

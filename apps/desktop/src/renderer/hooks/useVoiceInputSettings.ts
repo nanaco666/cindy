@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { DictationDictionaryLearningAction } from '@lizi/voice-input-core';
+import type { DictationDictionaryLearningAction } from '@cindy/voice-input-core';
 
 import { createLogger } from '@/lib/logger';
 import { toast } from '@/lib/toast';

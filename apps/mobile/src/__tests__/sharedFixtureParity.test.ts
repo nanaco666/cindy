@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { SHARED_REMOTE_CONTROL_FIXTURE } from '@lizi/maker-shared/fixtures';
+import { SHARED_REMOTE_CONTROL_FIXTURE } from '@cindy/maker-shared/fixtures';
 import { buildMobileMessageRenderItems } from '@/session/messageRenderModel';
 import { normalizeRemoteMessages } from '@/session/messageNormalize';
 import type { RemoteMessage } from '@/session/types';

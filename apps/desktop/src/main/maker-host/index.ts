@@ -15,7 +15,7 @@ import {
   ClaudeCodeAgent,
   CodexAgent,
   configureDefaultImageResizer,
-} from '@lizi/maker-core';
+} from '@cindy/maker-core';
 import {
   getActiveCatalog,
   setActiveCatalogChangedListener,
@@ -25,8 +25,8 @@ import { maybeBackfillCodexModels } from './codex-model-backfill.js';
 import {
   createOrcaWorkerBridgeMcpProvider,
   type OrcaBridgeMcpDeps,
-} from '@fmfsaisai/orca-workflow';
-import { LspServerPool } from 'lizi-mcps';
+} from '@cindy/orca-workflow';
+import { LspServerPool } from '@cindy/mcps';
 
 import { createMessage } from '../localDb/ipc/messages.js';
 import {
@@ -219,7 +219,7 @@ export function getPluginRegistry() {
  * 获取 Maker 单例。第一次调用时构造（要求 localDb 已 ensureReady, 且 splash
  * 阶段已完成 claude/codex binary provisioning —— 否则 binaryPath 拿不到, 直接抛错）。
  *
- * MCP 由 lizi-mcps 包提供 server/tool 定义，desktop main 在这里注入 token、
+ * MCP 由 @cindy/mcps 包提供 server/tool 定义，desktop main 在这里注入 token、
  * OAuth、缓存、bot 发送等宿主能力，再交给 maker-core 的 ClaudeCodeAgent。
  */
 export function getMaker(): Maker {

@@ -8,7 +8,7 @@ describe('mobile simulator source identity', () => {
   it('uses branch and commit for a clean worktree', () => {
     expect(gitSourceIdentity('/repo', {
       execFile: fakeGit({ status: '', diff: '' }),
-    })).toBe('dash/feature@abc123456');
+    })).toBe('carol/feature@abc123456');
   });
 
   it('changes when dirty tracked content changes without a commit', () => {
@@ -19,7 +19,7 @@ describe('mobile simulator source identity', () => {
       execFile: fakeGit({ status: ' M file.ts', diff: '-old\n+two' }),
     });
 
-    expect(first).toMatch(/^dash\/feature@abc123456\+[a-f0-9]{10}$/);
+    expect(first).toMatch(/^carol\/feature@abc123456\+[a-f0-9]{10}$/);
     expect(second).not.toBe(first);
   });
 
@@ -45,7 +45,7 @@ describe('mobile simulator source identity', () => {
 
 function fakeGit({ status, diff }: { status: string; diff: string }) {
   return (_command: string, args: string[]) => {
-    if (args[0] === 'branch') return 'dash/feature\n';
+    if (args[0] === 'branch') return 'carol/feature\n';
     if (args[0] === 'rev-parse') return 'abc123456\n';
     if (args[0] === 'status') return status;
     if (args[0] === 'diff') return diff;

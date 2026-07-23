@@ -2,10 +2,10 @@ import {
   buildAttachmentPersistFileRefs,
   buildAttachmentPersistImageRefs,
 } from '@/session/attachments';
-import { stripChatQuoteMarkerLines } from '@lizi/maker-shared/chat-quotes';
+import { stripChatQuoteMarkerLines } from '@cindy/maker-shared/chat-quotes';
 import type { InputProjection, QueuedRemoteMessage, RemoteImageRef, RemoteSession } from '@/session/types';
 import type { RemoteSerializedAttachment } from '@/session/types';
-import { permissionModeOrAsk } from '@lizi/maker-shared/permission-mode';
+import { permissionModeOrAsk } from '@cindy/maker-shared/permission-mode';
 export {
   buildQueuePanelSummary,
   buildQueueRowPresentation,
@@ -16,7 +16,7 @@ export {
   type QueueRowActionId,
   type QueueRowActionPresentation,
   type QueueRowPresentation,
-} from '@lizi/maker-shared/queue';
+} from '@cindy/maker-shared/queue';
 
 export const EMPTY_INPUT_PROJECTION: InputProjection = Object.freeze({
   sessionId: '',

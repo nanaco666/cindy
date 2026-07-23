@@ -1,10 +1,10 @@
 import { dialog, ipcMain, screen, BrowserWindow, type Display, type OpenDialogOptions } from 'electron';
 import path from 'node:path';
 import { release as getOsRelease } from 'node:os';
-import { SESSION_ACTIVITY_CHANNEL } from '@lizi/device-link';
-import type { AgentEvent, InteractionDecision, InteractionRequest } from '@lizi/maker-core';
-import type { SchedulerEvent } from '@lizi/maker-scheduler';
-import { BRAND_NAME } from '@lizi/maker-shared/branding';
+import { SESSION_ACTIVITY_CHANNEL } from '@cindy/device-link';
+import type { AgentEvent, InteractionDecision, InteractionRequest } from '@cindy/maker-core';
+import type { SchedulerEvent } from '@cindy/maker-scheduler';
+import { BRAND_NAME } from '@cindy/maker-shared/branding';
 import type { ApplicationMenuCommand } from '../../shared/applicationMenuCommands.js';
 
 import { hasSessionAttention as hasAppBadgeSessionAttention } from '../appBadgeService.js';

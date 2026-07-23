@@ -1,4 +1,4 @@
-import { BRAND_IDENTITY, allDeepLinkSchemes } from '@lizi/maker-shared/brand-identity';
+import { BRAND_IDENTITY, allDeepLinkSchemes } from '@cindy/maker-shared/brand-identity';
 
 // 深链双 scheme(身份单点派生):cindy 主 + xdt-maker 永久兼容(存量消息里的
 // 老链接不能死);生成一律用主 scheme。与桌面端 shared/deepLinkSchemes 同源镜像。

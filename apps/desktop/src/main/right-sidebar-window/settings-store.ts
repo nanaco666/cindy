@@ -6,7 +6,7 @@
  * 两个字段语义不同但同生命周期、同读写方(都只由 main 的 RsbWindowController 写),
  * 所以放同一文件:
  *  - detached: **偏好**(default false)。用户显式选择「侧边栏在新窗口打开」;
- *    走 override 模型(未自定义时跟随版本默认值,见 AGENTS.md 规则 20)。
+ *    走 override 模型(未自定义时跟随版本默认值,见 docs/dev-rules/configuration-and-overrides.md)。
  *  - lastOpen: **状态**(default false)。退出时子窗口是否处于打开态,供下次启动
  *    恢复(detached && lastOpen → 主窗 mount 后自动重开子窗口)。不经 Settings UI。
  */

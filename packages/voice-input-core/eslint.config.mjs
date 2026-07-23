@@ -15,11 +15,11 @@ export default tseslint.config(
           patterns: [
             {
               group: ['electron', 'electron/*', 'electron-*'],
-              message: '@lizi/voice-input-core 不能依赖 Electron。麦克风、IPC、凭证、日志由 host 注入。',
+              message: '@cindy/voice-input-core 不能依赖 Electron。麦克风、IPC、凭证、日志由 host 注入。',
             },
             {
               group: ['ws', 'ws/*'],
-              message: '@lizi/voice-input-core 不能绑定具体 websocket 实现。Provider 适配放在 host 层。',
+              message: '@cindy/voice-input-core 不能绑定具体 websocket 实现。Provider 适配放在 host 层。',
             },
           ],
         },

@@ -1,4 +1,4 @@
-import type { Schedule, ScheduleRun } from '@lizi/maker-scheduler';
+import type { Schedule, ScheduleRun } from '@cindy/maker-scheduler';
 
 /** Sidebar 聚合索引用的轻量 run wire 形态，由 main 侧 SQLite 查询直接返回。 */
 export interface ScheduleSidebarIndexRun {

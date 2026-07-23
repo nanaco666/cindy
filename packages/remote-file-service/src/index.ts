@@ -1,5 +1,5 @@
 /**
- * @lizi/remote-file-service — SSH 远端文件服务(daemon + client + 协议)。
+ * @cindy/remote-file-service — SSH 远端文件服务(daemon + client + 协议)。
  *
  * 消费方式:
  *  - desktop main:import { FileServiceClient } from './client.js' 经

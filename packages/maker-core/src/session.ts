@@ -49,7 +49,7 @@ export interface SessionOptions {
   capabilities: Capabilities;
   logger: Logger;
   /**
-   * 远端 SSH 主机的 alias (来自 `@lizi/maker-remote-ssh` ConnectionPool)。
+   * 远端 SSH 主机的 alias (来自 `@cindy/maker-remote-ssh` ConnectionPool)。
    * 非空 → 这个 session 实际跑在远端机器上, workDir 是远端机器上的路径。
    * 主进程的 send 路径用它判断 "local fs guard 应不应该跑" — 远端 workdir
    * 是不可能存在于本地 fs 的, 没必要也不该 stat。
@@ -173,7 +173,7 @@ export class Session {
       // 不会污染下一个无 origin 的 turn。先存下当前值,handle.send 失败时**还原**而非
       // 清 null(见下方 finally 注释)。
       //
-      // 已知局限(PR #129 review Thread G,经 Dash 确认接受):currentTurnOrigin 是单一
+      // 已知局限(PR #129 review Thread G,经产品确认接受):currentTurnOrigin 是单一
       // session 级槽位,无法完美区分**重叠的 turn**。窄 race:turn1 在 handle 层已 idle
       // (isTurnRunning 翻 false)但其终止 done 尚未 fan-out 时,turn2 的 send **成功**会
       // 在此覆盖槽位、且 turnDispatched=true 不触发 finally 还原 → turn1 的 done 带上

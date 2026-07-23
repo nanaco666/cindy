@@ -10,7 +10,7 @@
  * 代码化检索后作为 evidenceBlock 注入(规则 9)。
  */
 
-import { BRAND_NAME } from '@lizi/maker-shared/branding';
+import { BRAND_NAME } from '@cindy/maker-shared/branding';
 
 /**
  * XDMaker 的 skill 编写规范 —— 蒸馏产物必须符合本地加载器(Claude Code /
@@ -216,7 +216,7 @@ export function buildLearnPrompt(args: BuildLearnPromptArgs): string {
     // 个性化是硬指令,不是可选润色 —— learn 的产品定位就是"学成这个用户的
     // skill",而不是把通用材料程序化裁剪一遍。
     'PERSONALIZE — the deliverable is a skill that fits THIS user, not a generic copy:',
-    "- Rewrite the trigger phrases in \"When to Use\" to match how this user actually",
+    '- Rewrite the trigger phrases in "When to Use" to match how this user actually',
     '  phrases requests (see the profile and evidence).',
     "- Replace generic examples, paths, and commands with the user's real ones",
     '  wherever the evidence shows them.',

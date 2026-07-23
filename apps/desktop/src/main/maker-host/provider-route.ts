@@ -19,10 +19,11 @@
  * token 覆盖 authorization,避免把子进程里其它供应商的 OAuth bearer 泄漏过去(如 Codex → xAI)。
  */
 
-import type { AgentKind, RoutingDescriptor } from '@lizi/model-providers';
-import type { RoutingDecision } from '@lizi/anthropic-compat-proxy';
+import type { AgentKind, RoutingDescriptor } from '@cindy/model-providers';
+import type { RoutingDecision } from '@cindy/anthropic-compat-proxy';
 
 import { getActiveCatalog } from './active-catalog.js';
+import { getAppCapabilities } from '../appCapabilities.js';
 import { getSessionProvider } from './session-provider-store.js';
 
 /**
@@ -198,6 +199,7 @@ export function gatewayDefaultRouteDecision(
   agent: AgentKind,
   gatewayKey: string | null,
 ): RoutingDecision | null {
+  if (!getAppCapabilities().canUseCindyGateway) return null;
   const xd = getActiveCatalog().providers.find((p) => p.id === 'xd');
   const routing = xd?.routing[agent];
   if (!routing) return null;
@@ -229,6 +231,7 @@ export function providerRoutingServesWireModel(
   agent: AgentKind,
   wireModel: string | undefined,
 ): boolean {
+  if (providerId === 'xd' && !getAppCapabilities().canUseCindyGateway) return false;
   const routing = getActiveCatalog().providers.find((p) => p.id === providerId)?.routing[agent];
   if (!routing) return false;
   return routingServesWireModel(routing, wireModel);
@@ -258,6 +261,7 @@ export function resolveSessionRouteDecision(
 ): RoutingDecision | null | Promise<RoutingDecision | null> {
   const providerId = getSessionProvider(sessionId);
   if (!providerId) return null;
+  if (providerId === 'xd' && !getAppCapabilities().canUseCindyGateway) return null;
   const provider = getActiveCatalog().providers.find((p) => p.id === providerId);
   const routing = provider?.routing[agent];
   if (!routing) return null;
@@ -279,6 +283,7 @@ export function resolveSessionRouteDecision(
 
 function providersForModel(modelId: string, agent: AgentKind) {
   return getActiveCatalog().providers.filter((provider) =>
+    (provider.id !== 'xd' || getAppCapabilities().canUseCindyGateway) &&
     provider.agents.includes(agent) &&
     Boolean(provider.routing[agent]) &&
     (provider.models[agent] ?? []).some((model) => model.id === modelId),

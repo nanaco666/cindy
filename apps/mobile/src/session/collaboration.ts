@@ -4,4 +4,4 @@ export {
   sessionCollaborationLabel,
   sessionCollaborationNotice,
   sessionCollaborationReadOnlyReason,
-} from '@lizi/maker-shared/session-identity';
+} from '@cindy/maker-shared/session-identity';

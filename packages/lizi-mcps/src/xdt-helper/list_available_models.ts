@@ -3,7 +3,7 @@
  * 用于 create_worker 前确认 model 名拼写, Codex 和 Claude Code 模型不可跨用。
  */
 
-import { BRAND_NAME } from '@lizi/maker-shared/branding';
+import { BRAND_NAME } from '@cindy/maker-shared/branding';
 import { z } from 'zod';
 
 import type { XdtHelperToolRegistry } from '../lizi_xdtHelperToolRegistry.js';

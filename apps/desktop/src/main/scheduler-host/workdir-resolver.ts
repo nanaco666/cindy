@@ -10,7 +10,7 @@
  * 在 session 关闭时尝试池化回收或销毁 worktree。
  */
 
-import type { Schedule } from '@lizi/maker-scheduler';
+import type { Schedule } from '@cindy/maker-scheduler';
 import { WorktreeManager, WorktreePool } from '../worktree';
 
 export interface WorkdirResolveResult {

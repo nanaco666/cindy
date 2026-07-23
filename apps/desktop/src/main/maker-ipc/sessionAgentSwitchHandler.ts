@@ -26,7 +26,7 @@
  * turn 进行中登记 pending 推迟到下一条消息发送时刻执行。
  */
 
-import type { AgentKind } from '@lizi/maker-core';
+import type { AgentKind } from '@cindy/maker-core';
 
 import { MAKER_INVOKE } from './channels.js';
 import type { IpcHandlerRegistry } from './ipcHandlerRegistry.js';
@@ -245,7 +245,7 @@ export async function performSessionAgentSwitch(
      */
     skipBootstrap?: boolean;
     /**
-     * 意图制(2026-07-20 Dash 反馈"切换应以消息实际发出为准"):外部调用(IPC)
+     * 意图制(2026-07-20 产品反馈"切换应以消息实际发出为准"):外部调用(IPC)
      * 一律只登记意图立即返回 deferred——用户在选择器里反复改选零成本,不反复
      * 关引擎/建交接/插边界行;真正的切换事务只在下一条消息发送时刻由
      * applyPendingAgentSwitchIfIdle 以 applyNow=true 执行一次。

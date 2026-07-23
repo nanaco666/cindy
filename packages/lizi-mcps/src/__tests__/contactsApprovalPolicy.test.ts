@@ -13,14 +13,14 @@ describe("cindy_contacts Codex approval policy", () => {
     ).toBe(true);
     expect(
       canAutoApproveContactsMcpTool(
-        callTool("contacts_search", { query: "Dash" }),
+        callTool("contacts_search", { query: "Carol" }),
       ),
     ).toBe(true);
     expect(
       canAutoApproveContactsMcpTool(
         callTool("contacts_create", {
           kind: "person",
-          display_name: "Dash",
+          display_name: "Carol",
         }),
       ),
     ).toBe(true);

@@ -9,7 +9,7 @@
  * ImChannelAdapter 参数化 —— 同一套编排逻辑挂 feishu / slack 两个 adapter。
  *
  * 设计要点:
- *   - adapter.im 只要求 lizi-im 的 ChannelIM 能力接口, 不要求具体类;
+ *   - adapter.im 只要求 @cindy/im 的 ChannelIM 能力接口, 不要求具体类;
  *     可选能力(emoji 回应)用 `im.reactToMessage?.()` 探测, 不另设 caps 开关
  *   - sessions 命名空间封装"这个渠道的 session 行长什么样"(id 格式 / source
  *     列值 / 默认 title / workingDir 策略 / 渠道专属列), DB 读写逻辑共用
@@ -17,8 +17,8 @@
  *     不存在静默回退
  */
 
-import type { AgentKind, Effort, PermissionMode } from '@lizi/maker-core';
-import type { ChannelIM, IMUnsupportedEntry } from 'lizi-im';
+import type { AgentKind, Effort, PermissionMode } from '@cindy/maker-core';
+import type { ChannelIM, IMUnsupportedEntry } from '@cindy/im';
 
 /** 渠道名 — 同时是 sessions.source 列值与 IdentityKey.channel 的值域。 */
 export type ImChannelName = 'feishu' | 'slack' | 'discord';
@@ -81,7 +81,7 @@ export interface ImSessionNamespace {
  */
 export interface ImChannelAdapter {
   channel: ImChannelName;
-  /** 收发能力(lizi-im ChannelIM 契约)。 */
+  /** 收发能力(@cindy/im ChannelIM 契约)。 */
   im: ChannelIM;
   config: ImOrchestratorConfig;
   ui: ImUiTextPack;

@@ -1,7 +1,7 @@
 /**
  * staging.ts —— learn 蒸馏产物的 staging 目录生命周期。
  *
- * 每个 run 一个隔离目录 {userData}/learn/staging/{runId}/,作为蒸馏 session 的
+ * 每个 run 一个隔离目录 {ownerRoot}/learn/staging/{runId}/,作为蒸馏 session 的
  * workingDir —— agent 用普通 Write 工具落盘,零新增 agent 工具。选 userData 而非
  * os.tmpdir:待审查提案要跨重启保留。done 后 scanStaging 提取提案文件清单交给
  * stagingValidation.pure 校验;失败/放弃/应用后 cleanupStaging 整目录删除。
@@ -10,8 +10,8 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { app } from 'electron';
 
+import { ownerScopedUserDataPath } from '../appSessionState';
 import { createLogger, maskPath } from '../logger';
 import { isIgnoredSkillPackagePath } from '../skillhub/packageIgnore';
 import type { ProposalFile } from './stagingValidation.pure';
@@ -32,7 +32,7 @@ import {
 const TEXT_READ_MAX = 1024 * 1024;
 
 export function stagingRoot(): string {
-  return path.join(app.getPath('userData'), 'learn', 'staging');
+  return ownerScopedUserDataPath('learn', 'staging');
 }
 
 export function stagingDirForRun(runId: string): string {

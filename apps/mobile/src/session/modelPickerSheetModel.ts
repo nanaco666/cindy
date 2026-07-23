@@ -5,7 +5,7 @@
  * 二级 = 某行的「模型选项」(effort/Fast/元信息)或「权限」选择。Android 返回键 / backdrop /
  * 把手下拉的「先关二级再关一级」结算、二级标题派生、options 目标行现查都收在这里,可 node 单测。
  */
-import type { ProviderView } from '@lizi/model-providers/registry';
+import type { ProviderView } from '@cindy/model-providers/registry';
 
 import type { MobileModelOption } from './agentCapabilities';
 import type { PickerRowModel } from './modelPickerRows';

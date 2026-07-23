@@ -7,8 +7,8 @@
  */
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import type { Logger, McpProvider, McpProviderContext } from '@lizi/maker-core';
-import { getLiziMcpSessionContext, type LiziMcpSessionContext } from 'lizi-mcps';
+import type { Logger, McpProvider, McpProviderContext } from '@cindy/maker-core';
+import { getLiziMcpSessionContext, type LiziMcpSessionContext } from '@cindy/mcps';
 
 import {
   startCodexHttpBridge,

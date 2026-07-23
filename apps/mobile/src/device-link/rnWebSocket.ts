@@ -1,4 +1,4 @@
-import type { WsLike } from '@lizi/device-link';
+import type { WsLike } from '@cindy/device-link';
 
 type EventName = 'open' | 'message' | 'close' | 'error';
 

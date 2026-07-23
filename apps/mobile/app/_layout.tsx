@@ -8,16 +8,32 @@ import {
 } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useMemo, type ReactElement } from 'react';
-import { Alert, StyleSheet } from 'react-native';
+import { Alert, Pressable, StyleSheet, View } from 'react-native';
+import { Text } from '@/components/AppText';
+import {
+  fontWeight,
+  radius,
+  spacing,
+  typeScale,
+  useThemedStyles,
+  type ThemeColors,
+} from '@/theme';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider, useAuth } from '@/auth/AuthContext';
 import { loginText } from '@/auth/loginMessages';
+import {
+  MobileLoginHandoffProvider,
+  useLoginHandoff,
+} from '@/auth/MobileLoginHandoffContext';
 import { DeviceLinkProvider } from '@/device-link/DeviceLinkContext';
 import { GestureHandlerRootView } from '@/platform/gestureHandler';
 import { ThemeProvider, useTheme } from '@/theme/ThemeProvider';
 import { createNavigationTheme } from '@/theme/navigationTheme';
-import { StartupBlockedScreen } from '@/components/StartupBlockedScreen';
-import { StartupSplashOverlay, useStartupSplash } from '@/components/StartupSplashOverlay';
+import { MobileLoginHandoffStage } from '@/components/MobileLoginHandoffStage';
+import {
+  StartupSplashOverlay,
+  useStartupSplash,
+} from '@/components/StartupSplashOverlay';
 import { registerDevCacheMenu } from '@/debug/devCacheMenu';
 import { startJsStallWatchdog } from '@/debug/jsStallWatchdog';
 import { initMobileTapdb } from '@/analytics/mobileTapdb';
@@ -40,10 +56,11 @@ function NavigationGate() {
   const { mode, colors } = useTheme();
   const { releaseSplash, splashActive } = useStartupSplash();
   const navigationTheme = useMemo(
-    () => createNavigationTheme(
-      mode === 'dark' ? NavigationDarkTheme : NavigationLightTheme,
-      colors,
-    ),
+    () =>
+      createNavigationTheme(
+        mode === 'dark' ? NavigationDarkTheme : NavigationLightTheme,
+        colors,
+      ),
     [mode, colors],
   );
 
@@ -80,7 +97,7 @@ function NavigationGate() {
 
   return (
     <NavigationThemeProvider value={navigationTheme}>
-      {/* splash 覆盖层仍在时状态栏保持浅色(红底白字);淡出开始后切回主题样式 */}
+      {/* splash 覆盖层仍在时状态栏保持浅色;淡出开始后切回主题样式 */}
       <StatusBar style={splashActive || mode === 'dark' ? 'light' : 'dark'} />
       <Stack
         screenOptions={{
@@ -98,13 +115,45 @@ function NavigationGate() {
 }
 
 /**
- * 端点闸门之后的应用主体:OTA 检查更新与业务树都在这里——保证「拉端点清单」
- * 严格先于「检查更新」(本组件只在端点闸门 ready 后才挂载)。
+ * handoff reporter 桥(PR4b Step 5b WHAT2,reporter 拓扑写死):
+ * endpoint gate 在 root 层直接上报——挂在 Provider 内、随 status 变化派发
+ * (pending→error→retry(pending)→ready 全程可上报,reducer 侧 ready 后单向锁定)。
  */
+function EndpointHandoffBridge({
+  status,
+}: {
+  status: 'pending' | 'ready' | 'error';
+}) {
+  const handoff = useLoginHandoff();
+  const dispatch = handoff.dispatch;
+  useEffect(() => {
+    dispatch({ type: 'endpoint', status });
+  }, [dispatch, status]);
+  return null;
+}
+
+/** auth-init 上报桥(挂 AuthProvider 内;initialized 置位即上报含登录态)。 */
+function AuthHandoffBridge() {
+  const auth = useAuth();
+  const handoff = useLoginHandoff();
+  const dispatch = handoff.dispatch;
+  useEffect(() => {
+    if (!auth.initialized) return;
+    dispatch({ type: 'auth-init', authenticated: auth.isAuthenticated });
+  }, [auth.initialized, auth.isAuthenticated, dispatch]);
+  return null;
+}
+
 function RootAfterUpdateChannel({ isCanary }: { isCanary: boolean }) {
   // 自建变体:启动即生效的 JS 热更门(冷启动 check→fetch→reload,本次启动就跑上最新 JS)。
   // 内部 gate 自建 + 非 dev + updates 可用,其余直接 ready=true 不阻塞。见 useStartupOtaGate。
   const otaReady = useStartupOtaGate(isCanary);
+  // handoff reporter:OTA 门就绪在本层上报(reload 期间保持 pending,readiness 不推进)
+  const handoff = useLoginHandoff();
+  const dispatchHandoff = handoff.dispatch;
+  useEffect(() => {
+    if (otaReady) dispatchHandoff({ type: 'ota-ready' });
+  }, [otaReady, dispatchHandoff]);
   // 自建变体:启动时检查整包更新(runtimeVersion 变化 → 引导跳 NPKG)。
   // 内部 IS_OTA_SELFHOST gate,EAS 包为 no-op。JS 热更由上面的门 + expo-updates 处理,与此互补。
   useBundleUpdatePrompt({ auto: true, isCanary });
@@ -118,6 +167,7 @@ function RootAfterUpdateChannel({ isCanary }: { isCanary: boolean }) {
   }
   return (
     <AuthProvider>
+      <AuthHandoffBridge />
       <DeviceLinkProvider>
         <NavigationGate />
       </DeviceLinkProvider>
@@ -125,6 +175,10 @@ function RootAfterUpdateChannel({ isCanary }: { isCanary: boolean }) {
   );
 }
 
+/**
+ * 端点闸门之后的应用主体:OTA 检查更新与业务树都在这里——保证「拉端点清单」
+ * 严格先于「检查更新」(本组件只在端点闸门 ready 后才挂载)。
+ */
 function RootAfterEndpoints() {
   // 更新检查早于 AuthProvider，必须先恢复上次登录同步到本机的 canary 快照。
   // 未持久化/读取失败一律 stable；读取完成前不允许发任何 /manifest 或 /latest 请求。
@@ -153,13 +207,20 @@ function RootLayout() {
   // 各分支都包同一层,避免闸门状态切换时 root 重挂。
   let body: ReactElement | null;
   if (endpointGate.status === 'error') {
+    // 白底体系(PR4a):错误屏包 MobileLoginHandoffStage(品牌显示),阻断内容层
+    // 透明置于其上——阻断语义不变:没有"跳过 / 稍后再说",只有重试。
     body = (
-      <StartupBlockedScreen
-        title="无法获取服务器配置"
-        subtitle={`请检查网络连接后重试(${endpointGate.reason ?? 'unknown'})`}
-        retryLabel="重试"
-        onRetry={endpointGate.retry}
-      />
+      <MobileLoginHandoffStage>
+        <StartupGateBlockedContent
+          title={loginText('endpointGateTitle')}
+          subtitle={loginText('endpointGateSubtitle').replace(
+            '{reason}',
+            endpointGate.reason ?? 'unknown',
+          )}
+          retryLabel={loginText('retry')}
+          onRetry={endpointGate.retry}
+        />
+      </MobileLoginHandoffStage>
     );
   } else if (endpointGate.status === 'pending') {
     // pending 期间由 StartupSplashOverlay 顶着,不渲染业务内容。
@@ -171,15 +232,93 @@ function RootLayout() {
     <GestureHandlerRootView style={styles.gestureRoot}>
       <SafeAreaProvider>
         <ThemeProvider>
-          {/* 启动闸门全程共用这一个 splash 实例;端点错误屏需要交互时才隐藏它 */}
-          <StartupSplashOverlay hidden={endpointGate.status === 'error'}>
-            {body}
-          </StartupSplashOverlay>
+          {/* handoff Provider 常驻 root(PR4b):闸门屏切换不重置衔接状态机 */}
+          <MobileLoginHandoffProvider>
+            <EndpointHandoffBridge status={endpointGate.status} />
+            {/* 启动闸门全程共用这一个 splash 实例;端点错误屏需要交互时才隐藏它 */}
+            <StartupSplashOverlay hidden={endpointGate.status === 'error'}>
+              {body}
+            </StartupSplashOverlay>
+          </MobileLoginHandoffProvider>
         </ThemeProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );
 }
+
+/**
+ * 端点闸门阻断内容层(StartupBlockedScreen 的白底体系消费变体,PR4a):
+ * 品牌视觉由 MobileLoginHandoffStage 宿主拥有,本层背景透明、内容沉到下半屏
+ * (避开品牌三要素),仅承载标题/原因/重试。文案 key 化契约不变
+ * (endpointGateTitle / endpointGateSubtitle{reason} / retry)。
+ */
+function StartupGateBlockedContent({
+  title,
+  subtitle,
+  retryLabel,
+  onRetry,
+}: {
+  title: string;
+  subtitle?: string;
+  retryLabel: string;
+  onRetry: () => void;
+}) {
+  const gateStyles = useThemedStyles(makeGateStyles);
+  return (
+    <View style={gateStyles.root}>
+      <Text style={gateStyles.title}>{title}</Text>
+      {subtitle ? <Text style={gateStyles.subtitle}>{subtitle}</Text> : null}
+      <Pressable
+        accessibilityRole="button"
+        onPress={onRetry}
+        style={({ pressed }) => [
+          gateStyles.retryButton,
+          pressed && gateStyles.retryButtonPressed,
+        ]}
+      >
+        <Text style={gateStyles.retryLabel}>{retryLabel}</Text>
+      </Pressable>
+    </View>
+  );
+}
+
+const makeGateStyles = (colors: ThemeColors) =>
+  StyleSheet.create({
+    root: {
+      alignItems: 'center',
+      // 背景透明:品牌层(立绘/字标/渐变)由宿主渲染,本层只放阻断内容
+      flex: 1,
+      gap: spacing.sm,
+      justifyContent: 'flex-end',
+      padding: spacing.xl,
+      paddingBottom: spacing.xxl * 3,
+    },
+    title: {
+      color: colors.textPrimary,
+      fontSize: typeScale.title,
+      fontWeight: fontWeight.medium,
+    },
+    subtitle: {
+      color: colors.textSecondary,
+      fontSize: typeScale.body,
+      textAlign: 'center',
+    },
+    retryButton: {
+      backgroundColor: colors.textPrimary,
+      borderRadius: radius.control,
+      marginTop: spacing.md,
+      paddingHorizontal: spacing.xl,
+      paddingVertical: spacing.sm,
+    },
+    retryButtonPressed: {
+      opacity: 0.7,
+    },
+    retryLabel: {
+      color: colors.surface,
+      fontSize: typeScale.body,
+      fontWeight: fontWeight.medium,
+    },
+  });
 
 const styles = StyleSheet.create({
   gestureRoot: {

@@ -15,7 +15,7 @@ import {
   type PresenceSnapshot,
   type PushPayload,
   type Topic,
-} from '@lizi/device-link';
+} from '@cindy/device-link';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { deviceLinkWsUrl } from '@/config/env';
 import { MOBILE_VISUAL_MOCK_ENABLED } from '@/config/env';
@@ -43,7 +43,7 @@ import { dispatchFileBrowserWatchEvent } from '@/device-link/fileBrowserWatch';
 import { rehydrateDeviceLinkTopics } from '@/device-link/rehydrate';
 import { isTransientRemoteError } from '@/device-link/remoteRetry';
 import { createRnWebSocket } from '@/device-link/rnWebSocket';
-import type { MobileGoalStatusPayload } from '@lizi/maker-shared/device-link-contract';
+import type { MobileGoalStatusPayload } from '@cindy/maker-shared/device-link-contract';
 import {
   DeviceLinkTopicRegistry,
   markHeldRemoteTopicsSubscribed,

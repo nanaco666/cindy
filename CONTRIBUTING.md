@@ -13,9 +13,11 @@ desktop、mobile 及共享 packages；服务端位于独立仓库，不在本仓
   [`docs/dev-rules/environment-setup.md`](docs/dev-rules/environment-setup.md) 为准。
 - 先阅读 [README.md](README.md) 的安装说明，以及适用的
   [工程规则](AGENTS.md)。`AGENTS.md` 是详细工程约束，不是本指南的替代品。
+- 参与社区时请遵守 [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md)；普通使用问题见
+  [`SUPPORT.md`](SUPPORT.md)。
 - 不要提交凭证、令牌、授权文件、个人数据或生成的本地数据库。
-- 当前父仓会锁定 submodule 的 commit。没有对应权限时，不要把私有 submodule
-  的凭证写入 Git 配置或仓库文件；`xd` 插件 submodule 是可选的私有开发资源。
+- 公开版本只锁定公开的协议 submodule commit；插件通过 SkillHub 或手动安装。
+  不要把任何凭证写入 Git 配置或仓库文件。
 
 ## 获取代码与安装
 

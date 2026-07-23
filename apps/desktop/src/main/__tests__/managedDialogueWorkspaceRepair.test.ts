@@ -47,7 +47,7 @@ describe('repairManagedDialogueWorkspaceSessions', () => {
     );
     localDb.prepare('INSERT INTO sessions (id, working_dir, workspace_kind) VALUES (?, ?, ?)').run(
       'real-project',
-      '/Users/dash/Code/Tools/xdt-maker',
+      '/Users/alice/Code/Tools/xdt-maker',
       'project',
     );
     localDb.prepare('INSERT INTO sessions (id, working_dir, workspace_kind) VALUES (?, ?, ?)').run(

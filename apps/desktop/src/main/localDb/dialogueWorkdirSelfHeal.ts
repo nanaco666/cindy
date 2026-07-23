@@ -114,6 +114,10 @@ export interface SweepLegacyDialogueWorkingDirsDeps {
   userDataDir: string;
   /** legacy userData 目录名候选(BRAND_IDENTITY.legacyUserDataDirNames)。 */
   legacyUserDataDirNames: readonly string[];
+  /** Explicit current owner dialogue root; defaults to userDataDir/dialogues. */
+  currentDialoguesRoot?: string;
+  /** Extra old roots, such as the pre-owner-namespace userData/dialogues path. */
+  additionalLegacyDialogueRoots?: readonly string[];
   log: {
     info(message: string, fields?: Record<string, unknown>): void;
     warn(message: string, fields?: Record<string, unknown>): void;
@@ -196,8 +200,11 @@ export async function sweepLegacyDialogueWorkingDirs(
     }
   };
 
-  const currentRoot = path.join(deps.userDataDir, DIALOGUES_DIR_NAME);
-  const legacyRoots = buildLegacyDialogueRoots(deps.userDataDir, deps.legacyUserDataDirNames);
+  const currentRoot = deps.currentDialoguesRoot ?? path.join(deps.userDataDir, DIALOGUES_DIR_NAME);
+  const legacyRoots = [
+    ...buildLegacyDialogueRoots(deps.userDataDir, deps.legacyUserDataDirNames),
+    ...(deps.additionalLegacyDialogueRoots ?? []),
+  ].filter((root, index, roots) => root !== currentRoot && roots.indexOf(root) === index);
   let scanned = 0;
   let rewritten = 0;
   const needsCopy: Array<{ row: LegacySessionRow; healedDir: string }> = [];

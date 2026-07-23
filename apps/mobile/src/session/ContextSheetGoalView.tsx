@@ -21,7 +21,7 @@ import type {
   MobileGoalLimitsInput,
   MobileGoalStatus,
   MobileGoalStatusPayload,
-} from '@lizi/maker-shared/device-link-contract';
+} from '@cindy/maker-shared/device-link-contract';
 import { fontWeight, iconSize, iconStroke, lineHeight, radius, spacing, typeScale, useTheme, useThemedStyles, type ThemeColors } from '@/theme';
 
 /** 三项上限的推荐预设(与桌面 GoalAdvancedLimits 一致,2026-06 与用户确认)。 */

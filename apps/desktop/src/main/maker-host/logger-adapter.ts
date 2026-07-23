@@ -13,7 +13,7 @@
  * 例外: 当 msg 本身就是 dash 分隔符或空白时,直接透传不再装饰。
  */
 
-import type { Logger } from '@lizi/maker-core';
+import type { Logger } from '@cindy/maker-core';
 
 import { createLogger, getLogLevel } from '../logger.js';
 

@@ -8,7 +8,7 @@
  * 不做字段合并、不做整份回退，
  * 避免线上配置错误被静默掩盖或不同端点跑在不同版本。
  *
- * 共享逻辑(schema / 校验)在 @lizi/maker-shared/client-endpoints;本文件负责
+ * 共享逻辑(schema / 校验)在 @cindy/maker-shared/client-endpoints;本文件负责
  * mobile 侧 IO(全局 fetch + AbortController)与启动阻断;成功后经
  * env.applyResolvedClientEndpoints 回写 live binding。
  */
@@ -16,7 +16,7 @@
 import {
   resolveClientEndpointsStrict,
   type ClientEndpointMap,
-} from '@lizi/maker-shared/client-endpoints';
+} from '@cindy/maker-shared/client-endpoints';
 
 import { ENDPOINT_MANIFEST_BASE_URL, applyResolvedClientEndpoints } from './env';
 

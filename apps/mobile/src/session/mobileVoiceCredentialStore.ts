@@ -1,5 +1,5 @@
 import { deleteSecureItem, getSecureItem, setSecureItem } from '@/auth/secureStorage';
-import type { MobileVoiceCredentialSyncResult } from '@lizi/maker-shared/device-link-contract';
+import type { MobileVoiceCredentialSyncResult } from '@cindy/maker-shared/device-link-contract';
 import { redactMobileVoiceCredentialValue } from '@/session/mobileVoiceCredentialRedaction';
 
 const STORAGE_KEY_PREFIX = 'xdt.mobileVoiceCredential.v1';

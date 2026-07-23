@@ -405,7 +405,7 @@ import {
   dropAllControllers,
 } from '../device-link/dispatch';
 import { hasBroadcastTapListener, tapWindowBroadcast } from '../device-link/broadcast-tap';
-import { SESSION_ACTIVITY_CHANNEL, type Envelope } from '@lizi/device-link';
+import { SESSION_ACTIVITY_CHANNEL, type Envelope } from '@cindy/device-link';
 
 /** 最小 fake client:捕获 onFrame handler,记录出站调用 */
 function makeFakeClient() {

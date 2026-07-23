@@ -1,7 +1,7 @@
 /**
  * github-client listPullRequestReviewThreads —— 回归测试(PR #558 follow-up)。
  *
- * github-client 包本身无测试基建(零依赖、只有 build 脚本),故在 lizi-mcps(已有
+ * github-client 包本身无测试基建(零依赖、只有 build 脚本),故在 @cindy/mcps(已有
  * vitest 且依赖该 client)里通过 stub 全局 fetch 覆盖这个 GraphQL 方法的几处易错逻辑:
  *  - null-guard:不存在的 PR(pullRequest: null)抛 GithubApiError(status=404),
  *    让上层 toolCatch 归类成 NOT_FOUND(本次 follow-up 一并修的映射)。
@@ -11,7 +11,7 @@
  */
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { GithubClient, GithubApiError } from '@lizi/github-client';
+import { GithubClient, GithubApiError } from '@cindy/github-client';
 
 function graphqlResponse(body: unknown): Response {
   return new Response(JSON.stringify(body), {
@@ -21,7 +21,7 @@ function graphqlResponse(body: unknown): Response {
 }
 
 function client() {
-  return new GithubClient({ token: 't', owner: 'xindong', repo: 'XDMaker' });
+  return new GithubClient({ token: 't', owner: 'makecindy', repo: 'cindy' });
 }
 
 afterEach(() => {

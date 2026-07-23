@@ -26,7 +26,7 @@
  */
 
 import type { TFunction } from 'i18next';
-import type { CommandIntentAction } from '@lizi/maker-shared';
+import type { CommandIntentAction } from '@cindy/maker-shared';
 
 import type { ChatMessage } from '@/lib/makerChatStore';
 

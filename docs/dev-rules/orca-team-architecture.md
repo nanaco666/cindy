@@ -2,7 +2,7 @@
 
 > 这是 Orca 的唯一权威文档，覆盖当前实现、设计约束与未来规划。
 >
-> **状态**：权威（authoritative）。**Owner**：yuhaobo（fmfsaisai）。
+> **状态**：权威（authoritative）。
 > **约束力**：本文「协同运行时行为契约」「坑点与不变量」两节是 Orca 协同代码的约束源，治理范围包括 `apps/desktop` 的 `maker-ipc/orca*` 服务与 `mcp-integrations` codex MCP 集成、`packages/lizi-mcps` 的 `orca` server 与 worker 控制工具、`packages/orca-workflow`、`packages/maker-core` 的 codex MCP context。改这些模块前先读本文；本文与代码实现冲突时以代码为准（遵循「以源码实现为准」原则），但必须同步修正本文。
 
 ## 目录
@@ -109,7 +109,7 @@ PR #101 之后，Orca 的 main 侧业务由独立 service 承接，`register.ts`
 
 排队消息控制 3 工具让 Lead 在消息被 worker 消费前管理自己发出的排队消息：`send_to_worker` / `create_worker`（initial_task）在 `wakeKind='queued'` 时回传 `queued_message_id`（coordinator 队列内的 clientId），Lead 可据此列出、整条改写或撤回。实现走 `OrcaTeamService.listWorkerQueuedMessages / updateWorkerQueuedMessage / cancelWorkerQueuedMessage`，语义约束见「协同运行时行为契约 · 消息派发与 auto-bridge」第 6 条。
 
-诊断 3 工具是纯只读，实现走 host `apps/desktop/src/main/maker-ipc/orcaDiagnostics.ts`（读 active team + DB worker 列表 + live session 状态 + 最近 assistant 消息），**无建 team 写副作用**——这是与旧 `orca_bridge` 版本的关键差异（旧版经 `ensureWorkflowForLead` 会顺手建 team）。早期 Lead 侧 `orca_bridge`（门面 + 私有 registry/restore/auto-bridge）已整体删除：Lead→worker/team 工具面唯 `cindy_orca`（C）一套，worker→lead 唯 `orca_worker_bridge`（B，在 `packages/orca-workflow`）一套；`@lizi`/`@fmfsaisai` 的 `orca-workflow` 包通过 B provider 与 `renderOrcaLeadSystemPrompt`/`renderOrcaWorkerSystemPrompt` 两个 render 函数继续被 host 依赖。
+诊断 3 工具是纯只读，实现走 host `apps/desktop/src/main/maker-ipc/orcaDiagnostics.ts`（读 active team + DB worker 列表 + live session 状态 + 最近 assistant 消息），**无建 team 写副作用**——这是与旧 `orca_bridge` 版本的关键差异（旧版经 `ensureWorkflowForLead` 会顺手建 team）。早期 Lead 侧 `orca_bridge`（门面 + 私有 registry/restore/auto-bridge）已整体删除：Lead→worker/team 工具面唯 `cindy_orca`（C）一套，worker→lead 唯 `orca_worker_bridge`（B，在 `packages/orca-workflow`）一套；`@cindy/orca-workflow` 包通过 B provider 与 `renderOrcaLeadSystemPrompt`/`renderOrcaWorkerSystemPrompt` 两个 render 函数继续被 host 依赖。
 
 `cindy_orca` 直接注册到顶层，而不是藏在 `list_tools/call_tool` 后面；模型在“开协同 / 派 worker”时需要稳定发现 `start_team/create_worker`。实现见 `packages/lizi-mcps/src/orca/server.ts` 的 `createOrcaMcpServer`、`DirectToolSink`、`OrcaMcpDeps`。
 
@@ -177,7 +177,7 @@ Worktree 现状：Orca 与普通 session 对齐，worktree 是可选项，不强
    用户手动 stop / abort worker 后，terminal turn 不应把最后消息 auto-bridge 给 Lead。实现指针：`register.ts` 的 stop / abort IPC handlers，以及 `orcaTeamService.ts` 的 `handleWorkerTerminalTurn`。
 
 6. **Lead 只能管理自己的排队消息，撤回必须结清 accepted 暂存（状态：不变量）**<br>
-   `list_worker_queue` / `update_queued_message` / `cancel_queued_message` 经 `resolveWorkerRef` 按 caller Lead 归属校验后，只允许操作目标 worker 队列中 `origin.kind='orca'` 的条目（worker 队列中的 orca 条目只可能来自其 Lead）；队列可见性口径是「看得全、只能动自己的」（2026-07-21 Dash 拍板）——用户手打与 scheduler 排队条目对 Lead 正文可见（供基于完整队列内容编排），但不可改不可撤（`NOT_LEAD_MESSAGE`）。修改是整条正文替换，必须经 `rebuildQueuedOrcaLeadMessage` 按原派发格式重建 `text` / `persistedContent` / `chatMessage.content` / `origin.displayText`，身份字段（clientId / createOpts / createdAt / senderLabel）锚定原条目；不许直接调 coordinator 的 `updateText`（会破坏 orca 派发格式耦合）。撤回必须走 coordinator `remove`（触发 `onDiscardedQueuedMessage` → dispatcher 丢弃该 clientId 的 accepted 暂存回调，与 Stop 清队列同一条 settle 路径），否则 accepted 回调表泄漏。steering 中的条目一律拒绝（`MESSAGE_CONSUMING`）。实现指针：`orcaTeamService.ts` 的 `resolveLeadQueuedMessage` 与三个队列控制方法、`orcaInterAgentDispatcher.ts` 的 `rebuildQueuedOrcaLeadMessage`、`agent-input-coordinator.ts` 的 `replaceQueuedMessage`。
+   `list_worker_queue` / `update_queued_message` / `cancel_queued_message` 经 `resolveWorkerRef` 按 caller Lead 归属校验后，只允许操作目标 worker 队列中 `origin.kind='orca'` 的条目（worker 队列中的 orca 条目只可能来自其 Lead）；队列可见性口径是「看得全、只能动自己的」（2026-07-21 产品决策）——用户手打与 scheduler 排队条目对 Lead 正文可见（供基于完整队列内容编排），但不可改不可撤（`NOT_LEAD_MESSAGE`）。修改是整条正文替换，必须经 `rebuildQueuedOrcaLeadMessage` 按原派发格式重建 `text` / `persistedContent` / `chatMessage.content` / `origin.displayText`，身份字段（clientId / createOpts / createdAt / senderLabel）锚定原条目；不许直接调 coordinator 的 `updateText`（会破坏 orca 派发格式耦合）。撤回必须走 coordinator `remove`（触发 `onDiscardedQueuedMessage` → dispatcher 丢弃该 clientId 的 accepted 暂存回调，与 Stop 清队列同一条 settle 路径），否则 accepted 回调表泄漏。steering 中的条目一律拒绝（`MESSAGE_CONSUMING`）。实现指针：`orcaTeamService.ts` 的 `resolveLeadQueuedMessage` 与三个队列控制方法、`orcaInterAgentDispatcher.ts` 的 `rebuildQueuedOrcaLeadMessage`、`agent-input-coordinator.ts` 的 `replaceQueuedMessage`。
 
 #### Worker 运行态
 
@@ -242,15 +242,15 @@ Codex thread start / resume 成功后必须注册 `threadId -> session context`�
 
 #### 5. Lead prompt 的诊断工具名（状态：已解决）
 
-历史问题：`renderOrcaLeadSystemPrompt`（`packages/orca-workflow/src/orca-bridge-prompt.ts`）的 Lead prompt 用裸工具名引用 `get_workspace_info` / `worker_status` / `read_worker`，而这些过去只在 Claude-lead 专属的 `orca_bridge` 里、Codex Lead 看不到，会制造稳定噪音。统一后这 3 个诊断工具以**同名裸工具**桥入全局可见的 `cindy_orca`，Claude 与 Codex Lead 都能解析到真实工具，噪音消除。prompt 正文保持不动（无 provider namespace、只用裸名），因此本次未触发规则 11。
+历史问题：`renderOrcaLeadSystemPrompt`（`packages/orca-workflow/src/orca-bridge-prompt.ts`）的 Lead prompt 用裸工具名引用 `get_workspace_info` / `worker_status` / `read_worker`，而这些过去只在 Claude-lead 专属的 `orca_bridge` 里、Codex Lead 看不到，会制造稳定噪音。统一后这 3 个诊断工具以**同名裸工具**桥入全局可见的 `cindy_orca`，Claude 与 Codex Lead 都能解析到真实工具，噪音消除。prompt 正文保持不动（无 provider namespace、只用裸名），因此本次未触发 system prompt 改动门禁（[`maker-core-and-agent-behavior.md`](maker-core-and-agent-behavior.md) §4）。
 
 #### 6. Model 不可中途换，effort 可调（状态：不变量）
 
 对同一个 live worker session，中途换 model 应视为重建执行单元，不是普通请求参数。原因：model 切换会破坏 prompt/cache 前缀稳定，Claude SDK 也可能解析失败。effort 是 per-turn 参数，可以中途调。创建执行单元前可以选 model/effort；运行中 effort 可调，model 不可调。
 
-#### 7. Prompt / tool / MCP 注册路径必须评估规则 10 四指标（状态：不变量）
+#### 7. Prompt / tool / MCP 注册路径必须评估 maker-core 四指标（状态：不变量）
 
-任何改动落在 prompt 拼接、tool/MCP 暴露、translator、event loop、model 映射、usage/token 计量路径时，都必须评估缓存率、性能/返回速度、返回内容准确性，并按项目规则 10 给出实测证据。尤其不要把 per-turn 易变内容塞进稳定 system/developer 前缀，不要在会话中途随意增删/重排 tool 定义。
+任何改动落在 prompt 拼接、tool/MCP 暴露、translator、event loop、model 映射、usage/token 计量路径时，都必须评估缓存率、性能/返回速度、返回内容准确性，并按 [`maker-core-and-agent-behavior.md`](maker-core-and-agent-behavior.md) §3 给出实测证据。尤其不要把 per-turn 易变内容塞进稳定 system/developer 前缀，不要在会话中途随意增删/重排 tool 定义。
 
 #### 8. `forkedAtMessageId` schema 注释滞后（状态：follow-up）
 

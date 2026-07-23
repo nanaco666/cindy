@@ -5,7 +5,7 @@
 
 import { describe, expect, it } from 'vitest';
 
-import type { McpProviderContext } from '@lizi/maker-core';
+import type { McpProviderContext } from '@cindy/maker-core';
 import type { CustomMcpConfig } from '../../../shared/customMcp.js';
 import { CustomMcpProvider } from '../custom-mcp-provider.js';
 

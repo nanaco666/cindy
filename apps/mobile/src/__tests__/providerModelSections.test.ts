@@ -7,8 +7,8 @@
  * 纯逻辑,node env,不 import react-native。
  */
 import { describe, expect, it } from 'vitest';
-import type { ProviderView } from '@lizi/model-providers/registry';
-import type { SectionModel } from '@lizi/model-providers/sections';
+import type { ProviderView } from '@cindy/model-providers/registry';
+import type { SectionModel } from '@cindy/model-providers/sections';
 
 import type { MobileModelMemoryAccessors } from '@/session/draftModelMemory';
 import {

@@ -5,11 +5,11 @@
  * import Electron / runtime config。
  */
 
-import type { AgentKind } from '@lizi/maker-core';
+import type { AgentKind } from '@cindy/maker-core';
 import type {
   MobileCodexRateLimitResetResult,
   MobileCodexRateLimitsResult,
-} from '@lizi/maker-shared/device-link-contract';
+} from '@cindy/maker-shared/device-link-contract';
 import type { ClaudeSubscriptionUsageSnapshot } from '../../shared/claudeSubscriptionUsage.js';
 import type { ClaudeAccountUsageSnapshot } from '../usage/claudeAccountUsage.js';
 import type { ModelPricingMap } from '../usage/modelPricing.js';

@@ -15,7 +15,7 @@ interface UserInfoSectionProps {
 }
 
 export function UserInfoSection({ isCollapsed, onOpenUpdateNotice }: UserInfoSectionProps) {
-  const { user, isCanary } = useAuth();
+  const { user, mode, isCanary } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [avatarError, setAvatarError] = useState(false);
@@ -32,14 +32,16 @@ export function UserInfoSection({ isCollapsed, onOpenUpdateNotice }: UserInfoSec
 
   // 头像地址变化(设置页改头像 / 服务端资料更新)时重置加载失败标记,
   // 让新地址有机会渲染,而不是永远停在首字母兜底。
+  const isLocal = mode === 'local';
+  const displayName = user?.name ?? (isLocal ? t('settings.userProfile.local.name') : '');
   const avatarUrl = user?.avatar ?? null;
   useEffect(() => {
     setAvatarError(false);
   }, [avatarUrl]);
 
-  if (!user) return null;
+  if (!user && !isLocal) return null;
 
-  const initial = user.name.charAt(0).toUpperCase();
+  const initial = displayName.charAt(0).toUpperCase();
   const appDisplayVersion = window.electronAPI.appDisplayVersion;
   const appDisplayVersionDetail = window.electronAPI.appDisplayVersionDetail;
   const appRegionLabel = CURRENT_CINDY_REGION === 'global' ? 'Global' : 'CN';
@@ -58,17 +60,17 @@ export function UserInfoSection({ isCollapsed, onOpenUpdateNotice }: UserInfoSec
         <button
           onClick={handleClick}
           role="link"
-          aria-label={t('sidebar.user.settingsLink', { name: user.name })}
+          aria-label={t('sidebar.user.settingsLink', { name: displayName })}
           className="flex min-w-0 items-center justify-center text-left"
         >
           <div
             className="relative h-9 w-9 shrink-0"
             title={isCanary ? t('sidebar.user.canaryBadge') : undefined}
           >
-            {user.avatar && !avatarError ? (
+            {user?.avatar && !avatarError ? (
               <img
                 src={user.avatar}
-                alt={user.name}
+                alt={displayName}
                 className="h-9 w-9 rounded-full object-cover"
                 onError={() => setAvatarError(true)}
               />
@@ -114,7 +116,7 @@ export function UserInfoSection({ isCollapsed, onOpenUpdateNotice }: UserInfoSec
         <button
           onClick={handleClick}
           role="link"
-          aria-label={t('sidebar.user.settingsLink', { name: user.name })}
+          aria-label={t('sidebar.user.settingsLink', { name: displayName })}
           className={cn('flex min-w-0 flex-1 items-center gap-[10px]', 'text-left')}
         >
           {/* Avatar — admin 用户加 1.5px 反色描边 + 右下角盾牌角标 */}
@@ -122,10 +124,10 @@ export function UserInfoSection({ isCollapsed, onOpenUpdateNotice }: UserInfoSec
             className="relative h-[27px] w-[27px] shrink-0"
             title={isCanary ? t('sidebar.user.canaryBadge') : undefined}
           >
-            {user.avatar && !avatarError ? (
+            {user?.avatar && !avatarError ? (
               <img
                 src={user.avatar}
-                alt={user.name}
+                alt={displayName}
                 className={cn(
                   'h-[27px] w-[27px] rounded-full object-cover',
                 )}
@@ -167,7 +169,7 @@ export function UserInfoSection({ isCollapsed, onOpenUpdateNotice }: UserInfoSec
             )}
           >
             <p className="truncate text-[14px] font-semibold leading-[18px] text-[var(--sidebar-user-card-text)]">
-              {user.name}
+              {displayName}
             </p>
             {/* 2px gap 与同栏 userNameContainer 保持一致。 */}
             <p

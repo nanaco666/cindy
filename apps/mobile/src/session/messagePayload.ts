@@ -37,7 +37,7 @@ import {
   type MessagePayloadPreviewSeverity,
   type PayloadAttachmentLike,
   type SharedMessagePayload,
-} from '@lizi/maker-shared/payload-summary';
+} from '@cindy/maker-shared/payload-summary';
 
 export type MessagePayload = SharedMessagePayload<NormalizedToolDiff, NormalizedToolMedia>;
 

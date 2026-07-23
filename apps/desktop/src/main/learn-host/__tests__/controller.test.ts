@@ -100,7 +100,7 @@ function makeHarness(overrides: HarnessOverrides = {}): Harness {
     createSession: async () => session,
     isTerminalErrorEvent: (ev) => ev.type === 'error',
     getAppLocale: () => 'zh-CN',
-    getCurrentUserId: () => 'u1',
+    getCurrentDataOwnerId: () => 'u1',
     collectProfile: async () => ({ block: '--- Chris (user) ---\nprefers concise answers', used: true }),
     getSessionWorkdir: async () => null,
     getConversationBlock: async () => 'User: run pnpm test first\n\nAssistant: done, 53 passed',
@@ -757,13 +757,13 @@ describe('LearnController 状态机', () => {
     expect(h.store.get(runId)!.status).toBe('awaiting-review');
   });
 
-  it('run 按账号隔离:其它账号的 run 不可见、不可 apply(runs.json per-profile)', async () => {
-    const h = makeHarness({ getCurrentUserId: () => 'u2' });
+  it('run 按 data owner 隔离:其它 owner 的 run 不可见、不可 apply', async () => {
+    const h = makeHarness({ getCurrentDataOwnerId: () => 'u2' });
     await h.store.put({
       runId: 'r-other',
       status: 'awaiting-review',
       sourceKind: 'freetext',
-      ownerUserId: 'u1',
+      dataOwnerId: 'u1',
       input: 'x',
       skillName: 'my-skill',
       usedSessionEvidence: false,
@@ -783,6 +783,24 @@ describe('LearnController 状态机', () => {
       updatedAt: 2,
     });
     expect((await h.controller.listRuns()).map((r) => r.runId)).toEqual(['r-legacy']);
+  });
+
+  it('本地模式 run 带 local data owner,其它 owner 的在途 run 不触发 LEARN_BUSY', async () => {
+    const h = makeHarness({ getCurrentDataOwnerId: () => 'local-v1' });
+    await h.store.put({
+      runId: 'cloud-in-flight',
+      status: 'collecting',
+      sourceKind: 'freetext',
+      dataOwnerId: 'cloud-a',
+      input: 'cloud task',
+      usedSessionEvidence: false,
+      createdAt: 1,
+      updatedAt: 1,
+    });
+
+    const { runId } = await h.controller.startLearn({ input: 'local task', sourceKind: 'freetext' });
+
+    expect(h.store.get(runId)?.dataOwnerId).toBe('local-v1');
   });
 
   it('修订把提案改名到本地已装 skill ⇒ personal(rescan 路径同责)', async () => {

@@ -1,3 +1,5 @@
+import { fileURLToPath } from 'node:url';
+
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
@@ -23,8 +25,11 @@ export default defineConfig({
   ],
   resolve: {
     alias: {
-      '@': new URL('./src', import.meta.url).pathname,
-      'expo-constants': new URL('./src/__tests__/expo-constants.mock.ts', import.meta.url).pathname,
+      // fileURLToPath 而非 URL.pathname:后者会把路径里的空格等字符百分号编码
+      // (checkout 路径含空格时 alias 指向不存在的 %20 路径,255 个测试文件整体
+      // TEST_COLLECT_FAILED);无空格路径下两者逐字节一致,CI 行为零变化。
+      '@': fileURLToPath(new URL('./src', import.meta.url)),
+      'expo-constants': fileURLToPath(new URL('./src/__tests__/expo-constants.mock.ts', import.meta.url)),
     },
   },
   test: {
