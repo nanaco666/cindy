@@ -1,8 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { INTERNAL_GITLAB_HOST } from '../../shared/endpoints';
 
-// 内部 GitLab 的 MR URL fixture:域名走单点常量,便于未来统一替换
-const INTERNAL_MR_URL = `https://${INTERNAL_GITLAB_HOST}/smash/xdt-maker/-/merge_requests/42`;
+// GitLab MR URL fixture(边界/截断逻辑对 gitlab.com 适用)
+const GITLAB_MR_URL = `https://gitlab.com/acme/app/-/merge_requests/42`;
 
 import { findLinkifyMatches } from '../components/chat/userMessageLinkify';
 
@@ -267,11 +266,11 @@ describe('userMessageLinkify', () => {
     expect(urls('**(see https://github.com/xindong/XDMaker/pull/283(base,OPEN))**')).toEqual([
       'https://github.com/xindong/XDMaker/pull/283',
     ]);
-    expect(urls(`已提交 ${INTERNAL_MR_URL}(base,OPEN)`)).toEqual([
-      INTERNAL_MR_URL,
+    expect(urls(`已提交 ${GITLAB_MR_URL}(base,OPEN)`)).toEqual([
+      GITLAB_MR_URL,
     ]);
-    expect(urls(`已提交 ${INTERNAL_MR_URL}/(base,OPEN)`)).toEqual([
-      `${INTERNAL_MR_URL}/`,
+    expect(urls(`已提交 ${GITLAB_MR_URL}/(base,OPEN)`)).toEqual([
+      `${GITLAB_MR_URL}/`,
     ]);
   });
 
