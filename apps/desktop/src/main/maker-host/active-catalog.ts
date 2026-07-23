@@ -211,16 +211,18 @@ function projectCodexModelsToClaude(p: Provider): Provider {
 const DYNAMIC_LIST_PROVIDER_IDS: ReadonlySet<string> = new Set(['anthropic', 'openai', 'xd']);
 
 /**
- * cindyModelMeta 里客户端消费的**展示字段子集**。能力字段(efforts / fast /
- * contextWindow)仍以动态发现为权威,这里刻意不收——元数据基线只管「叫什么、
- * 排哪里、默认露不露」,不管「能干什么」(2026-07-21 三层合并设计)。
+ * cindyModelMeta 里客户端认识的字段子集。展示字段直接覆盖发现条目；effort 字段只在
+ * Anthropic 动态通道**没有能力信息**时作为基线，由 model-discovery/anthropic 消费。
+ * 上游显式能力始终优先，meta 不在 active catalog overlay 阶段改写能力。
  */
-interface CindyMetaDisplayFields {
+interface CindyModelMetaFields {
   name?: string;
   group?: string;
   description?: string;
   sortOrder?: number;
   defaultEnabled?: boolean;
+  efforts?: Effort[];
+  defaultEffort?: Effort | null;
 }
 
 /**
@@ -229,8 +231,8 @@ interface CindyMetaDisplayFields {
  * **版本门禁**:version !== 1 整段忽略(未来服务端升 schema 时老客户端安全降级,
  * 不按旧语义误读新数据)。坏信封 / 坏条目静默跳过,绝不让元数据把清单弄坏。
  */
-function buildCindyModelMetaIndex(meta: unknown): Map<string, CindyMetaDisplayFields> {
-  const index = new Map<string, CindyMetaDisplayFields>();
+function buildCindyModelMetaIndex(meta: unknown): Map<string, CindyModelMetaFields> {
+  const index = new Map<string, CindyModelMetaFields>();
   if (!meta || typeof meta !== 'object' || Array.isArray(meta)) return index;
   const envelope = meta as { version?: unknown; models?: unknown };
   if (envelope.version !== 1) return index;
@@ -239,15 +241,47 @@ function buildCindyModelMetaIndex(meta: unknown): Map<string, CindyMetaDisplayFi
   for (const [id, entry] of Object.entries(models as Record<string, unknown>)) {
     if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue;
     const e = entry as Record<string, unknown>;
-    const fields: CindyMetaDisplayFields = {};
+    const fields: CindyModelMetaFields = {};
     if (typeof e.name === 'string' && e.name.length > 0) fields.name = e.name;
     if (typeof e.group === 'string' && e.group.length > 0) fields.group = e.group;
     if (typeof e.description === 'string' && e.description.length > 0) fields.description = e.description;
     if (typeof e.sortOrder === 'number' && Number.isFinite(e.sortOrder)) fields.sortOrder = e.sortOrder;
     if (typeof e.defaultEnabled === 'boolean') fields.defaultEnabled = e.defaultEnabled;
+    if (Array.isArray(e.efforts)) {
+      const efforts = e.efforts.filter((value): value is Effort =>
+        typeof value === 'string' && VALID_EFFORTS.has(value));
+      if (efforts.length === e.efforts.length) fields.efforts = efforts;
+    }
+    if (e.defaultEffort === null) fields.defaultEffort = null;
+    else if (typeof e.defaultEffort === 'string' && VALID_EFFORTS.has(e.defaultEffort)) {
+      fields.defaultEffort = e.defaultEffort as Effort;
+    }
     if (Object.keys(fields).length > 0) index.set(id, fields);
   }
   return index;
+}
+
+export interface CindyModelEffortBaseline {
+  efforts: Effort[];
+  defaultEffort: Effort | null;
+}
+
+/**
+ * 返回当前目录的模型 effort 基线。只供动态发现缺少 capability 字段时兜底；
+ * 模型是否存在仍完全由 HTTP / SDK 动态清单决定。
+ */
+export function getCindyModelEffortBaseline(modelId: string): CindyModelEffortBaseline | null {
+  const fields = buildCindyModelMetaIndex((base ?? BUNDLED_CATALOG).cindyModelMeta).get(modelId);
+  if (!fields?.efforts) return null;
+  const efforts = [...fields.efforts];
+  const defaultEffort =
+    fields.defaultEffort !== undefined &&
+    (fields.defaultEffort === null || efforts.includes(fields.defaultEffort))
+      ? fields.defaultEffort
+      : efforts.includes('high')
+        ? 'high'
+        : efforts[efforts.length - 1] ?? null;
+  return { efforts, defaultEffort };
 }
 
 /**
@@ -255,7 +289,7 @@ function buildCindyModelMetaIndex(meta: unknown): Map<string, CindyMetaDisplayFi
  * 典型修正:订阅 `/v1/models` / SDK 捕获给的家族级名字("Fable")→ 产品命名
  * ("Fable 5");上游无排序 → 产品排序。
  */
-function overlayCindyMeta(model: CatalogModel, fields: CindyMetaDisplayFields | undefined): CatalogModel {
+function overlayCindyMeta(model: CatalogModel, fields: CindyModelMetaFields | undefined): CatalogModel {
   if (!fields) return model;
   return {
     ...model,

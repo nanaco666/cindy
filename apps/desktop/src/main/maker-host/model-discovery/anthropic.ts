@@ -13,8 +13,9 @@
  *      fastMode 是 SDK 明说的,逐字段可信。
  *
  * 合并纪律(确定性,无隐藏兜底):
- *   - 两条通道都按 id 合并:条目自带能力信息(hasCapabilityInfo)则覆盖,否则保留
- *     已发现条目的能力字段(防止「不带能力字段的粗清单」把「已精化的档位」打回默认);
+ *   - 两条通道都按 id、按字段合并:effort / fastMode 哪项明确返回就只覆盖并记录哪项;
+ *     缺席字段只保留**明确探测过**的旧值,旧版缓存 / 合成默认会用当前产品目录基线刷新
+ *     (防止历史 low/medium/high 永久盖住新模型的 xhigh/max,也防止 fast-only 响应清空档位);
  *   - HTTP 明说的 max_input_tokens 单独记账(explicitWindows,随缓存持久化),SDK
  *     通道覆盖时不许把精确窗口打回 1M/200k 猜测值;
  *   - 同一授权世代内失败不清列表(上一次成功结果 + 磁盘缓存是「陈旧的真数据」,
@@ -34,7 +35,8 @@
  *   猜错 1M 的后果是该模型请求被拒(带 [1m] 后缀),由会话报错 + usage 校准暴露。
  *
  * 磁盘缓存:`<userData>/model-discovery/anthropic-models.json`
- * ({ fetchedAt, models });只缓存动态获取的成功结果,与静态兜底是两回事。
+ * ({ fetchedAt, models, explicitEffortModelIds, explicitFastModeModelIds });只缓存动态获取的
+ * 成功结果,与静态兜底是两回事。
  */
 
 import { app } from 'electron';
@@ -44,7 +46,11 @@ import path from 'node:path';
 import type { CatalogModel, Effort } from '@cindy/model-providers';
 
 import { createLogger } from '../../logger.js';
-import { getActiveCatalog, setAnthropicDiscoveredModels } from '../active-catalog.js';
+import {
+  getActiveCatalog,
+  getCindyModelEffortBaseline,
+  setAnthropicDiscoveredModels,
+} from '../active-catalog.js';
 import { hasClaudeAiOAuth } from '../claude-credentials-store.js';
 import { getValidClaudeAiOAuth } from '../claude-oauth-refresh.js';
 
@@ -57,6 +63,13 @@ const MAX_MODEL_PAGES = 5;
 
 /** 最近一次生效的发现结果(含缓存加载),合并时的能力字段保留源。 */
 let lastApplied: CatalogModel[] = [];
+/**
+ * 能力字段由 HTTP / SDK 明确声明过的模型 id。effort / fastMode 必须分开记账,因为上游
+ * 可能只返回其中一项；旧版缓存里的 low/medium/high 既可能是合成默认,也可能是上游实值,
+ * 只看模型值无法安全判断。旧缓存没有来源字段时一律按非明确处理。
+ */
+const explicitEffortModelIds = new Set<string>();
+const explicitFastModeModelIds = new Set<string>();
 /** HTTP 明说过 max_input_tokens 的模型窗口(id → tokens);SDK 覆盖时优先于启发式规则。 */
 const explicitWindows = new Map<string, number>();
 /** 授权边界(登出 / 换号)自增:在途发现若世代已变,结果作废不写回。 */
@@ -199,23 +212,27 @@ export function evaluateHttpShrink(prevCount: number, nextIds: readonly string[]
   return verdict;
 }
 
-/** SDK 映射结果:能力字段是条目明说的还是合成默认的(决定合并时是否覆盖已精化条目)。 */
+/** SDK 映射结果:每项能力是条目明说的还是合成默认的(决定逐字段合并与来源记账)。 */
 export interface SdkMappedModel {
   model: CatalogModel;
-  hasCapabilityInfo: boolean;
+  hasEffortInfo: boolean;
+  hasFastModeInfo: boolean;
 }
 
-/** 无能力信息时的确定性默认档位(与 HTTP 通道同一套):3 档,haiku 系例外 0 档。 */
-function defaultEffortsFor(id: string): Effort[] {
-  return /haiku/.test(id) ? [] : ['low', 'medium', 'high'];
+/** 动态通道无能力信息时:产品目录基线优先,未知模型才合成 3 档(haiku 0 档)。 */
+function fallbackEffortBaseline(id: string): { efforts: Effort[]; defaultEffort: Effort | null } {
+  const catalogBaseline = getCindyModelEffortBaseline(id);
+  if (catalogBaseline) return catalogBaseline;
+  const efforts: Effort[] = /haiku/.test(id) ? [] : ['low', 'medium', 'high'];
+  return { efforts, defaultEffort: pickDefaultEffort(efforts) };
 }
 
 /**
  * SDK `supportedModels()` 条目 → 映射结果。纯函数。
  * 只收 `claude` 开头的显式版本 id(规则 10:禁止 opus/sonnet 裸别名进目录)。
  * ModelInfo 的能力字段全部 optional:字段在场时 SDK 是能力权威(supportsEffort=false =
- * 不可调);**全缺席 = 未知**,按确定性默认合成并标记 hasCapabilityInfo=false,合并时
- * 保留已精化条目——不能把「CLI 没填」解读成「不支持」而抹掉档位(review P2)。
+ * 不可调);**字段缺席 = 该字段未知**,按 cindyModelMeta 基线 / 确定性默认合成,
+ * 合并时保留该字段已精化的旧值——不能把「CLI 没填」解读成「不支持」而抹掉档位。
  */
 export function mapAnthropicSdkModels(raw: unknown): SdkMappedModel[] {
   if (!Array.isArray(raw)) return [];
@@ -235,22 +252,32 @@ export function mapAnthropicSdkModels(raw: unknown): SdkMappedModel[] {
     const id = normalizeModelId(e.value);
     if (!id.startsWith('claude') || seen.has(id)) continue;
     seen.add(id);
-    const hasCapabilityInfo =
-      e.supportsEffort !== undefined ||
-      e.supportedEffortLevels !== undefined ||
-      e.supportsFastMode !== undefined;
+    const hasEffortInfo =
+      e.supportsEffort !== undefined || e.supportedEffortLevels !== undefined;
+    const hasFastModeInfo = e.supportsFastMode !== undefined;
+    const fallback = fallbackEffortBaseline(id);
     let efforts: Effort[];
-    if (!hasCapabilityInfo) {
-      efforts = defaultEffortsFor(id);
+    let defaultEffort: Effort | null;
+    if (!hasEffortInfo) {
+      efforts = fallback.efforts;
+      defaultEffort = fallback.defaultEffort;
     } else if (e.supportsEffort === false) {
       efforts = [];
+      defaultEffort = null;
     } else {
       const levels = toEfforts(e.supportedEffortLevels);
-      // supportsEffort=true 但没给档位清单:按确定性默认合成,不解读为不可调。
-      efforts = levels && levels.length > 0 ? levels : e.supportsEffort === true ? defaultEffortsFor(id) : [];
+      // supportsEffort=true 但没给档位清单:按目录基线 / 确定性默认合成,不解读为不可调。
+      efforts = levels && levels.length > 0 ? levels : e.supportsEffort === true ? fallback.efforts : [];
+      defaultEffort =
+        levels && levels.length > 0
+          ? pickDefaultEffort(efforts)
+          : e.supportsEffort === true
+            ? fallback.defaultEffort
+            : null;
     }
     out.push({
-      hasCapabilityInfo,
+      hasEffortInfo,
+      hasFastModeInfo,
       model: {
         id,
         name: typeof e.displayName === 'string' && e.displayName.length > 0 ? e.displayName : id,
@@ -261,7 +288,7 @@ export function mapAnthropicSdkModels(raw: unknown): SdkMappedModel[] {
           : {}),
         contextWindow: contextWindowFor(id),
         efforts,
-        defaultEffort: pickDefaultEffort(efforts),
+        defaultEffort,
         supportsFastMode: e.supportsFastMode === true,
         status: 'active',
         // 旧产品目录刻意把 haiku 收起(defaultEnabled:false);默认可见性是客户端
@@ -273,20 +300,69 @@ export function mapAnthropicSdkModels(raw: unknown): SdkMappedModel[] {
   return out;
 }
 
-/** HTTP 映射结果:能力字段是响应明说的还是合成默认的(决定合并时是否覆盖已精化条目)。 */
+/** HTTP 映射结果:每项能力是响应明说的还是合成默认的(决定逐字段合并与来源记账)。 */
 export interface HttpMappedModel {
   model: CatalogModel;
-  hasCapabilityInfo: boolean;
+  hasEffortInfo: boolean;
+  hasFastModeInfo: boolean;
   /** 响应明说的 max_input_tokens(null = 未下发,窗口来自启发式规则)。 */
   explicitContextWindow: number | null;
 }
 
+interface CapabilityMappedModel {
+  model: CatalogModel;
+  hasEffortInfo: boolean;
+  hasFastModeInfo: boolean;
+}
+
+/**
+ * 把一份完整存在性快照与上一轮能力状态逐字段合并。缺席字段只有上一轮已标记为明确
+ * 来源时才保留旧值；否则直接使用 mapper 生成的当前目录基线。
+ */
+function mergeCapabilitiesWithPrevious(
+  mapped: readonly CapabilityMappedModel[],
+): {
+  models: CatalogModel[];
+  explicitEffortIds: Set<string>;
+  explicitFastModeIds: Set<string>;
+} {
+  const prevById = new Map(lastApplied.map((model) => [model.id, model]));
+  const nextExplicitEffort = new Set<string>();
+  const nextExplicitFastMode = new Set<string>();
+  const models = mapped.map(({ model, hasEffortInfo, hasFastModeInfo }) => {
+    const prev = prevById.get(model.id);
+    let merged = model;
+    if (hasEffortInfo) {
+      nextExplicitEffort.add(model.id);
+    } else if (prev && explicitEffortModelIds.has(model.id)) {
+      nextExplicitEffort.add(model.id);
+      merged = {
+        ...merged,
+        efforts: prev.efforts,
+        defaultEffort: prev.defaultEffort,
+      };
+    }
+    if (hasFastModeInfo) {
+      nextExplicitFastMode.add(model.id);
+    } else if (prev && explicitFastModeModelIds.has(model.id)) {
+      nextExplicitFastMode.add(model.id);
+      merged = { ...merged, supportsFastMode: prev.supportsFastMode };
+    }
+    return merged;
+  });
+  return {
+    models,
+    explicitEffortIds: nextExplicitEffort,
+    explicitFastModeIds: nextExplicitFastMode,
+  };
+}
+
 /**
  * HTTP `GET /v1/models` 单页条目数组 → 映射结果。纯函数,对响应形状容错:
- * 能力字段(capabilities.efforts / fast_mode)是 Anthropic 侧未固化的扩展,认得出
- * 就用(hasCapabilityInfo=true),认不出按确定性默认合成——3 档(low/medium/high,
- * 默认 high),haiku 系例外 0 档(与 contextWindow 同源的 haiku 判别,haiku 从未
- * 支持档位调节);fastMode 默认 false(SDK 通道会精化)。
+ * 能力字段(capabilities.efforts / fast_mode)是 Anthropic 侧未固化的扩展,逐字段识别；
+ * effort 认不出时按 cindyModelMeta 能力基线合成,目录也没有才回落 3 档
+ * (low/medium/high,默认 high),haiku 系例外 0 档。fastMode 未知时先为 false,
+ * 合并阶段会保留已明确探测过的旧值。
  */
 export function mapAnthropicHttpModels(raw: unknown): HttpMappedModel[] {
   if (!Array.isArray(raw)) return [];
@@ -312,12 +388,16 @@ export function mapAnthropicHttpModels(raw: unknown): HttpMappedModel[] {
         ? (e.capabilities as { efforts?: unknown; effort_levels?: unknown; fast_mode?: unknown })
         : null;
     const capEfforts = caps ? (toEfforts(caps.efforts) ?? toEfforts(caps.effort_levels)) : null;
-    const hasCapabilityInfo = capEfforts !== null;
-    const efforts: Effort[] = capEfforts ?? defaultEffortsFor(id);
+    const hasEffortInfo = capEfforts !== null;
+    const hasFastModeInfo = typeof caps?.fast_mode === 'boolean';
+    const fallback = fallbackEffortBaseline(id);
+    const efforts: Effort[] = capEfforts ?? fallback.efforts;
+    const defaultEffort = capEfforts !== null ? pickDefaultEffort(efforts) : fallback.defaultEffort;
     const maxInput =
       typeof e.max_input_tokens === 'number' && e.max_input_tokens > 0 ? e.max_input_tokens : null;
     out.push({
-      hasCapabilityInfo,
+      hasEffortInfo,
+      hasFastModeInfo,
       explicitContextWindow: maxInput,
       model: {
         id,
@@ -326,7 +406,7 @@ export function mapAnthropicHttpModels(raw: unknown): HttpMappedModel[] {
         sortOrder: out.length,
         contextWindow: contextWindowFor(id, maxInput ?? undefined),
         efforts,
-        defaultEffort: pickDefaultEffort(efforts),
+        defaultEffort,
         supportsFastMode: caps?.fast_mode === true,
         status: 'active',
         ...(/haiku/.test(id) ? { defaultEnabled: false } : {}),
@@ -346,17 +426,42 @@ async function applyModels(
   models: CatalogModel[],
   persist: boolean,
   generation = authGeneration,
+  nextExplicitEffortIds: ReadonlySet<string> = explicitEffortModelIds,
+  nextExplicitFastModeIds: ReadonlySet<string> = explicitFastModeModelIds,
 ): Promise<void> {
   if (!generationCanApply(generation, models)) return;
-  if (JSON.stringify(models) === JSON.stringify(lastApplied)) return;
+  const modelIds = new Set(models.map((model) => model.id));
+  const normalizedExplicitEffortIds = new Set(
+    [...nextExplicitEffortIds].filter((id) => modelIds.has(id)),
+  );
+  const normalizedExplicitFastModeIds = new Set(
+    [...nextExplicitFastModeIds].filter((id) => modelIds.has(id)),
+  );
+  const modelsChanged = JSON.stringify(models) !== JSON.stringify(lastApplied);
+  const capabilityProvenanceChanged =
+    normalizedExplicitEffortIds.size !== explicitEffortModelIds.size ||
+    [...normalizedExplicitEffortIds].some((id) => !explicitEffortModelIds.has(id)) ||
+    normalizedExplicitFastModeIds.size !== explicitFastModeModelIds.size ||
+    [...normalizedExplicitFastModeIds].some((id) => !explicitFastModeModelIds.has(id));
+  if (!modelsChanged && !capabilityProvenanceChanged) return;
   lastApplied = models;
-  setAnthropicDiscoveredModels(models);
+  explicitEffortModelIds.clear();
+  for (const id of normalizedExplicitEffortIds) explicitEffortModelIds.add(id);
+  explicitFastModeModelIds.clear();
+  for (const id of normalizedExplicitFastModeIds) explicitFastModeModelIds.add(id);
+  if (modelsChanged) setAnthropicDiscoveredModels(models);
   if (persist) {
     const payload = JSON.stringify(
       {
         fetchedAt: new Date().toISOString(),
         models,
         explicitWindows: Object.fromEntries(explicitWindows),
+        explicitEffortModelIds: models
+          .map((model) => model.id)
+          .filter((id) => explicitEffortModelIds.has(id)),
+        explicitFastModeModelIds: models
+          .map((model) => model.id)
+          .filter((id) => explicitFastModeModelIds.has(id)),
         // 整份重写不得抹掉跨重启的待确认骤减记账(SDK 每会话都会持久化一次)。
         ...(httpShrinkSignature !== null
           ? { pendingShrink: { signature: httpShrinkSignature, streak: httpShrinkStreak } }
@@ -428,7 +533,31 @@ export async function loadAnthropicModelsFromDiskCache(): Promise<void> {
         Array.isArray((m as CatalogModel).efforts),
     );
     if (valid.length === 0) return;
-    await applyModels(valid, false, generation);
+    const validIds = new Set(valid.map((model) => model.id));
+    const restoreIds = (value: unknown): Set<string> => {
+      const restored = new Set<string>();
+      if (Array.isArray(value)) {
+        for (const id of value) {
+          if (typeof id === 'string' && validIds.has(id)) restored.add(id);
+        }
+      }
+      return restored;
+    };
+    // 旧的 explicitCapabilityModelIds 无法区分 effort / fastMode,刻意不恢复；
+    // 把有歧义的整模型来源当作非明确,下一次 HTTP / SDK 会按逐字段证据重新记账。
+    const restoredExplicitEffortIds = restoreIds(
+      (raw as { explicitEffortModelIds?: unknown }).explicitEffortModelIds,
+    );
+    const restoredExplicitFastModeIds = restoreIds(
+      (raw as { explicitFastModeModelIds?: unknown }).explicitFastModeModelIds,
+    );
+    await applyModels(
+      valid,
+      false,
+      generation,
+      restoredExplicitEffortIds,
+      restoredExplicitFastModeIds,
+    );
     log.info(`anthropic models loaded from disk cache: ${valid.length}`);
   } catch {
     /* 缓存缺失 / 损坏:等动态通道,不影响启动 */
@@ -446,34 +575,68 @@ export function noteAnthropicSdkSupportedModels(raw: unknown): void {
   const generation = authGeneration;
   const mapped = mapAnthropicSdkModels(raw);
   if (mapped.length === 0) return;
-  const prevById = new Map(lastApplied.map((m) => [m.id, m]));
-  const models = mapped.map(({ model, hasCapabilityInfo }) => {
+  const mappedWithWindows = mapped.map(({ model, hasEffortInfo, hasFastModeInfo }) => {
     const explicit = explicitWindows.get(model.id);
     const base = explicit !== undefined ? { ...model, contextWindow: explicit } : model;
-    const prev = prevById.get(model.id);
-    if (!prev || hasCapabilityInfo) return base;
-    return {
-      ...base,
-      efforts: prev.efforts,
-      defaultEffort: prev.defaultEffort,
-      supportsFastMode: prev.supportsFastMode,
-    };
+    return { model: base, hasEffortInfo, hasFastModeInfo };
   });
-  // SDK 通道骤减恒拒绝、**不参与收敛**:持续一致的退化 SDK 快照正是打塌事故的形态,
-  // 给 SDK 开 streak 收敛等于把事故门重新打开(真退化会一直一致,streak 必然凑齐)。
+  const { models, explicitEffortIds, explicitFastModeIds } =
+    mergeCapabilitiesWithPrevious(mappedWithWindows);
+  // SDK 通道骤减恒拒绝其**存在性快照**、**不参与收敛**:持续一致的退化 SDK 快照正是
+  // 打塌事故的形态,给 SDK 开 streak 收敛等于把事故门重新打开(真退化会一直一致,
+  // streak 必然凑齐)。但 cc 当前可能只返回本会话模型这一条,其中明确携带的 capability
+  // 仍是该模型的权威信息:保留完整清单,只把同 id 的 effort / fast 字段增量合入。
+  // 否则 HTTP `/v1/models` 不带 capabilities 时会永久停在合成的 low/medium/high,
+  // Fable / Opus 的 xhigh 永远无法进入 UI。
   // 真实批量下架的收敛只认 HTTP 权威通道(evaluateHttpShrink);为了不依赖「下次重启 /
   // 登录」才仲裁,这里在拒绝的同时主动触发一次 HTTP 刷新(单飞防抖):HTTP 可达时要么
   // 纠正要么推进收敛 streak;HTTP 持续不可达时保留陈旧超集(fail-visible:多出的条目
   // 发请求时报错,不会静默丢模型)——两难下的取舍,review P1 讨论定案。
   if (isDegenerateModelListShrink(lastApplied.length, models.length)) {
-    log.warn(
-      `anthropic SDK capture looks degenerate (${lastApplied.length} -> ${models.length}); keeping current list and consulting HTTP`,
+    const capabilityPatches = new Map(
+      mapped
+        .filter(({ hasEffortInfo, hasFastModeInfo }) => hasEffortInfo || hasFastModeInfo)
+        .map((entry) => [entry.model.id, entry] as const),
     );
+    const merged = lastApplied.map((current) => {
+      const patch = capabilityPatches.get(current.id);
+      if (!patch) return current;
+      let next = current;
+      if (patch.hasEffortInfo) {
+        next = {
+          ...next,
+          efforts: patch.model.efforts,
+          defaultEffort: patch.model.defaultEffort,
+        };
+      }
+      if (patch.hasFastModeInfo) {
+        next = { ...next, supportsFastMode: patch.model.supportsFastMode };
+      }
+      return next;
+    });
+    const mergedExplicitEffortIds = new Set(explicitEffortModelIds);
+    const mergedExplicitFastModeIds = new Set(explicitFastModeModelIds);
+    for (const [id, patch] of capabilityPatches) {
+      if (patch.hasEffortInfo) mergedExplicitEffortIds.add(id);
+      if (patch.hasFastModeInfo) mergedExplicitFastModeIds.add(id);
+    }
+    log.warn(
+      `anthropic SDK capture looks degenerate (${lastApplied.length} -> ${models.length}); keeping current list, merging ${capabilityPatches.size} capability patch(es), and consulting HTTP`,
+    );
+    void applyModels(
+      merged,
+      true,
+      generation,
+      mergedExplicitEffortIds,
+      mergedExplicitFastModeIds,
+    ).catch((err) => {
+      log.warn('apply partial anthropic SDK capabilities failed', { error: String(err) });
+    });
     void refreshAnthropicModelsFromHttp().catch(() => undefined);
     return;
   }
   log.info(`anthropic models captured from SDK init: ${models.length}`);
-  void applyModels(models, true, generation).catch((err) => {
+  void applyModels(models, true, generation, explicitEffortIds, explicitFastModeIds).catch((err) => {
     log.warn('apply anthropic SDK models failed', { error: String(err) });
   });
 }
@@ -540,20 +703,11 @@ export function refreshAnthropicModelsFromHttp(): Promise<void> {
     for (const { model, explicitContextWindow } of mapped) {
       if (explicitContextWindow != null) explicitWindows.set(model.id, explicitContextWindow);
     }
-    // 合并:HTTP 无能力信息的条目保留已精化(SDK/缓存)条目的能力字段。
-    const prevById = new Map(lastApplied.map((m) => [m.id, m]));
-    const models = mapped.map(({ model, hasCapabilityInfo }) => {
-      const prev = prevById.get(model.id);
-      if (!prev || hasCapabilityInfo) return model;
-      return {
-        ...model,
-        efforts: prev.efforts,
-        defaultEffort: prev.defaultEffort,
-        supportsFastMode: prev.supportsFastMode,
-      };
-    });
+    // HTTP 不带能力时只保留明确探测过的旧能力；旧版缓存 / 合成默认用当前目录基线刷新。
+    const { models, explicitEffortIds, explicitFastModeIds } =
+      mergeCapabilitiesWithPrevious(mapped);
     log.info(`anthropic models refreshed via HTTP: ${models.length}`);
-    await applyModels(models, true, gen);
+    await applyModels(models, true, gen, explicitEffortIds, explicitFastModeIds);
   })().finally(() => {
     // 只清自己的登记:世代变化后可能已有新 flight 顶替,不能误清。
     if (httpRefreshInflight === flight) httpRefreshInflight = null;
@@ -571,6 +725,8 @@ export async function clearAnthropicDiscoveredModels(): Promise<void> {
   const generation = authGeneration + 1;
   authGeneration = generation;
   explicitWindows.clear();
+  explicitEffortModelIds.clear();
+  explicitFastModeModelIds.clear();
   resetHttpShrinkStreak();
   await applyModels([], false, generation);
   await enqueueCacheMutation(async () => {
@@ -587,6 +743,8 @@ export function waitForAnthropicDiscoveryIdleForTest(): Promise<void> {
 export function resetAnthropicDiscoveryForTest(): void {
   lastApplied = [];
   explicitWindows.clear();
+  explicitEffortModelIds.clear();
+  explicitFastModeModelIds.clear();
   resetHttpShrinkStreak();
   // 不回拨世代:即便测试误留异步任务,旧任务也不会重新获得生效资格。
   authGeneration += 1;

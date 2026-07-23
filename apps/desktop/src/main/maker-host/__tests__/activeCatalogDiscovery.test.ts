@@ -12,6 +12,7 @@ import { BUNDLED_CATALOG, type Catalog, type CatalogModel } from '@cindy/model-p
 
 import {
   getActiveCatalog,
+  getCindyModelEffortBaseline,
   setActiveCatalog,
   setAnthropicDiscoveredModels,
   setDiscoveredCodexModels,
@@ -159,7 +160,7 @@ function anthropicList(): CatalogModel[] {
   return p?.models['claude-code'] ?? [];
 }
 
-describe('anthropic 发现条目的 cindyModelMeta 展示元数据基线(2026-07-21 三层合并)', () => {
+describe('anthropic 发现条目的 cindyModelMeta 元数据基线', () => {
   afterEach(() => {
     setActiveCatalog(BUNDLED_CATALOG);
     setAnthropicDiscoveredModels([]);
@@ -177,7 +178,7 @@ describe('anthropic 发现条目的 cindyModelMeta 展示元数据基线(2026-07
     ]);
   });
 
-  it('meta 没有的 id 保留上游名字;能力字段(efforts/contextWindow)不被 meta 覆盖', () => {
+  it('active overlay 不覆盖能力;发现模块可单独读取 effort 基线', () => {
     const catalog = JSON.parse(JSON.stringify(BUNDLED_CATALOG)) as Catalog;
     catalog.cindyModelMeta = {
       version: 1,
@@ -191,12 +192,16 @@ describe('anthropic 发现条目的 cindyModelMeta 展示元数据基线(2026-07
       anthro('claude-unknown', 'Unknown Raw', 1),
     ]);
     const known = anthropicList().find((m) => m.id === 'claude-known');
-    // 展示字段覆盖;能力字段仍以发现为准(meta 的 contextWindow/efforts 不消费)。
+    // 展示字段覆盖;active overlay 不直接改能力,避免覆盖上游显式声明。
     expect(known).toMatchObject({
       name: 'Known Pro',
       defaultEnabled: false,
       contextWindow: 1_000_000,
       efforts: ['low', 'medium', 'high'],
+    });
+    expect(getCindyModelEffortBaseline('claude-known')).toEqual({
+      efforts: ['max'],
+      defaultEffort: 'max',
     });
     expect(anthropicList().find((m) => m.id === 'claude-unknown')?.name).toBe('Unknown Raw');
   });
@@ -207,10 +212,12 @@ describe('anthropic 发现条目的 cindyModelMeta 展示元数据基线(2026-07
     setActiveCatalog(catalog);
     setAnthropicDiscoveredModels([anthro('claude-fable-5', 'Fable', 0)]);
     expect(anthropicList()[0]?.name).toBe('Fable');
+    expect(getCindyModelEffortBaseline('claude-fable-5')).toBeNull();
 
     catalog.cindyModelMeta = 'not-an-object';
     setActiveCatalog(JSON.parse(JSON.stringify(catalog)) as Catalog);
     setAnthropicDiscoveredModels([anthro('claude-fable-5', 'Fable', 0)]);
     expect(anthropicList()[0]?.name).toBe('Fable');
+    expect(getCindyModelEffortBaseline('claude-fable-5')).toBeNull();
   });
 });
