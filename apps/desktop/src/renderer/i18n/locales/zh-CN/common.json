@@ -1744,18 +1744,23 @@
     },
     "builtinTools": {
       "title": "内置工具",
-      "description": "为当前项目启用或禁用内置工具。变更在下次启动 agent 会话时生效。",
+      "description": "设置新对话默认值，或为指定项目添加覆盖。项目设置优先于用户默认值。",
       "empty": "暂无可用的工具。",
-      "projectOverrideBadge": "项目",
-      "projectOverrideTooltip": "已被项目设置覆盖 ({{dir}})",
       "toggleAria": "切换 {{name}} 工具",
-      "toggleHint": "变更在下次启动 agent 会话时生效，不影响正在运行的会话 ——",
-      "startNewSessionToApply": "新建会话立即生效。",
-      "noProjectHint": "从项目会话中打开「设置」可针对该项目切换工具开关。",
+      "toggleHint": "变更仅对新建或重新启动的 agent 会话生效，不影响正在运行的会话。",
       "loadFailed": "加载工具列表失败",
-      "projectPicker": {
-        "ariaLabel": "切换工具开关作用的项目",
-        "noRecentProjects": "暂无最近项目"
+      "scopePicker": {
+        "ariaLabel": "切换内置工具设置的作用域",
+        "userDefault": "新对话默认值",
+        "userDefaultDescription": "适用于没有项目覆盖的新会话"
+      },
+      "source": {
+        "project": "项目",
+        "projectTooltip": "由项目设置覆盖 ({{dir}})",
+        "user": "用户默认",
+        "userTooltip": "沿用新对话默认值",
+        "product": "产品默认",
+        "productTooltip": "沿用 Cindy 产品默认值"
       },
       "toast": {
         "enabled": "{{name}} 已启用 — 下次会话生效",

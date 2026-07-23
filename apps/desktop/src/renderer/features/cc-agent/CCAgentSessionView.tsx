@@ -974,12 +974,22 @@ export function CCAgentSessionView({
     };
   }, [session?.agentKind, session?.workingDir, isRemoteSession, remoteDeviceId]);
 
-  // Keep lastWorkingDir in sync so Settings → BuiltinToolsSection has a
-  // project context for per-project tool toggles. remote 的 workingDir 是远端路径,
-  // 不进本地项目上下文缓存。
+  // Keep lastWorkingDir in sync so Settings can distinguish a real project
+  // scope from「新对话默认值」. Standalone dialogues have an internal runtime
+  // directory too, but it is not a stable project preference scope; caching it
+  // here was the root cause of every new dialogue getting a fresh setting.
+  // Remote workingDir is also not a local project path.
   useEffect(() => {
-    if (session?.workingDir && !isRemoteSession) setLastWorkingDir(session.workingDir);
-  }, [session?.workingDir, isRemoteSession]);
+    // Embedded rails and Orca panes share this component but do not own the
+    // active route. They must not overwrite the process-wide project scope
+    // selected by the route-owned conversation.
+    if (!ownsRoute) return;
+    if (session?.workspaceKind === 'project' && session.workingDir && !isRemoteSession) {
+      setLastWorkingDir(session.workingDir);
+      return;
+    }
+    setLastWorkingDir(null);
+  }, [ownsRoute, session?.workingDir, session?.workspaceKind, isRemoteSession]);
 
   // (订阅 desktop-command-triggered 的 useEffect 在下方 useCCAgentChat 解构出
   //  insertSystemCard / clearSession 之后才能挂, 见下面 "Desktop slash dispatch

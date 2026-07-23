@@ -1745,18 +1745,23 @@
     },
     "builtinTools": {
       "title": "Built-in Tools",
-      "description": "Enable or disable built-in tools for the current project. Changes take effect on the next agent session.",
+      "description": "Set defaults for new conversations or override them for a project. Project settings take priority.",
       "empty": "No tools available.",
-      "projectOverrideBadge": "project",
-      "projectOverrideTooltip": "Overridden by project settings ({{dir}})",
       "toggleAria": "Toggle {{name}} tool",
-      "toggleHint": "Changes take effect on the next agent session. Running sessions are not affected —",
-      "startNewSessionToApply": "start a new session to apply.",
-      "noProjectHint": "Open Settings from a project session to toggle tools for that project.",
+      "toggleHint": "Changes apply only to new or restarted agent sessions. Running sessions are not affected.",
       "loadFailed": "Failed to load tool list",
-      "projectPicker": {
-        "ariaLabel": "Switch project for tool toggle",
-        "noRecentProjects": "No recent projects"
+      "scopePicker": {
+        "ariaLabel": "Switch the scope of built-in tool settings",
+        "userDefault": "New conversation defaults",
+        "userDefaultDescription": "Used by new sessions without a project override"
+      },
+      "source": {
+        "project": "project",
+        "projectTooltip": "Overridden by project settings ({{dir}})",
+        "user": "user default",
+        "userTooltip": "Inherited from new conversation defaults",
+        "product": "product default",
+        "productTooltip": "Inherited from Cindy product defaults"
       },
       "toast": {
         "enabled": "{{name}} enabled — takes effect on next session",

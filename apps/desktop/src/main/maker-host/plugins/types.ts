@@ -4,10 +4,12 @@
  * Capability fields are defined once up-front (mcps / skills / hooks / uiPanels)
  * but only `mcps` is wired in Phase 1. The rest are reserved for future phases.
  *
- * ## Enable decision (two-tier)
+ * ## Enable decision
  *   1. essential === true                     → always enabled
- *   2. project settings (.claude/settings.json → xdtMaker.builtinTools.{id})
- *   3. default                                → true
+ *   2. machine-wide setting                    → OS-level tools only
+ *   3. project settings (.claude/settings.json → xdtMaker.builtinTools.{id})
+ *   4. user default (userData/builtin-tools-settings.json)
+ *   5. product default
  */
 
 import type { LiziMcpProvider } from '@cindy/mcps';

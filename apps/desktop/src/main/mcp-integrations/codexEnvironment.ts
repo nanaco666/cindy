@@ -9,6 +9,8 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { Logger, McpProvider, McpProviderContext } from '@cindy/maker-core';
 import { getLiziMcpSessionContext, type LiziMcpSessionContext } from '@cindy/mcps';
+import { pluginIdForKnownProviderName } from '../maker-host/plugins/builtin-plugins.js';
+import { CODEX_DISABLED_BUILTIN_PLUGIN_IDS_KEY } from './codexBuiltinToolPolicy.js';
 
 import {
   startCodexHttpBridge,
@@ -46,6 +48,7 @@ export interface GetCodexExtraSpawnConfigOptions {
 
 let cached: Promise<CodexExtraSpawnConfig> | null = null;
 let activeBridge: CodexHttpBridge | null = null;
+const disabledPluginIdsByThread = new Map<string, unknown>();
 
 /**
  * 懒启动 + 缓存。多个 codex session 并发首次调用共享同一个 in-flight Promise，
@@ -87,10 +90,21 @@ export function registerCodexMcpThreadContext(
   threadId: string,
   ctx: LiziMcpSessionContext,
 ): void {
-  activeBridge?.registerThreadContext(threadId, ctx);
+  const requestedPolicy = ctx.vendorOptions?.[CODEX_DISABLED_BUILTIN_PLUGIN_IDS_KEY];
+  if (!disabledPluginIdsByThread.has(threadId)) {
+    disabledPluginIdsByThread.set(threadId, requestedPolicy);
+  }
+  activeBridge?.registerThreadContext(threadId, {
+    ...ctx,
+    vendorOptions: {
+      ...ctx.vendorOptions,
+      [CODEX_DISABLED_BUILTIN_PLUGIN_IDS_KEY]: disabledPluginIdsByThread.get(threadId),
+    },
+  });
 }
 
 export function unregisterCodexMcpThreadContext(threadId: string): void {
+  disabledPluginIdsByThread.delete(threadId);
   activeBridge?.unregisterThreadContext(threadId);
 }
 
@@ -125,6 +139,7 @@ async function doStart(
     },
   };
   const serverFactories: Record<string, () => McpServer> = {};
+  const pluginIdByServerName: Record<string, string> = {};
   const remoteHttpServers: Record<
     string,
     { url: string; bearerTokenEnvVar?: string; envHttpHeaders?: Record<string, string> }
@@ -189,6 +204,8 @@ async function doStart(
       }
       return createServer();
     };
+    const pluginId = pluginIdForKnownProviderName(provider.name);
+    if (pluginId) pluginIdByServerName[provider.name] = pluginId;
   }
 
   if (Object.keys(serverFactories).length === 0 && Object.keys(remoteHttpServers).length === 0) {
@@ -200,6 +217,7 @@ async function doStart(
   const bridge = Object.keys(serverFactories).length > 0
     ? await startCodexHttpBridge({
         serverFactories,
+        pluginIdByServerName,
         logger: opts.logger,
       })
     : null;
