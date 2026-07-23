@@ -59,7 +59,7 @@ type SelfDeviceNameQueuedWrite =
   | { kind: 'reset' };
 const SETTINGS_DEVICE_TIMEOUT_MS = 12_000;
 const PRIVACY_POLICY_URL = AUTH_REGION === 'cn'
-  ? 'https://cindy.com.cn/privacy/'
+  ? 'https://cindy.cn/privacy/'
   : 'https://cindy.app/privacy/';
 
 export default function SettingsScreen() {

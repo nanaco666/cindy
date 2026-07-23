@@ -19,11 +19,11 @@
 </p>
 
 <p align="center">
-  🌐 <a href="https://cindy.com.cn">国内版</a> | <a href="https://cindy.app">海外版</a>
+  🌐 <a href="https://cindy.cn">国内版</a> | <a href="https://cindy.app">海外版</a>
 </p>
 
 <p align="center">
-  ⬇️ <a href="https://cindy.com.cn/#download">国内版下载</a> | <a href="https://cindy.app/#download">海外版下载</a>
+  ⬇️ <a href="https://cindy.cn/#download">国内版下载</a> | <a href="https://cindy.app/#download">海外版下载</a>
 </p>
 
 
@@ -36,7 +36,7 @@ monorepo 组织。
 
 客户端本身免费使用，源码以 Apache-2.0 开源。只有使用 Cindy 提供的 Token / API
 时才需要按官网规则付费；你也可以配置自己的 API Key。具体的服务说明、价格和下载
-入口请按所在区域查看[国内官网](https://cindy.com.cn/#pricing)或[海外官网](https://cindy.app/#pricing)。
+入口请按所在区域查看[国内官网](https://cindy.cn/#pricing)或[海外官网](https://cindy.app/#pricing)。
 
 ## 本仓包含什么
 
@@ -52,7 +52,7 @@ monorepo 组织。
 
 | 使用方式 | 账号要求 | 可用范围 |
 | --- | --- | --- |
-| 远程托管 | Cindy 云端账号 | 使用 Cindy 的完整托管服务；[国内定价](https://cindy.com.cn/#pricing) · [海外定价](https://cindy.app/#pricing)。 |
+| 远程托管 | Cindy 云端账号 | 使用 Cindy 的完整托管服务；[国内定价](https://cindy.cn/#pricing) · [海外定价](https://cindy.app/#pricing)。 |
 | 本地模式 | 无需登录 Cindy 账号 | 在登录页选择「本地模式」即可使用本机 agent 功能。依赖服务端的能力在该模式下不可用。 |
 
 ## 前置要求

@@ -173,7 +173,7 @@ describe('mobile settings overview', () => {
     const accountActionsIndex = source.indexOf('testID="settings.accountActions"');
 
     expect(source).toContain("const PRIVACY_POLICY_URL = AUTH_REGION === 'cn'");
-    expect(source).toContain("'https://cindy.com.cn/privacy/'");
+    expect(source).toContain("'https://cindy.cn/privacy/'");
     expect(source).toContain("'https://cindy.app/privacy/'");
     expect(source).toContain('Linking.openURL(PRIVACY_POLICY_URL)');
     expect(source).toContain('accessibilityLabel="打开隐私政策"');
