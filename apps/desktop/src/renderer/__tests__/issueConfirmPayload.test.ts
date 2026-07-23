@@ -4,9 +4,9 @@ import { parseIssueSubmissionIdentity } from '@/lib/issueConfirmPayload';
 
 describe('parseIssueSubmissionIdentity', () => {
   it('保留 GitHub 用户和平台的实际 login', () => {
-    expect(parseIssueSubmissionIdentity({ kind: 'github-user', login: ' dashhuang ' })).toEqual({
+    expect(parseIssueSubmissionIdentity({ kind: 'github-user', login: ' octocat ' })).toEqual({
       kind: 'github-user',
-      login: 'dashhuang',
+      login: 'octocat',
     });
     expect(parseIssueSubmissionIdentity({ kind: 'platform', login: 'cindy-issue' })).toEqual({
       kind: 'platform',

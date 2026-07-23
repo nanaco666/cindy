@@ -15,7 +15,7 @@ function makeDeps(over: Partial<GithubUserIssueSubmitterDeps> = {}): GithubUserI
     callGhostTool: vi.fn(async (request) => {
       const operation = request.args.name;
       if (operation === 'get_current_user') {
-        return { ok: true as const, result: { data: { login: 'dashhuang' } } };
+        return { ok: true as const, result: { data: { login: 'octocat' } } };
       }
       return {
         ok: true as const,
@@ -33,7 +33,7 @@ describe('resolveGithubIssueSubmissionIdentity', () => {
     const deps = makeDeps();
     await expect(resolveGithubIssueSubmissionIdentity(deps)).resolves.toEqual({
       kind: 'github-user',
-      login: 'dashhuang',
+      login: 'octocat',
     });
     expect(deps.callGhostTool).toHaveBeenCalledWith({
       ghostId: 'cindy-github',
@@ -100,7 +100,7 @@ describe('resolveGithubIssueSubmissionIdentity', () => {
       identityProbeTimeoutMs: 1,
       callGhostTool: vi.fn(async () => {
         await new Promise((resolve) => setTimeout(resolve, 50));
-        return { ok: true as const, result: { data: { login: 'dashhuang' } } };
+        return { ok: true as const, result: { data: { login: 'octocat' } } };
       }),
     });
     await expect(resolveGithubIssueSubmissionIdentity(deps)).resolves.toEqual(
@@ -119,7 +119,7 @@ describe('resolveGithubIssueSubmissionIdentity', () => {
 });
 
 describe('postGithubIssueAsUser', () => {
-  const IDENTITY = { kind: 'github-user', login: 'dashhuang' } as const;
+  const IDENTITY = { kind: 'github-user', login: 'octocat' } as const;
   const BODY = {
     title: '让 /issue 支持用户本人身份',
     description: '## 诉求\n使用绑定账号提交\n\n---\n**OS**: darwin arm64 (25.5.0)',
@@ -168,7 +168,7 @@ describe('postGithubIssueAsUser', () => {
   it('create_issue 失败时明确报错且没有平台提交入口', async () => {
     const callGhostTool = vi
       .fn<GithubUserIssueSubmitterDeps['callGhostTool']>()
-      .mockResolvedValueOnce({ ok: true, result: { data: { login: 'dashhuang' } } })
+      .mockResolvedValueOnce({ ok: true, result: { data: { login: 'octocat' } } })
       .mockResolvedValueOnce({
         ok: false,
         errorCode: 'INTERNAL',
@@ -183,7 +183,7 @@ describe('postGithubIssueAsUser', () => {
   it('create_issue 返回缺少 number/url 时拒绝当作成功', async () => {
     const callGhostTool = vi
       .fn<GithubUserIssueSubmitterDeps['callGhostTool']>()
-      .mockResolvedValueOnce({ ok: true, result: { data: { login: 'dashhuang' } } })
+      .mockResolvedValueOnce({ ok: true, result: { data: { login: 'octocat' } } })
       .mockResolvedValueOnce({ ok: true, result: { data: { number: 469 } } });
     await expect(
       postGithubIssueAsUser(makeDeps({ callGhostTool }), IDENTITY, BODY),

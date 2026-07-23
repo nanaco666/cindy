@@ -275,7 +275,7 @@ describe('cindy_contacts tools', () => {
   it('关系边: add_relation 双向可见, remove_relation 清除', async () => {
     const dash = await createNeo();
     const org = (
-      parseResult(await registry.call('contacts_create', { kind: 'org', display_name: '心动网络' }))
+      parseResult(await registry.call('contacts_create', { kind: 'org', display_name: '星澜网络' }))
         .data as { profile: { id: string } }
     ).profile;
 
@@ -297,7 +297,7 @@ describe('cindy_contacts tools', () => {
     // resolve 返回的 compactProfile 也带 relations
     const resolved = parseResult(await registry.call('contacts_resolve', { value: 'neo@example.com' }))
       .data as Array<{ profile: { relations: Array<{ displayName: string }> } }>;
-    expect(resolved[0]!.profile.relations[0]!.displayName).toBe('心动网络');
+    expect(resolved[0]!.profile.relations[0]!.displayName).toBe('星澜网络');
 
     const relId = (rel.data as { id: string }).id;
     const removed = parseResult(await registry.call('contacts_remove_relation', { relation_id: relId }));
@@ -372,7 +372,7 @@ describe('cindy_contacts tools', () => {
         .data as { profile: { id: string } }
     ).profile;
     const employer = (
-      parseResult(await registry.call('contacts_create', { kind: 'org', display_name: '心动网络' }))
+      parseResult(await registry.call('contacts_create', { kind: 'org', display_name: '星澜网络' }))
         .data as { profile: { id: string } }
     ).profile;
     // 客户边先建(旧逻辑会命中它), 任职边后建
@@ -382,12 +382,12 @@ describe('cindy_contacts tools', () => {
     });
 
     parseResult(await registry.call('contacts_export_system', { ids: [dash.id] }));
-    expect(writeCalls[0]![0]).toMatchObject({ org: '心动网络', title: '制作人' });
+    expect(writeCalls[0]![0]).toMatchObject({ org: '星澜网络', title: '制作人' });
 
     const vcf = (
       parseResult(await registry.call('contacts_export_vcf', { ids: [dash.id] })).data as { vcf: string }
     ).vcf;
-    expect(vcf).toContain('ORG:心动网络');
+    expect(vcf).toContain('ORG:星澜网络');
     expect(vcf).not.toContain('甲方客户公司');
 
     // 只有非雇佣 org 边的档案 → 公司/职位不写

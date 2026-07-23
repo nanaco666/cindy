@@ -1045,7 +1045,7 @@ const makers: ForgeConfig['makers'] = [
       icon: path.join(__dirname, 'resources', 'icon.png'),
       // 双 scheme:cindy 主 + xdt-maker 兼容(老分享链接不死)。
       mimeType: allDeepLinkSchemes().map((s) => `x-scheme-handler/${s}`),
-      maintainer: 'Lizi <jiali@magiclizi.com>',
+      maintainer: 'Lizi <feedback@cindy.app>',
       // deb 包名规范要求小写;跟随区域 exe 名(cn cindy / global cindyglobal)。
       name: CINDY_EXE.toLowerCase(),
       bin: CINDY_EXE,

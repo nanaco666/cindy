@@ -177,7 +177,7 @@ describe('submitGithubIssueWithConfirm', () => {
   });
 
   it('已绑定身份会展示并严格按该身份提交', async () => {
-    const identity = { kind: 'github-user', login: 'dashhuang' } as const;
+    const identity = { kind: 'github-user', login: 'octocat' } as const;
     const { deps, confirm, postIssue } = makeDeps({
       resolveSubmissionIdentity: async (): Promise<IssueSubmissionIdentity> => identity,
     });
@@ -201,7 +201,7 @@ describe('submitGithubIssueWithConfirm', () => {
   });
 
   it('用户身份提交失败时只调用一次该身份，不切换平台重试', async () => {
-    const identity = { kind: 'github-user', login: 'dashhuang' } as const;
+    const identity = { kind: 'github-user', login: 'octocat' } as const;
     const postIssue = vi.fn<GithubIssueSubmitServiceDeps['postIssue']>(async () => {
       throw Object.assign(new Error('repo issue 权限不足'), {
         issueErrorCode: 'AUTH_NOT_READY' as const,
