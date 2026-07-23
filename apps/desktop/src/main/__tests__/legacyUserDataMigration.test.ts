@@ -12,6 +12,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   LEGACY_MIGRATION_MARKER_FILENAME,
   runLegacyUserDataMigration,
+  shouldSkipLegacyMigrationForDevSandbox,
   type LegacyMigrationFsDeps,
   type LegacyMigrationPhase,
   type LegacyUserDataMigrationDeps,
@@ -540,5 +541,37 @@ describe('runLegacyUserDataMigration', () => {
     expect(result).toMatchObject({ status: 'migrated', sourceDb: 'xdt-maker-u1.db' });
     expect(phases).toEqual(['confirm', 'running', 'done']);
     expect(memfs.has(markerPath)).toBe(true);
+  });
+});
+
+describe('shouldSkipLegacyMigrationForDevSandbox', () => {
+  it('dev + XDT_USER_DATA_DIR 生效(--isolated 沙箱 / 手动覆写)→ 跳过', () => {
+    expect(
+      shouldSkipLegacyMigrationForDevSandbox({
+        isPackaged: false,
+        envUserDataDir: path.join(BASE, 'Cindy-dev'),
+      }),
+    ).toBe(true);
+  });
+
+  it('dev 共库(未覆写 userData)→ 不跳过,保持与 packaged 行为一致', () => {
+    expect(
+      shouldSkipLegacyMigrationForDevSandbox({ isPackaged: false, envUserDataDir: undefined }),
+    ).toBe(false);
+    expect(
+      shouldSkipLegacyMigrationForDevSandbox({ isPackaged: false, envUserDataDir: '' }),
+    ).toBe(false);
+    expect(
+      shouldSkipLegacyMigrationForDevSandbox({ isPackaged: false, envUserDataDir: '   ' }),
+    ).toBe(false);
+  });
+
+  it('packaged 永不跳过(即使残留同名 env)', () => {
+    expect(
+      shouldSkipLegacyMigrationForDevSandbox({
+        isPackaged: true,
+        envUserDataDir: path.join(BASE, 'anything'),
+      }),
+    ).toBe(false);
   });
 });

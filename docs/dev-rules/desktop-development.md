@@ -32,7 +32,9 @@ Desktop 连接的是你自己的 Cindy 云端账号（remote）。这与登录�
   任务与设备身份都与正式版彻底隔离（首次需重新登录）；命名沙箱每个名字一条独立沙箱，
   名字限 `A-Za-z0-9_-`、≤32 字符。用户说「独立数据库／隔离数据／沙箱启动／不要动正式版
   数据」时用。**未合入主干的 migration 必须在 `--isolated` 沙箱里跑，不得连共享 userData**
-  （见 [`database-and-migrations.md`](database-and-migrations.md)）。
+  （见 [`database-and-migrations.md`](database-and-migrations.md)）。沙箱（及任何 dev
+  userData 覆写）内不触发首登旧数据迁移（mToc）：不探测老目录、不弹确认窗、不把正式
+  数据复制进沙箱。
 - `--passive`：定时任务被动模式，本实例不自动触发 schedule，但数据仍与其它实例共享；
   多开导致定时任务重复、需要让位给 primary 时用。
 - `--preserve-running`：并行 dev，不停止任何已有 Cindy dev 进程，每个新实例强制 passive

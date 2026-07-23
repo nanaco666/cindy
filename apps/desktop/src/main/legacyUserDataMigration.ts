@@ -18,6 +18,8 @@
  *  - 老目录不存在(全新用户):静默写 marker 返回,不弹窗打扰。
  *  - 老目录存在:推送 confirm 态给 renderer 弹确认窗,await 用户确认(IPC
  *    `legacy-migration:confirm`)后才开始复制。
+ *  - dev userData 覆写(--isolated 沙箱 / XDT_USER_DATA_DIR)下整个迁移跳过,
+ *    不探测不弹窗(见 shouldSkipLegacyMigrationForDevSandbox)。
  *
  * 可测试性(docs/dev-rules/engineering-conventions.md):核心流程 `runLegacyUserDataMigration` 全部依赖
  * 经 `LegacyUserDataMigrationDeps` 注入(fs / 时钟 / 日志 / UI 桥),单测用内存
@@ -569,6 +571,24 @@ export function registerLegacyMigrationIpc(): void {
 }
 
 /**
+ * dev userData 覆写(--isolated 沙箱 / 手动 XDT_USER_DATA_DIR)下必须跳过首登迁移。
+ *
+ * 沙箱目录(如 <userData>-dev)与真实 userData 同级,首次登录时沙箱里没有 mToc
+ * marker,探测会命中同级的真实老 xdt-maker 目录 → 弹确认窗并把用户真实主库 /
+ * cindy-media / dialogues / 浏览器 profile 整套复制进临时沙箱。这既不是沙箱的
+ * 语义(隔离、不动正式数据),也会产生 GB 级无意义复制。isolated 的 argv 与 env
+ * 两条声明通道最终都会把生效目录同步进 XDT_USER_DATA_DIR(main/index.ts),
+ * 因此这里以该 env 为唯一检测面。packaged 永不跳过(线上升级迁移不受影响)。
+ * 纯函数、零 electron 依赖,便于单测。
+ */
+export function shouldSkipLegacyMigrationForDevSandbox(input: {
+  isPackaged: boolean;
+  envUserDataDir: string | undefined;
+}): boolean {
+  return !input.isPackaged && Boolean(input.envUserDataDir?.trim());
+}
+
+/**
  * bootstrap 挂载点:首次登录成功后、ensureReady 打开 db 前调用。
  * 幂等 + 防重入;marker 已写时零开销。绝不 throw。
  */
@@ -577,6 +597,16 @@ export async function runLegacyUserDataMigrationForUser(userId: string): Promise
   // global 构建(同机双装)是全新身份,把 cn 的历史数据导进 global 库会
   // 跨区域串台(两边 auth 后端不同,会话 / 凭证对不上)。
   if (CURRENT_CINDY_REGION !== 'cn') return;
+  // dev 沙箱 / userData 覆写:不探测、不弹窗、不写 marker,纯跳过(见上方谓词注释)。
+  if (
+    shouldSkipLegacyMigrationForDevSandbox({
+      isPackaged: app.isPackaged,
+      envUserDataDir: process.env.XDT_USER_DATA_DIR,
+    })
+  ) {
+    log.info('legacy userData migration: dev userData override active, skipped');
+    return;
+  }
   if (inFlight != null) {
     await inFlight;
     return;
