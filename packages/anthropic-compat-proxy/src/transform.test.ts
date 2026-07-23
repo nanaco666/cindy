@@ -3,10 +3,12 @@ import { describe, expect, it } from 'vitest';
 import { createThreadStripController } from './thread-strip-controller.js';
 import {
   createActiveStripTransform,
+  createEmptyTextRecoveryRule,
   createEmptyThinkingRecoveryRule,
   createEncryptedContentRecoveryRule,
   createImageGenerationIdRecoveryRule,
   createToolUseProviderSpecificFieldsRecoveryRule,
+  stripEmptyTextFromBody,
   stripEmptyThinkingFromBody,
   stripEncryptedContentFromBody,
   stripImageGenerationItemsWithoutIdFromBody,
@@ -265,6 +267,84 @@ describe('stripEmptyThinkingFromBody', () => {
   });
 });
 
+describe('stripEmptyTextFromBody', () => {
+  it('removes an empty text block, keeping siblings', () => {
+    const body = buf({
+      model: 'claude-fable-5',
+      messages: [
+        { role: 'user', content: 'hi' },
+        {
+          role: 'assistant',
+          content: [
+            { type: 'text', text: '' },
+            { type: 'tool_use', id: 't1', name: 'Bash', input: {} },
+          ],
+        },
+      ],
+    });
+    const out = stripEmptyTextFromBody(body);
+    expect(out).not.toBeNull();
+    expect(JSON.parse(out!.toString('utf8')).messages[1].content).toEqual([
+      { type: 'tool_use', id: 't1', name: 'Bash', input: {} },
+    ]);
+  });
+
+  it('drops the whole message when content becomes empty after removal (bridge-polluted turn)', () => {
+    // bridge 修复前的典型脏历史:纯工具轮落成 [{type:'text',text:''}] 单块 assistant 消息。
+    const body = buf({
+      messages: [
+        { role: 'user', content: 'q' },
+        { role: 'assistant', content: [{ type: 'text', text: '' }] },
+        { role: 'user', content: 'q2' },
+      ],
+    });
+    const out = stripEmptyTextFromBody(body);
+    expect(out).not.toBeNull();
+    const parsed = JSON.parse(out!.toString('utf8'));
+    expect(parsed.messages).toHaveLength(2);
+    expect(parsed.messages.map((m: { role: string }) => m.role)).toEqual(['user', 'user']);
+  });
+
+  it('treats whitespace-only / missing / non-string text as empty', () => {
+    const body = buf({
+      messages: [
+        { role: 'assistant', content: [{ type: 'text', text: '  \n ' }, { type: 'text' }, { type: 'text', text: 'ok' }] },
+      ],
+    });
+    const out = stripEmptyTextFromBody(body);
+    expect(out).not.toBeNull();
+    expect(JSON.parse(out!.toString('utf8')).messages[0].content).toEqual([{ type: 'text', text: 'ok' }]);
+  });
+
+  it('does not descend into tool_result nested content', () => {
+    const body = buf({
+      messages: [
+        {
+          role: 'user',
+          content: [{ type: 'tool_result', tool_use_id: 't1', content: [{ type: 'text', text: '' }] }],
+        },
+      ],
+    });
+    expect(stripEmptyTextFromBody(body)).toBeNull();
+  });
+
+  it('returns null for a clean body (cache-safe no-op)', () => {
+    const body = buf({
+      model: 'claude-fable-5',
+      messages: [{ role: 'assistant', content: [{ type: 'text', text: 'hello' }] }],
+    });
+    expect(stripEmptyTextFromBody(body)).toBeNull();
+  });
+
+  it('returns null when messages is absent (e.g. a Responses input[] body — Codex no-op)', () => {
+    expect(stripEmptyTextFromBody(buf({ model: 'gpt-5.5', input: [{ type: 'message' }] }))).toBeNull();
+  });
+
+  it('returns null for non-JSON body', () => {
+    expect(stripEmptyTextFromBody(Buffer.from('not json', 'utf8'))).toBeNull();
+  });
+});
+
 describe('createThreadStripController', () => {
   it('marks active threads and clears them when model changes', () => {
     const controller = createThreadStripController();
@@ -409,6 +489,19 @@ describe('recovery rule factories', () => {
     expect(rule.match('invalid_encrypted_content')).toBe(false);
     expect(
       rule.strip(buf({ messages: [{ role: 'assistant', content: [{ type: 'thinking', thinking: '' }] }] })),
+    ).not.toBeNull();
+  });
+
+  it('empty-text rule matches only its error text, is always-on by default, and strips empty text blocks', () => {
+    const rule = createEmptyTextRecoveryRule();
+    expect(rule.id).toBe('empty_text');
+    expect(rule.enabled()).toBe(true);
+    // 实测 Anthropic 400(2026-07-23,GPT 订阅会话切 Fable 5):
+    expect(rule.match('messages: text content blocks must be non-empty')).toBe(true);
+    expect(rule.match('messages.5.content.0: text content blocks must contain non-whitespace text')).toBe(true);
+    expect(rule.match('each thinking block must contain thinking')).toBe(false);
+    expect(
+      rule.strip(buf({ messages: [{ role: 'assistant', content: [{ type: 'text', text: '' }] }] })),
     ).not.toBeNull();
   });
 

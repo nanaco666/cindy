@@ -45,10 +45,17 @@ type BlockKind = 'thinking' | 'message' | 'function_call';
 interface BlockState {
   blockIndex: number;
   kind: BlockKind;
-  /** thinking:是否已开块(首个 summary delta 时开);message:是否已开 text 块。 */
+  /** thinking:是否已开块(首个非空白 summary delta 时开);message:是否已开 text 块。 */
   opened: boolean;
   /** function_call:已发出的 arguments 字符数 —— item.done 时对照完整 arguments 补尾。 */
   argsSent?: number;
+  /**
+   * message / thinking:块未开时缓冲的前导空白 delta。纯空白块与空块一样会被
+   * Anthropic 回放 400("text content blocks must contain non-whitespace text"),
+   * 所以块只在首个含非空白字符的 delta 到达时打开,此前的空白先缓冲;开块时随首个
+   * delta 一并发出(内容不丢),全程纯空白则整块不落地。
+   */
+  pending?: string;
 }
 
 function asRecord(v: unknown): Record<string, unknown> {
@@ -67,7 +74,6 @@ function asRecord(v: unknown): Record<string, unknown> {
  */
 const DEFERRABLE_TYPES = new Set([
   'response.output_item.added',
-  'response.content_part.added',
   'response.output_text.delta',
   'response.reasoning_summary_text.delta',
   'response.function_call_arguments.delta',
@@ -171,10 +177,6 @@ export class SseTranslator {
         this.onItemAdded(e, out);
         break;
       }
-      case 'response.content_part.added': {
-        this.onContentPartAdded(e, out);
-        break;
-      }
       case 'response.output_text.delta': {
         this.onTextDelta(e, out);
         break;
@@ -202,8 +204,9 @@ export class SseTranslator {
         break;
       }
       default:
-        // content_part.done / output_text.done / reasoning_summary_part.added / ping 等
-        // 对 Anthropic 语义无额外贡献,忽略。
+        // content_part.added / content_part.done / output_text.done /
+        // reasoning_summary_part.added / ping 等对 Anthropic 语义无额外贡献,忽略。
+        // (content_part.added 不再用于开 text 块 —— 块惰性开在首个非空 delta 上。)
         break;
     }
   }
@@ -283,7 +286,11 @@ export class SseTranslator {
       // 无可见 summary 则在 output_item.done 处作为 redacted_thinking 整块吐。
       this.blocks.set(outputIndex, { blockIndex: -1, kind: 'thinking', opened: false });
     } else if (itemType === 'message') {
-      // 等 content_part.added 再开 text 块(拿到 content 类型更稳)。
+      // 先登记,不开块 —— 首个非空 output_text.delta 时才开 text 块。曾经在
+      // content_part.added 处 eager 开块:纯工具轮的 message item 没有任何文本 delta,
+      // 或 text 块刚开就被 function_call 抢占强制关掉,都会落出 `{type:'text',text:''}`
+      // 空块进会话历史;切到真 Anthropic 模型回放时 API 400
+      // "text content blocks must be non-empty"。
       this.blocks.set(outputIndex, { blockIndex: -1, kind: 'message', opened: false });
     } else if (itemType === 'function_call') {
       this.closeOpenBlockForOtherItem(outputIndex, out);
@@ -307,33 +314,25 @@ export class SseTranslator {
     }
   }
 
-  // ── content_part.added(message 的文本部分)────────────────────────────────
-  private onContentPartAdded(e: Record<string, unknown>, out: AnthropicSseEvent[]): void {
-    const outputIndex = typeof e.output_index === 'number' ? e.output_index : -1;
-    const st = this.blocks.get(outputIndex);
-    if (!st || st.kind !== 'message' || st.opened) return;
-    const part = asRecord(e.part);
-    // 仅对文本部分开块;其它类型(极少)忽略。
-    if (part.type !== 'output_text' && part.type !== 'text') return;
-    this.closeOpenBlockForOtherItem(outputIndex, out);
-    st.blockIndex = this.nextBlockIndex++;
-    st.opened = true;
-    this.openOutputIndex = outputIndex;
-    out.push({
-      event: 'content_block_start',
-      data: { type: 'content_block_start', index: st.blockIndex, content_block: { type: 'text', text: '' } },
-    });
-  }
-
   // ── output_text.delta ────────────────────────────────────────────────────
   private onTextDelta(e: Record<string, unknown>, out: AnthropicSseEvent[]): void {
     const outputIndex = typeof e.output_index === 'number' ? e.output_index : -1;
     const st = this.blocks.get(outputIndex);
     const delta = typeof e.delta === 'string' ? e.delta : '';
     if (!st || st.kind !== 'message') return;
+    if (!delta) return;
     if (!st.opened) {
-      // 补开 text 块:content_part.added 缺失 delta 先到,或本块曾被别的 item 强制
-      // 关掉(单开块不变量)后文本恢复 —— 都开一个新块续写。
+      // text 块惰性开在首个含非空白字符的 delta 上;此前的空白 delta 先缓冲
+      // (见 BlockState.pending)。空块/纯空白块都不落地,杜绝
+      // "text content blocks must be non-empty / contain non-whitespace text" 回放 400。
+      const pending = (st.pending ?? '') + delta;
+      if (pending.trim().length === 0) {
+        st.pending = pending;
+        return;
+      }
+      st.pending = undefined;
+      // 开 text 块:首个非空白 delta 到达,或本块曾被别的 item 强制关掉(单开块
+      // 不变量)后文本恢复 —— 都开一个新块续写,缓冲的前导空白随首个 delta 发出。
       this.closeOpenBlockForOtherItem(outputIndex, out);
       st.blockIndex = this.nextBlockIndex++;
       st.opened = true;
@@ -342,13 +341,16 @@ export class SseTranslator {
         event: 'content_block_start',
         data: { type: 'content_block_start', index: st.blockIndex, content_block: { type: 'text', text: '' } },
       });
-    }
-    if (delta) {
       out.push({
         event: 'content_block_delta',
-        data: { type: 'content_block_delta', index: st.blockIndex, delta: { type: 'text_delta', text: delta } },
+        data: { type: 'content_block_delta', index: st.blockIndex, delta: { type: 'text_delta', text: pending } },
       });
+      return;
     }
+    out.push({
+      event: 'content_block_delta',
+      data: { type: 'content_block_delta', index: st.blockIndex, delta: { type: 'text_delta', text: delta } },
+    });
   }
 
   // ── reasoning_summary_text.delta(可见思考文本)──────────────────────────────
@@ -358,21 +360,38 @@ export class SseTranslator {
     const delta = typeof e.delta === 'string' ? e.delta : '';
     if (!st || st.kind !== 'thinking') return;
     if (!st.opened) {
+      // 任何 summary delta(含空串/纯空白)都先把本 reasoning item 占为当前打开项:
+      // 不可打断语义必须在首个 delta 就生效,其它 item 的事件继续 defer,否则空 delta
+      // 会提前放行后续块,encrypted_content 在 item.done 兜底成 redacted_thinking 时
+      // 位置错后,translate-request 回放 reasoning 的顺序错位(Responses 回放顺序敏感)。
+      // 可见块本身仍惰性开在首个非空白 delta 上(空/纯空白 thinking 块与 text 同理,
+      // Anthropic 回放会 400);占位未开块时 openOutputIndex 指向本 item 而
+      // st.opened=false,item.done 处负责释放。
       this.closeOpenBlockForOtherItem(outputIndex, out);
+      this.openOutputIndex = outputIndex;
+      const pending = (st.pending ?? '') + delta;
+      if (pending.trim().length === 0) {
+        st.pending = pending;
+        return;
+      }
+      st.pending = undefined;
       st.blockIndex = this.nextBlockIndex++;
       st.opened = true;
-      this.openOutputIndex = outputIndex;
       out.push({
         event: 'content_block_start',
         data: { type: 'content_block_start', index: st.blockIndex, content_block: { type: 'thinking', thinking: '' } },
       });
-    }
-    if (delta) {
       out.push({
         event: 'content_block_delta',
-        data: { type: 'content_block_delta', index: st.blockIndex, delta: { type: 'thinking_delta', thinking: delta } },
+        data: { type: 'content_block_delta', index: st.blockIndex, delta: { type: 'thinking_delta', thinking: pending } },
       });
+      return;
     }
+    if (!delta) return;
+    out.push({
+      event: 'content_block_delta',
+      data: { type: 'content_block_delta', index: st.blockIndex, delta: { type: 'thinking_delta', thinking: delta } },
+    });
   }
 
   // ── function_call_arguments.delta ──────────────────────────────────────────
@@ -421,9 +440,10 @@ export class SseTranslator {
         st.opened = false;
         if (this.openOutputIndex === outputIndex) this.openOutputIndex = null;
       } else if (encrypted) {
-        // 无可见 summary,或曾在流收尾强制排空时被关掉(签名没地方挂,仅 stream-end 路径,
-        // 正常流中 thinking 块不可打断):作为 redacted_thinking 整块一次性吐
-        // (data=encrypted_content),reasoning 状态仍可回放,只丢可见 summary。
+        // 无可见 summary(含全程只发空白 summary delta),或曾在流收尾强制排空时被
+        // 关掉(签名没地方挂,仅 stream-end 路径,正常流中 thinking 块不可打断):
+        // 作为 redacted_thinking 整块一次性吐(data=encrypted_content),reasoning
+        // 状态仍可回放,只丢可见 summary。
         this.closeOpenBlockForOtherItem(outputIndex, out);
         const blockIndex = this.nextBlockIndex++;
         st.blockIndex = blockIndex;
@@ -436,6 +456,10 @@ export class SseTranslator {
         st.opened = false;
       }
       // 既无 summary 又无 encrypted_content:什么都不吐(空 reasoning)。
+      // 释放"占位未开块"的 in-flight 标记(空白 summary delta 只占位不开块,
+      // 见 onReasoningSummaryDelta):不释放会让 deferred 队列等不到解锁事件。
+      st.pending = undefined;
+      if (this.openOutputIndex === outputIndex) this.openOutputIndex = null;
     } else if (st.opened) {
       // function_call:关块前对照 done item 携带的完整 arguments 补发缺失尾段 ——
       // 兜住 args delta 丢失/上游根本不发 delta 只发终值的情况(delta 序列是完整

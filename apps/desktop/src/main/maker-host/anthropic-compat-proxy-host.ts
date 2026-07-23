@@ -19,9 +19,11 @@
 import {
   createAnthropicCompatProxy,
   createActiveStripTransform,
+  createEmptyTextRecoveryRule,
   createEmptyThinkingRecoveryRule,
   createEncryptedContentRecoveryRule,
   createToolUseProviderSpecificFieldsRecoveryRule,
+  stripEmptyTextFromBody,
   stripEmptyThinkingFromBody,
   stripEncryptedContentFromBody,
   stripNonAnthropicFields,
@@ -48,7 +50,11 @@ import {
 } from './provider-route.js';
 import { createProviderUpstreamErrorObserver } from './provider-upstream-error-observer.js';
 import { createClaudeAutoClassifierFailureObserver } from './claude-auto-permission-fallback.js';
-import { emptyThinkingStripController, encryptedStripController } from './thread-strip-controllers.js';
+import {
+  emptyTextStripController,
+  emptyThinkingStripController,
+  encryptedStripController,
+} from './thread-strip-controllers.js';
 import { createMakerLogger } from './logger-adapter.js';
 import {
   createClaudeFastModeRequestTransform,
@@ -284,6 +290,13 @@ export async function ensureAnthropicCompatProxyReady(): Promise<void> {
           enabled: () => true,
           strip: stripEmptyThinkingFromBody,
         }),
+        // 空 text 块主动剥离 —— always-on,独立 controller(bridge 修复前落进历史的空
+        // text 块,切回真 Anthropic 模型时 400 "text content blocks must be non-empty")。
+        createActiveStripTransform({
+          controller: emptyTextStripController,
+          enabled: () => true,
+          strip: stripEmptyTextFromBody,
+        }),
         // LiteLLM/provider adapter 可能把 provider_specific_fields(null) 挂到 tool_use 上，
         // 严格 Anthropic 入站 schema 不接受该扩展字段。
         stripToolUseProviderSpecificFields,
@@ -298,6 +311,11 @@ export async function ensureAnthropicCompatProxyReady(): Promise<void> {
         createEmptyThinkingRecoveryRule({
           enabled: () => true,
           onRetry: (threadId, model) => emptyThinkingStripController.markActive(threadId, model),
+        }),
+        // 空 text 块 400 → 剥空块重发,always-on(同上,救 bridge 修复前污染的存量会话)。
+        createEmptyTextRecoveryRule({
+          enabled: () => true,
+          onRetry: (threadId, model) => emptyTextStripController.markActive(threadId, model),
         }),
         createToolUseProviderSpecificFieldsRecoveryRule(),
       ],

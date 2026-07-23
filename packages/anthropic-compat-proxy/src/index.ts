@@ -20,10 +20,12 @@ export {
 } from './instructions-injection.js';
 export {
   createActiveStripTransform,
+  createEmptyTextRecoveryRule,
   createEmptyThinkingRecoveryRule,
   createEncryptedContentRecoveryRule,
   createImageGenerationIdRecoveryRule,
   createToolUseProviderSpecificFieldsRecoveryRule,
+  stripEmptyTextFromBody,
   stripEmptyThinkingFromBody,
   stripEncryptedContentFromBody,
   stripImageGenerationItemsWithoutIdFromBody,
