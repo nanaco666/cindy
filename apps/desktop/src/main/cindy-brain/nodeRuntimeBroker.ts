@@ -12,6 +12,7 @@
  */
 
 import { spawn } from 'node:child_process';
+import os from 'node:os';
 import path from 'node:path';
 import { StringDecoder } from 'node:string_decoder';
 
@@ -97,7 +98,7 @@ class NodeRpcError extends Error {
 
 function defaultSpawnProcess(entryPath: string, cwd: string, ghostId: string): NodeWorkerProcess {
   // 不继承 API key / token 等宿主环境变量。Node 本身仍有用户级本机权限，
-  // 这里只是在“无意泄露宿主秘密”和“系统运行必需变量”之间取最小集合。
+  // 这里只是在”无意泄露宿主秘密”和”系统运行必需变量”之间取最小集合。
   const inheritedKeys = [
     'PATH',
     'SystemRoot',
@@ -111,12 +112,15 @@ function defaultSpawnProcess(entryPath: string, cwd: string, ghostId: string): N
   const env: NodeJS.ProcessEnv = {
     ELECTRON_RUN_AS_NODE: '1',
     CINDY_GHOST_ID: ghostId,
+    // 插件通过此变量定位自身资源;cwd 故意不指向安装目录,
+    // 防止无意写入覆盖 ghost.json / trust 文件。
+    CINDY_GHOST_DIR: cwd,
   };
   for (const key of inheritedKeys) {
     if (process.env[key] !== undefined) env[key] = process.env[key];
   }
   return spawn(process.execPath, [entryPath], {
-    cwd,
+    cwd: os.tmpdir(),
     env,
     shell: false,
     stdio: ['pipe', 'pipe', 'pipe'],
@@ -206,6 +210,9 @@ export class GhostNodeRuntimeBroker {
           return errorResult('INVALID_REQUEST', 'MCP 初始化由 Cindy 主机统一管理');
         }
         await this.ensureMcpInitialized(entry);
+        if (entry.pending.size >= MAX_PENDING_REQUESTS) {
+          return errorResult('RATE_LIMITED', '这个插件同时等待的 Node 请求太多');
+        }
       }
       const result = await this.sendRpc(
         entry,

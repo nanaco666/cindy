@@ -1047,13 +1047,20 @@ export function ghostPermissionItems(manifest: GhostManifest): GhostPermissionIt
   if (manifest.launch === 'resident') {
     items.push({ key: 'resident', kind: 'code', labelKey: 'resident', detailKey: 'residentDetail' });
   }
-  // 可执行代码的沙箱说明分档:声明了 network 槽的意识不能再宣称"无网络
-  // 访问"(那句会变成假话),换成"网络仅限白名单域名经主机代发"的版本。
+  // 可执行代码的沙箱说明分档:
+  // - 有 node 槽时浏览器沙箱部分仍隔离,但不能再笼统说"无文件无网络"
+  //   (Node 侧已摊过牌);
+  // - 声明了 network 槽时不能宣称"无网络访问";
+  // - 默认:纯沙箱、无文件无网络。
+  let codeDetailKey: string;
+  if (manifest.slots.includes('node')) codeDetailKey = 'codeDetailWithNode';
+  else if (manifest.slots.includes('network')) codeDetailKey = 'codeDetailNetwork';
+  else codeDetailKey = 'codeDetail';
   items.push({
     key: 'code',
     kind: 'code',
     labelKey: 'code',
-    detailKey: manifest.slots.includes('network') ? 'codeDetailNetwork' : 'codeDetail',
+    detailKey: codeDetailKey,
   });
   return items;
 }

@@ -2265,6 +2265,7 @@
         "networkConnections": "可连接你添加的 {{label}}",
         "networkConnectionsDetail": "地址在这个插件的设置界面里添加;每次新增地址都需要你确认,你提供的凭证只注入对应地址。",
         "codeDetailNetwork": "在独立沙箱中运行,无法访问你的文件;网络仅限上方声明的域名,由主机代发。",
+        "codeDetailWithNode": "面板 UI 在独立沙箱中运行;本地处理能力由上方声明的 Node 运行时提供。",
         "added": "新增",
         "removed": "移除",
         "unchanged": "其余 {{count}} 项权限不变",

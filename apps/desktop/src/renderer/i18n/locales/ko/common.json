@@ -2265,6 +2265,7 @@
         "networkConnections": "내가 추가한 {{label}}에 연결 가능",
         "networkConnectionsDetail": "주소는 이 플러그인의 설정 화면에서 추가합니다. 새 주소를 추가할 때마다 확인이 필요하며, 입력한 자격 증명은 해당 주소에만 주입됩니다.",
         "codeDetailNetwork": "독립된 샌드박스에서 실행되며 파일에는 접근할 수 없습니다. 네트워크는 위에 표시된 도메인으로 제한되며 호스트가 대신 전송합니다.",
+        "codeDetailWithNode": "패널 UI는 독립된 샌드박스에서 실행됩니다. 로컬 처리는 위에서 선언된 Node 런타임이 제공합니다.",
         "added": "추가",
         "removed": "제거",
         "unchanged": "그 외 {{count}}개 권한은 변경 없음",
