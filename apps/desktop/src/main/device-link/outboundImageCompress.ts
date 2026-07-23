@@ -146,7 +146,7 @@ async function withSoftTimeout<T>(work: Promise<T>, ms: number): Promise<T> {
 
 // sharp 懒加载:带原生二进制,启动期不加载;不可用时整体降级为不压
 // (与 file-browser/thumbnail、maker-core ImageResizer 同一取舍)。
-type SharpModule = typeof import('sharp');
+type SharpModule = (typeof import('sharp'))['default'];
 let sharpInstance: SharpModule | null = null;
 let sharpLoadAttempted = false;
 function loadSharp(): SharpModule | null {

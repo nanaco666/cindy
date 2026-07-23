@@ -95,7 +95,7 @@ function canThumbnail(absPath: string, mimeType: string | undefined): boolean {
 
 // sharp 懒加载:带原生二进制,启动期不加载;不可用则缩略图整体降级走原图路径
 // (与 file-browser/thumbnail 同取舍)。
-type SharpModule = typeof import('sharp');
+type SharpModule = (typeof import('sharp'))['default'];
 let sharpInstance: SharpModule | null = null;
 let sharpLoadAttempted = false;
 function loadSharp(): SharpModule | null {
