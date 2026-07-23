@@ -129,17 +129,58 @@ function deepDeleteEncryptedContent(node: unknown): number {
   return removed;
 }
 
+/** Responses `input[]` 里剥掉 encrypted_content 后已无密文的 reasoning 空壳。 */
+function isReasoningItemWithoutEncryptedContent(item: unknown): boolean {
+  if (!isPlainObject(item) || item.type !== 'reasoning') return false;
+  return typeof item.encrypted_content !== 'string' || item.encrypted_content.length === 0;
+}
+
 /**
- * 把请求体里所有 `encrypted_content` 键递归删掉, 返回新的 Buffer。
+ * 从 Responses-style `input[]` 丢掉"无 encrypted_content 的 reasoning"空壳。
+ * 只删 encrypted_content 键时,xAI 会把残留 reasoning item 判成 ModelInput 反序列化失败 (422)。
+ */
+function deepDropEmptyReasoningInputItems(node: unknown): number {
+  let removed = 0;
+  if (Array.isArray(node)) {
+    for (const item of node) removed += deepDropEmptyReasoningInputItems(item);
+    return removed;
+  }
+  if (!isPlainObject(node)) return 0;
+
+  if (Array.isArray(node.input)) {
+    const kept: unknown[] = [];
+    for (const item of node.input) {
+      if (isReasoningItemWithoutEncryptedContent(item)) {
+        removed += 1;
+        continue;
+      }
+      removed += deepDropEmptyReasoningInputItems(item);
+      kept.push(item);
+    }
+    node.input = kept;
+  }
+
+  for (const key of Object.keys(node)) {
+    if (key === 'input') continue;
+    removed += deepDropEmptyReasoningInputItems(node[key]);
+  }
+  return removed;
+}
+
+/**
+ * 把请求体里所有 `encrypted_content` 键递归删掉, 并丢掉因此变成空壳的 reasoning input item,
+ * 返回新的 Buffer。
  *
  * 背景: gpt-5.5 等模型经 litellm/Azure 走 OpenAI Responses API (/v1/responses) 时,
  * 请求体的 reasoning item 带 `encrypted_content` (gAAA... 加密推理)。多部署负载均衡把
  * 后续请求路由到另一部署时, 它解不开上一部署的加密推理 → 400 invalid_encrypted_content。
+ * xAI 同类失败文案是 "Could not decrypt the provided encrypted_content" (400/422)。
  * 删掉 encrypted_content 再重发即可恢复 (代价: 模型丢失上一轮的加密推理链, 可见对话保留)。
+ * 若只删键、保留 type=reasoning 空壳,xAI 会再报 ModelInput 422 —— 所以空壳一并丢掉。
  *
- * 仅在 server.ts 收到该 400 后的"透明重试"路径调用, 正常请求不经过此函数。
+ * 仅在 server.ts 收到该 400/422 后的"透明重试"路径调用, 正常请求不经过此函数。
  *
- * @returns 删掉了至少一个键 → 新 Buffer; body 非 JSON / 没有该键 → null (调用方据此决定不重试)
+ * @returns 删掉了至少一个键或空壳 → 新 Buffer; body 非 JSON / 没有该键 → null (调用方据此决定不重试)
  */
 export function stripEncryptedContentFromBody(rawBody: Buffer): Buffer | null {
   let parsed: unknown;
@@ -148,8 +189,9 @@ export function stripEncryptedContentFromBody(rawBody: Buffer): Buffer | null {
   } catch {
     return null;
   }
-  const removed = deepDeleteEncryptedContent(parsed);
-  if (removed === 0) return null;
+  const removedKeys = deepDeleteEncryptedContent(parsed);
+  if (removedKeys === 0) return null;
+  deepDropEmptyReasoningInputItems(parsed);
   try {
     return Buffer.from(JSON.stringify(parsed), 'utf8');
   } catch {
@@ -398,10 +440,11 @@ export function createActiveStripTransform(opts: {
 // 每条规则把"错误体匹配正则 + 对应 strip 函数"绑在一起,正则与 strip 就近放,单一真相源。
 // ───────────────────────────────────────────────────────────────────────────
 
-// 上游 400 错误体命中以下任一 → 判定为"协议加密推理内容解不开"(litellm/Azure:
-// code "invalid_encrypted_content" + "Encrypted content could not be decrypted or parsed.")。
+// 上游 400/422 错误体命中以下任一 → 判定为"协议加密推理内容解不开"。
+// litellm/Azure: code "invalid_encrypted_content" + "Encrypted content could not be decrypted or parsed."
+// xAI Responses: code "invalid-argument" + "Could not decrypt the provided encrypted_content..."
 const INVALID_ENCRYPTED_CONTENT_RE =
-  /invalid_encrypted_content|encrypted content could not be (?:decrypted|verified|parsed)/i;
+  /invalid_encrypted_content|invalid-argument[\s\S]{0,160}encrypted_content|could not decrypt(?: the provided)? encrypted_content|encrypted content could not be (?:decrypted|verified|parsed)/i;
 
 // Anthropic 400: "messages.N.content.M.thinking: each thinking block must contain thinking"
 // 只匹配不变的核心短语,不锚定会变的 messages.N.content.M 下标前缀。

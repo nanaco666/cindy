@@ -33,6 +33,7 @@ describe('stripEncryptedContentFromBody', () => {
       input: [
         { type: 'message', role: 'user', content: 'hi' },
         { type: 'reasoning', encrypted_content: 'gAAAAABxyz...', summary: [] },
+        { type: 'function_call', name: 'exec', arguments: '{}', call_id: 'call_1' },
       ],
     });
     const out = stripEncryptedContentFromBody(body);
@@ -40,8 +41,11 @@ describe('stripEncryptedContentFromBody', () => {
     const parsed = JSON.parse(out!.toString('utf8'));
     expect(JSON.stringify(parsed)).not.toContain('encrypted_content');
     expect(JSON.stringify(parsed)).not.toContain('gAAAAAB');
-    expect(parsed.input[0]).toMatchObject({ role: 'user', content: 'hi' });
-    expect(parsed.input[1]).toMatchObject({ type: 'reasoning' });
+    // 剥密文后 reasoning 已无 encrypted_content → 整项丢掉,避免 xAI ModelInput 422。
+    expect(parsed.input).toEqual([
+      { type: 'message', role: 'user', content: 'hi' },
+      { type: 'function_call', name: 'exec', arguments: '{}', call_id: 'call_1' },
+    ]);
   });
 
   it('removes every occurrence across deep nesting', () => {
@@ -390,6 +394,9 @@ describe('recovery rule factories', () => {
     const rule = createEncryptedContentRecoveryRule({ enabled: () => true });
     expect(rule.id).toBe('encrypted_content');
     expect(rule.match('... code invalid_encrypted_content ...')).toBe(true);
+    expect(rule.match('Could not decrypt the provided encrypted_content. Ensure the value is the unmodified encrypted_content from a previous response.')).toBe(true);
+    expect(rule.match(JSON.stringify({ code: 'invalid-argument', error: 'Could not decrypt the provided encrypted_content.' }))).toBe(true);
+    expect(rule.match(JSON.stringify({ code: 'invalid-argument', field: 'encrypted_content' }, null, 2))).toBe(true);
     expect(rule.match('each thinking block must contain thinking')).toBe(false);
     expect(rule.strip(buf({ input: [{ encrypted_content: 'x' }] }))).not.toBeNull();
   });
