@@ -363,6 +363,19 @@ The grayscale rule is near-absolute. The following are the **only** sanctioned n
 
 ## 10. Theme System & Token Reference
 
+### Light / Dark 双模式交付门槛
+
+- **所有 UI 必须同时支持 Light 与 Dark 两种模式。**新增或修改页面、组件、布局、样式、
+  动效或 UI 文案时，必须在同一项工作中完成两种模式；只设计、只实现或只验证一种模式，
+  均视为未完成。
+- 两种模式都必须覆盖本次改动涉及的默认态、hover、pressed、selected、focus、disabled、
+  loading、empty、error、弹层与遮罩等实际状态；没有涉及的状态不要求为凑检查而改造。
+- 颜色必须通过语义 token 消费，禁止用仅适配一种模式的硬编码色值或条件分支补丁。设计稿
+  只提供一种模式时，也必须按现有 token 体系补齐另一种模式；若缺少明确的语义映射，先请求
+  设计裁决，不得省略另一种模式。
+- 交付前至少对本次受影响界面的 Light 与 Dark 模式分别完成验证，并在提交或 PR 的验证说明
+  中如实记录；任一模式存在不可读、不可辨、状态缺失或明显视觉回退时，不得视为完成。
+
 ### 架构
 
 Cindy 桌面端用 **VSCode 风格的 ColorRegistry + Theme override** 模型管理颜色。所有颜色都通过 CSS variable 以 token 形式被组件消费,**永远不允许在组件里硬编码 hex / rgba**(违反规则会让该组件在非默认主题下无法切色)。
