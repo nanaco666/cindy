@@ -127,6 +127,24 @@ describe('agentSlot · 真人点击一次性票', () => {
     expect(runner).toHaveBeenCalledTimes(1);
   });
 
+  it('clearGhost 同步吊销该插件的未消费活票,不吊销别家的', async () => {
+    // 更新/重装同 id 包时旧代码拿到的点击票必须随 clearGhost 作废,
+    // 否则 TTL 窗口内新装入的不同代码可以花旧票起 Agent 轮次。
+    const runner = acceptedRunner();
+    const slot = makeSlot({ ghosts: [fakeGhost('alpha'), fakeGhost('beta')], runner });
+    const alphaToken = slot.issueUserActionToken('alpha', 'session-1')!;
+    const betaToken = slot.issueUserActionToken('beta', 'session-1')!;
+
+    slot.clearGhost('alpha');
+
+    expect(await slot.handleRequest('alpha', userRequest(alphaToken))).toMatchObject({
+      ok: false,
+      errorCode: 'TOKEN_EXPIRED',
+    });
+    expect((await slot.handleRequest('beta', userRequest(betaToken))).ok).toBe(true);
+    expect(runner).toHaveBeenCalledTimes(1);
+  });
+
   it('票据两分钟后过期', async () => {
     let now = 50_000;
     const runner = acceptedRunner();

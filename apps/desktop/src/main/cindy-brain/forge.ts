@@ -404,13 +404,41 @@ export async function scaffoldGhostDir(
   }
   const resolved = path.resolve(input.dir);
   const workdir = options?.sessionWorkdir;
-  if (workdir) {
-    const resolvedWorkdir = path.resolve(workdir);
-    if (!resolved.startsWith(`${resolvedWorkdir}${path.sep}`) && resolved !== resolvedWorkdir) {
-      return { ok: false, errorCode: 'INVALID_INPUT', message: 'dir 必须在当前会话工作目录内' };
-    }
-  } else {
+  if (!workdir) {
     return { ok: false, errorCode: 'INVALID_INPUT', message: '没有会话工作目录,无法确定骨架输出位置' };
+  }
+  // 字面 startsWith 不设防软链:工作目录里若有 out -> /tmp/out 之类的
+  // 软链祖先,字面在内、实际在外。两边都按 realpath 对账——目标还不存在,
+  // 就取「已存在的最深祖先」的真身再拼回剩余段。
+  let realWorkdir: string;
+  try {
+    realWorkdir = await fs.promises.realpath(path.resolve(workdir));
+  } catch {
+    return { ok: false, errorCode: 'INVALID_INPUT', message: '会话工作目录不存在,无法确定骨架输出位置' };
+  }
+  let realAncestor = resolved;
+  const pendingSegments: string[] = [];
+  for (;;) {
+    try {
+      realAncestor = await fs.promises.realpath(realAncestor);
+      break;
+    } catch (err) {
+      if (!hasFsErrorCode(err, 'ENOENT')) {
+        return {
+          ok: false,
+          errorCode: 'INTERNAL',
+          message: err instanceof Error ? err.message : String(err),
+        };
+      }
+      const parent = path.dirname(realAncestor);
+      if (parent === realAncestor) break; // 到根了,根一定存在,防御性兜底
+      pendingSegments.unshift(path.basename(realAncestor));
+      realAncestor = parent;
+    }
+  }
+  const realTarget = path.join(realAncestor, ...pendingSegments);
+  if (!realTarget.startsWith(`${realWorkdir}${path.sep}`) && realTarget !== realWorkdir) {
+    return { ok: false, errorCode: 'INVALID_INPUT', message: 'dir 必须在当前会话工作目录内' };
   }
   const files = scaffoldFiles(input);
   const validation = validateGhostManifest(JSON.parse(files[GHOST_MANIFEST_FILE]));

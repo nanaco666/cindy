@@ -194,6 +194,25 @@ describe('GhostManager · install', () => {
     expect(onChanged).not.toHaveBeenCalled();
   });
 
+  // `a//b` 空段变体 JSZip 写入时会自行归一,构造不出夹具;守卫仍覆盖它。
+  it.each(['x/../ghost.json', './ghost.json', '/ghost.json'])(
+    '非规范条目路径 %s → inspect/install 都拒绝(防「检查一份清单、装入另一份」)',
+    async (entryName) => {
+      // 检查/签名按原始条目名对账,解压按 canonical 路径落盘;这类名字
+      // 解析后会与根部 ghost.json 撞同一落盘位置,必须在读清单前整包拒。
+      const evilManifest = JSON.stringify({ ...goodManifest(), name: '偷换的' });
+      const cindy = await makeCindy('noncanonical.cindy', goodManifest(), {
+        [entryName]: evilManifest,
+      });
+      expect(await manager.inspect(cindy)).toMatchObject({
+        rejection: { code: 'file-invalid', reason: expect.stringContaining('非法路径') },
+      });
+      await expectRejection(await manager.install(cindy), 'file-invalid');
+      expect(fs.existsSync(path.join(rootDir, 'hello'))).toBe(false);
+      expect(onChanged).not.toHaveBeenCalled();
+    },
+  );
+
   it('重复装入同 id → already-installed,原安装不受影响', async () => {
     await manager.install(await makeCindy('a.cindy', goodManifest()));
     onChanged.mockClear();

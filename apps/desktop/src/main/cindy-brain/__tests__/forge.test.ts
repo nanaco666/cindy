@@ -232,6 +232,31 @@ describe('scaffoldGhostDir', () => {
     ).toMatchObject({ ok: false, errorCode: 'INVALID_INPUT' });
     await expect(fs.promises.stat(invalid)).rejects.toMatchObject({ code: 'ENOENT' });
   });
+
+  it('软链祖先把字面在工作目录内的路径引到外面 → 拒绝且外面不落盘', async () => {
+    // Windows 无特权时目录软链可能 EPERM,建不出夹具就跳过(守卫仍在)。
+    const outside = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'cindy-forge-outside-'));
+    try {
+      try {
+        fs.symlinkSync(outside, path.join(workDir, 'out'), 'dir');
+      } catch {
+        return;
+      }
+      expect(
+        await scaffoldGhostDir({
+          dir: path.join(workDir, 'out', 'plugin'),
+          template: 'plain',
+          id: 'escape',
+          name: 'Escape',
+        }, { sessionWorkdir: workDir }),
+      ).toMatchObject({ ok: false, errorCode: 'INVALID_INPUT' });
+      await expect(fs.promises.stat(path.join(outside, 'plugin'))).rejects.toMatchObject({
+        code: 'ENOENT',
+      });
+    } finally {
+      await fs.promises.rm(outside, { recursive: true, force: true });
+    }
+  });
 });
 
 describe('FORGE_GUIDE', () => {

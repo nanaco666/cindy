@@ -104,6 +104,11 @@ export class GhostAgentSlot {
   clearGhost(ghostId: string): void {
     this.associatedSessions.delete(ghostId);
     this.lastBackgroundAt.delete(ghostId);
+    // 活票同清:旧包代码已拿到的点击通行票不得跨更新/重装被新装入的
+    // 同 id 包继续消费(票据 TTL 两分钟,窗口虽小但语义必须干净)。
+    for (const [token, grant] of this.grants) {
+      if (grant.ghostId === ghostId) this.grants.delete(token);
+    }
   }
 
   /**

@@ -279,6 +279,16 @@ export class GhostManager {
         rejection: { code: 'file-invalid', reason: `压缩包条目过多:${allEntries.length}(上限 ${MAX_NODE_ZIP_ENTRIES})` },
       };
     }
+    // 检查/签名/保留文件对账都按原始条目名,解压却按 canonical 路径落盘;
+    // 若二者可指向不同文件,恶意包就能「检查一份清单、装入另一份」
+    // (如根部放无害 ghost.json,再用 x/../ghost.json 在 staging 里盖掉它)。
+    // 读清单之前一刀切拒绝非规范路径,让后续所有按名对账都可信。
+    const nonCanonicalEntry = allEntries.find((entry) => hasNonCanonicalZipPath(entry.name));
+    if (nonCanonicalEntry) {
+      return {
+        rejection: { code: 'file-invalid', reason: `压缩包内有非法路径:${nonCanonicalEntry.name}` },
+      };
+    }
 
     const prefix = detectSingleTopFolderPrefix(allEntries.map((e) => e.name));
     // 这两个点文件只属于主机：包若能自带它们，就可伪造停用状态或覆盖
@@ -758,6 +768,20 @@ function detectSingleTopFolderPrefix(names: string[]): string {
     else if (top !== first) return '';
   }
   return top === null ? '' : `${top}/`;
+}
+
+/**
+ * 非规范 zip 条目路径:绝对路径、盘符、`.`/`..` 段或空段(`a//b`)。
+ * 这些名字解析(canonical)后可与原始名指向不同文件,必须整包拒绝。
+ * 目录条目的尾部 `/` 是 zip 的合法形态,不算空段。
+ */
+function hasNonCanonicalZipPath(name: string): boolean {
+  const normalized = name.replace(/\\/g, '/');
+  if (normalized.startsWith('/') || /^[a-zA-Z]:/.test(normalized)) return true;
+  const segments = normalized.split('/');
+  return segments.some(
+    (seg, i) => seg === '.' || seg === '..' || (seg === '' && i !== segments.length - 1),
+  );
 }
 
 /** 防 zip-slip:解压目标必须严格落在 dest 内部(不含 dest 本身),越界返回 null。 */
