@@ -2794,11 +2794,13 @@
   },
   "todaySpend": {
     "openCodexUsage": "Open Codex usage limits",
+    "resetPendingSegment": "{{label}} resetting",
     "openClaudeUsage": "Open Claude usage page",
     "unit": {
       "day": "d",
       "hour": "h",
-      "minute": "m"
+      "minute": "m",
+      "second": "s"
     },
     "openProxyUsage": "Open the full usage dashboard in your browser",
     "openXaiUsage": "Open your xAI account page",

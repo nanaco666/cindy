@@ -2793,11 +2793,13 @@
   },
   "todaySpend": {
     "openCodexUsage": "Codex の使用量制限ページを開く",
+    "resetPendingSegment": "{{label}} リセット中",
     "openClaudeUsage": "Claude の使用量ページを開く",
     "unit": {
       "day": "日",
       "hour": "時間",
-      "minute": "分"
+      "minute": "分",
+      "second": "秒"
     },
     "openProxyUsage": "ブラウザで完全な使用量ダッシュボードを開く",
     "openXaiUsage": "xAI アカウントページを開く",

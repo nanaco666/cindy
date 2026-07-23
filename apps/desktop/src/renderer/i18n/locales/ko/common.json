@@ -2793,11 +2793,13 @@
   },
   "todaySpend": {
     "openCodexUsage": "Codex 사용량 제한 페이지 열기",
+    "resetPendingSegment": "{{label}} 초기화 중",
     "openClaudeUsage": "Claude 사용량 페이지 열기",
     "unit": {
       "day": "일",
       "hour": "시간",
-      "minute": "분"
+      "minute": "분",
+      "second": "초"
     },
     "openProxyUsage": "브라우저에서 전체 사용량 대시보드 열기",
     "openXaiUsage": "xAI 계정 페이지 열기",

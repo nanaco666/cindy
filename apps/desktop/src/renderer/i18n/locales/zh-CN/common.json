@@ -2793,11 +2793,13 @@
   },
   "todaySpend": {
     "openCodexUsage": "打开 Codex 用量限制页面",
+    "resetPendingSegment": "{{label}} 重置中",
     "openClaudeUsage": "打开 Claude 用量页面",
     "unit": {
       "day": "天",
       "hour": "小时",
-      "minute": "分钟"
+      "minute": "分钟",
+      "second": "秒"
     },
     "openProxyUsage": "打开浏览器查看完整用量看板",
     "openXaiUsage": "打开 xAI 账户页面",
