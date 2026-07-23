@@ -249,6 +249,8 @@ const COMPOSER_VOICE_CARET_GAP = 2;
 const COMPOSER_RESIZE_CHROME_HEIGHT = 34;
 // 聚焦卡片形态的 chrome:paddingTop 26 + paddingBottom 8 + 层间 gap 8 + 工具排 ~36。
 const COMPOSER_CARD_CHROME_HEIGHT = 78;
+// Android 的 SafeAreaView 已经包含状态栏顶部 inset，不能再叠加一档顶部留白。
+const NEW_SESSION_SCREEN_TOP_PADDING = Platform.OS === 'android' ? 0 : spacing.xl;
 
 export default function NewRemoteSessionScreen() {
   const styles = useThemedStyles(makeStyles);
@@ -3051,7 +3053,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   screen: {
     flex: 1,
     paddingHorizontal: spacing.lg,
-    paddingTop: spacing.xl,
+    paddingTop: NEW_SESSION_SCREEN_TOP_PADDING,
   },
   topBar: {
     alignItems: 'center',

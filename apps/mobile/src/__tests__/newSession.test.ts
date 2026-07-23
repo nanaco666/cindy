@@ -708,6 +708,15 @@ describe('new session model', () => {
 });
 
 describe('new session composer surface', () => {
+  it('does not double-apply the Android safe-area inset to the top navigation', () => {
+    const newSource = readFileSync(resolve(process.cwd(), 'app/sessions/new.tsx'), 'utf8');
+
+    expect(newSource).toContain(
+      "const NEW_SESSION_SCREEN_TOP_PADDING = Platform.OS === 'android' ? 0 : spacing.xl;",
+    );
+    expect(newSource).toContain('paddingTop: NEW_SESSION_SCREEN_TOP_PADDING,');
+  });
+
   it('uses the shared platform keyboard avoidance rule for the new-session composer', () => {
     const newSource = readFileSync(resolve(process.cwd(), 'app/sessions/new.tsx'), 'utf8');
     const normalizedNewSource = newSource.replace(/\r\n/g, '\n');
