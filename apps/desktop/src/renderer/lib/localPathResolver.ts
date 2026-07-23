@@ -265,12 +265,39 @@ export function resolveLocalPath(href: string, cwd: string): string {
   }
   if (href.startsWith('/')) return href;
   if (WIN_ABS_RE.test(href)) return href;
+  // UNC share (`\\server\share\...`) is already absolute on Windows — joining
+  // it onto the cwd would produce garbage.
+  if (href.startsWith('\\\\')) return href;
 
   const isWin = cwd.includes('\\');
   const sep = isWin ? '\\' : '/';
   const trimmedCwd = stripTrailingPathSeparators(cwd);
   const normalizedHref = isWin ? href.replace(/\//g, '\\') : href;
   return `${trimmedCwd}${sep}${normalizedHref}`;
+}
+
+/**
+ * Absolutize an agent tool-input file path (Read/Edit/Write `file_path`,
+ * Codex file_change target) against the session working directory.
+ *
+ * Why: the agent runtime resolves a relative path against the session cwd —
+ * and some models DO emit relative paths even though the tool spec asks for
+ * absolute ones — while every renderer file IPC (`text-file:read-preview`,
+ * `shell:show-item-in-folder`, `xdt-file://`) requires an absolute path.
+ * Mirroring the runtime semantics here makes the tool's file chip open the
+ * same file the agent actually read/wrote.
+ *
+ *   - absolute (POSIX `/`, drive letter, UNC `\\`) → returned untouched
+ *   - relative + known workingDir → resolveLocalPath join (cwd's separator
+ *     style; for remote sessions the caller passes the REMOTE workingDir,
+ *     which is the cwd the remote agent resolved against)
+ *   - relative + empty workingDir (component used outside the chat stream)
+ *     → returned untouched, preserving the downstream
+ *     "Path must be absolute" error UX instead of producing a garbage path
+ */
+export function resolveToolFilePath(rawPath: string, workingDir: string): string {
+  if (!rawPath || !workingDir) return rawPath;
+  return resolveLocalPath(rawPath, workingDir);
 }
 
 /**

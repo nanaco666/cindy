@@ -56,7 +56,7 @@ import { verbForTool, verbLabelKeyForIntent, verbLabelKeyForRow } from '@/lib/ag
 import { statsForToolCall } from '@/lib/agent-actions/diffStats';
 import { extractDisplayParam } from '@/lib/agent-actions/actionPresentation';
 import { SUPPORTED_IMAGE_EXTS, extractExt } from '@/lib/fileTypes';
-import { toLocalFileUrl } from '@/lib/localPathResolver';
+import { toLocalFileUrl, resolveToolFilePath } from '@/lib/localPathResolver';
 import { isBrowserOpenablePath } from '../../../shared/browserOpenableExts';
 import { isGhostCallToolName } from '../../../shared/ghost';
 import { shouldOpenTextLightboxForOrigin } from '@/lib/filePreview';
@@ -720,22 +720,26 @@ export function AgentActionRow({
     }
     triggerRef.current = anchor;
     if (toolName === 'Read' && filePath) {
+      // 模型可能给相对路径(runtime 按会话工作目录解析后 Read 照样成功),而
+      // 预览 / 定位 IPC 一律要求绝对路径 —— 先按 workingDir 补齐,镜像 runtime
+      // 语义,保证 chip 打开的就是 agent 实际读到的那个文件。
+      const absPath = resolveToolFilePath(filePath, fileCtx.workingDir);
       // 按扩展名分流:图片 → ImageLightbox(xdt-file:// 协议直接渲染),
       // 其他 → TextLightbox(文稿浏览器)。镜像 MarkdownRenderer / UserMessage
       // 里 image-local vs text-local 的同款决策(见 localPathResolver.classifyMarkdownHref)。
-      if (isImagePath(filePath)) {
+      if (isImagePath(absPath)) {
         // remote 会话:xdt-file://?path= 经 origin 改写走远程媒体管线(device 全量 /
         // ssh 限 workdir 内);本地 no-op。
         setLightbox({
           kind: 'image',
           src: rewriteToRemoteMediaOrigin(
-            toLocalFileUrl(filePath),
+            toLocalFileUrl(absPath),
             toRemoteMediaOrigin(fileCtx.origin, fileCtx.workingDir),
           ),
         });
       } else {
-        if (!(await shouldOpenTextLightboxForOrigin(fileCtx, filePath))) return;
-        setLightbox({ kind: 'file', path: filePath, name: basename(filePath) });
+        if (!(await shouldOpenTextLightboxForOrigin(fileCtx, absPath))) return;
+        setLightbox({ kind: 'file', path: absPath, name: basename(absPath) });
       }
       return;
     }
@@ -753,9 +757,10 @@ export function AgentActionRow({
   );
 
   // v12: 文件 chip 右键菜单 (复制 / 复制文件路径 / 打开文件所在目录)。
-  // Claude 取 file_path，Codex 单文件 change 取目标路径；均已是绝对路径。
+  // Claude 取 file_path，Codex 单文件 change 取目标路径 —— 模型可能给相对
+  // 路径(见 onActivate 注释),菜单动作统一经 resolveToolFilePath 补成绝对路径。
   const fileChipMenu = useFileChipContextMenu({
-    getAbsPath: () => chipFilePath,
+    getAbsPath: () => resolveToolFilePath(chipFilePath, fileCtx.workingDir),
     canOpenInBrowser: isBrowserOpenablePath(chipFilePath),
   });
 

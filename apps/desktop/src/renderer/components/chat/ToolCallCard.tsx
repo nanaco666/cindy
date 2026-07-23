@@ -13,6 +13,7 @@ import { ChevronRight, FileText } from 'lucide-react';
 
 import { cn, basename } from '@/lib/utils';
 import { shouldOpenTextLightboxForOrigin } from '@/lib/filePreview';
+import { resolveToolFilePath } from '@/lib/localPathResolver';
 import { useChatSessionFile } from './ChatSessionFileContext';
 import { Collapse } from '@/components/ui/collapse';
 import { Tip } from '@/components/ui/tooltip';
@@ -26,7 +27,9 @@ const TEXT_LIGHTBOX_TOOLS = new Set(['Read', 'Write', 'Edit', 'MultiEdit']);
 /**
  * text-lightbox F1: extract the file_path(s) from a tool input. Read/Write/
  * Edit each have a single `file_path`; MultiEdit also has a single `file_path`
- * (the edits array shares one target file). Returns absolute path strings.
+ * (the edits array shares one target file). Returns the path verbatim as the
+ * model emitted it — may be RELATIVE (resolved against the session workingDir
+ * at the click site via resolveToolFilePath).
  *
  * Currently the extraction logic is identical for all four tools (`file_path`
  * key on the input record), so we don't branch on toolName — but the caller
@@ -156,11 +159,14 @@ export function ToolCallCard({ toolName, toolInput, summary, toolResult }: ToolC
                       onClick={async (e) => {
                         e.stopPropagation();
                         const btn = e.currentTarget;
-                        if (!(await shouldOpenTextLightboxForOrigin(fileCtx, p))) return;
+                        // 模型可能给相对 file_path(见 AgentActionRow onActivate
+                        // 注释)—— 先按会话 workingDir 补成绝对路径再预览。
+                        const abs = resolveToolFilePath(p, fileCtx.workingDir);
+                        if (!(await shouldOpenTextLightboxForOrigin(fileCtx, abs))) return;
                         // F6 focus return: stash the clicked chip so the
                         // lightbox can restore focus on close.
                         activeChipRef.current = btn;
-                        setPreviewPath(p);
+                        setPreviewPath(abs);
                       }}
                       className={cn(
                         'inline-flex items-center gap-1.5',

@@ -32,6 +32,7 @@ import { Tooltip } from '@/components/ui/tooltip';
 import { DiffView } from './DiffView';
 import { MarkdownDiffBlock } from './MarkdownDiffBlock';
 import { isRemoteFileOrigin } from '@/lib/sessionFileOrigin';
+import { resolveToolFilePath } from '@/lib/localPathResolver';
 import { revealRemoteChatFile } from '@/lib/remoteFileOpen';
 import { useChatSessionFile } from './ChatSessionFileContext';
 
@@ -220,7 +221,9 @@ export function ToolPayloadLightbox({
 
   async function showInFolder() {
     if (payload.kind !== 'diff' || payload.files.length !== 1) return;
-    const filePath = payload.files[0].filePath;
+    // 模型可能给相对路径(Claude file_path / Codex change path)—— 先按会话
+    // workingDir 补成绝对路径,show-item-in-folder 只接受绝对路径。
+    const filePath = resolveToolFilePath(payload.files[0].filePath, fileCtx.workingDir);
     // remote 会话:远端路径本机不存在(或更糟,存在同路径本机文件)——
     // 下载缓存副本后定位副本。
     if (isRemoteFileOrigin(fileCtx.origin)) {
