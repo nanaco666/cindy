@@ -88,12 +88,12 @@ const XD_PROVIDER: Provider = {
   titleModel: 'gpt-5.4-mini',
   imageModels: [
     { id: 'gpt-image-2', name: 'GPT Image 2' },
-    { id: 'gemini-3-pro-image-preview', name: 'Gemini 3 Pro Image' },
-    { id: 'gemini-3.1-flash-image-preview', name: 'Gemini 3.1 Flash Image' },
+    { id: 'gemini-3-pro-image', name: 'Gemini 3 Pro Image' },
+    { id: 'gemini-3.1-flash-image', name: 'Gemini 3.1 Flash Image' },
   ],
   imageDefaults: {
     standard: 'gpt-image-2',
-    draft: 'gemini-3.1-flash-image-preview',
+    draft: 'gemini-3.1-flash-image',
   },
   videoModels: [
     { id: 'seedance-fast', name: 'Seedance 快速' },

@@ -61,8 +61,8 @@ export interface CindyProxyMediaService {
  */
 export const XDPROXY_IMAGE_MODELS = [
   { id: 'gpt-image-2', label: 'GPT Image 2' },
-  { id: 'gemini-3-pro-image-preview', label: 'Gemini 3 Pro Image' },
-  { id: 'gemini-3.1-flash-image-preview', label: 'Gemini 3.1 Flash Image' },
+  { id: 'gemini-3-pro-image', label: 'Gemini 3 Pro Image' },
+  { id: 'gemini-3.1-flash-image', label: 'Gemini 3.1 Flash Image' },
 ] as const;
 
 export type XdproxyImageModel = (typeof XDPROXY_IMAGE_MODELS)[number]['id'];

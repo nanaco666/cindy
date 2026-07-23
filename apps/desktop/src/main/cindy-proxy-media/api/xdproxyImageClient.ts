@@ -26,14 +26,43 @@ export interface CreateXdproxyImageClientOptions {
   logger?: LiziMcpLogger;
 }
 
-async function parseResponse(res: Response): Promise<XdproxyImageResponse> {
+function gatewayErrorCode(body: unknown): string | null {
+  if (!body || typeof body !== 'object') return null;
+  const parsed = body as {
+    code?: unknown;
+    error?: { code?: unknown; type?: unknown };
+  };
+  const value = parsed.error?.code ?? parsed.code ?? parsed.error?.type;
+  return typeof value === 'string' || typeof value === 'number' ? String(value) : null;
+}
+
+function requestErrorMessage(params: {
+  status: number;
+  model: string;
+  message: string;
+  body?: unknown;
+}): string {
+  const code = gatewayErrorCode(params.body);
+  const context = [
+    `HTTP ${params.status}`,
+    `model ${JSON.stringify(params.model)}`,
+    ...(code ? [`code ${JSON.stringify(code)}`] : []),
+  ].join(', ');
+  return `xdproxy image request failed (${context}): ${params.message}`;
+}
+
+async function parseResponse(res: Response, model: string): Promise<XdproxyImageResponse> {
   const text = await res.text();
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);
   } catch {
     throw new XdproxyImageError(
-      `xdproxy returned non-JSON (HTTP ${res.status}): ${text.slice(0, 200)}`,
+      requestErrorMessage({
+        status: res.status,
+        model,
+        message: `non-JSON response: ${text.slice(0, 200)}`,
+      }),
       res.status,
       text,
     );
@@ -43,13 +72,22 @@ async function parseResponse(res: Response): Promise<XdproxyImageResponse> {
     const errMsg =
       (parsed as { error?: { message?: string } })?.error?.message ??
       `xdproxy HTTP ${res.status}`;
-    throw new XdproxyImageError(errMsg, res.status, parsed);
+    throw new XdproxyImageError(
+      requestErrorMessage({ status: res.status, model, message: errMsg, body: parsed }),
+      res.status,
+      parsed,
+    );
   }
 
   const body = parsed as XdproxyImageResponse;
   if (!body?.data || !Array.isArray(body.data) || body.data.length === 0) {
     throw new XdproxyImageError(
-      'xdproxy response missing data[]',
+      requestErrorMessage({
+        status: res.status,
+        model,
+        message: 'response missing data[]',
+        body: parsed,
+      }),
       res.status,
       parsed,
     );
@@ -113,7 +151,7 @@ export function createXdproxyImageClient(opts: CreateXdproxyImageClientOptions):
       body: JSON.stringify(body),
       signal,
     });
-    return parseResponse(res);
+    return parseResponse(res, params.model);
   }
 
   async function editImage(
@@ -146,7 +184,7 @@ export function createXdproxyImageClient(opts: CreateXdproxyImageClientOptions):
       body: form as unknown as BodyInit,
       signal,
     });
-    return parseResponse(res);
+    return parseResponse(res, params.model);
   }
 
   return { generateImage, editImage };

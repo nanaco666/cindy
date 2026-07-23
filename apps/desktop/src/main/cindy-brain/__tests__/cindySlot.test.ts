@@ -70,10 +70,10 @@ function makeSlot(overrides: Partial<CindySlotDeps> = {}): {
   const getImageConfig = vi.fn(() => ({
     models: [
     { id: 'gpt-image-2', label: 'GPT Image 2' },
-    { id: 'gemini-3-pro-image-preview', label: 'Gemini 3 Pro Image' },
-    { id: 'gemini-3.1-flash-image-preview', label: 'Gemini 3.1 Flash Image' },
+    { id: 'gemini-3-pro-image', label: 'Gemini 3 Pro Image' },
+    { id: 'gemini-3.1-flash-image', label: 'Gemini 3.1 Flash Image' },
     ],
-    defaults: { standard: 'gpt-image-2', draft: 'gemini-3.1-flash-image-preview', best: 'gpt-image-2' },
+    defaults: { standard: 'gpt-image-2', draft: 'gemini-3.1-flash-image', best: 'gpt-image-2' },
   }));
   const getVideoConfig = vi.fn(() => ({
     models: [
@@ -130,9 +130,9 @@ describe('载荷校验', () => {
 
   it('模型白名单:名单内放行并透传,名单外拒且不触发生成', async () => {
     const { slot, generateImage } = makeSlot();
-    const ok = await slot.handleModelRequest('art', { ...REQ, model: 'gemini-3-pro-image-preview' });
+    const ok = await slot.handleModelRequest('art', { ...REQ, model: 'gemini-3-pro-image' });
     expect(ok).toMatchObject({ ok: true });
-    expect(generateImage).toHaveBeenCalledWith({ prompt: '一只猫', model: 'gemini-3-pro-image-preview' });
+    expect(generateImage).toHaveBeenCalledWith({ prompt: '一只猫', model: 'gemini-3-pro-image' });
 
     const bad = await slot.handleModelRequest('art', { ...REQ, model: 'dall-e-9' });
     expect(bad).toMatchObject({ ok: false });
@@ -151,7 +151,7 @@ describe('载荷校验', () => {
     await slot.handleModelRequest('art', { ...REQ, tier: 'draft' });
     expect(generateImage).toHaveBeenLastCalledWith({
       prompt: '一只猫',
-      model: 'gemini-3.1-flash-image-preview',
+      model: 'gemini-3.1-flash-image',
     });
     await slot.handleModelRequest('art', { ...REQ, tier: 'best' });
     expect(generateImage).toHaveBeenLastCalledWith({ prompt: '一只猫', model: 'gpt-image-2' });
@@ -169,13 +169,13 @@ describe('载荷校验', () => {
 describe('意识专属后端覆盖(解析表第②层)', () => {
   it('覆盖压过档位;调用显式点名仍压过覆盖;下架型号的覆盖静默落回', async () => {
     const pinned = makeSlot({
-      getOverride: vi.fn(() => 'gemini-3-pro-image-preview') as unknown as CindySlotDeps['getOverride'],
+      getOverride: vi.fn(() => 'gemini-3-pro-image') as unknown as CindySlotDeps['getOverride'],
     });
     // 覆盖 > tier
     await pinned.slot.handleModelRequest('art', { ...REQ, tier: 'draft' });
     expect(pinned.generateImage).toHaveBeenLastCalledWith({
       prompt: '一只猫',
-      model: 'gemini-3-pro-image-preview',
+      model: 'gemini-3-pro-image',
     });
     // 显式点名 > 覆盖
     await pinned.slot.handleModelRequest('art', { ...REQ, model: 'gpt-image-2' });

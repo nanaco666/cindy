@@ -18,12 +18,36 @@ describe('normalize(坏形态清洗)', () => {
     expect(
       __testing.normalize({
         overrides: {
-          art: { 'image.generate': 'gemini-3-pro-image-preview', 'image.upscale': 'x', 'image.edit': '' },
+          art: { 'image.generate': 'gpt-image-2', 'image.upscale': 'x', 'image.edit': '' },
           broken: 'not-an-object',
           empty: {},
         },
       }),
-    ).toEqual({ overrides: { art: { 'image.generate': 'gemini-3-pro-image-preview' } }, inflightLimits: {} });
+    ).toEqual({ overrides: { art: { 'image.generate': 'gpt-image-2' } }, inflightLimits: {} });
+  });
+
+  it('旧 Gemini 图片 alias 映射到新 ID，保留已自定义用户的模型选择', () => {
+    expect(
+      __testing.normalize({
+        overrides: {
+          art: {
+            'image.generate': 'gemini-3-pro-image-preview',
+            'image.edit': 'gemini-3.1-flash-image-preview',
+            'video.generate': 'gemini-3-pro-image-preview',
+          },
+        },
+      }),
+    ).toEqual({
+      overrides: {
+        art: {
+          'image.generate': 'gemini-3-pro-image',
+          'image.edit': 'gemini-3.1-flash-image',
+          // 迁移只作用于图片能力，避免改写其它类别的未知值。
+          'video.generate': 'gemini-3-pro-image-preview',
+        },
+      },
+      inflightLimits: {},
+    });
   });
 
   it('整体不是对象 / 缺 overrides → 空表', () => {
