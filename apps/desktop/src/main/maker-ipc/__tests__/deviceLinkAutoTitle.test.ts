@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { Maker } from '@cindy/maker-core';
+import type { Maker } from '@lizi/maker-core';
 
 vi.mock('../../logger.js', () => ({
   createLogger: () => ({ warn: vi.fn() }),

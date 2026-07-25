@@ -14,35 +14,7 @@
  * 跟 model/effort 完全同模式，main 不需要知道 storage 实现。
  */
 
-const STORAGE_KEY_PREFIX = 'userPrompt.value';
-const LEGACY_STORAGE_KEY = STORAGE_KEY_PREFIX;
-let activeOwnerId: string | null = null;
-
-function storageKey(): string {
-  return `${STORAGE_KEY_PREFIX}.${activeOwnerId ?? 'signed-out'}`;
-}
-
-function migrateLegacyPrompt(ownerId: string): void {
-  try {
-    const scopedKey = `${STORAGE_KEY_PREFIX}.${ownerId}`;
-    if (localStorage.getItem(scopedKey) !== null) return;
-    const legacyValue = localStorage.getItem(LEGACY_STORAGE_KEY);
-    if (legacyValue === null) return;
-    localStorage.setItem(scopedKey, legacyValue);
-    localStorage.removeItem(LEGACY_STORAGE_KEY);
-  } catch {
-    // localStorage 不可用时保留现有的空值回退语义。
-  }
-}
-
-/** Select the owner namespace used by this renderer's personal prompt cache. */
-export function setUserPromptOwner(ownerId: string | null): void {
-  if (activeOwnerId === ownerId) return;
-  activeOwnerId = ownerId;
-  if (ownerId) migrateLegacyPrompt(ownerId);
-  const value = getUserPrompt();
-  subscribers.forEach((cb) => cb(value));
-}
+const STORAGE_KEY = 'userPrompt.value';
 
 type Subscriber = (value: string) => void;
 const subscribers = new Set<Subscriber>();
@@ -50,7 +22,7 @@ const subscribers = new Set<Subscriber>();
 /** 同步读 —— 给 hook 之外路径用（ChatInput 启 session 时透传等）。坏数据兜底空串。 */
 export function getUserPrompt(): string {
   try {
-    const raw = localStorage.getItem(storageKey());
+    const raw = localStorage.getItem(STORAGE_KEY);
     return typeof raw === 'string' ? raw : '';
   } catch {
     return '';
@@ -60,7 +32,7 @@ export function getUserPrompt(): string {
 /** 同步写 —— 落盘 + 通知本 tab 内所有 subscriber（storage 事件本身不会触发当前 tab）。 */
 export function setUserPrompt(next: string): void {
   try {
-    localStorage.setItem(storageKey(), next);
+    localStorage.setItem(STORAGE_KEY, next);
   } catch {
     // localStorage 不可用 —— 忽略，调用方应自行处理 UI 反馈。
   }
@@ -73,7 +45,7 @@ export function subscribeUserPrompt(cb: Subscriber): () => void {
 
   // 监听跨实例 storage 事件（多窗口兜底；Electron 单窗口下几乎不触发）。
   const storageHandler = (e: StorageEvent) => {
-    if (e.key !== storageKey()) return;
+    if (e.key !== STORAGE_KEY) return;
     cb(getUserPrompt());
   };
   window.addEventListener('storage', storageHandler);

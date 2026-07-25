@@ -1,11 +1,12 @@
 /**
  * ReviewVerdictDialog — WARN and BLOCK review result dialogs.
  *
+ * Design: doc/design_docs/skillhub.pen
  *   WARN:  ZsNls (Light) / 4kwHH (Dark)
  *   BLOCK: VIuO3 (Light) / cRUum (Dark)
  *
  * 480px wide, cornerRadius 12, Card fill, Board border, backdrop bg-black/40.
- * All icons strictly grayscale per docs/design-rules/cindy-design-system.md / N12.
+ * All icons strictly grayscale per DESIGN.md / N12.
  */
 
 import * as Dialog from '@radix-ui/react-dialog';

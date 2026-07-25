@@ -7,8 +7,8 @@
  *   - dubious-ownership：到这里说明 main 已自动重试仍失败，hint 提示
  *     用户检查 git config 的 safe.directory
  *
- * Toast 视觉规格沿用项目内通用 toast（lib/toast.ts），不为 worktree
- * 单独定制样式，只补文案。
+ * 视觉来源：worktree.pen F5 Light + F5 Dark；Toast 视觉规格沿用项目内
+ * 通用 toast（lib/toast.ts），不为 worktree 单独定制样式，只补文案。
  */
 
 import { toast } from './toast';

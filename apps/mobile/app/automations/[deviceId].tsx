@@ -52,7 +52,7 @@ import {
   summarizeRun,
   summarizeSchedule,
 } from '@/scheduler/scheduleModel';
-import { shouldRefreshRunsForSchedule } from '@cindy/maker-shared/schedule-events';
+import { shouldRefreshRunsForSchedule } from '@lizi/maker-shared/schedule-events';
 import {
   applyMobileTemplateParams,
   applyTemplateToMobileScheduleDraft,

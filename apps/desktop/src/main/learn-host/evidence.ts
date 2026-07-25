@@ -6,7 +6,7 @@
  * 单测不需要 SQLite。
  */
 
-import type { SearchChatHistoryHit, SearchChatHistoryResult } from '@cindy/mcps';
+import type { SearchChatHistoryHit, SearchChatHistoryResult } from 'lizi-mcps';
 
 import { SESSION_SOURCES, type SessionSource } from '../../shared/sessionSource';
 import { visibleMessageTextForConversationSearch } from '../localDb/conversationSearch.pure';

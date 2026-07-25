@@ -1,9 +1,6 @@
 import { z } from "zod";
 
 import {
-  accountDeletionAvailabilitySchema,
-  accountDeletionChallengeSchema,
-  accountDeletionStatusSchema,
   accountMembershipSchema,
   authRegionSchema,
   loginMethodSchema,
@@ -13,9 +10,6 @@ import {
   ssoOrgDiscoverySchema,
   tokenPairSchema,
   type AuthClientType,
-  type AccountDeletionAvailability,
-  type AccountDeletionChallenge,
-  type AccountDeletionStatus,
   type AccountMembership,
   type AuthMe,
   type AuthTokenPair,
@@ -179,12 +173,7 @@ export class CindyAuthClient {
     provider: SocialProvider,
     credential:
       | { idToken: string }
-      | {
-          identityToken: string;
-          authorizationCode?: string;
-          rawNonce: string;
-          user?: { name?: string };
-        }
+      | { identityToken: string; rawNonce: string; user?: { name?: string } }
       | { code: string },
   ): Promise<LoginOutcome> {
     return this.request(`/api/auth/social/${provider}`, loginOutcomeSchema, {
@@ -292,55 +281,6 @@ export class CindyAuthClient {
     return this.request("/api/me", meResponseSchema, undefined, {
       token: accessToken,
     });
-  }
-
-  getAccountDeletionAvailability(
-    accessToken: string,
-  ): Promise<AccountDeletionAvailability> {
-    return this.request(
-      "/api/auth/account/deletion",
-      accountDeletionAvailabilitySchema,
-      undefined,
-      { token: accessToken },
-    );
-  }
-
-  requestAccountDeletionChallenge(
-    accessToken: string,
-  ): Promise<AccountDeletionChallenge> {
-    return this.request(
-      "/api/auth/account/deletion/challenge",
-      accountDeletionChallengeSchema,
-      { locale: this.options.locale },
-      { token: accessToken },
-    );
-  }
-
-  confirmAccountDeletion(
-    accessToken: string,
-    input: {
-      challengeId: string;
-      receiptToken: string;
-      code: string;
-      acknowledged: true;
-    },
-  ): Promise<AccountDeletionStatus> {
-    return this.request(
-      "/api/auth/account/deletion/confirm",
-      accountDeletionStatusSchema,
-      input,
-      { token: accessToken },
-    );
-  }
-
-  getAccountDeletionStatus(
-    receiptToken: string,
-  ): Promise<AccountDeletionStatus> {
-    return this.request(
-      "/api/auth/account/deletion/status",
-      accountDeletionStatusSchema,
-      { receiptToken },
-    );
   }
 
   async logout(accessToken: string): Promise<void> {

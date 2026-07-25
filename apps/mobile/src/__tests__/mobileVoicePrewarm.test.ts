@@ -1,23 +1,26 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { AsrEvent, AsrProvider, AudioTrace } from '@cindy/voice-input-core';
+import type { AsrEvent, AsrProvider, AudioTrace } from '@lizi/voice-input-core';
 
 const prewarmMobileRealtimeAudio = vi.fn();
+const resolveCredential = vi.fn();
 const createProvider = vi.fn();
 
 vi.mock('@/session/mobileRealtimeAudio', () => ({
   prewarmMobileRealtimeAudio: (...args: unknown[]) => prewarmMobileRealtimeAudio(...args),
+}));
+vi.mock('@/session/mobileVoiceLiteLlmSettings', () => ({
+  createMobileVoiceCredentialFromLiteLlmSettings: vi.fn(),
+  resolveMobileVoiceCredentialFromLiteLlmSettings: (...args: unknown[]) => resolveCredential(...args),
 }));
 vi.mock('@/session/mobileRealtimeAsrProvider', () => ({
   createMobileAsrProvider: (...args: unknown[]) => createProvider(...args),
 }));
 const createCindyCredential = vi.fn();
 vi.mock('@/session/mobileCindyVoiceSession', () => ({
-  CINDY_MANAGED_REFINER_PROVIDER: 'auto',
   createMobileCindyVoiceCredential: (...args: unknown[]) => createCindyCredential(...args),
   MobileCindyVoiceRunContext: class {
     createAsrConnection = vi.fn();
     createRefinerTarget = vi.fn();
-    warmRefiner = vi.fn();
   },
 }));
 
@@ -71,12 +74,6 @@ class FakeProvider implements AsrProvider {
 
 const CREDENTIAL = { hostDeviceId: 'host-a' } as never;
 
-const AUTH = {
-  getAccessToken: async () => 'token',
-  refreshAccessToken: async () => 'token',
-  apiFetch: async () => ({} as never),
-};
-
 async function settle(): Promise<void> {
   await Promise.resolve();
   await Promise.resolve();
@@ -91,10 +88,10 @@ describe('mobileVoicePrewarm', () => {
 
   it('starts the ASR connect at prewarm and hands the in-flight connection to the claiming run', async () => {
     const provider = new FakeProvider();
-    createCindyCredential.mockReturnValue(CREDENTIAL);
+    resolveCredential.mockResolvedValue(CREDENTIAL);
     createProvider.mockReturnValue(provider);
 
-    prewarmMobileVoiceStart('device-1', AUTH);
+    prewarmMobileVoiceStart('device-1');
     expect(prewarmMobileRealtimeAudio).toHaveBeenCalledTimes(1);
     await settle();
     expect(provider.startCalls).toBe(1);
@@ -123,20 +120,20 @@ describe('mobileVoicePrewarm', () => {
 
   it('does not hand a prewarmed connection to a different device', async () => {
     const provider = new FakeProvider();
-    createCindyCredential.mockReturnValue(CREDENTIAL);
+    resolveCredential.mockResolvedValue(CREDENTIAL);
     createProvider.mockReturnValue(provider);
 
-    prewarmMobileVoiceStart('device-1', AUTH);
+    prewarmMobileVoiceStart('device-1');
     expect(takePrewarmedMobileVoiceAsr('device-2')).toBeNull();
     expect(__testing.hasPending()).toBe(true);
   });
 
   it('discard immediately propagates cancellation to an in-flight speculative connection', async () => {
     const provider = new FakeProvider();
-    createCindyCredential.mockReturnValue(CREDENTIAL);
+    resolveCredential.mockResolvedValue(CREDENTIAL);
     createProvider.mockReturnValue(provider);
 
-    prewarmMobileVoiceStart('device-1', AUTH);
+    prewarmMobileVoiceStart('device-1');
     await settle();
     discardPendingPrewarm();
     await settle();
@@ -149,11 +146,11 @@ describe('mobileVoicePrewarm', () => {
 
   it('repeated pressIn for the same device reuses the pending prewarm instead of reconnecting', async () => {
     const provider = new FakeProvider();
-    createCindyCredential.mockReturnValue(CREDENTIAL);
+    resolveCredential.mockResolvedValue(CREDENTIAL);
     createProvider.mockReturnValue(provider);
 
-    prewarmMobileVoiceStart('device-1', AUTH);
-    prewarmMobileVoiceStart('device-1', AUTH);
+    prewarmMobileVoiceStart('device-1');
+    prewarmMobileVoiceStart('device-1');
     await settle();
     expect(createProvider).toHaveBeenCalledTimes(1);
     expect(provider.startCalls).toBe(1);
@@ -161,10 +158,10 @@ describe('mobileVoicePrewarm', () => {
 
   it('retries with a fresh connection when the speculative connect failed', async () => {
     const provider = new FakeProvider();
-    createCindyCredential.mockReturnValue(CREDENTIAL);
+    resolveCredential.mockResolvedValue(CREDENTIAL);
     createProvider.mockReturnValue(provider);
 
-    prewarmMobileVoiceStart('device-1', AUTH);
+    prewarmMobileVoiceStart('device-1');
     await settle();
     // The speculative connect fails (e.g. transient network blip at pressIn).
     provider.failStart(new Error('blip'));
@@ -182,10 +179,10 @@ describe('mobileVoicePrewarm', () => {
 
   it('reconnects when the transport dropped after the speculative connect succeeded', async () => {
     const provider = new FakeProvider();
-    createCindyCredential.mockReturnValue(CREDENTIAL);
+    resolveCredential.mockResolvedValue(CREDENTIAL);
     createProvider.mockReturnValue(provider);
 
-    prewarmMobileVoiceStart('device-1', AUTH);
+    prewarmMobileVoiceStart('device-1');
     await settle();
     provider.resolveStart();
     await settle();
@@ -202,46 +199,52 @@ describe('mobileVoicePrewarm', () => {
     await expect(startPromise).resolves.toBeUndefined();
   });
 
-  it('falls back to null when the managed credential cannot be built', async () => {
-    createCindyCredential.mockImplementation(() => {
-      throw new Error('当前区域未配置 Cindy 语音服务。');
-    });
+  it('falls back to null when the credential cannot be resolved', async () => {
+    resolveCredential.mockRejectedValue(new Error('no litellm key'));
 
-    prewarmMobileVoiceStart('device-1', AUTH);
+    prewarmMobileVoiceStart('device-1');
     const claimed = await takePrewarmedMobileVoiceAsr('device-1');
     expect(claimed).toBeNull();
   });
 
-  it('managed prewarm uses the cindy credential and exposes a voiceContext', async () => {
+  it('managed prewarm (auth present) uses the cindy credential and exposes a voiceContext', async () => {
     const provider = new FakeProvider();
     const managedCredential = {
       hostDeviceId: 'host-managed',
-      refiner: { provider: 'auto' },
+      refiner: { provider: 'litellm-gpt-5.4-mini' },
       settings: { language: 'zh-CN' },
     } as never;
     createCindyCredential.mockReturnValue(managedCredential);
     createProvider.mockReturnValue(provider);
 
-    prewarmMobileVoiceStart('device-1', AUTH);
+    prewarmMobileVoiceStart('device-1', {
+      getAccessToken: async () => 'token',
+      refreshAccessToken: async () => 'token',
+      apiFetch: async () => ({} as never),
+    });
     const claimed = await takePrewarmedMobileVoiceAsr('device-1');
 
     expect(createCindyCredential).toHaveBeenCalledWith('device-1');
+    expect(resolveCredential).not.toHaveBeenCalled();
     expect(claimed?.credential).toBe(managedCredential);
     expect(claimed?.voiceContext).toBeDefined();
     // The managed provider dials through voice-server tickets.
     expect(createProvider.mock.calls[0][1]).toHaveProperty('connectionProvider');
   });
 
-  it('without auth there is nothing to prewarm (managed-only voice input)', async () => {
+  it('byok prewarm (no auth) never touches the managed credential plane', async () => {
     const provider = new FakeProvider();
-    createCindyCredential.mockReturnValue(CREDENTIAL);
+    resolveCredential.mockResolvedValue(CREDENTIAL);
     createProvider.mockReturnValue(provider);
 
     prewarmMobileVoiceStart('device-1');
     const claimed = await takePrewarmedMobileVoiceAsr('device-1');
 
-    expect(claimed).toBeNull();
+    expect(resolveCredential).toHaveBeenCalledWith('device-1');
     expect(createCindyCredential).not.toHaveBeenCalled();
-    expect(createProvider).not.toHaveBeenCalled();
+    expect(claimed?.credential).toBe(CREDENTIAL);
+    expect(claimed?.voiceContext).toBeUndefined();
+    // BYOK dials directly with the credential's own key — no ticket provider.
+    expect(createProvider.mock.calls[0][1]).not.toHaveProperty('connectionProvider');
   });
 });

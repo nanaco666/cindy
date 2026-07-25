@@ -1,4 +1,4 @@
-import type { Logger } from '@cindy/maker-core';
+import type { Logger } from '@lizi/maker-core';
 
 import { desktopMakerLogger } from './logger-adapter.js';
 

@@ -11,7 +11,7 @@ import { AGENT_KIND, EFFORT, EXECUTION_MODE, SCRIPT_CAPABILITY } from './_enums.
 import { assertCronAndTimezoneValid, withScheduler } from './_shared.js';
 import type { LiziMcpSessionContext, SchedulerMcpDeps } from '../types.js';
 import type { SchedulerToolRegistry } from '../cindy_schedulerToolRegistry.js';
-import { stabilizePreRunHookForUpdate, type UpdateScheduleInput } from '@cindy/maker-scheduler';
+import { stabilizePreRunHookForUpdate, type UpdateScheduleInput } from '@lizi/maker-scheduler';
 
 export function registerScheduleUpdateTool(
   registry: SchedulerToolRegistry,

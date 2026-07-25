@@ -3,7 +3,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import { createLogger } from '../logger.js';
-import { getActiveAppSession, ownerScopedUserDataPath } from '../appSessionState.js';
 import {
   DEFAULT_VOICE_INPUT_ASR_PROVIDER_CHAIN,
   DEFAULT_VOICE_INPUT_PROVIDER_KIND,
@@ -11,12 +10,11 @@ import {
   type VoiceInputProviderKind,
 } from './voiceInputAsrConfig.js';
 import {
+  DEFAULT_VOICE_INPUT_REFINER_PROVIDER_CHAIN,
   DEFAULT_VOICE_INPUT_REFINER_PROVIDER_KIND,
   resolveVoiceInputRefinerProviderKindAlias,
   type VoiceInputRefinerProviderKind,
 } from '../../shared/voiceInputRefinerProfiles.js';
-
-const EMPTY_REFINER_DEFAULT_CHAIN: readonly VoiceInputRefinerProviderKind[] = [];
 
 const log = createLogger('voice-input:model-selection');
 const CONFIG_FILE_NAME = 'voice-input-models.json';
@@ -34,18 +32,6 @@ export type VoiceInputProviderChainSource = 'default' | 'configured';
 export type VoiceInputServiceMode = 'cindy' | 'byok';
 
 export const DEFAULT_VOICE_INPUT_SERVICE_MODE: VoiceInputServiceMode = 'cindy';
-
-/**
- * Account-free sessions must always use the user's own credential plane.
- * Keep the persisted preference untouched so returning to a cloud account
- * restores the user's previous managed/BYOK choice.
- */
-export function effectiveVoiceInputServiceMode(
-  configuredMode: VoiceInputServiceMode,
-  canUseCindyAccountServices: boolean,
-): VoiceInputServiceMode {
-  return canUseCindyAccountServices ? configuredMode : 'byok';
-}
 
 export type VoiceInputModelSelectionValues = {
   serviceMode: VoiceInputServiceMode;
@@ -75,12 +61,6 @@ export type VoiceInputModelSelectionPatch = {
   asrProvider?: VoiceInputProviderKind | null;
   refinerProvider?: VoiceInputRefinerProviderKind | null;
   refinerModel?: string | null;
-  /**
-   * Explicit BYOK refiner fallback tail (providers tried after the primary).
-   * `null` clears the override — with no configured tail the primary runs
-   * alone. Managed mode ignores this entirely (server-side failover).
-   */
-  refinerProviderChain?: VoiceInputRefinerProviderKind[] | null;
 };
 
 export type VoiceInputModelSelectionWarning = {
@@ -110,8 +90,7 @@ let cachedConfig: VoiceInputModelSelection | null = null;
 let cachedMtimeMs = -1;
 
 export function getVoiceInputModelSelectionConfigPath(): string {
-  const ownerId = getActiveAppSession().dataOwnerId;
-  return ownerId ? ownerScopedUserDataPath(CONFIG_FILE_NAME) : path.join(app.getPath('userData'), CONFIG_FILE_NAME);
+  return path.join(app.getPath('userData'), CONFIG_FILE_NAME);
 }
 
 export function resolveVoiceInputModelSelectionValues(
@@ -151,11 +130,7 @@ export function resolveVoiceInputModelSelectionValues(
       ?? splitCommaList(env.XDT_UTILITY_MODEL_PROVIDER_CHAIN)
       ?? splitCommaList(env.XDT_VOICE_INPUT_REFINER_PROVIDER_CHAIN),
     head: refinerProvider.value,
-    // BYOK refiner fallback is explicit opt-in (product decision 2026-07-23):
-    // without a configured chain the head runs alone, mirroring the reality
-    // that most BYOK users hold a single credential plane. Managed mode does
-    // not read this chain at all — voice-server owns model failover there.
-    defaultChain: EMPTY_REFINER_DEFAULT_CHAIN,
+    defaultChain: DEFAULT_VOICE_INPUT_REFINER_PROVIDER_CHAIN,
     resolveAlias: resolveVoiceInputRefinerProviderKindAlias,
   });
   return {
@@ -235,7 +210,7 @@ export function getVoiceInputModelSelection(): VoiceInputModelSelection {
   ensureVoiceInputModelSelectionFile();
   const configPath = getVoiceInputModelSelectionConfigPath();
   const mtimeMs = readConfigMtimeMs(configPath);
-  if (!cachedConfig || cachedConfig.configPath !== configPath || cachedMtimeMs !== mtimeMs) {
+  if (!cachedConfig || cachedMtimeMs !== mtimeMs) {
     cachedConfig = loadVoiceInputModelSelection(configPath, mtimeMs);
   }
   return cachedConfig;
@@ -256,7 +231,6 @@ export function setVoiceInputModelSelection(patch: VoiceInputModelSelectionPatch
   if ('asrProvider' in patch) next.asrProvider = patch.asrProvider ?? '';
   if ('refinerProvider' in patch) next.refinerProvider = patch.refinerProvider ?? '';
   if ('refinerModel' in patch) next.refinerModel = patch.refinerModel?.trim() ?? '';
-  if ('refinerProviderChain' in patch) next.refinerProviderChain = patch.refinerProviderChain ?? [];
   fs.writeFileSync(configPath, `${JSON.stringify(next, null, 2)}\n`, 'utf8');
   log.info('voice input model selection written', {
     path: configPath,
@@ -264,7 +238,6 @@ export function setVoiceInputModelSelection(patch: VoiceInputModelSelectionPatch
     asrProvider: next.asrProvider,
     refinerProvider: next.refinerProvider,
     refinerModel: next.refinerModel,
-    refinerProviderChain: next.refinerProviderChain,
   });
   return reloadVoiceInputModelSelection();
 }

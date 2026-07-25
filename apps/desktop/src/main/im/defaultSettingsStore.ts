@@ -22,20 +22,19 @@ import {
   createOverrideSettingsFile,
   type OverrideSettingsState,
 } from '../maker-host/override-settings-file.js';
-import { claimLegacyImPath, ownerScopedImUserDataPath } from './ownerScopedStorage.js';
 
 const log = desktopMakerLogger.child('im-default-settings-store');
 
 function settingsFilePath(): string {
-  const scoped = ownerScopedImUserDataPath('im-default-settings.json');
-  claimLegacyImPath(path.join(app.getPath('userData'), 'im-default-settings.json'), scoped);
-  return scoped;
+  return path.join(app.getPath('userData'), 'im-default-settings.json');
 }
 
 function normalize(raw: unknown): ImDefaultSettings {
   if (!raw || typeof raw !== 'object') return { ...IM_DEFAULT_SETTINGS };
   const r = raw as Record<string, unknown>;
-  const agentKind = isImDefaultAgentKind(r.agentKind) ? r.agentKind : IM_DEFAULT_SETTINGS.agentKind;
+  const agentKind = isImDefaultAgentKind(r.agentKind)
+    ? r.agentKind
+    : IM_DEFAULT_SETTINGS.agentKind;
   const rawAgents = isRecord(r.agents) ? r.agents : {};
   const legacySettings = legacyAgentSettings(r);
   return {
@@ -80,9 +79,12 @@ function normalizeAgentSettings(
   const defaults = IM_DEFAULT_SETTINGS.agents[agentKind];
   if (!isRecord(raw)) return { ...defaults };
   return {
-    providerId:
-      typeof raw.providerId === 'string' && raw.providerId.trim() ? raw.providerId.trim() : null,
-    model: typeof raw.model === 'string' && raw.model.trim() ? raw.model.trim() : defaults.model,
+    providerId: typeof raw.providerId === 'string' && raw.providerId.trim()
+      ? raw.providerId.trim()
+      : null,
+    model: typeof raw.model === 'string' && raw.model.trim()
+      ? raw.model.trim()
+      : defaults.model,
     effort: isImDefaultEffort(raw.effort) ? raw.effort : defaults.effort,
   };
 }
@@ -90,9 +92,12 @@ function normalizeAgentSettings(
 function legacyAgentSettings(raw: Record<string, unknown>): Partial<ImDefaultAgentSettings> | null {
   if (!('providerId' in raw) && !('model' in raw) && !('effort' in raw)) return null;
   return {
-    providerId:
-      typeof raw.providerId === 'string' && raw.providerId.trim() ? raw.providerId.trim() : null,
-    model: typeof raw.model === 'string' && raw.model.trim() ? raw.model.trim() : undefined,
+    providerId: typeof raw.providerId === 'string' && raw.providerId.trim()
+      ? raw.providerId.trim()
+      : null,
+    model: typeof raw.model === 'string' && raw.model.trim()
+      ? raw.model.trim()
+      : undefined,
     effort: isImDefaultEffort(raw.effort) ? raw.effort : undefined,
   };
 }

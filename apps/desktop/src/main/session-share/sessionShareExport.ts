@@ -19,7 +19,7 @@ import path from 'node:path';
 import { setImmediate as yieldToEventLoop } from 'node:timers/promises';
 
 import JSZip from 'jszip';
-import { findClaudeSessionJsonl } from '@cindy/maker-core';
+import { findClaudeSessionJsonl } from '@lizi/maker-core';
 
 import { getDbClient } from '../localDb/client/current.js';
 import { createLogger } from '../logger.js';
@@ -257,7 +257,7 @@ export async function exportSessionShare(
     // realpath 双侧归一后再比前缀:纯字符串前缀判定会被受管区内的
     // symlink / Windows junction 指到区外绕过(review bot 指出);顺带解决
     // Windows 盘符大小写与 macOS /var → /private/var 的别名差异。
-    // 受管区两个根:历史 cc-agent + 媒体总仓 blobs(导入会把 loose 媒体
+    // 受管区两个根:老世界 cc-agent + 媒体总仓 blobs(第 4 步导入把 loose 媒体
     // 入仓后,?path= 指向 blobs 内路径,再导出必须放行,否则附件在二次分享时
     // 静默丢失——review P1 的闭环回归)。
     const managedMediaRoots: string[] = [];

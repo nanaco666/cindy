@@ -1,6 +1,8 @@
 /**
  * blobStore.ts — cindy-media 字节仓(内容寻址 blob store)。
  * ---------------------------------------------------------------------------
+ * 设计:docs/Cindy架构设计/媒体总仓/media-store.md §2
+ *
  * 本模块只管字节,不含任何含义:
  *   - 文件名 = SHA-256 指纹(**主机侧对字节计算**;外部/插件自称的指纹一律无效);
  *   - 落盘 `userData/cindy-media/blobs/<指纹前2位>/<指纹>.<ext>`——256 抽屉是
@@ -40,7 +42,6 @@ const MIME_BY_EXT: Record<string, string> = {
   '.mp3': 'audio/mpeg',
   '.wav': 'audio/wav',
   '.m4a': 'audio/mp4',
-  '.ogg': 'audio/ogg',
   '.glb': 'model/gltf-binary',
 };
 
@@ -55,7 +56,6 @@ const EXT_BY_MIME: Record<string, string> = {
   'audio/mpeg': '.mp3',
   'audio/wav': '.wav',
   'audio/mp4': '.m4a',
-  'audio/ogg': '.ogg',
   'model/gltf-binary': '.glb',
 };
 

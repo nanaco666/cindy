@@ -6,7 +6,7 @@
  *   cc-mgr --version                   # print version + protocolVersion JSON
  *   cc-mgr --help                      # usage
  *
- * Bundled via `pnpm --filter @cindy/maker-cc-manager bundle` → dist/cc-mgr.mjs
+ * Bundled via `pnpm --filter @lizi/maker-cc-manager bundle` → dist/cc-mgr.mjs
  * (esbuild --bundle --platform=node, ~500KB including SDK).
  *
  * The bundled file gets shipped to remote via bootstrap-script.ts (Phase 4).

@@ -1,6 +1,6 @@
 import { ChevronDown } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import type { TemplateParameter } from '@cindy/maker-scheduler';
+import type { TemplateParameter } from '@lizi/maker-scheduler';
 
 import { cn } from '@/lib/utils';
 

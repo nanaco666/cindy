@@ -38,12 +38,6 @@ function statusColor(s: DiscordBotTransportStatus): string {
   }
 }
 
-function statusTextColor(s: DiscordBotTransportStatus): string {
-  return s.kind === 'connected'
-    ? 'var(--settings-badge-connected-text)'
-    : statusColor(s);
-}
-
 export function DiscordBotSection() {
   const {
     token,
@@ -118,7 +112,7 @@ export function DiscordBotSection() {
             'border border-[var(--settings-badge-border)]',
             'text-12 font-medium tracking-[0.12px]',
           )}
-          style={{ letterSpacing: '0.12px', color: statusTextColor(status) }}
+          style={{ letterSpacing: '0.12px', color: statusColor(status) }}
           role="status"
           aria-live="polite"
           aria-label={t('settings.discordBot.statusAria', { status: t(statusKey[status.kind]) })}
@@ -252,7 +246,7 @@ export function DiscordBotSection() {
           )}
         >
           {isSaving ? (
-            <span className="inline-flex animate-spin motion-reduce:animate-none" aria-hidden>
+            <span className="inline-flex animate-spin" aria-hidden>
               <Loader2 size={14} />
             </span>
           ) : null}
@@ -363,7 +357,7 @@ function ConnectedCard(props: {
           )}
         >
           {props.isDisconnecting ? (
-            <span className="inline-flex animate-spin motion-reduce:animate-none" aria-hidden>
+            <span className="inline-flex animate-spin" aria-hidden>
               <Loader2 size={13} />
             </span>
           ) : (

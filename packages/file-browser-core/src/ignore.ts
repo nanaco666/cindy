@@ -12,7 +12,7 @@
  *   2. BUILTIN_IGNORE — never-walk-into directories regardless of vcs config.
  *      Covers the "always huge / always cache" set: VCS, package managers,
  *      Unity build artifacts, Mac/Win OS junk. Real benchmark on Unity client
- *      `Lizi/Client` with this list applied: 698k entries → still
+ *      `lizi_stage_hhh/Client` with this list applied: 698k entries → still
  *      large but tractable for *lazy* (per-folder) reads (<12ms even for the
  *      worst folder).
  *

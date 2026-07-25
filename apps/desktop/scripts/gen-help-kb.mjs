@@ -22,8 +22,6 @@ const ALLOWED_TABS = new Set([
   'connections',
   'im-bot',
   'about',
-  'ghosts',
-  'remote-control',
 ]);
 
 function fail(msg) {

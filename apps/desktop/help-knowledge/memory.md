@@ -1,40 +1,30 @@
 ---
 id: memory
 title: Memory across conversations
-summary: The "Cindy" master switch turns on shared cross-agent memory (default on); when off, each agent uses its own native memory — all in Settings > Personalization > Memory.
+summary: Toggle Maker Memory globally, enable / disable per agent entry, and reset what's remembered — in Settings > Personalization.
 tab: personalization
+status: draft
 ---
-Memory lets the agents carry context across your conversations — facts about you, your projects, and how you like to work. There are two kinds, and one master switch chooses between them.
+Memory lets the agents carry context across your conversations — facts about you, your projects, and how you like to work. Without it, every session starts blank.
 
 **Where it lives:**
 
 - Settings > Personalization > Memory.
 
-**The "Cindy" master switch (default ON):**
+**Controls:**
 
-- Turning **Cindy** on enables a **shared, cross-agent memory** scoped to each working directory — Claude Code and Codex sessions in the same directory draw on the same memory.
-- While it's on, the per-agent native toggles below are **disabled / grayed out**, because the shared memory supersedes them.
-- It's **on by default** for new installs.
-
-**Per-agent native memory (used when the master switch is OFF):**
-
-- When Cindy is off, each agent falls back to **its own native memory** — so turning the master off does not mean "no memory," it means Claude Code and Codex each remember things their own way.
-- Separate toggles let you enable / disable native memory for **Claude Code** and **Codex** independently (these are only interactive while the master switch is off).
-
-**Resetting:**
-
-- **Per-agent reset** clears a single agent's native memory.
-- **Reset all Cindy memory** clears the shared cross-agent memory for every working directory.
-- A section-level **reset to defaults** restores the switches themselves.
-- Resets ask for confirmation and aren't undoable.
+- **Maker Memory** — the master toggle. Off = no agent uses memory.
+- **Per-agent-entry toggles** — enable / disable native memory independently for Claude Code and Codex. Models from other providers use the setting of the entry they run through.
+- **Status** — the section shows each agent entry's memory state at a glance.
+- **Reset** — clears what's been remembered for that agent entry. Asks for confirmation first; reset is not undoable.
 
 **What memory is, what it isn't:**
 
-- It's the agents' **long-term memory across sessions** — notes about you and your projects.
+- It's the **agent's** long-term memory across sessions — typically saved as notes the agent writes to itself (a few lines at the end of a session).
 - It's **not** the in-session chat history (that's always persisted to the session itself).
-- It's **not** your Personalization custom instructions (those are standing instructions you write; memory is what the agents record about you).
+- It's **not** related to your Personalization custom instructions (those are standing instructions you write; memory is what the agent writes about you).
 
 **Notes:**
 
-- Changes take effect on the **next** chat / agent turn — toggling mid-conversation doesn't retroactively scrub current context.
-- Memory is stored locally and does not migrate if you change machines or wipe the app's user data.
+- Memory takes effect on the next agent turn — toggling off mid-conversation doesn't retroactively scrub current context.
+- If you change machines or wipe the user data, memory does not migrate (it lives in the local DB).

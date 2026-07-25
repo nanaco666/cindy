@@ -28,6 +28,11 @@ const sessionId = options.sessionId ?? process.env.XDT_MOBILE_E2E_SESSION_ID ?? 
 const scenario = options.scenario ?? process.env.XDT_MOBILE_E2E_MOCK_SCENARIO ?? 'basic';
 const realDbPath = options.realDb ?? process.env.XDT_MOBILE_E2E_REAL_DB_PATH ?? null;
 const realDbLimit = parsePositiveInteger(options.realDbLimit ?? process.env.XDT_MOBILE_E2E_REAL_DB_LIMIT, DEFAULT_REAL_DB_LIMIT);
+const voiceProxyBaseUrl = options.voiceProxyBaseUrl ?? process.env.XDT_MOBILE_E2E_VOICE_PROXY_BASE_URL ?? null;
+const voiceCredentialOverride = loadVoiceCredentialOverride(
+  options.voiceCredentialFile ?? process.env.XDT_MOBILE_VOICE_CREDENTIAL_FILE,
+  process.env.XDT_MOBILE_VOICE_CREDENTIAL_JSON,
+);
 const startedAt = new Date();
 const state = realDbPath
   ? createRealDbState({ dbPath: realDbPath, sessionId, deviceId, deviceName, startedAt, limit: realDbLimit })
@@ -58,6 +63,8 @@ if (options.dryRun) {
   } else {
     console.log(`- scenario: ${scenario}`);
   }
+  if (voiceProxyBaseUrl) console.log(`- voice proxy: ${voiceProxyBaseUrl}`);
+  if (voiceCredentialOverride) console.log('- voice credential override: configured');
   process.exit(0);
 }
 
@@ -289,21 +296,8 @@ async function handleInvoke(controllerId, channel, args) {
       return createSession(args[0]);
     case 'maker:get-capabilities':
       return agentCapabilities(String(args[0] ?? 'claude-code'));
-    case 'maker:provider:list':
-      return mockProviders();
-    case 'maker:switch-session-agent':
-      return registerAgentSwitchIntent(
-        String(args[0] ?? sessionId),
-        String(args[1] ?? ''),
-        String(args[2] ?? ''),
-        args[3],
-        args[4],
-        args[5],
-      );
-    case 'maker:get-session-agent-switch-intent':
-      return agentSwitchIntents().get(String(args[0] ?? sessionId)) ?? null;
     case 'maker:set-model':
-      return setSessionModel(String(args[0] ?? sessionId), String(args[1] ?? ''), args[2]);
+      return patchAndBroadcast(String(args[0] ?? sessionId), { model: String(args[1] ?? '') });
     case 'maker:set-effort':
       return patchAndBroadcast(String(args[0] ?? sessionId), { effort: String(args[1] ?? '') });
     case 'maker:set-permission-mode':
@@ -391,13 +385,8 @@ async function handleInvoke(controllerId, channel, args) {
         model: 'elevenlabs/scribe_v2',
         audioBytes: 4096,
       };
-    case 'device-link:voice:credential-sync': {
-      // 与 desktop dispatch 语义对齐:穿透 credential 同步已下线,手机语音改走
-      // Cindy 官方托管服务;旧手机据此拿到可读错误而不是 CHANNEL_NOT_ALLOWED。
-      const err = new Error('手机语音输入已改用 Cindy 官方语音服务,请升级手机版。');
-      err.code = 'VOICE_CREDENTIAL_SYNC_REMOVED';
-      throw err;
-    }
+    case 'device-link:voice:credential-sync':
+      return mockVoiceCredential();
     case 'device-link:voice:dictionary-learning':
       return {
         ok: true,
@@ -409,6 +398,128 @@ async function handleInvoke(controllerId, channel, args) {
       const err = new Error(`[CHANNEL_NOT_ALLOWED] ${channel}`);
       err.code = 'CHANNEL_NOT_ALLOWED';
       throw err;
+    }
+  }
+}
+
+function mockVoiceCredential() {
+  if (voiceCredentialOverride) return voiceCredentialOverride;
+  const base = {
+    temporary: true,
+    credentialVersion: 1,
+    issuedAt: new Date().toISOString(),
+    proxyBaseUrl: voiceProxyBaseUrl ?? 'https://llm-proxy.example.test',
+    proxyApiKey: 'sk-mock-mobile-voice-key',
+    refiner: {
+      provider: 'litellm-gpt-5.4-mini',
+      model: 'gpt-5.4-mini',
+      auth: 'api-key',
+      transport: 'litellm-chat-completions',
+      endpointPath: '/v1/chat/completions',
+    },
+    refinerProviderChain: [
+      {
+        provider: 'litellm-gpt-5.4-mini',
+        model: 'gpt-5.4-mini',
+        auth: 'api-key',
+        transport: 'litellm-chat-completions',
+        endpointPath: '/v1/chat/completions',
+      },
+      {
+        provider: 'litellm-deepseek-v4-flash',
+        model: 'deepseek-v4-flash',
+        auth: 'api-key',
+        transport: 'litellm-chat-completions',
+        endpointPath: '/v1/chat/completions',
+      },
+    ],
+    settings: {
+      language: 'zh-CN',
+      refinementEnabled: true,
+      playInteractionSound: false,
+      refinementInstructions: 'E2E fixture: keep the mock transcript concise.',
+      dictionaryEntries: [],
+      voiceInputHistory: [],
+    },
+  };
+  if (voiceProxyBaseUrl) {
+    const asr = {
+      provider: 'litellm-gpt-realtime-whisper',
+      model: 'gpt-realtime-whisper',
+      auth: 'api-key',
+      mode: 'realtime-websocket',
+      endpointPath: '/openai/passthrough/v1/realtime?intent=transcription',
+      pcmSampleRate: 24000,
+      protocolProfile: 'openai-transcription-manual',
+      litellmHeaderModel: 'gpt-realtime-whisper',
+    };
+    return {
+      ...base,
+      asr,
+      asrProviderChain: [
+        asr,
+        {
+          provider: 'litellm-qwen3-asr-flash-realtime',
+          model: 'qwen3-asr-flash-realtime',
+          auth: 'api-key',
+          mode: 'realtime-websocket',
+          endpointPath: '/dashscope/api-ws/v1/realtime?model=qwen3-asr-flash-realtime',
+          pcmSampleRate: 16000,
+          protocolProfile: 'qwen-asr-server-vad',
+        },
+      ],
+    };
+  }
+  const asr = {
+    provider: 'litellm-batch',
+    model: 'elevenlabs/scribe_v2',
+    auth: 'api-key',
+    mode: 'batch-http',
+    endpointPath: '/v1/audio/transcriptions',
+  };
+  return {
+    ...base,
+    asr,
+    asrProviderChain: [asr],
+  };
+}
+
+function loadVoiceCredentialOverride(file, rawJson) {
+  const raw = rawJson || (file ? fs.readFileSync(path.resolve(file), 'utf8') : null);
+  if (!raw) return null;
+  const parsed = JSON.parse(raw);
+  if (!parsed || typeof parsed !== 'object') throw new Error('voice credential override must be an object');
+  if (typeof parsed.proxyApiKey !== 'string' || !parsed.proxyApiKey.trim()) {
+    throw new Error('voice credential override missing proxyApiKey');
+  }
+  if (typeof parsed.proxyBaseUrl !== 'string' || !parsed.proxyBaseUrl.trim()) {
+    throw new Error('voice credential override missing proxyBaseUrl');
+  }
+  if (!parsed.asr || typeof parsed.asr !== 'object') {
+    throw new Error('voice credential override missing asr');
+  }
+  if (!parsed.refiner || typeof parsed.refiner !== 'object') {
+    throw new Error('voice credential override missing refiner');
+  }
+  assertVoiceCredentialChain(parsed, 'asrProviderChain', ['provider', 'model', 'mode']);
+  assertVoiceCredentialChain(parsed, 'refinerProviderChain', ['provider', 'model', 'transport']);
+  return parsed;
+}
+
+function assertVoiceCredentialChain(credential, property, requiredFields) {
+  const chain = credential[property];
+  if (chain === undefined) return;
+  if (!Array.isArray(chain) || chain.length === 0) {
+    throw new Error(`voice credential override ${property} must be a non-empty array`);
+  }
+  for (const [index, item] of chain.entries()) {
+    if (!item || typeof item !== 'object') {
+      throw new Error(`voice credential override ${property}[${index}] must be an object`);
+    }
+    for (const field of requiredFields) {
+      if (typeof item[field] !== 'string' || !item[field].trim()) {
+        throw new Error(`voice credential override ${property}[${index}] missing ${field}`);
+      }
     }
   }
 }
@@ -1247,7 +1358,6 @@ function listMessages(id, opts = {}) {
 }
 
 async function enqueueMessage(controllerId, id, queued) {
-  applyPendingAgentSwitchIntent(id);
   const text = typeof queued?.text === 'string' ? queued.text : 'mobile message';
   const userMessage = message(id, `mock-user-${Date.now()}`, 'user', text, 0);
   const assistantMessage = message(id, `mock-assistant-${Date.now()}`, 'assistant', `Mock desktop received: ${text}`, 300);
@@ -1311,7 +1421,6 @@ function agentCapabilities(agentKind) {
         { id: 'ask', displayName: 'Ask' },
         { id: 'acceptEdits', displayName: 'Accept Edits' },
       ],
-      supportsSessionAgentSwitch: true,
     };
   }
   return {
@@ -1346,116 +1455,7 @@ function agentCapabilities(agentKind) {
       { id: 'acceptEdits', displayName: 'Accept Edits' },
       { id: 'plan', displayName: 'Plan' },
     ],
-    supportsSessionAgentSwitch: true,
   };
-}
-
-function mockProviders() {
-  return {
-    providers: [
-      {
-        id: 'anthropic',
-        name: 'Anthropic',
-        source: 'builtin',
-        agents: ['claude-code'],
-        auth: { method: 'oauth' },
-        routing: {},
-        connected: true,
-        models: {
-          'claude-code': [
-            {
-              id: 'claude-sonnet-4-6',
-              name: 'Claude Sonnet 4.6',
-              contextWindow: 200_000,
-              efforts: ['low', 'medium', 'high', 'xhigh'],
-              defaultEffort: 'medium',
-              supportsFastMode: true,
-            },
-            {
-              id: 'claude-haiku-4-6',
-              name: 'Claude Haiku 4.6',
-              contextWindow: 200_000,
-              efforts: [],
-              defaultEffort: null,
-              supportsFastMode: false,
-            },
-          ],
-        },
-      },
-      {
-        id: 'openai',
-        name: 'OpenAI',
-        source: 'builtin',
-        agents: ['codex'],
-        auth: { method: 'oauth' },
-        routing: {},
-        connected: true,
-        models: {
-          codex: [{
-            id: 'gpt-5.2-codex',
-            name: 'GPT-5.2 Codex',
-            contextWindow: 400_000,
-            efforts: ['low', 'medium', 'high'],
-            defaultEffort: 'medium',
-            supportsFastMode: true,
-          }],
-        },
-      },
-    ],
-  };
-}
-
-function agentSwitchIntents() {
-  state.agentSwitchIntents ??= new Map();
-  return state.agentSwitchIntents;
-}
-
-function registerAgentSwitchIntent(id, targetAgentKind, model, providerId, effort, fastMode) {
-  const current = getSession(id);
-  if (!current) throw new Error(`session ${id} not found`);
-  const currentAgentKind = current.agentKind === 'codex' ? 'codex' : 'claude-code';
-  if (targetAgentKind !== 'claude-code' && targetAgentKind !== 'codex') {
-    throw new Error('targetAgentKind must be claude-code | codex');
-  }
-  if (!model) throw new Error('model required');
-  if (targetAgentKind === currentAgentKind) {
-    agentSwitchIntents().delete(id);
-    broadcast('local-db:sessions:patched', { sessionId: id, patch: { agentSwitchIntent: null } });
-    return { switched: false, agentKind: targetAgentKind, model, engineReady: true };
-  }
-  const intent = {
-    targetAgentKind,
-    model,
-    providerId: typeof providerId === 'string' ? providerId : null,
-    ...(typeof effort === 'string' && effort ? { effort } : {}),
-    ...(typeof fastMode === 'boolean' ? { fastMode } : {}),
-  };
-  agentSwitchIntents().set(id, intent);
-  broadcast('local-db:sessions:patched', { sessionId: id, patch: { agentSwitchIntent: intent } });
-  return { switched: false, agentKind: targetAgentKind, model, engineReady: true, deferred: true };
-}
-
-function setSessionModel(id, model, providerId) {
-  agentSwitchIntents().delete(id);
-  return patchAndBroadcast(id, {
-    model,
-    ...(typeof providerId === 'string' ? { providerId } : {}),
-    agentSwitchIntent: null,
-  });
-}
-
-function applyPendingAgentSwitchIntent(id) {
-  const intent = agentSwitchIntents().get(id);
-  if (!intent) return;
-  agentSwitchIntents().delete(id);
-  patchAndBroadcast(id, {
-    agentKind: intent.targetAgentKind === 'codex' ? 'codex' : 'cc',
-    model: intent.model,
-    providerId: intent.providerId,
-    ...(intent.effort ? { effort: intent.effort } : {}),
-    ...(typeof intent.fastMode === 'boolean' ? { fastMode: intent.fastMode } : {}),
-    agentSwitchIntent: null,
-  });
 }
 
 function forkSession(id) {
@@ -1989,6 +1989,16 @@ function parseArgs(args) {
     }
     if (arg === '--real-db-limit') {
       parsed.realDbLimit = readValue(args, index, arg);
+      index += 1;
+      continue;
+    }
+    if (arg === '--voice-proxy-base-url') {
+      parsed.voiceProxyBaseUrl = readValue(args, index, arg);
+      index += 1;
+      continue;
+    }
+    if (arg === '--voice-credential-file') {
+      parsed.voiceCredentialFile = readValue(args, index, arg);
       index += 1;
       continue;
     }

@@ -21,10 +21,6 @@ const canSymlink = (() => {
 vi.mock('electron', () => ({
   app: { getPath: vi.fn(() => '/tmp/xdt-learn-staging-test/userData') },
 }));
-vi.mock('../../appSessionState', () => ({
-  ownerScopedUserDataPath: (...parts: string[]) =>
-    `/tmp/xdt-learn-staging-test/userData/owners/test-owner/${parts.join('/')}`,
-}));
 vi.mock('../../logger', () => ({
   createLogger: () => ({ debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }),
   maskPath: (p: string) => p,

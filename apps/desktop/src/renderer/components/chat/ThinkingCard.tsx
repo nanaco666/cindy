@@ -28,10 +28,9 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Sparkles, ChevronRight, Lock } from 'lucide-react';
+import { Sparkles, ChevronDown, ChevronRight, Lock } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
-import { Collapse } from '@/components/ui/collapse';
 import { useExpandedBlockMemory } from '@/hooks/useExpandedBlockMemory';
 
 import { ThinkingText } from './ThinkingText';
@@ -183,17 +182,20 @@ export function ThinkingCard({
             <span className="font-mono text-12 text-[var(--msg-tool-card-chevron)]">
               {formatDuration(elapsedMs)}
             </span>
-            <ChevronRight
-              size={14}
-              className={cn(
-                'shrink-0 text-[var(--msg-tool-card-chevron)]',
-                'transition-transform duration-[var(--motion-fast,150ms)]',
-                expanded && 'rotate-90',
-              )}
-            />
+            {expanded ? (
+              <ChevronDown
+                size={14}
+                className="shrink-0 text-[var(--msg-tool-card-chevron)]"
+              />
+            ) : (
+              <ChevronRight
+                size={14}
+                className="shrink-0 text-[var(--msg-tool-card-chevron)]"
+              />
+            )}
           </button>
 
-          <Collapse open={expanded}>
+          {expanded && (
             <BodyRail>
               {content ? (
                 <p className="whitespace-pre-wrap italic text-14 leading-[1.6] text-[var(--thinking-body-text)]">
@@ -205,7 +207,7 @@ export function ThinkingCard({
                 </p>
               )}
             </BodyRail>
-          </Collapse>
+          )}
         </div>
       </div>
     );
@@ -240,17 +242,20 @@ export function ThinkingCard({
             {summary}
           </span>
           <div className="flex-1" />
-          <ChevronRight
-            size={14}
-            className={cn(
-              'shrink-0 text-[var(--msg-tool-card-chevron)]',
-              'transition-transform duration-[var(--motion-fast,150ms)]',
-              expanded && 'rotate-90',
-            )}
-          />
+          {expanded ? (
+            <ChevronDown
+              size={14}
+              className="shrink-0 text-[var(--msg-tool-card-chevron)]"
+            />
+          ) : (
+            <ChevronRight
+              size={14}
+              className="shrink-0 text-[var(--msg-tool-card-chevron)]"
+            />
+          )}
         </button>
 
-        <Collapse open={expanded}>
+        {expanded && (
           <BodyRail>
             {content ? (
               <p className="whitespace-pre-wrap italic text-14 leading-[1.6] text-[var(--thinking-body-text)]">
@@ -262,7 +267,7 @@ export function ThinkingCard({
               </p>
             )}
           </BodyRail>
-        </Collapse>
+        )}
       </div>
     </div>
   );

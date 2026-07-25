@@ -26,7 +26,7 @@ import {
   scopedLogger,
   XDT_TMP_SUFFIX,
   type Matcher,
-} from '@cindy/file-browser-core';
+} from '@lizi/file-browser-core';
 
 const log = scopedLogger('file-service/watch');
 

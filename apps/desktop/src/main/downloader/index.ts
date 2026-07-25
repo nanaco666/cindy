@@ -1,7 +1,7 @@
 /**
  * unified-downloader — M1: Public Facade.
  * ---------------------------------------------------------------------------
- * Public downloader assembly and lifecycle are maintained in this module.
+ * Tech spec: .sivi/docs/tech_specs/unified-downloader-frontend.md (M1)
  *
  * The ONLY public entry point of the downloader module. Callers (UpdateService,
  * ccdManager, future consumers) must depend on this file — not on internals.

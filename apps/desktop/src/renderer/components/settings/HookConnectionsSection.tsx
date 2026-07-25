@@ -30,7 +30,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ChevronDown, ChevronRight, Plus, Send, Trash2 } from 'lucide-react';
+import { ChevronDown, ChevronRight, Plus, Trash2 } from 'lucide-react';
 
 import { Switch } from '@/components/ui/switch';
 import {
@@ -46,16 +46,11 @@ import {
   HOOK_BIND_REASON_ALREADY_BOUND,
   HOOK_BIND_REASON_NOT_INSTALLED,
   HOOK_CHAT_WORKSPACE_ALIAS,
-  HOOK_WORKSPACE_ALIAS_RE,
   slackHookInstallUrl,
   type HookTeamBindingView,
   type SlackHookView,
 } from '../../../shared/hookControlIpc';
-import {
-  useHookWorkspacePrefs,
-  WorkspacePrefsEditor,
-  type HookPrefsProvider,
-} from './HookWorkspacePrefsEditor';
+import { useHookWorkspacePrefs, WorkspacePrefsEditor } from './HookWorkspacePrefsEditor';
 
 /** 状态点颜色(语义同 SSH 主机行)。 */
 function statusDot(status: SlackHookView['status']): string {
@@ -77,53 +72,24 @@ function statusDot(status: SlackHookView['status']): string {
 const pillBtn =
   'flex h-6 shrink-0 items-center rounded-full border border-[var(--border-default)] px-2.5 text-11 text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)] disabled:opacity-50';
 
-const RESERVED_WORKSPACE_ALIASES = new Set([
-  HOOK_CHAT_WORKSPACE_ALIAS,
-  '__proto__',
-  'prototype',
-  'constructor',
-]);
-
-/** 目录名 -> 合法别名: 只留 [A-Za-z0-9_-], 其余折叠成 '-', 撞名或保留名加序号。 */
-export function deriveAlias(dir: string, taken: ReadonlySet<string>): string {
+/** 目录名 -> 合法别名: 只留 [A-Za-z0-9_-], 其余折叠成 '-', 撞名加序号(含保留名 chat)。 */
+function deriveAlias(dir: string, taken: ReadonlySet<string>): string {
   const base = dir.split(/[\\/]/).filter(Boolean).pop() ?? 'ws';
   let alias =
     base
       .replace(/[^A-Za-z0-9_-]+/g, '-')
       .replace(/^-+|-+$/g, '')
       .slice(0, 32) || 'ws';
-  if (taken.has(alias) || RESERVED_WORKSPACE_ALIASES.has(alias)) {
+  if (taken.has(alias)) {
     for (let i = 2; ; i++) {
       const candidate = `${alias.slice(0, 32 - String(i).length - 1)}-${i}`;
-      if (!taken.has(candidate) && !RESERVED_WORKSPACE_ALIASES.has(candidate)) {
+      if (!taken.has(candidate)) {
         alias = candidate;
         break;
       }
     }
   }
   return alias;
-}
-
-/** Validate a complete renderer edit before constructing its IPC payload. */
-export function workspaceRowsToMap(
-  rows: ReadonlyArray<{ alias: string; dir: string }>,
-): Record<string, string> | null {
-  const workspaces: Record<string, string> = {};
-  for (const row of rows) {
-    const alias = row.alias.trim();
-    const dir = row.dir.trim();
-    if (
-      !alias ||
-      !dir ||
-      !HOOK_WORKSPACE_ALIAS_RE.test(alias) ||
-      RESERVED_WORKSPACE_ALIASES.has(alias) ||
-      Object.hasOwn(workspaces, alias)
-    ) {
-      return null;
-    }
-    workspaces[alias] = dir;
-  }
-  return workspaces;
 }
 
 export function HookConnectionsSection() {
@@ -138,17 +104,6 @@ export function HookConnectionsSection() {
    * 配置, 折叠标题自带目录数摘要; 收起时提示语 / 卡片 / 添加按钮全部隐藏。
    */
   const [workspacesOpen, setWorkspacesOpen] = useState(false);
-  /** 同一份目录清单下，Slack / Telegram 各自维护独立的运行偏好。 */
-  const [prefsProvider, setPrefsProvider] = useState<HookPrefsProvider>('slack');
-  /** Older IPC replies and server pushes must never overwrite a newer view transition. */
-  const viewRevisionRef = useRef(0);
-  /**
-   * Confirmation dialogs outlive the render that opened them. Keep the latest
-   * authoritative snapshot so a delayed confirmation cannot mutate a binding
-   * that has since been replaced.
-   */
-  const hookRef = useRef<SlackHookView | null>(hook);
-  hookRef.current = hook;
 
   const applyView = useCallback((view: SlackHookView) => {
     setHook(view);
@@ -158,45 +113,28 @@ export function HookConnectionsSection() {
       setRows(Object.entries(view.workspaces).map(([alias, dir]) => ({ alias, dir })));
     }
   }, []);
-  const applyPushedView = useCallback(
-    (view: SlackHookView) => {
-      viewRevisionRef.current += 1;
-      applyView(view);
-    },
-    [applyView],
-  );
 
   useEffect(() => {
-    const requestedAtRevision = ++viewRevisionRef.current;
     void window.electronAPI.hookControl
       .get()
-      .then((res) => {
-        if (viewRevisionRef.current === requestedAtRevision) applyView(res.hook);
-      })
+      .then((res) => applyView(res.hook))
       .catch(() => {});
-    const unsubscribe = window.electronAPI.hookControl.onStatusChanged(applyPushedView);
-    return () => {
-      viewRevisionRef.current += 1;
-      unsubscribe();
-    };
-  }, [applyPushedView, applyView]);
+    return window.electronAPI.hookControl.onStatusChanged(applyView);
+  }, [applyView]);
 
   const saveWorkspaces = useCallback(
     async (next: Array<{ alias: string; dir: string }>) => {
-      // Reject the whole edit before assigning attacker-shaped keys to a
-      // plain object. Silently skipping/overwriting one row could persist a
-      // partial map and remove a previously valid workspace.
-      const workspaces = workspaceRowsToMap(next);
-      if (workspaces === null) {
-        toast.error(t('settings.remoteControl.hook.toast.saveFailed'));
-        return;
+      const workspaces: Record<string, string> = {};
+      for (const row of next) {
+        // 保留名 chat 是内置伪目录, 不允许成为真实目录别名(main 侧校验兜底)
+        if (row.alias.trim() === HOOK_CHAT_WORKSPACE_ALIAS) continue;
+        if (row.alias.trim() && row.dir.trim()) workspaces[row.alias.trim()] = row.dir.trim();
       }
       // 无变更的 blur(点进输入框又点出去)不发保存 —— 避免无谓 IPC 与状态刷新
       if (JSON.stringify(workspaces) === syncedRef.current) return;
       try {
-        const requestedAtRevision = ++viewRevisionRef.current;
         const res = await window.electronAPI.hookControl.setWorkspaces(workspaces);
-        if (viewRevisionRef.current === requestedAtRevision) applyView(res.hook);
+        applyView(res.hook);
       } catch (err) {
         toast.error(
           extractIpcError(err)?.message ?? t('settings.remoteControl.hook.toast.saveFailed'),
@@ -210,18 +148,12 @@ export function HookConnectionsSection() {
    * 开关即绑定(即时生效): 开 = 连接, main 连上后自动拉起浏览器 Slack 授权;
    * 关 = 解除绑定并断开(main 发 bind.revoke), 再开需重新授权。
    */
-  const handleToggle = useCallback(
-    (enabled: boolean) => {
-      const requestedAtRevision = ++viewRevisionRef.current;
-      void window.electronAPI.hookControl
-        .setEnabled(enabled)
-        .then((res) => {
-          if (viewRevisionRef.current === requestedAtRevision) applyView(res.hook);
-        })
-        .catch(() => toast.error(t('settings.remoteControl.hook.toast.toggleFailed')));
-    },
-    [applyView, t],
-  );
+  const handleToggle = (enabled: boolean) => {
+    void window.electronAPI.hookControl
+      .setEnabled(enabled)
+      .then((res) => applyView(res.hook))
+      .catch(() => toast.error(t('settings.remoteControl.hook.toast.toggleFailed')));
+  };
 
   // ── (multi-team)派生视图 ────────────────────────────────────────────────
   // multiUi: 走多 workspace 列表 UI。serverMultiTeam 是权威信号; bindings 非空
@@ -237,11 +169,8 @@ export function HookConnectionsSection() {
   /** (multi-team)绑定动作 IPC 的统一收口(应用快照 + 失败 toast)。 */
   const runHookAction = useCallback(
     (action: () => Promise<{ hook: SlackHookView }>) => {
-      const requestedAtRevision = ++viewRevisionRef.current;
       void action()
-        .then((res) => {
-          if (viewRevisionRef.current === requestedAtRevision) applyView(res.hook);
-        })
+        .then((res) => applyView(res.hook))
         .catch((err: unknown) =>
           toast.error(
             extractIpcError(err)?.message ?? t('settings.remoteControl.hook.toast.actionFailed'),
@@ -276,38 +205,14 @@ export function HookConnectionsSection() {
   // 授权的工作区), 老 server 不下发时回退通用 /slack/install
   const installUrl =
     hook?.binding?.installUrl ?? (hook !== null ? slackHookInstallUrl(hook.url) : null);
-  /**
-   * The confirmation can remain open while a push changes the binding mode or
-   * custom install URL. Read those values at decision time instead of acting
-   * on the render that originally opened the dialog.
-   */
-  const installTargetKey = JSON.stringify({
-    multiUi,
-    pendingTeamId: hook?.pendingBind?.teamId ?? null,
-    slackUserId: hook?.binding?.slackUserId ?? null,
-  });
-  const installDecisionRef = useRef({ installUrl, multiUi, targetKey: installTargetKey });
-  installDecisionRef.current = { installUrl, multiUi, targetKey: installTargetKey };
-  /** Invalidates a dialog when its failed bind attempt ends, even if a later attempt targets the same team. */
-  const installPromptGenerationRef = useRef(0);
-  const mountedRef = useRef(true);
-  useEffect(() => {
-    mountedRef.current = true;
-    return () => {
-      mountedRef.current = false;
-    };
-  }, []);
   useEffect(() => {
     if (!awaitingInstall) {
-      installPromptGenerationRef.current += 1;
       installPromptShownRef.current = false;
       return;
     }
     if (installPromptShownRef.current) return;
     installPromptShownRef.current = true;
     void (async () => {
-      const promptGeneration = ++installPromptGenerationRef.current;
-      const targetKey = installDecisionRef.current.targetKey;
       const ok = await confirm({
         title: t('settings.remoteControl.hook.notInstalled.confirmTitle'),
         description: t('settings.remoteControl.hook.notInstalled.confirmDescription'),
@@ -316,29 +221,20 @@ export function HookConnectionsSection() {
       });
       // 弹窗期间状态已翻页(装完自动 confirmed / 超时弹回)则本次选择作废:
       // 取消不关刚绑好的开关, 确认不重复开安装页
-      if (
-        !mountedRef.current ||
-        !awaitingInstallRef.current ||
-        installPromptGenerationRef.current !== promptGeneration
-      ) {
-        return;
-      }
-      const decision = installDecisionRef.current;
-      // A single attempt may receive a more specific install URL after the
-      // dialog opens, so consume the latest URL. A different target identity,
-      // however, belongs to another authorization attempt and must not inherit
-      // this stale confirmation.
-      if (decision.targetKey !== targetKey) return;
+      if (!awaitingInstallRef.current) return;
       if (ok) {
-        if (decision.installUrl) void window.electronAPI.openExternal(decision.installUrl);
-      } else if (decision.multiUi) {
+        if (installUrl) void window.electronAPI.openExternal(installUrl);
+      } else if (multiUi) {
         // multi-team: 取消只作废这次"添加 workspace"尝试, 既有绑定不受影响
         runHookAction(() => window.electronAPI.hookControl.cancelPendingBind());
       } else {
         handleToggle(false);
       }
     })();
-  }, [awaitingInstall, confirm, handleToggle, runHookAction, t]);
+    // installUrl 随触发 awaitingInstall 的同一帧广播更新(定制链接与 failed 帧
+    // 同帧到达), effect 重跑时闭包已是新值; handleToggle 每渲染新建但行为恒定
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [awaitingInstall, confirm, t]);
 
   const handleAddWorkspace = async () => {
     const res = await window.electronAPI.showOpenDirectoryDialog();
@@ -374,19 +270,9 @@ export function HookConnectionsSection() {
     await saveWorkspaces(next);
   };
 
-  // 目录清单设备共享；运行偏好按 provider 隔离。两个 hook 都始终调用，避免
-  // provider 开关切换时改变 React hook 顺序。
-  const slackPrefsState = useHookWorkspacePrefs(hook, 'slack');
-  const telegramPrefsState = useHookWorkspacePrefs(hook, 'telegram');
-  const prefsState = prefsProvider === 'telegram' ? telegramPrefsState : slackPrefsState;
-  useEffect(() => {
-    if (hook === null) return;
-    if (prefsProvider === 'slack' && !hook.enabled && hook.telegram.enabled) {
-      setPrefsProvider('telegram');
-    } else if (prefsProvider === 'telegram' && !hook.telegram.enabled && hook.enabled) {
-      setPrefsProvider('slack');
-    }
-  }, [hook, prefsProvider]);
+  // 每目录会话偏好(与 Slack /model 卡同一份数据): 单订阅共享状态,
+  // 编辑行内嵌在下方每个目录卡片里
+  const prefsState = useHookWorkspacePrefs(hook);
 
   /** 复制授权链接(远程控制兜底: 到本机浏览器打开, 规则 26)。 */
   const handleCopyLink = async () => {
@@ -411,62 +297,12 @@ export function HookConnectionsSection() {
     }
   };
 
-  const handleTelegramToggle = (enabled: boolean) => {
-    runHookAction(() => window.electronAPI.hookControl.setProviderEnabled('telegram', enabled));
-  };
-
-  const handleTelegramOpen = (action: 'connect' | 'provider' | 'add-to-group') => {
-    void window.electronAPI.hookControl.openTelegramAction(action).catch((err: unknown) => {
-      toast.error(
-        extractIpcError(err)?.message ?? t('settings.remoteControl.hook.toast.actionFailed'),
-      );
-    });
-  };
-
-  const handleCopyTelegramLink = async () => {
-    const url = hook?.telegram.binding?.connectUrl;
-    if (!url) return;
-    try {
-      await navigator.clipboard.writeText(url);
-      toast.success(t('settings.remoteControl.hook.binding.copied'));
-    } catch {
-      toast.error(t('settings.remoteControl.hook.toast.actionFailed'));
-    }
-  };
-
-  const handleTelegramUnlink = async () => {
-    const targetBindingId =
-      hook?.telegram.binding?.state === 'confirmed' ? hook.telegram.binding.bindingId : null;
-    if (targetBindingId === null) return;
-    const ok = await confirm({
-      title: t('settings.remoteControl.hook.telegram.unlinkConfirmTitle'),
-      description: t('settings.remoteControl.hook.telegram.unlinkConfirmDescription'),
-      confirmText: t('settings.remoteControl.hook.telegram.unlink'),
-      cancelText: t('settings.remoteControl.hook.notInstalled.confirmCancel'),
-    });
-    const currentBinding = hookRef.current?.telegram.binding;
-    if (
-      !ok ||
-      !mountedRef.current ||
-      currentBinding?.state !== 'confirmed' ||
-      currentBinding.bindingId !== targetBindingId
-    ) {
-      return;
-    }
-    runHookAction(() => window.electronAPI.hookControl.providerBindRevoke());
-  };
-
   /**
    * (multi-team)解绑某 workspace: 走确认弹窗(危险操作文案)。displaced 行的
    * "删除"同一入口 —— main 侧按行状态区分(活跃行发 bind.revoke, displaced 行
    * 仅清本地缓存), 文案按行状态取。
    */
   const handleRemoveBinding = async (b: HookTeamBindingView) => {
-    const target = {
-      teamId: b.teamId,
-      slackUserId: b.slackUserId,
-      displaced: b.displaced,
-    };
     const teamLabel = b.teamName ?? b.teamId;
     const ok = await confirm({
       title: t('settings.remoteControl.hook.multi.removeConfirmTitle', { team: teamLabel }),
@@ -476,14 +312,8 @@ export function HookConnectionsSection() {
       confirmText: t('settings.remoteControl.hook.multi.removeConfirm'),
       cancelText: t('settings.remoteControl.hook.notInstalled.confirmCancel'),
     });
-    const stillSameBinding = hookRef.current?.bindings.some(
-      (current) =>
-        current.teamId === target.teamId &&
-        current.slackUserId === target.slackUserId &&
-        current.displaced === target.displaced,
-    );
-    if (!ok || !mountedRef.current || !stillSameBinding) return;
-    runHookAction(() => window.electronAPI.hookControl.revokeTeam(target.teamId));
+    if (!ok) return;
+    runHookAction(() => window.electronAPI.hookControl.revokeTeam(b.teamId));
   };
 
   // 数据未就绪不渲染任何内容(规则 7: 无 loading 态、不闪空状态)
@@ -568,50 +398,6 @@ export function HookConnectionsSection() {
     hook.lastError === 'not logged in'
       ? t('settings.remoteControl.hook.loginRequired')
       : hook.lastError;
-  const telegram = hook.telegram;
-  const telegramBinding = telegram.binding;
-  const telegramActions = telegramBinding?.actions ?? [];
-  const telegramState = telegramBinding?.state ?? 'none';
-  // A configured endpoint is the rollout gate. Capability negotiation starts
-  // only after the user enables Telegram, so the disabled card cannot depend
-  // on an already-received welcome to become discoverable.
-  const telegramVisible =
-    telegram.url.length > 0 || telegram.capabilityPending || telegram.available || telegram.enabled;
-  const telegramConfirmed = telegramState === 'confirmed';
-  const telegramInProgress =
-    telegram.enabled && (telegramState === 'pending' || telegramState === 'awaiting_confirmation');
-  const telegramCanStartLink =
-    telegramState === 'none' ||
-    ((telegramState === 'failed' ||
-      telegramState === 'denied' ||
-      telegramState === 'expired' ||
-      telegramState === 'revoked' ||
-      telegramState === 'superseded') &&
-      telegramActions.includes('retry'));
-  // The switch represents provider ingress, not only the final bind state. Keep
-  // it on while Telegram is waiting for /start confirmation so clicking it is
-  // an unsurprising cancel/disable action.
-  const telegramToggleChecked = telegram.enabled;
-  const telegramStatusLine = !telegram.enabled
-    ? t('settings.remoteControl.hook.telegram.status.disabled')
-    : telegram.status === 'error'
-      ? t('settings.remoteControl.hook.status.error')
-      : telegram.capabilityPending
-        ? t('settings.remoteControl.hook.telegram.status.checking')
-        : !telegram.available
-          ? t('settings.remoteControl.hook.telegram.status.unavailable')
-          : telegram.status !== 'connected'
-            ? t(`settings.remoteControl.hook.status.${telegram.status}`)
-            : telegramConfirmed
-              ? t('settings.remoteControl.hook.telegram.status.confirmed', {
-                  user: telegramBinding?.principalName ?? telegramBinding?.principalId ?? '',
-                  bot: telegramBinding?.scopeName ?? '',
-                })
-              : t(`settings.remoteControl.hook.telegram.status.${telegramState}`);
-  const telegramErrorText =
-    telegram.lastError === 'not logged in'
-      ? t('settings.remoteControl.hook.loginRequired')
-      : telegram.lastError;
 
   return (
     <div className="flex flex-col gap-3">
@@ -620,7 +406,8 @@ export function HookConnectionsSection() {
       </p>
 
       <div className="rounded-xl border border-[var(--border-default)] px-4 py-3">
-        {/* 固定一行: Slack + 状态 + 总开关(无任何地址/密钥表单)。 */}
+        {/* 固定一行: Slack + 状态 + 总开关(无任何地址/密钥表单); 品牌名跨语言
+            一致, 与「Tina」同理不走 i18n */}
         <div className="flex items-center gap-3">
           <span
             className="h-1.5 w-1.5 shrink-0 rounded-full"
@@ -628,9 +415,7 @@ export function HookConnectionsSection() {
             aria-hidden
           />
           <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-            <span className="truncate text-13 font-medium text-[var(--text-primary)]">
-              {t('settings.tina.prefs.providerSlack')}
-            </span>
+            <span className="truncate text-13 font-medium text-[var(--text-primary)]">Slack</span>
             <span className="truncate text-11 text-[var(--text-tertiary)]">{statusLine}</span>
             {hook.status === 'error' && errorText ? (
               <span className="truncate text-11 text-[var(--error-fg)]">{errorText}</span>
@@ -732,11 +517,7 @@ export function HookConnectionsSection() {
               >
                 {t('settings.remoteControl.hook.installApp')}
               </button>
-              <button
-                type="button"
-                onClick={() => void handleCopyInstallLink()}
-                className={pillBtn}
-              >
+              <button type="button" onClick={() => void handleCopyInstallLink()} className={pillBtn}>
                 {t('settings.remoteControl.hook.binding.copyLink')}
               </button>
             </div>
@@ -761,147 +542,13 @@ export function HookConnectionsSection() {
           </div>
         ) : null}
 
-        {telegramVisible ? (
-          <div className="mt-3 flex flex-col gap-2 border-t border-[var(--border-default)] pt-3">
-            <div className="flex items-center gap-3">
-              <span
-                className="h-1.5 w-1.5 shrink-0 rounded-full"
-                style={{
-                  backgroundColor: statusDot(telegram.enabled ? telegram.status : 'disabled'),
-                }}
-                aria-hidden
-              />
-              <Send
-                size={14}
-                strokeWidth={1.75}
-                className="shrink-0 text-[var(--text-secondary)]"
-              />
-              <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                <span className="truncate text-13 font-medium text-[var(--text-primary)]">
-                  {t('settings.tina.prefs.providerTelegram')}
-                </span>
-                <span
-                  className={`truncate text-11 ${
-                    telegramState === 'failed' ||
-                    telegramState === 'denied' ||
-                    telegramState === 'expired' ||
-                    telegramState === 'superseded'
-                      ? 'text-[var(--error-fg)]'
-                      : 'text-[var(--text-tertiary)]'
-                  }`}
-                >
-                  {telegramStatusLine}
-                </span>
-              </div>
-              <Switch
-                checked={telegramToggleChecked}
-                disabled={!telegram.enabled && telegram.url.length === 0}
-                onCheckedChange={handleTelegramToggle}
-                aria-label={t('settings.remoteControl.hook.telegram.toggleAria')}
-              />
-            </div>
-
-            {telegram.enabled &&
-            telegram.status === 'error' &&
-            telegramErrorText &&
-            telegramErrorText !== telegramStatusLine ? (
-              <span className="pl-8 text-11 leading-relaxed text-[var(--error-fg)]">
-                {telegramErrorText}
-              </span>
-            ) : null}
-
-            {telegram.enabled && telegram.available ? (
-              <div className="flex flex-wrap items-center gap-2 pl-8">
-                {telegramInProgress && telegramBinding?.connectUrl ? (
-                  <>
-                    {telegramActions.includes('open_connect_url') ? (
-                      <button
-                        type="button"
-                        onClick={() => handleTelegramOpen('connect')}
-                        className={pillBtn}
-                      >
-                        {t('settings.remoteControl.hook.telegram.openTelegram')}
-                      </button>
-                    ) : null}
-                    {telegramActions.includes('copy_connect_url') ? (
-                      <button
-                        type="button"
-                        onClick={() => void handleCopyTelegramLink()}
-                        className={pillBtn}
-                      >
-                        {t('settings.remoteControl.hook.binding.copyLink')}
-                      </button>
-                    ) : null}
-                  </>
-                ) : null}
-                {telegramInProgress && telegramActions.includes('cancel') ? (
-                  <button
-                    type="button"
-                    onClick={() =>
-                      runHookAction(() => window.electronAPI.hookControl.providerBindCancel())
-                    }
-                    className={pillBtn}
-                  >
-                    {t('settings.remoteControl.hook.telegram.cancel')}
-                  </button>
-                ) : null}
-                {telegramConfirmed ? (
-                  <>
-                    {telegramActions.includes('open_provider') ? (
-                      <button
-                        type="button"
-                        onClick={() => handleTelegramOpen('provider')}
-                        className={pillBtn}
-                      >
-                        {t('settings.remoteControl.hook.telegram.openBot')}
-                      </button>
-                    ) : null}
-                    {telegramActions.includes('add_to_group') ? (
-                      <button
-                        type="button"
-                        onClick={() => handleTelegramOpen('add-to-group')}
-                        className={pillBtn}
-                      >
-                        {t('settings.remoteControl.hook.telegram.addToGroup')}
-                      </button>
-                    ) : null}
-                    {telegramActions.includes('revoke') ? (
-                      <button
-                        type="button"
-                        onClick={() => void handleTelegramUnlink()}
-                        className={pillBtn}
-                      >
-                        {t('settings.remoteControl.hook.telegram.unlink')}
-                      </button>
-                    ) : null}
-                  </>
-                ) : telegramCanStartLink ? (
-                  <button
-                    type="button"
-                    onClick={() =>
-                      runHookAction(() => window.electronAPI.hookControl.providerBindStart())
-                    }
-                    className={pillBtn}
-                  >
-                    {t(
-                      telegramState === 'none'
-                        ? 'settings.remoteControl.hook.telegram.connect'
-                        : 'settings.remoteControl.hook.telegram.retry',
-                    )}
-                  </button>
-                ) : null}
-              </div>
-            ) : null}
-          </div>
-        ) : null}
-
-        {hook.enabled || hook.telegram.enabled ? (
+        {hook.enabled ? (
           <>
             {/* (multi-team)Slack workspaces 区块: 每个绑定一行(team + 用户 +
                 状态标注 + 解绑), displaced 行给「重新绑定」; 在途授权挂列表尾部
                 (授权中 + 复制链接 + 取消), 未安装引导行挂 pending 行下;
                 「添加」入口仅 server 宣告 multi-team 时显示 */}
-            {hook.enabled && multiUi ? (
+            {multiUi ? (
               <div className="mt-3 flex flex-col gap-1.5 border-t border-[var(--border-default)] pt-3">
                 <span className="text-12 font-medium text-[var(--text-secondary)]">
                   {t('settings.remoteControl.hook.multi.title')}
@@ -928,7 +575,9 @@ export function HookConnectionsSection() {
                         <button
                           type="button"
                           onClick={() =>
-                            runHookAction(() => window.electronAPI.hookControl.rebindTeam(b.teamId))
+                            runHookAction(() =>
+                              window.electronAPI.hookControl.rebindTeam(b.teamId),
+                            )
                           }
                           className={pillBtn}
                         >
@@ -952,11 +601,7 @@ export function HookConnectionsSection() {
                       {t('settings.remoteControl.hook.authorizing')}
                     </span>
                     {hook.pendingBind.authorizeUrl ? (
-                      <button
-                        type="button"
-                        onClick={() => void handleCopyLink()}
-                        className={pillBtn}
-                      >
+                      <button type="button" onClick={() => void handleCopyLink()} className={pillBtn}>
                         {t('settings.remoteControl.hook.binding.copyLink')}
                       </button>
                     ) : null}
@@ -1024,7 +669,9 @@ export function HookConnectionsSection() {
                               '',
                           })
                         : (hook.pendingBind.message ??
-                          t(`settings.remoteControl.hook.binding.state.${hook.pendingBind.state}`))}
+                          t(
+                            `settings.remoteControl.hook.binding.state.${hook.pendingBind.state}`,
+                          ))}
                     </span>
                     <button
                       type="button"
@@ -1040,7 +687,9 @@ export function HookConnectionsSection() {
                 {hook.serverMultiTeam ? (
                   <button
                     type="button"
-                    onClick={() => runHookAction(() => window.electronAPI.hookControl.addBinding())}
+                    onClick={() =>
+                      runHookAction(() => window.electronAPI.hookControl.addBinding())
+                    }
                     className="flex h-7 w-fit items-center gap-1.5 rounded-full border border-[var(--border-default)] px-3 text-12 text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
                   >
                     <Plus size={12} />
@@ -1072,40 +721,6 @@ export function HookConnectionsSection() {
                     })}
                   </span>
                 </button>
-                <div
-                  className="flex shrink-0 items-center rounded-full bg-[var(--surface-chip)] p-0.5"
-                  role="group"
-                  aria-label={t('settings.tina.prefs.providerAria')}
-                >
-                  {hook.enabled ? (
-                    <button
-                      type="button"
-                      aria-pressed={prefsProvider === 'slack'}
-                      onClick={() => setPrefsProvider('slack')}
-                      className={`rounded-full px-2 py-0.5 text-11 transition-colors ${
-                        prefsProvider === 'slack'
-                          ? 'bg-[var(--background-primary)] text-[var(--text-primary)]'
-                          : 'text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]'
-                      }`}
-                    >
-                      {t('settings.tina.prefs.providerSlack')}
-                    </button>
-                  ) : null}
-                  {hook.telegram.enabled ? (
-                    <button
-                      type="button"
-                      aria-pressed={prefsProvider === 'telegram'}
-                      onClick={() => setPrefsProvider('telegram')}
-                      className={`rounded-full px-2 py-0.5 text-11 transition-colors ${
-                        prefsProvider === 'telegram'
-                          ? 'bg-[var(--background-primary)] text-[var(--text-primary)]'
-                          : 'text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]'
-                      }`}
-                    >
-                      {t('settings.tina.prefs.providerTelegram')}
-                    </button>
-                  ) : null}
-                </div>
                 {/* (multi-team)偏好归属 team 切换 chip: 多绑定展开时显示, 选中
                     team 决定下方偏好编辑读写哪个 workspace 的那份 */}
                 {workspacesOpen && prefsState.showTeamChip ? (
@@ -1116,9 +731,7 @@ export function HookConnectionsSection() {
                     >
                       <span className="max-w-40 truncate">
                         {prefsState.teams.find((tm) => tm.teamId === prefsState.selectedTeamId)
-                          ?.teamName ??
-                          prefsState.selectedTeamId ??
-                          ''}
+                          ?.teamName ?? prefsState.selectedTeamId ?? ''}
                       </span>
                       <ChevronDown size={12} />
                     </DropdownMenuTrigger>

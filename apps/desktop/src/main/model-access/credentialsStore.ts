@@ -1,8 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { app } from 'electron';
 
 import { createLogger } from '../logger.js';
-import { getActiveAppSession, ownerScopedUserDataPath } from '../appSessionState.js';
 import type { ModelAccessCredentialSource } from '../../shared/modelAccess.js';
 
 const log = createLogger('modelAccessStore');
@@ -51,7 +51,7 @@ export interface CredentialsStoreIo {
 }
 
 function defaultIo(): CredentialsStoreIo {
-  const file = () => ownerScopedUserDataPath('model-access-credentials.json');
+  const file = () => path.join(app.getPath('userData'), 'model-access-credentials.json');
   return {
     read() {
       try {
@@ -61,7 +61,6 @@ function defaultIo(): CredentialsStoreIo {
       }
     },
     write(text) {
-      fs.mkdirSync(path.dirname(file()), { recursive: true });
       fs.writeFileSync(file(), text, 'utf-8');
     },
     remove() {
@@ -75,24 +74,14 @@ function defaultIo(): CredentialsStoreIo {
 }
 
 export function createModelAccessCredentialsStore(
-  io?: CredentialsStoreIo,
-  ownerIdProvider?: () => string | null,
+  io: CredentialsStoreIo = defaultIo(),
 ): ModelAccessCredentialsStore {
-  const resolvedIo = io ?? defaultIo();
-  const resolveOwnerId = ownerIdProvider ?? (io ? () => null : () => getActiveAppSession().dataOwnerId);
   // 内存缓存:读路径(每次会话 spawn / 路由决策都会读 endpoint)零磁盘 IO(规则 10)。
   let cached: PersistedState | null | undefined; // undefined = 尚未加载
 
-  let cachedOwnerId: string | null | undefined;
-
   const load = (): PersistedState | null => {
-    const ownerId = resolveOwnerId();
-    if (cachedOwnerId !== ownerId) {
-      cached = undefined;
-      cachedOwnerId = ownerId;
-    }
     if (cached !== undefined) return cached;
-    const raw = resolvedIo.read();
+    const raw = io.read();
     if (!raw) {
       cached = null;
       return cached;
@@ -117,11 +106,10 @@ export function createModelAccessCredentialsStore(
   };
 
   const persist = (state: PersistedState | null): void => {
-    cachedOwnerId = resolveOwnerId();
     cached = state;
     try {
-      if (state === null) resolvedIo.remove();
-      else resolvedIo.write(JSON.stringify(state));
+      if (state === null) io.remove();
+      else io.write(JSON.stringify(state));
     } catch (err) {
       // 落盘失败只影响下次冷启动的 endpoint 记忆(冷启动首轮同步前网关暂不可用),不阻断主流程。
       log.warn(

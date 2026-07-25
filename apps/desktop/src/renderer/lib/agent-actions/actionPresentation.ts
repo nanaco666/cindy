@@ -1,4 +1,4 @@
-import { truncateToolText, type ToolUseDescriptor } from '@cindy/maker-shared';
+import { truncateToolText, type ToolUseDescriptor } from '@lizi/maker-shared';
 
 /** Lightweight human-readable parameter shared by full tool rows and live previews. */
 export interface DisplayParam {

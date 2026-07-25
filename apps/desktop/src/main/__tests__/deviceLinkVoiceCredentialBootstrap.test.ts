@@ -1,11 +1,9 @@
 /**
- * Locks the real Electron desktop path for device-link voice channels.
+ * Locks the real Electron desktop path for mobile voice credential sync.
  *
- * Mobile voice credential sync itself is removed (mobile voice input now uses
- * the managed Cindy voice service); the channel stays matched so old mobile
- * builds get a readable rejection. This source guard prevents a future
- * bootstrap refactor from leaving dispatch unreachable from the running
- * desktop DeviceLinkClient.
+ * The handler itself is covered by deviceLinkDispatch/voiceCredentialSync tests.
+ * This source guard prevents a future bootstrap refactor from leaving the
+ * handler implemented but unreachable from the running desktop DeviceLinkClient.
  */
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -40,13 +38,14 @@ describe('mobile voice credential sync desktop bootstrap path', () => {
     expect(deviceLinkHost).toContain('replayActiveSubscriptions(`presence-online:${snap.deviceId.slice(0, 8)}`, snap.deviceId);');
   });
 
-  it('keeps device-link:voice:credential-sync matched but rejected (feature removed, readable error for old mobile)', () => {
+  it('routes device-link:voice:credential-sync to the temporary mobile credential sync handler', () => {
     const dispatch = readFileSync(resolve(mainRoot, 'device-link/dispatch.ts'), 'utf8');
 
     expect(dispatch).toContain('DL_VOICE_CREDENTIAL_SYNC_CHANNEL');
+    expect(dispatch).toContain("import { syncMobileVoiceCredential } from './voiceCredentialSync';");
     expect(dispatch).toContain('if (payload.channel === DL_VOICE_CREDENTIAL_SYNC_CHANNEL)');
-    expect(dispatch).toContain("code: 'VOICE_CREDENTIAL_SYNC_REMOVED'");
-    expect(dispatch).not.toContain('syncMobileVoiceCredential');
+    expect(dispatch).toContain('const result = syncMobileVoiceCredential();');
+    expect(dispatch).toContain('return { ok: true, result };');
   });
 
   it('routes device-link:voice:dictionary-learning to desktop dictionary learning', () => {

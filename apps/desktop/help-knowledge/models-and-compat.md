@@ -1,23 +1,28 @@
 ---
 id: models-and-compat
-title: Choosing a model
-summary: Pick a session's model from the composer dropdown; non-Anthropic models work automatically (no compat toggle to flip).
-tab: providers
+title: Choosing a model and Compat Mode
+summary: Pick the session's model in the composer; enable Compat Mode for gpt-5.4-family models in Personalization.
+tab: personalization
+status: draft
 ---
-You pick the model a session uses from the **model dropdown in the composer toolbar**. In the dropdown, models are organized under the source providers you've connected. The brand groups they belong to are **Anthropic**, **OpenAI**, **Budget GPT**, **xAI**, **Google**, and **Domestic** (Kimi / GLM / Qwen / DeepSeek), plus non-chat model kinds (image / audio / video / …).
-
-The default depends on the agent: Claude Code defaults to **Opus 4.8**, Codex defaults to a **GPT** model.
+You pick the model a session uses from the **model dropdown in the composer toolbar**. Models are grouped by provider (Anthropic, OpenAI, Google, Moonshot, Zhipu, etc.). The default depends on the agent kind (Claude Code defaults to a Claude sonnet; Codex defaults to a gpt model).
 
 **Switching mid-session:**
 
-- Open the dropdown and pick a different model. It takes effect on the **next turn**.
+- Open the dropdown, pick a different model. It takes effect on the next turn.
 
-**Using non-Anthropic models:**
+**Compat Mode (when you need it):**
 
-- You don't need to flip anything. Claude Code's SDK emits Anthropic-specific request fields (`thinking`, `cache_control`, etc.) that non-Anthropic backends would reject, so the app **always** routes requests through a local proxy that scrubs those fields per-model before forwarding. Claude / Anthropic models pass through untouched.
-- (This used to be a manual "Compat Mode" toggle in Settings. That toggle has been retired — the handling is now automatic and always on, so there's nothing to configure.)
+- Required for **gpt-5.4 / gpt-5.4-mini** models (and similar non-Anthropic third-party models). Without it, requests fail or strip required fields.
+- Why: Claude Code's SDK sends Anthropic-specific fields (`thinking`, `cache_control`, etc.) that non-Anthropic backends reject. Compat Mode routes requests through a local loopback proxy that scrubs those fields before forwarding.
+
+**Turning Compat Mode on:**
+
+- Open Settings > Personalization, find **Compat Mode** under the Tips section, toggle it on.
+- Takes effect for **new sessions** — existing sessions keep using whatever mode they started with.
 
 **Notes:**
 
-- Which models you can pick depends on the providers connected in **Settings > Model Providers** (see the Providers topic).
-- "Budget GPT" is a lower-cost routing tier for GPT models; "Domestic" groups the China-hosted models.
+- Default for Compat Mode is **off** — only flip it when you actually pick a model that needs it.
+- Claude and Anthropic models do not need Compat Mode (it's a no-op for them but adds latency).
+- If you suddenly see "400" errors after switching to a non-Anthropic model, Compat Mode is almost always the missing piece.

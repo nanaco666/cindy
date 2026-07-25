@@ -11,17 +11,19 @@
  *   Settings UI,直接改文件或让 agent 改);缺项 = 不限并发(系统默认);
  * - 抽离意识**不**清覆盖——与布局位置"重新注入原位复活"同语义,重装回来
  *   钉的后端还在;
- * - 已确认的一对一模型 rename 在读取 normalize 时兼容映射,保留用户显式
- *   override;真正失效的值仍由消费方(cindySlot)校验,静默落回默认并留日志。
+ * - 值可能随主机白名单演进而失效(型号下架),消费方(cindySlot)使用时
+ *   校验,失效静默落回默认并留日志,不在读取层抛错。
  */
+
+import { app } from 'electron';
+import path from 'node:path';
 
 import { desktopMakerLogger } from '../maker-host/logger-adapter.js';
 import { createOverrideSettingsFile } from '../maker-host/override-settings-file.js';
-import { ownerScopedUserDataPath } from '../appSessionState.js';
 
 const log = desktopMakerLogger.child('cindy-prefs-store');
 
-/** cindy 槽能力键(类目.动作;与身份卡详单同一词汇表,当前包含 video)。 */
+/** cindy 槽能力键(类目.动作;与身份卡详单同一词汇表,C3c-5 起含 video)。 */
 export const CINDY_CAPABILITY_KEYS = ['image.generate', 'image.edit', 'video.generate', 'video.edit'] as const;
 export type CindyCapabilityKey = (typeof CINDY_CAPABILITY_KEYS)[number];
 
@@ -34,17 +36,6 @@ export interface GhostCindyPrefs {
 
 const DEFAULTS: GhostCindyPrefs = { overrides: {}, inflightLimits: {} };
 
-/** 已确认的一对一图片模型 rename；旧 override 代表明确的用户选择，可无歧义迁移。 */
-const LEGACY_IMAGE_MODEL_ALIASES: Readonly<Record<string, string>> = {
-  'gemini-3-pro-image-preview': 'gemini-3-pro-image',
-  'gemini-3.1-flash-image-preview': 'gemini-3.1-flash-image',
-};
-
-function normalizeModelOverride(capability: CindyCapabilityKey, model: string): string {
-  if (capability !== 'image.generate' && capability !== 'image.edit') return model;
-  return LEGACY_IMAGE_MODEL_ALIASES[model] ?? model;
-}
-
 function normalize(raw: unknown): GhostCindyPrefs {
   if (!raw || typeof raw !== 'object') return { overrides: {}, inflightLimits: {} };
   const overridesRaw = (raw as { overrides?: unknown }).overrides;
@@ -55,7 +46,7 @@ function normalize(raw: unknown): GhostCindyPrefs {
       const caps: Partial<Record<CindyCapabilityKey, string>> = {};
       for (const key of CINDY_CAPABILITY_KEYS) {
         const v = (capsRaw as Record<string, unknown>)[key];
-        if (typeof v === 'string' && v.length > 0) caps[key] = normalizeModelOverride(key, v);
+        if (typeof v === 'string' && v.length > 0) caps[key] = v;
       }
       if (Object.keys(caps).length > 0) overrides[ghostId] = caps;
     }
@@ -72,7 +63,7 @@ function normalize(raw: unknown): GhostCindyPrefs {
 }
 
 const store = createOverrideSettingsFile<GhostCindyPrefs>({
-  filePath: () => ownerScopedUserDataPath('ghost-cindy-prefs.json'),
+  filePath: () => path.join(app.getPath('userData'), 'ghost-cindy-prefs.json'),
   defaults: DEFAULTS,
   normalize,
   log,

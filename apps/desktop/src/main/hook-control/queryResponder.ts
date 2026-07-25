@@ -12,12 +12,7 @@
  *     逐模型一致。listProviders 是异步的, 因此 listAgentModels 允许返回 Promise。
  */
 
-import type {
-  QueryAgentModels,
-  QueryRequestPayload,
-  QueryResponsePayload,
-  QuerySessionEntry,
-} from '@cindy/slack-hook-protocol';
+import type { QueryAgentModels, QueryRequestPayload, QueryResponsePayload } from '@cindy/slack-hook-protocol';
 
 /** 单 agent 能力面(getCapabilities 的最小消费形状)。 */
 export interface AgentModelSource {
@@ -39,8 +34,6 @@ export interface QueryResponderDeps {
   listWorkspaces: () => string[];
   /** 全部 agent 的可用模型(与会话选择器同规则实时派生; listProviders 异步故允许 Promise)。 */
   listAgentModels: () => AgentModelSource[] | Promise<AgentModelSource[]>;
-  /** 当前账号、仅本地白名单内的隐私最小化 recent sessions。 */
-  listSessions?: () => QuerySessionEntry[] | Promise<QuerySessionEntry[]>;
 }
 
 /** 构造 query.response payload; 数据源抛错 / reject 时回 ok:false + 原因。 */
@@ -56,16 +49,6 @@ export async function buildQueryResponse(
         ok: true,
         error: null,
         workspaces: deps.listWorkspaces(),
-      };
-    }
-    if (request.kind === 'sessions') {
-      const sessions = (await (deps.listSessions?.() ?? [])).slice(0, 20);
-      return {
-        queryId: request.queryId,
-        kind: 'sessions',
-        ok: true,
-        error: null,
-        sessions,
       };
     }
     const agents: QueryAgentModels[] = (await deps.listAgentModels()).map((src) => ({

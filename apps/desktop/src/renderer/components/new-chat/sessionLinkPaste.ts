@@ -4,12 +4,9 @@
  *
  * 粘贴文本的**分段**在 pastePipeline.ts(统一管线:长文本 / session /
  * project / path);本文件只负责 session 段落地后的部分:
- *   - 整段会话 markdown 形式自带标题 → chip 直接显示该标题(titled=true);
- *   - 整段会话裸 URL → 先显示短会话 ID 占位(titled=false),随后
- *     `resolveSessionChipTitles` 异步查到标题后原地 patch 节点 attrs;
- *   - 消息锚点始终忽略会话标题/markdown label,异步读取目标消息正文,
- *     wire text 仍序列化原始深链，同时把有上限的完整正文放进结构化
- *     agent reference metadata；compact label 只负责 UI 展示。
+ *   - markdown 形式自带标题 → chip 直接显示该标题(titled=true);
+ *   - 裸 URL → 先显示短会话 ID 占位(titled=false),随后
+ *     `resolveSessionChipTitles` 异步查到标题后原地 patch 节点 attrs
  *     (addToHistory:false,不污染撤销栈)——先占位再增量刷新,不产生
  *     空白帧 / 跳变(设计规范规则 7)。
  *
@@ -19,21 +16,11 @@
  * ASCII 方括号会破坏 markdown 链接语法,清洗为空格。
  */
 import type { Editor } from '@tiptap/core';
-import { boundAgentReferenceText } from '@cindy/maker-shared/agent-input-projection';
 
 import { parseSessionDeepLinkHref } from '@/lib/deepLink';
 import { shortSessionId } from '@/lib/sessionId';
 
 import type { MentionChipAttrs } from './MentionChipNode';
-
-/** Visible chip labels stay compact; the full bounded body is separate semantic metadata. */
-export const SESSION_MESSAGE_CHIP_LABEL_MAX_CHARS = 240;
-
-export function summarizeSessionMessageChipLabel(text: string): string {
-  const collapsed = text.replace(/\s+/g, ' ').trim();
-  if (collapsed.length <= SESSION_MESSAGE_CHIP_LABEL_MAX_CHARS) return collapsed;
-  return `${collapsed.slice(0, SESSION_MESSAGE_CHIP_LABEL_MAX_CHARS - 1)}…`;
-}
 
 /**
  * 序列化用 label 清洗:
@@ -47,20 +34,11 @@ export function sanitizeSessionChipTitle(title: string): string {
 }
 
 /** 粘贴段 → session chip 的节点 attrs(带标题即 titled,否则短 ID 占位)。 */
-export function pastedSessionChipAttrs(seg: {
-  href: string;
-  label: string | null;
-}): MentionChipAttrs {
+export function pastedSessionChipAttrs(
+  seg: { href: string; label: string | null },
+): MentionChipAttrs {
   const target = parseSessionDeepLinkHref(seg.href);
   const sessionId = target?.sessionId ?? seg.href;
-  if (target?.messageClientId) {
-    return {
-      kind: 'session',
-      label: shortSessionId(target.messageClientId),
-      path: seg.href,
-      titled: false,
-    };
-  }
   const label = seg.label ? sanitizeSessionChipTitle(seg.label) : '';
   return label
     ? { kind: 'session', label, path: seg.href, titled: true }
@@ -69,17 +47,7 @@ export function pastedSessionChipAttrs(seg: {
 
 /** session chip → 发送文本:有标题 `[标题](href)`,无标题裸 href。 */
 export function serializeSessionChipText(attrs: MentionChipAttrs): string {
-  if (parseSessionDeepLinkHref(attrs.path)?.messageClientId) return attrs.path;
   return attrs.titled && attrs.label ? `[${attrs.label}](${attrs.path})` : attrs.path;
-}
-
-/** 默认消息正文解析:按会话来源路由到本机或 device-link 被控端。 */
-export async function resolvePastedSessionMessageText(
-  sessionId: string,
-  clientId: string,
-): Promise<string | null> {
-  const { resolveSessionMessageText } = await import('@/lib/sessionMessageText');
-  return resolveSessionMessageText(sessionId, clientId);
 }
 
 /**
@@ -99,92 +67,10 @@ export async function resolvePastedSessionTitle(sessionId: string): Promise<stri
     // 本地库没有(远程 / 未知会话)→ 走远程镜像降级
   }
   const { remoteProjectsStore } = await import('@/features/device-link/remoteProjectsStore');
-  const remote = remoteProjectsStore.getMergedRemoteSessions().find((s) => s.id === sessionId);
+  const remote = remoteProjectsStore
+    .getMergedRemoteSessions()
+    .find((s) => s.id === sessionId);
   return remote?.title?.trim() || null;
-}
-
-const pendingMessageResolutions = new WeakMap<Editor, Map<string, Promise<void>>>();
-
-function patchResolvedMessageChip(editor: Editor, path: string, value: string): void {
-  const display = summarizeSessionMessageChipLabel(value);
-  if (!display || editor.isDestroyed) return;
-  const agentText = boundAgentReferenceText(value);
-  const tr = editor.state.tr;
-  let changed = false;
-  editor.state.doc.descendants((node, pos) => {
-    if (node.type.name !== 'mentionChip') return;
-    const attrs = node.attrs as MentionChipAttrs;
-    if (attrs.kind !== 'session' || attrs.path !== path) return;
-    tr.setNodeMarkup(pos, undefined, {
-      ...attrs,
-      label: display,
-      titled: true,
-      agentText: agentText.text,
-      ...(agentText.truncated ? { agentTextTruncated: true } : {}),
-    });
-    changed = true;
-  });
-  if (!changed) return;
-  tr.setMeta('addToHistory', false);
-  editor.view.dispatch(tr);
-}
-
-function resolveMessageChip(
-  editor: Editor,
-  path: string,
-  target: NonNullable<ReturnType<typeof parseSessionDeepLinkHref>>,
-  resolveMessageText: (sessionId: string, clientId: string) => Promise<string | null>,
-): Promise<void> {
-  let editorPending = pendingMessageResolutions.get(editor);
-  if (!editorPending) {
-    editorPending = new Map();
-    pendingMessageResolutions.set(editor, editorPending);
-  }
-  const existing = editorPending.get(path);
-  if (existing) return existing;
-
-  const pending = resolveMessageText(target.sessionId, target.messageClientId!)
-    .then((value) => {
-      if (value) patchResolvedMessageChip(editor, path, value);
-    })
-    .catch(() => {
-      // Keep the short-id placeholder when the target is unavailable.
-    })
-    .finally(() => {
-      editorPending?.delete(path);
-      if (editorPending?.size === 0) pendingMessageResolutions.delete(editor);
-    });
-  editorPending.set(path, pending);
-  return pending;
-}
-
-/**
- * Resolve every message chip that still lacks a bounded semantic body.
- * Sending awaits this so a fast submit cannot outrun cross-device hydration.
- */
-export async function resolveSessionMessageReferencesForSend(
-  editor: Editor,
-  resolveMessageText: (
-    sessionId: string,
-    clientId: string,
-  ) => Promise<string | null> = resolvePastedSessionMessageText,
-): Promise<void> {
-  const pendingTargets = new Map<
-    string,
-    NonNullable<ReturnType<typeof parseSessionDeepLinkHref>>
-  >();
-  editor.state.doc.descendants((node) => {
-    if (node.type.name !== 'mentionChip') return;
-    const attrs = node.attrs as MentionChipAttrs;
-    if (attrs.kind !== 'session' || attrs.agentText) return;
-    const target = parseSessionDeepLinkHref(attrs.path);
-    if (target?.messageClientId) pendingTargets.set(attrs.path, target);
-  });
-  await Promise.all(
-    [...pendingTargets].map(([path, target]) => (
-      resolveMessageChip(editor, path, target, resolveMessageText)
-    )),
-  );
 }
 
 /**
@@ -199,40 +85,28 @@ export async function resolveSessionMessageReferencesForSend(
 export function resolveSessionChipTitles(
   editor: Editor,
   resolveTitle: (sessionId: string) => Promise<string | null> = resolvePastedSessionTitle,
-  resolveMessageText: (
-    sessionId: string,
-    clientId: string,
-  ) => Promise<string | null> = resolvePastedSessionMessageText,
 ): void {
-  void resolveSessionMessageReferencesForSend(editor, resolveMessageText);
-  const pendingTargets = new Map<
-    string,
-    NonNullable<ReturnType<typeof parseSessionDeepLinkHref>>
-  >();
+  const pendingIds = new Set<string>();
   editor.state.doc.descendants((node) => {
     if (node.type.name !== 'mentionChip') return;
     const attrs = node.attrs as MentionChipAttrs;
     if (attrs.kind !== 'session' || attrs.titled) return;
     const target = parseSessionDeepLinkHref(attrs.path);
-    if (target && !target.messageClientId) pendingTargets.set(attrs.path, target);
+    if (target) pendingIds.add(target.sessionId);
   });
-  for (const [path, target] of pendingTargets) {
-    void resolveTitle(target.sessionId)
-      .then((value) => {
-        const display = value ? sanitizeSessionChipTitle(value) : '';
-        if (!display || editor.isDestroyed) return;
+  for (const sessionId of pendingIds) {
+    void resolveTitle(sessionId)
+      .then((title) => {
+        const clean = title ? sanitizeSessionChipTitle(title) : '';
+        if (!clean || editor.isDestroyed) return;
         const tr = editor.state.tr;
         let changed = false;
         editor.state.doc.descendants((node, pos) => {
           if (node.type.name !== 'mentionChip') return;
           const attrs = node.attrs as MentionChipAttrs;
           if (attrs.kind !== 'session' || attrs.titled) return;
-          if (attrs.path !== path) return;
-          tr.setNodeMarkup(pos, undefined, {
-            ...attrs,
-            label: display,
-            titled: true,
-          });
+          if (parseSessionDeepLinkHref(attrs.path)?.sessionId !== sessionId) return;
+          tr.setNodeMarkup(pos, undefined, { ...attrs, label: clean, titled: true });
           changed = true;
         });
         if (!changed) return;

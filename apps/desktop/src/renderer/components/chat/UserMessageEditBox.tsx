@@ -32,14 +32,12 @@ import { useTranslation } from 'react-i18next';
 
 import { cn } from '@/lib/utils';
 import { Spinner } from '@/components/ui/spinner';
-import { ListComposerTextarea } from '@/components/new-chat/ListComposerTextarea';
 import { toast } from '@/lib/toast';
 import { ApiError } from '@/lib/httpClient';
 import { rewindPreview } from '@/lib/sessionService';
 import { commitEditAndResendWithRunningRetry } from '@/lib/editLastUserMessage';
 import type { RewindDraftImage } from '@/lib/rewindDraftAttachments';
-import type { FileRef, PastedTextRange, SlashCommandRange } from '@/lib/imageRef';
-import type { AgentInputReference } from '../../../shared/agentInputQueue';
+import type { FileRef } from '@/lib/imageRef';
 
 // 运行中发送的等待兜底:stop 发出后 renderer 迟迟观察不到 idle(远端断链、
 // stop 丢失等)时,超过该时长报错退回编辑态,不让 spinner 永转。
@@ -64,12 +62,6 @@ interface UserMessageEditBoxProps {
   /** 原消息带「选中引用」编码标志(引用胶囊渲染门控)。可见文本未修改时
    *  原样携带；一旦编辑成 markerless 文本就移除，避免手写 blockquote 被误解析。 */
   quotesEncoded?: boolean;
-  /** 原消息语义引用 range；可见文本未修改时原样携带。 */
-  agentReferences?: readonly AgentInputReference[];
-  /** 原消息长粘贴 range；可见文本未修改时原样携带。 */
-  pastedTextRanges?: readonly PastedTextRange[];
-  /** 原消息 slash range；undefined 表示旧消息缺少显式 marker，空数组也需保留。 */
-  slashCommandRanges?: readonly SlashCommandRange[];
   /** 会话是否有 in-flight turn(renderer 视角)。发送时若为 true,先经
    *  onRequestStop 中断,再挂起等它翻 false 后提交。 */
   sessionRunning?: boolean;
@@ -88,9 +80,6 @@ interface UserMessageEditBoxProps {
   onCommitOverride?: (submission: {
     text: string;
     quotesEncoded?: boolean;
-    agentReferences?: AgentInputReference[];
-    pastedTextRanges?: PastedTextRange[];
-    slashCommandRanges?: SlashCommandRange[];
   }) => Promise<void>;
 }
 
@@ -103,9 +92,6 @@ export function UserMessageEditBox({
   files,
   workingDir,
   quotesEncoded,
-  agentReferences,
-  pastedTextRanges,
-  slashCommandRanges,
   sessionRunning,
   onRequestStop,
   onCancel,
@@ -174,40 +160,22 @@ export function UserMessageEditBox({
       const visibleTextUnchanged = text === initialText;
       const submitText = visibleTextUnchanged ? (initialSubmitText ?? text) : text;
       const preserveQuoteMetadata = quotesEncoded && visibleTextUnchanged;
-      const preservedAgentReferences =
-        visibleTextUnchanged && agentReferences && agentReferences.length > 0
-          ? [...agentReferences]
-          : undefined;
-      const preservedPastedTextRanges =
-        visibleTextUnchanged && pastedTextRanges && pastedTextRanges.length > 0
-          ? [...pastedTextRanges]
-          : undefined;
-      const preservedSlashCommandRanges =
-        visibleTextUnchanged && slashCommandRanges !== undefined
-          ? [...slashCommandRanges]
-          : undefined;
       if (onCommitOverride) {
         // 被拦消息:普通重发(不 rewind)。失败抛错落入下方 catch 保留编辑态。
         await onCommitOverride({
           text: submitText,
           ...(preserveQuoteMetadata ? { quotesEncoded: true } : {}),
-          ...(preservedAgentReferences ? { agentReferences: preservedAgentReferences } : {}),
-          ...(preservedPastedTextRanges ? { pastedTextRanges: preservedPastedTextRanges } : {}),
-          ...(preservedSlashCommandRanges !== undefined ? { slashCommandRanges: preservedSlashCommandRanges } : {}),
         });
       } else {
-        await commitEditAndResendWithRunningRetry({
-          sessionId,
-          clientId: messageClientId,
-          text: submitText,
-          images,
-          files,
-          fallbackWorkingDir: workingDir,
-          ...(preserveQuoteMetadata ? { quotesEncoded: true } : {}),
-          ...(preservedAgentReferences ? { agentReferences: preservedAgentReferences } : {}),
-          ...(preservedPastedTextRanges ? { pastedTextRanges: preservedPastedTextRanges } : {}),
-          ...(preservedSlashCommandRanges !== undefined ? { slashCommandRanges: preservedSlashCommandRanges } : {}),
-        });
+      await commitEditAndResendWithRunningRetry({
+        sessionId,
+        clientId: messageClientId,
+        text: submitText,
+        images,
+        files,
+        fallbackWorkingDir: workingDir,
+        ...(preserveQuoteMetadata ? { quotesEncoded: true } : {}),
+      });
       }
       // 先归零守卫再 onSent:onSent 让父组件立刻卸载本组件,晚于它的 setState
       // 在已卸载组件上是无效 no-op(bot review 指出的死代码顺序问题)。
@@ -233,7 +201,7 @@ export function UserMessageEditBox({
       submittingRef.current = false;
       setSubmitting(false);
     }
-  }, [sessionId, messageClientId, text, initialText, initialSubmitText, images, files, workingDir, quotesEncoded, agentReferences, pastedTextRanges, slashCommandRanges, onSent, onCommitOverride, t]);
+  }, [sessionId, messageClientId, text, initialText, initialSubmitText, images, files, workingDir, quotesEncoded, onSent, onCommitOverride, t]);
 
   const handleSend = useCallback(() => {
     if (!canSend || submittingRef.current) return;
@@ -303,7 +271,7 @@ export function UserMessageEditBox({
         'px-4 pt-3 pb-2.5',
       )}
     >
-      <ListComposerTextarea
+      <textarea
         ref={textareaRef}
         value={text}
         onChange={(e) => setText(e.target.value)}

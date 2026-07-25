@@ -16,10 +16,6 @@
  */
 
 import type { AgentEvent, AgentTaskStatus, AgentTaskUsage, AgentTaskUpdateEventData } from '../../types/events.js';
-import {
-  extractNonSecretErrorSignals,
-  redactSensitiveText,
-} from '@cindy/maker-shared/error-redaction';
 import type { createAsyncQueue } from '../shared/async-queue.js';
 import { stripTerminalControlSequences } from '../shared/terminal-output.js';
 import type { UsageTracker } from '../shared/usage-tracker.js';
@@ -61,7 +57,6 @@ export interface TurnState {
     sdkError: string;
     agentMeta?: Record<string, unknown>;
     errorStatus?: number | null;
-    usageLimit?: boolean;
     retryAttempt?: number;
     maxRetries?: number;
   } | null;
@@ -733,7 +728,7 @@ function handleSystem(
     // 已有 envelope 时保留其中的人话文案与 transcript metadata，只补 retry 元数据。
     const previous = ctx.turn.pendingApiError;
     const hasAssistantEnvelope = previous?.agentMeta !== undefined;
-    const sdkError = redactSensitiveText(hasAssistantEnvelope ? previous.sdkError : (msg.error || 'unknown'));
+    const sdkError = hasAssistantEnvelope ? previous.sdkError : (msg.error || 'unknown');
     const statusLabel = msg.error_status == null ? 'connection error' : `HTTP ${msg.error_status}`;
     const retryLabel = typeof msg.attempt === 'number' && typeof msg.max_retries === 'number'
       ? `, retry ${msg.attempt}/${msg.max_retries}`
@@ -753,7 +748,7 @@ function handleSystem(
       maxRetries: msg.max_retries,
       retryDelayMs: msg.retry_delay_ms,
       errorStatus: msg.error_status,
-      sdkError: redactSensitiveText(msg.error ?? 'unknown'),
+      sdkError: msg.error,
     });
     return;
   }
@@ -958,17 +953,11 @@ function handleAssistant(
       .filter(Boolean)
       .join('\n')
       .trim();
-    const errorMessage = errorText || `SDK error: ${msg.error}`;
-    const errorSignals = extractNonSecretErrorSignals(errorMessage);
     ctx.turn.pendingApiError = {
       ...ctx.turn.pendingApiError,
-      message: redactSensitiveText(errorMessage),
-      sdkError: redactSensitiveText(msg.error),
+      message: errorText || `SDK error: ${msg.error}`,
+      sdkError: msg.error,
       agentMeta: assistantMeta,
-      ...(errorSignals.errorStatus !== undefined
-        ? { errorStatus: errorSignals.errorStatus }
-        : {}),
-      ...(errorSignals.usageLimit ? { usageLimit: true } : {}),
     };
     return;
   }
@@ -1425,7 +1414,6 @@ function handleResult(
 
   // turn 桶快照 — endTurn 会清掉 turn 桶, 必须在调用之前先取出来给后面日志用
   const preTurnEndCacheStats = ctx.tracker.getCacheStats();
-  const finalTextForLogs = msg.is_error ? redactSensitiveText(finalText) : finalText;
 
   // turn end usage 锁定: Claude Code result.usage 是 session aggregate,
   // 这里先转成 turn delta; tracker.endTurn 内部覆盖 currentTurn 然后返回 snapshot 再 reset。
@@ -1488,7 +1476,7 @@ function handleResult(
       session: formatCacheBucket(ctx.tracker.getCacheStats().session),
     },
     toolUses: ctx.turn.toolUses,
-    output: finalTextForLogs || '<empty>',
+    output: finalText || '<empty>',
   });
   // turn 以 error 结束时上面只有 DEBUG 落盘 — debug 关 (release 默认 info) 时用户
   // 上报的 maker.log 里会完全看不到这次失败 (API 限流 / 上游 5xx /
@@ -1498,7 +1486,7 @@ function handleResult(
       stopReason: msg.stop_reason,
       terminalReason: msg.terminal_reason,
       durationMs: msg.duration_ms,
-      output: finalTextForLogs || '<empty>',
+      output: finalText || '<empty>',
     });
   }
   // 流式截断兜底(后缀 diff 版)—— 覆盖两种截断:
@@ -1611,11 +1599,7 @@ function handleResult(
   // 停止"误报成"执行失败"、并让 watchdog 场景双发 banner(见 TurnState 字段注释)。
   if (msg.is_error && !ctx.turn.interruptRequested) {
     const pendingApiError = ctx.turn.pendingApiError;
-    const rawResult = typeof msg.result === 'string' ? msg.result.trim() : '';
-    const resultSignals = extractNonSecretErrorSignals(rawResult);
-    const errDetail = redactSensitiveText(rawResult);
-    const errorStatus = resultSignals.errorStatus ?? pendingApiError?.errorStatus;
-    const usageLimit = pendingApiError?.usageLimit === true || resultSignals.usageLimit;
+    const errDetail = typeof msg.result === 'string' ? msg.result.trim() : '';
     const errorMessage = pendingApiError?.agentMeta
       ? pendingApiError.message
       : errDetail || pendingApiError?.message;
@@ -1626,8 +1610,9 @@ function handleResult(
             message: errorMessage,
             sdkError: pendingApiError.sdkError,
             isTerminal: true,
-            ...(errorStatus !== undefined ? { errorStatus } : {}),
-            ...(usageLimit ? { usageLimit: true } : {}),
+            ...(pendingApiError.errorStatus !== undefined
+              ? { errorStatus: pendingApiError.errorStatus }
+              : {}),
             ...(pendingApiError.retryAttempt !== undefined
               ? { retryAttempt: pendingApiError.retryAttempt }
               : {}),
@@ -1636,12 +1621,7 @@ function handleResult(
               : {}),
           }
         : errDetail
-        ? {
-            message: errDetail,
-            isTerminal: true,
-            ...(errorStatus !== undefined ? { errorStatus } : {}),
-            ...(usageLimit ? { usageLimit: true } : {}),
-          }
+        ? { message: errDetail, isTerminal: true }
         // reason 是稳定 key, renderer 按它走 i18n(规则 18); message 仅作非
         // renderer 消费方(IM/orca)的兜底文案。
         : { message: '任务执行失败（模型未返回错误详情）。', isTerminal: true, reason: 'turn-failed' },
@@ -1664,16 +1644,7 @@ function handleResult(
   // typeof 读字段, 加字段零影响; 不命中时 done 与现状逐字节一致。
   queue.push({
     type: 'done',
-    data:
-      msg.is_error && typeof msg.result === 'string'
-        ? {
-            ...msg,
-            result: redactSensitiveText(msg.result),
-            ...(isSilentStopTurn ? { silentStop: true } : {}),
-          }
-        : isSilentStopTurn
-          ? { ...msg, silentStop: true }
-          : msg,
+    data: isSilentStopTurn ? { ...msg, silentStop: true } : msg,
     source: 'claude-code',
   });
   // reset turn 累积 (tracker 内部已经在 endTurn 里 reset 了 currentTurn,这里只清非 usage 状态)

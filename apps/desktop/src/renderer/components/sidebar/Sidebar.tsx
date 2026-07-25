@@ -1,7 +1,7 @@
 /**
  * Sidebar Shell（纯外壳层）
  * ---------------------------------------------------------------------------
- * 职责：
+ * 职责（见 doc/prod_docs/xdt-maker-主界面设计.md V0.8 F2）：
  *   - 宽度 / 背景 / 右侧分割线 / 折叠-展开过渡动画（跨所有主功能共享）
  *   - 顶行（Codex 风格布局重构后通顶到窗口顶部）：mac 红绿灯所在的空白
  *     拖拽行；其下是 HorizontalTabbar 行。折叠/菜单按钮在 MainLayout 的
@@ -134,7 +134,7 @@ export function Sidebar({
           ? cn(
               // 抽屉:fixed overlay 通顶,不挤压主区;z 低于 ChromeActions(z-20),
               // 触发钮保持可点(点击 = pin)。阴影复用 --shadow-menu(中型悬浮卡,
-              // 同色 Surface 上的辅助分离),1px hairline 仍是主分隔手段(docs/design-rules/cindy-design-system.md)。
+              // 同色 Surface 上的辅助分离),1px hairline 仍是主分隔手段(DESIGN.md)。
               'fixed inset-y-0 left-0 z-[15]',
               'border-r border-sidebar-border shadow-[var(--shadow-menu)]',
               peekState === 'peeking' &&
@@ -232,7 +232,7 @@ export function Sidebar({
           onDoubleClick={onResetWidth}
         >
           {/* Visual highlight line — default transparent so the aside's existing
-              border-r provides the 1px divider (docs/design-rules/cindy-design-system.md: Board hairline).
+              border-r provides the 1px divider (DESIGN.md: Board hairline).
               Only becomes visible on hover to indicate the draggable handle. */}
           <div className="absolute right-0 top-0 h-full w-px bg-transparent transition-colors group-hover/handle:bg-sidebar-action-icon" />
         </div>

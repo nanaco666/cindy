@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from 'react';
 
 /**
- * 意识运行时状态的 renderer 侧只读镜像。
+ * 意识运行时状态的 renderer 侧只读镜像(C3a)。
  *
  * 数据流:main 的 GhostRuntime 每次状态变化广播 ghosts:runtime-changed
  * (全量 states map);首帧另拉一次快照(面板可能在崩溃发生后才挂载,

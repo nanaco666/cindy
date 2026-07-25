@@ -14,7 +14,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import type { CatalogModel, Provider, ProviderView } from '@cindy/model-providers';
+import type { CatalogModel, Provider, ProviderView } from '@lizi/model-providers';
 
 import { shouldFallbackVendorModel } from '@/features/cc-agent/lib/vendorModelFallback';
 

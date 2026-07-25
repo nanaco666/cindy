@@ -3,8 +3,8 @@ import {
   providerOffersModel,
   sourcesForModel,
   type ProviderView,
-} from '@cindy/model-providers';
-import type { AgentKind } from '@cindy/maker-core';
+} from '@lizi/model-providers';
+import type { AgentKind } from '@lizi/maker-core';
 
 import type { ImSessionRow } from './sessionRepo';
 
@@ -22,7 +22,7 @@ export interface ImAuthRouteStatus extends ImAuthCheckResult {
 }
 
 export interface ImAuthCheckDeps {
-  readXdGatewayApiKey(): string | null;
+  readXdProxyApiKey(): string | null;
   hasCustomProviderKey(providerId: string, agentKind: AgentKind): boolean;
   getAgentAuthState(agentKind: AgentKind): Promise<{ authenticated: boolean }>;
   listProviders(): Promise<ProviderView[]>;
@@ -57,7 +57,7 @@ async function checkImRouteAuthWithResolution(
   if (resolution.kind === 'provider') {
     const routing = resolution.provider.routing[row.agentKind];
     if (routing?.authStrategy === 'gateway-key') {
-      return deps.readXdGatewayApiKey()
+      return deps.readXdProxyApiKey()
         ? { ok: true, missing: null }
         : { ok: false, missing: 'gateway-key' };
     }
@@ -183,7 +183,7 @@ async function fallbackAuthCheckForImRoute(
   row: AuthRow,
   deps: ImAuthCheckDeps,
 ): Promise<ImAuthCheckResult> {
-  const hasGatewayKey = Boolean(deps.readXdGatewayApiKey());
+  const hasGatewayKey = Boolean(deps.readXdProxyApiKey());
   if (row.providerId === 'xd') {
     return hasGatewayKey ? { ok: true, missing: null } : { ok: false, missing: 'gateway-key' };
   }

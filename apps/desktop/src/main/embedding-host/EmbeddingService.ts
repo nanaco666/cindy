@@ -16,7 +16,7 @@
  *   - Worker 长生命周期细节 (tick / 重试) 全在 EmbeddingWorker, 本类不操心
  */
 
-import type { EmbedResponse, EmbeddingClient, EmbeddingModelId } from '@cindy/embedding-client';
+import type { EmbedResponse, EmbeddingClient, EmbeddingModelId } from '@lizi/embedding-client';
 
 import type { createLogger } from '../logger';
 import type { DbClient } from '../localDb/client/DbClient';

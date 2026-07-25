@@ -1,15 +1,15 @@
 import { useEffect, useRef, useSyncExternalStore } from 'react';
-import { SESSION_ACTIVITY_CHANNEL, type SessionActivityPayload } from '@cindy/device-link';
+import { SESSION_ACTIVITY_CHANNEL, type SessionActivityPayload } from '@lizi/device-link';
 import {
   applyAgentTaskUpdateEvent,
   isSameAgentTaskAlias,
   normalizeAgentTaskUpdate,
   type AgentTaskUpdate,
-} from '@cindy/maker-shared/agent-task';
-import type { MobileGoalStatusPayload } from '@cindy/maker-shared/device-link-contract';
-import { applyCodexPlanSnapshotOnDone } from '@cindy/maker-shared/message-render';
-import type { RemoteSessionLiveActivity } from '@cindy/maker-shared/session-list';
-import { buildDeviceIdentity, resolveCanonicalDeviceId } from '@cindy/maker-shared/mobile-home';
+} from '@lizi/maker-shared/agent-task';
+import type { MobileGoalStatusPayload } from '@lizi/maker-shared/device-link-contract';
+import { applyCodexPlanSnapshotOnDone } from '@lizi/maker-shared/message-render';
+import type { RemoteSessionLiveActivity } from '@lizi/maker-shared/session-list';
+import { buildDeviceIdentity, resolveCanonicalDeviceId } from '@lizi/maker-shared/mobile-home';
 import { EMPTY_INPUT_PROJECTION, normalizeInputProjection } from '@/session/inputProjection';
 import { sortPendingInteractions } from '@/session/interactionModel';
 import { applySessionModelPrefPush } from '@/session/sessionModelMirror';
@@ -113,7 +113,7 @@ const sessionRunning = new Map<string, boolean>();
 const sessionRunStatus = new Map<string, RemoteSessionRunStatus>();
 const sessionMessageSyncMarkers = new Map<string, SessionMessageSyncMarker>();
 // Per-session live sub-agent task state, decoded from `agent_task_update` events (live-only,
-// never persisted — see @cindy/maker-shared/agent-task). Keyed taskId/parentToolUseId → update.
+// never persisted — see @lizi/maker-shared/agent-task). Keyed taskId/parentToolUseId → update.
 const sessionTaskUpdates = new Map<string, ReadonlyMap<string, AgentTaskUpdate>>();
 // `maker:event` reaches the control phone before the desktop's async DB write completes.
 // Keep one temporary assistant row per session and reconcile it with the persisted row by
@@ -221,20 +221,6 @@ function sameElementRefs<T>(a: readonly T[], b: readonly T[]): boolean {
 
 function stamp(session: RemoteSession, deviceId: string, deviceName: string): RemoteSession {
   return { ...session, deviceLinkDeviceId: deviceId, deviceLinkDeviceName: deviceName };
-}
-
-/**
- * SQLite session 快照不包含 desktop main 内存里的 pending Agent intent。全量列表 / getSession
- * 对账只能刷新持久化字段，不能顺手抹掉已由 push / 权威查询写入的运行时镜像；显式携带该字段
- * 的新快照仍优先（包括 null）。
- */
-function preserveSessionRuntimeFields(fresh: RemoteSession, local: RemoteSession | undefined): RemoteSession {
-  if (
-    !local
-    || Object.prototype.hasOwnProperty.call(fresh, 'agentSwitchIntent')
-    || local.agentSwitchIntent === undefined
-  ) return fresh;
-  return { ...fresh, agentSwitchIntent: local.agentSwitchIntent };
 }
 
 function normalizeMessages(list: readonly RemoteMessage[]): RemoteMessage[] {
@@ -836,13 +822,6 @@ export const remoteSessionStore = {
   setDeviceSessions(deviceId: string, deviceName: string, rawSessions: readonly RemoteSession[]): void {
     let nextSessions = rawSessions.map((s) => stamp(s, deviceId, deviceName));
     const existing = shards.get(deviceId);
-    if (existing) {
-      const localById = new Map(existing.sessions.map((session) => [session.id, session]));
-      nextSessions = nextSessions.map((session) => preserveSessionRuntimeFields(
-        session,
-        localById.get(session.id),
-      ));
-    }
     // 在途乐观创建行保护:pendingLocalCreation 行由 newSessionCreation 管线负责生命
     // 周期(enqueue 落定清标 / 失败撤行),全量列表对账不能越权处置——(a) 比被控端
     // 建成更早发出的旧列表不含该 id,直接替换会让刚进入的会话从列表消失;(b) 建成后
@@ -920,7 +899,7 @@ export const remoteSessionStore = {
   },
 
   upsertDeviceSession(deviceId: string, deviceName: string, rawSession: RemoteSession): void {
-    let stamped = stamp(rawSession, deviceId, deviceName);
+    const stamped = stamp(rawSession, deviceId, deviceName);
     const shard = shards.get(deviceId);
     if (!shard) {
       shards.set(deviceId, { deviceId, deviceName, sessions: [stamped] });
@@ -929,7 +908,6 @@ export const remoteSessionStore = {
     }
     const next = shard.sessions.filter((s) => s.id !== rawSession.id);
     const existing = shard.sessions.find((s) => s.id === rawSession.id);
-    stamped = preserveSessionRuntimeFields(stamped, existing);
     if (
       existing
       && shard.deviceName === deviceName
@@ -1174,70 +1152,6 @@ export const remoteSessionStore = {
     if (changed) emit();
   },
 
-  /**
-   * 被控端已原子清除一轮消息后，按稳定 clientId 集合移除控制端镜像。
-   * 同时失效 latest-window marker；sessions patch 与 deletion push 无顺序保证，
-   * 不能让旧 marker 把已变更的窗口误判为已同步。
-   */
-  removeMessages(sessionId: string, clientIds: readonly string[], deviceId?: string): void {
-    const deletedClientIds = new Set(clientIds.filter(Boolean));
-    if (!sessionId || deletedClientIds.size === 0) return;
-    const existing = messages.get(sessionId) ?? emptyMessages;
-    const removed = existing.filter((message) => (
-      deletedClientIds.has(message.clientId) || deletedClientIds.has(message.id)
-    ));
-    const next = existing.filter((message) => (
-      !deletedClientIds.has(message.clientId) && !deletedClientIds.has(message.id)
-    ));
-    sessionMessageSyncMarkers.delete(sessionId);
-    const messagesChanged = next.length !== existing.length;
-    if (messagesChanged) messages.set(sessionId, next);
-    const deletedTaskAliases = new Set<string>(deletedClientIds);
-    for (const message of removed) {
-      if (message.toolUseId) deletedTaskAliases.add(message.toolUseId);
-      const parentToolUseId = message.agentMeta?.parentUuid;
-      if (typeof parentToolUseId === 'string') deletedTaskAliases.add(parentToolUseId);
-    }
-    let tasksChanged = false;
-    for (const taskMap of [sessionTaskUpdates, sessionParkedTaskUpdates]) {
-      const existingTasks = taskMap.get(sessionId);
-      if (!existingTasks) continue;
-      const nextTasks = new Map<string, AgentTaskUpdate>();
-      for (const [key, task] of existingTasks) {
-        if (
-          deletedTaskAliases.has(key) ||
-          deletedTaskAliases.has(task.taskId) ||
-          (task.parentToolUseId !== undefined &&
-            deletedTaskAliases.has(task.parentToolUseId))
-        ) {
-          continue;
-        }
-        nextTasks.set(key, task);
-      }
-      if (nextTasks.size !== existingTasks.size) {
-        tasksChanged = true;
-        if (nextTasks.size === 0) taskMap.delete(sessionId);
-        else taskMap.set(sessionId, nextTasks);
-      }
-    }
-    for (const deletedClientId of deletedClientIds) {
-      forgetPendingLiveAssistantMessageIdentity(sessionId, deletedClientId);
-    }
-    if (!messagesChanged && !tasksChanged) return;
-    bumpMessageVersion();
-    emit();
-    // useSessionMessageCacheSync 对空数组会跳过持久化；删除最后一条消息时在这里
-    // 主动清理 AsyncStorage，避免下次冷开又 hydrate 出已删除正文。
-    if (messagesChanged) {
-      if (deviceId) void cacheSessionMessages(deviceId, sessionId, next).catch(() => undefined);
-    }
-  },
-
-  /** 旧调用点兼容：精确移除一个 clientId。 */
-  removeMessage(sessionId: string, clientId: string, deviceId?: string): void {
-    this.removeMessages(sessionId, [clientId], deviceId);
-  },
-
   appendLocalSystemCard(
     sessionId: string,
     cardType: MobileSystemCardType,
@@ -1465,21 +1379,6 @@ export const remoteSessionStore = {
       const sessionId = readString(payload, 'sessionId');
       const message = isRecord(payload.message) ? (payload.message as unknown as RemoteMessage) : null;
       if (sessionId && message) this.appendMessage(sessionId, message);
-      return;
-    }
-    if (channel === 'local-db:messages:deleted' && isRecord(payload)) {
-      const sessionId = readString(payload, 'sessionId');
-      const clientId = readString(payload, 'clientId');
-      const clientIds = Array.isArray(payload.clientIds)
-        ? payload.clientIds.filter((value): value is string =>
-            typeof value === 'string' && value.length > 0,
-          )
-        : clientId
-          ? [clientId]
-          : [];
-      if (sessionId && clientIds.length > 0) {
-        this.removeMessages(sessionId, clientIds, deviceId);
-      }
       return;
     }
     if (channel === 'local-db:session:error-persisted' && isRecord(payload)) {
@@ -2164,19 +2063,14 @@ export function useRemoteSessions(): RemoteSession[] {
   return useSyncExternalStore(remoteSessionStore.subscribe, remoteSessionStore.getSessions);
 }
 
-/** Subscribe to one session's message mirror without triggering cache hydration side effects. */
-export function useRemoteSessionMessages(sessionId: string): RemoteMessage[] {
-  return useSyncExternalStore(
-    remoteSessionStore.subscribe,
-    () => remoteSessionStore.getMessages(sessionId),
-  );
-}
-
 // 本地「最近消息」缓存持久化的去抖间隔:消息流式更新很频繁,只在静默一小段后落盘一次。
 const SESSION_MESSAGE_CACHE_PERSIST_DEBOUNCE_MS = 600;
 
 export function useSessionMessages(sessionId: string, deviceId?: string): RemoteMessage[] {
-  const messages = useRemoteSessionMessages(sessionId);
+  const messages = useSyncExternalStore(
+    remoteSessionStore.subscribe,
+    () => remoteSessionStore.getMessages(sessionId),
+  );
   useSessionMessageCacheSync(sessionId, deviceId, messages);
   return messages;
 }
@@ -2189,7 +2083,6 @@ function useSessionMessageCacheSync(
   messages: RemoteMessage[],
 ): void {
   const hydratedKeyRef = useRef<string | null>(null);
-  const hydrationReadyKeyRef = useRef<string | null>(null);
   const persistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // 持久化在定时器回调里读最新值,避免把每次渲染的 messages 都闭包进 timer。
   const ctxRef = useRef<{ deviceId?: string; sessionId: string; messages: RemoteMessage[] }>({
@@ -2205,17 +2098,13 @@ function useSessionMessageCacheSync(
     const key = `${deviceId}::${sessionId}`;
     if (hydratedKeyRef.current === key) return;
     hydratedKeyRef.current = key;
-    hydrationReadyKeyRef.current = null;
     let cancelled = false;
     void getCachedSessionMessages(deviceId, sessionId)
       .then((cached) => {
         if (cancelled || cached.length === 0) return;
         remoteSessionStore.hydrateMessagesIfEmpty(sessionId, cached);
       })
-      .catch(() => undefined)
-      .finally(() => {
-        if (!cancelled) hydrationReadyKeyRef.current = key;
-      });
+      .catch(() => undefined);
     return () => {
       cancelled = true;
     };
@@ -2223,15 +2112,8 @@ function useSessionMessageCacheSync(
 
   // 去抖持久化:messages 变化时重排定时器,静默后落盘最新快照。
   useEffect(() => {
+    if (!deviceId || !sessionId || messages.length === 0) return;
     if (persistTimerRef.current) clearTimeout(persistTimerRef.current);
-    persistTimerRef.current = null;
-    if (!deviceId || !sessionId) return;
-    const key = `${deviceId}::${sessionId}`;
-    if (messages.length === 0) {
-      if (hydrationReadyKeyRef.current !== key) return;
-      void cacheSessionMessages(deviceId, sessionId, []).catch(() => undefined);
-      return;
-    }
     persistTimerRef.current = setTimeout(() => {
       persistTimerRef.current = null;
       const ctx = ctxRef.current;

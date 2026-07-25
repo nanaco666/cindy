@@ -23,7 +23,7 @@
 import type {
   BrowserControlRequest,
   BrowserControlResult,
-} from '@cindy/browser-control-runtime';
+} from '@lizi/browser-control-runtime';
 import type { WebContents } from 'electron';
 
 import type { TabRegistry } from '../../rsb-browser-bridge/registry.js';
@@ -46,7 +46,7 @@ export interface RsbWebviewBackendOptions {
    * Fallback session-id resolver for paths that DON'T originate from an MCP
    * tool call (Settings UI status probe, dev diagnostics). MCP-driven actions
    * carry the authoritative session in `req.__mcpSessionId` injected by the
-   * @cindy/mcps provider wrap; the backend prefers that and only falls back to
+   * lizi-mcps provider wrap; the backend prefers that and only falls back to
    * this resolver when the field is absent.
    *
    * Why this distinction matters: the previous design used UI-focus inference

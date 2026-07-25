@@ -54,7 +54,7 @@ describe('redactSensitive', () => {
   });
 
   it('rewrites home paths to ~ on all three platforms', () => {
-    const r = redactSensitive('/Users/carol/Projects/foo /home/chris/work C:\\Users\\chris\\dev');
+    const r = redactSensitive('/Users/zkyo/Projects/foo /home/chris/work C:\\Users\\chris\\dev');
     expect(r.text).toBe('~/Projects/foo ~/work ~\\dev');
     expect(r.categories).toEqual(['home-path']);
   });
@@ -86,12 +86,12 @@ describe('redactSensitive', () => {
   });
 
   it('redacts emails', () => {
-    const r = redactSensitive('contact carol@example.com please');
+    const r = redactSensitive('contact zkyo@example.com please');
     expect(r.text).toBe('contact [REDACTED:email] please');
   });
 
   it('is idempotent', () => {
-    const once = redactSensitive('key sk-abcdefghijklmnopqrstuvwx from carol@example.com at /Users/carol/x');
+    const once = redactSensitive('key sk-abcdefghijklmnopqrstuvwx from zkyo@example.com at /Users/zkyo/x');
     const twice = redactSensitive(once.text);
     expect(twice.text).toBe(once.text);
     expect(twice.hitCount).toBe(0);

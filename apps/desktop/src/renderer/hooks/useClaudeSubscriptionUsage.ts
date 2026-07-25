@@ -91,19 +91,6 @@ function readUsageApi(): {
   }).electronAPI?.maker?.usage;
 }
 
-/**
- * 主动催一次余量刷新(chip 悬念期用: 倒计时归零等新快照时)。走与 warm-start 同一
- * 个 cached-first IPC —— main 侧 read() 自带 180s 节流 + 退避, 重复调用安全;
- * 刷新结果经 push 通道回流, 这里不消费返回值。
- */
-export function requestClaudeSubscriptionRefresh(): void {
-  const api = readUsageApi();
-  if (!api?.getClaudeSubscription) return;
-  void api.getClaudeSubscription().catch(() => {
-    /* Best-effort nudge; push 更新仍会刷新 chip。 */
-  });
-}
-
 export function useClaudeSubscriptionUsage(
   enabled: boolean,
 ): ClaudeSubscriptionUsageSnapshot | null {

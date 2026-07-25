@@ -53,13 +53,13 @@ describe('releaseNotesService', () => {
     const payload = JSON.stringify({
       version: '0.0.122',
       date: '2026-06-23',
-      contributors: ['Carol'],
+      contributors: ['Dash'],
       sections: [
         {
           title: 'Bug Fixes',
           items: [
             {
-              name: 'Carol',
+              name: 'Dash',
               list: [
                 '修复远程会话在网络断断续续时消息可能被错误合并或时间错乱的问题，断线恢复后能正确保留期间收到的新消息',
               ],

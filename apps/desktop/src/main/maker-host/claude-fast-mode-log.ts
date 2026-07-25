@@ -20,7 +20,7 @@ import type {
   RequestTransform,
   ResponseObserver,
   ResponseObserverCtx,
-} from '@cindy/anthropic-compat-proxy';
+} from '@lizi/anthropic-compat-proxy';
 import { Buffer } from 'node:buffer';
 import type { Transform } from 'node:stream';
 import { createBrotliDecompress, createGunzip, createInflate } from 'node:zlib';

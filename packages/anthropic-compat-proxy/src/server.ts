@@ -564,9 +564,6 @@ function forward(
   // 转发前从 outbound headers 删除的字段(大小写不敏感)。在 headerOverride 合并之后应用。
   headerDelete?: readonly string[],
   responseObserver?: ResponseObserver,
-  // 原始客户端 model id。provider transform 可能在出站前去掉命名空间；recovery
-  // controller 必须记原值，才能和下一轮主动 strip 看到的入站 model 对上。
-  clientModel = '',
 ): void {
   // 客户端已断开(典型:400 缓冲期间断开后走到透明重试)——'close' 已经发过,
   // 下面挂的中断传播 listener 永远不会触发,直接不发起上游请求。
@@ -638,15 +635,11 @@ function forward(
     }
     const status = upstreamRes.statusCode ?? 502;
 
-    // ── 上游 400/422 的透明重试 ──────────────────────────────────────────────
-    // 只对可恢复的客户端错误(400/422)且尚未重试过、且有 enabled recovery rule 的请求:
-    // 先把(很小的) 错误体完整缓冲下来, 在 'end' 找第一条 match 命中且 strip 出东西的规则,
-    // 剥字段重发一次, 对客户端透明。
-    // xAI 对不可反序列化 / 解不开的 encrypted_content 可能回 422 invalid-argument, 不能只认 400。
-    // 2xx 流式响应 / 其它 4xx5xx / 已重试 / 无 enabled rule 一律走下面原有的 writeHead + pipe, 零额外延迟。
-    const activeRules = canRetry && (status === 400 || status === 422)
-      ? recoveryRules.filter((r) => r.enabled())
-      : [];
+    // ── 上游 400 的透明重试 ──────────────────────────────────────────────────
+    // 只对 400 且尚未重试过、且有 enabled recovery rule 的请求: 先把(很小的) 错误体完整
+    // 缓冲下来, 在 'end' 找第一条 match 命中且 strip 出东西的规则, 剥字段重发一次, 对客户端透明。
+    // 2xx 流式响应 / 非 400 / 已重试 / 无 enabled rule 一律走下面原有的 writeHead + pipe, 零额外延迟。
+    const activeRules = canRetry && status === 400 ? recoveryRules.filter((r) => r.enabled()) : [];
     if (activeRules.length > 0) {
       const chunks: Buffer[] = [];
       upstreamRes.on('data', (chunk: Buffer) => chunks.push(chunk));
@@ -673,7 +666,7 @@ function forward(
             retryBody = extraStripped;
             appliedRules.push(extraRule);
           }
-          logger.info?.(`◀ upstream ${status} [${rule.id}] → 透明重试 (strip + 重发)`, {
+          logger.info?.(`◀ upstream 400 [${rule.id}] → 透明重试 (strip + 重发)`, {
             reqId,
             ruleId: rule.id,
             appliedRuleIds: appliedRules.map((r) => r.id),
@@ -681,7 +674,7 @@ function forward(
             strippedBytes: retryBody.length,
           });
           const threadId = selectedHeaderValue(headers, rule.threadIdHeaders ?? DEFAULT_THREAD_ID_HEADERS);
-          const model = clientModel || extractBodyModel(body);
+          const model = extractBodyModel(body);
           if (threadId && model) {
             for (const appliedRule of appliedRules) {
               appliedRule.onRetry?.(threadId, model);
@@ -702,7 +695,6 @@ function forward(
             headerOverride,
             headerDelete,
             responseObserver,
-            clientModel,
           );
           return;
         }
@@ -1072,7 +1064,7 @@ export async function createAnthropicCompatProxy(opts: ProxyOptions): Promise<Pr
     // (例: 去前缀前的 codex/ model id)。decision 的 override 传给 forward, 默认不 override。
     // 提前到 ▶ inbound 日志**之前**计算: 路由只依赖 rawBody / headers / contentType,与下方
     // runTransforms 的输出无关,提前是安全的; 这样 inbound 日志能直接打出本请求**最终**发往的
-    // upstream(订阅直连 api.anthropic.com / 走网关 endpoint),而非静态默认上游。
+    // upstream(订阅直连 api.anthropic.com / 走网关 llm-proxy.tapsvc.com),而非静态默认上游。
     let decision: RoutingDecision | null = null;
     let rawParsed: unknown = undefined;
     if (opts.routingTransform && contentType.toLowerCase().startsWith('application/json')) {
@@ -1117,7 +1109,7 @@ export async function createAnthropicCompatProxy(opts: ProxyOptions): Promise<Pr
         reqId,
         method,
         // 本请求**最终**发往的 upstream(per-request override 后), 不是静态默认上游 ——
-        // = api.anthropic.com 即走订阅直连; = 网关 endpoint 即走网关。
+        // = api.anthropic.com 即走订阅直连; = llm-proxy.tapsvc.com 即走网关。
         upstreamBase: formatUpstreamBase(route.target),
         url,
         bytes: rawBody.length,
@@ -1153,7 +1145,6 @@ export async function createAnthropicCompatProxy(opts: ProxyOptions): Promise<Pr
       route.headerOverride,
       route.headerDelete,
       opts.responseObserver,
-      extractBodyModel(rawBody),
     );
   });
 

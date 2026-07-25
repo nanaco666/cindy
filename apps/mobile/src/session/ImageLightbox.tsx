@@ -3,13 +3,13 @@
  * ---------------------------------------------------------------------------
  * 点缩略图直接全屏黑底看图,交互对齐主流 IM:
  *   - 双指捏合缩放(1x~4x)、放大后单指平移(钳制在图片边界内)
- *   - 双击在 1x / 2.5x 间切换;单击关闭(微信式,产品决策)
+ *   - 双击在 1x / 2.5x 间切换;单击关闭(微信式,Dash 拍板)
  *   - 1x 下竖直下滑跟手关闭(位移 + 背景渐隐),横滑翻会话内图片集
  *   - chrome 极简:右下系统分享、多图时顶部页码;无关闭按钮(单击 / 下滑即关)、无文件名无正文
  * 手势判定全部走 imageLightboxModel.ts 纯函数;取件复用会话屏的队列 + 磁盘缓存
  * (onResolveRemoteMedia),点开时通常已被列表缩略图取过、秒出。
  * 仅图片走本组件;video / audio / 文件仍走 MessagePayloadModal。
- * lightbox 是常黑沉浸语境,黑白系颜色为刻意豁免(对齐桌面 docs/design-rules/cindy-design-system.md overlay/lightbox 语义豁免),不走主题 token。
+ * lightbox 是常黑沉浸语境,黑白系颜色为刻意豁免(对齐桌面 DESIGN.md overlay/lightbox 语义豁免),不走主题 token。
  */
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {

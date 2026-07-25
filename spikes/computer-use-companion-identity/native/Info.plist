@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleIdentifier</key>
+    <string>com.xd.cindy.computer-use.spike</string>
+    <key>CFBundleName</key>
+    <string>CindyComputerUseSpike</string>
+    <key>CFBundleExecutable</key>
+    <string>CindyComputerUseSpike</string>
+    <key>CFBundleVersion</key>
+    <string>1</string>
+    <key>CFBundleShortVersionString</key>
+    <string>1.0</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>LSUIElement</key>
+    <true/>
+    <key>NSAccessibilityUsageDescription</key>
+    <string>Cindy Computer Use needs Accessibility access to control and interact with applications on your behalf.</string>
+    <key>NSScreenCaptureUsageDescription</key>
+    <string>Cindy Computer Use needs Screen Recording access to take screenshots and observe the screen on your behalf.</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>13.0</string>
+</dict>
+</plist>

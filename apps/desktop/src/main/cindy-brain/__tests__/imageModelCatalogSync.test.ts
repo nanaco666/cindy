@@ -1,49 +1,21 @@
 /**
  * imageModelCatalogSync.test.ts — 图像模型两份打包源的同源守卫。
  *
- * 运行时以 providers.json 目录(getActiveCatalog)为准;@cindy/mcps 的
- * GATEWAY_IMAGE_MODELS 是意识 cindy 槽白名单与目录缺区时的打包兜底。
+ * 运行时以 providers.json 目录(getActiveCatalog)为准;lizi-mcps 的
+ * XDPROXY_IMAGE_MODELS 是意识 cindy 槽白名单与目录缺区时的打包兜底。
  * 两者随 App 同版发布,必须逐项一致——漂移会造成"下拉可选但图像通道
  * enum 不认"(或反之)的割裂。改任一边,另一边必须同步。
  */
 
 import { describe, it, expect } from 'vitest';
-import { GATEWAY_IMAGE_MODELS } from '../../cindy-proxy-media/types.js';
-import { BUNDLED_CATALOG } from '@cindy/model-providers';
-
-const LEGACY_PREVIEW_IMAGE_MODELS = ['gemini-3-pro-image-preview', 'gemini-3.1-flash-image-preview'] as const;
-const ACTIVE_GEMINI_IMAGE_MODELS = ['gemini-3-pro-image', 'gemini-3.1-flash-image'] as const;
+import { XDPROXY_IMAGE_MODELS } from '../../cindy-proxy-media/types.js';
+import { BUNDLED_CATALOG } from '@lizi/model-providers';
 
 describe('图像模型清单同源守卫', () => {
-  it('内置目录 xd.imageModels 与 @cindy/mcps 打包常量逐项一致(id + 显示名)', () => {
+  it('内置目录 xd.imageModels 与 lizi-mcps 打包常量逐项一致(id + 显示名)', () => {
     const xd = BUNDLED_CATALOG.providers.find((p) => p.id === 'xd');
     expect(xd?.imageModels, '内置目录 xd 供应商缺 imageModels 区').toBeTruthy();
-    expect(xd?.imageModels).toEqual(GATEWAY_IMAGE_MODELS.map((m) => ({ id: m.id, name: m.label })));
-  });
-
-  it('旧 preview alias 不再进入目录、打包兜底或默认档位', () => {
-    const xd = BUNDLED_CATALOG.providers.find((p) => p.id === 'xd');
-    const catalogIds = new Set((xd?.imageModels ?? []).map((m) => m.id));
-    const fallbackIds = new Set<string>(GATEWAY_IMAGE_MODELS.map((m) => m.id));
-    const defaults = new Set<string>(Object.values(xd?.imageDefaults ?? {}));
-
-    for (const id of LEGACY_PREVIEW_IMAGE_MODELS) {
-      expect(catalogIds.has(id), `${id} 仍在内置目录`).toBe(false);
-      expect(fallbackIds.has(id), `${id} 仍在图片通道打包兜底`).toBe(false);
-      expect(defaults.has(id), `${id} 仍被默认档位引用`).toBe(false);
-    }
-  });
-
-  it('网关当前 Gemini alias 同时进入目录与打包兜底，draft 指向 Flash', () => {
-    const xd = BUNDLED_CATALOG.providers.find((p) => p.id === 'xd');
-    const catalogIds = new Set((xd?.imageModels ?? []).map((m) => m.id));
-    const fallbackIds = new Set<string>(GATEWAY_IMAGE_MODELS.map((m) => m.id));
-
-    for (const id of ACTIVE_GEMINI_IMAGE_MODELS) {
-      expect(catalogIds.has(id), `${id} 未进入内置目录`).toBe(true);
-      expect(fallbackIds.has(id), `${id} 未进入图片通道打包兜底`).toBe(true);
-    }
-    expect(xd?.imageDefaults?.draft).toBe('gemini-3.1-flash-image');
+    expect(xd?.imageModels).toEqual(XDPROXY_IMAGE_MODELS.map((m) => ({ id: m.id, name: m.label })));
   });
 });
 

@@ -2,9 +2,7 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { afterEach, describe, expect, it, vi } from 'vitest';
-
-vi.setConfig({ testTimeout: process.platform === 'win32' ? 60_000 : 30_000 });
+import { afterEach, describe, expect, it } from 'vitest';
 
 import { parseGitDiff } from '../diffParser';
 import { formatPatchForSelection, PatchFormatError } from '../patchFormatter';

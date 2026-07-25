@@ -1,5 +1,5 @@
 /**
- * 远程文件 Quick Look 预览。
+ * 远程文件 Quick Look 预览(设计稿 mobile-file-browser.pen F4/F5/F6)。
  *
  * 同目录文件横滑翻页(iOS Quick Look 心智):进入时列一次父目录,把全部文件
  * (含不可预览的,显示占位页)按浏览页同款排序装进水平 pager。
@@ -294,12 +294,7 @@ export default function RemoteFilePreviewScreen() {
     const merged = mergePathIntoComposerDraft(sessionId, item.relPath);
     router.navigate({
       pathname: '/sessions/[sessionId]',
-      params: {
-        sessionId,
-        deviceId,
-        draft: merged,
-        focusComposerRequestKey: String(Date.now()),
-      },
+      params: { sessionId, deviceId, draft: merged },
     });
   }, [deviceId, router, sessionId]);
 
@@ -367,7 +362,7 @@ export default function RemoteFilePreviewScreen() {
               onDownload={() => void downloadAndShare(item)}
               // chat-text-quote:markdown 渲染态选中文字 → 引用进会话草稿
               // (携带当前文件路径,— source: 行),随即切回对话界面——与
-              // 「发送到会话」(sendToSession)的图片/路径处理一致(产品决策);
+              // 「发送到会话」(sendToSession)的图片/路径处理一致(Dash 拍板);
               // 引用在全局 store,导航后 composer 胶囊即时可见。
               onQuoteSelection={(text) => {
                 appendQuote(sessionId, {
@@ -376,11 +371,7 @@ export default function RemoteFilePreviewScreen() {
                 });
                 router.navigate({
                   pathname: '/sessions/[sessionId]',
-                  params: {
-                    sessionId,
-                    deviceId,
-                    focusComposerRequestKey: String(Date.now()),
-                  },
+                  params: { sessionId, deviceId },
                 });
               }}
               readTextFile={readTextFile}

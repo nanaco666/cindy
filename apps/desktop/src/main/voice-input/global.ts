@@ -15,12 +15,10 @@ import fs from 'node:fs';
 import {
   inspectExternalEditedInsertedText,
   type DictationDictionaryAdviceInput,
-} from '@cindy/voice-input-core';
+} from '@lizi/voice-input-core';
 
 import { createLogger } from '../logger.js';
 import { scheduleMainAppPresenceRestore } from '../appPresence.js';
-import { openMainWindowVoiceSettings } from '../deepLink.js';
-import { throwIpcError } from '../utils/ipcValidate.js';
 import { prewarmVoiceInputProvider } from './index.js';
 import {
   VOICE_INPUT_DICTIONARY_LEARNING_TRACK_TIMEOUT_MS,
@@ -507,25 +505,6 @@ export function registerGlobalVoiceInputIpc(): void {
     showPassiveOverlayWindow(window);
     return { ok: true };
   });
-
-  ipcMain.handle(
-    'voice-input:open-settings',
-    async (event, tab: unknown): Promise<{ ok: true }> => {
-      const window = getOverlayWindow();
-      if (!window || event.sender !== window.webContents) {
-        throwIpcError(
-          'PERMISSION_DENIED',
-          'Voice input settings can only be opened from the global overlay.',
-        );
-      }
-      if (tab !== 'voice-input' && tab !== 'providers') {
-        throwIpcError('INVALID_PARAMS', 'Unsupported voice input settings tab.');
-      }
-      await hideOverlayWindow({ restorePasteTarget: false });
-      openMainWindowVoiceSettings(tab);
-      return { ok: true };
-    },
-  );
 
   // ── 浮窗自定义拖动（renderer 手势 + main setBounds）───────────────────
   // 窗口保持 movable: false（透明无边框跨 App 面板走原生 drag region 有
@@ -1036,19 +1015,7 @@ function closeDictionaryToastWindow(): void {
   window.destroy();
 }
 
-type HideOverlayWindowOptions = {
-  preservePasteTarget?: boolean;
-  restorePasteTarget?: boolean;
-};
-
-export function shouldRestoreOverlayPasteTarget(
-  options: HideOverlayWindowOptions | undefined,
-  platform: NodeJS.Platform = process.platform,
-): boolean {
-  return !options?.preservePasteTarget && options?.restorePasteTarget !== false && platform === 'darwin';
-}
-
-async function hideOverlayWindow(options?: HideOverlayWindowOptions): Promise<void> {
+async function hideOverlayWindow(options?: { preservePasteTarget?: boolean }): Promise<void> {
   // Windows: destroy and recreate on the next show. Hiding +
   // showInactive() of a transparent / frameless / focusable:false /
   // alwaysOnTop BrowserWindow leaves it in a state where its own
@@ -1071,11 +1038,8 @@ async function hideOverlayWindow(options?: HideOverlayWindowOptions): Promise<vo
   //
   // Skip on the paste path (preservePasteTarget=true): the Swift helper owns
   // focus during paste, and waiting on osascript here would just add ~150-300ms
-  // of dead time before the overlay disappears. Settings navigation also opts
-  // out explicitly: Cindy is the new target, so restoring the old app after
-  // opening Settings would immediately put the requested page in background.
-  const shouldRestorePasteTarget = shouldRestoreOverlayPasteTarget(options);
-  const targetForFocusRestore = shouldRestorePasteTarget
+  // of dead time before the overlay disappears.
+  const targetForFocusRestore = !preservePasteTarget && process.platform === 'darwin'
     ? overlayPasteTarget
     : null;
   if (!preservePasteTarget) {
@@ -1095,7 +1059,7 @@ async function hideOverlayWindow(options?: HideOverlayWindowOptions): Promise<vo
     window.hide();
   }
   setOverlayIdlePresentationState(window);
-  if (shouldRestorePasteTarget && targetForFocusRestore?.processName) {
+  if (!preservePasteTarget && targetForFocusRestore?.processName) {
     // Manual close/cancel must make the panel disappear immediately. Restore
     // the original target asynchronously so a slow AX/osascript round-trip
     // cannot make the overlay feel stuck.

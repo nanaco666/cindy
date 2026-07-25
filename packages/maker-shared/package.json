@@ -1,5 +1,5 @@
 {
-  "name": "@cindy/maker-shared",
+  "name": "@lizi/maker-shared",
   "version": "0.0.0",
   "private": true,
   "description": "Cindy shared presentation and contract models for desktop and mobile clients. Zero React/Electron/Expo runtime dependencies.",
@@ -9,7 +9,6 @@
   "exports": {
     ".": "./src/index.ts",
     "./agent-capabilities": "./src/agentCapabilities.ts",
-    "./agent-input-projection": "./src/agentInputProjection.ts",
     "./agent-task": "./src/agentTask.ts",
     "./branding": "./src/branding.ts",
     "./brand-identity": "./src/brandIdentity.ts",
@@ -19,7 +18,6 @@
     "./composer-palette": "./src/composerPalette.ts",
     "./device-list": "./src/deviceList.ts",
     "./device-link-contract": "./src/deviceLinkContract.ts",
-    "./error-redaction": "./src/errorRedaction.ts",
     "./expanded-block-memory": "./src/expandedBlockMemory.ts",
     "./file-browser": "./src/fileBrowser.ts",
     "./file-browser-grid": "./src/fileBrowserGrid.ts",
@@ -62,8 +60,8 @@
     "lint": "eslint src/"
   },
   "author": {
-    "name": "X.D. Network Inc.",
-    "email": "feedback@cindy.app"
+    "name": "Lizi",
+    "email": "jiali@magiclizi.com"
   },
   "license": "Apache-2.0",
   "devDependencies": {

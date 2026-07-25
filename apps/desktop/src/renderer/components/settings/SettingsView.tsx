@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Navigate, useNavigate, useOutletContext, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useSyncExternalStore } from 'react';
@@ -37,7 +37,6 @@ import { CollaborationSection } from './CollaborationSection';
 import { BuiltinToolsSection } from './BuiltinToolsSection';
 import { ContactsSection } from './contacts/ContactsSection';
 import { ComputerUseSection } from './ComputerUseSection';
-import { useAuth } from '@/contexts/AuthContext';
 import { getLastWorkingDir, subscribeToLastWorkingDir } from '@/state/lastWorkingDir';
 
 const DEFAULT_SETTINGS_MENU_WIDTH = 260;
@@ -51,7 +50,6 @@ export function SettingsView() {
   const outletContext = useOutletContext<SettingsOutletContext | null>();
   const [searchParams, setSearchParams] = useSearchParams();
   const { t } = useTranslation();
-  const { mode, dataOwnerId } = useAuth();
   const menuWidth = outletContext?.sidebarWidth ?? DEFAULT_SETTINGS_MENU_WIDTH;
   const isMac = window.electronAPI?.platform === 'darwin';
   const [helpAssistantOpen, setHelpAssistantOpen] = useState(false);
@@ -88,13 +86,6 @@ export function SettingsView() {
   // 渲染层直接用兜底值,imGroup 缺省时不回写 URL(少一次 replace,深链语义不变)。
   const resolvedImBotGroup: ImBotSettingsGroup | null =
     activeTab === 'im-bot' ? (activeImBotGroup ?? imBotFallbackGroup) : null;
-
-  // 切分区后外层滚动容器回顶:滚动偏移是容器的、不随内层 key 重挂归零,
-  // 长页滚到底再切短页会停在中段(review 反馈)。瞬时回顶,不做平滑。
-  const contentScrollRef = useRef<HTMLDivElement | null>(null);
-  useEffect(() => {
-    contentScrollRef.current?.scrollTo({ top: 0 });
-  }, [activeTab]);
 
   const handleSelectTab = useCallback(
     (tab: SettingsTab) => {
@@ -221,13 +212,8 @@ export function SettingsView() {
             skipping the "Settings" header height (h1 24/1.1 + pb-18 + gap-2 ≈ 52px).
             scrollbar-gutter:stable —— 全局滚动条占位 12px,长短页(有/无滚动条)
             切换时预留 gutter,避免居中内容左右跳变。 */}
-        <div
-          ref={contentScrollRef}
-          className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-y-auto pl-4 pr-6 pt-[56px] [scrollbar-gutter:stable]"
-        >
-          {/* key={activeTab}:切分区时 wrapper 重挂跑 150ms 淡入(面板内容本就
-              按 activeTab 条件卸载重挂,key 不额外丢状态;滚动容器在外层不重挂)。 */}
-          <div key={activeTab} className="mx-auto w-full max-w-[920px] pb-32 animate-fade-in">
+        <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-y-auto pl-4 pr-6 pt-[56px] [scrollbar-gutter:stable]">
+          <div className="mx-auto w-full max-w-[920px] pb-32">
             {activeTab === 'general' && (
               <div
                 role="tabpanel"
@@ -314,15 +300,13 @@ export function SettingsView() {
                   <MemorySection />
                 </section>
                 <section className="pb-[18px]" aria-label={t('settings.sections.subagentModels')}>
-                  <SubagentModelSection key={`subagent-models:${mode}:${dataOwnerId ?? 'none'}`} />
+                  <SubagentModelSection />
                 </section>
-                {mode !== 'local' && (
-                  <section className="pb-[18px]" aria-label={t('settings.contacts.title')}>
-                    <ContactsSection key={`contacts:${dataOwnerId ?? 'none'}`} />
-                  </section>
-                )}
+                <section className="pb-[18px]" aria-label={t('settings.contacts.title')}>
+                  <ContactsSection />
+                </section>
                 <section className="pb-[18px]" aria-label={t('settings.sections.compaction')}>
-                  <CompactionSection key={`compaction:${mode}:${dataOwnerId ?? 'none'}`} />
+                  <CompactionSection />
                 </section>
                 {/* RSB 默认终端 shell —— 改默认只影响新建 tab,已有 tab 不动 */}
                 <section className="pb-[18px]" aria-label={t('settings.sections.terminalShell')}>
@@ -348,7 +332,7 @@ export function SettingsView() {
                 aria-labelledby="settings-tab-voice-input"
               >
                 <section aria-label={t('settings.sections.voiceInput')}>
-                  <VoiceInputSection key={`voice-input:${mode}:${dataOwnerId ?? 'none'}`} />
+                  <VoiceInputSection />
                 </section>
               </div>
             )}

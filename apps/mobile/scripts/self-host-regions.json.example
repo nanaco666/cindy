@@ -1,6 +1,6 @@
 {
     "cn": {
-        "authRegion": "cn",
+        "authRegion": "",
         "iosBundleId": "",
         "iosAppStoreId": "",
         "androidPackage": "",
@@ -28,7 +28,7 @@
         }
     },
     "global": {
-        "authRegion": "global",
+        "authRegion": "",
         "iosBundleId": "",
         "iosAppStoreId": "",
         "androidPackage": "",

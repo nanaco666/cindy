@@ -18,9 +18,8 @@
 
 import { brotliDecompressSync, gunzipSync, inflateSync } from 'node:zlib';
 
-import type { ResponseObserver, ResponseObserverCtx } from '@cindy/anthropic-compat-proxy';
-import type { AgentKind } from '@cindy/model-providers';
-import { redactSensitiveText } from '@cindy/maker-shared/error-redaction';
+import type { ResponseObserver, ResponseObserverCtx } from '@lizi/anthropic-compat-proxy';
+import type { AgentKind } from '@lizi/model-providers';
 
 import {
   classifyProviderError,
@@ -31,7 +30,6 @@ import {
 export interface ProviderUpstreamErrorEvent {
   agent: AgentKind;
   providerId: string;
-  providerName: string;
   code: ProviderErrorCode;
   retryable: boolean;
   status: number;
@@ -77,8 +75,6 @@ export interface ProviderUpstreamErrorObserverOptions {
    * codex: thread-id → threadToSession → session → provider。由各 proxy host 闭包提供。
    */
   resolveUserProviderId: (requestHeaders: Readonly<Record<string, string>>) => string | null;
-  /** Resolve the non-secret display name for the user provider. */
-  resolveUserProviderName?: (providerId: string) => string | null;
   /** 节流时钟（单测注入）。 */
   now?: () => number;
 }
@@ -124,11 +120,10 @@ export function createProviderUpstreamErrorObserver(
         _broadcast({
           agent: opts.agent,
           providerId,
-          providerName: opts.resolveUserProviderName?.(providerId) ?? providerId,
           code: cls.code,
           retryable: cls.retryable,
           status: ctx.status,
-          detail: cls.detail ? redactSensitiveText(cls.detail) : undefined,
+          detail: cls.detail,
         });
       },
       // 上游流错误：本次观察放弃即可（连接层问题由 proxy 主路径处理与记日志）。

@@ -1,13 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import type { Editor } from '@tiptap/core';
 
 import {
-  resolveSessionMessageReferencesForSend,
   sanitizeSessionChipTitle,
   pastedSessionChipAttrs,
   serializeSessionChipText,
-  summarizeSessionMessageChipLabel,
-  SESSION_MESSAGE_CHIP_LABEL_MAX_CHARS,
 } from '../components/new-chat/sessionLinkPaste';
 
 // 粘贴文本的分段(text / session / project / path)用例在 pastePipeline.test.ts;
@@ -15,7 +11,6 @@ import {
 
 const SESSION_URL = 'xdt-maker://session/ee59672a-5591-48a7-a44d-aa97e3808c64';
 const SHORT_ID = 'ee59672a…8c64';
-const MESSAGE_URL = `${SESSION_URL}?message=client-message-12345678`;
 
 describe('sanitizeSessionChipTitle', () => {
   it('replaces ascii square brackets and collapses whitespace', () => {
@@ -42,95 +37,15 @@ describe('pastedSessionChipAttrs', () => {
       titled: false,
     });
   });
-
-  it('ignores a conversation title for message anchors while resolving their content', () => {
-    expect(pastedSessionChipAttrs({ href: MESSAGE_URL, label: 'Conversation title' })).toEqual({
-      kind: 'session',
-      label: 'client-m…5678',
-      path: MESSAGE_URL,
-      titled: false,
-    });
-  });
 });
 
 describe('serializeSessionChipText', () => {
   it('serializes titled chips to markdown links and untitled to the bare href', () => {
     expect(
-      serializeSessionChipText({
-        kind: 'session',
-        label: '修复白屏',
-        path: SESSION_URL,
-        titled: true,
-      }),
+      serializeSessionChipText({ kind: 'session', label: '修复白屏', path: SESSION_URL, titled: true }),
     ).toBe(`[修复白屏](${SESSION_URL})`);
     expect(
-      serializeSessionChipText({
-        kind: 'session',
-        label: SHORT_ID,
-        path: SESSION_URL,
-        titled: false,
-      }),
+      serializeSessionChipText({ kind: 'session', label: SHORT_ID, path: SESSION_URL, titled: false }),
     ).toBe(SESSION_URL);
-  });
-
-  it('keeps resolved message text out of the persisted deep-link wire', () => {
-    expect(
-      serializeSessionChipText({
-        kind: 'session',
-        label: 'The referenced message body',
-        path: MESSAGE_URL,
-        titled: true,
-      }),
-    ).toBe(MESSAGE_URL);
-  });
-});
-
-describe('summarizeSessionMessageChipLabel', () => {
-  it('collapses whitespace and caps draft metadata for long message links', () => {
-    const summary = summarizeSessionMessageChipLabel(` first\n\n${'x'.repeat(400)} `);
-    expect(summary).toHaveLength(SESSION_MESSAGE_CHIP_LABEL_MAX_CHARS);
-    expect(summary.startsWith('first x')).toBe(true);
-    expect(summary.endsWith('…')).toBe(true);
-  });
-});
-
-describe('resolveSessionMessageReferencesForSend', () => {
-  it('waits for the full message body and patches semantic attrs before submit serialization', async () => {
-    const chip = {
-      type: { name: 'mentionChip' },
-      attrs: pastedSessionChipAttrs({ href: MESSAGE_URL, label: null }),
-    };
-    const transaction = {
-      setMeta: () => transaction,
-      setNodeMarkup: (_pos: number, _type: unknown, attrs: unknown) => {
-        chip.attrs = attrs as typeof chip.attrs;
-        return transaction;
-      },
-    };
-    const editor = {
-      isDestroyed: false,
-      state: {
-        doc: {
-          descendants: (visit: (node: typeof chip, pos: number) => void) => visit(chip, 1),
-        },
-        tr: transaction,
-      },
-      view: { dispatch: () => undefined },
-    } as unknown as Editor;
-    let release!: (value: string | null) => void;
-    const resolved = new Promise<string | null>((resolve) => {
-      release = resolve;
-    });
-
-    const pending = resolveSessionMessageReferencesForSend(editor, async () => resolved);
-    expect(chip.attrs.agentText).toBeUndefined();
-    release('Full cross-device message body');
-    await pending;
-
-    expect(chip.attrs).toMatchObject({
-      label: 'Full cross-device message body',
-      titled: true,
-      agentText: 'Full cross-device message body',
-    });
   });
 });

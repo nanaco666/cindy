@@ -7,7 +7,7 @@
  * allows block layouts that do not belong inside compact activity rows.
  *
  * Supported syntax is intentionally narrow and deterministic:
- *   - paired `**text**` → medium-weight text (500, per docs/design-rules/cindy-design-system.md);
+ *   - paired `**text**` → medium-weight text (500, per DESIGN.md);
  *   - paired backtick runs → inline monospace text;
  *   - malformed / unmatched delimiters remain literal text.
  *
@@ -15,10 +15,10 @@
  */
 
 import { Fragment, memo, useMemo } from 'react';
-import { tokenizeThinkingText } from '@cindy/maker-shared/thinking-text';
+import { tokenizeThinkingText } from '@lizi/maker-shared/thinking-text';
 
-export { tokenizeThinkingText } from '@cindy/maker-shared/thinking-text';
-export type { ThinkingTextToken } from '@cindy/maker-shared/thinking-text';
+export { tokenizeThinkingText } from '@lizi/maker-shared/thinking-text';
+export type { ThinkingTextToken } from '@lizi/maker-shared/thinking-text';
 
 /** Shared compact renderer for live, expanded, and standalone thinking views. */
 export const ThinkingText = memo(function ThinkingText({ content }: { content: string }) {

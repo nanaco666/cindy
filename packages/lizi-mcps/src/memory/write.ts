@@ -18,7 +18,7 @@ import { z } from 'zod';
 import { withStore } from './_shared.js';
 import type { MemoryMcpDeps } from '../types.js';
 import type { MemoryToolRegistry } from '../cindy_memoryToolRegistry.js';
-import type { WriteOptions } from '@cindy/maker-core';
+import type { WriteOptions } from '@lizi/maker-core';
 
 export function registerMemoryWriteTool(registry: MemoryToolRegistry, deps: MemoryMcpDeps): void {
   registry.register({

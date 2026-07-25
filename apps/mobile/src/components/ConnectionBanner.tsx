@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Text } from '@/components/AppText';
-import type { DeviceLinkConnectionIssue, DeviceLinkStatus } from '@cindy/device-link';
+import type { DeviceLinkConnectionIssue, DeviceLinkStatus } from '@lizi/device-link';
 import {
   connectionIssueHint,
   connectionIssueTitle,

@@ -43,7 +43,6 @@ export function createOverrideSettingsFile<T>(options: {
   label: string;
 }): OverrideSettingsFile<T> {
   let cached: CachedState<T> | null = null;
-  let cachedResolvedPath: string | null = null;
   /** 缓存装载时文件的 mtimeMs;null = 装载时文件不存在(默认态)。 */
   let cachedFileMtimeMs: number | null = null;
 
@@ -59,10 +58,8 @@ export function createOverrideSettingsFile<T>(options: {
   }
 
   function readState(): OverrideSettingsState<T> {
-    invalidateIfPathChanged();
     if (cached) return toPublicState(cached);
     const file = options.filePath();
-    cachedResolvedPath = file;
     try {
       if (fs.existsSync(file)) {
         const text = fs.readFileSync(file, 'utf-8');
@@ -107,7 +104,6 @@ export function createOverrideSettingsFile<T>(options: {
   }
 
   function invalidateIfChanged(): void {
-    invalidateIfPathChanged();
     if (!cached) return;
     if (statFileMtimeMs() !== cachedFileMtimeMs) {
       cached = null;
@@ -149,7 +145,6 @@ export function createOverrideSettingsFile<T>(options: {
     }
     const file = options.filePath();
     const tmp = `${file}.tmp`;
-    fs.mkdirSync(pathDirname(file), { recursive: true });
     fs.writeFileSync(tmp, JSON.stringify(overrides, null, 2), 'utf-8');
     fs.renameSync(tmp, file);
     cachedFileMtimeMs = statFileMtimeMs();
@@ -165,7 +160,6 @@ export function createOverrideSettingsFile<T>(options: {
 
   function reset(): T {
     const file = options.filePath();
-    cachedResolvedPath = file;
     try {
       if (fs.existsSync(file)) {
         fs.unlinkSync(file);
@@ -196,19 +190,6 @@ export function createOverrideSettingsFile<T>(options: {
     reset,
     invalidateIfChanged,
   };
-
-  function invalidateIfPathChanged(): void {
-    const currentPath = options.filePath();
-    if (cachedResolvedPath === null || cachedResolvedPath === currentPath) return;
-    cached = null;
-    cachedFileMtimeMs = null;
-    cachedResolvedPath = currentPath;
-  }
-}
-
-function pathDirname(filePath: string): string {
-  const slash = Math.max(filePath.lastIndexOf('/'), filePath.lastIndexOf('\\'));
-  return slash < 0 ? '.' : filePath.slice(0, slash);
 }
 
 function toPublicState<T>(state: CachedState<T>): OverrideSettingsState<T> {

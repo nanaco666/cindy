@@ -14,7 +14,7 @@
  * IAB webview 在主进程监听的事件子集):
  *   - `page-title-updated` / `page-favicon-updated` —— 标题 / 图标
  *   - `did-navigate` / `did-navigate-in-page` —— URL 同步
- *   - `did-redirect-navigation` —— 不写入 state;中间态不是已提交导航
+ *   - `did-redirect-navigation` —— 301/302 中间态 URL 同步
  *   - `did-start-loading` / `did-stop-loading` —— loading 状态
  *   - `did-fail-load` —— 404 / 网络错误 / SSL 错误,UI 停 loading
  *   - `dom-ready` —— attach 后 nav 状态刷新点
@@ -31,10 +31,6 @@ import type { WebviewTag } from 'electron';
 
 import { browserWebviewPool } from '../lib/browserWebviewPool';
 import { reportRsbBrowserTab } from '../lib/rsbBrowserBridge';
-
-/** 2 秒内最多允许 12 次 renderer 主动导航;网页自身导航不计入。 */
-export const BROWSER_NAVIGATION_FUSE_LIMIT = 12;
-export const BROWSER_NAVIGATION_FUSE_WINDOW_MS = 2_000;
 
 function normalizeNavigationUrl(url: string): string {
   try {
@@ -98,8 +94,6 @@ export function useBrowserWebview(tabId: string, sessionId?: string): UseBrowser
   const webviewRef = useRef<WebviewTag | null>(null);
   const urlRef = useRef('');
   const suppressStaleUrlRef = useRef<{ targetUrl: string; staleUrl: string } | null>(null);
-  const navigationAttemptsRef = useRef<number[]>([]);
-  const navigationFuseTrippedRef = useRef(false);
   const setObservedUrl = useCallback((nextUrl: string) => {
     const suppress = suppressStaleUrlRef.current;
     if (suppress) {
@@ -147,8 +141,7 @@ export function useBrowserWebview(tabId: string, sessionId?: string): UseBrowser
     const onStartLoading = () => {
       setIsLoading(true);
       // 任何主动导航 / reload 都视为崩溃后的恢复 — 清掉 crash banner。
-      // navigation-loop 是主动熔断,必须等用户点 banner 的重新加载才解除。
-      setCrash((prev) => (prev?.reason === 'navigation-loop' ? prev : null));
+      setCrash(null);
     };
     const onStopLoading = () => {
       setIsLoading(false);
@@ -199,11 +192,11 @@ export function useBrowserWebview(tabId: string, sessionId?: string): UseBrowser
       setIsLoading(false);
       refreshNav();
     };
-    // did-redirect-navigation 只代表尚未提交的中间态。不能把它写入持久化 URL:
-    // BrowserTabBody 会把持久化 state 当成重启恢复目标,若 React render 落后一帧,
-    // authorize ↔ callback 这类跨 origin 重定向会被旧 state 反向 loadURL,
-    // 形成 ERR_ABORTED 导航反馈环。最终 URL 统一等 did-navigate。
-    const onRedirect = () => undefined;
+    // did-redirect-navigation:301/302 服务端重定向,把中间态 URL 也同步进 state,
+    // URL bar 立即跟上(等 final did-navigate 太晚)。对齐 Codex `main-cC-d0ezP.js:48833`。
+    const onRedirect = (e: Electron.DidRedirectNavigationEvent) => {
+      setObservedUrl(e.url);
+    };
     // audio-state-changed:guest 开始 / 停止发声(`<video>` / `<audio>` 播放)。
     // event.audible 是布尔。对齐 Codex `main-cC-d0ezP.js:48434` 的 isAudible 同步。
     // Electron WebviewTag typing 没声明此 DOM event 的具名 interface(只 webContents 端
@@ -272,27 +265,6 @@ export function useBrowserWebview(tabId: string, sessionId?: string): UseBrowser
 
   const navigate = useCallback((nextUrl: string) => {
     const wv = webviewRef.current;
-    if (navigationFuseTrippedRef.current) return;
-    const now = Date.now();
-    const attempts = navigationAttemptsRef.current.filter(
-      (at) => now - at < BROWSER_NAVIGATION_FUSE_WINDOW_MS,
-    );
-    if (attempts.length >= BROWSER_NAVIGATION_FUSE_LIMIT) {
-      // 熔断立即拒绝本次 navigate,不再把被拒绝调用计入 attempts。
-      navigationAttemptsRef.current = [];
-      navigationFuseTrippedRef.current = true;
-      suppressStaleUrlRef.current = null;
-      try {
-        wv?.stop();
-      } catch {
-        // guest 可能正处于 detach / crash,熔断本身仍然成立。
-      }
-      setIsLoading(false);
-      setCrash({ reason: 'navigation-loop' });
-      return;
-    }
-    attempts.push(now);
-    navigationAttemptsRef.current = attempts;
     let staleUrl = urlRef.current || 'about:blank';
     try {
       staleUrl = wv?.getURL?.() || staleUrl;
@@ -315,12 +287,7 @@ export function useBrowserWebview(tabId: string, sessionId?: string): UseBrowser
       wv.setAttribute('src', nextUrl);
     }
   }, []);
-  const reload = useCallback(() => {
-    navigationAttemptsRef.current = [];
-    navigationFuseTrippedRef.current = false;
-    setCrash(null);
-    webviewRef.current?.reload();
-  }, []);
+  const reload = useCallback(() => webviewRef.current?.reload(), []);
   const goBack = useCallback(() => webviewRef.current?.goBack(), []);
   const goForward = useCallback(() => webviewRef.current?.goForward(), []);
   const stop = useCallback(() => webviewRef.current?.stop(), []);

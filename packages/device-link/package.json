@@ -1,5 +1,5 @@
 {
-  "name": "@cindy/device-link",
+  "name": "@lizi/device-link",
   "version": "0.0.0",
   "private": true,
   "description": "跨设备远程控制(同账号设备互联)的协议层 + WS 客户端: envelope 协议、IPC 隧道 allowlist、DeviceLinkClient(重连/心跳/请求配对)。零依赖、Electron-agnostic,WebSocket 实现由 host 注入。",
@@ -14,8 +14,8 @@
     "test": "vitest run"
   },
   "author": {
-    "name": "X.D. Network Inc.",
-    "email": "feedback@cindy.app"
+    "name": "Lizi",
+    "email": "jiali@magiclizi.com"
   },
   "license": "Apache-2.0",
   "dependencies": {

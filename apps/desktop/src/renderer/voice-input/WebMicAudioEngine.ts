@@ -1,4 +1,4 @@
-import type { AudioTrace } from '@cindy/voice-input-core';
+import type { AudioTrace } from '@lizi/voice-input-core';
 
 import { PCM16K_WORKLET_NAME, prewarmVoiceInputAudio } from './audioContextPool';
 
@@ -195,19 +195,16 @@ function buildMediaConstraints(options: {
 
 export function isSelectedMicrophoneUnavailableError(error: unknown): boolean {
   if (error instanceof VoiceInputSelectedMicrophoneUnavailableError) return true;
-  return readErrorString(error, 'name') === 'VoiceInputSelectedMicrophoneUnavailableError';
-}
-
-export function isMicrophoneDeviceUnavailableError(error: unknown): boolean {
-  return isSelectedMicrophoneUnavailableError(error) || isDeviceConstraintError(error);
+  if (!(error instanceof Error)) return false;
+  return error.name === 'VoiceInputSelectedMicrophoneUnavailableError';
 }
 
 function isDeviceConstraintError(error: unknown): boolean {
-  const name = readErrorString(error, 'name');
-  const message = readErrorString(error, 'message')?.toLowerCase() ?? '';
+  if (!(error instanceof Error)) return false;
+  const message = error.message.toLowerCase();
   return (
-    name === 'OverconstrainedError' ||
-    name === 'NotFoundError' ||
+    error.name === 'OverconstrainedError' ||
+    error.name === 'NotFoundError' ||
     message.includes('requested device not found') ||
     message.includes('device not found')
   );
@@ -217,22 +214,7 @@ function normalizeMicrophoneStartError(error: unknown, deviceId?: string): Error
   if (isSpecificMicrophoneDeviceId(deviceId) && isDeviceConstraintError(error)) {
     return new VoiceInputSelectedMicrophoneUnavailableError();
   }
-  if (error instanceof Error) return error;
-  const normalized = new Error(readErrorString(error, 'message') ?? String(error));
-  const name = readErrorString(error, 'name');
-  if (name) normalized.name = name;
-  return normalized;
-}
-
-/**
- * DOMException and errors crossing an Electron/Chromium boundary may not be
- * `instanceof Error` in this realm. Read the standard fields structurally so a
- * stale selected microphone still takes the automatic fallback path.
- */
-function readErrorString(error: unknown, key: 'name' | 'message'): string | undefined {
-  if (typeof error !== 'object' || error === null) return undefined;
-  const value = (error as Record<string, unknown>)[key];
-  return typeof value === 'string' ? value : undefined;
+  return error instanceof Error ? error : new Error(String(error));
 }
 
 async function assertSelectedMicrophoneAvailable(deviceId?: string): Promise<void> {

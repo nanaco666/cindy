@@ -21,7 +21,6 @@ import {
   type ModelAccessStatus,
 } from '../../shared/modelAccess.js';
 import { getModelAccessCredentialsStore } from './credentialsStore.js';
-import { getAppCapabilities } from '../appCapabilities.js';
 import {
   createCredentialsSync,
   type CredentialsPayload,
@@ -273,16 +272,10 @@ export function initModelAccess(): void {
   ipcMain.handle('model-access:get-status', () => sync.getStatus());
 
   ipcMain.handle('model-access:retry', async (): Promise<ModelAccessStatus> => {
-    if (!getAppCapabilities().canUseCindyGateway) {
-      throwIpcError('PERMISSION_DENIED', 'Cindy AI requires a Cindy account.');
-    }
     return sync.retry();
   });
 
   ipcMain.handle('model-access:rotate', async (): Promise<ModelAccessStatus> => {
-    if (!getAppCapabilities().canUseCindyGateway) {
-      throwIpcError('PERMISSION_DENIED', 'Cindy AI requires a Cindy account.');
-    }
     try {
       return await sync.rotate();
     } catch (err) {

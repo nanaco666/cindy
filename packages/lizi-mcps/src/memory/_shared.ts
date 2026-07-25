@@ -13,7 +13,7 @@
  * thread 的真实 workingDir。
  */
 
-import type { MakerMemoryStore } from '@cindy/maker-core';
+import type { MakerMemoryStore } from '@lizi/maker-core';
 
 import type { MemoryToolResult } from '../cindy_memoryToolRegistry.js';
 import type { MemoryMcpDeps } from '../types.js';

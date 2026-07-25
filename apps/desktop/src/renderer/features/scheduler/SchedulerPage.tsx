@@ -1,12 +1,12 @@
 /**
  * SchedulerPage — /schedules 主路由（master-detail 改版）
  * ---------------------------------------------------------------------------
- * - 列表为空 → 居中 EmptyState（统一秒表图标 + 文案 + New Automation 按钮）
+ * - 列表为空 → 居中 EmptyState（保留旧设计：圆形钟表 + 文案 + New Automation 按钮）
  * - 列表非空 → master-detail：
  *     左 TaskListPane (300w，按 lastFiredAt desc 排) + 右 RunHistoryPane (flex)
  *
  * 排序变化：从原"按状态分组(active/paused/expired)"改成"统一按 lastFiredAt 降序"
- * （用户对齐：列表更直观地看到"最近一次执行的任务"）。
+ * （schedule.pen 设计稿 + 用户对齐：列表更直观地看到"最近一次执行的任务"）。
  *
  * selectedId 维护：
  *   1. URL ?focus=<id> 命中 → 选中
@@ -25,7 +25,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Plus, Timer } from 'lucide-react';
+import { Plus, Clock } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 
@@ -39,7 +39,7 @@ import type {
   CreateScheduleInput,
   ScheduleTemplate,
   UpdateScheduleInput,
-} from '@cindy/maker-scheduler';
+} from '@lizi/maker-scheduler';
 
 import { useHorizontalResize } from '@/hooks/useHorizontalResize';
 
@@ -514,7 +514,7 @@ export function SchedulerPage() {
         style={WINDOW_DRAG_STYLE}
       >
         <div className="flex min-w-0 items-center gap-3">
-          <Timer
+          <Clock
             size={18}
             strokeWidth={1.75}
             className="shrink-0 text-[var(--settings-section-desc)]"
@@ -650,7 +650,7 @@ function EmptyState({
       <div className="mx-auto flex w-full max-w-[800px] flex-col gap-8">
         <div className="flex flex-col items-center gap-3 text-center">
           <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[var(--chat-input-chip-bg)]">
-            <Timer size={28} strokeWidth={1.5} className="text-[var(--cmd-palette-item-meta)]" />
+            <Clock size={28} strokeWidth={1.5} className="text-[var(--cmd-palette-item-meta)]" />
           </div>
           <h2 className="text-lg font-medium text-[var(--msg-assistant-text)]">
             {t('scheduler.empty.promptHeading')}

@@ -21,12 +21,12 @@ import {
   APP_EXIT_INTERRUPTED_REASON,
   CONTINUE_AFTER_APP_EXIT_PROMPT,
   CONTINUE_AFTER_ERROR_PROMPT,
-} from '@cindy/maker-shared/synthetic-trigger';
+} from '@lizi/maker-shared/synthetic-trigger';
 import {
   messageContentToPreview,
   sortMessagesByCreatedAt,
-} from '@cindy/maker-shared/message-normalize';
-import { describeAgentAuthError } from '@cindy/maker-shared/device-link-contract';
+} from '@lizi/maker-shared/message-normalize';
+import { describeAgentAuthError } from '@lizi/maker-shared/device-link-contract';
 import type { InputProjection, QueuedRemoteMessage, RemoteMessage, RemoteSession } from '@/session/types';
 
 export interface SessionTailErrorBanner {

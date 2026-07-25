@@ -12,7 +12,7 @@
  *  - INTERNAL           : 其他底层错
  */
 
-import { ContactsError, type DuplicateCandidate } from '@cindy/maker-core';
+import { ContactsError, type DuplicateCandidate } from '@lizi/maker-core';
 
 export type ContactsToolErrorCode =
   | 'CONTACTS_NOT_READY'

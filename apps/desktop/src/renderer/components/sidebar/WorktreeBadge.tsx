@@ -8,7 +8,7 @@
  *   - 点击调 worktreeReveal({ path }) 在系统文件管理器中打开
  *   - 与 SessionItem 内现有 ⋮ 按钮共存，常驻可见（无需 hover）
  *
- * 视觉同时覆盖 Light / Dark；颜色走 token，不硬编码。
+ * 视觉对照：worktree.pen F6 Light + F6 Dark；颜色走 token，不硬编码。
  */
 
 import { GitBranch } from 'lucide-react';

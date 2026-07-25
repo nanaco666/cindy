@@ -35,7 +35,7 @@ import type {
   SearchChatHistoryContextMessage,
   SearchChatHistorySessionMeta,
   HistoryRole,
-} from '@cindy/mcps';
+} from 'lizi-mcps';
 
 import { getDbClient } from './client/current';
 import { messages as messagesTable, sessions as sessionsTable } from './schema';

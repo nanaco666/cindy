@@ -7,7 +7,7 @@
  * 区 — 这里是"正在创建 worktree · 输入已禁用 / 目标分支 xxx · 完成后自动解锁"
  * + 旋转的 spinner, 没有右侧 action 按钮 (worktree 创建不可中途取消)。
  *
- * 视觉规格:
+ * 视觉规格 (doc/design_docs/feishu-takeover-mask.pen 节点 MDkzR, 对照对齐):
  *   - 容器: h-[90px] / rounded-[12px] / px-4 / bg --content-area / border 1px sidebar-border
  *   - 左侧 32x32 圆形 chip (bg sidebar-item-hover) + 共享 Spinner 16px (动画在 wrapper 上)
  *   - 文字主: 14 / 500 / msg-assistant-text "正在创建 worktree · 输入已禁用"

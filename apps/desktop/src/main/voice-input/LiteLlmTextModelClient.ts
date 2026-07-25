@@ -3,7 +3,7 @@ import type { ReadableStream as NodeReadableStream } from 'node:stream/web';
 
 import { fetch as undiciFetch, type Agent, type Response as UndiciResponse } from 'undici';
 
-import type { TextModelClient } from '@cindy/voice-input-core';
+import type { TextModelClient } from '@lizi/voice-input-core';
 
 import { createLogger } from '../logger.js';
 import { describeErrorWithCause, markRefinerModelOutputError } from './refinerErrorKind.js';
@@ -59,13 +59,6 @@ export type LiteLlmTokenUsage = {
   promptTokens?: number;
   completionTokens?: number;
   cachedTokens?: number;
-  /**
-   * Model name reported by the upstream SSE events. In managed mode the
-   * server may have failed over to a different model than requested; usage
-   * accounting uses this to attribute tokens to the provider that actually
-   * answered.
-   */
-  servedModel?: string;
 };
 
 type LiteLlmTextModelClientOptions = {
@@ -194,7 +187,7 @@ export class LiteLlmTextModelClient implements TextModelClient {
         throw new Error('Empty refinement response body');
       }
 
-      const { content, usageSummary, servedModel, rawChars, bodyAt } = await readStreamingChatCompletion({
+      const { content, usageSummary, rawChars, bodyAt } = await readStreamingChatCompletion({
         body: response.body,
         onChunk: () => armIdleTimeout('response stream'),
         onFirstByte: () => {
@@ -234,7 +227,6 @@ export class LiteLlmTextModelClient implements TextModelClient {
           promptTokens: usageSummary.promptTokens,
           completionTokens: usageSummary.completionTokens,
           cachedTokens: usageSummary.cachedTokens,
-          servedModel,
         });
       }
 
@@ -266,7 +258,6 @@ async function readStreamingChatCompletion(input: {
 }): Promise<{
   content: string;
   usageSummary: UsageSummary;
-  servedModel: string | undefined;
   rawChars: number;
   bodyAt: number;
 }> {
@@ -276,7 +267,6 @@ async function readStreamingChatCompletion(input: {
   let content = '';
   let rawChars = 0;
   let usageSummary: UsageSummary = { usagePresent: false };
-  let servedModel: string | undefined;
   let streamError: string | null = null;
   try {
     while (true) {
@@ -299,9 +289,6 @@ async function readStreamingChatCompletion(input: {
         buf = buf.slice(idx + 2);
         const event = parseSseBlock(block);
         if (event) {
-          if (!servedModel && isRecord(event.data) && typeof event.data.model === 'string' && event.data.model) {
-            servedModel = event.data.model;
-          }
           if (isRecord(event.data) && isRecord(event.data.error)) {
             streamError = typeof event.data.error.message === 'string'
               ? event.data.error.message
@@ -321,9 +308,6 @@ async function readStreamingChatCompletion(input: {
     if (buf.trim()) {
       const event = parseSseBlock(buf);
       if (event) {
-        if (!servedModel && isRecord(event.data) && typeof event.data.model === 'string' && event.data.model) {
-          servedModel = event.data.model;
-        }
         const delta = extractDeltaContent(event.data);
         if (delta) {
           content += delta;
@@ -341,7 +325,6 @@ async function readStreamingChatCompletion(input: {
   return {
     content: content.trim(),
     usageSummary,
-    servedModel,
     rawChars,
     bodyAt: performance.now(),
   };
@@ -460,28 +443,6 @@ function extractPromptVersion(user: unknown): string | undefined {
 
 function shortHash(text: string): string {
   return createHash('sha256').update(text).digest('hex').slice(0, 20);
-}
-
-/**
- * Managed-mode warmup helper: derives the exact prompt_cache_key that
- * requestJson() will send for the refinement with the same inputs — the
- * upstream cache node is routed by this key, so any divergence would warm the
- * wrong shard.
- */
-export function makeRefinerPromptCacheKey(input: {
-  model: string;
-  schemaName: string;
-  promptVersion?: string;
-  system: string;
-  scope?: string;
-}): string {
-  return makePromptCacheKey({
-    model: input.model,
-    schemaName: input.schemaName,
-    promptVersion: input.promptVersion,
-    systemPromptHash: shortHash(input.system),
-    scope: input.scope,
-  });
 }
 
 function makePromptCacheKey(input: {

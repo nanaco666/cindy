@@ -1,5 +1,5 @@
 /**
- * codexEnvironment — 把 Cindy MCP providers 暴露成 codex spawn 时用的
+ * codexEnvironment — 把 lizi_mcp providers 暴露成 codex spawn 时用的
  * extraArgs (-c flags) + extraEnv (LIZI_MCP_TOKEN)。
  *
  * Lazy + cached：第一次 CodexAgent.getHost() 调用时启动 HTTP bridge，整个
@@ -7,10 +7,8 @@
  */
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import type { Logger, McpProvider, McpProviderContext } from '@cindy/maker-core';
-import { getLiziMcpSessionContext, type LiziMcpSessionContext } from '@cindy/mcps';
-import { pluginIdForKnownProviderName } from '../maker-host/plugins/builtin-plugins.js';
-import { CODEX_DISABLED_BUILTIN_PLUGIN_IDS_KEY } from './codexBuiltinToolPolicy.js';
+import type { Logger, McpProvider, McpProviderContext } from '@lizi/maker-core';
+import { getLiziMcpSessionContext, type LiziMcpSessionContext } from 'lizi-mcps';
 
 import {
   startCodexHttpBridge,
@@ -48,7 +46,6 @@ export interface GetCodexExtraSpawnConfigOptions {
 
 let cached: Promise<CodexExtraSpawnConfig> | null = null;
 let activeBridge: CodexHttpBridge | null = null;
-const disabledPluginIdsByThread = new Map<string, unknown>();
 
 /**
  * 懒启动 + 缓存。多个 codex session 并发首次调用共享同一个 in-flight Promise，
@@ -90,21 +87,10 @@ export function registerCodexMcpThreadContext(
   threadId: string,
   ctx: LiziMcpSessionContext,
 ): void {
-  const requestedPolicy = ctx.vendorOptions?.[CODEX_DISABLED_BUILTIN_PLUGIN_IDS_KEY];
-  if (!disabledPluginIdsByThread.has(threadId)) {
-    disabledPluginIdsByThread.set(threadId, requestedPolicy);
-  }
-  activeBridge?.registerThreadContext(threadId, {
-    ...ctx,
-    vendorOptions: {
-      ...ctx.vendorOptions,
-      [CODEX_DISABLED_BUILTIN_PLUGIN_IDS_KEY]: disabledPluginIdsByThread.get(threadId),
-    },
-  });
+  activeBridge?.registerThreadContext(threadId, ctx);
 }
 
 export function unregisterCodexMcpThreadContext(threadId: string): void {
-  disabledPluginIdsByThread.delete(threadId);
   activeBridge?.unregisterThreadContext(threadId);
 }
 
@@ -139,7 +125,6 @@ async function doStart(
     },
   };
   const serverFactories: Record<string, () => McpServer> = {};
-  const pluginIdByServerName: Record<string, string> = {};
   const remoteHttpServers: Record<
     string,
     { url: string; bearerTokenEnvVar?: string; envHttpHeaders?: Record<string, string> }
@@ -204,8 +189,6 @@ async function doStart(
       }
       return createServer();
     };
-    const pluginId = pluginIdForKnownProviderName(provider.name);
-    if (pluginId) pluginIdByServerName[provider.name] = pluginId;
   }
 
   if (Object.keys(serverFactories).length === 0 && Object.keys(remoteHttpServers).length === 0) {
@@ -217,7 +200,6 @@ async function doStart(
   const bridge = Object.keys(serverFactories).length > 0
     ? await startCodexHttpBridge({
         serverFactories,
-        pluginIdByServerName,
         logger: opts.logger,
       })
     : null;

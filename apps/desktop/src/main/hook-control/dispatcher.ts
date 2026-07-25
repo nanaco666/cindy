@@ -138,12 +138,11 @@ export interface HookDispatcherDeps {
    */
   prepareWorktree?: (workingDir: string) => Promise<PrepareWorktreeResult>;
   /**
-   * 可选: 内置「对话」伪目录(chat 保留别名)的解析面。rootDir 在每次
-   * dispatch 时解析当前 data owner 的 app 托管目录根，allocateDir 为新会话
-   * 分配独立子目录。
+   * 可选: 内置「对话」伪目录(chat 保留别名)的解析面。rootDir 是 app 托管
+   * 对话目录根(userData/dialogues), allocateDir 为新会话分配独立子目录。
    * 未注入时 chat 别名按 unknown_workspace 拒绝(纯逻辑测试 / 旧行为默认)。
    */
-  dialogue?: { rootDir: () => string; allocateDir: (sessionId: string) => Promise<string> };
+  dialogue?: { rootDir: string; allocateDir: (sessionId: string) => Promise<string> };
   /**
    * 可选: 中断某 session 正在跑的 turn(task.cancel 用; 生产为
    * maker.getSession(id)?.abort())。未注入时 cancel 只能收口排队中的任务。
@@ -160,12 +159,6 @@ export interface HookDispatcherDeps {
    * runner 侧交互只能等超时默认。
    */
   resolveInteraction?: (interactionId: string, buttonId: string) => boolean;
-  /**
-   * Production keeps ingress closed until app:ready-for-bot has opened the
-   * account DB. Tests and standalone consumers retain the historical eager
-   * behavior unless they opt out explicitly.
-   */
-  accountInitiallyActive?: boolean;
   log: { info(msg: string): void; warn(msg: string): void };
 }
 
@@ -178,8 +171,6 @@ export interface HookDispatcher {
   ): void;
   /** 连接握手完成(welcome)后调用: 更新发送函数并补发离线期间积压的 turn.end。 */
   onConnected(connectionId: string, send: (m: HookMessage) => boolean): void;
-  /** transport 离线或失去已协商能力时调用，禁止继续向旧 socket 发送帧。 */
-  onDisconnected(connectionId: string): void;
   /**
    * task.cancel: 中断指定 requestId 的任务。排队中的直接摘除并回
    * turn.end(cancelled); 执行中的标记取消并 abort 对应 session, 收口时以
@@ -197,10 +188,6 @@ export interface HookDispatcher {
    * 正在执行的任务)后按 interactionId 配对 resolve; 未知 / 迟到的静默忽略。
    */
   handleInteractionDecision(connectionId: string, payload: InteractionDecisionPayload): void;
-  /** Re-open ingress after the next account DB is ready. */
-  activateAccount(): void;
-  /** Close ingress, abort old-account turns and await their final async boundary. */
-  deactivateAccount(): Promise<void>;
 }
 
 /** 单 session 排队上限 —— 超过按 rejected(invalid) 打回, 防失控上游刷爆。 */
@@ -220,49 +207,6 @@ export function isPathWithin(base: string, target: string): boolean {
 
 /** 标题里消息摘要的最大长度(字符), 超出截断加省略号。 */
 const TITLE_SNIPPET_MAX = 24;
-/** Server-controlled source metadata is persisted and rendered, so keep it bounded locally too. */
-const SOURCE_USER_TEXT_MAX = 20_000;
-const SOURCE_CHANNEL_NAME_MAX = 160;
-const SOURCE_TEAM_ID_MAX = 128;
-const SOURCE_TEAM_NAME_MAX = 160;
-const SOURCE_THREAD_CONTEXT_MAX = 20;
-const SOURCE_THREAD_AUTHOR_MAX = 128;
-const SOURCE_THREAD_TEXT_MAX = 4_000;
-
-/**
- * Bound IM display metadata before it reaches session persistence. The wire
- * parser validates types, while this client boundary limits renderer work and
- * keeps desktop/mobile normalization consistent without changing the shared
- * protocol or silently truncating the prompt sent to the agent.
- */
-export function normalizeTaskSource(source: TaskSource): TaskSource {
-  const boundedNullable = (
-    value: string | null | undefined,
-    max: number,
-  ): string | null | undefined => {
-    if (value === null || value === undefined) return value;
-    return value.slice(0, max);
-  };
-  const channelName = boundedNullable(source.channelName, SOURCE_CHANNEL_NAME_MAX);
-  const teamId = boundedNullable(source.teamId, SOURCE_TEAM_ID_MAX);
-  const teamName = boundedNullable(source.teamName, SOURCE_TEAM_NAME_MAX);
-  const threadContext = source.threadContext?.slice(0, SOURCE_THREAD_CONTEXT_MAX).map((entry) => ({
-    author: entry.author.slice(0, SOURCE_THREAD_AUTHOR_MAX),
-    text: entry.text.slice(0, SOURCE_THREAD_TEXT_MAX),
-    ...(entry.isBot === true ? { isBot: true } : {}),
-  }));
-
-  return {
-    im: source.im,
-    ...(channelName !== undefined ? { channelName } : {}),
-    ...(teamId !== undefined ? { teamId } : {}),
-    ...(teamName !== undefined ? { teamName } : {}),
-    ...(threadContext !== undefined ? { threadContext } : {}),
-    ...(source.userText !== undefined
-      ? { userText: source.userText.slice(0, SOURCE_USER_TEXT_MAX) }
-      : {}),
-  };
-}
 
 /**
  * 新建 hook 会话的标题: `[<Provider>] <首条消息摘要>`(如 `[Slack] 修登录页`)。
@@ -271,7 +215,7 @@ export function normalizeTaskSource(source: TaskSource): TaskSource {
  * (如纯图片派发)时回退渠道内标识 bareKey。
  * 渠道内标识约定 `dm:` 前缀 = 私聊(见 slack-hook-server externalKeyFor),
  * 私聊会话前缀额外标 `·DM`(`[Slack·DM]`), 与频道驱动的会话在列表里一眼区分。
- * contextName: Slack workspace 或 Telegram group/topic 显示名，非空时并入方括号**首段**
+ * teamName: (multi-team)来源 workspace 显示名, 非空时并入方括号**首段**
  * (`[XD Inc.·Slack·DM] ...`)—— 多绑定设备上区分「哪个 workspace 派来的」,
  * team 名在前便于列表扫读; 放括号内保持标题统一以 `[` 开头对齐
  * (老 server / 单绑定不下发, 无 teamName 分支格式不变)。
@@ -280,7 +224,7 @@ export function buildHookSessionTitle(
   providerName: string,
   prompt: string,
   bareKey: string,
-  contextName?: string | null,
+  teamName?: string | null,
 ): string {
   const flat = prompt.replace(/\s+/g, ' ').trim();
   const snippet =
@@ -291,8 +235,8 @@ export function buildHookSessionTitle(
         : flat;
   const dmTag = bareKey.startsWith('dm:') ? '·DM' : '';
   const displayProvider = providerName.charAt(0).toUpperCase() + providerName.slice(1);
-  const contextTag = contextName && contextName.trim().length > 0 ? `${contextName.trim()}·` : '';
-  return `[${contextTag}${displayProvider}${dmTag}] ${snippet}`;
+  const teamTag = teamName && teamName.trim().length > 0 ? `${teamName.trim()}·` : '';
+  return `[${teamTag}${displayProvider}${dmTag}] ${snippet}`;
 }
 
 /** 待执行任务(定位已完成, 排队即执行参数就绪)。 */
@@ -301,7 +245,6 @@ interface PendingTask {
   requestId: string;
   externalKey: string;
   run: HookRunRequest;
-  accountGeneration: number;
 }
 
 export function createHookDispatcher(deps: HookDispatcherDeps): HookDispatcher {
@@ -314,7 +257,6 @@ export function createHookDispatcher(deps: HookDispatcherDeps): HookDispatcher {
     abortSession,
     archiveSessionRow,
     resolveInteraction,
-    accountInitiallyActive,
     log,
   } = deps;
 
@@ -370,18 +312,10 @@ export function createHookDispatcher(deps: HookDispatcherDeps): HookDispatcher {
   const running = new Set<string>();
   /** 每 session 的 FIFO 等待队列。 */
   const queues = new Map<string, PendingTask[]>();
-  /** connectionId + requestId -> 正在执行它的 session(cancel 定位与归属校验用, 收口即清)。 */
+  /** requestId -> 正在执行它的 session 与归属连接(cancel 定位与归属校验用, 收口即清)。 */
   const runningByRequest = new Map<string, { sessionId: string; connectionId: string }>();
-  /** 已请求取消的 connectionId + requestId(execute 收口时据此把结果改写为 cancelled)。 */
+  /** 已请求取消的 requestId(execute 收口时据此把结果改写为 cancelled)。 */
   const cancelRequested = new Set<string>();
-  let accountActive = accountInitiallyActive ?? true;
-  let accountGeneration = 0;
-  const executing = new Set<Promise<void>>();
-  let accountDeactivation: Promise<void> | null = null;
-
-  function isCurrentGeneration(generation: number): boolean {
-    return accountActive && generation === accountGeneration;
-  }
 
   function ackKey(connectionId: string, requestId: string): string {
     return `${connectionId} ${requestId}`;
@@ -419,17 +353,11 @@ export function createHookDispatcher(deps: HookDispatcherDeps): HookDispatcher {
   /** 执行一个任务并回推 turn.end; 收口后 drain 同 session 队列。 */
   async function execute(task: PendingTask): Promise<void> {
     const sessionId = task.run.sessionId;
-    const requestKey = ackKey(task.connectionId, task.requestId);
-    if (!isCurrentGeneration(task.accountGeneration)) {
-      running.delete(sessionId);
-      return;
-    }
-    runningByRequest.set(requestKey, { sessionId, connectionId: task.connectionId });
+    runningByRequest.set(task.requestId, { sessionId, connectionId: task.connectionId });
 
     // 进度快照直发不缓存: 断线期间的中间帧没有补发价值(turn.end 会带最终
     // 结果), 发送失败静默丢弃即可
     const onProgress = (text: string): void => {
-      if (!isCurrentGeneration(task.accountGeneration)) return;
       const send = sendFns.get(task.connectionId);
       if (send) send(makeTurnProgress({ requestId: task.requestId, text }));
     };
@@ -442,12 +370,10 @@ export function createHookDispatcher(deps: HookDispatcherDeps): HookDispatcher {
       body: string;
       buttons: InteractionButton[];
     }): void => {
-      if (!isCurrentGeneration(task.accountGeneration)) return;
       const send = sendFns.get(task.connectionId);
       if (send) send(makeInteractionRequest({ requestId: task.requestId, ...card }));
     };
     const onInteractionCancel = (interactionId: string, reason: string): void => {
-      if (!isCurrentGeneration(task.accountGeneration)) return;
       const send = sendFns.get(task.connectionId);
       if (send) send(makeInteractionCancel({ requestId: task.requestId, interactionId, reason }));
     };
@@ -463,15 +389,10 @@ export function createHookDispatcher(deps: HookDispatcherDeps): HookDispatcher {
         durationMs: 0,
       };
     }
-    runningByRequest.delete(requestKey);
-    if (!isCurrentGeneration(task.accountGeneration)) {
-      cancelRequested.delete(requestKey);
-      running.delete(sessionId);
-      return;
-    }
+    runningByRequest.delete(task.requestId);
     // 取消收口: 无论 abort 后 runner 以 ok 还是 error 收口, 对上游统一
     // 报 cancelled(用户按下的是"停止", 中断导致的 error 不是真错误)
-    const wasCancelled = cancelRequested.delete(requestKey);
+    const wasCancelled = cancelRequested.delete(task.requestId);
     const status: 'ok' | 'error' | 'cancelled' = wasCancelled ? 'cancelled' : outcome.status;
     // 协议约束: error 必须带非空 errorMessage, ok / cancelled 必须为 null
     const isError = status === 'error';
@@ -483,7 +404,7 @@ export function createHookDispatcher(deps: HookDispatcherDeps): HookDispatcher {
         sessionId,
         status,
         finalText: outcome.finalText,
-        errorMessage: isError ? outcome.errorMessage || 'unknown error' : null,
+        errorMessage: isError ? (outcome.errorMessage || 'unknown error') : null,
         usage: { durationMs: outcome.durationMs },
         ...(outcome.attachments !== undefined && outcome.attachments.length > 0
           ? { attachments: outcome.attachments }
@@ -493,17 +414,10 @@ export function createHookDispatcher(deps: HookDispatcherDeps): HookDispatcher {
     running.delete(sessionId);
     const queue = queues.get(sessionId);
     const next = queue?.shift();
-    if (!queue || queue.length === 0) queues.delete(sessionId);
     if (next) {
       running.add(sessionId);
-      startExecution(next);
+      void execute(next);
     }
-  }
-
-  function startExecution(task: PendingTask): void {
-    const promise = execute(task);
-    executing.add(promise);
-    void promise.finally(() => executing.delete(promise));
   }
 
   /** 会话定位(接管 / 绑定复用 / 新建), 返回 run 参数或拒绝原因。 */
@@ -511,7 +425,6 @@ export function createHookDispatcher(deps: HookDispatcherDeps): HookDispatcher {
     connectionId: string,
     config: HookConnectionConfig,
     payload: TaskDispatchPayload,
-    generation: number,
   ): Promise<{ run: HookRunRequest } | { reject: TaskRejectReason }> {
     // options 四元组原样透传给 runner —— 空值由 runner 按桌面端草稿默认落值
     // (取值链: Slack 按目录偏好 > 草稿默认, 权限缺省 bypass; 见
@@ -531,14 +444,13 @@ export function createHookDispatcher(deps: HookDispatcherDeps): HookDispatcher {
       dir !== null && whitelistDirs.some((base) => isPathWithin(base, dir));
     /** app 托管对话目录(dialogues 根)内的路径 —— chat 伪目录会话的白名单等价物。 */
     const inDialogueRoot = (dir: string | null): boolean =>
-      dir !== null && dialogue !== undefined && isPathWithin(dialogue.rootDir(), dir);
+      dir !== null && dialogue !== undefined && isPathWithin(dialogue.rootDir, dir);
     // 保留别名「对话」: 不查 config.workspaces, 解析成 app 托管对话目录
     const isChat = payload.workspace === HOOK_CHAT_WORKSPACE_ALIAS && dialogue !== undefined;
 
     // 接管路径: server 显式指定已有 session(对话会话同样可接管)
     if (payload.sessionId !== null) {
       const info = await runner.inspect(payload.sessionId);
-      if (!isCurrentGeneration(generation)) return { reject: 'disabled' };
       if (!info || !info.usable) return { reject: 'session_not_found' };
       if (!inWhitelist(info.workingDir) && !inDialogueRoot(info.workingDir)) {
         return { reject: 'workspace_not_allowed' };
@@ -565,27 +477,11 @@ export function createHookDispatcher(deps: HookDispatcherDeps): HookDispatcher {
     const dir = isChat
       ? undefined
       : payload.workspace
-        ? Object.hasOwn(config.workspaces, payload.workspace)
-          ? config.workspaces[payload.workspace]
-          : undefined
+        ? config.workspaces[payload.workspace]
         : undefined;
     if (!dir && !isChat) return { reject: 'unknown_workspace' };
 
-    // v1 stored every mapping under the literal "slack" namespace.  A new
-    // account/provider namespace may read it only as a candidate; it is moved
-    // after current-account DB existence + workspace allowlist checks pass.
-    const legacyNamespace = connectionId.endsWith(':slack') ? 'slack' : null;
-    const namespacedBound = bindings.get(connectionId, payload.externalKey);
-    const legacyBound =
-      namespacedBound === null && legacyNamespace !== null
-        ? bindings.get(legacyNamespace, payload.externalKey)
-        : null;
-    const bound = namespacedBound ?? legacyBound;
-    const migrateLegacyBinding = (): void => {
-      if (!legacyBound || !legacyNamespace) return;
-      bindings.set(connectionId, payload.externalKey, legacyBound);
-      bindings.remove(legacyNamespace, payload.externalKey);
-    };
+    const bound = bindings.get(connectionId, payload.externalKey);
     if (bound) {
       // 关键竞态防护: 绑定的 session 正在本模块跑/排队(首次派发尚未落库,
       // inspect 会查不到)时直接复用 —— 否则同 key 的连发消息会各开新 session,
@@ -593,17 +489,14 @@ export function createHookDispatcher(deps: HookDispatcherDeps): HookDispatcher {
       // 已声明的取舍: 该快路径不重校验白名单 —— 窗口仅限「用户改别名映射」与
       // 「旧任务在跑」重叠的瞬间, 且此 session 本就是本连接刚创建的; 常规
       // 复用路径(下方 inspect 分支)每次都重校验。
-      if (
-        namespacedBound !== null &&
-        (running.has(bound) || (queues.get(bound)?.length ?? 0) > 0)
-      ) {
+      if (running.has(bound) || (queues.get(bound)?.length ?? 0) > 0) {
         return {
           run: {
             sessionId: bound,
             isNew: false,
             // 复用路径 workingDir 仅供参考(runner 以 session meta 为权威);
             // chat 伪目录无别名映射, 给 dialogues 根占位
-            workingDir: dir ?? dialogue?.rootDir() ?? '',
+            workingDir: dir ?? dialogue?.rootDir ?? '',
             agentKind,
             model,
             effort,
@@ -616,14 +509,9 @@ export function createHookDispatcher(deps: HookDispatcherDeps): HookDispatcher {
         };
       }
       const info = await runner.inspect(bound);
-      if (!isCurrentGeneration(generation)) return { reject: 'disabled' };
       // 复用条件: 仍存在、可用、且仍在白名单内(别名映射可能已被用户改过);
       // chat 伪目录的会话住在 dialogues 根下, 按对话根校验
-      if (
-        info?.usable &&
-        (isChat ? inDialogueRoot(info.workingDir) : inWhitelist(info.workingDir))
-      ) {
-        migrateLegacyBinding();
+      if (info?.usable && (isChat ? inDialogueRoot(info.workingDir) : inWhitelist(info.workingDir))) {
         return {
           run: {
             sessionId: bound,
@@ -641,7 +529,6 @@ export function createHookDispatcher(deps: HookDispatcherDeps): HookDispatcher {
         };
       }
       bindings.remove(connectionId, payload.externalKey);
-      if (legacyNamespace) bindings.remove(legacyNamespace, payload.externalKey);
     }
 
     // 新建会话: 默认为它预建独立 git worktree —— 每个 thread/会话一个隔离
@@ -657,17 +544,12 @@ export function createHookDispatcher(deps: HookDispatcherDeps): HookDispatcher {
       // chat 伪目录: 每会话分配独立的 app 托管对话目录(不落任何仓库);
       // 天然无并发踩踏, 不做 worktree 预建
       runDir = await dialogue!.allocateDir(sessionId);
-      if (!isCurrentGeneration(generation)) return { reject: 'disabled' };
       log.info(`hook chat session ${sessionId} gets dialogue dir: ${runDir}`);
     } else {
       runDir = dir as string;
     }
     if (prepareWorktree && !isChat && dir !== undefined) {
       const prep = await prepareWorktreeSerial(dir);
-      if (!isCurrentGeneration(generation)) {
-        if (prep.ok) await prep.cleanup().catch(() => undefined);
-        return { reject: 'disabled' };
-      }
       if (prep.ok && isPathWithin(dir, prep.path)) {
         sessionId = prep.sessionId;
         runDir = prep.path;
@@ -686,8 +568,7 @@ export function createHookDispatcher(deps: HookDispatcherDeps): HookDispatcher {
     // 取前缀作 provider 名(如 team-slack), 比连接名(desktop 侧命名)更能
     // 说明"这条会话是谁驱动的"; 无前缀(非常规 key)时回退连接名
     const colon = payload.externalKey.indexOf(':');
-    const providerName =
-      payload.source?.im?.trim() || (colon > 0 ? payload.externalKey.slice(0, colon) : config.name);
+    const providerName = colon > 0 ? payload.externalKey.slice(0, colon) : config.name;
     const bareKey = colon > 0 ? payload.externalKey.slice(colon + 1) : payload.externalKey;
     return {
       run: {
@@ -699,13 +580,7 @@ export function createHookDispatcher(deps: HookDispatcherDeps): HookDispatcher {
         effort,
         permissionMode,
         ...(isChat ? { workspaceKind: 'dialogue' as const } : {}),
-        title: buildHookSessionTitle(
-          providerName,
-          payload.prompt,
-          bareKey,
-          payload.source?.teamName ??
-            (payload.source?.im === 'telegram' ? payload.source.channelName : null),
-        ),
+        title: buildHookSessionTitle(providerName, payload.prompt, bareKey, payload.source?.teamName),
         prompt: payload.prompt,
         attachments: payload.attachments,
         origin,
@@ -718,10 +593,6 @@ export function createHookDispatcher(deps: HookDispatcherDeps): HookDispatcher {
     payload: TaskDispatchPayload,
     send: (m: HookMessage) => boolean,
   ): void {
-    if (!accountActive) return;
-    const admittedGeneration = accountGeneration;
-    const source = payload.source === undefined ? undefined : normalizeTaskSource(payload.source);
-    const dispatchPayload = source === undefined ? payload : { ...payload, source };
     sendFns.set(connectionId, send);
 
     // 幂等: 已回过 ack 的重投只回放, 不重跑
@@ -745,15 +616,7 @@ export function createHookDispatcher(deps: HookDispatcherDeps): HookDispatcher {
     // 同 key 串行化(见 keyChains 注释) —— 定位+入队作为一个原子段执行
     serializeByKey(`${connectionId} ${payload.externalKey}`, async () => {
       try {
-        const resolved = await resolveTarget(
-          connectionId,
-          config,
-          dispatchPayload,
-          admittedGeneration,
-        );
-        // Account shutdown may complete while inspect/worktree preparation is
-        // awaiting.  Suppress both the stale ack and every downstream write.
-        if (!isCurrentGeneration(admittedGeneration)) return;
+        const resolved = await resolveTarget(connectionId, config, payload);
         if ('reject' in resolved) {
           reply(connectionId, send, rejected(payload.requestId, resolved.reject));
           log.info(
@@ -765,8 +628,7 @@ export function createHookDispatcher(deps: HookDispatcherDeps): HookDispatcher {
           connectionId,
           requestId: payload.requestId,
           externalKey: payload.externalKey,
-          run: { ...resolved.run, ...(source ? { source } : {}) },
-          accountGeneration: admittedGeneration,
+          run: { ...resolved.run, ...(payload.source ? { source: payload.source } : {}) },
         };
         const sessionId = resolved.run.sessionId;
         const queue = queues.get(sessionId) ?? [];
@@ -800,9 +662,8 @@ export function createHookDispatcher(deps: HookDispatcherDeps): HookDispatcher {
           sessionId,
           queuePosition: null,
         });
-        startExecution(task);
+        void execute(task);
       } catch (err) {
-        if (!isCurrentGeneration(admittedGeneration)) return;
         log.warn(`handleDispatch failed: ${err instanceof Error ? err.message : String(err)}`);
         reply(connectionId, send, rejected(payload.requestId, 'invalid'));
       }
@@ -820,12 +681,10 @@ export function createHookDispatcher(deps: HookDispatcherDeps): HookDispatcher {
         scheduleDrainPoll(sessionId);
         return;
       }
-      const queue = queues.get(sessionId);
-      const next = queue?.shift();
-      if (!queue || queue.length === 0) queues.delete(sessionId);
+      const next = queues.get(sessionId)?.shift();
       if (next) {
         running.add(sessionId);
-        startExecution(next);
+        void execute(next);
         // execute 收口自己会继续 drain
       }
     }, 2000);
@@ -835,104 +694,17 @@ export function createHookDispatcher(deps: HookDispatcherDeps): HookDispatcher {
 
   return {
     handleDispatch,
-    activateAccount() {
-      if (accountActive) return;
-      if (accountDeactivation !== null) {
-        const requestedGeneration = accountGeneration;
-        void accountDeactivation.then(() => {
-          if (requestedGeneration === accountGeneration) accountActive = true;
-        });
-        return;
-      }
-      accountActive = true;
-    },
-    async deactivateAccount() {
-      // Invalidate a deferred activation on every close request, including a
-      // duplicate request that arrives while the physical drain is running.
-      const wasActive = accountActive;
-      accountActive = false;
-      accountGeneration += 1;
-      if (accountDeactivation !== null) {
-        await accountDeactivation;
-        return;
-      }
-      if (!wasActive) return;
-
-      for (const timer of drainPolls.values()) clearTimeout(timer);
-      drainPolls.clear();
-      queues.clear();
-      sendFns.clear();
-      pendingTurnEnds.clear();
-
-      const drain = (async (): Promise<void> => {
-        const aborts: Promise<void>[] = [];
-        if (abortSession) {
-          for (const { sessionId } of runningByRequest.values()) {
-            aborts.push(
-              abortSession(sessionId).catch((err) => {
-                log.warn(
-                  `account-boundary abort failed for ${sessionId}: ${err instanceof Error ? err.message : String(err)}`,
-                );
-              }),
-            );
-          }
-        }
-        await Promise.allSettled(aborts);
-        await Promise.allSettled([...keyChains.values()]);
-        await Promise.allSettled([...executing]);
-
-        ackHistory.clear();
-        inflightRequests.clear();
-        running.clear();
-        runningByRequest.clear();
-        cancelRequested.clear();
-        keyChains.clear();
-      })();
-      accountDeactivation = drain.finally(() => {
-        accountDeactivation = null;
-      });
-      await accountDeactivation;
-    },
     handleSessionArchive(connectionId, externalKey) {
-      if (!accountActive) return;
-      const admittedGeneration = accountGeneration;
       // 与 dispatch 同 key 串行: 避免在途 resolveTarget(即将落绑定建会话)与
       // 归档并发穿插 —— 归档排在其后, 能看到刚落下的绑定。
       serializeByKey(`${connectionId} ${externalKey}`, async () => {
-        if (!isCurrentGeneration(admittedGeneration)) return;
-        let bindingNamespace = connectionId;
-        let bound = bindings.get(connectionId, externalKey);
-        if (!bound && connectionId.endsWith(':slack')) {
-          const legacyBound = bindings.get('slack', externalKey);
-          if (legacyBound) {
-            // `/new` can be the first post-upgrade event, before dispatch had
-            // a chance to migrate the v1 mapping. Only act on that mapping
-            // after proving it belongs to the current account DB and remains
-            // inside today's workspace/dialogue allowlist.
-            const config = getConnection(connectionId);
-            const info = await runner.inspect(legacyBound);
-            if (!isCurrentGeneration(admittedGeneration)) return;
-            const allowed =
-              info?.usable === true &&
-              info.workingDir !== null &&
-              (Object.values(config?.workspaces ?? {}).some((root) =>
-                isPathWithin(root, info.workingDir!),
-              ) ||
-                (dialogue !== undefined && isPathWithin(dialogue.rootDir(), info.workingDir)));
-            if (allowed) {
-              bound = legacyBound;
-              bindingNamespace = 'slack';
-            } else {
-              bindings.remove('slack', externalKey);
-            }
-          }
-        }
+        const bound = bindings.get(connectionId, externalKey);
         if (!bound) return; // 该 key 从没建过会话(或已归档清理过), 幂等 no-op
-        bindings.remove(bindingNamespace, externalKey);
+        bindings.remove(connectionId, externalKey);
         if (!archiveSessionRow) return;
         try {
           await archiveSessionRow(bound);
-          log.info(`hook session ${bound} archived`);
+          log.info(`hook session ${bound} archived (externalKey=${externalKey})`);
         } catch (err) {
           // 典型: 会话行尚未建成(任务在跑)或已被删 —— 只记日志, 不回推错误
           log.warn(
@@ -942,10 +714,9 @@ export function createHookDispatcher(deps: HookDispatcherDeps): HookDispatcher {
       });
     },
     handleInteractionDecision(connectionId, payload) {
-      if (!accountActive) return;
       // 归属校验: requestId 必须是本连接正在执行的任务(排队中的任务不可能有
       // 未决交互 —— 交互只在 turn 执行期产生)
-      const runningEntry = runningByRequest.get(ackKey(connectionId, payload.requestId));
+      const runningEntry = runningByRequest.get(payload.requestId);
       if (runningEntry === undefined || runningEntry.connectionId !== connectionId) {
         log.info(
           `interaction.decision for unknown/foreign requestId ${payload.requestId}, ignored`,
@@ -962,7 +733,6 @@ export function createHookDispatcher(deps: HookDispatcherDeps): HookDispatcher {
       );
     },
     cancel(connectionId, requestId) {
-      if (!accountActive) return;
       // 1) 排队中的: 从队列摘除, 立即回 cancelled(任务从未开始)
       for (const [sessionId, queue] of queues) {
         const idx = queue.findIndex(
@@ -988,12 +758,11 @@ export function createHookDispatcher(deps: HookDispatcherDeps): HookDispatcher {
         }
       }
       // 2) 执行中的: 标记取消 + abort session, execute 收口时改写为 cancelled
-      const requestKey = ackKey(connectionId, requestId);
-      const runningEntry = runningByRequest.get(requestKey);
+      const runningEntry = runningByRequest.get(requestId);
       // 归属校验: 只有派发该任务的连接才能取消它(多连接并存时的授权边界)
       if (runningEntry !== undefined && runningEntry.connectionId === connectionId) {
         const sessionId = runningEntry.sessionId;
-        cancelRequested.add(requestKey);
+        cancelRequested.add(requestId);
         log.info(`hook task ${requestId} cancel requested (aborting session ${sessionId})`);
         if (abortSession) {
           void abortSession(sessionId).catch((err) => {
@@ -1007,11 +776,7 @@ export function createHookDispatcher(deps: HookDispatcherDeps): HookDispatcher {
       // 3) 未知 / 已收口: 静默(server 侧幂等)
       log.info(`hook cancel for unknown/finished requestId ${requestId}, ignored`);
     },
-    onDisconnected(connectionId) {
-      sendFns.delete(connectionId);
-    },
     onConnected(connectionId, send) {
-      if (!accountActive) return;
       sendFns.set(connectionId, send);
       const buf = pendingTurnEnds.get(connectionId);
       if (!buf?.length) return;

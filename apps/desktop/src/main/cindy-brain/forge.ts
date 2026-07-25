@@ -18,19 +18,11 @@ import path from 'node:path';
 
 import JSZip from 'jszip';
 
-import {
-  GHOST_MANIFEST_FILE,
-  validateGhostManifest,
-  type GhostManifest,
-} from '../../shared/ghost.js';
+import { GHOST_MANIFEST_FILE, validateGhostManifest, type GhostManifest } from '../../shared/ghost.js';
 
 /** 与 GhostManager 装入侧同一量级的上限(打包侧提前拦,fail fast)。 */
-const MAX_BASIC_FILES = 256;
-const MAX_NODE_FILES = 2_048;
-const MAX_BASIC_TOTAL_BYTES = 32 * 1024 * 1024;
-const MAX_NODE_TOTAL_BYTES = 256 * 1024 * 1024;
-const MAX_BASIC_CINDY_BYTES = 8 * 1024 * 1024;
-const MAX_NODE_CINDY_BYTES = 128 * 1024 * 1024;
+const MAX_FILES = 256;
+const MAX_TOTAL_BYTES = 32 * 1024 * 1024;
 
 /** 打包时跳过的目录/文件(源码目录里的开发残留,不属于意识本体)。 */
 function shouldSkip(name: string): boolean {
@@ -47,475 +39,6 @@ export type ForgePackResult =
       errorCode: 'DIR_NOT_FOUND' | 'MANIFEST_INVALID' | 'ENTRY_MISSING' | 'TOO_LARGE' | 'INTERNAL';
       message: string;
     };
-
-/** 对话制作插件时可直接生成的四种安全起步模板。 */
-export const FORGE_SCAFFOLD_TEMPLATES = [
-  'plain',
-  'agent-action',
-  'node-json-rpc',
-  'node-mcp',
-] as const;
-export type ForgeScaffoldTemplate = (typeof FORGE_SCAFFOLD_TEMPLATES)[number];
-
-export type ForgeScaffoldResult =
-  | {
-      ok: true;
-      dir: string;
-      template: ForgeScaffoldTemplate;
-      files: string[];
-      nextSteps: string[];
-    }
-  | {
-      ok: false;
-      errorCode: 'INVALID_INPUT' | 'TARGET_EXISTS' | 'INTERNAL';
-      message: string;
-    };
-
-interface ForgeScaffoldInput {
-  dir: string;
-  template: ForgeScaffoldTemplate;
-  id: string;
-  name: string;
-  description?: string;
-}
-
-/** 生成插件清单；先走正式校验，再允许任何文件落盘。 */
-function scaffoldManifest(input: ForgeScaffoldInput): Record<string, unknown> {
-  const common = {
-    schemaVersion: 2,
-    id: input.id,
-    name: input.name,
-    description: input.description?.trim() || `${input.name} 插件`,
-    whenToUse: input.description?.trim() || `需要使用 ${input.name} 提供的能力时`,
-    version: '1.0.0',
-    kind: 'chip',
-    entry: 'main.js',
-  };
-  if (input.template === 'agent-action') {
-    return {
-      ...common,
-      slots: ['tool', 'card', 'agent'],
-      tools: [
-        {
-          name: 'show_agent_actions',
-          description: '显示继续、分叉或新建 Agent 会话的操作卡片。',
-          parameters: { type: 'object', properties: {} },
-        },
-      ],
-    };
-  }
-  if (input.template === 'node-json-rpc') {
-    return {
-      ...common,
-      slots: ['tool', 'node'],
-      tools: [
-        {
-          name: 'node_echo',
-          description: '通过随包 Node 工作进程原样返回一段文字。',
-          parameters: {
-            type: 'object',
-            properties: { text: { type: 'string', description: '要交给 Node 的文字' } },
-            required: ['text'],
-          },
-        },
-      ],
-      node: {
-        entry: 'node/worker.cjs',
-        protocol: 'json-rpc-stdio',
-        lifecycle: 'on-demand',
-        idleTimeoutSeconds: 120,
-      },
-    };
-  }
-  if (input.template === 'node-mcp') {
-    return {
-      ...common,
-      slots: ['tool', 'node'],
-      tools: [
-        {
-          name: 'echo_via_mcp',
-          description: '调用随包 stdio MCP 的 echo 工具。',
-          parameters: {
-            type: 'object',
-            properties: { text: { type: 'string', description: '要交给 MCP 的文字' } },
-            required: ['text'],
-          },
-        },
-      ],
-      node: {
-        entry: 'node/worker.cjs',
-        protocol: 'mcp-stdio',
-        lifecycle: 'on-demand',
-        idleTimeoutSeconds: 120,
-      },
-    };
-  }
-  return {
-    ...common,
-    slots: ['tool'],
-    tools: [
-      {
-        name: 'hello',
-        description: '返回一句问候，用来确认插件已经正常工作。',
-        parameters: { type: 'object', properties: {} },
-      },
-    ],
-  };
-}
-
-/** 最小浏览器沙箱插件的 main.js。 */
-function plainMainSource(): string {
-  return `cindy.onHostMessage(async function (msg) {
-  if (msg.type !== 'tool-call' || msg.tool !== 'hello') return;
-  await cindy.send({
-    type: 'tool-result',
-    callId: msg.callId,
-    ok: true,
-    result: { message: '插件已经正常工作。' }
-  });
-});
-`;
-}
-
-/** 带交互卡片和真实用户点击票的 Agent 模板。 */
-function agentActionMainSource(): string {
-  return `cindy.onHostMessage(async function (msg) {
-  if (msg.type === 'tool-call' && msg.tool === 'show_agent_actions') {
-    await cindy.send({
-      type: 'card-update',
-      callId: msg.callId,
-      v: 2,
-      html: '<div style="padding:12px"><p>让 Agent 接下来怎么做？</p><button data-ghost-action="continue">继续当前会话</button> <button data-ghost-action="fork">分叉会话</button> <button data-ghost-action="new">新建会话</button></div>',
-      height: 150
-    });
-    await cindy.send({
-      type: 'tool-result',
-      callId: msg.callId,
-      ok: true,
-      result: { note: '请用户在卡片上选择下一步。' }
-    });
-    return;
-  }
-
-  if (msg.type !== 'event' || msg.name !== 'card-action') return;
-  if (!msg.userActionToken) {
-    await cindy.send({
-      type: 'card-update',
-      callId: msg.spawnCallId,
-      v: 2,
-      state: 'done',
-      html: '<div style="padding:12px">这次点击没有拿到有效通行票，请重新点击原卡片。</div>',
-      height: 110
-    });
-    return;
-  }
-
-  const mode = msg.actionId === 'fork' ? 'fork' : msg.actionId === 'new' ? 'new' : 'continue';
-  const result = await cindy.agent.run({
-    mode: mode,
-    promptTemplate: '用户要求：{{user_message}}\\n插件事件：{{event_json}}\\n请继续处理。',
-    userMessage: msg.prompt || '请继续处理当前任务',
-    event: { actionId: msg.actionId, callId: msg.callId },
-    userActionToken: msg.userActionToken,
-    title: mode === 'new' ? '插件发起的新任务' : undefined
-  });
-  await cindy.send({
-    type: 'card-update',
-    callId: msg.spawnCallId,
-    v: 2,
-    state: 'done',
-    html: result.ok
-      ? '<div style="padding:12px">Agent 已收到任务。</div>'
-      : '<div style="padding:12px">没有成功发给 Agent，请重新点击后再试。</div>',
-    height: 110
-  });
-});
-`;
-}
-
-/** 普通 JSON-RPC Node 服务的 main.js。 */
-function nodeJsonRpcMainSource(): string {
-  return `cindy.onHostMessage(async function (msg) {
-  if (msg.type !== 'tool-call' || msg.tool !== 'node_echo') return;
-  const response = await cindy.node.request({
-    method: 'echo',
-    params: { text: String(msg.args.text || '') }
-  });
-  if (!response.ok) {
-    await cindy.send({
-      type: 'tool-result', callId: msg.callId, ok: false,
-      errorCode: 'NODE_REQUEST_FAILED', message: response.message
-    });
-    return;
-  }
-  await cindy.send({
-    type: 'tool-result', callId: msg.callId, ok: true,
-    result: response.result
-  });
-});
-`;
-}
-
-/** 普通 JSON-RPC Node 服务的零依赖 worker。 */
-function nodeJsonRpcWorkerSource(): string {
-  return `const readline = require('node:readline');
-
-function reply(message) {
-  process.stdout.write(JSON.stringify(message) + '\\n');
-}
-
-readline.createInterface({ input: process.stdin }).on('line', function (line) {
-  let request;
-  try {
-    request = JSON.parse(line);
-  } catch {
-    reply({ jsonrpc: '2.0', id: null, error: { code: -32700, message: 'Parse error' } });
-    return;
-  }
-  if (request.method === 'echo') {
-    reply({ jsonrpc: '2.0', id: request.id, result: { text: String(request.params?.text || '') } });
-    return;
-  }
-  reply({ jsonrpc: '2.0', id: request.id, error: { code: -32601, message: 'Method not found' } });
-});
-`;
-}
-
-/** stdio MCP 模板的 main.js。 */
-function nodeMcpMainSource(): string {
-  return `cindy.onHostMessage(async function (msg) {
-  if (msg.type !== 'tool-call' || msg.tool !== 'echo_via_mcp') return;
-  const response = await cindy.node.request({
-    method: 'tools/call',
-    params: { name: 'echo', arguments: { text: String(msg.args.text || '') } }
-  });
-  if (!response.ok) {
-    await cindy.send({
-      type: 'tool-result', callId: msg.callId, ok: false,
-      errorCode: 'MCP_REQUEST_FAILED', message: response.message
-    });
-    return;
-  }
-  await cindy.send({
-    type: 'tool-result', callId: msg.callId, ok: true,
-    result: { mcpResult: response.result }
-  });
-});
-`;
-}
-
-/** stdio MCP 的最小零依赖 worker，含 initialize / tools/list / tools/call。 */
-function nodeMcpWorkerSource(): string {
-  return `const readline = require('node:readline');
-
-function reply(message) {
-  process.stdout.write(JSON.stringify(message) + '\\n');
-}
-
-readline.createInterface({ input: process.stdin }).on('line', function (line) {
-  let request;
-  try {
-    request = JSON.parse(line);
-  } catch {
-    reply({ jsonrpc: '2.0', id: null, error: { code: -32700, message: 'Parse error' } });
-    return;
-  }
-  if (request.method === 'notifications/initialized') return;
-  if (request.method === 'initialize') {
-    reply({
-      jsonrpc: '2.0', id: request.id,
-      result: {
-        protocolVersion: request.params?.protocolVersion || '2025-03-26',
-        capabilities: { tools: {} },
-        serverInfo: { name: 'cindy-scaffold-mcp', version: '1.0.0' }
-      }
-    });
-    return;
-  }
-  if (request.method === 'tools/list') {
-    reply({
-      jsonrpc: '2.0', id: request.id,
-      result: { tools: [{
-        name: 'echo', description: '原样返回文字',
-        inputSchema: {
-          type: 'object',
-          properties: { text: { type: 'string' } },
-          required: ['text']
-        }
-      }] }
-    });
-    return;
-  }
-  if (request.method === 'tools/call' && request.params?.name === 'echo') {
-    reply({
-      jsonrpc: '2.0', id: request.id,
-      result: { content: [{ type: 'text', text: String(request.params.arguments?.text || '') }] }
-    });
-    return;
-  }
-  reply({ jsonrpc: '2.0', id: request.id, error: { code: -32601, message: 'Method not found' } });
-});
-`;
-}
-
-/** 按模板产出相对路径到源码内容的完整映射。 */
-function scaffoldFiles(input: ForgeScaffoldInput): Record<string, string> {
-  const manifest = scaffoldManifest(input);
-  const files: Record<string, string> = {
-    [GHOST_MANIFEST_FILE]: `${JSON.stringify(manifest, null, 2)}\n`,
-    'main.js':
-      input.template === 'agent-action'
-        ? agentActionMainSource()
-        : input.template === 'node-json-rpc'
-          ? nodeJsonRpcMainSource()
-          : input.template === 'node-mcp'
-            ? nodeMcpMainSource()
-            : plainMainSource(),
-  };
-  if (input.template === 'node-json-rpc') files['node/worker.cjs'] = nodeJsonRpcWorkerSource();
-  if (input.template === 'node-mcp') files['node/worker.cjs'] = nodeMcpWorkerSource();
-  return files;
-}
-
-/** 判断 Node 文件错误码，不用平台相关的错误文案做分支。 */
-function hasFsErrorCode(err: unknown, code: string): boolean {
-  return Boolean(err && typeof err === 'object' && 'code' in err && err.code === code);
-}
-
-/**
- * 创建一份不覆盖任何现有内容的插件源码骨架。
- *
- * 文件先写进同目录临时文件夹，全部成功后再一次 rename 到目标；目标已经
- * 存在时直接拒绝，因此并发调用也不会把用户原文件覆盖一半。
- */
-export async function scaffoldGhostDir(
-  input: ForgeScaffoldInput,
-  options?: { sessionWorkdir?: string | null },
-): Promise<ForgeScaffoldResult> {
-  const template = input.template;
-  if (!FORGE_SCAFFOLD_TEMPLATES.includes(template)) {
-    return { ok: false, errorCode: 'INVALID_INPUT', message: `不认识的模板:${String(template)}` };
-  }
-  if (
-    !path.isAbsolute(input.dir) ||
-    path.resolve(input.dir) === path.parse(path.resolve(input.dir)).root
-  ) {
-    return { ok: false, errorCode: 'INVALID_INPUT', message: 'dir 必须是一个新的插件目录绝对路径' };
-  }
-  const resolved = path.resolve(input.dir);
-  const workdir = options?.sessionWorkdir;
-  if (!workdir) {
-    return { ok: false, errorCode: 'INVALID_INPUT', message: '没有会话工作目录,无法确定骨架输出位置' };
-  }
-  // 字面 startsWith 不设防软链:工作目录里若有 out -> /tmp/out 之类的
-  // 软链祖先,字面在内、实际在外。两边都按 realpath 对账——目标还不存在,
-  // 就取「已存在的最深祖先」的真身再拼回剩余段。
-  let realWorkdir: string;
-  try {
-    realWorkdir = await fs.promises.realpath(path.resolve(workdir));
-  } catch {
-    return { ok: false, errorCode: 'INVALID_INPUT', message: '会话工作目录不存在,无法确定骨架输出位置' };
-  }
-  let realAncestor = resolved;
-  const pendingSegments: string[] = [];
-  for (;;) {
-    try {
-      realAncestor = await fs.promises.realpath(realAncestor);
-      break;
-    } catch (err) {
-      if (!hasFsErrorCode(err, 'ENOENT')) {
-        return {
-          ok: false,
-          errorCode: 'INTERNAL',
-          message: err instanceof Error ? err.message : String(err),
-        };
-      }
-      const parent = path.dirname(realAncestor);
-      if (parent === realAncestor) break; // 到根了,根一定存在,防御性兜底
-      pendingSegments.unshift(path.basename(realAncestor));
-      realAncestor = parent;
-    }
-  }
-  const realTarget = path.join(realAncestor, ...pendingSegments);
-  if (!realTarget.startsWith(`${realWorkdir}${path.sep}`) && realTarget !== realWorkdir) {
-    return { ok: false, errorCode: 'INVALID_INPUT', message: 'dir 必须在当前会话工作目录内' };
-  }
-  const files = scaffoldFiles(input);
-  const validation = validateGhostManifest(JSON.parse(files[GHOST_MANIFEST_FILE]));
-  if (!validation.ok) {
-    return {
-      ok: false,
-      errorCode: 'INVALID_INPUT',
-      message: `插件信息不合格:${validation.reason}`,
-    };
-  }
-
-  const targetDir = path.resolve(input.dir);
-  try {
-    await fs.promises.lstat(targetDir);
-    return {
-      ok: false,
-      errorCode: 'TARGET_EXISTS',
-      message: `目标已经存在，不会覆盖:${targetDir}`,
-    };
-  } catch (err) {
-    if (!hasFsErrorCode(err, 'ENOENT')) {
-      return {
-        ok: false,
-        errorCode: 'INTERNAL',
-        message: err instanceof Error ? err.message : String(err),
-      };
-    }
-  }
-
-  const parentDir = path.dirname(targetDir);
-  let stagingDir: string | null = null;
-  try {
-    await fs.promises.mkdir(parentDir, { recursive: true });
-    stagingDir = await fs.promises.mkdtemp(
-      path.join(parentDir, `.${path.basename(targetDir)}-scaffold-`),
-    );
-    for (const [rel, content] of Object.entries(files)) {
-      const abs = path.join(stagingDir, rel);
-      await fs.promises.mkdir(path.dirname(abs), { recursive: true });
-      await fs.promises.writeFile(abs, content, { encoding: 'utf8', flag: 'wx' });
-    }
-    try {
-      await fs.promises.rename(stagingDir, targetDir);
-      stagingDir = null;
-    } catch (err) {
-      if (hasFsErrorCode(err, 'EEXIST') || hasFsErrorCode(err, 'ENOTEMPTY')) {
-        return {
-          ok: false,
-          errorCode: 'TARGET_EXISTS',
-          message: `目标已经存在，不会覆盖:${targetDir}`,
-        };
-      }
-      throw err;
-    }
-    return {
-      ok: true,
-      dir: targetDir,
-      template,
-      files: Object.keys(files).sort(),
-      nextSteps: [
-        '按需要修改 ghost.json、main.js 和 worker 源码。',
-        '调用 ghost_forge_pack 打包并让用户确认安装。',
-        'Node 模板不允许在安装或首次运行时执行 npm install、npx 或 postinstall。',
-      ],
-    };
-  } catch (err) {
-    return {
-      ok: false,
-      errorCode: 'INTERNAL',
-      message: err instanceof Error ? err.message : String(err),
-    };
-  } finally {
-    if (stagingDir) {
-      await fs.promises.rm(stagingDir, { recursive: true, force: true }).catch(() => {});
-    }
-  }
-}
 
 /**
  * 校验 + 打包一个意识源码目录。产物写到源码目录自身(<id>-<version>.cindy,
@@ -537,9 +60,7 @@ export async function packGhostDir(dir: string): Promise<ForgePackResult> {
     // 1) 清单先行:与装入侧同一套校验,错在打包期就报清楚。
     let manifestRaw: unknown;
     try {
-      manifestRaw = JSON.parse(
-        await fs.promises.readFile(path.join(dir, GHOST_MANIFEST_FILE), 'utf-8'),
-      );
+      manifestRaw = JSON.parse(await fs.promises.readFile(path.join(dir, GHOST_MANIFEST_FILE), 'utf-8'));
     } catch (err) {
       return {
         ok: false,
@@ -556,7 +77,6 @@ export async function packGhostDir(dir: string): Promise<ForgePackResult> {
     // 2) 清单声明的入口文件必须真实在场(打包期拦,别等装入后沙箱 404)。
     const mustExist: string[] = [];
     if (manifest.entry) mustExist.push(manifest.entry);
-    if (manifest.node?.entry) mustExist.push(manifest.node.entry);
     if (manifest.panel?.html) mustExist.push(manifest.panel.html);
     if (manifest.settingsHtml) mustExist.push(manifest.settingsHtml);
     for (const rel of mustExist) {
@@ -571,8 +91,6 @@ export async function packGhostDir(dir: string): Promise<ForgePackResult> {
     // 3) 收集文件(递归,跳过开发残留),数量/体积设限。
     const files: Array<{ rel: string; abs: string }> = [];
     let totalBytes = 0;
-    const maxFiles = manifest.node ? MAX_NODE_FILES : MAX_BASIC_FILES;
-    const maxTotalBytes = manifest.node ? MAX_NODE_TOTAL_BYTES : MAX_BASIC_TOTAL_BYTES;
     const walk = async (cur: string, relBase: string): Promise<ForgePackResult | null> => {
       const entries = await fs.promises.readdir(cur, { withFileTypes: true });
       for (const e of entries) {
@@ -585,15 +103,11 @@ export async function packGhostDir(dir: string): Promise<ForgePackResult> {
         } else if (e.isFile()) {
           files.push({ rel, abs });
           totalBytes += (await fs.promises.stat(abs)).size;
-          if (files.length > maxFiles) {
-            return { ok: false, errorCode: 'TOO_LARGE', message: `文件过多(上限 ${maxFiles} 个)` };
+          if (files.length > MAX_FILES) {
+            return { ok: false, errorCode: 'TOO_LARGE', message: `文件过多(上限 ${MAX_FILES} 个)` };
           }
-          if (totalBytes > maxTotalBytes) {
-            return {
-              ok: false,
-              errorCode: 'TOO_LARGE',
-              message: `总体积超上限(${maxTotalBytes} 字节)`,
-            };
+          if (totalBytes > MAX_TOTAL_BYTES) {
+            return { ok: false, errorCode: 'TOO_LARGE', message: `总体积超上限(${MAX_TOTAL_BYTES} 字节)` };
           }
         }
       }
@@ -610,23 +124,11 @@ export async function packGhostDir(dir: string): Promise<ForgePackResult> {
       zip.file(f.rel, await fs.promises.readFile(f.abs));
     }
     const buf = await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' });
-    const maxCindyBytes = manifest.node ? MAX_NODE_CINDY_BYTES : MAX_BASIC_CINDY_BYTES;
-    if (buf.byteLength > maxCindyBytes) {
-      return {
-        ok: false,
-        errorCode: 'TOO_LARGE',
-        message: `压缩包体积超上限(${maxCindyBytes} 字节)`,
-      };
-    }
     const cindyPath = path.join(dir, `${manifest.id}-${manifest.version}.cindy`);
     await fs.promises.writeFile(cindyPath, buf);
     return { ok: true, cindyPath, manifest };
   } catch (err) {
-    return {
-      ok: false,
-      errorCode: 'INTERNAL',
-      message: err instanceof Error ? err.message : String(err),
-    };
+    return { ok: false, errorCode: 'INTERNAL', message: err instanceof Error ? err.message : String(err) };
   }
 }
 
@@ -641,18 +143,12 @@ export const FORGE_GUIDE = `# 意识(Ghost)编写手册
 写一个意识。**流程:读完本手册 → 在工作目录写源码文件 → ghost_forge_pack 打包 →
 用户在弹窗上确认装入。**
 
-从零开始时优先调用 \`ghost_forge_scaffold\` 生成一份不会覆盖现有文件的骨架，再在
-骨架上修改。可选模板:\`plain\`(普通沙箱工具)、\`agent-action\`(卡片点击后让 Agent
-继续工作)、\`node-json-rpc\`(普通随包 Node 服务)、\`node-mcp\`(随包 stdio MCP)。
-
 ## 1. 目录结构(最小可用)
 
 \`\`\`
 my-ghost/
 ├── ghost.json    ← 身份卡(必须,zip 根部)
 ├── main.js       ← 电子脑:后台逻辑入口(声明了 tools/cindy 时必须)
-├── node/
-│   └── worker.cjs ← 可选:随包 Node/stdio MCP 入口(声明 node 槽时必须,见 §4.12)
 ├── panel.html    ← 面板界面(声明了 panel.html 时必须)
 ├── panel.css
 ├── panel.js
@@ -683,48 +179,11 @@ my-ghost/
 }
 \`\`\`
 
-十三个卡槽:\`tool\`(注册工具给 AI)、\`cindy\`(请 Cindy 本体代办:出图/改图)、\`agent\`(让
-当前 Agent 开始一个普通用户回合,见 §4.11)、\`panel\`(常驻
+八个卡槽:\`tool\`(注册工具给 AI)、\`cindy\`(请 Cindy 本体代办:出图/改图)、\`panel\`(常驻
 面板)、\`card\`(聊天卡片:自绘工具调用的过程与结果,见 §4.5)、\`subscribe\`(旁听会话
 事件 + 拦截用户消息,见 §4.6)、\`network\`(访问自带服务的域名白名单 HTTP,主机代发,
 见 §4.7)、\`notify\`(弹系统轻提示,主机画壳带你的身份头,见 §4.9)、\`fs\`(请主机
-代写文件:私有数据目录/会话工作目录/过户目录三档,见 §4.10)、\`node\`(运行随包
-Node 工作进程或 stdio MCP,见 §4.12)、\`session-context\`(派活时主机把当前会话的
-可信 session_id / workdir 注入 args,见 §4.13)、\`pick\`(请主机弹系统选文件夹窗口,
-用户亲选即授权,见 §4.14)、\`preview\`(请主机在右侧栏内置浏览器打开白名单网站的
-预览标签,见 §4.15)。
-
-**agent 能力详单**:在 \`slots\` 加 \`"agent"\`，默认只允许在用户真实点击你的
-聊天卡片后发起一次 Agent 回合；这一档不写配套字段。若确实需要没有当次点击也能
-自动发起，额外写 \`"agent": { "background": true }\`。后台档会在装入确认框单独
-显示为更高风险权限，而且仍只能使用用户曾通过点击卡片与你建立关联的会话。
-
-**node 工作进程详单**(声明 node 槽时必写,详见 §4.12):
-
-\`\`\`json
-"node": {
-  "entry": "node/worker.cjs",          // 包内 CommonJS 入口，只认 .js/.cjs
-  "protocol": "json-rpc-stdio",       // json-rpc-stdio / mcp-stdio
-  "lifecycle": "on-demand",           // 可选:on-demand(缺省)/resident(常驻,单列高风险权限)
-  "idleTimeoutSeconds": 120,           // 可选:按需档空闲关闭时间,30–3600;resident 禁写
-  "entries": ["node/build.cjs"],       // 可选 ≤4 条:额外工作进程入口(每入口一个独立进程,调用时用 entry 指名,见 §4.12.1;不能与 entry / 浏览器沙箱 entry / 彼此重复)
-  "childSpawn": true                   // 可选:worker 可请宿主代启申报入口的原样 stdio 子进程(见 §4.12.4;装入确认框单列一行)
-}
-\`\`\`
-
-node 详单**不接受** \`command\` / \`args\` / \`shell\` / \`env\` 或其它自造字段；
-入口固定使用 Cindy 随包运行时启动，用户不需要另装 Node、CLI 或 MCP。
-**不要在 worker 里用 \`process.execPath\` / \`child_process.fork\` 再生 Node 子进程**
-——正式包关闭了 RunAsNode,那样生出来的不是 Node;要多进程就把入口申报进
-\`entries\`,由主机代开。
-
-**preview 详单**(声明 preview 槽时必写,详见 §4.15):
-
-\`\`\`json
-"preview": {
-  "hosts": ["*.example.dev", "localhost"]   // 1–4 条;语法同 network.hosts;能在右侧栏打开的预览网站白名单,装入确认框逐条展示
-}
-\`\`\`
+代写文件:私有数据目录/会话工作目录/过户目录三档,见 §4.10)。
 
 **cindy 能力详单**:声明"这个意识被允许点主机代办菜单上的哪些菜"——只有类目和
 动作,**没有任何具体模型/供应商信息**(选型权在主机与用户,意识只表达意图)。
@@ -1001,9 +460,9 @@ cindy.onHostMessage(async function (msg) {
 \`\`\`
 
 硬规则(主机代码强制,写了也没用的别写):
-- **纯 HTML+CSS,零脚本**:\`<script>\`/事件属性/iframe/svg 等一律被主机
+- **纯 HTML+CSS,零脚本**:\`<script>\`/事件属性/\`<a>\`/iframe/svg 等一律被主机
   净化器剥除或连内容丢弃;可用标签为 div/span/p/h1-h4/ul/ol/li/img/figure/table/
-  pre/code/style/a 等排版件;
+  pre/code/style 等排版件;
 - **动画可以写,但只许动 transform / opacity**(\`@keyframes\` 体内出现其它属性 =
   整卡动画作废,回退主机统一扫光)。动画只在该次调用 running 期间生效——
   交卷后主机自动换成剥掉动画的静态版,历史卡永远静止,你不用(也无法)
@@ -1016,7 +475,7 @@ cindy.onHostMessage(async function (msg) {
   url 直接用;别人的图/外链/data: 一律被剥)。CSS 里的 \`url()\` 同规则;
 - **可放交互按钮**(交互卡 v2):卡里可写 \`<button data-ghost-action="<动作id>">U1</button>\`
   (\`data-ghost-action\` 也可挂在 div/span/img 上,把整块当按钮)。用户点击时主机受信桥把
-  \`{type:'event', name:'card-action', callId, actionId, sessionId, userActionToken}\` 回传你的电子脑(见下方 onHostMessage
+  \`{type:'event', name:'card-action', callId, actionId}\` 回传你的电子脑(见下方 onHostMessage
   分支),你据此干活(如调你自己的工具)再 \`card-update\` 换新卡。**仍零脚本**——按钮只是
   声明,点击链路由主机独占,你写不了 onclick、也伪造不了点击。动作 id 限
   \`[A-Za-z0-9_:-]\` ≤128 字符(含 \`:\`,可直接用第三方 customId);不合法的值主机只丢该属性
@@ -1025,14 +484,6 @@ cindy.onHostMessage(async function (msg) {
   \`data-ghost-prompt="占位文案"\`(≤128 字,可空串)。用户点击时主机弹标准输入框
   收集文字(textarea,回车发送/Esc 取消),card-action 事件多带 \`prompt\` 字段
   (≤2000 字)——你不用也画不了卡内输入框,输入交互由主机代管;
-- **可放外部链接**(外链 v3,经宿主确认):写 \`<a href="https://…">官网</a>\`,或在
-  任意可用标签上挂 \`data-ghost-link="https://…"\`(整块可点)。仅收**整串**
-  http/https URL(≤2048 字,不合法只丢属性——文字保留、点不动)。用户点击时主机
-  先弹确认框亮出真实域名与完整链接,用户确认才在系统浏览器打开——跳转链路由
-  主机独占,href 不会真的落进卡片(主机转写成声明属性),你写不了跳转、也
-  骗不了确认框上显示的去向。与 \`data-ghost-action\` 同挂时动作优先、链接被忽略,
-  一个元素只有一种点击行为;别拿链接文案冒充按钮语义,去向和文案不符只会让
-  用户在确认框里看穿;
 - 不带 \`data-ghost-action\` 的图片仍是"点开看大图":用户点卡内图片主机自动弹 lightbox
   (大图/标注/另存),零代码;复杂交互(多字段表单等)仍去你的面板做;
 - **3D 预览图**:img 再加 \`data-ghost-model="cindy-media://blobs/<指纹>.glb"\`(你名下
@@ -1087,8 +538,6 @@ cindy.onHostMessage(async function (msg) {
     // msg.actionId = 你在 data-ghost-action 里写的动作 id;
     // msg.prompt = 用户输入的文字(仅 data-ghost-prompt 类按钮有,非空才带);
     // msg.spawnCallId = 主机铸的**衍生卡位**:画到它 = 原卡下方长出新卡。
-    // 声明 agent 槽后还会收到 msg.sessionId 与 msg.userActionToken；后者是
-    // 绑定本插件+本会话、两分钟有效且只能使用一次的 Agent 通行票(见 §4.11)。
     cindy.send({ type: 'card-update', callId: msg.spawnCallId, v: 2, state: 'working', // 过程态:会话侧栏保持运行呼吸
                  html: '<div style="padding:12px">⏳ 生成中…</div>', height: 110 });
     const r = await doSomething(msg.actionId, msg.prompt);     // 干活(可调你自己的工具/network 槽)
@@ -1714,320 +1163,6 @@ await cindy.fs({ op: 'write', root: 'data', path: 'a.txt', content: 'hi' });
   想拿二进制回传 \`encoding:'base64'\`);单次写入上限 16MB,超了拆多个文件;
 - 符号链接一律不穿透:目标是 symlink、或路径经 symlink 逃出根目录,直接拒。
 
-## 4.11 发起 Agent 新回合(agent 槽)
-
-这个槽让你的 \`main.js\` 把一段文字作为**普通用户消息**交给 Cindy Agent，适合
-“用户在插件卡片上点继续，然后 Agent 接着做”的流程。它不是系统提示词，也不会
-修改该会话里其它插件或 Agent 的长期规则。
-
-最安全、也是默认的用法，是消费 \`card-action\` 事件里的真实用户点击票：
-
-\`\`\`js
-cindy.onHostMessage(async function (msg) {
-  if (msg.type !== 'event' || msg.name !== 'card-action') return;
-
-  const result = await cindy.agent.run({
-    mode: 'continue', // continue = 继续原会话；fork = 从最新回复分叉；new = 新建会话
-    promptTemplate: '用户要求：{{user_message}}\\n插件事件：{{event_json}}\\n请继续处理。',
-    userMessage: msg.prompt || '继续',
-    event: { actionId: msg.actionId, callId: msg.callId },
-    userActionToken: msg.userActionToken,
-    // title: '插件创建的新任务' // 仅 mode:'new' 时使用
-  });
-
-  if (!result.ok) {
-    // result.errorCode / result.message 可用于把失败原因画回卡片
-    return;
-  }
-  // result.sessionId = 实际工作的会话；disposition 说明新建/恢复/排队/分叉
-});
-\`\`\`
-
-模板规则由主机强制：
-
-- \`promptTemplate\` 必须且只能出现一次 \`{{user_message}}\`；主机把
-  \`userMessage\` 填进去。\`{{event_json}}\` 可出现零次或多次，主机统一替换成
-  \`event\` 的 JSON。不要自己用字符串拼接绕开模板；
-- \`mode:'continue'\` 使用被点卡片所属的原会话；\`fork\` 从原会话最新一条有效
-  Agent 回复处分叉后再发送；\`new\` 继承原会话的 Agent、模型和工作目录配置；
-- 票据绑定当前插件与卡片所属会话，两分钟有效、只能成功提交一次。runner 失败也
-  不退票，避免一次点击被放大成多次收费回合；拿不到 \`userActionToken\` 时不要调用；
-- 会话正在工作时不会硬插队，主机会把请求放进该会话的输入队列。最终文字、插件 id、
-  插件版本、模板和事件 JSON 会随用户消息一起留存，方便用户知道这轮从哪里来。
-
-只有清单额外声明 \`"agent": { "background": true }\` 时，才可不用当次票据：
-
-\`\`\`js
-await cindy.agent.run({
-  mode: 'continue',
-  trigger: 'background',
-  sessionId: rememberedSessionId,
-  promptTemplate: '后台任务有新结果：{{user_message}}\\n{{event_json}}',
-  userMessage: '请检查并继续',
-  event: { jobId: 'job-123', state: 'done' }
-});
-\`\`\`
-
-后台调用只能使用用户过去点击过你卡片、已与你建立关联的会话；每个插件同时只处理
-一条 Agent 请求，后台请求之间至少间隔 10 秒。这个能力可能自动产生模型费用，只在
-产品确实需要时申请，不要把 \`sessionId\` 当作任意跨会话控制口。
-
-## 4.12 随包 Node 工作进程与 stdio MCP(node 槽)
-
-\`main.js\` 永远还是浏览器沙箱代码。声明 node 槽后，主机额外为**这一段意识**按需
-启动一个独立 Node 进程；同一插件的多个会话复用它，不同插件绝不共用进程。通信链固定为：
-
-\`\`\`
-Node worker ↔ JSON-RPC stdio ↔ 你的 main.js ↔ Cindy 主机能力
-\`\`\`
-
-Node 不能直接拿到 \`cindy\`、Electron IPC 或 Agent 会话。它向主机发反向 JSON-RPC
-请求时，主机会固定返回 \`-32601\`；需要 Cindy 能力时，Node 先把数据回给 \`main.js\`，
-再由 \`main.js\` 调自己已声明的 cindy / agent / network / fs 等槽，主机照常逐项验权。
-
-### 4.12.1 自定义 Node 服务(JSON-RPC stdio)
-
-这不是“只能做 MCP”。你可以把 worker 当成任意本地 Node 服务，只要用一行一个
-JSON-RPC 2.0 对象收发。stdout **只能写协议消息**，日志写 stderr：
-
-\`\`\`js
-// node/worker.cjs
-const readline = require('node:readline');
-
-function reply(message) {
-  process.stdout.write(JSON.stringify(message) + '\\n');
-}
-
-readline.createInterface({ input: process.stdin }).on('line', async (line) => {
-  const request = JSON.parse(line);
-  if (request.method === 'taptap/connect') {
-    const result = await connectTapTap(request.params); // 这里可用完整 Node/CLI 能力
-    reply({ jsonrpc: '2.0', id: request.id, result });
-    return;
-  }
-  reply({ jsonrpc: '2.0', id: request.id,
-          error: { code: -32601, message: 'Method not found' } });
-});
-\`\`\`
-
-\`main.js\` 调用：
-
-\`\`\`js
-const response = await cindy.node.request({
-  method: 'taptap/connect',
-  params: { projectId: 'demo' },
-  timeoutMs: 30000 // 可选 1000–120000，缺省 30000
-});
-if (!response.ok) throw new Error(response.message);
-const result = response.result;
-\`\`\`
-
-长任务(构建/打包这类几分钟量级的活)加 \`maxTotalMs\` 开启**有动静就续期**:
-\`timeoutMs\` 变成"沉默窗口"——worker 只要还在输出(stdout 协议消息或 stderr
-日志)就不断续期,绝对上限 \`maxTotalMs\`(最长 15 分钟):
-
-\`\`\`js
-const built = await cindy.node.request({
-  method: 'build/run',
-  params: { projectId: 'demo' },
-  timeoutMs: 60000,     // 沉默 60 秒判死
-  maxTotalMs: 900000    // 就算一直有动静,最多也只等 15 分钟
-});
-\`\`\`
-
-worker 侧配合:干长活时定期发进度 notification(或往 stderr 打日志)即可;
-彻底静默超过 timeoutMs、或总时长到 maxTotalMs,都会收到 TIMEOUT。mcp-stdio
-的 \`tools/call\` 同样适用(MCP 进度通知天然就是"动静")。
-
-多进程:在 \`node.entries\` 申报额外入口后,\`cindy.node.request\` 带 \`entry\`
-指名调用(缺省 = 主入口 \`node.entry\`);每个入口一个独立进程、独立空闲回收,
-协议与生命周期声明全体共用:
-
-\`\`\`js
-const built = await cindy.node.request({
-  entry: 'node/build.cjs',           // 必须逐字命中 node.entries,否则整单拒
-  method: 'build/run',
-  params: { projectId: 'demo' }
-});
-\`\`\`
-
-worker 可以发不带 id 的 notification 报进度，主机会转成 main.js 的
-\`node-notification\` 事件；进程启动/停止/崩溃会转成 \`node-status\`(额外入口的
-状态事件带 \`entry\` 字段,主入口不带)：
-
-\`\`\`js
-// worker
-reply({ jsonrpc: '2.0', method: 'progress', params: { percent: 50 } });
-
-// main.js
-cindy.onHostMessage((msg) => {
-  if (msg.type === 'event' && msg.name === 'node-notification') {
-    // msg.method / msg.params
-  }
-  if (msg.type === 'event' && msg.name === 'node-status') {
-    // msg.state = starting / running / stopped / crashed
-  }
-});
-\`\`\`
-
-### 4.12.2 stdio MCP
-
-把 \`protocol\` 改成 \`"mcp-stdio"\`，worker 实现标准的逐行 JSON-RPC MCP server。
-Cindy 会统一完成 \`initialize\` + \`notifications/initialized\`，你的 main.js 不要重复初始化，
-直接调用标准方法：
-
-\`\`\`js
-const listed = await cindy.node.request({ method: 'tools/list', params: {} });
-const called = await cindy.node.request({
-  method: 'tools/call',
-  params: { name: 'build_game', arguments: { projectId: 'demo' } }
-});
-\`\`\`
-
-MCP server 的 sampling / elicitation / roots 等 server→client 反向请求第一版不开放；需要
-这类能力时仍按“结果回 main.js，再由 main.js 申请 Cindy 槽”的链路设计。
-
-### 4.12.3 打包和生命周期红线
-
-- 用户不需要安装 Node、npm、CLI 或 MCP。运行时由 Cindy 随包提供；你必须在制作阶段
-  把依赖打成单个 worker 文件或连同静态资源放进目录；**禁止**在安装/首次运行时执行
-  \`npm install\`、\`npx\`、\`postinstall\` 或从网络下载可执行代码；
-- Forge 会跳过 \`node_modules\`，推荐用 esbuild/rollup 预打包成 \`worker.cjs\`。Node 包
-  最多 2048 个文件、解压后 256MB、.cindy 128MB；超限直接拒绝；
-- \`on-demand\` 首次 \`cindy.node.request\` 才启动，缺省空闲 120 秒关闭；停用、更新、
-  卸载、退出 Cindy 都立即关闭。\`resident\` 会随插件启用一直运行，安装确认里单独显示；
-- 每个插件最多 32 条在途请求；单次 params 256KB、单行 stdout 1MB。单次请求缺省
-  30 秒、上限 120 秒;长任务用 maxTotalMs 开启"有动静就续期",绝对上限 15 分钟
-  (见 §4.12.1)。进程崩溃只影响
-  自己，所有在途请求收到结构化失败，下次请求可重新启动；
-- **最重要的安全事实**：Node 进程不是浏览器沙箱，它拥有当前登录系统账号能拿到的
-  本机权限，能读写文件、联网、起别的进程。安装时先展示权限清单，真正写盘前还会
-  由 Cindy 主进程弹出一次系统级强风险确认；
-  不需要本机能力的插件不要申请 node 槽。
-
-### 4.12.4 宿主代启子进程(childSpawn)
-
-有些库(如 \`@taptap/maker\`)会在肚子里自己 \`spawn(process.execPath, [脚本, 参数])\`
-——在 Cindy 的 worker 里这条路是死路(正式包关 RunAsNode,生出来的不是 Node)。
-声明 \`"childSpawn": true\` 后,worker 里多一个全局窄接口,可以请宿主**代启**一个
-已申报入口的原样 stdio 子进程:
-
-\`\`\`js
-// worker 里(仅普通 worker 模式有;子进程里没有——树深恒为 1)
-const child = await globalThis.__CINDY_NODE__.spawnEntry(
-  'node/maker.cjs',                 // 必须逐字命中 node.entry / node.entries
-  ['__maker-proxy']                 // 启动参数(≤16 条、单条 ≤2048 字符),
-);                                  // 子进程看到的 argv 就像被 node 正常启动
-child.stdout.on('data', (buf) => { /* 字节原样到手 */ });
-child.stdin.write('{"jsonrpc":"2.0",...}\\n');
-child.on('exit', (code) => { /* 级联生死:worker 停,孩子必停 */ });
-child.kill();
-\`\`\`
-
-给第三方库改道的惯用垫片——在 require 它**之前**打补丁:
-
-\`\`\`js
-const cp = require('node:child_process');
-const realSpawn = cp.spawn;
-cp.spawn = (cmd, args, opts) => {
-  if (cmd === process.execPath) {
-    // 把 [脚本绝对路径, ...其余参数] 映射到申报入口 + 参数
-    return wrapAsChildProcess(globalThis.__CINDY_NODE__.spawnEntry('node/maker.cjs', args.slice(1)));
-  }
-  return realSpawn(cmd, args, opts);
-};
-const maker = require('@taptap/maker'); // 之后它的自启动全部走了正道
-\`\`\`
-
-红线与钳制:
-
-- 只能启动 \`node.entry\` / \`node.entries\` 里**逐字申报过**的 JS——这不是任意
-  命令执行,连 node 命令行参数都不存在;
-- 每插件同时在世的子进程最多 4 个;子进程不能再生孙进程(接口只在 worker 有);
-- stdio 由宿主纯字节中继(base64 帧,不参与 JSON-RPC 协议、不受逐行检查),
-  但**只适合文本/协议流**,别拿它传大文件;
-- 级联生死:worker 退出/被停/插件停用,子进程一并收掉,不留孤儿。
-
-## 4.13 会话上下文(session-context 槽)
-
-围着用户项目干活的插件(构建/检查/同步类)需要知道"现在是哪个会话、项目在哪个
-文件夹"。声明 \`session-context\` 槽后,agent 派活(tool-call)时主机把**宿主铸造**
-的上下文注入 \`args.session_context\`:
-
-\`\`\`js
-cindy.onHostMessage(async (msg) => {
-  if (msg.type !== 'tool-call') return;
-  const ctx = msg.args.session_context;
-  // ctx = { session_id, workdir, workdir_is_local }
-  if (ctx?.workdir_is_local && ctx.workdir) {
-    // 只有 workdir_is_local === true 才能把 workdir 当本机路径交给 Node 侧
-    await cindy.node.request({ method: 'project/build', params: { dir: ctx.workdir } });
-  }
-});
-\`\`\`
-
-规则与红线:
-
-- 注入只发生在**主机侧**:agent 或任何上游自报的 \`session_context\` 一律被主机
-  剥除后重铸——你拿到的字段永远可信,不需要再验;
-- \`workdir_is_local\` 是安全核心:会话跑在 SSH 远程工作区(或主机证明不了是本地)
-  时为 \`false\`,此时 \`workdir\` 是远端路径,**绝不能**当本机路径读写——同名本机
-  目录可能存在,写下去就是事故;
-- 这只是"位置信息",不是文件访问权:读写仍走 fs 槽 / node 槽各自的守门;
-- 未声明本槽的插件,args 里永远没有 \`session_context\` 字段。
-
-## 4.14 目录选择(pick 槽)
-
-需要用户交一个文件夹进来(导入/同步/部署源)时,声明 \`pick\` 槽,经管子请主机
-弹**系统级**选文件夹窗口——用户亲手选中即授权,取消则你什么都拿不到:
-
-\`\`\`js
-const picked = await cindy.pick({
-  mode: 'directory',
-  title: '选择要同步的项目父目录',   // 净化后随插件名一起展示(≤80 字)
-  deposit: true                       // 需要过户票据(上传用)时带;声明了 node 槽可省
-});
-if (picked.ok) {
-  // picked.name        —— 所选目录名(展示用)
-  // picked.path        —— 绝对路径,仅声明了 node 槽的插件有(交给 Node 侧干活)
-  // picked.dir_deposit —— 过户票据(同 ghost_call dir 通道;deposit:true 才有)
-}
-\`\`\`
-
-规则与红线:
-
-- 对话框由主机拼装并带你的插件名,\`title\` 只是用途说明片段,伪装不了主机文案;
-- 同一插件两次请求最小间隔 3 秒、全局同时只有一个选择框(超了回 RATE_LIMITED /
-  BUSY);用户取消回 CANCELLED——**尊重取消,不要循环重弹**,那是骚扰;
-- 未声明 node 槽的插件必须 \`deposit: true\`(没有票据你什么都拿不到,请求会被拒);
-  票据收集有上限(500 文件/单文件 50MB/总 256MB),超限会签发失败;
-- \`path\` 只发给声明了 node 槽的插件:Node 侧本就有用户级本机权限,给路径不扩权,
-  价值是把"用户选了哪个目录"这一事实可信地交过去。
-
-## 4.15 面板预览(preview 槽)
-
-部署预览、本地 dev server、控制台面板这类"给用户看个网页"的需求,声明 \`preview\`
-槽 + \`preview.hosts\` 白名单(见 §2),运行期请主机在右侧栏内置浏览器开标签:
-
-\`\`\`js
-const opened = await cindy.preview({
-  url: 'https://demo.example.dev/build/123',
-  sessionId: ctx?.session_id            // 可选:落到哪个会话的右侧栏;缺省当前会话
-});
-if (!opened.ok) console.warn(opened.errorCode, opened.message);
-\`\`\`
-
-规则与红线:
-
-- URL 必须命中装入时钉死的 \`preview.hosts\` 白名单:只收 https(http 仅限
-  localhost / 127.0.0.1 本地开发),不收 URL 内嵌凭证;范围外回 URL_NOT_ALLOWED,
-  **改白名单只能发新版本重新过装入确认**;
-- 同一插件两次打开最小间隔 5 秒(RATE_LIMITED)——预览是"结果亮相",不是刷屏
-  通道;
-- 每次打开,宿主都会弹带你身份头的提示("xxx 打开了一个预览页面"),用户永远
-  知道页面是谁开的;
-- 标签开在用户自己的右侧栏浏览器里,关不关、看不看由用户决定。
-
 ## 5. 面板(panel.html/css/js)
 
 - 与电子脑同源,用 \`BroadcastChannel('<自定名>')\` 通信(电子脑发,面板收);
@@ -2062,9 +1197,7 @@ if (!opened.ok) console.warn(opened.errorCode, opened.message);
 
 ## 6. 沙箱红线(平台结构保证,写了也没用)
 
-- **本节说的是 main.js 浏览器电子脑**:它无文件系统、无 Node API、默认无网络——
-  即使另申请 node 槽，Node 也在独立进程里，只能经 §4.12 的 stdio 与 main.js 交换数据，
-  不会把 require/process 等能力注入 main.js。想用 AI/出图走 cindy-request 求主机代办,
+- 无文件系统、无 Node API;默认无网络——想用 AI/出图走 cindy-request 求主机代办,
   想访问自带服务走 network 槽经主机代发(仅限详单白名单域名,见 §4.7),想落盘
   走 fs 槽请主机代写(仅限三档目的地,见 §4.10),沙箱内直连(fetch/XHR/
   WebSocket)与直接读写磁盘永远不存在,声明了槽也一样——槽给的是"请主机
@@ -2078,8 +1211,7 @@ if (!opened.ok) console.warn(opened.errorCode, opened.message);
 
 ## 7. 打包与测试
 
-1. 新插件先调 \`ghost_forge_scaffold\` 生成骨架，或把已有源码放在用户工作目录下的
-   一个文件夹里(如 \`my-ghost/\`)；脚手架目标必须是新目录，绝不覆盖已有文件；
+1. 源码写在用户工作目录下的一个文件夹里(如 \`my-ghost/\`);
 2. 调 \`ghost_forge_pack({ dir: '<绝对路径>' })\`——校验 + 打包 + 弹装入确认框;
    产物落在源码目录里(\`<id>-<version>.cindy\`,同版本覆盖,下次打包自动跳过);
 3. **告知用户去点弹窗**(装入默认沉睡,提醒用户勾"立即开启"或到主界面侧边栏「插件」中唤醒);
@@ -2087,44 +1219,13 @@ if (!opened.ok) console.warn(opened.errorCode, opened.message);
    (记得 bump ghost.json 的 version);
 5. 验证:让用户 \`$<command> <内容>\` 试一单,看聊天图卡/面板是否符合预期。
 
-## 8. 发布签名与审核
-
-\`ghost_forge_pack\` 默认只负责本地制作和试装，生成的是**未签名包**。未签名不等于
-一定有问题，用户仍可安装，但界面会明确显示“未验证”。正式对外发布时由商店或发布
-流水线在包根加入 \`cindy-signatures.json\`，不要让当前对话里的 Agent 代管正式私钥。
-
-签名使用 Ed25519，分两层：
-
-- **发布者签名**覆盖插件 id、版本、发布者名称/公钥，以及每个文件的路径、大小和
-  SHA256。它证明包里的文件和显示身份在签名后没有被改，也证明不同版本由同一把
-  发布者私钥签出；只有发布者公钥已进入 Cindy 信任表时，界面才会显示“发布者已验证”；
-- **Cindy 审核签名**再覆盖准确版本的文件清单和发布者签名。只有审核公钥属于 Cindy
-  信任表且签名有效时，界面才会显示“此版本已审核”。改一行代码或改版本号都必须重新
-  发布、重新审核，旧版本的审核不能借给新版本。
-
-钥匙的分工必须守住：
-
-- 私钥像保险柜钥匙，只留在发布者机器的安全存储或受保护的 CI；不能放进插件源码、
-  \`.cindy\`、Git、聊天消息，也不要让 Agent 读取、生成或回显正式私钥；
-- 公钥像公开印章样本，可以公开并提交给 Cindy 的发布者/审核信任表；客户端只需要
-  公钥验签，永远不需要私钥；
-- 包里自带但未进入信任表的发布者公钥，只能证明“文件没改、还是同一把钥匙”，不能
-  自己证明现实身份。签名文件一旦存在却损坏或对不上文件，客户端会直接拒装，不能
-  偷偷降级成未签名包。
-
-界面最终会区分:Cindy 随包官方、此版本已审核、发布者已验证、未验证/无签名。正式
-签名和审核应由商店/发布流水线完成；本地 Forge 不替用户生成或保存正式密钥。
-
-## 9. 常见拒装原因速查
+## 8. 常见拒装原因速查
 
 - \`id\` 不合法(大写/下划线/超长)· 声明了 command 但没有 tools · command 与已装意识撞名
 - 声明了 tool 槽但缺 tools(或反之)· panel.html 声明了但 slots 没有 "panel"
 - settingsHtml 路径不合法/文件不在包里 · settingsHeight 越界(160–800)或没配 settingsHtml 单独声明
 - keywords(已废弃字段,旧包兼容保留,新意识别写)有单字词 · kind 写了但不是 "chip"(可省略) · schemaVersion 不是 2
 - cindy 详单格式错(未知类目/动作、空数组、有详单但 slots 没有 "cindy")
-- agent 详单格式错(有详单但 slots 没有 "agent"，或 background 不是 true；只需点击触发时应省略 agent 字段)
-- node 详单格式错(槽/详单不成对、entry 不是包内 CommonJS .js/.cjs、protocol 不在 json-rpc-stdio / mcp-stdio、
-  写了 command/args/shell/env、resident 又写 idleTimeoutSeconds)
 - id 用了 \`cindy-\` / \`filo-\` / \`xd-\` 前缀(官方保留,正式版用户通道拒装;给自己的意识换个前缀)
 - network 详单格式错(hosts 缺失/裸 TLD/IP/带端口/通配不在最左、secret 缺 inject、
   inject.format 没有 {value} 占位、inject.header 用了 Host/Cookie 等协议关键头、

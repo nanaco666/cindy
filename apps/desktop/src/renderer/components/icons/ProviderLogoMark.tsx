@@ -1,7 +1,7 @@
 /**
  * ProviderLogoMark —— 模型供应商的单色官方 Logo。
  *
- * 品牌路径与 provider id/upstream 识别由 @cindy/model-providers/branding 在 Desktop / Mobile
+ * 品牌路径与 provider id/upstream 识别由 @lizi/model-providers/branding 在 Desktop / Mobile
  * 间共享；本组件只负责把共享品牌数据渲染成 currentColor SVG。
  */
 
@@ -10,7 +10,7 @@ import {
   PROVIDER_LOGO_PATHS,
   resolveProviderLogoKind,
   type ProviderLogoRouting,
-} from '@cindy/model-providers/branding';
+} from '@lizi/model-providers/branding';
 
 import { AnthropicMark } from './AnthropicMark';
 import { OpenAIMark } from './OpenAIMark';

@@ -26,10 +26,22 @@ const LFS_POINTER_HEADER = 'version https://git-lfs.github.com/spec/v1';
 const MIN_EXPECTED_BYTES = 1024;
 
 // kind → 本地落点 + 提供 ensurePlatform/readPinnedVersion 的下载模块
+//
+// platformFilter (optional): 若设置，仅当 platformKey 满足过滤条件时才执行下载；
+// 不满足时静默跳过（返回 undefined），不报错。用于平台限定的 kind（如 cua-driver 是 macOS-only）。
 const KINDS = {
   claude: { binDir: 'claude-code-bin', base: 'claude', module: '../tools/claude/update.mjs' },
   codex: { binDir: 'codex-bin', base: 'codex', module: '../tools/codex/update.mjs' },
   ripgrep: { binDir: 'ripgrep-bin', base: 'rg', module: '../tools/ripgrep/update.mjs' },
+  // cua-driver: macOS-only（二期 companion app 是 macOS 专属）；非 darwin 平台静默跳过。
+  // noCdnFallback: 公司 CDN 只托管 claude/codex/ripgrep，cua-driver 没有 CDN 兜底。
+  'cua-driver': {
+    binDir: 'cua-driver-bin',
+    base: 'cua-driver',
+    module: '../tools/cua-driver/update.mjs',
+    platformFilter: (platformKey) => platformKey.startsWith('darwin'),
+    noCdnFallback: true,
+  },
 };
 
 const log = (msg) => console.log(`\x1b[36m[ensure-agent-binaries]\x1b[0m ${msg}`);
@@ -146,11 +158,18 @@ export function tryReuseFromSiblingWorktree({ candidates, binFile, version, dest
 
 /**
  * 确保 <kind> 在 <platformKey> 平台的二进制就位。已存在合法文件且非 force 时跳过。
- * 返回最终二进制的绝对路径。
+ * 返回最终二进制的绝对路径；若 kind 的 platformFilter 不匹配（如 cua-driver 在非 darwin 平台）
+ * 则静默跳过并返回 undefined。
  */
 export async function ensureBinary(kind, platformKey = currentPlatformKey(), { force = false } = {}) {
   const cfg = KINDS[kind];
   if (!cfg) throw new Error(`Unknown kind: ${kind} (known: ${Object.keys(KINDS).join(', ')})`);
+
+  // 平台过滤：kind 配置了 platformFilter 且当前平台不满足时静默跳过（不下载、不报错）。
+  if (cfg.platformFilter && !cfg.platformFilter(platformKey)) {
+    log(`${kind} ${platformKey}: platform not supported (skip)`);
+    return undefined;
+  }
 
   const binFile = binFileFor(cfg.base, platformKey);
   const binDirPath = path.join(ROOT, 'apps', cfg.binDir, platformKey);
@@ -197,6 +216,13 @@ export async function ensureBinary(kind, platformKey = currentPlatformKey(), { f
     try {
       await mod.ensurePlatform({ version, platformKey, force });
     } catch (upstreamErr) {
+      if (cfg.noCdnFallback) {
+        // 该 kind 没有 CDN 兜底（cua-driver 等）——上游失败直接抛错
+        throw new Error(
+          `Failed to download ${kind} ${platformKey}@${version} from upstream: ${upstreamErr.message}\n` +
+            `  Fix: run "pnpm update:${kind}" manually, or check network / GITHUB_TOKEN.`,
+        );
+      }
       // claude / codex / ripgrep：上游慢/失败（含 fetch-with-timeout 的 connect/stall/total/throughput 超时）→
       // 回退公司 CDN（国内快，.gz gunzip 后与上游裸二进制字节一致）。
       warn(`${kind} ${platformKey}: upstream failed/slow (${upstreamErr.message}); falling back to CDN...`);

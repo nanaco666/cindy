@@ -18,7 +18,7 @@ import type {
   ImportContactRecord,
   SystemContactWriteItem,
   SystemContactWriteResult,
-} from '@cindy/maker-core';
+} from '@lizi/maker-core';
 
 import { throwIpcError } from '../utils/ipcValidate.js';
 

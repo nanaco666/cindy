@@ -1,14 +1,6 @@
-import { afterEach, describe, it, expect, vi } from 'vitest';
+import { afterEach, describe, it, expect } from 'vitest';
 
-const { mockGetAppCapabilities } = vi.hoisted(() => ({
-  mockGetAppCapabilities: vi.fn(() => ({ canUseCindyGateway: true })),
-}));
-
-vi.mock('../../appCapabilities.js', () => ({
-  getAppCapabilities: mockGetAppCapabilities,
-}));
-
-import { BUNDLED_CATALOG, buildUserProvider, type AgentKind, type RoutingDescriptor } from '@cindy/model-providers';
+import { BUNDLED_CATALOG, buildUserProvider, type AgentKind, type RoutingDescriptor } from '@lizi/model-providers';
 
 import {
   buildRouteDecision,
@@ -45,24 +37,10 @@ function descriptor(providerId: string, agent: AgentKind) {
 const KEY = 'sk-test-gateway-key';
 
 afterEach(() => {
-  mockGetAppCapabilities.mockReturnValue({ canUseCindyGateway: true });
   setProviderOAuthTokenReader(() => null);
   clearSessionProvider('s-xai');
   clearSessionProvider('s-xai-rewrite');
   setXdGatewayModels([]);
-});
-
-describe('local mode Cindy gateway gate', () => {
-  it('does not route explicit or implicit XD traffic when the capability is disabled', () => {
-    mockGetAppCapabilities.mockReturnValue({ canUseCindyGateway: false });
-    setSessionProvider('s-local-xd', 'xd');
-    setXdGatewayModels([{ id: 'gpt-local-gate', agents: ['codex'] }]);
-
-    expect(resolveSessionRouteDecision('s-local-xd', 'codex', KEY)).toBeNull();
-    expect(inferProviderIdForModel('gpt-local-gate', 'codex')).toBeNull();
-
-    clearSessionProvider('s-local-xd');
-  });
 });
 
 describe('claude-code: buildRouteDecision no-break 基线', () => {

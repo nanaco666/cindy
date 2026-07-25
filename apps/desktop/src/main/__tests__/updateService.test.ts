@@ -87,13 +87,6 @@ vi.mock('../downloader/index', () => ({
   },
 }));
 
-// cindy-brain/index 的真身会拖进 authManager→node-machine-id 等平台相关
-// 模块图;本套测试会伪造 process.platform,真加载会在非 Windows 上炸
-// spawnSync cmd.exe。updateService 只用 destroyAll,按需给最小假身。
-vi.mock('../cindy-brain/index', () => ({
-  getGhostNodeRuntimeBroker: () => ({ destroyAll: vi.fn() }),
-}));
-
 vi.mock('../logger', () => ({
   createLogger: () => ({
     info: logInfo,

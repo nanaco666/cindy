@@ -5,18 +5,20 @@ import {
   extractJsonStringFieldSnapshot,
   type DictationRefinementContext,
   type TextModelClient,
-} from '@cindy/voice-input-core';
+} from '@lizi/voice-input-core';
 import type { StoredMobileVoiceCredential } from '@/session/mobileVoiceCredentialStore';
 import { redactMobileVoiceCredentialText } from '@/session/mobileVoiceCredentialRedaction';
 import {
   composerVoiceStateLabel,
   type ComposerVoiceState,
-} from '@cindy/maker-shared/session-operation';
+} from '@lizi/maker-shared/session-operation';
+import { formatRemoteError } from '@lizi/maker-shared/device-link-contract';
 
 export const MOBILE_MAX_VOICE_AUDIO_BYTES = 64 * 1024 * 1024;
-export const MOBILE_VOICE_EMPTY_TRANSCRIPT_ERROR = '检测到语音但未识别出文本，请重试。';
 export const MOBILE_VOICE_MIC_PERMISSION_ERROR = '麦克风权限未开启，请在系统设置里允许 Cindy 使用麦克风。';
 export const MOBILE_VOICE_REALTIME_AUDIO_UNAVAILABLE_ERROR = '当前安装包不支持实时语音输入，请安装包含原生录音模块的测试版。';
+export const MOBILE_VOICE_CREDENTIAL_SYNC_UNSUPPORTED_ERROR =
+  '当前被控电脑端版本还不支持手机实时语音输入，请更新或重启桌面端后再试。';
 
 export type MobileVoiceState = ComposerVoiceState;
 
@@ -61,6 +63,24 @@ const MAX_MOBILE_VOICE_HISTORY_ENTRIES_FOR_REFINEMENT = 100;
 const MAX_MOBILE_VOICE_HISTORY_ITEM_CHARS = 360;
 const MAX_REFINER_RESPONSE_CHARS = 64_000;
 const MAX_ERROR_DETAIL_CHARS = 1_000;
+
+export interface MobileVoiceCloudTranscribeResult {
+  text: string;
+  provider: string;
+  model: string;
+  rawText: string;
+  refined: boolean;
+  refinerProvider?: string;
+  refinerModel?: string;
+  refineError?: string;
+}
+
+export type MobileRefinerAttempt = {
+  provider: string;
+  model: string;
+  client: TextModelClient;
+  promptCacheScope?: string;
+};
 
 export function appendVoiceTranscriptDraft(current: string, transcript: string): string {
   return appendVoiceTranscriptDraftWithRange(current, transcript).draft;
@@ -117,6 +137,17 @@ export function canCancelMobileVoiceRecording(state: MobileVoiceState): boolean 
 
 export function isMobileVoiceMicPermissionError(message: string | null | undefined): boolean {
   return message === MOBILE_VOICE_MIC_PERMISSION_ERROR;
+}
+
+export function formatMobileVoiceStartupError(error: unknown): string {
+  const formatted = formatRemoteError(error);
+  if (
+    formatted.includes('device-link:voice:credential-sync')
+    && (formatted.includes('CHANNEL_NOT_ALLOWED') || formatted.includes('DEVICE_LINK_CHANNEL_NOT_ALLOWED'))
+  ) {
+    return MOBILE_VOICE_CREDENTIAL_SYNC_UNSUPPORTED_ERROR;
+  }
+  return formatted;
 }
 
 export function normalizeMobileVoiceTranscriptResult(value: unknown): { text: string; provider?: string; model?: string } {
@@ -210,6 +241,83 @@ export async function uploadMobileVoiceRecording(
   };
 }
 
+export async function transcribeMobileVoiceRecordingWithCredential(
+  recording: MobileVoiceRecording,
+  body: Blob,
+  credential: StoredMobileVoiceCredential,
+  options: {
+    sourceLanguage?: string;
+    refinementEnabled?: boolean;
+    refinementContext?: DictationRefinementContext;
+    localVoiceInputHistory?: readonly string[];
+    deps?: CloudVoiceDeps;
+    onSubmittedTranscript?: (result: MobileVoiceCloudTranscribeResult) => void | Promise<void>;
+    onRefinementStarted?: (result: MobileVoiceCloudTranscribeResult) => void | Promise<void>;
+    onRefinementPreview?: (text: string) => void;
+  } = {},
+): Promise<MobileVoiceCloudTranscribeResult> {
+  // Legacy file-upload helper kept for protocol/media regression tests. The
+  // interactive mobile composer uses createMobileVoiceControllerSession so ASR
+  // partials are visible while recording and refinement streams into the draft.
+  const raw = await transcribeMobileVoiceAsr(recording, body, credential, options);
+  const submitted: MobileVoiceCloudTranscribeResult = {
+    ...raw,
+    rawText: raw.text,
+    refined: false,
+  };
+  await options.onSubmittedTranscript?.(submitted);
+  if (!raw.text || options.refinementEnabled === false) {
+    return submitted;
+  }
+
+  try {
+    await options.onRefinementStarted?.(submitted);
+    const refinerAttempts = buildMobileRefinerAttempts(credential, options.deps);
+    const refinerClient = createMobileRefinerTextModelClient(refinerAttempts);
+    const refiner = new DictationRefiner({
+      client: refinerClient,
+      model: refinerAttempts[0]?.model ?? credential.refiner.model,
+      promptCacheScope: refinerAttempts[0]?.promptCacheScope ?? `mobile-voice:${credential.hostDeviceId}`,
+      contextProvider: () => buildMobileVoiceRefinementContext(credential, options),
+    });
+    const refined = await refiner.refine({
+      text: raw.text,
+      runId: `mobile-voice-${Date.now()}`,
+      segmentIds: ['mobile-voice'],
+      onPartial: options.onRefinementPreview,
+    });
+    if (refined.accepted && refined.refinedText) {
+      const usedAttempt = refinerClient instanceof MobileFallbackTextModelClient
+        ? refinerClient.lastSuccessfulAttempt
+        : refinerAttempts[0];
+      return {
+        ...raw,
+        text: refined.refinedText,
+        rawText: raw.text,
+        refined: true,
+        refinerProvider: usedAttempt?.provider ?? credential.refiner.provider,
+        refinerModel: usedAttempt?.model ?? credential.refiner.model,
+      };
+    }
+    return {
+      ...raw,
+      rawText: raw.text,
+      refined: false,
+      refinerProvider: credential.refiner.provider,
+      refinerModel: credential.refiner.model,
+    };
+  } catch (err) {
+    return {
+      ...raw,
+      rawText: raw.text,
+      refined: false,
+      refinerProvider: credential.refiner.provider,
+      refinerModel: credential.refiner.model,
+      refineError: redactMobileVoiceCredentialText(err, credential),
+    };
+  }
+}
+
 export function buildMobileVoiceRefinementContext(
   credential: StoredMobileVoiceCredential,
   options: {
@@ -241,19 +349,71 @@ export function buildMobileVoiceRefinementContext(
   };
 }
 
-/**
- * 托管润色客户端:请求目标(voice-server refine 端点 + 一次性授权)由
- * requestTargetProvider 现取,客户端不落任何推理 key,也不再支持用本机保存的
- * key 直拨上游(BYOK 已删除)。
- */
+async function transcribeMobileVoiceAsr(
+  recording: MobileVoiceRecording,
+  body: Blob,
+  credential: StoredMobileVoiceCredential,
+  options: { sourceLanguage?: string; deps?: CloudVoiceDeps },
+): Promise<Omit<MobileVoiceCloudTranscribeResult, 'rawText' | 'refined' | 'refineError'>> {
+  if (!Number.isFinite(recording.size) || recording.size <= 0) {
+    throw new Error('录音为空，不能转写。');
+  }
+  if (recording.size > MOBILE_MAX_VOICE_AUDIO_BYTES) {
+    throw new Error(`录音超过上限 ${Math.round(MOBILE_MAX_VOICE_AUDIO_BYTES / 1024 / 1024)}MB。`);
+  }
+  if (credential.asr.mode !== 'batch-http') {
+    throw new Error(`手机版暂不支持 ${credential.asr.mode} 语音识别，请重新同步 batch ASR 配置。`);
+  }
+  if (!credential.asr.endpointPath) {
+    throw new Error('语音识别配置缺少 endpointPath。');
+  }
+
+  const meta = resolveVoiceRecordingMeta(recording);
+  const form = new FormData();
+  form.append('model', credential.asr.model);
+  if (options.sourceLanguage) form.append('language', options.sourceLanguage);
+  form.append('file', body, meta.fileName);
+
+  const fetchImpl = options.deps?.fetch ?? fetch;
+  const response = await fetchImpl(joinProxyPath(credential.proxyBaseUrl, credential.asr.endpointPath), {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${credential.proxyApiKey}`,
+    },
+    body: form,
+  });
+  if (!response.ok) {
+    throw new Error(await cloudVoiceHttpErrorMessage('语音识别失败', response, credential));
+  }
+  const payload = await response.json().catch(() => null);
+  const text = typeof payload?.text === 'string' ? payload.text.trim() : '';
+  if (!text) throw new Error('语音识别没有返回文本。');
+  return {
+    text,
+    provider: credential.asr.provider,
+    model: credential.asr.model,
+    refinerProvider: credential.refiner.provider,
+    refinerModel: credential.refiner.model,
+  };
+}
+
 export class MobileLiteLlmTextModelClient implements TextModelClient {
+  private readonly proxyApiKey?: string;
+  private readonly baseUrl?: string;
+  private readonly endpointPath: string;
   private readonly deps?: CloudVoiceDeps;
-  private readonly requestTargetProvider: (options?: { refreshAccessToken?: boolean }) => Promise<{ url: string; authorization: string }>;
+  private readonly requestTargetProvider?: (options?: { refreshAccessToken?: boolean }) => Promise<{ url: string; authorization: string }>;
 
   constructor(options: {
-    requestTargetProvider: (options?: { refreshAccessToken?: boolean }) => Promise<{ url: string; authorization: string }>;
+    proxyApiKey?: string;
+    baseUrl?: string;
+    endpointPath?: string;
     deps?: CloudVoiceDeps;
+    requestTargetProvider?: (options?: { refreshAccessToken?: boolean }) => Promise<{ url: string; authorization: string }>;
   }) {
+    this.proxyApiKey = options.proxyApiKey;
+    this.baseUrl = options.baseUrl;
+    this.endpointPath = options.endpointPath ?? '/v1/chat/completions';
     this.deps = options.deps;
     this.requestTargetProvider = options.requestTargetProvider;
   }
@@ -267,17 +427,13 @@ export class MobileLiteLlmTextModelClient implements TextModelClient {
     onTextSnapshot?: (text: string) => void;
   }): Promise<T> {
     const fetchImpl = this.deps?.fetch ?? fetch;
-    // prompt_cache_key 让上游把 warmup 与真实润色路由到同一缓存分片;派生逻辑
-    // 必须与 makeMobileRefinerPromptCacheKey 完全一致(warmup 调用方用它预热)。
-    const promptCacheKey = makeMobileRefinerPromptCacheKey({
-      model: input.model,
-      schemaName: input.schemaName,
-      promptVersion: extractPromptVersion(input.user),
-      system: input.system,
-      scope: input.promptCacheScope,
-    });
     const request = async (refreshAccessToken = false) => {
-      const target = await this.requestTargetProvider({ refreshAccessToken });
+      const target = this.requestTargetProvider
+        ? await this.requestTargetProvider({ refreshAccessToken })
+        : {
+            url: joinProxyPath(this.baseUrl!, this.endpointPath),
+            authorization: `Bearer ${this.proxyApiKey!}`,
+          };
       return fetchImpl(target.url, {
       method: 'POST',
       headers: {
@@ -288,7 +444,6 @@ export class MobileLiteLlmTextModelClient implements TextModelClient {
       body: JSON.stringify({
         model: input.model,
         response_format: { type: 'json_object' },
-        prompt_cache_key: promptCacheKey,
         stream: true,
         stream_options: { include_usage: true },
         messages: [
@@ -305,71 +460,109 @@ export class MobileLiteLlmTextModelClient implements TextModelClient {
       });
     };
     let response = await request();
-    if (!response.ok && response.status === 401) {
+    if (!response.ok && response.status === 401 && this.requestTargetProvider) {
       response = await request(true);
     }
     if (!response.ok) {
-      throw new Error(await cloudVoiceHttpErrorMessage('语音润色失败', response, ''));
+      throw new Error(await cloudVoiceHttpErrorMessage('语音润色失败', response, this.proxyApiKey ?? ''));
     }
-    if (hasReadableStreamBody(response.body)) {
-      const content = await readStreamingChatCompletion(response.body, input.onTextSnapshot);
-      return parseJsonObject(content) as T;
-    }
-    const buffered = await readBufferedResponseText(response);
-    if (buffered.trim()) {
-      if (buffered.length > MAX_REFINER_RESPONSE_CHARS) {
-        throw new Error(`语音润色返回内容超过上限 ${MAX_REFINER_RESPONSE_CHARS} 字符。`);
+    try {
+      if (hasReadableStreamBody(response.body)) {
+        const content = await readStreamingChatCompletion(response.body, input.onTextSnapshot);
+        return parseJsonObject(content) as T;
       }
-      const streamedContent = readBufferedChatCompletion(buffered, input.onTextSnapshot);
-      if (streamedContent) return parseJsonObject(streamedContent) as T;
-      const payload = parseJsonObject(buffered);
+      const buffered = await readBufferedResponseText(response);
+      if (buffered.trim()) {
+        if (buffered.length > MAX_REFINER_RESPONSE_CHARS) {
+          throw new Error(`语音润色返回内容超过上限 ${MAX_REFINER_RESPONSE_CHARS} 字符。`);
+        }
+        const streamedContent = readBufferedChatCompletion(buffered, input.onTextSnapshot);
+        if (streamedContent) return parseJsonObject(streamedContent) as T;
+        const payload = parseJsonObject(buffered);
+        const content = extractChatCompletionContent(payload);
+        return parseJsonObject(content) as T;
+      }
+      const payload = await response.json().catch(() => null);
       const content = extractChatCompletionContent(payload);
       return parseJsonObject(content) as T;
+    } catch (err) {
+      throw new Error(redactMobileVoiceCredentialText(err, this.proxyApiKey ?? ''));
     }
-    const payload = await response.json().catch(() => null);
-    const content = extractChatCompletionContent(payload);
-    return parseJsonObject(content) as T;
   }
 }
 
-/**
- * 派生托管润色的 prompt_cache_key。warmup(refine-warmup 端点)与真实润色请求
- * 必须用同一把 key,否则预热的是错误的缓存分片(与 desktop
- * makeRefinerPromptCacheKey 同构,哈希实现按移动端无 node crypto 改为纯 JS)。
- */
-export function makeMobileRefinerPromptCacheKey(input: {
-  model: string;
-  schemaName: string;
-  promptVersion?: string;
-  system: string;
-  scope?: string;
-}): string {
-  const scopeHash = shortStableHash(input.scope?.trim() || 'default');
-  return `xdt:${input.schemaName}:${shortStableHash([
-    input.model,
-    input.promptVersion ?? '',
-    shortStableHash(input.system),
-    scopeHash,
-  ].join('\n'))}`;
-}
+export class MobileFallbackTextModelClient implements TextModelClient {
+  private readonly attempts: MobileRefinerAttempt[];
+  private successfulAttempt: MobileRefinerAttempt | null = null;
 
-function extractPromptVersion(user: unknown): string | undefined {
-  if (!isRecord(user)) return undefined;
-  return typeof user.promptVersion === 'string' ? user.promptVersion : undefined;
-}
-
-/** 纯 JS 的稳定短哈希(两个不同种子的 FNV-1a 拼接,64bit 强度,非加密用途)。 */
-function shortStableHash(text: string): string {
-  return `${fnv1aHex(text, 0x811c9dc5)}${fnv1aHex(text, 0x01234567)}`;
-}
-
-function fnv1aHex(text: string, seed: number): string {
-  let hash = seed >>> 0;
-  for (let i = 0; i < text.length; i += 1) {
-    hash ^= text.charCodeAt(i);
-    hash = Math.imul(hash, 0x01000193) >>> 0;
+  constructor(attempts: MobileRefinerAttempt[]) {
+    if (attempts.length === 0) throw new Error('Mobile refiner fallback requires at least one attempt.');
+    this.attempts = attempts;
   }
-  return hash.toString(16).padStart(8, '0');
+
+  get lastSuccessfulAttempt(): MobileRefinerAttempt | null {
+    return this.successfulAttempt;
+  }
+
+  async requestJson<T>(input: {
+    model: string;
+    system: string;
+    user: unknown;
+    schemaName: string;
+    promptCacheScope?: string;
+    onTextSnapshot?: (text: string) => void;
+  }): Promise<T> {
+    let lastError: unknown = null;
+    for (const attempt of this.attempts) {
+      let partialEmitted = false;
+      try {
+        const result = await attempt.client.requestJson<T>({
+          ...input,
+          model: attempt.model,
+          promptCacheScope: attempt.promptCacheScope ?? input.promptCacheScope,
+          onTextSnapshot: input.onTextSnapshot
+            ? (text) => {
+              partialEmitted = true;
+              input.onTextSnapshot?.(text);
+            }
+            : undefined,
+        });
+        this.successfulAttempt = attempt;
+        return result;
+      } catch (err) {
+        lastError = err;
+        if (partialEmitted) throw err;
+      }
+    }
+    throw lastError instanceof Error ? lastError : new Error('All mobile voice refiner providers failed.');
+  }
+}
+
+export function buildMobileRefinerAttempts(
+  credential: StoredMobileVoiceCredential,
+  deps?: CloudVoiceDeps,
+  requestTargetProvider?: (provider: string, options?: { refreshAccessToken?: boolean }) => Promise<{ url: string; authorization: string }>,
+): MobileRefinerAttempt[] {
+  const chain = mobileRefinerCredentialChain(credential);
+  return chain.map((refiner) => ({
+    provider: refiner.provider,
+    model: refiner.model,
+    promptCacheScope: `mobile-voice:${credential.hostDeviceId}:${refiner.provider}`,
+    client: new MobileLiteLlmTextModelClient({
+      proxyApiKey: credential.proxyApiKey,
+      baseUrl: credential.proxyBaseUrl,
+      endpointPath: refiner.endpointPath,
+      deps,
+      requestTargetProvider: requestTargetProvider
+        ? (options) => requestTargetProvider(refiner.provider, options)
+        : undefined,
+    }),
+  }));
+}
+
+export function createMobileRefinerTextModelClient(attempts: MobileRefinerAttempt[]): TextModelClient {
+  if (attempts.length === 1) return attempts[0].client;
+  return new MobileFallbackTextModelClient(attempts);
 }
 
 async function readStreamingChatCompletion(
@@ -607,6 +800,15 @@ function parseJsonObject(text: string): unknown {
   }
 }
 
+function joinProxyPath(baseUrl: string, endpointPath: string): string {
+  const base = new URL(baseUrl);
+  const endpoint = new URL(endpointPath, 'https://placeholder.invalid');
+  const basePath = base.pathname.replace(/\/+$/, '');
+  base.pathname = `${basePath}${endpoint.pathname}`;
+  base.search = endpoint.search;
+  return base.toString();
+}
+
 function hasReadableStreamBody(value: unknown): value is ReadableStream<Uint8Array> {
   return !!value && typeof (value as { getReader?: unknown }).getReader === 'function';
 }
@@ -644,6 +846,20 @@ function mergeMobileVoiceHistories(
     ...(localMobileHistory ?? []),
     ...(syncedDesktopHistory ?? []),
   ]);
+}
+
+function mobileRefinerCredentialChain(
+  credential: StoredMobileVoiceCredential,
+): Array<StoredMobileVoiceCredential['refiner']> {
+  const chain = credential.refinerProviderChain?.length ? credential.refinerProviderChain : [credential.refiner];
+  const seen = new Set<string>();
+  const result: Array<StoredMobileVoiceCredential['refiner']> = [];
+  for (const item of chain) {
+    if (seen.has(item.provider)) continue;
+    seen.add(item.provider);
+    result.push(item);
+  }
+  return result;
 }
 
 function normalizeMobileVoiceHistoryNewestFirst(history: readonly string[]): string[] {

@@ -2,7 +2,7 @@ import { EventEmitter } from 'node:events';
 import path from 'node:path';
 import { PassThrough } from 'node:stream';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { BRAND_NAME } from '@cindy/maker-shared/branding';
+import { BRAND_NAME } from '@lizi/maker-shared/branding';
 
 const {
   existsSyncMock,
@@ -37,9 +37,16 @@ function setPlatform(platform: NodeJS.Platform): void {
   });
 }
 
-vi.mock('node:child_process', () => ({
-  spawn: spawnMock,
-}));
+vi.mock('node:child_process', async () => {
+  // CompanionHost.ts 在模块顶层运行 promisify(execFile)，需要 execFile 存在于 mock。
+  // 使用 importOriginal 部分 mock：保留 execFile 真实函数，只覆盖 spawn。
+  const actual = await vi.importActual<typeof import('node:child_process')>('node:child_process');
+  return {
+    ...actual,
+    spawn: spawnMock,
+    execFile: actual.execFile,
+  };
+});
 
 vi.mock('node:fs', async () => {
   const actual = await vi.importActual<typeof import('node:fs')>('node:fs');
@@ -82,12 +89,11 @@ import {
   cleanupComputerDriverSession,
   compareSemver,
   extractDriverSemver,
-  getCuaDriverReleaseAssetName,
-  resolveCuaDriverHostArch,
   getComputerMcpDeps,
   getComputerDriverStatus,
   grantComputerDriverPermissions,
   installComputerDriver,
+  pauseComputerDriverPermissionProbe,
   pickLatestCuaDriverVersion,
   resetComputerDriverPermissionProbeCacheForTests,
   resetComputerDriverUpdateStateForTests,
@@ -98,8 +104,10 @@ import {
   installIdleTimeoutForPlatform,
   matchAssetSizeByFilename,
   pickLatestCuaDriverRelease,
+  setSharedCompanionHostForTests,
   updateComputerDriver,
 } from '../computer.js';
+import { CompanionHost } from '../../computer-use-companion/CompanionHost.js';
 
 interface MockSpawnOptions {
   stdout?: string;
@@ -160,6 +168,54 @@ function mockNeverSettlingSpawn() {
     child.unref = vi.fn();
     return child;
   });
+}
+
+/**
+ * 创建一个伪 CompanionHost，用于测试 daemon autostart 与 installComputerDriver 路径。
+ *
+ * Stage A 后 daemon 自愈路径从 `open -n -g -a CuaDriver` 换成 CompanionHost.start()；
+ * installComputerDriver 在 darwin 上也委托给 CompanionHost.ensureInstalled()。
+ * 注入伪 host 让测试可以精确控制自愈/安装成败，而无需依赖真实 socket/文件系统。
+ */
+function makeFakeCompanionHost(
+  startResult: { ok: true } | { ok: false; reason: string } = { ok: true },
+  ensureInstalledResult: { ok: true } | { ok: false; reason: string } = { ok: true },
+): CompanionHost {
+  const host = new CompanionHost({
+    platform: 'darwin',
+    isPackaged: () => false,
+    getResourcesCompanionPath: () => '',
+    getInstallDir: () => '/tmp/test-companion',
+    getBuildScriptPath: () => '',
+    fs: {
+      existsSync: () => false,
+      mkdirSync: () => {},
+      readFileSync: () => '',
+      renameSync: () => {},
+      rmSync: () => {},
+      unlinkSync: () => {},
+      copyFileSync: () => {},
+    },
+    copyBundle: async () => {},
+    runBuildScript: async () => '',
+    // 覆盖 openApp 为 no-op；真正的行为由下面的 start() 返回值决定
+    openApp: async () => {},
+    connectSocket: async () => null,
+    setTimeout: globalThis.setTimeout.bind(globalThis),
+    clearTimeout: globalThis.clearTimeout.bind(globalThis),
+    setInterval: globalThis.setInterval.bind(globalThis),
+    clearInterval: globalThis.clearInterval.bind(globalThis),
+    logger: { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} } as never,
+  });
+  // 覆盖 start() 直接返回预设结果（跳过真实安装/握手流程）
+  vi.spyOn(host, 'start').mockResolvedValue(
+    startResult.ok
+      ? { ok: true, handshake: { pid: 9999, protocolVersion: 1, companionFingerprint: 'test', reused: false } }
+      : { ok: false, reason: startResult.reason },
+  );
+  // 覆盖 ensureInstalled() 直接返回预设结果（darwin installComputerDriver 路径）
+  vi.spyOn(host, 'ensureInstalled').mockResolvedValue(ensureInstalledResult);
+  return host;
 }
 
 function mockProcessSnapshotSpawn(processes: Array<{
@@ -309,6 +365,12 @@ describe('computer mcp integration', () => {
     for (const key of driverResolutionEnvKeys) {
       delete process.env[key];
     }
+    // Stage A：daemon autostart 从 `open -a CuaDriver` 换成 CompanionHost.start()；
+    // 测试注入伪 host（默认 start 成功），隔离真实 socket/进程依赖。
+    // 各测试若需要 start 失败的场景，可调用 setSharedCompanionHostForTests 覆盖。
+    if (process.platform === 'darwin') {
+      setSharedCompanionHostForTests(makeFakeCompanionHost({ ok: true }));
+    }
   });
 
   afterEach(() => {
@@ -344,11 +406,37 @@ describe('computer mcp integration', () => {
         status: process.platform === 'darwin' ? 'granted' : 'not_required',
       },
     });
-    expect(spawnMock).toHaveBeenCalledWith(expect.stringContaining('cua-driver'), ['--version'], {
-      stdio: ['ignore', 'pipe', 'pipe'],
-      windowsHide: true,
-    });
+    expect(spawnMock).toHaveBeenCalledWith(
+      expect.stringContaining('cua-driver'),
+      ['--version'],
+      expect.objectContaining({ stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true }),
+    );
     expect(spawnMock.mock.calls.some((call) => call[1]?.[0] === 'doctor')).toBe(false);
+  });
+
+  it('does not probe or autostart the permission daemon while waiting for the real app drag', async () => {
+    setPlatform('darwin');
+    await pauseComputerDriverPermissionProbe();
+    mockDriverSpawn({ stdout: 'cua-driver 0.7.1\n' });
+    mockDriverSpawn({ stdout: 'Cua Driver daemon is running\n  pid: 4242\n' });
+
+    await expect(getComputerDriverStatus({
+      forcePermissionProbe: true,
+      freshPermissionProbe: true,
+      bypassPermissionProbeCache: true,
+    })).resolves.toMatchObject({
+      installed: true,
+      daemonRunning: true,
+      permissionState: {
+        platform: 'macos',
+        status: 'missing',
+        accessibility: 'missing',
+        reason: 'Waiting for CuaDriver to be added in System Settings.',
+      },
+    });
+
+    expect(spawnMock).toHaveBeenCalledTimes(2);
+    expect(driverStdinWrites).toEqual([]);
   });
 
   it('runs cua-driver doctor only for explicit deep status checks', async () => {
@@ -369,10 +457,11 @@ describe('computer mcp integration', () => {
         probes: [],
       },
     });
-    expect(spawnMock).toHaveBeenCalledWith(expect.stringContaining('cua-driver'), ['doctor', '--json'], {
-      stdio: ['ignore', 'pipe', 'pipe'],
-      windowsHide: true,
-    });
+    expect(spawnMock).toHaveBeenCalledWith(
+      expect.stringContaining('cua-driver'),
+      ['doctor', '--json'],
+      expect.objectContaining({ stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true }),
+    );
   });
 
   it('reports not installed when the driver cannot be spawned', async () => {
@@ -1301,10 +1390,11 @@ describe('computer mcp integration', () => {
     });
 
     expect(mcpConnectMock).toHaveBeenCalledTimes(1);
-    expect(spawnMock).toHaveBeenCalledWith(expect.stringContaining('cua-driver'), ['call', 'get_screen_size'], {
-      stdio: ['pipe', 'pipe', 'pipe'],
-      windowsHide: true,
-    });
+    expect(spawnMock).toHaveBeenCalledWith(
+      expect.stringContaining('cua-driver'),
+      ['call', 'get_screen_size'],
+      expect.objectContaining({ stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true }),
+    );
     expect(driverStdinWrites).toEqual(['{}\n']);
     const screenCalls = mcpCallToolMock.mock.calls
       .map((call) => call[0])
@@ -1330,10 +1420,11 @@ describe('computer mcp integration', () => {
       await assertion;
 
       expect(mcpConnectMock).toHaveBeenCalledTimes(1);
-      expect(spawnMock).toHaveBeenCalledWith(expect.stringContaining('cua-driver'), ['call', 'get_screen_size'], {
-        stdio: ['pipe', 'pipe', 'pipe'],
-        windowsHide: true,
-      });
+      expect(spawnMock).toHaveBeenCalledWith(
+        expect.stringContaining('cua-driver'),
+        ['call', 'get_screen_size'],
+        expect.objectContaining({ stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true }),
+      );
       expect(driverStdinWrites).toEqual(['{}\n']);
       const screenCalls = mcpCallToolMock.mock.calls
         .map((mockCall) => mockCall[0])
@@ -1359,10 +1450,11 @@ describe('computer mcp integration', () => {
       height: 720,
     });
 
-    expect(spawnMock).toHaveBeenCalledWith(expect.stringContaining('cua-driver'), ['call', 'get_screen_size'], {
-      stdio: ['pipe', 'pipe', 'pipe'],
-      windowsHide: true,
-    });
+    expect(spawnMock).toHaveBeenCalledWith(
+      expect.stringContaining('cua-driver'),
+      ['call', 'get_screen_size'],
+      expect.objectContaining({ stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true }),
+    );
     expect(driverStdinWrites).toEqual(['{}\n']);
   });
 
@@ -1383,10 +1475,11 @@ describe('computer mcp integration', () => {
       await assertion;
 
       expect(mcpConnectMock).toHaveBeenCalledTimes(1);
-      expect(spawnMock).toHaveBeenCalledWith(expect.stringContaining('cua-driver'), ['call', 'get_cursor_position'], {
-        stdio: ['pipe', 'pipe', 'pipe'],
-        windowsHide: true,
-      });
+      expect(spawnMock).toHaveBeenCalledWith(
+        expect.stringContaining('cua-driver'),
+        ['call', 'get_cursor_position'],
+        expect.objectContaining({ stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true }),
+      );
       expect(driverStdinWrites).toEqual(['{}\n']);
       const cursorCalls = mcpCallToolMock.mock.calls
         .map((mockCall) => mockCall[0])
@@ -1413,10 +1506,11 @@ describe('computer mcp integration', () => {
     });
 
     expect(mcpConnectMock).toHaveBeenCalledTimes(1);
-    expect(spawnMock).toHaveBeenCalledWith(expect.stringContaining('cua-driver'), ['call', 'get_screen_size'], {
-      stdio: ['pipe', 'pipe', 'pipe'],
-      windowsHide: true,
-    });
+    expect(spawnMock).toHaveBeenCalledWith(
+      expect.stringContaining('cua-driver'),
+      ['call', 'get_screen_size'],
+      expect.objectContaining({ stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true }),
+    );
     expect(driverStdinWrites).toEqual(['{}\n']);
     const screenCalls = mcpCallToolMock.mock.calls
       .map((mockCall) => mockCall[0])
@@ -2328,35 +2422,69 @@ describe('computer mcp integration', () => {
   });
 
   it('checks current Computer Use opt-in before dispatching MCP tool calls', async () => {
-    const isComputerUseEnabled = vi.fn(() => false);
-    const deps = getComputerMcpDeps({ isComputerUseEnabled });
+    const prepareRuntimeBeforeUse = vi.fn(async () => undefined);
+    const deps = getComputerMcpDeps({
+      isComputerUseEnabled: () => false,
+      prepareRuntimeBeforeUse,
+    });
 
-    await expect(deps.callTool('list_windows', {}, { agentKind: 'codex' }))
-      .rejects.toThrow('Computer Use is disabled');
-    expect(isComputerUseEnabled).toHaveBeenCalledWith({ agentKind: 'codex' });
+    await expect(deps.callTool('list_windows', {})).rejects.toThrow('Computer Use is disabled');
+    expect(prepareRuntimeBeforeUse).not.toHaveBeenCalled();
     expect(spawnMock).not.toHaveBeenCalled();
   });
 
-  it('runs the official installer and returns refreshed status', async () => {
-    mockDriverSpawn({ stdout: 'installed\n' });
-    mockDriverSpawn({ stdout: 'cua-driver 0.5.8\n' });
-    mockDriverSpawn({ stdout: 'Cua Driver daemon is running\n' });
+  it('prepares the runtime before dispatching the first enabled tool call', async () => {
+    const prepareRuntimeBeforeUse = vi.fn(async () => undefined);
+    mcpCallToolMock.mockResolvedValueOnce({
+      content: [{ type: 'text', text: '{"ok":true,"windows":[]}' }],
+    });
+    const deps = getComputerMcpDeps({
+      isComputerUseEnabled: () => true,
+      prepareRuntimeBeforeUse,
+    });
+
+    await expect(deps.callTool(
+      'list_windows',
+      {},
+      { sessionId: 'session-runtime-gate' },
+    )).resolves.toEqual({ ok: true, windows: [] });
+    expect(prepareRuntimeBeforeUse).toHaveBeenCalledTimes(1);
+    expect(prepareRuntimeBeforeUse.mock.invocationCallOrder[0]).toBeLessThan(
+      mcpCallToolMock.mock.invocationCallOrder[0]!,
+    );
+  });
+
+  it('installs via companion on darwin / official installer on other platforms, then returns refreshed status', async () => {
     if (process.platform === 'darwin') {
+      // darwin：委托 companion ensureInstalled，不产生额外 spawn，状态由 getComputerDriverStatus 读取
+      mockDriverSpawn({ stdout: 'cua-driver 0.5.8\n' });
+      mockDriverSpawn({ stdout: 'Cua Driver daemon is running\n' });
       mockDriverSpawn({
         stdout:
           '{"accessibility":true,"screen_recording":true,"screen_recording_capturable":true,"source":{"attribution":"driver-daemon"}}\n',
       });
-    }
 
-    await expect(installComputerDriver()).resolves.toMatchObject({
-      ok: true,
-      stdout: 'installed\n',
-      status: {
-        installed: true,
-        version: 'cua-driver 0.5.8',
-      },
-    });
-    expect(spawnMock.mock.calls[0]?.[0]).toMatch(process.platform === 'win32' ? /powershell/i : '/bin/bash');
+      await expect(installComputerDriver()).resolves.toMatchObject({
+        ok: true,
+        stdout: '',
+        stderr: '',
+        status: { installed: true, version: 'cua-driver 0.5.8' },
+      });
+      // darwin 不再 spawn bash 安装脚本
+      expect(spawnMock.mock.calls.some((call) => String(call[0]).includes('bash'))).toBe(false);
+    } else {
+      // 非 darwin：仍走上游官方安装脚本 spawn
+      mockDriverSpawn({ stdout: 'installed\n' });
+      mockDriverSpawn({ stdout: 'cua-driver 0.5.8\n' });
+      mockDriverSpawn({ stdout: 'Cua Driver daemon is running\n' });
+
+      await expect(installComputerDriver()).resolves.toMatchObject({
+        ok: true,
+        stdout: 'installed\n',
+        status: { installed: true, version: 'cua-driver 0.5.8' },
+      });
+      expect(spawnMock.mock.calls[0]?.[0]).toMatch(process.platform === 'win32' ? /powershell/i : '/bin/bash');
+    }
   });
 
   it('keeps macOS status checks side-effect-free when the daemon is stopped', async () => {
@@ -2378,14 +2506,84 @@ describe('computer mcp integration', () => {
     expect(spawnMock.mock.calls.some((call) => call[1]?.[0] === 'permissions')).toBe(false);
   });
 
+  it('can inspect a running macOS daemon without triggering the permission probe', async () => {
+    if (process.platform !== 'darwin') return;
+
+    mockDriverSpawn({ stdout: 'cua-driver 0.5.8\n' });
+    mockDriverSpawn({ stdout: 'Cua Driver daemon is running\n' });
+
+    await expect(getComputerDriverStatus({ skipPermissionProbe: true })).resolves.toMatchObject({
+      installed: true,
+      daemonRunning: true,
+      permissionState: {
+        platform: 'macos',
+        status: 'unknown',
+      },
+    });
+    expect(spawnMock.mock.calls.some((call) => call[1]?.[0] === 'permissions')).toBe(false);
+  });
+
+  it('keeps page-entry status checks passive on CuaDriver versions before 0.12.2', async () => {
+    if (process.platform !== 'darwin') return;
+
+    mockDriverSpawn({ stdout: 'cua-driver 0.12.1\n' });
+    mockDriverSpawn({ stdout: 'Cua Driver daemon is running\n  pid: 4242\n' });
+
+    await expect(getComputerDriverStatus({
+      forcePermissionProbe: true,
+      bypassPermissionProbeCache: true,
+      passivePermissionProbeOnly: true,
+    })).resolves.toMatchObject({
+      installed: true,
+      daemonRunning: true,
+      permissionState: {
+        platform: 'macos',
+        status: 'unknown',
+      },
+    });
+    expect(spawnMock.mock.calls.some((call) => call[1]?.[0] === 'permissions')).toBe(false);
+  });
+
+  it('refreshes page-entry permissions through the read-only 0.12.2 status command', async () => {
+    if (process.platform !== 'darwin') return;
+
+    mockDriverSpawn({ stdout: 'cua-driver 0.12.2\n' });
+    mockDriverSpawn({ stdout: 'Cua Driver daemon is running\n  pid: 4242\n' });
+    mockDriverSpawn({
+      stdout:
+        '{"accessibility":true,"screen_recording":true,"screen_recording_capturable":true,"source":{"attribution":"driver-daemon"}}\n',
+    });
+
+    await expect(getComputerDriverStatus({
+      forcePermissionProbe: true,
+      bypassPermissionProbeCache: true,
+      passivePermissionProbeOnly: true,
+    })).resolves.toMatchObject({
+      installed: true,
+      permissionState: {
+        accessibility: 'granted',
+        screenRecording: 'granted',
+        status: 'granted',
+      },
+    });
+    // Stage A 后 passive 探测同样走 call check_permissions（check_permissions 本身就是
+    // 只读探针；passivePermissionProbeOnly 语义从「禁止被动路径执行」变为「版本门控」）。
+    expect(spawnMock).toHaveBeenCalledWith(
+      'cua-driver',
+      ['call', 'check_permissions', '{"prompt":false}'],
+      expect.objectContaining({ windowsHide: true }),
+    );
+  });
+
   it('can force a macOS permission probe even when the daemon status is stopped', async () => {
     if (process.platform !== 'darwin') return;
 
+    // Stage A：自愈从 `open -a CuaDriver` 换成 CompanionHost.start()。
+    // 这里模拟 companion 安装失败（start 返回 ok:false）→ 放弃自愈，
+    // 但仍应继续走 CLI 探测（forced probe 必须给出结论）。
+    setSharedCompanionHostForTests(makeFakeCompanionHost({ ok: false, reason: 'companion not installed' }));
     mockDriverSpawn({ stdout: 'cua-driver 0.6.8\n' });
     mockDriverSpawn({ stderr: 'Cua Driver daemon is not running\n', exitCode: 1 });
-    // daemon 掉线的强制探测会先尝试自愈启动(open);这里模拟 app bundle 缺失
-    // (open 非零退出)→ 放弃自愈,仍应继续走 CLI 探测。
-    mockDriverSpawn({ stderr: 'Unable to find application named CuaDriver\n', exitCode: 1 });
     mockDriverSpawn({
       stdout:
         '{"accessibility":true,"screen_recording":true,"screen_recording_capturable":true,"source":{"attribution":"driver-daemon"}}\n',
@@ -2401,10 +2599,11 @@ describe('computer mcp integration', () => {
         screenRecording: 'granted',
       },
     });
-    expect(spawnMock).toHaveBeenCalledWith('cua-driver', ['permissions', 'status', '--json'], {
-      stdio: ['ignore', 'pipe', 'pipe'],
-      windowsHide: true,
-    });
+    expect(spawnMock).toHaveBeenCalledWith(
+      'cua-driver',
+      ['call', 'check_permissions', '{"prompt":false}'],
+      expect.objectContaining({ stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true }),
+    );
     expect(spawnMock.mock.calls.some((call) => call[1]?.[0] === 'doctor')).toBe(false);
   });
 
@@ -2496,7 +2695,10 @@ describe('computer mcp integration', () => {
     await expect(getComputerDriverStatus({ forcePermissionProbe: true })).resolves.toMatchObject({
       permissionState: { status: 'missing', screenRecordingCapturable: 'missing' },
     });
-    const permissionProbeCalls = spawnMock.mock.calls.filter((call) => call[1]?.[0] === 'permissions');
+    // Stage A：权限探测命令从 permissions status 改为 call check_permissions。
+    const permissionProbeCalls = spawnMock.mock.calls.filter(
+      (call) => call[1]?.[0] === 'call' && call[1]?.[1] === 'check_permissions',
+    );
     expect(permissionProbeCalls).toHaveLength(1);
   });
 
@@ -2527,13 +2729,14 @@ describe('computer mcp integration', () => {
   it('autostarts the daemon for a forced permission probe when it is down, then probes it', async () => {
     if (process.platform !== 'darwin') return;
 
-    // macOS 修改屏幕录制授权会杀掉 daemon 且 macOS 侧没有 autostart;设置面板的
-    // 显式探测应把它拉起来(必须带 --no-permissions-gate,避免 serve 首启 gate
-    // 自己弹授权框 + 打开系统设置)再对新 daemon 做探测。
+    // Stage A：macOS 修改屏幕录制授权会杀掉 daemon；设置面板的显式探测通过
+    // CompanionHost.start() 把 daemon 拉起（不再用 `open -a CuaDriver`）。
+    // 默认 fake host 的 start() 返回成功；自愈轮询 spawn 应返回 daemon running。
+    const fakeHost = makeFakeCompanionHost({ ok: true });
+    setSharedCompanionHostForTests(fakeHost);
     mockDriverSpawn({ stdout: 'cua-driver 0.7.0\n' });
-    mockDriverSpawn({ stderr: 'daemon not running\n', exitCode: 1 });
-    mockDriverSpawn({ stdout: '' }); // open -n -g -a CuaDriver … → exit 0
-    mockDriverSpawn({ stdout: 'Cua Driver daemon is running\n  pid: 7777\n' }); // 自愈后的轮询
+    mockDriverSpawn({ stderr: 'daemon not running\n', exitCode: 1 }); // 初始 daemon status
+    mockDriverSpawn({ stdout: 'Cua Driver daemon is running\n  pid: 7777\n' }); // 自愈后的第一次轮询
     mockDriverSpawn({
       stdout:
         '{"accessibility":true,"screen_recording":true,"screen_recording_capturable":true,"source":{"attribution":"driver-daemon"}}\n',
@@ -2544,8 +2747,9 @@ describe('computer mcp integration', () => {
       daemonRunning: true,
       permissionState: { status: 'granted' },
     });
-    const openCall = spawnMock.mock.calls.find((call) => call[0] === 'open');
-    expect(openCall?.[1]).toEqual(['-n', '-g', '-a', 'CuaDriver', '--args', 'serve', '--no-permissions-gate']);
+    // Stage A：自愈路径走 CompanionHost.start()，不再通过 spawn 调用 `open`。
+    expect(vi.mocked(fakeHost.start)).toHaveBeenCalledOnce();
+    expect(spawnMock.mock.calls.some((call) => call[0] === 'open')).toBe(false);
   }, 10_000);
 
   it('allows an immediate re-autostart after a successful one (throttle only cools down failures)', async () => {
@@ -2553,11 +2757,13 @@ describe('computer mcp integration', () => {
 
     const healthyPayload =
       '{"accessibility":true,"screen_recording":true,"screen_recording_capturable":true,"source":{"attribution":"driver-daemon"}}\n';
-    // 第一次:daemon 掉线 → 自愈成功。
+    const fakeHost = makeFakeCompanionHost({ ok: true });
+    setSharedCompanionHostForTests(fakeHost);
+
+    // 第一次:daemon 掉线 → CompanionHost.start() 自愈成功。
     mockDriverSpawn({ stdout: 'cua-driver 0.7.0\n' });
     mockDriverSpawn({ stderr: 'daemon not running\n', exitCode: 1 });
-    mockDriverSpawn({ stdout: '' }); // open
-    mockDriverSpawn({ stdout: 'Cua Driver daemon is running\n  pid: 4242\n' });
+    mockDriverSpawn({ stdout: 'Cua Driver daemon is running\n  pid: 4242\n' }); // 自愈后轮询
     mockDriverSpawn({ stdout: healthyPayload });
     await expect(getComputerDriverStatus({ forcePermissionProbe: true })).resolves.toMatchObject({
       daemonRunning: true,
@@ -2567,32 +2773,38 @@ describe('computer mcp integration', () => {
     // 不被 30s 节流卡住 —— 节流只惩罚「起不来」的失败重试。
     mockDriverSpawn({ stdout: 'cua-driver 0.7.0\n' });
     mockDriverSpawn({ stderr: 'daemon not running\n', exitCode: 1 });
-    mockDriverSpawn({ stdout: '' }); // open(第二次)
-    mockDriverSpawn({ stdout: 'Cua Driver daemon is running\n  pid: 5555\n' });
+    mockDriverSpawn({ stdout: 'Cua Driver daemon is running\n  pid: 5555\n' }); // 自愈后轮询（第二次）
     mockDriverSpawn({ stdout: healthyPayload });
     await expect(getComputerDriverStatus({ forcePermissionProbe: true })).resolves.toMatchObject({
       daemonRunning: true,
       permissionState: { status: 'granted' },
     });
-    expect(spawnMock.mock.calls.filter((call) => call[0] === 'open')).toHaveLength(2);
+    // Stage A：自愈走 CompanionHost.start()，每次自愈各调用一次（共 2 次）。
+    expect(vi.mocked(fakeHost.start)).toHaveBeenCalledTimes(2);
+    expect(spawnMock.mock.calls.some((call) => call[0] === 'open')).toBe(false);
   }, 10_000);
 
   it('throttles daemon autostart attempts when the daemon stays down', async () => {
     if (process.platform !== 'darwin') return;
 
-    // 第一次:open 成功但 daemon 在等待窗口内一直没起来(后续 spawn 全部失败)。
+    // Stage A：CompanionHost.start() 成功但 daemon 在轮询窗口内一直没起来（轮询
+    // spawn 全部返回 exit 1），tryAutostartCuaDaemonOnce 返回 null，节流计时器保持。
+    const fakeHost = makeFakeCompanionHost({ ok: true });
+    setSharedCompanionHostForTests(fakeHost);
+    // 第一次:cua-driver --version + 初始 daemon status（down）；start() 后轮询 spawn 全部失败。
     mockDriverSpawn({ stdout: 'cua-driver 0.7.0\n' });
     mockDriverSpawn({ stderr: 'daemon not running\n', exitCode: 1 });
-    mockDriverSpawn({ stdout: '' }); // open → exit 0
     spawnMock.mockImplementation(() => {
       const child = new EventEmitter() as EventEmitter & {
         stdout: EventEmitter;
         stderr: EventEmitter;
         kill: ReturnType<typeof vi.fn>;
+        unref: ReturnType<typeof vi.fn>;
       };
       child.stdout = new EventEmitter();
       child.stderr = new EventEmitter();
       child.kill = vi.fn();
+      child.unref = vi.fn();
       queueMicrotask(() => {
         child.stderr.emit('data', Buffer.from('daemon not running\n'));
         child.emit('close', 1, null);
@@ -2604,28 +2816,35 @@ describe('computer mcp integration', () => {
       daemonRunning: false,
       permissionState: { status: 'unknown' },
     });
-    expect(spawnMock.mock.calls.filter((call) => call[0] === 'open')).toHaveLength(1);
+    // start() 调用了一次；但 daemon 没起来，节流计时不清零
+    expect(vi.mocked(fakeHost.start)).toHaveBeenCalledTimes(1);
+    expect(spawnMock.mock.calls.some((call) => call[0] === 'open')).toBe(false);
 
-    // 第二次(30s 节流窗口内):不再尝试 open,直接维持 unknown,避免 spawn 风暴。
+    // 第二次(30s 节流窗口内):不再调用 start()，直接维持 unknown，避免 spawn 风暴。
     mockDriverSpawn({ stdout: 'cua-driver 0.7.0\n' });
     mockDriverSpawn({ stderr: 'daemon not running\n', exitCode: 1 });
     await expect(getComputerDriverStatus({ forcePermissionProbe: true })).resolves.toMatchObject({
       daemonRunning: false,
       permissionState: { status: 'unknown' },
     });
-    expect(spawnMock.mock.calls.filter((call) => call[0] === 'open')).toHaveLength(1);
+    // 节流阻断：start() 仍只调用过一次
+    expect(vi.mocked(fakeHost.start)).toHaveBeenCalledTimes(1);
   }, 15_000);
 
   it('restarts the daemon for a fresh permission probe so accessibility revocation is detected', async () => {
     if (process.platform !== 'darwin') return;
 
-    existsSyncMock.mockImplementation((candidate) => String(candidate).includes('CuaDriver.app'));
+    // Stage A：app bundle 检测改为 Cindy Computer Use.app（新 companion bundle）。
+    // fresh 探测流程不变：stop → CompanionHost.start() 自愈 → 对新进程实测。
+    existsSyncMock.mockImplementation((candidate) => String(candidate).includes('Cindy Computer Use.app'));
+    const fakeHost = makeFakeCompanionHost({ ok: true });
+    setSharedCompanionHostForTests(fakeHost);
     // AX 撤销对运行中的 daemon 不可见:fresh 探测必须 stop → 自愈拉起 → 对新进程实测。
     mockDriverSpawn({ stdout: 'cua-driver 0.7.0\n' });
     mockDriverSpawn({ stdout: 'Cua Driver daemon is running\n  pid: 4242\n' });
     mockDriverSpawn({ stdout: 'daemon stopped\n' }); // cua-driver stop
     mockDriverSpawn({ stderr: 'daemon not running\n', exitCode: 1 }); // stop 后复查
-    mockDriverSpawn({ stdout: '' }); // open(autostart) → exit 0
+    // open 不再需要——autostart 走 CompanionHost.start()；下面是自愈轮询
     mockDriverSpawn({ stdout: 'Cua Driver daemon is running\n  pid: 9999\n' }); // 自愈轮询
     mockDriverSpawn({
       stdout:
@@ -2639,13 +2858,17 @@ describe('computer mcp integration', () => {
       permissionState: { status: 'missing', accessibility: 'missing', screenRecordingCapturable: 'granted' },
     });
     expect(spawnMock.mock.calls.filter((call) => call[1]?.[0] === 'stop')).toHaveLength(1);
-    expect(spawnMock.mock.calls.filter((call) => call[0] === 'open')).toHaveLength(1);
+    expect(vi.mocked(fakeHost.start)).toHaveBeenCalledOnce();
+    expect(spawnMock.mock.calls.some((call) => call[0] === 'open')).toBe(false);
   }, 10_000);
 
   it('fresh probe restarts and live-probes even while screen recording is broken', async () => {
     if (process.platform !== 'darwin') return;
 
-    existsSyncMock.mockImplementation((candidate) => String(candidate).includes('CuaDriver.app'));
+    // Stage A：app bundle 检测改为 Cindy Computer Use.app；autostart 走 CompanionHost.start()。
+    existsSyncMock.mockImplementation((candidate) => String(candidate).includes('Cindy Computer Use.app'));
+    const fakeHost = makeFakeCompanionHost({ ok: true });
+    setSharedCompanionHostForTests(fakeHost);
     // 先种下「屏幕录制坏状态」缓存(capturable=missing @ pid 4242)——被动路径会复用它。
     const daemonStdout = 'Cua Driver daemon is running\n  pid: 4242\n';
     mockDriverSpawn({ stdout: 'cua-driver 0.7.0\n' });
@@ -2663,7 +2886,7 @@ describe('computer mcp integration', () => {
     mockDriverSpawn({ stdout: daemonStdout });
     mockDriverSpawn({ stdout: 'daemon stopped\n' }); // cua-driver stop
     mockDriverSpawn({ stderr: 'daemon not running\n', exitCode: 1 }); // stop 后复查
-    mockDriverSpawn({ stdout: '' }); // open(autostart)
+    // open 不再需要——autostart 走 CompanionHost.start()
     mockDriverSpawn({ stdout: 'Cua Driver daemon is running\n  pid: 9999\n' }); // 自愈轮询
     mockDriverSpawn({
       stdout:
@@ -2675,13 +2898,17 @@ describe('computer mcp integration', () => {
       permissionState: { status: 'missing', accessibility: 'missing' },
     });
     expect(spawnMock.mock.calls.filter((call) => call[1]?.[0] === 'stop')).toHaveLength(1);
-    expect(spawnMock.mock.calls.filter((call) => call[1]?.[0] === 'permissions')).toHaveLength(2);
+    // Stage A：探测命令从 permissions status 改为 call check_permissions（共 2 次）。
+    expect(spawnMock.mock.calls.filter(
+      (call) => call[1]?.[0] === 'call' && call[1]?.[1] === 'check_permissions',
+    )).toHaveLength(2);
+    expect(vi.mocked(fakeHost.start)).toHaveBeenCalledOnce();
   }, 10_000);
 
   it('fresh probe never stops the daemon when the app bundle is missing (CLI-only install)', async () => {
     if (process.platform !== 'darwin') return;
 
-    // 无 /Applications/CuaDriver.app(existsSync 默认 false)时自愈 `open` 必失败:
+    // companion bundle（Cindy Computer Use.app）不存在（existsSync 默认 false）时：
     // 绝不能把健康 daemon 停掉变成拉不回来的破坏性动作,退化为不重启的现场实测。
     mockDriverSpawn({ stdout: 'cua-driver 0.7.0\n' });
     mockDriverSpawn({ stdout: 'Cua Driver daemon is running\n  pid: 4242\n' });
@@ -2696,13 +2923,17 @@ describe('computer mcp integration', () => {
       permissionState: { status: 'granted' },
     });
     expect(spawnMock.mock.calls.filter((call) => call[1]?.[0] === 'stop')).toHaveLength(0);
-    expect(spawnMock.mock.calls.filter((call) => call[1]?.[0] === 'permissions')).toHaveLength(1);
+    // Stage A：探测命令从 permissions status 改为 call check_permissions。
+    expect(spawnMock.mock.calls.filter(
+      (call) => call[1]?.[0] === 'call' && call[1]?.[1] === 'check_permissions',
+    )).toHaveLength(1);
   });
 
   it('fresh probe skips the daemon restart while cua MCP sessions are active but still live-probes', async () => {
     if (process.platform !== 'darwin') return;
 
-    existsSyncMock.mockImplementation((candidate) => String(candidate).includes('CuaDriver.app'));
+    // Stage A：app bundle 检测改为 Cindy Computer Use.app。
+    existsSyncMock.mockImplementation((candidate) => String(candidate).includes('Cindy Computer Use.app'));
     // 起一个 cua MCP 会话(agent 正在操作电脑)。
     mcpCallToolMock.mockResolvedValueOnce({ content: [{ type: 'text', text: '{"ok":true,"windows":[]}' }] });
     await callComputerDriverTool('list_windows', {}, { sessionId: 'fresh-guard-session' });
@@ -2720,7 +2951,10 @@ describe('computer mcp integration', () => {
     });
     // 不重启(别打断 agent),但仍现场实测。
     expect(spawnMock.mock.calls.filter((call) => call[1]?.[0] === 'stop')).toHaveLength(0);
-    expect(spawnMock.mock.calls.filter((call) => call[1]?.[0] === 'permissions')).toHaveLength(1);
+    // Stage A：探测命令从 permissions status 改为 call check_permissions。
+    expect(spawnMock.mock.calls.filter(
+      (call) => call[1]?.[0] === 'call' && call[1]?.[1] === 'check_permissions',
+    )).toHaveLength(1);
   });
 
   it('fresh/bypass probes start a new probe instead of joining a stale in-flight one', async () => {
@@ -2757,7 +2991,10 @@ describe('computer mcp integration', () => {
     await expect(
       getComputerDriverStatus({ forcePermissionProbe: true, bypassPermissionProbeCache: true }),
     ).resolves.toMatchObject({ permissionState: { status: 'granted' } });
-    expect(spawnMock.mock.calls.filter((call) => call[1]?.[0] === 'permissions')).toHaveLength(2);
+    // Stage A：探测命令从 permissions status 改为 call check_permissions（共 2 次）。
+    expect(spawnMock.mock.calls.filter(
+      (call) => call[1]?.[0] === 'call' && call[1]?.[1] === 'check_permissions',
+    )).toHaveLength(2);
 
     // 收尾:放行 p1,避免悬挂 promise 泄漏到后续用例。
     hangingProbe?.stderr.emit('data', Buffer.from('slow probe\n'));
@@ -2788,7 +3025,10 @@ describe('computer mcp integration', () => {
     await expect(getComputerDriverStatus({ forcePermissionProbe: true, bypassPermissionProbeCache: true })).resolves.toMatchObject({
       permissionState: { status: 'missing', accessibility: 'granted' },
     });
-    const permissionProbeCalls = spawnMock.mock.calls.filter((call) => call[1]?.[0] === 'permissions');
+    // Stage A：探测命令从 permissions status 改为 call check_permissions（共 2 次）。
+    const permissionProbeCalls = spawnMock.mock.calls.filter(
+      (call) => call[1]?.[0] === 'call' && call[1]?.[1] === 'check_permissions',
+    );
     expect(permissionProbeCalls).toHaveLength(2);
   });
 
@@ -2812,10 +3052,68 @@ describe('computer mcp integration', () => {
         },
       },
     });
-    expect(spawnMock).toHaveBeenCalledWith('cua-driver', ['permissions', 'grant'], {
-      stdio: ['ignore', 'pipe', 'pipe'],
-      windowsHide: true,
+    // darwin 下所有 CLI 调用附带嵌入模式 env（CUA_DRIVER_EMBEDDED / HOST_BUNDLE_ID）。
+    expect(spawnMock).toHaveBeenCalledWith(
+      'cua-driver',
+      ['permissions', 'grant'],
+      expect.objectContaining({ stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true }),
+    );
+  });
+
+  it('leaves row creation to the phase-one guide while its drag step is active', async () => {
+    setPlatform('darwin');
+    await pauseComputerDriverPermissionProbe();
+    mockDriverSpawn({ stdout: 'cua-driver 0.12.2\n' });
+    mockDriverSpawn({ stdout: 'Cua Driver daemon is not running\n' });
+
+    await expect(grantComputerDriverPermissions()).resolves.toMatchObject({
+      ok: false,
+      status: {
+        permissionState: {
+          status: 'missing',
+          accessibility: 'missing',
+          reason: 'Waiting for CuaDriver to be added in System Settings.',
+        },
+      },
     });
+    expect(
+      spawnMock.mock.calls.some(
+        (call) => call[1]?.[0] === 'permissions' && call[1]?.[1] === 'grant',
+      ),
+    ).toBe(false);
+  });
+
+  it('preserves the preflight permission snapshot while the phase-one guide is active', async () => {
+    setPlatform('darwin');
+    await pauseComputerDriverPermissionProbe();
+    const preflightStatus: ComputerDriverStatus = {
+      installed: true,
+      executablePath: '/Applications/CuaDriver.app/Contents/MacOS/cua-driver',
+      version: '0.12.2',
+      daemonRunning: true,
+      installCommand: 'test',
+      docsUrl: 'https://cua.ai/docs/cua-driver',
+      permissionState: {
+        platform: 'macos',
+        required: true,
+        status: 'missing',
+        accessibility: 'granted',
+        screenRecording: 'missing',
+        screenRecordingCapturable: 'missing',
+        canGrant: true,
+      },
+    };
+
+    await expect(grantComputerDriverPermissions(preflightStatus)).resolves.toMatchObject({
+      ok: false,
+      status: {
+        permissionState: {
+          accessibility: 'granted',
+          screenRecording: 'missing',
+        },
+      },
+    });
+    expect(spawnMock).not.toHaveBeenCalled();
   });
 
   it('kills the in-flight grant child when the user cancels the permission guide', async () => {
@@ -3013,16 +3311,184 @@ describe('computer mcp integration', () => {
       },
     });
   });
+
+  // ── Stage A 回归测试 ────────────────────────────────────────────────────────
+
+  it('Stage A: companion-identity grants are accepted as valid TCC grants', async () => {
+    if (process.platform !== 'darwin') return;
+
+    // check_permissions 返回新 TCC 身份的授权——应报 granted。
+    mockDriverSpawn({ stdout: 'cua-driver 0.7.0\n' });
+    mockDriverSpawn({ stdout: 'Cua Driver daemon is running\n  pid: 4242\n' });
+    mockDriverSpawn({
+      stdout: JSON.stringify({
+        attribution: 'host',
+        host_bundle_id: 'com.xd.cindy.computer-use',
+        accessibility: true,
+        screen_recording: true,
+        screen_recording_capturable: true,
+      }) + '\n',
+    });
+    await expect(getComputerDriverStatus({ forcePermissionProbe: true })).resolves.toMatchObject({
+      permissionState: {
+        status: 'granted',
+        accessibility: 'granted',
+        screenRecording: 'granted',
+        source: 'com.xd.cindy.computer-use',
+      },
+    });
+  });
+
+  it('Stage A: legacy CuaDriver identity is reported as missing with legacy-identity-migration reason', async () => {
+    if (process.platform !== 'darwin') return;
+
+    // 旧 CuaDriver 身份（com.trycua.driver）持有 TCC 授权——应报 missing 并附原因码。
+    mockDriverSpawn({ stdout: 'cua-driver 0.7.0\n' });
+    mockDriverSpawn({ stdout: 'Cua Driver daemon is running\n  pid: 4242\n' });
+    mockDriverSpawn({
+      stdout: JSON.stringify({
+        attribution: 'host',
+        host_bundle_id: 'com.trycua.driver',
+        accessibility: true,
+        screen_recording: true,
+        screen_recording_capturable: true,
+      }) + '\n',
+    });
+    await expect(getComputerDriverStatus({ forcePermissionProbe: true })).resolves.toMatchObject({
+      permissionState: {
+        status: 'missing',
+        reason: 'legacy-identity-migration',
+      },
+    });
+  });
+
+  it('Stage A: foreign daemon identity (unknown bundle id) is reported as missing with foreign-daemon-identity reason', async () => {
+    if (process.platform !== 'darwin') return;
+
+    // 未知 bundle id 的外来 daemon——应报 missing 并附 foreign-daemon-identity 原因码。
+    mockDriverSpawn({ stdout: 'cua-driver 0.7.0\n' });
+    mockDriverSpawn({ stdout: 'Cua Driver daemon is running\n  pid: 4242\n' });
+    mockDriverSpawn({
+      stdout: JSON.stringify({
+        attribution: 'host',
+        host_bundle_id: 'com.some.other.app',
+        accessibility: true,
+        screen_recording: true,
+        screen_recording_capturable: true,
+      }) + '\n',
+    });
+    await expect(getComputerDriverStatus({ forcePermissionProbe: true })).resolves.toMatchObject({
+      permissionState: {
+        status: 'missing',
+        reason: 'foreign-daemon-identity',
+      },
+    });
+  });
+
+  it('Stage A: old-format source.attribution without host_bundle_id falls back to driver-daemon attribution check', async () => {
+    if (process.platform !== 'darwin') return;
+
+    // 旧版 permissions status 格式（无 host_bundle_id）——兼容路径应报 granted。
+    mockDriverSpawn({ stdout: 'cua-driver 0.7.0\n' });
+    mockDriverSpawn({ stdout: 'Cua Driver daemon is running\n  pid: 4242\n' });
+    mockDriverSpawn({
+      stdout: JSON.stringify({
+        accessibility: true,
+        screen_recording: true,
+        screen_recording_capturable: true,
+        source: { attribution: 'driver-daemon' },
+      }) + '\n',
+    });
+    await expect(getComputerDriverStatus({ forcePermissionProbe: true })).resolves.toMatchObject({
+      permissionState: {
+        status: 'granted',
+        accessibility: 'granted',
+      },
+    });
+  });
+
+  it('Stage A: CompanionHost.start() failure leaves daemon status not-ready without crashing', async () => {
+    if (process.platform !== 'darwin') return;
+
+    // CompanionHost.start() 失败时（companion 未安装等），autostart 应静默返回 null。
+    // daemon 维持 not-running；forcePermissionProbe 仍触发 probe（探针对 daemon-down 也运行），
+    // 不崩溃不抛异常。
+    setSharedCompanionHostForTests(makeFakeCompanionHost({ ok: false, reason: 'companion not available' }));
+    mockDriverSpawn({ stdout: 'cua-driver 0.7.0\n' });
+    mockDriverSpawn({ stderr: 'daemon not running\n', exitCode: 1 });
+    // forcePermissionProbe 即使 daemon 掉线也继续 probe（check_permissions 返回 granted）
+    mockDriverSpawn({
+      stdout: JSON.stringify({
+        attribution: 'host',
+        host_bundle_id: 'com.xd.cindy.computer-use',
+        accessibility: true,
+        screen_recording: true,
+        screen_recording_capturable: true,
+      }) + '\n',
+    });
+    await expect(getComputerDriverStatus({ forcePermissionProbe: true })).resolves.toMatchObject({
+      installed: true,
+      daemonRunning: false,
+      permissionState: {
+        platform: 'macos',
+        // daemon 未起，autostart 失败（不崩溃），probe 仍运行
+        status: 'granted',
+      },
+    });
+  });
+
+  it('Stage A: darwin resolveDriverInvocation injects CUA_DRIVER_EMBEDDED env', async () => {
+    if (process.platform !== 'darwin') return;
+
+    // darwin 下所有 CLI 调用必须附 CUA_DRIVER_EMBEDDED=1 + HOST_BUNDLE_ID，
+    // 防止 CLI 以旧 TCC 身份自动拉起 /Applications/CuaDriver.app。
+    mockDriverSpawn({ stdout: 'cua-driver 0.7.0\n' });
+    mockDriverSpawn({ stdout: 'Cua Driver daemon is running\n  pid: 4242\n' });
+    mockDriverSpawn({
+      stdout: JSON.stringify({
+        attribution: 'host',
+        host_bundle_id: 'com.xd.cindy.computer-use',
+        accessibility: true,
+        screen_recording: true,
+        screen_recording_capturable: true,
+      }) + '\n',
+    });
+    await getComputerDriverStatus({ forcePermissionProbe: true });
+    // 检查所有 spawn 调用均含 CUA_DRIVER_EMBEDDED=1 与正确的 HOST_BUNDLE_ID。
+    const darwinCalls = spawnMock.mock.calls;
+    for (const call of darwinCalls) {
+      const env = (call[2] as { env?: Record<string, string> } | undefined)?.env;
+      expect(env).toBeDefined();
+      expect(env?.CUA_DRIVER_EMBEDDED).toBe('1');
+      expect(env?.CUA_DRIVER_HOST_BUNDLE_ID).toBe('com.xd.cindy.computer-use');
+    }
+  });
+
+  it('Stage A: darwin getDriverCandidates only returns embedded engine path (no user install paths)', async () => {
+    if (process.platform !== 'darwin') return;
+
+    // darwin 下不再检测 ~/.local/bin / homebrew / PATH 等用户安装位置。
+    // 候选仅为 companion bundle 内嵌路径（或 XDT_CUA_DRIVER_PATH 覆写）。
+    // 通过 getComputerDriverStatus 间接验证：只有 companion embedded 路径的 existsSync
+    // 被检查，不触及 ~/.local/bin 等旧路径。
+    const queriedPaths: string[] = [];
+    existsSyncMock.mockImplementation((candidate: unknown) => {
+      queriedPaths.push(String(candidate));
+      return false;
+    });
+    mockDriverSpawn({ stderr: 'command not found\n', exitCode: 1 });
+    await getComputerDriverStatus();
+    // 验证没有查询旧 user-install 路径
+    expect(queriedPaths.some((p) => p.includes('.local/bin'))).toBe(false);
+    expect(queriedPaths.some((p) => p.includes('homebrew'))).toBe(false);
+    expect(queriedPaths.some((p) => p.includes('/Applications/CuaDriver.app'))).toBe(false);
+    // 验证确实查询了 companion embedded 路径
+    expect(queriedPaths.some((p) => p.includes('Cindy Computer Use.app'))).toBe(true);
+  });
 });
 
 
-function currentPlatformReleaseAsset(version: string, size = 21147689) {
-  const name = getCuaDriverReleaseAssetName(version);
-  if (!name) throw new Error(`unsupported test platform: ${process.platform}/${process.arch}`);
-  return { name, size, state: 'uploaded' as const };
-}
-
-/** 标准更新检查 mock:matching-refs 返回 0.7.0,后续请求返回可安装 release。 */
+/** 标准两段式更新检查 mock:matching-refs 返回 0.7.0,release-by-tag 返回其 assets。 */
 function mockRefsThenReleaseFetch() {
   return vi
     .fn()
@@ -3030,11 +3496,11 @@ function mockRefsThenReleaseFetch() {
       ok: true,
       json: async () => [{ ref: 'refs/tags/cua-driver-rs-v0.7.0' }],
     })
-    .mockResolvedValue({
+    .mockResolvedValueOnce({
       ok: true,
       json: async () => ({
         tag_name: 'cua-driver-rs-v0.7.0',
-        assets: [currentPlatformReleaseAsset('0.7.0')],
+        assets: [{ name: 'cua-driver-rs-0.7.0-darwin-universal.tar.gz', size: 21147689 }],
       }),
     });
 }
@@ -3094,7 +3560,7 @@ describe('computer driver update check', () => {
         ok: true,
         json: async () => ({
           tag_name: 'cua-driver-rs-v0.7.0',
-          assets: [currentPlatformReleaseAsset('0.7.0')],
+          assets: [{ name: 'cua-driver-rs-0.7.0-darwin-universal.tar.gz', size: 21147689 }],
         }),
       });
 
@@ -3213,94 +3679,38 @@ describe('computer driver update check', () => {
     }
   });
 
-  it('keeps a newer verified target when its background probe transiently falls back', async () => {
-    mockDriverSpawn({ stdout: 'cua-driver 0.10.0\n' });
-    const initialFetch = vi
-      .fn()
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => [{ ref: 'refs/tags/cua-driver-rs-v0.12.0' }],
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          tag_name: 'cua-driver-rs-v0.12.0',
-          assets: [currentPlatformReleaseAsset('0.12.0')],
-        }),
-      });
-    await checkComputerDriverUpdate(initialFetch as unknown as typeof fetch);
-
-    vi.useFakeTimers({ toFake: ['Date'] });
-    try {
-      vi.setSystemTime(Date.now() + 11 * 60_000);
-      mockDriverSpawn({ stdout: 'cua-driver 0.10.0\n' });
-      const refreshedFetch = vi
-        .fn()
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => [
-            { ref: 'refs/tags/cua-driver-rs-v0.12.0' },
-            { ref: 'refs/tags/cua-driver-rs-v0.11.0' },
-          ],
-        })
-        .mockResolvedValueOnce({ ok: false, status: 503 })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({
-            tag_name: 'cua-driver-rs-v0.11.0',
-            assets: [currentPlatformReleaseAsset('0.11.0')],
-          }),
-        });
-
-      await expect(
-        checkComputerDriverUpdate(refreshedFetch as unknown as typeof fetch),
-      ).resolves.toMatchObject({ latestVersion: '0.12.0', updateAvailable: true });
-      await new Promise((resolve) => { setTimeout(resolve, 0); });
-      expect(refreshedFetch).toHaveBeenCalledTimes(3);
-
-      const hangingFetch = vi.fn().mockReturnValue(new Promise(() => {}));
-      await expect(
-        checkComputerDriverUpdate(hangingFetch as unknown as typeof fetch),
-      ).resolves.toMatchObject({ latestVersion: '0.12.0', updateAvailable: true });
-      expect(hangingFetch).not.toHaveBeenCalled();
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
   it('updateComputerDriver joins one in-flight install and clears the cached check on success', async () => {
     // 先塞一个"有更新"缓存
     mockDriverSpawn({ stdout: 'cua-driver 0.5.8\n' });
-    const fetchImpl = mockRefsThenReleaseFetch();
-    await checkComputerDriverUpdate(fetchImpl as unknown as typeof fetch);
+    await checkComputerDriverUpdate(mockRefsThenReleaseFetch() as unknown as typeof fetch);
 
-    // installComputerDriver 的 spawn 序列:installer + status(version/daemon[/permissions])
-    mockDriverSpawn({ stdout: 'installed\n' });
-    mockDriverSpawn({ stdout: 'cua-driver 0.7.0\n' });
-    mockDriverSpawn({ stdout: 'Cua Driver daemon is running\n' });
+    // installComputerDriver 的 spawn 序列（darwin：仅 status；非 darwin：installer + status）
     if (process.platform === 'darwin') {
+      // darwin 委托 companion ensureInstalled，状态由 getComputerDriverStatus 读取
+      mockDriverSpawn({ stdout: 'cua-driver 0.7.0\n' });
+      mockDriverSpawn({ stdout: 'Cua Driver daemon is running\n' });
       mockDriverSpawn({
         stdout:
           '{"accessibility":true,"screen_recording":true,"screen_recording_capturable":true,"source":{"attribution":"driver-daemon"}}\n',
       });
+    } else {
+      mockDriverSpawn({ stdout: 'installed\n' });
+      mockDriverSpawn({ stdout: 'cua-driver 0.7.0\n' });
+      mockDriverSpawn({ stdout: 'Cua Driver daemon is running\n' });
     }
 
     const installerCallsBefore = spawnMock.mock.calls.length;
     // 并发两次调用(模拟面板关闭前发起 + 重开后 join),应共享同一次安装
-    const [first, second] = await Promise.all([
-      updateComputerDriver(undefined, { fetchImpl: fetchImpl as unknown as typeof fetch }),
-      updateComputerDriver(undefined, { fetchImpl: fetchImpl as unknown as typeof fetch }),
-    ]);
+    const [first, second] = await Promise.all([updateComputerDriver(), updateComputerDriver()]);
     expect(first).toBe(second);
     expect(first.ok).toBe(true);
-    const installerRuns = spawnMock.mock.calls
-      .slice(installerCallsBefore)
-      .filter((call) => String(call[0]).match(/bash|powershell/i)).length;
-    expect(installerRuns).toBe(1);
-    const installerCall = spawnMock.mock.calls
-      .slice(installerCallsBefore)
-      .find((call) => String(call[0]).match(/bash|powershell/i));
-    expect(installerCall?.[2]?.env?.CUA_DRIVER_RS_VERSION).toBe('0.7.0');
+    if (process.platform !== 'darwin') {
+      // 非 darwin 仍验证只 spawn 了一次安装脚本
+      const installerRuns = spawnMock.mock.calls
+        .slice(installerCallsBefore)
+        .filter((call) => String(call[0]).match(/bash|powershell/i)).length;
+      expect(installerRuns).toBe(1);
+    }
 
     // 成功后缓存被清:下一次 check 重新走网络(注入 no-update 响应验证)
     mockDriverSpawn({ stdout: 'cua-driver 0.7.0\n' });
@@ -3321,14 +3731,11 @@ describe('computer driver update check', () => {
 
   it('reports updating=true while a driver update install is in flight', async () => {
     mockDriverSpawn({ stdout: 'cua-driver 0.5.8\n' });
-    const fetchImpl = mockRefsThenReleaseFetch();
-    await checkComputerDriverUpdate(fetchImpl as unknown as typeof fetch);
+    await checkComputerDriverUpdate(mockRefsThenReleaseFetch() as unknown as typeof fetch);
 
     // 安装脚本挂起 → updateComputerDriver 处于 in-flight
     mockNeverSettlingSpawn();
-    const updatePromise = updateComputerDriver(undefined, {
-      fetchImpl: fetchImpl as unknown as typeof fetch,
-    });
+    const updatePromise = updateComputerDriver();
     await new Promise((resolve) => { setTimeout(resolve, 0); });
 
     const hangingFetch = vi.fn().mockReturnValue(new Promise(() => {}));
@@ -3533,52 +3940,6 @@ describe('driver update download progress helpers', () => {
     ]);
     expect(pickLatestCuaDriverRelease([{ tag_name: 'cli-v0.1.12' }])).toBeNull();
   });
-
-  it('maps the assets used by the official installer on every supported platform', () => {
-    expect(getCuaDriverReleaseAssetName('0.7.0', 'darwin', 'arm64')).toBe(
-      'cua-driver-rs-0.7.0-darwin-universal.tar.gz',
-    );
-    expect(getCuaDriverReleaseAssetName('0.7.0', 'linux', 'x64')).toBe(
-      'cua-driver-rs-0.7.0-linux-x86_64-binary.tar.gz',
-    );
-    expect(getCuaDriverReleaseAssetName('0.7.0', 'linux', 'arm64')).toBe(
-      'cua-driver-rs-0.7.0-linux-arm64-binary.tar.gz',
-    );
-    expect(getCuaDriverReleaseAssetName('0.7.0', 'linux', 'aarch64')).toBe(
-      'cua-driver-rs-0.7.0-linux-arm64-binary.tar.gz',
-    );
-    expect(getCuaDriverReleaseAssetName('0.7.0', 'win32', 'x64')).toBe(
-      'cua-driver-rs-0.7.0-windows-x86_64.zip',
-    );
-    expect(getCuaDriverReleaseAssetName('0.7.0', 'win32', 'x86_64')).toBe(
-      'cua-driver-rs-0.7.0-windows-x86_64.zip',
-    );
-    expect(getCuaDriverReleaseAssetName('0.7.0', 'win32', 'arm64')).toBe(
-      'cua-driver-rs-0.7.0-windows-arm64.zip',
-    );
-    expect(getCuaDriverReleaseAssetName('0.7.0', 'linux', 'riscv64')).toBeNull();
-  });
-
-  it('falls back when Windows os.machine() reports unknown', () => {
-    expect(
-      resolveCuaDriverHostArch('win32', 'unknown', {
-        processArch: 'x64',
-        env: { PROCESSOR_ARCHITECTURE: 'ARM64' },
-      }),
-    ).toBe('arm64');
-    expect(
-      getCuaDriverReleaseAssetName('0.7.0', 'win32', 'unknown', {
-        processArch: 'x64',
-        env: { PROCESSOR_ARCHITECTURE: 'ARM64' },
-      }),
-    ).toBe('cua-driver-rs-0.7.0-windows-arm64.zip');
-    expect(
-      getCuaDriverReleaseAssetName('0.7.0', 'win32', 'unknown', {
-        processArch: 'arm64',
-        env: {},
-      }),
-    ).toBe('cua-driver-rs-0.7.0-windows-arm64.zip');
-  });
 });
 
 describe('review follow-ups: releases pagination and Windows idle timeout', () => {
@@ -3598,13 +3959,7 @@ describe('review follow-ups: releases pagination and Windows idle timeout', () =
       .mockResolvedValueOnce({ ok: true, json: async () => fullPage })
       .mockResolvedValueOnce({ ok: true, json: async () => shortPage })
       // assets by tag
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          tag_name: 'cua-driver-rs-v0.7.0',
-          assets: [currentPlatformReleaseAsset('0.7.0')],
-        }),
-      });
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ tag_name: 'cua-driver-rs-v0.7.0', assets: [] }) });
 
     await expect(
       checkComputerDriverUpdate(fetchImpl as unknown as typeof fetch),
@@ -3624,329 +3979,26 @@ describe('review follow-ups: releases pagination and Windows idle timeout', () =
           { ref: 'refs/tags/cua-driver-rs-v0.9.0' },
         ],
       })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          tag_name: 'cua-driver-rs-v0.10.0',
-          assets: [currentPlatformReleaseAsset('0.10.0')],
-        }),
-      });
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ tag_name: 'cua-driver-rs-v0.10.0', assets: [] }) });
 
     await expect(
       checkComputerDriverUpdate(fetchImpl as unknown as typeof fetch),
     ).resolves.toMatchObject({ latestVersion: '0.10.0', updateAvailable: true });
   });
 
-  it('falls back when the newest tag has no published release', async () => {
-    mockDriverSpawn({ stdout: 'cua-driver 0.10.0\n' });
+  it('still reports the update when the asset lookup fails', async () => {
+    mockDriverSpawn({ stdout: 'cua-driver 0.5.8\n' });
     const fetchImpl = vi
       .fn()
       .mockResolvedValueOnce({
         ok: true,
-        json: async () => [
-          { ref: 'refs/tags/cua-driver-rs-v0.11.0' },
-          { ref: 'refs/tags/cua-driver-rs-v0.12.0' },
-        ],
+        json: async () => [{ ref: 'refs/tags/cua-driver-rs-v0.7.0' }],
       })
-      .mockResolvedValueOnce({ ok: false, status: 404 })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          tag_name: 'cua-driver-rs-v0.11.0',
-          assets: [currentPlatformReleaseAsset('0.11.0')],
-        }),
-      });
-
-    await expect(
-      checkComputerDriverUpdate(fetchImpl as unknown as typeof fetch),
-    ).resolves.toMatchObject({ latestVersion: '0.11.0', updateAvailable: true });
-    expect(String(fetchImpl.mock.calls[1][0])).toContain('cua-driver-rs-v0.12.0');
-    expect(String(fetchImpl.mock.calls[2][0])).toContain('cua-driver-rs-v0.11.0');
-  });
-
-  it('keeps probing past five incomplete tags to find an older installable update', async () => {
-    mockDriverSpawn({ stdout: 'cua-driver 0.6.0\n' });
-    const fetchImpl = vi.fn().mockResolvedValueOnce({
-      ok: true,
-      json: async () => [
-        { ref: 'refs/tags/cua-driver-rs-v0.12.0' },
-        { ref: 'refs/tags/cua-driver-rs-v0.11.0' },
-        { ref: 'refs/tags/cua-driver-rs-v0.10.0' },
-        { ref: 'refs/tags/cua-driver-rs-v0.9.0' },
-        { ref: 'refs/tags/cua-driver-rs-v0.8.0' },
-        { ref: 'refs/tags/cua-driver-rs-v0.7.0' },
-      ],
-    });
-    for (let index = 0; index < 5; index += 1) {
-      fetchImpl.mockResolvedValueOnce({ ok: false, status: 404 });
-    }
-    fetchImpl.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
-        tag_name: 'cua-driver-rs-v0.7.0',
-        assets: [currentPlatformReleaseAsset('0.7.0')],
-      }),
-    });
+      .mockResolvedValueOnce({ ok: false, status: 404 });
 
     await expect(
       checkComputerDriverUpdate(fetchImpl as unknown as typeof fetch),
     ).resolves.toMatchObject({ latestVersion: '0.7.0', updateAvailable: true });
-    expect(fetchImpl).toHaveBeenCalledTimes(7);
-  });
-
-  it('accepts installable releases that upstream marks as GitHub prereleases', async () => {
-    mockDriverSpawn({ stdout: 'cua-driver 0.10.0\n' });
-    const fetchImpl = vi
-      .fn()
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => [{ ref: 'refs/tags/cua-driver-rs-v0.11.0' }],
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          tag_name: 'cua-driver-rs-v0.11.0',
-          prerelease: true,
-          assets: [currentPlatformReleaseAsset('0.11.0')],
-        }),
-      });
-
-    await expect(
-      checkComputerDriverUpdate(fetchImpl as unknown as typeof fetch),
-    ).resolves.toMatchObject({ latestVersion: '0.11.0', updateAvailable: true });
-  });
-
-  it('skips releases without the current-platform installer asset', async () => {
-    mockDriverSpawn({ stdout: 'cua-driver 0.10.0\n' });
-    const fetchImpl = vi
-      .fn()
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => [
-          { ref: 'refs/tags/cua-driver-rs-v0.12.0' },
-          { ref: 'refs/tags/cua-driver-rs-v0.11.0' },
-        ],
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          tag_name: 'cua-driver-rs-v0.12.0',
-          assets: [{ name: 'checksums.txt', size: 100 }],
-        }),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          tag_name: 'cua-driver-rs-v0.11.0',
-          assets: [currentPlatformReleaseAsset('0.11.0')],
-        }),
-      });
-
-    await expect(
-      checkComputerDriverUpdate(fetchImpl as unknown as typeof fetch),
-    ).resolves.toMatchObject({ latestVersion: '0.11.0', updateAvailable: true });
-  });
-
-  it('skips starter and zero-byte platform assets until an uploaded archive is available', async () => {
-    mockDriverSpawn({ stdout: 'cua-driver 0.10.0\n' });
-    const fetchImpl = vi
-      .fn()
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => [
-          { ref: 'refs/tags/cua-driver-rs-v0.13.0' },
-          { ref: 'refs/tags/cua-driver-rs-v0.12.0' },
-          { ref: 'refs/tags/cua-driver-rs-v0.11.0' },
-        ],
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          tag_name: 'cua-driver-rs-v0.13.0',
-          assets: [{ ...currentPlatformReleaseAsset('0.13.0'), state: 'starter' }],
-        }),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          tag_name: 'cua-driver-rs-v0.12.0',
-          assets: [currentPlatformReleaseAsset('0.12.0', 0)],
-        }),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          tag_name: 'cua-driver-rs-v0.11.0',
-          assets: [currentPlatformReleaseAsset('0.11.0')],
-        }),
-      });
-
-    await expect(
-      checkComputerDriverUpdate(fetchImpl as unknown as typeof fetch),
-    ).resolves.toMatchObject({ latestVersion: '0.11.0', updateAvailable: true });
-  });
-
-  it('hides the updater when no newer tag is installable', async () => {
-    mockDriverSpawn({ stdout: 'cua-driver 0.10.0\n' });
-    const fetchImpl = vi
-      .fn()
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => [{ ref: 'refs/tags/cua-driver-rs-v0.12.0' }],
-      })
-      .mockResolvedValueOnce({ ok: false, status: 404 });
-
-    await expect(checkComputerDriverUpdate(fetchImpl as unknown as typeof fetch)).resolves.toEqual({
-      currentVersion: '0.10.0',
-      latestVersion: '0.10.0',
-      updateAvailable: false,
-      updating: false,
-    });
-    const installerCallsBefore = spawnMock.mock.calls.length;
-    await expect(updateComputerDriver()).rejects.toThrow(
-      'no verified installable cua-driver update is available',
-    );
-    expect(spawnMock.mock.calls).toHaveLength(installerCallsBefore);
-  });
-
-  it('revalidates on click and falls back when the cached release disappears', async () => {
-    mockDriverSpawn({ stdout: 'cua-driver 0.10.0\n' });
-    const fetchImpl = vi
-      .fn()
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => [{ ref: 'refs/tags/cua-driver-rs-v0.12.0' }],
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          tag_name: 'cua-driver-rs-v0.12.0',
-          assets: [currentPlatformReleaseAsset('0.12.0')],
-        }),
-      })
-      .mockResolvedValueOnce({ ok: false, status: 404 })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => [
-          { ref: 'refs/tags/cua-driver-rs-v0.12.0' },
-          { ref: 'refs/tags/cua-driver-rs-v0.11.0' },
-        ],
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          tag_name: 'cua-driver-rs-v0.11.0',
-          assets: [currentPlatformReleaseAsset('0.11.0')],
-        }),
-      });
-
-    await checkComputerDriverUpdate(fetchImpl as unknown as typeof fetch);
-    mockDriverSpawn({ stdout: 'cua-driver 0.10.0\n' });
-    mockDriverSpawn({ stdout: 'installed\n' });
-    mockDriverSpawn({ stdout: 'cua-driver 0.11.0\n' });
-    mockDriverSpawn({ stdout: 'Cua Driver daemon is running\n' });
-    if (process.platform === 'darwin') {
-      mockDriverSpawn({
-        stdout:
-          '{"accessibility":true,"screen_recording":true,"screen_recording_capturable":true,"source":{"attribution":"driver-daemon"}}\n',
-      });
-    }
-
-    const installerCallsBefore = spawnMock.mock.calls.length;
-    await updateComputerDriver(undefined, { fetchImpl: fetchImpl as unknown as typeof fetch });
-    const installerCall = spawnMock.mock.calls
-      .slice(installerCallsBefore)
-      .find((call) => String(call[0]).match(/bash|powershell/i));
-    expect(installerCall?.[2]?.env?.CUA_DRIVER_RS_VERSION).toBe('0.11.0');
-  });
-
-  it('throttles panel refreshes after an update preflight performs a fallback check', async () => {
-    mockDriverSpawn({ stdout: 'cua-driver 0.10.0\n' });
-    const fetchImpl = vi
-      .fn()
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => [{ ref: 'refs/tags/cua-driver-rs-v0.12.0' }],
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          tag_name: 'cua-driver-rs-v0.12.0',
-          assets: [currentPlatformReleaseAsset('0.12.0')],
-        }),
-      })
-      // update click:cached target disappeared,then fallback sees no other candidate
-      .mockResolvedValueOnce({ ok: false, status: 404 })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => [{ ref: 'refs/tags/cua-driver-rs-v0.12.0' }],
-      });
-
-    await checkComputerDriverUpdate(fetchImpl as unknown as typeof fetch);
-    vi.useFakeTimers({ toFake: ['Date'] });
-    try {
-      vi.setSystemTime(Date.now() + 11 * 60_000);
-      mockDriverSpawn({ stdout: 'cua-driver 0.10.0\n' });
-      await expect(
-        updateComputerDriver(undefined, { fetchImpl: fetchImpl as unknown as typeof fetch }),
-      ).rejects.toThrow('no verified installable cua-driver update is available');
-
-      // 预检失败后主缓存已是 no-update;同会话再次读取应直接清掉残留入口。
-      await expect(
-        checkComputerDriverUpdate(fetchImpl as unknown as typeof fetch),
-      ).resolves.toMatchObject({ updateAvailable: false, updating: false });
-
-      const reopenedFetch = vi.fn().mockReturnValue(new Promise(() => {}));
-      await expect(
-        checkComputerDriverUpdate(reopenedFetch as unknown as typeof fetch),
-      ).resolves.toMatchObject({ updateAvailable: false, updating: false });
-      expect(reopenedFetch).not.toHaveBeenCalled();
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it('fails closed when a release probe fails with a server error', async () => {
-    mockDriverSpawn({ stdout: 'cua-driver 0.10.0\n' });
-    const fetchImpl = vi
-      .fn()
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => [{ ref: 'refs/tags/cua-driver-rs-v0.12.0' }],
-      })
-      .mockResolvedValueOnce({ ok: false, status: 503 });
-
-    await expect(checkComputerDriverUpdate(fetchImpl as unknown as typeof fetch)).resolves.toEqual({
-      currentVersion: '0.10.0',
-      latestVersion: null,
-      updateAvailable: false,
-      updating: false,
-    });
-  });
-
-  it('continues to an older candidate after a transient release probe error', async () => {
-    mockDriverSpawn({ stdout: 'cua-driver 0.10.0\n' });
-    const fetchImpl = vi
-      .fn()
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => [
-          { ref: 'refs/tags/cua-driver-rs-v0.12.0' },
-          { ref: 'refs/tags/cua-driver-rs-v0.11.0' },
-        ],
-      })
-      .mockResolvedValueOnce({ ok: false, status: 503 })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          tag_name: 'cua-driver-rs-v0.11.0',
-          assets: [currentPlatformReleaseAsset('0.11.0')],
-        }),
-      });
-
-    await expect(
-      checkComputerDriverUpdate(fetchImpl as unknown as typeof fetch),
-    ).resolves.toMatchObject({ latestVersion: '0.11.0', updateAvailable: true });
   });
 
   it('sends Authorization only when GITHUB_TOKEN/GH_TOKEN is present', async () => {

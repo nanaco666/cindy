@@ -1,1 +1,1 @@
-export * from '@cindy/maker-shared/schedule-delete';
+export * from '@lizi/maker-shared/schedule-delete';

@@ -6,9 +6,11 @@
  * - localStorage key = 'experimental.<feature>'
  * - 跨组件实例同步走 storage 事件（同 useNotificationSettings 模式）
  *
- * 新增 experimental feature 只需要：
+ * 未来加新 experimental feature 只需要：
  * 1. 在 EXPERIMENTAL_FEATURES 加一项
  * 2. 在 ExperimentalSection 里加一行 UI
+ *
+ * 详见 doc/agent/xdt-maker-architecture.md
  */
 
 import { useCallback, useEffect, useState } from 'react';

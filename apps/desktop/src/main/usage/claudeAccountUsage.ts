@@ -3,14 +3,14 @@
  *
  * 配额周期:
  *   字段来自 LiteLLM /v2/user/info 的 spend / max_budget / budget_reset_at。
- *   网关当前部署 budget_duration='30d', 所以 cycleSpend 是"本月度周期 (距上次 reset)
+ *   tapsvc 当前部署 budget_duration='30d', 所以 cycleSpend 是"本月度周期 (距上次 reset)
  *   跨所有客户端 / 所有 API key 的累计花费", cycleMaxBudget 是月度上限。
  *
  * 今日跨客户端 (todaySpend):
  *   走 LiteLLM /user/daily/activity?start_date=<UTC today>&end_date=<UTC today>, 返回
  *   results[0].metrics.spend (本 user 名下跨所有客户端 / 所有 API key 的当日累计, 与 web
  *   看板同源)。UTC 日切, 跟 web 看板边界完全对齐。
- *   历史: 早期网关没开这个端点, 改用 dailyBaselineStore (本机 baseline diff) 反推,
+ *   历史: 早期 tapsvc 没开这个端点, 改用 dailyBaselineStore (本机 baseline diff) 反推,
  *   现已下线 (2026-05-22 GateWay 同事 ship 后)。
  *   注: 曾额外用 /key/info + breakdown.api_keys 算"当前 API key 今日", 但 /key/info 解析到
  *   的是管理用途 key, 与子进程实际计费 key 不是同一把, 取出来的桶并非用户真实用量;
@@ -53,7 +53,7 @@ export const USAGE_CLAUDE_ACCOUNT_CHANGED = 'usage:claude-account-changed';
 
 export interface ClaudeAccountUsageSnapshot {
   /**
-   * 当前周期(网关部署为 30d / 月度) 跨所有客户端 + 所有 API key 的累计花费 USD,
+   * 当前周期(tapsvc 部署为 30d / 月度) 跨所有客户端 + 所有 API key 的累计花费 USD,
    * 来自 LiteLLM user.spend。不只本机本壳。
    */
   spend: number;
@@ -99,7 +99,7 @@ interface LiteLlmDailyActivity {
   }>;
 }
 
-/** UTC YYYY-MM-DD。跟 web 看板 的 daily 边界对齐。 */
+/** UTC YYYY-MM-DD。跟 web 看板 (console.tapsvc.com) 的 daily 边界对齐。 */
 function utcTodayKey(): string {
   const d = new Date();
   const y = d.getUTCFullYear();

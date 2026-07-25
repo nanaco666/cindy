@@ -1,5 +1,3 @@
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { RemoteMessage } from '@/session/types';
 
@@ -246,13 +244,6 @@ describe('mobileSessionMessageCache', () => {
     await cacheSessionMessages('host-a', 'session-1', []);
     expect(store.size).toBe(0);
     await expect(getCachedSessionMessages('host-a', 'session-1')).resolves.toEqual([]);
-  });
-
-  it('does not persist an empty render snapshot before cache hydration finishes', () => {
-    const source = readFileSync(resolve(process.cwd(), 'src/session/remoteSessionStore.ts'), 'utf8');
-    expect(source).toContain('const hydrationReadyKeyRef = useRef<string | null>(null);');
-    expect(source).toContain('if (hydrationReadyKeyRef.current !== key) return;');
-    expect(source).toContain('if (deviceId) void cacheSessionMessages(deviceId, sessionId, next).catch(() => undefined);');
   });
 
   it('clears every cached session on logout but leaves unrelated keys', async () => {

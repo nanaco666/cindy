@@ -140,15 +140,6 @@ async function addHostToHistoryIndex(hostDeviceId: string): Promise<void> {
   await writeHistoryHostIndex([...hosts, hostDeviceId]);
 }
 
-/**
- * 供凭据存量清理复用:用过语音输入的 host 一定同步过穿透凭据,这个索引是
- * SecureStore 无法枚举键时的第二个 host 推导来源(见
- * mobileVoiceCredentialStore.clearAllMobileVoiceCredentials)。
- */
-export async function listMobileVoiceHistoryHosts(): Promise<string[]> {
-  return readHistoryHostIndex();
-}
-
 async function readHistoryHostIndex(): Promise<string[]> {
   const raw = await getSecureItem(STORAGE_INDEX_KEY).catch(() => null);
   if (!raw) return [];

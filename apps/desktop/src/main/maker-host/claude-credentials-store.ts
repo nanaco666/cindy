@@ -28,7 +28,6 @@ import {
   decideKeychainWriteMode,
   planClaudeAiOAuthClear,
 } from './claude-credentials-blob.js';
-import { isNativeProviderAuthBound } from './nativeProviderAuthBinding.js';
 
 const log = desktopMakerLogger.child('claude-credentials-store');
 
@@ -174,7 +173,6 @@ function writeBlob(blob: Record<string, unknown>): void {
  * getState 自动兼容本地登录 + 登录后状态判定都用它。
  */
 export function readClaudeAiOAuth(): ClaudeAiOAuth | null {
-  if (!isNativeProviderAuthBound('anthropic')) return null;
   const blob = readBlob();
   const oauth = blob?.claudeAiOauth as ClaudeAiOAuth | undefined;
   if (oauth && typeof oauth.accessToken === 'string' && oauth.accessToken.length > 0) {
@@ -186,13 +184,6 @@ export function readClaudeAiOAuth(): ClaudeAiOAuth | null {
 /** 是否存在可用的 Claude.ai OAuth 登录(有 accessToken)。 */
 export function hasClaudeAiOAuth(): boolean {
   return readClaudeAiOAuth() != null;
-}
-
-/** Legacy upgrade probe; intentionally bypasses owner binding once at migration time. */
-export function hasClaudeAiOAuthUnbound(): boolean {
-  const blob = readBlob();
-  const oauth = blob?.claudeAiOauth as ClaudeAiOAuth | undefined;
-  return typeof oauth?.accessToken === 'string' && oauth.accessToken.length > 0;
 }
 
 /**

@@ -1,4 +1,4 @@
-import type { MessageRenderItem } from '@cindy/maker-shared/message-render';
+import type { MessageRenderItem } from '@lizi/maker-shared/message-render';
 import type { NormalizedRemoteMessage } from '@/session/messageNormalize';
 import {
   type MobileMessageRenderItem,
@@ -29,7 +29,7 @@ import {
   type ToolRowPresentationOptions,
   type ToolRowStatus,
   type WorkGroupPresentation,
-} from '@cindy/maker-shared/message-presentation';
+} from '@lizi/maker-shared/message-presentation';
 
 export {
   buildMessageActionBarPresentation,

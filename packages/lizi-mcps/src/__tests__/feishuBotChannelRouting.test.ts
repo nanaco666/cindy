@@ -1,12 +1,12 @@
 /**
- * cindy_feishu_bot 渠道路由提示的回归测试。
+ * lizi_feishu_bot 渠道路由提示的回归测试。
  *
- * 背景(2026-07-16 实踩):hook 会话里模型把「把文件发给我」路由到了飞书通道
+ * 背景(2026-07-16 实踩):Slack 会话里模型把「把文件发给我」路由到了飞书通道
  * 并失败。修复方式是构建期按 sessionSource 给飞书侧全部工具描述追加路由提示
  * (规则 9:通道路由确定性用代码保证)。本测试锁两件事:
- *   1. Cindy hook source 时,每个工具描述 === 基线描述 + 对应固定提示
+ *   1. sessionSource='slack-hook' 时,每个工具描述 === 基线描述 + 固定提示
  *      后缀(锁"前缀确定、note 无易变内容");
- *   2. 非 hook 会话(缺省 / 'feishu')描述与基线字节级一致。
+ *   2. 非 slack 会话(缺省 / 'feishu')描述与基线字节级一致。
  */
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
@@ -15,9 +15,8 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   createFeishuBotMcpServer,
   SLACK_HOOK_SESSION_CHANNEL_NOTE,
-  TELEGRAM_HOOK_SESSION_CHANNEL_NOTE,
   type FeishuBotMcpDeps,
-} from '../cindy_feishuBotMcpServer';
+} from '../lizi_feishuBotMcpServer';
 
 function makeDeps(sessionSource?: string): FeishuBotMcpDeps {
   return {
@@ -70,10 +69,9 @@ const ALL_TOOL_KEYS = [
   'registry:send_message_to_user',
 ] as const;
 
-describe('cindy_feishu_bot channel routing note', () => {
+describe('lizi_feishu_bot channel routing note', () => {
   it.each([
     ['slack-hook', SLACK_HOOK_SESSION_CHANNEL_NOTE],
-    ['telegram', TELEGRAM_HOOK_SESSION_CHANNEL_NOTE],
   ] as const)(
     '%s description === base description + fixed note, for every tool',
     async (source, note) => {
@@ -102,7 +100,6 @@ describe('cindy_feishu_bot channel routing note', () => {
       expect(feishuDescs).toEqual(baseDescs);
       for (const description of feishuDescs.values()) {
         expect(description).not.toContain(SLACK_HOOK_SESSION_CHANNEL_NOTE.trim());
-        expect(description).not.toContain(TELEGRAM_HOOK_SESSION_CHANNEL_NOTE.trim());
       }
     } finally {
       await feishu.cleanup();

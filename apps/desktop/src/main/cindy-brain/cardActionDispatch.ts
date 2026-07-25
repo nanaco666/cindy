@@ -45,11 +45,6 @@ export interface CardActionDispatchDeps {
   /** 管子下行投递(electronSandboxAdapter.sendToGhostLogic)。 */
   sendToGhost(ghostId: string, payload: GhostPipeEventPush): void;
   /**
-   * 为本次受信点击签发 Agent 一次性票据。插件没申请 agent 槽或卡片没有
-   * session 归属时返回 null，card-action 仍照常投递。
-   */
-  issueUserActionToken?(ghostId: string, sessionId: string | null): string | null;
-  /**
    * 后台活动起点(会话呼吸链路,可选):点击成功投递给意识后上报——
    * 从用户点下按钮那刻起会话侧栏就该亮呼吸,不等意识的第一版过程卡。
    * key = 新结果的画布卡位(衍生卡位,极端回退原 callId)。sessionId 查无
@@ -135,14 +130,11 @@ export class GhostCardActionDispatcher {
 
     try {
       if (!this.deps.isRunning(ghostId)) await this.deps.wake(ghost);
-      const userActionToken = this.deps.issueUserActionToken?.(ghostId, sessionId) ?? null;
       this.deps.sendToGhost(ghostId, {
         type: 'event',
         name: 'card-action',
         callId,
         actionId,
-        ...(sessionId ? { sessionId } : {}),
-        ...(userActionToken ? { userActionToken } : {}),
         ...(promptText !== undefined ? { prompt: promptText } : {}),
         spawnCallId,
         ts: this.now(),

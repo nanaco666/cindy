@@ -87,9 +87,6 @@ export function registerScheduleSetPreRunHookTool(
         let scheduleName = argScheduleName;
         let currentCommand: string | undefined;
         let currentTimeoutMs: number | undefined;
-        let providerId: string | undefined;
-        let agentKind: 'codex' | 'claude-code' | undefined;
-        let model: string | undefined;
         if (scheduleId) {
           const schedule = await scheduler.get(scheduleId);
           if (!schedule) throw new Error(`Schedule not found: ${scheduleId}`);
@@ -107,9 +104,6 @@ export function registerScheduleSetPreRunHookTool(
           scheduleName = scheduleName ?? schedule.name;
           currentCommand = schedule.preRunHook?.command;
           currentTimeoutMs = schedule.preRunHook?.timeoutMs;
-          providerId = schedule.providerId;
-          agentKind = schedule.agentKind;
-          model = schedule.model;
         }
 
         const installed = await hookScript.install({
@@ -118,9 +112,6 @@ export function registerScheduleSetPreRunHookTool(
           scheduleName,
           workingDir,
           currentCommand,
-          providerId,
-          agentKind,
-          model,
         });
 
         let attached = false;

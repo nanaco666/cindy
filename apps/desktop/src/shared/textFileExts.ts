@@ -1,7 +1,7 @@
 /**
  * textFileExts — 文本/代码/markdown 文件类型白名单。
  *
- * 真源已迁至 @cindy/file-browser-core(P0 抽包):白名单同时驱动 desktop 的
+ * 真源已迁至 @lizi/file-browser-core(P0 抽包):白名单同时驱动 desktop 的
  * 附件分类/预览判断(renderer)、rg 搜索 glob(main),以及远端 file-service
  * daemon 的同一套搜索范围——三个消费点必须共享单一定义,所以定义放在包里,
  * 这里保留 re-export 让 desktop 内既有 import 路径(@/shared/textFileExts、
@@ -19,4 +19,4 @@ export {
   SUPPORTED_TEXT_EXTS,
   COMPOUND_EXTS,
   KNOWN_TEXT_FILENAMES,
-} from '@cindy/file-browser-core/textFileExts';
+} from '@lizi/file-browser-core/textFileExts';

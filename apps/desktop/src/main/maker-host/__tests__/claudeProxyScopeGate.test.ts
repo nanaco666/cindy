@@ -18,10 +18,6 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('../../appCapabilities.js', () => ({
-  getAppCapabilities: () => ({ canUseCindyGateway: true }),
-}));
-
 vi.mock('../logger-adapter', () => ({
   createMakerLogger: () => ({
     trace: vi.fn(), debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn(),

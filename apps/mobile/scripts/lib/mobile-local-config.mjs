@@ -29,9 +29,7 @@ export function ensureMobileLocalRegionConfig(options = {}) {
   const mobileDir = path.resolve(options.mobileDir ?? defaultMobileDir);
   const worktreeRoot = path.resolve(mobileDir, '../..');
   const configPath = path.join(mobileDir, 'scripts', 'self-host-regions.json');
-  // 本地 Xcode / Simulator 引导用 local 模式:TapDB / Google 等叶子值允许留空,
-  // 外部开发者只填身份字段即可构建;自建发布线仍走默认 release 严格校验。
-  const validateConfig = options.validateConfig ?? ((candidate) => loadSelfHostRegions({ filePath: candidate, mode: 'local' }));
+  const validateConfig = options.validateConfig ?? ((candidate) => loadSelfHostRegions({ filePath: candidate }));
 
   if (fs.existsSync(configPath)) {
     validateConfig(configPath);
@@ -61,22 +59,6 @@ export function ensureMobileLocalRegionConfig(options = {}) {
   const invalidHint = invalidCandidates.length > 0
     ? ` Found ${invalidCandidates.length} invalid config candidate(s); values were not copied.`
     : '';
-
-  // 任何 worktree 都没有可用配置时,不再阻断:从空白模板自动创建并打警告。
-  // 空白模板在 local 校验模式下合法——app 身份回落内置默认,统计/Google 登录关闭。
-  const examplePath = path.join(mobileDir, 'scripts', 'self-host-regions.json.example');
-  if (fs.existsSync(examplePath)) {
-    validateConfig(examplePath);
-    const published = publishValidatedConfig(examplePath, configPath, validateConfig);
-    validateConfig(configPath);
-    console.warn(
-      `[cindy] Missing ${configPath}; created it from the blank template ` +
-        '(built-in app identity, analytics/Google sign-in disabled). ' +
-        `Edit the file to customize.${invalidHint}`,
-    );
-    return { configPath, copiedFrom: published ? examplePath : null, createdFromExample: true };
-  }
-
   throw new Error(
     `Missing mobile local region config: ${configPath}. Copy self-host-regions.json from a configured Cindy worktree or fill self-host-regions.json.example.${invalidHint}`,
   );
@@ -102,9 +84,6 @@ function publishValidatedConfig(sourcePath, configPath, validateConfig) {
 }
 
 export function formatMobileLocalConfigStatus(result, worktreeRoot) {
-  if (result.createdFromExample) {
-    return '==> Created mobile local config from the blank template (built-in app identity, analytics/Google sign-in disabled); edit apps/mobile/scripts/self-host-regions.json to customize';
-  }
   if (!result.copiedFrom) return null;
   return `==> Reused validated mobile local config from ${path.relative(path.dirname(worktreeRoot), result.copiedFrom)} (values hidden)`;
 }
@@ -124,7 +103,7 @@ function readWorktreeEntries(worktreeRoot) {
 
 function candidateRank(entry) {
   const basename = path.basename(entry.path);
-  if (basename.endsWith('personal-client')) return 0;
+  if (entry.branch?.startsWith('refs/heads/dash/personal-client-') || basename.endsWith('personal-client')) return 0;
   if (entry.branch === 'refs/heads/main' || entry.branch === 'refs/heads/master') return 1;
   return 2;
 }

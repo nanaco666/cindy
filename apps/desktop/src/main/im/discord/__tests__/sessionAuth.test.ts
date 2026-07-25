@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import type { AgentKind } from '@cindy/maker-core';
-import type { ProviderView } from '@cindy/model-providers';
+import type { AgentKind } from '@lizi/maker-core';
+import type { ProviderView } from '@lizi/model-providers';
 
 const mocks = vi.hoisted(() => ({
   ipcHandle: vi.fn(),
@@ -9,7 +9,7 @@ const mocks = vi.hoisted(() => ({
   getAgentAuthState: vi.fn(),
   listProviders: vi.fn(),
   hasCustomProviderKey: vi.fn(),
-  readXdGatewayApiKey: vi.fn(),
+  readXdProxyApiKey: vi.fn(),
 }));
 
 vi.mock('electron', () => ({ ipcMain: { handle: mocks.ipcHandle } }));
@@ -24,7 +24,7 @@ vi.mock('../../../maker-host/provider-route', () => ({
   hasCustomProviderKey: mocks.hasCustomProviderKey,
 }));
 vi.mock('../../shared/apiKey', () => ({
-  readXdGatewayApiKey: mocks.readXdGatewayApiKey,
+  readXdProxyApiKey: mocks.readXdProxyApiKey,
 }));
 
 import type { ImAuthCheckDeps } from '../../shared/authCheck';
@@ -40,7 +40,7 @@ const config: ImOrchestratorConfig = {
 
 function authDeps(providers: ProviderView[]): ImAuthCheckDeps {
   return {
-    readXdGatewayApiKey: vi.fn(() => null),
+    readXdProxyApiKey: vi.fn(() => null),
     hasCustomProviderKey: vi.fn(() => false),
     getAgentAuthState: vi.fn(async () => ({ authenticated: false })),
     listProviders: vi.fn(async () => providers),

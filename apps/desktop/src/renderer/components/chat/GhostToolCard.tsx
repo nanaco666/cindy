@@ -1,5 +1,5 @@
 /**
- * GhostToolCard — 消息流「意识卡片」(卡槽③海报模式)。
+ * GhostToolCard — 消息流「意识卡片」(卡槽③海报模式,C3d')。
  *
  * 结构 = 归属 chip(意识摸不到)+ 意识画布(沙箱 iframe)+ 衍生卡堆叠:
  * - chip:幽灵印记 + 意识名 + 运行/完成状态点 + 展开箭头(点开看调用参数,
@@ -15,9 +15,7 @@
  * - 点击桥:iframe 与宿主同源(allow-same-origin 的目的),onLoad 后进
  *   contentDocument 给 cindy-media 图片挂 click → 弹标准 ImageLightbox;
  *   data-ghost-action 元素挂 click → card-action 回传意识(交互卡 v2);
- *   data-ghost-prompt 类动作先弹宿主输入框收文字;data-ghost-link 元素挂
- *   click → 宿主确认框(真实域名 + 全串链接)→ openExternal(外链 v3)。
- *   组件不向 iframe 注入脚本。
+ *   data-ghost-prompt 类动作先弹宿主输入框收文字。组件不向 iframe 注入脚本。
  * - 衍生卡(spawnCallId,`<根>::sp<序>`):card-action 触发的新结果卡,
  *   渲染在母卡下方——母卡(如 MJ 四宫格+按钮)原封不动,抽卡式反复点。
  *   每张衍生卡是**视觉独立的新卡片**:自带一枚精简归属 chip(印记 + 名字 +
@@ -37,7 +35,6 @@ import { ImageLightbox } from './ImageLightbox';
 import { ModelLightbox } from './ModelLightbox';
 import { toast } from '@/lib/toast';
 import { registerMedia } from '@/lib/mediaPlaybackBus';
-import { ListComposerTextarea } from '@/components/new-chat/ListComposerTextarea';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -57,7 +54,6 @@ import {
   GHOST_CARD_ACTION_PROMPT_MAX_LEN,
   GHOST_CARD_HEIGHT_MAX,
   GHOST_CARD_HEIGHT_MIN,
-  isGhostCardLinkAllowed,
 } from '@/../shared/ghost';
 
 /** 卡片画布宽度上限(与 tool-output 图卡同规格,设计稿按 460 出的)。 */
@@ -149,7 +145,6 @@ function GhostCardCanvas({
   themeVars,
   ariaTitle,
   sessionId,
-  allowExternalLinks,
 }: {
   /** 本画布的卡片键(母卡 = 调用 callId;衍生卡 = spawnCallId)。 */
   callId: string;
@@ -160,8 +155,6 @@ function GhostCardCanvas({
   themeVars: string;
   ariaTitle: string;
   sessionId?: string;
-  /** 插件是否声明了 card.externalLinks;未声明则卡内 data-ghost-link 不激活。 */
-  allowExternalLinks?: boolean;
 }): ReactNode {
   const { t } = useTranslation();
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
@@ -182,11 +175,6 @@ function GhostCardCanvas({
   const [promptText, setPromptText] = useState('');
   // 弹面板那颗按钮的引用:发送时对它上锁(防连点),与普通按钮同一套锁。
   const promptSourceElRef = useRef<HTMLElement | null>(null);
-  // data-ghost-link 外链确认框(卡片交互 v3):卡内声明式外链点击后先弹宿主
-  // 确认框(展示真实域名 + 完整链接,防"文案写 A 链到 B"),用户确认才
-  // openExternal。链接文案归意识,跳转链路由宿主独占——与 action/prompt 同一
-  // 信任模型。值 = 待确认的 URL。
-  const [linkAsk, setLinkAsk] = useState<string | null>(null);
   // 卡内图片右键菜单(复制图片 / 打开所在目录):与 ChatImageView 同款交互。
   // 图片在沙箱 iframe 里,宿主的 React onContextMenu 收不到,由点击桥代挂
   // contextmenu 监听后把 iframe 坐标换算成宿主视口坐标弹这里的菜单。
@@ -394,14 +382,12 @@ function GhostCardCanvas({
           img.style.opacity = '1';
         });
       }
-      // 图片点击的四级路由:data-ghost-action(动作按钮)> data-ghost-link
-      // (外链,均由下面的循环挂)> data-ghost-model(3D 预览 → 应用内 3D
-      // 查看器)> 普通看大图 lightbox。
-      if (!img.dataset.ghostAction && !img.dataset.ghostLink) {
+      // 图片点击的三级路由:data-ghost-action(动作按钮,下面的循环挂)>
+      // data-ghost-model(3D 预览 → 应用内 3D 查看器)> 普通看大图 lightbox。
+      if (!img.dataset.ghostAction) {
         img.style.cursor = 'pointer';
         const modelUrl = img.dataset.ghostModel;
-        img.addEventListener('click', (e) => {
-          e.stopPropagation();
+        img.addEventListener('click', () => {
           // 点击发生在 iframe 里,焦点会留在 guest 文档——keydown 不跨文档冒泡,
           // 不挪回宿主的话 Esc/方向键/缩放键都进不了 lightbox(与
           // GhostMediaLightboxHost 同坑同解:blur 掉 iframe,键盘立即归位)。
@@ -450,8 +436,7 @@ function GhostCardCanvas({
       const actionId = el.dataset.ghostAction ?? '';
       if (!actionId) return;
       el.style.cursor = 'pointer';
-      el.addEventListener('click', (e) => {
-        e.stopPropagation();
+      el.addEventListener('click', () => {
         // 已锁(点过、等新卡)则忽略连点。
         if (el.getAttribute('aria-disabled') === 'true' || (el as HTMLButtonElement).disabled) return;
         // data-ghost-prompt 类动作:先弹宿主输入框收集文字,发送时才派发
@@ -480,37 +465,8 @@ function GhostCardCanvas({
         void window.electronAPI?.ghosts?.dispatchCardAction?.(callId, actionId)?.catch(() => {});
       });
     });
-    // 卡内外链(v3):data-ghost-link 元素点击 → 宿主确认框 → openExternal。
-    // 净化器已白名单校验(整串 http/https);此处再验协议一次作纵深,并让
-    // 动作声明优先(净化器已互斥,同为纵深)。
-    // 须声明 card.externalLinks 才激活(未声明的插件属性保留但不挂桥)。
-    if (allowExternalLinks) doc.querySelectorAll<HTMLElement>('[data-ghost-link]').forEach((el) => {
-      if (el.dataset.xdtLinkBridged === '1') return;
-      el.dataset.xdtLinkBridged = '1';
-      if (el.dataset.ghostAction) return;
-      const url = el.dataset.ghostLink ?? '';
-      if (!isGhostCardLinkAllowed(url)) return;
-      el.style.cursor = 'pointer';
-      if (!el.getAttribute('tabindex')) el.setAttribute('tabindex', '0');
-      el.setAttribute('role', 'link');
-      const activateLink = (): void => {
-        iframeRef.current?.blur();
-        setLinkAsk(url);
-      };
-      el.addEventListener('click', (e) => {
-        e.stopPropagation();
-        activateLink();
-      });
-      el.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          e.stopPropagation();
-          activateLink();
-        }
-      });
-    });
     measureHeight();
-  }, [measureHeight, callId, lockActionEl, bindAudioSlot, allowExternalLinks]);
+  }, [measureHeight, callId, lockActionEl, bindAudioSlot]);
 
   useEffect(() => {
     // srcDoc 更新后 load 事件可能在 effect 前已触发(同进程同步解析),补挂一次。
@@ -535,7 +491,6 @@ function GhostCardCanvas({
     setPromptAsk(null);
     setImgMenu(null);
     setAudioMenu(null);
-    setLinkAsk(null);
   }, [html]);
 
   /** 图片右键菜单动作(与 ChatImageView 同一对 IPC;cindy-media 地址直用)。 */
@@ -553,26 +508,6 @@ function GhostCardCanvas({
     if (!src) return;
     const res = await window.electronAPI.showItemInFolder({ url: src });
     if (!res.success) toast.error(res.error ?? t('chat.media.openFolderFailed'));
-  };
-
-  /** 外链确认框的醒目域名(URL 已过净化器白名单;解析失败显示空,正文仍有全串)。 */
-  const linkAskHost = useMemo(() => {
-    if (!linkAsk) return '';
-    try {
-      return new URL(linkAsk).host;
-    } catch {
-      return '';
-    }
-  }, [linkAsk]);
-
-  /** 外链确认:用户点了「打开」→ 经既有受信通道 openExternal(main 再验协议)。 */
-  const confirmOpenLink = (): void => {
-    const url = linkAsk;
-    setLinkAsk(null);
-    if (!url) return;
-    void window.electronAPI.openExternal(url).then((res) => {
-      if (!res.success) toast.error(t('chat.ghostCall.linkOpenFailed'));
-    });
   };
 
   /** 输入面板发送:非空文字 → 锁源按钮 + 派发带 prompt 的 card-action。 */
@@ -643,7 +578,7 @@ function GhostCardCanvas({
               boxShadow: 'var(--shadow-menu)',
             }}
           >
-            <ListComposerTextarea
+            <textarea
               autoFocus
               rows={3}
               value={promptText}
@@ -691,72 +626,6 @@ function GhostCardCanvas({
                 }}
               >
                 {t('chat.mivoAction.promptSend')}
-              </button>
-            </div>
-          </div>
-        </>
-      ) : null}
-
-      {/* ── data-ghost-link 外链确认框(宿主交互面,与输入面板同层级模式:
-          遮罩点击/Esc 取消)。域名醒目 + 完整链接全量展示——卡内文案归意识,
-          真实去向由宿主如实亮给用户,确认才 openExternal。 */}
-      {linkAsk ? (
-        <>
-          <div className="fixed inset-0 z-40" onMouseDown={() => setLinkAsk(null)} />
-          <div
-            className="fixed left-1/2 top-1/2 z-50 w-80 -translate-x-1/2 -translate-y-1/2 rounded-lg border p-3.5"
-            role="alertdialog"
-            aria-label={t('chat.ghostCall.linkConfirmTitle')}
-            onKeyDown={(e) => {
-              if (e.key === 'Escape') setLinkAsk(null);
-            }}
-            style={{
-              backgroundColor: 'var(--surface-elevated)',
-              borderColor: 'var(--border-default)',
-              boxShadow: 'var(--shadow-menu)',
-            }}
-          >
-            <div className="text-[13px] font-semibold" style={{ color: 'var(--text-primary)' }}>
-              {t('chat.ghostCall.linkConfirmTitle')}
-            </div>
-            <div className="mt-1.5 text-xs" style={{ color: 'var(--text-secondary)' }}>
-              {t('chat.ghostCall.linkConfirmHint')}
-            </div>
-            {linkAskHost ? (
-              <div
-                className="mt-1.5 break-all text-[13px] font-semibold"
-                style={{ color: 'var(--text-primary)' }}
-              >
-                {linkAskHost}
-              </div>
-            ) : null}
-            <div
-              className="mt-1 max-h-24 overflow-y-auto break-all font-mono text-[11px] leading-relaxed"
-              style={{ color: 'var(--text-tertiary)' }}
-            >
-              {linkAsk}
-            </div>
-            <div className="mt-2.5 flex items-center justify-end gap-1.5">
-              <button
-                type="button"
-                autoFocus
-                onClick={() => setLinkAsk(null)}
-                className="h-6 cursor-pointer rounded-md px-2 text-xs transition-colors"
-                style={{ color: 'var(--text-secondary)' }}
-              >
-                {t('chat.ghostCall.linkConfirmCancel')}
-              </button>
-              <button
-                type="button"
-                onClick={confirmOpenLink}
-                className="h-6 cursor-pointer rounded-md border px-2.5 text-xs font-medium transition-colors hover:bg-[var(--msg-table-header-bg)]"
-                style={{
-                  backgroundColor: 'var(--msg-tool-card-bg)',
-                  borderColor: 'var(--msg-tool-card-border)',
-                  color: 'var(--msg-tool-card-text)',
-                }}
-              >
-                {t('chat.ghostCall.linkConfirmOpen')}
               </button>
             </div>
           </div>
@@ -995,7 +864,6 @@ export function GhostToolCard({
         themeVars={themeVars}
         ariaTitle={ariaTitle}
         sessionId={sessionId}
-        allowExternalLinks={ghost?.manifest.card?.externalLinks}
       />
 
       {/* ── 衍生卡(card-action 触发的新结果;母卡保留,可反复抽卡)────────
@@ -1042,7 +910,6 @@ export function GhostToolCard({
               themeVars={themeVars}
               ariaTitle={ariaTitle}
               sessionId={sessionId}
-              allowExternalLinks={ghost?.manifest.card?.externalLinks}
             />
           </div>
         );

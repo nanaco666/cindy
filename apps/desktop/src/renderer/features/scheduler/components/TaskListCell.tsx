@@ -1,7 +1,7 @@
 /**
  * TaskListCell — 左侧任务列表单元格
  * ---------------------------------------------------------------------------
- * 任务列表单元格的视觉规格：
+ * 设计稿 (schedule.pen "Automations master-detail")：
  *   - cornerRadius 10，padding [12, 14]，gap 5
  *   - 标题 14/500 + 副标题 'Last X ago' 11/normal
  *   - 选中态：bg #e5e5e5 (light) / #3c3c3a (dark)（与 nav-pill 选中色对齐）
@@ -28,7 +28,7 @@ import { useTranslation } from 'react-i18next';
 
 import { cn } from '@/lib/utils';
 import { AttentionDot } from '@/components/sidebar/AttentionDot';
-import type { Schedule } from '@cindy/maker-scheduler';
+import type { Schedule } from '@lizi/maker-scheduler';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -296,7 +296,7 @@ export function TaskListCell({
             'absolute right-2 bottom-2.5 z-[1]',
             // 与侧栏对话列表的悬浮 Run 按钮完全同款(AutomationSessionGroupItem):
             // size-5 幽灵按钮 + Silver 图标 + hover 浅灰底,连 token 都复用同一组,
-            // 两处"运行"入口视觉与后续调整保持同步。零阴影(docs/design-rules/cindy-design-system.md §6)、
+            // 两处"运行"入口视觉与后续调整保持同步。零阴影(DESIGN.md §6)、
             // 零缩放位移(§14.4),只保留 ≤150ms 的 opacity/颜色功能性过渡。
             'flex size-5 items-center justify-center rounded-md',
             'text-sidebar-action-icon',
@@ -366,7 +366,7 @@ export function TaskListCell({
           </span>
         )}
         {/* 一次性任务标识：recurring=false 即标 Once；manual 优先标 Manual（更准确）。
-            视觉规格：椭圆描边 + 11px 灰字。
+            视觉规格对齐 schedule.pen 设计稿 — 椭圆描边 + 11px 灰字。
             编辑态下隐藏 chip 给输入框留满宽度。 */}
         {!isEditing && isProjectSchedule && (
           <span

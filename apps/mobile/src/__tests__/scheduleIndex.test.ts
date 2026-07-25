@@ -50,7 +50,6 @@ describe('scheduleIndex', () => {
     expect(listRuns).toHaveBeenCalledWith('sched-1', 50);
     expect(listRuns).toHaveBeenCalledWith('broken', 50);
     expect(index.get('session-1')).toMatchObject({
-      allSchedulesStopped: false,
       running: true,
       scheduleId: 'sched-1',
       scheduleName: '巡检',
@@ -59,173 +58,14 @@ describe('scheduleIndex', () => {
     });
   });
 
-  it('only stops a multi-schedule session when every known binding is paused or expired', async () => {
-    const maker = {
-      schedule: {
-        list: async () => [
-          {
-            id: 'active-without-run',
-            name: '仍在运行',
-            status: 'active',
-            targetSessionId: 'session-mixed',
-          },
-          {
-            id: 'paused',
-            name: '已暂停',
-            status: 'paused',
-            targetSessionId: 'session-mixed',
-          },
-          {
-            id: 'expired',
-            name: '已过期',
-            status: 'expired',
-            targetSessionId: 'session-stopped',
-          },
-          {
-            id: 'paused-stopped',
-            name: '也已暂停',
-            status: 'paused',
-            targetSessionId: 'session-stopped',
-          },
-        ],
-        listRuns: async (scheduleId: string) => {
-          if (scheduleId === 'paused') {
-            return [{
-              id: 'run-paused',
-              scheduleId,
-              sessionId: 'session-mixed',
-              status: 'success',
-              firedAt: 200,
-            }];
-          }
-          if (scheduleId === 'expired') {
-            return [{
-              id: 'run-expired',
-              scheduleId,
-              sessionId: 'session-stopped',
-              status: 'success',
-              firedAt: 100,
-            }];
-          }
-          if (scheduleId === 'paused-stopped') {
-            return [{
-              id: 'run-paused-stopped',
-              scheduleId,
-              sessionId: 'session-stopped',
-              status: 'success',
-              firedAt: 200,
-            }];
-          }
-          return [];
-        },
-      },
-    } as unknown as Pick<MobileMakerTransport, 'schedule'>;
-
-    const index = await loadSessionScheduleIndex(maker);
-
-    expect(index.get('session-mixed')).toMatchObject({
-      scheduleStatus: 'paused',
-      allSchedulesStopped: false,
-    });
-    expect(index.get('session-stopped')).toMatchObject({
-      scheduleStatus: 'paused',
-      allSchedulesStopped: true,
-    });
-  });
-
-  it('indexes targetSessionId bindings before their first run', async () => {
-    const maker = {
-      schedule: {
-        list: async () => [
-          {
-            id: 'paused-no-run',
-            name: '等待恢复',
-            status: 'paused',
-            targetSessionId: 'session-paused-no-run',
-          },
-          {
-            id: 'active-no-run',
-            name: '等待首次执行',
-            status: 'active',
-            targetSessionId: 'session-active-no-run',
-          },
-        ],
-        listRuns: async () => [],
-      },
-    } as unknown as Pick<MobileMakerTransport, 'schedule'>;
-
-    const index = await loadSessionScheduleIndex(maker);
-
-    expect(index.get('session-paused-no-run')).toMatchObject({
-      scheduleId: 'paused-no-run',
-      scheduleName: '等待恢复',
-      scheduleStatus: 'paused',
-      allSchedulesStopped: true,
-      unreadRunIds: [],
-      unreadCount: 0,
-      running: false,
-      latestRunAt: 0,
-    });
-    expect(index.get('session-active-no-run')).toMatchObject({
-      scheduleId: 'active-no-run',
-      scheduleStatus: 'active',
-      allSchedulesStopped: false,
-    });
-  });
-
-  it('ignores historical runs after a schedule is rebound to another session', async () => {
-    const maker = {
-      schedule: {
-        list: async () => [
-          {
-            id: 'rebound-active',
-            name: '已改绑任务',
-            status: 'active',
-            targetSessionId: 'session-new',
-          },
-          {
-            id: 'paused-old',
-            name: '旧会话暂停任务',
-            status: 'paused',
-            targetSessionId: 'session-old',
-          },
-        ],
-        listRuns: async (scheduleId: string) => scheduleId === 'rebound-active'
-          ? [{
-              id: 'historical-run',
-              scheduleId,
-              sessionId: 'session-old',
-              status: 'success',
-              firedAt: 200,
-            }]
-          : [],
-      },
-    } as unknown as Pick<MobileMakerTransport, 'schedule'>;
-
-    const index = await loadSessionScheduleIndex(maker);
-
-    expect(index.get('session-old')).toMatchObject({
-      scheduleId: 'paused-old',
-      scheduleStatus: 'paused',
-      allSchedulesStopped: true,
-      unreadCount: 0,
-    });
-    expect(index.get('session-new')).toMatchObject({
-      scheduleId: 'rebound-active',
-      scheduleStatus: 'active',
-      allSchedulesStopped: false,
-      unreadCount: 0,
-    });
-  });
-
   it('replaces only entries for the refreshed device sessions', () => {
     const current = new Map([
-      ['session-1', { scheduleId: 'old', scheduleName: 'Old', allSchedulesStopped: false, unreadRunIds: ['old-run'], unreadCount: 1, running: false, latestRunAt: 1 }],
-      ['other-device-session', { scheduleId: 'keep', scheduleName: 'Keep', allSchedulesStopped: false, unreadRunIds: ['keep-run'], unreadCount: 1, running: false, latestRunAt: 1 }],
+      ['session-1', { scheduleId: 'old', scheduleName: 'Old', unreadRunIds: ['old-run'], unreadCount: 1, running: false, latestRunAt: 1 }],
+      ['other-device-session', { scheduleId: 'keep', scheduleName: 'Keep', unreadRunIds: ['keep-run'], unreadCount: 1, running: false, latestRunAt: 1 }],
     ]);
     const next = new Map([
-      ['session-1', { scheduleId: 'new', scheduleName: 'New', allSchedulesStopped: false, unreadRunIds: [], unreadCount: 0, running: true, latestRunAt: 2 }],
-      ['outside-refreshed-window', { scheduleId: 'ignored', scheduleName: 'Ignored', allSchedulesStopped: false, unreadRunIds: ['ignored'], unreadCount: 1, running: false, latestRunAt: 2 }],
+      ['session-1', { scheduleId: 'new', scheduleName: 'New', unreadRunIds: [], unreadCount: 0, running: true, latestRunAt: 2 }],
+      ['outside-refreshed-window', { scheduleId: 'ignored', scheduleName: 'Ignored', unreadRunIds: ['ignored'], unreadCount: 1, running: false, latestRunAt: 2 }],
     ]);
 
     const merged = replaceSessionScheduleIndexEntries(current, ['session-1', 'session-2'], next);
@@ -237,11 +77,11 @@ describe('scheduleIndex', () => {
 
   it('keeps the existing map reference when a refresh is value-equivalent', () => {
     const current = new Map<string, RemoteSessionScheduleInfo>([
-      ['session-1', { scheduleId: 'sched-1', scheduleName: 'Daily', scheduleStatus: 'active', allSchedulesStopped: false, unreadRunIds: ['run-1'], unreadCount: 1, running: true, latestRunAt: 2 }],
-      ['other-device-session', { scheduleId: 'keep', scheduleName: 'Keep', scheduleStatus: 'active', allSchedulesStopped: false, unreadRunIds: [], unreadCount: 0, running: false, latestRunAt: 1 }],
+      ['session-1', { scheduleId: 'sched-1', scheduleName: 'Daily', scheduleStatus: 'active', unreadRunIds: ['run-1'], unreadCount: 1, running: true, latestRunAt: 2 }],
+      ['other-device-session', { scheduleId: 'keep', scheduleName: 'Keep', scheduleStatus: 'active', unreadRunIds: [], unreadCount: 0, running: false, latestRunAt: 1 }],
     ]);
     const next = new Map<string, RemoteSessionScheduleInfo>([
-      ['session-1', { scheduleId: 'sched-1', scheduleName: 'Daily', scheduleStatus: 'active', allSchedulesStopped: false, unreadRunIds: ['run-1'], unreadCount: 1, running: true, latestRunAt: 2 }],
+      ['session-1', { scheduleId: 'sched-1', scheduleName: 'Daily', scheduleStatus: 'active', unreadRunIds: ['run-1'], unreadCount: 1, running: true, latestRunAt: 2 }],
     ]);
 
     const merged = replaceSessionScheduleIndexEntries(current, ['session-1'], next);
@@ -251,17 +91,16 @@ describe('scheduleIndex', () => {
 
   it('updates the map when only schedule status changes', () => {
     const current = new Map<string, RemoteSessionScheduleInfo>([
-      ['session-1', { scheduleId: 'sched-1', scheduleName: 'Daily', scheduleStatus: 'active', allSchedulesStopped: false, unreadRunIds: [], unreadCount: 0, running: false, latestRunAt: 2 }],
+      ['session-1', { scheduleId: 'sched-1', scheduleName: 'Daily', scheduleStatus: 'active', unreadRunIds: [], unreadCount: 0, running: false, latestRunAt: 2 }],
     ]);
     const next = new Map<string, RemoteSessionScheduleInfo>([
-      ['session-1', { scheduleId: 'sched-1', scheduleName: 'Daily', scheduleStatus: 'paused', allSchedulesStopped: true, unreadRunIds: [], unreadCount: 0, running: false, latestRunAt: 2 }],
+      ['session-1', { scheduleId: 'sched-1', scheduleName: 'Daily', scheduleStatus: 'paused', unreadRunIds: [], unreadCount: 0, running: false, latestRunAt: 2 }],
     ]);
 
     const merged = replaceSessionScheduleIndexEntries(current, ['session-1'], next);
 
     expect(merged).not.toBe(current);
     expect(merged.get('session-1')?.scheduleStatus).toBe('paused');
-    expect(merged.get('session-1')?.allSchedulesStopped).toBe(true);
   });
 });
 

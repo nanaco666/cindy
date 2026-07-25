@@ -1,7 +1,7 @@
 /**
  * ProjectNode — 单个 Project 节点（Header + 受控折叠的子 sessions）
  * ---------------------------------------------------------------------------
- * Project 节点视觉规格：
+ * 设计稿对照（cc-agent-view.pen）：
  *   - Project Header：高 28 / 圆角 6 / padding [0, 8] / gap 6
  *     · chevron-right (折叠) / chevron-down (展开)，14×14 #737373
  *     · displayName Inter 14 / 500 #262626 (Light) / #f5f5f5 (Dark)
@@ -215,7 +215,7 @@ export function ProjectNode({
     // 两个 data 属性各自服务不同消费者:
     //   - data-project-working-dir : Sortable drop-target 识别 (历史: ProjectsSection 手写拖拽热区,
     //                                现已被 SortableList 接管,但保留供深度链接/测试 hook)
-    //   - data-project-workingdir  : CCAgentSidebarUpper 深度链接 scrollIntoView
+    //   - data-project-workingdir  : CCAgentSidebarUpper 深度链接 scrollIntoView (MR !51)
     // 名字差一个连字符是历史遗留,保留两个比贸然统一更稳。
     <div
       data-project-working-dir={project.projectKey}
@@ -330,7 +330,7 @@ export function ProjectNode({
             </span>
           ) : null}
           {/* 展开/收起指示箭头:标题右侧、hover 才渐显(参考 MivoCanvas 的
-              row-hover-arrow;仅 opacity 渐显,不做位移,守 docs/design-rules/cindy-design-system.md §14.4)。 */}
+              row-hover-arrow;仅 opacity 渐显,不做位移,守 DESIGN.md §14.4)。 */}
           {!isEditingName && (
             <Chevron
               size={13}

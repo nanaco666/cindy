@@ -1,5 +1,5 @@
 /**
- * feishu/mediaStore.test.ts — getOrDownload 的媒体总仓缓存路由回归。
+ * feishu/mediaStore.test.ts — getOrDownload 的缓存路由回归(迁移第 3 步)。
  * 钉死四条分支的"附件不丢"承诺(与 discord inbound.test.ts 同口径):
  *   - host 总仓命中 → 免下载直接复用;
  *   - host 索引坏账(有账无文件)→ 静默回落,不挡消息;

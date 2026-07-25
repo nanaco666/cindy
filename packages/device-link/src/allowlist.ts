@@ -29,20 +29,6 @@ export const DL_SUBSCRIBE_CHANNEL = 'device-link:subscribe';
 export const DL_UNSUBSCRIBE_CHANNEL = 'device-link:unsubscribe';
 
 /**
- * cindy_helper 跨设备历史读取。被控端只接受单 session 的结构化只读查询，
- * 并复用本机 history reader 的过滤、排序与游标语义。
- */
-export const DL_HISTORY_MESSAGES_CHANNEL = 'local-db:history:messages';
-
-/**
- * 会话引用消费能力探针。控制端在发送含引用快照的队列消息前必须先调用；
- * 老被控端不在 allowlist 中会返回 CHANNEL_NOT_ALLOWED，控制端据此显式拒绝，
- * 避免消息看似发送成功但 Agent 只收到一条普通深链文本。
- */
-export const DL_SESSION_REFERENCE_CAPABILITY_CHANNEL =
-  'maker:input:session-reference-capability';
-
-/**
  * 入方向媒体取件 channel(控制端 → 被控端):控制端要查看被控端会话里的媒体
  * (图片/视频/文件/音频,字节在被控端本地缓存)时,发此 invoke 让被控端把原始媒体
  * 解析成本地文件 → 上传 OSS 中转区(明文 + 同账号 key)→ 回 { ossKey, mimeType, size }。
@@ -66,7 +52,7 @@ export const DL_VOICE_TRANSCRIBE_CHANNEL = 'device-link:voice:transcribe';
 /**
  * 手机端云端语音输入的临时 credential 同步 channel。
  *
- * 这是账号体系补齐前的窄口径例外:只允许同步 voice ASR/refine 所需的 XD Gateway key
+ * 这是账号体系补齐前的窄口径例外:只允许同步 voice ASR/refine 所需的 XD Proxy key
  * 与模型配置,由被控端 dispatch 专门拦截,不落通用 ipcMain,也不是 safe-storage/api-key
  * 的通用远程读写能力。长期方案应改为「AI key 绑定用户账号,移动端登录后读自己的 key」。
  */
@@ -95,7 +81,6 @@ const CORE_INVOKE_CHANNELS: readonly string[] = [
   'maker:any-session-in-turn',
   'maker:session-in-turn',
   // —— 输入队列(input queue 全集,无本机副作用)——
-  DL_SESSION_REFERENCE_CAPABILITY_CHANNEL,
   'maker:input:get-projection',
   'maker:input:enqueue',
   'maker:input:compact',
@@ -122,10 +107,6 @@ const CORE_INVOKE_CHANNELS: readonly string[] = [
   'maker:get-pending-interactions',
   // —— 运行时切换 ——
   'maker:set-model',
-  // 同一会话 Claude Code / Codex 切换采用 pending intent：写入口只登记意图，
-  // 只读入口供控制端重连后恢复 main 权威状态；两者都无 event.sender / 本机 UI 副作用。
-  'maker:switch-session-agent',
-  'maker:get-session-agent-switch-intent',
   'maker:set-effort',
   'maker:set-permission-mode',
   'maker:set-fast-mode',
@@ -161,7 +142,6 @@ const CORE_INVOKE_CHANNELS: readonly string[] = [
   // —— 读模型(被控端本地 DB 是数据真相)——
   'local-db:sessions:list',
   'local-db:sessions:get',
-  DL_HISTORY_MESSAGES_CHANNEL,
   'local-db:messages:list',
   // 会话内搜索跳转定位(loadAroundMessage):只读,与 messages:list 同安全级。
   'local-db:messages:around',
@@ -189,8 +169,6 @@ const CORE_INVOKE_CHANNELS: readonly string[] = [
   // 红条复活。老被控端无此 handler → CHANNEL_NOT_ALLOWED → 控制端吞错退化为
   // 本视图内存隐藏。
   'local-db:messages:dismiss-error',
-  // 消息菜单单条内容删除:在被控端清旧原生上下文并写 context rebuild handoff。
-  'maker:message:delete',
   // 订阅控制帧(push 驱动):被控端 dispatch 拦截执行,不落到 ipcMain handler。
   // 列入 allowlist 作契约登记 + 老被控端不识别时回 CHANNEL_NOT_ALLOWED 供控制端探测能力(回退 poll)。
   DL_SUBSCRIBE_CHANNEL,
@@ -284,10 +262,6 @@ const EXTENDED_INVOKE_CHANNELS: readonly string[] = [
   'maker:auth:get-state',
   'maker:usage:today',
   'maker:usage:account',
-  // Codex app-server 官方控制面:额度/reset 次数读取 + 经 desktop 账号绑定 offer 的
-  // 人工 reset。mutation 不接收 creditId,不能泛化成任意账号/凭证控制入口。
-  'maker:usage:codex-rate-limits',
-  'maker:usage:codex-rate-limit-reset',
   // 模型单价表(只读,main 侧 LiteLLM /model_group/info 缓存):控制端模型选择器展示被控端
   // 视角的单价(与被控端桌面 tooltip 同源)。无 sender 依赖、无副作用;老被控端无此 channel
   // → CHANNEL_NOT_ALLOWED → 控制端隐藏价格(与桌面「无价不显示」口径一致)。
@@ -403,7 +377,6 @@ export const PUSH_FORWARD_ALLOWLIST: ReadonlySet<string> = new Set([
   'local-db:sessions:patched',
   SESSION_ACTIVITY_CHANNEL,
   'local-db:messages:created',
-  'local-db:messages:deleted',
   // 被控端 terminal error 落库脏信号:控制端据此把已加载历史的远程会话标脏,下次打开重拉。
   'local-db:session:error-persisted',
   // 被控端「当前 New Maker 草稿」全量变更:被控端草稿 effort/fast/选中 等任意变化时广播,

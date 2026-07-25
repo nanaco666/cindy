@@ -1,6 +1,6 @@
 // 整包更新发现 —— 纯逻辑(无 IO / 无 React,便于单测)。
 //
-// 背景:
+// 背景(见 docs/self-hosted-ios-build-and-ota.md §5「两条通道」):
 // - expo-updates 只感知"我这个 runtimeVersion 有没有新 JS OTA",不会告知"有更高 runtimeVersion 的整包"。
 // - 所以整包发现靠独立的 `/latest` 通道 + 客户端比对 runtimeVersion:
 //     · latest.runtimeVersion === 当前 runtimeVersion → 无需整包(JS OTA 通道会处理);

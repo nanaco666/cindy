@@ -14,10 +14,6 @@ vi.mock('electron', () => ({
   },
 }));
 
-vi.mock('../appSessionState.js', () => ({
-  ownerScopedUserDataPath: (...parts: string[]) => path.join(userDataDir, ...parts),
-}));
-
 describe('dialogue workspace directory', () => {
   beforeEach(() => {
     userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'xdt-dialogues-'));

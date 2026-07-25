@@ -3,6 +3,7 @@ id: personalization
 title: Custom instructions (personalization)
 summary: Standing instructions the agents follow across every session — in Settings > Personalization.
 tab: personalization
+status: draft
 ---
 Personalization is where you give the agents standing instructions that apply to **every** session — tone, language, conventions, things you want the agent to always keep in mind.
 
@@ -14,9 +15,8 @@ Personalization is where you give the agents standing instructions that apply to
 
 **Other things on this page:**
 
-- **Memory** — long-term memory across sessions (see the Memory topic).
-- **Subagent models** — choose which models the agents' subagents use.
-- **Tips** — a few functional toggles (e.g. silent encrypted retry, chat embedding).
+- **Memory** — agent's long-term memory across sessions (see the Memory topic).
+- **Compat Mode** — for non-Anthropic models (see the Models and Compat Mode topic).
 
 **Notes:**
 

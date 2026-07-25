@@ -10,7 +10,11 @@ import path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { createSlackHookStore, HookConnectionValidationError, validateWorkspaces } from '../store';
+import {
+  createSlackHookStore,
+  HookConnectionValidationError,
+  validateWorkspaces,
+} from '../store';
 
 const noopLog = { info: () => {}, warn: () => {} };
 // 生产的 defaultUrl 来自运行期端点清单(getClientEndpoint('slackHookWsUrl'));
@@ -29,16 +33,12 @@ afterEach(() => {
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
-function makeStore(
-  cleanup?: (ids: string[]) => void,
-  getAccountFingerprint: () => string | null = () => 'account-test',
-) {
+function makeStore(cleanup?: (ids: string[]) => void) {
   return createSlackHookStore({
     filePath: filePath(),
     legacyFilePath: legacyPath(),
     cleanupLegacySecrets: cleanup,
     defaultUrl: () => TEST_DEFAULT_URL,
-    getAccountFingerprint,
     log: noopLog,
   });
 }
@@ -48,11 +48,9 @@ describe('默认态与持久化', () => {
     const store = makeStore();
     expect(store.get()).toEqual({
       enabled: false,
-      telegramEnabled: false,
       urlOverride: null,
       workspaces: {},
       bindingsCache: [],
-      telegramBindingCache: null,
     });
     expect(store.effectiveUrl()).toBe(TEST_DEFAULT_URL);
   });
@@ -82,13 +80,10 @@ describe('默认态与持久化', () => {
 
 describe('workspaces 校验', () => {
   it('非法别名 / 相对路径拒绝', () => {
-    expect(() => validateWorkspaces({ 别名: path.join(dir, 'x') })).toThrow(
+    expect(() => validateWorkspaces({ '别名': path.join(dir, 'x') })).toThrow(
       HookConnectionValidationError,
     );
     expect(() => validateWorkspaces({ ok: 'relative/path' })).toThrow(
-      HookConnectionValidationError,
-    );
-    expect(() => validateWorkspaces({ constructor: path.join(dir, 'x') })).toThrow(
       HookConnectionValidationError,
     );
   });
@@ -103,26 +98,6 @@ describe('workspaces 校验', () => {
       HookConnectionValidationError,
     );
   });
-
-  it('读损坏配置时过滤非法别名与非绝对路径，不让它们进入派发白名单', () => {
-    const abs = path.join(dir, 'repo');
-    fs.writeFileSync(
-      filePath(),
-      JSON.stringify({
-        version: 2,
-        urlOverride: null,
-        workspaces: {
-          valid: `  ${abs}  `,
-          chat: abs,
-          constructor: abs,
-          relative: 'repos/relative',
-        },
-        accounts: {},
-      }),
-    );
-
-    expect(makeStore().get().workspaces).toEqual({ valid: abs });
-  });
 });
 
 describe('旧多连接文件迁移', () => {
@@ -131,22 +106,8 @@ describe('旧多连接文件迁移', () => {
     fs.writeFileSync(
       legacyPath(),
       JSON.stringify([
-        {
-          id: 'b',
-          name: 'later',
-          url: 'wss://x',
-          enabled: true,
-          workspaces: { blog: abs },
-          createdAt: 200,
-        },
-        {
-          id: 'a',
-          name: 'earlier',
-          url: 'wss://y',
-          enabled: true,
-          workspaces: { xdmaker: abs },
-          createdAt: 100,
-        },
+        { id: 'b', name: 'later', url: 'wss://x', enabled: true, workspaces: { blog: abs }, createdAt: 200 },
+        { id: 'a', name: 'earlier', url: 'wss://y', enabled: true, workspaces: { xdmaker: abs }, createdAt: 100 },
         { id: 'c', name: 'off', url: 'wss://z', enabled: false, workspaces: {}, createdAt: 50 },
       ]),
     );
@@ -166,17 +127,15 @@ describe('旧多连接文件迁移', () => {
     fs.writeFileSync(legacyPath(), 'not-json');
     expect(makeStore().get()).toEqual({
       enabled: false,
-      telegramEnabled: false,
       urlOverride: null,
       workspaces: {},
       bindingsCache: [],
-      telegramBindingCache: null,
     });
   });
 });
 
 describe('(multi-team)bindingsCache 持久化', () => {
-  const T1 = { teamId: 'T1', teamName: 'acme', slackUserId: 'U1', slackUserName: 'devuser' };
+  const T1 = { teamId: 'T1', teamName: 'xindong', slackUserId: 'U1', slackUserName: 'lizi' };
   const T2 = { teamId: 'T2', teamName: null, slackUserId: 'U2', slackUserName: null };
 
   it('setBindingsCache 落盘, 重建实例仍在; 覆写为空即清空', () => {
@@ -216,98 +175,5 @@ describe('(multi-team)bindingsCache 持久化', () => {
     const state = makeStore().get();
     expect(state.enabled).toBe(true);
     expect(state.bindingsCache).toEqual([]);
-  });
-});
-
-describe('provider 与 Cindy 账号隔离', () => {
-  const telegramBinding = {
-    bindingId: 'bind-1',
-    principalId: 'tg-user-1',
-    principalName: 'Chris',
-    scopeId: 'bot-1',
-    scopeName: 'CindyBot',
-  };
-
-  it('Slack/Telegram 开关独立，目录映射设备共享，绑定缓存按账号分区', () => {
-    let fingerprint = 'account-one';
-    const store = makeStore(undefined, () => fingerprint);
-    const abs = path.join(dir, 'repo');
-
-    store.setEnabled(true);
-    store.setProviderEnabled('telegram', true);
-    store.setTelegramBindingCache(telegramBinding);
-    store.setWorkspaces({ cindy: abs });
-
-    expect(store.anyProviderEnabled()).toBe(true);
-    expect(store.get()).toMatchObject({
-      enabled: true,
-      telegramEnabled: true,
-      workspaces: { cindy: abs },
-      telegramBindingCache: telegramBinding,
-    });
-
-    fingerprint = 'account-two';
-    expect(store.get()).toMatchObject({
-      enabled: false,
-      telegramEnabled: false,
-      workspaces: { cindy: abs },
-      bindingsCache: [],
-      telegramBindingCache: null,
-    });
-
-    store.setProviderEnabled('telegram', true);
-    fingerprint = 'account-one';
-    expect(store.get().enabled).toBe(true);
-    expect(store.get().telegramBindingCache).toEqual(telegramBinding);
-  });
-
-  it('登出期不把 provider 状态写入无账号的共享分区', () => {
-    let fingerprint: string | null = null;
-    const store = makeStore(undefined, () => fingerprint);
-    store.setProviderEnabled('telegram', true);
-    expect(store.get().telegramEnabled).toBe(false);
-
-    fingerprint = 'account-after-login';
-    expect(store.get().telegramEnabled).toBe(false);
-  });
-
-  it('拒绝会命中 Object 原型的伪账号指纹，不把状态写进错误分区', () => {
-    const store = makeStore(undefined, () => 'constructor');
-
-    expect(store.setProviderEnabled('telegram', true).telegramEnabled).toBe(false);
-    expect(store.get().telegramEnabled).toBe(false);
-    expect(fs.existsSync(filePath())).toBe(false);
-  });
-
-  it('读取账号分区时忽略 Object 原型键并保留合法账号', () => {
-    fs.writeFileSync(
-      filePath(),
-      JSON.stringify({
-        version: 2,
-        urlOverride: null,
-        workspaces: {},
-        accounts: {
-          ['__proto__']: {
-            slack: { enabled: true, bindingsCache: [] },
-            telegram: { enabled: true, bindingCache: telegramBinding },
-          },
-          'account-safe': {
-            slack: { enabled: false, bindingsCache: [] },
-            telegram: { enabled: true, bindingCache: telegramBinding },
-          },
-        },
-      }),
-    );
-
-    expect(makeStore(undefined, () => 'account-safe').get()).toMatchObject({
-      enabled: false,
-      telegramEnabled: true,
-      telegramBindingCache: telegramBinding,
-    });
-    expect(makeStore(undefined, () => '__proto__').get()).toMatchObject({
-      enabled: false,
-      telegramEnabled: false,
-      telegramBindingCache: null,
-    });
   });
 });

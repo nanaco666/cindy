@@ -1,8 +1,8 @@
 # Mobile Simulator Debugging
 
 This guide is the fixed local loop for testing `apps/mobile` in an iOS
-Simulator. It exists because Expo Go, the iOS development client, and an installed
-distribution build look similar during manual testing but prove different things.
+Simulator. It exists because Expo Go, the iOS development client, and TestFlight
+look similar during manual testing but prove different things.
 
 ## Current Source Verification Contract
 
@@ -49,16 +49,8 @@ block from the gitignored `apps/mobile/scripts/self-host-regions.json` for bundl
 identity, TapDB, and global Google client configuration. If this gitignored file
 is absent, the scripts automatically reuse and validate it from a registered
 personal-client or main worktree without printing its values; if no valid copy
-exists, the file is created automatically from the blank
-`self-host-regions.json.example` template with a warning (built-in app
-identity, analytics and Google sign-in disabled). You do not need to
+exists, copy and fill `self-host-regions.json.example` first. You do not need to
 inject those public values or endpoint variables into `.env` by hand.
-
-For local builds only the bundle identity fields of the selected region
-(`iosBundleId` / `androidPackage`) are required. `tapdb` and `global.google`
-may be left empty: analytics then no-ops at runtime and Google sign-in is
-skipped, so external contributors can build without TapDB or Google OAuth
-accounts. The self-host release scripts still require these fields.
 
 The new-session build label reads the exact source fingerprint plus branch/commit
 from `EXPO_PUBLIC_XDT_GIT_*` (set by `mobile:sim:start`) and the Metro host from
@@ -101,14 +93,14 @@ Use these runtimes for different jobs:
 - Current source debugging: iOS development client, bundle id
   resolved from the selected local region config (`com.xd.cindycn` for the
   current cn config, `com.xd.cindy` for global), attached to Metro.
-- An installed distribution build does not consume local Metro changes.
+- Distribution validation: TestFlight. It does not consume local Metro changes.
 - Expo Go: only for explicit Expo Go compatibility checks. It is not the normal
   regression target because this app depends on native config, secure storage,
   Feishu/Lark app handoff, audio, image picker, app scheme, and build-time iOS
   metadata.
 
-When testing a code change, state explicitly whether it is the development client or an installed
-distribution build. Do not just say "the app".
+When testing a code change, say "development client" or "TestFlight" explicitly.
+Do not just say "the app".
 
 ## Clean Simulator Loop
 
@@ -213,7 +205,7 @@ pnpm --filter mobile ios -- --device "iPhone 17 Pro"
 If Feishu login opens Safari and lands on `Cannot GET /api/auth/callback`, do
 not assume the backend auth exchange failed yet. First check:
 
-- The app is the development client, not Expo Go or an installed distribution build.
+- The app is the development client, not Expo Go or TestFlight.
 - The installed build contains the selected region scheme (`cindycn` or `cindy`).
 - Metro was restarted after env changes.
 - Metro logs show whether `WebBrowser.openAuthSessionAsync` returned success,
@@ -231,7 +223,7 @@ pnpm --filter mobile start -- --dev-client --host lan
 Use the simulator system log for native crashes or native auth/session issues:
 
 ```bash
-xcrun simctl spawn booted log stream --style compact --predicate 'process == "Cindy"'
+xcrun simctl spawn booted log stream --style compact --predicate 'process == "XDMaker"'
 ```
 
 The in-app "Open debugger to view warnings" banner means a JavaScript warning is
@@ -308,7 +300,7 @@ regression targets.
 screens need an explicit destination such as `/devices`.
 
 Local source change is not visible
-: Usually one of: wrong runtime, stale Metro bundle, an installed distribution build instead of
+: Usually one of: wrong runtime, stale Metro bundle, TestFlight instead of
 development client, or native rebuild required.
 
 No controllable devices
@@ -330,7 +322,7 @@ keyboard layout with only the hardware keyboard.
 
 Run this checklist:
 
-- Confirm the exact runtime: development client, Expo Go, or an installed distribution build.
+- Confirm the exact runtime: development client, Expo Go, or TestFlight.
 - Confirm `CFBundleIdentifier`, `CFBundleShortVersionString`, and
   `CFBundleVersion`.
 - Restart Metro after env changes.

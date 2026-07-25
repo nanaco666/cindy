@@ -34,7 +34,7 @@ function createFixture() {
   );
   fixtures.push(root);
   const projectRoot = path.join(root, "apps", "mobile");
-  const notices = path.join(root, "docs", "legal", "notices");
+  const notices = path.join(root, "notices");
   fs.mkdirSync(projectRoot, { recursive: true });
   fs.mkdirSync(notices, { recursive: true });
   fs.writeFileSync(path.join(notices, "mobile-ios.txt"), "ios notice\n");
@@ -74,16 +74,12 @@ describe("with-third-party-notices config plugin helpers", () => {
     ).toBe("ios restricted\n");
     expect(
       noticeSource(fixture.projectRoot, "android", "THIRD-PARTY-NOTICES.txt"),
-    ).toBe(
-      path.join(fixture.root, "docs", "legal", "notices", "mobile-android.txt"),
-    );
+    ).toBe(path.join(fixture.root, "notices", "mobile-android.txt"));
   });
 
   it("fails prebuild when generated notices are missing", () => {
     const fixture = createFixture();
-    fs.rmSync(
-      path.join(fixture.root, "docs", "legal", "notices", "mobile-android.txt"),
-    );
+    fs.rmSync(path.join(fixture.root, "notices", "mobile-android.txt"));
 
     expect(() =>
       copyNoticeFiles(

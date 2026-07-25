@@ -17,7 +17,6 @@ import { useTranslation } from 'react-i18next';
 import { useGoalStatus } from '@/hooks/useGoalStatus';
 import { goalApiFor } from '@/lib/makerTransport';
 import { GoalAdvancedLimits, type GoalLimitValues } from './GoalAdvancedLimits';
-import { ListComposerTextarea } from './ListComposerTextarea';
 
 interface GoalIndicatorProps {
   sessionId: string | null | undefined;
@@ -147,7 +146,7 @@ function GoalEditor({
             >
               {t('goal.editGoal.objectiveLabel')}
             </label>
-            <ListComposerTextarea
+            <textarea
               id="goal-objective"
               ref={textareaRef}
               value={objective}

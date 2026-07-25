@@ -4,4 +4,4 @@ export {
   type SessionMessageHistoryMode,
   type SessionOperationLayout,
   type SessionOperationLayoutInput,
-} from '@cindy/maker-shared/session-operation';
+} from '@lizi/maker-shared/session-operation';

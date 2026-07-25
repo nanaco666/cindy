@@ -5,9 +5,9 @@
 // they're scp'd to a remote host, not require()'d locally.
 //
 // Hooked at predev / predev:remote / prepackage / prebuild (see package.json).
-// External release pipelines should also invoke this once before
-// `electron-forge make` — `npx electron-forge make` does NOT trigger npm
-// pre hooks, so without an explicit call there release builds
+// Release scripts (release-windows.mjs / release-macos.mjs) also invoke this
+// once before `electron-forge make` — `npx electron-forge make` does NOT
+// trigger npm pre hooks, so without an explicit call there release builds
 // would ship without the bundles.
 //
 // mtime check: skips rebuild when bundle is newer than every src file +
@@ -29,21 +29,21 @@ const MONOREPO_ROOT = resolve(DESKTOP_ROOT, '..', '..');
 // expects to find it relative to apps/desktop/.
 const TARGETS = [
   {
-    pkgName: '@cindy/maker-cc-manager',
+    pkgName: '@lizi/maker-cc-manager',
     pkgDir: resolve(MONOREPO_ROOT, 'packages', 'maker-cc-manager'),
     bundleFile: 'dist/cc-mgr.mjs',
     destDir: resolve(DESKTOP_ROOT, 'resources', 'cc-manager'),
     destFile: 'cc-mgr.mjs',
   },
   {
-    pkgName: '@cindy/anthropic-compat-proxy',
+    pkgName: '@lizi/anthropic-compat-proxy',
     pkgDir: resolve(MONOREPO_ROOT, 'packages', 'anthropic-compat-proxy'),
     bundleFile: 'dist/proxy.mjs',
     destDir: resolve(DESKTOP_ROOT, 'resources', 'anthropic-compat-proxy'),
     destFile: 'proxy.mjs',
   },
   {
-    pkgName: '@cindy/remote-file-service',
+    pkgName: '@lizi/remote-file-service',
     pkgDir: resolve(MONOREPO_ROOT, 'packages', 'remote-file-service'),
     bundleFile: 'dist/file-service.mjs',
     destDir: resolve(DESKTOP_ROOT, 'resources', 'remote-file-service'),

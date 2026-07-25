@@ -361,33 +361,6 @@ describe('payloadSummary', () => {
       title: 'spec.md',
     });
 
-    expect(buildAttachmentPayload({
-      kind: 'file',
-      name: 'clip.mp4',
-      path: 'cindy-media://blobs/aa11bb22.mp4',
-      mimeType: 'video/mp4',
-      previewable: false,
-    })).toMatchObject({
-      kind: 'media',
-      media: {
-        kind: 'video',
-        previewable: false,
-        title: 'clip.mp4',
-        url: 'cindy-media://blobs/aa11bb22.mp4',
-      },
-      title: 'clip.mp4',
-    });
-    expect(summarizeMessagePayloadBody(buildAttachmentPayload({
-      kind: 'file',
-      name: 'voice.ogg',
-      path: 'cindy-media://blobs/cc33dd44.ogg',
-      mimeType: 'audio/ogg; codecs=opus',
-      previewable: false,
-    })).media).toMatchObject({
-      kindLabel: '音频',
-      needsRemoteFetch: true,
-    });
-
     expect(summarizeMessagePayloadPreview(buildAttachmentPayload({
       kind: 'file',
       name: 'missing.txt',

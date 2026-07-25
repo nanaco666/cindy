@@ -11,7 +11,7 @@ import path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { FORGE_GUIDE, packGhostDir, scaffoldGhostDir, type ForgeScaffoldTemplate } from '../forge';
+import { packGhostDir, FORGE_GUIDE } from '../forge';
 import { GhostManager } from '../GhostManager';
 
 let workDir: string;
@@ -86,27 +86,6 @@ describe('packGhostDir', () => {
     await fs.promises.rm(r.cindyPath, { force: true });
   });
 
-  it('Node 插件把预打包 worker 带进 .cindy，装入侧能核对入口在场', async () => {
-    const manifest = {
-      ...GOOD_MANIFEST,
-      slots: ['node'],
-      tools: undefined,
-      node: { entry: 'node/worker.cjs', protocol: 'json-rpc-stdio' },
-    };
-    const dir = await makeSrcDir({
-      'ghost.json': JSON.stringify(manifest),
-      'main.js': '// browser brain',
-      'node/worker.cjs': '// bundled node worker',
-    });
-    const packed = await packGhostDir(dir);
-    expect(packed.ok, JSON.stringify(packed)).toBe(true);
-    if (!packed.ok) return;
-    const manager = new GhostManager({ getRootDir: () => path.join(workDir, 'ghosts') });
-    expect(await manager.inspect(packed.cindyPath)).toMatchObject({
-      manifest: { node: { entry: 'node/worker.cjs', protocol: 'json-rpc-stdio' } },
-    });
-  });
-
   it('目录不存在 / 清单坏 / 声明的入口文件缺失 → 结构化拒绝', async () => {
     expect((await packGhostDir(path.join(workDir, 'nope'))).ok).toBe(false);
 
@@ -116,29 +95,9 @@ describe('packGhostDir', () => {
 
     const missingEntry = path.join(workDir, 'src2');
     await fs.promises.mkdir(missingEntry, { recursive: true });
-    await fs.promises.writeFile(
-      path.join(missingEntry, 'ghost.json'),
-      JSON.stringify(GOOD_MANIFEST),
-    );
+    await fs.promises.writeFile(path.join(missingEntry, 'ghost.json'), JSON.stringify(GOOD_MANIFEST));
     const r2 = await packGhostDir(missingEntry); // entry: main.js 没写
     expect(r2).toMatchObject({ ok: false, errorCode: 'ENTRY_MISSING' });
-
-    const missingNodeDir = path.join(workDir, 'src3');
-    await fs.promises.mkdir(missingNodeDir, { recursive: true });
-    await fs.promises.writeFile(
-      path.join(missingNodeDir, 'ghost.json'),
-      JSON.stringify({
-        ...GOOD_MANIFEST,
-        slots: ['node'],
-        tools: undefined,
-        node: { entry: 'node/worker.cjs', protocol: 'json-rpc-stdio' },
-      }),
-    );
-    await fs.promises.writeFile(path.join(missingNodeDir, 'main.js'), '// browser brain');
-    expect(await packGhostDir(missingNodeDir)).toMatchObject({
-      ok: false,
-      errorCode: 'ENTRY_MISSING',
-    });
   });
 
   it('形态收敛:老声明型清单(v1 / kind: declaration)打包被拒', async () => {
@@ -167,98 +126,6 @@ describe('packGhostDir', () => {
   });
 });
 
-describe('scaffoldGhostDir', () => {
-  it.each<ForgeScaffoldTemplate>(['plain', 'agent-action', 'node-json-rpc', 'node-mcp'])(
-    '生成 %s 模板，随后可以直接打包并通过装入检查',
-    async (template) => {
-      const dir = path.join(workDir, template);
-      const result = await scaffoldGhostDir({
-        dir,
-        template,
-        id: `demo-${template}`,
-        name: `演示 ${template}`,
-        description: `${template} 起步插件`,
-      }, { sessionWorkdir: workDir });
-      expect(result, JSON.stringify(result)).toMatchObject({ ok: true, dir, template });
-      if (!result.ok) return;
-      expect(result.files).toContain('ghost.json');
-      expect(result.files).toContain('main.js');
-      expect(result.files.includes('node/worker.cjs')).toBe(template.startsWith('node-'));
-
-      const packed = await packGhostDir(dir);
-      expect(packed.ok, JSON.stringify(packed)).toBe(true);
-      if (!packed.ok) return;
-      const manager = new GhostManager({ getRootDir: () => path.join(workDir, 'ghosts') });
-      expect(await manager.inspect(packed.cindyPath)).toHaveProperty('manifest');
-
-      const mainSource = await fs.promises.readFile(path.join(dir, 'main.js'), 'utf8');
-      if (template === 'agent-action') {
-        expect(mainSource).toContain('cindy.agent.run');
-        expect(mainSource).toContain('{{user_message}}');
-        expect(mainSource).toContain('userActionToken');
-      }
-      if (template === 'node-json-rpc') expect(mainSource).toContain("method: 'echo'");
-      if (template === 'node-mcp') {
-        const worker = await fs.promises.readFile(path.join(dir, 'node/worker.cjs'), 'utf8');
-        expect(worker).toContain("request.method === 'initialize'");
-        expect(worker).toContain("request.method === 'tools/list'");
-        expect(worker).toContain("request.method === 'tools/call'");
-      }
-    },
-  );
-
-  it('目标已存在时拒绝且不覆盖；插件信息不合法时不创建目录', async () => {
-    const existing = path.join(workDir, 'existing');
-    await fs.promises.mkdir(existing);
-    await fs.promises.writeFile(path.join(existing, 'keep.txt'), 'keep me');
-    expect(
-      await scaffoldGhostDir({
-        dir: existing,
-        template: 'plain',
-        id: 'existing',
-        name: 'Existing',
-      }, { sessionWorkdir: workDir }),
-    ).toMatchObject({ ok: false, errorCode: 'TARGET_EXISTS' });
-    expect(await fs.promises.readFile(path.join(existing, 'keep.txt'), 'utf8')).toBe('keep me');
-
-    const invalid = path.join(workDir, 'invalid');
-    expect(
-      await scaffoldGhostDir({
-        dir: invalid,
-        template: 'plain',
-        id: 'INVALID_ID',
-        name: 'Invalid',
-      }, { sessionWorkdir: workDir }),
-    ).toMatchObject({ ok: false, errorCode: 'INVALID_INPUT' });
-    await expect(fs.promises.stat(invalid)).rejects.toMatchObject({ code: 'ENOENT' });
-  });
-
-  it('软链祖先把字面在工作目录内的路径引到外面 → 拒绝且外面不落盘', async () => {
-    // Windows 无特权时目录软链可能 EPERM,建不出夹具就跳过(守卫仍在)。
-    const outside = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'cindy-forge-outside-'));
-    try {
-      try {
-        fs.symlinkSync(outside, path.join(workDir, 'out'), 'dir');
-      } catch {
-        return;
-      }
-      expect(
-        await scaffoldGhostDir({
-          dir: path.join(workDir, 'out', 'plugin'),
-          template: 'plain',
-          id: 'escape',
-          name: 'Escape',
-        }, { sessionWorkdir: workDir }),
-      ).toMatchObject({ ok: false, errorCode: 'INVALID_INPUT' });
-      await expect(fs.promises.stat(path.join(outside, 'plugin'))).rejects.toMatchObject({
-        code: 'ENOENT',
-      });
-    } finally {
-      await fs.promises.rm(outside, { recursive: true, force: true });
-    }
-  });
-});
-
 describe('FORGE_GUIDE', () => {
   it('手册覆盖关键章节(身份卡/工具面/管子/聊天卡片/订阅拦截/网络代发/系统提示/沙箱红线/打包)', () => {
     for (const marker of [
@@ -279,18 +146,6 @@ describe('FORGE_GUIDE', () => {
       'data-ghost-action',
       'data-ghost-prompt',
       'card-action',
-      'agent 槽',
-      'cindy.agent.run',
-      '{{user_message}}',
-      'userActionToken',
-      "mode:'continue'",
-      "trigger: 'background'",
-      'node 槽',
-      'cindy.node.request',
-      'json-rpc-stdio',
-      'mcp-stdio',
-      'Electron IPC',
-      'npm install',
       'spawnCallId',
       // 媒体回锚(2026-07-14):常驻过程卡模式下轮询结果把媒体挂回提交卡下方。
       'xdt_anchor_card_id',
@@ -299,8 +154,6 @@ describe('FORGE_GUIDE', () => {
       // 卡内音频播放器(2026-07-14):data-ghost-audio 插槽 + 防重令牌。
       'data-ghost-audio',
       'xdt_audio_in_card',
-      // 卡内外链(2026-07-23,外链 v3):声明式属性 + 宿主确认框才 openExternal。
-      'data-ghost-link',
       'cindy.request',
       'app-context',
       'clientIdAlternatives',
@@ -330,12 +183,7 @@ describe('FORGE_GUIDE', () => {
       "root: 'save'",
       'save_deposit.token',
       '沙箱红线',
-      'ghost_forge_scaffold',
       'ghost_forge_pack',
-      'cindy-signatures.json',
-      '发布者签名',
-      'Cindy 审核签名',
-      '不要让 Agent 读取、生成或回显正式私钥',
       '/preview/',
       'settingsHtml',
       'settingsHeight',
@@ -344,22 +192,6 @@ describe('FORGE_GUIDE', () => {
       'setup 就绪声明',
       'anyOf',
       'secret:brave_api_key',
-      // 2026-07-23 通用能力四件套:会话上下文 / node 多入口 / 目录选择 / 面板预览。
-      '会话上下文(session-context 槽)',
-      'workdir_is_local',
-      'node.entries',
-      '目录选择(pick 槽)',
-      'cindy.pick',
-      '面板预览(preview 槽)',
-      'cindy.preview',
-      'preview.hosts',
-      // 2026-07-23 长任务续命:maxTotalMs 沉默窗口语义。
-      'maxTotalMs',
-      '有动静就续期',
-      // 2026-07-23 宿主代启子进程(缺口 1):childSpawn + spawnEntry 窄接口。
-      '宿主代启子进程(childSpawn)',
-      '__CINDY_NODE__',
-      'spawnEntry',
     ]) {
       expect(FORGE_GUIDE).toContain(marker);
     }

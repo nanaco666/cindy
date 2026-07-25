@@ -14,12 +14,12 @@ import path from 'node:path';
 
 import { BrowserWindow } from 'electron';
 
-import type { Maker } from '@cindy/maker-core';
-import { isTerminalAgentErrorEvent } from '@cindy/maker-core';
+import type { Maker } from '@lizi/maker-core';
+import { isTerminalAgentErrorEvent } from '@lizi/maker-core';
 
 import { tapWindowBroadcast } from '../device-link/broadcast-tap.js';
 import { createLogger } from '../logger.js';
-import { getCurrentDataOwnerId } from '../authManager';
+import { getCurrentUserId } from '../authManager';
 import { getResolvedMainLocale } from '../i18n.js';
 import { wireSessionToIpc } from '../maker-ipc/register.js';
 import { createMessage } from '../localDb/ipc/messages.js';
@@ -27,7 +27,6 @@ import { getDbClient } from '../localDb/client/current';
 import { and, desc, eq, isNull, inArray } from 'drizzle-orm';
 import { messages as messagesTable, sessions as sessionsTable } from '../localDb/schema';
 import { getSessionProvider, setSessionProvider } from '../maker-host/session-provider-store.js';
-import { agentHandoffPending } from '../maker-ipc/agentHandoffPendingSingleton.js';
 import { readMemorySettings } from '../maker-host/memory-settings-store.js';
 import { visibleMessageTextForConversationSearch } from '../localDb/conversationSearch.pure';
 import { searchChatHistoryHybrid } from '../localDb/chatHistorySearch';
@@ -136,10 +135,8 @@ export function startLearnHost(deps: StartLearnHostDeps): LearnController {
     isTerminalErrorEvent: (ev) => isTerminalAgentErrorEvent(ev as Parameters<typeof isTerminalAgentErrorEvent>[0]),
     beforeDispatchUserTurn: deps.beforeDispatchUserTurn,
     onUndispatchedUserTurn: deps.onUndispatchedUserTurn,
-    peekPendingHandoff: (sessionId) => agentHandoffPending.peek(sessionId),
-    consumePendingHandoff: (sessionId) => agentHandoffPending.consume(sessionId),
     getAppLocale: () => getResolvedMainLocale(),
-    getCurrentDataOwnerId,
+    getCurrentUserId,
     waitForStartupSweep: () => startupReady,
     collectProfile: (originWorkdir) =>
       readMemorySettings().maker

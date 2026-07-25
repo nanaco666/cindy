@@ -11,12 +11,12 @@ import { extractIpcError } from '@/utils/ipcError';
 import { Tip } from '@/components/ui/tooltip';
 import { useAgentCapabilities } from '@/hooks/useAgentCapabilities';
 import { useProviders } from '@/hooks/useProviders';
-import { sessionModelSupportsFastMode } from '@cindy/model-providers';
+import { sessionModelSupportsFastMode } from '@lizi/model-providers';
 import type { UtilityTextAttemptReason, UtilityTextFailure } from '../../../../shared/utilityTextResult';
 import { useFeishuBot } from '@/hooks/useFeishuBot';
 import { useProjectPickerOptions } from '@/hooks/useProjectPickerOptions';
-import type { Schedule, CreateScheduleInput, ScheduleTemplate, UpdateScheduleInput } from '@cindy/maker-scheduler';
-import { applyTemplateParams } from '@cindy/maker-scheduler/template-engine';
+import type { Schedule, CreateScheduleInput, ScheduleTemplate, UpdateScheduleInput } from '@lizi/maker-scheduler';
+import { applyTemplateParams } from '@lizi/maker-scheduler/template-engine';
 import { ScriptCapabilityMultiSelect } from './ScriptCapabilityMultiSelect';
 
 import {
@@ -33,8 +33,6 @@ import {
   canSubmitSessionBinding,
   isExplicitScheduleModelUnavailable,
   parsePreRunHookTimeoutMs,
-  resolveScheduleGenerationProviderId,
-  shouldFollowBoundSessionGenerationRoute,
 } from '../lib/scheduleFormLogic';
 import type { RunMode } from '../hooks/useScheduleForm';
 import { BoundSessionCard } from './BoundSessionCard';
@@ -66,7 +64,6 @@ print(json.dumps({
 const UTILITY_ATTEMPT_REASON_KEY: Record<UtilityTextAttemptReason, string> = {
   unsupported_transport: 'unsupportedTransport',
   agent_unavailable: 'agentUnavailable',
-  model_unavailable: 'modelUnavailable',
   not_authenticated: 'notAuthenticated',
   auth_probe_failed: 'authProbeFailed',
   api_key_missing: 'apiKeyMissing',
@@ -117,8 +114,6 @@ export function ScheduleFormDialog({
   const { t } = useTranslation();
   const formApi = useScheduleForm(initial);
   const { form, setField, setDestination, setRunMode, selectBoundSession, applyTemplateAgentFields, reset, toInput, validate } = formApi;
-  const caps = useAgentCapabilities(form.agentKind);
-  const { providers } = useProviders();
   // "运行会话"三态(fresh / persistent / bound)与心跳形态派生值。
   // hasRealBinding = targetSessionId 为真实会话 id(B 已绑 / C 已选 / MCP 手绑),
   // 此时目录 / worktree / fastMode 由绑定会话决定,表单隐藏对应字段。
@@ -221,20 +216,6 @@ export function ScheduleFormDialog({
   const runHookGenerate = useCallback(async () => {
     const description = hookGenDesc.trim();
     if (!description || hookGenerating) return;
-    const hasSessionTarget = hasRealBinding(form);
-    const followsSessionRoute = shouldFollowBoundSessionGenerationRoute(form);
-    const providerId = followsSessionRoute
-      ? undefined
-      : resolveScheduleGenerationProviderId({
-        providers,
-        providerId: form.providerId,
-        model: form.model,
-        agentKind: form.agentKind,
-      });
-    if (!followsSessionRoute && !providerId) {
-      toast.warning(t('scheduler.editor.validation.modelUnavailable', { model: form.model }));
-      return;
-    }
     setHookGenerating(true);
     setHookGenPath(null);
     setHookGenFailure(null);
@@ -242,16 +223,11 @@ export function ScheduleFormDialog({
       const result = await window.electronAPI.maker.schedule.generatePreRunHook({
         description,
         scheduleName: form.name.trim() || undefined,
-        providerId: providerId ?? undefined,
-        // 只有 bound + 空 model/provider 才跟随 session 路由。persistent 任务即使
-        // 已回写 targetSessionId，仍按任务级选择生成，与下次 fire 的覆盖语义一致。
-        agentKind: followsSessionRoute ? undefined : form.agentKind,
-        model: followsSessionRoute ? undefined : form.model.trim() || undefined,
         // 绑定会话任务:workingDir 不发(表单残留值可能是改绑前的过期项目目录,
         // 显式值会压过会话解析),真实 cwd 由 main 按会话 meta.workDir 解析 ——
         // 落盘目录/自测环境与生产运行一致
-        workingDir: hasSessionTarget ? undefined : form.workingDir.trim() || undefined,
-        targetSessionId: hasSessionTarget ? form.targetSessionId.trim() : undefined,
+        workingDir: hasRealBinding(form) ? undefined : form.workingDir.trim() || undefined,
+        targetSessionId: hasRealBinding(form) ? form.targetSessionId.trim() : undefined,
         currentCommand: form.preRunHookCommand.trim() || undefined,
       });
       if (!result.ok) {
@@ -269,22 +245,7 @@ export function ScheduleFormDialog({
     } finally {
       setHookGenerating(false);
     }
-  }, [
-    hookGenDesc,
-    hookGenerating,
-    providers,
-    form.name,
-    form.providerId,
-    form.agentKind,
-    form.model,
-    form.workingDir,
-    form.targetSessionId,
-    form.preRunHookCommand,
-    form.executionMode,
-    form.persistentSession,
-    setField,
-    t,
-  ]);
+  }, [hookGenDesc, hookGenerating, form.name, form.workingDir, form.targetSessionId, form.preRunHookCommand, setField]);
 
   /** 前置检查「测试运行」:立即执行一次脚本并就地回显 exit code / 输出 / 耗时。 */
   const runHookTest = useCallback(async () => {
@@ -383,6 +344,8 @@ export function ScheduleFormDialog({
 
   const projectOptions = useProjectPickerOptions();
 
+  const caps = useAgentCapabilities(form.agentKind);
+  const { providers } = useProviders();
   const currentModel = useMemo(() => {
     const list = caps.capabilities?.availableModels ?? [];
     if (form.model) return list.find((m) => m.id === form.model);
@@ -945,6 +908,7 @@ export function ScheduleFormDialog({
 
             {/* 前置检查(Pre-run Hook):触发时先执行脚本,exit 0 放行 / exit 2 跳过本轮
                 (不启动 agent、零 token);报错 / 超时会阻止本轮并记录失败。
+                设计稿:docs/design_docs/schedule.pen「创建自动化 · 前置检查集成 (Dark)」。
                 仅 agent 模式展示——script 模式任务本体就是脚本,再叠一层脚本闸门是套娃。 */}
             {!isScriptMode && (
             <div className="flex flex-col gap-2">

@@ -14,7 +14,7 @@
  */
 
 import { createLogger } from '../logger.js';
-import type { McpProvider } from '@cindy/maker-core';
+import type { McpProvider } from '@lizi/maker-core';
 
 import { listCustomMcpServers } from '../maker-host/custom-mcp-store.js';
 import { readCustomMcpToken } from '../secrets/providerSecretStore.js';

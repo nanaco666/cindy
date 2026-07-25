@@ -122,7 +122,7 @@ function PrTooltip({
 
 /**
  * 单独 automation-generated 会话行的 hover 浮层 —— 显示「下次运行剩余时间 + 累计运行
- * 次数」,和 AutomationSessionGroupItem 的 rowTooltip 语义一致。数据源和 Timer chip
+ * 次数」,和 AutomationSessionGroupItem 的 rowTooltip 语义一致。数据源和 Clock chip
  * 点击复用同一套 loadScheduleSidebarIndexRuns:runs 里每条自带 nextFireAt /
  * scheduleStatus,同 scheduleId 的条数即为总运行次数。tooltip 打开时才发起一次拉取
  * (与 PrTooltip 的 fetchStatusesForSession 同风格,不在密集渲染路径上常驻拉数据);

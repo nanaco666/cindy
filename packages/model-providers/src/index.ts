@@ -1,5 +1,5 @@
 /**
- * @cindy/model-providers — 模型供应商目录 + 路由抽象（纯逻辑，零 Electron / maker-core 运行时依赖）。
+ * @lizi/model-providers — 模型供应商目录 + 路由抽象（纯逻辑，零 Electron / maker-core 运行时依赖）。
  *
  * - types：Provider / CatalogModel / RoutingDescriptor（models.dev 形状 + agents/routing/runtime 扩展）
  * - catalog：内置目录 BUNDLED_CATALOG + parseCatalog 校验
@@ -21,7 +21,6 @@ export type {
   Catalog,
   CustomProviderConfig,
   CustomProviderRuntimeConfig,
-  ProviderRuntimeModelConfig,
   ProviderPreset,
   ProviderPresetRuntime,
   OAuthProviderDescriptor,
@@ -57,4 +56,4 @@ export type { ConnectionState, ProviderView, ResolvedRoute } from './registry.js
 export { isModelVisible, buildProviderSections, visibleModelUnion, resolveModelIconKind } from './sections.js';
 export type { SectionModel, ProviderSection, ModelIconKind } from './sections.js';
 
-export { resolveEffort, resolveProviderSwitchEffort, clampEffortToSupported } from './effortResolution.js';
+export { resolveEffort, resolveProviderSwitchEffort } from './effortResolution.js';

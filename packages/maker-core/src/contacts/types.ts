@@ -92,7 +92,7 @@ export interface ContactIdentity {
   value: string;
   /** 归一化值(匹配用): trim + 小写 */
   normalizedValue: string;
-  /** 标签, e.g. "当前" / "云岚早期" / "个人" */
+  /** 标签, e.g. "当前" / "心动早期" / "个人" */
   label: string;
   /** 来源备注 */
   note: string;

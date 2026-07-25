@@ -13,7 +13,7 @@ import { z } from 'zod';
 import { CONTACTS_COLLECTION_RULES, withContacts } from './_shared.js';
 import { DuplicateSuspectSignal } from './errors.js';
 import type { ContactsMcpDeps } from '../types.js';
-import type { ContactsToolRegistry } from '../cindy_contactsToolRegistry.js';
+import type { ContactsToolRegistry } from '../lizi_contactsToolRegistry.js';
 
 const identityShape = {
   platform: z

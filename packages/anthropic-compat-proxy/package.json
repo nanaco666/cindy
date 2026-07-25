@@ -1,5 +1,5 @@
 {
-  "name": "@cindy/anthropic-compat-proxy",
+  "name": "@lizi/anthropic-compat-proxy",
   "version": "0.0.0",
   "private": true,
   "description": "Loopback HTTP proxy that strips Anthropic-only request fields when the target model is non-Anthropic. Lets Claude Code SDK talk to gateways routing to OpenAI/Azure/etc backends.",
@@ -17,8 +17,8 @@
     "lint": "eslint src/"
   },
   "author": {
-    "name": "X.D. Network Inc.",
-    "email": "feedback@cindy.app"
+    "name": "Lizi",
+    "email": "jiali@magiclizi.com"
   },
   "license": "Apache-2.0",
   "devDependencies": {

@@ -3,7 +3,7 @@
  *
  * 设计取舍:
  *  - 4 类分片照搬 Claude Code auto-memory 规范 (user / feedback / project / reference),
- *    Lizi 已经熟。前缀决定文件名: <type>_<slug>.md。
+ *    LiziMagic 已经熟。前缀决定文件名: <type>_<slug>.md。
  *  - frontmatter 用 yaml (gray-matter 解析), 字段尽量少 — title/description/type/updatedAt 四个,
  *    保持人手改 .md 时的可读性。
  *  - WriteOptions.name 是 filename slug ([a-z0-9_-]{1,64}), 不是显示文本; title 才是显示文本。

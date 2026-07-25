@@ -34,8 +34,8 @@ interface SendViolation {
 describe('direct Session.send guard', () => {
   it('flags fixture patterns that ignore maker-core Session.send outcomes', () => {
     const source = `
-      import type { Session } from '@cindy/maker-core';
-      import { assertSendDispatched, toSessionDispatchOutcome } from '@cindy/maker-core';
+      import type { Session } from '@lizi/maker-core';
+      import { assertSendDispatched, toSessionDispatchOutcome } from '@lizi/maker-core';
 
       declare const session: Session;
       declare const webContents: { send(channel: string, payload?: unknown): void };
@@ -335,7 +335,7 @@ function createProgramWithSources(
   const files = new Map<string, string>([
     ...normalizedSources,
     [makerCoreSessionFixturePath, `
-      declare module '@cindy/maker-core' {
+      declare module '@lizi/maker-core' {
         export type AgentEvent = unknown;
         export type AgentKind = 'cc' | 'claude-code' | 'codex' | string;
         export type SessionSendResult =

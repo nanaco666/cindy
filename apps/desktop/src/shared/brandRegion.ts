@@ -15,7 +15,7 @@ import {
   brandAppId,
   resolveCindyRegion,
   type CindyRegion,
-} from '@cindy/maker-shared/brand-identity';
+} from '@lizi/maker-shared/brand-identity';
 
 /** 本构建的区域(构建期烘焙;dev 默认 cn)。 */
 export const CURRENT_CINDY_REGION: CindyRegion = resolveCindyRegion(

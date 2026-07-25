@@ -9,30 +9,30 @@ import {
 
 describe('install target path helpers', () => {
   it('normalizes POSIX install paths without changing case', () => {
-    expect(normalizeInstallPathKey('/Users/Sam/Repo/.agents/skills/Demo/')).toBe(
-      '/Users/Sam/Repo/.agents/skills/Demo',
+    expect(normalizeInstallPathKey('/Users/Lizi/Repo/.agents/skills/Demo/')).toBe(
+      '/Users/Lizi/Repo/.agents/skills/Demo',
     );
   });
 
   it('normalizes Windows install paths for registry comparison', () => {
-    expect(normalizeInstallPathKey('C:\\Users\\Sam\\Repo\\.agents\\skills\\Demo\\')).toBe(
-      'c:/users/sam/repo/.agents/skills/demo',
+    expect(normalizeInstallPathKey('C:\\Users\\Lizi\\Repo\\.agents\\skills\\Demo\\')).toBe(
+      'c:/users/lizi/repo/.agents/skills/demo',
     );
-    expect(normalizeInstallPathKey('C:/Users/Sam/Repo/.agents/skills/Demo')).toBe(
-      'c:/users/sam/repo/.agents/skills/demo',
+    expect(normalizeInstallPathKey('C:/Users/Lizi/Repo/.agents/skills/Demo')).toBe(
+      'c:/users/lizi/repo/.agents/skills/demo',
     );
   });
 
   it('joins install paths using the separator style of the chosen base dir', () => {
-    expect(joinSkillInstallPath('/Users/sam/repo', 'demo')).toBe('/Users/sam/repo/.agents/skills/demo');
-    expect(joinSkillInstallPath('C:\\Users\\Sam\\Repo', 'demo')).toBe(
-      'C:\\Users\\Sam\\Repo\\.agents\\skills\\demo',
+    expect(joinSkillInstallPath('/Users/lizi/repo', 'demo')).toBe('/Users/lizi/repo/.agents/skills/demo');
+    expect(joinSkillInstallPath('C:\\Users\\Lizi\\Repo', 'demo')).toBe(
+      'C:\\Users\\Lizi\\Repo\\.agents\\skills\\demo',
     );
   });
 
   it('matches installed skill paths across Windows separator and case differences', () => {
-    expect(isInstallPathForSkill('C:\\Users\\Sam\\.agents\\skills\\Demo', 'demo')).toBe(true);
-    expect(isInstallPathForSkill('/Users/Sam/.agents/skills/Demo', 'demo')).toBe(false);
+    expect(isInstallPathForSkill('C:\\Users\\Lizi\\.agents\\skills\\Demo', 'demo')).toBe(true);
+    expect(isInstallPathForSkill('/Users/Lizi/.agents/skills/Demo', 'demo')).toBe(false);
   });
 
   it('detects project installs across Windows separator and case differences', () => {

@@ -6,7 +6,6 @@ interface OrcaRoleCreateOpts {
 }
 
 export const knownNonOrcaSessionIds = new Set<string>();
-const orcaMcpHydratedSessionIds = new Set<string>();
 
 export function readOrcaRoleFromVendorOptions(
   vendorOptions: Record<string, unknown> | undefined,
@@ -23,19 +22,4 @@ export function markKnownNonOrcaIfApplicable(sessionId: string, o: OrcaRoleCreat
   if (role === 'lead' || role === 'worker') return;
   if (o.orcaRole === 'lead' || o.orcaRole === 'worker') return;
   knownNonOrcaSessionIds.add(sessionId);
-}
-
-export function markOrcaMcpHydratedIfNeeded(sessionId: string, o: OrcaRoleCreateOpts): void {
-  const role = readOrcaRoleFromVendorOptions(o.vendorOptions);
-  if (role !== 'lead' && role !== 'worker') return;
-  orcaMcpHydratedSessionIds.add(sessionId);
-  knownNonOrcaSessionIds.delete(sessionId);
-}
-
-export function isOrcaMcpHydrated(sessionId: string): boolean {
-  return orcaMcpHydratedSessionIds.has(sessionId);
-}
-
-export function clearOrcaMcpHydrated(sessionId: string): void {
-  orcaMcpHydratedSessionIds.delete(sessionId);
 }

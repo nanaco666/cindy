@@ -22,7 +22,7 @@ export function isSyntheticTriggerText(text: string): boolean {
 }
 
 /**
- * 规范化续跑指令(2026-07-05 产品决策,原定义在桌面 interruptedTurn.ts,随
+ * 规范化续跑指令(2026-07-05 Dash 拍板,原定义在桌面 interruptedTurn.ts,随
  * UI_ACTION_TRIGGER_PREFIX 一起上移):英文、代码固定 —— 它是系统 prompt 而非
  * 用户话术,不随 UI locale 变化,行为可预测(设计实现规范规则 9)。
  *

@@ -10,8 +10,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const sourcePath = resolve(__dirname, '..', 'components', 'status', 'TodaySpendChip.tsx');
-// Windows CRLF 检出下 \n 字面量断言会失配,统一归一化成 LF 再断言。
-const source = readFileSync(sourcePath, 'utf8').replace(/\r\n/g, '\n');
+const source = readFileSync(sourcePath, 'utf8');
 
 describe('TodaySpendChip dashboard routing', () => {
   it('separates the latest user-round total from final-segment token details', () => {
@@ -24,13 +23,12 @@ describe('TodaySpendChip dashboard routing', () => {
     expect(source).toContain("'chat.messageActionBar.userTurnCostDetailsTitle'");
   });
 
-  it('routes codex-oauth / cc+chatgpt bridge to OpenAI usage, xai provider/bridge to xAI, claude subscription to claude.ai, and gateway / codex-api to no dashboard (internal console removed pre-OSS)', () => {
+  it('routes codex-oauth / cc+chatgpt bridge to OpenAI usage, xai provider/bridge to xAI, claude subscription to claude.ai, codex-api to the proxy dashboard', () => {
     expect(source).toContain('https://chatgpt.com/codex/settings/usage');
     expect(source).toContain('https://accounts.x.ai');
     expect(source).toContain('https://claude.ai/settings/usage');
-    // 网关 / 托管账号这一路 URL 落到 null(点击无跳转);其余三路指向各自公开看板。
     expect(source).toMatch(
-      /usesXaiQuotaForm\s*\?\s*XAI_ACCOUNT_URL\s*:\s*isCodexOauth \|\| isChatgptBridge\s*\?\s*CODEX_USAGE_DASHBOARD_URL\s*:\s*isClaudeSubscription\s*\?\s*CLAUDE_USAGE_DASHBOARD_URL\s*:\s*null/,
+      /usesXaiQuotaForm\s*\?\s*XAI_ACCOUNT_URL\s*:\s*isCodexOauth \|\| isChatgptBridge\s*\?\s*CODEX_USAGE_DASHBOARD_URL\s*:\s*isClaudeSubscription\s*\?\s*CLAUDE_USAGE_DASHBOARD_URL\s*:\s*PROXY_USAGE_DASHBOARD_URL/,
     );
     expect(source).toContain('todaySpend.openCodexUsage');
     expect(source).toContain('todaySpend.openXaiUsage');
@@ -98,21 +96,21 @@ describe('TodaySpendChip dashboard routing', () => {
     expect(source).toMatch(
       /useSessionEstimatedValue\(\s*sessionId,\s*isCodexSubscription \|\| isClaudeSubscription \|\| isSubscriptionBridge,?\s*\)/,
     );
-    expect(source).toContain('function getCodexChipWindows(');
-    expect(source).toContain("'todaySpend.codex.windowSegment'");
+    expect(source).toContain('function getCodexChipSegments(');
+    expect(source).toContain("t('todaySpend.codex.windowSegment'");
     expect(source).toContain(
       "chipSegments.push(t('todaySpend.codex.sessionValueLabel'",
     );
     expect(source).toContain('tooltipNode = buildCodexTooltipNode(');
     expect(source).toContain('sessionEstimatedValueUsd,');
     expect(source).toContain("t('todaySpend.codex.sessionValueLabel'");
-    expect(source).toContain('getCodexWindowUsages(snapshot, t, nowMs)');
+    expect(source).toContain('getCodexWindowUsages(snapshot, t, nowMs,');
     expect(source).toContain('todaySpend.codex.planCreditsLine');
     expect(source).toContain('todaySpend.codex.windowLine');
     // chip 主体 label 统一为距 reset 的剩余时长倒计时 (Claude / Codex 同一函数),
     // tooltip 保留窗口名 + 精确 reset 时间点
     expect(source).toContain('function formatCompactTimeUntilReset(');
-    expect(source).toContain('function toCodexChipWindow(');
+    expect(source).toContain("getCodexWindowUsages(snapshot, t, nowMs, { labelMode: 'countdown' })");
     expect(source).toContain('todaySpend.codex.resetAt');
     expect(source).toContain('todaySpend.codex.balanceDepleted');
     expect(source).not.toContain('todaySpend.codex.remainingSegment');
@@ -137,14 +135,14 @@ describe('TodaySpendChip dashboard routing', () => {
 
   it('keeps Claude subscription details in the chip and tooltip (plan B: follows current model)', () => {
     // 方案 B: 第二栏跟随当前模型的 weekly_scoped 窗口, 匹配不到回退总周限
-    expect(source).toContain('function getClaudeChipWindows(');
+    expect(source).toContain('function getClaudeChipSegments(');
     expect(source).toContain('function resolveClaudeWeeklyWindow(');
     expect(source).toContain('matchScopedWindowForModel(snapshot.scoped, modelId)');
     // bridge 模型形态优先(不消耗 Claude 订阅额度),订阅余量 hook 对 bridge 会话关闭;
     // device-link 远程会话同样不读本机订阅余量
     expect(source).toContain('isClaudeSubscription && !isSubscriptionBridge && !isDeviceLinkRemote');
     expect(source).toContain('tooltipNode = buildClaudeSubscriptionTooltipNode(');
-    expect(source).toContain("'todaySpend.claude.windowSegment'");
+    expect(source).toContain("t('todaySpend.claude.windowSegment'");
     expect(source).toContain("t('todaySpend.claude.modelWeeklyLabel'");
     expect(source).toContain('todaySpend.claude.weeklyLabel');
     expect(source).toContain('todaySpend.claude.windowLine');
@@ -182,10 +180,9 @@ describe('TodaySpendChip dashboard routing', () => {
 
   it('labels the Codex chip windows by time until reset while tooltip keeps the window name', () => {
     expect(source).toContain('const DAY_MS = 24 * 60 * 60 * 1000');
-    // chip label = 紧凑倒计时 (天级向上取整, 与旧 getDaysUntilReset 口径一致; <1 天
-    // 降到小时/分钟, 最后一分钟降到秒)
+    // chip label = 紧凑倒计时 (天级向上取整, 与旧 getDaysUntilReset 口径一致; <1 天降到小时/分钟)
     expect(source).toContain('Math.ceil(remainMs / DAY_MS)');
-    expect(source).toContain('preferResetCountdown: true');
+    expect(source).toContain('preferResetCountdown: countdown');
     // 窗口构成不写死, 以上游接口返回为准 (OpenAI 会调整窗口策略, 如 2026-07 曾一度
     // 取消 5h 窗口): 窗口名由 windowMinutes/resetsAt 动态派生, primary/secondary
     // 兜底统一中性「限额」, 不猜 5h / 周等具体窗口名 (Claude 段的 '5h' 是 Anthropic
@@ -193,73 +190,16 @@ describe('TodaySpendChip dashboard routing', () => {
     expect(source).not.toContain("formatWindowLabel(snapshot.primary, '5h'");
     expect(source).not.toContain("t('todaySpend.codex.daysWindow', { days: 7 })");
     expect(source).toContain(
-      "formatWindowLabel(snapshot.primary, t('todaySpend.codex.limitWindow'), t, nowMs)",
+      "formatWindowLabel(snapshot.primary, t('todaySpend.codex.limitWindow'), t, nowMs, {",
     );
     expect(source).toContain(
-      "formatWindowLabel(snapshot.secondary, t('todaySpend.codex.limitWindow'), t, nowMs)",
+      "formatWindowLabel(snapshot.secondary, t('todaySpend.codex.limitWindow'), t, nowMs, {",
     );
+    expect(source).toContain("labelMode?: 'countdown' | 'windowName'");
+    expect(source).toContain("{ labelMode: 'countdown' }");
+    expect(source).toContain("{ labelMode: 'windowName' }");
     expect(source).toContain("t('todaySpend.codex.weekWindow')");
-  });
-
-  it('ticks the reset countdown per second in the last minute and rolls remaining % up after a reset', () => {
-    // 最后一分钟秒级倒计时: formatCompactTimeUntilReset 落到秒单位, tick 节奏由
-    // computeCountdownTickDelayMs 决定 (setTimeout 链, 非固定 interval)
-    expect(source).toContain("t('todaySpend.unit.second')");
-    expect(source).toContain('computeCountdownTickDelayMs(chipResetsAtMsList, Date.now())');
-    expect(source).toContain('window.setTimeout(');
-    expect(source).not.toContain('window.setInterval(');
-    // 重置滚动动画: chip 最多两个窗口段, 固定两个 slot 无条件调 hook (Rules of Hooks);
-    // 剩余百分比经 useQuotaResetRollup 后再格式化 (重置时 0% → 100% 快速跳动)
-    expect(source).toContain('const rollupA = useQuotaResetRollup(windowSlotA);');
-    expect(source).toContain('const rollupB = useQuotaResetRollup(windowSlotB);');
-    // 揭晓仪式: 重置滚动启动的上升沿放一次撒花 (QuotaResetConfetti, DESIGN §14.4
-    // 第三类 sanctioned motion); 不再用绿色文字 (2026-07-23 用户反馈效果差已移除)。
-    // 锚点 = 正在揭晓的窗口段元素 (粒子沿整段文字宽度散布), 兜底 chip 容器
-    expect(source).toContain("import { QuotaResetConfetti } from './QuotaResetConfetti';");
-    expect(source).toContain('if (celebrating && !prevCelebratingRef.current)');
-    expect(source).toContain('segmentElsRef.current[window.key] = el;');
-    expect(source).toContain('?? chipRef.current;');
-    expect(source).toContain('<QuotaResetConfetti');
-    expect(source).toContain('onDone={() => setConfettiBurst(null)}');
-    expect(source).not.toContain('card-status-done');
-    expect(source).toContain('interface ChipWindowSegment extends ChipWindowSlot');
-    // 动画身份 key: 上游窗口策略变化 / 周限口径切换只重置基线, 不误触滚动
-    expect(source).toContain('`codex-${slotKey}:${window.windowMinutes ?? ');
-    expect(source).toContain("'claude-5h'");
-    expect(source).toContain('claude-weekly:');
-    // tick effect 依赖以值签名 memo 的 reset 时点列表, 动画帧不得重建定时器
-    expect(source).toContain('const resetsAtSignature = chipWindows');
-  });
-
-  it('shows a suspense "resetting…" segment while waiting for the post-reset snapshot', () => {
-    // 悬念期: 倒计时归零、新快照未落地 → 段换成「重置中…」(呼吸省略号), 不再
-    // 显示已失真的旧百分比; 新快照落地由重置滚动动画揭晓
-    expect(source).toContain('function isResetPending(');
-    expect(source).toContain('resetPending: isResetPending(resetsAtMs, nowMs)');
-    // 悬念期必须有界 (催刷是 best-effort, 离线/登出/退避时拿不到新快照); 超时
-    // 回落旧值 + 窗口名。常量在 quotaResetRollup (tick 节奏踩着超时边界调度,
-    // 悬念不会因慢 tick 多挂一分钟, Greptile P1 两轮, PR #546)
-    expect(source).toContain('RESET_PENDING_MAX_MS,');
-    // 超时侧严格小于: 排在超时边界上的 tick 必须当场退出悬念, 含等号会再等一轮
-    // 慢 tick (Greptile P1 第三轮)
-    expect(source).toContain('&& nowMs - resetsAtMs < RESET_PENDING_MAX_MS');
-    expect(source).toContain("'todaySpend.resetPendingSegment'");
-    // 省略号动画: HTML span + opacity (animate-pulse), 仅悬念期挂载 (动效红线);
-    // motion-safe = 尊重 prefers-reduced-motion (review P1, PR #546)
-    expect(source).toContain('<span className="motion-safe:animate-pulse">…</span>');
-    expect(source).not.toContain('"animate-pulse"');
-    // 悬念期主动催余量刷新, Claude / Codex 两侧都要 (main 侧 cached-first + 节流,
-    // 重复调用安全; Codex 缺催刷会在空闲期卡悬念态, review P1)。分支优先级必须
-    // 与 chipWindows 形态选择一致 —— Codex 形态优先: cc + chatgpt/ bridge 会话里
-    // usesCodexQuotaForm 与 isClaudeSubscription 可同时为真 (review P1 第二轮)
-    expect(source).toContain(
-      'if (usesCodexQuotaForm) {\n'
-      + '      requestCodexAccountRefresh();\n'
-      + '    } else if (isClaudeSubscription) {\n'
-      + '      requestClaudeSubscriptionRefresh();\n'
-      + '    }',
-    );
-    expect(source).toContain('const hasPendingResetWindow = chipWindows.some((window) => window.resetPending);');
+    expect(source).toContain('window.setInterval(');
   });
 
   it('does not treat missing subscription credits as exhausted usage', () => {
@@ -274,17 +214,9 @@ describe('TodaySpendChip dashboard routing', () => {
     expect(source).toContain('formatPlanType(snapshot.planType)');
   });
 
-  it('drops the internal usage-dashboard domain pre-OSS: gateway / XD accounts get no link and stay non-clickable, other metrics unchanged', () => {
-    // 内部用量看板 URL 只活在 PROXY_USAGE_DASHBOARD_URL 常量里 —— 断言该常量已消失
-    // + 三元结尾落 null(见上一个用例的正则),即等价于"内部域名已从源码移除";
-    // 这里不重新写出被禁的内部域名字面量,否则它又会 grep 命中公开仓。
-    expect(source).not.toContain('PROXY_USAGE_DASHBOARD_URL');
-    // 网关账号无看板 → url/label 落 null,chip 不可点(点击无跳转)。
-    expect(source).toContain('const isDashboardClickable = usageDashboardUrl !== null');
-    expect(source).toContain('if (!usageDashboardUrl) return;');
-    // tooltip "打开看板" 行经 helper 统一追加,label 为 null(网关账号)时不追加。
-    expect(source).toContain('function pushDashboardLinkLine(lines: string[], label: string | null)');
-    // 网关账号仍展示 daily/session 指标 + tooltip(仅去掉"打开看板"链接行)。
+  it('keeps Claude sessions on the proxy usage dashboard', () => {
+    expect(source).toContain('https://console.tapsvc.com/nova/#/ai-gateway?tab=overview');
+    expect(source).toMatch(/PROXY_USAGE_DASHBOARD_URL/);
     expect(source).toContain("const PRIMARY_GATEWAY_METRICS: readonly MetricKey[] = ['daily', 'session']");
     expect(source).toContain('const chipSegments = getGatewayChipSegments(slots)');
     expect(source).toContain("t('todaySpend.dailyLimitLabel'");

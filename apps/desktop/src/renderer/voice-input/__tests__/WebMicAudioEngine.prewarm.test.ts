@@ -3,7 +3,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { prewarmVoiceInputAudio } from '../audioContextPool';
 import {
   disposeKeepAliveVoiceInputMicrophone,
-  isMicrophoneDeviceUnavailableError,
   prewarmVoiceInputMicrophoneWithAutomaticFallback,
   WebMicAudioEngine,
 } from '../WebMicAudioEngine';
@@ -149,41 +148,6 @@ describe('prewarmVoiceInputMicrophoneWithAutomaticFallback', () => {
     expect(enumerateDevices).toHaveBeenCalledTimes(1);
     expect(getUserMedia).toHaveBeenCalledTimes(1);
     expect(getUserMedia).toHaveBeenCalledWith({
-      audio: {
-        autoGainControl: true,
-        channelCount: 1,
-        echoCancellation: true,
-        noiseSuppression: true,
-      },
-      video: false,
-    });
-  });
-
-  it('recognizes a cross-realm device error and falls back automatically', async () => {
-    const onFallback = vi.fn();
-    const crossRealmError = {
-      name: 'NotFoundError',
-      message: 'Requested device not found',
-    };
-    enumerateDevices.mockResolvedValue([
-      { kind: 'audioinput', deviceId: 'missing-device' },
-    ]);
-    getUserMedia
-      .mockRejectedValueOnce(crossRealmError)
-      .mockResolvedValueOnce({
-        getAudioTracks: () => [track],
-        getTracks: () => [track],
-      });
-
-    await prewarmVoiceInputMicrophoneWithAutomaticFallback({
-      workletUrl: 'https://app.local/pcm16k-worklet.js',
-      deviceId: 'missing-device',
-    }, onFallback);
-
-    expect(onFallback).toHaveBeenCalledTimes(1);
-    expect(isMicrophoneDeviceUnavailableError(crossRealmError)).toBe(true);
-    expect(getUserMedia).toHaveBeenCalledTimes(2);
-    expect(getUserMedia.mock.calls[1][0]).toEqual({
       audio: {
         autoGainControl: true,
         channelCount: 1,

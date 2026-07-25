@@ -19,7 +19,7 @@ import {
   effectiveSourceIdForModel,
   getModel,
   nativeDefaultSourceId,
-} from '@cindy/model-providers';
+} from '@lizi/model-providers';
 import * as sessionService from '@/lib/sessionService';
 import type { Session } from '@/lib/ccAgent.types';
 import { cn } from '@/lib/utils';

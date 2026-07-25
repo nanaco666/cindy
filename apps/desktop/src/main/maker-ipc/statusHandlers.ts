@@ -4,7 +4,7 @@
  * 这里只做参数校验和 Maker 调用，Electron 注册由 status.ts adapter 承担。
  */
 
-import type { AgentKind, Maker } from '@cindy/maker-core';
+import type { AgentKind, Maker } from '@lizi/maker-core';
 
 import { requireString } from '../utils/ipcValidate.js';
 import { MAKER_INVOKE } from './channels.js';

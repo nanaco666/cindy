@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 
 import { spawn, spawnSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, unlinkSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { resolveMobileE2eProfile } from './mobile-e2e-profile.mjs';
@@ -14,6 +15,7 @@ const maestroCheckScript = resolve(scriptDir, 'maestro-flow-smoke.mjs');
 const mockHostScript = resolve(scriptDir, 'mock-device-link-host.mjs');
 const mockVoiceProxyScript = resolve(scriptDir, 'mock-voice-proxy.mjs');
 const voiceCloudPreflightScript = resolve(scriptDir, 'mobile-voice-cloud-preflight.mjs');
+const fetchVoiceCredentialScript = resolve(scriptDir, 'fetch-mobile-voice-credential.mjs');
 const defaultAppId = 'com.xd.lizcn';
 const defaultApiBase = 'http://localhost:3333';
 const defaultFlow = 'remote_session_smoke.yaml';
@@ -64,11 +66,24 @@ const probeDeviceId = options.probeDeviceId ?? process.env.XDT_MOBILE_E2E_PROBE_
 const mockHostDeviceId = options.mockHostDeviceId ?? process.env.XDT_MOBILE_E2E_HOST_DEVICE_ID ?? 'mobile-e2e-host';
 const mockHostDeviceChipId = `home.deviceChip.${sanitizeTestIdSegment(mockHostDeviceId)}`;
 const configuredVoiceProxyBaseUrl = options.voiceProxyBaseUrl ?? process.env.XDT_MOBILE_E2E_VOICE_PROXY_BASE_URL ?? null;
+const willFetchVoiceCredential = options.voiceCredentialFromDevice
+  && !options.voiceCredentialFile
+  && !process.env.XDT_MOBILE_VOICE_CREDENTIAL_JSON;
+const generatedVoiceCredentialFile = willFetchVoiceCredential
+  ? resolve(tmpdir(), `xdt-mobile-voice-credential-${process.pid}.json`)
+  : null;
+const voiceCredentialFile = options.voiceCredentialFile ?? generatedVoiceCredentialFile;
+const voiceCredentialTargetDeviceId = options.voiceCredentialTargetDeviceId
+  ?? (options.mockHost && willFetchVoiceCredential ? mockHostDeviceId : undefined);
+const hasProvidedVoiceCredentialOverride = !!options.voiceCredentialFile
+  || !!process.env.XDT_MOBILE_VOICE_CREDENTIAL_FILE
+  || !!process.env.XDT_MOBILE_VOICE_CREDENTIAL_JSON;
 const voiceProxySelected = options.mockVoiceProxy || !!configuredVoiceProxyBaseUrl || flows.includes('voice_input_smoke.yaml');
 const voiceProxyPort = parsePositiveInteger(options.voiceProxyPort ?? process.env.XDT_MOBILE_E2E_VOICE_PROXY_PORT, defaultVoiceProxyPort);
-const voiceProxyBaseUrl = configuredVoiceProxyBaseUrl
-  ?? (voiceProxySelected ? resolveVoiceProxyBaseUrl(platform, voiceProxyPort) : null);
-const startLocalVoiceProxy = voiceProxySelected && !configuredVoiceProxyBaseUrl;
+const voiceProxyBaseUrl = options.voiceProxyBaseUrl
+  ?? process.env.XDT_MOBILE_E2E_VOICE_PROXY_BASE_URL
+  ?? (voiceProxySelected && !hasProvidedVoiceCredentialOverride ? resolveVoiceProxyBaseUrl(platform, voiceProxyPort) : null);
+const startLocalVoiceProxy = voiceProxySelected && !configuredVoiceProxyBaseUrl && !hasProvidedVoiceCredentialOverride;
 const voiceProxyHealthBaseUrl = startLocalVoiceProxy ? `http://localhost:${voiceProxyPort}` : voiceProxyBaseUrl;
 const useMockAudio = voiceProxySelected && !options.noMockAudio;
 if (options.startExpo && useMockAudio) {
@@ -76,9 +91,6 @@ if (options.startExpo && useMockAudio) {
 }
 if (options.startExpo && voiceProxyBaseUrl) {
   process.env.EXPO_PUBLIC_XDT_MOBILE_VOICE_LITELLM_BASE_URL = voiceProxyBaseUrl;
-  // 托管语音面:手机只保留官方托管路径后,voice smoke 经 mock 的
-  // /api/voice/sessions 换票再连本 mock 的 realtime 端点。
-  process.env.EXPO_PUBLIC_CINDY_VOICE_API_BASE_URL = voiceProxyBaseUrl;
 }
 const waitForReadyMs = options.waitForReadyMs
   ?? (options.mockHost || options.startServer ? 20_000 : 0);
@@ -90,6 +102,16 @@ const isolateMockHostFlows = options.mockHost
   && flows.length > 1;
 const cleanupTasks = [];
 let activeMockHostStop = null;
+
+if (generatedVoiceCredentialFile) {
+  cleanupTasks.push(() => {
+    try {
+      if (existsSync(generatedVoiceCredentialFile)) unlinkSync(generatedVoiceCredentialFile);
+    } catch {
+      // best effort
+    }
+  });
+}
 
 process.env.XDT_MOBILE_E2E_HOST_DEVICE_ID = mockHostDeviceId;
 process.env.XDT_MOBILE_E2E_HOST_DEVICE_CHIP_ID = mockHostDeviceChipId;
@@ -122,9 +144,12 @@ if (options.dryRun) {
     console.log(`- mock host flow scenarios: ${flows.map((flow) => `${flow}:${mockHostScenarioForFlow(flow)}`).join(', ')}`);
   }
   if (mockHostRealDb) console.log(`- mock host real db: ${mockHostRealDb}`);
-  if (voiceProxySelected) console.log(`- voice proxy: ${voiceProxyBaseUrl}`);
+  if (voiceProxySelected) console.log(`- voice proxy: ${voiceProxyBaseUrl ?? 'credential override'}`);
+  if (willFetchVoiceCredential) {
+    console.log(`- voice credential fetch: yes${voiceCredentialTargetDeviceId ? ` (${voiceCredentialTargetDeviceId})` : ''}`);
+  }
   if (options.voiceCloudPreflight) {
-    console.log('- voice cloud preflight: yes');
+    console.log(`- voice cloud preflight: yes${voiceCredentialFile ? ` (${voiceCredentialFile})` : ''}`);
     console.log(`- voice cloud candidates: ${options.voiceCloudAllCandidates ? 'all ASR/refine provider candidates' : 'primary candidate only'}`);
   }
   console.log(`- wait for ready: ${waitForReadyMs}ms`);
@@ -137,7 +162,7 @@ if (options.dryRun) {
   }
   if (options.mockHost) {
     if (startLocalVoiceProxy) console.log(`- voice proxy command: node ${mockVoiceProxyScript} --port ${voiceProxyPort}`);
-    console.log(`- mock host command: node ${mockHostScript} --api-base ${apiBase} --device-link-base ${deviceLinkApiBase} --device-id ${mockHostDeviceId} --scenario ${mockHostScenario}${mockHostRealDb ? ` --real-db ${mockHostRealDb}` : ''}`);
+    console.log(`- mock host command: node ${mockHostScript} --api-base ${apiBase} --device-link-base ${deviceLinkApiBase} --device-id ${mockHostDeviceId} --scenario ${mockHostScenario}${mockHostRealDb ? ` --real-db ${mockHostRealDb}` : ''}${voiceProxyBaseUrl ? ` --voice-proxy-base-url ${voiceProxyBaseUrl}` : ''}${voiceCredentialFile ? ' --voice-credential-file <redacted-path>' : ''}`);
   }
   console.log(`- maestro command: node ${maestroScript}${profile ? ` --profile ${profile.name}` : ''} --app-id ${appId} --platform ${platform}${expoUrl ? ` --expo-url ${expoUrl}` : ''}${flows.map((item) => ` --flow ${item}`).join('')}`);
   process.exit(0);
@@ -171,6 +196,20 @@ if (options.mockHost && startLocalVoiceProxy) {
   await assertVoiceProxyReady(voiceProxyHealthBaseUrl, { waitForReadyMs });
 }
 
+if (willFetchVoiceCredential) {
+  if (options.mockHost) {
+    await cleanupE2eDeviceRecords(apiBase, mockHostDeviceId);
+    const stopMockHost = startMockHostProcess(apiBase, mockHostDeviceId, mockHostScenario, mockHostRealDb, voiceProxyBaseUrl, null);
+    activeMockHostStop = stopMockHost;
+    await stopMockHost.ready;
+  }
+  await assertServerReady(apiBase, probeDeviceId, {
+    waitForReadyMs,
+    expectedControllableDeviceId: options.mockHost ? mockHostDeviceId : undefined,
+  });
+  runVoiceCredentialFetch();
+}
+
 if (options.voiceCloudPreflight) {
   runVoiceCloudPreflight();
 }
@@ -183,7 +222,7 @@ if (isolateMockHostFlows) {
     process.env.XDT_MOBILE_E2E_HOST_DEVICE_ID = flowMockHostDeviceId;
     process.env.XDT_MOBILE_E2E_HOST_DEVICE_CHIP_ID = flowMockHostDeviceChipId;
     await cleanupE2eDeviceRecords(apiBase, flowMockHostDeviceId);
-    const stopMockHost = startMockHostProcess(apiBase, flowMockHostDeviceId, flowMockHostScenario, mockHostRealDb);
+    const stopMockHost = startMockHostProcess(apiBase, flowMockHostDeviceId, flowMockHostScenario, mockHostRealDb, voiceProxyBaseUrl, voiceCredentialFile);
     await stopMockHost.ready;
     await assertServerReady(apiBase, probeDeviceId, { waitForReadyMs, expectedControllableDeviceId: flowMockHostDeviceId });
     runNodeScript(maestroScript, maestroArgsForFlows([flow]));
@@ -198,10 +237,12 @@ if (isolateMockHostFlows) {
 }
 
 if (options.mockHost) {
-  await cleanupE2eDeviceRecords(apiBase, mockHostDeviceId);
-  const stopMockHost = startMockHostProcess(apiBase, mockHostDeviceId, mockHostScenario, mockHostRealDb);
-  activeMockHostStop = stopMockHost;
-  await stopMockHost.ready;
+  if (!willFetchVoiceCredential) {
+    await cleanupE2eDeviceRecords(apiBase, mockHostDeviceId);
+    const stopMockHost = startMockHostProcess(apiBase, mockHostDeviceId, mockHostScenario, mockHostRealDb, voiceProxyBaseUrl, voiceCredentialFile);
+    activeMockHostStop = stopMockHost;
+    await stopMockHost.ready;
+  }
 }
 
 await assertServerReady(apiBase, probeDeviceId, {
@@ -562,10 +603,7 @@ async function startExpoProcess(url) {
       EXPO_PUBLIC_XDT_API_BASE_URL: apiBase,
       EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL: deviceLinkApiBase,
       EXPO_PUBLIC_XDT_DEV_LOGIN_ENABLED: '1',
-      ...(voiceProxyBaseUrl ? {
-        EXPO_PUBLIC_XDT_MOBILE_VOICE_LITELLM_BASE_URL: voiceProxyBaseUrl,
-        EXPO_PUBLIC_CINDY_VOICE_API_BASE_URL: voiceProxyBaseUrl,
-      } : {}),
+      ...(voiceProxyBaseUrl ? { EXPO_PUBLIC_XDT_MOBILE_VOICE_LITELLM_BASE_URL: voiceProxyBaseUrl } : {}),
       XDT_MOBILE_E2E_API_BASE_URL: apiBase,
       XDT_MOBILE_E2E_DEVICE_LINK_API_BASE_URL: deviceLinkApiBase,
     },
@@ -594,7 +632,7 @@ async function assertExpoReady(url, { waitForReadyMs = 0 } = {}) {
   console.log(`local-device-link-smoke Expo preflight passed: ${expoServer.statusUrl}`);
 }
 
-function startMockHostProcess(baseUrl, hostDeviceId, scenario, realDbPath) {
+function startMockHostProcess(baseUrl, hostDeviceId, scenario, realDbPath, voiceProxyUrl, voiceCredentialFile) {
   let readySettled = false;
   let resolveReady;
   let rejectReady;
@@ -624,6 +662,8 @@ function startMockHostProcess(baseUrl, hostDeviceId, scenario, realDbPath) {
     '--scenario',
     scenario,
     ...(realDbPath ? ['--real-db', realDbPath] : []),
+    ...(voiceProxyUrl ? ['--voice-proxy-base-url', voiceProxyUrl] : []),
+    ...(voiceCredentialFile ? ['--voice-credential-file', voiceCredentialFile] : []),
   ], {
     cwd: mobileRoot,
     env: {
@@ -633,6 +673,8 @@ function startMockHostProcess(baseUrl, hostDeviceId, scenario, realDbPath) {
       XDT_MOBILE_E2E_HOST_DEVICE_ID: hostDeviceId,
       XDT_MOBILE_E2E_MOCK_SCENARIO: scenario,
       ...(realDbPath ? { XDT_MOBILE_E2E_REAL_DB_PATH: realDbPath } : {}),
+      ...(voiceProxyUrl ? { XDT_MOBILE_E2E_VOICE_PROXY_BASE_URL: voiceProxyUrl } : {}),
+      ...(voiceCredentialFile ? { XDT_MOBILE_VOICE_CREDENTIAL_FILE: voiceCredentialFile } : {}),
     },
     detached: process.platform !== 'win32',
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -741,9 +783,10 @@ function runVoiceCloudPreflight() {
   const args = [
     '--run',
     ...(options.voiceCloudAllCandidates ? ['--all-candidates'] : []),
+    ...(voiceCredentialFile ? ['--credential-file', voiceCredentialFile] : []),
   ];
   const preflightEnv = {};
-  if (voiceProxyBaseUrl) {
+  if (!voiceCredentialFile && voiceProxyBaseUrl) {
     preflightEnv.XDT_MOBILE_VOICE_PROXY_BASE_URL = voiceProxyBaseUrl;
     if (process.env.XDT_MOBILE_VOICE_PROXY_API_KEY) {
       preflightEnv.XDT_MOBILE_VOICE_PROXY_API_KEY = process.env.XDT_MOBILE_VOICE_PROXY_API_KEY;
@@ -753,6 +796,23 @@ function runVoiceCloudPreflight() {
   }
   console.log('local-device-link-smoke running voice cloud preflight');
   runNodeScript(voiceCloudPreflightScript, args, preflightEnv);
+}
+
+function runVoiceCredentialFetch() {
+  const args = [
+    '--api-base',
+    apiBase,
+    '--device-link-base',
+    deviceLinkApiBase,
+    '--output',
+    voiceCredentialFile,
+    '--wait-for-ready-ms',
+    String(waitForReadyMs),
+    ...(voiceCredentialTargetDeviceId ? ['--target-device-id', voiceCredentialTargetDeviceId] : []),
+    ...(options.voiceCredentialAccessTokenFile ? ['--access-token-file', options.voiceCredentialAccessTokenFile] : []),
+  ];
+  console.log('local-device-link-smoke fetching mobile voice credential from device-link');
+  runNodeScript(fetchVoiceCredentialScript, args);
 }
 
 function sleep(ms) {
@@ -791,6 +851,10 @@ function parseArgs(args) {
     startExpo: false,
     voiceCloudAllCandidates: process.env.XDT_MOBILE_E2E_VOICE_CLOUD_ALL_CANDIDATES === '1',
     voiceCloudPreflight: process.env.XDT_MOBILE_E2E_VOICE_CLOUD_PREFLIGHT === '1',
+    voiceCredentialFile: process.env.XDT_MOBILE_VOICE_CREDENTIAL_FILE,
+    voiceCredentialFromDevice: process.env.XDT_MOBILE_VOICE_CREDENTIAL_FROM_DEVICE === '1',
+    voiceCredentialTargetDeviceId: process.env.XDT_MOBILE_VOICE_CREDENTIAL_TARGET_DEVICE_ID,
+    voiceCredentialAccessTokenFile: process.env.XDT_MOBILE_AUTH_ACCESS_TOKEN_FILE,
     voiceProxyBaseUrl: undefined,
     voiceProxyPort: undefined,
     waitForReadyMs: undefined,
@@ -824,6 +888,10 @@ function parseArgs(args) {
     }
     if (arg === '--voice-cloud-all-candidates') {
       parsed.voiceCloudAllCandidates = true;
+      continue;
+    }
+    if (arg === '--voice-credential-from-device') {
+      parsed.voiceCredentialFromDevice = true;
       continue;
     }
     if (arg === '--no-mock-audio') {
@@ -885,6 +953,21 @@ function parseArgs(args) {
     }
     if (arg === '--voice-proxy-base-url') {
       parsed.voiceProxyBaseUrl = normalizeBaseUrl(readValue(args, index, arg));
+      index += 1;
+      continue;
+    }
+    if (arg === '--voice-credential-file') {
+      parsed.voiceCredentialFile = readValue(args, index, arg);
+      index += 1;
+      continue;
+    }
+    if (arg === '--voice-credential-target-device-id') {
+      parsed.voiceCredentialTargetDeviceId = readValue(args, index, arg);
+      index += 1;
+      continue;
+    }
+    if (arg === '--voice-credential-access-token-file') {
+      parsed.voiceCredentialAccessTokenFile = readValue(args, index, arg);
       index += 1;
       continue;
     }

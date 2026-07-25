@@ -4,7 +4,7 @@
  */
 import { describe, it, expect } from 'vitest';
 
-import { resolveEffort, resolveProviderSwitchEffort, clampEffortToSupported } from '../effortResolution.js';
+import { resolveEffort, resolveProviderSwitchEffort } from '../effortResolution.js';
 import type { Effort } from '../types.js';
 
 describe('resolveEffort —— 选中模型后 effort 落档优先级', () => {
@@ -177,47 +177,5 @@ describe('resolveProviderSwitchEffort —— 同模型只切来源(严格 per-�
         fallbackEffort: 'high',
       }),
     ).toBe('high');
-  });
-});
-
-describe('clampEffortToSupported —— 未门控入口按模型能力 clamp(issue #456)', () => {
-  const XHIGH_MODEL: readonly Effort[] = ['low', 'medium', 'high', 'xhigh']; // 如 gpt-5.5
-  const ULTRA_MODEL: readonly Effort[] = ['low', 'medium', 'high', 'xhigh', 'max', 'ultra']; // 如 gpt-5.6-sol
-
-  it('模型支持该档 → 原样保留,不降级(保 #352)', () => {
-    expect(clampEffortToSupported('ultra', ULTRA_MODEL)).toBe('ultra');
-    expect(clampEffortToSupported('max', ULTRA_MODEL)).toBe('max');
-    expect(clampEffortToSupported('high', XHIGH_MODEL)).toBe('high');
-  });
-
-  it('超额档(gpt-5.5 + max/ultra)→ clamp 到最高兼容档 xhigh', () => {
-    expect(clampEffortToSupported('max', XHIGH_MODEL)).toBe('xhigh');
-    expect(clampEffortToSupported('ultra', XHIGH_MODEL)).toBe('xhigh');
-  });
-
-  it('clamp 到「rank ≤ 请求档」的最高受支持档(跳过缺失中间档)', () => {
-    const SPARSE: readonly Effort[] = ['low', 'high']; // 无 medium/xhigh/max
-    expect(clampEffortToSupported('xhigh', SPARSE)).toBe('high'); // high(3) ≤ xhigh(4)
-    expect(clampEffortToSupported('medium', SPARSE)).toBe('low'); // low(1) ≤ medium(2);high(3) 超了
-  });
-
-  it('请求档低于全部受支持档 → 最低受支持档(floor,绝不上调到模型默认,#456 review)', () => {
-    // minimal 落在只支持 low+ 的模型:clamp 到 floor(low),不上调到 default(high)——
-    // 否则存量 minimal 定时任务被静默升级、变贵(codex 旧行为是 minimal→low)。
-    expect(clampEffortToSupported('minimal', XHIGH_MODEL)).toBe('low');
-    expect(clampEffortToSupported('minimal', ['medium', 'high', 'xhigh'])).toBe('medium'); // floor=medium
-    expect(clampEffortToSupported('low', ['high', 'xhigh'])).toBe('high'); // 请求 low 低于全部 → floor=high
-  });
-
-  it('efforts 空/缺失 → 原样透传(模型未声明门控,no-break)', () => {
-    expect(clampEffortToSupported('ultra', [])).toBe('ultra');
-    expect(clampEffortToSupported('max', undefined)).toBe('max');
-  });
-
-  it('effort 为空(null/undefined/空串)→ 原样返回(留空 = 不改,不被 clamp 上调)', () => {
-    expect(clampEffortToSupported(undefined, XHIGH_MODEL)).toBeUndefined();
-    expect(clampEffortToSupported(null, XHIGH_MODEL)).toBeNull();
-    // 空串:不在 EFFORT_ORDER 内,若不透传会被当"未知档"clamp 到模型最高受支持档(#456 review)。
-    expect(clampEffortToSupported('', XHIGH_MODEL)).toBe('');
   });
 });

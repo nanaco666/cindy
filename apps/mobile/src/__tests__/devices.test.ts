@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { DeviceView } from '@cindy/device-link';
+import type { DeviceView } from '@lizi/device-link';
 import {
   deviceAccessState,
   isControllableDevice,

@@ -1,14 +1,9 @@
-import { existsSync, readFileSync } from 'node:fs';
 import { createServer } from 'node:http';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
-import { BRAND_NAME } from '@cindy/maker-shared/branding';
+import { BRAND_NAME } from '@lizi/maker-shared/branding';
 
 import {
   buildOAuthReturnAction,
-  getGhostOAuthResultCopy,
-  getOAuthNeutralResultCopy,
   getProviderOAuthResultCopy,
   OAUTH_RESULT_HTML_LANG,
   renderOAuthResultPage,
@@ -46,64 +41,81 @@ const PAGE_LABELS: Record<PageKind, string> = {
   warning: '需要继续操作 · 警告',
 };
 
-/**
- * Login callback copy comes from the SAME source production uses: renderer
- * locale JSONs' `login.browserCallback.*` (authManager resolves them via the
- * main mini-i18n; the preview cannot boot Electron, so it reads the JSON files
- * directly). Ghost / provider / neutral copy comes from the shared builders in
- * oauthResultPage.ts. No preview-only copy table remains — callback copy
- * builder 生产/preview 合一(PR0b-callback)。
- */
-const LOCALE_DIR = path.join(
-  path.dirname(fileURLToPath(import.meta.url)),
-  '../src/renderer/i18n/locales',
-);
+interface PreviewCopy {
+  loginSuccess: { title: string; body: string };
+  loginError: { title: string; body: string };
+  ghostSuccess: { title: string; body: string };
+  ghostError: { title: string; body: string };
+  warning: { title: string; body: string };
+}
 
-/**
- * Preview lang → renderer locale candidates(主干 4 语,中文全并进 zh-CN)。
- */
-const OAUTH_LANG_TO_APP_LOCALES: Record<OAuthResultPageLang, string[]> = {
-  zh: ['zh-CN'],
-  en: ['en'],
-  ja: ['ja'],
-  ko: ['ko'],
+/** Preview-only sample copy. Production flows keep their own localized business copy. */
+const PREVIEW_COPY: Record<OAuthResultPageLang, PreviewCopy> = {
+  zh: {
+    loginSuccess: { title: '登录成功', body: '你可以返回 Cindy 继续使用。' },
+    loginError: { title: '登录未完成', body: '请返回 Cindy 重新发起登录。' },
+    ghostSuccess: { title: '授权成功', body: '意识账号已经连接，你可以返回 Cindy 继续。' },
+    ghostError: { title: '授权失败', body: '回调参数不完整或校验失败，请返回 Cindy 重试。' },
+    warning: { title: '需要继续操作', body: '请返回 Cindy，完成当前工作区的安装后继续。' },
+  },
+  en: {
+    loginSuccess: { title: 'Sign-in complete', body: 'You can return to Cindy to continue.' },
+    loginError: {
+      title: 'Sign-in not completed',
+      body: 'Return to Cindy and start the sign-in again.',
+    },
+    ghostSuccess: {
+      title: 'Authorization complete',
+      body: 'The account is connected. Return to Cindy to continue.',
+    },
+    ghostError: {
+      title: 'Authorization failed',
+      body: 'The callback is incomplete or failed validation. Return to Cindy and try again.',
+    },
+    warning: {
+      title: 'Action required',
+      body: 'Return to Cindy and finish installing in the current workspace.',
+    },
+  },
+  ja: {
+    loginSuccess: { title: 'ログインが完了しました', body: 'Cindy に戻って続行できます。' },
+    loginError: {
+      title: 'ログインを完了できませんでした',
+      body: 'Cindy に戻ってログインをやり直してください。',
+    },
+    ghostSuccess: {
+      title: '認可が完了しました',
+      body: 'アカウントが接続されました。Cindy に戻って続行できます。',
+    },
+    ghostError: {
+      title: '認可に失敗しました',
+      body: 'コールバックの検証に失敗しました。Cindy に戻って再試行してください。',
+    },
+    warning: {
+      title: '操作が必要です',
+      body: 'Cindy に戻り、現在のワークスペースへのインストールを完了してください。',
+    },
+  },
+  ko: {
+    loginSuccess: { title: '로그인 완료', body: 'Cindy로 돌아가 계속할 수 있습니다.' },
+    loginError: {
+      title: '로그인이 완료되지 않았습니다',
+      body: 'Cindy로 돌아가 로그인을 다시 시작하세요.',
+    },
+    ghostSuccess: {
+      title: '인증 완료',
+      body: '계정이 연결되었습니다. Cindy로 돌아가 계속할 수 있습니다.',
+    },
+    ghostError: {
+      title: '인증 실패',
+      body: '콜백 검증에 실패했습니다. Cindy로 돌아가 다시 시도하세요.',
+    },
+    warning: {
+      title: '추가 작업 필요',
+      body: 'Cindy로 돌아가 현재 워크스페이스 설치를 완료하세요.',
+    },
+  },
 };
-
-interface LoginBrowserCallbackCopy {
-  successTitle: string;
-  successBody: string;
-  errorTitle: string;
-  errorBody: string;
-  returnButton: string;
-}
-
-/** Reads production `login.browserCallback.*` copy, interpolating {{appName}}. */
-function loadLoginCallbackCopy(lang: OAuthResultPageLang): LoginBrowserCallbackCopy {
-  for (const locale of OAUTH_LANG_TO_APP_LOCALES[lang]) {
-    const file = path.join(LOCALE_DIR, locale, 'common.json');
-    if (!existsSync(file)) continue;
-    const common = JSON.parse(readFileSync(file, 'utf8')) as {
-      login?: { browserCallback?: Record<string, unknown> };
-    };
-    const raw = common.login?.browserCallback;
-    if (!raw) continue;
-    const resolve = (key: keyof LoginBrowserCallbackCopy): string => {
-      const value = raw[key];
-      if (typeof value !== 'string' || value.length === 0) {
-        throw new Error(`login.browserCallback.${key} missing in ${locale}/common.json`);
-      }
-      return value.replaceAll('{{appName}}', BRAND_NAME);
-    };
-    return {
-      successTitle: resolve('successTitle'),
-      successBody: resolve('successBody'),
-      errorTitle: resolve('errorTitle'),
-      errorBody: resolve('errorBody'),
-      returnButton: resolve('returnButton'),
-    };
-  }
-  throw new Error(`No locale file provides login.browserCallback for lang=${lang}`);
-}
 
 function isPageKind(value: string | null): value is PageKind {
   return PAGE_KINDS.includes(value as PageKind);
@@ -123,6 +135,7 @@ function renderPreviewPage(
   lang: OAuthResultPageLang,
   theme: OAuthResultPageTheme,
 ): string {
+  const samples = PREVIEW_COPY[lang];
   const action = buildOAuthReturnAction(lang, `preview-${kind}`, BRAND_NAME);
   const base: Pick<OAuthResultPageInput, 'htmlLang' | 'theme' | 'action'> = {
     htmlLang: OAUTH_RESULT_HTML_LANG[lang],
@@ -147,49 +160,18 @@ function renderPreviewPage(
     });
   }
 
-  if (kind === 'login-success' || kind === 'login-error') {
-    const login = loadLoginCallbackCopy(lang);
-    const success = kind === 'login-success';
-    // 显式传 login pageKind(implementation-plan Step 4 WHAT1):preview 与生产
-    // (authManager → renderAuthLoopbackPage)同走 wave4 新品牌卡。
-    return renderOAuthResultPage({
-      ...base,
-      pageKind: 'desktop-login',
-      copyKind: 'login.browserCallback',
-      action: { ...action, label: login.returnButton },
-      variant: success ? 'success' : 'error',
-      title: success ? login.successTitle : login.errorTitle,
-      body: success ? login.successBody : login.errorBody,
-      detail: success ? undefined : 'STATE_MISMATCH',
-    });
-  }
+  const page =
+    kind === 'login-success'
+      ? { ...samples.loginSuccess, variant: 'success' as const }
+      : kind === 'login-error'
+        ? { ...samples.loginError, variant: 'error' as const, detail: 'STATE_MISMATCH' }
+        : kind === 'ghost-success'
+          ? { ...samples.ghostSuccess, variant: 'success' as const }
+          : kind === 'ghost-error'
+            ? { ...samples.ghostError, variant: 'error' as const, detail: 'access_denied' }
+            : { ...samples.warning, variant: 'warning' as const };
 
-  if (kind === 'ghost-success' || kind === 'ghost-error') {
-    const ghost = getGhostOAuthResultCopy(lang);
-    const success = kind === 'ghost-success';
-    const body = (success ? ghost.successBody : ghost.errors['invalid-callback']).replaceAll(
-      '{brand}',
-      BRAND_NAME,
-    );
-    return renderOAuthResultPage({
-      ...base,
-      variant: success ? 'success' : 'error',
-      title: success ? ghost.successTitle : ghost.errorTitle,
-      body,
-      detail: success ? undefined : 'access_denied',
-    });
-  }
-
-  // 中性/warning 卡属登录卡族(demo CALLBACK.neutral 即三变体之一),preview 走
-  // 新品牌卡以覆盖成功/失败/中性三变体 × 深浅色对照;生产暂无中性态调用方。
-  const neutral = getOAuthNeutralResultCopy(lang, BRAND_NAME);
-  return renderOAuthResultPage({
-    ...base,
-    pageKind: 'desktop-login',
-    copyKind: 'callback.neutral',
-    variant: 'warning',
-    ...neutral,
-  });
+  return renderOAuthResultPage({ ...base, ...page });
 }
 
 function renderToolbar(

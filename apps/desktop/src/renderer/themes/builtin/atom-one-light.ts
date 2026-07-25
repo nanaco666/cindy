@@ -110,7 +110,7 @@ const singletonOverrides = {
   'settings-btn-primary-text': '#FFFFFF',
   'settings-btn-secondary-hover-bg': HOVER_BG,
   // 用 disabled(比 tertiary 更淡)而非 tertiary:亮色背景下 tertiary≈2.6:1,
-  // 命中 docs/design-rules/cindy-design-system.md §4 禁用 Silver 的对比度,placeholder 需更淡才"读着像空"。
+  // 命中 DESIGN.md §4 禁用 Silver 的对比度,placeholder 需更淡才"读着像空"。
   'text-placeholder': TEXT_DISABLED,
   'settings-integration-avatar-bg': CHIP_BG,
   'settings-logout-bg': CHIP_BG,

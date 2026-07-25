@@ -6,7 +6,7 @@
  * worktree dirty checks, and oneShot label generation.
  */
 
-import type { AgentKind, Maker } from '@cindy/maker-core';
+import type { AgentKind, Maker } from '@lizi/maker-core';
 import { and, desc, eq, isNull } from 'drizzle-orm';
 
 import { GitSnapshotCoordinator } from '../git-snapshot/gitSnapshotCoordinator.js';

@@ -3,8 +3,8 @@
  * flat query 过滤。纯逻辑,node env。
  */
 import { describe, expect, it } from 'vitest';
-import type { MobileModelOption } from '@cindy/maker-shared/agent-capabilities';
-import type { ProviderView } from '@cindy/model-providers/registry';
+import type { MobileModelOption } from '@lizi/maker-shared/agent-capabilities';
+import type { ProviderView } from '@lizi/model-providers/registry';
 
 import type { ProviderModelRow } from '@/session/providerModelSections';
 import {

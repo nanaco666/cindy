@@ -129,58 +129,17 @@ function deepDeleteEncryptedContent(node: unknown): number {
   return removed;
 }
 
-/** Responses `input[]` 里剥掉 encrypted_content 后已无密文的 reasoning 空壳。 */
-function isReasoningItemWithoutEncryptedContent(item: unknown): boolean {
-  if (!isPlainObject(item) || item.type !== 'reasoning') return false;
-  return typeof item.encrypted_content !== 'string' || item.encrypted_content.length === 0;
-}
-
 /**
- * 从 Responses-style `input[]` 丢掉"无 encrypted_content 的 reasoning"空壳。
- * 只删 encrypted_content 键时,xAI 会把残留 reasoning item 判成 ModelInput 反序列化失败 (422)。
- */
-function deepDropEmptyReasoningInputItems(node: unknown): number {
-  let removed = 0;
-  if (Array.isArray(node)) {
-    for (const item of node) removed += deepDropEmptyReasoningInputItems(item);
-    return removed;
-  }
-  if (!isPlainObject(node)) return 0;
-
-  if (Array.isArray(node.input)) {
-    const kept: unknown[] = [];
-    for (const item of node.input) {
-      if (isReasoningItemWithoutEncryptedContent(item)) {
-        removed += 1;
-        continue;
-      }
-      removed += deepDropEmptyReasoningInputItems(item);
-      kept.push(item);
-    }
-    node.input = kept;
-  }
-
-  for (const key of Object.keys(node)) {
-    if (key === 'input') continue;
-    removed += deepDropEmptyReasoningInputItems(node[key]);
-  }
-  return removed;
-}
-
-/**
- * 把请求体里所有 `encrypted_content` 键递归删掉, 并丢掉因此变成空壳的 reasoning input item,
- * 返回新的 Buffer。
+ * 把请求体里所有 `encrypted_content` 键递归删掉, 返回新的 Buffer。
  *
  * 背景: gpt-5.5 等模型经 litellm/Azure 走 OpenAI Responses API (/v1/responses) 时,
  * 请求体的 reasoning item 带 `encrypted_content` (gAAA... 加密推理)。多部署负载均衡把
  * 后续请求路由到另一部署时, 它解不开上一部署的加密推理 → 400 invalid_encrypted_content。
- * xAI 同类失败文案是 "Could not decrypt the provided encrypted_content" (400/422)。
  * 删掉 encrypted_content 再重发即可恢复 (代价: 模型丢失上一轮的加密推理链, 可见对话保留)。
- * 若只删键、保留 type=reasoning 空壳,xAI 会再报 ModelInput 422 —— 所以空壳一并丢掉。
  *
- * 仅在 server.ts 收到该 400/422 后的"透明重试"路径调用, 正常请求不经过此函数。
+ * 仅在 server.ts 收到该 400 后的"透明重试"路径调用, 正常请求不经过此函数。
  *
- * @returns 删掉了至少一个键或空壳 → 新 Buffer; body 非 JSON / 没有该键 → null (调用方据此决定不重试)
+ * @returns 删掉了至少一个键 → 新 Buffer; body 非 JSON / 没有该键 → null (调用方据此决定不重试)
  */
 export function stripEncryptedContentFromBody(rawBody: Buffer): Buffer | null {
   let parsed: unknown;
@@ -189,9 +148,8 @@ export function stripEncryptedContentFromBody(rawBody: Buffer): Buffer | null {
   } catch {
     return null;
   }
-  const removedKeys = deepDeleteEncryptedContent(parsed);
-  if (removedKeys === 0) return null;
-  deepDropEmptyReasoningInputItems(parsed);
+  const removed = deepDeleteEncryptedContent(parsed);
+  if (removed === 0) return null;
   try {
     return Buffer.from(JSON.stringify(parsed), 'utf8');
   } catch {
@@ -333,75 +291,6 @@ export function stripEmptyThinkingFromBody(rawBody: Buffer): Buffer | null {
   }
 }
 
-/** text 块的 `text` 字段是否为空(空串 / 纯空白 / 缺失 / 非字符串都算空)。 */
-function isEmptyTextBlock(block: unknown): boolean {
-  if (!isPlainObject(block)) return false;
-  if (block.type !== 'text') return false;
-  const t = block.text;
-  return typeof t !== 'string' || t.trim().length === 0;
-}
-
-/**
- * 删除请求体里空内容 text 块,返回新 Buffer;没改动 / 非 JSON / 无 messages → null。
- *
- * 背景: anthropic-responses-bridge 修复前会把纯工具轮的 message item 落成
- * `{type:"text", text:""}` 空块写进 Claude Code 会话历史(eager 开块被 function_call
- * 抢占强制关掉)。会话切到真 Anthropic 模型时历史原样回放,API 400:
- * "messages.N.content.M: text content blocks must be non-empty"。bridge 已改为惰性
- * 开块不再产出新空块;本函数负责修复期之前累积的存量脏历史 —— 命中 400 后剥掉
- * 空块透明重试(结构与 stripEmptyThinkingFromBody 一致)。
- *
- * 只处理 messages[].content 顶层块,不深入 tool_result 嵌套 content(实测命中的
- * 只有顶层;嵌套形态被打脸再扩)。
- *
- * 边界: 某条 message 的 content 删空后 → 整条 message 丢弃(Anthropic 也拒空 content)。
- *
- * @returns 删掉至少一个空块 → 新 Buffer; body 非 JSON / messages 非数组 / 无空块 → null
- *          (返回 null 是 cache 安全契约:让代理字节透传,正常会话零影响)。
- */
-export function stripEmptyTextFromBody(rawBody: Buffer): Buffer | null {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(rawBody.toString('utf8'));
-  } catch {
-    return null;
-  }
-  if (!isPlainObject(parsed)) return null;
-  const messages = parsed.messages;
-  if (!Array.isArray(messages)) return null;
-
-  let removed = 0;
-  const keptMessages: unknown[] = [];
-  for (const msg of messages) {
-    if (!isPlainObject(msg) || !Array.isArray(msg.content)) {
-      keptMessages.push(msg);
-      continue;
-    }
-    const keptContent = msg.content.filter((block) => {
-      if (isEmptyTextBlock(block)) {
-        removed += 1;
-        return false;
-      }
-      return true;
-    });
-    if (keptContent.length === msg.content.length) {
-      keptMessages.push(msg); // 该 message 没动
-    } else if (keptContent.length === 0) {
-      // content 被清空 → 整条 message 丢弃;removed 已累加,下方仍判定有改动。
-    } else {
-      keptMessages.push({ ...msg, content: keptContent });
-    }
-  }
-
-  if (removed === 0) return null; // ← cache 安全契约:无改动 → null → 字节透传
-  parsed.messages = keptMessages;
-  try {
-    return Buffer.from(JSON.stringify(parsed), 'utf8');
-  } catch {
-    return null;
-  }
-}
-
 // ───────────────────────────────────────────────────────────────────────────
 // Per-model handlers ——
 // 每个 model 一个独立函数,内部自由实现 strip / 翻译 / 改值。
@@ -509,20 +398,14 @@ export function createActiveStripTransform(opts: {
 // 每条规则把"错误体匹配正则 + 对应 strip 函数"绑在一起,正则与 strip 就近放,单一真相源。
 // ───────────────────────────────────────────────────────────────────────────
 
-// 上游 400/422 错误体命中以下任一 → 判定为"协议加密推理内容解不开"。
-// litellm/Azure: code "invalid_encrypted_content" + "Encrypted content could not be decrypted or parsed."
-// xAI Responses: code "invalid-argument" + "Could not decrypt the provided encrypted_content..."
+// 上游 400 错误体命中以下任一 → 判定为"协议加密推理内容解不开"(litellm/Azure:
+// code "invalid_encrypted_content" + "Encrypted content could not be decrypted or parsed.")。
 const INVALID_ENCRYPTED_CONTENT_RE =
-  /invalid_encrypted_content|invalid-argument[\s\S]{0,160}encrypted_content|could not decrypt(?: the provided)? encrypted_content|encrypted content could not be (?:decrypted|verified|parsed)/i;
+  /invalid_encrypted_content|encrypted content could not be (?:decrypted|verified|parsed)/i;
 
 // Anthropic 400: "messages.N.content.M.thinking: each thinking block must contain thinking"
 // 只匹配不变的核心短语,不锚定会变的 messages.N.content.M 下标前缀。
 const EMPTY_THINKING_RE = /each thinking block must contain thinking/i;
-
-// Anthropic 400: "messages.N.content.M: text content blocks must be non-empty"
-// (纯空白变体: "text content blocks must contain non-whitespace text")。
-// 同样只匹配核心短语,不锚定下标前缀。
-const EMPTY_TEXT_RE = /text content blocks must (?:be non-empty|contain non-whitespace text)/i;
 
 // Azure/LiteLLM 400: "Image generation items without `id` are not supported for this request."
 const IMAGE_GENERATION_WITHOUT_ID_RE =
@@ -603,25 +486,6 @@ export function createEmptyThinkingRecoveryRule(opts: {
     enabled: opts.enabled ?? (() => true),
     match: (text) => EMPTY_THINKING_RE.test(text),
     strip: stripEmptyThinkingFromBody,
-    onRetry: opts.onRetry,
-    threadIdHeaders: opts.threadIdHeaders,
-  };
-}
-
-/**
- * 空 text 块恢复规则: 历史被 bridge 修复前的空 `{type:"text",text:""}` 块污染的会话,
- * 切到真 Anthropic 模型时 400 → 剥掉空块重发。默认 always-on(删空块零代价)。
- */
-export function createEmptyTextRecoveryRule(opts: {
-  enabled?: () => boolean;
-  onRetry?: (threadId: string, model: string) => void;
-  threadIdHeaders?: readonly string[];
-} = {}): RecoveryRule {
-  return {
-    id: 'empty_text',
-    enabled: opts.enabled ?? (() => true),
-    match: (text) => EMPTY_TEXT_RE.test(text),
-    strip: stripEmptyTextFromBody,
     onRetry: opts.onRetry,
     threadIdHeaders: opts.threadIdHeaders,
   };

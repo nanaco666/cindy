@@ -14,12 +14,7 @@
  *   - buildScheduleInput:表单 → CreateScheduleInput(原 toInput 迁入)
  */
 
-import type { CreateScheduleInput, ScheduleTemplate, ScheduleWorkspaceKind, ScriptCapability } from '@cindy/maker-scheduler';
-import {
-  effectiveSourceIdForModel,
-  type AgentKind,
-  type ProviderView,
-} from '@cindy/model-providers';
+import type { CreateScheduleInput, ScheduleTemplate, ScheduleWorkspaceKind, ScriptCapability } from '@lizi/maker-scheduler';
 import type { SessionReference } from '../../../../shared/sessionReference';
 
 /** Effort 白名单 — 与 Phase 2 mapper enum 一致;UI 提交前的最后一道关卡。 */
@@ -42,32 +37,6 @@ export function isExplicitScheduleModelUnavailable(
   return availableModels !== undefined
     && explicitModel.length > 0
     && !availableModels.some((candidate) => candidate.id === explicitModel);
-}
-
-/**
- * Resolve the provider represented by the schedule picker. An empty stored
- * providerId means "use the effective source", not "use the utility fallback
- * chain", so generation must materialize that source before crossing IPC.
- */
-export function resolveScheduleGenerationProviderId(input: {
-  providers: ProviderView[];
-  providerId: string;
-  model: string;
-  agentKind: AgentKind;
-}): string | null {
-  const model = input.model.trim();
-  if (!model) return null;
-  const explicitProviderId = input.providerId.trim();
-  // An explicit provider is a routing boundary, even while disconnected.
-  // Preserve it so main can report that provider's credential/model failure
-  // instead of silently selecting another connected source for the same id.
-  if (explicitProviderId) return explicitProviderId;
-  return effectiveSourceIdForModel(
-    input.providers,
-    null,
-    model,
-    input.agentKind,
-  );
 }
 
 export interface ScheduleFormState {
@@ -149,16 +118,6 @@ export function canSubmitSessionBinding(
 export function hasRealBinding(form: Pick<ScheduleFormState, 'targetSessionId'>): boolean {
   const tgt = form.targetSessionId.trim();
   return !!tgt && tgt !== PENDING_SESSION_ID;
-}
-
-/** True only for a bound schedule that intentionally follows its session route. */
-export function shouldFollowBoundSessionGenerationRoute(
-  form: Pick<ScheduleFormState, 'persistentSession' | 'targetSessionId' | 'providerId' | 'model'>,
-): boolean {
-  return deriveRunMode(form) === 'bound'
-    && hasRealBinding(form)
-    && !form.providerId.trim()
-    && !form.model.trim();
 }
 
 /**

@@ -1,6 +1,3 @@
-import type { MobileSessionAgentSwitchIntent } from '@cindy/maker-shared/device-link-contract';
-import type { AgentInputReference } from '@cindy/maker-shared/agent-input-projection';
-
 export type RemoteSessionStatus = 'active' | 'archived' | 'deleted';
 export type RemoteMessageRole =
   | 'user'
@@ -52,8 +49,6 @@ export interface RemoteSession {
   lastTurnEndedAt?: number | null;
   status: RemoteSessionStatus;
   agentKind: 'cc' | 'codex';
-  /** main 进程内的下一条消息跨 Agent 切换意图；null = 已确认没有。 */
-  agentSwitchIntent?: MobileSessionAgentSwitchIntent | null;
   source?: string;
   orcaRole?: 'lead' | 'worker' | string | null;
   parentSessionId?: string | null;
@@ -155,18 +150,11 @@ export interface QueuedRemoteMessage {
   text: string;
   persistedContent: string;
   files?: RemoteSerializedAttachment[];
-  agentReferences?: AgentInputReference[];
   model: string;
   effort: string;
   permissionMode: string;
   workingDir: string;
   vendorOptions?: Record<string, unknown>;
-  /** 会话深链的定位信息；真实正文由手机控制端从来源桌面读取后固化为可信快照。 */
-  sessionRefs?: import('@/session/sessionReferences').MobileSessionReference[];
-  /** 仅跨 device-link 入站使用；目标桌面投影回手机前会剥离其中的历史正文。 */
-  trustedSessionReferenceContexts?: import('@/session/sessionReferences').MobileSessionReferenceContext[];
-  /** 与桌面队列契约镜像；目标桌面据此禁止缺失快照时按自己的设备坐标重解引用。 */
-  sessionReferencesRequireTrustedSnapshot?: boolean;
   userName?: string;
   createOpts: {
     agentKind: 'claude-code' | 'codex';
@@ -190,8 +178,6 @@ export interface QueuedRemoteMessage {
     files?: RemoteFileRef[];
     images?: RemoteImageRef[];
     quotesEncoded?: boolean;
-    pastedTextRanges?: Array<{ start: number; end: number; display: string }>;
-    slashCommandRanges?: Array<{ start: number; end: number }>;
     isStreaming?: boolean;
     createdAt: string;
   };

@@ -5,7 +5,7 @@
  * （`<userData>/xdt-maker-<userId>.db`，换账号 closeDb 重开），故本表天然账号隔离、
  * 无 owner 列（与 `sessions` 一致）。API key 不在此——按 runtime 单独走 safeStorage（见 routing）。
  *
- * 形状：行 ↔ `@cindy/model-providers` 的 `CustomProviderConfig`（per-runtime）。`runtimes` 列以
+ * 形状：行 ↔ `@lizi/model-providers` 的 `CustomProviderConfig`（per-runtime）。`runtimes` 列以
  * TEXT 存 JSON，出入口转换、反序列化失败安全兜底（{}），不抛错。
  *
  * 验证（`validateCustomProviderConfig`）是纯函数，便于单测；CRUD 经 `getDbClient().drizzle`
@@ -19,7 +19,7 @@ import type {
   CustomProviderConfig,
   CustomProviderRuntimeConfig,
   OAuthProviderDescriptor,
-} from '@cindy/model-providers';
+} from '@lizi/model-providers';
 
 import { getDbClient } from '../localDb/client/current.js';
 import { customProviders } from '../localDb/schema.js';
@@ -64,19 +64,6 @@ function validateRuntime(agent: string, rt: unknown): ValidationResult {
     }
     if (typeof mm.name !== 'string' || mm.name.trim().length === 0) {
       return invalid(`runtime '${agent}' model.name required`);
-    }
-    if (
-      mm.contextWindow !== undefined
-      && (
-        typeof mm.contextWindow !== 'number'
-        || !Number.isFinite(mm.contextWindow)
-        || mm.contextWindow <= 0
-      )
-    ) {
-      return invalid(`runtime '${agent}' model.contextWindow must be a positive number`);
-    }
-    if (mm.defaultEnabled !== undefined && typeof mm.defaultEnabled !== 'boolean') {
-      return invalid(`runtime '${agent}' model.defaultEnabled must be a boolean`);
     }
   }
   if (r.headers !== undefined) {
@@ -180,12 +167,7 @@ export function validateCustomProviderConfig(config: unknown): ValidationResult 
 function normalizeRuntime(rt: CustomProviderRuntimeConfig): CustomProviderRuntimeConfig {
   const seen = new Set<string>();
   const models = rt.models
-    .map((m) => ({
-      id: m.id.trim(),
-      name: m.name.trim(),
-      ...(m.contextWindow !== undefined ? { contextWindow: m.contextWindow } : {}),
-      ...(m.defaultEnabled === false ? { defaultEnabled: false } : {}),
-    }))
+    .map((m) => ({ id: m.id.trim(), name: m.name.trim() }))
     .filter((m) => {
       if (!m.id || !m.name || seen.has(m.id)) return false;
       seen.add(m.id);
@@ -282,19 +264,10 @@ function parseRuntimes(raw: string): Partial<Record<AgentKind, CustomProviderRun
     const r = rt as Record<string, unknown>;
     const models = Array.isArray(r.models)
       ? r.models
-          .filter((m): m is Record<string, unknown> =>
+          .filter((m): m is { id: string; name: string } =>
             !!m && typeof m === 'object' && typeof (m as { id?: unknown }).id === 'string',
           )
-          .map((m) => ({
-            id: String(m.id),
-            name: String(m.name ?? ''),
-            ...(typeof m.contextWindow === 'number'
-              && Number.isFinite(m.contextWindow)
-              && m.contextWindow > 0
-              ? { contextWindow: m.contextWindow }
-              : {}),
-            ...(m.defaultEnabled === false ? { defaultEnabled: false } : {}),
-          }))
+          .map((m) => ({ id: String(m.id), name: String((m as { name?: unknown }).name ?? '') }))
       : [];
     const entry: CustomProviderRuntimeConfig = {
       baseUrl: typeof r.baseUrl === 'string' ? r.baseUrl : '',

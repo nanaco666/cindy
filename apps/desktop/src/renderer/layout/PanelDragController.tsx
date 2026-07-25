@@ -97,7 +97,7 @@ const MIN_DROP_TARGET_SIZE_PX = 40;
 /**
  * 纯函数:该矩形是否够格当落点。换位语义是"拖到另一块面板身上",折叠(w-0)或
  * 隐藏(rect 全 0)的面板没有可落的身体 —— 收集落点时过滤,而不是靠上层开关
- * 猜测哪些面板在场(N 面板通用后,任何按具体面板写死的开关都是错的)。
+ * 猜测哪些面板在场(C1b N 面板通用后,任何按具体面板写死的开关都是错的)。
  */
 export function isDroppableRect(width: number, height: number): boolean {
   return width >= MIN_DROP_TARGET_SIZE_PX && height >= MIN_DROP_TARGET_SIZE_PX;
@@ -127,7 +127,7 @@ interface DropTarget {
   trigger: TriggerRange;
 }
 
-/** 起拖时一次性缓存的几何:全部可落靶面板(N 面板,拖到谁身上就和谁换位)。 */
+/** 起拖时一次性缓存的几何:全部可落靶面板(C1b:N 面板,拖到谁身上就和谁换位)。 */
 interface DragGeometry {
   targets: DropTarget[];
 }
@@ -162,7 +162,7 @@ export function PanelDragController({
 
     /** 进入拖动态:量一次几何 + 挂全局监听 + webview 穿透 + 禁选中。 */
     const activateDrag = (sourceKind: string, startX: number, startY: number) => {
-      // 可落靶面板 = root 分割里除源之外的每一个 pane(N 面板通用,拖到谁
+      // 可落靶面板 = root 分割里除源之外的每一个 pane(C1b:N 面板通用,拖到谁
       // 身上就和谁换位);高亮/提交区域是各自**当下的真实矩形**(Lizi 定案:
       // 高亮必须是"会被交换的那块区域"的尺寸,不是半屏)。
       // 几何一次性缓存:拖动期间不换位、界面静止,没有需要每帧重量的理由。
@@ -349,8 +349,7 @@ export function PanelDragController({
   // 视觉(全走主题 token,规则 16;无文案免 i18n):
   //   1. 落点高亮:半透明淡蓝罩层(VSCode 拖 tab 落点同款质感)——透出下方内容,
   //      取色基于 focus-ring 语义蓝低透明度混合,light / dark / 扩展主题都自然;
-  //   2. 拖影:迷你面板骨架卡,微倾斜 + 淡入起手动画(内层卡的 transform 被
-  //      居中偏移+倾斜占用,起手动画只能碰 opacity,不许上 scale 类 keyframe)。
+  //   2. 拖影:迷你面板骨架卡,微倾斜 + zoom-in 起手动画;点亮目标时描边跟随变色。
   //      外层定位壳(translate3d 跟手,热路径直改)与内层视觉卡(居中偏移 + 倾斜)
   //      分离 —— transform 各自独立,互不覆盖。
   return createPortal(
@@ -358,7 +357,7 @@ export function PanelDragController({
       {zone && (
         <div
           aria-hidden
-          className="pointer-events-none fixed z-[9998] rounded-xl border animate-fade-in"
+          className="pointer-events-none fixed z-[9998] rounded-xl border animate-in fade-in duration-150"
           style={{
             left: zone.left,
             top: zone.top,
@@ -381,7 +380,7 @@ export function PanelDragController({
         className="pointer-events-none fixed left-0 top-0 z-[9999] will-change-transform"
       >
         <div
-          className="h-[110px] w-[170px] rounded-xl border animate-fade-in"
+          className="h-[110px] w-[170px] rounded-xl border animate-in fade-in zoom-in-90 duration-150"
           style={{
             transform: 'translate(-50%, -58%) rotate(-2deg)',
             background: 'var(--surface-elevated)',

@@ -95,7 +95,7 @@ function canThumbnail(absPath: string, mimeType: string | undefined): boolean {
 
 // sharp 懒加载:带原生二进制,启动期不加载;不可用则缩略图整体降级走原图路径
 // (与 file-browser/thumbnail 同取舍)。
-type SharpModule = (typeof import('sharp'))['default'];
+type SharpModule = typeof import('sharp');
 let sharpInstance: SharpModule | null = null;
 let sharpLoadAttempted = false;
 function loadSharp(): SharpModule | null {
@@ -187,7 +187,7 @@ async function parseSshMediaOrigin(url: string): Promise<{ remoteHostId: string;
 function resolveLocalMedia(url: string): { absPath: string; mimeType?: string } {
   if (url.startsWith('xdt-image://')) return imageCacheStore.resolveSafe(url);
   if (url.startsWith('xdt-video://')) return videoCacheStore.resolveSafe(url);
-  // cindy-media 内容寻址 blob(统一媒体仓):resolveSafe 自带指纹校验
+  // cindy-media 内容寻址 blob(新世界统一媒体仓):resolveSafe 自带指纹校验
   // 与仓内前缀双保险,mime 由扩展名白名单定死。
   if (url.startsWith('cindy-media://')) return cindyMediaBlobStore.resolveSafe(url);
   // file/audio 是 ?path= 直引本机文件,mime 交给 uploadLocalFile 按 ext 推断。

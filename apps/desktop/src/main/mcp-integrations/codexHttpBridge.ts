@@ -1,5 +1,5 @@
 /**
- * codexHttpBridge — 把 in-process Cindy MCP server 实例通过 streamable-HTTP
+ * codexHttpBridge — 把 in-process lizi_mcp McpServer 实例通过 streamable-HTTP
  * 暴露给 codex app-server 子进程。
  *
  * 架构：
@@ -21,11 +21,10 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
-import { runWithLiziMcpSessionContext, type LiziMcpSessionContext } from '@cindy/mcps';
+import { runWithLiziMcpSessionContext, type LiziMcpSessionContext } from 'lizi-mcps';
 
-import type { Logger } from '@cindy/maker-core';
+import type { Logger } from '@lizi/maker-core';
 import { createCodexMcpThreadContextStore } from './codexMcpThreadContextStore.js';
-import { CODEX_DISABLED_BUILTIN_PLUGIN_IDS_KEY } from './codexBuiltinToolPolicy.js';
 
 const SERVER_HEADER = 'Lizi_MCPS/1.0';
 const MCP_PATH_PREFIX = '/mcp/';
@@ -56,15 +55,13 @@ export interface StartCodexHttpBridgeOptions {
    * streamable-http session 必须拿到独立实例。
    */
   serverFactories: Record<string, () => McpServer>;
-  /** Built-in plugin id for each policy-controlled MCP server. */
-  pluginIdByServerName?: Record<string, string>;
   logger: Logger;
 }
 
 export async function startCodexHttpBridge(
   opts: StartCodexHttpBridgeOptions,
 ): Promise<CodexHttpBridge> {
-  const log = opts.logger.child('@cindy/mcps-http-bridge');
+  const log = opts.logger.child('lizi-mcps-http-bridge');
   const token = randomBytes(32).toString('hex');
 
   const serverNames = Object.keys(opts.serverFactories);
@@ -135,7 +132,6 @@ export async function startCodexHttpBridge(
         serverName,
         log,
         threadContextStore,
-        pluginId: opts.pluginIdByServerName?.[serverName],
       });
     } catch (err) {
       log.error('request handler threw', {
@@ -285,7 +281,6 @@ interface DispatchOpts {
   serverName: string;
   log: Logger;
   threadContextStore: ReturnType<typeof createCodexMcpThreadContextStore>;
-  pluginId?: string;
 }
 
 interface SessionTransport {
@@ -303,7 +298,7 @@ interface SessionTransport {
  * 重新 init MCP server 的开销)。
  */
 async function dispatchToTransport(opts: DispatchOpts): Promise<void> {
-  const { req, res, createMcpServer, transports, serverName, log, threadContextStore, pluginId } = opts;
+  const { req, res, createMcpServer, transports, serverName, log, threadContextStore } = opts;
 
   const sessionIdHeader = req.headers['mcp-session-id'];
   const sessionId = typeof sessionIdHeader === 'string' ? sessionIdHeader : undefined;
@@ -347,20 +342,6 @@ async function dispatchToTransport(opts: DispatchOpts): Promise<void> {
         decision,
         registeredThreadCount: threadContextStore.registeredThreadCount(),
       });
-    }
-    const blockedToolCall = pluginId
-      ? findBlockedToolCall(parsedBody, threadContextStore, pluginId)
-      : undefined;
-    if (blockedToolCall && pluginId) {
-      log.info('blocked Codex built-in tool call', {
-        serverName,
-        pluginId,
-        reason: blockedToolCall.reason,
-        sessionId: prefixId(blockedToolCall.context?.sessionId),
-        workingDir: blockedToolCall.context?.workingDir,
-      });
-      writeBlockedToolCallResponse(res, parsedBody, pluginId, blockedToolCall.reason);
-      return;
     }
     if (activeContext) {
       await runWithLiziMcpSessionContext(activeContext, () =>
@@ -428,76 +409,6 @@ async function dispatchToTransport(opts: DispatchOpts): Promise<void> {
     }
     throw err;
   }
-}
-
-/** One policy-controlled tools/call that must not reach its MCP transport. */
-interface BlockedToolCall {
-  reason: 'disabled' | 'missing_thread_context';
-  context?: LiziMcpSessionContext;
-}
-
-function findBlockedToolCall(
-  body: unknown,
-  threadContextStore: ReturnType<typeof createCodexMcpThreadContextStore>,
-  pluginId: string,
-): BlockedToolCall | undefined {
-  const messages = Array.isArray(body) ? body : [body];
-  for (const message of messages) {
-    if (
-      message === null ||
-      typeof message !== 'object' ||
-      (message as { method?: unknown }).method !== 'tools/call'
-    ) {
-      continue;
-    }
-    // Resolve each tools/call independently. Batch siblings such as MCP
-    // notifications may legitimately omit threadId and must not make a
-    // disabled call fail open.
-    const threadId = extractCodexThreadIdFromMessage(message);
-    const context = threadContextStore.getContextForThreadId(threadId);
-    // Ordinary built-in providers are initialized globally, so the bridge is
-    // their only deterministic per-thread policy boundary. A malformed or
-    // stale client must not bypass that boundary by omitting an id or naming
-    // a thread that was never registered.
-    if (!context) {
-      return { reason: 'missing_thread_context' };
-    }
-    const raw = context?.vendorOptions?.[CODEX_DISABLED_BUILTIN_PLUGIN_IDS_KEY];
-    if (Array.isArray(raw) && raw.some((id) => id === pluginId)) {
-      return { reason: 'disabled', context };
-    }
-  }
-  return undefined;
-}
-
-function writeBlockedToolCallResponse(
-  res: http.ServerResponse,
-  body: unknown,
-  pluginId: string,
-  reason: BlockedToolCall['reason'],
-): void {
-  const message = reason === 'disabled'
-    ? `Built-in tool "${pluginId}" is disabled for this session. Enable it in Settings and start a new session to apply the change.`
-    : `Built-in tool "${pluginId}" could not verify this session's tool policy. Start a new session and try again.`;
-  const disabledResult = (id: unknown) => ({
-    jsonrpc: '2.0',
-    id: id ?? null,
-    result: {
-      content: [{
-        type: 'text',
-        text: message,
-      }],
-      isError: true,
-    },
-  });
-  const payload = Array.isArray(body)
-    ? body
-      .filter((message) => message !== null && typeof message === 'object' && 'id' in message)
-      .map((message) => disabledResult((message as { id?: unknown }).id))
-    : disabledResult((body as { id?: unknown }).id);
-  res.statusCode = 200;
-  res.setHeader('content-type', 'application/json');
-  res.end(JSON.stringify(payload));
 }
 
 async function readJsonBody(

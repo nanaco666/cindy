@@ -2,10 +2,9 @@ import { app, BrowserWindow, ipcMain } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
 
-import type { DictationDictionaryLearningAction } from '@cindy/voice-input-core';
+import type { DictationDictionaryLearningAction } from '@lizi/voice-input-core';
 
 import { createLogger } from '../logger.js';
-import { ownerScopedUserDataPath, getActiveAppSession } from '../appSessionState.js';
 import { throwIpcError } from '../utils/ipcValidate.js';
 import {
   applyVoiceInputDictionaryLearningActions,
@@ -45,7 +44,6 @@ type DataChangedPayload = {
 
 export class VoiceInputDataStore {
   private state: StoredVoiceInputData | null = null;
-  private stateOwnerId: string | null = null;
 
   getSnapshot(): VoiceInputDataSnapshot {
     return cloneSnapshot(this.load());
@@ -201,9 +199,6 @@ export class VoiceInputDataStore {
   }
 
   private load(): StoredVoiceInputData {
-    const ownerId = getActiveAppSession().dataOwnerId;
-    if (this.state && this.stateOwnerId !== ownerId) this.state = null;
-    this.stateOwnerId = ownerId;
     if (this.state) return this.state;
     const filePath = getDataFilePath();
     try {
@@ -373,10 +368,7 @@ function voiceInputDataStoreIpcErrorResult(error: unknown): VoiceInputSyncErrorR
 }
 
 function getDataFilePath(): string {
-  // Keep the pre-auth bootstrap path compatible with legacy installs. Once a
-  // stable owner exists (including local-v1), all voice data is owner-scoped.
-  const ownerId = getActiveAppSession().dataOwnerId;
-  return ownerId ? ownerScopedUserDataPath(DATA_FILE_NAME) : path.join(app.getPath('userData'), DATA_FILE_NAME);
+  return path.join(app.getPath('userData'), DATA_FILE_NAME);
 }
 
 function broadcastVoiceInputDataChanged(payload: DataChangedPayload): void {

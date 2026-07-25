@@ -57,7 +57,7 @@ function usage() {
     'Options:',
     '  --app-url=http://localhost:5173',
     '  --cdp=http://127.0.0.1:9222',
-    '  --email=dev@example.com',
+    '  --email=weikailing@xd.com',
     '  --hub-env=/path/to/skill-hub/.env',
     '  --screenshots-dir=/tmp/xdt-skillhub-management-e2e',
   ].join('\n');

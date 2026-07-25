@@ -1,8 +1,8 @@
 /**
  * Embedding 模型 catalog — 硬编码的可用 model 元信息。
  *
- * XD Gateway /v1/embeddings 当前支持的 7 个模型 (2026-05-24)。
- * 价格 / dim / maxTokens 均来自 provider 官方文档对齐 XD Gateway。
+ * xdproxy /v1/embeddings 当前支持的 7 个模型 (2026-05-24)。
+ * 价格 / dim / maxTokens 均来自 provider 官方文档对齐 xdproxy 网关。
  *
  * 新增模型:
  *   1. 同步追加 types.ts EmbeddingModelId 联合

@@ -4,20 +4,17 @@
  * 需求:app 退出(崩溃 / ⌘Q)时在飞的任务,重启后在会话里给出「继续任务 / 忽略」
  * 提示,不再靠用户口头输入"继续"。
  *
- * 设计(2026-07-06 产品决策的简化重构,替代早期的多进程标记所有权协议):
+ * 设计(2026-07-06 Dash 拍板的简化重构,替代早期的多进程标记所有权协议):
  *  - sessions 上两个 **append-only 覆盖写**的时间戳,没有"清除"操作:
  *      · active_turn_started_at —— turn 启动(status:isRunning=true)时写 now;
  *      · last_turn_ended_at     —— turn 正常收尾(done / terminal error / close /
- *        stop / reconcile)或用户确认「继续 / 忽略」旧中断时写 now。
+ *        stop / reconcile)或用户点「忽略」时写 now。
  *  - 「疑似中断」= 纯读判定:startedAt > endedAt(且 > cleared_at,且会话空闲)。
  *    崩溃 / 强杀没有机会写 ended;⌘Q 由退出编排的 freeze 挡住 shutdown close
  *    触发的 ended 写 —— 两者重启后都满足 startedAt > endedAt。
  *  - **不往消息流插任何行**:提示是纯 UI 态(renderer 打开会话时读 session 行
- *    判定,InterruptedTurnBanner 展示);「忽略」立即写 ended，「继续」在 vendor
- *    dispatch 成功后用 dispatch 前冻结的时间戳写 ended。旧版本
- *    插入的 reason='app-exit-interrupted' 历史行仍由 renderer 按尾部错误行优雅
- *    展示。「继续」先把续跑项插到队首，真正 dispatch 后才确认旧中断；续跑
- *    turn 启动会写新的 startedAt，因此再次中断仍能被识别。
+ *    判定,InterruptedTurnBanner 展示);「忽略」= 写一次 ended。旧版本插入的
+ *    reason='app-exit-interrupted' 历史行仍由 renderer 按尾部错误行优雅展示。
  *
  * 为什么这样够了(与早期协议版的取舍):
  *  - 没有 clear 操作 → 不存在清标与 mark / sweep / error 持久化的并发交错,
@@ -117,7 +114,7 @@ export function markSessionTurnStarted(sessionId: string): void {
 }
 
 /**
- * turn 正常收尾 / 用户确认继续或忽略中断提示:写 last_turn_ended_at。幂等,
+ * turn 正常收尾 / 用户忽略中断提示:写 last_turn_ended_at。幂等,
  * fire-and-forget。frozen 后 no-op(见 _quitFrozen)。
  *
  * endedAtOverride:调用方需要把写入延后(如等 error 行 durable 后再写,见
@@ -153,19 +150,15 @@ export function markSessionTurnEndedAfterBarrier(sessionId: string, barrier: Pro
 }
 
 /**
- * 用户显式确认「继续 / 忽略」中断提示的 awaited 版收尾打标:与
- * markSessionTurnEnded 同一落库路径(链 + MAX 守卫),但**等本次 UPDATE
- * 真正落库(含排在前面的链上写)后
- * 才 resolve** —— 调用入口需要在返回 / 广播 sessions:patched 之前确认持久化,
- * 否则用户确认后立刻退出,写还在内存链上,重启后同一提示复现(review P2)。
+ * 用户显式「忽略」中断提示的 awaited 版收尾打标:与 markSessionTurnEnded 同一
+ * 落库路径(链 + MAX 守卫),但**等本次 UPDATE 真正落库(含排在前面的链上写)后
+ * 才 resolve** —— IPC handler 需要在返回 / 广播 sessions:patched 之前确认持久化,
+ * 否则用户点忽略后立刻退出,写还在内存链上,重启后同一提示复现(review P2)。
  * 写失败吞错落日志照旧(本地 SQLite UPDATE 失败极罕见,不为它扩 UI 错误面),
  * 但 resolve 时"写已尝试完成"的时序保证成立。
  */
-export async function ackSessionTurnEndedDurable(
-  sessionId: string,
-  endedAtOverride?: number,
-): Promise<number> {
-  const endedAt = Math.min(endedAtOverride ?? Date.now(), Date.now());
+export async function ackSessionTurnEndedDurable(sessionId: string): Promise<number> {
+  const endedAt = Date.now();
   if (!_quitFrozen) await enqueueEndedWrite(sessionId, endedAt);
   return endedAt;
 }

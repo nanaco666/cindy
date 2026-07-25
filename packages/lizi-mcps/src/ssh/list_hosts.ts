@@ -34,7 +34,7 @@ export function registerSshListHostsTool(
             : {}),
         });
       } catch (err) {
-        deps.logger?.error?.(`[cindy_ssh] ssh_list_hosts failed: ${String(err)}`);
+        deps.logger?.error?.(`[lizi_ssh] ssh_list_hosts failed: ${String(err)}`);
         return errorPayload('INTERNAL', `读取主机列表失败：${err instanceof Error ? err.message : String(err)}`);
       }
     },

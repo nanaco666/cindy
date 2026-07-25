@@ -10,7 +10,6 @@ import { MAKER_PUSH } from '../../maker-ipc/channels';
 
 const DRAFT = { title: '标题标题标题', body: '正文'.repeat(20), type: 'bug' as const };
 const ENV = { appVersion: '0.0.112', platform: 'darwin', arch: 'arm64', osVersion: '25.5.0' };
-const IDENTITY = { kind: 'github-user', login: 'octocat' } as const;
 
 function lastRequestId(broadcast: ReturnType<typeof vi.fn>): string {
   const call = broadcast.mock.calls.findLast(
@@ -31,18 +30,13 @@ describe('IssueConfirmBridge', () => {
   it('request → broadcast kind=issue_confirm 的 INTERACTION_REQUEST payload', () => {
     const broadcast = vi.fn();
     const bridge = new IssueConfirmBridge({ broadcast });
-    void bridge.request('sess-1', DRAFT, ENV, IDENTITY);
+    void bridge.request('sess-1', DRAFT, ENV);
     expect(broadcast).toHaveBeenCalledTimes(1);
     const [channel, payload] = broadcast.mock.calls[0];
     expect(channel).toBe(MAKER_PUSH.INTERACTION_REQUEST);
     expect(payload).toMatchObject({
       sessionId: 'sess-1',
-      request: {
-        kind: 'issue_confirm',
-        draft: DRAFT,
-        env: ENV,
-        submissionIdentity: IDENTITY,
-      },
+      request: { kind: 'issue_confirm', draft: DRAFT, env: ENV },
     });
     expect((payload as { request: { requestId: string } }).request.requestId).toBeTruthy();
   });
@@ -50,7 +44,7 @@ describe('IssueConfirmBridge', () => {
   it('resolve 确认 decision → promise settle 为 confirmed,值取卡片当前版', async () => {
     const broadcast = vi.fn();
     const bridge = new IssueConfirmBridge({ broadcast });
-    const promise = bridge.request('sess-1', DRAFT, ENV, IDENTITY);
+    const promise = bridge.request('sess-1', DRAFT, ENV);
     const requestId = lastRequestId(broadcast);
     const hit = bridge.resolve(requestId, {
       confirmed: true,
@@ -79,7 +73,7 @@ describe('IssueConfirmBridge', () => {
   it('resolve 取消 decision → cancelled;未知 requestId → 返 false', async () => {
     const broadcast = vi.fn();
     const bridge = new IssueConfirmBridge({ broadcast });
-    const promise = bridge.request('sess-1', DRAFT, ENV, IDENTITY);
+    const promise = bridge.request('sess-1', DRAFT, ENV);
     const requestId = lastRequestId(broadcast);
     expect(bridge.resolve('nope', { confirmed: false })).toBe(false);
     expect(bridge.resolve(requestId, { confirmed: false })).toBe(true);
@@ -104,7 +98,7 @@ describe('IssueConfirmBridge', () => {
     const broadcast = vi.fn();
     const warn = vi.fn();
     const bridge = new IssueConfirmBridge({ broadcast, logger: { warn } });
-    const promise = bridge.request('sess-1', DRAFT, ENV, IDENTITY);
+    const promise = bridge.request('sess-1', DRAFT, ENV);
     const requestId = lastRequestId(broadcast);
     expect(bridge.resolve(requestId, { confirmed: true, title: '' })).toBe(true);
     await expect(promise).resolves.toEqual({ confirmed: false, reason: 'cancelled' });
@@ -114,7 +108,7 @@ describe('IssueConfirmBridge', () => {
   it('超时 → timeout decision + 广播 INTERACTION_DISMISSED', async () => {
     const broadcast = vi.fn();
     const bridge = new IssueConfirmBridge({ broadcast, timeoutMs: 1000 });
-    const promise = bridge.request('sess-1', DRAFT, ENV, IDENTITY);
+    const promise = bridge.request('sess-1', DRAFT, ENV);
     const requestId = lastRequestId(broadcast);
     vi.advanceTimersByTime(1001);
     await expect(promise).resolves.toEqual({ confirmed: false, reason: 'timeout' });
@@ -129,8 +123,8 @@ describe('IssueConfirmBridge', () => {
   it('cleanupForSession 只清目标会话的 pending,并广播收卡', async () => {
     const broadcast = vi.fn();
     const bridge = new IssueConfirmBridge({ broadcast });
-    const p1 = bridge.request('sess-1', DRAFT, ENV, IDENTITY);
-    const p2 = bridge.request('sess-2', DRAFT, ENV, IDENTITY);
+    const p1 = bridge.request('sess-1', DRAFT, ENV);
+    const p2 = bridge.request('sess-2', DRAFT, ENV);
     bridge.cleanupForSession('sess-1', 'session_aborted');
     await expect(p1).resolves.toEqual({ confirmed: false, reason: 'session_aborted' });
     const dismissed = broadcast.mock.calls.filter(

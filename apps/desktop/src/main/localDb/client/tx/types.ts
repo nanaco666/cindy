@@ -17,9 +17,6 @@ export type DbTxName =
   | 'sessions.renameTitles'
   | 'sessions.setStatus'
   | 'session.agentSwitchFallback'
-  | 'message.delete'
-  | 'im.deleteBindings'
-  | 'im.replaceBinding'
   | 'session.importShare';
 
 export interface CodexImportMessagesArgs {
@@ -69,11 +66,7 @@ export interface RewindCommitArgs {
 
 export interface ForkSessionArgs {
   sourceSessionId: string;
-  /** /clear 之前的行不属于当前可见/原生上下文，fork 时不得重新带回。 */
-  sourceClearedAt?: number | null;
   targetCreatedAt: number;
-  /** 与 targetCreatedAt 同毫秒时按 SQLite 插入顺序截断；null/缺省表示整毫秒前缀。 */
-  targetRowid?: number | null;
   newSession: {
     id: string;
     title: string;
@@ -106,16 +99,6 @@ export interface ForkSessionArgs {
   legacyTranscriptParentUuids?: string[];
   /** Imported Claude assistant rows may retain an external tool-use parent id. */
   toolParentUuids?: string[];
-  /**
-   * 复制的 agent_switch 只保留展示/交接信息，不继承父会话的停泊原生 session。
-   * 否则父子分支稍后切回旧引擎时会共同续写同一个 vendor session。
-   */
-  detachAgentSwitchSessions?: boolean;
-  /**
-   * user 目标恰好是切换后的首条消息时，该消息不会被复制；把对应边界恢复为
-   * consumed=false，使新分支首次发送时重新注入同一份 handoff。
-   */
-  resetHandoffBoundaryClientId?: string | null;
   /**
    * main 侧预生成的新 message id 列表,顺序对应 source 消息按 created_at ASC 的遍历顺序。
    * 长度必须等于 source message 数。
@@ -249,31 +232,6 @@ export interface SessionAgentSwitchFallbackArgs {
   updatedAt: number;
 }
 
-/**
- * 一次消息删除动作涉及的全部本地记录。删除 assistant 时，这里会包含同一真实
- * 用户轮中的 thinking / tool / 自动续跑 / 多段 assistant；删除 user 时只有目标行。
- * 正文/元数据清空为最小 tombstone、清原生会话绑定、写入隐藏的上下文重建标记
- * 必须在同一事务内提交，避免崩溃后继续 resume 含被删消息的旧 transcript。
- */
-export interface MessageDeleteArgs {
-  sessionId: string;
-  clientIds: string[];
-  contextMarker: {
-    id: string;
-    clientId: string;
-    content: string;
-    createdAt: number;
-  };
-  updatedAt: number;
-}
-
-export interface MessageDeleteResult {
-  messages: Array<{
-    messageId: string;
-    clientId: string;
-  }>;
-}
-
 export interface SessionsSetStatusResultItem {
   sessionId: string;
   title: string | null;
@@ -333,29 +291,6 @@ export interface SessionImportShareArgs {
   }>;
 }
 
-/**
- * Atomically replace every persisted owner of a desktop session with one IM
- * identity. The same identity may already point at another session.
- */
-export interface ImReplaceBindingArgs {
-  channel: string;
-  botContextId: string;
-  userId: string;
-  scopeKey: string;
-  targetSessionId: string;
-  attachedAt: number;
-  attachedViaCardMessageId: string | null;
-}
-
-export interface ImDeleteBindingsArgs {
-  identities: Array<{
-    channel: string;
-    botContextId: string;
-    userId: string;
-    scopeKey: string;
-  }>;
-}
-
 export type DbTxArgsByName = {
   'codex.importMessages': CodexImportMessagesArgs;
   'claude.importMessages': ClaudeImportMessagesArgs;
@@ -375,9 +310,6 @@ export type DbTxArgsByName = {
   'sessions.renameTitles': SessionsRenameTitlesArgs;
   'sessions.setStatus': SessionsSetStatusArgs;
   'session.agentSwitchFallback': SessionAgentSwitchFallbackArgs;
-  'message.delete': MessageDeleteArgs;
-  'im.deleteBindings': ImDeleteBindingsArgs;
-  'im.replaceBinding': ImReplaceBindingArgs;
   'session.importShare': SessionImportShareArgs;
 };
 
@@ -400,8 +332,5 @@ export type DbTxResultByName = {
   'sessions.renameTitles': SessionsRenameTitleResult[];
   'sessions.setStatus': SessionsSetStatusResultItem[];
   'session.agentSwitchFallback': undefined;
-  'message.delete': MessageDeleteResult;
-  'im.deleteBindings': undefined;
-  'im.replaceBinding': undefined;
   'session.importShare': { messageCount: number };
 };

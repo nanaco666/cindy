@@ -43,7 +43,6 @@ export type IpcErrorCode =
   | 'WORKER_STATE_CHANGED'
   | 'BUDGET_MODEL_REQUIRES_API_MODE'
   | 'NO_PROVIDER_FOR_AGENT'
-  | 'PROVIDER_ROUTE_UNAVAILABLE'
   // 会话内 /goal
   | 'GOAL_ALREADY_ACTIVE'
   | 'GOAL_NOT_FOUND'
@@ -87,8 +86,6 @@ export type IpcErrorCode =
   | 'DEVICE_LINK_TIMEOUT' // 等待远端响应超时
   | 'DEVICE_LINK_VERSION_MISMATCH' // 两端协议/版本不匹配
   | 'DEVICE_LINK_MEDIA_TRANSFER_FAILED' // 远程媒体经 OSS 中转失败(出方向附件上传 / 入方向取媒体)
-  | 'SESSION_REFERENCE_UNAVAILABLE' // 会话引用不存在、离线、撤权、预算/形状非法
-  | 'SESSION_REFERENCE_UNSUPPORTED' // 目标端版本不能消费可信会话引用快照
   // right-sidebar tabs(对标 Codex in-app browser sidebar 多 Tab 容器)
   | 'RIGHT_SIDEBAR_TOO_MANY_TABS' // 单 session 超 20 个 tab
   | 'RIGHT_SIDEBAR_UNKNOWN_KIND' // kind 不在 plugin registry 里
@@ -160,7 +157,6 @@ const IPC_ERROR_CODES: ReadonlySet<IpcErrorCode> = new Set<IpcErrorCode>([
   'WORKER_STATE_CHANGED',
   'BUDGET_MODEL_REQUIRES_API_MODE',
   'NO_PROVIDER_FOR_AGENT',
-  'PROVIDER_ROUTE_UNAVAILABLE',
   'GOAL_ALREADY_ACTIVE',
   'GOAL_NOT_FOUND',
   'LEARN_BUSY',
@@ -190,8 +186,6 @@ const IPC_ERROR_CODES: ReadonlySet<IpcErrorCode> = new Set<IpcErrorCode>([
   'DEVICE_LINK_TIMEOUT',
   'DEVICE_LINK_VERSION_MISMATCH',
   'DEVICE_LINK_MEDIA_TRANSFER_FAILED',
-  'SESSION_REFERENCE_UNAVAILABLE',
-  'SESSION_REFERENCE_UNSUPPORTED',
   'RIGHT_SIDEBAR_TOO_MANY_TABS',
   'RIGHT_SIDEBAR_UNKNOWN_KIND',
   'RIGHT_SIDEBAR_STATE_TOO_LARGE',

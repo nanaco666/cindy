@@ -2,7 +2,7 @@
  * art/video/providers/happyhorse.ts
  * ---------------------------------------------------------------------------
  * VideoProvider implementation for Aliyun DashScope HappyHorse video models,
- * routed through XD Gateway's `/dashscope/...` passthrough (per llms.txt:
+ * routed through xdproxy's `/dashscope/...` passthrough (per llms.txt:
  * "Video — DashScope (HappyHorse)").
  *
  * One LLM-facing alias (`happyhorse`) — opt-in, NOT a default. The seedance
@@ -42,10 +42,10 @@ import {
   joinProxyUrl,
   parseJsonResponse,
   requireApiKey,
-  GatewayHttpError,
-  type GatewayHttpAuth,
-} from '../../api/gatewayHttp.js';
-import type { LiziMcpLogger } from '@cindy/mcps';
+  XdproxyHttpError,
+  type XdproxyHttpAuth,
+} from '../../api/xdproxyHttp.js';
+import type { LiziMcpLogger } from 'lizi-mcps';
 import type {
   VideoGenerationRequest,
   VideoProvider,
@@ -60,7 +60,7 @@ export interface CreateHappyhorseProviderOptions {
   submitPath?: string;
   /** Default template: `/dashscope/api/v1/tasks/{id}`. `{id}` substituted with task id. */
   pollPathTemplate?: string;
-  getApiKey: GatewayHttpAuth['getApiKey'];
+  getApiKey: XdproxyHttpAuth['getApiKey'];
   fetchImplementation?: typeof fetch;
   logger?: LiziMcpLogger;
 }
@@ -200,7 +200,7 @@ export function createHappyhorseProvider(
     signal?: AbortSignal,
   ): Promise<VideoTaskHandle> {
     if (alias !== 'happyhorse') {
-      throw new GatewayHttpError(
+      throw new XdproxyHttpError(
         `happyhorse: unknown alias '${alias}'`,
         400,
       );
@@ -234,7 +234,7 @@ export function createHappyhorseProvider(
     );
     const taskId = parsed.output?.task_id;
     if (!taskId) {
-      throw new GatewayHttpError(
+      throw new XdproxyHttpError(
         'happyhorse submit response missing output.task_id',
         res.status,
         parsed,
@@ -316,7 +316,7 @@ export function createHappyhorseProvider(
     // DashScope returns an OSS signed URL — plain GET, no auth header.
     const res = await doFetch(videoUrl, { method: 'GET', signal });
     if (!res.ok) {
-      throw new GatewayHttpError(
+      throw new XdproxyHttpError(
         `happyhorse download failed HTTP ${res.status}`,
         res.status,
       );

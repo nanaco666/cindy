@@ -63,40 +63,6 @@ export function getRefreshTokenReplacementCandidate(
   return latestStoredToken;
 }
 
-/**
- * 会话失效的展示分类 —— 客户端内部分类,从不透传服务端 message / 内部细节。
- * renderer 按 reason 映射本地化文案,让用户区分「被顶下线」与「自然过期」等成因。
- */
-export type SessionExpiredReason =
-  /** 凭证已被其他设备/实例替换或吊销(replacement-retry 追不上新 token)。 */
-  | 'replaced-elsewhere'
-  /** refresh token 自然过期。 */
-  | 'expired'
-  /** 凭证与本机设备指纹不匹配(如 userData 被复制到别的机器)。 */
-  | 'device-mismatch'
-  /** 账号被禁用 / 删除。 */
-  | 'account-unavailable'
-  /** 本机凭证文件被共享 userData 的外部实例清除(磁盘 token 消失但本会话活着)。 */
-  | 'credential-lost'
-  /** 无法归因的确定性失效,走通用文案。 */
-  | 'unknown';
-
-/** 把服务端确定性失效码映射为展示分类;未识别码一律 unknown(通用文案兜底)。 */
-export function resolveSessionExpiredReason(code: string | undefined): SessionExpiredReason {
-  switch (code) {
-    case 'INVALID_REFRESH_TOKEN':
-      return 'replaced-elsewhere';
-    case 'REFRESH_TOKEN_EXPIRED':
-      return 'expired';
-    case 'DEVICE_MISMATCH':
-      return 'device-mismatch';
-    case 'MEMBERSHIP_DISABLED':
-      return 'account-unavailable';
-    default:
-      return 'unknown';
-  }
-}
-
 export type RefreshFailureAction =
   | { kind: 'transient-failure' }
   | { kind: 'definitive-failure' }

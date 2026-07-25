@@ -35,10 +35,6 @@ export interface IssueEnvInfo {
   osVersion: string;
 }
 
-/** 确认后真正写入 GitHub 的身份；卡片必须原样展示，避免把平台代提交误认成用户本人。 */
-export type IssueSubmissionIdentity =
-  { kind: 'github-user'; login: string } | { kind: 'platform'; login: string };
-
 export type IssueConfirmDecision =
   | {
       confirmed: true;
@@ -79,7 +75,6 @@ export class IssueConfirmBridge {
     sessionId: string,
     draft: IssueDraft,
     env: IssueEnvInfo,
-    submissionIdentity: IssueSubmissionIdentity,
   ): Promise<IssueConfirmDecision> {
     const requestId = randomUUID();
     return new Promise<IssueConfirmDecision>((resolve) => {
@@ -90,7 +85,7 @@ export class IssueConfirmBridge {
       this.pending.set(requestId, { sessionId, resolve, timeoutId });
       this.deps.broadcast(MAKER_PUSH.INTERACTION_REQUEST, {
         sessionId,
-        request: { kind: 'issue_confirm', requestId, draft, env, submissionIdentity },
+        request: { kind: 'issue_confirm', requestId, draft, env },
       });
     });
   }

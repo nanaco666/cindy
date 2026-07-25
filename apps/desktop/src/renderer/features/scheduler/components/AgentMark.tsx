@@ -10,7 +10,7 @@
 
 import { CodexMark } from '@/components/icons/CodexMark';
 import { ClaudeMark } from '@/components/icons/ClaudeMark';
-import type { AgentKind } from '@cindy/maker-scheduler';
+import type { AgentKind } from '@lizi/maker-scheduler';
 
 interface Props {
   agentKind: AgentKind;

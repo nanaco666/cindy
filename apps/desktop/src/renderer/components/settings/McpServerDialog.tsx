@@ -201,7 +201,7 @@ export function McpServerDialog({ initial, existingIds, onSaved, onClose }: McpS
       <div
         className={cn(
           'flex max-h-[88vh] w-[600px] flex-col rounded-[16px]',
-          'border border-[var(--border-default)] bg-[var(--surface-elevated)]',
+          'border border-[var(--login-card-border)] bg-[var(--login-card-bg)]',
           'shadow-[var(--shadow-menu)]',
         )}
       >
@@ -400,7 +400,7 @@ export function McpServerDialog({ initial, existingIds, onSaved, onClose }: McpS
             )}
           >
             {saving && (
-              <span className="absolute left-[18px] inline-flex animate-spin motion-reduce:animate-none">
+              <span className="absolute left-[18px] inline-flex animate-spin">
                 <Loader2 className="h-[14px] w-[14px]" />
               </span>
             )}

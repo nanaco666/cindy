@@ -193,30 +193,6 @@ export class DictationRefiner {
     this.usesBundledDefaultPrompt = this.systemPrompt === DEFAULT_DICTATION_REFINER_SYSTEM_PROMPT;
   }
 
-  /**
-   * Builds a request that shares the exact prompt prefix of a real refinement
-   * (system prompt + promptVersion + context) with an empty dictationText.
-   * Hosts POST it to a warmup endpoint right when recording starts, so the
-   * upstream prompt cache is hot before the user stops speaking. The object
-   * key order matches refine(): everything up to and including `context` is a
-   * byte-identical prefix; only the trailing dictation-dependent fields differ.
-   */
-  buildWarmupRequest(): { system: string; user: unknown; promptVersion: string } {
-    const contextWithMatches = this.getContext('');
-    const { replyToMessage, userDictionaryMatches, ...context } = contextWithMatches;
-    void replyToMessage;
-    void userDictionaryMatches;
-    return {
-      system: this.systemPrompt,
-      promptVersion: this.promptVersion,
-      user: {
-        promptVersion: this.promptVersion,
-        context,
-        dictationText: '',
-      },
-    };
-  }
-
   async refine(input: {
     text: string;
     runId: string;

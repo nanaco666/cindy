@@ -25,13 +25,7 @@ vi.mock('@/lib/logger', () => ({
 }));
 
 const authState = vi.hoisted(() => ({
-  current: {
-    user: { id: 'user-1' },
-    dataOwnerId: 'user-1',
-    mode: 'cloud',
-    logout: vi.fn().mockResolvedValue(undefined),
-    exitLocalMode: vi.fn().mockResolvedValue(undefined),
-  },
+  current: { user: { id: 'user-1' } },
 }));
 
 vi.mock('@/contexts/AuthContext', () => ({
@@ -99,9 +93,7 @@ describe('LocalDbGate 有限重试', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.clearAllMocks();
-    authState.current.user = { id: 'user-1' };
-    authState.current.dataOwnerId = 'user-1';
-    authState.current.mode = 'cloud';
+    authState.current = { user: { id: 'user-1' } };
   });
 
   afterEach(() => {
@@ -153,8 +145,7 @@ describe('LocalDbGate 有限重试', () => {
     await flushAsync(); // 决策#1 失败,count=1,等待重试
 
     // 重试等待期切换账号 → 触发全新决策
-    authState.current.user = { id: 'user-2' };
-    authState.current.dataOwnerId = 'user-2';
+    authState.current = { user: { id: 'user-2' } };
     await act(async () => {
       view.rerender(gateTree());
     });

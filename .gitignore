@@ -43,9 +43,11 @@ apps/desktop/resources/remote-file-service/
 apps/claude-code-bin/
 apps/codex-bin/
 apps/ripgrep-bin/
+apps/cua-driver-bin/
 tools/claude/updates/
 tools/codex/updates/
 tools/ripgrep/updates/
+tools/cua-driver/updates/
 
 # ── 日志 / 下载 / 本地运行态 ─────────────────────────────────
 logs/
@@ -61,22 +63,12 @@ apps/desktop/codex-home/
 .cindy/
 
 # ── 设计与开发临时产物 ───────────────────────────────────────
+docs/design_docs/.tmp_screenshots/
 docs/superpowers/
 
 # ── IDE / 本地知识工具 ───────────────────────────────────────
 .idea/
 .vscode/
-.vs/
-.fleet/
-.zed/
-.nova/
-.metadata/
-.history/
-.ionide/
-xcuserdata/
-*.xcuserstate
-*.sublime-workspace
-**/nbproject/private/
 .codegraph/
 .obsidian/
 
@@ -96,10 +88,10 @@ nul
 
 # ── AI coding agent 本地状态 ──────────────────────────────────
 # 国际主流
-# Agent 工具私有目录整体忽略；共享说明只通过 AGENTS.md / CLAUDE.md 提交。
-.agents/
-.learnings/
-.claude/
+# .claude 整体忽略,但共享 skill(review-pr 等,由 agent-use/ 单源生成)反向豁免——
+# 用 `.claude/*` 而非 `.claude/`:gitignore 排除整个目录后 `!` 无法重新包含其子项。
+.claude/*
+!.claude/skills/
 CLAUDE.local.md
 .codex/
 .cursor/
@@ -134,15 +126,9 @@ CLAUDE.local.md
 # ── Cindy/XDMaker 开发者本地工作区 ───────────────────────────
 # local 模式的端点清单(restart:desktop:local 从 config/endpoint.json 生成,api/auth/device-link 指 localhost)
 config/endpoint.local.json
-# dev 区端点清单为本地文件(内部/自托管环境各自维护,不入仓)。
-# mobile 打包静态引用该文件;缺失时从 config/endpoint.dev.json.example 复制一份。
-config/endpoint.dev.json
 # 发布机本地地区 / 签名配置；仓库只保留对应的 .example 文件。
 apps/mobile/scripts/self-host-regions.json
 apps/desktop/scripts/release-regions.json
-# 视觉基线截图是开发者本地对照数据(可能截到真实会话内容),不入仓;
-# 本地跑 visual-baseline-check 时会自动生成。
-apps/mobile/e2e/visual-baselines/
 .cindy-worktrees/
 # 品牌迁移前已创建的 worktree 仍需保持 ignored。
 .xdt-worktrees/
@@ -152,8 +138,14 @@ apps/mobile/e2e/visual-baselines/
 /dev-*.bat
 /dev-*.ps1
 
-# worktree 回收豁免哨兵(会话工具生成,永不入仓)
-.worktree-keep
-
-# 内置插件种子已废弃(改走 plugin-store 安装);历史克隆含私有插件与凭证,永不入仓。
-apps/desktop/resources/builtin-ghosts/
+# ── review-pr skill 运行时状态(auto 模式落盘,per-machine) ──────────
+# thread-resolve 提醒去重状态
+scripts/review-pr/.reminded.json
+# 停滞飞书催办去重状态
+scripts/review-pr/.remind-feishu.json
+# 空转指纹(context.mjs --scan-all 落盘、pre-check.mjs 比对)
+scripts/review-pr/.last-scan.json
+# 自动跟进修复(fix-handoff)的 PR→跟进会话绑定与投递去重状态
+scripts/review-pr/.fix-sessions.json
+# auto 模式并发锁(prepare.mjs 写 .lock / .lock.takeover)
+scripts/review-pr/.lock*

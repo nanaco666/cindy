@@ -1,9 +1,9 @@
-import type { SessionSendResult } from '@cindy/maker-core';
+import type { SessionSendResult } from '@lizi/maker-core';
 import {
   assertSendDispatched,
   toSessionDispatchOutcome,
   type SessionDispatchOutcome,
-} from '@cindy/maker-core';
+} from '@lizi/maker-core';
 
 import { createLogger } from '../logger.js';
 

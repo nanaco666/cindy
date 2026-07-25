@@ -81,13 +81,9 @@ export function BrowserTabBody({ state, ctx, active }: BrowserTabBodyProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const slotRef = useRef<HTMLDivElement>(null);
   const browser = useBrowserWebview(tabId, sessionId);
-  const initialNavigationTabRef = useRef<string | null>(null);
-  const stateUrlRef = useRef(state.url);
-  const browserUrlRef = useRef(browser.url);
+  const navigatedKeyRef = useRef<string | null>(null);
   const suppressStaleUrlRef = useRef<{ targetUrl: string; staleUrl: string } | null>(null);
   const navigateRef = useRef(browser.navigate);
-  stateUrlRef.current = state.url;
-  browserUrlRef.current = browser.url;
   navigateRef.current = browser.navigate;
 
   // 把 pool 的 wrapper 挂进 slot —— useLayoutEffect(在 paint 前移 DOM,避免闪)。
@@ -153,20 +149,27 @@ export function BrowserTabBody({ state, ctx, active }: BrowserTabBodyProps) {
     ctx.patchState({ isAudible: browser.isAudible });
   }, [browser.isAudible, ctx, state.isAudible]);
 
-  // 持久化 URL 只用于 tab 首次物化 / 重启恢复。后续 state.url 是 webview 导航
-  // 的观测结果,绝不能再反向驱动 loadURL:跨 origin 重定向时 React state 可能
-  // 落后一帧,双向 reconcile 会把 authorize / callback 互相覆盖成死循环。
-  // 用户地址栏与 agent 导航都有各自明确的命令入口,不依赖 state 反向触发。
+  // 首次 mount(或切到新 tabId)→ 用 state.url 主动 navigate。
+  // 已经在 state.url 上 / 当前 hook URL 是空(刚 attach 还没载入)→ 跳过判 url 不
+  // 一致就发起 navigate;Electron 自己会去重 didNavigate 不重复加载相同 URL。
+  // deps **不**含 browser(整对象引用每次 render 都新,会让 effect 多跑;navigate
+  // 是稳定 useCallback,通过 ref 取最新值),只在 (tabId, state.url) 实际变化时 fire。
   useEffect(() => {
-    if (initialNavigationTabRef.current === tabId) return;
-    initialNavigationTabRef.current = tabId;
-    const nextUrl = stateUrlRef.current || 'about:blank';
-    const currentUrl = browserUrlRef.current;
-    if (currentUrl && isSameNavigationUrl(currentUrl, nextUrl)) return;
+    const nextUrl = state.url || 'about:blank';
+    const key = `${tabId}::${state.url}`;
+    if (navigatedKeyRef.current === key) return;
+    navigatedKeyRef.current = key;
+    if (browser.url && isSameNavigationUrl(browser.url, nextUrl)) return;
+    if (browser.url && !isSameNavigationUrl(browser.url, nextUrl)) {
+      suppressStaleUrlRef.current = {
+        targetUrl: nextUrl,
+        staleUrl: browser.url,
+      };
+    }
     // about:blank 默认状态下也要 navigate,确保 webview 真的处于 about:blank,
     // 不会停留在 pool 创建时未 setAttribute('src') 的"未初始化"状态。
     navigateRef.current(nextUrl);
-  }, [tabId]);
+  }, [browser.url, tabId, state.url]);
 
   const reloadRef = useRef(browser.reload);
   const goBackRef = useRef(browser.goBack);
@@ -181,6 +184,7 @@ export function BrowserTabBody({ state, ctx, active }: BrowserTabBodyProps) {
 
   const handleNavigate = useCallback(
     (nextUrl: string) => {
+      navigatedKeyRef.current = `${tabId}::${nextUrl}`;
       if (browser.url && !isSameNavigationUrl(browser.url, nextUrl)) {
         suppressStaleUrlRef.current = {
           targetUrl: nextUrl,
@@ -195,7 +199,7 @@ export function BrowserTabBody({ state, ctx, active }: BrowserTabBodyProps) {
         isAudible: false,
       });
     },
-    [browser.url, ctx],
+    [browser.url, ctx, tabId],
   );
 
   // 浏览器级快捷键 (focus URL bar / 前进后退 / 刷新) —— 组合键定义在
@@ -332,10 +336,7 @@ export function BrowserTabBody({ state, ctx, active }: BrowserTabBodyProps) {
   // 主线程被打断重启),对 crashed/killed/oom 走 navigate(等价于 reload,但能
   // 容忍 webContents 已经死掉的情况)。两种都会触发 did-start-loading → 清 crash。
   const handleRecover = useCallback(() => {
-    if (
-      browser.crash?.reason === 'unresponsive' ||
-      browser.crash?.reason === 'navigation-loop'
-    ) {
+    if (browser.crash?.reason === 'unresponsive') {
       browser.reload();
     } else {
       browser.navigate(state.url || 'about:blank');
@@ -456,18 +457,14 @@ function BrowserCrashBanner({
   onRecover: () => void;
 }) {
   const { t } = useTranslation();
-  // 区分导航熔断、unresponsive 与进程崩溃。沿用同一个克制的恢复 banner,
-  // 不新增布局或视觉分支。
+  // 区分 unresponsive(卡死)vs 其它(进程崩溃 / killed / oom)的标题文案 ——
+  // 卡死可能自己恢复,真崩了必须 reload。
   const titleKey =
-    reason === 'navigation-loop'
-      ? 'rightSidebar.browser.crash.navigationLoopTitle'
-      : reason === 'unresponsive'
+    reason === 'unresponsive'
       ? 'rightSidebar.browser.crash.unresponsiveTitle'
       : 'rightSidebar.browser.crash.crashedTitle';
   const descKey =
-    reason === 'navigation-loop'
-      ? 'rightSidebar.browser.crash.navigationLoopDesc'
-      : reason === 'unresponsive'
+    reason === 'unresponsive'
       ? 'rightSidebar.browser.crash.unresponsiveDesc'
       : 'rightSidebar.browser.crash.crashedDesc';
   return (

@@ -36,60 +36,6 @@ describe('WorkerThreadTransport', () => {
     await expect(pending).rejects.toThrow(/db worker exited|terminated/i);
   });
 
-  it('applies bounded backpressure before posting more RPCs to the worker', async () => {
-    const transport = new WorkerThreadTransport({
-      useInlineWorker: true,
-      maxInFlightRpcs: 1,
-      maxQueuedRpcs: 1,
-    });
-    try {
-      const active = transport.send('sleep', { ms: 30 });
-      const queued = transport.send('echoTransfer', { buffer: new ArrayBuffer(4) });
-      await expect(
-        transport.send('query', { sql: 'SELECT 1' }),
-      ).rejects.toThrow(/RPC queue overloaded/);
-
-      await expect(active).resolves.toEqual({ slept: 30 });
-      await expect(queued).resolves.toEqual({ byteLength: 4 });
-    } finally {
-      await transport.close();
-    }
-  });
-
-  it('counts queue wait against the RPC timeout budget', async () => {
-    const transport = new WorkerThreadTransport({
-      useInlineWorker: true,
-      maxInFlightRpcs: 1,
-      maxQueuedRpcs: 1,
-      rpcTimeoutMs: 100,
-    });
-    const startedAt = Date.now();
-    try {
-      const active = transport.send('sleep', { ms: 70 });
-      const queued = transport.send('sleep', { ms: 100 });
-      await expect(active).resolves.toEqual({ slept: 70 });
-      await expect(queued).rejects.toThrow(/RPC timeout/);
-      expect(Date.now() - startedAt).toBeLessThan(140);
-    } finally {
-      await transport.close();
-    }
-  });
-
-  it('terminates promptly instead of queueing closeDb behind existing work', async () => {
-    const transport = new WorkerThreadTransport({
-      useInlineWorker: true,
-      maxInFlightRpcs: 1,
-      maxQueuedRpcs: 1,
-    });
-    const active = transport.send('sleep', { ms: 1_000 });
-    const queued = transport.send('query', { sql: 'SELECT 1' });
-    const activeRejection = expect(active).rejects.toThrow(/transport closed/);
-    const queuedRejection = expect(queued).rejects.toThrow(/transport closed/);
-
-    await expect(transport.close()).resolves.toBeUndefined();
-    await Promise.all([activeRejection, queuedRejection]);
-  });
-
   it('transfers ArrayBuffer ownership through postMessage transferList', async () => {
     const transport = new WorkerThreadTransport({ useInlineWorker: true });
     try {
@@ -106,7 +52,7 @@ describe('WorkerThreadTransport', () => {
     }
   });
 
-  it('normalizes fork.session fields in the inline worker fallback', async () => {
+  it('normalizes fork.session workingDir in the inline worker fallback', async () => {
     const transport = new WorkerThreadTransport({ useInlineWorker: true });
     try {
       await transport.send('exec', {
@@ -151,19 +97,6 @@ describe('WorkerThreadTransport', () => {
           rewind_at INTEGER
         )`,
       });
-      await transport.send('exec', {
-        sql: `INSERT INTO messages (
-          id, client_id, session_id, role, content, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?)`,
-        params: [
-          'switch',
-          'switch-client',
-          'src',
-          'agent_switch',
-          JSON.stringify({ fromAgentKind: 'cc', fromSdkSessionId: 'parent-claude-session' }),
-          50,
-        ],
-      });
 
       await transport.send('tx', {
         name: 'fork.session',
@@ -197,8 +130,7 @@ describe('WorkerThreadTransport', () => {
             updatedAt: 1,
           },
           uuidMap: [],
-          detachAgentSwitchSessions: true,
-          newMessageIds: [{ id: 'forked-switch', clientId: 'forked-switch-client' }],
+          newMessageIds: [],
         },
       });
 
@@ -206,13 +138,6 @@ describe('WorkerThreadTransport', () => {
         sql: 'SELECT working_dir FROM sessions WHERE id = ?',
         params: ['forked'],
       })).resolves.toEqual({ working_dir: 'D:/repo/project' });
-      const copiedSwitch = await transport.send<{ content: string }>('queryOne', {
-        sql: 'SELECT content FROM messages WHERE id = ?',
-        params: ['forked-switch'],
-      });
-      expect(JSON.parse(copiedSwitch.content)).toMatchObject({
-        fromSdkSessionId: null,
-      });
     } finally {
       await transport.close();
     }

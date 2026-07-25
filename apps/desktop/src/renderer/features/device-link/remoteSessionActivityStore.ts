@@ -22,7 +22,7 @@ import { useSyncExternalStore } from 'react';
 
 export type RemoteSessionActivityPhase = 'running' | 'needs-interaction' | 'completed' | 'error';
 
-/** 镜像 @cindy/device-link 的 SessionActivityPayload(renderer 不直接依赖该包)。 */
+/** 镜像 @lizi/device-link 的 SessionActivityPayload(renderer 不直接依赖该包)。 */
 export interface RemoteSessionActivity {
   sessionId: string;
   phase: RemoteSessionActivityPhase;

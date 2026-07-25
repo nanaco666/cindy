@@ -5,7 +5,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, readlinkSync, rmSync, statSync } from 'node:fs';
 import type { Stream } from 'node:stream';
 import { app } from 'electron';
-import { BRAND_NAME } from '@cindy/maker-shared/branding';
+import { BRAND_NAME } from '@lizi/maker-shared/branding';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import type {
@@ -16,10 +16,14 @@ import type {
   ComputerDriverStatus,
   ComputerMcpDeps,
   ComputerMcpToolName,
-} from '@cindy/mcps';
+} from 'lizi-mcps';
 import { createLogger } from '../logger.js';
+import {
+  CompanionHost,
+  createProductionDeps,
+} from '../computer-use-companion/CompanionHost.js';
 
-const logger = createLogger('mcp/cindy_computer');
+const logger = createLogger('mcp/lizi_computer');
 const DRIVER_COMMAND = 'cua-driver';
 const STATUS_TIMEOUT_MS = 3_000;
 const DOCTOR_TIMEOUT_MS = 10_000;
@@ -45,11 +49,13 @@ const PERMISSIONS_GRANT_REUSE_MAX_AGE_MS = 15_000;
 const MAX_STDOUT_BYTES = 5 * 1024 * 1024;
 const MAX_STDERR_BYTES = 512 * 1024;
 const DOCS_URL = 'https://cua.ai/docs/cua-driver';
-const UNIX_INSTALL_COMMAND =
+// darwin 已迁移到 companion bundle，不再使用 trycua 上游安装脚本。
+// 以下常量仅供 Linux 与 Windows 路径使用。
+const LINUX_INSTALL_COMMAND =
   '/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/trycua/cua/main/libs/cua-driver/scripts/install.sh)"';
 const WINDOWS_INSTALL_COMMAND =
   'irm https://raw.githubusercontent.com/trycua/cua/main/libs/cua-driver/scripts/install.ps1 | iex';
-const UNIX_INSTALL_URL = 'https://raw.githubusercontent.com/trycua/cua/main/libs/cua-driver/scripts/install.sh';
+const LINUX_INSTALL_URL = 'https://raw.githubusercontent.com/trycua/cua/main/libs/cua-driver/scripts/install.sh';
 const WINDOWS_INSTALL_URL = 'https://raw.githubusercontent.com/trycua/cua/main/libs/cua-driver/scripts/install.ps1';
 // 上游 trycua/cua 是 monorepo,cua-driver 的 release tag 前缀固定为 cua-driver-rs-v。
 // 版本发现走「按前缀过滤 tag」的 matching-refs API,而不是翻 /releases 列表:
@@ -57,8 +63,7 @@ const WINDOWS_INSTALL_URL = 'https://raw.githubusercontent.com/trycua/cua/main/l
 // 都在「翻不够会漏检(backport 乱序 / driver tag 被挤出)」与「翻到底会耗尽
 // 未鉴权 60/h 限额、403 后静默降级成无更新」之间两头堵(review 拉锯实锤)。
 // matching-refs 一次请求返回全量 cua-driver-rs-v* tag(当前约 50 个,单页),
-// 零遗漏、请求量恒定;随后按版本倒序精确核对 release + 当前平台 asset,
-// 防止上游先推 tag、后发布安装包的窗口把不可安装版本暴露给用户。
+// 零遗漏、请求量恒定;asset 大小仅在确认有更新时再用一个请求按 tag 精确拉取。
 const CUA_DRIVER_TAG_REFS_URL =
   'https://api.github.com/repos/trycua/cua/git/matching-refs/tags/cua-driver-rs-v';
 const CUA_DRIVER_RELEASE_BY_TAG_URL =
@@ -72,6 +77,9 @@ const UPDATE_CHECK_TIMEOUT_MS = 10_000;
 const LOG_OUTPUT_PREVIEW_CHARS = 2_000;
 const TYPE_TEXT_CHUNK_CHARS = 400;
 const CUA_DRIVER_SESSION_PROCESS_NONCE = randomUUID().replace(/-/g, '').slice(0, 12);
+// 0.12.2 changed `permissions status` into a strictly read-only daemon query.
+// Older builds may touch ScreenCaptureKit while checking capturability.
+const PASSIVE_PERMISSION_STATUS_MIN_VERSION = '0.12.2';
 const SCREENSHOT_OUTPUT_TOOL_NAMES = new Set<ComputerMcpToolName>(['get_window_state']);
 const DRIVER_SESSION_ARG_TOOL_NAMES = new Set<ComputerMcpToolName>([
   'list_windows',
@@ -132,8 +140,44 @@ const PROCESS_SNAPSHOT_CACHE_MS = 2_000;
 const LIST_WINDOWS_LOCAL_ARG_NAMES = new Set(['query', 'workspace_root', 'process_name']);
 const WIN32_FALLBACK_SOURCE = 'xdmaker_win32_fallback';
 const WINDOWS_WIN32_FALLBACK_TOOL_NAMES = new Set<ComputerMcpToolName>(['list_windows', 'list_apps']);
-// CuaDriver 的 macOS app bundle 安装位置(LaunchServices 拉起 daemon / 取图标共用)。
-const CUA_DRIVER_APP_BUNDLE_PATH = '/Applications/CuaDriver.app';
+
+/**
+ * Stage A 身份切换后，daemon TCC 归因 bundle id。
+ * CLI 调用必须附带 CUA_DRIVER_EMBEDDED=1 + CUA_DRIVER_HOST_BUNDLE_ID，
+ * 否则 CLI 在 daemon 缺席时会以错误 TCC 身份自动拉起 standalone /Applications/CuaDriver.app。
+ * 导出供 computer-permission-guide 子系统复用，避免重复硬编码。
+ */
+export const COMPANION_BUNDLE_ID = 'com.xd.cindy.computer-use';
+
+/** companion 安装在 userData 下的稳定路径名 */
+const COMPANION_INSTALL_DIR = 'computer-use';
+const COMPANION_BUNDLE_NAME = 'Cindy Computer Use.app';
+
+/** 旧 CuaDriver 的 bundle id（用于旧授权迁移检测）。 */
+const LEGACY_CUA_DRIVER_BUNDLE_ID = 'com.trycua.driver';
+
+/** 探测权限使用 `call check_permissions` 而非 `permissions status`（spike Task 0 结论）。 */
+const CHECK_PERMISSIONS_TIMEOUT_MS = 10_000;
+
+let computerDriverPermissionProbePaused = false;
+
+/**
+ * Stage A:返回 userData 下已安装的 companion bundle 路径（拖拽 payload 来源）。
+ *
+ * macOS permission panes accept application bundles as native file drags.
+ * Keep the technical bundle path in main; renderer only sees "Computer Use".
+ * 非 darwin 或 companion 未安装时返回 null。
+ */
+export function getComputerDriverAppBundlePath(): string | null {
+  if (process.platform !== 'darwin') return null;
+  const companionPath = path.join(
+    app.getPath('userData'),
+    COMPANION_INSTALL_DIR,
+    COMPANION_BUNDLE_NAME,
+  );
+  if (!existsSync(companionPath)) return null;
+  return companionPath;
+}
 
 const WINDOWS_WIN32_WINDOW_SNAPSHOT_SCRIPT = String.raw`
 $ErrorActionPreference = 'Stop'
@@ -325,12 +369,16 @@ export interface ComputerDriverPermissionGrantResult {
 }
 
 export interface ComputerMcpDepsOptions {
-  isComputerUseEnabled?: (context?: ComputerMcpCallContext) => boolean;
+  isComputerUseEnabled?: () => boolean;
+  /** Optional provider gate before the first status/tool request. */
+  prepareRuntimeBeforeUse?: () => Promise<void>;
 }
 
 interface ComputerDriverStatusOptions {
   includeDoctor?: boolean;
   forcePermissionProbe?: boolean;
+  /** Passive surfaces must not trigger ScreenCaptureKit authorization prompts. */
+  skipPermissionProbe?: boolean;
   /**
    * 显式用户动作(重新检查 / 开启开关)专用:先重启 daemon 再实测。
    * 背景:辅助功能(AX)被用户在系统设置里撤销后,**正在运行的 daemon 感知不到**
@@ -348,6 +396,8 @@ interface ComputerDriverStatusOptions {
    * 弹授权对话框,实测可能再触发的弹窗与引导语义一致。
    */
   bypassPermissionProbeCache?: boolean;
+  /** Never fall back to a status implementation that may open a macOS TCC prompt. */
+  passivePermissionProbeOnly?: boolean;
 }
 
 class ComputerDriverError extends Error {
@@ -392,41 +442,120 @@ export function resetComputerDriverPermissionProbeCacheForTests(): void {
   cachedPermissionProbe = null;
   lastDaemonAutostartAt = 0;
   daemonAutostartInFlight = null;
+  computerDriverPermissionProbePaused = false;
+  // 测试中清空 sharedCompanionHost，防止跨用例状态污染
+  sharedCompanionHost = null;
 }
 
-// ── macOS daemon 自愈启动 ────────────────────────────────────────────────
-// macOS 修改屏幕录制授权会直接杀掉 CuaDriver daemon,而 macOS 侧上游没有
-// autostart(仅 Windows 有)。daemon 掉线时 `permissions status` 只能如实报
-// unknown,设置面板会一直停在「未知」。因此设置面板的权限探测(带
-// forcePermissionProbe 的 status 调用)在 daemon 掉线时先按上游文档的方式把
-// 它拉起来(LaunchServices 启动,TCC 归因才是 com.trycua.driver),再做探测。
-// --no-permissions-gate 必带:serve 的首启 gate 缺权限时会主动弹授权框、打开
-// 系统设置并阻塞启动 —— 「打开设置面板」绝不能触发那一套。
+// ── macOS daemon 自愈启动（Stage A：经 CompanionHost 接管）────────────────
+// Stage A 身份切换后，daemon 的 TCC 归因改为 com.xd.cindy.computer-use。
+// 自愈逻辑从「LaunchServices 启动 /Applications/CuaDriver.app」换成
+// 「CompanionHost.start()」——companion supervisor 在 spawn 前先 `cua-driver stop`，
+// 确定性接管全局 socket（~/Library/Caches/cua-driver/cua-driver.sock）。
+// companion 未安装时静默返回 null，维持 unknown 现状。
 const DAEMON_AUTOSTART_MIN_INTERVAL_MS = 30_000;
-const DAEMON_AUTOSTART_OPEN_TIMEOUT_MS = 5_000;
 const DAEMON_AUTOSTART_WAIT_MS = 3_000;
 const DAEMON_AUTOSTART_POLL_MS = 300;
 let lastDaemonAutostartAt = 0;
 let daemonAutostartInFlight: Promise<DaemonStatus | null> | null = null;
 
+/** 持久化单例 CompanionHost（跨多次 autostart 复用，避免重复安装/握手）。 */
+let sharedCompanionHost: CompanionHost | null = null;
+
+/**
+ * 返回复用的 CompanionHost 实例（懒创建，仅 darwin）。
+ * 生产路径注入真实 Electron 路径；测试通过 setSharedCompanionHostForTests 替换。
+ */
+export function getSharedCompanionHost(): CompanionHost | null {
+  if (process.platform !== 'darwin') return null;
+  if (!sharedCompanionHost) {
+    sharedCompanionHost = new CompanionHost(
+      createProductionDeps(() => ({
+        // process.resourcesPath 是 Electron 官方路径（packaged 与 dev 一致），
+        // 与 bootstrap-electron.ts ~L5127 保持同源，避免用 exe 路径字符串处理的脆性方案。
+        resourcesPath: process.resourcesPath,
+        userData: app.getPath('userData'),
+        appPath: app.getAppPath(),
+        isPackaged: app.isPackaged,
+      })),
+    );
+    // 将 companion daemon 状态变化实时推送给设置面板（避免轮询延迟）。
+    // permissionGuideRefresher 由 computer-permission-guide/window.ts 注册，
+    // 避免循环 import（window.ts 已静态依赖 computer.ts，不能反向 import）。
+    sharedCompanionHost.on('daemon-status', (msg) => {
+      logger.debug('companion daemon-status received', {
+        running: msg.running,
+        pid: msg.pid,
+        restarts: msg.restarts,
+      });
+      // daemon 状态变化时清缓存，以便下次探测拿到最新状态
+      cachedPermissionProbe = null;
+      if (msg.running) lastDaemonAutostartAt = 0;
+      // 实时推送：直接触发 UI 刷新（无需等待下次轮询）
+      permissionGuideRefresher?.();
+    });
+    sharedCompanionHost.on('disconnected', () => {
+      logger.warn('companion heartbeat disconnected; clearing autostart throttle');
+      lastDaemonAutostartAt = 0;
+      cachedPermissionProbe = null;
+      // companion 断连时也触发一次状态刷新，让设置面板感知到 daemon 掉线
+      permissionGuideRefresher?.();
+    });
+  }
+  return sharedCompanionHost;
+}
+
+/**
+ * companion daemon-status 变化时触发 UI 刷新的回调。
+ * computer-permission-guide/window.ts 在 register.ts 初始化后注入，
+ * 避免循环 import（window.ts → computer.ts 已有静态依赖，反向不能再 import）。
+ */
+let permissionGuideRefresher: (() => void) | null = null;
+
+/**
+ * 注册 permission guide 刷新回调（由 computer-permission-guide/window.ts 的注册链调用）。
+ * 供 daemon-status 事件触发实时状态推送到 renderer，无需等待轮询。
+ */
+export function registerComputerPermissionGuideRefresher(refresher: () => void): void {
+  permissionGuideRefresher = refresher;
+}
+
+/** 测试隔离用：替换 sharedCompanionHost。 */
+export function setSharedCompanionHostForTests(host: CompanionHost | null): void {
+  sharedCompanionHost = host;
+  // 替换 host 时同时重置刷新回调（避免测试间污染）
+}
+
 async function tryAutostartCuaDaemonOnce(): Promise<DaemonStatus | null> {
-  const res = await runProcess(
-    'open',
-    ['-n', '-g', '-a', 'CuaDriver', '--args', 'serve', '--no-permissions-gate'],
-    DAEMON_AUTOSTART_OPEN_TIMEOUT_MS,
-  );
-  // app bundle 不存在(仅 CLI 安装)等情况 open 非零退出:放弃,维持 unknown 现状。
-  if (res.exitCode !== 0) return null;
+  const host = getSharedCompanionHost();
+  if (!host) return null;
+  // CompanionHost.start() 幂等：companion 已运行时直接复用。
+  // supervisor 内部在 spawn daemon 前先 `cua-driver stop`，确定性接管全局 socket。
+  const result = await host.start().catch((err: unknown) => {
+    logger.warn('companion start failed during daemon autostart', {
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return { ok: false as const, reason: err instanceof Error ? err.message : String(err) };
+  });
+  if (!result.ok) {
+    logger.warn('CompanionHost.start() failed; daemon autostart aborted', { reason: result.reason });
+    return null;
+  }
+  logger.info('companion started for daemon autostart', {
+    pid: result.handshake.pid,
+    reused: result.handshake.reused,
+  });
+  // companion 刚启动，等 daemon 上报 running 状态（最多 DAEMON_AUTOSTART_WAIT_MS）
   const deadline = Date.now() + DAEMON_AUTOSTART_WAIT_MS;
   while (Date.now() < deadline) {
     await sleep(DAEMON_AUTOSTART_POLL_MS);
     const status = await readDaemonStatus().catch(() => null);
     if (status?.running) {
-      logger.info('cua-driver daemon autostarted for permission probe', { pid: status.pid });
+      logger.info('cua-driver daemon autostarted via companion', { pid: status.pid });
       return status;
     }
   }
-  logger.warn('cua-driver daemon autostart launched but daemon did not come up in time');
+  logger.warn('companion started but cua-driver daemon did not come up in time');
   return null;
 }
 
@@ -473,7 +602,14 @@ let permissionProbeInFlight: Promise<unknown> | null = null;
 
 function probeDriverPermissionsOnce(options: { forceNew?: boolean } = {}): Promise<unknown> {
   if (!options.forceNew && permissionProbeInFlight) return permissionProbeInFlight;
-  const run = readDriverJsonCommand(['permissions', 'status', '--json'], DOCTOR_TIMEOUT_MS)
+  // Stage A:使用 `call check_permissions '{"prompt":false}'` 探测权限。
+  // 原因（Task 0 spike 结论）：`permissions status` 只查询 com.trycua.driver 归因，
+  // 在嵌入模式下永远报 daemon_running:false；正确探针是 check_permissions，
+  // 其 attribution.host_bundle_id 反映实际的 daemon TCC 身份。
+  const run = readDriverJsonCommand(
+    ['call', 'check_permissions', JSON.stringify({ prompt: false })],
+    CHECK_PERMISSIONS_TIMEOUT_MS,
+  )
     .catch((err) => ({
       ok: false,
       error: err instanceof Error ? err.message : String(err),
@@ -490,7 +626,10 @@ const cuaDriverSessionGenerations = new Map<string, number>();
 const cuaMcpSessionCloseVersions = new Map<string, number>();
 
 function getInstallCommand(): string {
-  return process.platform === 'win32' ? WINDOWS_INSTALL_COMMAND : UNIX_INSTALL_COMMAND;
+  if (process.platform === 'win32') return WINDOWS_INSTALL_COMMAND;
+  // darwin 由 companion bundle 内嵌安装，不再走上游脚本。
+  if (process.platform === 'darwin') return DOCS_URL;
+  return LINUX_INSTALL_COMMAND;
 }
 
 function getPermissionPlatform(): ComputerDriverPermissionPlatform {
@@ -503,14 +642,28 @@ function getPermissionPlatform(): ComputerDriverPermissionPlatform {
 function getDriverCandidates(): string[] {
   const envPath = process.env.XDT_CUA_DRIVER_PATH?.trim();
   const candidates = envPath ? [envPath] : [];
-  const home = app.getPath('home');
-  if (process.platform === 'win32') {
+
+  if (process.platform === 'darwin') {
+    // Stage A：darwin 下 cua-driver 由 companion bundle 内嵌，不再要求用户自装。
+    // 嵌入路径 = <companionInstallPath>/Contents/Resources/engine/cua-driver。
+    // 仅允许 XDT_CUA_DRIVER_PATH 覆写（开发调试用），其余用户安装候选路径不再检测。
+    if (!envPath) {
+      const companionBase = path.join(
+        app.getPath('userData'),
+        COMPANION_INSTALL_DIR,
+        COMPANION_BUNDLE_NAME,
+      );
+      candidates.push(path.join(companionBase, 'Contents', 'Resources', 'engine', 'cua-driver'));
+    }
+  } else if (process.platform === 'win32') {
     const localAppData = process.env.LOCALAPPDATA;
     if (localAppData) {
       candidates.push(path.join(localAppData, 'Programs', 'Cua', 'cua-driver', 'bin', 'cua-driver.exe'));
     }
     candidates.push(DRIVER_COMMAND);
   } else {
+    // Linux 等其它平台：沿用旧的用户安装检测逻辑
+    const home = app.getPath('home');
     candidates.push(
       path.join(home, '.local', 'bin', DRIVER_COMMAND),
       '/opt/homebrew/bin/cua-driver',
@@ -531,12 +684,62 @@ function resolveDriverCommand(): string {
   return DRIVER_COMMAND;
 }
 
+function resolveDriverInvocation(args: readonly string[]): {
+  command: string;
+  args: string[];
+  env?: Record<string, string>;
+} {
+  // macOS 侧所有 CLI 调用必须附带嵌入模式环境变量，防止 CLI 在 daemon 缺位时
+  // 以错误 TCC 身份（com.trycua.driver）自动拉起 /Applications/CuaDriver.app。
+  if (process.platform === 'darwin') {
+    return {
+      command: resolveDriverCommand(),
+      args: [...args],
+      env: {
+        CUA_DRIVER_EMBEDDED: '1',
+        CUA_DRIVER_HOST_BUNDLE_ID: COMPANION_BUNDLE_ID,
+      },
+    };
+  }
+  return { command: resolveDriverCommand(), args: [...args] };
+}
+
+/** Whether permission onboarding is deliberately waiting for a real app drag. */
+export function isComputerDriverPermissionProbePaused(): boolean {
+  return computerDriverPermissionProbePaused;
+}
+
+/**
+ * Stop the branded daemon while the app is absent from the current macOS
+ * permission pane. Merely probing AX/TCC re-registers a deleted app row, so
+ * the first-time drag step must be genuinely passive until System Settings
+ * exposes the row again.
+ */
+export async function pauseComputerDriverPermissionProbe(): Promise<void> {
+  computerDriverPermissionProbePaused = true;
+  cachedPermissionProbe = null;
+  lastDaemonAutostartAt = 0;
+}
+
+/** Resume live permission checks after System Settings contains Computer Use. */
+export function resumeComputerDriverPermissionProbe(): void {
+  computerDriverPermissionProbePaused = false;
+  cachedPermissionProbe = null;
+  lastDaemonAutostartAt = 0;
+}
+
 function runDriver(args: string[], timeoutMs: number, options: RunDriverOptions = {}): Promise<ExecResult> {
   return new Promise((resolve, reject) => {
-    const command = resolveDriverCommand();
-    const child = spawn(command, args, {
+    const invocation = resolveDriverInvocation(args);
+    const child = spawn(invocation.command, invocation.args, {
       stdio: [options.stdin === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe'],
       windowsHide: true,
+      env: invocation.env
+        ? {
+            ...process.env,
+            ...invocation.env,
+          }
+        : undefined,
     });
     options.onChild?.(child);
     let stdout = '';
@@ -820,6 +1023,12 @@ function runInstallCommand(
   onSpawn?: (pid: number | undefined) => void,
   targetVersion?: string,
 ): Promise<ExecResult> {
+  // darwin 的安装由 companion bundle 负责，不允许走上游 curl 脚本（会装错身份）。
+  if (process.platform === 'darwin') {
+    throw new ComputerDriverError(
+      'runInstallCommand must not be called on darwin; use companion ensureInstalled instead',
+    );
+  }
   clearStaleCuaInstallLock();
   const activityOptions: ActivityTimeoutOptions = {
     idleTimeoutMs: installIdleTimeoutForPlatform(),
@@ -846,7 +1055,7 @@ function runInstallCommand(
   }
   return runProcessWithActivityTimeout(
     '/bin/bash',
-    ['-c', `curl -fsSL ${UNIX_INSTALL_URL} | /bin/bash`],
+    ['-c', `curl -fsSL ${LINUX_INSTALL_URL} | /bin/bash`],
     activityOptions,
   );
 }
@@ -1913,10 +2122,14 @@ function logCuaMcpStderr(sessionId: string, stream: Stream): void {
 }
 
 function createCuaMcpSession(sessionId: string): CuaMcpSessionEntry {
+  const invocation = resolveDriverInvocation(['mcp']);
   const transport = new StdioClientTransport({
-    command: resolveDriverCommand(),
-    args: ['mcp'],
-    env: inheritedProcessEnv(),
+    command: invocation.command,
+    args: invocation.args,
+    env: {
+      ...inheritedProcessEnv(),
+      ...invocation.env,
+    },
     stderr: 'pipe',
   });
   const stderr = transport.stderr;
@@ -2175,12 +2388,31 @@ function normalizePermissionState(raw: unknown): ComputerDriverPermissionState {
     };
   }
 
-  const source = objectValue(obj.source)?.attribution;
-  const sourceAttribution = typeof source === 'string' ? source : undefined;
+  // Stage A:check_permissions 输出的 attribution 结构（Task 0 spike 实测）：
+  //   { attribution: "host", host_bundle_id: "com.xd.cindy.computer-use", ... }
+  // 顶层 attribution 字段与 host_bundle_id 共同标识 daemon 的 TCC 归因。
+  // 注意：旧版 `permissions status` 走 source.attribution，新探针走顶层字段。
+  const attributionObj = objectValue(obj.attribution) ?? objectValue(obj.source);
+  const topLevelAttribution = typeof obj.attribution === 'string' ? obj.attribution : null;
+  const hostBundleId = typeof obj.host_bundle_id === 'string' ? obj.host_bundle_id : null;
+  // 兼容两种格式：check_permissions 顶层格式 + 旧 permissions status 的 source 嵌套格式。
+  const sourceAttribution: string | undefined = topLevelAttribution
+    ?? (typeof attributionObj?.attribution === 'string' ? attributionObj.attribution : undefined);
+
   const accessibility = readBooleanGrant(obj.accessibility);
   const screenRecording = readBooleanGrant(obj.screen_recording);
   const screenRecordingCapturable = readBooleanGrant(obj.screen_recording_capturable);
-  const grantsBelongToDriver = !sourceAttribution || sourceAttribution === 'driver-daemon';
+
+  // Stage A 归属校验：daemon 必须以新身份（com.xd.cindy.computer-use）持有 TCC 授权。
+  // host_bundle_id 精确对比，防止外来 daemon（standalone CuaDriver 身份）的权限状态
+  // 被误认为自己的。外来 daemon 状态→视为未就绪，路由到 CompanionHost 重新接管。
+  const isCorrectIdentity = hostBundleId === COMPANION_BUNDLE_ID;
+  // 探针返回 attribution 字段时以 host_bundle_id 判断；无 hostBundleId 字段时
+  // 兼容旧 permissions status 的 driver-daemon 归因（仅 non-darwin 测试环境）。
+  const grantsBelongToCompanion = hostBundleId !== null
+    ? isCorrectIdentity
+    : (!sourceAttribution || sourceAttribution === 'driver-daemon');
+
   // capturable 是 daemon 用 ScreenCaptureKit 实测「此刻能否真正截屏」;screen_recording
   // 只是 TCC 数据库的 preflight 记录。driver 二进制更新后会出现「记录还在、授权实际已
   // 失效」的 stale grant(screen_recording=true / capturable=false),此时截屏必失败且
@@ -2192,10 +2424,25 @@ function normalizePermissionState(raw: unknown): ComputerDriverPermissionState {
     (screenRecordingCapturable === 'unknown' && screenRecording === 'granted');
   const staleScreenRecordingGrant =
     screenRecording === 'granted' && screenRecordingCapturable === 'missing';
+
+  // 旧身份迁移检测：host_bundle_id 为旧 CuaDriver 身份时，说明存在外来 daemon。
+  // 旧授权有效、新身份无授权→引导重新授权（硬切换，不做双路径兼容）。
+  const isLegacyIdentity = hostBundleId === LEGACY_CUA_DRIVER_BUNDLE_ID;
+
   const granted =
     accessibility === 'granted' &&
     screenCaptureReady &&
-    grantsBelongToDriver;
+    grantsBelongToCompanion;
+
+  let reason: string | undefined;
+  if (!grantsBelongToCompanion && isLegacyIdentity) {
+    // 旧 CuaDriver daemon 持有 TCC 授权，但新身份尚未授权——引导重新授权
+    reason = 'legacy-identity-migration';
+  } else if (!grantsBelongToCompanion) {
+    reason = 'foreign-daemon-identity';
+  } else if (staleScreenRecordingGrant) {
+    reason = 'macOS still lists a Screen Recording grant but live capture is denied (stale grant, typically after a driver update). Re-enable Computer Use in System Settings → Privacy & Security → Screen Recording.';
+  }
 
   return {
     platform,
@@ -2204,12 +2451,8 @@ function normalizePermissionState(raw: unknown): ComputerDriverPermissionState {
     accessibility,
     screenRecording,
     screenRecordingCapturable,
-    source: sourceAttribution,
-    reason: !grantsBelongToDriver
-      ? 'Permission status belongs to the launching app, not CuaDriver.'
-      : staleScreenRecordingGrant
-        ? 'macOS still lists a Screen Recording grant but live capture is denied (stale grant, typically after a driver update). Re-enable CuaDriver in System Settings → Privacy & Security → Screen Recording.'
-        : undefined,
+    source: hostBundleId ?? sourceAttribution,
+    reason,
     canGrant: true,
   };
 }
@@ -2219,6 +2462,13 @@ export async function getComputerDriverStatus(
 ): Promise<ComputerDriverStatus> {
   try {
     const version = await readDriverVersion();
+    const installedVersion = extractDriverSemver(version);
+    const passivePermissionProbeSupported =
+      options.passivePermissionProbeOnly !== true
+      || (
+        installedVersion !== null
+        && compareSemver(installedVersion, PASSIVE_PERMISSION_STATUS_MIN_VERSION) >= 0
+      );
     let daemon: DaemonStatus = await readDaemonStatus().catch((err) => ({
       running: false,
       message: err instanceof Error ? err.message : String(err),
@@ -2234,13 +2484,15 @@ export async function getComputerDriverStatus(
     //   - stop 失败(daemon 仍在)→ 同上,静默回落不重启的现场实测。
     if (
       process.platform === 'darwin' &&
+      !computerDriverPermissionProbePaused &&
       options.freshPermissionProbe === true &&
+      passivePermissionProbeSupported &&
       daemon.running &&
       cuaMcpSessions.size === 0 &&
       // CLI-only 安装(无 app bundle)时自愈的 `open` 必然失败:停了就拉不回来,
       // 宁可保留运行中的 daemon(此时读不到 AX 撤销)也不能让「重新检查」这种
       // 看似只读的动作变成破坏性操作(review P2)。
-      existsSync(CUA_DRIVER_APP_BUNDLE_PATH)
+      Boolean(getComputerDriverAppBundlePath())
     ) {
       await runDriver(['stop'], STATUS_TIMEOUT_MS).catch((err: unknown) => {
         logger.warn('failed to stop cua-driver daemon for fresh permission probe', {
@@ -2258,7 +2510,9 @@ export async function getComputerDriverStatus(
     // fresh 探测刚主动停掉 daemon,豁免节流立即拉起)。
     if (
       process.platform === 'darwin' &&
+      !computerDriverPermissionProbePaused &&
       !daemon.running &&
+      passivePermissionProbeSupported &&
       (options.forcePermissionProbe === true || options.freshPermissionProbe === true)
     ) {
       const revived = await tryAutostartCuaDaemon({
@@ -2278,6 +2532,9 @@ export async function getComputerDriverStatus(
     const grantFlowAtProbeStart = permissionGrantInFlight;
     const shouldProbePermissions =
       process.platform === 'darwin' &&
+      !computerDriverPermissionProbePaused &&
+      options.skipPermissionProbe !== true &&
+      passivePermissionProbeSupported &&
       (daemon.running || options.forcePermissionProbe === true || options.freshPermissionProbe === true);
     let permissions: unknown = null;
     let permissionProbe: 'run' | 'cached' | 'skipped' = 'skipped';
@@ -2317,7 +2574,18 @@ export async function getComputerDriverStatus(
         }
       }
     } else {
-      permissionState = normalizePermissionState(null);
+      permissionState = computerDriverPermissionProbePaused && process.platform === 'darwin'
+        ? {
+            platform: 'macos',
+            required: true,
+            status: 'missing',
+            accessibility: 'missing',
+            screenRecording: 'unknown',
+            screenRecordingCapturable: 'unknown',
+            reason: 'Waiting for CuaDriver to be added in System Settings.',
+            canGrant: true,
+          }
+        : normalizePermissionState(null);
     }
     // 权限已确认到位时,收割仍在傻等系统弹窗的 grant 子进程(用户可能是在系统
     // 设置里手动授的权,上游 `permissions grant` 不会自己退出)。
@@ -2364,10 +2632,35 @@ export async function getComputerDriverStatus(
   }
 }
 
+/**
+ * darwin：委托 companion bundle 执行安装（ensureInstalled 原子替换），
+ *         不再走上游 trycua 安装脚本（会以错误身份 com.trycua.driver 落盘）。
+ * 其他平台：调用上游官方安装脚本。
+ *
+ * `onSpawn` / `targetVersion` 仅对非 darwin 平台有意义；
+ * darwin 侧 companion 安装是同步的 bundle 替换，无独立进程可 hook。
+ */
 export async function installComputerDriver(
   onSpawn?: (pid: number | undefined) => void,
   targetVersion?: string,
 ): Promise<ComputerDriverInstallResult> {
+  if (process.platform === 'darwin') {
+    const host = getSharedCompanionHost();
+    if (!host) {
+      throw new ComputerDriverError('companion host unavailable on darwin');
+    }
+    const installResult = await host.ensureInstalled();
+    if (!installResult.ok) {
+      throw new ComputerDriverError(`companion ensureInstalled failed: ${installResult.reason}`);
+    }
+    const status = await getComputerDriverStatus();
+    if (!status.installed) {
+      throw new ComputerDriverError(
+        status.error ?? 'companion installed but cua-driver binary not found',
+      );
+    }
+    return { ok: true, stdout: '', stderr: '', status };
+  }
   const res = await runInstallCommand(onSpawn, targetVersion);
   const status = await getComputerDriverStatus();
   if (res.exitCode !== 0 || !status.installed) {
@@ -2414,13 +2707,6 @@ interface CuaDriverReleaseInfo {
   assets: CuaDriverReleaseAsset[];
 }
 
-/** 只接受完整稳定版 tag,避免把 prerelease 后缀截断后误认成正式版本。 */
-function extractCuaDriverTagVersion(tagName: string): string | null {
-  if (!tagName.startsWith(CUA_DRIVER_RELEASE_TAG_PREFIX)) return null;
-  const version = tagName.slice(CUA_DRIVER_RELEASE_TAG_PREFIX.length);
-  return /^\d+\.\d+\.\d+$/.test(version) ? version : null;
-}
-
 /**
  * 从 GitHub releases 列表中挑出 cua-driver 的最新 release(版本号 + asset
  * 列表,后者供更新进度条换算总字节数)。上游是 monorepo,列表混着
@@ -2433,8 +2719,8 @@ export function pickLatestCuaDriverRelease(
   let latest: CuaDriverReleaseInfo | null = null;
   for (const release of releases) {
     const tag = typeof release?.tag_name === 'string' ? release.tag_name : null;
-    if (!tag) continue;
-    const version = extractCuaDriverTagVersion(tag);
+    if (!tag || !tag.startsWith(CUA_DRIVER_RELEASE_TAG_PREFIX)) continue;
+    const version = extractDriverSemver(tag.slice(CUA_DRIVER_RELEASE_TAG_PREFIX.length));
     if (!version) continue;
     if (!latest || compareSemver(version, latest.version) > 0) {
       const assets = Array.isArray(release.assets)
@@ -2451,137 +2737,6 @@ export function pickLatestCuaDriverRelease(
 /** 兼容旧签名:仅按 tag 列表挑最新版本号(单测与调用方沿用)。 */
 export function pickLatestCuaDriverVersion(tagNames: string[]): string | null {
   return pickLatestCuaDriverRelease(tagNames.map((tag) => ({ tag_name: tag })))?.version ?? null;
-}
-
-/** 将 `os.machine()` / installer 使用的原生机器架构归一化。 */
-function normalizeCuaDriverMachineArch(machineArch: string): 'x64' | 'arm64' | null {
-  const normalized = machineArch.toLowerCase();
-  if (normalized === 'x64' || normalized === 'x86_64' || normalized === 'amd64') return 'x64';
-  if (normalized === 'arm64' || normalized === 'aarch64') return 'arm64';
-  return null;
-}
-
-/**
- * 解析当前宿主架构:优先 `os.machine()`(与官方 installer 一致),Windows 上
- * Node 可能返回 `unknown`(nodejs#62232) 时回退 `PROCESSOR_ARCHITECTURE`,
- * 再回退 `process.arch`。
- */
-export function resolveCuaDriverHostArch(
-  platform: NodeJS.Platform = process.platform,
-  machineArch: string = os.machine(),
-  options?: { processArch?: string; env?: NodeJS.ProcessEnv },
-): 'x64' | 'arm64' | null {
-  const fromMachine = normalizeCuaDriverMachineArch(machineArch);
-  if (fromMachine) return fromMachine;
-  // 只有 machine 不可用(空 / Node 的 "unknown") 才回退;riscv64 这类明确不支持的值直接 null。
-  const machineLabel = machineArch.trim().toLowerCase();
-  const machineUsable = machineLabel.length > 0 && machineLabel !== 'unknown';
-  if (machineUsable) return null;
-  if (platform === 'win32') {
-    const env = options?.env ?? process.env;
-    const fromEnv = normalizeCuaDriverMachineArch(String(env.PROCESSOR_ARCHITECTURE ?? ''));
-    if (fromEnv) return fromEnv;
-  }
-  return normalizeCuaDriverMachineArch(options?.processArch ?? process.arch);
-}
-
-/**
- * 返回官方安装脚本在指定平台会下载的 release asset 文件名。优先原生机器架构,
- * 避免 Windows ARM64 上 x64 仿真进程用错包;machine 未知时再按宿主探测回退。
- */
-export function getCuaDriverReleaseAssetName(
-  version: string,
-  platform: NodeJS.Platform = process.platform,
-  machineArch: string = os.machine(),
-  options?: { processArch?: string; env?: NodeJS.ProcessEnv },
-): string | null {
-  const prefix = `cua-driver-rs-${version}`;
-  if (platform === 'darwin') return `${prefix}-darwin-universal.tar.gz`;
-  const arch = resolveCuaDriverHostArch(platform, machineArch, options);
-  if (platform === 'linux') {
-    if (arch === 'x64') return `${prefix}-linux-x86_64-binary.tar.gz`;
-    if (arch === 'arm64') return `${prefix}-linux-arm64-binary.tar.gz`;
-    return null;
-  }
-  if (platform === 'win32') {
-    if (arch === 'x64') return `${prefix}-windows-x86_64.zip`;
-    if (arch === 'arm64') return `${prefix}-windows-arm64.zip`;
-  }
-  return null;
-}
-
-/** 携带 HTTP status,供多候选探测区分可继续的上游 5xx 与应立即停止的错误。 */
-class CuaDriverReleaseHttpError extends Error {
-  constructor(readonly status: number, version: string) {
-    super(`GitHub release API responded ${status} for cua-driver ${version}`);
-    this.name = 'CuaDriverReleaseHttpError';
-  }
-}
-
-/** 构造 GitHub API headers;开发环境有 token 时自动提升限额。 */
-function getCuaDriverGithubHeaders(): Record<string, string> {
-  const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
-  return {
-    Accept: 'application/vnd.github+json',
-    'User-Agent': 'xdt-maker',
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-  };
-}
-
-/**
- * 精确核对指定版本已经发布且包含当前平台安装器需要的 asset。404、draft
- * 或缺 asset 都表示该候选不可安装;上游会把稳定 semver tag 的 release 标成
- * GitHub prerelease,因此不使用该布尔值过滤。其它 HTTP 错误按网络故障抛出。
- */
-async function fetchInstallableCuaDriverRelease(
-  version: string,
-  fetchImpl: typeof fetch,
-  headers: Record<string, string>,
-): Promise<CuaDriverReleaseInfo | null> {
-  const res = await fetchImpl(
-    `${CUA_DRIVER_RELEASE_BY_TAG_URL}/${CUA_DRIVER_RELEASE_TAG_PREFIX}${version}`,
-    { headers, signal: AbortSignal.timeout(UPDATE_CHECK_TIMEOUT_MS) },
-  );
-  if (res.status === 404) {
-    logger.debug('skipping cua-driver tag without a published release', { version });
-    return null;
-  }
-  if (!res.ok) {
-    throw new CuaDriverReleaseHttpError(res.status, version);
-  }
-
-  const release = (await res.json()) as {
-    tag_name?: unknown;
-    assets?: unknown;
-    draft?: unknown;
-  };
-  if (release.draft === true) {
-    logger.debug('skipping unpublished cua-driver release', { version });
-    return null;
-  }
-  const parsed = pickLatestCuaDriverRelease([release]);
-  const requiredAssetName = getCuaDriverReleaseAssetName(version);
-  const requiredAssetUploaded =
-    requiredAssetName !== null &&
-    Array.isArray(release.assets) &&
-    (release.assets as Array<{ name?: unknown; size?: unknown; state?: unknown }>).some(
-      (asset) =>
-        asset?.name === requiredAssetName &&
-        asset?.state === 'uploaded' &&
-        typeof asset?.size === 'number' &&
-        asset.size > 0,
-    );
-  const installable =
-    parsed?.version === version &&
-    requiredAssetUploaded;
-  if (!installable || !parsed) {
-    logger.debug('skipping cua-driver release without an uploaded platform asset', {
-      version,
-      requiredAssetName,
-    });
-    return null;
-  }
-  return parsed;
 }
 
 // ── cua-driver 更新检查 / 更新执行的 main 侧状态 ──────────────────────────
@@ -2606,8 +2761,6 @@ export function resetComputerDriverUpdateStateForTests(): void {
 /** 真正执行一次「本地版本 + 上游 releases」的检查,无缓存语义。 */
 async function fetchDriverUpdateCheck(
   fetchImpl: typeof fetch,
-  excludedVersions: ReadonlySet<string> = new Set(),
-  knownVerifiedTarget: string | null = null,
 ): Promise<Omit<ComputerDriverUpdateCheck, 'updating'>> {
   let currentVersion: string | null = null;
   try {
@@ -2621,7 +2774,13 @@ async function fetchDriverUpdateCheck(
   }
 
   try {
-    const headers = getCuaDriverGithubHeaders();
+    // 环境里有 GITHUB_TOKEN/GH_TOKEN 时带上鉴权(5000/h),对开发机生效。
+    const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
+    const headers = {
+      Accept: 'application/vnd.github+json',
+      'User-Agent': 'xdt-maker',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    };
     // 全量 driver tag(matching-refs 按前缀过滤,常规单页拿全;分页仅防御
     // tag 数超过单页的远期情形,短页即尾页)。
     const tagNames: string[] = [];
@@ -2642,62 +2801,27 @@ async function fetchDriverUpdateCheck(
       }
       if (batch.length < CUA_DRIVER_REFS_PAGE_SIZE) break;
     }
-    const versions = [...new Set(
-      tagNames
-        .map(extractCuaDriverTagVersion)
-        .filter((version): version is string => version !== null),
-    )].sort((a, b) => compareSemver(b, a));
-    const latestTagVersion = versions[0] ?? null;
-    const newerCandidates = versions.filter((version) =>
-      compareSemver(currentVersion, version) < 0 && !excludedVersions.has(version));
-
-    if (newerCandidates.length === 0) {
-      cachedDriverReleaseAssets = [];
-      return { currentVersion, latestVersion: latestTagVersion, updateAvailable: false };
-    }
-
-    let hadTransientProbeFailure = false;
-    let knownTargetProbeFailedTransiently = false;
-    for (const candidateVersion of newerCandidates) {
-      let release: CuaDriverReleaseInfo | null;
+    const latestVersion = pickLatestCuaDriverVersion(tagNames);
+    const updateAvailable =
+      latestVersion !== null && compareSemver(currentVersion, latestVersion) < 0;
+    if (updateAvailable && latestVersion) {
+      // 仅在确认有更新时才拉对应 release 的 asset 列表(进度条总字节数);
+      // 失败只影响进度条显示为「已下载 X MB」,不影响更新功能本身。
       try {
-        release = await fetchInstallableCuaDriverRelease(candidateVersion, fetchImpl, headers);
-      } catch (err) {
-        if (err instanceof CuaDriverReleaseHttpError && err.status >= 500) {
-          hadTransientProbeFailure = true;
-          if (candidateVersion === knownVerifiedTarget) {
-            knownTargetProbeFailedTransiently = true;
-          }
-          logger.debug('continuing cua-driver fallback after transient release API error', {
-            version: candidateVersion,
-            status: err.status,
-          });
-          continue;
+        const res = await fetchImpl(
+          `${CUA_DRIVER_RELEASE_BY_TAG_URL}/${CUA_DRIVER_RELEASE_TAG_PREFIX}${latestVersion}`,
+          { headers, signal: AbortSignal.timeout(UPDATE_CHECK_TIMEOUT_MS) },
+        );
+        if (res.ok) {
+          const release = (await res.json()) as { tag_name?: unknown; assets?: unknown };
+          const parsed = pickLatestCuaDriverRelease([release]);
+          if (parsed) cachedDriverReleaseAssets = parsed.assets;
         }
-        throw err;
+      } catch {
+        /* asset 大小拿不到时进度条退化,静默 */
       }
-      if (!release) continue;
-
-      // 后台刷新若无法重新核实已知目标,不能用更旧候选覆盖它;首次检查仍可回退。
-      if (
-        knownTargetProbeFailedTransiently &&
-        knownVerifiedTarget &&
-        compareSemver(candidateVersion, knownVerifiedTarget) < 0
-      ) {
-        return { currentVersion, latestVersion: null, updateAvailable: false };
-      }
-      cachedDriverReleaseAssets = release.assets;
-      return { currentVersion, latestVersion: candidateVersion, updateAvailable: true };
     }
-
-    if (hadTransientProbeFailure) {
-      return { currentVersion, latestVersion: null, updateAvailable: false };
-    }
-
-    // API 请求均成功但没有可安装的新版本:用当前已安装版本覆盖旧缓存。
-    // 网络失败会走 catch 返回 null,commitDriverUpdateCheck 会保留已知结果。
-    cachedDriverReleaseAssets = [];
-    return { currentVersion, latestVersion: currentVersion, updateAvailable: false };
+    return { currentVersion, latestVersion, updateAvailable };
   } catch (err) {
     logger.debug('cua-driver update check failed (silently ignored)', {
       message: err instanceof Error ? err.message : String(err),
@@ -2721,10 +2845,7 @@ function commitDriverUpdateCheck(
 
 function startDriverUpdateCheck(fetchImpl: typeof fetch): Promise<Omit<ComputerDriverUpdateCheck, 'updating'>> {
   if (!driverUpdateCheckInFlight) {
-    const knownVerifiedTarget = cachedDriverUpdateCheck?.updateAvailable
-      ? cachedDriverUpdateCheck.latestVersion
-      : null;
-    driverUpdateCheckInFlight = fetchDriverUpdateCheck(fetchImpl, new Set(), knownVerifiedTarget)
+    driverUpdateCheckInFlight = fetchDriverUpdateCheck(fetchImpl)
       .then((result) => {
         commitDriverUpdateCheck(result);
         return result;
@@ -2761,35 +2882,6 @@ export async function checkComputerDriverUpdate(
   }
   const result = await startDriverUpdateCheck(fetchImpl);
   return { ...result, updating: driverUpdateInstallInFlight !== null };
-}
-
-/** 点击更新时再次核对目标;失效时排除它并回退到下一个可安装版本。 */
-async function revalidateComputerDriverUpdateTarget(fetchImpl: typeof fetch): Promise<string | null> {
-  const cachedTarget = cachedDriverUpdateCheck?.updateAvailable
-    ? cachedDriverUpdateCheck.latestVersion
-    : null;
-  if (!cachedTarget) return null;
-
-  try {
-    const release = await fetchInstallableCuaDriverRelease(
-      cachedTarget,
-      fetchImpl,
-      getCuaDriverGithubHeaders(),
-    );
-    if (release) {
-      cachedDriverReleaseAssets = release.assets;
-      return cachedTarget;
-    }
-
-    const refreshed = await fetchDriverUpdateCheck(fetchImpl, new Set([cachedTarget]));
-    // 已确认 cachedTarget 不可安装,即使 fallback 刷新失败也不能保留旧入口。
-    cachedDriverUpdateCheck = refreshed;
-    if (!refreshed.updateAvailable) cachedDriverReleaseAssets = [];
-    return refreshed.updateAvailable ? refreshed.latestVersion : null;
-  } finally {
-    // 安装前校验也是一次完整的上游刷新,避免面板重开后立即重复请求。
-    driverUpdateCheckLastFetchAt = Date.now();
-  }
 }
 
 // ── 更新下载进度采样 ──────────────────────────────────────────────────────
@@ -2901,7 +2993,7 @@ function startInstallProgressSampler(
  */
 export async function updateComputerDriver(
   onProgress?: (progress: ComputerDriverUpdateProgress) => void,
-  opts?: { joinOnly?: boolean; fetchImpl?: typeof fetch },
+  opts?: { joinOnly?: boolean },
 ): Promise<ComputerDriverInstallResult> {
   if (!driverUpdateInstallInFlight && opts?.joinOnly) {
     const status = await getComputerDriverStatus();
@@ -2909,39 +3001,40 @@ export async function updateComputerDriver(
   }
   if (!driverUpdateInstallInFlight) {
     let stopSampler: () => void = () => {};
-    // preflight + install 立即收进同一个 Promise,避免并发点击各起一轮安装。
-    driverUpdateInstallInFlight = (async () => {
-      const targetVersion = await revalidateComputerDriverUpdateTarget(opts?.fetchImpl ?? fetch);
-      if (!targetVersion) {
-        throw new ComputerDriverError('no verified installable cua-driver update is available');
-      }
-      const result = await installComputerDriver((pid) => {
-        if (onProgress) stopSampler = startInstallProgressSampler(pid, onProgress);
-      }, targetVersion);
-      const installedVersion = extractDriverSemver(result.status.version);
-      if (!installedVersion || compareSemver(installedVersion, targetVersion) < 0) {
-        throw new ComputerDriverError(
-          `cua-driver update did not reach v${targetVersion} (installed: ${result.status.version ?? 'unknown'})`,
-        );
-      }
-      cachedDriverUpdateCheck = null;
-      cachedDriverReleaseAssets = [];
-      return result;
-    })().finally(() => {
-      driverUpdateInstallInFlight = null;
-      stopSampler();
-      onProgress?.({ phase: 'done', downloadedBytes: null, totalBytes: null });
-    });
+    // 把检查到的版本 pin 给安装脚本,并在装完后校验确实到达了该版本——
+    // 否则「更新到 X」可能装回上游脚本 baked 的旧版还报成功(review P1)。
+    const targetVersion = cachedDriverUpdateCheck?.latestVersion ?? undefined;
+    driverUpdateInstallInFlight = installComputerDriver((pid) => {
+      if (onProgress) stopSampler = startInstallProgressSampler(pid, onProgress);
+    }, targetVersion)
+      .then((result) => {
+        if (targetVersion) {
+          const installedVersion = extractDriverSemver(result.status.version);
+          if (!installedVersion || compareSemver(installedVersion, targetVersion) < 0) {
+            // 失败时保留更新检查缓存,更新入口仍在,用户可重试。
+            throw new ComputerDriverError(
+              `cua-driver update did not reach v${targetVersion} (installed: ${result.status.version ?? 'unknown'})`,
+            );
+          }
+        }
+        cachedDriverUpdateCheck = null;
+        return result;
+      })
+      .finally(() => {
+        driverUpdateInstallInFlight = null;
+        stopSampler();
+        onProgress?.({ phase: 'done', downloadedBytes: null, totalBytes: null });
+      });
   }
   return driverUpdateInstallInFlight;
 }
 
-// CuaDriver.app 图标 dataURL 缓存:安装位置与图标在一次运行内不变,取一次即可。
+// companion bundle（Cindy Computer Use.app）图标 dataURL 缓存:安装位置与图标在一次运行内不变,取一次即可。
 let cachedDriverAppIconDataUrl: string | null | undefined;
 
 /**
- * 返回本机 CuaDriver.app 的真实图标(PNG dataURL)。授权引导弹窗用它当识别参照——
- * 用户要去系统设置的权限列表里找这个 App,给到和列表里一模一样的图标最直观。
+ * 返回本机 companion bundle（Cindy Computer Use.app）的真实图标(PNG dataURL)。
+ * 授权引导弹窗用它当识别参照——用户要去系统设置的权限列表里找这个 App,给到和列表里一模一样的图标最直观。
  *
  * 实现刻意走**进程外**管线:plutil 读 Info.plist 拿 icns 文件名 → sips(macOS 自带)
  * 转成 64px PNG → 读文件转 dataURL。不用 Electron app.getFileIcon —— 该调用在
@@ -2956,8 +3049,9 @@ export async function getComputerDriverAppIcon(): Promise<string | null> {
   if (cachedDriverAppIconDataUrl !== undefined) return cachedDriverAppIconDataUrl;
   cachedDriverAppIconDataUrl = null;
   try {
-    const appPath = CUA_DRIVER_APP_BUNDLE_PATH;
-    if (!existsSync(appPath)) return null;
+    // Stage A：app bundle 改为 userData 下的 companion bundle（Cindy Computer Use.app）。
+    const appPath = getComputerDriverAppBundlePath();
+    if (!appPath) return null;
     let iconName: string | null = null;
     const plistRes = await runProcess(
       '/usr/bin/plutil',
@@ -2989,7 +3083,7 @@ export async function getComputerDriverAppIcon(): Promise<string | null> {
       rmSync(outPng, { force: true });
     }
   } catch (err) {
-    logger.debug('failed to extract CuaDriver.app icon (fallback to generic)', {
+    logger.debug('failed to extract companion bundle icon (fallback to generic)', {
       error: err instanceof Error ? err.message : String(err),
     });
     cachedDriverAppIconDataUrl = null;
@@ -3011,7 +3105,9 @@ export function cancelComputerDriverPermissionGrant(): void {
   stopPermissionGrantFlow('user cancelled permission guide');
 }
 
-export async function grantComputerDriverPermissions(): Promise<ComputerDriverPermissionGrantResult> {
+export async function grantComputerDriverPermissions(
+  knownStatus?: ComputerDriverStatus,
+): Promise<ComputerDriverPermissionGrantResult> {
   if (process.platform !== 'darwin') {
     const status = await getComputerDriverStatus();
     return {
@@ -3022,6 +3118,23 @@ export async function grantComputerDriverPermissions(): Promise<ComputerDriverPe
     };
   }
 
+  // The phase-one macOS guide owns the drag/enable interaction. While it is
+  // waiting for the companion app (Cindy Computer Use.app) row to appear in
+  // System Settings, do not run upstream `permissions grant`: that command
+  // would recreate the row and replace the designed drag step with its own
+  // legacy onboarding.
+  if (computerDriverPermissionProbePaused) {
+    const status = knownStatus
+      ?? await getComputerDriverStatus({ skipPermissionProbe: true });
+    return {
+      ok: false,
+      stdout: '',
+      stderr: '',
+      status,
+    };
+  }
+
+  // Legacy callers without the new guide retain upstream CuaDriver's grant.
   const grantFlow = startPermissionGrantFlow();
   await Promise.race([
     grantFlow.catch(() => null),
@@ -3225,12 +3338,19 @@ export async function cleanupAllComputerDriverSessions(): Promise<void> {
 }
 
 export function getComputerMcpDeps(options: ComputerMcpDepsOptions = {}): ComputerMcpDeps {
+  const ensureRuntime = async (): Promise<void> => {
+    await options.prepareRuntimeBeforeUse?.();
+  };
   return {
-    getStatus: getComputerDriverStatus,
+    getStatus: async () => {
+      await ensureRuntime();
+      return getComputerDriverStatus();
+    },
     callTool: async (name, args, context) => {
-      if (options.isComputerUseEnabled && !options.isComputerUseEnabled(context)) {
+      if (options.isComputerUseEnabled && !options.isComputerUseEnabled()) {
         throw new ComputerDriverError('Computer Use is disabled in Settings.');
       }
+      await ensureRuntime();
       return callComputerDriverTool(name, args, context);
     },
     logger,

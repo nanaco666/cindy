@@ -4,14 +4,14 @@ import QuartzCore
 import SwiftUI
 
 private let agentIslandSoundIds: Set<String> = [
-  "startup-chime",
-  "ring-chime",
-  "item-found",
-  "gem-collect",
-  "item-fanfare",
-  "victory-fanfare",
-  "error-buzz",
-  "secret-chime",
+  "gameboy-startup",
+  "sonic-ring",
+  "pokemon-item-found",
+  "zelda-rupee",
+  "zelda-item-get",
+  "ff-victory",
+  "mario-incorrect",
+  "zelda-secret",
 ]
 
 final class AgentIslandSoundPlayer: NSObject, NSSoundDelegate {
@@ -1364,10 +1364,10 @@ struct AgentIslandSoundSettings: Codable {
   static let fallback = AgentIslandSoundSettings(
     enabled: true,
     sounds: [
-      "start": .builtin("startup-chime"),
-      "attention": .builtin("secret-chime"),
-      "complete": .builtin("gem-collect"),
-      "error": .builtin("error-buzz"),
+      "start": .builtin("gameboy-startup"),
+      "attention": .builtin("zelda-secret"),
+      "complete": .builtin("zelda-rupee"),
+      "error": .builtin("mario-incorrect"),
       "select": .builtin("none"),
     ]
   )
@@ -3227,23 +3227,9 @@ struct ExpandedSessionHeaderLine: View {
   let mascotSkin: String
   let onFocus: () -> Void
 
-  private var showsMascot: Bool {
-    switch session.phase {
-    case "needs-interaction", "completed":
-      return false
-    default:
-      return true
-    }
-  }
-
   var body: some View {
     HStack(alignment: .center, spacing: 8) {
-      StatusDot(
-        session: session,
-        compact: false,
-        showsRunningAnimation: showsMascot,
-        mascotSkin: mascotSkin
-      )
+      StatusDot(session: session, compact: false, mascotSkin: mascotSkin)
 
       Text(expandedPrimaryTitle(for: session, strings: strings))
         .font(.system(size: titleFontSize, weight: .bold, design: .monospaced))

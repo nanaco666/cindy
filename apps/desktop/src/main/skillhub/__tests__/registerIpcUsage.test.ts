@@ -19,7 +19,7 @@ vi.mock('electron', () => ({
 }));
 
 vi.mock('../../authManager', () => ({
-  getCurrentDataOwnerId: vi.fn(() => 'local-v1'),
+  getCurrentUserId: vi.fn(() => 'user-1'),
 }));
 
 const ensureReady = vi.fn();
@@ -96,7 +96,7 @@ describe('registerSkillhubIpc usage handlers', () => {
     expect(handler).toBeTypeOf('function');
     const result = await handler?.({}, { name: 'word-doc' });
 
-    expect(ensureReady).toHaveBeenCalledWith('local-v1');
+    expect(ensureReady).toHaveBeenCalledWith('user-1');
     expect(getLocalSkillUsageSummary).toHaveBeenCalledTimes(2);
     expect(result).toEqual({ success: true, summary: { totalUseCount: 1 }, refreshing: false });
   });
@@ -132,9 +132,9 @@ describe('registerSkillhubIpc usage handlers', () => {
   it('drops internal autoSync flag from renderer install params', async () => {
     installServiceMocks.install.mockResolvedValueOnce({
       success: true,
-      name: 'demo-oa-skill',
+      name: 'xdoa-skill',
       version: '1.0.0',
-      absolutePath: '/tmp/demo-oa-skill',
+      absolutePath: '/tmp/xdoa-skill',
     });
     const sender = { send: vi.fn() };
     const handler = handlers.get('skillhub:install');
@@ -142,10 +142,10 @@ describe('registerSkillhubIpc usage handlers', () => {
     const result = await handler?.(
       { sender },
       {
-        name: 'demo-oa-skill',
+        name: 'xdoa-skill',
         version: '1.0.0',
         force: true,
-        installPath: '/tmp/demo-oa-skill',
+        installPath: '/tmp/xdoa-skill',
         skipBackup: true,
         autoSync: true,
       },
@@ -153,16 +153,16 @@ describe('registerSkillhubIpc usage handlers', () => {
 
     expect(result).toEqual({
       success: true,
-      name: 'demo-oa-skill',
+      name: 'xdoa-skill',
       version: '1.0.0',
-      absolutePath: '/tmp/demo-oa-skill',
+      absolutePath: '/tmp/xdoa-skill',
     });
     expect(installServiceMocks.install).toHaveBeenCalledWith(
       {
-        name: 'demo-oa-skill',
+        name: 'xdoa-skill',
         version: '1.0.0',
         force: true,
-        installPath: '/tmp/demo-oa-skill',
+        installPath: '/tmp/xdoa-skill',
         skipBackup: true,
       },
       expect.any(Function),

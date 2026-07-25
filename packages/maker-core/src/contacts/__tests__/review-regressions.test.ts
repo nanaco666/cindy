@@ -34,14 +34,14 @@ describe('review 回归', () => {
 
   describe('关系对端 FTS 一致性(rename/merge/delete 后搜组织名捞成员)', () => {
     it('组织改名后, 用新名能搜到成员, 旧名不再脏命中', () => {
-      const org = store.createContact({ kind: 'org', displayName: '旧云岚' });
+      const org = store.createContact({ kind: 'org', displayName: '旧心动' });
       const p = store.createContact({ kind: 'person', displayName: '员工甲' });
       store.addRelation(p.id, { toId: org.id, relation: '任职' });
-      expect(store.search('旧云岚').map((h) => h.contactId)).toContain(p.id);
+      expect(store.search('旧心动').map((h) => h.contactId)).toContain(p.id);
 
-      store.updateContact(org.id, { displayName: '新云岚' });
-      expect(store.search('新云岚').map((h) => h.contactId)).toContain(p.id);
-      expect(store.search('旧云岚').map((h) => h.contactId)).not.toContain(p.id);
+      store.updateContact(org.id, { displayName: '新心动' });
+      expect(store.search('新心动').map((h) => h.contactId)).toContain(p.id);
+      expect(store.search('旧心动').map((h) => h.contactId)).not.toContain(p.id);
     });
 
     it('组织被 merge 掉后, 成员的 FTS 关系文本换成 target 名', () => {
@@ -72,7 +72,7 @@ describe('review 回归', () => {
         displayName: '张三丰',
         summary: '一行简介',
         identities: [
-          { platform: 'email', value: 'zhang@example.com' },
+          { platform: 'email', value: 'zhang@xd.com' },
           { platform: '!!!非法平台!!!', value: 'x' },
           { platform: 'email', value: '   ' }, // 空值
         ],
@@ -88,11 +88,11 @@ describe('review 回归', () => {
 
   describe('merge 字段保留', () => {
     it('target 为空的 summary/agentNotes 由 source 填充; 别名并集大小写不敏感', () => {
-      const target = store.createContact({ kind: 'person', displayName: 'Remy Kim', aliases: ['remy'] });
+      const target = store.createContact({ kind: 'person', displayName: 'Kros Dai', aliases: ['kros'] });
       const source = store.createContact({
         kind: 'person',
-        displayName: 'Remy',
-        aliases: ['REMY', 'K.D.'],
+        displayName: 'Kros',
+        aliases: ['KROS', 'K.D.'],
         summary: '技术合伙人',
         agentNotes: '勿群发营销邮件',
       });
@@ -100,8 +100,8 @@ describe('review 回归', () => {
       const after = store.getContact(target.id);
       expect(after.summary).toBe('技术合伙人');
       expect(after.agentNotes).toBe('勿群发营销邮件');
-      // 'REMY' 与已有 'remy' 大小写不敏感去重, 不重复入列
-      expect(after.aliases.filter((a) => a.toLowerCase() === 'remy')).toHaveLength(1);
+      // 'KROS' 与已有 'kros' 大小写不敏感去重, 不重复入列
+      expect(after.aliases.filter((a) => a.toLowerCase() === 'kros')).toHaveLength(1);
       expect(after.aliases).toContain('K.D.');
     });
   });
@@ -122,8 +122,8 @@ describe('review 回归', () => {
         kind: 'person',
         displayName: '重复身份',
         identities: [
-          { platform: 'email', value: 'dup@example.com' },
-          { platform: 'email', value: 'DUP@example.com' }, // 归一化后同值
+          { platform: 'email', value: 'dup@xd.com' },
+          { platform: 'email', value: 'DUP@xd.com' }, // 归一化后同值
         ],
       });
       expect(p.identities).toHaveLength(1);
@@ -134,7 +134,7 @@ describe('review 回归', () => {
         store.createContact({
           kind: 'person',
           displayName: '超长值',
-          identities: [{ platform: 'email', value: `${'a'.repeat(400)}@example.com` }],
+          identities: [{ platform: 'email', value: `${'a'.repeat(400)}@xd.com` }],
         }),
       ).toThrow(/too long/);
     });
@@ -149,12 +149,12 @@ describe('review 回归', () => {
 
   describe('vCard round-trip 与注入面', () => {
     it('org 档案导出带 KIND:org / X-ABSHOWAS, 读回仍是 org(不再退化成 person)', () => {
-      const org = store.createContact({ kind: 'org', displayName: '云岚网络' });
+      const org = store.createContact({ kind: 'org', displayName: '心动网络' });
       const vcf = serializeVCards([store.getContact(org.id)]);
       expect(vcf).toContain('KIND:org');
       expect(vcf).toContain('X-ABSHOWAS:COMPANY');
       const back = parseVCards(vcf);
-      expect(back[0]).toMatchObject({ displayName: '云岚网络', kind: 'org' });
+      expect(back[0]).toMatchObject({ displayName: '心动网络', kind: 'org' });
     });
 
     it('EMAIL 值与 TYPE label 被转义/净化, 换行注入不产生伪造行', () => {
@@ -166,8 +166,8 @@ describe('review 回归', () => {
           id: 'x',
           contactId: p.id,
           platform: 'email',
-          value: 'evil@example.com\r\nX-INJECTED:pwned',
-          normalizedValue: 'evil@example.com',
+          value: 'evil@xd.com\r\nX-INJECTED:pwned',
+          normalizedValue: 'evil@xd.com',
           label: 'work;X-EVIL',
           note: '',
           createdAt: '',
@@ -207,15 +207,15 @@ describe('review 回归', () => {
   });
 
   describe('import 组织精确归并与批内去重', () => {
-    it('org 名只做精确等值归并: "云岚" 不再模糊挂进 "云岚网络"', () => {
-      store.createContact({ kind: 'org', displayName: '云岚网络' });
+    it('org 名只做精确等值归并: "心动" 不再模糊挂进 "心动网络"', () => {
+      store.createContact({ kind: 'org', displayName: '心动网络' });
       const summary = importContacts(store, [
-        { displayName: 'Employee X', emails: [{ value: 'ex@example.com' }], phones: [], org: '云岚' },
+        { displayName: 'Employee X', emails: [{ value: 'ex@xd.com' }], phones: [], org: '心动' },
       ]);
-      expect(summary.orgsCreated).toBe(1); // 新建了 "云岚", 没挂错到 "云岚网络"
+      expect(summary.orgsCreated).toBe(1); // 新建了 "心动", 没挂错到 "心动网络"
       const orgs = store.listContacts({ kind: 'org' }).map((c) => c.displayName);
-      expect(orgs).toContain('云岚');
-      expect(orgs).toContain('云岚网络');
+      expect(orgs).toContain('心动');
+      expect(orgs).toContain('心动网络');
     });
 
     it('org 名与既有 org 精确同名(大小写差异)时归并, 不重复建档', () => {
@@ -281,16 +281,16 @@ describe('bot review 回归(PR #875 threads)', () => {
     const owner = store.createContact({
       kind: 'person',
       displayName: '占用者',
-      identities: [{ platform: 'email', value: 'taken@example.com' }],
+      identities: [{ platform: 'email', value: 'taken@xd.com' }],
     });
     const target = store.createContact({ kind: 'person', displayName: '被并入' });
     const r = store.enrichContact(target.id, {
       kind: 'person',
       displayName: '被并入',
-      identities: [{ platform: 'email', value: 'taken@example.com' }],
+      identities: [{ platform: 'email', value: 'taken@xd.com' }],
     });
     expect(r.skippedIdentities).toEqual([
-      { platform: 'email', value: 'taken@example.com', reason: 'conflict-other', conflictContactId: owner.id },
+      { platform: 'email', value: 'taken@xd.com', reason: 'conflict-other', conflictContactId: owner.id },
     ]);
   });
 
@@ -362,20 +362,20 @@ describe('bot review 回归(PR #875 threads)', () => {
     const x = store.createContact({
       kind: 'person',
       displayName: 'X',
-      identities: [{ platform: 'email', value: 'x@example.com' }],
+      identities: [{ platform: 'email', value: 'x@xd.com' }],
     });
     const y = store.createContact({
       kind: 'person',
       displayName: 'Y',
-      identities: [{ platform: 'email', value: 'y@example.com' }],
+      identities: [{ platform: 'email', value: 'y@xd.com' }],
     });
 
     const summary = importContacts(store, [
-      { displayName: '同一人', emails: [{ value: 'x@example.com' }, { value: 'y@example.com' }], phones: [] },
+      { displayName: '同一人', emails: [{ value: 'x@xd.com' }, { value: 'y@xd.com' }], phones: [] },
     ]);
     expect(summary.enriched).toBe(1);
     expect(summary.identityConflicts).toEqual([
-      { displayName: '同一人', platform: 'email', value: 'y@example.com', conflictContactId: y.id },
+      { displayName: '同一人', platform: 'email', value: 'y@xd.com', conflictContactId: y.id },
     ]);
     // X 档案本体正常并入
     expect(store.getContact(x.id).aliases).toContain('同一人');
@@ -413,7 +413,7 @@ describe('bot review 回归(PR #875 threads)', () => {
     const strictStore = new MakerContactsStore({ db, logger: noopLogger(), config: { maxRelationLen: 1 } });
     strictStore.init();
     const summary = importContacts(strictStore, [
-      { displayName: '关系失败者', emails: [{ value: 'rel@example.com' }], phones: [], org: '某公司', title: '经理' },
+      { displayName: '关系失败者', emails: [{ value: 'rel@xd.com' }], phones: [], org: '某公司', title: '经理' },
     ]);
     expect(summary.created).toBe(1); // 档案本体导入成功
     expect(summary.relationsAdded).toBe(0);
@@ -462,7 +462,7 @@ describe('bot review 回归(PR #875 threads)', () => {
     // export_system 当更新目标, 且同锚值可能让两个人被去重误并
     const vcf = [
       'BEGIN:VCARD', 'VERSION:3.0', 'FN:旧文件联系人',
-      'EMAIL:old@example.com',
+      'EMAIL:old@xd.com',
       'X-XDMAKER-APPLE-CONTACTS:DEAD-ANCHOR-999',
       'X-XDMAKER-GITHUB:legit-handle',
       'END:VCARD',
@@ -478,7 +478,7 @@ describe('bot review 回归(PR #875 threads)', () => {
     // 回归: org find-or-create 在人已建档计数后抛错 → 外层 catch 把同一条记录
     // 再计入 skipped(created+skipped 双计), 雇主关系静默丢失
     const summary = importContacts(store, [
-      { displayName: '公司名超长者', emails: [{ value: 'longorg@example.com' }], phones: [], org: 'X'.repeat(101) },
+      { displayName: '公司名超长者', emails: [{ value: 'longorg@xd.com' }], phones: [], org: 'X'.repeat(101) },
     ]);
     expect(summary.created).toBe(1);
     expect(summary.skipped).toHaveLength(0); // 不双计
@@ -486,7 +486,7 @@ describe('bot review 回归(PR #875 threads)', () => {
     expect(summary.relationErrors).toHaveLength(1);
     expect(summary.relationErrors[0]).toMatchObject({ displayName: '公司名超长者' });
     // 人已正常入库
-    expect(store.resolve('longorg@example.com')[0]!.profile.displayName).toBe('公司名超长者');
+    expect(store.resolve('longorg@xd.com')[0]!.profile.displayName).toBe('公司名超长者');
   });
 
   it('导出雇主取最新任职关系: 换工作没删旧关系时不导出老东家', () => {
@@ -511,7 +511,7 @@ describe('bot review 回归(PR #875 threads)', () => {
     const p = store.createContact({
       kind: 'person',
       displayName: '分号公司员工',
-      identities: [{ platform: 'email', value: 'semi@example.com' }],
+      identities: [{ platform: 'email', value: 'semi@xd.com' }],
     });
     store.addRelation(p.id, { toId: org.id, relation: '任职', note: '工程师' });
 

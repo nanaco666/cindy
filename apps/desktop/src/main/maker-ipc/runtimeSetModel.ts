@@ -1,4 +1,4 @@
-import type { AgentKind } from '@cindy/maker-core';
+import type { AgentKind } from '@lizi/maker-core';
 
 import { getSessionProvider, setSessionProvider } from '../maker-host/session-provider-store.js';
 import {

@@ -5,15 +5,15 @@
  *   1. 目标已存在 → 先 rename 挪去备份(可回滚),再切入新目录
  *   2. registry.addInstall(origin='learned' + provenance)失败 → 回滚文件
  *   3. best-effort 建 Claude 侧 symlink + 刷新共享 skill links
- * 被覆盖的旧版本移入 {ownerRoot}/learn/backups/ 持久保留(误覆盖可手动找回)。
+ * 被覆盖的旧版本移入 {userData}/learn/backups/ 持久保留(误覆盖可手动找回)。
  */
 
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { app } from 'electron';
 
-import { ownerScopedUserDataPath } from '../appSessionState';
 import { createLogger, maskPath } from '../logger';
 import { getCurrentUserId } from '../authManager';
 import { registryService } from '../skillhub/registry';
@@ -32,7 +32,7 @@ function globalSkillsDir(): string {
 }
 
 function learnBackupsRoot(): string {
-  return ownerScopedUserDataPath('learn', 'backups');
+  return path.join(app.getPath('userData'), 'learn', 'backups');
 }
 
 async function pathExists(p: string): Promise<boolean> {

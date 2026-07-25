@@ -1,7 +1,7 @@
 /**
  * PinnedSection — Sidebar 顶部的 Pinned 段
  * ---------------------------------------------------------------------------
- * 顶部 Pinned 段视觉规格：
+ * 设计稿对照：cc-agent-view.pen frame ZVIpx / WazkW（Main）顶部 Pinned 段
  *   - Section 容器：vertical layout, gap 2
  *   - Section Title：padding [0, 12, 0, 24], height 24
  *   - Title 文字："Pinned" Inter 14 / 600，#262626 (Light) / #f5f0e8 (Dark)

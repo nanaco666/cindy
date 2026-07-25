@@ -1,7 +1,7 @@
-# Cindy Mobile Remote Control Plan
+# XDMaker Mobile Remote Control Plan
 
 > 版本: 2026-06-16
-> 范围: 手机版作为 `device-link` 控制端,远程连接同账号电脑,控制电脑上的 Cindy。
+> 范围: 手机版作为 `device-link` 控制端,远程连接同账号电脑,控制电脑上的 XDMaker。
 > 分支前提: 手机版工作基于 `feat/device-link-remote-control`;该分支已经实现远程连接必需的桌面端、服务端和 `device-link` 基础能力。
 > 当前基线: `codex/mobile-device-link` 已 fast-forward 到 `feat/device-link-remote-control` HEAD `d04e654d0`。
 > 基线: 以桌面版现有源码语义为准,只针对手机触控、窄屏、后台/前台切换做交互优化。
@@ -50,7 +50,7 @@
 2. **Shared core 收口先于继续加 UI**:凡是 session/message、pending interaction、queue/input、session controls、file browser、automation/schedule、device-link contract 这类可用纯对象表达的语义,先迁到 `packages/maker-shared`,mobile 只保留 native shell、navigation、touch UI 和 device-link 生命周期。
 3. **移动端 UI 重新按桌面信息架构整理**:首页对齐桌面左侧会话列表,直接展示所有可继续操作的会话;会话详情对齐桌面会话页主阅读流;Automations、Files、Settings 只保留桌面端已有概念的移动承载。调试、本地联调和 mock login 入口只能留在 dev/debug surface。
 4. **会话页做一次完整减法重构**:固定 header + message list + bottom interaction/composer 是主干;connection、queue、session controls、payload、diff、context/cost、file preview 只有在需要时进入 sheet/full-screen route,不在页面里常驻堆卡片。
-5. **视觉规范按桌面 `docs/design-rules/cindy-design-system.md` 统一**:整体保持黑白灰、无阴影、12px container radius、pill-shaped interactive control、克制字重和层级。React Native 不强制复用桌面组件,但颜色、层级、spacing、图标、状态表达必须可回指到桌面 token / lucide icon 语义。
+5. **视觉规范按桌面 `DESIGN.md` 统一**:整体保持黑白灰、无阴影、12px container radius、pill-shaped interactive control、克制字重和层级。React Native 不强制复用桌面组件,但颜色、层级、spacing、图标、状态表达必须可回指到桌面 token / lucide icon 语义。
 6. **自动化测试作为每次交付门槛**:用户不再手工承担回归。每次阶段交付至少跑 shared build/test、mobile typecheck/unit、web smoke、Maestro 静态检查、local full check-only;有 Maestro CLI 和固定模拟器时再跑 native flow 和 visual baseline。
 
 ### 1.2 本轮意见后的目标重校准
@@ -61,7 +61,7 @@
 
 1. **首页像桌面左侧栏,不是设备页**:默认只展示可继续操作的会话列表,按桌面侧边栏的信息层级和排序来组织;电脑只作为轻量筛选/归属信息,不作为第一步选择路径。不要常驻 Relay 连接、设备调试、项目/聊天二次分类、等待数量 badge 等桌面左侧栏没有的信息。
 2. **会话页像桌面会话主流,不是控制台**:顶部只保留返回、标题、必要上下文和桌面同源动作;中间是消息流;底部是 pending interaction 或 composer。队列、控制项、payload、diff、媒体、文件、context/cost 进入 sheet/full-screen route,不在主流堆卡片。
-3. **消息行为对齐桌面且更轻**:复制、分叉、撤销等动作回到消息结束位置;图标视觉尺寸按桌面轻量 action bar 处理,手机只放大不可见 hit area。自己发的消息不显示“你/Cindy”之类身份标签。消息正文必须能在可见文本上直接选择和复制;弹窗只能作为平台兜底,不能成为唯一选择路径。
+3. **消息行为对齐桌面且更轻**:复制、分叉、撤销等动作回到消息结束位置;图标视觉尺寸按桌面轻量 action bar 处理,手机只放大不可见 hit area。自己发的消息不显示“你/XDMaker”之类身份标签。消息正文必须能在可见文本上直接选择和复制;弹窗只能作为平台兜底,不能成为唯一选择路径。
 4. **工作过程默认更克制**:`已工作` 折叠态只保留桌面同级摘要,不显示额外分类 chip 或比桌面更详细的统计。展开后按 Work/Tool/Thinking/Todo 的桌面语义展示,不要给手机端新增解释性分类。
 5. **输入区图标化**:附件、语音、发送、停止、目录、搜索、更多都使用桌面同族图标。语音放在发送左侧;文字只保留 placeholder、必要错误和不可用原因。附件面板可以有说明,但默认入口不能是大号文字按钮。
 6. **Android 不阻塞,但不能埋坑**:当前 iOS 先验收视觉和交互质量;实现层不写死 iOS-only 安全区、app id、URL scheme、状态栏高度或 WebView 行为。Android 后续用同一 shared model 和同一自动化入口补 baseline。
@@ -82,7 +82,7 @@
 
 | 顺序 | 状态 | 里程碑 | 交付内容 | 验收 |
 | --- | --- | --- | --- | --- |
-| A | 已完成第一轮 | Shared core completion pass | automation/schedule model、device-link controller contract、shared fixture baseline、raw desktop-like message parity、schedule/file raw payload parity 已迁;保留 mobile re-export 兼容。 | `@cindy/maker-shared` build/test;mobile adapter 测试全绿;desktop parity 单测覆盖 schedule/file;shared 不依赖 RN/Electron/DOM。 |
+| A | 已完成第一轮 | Shared core completion pass | automation/schedule model、device-link controller contract、shared fixture baseline、raw desktop-like message parity、schedule/file raw payload parity 已迁;保留 mobile re-export 兼容。 | `@lizi/maker-shared` build/test;mobile adapter 测试全绿;desktop parity 单测覆盖 schedule/file;shared 不依赖 RN/Electron/DOM。 |
 | B | iOS baseline 已完成 | Mobile IA and shell baseline | RN primitives、Session Action Strip、会话页 chrome/main/bottom 层级、Queue/Search/Controls sheet、Usage 直达入口、debug/local path 分离、pending bottom surface、payload full-screen viewer shell 已完成;Session 六态 visual scenario / Maestro flow / baseline checker 已落地;payload modal 已补 `visual_session_payload.yaml` flow,Settings 已进入 `visual_smoke.yaml` 截图 flow。 | `ios-iphone-17-pro-expo-go` 下 12 张截图基线已接受并通过 hash 校验,包括设备列表、Settings、设备详情、会话、控制面板、payload full-screen viewer 和 idle/running/pending/queue/offline/revoked;revoked flow 已真实等待到“访问已撤销”。Android 当前只保留 profile/脚本护栏,不阻塞 iOS 高标准 polish。 |
 | C | 当前进行 | Home and session desktop-first polish | 在视觉基线保护下先修首页和会话页:首页回到桌面左侧会话列表;会话页重做消息层级、消息动作、可见文本选择、composer、pending、payload/diff/media/file viewer、context/cost、queue/controls 的触控节奏。所有手机端额外统计、说明和调试信息先默认删除或收进详情。新展示语义先进入 shared model,手机只做承载。 | 首页常驻信息不超过桌面左侧栏;长消息可直接选择复制;消息动作在消息结束处且视觉轻量;composer icon-first;长消息、长工具、大 diff、媒体、键盘、sheet 打开/关闭在 iPhone SE 宽度无重叠、无空白帧、消息列表不被卸载。 |
 | D | C 后收口 | Desktop parity pruning and hardening | 回到桌面源码矩阵,逐项补 new session、media/file、automations、fork/rewind、settings 的细节缺口;同时删除或下沉手机端比桌面端更多的状态表达。协作模式继续只读安全降级。 | 每个缺口必须有桌面来源、shared model 判断、mobile 承载说明和 unit / E2E / parity fixture 中至少一层验证;每个新增 UI 必须说明为什么没有让手机端更复杂。 |
@@ -258,7 +258,7 @@
 | 远程会话列表 | `remoteProjectsStore` 是控制端内存镜像,不写本地 SQLite;`sessions` topic 先订阅再 bootstrap;`sessions:created` 无 row,只触发 reseed。 | `remoteSessionStore` 按 `deviceId` 分片,`sessionId -> deviceId` 建索引;列表页只订阅 `sessions`;push patch 幂等合并,created 触发 refresh。 | store snapshot/patch/reseed/乱序回放单测;手机列表和桌面新建/改名/归档/删除同步 E2E。 |
 | 打开会话重订阅 | `useRemoteSessionSync` 打开会话才订阅 `session:<id>`;WS online、presence online、turn end、window focus、手动 resync 触发 reconcile。 | 会话页进入时 `openLink + subscribe(session:<id>) + getSession + getPendingInteractions + getProjection`;退出时 unsubscribe;App foreground 走同样 rehydrate。 | `rehydrateDeviceLinkTopics` 单测;reconnect Maestro flow;server relay E2E 覆盖 push 后补账。 |
 | 远程传输层 | `makerTransport.ts` 通过 `getSessionDeviceId(sessionId)` 路由本地 IPC 或 `deviceLink.invoke`。 | 手机版所有远程调用进入 `mobileMakerTransport`;页面组件禁止直接拼 channel;channel drift 由测试锁定。 | `mobileMakerTransport.test` 断言 channel、参数顺序、错误码保留。 |
-| 侧边栏/会话列表 | `CCAgentSidebarUpper` + sections 支持 pinned、dialogue、projects、date grouped、archived/all、search、batch、automation group、schedule unread。 | V1 用 `SectionList` 实现设备/置顶/对话/项目分组,已补搜索、archived/all、project/date 切换、长按选择模式和批量归档/删除;同一 schedule 的自动化生成会话已聚合成组行,并显示 running/unread run。筛选、搜索、分组、自动化聚合、列表上下文/空状态和批量操作 patch projection 已迁入 `@cindy/maker-shared/session-list` 与 `session-selection`,mobile 只保留 RN 列表、确认卡、远程 patch 调用和刷新。 | shared + mobile 分组/选择单测;1000 session fixture;E2E 覆盖搜索、置顶、归档、批量操作、切筛选。 |
+| 侧边栏/会话列表 | `CCAgentSidebarUpper` + sections 支持 pinned、dialogue、projects、date grouped、archived/all、search、batch、automation group、schedule unread。 | V1 用 `SectionList` 实现设备/置顶/对话/项目分组,已补搜索、archived/all、project/date 切换、长按选择模式和批量归档/删除;同一 schedule 的自动化生成会话已聚合成组行,并显示 running/unread run。筛选、搜索、分组、自动化聚合、列表上下文/空状态和批量操作 patch projection 已迁入 `@lizi/maker-shared/session-list` 与 `session-selection`,mobile 只保留 RN 列表、确认卡、远程 patch 调用和刷新。 | shared + mobile 分组/选择单测;1000 session fixture;E2E 覆盖搜索、置顶、归档、批量操作、切筛选。 |
 | 新建会话 | `NewMakerDraftRoute` 远程 device-link 路径调用 `maker:create-session`;`deviceLinkCreateArgs` 负责 workspace、agent、extraDirs 归一;首条消息再走 input queue。桌面本地对话由 main/localDb 分配 `userData/dialogues/<date>/<sessionId>` cwd。 | `/sessions/new` 已支持项目/对话工作区切换、手动远程项目路径、远端目录浏览、最近项目 quick pick、extra dirs、agent/model/effort/permission/fast 和首条消息;运行设置已通过被控端 `maker:get-capabilities` 纠正 model/effort/permission/fast 组合;对话模式不让手机端猜路径,由被控桌面端 `maker:create-session` 分配真实 cwd。会话 composer 已补附件、slash、@ 和语音首版;worktree 创建继续后补。协议仍是 create session 后 enqueue first message。 | `newSession.test` 覆盖 project/dialogue create args、defaults、recent workspaces、extra dirs、无 effort 模型参数省略;`agentCapabilities.test` 覆盖 capability 纠偏;桌面 `sessionRequest/sessionCreateHandler` 覆盖 dialogue cwd 分配;`mobileMakerTransport` 和 smoke 覆盖 `fs:list-dir` 参数形态;E2E 覆盖新建后桌面侧出现会话并收到首条消息。 |
 | 会话 Header | `SessionContentHeader` 管 title、pin、schedule badge、deep link、SDK id、archive/delete、right sidebar;远程会话只显示远端路径,不本机 open。 | 手机顶部只放返回、设备、标题、状态;`SessionControlsPanel` 已承载 rename/pin/archive/delete/copy deep link/copy XDT id/copy SDK id/model/effort/permission/fast/context/spend,删除需要二次确认;controls sheet 的 overview、tabs、输入行、按钮和远程目录 browser 已用 `sessionControlsTouchLayout.ts` 做窄屏触控布局,动作按钮统一由局部 `ControlActionButton` 表达,inline 入口 / section tabs / 远程目录进入行补齐 expanded / selected / disabled accessibility state。 | header/control source anchors + smoke 覆盖;`sessionLinks.test` 锁定 deep link 格式;`sessionControlsTouchLayout.test` 锁定 320/393/未就绪宽度。 |
 | 连接状态 | `RemoteSessionBanner` 区分 disconnected、host offline、not connected、remote disabled、access revoked,支持 resync。 | 顶部固定连接 banner,错误保留 code;resync 执行重订阅、消息 reconcile、pending interaction 和列表 refresh;重新同步按钮用 busy-aware `MainWindowActionButton` 表达 loading/disabled/busy state。 | remote error formatting 单测;relay 断开/电脑关闭远控/撤权 E2E。 |
@@ -314,7 +314,7 @@ Worktree 补充:
 
 ### 2.3 第一版明确边界
 
-第一版的目标不是“把桌面 UI 缩小”,而是“完整控制一台电脑上的单会话 Cindy”。因此:
+第一版的目标不是“把桌面 UI 缩小”,而是“完整控制一台电脑上的单会话 XDMaker”。因此:
 
 - 必做:设备发现、会话列表、新建会话、消息流、发送/停止/队列、pending interactions、会话控制、fork/rewind、context/spend、媒体/diff、基础 automations、断线重连和撤权。
 - 必须按桌面源码统一:协议 shape、队列语义、interaction decision、session patch 回流、scheduler 排序和删除策略、远程媒体取件链路。
@@ -464,7 +464,7 @@ V1A 可以先只有 `Devices/Sessions/Settings`,但路由结构要给 `Automatio
 手机版 V1A:
 
 - 从某台电脑进入“新建远程会话”。
-- 先选工作区: 项目模式支持手动输入路径、最近项目 quick pick、被控端目录浏览;对话模式由被控端分配 Cindy 管理目录。
+- 先选工作区: 项目模式支持手动输入路径、最近项目 quick pick、被控端目录浏览;对话模式由被控端分配 XDMaker 管理目录。
 - 再选 agent、model、effort、permission、fast。
 - 输入首条消息后,通过被控端 `maker:create-session` 创建 session,再由手机端 queue coordinator 发送首条消息。桌面 device-link 草稿当前就是这个协议;等被控端支持真正 lazy create 后再收敛。
 - 不做 worktree 创建 UI 的复杂分支:桌面 `NewMakerDraftRoute` 在 device-link 远程项目路径也明确跳过 worktree 创建。手机版 V1 只保留已有 session 的 worktree 状态显示,已完成列表 badge、subtitle 搜索和会话详情只读路径。
@@ -972,7 +972,7 @@ V2 再做:
 
 ## 10. 手机版实现结构
 
-当前实现结构按 shared core 修订。`apps/mobile` 只放 iOS / Android 原生壳、device-link 生命周期、mobile adapter 和触控 UI;可复用的 session/message render、message presentation、pending interaction、queue/input projection、session controls、file browser、automation/schedule、payload summary/body/preview/tool input diff/summary projection/tool_result media extraction/attachment projection 等纯模型从 `@cindy/maker-shared` 引入。
+当前实现结构按 shared core 修订。`apps/mobile` 只放 iOS / Android 原生壳、device-link 生命周期、mobile adapter 和触控 UI;可复用的 session/message render、message presentation、pending interaction、queue/input projection、session controls、file browser、automation/schedule、payload summary/body/preview/tool input diff/summary projection/tool_result media extraction/attachment projection 等纯模型从 `@lizi/maker-shared` 引入。
 
 建议按这些模块推进:
 
@@ -1031,7 +1031,7 @@ apps/mobile/src/
 - 不直接复用桌面 React DOM 组件。
 - 复用桌面 wire protocol 和状态机语义。
 - 所有 `deviceLink.invoke` 进入 `mobileMakerTransport`。
-- message renderer 先消费 `@cindy/maker-shared` 的 render model;raw desktop payload 只允许在 mobile adapter 层归一,不要在组件里散落 `unknown` 判断。
+- message renderer 先消费 `@lizi/maker-shared` 的 render model;raw desktop payload 只允许在 mobile adapter 层归一,不要在组件里散落 `unknown` 判断。
 - pending interaction 的 answer/decision serialization 必须进入 shared core 并有单测锁定;mobile 只负责 sheet / wizard 和本地 draft。
 - queue、session controls、file preview、automation/schedule、payload summary/body/preview/tool input diff/summary projection/tool_result media extraction/attachment projection 的排序、摘要、disabled reason、error copy、primary action 等语义先进入 shared core,再由 mobile 渲染。
 - 展开态、composer draft、ask draft、queue sheet 状态只存在手机本地。
@@ -1073,8 +1073,8 @@ apps/mobile/src/
   - 已新增 `media_smoke.yaml` + `pnpm --filter mobile test:e2e:local:media`:mock host 在会话里制造 direct image / xdt-video / xdt-audio 媒体消息,Maestro 打开图片 payload 并验证缩放控件。
   - 已新增 `pnpm --filter mobile test:e2e:local:full`:mock host 默认使用 `controls` 场景,把 create、remote session、pending controls、media、file preview、fork/rewind、automations 串进同一个 full flow suite;`--check-only` 可在未安装 Maestro 时验证 local server + relay + mock host preflight。
 - 当前验证命令已通过:
-  - `pnpm --filter @cindy/maker-shared build`
-  - `pnpm --filter @cindy/maker-shared test`
+  - `pnpm --filter @lizi/maker-shared build`
+  - `pnpm --filter @lizi/maker-shared test`
   - `pnpm --filter mobile typecheck`
   - `pnpm --filter mobile test`(63 files / 306 tests)
   - `pnpm --filter desktop test -- src/renderer/__tests__/makerSharedFixtureParity.test.ts`
@@ -1088,7 +1088,7 @@ apps/mobile/src/
   - `pnpm --filter mobile test:e2e:local:full -- --start-server --check-only`(local server + controls mock host preflight)
   - `pnpm --filter mobile test:e2e:local -- --dry-run`(local smoke runner dry run)
   - `pnpm --filter mobile test:e2e:local:fixture -- --dry-run`(mock host fixture dry run)
-  - `pnpm --filter @cindy/device-link test`(3 files / 36 tests)
+  - `pnpm --filter @lizi/device-link test`(3 files / 36 tests)
   - `pnpm --filter server exec vitest run src/__tests__/deviceLinkClientRelayE2E.test.ts`(1 file / 8 tests)
 - 本轮 schedule/file shared parity 补充验证实际命令:
   - `cd packages/maker-shared && ../../node_modules/.bin/tsc --noEmit --pretty false`
@@ -1120,7 +1120,7 @@ apps/mobile/src/
 - 已锁定 busy 不影响可控性,只作为状态提示;离线 / 未开启远程控制 / 本机不可进入。
 - 已接入控制端撤权镜像:收到 `link-close('revoked')` 或 `ACCESS_REVOKED` 后,手机标记该设备“已撤销访问权限”、清掉该设备的远程会话分片;后续 open/subscribe/invoke 成功后自动清除该标记。
 - 已把设备列表补齐到可控制、运行中、已撤销访问权限、未开启远程控制、离线、本机,排序基于最终状态而不是原始 presence。
-- 设备列表可控性分类、排序、平台标签、不可用设备可见性、header/filter/empty/toggle 文案已迁入 `@cindy/maker-shared/device-list`;mobile 只保留 `FlatList`、设置入口、重新同步、设备详情导航和状态点视觉。
+- 设备列表可控性分类、排序、平台标签、不可用设备可见性、header/filter/empty/toggle 文案已迁入 `@lizi/maker-shared/device-list`;mobile 只保留 `FlatList`、设置入口、重新同步、设备详情导航和状态点视觉。
 - 已把设备详情页会话列表升级为 `SectionList`,按置顶、对话、项目分组,并显示 agent、model、状态、最近活动、消息数。
 - 已接入会话搜索、active/archived/all 状态筛选和 project/date 分组切换;状态筛选透传到被控端 `local-db:sessions:list(limit, status)`,搜索和分组在手机端本地完成。当前搜索覆盖 title / project path / model / agent / status / worktree / schedule / Orca label / last message preview;preview 来源兼容未来 session row 字段和当前已同步 message window。
 - 已接入会话列表长按选择模式和批量 archive / delete / clear selection;批量操作复用被控端 `local-db:sessions:patch-meta`,成功后刷新远程镜像。
@@ -1252,7 +1252,7 @@ apps/mobile/src/
   - context usage 刷新、摘要和桌面同形字段扁平详情展示。
   - session spend 摘要,读取被控端 session row 的 `totalCostUsd` / `totalTokenUsage` / `contextTokens` / `contextWindow`,只展示当前远程会话自身用量。
 - 已给会话控制面板补关键 source anchors,并把删除从单击改为二次确认:第一次进入“确认删除”状态,第二次才向被控端提交 `status: deleted`。
-- 已按桌面 `ChatInput` 的 `ModelSelector` 分类规则补跨厂商模型切换确认:已有历史消息且从 Anthropic / GPT / Google / China 等不兼容类别切换时,手机端先显示确认卡;GPT 与 `codex/` 低价版 GPT 互切沿用桌面兼容豁免。
+- 已按桌面 `ChatInput` 的 `ModelSelector` 分类规则补跨厂商模型切换确认:已有历史消息且从 Anthropic / GPT / Google / China 等不兼容类别切换时,手机端先显示确认卡;GPT 与 `codex/` 骨折GPT 互切沿用桌面兼容豁免。
 - 已按桌面 `SessionContentHeader` / sidebar menu 语义补复制入口:深度链接 `xdt-maker://session/<id>`、XDT session id、底层 SDK session id;SDK id 缺失时按钮禁用。
 - 已新增 `sessionControls` helper,统一构造 `maker:get-context-usage` 的 createOpts,并把常见 usage shape、桌面结构化 context usage 和 session spend shape 压成手机可读摘要 / 详情 rows。
 - 已新增 `agentCapabilities` helper,按桌面 `AgentCapabilities` / `ModelDescriptor` 结构归一远程 `maker:get-capabilities`,让已有会话和新建会话的 model / effort / permission / fast mode 选项由被控端能力声明驱动。新建会话如果当前模型声明 `efforts: []`,创建参数会省略 `effort`,避免把旧 effort 发给不支持 reasoning 强度的模型。
@@ -1389,7 +1389,7 @@ apps/mobile/src/
 pnpm --filter mobile test
 pnpm --filter mobile test:smoke
 pnpm --filter mobile test:web-smoke
-pnpm --filter @cindy/device-link test
+pnpm --filter @lizi/device-link test
 pnpm --filter server test -- deviceLinkClientRelayE2E
 ```
 

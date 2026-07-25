@@ -7,10 +7,6 @@ const TEST_ROOT = '/tmp/xdt-learn-runstore-test';
 vi.mock('electron', () => ({
   app: { getPath: vi.fn(() => '/tmp/xdt-learn-runstore-test/userData') },
 }));
-vi.mock('../../appSessionState', () => ({
-  ownerScopedUserDataPath: (...parts: string[]) =>
-    `/tmp/xdt-learn-runstore-test/userData/owners/test-owner/${parts.join('/')}`,
-}));
 vi.mock('../../logger', () => ({
   createLogger: () => ({ debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }),
 }));
@@ -18,14 +14,7 @@ vi.mock('../../logger', () => ({
 import { LearnRunStore } from '../runStore';
 import type { LearnRunPublic } from '../../../shared/learnTypes';
 
-const RUNS_FILE = path.join(
-  TEST_ROOT,
-  'userData',
-  'owners',
-  'test-owner',
-  'learn',
-  'runs.json',
-);
+const RUNS_FILE = path.join(TEST_ROOT, 'userData', 'learn', 'runs.json');
 
 const run = (id: string, status: LearnRunPublic['status'] = 'awaiting-review'): LearnRunPublic => ({
   runId: id,

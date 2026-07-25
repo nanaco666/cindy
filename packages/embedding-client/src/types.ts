@@ -2,7 +2,7 @@
  * embedding-client 类型定义。
  *
  * 设计原则:
- *   - 完全 OpenAI /v1/embeddings 兼容 (XD Gateway 此 endpoint 透传)
+ *   - 完全 OpenAI /v1/embeddings 兼容 (xdproxy 网关此 endpoint 透传)
  *   - dim / 价格等模型元信息硬编码在 catalog.ts; 调方按 id 查
  *   - 不强制 default model: EmbedRequest 必传 modelId, 让 consumer 自己声明
  */
@@ -70,10 +70,10 @@ export interface EmbedResponse {
    * 缓存命中的位次也会回填到对应 index, 调方拿到的语义跟"全跑了一遍"一致。
    */
   embeddings: number[][];
-  /** 实际生效的 model id (XD Gateway 返的 `model` 字段, 用于审计)。 */
+  /** 实际生效的 model id (xdproxy 返的 `model` 字段, 用于审计)。 */
   modelUsed: string;
   /**
-   * 本次调用 XD Gateway 消耗的 input token 数 (缓存命中部分不计)。
+   * 本次调用 xdproxy 消耗的 input token 数 (缓存命中部分不计)。
    * 缓存全命中时 tokensUsed = 0。
    */
   tokensUsed: number;
@@ -85,9 +85,9 @@ export interface EmbedResponse {
  * embedding 操作的错误类型, 统一 code 便于 Worker 按 code 决定重试策略。
  *
  * code 语义:
- *   - AUTH_FAILED   : 没拿到 api key, 或 XD Gateway 返 401/403。不重试。
+ *   - AUTH_FAILED   : 没拿到 api key, 或 xdproxy 返 401/403。不重试。
  *   - RATE_LIMITED  : 429。Worker 走 backoff 重试。
- *   - INVALID_MODEL : 调方传了 catalog 里没有的 model id (本地校验), 或 XD Gateway 返 400。不重试。
+ *   - INVALID_MODEL : 调方传了 catalog 里没有的 model id (本地校验), 或 xdproxy 返 400。不重试。
  *   - NETWORK_ERROR : fetch 抛错 (DNS/socket reset/timeout)。Worker 走 backoff 重试。
  *   - SERVER_ERROR  : 5xx。Worker 走 backoff 重试。
  */

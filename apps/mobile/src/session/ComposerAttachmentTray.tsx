@@ -19,7 +19,7 @@ import { attachmentDisplayLabel, pendingUploadDisplayLabel } from '@/session/att
 import { ANNOTATION_OUTLINE_COLOR, ANNOTATION_STROKE_COLOR } from '@/session/imageAnnotationModel';
 import { fontWeight, iconSize, iconStroke, radius, spacing, typeScale, useTheme, useThemedStyles, type ThemeColors } from '@/theme';
 
-/** 输入卡内的缩略图为正方形(产品决策,不用横长方)。 */
+/** 输入卡内的缩略图为正方形(Dash 拍板,不用横长方)。 */
 const THUMB_SIZE = 72;
 
 export interface ComposerAttachmentTrayProps {

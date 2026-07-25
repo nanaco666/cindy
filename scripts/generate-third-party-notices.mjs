@@ -9,8 +9,8 @@
  * 分发的非 npm 资产(ripgrep / Codex CLI / Electron / Android Platform-Tools /
  * vendored 代码)的手工条目。
  *
- * 输出(均应提交进仓库,但依赖范围不同):
- *   - <repo>/docs/legal/notices/ (全工程、各分发产物及 SBOM)
+ * 输出(两份均应提交进仓库,但依赖范围不同):
+ *   - <repo>/THIRD-PARTY-NOTICES.txt (全工程生产依赖)
  *   - <repo>/apps/desktop/resources/THIRD-PARTY-NOTICES.txt
  *     (仅桌面端生产依赖,随 forge extraResource 打进安装包)
  *
@@ -29,7 +29,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, "..");
 const DESKTOP_DIR = path.join(REPO_ROOT, "apps", "desktop");
 const MOBILE_DIR = path.join(REPO_ROOT, "apps", "mobile");
-const NOTICES_DIR = path.join(REPO_ROOT, "docs", "legal", "notices");
+const NOTICES_DIR = path.join(REPO_ROOT, "notices");
 const SBOM_DIR = path.join(NOTICES_DIR, "sbom");
 const CARGO_MANIFEST = path.join(
   DESKTOP_DIR,
@@ -676,7 +676,7 @@ function buildDesktopCommonEntries(apacheText, sharpPackageName) {
 
   // vendored 上游源码不作为独立 npm 包出现,需显式声明。
   // (lark-openapi-mcp vendored 源已于 2026-07-22 随飞书 OpenAPI 工具链整体迁出
-  // 本仓,改由独立插件包分发,不再随桌面包分发,故其声明从此处移除。)
+  // 本仓 → cindy-xd-plugin 插件仓,不再随桌面包分发,故其声明从此处移除。)
   entries.push(
     bundledComponent({
       name: "openclaw fs-safe sources (vendored)",
@@ -701,20 +701,6 @@ function buildDesktopCommonEntries(apacheText, sharpPackageName) {
   );
 
   return entries;
-}
-
-function buildMacEntries() {
-  return [
-    // agent-island Swift helper 中的 NotchShape 轮廓与 SpriteMascotConfig 皮肤
-    // 参数改编自 Code Island(见 macos-agent-island-helper.swift 内注释)。
-    bundledComponent({
-      name: "Code Island NotchPanelShape & mascot parameters (adapted)",
-      version: "adapted",
-      license: "MIT",
-      url: "https://github.com/wxtsky/CodeIsland",
-      licenseText: MIT_TEXT("MIT License\n\nCopyright (c) 2026 wxtsky"),
-    }),
-  ];
 }
 
 function buildWindowsEntries() {
@@ -1154,7 +1140,7 @@ function assertProjectPodspecLicenses() {
     if (/UNLICENSED/i.test(text)) {
       throw new Error(`project podspec must not declare UNLICENSED: ${relativePath}`);
     }
-    if (!/https:\/\/github\.com\/makecindy\/cindy\.git/.test(text)) {
+    if (!/https:\/\/github\.com\/xindong\/cindy-moved\.git/.test(text)) {
       throw new Error(`project podspec must point to the public source repository: ${relativePath}`);
     }
   }
@@ -1177,6 +1163,7 @@ function assertTrackedBinariesRegistered() {
   const registeredPrefixes = [
     "apps/android-platform-tools-bin/",
     "apps/desktop/native/sqlite-vec/",
+    "apps/desktop/resources/xdt-helper.exe",
     "apps/desktop/resources/cindy-updater.exe",
     "apps/mobile/assets/fonts/JetBrainsMono-",
   ];
@@ -1252,10 +1239,10 @@ const artifactDefinitions = {
   },
   "desktop-macos": {
     closure: desktopMacNpm,
-    manual: [
-      ...buildDesktopCommonEntries(apacheText, "@img/sharp-libvips-darwin-arm64"),
-      ...buildMacEntries(),
-    ],
+    manual: buildDesktopCommonEntries(
+      apacheText,
+      "@img/sharp-libvips-darwin-arm64",
+    ),
     productName: "Cindy desktop application — macOS x64/arm64",
     description: [
       "macOS Intel 与 Apple Silicon 桌面安装包的第三方开源组件声明。",
@@ -1404,15 +1391,13 @@ const desktopRestricted = mergeComponents(
 );
 outputs.push(
   [
-    path.join(NOTICES_DIR, "THIRD-PARTY-NOTICES.txt"),
+    path.join(REPO_ROOT, "THIRD-PARTY-NOTICES.txt"),
     buildOutput({
       packages: projectClosure.packages,
       manualEntries: projectManual,
       productName: "Cindy project aggregate",
       description: ["全工程各已定义分发产物的第三方开源组件聚合声明。"],
-      coverageNotes: [
-        "各产物精确范围见 docs/legal/notices/*.txt;受限组件见独立清单。",
-      ],
+      coverageNotes: ["各产物精确范围见 notices/*.txt;受限组件见独立清单。"],
     }),
   ],
   [
@@ -1423,7 +1408,7 @@ outputs.push(
       productName: "Cindy desktop application — all supported platforms",
       description: ["Windows、macOS 与 Linux 桌面产物的保守合并声明。"],
       coverageNotes: [
-        "发布包可按 docs/legal/notices/desktop-<platform>.txt 使用平台精确版本。",
+        "发布包可按 notices/desktop-<platform>.txt 使用平台精确版本。",
       ],
     }),
   ],

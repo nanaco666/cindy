@@ -1,7 +1,7 @@
 /**
  * VendorSegmentedSwitcher —— NewMaker 主区域内的 Agent 引擎切换控件。
  * ---------------------------------------------------------------------------
- * 视觉规格:
+ * 设计稿对照(doc/design_docs/cc-agent-view.pen 节点 HPzt0/wBlHH):
  *   - 容器:pill (9999px),宽 220,padding 3,gap 2
  *           Light fill #e5e5e5 / Dark fill #1f1f1e + 1px Board #3c3c3a
  *   - segment:pill,padding [6,14],fill_container,justifyContent center,gap 6
@@ -29,8 +29,6 @@ interface VendorSegmentedSwitcherProps {
   className?: string;
   width?: number;
   dense?: boolean;
-  /** 窄态工具栏只保留品牌图标，文字通过 title / aria-label 提供。 */
-  iconOnly?: boolean;
   /**
    * CREATE AGENT 首页按 Figma 185:2724 使用独立私有 token。
    * dropdown:模型选择器浮层内使用(session-agent-switch 两步切换)——浮层表面与
@@ -59,7 +57,6 @@ export function VendorSegmentedSwitcher({
   className,
   width = 220,
   dense = false,
-  iconOnly = false,
   visualVariant = 'default',
 }: VendorSegmentedSwitcherProps) {
   const isCreateAgentVariant = visualVariant === 'create-agent';
@@ -101,11 +98,8 @@ export function VendorSegmentedSwitcher({
               if (isActive) return;
               onChange(opt.vendor);
             }}
-            aria-label={opt.label}
-            title={opt.label}
             className={cn(
-              'flex h-full flex-1 items-center justify-center rounded-full',
-              !iconOnly && 'gap-1.5',
+              'flex h-full flex-1 items-center justify-center gap-1.5 rounded-full',
               dense ? 'text-[12px] leading-none transition-colors' : 'text-[14px] leading-none transition-colors',
               isActive
                 ? cn(
@@ -133,7 +127,7 @@ export function VendorSegmentedSwitcher({
             <opt.Mark size={dense ? 13 : 14} className={cn('shrink-0', opt.iconClassName)} />
             {/* 文字下沉 0.5px —— Inter 在 leading-none 下视觉重心偏上,与 vendor mark
                 光学居中对齐微调,见 NewChat 视觉走查 2026-05-03。 */}
-            {!iconOnly && <span className="translate-y-[0.5px] whitespace-nowrap">{opt.label}</span>}
+            <span className="translate-y-[0.5px] whitespace-nowrap">{opt.label}</span>
           </button>
         );
       })}

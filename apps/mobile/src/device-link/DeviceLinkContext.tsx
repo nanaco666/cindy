@@ -15,7 +15,7 @@ import {
   type PresenceSnapshot,
   type PushPayload,
   type Topic,
-} from '@cindy/device-link';
+} from '@lizi/device-link';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { deviceLinkWsUrl } from '@/config/env';
 import { MOBILE_VISUAL_MOCK_ENABLED } from '@/config/env';
@@ -43,7 +43,7 @@ import { dispatchFileBrowserWatchEvent } from '@/device-link/fileBrowserWatch';
 import { rehydrateDeviceLinkTopics } from '@/device-link/rehydrate';
 import { isTransientRemoteError } from '@/device-link/remoteRetry';
 import { createRnWebSocket } from '@/device-link/rnWebSocket';
-import type { MobileGoalStatusPayload } from '@cindy/maker-shared/device-link-contract';
+import type { MobileGoalStatusPayload } from '@lizi/maker-shared/device-link-contract';
 import {
   DeviceLinkTopicRegistry,
   markHeldRemoteTopicsSubscribed,
@@ -406,20 +406,6 @@ export function DeviceLinkProvider({ children }: { children: ReactNode }) {
         void rehydrateWithClient(client);
       }
       if (next === 'background') {
-        // 立即释放重量级 session:<id> 订阅(趁 socket 还活着、iOS 尚未挂起 JS):
-        // 被控桌面以「有人订阅该会话流」为防打扰信号压制手机系统推送,锁屏/切后台
-        // 后若订阅残留(宽限窗、挂起延迟最长可拖到 server 60s 空闲清扫),恰好在
-        // 用户离开的瞬间完成的任务就永远收不到通知。只动远端订阅与 ack 簿记,
-        // registry 所有权保留 —— 回前台的 rehydrate 会因 ack 已清而重新订阅。
-        const registrySnapshot = registryRef.current.snapshot();
-        for (const plan of registrySnapshot) {
-          const heavy = plan.topics.filter((topic) => topic.startsWith('session:'));
-          if (heavy.length === 0) continue;
-          markRemoteTopicsUnsubscribed(remoteSubscribedTopicsRef.current, plan.deviceId, heavy);
-          if (client.getStatus() === 'online') {
-            void sendUnsubscribe(client, plan.deviceId, heavy).catch(() => undefined);
-          }
-        }
         // 短暂宽限再断:几秒内切回的快速 App 切换不触发整套断连/重连/补齐。
         // iOS 挂起后计时器不再运行,恢复时由上面的 active 分支收拾残局。
         backgroundState.backgroundAt = Date.now();

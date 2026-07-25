@@ -45,12 +45,6 @@ class FakeAsrProvider implements AsrProvider {
   }
 }
 
-function pcmChunk(amplitude: number): ArrayBuffer {
-  const samples = new Int16Array(160);
-  samples.fill(amplitude);
-  return samples.buffer;
-}
-
 describe('VoiceInputController', () => {
   it('starts without a global crypto implementation', async () => {
     const originalCrypto = Object.getOwnPropertyDescriptor(globalThis, 'crypto');
@@ -198,76 +192,6 @@ describe('VoiceInputController', () => {
     await controller.stop();
 
     expect(submitted.map((segment) => segment.text)).toEqual(['hello world tail']);
-  });
-
-  it('silently completes when the user did not produce speech', async () => {
-    const asr = new FakeAsrProvider();
-    const states: VoiceInputState[] = [];
-    const outcomes: string[] = [];
-    const errors: string[] = [];
-    const controller = new VoiceInputController({
-      asr,
-      logger: new VoiceTimelineLogger(),
-      stableWaitMs: 0,
-      callbacks: {
-        onStateChanged: (state, outcome) => {
-          states.push(state);
-          if (outcome) outcomes.push(outcome);
-        },
-        onDraftChanged: () => {},
-        onSubmitted: () => undefined,
-        onError: (message) => errors.push(message),
-      },
-    });
-
-    await controller.start();
-    controller.appendAudio(pcmChunk(0), {
-      capturedAt: 0,
-      convertedAt: 0,
-      chunkIndex: 0,
-      sampleRate: 16_000,
-      durationMs: 10,
-    });
-    await controller.stop();
-
-    expect(controller.currentState).toBe('done');
-    expect(states.at(-1)).toBe('done');
-    expect(outcomes.at(-1)).toBe('no_speech');
-    expect(errors).toEqual([]);
-  });
-
-  it('surfaces an error when speech was detected but the transcript is empty', async () => {
-    const asr = new FakeAsrProvider();
-    const states: VoiceInputState[] = [];
-    const errors: Array<{ message: string; code?: string }> = [];
-    const controller = new VoiceInputController({
-      asr,
-      logger: new VoiceTimelineLogger(),
-      stableWaitMs: 0,
-      callbacks: {
-        onStateChanged: (state) => states.push(state),
-        onDraftChanged: () => {},
-        onSubmitted: () => undefined,
-        onError: (message, code) => errors.push({ message, code }),
-      },
-    });
-
-    await controller.start();
-    controller.appendAudio(pcmChunk(1_000), {
-      capturedAt: 0,
-      convertedAt: 0,
-      chunkIndex: 0,
-      sampleRate: 16_000,
-      durationMs: 10,
-    });
-    await controller.stop();
-
-    expect(controller.currentState).toBe('error');
-    expect(states.at(-1)).toBe('error');
-    expect(errors).toEqual([{
-      message: 'Voice input detected speech but returned no transcript. Please try again.',
-      code: 'empty_transcript',
-    }]);
   });
 
   it('ignores stop-time ASR errors after transcript text is available', async () => {

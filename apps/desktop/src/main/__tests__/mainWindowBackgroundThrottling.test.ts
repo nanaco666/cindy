@@ -16,7 +16,7 @@ import {
   SessionTurnActivityTracker,
   TURN_IDLE_THROTTLE_RESTORE_GRACE_MS,
 } from '../maker-ipc/sessionTurnActivityTracker';
-import type { AgentEvent } from '@cindy/maker-core';
+import type { AgentEvent } from '@lizi/maker-core';
 
 const sourcePath = resolve(__dirname, '..', 'bootstrap-electron.ts');
 const source = readFileSync(sourcePath, 'utf8').replace(/\r\n?/g, '\n');

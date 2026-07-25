@@ -1,7 +1,7 @@
 /**
  * 文件浏览 → ImageLightbox(聊天同款图片查看器)的桥接。
  *
- * 统一决策(2026-07-04 产品):图片文件不再走 Quick Look 预览页,直接进
+ * 统一决策(2026-07-04 Dash):图片文件不再走 Quick Look 预览页,直接进
  * ImageLightbox,与聊天看图同一套体验(左右滑/捏合缩放/下拉关闭/分享)。
  * 做法:把目录里的图片文件包装成 `xdt-file://open?path=<绝对路径>` 的
  * gallery 项(previewable:false)——这是被控端媒体取件通道原生认可的 scheme,

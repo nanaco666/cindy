@@ -2,7 +2,7 @@ import type { NormalizedToolMedia } from '@/session/messageNormalize';
 import {
   isPayloadDesktopLocalMediaUrl,
   isPayloadDirectPreviewableUrl,
-} from '@cindy/maker-shared/payload-summary';
+} from '@lizi/maker-shared/payload-summary';
 
 const EXPIRY_SAFETY_WINDOW_MS = 60 * 1000;
 

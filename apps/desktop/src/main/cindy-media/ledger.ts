@@ -1,6 +1,8 @@
 /**
  * ledger.ts — cindy-media 账本(唯一真相)。
  * ---------------------------------------------------------------------------
+ * 设计:docs/Cindy架构设计/媒体总仓/media-store.md §2.2 / §3
+ *
  * 字节仓(blobStore.ts)只存字节;文件的出生、性质、引用全部是本模块维护的
  * 两张表(localDb/schema.ts: mediaBlobs / mediaRefs)。生命周期 = 引用计数,
  * 回收器在后续切片实现;本切片提供:
@@ -32,10 +34,10 @@ function defaultDb(): LedgerDb {
 
 /**
  * 引用方类型(多态引用,详见 schema.ts mediaRefs 注释)。
- * 'ghost-grant':用户显式引渡给某意识的图(随 ghost_call attachments
+ * 'ghost-grant'(C3c-4):用户显式引渡给某意识的图(随 ghost_call attachments
  * 过户 / 拖进面板)——授权按张、永久,refId = 意识 id;与画廊 ref 一样计入
  * 归属校验(ghostCanRead)与"不被回收"。
- * 'integration-cache':集成下载缓存的 token→指纹索引行,
+ * 'integration-cache'(迁移第 3 步):集成下载缓存的 token→指纹索引行,
  * refId = `<集成名>:<token>`——(a) 回答"这个 token 下过没有"(指纹制下文件名
  * 不再是 token,没这行就只能重下);(b) 标明该 blob 归缓存策略管(总量上限 +
  * LRU 可清,即使有此引用),不是零引用孤儿。删会话不清它(removeSessionRefs
@@ -185,7 +187,7 @@ export async function hasRef(
  *   - message:refId 是消息 id,按出生会话(originSessionId)连坐删——
  *     会话没了,它名下消息的引用自然一起走;
  *   - **绝不**碰 ghost-gallery / ghost-grant:画廊/引渡是跨会话的持久引用,
- *     "删会话作品不陪葬"正是靠这两类 ref 存活。
+ *     "删会话作品不陪葬"正是靠这两类 ref 存活(media-store.md §3)。
  * 引用删完后引用归零的 blob 交回收器,本函数不动字节仓。
  */
 export async function removeSessionRefs(
@@ -283,7 +285,7 @@ export async function getBlobInfo(
   return rows[0] ?? null;
 }
 
-// ── 回收器查询与条件删账──────────────────────────────────────────────
+// ── 回收器查询与条件删账(第 5 步,media-store.md §4)─────────────────────
 
 /** 该指纹名下无任何引用行(零引用判定的 SQL 片段,删账与候选查询共用)。 */
 function noRefsExist() {

@@ -29,7 +29,6 @@ describe('decodeAttachments', () => {
     expect(out.images[0].mimeType).toBe('image/png');
     expect(out.images[0].name).toBe('shot.png');
     expect(out.images[0].bytes.length).toBeGreaterThan(0);
-    expect(out.skipped).toBe(0);
   });
 
   it('name 原样透传(不参与落盘路径, 落盘安全在 imageCacheStore 层保证)', () => {
@@ -40,10 +39,7 @@ describe('decodeAttachments', () => {
 
   it('非图片 MIME 归入 files(不再丢弃 —— server 已全类型转发)', () => {
     const out = decodeAttachments(
-      [
-        att({ name: 'spec.pdf', mimeType: 'application/pdf' }),
-        att({ name: 'a.txt', mimeType: 'text/plain' }),
-      ],
+      [att({ name: 'spec.pdf', mimeType: 'application/pdf' }), att({ name: 'a.txt', mimeType: 'text/plain' })],
       noopLog,
     );
     expect(out.images).toHaveLength(0);
@@ -75,16 +71,11 @@ describe('decodeAttachments', () => {
 
   it('空 base64 跳过, 不影响其它附件(图片与文件同规则)', () => {
     const out = decodeAttachments(
-      [
-        att({ dataBase64: '' }),
-        att(),
-        att({ name: 'x.pdf', mimeType: 'application/pdf', dataBase64: '' }),
-      ],
+      [att({ dataBase64: '' }), att(), att({ name: 'x.pdf', mimeType: 'application/pdf', dataBase64: '' })],
       noopLog,
     );
     expect(out.images).toHaveLength(1);
     expect(out.files).toHaveLength(0);
-    expect(out.skipped).toBe(2);
   });
 
   it('图文混合各自解出独立字节', () => {
@@ -110,13 +101,6 @@ describe('sanitizeAttachmentName', () => {
   it('Windows 保留字符与控制字符替换为下划线', () => {
     expect(sanitizeAttachmentName('a<b>:c"|d?*.txt')).toBe('a_b__c__d__.txt');
     expect(sanitizeAttachmentName('bad\u0000name.txt')).toBe('bad_name.txt');
-  });
-
-  it('Windows 设备保留名加前缀，普通相似名称不受影响', () => {
-    expect(sanitizeAttachmentName('CON')).toBe('_CON');
-    expect(sanitizeAttachmentName('nul.txt')).toBe('_nul.txt');
-    expect(sanitizeAttachmentName('LPT9.log')).toBe('_LPT9.log');
-    expect(sanitizeAttachmentName('console.txt')).toBe('console.txt');
   });
 
   it('空 / null / 全非法字符回退 attachment', () => {

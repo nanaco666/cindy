@@ -1,1 +1,1 @@
-export { messageContentToPreview as contentToPreview } from '@cindy/maker-shared/message-normalize';
+export { messageContentToPreview as contentToPreview } from '@lizi/maker-shared/message-normalize';

@@ -13,7 +13,6 @@ import {
 } from '@/session/inputProjection';
 import { buildMobileUploadedAttachment } from '@/session/attachments';
 import { parseAttachmentOssRef } from '@/session/attachmentOssRef';
-import { textComposerDocument } from '@/session/composerDocument';
 import type { RemoteSession } from '@/session/types';
 
 const ATTACHMENT_SHA256 = 'a'.repeat(64);
@@ -131,64 +130,15 @@ describe('inputProjection', () => {
     );
     const state = createQueueEditTextState(queued);
 
-    expect(state.visibleText).toBe('reply');
-    expect(state.document.nodes.map((node) => node.type)).toEqual(['quote', 'text']);
-    expect(resolveQueueEditTextSubmission(state, state.document)).toEqual({
+    expect(state.visibleText).toBe('> selected\n\nreply');
+    expect(resolveQueueEditTextSubmission(state, state.visibleText)).toEqual({
       text: encoded,
       quotesEncoded: true,
-      agentReferences: [],
     });
-    expect(resolveQueueEditTextSubmission(state, {
-      nodes: state.document.nodes.map((node) => ({ ...node })),
-      version: 1,
-    })).toEqual({
-      text: encoded,
-      quotesEncoded: true,
-      agentReferences: [],
+    expect(resolveQueueEditTextSubmission(state, '> selected\n\nedited')).toEqual({
+      text: '> selected\n\nedited',
+      quotesEncoded: false,
     });
-    expect(resolveQueueEditTextSubmission(state, {
-      version: 1,
-      nodes: [state.document.nodes[0], { type: 'text', text: 'edited' }],
-    })).toEqual({
-      text: '> <!-- cindy-composer-quote -->\n> selected\n\nedited',
-      quotesEncoded: true,
-      agentReferences: [],
-      slashCommandRanges: [],
-    });
-  });
-
-  it('persists structured references through queue creation and queue editing', () => {
-    const href = 'cindy://session/session-a?message=message-a';
-    const text = `inspect ${href}`;
-    const reference = {
-      kind: 'message' as const,
-      start: text.indexOf(href),
-      end: text.length,
-      href,
-      sessionId: 'session-a',
-      messageClientId: 'message-a',
-      text: 'Complete target message body',
-    };
-    const queued = buildQueuedTextMessage(
-      session(),
-      text,
-      new Date('2026-01-01T00:00:05.000Z'),
-      'q-reference',
-      { agentReferences: [reference] },
-    );
-
-    expect(queued.agentReferences).toEqual([reference]);
-    expect(JSON.parse(queued.persistedContent).agentReferences).toEqual([reference]);
-    const state = createQueueEditTextState(queued);
-    expect(state.agentReferences).toEqual([reference]);
-    expect(resolveQueueEditTextSubmission(state, state.document).agentReferences)
-      .toEqual([reference]);
-
-    expect(resolveQueueEditTextSubmission(state, textComposerDocument('plain edit')))
-      .toMatchObject({
-        text: 'plain edit',
-        agentReferences: [],
-      });
   });
 
   it('builds queued messages with desktop-compatible remote file attachments', () => {
@@ -502,30 +452,6 @@ describe('inputProjection', () => {
     });
     expect(locked.hint).toBe('这条消息正在编辑中,桌面端会暂停自动发送。');
     expect(locked.actions.edit.disabledReason).toBe('这条队列消息正在编辑中，完成后再操作。');
-  });
-
-  it('strips trusted session-reference bodies from every mobile projection', () => {
-    const queued = buildQueuedTextMessage(session(), 'cindy://session/source', new Date(), 'q-ref');
-    queued.sessionRefs = [{ sessionId: 'source', deviceId: 'dev-source' }];
-    queued.trustedSessionReferenceContexts = [{
-      sessionId: 'source',
-      source: 'device-link',
-      deviceId: 'dev-source',
-      messages: [{ role: 'user', content: 'trusted body' }],
-      range: 'recent',
-      messageCount: 1,
-      truncated: false,
-    }];
-    queued.sessionReferencesRequireTrustedSnapshot = true;
-
-    const [projected] = normalizeInputProjection({
-      sessionId: 's1',
-      pendingQueue: [queued],
-    }).pendingQueue;
-
-    expect(projected.sessionRefs).toEqual([{ sessionId: 'source', deviceId: 'dev-source' }]);
-    expect(projected.trustedSessionReferenceContexts).toBeUndefined();
-    expect(projected.sessionReferencesRequireTrustedSnapshot).toBeUndefined();
   });
 });
 

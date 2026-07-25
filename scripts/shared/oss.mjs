@@ -1,5 +1,5 @@
 // =============================================================================
-// 共享 OSS/CDN 发布原语 — 供自建发布脚本
+// 共享 OSS/CDN 发布原语 — 供 desktop 发布脚本(经 apps/desktop/scripts/ci/lib.mjs
 // re-export)与 mobile 自托管 OTA 脚本(release-ios-*.mjs)共用。
 //
 // 这里只放与项目无关的纯原语:sha256 / gzip / ali-oss client / 带分片+重试的上传。
@@ -58,7 +58,8 @@ const OSS_ENV_NAMES_BY_REGION = Object.freeze({
     prefix: 'XDT_GLOBAL_OSS_PREFIX',
     region: 'XDT_GLOBAL_OSS_REGION',
   },
-  // dev 第三渠道(2026-07-20 预留):dev 服务器/bucket 就绪后填以下 env;在此之前 dev 渠道的发布会因缺配置 fail closed。
+  // dev 第三渠道(2026-07-20 预留):dev 服务器/bucket 就绪后填 release-regions.json
+  // 或以下 env;在此之前 dev 渠道的发布会因缺配置 fail closed。
   // 前缀用 XDT_DEVCH_(dev channel),避免与既有 FP_DEV_* 凭证名混淆。
   dev: {
     cdnBase: 'XDT_DEVCH_CDN_BASE_URL',

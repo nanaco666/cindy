@@ -1,7 +1,7 @@
 /** 用户真机复现「长消息折叠正常、展开后变成巨高空白」的原始消息。 */
 export const PR_WATCH_EXPANDED_BLANK_FIXTURE = [
   '[pr-watch] 你负责的 PR 有新的审核反馈或未解决 conversation,请处理。',
-  'PR: https://github.com/makecindy/cindy/pull/893 (fix(desktop): worktree 不再被 /clear、重连、退出静默回收,脏内容快照化并支持一键恢复)',
+  'PR: https://github.com/xindong/XDMaker/pull/893 (fix(desktop): worktree 不再被 /clear、重连、退出静默回收,脏内容快照化并支持一键恢复)',
   '分支: fix/worktree-recycle-lifecycle',
   '目标基线: main',
   '',
@@ -13,10 +13,10 @@ export const PR_WATCH_EXPANDED_BLANK_FIXTURE = [
   '',
   '• apps/desktop/src/main/worktree/restore.ts:205 — chatgpt-codex-connector: **<sub><sub>![P2 Badge](https://img.shields.io/badge/P2-yellow?style=flat)</sub></sub> Apply snapshots before copying include files** When an archived dirty worktree had an untracked file that is also copied by `.xdtwor... (thread PRRT_kwDOSxPtk86P1Lff)',
   '',
-  'https://github.com/makecindy/cindy/pull/893#discussion_r3557743411',
+  'https://github.com/xindong/XDMaker/pull/893#discussion_r3557743411',
   '• apps/desktop/src/renderer/features/cc-agent/CCAgentSidebarUpper.tsx:1535 — chatgpt-codex-connector: **<sub><sub>![P2 Badge](https://img.shields.io/badge/P2-yellow?style=flat)</sub></sub> Warn before inline archiving dirty worktrees** When the row/card two-click archive action sends `archive-now`, this early return byp... (thread PRRT_kwDOSxPtk86P1Lfn)',
   '',
-  'https://github.com/makecindy/cindy/pull/893#discussion_r3557743422',
+  'https://github.com/xindong/XDMaker/pull/893#discussion_r3557743422',
   '',
   '处理要求:',
   '',

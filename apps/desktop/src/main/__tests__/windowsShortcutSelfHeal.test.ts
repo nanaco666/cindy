@@ -16,7 +16,7 @@ vi.mock('../logger', () => ({
 }));
 
 import { healWindowsShortcuts, type ShortcutSelfHealDeps } from '../windowsShortcutSelfHeal';
-import { brandAppId, brandExecutableName } from '@cindy/maker-shared/brand-identity';
+import { brandAppId, brandExecutableName } from '@lizi/maker-shared/brand-identity';
 
 // 被测模块经 shared/brandRegion 消费 CURRENT_APP_ID / 区域快捷方式名;vitest 下无
 // VITE_CINDY_AUTH_REGION → 区域回落 cn → brandAppId('cn') / brandExecutableName('cn')。

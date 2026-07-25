@@ -16,7 +16,7 @@
  *     内十几次 API call 反复触发相同值的落库 / 广播。
  */
 
-import type { ResponseObserver } from '@cindy/anthropic-compat-proxy';
+import type { ResponseObserver } from '@lizi/anthropic-compat-proxy';
 
 import {
   parseClaudeUnifiedRateLimitHeaders,

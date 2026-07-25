@@ -7,8 +7,8 @@
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
-import type { Maker } from '@cindy/maker-core';
-import type { FireContext, Logger, Notifier, Schedule } from '@cindy/maker-scheduler';
+import type { Maker } from '@lizi/maker-core';
+import type { FireContext, Logger, Notifier, Schedule } from '@lizi/maker-scheduler';
 
 const mocks = vi.hoisted(() => ({
   executePreRunHook: vi.fn(),

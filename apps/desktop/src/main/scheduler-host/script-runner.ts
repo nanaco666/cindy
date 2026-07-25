@@ -12,7 +12,7 @@ import type {
   ScheduleRun,
   Scheduler,
   ScriptCapability,
-} from '@cindy/maker-scheduler';
+} from '@lizi/maker-scheduler';
 
 import { sessions } from '../localDb/schema';
 import { buildSkipResultText, executePreRunHook, formatPreRunHookFailure } from './pre-run-hook';

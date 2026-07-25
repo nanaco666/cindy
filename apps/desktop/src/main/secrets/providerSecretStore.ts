@@ -17,12 +17,6 @@ import {
   PROVIDER_SECRET_IDS,
   type ProviderSecretId,
 } from '../../shared/providerSecrets.js';
-import {
-  getActiveAppSession,
-  dataOwnerStorageKey,
-  LOCAL_DATA_OWNER_ID,
-} from '../appSessionState.js';
-import { hasLegacyOwnerNamespaceClaim } from '../ownerNamespaceMigration.js';
 
 const log = createLogger('providerSecretStore');
 
@@ -57,8 +51,6 @@ const OWNER_STORAGE_KEY = 'provider_secret_owner';
 
 /** 低层加密 KV(按 safeStorage 存储键名读写),抽出以便注入测试。 */
 export interface SecretStorageIo {
-  /** Production storage namespaces every logical key by the active data owner. */
-  ownerScoped?: boolean;
   isAvailable(): boolean;
   read(storageKey: string): string | null;
   write(storageKey: string, value: string): boolean;
@@ -71,112 +63,32 @@ function secretDir(): string {
   return path.join(app.getPath('userData'), 'safe-storage');
 }
 
-const DYNAMIC_SECRET_PREFIXES = [
-  CUSTOM_MCP_SECRET_PREFIX,
-  'provider_key_',
-  'provider_oauth_',
-  GHOST_SECRET_PREFIX,
-  GHOST_SECRET_HINT_PREFIX,
-] as const;
-
-function isManagedSecretStorageKey(key: string): boolean {
-  return (
-    PROVIDER_SECRET_IDS.some((id) => providerSecretStorageKey(id) === key) ||
-    DYNAMIC_SECRET_PREFIXES.some((prefix) => key.startsWith(prefix))
-  );
-}
-
-function ownerStoragePrefix(ownerId: string): string {
-  return `owner_${dataOwnerStorageKey(ownerId)}_`;
-}
-
-/** Resolve a renderer/main logical provider-secret key into the active owner's key. */
-export function resolveOwnerScopedSecretStorageKey(storageKey: string): string | null {
-  const ownerId = getActiveAppSession().dataOwnerId;
-  if (!ownerId) return null;
-  return `${ownerStoragePrefix(ownerId)}${storageKey}`;
-}
-
-function readPhysical(storageKey: string): string | null {
-  if (!safeStorage.isEncryptionAvailable()) return null;
-  const filepath = path.join(secretDir(), `${storageKey}.enc`);
-  if (!fs.existsSync(filepath)) return null;
-  return safeStorage.decryptString(Buffer.from(fs.readFileSync(filepath, 'utf-8'), 'base64'));
-}
-
-function writePhysical(storageKey: string, value: string): boolean {
-  if (!safeStorage.isEncryptionAvailable()) return false;
-  fs.mkdirSync(secretDir(), { recursive: true });
-  const encrypted = safeStorage.encryptString(value);
-  fs.writeFileSync(
-    path.join(secretDir(), `${storageKey}.enc`),
-    encrypted.toString('base64'),
-    'utf-8',
-  );
-  return true;
-}
-
-/**
- * Move the pre-namespace secret files into a verified cloud owner exactly once.
- * Local mode never scans or claims legacy credentials.
- */
-function migrateLegacySecretsForCloudOwner(ownerId: string): void {
-  if (ownerId === LOCAL_DATA_OWNER_ID) return;
-  // The global claim decides which verified cloud owner may interpret the
-  // pre-namespace files. A separate provider marker must not let a later
-  // owner adopt leftovers when the first owner's migration was partial.
-  if (!hasLegacyOwnerNamespaceClaim(ownerId)) return;
-  let previousLegacyOwner: string | null = null;
-  try {
-    previousLegacyOwner = readPhysical(OWNER_STORAGE_KEY);
-  } catch {
-    previousLegacyOwner = null;
-  }
-  if (previousLegacyOwner && previousLegacyOwner !== ownerId) return;
-
-  const targetPrefix = ownerStoragePrefix(ownerId);
-  try {
-    for (const fileName of fs.readdirSync(secretDir())) {
-      if (!fileName.endsWith('.enc')) continue;
-      const logicalKey = fileName.slice(0, -'.enc'.length);
-      if (!isManagedSecretStorageKey(logicalKey)) continue;
-      const source = path.join(secretDir(), fileName);
-      const target = path.join(secretDir(), `${targetPrefix}${logicalKey}.enc`);
-      if (fs.existsSync(target)) fs.unlinkSync(source);
-      else fs.renameSync(source, target);
-    }
-    writePhysical(OWNER_STORAGE_KEY, ownerId);
-    log.info('legacy provider secrets migrated into owner namespace', { ownerId });
-  } catch (err) {
-    log.warn('legacy provider secret migration failed', {
-      ownerId,
-      err: err instanceof Error ? err.message : String(err),
-    });
-  }
-}
-
 /**
  * 默认 IO:Electron safeStorage + fs。编码 / 路径 / 幂等语义与
  * bootstrap-electron 的 safe-storage-{store,read,remove} 完全对齐。
  */
 const electronSecretIo: SecretStorageIo = {
-  ownerScoped: true,
   isAvailable() {
     return safeStorage.isEncryptionAvailable();
   },
   read(storageKey) {
-    const scopedKey = resolveOwnerScopedSecretStorageKey(storageKey);
-    return scopedKey ? readPhysical(scopedKey) : null;
+    if (!safeStorage.isEncryptionAvailable()) return null;
+    const filepath = path.join(secretDir(), `${storageKey}.enc`);
+    if (!fs.existsSync(filepath)) return null;
+    const content = fs.readFileSync(filepath, 'utf-8');
+    return safeStorage.decryptString(Buffer.from(content, 'base64'));
   },
   write(storageKey, value) {
-    const scopedKey = resolveOwnerScopedSecretStorageKey(storageKey);
-    return scopedKey ? writePhysical(scopedKey, value) : false;
+    if (!safeStorage.isEncryptionAvailable()) return false;
+    const dir = secretDir();
+    fs.mkdirSync(dir, { recursive: true });
+    const encrypted = safeStorage.encryptString(value);
+    fs.writeFileSync(path.join(dir, `${storageKey}.enc`), encrypted.toString('base64'), 'utf-8');
+    return true;
   },
   remove(storageKey) {
-    const scopedKey = resolveOwnerScopedSecretStorageKey(storageKey);
-    if (!scopedKey) return { success: true };
     try {
-      fs.unlinkSync(path.join(secretDir(), `${scopedKey}.enc`));
+      fs.unlinkSync(path.join(secretDir(), `${storageKey}.enc`));
       return { success: true };
     } catch (err) {
       // ENOENT:文件本就不存在 → 视为成功(幂等),与 IPC 层一致。
@@ -187,14 +99,11 @@ const electronSecretIo: SecretStorageIo = {
     }
   },
   list() {
-    const ownerId = getActiveAppSession().dataOwnerId;
-    if (!ownerId) return [];
-    const prefix = ownerStoragePrefix(ownerId);
     try {
       return fs
         .readdirSync(secretDir())
-        .filter((f) => f.startsWith(prefix) && f.endsWith('.enc'))
-        .map((f) => f.slice(prefix.length, -'.enc'.length));
+        .filter((f) => f.endsWith('.enc'))
+        .map((f) => f.slice(0, -'.enc'.length));
     } catch {
       // 目录不存在(尚无任何密钥落盘)等 → 空列表。
       return [];
@@ -224,8 +133,6 @@ export interface ProviderSecretStore {
   has(id: ProviderSecretId): boolean;
   /** 清空本机所有已登记 provider 的密钥(账号切换时用)。不动 owner 标记本身。 */
   clearAll(): void;
-  /** Invalidate process-local OAuth/token caches without deleting owner files. */
-  invalidateCaches(): void;
   /** 读取「本机密钥归属账号」标记;未设置返回 null。 */
   getOwnerUserId(): string | null;
   /**
@@ -241,14 +148,6 @@ export interface ProviderSecretStore {
 export function createProviderSecretStore(
   io: SecretStorageIo = electronSecretIo,
 ): ProviderSecretStore {
-  let lastReconciledOwnerId: string | null = null;
-  const notifySecretsCleared = (): void => {
-    try {
-      secretsClearedListener?.();
-    } catch {
-      /* 监听器异常不阻断账号边界清理 */
-    }
-  };
   const clearAllSecrets = (): void => {
     for (const id of PROVIDER_SECRET_IDS) {
       io.remove(providerSecretStorageKey(id));
@@ -257,12 +156,17 @@ export function createProviderSecretStore(
     // 自定义供应商 per-runtime key(provider_key_*)、通用 OAuth 凭证 blob(provider_oauth_*)、
     // 意识 network 槽凭证(ghost_secret_*)。这些不在 PROVIDER_SECRET_IDS 静态集合里,
     // 漏清会让同机换账号后 B 用 A 的凭证串号。
+    const DYNAMIC_PREFIXES = [CUSTOM_MCP_SECRET_PREFIX, 'provider_key_', 'provider_oauth_', GHOST_SECRET_PREFIX, GHOST_SECRET_HINT_PREFIX];
     for (const key of io.list()) {
-      if (DYNAMIC_SECRET_PREFIXES.some((prefix) => key.startsWith(prefix))) {
+      if (DYNAMIC_PREFIXES.some((prefix) => key.startsWith(prefix))) {
         io.remove(key);
       }
     }
-    notifySecretsCleared();
+    try {
+      secretsClearedListener?.();
+    } catch {
+      /* 监听器异常不阻断清理主流程 */
+    }
   };
   return {
     get(id) {
@@ -300,12 +204,7 @@ export function createProviderSecretStore(
     clearAll() {
       clearAllSecrets();
     },
-    invalidateCaches() {
-      lastReconciledOwnerId = null;
-      notifySecretsCleared();
-    },
     getOwnerUserId() {
-      if (io.ownerScoped) return getActiveAppSession().dataOwnerId;
       try {
         return io.read(OWNER_STORAGE_KEY);
       } catch {
@@ -313,21 +212,6 @@ export function createProviderSecretStore(
       }
     },
     reconcileOwner(userId) {
-      if (io.ownerScoped) {
-        if (getActiveAppSession().dataOwnerId !== userId) {
-          log.warn('provider secret owner does not match active app session', { userId });
-          return { cleared: false };
-        }
-        migrateLegacySecretsForCloudOwner(userId);
-        if (lastReconciledOwnerId !== userId) {
-          // Owner-scoped files remain isolated on disk, but generic OAuth and
-          // similar consumers still keep process-local token caches. Invalidate
-          // those caches whenever the committed data owner changes.
-          notifySecretsCleared();
-          lastReconciledOwnerId = userId;
-        }
-        return { cleared: false };
-      }
       let prev: string | null = null;
       try {
         prev = io.read(OWNER_STORAGE_KEY);
@@ -426,11 +310,7 @@ export function readGhostSecret(ghostId: string, secretKey: string): string | nu
  */
 export function ghostSecretSaved(ghostId: string, secretKey: string): boolean {
   try {
-    const physicalKey = resolveOwnerScopedSecretStorageKey(
-      ghostSecretStorageKey(ghostId, secretKey),
-    );
-    if (!physicalKey) return false;
-    fs.statSync(path.join(secretDir(), `${physicalKey}.enc`));
+    fs.statSync(path.join(secretDir(), `${ghostSecretStorageKey(ghostId, secretKey)}.enc`));
     return true;
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === 'ENOENT') return false;

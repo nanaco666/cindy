@@ -9,7 +9,7 @@
  */
 
 import { useCallback, useRef, useState } from 'react';
-import type { CreateScheduleInput, Schedule, ScheduleTemplate, ScheduleWorkspaceKind } from '@cindy/maker-scheduler';
+import type { CreateScheduleInput, Schedule, ScheduleTemplate, ScheduleWorkspaceKind } from '@lizi/maker-scheduler';
 import { getPersistedVendorModel } from '@/state/newMakerDraft';
 import type { Session } from '@/lib/ccAgent.types';
 import {

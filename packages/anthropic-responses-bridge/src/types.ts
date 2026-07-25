@@ -138,7 +138,7 @@ export interface BridgeLogger {
  * OpenAI Responses 翻译器);预留的扩展位:
  *   - 'openai-chat':OpenAI Chat Completions 系上游(需要第二个翻译器,未实现);
  *   - Anthropic 兼容上游(GLM coding plan / DeepSeek anthropic 端点等)**不进 bridge**——
- *     它们不需要协议翻译,走 catalog provider + compat-proxy 既有路由。
+ *     它们不需要协议翻译,走 catalog provider + compat-proxy 既有路由(见 docs/subscription-bridge.md)。
  * createResponsesHandler 对未实现的协议 fail-fast 抛错,防止注册了却静默不可用。
  */
 export type BridgeWireProtocol = 'openai-responses';
@@ -155,7 +155,7 @@ export interface BridgeUpstreamErrorInfo {
  * 单个上游供应商的配置(= 订阅源 adapter 契约)。bridge 按 model 前缀匹配到某个 provider,
  * 用它的 upstream / headers / quirks 翻译转发。一个 bridge 实例可持有多个(codex 订阅 /
  * xAI 订阅 …),共用同一套协议翻译器。新增 Responses 系订阅源 = 加一份本配置,
- * **不改翻译器 / server 代码**;新增源应以配置、provider membership 测试和 handler 测试覆盖。
+ * **不改翻译器 / server 代码**;完整接入 checklist 见 docs/subscription-bridge.md。
  */
 export interface BridgeProviderConfig {
   /** model id 前缀,如 'chatgpt/' | 'xai/';bridge 收到后 strip 掉再发上游(chatgpt/gpt-5.5 → gpt-5.5)。 */

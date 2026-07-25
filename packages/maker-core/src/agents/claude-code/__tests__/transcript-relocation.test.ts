@@ -55,8 +55,8 @@ describe('relocateClaudeSessionTranscripts', () => {
   it('copies transcripts from the old cwd project dir to the new one (space-containing path)', async () => {
     const projectsRoot = await makeTempDir();
     // 真实事故形态:dialogue 临时目录(含空格的 Application Support)→ 项目目录。
-    const oldCwd = '/Users/alice/Library/Application Support/xdt-maker/dialogues/2026-07-02/ef3b0a81';
-    const newCwd = '/Users/alice/Code/Tools/xdt-maker';
+    const oldCwd = '/Users/dash/Library/Application Support/xdt-maker/dialogues/2026-07-02/ef3b0a81';
+    const newCwd = '/Users/dash/Code/Tools/xdt-maker';
     await seedTranscript(projectsRoot, oldCwd, SESSION_A, '{"payload":"a"}\n');
     await seedTranscript(projectsRoot, oldCwd, SESSION_B, '{"payload":"b"}\n');
 
@@ -73,7 +73,7 @@ describe('relocateClaudeSessionTranscripts', () => {
     expect(result.targetKeyInexact).toBe(false);
 
     // 转码目录名与 CLI 真实行为一致(空格 / 斜杠全部转 '-')。
-    const targetDir = path.join(projectsRoot, '-Users-alice-Code-Tools-xdt-maker');
+    const targetDir = path.join(projectsRoot, '-Users-dash-Code-Tools-xdt-maker');
     const copiedA = await fs.readFile(path.join(targetDir, `${SESSION_A}.jsonl`), 'utf8');
     expect(copiedA).toBe('{"payload":"a"}\n');
     // 源文件保留(复制非移动)。
@@ -88,15 +88,15 @@ describe('relocateClaudeSessionTranscripts', () => {
 
     const result = await relocateClaudeSessionTranscripts({
       sdkSessionIds: [SESSION_A],
-      oldWorkingDir: '/Users/alice/stale/dir',
-      newWorkingDir: '/Users/alice/target/project',
+      oldWorkingDir: '/Users/dash/stale/dir',
+      newWorkingDir: '/Users/dash/target/project',
       projectsRoot,
     });
 
     expect(result.copied).toEqual([SESSION_A]);
     const target = path.join(
       projectsRoot,
-      sanitizeClaudeProjectKey('/Users/alice/target/project'),
+      sanitizeClaudeProjectKey('/Users/dash/target/project'),
       `${SESSION_A}.jsonl`,
     );
     await expect(fs.stat(target)).resolves.toBeTruthy();
@@ -115,13 +115,13 @@ describe('relocateClaudeSessionTranscripts', () => {
     const result = await relocateClaudeSessionTranscripts({
       sdkSessionIds: [SESSION_A],
       oldWorkingDir: '/does/not/match/any/dir',
-      newWorkingDir: '/Users/alice/target/project',
+      newWorkingDir: '/Users/dash/target/project',
       projectsRoot,
     });
 
     expect(result.copied).toEqual([SESSION_A]);
     const copied = await fs.readFile(
-      path.join(projectsRoot, sanitizeClaudeProjectKey('/Users/alice/target/project'), `${SESSION_A}.jsonl`),
+      path.join(projectsRoot, sanitizeClaudeProjectKey('/Users/dash/target/project'), `${SESSION_A}.jsonl`),
       'utf8',
     );
     expect(copied).toBe('{"payload":"newest"}\n');
@@ -231,7 +231,7 @@ describe('relocateClaudeSessionTranscripts', () => {
 });
 
 describe('ensureClaudeTranscriptInWorkingDir', () => {
-  const WORKING_DIR = '/Users/alice/Code/Tools/xdt-maker';
+  const WORKING_DIR = '/Users/dash/Code/Tools/xdt-maker';
 
   it('returns in-place and leaves the file untouched when the transcript is already in the cwd dir', async () => {
     const projectsRoot = await makeTempDir();
@@ -254,7 +254,7 @@ describe('ensureClaudeTranscriptInWorkingDir', () => {
     // 实测事故形态:fork jsonl 落在已删除 worktree 的转码目录,workingDir 目录下没有。
     await seedTranscript(
       projectsRoot,
-      '/Users/alice/Code/Tools/xdt-maker-mobile-message-render-perf',
+      '/Users/dash/Code/Tools/xdt-maker-mobile-message-render-perf',
       SESSION_A,
       '{"payload":"forked"}\n',
     );
@@ -276,7 +276,7 @@ describe('ensureClaudeTranscriptInWorkingDir', () => {
       fs.stat(
         path.join(
           projectsRoot,
-          sanitizeClaudeProjectKey('/Users/alice/Code/Tools/xdt-maker-mobile-message-render-perf'),
+          sanitizeClaudeProjectKey('/Users/dash/Code/Tools/xdt-maker-mobile-message-render-perf'),
           `${SESSION_A}.jsonl`,
         ),
       ),

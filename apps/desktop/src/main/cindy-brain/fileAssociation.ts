@@ -3,13 +3,13 @@ import { promisify } from 'node:util';
 
 import { app } from 'electron';
 
-import { brandExecutableName } from '@cindy/maker-shared/brand-identity';
+import { brandExecutableName } from '@lizi/maker-shared/brand-identity';
 import { CINDY_MIME_TYPE, SHARE_MIME_TYPE } from '../../shared/fileTypes.js';
 import { CURRENT_CINDY_REGION } from '../../shared/brandRegion.js';
 import { createLogger } from '../logger.js';
 
 /**
- * Windows 自有文件类型自注册:.cindy 文件关联(双击装入的
+ * Windows 自有文件类型自注册:.cindy 文件关联(意识系统 C2c:双击装入的
  * Windows 半边)+ .cindy / .cshare 的 MIME 媒体类型(注册表 Content Type)。
  *
  * 口径完全对齐 folderContextMenu.ts 的先例:

@@ -1,1 +1,1 @@
-export * from '@cindy/maker-shared/schedule-form';
+export * from '@lizi/maker-shared/schedule-form';

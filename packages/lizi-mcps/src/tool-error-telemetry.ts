@@ -62,7 +62,7 @@ export function extractToolResultErrorCode(result: ToolResultLike): string | nul
  */
 export function logToolResultErrorCode(params: {
   logger: LiziMcpLogger | undefined;
-  /** MCP server 名,如 'cindy_helper' / 'cindy_computer'。 */
+  /** MCP server 名,如 'cindy_helper' / 'lizi_computer'。 */
   server: string;
   /** call_tool 里被调用的具体工具名。 */
   tool: string;

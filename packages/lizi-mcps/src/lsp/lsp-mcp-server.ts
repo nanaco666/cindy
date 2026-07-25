@@ -11,9 +11,9 @@ import {
 } from './tools/index.js';
 import type { LspMcpDeps } from '../types.js';
 
-export function createCindyLspMcpServer(deps: LspMcpDeps): McpServer {
+export function createLiziLspMcpServer(deps: LspMcpDeps): McpServer {
   const server = new McpServer({
-    name: 'cindy_lsp',
+    name: 'lizi_lsp',
     version: '1.0.0',
   });
 

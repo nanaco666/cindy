@@ -1,5 +1,5 @@
 {
-  "name": "@cindy/orca-workflow",
+  "name": "@fmfsaisai/orca-workflow",
   "version": "0.0.0",
   "private": true,
   "description": "Orca workflow package for xdt-maker: MCP bridge and lead prompt",
@@ -17,12 +17,12 @@
     "test": "vitest run"
   },
   "author": {
-    "name": "X.D. Network Inc.",
-    "email": "feedback@cindy.app"
+    "name": "Lizi",
+    "email": "jiali@magiclizi.com"
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "@cindy/maker-core": "workspace:*",
+    "@lizi/maker-core": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "zod": "^4.0.0"
   },

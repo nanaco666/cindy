@@ -30,7 +30,7 @@
   "owner": "D1"
  },
  {
-  "glob": "docs/design-rules/cindy-design-system.md",
+  "glob": "DESIGN.md",
   "reason": "§15 CINDY 色板/三份红 map 文档示例",
   "owner": "D2"
  },
@@ -81,7 +81,7 @@
  },
  {
   "glob": "apps/desktop/src/renderer/components/ui/toast/Toast.tsx",
-  "reason": "E5D Toast 四色定稿 hardcode(docs/design-rules/cindy-design-system.md §2 sanctioned,info #417CDD/success #2AAE5B/warning #F3A115/error #D91F37;VARIANT_MAP 已导出供 toastColors 守)",
+  "reason": "E5D Toast 四色定稿 hardcode(DESIGN.md §2 sanctioned,info #417CDD/success #2AAE5B/warning #F3A115/error #D91F37;VARIANT_MAP 已导出供 toastColors 守)",
   "owner": "E5D"
  },
  {

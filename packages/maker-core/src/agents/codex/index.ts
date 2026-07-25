@@ -63,11 +63,6 @@ import type {
   MemorySetResult,
   MemoryResetResult,
 } from '../../types/memory.js';
-import type {
-  AccountRateLimitsResponse,
-  ConsumeAccountRateLimitResetCreditParams,
-  ConsumeAccountRateLimitResetCreditResponse,
-} from '../../types/account-rate-limits.js';
 import { createAsyncQueue, type AsyncQueue } from '../shared/async-queue.js';
 import { UsageTracker } from '../shared/usage-tracker.js';
 import { getDefaultImageResizer } from '../shared/image-resizer.js';
@@ -1449,14 +1444,6 @@ export class CodexAgent extends BaseAgent {
     return { key, host };
   }
 
-  /** Start the local OAuth host used by non-model account control-plane RPCs. */
-  private async getStartedAccountHost(): Promise<AppServerHost> {
-    const host = await this.getHost(undefined, 'oauth-bearer');
-    const init = await host.ensureStarted();
-    if (init.codexHome) this.codexHome = init.codexHome;
-    return host;
-  }
-
   /**
    * 向本地 app-server 实时读取完整模型清单并交给宿主。
    *
@@ -1494,26 +1481,6 @@ export class CodexAgent extends BaseAgent {
     if (this.hosts.get(key) !== host || !this.deps.onCodexLocalModelsListed) return false;
     await this.deps.onCodexLocalModelsListed(models);
     return true;
-  }
-
-  /** Read ChatGPT subscription windows and banked reset credits via app-server RPC. */
-  override async readAccountRateLimits(): Promise<AccountRateLimitsResponse> {
-    // This RPC is credential-specific, unlike model/list or memory utilities. Requiring
-    // oauth-bearer prevents a gateway/provider host from reading or mutating the wrong
-    // account context; getHost refuses to replace a differently-authenticated active host.
-    const host = await this.getStartedAccountHost();
-    return await host.request<AccountRateLimitsResponse>(Method.AccountRateLimitsRead, undefined);
-  }
-
-  /** Consume one reset credit on the non-model app-server control plane. */
-  override async consumeAccountRateLimitResetCredit(
-    params: ConsumeAccountRateLimitResetCreditParams,
-  ): Promise<ConsumeAccountRateLimitResetCreditResponse> {
-    const host = await this.getStartedAccountHost();
-    return await host.request<ConsumeAccountRateLimitResetCreditResponse>(
-      Method.AccountRateLimitResetCreditConsume,
-      params,
-    );
   }
 
   private async createHost(
@@ -3975,7 +3942,7 @@ export class CodexAgent extends BaseAgent {
           // original queue/composer content and can retry through the normal path.
           throw new Error('No active Codex turn to steer');
         }
-        // 同轮注入(2026-07-12 产品决策,与 Claude 对齐):turn/steer 把消息追加进
+        // 同轮注入(2026-07-12 Dash 拍板,与 Claude 对齐):turn/steer 把消息追加进
         // in-flight turn,不打断当前工作,模型在下一个工具调用边界消化这条输入
         // (与 Codex 官方 CLI 排队消息 "submitted after next tool call" 同语义)。
         // 需要真打断的用户自己点 Stop。挂起的审批 / user-input 不 dismiss——turn

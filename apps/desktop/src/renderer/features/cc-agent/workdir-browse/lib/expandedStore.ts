@@ -8,7 +8,7 @@
  *
  * Storage shape:
  *   {
- *     "<workdir absolute path>": ["Assets", "Assets/Scripts", "Design"],
+ *     "<workdir absolute path>": ["Assets", "Assets/Scripts", "doc/design_docs"],
  *     ...
  *   }
  *

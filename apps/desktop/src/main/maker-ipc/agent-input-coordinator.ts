@@ -35,21 +35,14 @@ import type {
   AgentInputProjection,
   AgentInputQueuedMessage,
   AgentInputRecovery,
-  AgentInputSessionReferenceContext,
 } from '../../shared/agentInputQueue.js';
 import {
   buildMakerUserMessage,
-  getAgentFacingText,
   projectionRetryText,
-  sanitizeQueuedMessageForPersistence,
   updateQueuedMessageContent,
   updateQueuedMessageText,
 } from '../../shared/agentInputQueue.js';
-import {
-  CONTINUE_AFTER_ERROR_PROMPT,
-  syntheticTriggerKind,
-} from '../../shared/interruptedTurn.js';
-import { attachSessionReferenceMetadata } from '../../shared/sessionReferenceMetadata.js';
+import { CONTINUE_AFTER_ERROR_PROMPT } from '../../shared/interruptedTurn.js';
 
 const log = createLogger('maker-input-coordinator');
 const SESSION_RUNNING_RETRY_DELAY_MS = 250;
@@ -136,10 +129,6 @@ export interface AgentInputCoordinatorDeps {
    */
   hasAssistantProgressAfter?: (sessionId: string, userClientId: string) => Promise<boolean>;
   getLastAssistantTranscriptUuid?: (sessionId: string) => string | undefined;
-  /** 在 vendor dispatch 前读取用户选中的本地/在线会话引用。 */
-  resolveSessionReferences?: (
-    refs: AgentInputQueuedMessage['sessionRefs'],
-  ) => Promise<AgentInputSessionReferenceContext[]>;
   emitProjection: (projection: AgentInputProjection) => void;
   /**
    * 意识拦截钩(订阅槽①,will-user-message):派发与落库**之前**问一遍已装
@@ -150,7 +139,7 @@ export interface AgentInputCoordinatorDeps {
    */
   screenUserMessage?: (
     sessionId: string,
-    agentFacingText: string,
+    item: AgentInputQueuedMessage,
   ) => Promise<
     | { action: 'allow' }
     | { action: 'block'; ghostId: string; ghostName: string; reason: string }
@@ -178,16 +167,6 @@ export interface AgentInputCoordinatorDeps {
    */
   onUndispatchedUserTurn?: (sessionId: string, item: AgentInputQueuedMessage) => void;
   onAcceptedQueuedMessage?: (sessionId: string, item: AgentInputQueuedMessage) => void | Promise<void>;
-  /**
-   * Awaited only after vendor dispatch is irreversible (`accepted=true`).
-   * Hosts use this for side effects that must not run on cancelled-before-dispatch
-   * (e.g. durable-acking an interrupted turn once Continue has really started).
-   */
-  onDispatchedUserTurn?: (
-    sessionId: string,
-    item: AgentInputQueuedMessage,
-    preVendorDispatchAt: number,
-  ) => void | Promise<void>;
   noteSessionClearBoundary?: (sessionId: string, clearedAt: string | number) => void;
   /**
    * 队列项未派发即被丢弃(stop 清队列 / 手动 remove / clearSession)时回调。
@@ -322,35 +301,6 @@ function createInitialInputState(generation = 0): SessionInputState {
   };
 }
 
-/**
- * 首次进入 main 队列边界时冻结原始合成指令意图。IPC payload 属不可信输入，
- * 因此即使 renderer 带了同名字段也必须从当下原始 text 重新计算。
- */
-function captureOriginalSyntheticTrigger(
-  item: AgentInputQueuedMessage,
-): AgentInputQueuedMessage {
-  return {
-    ...item,
-    originalSyntheticTrigger: syntheticTriggerKind(item.text) ?? undefined,
-  };
-}
-
-/**
- * 老崩溃快照没有 originalSyntheticTrigger；从仍保留的原始 text 补齐。新版
- * 快照则保留首次入队时冻结的值，因为正文可能已经被 Ghost rewrite。
- */
-function normalizeRestoredSyntheticTrigger(
-  item: AgentInputQueuedMessage,
-): AgentInputQueuedMessage {
-  if (
-    item.originalSyntheticTrigger === 'continue' ||
-    item.originalSyntheticTrigger === 'generic'
-  ) {
-    return item;
-  }
-  return captureOriginalSyntheticTrigger(item);
-}
-
 type PersistAcceptedUserMessageResult = 'persisted' | 'stale' | 'failed';
 
 function isNoActiveTurnError(err: unknown): boolean {
@@ -458,7 +408,7 @@ export class AgentInputCoordinator {
   constructor(private readonly deps: AgentInputCoordinatorDeps) {}
 
   /**
-   * 媒体回收器活引用取证(recycler.ts 的内存队列暂存区):序列化所有会话在
+   * 媒体回收器活引用取证(media-store.md §4 暂存区 (2)):序列化所有会话在
    * 内存中的排队/在途消息(pendingQueue + activeTurn 消息体 + recovery 项),
    * 供回收器按文本抽取 cindy-media 指纹当活引用——这些消息尚未(或可能不会)
    * 落库,其附件 blob 合法地处于零引用状态,清理时必须豁免。
@@ -506,9 +456,7 @@ export class AgentInputCoordinator {
     const preGeneration = preState.generation;
     let items: AgentInputQueuedMessage[];
     try {
-      items = (await this.deps.loadQueueSnapshot!(sessionId)).map(
-        normalizeRestoredSyntheticTrigger,
-      );
+      items = await this.deps.loadQueueSnapshot!(sessionId);
     } catch (err) {
       log.warn('load queue snapshot failed; will retry on next entry', {
         sessionId,
@@ -744,7 +692,6 @@ export class AgentInputCoordinator {
     opts?: { wasFirst?: boolean; sendAtMs?: number; resumeRestorePausedQueue?: boolean },
   ): AgentInputProjection {
     const state = this.getState(sessionId);
-    item = captureOriginalSyntheticTrigger(item);
     // 幂等去重(弱网重发防线,PR #881):同 clientId 重复投递说明是控制端(手机
     // 断连自动重试 / 用户对 ack 丢失的消息重发)在补发同一条消息,不是新消息。
     // 直接返回当前 projection、不再入队——否则同一条消息双入队、agent 跑两轮。
@@ -774,23 +721,7 @@ export class AgentInputCoordinator {
     }
     this.abandonActiveTurnRecoveryForNewInput(state);
     this.clearErrorUnlessQueueHeadBlocked(state);
-    // 用户点「继续任务」表达的是恢复刚才中断/失败的 turn，必须先于此前
-    // 已排队的新任务执行；普通 composer / Orca / scheduler 输入仍保持 FIFO。
-    // 复用 prepend helper 同时把本项加入 pending compact 的等待集合，避免
-    // 已排队的 /compact 抢在续跑前执行，破坏原任务现场。
-    if (item.originalSyntheticTrigger === 'continue') {
-      this.prependQueueHeadIfMissing(state, item);
-      // 与 move() 对称：插队后原 credential-switch 等待目标不再是队首时，
-      // 必须清掉 wait，否则横幅/取消仍绑定旧 clientId，会误删错误排队项。
-      if (
-        state.credentialSwitchWait &&
-        state.pendingQueue[0]?.clientId !== state.credentialSwitchWait.clientId
-      ) {
-        this.clearCredentialSwitchWait(state);
-      }
-    } else {
-      state.pendingQueue.push(item);
-    }
+    state.pendingQueue.push(item);
     // scheduler 撞忙排队不算"用户活跃":userSendAt 是 B1 活跃礼让的判据,自动化
     // 入队若 bump 它,接下来 10 分钟内同会话其它心跳会被误当"用户正在远程控制"
     // 而静默顺延(PR #972 review P2)。侧栏排序的 bump 语义保留在派发时刻 ——
@@ -939,38 +870,6 @@ export class AgentInputCoordinator {
 
   async steer(sessionId: string, item: AgentInputQueuedMessage, opts?: { removeFromQueue?: boolean; touchUserSend?: boolean }): Promise<boolean> {
     const state = this.getState(sessionId);
-    if (opts?.removeFromQueue) {
-      const storedItem = state.pendingQueue.find((queued) => queued.clientId === item.clientId);
-      if (storedItem) {
-        // Renderer projections intentionally omit trusted reference bodies. The main-owned
-        // queue row is authoritative for identity/text. A restored device-link row can retain
-        // only the fail-closed marker, though; in that case the validated inbound snapshot is
-        // safe to reattach when it still describes the same queued references/text.
-        const incomingContexts = item.trustedSessionReferenceContexts;
-        const storedRefs = storedItem.sessionRefs ?? [];
-        const incomingRefs = item.sessionRefs ?? [];
-        const sameRefs =
-          storedRefs.length === incomingRefs.length &&
-          storedRefs.every((ref, index) => {
-            const incoming = incomingRefs[index];
-            return (
-              incoming !== undefined &&
-              ref.sessionId === incoming.sessionId &&
-              ref.messageClientId === incoming.messageClientId &&
-              ref.deviceId === incoming.deviceId
-            );
-          });
-        const canRestoreSnapshot =
-          storedItem.sessionReferencesRequireTrustedSnapshot === true &&
-          incomingContexts !== undefined &&
-          incomingContexts.length > 0 &&
-          sameRefs &&
-          storedItem.text === item.text;
-        item = canRestoreSnapshot
-          ? { ...storedItem, trustedSessionReferenceContexts: incomingContexts }
-          : storedItem;
-      }
-    }
     if (
       state.steeringQueueClientIds.length > 0 ||
       state.queueAbortPending ||
@@ -994,7 +893,7 @@ export class AgentInputCoordinator {
       return true;
     }
 
-    // 插话统一为同轮注入(2026-07-12 产品决策):Claude 与 Codex 都走
+    // 插话统一为同轮注入(2026-07-12 Dash 拍板):Claude 与 Codex 都走
     // steerToAgent 把消息注入正在跑的 turn,不打断当前工作。需要打断的用户
     // 自己点 Stop。(历史:PR #394 曾把 Claude 改成 abort+新 turn,现回退。)
     const messageUuid = crypto.randomUUID();
@@ -1015,7 +914,7 @@ export class AgentInputCoordinator {
     // marker 已置位,筛查期间并发 steer / drain 被挡;stop / clearSession 竞态
     // 由筛查后的 marker 复查兜底。
     if (!item.bypassGhostHooks && this.deps.screenUserMessage) {
-      const verdict = await this.deps.screenUserMessage(sessionId, getAgentFacingText(item));
+      const verdict = await this.deps.screenUserMessage(sessionId, item);
       const cur = this.getState(sessionId);
       if (!cur.steeringQueueClientIds.includes(item.clientId)) {
         // stop/close/clearSession 赢在筛查期间:steer 事务已被取消,静默放弃。
@@ -1040,17 +939,12 @@ export class AgentInputCoordinator {
         return true;
       }
       if (verdict.action === 'rewrite') {
-        // 与 drain 的 rewrite 同构:JSON-aware 只换 text 字段并保留附件信封；
-        // 整体改写后旧 Composer reference offsets 已失效，必须同步清掉。
+        // 与 drain 的 rewrite 同构:JSON-aware 只换 text 字段,附件/引用信封保留。
         const originalText = item.text;
         const rewritten = updateQueuedMessageText(item, verdict.text);
-        Object.assign(item, rewritten);
-        if (!rewritten.sessionRefs) delete item.sessionRefs;
-        if (!rewritten.trustedSessionReferenceContexts) delete item.trustedSessionReferenceContexts;
-        if (!rewritten.sessionReferencesRequireTrustedSnapshot) {
-          delete item.sessionReferencesRequireTrustedSnapshot;
-        }
-        delete item.agentReferences;
+        item.text = rewritten.text;
+        item.persistedContent = rewritten.persistedContent;
+        item.chatMessage = rewritten.chatMessage;
         this.deps.onUserMessageRewritten?.(sessionId, item, {
           ghostId: verdict.ghostId,
           ghostName: verdict.ghostName,
@@ -1061,11 +955,9 @@ export class AgentInputCoordinator {
     }
 
     try {
-      const referenceContexts = await this.resolveReferenceContexts(item);
-      item.persistedContent = attachSessionReferenceMetadata(item.persistedContent, referenceContexts);
       await this.deps.steerToAgent(
         sessionId,
-        buildMakerUserMessage(item, referenceContexts),
+        buildMakerUserMessage(item),
         { messageUuid, userName: item.userName, signal: steerAbort.signal },
       );
     } catch (err) {
@@ -1300,7 +1192,7 @@ export class AgentInputCoordinator {
     // 原文等于让模型"从头再来"(原文可能是很久之前的初始任务指令),改发规范化
     // 续跑指令;零产出(派发即失败 / 首个 API 调用就挂)才维持克隆重发。
     // 续跑指令是共享英文常量(带 [UI_ACTION_TRIGGER] 前缀,renderer 渲染时过滤,
-    // 用户只看到任务继续跑,不看到这条合成消息;2026-07-05 产品决策)。
+    // 用户只看到任务继续跑,不看到这条合成消息;2026-07-05 Dash 拍板)。
     let continueItem: AgentInputQueuedMessage | null = null;
     const continueText = CONTINUE_AFTER_ERROR_PROMPT;
     if (recovery.kind === 'active-turn' && this.deps.hasAssistantProgressAfter) {
@@ -1319,7 +1211,6 @@ export class AgentInputCoordinator {
           ...recovery.item,
           clientId,
           text: continueText,
-          originalSyntheticTrigger: 'continue',
           persistedContent: continueText,
           // 附件 / mention 属于原始消息,已在失败 turn 里送达过模型,续跑指令不重带。
           files: undefined,
@@ -1410,39 +1301,14 @@ export class AgentInputCoordinator {
     return this.getProjection(sessionId);
   }
 
-  updateText(
-    sessionId: string,
-    clientId: string,
-    newText: string,
-    sessionRefs?: AgentInputQueuedMessage['sessionRefs'],
-    trustedSessionReferenceContexts?: AgentInputSessionReferenceContext[],
-    requireTrustedSnapshot = false,
-  ): AgentInputProjection {
+  updateText(sessionId: string, clientId: string, newText: string): AgentInputProjection {
     const trimmed = newText.trim();
     if (!trimmed) return this.getProjection(sessionId);
     const state = this.getState(sessionId);
     if (state.steeringQueueClientIds.includes(clientId)) return this.getProjection(sessionId);
-    state.pendingQueue = state.pendingQueue.map((entry) => {
-      if (entry.clientId !== clientId) return entry;
-      // Device-link callers from before the structured refs argument may omit
-      // sessionRefs. When a trusted snapshot is required, treating undefined
-      // as "no refs" is fail-closed; otherwise updateQueuedMessageText would
-      // re-parse remote text and resolve links in the target device's DB.
-      const refsForUpdate = requireTrustedSnapshot && sessionRefs === undefined
-        ? []
-        : sessionRefs;
-      const updated = updateQueuedMessageText(entry, newText, refsForUpdate);
-      if (requireTrustedSnapshot && updated.sessionRefs && updated.sessionRefs.length > 0) {
-        updated.sessionReferencesRequireTrustedSnapshot = true;
-        if (trustedSessionReferenceContexts) {
-          updated.trustedSessionReferenceContexts = trustedSessionReferenceContexts;
-        }
-      } else if (requireTrustedSnapshot) {
-        delete updated.sessionReferencesRequireTrustedSnapshot;
-        delete updated.trustedSessionReferenceContexts;
-      }
-      return updated;
-    });
+    state.pendingQueue = state.pendingQueue.map((entry) =>
+      entry.clientId === clientId ? updateQueuedMessageText(entry, newText) : entry,
+    );
     this.emit(sessionId);
     return this.getProjection(sessionId);
   }
@@ -1770,9 +1636,9 @@ export class AgentInputCoordinator {
     // interrupted,恢复出的副本没有等待方;心跳 prompt 每轮 fire 重新生成,
     // 陈旧副本无价值,恢复它只会造成"暂停队列里的僵尸自动化"(restore 侧
     // 有对老快照的同款过滤,见 restoreQueueSnapshot)。
-    return [...activeItem, ...state.pendingQueue]
-      .filter((item) => item.origin?.kind !== 'scheduler')
-      .map(sanitizeQueuedMessageForPersistence);
+    return [...activeItem, ...state.pendingQueue].filter(
+      (item) => item.origin?.kind !== 'scheduler',
+    );
   }
 
   private maybePersistQueueSnapshot(sessionId: string): void {
@@ -1796,17 +1662,9 @@ export class AgentInputCoordinator {
   }
 
   private toProjection(sessionId: string, state: SessionInputState): AgentInputProjection {
-    const pendingQueue = state.pendingQueue.map((item) => this.toProjectedItem(item));
-    const recovery: AgentInputRecovery = state.recovery?.kind === 'active-turn'
-      ? { ...state.recovery, item: this.toProjectedItem(state.recovery.item) }
-      : state.recovery;
     return {
       sessionId,
-      pendingQueue,
-      continuationInFlightClientId:
-        state.activeTurn?.item?.originalSyntheticTrigger === 'continue'
-          ? state.activeTurn.item.clientId
-          : null,
+      pendingQueue: [...state.pendingQueue],
       steeringQueueClientIds: [...state.steeringQueueClientIds],
       queuePaused: state.queuePaused,
       queueExpanded: state.queueExpanded,
@@ -1814,7 +1672,7 @@ export class AgentInputCoordinator {
       queueEditLocks: [...state.queueEditLocks],
       queueAbortPending: state.queueAbortPending,
       error: state.error,
-      recovery,
+      recovery: state.recovery,
       errorRetryText: projectionRetryText(state.pendingQueue, state.recovery),
       credentialSwitchWait: state.credentialSwitchWait
         ? {
@@ -1823,26 +1681,6 @@ export class AgentInputCoordinator {
           }
         : null,
     };
-  }
-
-  /** Renderer projection may carry routing hints, but never quoted history bodies. */
-  private toProjectedItem(item: AgentInputQueuedMessage): AgentInputQueuedMessage {
-    const projected = { ...item };
-    delete projected.trustedSessionReferenceContexts;
-    delete projected.sessionReferencesRequireTrustedSnapshot;
-    return projected;
-  }
-
-  /** Resolve local refs normally, but never reinterpret a controller-owned remote ref. */
-  private async resolveReferenceContexts(
-    item: AgentInputQueuedMessage,
-  ): Promise<AgentInputSessionReferenceContext[]> {
-    if (!item.sessionRefs || item.sessionRefs.length === 0) return [];
-    if (item.trustedSessionReferenceContexts) return item.trustedSessionReferenceContexts;
-    if (item.sessionReferencesRequireTrustedSnapshot) {
-      throw new Error('Remote session reference snapshot is missing; edit and resend the message.');
-    }
-    return this.deps.resolveSessionReferences?.(item.sessionRefs) ?? [];
   }
 
   private isDispatchBoundaryBusy(sessionId: string, state: SessionInputState): boolean {
@@ -1955,7 +1793,7 @@ export class AgentInputCoordinator {
       // 留痕署名后照常派发。activeTurn 已置位,并发 drain 被挡住,询问期间
       // 不会抢发下一条。
       if (!head.bypassGhostHooks && this.deps.screenUserMessage) {
-        const verdict = await this.deps.screenUserMessage(sessionId, getAgentFacingText(head));
+        const verdict = await this.deps.screenUserMessage(sessionId, head);
         if (!this.isActiveTurnCurrent(sessionId, active)) return;
         if (verdict.action === 'block') {
           this.getState(sessionId).activeTurn = null;
@@ -1974,13 +1812,9 @@ export class AgentInputCoordinator {
           // 消息的落库内容毁成纯文本(重开会话后附件 chip / 引用全部丢失)。
           const originalText = head.text;
           const rewritten = updateQueuedMessageText(head, verdict.text);
-          Object.assign(head, rewritten);
-          if (!rewritten.sessionRefs) delete head.sessionRefs;
-          if (!rewritten.trustedSessionReferenceContexts) delete head.trustedSessionReferenceContexts;
-          if (!rewritten.sessionReferencesRequireTrustedSnapshot) {
-            delete head.sessionReferencesRequireTrustedSnapshot;
-          }
-          delete head.agentReferences;
+          head.text = rewritten.text;
+          head.persistedContent = rewritten.persistedContent;
+          head.chatMessage = rewritten.chatMessage;
           this.deps.onUserMessageRewritten?.(sessionId, head, {
             ghostId: verdict.ghostId,
             ghostName: verdict.ghostName,
@@ -1993,15 +1827,9 @@ export class AgentInputCoordinator {
       if (!this.isActiveTurnCurrent(sessionId, active)) return;
       active.sendStarted = true;
       active.dispatchLifecycle = 'sending';
-      // Freeze side-effect timestamps before entering vendor code. A dispatch
-      // may synchronously emit the new turn's started marker before it returns;
-      // post-dispatch acknowledgements must remain older than that marker.
-      const preVendorDispatchAt = Math.max(0, Date.now() - 1);
-      const referenceContexts = await this.resolveReferenceContexts(head);
-      head.persistedContent = attachSessionReferenceMetadata(head.persistedContent, referenceContexts);
       const result = await this.deps.sendToAgent(
         sessionId,
-        buildMakerUserMessage(head, referenceContexts),
+        buildMakerUserMessage(head),
         head.createOpts,
         {
           messageUuid: active.messageUuid,
@@ -2054,18 +1882,6 @@ export class AgentInputCoordinator {
       active.dispatchLifecycle = 'dispatched';
       // 派发成功 = 凭证切换等待(若有)结束。
       this.clearCredentialSwitchWait(this.getState(sessionId));
-      // vendor dispatch 已不可逆：此时再 durable-ack 旧中断。onAccepted 仍可能
-      // cancelled-before-dispatch，过早 ack 会在无新 started 时抹掉中断提示。
-      try {
-        await this.deps.onDispatchedUserTurn?.(sessionId, head, preVendorDispatchAt);
-      } catch (err) {
-        log.warn('onDispatchedUserTurn failed', {
-          sessionId,
-          clientId: head.clientId,
-          error: err instanceof Error ? err.message : String(err),
-        });
-      }
-      if (!this.isActiveTurnCurrent(sessionId, active)) return;
       if (active.pendingTerminalEvent) {
         this.settlePendingTerminalEventAfterPersist(sessionId, active);
         return;
@@ -2487,12 +2303,8 @@ export class AgentInputCoordinator {
   ): void {
     const existingIndex = state.pendingQueue.findIndex((q) => q.clientId === item.clientId);
     if (existingIndex >= 0) {
-      // `item` may carry a trusted snapshot restored by steer(). Keep that
-      // prepared value when materializing the fallback turn; otherwise the
-      // marker-only queue row would be re-used and the next drain would fail
-      // closed because its snapshot is missing.
-      state.pendingQueue.splice(existingIndex, 1);
-      state.pendingQueue.unshift(item);
+      const [entry] = state.pendingQueue.splice(existingIndex, 1);
+      if (entry) state.pendingQueue.unshift(entry);
     } else if (!removeFromQueue) {
       state.pendingQueue.push(item);
     } else {

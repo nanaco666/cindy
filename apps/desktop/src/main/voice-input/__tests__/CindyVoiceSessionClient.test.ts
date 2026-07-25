@@ -32,10 +32,6 @@ vi.mock('../../serverApiClient.js', () => ({
   ServerApiError,
   serverApiFetch,
 }));
-vi.mock('../../appCapabilities.js', () => ({
-  getAppCapabilities: () => ({ canUseCindyAccountServices: true }),
-  requireAppCapability: vi.fn(),
-}));
 
 import { CindyVoiceRunContext } from '../CindyVoiceSessionClient.js';
 
@@ -67,56 +63,5 @@ describe('CindyVoiceRunContext', () => {
     expect(refresh).toHaveBeenCalledTimes(1);
     expect(serverApiFetch).toHaveBeenCalledTimes(2);
     expect(serverApiFetch.mock.calls[0]).toEqual(serverApiFetch.mock.calls[1]);
-  });
-
-  it('keeps dictation working on a legacy server that rejects the auto refiner marker', async () => {
-    serverApiFetch.mockReset();
-    serverApiFetch
-      .mockRejectedValueOnce(new ServerApiError('INVALID_PARAMS', 400, '不支持的语音优化 Provider'))
-      .mockResolvedValueOnce({ ...SESSION, refiner: { enabled: false } });
-    const context = new CindyVoiceRunContext('zh-CN', 'auto');
-
-    await expect(context.createAsrConnection('qwen-asr-flash-realtime')).resolves.toEqual({
-      websocketUrl: SESSION.asr.websocketUrl,
-      authorizationToken: SESSION.ticket,
-    });
-    // The retry drops managed refinement so ASR still works...
-    expect(serverApiFetch).toHaveBeenCalledTimes(2);
-    const retryBody = (serverApiFetch.mock.calls[1][1] as { body: { refinerProvider?: string } }).body;
-    expect(retryBody.refinerProvider).toBeUndefined();
-    // ...and refine/warmup fail fast instead of hitting a server without the contract.
-    await expect(context.createRefinerTarget('auto')).rejects.toThrow('does not support managed refinement');
-    await expect(
-      context.warmRefiner({ system: 's', user: {}, promptCacheKey: 'k' }),
-    ).rejects.toThrow('does not support managed refinement');
-  });
-
-  it('does not downgrade on a 400 when using a concrete refiner provider', async () => {
-    serverApiFetch.mockReset();
-    serverApiFetch.mockRejectedValueOnce(new ServerApiError('INVALID_PARAMS', 400, 'bad request'));
-    const context = new CindyVoiceRunContext('zh-CN', 'qwen-plus');
-
-    await expect(context.createAsrConnection('qwen-asr-flash-realtime')).rejects.toThrow('bad request');
-    expect(serverApiFetch).toHaveBeenCalledTimes(1);
-  });
-
-  it('keeps trying managed refinement on later ASR candidates when the retry also fails', async () => {
-    // A 400 caused by the ASR candidate itself (not the 'auto' marker) fails
-    // the no-refiner retry too; the next candidate on the same run context
-    // must still request managed refinement.
-    serverApiFetch.mockReset();
-    serverApiFetch
-      .mockRejectedValueOnce(new ServerApiError('INVALID_PARAMS', 400, 'unsupported ASR provider'))
-      .mockRejectedValueOnce(new ServerApiError('INVALID_PARAMS', 400, 'unsupported ASR provider'))
-      .mockResolvedValueOnce(SESSION);
-    const context = new CindyVoiceRunContext('zh-CN', 'auto');
-
-    await expect(context.createAsrConnection('bad-candidate')).rejects.toThrow('unsupported ASR provider');
-    await expect(context.createAsrConnection('qwen-asr-flash-realtime')).resolves.toEqual({
-      websocketUrl: SESSION.asr.websocketUrl,
-      authorizationToken: SESSION.ticket,
-    });
-    const thirdBody = (serverApiFetch.mock.calls[2][1] as { body: { refinerProvider?: string } }).body;
-    expect(thirdBody.refinerProvider).toBe('auto');
   });
 });

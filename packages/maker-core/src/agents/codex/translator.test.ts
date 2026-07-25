@@ -15,7 +15,6 @@ import {
   extractRolloutUpdatePlanFunctionCallEvent,
   newCodexRuntimeState,
   translateErrorNotification,
-  translateAccountRateLimitsUpdated,
   translateItemNotification,
   translatePlanUpdatedNotification,
 } from './translator.js';
@@ -66,61 +65,7 @@ async function collect(queue: AsyncQueue<AgentEvent>): Promise<AgentEvent[]> {
   return out;
 }
 
-describe('translateAccountRateLimitsUpdated', () => {
-  it('normalizes Codex 0.144 windowDurationMins before emitting account usage', async () => {
-    const q = createAsyncQueue<AgentEvent>();
-    translateAccountRateLimitsUpdated({
-      rateLimits: {
-        primary: { usedPercent: 100, windowDurationMins: 300 },
-        secondary: { usedPercent: 25, windowMinutes: 10080, windowDurationMins: 60 },
-      },
-    }, q, makeCtx(newCodexRuntimeState()));
-
-    const events = await collect(q);
-    expect(events).toHaveLength(1);
-    expect(events[0]).toMatchObject({
-      type: 'account_usage',
-      source: 'codex',
-      data: {
-        primary: { usedPercent: 100, windowMinutes: 300, windowDurationMins: 300 },
-        secondary: { usedPercent: 25, windowMinutes: 10080, windowDurationMins: 60 },
-      },
-    });
-  });
-});
-
 describe('translateErrorNotification', () => {
-  it('redacts producer logs and preserves non-secret error signals', async () => {
-    const rt = newCodexRuntimeState();
-    const warnings: Record<string, unknown>[] = [];
-    const ctx = {
-      rt,
-      log: {
-        ...noopLog(),
-        warn: (_message: string, data?: Record<string, unknown>) => {
-          if (data) warnings.push(data);
-        },
-      },
-    };
-    const q = createAsyncQueue<AgentEvent>();
-    translateErrorNotification(
-      makeParams({
-        willRetry: false,
-        message: 'Authorization: Bearer secret-token, quota exhausted, status=429',
-      }),
-      q,
-      ctx,
-    );
-
-    const events = await collect(q);
-    expect(events[0]!.data).toMatchObject({
-      message: 'Authorization: [REDACTED]',
-      errorStatus: 429,
-      usageLimit: true,
-    });
-    expect(JSON.stringify(warnings)).not.toContain('secret-token');
-    expect(warnings[0]).toMatchObject({ message: 'Authorization: [REDACTED]' });
-  });
   it('willRetry=true transient → silent (no event pushed)', async () => {
     const rt = newCodexRuntimeState();
     const q = createAsyncQueue<AgentEvent>();
@@ -162,55 +107,6 @@ describe('translateErrorNotification', () => {
     expect(events).toHaveLength(1);
     expect(events[0].data).toMatchObject({ isTerminal: false, willRetry: true });
   });
-
-  it('preserves Missing bearer classification when Authorization redaction consumes the phrase', async () => {
-    const rt = newCodexRuntimeState();
-    const q = createAsyncQueue<AgentEvent>();
-    translateErrorNotification(
-      makeParams({
-        willRetry: true,
-        message: 'Authorization: Bearer secret-token, Missing bearer',
-      }),
-      q,
-      makeCtx(rt),
-    );
-
-    const events = await collect(q);
-    expect(events).toHaveLength(1);
-    expect(events[0].data).toMatchObject({
-      message: 'Authorization: [REDACTED]',
-      errorStatus: 401,
-      isTerminal: false,
-      willRetry: true,
-    });
-    expect(JSON.stringify(events)).not.toContain('secret-token');
-  });
-
-  it.each(['authentication_error', 'invalid api key'])(
-    'preserves %s classification when Authorization redaction consumes the marker',
-    async (authMarker) => {
-      const rt = newCodexRuntimeState();
-      const q = createAsyncQueue<AgentEvent>();
-      translateErrorNotification(
-        makeParams({
-          willRetry: true,
-          message: `Authorization: Bearer secret-token, ${authMarker}`,
-        }),
-        q,
-        makeCtx(rt),
-      );
-
-      const events = await collect(q);
-      expect(events).toHaveLength(1);
-      expect(events[0].data).toMatchObject({
-        message: 'Authorization: [REDACTED]',
-        errorStatus: 401,
-        isTerminal: false,
-        willRetry: true,
-      });
-      expect(JSON.stringify(events)).not.toContain('secret-token');
-    },
-  );
 
   it('willRetry=true + 401 同 thread+turn 再次触发 → dedupe (no push)', async () => {
     const rt = newCodexRuntimeState();
@@ -398,7 +294,7 @@ describe('translateItemNotification commandExecution output normalization', () =
     const q = createAsyncQueue<AgentEvent>();
     const ctx = makeCtx(rt);
     const rawCommand =
-      '"C:\\Program Files\\WindowsApps\\Microsoft.PowerShell_7.6.3.0_x64__8wekyb3d8bbwe\\pwsh.exe" -Command \'pnpm --filter @cindy/maker-core build\'';
+      '"C:\\Program Files\\WindowsApps\\Microsoft.PowerShell_7.6.3.0_x64__8wekyb3d8bbwe\\pwsh.exe" -Command \'pnpm --filter @lizi/maker-core build\'';
 
     translateItemNotification(
       'started',
@@ -426,7 +322,7 @@ describe('translateItemNotification commandExecution output normalization', () =
         input: {
           command: rawCommand,
           cwd: 'E:\\xdt-maker',
-          displayCommand: 'pnpm --filter @cindy/maker-core build',
+          displayCommand: 'pnpm --filter @lizi/maker-core build',
         },
       },
     });

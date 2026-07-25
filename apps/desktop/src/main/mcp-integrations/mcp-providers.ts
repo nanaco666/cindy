@@ -5,10 +5,10 @@ import {
   type LiziMcpProvider,
   type LiziMcpSessionContext,
   type LspServerPool,
-} from '@cindy/mcps';
-import type { OrcaMcpDeps } from '@cindy/mcps';
+} from 'lizi-mcps';
+import type { OrcaMcpDeps } from 'lizi-mcps';
 import { createCindyGhostsMcpServer } from 'cindy-tools';
-import type { MakerMemoryManager } from '@cindy/maker-core';
+import type { MakerMemoryManager } from '@lizi/maker-core';
 import { getCindyGhostsMcpDeps } from './ghost.js';
 import { getAndroidMcpDeps } from './android.js';
 import { getBrowserMcpDeps } from './browser.js';
@@ -41,19 +41,12 @@ import { broadcastContactsChanged } from '../maker-ipc/contacts-ipc.js';
 import { readContactsSettings } from '../maker-host/contacts-settings-store.js';
 import { readSystemContacts, writeSystemContacts } from '../maker-host/system-contacts.js';
 import { BUILTIN_LIZI_MCP_IDS, pluginIdForProviderName } from '../maker-host/plugins/builtin-plugins.js';
-import { GLOBAL_PLUGIN_IDS } from '../maker-host/plugins/types.js';
-import {
-  readChatHistoryMessages,
-  type ChatHistoryReaderDeps,
-} from './remoteChatHistory.js';
 
 export interface DesktopMcpProvidersDeps {
   getMakerMemoryManager: () => MakerMemoryManager;
   lspPool: LspServerPool;
   /** 按会话控制启用状态的 plugin registry。 */
   pluginRegistry: PluginRegistry;
-  /** Device-link transport stays host-injected so provider tests do not load Electron runtime services. */
-  invokeRemote: ChatHistoryReaderDeps['invokeRemote'];
 }
 
 export function createDesktopMcpProviders(deps: DesktopMcpProvidersDeps): LiziMcpProvider[] {
@@ -74,16 +67,11 @@ export function createDesktopMcpProviders(deps: DesktopMcpProvidersDeps): LiziMc
     // 先传完整内置列表；按会话启停由下面的 isEnabled 包装处理。
     enabled: BUILTIN_LIZI_MCP_IDS,
     android: getAndroidMcpDeps({
-      isAndroidAutomationEnabled: (context) =>
-        // Codex provider presence is the bridge-creation enablement snapshot.
-        // Keep that snapshot for a busy turn when a disable refresh is deferred;
-        // a successfully rebuilt bridge omits this provider via the outer gate.
-        context?.agentKind === 'codex' || pluginRegistry.isEnabled('android'),
+      isAndroidAutomationEnabled: () => pluginRegistry.isEnabled('android'),
     }),
     browser: getBrowserMcpDeps(),
     computer: getComputerMcpDeps({
-      isComputerUseEnabled: (context) =>
-        context?.agentKind === 'codex' || pluginRegistry.isEnabled('computer'),
+      isComputerUseEnabled: () => pluginRegistry.isEnabled('computer'),
     }),
     // lizi_feishu 已于 2026-07-16 摘壳:飞书能力(44 精品 + 123 只读直通)迁入
     // 内置意识 xd-feishu;2026-07-17 起授权切到意识 OAuth broker
@@ -108,7 +96,7 @@ export function createDesktopMcpProviders(deps: DesktopMcpProvidersDeps): LiziMc
         try {
           return await feishuIm.sendFile(chatId, absPath, displayName);
         } catch (err) {
-          createLogger('mcp/cindy_feishu_bot').warn(
+          createLogger('mcp/lizi_feishu_bot').warn(
             'sendFile failed target=...%s detail=%s',
             chatId.slice(-8),
             err instanceof Error ? err.message : String(err),
@@ -132,7 +120,7 @@ export function createDesktopMcpProviders(deps: DesktopMcpProvidersDeps): LiziMc
             : err instanceof Error
               ? err.message
               : String(err);
-          createLogger('mcp/cindy_feishu_bot').warn(
+          createLogger('mcp/lizi_feishu_bot').warn(
             'sendMessage failed target=...%s detail=%s',
             chatId.slice(-8),
             detail,
@@ -140,14 +128,14 @@ export function createDesktopMcpProviders(deps: DesktopMcpProvidersDeps): LiziMc
           return { ok: false, reason: 'SEND_FAIL' };
         }
       },
-      logger: createLogger('mcp/cindy_feishu_bot'),
+      logger: createLogger('mcp/lizi_feishu_bot'),
     },
-    // cindy_slack(2026-07-19): Slack 网关工具。桥经 hook-control 的零依赖
+    // lizi_slack(2026-07-19): Slack 网关工具。桥经 hook-control 的零依赖
     // 注册表取用(静态 import ipc.ts 会与 maker-host 闭环, 见 slackToolBridge
     // 模块头); 未注册 = null, provider isEnabled fail-closed。
     slackHook: {
       getBridge: () => getSlackToolBridge(),
-      logger: createLogger('mcp/cindy_slack'),
+      logger: createLogger('mcp/lizi_slack'),
     },
     scheduler: {
       getScheduler: () => getScheduler(),
@@ -194,7 +182,7 @@ export function createDesktopMcpProviders(deps: DesktopMcpProvidersDeps): LiziMc
       },
       logger: createLogger('mcp/cindy_scheduler'),
     },
-    // cindy_ssh: agent 直接在已配置 SSH 主机上执行命令(远端零安装)。
+    // lizi_ssh: agent 直接在已配置 SSH 主机上执行命令(远端零安装)。
     // ⚠️ 必须 lazy await import():静态 import remote-ssh 会形成
     // mcp-providers → remote-ssh/index.ts(imports maker-host) →
     // maker-host/index.ts(imports createDesktopMcpProviders) → mcp-providers 环
@@ -211,7 +199,7 @@ export function createDesktopMcpProviders(deps: DesktopMcpProvidersDeps): LiziMc
       // 这种远端执行工具必须在调用时刻按真实会话 workdir 再查一次 registry;
       // workingDir undefined = 无会话上下文,回落全局开关判定。
       isEnabledForWorkdir: (workingDir) => pluginRegistry.isEnabled('ssh', workingDir),
-      logger: createLogger('mcp/cindy_ssh'),
+      logger: createLogger('mcp/lizi_ssh'),
     },
     memory: {
       getManager: deps.getMakerMemoryManager,
@@ -229,11 +217,11 @@ export function createDesktopMcpProviders(deps: DesktopMcpProvidersDeps): LiziMc
       // agent 经 MCP 直写 store 不经 IPC 层, 变更靠这个回调广播给 renderer
       // (设置页统计/待确认角标/管理浮层的实时刷新)
       onMutated: broadcastContactsChanged,
-      logger: createLogger('mcp/cindy_contacts'),
+      logger: createLogger('mcp/lizi_contacts'),
     },
     lsp: {
       pool: deps.lspPool,
-      logger: createLogger('mcp/cindy_lsp'),
+      logger: createLogger('mcp/lizi_lsp'),
       isUserEnabled: () => readLspModeSettings().enabled,
     },
     // xdt-helper: 自省 + history + send_to_session (essential 常开)。
@@ -314,10 +302,8 @@ export function createDesktopMcpProviders(deps: DesktopMcpProvidersDeps): LiziMc
           catch (err) { const msg = err instanceof Error ? err.message : String(err); const errorCode = /localDb not ready/i.test(msg) ? 'HOST_NOT_READY' : 'INTERNAL'; return { ok: false, errorCode, message: msg }; }
         },
         getMessages: async (args) => {
-          return readChatHistoryMessages(args, {
-            readLocal: getMessagesForHistory,
-            invokeRemote: deps.invokeRemote,
-          });
+          try { const page = await getMessagesForHistory(args); return { ok: true, page }; }
+          catch (err) { const msg = err instanceof Error ? err.message : String(err); const errorCode = /localDb not ready/i.test(msg) ? 'HOST_NOT_READY' : 'INTERNAL'; return { ok: false, errorCode, message: msg }; }
         },
         searchChatHistory: async (args) => {
           try { const result = await searchChatHistoryHybrid(args); return { ok: true, result }; }
@@ -328,7 +314,7 @@ export function createDesktopMcpProviders(deps: DesktopMcpProvidersDeps): LiziMc
       // holder 同样是延迟查找，registerMakerIpc 里 init。
       githubIssue: (req) => submitGithubIssueForSession(req),
     },
-    // cindy_orca: 多 worker 协同 team 工具集。"协同模式"可关插件 gate 它。
+    // lizi_orca: 多 worker 协同 team 工具集。"协同模式"可关插件 gate 它。
     orca: {
       startTeam: wrap((s, params) => s.startTeam(params)),
       createWorker: wrap((s, params) => s.createWorker(params)),
@@ -351,7 +337,7 @@ export function createDesktopMcpProviders(deps: DesktopMcpProvidersDeps): LiziMc
   });
 
   // 用 plugin registry gate 包装每个 provider 的 isEnabled。
-  // essential plugin 始终放行；非 essential plugin 按 project → user → default 判定。
+  // essential plugin 始终放行；非 essential plugin 按 project → default 判定。
   // provider name(如 'lizi_jira') 会先映射成用户可见的 plugin id(如 'jira')。
   const gated = providers.map((p) => {
     const originalIsEnabled = p.isEnabled;
@@ -359,22 +345,16 @@ export function createDesktopMcpProviders(deps: DesktopMcpProvidersDeps): LiziMc
     return {
       ...p,
       isEnabled: (ctx: LiziMcpSessionContext) => {
-        // Codex 的共享 app-server 在还没有 thread/workdir 的阶段构建 MCP
-        // 工具清单。普通工具必须先全部注册，真正调用时由 HTTP bridge 按新会话
-        // 冻结的策略阻断；否则某个用户默认会错误地影响所有项目。机器级工具
-        // 仍沿用现有 spawn-time gate + 环境重建语义。
-        const deferOrdinaryCodexGate =
-          ctx.agentKind === 'codex' && !ctx.workingDir && !GLOBAL_PLUGIN_IDS.has(pluginId);
-        // Plugin gate：registry 负责 essential / machine / project / user / default 判定。
-        if (!deferOrdinaryCodexGate && !pluginRegistry.isEnabled(pluginId, ctx.workingDir)) return false;
+        // Plugin gate：registry 负责 essential / project / default 判定。
+        if (!pluginRegistry.isEnabled(pluginId, ctx.workingDir)) return false;
         // 继续走原 provider gate，例如 memory manager check、feishu bot source check。
         return originalIsEnabled?.(ctx) ?? true;
       },
     };
   });
 
-  // cindy:意识总机(cindy-tools;网关模式,
-  // docs/dev-rules/plugin-security-and-authoring.md;2026-07-12 由 cindy_ghosts 更名——server 名进
+  // cindy:意识总机(cindy-tools,"新世界"首个工具集;网关模式,
+  // runtime-sandbox.md §5.5;2026-07-12 由 cindy_ghosts 更名——server 名进
   // 工具全名 mcp__<server>__<tool>,短名让调用行少啰嗦一截,历史消息的旧
   // 全名由 shared/ghost.ts isGhostCallToolName 兼容匹配)。常注册不设
   // plugin gate——工具面恒定是缓存前缀稳定的前提,"没装任何意识"表现为

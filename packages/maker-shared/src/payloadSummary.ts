@@ -46,12 +46,11 @@ export interface PayloadAttachmentLike {
   name: string;
   uri?: string;
   path?: string;
-  mimeType?: string;
   previewable: boolean;
 }
 
 export interface PayloadAttachmentMediaLike {
-  kind: 'image' | 'video' | 'audio';
+  kind: 'image';
   url: string;
   title: string;
   previewable: boolean;
@@ -302,23 +301,6 @@ export function buildAttachmentPayload(
   }
 
   const sourcePath = attachment.path || attachment.uri || '';
-  const mimeType = attachment.mimeType?.trim().toLowerCase().split(';', 1)[0] ?? '';
-  const mediaKind =
-    mimeType.startsWith('video/') ? 'video' : mimeType.startsWith('audio/') ? 'audio' : null;
-  // User-message persistence historically has only images[] and files[].
-  // Audio/video therefore remain files on disk, but a managed-media URL plus
-  // its MIME is enough to route mobile playback through remote-media fetch.
-  if (mediaKind && isPayloadDesktopLocalMediaUrl(sourcePath)) {
-    return buildMediaPayload(
-      {
-        kind: mediaKind,
-        previewable: attachment.previewable,
-        title: attachment.name,
-        url: sourcePath,
-      },
-      attachment.name,
-    );
-  }
   return buildFilePayload(attachment.name, sourcePath);
 }
 

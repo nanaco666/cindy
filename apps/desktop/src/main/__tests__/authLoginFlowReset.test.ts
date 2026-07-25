@@ -99,18 +99,6 @@ describe('auth login-flow reset', () => {
     expect(initializeBody).not.toContain('restoreAccountSelection');
   });
 
-  it('returns a committed local session before reading or refreshing cloud credentials', () => {
-    const initializeStart = source.indexOf('export async function initialize(');
-    const initializeEnd = source.indexOf('\n}\n\n/**\n * 冷启动 refresh 流程本体', initializeStart);
-    const initializeBody = source.slice(initializeStart, initializeEnd);
-    const localGuard = initializeBody.indexOf("getActiveAppSession().mode === 'local'");
-    const refreshTokenRead = initializeBody.indexOf('readSafe(REFRESH_TOKEN_KEY)');
-
-    expect(localGuard).toBeGreaterThan(-1);
-    expect(refreshTokenRead).toBeGreaterThan(localGuard);
-    expect(initializeBody.slice(localGuard, refreshTokenRead)).toContain('return snapshotAuthState();');
-  });
-
   it('drops a runtime refresh result after logout or a newer login changes auth generation', () => {
     const refreshStart = source.indexOf('export async function refresh(): Promise<boolean> {');
     const refreshEnd = source.indexOf('\n}\n\nexport async function logout()', refreshStart);
@@ -123,27 +111,6 @@ describe('auth login-flow reset', () => {
     expect(refreshBody).toContain("refreshWasSuperseded('after-account-switch-teardown')");
     expect(refreshBody).toContain("refreshWasSuperseded('after-integration-reload')");
     expect(refreshBody).toContain("refreshWasSuperseded('catch')");
-  });
-
-  it('tears down the owner boundary before notifying runtime auth expiry', () => {
-    const helperStart = source.indexOf('async function expireRuntimeAuth(');
-    const helperEnd = source.indexOf('\n}\n\n// ── Public API', helperStart);
-    const helperBody = source.slice(helperStart, helperEnd);
-    expect(helperBody).toContain('beginAppSessionBoundary()');
-    expect(helperBody).toContain('notifyRendererAuthBoundaryPending();');
-    expect(helperBody).toContain('clearAuth({ notify: false,');
-    expect(helperBody).toContain('await accountSwitchTeardown');
-    expect(helperBody).toContain('closeLocalDb();');
-    expect(helperBody).toContain('notifyAuthListeners();');
-    expect(helperBody).toContain('notifySessionExpired(reason);');
-
-    const refreshStart = source.indexOf('export async function refresh(): Promise<boolean> {');
-    const refreshEnd = source.indexOf('\n}\n\nexport async function logout()', refreshStart);
-    const refreshBody = source.slice(refreshStart, refreshEnd);
-    expect(refreshBody).toContain(
-      'await expireRuntimeAuth(previousUserId, resolveSessionExpiredReason(code));',
-    );
-    expect(refreshBody).not.toContain('clearAuth({ notify: false });');
   });
 
   it('synchronizes canary flags on every path that establishes a new auth identity', () => {

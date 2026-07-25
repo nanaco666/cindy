@@ -25,8 +25,6 @@ export function throwOrcaServiceFailure(result: { ok: false; errorCode: string; 
       return throwIpcError('BUDGET_MODEL_REQUIRES_API_MODE', result.message);
     case 'NO_PROVIDER_FOR_AGENT':
       return throwIpcError('NO_PROVIDER_FOR_AGENT', result.message);
-    case 'PROVIDER_ROUTE_UNAVAILABLE':
-      return throwIpcError('PROVIDER_ROUTE_UNAVAILABLE', result.message);
     case 'BUSY':
       return throwIpcError('SESSION_RUNNING', result.message);
     default:

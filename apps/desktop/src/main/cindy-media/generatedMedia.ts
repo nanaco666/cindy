@@ -1,19 +1,20 @@
 /**
- * generatedMedia.ts — AI 生成产物(art / mivo / codex 生成图)的媒体总仓存储适配器。
+ * generatedMedia.ts — AI 生成产物(art / mivo / codex 生成图)的新世界存储适配器
+ * (媒体总仓迁移第 2 步)。
  * ---------------------------------------------------------------------------
- * 契约:docs/dev-rules/media-storage-and-protocols.md。
+ * 设计:media-store.md §3「AI 生成作品」;AGENTS.md 规则 25。
  *
- * 形状对齐 @cindy/mcps 的 art 存储契约(`storage.saveImage/resolveImageRef`、
+ * 形状对齐 lizi-mcps 的 art 存储契约(`storage.saveImage/resolveImageRef`、
  * `videoStorage.saveVideo`),替换 `createArtMediaStore/createArtVideoStore`
  * 的文件目录实现——mivo 与 MJ 按钮链路复用 art 注入的同一套存储,换这一处
  * 三条链全切。返回字段名(`xdtImageUrl`/`xdtVideoUrl`)保持不变,值变为
  * `cindy-media://blobs/<hash>.<ext>`;tool result JSON 的 `xdt_image_url(s)`
- * 等**字段名**由 @cindy/mcps 拼装,不受影响(renderer 按字段名提取)。
+ * 等**字段名**由 lizi-mcps 拼装,不受影响(renderer 按字段名提取)。
  *
  * 记账口径:生成时**零引用入仓**(art service 是无会话上下文的单例,拿不到
  * sessionId)——归属在消息落库的唯一汇聚点(localDb createMessage)由
  * commitChatImageUrls 统一挂 session-attachment 引用;落库前的零引用窗口受
- * recycler.ts 的「零引用≠无主」不变量保护。
+ * media-store.md §4「零引用≠无主」不变量保护。
  */
 
 import fs from 'node:fs/promises';
@@ -23,7 +24,7 @@ import * as blobStore from './blobStore';
 import { ingestMedia } from './ingest';
 import type { LedgerDb } from './ledger';
 
-/** 与 @cindy/mcps SavedImage 结构对齐(structural typing,不 import 包内类型)。 */
+/** 与 lizi-mcps SavedImage 结构对齐(structural typing,不 import 包内类型)。 */
 export interface SavedBlobImage {
   fileId: string;
   filename: string;
@@ -51,12 +52,12 @@ async function assertOnDisk(absPath: string, ref: string): Promise<void> {
 
 /**
  * 图片存储适配器:saveImage 入总仓(零引用),resolveImageRef 三分支——
- * 媒体总仓 blob 地址 / 历史 xdt-image 地址(改图的源图可能是历史图)/
+ * 新世界 blob 地址 / 老世界 xdt-image 地址(改图的源图可能是历史图)/
  * 绝对路径(用户 @ 的本地图)。
  */
 export function createBlobImageStorage(
   opts: {
-    /** 历史 xdt-image:// 地址 → 绝对路径(真身 imageCacheStore.resolveSafe;只读兼容层)。 */
+    /** 老 xdt-image:// 地址 → 绝对路径(真身 imageCacheStore.resolveSafe;只读老世界)。 */
     resolveLegacyImageRef: (ref: string) => { absPath: string };
   },
   db?: LedgerDb,
@@ -127,7 +128,7 @@ export function normalizeGeneratedVideoMime(raw: string): string {
   return 'video/mp4';
 }
 
-/** 视频存储适配器:saveVideo 入总仓(零引用),字段形状对齐 @cindy/mcps SavedVideo。 */
+/** 视频存储适配器:saveVideo 入总仓(零引用),字段形状对齐 lizi-mcps SavedVideo。 */
 export function createBlobVideoStorage(db?: LedgerDb): {
   saveVideo(buffer: Buffer, mime: string): Promise<SavedBlobVideo>;
 } {

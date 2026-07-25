@@ -1,4 +1,4 @@
-# Cindy Desktop Interaction Audit for Mobile Remote Control
+# XDMaker Desktop Interaction Audit for Mobile Remote Control
 
 > 版本: 2026-06-17
 > 目标: 按桌面版现有源码完整盘点消息交互过程、界面内容、选项卡、计划、自动化、文件页和协作模式,并转成手机版远程控制的实现清单。
@@ -33,7 +33,7 @@
 手机版不应有独立的会话数据库、独立计划引擎、独立权限状态机或独立 agent runtime。正确边界是:
 
 - 桌面端: 会话、消息、队列、权限请求、计划、文件、worker、自动化、媒体资源的真相源。
-- 服务端: 账号与设备中继,不保存 Cindy 业务状态。
+- 服务端: 账号与设备中继,不保存 XDMaker 业务状态。
 - 手机端: 通过 `device-link` 订阅和调用桌面能力,只保存 UI 状态、最近设备、短期缓存和本地草稿。
 
 ### 2.2 V1 范围

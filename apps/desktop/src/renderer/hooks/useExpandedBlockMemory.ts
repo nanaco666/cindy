@@ -12,13 +12,13 @@
  *   setExpanded(true | false | (prev) => !prev)
  *
  * Single source of truth: a module-level `ExpandedBlockStore`
- * (`@cindy/maker-shared/expanded-block-memory` — the same core the mobile
+ * (`@lizi/maker-shared/expanded-block-memory` — the same core the mobile
  * client uses, so both ends keep identical semantics) shared across all hook
  * instances; its pub/sub keeps every consumer in sync.
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { createExpandedBlockStore } from '@cindy/maker-shared/expanded-block-memory';
+import { createExpandedBlockStore } from '@lizi/maker-shared/expanded-block-memory';
 import { createLogger } from '@/lib/logger';
 
 const log = createLogger('UseExpandedBlockMemory');

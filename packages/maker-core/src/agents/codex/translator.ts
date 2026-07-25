@@ -22,13 +22,7 @@
  *  - turn-start status 文案 / userName → index.ts 在 send() 入口 push
  */
 
-import {
-  extractNonSecretErrorSignals,
-  redactSensitiveText,
-} from '@cindy/maker-shared/error-redaction';
-
 import type { AgentEvent, AgentTaskStatus, AgentTaskUpdateEventData } from '../../types/events.js';
-import { normalizeAccountRateLimitSnapshot } from '../../types/account-rate-limits.js';
 import type { AsyncQueue } from '../shared/async-queue.js';
 import { stripTerminalControlSequences } from '../shared/terminal-output.js';
 import { isNetworkishErrorMessage } from '../shared/network-error.js';
@@ -191,20 +185,6 @@ export function translateErrorNotification(
   ctx: CodexTranslateContext,
 ): void {
   const message = params.error?.message ?? 'codex error';
-  const hasMissingBearer = /\bMissing bearer\b/i.test(message);
-  const hasAuthErrorMarker =
-    /\bauthentication_(?:error|failed)\b|\binvalid[\s_-]*api[\s_-]*key\b|\bapi key not valid\b/i.test(
-      message,
-    );
-  const safeMessage = redactSensitiveText(message);
-  const signals = extractNonSecretErrorSignals(message);
-  const errorStatus =
-    signals.errorStatus ?? (hasMissingBearer || hasAuthErrorMarker ? 401 : undefined);
-  const safeErrorData = {
-    message: safeMessage,
-    ...(errorStatus !== undefined ? { errorStatus } : {}),
-    ...(signals.usageLimit ? { usageLimit: true } : {}),
-  };
   // willRetry=true 的暂时错误 (transient API blip / 5xx blip), server 自己会重试 — 默认
   // 不 emit error event 给 UI,否则会把瞬时错误暴露成用户可见失败。**但** auth 缺失
   // (401/Unauthorized/Missing bearer) 是 daemon 怎么 retry 也不可能自愈的 —— 必须
@@ -216,10 +196,9 @@ export function translateErrorNotification(
   // 收紧 pattern: 避开非 HTTP-auth 错误误伤 (eg. 工具执行报错 "Unauthorized file
   // system access" 含 Unauthorized 字面但不是 401)。要求带 \b401\b 边界, 或
   // Missing bearer 精确短语 (OpenAI 401 message 标准措辞)。
-  const isAuthMissing =
-    errorStatus === 401 || /\b401\b|Missing bearer/i.test(safeMessage);
+  const isAuthMissing = /\b401\b|Missing bearer/i.test(message);
   if (params.willRetry && !isAuthMissing) {
-    ctx.log.warn('codex error (will retry)', { message: safeMessage, threadId: params.threadId, turnId: params.turnId });
+    ctx.log.warn('codex error (will retry)', { message, threadId: params.threadId, turnId: params.turnId });
     // 网络类错误(502/连接失败等)持续重试 = 网络可能断了,daemon 卡在 retry-loop
     // 里 turn 无限转圈。同 turn 第 2 次时透出**一条**非终止提示(isTerminal:false,
     // renderer 走 recoverableError → "网络异常,正在自动重试…" banner,恢复后随
@@ -235,7 +214,7 @@ export function translateErrorNotification(
         ctx.rt.networkRetryNotice = { key, count, emitted: true };
         queue.push({
           type: 'error',
-          data: { ...safeErrorData, isTerminal: false, willRetry: true },
+          data: { message, isTerminal: false, willRetry: true },
           source: 'codex',
         });
       }
@@ -250,15 +229,15 @@ export function translateErrorNotification(
   if (params.willRetry && isAuthMissing) {
     const key = `${params.threadId ?? ''}|${params.turnId ?? ''}`;
     if (ctx.rt.lastAuthErrorKey === key) {
-      ctx.log.debug('codex auth retry-loop dropped (already surfaced this turn)', { message: safeMessage, threadId: params.threadId, turnId: params.turnId });
+      ctx.log.debug('codex auth retry-loop dropped (already surfaced this turn)', { message, threadId: params.threadId, turnId: params.turnId });
       return;
     }
     ctx.rt.lastAuthErrorKey = key;
   }
-  ctx.log.warn('codex turn error', { message: safeMessage, willRetry: params.willRetry, isAuthMissing, threadId: params.threadId, turnId: params.turnId });
+  ctx.log.warn('codex turn error', { message, willRetry: params.willRetry, isAuthMissing, threadId: params.threadId, turnId: params.turnId });
   queue.push({
     type: 'error',
-    data: { ...safeErrorData, isTerminal: !params.willRetry, willRetry: params.willRetry },
+    data: { message, isTerminal: !params.willRetry, willRetry: params.willRetry },
     source: 'codex',
   });
 }
@@ -1270,7 +1249,7 @@ export function translateAccountRateLimitsUpdated(
   void ctx;
   queue.push({
     type: 'account_usage',
-    data: normalizeAccountRateLimitSnapshot(params.rateLimits),
+    data: params.rateLimits,
     source: 'codex',
   });
 }

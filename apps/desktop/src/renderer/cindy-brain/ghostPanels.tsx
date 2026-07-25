@@ -26,9 +26,9 @@ import { pruneGhostSettingsSnapshots } from './ghostSettingsSnapshot';
 import { useGhostRuntimeState } from './runtimeStates';
 
 /**
- * 意识面板接入布局引擎。
+ * 意识面板接入布局引擎(意识系统 C2b)。
  *
- * 数据流(布局与沙箱边界见 docs/dev-rules/architecture-invariants.md / docs/dev-rules/plugin-security-and-authoring.md):
+ * 数据流(全链路见 docs/Cindy架构设计/意识系统/):
  * - 启动:LayoutRoot 首帧前 ensureGhostPanelsRegistered() 同步拉已装清单
  *   (sendSync)→ 声明了面板的意识逐个注册进面板注册表 —— 与内置面板同帧
  *   就位,布局第一帧即完整(设计规范规则 7);
@@ -38,11 +38,11 @@ import { useGhostRuntimeState } from './runtimeStates';
  *   树数据保留,重装即原位复活(§6 规则 5 的正式生效点)。
  *
  * 声明卡(v1)面板 = 标准头 + 清单正文,无任何可执行内容;芯片卡的沙箱渲染
- * 由独立沙箱负责,本模块只认清单数据。
+ * 是 C3 话题,本模块只认清单数据。
  */
 
 /**
- * 面板错误接管态:芯片型意识崩溃 / 熔断时面板**不关闭**,
+ * 面板错误接管态(C3a,Lizi 定案):芯片型意识崩溃 / 熔断时面板**不关闭**,
  * 原地显示错误信息 + 两个动作——「重载意识」(清熔断记账重新拉起)与
  * 「关闭意识」(转沉睡,面板收起,可到设置里再唤醒)。
  */
@@ -72,7 +72,7 @@ function GhostPanelError({
         >
           {t('settings.ghosts.panelError.reload')}
         </button>
-        {/* 关闭 = 转沉睡,可逆动作,按 docs/design-rules/cindy-design-system.md 红色纪律走灰度次按钮(红只留错误图标)。 */}
+        {/* 关闭 = 转沉睡,可逆动作,按 DESIGN.md 红色纪律走灰度次按钮(红只留错误图标)。 */}
         <button
           type="button"
           onClick={() => void window.electronAPI.ghosts.setEnabled(manifest.id, false).catch(() => {})}
@@ -95,7 +95,7 @@ interface GhostPanelMediaMenuState {
 }
 
 /**
- * 意识面板产物的右键菜单:与聊天流 ChatImageView / ChatVideoView
+ * 意识面板产物的右键菜单(C3b 补全):与聊天流 ChatImageView / ChatVideoView
  * 右键同款动作——复制文件(copyMediaToClipboard,文件引用形式)+ 打开所在
  * 目录(showItemInFolder)。菜单是宿主自绘(webview 里的右键经 Electron
  * context-menu 事件转出,面板自己画不了也伪造不了),地址已过 main 闸换发,
@@ -184,7 +184,7 @@ export function pickGhostPanelMediaUri(
 }
 
 /**
- * 芯片型意识的自绘面板体:一块沙箱 webview 装载意识自己的
+ * 芯片型意识的自绘面板体(C3b,卡槽④):一块沙箱 webview 装载意识自己的
  * panel.html——分区/地址由 main 侧 webview 附加闸验明正身(webview-security),
  * 主题 token 在 dom-ready 注入、主机换肤时重灌(ghostPanelTheme)。
  * webview 崩溃 = 本地错误接管态(重载 = 原地重挂载,不经主机)。

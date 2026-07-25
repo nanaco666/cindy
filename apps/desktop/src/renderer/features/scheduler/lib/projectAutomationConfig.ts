@@ -1,4 +1,4 @@
-import type { Schedule } from '@cindy/maker-scheduler';
+import type { Schedule } from '@lizi/maker-scheduler';
 
 import { buildPreRunHook } from './scheduleFormLogic';
 import type { ScheduleFormState } from '../hooks/useScheduleForm';

@@ -22,7 +22,7 @@
 
 import { createId } from '@paralleldrive/cuid2';
 
-import type { IMAttachment } from '@cindy/im';
+import type { IMAttachment } from 'lizi-im';
 
 import { createMessage } from '../localDb/ipc/messages';
 import { createLogger } from '../logger';
@@ -58,7 +58,7 @@ export async function persistUserMessage(args: {
         type: att.kind === 'image' ? 'image' : 'file',
         path: att.absPath,
         mimeType: att.mimeType,
-        // cindy-media 地址:写进落库 JSON 让 createMessage 的
+        // cindy-media 地址(迁移第 3 步):写进落库 JSON 让 createMessage 的
         // 媒体挂账钩子给 blob 补 session-attachment 引用(会话生命周期)。
         ...(att.url ? { url: att.url } : {}),
       });

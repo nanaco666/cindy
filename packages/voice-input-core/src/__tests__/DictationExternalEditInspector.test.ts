@@ -97,10 +97,10 @@ describe('DictationExternalEditInspector', () => {
   it('falls back to approximate replacement when the external app hides pre-paste chrome', () => {
     const result = inspectExternalEditedInsertedText({
       originalContext: {
-        selectionBefore: '发送给 周子墨, 林子航, 孙浩然, 郑凯文等5人\n',
+        selectionBefore: '发送给 赵宇尧, 黄一孟, 戴云杰, 黄希威等5人\n',
         selectedText: '',
         selectionAfter: '\u200b\n\u200b\n\u200b',
-        fullFieldContent: '发送给 周子墨, 林子航, 孙浩然, 郑凯文等5人\n\u200b\n\u200b\n\u200b',
+        fullFieldContent: '发送给 赵宇尧, 黄一孟, 戴云杰, 黄希威等5人\n\u200b\n\u200b\n\u200b',
         selectionLocation: 26,
         selectionLength: 0,
       },

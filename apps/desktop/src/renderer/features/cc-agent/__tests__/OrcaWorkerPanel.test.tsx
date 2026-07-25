@@ -10,14 +10,12 @@ const mocks = vi.hoisted(() => ({
   hardLimit: 2,
   refreshCreationState: vi.fn(),
   setCreateOpen: vi.fn(),
-  toastError: vi.fn(),
 }));
 
 vi.mock('react-router-dom', () => ({ useNavigate: () => vi.fn() }));
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock('@/hooks/useAgentIslandSettings', () => ({ isAgentIslandSupported: () => false }));
 vi.mock('@/lib/sidebarWindow', () => ({ isSidebarWindow: () => false }));
-vi.mock('@/lib/toast', () => ({ toast: { error: mocks.toastError } }));
 vi.mock('../CCAgentSessionView', () => ({ CCAgentSessionView: () => null }));
 vi.mock('../CreateWorkerPopover', () => ({ CreateWorkerPopover: () => null }));
 vi.mock('../RolePillDropdown', () => ({ WorkerListToolbar: () => null }));
@@ -54,7 +52,6 @@ describe('OrcaWorkerPanel New Maker shortcut', () => {
     mocks.hardLimit = 2;
     mocks.refreshCreationState.mockReset();
     mocks.setCreateOpen.mockReset();
-    mocks.toastError.mockReset();
   });
 
   afterEach(() => {
@@ -87,7 +84,7 @@ describe('OrcaWorkerPanel New Maker shortcut', () => {
     expect(mocks.setCreateOpen).not.toHaveBeenCalled();
   });
 
-  it('consumes the shortcut and reports an error when authoritative creation state cannot be refreshed', async () => {
+  it('falls back to New Maker when authoritative creation state cannot be refreshed', async () => {
     mocks.refreshCreationState.mockResolvedValue({
       status: 'failed',
       workers: [],
@@ -95,11 +92,8 @@ describe('OrcaWorkerPanel New Maker shortcut', () => {
     });
     render(<OrcaWorkerPanel leadSessionId="lead-1" viewVisible />);
 
-    await expect(requestNewWorkerFromShortcut()).resolves.toBe(true);
+    await expect(requestNewWorkerFromShortcut()).resolves.toBe(false);
     expect(mocks.setCreateOpen).not.toHaveBeenCalled();
-    expect(mocks.toastError).toHaveBeenCalledWith(
-      'newChat.collaboration.createWorkerRefreshFailed',
-    );
   });
 
   it('does not retain an in-flight shortcut after the visible panel unmounts', async () => {

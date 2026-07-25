@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { AsrEvent, AsrProvider } from '@cindy/voice-input-core';
+import type { AsrEvent, AsrProvider } from '@lizi/voice-input-core';
 
 import { FallbackAsrProvider, type FallbackAsrCandidate } from '../FallbackAsrProvider.js';
 import {

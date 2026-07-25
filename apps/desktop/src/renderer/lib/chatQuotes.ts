@@ -4,4 +4,4 @@
  * Keep desktop on the shared implementation so encoding / parsing stays
  * byte-for-byte aligned with mobile and maker-shared tests.
  */
-export * from '@cindy/maker-shared/chat-quotes';
+export * from '@lizi/maker-shared/chat-quotes';

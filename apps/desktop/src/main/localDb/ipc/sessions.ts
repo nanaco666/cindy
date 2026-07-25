@@ -76,10 +76,7 @@ function scheduleWorktreeRecycleForStatusChange(sessionId: string, status: unkno
       import('../../worktree/sessionRemovalRecycle.js'),
     ]);
     if (!(await recycle.isSessionStillRemovable(sessionId))) return;
-    await mh
-      .getMakerIfReady()
-      ?.closeSession(sessionId)
-      .catch(() => undefined);
+    await mh.getMakerIfReady()?.closeSession(sessionId).catch(() => undefined);
     await recycle.recycleWorktreeForRemovedSession(sessionId);
   })().catch((err) => {
     log.warn('worktree recycle after session status change failed', {
@@ -248,9 +245,7 @@ export async function persistSessionFields(
   }
   if (Object.keys(clean).length === 0) return;
   const db = getDbClient().drizzle;
-  const setObj = sessionPatchToRow(clean as Parameters<typeof sessionPatchToRow>[0], {
-    bumpUpdatedAt: false,
-  });
+  const setObj = sessionPatchToRow(clean as Parameters<typeof sessionPatchToRow>[0], { bumpUpdatedAt: false });
   await db.update(sessions).set(setObj).where(eq(sessions.id, sessionId));
   broadcastSessionPatched(sessionId, clean);
 }
@@ -297,17 +292,15 @@ const LATEST_MSG_ROLE_SQL = sql<string | null>`(
  * Resume 路径(scheduler runner / send_to_session)用它做归档/删除兜底和展示元数据返回。
  * 失败 swallow 返 null 而非抛 —— 调用方应当把 null 视作 NOT_FOUND, 由业务自己决定 fallback。
  */
-export async function getSessionRowSnapshot(id: string): Promise<{
+export async function getSessionRowSnapshot(
+  id: string,
+): Promise<{
   status: string;
   title: string | null;
   userSendAt: number | null;
   workingDir: string | null;
   workspaceKind: string | null;
   providerId: string | null;
-  /** Hook exact-takeover must reject SSH-owned sessions. */
-  remoteHostId?: string | null;
-  /** Hook exact-takeover must reject internal Orca worker sessions. */
-  orcaRole?: 'lead' | 'worker' | null;
 } | null> {
   try {
     const db = getDbClient().drizzle;
@@ -321,8 +314,6 @@ export async function getSessionRowSnapshot(id: string): Promise<{
         // heartbeat 任务 providerId 留空时,沿用绑定会话在聊天里选的来源(与 model
         // 留空沿用 meta.model 对称)。零新增查询,复用 runner 已并行取的这行快照。
         providerId: sessions.providerId,
-        remoteHostId: sessions.remoteHostId,
-        orcaRole: sessions.orcaRole,
       })
       .from(sessions)
       .where(eq(sessions.id, id))
@@ -343,7 +334,9 @@ export async function getSessionRowSnapshot(id: string): Promise<{
  * 它映射派生)、plan 开关、远程工作区标记。失败 swallow 返 null(调用方按
  * 「会话不存在」拒绝写入,不抛)。
  */
-export async function getSessionFsSnapshot(id: string): Promise<{
+export async function getSessionFsSnapshot(
+  id: string,
+): Promise<{
   workingDir: string | null;
   permissionMode: string;
   planModeEnabled: boolean;
@@ -432,12 +425,10 @@ export async function touchUserSendInDb(id: string, atMs?: number): Promise<void
 export async function isUntitledDraftSessionBeforeFirstInput(id: string): Promise<boolean> {
   const db = getDbClient().drizzle;
   const row = await selectSessionWithCount(db, id);
-  return (
-    !!row &&
+  return !!row &&
     row.title === DEFAULT_DRAFT_SESSION_TITLE &&
     row.userSendAt === null &&
-    row.messageCount === 0
-  );
+    row.messageCount === 0;
 }
 
 /**
@@ -480,7 +471,9 @@ export async function persistSessionTitleIfStillDraft(
  */
 export async function clearSessionContextInDb(sessionId: string, atMs?: number): Promise<void> {
   const ts =
-    typeof atMs === 'number' && Number.isFinite(atMs) && atMs > 0 ? Math.floor(atMs) : Date.now();
+    typeof atMs === 'number' && Number.isFinite(atMs) && atMs > 0
+      ? Math.floor(atMs)
+      : Date.now();
   const db = getDbClient().drizzle;
   await db
     .update(sessions)
@@ -510,7 +503,9 @@ export function registerSessionIpc(): void {
       const db = getDbClient().drizzle;
       // sidebar-card-mode: 首次 list(db 必然 ready)触发一次置顶摘要回填——
       // 老置顶会话没有 turn-done 触发点。模块内部 once 守卫 + 串行 + swallow。
-      void import('../../sessionTaskSummary.js').then((m) => m.backfillPinnedSessionSummaries());
+      void import('../../sessionTaskSummary.js').then((m) =>
+        m.backfillPinnedSessionSummaries(),
+      );
       const cap = clampLimit(limit, 20);
       const includePinned = shouldIncludePinnedSessions(options);
       // 支持 Sidebar Filter 的 Active/Archived/All status 过滤。
@@ -539,8 +534,15 @@ export function registerSessionIpc(): void {
       // feishu 会话以「对话」分组展示(workspaceKind='dialogue')。
       const sourceFilter = inArray(sessions.source, DESKTOP_VISIBLE_SESSION_SOURCES);
       const statusWhere = () =>
-        statusFilter ? eq(sessions.status, statusFilter) : ne(sessions.status, 'deleted');
-      const filteredQuery = selectSessionListRows().where(and(sourceFilter, statusWhere()));
+        statusFilter
+          ? eq(sessions.status, statusFilter)
+          : ne(sessions.status, 'deleted');
+      const filteredQuery = selectSessionListRows().where(
+        and(
+          sourceFilter,
+          statusWhere(),
+        ),
+      );
       const rows = await filteredQuery
         .groupBy(sessions.id)
         .orderBy(desc(sessions.updatedAt))
@@ -549,7 +551,13 @@ export function registerSessionIpc(): void {
       let mergedRows = rows;
       if (includePinned) {
         const pinnedRows = await selectSessionListRows()
-          .where(and(sourceFilter, statusWhere(), isNotNull(sessions.pinnedAt)))
+          .where(
+            and(
+              sourceFilter,
+              statusWhere(),
+              isNotNull(sessions.pinnedAt),
+            ),
+          )
           .groupBy(sessions.id)
           .orderBy(desc(sessions.updatedAt));
         mergedRows = mergeSessionListRows(rows, pinnedRows);
@@ -594,10 +602,9 @@ export function registerSessionIpc(): void {
     }
     const workspaceKind =
       (createBody?.workspaceKind as 'project' | 'dialogue' | undefined) ?? 'project';
-    const explicitWorkingDir =
-      normalizeWorkingDirForStorage(
-        typeof createBody?.workingDir === 'string' ? createBody.workingDir : null,
-      ) ?? undefined;
+    const explicitWorkingDir = normalizeWorkingDirForStorage(
+      typeof createBody?.workingDir === 'string' ? createBody.workingDir : null,
+    ) ?? undefined;
     const workingDir =
       workspaceKind === 'dialogue' && !explicitWorkingDir
         ? ensureDialogueWorkspaceDir(id, now)
@@ -654,8 +661,7 @@ export function registerSessionIpc(): void {
   // 幂等窄写,device-link 远程会话经隧道调用(allowlist 收录)。
   ipcMain.handle('local-db:sessions:ack-interrupted', async (_e, id: unknown) => {
     const sid = requireString(id, 'id');
-    // renderer 的「忽略」立即走本 IPC；「继续任务」由执行端 maker send 事务 /
-    // coordinator 在 dispatch 成功后用进入 vendor 前冻结的本机时间戳直调 durable 写。
+    // 只有「忽略」走这里(「继续任务」依赖续跑 turn 自身的时间戳演进,不 ack)。
     // awaited 版:等落库完成才广播 / 返回 —— 用户点忽略后立刻退出/重载时,写不能
     // 还停在内存链上,否则重启后同一提示复现(review P2)。
     // 广播不在此显式调用:ended 落库即经 setOnSessionTurnEndedPersisted 注入的回调
@@ -823,23 +829,15 @@ export function registerSessionIpc(): void {
     // (clearedAt / sdkSessionId / status / token 用量等)仍需更新 updatedAt，
     // 否则本地 /clear 后重启侧栏时间回退旧值。
     const SETTINGS_ONLY_FIELDS = new Set([
-      'model',
-      'effort',
-      'permissionMode',
-      'fastMode',
-      'planModeEnabled',
-      'providerId',
-      'orcaRole',
-      'extraDirs',
-      'pinnedAt',
-      'workingDir',
-      'workspaceKind',
-      'title',
+      'model', 'effort', 'permissionMode', 'fastMode', 'planModeEnabled',
+      'providerId', 'orcaRole', 'extraDirs', 'pinnedAt', 'workingDir',
+      'workspaceKind', 'title',
     ]);
     const isSettingsOnly = Object.keys(p).every((k) => SETTINGS_ONLY_FIELDS.has(k));
-    const setObj = sessionPatchToRow(p as Parameters<typeof sessionPatchToRow>[0], {
-      bumpUpdatedAt: !isSettingsOnly,
-    });
+    const setObj = sessionPatchToRow(
+      p as Parameters<typeof sessionPatchToRow>[0],
+      { bumpUpdatedAt: !isSettingsOnly },
+    );
     await db.update(sessions).set(setObj).where(eq(sessions.id, sid));
     // session-git-pr-context:/clear 经此处写 clearedAt——边界之前的消息对用户
     // 不可见,PR 引用同步重算(fire-and-forget,内部按 clearedAt/rewindAt 过滤)。
@@ -990,9 +988,9 @@ export async function patchSessionMetaInDb(
         err: err instanceof Error ? err.message : String(err),
       });
     });
-    // 媒体总仓对应清理:删本会话名下的媒体引用行(附件/导入/
+    // 新世界(cindy-media)对应清理:删本会话名下的媒体引用行(附件/导入/
     // 消息出生引用;画廊等持久引用不动),引用归零的 blob 交回收器。
-    // fire-and-forget 与历史目录清理同语义:失败只警告,不阻塞删除。
+    // fire-and-forget 与老世界目录清理同语义:失败只警告,不阻塞删除。
     void removeSessionMediaRefs(sessionId)
       .then((n) => {
         if (n > 0) log.info('session media refs removed', { sessionId, count: n });
@@ -1075,16 +1073,14 @@ export async function renameSessionTitlesInDb(
 
   if (dryRun) return preview;
 
-  const applied = await getDbClient()
-    .tx('sessions.renameTitles', { changes })
-    .catch((err) => {
-      const code = (err as { code?: string }).code;
-      const message = err instanceof Error ? err.message : String(err);
-      if (code === 'NOT_FOUND' || code === 'PRECONDITION_FAILED' || code === 'INVALID_PARAMS') {
-        throwIpcError(code, message);
-      }
-      throw err;
-    });
+  const applied = await getDbClient().tx('sessions.renameTitles', { changes }).catch((err) => {
+    const code = (err as { code?: string }).code;
+    const message = err instanceof Error ? err.message : String(err);
+    if (code === 'NOT_FOUND' || code === 'PRECONDITION_FAILED' || code === 'INVALID_PARAMS') {
+      throwIpcError(code, message);
+    }
+    throw err;
+  });
 
   for (const item of applied) {
     notifyAgentIslandSessionPatch(item.sessionId, {
@@ -1274,19 +1270,6 @@ export async function setSessionProviderIdInDb(
   } catch (err) {
     log.warn(
       `[localDb] setSessionProviderIdInDb failed for ${sessionId}:`,
-      err instanceof Error ? err.message : String(err),
-    );
-  }
-}
-
-/** Persist the provider-facing source for a newly-created shared IM session. */
-export async function setSessionSourceInDb(sessionId: string, source: 'telegram'): Promise<void> {
-  try {
-    const db = getDbClient().drizzle;
-    await db.update(sessions).set({ source }).where(eq(sessions.id, sessionId));
-  } catch (err) {
-    log.warn(
-      `[localDb] setSessionSourceInDb failed for ${sessionId}:`,
       err instanceof Error ? err.message : String(err),
     );
   }

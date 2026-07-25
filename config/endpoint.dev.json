@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "authApiBaseUrl": "https://dev-auth.cindy.com.cn",
+  "deviceLinkApiBaseUrl": "https://dev-device-link.cindy.com.cn",
+  "oauthBrokerApiBaseUrl": "https://dev-oauth-broker.cindy.com.cn",
+  "ossApiBaseUrl": "https://dev-oss.cindy.com.cn",
+  "heartbeatUrl": "https://dev-heartbeat.cindy.com.cn",
+  "slackHookWsUrl": "wss://dev-slack-hook.cindy.com.cn",
+  "websiteUrl": "https://cindy.com.cn",
+  "modelAccessApiBaseUrl": "https://dev-model-access.cindy.com.cn",
+  "voiceApiBaseUrl": "https://dev-voice.cindy.com.cn",
+  "githubApiBaseUrl": "https://dev-github.cindy.com.cn",
+  "skillhubApiBaseUrl": "https://dev-xd-skillhub.cindy.com.cn",
+  "cdnBaseUrl": "https://dev-hotfix.cindy.com.cn/cindy",
+  "mobileUpdateBaseUrl": "https://dev-mobile-update.cindy.com.cn",
+  "review": "0.1.0"
+}

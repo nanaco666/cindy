@@ -16,7 +16,7 @@
  * 跨渠道互不影响。
  */
 
-import type { ChannelIM, IMMessageEvent } from '@cindy/im';
+import type { ChannelIM, IMMessageEvent } from 'lizi-im';
 
 import { createLogger } from '../../logger';
 import {

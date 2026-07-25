@@ -4,7 +4,6 @@ import {
   CindyAuthClient,
   reduceAuthFlow,
   ssoOrgDiscoveryToMethods,
-  type AuthFetch,
   type AuthFetchResponse,
 } from "../index.js";
 
@@ -86,7 +85,6 @@ describe("CindyAuthClient", () => {
       },
       {
         status: "ok",
-        accountDeletionRestored: true,
         accessToken: "access",
         refreshToken: "refresh",
         membership: {
@@ -113,96 +111,7 @@ describe("CindyAuthClient", () => {
     ).resolves.toMatchObject({ status: "select_account" });
     await expect(
       client(fetch).selectAccount("login-1", "m1"),
-    ).resolves.toMatchObject({
-      status: "ok",
-      accountDeletionRestored: true,
-    });
-  });
-
-  it("keeps Apple native login compatible when the SDK omits authorizationCode", async () => {
-    const fetch = vi.fn<AuthFetch>(async () =>
-      response(200, {
-        status: "binding_required",
-        bindType: "email",
-        bindTicket: "bind-apple",
-      }),
-    );
-    const auth = client(fetch);
-
-    await expect(
-      auth.exchangeNativeSocial("apple", {
-        identityToken: "identity-token",
-        rawNonce: "raw-nonce-placeholder",
-      }),
-    ).resolves.toMatchObject({ status: "binding_required" });
-
-    const body = JSON.parse(String(fetch.mock.calls[0]?.[1]?.body));
-    expect(body).toMatchObject({
-      identityToken: "identity-token",
-      rawNonce: "raw-nonce-placeholder",
-    });
-    expect(body).not.toHaveProperty("authorizationCode");
-  });
-
-  it("uses an authenticated challenge and an unauthenticated receipt for account deletion", async () => {
-    const pending = {
-      status: "pending" as const,
-      requestedAt: "2026-07-22T00:00:00.000Z",
-      deleteAfter: "2026-08-21T00:00:00.000Z",
-    };
-    const fetch = vi
-      .fn()
-      .mockResolvedValueOnce(
-        response(200, {
-          available: true,
-          verification: {
-            channel: "email",
-            maskedTarget: "a***@example.com",
-          },
-          manualAppleRevocationRequired: false,
-        }),
-      )
-      .mockResolvedValueOnce(
-        response(200, {
-          challengeId: "challenge-1",
-          receiptToken: "receipt-1",
-          channel: "email",
-          maskedTarget: "a***@example.com",
-          expiresAt: "2026-07-22T00:10:00.000Z",
-        }),
-      )
-      .mockResolvedValueOnce(response(200, pending))
-      .mockResolvedValueOnce(response(200, pending));
-    const auth = client(fetch);
-
-    await expect(
-      auth.getAccountDeletionAvailability("access-token"),
-    ).resolves.toMatchObject({ available: true });
-    const challenge = await auth.requestAccountDeletionChallenge("access-token");
-    await expect(
-      auth.confirmAccountDeletion("access-token", {
-        challengeId: challenge.challengeId,
-        receiptToken: challenge.receiptToken,
-        code: "123456",
-        acknowledged: true,
-      }),
-    ).resolves.toEqual(pending);
-    await expect(
-      auth.getAccountDeletionStatus(challenge.receiptToken),
-    ).resolves.toEqual(pending);
-
-    expect(fetch.mock.calls[0]?.[1]?.headers).toMatchObject({
-      Authorization: "Bearer access-token",
-    });
-    expect(fetch.mock.calls[1]?.[1]?.headers).toMatchObject({
-      Authorization: "Bearer access-token",
-    });
-    expect(fetch.mock.calls[2]?.[1]?.headers).toMatchObject({
-      Authorization: "Bearer access-token",
-    });
-    expect(fetch.mock.calls[3]?.[1]?.headers).not.toHaveProperty(
-      "Authorization",
-    );
+    ).resolves.toMatchObject({ status: "ok" });
   });
 
   it("uses account tokens only for account control and exchanges a resource token", async () => {

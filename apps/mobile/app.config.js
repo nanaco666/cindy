@@ -5,7 +5,7 @@
 // - production / TestFlight 必须由发布环境注入对应 App Store 数字 ID,缺失即中止。
 // - 本地 Xcode / Simulator 与自建分发变体共用 scripts/self-host-regions.json 的 app 身份、
 //   TapDB / Google 公开配置;EAS 云构建看不到 gitignored 文件,继续使用 EAS environment。
-// - 自建分发变体(`EXPO_PUBLIC_XDT_OTA_SELFHOST=1`):
+// - 自建分发变体(`EXPO_PUBLIC_XDT_OTA_SELFHOST=1`,详见 docs/self-hosted-ios-build-and-ota.md):
 //     · iOS 与 Android app identity 各自一个字段,可独立调整,互不影响。
 //     · updates.url 只放稳定占位值;真实 mobile-update-server 地址由启动端点清单的
 //       mobileUpdateBaseUrl 运行时覆写,不参与 build/fingerprint;
@@ -21,42 +21,27 @@ const {
 
 // 本地 Xcode / Simulator 与 self-host release 共用同一份地区构建配置。EAS 云端看不到
 // gitignored 的真文件,因此不启用 CINDY_USE_LOCAL_REGION_CONFIG 时继续走 eas.json / EAS env。
-function loadRegionBuildConfig(region, { selfHosted = false } = {}) {
+function loadRegionBuildConfig(region) {
   const dir = path.join(__dirname, 'scripts');
   const configured = process.env.CINDY_SELF_HOST_REGIONS_FILE?.trim();
   const real = configured
     ? path.resolve(dir, configured)
     : path.join(dir, 'self-host-regions.json');
   const example = path.join(dir, 'self-host-regions.json.example');
-  let file = real;
   if (!fs.existsSync(real)) {
-    // 自建发布线缺文件必须硬报错;本地构建缺文件不阻断——回落到空白模板并打警告,
-    // 身份字段由调用方回落内置 dev 身份,统计/Google 登录自动关闭。
-    if (selfHosted) {
-      throw new Error(
-        `缺少地区构建配置: ${real}。请复制 ${example} 为 self-host-regions.json 并填值`,
-      );
-    }
-    console.warn(
-      `[cindy] 缺少 ${real},本地构建回落空白模板 ${path.basename(example)}` +
-        '(app 身份用内置默认,统计/Google 登录关闭)。需自定义请复制该模板为 self-host-regions.json 填值。',
+    throw new Error(
+      `缺少地区构建配置: ${real}。请复制 ${example} 为 self-host-regions.json 并填值`,
     );
-    file = example;
   }
+  const file = real;
   const block = JSON.parse(fs.readFileSync(file, 'utf8'))[region];
-  if (!block || typeof block !== 'object') {
-    throw new Error(`${path.basename(file)} 缺少 region "${region}" 配置块`);
-  }
-  // 身份字段:自建发布线必须非空;本地构建允许留空,由调用方回落内置 dev 身份并打警告。
-  if (selfHosted && !(block.iosBundleId?.trim() && block.androidPackage?.trim())) {
+  // dev 块允许暂未配置身份——本函数只在启用本地区域配置构建时调用,届时缺什么报什么。
+  if (!block?.iosBundleId || !block?.androidPackage) {
     throw new Error(
       `${path.basename(file)} 缺少 region "${region}" 的 iosBundleId/androidPackage`,
     );
   }
-  // TapDB 只在自建发布线强制非空:漏填会静默发出无统计的正式包。本地 Xcode /
-  // Simulator 构建允许留空——运行时统计模块对缺失配置自动 no-op(mobileTapdb.ts),
-  // 外部开发者无需 TapDB 账号即可本地构建。
-  if (selfHosted && !(block.tapdb?.clientId?.trim() && block.tapdb?.clientToken?.trim())) {
+  if (!(block.tapdb?.clientId?.trim() && block.tapdb?.clientToken?.trim())) {
     throw new Error(
       `${path.basename(file)} 缺少 region "${region}" 的 tapdb.clientId/clientToken`,
     );
@@ -67,16 +52,9 @@ function loadRegionBuildConfig(region, { selfHosted = false } = {}) {
   const google = block.google;
   const googleFields = ['webClientId', 'iosClientId', 'iosUrlScheme'];
   const hasGoogleConfig = googleFields.every((key) => google?.[key]?.trim());
-  if (region === 'global' && selfHosted && !hasGoogleConfig) {
+  if (region === 'global' && !hasGoogleConfig) {
     throw new Error(
       `${path.basename(file)} 缺少 global.google.webClientId/iosClientId/iosUrlScheme`,
-    );
-  }
-  // 本地构建 google 可整体留空(跳过 Google 登录);只要填了任意字段就必须三个齐全,
-  // 防止部分填写被静默丢弃。
-  if (!hasGoogleConfig && googleFields.some((key) => google?.[key]?.trim())) {
-    throw new Error(
-      `${path.basename(file)} 的 global.google 三个字段须同时填写或同时留空`,
     );
   }
   let normalizedGoogle;
@@ -192,40 +170,21 @@ module.exports = (context = {}) => {
     process.env.CINDY_USE_LOCAL_REGION_CONFIG === '1';
   const usesRegionConfig = selfHosted || usesLocalRegionConfig;
   const regionBuildConfig = usesRegionConfig
-    ? loadRegionBuildConfig(region, { selfHosted })
+    ? loadRegionBuildConfig(region)
     : null;
   const builtInRegional = REGION_CONFIG[region];
-  let regional = builtInRegional;
-  if (regionBuildConfig) {
-    // 身份字段留空(仅本地构建可能走到——自建线已在装载时硬校验)回落内置 dev 身份。
-    const iosBundleIdentifier =
-      regionBuildConfig.iosBundleId?.trim() || builtInRegional.iosBundleIdentifier;
-    const androidPackage =
-      regionBuildConfig.androidPackage?.trim() || builtInRegional.androidPackage;
-    if (
-      iosBundleIdentifier !== regionBuildConfig.iosBundleId?.trim() ||
-      androidPackage !== regionBuildConfig.androidPackage?.trim()
-    ) {
-      console.warn(
-        `[cindy] self-host-regions 的 ${region} 身份字段留空,本地构建回落内置身份 ` +
-          `${iosBundleIdentifier} / ${androidPackage}(真机安装可能与商店版同 id 冲突,` +
-          '可在 self-host-regions.json 填自己的 bundle id)。',
-      );
-    }
-    regional = { ...builtInRegional, iosBundleIdentifier, androidPackage };
-  }
+  const regional = regionBuildConfig
+    ? {
+        ...builtInRegional,
+        iosBundleIdentifier: regionBuildConfig.iosBundleId,
+        androidPackage: regionBuildConfig.androidPackage,
+      }
+    : builtInRegional;
   const regionGoogle = regionBuildConfig?.google;
   const regionTapdb = regionBuildConfig?.tapdb;
   resolveAppStoreId(region);
-  // EAS 账号绑定不入仓:owner / eas.projectId / updates.url 由构建期环境变量注入
-  // (EAS_OWNER / EAS_PROJECT_ID)。官方发布环境注回原值 → resolved ExpoConfig 逐字节不变
-  // → runtime fingerprint 不变、不触发冷更;缺省(dev / 外部 fork)不带账号绑定,由使用者
-  // 用自己的 Expo 项目(eas init)填 env。详见 docs/dev-rules/mobile-development.md。
-  const easOwner = process.env.EAS_OWNER?.trim();
-  const easProjectId = process.env.EAS_PROJECT_ID?.trim();
   let next = {
     ...baseConfig,
-    ...(easOwner ? { owner: easOwner } : {}),
     scheme: regional.scheme,
     ios: {
       ...baseConfig.ios,
@@ -236,11 +195,6 @@ module.exports = (context = {}) => {
       ...baseConfig.android,
       package: regional.androidPackage,
     },
-    // 非自建线的 EAS Update 入口:由下发的 projectId 推导;自建分支下方会把它覆写成
-    // selfhost 占位(真实地址运行时由 mobileUpdateBaseUrl 注入)。projectId 缺省则不配 OTA。
-    ...(easProjectId
-      ? { updates: { url: `https://u.expo.dev/${easProjectId}`, enabled: true } }
-      : {}),
     plugins: withNativeAuthPlugins(baseConfig.plugins || [], {
       googleIosUrlScheme: usesRegionConfig
         ? regionGoogle?.iosUrlScheme
@@ -251,23 +205,16 @@ module.exports = (context = {}) => {
     }),
     extra: {
       ...baseConfig.extra,
-      ...(easProjectId ? { eas: { projectId: easProjectId } } : {}),
       cindy: {
         authRegion: region,
         ...(usesRegionConfig
           ? {
               regionConfigSource: 'self-host-regions',
-              // TapDB 留空(仅本地构建可能)时不烘焙该键:运行时 mobileTapdb 视为
-              // 未配置并关闭统计。已填值时输出与旧版逐字节一致,不动 runtime fingerprint。
-              ...(regionTapdb?.clientId?.trim() && regionTapdb?.clientToken?.trim()
-                ? {
-                    tapdb: {
-                      clientId: regionTapdb.clientId.trim(),
-                      clientToken: regionTapdb.clientToken.trim(),
-                      region,
-                    },
-                  }
-                : {}),
+              tapdb: {
+                clientId: regionTapdb.clientId.trim(),
+                clientToken: regionTapdb.clientToken.trim(),
+                region,
+              },
               ...(regionGoogle
                 ? {
                     google: {

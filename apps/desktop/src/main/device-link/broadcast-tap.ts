@@ -8,7 +8,7 @@
  * 监听者由 dispatch.ts(被控端隧道层)在有 active link 时注册;无 link 时 listener 为 null。
  */
 
-import { PUSH_FORWARD_ALLOWLIST } from '@cindy/device-link';
+import { PUSH_FORWARD_ALLOWLIST } from '@lizi/device-link';
 
 /** 转发回调:(channel, payload) → 投递给所有 active 控制端 */
 export type BroadcastTapListener = (channel: string, payload: unknown) => void;

@@ -1,8 +1,4 @@
 import { messageContentToPreview } from './messageNormalize.js';
-import type {
-  MobileCodexRateLimitResetCredit,
-  MobileCodexRateLimitsResult,
-} from './deviceLinkContract.js';
 
 export interface SessionControlsSessionLike {
   contextTokens?: number;
@@ -139,76 +135,6 @@ export function summarizeAccountRateLimits(value: unknown, nowMs: number): {
   }
 
   return rows.length > 0 ? { rows } : null;
-}
-
-/** Mobile presentation model for banked Codex reset credits and their bound account. */
-export interface CodexRateLimitResetSummary {
-  rows: Array<{ label: string; value: string }>;
-  availableCount: number;
-  canReset: boolean;
-  shouldPrompt: boolean;
-}
-
-/**
- * Summarize reset credits without guessing provider policy.
- * The action is offered only after a returned bucket is actually exhausted or marked limited.
- */
-export function summarizeCodexRateLimitReset(
-  value: MobileCodexRateLimitsResult | null,
-  nowMs: number,
-): CodexRateLimitResetSummary | null {
-  if (!value) return null;
-  const rows: Array<{ label: string; value: string }> = [];
-  if (value.account.email) rows.push({ label: '账号', value: value.account.email });
-  if (value.account.accountId) rows.push({ label: 'Workspace', value: value.account.accountId });
-
-  const availableCount = Math.max(0, Math.floor(value.rateLimitResetCredits?.availableCount ?? 0));
-  if (value.rateLimitResetCredits) {
-    rows.push({ label: '可用重置', value: `${availableCount} 次` });
-  }
-
-  const earliestExpiry = value.resetOffer?.expiresAt ?? earliestCreditExpiry(
-    value.rateLimitResetCredits?.credits ?? null,
-  );
-  const expiryText = formatRateLimitResetAt(earliestExpiry, nowMs);
-  if (expiryText) rows.push({ label: '最早过期', value: expiryText });
-
-  const snapshots = [
-    value.rateLimits,
-    ...Object.values(value.rateLimitsByLimitId ?? {}),
-  ];
-  const shouldPrompt = snapshots.some((snapshot) => {
-    const reached = readString(snapshot.rateLimitReachedType);
-    // Prepaid-credit depletion means “recharge”, not a resettable Codex usage window.
-    if (reached?.includes('credits_depleted')) return false;
-    if (reached) return true;
-    return [snapshot.primary, snapshot.secondary].some((window) => {
-      const used = readNumber(window?.usedPercent);
-      return used !== null && used >= 100;
-    });
-  });
-
-  return {
-    rows,
-    availableCount,
-    shouldPrompt,
-    canReset: shouldPrompt
-      && availableCount > 0
-      // Offer TTL belongs to the issuing Desktop clock. Mobile only checks presence;
-      // consume returns a typed precondition error when Desktop has actually expired it.
-      && Boolean(value.resetOffer),
-  };
-}
-
-function earliestCreditExpiry(
-  credits: MobileCodexRateLimitResetCredit[] | null,
-): number | null {
-  if (!credits) return null;
-  const expiries = credits
-    .filter((credit) => credit.status === 'available')
-    .map((credit) => credit.expiresAt)
-    .filter((expiresAt): expiresAt is number => typeof expiresAt === 'number' && expiresAt > 0);
-  return expiries.length > 0 ? Math.min(...expiries) : null;
 }
 
 /** 窗口名由服务端下发的时长动态派生(与桌面 formatWindowLabel 同规则);缺数据 → 中性「限额」,不猜具体窗口名。 */

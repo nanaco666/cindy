@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * GhostPermissionList.test.tsx — 装入/更新确认框权限清单组件。
+ * GhostPermissionList.test.tsx — 装入/更新确认框权限清单组件(C3c-1)。
  * 条目推导已在 shared/__tests__/ghost.test.ts 锁死,这里只验展示契约:
  * 装入清单逐项渲染(含作者自由文本 detail 与主机固定说明 detailKey)、
  * 更新 diff 只亮变化项 + 不变折叠、权限无变化的收敛文案。
@@ -63,17 +63,7 @@ describe('GhostPermissionList(装入全量清单)', () => {
   it('安装简介过长时默认收起,可展开完整原文', () => {
     const description = '这是很长的意识介绍。'.repeat(20);
     const { container } = render(
-      <GhostInstallReview
-        description={description}
-        meta="作者 Cindy · 版本 1.0.0"
-        trust={{
-          level: 'unverified',
-          publisherSigned: false,
-          publisherVerified: false,
-          reviewed: false,
-        }}
-        items={[]}
-      />,
+      <GhostInstallReview description={description} meta="作者 Cindy · 版本 1.0.0" items={[]} />,
     );
     const scrollArea = container.firstElementChild as HTMLElement;
     expect(scrollArea.classList.contains('overflow-y-auto')).toBe(true);
@@ -92,7 +82,7 @@ describe('GhostPermissionList(装入全量清单)', () => {
     expect(container.innerHTML).toBe('');
   });
 
-  it('network 槽:域名/凭证逐条渲染,code 沙箱说明切分档版', () => {
+  it('network 槽:域名/凭证逐条渲染,code 沙箱说明切分档版(C4)', () => {
     const net: GhostManifest = {
       ...chip(),
       slots: [...chip().slots, 'network'],

@@ -8,20 +8,20 @@ import { extractPrRefs, messageContentToText } from '../git-context/prRefExtract
 
 describe('extractPrRefs', () => {
   it('提取标准 PR URL,owner/repo 规范化为小写', () => {
-    const refs = extractPrRefs('PR 已创建: https://github.com/makecindy/cindy/pull/85');
+    const refs = extractPrRefs('PR 已创建: https://github.com/xindong/XDMaker/pull/85');
     expect(refs).toEqual([
       {
-        owner: 'makecindy',
-        repo: 'cindy',
+        owner: 'xindong',
+        repo: 'xdmaker',
         prNumber: 85,
-        url: 'https://github.com/makecindy/cindy/pull/85',
+        url: 'https://github.com/xindong/xdmaker/pull/85',
       },
     ]);
   });
 
   it('同一 PR 的大小写变体规范化后去重(防唯一索引重复行)', () => {
     const refs = extractPrRefs(
-      'https://github.com/makecindy/cindy/pull/85 https://github.com/MakeCindy/cindy/pull/85',
+      'https://github.com/xindong/XDMaker/pull/85 https://github.com/Xindong/xdmaker/pull/85',
     );
     expect(refs).toHaveLength(1);
   });

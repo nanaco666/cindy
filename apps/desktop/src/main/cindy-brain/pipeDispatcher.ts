@@ -1,7 +1,7 @@
 /**
- * pipeDispatcher.ts — 管子(脑机接口)工具调用派发器。
+ * pipeDispatcher.ts — 管子(脑机接口)工具调用派发器(C3d 主循环通电)。
  * ---------------------------------------------------------------------------
- * 管子派发契约:agent 经 ghost 总机(cindy-tools)拨号 →
+ * runtime-sandbox.md §5.5:agent 经 ghost 总机(cindy-tools)拨号 →
  * 本派发器把活顺管子送进目标意识的电子脑,等交卷(callId 配对),
  * 把结果/结构化失败原样交回总机。
  *

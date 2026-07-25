@@ -1,1 +1,1 @@
-export * from '@cindy/maker-shared/file-preview';
+export * from '@lizi/maker-shared/file-preview';

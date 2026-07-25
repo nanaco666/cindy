@@ -1,6 +1,8 @@
 /**
- * cindyMediaProtocol.ts — `cindy-media://` 媒体总仓统一取件协议。
+ * cindyMediaProtocol.ts — `cindy-media://` 自定义协议(新世界唯一取件窗口)。
  * ---------------------------------------------------------------------------
+ * 设计:docs/Cindy架构设计/媒体总仓/media-store.md §2.4
+ *
  * 服务字节仓里的 blob:`cindy-media://blobs/<指纹>.<ext>` → 主窗口 <img>/<video>
  * 等按后缀渲染。老协议(xdt-image/-video/-model)永久保留只读服务老地址,
  * 新写入一律出本协议的地址。
@@ -10,7 +12,7 @@
  *      registerSchemesAsPrivileged(app.whenReady() 之前);
  *   2. registerCindyMediaProtocolHandler() —— app.whenReady() 之后接 handler。
  *
- * Range/206 分片:<video> 元素靠 Range 做分片
+ * Range/206 分片(C3c-5 视频落新世界时补齐):<video> 元素靠 Range 做分片
  * 加载与 seek,组装逻辑在 rangeResponse.ts(xdt-video 手动 206 同模式,
  * privilege 保持 stream:false);图片请求不带 Range 头,行为不变。
  */

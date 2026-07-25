@@ -10,7 +10,7 @@ const readTextLf = (...args: Parameters<typeof readFileSync>): string =>
 
 describe('mobile settings overview', () => {
   it('keeps the device-link hello name and settings device name on one source', () => {
-    expect(buildMobileDeviceName({ constantsDeviceName: ' Carol iPhone ', platform: 'ios' })).toBe('Carol iPhone');
+    expect(buildMobileDeviceName({ constantsDeviceName: ' Dash iPhone ', platform: 'ios' })).toBe('Dash iPhone');
     expect(buildMobileDeviceName({ constantsDeviceName: '   ', platform: 'android' })).toBe('Cindy android');
   });
 
@@ -19,19 +19,19 @@ describe('mobile settings overview', () => {
       authBaseUrl: 'https://auth-cn.example.com',
       authRegion: 'cn',
       deviceId: 'mobile-device-1',
-      deviceName: 'Carol iPhone',
+      deviceName: 'Dash iPhone',
       lastSyncedAt: new Date(2026, 0, 1, 3, 4, 5).getTime(),
       platform: 'ios',
       relayStatus: 'online',
-      userEmail: 'neo@example.com',
+      userEmail: 'dash@example.com',
       userId: 'user-1',
-      userName: 'Carol',
+      userName: 'Dash',
     });
 
     expect(overview.header).toMatchObject({
-      deviceName: 'Carol iPhone',
-      email: 'neo@example.com',
-      name: 'Carol',
+      deviceName: 'Dash iPhone',
+      email: 'dash@example.com',
+      name: 'Dash',
       relayDetail: '上次同步 03:04:05',
       relayLabel: 'Relay 已连接',
       relayTone: 'ready',
@@ -45,7 +45,7 @@ describe('mobile settings overview', () => {
       detail: '电脑端授权列表会显示这个名称。',
       id: 'about.deviceName',
       label: '设备名称',
-      value: 'Carol iPhone',
+      value: 'Dash iPhone',
     });
     expect(overview.sections.find((section) => section.id === 'about')?.rows).toContainEqual({
       id: 'about.platform',
@@ -74,11 +74,11 @@ describe('mobile settings overview', () => {
       deviceName: 'Local Phone',
       platform: 'android',
       relayStatus: 'stopped',
-      userEmail: 'neo@example.com',
+      userEmail: 'dash@example.com',
       userName: null,
     });
     // 没有展示名 → name 回退邮箱;此时 header.email 不再重复一行。
-    expect(overview.header.name).toBe('neo@example.com');
+    expect(overview.header.name).toBe('dash@example.com');
     expect(overview.header.email).toBeUndefined();
   });
 
@@ -173,7 +173,7 @@ describe('mobile settings overview', () => {
     const accountActionsIndex = source.indexOf('testID="settings.accountActions"');
 
     expect(source).toContain("const PRIVACY_POLICY_URL = AUTH_REGION === 'cn'");
-    expect(source).toContain("'https://cindy.cn/privacy/'");
+    expect(source).toContain("'https://cindy.com.cn/privacy/'");
     expect(source).toContain("'https://cindy.app/privacy/'");
     expect(source).toContain('Linking.openURL(PRIVACY_POLICY_URL)');
     expect(source).toContain('accessibilityLabel="打开隐私政策"');

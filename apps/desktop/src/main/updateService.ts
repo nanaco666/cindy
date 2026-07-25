@@ -26,7 +26,7 @@ import fs from 'node:fs';
 import { spawn } from 'node:child_process';
 import os from 'node:os';
 
-import { BRAND_IDENTITY } from '@cindy/maker-shared/brand-identity';
+import { BRAND_IDENTITY } from '@lizi/maker-shared/brand-identity';
 
 import { fetchManifest, getBaseUrl, isDev } from './manifestService';
 import type { Manifest } from './manifestService';
@@ -49,7 +49,6 @@ import { throwIpcError } from './utils/ipcValidate';
 import { noteExpectedExit } from './startup-diagnostics';
 import { buildMacOSUpdateScript } from './updateScriptMacOS';
 import { disposeAndroidAdb } from './mcp-integrations/android';
-import { getGhostNodeRuntimeBroker } from './cindy-brain/index';
 import { cleanOldUpdateFiles } from './updateArtifacts';
 
 const log = createLogger('updateService');
@@ -634,7 +633,7 @@ export async function checkForUpdate(
 }
 
 /**
- * 版本无关打包(本地无版本 packaging)写入的占位版本。
+ * 版本无关打包(scripts/package-desktop.mjs 缺省模式)写入的占位版本。
  * 这类包(占位 0.0.0)不参与热更新:任何 CDN manifest 版本与它都不相等,
  * 不做豁免的话 packaged 版本无关包启动即被拉去下载线上版本自更——
  * 与"开源社区拉仓即可打包试用"的定位相悖。'0.0.0-*' 前缀一并覆盖,
@@ -985,8 +984,6 @@ function forceQuit(): void {
   // 绕过 onQuit 链意味着 disposeAndroidAdb 不会被自动调用——显式 fire-and-forget
   // 收掉自带 adb server,避免它锁住安装目录阻碍 updater 替换文件。
   disposeAndroidAdb();
-  // Node 子进程同理——before-quit 的 destroyAll 不会触发,这里同步 kill。
-  try { getGhostNodeRuntimeBroker().destroyAll(); } catch { /* best-effort */ }
   for (const win of BrowserWindow.getAllWindows()) {
     try { if (!win.isDestroyed()) win.destroy(); } catch { /* ignore */ }
   }

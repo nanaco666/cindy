@@ -25,8 +25,6 @@ import {
   stringifyUserContent,
   type ImageRef,
   type FileRef,
-  type PastedTextRange,
-  type SlashCommandRange,
 } from '@/lib/imageRef';
 
 const ATTACHMENT_SHA256 = 'a'.repeat(64);
@@ -39,12 +37,12 @@ const validImage: ImageRef = {
 
 const validFile: FileRef = {
   name: 'notes.txt',
-  path: '/Users/sam/Desktop/notes.txt',
+  path: '/Users/lizi/Desktop/notes.txt',
 };
 
 const validFile2: FileRef = {
   name: 'spec.pdf',
-  path: '/Users/sam/Documents/spec.pdf',
+  path: '/Users/lizi/Documents/spec.pdf',
 };
 
 // ── Branch 1: string ────────────────────────────────────────────────────────
@@ -412,81 +410,6 @@ describe('parseUserContent — fallback for null/undefined/primitives', () => {
 // ── Round-trip: stringifyUserContent → JSON.parse → parseUserContent ──────
 
 describe('parseUserContent — round-trip with localDb mapper simulation', () => {
-  it('round-trips long-paste display ranges without adding markers to text', () => {
-    const text = 'before long pasted text after';
-    const ranges: PastedTextRange[] = [{ start: 7, end: 23, display: 'Pasted text (1 line)' }];
-    const persisted = stringifyUserContent(text, [], [], false, ranges);
-
-    expect(parseUserContent(JSON.parse(persisted))).toEqual({
-      text,
-      images: [],
-      files: [],
-      pastedTextRanges: ranges,
-    });
-    expect(JSON.parse(persisted).text).toBe(text);
-  });
-
-  it('drops malformed or overlapping long-paste ranges as one invalid set', () => {
-    const parsed = parseUserContent({
-      text: 'abcdef',
-      images: [],
-      files: [],
-      pastedTextRanges: [
-        { start: 1, end: 4, display: 'first' },
-        { start: 3, end: 5, display: 'overlap' },
-      ],
-    });
-
-    expect(parsed.pastedTextRanges).toBeUndefined();
-  });
-
-  it('round-trips exact slash ranges, including an explicit empty set', () => {
-    const text = '/git then /help';
-    const ranges: SlashCommandRange[] = [
-      { start: 0, end: 4 },
-      { start: 10, end: 15 },
-    ];
-
-    expect(
-      parseUserContent(JSON.parse(stringifyUserContent(text, [], [], false, [], ranges))),
-    ).toMatchObject({ text, slashCommandRanges: ranges });
-    expect(
-      parseUserContent(JSON.parse(stringifyUserContent('/unknown', [], [], false, [], []))),
-    ).toMatchObject({ text: '/unknown', slashCommandRanges: [] });
-  });
-
-  it('round-trips structured reference metadata without changing bubble text', () => {
-    const href = 'cindy://session/session-a?message=message-a';
-    const text = `inspect ${href}`;
-    const references = [{
-      kind: 'message' as const,
-      start: text.indexOf(href),
-      end: text.length,
-      href,
-      sessionId: 'session-a',
-      messageClientId: 'message-a',
-      text: 'Complete target message body',
-    }];
-    const persisted = stringifyUserContent(text, [], [], false, [], [], [], references);
-
-    expect(parseUserContent(JSON.parse(persisted))).toMatchObject({
-      text,
-      agentReferences: references,
-    });
-    expect(JSON.parse(persisted)).toMatchObject({ text, agentReferences: references });
-  });
-
-  it('drops malformed slash ranges so corrupted history uses legacy compatibility', () => {
-    const parsed = parseUserContent({
-      text: 'not-a-command',
-      images: [],
-      files: [],
-      slashCommandRanges: [{ start: 0, end: 3 }],
-    });
-
-    expect(parsed.slashCommandRanges).toBeUndefined();
-  });
-
   it('handles text-only content round-tripped through messageToCamel', () => {
     // Simulate: stringifyUserContent saves to DB → messageToCamel JSON.parses back.
     const persisted = stringifyUserContent('repeat after me', []);
@@ -578,21 +501,12 @@ describe('parseUserContent annotation metadata passthrough (non-destructive anno
     mimeType: 'image/png',
     originalName: 'burned.png',
   };
-  const strokes = [
-    {
-      points: [
-        { x: 0.1, y: 0.2 },
-        { x: 0.3, y: 0.4 },
-      ],
-    },
-  ];
+  const strokes = [{ points: [{ x: 0.1, y: 0.2 }, { x: 0.3, y: 0.4 }] }];
 
   it('carries valid annotationSourceUrl + annotationStrokes through parsing', () => {
     const content = JSON.stringify({
       text: 'hi',
-      images: [
-        { ...base, annotationSourceUrl: 'xdt-image://s/orig.png', annotationStrokes: strokes },
-      ],
+      images: [{ ...base, annotationSourceUrl: 'xdt-image://s/orig.png', annotationStrokes: strokes }],
       files: [],
     });
     const parsed = parseUserContent(content);
@@ -644,48 +558,5 @@ describe('parseUserContent annotation metadata passthrough (non-destructive anno
     });
     const parsed = parseUserContent(content);
     expect(parsed.images[0].annotationSourceUrl).toBeUndefined();
-  });
-});
-
-describe('parseUserContent session reference metadata', () => {
-  it('round-trips range, actual message count and truncation without localizing content', () => {
-    const sessionReferences = [
-      {
-        sessionId: 'session-linked',
-        messageClientId: 'message-anchor',
-        range: 'around-anchor' as const,
-        messageCount: 9,
-        truncated: true,
-      },
-    ];
-    const persisted = stringifyUserContent(
-      'See the linked session',
-      [],
-      [],
-      false,
-      sessionReferences,
-    );
-
-    expect(parseUserContent(persisted)).toEqual({
-      text: 'See the linked session',
-      images: [],
-      files: [],
-      sessionReferences,
-    });
-    expect(persisted).not.toContain('Around linked message');
-    expect(persisted).not.toContain('truncated messages');
-  });
-
-  it('drops malformed metadata without affecting the user message', () => {
-    expect(
-      parseUserContent({
-        text: 'Still visible',
-        images: [],
-        files: [],
-        sessionReferences: [
-          { sessionId: 'session-linked', range: 'recent', messageCount: -1, truncated: false },
-        ],
-      }),
-    ).toEqual({ text: 'Still visible', images: [], files: [] });
   });
 });

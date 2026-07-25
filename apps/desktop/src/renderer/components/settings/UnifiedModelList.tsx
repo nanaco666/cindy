@@ -35,7 +35,7 @@ import {
   useModelVisibilityVersion,
 } from '@/state/modelVisibilityPrefs';
 
-import type { AgentKind, CatalogModel, ProviderView } from '@cindy/model-providers';
+import type { AgentKind, CatalogModel, ProviderView } from '@lizi/model-providers';
 
 const AGENT_LABEL: Record<AgentKind, string> = {
   'claude-code': 'Claude Code',
@@ -303,7 +303,7 @@ export function UnifiedModelList({
           >
             {/* 常驻动画只在 refreshing(有状态含义)时挂载,且挂在 wrapper 上(规则 7)。 */}
             {refreshing ? (
-              <span className="inline-flex animate-spin motion-reduce:animate-none">
+              <span className="inline-flex animate-spin">
                 <RefreshCw size={14} />
               </span>
             ) : (

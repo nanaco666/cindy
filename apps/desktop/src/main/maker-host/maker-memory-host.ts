@@ -19,19 +19,17 @@
  */
 
 import { app } from 'electron';
-import path from 'node:path';
 
 import {
   MakerMemoryManager,
   type AgentKind,
   type BaseAgent,
   type SqliteFactory,
-} from '@cindy/maker-core';
+} from '@lizi/maker-core';
 
 import { desktopMakerLogger } from './logger-adapter.js';
 import { readMemorySettings } from './memory-settings-store.js';
 import { createBetterSqliteDatabase } from '../localDb/betterSqliteFactory.js';
-import { dataOwnerStorageKey, getActiveAppSession } from '../appSessionState.js';
 
 const sqliteFactory: SqliteFactory = (filePath) => {
   // better-sqlite3 sync open. WAL 让多 session 并发读写更稳, busyTimeout 防小撞锁。
@@ -50,17 +48,13 @@ const sqliteFactory: SqliteFactory = (filePath) => {
  * 子结构, host 不应该假设这个细节 (避免之前的双重叠加 bug)。
  */
 export function createDesktopMakerMemoryManager(): MakerMemoryManager {
-  const ownerId = getActiveAppSession().dataOwnerId;
-  const basePath = ownerId
-    ? path.join(app.getPath('userData'), 'owners', dataOwnerStorageKey(ownerId))
-    : path.join(app.getPath('temp'), 'cindy-no-session', String(process.pid));
   return new MakerMemoryManager({
-    basePath,
+    basePath: app.getPath('userData'),
     sqliteFactory,
     agents: {}, // 占位, attachAgents 补上
     logger: desktopMakerLogger.child('maker-memory'),
     // 持久化 store 读 — 重启后保持用户上次设置，新用户默认开启。
-    initialEnabled: readMemorySettings({ rootPath: basePath }).maker,
+    initialEnabled: readMemorySettings().maker,
     reviewAgent: 'claude-code', // memory_review 用 claude haiku 最便宜
   });
 }

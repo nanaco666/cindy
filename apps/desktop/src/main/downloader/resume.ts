@@ -1,7 +1,7 @@
 /**
  * unified-downloader — M2: .meta.json sidecar + resume decision.
  * ---------------------------------------------------------------------------
- * Resume metadata validation and persistence are maintained in this module.
+ * Tech spec: .sivi/docs/tech_specs/unified-downloader-frontend.md (M2)
  *
  * The sidecar tracks the negotiated ETag/Last-Modified so a future attempt can
  * decide whether the existing `.part` is still resumable. Writes are atomic

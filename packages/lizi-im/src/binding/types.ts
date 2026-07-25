@@ -1,5 +1,5 @@
 /**
- * @cindy/im/binding/types.ts
+ * lizi-im/binding/types.ts
  * ---------------------------------------------------------------------------
  * Channel-agnostic identity binding abstraction.
  *

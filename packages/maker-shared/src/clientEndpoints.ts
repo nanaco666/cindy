@@ -77,9 +77,6 @@ export const CLIENT_ENDPOINT_KEYS = [
   // oss-server(公开资产直传预签名,当前场景:头像上传)。
   'ossApiBaseUrl',
   'heartbeatUrl',
-  // Telegram hook is deployed independently from Slack; empty means the
-  // current environment has not rolled out Telegram yet.
-  'telegramHookWsUrl',
   'slackHookWsUrl',
   'websiteUrl',
   // model-access-server(登录后自动下发 LLM 网关凭据)的 API 基址。
@@ -135,7 +132,6 @@ const FIELD_PROTOCOLS: Record<ClientEndpointKey, readonly string[]> = {
   oauthBrokerApiBaseUrl: ['https:'],
   ossApiBaseUrl: ['https:'],
   heartbeatUrl: ['https:'],
-  telegramHookWsUrl: ['wss:'],
   slackHookWsUrl: ['wss:'],
   websiteUrl: ['https:'],
   modelAccessApiBaseUrl: ['https:'],

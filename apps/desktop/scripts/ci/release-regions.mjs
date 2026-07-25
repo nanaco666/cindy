@@ -11,7 +11,7 @@
 //     证书私钥本体在 macOS 钥匙串,按 signIdentity 名字取)——国内/海外用不同
 //     Developer ID 证书(X.D. Network / XD Entertainment)时在此按区域声明;
 //     resolveAppleIdentity 无代码默认值,JSON 与 env 都缺时在签名前 fail closed。
-// 真机密(OSS AK/SK、APPLE_APP_PASSWORD、签名命令等)仍走 env / .env,凭证不入仓。
+// 真机密(阿里云 AK/SK、APPLE_APP_PASSWORD、NPKG_TOKEN)仍走 env / .env,凭证不入仓。
 //
 // 与既有 env 驱动(XDT_* / XDT_GLOBAL_*,CI secret 场景)的关系:
 //   - env 已显式设置的键永远优先,JSON 只补 env 里缺失的键(与 .env 加载语义一致);
@@ -256,21 +256,14 @@ function applyMacSigningEnv(macSigning) {
     if (macSigning[key]) process.env[envName] = macSigning[key];
   }
   // appPasswordEnv:公证密码指针。显式 APPLE_APP_PASSWORD 仍优先(与全局 env-first
-  // 一致)。指针指向的 env 为空时只警告、不在加载期抛错:加载点在「是否真签名」
-  // 决策之前,ad-hoc / versionless / --allow-unsigned 流程根本用不到密码,提前抛
-  // 会拦住合法的无签名打包。fail closed 语义在真签名消费点兜底——有版本打包缺
-  // APPLE_APP_PASSWORD 时由 finish/publish 侧闸门报错(声明即承诺,只是延后到用时)。
+  // 一致);声明了指针但目标 env 为空则 fail closed——声明即承诺,不许静默降级。
   if (macSigning.appPasswordEnv && !process.env.APPLE_APP_PASSWORD?.trim()) {
     const value = process.env[macSigning.appPasswordEnv]?.trim();
     if (!value) {
-      // 不把指针值写进日志(CodeQL 将 *PasswordEnv 相关取值视作敏感数据流);
-      // 指针名去 release-regions.json 的 macSigning.appPasswordEnv 字段查即可。
-      console.warn(
-        'WARN: macSigning.appPasswordEnv 指向的环境变量未设置或为空(指针名见 release-regions.json);' +
-          '真签名(Developer ID + 公证)将在需要密码时报错,ad-hoc 打包不受影响。',
+      throw new Error(
+        `macSigning.appPasswordEnv 指向的环境变量 ${macSigning.appPasswordEnv} 未设置或为空(公证密码缺失)`,
       );
-    } else {
-      process.env.APPLE_APP_PASSWORD = value;
     }
+    process.env.APPLE_APP_PASSWORD = value;
   }
 }

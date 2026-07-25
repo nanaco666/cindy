@@ -1,7 +1,7 @@
 /**
  * RunHistoryPane — 右侧执行历史面板
  * ---------------------------------------------------------------------------
- * 右侧执行历史面板的视觉规格：
+ * 设计稿 (schedule.pen "Automations master-detail" 右侧)：
  *   - Pane header: 任务名 + 副行 'cron · agent · destination' + [Run now pill] + [Edit]
  *   - 'RECENT RUNS · count' 小灰标签
  *   - 滚动 run 卡片列表（最多 50 条）
@@ -21,7 +21,7 @@ import { useTranslation } from 'react-i18next';
 
 import { cn } from '@/lib/utils';
 import { toast } from '@/lib/toast';
-import type { AgentKind, Schedule, ScheduleRun } from '@cindy/maker-scheduler';
+import type { AgentKind, Schedule, ScheduleRun } from '@lizi/maker-scheduler';
 import { useConfirmDialog } from '@/components/ui/confirm-dialog-provider';
 import { useCCSessions } from '@/hooks/useCCSessions';
 import { clearSessionAttentionMany } from '@/lib/sessionAttentionStore';

@@ -3,6 +3,7 @@
  * 与 invoke-registry 的 dispatchLocalInvoke。
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { TEST_XD_GATEWAY_BASE_URL as XD_GATEWAY_BASE_URL } from '../../test/vitest/clientEndpointsFixture';
 
 let remoteControlEnabled = true;
 let revokedControllers: string[] = [];
@@ -21,6 +22,8 @@ const fetchLocalMediaToOssMock = vi.hoisted(() => vi.fn());
 vi.mock('../device-link/mediaFetch', () => ({ fetchLocalMediaToOss: fetchLocalMediaToOssMock }));
 const transcribeRemoteVoiceInputMock = vi.hoisted(() => vi.fn());
 vi.mock('../device-link/voiceTranscribe', () => ({ transcribeRemoteVoiceInput: transcribeRemoteVoiceInputMock }));
+const syncMobileVoiceCredentialMock = vi.hoisted(() => vi.fn());
+vi.mock('../device-link/voiceCredentialSync', () => ({ syncMobileVoiceCredential: syncMobileVoiceCredentialMock }));
 const adviseAndRecordVoiceInputDictionaryLearningMock = vi.hoisted(() => vi.fn());
 vi.mock('../voice-input/index.js', () => ({
   adviseAndRecordVoiceInputDictionaryLearning: adviseAndRecordVoiceInputDictionaryLearningMock,
@@ -46,6 +49,7 @@ beforeEach(() => {
   setRemoteSettingsPersist(null);
   fetchLocalMediaToOssMock.mockReset();
   transcribeRemoteVoiceInputMock.mockReset();
+  syncMobileVoiceCredentialMock.mockReset();
   adviseAndRecordVoiceInputDictionaryLearningMock.mockReset();
 });
 
@@ -229,28 +233,65 @@ describe('runInvoke voice:transcribe 拦截(手机语音输入)', () => {
   });
 });
 
-describe('runInvoke voice:credential-sync 拦截(能力已下线,保留可读拒绝)', () => {
-  it('device-link:voice:credential-sync → VOICE_CREDENTIAL_SYNC_REMOVED(不再穿透桌面 key)', async () => {
+describe('runInvoke voice:credential-sync 拦截(手机云端语音输入临时 key 同步)', () => {
+  it('device-link:voice:credential-sync → 调 syncMobileVoiceCredential 并回临时 credential,不落 ipcMain', async () => {
+    syncMobileVoiceCredentialMock.mockReturnValue({
+      temporary: true,
+      credentialVersion: 1,
+      issuedAt: '2026-06-19T00:00:00.000Z',
+      proxyBaseUrl: XD_GATEWAY_BASE_URL,
+      proxyApiKey: 'sk-xd-proxy-secret',
+      asr: {
+        provider: 'litellm-volcengine-sauc-asr',
+        model: 'volcengine-sauc-asr',
+        auth: 'api-key',
+        mode: 'provider-native-websocket',
+      },
+      refiner: {
+        provider: 'litellm-gpt-5.4-mini',
+        model: 'gpt-5.4-mini',
+        auth: 'api-key',
+        transport: 'litellm-chat-completions',
+        endpointPath: '/v1/chat/completions',
+      },
+    });
+    const r = await runInvoke('ctrl', {
+      channel: 'device-link:voice:credential-sync',
+      args: [],
+    });
+    expect(syncMobileVoiceCredentialMock).toHaveBeenCalledWith();
+    expect(r).toMatchObject({
+      ok: true,
+      result: {
+        temporary: true,
+        proxyApiKey: 'sk-xd-proxy-secret',
+        refiner: { transport: 'litellm-chat-completions' },
+      },
+    });
+  });
+
+  it('credential 同步失败 → VOICE_CREDENTIAL_SYNC_FAILED', async () => {
+    syncMobileVoiceCredentialMock.mockImplementation(() => {
+      throw new Error('missing key');
+    });
     const r = await runInvoke('ctrl', {
       channel: 'device-link:voice:credential-sync',
       args: [],
     });
     expect(r).toMatchObject({
       ok: false,
-      error: {
-        code: 'VOICE_CREDENTIAL_SYNC_REMOVED',
-        message: '手机语音输入已改用 Cindy 官方语音服务,请升级手机版。',
-      },
+      error: { code: 'VOICE_CREDENTIAL_SYNC_FAILED', message: 'missing key' },
     });
   });
 
-  it('已撤销控制端 voice:credential-sync → ACCESS_REVOKED(早于能力下线拒绝)', async () => {
+  it('已撤销控制端 voice:credential-sync → ACCESS_REVOKED,不触发 credential 同步', async () => {
     revokedControllers = ['ctrl'];
     const r = await runInvoke('ctrl', {
       channel: 'device-link:voice:credential-sync',
       args: [],
     });
     expect(r).toMatchObject({ ok: false, error: { code: 'ACCESS_REVOKED' } });
+    expect(syncMobileVoiceCredentialMock).not.toHaveBeenCalled();
   });
 });
 
@@ -364,7 +405,7 @@ import {
   dropAllControllers,
 } from '../device-link/dispatch';
 import { hasBroadcastTapListener, tapWindowBroadcast } from '../device-link/broadcast-tap';
-import { SESSION_ACTIVITY_CHANNEL, type Envelope } from '@cindy/device-link';
+import { SESSION_ACTIVITY_CHANNEL, type Envelope } from '@lizi/device-link';
 
 /** 最小 fake client:捕获 onFrame handler,记录出站调用 */
 function makeFakeClient() {

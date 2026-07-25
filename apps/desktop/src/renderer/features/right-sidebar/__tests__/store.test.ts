@@ -317,28 +317,6 @@ describe('RSB store', () => {
       expect(store.getBucket('s1').tabs.map((t) => t.id)).toEqual([a.id]);
     });
 
-    it('waits for queued state writes before deleting the tab row', async () => {
-      const a = await store.addTab('s1', 'web-browser', { url: 'https://example.com/0' });
-      ipc.upsert.mockClear();
-      let releaseWrite!: () => void;
-      ipc.upsert.mockImplementationOnce(
-        () => new Promise<{ ok: true }>((resolve) => {
-          releaseWrite = () => resolve({ ok: true });
-        }),
-      );
-
-      const write = store.patchTabState('s1', a.id, () => ({ url: 'https://example.com/1' }));
-      const close = store.closeTab('s1', a.id);
-      await Promise.resolve();
-
-      expect(ipc.close).not.toHaveBeenCalled();
-      releaseWrite();
-      await Promise.all([write, close]);
-
-      expect(ipc.close).toHaveBeenCalledWith({ id: a.id });
-      expect(store.getBucket('s1').tabs).toEqual([]);
-    });
-
     it('keeps the tab open when plugin onBeforeClose vetoes', async () => {
       const onBeforeClose = registerVetoPlugin();
       const tab = await store.addTab('s1', 'orca-workers', {});
@@ -442,76 +420,6 @@ describe('RSB store', () => {
       const bucket = store.getBucket('s1');
       expect((bucket.tabs[0].state as { selectedFilePath: string | null }).selectedFilePath).toBeNull();
     });
-
-    it('serializes DB writes and coalesces the latest pending state per tab', async () => {
-      const a = await store.addTab('s1', 'web-browser', { url: 'https://example.com/0' });
-      ipc.upsert.mockClear();
-      let releaseFirst!: () => void;
-      ipc.upsert
-        .mockImplementationOnce(
-          () => new Promise<{ ok: true }>((resolve) => {
-            releaseFirst = () => resolve({ ok: true });
-          }),
-        )
-        .mockResolvedValue({ ok: true });
-
-      const first = store.patchTabState('s1', a.id, () => ({ url: 'https://example.com/1' }));
-      const second = store.patchTabState('s1', a.id, () => ({ url: 'https://example.com/2' }));
-      const third = store.patchTabState('s1', a.id, () => ({ url: 'https://example.com/3' }));
-
-      expect(ipc.upsert).toHaveBeenCalledTimes(1);
-      expect(store.getBucket('s1').tabs[0].state).toEqual({ url: 'https://example.com/3' });
-
-      releaseFirst();
-      await Promise.all([first, second, third]);
-
-      expect(ipc.upsert).toHaveBeenCalledTimes(2);
-      expect(ipc.upsert).toHaveBeenLastCalledWith(
-        expect.objectContaining({ id: a.id, state: { url: 'https://example.com/3' } }),
-      );
-    });
-
-    it('rolls a failed coalesced write back to the last persisted state', async () => {
-      const a = await store.addTab('s1', 'web-browser', { url: 'https://example.com/0' });
-      ipc.upsert.mockClear();
-      let rejectFirst!: (err: Error) => void;
-      ipc.upsert
-        .mockImplementationOnce(
-          () => new Promise((_, reject) => {
-            rejectFirst = reject;
-          }),
-        )
-        .mockRejectedValueOnce(new Error('latest failed'));
-
-      const first = store.patchTabState('s1', a.id, () => ({ url: 'https://example.com/1' }));
-      const latest = store.patchTabState('s1', a.id, () => ({ url: 'https://example.com/2' }));
-      rejectFirst(new Error('first failed'));
-
-      await expect(first).rejects.toThrow('first failed');
-      await expect(latest).rejects.toThrow('latest failed');
-      expect(store.getBucket('s1').tabs[0].state).toEqual({ url: 'https://example.com/0' });
-    });
-
-    it('retries transient DB worker overload without flashing state back', async () => {
-      const a = await store.addTab('s1', 'web-browser', { url: 'https://example.com/0' });
-      ipc.upsert.mockClear();
-      ipc.upsert
-        .mockRejectedValueOnce(new Error('db worker RPC queue overloaded: test'))
-        .mockResolvedValueOnce({ ok: true });
-
-      const write = store.patchTabState('s1', a.id, () => ({
-        url: 'https://example.com/latest',
-      }));
-      expect(store.getBucket('s1').tabs[0].state).toEqual({
-        url: 'https://example.com/latest',
-      });
-
-      await write;
-      expect(ipc.upsert).toHaveBeenCalledTimes(2);
-      expect(store.getBucket('s1').tabs[0].state).toEqual({
-        url: 'https://example.com/latest',
-      });
-    });
   });
 
   describe('reorderTabs', () => {
@@ -539,60 +447,6 @@ describe('RSB store', () => {
       await expect(store.reorderTabs('s1', [b.id, a.id])).rejects.toThrow('boom');
 
       expect(store.getBucket('s1').tabs.map((tab) => tab.id)).toEqual([a.id, b.id]);
-    });
-
-    it('persists reorder after older queued state writes have settled', async () => {
-      const a = await store.addTab('s1', 'web-browser', { url: 'https://example.com' });
-      const b = await store.addTab('s1', 'file-browser', {});
-      ipc.upsert.mockClear();
-      let releaseWrite!: () => void;
-      ipc.upsert.mockImplementationOnce(
-        () => new Promise<{ ok: true }>((resolve) => {
-          releaseWrite = () => resolve({ ok: true });
-        }),
-      );
-
-      const write = store.patchTabState('s1', a.id, () => ({ url: 'https://example.com/next' }));
-      const reorder = store.reorderTabs('s1', [b.id, a.id]);
-      await Promise.resolve();
-
-      expect(store.getBucket('s1').tabs.map((tab) => tab.id)).toEqual([b.id, a.id]);
-      expect(ipc.reorder).not.toHaveBeenCalled();
-
-      releaseWrite();
-      await Promise.all([write, reorder]);
-      expect(ipc.reorder).toHaveBeenCalledWith({
-        sessionId: 's1',
-        orderedIds: [b.id, a.id],
-      });
-    });
-  });
-
-  describe('invalidateSessionCaches', () => {
-    it('keeps pending state writes alive while the renderer host changes', async () => {
-      const a = await store.addTab('s1', 'web-browser', { url: 'https://example.com/a' });
-      const b = await store.addTab('s1', 'web-browser', { url: 'https://example.com/b' });
-      ipc.upsert.mockClear();
-      let releaseFirst!: () => void;
-      ipc.upsert
-        .mockImplementationOnce(
-          () => new Promise<{ ok: true }>((resolve) => {
-            releaseFirst = () => resolve({ ok: true });
-          }),
-        )
-        .mockResolvedValue({ ok: true });
-
-      const first = store.patchTabState('s1', a.id, () => ({ url: 'https://example.com/a1' }));
-      const pending = store.patchTabState('s1', b.id, () => ({ url: 'https://example.com/b1' }));
-      store.invalidateSessionCaches();
-      releaseFirst();
-      await Promise.all([first, pending]);
-
-      expect(ipc.upsert).toHaveBeenCalledTimes(2);
-      expect(ipc.upsert).toHaveBeenLastCalledWith(
-        expect.objectContaining({ id: b.id, state: { url: 'https://example.com/b1' } }),
-      );
-      expect(store.getBucket('s1').hydrated).toBe(false);
     });
   });
 

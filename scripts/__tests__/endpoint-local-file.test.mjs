@@ -29,7 +29,6 @@ const CN_MANIFEST = JSON.stringify({
   oauthBrokerApiBaseUrl: 'https://oauth.example.invalid',
   ossApiBaseUrl: 'https://oss.example.invalid',
   heartbeatUrl: 'https://heartbeat.example.invalid',
-  telegramHookWsUrl: '',
   slackHookWsUrl: 'wss://hook.example.invalid',
   websiteUrl: 'https://website.example.invalid',
   githubApiBaseUrl: 'https://github-api.example.invalid',
@@ -91,7 +90,4 @@ test('生成物能过客户端 parser 的 allowHttp 校验(与仓内正本同一
     assert.ok(typeof local[key] === 'string' && local[key].length > 0, key);
     assert.doesNotThrow(() => new URL(local[key]), key);
   }
-  // Telegram 是平级服务；未部署时保持空值，绝不回退到 Slack 服务。
-  assert.equal(local.telegramHookWsUrl, '');
-  assert.equal(local.slackHookWsUrl, 'wss://hook.example.invalid');
 });

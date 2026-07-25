@@ -12,7 +12,6 @@ import { useTranslation } from 'react-i18next';
 
 import { isAgentIslandSupported } from '@/hooks/useAgentIslandSettings';
 import { isSidebarWindow } from '@/lib/sidebarWindow';
-import { toast } from '@/lib/toast';
 import { CCAgentSessionView } from './CCAgentSessionView';
 import { CreateWorkerPopover } from './CreateWorkerPopover';
 import { WorkerListToolbar } from './RolePillDropdown';
@@ -95,10 +94,7 @@ export function OrcaWorkerPanel({
       // cannot bypass a newly reached or newly lowered hard limit.
       const result = await refreshCreationState();
       if (!active) return true;
-      if (result.status !== 'applied') {
-        toast.error(t('newChat.collaboration.createWorkerRefreshFailed'));
-        return true;
-      }
+      if (result.status !== 'applied') return false;
       const activeCount = result.workers.filter((worker) =>
         isActiveWorkerStatus(worker.status),
       ).length;
@@ -111,7 +107,7 @@ export function OrcaWorkerPanel({
       active = false;
       unsubscribe();
     };
-  }, [refreshCreationState, setCreateOpen, t, viewVisible]);
+  }, [refreshCreationState, setCreateOpen, viewVisible]);
 
   useEffect(() => {
     if (!isAgentIslandSupported()) return;

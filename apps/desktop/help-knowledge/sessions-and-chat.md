@@ -2,6 +2,7 @@
 id: sessions-and-chat
 title: Sessions and the chat thread
 summary: Create sessions, send / stop / queue messages, clear context, and switch between sessions in the sidebar.
+status: draft
 ---
 Each **session** is a persistent chat thread driven by **one agent** (Claude Code or Codex). All your chats live as sessions in the left sidebar.
 
@@ -19,9 +20,9 @@ Each **session** is a persistent chat thread driven by **one agent** (Claude Cod
 
 **Conversation controls:**
 
-- **`/clear`** — clears the current session's conversation context in place (resets messages and state without creating or switching to a new session). The session itself stays in the sidebar; only its content is wiped.
+- **`/clear`** — reset the conversation context (the agent forgets what was said) without deleting the session itself.
 - **`/compact`** — ask the agent to summarize and compress earlier turns into a shorter context (Claude Code).
-- **Edit** — you can edit your **last** user message. Doing so **rewinds** the conversation: it drops that message and everything after it, then resends your edited message. In sessions with file-rewind support (local git working directories with savepoints), file changes are also rolled back. In sessions without savepoints (remote sessions, non-git directories, or Codex sessions that haven't created savepoints), only the conversation is rewound — filesystem changes remain.
+- **Edit** an earlier user message to fork from that point — the agent restarts from your edited message; later messages are dropped.
 
 **Switching between sessions:**
 

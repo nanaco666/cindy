@@ -28,7 +28,7 @@ import { drizzle, type BetterSQLite3Database } from 'drizzle-orm/better-sqlite3'
 import { app, dialog, BrowserWindow } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs';
-import { BRAND_IDENTITY } from '@cindy/maker-shared/brand-identity';
+import { BRAND_IDENTITY } from '@lizi/maker-shared/brand-identity';
 
 import { createBetterSqliteDatabase } from './betterSqliteFactory';
 import {

@@ -560,6 +560,7 @@ export function adhocSignMacApp(appPath, helperEntitlementsPath, mainEntitlement
   const resourceToolsDir = path.join(appPath, 'Contents', 'Resources', 'tools');
   if (fs.existsSync(resourceToolsDir)) {
     exec(`find "${resourceToolsDir}" -type f | while IFS= read -r f; do if file "$f" | grep -qE "Mach-O"; then ${signBase} "$f"; fi; done`);
+    exec(`find "${resourceToolsDir}" -depth -type d -name "*.app" -exec ${signBase} {} \\;`);
   }
 
   exec(`find "${frameworksDir}" -type f | while IFS= read -r f; do if file "$f" | grep -qE "Mach-O"; then ${signBase} "$f"; fi; done`);
@@ -598,6 +599,8 @@ export function signMacAppWithIdentity(appPath, helperEntitlementsPath, mainEnti
   if (fs.existsSync(resourceToolsDir)) {
     console.log('    Signing bundled CLI tools in Contents/Resources/tools/...');
     exec(`find "${resourceToolsDir}" -type f | while IFS= read -r f; do if file "$f" | grep -qE "Mach-O"; then ${signBase} "$f"; fi; done`);
+    console.log('    Signing bundled resource app bundles...');
+    exec(`find "${resourceToolsDir}" -depth -type d -name "*.app" -exec ${signBase} {} \\;`);
   }
 
   // 1. 全部 Mach-O(库、chrome_crashpad_handler、ShipIt 等)
@@ -632,19 +635,14 @@ export function notarizeMacApp(appPath, identity) {
   exec(`/usr/bin/ditto -c -k --keepParent "${appPath}" "${zipPath}"`);
 
   console.log('    Submitting to Apple notarization service (this may take a few minutes)...');
-  // 密码不进 argv:notarytool 支持 --password @env:VAR,从子进程 env 读取——
-  // 公证等待期间 ps 里只看得到 env 名,不再暴露 app-specific password;
-  // 日志回显的命令也天然无密码,无需打码。
+  // 不走 exec():它会把完整命令(含 app-specific password)回显进终端/CI 日志。
+  // 这里打码后手动回显,再直接 execSync。
   const submitCmd =
     `/usr/bin/xcrun notarytool submit "${zipPath}" ` +
-    `--apple-id "${identity.appleId}" --password "@env:CINDY_NOTARY_PASSWORD" ` +
+    `--apple-id "${identity.appleId}" --password "${identity.applePassword}" ` +
     `--team-id "${identity.teamId}" --wait`;
-  console.log(`    $ ${submitCmd}`);
-  execSync(submitCmd, {
-    stdio: 'inherit',
-    timeout: 1800000, // 30 min
-    env: { ...process.env, CINDY_NOTARY_PASSWORD: identity.applePassword },
-  });
+  console.log(`    $ ${submitCmd.replace(identity.applePassword, '***')}`);
+  execSync(submitCmd, { stdio: 'inherit', timeout: 1800000 }); // 30 min
 
   fs.unlinkSync(zipPath);
 
@@ -687,14 +685,11 @@ function findPython3() {
 
 /**
  * 确保 dmgbuild 可用,返回其可执行文件路径。
- * venv 建在当前用户 ~/.cache 下并按版本号隔离(幂等复用);不用 /tmp——共享
- * 构建机上其他本地用户可预占可预测的 /tmp 路径塞入恶意 dmgbuild,而签名打包
- * 进程 env 里带着 APPLE_* 凭证。~/.cache 仅本用户可写,消除预占面。
- * 凭证不入仓、生成物不进工作区;首次创建需要网络(pip);失败直接抛错阻断
- * 构建,不静默回退成无背景 DMG。
+ * venv 建在系统临时目录并按版本号隔离(幂等复用);凭证不入仓、生成物不进工作区。
+ * 首次创建需要网络(pip);失败直接抛错阻断构建,不静默回退成无背景 DMG。
  */
 function ensureDmgbuild() {
-  const venvDir = path.join(os.homedir(), '.cache', `cindy-dmgbuild-venv-${DMGBUILD_VERSION}`);
+  const venvDir = path.join(os.tmpdir(), `cindy-dmgbuild-venv-${DMGBUILD_VERSION}`);
   const bin = path.join(venvDir, 'bin', 'dmgbuild');
   if (fs.existsSync(bin)) return bin;
   console.log(`    Installing dmgbuild ${DMGBUILD_VERSION} (one-time venv)...`);
@@ -1024,7 +1019,7 @@ export async function uploadVersionedGzImmutable({
     console.warn(`    !! FORCE overwrite of existing versioned object: ${ossKey}`);
     console.warn('    !! 上传完成后必须手动刷新内外网 CDN 缓存,否则边缘节点会继续下发旧字节:');
     console.warn(`       - ${CDN_BASE}/${rel}`);
-    console.warn('       - 以及发布方内网 CDN 域名下的同路径(如有)');
+    console.warn(`       - http://xdtown-static-maker.xdcdn.cn:20080/xdt-maker/${rel}`);
   }
 
   await uploadToOSS(client, ossKey, gzPath, {

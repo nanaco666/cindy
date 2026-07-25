@@ -1,4 +1,4 @@
-import type { SessionSendResult } from '@cindy/maker-core';
+import type { SessionSendResult } from '@lizi/maker-core';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const mockState = vi.hoisted(() => ({
@@ -31,12 +31,12 @@ vi.mock('../../maker-ipc/register.js', () => ({
   tryGetOrcaCollabService: () => mockState.collabService,
 }));
 
-vi.mock('@cindy/mcps', () => ({
+vi.mock('lizi-mcps', () => ({
   createLiziMcpProviders: vi.fn((config: Record<string, unknown>) => {
     mockState.capturedProvidersConfig = config;
     return [
       {
-        name: 'cindy_orca',
+        name: 'lizi_orca',
         isEnabled: () => true,
         toClaudeSdkConfig: () => null,
       },
@@ -45,7 +45,7 @@ vi.mock('@cindy/mcps', () => ({
 }));
 
 vi.mock('../../maker-host/plugins/builtin-plugins.js', () => ({
-  BUILTIN_LIZI_MCP_IDS: ['cindy_orca', 'cindy_helper'],
+  BUILTIN_LIZI_MCP_IDS: ['lizi_orca', 'cindy_helper'],
   pluginIdForProviderName: (name: string) => name,
 }));
 
@@ -292,7 +292,6 @@ describe('collab send outcome semantics', () => {
       getMakerMemoryManager: vi.fn(),
       lspPool: {} as never,
       pluginRegistry: { isEnabled: () => true } as never,
-      invokeRemote: vi.fn(),
     });
     const orca = (mockState.capturedProvidersConfig?.orca ?? {}) as {
       createWorker: (params: {
@@ -340,7 +339,6 @@ describe('collab send outcome semantics', () => {
       getMakerMemoryManager: vi.fn(),
       lspPool: {} as never,
       pluginRegistry: { isEnabled: () => true } as never,
-      invokeRemote: vi.fn(),
     });
     const orca = (mockState.capturedProvidersConfig?.orca ?? {}) as {
       createWorker: (params: {
@@ -367,7 +365,7 @@ describe('collab send outcome semantics', () => {
     });
   });
 
-  it('exposes cindy_orca diagnostics through read-only collab provider callbacks', async () => {
+  it('exposes lizi_orca diagnostics through read-only collab provider callbacks', async () => {
     mockState.collabService = createCollabService({
       getWorkspaceInfo: vi.fn().mockResolvedValue({
         ok: true,
@@ -399,7 +397,6 @@ describe('collab send outcome semantics', () => {
       getMakerMemoryManager: vi.fn(),
       lspPool: {} as never,
       pluginRegistry: { isEnabled: () => true } as never,
-      invokeRemote: vi.fn(),
     });
     const orca = (mockState.capturedProvidersConfig?.orca ?? {}) as {
       getWorkspaceInfo: (params: { leadSessionId: string }) => Promise<Record<string, unknown>>;

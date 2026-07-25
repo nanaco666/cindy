@@ -5,7 +5,7 @@
  *   { "enabled": true }
  *
  * 默认 true —— 聊天语义搜索默认全员开启以提升搜索体验。embedding 走 voyage-4
- * (~¥0.09/天/重度用户, 经 XD Gateway + 公司 LiteLLM bearer 集中承担, 不计用户钱包)。
+ * (~¥0.09/天/重度用户, 经 xdproxy + 公司 LiteLLM bearer 集中承担, 不计用户钱包)。
  * "默认开"靠"无设置文件 → 用 DEFAULTS"实现: 全新装包 + 老用户从没碰过开关的,
  * 都会自动启用; 显式 toggle 关过 (文件 enabled:false) 的用户保持关闭, 不被覆盖。
  * 用户随时可在 Settings → 个性化 关闭。

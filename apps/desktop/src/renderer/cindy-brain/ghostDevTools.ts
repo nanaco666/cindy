@@ -1,7 +1,7 @@
 import type { InstalledGhost } from '../../shared/ghost';
 
 /**
- * 意识仓库 dev 调试工具—— dev UI 的黑盒验证通道。
+ * 意识仓库 dev 调试工具(意识系统 C2a)—— UI 入口(C2c)落地前的黑盒验证通道。
  *
  * dev 构建下往 window 挂 `__cindyGhosts`,QA 在 DevTools console 里调用:
  *
@@ -9,7 +9,7 @@ import type { InstalledGhost } from '../../shared/ghost';
  *   await __cindyGhosts.install('<路径>')     装入一个本地 .cindy 文件(绝对路径)
  *   await __cindyGhosts.uninstall('<id>')     按 id 卸下
  *
- * 运行时(芯片型意识沙箱进程 QA):
+ * 运行时(C3a,芯片型意识沙箱进程 QA):
  *   await __cindyGhosts.runtime()            全部意识的运行时状态
  *   await __cindyGhosts.spawn('<id>')         拉起沙箱(off/crashed → running)
  *   await __cindyGhosts.stopRun('<id>')       熄灯(→ off)
@@ -44,12 +44,8 @@ export function installGhostDevTools(): void {
   window.__cindyGhosts = {
     list: () => window.electronAPI.ghosts.listSync().ghosts,
     install: async (lizFilePath: string) => {
-      const inspected = await window.electronAPI.ghosts.inspect(lizFilePath);
-      const result = await window.electronAPI.ghosts.install(lizFilePath, {
-        expectedPackageSha256: inspected.packageSha256,
-      });
-      if ('canceled' in result) throw new Error('用户取消了 Node 安全确认');
-      return result.ghost;
+      const { ghost } = await window.electronAPI.ghosts.install(lizFilePath);
+      return ghost;
     },
     uninstall: async (id: string) => {
       await window.electronAPI.ghosts.uninstall(id);

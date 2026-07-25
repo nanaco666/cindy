@@ -1,7 +1,7 @@
 /**
  * file-service remote install — 与 cc-manager-installer 同构的独立安装路径。
  *
- * file-service.mjs 是 @cindy/remote-file-service 的 esbuild bundle(~50KB),
+ * file-service.mjs 是 @lizi/remote-file-service 的 esbuild bundle(~50KB),
  * 为 SSH remote 会话提供文件浏览 RPC(listDir / readFile / write / search)。
  * 与 agent 类型无关:codex remote 会话、未来 claude remote 会话共用。
  *

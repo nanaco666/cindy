@@ -8,7 +8,7 @@
 import {
   connectedProvidersForAgent,
   providerOffersModel,
-} from '@cindy/model-providers';
+} from '@lizi/model-providers';
 import { MessageSquare } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -16,7 +16,6 @@ import { useTranslation } from 'react-i18next';
 import { ClaudeMark } from '@/components/icons/ClaudeMark';
 import { CodexMark } from '@/components/icons/CodexMark';
 import { ModelSelector } from '@/components/new-chat/ModelSelector';
-import { useAuth } from '@/contexts/AuthContext';
 import { type ModelDescriptor, useAgentCapabilities } from '@/hooks/useAgentCapabilities';
 import { useProviders } from '@/hooks/useProviders';
 import { deriveModelsFromProviders } from '@/lib/providerModels';
@@ -52,7 +51,6 @@ function vendorKeyFor(agentKind: ImDefaultAgentKind): 'cc' | 'codex' {
 
 export function ImDefaultSettingsSection() {
   const { t } = useTranslation();
-  const { mode, dataOwnerId } = useAuth();
   const { providers } = useProviders();
   const cc = useAgentCapabilities('claude-code');
   const codex = useAgentCapabilities('codex');
@@ -61,8 +59,6 @@ export function ImDefaultSettingsSection() {
 
   useEffect(() => {
     let cancelled = false;
-    setSettings(null);
-    setPending(false);
     void window.electronAPI.maker
       .imDefaultSettingsGet()
       .then((state) => {
@@ -76,7 +72,7 @@ export function ImDefaultSettingsSection() {
     return () => {
       cancelled = true;
     };
-  }, [dataOwnerId, t]);
+  }, [t]);
 
   const modelsByAgent = useMemo<Record<ImDefaultAgentKind, ModelDescriptor[]>>(() => {
     const fromProviders = {
@@ -208,11 +204,7 @@ export function ImDefaultSettingsSection() {
               {t('settings.imBot.defaults.title')}
             </h3>
             <p className="mt-2 text-[12px] leading-[1.45] text-[var(--settings-section-desc)]">
-              {t(
-                mode === 'local'
-                  ? 'settings.imBot.defaults.localDescription'
-                  : 'settings.imBot.defaults.description',
-              )}
+              {t('settings.imBot.defaults.description')}
             </p>
           </div>
         </div>

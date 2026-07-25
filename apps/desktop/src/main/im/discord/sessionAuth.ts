@@ -1,7 +1,7 @@
 import { ipcMain } from 'electron';
 
-import type { AgentKind } from '@cindy/maker-core';
-import type { ProviderView } from '@cindy/model-providers';
+import type { AgentKind } from '@lizi/maker-core';
+import type { ProviderView } from '@lizi/model-providers';
 
 import { createLogger } from '../../logger';
 import { getMaker } from '../../maker-host';
@@ -11,7 +11,7 @@ import {
   resolveImSessionDefaults,
   type ResolvedImSessionDefaults,
 } from '../defaultSessionSettings';
-import { readXdGatewayApiKey } from '../shared/apiKey';
+import { readXdProxyApiKey } from '../shared/apiKey';
 import {
   checkImRouteAuth,
   type ImAuthCheckDeps,
@@ -84,7 +84,7 @@ export function registerDiscordSessionAuthIpc(config: ImOrchestratorConfig): voi
 
 function createDefaultAuthDeps(): ImAuthCheckDeps {
   return {
-    readXdGatewayApiKey,
+    readXdProxyApiKey,
     hasCustomProviderKey,
     getAgentAuthState: (agentKind) => getMaker().getAgentAuthState(agentKind),
     listProviders: () => getDesktopProviderService().listProviders(),

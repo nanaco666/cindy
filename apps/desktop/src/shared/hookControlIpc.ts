@@ -1,18 +1,18 @@
 /**
  * shared/hookControlIpc.ts
  * ---------------------------------------------------------------------------
- * Cindy IM relay(hook-control) 的 IPC 通道名与线上类型 —— main / preload /
- * renderer 三端共享的唯一契约(模式对齐 deviceLinkIpc.ts)。
+ * Slack Hook(hook-control)的 IPC 通道名与线上类型 —— main / preload / renderer
+ * 三端共享的唯一契约(模式对齐 deviceLinkIpc.ts)。
  *
- * 功能背景: desktop 主动外连公司中心部署的 IM hook 服务(WS 拨出),
- * 接收 Slack / Telegram 归一化后的任务派发。产品形态是**每 provider 一条内置连接**:
- *   - Slack / Telegram 地址分别来自运行期端点清单；
+ * 功能背景: desktop 主动外连公司中心部署的 slack-hook-server(WS 拨出),
+ * 接收 Slack 归一化后的任务派发。产品形态是**单条内置连接**:
+ *   - 服务器地址内置系统默认值(高级用户可经配置文件覆写, 无 UI 入口);
  *   - 鉴权用登录 JWT(与 device-link 同模型), 没有密钥概念, 用户零输入;
- *   - 用户可操作面 = provider 独立开关 / 账号绑定 / 工作目录清单。
+ *   - 用户可操作面 = 开关 / Slack 账号绑定 / 工作目录清单。
  */
 
-// 内置服务器地址来自运行期端点清单(main 侧分别读取 slackHookWsUrl 与
-// telegramHookWsUrl；Slack 的本地 urlOverride 只覆盖 Slack);
+// 内置服务器地址的系统默认值来自运行期端点清单(main 侧
+// getClientEndpoint('slackHookWsUrl'), 经 store deps.defaultUrl 注入);
 // 烘焙常量 SLACK_HOOK_DEFAULT_URL 已随 2026-07 端点清单重构退役。
 
 /**
@@ -47,20 +47,6 @@ export const HOOK_CONTROL_INVOKE = {
   REVOKE_TEAM: 'maker:hook-control:revoke-team',
   /** (multi-team)取消在途的添加/重绑授权(bind.revoke{pendingOnly} + 本地清 pending)。 */
   CANCEL_PENDING_BIND: 'maker:hook-control:cancel-pending-bind',
-  /** 独立开关一个 Cindy IM provider；不会改动其它 provider。 */
-  SET_PROVIDER_ENABLED: 'maker:hook-control:set-provider-enabled',
-  /** 发起 Telegram 一次性 deep-link 绑定。 */
-  PROVIDER_BIND_START: 'maker:hook-control:provider-bind-start',
-  /** 取消当前 Telegram 绑定尝试。 */
-  PROVIDER_BIND_CANCEL: 'maker:hook-control:provider-bind-cancel',
-  /** 解除当前 Telegram principal 与本设备的绑定。 */
-  PROVIDER_BIND_REVOKE: 'maker:hook-control:provider-bind-revoke',
-  /** 在本机安全打开当前 Telegram 绑定链接 / bot / 加群链接。 */
-  TELEGRAM_OPEN_ACTION: 'maker:hook-control:telegram-open-action',
-  /** 读取 Telegram provider 独立的 workspace 偏好。 */
-  PROVIDER_PREFS_GET: 'maker:hook-control:provider-prefs-get',
-  /** 更新 Telegram provider 独立的 workspace 偏好。 */
-  PROVIDER_PREFS_SET: 'maker:hook-control:provider-prefs-set',
 } as const;
 
 export const HOOK_CONTROL_EVENT = {
@@ -68,57 +54,7 @@ export const HOOK_CONTROL_EVENT = {
   STATUS_CHANGED: 'maker:hook-control:status-changed',
   /** 目录偏好快照推送(prefs.state; 含 Slack /model 卡改动的实时同步)。 */
   PREFS_CHANGED: 'maker:hook-control:prefs-changed',
-  /** provider-neutral 偏好快照推送（本版由 Telegram 消费）。 */
-  PROVIDER_PREFS_CHANGED: 'maker:hook-control:provider-prefs-changed',
 } as const;
-
-/** Cindy relay 当前支持的客户端 provider。 */
-export type HookProvider = 'slack' | 'telegram';
-
-/** provider-neutral 绑定状态（与 cindy-protocol v1 严格同形）。 */
-export type ProviderBindingState =
-  | 'none'
-  | 'pending'
-  | 'awaiting_confirmation'
-  | 'confirmed'
-  | 'denied'
-  | 'expired'
-  | 'failed'
-  | 'revoked'
-  | 'superseded';
-
-/** renderer 可见的 provider-neutral 绑定快照；不含任何 token/secret。 */
-export interface ProviderBindingView {
-  provider: HookProvider;
-  state: ProviderBindingState;
-  attemptId: string | null;
-  bindingId: string | null;
-  principalId: string | null;
-  principalName: string | null;
-  scopeId: string | null;
-  scopeName: string | null;
-  connectUrl: string | null;
-  expiresAt: number | null;
-  reason: string | null;
-  remediationUrl: string | null;
-  actions: string[];
-}
-
-/** Telegram provider 的独立设置与绑定视图。 */
-export interface TelegramHookView {
-  enabled: boolean;
-  /** Telegram 平级 hook 服务的运行期端点；空值表示当前环境尚未部署。 */
-  url: string;
-  status: HookConnectionStatus;
-  lastError: string | null;
-  /** 已收到 welcome，且双方成功协商完整 provider 能力。 */
-  available: boolean;
-  /** 尚未收到任何 welcome；用于首开时先显示入口、连接后再权威收敛。 */
-  capabilityPending: boolean;
-  binding: ProviderBindingView | null;
-}
-
-export type TelegramOpenAction = 'connect' | 'provider' | 'add-to-group';
 
 /**
  * Slack 账号绑定状态(与 hook-protocol 的 BindUpdateState 一致, 本文件为
@@ -228,7 +164,7 @@ export interface HookPendingBindView {
  */
 export type HookConnectionStatus = 'disabled' | 'connecting' | 'connected' | 'standby' | 'error';
 
-/** 渲染层可见的 Cindy IM 快照；顶层字段保持 Slack 兼容。 */
+/** 渲染层可见的 Slack Hook 快照(单连接)。 */
 export interface SlackHookView {
   enabled: boolean;
   /** 实际生效的服务器地址(默认内置值; 被 urlOverride 覆写时为覆写值)。 */
@@ -252,8 +188,6 @@ export interface SlackHookView {
   pendingBind: HookPendingBindView | null;
   /** server 是否宣告 multi-team 能力(welcome.features; renderer 据此显示「添加」入口)。 */
   serverMultiTeam: boolean;
-  /** 平级 Telegram hook 服务状态；Slack 旧字段保持原形。 */
-  telegram: TelegramHookView;
 }
 
 /** 工作区别名的合法格式(与 hook server 侧约定一致)。 */
@@ -291,13 +225,6 @@ export interface HookWorkspacePrefs {
 export interface HookPrefsView {
   bound: boolean;
   prefs: HookWorkspacePrefs[];
-}
-
-/** provider-neutral 偏好快照；selector 与协议帧同形。 */
-export interface ProviderPrefsView extends HookPrefsView {
-  provider: HookProvider;
-  bindingId: string | null;
-  scopeId: string | null;
 }
 
 /** 偏好部分更新 patch(undefined 不动, null 显式清空)。 */

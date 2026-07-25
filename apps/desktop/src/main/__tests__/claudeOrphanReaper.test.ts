@@ -251,9 +251,9 @@ describe('reapClaudeOrphansSync', () => {
     const execFileSync = vi.fn((file: string) => {
       if (file === 'taskkill') return '';
       return [
-        `${devOrphanPid}|99999|E:\\AIWork\\Lizi\\apps\\claude-code-bin\\win32-x64\\claude.exe --output-format stream-json`,
-        `${worktreeOrphanPid}|99999|E:/AIWork/Lizi/.xdt-worktrees/foo/apps/claude-code-bin/win32-x64/claude.exe`,
-        `${liveDevPeerPid}|88888|E:\\Other\\Lizi\\apps\\claude-code-bin\\win32-x64\\claude.exe`,
+        `${devOrphanPid}|99999|E:\\AIWork\\XDMaker\\apps\\claude-code-bin\\win32-x64\\claude.exe --output-format stream-json`,
+        `${worktreeOrphanPid}|99999|E:/AIWork/XDMaker/.xdt-worktrees/foo/apps/claude-code-bin/win32-x64/claude.exe`,
+        `${liveDevPeerPid}|88888|E:\\Other\\XDMaker\\apps\\claude-code-bin\\win32-x64\\claude.exe`,
       ].join('\n');
     });
     const killSpy = vi.spyOn(process, 'kill').mockImplementation(((pid: number) => {

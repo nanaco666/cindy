@@ -20,7 +20,7 @@ const DEFAULT_PHRASE =
   'Voice input benchmark. Today we test realtime transcription latency for Cindy.';
 const OPENAI_REALTIME_URL = 'wss://api.openai.com/v1/realtime?intent=transcription';
 const DEFAULT_MODEL = 'gpt-realtime-whisper';
-const DEFAULT_LITELLM_BASE_URL = process.env.VITE_XD_GATEWAY_BASE_URL?.trim() || '';
+const DEFAULT_LITELLM_BASE_URL = process.env.VITE_XDPROXY_BASE_URL?.trim() || '';
 const DEFAULT_ASR_PROVIDERS = [
   'litellm-qwen3-asr-flash-realtime',
   'litellm-gpt-realtime-whisper',
@@ -122,7 +122,7 @@ ASR options:
   --chunk-ms <n>                    Default: 40
   --tail-silence-ms <n>             Append silence before final/commit. Default: 0; Volcengine still sends its production 300ms final silence marker
   --timeout-ms <n>                  Default: 15000
-  --base-url <url>                  LiteLLM gateway. Default: VITE_XD_GATEWAY_BASE_URL
+  --base-url <url>                  LiteLLM gateway. Default: VITE_XDPROXY_BASE_URL
   --api-key <key>                   Optional. Otherwise env/App safeStorage is used
   --debug-events                    Print provider event/frame diagnostics to stderr
   --out <path>                      JSON report path
@@ -136,7 +136,7 @@ Refine options:
   --context <path>                  JSON context merged into every case
   --iterations <n>                  Default: 1
   --timeout-ms <n>                  Default: 15000
-  --base-url <url>                  LiteLLM gateway. Default: VITE_XD_GATEWAY_BASE_URL
+  --base-url <url>                  LiteLLM gateway. Default: VITE_XDPROXY_BASE_URL
   --api-key <key>                   Optional. Otherwise env/App safeStorage is used
   --out <path>                      JSON report path
   --json                            Print JSON only
@@ -604,17 +604,17 @@ async function resolveLiteLlmApiKey(opts) {
     process.env.ANTHROPIC_API_KEY,
   ].find((value) => value?.trim());
   if (explicit) return explicit.trim();
-  const stored = await readXdGatewayApiKeyFromAppStorage();
+  const stored = await readXdProxyApiKeyFromAppStorage();
   if (stored) return stored;
   throw new Error(
-    'No LiteLLM/XD Gateway API key found. Pass --api-key, set XDT_VOICE_INPUT_BENCHMARK_API_KEY, or save an API key in Settings > API Key.',
+    'No LiteLLM/XD Proxy API key found. Pass --api-key, set XDT_VOICE_INPUT_BENCHMARK_API_KEY, or save an API key in Settings > API Key.',
   );
 }
 
-async function readXdGatewayApiKeyFromAppStorage() {
+async function readXdProxyApiKeyFromAppStorage() {
   const electron = resolveElectronBinary();
   if (!electron) return null;
-  const helperPath = path.join(os.tmpdir(), `xdt-read-xd-gateway-key-${process.pid}-${Date.now()}.cjs`);
+  const helperPath = path.join(os.tmpdir(), `xdt-read-xdproxy-key-${process.pid}-${Date.now()}.cjs`);
   await fsp.writeFile(helperPath, `
 const fs = require('node:fs');
 const path = require('node:path');
@@ -2361,7 +2361,7 @@ async function main() {
     return;
   }
   if ((opts.command === 'asr' || opts.command === 'refine') && !opts.baseUrl) {
-    throw new Error('缺少 LiteLLM gateway: 请传 --base-url 或设置 VITE_XD_GATEWAY_BASE_URL');
+    throw new Error('缺少 LiteLLM gateway: 请传 --base-url 或设置 VITE_XDPROXY_BASE_URL');
   }
 
   let report;

@@ -8,7 +8,7 @@
  * the result reports `failedStep` so the agent can fall back to manual
  * snapshot+ref operation.
  */
-import type { BrowserControlRequest, BrowserControlResult } from '@cindy/browser-control-runtime';
+import type { BrowserControlRequest, BrowserControlResult } from '@lizi/browser-control-runtime';
 
 import { buildExtractFnSource, type ExtractSpec } from './extract.js';
 import type { Recipe, RecipeStep } from './recipe-loader.js';

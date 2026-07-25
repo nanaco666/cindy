@@ -1,6 +1,7 @@
 /**
  * MemorySection — Settings → Personalization 下的 Memory 控制面板。
  * ---------------------------------------------------------------------------
+ * 设计稿: doc/design_docs/settings-view.pen 节点 SUk5m (Light) / 4x4g2 (Dark)。
  *
  * 数据流:
  *   - 加载: window.electronAPI.maker.memoryGet(agentKind) on mount + agent
@@ -122,12 +123,7 @@ export function MemorySection() {
       setMakerEnabled(settings.maker);
       setSettingsCustomized(settings.isCustomized);
       await reloadSlots();
-      // codexRestartDeferred: Codex 正忙时设置已生效, 只是存活会话要等任务结束后
-      // 才换到新状态 — 信息性后缀, 不用 warning (同 per-agent 'next-session' 语义)。
-      const suffix = settings.codexRestartDeferred
-        ? t('settings.memory.maker.toast.deferredSuffix')
-        : '';
-      toast.success(`${t('settings.defaults.restored')}${suffix}`);
+      toast.success(t('settings.defaults.restored'));
     } catch (err) {
       log.warn('memoryResetSettings failed', err);
       toast.error(err instanceof Error ? err.message : t('settings.defaults.restoreFailed'));
@@ -177,13 +173,8 @@ export function MemorySection() {
         // enable 时联动调过 setMemory(false) → 下方 slots 真实 state 已变, 必须 reload
         // disable 不动 native, 但仍 reload 一次保证 UI 跟实际对齐 (零成本兜底)
         await reloadSlots();
-        // codexRestartDeferred: Codex 正忙, 存活会话等任务结束后自动换新状态。
-        // 操作本身成功 → success(绿) + 信息性后缀, 同 per-agent 'next-session' 处理。
-        const suffix = result.codexRestartDeferred
-          ? t('settings.memory.maker.toast.deferredSuffix')
-          : '';
         toast.success(
-          `${t(next ? 'settings.memory.maker.toast.enabled' : 'settings.memory.maker.toast.disabled')}${suffix}`,
+          t(next ? 'settings.memory.maker.toast.enabled' : 'settings.memory.maker.toast.disabled'),
         );
       } catch (err) {
         log.warn('makerMemorySetEnabled failed', err);

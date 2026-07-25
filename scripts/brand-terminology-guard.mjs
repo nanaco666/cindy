@@ -40,8 +40,8 @@ const ALLOWED_LEGACY_OCCURRENCES = new Set([
 ]);
 
 // ---------------------------------------------------------------------------
-// Locale 品牌名占位符检查:
-// 品牌展示名已收敛到 @cindy/maker-shared/branding 的 BRAND_NAME,四语言 locale
+// Locale 品牌名占位符检查(docs/branding-rename-checklist.md):
+// 品牌展示名已收敛到 @lizi/maker-shared/branding 的 BRAND_NAME,四语言 locale
 // 文案统一用 {{appName}} 占位。这里拒绝在 locale JSON 里重新硬编码品牌名——
 // 硬编码在开发期无感知,未来改名时必漏。运行时插值的端到端断言在
 // apps/desktop/src/renderer/__tests__/i18nBrandPlaceholder.test.ts。
@@ -57,10 +57,14 @@ const LOCALE_BRAND_RE = /XDMaker|XD Maker|xdt-maker/;
  * 嵌套下同名 key 都会被静默放过。
  */
 const LOCALE_EXEMPT_KEY_PATHS = new Set([]);
+/** 值级豁免:文档路径引用。 */
+const LOCALE_EXEMPT_VALUE_SUBSTRINGS = ['xdt-maker-architecture.md'];
+
 function collectLocaleViolations(file, node, path, out) {
   if (typeof node === 'string') {
     if (!LOCALE_BRAND_RE.test(node)) return;
     if (LOCALE_EXEMPT_KEY_PATHS.has(path)) return;
+    if (LOCALE_EXEMPT_VALUE_SUBSTRINGS.some((s) => node.includes(s))) return;
     out.push({ file, key: path });
     return;
   }
@@ -185,7 +189,7 @@ if (localeViolations.length > 0) {
     console.error(`  ${hit.file} → key "${hit.key}"`);
   }
   console.error('\nlocale 文案里的品牌名必须写 {{appName}}(由 i18next defaultVariables 注入 BRAND_NAME)。');
-  console.error('标识符例外属于稳定标识符层，不要将其当作 locale 展示文案改名。');
+  console.error('标识符例外(架构文档路径)见 docs/branding-rename-checklist.md。');
   process.exit(1);
 }
 

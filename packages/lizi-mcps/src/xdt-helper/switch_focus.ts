@@ -3,7 +3,7 @@
  * 同 workflow 内同时只能 1 个 focused worker, 切换后 UI 会完全替换 pane body。
  */
 
-import { BRAND_NAME } from '@cindy/maker-shared/branding';
+import { BRAND_NAME } from '@lizi/maker-shared/branding';
 import { z } from 'zod';
 
 import type { XdtHelperToolRegistry } from '../lizi_xdtHelperToolRegistry.js';

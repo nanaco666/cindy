@@ -18,9 +18,9 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import type { ReactNode } from 'react';
-import type { SchedulerEvent } from '@cindy/maker-scheduler';
+import type { SchedulerEvent } from '@lizi/maker-scheduler';
 import { createPortal } from 'react-dom';
-import { Archive, ChevronRight, CirclePlus, Folder, Plug, Timer, Trash2, X } from 'lucide-react';
+import { Archive, ChevronRight, CirclePlus, Clock, Folder, Plug, Trash2, X } from 'lucide-react';
 import { useNavigate, useMatch } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 
@@ -749,15 +749,13 @@ function ExpandedView({
     // 查看，而非跳到 worker 实现细节；与 effectiveRunningSessionIds 的角色聚合口径一致。
     if (session && isOrcaWorkerSession(session)) return;
     void window.electronAPI.notificationMarkSessionAttention(sessionId);
+    if (!desktopEnabled && !feishuEnabled) return;
     const title = session?.title ?? '';
-    // mobile 通道恒开:桌面侧不设第二个开关,是否收到由手机端注册/注销推送 token
-    // 决定;发送侧防打扰(远程正在看该会话 / 去重 / relay 能力)在 main 收口。
-    // 因此桌面/飞书都关时也要 invoke(不再提前 return)。
     void window.electronAPI.notificationShowSessionEvent({
       sessionId,
       title,
       kind,
-      channels: { desktop: desktopEnabled, feishu: feishuEnabled, mobile: true },
+      channels: { desktop: desktopEnabled, feishu: feishuEnabled },
     });
   }, []);
   const handleSessionDone = useCallback(
@@ -1228,7 +1226,7 @@ function ExpandedView({
 
   // 用户从 Dock badge / taskbar flash 点回 app 时,如果 viewedSessionId 没变,
   // route-driven effect 不会重跑,系统角标会残留。监听 window focus 兜底清当前
-  // 注视中会话的角标,正好覆盖这一回流场景。
+  // 注视中会话的角标,正好覆盖 "MR !102 的回流场景"。
   useEffect(() => {
     if (!viewedSessionId) return;
     const handler = () => {
@@ -2483,7 +2481,7 @@ function CollapsedView({
       {/* 自动化 rail 入口 —— 仅导航,不再显示未读 dot(与展开态 SidebarTopNav 一致,
           未读 / 运行状态由展开后的各 schedule 组头承载)。 */}
       <SidebarIconButton
-        icon={Timer}
+        icon={Clock}
         label={t('ccAgent.layout.automations')}
         aria-label={t('ccAgent.layout.automations')}
         aria-current={onScheduleMatch ? 'page' : undefined}

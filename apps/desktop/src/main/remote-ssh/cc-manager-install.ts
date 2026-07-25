@@ -42,8 +42,8 @@ import {
   REMOTE_CLAUDE_SHIM_PATH,
   REMOTE_XDT_NODE_PATH,
   type RemoteHost,
-} from '@cindy/maker-remote-ssh';
-import { PROTOCOL_VERSION as CC_MGR_PROTOCOL_VERSION } from '@cindy/maker-cc-manager/protocol';
+} from '@lizi/maker-remote-ssh';
+import { PROTOCOL_VERSION as CC_MGR_PROTOCOL_VERSION } from '@lizi/maker-cc-manager/protocol';
 
 import { createLogger } from '../logger.js';
 import { throwIpcError } from '../utils/ipcValidate.js';
@@ -65,7 +65,7 @@ const claudeBinaryPathCache = new Map<string, string>();
 // daemon 在 hello 握手里返回自己编译时的版本; desktop 跟自己 import 的版本比对。
 // 不匹配 → upgrade。不随无关依赖 / esbuild 输出变化而触发无意义升级。
 
-import { CC_MGR_BUNDLE_VERSION } from '@cindy/maker-cc-manager';
+import { CC_MGR_BUNDLE_VERSION } from '@lizi/maker-cc-manager';
 
 export function getLocalCcMgrBundleVersion(): string {
   return CC_MGR_BUNDLE_VERSION;

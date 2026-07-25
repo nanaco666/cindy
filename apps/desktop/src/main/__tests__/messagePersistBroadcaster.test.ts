@@ -15,12 +15,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('../localDb/ipc/messages.js', () => ({
-  broadcastMessageAgentMetaUpdate: vi.fn(async () => true),
   createMessage: vi.fn(async () => ({}) as unknown),
-  patchMessageAgentMetaWithResult: vi.fn(async (_sessionId, _clientId, patch) => ({
-    previous: {},
-    next: patch,
-  })),
   updateMessageContent: vi.fn(async () => ({}) as unknown),
 }));
 
@@ -33,12 +28,7 @@ vi.mock('electron', () => ({
   BrowserWindow: { getAllWindows: () => [{ isDestroyed: () => false, webContents: { send: mockSend } }] },
 }));
 
-import {
-  broadcastMessageAgentMetaUpdate,
-  createMessage,
-  patchMessageAgentMetaWithResult,
-  updateMessageContent,
-} from '../localDb/ipc/messages.js';
+import { createMessage, updateMessageContent } from '../localDb/ipc/messages.js';
 import {
   recordMediaToolResult,
   __resetMediaToolResultPoolForTesting,
@@ -57,7 +47,6 @@ import {
   resetTurnPersistState,
   clearSessionPersistState,
   consumeLastAssistantPersistId,
-  markAssistantTurnCompleted,
   noteSessionClearBoundary,
   noteSessionAgentKind,
   enqueueDurableWrite,
@@ -772,21 +761,6 @@ describe('consumeLastAssistantPersistId(per-turn 费用挂载的目标消息追�
     clearSessionPersistState(SESSION);
     expect(consumeLastAssistantPersistId(SESSION)).toBeUndefined();
   });
-
-  it('done seal 以 durable patch 落库', async () => {
-    await expect(markAssistantTurnCompleted(SESSION, 'assistant-final')).resolves.toBe(true);
-    expect(patchMessageAgentMetaWithResult).toHaveBeenCalledWith(
-      SESSION,
-      'assistant-final',
-      { turnCompleted: true },
-    );
-    expect(broadcastMessageAgentMetaUpdate).toHaveBeenCalledWith(SESSION, 'assistant-final');
-  });
-
-  it('纯 tool turn 没有 assistant 时不写 seal', async () => {
-    await expect(markAssistantTurnCompleted(SESSION, undefined)).resolves.toBe(false);
-    expect(patchMessageAgentMetaWithResult).not.toHaveBeenCalled();
-  });
 });
 
 describe('onTurnErrorEvent — terminal error 持久化', () => {
@@ -831,19 +805,6 @@ describe('onTurnErrorEvent — terminal error 持久化', () => {
     await flushWrites();
     const [, bodyArg] = vi.mocked(createMessage).mock.calls[0];
     expect((bodyArg as { content: unknown }).content).toEqual({ message: 'boom' });
-  });
-
-  it('redacts credentials before writing terminal errors to the local database', async () => {
-    onTurnErrorEvent(SESSION, {
-      message: 'Authorization: Basic dXNlcjpwYXNz; key=sk-live-123456789',
-      sdkError: 'access_token=secret-token',
-    });
-
-    await flushWrites();
-    const [, bodyArg] = vi.mocked(createMessage).mock.calls[0];
-    const content = (bodyArg as { content: { message: string; sdkError: string } }).content;
-    expect(content.message).toBe('Authorization: [REDACTED]; key=[REDACTED_KEY]');
-    expect(content.sdkError).toBe('access_token=[REDACTED]');
   });
 
   it('error 前的在飞 assistant 文本先 flush 落库,error 行排在其后', async () => {

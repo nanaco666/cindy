@@ -2,6 +2,7 @@
 // 以便把 `https://x.com/foo; 然后` 这类散文分号也视为 URL 边界。
 // 用在我们自己的 plain-text linkifier 和 remark 后处理里，避免两条渲染链路
 // 对 `https://x.com/foo.` / `https://x.com/foo(base` 这类边界给出不同结果。
+import { INTERNAL_GITLAB_HOST } from '../../shared/endpoints';
 
 const PROSE_TRAILING_PUNCT = new Set(['?', '!', '.', ',', ':', ';']);
 const MARKDOWN_FORMATTING_TRAILING_PUNCT = new Set(['*', '_', '~']);
@@ -136,7 +137,7 @@ export function isCodeHostNumericResourcePath(prefix: string): boolean {
   if (host === 'github.com') {
     return /^\/[^/]+\/[^/]+\/(?:pulls?|issues?)\/\d+\/?$/i.test(pathname);
   }
-  if (host === 'gitlab.com') {
+  if (host === 'gitlab.com' || host === INTERNAL_GITLAB_HOST) {
     return /^\/.+\/(?:-\/)?(?:issues?|merge_requests?)\/\d+\/?$/i.test(pathname);
   }
   return false;

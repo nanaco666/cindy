@@ -38,20 +38,21 @@ import {
   type InvokeResultPayload,
   type LinkOpenPayload,
   type Topic,
-} from '@cindy/device-link';
-import type { MobileVoiceDictionaryLearningRequest } from '@cindy/maker-shared/device-link-contract';
+} from '@lizi/device-link';
+import type { MobileVoiceDictionaryLearningRequest } from '@lizi/maker-shared/device-link-contract';
 import {
   resolveProviderLogoKind,
   type ProviderLogoRouting,
-} from '@cindy/model-providers/branding';
+} from '@lizi/model-providers/branding';
 import { app } from 'electron';
-import type { DeviceLinkClient } from '@cindy/device-link';
+import type { DeviceLinkClient } from '@lizi/device-link';
 import { createLogger } from '../logger';
 import { readDeviceLinkSettings } from './settings-store';
 import { dispatchLocalInvoke } from './invoke-registry';
 import { runDeviceLinkInvokeContext } from './invoke-context';
 import { fetchLocalMediaToOss } from './mediaFetch';
 import { transcribeRemoteVoiceInput } from './voiceTranscribe';
+import { syncMobileVoiceCredential } from './voiceCredentialSync';
 import { adviseAndRecordVoiceInputDictionaryLearning } from '../voice-input/index.js';
 import { setBroadcastTapListener } from './broadcast-tap';
 import * as subscriptions from './subscriptions';
@@ -898,18 +899,17 @@ export async function runInvoke(
     }
   }
 
-  // device-link:voice:credential-sync 已下线:手机语音输入改走 Cindy 官方语音服务
-  // (Cindy 登录 → voice-server 一次性票据),桌面不再向手机穿透 XD Gateway key。
-  // 保留 channel 匹配,让旧手机版拿到可读错误而不是 CHANNEL_NOT_ALLOWED。
+  // device-link:voice:credential-sync 是账号 key 体系补齐前的临时窄口径能力:
+  // 只同步移动端 voice ASR/refine 所需 XD Gateway key + 模型配置,不暴露通用 safe-storage/api-key。
   if (payload.channel === DL_VOICE_CREDENTIAL_SYNC_CHANNEL) {
-    log.warn(`voice:credential-sync rejected from ${shortId(src)}: feature removed`);
-    return {
-      ok: false,
-      error: {
-        code: 'VOICE_CREDENTIAL_SYNC_REMOVED',
-        message: '手机语音输入已改用 Cindy 官方语音服务,请升级手机版。',
-      },
-    };
+    try {
+      const result = syncMobileVoiceCredential();
+      return { ok: true, result };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      log.warn(`voice:credential-sync failed from ${shortId(src)}: ${message}`);
+      return { ok: false, error: { code: 'VOICE_CREDENTIAL_SYNC_FAILED', message } };
+    }
   }
 
   // device-link:voice:dictionary-learning 是手机端 voice refine 后的术语学习 evidence 回写:

@@ -1,5 +1,5 @@
 /**
- * runStore.ts —— learn run 状态的持久化({ownerRoot}/learn/runs.json)。
+ * runStore.ts —— learn run 状态的持久化({userData}/learn/runs.json)。
  *
  * run 是短生命周期、单机、量极小的状态,不进 DB(无 drizzle 迁移):
  * JSON 文件 + write-temp-then-rename 原子写足够。跨重启保留 awaiting-review
@@ -8,8 +8,8 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { app } from 'electron';
 
-import { ownerScopedUserDataPath } from '../appSessionState';
 import { createLogger } from '../logger';
 import type { LearnRunPublic } from '../../shared/learnTypes';
 
@@ -19,7 +19,7 @@ const log = createLogger('learn-host:store');
 const MAX_STORED_RUNS = 50;
 
 function runsFile(): string {
-  return ownerScopedUserDataPath('learn', 'runs.json');
+  return path.join(app.getPath('userData'), 'learn', 'runs.json');
 }
 
 interface RunsFileShape {

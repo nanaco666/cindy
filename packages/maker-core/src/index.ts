@@ -1,5 +1,7 @@
 /**
- * @cindy/maker-core — Cindy agent 核心抽象层
+ * @lizi/maker-core — xdt-maker 核心抽象层
+ *
+ * 见 apps/desktop/doc/agent/xdt-maker-architecture.md
  *
  * 严格约束：本包零 Electron 依赖。所有 IO（safeStorage / userData / spawn 路径）
  * 由 host 层（apps/desktop/src/main/maker-host/）实现并通过依赖注入传入。

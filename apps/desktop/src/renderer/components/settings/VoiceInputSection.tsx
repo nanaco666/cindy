@@ -7,7 +7,6 @@ import { Check, ChevronDown, Copy, Keyboard, Pencil, Plus, RotateCcw, Search, Sp
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Switch } from '@/components/ui/switch';
 import { Tip } from '@/components/ui/tooltip';
-import { useAuth } from '@/contexts/AuthContext';
 import { SUPPORTED_LOCALES } from '@/i18n';
 import { cn } from '@/lib/utils';
 import {
@@ -55,6 +54,7 @@ import { requestRendererMicrophonePermission } from '@/voice-input/startGuards';
 
 const LANGUAGE_OPTIONS: ReadonlyArray<VoiceInputLanguage> = ['auto', ...SUPPORTED_LOCALES];
 const AUTO_MICROPHONE_VALUE = '__auto__';
+const AI_GATEWAY_OVERVIEW_URL = 'https://console.tapsvc.com/nova/#/ai-gateway?tab=overview';
 const DICTIONARY_FILTERS = ['all', 'automatic', 'manual'] as const;
 
 type DictionaryFilter = (typeof DICTIONARY_FILTERS)[number];
@@ -336,7 +336,6 @@ function VoiceInputInlineSettingRow({
  */
 function VoiceInputServiceSourceCard() {
   const { t } = useTranslation();
-  const { mode: appMode } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const {
     ready,
@@ -348,14 +347,10 @@ function VoiceInputServiceSourceCard() {
     setServiceMode,
     setAsrProvider,
     setRefinerProvider,
-    setRefinerFallbackProvider,
     resetToDefault,
   } = useVoiceInputModelSelection();
 
-  const localMode = appMode === 'local';
-  const serviceMode: VoiceInputServiceModeData = localMode
-    ? 'byok'
-    : (selection?.serviceMode ?? 'cindy');
+  const serviceMode: VoiceInputServiceModeData = selection?.serviceMode ?? 'cindy';
   const byok = serviceMode === 'byok';
 
   const openProvidersTab = useCallback(() => {
@@ -364,22 +359,18 @@ function VoiceInputServiceSourceCard() {
     setSearchParams(next, { replace: true });
   }, [searchParams, setSearchParams]);
 
-  const modeOptions = useMemo<ReadonlyArray<VoiceInputSelectOption<VoiceInputServiceModeData>>>(() => {
-    const byokOption: VoiceInputSelectOption<VoiceInputServiceModeData> = {
+  const modeOptions = useMemo<ReadonlyArray<VoiceInputSelectOption<VoiceInputServiceModeData>>>(() => [
+    {
+      value: 'cindy',
+      label: t('settings.voiceInput.serviceSource.options.cindy'),
+      description: t('settings.voiceInput.serviceSource.optionDescriptions.cindy'),
+    },
+    {
       value: 'byok',
       label: t('settings.voiceInput.serviceSource.options.byok'),
       description: t('settings.voiceInput.serviceSource.optionDescriptions.byok'),
-    };
-    if (localMode) return [byokOption];
-    return [
-      {
-        value: 'cindy',
-        label: t('settings.voiceInput.serviceSource.options.cindy'),
-        description: t('settings.voiceInput.serviceSource.optionDescriptions.cindy'),
-      },
-      byokOption,
-    ];
-  }, [localMode, t]);
+    },
+  ], [t]);
 
   const credentialSourceLabel = useCallback((profile: { id: string; auth: 'api-key' | 'codex' }): string => {
     if (profile.auth === 'codex') return t('settings.voiceInput.serviceSource.credential.codexLogin');
@@ -407,24 +398,6 @@ function VoiceInputServiceSourceCard() {
     }))
   ), [refinerProfiles, credentialSourceLabel]);
 
-  // Explicit BYOK fallback (opt-in): "none" keeps the primary running alone,
-  // mirroring the single-credential reality of most BYOK setups.
-  const refinerFallbackValue = selection?.refinerProviderChain?.[1] ?? '';
-  const refinerFallbackOptions = useMemo<ReadonlyArray<VoiceInputSelectOption<string>>>(() => ([
-    {
-      value: '',
-      label: t('settings.voiceInput.serviceSource.refinerFallback.none'),
-      description: t('settings.voiceInput.serviceSource.refinerFallback.noneDescription'),
-    },
-    ...refinerProfiles
-      .filter((profile) => profile.id !== selection?.refinerProvider)
-      .map((profile) => ({
-        value: profile.id,
-        label: profile.model,
-        description: credentialSourceLabel(profile),
-      })),
-  ]), [refinerProfiles, selection?.refinerProvider, credentialSourceLabel, t]);
-
   // BYOK credential problems map to i18n by credential source instead of the
   // raw main-process message (which is an untranslated profile constant).
   const byokCredentialErrorText = useMemo(() => {
@@ -436,7 +409,7 @@ function VoiceInputServiceSourceCard() {
     return t('settings.voiceInput.serviceSource.credentialError.gatewayMissing');
   }, [byok, readiness, t]);
 
-  const customized = !localMode && Boolean(selection?.serviceModeConfigured);
+  const customized = Boolean(selection?.serviceModeConfigured);
 
   return (
     <VoiceInputCard
@@ -461,9 +434,7 @@ function VoiceInputServiceSourceCard() {
     >
       <VoiceInputInlineSettingRow
         label={t('settings.voiceInput.serviceSource.label')}
-        hint={t(localMode
-          ? 'settings.voiceInput.serviceSource.localHint'
-          : 'settings.voiceInput.serviceSource.hint')}
+        hint={t('settings.voiceInput.serviceSource.hint')}
       >
         <VoiceInputSelect
           value={serviceMode}
@@ -496,18 +467,6 @@ function VoiceInputServiceSourceCard() {
               options={refinerOptions}
               onChange={(value) => void setRefinerProvider(value)}
               ariaLabel={t('settings.voiceInput.serviceSource.refiner.ariaLabel')}
-            />
-          </VoiceInputInlineSettingRow>
-
-          <VoiceInputInlineSettingRow
-            label={t('settings.voiceInput.serviceSource.refinerFallback.label')}
-            hint={t('settings.voiceInput.serviceSource.refinerFallback.hint')}
-          >
-            <VoiceInputSelect
-              value={refinerFallbackValue}
-              options={refinerFallbackOptions}
-              onChange={(value) => void setRefinerFallbackProvider(value)}
-              ariaLabel={t('settings.voiceInput.serviceSource.refinerFallback.ariaLabel')}
             />
           </VoiceInputInlineSettingRow>
 
@@ -2061,14 +2020,21 @@ export function VoiceInputSection() {
             <dd className="mt-1 truncate text-17 font-medium leading-[1.2] text-[var(--settings-section-title)]">
               {stats.sessionCount}
             </dd>
-            <dd className="mt-1 text-11 leading-[1.3] text-[var(--settings-section-sublabel)] opacity-70">
-              {t('settings.voiceInput.usage.outcomes', {
-                noSpeech: stats.noSpeechSessionCount,
-                failed: stats.failedSessionCount,
-              })}
-            </dd>
           </div>
         </dl>
+
+        <button
+          type="button"
+          onClick={() => window.electronAPI.openExternal(AI_GATEWAY_OVERVIEW_URL)}
+          className={cn(
+            'self-start text-12 leading-[1.3]',
+            'text-[var(--settings-source-link)] underline',
+            'decoration-[var(--settings-source-link)] decoration-1 underline-offset-2',
+            'opacity-75 hover:opacity-100',
+          )}
+        >
+          {t('settings.voiceInput.usage.label')}
+        </button>
 
         <div className="border-t border-[var(--settings-theme-card-border)] pt-4">
           <button

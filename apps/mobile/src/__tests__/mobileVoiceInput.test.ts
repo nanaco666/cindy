@@ -6,9 +6,11 @@ const GW_PROXY = `${DEFAULT_MOBILE_VOICE_LITELLM_BASE_URL}/proxy`;
 import {
   appendVoiceTranscriptDraft,
   appendVoiceTranscriptDraftWithRange,
+  buildMobileRefinerAttempts,
   buildMobileVoiceRefinementContext,
   canCancelMobileVoiceRecording,
-  makeMobileRefinerPromptCacheKey,
+  formatMobileVoiceStartupError,
+  MOBILE_VOICE_CREDENTIAL_SYNC_UNSUPPORTED_ERROR,
   MOBILE_VOICE_MIC_PERMISSION_ERROR,
   MOBILE_VOICE_REALTIME_AUDIO_UNAVAILABLE_ERROR,
   MOBILE_MAX_VOICE_AUDIO_BYTES,
@@ -20,6 +22,7 @@ import {
   putMobileVoiceUpload,
   replaceVoiceTranscriptDraftRange,
   resolveVoiceRecordingMeta,
+  transcribeMobileVoiceRecordingWithCredential,
   uploadMobileVoiceRecording,
 } from '@/session/mobileVoiceInput';
 import type { StoredMobileVoiceCredential } from '@/session/mobileVoiceCredentialStore';
@@ -83,6 +86,19 @@ describe('mobileVoiceInput', () => {
     expect(mobileVoiceStateLabel('error')).toBe('语音出错');
   });
 
+  it('maps unsupported desktop voice credential sync to an actionable mobile voice error', () => {
+    const error = new Error("channel 'device-link:voice:credential-sync' not allowed remotely") as Error & {
+      code: string;
+    };
+    error.code = 'CHANNEL_NOT_ALLOWED';
+
+    expect(formatMobileVoiceStartupError(error)).toBe(MOBILE_VOICE_CREDENTIAL_SYNC_UNSUPPORTED_ERROR);
+  });
+
+  it('keeps unrelated mobile voice startup errors intact', () => {
+    expect(formatMobileVoiceStartupError(new Error('microphone failed'))).toBe('microphone failed');
+  });
+
   it('only exposes cancel while a recording is active', () => {
     expect(canCancelMobileVoiceRecording('listening')).toBe(true);
     expect(canCancelMobileVoiceRecording('idle')).toBe(false);
@@ -142,6 +158,64 @@ describe('mobileVoiceInput', () => {
     expect(history.indexOf('- 桌面较早的术语')).toBeLessThan(history.indexOf('- 桌面较新的术语'));
     expect(history.indexOf('- 桌面较新的术语')).toBeLessThan(history.indexOf('- 手机较早术语'));
     expect(history.indexOf('- 手机较早术语')).toBeLessThan(history.indexOf('- 手机最新术语'));
+  });
+
+  it('builds refiner attempts from the desktop-synced provider chain without reselecting models on mobile', () => {
+    const attempts = buildMobileRefinerAttempts(storedCredential({
+      hostDeviceId: 'desktop-1',
+      refiner: {
+        provider: 'litellm-qwen3.7-max',
+        model: 'qwen/custom-mobile-refiner',
+        auth: 'api-key',
+        transport: 'litellm-chat-completions',
+        endpointPath: '/v1/chat/completions',
+      },
+      refinerProviderChain: [
+        {
+          provider: 'litellm-qwen3.7-max',
+          model: 'qwen/custom-mobile-refiner',
+          auth: 'api-key',
+          transport: 'litellm-chat-completions',
+          endpointPath: '/v1/chat/completions',
+        },
+        {
+          provider: 'codex-gpt-5.4-nano',
+          model: 'gpt-5.4-nano',
+          auth: 'api-key',
+          transport: 'litellm-chat-completions',
+          endpointPath: '/v1/chat/completions',
+        },
+        {
+          provider: 'litellm-deepseek-v4-flash',
+          model: 'deepseek/deepseek-v4-flash',
+          auth: 'api-key',
+          transport: 'litellm-chat-completions',
+          endpointPath: '/v1/chat/completions',
+        },
+      ],
+    }));
+
+    expect(attempts.map(({ provider, model, promptCacheScope }) => ({
+      provider,
+      model,
+      promptCacheScope,
+    }))).toEqual([
+      {
+        provider: 'litellm-qwen3.7-max',
+        model: 'qwen/custom-mobile-refiner',
+        promptCacheScope: 'mobile-voice:desktop-1:litellm-qwen3.7-max',
+      },
+      {
+        provider: 'codex-gpt-5.4-nano',
+        model: 'gpt-5.4-nano',
+        promptCacheScope: 'mobile-voice:desktop-1:codex-gpt-5.4-nano',
+      },
+      {
+        provider: 'litellm-deepseek-v4-flash',
+        model: 'deepseek/deepseek-v4-flash',
+        promptCacheScope: 'mobile-voice:desktop-1:litellm-deepseek-v4-flash',
+      },
+    ]);
   });
 
   it('normalizes the desktop transcribe result before inserting into the draft', () => {
@@ -286,7 +360,138 @@ describe('mobileVoiceInput', () => {
     })).rejects.toThrow('语音上传失败: HTTP 403 Forbidden');
   });
 
-  it('streams mobile refinement previews from managed refine SSE chunks', async () => {
+  it('transcribes recorded audio on mobile with the stored host credential and refines the result', async () => {
+    const fetchCloud = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.endsWith('/v1/audio/transcriptions')) {
+        return {
+          ok: true,
+          status: 200,
+          statusText: 'OK',
+          json: async () => ({ text: '嗯 我想看一下 litellm' }),
+        } as Response;
+      }
+      return {
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: async () => ({
+          choices: [{ message: { content: JSON.stringify({ text: '我想看一下 LiteLLM。' }) } }],
+        }),
+      } as Response;
+    });
+    const blob = new Blob(['voice'], { type: 'audio/mp4' });
+    const submitted: string[] = [];
+    const refining: string[] = [];
+
+    const result = await transcribeMobileVoiceRecordingWithCredential({
+      uri: 'file:///tmp/mobile-voice.m4a',
+      size: blob.size,
+      mimeType: 'audio/mp4',
+      fileName: 'mobile-voice.m4a',
+    }, blob, storedCredential(), {
+      deps: { fetch: fetchCloud as unknown as typeof fetch },
+      onSubmittedTranscript: (raw) => {
+        submitted.push(raw.text);
+      },
+      onRefinementStarted: (raw) => {
+        refining.push(raw.text);
+      },
+    });
+
+    expect(result).toMatchObject({
+      text: '我想看一下 LiteLLM。',
+      rawText: '嗯 我想看一下 litellm',
+      refined: true,
+      provider: 'litellm-batch',
+      model: 'elevenlabs/scribe_v2',
+      refinerProvider: 'litellm-gpt-5.4-mini',
+    });
+    expect(fetchCloud).toHaveBeenNthCalledWith(
+      1,
+      `${GW_PROXY}/v1/audio/transcriptions`,
+      expect.objectContaining({
+        method: 'POST',
+        headers: { Authorization: 'Bearer sk-mobile-voice' },
+      }),
+    );
+    const refineBody = JSON.parse((fetchCloud.mock.calls[1][1] as RequestInit).body as string);
+    expect(refineBody.model).toBe('gpt-5.4-mini');
+    expect(refineBody.response_format).toEqual({ type: 'json_object' });
+    expect(refineBody.messages[1].content).toContain('嗯 我想看一下 litellm');
+    expect(submitted).toEqual(['嗯 我想看一下 litellm']);
+    expect(refining).toEqual(['嗯 我想看一下 litellm']);
+  });
+
+  it('falls back through the synced desktop refiner chain before any streamed preview is shown', async () => {
+    const fetchCloud = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.endsWith('/v1/audio/transcriptions')) {
+        return {
+          ok: true,
+          status: 200,
+          statusText: 'OK',
+          json: async () => ({ text: 'raw mobile voice' }),
+        } as Response;
+      }
+      const body = JSON.parse((init?.body as string) ?? '{}') as { model?: string };
+      if (body.model === 'gpt-5.4-mini') {
+        return {
+          ok: false,
+          status: 502,
+          statusText: 'Bad Gateway',
+          text: async () => JSON.stringify({ error: { message: 'primary refiner unavailable' } }),
+        } as unknown as Response;
+      }
+      return {
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        body: undefined,
+        json: async () => ({
+          choices: [{ message: { content: JSON.stringify({ text: 'refined by fallback' }) } }],
+        }),
+      } as unknown as Response;
+    });
+    const blob = new Blob(['voice'], { type: 'audio/mp4' });
+
+    const result = await transcribeMobileVoiceRecordingWithCredential({
+      uri: 'file:///tmp/mobile-voice.m4a',
+      size: blob.size,
+      mimeType: 'audio/mp4',
+    }, blob, storedCredential({
+      refinerProviderChain: [
+        {
+          provider: 'litellm-gpt-5.4-mini',
+          model: 'gpt-5.4-mini',
+          auth: 'api-key',
+          transport: 'litellm-chat-completions',
+          endpointPath: '/v1/chat/completions',
+        },
+        {
+          provider: 'litellm-deepseek-v4-flash',
+          model: 'deepseek/deepseek-v4-flash',
+          auth: 'api-key',
+          transport: 'litellm-chat-completions',
+          endpointPath: '/v1/chat/completions',
+        },
+      ],
+    }), {
+      deps: { fetch: fetchCloud as unknown as typeof fetch },
+    });
+
+    expect(result).toMatchObject({
+      text: 'refined by fallback',
+      rawText: 'raw mobile voice',
+      refined: true,
+      refinerProvider: 'litellm-deepseek-v4-flash',
+      refinerModel: 'deepseek/deepseek-v4-flash',
+    });
+    const models = fetchCloud.mock.calls.slice(1).map(([, init]) =>
+      JSON.parse((init as RequestInit).body as string).model,
+    );
+    expect(models).toEqual(['gpt-5.4-mini', 'deepseek/deepseek-v4-flash']);
+  });
+
+  it('streams mobile refinement previews from LiteLLM SSE chunks', async () => {
     const encoder = new TextEncoder();
     const stream = new ReadableStream<Uint8Array>({
       start(controller) {
@@ -301,64 +506,75 @@ describe('mobileVoiceInput', () => {
         controller.close();
       },
     });
+    const fetchCloud = vi.fn(async (url: string) => {
+      if (url.endsWith('/v1/audio/transcriptions')) {
+        return {
+          ok: true,
+          status: 200,
+          statusText: 'OK',
+          json: async () => ({ text: '嗯 我想看一下 litellm' }),
+        } as Response;
+      }
+      return {
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        body: stream,
+        json: async () => {
+          throw new Error('streaming response should not use json()');
+        },
+      } as unknown as Response;
+    });
+    const blob = new Blob(['voice'], { type: 'audio/mp4' });
+    const previews: string[] = [];
+
+    const result = await transcribeMobileVoiceRecordingWithCredential({
+      uri: 'file:///tmp/mobile-voice.m4a',
+      size: blob.size,
+      mimeType: 'audio/mp4',
+    }, blob, storedCredential(), {
+      deps: { fetch: fetchCloud as unknown as typeof fetch },
+      onRefinementPreview: (text) => previews.push(text),
+    });
+
+    expect(previews).toEqual(['我想', '我想看一下 LiteLLM。']);
+    expect(result).toMatchObject({
+      text: '我想看一下 LiteLLM。',
+      rawText: '嗯 我想看一下 litellm',
+      refined: true,
+    });
+  });
+
+  it('uses the synced refiner endpoint path instead of hardcoding chat completions', async () => {
     const fetchCloud = vi.fn(async () => ({
       ok: true,
       status: 200,
       statusText: 'OK',
-      body: stream,
-      json: async () => {
-        throw new Error('streaming response should not use json()');
-      },
+      body: undefined,
+      json: async () => ({
+        choices: [{ message: { content: JSON.stringify({ text: 'refined via custom path' }) } }],
+      }),
     } as unknown as Response));
     const client = new MobileLiteLlmTextModelClient({
+      proxyApiKey: 'sk-mobile-voice',
+      baseUrl: GW_PROXY,
+      endpointPath: '/custom/chat/completions',
       deps: { fetch: fetchCloud as unknown as typeof fetch },
-      requestTargetProvider: async () => ({
-        url: 'https://voice.example.com/api/voice/sessions/session-1/refine?provider=auto',
-        authorization: 'Bearer refine-token',
+    });
+
+    await expect(client.requestJson<{ text: string }>({
+      model: 'gpt-5.4-mini',
+      system: 'Return JSON.',
+      user: { text: 'raw' },
+      schemaName: 'VoiceRefinement',
+    })).resolves.toEqual({ text: 'refined via custom path' });
+    expect(fetchCloud).toHaveBeenCalledWith(
+      `${GW_PROXY}/custom/chat/completions`,
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({ Authorization: 'Bearer sk-mobile-voice' }),
       }),
-    });
-    const previews: string[] = [];
-
-    const result = await client.requestJson<{ text: string }>({
-      model: 'auto',
-      system: 'Return JSON.',
-      user: { promptVersion: 'v9', dictationText: '嗯 我想看一下 litellm' },
-      schemaName: 'dictation_refinement',
-      promptCacheScope: 'mobile-voice:host-a',
-      onTextSnapshot: (text) => previews.push(text),
-    });
-
-    expect(previews).toEqual(['我想', '我想看一下 LiteLLM。']);
-    expect(result).toEqual({ text: '我想看一下 LiteLLM。' });
-    // 托管单请求:目标 URL 来自 voice-server refine 票据,不再拼接直连网关地址。
-    const [url, init] = fetchCloud.mock.calls[0] as unknown as [string, RequestInit];
-    expect(url).toBe('https://voice.example.com/api/voice/sessions/session-1/refine?provider=auto');
-    const body = JSON.parse(init.body as string);
-    expect(body.model).toBe('auto');
-    // warmup 与真实润色必须共用同一把 prompt_cache_key。
-    expect(body.prompt_cache_key).toBe(makeMobileRefinerPromptCacheKey({
-      model: 'auto',
-      schemaName: 'dictation_refinement',
-      promptVersion: 'v9',
-      system: 'Return JSON.',
-      scope: 'mobile-voice:host-a',
-    }));
-  });
-
-  it('derives a stable prompt cache key that only changes with its inputs', () => {
-    const base = {
-      model: 'auto',
-      schemaName: 'dictation_refinement',
-      promptVersion: 'v9',
-      system: 'Return JSON.',
-      scope: 'mobile-voice:host-a',
-    };
-    const key = makeMobileRefinerPromptCacheKey(base);
-    expect(key).toMatch(/^xdt:dictation_refinement:[0-9a-f]{16}$/);
-    expect(makeMobileRefinerPromptCacheKey(base)).toBe(key);
-    expect(makeMobileRefinerPromptCacheKey({ ...base, scope: 'mobile-voice:host-b' })).not.toBe(key);
-    expect(makeMobileRefinerPromptCacheKey({ ...base, system: 'Return JSON!' })).not.toBe(key);
-    expect(makeMobileRefinerPromptCacheKey({ ...base, promptVersion: 'v10' })).not.toBe(key);
+    );
   });
 
   it('refreshes the managed voice access token once after a 401 refinement response', async () => {
@@ -390,65 +606,235 @@ describe('mobileVoiceInput', () => {
     expect(fetchCloud).toHaveBeenCalledTimes(2);
   });
 
-  it('parses buffered SSE text when React Native fetch has no readable body', async () => {
+  it('parses buffered LiteLLM SSE text when React Native fetch has no readable body', async () => {
+    const fetchCloud = vi.fn(async (url: string) => {
+      if (url.endsWith('/v1/audio/transcriptions')) {
+        return {
+          ok: true,
+          status: 200,
+          statusText: 'OK',
+          json: async () => ({ text: 'mock realtime voice draft' }),
+        } as Response;
+      }
+      return {
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        body: undefined,
+        text: async () => [
+          'data: {"choices":[{"delta":{"content":"{\\"text\\":\\"mock refined"}}]}',
+          '',
+          'data: {"choices":[{"delta":{"content":" voice draft\\"}"}}]}',
+          '',
+          'data: [DONE]',
+          '',
+        ].join('\n'),
+        json: async () => {
+          throw new Error('buffered SSE response should not use json()');
+        },
+      } as unknown as Response;
+    });
+    const blob = new Blob(['voice'], { type: 'audio/mp4' });
+    const previews: string[] = [];
+
+    const result = await transcribeMobileVoiceRecordingWithCredential({
+      uri: 'file:///tmp/mobile-voice.m4a',
+      size: blob.size,
+      mimeType: 'audio/mp4',
+    }, blob, storedCredential(), {
+      deps: { fetch: fetchCloud as unknown as typeof fetch },
+      onRefinementPreview: (text) => previews.push(text),
+    });
+
+    expect(previews).toEqual(['mock refined', 'mock refined voice draft']);
+    expect(result).toMatchObject({
+      text: 'mock refined voice draft',
+      rawText: 'mock realtime voice draft',
+      refined: true,
+    });
+  });
+
+  it('can skip refinement and return raw mobile ASR text', async () => {
     const fetchCloud = vi.fn(async () => ({
       ok: true,
       status: 200,
       statusText: 'OK',
-      body: undefined,
-      text: async () => [
-        'data: {"choices":[{"delta":{"content":"{\\"text\\":\\"mock refined"}}]}',
-        '',
-        'data: {"choices":[{"delta":{"content":" voice draft\\"}"}}]}',
-        '',
-        'data: [DONE]',
-        '',
-      ].join('\n'),
-      json: async () => {
-        throw new Error('buffered SSE response should not use json()');
-      },
-    } as unknown as Response));
-    const client = new MobileLiteLlmTextModelClient({
+      json: async () => ({ text: 'raw text' }),
+    } as Response));
+    const blob = new Blob(['voice'], { type: 'audio/mp4' });
+
+    const result = await transcribeMobileVoiceRecordingWithCredential({
+      uri: 'file:///tmp/mobile-voice.m4a',
+      size: blob.size,
+      mimeType: 'audio/mp4',
+    }, blob, storedCredential(), {
+      refinementEnabled: false,
       deps: { fetch: fetchCloud as unknown as typeof fetch },
-      requestTargetProvider: async () => ({
-        url: 'https://voice.example.com/api/voice/sessions/session-1/refine?provider=auto',
-        authorization: 'Bearer refine-token',
-      }),
-    });
-    const previews: string[] = [];
-
-    const result = await client.requestJson<{ text: string }>({
-      model: 'auto',
-      system: 'Return JSON.',
-      user: { dictationText: 'mock realtime voice draft' },
-      schemaName: 'dictation_refinement',
-      onTextSnapshot: (text) => previews.push(text),
     });
 
-    expect(previews).toEqual(['mock refined', 'mock refined voice draft']);
-    expect(result).toEqual({ text: 'mock refined voice draft' });
+    expect(result).toMatchObject({ text: 'raw text', rawText: 'raw text', refined: false });
+    expect(fetchCloud).toHaveBeenCalledTimes(1);
   });
 
-  it('surfaces managed refine HTTP error details', async () => {
-    const fetchCloud = vi.fn(async () => ({
-      ok: false,
-      status: 500,
-      statusText: 'Server Error',
-      text: async () => JSON.stringify({ error: { message: 'managed refiner unavailable' } }),
-    } as unknown as Response));
-    const client = new MobileLiteLlmTextModelClient({
+  it('keeps raw ASR text when refinement fails', async () => {
+    const fetchCloud = vi.fn(async (url: string) => {
+      if (url.endsWith('/v1/audio/transcriptions')) {
+        return {
+          ok: true,
+          status: 200,
+          statusText: 'OK',
+          json: async () => ({ text: 'raw text' }),
+        } as Response;
+      }
+      return {
+        ok: false,
+        status: 500,
+        statusText: 'Server Error',
+        json: async () => ({}),
+      } as Response;
+    });
+    const blob = new Blob(['voice'], { type: 'audio/mp4' });
+
+    const result = await transcribeMobileVoiceRecordingWithCredential({
+      uri: 'file:///tmp/mobile-voice.m4a',
+      size: blob.size,
+      mimeType: 'audio/mp4',
+    }, blob, storedCredential(), {
       deps: { fetch: fetchCloud as unknown as typeof fetch },
-      requestTargetProvider: async () => ({
-        url: 'https://voice.example.com/api/voice/sessions/session-1/refine?provider=auto',
-        authorization: 'Bearer refine-token',
-      }),
     });
 
-    await expect(client.requestJson<{ text: string }>({
-      model: 'auto',
-      system: 'Return JSON.',
-      user: { dictationText: 'raw' },
-      schemaName: 'dictation_refinement',
-    })).rejects.toThrow('语音润色失败: HTTP 500 Server Error · managed refiner unavailable');
+    expect(result).toMatchObject({
+      text: 'raw text',
+      rawText: 'raw text',
+      refined: false,
+      refineError: '语音润色失败: HTTP 500 Server Error',
+    });
+  });
+
+  it('includes redacted cloud ASR error details when transcription fails', async () => {
+    const fetchCloud = vi.fn(async () => ({
+      ok: false,
+      status: 401,
+      statusText: 'Unauthorized',
+      text: async () => JSON.stringify({
+        error: {
+          message: 'invalid bearer sk-mobile-voice for gpt-realtime-whisper',
+        },
+      }),
+    } as unknown as Response));
+    const blob = new Blob(['voice'], { type: 'audio/mp4' });
+
+    await expect(transcribeMobileVoiceRecordingWithCredential({
+      uri: 'file:///tmp/mobile-voice.m4a',
+      size: blob.size,
+      mimeType: 'audio/mp4',
+    }, blob, storedCredential(), {
+      deps: { fetch: fetchCloud as unknown as typeof fetch },
+      refinementEnabled: false,
+    })).rejects.toThrow(
+      '语音识别失败: HTTP 401 Unauthorized · invalid bearer [REDACTED] for gpt-realtime-whisper',
+    );
+  });
+
+  it('includes redacted cloud refinement error details when the model call fails', async () => {
+    const fetchCloud = vi.fn(async (url: string) => {
+      if (url.endsWith('/v1/audio/transcriptions')) {
+        return {
+          ok: true,
+          status: 200,
+          statusText: 'OK',
+          json: async () => ({ text: 'raw text' }),
+        } as Response;
+      }
+      return {
+        ok: false,
+        status: 500,
+        statusText: 'Server Error',
+        text: async () => JSON.stringify({
+          error: {
+            message: 'model gpt-5.4-mini rejected key sk-mobile-voice',
+          },
+        }),
+      } as unknown as Response;
+    });
+    const blob = new Blob(['voice'], { type: 'audio/mp4' });
+
+    const result = await transcribeMobileVoiceRecordingWithCredential({
+      uri: 'file:///tmp/mobile-voice.m4a',
+      size: blob.size,
+      mimeType: 'audio/mp4',
+    }, blob, storedCredential(), {
+      deps: { fetch: fetchCloud as unknown as typeof fetch },
+    });
+
+    expect(result).toMatchObject({
+      text: 'raw text',
+      rawText: 'raw text',
+      refined: false,
+      refineError: '语音润色失败: HTTP 500 Server Error · model gpt-5.4-mini rejected key [REDACTED]',
+    });
+  });
+
+  it('redacts the synced voice key from refinement errors', async () => {
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(encoder.encode([
+          'data: {"error":{"message":"upstream rejected Authorization Bearer sk-mobile-voice"}}',
+          '',
+          'data: [DONE]',
+          '',
+        ].join('\n')));
+        controller.close();
+      },
+    });
+    const fetchCloud = vi.fn(async (url: string) => {
+      if (url.endsWith('/v1/audio/transcriptions')) {
+        return {
+          ok: true,
+          status: 200,
+          statusText: 'OK',
+          json: async () => ({ text: 'raw text' }),
+        } as Response;
+      }
+      return {
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        body: stream,
+      } as unknown as Response;
+    });
+    const blob = new Blob(['voice'], { type: 'audio/mp4' });
+
+    const result = await transcribeMobileVoiceRecordingWithCredential({
+      uri: 'file:///tmp/mobile-voice.m4a',
+      size: blob.size,
+      mimeType: 'audio/mp4',
+    }, blob, storedCredential(), {
+      deps: { fetch: fetchCloud as unknown as typeof fetch },
+    });
+
+    expect(result.refineError).toContain('[REDACTED]');
+    expect(result.refineError).not.toContain('sk-mobile-voice');
+  });
+
+  it('keeps the legacy file-upload transcription helper limited to batch ASR credentials', async () => {
+    const blob = new Blob(['voice'], { type: 'audio/mp4' });
+
+    await expect(transcribeMobileVoiceRecordingWithCredential({
+      uri: 'file:///tmp/mobile-voice.m4a',
+      size: blob.size,
+      mimeType: 'audio/mp4',
+    }, blob, storedCredential({
+      asr: {
+        provider: 'litellm-gpt-realtime-whisper',
+        model: 'gpt-realtime-whisper',
+        auth: 'api-key',
+        mode: 'realtime-websocket',
+        endpointPath: '/openai/passthrough/v1/realtime?intent=transcription',
+      },
+    }), {
+      deps: { fetch: vi.fn() as unknown as typeof fetch },
+    })).rejects.toThrow('暂不支持 realtime-websocket');
   });
 });

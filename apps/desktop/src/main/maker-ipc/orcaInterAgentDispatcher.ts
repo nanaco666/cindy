@@ -1,8 +1,8 @@
 import {
   formatAgentMessage,
   formatOrcaCommunicationMessage,
-} from '@cindy/orca-workflow';
-import type { AgentKind, SessionSendOptions, SessionSendResult, UserMessage } from '@cindy/maker-core';
+} from '@fmfsaisai/orca-workflow';
+import type { AgentKind, SessionSendOptions, SessionSendResult, UserMessage } from '@lizi/maker-core';
 
 import type {
   AgentInputCreateOpts,

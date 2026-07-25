@@ -16,7 +16,7 @@
  *     remote): Phase 4.3 在 maker-core 端处理
  *   - UI 入口(添加远程项目 dialog vendor 选择): Phase 4.4
  *
- * Smoke test 已验证(2026-06-05 cache host):
+ * Smoke test 已验证(2026-06-05 cache host, 见 docs/cc-remote-follow-up.md):
  *   - daemon nohup setsid 启动 / sock ready / protocol/hello 返 protocolVersion
  *   - OpenBSD nc 支持 `-U` (unix socket) + 双向桥
  *   - daemon 主进程 cmdline 是 `node cc-mgr.mjs daemon --socket ...`
@@ -31,14 +31,14 @@ import {
   createRemoteQuery,
   METHODS,
   SERVER_METHODS,
-} from '@cindy/maker-cc-manager';
+} from '@lizi/maker-cc-manager';
 import type {
   RemoteQuery,
   QueryStartParams,
   SessionListResult,
   ApprovalRequestParams,
   ApprovalRequestResult,
-} from '@cindy/maker-cc-manager';
+} from '@lizi/maker-cc-manager';
 import {
   REMOTE_CC_MGR_BUNDLE_PATH,
   REMOTE_CC_MGR_DIR,
@@ -46,8 +46,8 @@ import {
   REMOTE_CC_MGR_PID_PATH,
   REMOTE_CC_MGR_SOCK_PATH,
   REMOTE_XDT_NODE_PATH,
-} from '@cindy/maker-remote-ssh';
-import type { RemoteHost, ExecStreamHandle } from '@cindy/maker-remote-ssh';
+} from '@lizi/maker-remote-ssh';
+import type { RemoteHost, ExecStreamHandle } from '@lizi/maker-remote-ssh';
 
 import { createLogger } from '../logger.js';
 import { drainPersistQueue } from '../messagePersistBroadcaster.js';

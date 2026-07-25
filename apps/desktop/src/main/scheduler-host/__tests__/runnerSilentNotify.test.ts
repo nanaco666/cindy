@@ -5,14 +5,14 @@ import type {
   Maker,
   Session,
   SessionSendResult,
-} from '@cindy/maker-core';
-import type { Scheduler } from '@cindy/maker-scheduler';
+} from '@lizi/maker-core';
+import type { Scheduler } from '@lizi/maker-scheduler';
 import type {
   FireContext,
   Logger,
   Notifier,
   Schedule,
-} from '@cindy/maker-scheduler';
+} from '@lizi/maker-scheduler';
 
 const mocks = vi.hoisted(() => ({
   createMessage: vi.fn(),

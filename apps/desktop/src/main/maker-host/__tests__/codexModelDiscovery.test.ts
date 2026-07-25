@@ -3,7 +3,7 @@
  * 验证筛选(visibility/supported_in_api)+ 规范化映射 + capability 字段。
  */
 import fsp from 'node:fs/promises';
-import type { CodexModelListItem } from '@cindy/maker-core';
+import type { CodexModelListItem } from '@lizi/maker-core';
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 

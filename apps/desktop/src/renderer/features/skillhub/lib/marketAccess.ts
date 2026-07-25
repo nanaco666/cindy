@@ -3,7 +3,8 @@
  *
  * 市场当前是 xd 组织的内部市场:仅 xd 组织的企业(org)成员可见。
  * 个人账号、非 xd 组织的企业账号、未登录 / 登录态未就绪一律不可见(fail-closed),
- * 技能页只保留本地技能管理。
+ * 技能页只保留本地技能管理。判定风格与插件页「团队共享」分组的
+ * `showsEnterpriseGhostGroup` 一致。
  *
  * 判据:主判据是 `orgSlug`(access token 的 orgSlug claim,auth-server 由已验证
  * 域名派生、全局唯一,xd.com → 'xd');orgId 是 cuid、orgName 是可重名的显示名,

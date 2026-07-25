@@ -556,49 +556,6 @@ describe('makerChatStore active view tracking', () => {
       expect(snapshot.oldestMessageId).toBeNull();
       expect(snapshot.hasMoreMessages).toBe(false);
     });
-
-    it('keeps legacy single-row removal compatible with an in-flight paging window', async () => {
-      const sessionId = sid('older-backfill-single-delete-compat');
-      await seedSession(sessionId);
-
-      let resolveOlderPage!: (rows: Message[]) => void;
-      vi.mocked(messageService.list).mockReturnValueOnce(
-        new Promise<Message[]>((resolve) => {
-          resolveOlderPage = resolve;
-        }),
-      );
-
-      makerChatStore.loadOlderMessages(sessionId);
-      makerChatStore.removeMessageByClientId(sessionId, 'client-current');
-      resolveOlderPage(fullPage(sessionId, 999).slice(0, 10));
-      await flushPagingLoop();
-
-      const snapshot = makerChatStore.getSnapshot(sessionId);
-      expect(snapshot.messages).toHaveLength(10);
-      expect(snapshot.messages.some((message) => message.clientId === 'client-current')).toBe(false);
-      expect(snapshot.isLoadingMore).toBe(false);
-    });
-
-    it('discards an in-flight paging window after grouped deletion', async () => {
-      const sessionId = sid('older-backfill-group-delete-race');
-      await seedSession(sessionId);
-
-      let resolveOlderPage!: (rows: Message[]) => void;
-      vi.mocked(messageService.list).mockReturnValueOnce(
-        new Promise<Message[]>((resolve) => {
-          resolveOlderPage = resolve;
-        }),
-      );
-
-      makerChatStore.loadOlderMessages(sessionId);
-      makerChatStore.removeMessagesByClientIds(sessionId, ['client-current']);
-      resolveOlderPage(fullPage(sessionId, 999).slice(0, 10));
-      await flushPagingLoop();
-
-      const snapshot = makerChatStore.getSnapshot(sessionId);
-      expect(snapshot.messages).toHaveLength(0);
-      expect(snapshot.isLoadingMore).toBe(false);
-    });
   });
 
   // 反向验证：Set 版没破坏原 522b2b31 的 demote 触发条件——session leave 后超过

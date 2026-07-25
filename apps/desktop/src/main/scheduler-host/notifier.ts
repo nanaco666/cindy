@@ -1,7 +1,7 @@
 /**
  * Phase 3: DesktopNotifier
  *
- * 实现 `Notifier` 接口（来自 @cindy/maker-scheduler）。
+ * 实现 `Notifier` 接口（来自 @lizi/maker-scheduler）。
  *
  * 桌面通道：直接复用 notificationService 的 main 进程入口。
  * 飞书通道：Phase 3 暂时只 log 一行（owner openId 解析逻辑要等 Phase 4 IPC
@@ -11,14 +11,13 @@
  */
 
 import type { BrowserWindow } from 'electron';
-import type { Notifier, Schedule, ScheduleRun } from '@cindy/maker-scheduler';
-import type { FeishuIM } from '@cindy/im';
+import type { Notifier, Schedule, ScheduleRun } from '@lizi/maker-scheduler';
+import type { FeishuIM } from 'lizi-im';
 
-import type { Logger } from '@cindy/maker-scheduler';
+import type { Logger } from '@lizi/maker-scheduler';
 
 import { stripTrailingPathSeparators } from '../../shared/pathText';
 import { showDesktopSessionEvent } from '../notificationService';
-import { getMobileNotifyGeneration, sendMobileSessionNotify } from '../device-link';
 
 export interface DesktopNotifierDeps {
   getMainWindow: () => BrowserWindow | null;
@@ -32,9 +31,6 @@ export class DesktopNotifier implements Notifier {
   constructor(private readonly deps: DesktopNotifierDeps) {}
 
   async notify(schedule: Schedule, run: ScheduleRun): Promise<void> {
-    // 链路代次在任何 await 之前捕获:飞书分支的 await 期间可能发生登出/换号,
-    // 发送侧按代次不一致丢弃,旧账号调度的通知不会进新账号的链路。
-    const generation = getMobileNotifyGeneration();
     if (schedule.notify.desktop && this.deps.shouldNotifyDesktop()) {
       try {
         this.notifyDesktop(schedule, run);
@@ -47,26 +43,6 @@ export class DesktopNotifier implements Notifier {
         await this.notifyFeishu(schedule, run);
       } catch (err) {
         this.deps.logger.warn?.('feishu notify failed', err);
-      }
-    }
-    // 手机推送随 schedule 的通知意愿走:desktop / feishu 全关表示用户不想被这个
-    // 调度打扰,mobile 不得绕过(schedule 级暂无独立 mobile 开关,任一通道开启即
-    // 视为允许提醒);是否真的收到仍由手机端注册 token 决定,发送侧防打扰在
-    // device-link 模块收口,失败静默。
-    if (run.sessionId && (schedule.notify.desktop || schedule.notify.feishu)) {
-      try {
-        // 正文带运行结果摘要(与飞书卡片同源素材):成功给 resultText,失败给
-        // errorMsg;缺省回退终态短文案。截断由 mobileNotify 按协议上限统一处理。
-        const detail = run.status === 'success' ? run.resultText : run.errorMsg;
-        sendMobileSessionNotify({
-          sessionId: run.sessionId,
-          title: schedule.name,
-          kind: run.status === 'success' ? 'done' : 'error',
-          generation,
-          ...(detail ? { detail } : {}),
-        });
-      } catch (err) {
-        this.deps.logger.warn?.('mobile notify failed', err);
       }
     }
   }

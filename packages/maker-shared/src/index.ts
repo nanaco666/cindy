@@ -1,5 +1,4 @@
 export * from './agentCapabilities.js';
-export * from './agentInputProjection.js';
 export * from './agentTask.js';
 export * from './branding.js';
 export * from './brandIdentity.js';
@@ -12,7 +11,6 @@ export * from './fileBrowserGrid.js';
 export * from './filePreview.js';
 export * from './fixtures.js';
 export * from './deviceLinkContract.js';
-export * from './errorRedaction.js';
 export * from './expandedBlockMemory.js';
 export * from './interaction.js';
 export * from './mathMarkdown.js';

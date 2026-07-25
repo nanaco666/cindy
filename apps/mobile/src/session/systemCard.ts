@@ -8,7 +8,7 @@ import {
   parseLocalSystemCommand,
   type SystemCardPresentation,
   type SystemCardType,
-} from '@cindy/maker-shared/system-card';
+} from '@lizi/maker-shared/system-card';
 
 /**
  * 手机端系统卡类型 = 共享 slash 命令卡 + goal 持久记录卡 + silent-stop 自动续跑卡。
@@ -94,10 +94,8 @@ export function formatMobileSystemCard(
 }
 
 /**
- * session-agent-switch 边界卡的纯数据兜底(标题 + 目标模型行)。
- * 注意:实际渲染已改由 MessageRenderer 的 MobileAgentSwitchCard 直接读 data
- * 走「分隔线 + 药丸 + 可展开交接」1:1 对齐桌面 AgentSwitchCard,不再经过本函数;
- * 这里仅保留为 formatMobileSystemCard 在该 union 分支上的类型完备兜底。
+ * session-agent-switch 边界卡(对齐桌面 AgentSwitchCard 的分隔条语义)。
+ * 手机端只展示切换事实与目标模型,交接全文不展开(控制端小屏无核查场景)。
  */
 function formatAgentSwitchCard(data: Record<string, unknown> | undefined): SystemCardPresentation {
   const engineLabel = (kind: unknown): string => (kind === 'codex' ? 'Codex' : 'Claude Code');

@@ -1,5 +1,5 @@
 /**
- * catalog-to-descriptors —— 把 @cindy/model-providers 目录派生成 maker-core 的 per-agent
+ * catalog-to-descriptors —— 把 @lizi/model-providers 目录派生成 maker-core 的 per-agent
  * availableModels（ModelDescriptor[]）。
  *
  * 背景：模型清单的 SSoT 已迁到目录（providers.json）。maker-core 不再写死 CLAUDE_MODELS /
@@ -8,7 +8,7 @@
  *
  * union 规则：按 `catalog.providers` 数组序 flatMap 各 provider 的 `models[agent]`，按 id
  * **首见胜出**去重（provider 序即 anthropic → openai → xd）。同一 agent 内同 id 跨 provider
- * 的元数据一致性由 @cindy/model-providers 的 parseCatalog → validateModelConsistency 保证，
+ * 的元数据一致性由 @lizi/model-providers 的 parseCatalog → validateModelConsistency 保证，
  * 因此去重取首个即可，不会丢信息。
  *
  * 顺序契约（no-break）：派生结果必须逐字逐序复现迁移前的有效列表
@@ -16,8 +16,8 @@
  * 由 maker-host 的 catalogDerivedModels.test.ts 守。
  */
 
-import type { Catalog, CatalogModel, AgentKind } from '@cindy/model-providers';
-import type { ModelDescriptor } from '@cindy/maker-core';
+import type { Catalog, CatalogModel, AgentKind } from '@lizi/model-providers';
+import type { ModelDescriptor } from '@lizi/maker-core';
 
 /** Maker 能力读取面的最小形状；保留数组引用以让已创建 Session 同步看到新目录。 */
 interface ModelCapabilitiesTarget {

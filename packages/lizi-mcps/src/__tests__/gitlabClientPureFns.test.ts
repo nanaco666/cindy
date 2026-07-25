@@ -1,7 +1,7 @@
 /**
  * gitlab-client —— 易错纯逻辑回归测试(PR #461 follow-up)。
  *
- * gitlab-client 包本身无测试基建,故在 @cindy/mcps(已有 vitest 且依赖该 client)里覆盖:
+ * gitlab-client 包本身无测试基建,故在 lizi-mcps(已有 vitest 且依赖该 client)里覆盖:
  *  1. request() 的空 body 短路四分支(304 / 204 / Content-Length:0 / 空文本)——
  *     必须返 undefined,绝不能让 res.json() 对空 body 抛 SyntaxError 误报 API 失败;
  *     非空 body 仍正常 JSON.parse。
@@ -14,7 +14,7 @@
  */
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { GitlabClient } from '@cindy/gitlab-client';
+import { GitlabClient } from '@lizi/gitlab-client';
 
 /** 用 as any 拿到私有 request(),直接断言四条空 body 分支的返回值。 */
 type RequestFn = (method: string, path: string, body?: unknown) => Promise<unknown>;

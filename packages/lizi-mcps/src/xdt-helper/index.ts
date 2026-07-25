@@ -5,7 +5,7 @@
  * from here and registers everything in one go (mirrors scheduler/index.ts).
  *
  * Note: handoff 工具 send_to_session 注册在 cindy_helper 的 handoff 类目(走 call_tool,essential 常开)。
- * 协同 team 工具由 cindy_orca server(src/orca/)托管,通过本目录的 register*Tool 注册。
+ * 协同 team 工具由 lizi_orca server(src/orca/)托管,通过本目录的 register*Tool 注册。
  */
 
 export { registerGetCapabilitiesTool } from './get_capabilities.js';
@@ -91,7 +91,7 @@ export {
   registerListAvailableModelsTool,
   type ListAvailableModelsDeps,
 } from './list_available_models.js';
-// history tools (split out from xdt-helper but kept exports here)
+// history tools (main MR !85 split out from xdt-helper but kept exports here)
 export {
   registerListWorkdirsTool,
   type ListWorkdirsToolDeps,
@@ -120,7 +120,6 @@ export type {
   XdtHelperHistoryDeps,
   HistoryAgentKind,
   HistoryOrder,
-  HistoryReadErrorCode,
   HistoryRole,
   HistoryCursor,
   HistoryPage,

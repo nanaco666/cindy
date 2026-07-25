@@ -13,7 +13,7 @@
  */
 import { useEffect, useState } from 'react';
 
-import type { ProviderView } from '@cindy/model-providers';
+import type { ProviderView } from '@lizi/model-providers';
 
 import { createLogger } from '@/lib/logger';
 
@@ -181,10 +181,6 @@ export async function prefetchDeviceProviders(deviceId: string): Promise<void> {
 }
 
 /** device-link:被控设备下线 / 断链时驱逐其供应商缓存(只清该设备的 key + 代际自增)。 */
-export function getCachedDeviceProviders(deviceId: string): ProviderView[] | null {
-  return cache.get(deviceId) ?? null;
-}
-
 export function evictDeviceProviders(deviceId: string): void {
   cache.delete(deviceId);
   inflight.delete(deviceId);

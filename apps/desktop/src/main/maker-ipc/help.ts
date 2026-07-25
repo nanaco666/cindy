@@ -1,8 +1,8 @@
 import { ipcMain } from 'electron';
 import { and, desc, inArray, ne } from 'drizzle-orm';
 
-import type { AgentKind, Maker, OneShotOptions } from '@cindy/maker-core';
-import { BRAND_NAME } from '@cindy/maker-shared/branding';
+import type { AgentKind, Maker, OneShotOptions } from '@lizi/maker-core';
+import { BRAND_NAME } from '@lizi/maker-shared/branding';
 
 import { createLogger } from '../logger.js';
 import { getDbClient } from '../localDb/client/current.js';
@@ -35,8 +35,6 @@ const ALLOWED_TABS = new Set<HelpTabId>([
   'connections',
   'im-bot',
   'about',
-  'ghosts',
-  'remote-control',
 ]);
 
 // Knowledge routing (progressive disclosure):
@@ -152,10 +150,9 @@ export function buildHelpPrompt(
 ): string {
   // Codex oneShot ignores maxTokens (see codex/index.ts), so cap length in the
   // prompt. Claude already has maxTokens=220 in buildOneShotOptions.
-  const lengthHint =
-    agentKind === 'codex'
-      ? 'Keep your answer under 3 short sentences. Do not use bulleted lists.'
-      : '';
+  const lengthHint = agentKind === 'codex'
+    ? 'Keep your answer under 3 short sentences. Do not use bulleted lists.'
+    : '';
   const tabLines = ACTION_TAB_MENU.map((c) => `- ${c.tab} -> ${c.purpose}`).join('\n');
   const hasDocs = docs.length > 0;
   const knowledge = hasDocs
@@ -251,7 +248,7 @@ async function pickHelpAgent(
   preferredAgent: AgentKind | null,
 ): Promise<AgentKind | null> {
   const ordered: AgentKind[] = preferredAgent
-    ? [...new Set<AgentKind>([preferredAgent, 'claude-code', 'codex'])]
+    ? ([...new Set<AgentKind>([preferredAgent, 'claude-code', 'codex'])])
     : ['claude-code', 'codex'];
   const available = new Set(maker.listAvailableAgents());
   for (const agentKind of ordered) {

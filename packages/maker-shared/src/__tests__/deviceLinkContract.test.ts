@@ -12,7 +12,6 @@ import {
   formatRemoteError,
   humanizeRemoteError,
   isAccessRevokedRemoteError,
-  isPreconditionFailedRemoteError,
   isMobileRemoteInvokeChannel,
   isTransientRemoteError,
   relayStatusHint,
@@ -29,15 +28,10 @@ describe('device-link shared contract', () => {
     expect(DEVICE_LINK_VOICE_CREDENTIAL_SYNC_CHANNEL).toBe('device-link:voice:credential-sync');
     expect(DEVICE_LINK_VOICE_DICTIONARY_LEARNING_CHANNEL).toBe('device-link:voice:dictionary-learning');
     expect(MOBILE_REMOTE_INVOKE_CHANNELS).toContain('maker:send');
-    expect(MOBILE_REMOTE_INVOKE_CHANNELS).toContain('maker:switch-session-agent');
-    expect(MOBILE_REMOTE_INVOKE_CHANNELS).toContain('maker:get-session-agent-switch-intent');
     expect(MOBILE_REMOTE_INVOKE_CHANNELS).toContain('maker:input:compact');
     expect(MOBILE_REMOTE_INVOKE_CHANNELS).toContain('local-db:messages:around-client-id');
-    expect(MOBILE_REMOTE_INVOKE_CHANNELS).toContain('maker:message:delete');
     expect(MOBILE_REMOTE_INVOKE_CHANNELS).toContain('maker:schedule:create-from-template');
     expect(MOBILE_REMOTE_INVOKE_CHANNELS).toContain('maker:schedule:delete-run');
-    expect(MOBILE_REMOTE_INVOKE_CHANNELS).toContain('maker:usage:codex-rate-limits');
-    expect(MOBILE_REMOTE_INVOKE_CHANNELS).toContain('maker:usage:codex-rate-limit-reset');
     expect(MOBILE_REMOTE_INVOKE_CHANNELS).not.toContain(DEVICE_LINK_VOICE_CREDENTIAL_SYNC_CHANNEL);
     expect(MOBILE_REMOTE_INVOKE_CHANNELS).toContain(DEVICE_LINK_VOICE_DICTIONARY_LEARNING_CHANNEL);
     expect(MOBILE_REMOTE_INVOKE_CHANNELS).toContain('text-file:read-preview');
@@ -59,21 +53,9 @@ describe('device-link shared contract', () => {
     expect(describeRemoteError('[MEDIA_FETCH_FAILED] oss upload failed')).toContain('获取电脑端文件失败');
     expect(describeRemoteError('[VOICE_TRANSCRIBE_FAILED] asr error')).toContain('语音转写失败');
     expect(describeRemoteError('[LINK_NOT_OPEN] no link')).toContain('控制链路已断开');
-    expect(describeRemoteError('[PRECONDITION_FAILED] OFFER_EXPIRED: expired')).toContain('重新确认');
-    expect(describeRemoteError('[PRECONDITION_FAILED] ACCOUNT_CHANGED: changed')).toContain('账号或工作区');
     expect(describeRemoteError('[INTERNAL] relay crashed')).toContain('远程调用失败');
     expect(describeRemoteError('[INTERNAL] relay crashed')).toContain('[INTERNAL] relay crashed');
     expect(describeRemoteError('unknown failure')).toBe('unknown failure');
-  });
-
-  it('detects structured and encoded precondition failures', () => {
-    expect(isPreconditionFailedRemoteError(
-      Object.assign(new Error('offer expired'), { code: 'PRECONDITION_FAILED' }),
-    )).toBe(true);
-    expect(isPreconditionFailedRemoteError(
-      new Error('[PRECONDITION_FAILED] OFFER_EXPIRED: refresh usage'),
-    )).toBe(true);
-    expect(isPreconditionFailedRemoteError(new Error('[INTERNAL] failed'))).toBe(false);
   });
 
   it('maps agent not-authenticated errors to guidance copy', () => {

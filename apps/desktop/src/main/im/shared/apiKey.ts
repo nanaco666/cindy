@@ -17,6 +17,6 @@ import { getProviderSecretStore } from '../../secrets/providerSecretStore.js';
  * safeStorage unavailable / decrypt failed — the store swallows errors and
  * returns null, and the caller treats null as "not configured".
  */
-export function readXdGatewayApiKey(): string | null {
+export function readXdProxyApiKey(): string | null {
   return getProviderSecretStore().get('xd');
 }

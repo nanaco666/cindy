@@ -1,5 +1,5 @@
-import type { DeviceView, PresenceSnapshot } from '@cindy/device-link';
-import { isControllableDevice } from '@cindy/maker-shared/device-list';
+import type { DeviceView, PresenceSnapshot } from '@lizi/device-link';
+import { isControllableDevice } from '@lizi/maker-shared/device-list';
 
 export interface PresenceDevicePatchResult {
   devices: readonly DeviceView[];

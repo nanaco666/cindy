@@ -108,72 +108,6 @@ function createHandle(args: {
   };
 }
 
-describe('Maker session creation singleflight', () => {
-  it('shares one startup when the same business session is restored concurrently', async () => {
-    let resolveStart!: (handle: AgentSessionHandle) => void;
-    const startPending = new Promise<AgentSessionHandle>((resolve) => {
-      resolveStart = resolve;
-    });
-    const startSession = vi.fn(() => startPending);
-    const maker = new Maker({
-      agents: { codex: createAgent(startSession) },
-      storage: createStorage(),
-      logger: createLogger(),
-    });
-    const created = vi.fn();
-    maker.on((event) => {
-      if (event.type === 'session:created') created(event.session);
-    });
-    const options: CreateSessionOptions = {
-      id: 'session-1',
-      agentKind: 'codex',
-      workingDir: '/repo',
-      model: 'gpt-5.4',
-      resumeSessionId: 'thread-1',
-    };
-
-    const first = maker.createSession(options);
-    const second = maker.createSession({ ...options });
-
-    expect(startSession).toHaveBeenCalledTimes(1);
-    resolveStart(createHandle({ id: 'thread-1' }));
-    const [firstSession, secondSession] = await Promise.all([first, second]);
-
-    expect(secondSession).toBe(firstSession);
-    expect(maker.listActiveSessions()).toEqual([firstSession]);
-    expect(created).toHaveBeenCalledTimes(1);
-    expect(created).toHaveBeenCalledWith(firstSession);
-  });
-
-  it('clears a failed startup so the same business session can be retried', async () => {
-    const startupError = new Error('start failed');
-    const startSession = vi.fn()
-      .mockRejectedValueOnce(startupError)
-      .mockResolvedValueOnce(createHandle({ id: 'thread-recovered' }));
-    const maker = new Maker({
-      agents: { codex: createAgent(startSession) },
-      storage: createStorage(),
-      logger: createLogger(),
-    });
-    const options: CreateSessionOptions = {
-      id: 'session-1',
-      agentKind: 'codex',
-      workingDir: '/repo',
-      model: 'gpt-5.4',
-      resumeSessionId: 'thread-1',
-    };
-
-    const first = maker.createSession(options);
-    const joined = maker.createSession({ ...options });
-    await expect(Promise.all([first, joined])).rejects.toBe(startupError);
-    expect(startSession).toHaveBeenCalledTimes(1);
-    expect(maker.listActiveSessions()).toEqual([]);
-
-    await expect(maker.createSession({ ...options })).resolves.toBeInstanceOf(Session);
-    expect(startSession).toHaveBeenCalledTimes(2);
-  });
-});
-
 describe('Maker before-start lifecycle hook', () => {
   it('awaits host preparation before starting the agent', async () => {
     const order: string[] = [];
@@ -230,92 +164,6 @@ describe('Maker before-start lifecycle hook', () => {
       'lifecycleHooks.onBeforeStart threw; continuing session startup',
       expect.objectContaining({ sessionId: 'session-1', workingDir: '/repo' }),
     );
-  });
-});
-
-describe('Maker start-option lifecycle hooks', () => {
-  it('prepares mutable start options before the agent and marks success before publish', async () => {
-    const order: string[] = [];
-    const startSession = vi.fn(async (opts: CreateSessionOptions) => {
-      order.push('start');
-      expect(opts.vendorOptions).toMatchObject({ orcaRole: 'lead' });
-      expect(opts.userPrompt).toBe('orca instructions');
-      return createHandle({ id: 'thread-1' });
-    });
-    const maker = new Maker({
-      agents: { codex: createAgent(startSession) },
-      storage: createStorage(),
-      logger: createLogger(),
-      lifecycleHooks: {
-        prepareStartOptions: async (_sessionId, opts) => {
-          order.push('prepare');
-          opts.vendorOptions = { orcaRole: 'lead' };
-          opts.userPrompt = 'orca instructions';
-        },
-        onStartSucceeded: async (sessionId, opts) => {
-          order.push('succeeded');
-          expect(sessionId).toBe('session-1');
-          expect(opts.vendorOptions).toMatchObject({ orcaRole: 'lead' });
-          expect(maker.getSession(sessionId)).toBeUndefined();
-        },
-      },
-    });
-    maker.on((event) => {
-      if (event.type === 'session:created') order.push('publish');
-    });
-
-    await maker.createSession({
-      id: 'session-1',
-      agentKind: 'codex',
-      workingDir: '/repo',
-      model: 'gpt-5.4',
-    });
-
-    expect(order).toEqual(['prepare', 'start', 'succeeded', 'publish']);
-  });
-
-  it('blocks agent startup when start-option preparation fails', async () => {
-    const startSession = vi.fn(async () => createHandle({ id: 'thread-1' }));
-    const onStartSucceeded = vi.fn();
-    const maker = new Maker({
-      agents: { codex: createAgent(startSession) },
-      storage: createStorage(),
-      logger: createLogger(),
-      lifecycleHooks: {
-        prepareStartOptions: async () => {
-          throw new Error('prepare failed');
-        },
-        onStartSucceeded,
-      },
-    });
-
-    await expect(maker.createSession({
-      id: 'session-1',
-      agentKind: 'codex',
-      workingDir: '/repo',
-      model: 'gpt-5.4',
-    })).rejects.toThrow('prepare failed');
-    expect(startSession).not.toHaveBeenCalled();
-    expect(onStartSucceeded).not.toHaveBeenCalled();
-    expect(maker.listActiveSessions()).toEqual([]);
-  });
-
-  it('does not run the success hook when agent startup fails', async () => {
-    const onStartSucceeded = vi.fn();
-    const maker = new Maker({
-      agents: { codex: createAgent(vi.fn().mockRejectedValue(new Error('start failed'))) },
-      storage: createStorage(),
-      logger: createLogger(),
-      lifecycleHooks: { onStartSucceeded },
-    });
-
-    await expect(maker.createSession({
-      id: 'session-1',
-      agentKind: 'codex',
-      workingDir: '/repo',
-      model: 'gpt-5.4',
-    })).rejects.toThrow('start failed');
-    expect(onStartSucceeded).not.toHaveBeenCalled();
   });
 });
 
@@ -1068,37 +916,6 @@ describe('Maker invalid-resume persistence bridge', () => {
       resumeSessionId: 'sdk-old',
     });
     expect((await storage.get('session-1'))?.sdkSessionId).toBeUndefined();
-  });
-
-  it('injects a compare-and-clear callback for fresh (non-resume) Claude sessions too', async () => {
-    // 全新会话(无 resumeSessionId)也可能把首个 turn 崩溃前落库的 fresh sdk id 变成幽灵 id,
-    // 需要同一把 CAS 才能清掉。之前该回调只对 resume 会话装配,全新会话会漏。
-    const storage = createStorage();
-    let captured: CreateSessionOptions['onInvalidResumeSession'];
-    const startSession = vi.fn(async (opts: CreateSessionOptions) => {
-      captured = opts.onInvalidResumeSession;
-      return createHandle({ id: 'sdk-fresh', agentKind: 'claude-code' });
-    });
-    const maker = new Maker({
-      agents: { 'claude-code': createAgent(startSession, 'claude-code') },
-      storage,
-      logger: createLogger(),
-    });
-    await maker.createSession({
-      id: 'session-fresh',
-      agentKind: 'claude-code',
-      workingDir: '/repo',
-      model: 'claude-opus-4-6',
-      // 无 resumeSessionId —— 全新会话
-    });
-
-    expect(captured).toBeDefined();
-    // fresh id 已落库;CAS 能把它清掉(index.ts 的 fresh-session self-reference 恢复会调它)。
-    expect((await storage.get('session-fresh'))?.sdkSessionId).toBe('sdk-fresh');
-    expect(await captured?.('sdk-fresh')).toBe(true);
-    expect((await storage.get('session-fresh'))?.sdkSessionId).toBeUndefined();
-    // CAS 不匹配(已清)时再次调用返回 false,不误覆盖。
-    expect(await captured?.('sdk-fresh')).toBe(false);
   });
 
   it('clears after in-flight writes and ignores stale session_id events that arrive after recovery', async () => {

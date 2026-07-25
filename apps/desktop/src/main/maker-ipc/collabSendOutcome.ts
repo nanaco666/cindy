@@ -1,4 +1,4 @@
-import type { SessionSendResult } from '@cindy/maker-core';
+import type { SessionSendResult } from '@lizi/maker-core';
 
 import {
   createHostSendFailure,

@@ -1,7 +1,7 @@
 /**
  * PanelDragPrototype —— 「直接拖面板换位」交互原型(dev 构建限定,布局树 Step B 决策辅助)。
  *
- * 背景:编辑模式的交互形态未定,本原型把两种候选手势
+ * 背景:编辑模式的交互形态未定(layout-tree.md §7.2 结论 3),本原型把两种候选手势
  * 都做出来给 Lizi 体感,决策后本文件按结论转正或删除 —— **不是正式功能**:
  *   1. 拖 Tab 条:按住工具面板 Tab 条空白处(data-panel-drag-handle)移动 >5px 即拖;
  *   2. 长按窗体:面板任意区域按住 600ms 不动(<8px)后"浮起"进入拖动。
@@ -314,8 +314,7 @@ export function PanelDragPrototype({
   // 视觉(全走主题 token,规则 16;无文案免 i18n):
   //   1. 落点高亮:半透明淡蓝罩层(VSCode 拖 tab 落点同款质感)——透出下方内容,
   //      取色基于 focus-ring 语义蓝低透明度混合,light / dark / 扩展主题都自然;
-  //   2. 拖影:迷你面板骨架卡,微倾斜 + 淡入起手动画(内层卡的 transform 被
-  //      居中偏移+倾斜占用,起手动画只能碰 opacity,不许上 scale 类 keyframe)。
+  //   2. 拖影:迷你面板骨架卡,微倾斜 + zoom-in 起手动画;点亮目标时描边跟随变色。
   //      外层定位壳(translate3d 跟手,热路径直改)与内层视觉卡(居中偏移 + 倾斜)
   //      分离 —— transform 各自独立,互不覆盖。
   return createPortal(
@@ -323,7 +322,7 @@ export function PanelDragPrototype({
       {zone && (
         <div
           aria-hidden
-          className="pointer-events-none fixed z-[9998] rounded-xl border animate-fade-in"
+          className="pointer-events-none fixed z-[9998] rounded-xl border animate-in fade-in duration-150"
           style={{
             left: zone.left,
             top: zone.top,
@@ -346,7 +345,7 @@ export function PanelDragPrototype({
         className="pointer-events-none fixed left-0 top-0 z-[9999] will-change-transform"
       >
         <div
-          className="h-[110px] w-[170px] rounded-xl border animate-fade-in"
+          className="h-[110px] w-[170px] rounded-xl border animate-in fade-in zoom-in-90 duration-150"
           style={{
             transform: 'translate(-50%, -58%) rotate(-2deg)',
             background: 'var(--surface-elevated)',

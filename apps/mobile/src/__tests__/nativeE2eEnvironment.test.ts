@@ -78,15 +78,26 @@ describe('native e2e environment', () => {
 
     expect(packageJson).toContain('"test:e2e:local:ios"');
     expect(packageJson).toContain('--start-server --start-expo --mock-host --profile ios-iphone-17-pro-expo-go');
+    expect(packageJson).toContain('"test:e2e:local:voice:ios:credential"');
+    expect(packageJson).toContain('--voice-credential-from-device --voice-cloud-preflight');
     expect(localSmoke).toContain("if (arg === '--start-expo')");
     expect(localSmoke).toContain("if (arg === '--no-mock-audio')");
     expect(localSmoke).toContain("const useMockAudio = voiceProxySelected && !options.noMockAudio;");
     expect(localSmoke).toContain("if (arg === '--voice-cloud-preflight')");
     expect(localSmoke).toContain("if (arg === '--voice-cloud-all-candidates')");
-    // 穿透 credential 工具族已随 device-link:voice:credential-sync 下线删除:
-    // smoke 不再有任何 voice credential fetch/override 面。
-    expect(localSmoke).not.toContain('voice-credential');
-    expect(localSmoke).not.toContain('voiceCredential');
+    expect(localSmoke).toContain("if (arg === '--voice-credential-from-device')");
+    expect(localSmoke).toContain("if (arg === '--voice-credential-file')");
+    expect(localSmoke).toContain("if (arg === '--voice-credential-target-device-id')");
+    expect(localSmoke).toContain('function runVoiceCredentialFetch()');
+    expect(localSmoke).toContain('runNodeScript(fetchVoiceCredentialScript, args);');
+    expect(localSmoke).toContain("...(voiceCredentialFile ? ['--voice-credential-file', voiceCredentialFile] : [])");
+    expect(localSmoke).toContain('const voiceCredentialTargetDeviceId = options.voiceCredentialTargetDeviceId');
+    expect(localSmoke).toContain('?? (options.mockHost && willFetchVoiceCredential ? mockHostDeviceId : undefined)');
+    expect(localSmoke).toContain("...(voiceCredentialTargetDeviceId ? ['--target-device-id', voiceCredentialTargetDeviceId] : [])");
+    expect(localSmoke).toContain('const hasProvidedVoiceCredentialOverride');
+    expect(localSmoke).toContain('!hasProvidedVoiceCredentialOverride ? resolveVoiceProxyBaseUrl(platform, voiceProxyPort) : null');
+    expect(localSmoke).toContain("import { existsSync, readFileSync, unlinkSync } from 'node:fs';");
+    expect(localSmoke).toContain('if (existsSync(generatedVoiceCredentialFile)) unlinkSync(generatedVoiceCredentialFile);');
     expect(localSmoke).toContain('expectedControllableDeviceId: options.mockHost ? mockHostDeviceId : undefined');
     expect(localSmoke).toContain('function isControllableDevice(device)');
     expect(localSmoke).toContain('function runVoiceCloudPreflight()');
@@ -94,14 +105,23 @@ describe('native e2e environment', () => {
     expect(localSmoke).toContain('preflightEnv.XDT_MOBILE_VOICE_PROXY_BASE_URL = voiceProxyBaseUrl;');
     expect(localSmoke).toContain("preflightEnv.XDT_MOBILE_VOICE_PROXY_API_KEY = 'sk-mock-mobile-voice-key';");
     expect(localSmoke).toContain('runNodeScript(voiceCloudPreflightScript, args, preflightEnv);');
-    expect(localSmoke).toContain('function startMockHostProcess(baseUrl, hostDeviceId, scenario, realDbPath)');
+    expect(localSmoke).toContain('if (willFetchVoiceCredential) {');
+    expect(localSmoke).toContain('startMockHostProcess(apiBase, mockHostDeviceId, mockHostScenario, mockHostRealDb, voiceProxyBaseUrl, null);');
     expect(localSmoke).toContain('await stopMockHost.ready;');
+    expect(localSmoke.indexOf('startMockHostProcess(apiBase, mockHostDeviceId, mockHostScenario, mockHostRealDb, voiceProxyBaseUrl, null);')).toBeLessThan(
+      localSmoke.indexOf('runVoiceCredentialFetch();'),
+    );
+    expect(localSmoke.indexOf('await stopMockHost.ready;')).toBeLessThan(
+      localSmoke.indexOf('runVoiceCredentialFetch();'),
+    );
+    expect(localSmoke).toContain('function startMockHostProcess(baseUrl, hostDeviceId, scenario, realDbPath, voiceProxyUrl, voiceCredentialFile)');
     expect(localSmoke).toContain('mock host did not become ready within');
     expect(localSmoke).toContain("line.includes('mock-device-link-host ready')");
     expect(localSmoke).toContain('async function stopActiveMockHost()');
     expect(localSmoke.indexOf('await stopActiveMockHost();')).toBeLessThan(
       localSmoke.indexOf('if (options.mockHost) await cleanupE2eDeviceRecords(apiBase, mockHostDeviceId);'),
     );
+    expect(localSmoke).toContain('if (!willFetchVoiceCredential) {');
     expect(localSmoke).toContain('async function startExpoProcess(url)');
     expect(localSmoke).toContain('async function assertExpoReady(url');
     expect(localSmoke).toContain('Expo Go native E2E needs Metro before Maestro opens the app.');
@@ -125,18 +145,6 @@ describe('native e2e environment', () => {
     expect(mockHost).toContain('--real-db auto could not find a readable XDMaker SQLite DB with sessions');
   });
 
-  it('keeps the mock host capable of exercising deferred session Agent switching', () => {
-    const mockHost = readFileSync(resolve(process.cwd(), 'scripts/mock-device-link-host.mjs'), 'utf8');
-
-    expect(mockHost).toContain("case 'maker:switch-session-agent':");
-    expect(mockHost).toContain("case 'maker:get-session-agent-switch-intent':");
-    expect(mockHost).toContain("case 'maker:provider:list':");
-    expect(mockHost).toContain('supportsSessionAgentSwitch: true');
-    expect(mockHost.indexOf('applyPendingAgentSwitchIntent(id);')).toBeLessThan(
-      mockHost.indexOf("const text = typeof queued?.text === 'string'"),
-    );
-  });
-
   it('can run reconnect smoke as a self-contained local relay gate', () => {
     const packageJson = readFileSync(resolve(process.cwd(), 'package.json'), 'utf8');
     const reconnectSmoke = readFileSync(resolve(process.cwd(), 'scripts/device-link-reconnect-smoke.mjs'), 'utf8');
@@ -148,21 +156,26 @@ describe('native e2e environment', () => {
     expect(reconnectSmoke).toContain('Or pass --start-server.');
   });
 
-  it('keeps cloud voice preflight opt-in and secret-redacted with the credential relay removed', () => {
+  it('keeps real cloud voice preflight opt-in and secret-redacted', () => {
     const packageJson = readFileSync(resolve(process.cwd(), 'package.json'), 'utf8');
     const preflight = readFileSync(resolve(process.cwd(), 'scripts/mobile-voice-cloud-preflight.mjs'), 'utf8');
+    const doctor = readFileSync(resolve(process.cwd(), 'scripts/mobile-voice-real-desktop-doctor.mjs'), 'utf8');
     const mockVoiceProxy = readFileSync(resolve(process.cwd(), 'scripts/mock-voice-proxy.mjs'), 'utf8');
     const mockHost = readFileSync(resolve(process.cwd(), 'scripts/mock-device-link-host.mjs'), 'utf8');
+    const fetchCredential = readFileSync(resolve(process.cwd(), 'scripts/fetch-mobile-voice-credential.mjs'), 'utf8');
+    const localDesktopCredential = readFileSync(resolve(process.cwd(), 'scripts/export-local-desktop-voice-credential.mjs'), 'utf8');
+    const relaySmoke = readFileSync(resolve(process.cwd(), 'scripts/local-desktop-voice-credential-relay-smoke.mjs'), 'utf8');
+    const realCloudSmoke = readFileSync(resolve(process.cwd(), 'scripts/mobile-voice-real-cloud-smoke.mjs'), 'utf8');
     const readme = readFileSync(resolve(process.cwd(), 'README.md'), 'utf8');
 
     expect(packageJson).toContain('"test:voice-cloud:preflight": "node scripts/mobile-voice-cloud-preflight.mjs"');
     expect(packageJson).toContain('"test:voice-cloud:preflight:run": "node scripts/mobile-voice-cloud-preflight.mjs --run"');
-    // 穿透 credential 工具族(export/fetch/relay smoke/doctor/device gate)已随
-    // device-link:voice:credential-sync 下线一并删除,不能再出现在 package scripts 里。
-    expect(packageJson).not.toContain('voice:credential:');
-    expect(packageJson).not.toContain('test:voice-cloud:doctor');
-    expect(packageJson).not.toContain('test:voice-cloud:local-desktop-relay');
-    expect(packageJson).not.toContain('test:voice-cloud:device');
+    expect(packageJson).toContain('"test:voice-cloud:doctor": "node scripts/mobile-voice-real-desktop-doctor.mjs"');
+    expect(packageJson).toContain('"voice:credential:local-desktop": "node scripts/export-local-desktop-voice-credential.mjs"');
+    expect(packageJson).toContain('"voice:credential:fetch": "node scripts/fetch-mobile-voice-credential.mjs"');
+    expect(packageJson).toContain('"test:voice-cloud:local-desktop-relay": "node scripts/local-desktop-voice-credential-relay-smoke.mjs"');
+    expect(packageJson).toContain('"test:voice-cloud:device": "node scripts/mobile-voice-real-cloud-smoke.mjs"');
+    expect(packageJson).toContain('"test:voice-cloud:device:run": "node scripts/mobile-voice-real-cloud-smoke.mjs --run"');
     expect(preflight).toContain('dry run passed; add --run to call the cloud endpoints');
     expect(preflight).toContain('XDT_MOBILE_VOICE_CREDENTIAL_JSON');
     expect(preflight).toContain('XDT_MOBILE_VOICE_PROXY_API_KEY');
@@ -184,58 +197,162 @@ describe('native e2e environment', () => {
     expect(preflight).not.toContain('console.log(credential.proxyApiKey');
     expect(preflight).not.toContain('console.warn(credential.proxyApiKey');
     expect(preflight).not.toContain('console.error(credential.proxyApiKey');
+    expect(fetchCredential).toContain("const DL_VOICE_CREDENTIAL_SYNC_CHANNEL = 'device-link:voice:credential-sync';");
+    expect(fetchCredential).toContain('XDT_MOBILE_AUTH_ACCESS_TOKEN_FILE');
+    expect(fetchCredential).toContain("console.log(`- auth: ${accessTokenOverride ? 'provided access token' : 'local dev-login'}`);");
+    expect(fetchCredential).toContain('pnpm restart:desktop:local');
+    expect(fetchCredential).toContain('stops existing XDMaker desktop dev processes');
+    expect(fetchCredential).toContain('constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY, 0o600');
+    expect(fetchCredential).toContain('chmodSync(path, 0o600);');
+    expect(fetchCredential).toContain('function cleanupDevSession(accessToken)');
+    expect(fetchCredential).toContain("label: 'fetcher device cleanup'");
+    expect(fetchCredential).toContain("label: 'fetcher logout'");
+    expect(fetchCredential).toContain('process.exitCode = 1;');
+    expect(fetchCredential).not.toContain('process.exit(1)');
+    expect(fetchCredential).toContain("console.log(`- proxy: ${redactUrl(credential.proxyBaseUrl)}`);");
+    expect(fetchCredential).toContain("assertProviderChainShape(credential, 'asrProviderChain'");
+    expect(fetchCredential).toContain("assertProviderChainShape(credential, 'refinerProviderChain'");
+    expect(fetchCredential).toContain("credentialProviderChain(credential, 'asrProviderChain', credential.asr)");
+    expect(fetchCredential).toContain("credentialProviderChain(credential, 'refinerProviderChain', credential.refiner)");
+    expect(fetchCredential).toContain('function redactionCandidates(secret)');
+    expect(fetchCredential).not.toContain('console.log(credential');
+    expect(fetchCredential).not.toContain('console.warn(credential');
+    expect(fetchCredential).not.toContain('console.error(credential');
+    expect(fetchCredential).not.toContain('console.log(fetchedCredential');
+    expect(fetchCredential).not.toContain('console.warn(fetchedCredential');
+    expect(fetchCredential).not.toContain('console.error(fetchedCredential');
+    expect(localDesktopCredential).toContain('export-local-desktop-voice-credential passed');
+    expect(localDesktopCredential).toContain("app.setName('xdt-maker');");
+    expect(localDesktopCredential).toContain("app.setPath('userData', userDataDir);");
+    expect(localDesktopCredential).toContain("join(userDataDir, 'safe-storage', 'api_key.enc')");
+    expect(localDesktopCredential).toContain('constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY, 0o600');
+    expect(localDesktopCredential).toContain('chmodSync(pathname, 0o600);');
+    expect(localDesktopCredential).toContain('rmSync(outputPath, { force: true });');
+    expect(localDesktopCredential).toContain("runNode(preflightScript, [");
+    expect(localDesktopCredential).toContain("...(options.allCandidates ? ['--all-candidates'] : [])");
+    expect(localDesktopCredential).toContain('let credentialForRedaction = null;');
+    expect(localDesktopCredential).toContain('credentialForRedaction = { proxyApiKey: apiKey };');
+    expect(localDesktopCredential).toContain('credentialForRedaction = credential;');
+    expect(localDesktopCredential).toContain('redactError(error, credentialForRedaction)');
+    expect(localDesktopCredential).toContain('function redactionCandidates(secret)');
+    expect(localDesktopCredential).not.toContain('spawn(pnpmBin()');
+    expect(localDesktopCredential).not.toContain('dev:desktop');
+    expect(localDesktopCredential).not.toContain('restart:desktop');
+    expect(localDesktopCredential).not.toContain('console.log(credential');
+    expect(localDesktopCredential).not.toContain('console.warn(credential');
+    expect(localDesktopCredential).not.toContain('console.error(credential');
+    expect(relaySmoke).toContain('export-local-desktop-voice-credential.mjs');
+    expect(relaySmoke).toContain('fetch-mobile-voice-credential.mjs');
+    expect(relaySmoke).toContain('mobile-voice-cloud-preflight.mjs');
+    expect(relaySmoke).toContain('mock-device-link-host.mjs');
+    expect(relaySmoke).toContain("XDT_MOBILE_VOICE_CREDENTIAL_FILE: sourceCredentialFile");
+    expect(relaySmoke).toContain("'--voice-credential-file'");
+    expect(relaySmoke).toContain("'--target-device-id'");
+    expect(relaySmoke).toContain('fetchedCredentialFile');
+    expect(relaySmoke).toContain('cleanupFile(sourceCredentialFile, shouldCleanupSource);');
+    expect(relaySmoke).toContain('cleanupFile(fetchedCredentialFile, shouldCleanupFetched);');
+    expect(relaySmoke).toContain('desktop process: not started or restarted');
+    expect(relaySmoke).toContain('pnpm dev:server');
+    expect(relaySmoke).not.toContain('restart:desktop');
+    expect(relaySmoke).not.toContain('dev:desktop');
+    expect(relaySmoke).not.toContain('console.log(credential');
+    expect(relaySmoke).not.toContain('console.warn(credential');
+    expect(relaySmoke).not.toContain('console.error(credential');
+    expect(realCloudSmoke).toContain('mobile-voice-real-cloud-smoke dry run');
+    expect(realCloudSmoke).toContain("if (arg === '--all-candidates')");
+    expect(realCloudSmoke).toContain("...(options.allCandidates ? ['--all-candidates'] : [])");
+    expect(realCloudSmoke).toContain("if (arg === '--list-devices')");
+    expect(realCloudSmoke).toContain('mobile-voice-real-cloud-smoke device list');
+    expect(realCloudSmoke).toContain('Pass --target-device-id <deviceId> when running the real cloud smoke.');
+    expect(realCloudSmoke).toContain('Add --run to fetch the desktop credential and call ASR/refine cloud endpoints.');
+    expect(realCloudSmoke).toContain("Use --list-devices first if more than one desktop may be online.");
+    expect(realCloudSmoke).toContain("if (arg === '--start-server')");
+    expect(realCloudSmoke).toContain('function startServerProcess()');
+    expect(realCloudSmoke).toContain('function devLogin(deviceId)');
+    expect(realCloudSmoke).toContain('function fetchDevices(accessToken)');
+    expect(realCloudSmoke).toContain('function isControllableDevice(device)');
+    expect(realCloudSmoke).toContain('function isRealDesktopCandidate(device)');
+    expect(realCloudSmoke).toContain('function isFixtureDevice(device)');
+    expect(realCloudSmoke).toContain('target is a real desktop, not a mobile E2E/mock fixture');
+    expect(realCloudSmoke).toContain('mobile-voice-real-cloud-smoke target:');
+    expect(realCloudSmoke).toContain('appVersion=');
+    expect(realCloudSmoke).toContain("target.deviceId");
+    expect(realCloudSmoke).toContain("XDT_DEV_AUTH_ENABLED: process.env.XDT_DEV_AUTH_ENABLED ?? '1'");
+    expect(realCloudSmoke).toContain('mobile-voice-real-cloud-smoke server ready');
+    expect(realCloudSmoke).toContain("const serverKillPortScript = resolve(repoRoot, 'scripts/kill-port.mjs');");
+    expect(realCloudSmoke).toContain('function cleanupServerPort()');
+    expect(realCloudSmoke).toContain('unlinkSync(credentialFile);');
+    expect(realCloudSmoke).toContain("runNode(fetchCredentialScript, [");
+    expect(realCloudSmoke).toContain("...(options.controllerDeviceId ? ['--controller-device-id', options.controllerDeviceId] : [])");
+    expect(realCloudSmoke).toContain("runNode(preflightScript, [");
+    expect(doctor).toContain('mobile-voice-real-desktop-doctor');
+    expect(doctor).toContain('fetch credential:');
+    expect(doctor).toContain("if (arg === '--fetch-credential')");
+    expect(doctor).toContain("if (arg === '--start-server')");
+    expect(doctor).toContain('runCredentialFetch(target.deviceId)');
+    expect(doctor).toContain('fetch-mobile-voice-credential.mjs');
+    expect(doctor).toContain('unlinkSync(credentialFile);');
+    expect(doctor).toContain('pnpm restart:desktop:local');
+    expect(doctor).toContain('function startServerProcess()');
+    expect(doctor).toContain("XDT_DEV_AUTH_ENABLED: process.env.XDT_DEV_AUTH_ENABLED ?? '1'");
+    expect(doctor).toContain('function cleanupServerPort()');
+    expect(doctor).toContain('function isRealDesktopCandidate(device)');
+    expect(doctor).toContain('function isFixtureDevice(device)');
+    expect(doctor).toContain('target is a real desktop, not a mobile E2E/mock fixture');
+    expect(doctor).toContain('appVersion=');
+    expect(doctor).not.toContain('dev:desktop');
+    expect(readme).toContain('pnpm --filter mobile test:voice-cloud:device -- --list-devices --api-base http://localhost:3333');
+    expect(readme).toContain('pnpm --filter mobile test:voice-cloud:doctor -- --start-server --api-base http://localhost:3333 --fetch-credential');
+    expect(readme).toContain('pnpm --filter mobile test:voice-cloud:local-desktop-relay -- --user-data-dir "$HOME/Library/Application Support/xdt-maker" --all-candidates');
+    expect(readme).toContain('pnpm --filter mobile test:voice-cloud:device:run -- --api-base http://localhost:3333 --target-device-id <desktop-device-id>');
+    expect(readme).toContain('--all-candidates');
     expect(readme).toContain('--voice-cloud-all-candidates');
-    expect(readme).toContain('VOICE_CREDENTIAL_SYNC_REMOVED');
-    expect(readme).not.toContain('voice:credential:');
-    expect(readme).not.toContain('test:voice-cloud:doctor');
-    expect(readme).not.toContain('test:voice-cloud:device');
+    expect(readme).toContain('voice:credential:local-desktop');
+    expect(readme).toContain('It does not open or restart desktop and does not prove the device-link relay path');
+    expect(readme).toContain('This restart command stops existing XDMaker desktop dev processes.');
     expect(mockVoiceProxy).toContain("url.pathname !== '/dashscope/api-ws/v1/realtime'");
-    // mock host 与 desktop dispatch 语义对齐:credential-sync 一律返回下线错误,
-    // 不再存在 mock 凭证或 credential override 面。
-    expect(mockHost).toContain("case 'device-link:voice:credential-sync':");
-    expect(mockHost).toContain("err.code = 'VOICE_CREDENTIAL_SYNC_REMOVED';");
-    expect(mockHost).toContain('手机语音输入已改用 Cindy 官方语音服务,请升级手机版。');
-    expect(mockHost).not.toContain('mockVoiceCredential');
-    expect(mockHost).not.toContain('voiceCredentialOverride');
-    expect(mockHost).not.toContain('loadVoiceCredentialOverride');
-    expect(mockHost).not.toContain("'--voice-credential-file'");
+    expect(mockHost).toContain('function loadVoiceCredentialOverride(file, rawJson)');
+    expect(mockHost).toContain("if (arg === '--voice-credential-file')");
+    expect(mockHost).toContain("console.log('- voice credential override: configured')");
+    expect(mockHost).toContain('asrProviderChain');
+    expect(mockHost).toContain('refinerProviderChain');
     expect(mockHost).toContain("case 'device-link:voice:dictionary-learning':");
     expect(mockHost).toContain("ignoreReason: 'mock-host'");
+    expect(mockHost).toContain('function assertVoiceCredentialChain(credential, property, requiredFields)');
+    expect(mockHost).not.toContain('console.log(voiceCredentialOverride');
+    expect(mockHost).not.toContain('console.warn(voiceCredentialOverride');
+    expect(mockHost).not.toContain('console.error(voiceCredentialOverride');
   });
 
-  it('clears local mobile voice credentials on logout and at auth startup', () => {
+  it('clears local mobile voice credentials on logout', () => {
     const authContext = readFileSync(resolve(process.cwd(), 'src/auth/AuthContext.tsx'), 'utf8');
 
     expect(authContext).toContain(
       "from '@/session/mobileVoiceCredentialStore'",
     );
+    expect(authContext).toContain(
+      "from '@/session/mobileVoiceLiteLlmSettings'",
+    );
     expect(authContext).toContain("from '@/session/mobileVoiceHistoryStore'");
-    // BYOK/穿透存储模块已删除:清理统一收敛进 clearAllMobileVoiceCredentials
-    // (含 serviceMode 与 LiteLLM key 的存量键)。
-    expect(authContext).not.toContain('mobileVoiceLiteLlmSettings');
-    expect(authContext).not.toContain('mobileVoiceServiceMode');
     expect(authContext).toContain(
       'await clearAllMobileVoiceCredentials().catch(() => undefined);',
     );
     expect(authContext).toContain(
+      'await clearMobileVoiceLiteLlmSettings().catch(() => undefined);',
+    );
+    expect(authContext).toContain(
       'await clearAllMobileVoiceInputHistories().catch(() => undefined);',
     );
-    // Scope the ordering check to the shared local-session cleanup: both logout and confirmed
-    // account deletion use it, and refresh-token deletion remains serialized against refresh.
-    const cleanupStart = authContext.indexOf('const clearLocalSession = useCallback(async () => {');
-    const cleanupBody = authContext.slice(cleanupStart, authContext.indexOf('}, [', cleanupStart));
-    const refreshTokenDelete = cleanupBody.indexOf('await serializeRefreshTokenMutation(() =>');
-    expect(refreshTokenDelete).toBeGreaterThanOrEqual(0);
-    expect(cleanupBody).toContain('deleteSecureItem(REFRESH_TOKEN_KEY).catch(() => undefined)');
-    expect(cleanupBody.indexOf('await clearAllMobileVoiceCredentials().catch(() => undefined);')).toBeLessThan(refreshTokenDelete);
-    expect(cleanupBody.indexOf('await clearAllMobileVoiceInputHistories().catch(() => undefined);')).toBeLessThan(refreshTokenDelete);
+    // Scope the ordering check to the logout body: refresh-token deletion is serialized so a
+    // racing refresh cannot restore credentials after logout has begun.
     const logoutStart = authContext.indexOf('const logout = useCallback(async () => {');
     const logoutBody = authContext.slice(logoutStart, authContext.indexOf('}, [', logoutStart));
-    expect(logoutBody).toContain('await persistAccountDeletionReceipt(null);');
-    expect(logoutBody).toContain('await clearLocalSession();');
-    // 启动(auth 初始化)也要做一次存量清理,防旧版本留下的桌面 key 继续躺在
-    // secure storage(与 LEGACY_* token 清理同一批)。
-    expect(authContext).toContain('clearAllMobileVoiceCredentials().catch(() => undefined),');
+    const refreshTokenDelete = logoutBody.indexOf('await serializeRefreshTokenMutation(() =>');
+    expect(refreshTokenDelete).toBeGreaterThanOrEqual(0);
+    expect(logoutBody).toContain('deleteSecureItem(REFRESH_TOKEN_KEY).catch(() => undefined)');
+    expect(logoutBody.indexOf('await clearAllMobileVoiceCredentials().catch(() => undefined);')).toBeLessThan(refreshTokenDelete);
+    expect(logoutBody.indexOf('await clearMobileVoiceLiteLlmSettings().catch(() => undefined);')).toBeLessThan(refreshTokenDelete);
+    expect(logoutBody.indexOf('await clearAllMobileVoiceInputHistories().catch(() => undefined);')).toBeLessThan(refreshTokenDelete);
   });
 
   it('keeps Android voice input as an explicit unsupported native boundary for now', () => {
@@ -254,17 +371,15 @@ describe('native e2e environment', () => {
   it('sends the realtime voice draft returned by the controller instead of stale React state', () => {
     const sessionScreen = readFileSync(resolve(process.cwd(), 'app/sessions/[sessionId].tsx'), 'utf8');
 
-    expect(sessionScreen).toContain('const documentBeforeStop = composerDocumentRef.current;');
     expect(sessionScreen).toContain('const latestDraft = await controller.stop();');
-    expect(sessionScreen).toContain('await sendLatest({ documentOverride: latestDocument });');
-    expect(sessionScreen.indexOf('const documentBeforeStop = composerDocumentRef.current;')).toBeLessThan(
-      sessionScreen.indexOf('const latestDraft = await controller.stop();'),
+    expect(sessionScreen).toContain('await sendLatest({ draftOverride: latestDraft });');
+    expect(sessionScreen.indexOf('const latestDraft = await controller.stop();')).toBeLessThan(
+      sessionScreen.indexOf('await sendLatest({ draftOverride: latestDraft });'),
     );
-    expect(sessionScreen).toContain('const latestDocument = latestDraft.trim()');
     expect(sessionScreen).toContain('readCurrentDraft: () => draftRef.current');
     expect(sessionScreen).toContain('onDraftChanged: setComposerDraft');
     expect(sessionScreen).toContain('createMobileVoiceControllerSession({');
-    expect(sessionScreen).not.toContain('await sendLatest({ draftOverride: latestDraft });');
+    expect(sessionScreen).not.toContain('await sendLatest({ draftOverride: draft });');
   });
 
   it('guards the mobile voice composer against the legacy desktop transcription path', () => {
@@ -274,6 +389,6 @@ describe('native e2e environment', () => {
     expect(scopeGuard).toContain("'transcribeVoice('");
     expect(scopeGuard).toContain("'DEVICE_LINK_VOICE_TRANSCRIBE_CHANNEL'");
     expect(scopeGuard).toContain("'device-link:voice:transcribe'");
-    expect(scopeGuard).toContain('Mobile voice composer must use the realtime controller + managed Cindy voice service');
+    expect(scopeGuard).toContain('Mobile voice composer must use realtime controller + local LiteLLM settings');
   });
 });

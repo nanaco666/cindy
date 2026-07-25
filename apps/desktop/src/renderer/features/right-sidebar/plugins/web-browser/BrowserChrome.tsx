@@ -1,7 +1,7 @@
 /**
  * BrowserChrome —— web-browser tab 的 40px 顶部工具栏。
  *
- * 视觉结构:
+ * 视觉对齐 plan §5.2:
  *   ┌────────────────────────────────────────────────────────────────┐
  *   │ ← → ↻   [🔒  https://github.com           ⭐]   ⋯              │  40px
  *   └────────────────────────────────────────────────────────────────┘
@@ -11,7 +11,7 @@
  *         lock icon 居左、URL/title 居中、star 居右
  *   - 右:24×24 download / ellipsis(Phase 5 范围内只渲染占位,实际无 action)
  *
- * 不提供 newtab quick-link 卡片,所以 URL bar 常驻、URL 输入
+ * 设计稿 F4(newtab quick-link 卡片)plan 明确不做,所以 URL bar 是常驻、URL 输入
  * 框跟显示框是同一个(点 / focus 就能编辑)。
  *
  * URL bar 自身要支持:
@@ -266,7 +266,7 @@ export const BrowserChrome = forwardRef<BrowserChromeHandle, BrowserChromeProps>
           </button>
         )}
       </div>
-      {/* 右侧工具区交互约定:
+      {/* 右侧工具区(设计稿 right-side.pen「Browser 工具栏增强」):
           camera = 截图(capturePage → 剪贴板,已实现);
           message-square-plus = 页面评论(评论模式点选元素 → 评论进 composer,
           已实现,active 态高亮);ellipsis = 更多菜单(系统浏览器打开 / 复制链接)。 */}

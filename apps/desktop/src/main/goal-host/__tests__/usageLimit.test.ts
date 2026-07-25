@@ -18,15 +18,6 @@ describe('classifyTurnUsageLimit', () => {
     expect(classifyTurnUsageLimit({ message: 'HTTP 429: Too Many Requests' })).toBe(true);
   });
 
-  it('matches a preserved non-secret rate-limit status after message redaction', () => {
-    expect(classifyTurnUsageLimit({ message: 'Authorization: [REDACTED]', errorStatus: 429 })).toBe(true);
-    expect(classifyTurnUsageLimit({ message: 'Authorization: [REDACTED]', errorStatus: 529 })).toBe(true);
-  });
-
-  it('matches a preserved quota marker after message redaction', () => {
-    expect(classifyTurnUsageLimit({ message: 'Authorization: [REDACTED]', usageLimit: true })).toBe(true);
-  });
-
   it('does NOT match ordinary errors', () => {
     expect(classifyTurnUsageLimit({ sdkError: 'server_error', message: 'boom' })).toBe(false);
     expect(classifyTurnUsageLimit({ message: 'tool failed: file not found' })).toBe(false);

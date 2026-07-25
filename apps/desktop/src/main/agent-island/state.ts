@@ -1,4 +1,4 @@
-import type { AgentEvent, InteractionRequest } from '@cindy/maker-core';
+import type { AgentEvent, InteractionRequest } from '@lizi/maker-core';
 
 import { stripTrailingPathSeparators } from '../../shared/pathText';
 

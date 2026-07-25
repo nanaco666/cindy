@@ -7,7 +7,7 @@
  * exception.
  */
 
-import type { AndroidAdbPreparationState, AndroidMcpErrorCode, AndroidStatusSummary } from '@cindy/mcps';
+import type { AndroidAdbPreparationState, AndroidMcpErrorCode, AndroidStatusSummary } from 'lizi-mcps';
 
 import type { OverrideSettingsState } from '../maker-host/override-settings-file.js';
 import {

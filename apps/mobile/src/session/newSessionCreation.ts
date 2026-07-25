@@ -32,22 +32,13 @@ import { formatRemoteError } from '@/device-link/remoteStatus';
 import type { MobileMakerTransport } from '@/device-link/mobileMakerTransport';
 import { buildQueuedTextMessage } from '@/session/inputProjection';
 import {
-  extractMobileSessionReferences,
-  type MobileSessionReference,
-} from '@/session/sessionReferences';
-import {
   buildRemoteCreateSessionOptions,
   normalizeCreateSessionResult,
   sessionFromCreateResult,
   type NewSessionDraft,
 } from '@/session/newSession';
 import { remoteSessionStore } from '@/session/remoteSessionStore';
-import type {
-  InputProjection,
-  QueuedRemoteMessage,
-  RemoteSerializedAttachment,
-  RemoteSession,
-} from '@/session/types';
+import type { InputProjection, RemoteSerializedAttachment, RemoteSession } from '@/session/types';
 
 export type NewSessionCreationStatus = 'running' | 'create-failed' | 'enqueue-failed';
 
@@ -55,8 +46,6 @@ export interface NewSessionCreationTransport {
   maker: MobileMakerTransport;
   openLink: (deviceId: string) => Promise<unknown>;
   subscribe: (owner: string, deviceId: string, topics: string[]) => Promise<void>;
-  /** 手机控制端在首条消息越过 device-link 前读取各引用来源的可信历史快照。 */
-  prepareQueuedMessage?: (item: QueuedRemoteMessage) => Promise<QueuedRemoteMessage>;
 }
 
 export interface NewSessionCreationParams {
@@ -98,7 +87,6 @@ export interface NewSessionCreationTask {
 interface InternalTask extends NewSessionCreationTask {
   status: NewSessionCreationStatus;
   error: string | null;
-  firstMessageSessionRefs: MobileSessionReference[];
   params: NewSessionCreationParams;
 }
 
@@ -173,16 +161,6 @@ function buildOptimisticProjection(
   };
 }
 
-/** Preserve source-device hints captured before the target session creation mutates the live mirror. */
-function attachFirstMessageSessionReferences(
-  queued: QueuedRemoteMessage,
-  refs: readonly MobileSessionReference[],
-): QueuedRemoteMessage {
-  return refs.length > 0
-    ? { ...queued, sessionRefs: [...refs] }
-    : queued;
-}
-
 function synthesizeSession(params: NewSessionCreationParams): RemoteSession {
   return {
     ...sessionFromCreateResult({ sessionId: params.sessionId }, params.draft),
@@ -196,19 +174,15 @@ function synthesizeSession(params: NewSessionCreationParams): RemoteSession {
  */
 export function startNewSessionCreation(params: NewSessionCreationParams): void {
   const firstMessageClientId = createUuid();
-  const firstMessageSessionRefs = extractMobileSessionReferences(
-    params.draft.firstMessage,
-    remoteSessionStore.getSessionDeviceId,
-  );
   const session = synthesizeSession(params);
   remoteSessionStore.upsertDeviceSession(params.deviceId, params.deviceName, session);
-  const queued = attachFirstMessageSessionReferences(buildQueuedTextMessage(
+  const queued = buildQueuedTextMessage(
     session,
     params.draft.firstMessage,
     new Date(),
     firstMessageClientId,
     { attachments: [...params.attachments] },
-  ), firstMessageSessionRefs);
+  );
   remoteSessionStore.setInputProjection(params.sessionId, buildOptimisticProjection(params.sessionId, queued));
   const task: InternalTask = {
     sessionId: params.sessionId,
@@ -219,7 +193,6 @@ export function startNewSessionCreation(params: NewSessionCreationParams): void 
     draft: params.draft,
     attachments: params.attachments,
     firstMessageClientId,
-    firstMessageSessionRefs,
     params,
   };
   tasks.set(params.sessionId, task);
@@ -236,13 +209,13 @@ export function retryNewSessionCreation(sessionId: string): void {
   // 重试前把乐观行 / 气泡恢复(返回编辑路径可能没走,行一般还在,upsert 幂等)。
   const session = synthesizeSession(task.params);
   remoteSessionStore.upsertDeviceSession(task.deviceId, task.deviceName, session);
-  const queued = attachFirstMessageSessionReferences(buildQueuedTextMessage(
+  const queued = buildQueuedTextMessage(
     session,
     task.draft.firstMessage,
     new Date(),
     task.firstMessageClientId,
     { attachments: [...task.attachments] },
-  ), task.firstMessageSessionRefs);
+  );
   remoteSessionStore.setInputProjection(sessionId, buildOptimisticProjection(sessionId, queued));
   emit();
   void runPipeline(task);
@@ -499,22 +472,13 @@ async function runPipeline(task: InternalTask): Promise<void> {
       ...synthesizeSession(params),
       ...(createOutcome.workDir ? { workingDir: createOutcome.workDir } : {}),
     };
-    const queuedDraft = attachFirstMessageSessionReferences(buildQueuedTextMessage(
+    const queued = buildQueuedTextMessage(
       sessionForQueue,
       params.draft.firstMessage,
       new Date(),
       task.firstMessageClientId,
       { attachments: [...params.attachments] },
-    ), task.firstMessageSessionRefs);
-    let queued = queuedDraft;
-    if (params.transport.prepareQueuedMessage) {
-      try {
-        queued = await params.transport.prepareQueuedMessage(queuedDraft);
-      } catch (error) {
-        failTask(task, 'enqueue-failed', formatRemoteError(error));
-        return;
-      }
-    }
+    );
     try {
       const projection = await maker.input.enqueue(sessionId, queued, { sendAtMs: Date.now() });
       remoteSessionStore.setInputProjection(sessionId, projection);

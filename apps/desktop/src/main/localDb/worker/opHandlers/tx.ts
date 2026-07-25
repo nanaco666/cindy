@@ -52,84 +52,11 @@ export function tx(db: Database.Database, args: unknown): unknown {
       return sessionsSetStatus(db, txArgs);
     case 'session.agentSwitchFallback':
       return sessionAgentSwitchFallback(db, txArgs);
-    case 'message.delete':
-      return messageDelete(db, txArgs);
-    case 'im.deleteBindings':
-      return imDeleteBindings(db, txArgs);
-    case 'im.replaceBinding':
-      return imReplaceBinding(db, txArgs);
     case 'session.importShare':
       return sessionImportShare(db, txArgs);
     default:
       throw Object.assign(new Error(`unknown tx: ${name}`), { code: 'UNKNOWN_TX' });
   }
-}
-
-/** Remove every stale startup binding as one all-or-nothing repair. */
-function imDeleteBindings(db: Database.Database, args: unknown): void {
-  const payload = asRecord(args, 'im.deleteBindings args');
-  const identities = expectArray(payload.identities, 'identities').map((raw, index) => {
-    const identity = asRecord(raw, `identities.${index}`);
-    return {
-      channel: expectString(identity.channel, `identities.${index}.channel`),
-      botContextId: expectString(identity.botContextId, `identities.${index}.botContextId`),
-      userId: expectString(identity.userId, `identities.${index}.userId`),
-      scopeKey: expectString(identity.scopeKey, `identities.${index}.scopeKey`),
-    };
-  });
-  const deleteBinding = db.prepare(
-    `DELETE FROM im_bindings
-     WHERE channel = ? AND bot_context_id = ? AND user_id = ? AND scope_key = ?`,
-  );
-  const transaction = db.transaction(() => {
-    for (const identity of identities) {
-      deleteBinding.run(
-        identity.channel,
-        identity.botContextId,
-        identity.userId,
-        identity.scopeKey,
-      );
-    }
-  });
-  transaction();
-}
-
-/**
- * IM takeover replacement must not expose the delete-before-insert gap: if
- * the insert fails, SQLite restores both the previous target owner and this
- * identity's previous target.
- */
-function imReplaceBinding(db: Database.Database, args: unknown): void {
-  const payload = asRecord(args, 'im.replaceBinding args');
-  const channel = expectString(payload.channel, 'channel');
-  const botContextId = expectString(payload.botContextId, 'botContextId');
-  const userId = expectString(payload.userId, 'userId');
-  const scopeKey = expectString(payload.scopeKey, 'scopeKey');
-  const targetSessionId = expectString(payload.targetSessionId, 'targetSessionId');
-  const attachedAt = expectNumber(payload.attachedAt, 'attachedAt');
-  const attachedViaCardMessageId = nullableString(payload.attachedViaCardMessageId);
-  const transaction = db.transaction(() => {
-    db.prepare(
-      `DELETE FROM im_bindings
-       WHERE target_session_id = ?
-          OR (channel = ? AND bot_context_id = ? AND user_id = ? AND scope_key = ?)`,
-    ).run(targetSessionId, channel, botContextId, userId, scopeKey);
-    db.prepare(
-      `INSERT INTO im_bindings (
-        channel, bot_context_id, user_id, scope_key, target_session_id,
-        attached_at, attached_via_card_message_id
-      ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    ).run(
-      channel,
-      botContextId,
-      userId,
-      scopeKey,
-      targetSessionId,
-      attachedAt,
-      attachedViaCardMessageId,
-    );
-  });
-  transaction();
 }
 
 /** 清失效停泊 id 与改写交接边界必须同成同败,防止重启后重建出错误 pending。 */
@@ -156,99 +83,6 @@ function sessionAgentSwitchFallback(db: Database.Database, args: unknown): void 
     }
   });
   transaction();
-}
-
-/** 一轮消息内容清除 + 原生上下文失效 + 隐藏重建标记，三者同成同败。 */
-function messageDelete(
-  db: Database.Database,
-  args: unknown,
-): { messages: Array<{ messageId: string; clientId: string }> } {
-  const payload = asRecord(args, 'message.delete args');
-  const sessionId = expectString(payload.sessionId, 'sessionId');
-  const clientIds = [...new Set(
-    expectArray(payload.clientIds, 'clientIds').map((value) =>
-      expectString(value, 'clientId'),
-    ),
-  )];
-  if (clientIds.length === 0) {
-    throw Object.assign(new Error('message.delete requires at least one clientId'), {
-      code: 'INVALID_ARGS',
-    });
-  }
-  const marker = asRecord(payload.contextMarker, 'contextMarker');
-  const markerId = expectString(marker.id, 'contextMarker.id');
-  const markerClientId = expectString(marker.clientId, 'contextMarker.clientId');
-  const markerContent = expectString(marker.content, 'contextMarker.content');
-  const markerCreatedAt = expectNumber(marker.createdAt, 'contextMarker.createdAt');
-  const updatedAt = expectNumber(payload.updatedAt, 'updatedAt');
-
-  const transaction = db.transaction(() => {
-    const selectTarget = db.prepare(
-      "SELECT id, client_id AS clientId FROM messages WHERE session_id = ? AND client_id = ? AND role IN ('user', 'assistant', 'tool_use', 'tool_result', 'ask_user', 'plan_review', 'thinking', 'error') AND rewind_at IS NULL LIMIT 1",
-    );
-    const targets = clientIds.map((clientId) => {
-      const target = selectTarget.get(sessionId, clientId) as
-        | { id: string; clientId: string }
-        | undefined;
-      if (!target) {
-        throw Object.assign(new Error(`Message 不存在或不可删除: ${clientId}`), {
-          code: 'NOT_FOUND',
-        });
-      }
-      return target;
-    });
-
-    for (const target of targets) {
-      const jobs = db.prepare(
-        "SELECT rowid, vec_table AS vecTable FROM embedding_jobs WHERE source = 'chat' AND source_id = ?",
-      ).all(target.id) as Array<{ rowid: number; vecTable: string }>;
-      const deleteVecByTable = new Map<string, Database.Statement>();
-      for (const job of jobs) {
-        assertIdentifier(job.vecTable);
-        if (!db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(job.vecTable)) {
-          continue;
-        }
-        let stmt = deleteVecByTable.get(job.vecTable);
-        if (!stmt) {
-          stmt = db.prepare(`DELETE FROM "${job.vecTable}" WHERE rowid = ?`);
-          deleteVecByTable.set(job.vecTable, stmt);
-        }
-        stmt.run(job.rowid);
-      }
-      db.prepare("DELETE FROM embedding_jobs WHERE source = 'chat' AND source_id = ?").run(target.id);
-    }
-
-    // 旧重建标记的 handoff 可能包含本次目标消息；先删旧标记，只保留基于
-    // 当前有效历史重新生成的最新版本，避免隐藏派生记录把内容留在本地。
-    db.prepare("DELETE FROM messages WHERE role = 'context_rebuild' AND session_id = ?").run(sessionId);
-    const scrubTarget = db.prepare(
-      "UPDATE messages SET role = 'message_tombstone', content = 'null', tool_use_id = NULL, agent_meta = NULL, agent_kind = NULL, rewind_at = ? WHERE id = ? AND session_id = ? AND client_id = ? AND role IN ('user', 'assistant', 'tool_use', 'tool_result', 'ask_user', 'plan_review', 'thinking', 'error') AND rewind_at IS NULL",
-    );
-    for (const target of targets) {
-      const scrubbed = scrubTarget.run(updatedAt, target.id, sessionId, target.clientId);
-      if (scrubbed.changes !== 1) {
-        throw Object.assign(new Error(`Message 删除竞态: ${target.clientId}`), {
-          code: 'PRECONDITION_FAILED',
-        });
-      }
-    }
-    const sessionResult = db.prepare(
-      'UPDATE sessions SET sdk_session_id = NULL, updated_at = ? WHERE id = ?',
-    ).run(updatedAt, sessionId);
-    if (sessionResult.changes !== 1) {
-      throw Object.assign(new Error(`Session 不存在: ${sessionId}`), { code: 'NOT_FOUND' });
-    }
-    db.prepare(
-      "INSERT INTO messages (id, client_id, session_id, role, content, created_at, rewind_at) VALUES (?, ?, ?, 'context_rebuild', ?, ?, ?)",
-    ).run(markerId, markerClientId, sessionId, markerContent, markerCreatedAt, markerCreatedAt);
-    return {
-      messages: targets.map((target) => ({
-        messageId: target.id,
-        clientId: target.clientId,
-      })),
-    };
-  });
-  return transaction();
 }
 
 function sessionsRenameTitles(db: Database.Database, args: unknown): Array<{
@@ -414,14 +248,10 @@ function codexImportMessages(db: Database.Database, args: unknown): { changed: n
       agent_meta = excluded.agent_meta,
       created_at = excluded.created_at
     WHERE
-      messages.role != 'message_tombstone' AND
-      messages.rewind_at IS NULL AND
-      (
-        messages.role IS NOT excluded.role OR
-        messages.content IS NOT excluded.content OR
-        messages.agent_meta IS NOT excluded.agent_meta OR
-        messages.created_at IS NOT excluded.created_at
-      )
+      messages.role IS NOT excluded.role OR
+      messages.content IS NOT excluded.content OR
+      messages.agent_meta IS NOT excluded.agent_meta OR
+      messages.created_at IS NOT excluded.created_at
   `);
   const transaction = db.transaction(() => {
     let changed = 0;
@@ -471,15 +301,11 @@ function claudeImportMessages(db: Database.Database, args: unknown): { changed: 
       agent_meta = excluded.agent_meta,
       created_at = excluded.created_at
     WHERE
-      messages.role != 'message_tombstone' AND
-      messages.rewind_at IS NULL AND
-      (
-        messages.role IS NOT excluded.role OR
-        messages.content IS NOT excluded.content OR
-        messages.tool_use_id IS NOT excluded.tool_use_id OR
-        messages.agent_meta IS NOT excluded.agent_meta OR
-        messages.created_at IS NOT excluded.created_at
-      )
+      messages.role IS NOT excluded.role OR
+      messages.content IS NOT excluded.content OR
+      messages.tool_use_id IS NOT excluded.tool_use_id OR
+      messages.agent_meta IS NOT excluded.agent_meta OR
+      messages.created_at IS NOT excluded.created_at
   `);
   const transaction = db.transaction(() => {
     let changed = 0;
@@ -629,9 +455,7 @@ function parseRewindAgentMeta(raw: string | null): { uuid?: string; transcriptPa
 function forkSession(db: Database.Database, args: unknown): { messageCount: number } {
   const payload = asRecord(args, 'fork.session args');
   const sourceSessionId = expectString(payload.sourceSessionId, 'sourceSessionId');
-  const sourceClearedAt = nullableNumber(payload.sourceClearedAt);
   const targetCreatedAt = expectNumber(payload.targetCreatedAt, 'targetCreatedAt');
-  const targetRowid = nullableNumber(payload.targetRowid);
   const newSession = asRecord(payload.newSession, 'newSession');
   const uuidMap = normalizeUuidMap(payload.uuidMap);
   const legacyTranscriptParentUuids = normalizeStringSet(
@@ -639,30 +463,15 @@ function forkSession(db: Database.Database, args: unknown): { messageCount: numb
     'legacyTranscriptParentUuids',
   );
   const toolParentUuids = normalizeStringSet(payload.toolParentUuids, 'toolParentUuids');
-  const detachAgentSwitchSessions = payload.detachAgentSwitchSessions === true;
-  const resetHandoffBoundaryClientId = nullableString(payload.resetHandoffBoundaryClientId);
   const newMessageIds = normalizeNewMessageIds(payload.newMessageIds);
   const sourceMessages = db.prepare(
-    `SELECT client_id, role, content, tool_use_id, agent_meta, agent_kind, created_at
+    `SELECT role, content, tool_use_id, agent_meta, agent_kind, created_at
        FROM messages
       WHERE session_id = ?
-        AND (? IS NULL OR created_at > ?)
-        AND (
-          created_at < ?
-          OR (? IS NOT NULL AND created_at = ? AND rowid < ?)
-        )
+        AND created_at < ?
         AND rewind_at IS NULL
-      ORDER BY created_at ASC, rowid ASC`,
-  ).all(
-    sourceSessionId,
-    sourceClearedAt,
-    sourceClearedAt,
-    targetCreatedAt,
-    targetRowid,
-    targetCreatedAt,
-    targetRowid,
-  ) as Array<{
-    client_id: string;
+      ORDER BY created_at ASC`,
+  ).all(sourceSessionId, targetCreatedAt) as Array<{
     role: string;
     content: string;
     tool_use_id: string | null;
@@ -728,10 +537,7 @@ function forkSession(db: Database.Database, args: unknown): { messageCount: numb
         ids.clientId,
         expectString(newSession.id, 'newSession.id'),
         message.role,
-        sanitizeForkedMessageContent(message, {
-          detachAgentSwitchSessions,
-          resetHandoffBoundaryClientId,
-        }),
+        message.content,
         message.tool_use_id,
         remapAgentMetaUuid(message.agent_meta, uuidMap, legacyTranscriptParentUuids, toolParentUuids),
         message.agent_kind,
@@ -741,28 +547,6 @@ function forkSession(db: Database.Database, args: unknown): { messageCount: numb
   });
   transaction();
   return { messageCount: sourceMessages.length };
-}
-
-/** 复制边界只保留可见语义；vendor session 绑定必须属于父分支。 */
-function sanitizeForkedMessageContent(
-  message: { client_id: string; role: string; content: string },
-  opts: { detachAgentSwitchSessions: boolean; resetHandoffBoundaryClientId: string | null },
-): string {
-  const resetConsumed = message.client_id === opts.resetHandoffBoundaryClientId;
-  if (message.role !== 'agent_switch' || (!opts.detachAgentSwitchSessions && !resetConsumed)) {
-    return message.content;
-  }
-  try {
-    const parsed = JSON.parse(message.content);
-    if (!isRecord(parsed)) return message.content;
-    return JSON.stringify({
-      ...parsed,
-      ...(opts.detachAgentSwitchSessions ? { fromSdkSessionId: null } : {}),
-      ...(resetConsumed ? { consumed: false } : {}),
-    });
-  } catch {
-    return message.content;
-  }
 }
 
 // 会话分享(.xdtshare)导入落库:单事务插 session 行 + 全量 messages(含 rewind 链)。
@@ -901,13 +685,9 @@ function embeddingCommit(db: Database.Database, args: unknown): void {
       }
       const vecTable = expectString(item.vecTable, 'item.vecTable');
       const rowidBig = BigInt(rowid);
-      // 消息删除可能在 embedding API 请求飞行期间删掉 job 与旧 vec。提交时
-      // 先确认 job 仍存在；不存在就只清理可能的孤立 vec，绝不能把已删除消息
-      // 的派生向量重新写回本地。
-      const updated = updateStmt.run(rowid);
       getDeleteStmt(vecTable).run(rowidBig);
-      if (updated.changes !== 1) continue;
       getInsertStmt(vecTable).run(rowidBig, embedding);
+      updateStmt.run(rowid);
     }
   });
   transaction();

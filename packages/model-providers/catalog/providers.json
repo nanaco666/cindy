@@ -286,18 +286,15 @@
           "models": [
             {
               "id": "kimi-k3",
-              "name": "Kimi K3",
-              "contextWindow": 1000000
+              "name": "Kimi K3"
             },
             {
               "id": "kimi-k2.7-code",
-              "name": "Kimi K2.7 Code",
-              "contextWindow": 262144
+              "name": "Kimi K2.7 Code"
             },
             {
               "id": "kimi-k2.6",
-              "name": "Kimi K2.6",
-              "contextWindow": 262144
+              "name": "Kimi K2.6"
             }
           ],
           "modelsUrl": "https://api.moonshot.cn/v1/models"
@@ -315,18 +312,15 @@
           "models": [
             {
               "id": "kimi-k3",
-              "name": "Kimi K3",
-              "contextWindow": 1000000
+              "name": "Kimi K3"
             },
             {
               "id": "kimi-k2.7-code",
-              "name": "Kimi K2.7 Code",
-              "contextWindow": 262144
+              "name": "Kimi K2.7 Code"
             },
             {
               "id": "kimi-k2.6",
-              "name": "Kimi K2.6",
-              "contextWindow": 262144
+              "name": "Kimi K2.6"
             }
           ],
           "modelsUrl": "https://api.moonshot.ai/v1/models"
@@ -343,13 +337,11 @@
           "models": [
             {
               "id": "kimi-for-coding",
-              "name": "Kimi for Coding",
-              "contextWindow": 262144
+              "name": "Kimi for Coding"
             },
             {
               "id": "kimi-for-coding-highspeed",
-              "name": "Kimi for Coding 高速版",
-              "contextWindow": 262144
+              "name": "Kimi for Coding 高速版"
             }
           ]
         }
@@ -358,7 +350,7 @@
     {
       "id": "minimax-cn",
       "name": "MiniMax（中国大陆）",
-      "docsUrl": "https://platform.minimaxi.com/docs/api-reference/responses-create",
+      "docsUrl": "https://platform.minimaxi.com/document",
       "regionHint": "cn",
       "runtimes": {
         "claude-code": {
@@ -373,27 +365,13 @@
               "name": "MiniMax M2.5"
             }
           ]
-        },
-        "codex": {
-          "baseUrl": "https://api.minimaxi.com/v1",
-          "models": [
-            {
-              "id": "MiniMax-M3",
-              "name": "MiniMax M3",
-              "contextWindow": 1000000
-            },
-            {
-              "id": "MiniMax-M2.5",
-              "name": "MiniMax M2.5"
-            }
-          ]
         }
       }
     },
     {
       "id": "minimax-global",
       "name": "MiniMax (Global)",
-      "docsUrl": "https://platform.minimax.io/docs/api-reference/responses-create",
+      "docsUrl": "https://platform.minimax.io/docs",
       "regionHint": "global",
       "runtimes": {
         "claude-code": {
@@ -402,20 +380,6 @@
             {
               "id": "MiniMax-M3",
               "name": "MiniMax M3"
-            },
-            {
-              "id": "MiniMax-M2.5",
-              "name": "MiniMax M2.5"
-            }
-          ]
-        },
-        "codex": {
-          "baseUrl": "https://api.minimax.io/v1",
-          "models": [
-            {
-              "id": "MiniMax-M3",
-              "name": "MiniMax M3",
-              "contextWindow": 1000000
             },
             {
               "id": "MiniMax-M2.5",
@@ -662,7 +626,7 @@
         ],
         "name": "GPT-5.6-Sol",
         "group": "gpt-budget",
-        "description": "GPT-5.6-Sol for coding tasks",
+        "description": "GPT-5.6-Sol (骨折价 codex 路由) for coding tasks",
         "contextWindow": 372000,
         "efforts": [
           "low",
@@ -696,7 +660,7 @@
         ],
         "name": "GPT-5.6-Terra",
         "group": "gpt-budget",
-        "description": "GPT-5.6-Terra for coding tasks",
+        "description": "GPT-5.6-Terra (骨折价 codex 路由) for coding tasks",
         "contextWindow": 372000,
         "efforts": [
           "low",
@@ -730,7 +694,7 @@
         ],
         "name": "GPT-5.5",
         "group": "gpt-budget",
-        "description": "GPT-5.5 for coding tasks",
+        "description": "GPT-5.5 (骨折价 codex 路由) for coding tasks",
         "contextWindow": 272000,
         "efforts": [
           "low",
@@ -755,7 +719,7 @@
         ],
         "name": "GPT-5.4",
         "group": "gpt-budget",
-        "description": "GPT-5.4 for coding tasks",
+        "description": "GPT-5.4 (骨折价 codex 路由) for coding tasks",
         "contextWindow": 272000,
         "efforts": [
           "low",
@@ -1016,8 +980,6 @@
         ],
         "name": "Kimi K3",
         "group": "china",
-        "description": "Moonshot Kimi K3 agentic coding model; 1M context; thinking is provider-managed",
-        "contextWindow": 1000000,
         "sortOrder": 41
       },
       "qwen/qwen3.6-plus": {

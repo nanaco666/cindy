@@ -134,7 +134,6 @@ function stubElectronApi(host: FakeHost) {
   const fanOut = () => () => () => {};
   const localResolveInteraction = vi.fn(async () => {});
   const localSetPermissionMode = vi.fn(async () => {});
-  const localSetFastMode = vi.fn(async () => {});
   const localGetPendingInteractions = vi.fn(
     async () => [] as Array<{ request: { kind: string; requestId: string }; persistId?: string }>,
   );
@@ -148,7 +147,6 @@ function stubElectronApi(host: FakeHost) {
         onInteractionDismissed: fanOut(),
         resolveInteraction: localResolveInteraction,
         setPermissionMode: localSetPermissionMode,
-        setFastMode: localSetFastMode,
         getPendingInteractions: localGetPendingInteractions,
         input: { getProjection: vi.fn(async (s: string) => emptyProjection(s)) },
       },
@@ -162,12 +160,7 @@ function stubElectronApi(host: FakeHost) {
       },
     },
   };
-  return {
-    localResolveInteraction,
-    localSetPermissionMode,
-    localSetFastMode,
-    localGetPendingInteractions,
-  };
+  return { localResolveInteraction, localSetPermissionMode, localGetPendingInteractions };
 }
 
 function emptyProjection(sessionId: string) {
@@ -316,17 +309,6 @@ describe('device-link 远程 fastMode 持久化', () => {
     await expect(makerChatStore.setFastMode(s, true)).rejects.toThrow('relay down');
     expect(host.invoke).toHaveBeenCalledWith(DEVICE_ID, 'maker:set-fast-mode', [s, true]);
     expect(makerChatStore.getSnapshot(s).fastMode).toBe(false);
-  });
-
-  it('已捕获 deviceId 在 session origin 消失后仍固定走远程 Fast 隧道', async () => {
-    const s = openRemoteSession();
-    remoteProjectsStore.clear();
-
-    await makerChatStore.setFastMode(s, true, DEVICE_ID);
-
-    expect(host.invoke).toHaveBeenCalledWith(DEVICE_ID, 'maker:set-fast-mode', [s, true]);
-    expect(local.localSetFastMode).not.toHaveBeenCalled();
-    expect(makerChatStore.getSnapshot(s).fastMode).toBe(true);
   });
 });
 
@@ -639,8 +621,7 @@ describe('device-link 交互快照重建 — 窗口在交互挂起之后才打�
 // ─── 接线源不变式:锁住远程交互的「收」与「发」两半,防像 orca 那样静默退化 ───────────────
 describe('远程交互接线不变式', () => {
   const R = resolve(__dirname, '..');
-  // Windows CRLF 检出下 \n 字面量断言会失配,统一归一化成 LF 再断言。
-  const read = (rel: string) => readFileSync(resolve(R, rel), 'utf8').replace(/\r\n/g, '\n');
+  const read = (rel: string) => readFileSync(resolve(R, rel), 'utf8');
 
   it('makerChatStore 远程 push switch 消费 interaction-request / interaction-dismissed(否则远程卡片不显示)', () => {
     const src = read('lib/makerChatStore.ts');
@@ -660,9 +641,7 @@ describe('远程交互接线不变式', () => {
     const src = read('lib/makerChatStore.ts');
     expect(src).toContain('const deviceLinkRemote = isRemoteSession(sessionId);');
     expect(src).toContain('const sshRemote = Boolean(current.remoteHostId);');
-    expect(src).toContain(
-      '...(deviceLinkRemote ? {} : { makerMemoryEnabled: sshRemote ? false : getMakerMemoryEnabled() })',
-    );
+    expect(src).toContain('...(deviceLinkRemote ? {} : { makerMemoryEnabled: sshRemote ? false : getMakerMemoryEnabled() })');
   });
 
   it('context usage 对 SSH 显式关闭本地 Maker Memory，对 device-link 仍省略', () => {
@@ -697,7 +676,7 @@ describe('远程交互接线不变式', () => {
     const helperStart = src.indexOf('const persistFastModeChange');
     expect(helperStart).toBeGreaterThan(-1);
     const helperBody = src.slice(helperStart, helperStart + 800);
-    expect(helperBody).toContain('await onFastModeChange?.(enabled, options?.remoteDeviceId);');
+    expect(helperBody).toContain('await onFastModeChange?.(enabled);');
     expect(helperBody).toContain('return true;');
     expect(helperBody).toContain('catch (err)');
     expect(helperBody).toContain('if (!options?.silent) {');
@@ -708,8 +687,7 @@ describe('远程交互接线不变式', () => {
     // 窗口覆盖:函数头部的切换意图拦截块(session-agent-switch 意图制)之后
     // 才是本用例断言的 persist→memory→draft 顺序,取 2200 字符保证包住全体。
     const body = src.slice(start, start + 2200);
-    expect(body).toContain('const persisted = await persistFastModeChange(enabled, {');
-    expect(body).toContain('remoteDeviceId: sourceRemoteDeviceId');
+    expect(body).toContain('const persisted = await persistFastModeChange(enabled);');
     expect(body.indexOf('if (!persisted) return;')).toBeLessThan(
       body.indexOf('syncSessionDraftModelPrefs'),
     );
@@ -739,15 +717,15 @@ describe('远程交互接线不变式', () => {
 
   it('ChatInput 远程切模型先尝试静默恢复 Fast,失败仍同步已落盘 model/effort', () => {
     const src = read('components/new-chat/ChatInput.tsx');
-    const start = src.indexOf('if (sourceRemoteDeviceId) {');
+    const start = src.indexOf('if (getSessionDeviceId(sessionId))');
     expect(start).toBeGreaterThan(-1);
     const body = src.slice(start, start + 2800);
     const persist = body.indexOf(
-      'const fastPersisted = await persistFastModeChange(restoredFast, {',
+      'const fastPersisted = await persistFastModeChange(restoredFast, { silent: true });',
     );
-    const sync = body.indexOf('syncSessionDraftModelPrefs(');
+    const sync = body.indexOf('syncSessionDraftModelPrefs(newModelId');
     expect(persist).toBeGreaterThan(
-      body.indexOf('await remoteMaker.setEffort(sessionId, newEffort);'),
+      body.indexOf('await makerApiFor(sessionId).setEffort(sessionId, newEffort);'),
     );
     expect(persist).toBeGreaterThan(-1);
     expect(sync).toBeGreaterThan(-1);
@@ -759,18 +737,16 @@ describe('远程交互接线不变式', () => {
 
   it('ChatInput 远程切来源先尝试静默恢复 Fast,失败仍同步已落盘 model/effort/provider', () => {
     const src = read('components/new-chat/ChatInput.tsx');
-    const start = src.indexOf('if (sessionId && sourceRemoteDeviceId)');
-    const end = src.indexOf('// 把这次切换后落定的 (model, effort)', start);
+    const start = src.indexOf('if (sessionId && isRemoteSession)');
     expect(start).toBeGreaterThan(-1);
-    expect(end).toBeGreaterThan(start);
-    const body = src.slice(start, end);
+    const body = src.slice(start, start + 2600);
     const persist = body.indexOf(
-      'const fastPersisted = await persistFastModeChange(restoredFast, {',
+      'const fastPersisted = await persistFastModeChange(restoredFast, { silent: true });',
     );
     const sync = body.indexOf('syncSessionDraftModelPrefs(');
     const finalize = body.indexOf('onModelDidChange?.(targetModel);');
     expect(persist).toBeGreaterThan(
-      body.indexOf('await remoteMaker.setEffort(sessionId, targetEffort);'),
+      body.indexOf('await makerApiFor(sessionId).setEffort(sessionId, targetEffort);'),
     );
     expect(persist).toBeGreaterThan(-1);
     expect(sync).toBeGreaterThan(-1);
@@ -788,10 +764,6 @@ describe('远程交互接线不变式', () => {
     const syncBody = chatInputSrc.slice(syncStart, syncStart + 1900);
     expect(syncBody).toContain('patchVendorPrefsPreservingModelChoice');
     expect(syncBody).toContain('markModelChoice: false');
-    expect(syncBody).toContain(
-      'opts.remoteDeviceId ?? getSessionDeviceId(sessionId) ?? deviceLinkDeviceId',
-    );
-    expect(syncBody).toContain(".invoke(remoteDeviceId, 'maker:apply-new-maker-draft-pref'");
     expect(syncBody).not.toContain('patchVendorPrefs(vendor');
 
     const appSrc = read('App.tsx');
@@ -805,117 +777,6 @@ describe('远程交互接线不变式', () => {
     const pushActiveBody = newMakerDraftRouteSrc.slice(pushActiveStart, pushActiveStart + 1400);
     expect(pushActiveBody).toContain('active: true');
     expect(pushActiveBody).toContain('markModelChoice: false');
-  });
-
-  it('外部 session effort patch 必须在 layout commit 时对齐 cache 并抢占旧 runtime', () => {
-    const src = read('components/new-chat/ChatInput.tsx');
-    const start = src.indexOf('const effortChangeCoordinatorRef');
-    const end = src.indexOf('// 优先级: 外部 store', start);
-    expect(start).toBeGreaterThan(-1);
-    expect(end).toBeGreaterThan(start);
-    const body = src.slice(start, end);
-    expect(body).toContain('useLayoutEffect(() => {');
-    expect(body).toContain('adoptExternalEffort(');
-    expect(body).toContain('window.electronAPI.maker.setEffort(targetSessionId, effort)');
-  });
-
-  it('远程 model/provider 收尾必须把已捕获 deviceId 传给草稿偏好同步', () => {
-    const src = read('components/new-chat/ChatInput.tsx');
-    const modelStart = src.indexOf('const performModelChange = useCallback(');
-    const modelEnd = src.indexOf('const handleModelChange = useCallback(', modelStart);
-    const providerStart = src.indexOf('const performProviderChange = useCallback(');
-    const providerEnd = src.indexOf('const handleProviderChange = useCallback(', providerStart);
-    expect(modelStart).toBeGreaterThan(-1);
-    expect(modelEnd).toBeGreaterThan(modelStart);
-    expect(providerStart).toBeGreaterThan(-1);
-    expect(providerEnd).toBeGreaterThan(providerStart);
-    const modelBody = src.slice(modelStart, modelEnd);
-    const providerBody = src.slice(providerStart, providerEnd);
-    expect(modelBody).toContain('remoteDeviceId: sourceRemoteDeviceId');
-    expect(modelBody).toContain('onEffortDidChange?.(newEffort, sessionId, sourceRemoteDeviceId)');
-    expect(modelBody).toContain('confirmModelSwitchContextGuard(newModelId, sourceRemoteDeviceId)');
-    expect(modelBody).toMatch(
-      /persistFastModeChange\(restoredFast,\s*\{[\s\S]*?remoteDeviceId: sourceRemoteDeviceId/,
-    );
-    expect(providerBody).toContain('remoteDeviceId: sourceRemoteDeviceId');
-    expect(providerBody).toContain(
-      'onEffortDidChange?.(targetEffort, sessionId, sourceRemoteDeviceId)',
-    );
-    expect(providerBody).toMatch(
-      /confirmModelSwitchContextGuard\(\s*reconciledModelId,\s*sourceRemoteDeviceId/,
-    );
-    expect(providerBody).toMatch(
-      /persistFastModeChange\(restoredFast,\s*\{[\s\S]*?remoteDeviceId: sourceRemoteDeviceId/,
-    );
-  });
-
-  it('Fast 持久化与草稿同步必须复用捕获 deviceId', () => {
-    const chatInputSrc = read('components/new-chat/ChatInput.tsx');
-    const persistStart = chatInputSrc.indexOf('const persistFastModeChange = useCallback(');
-    const persistEnd = chatInputSrc.indexOf(
-      'const handleFastModeChange = useCallback(',
-      persistStart,
-    );
-    const handleStart = persistEnd;
-    const handleEnd = chatInputSrc.indexOf('/**\n   * 切模型前的上下文容量护栏', handleStart);
-    expect(persistStart).toBeGreaterThan(-1);
-    expect(persistEnd).toBeGreaterThan(persistStart);
-    expect(handleEnd).toBeGreaterThan(handleStart);
-    expect(chatInputSrc.slice(persistStart, persistEnd)).toContain(
-      'onFastModeChange?.(enabled, options?.remoteDeviceId)',
-    );
-    expect(chatInputSrc.slice(handleStart, handleEnd)).toMatch(
-      /syncSessionDraftModelPrefs\(\s*modelId,\s*\{ effort, fast: enabled \},\s*\{ remoteDeviceId: sourceRemoteDeviceId \}/,
-    );
-
-    const hookSrc = read('hooks/useCCAgentChat.ts');
-    expect(hookSrc).toContain(
-      'makerChatStore.setFastMode(sessionId, enabled, sourceRemoteDeviceId)',
-    );
-    const storeSrc = read('lib/makerChatStore.ts');
-    expect(storeSrc).toContain('sourceRemoteDeviceId || isRemoteSession(sessionId)');
-    expect(storeSrc).toContain('makerApiForDevice(sourceRemoteDeviceId)');
-  });
-
-  it('effort 回调必须追踪 sticky deviceId 并向父级保留远程 scope', () => {
-    const src = read('components/new-chat/ChatInput.tsx');
-    const effortStart = src.indexOf('const handleEffortChange = useCallback(');
-    const effortEnd = src.indexOf('// per-session 来源切换', effortStart);
-    expect(effortStart).toBeGreaterThan(-1);
-    expect(effortEnd).toBeGreaterThan(effortStart);
-    const effortBody = src.slice(effortStart, effortEnd);
-    expect(effortBody).toContain('onEffortDidChange?.(newEffort, sessionId, remoteDeviceId)');
-    expect(effortBody).toMatch(/\[\s*activeModel,\s*sessionId,\s*deviceLinkDeviceId,/);
-
-    const sessionViewSrc = read('features/cc-agent/CCAgentSessionView.tsx');
-    const callbackStart = sessionViewSrc.indexOf('const handleEffortDidChange = useCallback(');
-    const callbackEnd = sessionViewSrc.indexOf(
-      'const handlePermissionModeDidChange',
-      callbackStart,
-    );
-    expect(callbackStart).toBeGreaterThan(-1);
-    expect(callbackEnd).toBeGreaterThan(callbackStart);
-    const callbackBody = sessionViewSrc.slice(callbackStart, callbackEnd);
-    expect(callbackBody).toContain('sourceRemoteDeviceId?: string');
-    expect(callbackBody).toContain(
-      'if (sourceRemoteDeviceId || getSessionDeviceId(targetSessionId)) return;',
-    );
-  });
-
-  it('同模型 provider task 必须在 lane 内读取最新 committed effort', () => {
-    const src = read('components/new-chat/ChatInput.tsx');
-    const providerStart = src.indexOf('const performProviderChange = useCallback(');
-    const sameModelStart = src.indexOf('// 同模型只切来源', providerStart);
-    const applyEnd = src.indexOf(
-      'await applyModelAndEffort(activeModel, targetEffort);',
-      sameModelStart,
-    );
-    expect(providerStart).toBeGreaterThan(-1);
-    expect(sameModelStart).toBeGreaterThan(providerStart);
-    expect(applyEnd).toBeGreaterThan(sameModelStart);
-    const body = src.slice(sameModelStart, applyEnd);
-    expect(body).toContain('getCommittedEffort(sessionId) ?? activeEffort');
-    expect(body).toContain('fallbackEffort: committedActiveEffort');
   });
 
   it('device-link draft active Fast 写穿必须带当前 effort,避免目标 model 继承旧 effort', () => {
@@ -971,7 +832,7 @@ describe('远程交互接线不变式', () => {
     expect(end).toBeGreaterThan(start);
     const body = src.slice(start, end);
     const runtimeGate = body.indexOf(
-      'const setModelResult = await window.electronAPI.maker.setModel(',
+      'await window.electronAPI.maker.setModel(sessionId, modelId, newProviderId)',
     );
     const persist = body.indexOf('await sessionService.update(sessionId, {');
     const applyUi = body.indexOf('applyProviderSelection();');
@@ -984,15 +845,15 @@ describe('远程交互接线不变式', () => {
 
   it('ChatInput 本地只切模型先过 main credential gate,再写 DB / UI', () => {
     const src = read('components/new-chat/ChatInput.tsx');
-    const start = src.indexOf('const performModelChange = useCallback(');
-    const end = src.indexOf('const handleModelChange = useCallback(', start);
+    const start = src.indexOf('const handleModelChange = useCallback(');
+    const end = src.indexOf('const handleEffortChange = useCallback(', start);
     expect(start).toBeGreaterThan(-1);
     expect(end).toBeGreaterThan(start);
     const body = src.slice(start, end);
     const runtimeGate = body.indexOf(
-      'const setModelResult = await window.electronAPI.maker.setModel(sessionId, newModelId)',
+      'await window.electronAPI.maker.setModel(sessionId, newModelId)',
     );
-    const persist = body.indexOf('await sessionService.update(sessionId, {');
+    const persist = body.indexOf('await sessionService.update(sessionId, { model: newModelId');
     const applyUi = body.indexOf('onModelDidChange?.(newModelId)');
     expect(runtimeGate).toBeGreaterThan(-1);
     expect(persist).toBeGreaterThan(-1);

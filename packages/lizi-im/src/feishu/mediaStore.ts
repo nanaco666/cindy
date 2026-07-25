@@ -8,9 +8,9 @@
  * Cache key = feishu's image_key / file_key (globally unique tokens). Filename
  * pattern = `{token}{ext}`. Cache hit = file exists on disk.
  *
- * Intentionally simpler than @cindy/mcps's media store: no metadata JSON file,
+ * Intentionally simpler than lizi-mcps's media store: no metadata JSON file,
  * no preview-image generation, no concurrency lock. Re-downloading an image
- * is cheap and rare; @cindy/im does not need to mirror every feature of the
+ * is cheap and rare; lizi-im does not need to mirror every feature of the
  * desktop's MCP-side store.
  */
 
@@ -92,7 +92,7 @@ export async function getOrDownload(
   const mediaDir = getHost().paths.feishuMediaDir;
   const dir = path.join(mediaDir, subdir(kind));
 
-  // 图片优先走 host 媒体总仓:token 命中免重下,miss 时下载
+  // 图片优先走 host 媒体总仓(迁移第 3 步):token 命中免重下,miss 时下载
   // 后入仓;白名单外图片(bmp/svg)与非图片文件、host 仓故障统统回落老路径,
   // 不让缓存问题挡消息。字节只下载一次:入仓失败用手头字节落老目录(review P2)。
   const media = getHost().media;

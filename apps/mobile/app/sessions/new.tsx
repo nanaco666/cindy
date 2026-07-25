@@ -1,4 +1,4 @@
-import { stripTrailingPathSeparators } from '@cindy/maker-shared/path-text';
+import { stripTrailingPathSeparators } from '@lizi/maker-shared/path-text';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import Constants from 'expo-constants';
 import { MOBILE_VISUAL_MOCK_ENABLED } from '@/config/env';
@@ -60,7 +60,7 @@ import type {
 } from '@/device-link/mobileMakerTransport';
 import { describeAgentAuthError, formatRemoteError } from '@/device-link/remoteStatus';
 import { agentAuthGateHint, agentAuthGateVerdict } from '@/session/agentAuthGate';
-import { connectedProvidersForAgent, getModel } from '@cindy/model-providers/registry';
+import { connectedProvidersForAgent, getModel } from '@lizi/model-providers/registry';
 import { withTransientRemoteRetry } from '@/device-link/remoteRetry';
 import { useMobileMakerTransport } from '@/device-link/useMobileMakerTransport';
 import { evictDeviceProviders, useDeviceProviders } from '@/device-link/useDeviceProviders';
@@ -106,7 +106,7 @@ import {
 } from '@/session/ContextSheet';
 import { RecentPhotosStrip, ScreenshotsGrid } from '@/session/ContextSheetMediaViews';
 import { ContextSheetGoalCreateForm } from '@/session/ContextSheetGoalView';
-import type { MobileGoalLimitsInput } from '@cindy/maker-shared/device-link-contract';
+import type { MobileGoalLimitsInput } from '@lizi/maker-shared/device-link-contract';
 import { ComposerAttachmentCollapsedBadge, ComposerAttachmentTray } from '@/session/ComposerAttachmentTray';
 import { ImageLightbox } from '@/session/ImageLightbox';
 import {
@@ -133,7 +133,6 @@ import {
   defaultPermissionModeForNewSessionAgent,
   buildRemoteCreateSessionOptions,
   buildRecentWorkspaceOptions,
-  filterRemoteDirectoryEntries,
   normalizeCreateSessionResult,
   parseNewSessionDeviceOptions,
   pickAgentDefaultRuntime,
@@ -147,13 +146,11 @@ import {
   type NewSessionDeviceOption,
   type NewSessionStoredPreferences,
 } from '@/session/newSession';
-import { newSessionText } from '@/session/newSessionMessages';
 import {
   createNewSessionId,
   drainStashedNewSessionDraft,
   startNewSessionCreation,
 } from '@/session/newSessionCreation';
-import { prepareMobileQueuedSessionReferences } from '@/session/sessionReferences';
 import {
   readNewSessionPreferences,
   saveNewSessionPreferences,
@@ -185,6 +182,7 @@ import { useMobileKeyboardState } from '@/session/useMobileKeyboardState';
 import {
   MOBILE_VOICE_MIC_PERMISSION_ERROR,
   MOBILE_VOICE_REALTIME_AUDIO_UNAVAILABLE_ERROR,
+  formatMobileVoiceStartupError,
   isMobileVoiceMicPermissionError,
   type MobileVoiceState,
 } from '@/session/mobileVoiceInput';
@@ -200,7 +198,11 @@ import {
   type PrewarmedMobileVoiceAsr,
 } from '@/session/mobileVoicePrewarm';
 import {
-  CINDY_MANAGED_REFINER_PROVIDER,
+  isMobileVoiceLiteLlmSettingsError,
+  resolveMobileVoiceCredentialFromLiteLlmSettings,
+} from '@/session/mobileVoiceLiteLlmSettings';
+import { getMobileVoiceServiceMode } from '@/session/mobileVoiceServiceMode';
+import {
   createMobileCindyVoiceCredential,
   MobileCindyVoiceRunContext,
 } from '@/session/mobileCindyVoiceSession';
@@ -245,8 +247,6 @@ const COMPOSER_VOICE_CARET_GAP = 2;
 const COMPOSER_RESIZE_CHROME_HEIGHT = 34;
 // 聚焦卡片形态的 chrome:paddingTop 26 + paddingBottom 8 + 层间 gap 8 + 工具排 ~36。
 const COMPOSER_CARD_CHROME_HEIGHT = 78;
-// Android 的 SafeAreaView 已经包含状态栏顶部 inset，不能再叠加一档顶部留白。
-const NEW_SESSION_SCREEN_TOP_PADDING = Platform.OS === 'android' ? 0 : spacing.xl;
 
 export default function NewRemoteSessionScreen() {
   const styles = useThemedStyles(makeStyles);
@@ -278,7 +278,7 @@ export default function NewRemoteSessionScreen() {
   const visualInitialDraft = MOBILE_VISUAL_MOCK_ENABLED ? readRouteString(params.visualDraft) : null;
   const router = useRouter();
   const auth = useAuth();
-  const { invoke, openLink, subscribe } = useDeviceLink();
+  const { openLink, subscribe } = useDeviceLink();
   const routeDeviceFallback = useMemo<NewSessionDeviceOption | null>(
     () => routeDeviceId ? { deviceId: routeDeviceId, name: routeDeviceName || routeDeviceId } : null,
     [routeDeviceId, routeDeviceName],
@@ -337,7 +337,6 @@ export default function NewRemoteSessionScreen() {
   const [browseEntries, setBrowseEntries] = useState<RemoteDirectoryEntry[]>([]);
   const [browseLoading, setBrowseLoading] = useState(false);
   const [browseError, setBrowseError] = useState<string | null>(null);
-  const [showHiddenDirectories, setShowHiddenDirectories] = useState(false);
   // Context 面板(+ 号弹出的可拖动 sheet):open + 子视图(主视图 / 截图列表 / 目标草稿)。
   const [contextSheetOpen, setContextSheetOpen] = useState(false);
   const [contextSheetView, setContextSheetView] = useState<'main' | 'screenshots' | 'goal'>('main');
@@ -740,8 +739,9 @@ export default function NewRemoteSessionScreen() {
   // 在途上传落定后再组首条消息,抢点创建不会丢图(#589 的 attachmentBusy 门由此取代)。
   const canCreate = !createValidation && !creating && !voiceIsProcessing;
   const voiceIsBusy = voiceIsListening || voiceIsProcessing;
-  // 手机语音只保留官方托管路径,错误引导仅剩系统麦克风权限一条。
-  const canOpenVoiceSettings = isMobileVoiceMicPermissionError(voiceError);
+  const canOpenSystemVoiceSettings = isMobileVoiceMicPermissionError(voiceError);
+  const canOpenAppVoiceSettings = isMobileVoiceLiteLlmSettingsError(voiceError);
+  const canOpenVoiceSettings = canOpenSystemVoiceSettings || canOpenAppVoiceSettings;
   // 状态行只承载错误信息;「正在听 / 转写中」不再占一行,对齐桌面版——
   // 录音状态由输入框内的语音按钮形态(Mic / Square / spinner)表达。
   const voiceStatusVisible = Boolean(voiceError);
@@ -823,10 +823,6 @@ export default function NewRemoteSessionScreen() {
       ? filterAtResources(atResources, composerTrigger.query, 5)
       : [],
     [atResources, composerTrigger],
-  );
-  const visibleBrowseEntries = useMemo(
-    () => filterRemoteDirectoryEntries(browseEntries, showHiddenDirectories),
-    [browseEntries, showHiddenDirectories],
   );
 
   const patchDraft = useCallback((patch: Partial<NewSessionDraft>) => {
@@ -924,7 +920,6 @@ export default function NewRemoteSessionScreen() {
     setError(null);
     setCapabilities(null);
     setBrowseOpen(false);
-    setShowHiddenDirectories(false);
     setBrowsePath('');
     setBrowseParent(null);
     setBrowseEntries([]);
@@ -1246,21 +1241,18 @@ export default function NewRemoteSessionScreen() {
     patchDraft({ workingDir });
     setBrowseOpen(false);
     setBrowseError(null);
-    setShowHiddenDirectories(false);
   }, [patchDraft]);
 
   const selectDialogueWorkspace = useCallback(() => {
     patchDraft({ workspaceKind: 'dialogue', workingDir: '' });
     setWorkspacePickerOpen(false);
     setBrowseOpen(false);
-    setShowHiddenDirectories(false);
   }, [patchDraft]);
 
   const selectRecentProject = useCallback((workingDir: string) => {
     patchDraft({ workspaceKind: 'project', workingDir });
     setWorkspacePickerOpen(false);
     setBrowseOpen(false);
-    setShowHiddenDirectories(false);
   }, [patchDraft]);
 
   const openProjectBrowse = useCallback(() => {
@@ -1396,24 +1388,31 @@ export default function NewRemoteSessionScreen() {
       // Claim the connection prewarmed at pressIn (if any): its credential is
       // already resolved and its ASR WebSocket already connecting, so the
       // handshake overlaps the press gesture instead of following it.
-      const [prewarmedVoice, localVoiceInputHistory] = await Promise.all([
+      const [prewarmedVoice, localVoiceInputHistory, voiceServiceMode] = await Promise.all([
         takePrewarmedMobileVoiceAsr(selectedDeviceId) ?? Promise.resolve(null),
         getMobileVoiceInputHistoryForHost(selectedDeviceId),
+        getMobileVoiceServiceMode(),
       ]);
       claimedPrewarm = prewarmedVoice;
+      const useByokVoice = voiceServiceMode === 'byok';
       const credential = prewarmedVoice?.credential
-        ?? createMobileCindyVoiceCredential(selectedDeviceId);
-      // 官方托管路径:ASR/refine 都经 voice-server 一次性票据,润色 provider
-      // 固定 'auto'(服务端 failover)。
+        ?? (useByokVoice
+          ? await resolveMobileVoiceCredentialFromLiteLlmSettings(selectedDeviceId)
+          : createMobileCindyVoiceCredential(selectedDeviceId));
+      // BYOK never constructs a managed run context: the user opted into their
+      // own key, and the two credential planes must not fall back into each
+      // other. A claimed prewarm without a voiceContext IS the BYOK prewarm.
       const voiceContext = prewarmedVoice
         ? prewarmedVoice.voiceContext
-        : new MobileCindyVoiceRunContext(
-          () => auth.getAccessToken(),
-          () => auth.refreshAccessToken(),
-          auth.apiFetch,
-          credential.settings?.language,
-          CINDY_MANAGED_REFINER_PROVIDER,
-        );
+        : (useByokVoice
+          ? undefined
+          : new MobileCindyVoiceRunContext(
+            () => auth.getAccessToken(),
+            () => auth.refreshAccessToken(),
+            auth.apiFetch,
+            credential.settings?.language,
+            credential.refiner.provider,
+          ));
       if (voiceStartupSeqRef.current !== startupSeq) {
         // Superseded while we awaited: close the claimed connection, and undo
         // the recording audio mode this startup enabled — but audio mode is
@@ -1433,11 +1432,13 @@ export default function NewRemoteSessionScreen() {
       const controller = createMobileVoiceControllerSession({
         credential,
         ...(prewarmedVoice ? { asr: prewarmedVoice.asr } : {}),
-        connectionProvider: (providerId: string) => voiceContext.createAsrConnection(providerId),
-        refinerTargetProvider: (providerId: string, options?: { refreshAccessToken?: boolean }) =>
-          voiceContext.createRefinerTarget(providerId, options),
-        warmRefiner: (input: { system: string; user: unknown; promptCacheKey: string }) =>
-          voiceContext.warmRefiner(input),
+        // BYOK (no voiceContext) dials directly with the credential's own
+        // key; only the managed path routes through voice-server tickets.
+        ...(voiceContext ? {
+          connectionProvider: (providerId: string) => voiceContext.createAsrConnection(providerId),
+          refinerTargetProvider: (providerId: string, options?: { refreshAccessToken?: boolean }) =>
+            voiceContext.createRefinerTarget(providerId, options),
+        } : {}),
         initialDraft: currentDraft,
         refinementContext: selectionBefore ? { selectionBefore } : undefined,
         localVoiceInputHistory,
@@ -1490,7 +1491,7 @@ export default function NewRemoteSessionScreen() {
       voiceStopInFlightRef.current = false;
       voiceRecordingActiveRef.current = false;
       setVoiceState('error');
-      setVoiceError(formatRemoteError(err));
+      setVoiceError(formatMobileVoiceStartupError(err));
       await setAudioModeAsync({ allowsRecording: false }).catch(() => undefined);
     }
   }, [openLink, selectedDeviceId, setFirstMessageDraft, voiceIsProcessing, voiceState]);
@@ -1529,10 +1530,14 @@ export default function NewRemoteSessionScreen() {
   }, [voiceState]);
 
   const openVoiceSettings = useCallback(() => {
+    if (canOpenAppVoiceSettings) {
+      router.push('/settings');
+      return;
+    }
     void Linking.openSettings().catch((err) => {
       setVoiceError(formatRemoteError(err));
     });
-  }, []);
+  }, [canOpenAppVoiceSettings, router]);
 
   const toggleVoiceRecording = useCallback(() => {
     if (voiceRecordingActiveRef.current || voiceState === 'listening') {
@@ -1555,12 +1560,16 @@ export default function NewRemoteSessionScreen() {
     // Keep the native audio-session warmup on the synchronous press-down path
     // (prewarmMobileVoiceStart re-runs it idempotently below).
     prewarmMobileRealtimeAudio();
-    // 托管预热:凭登录态提前拿 voice-server 票据并开 ASR WebSocket。
-    prewarmMobileVoiceStart(selectedDeviceId, {
-      getAccessToken: () => auth.getAccessToken(),
-      refreshAccessToken: () => auth.refreshAccessToken(),
-      apiFetch: auth.apiFetch,
-    });
+    // Fire-and-forget: the mode read is a fast secure-storage hit and prewarm
+    // is speculative anyway. BYOK prewarm omits auth so buildPrewarm resolves
+    // the user's own LiteLLM credential instead of a managed ticket context.
+    void getMobileVoiceServiceMode().then((mode) => {
+      prewarmMobileVoiceStart(selectedDeviceId, mode === 'byok' ? undefined : {
+        getAccessToken: () => auth.getAccessToken(),
+        refreshAccessToken: () => auth.refreshAccessToken(),
+        apiFetch: auth.apiFetch,
+      });
+    }).catch(() => undefined);
   }, [creating, selectedDeviceId, voiceIsProcessing, voiceState]);
 
   useEffect(() => {
@@ -2142,17 +2151,7 @@ export default function NewRemoteSessionScreen() {
           : () => confirmAgentUnauthenticated(agentKindSnapshot),
         authGateHint: agentAuthGateHint(agentKindSnapshot),
         onUnauthenticated: () => evictDeviceProviders(deviceIdSnapshot),
-        transport: {
-          maker,
-          openLink,
-          subscribe,
-          prepareQueuedMessage: (item) => prepareMobileQueuedSessionReferences(
-            item,
-            invoke,
-            remoteSessionStore.getSessionDeviceId,
-            deviceIdSnapshot,
-          ),
-        },
+        transport: { maker, openLink, subscribe },
       });
       if (planModeCapability) {
         // 一次性语义:chip 状态只影响这一次创建,创建后复位草稿态。
@@ -2565,36 +2564,11 @@ export default function NewRemoteSessionScreen() {
                     <Text style={styles.browseActionText}>使用当前</Text>
                   </Pressable>
                 </View>
-                <Pressable
-                  accessibilityLabel={newSessionText('showHiddenDirectories')}
-                  accessibilityRole="checkbox"
-                  accessibilityState={{ checked: showHiddenDirectories, disabled: creating || undefined }}
-                  disabled={creating}
-                  onPress={() => setShowHiddenDirectories((value) => !value)}
-                  style={({ pressed }) => [
-                    styles.browseHiddenToggle,
-                    pressed && styles.pressed,
-                    creating && styles.disabled,
-                  ]}
-                  testID="newSession.remoteBrowseShowHidden"
-                >
-                  <View style={[
-                    styles.browseCheckbox,
-                    showHiddenDirectories && styles.browseCheckboxChecked,
-                  ]}>
-                    {showHiddenDirectories ? (
-                      <Check color={colors.ctaText} size={iconSize.xs} strokeWidth={iconStroke.bold} />
-                    ) : null}
-                  </View>
-                  <Text style={styles.browseHiddenLabel}>
-                    {newSessionText('showHiddenDirectories')}
-                  </Text>
-                </Pressable>
                 {browseError ? <Text style={styles.errorText}>{browseError}</Text> : null}
                 <FlatList
                   style={styles.browseList}
                   contentContainerStyle={styles.browseListContent}
-                  data={visibleBrowseEntries}
+                  data={browseEntries}
                   keyExtractor={(entry) => entry.path}
                   renderItem={({ item }) => (
                     <RemoteDirectoryRow
@@ -2608,7 +2582,7 @@ export default function NewRemoteSessionScreen() {
                   keyboardShouldPersistTaps="handled"
                   showsVerticalScrollIndicator
                   ListEmptyComponent={!browseLoading && !browseError ? (
-                    <Text style={styles.hint}>{newSessionText('emptyDirectory')}</Text>
+                    <Text style={styles.hint}>没有可进入的子目录。</Text>
                   ) : null}
                 />
               </View>
@@ -2674,7 +2648,7 @@ export default function NewRemoteSessionScreen() {
                   </Text>
                   {canOpenVoiceSettings ? (
                     <Pressable
-                      accessibilityLabel="打开麦克风权限设置"
+                      accessibilityLabel={canOpenAppVoiceSettings ? '打开语音输入设置' : '打开麦克风权限设置'}
                       accessibilityRole="button"
                       hitSlop={10}
                       onPress={openVoiceSettings}
@@ -2762,7 +2736,7 @@ export default function NewRemoteSessionScreen() {
             />
             <ContextSheetGroup label="模式">
               {planModeSupported ? (
-                // 点击即切换计划模式并关面板(产品决策,不做开关);已开启时显示 ✓,再点退出。
+                // 点击即切换计划模式并关面板(Dash 拍板,不做开关);已开启时显示 ✓,再点退出。
                 <ContextSheetRow
                   disabled={creating}
                   icon={<ListTodo color={colors.textPrimary} size={iconSize.lg} strokeWidth={iconStroke.regular} />}
@@ -3041,7 +3015,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   screen: {
     flex: 1,
     paddingHorizontal: spacing.lg,
-    paddingTop: NEW_SESSION_SCREEN_TOP_PADDING,
+    paddingTop: spacing.xl,
   },
   topBar: {
     alignItems: 'center',
@@ -3289,31 +3263,6 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     paddingHorizontal: spacing.md,
   },
   browseActionText: {
-    color: colors.textSecondary,
-    fontSize: typeScale.caption,
-    fontWeight: fontWeight.medium,
-  },
-  browseHiddenToggle: {
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    flexDirection: 'row',
-    gap: spacing.sm,
-    minHeight: 44,
-  },
-  browseCheckbox: {
-    alignItems: 'center',
-    borderColor: colors.borderStrong,
-    borderRadius: radius.pill,
-    borderWidth: StyleSheet.hairlineWidth,
-    height: 20,
-    justifyContent: 'center',
-    width: 20,
-  },
-  browseCheckboxChecked: {
-    backgroundColor: colors.cta,
-    borderColor: colors.cta,
-  },
-  browseHiddenLabel: {
     color: colors.textSecondary,
     fontSize: typeScale.caption,
     fontWeight: fontWeight.medium,

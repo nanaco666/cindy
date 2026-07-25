@@ -23,13 +23,12 @@ import { toast } from '@/lib/toast';
 import { Spinner } from '@/components/ui/spinner';
 import { Tip } from '@/components/ui/tooltip';
 import { createCustomProvider, type RuntimeKeys } from '@/lib/customProviders';
-import { uniqueCustomProviderId } from '@/lib/customProviderId';
 import { providerMonogram } from '@/lib/providerModels';
 import { isChatGptConnectionConnected, useCodexAuth } from '@/hooks/useCodexAuth';
 import { hasProviderLogo, ProviderLogoMark } from '@/components/icons/ProviderLogoMark';
 
-import { sortPresetsForLocale } from '@cindy/model-providers';
-import type { AgentKind, CustomProviderConfig, ProviderPreset, ProviderView } from '@cindy/model-providers';
+import { sortPresetsForLocale } from '@lizi/model-providers';
+import type { AgentKind, CustomProviderConfig, ProviderPreset, ProviderView } from '@lizi/model-providers';
 
 /** 外部直达入口(左栏检测建议点击):直接进入该内置渠道的授权步。 */
 export interface WizardEntry {
@@ -55,6 +54,23 @@ const AGENT_LABEL: Record<AgentKind, string> = {
   'claude-code': 'Claude Code',
   codex: 'Codex',
 };
+
+function slugify(name: string): string {
+  const s = name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return s || 'provider';
+}
+
+function uniqueId(name: string, existing: ReadonlySet<string>): string {
+  const base = slugify(name);
+  if (!existing.has(base)) return base;
+  for (let i = 2; ; i += 1) {
+    const candidate = `${base}-${i}`;
+    if (!existing.has(candidate)) return candidate;
+  }
+}
 
 /** 供应商卡片图标。 */
 function cardIcon(sel: { providerId?: string; name: string }): React.ReactNode {
@@ -417,7 +433,7 @@ export function AddProviderWizard({
     setSaving(true);
     try {
       const existing = new Set(providers.map((p) => p.id));
-      const id = uniqueCustomProviderId(name.trim() || preset.name, existing);
+      const id = uniqueId(name.trim() || preset.name, existing);
       const runtimes: CustomProviderConfig['runtimes'] = {};
       const keys: RuntimeKeys = {};
       for (const agent of Object.keys(preset.runtimes) as AgentKind[]) {
@@ -427,16 +443,7 @@ export function AddProviderWizard({
         // (空模型 runtime 无意义,且避免把另一端的模型 id 越界写入)。
         const agentModels = selected
           .filter((m) => m.agents.includes(agent))
-          .map((m) => {
-            const presetModel = rt.models.find((candidate) => candidate.id === m.id);
-            return {
-              id: m.id,
-              name: m.name,
-              ...(presetModel?.contextWindow !== undefined
-                ? { contextWindow: presetModel.contextWindow }
-                : {}),
-            };
-          });
+          .map((m) => ({ id: m.id, name: m.name }));
         if (agentModels.length === 0) continue;
         runtimes[agent] = {
           baseUrl: rt.baseUrl,

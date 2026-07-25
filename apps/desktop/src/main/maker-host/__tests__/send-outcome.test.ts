@@ -1,4 +1,4 @@
-import type { SessionSendResult } from '@cindy/maker-core';
+import type { SessionSendResult } from '@lizi/maker-core';
 import path from 'node:path';
 import ts from 'typescript';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -111,8 +111,8 @@ describe('desktop send outcome helper', () => {
 
   it('normalizes unsafe error name and code before logging', async () => {
     const err = new Error('ordinary message') as Error & { code?: string };
-    err.name = 'PROMPT_SECRET token TOKEN_VALUE file body C:\\Users\\sam\\secret.txt';
-    err.code = 'SESSION_RUNNING TOKEN_VALUE C:\\Users\\sam\\secret.txt';
+    err.name = 'PROMPT_SECRET token TOKEN_VALUE file body C:\\Users\\lizi\\secret.txt';
+    err.code = 'SESSION_RUNNING TOKEN_VALUE C:\\Users\\lizi\\secret.txt';
 
     observeFireAndForgetSendOutcome(Promise.reject(err), {
       owner: 'orca-worker-ready',
@@ -338,7 +338,7 @@ function collectTypeDiagnostics(source: string): string[] {
       if (moduleName === '../send-outcome.js') {
         return { resolvedFileName: sendOutcomePath, extension: ts.Extension.Ts };
       }
-      if (moduleName === '@cindy/maker-core') {
+      if (moduleName === '@lizi/maker-core') {
         return { resolvedFileName: makerCorePath, extension: ts.Extension.Dts };
       }
       if (moduleName === '../logger.js') {

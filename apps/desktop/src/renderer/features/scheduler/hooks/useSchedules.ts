@@ -22,7 +22,7 @@ import type {
   Schedule,
   SchedulerEvent,
   SchedulerRuntimeSnapshot,
-} from '@cindy/maker-scheduler';
+} from '@lizi/maker-scheduler';
 
 import {
   schedulesStore,

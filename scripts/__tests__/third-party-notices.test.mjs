@@ -11,7 +11,7 @@ const repoRoot = path.resolve(
   "..",
   "..",
 );
-const noticesDir = path.join(repoRoot, "docs", "legal", "notices");
+const noticesDir = path.join(repoRoot, "notices");
 const artifactNames = [
   "desktop-win",
   "desktop-macos",
@@ -25,16 +25,12 @@ function read(relativePath) {
 }
 
 test("generated artifact notices are platform-scoped and disclose restricted components separately", () => {
-  const windows = read("docs/legal/notices/desktop-win.txt");
-  const macos = read("docs/legal/notices/desktop-macos.txt");
-  const linux = read("docs/legal/notices/desktop-linux.txt");
-  const windowsRestricted = read(
-    "docs/legal/notices/desktop-win-restricted.txt",
-  );
-  const iosRestricted = read("docs/legal/notices/mobile-ios-restricted.txt");
-  const androidRestricted = read(
-    "docs/legal/notices/mobile-android-restricted.txt",
-  );
+  const windows = read("notices/desktop-win.txt");
+  const macos = read("notices/desktop-macos.txt");
+  const linux = read("notices/desktop-linux.txt");
+  const windowsRestricted = read("notices/desktop-win-restricted.txt");
+  const iosRestricted = read("notices/mobile-ios-restricted.txt");
+  const androidRestricted = read("notices/mobile-android-restricted.txt");
 
   assert.match(windows, /@img\/sharp-win32-x64@/);
   assert.doesNotMatch(windows, /@img\/sharp-darwin-/);
@@ -74,7 +70,7 @@ test("project-owned iOS podspecs declare the repository Apache-2.0 license", () 
     assert.match(podspec, /:type\s*=>\s*['\"]Apache-2\.0['\"]/);
     assert.match(podspec, /:file\s*=>\s*['\"]\.\.\/\.\.\/\.\.\/\.\.\/\.\.\/LICENSE['\"]/);
     assert.doesNotMatch(podspec, /UNLICENSED/i);
-    assert.match(podspec, /https:\/\/github\.com\/makecindy\/cindy\.git/);
+    assert.match(podspec, /https:\/\/github\.com\/xindong\/cindy-moved\.git/);
   }
 });
 

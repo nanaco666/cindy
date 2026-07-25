@@ -15,7 +15,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 
-import { connectedProvidersForAgent, type AgentKind, type ProviderView } from '@cindy/model-providers';
+import { connectedProvidersForAgent, type AgentKind, type ProviderView } from '@lizi/model-providers';
 
 export type Readiness = 'ready' | 'unauthenticated' | 'binary-missing' | 'loading';
 

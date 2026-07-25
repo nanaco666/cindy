@@ -28,7 +28,7 @@ import { sessions, messages } from '../localDb/schema';
 import { sessionToCamel } from '../localDb/mapper';
 import { getMaker } from '../maker-host/index.js';
 import type { Session } from '../../renderer/lib/ccAgent.types';
-import type { RewindFilesResult } from '@cindy/maker-core';
+import type { RewindFilesResult } from '@lizi/maker-core';
 
 import { createLogger } from '../logger';
 import { setLastAssistantTranscriptUuid } from '../messagePersistBroadcaster.js';

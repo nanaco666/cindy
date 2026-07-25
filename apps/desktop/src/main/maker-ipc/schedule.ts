@@ -40,7 +40,7 @@ import path from 'node:path';
 
 import { ipcMain, BrowserWindow, app } from 'electron';
 
-import type { AgentKind, Maker } from '@cindy/maker-core';
+import type { Maker } from '@lizi/maker-core';
 import type {
   Scheduler,
   CreateScheduleInput,
@@ -48,13 +48,13 @@ import type {
   ListFilter,
   ScheduleTemplate,
   SchedulerEvent,
-} from '@cindy/maker-scheduler';
+} from '@lizi/maker-scheduler';
 import {
   BUILTIN_TEMPLATES,
   applyTemplateParams,
   stabilizePreRunHookForCreate,
   stabilizePreRunHookForUpdate,
-} from '@cindy/maker-scheduler';
+} from '@lizi/maker-scheduler';
 
 import { createLogger } from '../logger.js';
 import type { DrizzleScheduleStorage } from '../scheduler-host/storage.js';
@@ -69,12 +69,7 @@ import { getGhostManager } from '../cindy-brain/index.js';
 import { throwIpcError, requireString, requireObject } from '../utils/ipcValidate.js';
 import { tapWindowBroadcast } from '../device-link/broadcast-tap.js';
 import { getAgentIslandService } from '../agent-island/service.js';
-import { getSessionProvider } from '../maker-host/session-provider-store.js';
 import { MAKER_INVOKE, MAKER_PUSH } from './channels.js';
-import {
-  resolveBoundSessionGenerationRoute,
-  shouldResolveBoundSessionGenerationRoute,
-} from './scheduleGenerationRoute.js';
 
 const log = createLogger('maker-ipc:schedule');
 
@@ -384,44 +379,6 @@ export function registerScheduleHandlers(getMaker?: () => Maker | null): void {
     const maker = getMaker?.();
     if (!maker) throwIpcError('INTERNAL', 'maker not ready for hook script generation');
     const workingDir = await resolveHookWorkingDir(body);
-    const requestedAgentKind: AgentKind | undefined = body.agentKind === 'codex' || body.agentKind === 'claude-code'
-      ? body.agentKind
-      : undefined;
-    const targetSessionId = typeof body.targetSessionId === 'string' && body.targetSessionId.trim()
-      ? body.targetSessionId.trim()
-      : undefined;
-    let providerId = typeof body.providerId === 'string' ? body.providerId : undefined;
-    let agentKind = requestedAgentKind;
-    let model = typeof body.model === 'string' ? body.model : undefined;
-    if (targetSessionId && shouldResolveBoundSessionGenerationRoute({ targetSessionId, providerId, model })) {
-      const session = await maker.getSessionMeta(targetSessionId).catch(() => null);
-      // Bound-session fallback must use the same live connection snapshot as
-      // the provider picker. Never turn an unconnected built-in provider into
-      // a routable candidate just because it exists in the catalog.
-      const { getDesktopProviderService } = await import('../maker-host/createDesktopProviderService.js');
-      const providers = await getDesktopProviderService().listProviders();
-      const route = resolveBoundSessionGenerationRoute({
-        session,
-        sessionProviderId: getSessionProvider(targetSessionId),
-        providers,
-      });
-      if (!route) {
-        return {
-          ok: false as const,
-          reason: 'no_candidate' as const,
-          attempts: [{
-            providerId: getSessionProvider(targetSessionId) ?? targetSessionId,
-            model: session?.model?.trim() ?? '',
-            transport: session?.agentKind === 'codex' ? 'codex-responses' as const : 'litellm-chat-completions' as const,
-            status: 'skipped' as const,
-            reason: 'model_unavailable' as const,
-          }],
-        };
-      }
-      providerId = route.providerId;
-      agentKind = route.agentKind;
-      model = route.model;
-    }
     try {
       const installed = await installHookScript(
         {
@@ -434,9 +391,6 @@ export function registerScheduleHandlers(getMaker?: () => Maker | null): void {
           scheduleName: typeof body.scheduleName === 'string' ? body.scheduleName : undefined,
           workingDir,
           currentCommand: typeof body.currentCommand === 'string' ? body.currentCommand : undefined,
-          providerId,
-          agentKind,
-          model,
         },
       );
       return { ok: true as const, ...installed };

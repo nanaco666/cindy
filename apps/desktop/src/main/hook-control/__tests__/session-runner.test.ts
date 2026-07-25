@@ -19,8 +19,8 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { Effort } from '@cindy/maker-core';
-import type { CatalogModel, ProviderView } from '@cindy/model-providers';
+import type { Effort } from '@lizi/maker-core';
+import type { CatalogModel, ProviderView } from '@lizi/model-providers';
 
 const h = vi.hoisted(() => {
   /** 跨模块调用顺序记录: 'touch:<id>' / 'created:<id>' */
@@ -41,13 +41,8 @@ const h = vi.hoisted(() => {
     setSessionProviderIdInDb: vi.fn(async (id: string, providerId: string) => {
       calls.push(`providerDb:${id}:${providerId}`);
     }),
-    setSessionSourceInDb: vi.fn(async (id: string, source: string) => {
-      calls.push(`sourceDb:${id}:${source}`);
-    }),
     setSessionProvider: vi.fn(),
     hydrateSessionProvider: vi.fn(),
-    peekPendingHandoff: vi.fn(async () => null as string | null),
-    consumePendingHandoff: vi.fn(),
     listProviders: vi.fn(async (): Promise<unknown[]> => []),
     getModelVisibilityOverride: vi.fn(() => undefined),
     readImDefaultSettings: vi.fn(),
@@ -71,7 +66,7 @@ const h = vi.hoisted(() => {
 vi.mock('electron', () => ({
   BrowserWindow: { getAllWindows: () => [] },
 }));
-vi.mock('@cindy/maker-core', () => ({
+vi.mock('@lizi/maker-core', () => ({
   isTerminalAgentErrorEvent: (ev: { type: string }) => ev.type === 'error',
 }));
 vi.mock('../../device-link/broadcast-tap.js', () => ({
@@ -93,7 +88,6 @@ vi.mock('../../localDb/ipc/messages.js', () => ({
 vi.mock('../../localDb/ipc/sessions.js', () => ({
   getSessionRowSnapshot: vi.fn(async () => null),
   setSessionProviderIdInDb: h.setSessionProviderIdInDb,
-  setSessionSourceInDb: h.setSessionSourceInDb,
   setWorktreePathInDb: vi.fn(async () => undefined),
   touchUserSendInDb: h.touchUserSendInDb,
 }));
@@ -101,42 +95,27 @@ vi.mock('../../maker-host/session-provider-store.js', () => ({
   setSessionProvider: h.setSessionProvider,
   hydrateSessionProvider: h.hydrateSessionProvider,
 }));
-vi.mock('../../maker-ipc/agentHandoffPendingSingleton.js', () => ({
-  agentHandoffPending: {
-    peek: h.peekPendingHandoff,
-    consume: h.consumePendingHandoff,
-  },
-}));
 vi.mock('../../imageCacheStore.js', () => ({
   resolveSafe: vi.fn(),
 }));
-// cindy-media:入站图片写入媒体总仓,mock 记调用。
+// cindy-media(迁移第 1 步):入站图片写入切到媒体总仓,mock 记调用。
 const cindyMock = vi.hoisted(() => ({
-  ingestMedia: vi.fn(async ({ mimeType }: { mimeType: string }) => {
-    const ext = mimeType === 'video/mp4' ? '.mp4' : mimeType === 'audio/ogg' ? '.ogg' : '.png';
-    return {
-      hash: 'a'.repeat(64),
-      ext,
-      mimeType,
-      bytes: 8,
-      url: `cindy-media://blobs/${'a'.repeat(64)}${ext}`,
-      deduplicated: false,
-      refIds: ['ref-1'],
-    };
-  }),
-  supportedMime: vi.fn((mimeType: string) =>
-    ['image/png', 'image/jpeg', 'video/mp4', 'audio/ogg'].includes(mimeType),
-  ),
+  ingestMedia: vi.fn(async () => ({
+    hash: 'a'.repeat(64),
+    ext: '.png',
+    mimeType: 'image/png',
+    bytes: 8,
+    url: `cindy-media://blobs/${'a'.repeat(64)}.png`,
+    deduplicated: false,
+    refIds: ['ref-1'],
+  })),
   resolveSafe: vi.fn((url: string) => ({
     absPath: `/blobs/${url.slice('cindy-media://blobs/'.length)}`,
     mimeType: 'image/png',
     hash: 'a'.repeat(64),
   })),
 }));
-vi.mock('../../cindy-media/ingest.js', () => ({
-  ingestMedia: cindyMock.ingestMedia,
-  supportedMime: cindyMock.supportedMime,
-}));
+vi.mock('../../cindy-media/ingest.js', () => ({ ingestMedia: cindyMock.ingestMedia }));
 vi.mock('../../cindy-media/blobStore.js', () => ({ resolveSafe: cindyMock.resolveSafe }));
 vi.mock('../../worktree/index.js', () => ({
   worktreeStore: { get: () => undefined },
@@ -173,11 +152,14 @@ function makeFakeSession(id: string) {
       };
     },
     send: vi.fn(
-      async (_msg: unknown, opts: { onAccepted?: () => Promise<void> }): Promise<unknown> => {
+      async (
+        _msg: unknown,
+        opts: { onAccepted?: () => Promise<void> },
+      ): Promise<unknown> => {
         await opts.onAccepted?.();
         // 收口: 模拟 agent 立刻完成本 turn
         queueMicrotask(() => h.eventCbs.get(id)?.({ type: 'done', data: null }));
-        return { accepted: true };
+        return {};
       },
     ),
   };
@@ -201,7 +183,7 @@ vi.mock('../../maker-host/index.js', () => ({
 }));
 
 import { createMakerHookSessionRunner, extractToolResultImageUrls } from '../session-runner.js';
-import { buildHookPromptNote, SLACK_HOOK_PROMPT_NOTE } from '../outbound.js';
+import { SLACK_HOOK_PROMPT_NOTE } from '../outbound.js';
 
 const log = { info: vi.fn(), warn: vi.fn() };
 
@@ -235,9 +217,7 @@ function connectedProvider(
   };
 }
 
-function baseReq(
-  overrides: Partial<Parameters<ReturnType<typeof createMakerHookSessionRunner>['run']>[0]>,
-) {
+function baseReq(overrides: Partial<Parameters<ReturnType<typeof createMakerHookSessionRunner>['run']>[0]>) {
   return {
     sessionId: 'sess-new',
     isNew: true,
@@ -248,11 +228,7 @@ function baseReq(
     permissionMode: null,
     title: '[Slack·DM] dm:U1:g0',
     prompt: 'hello',
-    origin: {
-      connectionId: 'slack',
-      connectionName: 'XDMaker Slack',
-      externalKey: 'slack:dm:U1:g0',
-    },
+    origin: { connectionId: 'slack', connectionName: 'XDMaker Slack', externalKey: 'slack:dm:U1:g0' },
     ...overrides,
   };
 }
@@ -268,38 +244,6 @@ beforeEach(() => {
   h.useActualDefaults = false;
   h.resolvedConfig.permissionMode = 'bypassPermissions';
   h.resolvedConfig.providerId = null;
-  h.peekPendingHandoff.mockResolvedValue(null);
-});
-
-describe('hook session 精确接管边界', () => {
-  it('拒绝接管 SSH 远程会话和内部 worker 会话', async () => {
-    const { getSessionRowSnapshot } = await import('../../localDb/ipc/sessions.js');
-    vi.mocked(getSessionRowSnapshot)
-      .mockResolvedValueOnce({
-        status: 'active',
-        title: 'Remote',
-        userSendAt: 1,
-        workingDir: '/repo',
-        workspaceKind: 'project',
-        providerId: null,
-        remoteHostId: 'host-1',
-        orcaRole: null,
-      })
-      .mockResolvedValueOnce({
-        status: 'active',
-        title: 'Worker',
-        userSendAt: 1,
-        workingDir: '/repo',
-        workspaceKind: 'project',
-        providerId: null,
-        remoteHostId: null,
-        orcaRole: 'worker',
-      });
-    const runner = createMakerHookSessionRunner({ log });
-
-    await expect(runner.inspect('remote-session')).resolves.toMatchObject({ usable: false });
-    await expect(runner.inspect('worker-session')).resolves.toMatchObject({ usable: false });
-  });
 });
 
 describe('hook session-runner 的 userSendAt 时序(未分类误判回归)', () => {
@@ -335,11 +279,7 @@ describe('hook session-runner 的 userSendAt 时序(未分类误判回归)', () 
     const outcome = await runner.run(
       baseReq({
         attachments: [
-          {
-            name: '../shot\u0000.png',
-            mimeType: 'image/png',
-            dataBase64: Buffer.from('png-bytes').toString('base64'),
-          },
+          { name: 'shot.png', mimeType: 'image/png', dataBase64: Buffer.from('png-bytes').toString('base64') },
         ],
       } as Partial<Parameters<ReturnType<typeof createMakerHookSessionRunner>['run']>[0]>),
     );
@@ -347,18 +287,11 @@ describe('hook session-runner 的 userSendAt 时序(未分类误判回归)', () 
 
     // ingest 一次,入站图无草稿期直接挂 session-attachment 引用(含出生信息)
     expect(cindyMock.ingestMedia).toHaveBeenCalledTimes(1);
-    const ingestCalls = cindyMock.ingestMedia.mock.calls as unknown as Array<
-      [Record<string, unknown>]
-    >;
+    const ingestCalls = cindyMock.ingestMedia.mock.calls as unknown as Array<[Record<string, unknown>]>;
     expect(ingestCalls[0][0]).toMatchObject({
       mimeType: 'image/png',
       refs: [
-        {
-          refKind: 'session-attachment',
-          refId: 'sess-new',
-          originSessionId: 'sess-new',
-          originKind: 'user',
-        },
+        { refKind: 'session-attachment', refId: 'sess-new', originSessionId: 'sess-new', originKind: 'user' },
       ],
     });
 
@@ -372,25 +305,18 @@ describe('hook session-runner 的 userSendAt 时序(未分类误判回归)', () 
 
     // 落库:images 用 cindy-media:// URL(桌面/手机聊天记录据此渲染)
     const createCalls = h.createMessage.mock.calls as unknown as Array<
-      [string, { content: { images: Array<{ url: string; originalName: string }> } }]
+      [string, { content: { images: Array<{ url: string }> } }]
     >;
-    expect(createCalls[0][1].content.images[0].url).toBe(
-      `cindy-media://blobs/${'a'.repeat(64)}.png`,
-    );
-    expect(createCalls[0][1].content.images[0].originalName).toBe('shot_.png');
+    expect(createCalls[0][1].content.images[0].url).toBe(`cindy-media://blobs/${'a'.repeat(64)}.png`);
   });
 
-  it('入站图片 ingest 失败:文本照发并明确告知用户附件未完整处理', async () => {
+  it('入站图片 ingest 失败:丢该图不炸 turn(文本照发)', async () => {
     cindyMock.ingestMedia.mockRejectedValueOnce(new Error('db not ready'));
     const runner = createMakerHookSessionRunner({ log });
     const outcome = await runner.run(
       baseReq({
         attachments: [
-          {
-            name: 'shot.png',
-            mimeType: 'image/png',
-            dataBase64: Buffer.from('png-bytes').toString('base64'),
-          },
+          { name: 'shot.png', mimeType: 'image/png', dataBase64: Buffer.from('png-bytes').toString('base64') },
         ],
       } as Partial<Parameters<ReturnType<typeof createMakerHookSessionRunner>['run']>[0]>),
     );
@@ -398,83 +324,7 @@ describe('hook session-runner 的 userSendAt 时序(未分类误判回归)', () 
     const session = await fakeMaker.createSession.mock.results[0].value;
     // 图被降级丢弃:send 内容回落纯文本(仍带渠道说明后缀)
     expect(session.send.mock.calls[0][0]).toMatchObject({ content: HELLO_WITH_NOTE });
-    expect(outcome.finalText).toContain(
-      'Incoming attachment processing incomplete: 1 item could not be prepared',
-    );
     expect(log.warn).toHaveBeenCalledWith(expect.stringContaining('hook image ingest failed'));
-  });
-
-  it('入站音视频经媒体总仓落盘，不写 feature-specific 附件缓存', async () => {
-    const runner = createMakerHookSessionRunner({ log });
-    const outcome = await runner.run(
-      baseReq({
-        attachments: [
-          {
-            name: '../clip?.mp4',
-            mimeType: 'video/mp4',
-            dataBase64: Buffer.from('video').toString('base64'),
-          },
-          {
-            name: 'voice.ogg',
-            mimeType: 'audio/ogg',
-            dataBase64: Buffer.from('voice').toString('base64'),
-          },
-        ],
-      } as Partial<Parameters<ReturnType<typeof createMakerHookSessionRunner>['run']>[0]>),
-    );
-    expect(outcome.status).toBe('ok');
-    expect(cindyMock.ingestMedia).toHaveBeenCalledTimes(2);
-
-    const session = await fakeMaker.createSession.mock.results[0].value;
-    const content = session.send.mock.calls[0][0].content as Array<{
-      type: string;
-      path?: string;
-      mimeType?: string;
-    }>;
-    expect(content.filter((block) => block.type === 'file')).toEqual([
-      expect.objectContaining({ path: `/blobs/${'a'.repeat(64)}.mp4`, mimeType: 'video/mp4' }),
-      expect.objectContaining({ path: `/blobs/${'a'.repeat(64)}.ogg`, mimeType: 'audio/ogg' }),
-    ]);
-    const createCalls = h.createMessage.mock.calls as unknown as Array<
-      [string, { content: { files: Array<{ path: string; mimeType: string }> } }]
-    >;
-    expect(createCalls[0][1].content.files).toEqual([
-      expect.objectContaining({
-        name: 'clip_.mp4',
-        path: `cindy-media://blobs/${'a'.repeat(64)}.mp4`,
-        mimeType: 'video/mp4',
-      }),
-      expect.objectContaining({
-        path: `cindy-media://blobs/${'a'.repeat(64)}.ogg`,
-        mimeType: 'audio/ogg',
-      }),
-    ]);
-  });
-
-  it('不受支持的媒体格式明确失败，不降级写入 feature-specific 附件缓存', async () => {
-    const runner = createMakerHookSessionRunner({ log });
-    const outcome = await runner.run(
-      baseReq({
-        attachments: [
-          {
-            name: 'diagram.svg',
-            mimeType: 'image/svg+xml',
-            dataBase64: Buffer.from('<svg />').toString('base64'),
-          },
-        ],
-      } as Partial<Parameters<ReturnType<typeof createMakerHookSessionRunner>['run']>[0]>),
-    );
-
-    expect(outcome.status).toBe('ok');
-    expect(cindyMock.ingestMedia).not.toHaveBeenCalled();
-    const session = await fakeMaker.createSession.mock.results[0].value;
-    expect(session.send.mock.calls[0][0]).toMatchObject({ content: HELLO_WITH_NOTE });
-    expect(outcome.finalText).toContain(
-      'Incoming attachment processing incomplete: 1 item could not be prepared',
-    );
-    expect(log.warn).toHaveBeenCalledWith(
-      'hook media attachment skipped (unsupported cindy-media MIME image/svg+xml)',
-    );
   });
 
   it('渠道说明与渠道标记:喂 agent 带 xdt-file 说明,落库保持原话,createSession 带 slack-hook 标', async () => {
@@ -482,7 +332,7 @@ describe('hook session-runner 的 userSendAt 时序(未分类误判回归)', () 
     const outcome = await runner.run(baseReq({}));
     expect(outcome.status).toBe('ok');
 
-    // createSession 带渠道标记(cindy_feishu_bot 据此注入路由提示;
+    // createSession 带渠道标记(lizi_feishu_bot 据此注入路由提示;
     // 刻意不是 'slack' —— 那是已退役 organic SlackIM 渠道的历史标记)
     expect(fakeMaker.createSession).toHaveBeenCalledWith(
       expect.objectContaining({ vendorOptions: { source: 'slack-hook' } }),
@@ -493,50 +343,8 @@ describe('hook session-runner 的 userSendAt 时序(未分类误判回归)', () 
     expect(session.send.mock.calls[0][0]).toMatchObject({ content: HELLO_WITH_NOTE });
 
     // 落库的用户消息保持 Slack 原话,不带说明(渲染层展示口径)
-    const createCalls = h.createMessage.mock.calls as unknown as Array<
-      [string, { content: unknown }]
-    >;
+    const createCalls = h.createMessage.mock.calls as unknown as Array<[string, { content: unknown }]>;
     expect(createCalls[0][1].content).toBe('hello');
-  });
-
-  it('Telegram 新会话使用 provider-aware 标记、提示和持久化来源', async () => {
-    const runner = createMakerHookSessionRunner({ log });
-    const outcome = await runner.run(
-      baseReq({
-        source: { im: 'telegram', channelName: 'Release topic', userText: 'hello' },
-        origin: {
-          connectionId: 'slack:account:telegram',
-          connectionName: 'Cindy Telegram',
-          externalKey: 'telegram:dm:bot:user:g0',
-        },
-      }),
-    );
-    expect(outcome.status).toBe('ok');
-    expect(fakeMaker.createSession).toHaveBeenCalledWith(
-      expect.objectContaining({ vendorOptions: { source: 'telegram' } }),
-    );
-    const session = await fakeMaker.createSession.mock.results[0].value;
-    expect(session.send.mock.calls[0][0]).toMatchObject({
-      content: `hello\n\n${buildHookPromptNote('telegram')}`,
-    });
-    expect(h.setSessionSourceInDb).toHaveBeenCalledWith('sess-new', 'telegram');
-  });
-
-  it('pending handoff 只注入 agent wire 内容, accepted 后消费', async () => {
-    h.peekPendingHandoff.mockResolvedValueOnce('HANDOFF');
-    const runner = createMakerHookSessionRunner({ log });
-    const outcome = await runner.run(baseReq({}));
-
-    expect(outcome.status).toBe('ok');
-    const session = await fakeMaker.createSession.mock.results[0].value;
-    expect(session.send.mock.calls[0][0]).toMatchObject({
-      content: `HANDOFF\n\n${HELLO_WITH_NOTE}`,
-    });
-    const createCalls = h.createMessage.mock.calls as unknown as Array<
-      [string, { content: unknown }]
-    >;
-    expect(createCalls[0][1].content).toBe('hello');
-    expect(h.consumePendingHandoff).toHaveBeenCalledWith('sess-new');
   });
 
   it('复用/接管(isNew=false):createSession 不带 vendorOptions,不给可能的桌面会话打 Slack 标', async () => {
@@ -652,54 +460,6 @@ describe('进度快照(turn.progress 链路)', () => {
     }
   });
 
-  it('Telegram draft 只流式输出正文，不把会重排的 thinking/tool timeline 塞进 Rich Message', async () => {
-    vi.useFakeTimers();
-    try {
-      fakeMaker.createSession.mockImplementationOnce(async (opts: { id?: string }) =>
-        makeManualSession(opts.id ?? 'sess-x'),
-      );
-      const emitted: string[] = [];
-      const runner = createMakerHookSessionRunner({ log });
-      const p = runner.run(
-        baseReq({
-          source: { im: 'telegram', userText: 'hello' },
-          onProgress: (text: string) => emitted.push(text),
-        }),
-      );
-      await flush();
-
-      const cb = h.eventCbs.get('sess-new')!;
-      cb({
-        type: 'tool_use',
-        data: { toolUseId: 'read-1', toolName: 'Read', input: { file_path: '/repo/a.ts' } },
-      });
-      cb({ type: 'thinking', data: { stage: 'final', blockId: 't-1', text: '检查实现' } });
-      await vi.advanceTimersByTimeAsync(0);
-      expect(emitted).toEqual([]);
-
-      cb({ type: 'text', data: { text: '**结论**', isFinal: false } });
-      await vi.advanceTimersByTimeAsync(0);
-      expect(emitted).toEqual(['**结论**']);
-
-      // Later activity-only ticks must not resend or rewrite the same draft.
-      cb({
-        type: 'tool_use',
-        data: { toolUseId: 'test-1', toolName: 'Bash', input: { command: 'pnpm test' } },
-      });
-      await vi.advanceTimersByTimeAsync(6_500);
-      expect(emitted).toEqual(['**结论**']);
-
-      cb({ type: 'text', data: { text: '已完成。', isFinal: false } });
-      await vi.advanceTimersByTimeAsync(1_500);
-      expect(emitted).toEqual(['**结论**', '**结论**已完成。']);
-
-      cb({ type: 'done', data: null });
-      await p;
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
   it('未注入 onProgress 时零开销路径: 正常收口无异常', async () => {
     fakeMaker.createSession.mockImplementationOnce(async (opts: { id?: string }) =>
       makeManualSession(opts.id ?? 'sess-x'),
@@ -740,17 +500,13 @@ describe('交互卡链路(interaction listener 覆盖)', () => {
     fakeMaker.createSession.mockImplementationOnce(async (opts: { id?: string }) =>
       makeInteractiveSession(opts.id ?? 'sess-x'),
     );
-    const cards: Array<{ interactionId: string; title: string; buttons: Array<{ id: string }> }> =
-      [];
+    const cards: Array<{ interactionId: string; title: string; buttons: Array<{ id: string }> }> = [];
     const cancels: Array<{ interactionId: string; reason: string }> = [];
     const runner = createMakerHookSessionRunner({ log });
     const p = runner.run(
       baseReq({
-        onInteraction: (card: {
-          interactionId: string;
-          title: string;
-          buttons: Array<{ id: string }>;
-        }) => void cards.push(card),
+        onInteraction: (card: { interactionId: string; title: string; buttons: Array<{ id: string }> }) =>
+          void cards.push(card),
         onInteractionCancel: (interactionId: string, reason: string) =>
           void cancels.push({ interactionId, reason }),
       }),
@@ -792,16 +548,12 @@ describe('交互卡链路(interaction listener 覆盖)', () => {
     fakeMaker.createSession.mockImplementationOnce(async (opts: { id?: string }) =>
       makeInteractiveSession(opts.id ?? 'sess-x'),
     );
-    const cards: Array<{ interactionId: string; kind: string; buttons: Array<{ id: string }> }> =
-      [];
+    const cards: Array<{ interactionId: string; kind: string; buttons: Array<{ id: string }> }> = [];
     const runner = createMakerHookSessionRunner({ log });
     const p = runner.run(
       baseReq({
-        onInteraction: (card: {
-          interactionId: string;
-          kind: string;
-          buttons: Array<{ id: string }>;
-        }) => void cards.push(card),
+        onInteraction: (card: { interactionId: string; kind: string; buttons: Array<{ id: string }> }) =>
+          void cards.push(card),
       }),
     );
     await new Promise((r) => setTimeout(r, 0));

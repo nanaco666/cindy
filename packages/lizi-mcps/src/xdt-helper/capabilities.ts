@@ -17,7 +17,7 @@
  *    因为后者是 XDMaker 最差异化的能力,值得独立索引项让模型一眼能查到。
  */
 
-import { BRAND_NAME } from '@cindy/maker-shared/branding';
+import { BRAND_NAME } from '@lizi/maker-shared/branding';
 
 export interface CapabilityEntry {
   key: string;
@@ -56,7 +56,7 @@ export const CAPABILITIES: readonly CapabilityEntry[] = [
       '【怎么开】用户表达"用 worker / 协同模式 / 独立 agent / 派一个 agent 帮我 X"等意图时, Lead 调 start_team 工具创建 team, 再调 create_worker 工具添加 worker。worker 创建后可通过 send_to_worker 派活, 通过 list_workers 查看所有 worker, 通过 switch_focus 切换 focused worker。',
       '【怎么关】用户表达"够了 / 关掉 worker / 不要协同了"时, Lead 调 end_team 结束整个 team(归档所有 worker), 或调 archive_worker 归档单个 worker。Lead 自身保留可继续单 session 对话。',
       '【硬边界】Worker session 不能再开 team(嵌套禁止, 返 WORKER_CANNOT_NEST);Claude Code / Codex 本地项目 session 都可以作为 Lead 调 start_team;Worker 不能结束自己所在 team(返 WORKER_CANNOT_DISABLE);要求 Lead session 有 workingDir。',
-      '【工具归属】13 个 team 工具(start_team / create_worker / create_workers / send_to_worker / list_worker_queue / update_queued_message / cancel_queued_message / list_workers / switch_focus / idle_worker / end_team / archive_worker / list_available_models)在独立的 cindy_orca server 直接顶层注册, 对应"协同模式"可关插件(Settings → Connections → Built-in Tools)。通用 session handoff 原语 send_to_session 在 essential 的 cindy_helper 的 handoff 类目下(走 call_tool, 常开, 供 skill 路由用)。',
+      '【工具归属】13 个 team 工具(start_team / create_worker / create_workers / send_to_worker / list_worker_queue / update_queued_message / cancel_queued_message / list_workers / switch_focus / idle_worker / end_team / archive_worker / list_available_models)在独立的 lizi_orca server 直接顶层注册, 对应"协同模式"可关插件(Settings → Connections → Built-in Tools)。通用 session handoff 原语 send_to_session 在 essential 的 cindy_helper 的 handoff 类目下(走 call_tool, 常开, 供 skill 路由用)。',
       `【与 Claude Code Task tool / Codex subagent 的区别】Task / subagent 是 agent 框架内的子任务派发机制(子 agent 跑在同一 SDK 进程内、有限工具集、生命周期短、对话历史归属父 turn);${BRAND_NAME} 协同模式是业务层的 session 级编排(Lead/Worker 都是完整独立的 ${BRAND_NAME} session, 独立进程、UI 栏位、完整工具、独立对话历史, 长生命周期, 通过 main 进程 IPC + MCP bridge 通信)。两者不互斥, Worker 内部仍可用 Task/subagent 派子任务。`,
       '【手动入口】ChatInput 工具行的橙色 puzzle pill(CollaborationModeToggle), 用户也能手动开/关, 与本工具走同一份业务代码。',
     ].join(' '),
@@ -66,7 +66,7 @@ export const CAPABILITIES: readonly CapabilityEntry[] = [
     title: 'Session Handoff(把消息派给已存在的 session)',
     oneLiner: 'skill 可读当前 sessionId,并把消息 handoff 到一个既有 session,适合把同一业务对象的二次处理路由回原上下文。',
     detail: [
-      `【是什么】get_current_session_id(cindy_helper 自省类)+ send_to_worker(cindy_orca team 工具)/ send_to_session(cindy_helper handoff 类, 走 call_tool)配合使用。前者返回当前 ${BRAND_NAME} session 的 business id / agent_kind / working_dir, 后两者把一条控制层消息投递到指定 session;目标不在内存时会自动 resume, 投递成功即返回。`,
+      `【是什么】get_current_session_id(cindy_helper 自省类)+ send_to_worker(lizi_orca team 工具)/ send_to_session(cindy_helper handoff 类, 走 call_tool)配合使用。前者返回当前 ${BRAND_NAME} session 的 business id / agent_kind / working_dir, 后两者把一条控制层消息投递到指定 session;目标不在内存时会自动 resume, 投递成功即返回。`,
       '【典型场景】自动化 skill 首次处理某个外部业务对象(issue / jira / pr / 任意自定义 key)时, 先调 get_current_session_id 拿 session_id 并把它和外部 key 做持久化绑定;后续二次处理同一对象时, 调 send_to_worker(team 内 worker)或 send_to_session(任意已知 session)把增量信息 handoff 回那个 session, 保留原始上下文、决策链和历史工具调用。',
       '【skill 端伪代码】first_seen -> sid = get_current_session_id(); store(key, sid.session_id); later -> sid = load(key); if sid then send_to_worker / send_to_session({ target_session_id: sid, message: "...增量..." }) else fallback normal flow。',
       '【失败码】NOT_FOUND / DELETED 通常表示绑定失效,skill 应清掉绑定并回退; ARCHIVED 表示 session 已归档,skill 自己决定是否回退或等待未来的 unarchive 能力; BUSY 表示目标 turn 正在跑,本工具不排队,skill 自己决定 retry/backoff。',

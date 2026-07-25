@@ -890,14 +890,14 @@ emulator-5554 device product:sdk_gphone64_arm64 model:Pixel_8 device:emu transpo
       'adb -s 9fc52f30 shell wm size': { stdout: 'Physical size: 1200x2670\n' },
       'adb -s 9fc52f30 shell wm density': { stdout: 'Physical density: 520\n' },
       'adb -s 9fc52f30 shell dumpsys window windows': {
-        stdout: 'mCurrentFocus=Window{123 u0 com.example.unitygame/com.example.input.UnityPlayerActivity}\n',
+        stdout: 'mCurrentFocus=Window{123 u0 com.xd.recat.whitebox/com.ro2.input.RO2UnityPlayerActivity}\n',
       },
       'adb -s 9fc52f30 exec-out screencap -p': { stdout: png },
       'adb -s 9fc52f30 exec-out uiautomator dump /dev/tty': {
         stdout: `UI hierchary dumped to: /dev/tty
 <?xml version='1.0' encoding='UTF-8' standalone='yes' ?>
 <hierarchy rotation="1">
-  <node index="0" text="" resource-id="android:id/content" class="android.widget.FrameLayout" package="com.example.unitygame" clickable="false" enabled="true" bounds="[0,0][2670,1200]" />
+  <node index="0" text="" resource-id="android:id/content" class="android.widget.FrameLayout" package="com.xd.recat.whitebox" clickable="false" enabled="true" bounds="[0,0][2670,1200]" />
 </hierarchy>`,
       },
     });
@@ -908,8 +908,8 @@ emulator-5554 device product:sdk_gphone64_arm64 model:Pixel_8 device:emu transpo
     expect(result.data).toMatchObject({
       screen: { width: 2670, height: 1200, density: 520 },
       current_app: {
-        package: 'com.example.unitygame',
-        activity: 'com.example.input.UnityPlayerActivity',
+        package: 'com.xd.recat.whitebox',
+        activity: 'com.ro2.input.RO2UnityPlayerActivity',
       },
     });
   });
@@ -932,14 +932,14 @@ emulator-5554 device product:sdk_gphone64_arm64 model:Pixel_8 device:emu transpo
       'adb -s 9fc52f30 shell wm size': { stdout: 'Physical size: 1200x2670\n' },
       'adb -s 9fc52f30 shell wm density': { stdout: 'Physical density: 520\n' },
       'adb -s 9fc52f30 shell dumpsys window windows': {
-        stdout: 'mCurrentFocus=Window{123 u0 com.example.unitygame/com.example.input.UnityPlayerActivity}\n',
+        stdout: 'mCurrentFocus=Window{123 u0 com.xd.recat.whitebox/com.ro2.input.RO2UnityPlayerActivity}\n',
       },
       'adb -s 9fc52f30 exec-out screencap -p': { stdout: png },
       'adb -s 9fc52f30 exec-out uiautomator dump /dev/tty': {
         stdout: `UI hierchary dumped to: /dev/tty
 <?xml version='1.0' encoding='UTF-8' standalone='yes' ?>
 <hierarchy rotation="1">
-  <node index="0" text="" resource-id="android:id/content" class="android.widget.FrameLayout" package="com.example.unitygame" clickable="false" enabled="true" bounds="[0,0][2670,1200]" />
+  <node index="0" text="" resource-id="android:id/content" class="android.widget.FrameLayout" package="com.xd.recat.whitebox" clickable="false" enabled="true" bounds="[0,0][2670,1200]" />
 </hierarchy>`,
       },
       'adb -s 9fc52f30 shell input swipe 2000 500 300 500 300': { stdout: '' },
@@ -1331,14 +1331,12 @@ emulator-5554 device product:sdk_gphone64_arm64 model:Pixel_8 device:emu transpo
   });
 
   it('respects the plugin gate in getAndroidMcpDeps', async () => {
-    const isAndroidAutomationEnabled = vi.fn(() => false);
-    const deps = getAndroidMcpDeps({ isAndroidAutomationEnabled });
-    await expect(deps.callTool('status', {}, { agentKind: 'codex' })).resolves.toEqual({
+    const deps = getAndroidMcpDeps({ isAndroidAutomationEnabled: () => false });
+    await expect(deps.callTool('status', {})).resolves.toEqual({
       ok: false,
       errorCode: 'ANDROID_DRIVER_ERROR',
       message: 'Android automation is disabled in Settings.',
     });
-    expect(isAndroidAutomationEnabled).toHaveBeenCalledWith({ agentKind: 'codex' });
     expect(spawnMock).not.toHaveBeenCalled();
   });
 });

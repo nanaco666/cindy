@@ -22,7 +22,6 @@ const h = vi.hoisted(() => ({
   lastRefreshOpts: null as { staleToken?: string; forceRefresh?: boolean } | null,
   encryptionAvailable: true,
   proxyReady: true,
-  canUseGateway: true,
 }));
 
 vi.mock('electron', () => ({
@@ -36,11 +35,7 @@ vi.mock('electron', () => ({
   safeStorage: { isEncryptionAvailable: () => h.encryptionAvailable },
 }));
 
-vi.mock('@cindy/maker-core', () => ({}));
-
-vi.mock('../../appCapabilities.js', () => ({
-  getAppCapabilities: () => ({ canUseCindyGateway: h.canUseGateway }),
-}));
+vi.mock('@lizi/maker-core', () => ({}));
 
 vi.mock('../claude-credentials-store.js', () => ({
   hasClaudeAiOAuth: () => h.hasOAuth,
@@ -103,15 +98,6 @@ describe('DesktopClaudeAuthAdapter.getAuthEnv — 订阅 OAuth env 注入', () =
     h.refreshDelayMs = 0;
     h.encryptionAvailable = true;
     h.proxyReady = true;
-    h.canUseGateway = true;
-  });
-
-  it('keeps the owner-scoped BYOK key readable when Cindy gateway access is disabled', async () => {
-    h.canUseGateway = false;
-    const { readClaudeApiKey, readOwnerScopedXdGatewayKey } = await import('../auth-adapters.js');
-
-    expect(readClaudeApiKey()).toBeNull();
-    expect(readOwnerScopedXdGatewayKey()).toBe('sk-xd-gateway');
   });
 
   async function makeAdapter() {

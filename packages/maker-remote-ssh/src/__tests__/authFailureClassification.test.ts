@@ -1,10 +1,10 @@
 /**
  * isAuthFailure ↔ authFailureHint 的 invariant 回归。
  *
- * 背景（2026-07 cindy_ssh PR review 发现）：connect() 失败时会把 ssh2 原始
+ * 背景（2026-07 lizi_ssh PR review 发现）：connect() 失败时会把 ssh2 原始
  * auth 错误改写成 authFailureHint 的友好文案再 reject / 存进 lastError，而
  * 后续所有"是否认证失败"的判定（RemoteHost 自身的 reconnect 跳过、desktop
- * ensureRemoteHostReady 的 IPC 错误码分类、cindy_ssh 工具错误码）都跑在改写
+ * ensureRemoteHostReady 的 IPC 错误码分类、lizi_ssh 工具错误码）都跑在改写
  * 后的字符串上。若 isAuthFailure 不识别自家 hint 文案，确定性的认证失败会
  * 被降级成"可重试的连接失败"，引发无意义重连/重试。
  *

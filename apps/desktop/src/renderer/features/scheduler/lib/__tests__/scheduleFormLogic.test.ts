@@ -17,8 +17,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import type { ScheduleTemplate } from '@cindy/maker-scheduler';
-import type { ProviderView } from '@cindy/model-providers';
+import type { ScheduleTemplate } from '@lizi/maker-scheduler';
 
 import {
   PENDING_SESSION_ID,
@@ -30,10 +29,8 @@ import {
   deriveRunMode,
   hasRealBinding,
   isExplicitScheduleModelUnavailable,
-  resolveScheduleGenerationProviderId,
   resolveTemplateAgentFields,
   sessionAgentKindToScheduleAgentKind,
-  shouldFollowBoundSessionGenerationRoute,
 } from '../scheduleFormLogic';
 import type { ScheduleFormState } from '../scheduleFormLogic';
 import {
@@ -42,74 +39,6 @@ import {
   resolveScheduleTimingPresentation,
   switchScheduleTimingMode,
 } from '../cronCodexPreset';
-
-const tapsvcProvider: ProviderView = {
-  id: 'tapsvc',
-  name: 'Tap Service',
-  source: 'user',
-  connected: true,
-  agents: ['codex'],
-  auth: { method: 'apiKey' },
-  routing: { codex: { upstream: 'https://custom.example/v1', authStrategy: 'api-key-header' } },
-  models: {
-    codex: [{
-      id: 'gpt-5.5',
-      name: 'GPT-5.5',
-      contextWindow: 200_000,
-      efforts: ['high'],
-      defaultEffort: 'high',
-    }],
-  },
-};
-
-describe('resolveScheduleGenerationProviderId', () => {
-  it('materializes the effective custom provider when the stored provider id is empty', () => {
-    expect(resolveScheduleGenerationProviderId({
-      providers: [tapsvcProvider],
-      providerId: '',
-      model: 'gpt-5.5',
-      agentKind: 'codex',
-    })).toBe('tapsvc');
-  });
-
-  it('returns null when the current agent cannot use the configured provider', () => {
-    expect(resolveScheduleGenerationProviderId({
-      providers: [tapsvcProvider],
-      providerId: '',
-      model: 'claude-sonnet-4-6',
-      agentKind: 'claude-code',
-    })).toBeNull();
-  });
-
-  it('preserves an explicit provider id while that provider is disconnected', () => {
-    expect(resolveScheduleGenerationProviderId({
-      providers: [{ ...tapsvcProvider, connected: false }],
-      providerId: 'tapsvc',
-      model: 'gpt-5.5',
-      agentKind: 'codex',
-    })).toBe('tapsvc');
-  });
-});
-
-describe('shouldFollowBoundSessionGenerationRoute', () => {
-  it('only follows a true bound session with empty provider and model', () => {
-    expect(shouldFollowBoundSessionGenerationRoute({
-      persistentSession: false,
-      targetSessionId: 'session-1',
-      providerId: '',
-      model: '',
-    })).toBe(true);
-  });
-
-  it('keeps the task route for persistent schedules after a session id is written back', () => {
-    expect(shouldFollowBoundSessionGenerationRoute({
-      persistentSession: true,
-      targetSessionId: 'session-1',
-      providerId: 'tapsvc',
-      model: 'gpt-5.5',
-    })).toBe(false);
-  });
-});
 
 describe('isExplicitScheduleModelUnavailable', () => {
   it('does not reject an explicit model before capabilities are ready', () => {

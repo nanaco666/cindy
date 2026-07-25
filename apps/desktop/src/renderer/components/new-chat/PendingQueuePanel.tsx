@@ -37,7 +37,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { SortableList } from '@/components/sidebar/SortableList';
-import { ListComposerTextarea } from './ListComposerTextarea';
 import { Spinner } from '@/components/ui/spinner';
 import { Tip } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
@@ -447,7 +446,7 @@ export function PendingQueuePanel({
                 <GripVertical size={12} strokeWidth={2} aria-hidden />
               </button>
               {isRowEditing ? (
-                <ListComposerTextarea
+                <textarea
                   ref={editingTextareaRef}
                   value={editingDraft}
                   onChange={(e) => setEditingDraft(e.target.value)}

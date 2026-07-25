@@ -5,19 +5,19 @@
  * budgetDisabledOf / tooltipFor / formatContextWindow),文案对齐桌面 zh-CN common.json
  * (手机无 i18n 体系,硬编码简体中文,与桌面中文逐字一致)。组件只做渲染,这里可 node 单测。
  */
-import { modelSupportsFastMode, type ProviderView } from '@cindy/model-providers/registry';
-import type { SectionModel } from '@cindy/model-providers/sections';
-import type { AgentKind } from '@cindy/model-providers/types';
+import { modelSupportsFastMode, type ProviderView } from '@lizi/model-providers/registry';
+import type { SectionModel } from '@lizi/model-providers/sections';
+import type { AgentKind } from '@lizi/model-providers/types';
 
-import { MOBILE_EFFORT_LABELS } from '@cindy/maker-shared/agent-capabilities';
+import { MOBILE_EFFORT_LABELS } from '@lizi/maker-shared/agent-capabilities';
 
 import type { MobileAgentCapabilities } from './agentCapabilities';
 import type { MobileModelMemoryAccessors } from './draftModelMemory';
 import type { DeviceApiKeyStatus } from '@/device-link/deviceModelMetaCache';
 import type { MobileModelPricingMap } from '@/device-link/mobileMakerTransport';
 
-/** budget 档置灰时的行内提示(对位桌面 budgetNeedsApiKey,按远程语境改「被控电脑」)。 */
-export const BUDGET_DISABLED_HINT = '该模型需先在被控电脑配置 API key 才能使用';
+/** 骨折版置灰时的行内提示(对位桌面 budgetNeedsApiKey,按远程语境改「被控电脑」)。 */
+export const BUDGET_DISABLED_HINT = '骨折GPT 需先在被控电脑配置 API key 才能使用';
 
 /** 行/展开区消费的最小模型形状(SectionModel 与 capabilities MobileModelOption 都满足)。 */
 export interface PickerRowModel {
@@ -166,7 +166,7 @@ export function rowFastOn(args: {
 }
 
 /**
- * budget 档置灰判定(桌面 budgetDisabledOf 同口径,key 判定换成被控端 presence 探测):
+ * 骨折版置灰判定(桌面 budgetDisabledOf 同口径,key 判定换成被控端 presence 探测):
  * `codex/` 前缀 且 被控端明确无 key 才置灰;'unknown'(旧被控端 / 拉取失败)不置灰,
  * 宁可放行到被控端请求期报错也不误伤。
  */

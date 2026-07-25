@@ -3,7 +3,7 @@
  *
  * 控制端经隧道 `deviceLink.invoke(deviceId, 'file-browser:remote-op', [args])`
  * 到达这里(invoke-registry 捕获本文件注册的 ipcMain.handle;本机 renderer
- * 不调用该 channel)。单聚合 channel 的取舍见 @cindy/device-link allowlist.ts
+ * 不调用该 channel)。单聚合 channel 的取舍见 @lizi/device-link allowlist.ts
  * 的准入注释:老被控端 CHANNEL_NOT_ALLOWED = 能力全无,控制端渲染"设备版本
  * 过旧"占位。
  *
@@ -53,13 +53,13 @@ import {
   RipgrepSearcher,
   type SearchEvent,
   type SearchMatch,
-} from '@cindy/file-browser-core';
+} from '@lizi/file-browser-core';
 import {
   FILE_BROWSER_EVENT_CHANNEL,
   FILE_BROWSER_REMOTE_OP_CHANNEL,
   parseFsWatchTopic,
-} from '@cindy/device-link';
-import { WorkdirWatchManager } from '@cindy/remote-file-service';
+} from '@lizi/device-link';
+import { WorkdirWatchManager } from '@lizi/remote-file-service';
 
 import { createLogger } from '../logger.js';
 import { getDbClient } from '../localDb/client/current.js';
@@ -76,7 +76,7 @@ const log = createLogger('file-browser/device-op');
 
 /**
  * readFile 内容的 device-link 上限。量纲必须与帧限一致:relay 单帧
- * MAX_FRAME_BYTES=2MiB 按 **UTF-8 字节**判(见 @cindy/device-link client),
+ * MAX_FRAME_BYTES=2MiB 按 **UTF-8 字节**判(见 @lizi/device-link client),
  * 而 content.length 是 UTF-16 码元——中文 1 字符 = 3 字节、JSON 转义(引号 /
  * 反斜杠 / 换行)还会再膨胀,按字符数预判会放行必超帧的内容(core readFile
  * 按 2MiB 字节截断,≥2MiB 的中文文件恰好全量踩中)。用 JSON.stringify 后的

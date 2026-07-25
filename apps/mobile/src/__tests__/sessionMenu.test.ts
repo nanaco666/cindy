@@ -17,7 +17,7 @@ function session(patch: Partial<RemoteSession> = {}): RemoteSession {
     id: '83639512-9c1f-4b6e-b1de-0a1b2c3d7ed0',
     userId: 'u1',
     title: '修复语音输入丢字',
-    workingDir: '/Users/alice/Code/Tools/xdt-maker',
+    workingDir: '/Users/dash/Code/Tools/xdt-maker',
     workspaceKind: 'project',
     model: 'claude-sonnet-4-6',
     effort: 'medium',
@@ -118,7 +118,7 @@ describe('sessionMenu info model', () => {
     expect(buildSessionInfoWorkspace(session({ worktreePath: '/repo/.xdt-worktrees/voice-fix' })))
       .toEqual({ label: 'Worktree', name: 'voice-fix', path: '/repo/.xdt-worktrees/voice-fix' });
     expect(buildSessionInfoWorkspace(session()))
-      .toEqual({ label: '工作目录', name: 'xdt-maker', path: '/Users/alice/Code/Tools/xdt-maker' });
+      .toEqual({ label: '工作目录', name: 'xdt-maker', path: '/Users/dash/Code/Tools/xdt-maker' });
     expect(buildSessionInfoWorkspace(session({ workingDir: null }))).toBeNull();
   });
 

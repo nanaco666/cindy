@@ -20,8 +20,8 @@
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import path from 'node:path';
 
-import type { AgentKind, Maker } from '@cindy/maker-core';
-import type { PreRunHookRunResult } from '@cindy/maker-scheduler';
+import type { Maker } from '@lizi/maker-core';
+import type { PreRunHookRunResult } from '@lizi/maker-scheduler';
 import type { UtilityTextFailure, UtilityTextResult } from '../../shared/utilityTextResult.js';
 
 /** 生成请求的输入(IPC 层已完成参数校验)。 */
@@ -33,12 +33,6 @@ export interface GenerateHookScriptInput {
   workingDir?: string;
   /** 修改流:当前命令(尝试解析出已生成脚本的路径并覆写)。 */
   currentCommand?: string;
-  /** 任务实际选择的供应商；显式值优先于 utility model 默认回退链。 */
-  providerId?: string;
-  /** 任务实际使用的 agent runtime。 */
-  agentKind?: AgentKind;
-  /** 任务实际选择的模型；自定义供应商缺省时取该 runtime 的首个模型。 */
-  model?: string;
 }
 
 export interface GenerateHookScriptResult {
@@ -57,17 +51,7 @@ export interface HookScriptGeneratorDeps {
   fallbackDir: string;
   logger?: { info?: (msg: string, meta?: unknown) => void; warn?: (msg: string, meta?: unknown) => void };
   /** 测试注入;缺省走 requestUtilityText。 */
-  requestText?: (
-    maker: Maker,
-    prompt: string,
-    opts: {
-      maxTokens: number;
-      timeoutMs: number;
-      providerId?: string;
-      agentKind?: AgentKind;
-      model?: string;
-    },
-  ) => Promise<UtilityTextResult>;
+  requestText?: (maker: Maker, prompt: string, opts: { maxTokens: number; timeoutMs: number }) => Promise<UtilityTextResult>;
   /**
    * 测试注入;缺省走 hook-runtimes.hasSystemNode(探测系统 node)。
    * false → 生成的命令用 `xdt-node` 前缀(app 自带 Electron 运行时兜底,
@@ -419,9 +403,6 @@ export async function generateHookScript(
   const response = await requestText(deps.maker as Maker, prompt, {
     maxTokens: GENERATE_MAX_TOKENS,
     timeoutMs: GENERATE_TIMEOUT_MS,
-    providerId: input.providerId,
-    agentKind: input.agentKind,
-    model: input.model,
   });
   if (!response.ok) throw new HookScriptUtilityModelError(response);
   const content = extractScriptFromResponse(response.text);

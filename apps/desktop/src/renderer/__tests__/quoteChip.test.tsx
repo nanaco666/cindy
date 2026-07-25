@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { QuoteChip } from '@/components/chat/QuoteChip';
 
 afterEach(() => {
   cleanup();
+  vi.restoreAllMocks();
 });
 
 describe('QuoteChip', () => {
@@ -17,11 +18,19 @@ describe('QuoteChip', () => {
     expect(chip?.className).toContain('select-none');
   });
 
-  it('uses the compact primary-text shell without a close button', () => {
-    const { container } = render(<QuoteChip quote={{ text: 'quoted' }} />);
+  it('keeps the remove affordance optional for sent-message reuse', () => {
+    const onRemove = vi.fn();
+    const { rerender } = render(<QuoteChip quote={{ text: 'quoted' }} />);
     expect(screen.queryByRole('button')).toBeNull();
-    expect(
-      container.querySelector('[data-inline-reference-chip]')?.className,
-    ).toContain('text-[var(--text-primary)]');
+
+    rerender(
+      <QuoteChip
+        quote={{ text: 'quoted' }}
+        onRemove={onRemove}
+        removeLabel="Remove quote"
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Remove quote' }));
+    expect(onRemove).toHaveBeenCalledTimes(1);
   });
 });

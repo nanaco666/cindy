@@ -3,8 +3,6 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { normalizeWorkingDirForStorage } from '../../../shared/workingDir.js';
-
 import {
   buildLegacyDialogueRoots,
   healMissingDialogueWorkdir,
@@ -209,33 +207,6 @@ describe('sweepLegacyDialogueWorkingDirs', () => {
     });
     expect(result).toMatchObject({ scanned: 0, rewritten: 0, deferred: 0 });
     expect(queryCalls).toHaveLength(0);
-  });
-
-  it('rewrites pre-owner-namespace dialogue paths into the scoped owner root', async () => {
-    const oldRoot = path.join(userData, 'dialogues');
-    const ownerRoot = path.join(userData, 'owners', 'owner-key', 'dialogues');
-    const oldStored = normalizeWorkingDirForStorage(oldRoot)!;
-    const ownerStored = normalizeWorkingDirForStorage(ownerRoot)!;
-    const { db, execCalls, queryCalls } = makeFakeDb([
-      { id: 'owner-session', working_dir: `${oldStored}/2026-07-22/owner-session` },
-    ]);
-
-    const result = await sweepLegacyDialogueWorkingDirs({
-      db,
-      userDataDir: userData,
-      legacyUserDataDirNames: ['Cindy'],
-      currentDialoguesRoot: ownerRoot,
-      additionalLegacyDialogueRoots: [oldRoot],
-      log: noopLog,
-      ...noDiskFs,
-    });
-
-    expect(result).toMatchObject({ scanned: 1, rewritten: 1, deferred: 0 });
-    expect(queryCalls).toHaveLength(1);
-    expect(execCalls[0].params).toEqual([
-      `${ownerStored}/2026-07-22/owner-session`,
-      'owner-session',
-    ]);
   });
 
   it('defers still-existing legacy dirs to background: copy then rewrite', async () => {

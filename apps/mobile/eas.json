@@ -57,6 +57,32 @@
       "env": {
         "EXPO_PUBLIC_CINDY_AUTH_REGION": "global"
       }
+    },
+    "beta-base": {
+      "distribution": "store",
+      "environment": "preview",
+      "node": "22.19.0",
+      "ios": { "resourceClass": "m-medium" },
+      "android": { "resourceClass": "medium" },
+      "env": {
+        "EXPO_PUBLIC_CINDY_AUTH_REGION": "cn",
+        "EXPO_PUBLIC_APP_VARIANT": "beta",
+        "XDT_SKIP_AGENT_BIN_INSTALL": "1"
+      }
+    },
+    "beta-dash": {
+      "extends": "beta-base",
+      "channel": "beta-dash",
+      "env": { "EXPO_PUBLIC_BETA_DEV": "dash" }
+    },
+    "beta-global-base": {
+      "extends": "beta-base",
+      "env": { "EXPO_PUBLIC_CINDY_AUTH_REGION": "global" }
+    },
+    "beta-global-dash": {
+      "extends": "beta-global-base",
+      "channel": "beta-global-dash",
+      "env": { "EXPO_PUBLIC_BETA_DEV": "dash" }
     }
   }
 }

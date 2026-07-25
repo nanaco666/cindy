@@ -5,14 +5,16 @@
  * 过期后列表为空,调用方据此不渲染,徽章自动消失。SessionItem(size 10)与
  * SessionContentHeader(size 13)共用。
  *
- * 视觉:复用统一 AutomationTimerIcon。全部绑定均 paused 时主图标弱化 +
- * 右下叠 Pause mini-badge，不替换 Timer、不改变占位。
+ * 视觉:lucide Timer + meta 灰,与 scheduler 频率 chip 同图标语义("挂在定时器
+ * 上"),区别于"自动化创建"的 Clock。全部绑定均 paused 时主图标弱化 + 右下叠
+ * Pause mini-badge(视觉语言照 AutomationSessionGroupItem)。
  */
 
+import { Pause, Timer } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 
-import type { Schedule } from '@cindy/maker-scheduler';
+import type { Schedule } from '@lizi/maker-scheduler';
 
 import { cn } from '@/lib/utils';
 import { Tooltip } from '@/components/ui/tooltip';
@@ -21,7 +23,6 @@ import {
   summarizeConfig,
 } from '@/features/scheduler/lib/cronCodexPreset';
 import { scheduleFocusPath } from '@/features/scheduler/lib/scheduleSessionBinding';
-import { AutomationTimerIcon } from './AutomationTimerIcon';
 
 export interface ScheduleBindingBadgeProps {
   /** 绑定到当前会话的 schedules(expired 已由 selector 滤掉)。空数组不渲染。 */
@@ -69,16 +70,37 @@ export function ScheduleBindingBadge({
           onPointerDown={(e) => e.stopPropagation()}
           onKeyDown={(e) => e.stopPropagation()}
           className={cn(
-            'inline-flex shrink-0 items-center justify-center',
+            'relative inline-flex size-3 shrink-0 items-center justify-center',
             'cursor-pointer focus:outline-none',
             className,
           )}
         >
-          <AutomationTimerIcon
+          <Timer
             size={size}
-            paused={allPaused}
-            activeForeground={activeForeground}
+            strokeWidth={1.75}
+            className={cn(
+              activeForeground
+                ? 'text-[var(--sidebar-item-active-foreground)]'
+                : 'text-[var(--cmd-palette-item-meta)] hover:text-foreground transition-colors',
+              allPaused && 'opacity-60',
+            )}
+            aria-hidden
           />
+          {allPaused && (
+            <span
+              aria-hidden
+              className={cn(
+                'absolute -bottom-1 -right-1 flex size-2.5 items-center justify-center rounded-full',
+                // 反白态下角标随红胶囊取色(底=胶囊底遮住 Timer,前景反白),
+                // 否则沿用页面级 chip 配色。
+                activeForeground
+                  ? 'border border-[var(--sidebar-item-active-border)] bg-sidebar-item-active text-[var(--sidebar-item-active-foreground)]'
+                  : 'border border-[var(--cmd-palette-border)] bg-[var(--chat-input-chip-bg)] text-[var(--cmd-palette-item-meta)]',
+              )}
+            >
+              <Pause size={6} strokeWidth={3} />
+            </span>
+          )}
         </button>
       </Tooltip.Trigger>
       <Tooltip.Content side="top" variant="mono">

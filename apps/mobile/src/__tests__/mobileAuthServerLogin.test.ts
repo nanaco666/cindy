@@ -19,13 +19,6 @@ describe('mobile auth-server login', () => {
 
     expect(loginSource).toMatch(/type:\s*'native-social',\s*provider/);
     expect(loginSource).toContain('testID: `login.${provider}Button`');
-    expect(loginSource).toContain('<AppleAuthenticationButton');
-    expect(loginSource).toContain(
-      'buttonType={AppleAuthenticationButtonType.SIGN_IN}',
-    );
-    expect(loginSource).toContain('AppleAuthenticationButtonStyle.WHITE');
-    expect(loginSource).toContain('AppleAuthenticationButtonStyle.BLACK');
-    expect(loginSource).toContain('style={styles.appleButton}');
     expect(loginSource).not.toContain('react-native-webview');
     expect(authSource).toContain(
       'client.exchangeNativeSocial(action.provider, credential)',

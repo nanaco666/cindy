@@ -1,4 +1,4 @@
-import type { MobileVoiceDictionaryLearningRequest } from '@cindy/maker-shared/device-link-contract';
+import type { MobileVoiceDictionaryLearningRequest } from '@lizi/maker-shared/device-link-contract';
 
 export const MOBILE_VOICE_DICTIONARY_LEARNING_TRACK_TIMEOUT_MS = 15 * 1000;
 

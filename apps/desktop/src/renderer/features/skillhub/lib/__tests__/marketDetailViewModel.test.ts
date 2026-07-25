@@ -22,8 +22,8 @@ function makeSkill(overrides: Partial<SkillhubSkill> = {}): SkillhubSkill {
     kind: 'skill',
     scope: 'global',
     name: 'demo-skill',
-    absolutePath: '/home/sam/.agents/skills/demo-skill',
-    mdPath: '/home/sam/.agents/skills/demo-skill/SKILL.md',
+    absolutePath: '/home/lizi/.agents/skills/demo-skill',
+    mdPath: '/home/lizi/.agents/skills/demo-skill/SKILL.md',
     files: [],
     registryEntry: null,
     ...overrides,
@@ -139,7 +139,7 @@ describe('market cloud detail view model', () => {
   it('lists multiple registered installs and marks only outdated local versions', () => {
     const globalSkill = makeSkill({
       id: 'skill:global:demo-skill',
-      absolutePath: '/home/sam/.agents/skills/demo-skill',
+      absolutePath: '/home/lizi/.agents/skills/demo-skill',
     });
     const projectSkill = makeSkill({
       id: 'skill:project:abc:demo-skill',
@@ -165,7 +165,7 @@ describe('market cloud detail view model', () => {
 
   it('does not treat unregistered same-name local folders as installed foreign market skills', () => {
     const localOnlySkill = makeSkill({
-      absolutePath: '/home/sam/.codex/skills/demo-skill',
+      absolutePath: '/home/lizi/.codex/skills/demo-skill',
       registryEntry: null,
     });
 
@@ -179,7 +179,7 @@ describe('market cloud detail view model', () => {
 
   it('shows unregistered local copies only for owned market skills and avoids duplicating registered paths', () => {
     const registeredSkill = makeSkill({
-      absolutePath: '/home/sam/.agents/skills/demo-skill',
+      absolutePath: '/home/lizi/.agents/skills/demo-skill',
     });
     const localCopy = makeSkill({
       id: 'skill:project:abc:demo-skill',

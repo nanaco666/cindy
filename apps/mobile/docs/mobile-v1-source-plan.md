@@ -1,4 +1,4 @@
-# Cindy Mobile V1 Source-Based Implementation Plan
+# XDMaker Mobile V1 Source-Based Implementation Plan
 
 > 日期: 2026-06-18
 > 目标: 按桌面版源码逐项对齐手机版远程控制能力。
@@ -6,11 +6,11 @@
 > 原则: 桌面端是业务真相源,手机端只做控制端和移动交互承载;跨端展示语义沉到 `packages/maker-shared`。
 > 范围修订: 桌面 `/issue` / `submit_github_issue` 的 Issue Confirm 是反馈提交链路,不属于 mobile V1 主功能。mobile 只识别 `issue_confirm` 并提示回桌面端处理,不实现 GitHub Issue 表单。
 > 最新修订: 当前执行以 [mobile-current-execution-plan.md](./mobile-current-execution-plan.md) 为准。本文保留源码审计、能力矩阵和历史计划背景,不再作为唯一排期入口。
-> 当前执行合同: 先把 iOS 的 Home、Session、Composer 做到产品化;Android 只保留兼容护栏。所有主层 UI 必须能指回 Cindy 桌面源码,不能只因为参考图或 mobile 现状而新增桌面没有的信息、图标或动作。
+> 当前执行合同: 先把 iOS 的 Home、Session、Composer 做到产品化;Android 只保留兼容护栏。所有主层 UI 必须能指回 XDMaker 桌面源码,不能只因为参考图或 mobile 现状而新增桌面没有的信息、图标或动作。
 
 ## 0. 当前执行合同
 
-当前目标不是“把远程控制功能入口继续铺满”,而是先把三个主要窗口打磨到能代表 Cindy 手机版第一版质量:
+当前目标不是“把远程控制功能入口继续铺满”,而是先把三个主要窗口打磨到能代表 XDMaker 手机版第一版质量:
 
 1. **Home = 桌面左侧栏的手机形态**
    对齐 `ProjectNode`、`SessionItem`、`PinnedSection`、`DialogueSection` 的主层信息。设备只做轻量筛选和来源,不是第一层选择页;Relay 正常态、同步成功态、调试说明和额外统计不进入主层。
@@ -61,7 +61,7 @@ V1 不应做:
 
 桌面端和手机版不共享 UI 组件,但共享 model 输出和测试 fixture。桌面端把 model 渲染为 sidebar / right rail / hover action / split pane,手机版把同一份 model 渲染为 stack / sheet / full-screen modal / touch action。
 
-详细迁移顺序见 [shared-core-migration-plan.md](./shared-core-migration-plan.md)。当前已完成 `@cindy/maker-shared` 包 scaffold,并已迁入 queue summary / move index / Orca queue item 判断、device list presentation、session controls overview、session list / bulk selection model、agent capability projection、pending interaction serializers / priority / plan outline / issue normalization、message normalize content preview / stable sort / tool pairing model、message render grouping model、message window/search model、system card presentation、file browser / file preview model、automation/schedule model、device-link controller contract、composer palette model、payload summary/body/preview/tool-input-diff/tool-result-media/attachment projection model,以及 shared remote-control fixture baseline。raw desktop-like message fixture、schedule/file raw payload 和 desktop renderer parity 已接入;下一步继续 iOS session detail 产品化 polish 和失败态调优。
+详细迁移顺序见 [shared-core-migration-plan.md](./shared-core-migration-plan.md)。当前已完成 `@lizi/maker-shared` 包 scaffold,并已迁入 queue summary / move index / Orca queue item 判断、device list presentation、session controls overview、session list / bulk selection model、agent capability projection、pending interaction serializers / priority / plan outline / issue normalization、message normalize content preview / stable sort / tool pairing model、message render grouping model、message window/search model、system card presentation、file browser / file preview model、automation/schedule model、device-link controller contract、composer palette model、payload summary/body/preview/tool-input-diff/tool-result-media/attachment projection model,以及 shared remote-control fixture baseline。raw desktop-like message fixture、schedule/file raw payload 和 desktop renderer parity 已接入;下一步继续 iOS session detail 产品化 polish 和失败态调优。
 
 ### 1.2 Mobile Design Parity Gate
 
@@ -122,7 +122,7 @@ V1 不应做:
 
 ### 1.4 当前目标与重新排期
 
-根据首页和会话页的最新反馈,移动端 V1 的目标从“远程控制能力跑通”升级为 **桌面同源的 iOS 优先产品化版本**。当前验收不再以“功能有入口”为准,而以“像 Cindy 自己的移动控制面”为准。
+根据首页和会话页的最新反馈,移动端 V1 的目标从“远程控制能力跑通”升级为 **桌面同源的 iOS 优先产品化版本**。当前验收不再以“功能有入口”为准,而以“像 XDMaker 自己的移动控制面”为准。
 
 #### 1.4.1 产品目标
 
@@ -146,7 +146,7 @@ V1 不应做:
 | 优先级 | 目标 | 具体内容 | 不做什么 | 验收方式 |
 | --- | --- | --- | --- | --- |
 | P0 | 首页收口成桌面侧栏移动版 | Projects / Chats / Pinned 合并列表、桌面同源图标、一行 session row、轻量设备筛选、真实可用 action。 | 不展示 Relay 成功态、调试说明、session subtitle/preview/detail;不强迫先选电脑。 | 与 `CCAgentSidebarUpper` / `SessionItem` / `ProjectNode` 源码逐项比对;iOS 截图和 source anchor 通过。 |
-| P0 | 会话页主阅读面收口 | header、消息列表、用户/助手消息、work group、tool、todo、system card、消息结束 action。 | 不常驻显示工具/错误/思考/消息分类 chip;不做 Todo 详情 sheet;不把 action 做成大按钮。 | 真实 Cindy fixture 浏览顺畅;message action/source parity 单测;Maestro anchor;视觉 baseline。 |
+| P0 | 会话页主阅读面收口 | header、消息列表、用户/助手消息、work group、tool、todo、system card、消息结束 action。 | 不常驻显示工具/错误/思考/消息分类 chip;不做 Todo 详情 sheet;不把 action 做成大按钮。 | 真实 XDMaker fixture 浏览顺畅;message action/source parity 单测;Maestro anchor;视觉 baseline。 |
 | P0 | Composer 改成桌面 `ChatInput` 的 icon-first 触控版 | 附件/更多、输入框、语音、发送/停止按桌面顺序和语义渲染,语音在发送左侧。 | 不使用“附件 / 语音 / 发送”大文字按钮;不新增桌面没有的主层说明。 | `sessionComposer*` 单测锁顺序和图标化;typecheck;Maestro source anchor;截图检查。 |
 | P1 | Pending / queue / controls sheet 降噪 | 权限、提问、计划、队列、设置进入 sheet,只显示当前必须处理的信息。 | 不把桌面右栏/hover/tooltip 内容展开到主层;Issue confirm 不做手机表单。 | shared interaction/queue/control tests + iOS 主要路径截图。 |
 | P1 | 文件、payload、diff 只读承载 | 消息内 file/diff/media chip 进入 full-screen viewer 或只读文件页。 | V1 不做完整文件编辑器、dirty/conflict/save。 | file/payload shared fixture、viewer smoke、source anchor。 |
@@ -177,7 +177,7 @@ V1 不应做:
    桌面主层没有常驻的信息,手机主层也不常驻。Relay 正常态、同步成功态、调试说明、额外统计、分类 chip、桌面 hover/右栏详情,默认全部删除或下沉到 sheet / full-screen / debug surface。
 
 3. **会话阅读优先于控制面板**
-   会话页第一目标是顺畅浏览真实 Cindy 消息,然后才是接管输入、队列和 pending interaction。主层结构固定为 header -> message list -> message action -> pending/composer;其它能力只按需打开。
+   会话页第一目标是顺畅浏览真实 XDMaker 消息,然后才是接管输入、队列和 pending interaction。主层结构固定为 header -> message list -> message action -> pending/composer;其它能力只按需打开。
 
 4. **图标和动作语义必须同源**
    复制、分叉、撤销/rewind、附件、语音、发送、停止、目录、搜索、更多等动作使用桌面同族图标和桌面语义顺序。手机可以扩大不可见 hit area,但可见图标不能变成大按钮。
@@ -190,7 +190,7 @@ V1 不应做:
 | 顺序 | 任务 | 实现方式 | 验收 |
 | --- | --- | --- | --- |
 | 1 | 会话页主层减法 | 对照 `CCAgentSessionView` / `MessageStream` / `MessageActionBar` / `ChatInput` 删除手机主层额外卡片、说明、分类 chip 和成功态状态行。 | 主会话页常驻信息不超过桌面版;真实长会话浏览时第一屏主要是消息内容。 |
-| 2 | 消息动作轻量化 | 复制、分叉、撤销/rewind 放回消息结束处;可见图标按桌面轻量 action bar 尺寸,hit area 单独保证触控。 | 图标视觉不显重;动作顺序对齐桌面;用户消息不显示“你/Cindy”身份标签。 |
+| 2 | 消息动作轻量化 | 复制、分叉、撤销/rewind 放回消息结束处;可见图标按桌面轻量 action bar 尺寸,hit area 单独保证触控。 | 图标视觉不显重;动作顺序对齐桌面;用户消息不显示“你/XDMaker”身份标签。 |
 | 3 | 工作过程折叠态减法 | `已工作` 收起态只保留桌面同级摘要,不显示错误/工具/思考/消息分类 chip;展开后才看工具细节。 | 收起态信息少于或等于桌面;不会因为手机端补了更多统计而抢主消息。 |
 | 4 | Composer icon-first | 附件/更多、输入框、语音、发送/停止按桌面 `ChatInput` 语义重排;语音紧挨发送左侧;文字按钮改为图标。 | iPhone SE 宽度不挤压;底部不出现“附件 / 语音 / 发送”大文字按钮。 |
 | 5 | 可见文本选择 | 复核 RN `Text selectable`、Markdown WebView 和 streaming/finalized 的渲染路径;完成态优先走能直接选择的正文实现。 | iOS 模拟器和真机至少能对长中文/代码/列表消息局部拖选复制;不通过则继续修,不降级为弹窗唯一方案。 |
@@ -210,7 +210,7 @@ V1 不应做:
 当前阶段完成的标准不是“能点通”,而是:
 
 - 首页和会话页各有明确桌面源码母版,并且每个常驻信息都有来源。
-- iOS 上真实 Cindy 历史会话可顺畅浏览,长文本可局部选择复制。
+- iOS 上真实 XDMaker 历史会话可顺畅浏览,长文本可局部选择复制。
 - 消息动作、composer、header、search、queue 的图标和动作顺序与桌面语义一致。
 - 会话主层没有比桌面更多的状态、分类、统计和调试信息。
 - shared unit、mobile unit/source guard、typecheck、web smoke、Maestro 静态检查通过;涉及视觉的批次补 iOS screenshot/baseline。
@@ -261,7 +261,7 @@ Session 的母版是桌面会话主窗口,不是控制台。
 必须做到:
 
 - 主层顺序固定为:header -> message list -> message-end actions -> pending/composer。
-- 用户消息和助手消息不显示“你 / Cindy”身份标签。
+- 用户消息和助手消息不显示“你 / XDMaker”身份标签。
 - 复制、分叉、撤销/rewind 等动作回到消息结束处,视觉上是小图标 action;可点击热区可以大,但图标本身不能做成大按钮。
 - `已工作` 收起态只显示桌面同级摘要,不显示错误/工具/思考/消息这些分类 chip。展开后再按桌面顺序看 thinking/tool/todo。
 - 工具、diff、payload、文件、媒体、queue、session controls、search 都按需进入 sheet 或 full-screen viewer,不常驻堆卡片。
@@ -292,7 +292,7 @@ Composer 的母版是桌面 `ChatInput`,手机只是触控版。
 | --- | --- | --- | --- |
 | A | 桌面源码重新核对 | 逐项读取桌面侧栏、会话窗口、消息 action、work group、`ChatInput` 源码,更新 source inventory。 | 每个手机常驻信息都能指回桌面母版;不能指回的默认删除或下沉。 |
 | B | shared 展示模型补齐 | 把 home row、message action availability、work summary、composer action state、selection-friendly message block 沉到 `packages/maker-shared`。 | 桌面/mobile fixture 共享;排序、摘要、状态优先级不在 mobile 私有实现。 |
-| C | Session 主窗口 polish | 按 1.6.3 删除噪音、缩小 action、简化 work group、修正文案和图标。 | 真实 Cindy 长会话第一屏主要是消息内容;按钮视觉轻;正文可局部选择。 |
+| C | Session 主窗口 polish | 按 1.6.3 删除噪音、缩小 action、简化 work group、修正文案和图标。 | 真实 XDMaker 长会话第一屏主要是消息内容;按钮视觉轻;正文可局部选择。 |
 | D | Composer polish | 按 1.6.4 重排为 icon-first;语音在发送左边;禁用文字大按钮。 | 小屏不挤压;source guard 锁住图标和顺序。 |
 | E | Home 主窗口 polish | 按 1.6.2 回到桌面左侧栏模型,删除远程/Relay/调试主层噪音。 | 首页像桌面侧栏的移动版,不是设备调试页。 |
 | F | 自动化验证 | shared unit + mobile source guard + typecheck + web smoke + Maestro static + iOS screenshot/baseline。 | 用户不用反复手工点测基础回归;手工只看主观质感和真实使用反馈。 |
@@ -310,7 +310,7 @@ Composer 的母版是桌面 `ChatInput`,手机只是触控版。
 
 ### 1.7 当前执行版: 桌面主窗口的手机化
 
-当前阶段目标只有一个: **把 iOS 上的 Home 和 Session 做成 Cindy 桌面左侧栏与桌面会话窗口的移动版**。远程链路跑通只是底线;真正完成要满足:主层信息不多于桌面,动作和图标同源,消息阅读舒服,正文能在可见位置局部选择复制。
+当前阶段目标只有一个: **把 iOS 上的 Home 和 Session 做成 XDMaker 桌面左侧栏与桌面会话窗口的移动版**。远程链路跑通只是底线;真正完成要满足:主层信息不多于桌面,动作和图标同源,消息阅读舒服,正文能在可见位置局部选择复制。
 
 后续开发不再按“远程控制功能入口”排期,改按“桌面主窗口移动化”排期。每个手机常驻元素都要能指回桌面源码;指不回去的,默认删掉、下沉到 sheet/full-screen,或暂缓。
 
@@ -340,7 +340,7 @@ Composer 的母版是桌面 `ChatInput`,手机只是触控版。
 | 顺序 | 批次 | 具体改动 | 完成标准 |
 | --- | --- | --- | --- |
 | 0 | Source lock | 重新核对上表桌面母版,为 Home / Session 每个常驻元素补 source anchor 和降噪清单。 | 不能指回桌面的元素不进入主层。 |
-| 1 | Session 阅读主层 | 删除主层额外状态、分类、说明、调试;用户/助手消息不显示“你 / Cindy”;`已工作` 收起态只保留桌面同级摘要。 | 真实长会话第一屏主要是消息内容,信息量不超过桌面。 |
+| 1 | Session 阅读主层 | 删除主层额外状态、分类、说明、调试;用户/助手消息不显示“你 / XDMaker”;`已工作` 收起态只保留桌面同级摘要。 | 真实长会话第一屏主要是消息内容,信息量不超过桌面。 |
 | 2 | Message action 轻量化 | 按桌面 `MessageActionBar` 顺序渲染小图标;visible icon 保持轻,hit area 单独放大;禁用态和 remote capability 复用 shared model。 | 不再像大按钮;copy/undo/fork 顺序、图标、禁用态由 source guard 锁住。 |
 | 3 | Composer icon-first | 对照 `ChatInput` 重排为附件/更多、输入框、语音、发送/停止;语音紧挨发送左侧;去掉“附件 / 语音 / 发送”大文字按钮。 | iPhone SE 宽度不挤压;只保留 placeholder、错误和不可用原因文案。 |
 | 4 | 可见文本选择 | 复核 RN selectable、Markdown WebView、必要时 native text view 的实现边界;完成态优先走可直接选择的正文路径。 | iOS 模拟器/真机能局部选择长中文、代码块、列表和 mixed markdown;失败不算完成。 |
@@ -366,11 +366,11 @@ Composer 的母版是桌面 `ChatInput`,手机只是触控版。
 
 ### 1.8 本轮收敛后的目标和计划
 
-本轮目标不是继续扩远程控制入口,而是把 **Home 主窗口、Session 对话窗口、Composer 输入区** 做到能代表 Cindy 手机版第一版质量。后续所有功能都服从这三个窗口的信息层级:桌面主层没有的东西,手机主层默认也没有;手机只因为触控、键盘、安全区和窄屏做承载变化。
+本轮目标不是继续扩远程控制入口,而是把 **Home 主窗口、Session 对话窗口、Composer 输入区** 做到能代表 XDMaker 手机版第一版质量。后续所有功能都服从这三个窗口的信息层级:桌面主层没有的东西,手机主层默认也没有;手机只因为触控、键盘、安全区和窄屏做承载变化。
 
 #### 1.8.1 北极星
 
-**iOS 优先交付一个桌面同源、信息更少、动作更轻、真实可用的 Cindy 远程会话主体验。**
+**iOS 优先交付一个桌面同源、信息更少、动作更轻、真实可用的 XDMaker 远程会话主体验。**
 
 这句话拆成五条硬要求:
 
@@ -397,7 +397,7 @@ P0 只包含主窗口体验,其它都不能抢主线:
 | --- | --- | --- | --- |
 | Home | `CCAgentSidebarUpper`、`ProjectNode`、`SessionItem` | 合并展示所有可控电脑的 Pinned / Projects / Chats / sessions;设备只是筛选和来源;列表行一行一个主体。 | 不做设备选择器;不展示 Relay 成功态、同步成功、本地联调、调试说明、session preview/detail。 |
 | Session header | `SessionContentHeader`、会话顶部 action | 返回、标题、必要来源/状态、目录、搜索、更多;状态只在异常或需要用户处理时出现。 | 不把 controls、queue、cost、context、debug 常驻在 header 或主层。 |
-| Message list | `MessageStream`、`UserMessage`、`AssistantMessage`、`WorkGroupBlock`、`SystemCard` | 用户/助手正文、桌面同级 work 摘要、必要 system/pending;不显示“你 / Cindy”。`WorkGroupBlock` 收起时只显示“已工作 Xs / 工作过程”,展开后再看工具和思考详情。 | 不显示比桌面更多的错误/工具/思考/消息分类 chip;不把工具/思考/消息计数塞进收起态;不把工具详情默认铺在主层。 |
+| Message list | `MessageStream`、`UserMessage`、`AssistantMessage`、`WorkGroupBlock`、`SystemCard` | 用户/助手正文、桌面同级 work 摘要、必要 system/pending;不显示“你 / XDMaker”。`WorkGroupBlock` 收起时只显示“已工作 Xs / 工作过程”,展开后再看工具和思考详情。 | 不显示比桌面更多的错误/工具/思考/消息分类 chip;不把工具/思考/消息计数塞进收起态;不把工具详情默认铺在主层。 |
 | Message actions | `MessageActionBar` | 消息结束处的小图标 action:copy / fork / rewind 等,顺序和桌面语义一致。可见图标 14-16px,按钮视觉 24-28px,手机 hit area 40-44px。 | 不做大按钮组;不把 action 挪成长按菜单的唯一入口;不把复制/撤销/分叉做成比正文更抢眼的控制条。 |
 | Text selection | 桌面消息正文可复制语义 + iOS 文本选择习惯 | 完成态正文尽量支持当前可见文本局部拖选复制,覆盖长中文、代码、列表、mixed markdown。 | 不用弹窗选择或整条复制替代局部选择。 |
 | Composer | `components/new-chat/ChatInput.tsx` | 图标化附件/更多、输入框、语音、发送/停止;语音在发送左侧;placeholder 保留文字。 | 不用“附件 / 语音 / 发送”文字胶囊按钮;不新增说明文案;不把模型/权限/fast/context 常驻到输入栏主层。 |
@@ -449,7 +449,7 @@ P2 继续后移:
 - **已工作收起态**:只保留“已工作 Xs / 工作过程 + chevron”,不显示错误、工具、思考、消息分类 chip。桌面依据:`WorkGroupBlock`。
 - **已工作展开态**:展开 work group 后子工具/思考一次性展开到可读状态,不要让用户二次展开。桌面依据:`WorkGroupBlock` 的 `expandBlocks` 交互。
 - **底部输入栏**:附件、语音、发送/停止全部图标化;语音在发送左边;placeholder 可以有文字。桌面依据:`components/new-chat/ChatInput.tsx`。
-- **身份标签**:消息正文里不显示“你 / Cindy”;信息靠对齐、气泡和上下文表达。桌面依据:`UserMessage` / `AssistantMessage`。
+- **身份标签**:消息正文里不显示“你 / XDMaker”;信息靠对齐、气泡和上下文表达。桌面依据:`UserMessage` / `AssistantMessage`。
 - **文本选择**:目标是在当前消息正文上原地局部选择;当前策略是完成态正文默认走 RN 原生 selectable Text,避免 WebView 空白影响阅读。WebView/弹窗只能作为后续显式选择模式或兜底,不能替代主消息流里的可见文本选择。
 - **主层降噪**:Relay、同步成功、本地联调、调试入口、额外统计全部退出主层;异常和需要用户处理的状态才出现。
 
@@ -1248,8 +1248,8 @@ V2 再做:
 shared core 迁移后的单元测试不只跑 mobile。每次迁移必须同时跑:
 
 ```bash
-pnpm --filter @cindy/maker-shared build
-pnpm --filter @cindy/maker-shared test
+pnpm --filter @lizi/maker-shared build
+pnpm --filter @lizi/maker-shared test
 pnpm --filter mobile typecheck
 pnpm --filter mobile test -- <对应 mobile adapter 测试>
 ```
@@ -1415,20 +1415,20 @@ Shared core 迁移并不是额外阶段,而是 1-13 每个阶段的实现约束:
 
 1. **先迁共享语义**:schedule list/run overview、schedule form serialization、delete policy、device-link channel/error contract、allowlist drift fixture、shared fixture baseline、raw desktop-like message parity、schedule/file raw payload parity 已迁到 `packages/maker-shared`;后续新增业务语义仍先进入 shared core。
 2. **再重构移动端壳层**:保留 React Native 原生壳,但重新组织一级入口、详情页层级、sheet/full-screen route 和 debug surface。所有正式页面都只消费 shared model 或 typed mobile adapter,不直接解析桌面 raw payload。
-3. **然后做会话页视觉和触控 pass**:按 `docs/design-rules/cindy-design-system.md` 的黑白灰、无阴影、12px container、pill interactive、克制字重整理 header、消息、工具、队列、pending interaction、composer 和状态提示。手机端只因触控和窄屏调整布局,不改变桌面业务语义。
+3. **然后做会话页视觉和触控 pass**:按 `DESIGN.md` 的黑白灰、无阴影、12px container、pill interactive、克制字重整理 header、消息、工具、队列、pending interaction、composer 和状态提示。手机端只因触控和窄屏调整布局,不改变桌面业务语义。
 4. **最后补功能缺口和调优**:在 UI 层级稳定后,再补 project automation 完整编辑、worktree 创建设计、Orca V2、native share extension、真实 OSS 媒体播放 fixture 这些后续项。
 
 当前下一批具体任务按产品化重构排序:
 
 | 优先级 | 内容 | 桌面来源 | 实现方式 | 完成条件 |
 | --- | --- | --- | --- | --- |
-| P0 | mobile design parity gate | `CCAgentSidebarUpper`、`SessionItem`、`ProjectNode`、`CCAgentSessionView`、`ChatInput`、`SchedulerPage`、`WorkdirBrowseRoute`、`docs/design-rules/cindy-design-system.md` | 所有 UI 任务先写桌面来源、主层信息、降噪清单和手机承载方式。首页列表作为第一份标准样板:桌面侧栏展示模型不变,手机只改导航、触控和 sheet/full-screen 承载。 | 每个页面 PR / 批次记录必须能说明“桌面主层显示什么、手机主层删掉什么、二级信息去了哪里”;没有记录不进入视觉 baseline。 |
+| P0 | mobile design parity gate | `CCAgentSidebarUpper`、`SessionItem`、`ProjectNode`、`CCAgentSessionView`、`ChatInput`、`SchedulerPage`、`WorkdirBrowseRoute`、`DESIGN.md` | 所有 UI 任务先写桌面来源、主层信息、降噪清单和手机承载方式。首页列表作为第一份标准样板:桌面侧栏展示模型不变,手机只改导航、触控和 sheet/full-screen 承载。 | 每个页面 PR / 批次记录必须能说明“桌面主层显示什么、手机主层删掉什么、二级信息去了哪里”;没有记录不进入视觉 baseline。 |
 | P0 | Home/sidebar parity baseline | `PinnedSection`、`ProjectsSection`、`DialogueSection`、`ProjectNode`、`SessionItem`、`VendorIcon`、`formatSidebarTime` | 首页继续作为全局主窗口样板:保留 Projects / Chats / Pinned 层级、一行 session row、桌面同源图标、右侧短时间、attention dot 和真实可用 action;设备筛选 chip 只做筛选,不把“选电脑”变成一级流程。 | iOS 首页截图与桌面侧栏源码规则逐项对齐;不出现 Relay 成功态、debug 说明、session subtitle/preview/detail 这类桌面侧栏主层没有的信息。 |
 | P0 | shared core 第一轮收口 | `MessageStream`、`PendingQueuePanel`、`PermissionPrompt`、`ScheduleFormDialog`、`WorkdirBrowseRoute`、device-link dispatch | 已完成 automation/schedule、device-link contract、fixture baseline、raw message parity、schedule/file raw payload parity;后续新增业务语义仍先进入 shared model。 | shared build/test、mobile typecheck/test、desktop parity、web smoke、Maestro 静态检查、local full check-only 全部可跑。 |
 | P0 | shared core 剩余抽取边界 | tool input diff/summary projection、tool_result media extraction、attachment -> file/media payload projection、message normalize content preview / stable sort / tool_use parse / tool_result pairing、`MessageStream` search/window、`ChatInput` capability projection、scheduler event projection 和 payload preview/severity 第一刀已完成 | 只抽纯模型:后续若出现新的排序、状态优先级、disabled reason、payload body presentation 或 decision serialization,继续先进入 shared。纯触控尺寸、SafeArea、WebView、Audio、ImagePicker、SecureStore 留在 mobile。 | 每个抽取都有 shared fixture;mobile 保留 re-export 兼容;桌面消费前至少有 parity test。 |
 | P1 | mobile shell 信息架构 | `App.tsx`、`router.tsx`、`CCAgentFeatureLayout`、desktop sidebar/settings | 重排 Home/Computer Detail/Session/New/Automations/Files/Settings;debug/local test 移入 dev panel;正式路径只显示真实远程控制任务。 | web smoke 和 Maestro anchor 可区分正式路径和 debug 路径;首次进入不出现本地联调说明、mock 表单或成功态连接噪音。 |
 | P1 | 重要主窗口产品化 | `CCAgentFeatureLayout`、`NewMakerDraftRoute`、`SchedulerPage`、`WorkdirBrowseRoute`、desktop sidebar/session list | 以首页为样板逐一重做 Computer Detail、New Session、Session Detail、Files、Automations、Settings 的主层信息密度。每个主窗口只保留桌面同级主层信息;其它状态进入 sheet/full-screen/detail。 | iOS 主要路径窗口在 320/393 宽度下无挤压、无多余卡片嵌套、testID 不断;每个窗口有降噪清单和截图;Android 只消费同一布局模型和 dry-run profile。 |
-| P1 | RN 视觉 primitives | `docs/design-rules/cindy-design-system.md`、桌面按钮/卡片/状态 chip 语义 | 在 `apps/mobile` 建轻量 touch primitives:screen header、status strip、action pill、segmented control、bottom sheet container。只共享语义,不共享桌面 React 组件。 | iPhone SE 宽度按钮文字不挤压;所有新增颜色可回指到 mobile token;不引入阴影和装饰性渐变。 |
+| P1 | RN 视觉 primitives | `DESIGN.md`、桌面按钮/卡片/状态 chip 语义 | 在 `apps/mobile` 建轻量 touch primitives:screen header、status strip、action pill、segmented control、bottom sheet container。只共享语义,不共享桌面 React 组件。 | iPhone SE 宽度按钮文字不挤压;所有新增颜色可回指到 mobile token;不引入阴影和装饰性渐变。 |
 | P1 | session detail shell | `CCAgentSessionView`、`SessionContentHeader`、`RemoteSessionBanner`、`TopRightChipStack` | 固定 header、connection strip、message list、bottom composer/interaction 四层;controls/queue/search/files/diff/context/cost 转为 action strip + sheet/full-screen。 | idle、running、pending、queue、offline、revoked 六个状态截图无重叠;消息列表不因打开 sheet 被卸载。 |
 | P1 | composer/pending 触控重构 | `ChatInput`、`PendingQueuePanel`、`PermissionPrompt`、`AskUserQuestionPrompt`、`PlanViewerCard`;`IssueConfirmCard` desktop-only | composer 保持底部主入口;pending interaction 优先占用底部面板;queue 和 controls 用 sheet;resolve 操作防重复提交;Issue Confirm 只提示回桌面端处理。 | permission/ask/plan/queue/send/stop/resume 都有 mock host flow 或 unit;键盘弹出后最后消息仍可见。 |
 | P2 | message/payload 视觉重构 | `UserMessage`、`AssistantMessage`、`AgentActionsBlock`、`TodoListCard`、`ToolPayloadLightbox` | 按 shared render item 渲染;tool/work/todo 默认折叠;payload、diff、media、Mermaid、file preview 全屏查看。 | 1000 message fixture 可滚动;长 tool result 和大 diff 不撑爆消息列表;媒体关闭释放中转对象。 |

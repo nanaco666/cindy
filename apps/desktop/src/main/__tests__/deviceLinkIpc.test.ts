@@ -4,8 +4,6 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const capabilities = vi.hoisted(() => ({ canUseDeviceLink: true }));
-
 // electron / serverApiClient / device-link host 全部替换为测试替身,
 // 只测 handler 纯函数体
 vi.mock('electron', () => ({
@@ -65,11 +63,6 @@ vi.mock('../device-link/settings-store', async (importOriginal) => {
 vi.mock('../logger', () => ({
   createLogger: () => ({ debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }),
 }));
-vi.mock('../appCapabilities.js', () => ({
-  getAppCapabilities: () => ({
-    canUseDeviceLink: capabilities.canUseDeviceLink,
-  }),
-}));
 
 import {
   handleGetState,
@@ -88,7 +81,7 @@ import {
   retryUnsubscribeAfterWindowGone,
   type DeviceLinkIpcDeps,
 } from '../device-link/ipc';
-import { DeviceLinkError } from '@cindy/device-link';
+import { DeviceLinkError } from '@lizi/device-link';
 import { ServerApiError } from '../serverApiClient';
 import { __testing as settingsTesting } from '../device-link/settings-store';
 import { __testing as refcountTesting } from '../device-link/subscriptionRefcount';
@@ -124,46 +117,13 @@ function makeDeps(overrides?: Partial<DeviceLinkIpcDeps>): DeviceLinkIpcDeps {
 }
 
 describe('device-link IPC handlers', () => {
-  beforeEach(() => {
-    refcountTesting.reset(); // 多窗口订阅引用计数:每个用例独立
-    capabilities.canUseDeviceLink = true;
-  });
+  beforeEach(() => refcountTesting.reset()); // 多窗口订阅引用计数:每个用例独立
 
   it('getState 透传 deps 状态', () => {
     expect(handleGetState(makeDeps())).toEqual({
       remoteControlEnabled: true,
       keepAwake: false,
       linkStatus: 'online',
-      connectionIssue: null,
-      controlledBy: [],
-      revokedControllers: [],
-      disabledControlDeviceIds: [],
-    });
-  });
-
-  it('getState: local/signed-out sessions only expose keepAwake', () => {
-    capabilities.canUseDeviceLink = false;
-    const deps = makeDeps({
-      getState: () => ({
-        remoteControlEnabled: true,
-        keepAwake: true,
-        linkStatus: 'online',
-        connectionIssue: {
-          kind: 'auth-failed',
-          closeCode: 401,
-          detail: 'account state',
-          at: 123,
-        },
-        controlledBy: [{ deviceId: 'controller-1', name: 'Other device' }],
-        revokedControllers: ['revoked-1'],
-        disabledControlDeviceIds: ['disabled-1'],
-      }),
-    });
-
-    expect(handleGetState(deps)).toEqual({
-      remoteControlEnabled: false,
-      keepAwake: true,
-      linkStatus: 'stopped',
       connectionIssue: null,
       controlledBy: [],
       revokedControllers: [],
@@ -243,7 +203,7 @@ describe('device-link IPC handlers', () => {
           {
             deviceId: 'dev-1',
             name: 'MacBook Pro',
-            selfName: 'Carol-MacBook-Pro',
+            selfName: 'Dash-MacBook-Pro',
             deviceInfo: { cpuLabel: 'Apple M3 Pro', memoryGb: 36 },
             platform: 'darwin',
             appVersion: '1.0.0-test',
@@ -265,7 +225,7 @@ describe('device-link IPC handlers', () => {
         {
           deviceId: 'dev-1',
           name: 'MacBook Pro',
-          selfName: 'Carol-MacBook-Pro',
+          selfName: 'Dash-MacBook-Pro',
           deviceInfo: { cpuLabel: 'Apple M3 Pro', memoryGb: 36 },
           platform: 'darwin',
           appVersion: '1.0.0-test',
@@ -381,10 +341,10 @@ describe('device-link IPC handlers', () => {
       name: 'New',
     });
 
-    const resetApiFetch = vi.fn().mockResolvedValue({ deviceId: 'dev-1', name: 'Carol-MacBook-Pro', manualName: null });
+    const resetApiFetch = vi.fn().mockResolvedValue({ deviceId: 'dev-1', name: 'Dash-MacBook-Pro', manualName: null });
     await expect(handleRenameDevice(makeDeps({ apiFetch: resetApiFetch }), 'dev-1', null)).resolves.toEqual({
       deviceId: 'dev-1',
-      name: 'Carol-MacBook-Pro',
+      name: 'Dash-MacBook-Pro',
       manualName: null,
     });
     expect(resetApiFetch).toHaveBeenCalledWith('/api/device-link/devices/dev-1', {

@@ -37,7 +37,7 @@ export const LEARN_TERMINAL_STATUSES: readonly LearnRunStatus[] = [
 /**
  * 蒸馏产物的溯源记录 —— 落 skillhub registry manifest(StoredInstall.provenance)。
  * personal=true 的 skill 含本地会话衍生内容。当前**不拦截**发布 —— 该字段是
- * 将来「发布前泛化」流程(产品定的方向,另行独立 PR)的判定依据。
+ * 将来「发布前泛化」流程(Dash 定的产品方向,另行独立 PR)的判定依据。
  */
 export interface LearnProvenance {
   method: 'learn';
@@ -59,9 +59,8 @@ export interface LearnRunPublic {
   runId: string;
   status: LearnRunStatus;
   sourceKind: LearnSourceKind;
-  /** 发起 run 的 data owner id(local-v1 或云账号 id)。 */
-  dataOwnerId?: string;
-  /** @deprecated 旧版云账号 run 的归属字段;读取时仅作兼容回退。 */
+  /** 发起 run 的账号 id(runs.json 是 per-profile 文件,切账号后按 owner 过滤,
+   *  其它账号的 run 不可见不可操作;缺省(历史数据)不过滤)。 */
   ownerUserId?: string;
   /** 用户输入的原始请求文本(hub 源为空串或补充说明)。 */
   input: string;

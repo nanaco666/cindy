@@ -13,15 +13,7 @@
  * images / files lists, so no server-side migration is needed.
  */
 
-import { isValidAttachmentIntegrity } from '@cindy/device-link';
-import {
-  parsePersistedSessionReferenceMetadata,
-  type PersistedSessionReferenceMetadata,
-} from '../../shared/sessionReferenceMetadata';
-import {
-  readAgentInputReferences,
-  type AgentInputReference,
-} from '@cindy/maker-shared/agent-input-projection';
+import { isValidAttachmentIntegrity } from '@lizi/device-link';
 
 export interface ImageRef {
   /** Custom-protocol URL: 'xdt-image://{sessionId}/{filename}'. */
@@ -60,41 +52,16 @@ export interface FileRef {
   sha256?: string;
 }
 
-/** Local-only presentation metadata for a long-paste atom in user text. */
-export interface PastedTextRange {
-  start: number;
-  end: number;
-  display: string;
-}
-
-/** Local-only presentation metadata for a slash command confirmed by the composer roster. */
-export interface SlashCommandRange {
-  start: number;
-  end: number;
-}
-
 export interface UserMessageContent {
   text: string;
   images: ImageRef[];
   files: FileRef[];
-  /** Resolved range summaries for session links present in this user message. */
-  sessionReferences?: PersistedSessionReferenceMetadata[];
   /**
    * chat-text-quote:本消息的开头 blockquote 是"选中文字引用"功能产出,
    * 渲染层据此(且仅据此)把引用块收敛为 "N 处引用" 胶囊。缺省 / 历史消息 /
    * 用户手打的 markdown 引用不带该标志 → 原样渲染,存量呈现不变。
    */
   quotesEncoded?: boolean;
-  /** Long-paste ranges affect rendering only; `text` remains the Agent payload. */
-  pastedTextRanges?: PastedTextRange[];
-  /**
-   * Exact slash-command ranges confirmed by the composer roster. An empty array
-   * is meaningful: this is a new message with no confirmed slash commands, so
-   * the history renderer must not fall back to its legacy line-start heuristic.
-   */
-  slashCommandRanges?: SlashCommandRange[];
-  /** Hidden semantic projection metadata; message bubbles still render `text`. */
-  agentReferences?: AgentInputReference[];
 }
 
 /**
@@ -162,19 +129,11 @@ export function parseUserContent(content: unknown): UserMessageContent {
       const images = rawImages.map(coerceImageRef).filter((ref): ref is ImageRef => ref !== null);
       const rawFiles = Array.isArray(obj.files) ? obj.files : [];
       const files = rawFiles.filter(isValidFileRef);
-      const sessionReferences = parsePersistedSessionReferenceMetadata(obj.sessionReferences);
-      const pastedTextRanges = coercePastedTextRanges(obj.pastedTextRanges, obj.text);
-      const slashCommandRanges = coerceSlashCommandRanges(obj.slashCommandRanges, obj.text);
-      const agentReferences = readAgentInputReferences(obj.agentReferences, obj.text);
       return {
         text: obj.text,
         images,
         files,
-        ...(sessionReferences.length > 0 ? { sessionReferences } : {}),
         ...(obj.quotesEncoded === true ? { quotesEncoded: true } : {}),
-        ...(pastedTextRanges.length > 0 ? { pastedTextRanges } : {}),
-        ...(slashCommandRanges !== null ? { slashCommandRanges } : {}),
-        ...(agentReferences.length > 0 ? { agentReferences } : {}),
       };
     }
     // Truly unknown object shape — preserve old defensive stringify behaviour.
@@ -194,7 +153,7 @@ export function parseUserContent(content: unknown): UserMessageContent {
  * `originalName`, but messages already stored with `name` must keep
  * rendering). Output is always normalised to `originalName`.
  */
-/** 可渲染的托管图片地址:历史 xdt-image:// 或媒体总仓 cindy-media://。 */
+/** 可渲染的托管图片地址:老世界 xdt-image://(历史消息)或媒体总仓 cindy-media://(新消息)。 */
 function isManagedImageUrl(url: string): boolean {
   return url.startsWith('xdt-image://') || url.startsWith('cindy-media://');
 }
@@ -276,47 +235,6 @@ function isValidFileRef(x: unknown): x is FileRef {
   );
 }
 
-function coercePastedTextRanges(value: unknown, text: string): PastedTextRange[] {
-  if (!Array.isArray(value)) return [];
-  const ranges: PastedTextRange[] = [];
-  let previousEnd = 0;
-  for (const candidate of value) {
-    if (!candidate || typeof candidate !== 'object') return [];
-    const range = candidate as Record<string, unknown>;
-    if (
-      !Number.isInteger(range.start) ||
-      !Number.isInteger(range.end) ||
-      typeof range.display !== 'string'
-    ) {
-      return [];
-    }
-    const start = range.start as number;
-    const end = range.end as number;
-    if (start < previousEnd || start < 0 || end <= start || end > text.length) return [];
-    ranges.push({ start, end, display: range.display });
-    previousEnd = end;
-  }
-  return ranges;
-}
-
-function coerceSlashCommandRanges(value: unknown, text: string): SlashCommandRange[] | null {
-  if (!Array.isArray(value)) return null;
-  const ranges: SlashCommandRange[] = [];
-  let previousEnd = 0;
-  for (const candidate of value) {
-    if (!candidate || typeof candidate !== 'object') return null;
-    const range = candidate as Record<string, unknown>;
-    if (!Number.isInteger(range.start) || !Number.isInteger(range.end)) return null;
-    const start = range.start as number;
-    const end = range.end as number;
-    if (start < previousEnd || start < 0 || end <= start || end > text.length) return null;
-    if (!/^\/\S+$/.test(text.slice(start, end))) return null;
-    ranges.push({ start, end });
-    previousEnd = end;
-  }
-  return ranges;
-}
-
 /**
  * Serialize a user message into the new content shape. Always emits the JSON
  * form (even for empty `images` / `files`) so future readers see a uniform schema.
@@ -330,32 +248,7 @@ export function stringifyUserContent(
   images: ImageRef[],
   files: FileRef[] = [],
   quotesEncoded = false,
-  pastedTextRangesOrSessionReferences: PastedTextRange[] | PersistedSessionReferenceMetadata[] = [],
-  slashCommandRanges?: SlashCommandRange[],
-  sessionReferences: PersistedSessionReferenceMetadata[] = [],
-  agentReferences: AgentInputReference[] = [],
 ): string {
-  const fifthArgIsSessionReferences =
-    pastedTextRangesOrSessionReferences.length > 0 &&
-    'sessionId' in pastedTextRangesOrSessionReferences[0];
-  const pastedTextRanges = fifthArgIsSessionReferences
-    ? []
-    : (pastedTextRangesOrSessionReferences as PastedTextRange[]);
-  const resolvedSessionReferences = fifthArgIsSessionReferences
-    ? (pastedTextRangesOrSessionReferences as PersistedSessionReferenceMetadata[])
-    : sessionReferences;
-  // Long-paste metadata is omitted when empty. Slash metadata keeps an explicit
-  // empty array so new messages never fall back to the historical line-start guess.
-  return JSON.stringify({
-    text,
-    images,
-    files,
-    ...(quotesEncoded ? { quotesEncoded: true } : {}),
-    ...(pastedTextRanges.length > 0 ? { pastedTextRanges } : {}),
-    ...(slashCommandRanges !== undefined ? { slashCommandRanges } : {}),
-    ...(resolvedSessionReferences.length > 0
-      ? { sessionReferences: resolvedSessionReferences }
-      : {}),
-    ...(agentReferences.length > 0 ? { agentReferences } : {}),
-  });
+  // quotesEncoded 只在为真时写入,保持旧消息 JSON 形态逐字节稳定。
+  return JSON.stringify({ text, images, files, ...(quotesEncoded ? { quotesEncoded: true } : {}) });
 }

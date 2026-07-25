@@ -1,6 +1,7 @@
 /**
  * env 三段组装 + process.env strip —— Claude Code spawn 用。
  *
+ * 详见 doc/agent/xdt-maker-architecture.md §6.5：
  *   1. process.env 剥离敏感 OAuth token（避免 CLI 子进程读到用户系统 key）
  *   2. behaviorFlags 打底（runtimeConfig 注入，host 配置）
  *   3. endpoint → ANTHROPIC_BASE_URL（runtimeConfig 注入）
@@ -165,10 +166,10 @@ export function cleanProcessEnv(env: NodeJS.ProcessEnv = process.env): Record<st
  *
  *   **为什么必须**: 远端 cc-mgr daemon 收到 startParams.env 后转给远端 SDK,
  *   SDK spawn cc CLI 时 `{...process.env, ...userEnv}`。如果继承了 desktop 的
- *   `HOME=C:\Users\REMOTE_USER`(Windows) 或 `HOME=/Users/local-user`(mac), 远端
+ *   `HOME=C:\Users\XINDONG`(Windows) 或 `HOME=/Users/local-user`(mac), 远端
  *   POSIX 的 cc CLI 就拿到了**错误的 HOME** — Windows 字面字符串带 `C:` 和反斜
  *   杠在 macOS 当相对路径,被拼到 cwd 后面,session/memory/snapshot 全落到
- *   `<cwd>/C:\Users\REMOTE_USER/.claude/...` 这种怪目录里, 用户彻底找不到。
+ *   `<cwd>/C:\Users\XINDONG/.claude/...` 这种怪目录里, 用户彻底找不到。
  *   PATH/APPDATA/TMP 等也类似 — 跨平台 + 跨机器透传必出事。
  *
  *   零继承后, 远端 SDK spawn 用的就是 daemon 自己 process.env 的真实 POSIX

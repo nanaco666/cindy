@@ -1,11 +1,11 @@
 /**
  * cindy-tools 公共类型 —— Cindy 意识系统的内部工具集契约。
  *
- * 本包统一承载 Cindy 意识系统向 agent 暴露的
+ * 本包是"新世界"工具的家(lizi-mcps 为待迁移的老世界):向 agent 暴露的
  * 工具一律经 MCP 注册,host(apps/desktop main)通过 deps 注入真实实现,
  * 包内不感知 Electron / 沙箱 / DB(设计规范规则 2:package 解耦)。
  *
- * 首个成员:ghost 总机(docs/dev-rules/plugin-security-and-authoring.md 的网关模式)——
+ * 首个成员:ghost 总机(runtime-sandbox.md §5.5 网关模式)——
  * agent 工具箱里永远只有 ghost_list / ghost_call 两件固定工具,
  * 已装意识的增删即时反映在 ghost_list 的**返回内容**里,
  * 工具定义(缓存前缀)自始至终零变化。
@@ -18,6 +18,7 @@ export interface CindyGhostToolInfo {
   /** JSON Schema(object)形态的参数声明;无参工具省略。 */
   parameters?: Record<string, unknown>;
 }
+
 /** ghost_list 返回的单段意识条目(仅"已装且唤醒"的意识在列)。 */
 export interface CindyGhostInfo {
   id: string;
@@ -76,28 +77,6 @@ export type CindyForgePackResult =
     }
   | { ok: false; errorCode: CindyForgePackErrorCode; message: string };
 
-/** ghost_forge_scaffold 可生成的四种起步模板。 */
-export type CindyForgeScaffoldTemplate =
-  | 'plain'
-  | 'agent-action'
-  | 'node-json-rpc'
-  | 'node-mcp';
-
-export type CindyForgeScaffoldResult =
-  | {
-      ok: true;
-      dir: string;
-      template: CindyForgeScaffoldTemplate;
-      /** 创建的相对文件路径；不会包含临时文件。 */
-      files: string[];
-      nextSteps: string[];
-    }
-  | {
-      ok: false;
-      errorCode: 'INVALID_INPUT' | 'TARGET_EXISTS' | 'INTERNAL';
-      message: string;
-    };
-
 /** host 注入的依赖:总机的全部真实能力都在这几个回调里。 */
 export interface CindyGhostsMcpDeps {
   /**
@@ -114,7 +93,7 @@ export interface CindyGhostsMcpDeps {
     tool: string;
     args: Record<string, unknown>;
     /**
-     * 用户图片过户(可选):会话里用户图片的地址(xdt-image:// /
+     * 用户图片过户(C3c-4,可选):会话里用户图片的地址(xdt-image:// /
      * cindy-media://blobs/ / 本机绝对路径,主机归一化并验归属)。
      * host 把每张图落媒体总仓、给目标意识记 ghost-grant 引用(显式引渡 =
      * 授权,按张、永久),再以指纹数组注入 args.attachments 交给意识——
@@ -165,17 +144,6 @@ export interface CindyGhostsMcpDeps {
   getRosterItems?(): Array<{ id: string; name: string; command?: string; description?: string }>;
   /** 意识编写手册(markdown,随主机版本走;agent 写意识前先读)。 */
   forgeGuide(): Promise<string>;
-  /**
-   * 在新的目标目录创建一份安全起步骨架。目标已存在时必须拒绝，绝不覆盖
-   * 用户文件；Node 模板只生成随包源码，不安装依赖。
-   */
-  forgeScaffold(request: {
-    dir: string;
-    template: CindyForgeScaffoldTemplate;
-    id: string;
-    name: string;
-    description?: string;
-  }): Promise<CindyForgeScaffoldResult>;
   /**
    * 把一个源码目录校验 + 打包成 .cindy,并弹出与拖入/双击完全相同的
    * 装入(同 id 已装则更新)确认框——装不装永远由用户决定,agent 只能

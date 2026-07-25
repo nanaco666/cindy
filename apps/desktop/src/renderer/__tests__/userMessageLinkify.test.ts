@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import { INTERNAL_GITLAB_HOST } from '../../shared/endpoints';
 
-// GitLab MR URL fixture(边界/截断逻辑对 gitlab.com 适用)
-const GITLAB_MR_URL = `https://gitlab.com/acme/app/-/merge_requests/42`;
+// 内部 GitLab 的 MR URL fixture:域名走单点常量,便于未来统一替换
+const INTERNAL_MR_URL = `https://${INTERNAL_GITLAB_HOST}/smash/xdt-maker/-/merge_requests/42`;
 
 import { findLinkifyMatches } from '../components/chat/userMessageLinkify';
 
@@ -31,11 +32,11 @@ describe('userMessageLinkify', () => {
   });
 
   it('strips closing markdown wrap markers around plain-text URLs', () => {
-    expect(urls('**https://github.com/makecindy/cindy/pull/163**(ready for review,非 draft)')).toEqual([
-      'https://github.com/makecindy/cindy/pull/163',
+    expect(urls('**https://github.com/xindong/XDMaker/pull/163**(ready for review,非 draft)')).toEqual([
+      'https://github.com/xindong/XDMaker/pull/163',
     ]);
-    expect(urls('**https://github.com/makecindy/cindy/pull/283(base,OPEN)**')).toEqual([
-      'https://github.com/makecindy/cindy/pull/283',
+    expect(urls('**https://github.com/xindong/XDMaker/pull/283(base,OPEN)**')).toEqual([
+      'https://github.com/xindong/XDMaker/pull/283',
     ]);
     expect(urls('*https://example.com/Foo* next')).toEqual(['https://example.com/Foo']);
     expect(urls('__https://example.com/Foo__ next')).toEqual(['https://example.com/Foo']);
@@ -206,29 +207,29 @@ describe('userMessageLinkify', () => {
     expect(urls('看 (https://x.com/foo)then')).toEqual(['https://x.com/foo']);
     expect(urls('看 (https://x.com/foo)-bar')).toEqual(['https://x.com/foo']);
     expect(urls('看 https://x.com/foo(中文说明')).toEqual(['https://x.com/foo']);
-    expect(urls('已提交 https://github.com/makecindy/cindy/pull/283(base main,OPEN)')).toEqual([
-      'https://github.com/makecindy/cindy/pull/283',
+    expect(urls('已提交 https://github.com/xindong/XDMaker/pull/283(base main,OPEN)')).toEqual([
+      'https://github.com/xindong/XDMaker/pull/283',
     ]);
-    expect(urls('已提交 https://github.com/makecindy/cindy/pull/283(base,OPEN)')).toEqual([
-      'https://github.com/makecindy/cindy/pull/283',
+    expect(urls('已提交 https://github.com/xindong/XDMaker/pull/283(base,OPEN)')).toEqual([
+      'https://github.com/xindong/XDMaker/pull/283',
     ]);
-    expect(urls('已提交 https://github.com/makecindy/cindy/pull/283/(base,OPEN)')).toEqual([
-      'https://github.com/makecindy/cindy/pull/283/',
+    expect(urls('已提交 https://github.com/xindong/XDMaker/pull/283/(base,OPEN)')).toEqual([
+      'https://github.com/xindong/XDMaker/pull/283/',
     ]);
-    expect(urls('已提交 https://github.com/makecindy/cindy/pull/283(base,OPEN).')).toEqual([
-      'https://github.com/makecindy/cindy/pull/283',
+    expect(urls('已提交 https://github.com/xindong/XDMaker/pull/283(base,OPEN).')).toEqual([
+      'https://github.com/xindong/XDMaker/pull/283',
     ]);
-    expect(urls('已提交 https://github.com/makecindy/cindy/pull/283#discussion_r1(base,OPEN)')).toEqual([
-      'https://github.com/makecindy/cindy/pull/283#discussion_r1',
+    expect(urls('已提交 https://github.com/xindong/XDMaker/pull/283#discussion_r1(base,OPEN)')).toEqual([
+      'https://github.com/xindong/XDMaker/pull/283#discussion_r1',
     ]);
-    expect(urls('已提交 https://github.com/makecindy/cindy/pull/283#discussion_r1(base main,OPEN)')).toEqual([
-      'https://github.com/makecindy/cindy/pull/283#discussion_r1',
+    expect(urls('已提交 https://github.com/xindong/XDMaker/pull/283#discussion_r1(base main,OPEN)')).toEqual([
+      'https://github.com/xindong/XDMaker/pull/283#discussion_r1',
     ]);
-    expect(urls('已提交 https://github.com/makecindy/cindy/pull/283?diff=split(base,OPEN)')).toEqual([
-      'https://github.com/makecindy/cindy/pull/283?diff=split',
+    expect(urls('已提交 https://github.com/xindong/XDMaker/pull/283?diff=split(base,OPEN)')).toEqual([
+      'https://github.com/xindong/XDMaker/pull/283?diff=split',
     ]);
-    expect(urls('已提交 https://github.com/makecindy/cindy/pull/283?diff=split(base main,OPEN)')).toEqual([
-      'https://github.com/makecindy/cindy/pull/283?diff=split',
+    expect(urls('已提交 https://github.com/xindong/XDMaker/pull/283?diff=split(base main,OPEN)')).toEqual([
+      'https://github.com/xindong/XDMaker/pull/283?diff=split',
     ]);
     expect(urls('看 https://example.com/pull/123#frag(base,OPEN) 然后')).toEqual([
       'https://example.com/pull/123#frag(base,OPEN)',
@@ -254,23 +255,23 @@ describe('userMessageLinkify', () => {
     expect(urls('看 https://github.com/org/repo/pull/283?check=linux(base main,OPEN) 然后')).toEqual([
       'https://github.com/org/repo/pull/283?check=linux(base',
     ]);
-    expect(urls('看 (https://github.com/makecindy/cindy/pull/283(base,OPEN))')).toEqual([
-      'https://github.com/makecindy/cindy/pull/283',
+    expect(urls('看 (https://github.com/xindong/XDMaker/pull/283(base,OPEN))')).toEqual([
+      'https://github.com/xindong/XDMaker/pull/283',
     ]);
-    expect(urls('看 (https://github.com/makecindy/cindy/pull/283(base,OPEN)).')).toEqual([
-      'https://github.com/makecindy/cindy/pull/283',
+    expect(urls('看 (https://github.com/xindong/XDMaker/pull/283(base,OPEN)).')).toEqual([
+      'https://github.com/xindong/XDMaker/pull/283',
     ]);
-    expect(urls('看 (https://github.com/makecindy/cindy/pull/283(base,OPEN))，状态')).toEqual([
-      'https://github.com/makecindy/cindy/pull/283',
+    expect(urls('看 (https://github.com/xindong/XDMaker/pull/283(base,OPEN))，状态')).toEqual([
+      'https://github.com/xindong/XDMaker/pull/283',
     ]);
-    expect(urls('**(see https://github.com/makecindy/cindy/pull/283(base,OPEN))**')).toEqual([
-      'https://github.com/makecindy/cindy/pull/283',
+    expect(urls('**(see https://github.com/xindong/XDMaker/pull/283(base,OPEN))**')).toEqual([
+      'https://github.com/xindong/XDMaker/pull/283',
     ]);
-    expect(urls(`已提交 ${GITLAB_MR_URL}(base,OPEN)`)).toEqual([
-      GITLAB_MR_URL,
+    expect(urls(`已提交 ${INTERNAL_MR_URL}(base,OPEN)`)).toEqual([
+      INTERNAL_MR_URL,
     ]);
-    expect(urls(`已提交 ${GITLAB_MR_URL}/(base,OPEN)`)).toEqual([
-      `${GITLAB_MR_URL}/`,
+    expect(urls(`已提交 ${INTERNAL_MR_URL}/(base,OPEN)`)).toEqual([
+      `${INTERNAL_MR_URL}/`,
     ]);
   });
 

@@ -15,14 +15,7 @@
  * inside the store.
  */
 
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useSyncExternalStore,
-} from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useSyncExternalStore } from 'react';
 
 import {
   makerChatStore,
@@ -47,26 +40,11 @@ import {
 } from '@/lib/makerChatStore';
 import type { ChatDisplaySnapshot } from '@/components/chat/ChatDisplaySnapshotContext';
 import type { AttachedFile, MentionedResource } from '@/lib/fileTypes';
-import type { PastedTextRange, SlashCommandRange } from '@/lib/imageRef';
-import type { AgentInputReference } from '@cindy/maker-shared/agent-input-projection';
 import { createLogger } from '@/lib/logger';
 
 const log = createLogger('UseCCAgentChat');
 
-export type {
-  AgentStatus,
-  AgentTaskUpdate,
-  AskUserDraft,
-  AskUserViewerState,
-  ChatMessage,
-  PendingPermission,
-  PendingAskUser,
-  PendingPlanReview,
-  PendingRenameSessionsConfirm,
-  PendingGhostGrantConfirm,
-  PlanViewerState,
-  QueuedMessage,
-};
+export type { AgentStatus, AgentTaskUpdate, AskUserDraft, AskUserViewerState, ChatMessage, PendingPermission, PendingAskUser, PendingPlanReview, PendingRenameSessionsConfirm, PendingGhostGrantConfirm, PlanViewerState, QueuedMessage };
 
 interface UseCCAgentChatReturn {
   /** 仅用于乐观展示的下一次发送切换目标。 */
@@ -113,13 +91,7 @@ interface UseCCAgentChatReturn {
     workingDir: string,
     files?: AttachedFile[],
     mentions?: MentionedResource[],
-    opts?: {
-      vendorOptions?: Record<string, unknown>;
-      quotesEncoded?: boolean;
-      agentReferences?: AgentInputReference[];
-      pastedTextRanges?: PastedTextRange[];
-      slashCommandRanges?: SlashCommandRange[];
-    },
+    opts?: { vendorOptions?: Record<string, unknown>; quotesEncoded?: boolean },
   ) => Promise<boolean>;
   compactSession: (
     model: string,
@@ -136,13 +108,7 @@ interface UseCCAgentChatReturn {
     workingDir: string,
     files?: AttachedFile[],
     mentions?: MentionedResource[],
-    opts?: {
-      vendorOptions?: Record<string, unknown>;
-      quotesEncoded?: boolean;
-      agentReferences?: AgentInputReference[];
-      pastedTextRanges?: PastedTextRange[];
-      slashCommandRanges?: SlashCommandRange[];
-    },
+    opts?: { vendorOptions?: Record<string, unknown>; quotesEncoded?: boolean },
   ) => Promise<boolean>;
   steerQueuedMessage: (clientId: string) => Promise<boolean>;
   /** User-initiated stop: aborts the current SDK query and clears streaming state */
@@ -156,10 +122,7 @@ interface UseCCAgentChatReturn {
   /** silent-stop 耗尽横幅「继续」:清横幅并发隐藏续跑指令(充值守卫额度)。 */
   continueAfterSilentStop: () => void;
   /** F-CMD: Insert a local-only system card */
-  insertSystemCard: (
-    cardType: 'help' | 'cost' | 'context' | 'pwd' | 'status' | 'cmd' | 'learn',
-    data?: Record<string, unknown>,
-  ) => string | null;
+  insertSystemCard: (cardType: 'help' | 'cost' | 'context' | 'pwd' | 'status' | 'cmd' | 'learn', data?: Record<string, unknown>) => string | null;
   /** F-CMD: Patch the latest local-only system card in place */
   updateLastSystemCardData: (patch: Record<string, unknown>) => void;
   /** F-CMD: Patch a specific local-only system card in place */
@@ -175,8 +138,6 @@ interface UseCCAgentChatReturn {
   errorRetryText: string | null;
   /** 凭证切换等待态(main 透传):挡路会话结束后自动重发,渲染等待横幅。 */
   credentialSwitchWait: { clientId?: string; blockedBySessionIds: string[] } | null;
-  /** 已离队、正在 coordinator dispatch/turn 边界内的 Continue clientId。 */
-  continuationInFlightClientId: string | null;
   /** F-SYNC-2: Load older messages (prepend to top) */
   loadOlderMessages: () => void;
   isLoadingMore: boolean;
@@ -208,13 +169,7 @@ interface UseCCAgentChatReturn {
   /** issue_confirm: Respond to the pending issue confirm card */
   respondToIssueConfirm: (
     result:
-      | {
-          confirmed: true;
-          title: string;
-          body: string;
-          type: 'bug' | 'feature';
-          uiLanguage: string;
-        }
+      | { confirmed: true; title: string; body: string; type: 'bug' | 'feature'; uiLanguage: string }
       | { confirmed: false },
   ) => void;
   /** rename_sessions_confirm: Currently pending batch rename confirm card */
@@ -224,9 +179,7 @@ interface UseCCAgentChatReturn {
   /** ghost_grant_confirm: Currently pending ghost file-grant confirm card */
   pendingGhostGrantConfirm: PendingGhostGrantConfirm | null;
   /** ghost_grant_confirm: Respond to the pending ghost file-grant confirm card */
-  respondToGhostGrantConfirm: (
-    result: { confirmed: true; allowDirs?: boolean } | { confirmed: false },
-  ) => void;
+  respondToGhostGrantConfirm: (result: { confirmed: true; allowDirs?: boolean } | { confirmed: false }) => void;
   /** FP-3: Current plan viewer display state */
   planViewerState: PlanViewerState;
   /** FP-3: Change plan viewer display state */
@@ -251,8 +204,8 @@ interface UseCCAgentChatReturn {
   isFirstMessage: boolean;
   /** Fast Mode toggle state — session-level, OFF by default. */
   fastMode: boolean;
-  /** Toggle Fast Mode ON/OFF; captured device ID pins remote routing across relay reconnects. */
-  setFastMode: (enabled: boolean, sourceRemoteDeviceId?: string) => Promise<void>;
+  /** Toggle Fast Mode ON/OFF for this session (server-first: persists to DB then updates store + SDK). */
+  setFastMode: (enabled: boolean) => Promise<void>;
   /** Reset Fast Mode to OFF (server-first, used on model switch away from Opus 4.6). */
   resetFastMode: () => Promise<void>;
   /** 计划模式一级开关状态(与 permissionMode 正交); 计划批准后经 plan_mode_changed 回流自动变 false。 */
@@ -328,16 +281,13 @@ export function useCCAgentChat(
   const chatRealtime = options.chatRealtime ?? true;
   const heavyState = useHeavyChatSnapshot(sessionId, chatRealtime);
   const lightState = useLiveChatLightState(sessionId);
-  const chatDisplaySnapshot = useMemo<ChatDisplaySnapshot>(
-    () => ({
-      sessionId,
-      chatRealtime,
-      messages: heavyState.messages,
-      historyLoaded: heavyState.historyLoaded,
-      hasMoreMessages: heavyState.hasMoreMessages,
-    }),
-    [chatRealtime, heavyState, sessionId],
-  );
+  const chatDisplaySnapshot = useMemo<ChatDisplaySnapshot>(() => ({
+    sessionId,
+    chatRealtime,
+    messages: heavyState.messages,
+    historyLoaded: heavyState.historyLoaded,
+    hasMoreMessages: heavyState.hasMoreMessages,
+  }), [chatRealtime, heavyState, sessionId]);
 
   // Register the onTitleUpdate callback for this session. The store invokes
   // it on `done` events and on sendMessage auto-naming. It is re-registered
@@ -368,13 +318,7 @@ export function useCCAgentChat(
       workingDir: string,
       files?: AttachedFile[],
       mentions?: MentionedResource[],
-      opts?: {
-        vendorOptions?: Record<string, unknown>;
-        quotesEncoded?: boolean;
-        agentReferences?: AgentInputReference[];
-        pastedTextRanges?: PastedTextRange[];
-        slashCommandRanges?: SlashCommandRange[];
-      },
+      opts?: { vendorOptions?: Record<string, unknown>; quotesEncoded?: boolean },
     ): Promise<boolean> => {
       if (!sessionId) return Promise.resolve(false);
       return makerChatStore.sendMessage(
@@ -401,14 +345,7 @@ export function useCCAgentChat(
       opts?: { vendorOptions?: Record<string, unknown> },
     ) => {
       if (!sessionId) return Promise.resolve(false);
-      return makerChatStore.compactSession(
-        sessionId,
-        model,
-        effort,
-        permissionMode,
-        workingDir,
-        opts,
-      );
+      return makerChatStore.compactSession(sessionId, model, effort, permissionMode, workingDir, opts);
     },
     [sessionId],
   );
@@ -422,26 +359,10 @@ export function useCCAgentChat(
       workingDir: string,
       files?: AttachedFile[],
       mentions?: MentionedResource[],
-      opts?: {
-        vendorOptions?: Record<string, unknown>;
-        quotesEncoded?: boolean;
-        agentReferences?: AgentInputReference[];
-        pastedTextRanges?: PastedTextRange[];
-        slashCommandRanges?: SlashCommandRange[];
-      },
+      opts?: { vendorOptions?: Record<string, unknown>; quotesEncoded?: boolean },
     ) => {
       if (!sessionId) return Promise.resolve(false);
-      return makerChatStore.steerMessage(
-        sessionId,
-        text,
-        model,
-        effort,
-        permissionMode,
-        workingDir,
-        files,
-        mentions,
-        opts,
-      );
+      return makerChatStore.steerMessage(sessionId, text, model, effort, permissionMode, workingDir, files, mentions, opts);
     },
     [sessionId],
   );
@@ -488,10 +409,7 @@ export function useCCAgentChat(
   }, [sessionId]);
 
   const insertSystemCard = useCallback(
-    (
-      cardType: 'help' | 'cost' | 'context' | 'pwd' | 'status' | 'cmd' | 'learn',
-      data?: Record<string, unknown>,
-    ) => {
+    (cardType: 'help' | 'cost' | 'context' | 'pwd' | 'status' | 'cmd' | 'learn', data?: Record<string, unknown>) => {
       if (!sessionId) return null;
       return makerChatStore.insertSystemCard(sessionId, cardType, data);
     },
@@ -530,13 +448,7 @@ export function useCCAgentChat(
   const respondToIssueConfirm = useCallback(
     (
       result:
-        | {
-            confirmed: true;
-            title: string;
-            body: string;
-            type: 'bug' | 'feature';
-            uiLanguage: string;
-          }
+        | { confirmed: true; title: string; body: string; type: 'bug' | 'feature'; uiLanguage: string }
         | { confirmed: false },
     ) => {
       if (!sessionId) return;
@@ -661,9 +573,9 @@ export function useCCAgentChat(
   );
 
   const setFastMode = useCallback(
-    async (enabled: boolean, sourceRemoteDeviceId?: string) => {
+    async (enabled: boolean) => {
       if (!sessionId) return;
-      await makerChatStore.setFastMode(sessionId, enabled, sourceRemoteDeviceId);
+      await makerChatStore.setFastMode(sessionId, enabled);
     },
     [sessionId],
   );
@@ -783,7 +695,6 @@ export function useCCAgentChat(
     errorIsRecoverable: !lightState.error && lightState.recoverableError != null,
     errorRetryText: lightState.errorRetryText,
     credentialSwitchWait: lightState.credentialSwitchWait,
-    continuationInFlightClientId: lightState.continuationInFlightClientId,
     loadOlderMessages,
     isLoadingMore: lightState.isLoadingMore,
     hasMoreMessages: lightState.hasMoreMessages,

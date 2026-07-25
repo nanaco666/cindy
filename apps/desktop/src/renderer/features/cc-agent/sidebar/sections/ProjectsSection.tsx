@@ -1,7 +1,7 @@
 /**
  * ProjectsSection — Sidebar 中部的 Projects 段
  * ---------------------------------------------------------------------------
- * Projects 段视觉规格：
+ * 设计稿对照（cc-agent-view.pen）：
  *   - Section 容器：vertical layout, gap 2
  *   - Section Title：padding [0, 12, 0, 24], height 24, space_between
  *     · 左：文字 "Projects" Inter 14 / 600 #262626 (Light) / #f5f0e8 (Dark)

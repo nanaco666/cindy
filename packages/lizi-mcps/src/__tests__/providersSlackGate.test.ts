@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { createLiziMcpProviders } from '../providers.js';
 import type { SlackToolBridgeLike } from '../types.js';
 
-describe('cindy_slack provider gate', () => {
+describe('lizi_slack provider gate', () => {
   const context = { agentKind: 'codex', workingDir: '' };
 
   it.each([
@@ -20,7 +20,7 @@ describe('cindy_slack provider gate', () => {
       };
       const provider = createLiziMcpProviders({
         slackHook: { getBridge: () => bridge },
-      }).find((item) => item.name === 'cindy_slack');
+      }).find((item) => item.name === 'lizi_slack');
 
       expect(provider).toBeDefined();
       expect(provider?.isEnabled?.(context)).toBe(enabled);
@@ -30,7 +30,7 @@ describe('cindy_slack provider gate', () => {
   it('bridge 尚未注册时 fail-closed', () => {
     const provider = createLiziMcpProviders({
       slackHook: { getBridge: () => null },
-    }).find((item) => item.name === 'cindy_slack');
+    }).find((item) => item.name === 'lizi_slack');
 
     expect(provider?.isEnabled?.(context)).toBe(false);
   });

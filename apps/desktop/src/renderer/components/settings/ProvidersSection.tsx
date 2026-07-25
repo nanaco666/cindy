@@ -29,8 +29,6 @@ import { useModelAccessStatus } from '@/hooks/useModelAccessStatus';
 import { useConfirmDialog } from '@/components/ui/confirm-dialog-provider';
 import { toast } from '@/lib/toast';
 import {
-  appendDiscoveredCustomProviderModels,
-  customProviderModelConfigFromCatalogModel,
   deleteCustomProvider,
   readCustomProviderKey,
   updateCustomProvider,
@@ -46,7 +44,7 @@ import { XDIncMark } from '@/components/icons/XDIncMark';
 import { hasProviderLogo, ProviderLogoMark } from '@/components/icons/ProviderLogoMark';
 
 import type { LocalCliDetection } from '../../../shared/localCliDetect';
-import type { CustomProviderConfig, ProviderView } from '@cindy/model-providers';
+import type { CustomProviderConfig, ProviderView } from '@lizi/model-providers';
 
 // ---------------------------------------------------------------------------
 // 工具
@@ -760,7 +758,7 @@ function providerViewToConfig(p: ProviderView): CustomProviderConfig {
     const models = p.models[agent] ?? [];
     runtimes[agent] = {
       baseUrl: routing?.upstream ?? '',
-      models: models.map(customProviderModelConfigFromCatalogModel),
+      models: models.map((m) => ({ id: m.id, name: m.name })),
       ...(routing?.headerOverride && Object.keys(routing.headerOverride).length > 0
         ? { headers: { ...routing.headerOverride } }
         : {}),
@@ -1071,8 +1069,8 @@ export function ProvidersSection() {
 
   /**
    * 自定义供应商「刷新模型」:读回各 runtime 密钥 → fetchProviderModels →
-   * additions-only 合并进配置。新增模型默认隐藏,避免刷新扩大用户当前可用模型范围;
-   * 已有模型及其显式可见性不变。
+   * additions-only 合并进配置(与 OAuth 动态发现同语义:只增不删不改,用户手工
+   * 精简过的列表不被打回)。
    */
   const handleRefreshModels = useCallback(
     async (p: ProviderView) => {
@@ -1094,9 +1092,14 @@ export function ProvidersSection() {
           });
           if (!r.ok || !r.models) continue;
           anyOk = true;
-          const merged = appendDiscoveredCustomProviderModels(rt.models, r.models);
-          rt.models = merged.models;
-          added += merged.addedIds.length;
+          const known = new Set(rt.models.map((m) => m.id));
+          for (const m of r.models) {
+            if (!known.has(m.id)) {
+              rt.models.push({ id: m.id, name: m.name });
+              known.add(m.id);
+              added += 1;
+            }
+          }
         }
         if (!anyOk) {
           toast.error(t('settings.providers.models.refreshFailed'));

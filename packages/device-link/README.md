@@ -1,4 +1,4 @@
-# @cindy/device-link — 远程控制协议与契约
+# @lizi/device-link — 远程控制协议与契约
 
 同账号跨设备远程控制的**传输/协议层**。当前消费者是 desktop(`apps/desktop`),既可作控制端也可作被控端。
 

@@ -18,7 +18,7 @@ import {
   scanAllSkills,
   writeSkillFile,
 } from '../scanner';
-import type { Maker } from '@cindy/maker-core';
+import type { Maker } from '@lizi/maker-core';
 
 const tempRoots: string[] = [];
 
@@ -116,7 +116,7 @@ describe('scanAllSkills', () => {
   });
 
   it('dedupes the same global skill across Claude and Codex, preferring the shared .agents path', async () => {
-    const home = path.join('/Users', 'devuser');
+    const home = path.join('/Users', 'lizi');
     const claudePath = path.join(home, '.claude', 'skills', 'web-access');
     const agentsPath = path.join(home, '.agents', 'skills', 'web-access');
 

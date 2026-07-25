@@ -12,12 +12,9 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { mockSend } = vi.hoisted(() => ({ mockSend: vi.fn() }));
 vi.mock('electron', () => ({
   ipcMain: { handle: vi.fn() },
-  BrowserWindow: {
-    getAllWindows: () => [{ isDestroyed: () => false, webContents: { send: mockSend } }],
-  },
+  BrowserWindow: { getAllWindows: () => [] },
 }));
 vi.mock('../logger.js', () => ({
   createLogger: () => ({ debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }),
@@ -70,7 +67,6 @@ vi.mock('../localDb/client/current', () => ({
 }));
 
 import {
-  broadcastMessageAgentMetaUpdate,
   extractEstimatedSessionValueEntries,
   patchMessageAgentMeta,
 } from '../localDb/ipc/messages.js';
@@ -119,33 +115,6 @@ describe('patchMessageAgentMeta', () => {
     const ok = await patchMessageAgentMeta('s1', 'gone', { turnCostUsd: 0.03 });
     expect(ok).toBe(false);
     expect(fakeDb.update).not.toHaveBeenCalled();
-  });
-
-  it('元数据更新复用 messages:created 广播权威完整行', async () => {
-    selectQueue.push([{
-      id: 'row-1',
-      sessionId: 's1',
-      clientId: 'm1',
-      role: 'assistant',
-      content: JSON.stringify('正式总结'),
-      toolUseId: null,
-      agentMeta: JSON.stringify({ turnCompleted: true }),
-      agentKind: 'cc',
-      createdAt: 1,
-      rewindAt: null,
-    }]);
-
-    await expect(broadcastMessageAgentMetaUpdate('s1', 'm1')).resolves.toBe(true);
-    expect(mockSend).toHaveBeenCalledWith(
-      'local-db:messages:created',
-      expect.objectContaining({
-        sessionId: 's1',
-        message: expect.objectContaining({
-          clientId: 'm1',
-          agentMeta: expect.objectContaining({ turnCompleted: true }),
-        }),
-      }),
-    );
   });
 });
 

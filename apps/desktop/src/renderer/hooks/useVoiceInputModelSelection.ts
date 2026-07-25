@@ -28,7 +28,6 @@ export function useVoiceInputModelSelection(): {
   setServiceMode: (mode: VoiceInputServiceModeData) => Promise<void>;
   setAsrProvider: (provider: string) => Promise<void>;
   setRefinerProvider: (provider: string) => Promise<void>;
-  setRefinerFallbackProvider: (provider: string) => Promise<void>;
   resetToDefault: () => Promise<void>;
   refresh: () => Promise<void>;
 } {
@@ -90,19 +89,12 @@ export function useVoiceInputModelSelection(): {
     await applyPatch({ refinerProvider: provider || null });
   }, [applyPatch]);
 
-  // BYOK fallback is explicit opt-in: an empty selection clears the override
-  // so the primary refiner runs alone (the product default).
-  const setRefinerFallbackProvider = useCallback(async (provider: string) => {
-    await applyPatch({ refinerProviderChain: provider ? [provider] : null });
-  }, [applyPatch]);
-
   const resetToDefault = useCallback(async () => {
     await applyPatch({
       serviceMode: null,
       asrProvider: null,
       refinerProvider: null,
       refinerModel: null,
-      refinerProviderChain: null,
     });
   }, [applyPatch]);
 
@@ -116,7 +108,6 @@ export function useVoiceInputModelSelection(): {
     setServiceMode,
     setAsrProvider,
     setRefinerProvider,
-    setRefinerFallbackProvider,
     resetToDefault,
     refresh,
   };

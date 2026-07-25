@@ -1,4 +1,4 @@
-import type { AsrEvent, AsrProvider } from '@cindy/voice-input-core';
+import type { AsrEvent, AsrProvider } from '@lizi/voice-input-core';
 import { elevenLabsLanguageCode } from './language.js';
 
 type LiteLlmTranscriptionProviderOptions = {

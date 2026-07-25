@@ -3,7 +3,7 @@
 import { cleanup, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { ScheduleRun } from '@cindy/maker-scheduler';
+import type { ScheduleRun } from '@lizi/maker-scheduler';
 import type { SessionReference } from '../../../../../shared/sessionReference';
 
 import { RunHistoryCard } from '../RunHistoryCard';

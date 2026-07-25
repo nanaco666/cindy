@@ -16,16 +16,10 @@ export interface HistoryCursorPayload {
   /** unix ms */
   createdAt: number;
   id: string;
-  /** SQLite insertion-order tie-breaker for message history cursors. */
-  rowid?: number;
 }
 
 export function encodeCursor(payload: HistoryCursorPayload): string {
-  const json = JSON.stringify({
-    c: payload.createdAt,
-    i: payload.id,
-    ...(payload.rowid !== undefined ? { r: payload.rowid } : {}),
-  });
+  const json = JSON.stringify({ c: payload.createdAt, i: payload.id });
   // base64url (URL-safe, 无 padding) — Node Buffer 直接支持
   return Buffer.from(json, 'utf8').toString('base64url');
 }
@@ -34,17 +28,10 @@ export function decodeCursor(raw: string | undefined | null): HistoryCursorPaylo
   if (!raw || typeof raw !== 'string') return null;
   try {
     const json = Buffer.from(raw, 'base64url').toString('utf8');
-    const obj = JSON.parse(json) as { c?: unknown; i?: unknown; r?: unknown };
+    const obj = JSON.parse(json) as { c?: unknown; i?: unknown };
     if (typeof obj.c !== 'number' || !Number.isFinite(obj.c)) return null;
     if (typeof obj.i !== 'string' || obj.i.length === 0) return null;
-    if (obj.r !== undefined && (typeof obj.r !== 'number' || !Number.isSafeInteger(obj.r) || obj.r < 1)) {
-      return null;
-    }
-    return {
-      createdAt: obj.c,
-      id: obj.i,
-      ...(obj.r !== undefined ? { rowid: obj.r } : {}),
-    };
+    return { createdAt: obj.c, id: obj.i };
   } catch {
     return null;
   }

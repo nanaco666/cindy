@@ -24,7 +24,6 @@ import { ChevronDown, ChevronRight } from 'lucide-react';
 import { useDeviceLinkSettings, type DeviceLinkSettings } from '@/hooks/useDeviceLinkSettings';
 import { MyDevicesPanel } from './MyDevicesPanel';
 import { RemoteSection } from './RemoteSection';
-import { useAuth } from '@/contexts/AuthContext';
 
 /** SSH 状态 → 摘要状态点的优先级:有已连接给绿,其次进行中给橙,再次失败给红,否则灰。 */
 const SSH_PROGRESS_STATUSES: ReadonlySet<RemoteHostSnapshot['status']> = new Set([
@@ -135,9 +134,7 @@ function sshSummary(
 
 export function RemoteControlSection() {
   const { t } = useTranslation();
-  const { mode } = useAuth();
-  const deviceLinkAvailable = mode === 'cloud';
-  const s = useDeviceLinkSettings(deviceLinkAvailable);
+  const s = useDeviceLinkSettings();
 
   const [devicesOpen, setDevicesOpen] = useState(false);
   const [sshOpen, setSshOpen] = useState(false);
@@ -194,21 +191,18 @@ export function RemoteControlSection() {
       </div>
 
       <div className="mt-4 flex flex-col gap-6">
-        {deviceLinkAvailable ? (
-          <>
-            <CollapsibleSubSection
-              title={t('settings.remoteControl.sections.myDevices')}
-              summary={devSumText}
-              dotColor={null}
-              open={devicesOpen}
-              onToggle={() => setDevicesOpen((v) => !v)}
-              pinned={<MyDevicesPanel s={s} variant="self" />}
-            >
-              <MyDevicesPanel s={s} variant="others" />
-            </CollapsibleSubSection>
-            <div className="h-px w-full bg-[var(--border-default)]" />
-          </>
-        ) : null}
+        <CollapsibleSubSection
+          title={t('settings.remoteControl.sections.myDevices')}
+          summary={devSumText}
+          dotColor={null}
+          open={devicesOpen}
+          onToggle={() => setDevicesOpen((v) => !v)}
+          pinned={<MyDevicesPanel s={s} variant="self" />}
+        >
+          <MyDevicesPanel s={s} variant="others" />
+        </CollapsibleSubSection>
+
+        <div className="h-px w-full bg-[var(--border-default)]" />
 
         <CollapsibleSubSection
           title={t('settings.remoteControl.sections.ssh')}

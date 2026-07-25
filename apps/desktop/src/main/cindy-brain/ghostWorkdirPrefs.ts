@@ -22,11 +22,11 @@
  * - POSIX 形态:仅去尾部 `/`,保留大小写(远端 Linux 区分大小写)。
  */
 
+import { app } from 'electron';
 import path from 'node:path';
 
 import { desktopMakerLogger } from '../maker-host/logger-adapter.js';
 import { createOverrideSettingsFile } from '../maker-host/override-settings-file.js';
-import { ownerScopedUserDataPath } from '../appSessionState.js';
 
 const log = desktopMakerLogger.child('ghost-workdir-prefs');
 
@@ -73,7 +73,7 @@ function normalize(raw: unknown): GhostWorkdirPrefs {
 }
 
 const store = createOverrideSettingsFile<GhostWorkdirPrefs>({
-  filePath: () => ownerScopedUserDataPath('ghost-workdir-prefs.json'),
+  filePath: () => path.join(app.getPath('userData'), 'ghost-workdir-prefs.json'),
   defaults: DEFAULTS,
   normalize,
   log,

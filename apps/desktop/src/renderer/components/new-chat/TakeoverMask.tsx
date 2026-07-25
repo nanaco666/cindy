@@ -4,7 +4,7 @@
  * 替代 ChatInput 渲染 — 当该 session 被某个 IM (现仅 feishu) 接管时, CCAgentSessionView
  * 不再挂 ChatInput, 改挂这个 mask 表达 "输入已禁用 + 当前正被远程接管 + 收回"。
  *
- * 视觉规格:
+ * 视觉规格 (doc/design_docs/feishu-takeover-mask.pen 节点 MDkzR):
  *   - 容器: rounded-12, bg surface, border 1px Board, padding-x 16, gap 12, h-[90px]
  *   - 左: 32x32 圆形 chip (bg Light Gray) + radio-tower icon 16 (Stone)
  *   - 文字主: 14 / 500 / Near Black "此会话已被{channel} bot 接管 · 输入已禁用"

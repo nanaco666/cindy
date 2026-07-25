@@ -26,14 +26,6 @@ vi.mock('@/hooks/useLogin', () => ({
   useLogin: () => loginHook.value,
 }));
 
-vi.mock('@/contexts/AuthContext', () => ({
-  useAuth: () => ({ mode: 'signed-out', enterLocalMode: vi.fn() }),
-}));
-
-vi.mock('react-router-dom', () => ({
-  useNavigate: () => vi.fn(),
-}));
-
 vi.mock('@/components/title-bar/WindowControls', () => ({
   WindowControls: () => null,
 }));
@@ -75,37 +67,5 @@ describe('LoginPage browser redirect waiting state', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'login.cancel' }));
     expect(loginHook.dispatch).toHaveBeenCalledWith({ type: 'cancel-browser' });
-  });
-
-  it('keeps the local-mode entry available on an authentication error screen', () => {
-    loginHook.value = {
-      isLoading: false,
-      errorCode: 'NETWORK_ERROR',
-      loginState: { step: 'error', code: 'NETWORK_ERROR', recoverTo: 'identifier' },
-      dispatch: loginHook.dispatch,
-      clearError: vi.fn(),
-    } as unknown as typeof loginHook.value;
-
-    render(<LoginPage />);
-
-    expect(screen.getByRole('button', { name: 'login.localModeEntry' })).toBeTruthy();
-    expect(screen.getByText('login.localModeDescription')).toBeTruthy();
-  });
-
-  it('disables local entry while a login request is pending', () => {
-    loginHook.value = {
-      isLoading: true,
-      errorCode: null,
-      loginState: { step: 'error', code: 'NETWORK_ERROR', recoverTo: 'identifier' },
-      dispatch: loginHook.dispatch,
-      clearError: vi.fn(),
-    } as unknown as typeof loginHook.value;
-
-    render(<LoginPage />);
-
-    expect(
-      (screen.getByRole('button', { name: 'login.localModeEntry' }) as HTMLButtonElement)
-        .disabled,
-    ).toBe(true);
   });
 });

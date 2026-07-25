@@ -440,7 +440,7 @@ describe('commandIntentFromCommand — 本地规则解析', () => {
     const cases: Array<[string, string]> = [
       ['gh pr list --limit 20', 'ghPrList'],
       ['gh pr view 123 --json title', 'ghPrView'],
-      ['gh --repo makecindy/cindy pr checks 123', 'ghPrChecks'],
+      ['gh --repo xindong/cindy pr checks 123', 'ghPrChecks'],
       ['gh pr status', 'ghPrStatus'],
       ['gh pr diff 123', 'ghPrDiff'],
       ['gh pr create --title fix', 'ghPrCreate'],
@@ -467,7 +467,7 @@ describe('commandIntentFromCommand — 本地规则解析', () => {
       ['gh run list --limit 10', 'ghRunList'],
       ['gh run view 123 --log', 'ghRunView'],
       ['gh run watch 123', 'ghRunWatch'],
-      ['gh repo list makecindy', 'ghRepoList'],
+      ['gh repo list xindong', 'ghRepoList'],
     ];
     for (const [command, action] of cases) {
       expect(commandIntentFromCommand(command), command).toEqual({ action });
@@ -485,7 +485,7 @@ describe('commandIntentFromCommand — 本地规则解析', () => {
   });
 
   it('distinguishes gh api queries, mutations and unknown request bodies', () => {
-    expect(commandIntentFromCommand('gh api repos/makecindy/cindy/pulls/123')).toEqual({
+    expect(commandIntentFromCommand('gh api repos/xindong/cindy/pulls/123')).toEqual({
       action: 'ghApiQuery',
     });
     expect(commandIntentFromCommand('gh api --method GET repos/x/y/issues -f per_page=100')).toEqual({

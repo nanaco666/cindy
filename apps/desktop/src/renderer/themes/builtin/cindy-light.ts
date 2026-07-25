@@ -66,9 +66,6 @@ const overrides = {
   'file-remove-bg': '#686B72', // AA remove affordance
   'info-700': '#1D4ED8', // 信息/链接蓝
   'model-trigger-hover': '#F1F1F1', // hover
-  // 下拉行 hover/选中底:surface-hover(#F1F1F1)相对面板(#F8F8F8)只差 7,行高亮几乎看不清。
-  // 菜单行专用 token 压深一档(-14/通道)使 hover 在面板上清晰,模型/权限/+ 三菜单共用。
-  'model-item-hover': '#EAEAEA', // 下拉行 hover/选中(压深到面板之下,清晰可见)
   'msg-link': '#1D4ED8', // 链接蓝
   'msg-scrollbar-hover': '#D8D9DB', // 弱档
   'msg-user-bg': '#F8F8F8', // 卡片

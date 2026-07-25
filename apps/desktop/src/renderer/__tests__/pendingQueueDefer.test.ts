@@ -309,7 +309,6 @@ describe('renderer input queue facade', () => {
     makerChatStore.initGlobalListeners();
     projectionHandler?.(projection(sid, {
       pendingQueue: [item],
-      continuationInFlightClientId: 'q-continue',
       steeringQueueClientIds: ['q-1'],
       queuePaused: true,
       queueExpanded: true,
@@ -323,7 +322,6 @@ describe('renderer input queue facade', () => {
 
     const snap = makerChatStore.getSnapshot(sid);
     expect(snap.pendingQueue).toEqual([item]);
-    expect(snap.continuationInFlightClientId).toBe('q-continue');
     expect(snap.steeringQueueClientIds).toEqual(['q-1']);
     expect(snap.queuePaused).toBe(true);
     expect(snap.queueExpanded).toBe(true);
@@ -332,11 +330,6 @@ describe('renderer input queue facade', () => {
     expect(snap.queueAbortPending).toBe(true);
     expect(snap.error).toBe('paused');
     expect(snap.errorRetryText).toBe('from main');
-
-    // 旧被控端 projection 缺省新字段时回落 null，不能把前一轮 in-flight
-    // Continue 标记永久留在 renderer。
-    projectionHandler?.(projection(sid));
-    expect(makerChatStore.getSnapshot(sid).continuationInFlightClientId).toBeNull();
   });
 
   it('delegates queue row operations to main input intents', async () => {
@@ -357,30 +350,13 @@ describe('renderer input queue facade', () => {
 
     expect(ok).toBe(true);
     expect(input.steer).toHaveBeenCalledWith(sid, item, { removeFromQueue: true });
-    expect(input.updateText).toHaveBeenCalledWith(sid, item.clientId, 'edited', []);
+    expect(input.updateText).toHaveBeenCalledWith(sid, item.clientId, 'edited');
     expect(input.move).toHaveBeenCalledWith(sid, item.clientId, 0);
     expect(input.remove).toHaveBeenCalledWith(sid, item.clientId);
     expect(input.setExpanded).toHaveBeenCalledWith(sid, true);
     expect(input.setInteractionLock).toHaveBeenCalledWith(sid, 'drag', true);
     expect(input.setEditLock).toHaveBeenCalledWith(sid, item.clientId, true);
     expect(legacySteer).not.toHaveBeenCalled();
-  });
-
-  it('preserves queued source device hints while editing an anchored link', async () => {
-    const sid = `row-ref-${Math.random().toString(36).slice(2, 8)}`;
-    const item = queued('q-ref', 'compare cindy://session/source?message=old-anchor');
-    item.sessionRefs = [{ sessionId: 'source', messageClientId: 'old-anchor', deviceId: 'source-device' }];
-
-    makerChatStore.initGlobalListeners();
-    projectionHandler?.(projection(sid, { pendingQueue: [item] }));
-    makerChatStore.updateQueueItem(sid, item.clientId, 'edited cindy://session/source?message=new-anchor');
-    await flushPromises();
-
-    expect(input.updateText).toHaveBeenCalledWith(sid, item.clientId, expect.any(String), [{
-      sessionId: 'source',
-      messageClientId: 'new-anchor',
-      deviceId: 'source-device',
-    }]);
   });
 
   it('delegates composer steer, stop, resume and retry to main input intents', async () => {

@@ -110,7 +110,7 @@ function makeHandlers(overrides?: {
 }
 
 describe('stats(占用总览)', () => {
-  it('账面统计 + 历史兼容层占用 + 死目录状态', async () => {
+  it('账面统计 + 老世界占用 + 死目录状态', async () => {
     const a = await seedBlob('stats-a');
     const c = await seedBlob('stats-cache', { isCache: true });
     fs.mkdirSync(path.join(legacyRoot, 'feishu-media'), { recursive: true });
@@ -158,7 +158,7 @@ describe('cleanup(执行:全类别 + 执行时重新取证)', () => {
   it('零引用/缓存逐出/死目录/tmp 一次执行,汇总释放量', async () => {
     const doomed = await seedBlob('clean-doomed', { aged: true });
     const cacheBlob = await seedBlob('clean-cache', { isCache: true });
-    const deadDir = path.join(legacyRoot, '@cindy/image-media');
+    const deadDir = path.join(legacyRoot, 'lizi-image-media');
     fs.mkdirSync(deadDir, { recursive: true });
     const deadFile = path.join(deadDir, 'a.png');
     fs.writeFileSync(deadFile, 'dead');
@@ -169,13 +169,13 @@ describe('cleanup(执行:全类别 + 执行时重新取证)', () => {
       draftUrls: [],
       zeroRefHashes: [doomed.hash],
       evictCacheHashes: [cacheBlob.hash],
-      deadDirNames: ['@cindy/image-media'],
+      deadDirNames: ['lizi-image-media'],
       cleanTmpFiles: false,
     });
 
     expect(result.zeroRef.deleted).toBe(1);
     expect(result.cacheEvicted.deleted).toBe(1);
-    expect(result.deadDirs.removed).toEqual(['@cindy/image-media']);
+    expect(result.deadDirs.removed).toEqual(['lizi-image-media']);
     expect(result.freedBytes).toBe(doomed.bytes + cacheBlob.bytes + 4);
     expect(fs.existsSync(deadDir)).toBe(false);
   });

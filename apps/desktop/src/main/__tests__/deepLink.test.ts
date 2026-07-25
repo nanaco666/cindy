@@ -6,13 +6,12 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import type { BrowserWindow } from 'electron';
 
 // vitest 跑测试时不会真的初始化 Electron app, 单 import 需要 mock electron。
 // deepLink.ts 只在 registerDeepLinkProtocol / dispatchDeepLink 用到 app /
 // BrowserWindow, 本单测只测 pure parse function 不会触达,给个最小 mock 满足 import。
 vi.mock('electron', () => ({
-  app: { focus: vi.fn(), setAsDefaultProtocolClient: () => {} },
+  app: { setAsDefaultProtocolClient: () => {} },
   BrowserWindow: class {},
 }));
 
@@ -39,39 +38,7 @@ import {
   DEEP_LINK_PROTOCOL,
   OPEN_FOLDER_FLAG,
   OPEN_SHARE_FILE_FLAG,
-  openMainWindowVoiceSettings,
-  setDeepLinkMainWindow,
 } from '../deepLink';
-
-describe('internal main-window navigation', () => {
-  it('focuses the main window and routes voice settings to the requested tab', () => {
-    const send = vi.fn();
-    const mainWindow = {
-      isDestroyed: () => false,
-      isVisible: () => false,
-      isMinimized: () => true,
-      show: vi.fn(),
-      restore: vi.fn(),
-      focus: vi.fn(),
-      webContents: {
-        isLoading: () => false,
-        send,
-      },
-    };
-    setDeepLinkMainWindow(mainWindow as unknown as BrowserWindow);
-
-    openMainWindowVoiceSettings('providers');
-
-    expect(mainWindow.show).toHaveBeenCalledOnce();
-    expect(mainWindow.restore).toHaveBeenCalledOnce();
-    expect(mainWindow.focus).toHaveBeenCalledOnce();
-    expect(send).toHaveBeenCalledWith('deep-link:navigate', {
-      type: 'settings',
-      tab: 'providers',
-    });
-    setDeepLinkMainWindow(null);
-  });
-});
 
 describe('parseDeepLink', () => {
   it('parses session payload', () => {

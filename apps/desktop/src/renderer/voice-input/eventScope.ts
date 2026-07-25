@@ -1,4 +1,4 @@
-import type { VoiceInputState } from '@cindy/voice-input-core';
+import type { VoiceInputState } from '@lizi/voice-input-core';
 
 export function isVoiceInputEventScopeActive(state: VoiceInputState): boolean {
   return state === 'listening' || state === 'submitting' || state === 'refining';

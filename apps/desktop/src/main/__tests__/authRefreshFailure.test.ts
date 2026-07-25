@@ -12,27 +12,11 @@ import {
   getRefreshTokenReplacementCandidate,
   isDefinitiveRefreshFailure,
   resolveRefreshFailureAction,
-  resolveSessionExpiredReason,
   runRefreshWithReplacementRetry,
   runRefreshWithTransientRetry,
   type RefreshFailureInfo,
   type RefreshFetchResult,
 } from '../authRefreshFailure';
-
-describe('resolveSessionExpiredReason', () => {
-  it('确定性失效码映射到对应展示分类', () => {
-    expect(resolveSessionExpiredReason('INVALID_REFRESH_TOKEN')).toBe('replaced-elsewhere');
-    expect(resolveSessionExpiredReason('REFRESH_TOKEN_EXPIRED')).toBe('expired');
-    expect(resolveSessionExpiredReason('DEVICE_MISMATCH')).toBe('device-mismatch');
-    expect(resolveSessionExpiredReason('MEMBERSHIP_DISABLED')).toBe('account-unavailable');
-  });
-
-  it('未识别码 / 缺省一律 unknown,走通用文案', () => {
-    expect(resolveSessionExpiredReason(undefined)).toBe('unknown');
-    expect(resolveSessionExpiredReason('RATE_LIMITED')).toBe('unknown');
-    expect(resolveSessionExpiredReason('SOME_FUTURE_CODE')).toBe('unknown');
-  });
-});
 
 describe('isDefinitiveRefreshFailure', () => {
   it('成功响应不删除 token', () => {

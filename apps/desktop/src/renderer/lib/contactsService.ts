@@ -2,7 +2,7 @@
  * contactsService — 智能通讯录 IPC 的 renderer 封装。
  *
  * preload 的 window.electronAPI.maker.contacts 用 unknown 透传, 这里收敛为
- * @cindy/maker-core contacts 类型(type-only import, 无 runtime 依赖)。
+ * @lizi/maker-core contacts 类型(type-only import, 无 runtime 依赖)。
  * IPC 错误统一走 extractIpcError 转 code(如 IDENTITY_CONFLICT)供 UI 分支。
  */
 
@@ -30,7 +30,7 @@ import type {
   MergeResult,
   ResolveHit,
   UpdateContactInput,
-} from '@cindy/maker-core';
+} from '@lizi/maker-core';
 
 const api = () => window.electronAPI.maker.contacts;
 

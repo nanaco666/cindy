@@ -3,7 +3,7 @@
  * 的 packages 白名单里放行,否则 EAS 上传的归档不含该包源码,云端 `pnpm install` 解析不到
  * `workspace:*` → Prebuild/安装阶段失败(本地有 node_modules 故不复现)。
  *
- * 背景:2026-06 给手机版加 `@cindy/model-providers` 依赖,但漏了同步 `.easignore` 白名单,
+ * 背景:2026-06 给手机版加 `@lizi/model-providers` 依赖,但漏了同步 `.easignore` 白名单,
  * 导致 TestFlight 构建在 Prebuild 阶段失败。本测试把"加 workspace 依赖须同步 .easignore"
  * 这条约定变成代码强制——再漏 CI 当场拦下,并直接给出该补的 .easignore 行。
  *
@@ -41,25 +41,6 @@ function localDepNames(pkg: ReturnType<typeof readJson>, nameToDir: Map<string, 
 }
 
 describe('EAS .easignore covers apps/mobile workspace dependency closure', () => {
-  it('includes the generated legal notices consumed by the Expo config plugin', () => {
-    const easignore = readFileSync(resolve(repoRoot, '.easignore'), 'utf8');
-
-    expect(easignore).toMatch(/^docs$/m);
-    expect(easignore).toMatch(/^!docs\/$/m);
-    expect(easignore).toMatch(/^!docs\/legal\/$/m);
-    expect(easignore).toMatch(/^!docs\/legal\/notices\/$/m);
-    for (const artifact of [
-      'mobile-ios.txt',
-      'mobile-ios-restricted.txt',
-      'mobile-android.txt',
-      'mobile-android-restricted.txt',
-    ]) {
-      expect(easignore).toMatch(
-        new RegExp(`^!docs/legal/notices/${artifact.replace('.', '\\.')}\\s*$`, 'm'),
-      );
-    }
-  });
-
   it('includes the root postinstall skip path used by mobile EAS builds', () => {
     const easignore = readFileSync(resolve(repoRoot, '.easignore'), 'utf8');
     const easJson = readJson(resolve(mobileDir, 'eas.json')) as {
@@ -78,11 +59,11 @@ describe('EAS .easignore covers apps/mobile workspace dependency closure', () =>
     expect(easignore).toMatch(/^!tools\/shared\/fetch-with-timeout\.mjs$/m);
     expect(easignore).toMatch(/^!cindy-protocol$/m);
     expect(easignore).toMatch(/^!cindy-protocol\/\*\*$/m);
-    // beta EAS lane 已在 79013fcc 退役,eas.json 不再有 beta-base profile。
     for (const profile of [
       'store-cn-base',
       'store-global-base',
       'adhoc',
+      'beta-base',
     ]) {
       expect(easJson.build?.[profile]?.env?.XDT_SKIP_AGENT_BIN_INSTALL).toBe(
         '1',

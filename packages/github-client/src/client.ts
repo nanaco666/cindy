@@ -4,7 +4,7 @@
  * 零外部依赖 — 仅使用全局 fetch(Node 18+ / Electron 28+)。
  * 所有方法均可在 main / server 进程直接调用。
  *
- * 与 @cindy/gitlab-client 接口形状对齐,差异点:
+ * 与 @lizi/gitlab-client 接口形状对齐,差异点:
  *   - GitHub 用 `number` 标识 issue/PR(GitLab 是 `iid`)
  *   - GitHub 路径是 `/repos/{owner}/{repo}/...`(GitLab 是 `/projects/{id}/...`)
  *   - 认证 header 是 `Authorization: Bearer <token>`(GitLab 是 `PRIVATE-TOKEN: <token>`)

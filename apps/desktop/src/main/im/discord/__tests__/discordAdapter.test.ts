@@ -7,26 +7,13 @@ import { describe, expect, it, vi } from 'vitest';
 import os from 'node:os';
 import path from 'node:path';
 
-const scopeMocks = vi.hoisted(() => ({
-  owner: 'local-v1',
-  root: '',
-  join: null as unknown as (...parts: string[]) => string,
-  claimLegacy: vi.fn(),
-}));
-
 vi.mock('electron', () => ({
   app: {
     getPath: vi.fn(() => path.join(os.tmpdir(), 'xdt-discord-adapter-test')),
   },
 }));
 
-vi.mock('../../ownerScopedStorage', () => ({
-  ownerScopedImUserDataPath: (...parts: string[]) =>
-    scopeMocks.join(scopeMocks.root, 'owners', scopeMocks.owner, ...parts),
-  claimLegacyImPath: scopeMocks.claimLegacy,
-}));
-
-import type { DiscordIM } from '@cindy/im';
+import type { DiscordIM } from 'lizi-im';
 import { buildDiscordAdapter } from '../adapter';
 
 const fakeIm = {} as unknown as DiscordIM;
@@ -39,8 +26,6 @@ const CONFIG = {
 
 describe('discord ImChannelAdapter characterization', () => {
   const adapter = buildDiscordAdapter(fakeIm, CONFIG);
-  scopeMocks.root = path.join(os.tmpdir(), 'xdt-discord-adapter-test');
-  scopeMocks.join = path.join;
 
   it('channel / source are discord and the adapter is not thread scoped', () => {
     expect(adapter.channel).toBe('discord');
@@ -77,18 +62,7 @@ describe('discord ImChannelAdapter characterization', () => {
   it('workingDir = userData/im-working-dir/discord-{appId}', () => {
     const dir = adapter.sessions.ensureWorkingDir('app_123');
     expect(dir).toBe(
-      path.join(
-        os.tmpdir(),
-        'xdt-discord-adapter-test',
-        'owners',
-        'local-v1',
-        'im-working-dir',
-        'discord-app_123',
-      ),
-    );
-    expect(scopeMocks.claimLegacy).toHaveBeenCalledWith(
       path.join(os.tmpdir(), 'xdt-discord-adapter-test', 'im-working-dir', 'discord-app_123'),
-      dir,
     );
   });
 });

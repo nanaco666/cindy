@@ -111,7 +111,7 @@ vi.mock('../../cindy-media/ingest.js', () => ({
   ingestMedia: async (params: { buffer: Buffer; mimeType: string; refs: Array<Record<string, unknown>> }) => {
     if (cindyMediaMock.ingestError) throw cindyMediaMock.ingestError;
     cindyMediaMock.ingestCalls.push(params);
-    // 用真实 sha256 当指纹:导入路径会经 resolveHashRef 反推仓内路径,
+    // 用真实 sha256 当指纹:第 4 步导入路径会经 resolveHashRef 反推仓内路径,
     // 假指纹会被形状校验拒掉、静默落回老路径,测不到新分支。
     const { createHash: ch } = await import('node:crypto');
     const hash = ch('sha256').update(params.buffer).digest('hex');
@@ -171,7 +171,7 @@ const OLD_SESSION_ID = 'old-session-id';
 const SID = 'aaaaaaaa-1111-2222-3333-444444444444';
 const IMAGE_URL = `xdt-image://${OLD_SESSION_ID}/img-1.png`;
 
-/** 老包媒体入总仓后消息里的新地址 = 字节指纹(与 ingest mock 同算法)。 */
+/** 第 4 步:老包媒体入总仓后消息里的新地址 = 字节指纹(与 ingest mock 同算法)。 */
 function blobUrlOf(bytes: Buffer, ext = '.png'): string {
   return `cindy-media://blobs/${createHash('sha256').update(bytes).digest('hex')}${ext}`;
 }
@@ -191,7 +191,7 @@ interface BundleOverrides {
   extraImage?: string;
   /** 加一条 cindy-media blob 条目(媒体总仓);urlHash 可指定 URL 里声称的指纹(不给则用字节真实指纹)。 */
   blob?: { bytes: Buffer; urlHash?: string };
-  /** 加一条媒体类 loose 条目(xdt-audio mp3,测试入仓重写)。 */
+  /** 加一条媒体类 loose 条目(xdt-audio mp3,测第 4 步入仓重写)。 */
   looseAudio?: { bytes: Buffer };
   /** v1 旧包没有逐消息 agentKind。 */
   omitMessageAgentKind?: boolean;
@@ -355,7 +355,7 @@ describe('sessionShareImport', () => {
     const jsonl = path.join(projectsRoot, key, `${SID}.jsonl`);
     expect(fs.existsSync(jsonl)).toBe(true);
 
-    // DB tx:content 里老 xdt-image 图重写为总仓 blob 地址、loose 非
+    // DB tx:content 里老 xdt-image 图重写为总仓 blob 地址(第 4 步)、loose 非
     // 媒体 url 换 shared-media 新落盘路径
     expect(dbMock.txCalls).toHaveLength(1);
     const txArgs = dbMock.txCalls[0].args as {
@@ -397,7 +397,7 @@ describe('sessionShareImport', () => {
     expect(txArgs.messages.map((m) => m.agentKind)).toEqual([null, null]);
   });
 
-  it('loose 媒体(mp3)入总仓:?path= 重写为仓内绝对路径,shared-media 零落盘', async () => {
+  it('loose 媒体(mp3)入总仓:?path= 重写为仓内绝对路径,shared-media 零落盘(第 4 步)', async () => {
     const mp3 = Buffer.from('fake-mp3-bytes');
     const filePath = await writeBundleFile(await buildBundle({ looseAudio: { bytes: mp3 } }));
     const inspect = await inspectShareFile(filePath);
@@ -424,7 +424,7 @@ describe('sessionShareImport', () => {
     expect(fs.existsSync(path.join(sharedMediaRoot, result.sessionId, '5-voice.mp3'))).toBe(false);
   });
 
-  it('ingest 全挂时回落老目录:行为与迁移前一致(附件不能丢)', async () => {
+  it('ingest 全挂时回落老目录:行为与迁移前一致(附件不能丢,第 4 步回落面)', async () => {
     cindyMediaMock.ingestError = new Error('ledger down');
     const filePath = await writeBundleFile(await buildBundle());
     const inspect = await inspectShareFile(filePath);
@@ -473,7 +473,7 @@ describe('sessionShareImport', () => {
       projectsRootOverride: projectsRoot,
       sharedMediaRootOverride: sharedMediaRoot,
     });
-    // bundle 里的 xdt-image 老图也会 ingest,按字节找 blob 条目那次调用
+    // 第 4 步后 bundle 里的 xdt-image 老图也会 ingest,按字节找 blob 条目那次调用
     const call = cindyMediaMock.ingestCalls.find((c) => Buffer.from(c.buffer).equals(bytes));
     expect(call).toBeDefined();
     expect(call!.mimeType).toBe('image/png');
@@ -497,7 +497,7 @@ describe('sessionShareImport', () => {
       sharedMediaRootOverride: sharedMediaRoot,
     });
     expect(result.sessionId).toBeTruthy();
-    // 指纹不符的 evil 字节绝不入库(img-1 老图的 ingest 是正常行为)
+    // 指纹不符的 evil 字节绝不入库(img-1 老图的 ingest 是第 4 步的正常行为)
     expect(
       cindyMediaMock.ingestCalls.some((c) => Buffer.from(c.buffer).equals(Buffer.from('evil-bytes'))),
     ).toBe(false);
@@ -758,7 +758,7 @@ describe('sessionShareImport', () => {
       projectsRootOverride: projectsRoot,
       sharedMediaRootOverride: sharedMediaRoot,
     });
-    // 图片入总仓(不落盘 cc-agent),包内伪造的 filename 全程不参与
+    // 第 4 步:图片入总仓(不落盘 cc-agent),包内伪造的 filename 全程不参与
     // 任何路径拼接,无逃逸文件
     expect(cindyMediaMock.ingestCalls.some((c) => Buffer.from(c.buffer).equals(IMG1_BYTES))).toBe(true);
     expect(fs.existsSync(path.join(tmpRoot, 'cc-agent', 'images', result.sessionId, 'img-1.png'))).toBe(false);
@@ -779,7 +779,7 @@ describe('sessionShareImport', () => {
     });
     const txArgs = dbMock.txCalls[0].args as { messages: Array<{ content: string }> };
     const content0 = txArgs.messages[0].content;
-    // 多 host 的祖先链图片统一入总仓,逐 URL 重写为各自字节的指纹地址
+    // 第 4 步:多 host 的祖先链图片统一入总仓,逐 URL 重写为各自字节的指纹地址
     expect(content0).toContain(blobUrlOf(IMG1_BYTES));
     expect(content0).toContain(blobUrlOf(IMG2_BYTES));
     expect(content0).not.toContain('xdt-image://');

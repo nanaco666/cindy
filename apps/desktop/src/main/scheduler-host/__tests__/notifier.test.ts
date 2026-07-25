@@ -1,20 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { BrowserWindow } from 'electron';
-import type { Schedule, ScheduleRun } from '@cindy/maker-scheduler';
-import type { FeishuIM } from '@cindy/im';
+import type { Schedule, ScheduleRun } from '@lizi/maker-scheduler';
+import type { FeishuIM } from 'lizi-im';
 
 import { showDesktopSessionEvent } from '../../notificationService';
-import { sendMobileSessionNotify } from '../../device-link';
 import { DesktopNotifier } from '../notifier';
 
 vi.mock('../../notificationService', () => ({
   showDesktopSessionEvent: vi.fn(),
-}));
-
-// 手机推送真实实现在 device-link host(依赖 electron/ws 全家桶),这里只验分发。
-vi.mock('../../device-link', () => ({
-  getMobileNotifyGeneration: vi.fn(() => 7),
-  sendMobileSessionNotify: vi.fn(() => true),
 }));
 
 const schedule = {
@@ -93,50 +86,6 @@ describe('DesktopNotifier desktop status mapping', () => {
 
     await notifier.notify(schedule, run('success'));
 
-    expect(showDesktopSessionEvent).not.toHaveBeenCalled();
-    // 手机推送不受桌面开关影响(手机端自持开关;发送侧防打扰在 device-link 收口)
-    expect(sendMobileSessionNotify).toHaveBeenCalledWith({
-      sessionId: 'session-1',
-      title: '每日检查',
-      kind: 'done',
-      // notify() 入口(任何 await 之前)捕获的链路代次,原样透传
-      generation: 7,
-    });
-  });
-
-  it('skips the mobile push when the run is not bound to a session', async () => {
-    const { notifier } = createNotifier();
-
-    await notifier.notify(schedule, { ...run('success'), sessionId: undefined });
-
-    expect(sendMobileSessionNotify).not.toHaveBeenCalled();
-  });
-
-  it('mobile 正文带运行结果摘要:成功用 resultText,失败用 errorMsg', async () => {
-    const { notifier } = createNotifier();
-
-    await notifier.notify(schedule, { ...run('success'), resultText: '巡检完成,无异常。' });
-    expect(sendMobileSessionNotify).toHaveBeenCalledWith(
-      expect.objectContaining({ kind: 'done', detail: '巡检完成,无异常。' }),
-    );
-
-    vi.mocked(sendMobileSessionNotify).mockClear();
-    await notifier.notify(schedule, { ...run('failed'), errorMsg: '网络超时' });
-    expect(sendMobileSessionNotify).toHaveBeenCalledWith(
-      expect.objectContaining({ kind: 'error', detail: '网络超时' }),
-    );
-  });
-
-  it('respects the per-schedule opt-out: desktop 与 feishu 全关时 mobile 也不发', async () => {
-    const { notifier } = createNotifier();
-    const mutedSchedule = {
-      ...schedule,
-      notify: { desktop: false, feishu: false },
-    } as Schedule;
-
-    await notifier.notify(mutedSchedule, run('success'));
-
-    expect(sendMobileSessionNotify).not.toHaveBeenCalled();
     expect(showDesktopSessionEvent).not.toHaveBeenCalled();
   });
 

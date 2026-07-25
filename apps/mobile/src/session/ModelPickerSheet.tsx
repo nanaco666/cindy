@@ -29,10 +29,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { MobileAgentCapabilities, MobileChoiceOption, MobileModelOption } from '@/session/agentCapabilities';
 import type { DeviceApiKeyStatus } from '@/device-link/deviceModelMetaCache';
 import type { MobileModelPricingMap } from '@/device-link/mobileMakerTransport';
-import type { ProviderView } from '@cindy/model-providers/registry';
-import type { AgentKind } from '@cindy/model-providers/types';
+import type { ProviderView } from '@lizi/model-providers/registry';
+import type { AgentKind } from '@lizi/model-providers/types';
 import { MobileModelPickerList, type ModelOptionsOpenTarget } from '@/session/MobileModelPickerList';
-import { MobileAgentSwitcher } from '@/session/MobileAgentSwitcher';
 import { MobilePermissionPickerList } from '@/session/MobilePermissionPickerList';
 import { ModelOptionsSheetView } from '@/session/ModelOptionsSheetView';
 import { SheetModal } from '@/session/SheetModal';
@@ -55,10 +54,6 @@ import {
 } from '@/session/providerModelSections';
 import { iconSize, iconStroke, useTheme, useThemedStyles, type ThemeColors } from '@/theme';
 import { fontWeight, radius, spacing, typeScale } from '@/theme/tokens';
-import {
-  mobileAgentLabel,
-  type MobileSessionAgentKind,
-} from '@/session/sessionAgentSwitch';
 
 /** 二级 Surface 滑入/滑出时长(对齐 useContextSheetDrag 的 SNAP_ANIMATION_DURATION_MS)。 */
 const SECONDARY_SLIDE_DURATION_MS = 180;
@@ -75,13 +70,6 @@ export interface ModelPickerSheetProps {
   modelVisibilityOverrides?: Record<string, boolean>;
   flatOptions: readonly MobileModelOption[];
   agentKind: AgentKind;
-  /** 已建会话可选：先浏览 Agent，再选模型登记下一条消息的切换意图。 */
-  agentSwitch?: {
-    currentAgentKind: MobileSessionAgentKind;
-    browsingAgentKind: MobileSessionAgentKind;
-    disabled?: boolean;
-    onBrowseAgent(next: MobileSessionAgentKind): boolean | void | Promise<boolean | void>;
-  };
   capabilities: MobileAgentCapabilities | null;
   activeModelId: string;
   /** 显式选中的来源 id(null = 跟随被控端默认路由;内部据此算高亮来源)。 */
@@ -118,7 +106,6 @@ export function ModelPickerSheet({
   modelVisibilityOverrides,
   flatOptions,
   agentKind,
-  agentSwitch,
   capabilities,
   activeModelId,
   selectedProviderId,
@@ -207,12 +194,7 @@ export function ModelPickerSheet({
   // flat 回退只在「0 个已连接供应商」时启用;provider-aware 模式下搜索/可见性把 providerRows
   // 清空时必须显示「没有匹配的模型」,不能漏到 capabilities 扁平列表(绕过可见性过滤且选行丢来源)。
   const providerAware = sections.connected.length > 0;
-  const browsingOtherAgent = !!agentSwitch
-    && agentSwitch.browsingAgentKind !== agentSwitch.currentAgentKind;
-  // 跨 Agent 浏览只列已连接来源；不能从 capabilities flat 回退里选到无路由模型。
-  const effectiveFlatOptions = providerAware || browsingOtherAgent
-    ? EMPTY_FLAT_OPTIONS
-    : filteredFlatOptions;
+  const effectiveFlatOptions = providerAware ? EMPTY_FLAT_OPTIONS : filteredFlatOptions;
 
   const hasQuery = query.trim().length > 0;
   const noResults = hasQuery && providerRows.length === 0 && effectiveFlatOptions.length === 0;
@@ -310,47 +292,21 @@ export function ModelPickerSheet({
     </View>
   );
 
-  const primaryPinnedTop = (
-    <View style={styles.pinnedTop}>
-      {agentSwitch ? (
-        <>
-          <MobileAgentSwitcher
-            disabled={disabled || agentSwitch.disabled}
-            onChange={async (next) => {
-              const changed = await agentSwitch.onBrowseAgent(next);
-              if (changed === false) return false;
-              setQuery('');
-              if (view.kind !== 'models') backToModels();
-              return true;
-            }}
-            value={agentSwitch.browsingAgentKind}
-          />
-          {browsingOtherAgent ? (
-            <Text style={styles.agentSwitchHint} testID={`${testID}.agentSwitchHint`}>
-              选择模型后，下一条消息将切换到 {mobileAgentLabel(agentSwitch.browsingAgentKind)}
-            </Text>
-          ) : null}
-        </>
-      ) : null}
-      {searchRow}
-    </View>
-  );
-
   // 权限入口:header 右侧「图标 + 文案 + 下拉箭头」,与桌面 composer 的 PermissionSelector
   // trigger 同构——透明底、整体着色(中性 = textSecondary,auto / bypass = 语义色),点开二级
-  // 权限选择。按产品反馈刻意轻量化——不占列表整行,浮窗主体只留模型。
+  // 权限选择。按 Dash 反馈刻意轻量化——不占列表整行,浮窗主体只留模型。
   const permissionColor = permissionAccentColor(permission.accent, colors);
   const permissionTrigger = (
     <Pressable
       accessibilityLabel={`权限模式:${permissionLabel}`}
       accessibilityRole="button"
-      accessibilityState={{ disabled: permissionDisabled || browsingOtherAgent }}
-      disabled={permissionDisabled || browsingOtherAgent}
+      accessibilityState={{ disabled: permissionDisabled }}
+      disabled={permissionDisabled}
       hitSlop={6}
       onPress={() => openSecondary({ kind: 'permission' })}
       style={({ pressed }) => [
         styles.permissionTrigger,
-        (permissionDisabled || browsingOtherAgent) && styles.permissionTriggerDisabled,
+        permissionDisabled && styles.permissionTriggerDisabled,
         pressed && { opacity: 0.6 },
       ]}
       testID={`${testID}.permissionTrigger`}
@@ -381,7 +337,7 @@ export function ModelPickerSheet({
         heights={heights}
         onClose={onClose}
         onSnapChange={setPrimarySnap}
-        pinnedTop={primaryPinnedTop}
+        pinnedTop={searchRow}
         scrollRef={scrollRef}
         snap={primarySnap}
         testID={testID}
@@ -397,9 +353,7 @@ export function ModelPickerSheet({
             apiKeyStatus={apiKeyStatus}
             capabilities={capabilities}
             disabled={disabled}
-            emptyHint={browsingOtherAgent
-              ? `请先在被控电脑连接 ${mobileAgentLabel(agentSwitch!.browsingAgentKind)} 的模型来源`
-              : emptyHint}
+            emptyHint={emptyHint}
             flatOptions={effectiveFlatOptions}
             loading={loading}
             loadingHint={loadingHint}
@@ -531,14 +485,6 @@ function makeStyles(colors: ThemeColors) {
       paddingHorizontal: spacing.sm,
       paddingVertical: spacing.md,
       textAlign: 'center' as const,
-    },
-    pinnedTop: {
-      gap: spacing.sm,
-    },
-    agentSwitchHint: {
-      color: colors.textTertiary,
-      fontSize: typeScale.caption,
-      paddingHorizontal: spacing.xs,
     },
     // 对齐桌面 PermissionSelector trigger:透明底 + gap 4 + 13px 文案,整体随权限档着色。
     permissionTrigger: {

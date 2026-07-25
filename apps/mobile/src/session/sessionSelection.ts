@@ -1,1 +1,1 @@
-export * from '@cindy/maker-shared/session-selection';
+export * from '@lizi/maker-shared/session-selection';

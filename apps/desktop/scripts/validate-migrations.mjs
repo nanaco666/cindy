@@ -299,8 +299,7 @@ const mainSummary = freezeResult.mainCheck
     `${freezeResult.mainCheck.runtimeScriptCount} 条 runtime script`
   : '；新仓尚无 main commit，跳过增量 Git 基线';
 info(
-  `step 6/6 ok — 固定 SHA256 基线冻结 ${freezeResult.fixedCheck.migrationCount} 条 migration SQL + ` +
-    `${freezeResult.fixedCheck.runtimeScriptCount} 条 runtime script${mainSummary}`,
+  `step 6/6 ok — 固定 SHA256 基线冻结 ${freezeResult.fixedCheck.migrationCount} 条 migration SQL${mainSummary}`,
 );
 
 // ── Done ───────────────────────────────────────────────────────────────────

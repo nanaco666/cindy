@@ -1,5 +1,5 @@
 /**
- * legacyDeadDirs.test.ts — 历史兼容层死目录清退单测。
+ * legacyDeadDirs.test.ts — 老世界死目录清退单测(第 5 步)。
  * os.tmpdir 注入根目录(规则 23)。覆盖:名单封闭性(不认识的目录名一律拒)、
  * 30 天资格判定(有新文件即整目录不合格)、clean 前重新核验、空目录壳可清退。
  */
@@ -40,7 +40,7 @@ function seedDir(name: string, files: Array<{ rel: string; old: boolean }>): voi
 
 describe('scanDeadDirs(报数与资格)', () => {
   it('全部文件超 30 天 → eligible;有一个新文件 → 整目录不合格;不存在 → exists=false', async () => {
-    seedDir('@cindy/image-media', [
+    seedDir('lizi-image-media', [
       { rel: 'a.png', old: true },
       { rel: 'sub/b.png', old: true },
     ]);
@@ -51,7 +51,7 @@ describe('scanDeadDirs(报数与资格)', () => {
 
     const statuses = await deadDirs.scanDeadDirs(root);
     const byName = new Map(statuses.map((s) => [s.name, s]));
-    expect(byName.get('@cindy/image-media')).toMatchObject({
+    expect(byName.get('lizi-image-media')).toMatchObject({
       exists: true,
       fileCount: 2,
       eligible: true,
@@ -73,16 +73,16 @@ describe('scanDeadDirs(报数与资格)', () => {
 
 describe('cleanDeadDirs(清退与封闭名单)', () => {
   it('只清名单内且复验合格的;名单外目录名一律拒(不给删任意子目录留口)', async () => {
-    seedDir('@cindy/image-media', [{ rel: 'a.png', old: true }]);
+    seedDir('lizi-image-media', [{ rel: 'a.png', old: true }]);
     seedDir('feishu-media', [{ rel: 'in-use.png', old: true }]); // 在用目录,不在名单
 
     const result = await deadDirs.cleanDeadDirs(
-      ['@cindy/image-media', 'feishu-media', '../escape'],
+      ['lizi-image-media', 'feishu-media', '../escape'],
       root,
     );
-    expect(result.removed).toEqual(['@cindy/image-media']);
+    expect(result.removed).toEqual(['lizi-image-media']);
     expect(result.skipped).toEqual(expect.arrayContaining(['feishu-media', '../escape']));
-    expect(fs.existsSync(path.join(root, '@cindy/image-media'))).toBe(false);
+    expect(fs.existsSync(path.join(root, 'lizi-image-media'))).toBe(false);
     expect(fs.existsSync(path.join(root, 'feishu-media'))).toBe(true);
     expect(result.freedBytes).toBeGreaterThan(0);
   });

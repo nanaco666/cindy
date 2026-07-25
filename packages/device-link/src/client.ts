@@ -1,12 +1,10 @@
 import {
   PROTOCOL_VERSION,
   MAX_FRAME_BYTES,
-  SERVER_CAPABILITY_NOTIFY,
   DeviceLinkError,
   type Envelope,
   type HelloPayload,
   type HelloAckPayload,
-  type NotifyPayload,
   type PresenceSetPayload,
   type PresenceSnapshot,
   type RelayErrorPayload,
@@ -218,10 +216,6 @@ export class DeviceLinkClient {
   private lastSocketErrorMessage: string | null = null;
   /** 最近一次分类出的连接问题;online 清除,普通断线保留(重连中 banner 不闪) */
   private connectionIssue: DeviceLinkConnectionIssue | null = null;
-  /** 最近一次 hello-ack 声明的 server 能力集(老 server 无该字段 = 空集) */
-  private serverCapabilities: readonly string[] = [];
-  /** 最近一次 hello-ack 回的本设备 deviceId(深链等场景需要自我标识) */
-  private selfDeviceId: string | null = null;
 
   private readonly pending = new Map<string, PendingRequest>();
 
@@ -369,34 +363,6 @@ export class DeviceLinkClient {
   sendPresence(patch: PresenceSetPayload): void {
     if (this.status !== 'online') return;
     this.sendEnvelope({ v: PROTOCOL_VERSION, kind: 'presence-set', payload: patch });
-  }
-
-  /** 最近一次 hello-ack 声明的 server 能力(如 SERVER_CAPABILITY_NOTIFY);老 server = 空集。 */
-  hasServerCapability(capability: string): boolean {
-    return this.serverCapabilities.includes(capability);
-  }
-
-  /** 最近一次 hello-ack 回的本设备 deviceId(未上线过为 null)。 */
-  getSelfDeviceId(): string | null {
-    return this.selfDeviceId;
-  }
-
-  /**
-   * 请求 server 给本账号已注册推送 token 的移动设备发系统推送(fire-and-forget)。
-   * 返回是否真的发出:离线或 server 未声明 notify capability 时静默跳过返回 false
-   * (旧 server 对未知 kind 是静默黑洞,capability gate 是协议要求,见协议仓文档)。
-   * 失败(RATE_LIMITED / BAD_REQUEST)由 relay-error 帧回报,经 onFrame 交 host 记日志。
-   */
-  sendNotify(payload: NotifyPayload): boolean {
-    if (this.status !== 'online') return false;
-    if (!this.serverCapabilities.includes(SERVER_CAPABILITY_NOTIFY)) return false;
-    this.sendEnvelope({
-      v: PROTOCOL_VERSION,
-      kind: 'notify',
-      id: createRequestId(),
-      payload,
-    });
-    return true;
   }
 
   /** 控制端:向目标设备发起 link-open,等待 link-accept */
@@ -767,12 +733,6 @@ export class DeviceLinkClient {
           return; // close 事件经 epoch 校验后走 handleDisconnect → 退避重连
         }
         this.setConnectionIssue(null);
-        this.serverCapabilities = Array.isArray(ack?.capabilities)
-          ? ack.capabilities.filter((c): c is string => typeof c === 'string')
-          : [];
-        if (typeof ack?.deviceId === 'string' && ack.deviceId) {
-          this.selfDeviceId = ack.deviceId;
-        }
         if (this.handshakeTimer) {
           clearTimeout(this.handshakeTimer);
           this.handshakeTimer = null;

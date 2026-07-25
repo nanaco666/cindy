@@ -63,11 +63,6 @@ vi.mock('@/components/new-chat/ModelSelector', () => ({
   ),
 }));
 
-vi.mock('@/state/modelVisibilityPrefs', () => ({
-  isModelEnabled: () => true,
-  useModelVisibilityVersion: () => 0,
-}));
-
 vi.mock('../workerModelAvailability', () => ({
   selectWorkerModels: ({ agent }: { agent: 'codex' | 'claude-code' }) => mocks.modelsByAgent[agent],
 }));

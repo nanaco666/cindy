@@ -2,7 +2,7 @@
 
 Agent-maintained project knowledge layer. Commit-driven, markdown + frontmatter, generic CLI.
 
-本文档同时维护使用方式、架构边界与当前限制。
+设计稿：`docs/project-context.md`（XDMaker 仓库根，详细架构 + 决策日志 + 进程拓扑）。
 
 > **Status**: MVP (v0.1)。MVP 范围见本文档底部"Limitations"。
 
@@ -122,7 +122,7 @@ node packages/project-context/dist/cli.js query --files packages/maker-core/src/
 
 ```
 project-context init
-  repo root: D:/work/cindy
+  repo root: D:/XDMakerDestop/xdt-maker
   discovered modules: 8
   created: 8, skipped: 0
     + apps--desktop
@@ -206,7 +206,7 @@ project-context refresh
   ...
 
   refreshed: 7, skipped: 0, failed: 1
-    x packages--@cindy/mcps  claude-code adapter: timed out after 600000ms
+    x packages--lizi-mcps  claude-code adapter: timed out after 600000ms
 ```
 
 **成本提醒**：
@@ -359,13 +359,13 @@ MVP 内置一个 adapter：`claude-code`。
 - 超时 → 杀子进程报错
 - 任何失败 → 该 module 标 stale，update 继续处理后面的 ID
 
-后续可按 `src/adapters/types.ts` 的接口增加 `codex` / `custom` adapter。
+后续可加 `codex` / `custom` adapter（设计见 `docs/project-context.md` §5.2）。
 
 ---
 
 ## 常见接入工作流
 
-### Cindy Desktop（本仓库默认 harness，开箱即用）
+### XDMaker Desktop（本仓库默认 harness，开箱即用）
 
 Cindy Desktop 已内置自动注入：每次创建新 cc-agent / codex session 时，main 进程会探测 cwd 下是否有 `.cindy/project-knowledge/TOC.md`，存在就把这份预渲染 TOC 包成 `<project-context-toc>` wrapper 注入，缺失则 silently skip。
 
@@ -390,7 +390,7 @@ Cindy Desktop 已内置自动注入：每次创建新 cc-agent / codex session �
 
 ### 让 agent 启动时拿到知识：harness 集成
 
-任何 agent harness（Claude Code、Codex CLI、Cindy、Cursor）启动新 session 前调一次：
+任何 agent harness（Claude Code、Codex CLI、XDMaker、Cursor）启动新 session 前调一次：
 
 ```bash
 # 收集相关文件
@@ -467,6 +467,8 @@ node packages/project-context/dist/cli.js refresh --all
 - 没有"跨进程更稳的锁"——`.cindy/project-knowledge/.lock` 是简单文件锁，崩溃时可能残留（手动删）
 - 演进备忘没有膨胀防护（Phase 3）
 
+完整决策列表见 `docs/project-context.md` §12 Decisions Log。
+
 ---
 
 ## Troubleshooting
@@ -480,4 +482,10 @@ node packages/project-context/dist/cli.js refresh --all
 | update 报 `claude CLI not found` | 装 Claude Code CLI 或在 config.yaml 写 `agent_options.command` 指自定义路径 |
 | init 报某个目录是 orphan 但不该是 | 该目录里全是非源码后缀。要么手动建一份 .md（init 不会覆盖），要么扩展 `SOURCE_EXTENSIONS`（src/discovery.ts） |
 
-配置字段与当前限制以本 README 和 `src/` 实现为准。
+---
+
+## 设计文档
+
+完整架构、决策、进程拓扑、试运行计划：
+
+`docs/project-context.md`（XDMaker 仓库根）

@@ -1,14 +1,10 @@
 export { AuthApiError, CindyAuthClient } from "./client.js";
-export { isValidEmail } from "./email.js";
 export type {
   AuthClientOptions,
   AuthFetch,
   AuthFetchResponse,
 } from "./client.js";
 export {
-  accountDeletionAvailabilitySchema,
-  accountDeletionChallengeSchema,
-  accountDeletionStatusSchema,
   accountMembershipSchema,
   authRegionSchema,
   loginMethodSchema,
@@ -24,9 +20,6 @@ export {
   tokenPairSchema,
 } from "./types.js";
 export type {
-  AccountDeletionAvailability,
-  AccountDeletionChallenge,
-  AccountDeletionStatus,
   AccountMembership,
   AuthClientType,
   AuthFlowAction,

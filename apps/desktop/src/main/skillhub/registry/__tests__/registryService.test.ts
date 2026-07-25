@@ -229,7 +229,7 @@ describe('listAllInstalls', () => {
   });
 
   it('跨多个 manifest 文件展平所有 install', async () => {
-    const pathA = path.join('/home/sam/.claude/skills/skill-a');
+    const pathA = path.join('/home/lizi/.claude/skills/skill-a');
     const pathB1 = path.join('/projects/p1/.claude/skills/skill-b');
     const pathB2 = path.join('/projects/p2/.claude/skills/skill-b');
     await addInstall('skill-a', pathA, makeEntry({ version: '1' }));

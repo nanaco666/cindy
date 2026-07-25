@@ -37,7 +37,7 @@ import path from 'node:path';
 import * as fs from 'node:fs';
 import type { BrowserWindow } from 'electron';
 
-import { loadIgnoreMatcher, XDT_TMP_SUFFIX, type Matcher } from '@cindy/file-browser-core';
+import { loadIgnoreMatcher, XDT_TMP_SUFFIX, type Matcher } from '@lizi/file-browser-core';
 
 import { createLogger } from '../logger.js';
 import type { WatchedFsEvent } from '../watcher-host/protocol.js';

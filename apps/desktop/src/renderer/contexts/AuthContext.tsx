@@ -12,8 +12,6 @@ import { useTranslation } from 'react-i18next';
 
 import { useConfirmDialog } from '@/components/ui/confirm-dialog-provider';
 import { clearWorkersCache } from '@/features/cc-agent/hooks/useWorkers';
-import { createLogger } from '@/lib/logger';
-import { toast } from '@/lib/toast';
 import {
   createAuthService,
   type AuthService,
@@ -24,13 +22,7 @@ import {
   type User,
 } from '@/lib/authService';
 import { setCurrentUserName } from '@/lib/makerChatStore';
-import { isSecondaryWindow } from '@/lib/secondaryWindow';
-import { setUserPromptOwner } from '@/lib/userPromptStore';
-import { bootstrapMemorySettingsFromMain, setMemorySettingsOwner } from '@/lib/memorySettingsStore';
 import { sessionsStore } from '@/lib/sessionsStore';
-import { isSidebarWindow } from '@/lib/sidebarWindow';
-import { setNewMakerDraftOwner } from '@/state/newMakerDraft';
-import { setComposerDraftOwner } from '@/lib/composerDraftStore';
 
 /**
  * 登录态上下文：user / isAuthenticated / isCanary / deviceId 全部来自 main 的
@@ -42,9 +34,6 @@ import { setComposerDraftOwner } from '@/lib/composerDraftStore';
  */
 export interface AuthContextValue {
   user: User | null;
-  mode: 'signed-out' | 'local' | 'cloud';
-  dataOwnerId: string | null;
-  canEnterApp: boolean;
   isAuthenticated: boolean;
   /** 当前账号是否加入 Canary 发布通道。 */
   isCanary: boolean;
@@ -56,33 +45,16 @@ export interface AuthContextValue {
   loadLoginState: () => Promise<DesktopLoginActionResult>;
   dispatchLoginAction: (action: DesktopLoginAction) => Promise<DesktopLoginActionResult>;
   logout: () => Promise<void>;
-  enterLocalMode: () => Promise<void>;
-  exitLocalMode: () => Promise<void>;
-  hasAccountDeletionReceipt: boolean;
-  accountDeletionRestored: boolean;
-  getAccountDeletionAvailability: ReturnType<typeof createAuthService>['getAccountDeletionAvailability'];
-  requestAccountDeletionChallenge: ReturnType<typeof createAuthService>['requestAccountDeletionChallenge'];
-  confirmAccountDeletion: ReturnType<typeof createAuthService>['confirmAccountDeletion'];
-  getAccountDeletionStatus: ReturnType<typeof createAuthService>['getAccountDeletionStatus'];
-  clearAccountDeletionReceipt: ReturnType<typeof createAuthService>['clearAccountDeletionReceipt'];
-  consumeAccountDeletionRestoredNotice: ReturnType<typeof createAuthService>['consumeAccountDeletionRestoredNotice'];
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-const log = createLogger('AuthContext');
-
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [mode, setMode] = useState<'signed-out' | 'local' | 'cloud'>('signed-out');
-  const [dataOwnerId, setDataOwnerId] = useState<string | null>(null);
-  const [canEnterApp, setCanEnterApp] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isCanary, setIsCanary] = useState(false);
   const [isInitializing, setIsInitializing] = useState(true);
   const [deviceId, setDeviceId] = useState<string | null>(null);
-  const [hasAccountDeletionReceipt, setHasAccountDeletionReceipt] = useState(false);
-  const [accountDeletionRestored, setAccountDeletionRestored] = useState(false);
   const [loginState, setLoginState] = useState<AuthFlowState | null>(null);
   const { confirm } = useConfirmDialog();
   const { t } = useTranslation();
@@ -93,7 +65,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   const activeUserIdRef = useRef<string | null>(null);
-  const activeDataOwnerIdRef = useRef<string | null>(null);
   const authStateVersionRef = useRef(0);
 
   /**
@@ -108,56 +79,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(incoming);
   }, []);
 
-  const applyIncomingState = useCallback(
-    (state: AuthState) => {
-      const ownerChanged = activeDataOwnerIdRef.current !== state.dataOwnerId;
-      if (ownerChanged) {
-        sessionsStore.reset();
-        clearWorkersCache();
-      }
-      activeDataOwnerIdRef.current = state.dataOwnerId;
-      setNewMakerDraftOwner(state.dataOwnerId);
-      setComposerDraftOwner(state.dataOwnerId);
-      setUserPromptOwner(state.dataOwnerId);
-      if (ownerChanged) {
-        setMemorySettingsOwner(state.dataOwnerId);
-        void bootstrapMemorySettingsFromMain();
-      }
-      setMode(state.mode);
-      setDataOwnerId(state.dataOwnerId);
-      setCanEnterApp(state.canEnterApp);
-      setIsAuthenticated(state.isAuthenticated);
-      setIsCanary(state.isCanary);
-      setDeviceId(state.deviceId);
-      setHasAccountDeletionReceipt(state.hasAccountDeletionReceipt);
-      setAccountDeletionRestored(state.accountDeletionRestored);
-      if (state.user) {
-        setLoginState(null);
-        if (ownerChanged) {
-          activeUserIdRef.current = state.user.id;
-          setUser(state.user);
-        } else {
-          applyIncomingUser(state.user);
-        }
-      } else {
-        activeUserIdRef.current = null;
-        setUser(null);
-        // Both signed-out and local sessions have no Cindy user. Clear any
-        // in-progress SSO/OTP step so returning to /login always starts fresh.
-        setLoginState(null);
-      }
-    },
-    [applyIncomingUser],
-  );
   useEffect(() => {
     const service = authServiceRef.current!;
     const initializeVersion = authStateVersionRef.current;
 
     const unsubscribe = service.onAuthStateChange((state: AuthState) => {
       authStateVersionRef.current += 1;
-      applyIncomingState(state);
-      setHasAccountDeletionReceipt(state.hasAccountDeletionReceipt);
-      setAccountDeletionRestored(state.accountDeletionRestored);
+      setIsAuthenticated(state.isAuthenticated);
+      setIsCanary(state.isCanary);
+      setDeviceId(state.deviceId);
+      if (state.user) {
+        setLoginState(null);
+        applyIncomingUser(state.user);
+      } else {
+        sessionsStore.reset();
+        activeUserIdRef.current = null;
+        setLoginState(null);
+        clearWorkersCache();
+        setUser(null);
+      }
     });
 
     void service
@@ -165,28 +105,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .then(async (state) => {
         // A pushed auth event is newer than this initialize response.
         if (authStateVersionRef.current !== initializeVersion) return;
-        applyIncomingState(state);
-        setHasAccountDeletionReceipt(state.hasAccountDeletionReceipt);
-        setAccountDeletionRestored(state.accountDeletionRestored);
-      })
-      .catch((error: unknown) => {
-        // 初始化异常归一未登录(implementation-plan Step 3b v6.3):此前该链仅
-        // then/finally,真实 reject 会产生 unhandled rejection 且 auth 快照悬空。
-        // 统一 logger 记录 + 清为 unauthenticated snapshot,不新增视觉分支
-        // (handoff 走正常 unauthenticated 冷启动)。
-        log.error('auth initialize failed, fall back to unauthenticated', error);
-        // 推送事件比本次 initialize 响应新时不覆盖(与 then 分支同守卫)。
-        if (authStateVersionRef.current !== initializeVersion) return;
-        setIsAuthenticated(false);
-        setIsCanary(false);
-        setCanEnterApp(false);
-        setMode('signed-out');
-        setDataOwnerId(null);
-        activeDataOwnerIdRef.current = null;
-        activeUserIdRef.current = null;
-        setLoginState(null);
-        clearWorkersCache();
-        setUser(null);
+        setIsAuthenticated(state.isAuthenticated);
+        setIsCanary(state.isCanary);
+        setDeviceId(state.deviceId);
+        if (state.user) {
+          applyIncomingUser(state.user);
+        } else {
+          activeUserIdRef.current = null;
+          setLoginState(null);
+          clearWorkersCache();
+          setUser(null);
+        }
       })
       .finally(() => setIsInitializing(false));
 
@@ -194,40 +123,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       unsubscribe();
       service.dispose();
     };
-  }, [applyIncomingState]);
-
-  useEffect(() => {
-    if (!isAuthenticated || !accountDeletionRestored) return;
-    setAccountDeletionRestored(false);
-    if (isSecondaryWindow() || isSidebarWindow()) return;
-    let disposed = false;
-    void authServiceRef
-      .current!.consumeAccountDeletionRestoredNotice()
-      .then((shouldShow) => {
-        if (!disposed && shouldShow) {
-          toast.success(t('accountDeletion.restoredNotice'), { duration: 5000 });
-        }
-      })
-      .catch(() => undefined);
-    return () => {
-      disposed = true;
-    };
-  }, [accountDeletionRestored, isAuthenticated, t]);
+  }, [applyIncomingUser]);
 
   useEffect(() => {
     let handling = false;
     return window.electronAPI.onAuthSessionExpired((payload) => {
       if (handling) return;
       handling = true;
-      // main 只给客户端内部分类(不透传服务端原文),按 reason 选本地化文案,
-      // 让用户区分「被顶下线 / 凭证被外部实例清除 / 自然过期 / 账号不可用」。
-      const descriptionKey =
-        payload.reason && payload.reason !== 'unknown' && payload.reason !== 'expired'
-          ? `logic.confirm.sessionExpiredReason.${payload.reason}`
-          : 'logic.confirm.sessionExpiredDescription';
       void confirm({
         title: t('logic.confirm.sessionExpiredTitle'),
-        description: payload.message || t(descriptionKey),
+        description: payload.message || t('logic.confirm.sessionExpiredDescription'),
         confirmText: t('logic.confirm.sessionExpiredConfirm'),
         showCancel: false,
       }).then(() => {
@@ -235,10 +140,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         sessionsStore.reset();
         clearWorkersCache();
         setUser(null);
-        setMode('signed-out');
-        setDataOwnerId(null);
-        activeDataOwnerIdRef.current = null;
-        setCanEnterApp(false);
         setIsAuthenticated(false);
         setIsCanary(false);
         setLoginState(null);
@@ -273,58 +174,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     clearWorkersCache();
   }, []);
 
-  const enterLocalMode = useCallback(async () => {
-    const state = await authServiceRef.current!.enterLocalMode();
-    setComposerDraftOwner(state.dataOwnerId);
-    setMode(state.mode);
-    setDataOwnerId(state.dataOwnerId);
-    setCanEnterApp(state.canEnterApp);
-    setIsAuthenticated(state.isAuthenticated);
-    setUser(state.user);
-  }, []);
-
-  const exitLocalMode = useCallback(async () => {
-    const state = await authServiceRef.current!.exitLocalMode();
-    setComposerDraftOwner(state.dataOwnerId);
-    setMode(state.mode);
-    setDataOwnerId(state.dataOwnerId);
-    setCanEnterApp(state.canEnterApp);
-    setIsAuthenticated(state.isAuthenticated);
-    setUser(state.user);
-  }, []);
-
-  const getAccountDeletionAvailability = useCallback(
-    () => authServiceRef.current!.getAccountDeletionAvailability(),
-    [],
-  );
-
-  const requestAccountDeletionChallenge = useCallback(async () => {
-    const result = await authServiceRef.current!.requestAccountDeletionChallenge();
-    if (result.success) setHasAccountDeletionReceipt(true);
-    return result;
-  }, []);
-
-  const confirmAccountDeletion = useCallback(
-    (input: { challengeId: string; code: string }) =>
-      authServiceRef.current!.confirmAccountDeletion(input),
-    [],
-  );
-
-  const getAccountDeletionStatus = useCallback(
-    () => authServiceRef.current!.getAccountDeletionStatus(),
-    [],
-  );
-
-  const clearAccountDeletionReceipt = useCallback(async () => {
-    await authServiceRef.current!.clearAccountDeletionReceipt();
-    setHasAccountDeletionReceipt(false);
-  }, []);
-
-  const consumeAccountDeletionRestoredNotice = useCallback(
-    () => authServiceRef.current!.consumeAccountDeletionRestoredNotice(),
-    [],
-  );
-
   // 同步用户名到 makerChatStore 模块级 cache — dispatchToSdk 把它透传给 maker.send
   // 让 turn-start status 文案带 "<userName> Just Wait ..." (登出 / 切账号自动清空)。
   useEffect(() => {
@@ -334,9 +183,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const value = useMemo(
     () => ({
       user,
-      mode,
-      dataOwnerId,
-      canEnterApp,
       isAuthenticated,
       isCanary,
       isInitializing,
@@ -345,22 +191,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       loadLoginState,
       dispatchLoginAction,
       logout,
-      enterLocalMode,
-      exitLocalMode,
-      hasAccountDeletionReceipt,
-      accountDeletionRestored,
-      getAccountDeletionAvailability,
-      requestAccountDeletionChallenge,
-      confirmAccountDeletion,
-      getAccountDeletionStatus,
-      clearAccountDeletionReceipt,
-      consumeAccountDeletionRestoredNotice,
     }),
     [
       user,
-      mode,
-      dataOwnerId,
-      canEnterApp,
       isAuthenticated,
       isCanary,
       isInitializing,
@@ -369,16 +202,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       loadLoginState,
       dispatchLoginAction,
       logout,
-      enterLocalMode,
-      exitLocalMode,
-      hasAccountDeletionReceipt,
-      accountDeletionRestored,
-      getAccountDeletionAvailability,
-      requestAccountDeletionChallenge,
-      confirmAccountDeletion,
-      getAccountDeletionStatus,
-      clearAccountDeletionReceipt,
-      consumeAccountDeletionRestoredNotice,
     ],
   );
 

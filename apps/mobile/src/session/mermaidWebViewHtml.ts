@@ -5,7 +5,7 @@
 // 2. mermaid JS 由内联脚本动态注入,带超时;
 // 3. CDN 按顺序 failover(jsdelivr → npmmirror,后者大陆可达性好),
 //    全部失败就停留在源码展示,永不长时间空转。
-import { repairMermaidSource } from '@cindy/maker-shared/mermaid-autofix';
+import { repairMermaidSource } from '@lizi/maker-shared/mermaid-autofix';
 
 import { lightColors } from '@/theme/tokens';
 

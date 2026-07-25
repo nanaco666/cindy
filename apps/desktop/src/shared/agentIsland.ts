@@ -1,4 +1,4 @@
-import { BRAND_NAME } from '@cindy/maker-shared/branding';
+import { BRAND_NAME } from '@lizi/maker-shared/branding';
 
 export type AgentIslandSessionPhase = 'running' | 'needs-interaction' | 'completed' | 'error';
 
@@ -85,14 +85,14 @@ export type AgentIslandDisplayTarget =
     };
 export type AgentIslandSoundId =
   | 'none'
-  | 'startup-chime'
-  | 'ring-chime'
-  | 'item-found'
-  | 'gem-collect'
-  | 'item-fanfare'
-  | 'victory-fanfare'
-  | 'error-buzz'
-  | 'secret-chime';
+  | 'gameboy-startup'
+  | 'sonic-ring'
+  | 'pokemon-item-found'
+  | 'zelda-rupee'
+  | 'zelda-item-get'
+  | 'ff-victory'
+  | 'mario-incorrect'
+  | 'zelda-secret';
 
 export type AgentIslandSoundChoice =
   | { type: 'builtin'; id: AgentIslandSoundId }
@@ -137,45 +137,23 @@ export const AGENT_ISLAND_SOUND_EVENTS: readonly AgentIslandSoundEvent[] = [
 
 export const AGENT_ISLAND_SOUND_OPTIONS: readonly AgentIslandSoundId[] = [
   'none',
-  'startup-chime',
-  'ring-chime',
-  'item-found',
-  'gem-collect',
-  'item-fanfare',
-  'victory-fanfare',
-  'error-buzz',
-  'secret-chime',
+  'gameboy-startup',
+  'sonic-ring',
+  'pokemon-item-found',
+  'zelda-rupee',
+  'zelda-item-get',
+  'ff-victory',
+  'mario-incorrect',
+  'zelda-secret',
 ] as const;
-
-/**
- * 2026-07 内置音效改用中性命名后,旧持久化设置(main settings 与 renderer
- * localStorage)里仍可能存着老 ID;normalize 时映射到新 ID,避免用户已选音效被
- * 静默重置回默认值。
- */
-const LEGACY_AGENT_ISLAND_SOUND_ID_ALIASES: Readonly<Record<string, AgentIslandSoundId>> = {
-  'gameboy-startup': 'startup-chime',
-  'sonic-ring': 'ring-chime',
-  'pokemon-item-found': 'item-found',
-  'zelda-rupee': 'gem-collect',
-  'zelda-item-get': 'item-fanfare',
-  'ff-victory': 'victory-fanfare',
-  'mario-incorrect': 'error-buzz',
-  'zelda-secret': 'secret-chime',
-};
-
-function resolveAgentIslandSoundId(value: unknown): AgentIslandSoundId | null {
-  if (typeof value !== 'string') return null;
-  if (isAgentIslandSoundId(value)) return value;
-  return LEGACY_AGENT_ISLAND_SOUND_ID_ALIASES[value] ?? null;
-}
 
 export const DEFAULT_AGENT_ISLAND_SOUND_SETTINGS: AgentIslandSoundSettings = {
   enabled: true,
   sounds: {
-    start: { type: 'builtin', id: 'startup-chime' },
-    attention: { type: 'builtin', id: 'secret-chime' },
-    complete: { type: 'builtin', id: 'gem-collect' },
-    error: { type: 'builtin', id: 'error-buzz' },
+    start: { type: 'builtin', id: 'gameboy-startup' },
+    attention: { type: 'builtin', id: 'zelda-secret' },
+    complete: { type: 'builtin', id: 'zelda-rupee' },
+    error: { type: 'builtin', id: 'mario-incorrect' },
     select: { type: 'builtin', id: 'none' },
   },
 };
@@ -234,15 +212,13 @@ export function normalizeAgentIslandSoundChoice(
   raw: unknown,
   fallback: AgentIslandSoundChoice,
 ): AgentIslandSoundChoice {
-  const bareId = resolveAgentIslandSoundId(raw);
-  if (bareId !== null) {
-    return { type: 'builtin', id: bareId };
+  if (isAgentIslandSoundId(raw)) {
+    return { type: 'builtin', id: raw };
   }
   if (typeof raw !== 'object' || raw === null) return { ...fallback };
   const record = raw as Record<string, unknown>;
-  if (record.type === 'builtin') {
-    const id = resolveAgentIslandSoundId(record.id);
-    if (id !== null) return { type: 'builtin', id };
+  if (record.type === 'builtin' && isAgentIslandSoundId(record.id)) {
+    return { type: 'builtin', id: record.id };
   }
   if (record.type === 'custom' && typeof record.path === 'string') {
     const path = record.path.trim();

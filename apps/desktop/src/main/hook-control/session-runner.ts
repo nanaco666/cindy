@@ -14,9 +14,9 @@
  * 同一套过程区纯逻辑), 节流合成 markdown 快照经 req.onProgress 回调发射;
  * server 侧以占位消息 + chat.update 呈现"正在干什么"。
  *
- * permissionMode: 新建会话按「当前 IM provider 的目录偏好(显式且该 agent 支持) >
+ * permissionMode: 新建会话按「Slack 按目录偏好(显式且该 agent 支持) >
  * bypassPermissions」合成(见 defaults.ts); 复用/接管以 session meta 为权威。
- * 非 bypass 会话的权限请求经 interactions.ts 出渠道交互卡(允许一次/本会话
+ * 非 bypass 会话的权限请求经 interactions.ts 出 Slack 卡(允许一次/本会话
  * 总是允许/拒绝), 超时安全默认拒绝 —— scheduler 仍固定 bypass(它没有
  * 交互回流通道), hook 因具备 interaction.request 往返而例外。
  * origin 用 kind:'scheduler' + scheduleName
@@ -32,20 +32,14 @@ import path from 'node:path';
 
 import { app, BrowserWindow } from 'electron';
 
-import { isTerminalAgentErrorEvent } from '@cindy/maker-core';
-import type {
-  AgentEvent,
-  AgentKind,
-  PermissionMode,
-  UserContentBlock,
-  UserMessage,
-} from '@cindy/maker-core';
+import { isTerminalAgentErrorEvent } from '@lizi/maker-core';
+import type { AgentEvent, AgentKind, PermissionMode, UserContentBlock } from '@lizi/maker-core';
 import {
   effectiveSourceIdForModel,
   isModelVisible,
   type ProviderView,
   visibleModelUnion,
-} from '@cindy/model-providers';
+} from '@lizi/model-providers';
 
 import { tapWindowBroadcast } from '../device-link/broadcast-tap.js';
 import { getMaker } from '../maker-host/index.js';
@@ -56,14 +50,11 @@ import {
   noteSilentStopUserSend,
   onSilentStopSettled,
 } from '../maker-ipc/register.js';
-import { prependHandoffToUserMessage } from '../maker-ipc/agentHandoff.js';
-import { agentHandoffPending } from '../maker-ipc/agentHandoffPendingSingleton.js';
 import { toDesktopSessionDispatchOutcome } from '../maker-host/send-outcome.js';
 import { createMessage } from '../localDb/ipc/messages.js';
 import {
   getSessionRowSnapshot,
   setSessionProviderIdInDb,
-  setSessionSourceInDb,
   setWorktreePathInDb,
   touchUserSendInDb,
 } from '../localDb/ipc/sessions.js';
@@ -74,7 +65,7 @@ import {
 
 import { resolveSafe as resolveXdtImage } from '../imageCacheStore.js';
 import { resolveSafe as resolveCindyMediaUrl } from '../cindy-media/blobStore.js';
-import { ingestMedia, supportedMime as isCindyMediaMime } from '../cindy-media/ingest.js';
+import { ingestMedia } from '../cindy-media/ingest.js';
 import { worktreeStore, WorktreeManager } from '../worktree/index.js';
 import { readImDefaultSettings } from '../im/defaultSettingsStore.js';
 import { getDesktopProviderService } from '../maker-host/createDesktopProviderService.js';
@@ -95,10 +86,14 @@ import {
   composeInteractionCard,
   registerHookInteraction,
 } from './interactions.js';
-import { collectOutboundAttachments, buildHookPromptNote, hasOutboundRefs } from './outbound.js';
+import {
+  collectOutboundAttachments,
+  hasOutboundRefs,
+  SLACK_HOOK_PROMPT_NOTE,
+} from './outbound.js';
 
 /**
- * 新会话 agent/model/effort/permissionMode/providerId 合成: IM provider 按目录偏好
+ * 新会话 agent/model/effort/permissionMode/providerId 合成: Slack 按目录偏好
  * (dispatch options)优先, 缺省落桌面端 IM 新会话默认值(草稿, 建 session 那
  * 一刻实时读; 权限无草稿概念, 缺省 bypassPermissions; 来源无 override 通道,
  * 草稿默认仅作优先值, 最终收敛到已连接来源)—— 与桌面端/IM 新开会话同一
@@ -196,7 +191,10 @@ const PRODUCED_IMAGE_EXT_RE = /\.(png|jpe?g|gif|webp)$/i;
 
 /** 导出仅供单测(纯函数,不碰 electron)。 */
 export function extractToolResultImageUrls(toolResultText: string): string[] {
-  if (!toolResultText.includes('xdt_image_url') && !toolResultText.includes('xdt_media_produced')) {
+  if (
+    !toolResultText.includes('xdt_image_url') &&
+    !toolResultText.includes('xdt_media_produced')
+  ) {
     return [];
   }
   let parsed: {
@@ -259,26 +257,20 @@ function createProgressEmitter(
   compose: () => string,
 ): { schedule: () => void; ensureTicker: () => void; stop: () => void } {
   let lastEmitAt = 0;
-  let lastEmittedText = '';
   let pending: NodeJS.Timeout | null = null;
   let ticker: NodeJS.Timeout | null = null;
   let stopped = false;
 
   const fire = (): void => {
     if (stopped) return;
+    lastEmitAt = Date.now();
     const text = compose();
     if (text.length === 0) return;
-    const snapshot =
+    emit(
       text.length > PROGRESS_SNAPSHOT_MAX_CHARS
         ? `${text.slice(0, PROGRESS_SNAPSHOT_MAX_CHARS - 1)}…`
-        : text;
-    // The low-frequency activity ticker can fire while the user-visible
-    // answer is unchanged. Do not spend provider API calls on identical
-    // full snapshots (and, for Telegram, do not re-animate the same draft).
-    if (snapshot === lastEmittedText) return;
-    lastEmitAt = Date.now();
-    lastEmittedText = snapshot;
-    emit(snapshot);
+        : text,
+    );
   };
   const schedule = (): void => {
     if (stopped || pending !== null) return;
@@ -316,18 +308,11 @@ export function createMakerHookSessionRunner(deps: {
 
     async inspect(sessionId) {
       const [meta, row] = await Promise.all([
-        getMaker()
-          .getSessionMeta(sessionId)
-          .catch(() => null),
+        getMaker().getSessionMeta(sessionId).catch(() => null),
         getSessionRowSnapshot(sessionId),
       ]);
       if (!meta && !row) return null;
-      const usable =
-        !!row &&
-        row.status !== 'archived' &&
-        row.status !== 'deleted' &&
-        row.remoteHostId == null &&
-        row.orcaRole !== 'worker';
+      const usable = !!row && row.status !== 'archived' && row.status !== 'deleted';
       // workDir 以 maker meta 为权威(scheduler 同做法), row 兜底
       const workingDir = meta?.workDir ?? row?.workingDir ?? null;
       return { workingDir, usable };
@@ -419,7 +404,7 @@ export function createMakerHookSessionRunner(deps: {
             ? { workspaceKind: req.workspaceKind }
             : {}),
           title: req.isNew ? (req.title ?? undefined) : undefined,
-          // 渠道标记(仅 hook 亲生新会话): cindy_feishu_bot 据此在构建期给
+          // 渠道标记(仅 hook 亲生新会话): lizi_feishu_bot 据此在构建期给
           // 工具描述注入渠道路由提示。两个刻意限定:
           //   - 不用 'slack'(那是已退役的 organic SlackIM relay 渠道的历史
           //     标记,留给存量会话的侧边栏显示,新会话不再产生);
@@ -427,14 +412,8 @@ export function createMakerHookSessionRunner(deps: {
           //     否则冷 resume 时会把桌面会话打上 Slack 渠道描述并存续整个
           //     进程生命周期(对齐 im/turnRunner「attached 不传 vendorOptions」
           //     的裁决)。hook turn 本身的渠道说明由逐 turn 的
-          //     provider-aware hook prompt note 全覆盖,不依赖这里。
-          ...(req.isNew
-            ? {
-                vendorOptions: {
-                  source: req.source?.im === 'telegram' ? 'telegram' : 'slack-hook',
-                },
-              }
-            : {}),
+          //     SLACK_HOOK_PROMPT_NOTE 全覆盖,不依赖这里。
+          ...(req.isNew ? { vendorOptions: { source: 'slack-hook' } } : {}),
           resumeSessionId,
         });
       } catch (err) {
@@ -459,7 +438,7 @@ export function createMakerHookSessionRunner(deps: {
       wireSessionToIpc(session);
 
       // 交互卡链路: 覆盖 wireSessionToIpc 装上的桌面版 interaction listener。
-      // hook 是无人值守 turn, 交互必须走来源渠道卡片 + 有界超时 —— 旧行为里
+      // hook 是无人值守 turn, 交互必须走 Slack 卡片 + 有界超时 —— 旧行为里
       // 模型调 AskUserQuestion 会把请求发给桌面 renderer 无限死等, 直到
       // 60min 整 turn 硬超时才以 error 收口。turn 结束后归还桌面版 listener
       // (用户在桌面端继续用该会话时交互仍走桌面弹窗)。
@@ -476,12 +455,7 @@ export function createMakerHookSessionRunner(deps: {
           if (!composed) {
             // 空问题等不可渲染的请求: 按 kind 安全默认就地自决
             if (ireq.kind === 'plan_review') {
-              return {
-                kind: 'plan_review',
-                behavior: 'deny',
-                reason: 'not_renderable',
-                dismissed: true,
-              };
+              return { kind: 'plan_review', behavior: 'deny', reason: 'not_renderable', dismissed: true };
             }
             if (ireq.kind === 'permission') {
               // 纯防御: compose 对 permission 恒出卡, 走到这里说明未来有人改了
@@ -512,8 +486,7 @@ export function createMakerHookSessionRunner(deps: {
       };
       // 新建会话广播 -> 侧边栏实时出现(复用/接管的会话本来就在列表里, 不用发)
       if (req.isNew) {
-        // hook 会话由用户消息(Slack / Telegram DM、群组或 topic)触发创建,
-        // 与 IM 同语义(53b999601):
+        // hook 会话由用户消息(Slack DM / 频道 @)触发创建, 与 IM 同语义(53b999601):
         // 广播前先落 userSendAt, 否则 renderer 重拉到 userSendAt=null && 0 消息的行
         // 会被 projectGrouping 草稿规则误判进「未分类」, 且之后没有事件再触发重归组。
         // 失败不阻断(onAccepted 还会 bump 一次兜底)。
@@ -527,9 +500,6 @@ export function createMakerHookSessionRunner(deps: {
         // (issue #854)。失败仅 warn(helper 内部吞错), 运行时路由不受影响。
         if (providerId) {
           await setSessionProviderIdInDb(session.id, providerId);
-        }
-        if (req.source?.im === 'telegram') {
-          await setSessionSourceInDb(session.id, 'telegram');
         }
         broadcastSessionCreated(session.id);
       }
@@ -553,15 +523,8 @@ export function createMakerHookSessionRunner(deps: {
       // (turnActivity), 合成规则同 composeStreamingView —— 有正文时过程区在
       // 上正文在下, done/error 后 stop, 不再发射。
       const activity = createTurnActivity(Date.now());
-      const isTelegram = req.source?.im === 'telegram';
       const progress = req.onProgress
         ? createProgressEmitter(req.onProgress, () => {
-            // Telegram Rich Message drafts are the partial final answer, not
-            // an editable process card. turnActivity can reorder/fold as
-            // thinking and tool events arrive, which makes Telegram animate
-            // repeated full clears. Keep Slack's established process card,
-            // while Telegram streams only the monotonically growing answer.
-            if (isTelegram) return assistantText;
             const act = renderActivity(activity, Date.now());
             if (!act) return assistantText;
             return assistantText ? `${act}\n\n${assistantText}` : act;
@@ -714,13 +677,11 @@ export function createMakerHookSessionRunner(deps: {
       } as const;
 
       // 入站附件: 解码后图片/文件分流(server 2026-07 起全 MIME 转发) ->
-      //   - 图片写入 cindy-media 媒体总仓(规则 25;不再通过 imageCacheStore
+      //   - 图片写入 cindy-media 媒体总仓(规则 25;迁移第 1 步从 imageCacheStore
       //     切换): sendContent 用本地绝对 path 的 image block(maker 要 path
       //     而非 base64 / URL), 落库用 cindy-media:// URL(parseUserContent 只认
       //     {text,images:ImageRef[]} 形态, 裸 path 的 image block 会被忽略);
-      //   - 其它受支持媒体(视频/音频/模型)同样写 cindy-media；agent 仍拿
-      //     blob 的绝对路径，消息持久化只保存 cindy-media:// 地址；
-      //   - 真正的非媒体文件写 hook 附件目录(userData/hook-attachments/<sessionId>/,
+      //   - 非图片文件写 hook 附件目录(userData/hook-attachments/<sessionId>/,
       //     文件名消毒 + 随机前缀防碰撞): sendContent 用 file block(cc/codex
       //     adapter 原生支持, 能否消费交给 agent), 落库 files:[{name,path}]
       //     让聊天记录渲染文件 chip。删会话时 sessions.ts 随 removeSessionRefs
@@ -730,8 +691,7 @@ export function createMakerHookSessionRunner(deps: {
       const decoded =
         req.attachments && req.attachments.length > 0
           ? decodeAttachments(req.attachments, log)
-          : { images: [], files: [], skipped: 0 };
-      let inboundAttachmentFailures = decoded.skipped;
+          : { images: [], files: [] };
       const imageBlocks: UserContentBlock[] = [];
       const imageRefs: Array<{ url: string; mimeType: string; originalName: string }> = [];
       for (const img of decoded.images) {
@@ -750,93 +710,40 @@ export function createMakerHookSessionRunner(deps: {
           });
           const { absPath } = resolveCindyMediaUrl(url);
           imageBlocks.push({ type: 'image', path: absPath, mimeType: img.mimeType });
-          imageRefs.push({
-            url,
-            mimeType: img.mimeType,
-            originalName: sanitizeAttachmentName(img.name ?? 'image'),
-          });
+          imageRefs.push({ url, mimeType: img.mimeType, originalName: img.name ?? 'image' });
         } catch (err) {
-          inboundAttachmentFailures += 1;
           log.warn(`hook image ingest failed: ${err instanceof Error ? err.message : String(err)}`);
         }
       }
       const fileBlocks: UserContentBlock[] = [];
-      const fileRefs: Array<{ name: string; path: string; mimeType?: string }> = [];
-      const plainFiles: typeof decoded.files = [];
-      for (const file of decoded.files) {
-        const mimeType = file.mimeType.trim().toLowerCase().split(';', 1)[0] ?? '';
-        if (!isCindyMediaMime(mimeType)) {
-          if (/^(?:image|audio|video|model)\//.test(mimeType)) {
-            // Recognizable media may only be persisted through cindy-media.
-            // Unsupported formats must fail explicitly, never fall through to
-            // the feature-specific plain-file attachment directory.
-            inboundAttachmentFailures += 1;
-            log.warn(`hook media attachment skipped (unsupported cindy-media MIME ${mimeType})`);
-          } else {
-            plainFiles.push(file);
-          }
-          continue;
-        }
-        try {
-          const { url } = await ingestMedia({
-            buffer: file.bytes,
-            mimeType,
-            refs: [
-              {
-                refKind: 'session-attachment',
-                refId: session.id,
-                originSessionId: session.id,
-                originKind: 'user',
-              },
-            ],
-          });
-          const { absPath } = resolveCindyMediaUrl(url);
-          fileBlocks.push({ type: 'file', path: absPath, mimeType });
-          const safeName = sanitizeAttachmentName(file.name);
-          fileRefs.push({ name: safeName, path: url, mimeType });
-        } catch (err) {
-          inboundAttachmentFailures += 1;
-          // Media must never fall back to a feature-specific cache (rule 25).
-          log.warn(`hook media ingest failed: ${err instanceof Error ? err.message : String(err)}`);
-        }
-      }
-      if (plainFiles.length > 0) {
+      const fileRefs: Array<{ name: string; path: string }> = [];
+      if (decoded.files.length > 0) {
         const attachRoot = path.join(app.getPath('userData'), 'hook-attachments');
         const attachDir = path.join(attachRoot, session.id);
         if (!attachDir.startsWith(attachRoot + path.sep)) {
-          inboundAttachmentFailures += plainFiles.length;
-          log.warn(
-            `hook attachment dir escapes root (sessionId=${session.id}), skipping file attachments`,
-          );
-        } else
-          try {
-            await fs.mkdir(attachDir, { recursive: true });
-            for (const file of plainFiles) {
-              const safeName = sanitizeAttachmentName(file.name);
-              const absPath = path.join(attachDir, `${randomUUID().slice(0, 8)}-${safeName}`);
-              try {
-                await fs.writeFile(absPath, file.bytes);
-                fileBlocks.push({ type: 'file', path: absPath, mimeType: file.mimeType });
-                fileRefs.push({ name: safeName, path: absPath, mimeType: file.mimeType });
-              } catch (err) {
-                inboundAttachmentFailures += 1;
-                log.warn(
-                  `hook file attachment write failed (${safeName}): ${err instanceof Error ? err.message : String(err)}`,
-                );
-              }
+          log.warn(`hook attachment dir escapes root (sessionId=${session.id}), skipping file attachments`);
+        } else try {
+          await fs.mkdir(attachDir, { recursive: true });
+          for (const file of decoded.files) {
+            const safeName = sanitizeAttachmentName(file.name);
+            const absPath = path.join(attachDir, `${randomUUID().slice(0, 8)}-${safeName}`);
+            try {
+              await fs.writeFile(absPath, file.bytes);
+              fileBlocks.push({ type: 'file', path: absPath, mimeType: file.mimeType });
+              fileRefs.push({ name: file.name ?? safeName, path: absPath });
+            } catch (err) {
+              log.warn(`hook file attachment write failed (${safeName}): ${err instanceof Error ? err.message : String(err)}`);
             }
-          } catch (err) {
-            inboundAttachmentFailures += plainFiles.length;
-            log.warn(
-              `hook attachment dir create failed: ${err instanceof Error ? err.message : String(err)}`,
-            );
           }
+        } catch (err) {
+          log.warn(`hook attachment dir create failed: ${err instanceof Error ? err.message : String(err)}`);
+        }
       }
       // 渠道说明只进喂给 agent 的内容,不进落库的 userMessageContent ——
-      // 渲染层展示的用户消息保持来源 IM 原话。逐 turn 追加固定文本,教模型
-      // 用 xdt-file 引用回传文件而非误用 cindy_feishu_bot(规则 9,实踩背景
+      // 渲染层展示的用户消息保持 Slack 原话。逐 turn 追加固定文本,教模型
+      // 用 xdt-file 引用回传文件而非误用 lizi_feishu_bot(规则 9,实踩背景
       // 见 outbound.ts 的常量注释)。
-      const promptWithNote = `${req.prompt}\n\n${buildHookPromptNote(req.source?.im)}`;
+      const promptWithNote = `${req.prompt}\n\n${SLACK_HOOK_PROMPT_NOTE}`;
       const sendContent =
         imageBlocks.length > 0 || fileBlocks.length > 0
           ? [{ type: 'text' as const, text: promptWithNote }, ...imageBlocks, ...fileBlocks]
@@ -849,41 +756,34 @@ export function createMakerHookSessionRunner(deps: {
           : req.prompt;
 
       try {
-        const pendingHandoff = await agentHandoffPending.peek(session.id);
-        const outgoingMessage: UserMessage = pendingHandoff
-          ? (prependHandoffToUserMessage(
-              { type: 'user', content: sendContent },
-              pendingHandoff,
-            ) as UserMessage)
-          : { type: 'user', content: sendContent };
-        const sendResult = await session.send(outgoingMessage, {
-          origin,
-          planMode: false,
-          onAccepted: async () => {
-            // send 被接受才落 user 消息(与 scheduler 同序: 不让 agent 在
-            // "消息没存下"的情况下空跑); 失败即整体失败
-            // agentMeta 形状受 CcMeta 约束, 只放 origin(scheduleId 已携带
-            // hook 连接标识); lane key 含 IM 用户/聊天标识，不写日志
-            // content 落 {text, images} 形态: 有图时 images 为 xdt-image:// URL
-            // (桌面端聊天记录据此渲染出图片; parseUserContent 只认这种形态,
-            // 裸 path 的 image block 会被忽略), 无图为纯文本 string。
-            noteSilentStopUserSend(session.id);
-            await createMessage(session.id, {
-              clientId: randomUUID(),
-              role: 'user',
-              content: userMessageContent,
-              agentMeta: { origin, ...(req.source ? { hookSource: req.source } : {}) },
-            });
-            // 每次被接受的 IM 消息都是一次用户发送: bump userSendAt 让排序
-            // 时间轴与桌面端 sendMessage 口径一致, sessions:patched 广播顺带把
-            // 复用/接管会话即时重排序(新建路径已在广播前落过, 这里更新为实际
-            // 发送时刻)。失败不影响 turn 本身。
-            void touchUserSendInDb(session.id).catch(() => undefined);
+        const sendResult = await session.send(
+          { type: 'user', content: sendContent },
+          {
+            origin,
+            planMode: false,
+            onAccepted: async () => {
+              // send 被接受才落 user 消息(与 scheduler 同序: 不让 agent 在
+              // "消息没存下"的情况下空跑); 失败即整体失败
+              // agentMeta 形状受 CcMeta 约束, 只放 origin(scheduleId 已携带
+              // hook 连接标识); externalKey 溯源走 dispatcher 日志
+              // content 落 {text, images} 形态: 有图时 images 为 xdt-image:// URL
+              // (桌面端聊天记录据此渲染出图片; parseUserContent 只认这种形态,
+              // 裸 path 的 image block 会被忽略), 无图为纯文本 string。
+              noteSilentStopUserSend(session.id);
+              await createMessage(session.id, {
+                clientId: randomUUID(),
+                role: 'user',
+                content: userMessageContent,
+                agentMeta: { origin, ...(req.source ? { hookSource: req.source } : {}) },
+              });
+              // 每次被接受的 Slack 消息都是一次用户发送: bump userSendAt 让排序
+              // 时间轴与桌面端 sendMessage 口径一致, sessions:patched 广播顺带把
+              // 复用/接管会话即时重排序(新建路径已在广播前落过, 这里更新为实际
+              // 发送时刻)。失败不影响 turn 本身。
+              void touchUserSendInDb(session.id).catch(() => undefined);
+            },
           },
-        });
-        if (pendingHandoff && sendResult.accepted) {
-          agentHandoffPending.consume(session.id);
-        }
+        );
         const outcome = toDesktopSessionDispatchOutcome(sendResult, {
           source: 'hook-dispatcher',
           context: `hook:${req.origin.connectionId}`,
@@ -919,9 +819,11 @@ export function createMakerHookSessionRunner(deps: {
         finalizeInteractions();
       }
 
-      // 已知 v1 取舍: 不做 scheduler 4.5.1 的完整 backfillSessionMeta。
-      // provider_id 仍按建会话结果补写；Telegram 另补 source，让桌面/移动端
-      // 能稳定展示渠道来源，既有 Slack source 兼容行为保持不变。
+      // 已知 v1 取舍: 不做 scheduler 4.5.1 的 backfillSessionMeta —— 新建
+      // hook session 的 sessions 行保留默认 permission_mode/source, 侧边栏
+      // 按普通会话展示。待 hook 会话需要独立分组/标识时随 UI 一起补。
+      // (例外: provider_id 已在建会话时单列补写, 见上方 setSessionProviderIdInDb
+      // —— 来源缺失直接造成路由/显示错配, 不能等 UI 演进, issue #854。)
       // 出站附件: 文本引用 / 旁路图存在时才收集(读盘 + base64 只在需要时
       // 发生); 收集失败不拖垮收口 —— 附件是回帖增强, 文本永远要发出去
       let finalText = assistantText;
@@ -943,12 +845,6 @@ export function createMakerHookSessionRunner(deps: {
             `hook outbound attachment collection failed: ${err instanceof Error ? err.message : String(err)}`,
           );
         }
-      }
-      if (inboundAttachmentFailures > 0) {
-        const warning =
-          `⚠️ Incoming attachment processing incomplete: ${inboundAttachmentFailures} ` +
-          `item${inboundAttachmentFailures === 1 ? '' : 's'} could not be prepared.`;
-        finalText = `${finalText.trimEnd()}${finalText.trim().length > 0 ? '\n\n' : ''}${warning}`;
       }
       return {
         status: 'ok',

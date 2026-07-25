@@ -10,7 +10,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { buildUnionRows, countModelsByAgent, isRowDiverged } from '@/components/settings/UnifiedModelList';
 import { __resetForTest, setModelVisibility } from '@/state/modelVisibilityPrefs';
 
-import type { CatalogModel, ProviderView } from '@cindy/model-providers';
+import type { CatalogModel, ProviderView } from '@lizi/model-providers';
 
 function model(id: string, contextWindow = 100_000): CatalogModel {
   return { id, name: id, contextWindow, efforts: [], defaultEffort: null } as CatalogModel;
@@ -106,20 +106,6 @@ describe('countModelsByAgent', () => {
     expect(countModelsByAgent(provider)).toEqual([
       { agent: 'claude-code', on: 2, total: 2 },
       { agent: 'codex', on: 1, total: 2 },
-    ]);
-  });
-
-  it('does not count a newly discovered model with defaultEnabled=false as enabled', () => {
-    const withDiscovered = {
-      ...provider,
-      models: {
-        ...provider.models,
-        codex: [...(provider.models.codex ?? []), { ...model('discovered'), defaultEnabled: false }],
-      },
-    } as ProviderView;
-    expect(countModelsByAgent(withDiscovered)).toEqual([
-      { agent: 'claude-code', on: 2, total: 2 },
-      { agent: 'codex', on: 2, total: 3 },
     ]);
   });
 });

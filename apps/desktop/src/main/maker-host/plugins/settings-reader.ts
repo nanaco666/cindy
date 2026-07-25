@@ -1,9 +1,8 @@
 /**
- * Settings reader — reads user-default and project-level plugin preferences from disk,
+ * Settings reader — reads project-level plugin preferences from disk,
  * with simple mtime+size-based in-memory caching.
  *
  * Project settings: <workingDir>/.claude/settings.json → xdtMaker.builtinTools.{id}
- * User defaults: <userData>/builtin-tools-settings.json → builtinTools.{id}
  *
  * Sync path (readProjectPluginSetting) is used by the MCP provider isEnabled
  * gate during session start. Async path is used by IPC handlers.
@@ -116,7 +115,7 @@ export class SettingsReader {
     this.projectCache.delete(workingDir);
   }
 
-  /** Remove a project-level override so the plugin follows the user/product default again. */
+  /** Remove a project-level plugin override so the plugin follows product defaults again. */
   async clearProjectPluginSetting(workingDir: string, pluginId: PluginId): Promise<void> {
     const settingsPath = path.join(workingDir, '.claude', 'settings.json');
 

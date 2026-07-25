@@ -6,8 +6,8 @@
  * 文字之间的动作段仍保留为内层 work_group。运行中默认展示最近 5 条活动。
  *
  * 交互契约:
- *   - 运行中动作组默认露出 latest-five preview;点组头在最近 5 条与全部明细
- *     之间切换,不会把活动完全隐藏。完成态默认 collapsed。
+ *   - 运行中动作组默认露出 latest-five preview;点组头先完整收起,再次点开才
+ *     展示全部明细。完成态默认 collapsed。
  *   - 完成态外组展开后直接显示 assistant 文字,动作仍是内层「已工作 Xs」。
  *   - 运行态或完成态的动作组展开后直接显示 thinking 内容和工具行;长 thinking
  *     可再点行展开全文,工具行沿用 AgentActionRow 的详情交互。
@@ -27,13 +27,12 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { ChevronRight, Layers, Sparkles } from 'lucide-react';
+import { ChevronDown, ChevronRight, Layers, Sparkles } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { cn } from '@/lib/utils';
 import type { ChatMessage } from '@/lib/makerChatStore';
 import { useExpandedBlockMemory } from '@/hooks/useExpandedBlockMemory';
-import { Collapse } from '@/components/ui/collapse';
 import { Spinner } from '@/components/ui/spinner';
 
 import { AgentActionRow } from './AgentActionRow';
@@ -211,13 +210,7 @@ function ExpandedThinkingRow({ message }: { message: ChatMessage }) {
       </span>
       {canExpand && (
         <span className="inline-flex h-[18px] shrink-0 items-center text-[var(--msg-tool-card-chevron)]">
-          <ChevronRight
-            size={13}
-            className={cn(
-              'transition-transform duration-[var(--motion-fast,150ms)]',
-              expanded && 'rotate-90',
-            )}
-          />
+          {expanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
         </span>
       )}
     </button>
@@ -267,7 +260,13 @@ export function WorkGroupBlock({
 }: WorkGroupBlockProps) {
   const { t } = useTranslation();
   const { expanded, setExpanded } = useExpandedBlockMemory(blockId);
+  const {
+    expanded: livePreviewDismissed,
+    setExpanded: setLivePreviewDismissed,
+  } = useExpandedBlockMemory(`${blockId}:live-preview-dismissed`);
   const [elapsedMs, setElapsedMs] = useState(0);
+  // live preview 是首次出现时的自动展示态,不等同于 expanded。用户第一次点
+  // 组头应能把它彻底收起;dismissed 也走 block memory,切走再回来不会复现。
 
   useEffect(() => {
     if (!isStreaming || startedAtMs === undefined) return;
@@ -282,7 +281,9 @@ export function WorkGroupBlock({
     () => projectRecentWorkActivities(childItems, isStreaming, MAX_LIVE_WORK_ACTIVITIES),
     [childItems, isStreaming],
   );
-  const isLivePreviewVisible = isStreaming && !expanded && liveActivities.length > 0;
+  const isLivePreviewVisible =
+    isStreaming && !expanded && !livePreviewDismissed && liveActivities.length > 0;
+  const isContentVisible = expanded || isLivePreviewVisible;
   // 完成态只计算一次完整摘要；运行态保持折叠时走上面的反向 latest-five
   // 热路径，用户主动展开后才投影全部历史。
   const activityProjection = useMemo(
@@ -293,8 +294,15 @@ export function WorkGroupBlock({
   // 外层完成态组展开成文字 + 内层动作组;内层动作组与运行态组复用本组件,
   // 展开后直接渲染 thinking /工具行,不再多套一层子卡摘要。
   const onToggle = useCallback(() => {
+    if (isLivePreviewVisible) {
+      setLivePreviewDismissed(true);
+      return;
+    }
+    // 若完整详情来自运行期记忆,折叠时也要同步禁掉默认 preview,否则重挂载
+    // 后会从 expanded 退回 preview,表现为第一次点击仍无法完全收起。
+    if (isStreaming && expanded) setLivePreviewDismissed(true);
     setExpanded((v) => !v);
-  }, [setExpanded]);
+  }, [expanded, isLivePreviewVisible, isStreaming, setExpanded, setLivePreviewDismissed]);
 
   if (childItems.length === 0) return null;
 
@@ -340,7 +348,7 @@ export function WorkGroupBlock({
             'hover:opacity-80 transition-opacity',
             'text-left',
           )}
-          aria-expanded={expanded || isLivePreviewVisible}
+          aria-expanded={isContentVisible}
         >
           <span className="inline-flex h-[1lh] items-center shrink-0">
             {isStreaming ? (
@@ -358,14 +366,11 @@ export function WorkGroupBlock({
               {formatDuration(elapsedMs)}
             </span>
           )}
-          <ChevronRight
-            size={14}
-            className={cn(
-              'shrink-0 text-[var(--msg-tool-card-chevron)]',
-              'transition-transform duration-[var(--motion-fast,150ms)]',
-              expanded && 'rotate-90',
-            )}
-          />
+          {isContentVisible ? (
+            <ChevronDown size={14} className="shrink-0 text-[var(--msg-tool-card-chevron)]" />
+          ) : (
+            <ChevronRight size={14} className="shrink-0 text-[var(--msg-tool-card-chevron)]" />
+          )}
         </button>
 
         {isLivePreviewVisible && (
@@ -386,7 +391,7 @@ export function WorkGroupBlock({
           </div>
         )}
 
-        <Collapse open={expanded}>
+        {expanded && (
           <div
             className={cn(
               'mt-1 pl-3 py-[2px]',
@@ -407,7 +412,7 @@ export function WorkGroupBlock({
               </Fragment>
             ))}
           </div>
-        </Collapse>
+        )}
       </div>
     </div>
   );

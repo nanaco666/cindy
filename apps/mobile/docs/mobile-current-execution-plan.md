@@ -1,15 +1,15 @@
-# Cindy Mobile Current Execution Plan
+# XDMaker Mobile Current Execution Plan
 
 > 日期: 2026-06-19
 > 状态: 当前唯一执行合同。其它 mobile 文档保留源码审计、历史背景和长期能力矩阵。
-> 北极星: iOS 优先交付一个桌面同源、信息更少、动作更轻、真实可用的 Cindy 远程会话体验。
+> 北极星: iOS 优先交付一个桌面同源、信息更少、动作更轻、真实可用的 XDMaker 远程会话体验。
 > 本次修订: 根据最新走查反馈,把“参考桌面版”升级为硬性验收合同:手机主层只能是桌面主层的触控版,只能更简单,不能更复杂。
 
 ## 0. 当前结论
 
 手机版当前阶段不再按“远程控制台”或“移动聊天产品”规划。它的目标只有一个:
 
-**把桌面版 Cindy 的左侧会话列表和会话主窗口投影到手机上,但手机主层只能做减法,不能展示比桌面主层更多的信息。**
+**把桌面版 XDMaker 的左侧会话列表和会话主窗口投影到手机上,但手机主层只能做减法,不能展示比桌面主层更多的信息。**
 
 这条结论是后续所有 UI、交互和测试的优先级来源:
 
@@ -54,7 +54,7 @@ Session 只做桌面会话主窗口的手机形态。
 必须做到:
 
 - 主层固定为 Header、消息流、工作过程折叠、消息结束处 action、pending/composer。
-- 用户消息不显示“你”,助手消息不显示“Cindy”身份标签。
+- 用户消息不显示“你”,助手消息不显示“XDMaker”身份标签。
 - 完成态消息正文尽量支持在当前可见文本上直接局部选择和复制。
 - 复制、撤销/rewind、分叉保留在消息结束处,而不是改成长按菜单的唯一入口。
 - 工作过程收起态只显示桌面同级的一行摘要,如 `已工作 Xs` 或 `工作过程` + 展开箭头;不显示错误/工具/思考/消息等分类 chip。展开后才显示工具、思考、todo 细节。
@@ -115,7 +115,7 @@ Composer 是桌面 `ChatInput` 的触控版。
 | --- | --- | --- |
 | Home | `PinnedSection`, `ProjectsSection`, `DialogueSection`, `ProjectNode`, `SessionItem` | Pinned / Projects / Chats / sessions、桌面同级必要状态、多设备时的轻量筛选。 | Relay 正常态、同步成功态、设备选择说明、单设备常驻 chip、调试文案、比桌面更多的 session metadata。 |
 | Session header | `CCAgentSessionView`, `SessionContentHeader` | 返回、标题、必要副标题、目录、搜索、更多。 | 设备控制台说明、同步成功说明、额外连接状态。 |
-| 消息流 | `MessageStream`, `UserMessage`, `AssistantMessage`, `SystemCard` | 用户/助手正文、必要 system/pending、桌面同级元信息。 | “你”/“Cindy”身份标签、移动端自造解释卡、普通成功态卡。 |
+| 消息流 | `MessageStream`, `UserMessage`, `AssistantMessage`, `SystemCard` | 用户/助手正文、必要 system/pending、桌面同级元信息。 | “你”/“XDMaker”身份标签、移动端自造解释卡、普通成功态卡。 |
 | 工作过程 | `WorkGroupBlock`, `AgentActionsBlock`, `ThinkingCard`, `TodoListCard` | 收起态一行摘要;展开后按桌面顺序显示工具/思考/todo。 | 收起态分类 chip、统计 chip、比桌面更多的工具/错误/消息数量。 |
 | 消息动作 | `MessageActionBar` | 消息结束处 copy / rewind / fork 等小图标 action。 | 大号按钮组、只靠长按菜单承载核心动作。 |
 | 输入区 | `ChatInput`, `VoiceInputButton`, `SendButton` | 附件/更多、输入框、语音、发送/停止。 | “附件 / 语音 / 发送”文字按钮、额外状态说明行。 |
@@ -219,7 +219,7 @@ Android 当前只保留兼容护栏:shared model、协议、布局计算不能�
    继续验证 iOS 当前可见正文的局部选择。不能接受“只有放大镜没有选择手柄”,也不能接受“只能弹窗选择”作为最终交互。
 
 5. **真实数据走读**
-   接本地真实 Cindy fixture,覆盖长消息、代码块、列表、用户消息、助手消息、工具过程、文件 chip、媒体摘要和继续发送。
+   接本地真实 XDMaker fixture,覆盖长消息、代码块、列表、用户消息、助手消息、工具过程、文件 chip、媒体摘要和继续发送。
 
 6. **首页回归复核**
    Session 过关后回到 Home,按桌面侧栏信息层级删掉剩余多余信息。重点检查单设备 chip、row metadata、Projects / Chats 缩进和图标。
@@ -239,7 +239,7 @@ Android 当前只保留兼容护栏:shared model、协议、布局计算不能�
 - `pnpm --filter mobile test:e2e:maestro:check`。
 - iOS Simulator Maestro smoke:Home、Session、Composer、文本选择、发送/停止。
 - iOS screenshot / visual baseline:首页、对话页、composer、work group 展开/收起。
-- 真实 device-link smoke:本地 mock host + 真实 Cindy DB fixture。
+- 真实 device-link smoke:本地 mock host + 真实 XDMaker DB fixture。
 
 涉及视觉的批次必须留下截图证据,并和桌面同状态源码或截图对照。通过标准不是“能点通”,而是“信息量不超过桌面、动作不比桌面更重、真实消息读起来顺”。
 

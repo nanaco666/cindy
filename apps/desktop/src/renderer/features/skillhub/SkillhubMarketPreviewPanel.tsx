@@ -344,7 +344,7 @@ export function SkillhubMarketPreviewPanel({
                 ) : filesError && selectedPath ? (
                   <p className="px-10 py-8 text-sm text-[var(--cmd-palette-item-meta)]">{filesError}</p>
                 ) : file ? (
-                  <div key={file.path} className="w-full animate-fade-in px-10 py-8">
+                  <div key={file.path} className="w-full animate-in fade-in duration-200 px-10 py-8">
                     <div className="mx-auto w-full min-w-0 max-w-[860px]">
                       <MarkdownRenderer
                         workingDir=""

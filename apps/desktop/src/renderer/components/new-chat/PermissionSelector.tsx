@@ -11,6 +11,7 @@ import {
 import { useTranslation } from 'react-i18next';
 
 import { cn } from '@/lib/utils';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { MorphPopover } from '@/components/ui/morph-popover';
 import { Tip } from '@/components/ui/tooltip';
 import {
@@ -30,10 +31,10 @@ interface PermissionSelectorProps {
   disabled?: boolean;
   /** 窄容器(如 doc rail)下把 trigger 字号/图标各压一档,默认 false。 */
   dense?: boolean;
-  /** 极窄新建对话工具栏只显示当前权限图标，文字通过 tooltip / aria-label 提供。 */
-  iconOnly?: boolean;
   /** CREATE AGENT 首页按 Figma 185:2724 使用独立私有 token。 */
   visualVariant?: 'default' | 'create-agent';
+  /** 仅普通 composer 显式开启 chip → panel 容器形变；其它消费方维持 Radix Popover。 */
+  useMorphPopover?: boolean;
 }
 
 /**
@@ -67,7 +68,7 @@ function getModeTone(mode: PermissionMode): 'auto' | 'bypassPermissions' | null 
 
 /**
  * 权限模式选择器 —— 容器形变(MorphPopover)试点组件。
- * 弹层不再是 Radix Popover 浮层,而是从 trigger chip 原位生长(docs/design-rules/cindy-design-system.md §14.4
+ * 弹层不再是 Radix Popover 浮层,而是从 trigger chip 原位生长(DESIGN.md §14.4
  * 容器形变类目);trigger 视觉与旧版逐像素一致,变化只在开合方式。
  */
 export function PermissionSelector({
@@ -77,8 +78,8 @@ export function PermissionSelector({
   deviceId,
   disabled = false,
   dense = false,
-  iconOnly = false,
   visualVariant = 'default',
+  useMorphPopover = false,
 }: PermissionSelectorProps) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
@@ -107,82 +108,88 @@ export function PermissionSelector({
   const triggerLabel = labelOf(current, effectiveMode);
   const triggerDescription = descriptionOf(current, effectiveMode);
   const isCreateAgentVariant = visualVariant === 'create-agent';
-  // 窄态工具条(#562):新建对话框空间不足时权限入口图标化,防与语音/发送重叠。
-  const isIconOnly = iconOnly && isCreateAgentVariant;
+  const morphEnabled = useMorphPopover && !isCreateAgentVariant;
 
-  /** chip 内容行(icon + label + chevron) */
+  /** trigger tone 文字色(chip 与 ghost 共用,sanctioned 蓝/橙仅文字层) */
+  const toneClassName = cn(
+    triggerTone === 'auto' && 'text-[var(--perm-auto-selected-text)]',
+    triggerTone === 'bypassPermissions' && 'text-[var(--perm-bypass-selected-text)]',
+  );
+
+  /** chip 内容行(icon + label + chevron):trigger 按钮与形变 ghost 共用同一渲染 */
   const triggerContent = (
     <>
       <TriggerIcon
         size={isCreateAgentVariant ? 11 : dense ? 13 : 14}
         className="shrink-0 text-current"
       />
-      {!isIconOnly && (
-        <span
+      <span
+        className={cn(
+          // min-w-0 让 span 能在 flex 容器里跌破内容宽度,truncate 才能在窄宽下出现 "完..."
+          'min-w-0 font-normal text-current',
+          'truncate',
+          isCreateAgentVariant ? 'text-[12px]' : dense ? 'text-[12.5px]' : 'text-[13px]',
+        )}
+      >
+        {triggerLabel}
+      </span>
+      <div className="pt-[2px]">
+        <ChevronDown
+          size={isCreateAgentVariant ? 8 : dense ? 13 : 14}
           className={cn(
-            // min-w-0 让 span 能在 flex 容器里跌破内容宽度,truncate 才能在窄宽下出现 "完..."
-            'min-w-0 font-normal text-current',
-            'truncate',
-            isCreateAgentVariant ? 'text-[12px]' : dense ? 'text-[12.5px]' : 'text-[13px]',
+            'shrink-0',
+            'text-current',
           )}
-        >
-          {triggerLabel}
-        </span>
-      )}
-      {!isIconOnly && (
-        <div className="pt-[2px]">
-          <ChevronDown
-            size={isCreateAgentVariant ? 8 : dense ? 13 : 14}
-            className="shrink-0 text-current"
-          />
-        </div>
-      )}
+        />
+      </div>
     </>
   );
 
-  return (
-    <MorphPopover
-      open={open && !disabled}
-      onOpenChange={(next) => setOpen(disabled ? false : next)}
-      panelWidth={300}
-      panelClassName="p-2"
-      panelAriaLabel={t('newChat.permissionSelector.listAria')}
-      startBg="var(--composer-pill-bg)"
-      startBorderColor="var(--border-default)"
-      wrapperClassName="min-w-0 shrink"
-      trigger={
-        <Tip
-          text={triggerDescription}
-          side="top"
-          contentClassName="max-w-[280px] whitespace-normal break-words text-left"
-        >
-          <button
-            type="button"
-            disabled={disabled}
-            onClick={() => setOpen((prev) => (disabled ? false : !prev))}
-            aria-expanded={open && !disabled}
-            aria-haspopup="listbox"
-            className={cn(
-              'flex min-w-0 items-center gap-1 overflow-hidden rounded-full transition-colors',
-              // 裸态工具条(2026-07-22 用户定稿):默认无框,hover 才浮现胶囊外框。
-              // create-agent(新建对话框)与会话内共用同一套裸态,不再分叉 —— 静息/hover 逐字一致。
-              isIconOnly
-                ? 'h-[30px] w-[34px] min-w-[34px] justify-center px-0'
-                : 'h-[30px] min-w-[72px] max-w-full shrink px-2.5',
-              'border border-transparent bg-transparent text-[var(--text-primary)]',
-              'hover:border-[var(--border-default)] hover:bg-[var(--composer-pill-bg,#FCFCFC)] dark:hover:bg-[var(--composer-pill-bg,#393838)]',
-              triggerTone === 'auto' && 'text-[var(--perm-auto-selected-text)]',
-              triggerTone === 'bypassPermissions' && 'text-[var(--perm-bypass-selected-text)]',
-              disabled && 'pointer-events-none opacity-50',
-            )}
-            aria-label={t('newChat.permissionSelector.triggerAria', { label: triggerLabel })}
-          >
-            {triggerContent}
-          </button>
-        </Tip>
-      }
+  const trigger = (
+    <Tip
+      text={triggerDescription}
+      side="top"
+      contentClassName="max-w-[280px] whitespace-normal break-words text-left"
     >
-      <div role="listbox" aria-label={t('newChat.permissionSelector.listAria')}>
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={morphEnabled ? () => setOpen((prev) => (disabled ? false : !prev)) : undefined}
+        aria-expanded={open && !disabled}
+        aria-haspopup="listbox"
+        className={cn(
+          'flex min-w-0 items-center gap-1 overflow-hidden rounded-full transition-colors',
+          isCreateAgentVariant
+            ? [
+                'h-[30px] min-w-[52px] max-w-full shrink border border-[var(--create-agent-control-border)]',
+                'bg-[var(--create-agent-control-bg)] py-0 pl-2.5 pr-2 text-[var(--create-agent-control-text)]',
+                'hover:bg-[var(--create-agent-control-bg-hover)] active:bg-[var(--create-agent-control-bg-pressed)]',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--create-agent-focus-ring)]',
+              ]
+            : morphEnabled
+              ? [
+                  'h-[30px] min-w-[72px] max-w-full shrink px-2.5',
+                  'border border-transparent bg-transparent text-[var(--text-primary)]',
+                  'hover:border-[var(--border-default)] hover:bg-[var(--composer-pill-bg,#FCFCFC)] dark:hover:bg-[var(--composer-pill-bg,#393838)]',
+                ]
+              : [
+                  'h-[30px] min-w-[72px] max-w-full shrink px-2.5',
+                  'bg-[var(--composer-pill-bg,#FCFCFC)] dark:bg-[var(--composer-pill-bg,#393838)] border border-[var(--border-default)] text-[var(--text-primary)]',
+                  'hover:bg-[var(--model-trigger-hover)]',
+                ],
+          triggerTone === 'auto' && 'text-[var(--perm-auto-selected-text)]',
+          triggerTone === 'bypassPermissions' && 'text-[var(--perm-bypass-selected-text)]',
+          disabled && 'pointer-events-none opacity-50',
+        )}
+        aria-label={t('newChat.permissionSelector.triggerAria', { label: triggerLabel })}
+      >
+        {triggerContent}
+      </button>
+    </Tip>
+  );
+
+  const optionList = (
+    <div role="listbox" aria-label={t('newChat.permissionSelector.listAria')}>
         {options.map((option) => {
           const Icon = PERMISSION_ICONS[option.id] ?? Hand;
           const isSelected = effectiveMode === option.id;
@@ -204,12 +211,10 @@ export function PermissionSelector({
                 role="option"
                 aria-selected={isSelected}
                 className={cn(
-                  'flex w-full items-center gap-3 rounded-[8px] px-3 py-2',
+                  'flex w-full items-center gap-3 rounded-[8px] px-[14px] py-2',
                   'transition-colors',
                   'hover:bg-[var(--model-item-hover)]',
-                  // 选中底与 hover 统一到 --model-item-hover,和模型/+ 菜单一致(危险档的
-                  // 橙/蓝仍只染文字,不改底色);原 --perm-item-selected-bg 在 cindy 面板上隐形。
-                  isSelected && 'bg-[var(--model-item-hover)]',
+                  isSelected && 'bg-[var(--perm-item-selected-bg)]',
                   selectedTone === 'auto' && 'text-[var(--perm-auto-selected-text)]',
                   selectedTone === 'bypassPermissions' &&
                     'text-[var(--perm-bypass-selected-text)]',
@@ -243,7 +248,44 @@ export function PermissionSelector({
             </Tip>
           );
         })}
-      </div>
-    </MorphPopover>
+    </div>
+  );
+
+  if (morphEnabled) {
+    return (
+      <MorphPopover
+        open={open && !disabled}
+        onOpenChange={(next) => setOpen(disabled ? false : next)}
+        panelWidth={300}
+        panelClassName="p-2"
+        panelAriaLabel={t('newChat.permissionSelector.listAria')}
+        wrapperClassName="min-w-0 shrink"
+        trigger={trigger}
+        ghost={
+          <span className={cn('flex items-center gap-1 px-2.5 text-[var(--text-primary)]', toneClassName)}>
+            {triggerContent}
+          </span>
+        }
+      >
+        {optionList}
+      </MorphPopover>
+    );
+  }
+
+  return (
+    <Popover open={open && !disabled} onOpenChange={(next) => setOpen(disabled ? false : next)}>
+      <PopoverTrigger asChild>{trigger}</PopoverTrigger>
+      <PopoverContent
+        align="start"
+        sideOffset={4}
+        className={cn(
+          'w-[300px] rounded-[12px] p-2',
+          'bg-[var(--model-dropdown-bg)]',
+          'border border-[var(--model-dropdown-border)]',
+        )}
+      >
+        {optionList}
+      </PopoverContent>
+    </Popover>
   );
 }

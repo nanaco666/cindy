@@ -7,11 +7,10 @@
 
 import { ipcMain } from 'electron';
 import {
-  DL_SESSION_REFERENCE_CAPABILITY_CHANNEL,
   DeviceLinkError,
   type InvokeResultPayload,
   type LinkAcceptPayload,
-} from '@cindy/device-link';
+} from '@lizi/device-link';
 import { serverApiFetch, ServerApiError } from '../serverApiClient';
 import { throwIpcError } from '../utils/ipcValidate';
 import type { IpcErrorCode } from '../../shared/ipc-errors';
@@ -40,10 +39,6 @@ import {
 import { getActiveControllers } from './dispatch';
 import { rewriteOutboundMedia } from './outboundMedia';
 import {
-  outboundSessionReferencesRequested,
-  rewriteOutboundSessionReferences,
-} from './outboundSessionReferences';
-import {
   isPlaceholderDeviceName,
   readDeviceLinkSettings,
   readLastKnownDeviceNames,
@@ -58,15 +53,8 @@ import {
   resetAll as resetSubscriptionRefcount,
 } from './subscriptionRefcount';
 import { createLogger } from '../logger';
-import { getAppCapabilities } from '../appCapabilities.js';
 
 const log = createLogger('device-link:ipc');
-
-function requireDeviceLinkCapability(): void {
-  if (!getAppCapabilities().canUseDeviceLink) {
-    throwIpcError('PERMISSION_DENIED', 'Device Link requires a Cindy account.');
-  }
-}
 
 type DeviceLinkServerDeviceView = Omit<DeviceLinkDeviceView, 'controlEnabled'> & {
   controlEnabled?: boolean;
@@ -95,8 +83,6 @@ export interface DeviceLinkIpcDeps {
    * 可选 —— 测试可不注入(跳过改写,行为同旧版纯透传)。
    */
   rewriteOutboundMedia?(channel: string, args: unknown[]): Promise<unknown[]>;
-  /** 控制端 main 在越过 device-link 前把相对引用解析为可信、预算化快照。 */
-  rewriteOutboundSessionReferences?(channel: string, args: unknown[]): Promise<unknown[]>;
 }
 
 export function defaultDeps(): DeviceLinkIpcDeps {
@@ -118,10 +104,7 @@ export function defaultDeps(): DeviceLinkIpcDeps {
     apiFetch: (path, opts) => serverApiFetch(path, { ...opts, baseUrl: deviceLinkApiBase() }),
     openLink: openRemoteLink,
     closeLink: closeRemoteLink,
-    invoke: (...args) => {
-      requireDeviceLinkCapability();
-      return remoteInvoke(...args);
-    },
+    invoke: remoteInvoke,
     subscribe: remoteSubscribe,
     unsubscribe: remoteUnsubscribe,
     disconnectAll: disconnectAllControllers,
@@ -132,7 +115,6 @@ export function defaultDeps(): DeviceLinkIpcDeps {
     readLastKnownDeviceNames,
     rememberLastKnownDeviceName,
     rewriteOutboundMedia,
-    rewriteOutboundSessionReferences,
   };
 }
 
@@ -197,20 +179,7 @@ function rethrowServerError(err: unknown): never {
 // ─── handler bodies(纯函数,可注入依赖)──────────────────────────────────────
 
 export function handleGetState(deps: DeviceLinkIpcDeps): DeviceLinkState {
-  const state = deps.getState();
-  if (getAppCapabilities().canUseDeviceLink) return state;
-
-  // Keep the local, account-free setting available to Settings while hiding
-  // account-scoped Device Link state from signed-out/local sessions.
-  return {
-    remoteControlEnabled: false,
-    keepAwake: state.keepAwake,
-    linkStatus: 'stopped',
-    connectionIssue: null,
-    controlledBy: [],
-    revokedControllers: [],
-    disabledControlDeviceIds: [],
-  };
+  return deps.getState();
 }
 
 export async function handleSetEnabled(
@@ -420,72 +389,8 @@ export async function handleInvoke(
   }
   let callArgs = Array.isArray(args) ? args : [];
 
-  if (outboundSessionReferencesRequested(channel, callArgs)) {
-    let capability: InvokeResultPayload;
-    try {
-      capability = await deps.invoke(
-        normalizedDeviceId,
-        DL_SESSION_REFERENCE_CAPABILITY_CHANNEL,
-        [],
-      );
-    } catch (err) {
-      rethrowDeviceLinkError(err);
-    }
-    if (!capability.ok) {
-      if (capability.error.code === 'CHANNEL_NOT_ALLOWED') {
-        throwIpcError(
-          'SESSION_REFERENCE_UNSUPPORTED',
-          '目标设备版本不支持会话引用，请升级目标设备后重试',
-        );
-      }
-      if (capability.error.code === 'IPC_ERROR') {
-        throwIpcError(
-          'SESSION_REFERENCE_UNAVAILABLE',
-          '目标设备仍在启动，会话引用暂不可用，请稍后重试',
-        );
-      }
-      throwIpcError(
-        DEVICE_LINK_CODE_MAP[capability.error.code] ?? 'INTERNAL',
-        capability.error.message,
-      );
-    }
-    const capabilityVersion =
-      capability.result &&
-      typeof capability.result === 'object' &&
-      !Array.isArray(capability.result)
-        ? (capability.result as { version?: unknown }).version
-        : undefined;
-    if (
-      !capability.result ||
-      typeof capability.result !== 'object' ||
-      Array.isArray(capability.result) ||
-      (capability.result as { supported?: unknown }).supported !== true ||
-      typeof capabilityVersion !== 'number' ||
-      !Number.isFinite(capabilityVersion) ||
-      capabilityVersion < 1
-    ) {
-      throwIpcError(
-        'SESSION_REFERENCE_UNSUPPORTED',
-        '目标设备版本不支持会话引用，请升级目标设备后重试',
-      );
-    }
-  }
-
-  // 会话引用必须在控制端坐标系解析；放在附件上传前，引用失败时不产生无用 OSS 写入。
-  if (deps.rewriteOutboundSessionReferences) {
-    try {
-      callArgs = await deps.rewriteOutboundSessionReferences(channel, callArgs);
-    } catch (err) {
-      throwIpcError(
-        'SESSION_REFERENCE_UNAVAILABLE',
-        err instanceof Error ? err.message : String(err),
-      );
-    }
-    assertControlTargetEnabled(deps, normalizedDeviceId);
-  }
-
   // 出方向附件:发往远程前先把本机附件上传 OSS、替换成引用串(bytes 不内联进 relay)。
-  // 上传失败 → MEDIA_TRANSFER_FAILED,整条消息不发(产品决策:不静默丢附件)。
+  // 上传失败 → MEDIA_TRANSFER_FAILED,整条消息不发(@dash 决策:不静默丢附件)。
   if (deps.rewriteOutboundMedia) {
     try {
       callArgs = await deps.rewriteOutboundMedia(channel, callArgs);
@@ -634,47 +539,35 @@ export async function retryUnsubscribeAfterWindowGone(
 // ─── 注册(Electron adapter)──────────────────────────────────────────────────
 
 export function registerDeviceLinkIpc(deps: DeviceLinkIpcDeps = defaultDeps()): void {
-  const gated = <T extends unknown[]>(handler: (...args: T) => unknown) => (...args: T) => {
-    requireDeviceLinkCapability();
-    return handler(...args);
-  };
-  // Keep the local keep-awake setting available without a Cindy account. The
-  // setting is local-only and does not expose any remote-control capability.
   ipcMain.handle(DEVICE_LINK_INVOKE.GET_STATE, () => handleGetState(deps));
   ipcMain.handle(DEVICE_LINK_INVOKE.SET_ENABLED, (_e, enabled: unknown) =>
-    gated(handleSetEnabled)(deps, enabled),
+    handleSetEnabled(deps, enabled),
   );
   ipcMain.handle(DEVICE_LINK_INVOKE.SET_KEEP_AWAKE, (_e, enabled: unknown) =>
     handleSetKeepAwake(deps, enabled),
   );
   ipcMain.handle(DEVICE_LINK_INVOKE.SET_DEVICE_CONTROL_ENABLED, (_e, payload: unknown) => {
-    requireDeviceLinkCapability();
     const p = (payload ?? {}) as { deviceId?: unknown; enabled?: unknown };
     return handleSetDeviceControlEnabled(deps, p.deviceId, p.enabled);
   });
-  ipcMain.handle(DEVICE_LINK_INVOKE.LIST_DEVICES, gated(() => handleListDevices(deps)));
+  ipcMain.handle(DEVICE_LINK_INVOKE.LIST_DEVICES, () => handleListDevices(deps));
   ipcMain.handle(DEVICE_LINK_INVOKE.RENAME_DEVICE, (_e, payload: unknown) => {
-    requireDeviceLinkCapability();
     const p = (payload ?? {}) as { deviceId?: unknown; name?: unknown };
     return handleRenameDevice(deps, p.deviceId, p.name);
   });
   ipcMain.handle(DEVICE_LINK_INVOKE.DELETE_DEVICE, (_e, payload: unknown) => {
-    requireDeviceLinkCapability();
     const p = (payload ?? {}) as { deviceId?: unknown };
     return handleDeleteDevice(deps, p.deviceId);
   });
   ipcMain.handle(DEVICE_LINK_INVOKE.OPEN_LINK, (_e, payload: unknown) => {
-    requireDeviceLinkCapability();
     const p = (payload ?? {}) as { deviceId?: unknown };
     return handleOpenLink(deps, p.deviceId);
   });
   ipcMain.handle(DEVICE_LINK_INVOKE.CLOSE_LINK, (_e, payload: unknown) => {
-    requireDeviceLinkCapability();
     const p = (payload ?? {}) as { deviceId?: unknown };
     return handleCloseLink(deps, p.deviceId);
   });
   ipcMain.handle(DEVICE_LINK_INVOKE.INVOKE, (_e, payload: unknown) => {
-    requireDeviceLinkCapability();
     const p = (payload ?? {}) as { deviceId?: unknown; channel?: unknown; args?: unknown };
     return handleInvoke(deps, p.deviceId, p.channel, p.args);
   });
@@ -696,28 +589,23 @@ export function registerDeviceLinkIpc(deps: DeviceLinkIpcDeps = defaultDeps()): 
     });
   };
   ipcMain.handle(DEVICE_LINK_INVOKE.SUBSCRIBE, (e, payload: unknown) => {
-    requireDeviceLinkCapability();
     const p = (payload ?? {}) as { deviceId?: unknown; topics?: unknown };
     attachWindowCleanup(e.sender);
     return handleSubscribe(deps, p.deviceId, p.topics, e.sender.id);
   });
   ipcMain.handle(DEVICE_LINK_INVOKE.UNSUBSCRIBE, (e, payload: unknown) => {
-    requireDeviceLinkCapability();
     const p = (payload ?? {}) as { deviceId?: unknown; topics?: unknown };
     return handleUnsubscribe(deps, p.deviceId, p.topics, e.sender.id);
   });
   ipcMain.handle(DEVICE_LINK_INVOKE.DISCONNECT_ALL, () => {
-    requireDeviceLinkCapability();
     resetSubscriptionRefcount(); // 整体断开 → 清空引用,后续重连各窗口重订阅
     return handleDisconnectAll(deps);
   });
   ipcMain.handle(DEVICE_LINK_INVOKE.REVOKE, (_e, payload: unknown) => {
-    requireDeviceLinkCapability();
     const p = (payload ?? {}) as { deviceId?: unknown };
     return handleRevoke(deps, p.deviceId);
   });
   ipcMain.handle(DEVICE_LINK_INVOKE.RESTORE, (_e, payload: unknown) => {
-    requireDeviceLinkCapability();
     const p = (payload ?? {}) as { deviceId?: unknown };
     return handleRestore(deps, p.deviceId);
   });

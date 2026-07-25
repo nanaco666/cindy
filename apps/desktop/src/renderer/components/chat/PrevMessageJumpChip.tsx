@@ -64,9 +64,9 @@ export function PrevMessageJumpChip({
         // ModelSelector 等同源)
         'hover:bg-[var(--cmd-palette-item-hover)]',
         'focus-visible:outline-none',
-        // mount-only 入场动画(淡入 + 轻缩放);消失时由 unmount 直接
+        // mount-only 入场动画(出现时滑入 + fade);消失时由 unmount 直接
         // 抹掉,2 个 chip 体量没必要做 exit 动画。
-        'animate-float-in',
+        'animate-in fade-in slide-in-from-top-1 duration-150',
       )}
     >
       <ArrowUp size={15} className="shrink-0" aria-hidden="true" />

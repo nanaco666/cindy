@@ -1,7 +1,7 @@
 /**
  * subscriptionGateway.ts — 订阅槽①网关(旁听 did- + 拦截 will-,2026-07-12 开闸)。
  * ---------------------------------------------------------------------------
- * 订阅卡槽:意识经管子旁听会话事件(fire-and-forget),
+ * runtime-sandbox.md §5 卡槽①:意识经管子旁听会话事件(fire-and-forget),
  * 或对用户消息行使拦截裁决(停等 + fail-open)。一种事件模型两个类型:
  *
  *   did-  旁听:publish() 按 topic 白名单扇出 → 在跑直投 / 熄灯进队列
@@ -457,17 +457,13 @@ export function isGhostEligibleSessionRow(row: {
  */
 export function createGhostSessionFocusTracker(
   notify: (sessionId: string) => void,
-): { note(sessionId: string | null): void; current(): string | null } {
+): { note(sessionId: string | null): void } {
   let last: string | null = null;
   return {
     note(sessionId) {
       if (sessionId === last) return;
       last = sessionId;
       if (sessionId) notify(sessionId);
-    },
-    // 台前会话快照(preview 槽缺省落点等"当前会话"语境用;非会话页为 null)。
-    current() {
-      return last;
     },
   };
 }

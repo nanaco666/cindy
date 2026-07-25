@@ -265,21 +265,20 @@ describe('SkillhubAutoSyncService', () => {
     expect(install).toHaveBeenCalledWith({ name: 'beta', autoSync: true }, expect.any(Function));
   });
 
-  it('records empty fallback candidates without replacing previous remote candidates when the config fetch fails', async () => {
-    const { service, syncMarket, recordCandidateSkills } = makeService({
+  it('merges fallback auto-sync candidates without replacing previous remote candidates', async () => {
+    const { service, recordCandidateSkills } = makeService({
       fetchConfigImpl: async () => {
         throw new Error('cdn unavailable');
       },
+      syncResults: [{ name: 'xdoa-skill', exists: true, latestVersion: '1.0.0' }],
     });
 
     await service.runOnceAfterLogin();
 
-    // 默认白名单为空:拉不到远端配置时不同步任何技能,也不覆盖已记录的远端候选。
-    expect(recordCandidateSkills).toHaveBeenCalledWith('user-1', [], { replace: false });
-    expect(syncMarket).not.toHaveBeenCalled();
+    expect(recordCandidateSkills).toHaveBeenCalledWith('user-1', ['xdoa-skill'], { replace: false });
   });
 
-  it('records empty fallback candidates when remote config parsing falls back to defaults', async () => {
+  it('merges fallback auto-sync candidates when remote config parsing falls back to defaults', async () => {
     process.env.XDT_SKILLHUB_AUTO_SYNC_CONFIG_URL = 'https://cdn.example.test/auto-sync.json';
     vi.mocked(getCurrentUserId).mockReturnValue('user-1');
     vi.mocked(net.fetch).mockResolvedValue({
@@ -288,18 +287,19 @@ describe('SkillhubAutoSyncService', () => {
     } as unknown as Awaited<ReturnType<typeof net.fetch>>);
 
     const recordCandidateSkills = vi.fn(async () => undefined);
-    const syncMarket = vi.fn(async () => ({ success: true, results: [] }));
     vi.mocked(registryService.listAllInstalls).mockResolvedValue([]);
     const service = new SkillhubAutoSyncService({
-      syncMarket,
-      install: async () => ({ success: true, name: 'demo-skill', version: '1.0.0', absolutePath: '/tmp/demo-skill' }),
+      syncMarket: async () => ({
+        success: true,
+        results: [{ name: 'xdoa-skill', exists: true, latestVersion: '1.0.0' }],
+      }),
+      install: async () => ({ success: true, name: 'xdoa-skill', version: '1.0.0', absolutePath: '/tmp/xdoa-skill' }),
       recordCandidateSkills,
     });
 
     await service.runOnceAfterLogin();
 
-    expect(recordCandidateSkills).toHaveBeenCalledWith('user-1', [], { replace: false });
-    expect(syncMarket).not.toHaveBeenCalled();
+    expect(recordCandidateSkills).toHaveBeenCalledWith('user-1', ['xdoa-skill'], { replace: false });
   });
 
   it('installs a whitelisted skill that is not locally registered', async () => {

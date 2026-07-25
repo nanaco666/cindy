@@ -9,9 +9,9 @@
  * backdrop 先回一级再关浮窗(settleSessionMenuBack)。刻意不用嵌套 Modal,原因同
  * ModelPickerSheet 头注释(iOS 同级双 Modal 不显示、Android 返回键派发不可控)。
  *
- * 交互取舍(2026-07-06 与产品确认的重设计):重命名 = 一级内原地编辑(输入框替换头部,
+ * 交互取舍(2026-07-06 与 Dash 确认的重设计):重命名 = 一级内原地编辑(输入框替换头部,
  * 编辑期隐藏操作列表);删除 = 系统 Alert 确认(取代旧「点两次」按钮);复制只保留对话深链,
- * 旧面板的 XDT ID / Agent ID 复制按产品决策整体移除(调试向信息不再进手机端 UI);
+ * 旧面板的 XDT ID / Agent ID 复制按 Dash 决策整体移除(调试向信息不再进手机端 UI);
  * 附加引用目录从 textarea 草稿改为列表 + 移除 + 浏览添加,每次增删立即写穿被控端。
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
@@ -42,13 +42,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text, TextInput } from '@/components/AppText';
 import { MainWindowActionGroup } from '@/components/MobilePrimitives';
 import type { RemoteDirectoryEntry } from '@/device-link/mobileMakerTransport';
-import type { MobileCodexRateLimitsResult } from '@cindy/maker-shared/device-link-contract';
 import { computeContextSheetSnapHeights, type ContextSheetSnap } from '@/session/contextSheetModel';
 import { writeClipboardText } from '@/session/messageActions';
 import { normalizeExtraDirs } from '@/session/newSession';
 import {
   summarizeAccountRateLimits,
-  summarizeCodexRateLimitReset,
   summarizeContextUsage,
   summarizeSessionSpend,
 } from '@/session/sessionControls';
@@ -101,10 +99,6 @@ export interface SessionMenuSheetProps {
    * 非订阅形态都静默降级,不占位不显示 loading)。
    */
   accountUsage: unknown;
-  /** app-server 权威额度/reset credit 快照;老被控端不支持时为 null。 */
-  codexRateLimits: MobileCodexRateLimitsResult | null;
-  codexResetBusy: boolean;
-  onResetCodexRateLimits(): void;
   onRefreshAccountUsage(): void;
   extraDirBrowser?: SessionExtraDirBrowserState | null;
   onLoadExtraDirPath(path: string): void;
@@ -133,9 +127,6 @@ export function SessionMenuSheet({
   contextLoading,
   onRefreshContextUsage,
   accountUsage,
-  codexRateLimits,
-  codexResetBusy,
-  onResetCodexRateLimits,
   onRefreshAccountUsage,
   extraDirBrowser,
   onLoadExtraDirPath,
@@ -323,7 +314,7 @@ export function SessionMenuSheet({
   }, [session.title]);
 
   // 自动起名:生成结果只回填输入框,停留在编辑态等用户按「确定」提交(2026-07-06
-  // 产品确认,与桌面「生成即提交」刻意不同);生成期间用户手动提交 / 取消 →
+  // Dash 确认,与桌面「生成即提交」刻意不同);生成期间用户手动提交 / 取消 →
   // 轮次号变化,迟到结果丢弃。
   const handleAiRename = useCallback(async () => {
     if (renameGenerating) return;
@@ -413,32 +404,11 @@ export function SessionMenuSheet({
     () => summarizeAccountRateLimits(accountUsage, Date.now()),
     [accountUsage],
   );
-  const resetSummary = useMemo(
-    () => summarizeCodexRateLimitReset(codexRateLimits, Date.now()),
-    [codexRateLimits],
-  );
   const workspace = buildSessionInfoWorkspace(session);
   const showExtraDirs = sessionInfoShowsExtraDirs(session);
 
   const mainActions = actions.filter((action) => action.id !== 'delete');
   const deleteAction = actions.find((action) => action.id === 'delete');
-
-  const confirmCodexReset = useCallback(() => {
-    if (!resetSummary?.canReset || codexResetBusy) return;
-    const account = [
-      codexRateLimits?.account.email,
-      codexRateLimits?.account.accountId,
-      codexRateLimits?.account.planType,
-    ].filter(Boolean).join(' · ');
-    Alert.alert(
-      '重置 Codex 用量？',
-      `将为 ${account || '当前 Codex 账号'} 消耗 1 次重置。额度窗口会立即重开，此操作不能撤销。`,
-      [
-        { text: '取消', style: 'cancel' },
-        { text: '消耗 1 次重置', onPress: onResetCodexRateLimits },
-      ],
-    );
-  }, [codexRateLimits, codexResetBusy, onResetCodexRateLimits, resetSummary]);
 
   const menuContent = (
     <View style={styles.menuBody} testID="session.menuSheetBody">
@@ -593,34 +563,13 @@ export function SessionMenuSheet({
         ) : null}
       </View>
 
-      {accountLimits || resetSummary ? (
+      {accountLimits ? (
         <View style={styles.infoSection} testID="session.accountLimitsSection">
           <Text style={styles.infoSectionTitle}>账号限额</Text>
-          {accountLimits?.rows.map((row, index) => (
+          {accountLimits.rows.map((row, index) => (
             // 两个窗口都缺时长数据时 label 会同为「限额」,key 需带 index 去重。
             <InfoRow key={`${row.label}:${index}`} label={row.label} value={row.value} />
           ))}
-          {resetSummary?.rows.map((row, index) => (
-            <InfoRow key={`reset:${row.label}:${index}`} label={row.label} value={row.value} />
-          ))}
-          {resetSummary?.canReset ? (
-            <>
-              <Text style={styles.infoCaption}>
-                当前额度已耗尽。重置会立即消耗 1 次，且不能撤销。
-              </Text>
-              <View style={styles.infoActionRow}>
-                <MenuPillButton
-                  disabled={codexResetBusy}
-                  label={codexResetBusy ? '正在重置…' : '重置 Codex 用量'}
-                  onPress={confirmCodexReset}
-                  testID="session.codexRateLimitResetButton"
-                  tone="primary"
-                />
-              </View>
-            </>
-          ) : resetSummary?.shouldPrompt && resetSummary.availableCount === 0 ? (
-            <Text style={styles.infoCaption}>当前额度已耗尽，但没有可用重置次数。</Text>
-          ) : null}
         </View>
       ) : null}
 

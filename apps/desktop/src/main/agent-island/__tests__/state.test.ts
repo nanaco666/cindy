@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { AgentEvent, InteractionRequest } from '@cindy/maker-core';
+import type { AgentEvent, InteractionRequest } from '@lizi/maker-core';
 import { DEFAULT_AGENT_ISLAND_STRINGS } from '../../../shared/agentIsland.js';
 
 import {
@@ -642,7 +642,7 @@ describe('Agent Island display state', () => {
       {
         sessionId: 's1',
         agentKind: 'codex',
-        workingDir: '/Users/alice/Library/Application Support/xdt-maker/dialogues/2026-06-16/14ad7035-b7aa-4f5d-bc9f-6e39cffdd9ea',
+        workingDir: '/Users/dash/Library/Application Support/xdt-maker/dialogues/2026-06-16/14ad7035-b7aa-4f5d-bc9f-6e39cffdd9ea',
         workspaceKind: 'dialogue',
       },
       '/goal 测试一下是不是支持目标模式',
@@ -651,7 +651,7 @@ describe('Agent Island display state', () => {
     applyAgentIslandMetadata(state, {
       sessionId: 's1',
       title: '目标模式测试',
-      workingDir: '/Users/alice/Library/Application Support/xdt-maker/dialogues/2026-06-16/14ad7035-b7aa-4f5d-bc9f-6e39cffdd9ea',
+      workingDir: '/Users/dash/Library/Application Support/xdt-maker/dialogues/2026-06-16/14ad7035-b7aa-4f5d-bc9f-6e39cffdd9ea',
       workspaceKind: 'dialogue',
     }, 1_100);
 

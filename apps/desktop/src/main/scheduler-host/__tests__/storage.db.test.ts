@@ -5,7 +5,7 @@
  * 因此由 test-workspaces 的 db tier 运行，不放进 fast unit tier。
  */
 
-import type { Schedule, ScheduleRun } from '@cindy/maker-scheduler';
+import type { Schedule, ScheduleRun } from '@lizi/maker-scheduler';
 import Database from 'better-sqlite3';
 import { sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/better-sqlite3';

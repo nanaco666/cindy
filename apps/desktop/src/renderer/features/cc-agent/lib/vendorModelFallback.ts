@@ -19,7 +19,7 @@
  *     → 保守不动,交给 spawn 层透传(与 cc 历史行为一致),避免目录 load race 误杀用户选的模型。
  */
 
-import { providerOffersModel, type AgentKind, type ProviderView } from '@cindy/model-providers';
+import { providerOffersModel, type AgentKind, type ProviderView } from '@lizi/model-providers';
 
 /**
  * 该会话 model 是否需要回退到 vendor 默认。

@@ -7,7 +7,7 @@
  * URL shapes:
  *   per-version:   {CDN_BASE}/notice/{platformKey}/{version}.json
  *   version index: {CDN_BASE}/notice/{platformKey}/index.json
- *     e.g. https://cdn.example.com/app/notice/darwin-arm64/index.json
+ *     e.g. https://dev-cdn.fp.xd.com/xdt-maker/notice/darwin-arm64/index.json
  *          → ["0.0.31", "0.0.78", ..., "0.0.124"]  (sorted ascending)
  *
  * The platform key is the SAME `${process.platform}-${process.arch}` value

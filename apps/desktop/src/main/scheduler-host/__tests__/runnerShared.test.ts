@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import type { AgentEvent, Session } from '@cindy/maker-core';
+import type { AgentEvent, Session } from '@lizi/maker-core';
 import { backfillSessionMeta, runOneTurn } from '../runners/_shared';
 
 type DbArg = Parameters<typeof backfillSessionMeta>[0];

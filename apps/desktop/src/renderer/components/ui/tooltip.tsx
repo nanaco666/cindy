@@ -67,12 +67,12 @@ const TooltipContent = React.forwardRef<
         'dark:border-transparent',
         'max-w-[420px] break-all', // 长路径允许任意位置截断换行
         variant === 'mono' && 'font-mono',
-        // 入场/出场动画:tooltip 是信息不是对象,入场纯 opacity 不缩放,
-        // 退场走轻浮层统一的 float-out(--motion-instant)。
-        // 注意 Radix Tooltip 的 data-state 是 delayed-open / instant-open /
-        // closed(没有 "open"),所以入场直接挂 mount 动画,closed 态靠更高
-        // 特异性的规则覆盖成退场动画。
-        'animate-fade-in data-[state=closed]:animate-float-out',
+        // 入场/出场动画
+        'data-[state=open]:animate-in data-[state=closed]:animate-out',
+        'data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
+        'data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95',
+        'data-[side=bottom]:slide-in-from-top-1 data-[side=left]:slide-in-from-right-1',
+        'data-[side=right]:slide-in-from-left-1 data-[side=top]:slide-in-from-bottom-1',
         className,
       )}
       {...props}

@@ -7,13 +7,13 @@
  *  - getMessagesForHistory   → 按多种过滤组合拉 messages, JOIN session 元数据
  *
  * 设计要点:
- *  - 消息按 (createdAt, rowid)、其它历史按 (createdAt, id) 分页，保证同毫秒顺序稳定
+ *  - 全部按 (createdAt, id) 复合排序 + 游标分页, 保证 hasMore + nextCursor 可串联
  *  - 不暴露 IPC, 仅供 mcp-providers.ts 注入给 xdt-helper MCP server
  *  - content / agentMeta JSON 解析复用 mapper.ts 已有逻辑, 保证形态一致
  *  - 时间参数从工具层进来时已经是 unix ms (由 tool handler 把 ISO 转好); reader 不做时间转换
  */
 
-import { and, asc, desc, eq, gt, gte, lt, inArray, isNotNull, isNull, ne, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, lt, inArray, isNotNull, isNull, ne, or, sql } from 'drizzle-orm';
 
 import { getDbClient } from './client/current';
 import { sessions, messages } from './schema';
@@ -24,8 +24,6 @@ import {
   resolveStoredWorkingDirCandidates,
 } from './workingDirHistoryFilter';
 
-const messageRowid = sql<number>`"messages"."rowid"`;
-
 // ── Types ───────────────────────────────────────────────────────────────────
 
 export type HistoryOrder = 'asc' | 'desc';
@@ -34,8 +32,6 @@ export type HistoryAgentKind = 'cc' | 'codex';
 export interface HistoryCursor {
   createdAt: number; // unix ms
   id: string;
-  /** SQLite insertion-order tie-breaker for message history cursors. */
-  rowid?: number;
 }
 
 export interface HistoryPage<T> {
@@ -306,7 +302,7 @@ export interface GetMessagesParams {
   roles: HistoryRole[] | null;
   includeRewound: boolean;
   limit: number;
-  cursor: HistoryCursor | null; // (messages.createdAt(ms), messages.rowid); id remains for legacy cursors
+  cursor: HistoryCursor | null; // (messages.createdAt(ms), messages.id)
   order: HistoryOrder;
 }
 
@@ -397,26 +393,19 @@ export async function getMessagesForHistory(
   }
 
   if (params.cursor) {
-    const { createdAt: c, id, rowid } = params.cursor;
-    const tieBreaker = rowid === undefined
-      ? params.order === 'desc'
-        ? lt(messages.id, id)
-        : sql`${messages.id} > ${id}`
-      : params.order === 'desc'
-        ? lt(messageRowid, rowid)
-        : gt(messageRowid, rowid);
+    const { createdAt: c, id } = params.cursor;
     if (params.order === 'desc') {
       conds.push(
         or(
           lt(messages.createdAt, c),
-          and(eq(messages.createdAt, c), tieBreaker),
+          and(eq(messages.createdAt, c), lt(messages.id, id)),
         ),
       );
     } else {
       conds.push(
         or(
           sql`${messages.createdAt} > ${c}`,
-          and(eq(messages.createdAt, c), tieBreaker),
+          and(eq(messages.createdAt, c), sql`${messages.id} > ${id}`),
         ),
       );
     }
@@ -427,7 +416,6 @@ export async function getMessagesForHistory(
   const rows = await db
     .select({
       m: messages,
-      rowid: messageRowid,
       sWorkingDir: sessions.workingDir,
       sAgentKind: sessions.agentKind,
       sTitle: sessions.title,
@@ -435,9 +423,7 @@ export async function getMessagesForHistory(
     .from(messages)
     .innerJoin(sessions, eq(messages.sessionId, sessions.id))
     .where(and(...conds))
-    .orderBy(orderFn(messages.createdAt), orderFn(!params.cursor || params.cursor.rowid !== undefined
-      ? messageRowid
-      : messages.id))
+    .orderBy(orderFn(messages.createdAt), orderFn(messages.id))
     .limit(fetchLimit);
 
   const hasMore = rows.length > params.limit;
@@ -461,13 +447,7 @@ export async function getMessagesForHistory(
   });
   const last = items[items.length - 1];
   const nextCursor: HistoryCursor | null = hasMore && last
-    ? {
-      createdAt: last.createdAt,
-      id: last.id,
-      ...(typeof sliced[sliced.length - 1]?.rowid === 'number'
-        ? { rowid: sliced[sliced.length - 1].rowid }
-        : {}),
-    }
+    ? { createdAt: last.createdAt, id: last.id }
     : null;
   return { items, nextCursor, hasMore };
 }

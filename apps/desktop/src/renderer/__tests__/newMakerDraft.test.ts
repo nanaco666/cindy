@@ -126,40 +126,6 @@ describe('newMakerDraft store', () => {
     expect(m2.getDraft().workingDir).toBe('E:/projects/foo');
   });
 
-  it('collab.workerConfig 跨重启保留耐久字段,丢弃一次性 initialTask(codex P2)', async () => {
-    const m1 = await loadModule();
-    m1.patchDraft({
-      workingDir: '/projects/foo',
-      collab: {
-        enabled: true,
-        worker: 'cc',
-        workerConfig: {
-          role: 'developer',
-          model: 'claude-opus-4-7',
-          effort: 'high',
-          fast: true,
-          initialTask: '先跑一遍测试',
-        },
-      },
-    });
-    // 当前运行内 initialTask 可用(Send/New Goal 立即消费)
-    expect(m1.getDraft().collab.workerConfig?.initialTask).toBe('先跑一遍测试');
-
-    // 模拟 app 重启:耐久选择(role/model/effort/fast)恢复,一次性任务不复活——
-    // 否则重启后 Send 会静默把过期任务当 delegateTask 派给 Worker,而收起态
-    // pill 无从看见/编辑。
-    vi.resetModules();
-    const m2 = await loadModule();
-    const wc = m2.getDraft().collab.workerConfig;
-    expect(wc).toMatchObject({
-      role: 'developer',
-      model: 'claude-opus-4-7',
-      effort: 'high',
-      fast: true,
-    });
-    expect(wc?.initialTask).toBeUndefined();
-  });
-
   it('patchDraft: Cindy worktree 路径会折回项目根目录', async () => {
     const { getDraft, patchDraft } = await loadModule();
     patchDraft({ workingDir: 'E:/projects/foo/.cindy-worktrees/auto-abc' });

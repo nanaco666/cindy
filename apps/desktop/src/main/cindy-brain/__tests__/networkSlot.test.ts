@@ -93,7 +93,7 @@ function makeSlot(overrides: Partial<NetworkSlotDeps> = {}): {
   const deps: NetworkSlotDeps = {
     getGhost: () => fakeGhost(),
     readSecret,
-    getLoginEmail: () => 'dev@example.com',
+    getLoginEmail: () => 'lizi@xd.com',
     fetchImpl: fetchImpl as unknown as NetworkSlotDeps['fetchImpl'],
     saveGhostMedia: saveGhostMedia as unknown as NetworkSlotDeps['saveGhostMedia'],
     isSupportedMediaMime,
@@ -657,11 +657,11 @@ describe('networkSlot · 在途并发闸', () => {
 });
 
 describe('networkSlot · 登录邮箱派生凭证(source:login-email)', () => {
-  const PAGES_URL = 'https://api.pages.example.com/list';
+  const PAGES_URL = 'https://api.workers.xd.team/list';
 
   /** xd-pages 形态的详单:X-Pages-Token = pages_<登录邮箱>(inject.format 派生)。 */
   const pagesNetwork: GhostNetworkNeeds = {
-    hosts: ['api.pages.example.com'],
+    hosts: ['api.workers.xd.team'],
     secrets: [
       {
         key: 'pages_token',
@@ -681,9 +681,9 @@ describe('networkSlot · 登录邮箱派生凭证(source:login-email)', () => {
     const r = await slot.handleFetchRequest('web-search', { url: PAGES_URL });
     expect(r.ok).toBe(true);
     const sent = fetchImpl.mock.calls[0][1].headers as Record<string, string>;
-    expect(sent['X-Pages-Token']).toBe('pages_dev@example.com');
+    expect(sent['X-Pages-Token']).toBe('pages_lizi@xd.com');
     expect(readSecret).not.toHaveBeenCalled();
-    expect(JSON.stringify(r)).not.toContain('dev@example.com');
+    expect(JSON.stringify(r)).not.toContain('lizi@xd.com');
   });
 
   it('未登录 / 登录态无邮箱:fail-closed 带重登指引,不发请求', async () => {
@@ -714,9 +714,9 @@ describe('networkSlot · 登录邮箱派生凭证(source:login-email)', () => {
     await slot.handleFetchRequest('web-search', { url: PAGES_URL });
     expect((fetchImpl.mock.calls[0][1].headers as Record<string, string>)['X-Pages-Token']).toBe('pages_a@b.co');
 
-    email = 'new@example.com';
+    email = 'new@xd.com';
     await slot.handleFetchRequest('web-search', { url: PAGES_URL });
-    expect((fetchImpl.mock.calls[1][1].headers as Record<string, string>)['X-Pages-Token']).toBe('pages_new@example.com');
+    expect((fetchImpl.mock.calls[1][1].headers as Record<string, string>)['X-Pages-Token']).toBe('pages_new@xd.com');
   });
 
   it('意识伪造 X-Pages-Token 头被剥除,最终值由主机按登录态注入', async () => {
@@ -728,7 +728,7 @@ describe('networkSlot · 登录邮箱派生凭证(source:login-email)', () => {
     const sent = fetchImpl.mock.calls[0][1].headers as Record<string, string>;
     const variants = Object.keys(sent).filter((k) => k.toLowerCase() === 'x-pages-token');
     expect(variants).toEqual(['X-Pages-Token']);
-    expect(sent['X-Pages-Token']).toBe('pages_dev@example.com');
+    expect(sent['X-Pages-Token']).toBe('pages_lizi@xd.com');
   });
 });
 

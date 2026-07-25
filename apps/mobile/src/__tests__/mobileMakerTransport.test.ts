@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { REMOTE_INVOKE_ALLOWLIST } from '@cindy/device-link';
+import { REMOTE_INVOKE_ALLOWLIST } from '@lizi/device-link';
 import {
   createMobileMakerTransport,
   MOBILE_MAKER_CHANNELS,
@@ -34,8 +34,6 @@ describe('mobile maker transport', () => {
       'maker:send',
       'maker:list-active',
       'maker:set-model',
-      'maker:switch-session-agent',
-      'maker:get-session-agent-switch-intent',
       'maker:set-effort',
       'maker:set-permission-mode',
       'maker:set-fast-mode',
@@ -43,8 +41,6 @@ describe('mobile maker transport', () => {
       'maker:set-session-model-pref',
       'maker:apply-new-maker-draft-pref',
       'maker:usage:model-pricing',
-      'maker:usage:codex-rate-limits',
-      'maker:usage:codex-rate-limit-reset',
       'maker:api-key:present',
       'maker:list-agent-commands',
       'maker:list-agent-skills',
@@ -64,7 +60,6 @@ describe('mobile maker transport', () => {
       'maker:fork',
       'maker:rewind:preview',
       'maker:rewind:commit',
-      'maker:message:delete',
       'maker:close-session',
       'maker:schedule:list',
       'maker:schedule:get',
@@ -257,8 +252,6 @@ describe('mobile maker transport', () => {
 
     await maker.setModel('s1', 'claude-opus-4-7');
     await maker.setModel('s1', 'gpt-5.5', 'openai');
-    await maker.switchSessionAgent('s1', 'codex', 'gpt-5.5', 'openai', 'high', true);
-    await maker.getSessionAgentSwitchIntent('s1');
     await maker.setEffort('s1', 'high');
     await maker.setPermissionMode('s1', 'plan');
     await maker.setFastMode('s1', true);
@@ -284,8 +277,6 @@ describe('mobile maker transport', () => {
     await maker.input.setEditLock('s1', 'queued-1', false);
     await maker.fs.readTextFilePreview('/repo/spec.md');
     await maker.getModelPricing();
-    await maker.getCodexRateLimits();
-    await maker.resetCodexRateLimits('018f4ec7-c6d8-7f10-8d43-9f8791d33000');
     await maker.getApiKeyPresent();
     await maker.setSessionModelPref({
       sessionId: 's1', agent: 'codex', providerId: 'openai', model: 'gpt-5.5', effort: 'high',
@@ -297,8 +288,6 @@ describe('mobile maker transport', () => {
     expect(calls.map((call) => [call.channel, call.args])).toEqual([
       ['maker:set-model', ['s1', 'claude-opus-4-7']],
       ['maker:set-model', ['s1', 'gpt-5.5', 'openai']],
-      ['maker:switch-session-agent', ['s1', 'codex', 'gpt-5.5', 'openai', 'high', true]],
-      ['maker:get-session-agent-switch-intent', ['s1']],
       ['maker:set-effort', ['s1', 'high']],
       ['maker:set-permission-mode', ['s1', 'plan']],
       ['maker:set-fast-mode', ['s1', true]],
@@ -324,8 +313,6 @@ describe('mobile maker transport', () => {
       ['maker:input:set-edit-lock', ['s1', 'queued-1', false]],
       ['text-file:read-preview', [{ filePath: '/repo/spec.md' }]],
       ['maker:usage:model-pricing', []],
-      ['maker:usage:codex-rate-limits', []],
-      ['maker:usage:codex-rate-limit-reset', ['018f4ec7-c6d8-7f10-8d43-9f8791d33000']],
       ['maker:api-key:present', []],
       ['maker:set-session-model-pref', [{
         sessionId: 's1', agent: 'codex', providerId: 'openai', model: 'gpt-5.5', effort: 'high',
@@ -336,43 +323,18 @@ describe('mobile maker transport', () => {
     ]);
   });
 
-  it('routes fork, rewind and delete actions through maker namespace', async () => {
+  it('routes fork and rewind actions through maker namespace', async () => {
     const { calls, maker } = harness();
 
     await maker.fork('s1', 'm2');
     await maker.rewindPreview('s1', 'm2');
     await maker.rewindCommit('s1', 'm2');
-    await maker.deleteMessage('s1', 'm2');
 
     expect(calls.map((call) => [call.channel, call.args])).toEqual([
       ['maker:fork', ['s1', 'm2']],
       ['maker:rewind:preview', ['s1', 'm2']],
       ['maker:rewind:commit', ['s1', 'm2']],
-      ['maker:message:delete', ['s1', 'm2']],
     ]);
-  });
-
-  it('passes trusted reference coordinates after update-text in desktop argument order', async () => {
-    const { calls, maker } = harness();
-    const refs = [{ sessionId: 'source', messageClientId: 'anchor', deviceId: 'dev-source' }];
-    const contexts = [{
-      sessionId: 'source',
-      messageClientId: 'anchor',
-      source: 'device-link' as const,
-      deviceId: 'dev-source',
-      messages: [{ role: 'user' as const, content: 'trusted' }],
-      range: 'around-anchor' as const,
-      messageCount: 1,
-      truncated: false,
-    }];
-
-    await maker.input.updateText('target', 'queued-1', 'edited', refs, contexts);
-
-    expect(calls).toEqual([{
-      deviceId: 'dev-1',
-      channel: 'maker:input:update-text',
-      args: ['target', 'queued-1', 'edited', refs, contexts],
-    }]);
   });
 
   it('routes the session read receipt with desktop preload argument order', async () => {

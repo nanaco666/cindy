@@ -23,7 +23,7 @@
  *     拿后续页; pool_capped=true 表示候选池触达硬上限, 更靠后的相关结果可能未进池。
  */
 
-import { BRAND_NAME } from '@cindy/maker-shared/branding';
+import { BRAND_NAME } from '@lizi/maker-shared/branding';
 import { z } from 'zod';
 
 import type { XdtHelperToolRegistry } from '../lizi_xdtHelperToolRegistry.js';

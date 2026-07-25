@@ -11,7 +11,7 @@ import {
 
 describe('buildProjectDeepLink(严格编码,review P2)', () => {
   it('escapes !\'()* so generated links never contain bare matcher delimiters', () => {
-    const workingDir = "/Users/alice/Projects/my(app)'s dir!*";
+    const workingDir = "/Users/dash/Projects/my(app)'s dir!*";
     const href = buildProjectDeepLink(workingDir);
     // 生成一律主 scheme;切片按主 scheme 前缀长度(双 scheme 后长度不同)。
     expect(href.startsWith('cindy://project/')).toBe(true);

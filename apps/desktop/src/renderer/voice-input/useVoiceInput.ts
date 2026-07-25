@@ -5,10 +5,9 @@ import { useTranslation } from 'react-i18next';
 import type {
   DictationRefinementContext,
   VoiceInputDraftSource,
-  VoiceInputErrorCode,
   VoiceInputRendererEvent,
   VoiceInputState,
-} from '@cindy/voice-input-core';
+} from '@lizi/voice-input-core';
 
 import { createLogger } from '@/lib/logger';
 import { toast } from '@/lib/toast';
@@ -28,7 +27,6 @@ import {
 import {
   recordVoiceInputRefinementUsage,
   recordVoiceInputUsage,
-  type VoiceInputUsageOutcome,
 } from '@/hooks/useVoiceInputUsageStats';
 import {
   VOICE_INPUT_REFINEMENT_CACHE_SCOPE,
@@ -42,7 +40,6 @@ import {
 import {
   WebMicAudioEngine,
   disposeKeepAliveVoiceInputMicrophone,
-  isMicrophoneDeviceUnavailableError,
   isSelectedMicrophoneUnavailableError,
   prewarmVoiceInputBenchmarkFixture,
   prewarmVoiceInputMicrophoneWithAutomaticFallback,
@@ -184,14 +181,10 @@ export function useVoiceInput(
   const systemAudioMuteGateDropLoggedRef = useRef(false);
   const stopCompletionWaitersRef = useRef<StopCompletionWaiter[]>([]);
   const sentAudioMsRef = useRef(0);
-  const terminalOutcomeRef = useRef<VoiceInputUsageOutcome>('success');
   const startAttemptIdRef = useRef(0);
   const startReadyRef = useRef<StartReadyState | null>(null);
   const ownedRunIdRef = useRef<string | null>(null);
-  const stopInFlightRef = useRef(false);
-  const stopInFlightPromiseRef = useRef<Promise<void> | null>(null);
   const inlineErrorDismissTimerRef = useRef<number | null>(null);
-  const lastErrorRef = useRef<string | null>(null);
   const shouldRestoreEditorFocusRef = useRef(false);
   const insertionRangeRef = useRef<EditorTextRange | null>(null);
   const draftDisplayRangeRef = useRef<EditorTextRange | null>(null);
@@ -205,7 +198,6 @@ export function useVoiceInput(
 
   const setVoiceState = useCallback((next: VoiceInputState) => {
     stateRef.current = next;
-    if (next === 'error') terminalOutcomeRef.current = 'failed';
     setState(next);
   }, []);
 
@@ -353,24 +345,17 @@ export function useVoiceInput(
 
   const dismissInlineError = useCallback(() => {
     clearInlineErrorDismissTimer();
-    lastErrorRef.current = null;
     setLastError(null);
   }, [clearInlineErrorDismissTimer]);
 
   const reportVoiceInputError = useCallback((message: string) => {
     clearInlineErrorDismissTimer();
-    lastErrorRef.current = message;
     setLastError(message);
     inlineErrorDismissTimerRef.current = window.setTimeout(() => {
       inlineErrorDismissTimerRef.current = null;
       setLastError(null);
     }, INLINE_ERROR_AUTO_DISMISS_MS);
   }, [clearInlineErrorDismissTimer]);
-
-  const formatVoiceInputError = useCallback((message: string, code?: VoiceInputErrorCode): string => {
-    if (code === 'empty_transcript') return t('voiceInputOverlay.emptyTranscript');
-    return message;
-  }, [t]);
 
   const appendAudioChunk = useCallback((chunk: PcmChunk) => {
     sentAudioMsRef.current += chunk.trace.durationMs;
@@ -389,7 +374,7 @@ export function useVoiceInput(
   const commitUsageStats = useCallback(() => {
     const audioMs = sentAudioMsRef.current;
     sentAudioMsRef.current = 0;
-    recordVoiceInputUsage(audioMs, terminalOutcomeRef.current);
+    recordVoiceInputUsage(audioMs);
   }, []);
 
   const muteSystemAudioForRecording = useCallback((): Promise<void> => {
@@ -755,12 +740,8 @@ export function useVoiceInput(
   ]);
 
   const formatMicrophoneStartError = useCallback((error: unknown): string => {
-    if (isMicrophoneDeviceUnavailableError(error)) {
-      return t(
-        isSelectedMicrophoneUnavailableError(error)
-          ? 'settings.voiceInput.microphone.errors.selectedUnavailable'
-          : 'settings.voiceInput.microphone.errors.deviceUnavailable',
-      );
+    if (voiceInputSettings.microphoneDeviceId && isSelectedMicrophoneUnavailableError(error)) {
+      return t('settings.voiceInput.microphone.errors.selectedUnavailable');
     }
     return error instanceof Error ? error.message : String(error);
   }, [t, voiceInputSettings.microphoneDeviceId]);
@@ -892,7 +873,6 @@ export function useVoiceInput(
           promptCodexSessionExpired(event.reason);
           break;
         case 'state':
-          if (event.outcome) terminalOutcomeRef.current = event.outcome;
           setVoiceState(event.state);
           if (event.state === 'refining') {
             resolveStopCompletion('raw');
@@ -992,11 +972,9 @@ export function useVoiceInput(
           draftDisplayRangeRef.current = null;
           setDraftSource(null);
           break;
-        case 'error': {
+        case 'error':
           log.warn('voice input error:', event.message);
-          terminalOutcomeRef.current = 'failed';
-          const formattedMessage = formatVoiceInputError(event.message, event.code);
-          promptCodexSessionExpired(formattedMessage);
+          promptCodexSessionExpired(event.message);
           commitUsageStats();
           void (async () => {
             await stopEngine();
@@ -1010,10 +988,9 @@ export function useVoiceInput(
           runIdRef.current = null;
           ownedRunIdRef.current = null;
           resolveStopCompletion();
-          reportVoiceInputError(formattedMessage);
+          reportVoiceInputError(event.message);
           restoreEditorFocusAfterVoiceInput();
           break;
-        }
         case 'usage':
           recordVoiceInputRefinementUsage(event.refinement);
           break;
@@ -1027,7 +1004,7 @@ export function useVoiceInput(
           break;
       }
     });
-  }, [applyRefinedText, clampEditorTextRange, commitUsageStats, formatVoiceInputError, insertSubmittedText, promptCodexSessionExpired, recordVisibleTextChanged, reportVoiceInputError, resolveStopCompletion, restoreEditorFocusAfterVoiceInput, restoreSystemAudioForRecording, setVoiceState, stopEngine, upsertDictionaryLearningWatch]);
+  }, [applyRefinedText, clampEditorTextRange, commitUsageStats, insertSubmittedText, promptCodexSessionExpired, recordVisibleTextChanged, reportVoiceInputError, resolveStopCompletion, restoreEditorFocusAfterVoiceInput, restoreSystemAudioForRecording, setVoiceState, stopEngine, upsertDictionaryLearningWatch]);
 
   useEffect(() => {
     return () => {
@@ -1106,7 +1083,6 @@ export function useVoiceInput(
     if (
       disabled ||
       !editorRef.current ||
-      stopInFlightRef.current ||
       currentState === 'listening' ||
       currentState === 'submitting' ||
       currentState === 'refining'
@@ -1127,7 +1103,6 @@ export function useVoiceInput(
     ownedRunIdRef.current = null;
     submittedRangesRef.current.clear();
     sentAudioMsRef.current = 0;
-    terminalOutcomeRef.current = 'success';
     systemAudioMuteGateOpenRef.current = true;
     systemAudioMuteGateDropLoggedRef.current = false;
     if (voiceInputSettings.muteSystemAudio && supportsSystemAudioMute()) {
@@ -1389,9 +1364,6 @@ export function useVoiceInput(
     const currentState = stateRef.current;
     if (currentState === 'submitting' || currentState === 'refining') {
       await waitForBusyCompletion(Boolean(options?.waitForRefinement));
-      if (stateRef.current === 'error') {
-        throw new Error(lastErrorRef.current ?? 'Voice input failed.');
-      }
       commitUsageStats();
       return;
     }
@@ -1420,7 +1392,7 @@ export function useVoiceInput(
           promptCodexSessionExpired(startResult.authErrorReason ?? startResult.error);
           reportVoiceInputError(startResult.error);
           restoreEditorFocusAfterVoiceInput();
-          throw new Error(startResult.error);
+          return;
         }
         runId = startResult.runId;
         await drainAndStopEngine();
@@ -1460,18 +1432,15 @@ export function useVoiceInput(
     }
     if (!result.ok) {
       resolveStopCompletion();
-      setVoiceState('error');
       commitUsageStats();
+      setVoiceState('error');
       reportVoiceInputError(result.error);
       restoreEditorFocusAfterVoiceInput();
-      throw new Error(result.error);
+      return;
     }
     await busyCompletion;
-    const stateAfterStop = stateRef.current as VoiceInputState;
-    if (stateAfterStop === 'error') {
-      throw new Error(lastErrorRef.current ?? 'Voice input failed.');
-    }
     commitUsageStats();
+    const stateAfterStop = stateRef.current as VoiceInputState;
     if (stateAfterStop === 'submitting') {
       setDraftText('');
       setDraftSource(null);
@@ -1483,17 +1452,6 @@ export function useVoiceInput(
       restoreEditorFocusAfterVoiceInput();
     }
   }, [commitUsageStats, dismissInlineError, drainAndStopEngine, drainQueuedAudioToMain, invalidateStartAttempt, reportVoiceInputError, resolveStopCompletion, restoreEditorFocusAfterVoiceInput, restoreSystemAudioAndNotifyEndCue, setVoiceState, waitForBusyCompletion, waitForStartReadyWhileStopping]);
-
-  const stopWithGate = useCallback(async (options?: VoiceInputStopOptions) => {
-    if (stopInFlightPromiseRef.current) return stopInFlightPromiseRef.current;
-    stopInFlightRef.current = true;
-    const stopPromise = stop(options).finally(() => {
-      stopInFlightRef.current = false;
-      stopInFlightPromiseRef.current = null;
-    });
-    stopInFlightPromiseRef.current = stopPromise;
-    return stopPromise;
-  }, [stop]);
 
   const cancel = useCallback(async () => {
     const runId = runIdRef.current;
@@ -1546,7 +1504,7 @@ export function useVoiceInput(
     isListening: state === 'listening',
     isBusy: state === 'listening' || state === 'submitting' || state === 'refining',
     start,
-    stop: stopWithGate,
+    stop,
     cancel,
   };
 }

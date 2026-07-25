@@ -24,7 +24,6 @@ const SESSION_SOURCES = [
   'desktop',
   'feishu',
   'slack',
-  'telegram',
   'discord',
   'scheduler',
   'learn',
@@ -81,7 +80,7 @@ export const sessions = sqliteTable(
      */
     summary: text('summary'),
     /**
-     * 模型供应商来源 id（@cindy/model-providers catalog 的 provider.id，如
+     * 模型供应商来源 id（@lizi/model-providers catalog 的 provider.id，如
      * 'anthropic' / 'openai' / 'xd'）。决定本 session 的请求路由到哪个上游 + 用哪种钥匙。
      * NULL = 未显式选择来源 → 路由 fallback 走现有默认逻辑（decideXxxRoute 按 authMode 推断），
      * 保证老会话与未升级用户行为完全不变（no-break）。由 SET_MODEL 携带 providerId 时持久化。
@@ -158,7 +157,7 @@ export const sessions = sqliteTable(
      * 本 session 创建时是否注入了 project-context 知识（来自 .cindy/project-knowledge/）。
      * 仅在创建瞬间由 main IPC 写入；后续不变。
      * Render 端用此字段决定 sidebar stripe / chat header chip 显示。
-     * 该快照语义由 session 创建链路与 packages/project-context/README.md 共同维护。
+     * 详见 docs/project-context.md + plan partitioned-dazzling-rainbow.md。
      */
     usedProjectContext: integer('used_project_context', { mode: 'boolean' })
       .notNull()
@@ -177,7 +176,7 @@ export const sessions = sqliteTable(
      */
     extraDirs: text('extra_dirs').notNull().default('[]'),
     /**
-     * 远端目标 host id (`@cindy/maker-remote-ssh` ConnectionPool 里的 alias)。
+     * 远端目标 host id (`@lizi/maker-remote-ssh` ConnectionPool 里的 alias)。
      * 非空 = 这个 session 跑在远端机器上 (codex agent 在远端、workingDir 是远端路径)。
      * 应用重启 / session 切换都能恢复远端目标; 本地 session 字段为 null,
      * 跟历史行为兼容 (老 session 没这列, sqlite default null 即可)。
@@ -192,7 +191,7 @@ export const sessions = sqliteTable(
      */
     activeTurnStartedAt: integer('active_turn_started_at'),
     /**
-     * @deprecated 早期实现的标记 pid 列(多进程所有权协议已按 2026-07-06 产品
+     * @deprecated 早期实现的标记 pid 列(多进程所有权协议已按 2026-07-06 Dash
      * 决策整体移除),不再读写;保留列避免历史库 DROP COLUMN 迁移风险。
      */
     activeTurnPid: integer('active_turn_pid'),
@@ -326,10 +325,6 @@ export const messages = sqliteTable(
       // content 存 { fromAgentKind, toAgentKind, fromModel, toModel, handoff }。
       // handoff 交接文本只进这里(供 UI 展开查看/debug),不作为可见消息渲染正文,
       // 也不落 user 消息——wire 注入与显示分离。
-      // 'context_rebuild':消息内容删除后的内部重建标记。rewind_at 固定非 NULL,
-      // 所有普通历史读取都不可见；content.handoff 只在下一次发送的 wire 前缀消费。
-      // 'message_tombstone':被删除消息的无内容墓碑，保留 id/client_id 仅用于阻止
-      // 外部原生 transcript importer 把同一消息重新导入；正文/元数据均已清空。
       enum: [
         'user',
         'assistant',
@@ -340,8 +335,6 @@ export const messages = sqliteTable(
         'thinking',
         'error',
         'agent_switch',
-        'context_rebuild',
-        'message_tombstone',
       ],
     }).notNull(),
     content: text('content').notNull(), // JSON string
@@ -506,7 +499,7 @@ export const imBindings = sqliteTable(
 /**
  * scheduler 模块 (Phase 2): cron 定时任务表。
  *
- * 与 `@cindy/maker-scheduler` 的 `Schedule` 类型一一对应。注意：
+ * 与 `@lizi/maker-scheduler` 的 `Schedule` 类型一一对应。注意：
  *   - `notify` 在内存类型里是嵌套对象 `{ desktop, feishu }`，DB 端拆成
  *     `notify_desktop` / `notify_feishu` 两列，由 mapper 合并/拆解。
  *   - 时间戳列存 unix ms（与 sessions 表一致），调度引擎本身就用 ms。
@@ -595,13 +588,13 @@ export const schedules = sqliteTable(
     /**
      * 持续会话开关。true → runner 第一次 fire 后把新建 session 的 id 回写到
      * `target_session_id`，后续 fire 自动走 heartbeat resume；详见
-     * `@cindy/maker-scheduler` Schedule.persistentSession。默认 false 维持旧行为。
+     * `@lizi/maker-scheduler` Schedule.persistentSession。默认 false 维持旧行为。
      */
     persistentSession: integer('persistent_session', { mode: 'boolean' }).notNull().default(false),
     /**
      * 静默运行开关。true → 成功 run 默认不提醒;任务 agent 可在需要用户关注时
      * 调 schedule_notify_current_run 主动上报;
-     * 详见 `@cindy/maker-scheduler` Schedule.silentWhenIdle。默认 false。
+     * 详见 `@lizi/maker-scheduler` Schedule.silentWhenIdle。默认 false。
      */
     silentWhenIdle: integer('silent_when_idle', { mode: 'boolean' }).notNull().default(false),
     /**
@@ -739,7 +732,7 @@ export const projectAutomationConsents = sqliteTable('project_automation_consent
 /**
  * scheduler 模块 (Phase 2): 单次触发记录。
  *
- * 与 `@cindy/maker-scheduler` 的 `ScheduleRun` 一一对应。schedule 删除级联删；
+ * 与 `@lizi/maker-scheduler` 的 `ScheduleRun` 一一对应。schedule 删除级联删；
  * session 删除仅 SET NULL（保留历史可见，session 链接断了显示为"已删除"）。
  */
 export const scheduleRuns = sqliteTable(
@@ -756,7 +749,7 @@ export const scheduleRuns = sqliteTable(
     finishedAt: integer('finished_at'),
     status: text('status', {
       // 'skipped': 前置检查脚本 exit 2 拦截,本轮未启动 agent(生而已读,见
-      // @cindy/maker-scheduler RunStatus)。SQLite 无 CHECK 约束,enum 仅类型层。
+      // @lizi/maker-scheduler RunStatus)。SQLite 无 CHECK 约束,enum 仅类型层。
       enum: ['running', 'success', 'failed', 'aborted', 'interrupted', 'skipped'],
     }).notNull(),
     errorMsg: text('error_msg'),
@@ -780,7 +773,7 @@ export const scheduleRuns = sqliteTable(
     /**
      * In-flight 心跳时间戳（毫秒）——跨实例的"仍有活实例在跑"租约信号。
      * 执行实例周期续期；僵尸清理只回收心跳过期的 'running' 行（NULL 按 fired_at
-     * 兜底，兼容老版本写入的行）。见 @cindy/maker-scheduler ScheduleRun.heartbeatAt。
+     * 兜底，兼容老版本写入的行）。见 @lizi/maker-scheduler ScheduleRun.heartbeatAt。
      */
     heartbeatAt: integer('heartbeat_at'),
   },
@@ -885,7 +878,7 @@ export const embeddingMeta = sqliteTable('embedding_meta', {
  *
  * 时区: day = 用户**本地时区** YYYY-MM-DD 字符串 (避免 UTC 跨日错配显示)。
  *
- * 与 web 看板 数据关系:
+ * 与 web 看板 (console.tapsvc.com) 数据关系:
  *   - web 是 llm-proxy 网关侧统计 (含此账号所有调用方)
  *   - 本表是单机 xdt-maker 实例累加 (子集)
  *   - 同账号用多设备时本表数字会不一致 — 设计取舍, chip 点击跳 web 看完整账。
@@ -1019,7 +1012,7 @@ export const skillUsageExposures = sqliteTable(
 /**
  * custom-model-providers：用户自定义的模型供应商**配置**（不含密钥）。
  *
- * 与 `@cindy/model-providers` 的 `CustomProviderConfig` 一一对应；加载时经 `buildUserProvider`
+ * 与 `@lizi/model-providers` 的 `CustomProviderConfig` 一一对应；加载时经 `buildUserProvider`
  * 展开成标准 `Provider`，并进 host 的 active-catalog，供路由 / 选择器 / listProviders 统一消费。
  *
  * 账号隔离：本地 db 文件本身按 userId 切片（`<userData>/xdt-maker-<userId>.db`，换账号 closeDb
@@ -1029,7 +1022,7 @@ export const skillUsageExposures = sqliteTable(
  * 在 host 路由 resolve 时注入鉴权头，绝不入库 / 绝不进 catalog / 绝不回传 renderer 明文。
  *
  * **per-runtime 配置**：`runtimes` 以 TEXT 存 JSON.stringify 字符串——按 agent 索引、每个
- * runtime 各有独立 `{baseUrl, models, headers}`（对应 `@cindy/model-providers` 的
+ * runtime 各有独立 `{baseUrl, models, headers}`（对应 `@lizi/model-providers` 的
  * `CustomProviderConfig.runtimes`）。反序列化失败安全兜底（→{}），不抛错。
  */
 export const customProviders = sqliteTable(
@@ -1182,14 +1175,14 @@ export const deviceLinkOwnership = sqliteTable('device_link_ownership', {
 });
 
 /**
- * ── cindy-media 媒体总仓账本(契约:docs/dev-rules/media-storage-and-protocols.md)─────────────────────
+ * ── cindy-media 媒体总仓账本(设计:docs/Cindy架构设计/媒体总仓/media-store.md)──
  *
  * 字节与含义分家:硬盘上的字节仓(userData/cindy-media/blobs,内容寻址,
  * 文件名=SHA-256 指纹)不含任何归属信息;文件的出生、性质、引用全部是
  * 下面两张表的行。生命周期 = 引用计数:blob 无任何 ref → 回收候选
  * (回收器在后续切片实现,本切片只做写入与归属查询)。
  *
- * 历史兼容层(cc-agent/ 各仓 + xdt-image 等协议)整体冻结,
+ * 老世界(cc-agent/ 各仓 + xdt-image 等协议)整体冻结 grandfather,
  * 不进本账本;新写入 100% 走本体系。
  */
 
@@ -1249,7 +1242,7 @@ export const mediaRefs = sqliteTable(
 );
 
 /**
- * 意识聊天卡片(卡槽③海报模式)。
+ * 意识聊天卡片(卡槽③海报模式,C3d')。
  *
  * 一行 = 一次 ghost_call 的最新卡片版本(upsert by callId,过程版被终版
  * 覆盖)。html 是主机 sanitizer 的净化产物,renderer 直接装入沙箱 iframe;

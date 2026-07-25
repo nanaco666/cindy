@@ -30,7 +30,12 @@ import type {
 
 const log = createLogger('help-feedback');
 
-const VALID_LOCALES: ReadonlySet<HelpLocale> = new Set<HelpLocale>(['zh-CN', 'en', 'ja', 'ko']);
+const VALID_LOCALES: ReadonlySet<HelpLocale> = new Set<HelpLocale>([
+  'zh-CN',
+  'en',
+  'ja',
+  'ko',
+]);
 
 function draftFilePath(): string {
   return path.join(app.getPath('userData'), 'help-feedback-drafts.json');
@@ -78,7 +83,11 @@ async function readAll(): Promise<HelpFeedbackDraft[]> {
     // suffix so the user (or a recovery script) can inspect it later;
     // return empty so the next write produces a clean file rather than
     // silently overwriting partially-readable history.
-    await quarantineCorrupted(file, raw, err instanceof Error ? err.message : String(err));
+    await quarantineCorrupted(
+      file,
+      raw,
+      err instanceof Error ? err.message : String(err),
+    );
     return [];
   }
 }

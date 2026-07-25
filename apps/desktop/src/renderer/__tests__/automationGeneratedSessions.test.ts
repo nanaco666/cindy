@@ -101,27 +101,24 @@ describe('automation-generated sessions', () => {
   });
 
   it('keeps scheduler sessions in the desktop-visible source contract', () => {
-    // feishu / slack / telegram / discord 四个 IM 渠道均进 desktop sidebar
+    // feishu / slack / discord 三个 IM 渠道均进 desktop sidebar
     // (feishu 2026-07-16 起以「对话」分组回归, 见 sessionSource.ts 注释)。
     expect(DESKTOP_VISIBLE_SESSION_SOURCES).toEqual([
       'desktop',
       'feishu',
       'slack',
-      'telegram',
       'discord',
       'scheduler',
       'learn',
       'shared',
     ]);
     expect(DESKTOP_VISIBLE_SESSION_SOURCES).toContain('feishu');
-    expect(DESKTOP_VISIBLE_SESSION_SOURCES).toContain('telegram');
     expect(DESKTOP_VISIBLE_SESSION_SOURCES).toContain('discord');
 
     expect(normalizeSessionSource('desktop')).toBe('desktop');
     expect(normalizeSessionSource('scheduler')).toBe('scheduler');
     expect(normalizeSessionSource('learn')).toBe('learn');
     expect(normalizeSessionSource('feishu')).toBe('feishu');
-    expect(normalizeSessionSource('telegram')).toBe('telegram');
     expect(normalizeSessionSource('discord')).toBe('discord');
     expect(normalizeSessionSource(null)).toBe('desktop');
     expect(normalizeSessionSource('unknown')).toBe('desktop');
@@ -158,21 +155,21 @@ describe('automation-generated sessions', () => {
           id: 'daily-old',
           title: 'Daily summary',
           source: 'scheduler',
-          workingDir: '/Users/alice/repo',
+          workingDir: '/Users/dash/repo',
           userSendAt: '2026-01-02T00:00:00.000Z',
         }),
         makeSession({
           id: 'daily-new',
           title: 'Daily summary',
           source: 'scheduler',
-          workingDir: '/Users/alice/repo',
+          workingDir: '/Users/dash/repo',
           userSendAt: '2026-01-04T00:00:00.000Z',
           agentKind: 'codex',
         }),
         makeSession({
           id: 'legacy',
           title: '[Schedule] Legacy summary',
-          workingDir: '/Users/alice/repo',
+          workingDir: '/Users/dash/repo',
           userSendAt: '2026-01-03T00:00:00.000Z',
         }),
         makeSession({
@@ -198,7 +195,7 @@ describe('automation-generated sessions', () => {
     expect(groups[0].schedules[0].sessions.map((session) => session.id)).toEqual(['dialogue-run']);
 
     expect(groups[1]).toMatchObject({
-      workingDir: '/Users/alice/repo',
+      workingDir: '/Users/dash/repo',
       displayName: 'repo',
     });
     expect(groups[1].schedules.map((schedule) => schedule.scheduleName)).toEqual([
@@ -226,14 +223,14 @@ describe('automation-generated sessions', () => {
         id: 'project-manual',
         title: 'Manual project session',
         source: 'desktop',
-        workingDir: '/Users/alice/repo',
+        workingDir: '/Users/dash/repo',
         userSendAt: '2026-01-02T00:00:00.000Z',
       }),
       makeSession({
         id: 'project-auto',
         title: 'Automated project session',
         source: 'scheduler',
-        workingDir: '/Users/alice/repo',
+        workingDir: '/Users/dash/repo',
         userSendAt: '2026-01-03T00:00:00.000Z',
       }),
       makeSession({
@@ -249,7 +246,7 @@ describe('automation-generated sessions', () => {
     expect(grouped.dialogues.map((session) => session.id)).toEqual(['dialogue-auto']);
     expect(grouped.projects).toHaveLength(1);
     expect(grouped.projects[0]).toMatchObject({
-      workingDir: '/Users/alice/repo',
+      workingDir: '/Users/dash/repo',
       displayName: 'repo',
     });
     expect(grouped.projects[0].sessions.map((session) => session.id)).toEqual([
@@ -264,7 +261,7 @@ describe('automation-generated sessions', () => {
         id: 'manual-draft',
         title: 'Manual draft',
         source: 'desktop',
-        workingDir: '/Users/alice/repo',
+        workingDir: '/Users/dash/repo',
         userSendAt: null,
         _count: { messages: 0 },
       }),
@@ -272,7 +269,7 @@ describe('automation-generated sessions', () => {
         id: 'scheduler-bound',
         title: '[Schedule] GitHub 巡检',
         source: 'scheduler',
-        workingDir: '/Users/alice/repo',
+        workingDir: '/Users/dash/repo',
         userSendAt: null,
         _count: { messages: 0 },
       }),
@@ -281,7 +278,7 @@ describe('automation-generated sessions', () => {
     expect(grouped.unclassified.map((session) => session.id)).toEqual(['manual-draft']);
     expect(grouped.projects).toHaveLength(1);
     expect(grouped.projects[0]).toMatchObject({
-      workingDir: '/Users/alice/repo',
+      workingDir: '/Users/dash/repo',
       displayName: 'repo',
     });
     expect(grouped.projects[0].sessions.map((session) => session.id)).toEqual(['scheduler-bound']);
@@ -755,16 +752,12 @@ describe('automation-generated sessions', () => {
     // 否则裸 VendorIcon 会比其它会话向左偏约 1.5px，Claude mark 还会小 1px。
     expect(source).toContain('className="flex w-[15px] shrink-0 items-center justify-center"');
     expect(source).toContain("size={latestSession?.agentKind === 'codex' ? 12 : 13}");
-    // 所有自动任务统一 Timer；暂停只叠角标，主图标和 12px 槽位不替换。
-    expect(source).toContain('<AutomationTimerIcon');
-    expect(source).toContain('paused={isScheduleStopped}');
-    expect(source).not.toContain('<Clock');
-    expect(source).not.toContain('<Pause');
-    // 沿用原 Clock 的紧凑节奏：vendor → Timer、Timer → 标题均为 6px。
-    expect(source).toContain(
-      'className="flex min-w-0 items-center gap-1.5 text-left disabled:cursor-default"',
-    );
-    expect(source).toContain('className="flex min-w-0 items-center gap-1.5"');
+    expect(source).toContain('<Clock');
+    // 已停止(paused/expired)时整个 Clock chip 换成大 Pause 图标(size 10 + fill),
+    // 不再是原先叠在 Clock 上的迷你角标 —— 视觉必须明显。
+    expect(source).toContain('isScheduleStopped ? (');
+    expect(source).toContain('<Pause\n                  size={10}');
+    expect(source).toContain('fill="currentColor"');
     expect(source).toContain('runningSessionIds,');
   });
 

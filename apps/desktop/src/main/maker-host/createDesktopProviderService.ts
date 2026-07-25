@@ -25,7 +25,7 @@ import {
   type Catalog,
   type CatalogIO,
   type CatalogSourceConfig,
-} from '@cindy/model-providers';
+} from '@lizi/model-providers';
 
 import { createLogger } from '../logger.js';
 import { getBaseUrl, isDev } from '../manifestService.js';
@@ -51,22 +51,10 @@ import {
 import { genericOAuthSecretIo, setProviderSecretsClearedListener } from '../secrets/providerSecretStore.js';
 import { readClaudeApiKey, desktopCodexAuthAdapter } from './auth-adapters.js';
 import { readCustomProviderKey } from '../secrets/providerSecretStore.js';
-import { hasClaudeAiOAuth, hasClaudeAiOAuthUnbound } from './claude-credentials-store.js';
-import {
-  getGrokAccessToken,
-  hasGrokOAuthLogin,
-  hasGrokOAuthLoginUnbound,
-  resetGrokOAuthMemoryCache,
-} from './grok-oauth-login.js';
+import { hasClaudeAiOAuth } from './claude-credentials-store.js';
+import { getGrokAccessToken, hasGrokOAuthLogin } from './grok-oauth-login.js';
 import { getAuthState } from '../authManager.js';
-import { getActiveAppSession } from '../appSessionState.js';
 import { filterProviderCatalogForAccount } from './provider-access-policy.js';
-import { getAppCapabilities } from '../appCapabilities.js';
-import {
-  isNativeProviderAuthBound,
-  migrateLegacyNativeProviderAuthBindings,
-} from './nativeProviderAuthBinding.js';
-import { hasLegacyOwnerNamespaceClaim } from '../ownerNamespaceMigration.js';
 
 const log = createLogger('provider-service');
 
@@ -196,10 +184,7 @@ export function ensureActiveCatalogLoaded(): Promise<Catalog> {
   });
   // 账号切换清空本机密钥后,同步失效 generic-oauth 的内存缓存——
   // 不失效的话磁盘 blob 已删但缓存还热,B 账号会继续用 A 的 token 路由(串号)。
-  setProviderSecretsClearedListener(() => {
-    resetGenericOAuthMemoryCache();
-    resetGrokOAuthMemoryCache();
-  });
+  setProviderSecretsClearedListener(() => resetGenericOAuthMemoryCache());
   const readOAuthToken = (providerId: string): string | null => {
     const provider = getActiveCatalog().providers.find((p) => p.id === providerId);
     return readCachedGenericOAuthAccessToken(providerId, provider?.auth.oauth);
@@ -280,40 +265,27 @@ export async function refreshCustomProvidersIntoCatalog(): Promise<void> {
 let singleton: ProviderService | null = null;
 
 /**
- * User-selectable desktop catalog. Account-free local sessions do not receive
- * the Cindy AI provider or any models whose only source is Cindy AI; every
- * Cindy account session keeps the full active catalog.
+ * User-selectable desktop catalog. Packaged personal memberships do not receive
+ * the Cindy AI provider or any models whose only source is Cindy AI; dev and org
+ * memberships keep the full active catalog.
  */
 export function getDesktopSelectableCatalog(): Catalog {
   return filterProviderCatalogForAccount(getActiveCatalog(), {
-    canUseCindyGateway: getAppCapabilities().canUseCindyGateway,
+    isPackaged: app.isPackaged,
+    membershipKind: getAuthState().user?.membershipKind,
   });
 }
 
 /** 进程内单例：注入 active-catalog（同步读）+ 实时连接状态读取器。 */
 export function getDesktopProviderService(): ProviderService {
-  const authState = getAuthState();
-  const ownerId = getActiveAppSession().dataOwnerId;
-  if (
-    authState.mode === 'cloud' &&
-    ownerId &&
-    authState.user?.id === ownerId &&
-    hasLegacyOwnerNamespaceClaim(ownerId)
-  ) {
-    migrateLegacyNativeProviderAuthBindings(ownerId, {
-      anthropic: hasClaudeAiOAuthUnbound(),
-      openai: desktopCodexAuthAdapter.hasCodexOAuthLoginUnbound(),
-      xai: hasGrokOAuthLoginUnbound(),
-    });
-  }
   if (singleton) return singleton;
   singleton = createProviderService({
     getCatalog: getDesktopSelectableCatalog,
     connection: {
-      xd: () => getAppCapabilities().canUseCindyGateway && readClaudeApiKey() != null,
-      anthropic: () => isNativeProviderAuthBound('anthropic') && hasClaudeAiOAuth(),
-      openai: () => isNativeProviderAuthBound('openai') && desktopCodexAuthAdapter.hasCodexOAuthLogin(),
-      xai: () => isNativeProviderAuthBound('xai') && hasGrokOAuthLogin(),
+      xd: () => readClaudeApiKey() != null,
+      anthropic: () => hasClaudeAiOAuth(),
+      openai: () => desktopCodexAuthAdapter.hasCodexOAuthLogin(),
+      xai: () => hasGrokOAuthLogin(),
     },
     // 通用 OAuth 供应商（目录 auth.oauth 描述符驱动）：连接态 = 本机凭证 blob 是否存在。
     genericOAuthConnected: (providerId) => hasGenericOAuthLogin(providerId),

@@ -15,16 +15,6 @@ type RsbWindowCommand = import('../shared/rightSidebarWindow').RsbWindowCommand;
 type DesktopLoginAction = import('../shared/authIpc').DesktopLoginAction;
 type DesktopLoginActionResult = import('../shared/authIpc').DesktopLoginActionResult;
 type UtilityTextFailure = import('../shared/utilityTextResult').UtilityTextFailure;
-type DesktopAccountDeletionConfirmInput =
-  import('../shared/authIpc').DesktopAccountDeletionConfirmInput;
-type DesktopAccountDeletionAvailabilityResult =
-  import('../shared/authIpc').DesktopAccountDeletionAvailabilityResult;
-type DesktopAccountDeletionChallengeResult =
-  import('../shared/authIpc').DesktopAccountDeletionChallengeResult;
-type DesktopAccountDeletionConfirmResult =
-  import('../shared/authIpc').DesktopAccountDeletionConfirmResult;
-type DesktopAccountDeletionStatusResult =
-  import('../shared/authIpc').DesktopAccountDeletionStatusResult;
 
 /* ── Environment check ── */
 
@@ -41,7 +31,7 @@ interface EnvCheckResult {
 // HostSnapshot 来自 transport-only package; desktop main 端 wrap 时附加
 // autoConnect 偏好字段 (本地 prefs, 不写入 ~/.ssh/config), 渲染层统一用
 // 这个扩展类型即可一次拿到完整信息, 不必再为单个字段单独 IPC。
-type RemoteHostSnapshot = import('@cindy/maker-remote-ssh').HostSnapshot & {
+type RemoteHostSnapshot = import('@lizi/maker-remote-ssh').HostSnapshot & {
   autoConnect: boolean;
 };
 /** 设备互联:REST 设备视图(同 shared/deviceLinkIpc.ts DeviceLinkDeviceView) */
@@ -68,7 +58,7 @@ interface DeviceLinkDeviceView {
   isSelf: boolean;
 }
 
-/** 设备互联:relay 连接问题(镜像 @cindy/device-link 的 DeviceLinkConnectionIssue) */
+/** 设备互联:relay 连接问题(镜像 @lizi/device-link 的 DeviceLinkConnectionIssue) */
 interface DeviceLinkConnectionIssuePayload {
   kind: 'auth-failed' | 'replaced' | 'too-many-connections' | 'version-mismatch';
   closeCode?: number;
@@ -113,10 +103,10 @@ interface LocalSshKeyInfo {
   mtimeIso: string | null;
 }
 type AgentFailureReason = 'agent_unavailable' | 'bad_passphrase' | 'no_such_file' | 'other';
-type RemoteAgentKind = import('@cindy/maker-remote-ssh').RemoteAgentKind;
-type RemoteAgentProbe = import('@cindy/maker-remote-ssh').ProbeResult;
-type RemoteAgentInstallResult = import('@cindy/maker-remote-ssh').InstallResult;
-type RemoteAgentInstallProgress = import('@cindy/maker-remote-ssh').InstallProgressEvent;
+type RemoteAgentKind = import('@lizi/maker-remote-ssh').RemoteAgentKind;
+type RemoteAgentProbe = import('@lizi/maker-remote-ssh').ProbeResult;
+type RemoteAgentInstallResult = import('@lizi/maker-remote-ssh').InstallResult;
+type RemoteAgentInstallProgress = import('@lizi/maker-remote-ssh').InstallProgressEvent;
 
 interface RemoteAgentInstallProgressPush {
   hostId: string;
@@ -154,19 +144,19 @@ interface RemoteAgentOneShotResult extends RemoteAgentExecResult {
   durationMs: number;
 }
 
-type VoiceInputState = import('@cindy/voice-input-core').VoiceInputState;
-type VoiceAudioTrace = import('@cindy/voice-input-core').AudioTrace;
-type VoiceSpeechSegment = import('@cindy/voice-input-core').SpeechSegment;
+type VoiceInputState = import('@lizi/voice-input-core').VoiceInputState;
+type VoiceAudioTrace = import('@lizi/voice-input-core').AudioTrace;
+type VoiceSpeechSegment = import('@lizi/voice-input-core').SpeechSegment;
 type VoiceInputGlobalErrorCode = 'empty' | 'unavailable' | 'unconfirmed' | 'permission' | 'failed';
 type VoiceInputGlobalResult =
   | { ok: true }
   | { ok: false; error: string; errorCode?: VoiceInputGlobalErrorCode };
-type VoiceEditableRange = import('@cindy/voice-input-core').EditableRange;
-type VoiceRefinementContext = import('@cindy/voice-input-core').DictationRefinementContext;
-type VoiceInputDraftSource = import('@cindy/voice-input-core').VoiceInputDraftSource;
-type VoiceInputRendererEvent = import('@cindy/voice-input-core').VoiceInputRendererEvent;
-type VoiceInputDictionaryAdviceInput = import('@cindy/voice-input-core').DictationDictionaryAdviceInput;
-type VoiceInputDictionaryLearningAction = import('@cindy/voice-input-core').DictationDictionaryLearningAction;
+type VoiceEditableRange = import('@lizi/voice-input-core').EditableRange;
+type VoiceRefinementContext = import('@lizi/voice-input-core').DictationRefinementContext;
+type VoiceInputDraftSource = import('@lizi/voice-input-core').VoiceInputDraftSource;
+type VoiceInputRendererEvent = import('@lizi/voice-input-core').VoiceInputRendererEvent;
+type VoiceInputDictionaryAdviceInput = import('@lizi/voice-input-core').DictationDictionaryAdviceInput;
+type VoiceInputDictionaryLearningAction = import('@lizi/voice-input-core').DictationDictionaryLearningAction;
 type VoiceInputSettingsData = import('../shared/voiceInputData').VoiceInputSettings;
 type VoiceInputHistoryEntryData = import('../shared/voiceInputData').VoiceInputHistoryEntry;
 type VoiceInputDataSnapshot = import('../shared/voiceInputData').VoiceInputDataSnapshot;
@@ -182,9 +172,6 @@ type VoiceInputModelSelectionResultData = {
     asrProvider: VoiceInputProviderKindData;
     refinerProvider: VoiceInputRefinerProviderKindData;
     refinerModel?: string;
-    /** Effective refiner chain, head first; length 1 = no fallback (BYOK default). */
-    refinerProviderChain: VoiceInputRefinerProviderKindData[];
-    refinerProviderChainSource: 'default' | 'configured';
     configPath: string;
   };
   asrProfiles: Array<{
@@ -247,8 +234,10 @@ interface ComputerDriverStatus {
 interface ComputerDriverStatusOptions {
   includeDoctor?: boolean;
   forcePermissionProbe?: boolean;
+  skipPermissionProbe?: boolean;
   freshPermissionProbe?: boolean;
   bypassPermissionProbeCache?: boolean;
+  passivePermissionProbeOnly?: boolean;
 }
 
 type ComputerDriverPermissionPlatform = 'macos' | 'windows' | 'linux' | 'unsupported';
@@ -338,8 +327,6 @@ interface AuthUser {
   orgName: string | null;
   /** 组织稳定标识(access token orgSlug claim);个人身份或旧 token 为 null。 */
   orgSlug: string | null;
-  /** 企业 logo(auth console 组织设置上传);个人身份或未设置为 null。 */
-  orgLogoUrl: string | null;
   passportId: string;
 }
 
@@ -349,7 +336,7 @@ type GoogleAuthStatus = 'not_connected' | 'connecting' | 'connected' | 'reconnec
 
 type FeishuBotStatus = 'idle' | 'testing' | 'connected' | 'reconnecting' | 'conflict' | 'error';
 
-/** @cindy/im DiscordIM 的 transport 状态(IMStatus union 的 mirror)。 */
+/** lizi-im DiscordIM 的 transport 状态(IMStatus union 的 mirror)。 */
 type DiscordBotTransportStatus =
   | { kind: 'idle' }
   | { kind: 'connecting' }
@@ -387,34 +374,15 @@ interface FeishuBotRegistrationStatusPayload {
 /** Auth state pushed from main → renderer via 'auth:state-change'. */
 interface AuthStateChangePayload {
   user: AuthUser | null;
-  mode: 'signed-out' | 'local' | 'cloud';
-  dataOwnerId: string | null;
-  canEnterApp: boolean;
   isAuthenticated: boolean;
   /** 当前账号是否加入 Canary 发布通道；由 main 的 feature-flags 同步结果驱动。 */
   isCanary: boolean;
   /** SkillHub 跨设备识别：本机 deviceId（machineIdSync 结果），登录前后都有值 */
   deviceId: string;
-  hasAccountDeletionReceipt: boolean;
-  accountDeletionRestored: boolean;
 }
-
-/**
- * 会话失效的客户端内部分类(镜像 main/authRefreshFailure.ts 的 SessionExpiredReason;
- * main 不透传服务端原文,renderer 按此映射本地化文案)。
- */
-type AuthSessionExpiredReason =
-  | 'replaced-elsewhere'
-  | 'expired'
-  | 'device-mismatch'
-  | 'account-unavailable'
-  | 'credential-lost'
-  | 'unknown';
 
 interface AuthSessionExpiredPayload {
   message: string;
-  /** 缺省视为 'unknown'(老版本 main 不带此字段)。 */
-  reason?: AuthSessionExpiredReason;
 }
 
 /** chat-data-localization F1 V0.4: corruption-restored toast payload (C10). */
@@ -761,22 +729,13 @@ interface PluginListItem {
   source: 'builtin' | 'hub' | 'local';
   essential: boolean;
   effectiveEnabled: boolean;
-  productDefaultEnabled: boolean;
   projectOverride?: { enabled: boolean; workingDir: string } | null;
-  userOverride?: { enabled: boolean } | null;
-  globalOverride?: { enabled: boolean } | null;
 }
 
 interface PluginEnableState {
   effectiveEnabled: boolean;
-  productDefaultEnabled: boolean;
   projectOverride?: { enabled: boolean; workingDir: string } | null;
-  userOverride?: { enabled: boolean } | null;
   globalOverride?: { enabled: boolean } | null;
-}
-
-interface PluginEnableUpdateResult {
-  codexMcpRefreshed: boolean;
 }
 
 interface BrowserAvailability {
@@ -1015,16 +974,13 @@ interface ElectronAPI {
     install: (
       lizFilePath: string,
       /** enable:装入后立即开启(确认框勾选决定;缺省沉睡)。 */
-      opts: { enable?: boolean; expectedPackageSha256: string },
-    ) => Promise<{ ghost: import('../shared/ghost').InstalledGhost } | { canceled: true }>;
+      opts?: { enable?: boolean },
+    ) => Promise<{ ghost: import('../shared/ghost').InstalledGhost }>;
     /** 原位更新(同 id 换版):唤醒状态与面板位置延续,沙箱熄灯待重拉。 */
-    update: (
-      lizFilePath: string,
-      opts: { expectedPackageSha256: string },
-    ) => Promise<{ ghost: import('../shared/ghost').InstalledGhost } | { canceled: true }>;
+    update: (lizFilePath: string) => Promise<{ ghost: import('../shared/ghost').InstalledGhost }>;
     /**
      * cindy 槽后端覆盖:首帧同步读(规则 7);overrides 键为 "image.generate"
-     * 等能力键;image/video 各一份下拉数据,defaultModel = 目录默认
+     * 等能力键;image/video 各一份下拉数据(C3c-5),defaultModel = 目录默认
      * 选型的展示信息("默认(GPT Image 2)")。
      */
     cindyPrefsSync: (id: string) => {
@@ -1040,16 +996,10 @@ interface ElectronAPI {
     ) => Promise<{ overrides: Record<string, string> }>;
     /** 系统文件选择框(.cindy 过滤),只选不装;取消返回 { canceled: true }。 */
     pickFile: () => Promise<{ canceled: true } | { filePath: string }>;
-    /** 只验不装:读出清单、签名信任等级与 icon data URL,供确认弹窗展示。 */
+    /** 只验不装:读出清单(含 icon data URL)供装入确认弹窗展示,零副作用。 */
     inspect: (
       lizFilePath: string,
-    ) => Promise<{
-      manifest: import('../shared/ghost').GhostManifest;
-      trust: import('../shared/ghost').GhostTrustInfo;
-      /** 本次检查的整包指纹；安装/更新时回传，防止确认后文件被替换。 */
-      packageSha256: string;
-      iconDataUrl?: string;
-    }>;
+    ) => Promise<{ manifest: import('../shared/ghost').GhostManifest; iconDataUrl?: string }>;
     uninstall: (id: string) => Promise<{ ok: true }>;
     /** 启用/停用(停用 = 面板休眠,布局位置保留)。 */
     setEnabled: (id: string, enabled: boolean) => Promise<{ ok: true }>;
@@ -1063,6 +1013,25 @@ interface ElectronAPI {
     ) => Promise<{ disabled: string[] }>;
     /** 双击 .cindy 的待装路径,原子取走(取即清空;无则 null)。 */
     takePendingInstall: () => Promise<{ filePath: string | null }>;
+    /**
+     * 内置意识状态(sendSync 首帧同步):builtinIds 打标/分组,enterpriseIds
+     * (builtinIds 子集)把企业档单列一组,restorable 是已抽离可恢复清单。
+     */
+    builtinStatusSync: () => {
+      builtinIds: string[];
+      enterpriseIds: string[];
+      restorable: Array<{
+        id: string;
+        name: string;
+        description?: string;
+        version: string;
+        manifest: import('../shared/ghost').GhostManifest;
+        tier: 'builtin' | 'enterprise';
+        iconDataUrl?: string;
+      }>;
+    };
+    /** 恢复被抽离的内置意识(清墓碑 + 立即对账装回)。 */
+    restoreBuiltin: (id: string) => Promise<{ ok: true }>;
     onChanged: (
       callback: (payload: { ghosts: import('../shared/ghost').InstalledGhost[] }) => void,
     ) => () => void;
@@ -1072,6 +1041,8 @@ interface ElectronAPI {
     onRuntimeChanged: (
       callback: (payload: { states: Record<string, string> }) => void,
     ) => () => void;
+    /** 内置意识播种进行中(真实装/覆盖/回收时 true,完成 false;胶囊提示用)。 */
+    onProvisioning: (callback: (payload: { active: boolean }) => void) => () => void;
     /** 面板「点开产物大图」推送:main 拦下 /preview/ 导航并过闸后,推主机拼装的
      *  cindy-media:// 地址与媒体类别,GhostMediaLightboxHost 按 kind 弹
      *  ImageLightbox / VideoLightbox。 */
@@ -1187,21 +1158,11 @@ interface ElectronAPI {
         tone: 'info' | 'success' | 'warning' | 'error';
       }) => void,
     ) => () => void;
-    /** preview 槽:插件请求在右侧栏内置浏览器开预览标签(main 已白名单守门+限速)。 */
-    onPreviewOpen: (
-      callback: (payload: {
-        ghostId: string;
-        name: string;
-        iconDataUrl?: string;
-        sessionId: string;
-        url: string;
-      }) => void,
-    ) => () => void;
     /** 运行时状态快照(错误接管态首帧数据源)。 */
     runtimeStates: () => Promise<{ states: Record<string, string> }>;
     /** 面板错误态「重载意识」:清熔断记账 + 重新拉起沙箱。 */
     reload: (id: string) => Promise<{ state: string }>;
-    /** dev-only 运行时控制(packaged 版 main 侧不注册,调用会 reject)。 */
+    /** dev-only 运行时控制(C3a;packaged 版 main 侧不注册,调用会 reject)。 */
     devRuntime: (
       action: 'status' | 'spawn' | 'stop' | 'crash',
       id?: string,
@@ -1268,11 +1229,8 @@ interface ElectronAPI {
       asrProvider?: string | null;
       refinerProvider?: string | null;
       refinerModel?: string | null;
-      /** BYOK fallback tail; null clears the override (primary runs alone). */
-      refinerProviderChain?: string[] | null;
     }) => Promise<VoiceInputModelSelectionResultData>;
     reloadModelSelection: () => Promise<VoiceInputModelSelectionResultData>;
-    openSettings: (tab: 'voice-input' | 'providers') => Promise<{ ok: true }>;
     start: (params?: {
       sourceLanguage?: string;
       refinementEnabled?: boolean;
@@ -1439,30 +1397,15 @@ interface ElectronAPI {
   // ── Auth (delegated to main process authManager) ──
   authInitialize: () => Promise<{
     user: AuthUser | null;
-    mode: 'signed-out' | 'local' | 'cloud';
-    dataOwnerId: string | null;
-    canEnterApp: boolean;
     isAuthenticated: boolean;
     isCanary: boolean;
     /** SkillHub 跨设备识别：本机 deviceId，登录前后都有值 */
     deviceId: string;
-    hasAccountDeletionReceipt: boolean;
-    accountDeletionRestored: boolean;
   }>;
   authGetLoginState: () => Promise<DesktopLoginActionResult>;
   authDispatchLoginAction: (action: DesktopLoginAction) => Promise<DesktopLoginActionResult>;
   authLogout: () => Promise<void>;
-  authEnterLocal: () => Promise<AuthStateChangePayload>;
-  authExitLocal: () => Promise<AuthStateChangePayload>;
   authRefresh: () => Promise<boolean>;
-  authGetAccountDeletionAvailability: () => Promise<DesktopAccountDeletionAvailabilityResult>;
-  authRequestAccountDeletionChallenge: () => Promise<DesktopAccountDeletionChallengeResult>;
-  authConfirmAccountDeletion: (
-    input: DesktopAccountDeletionConfirmInput,
-  ) => Promise<DesktopAccountDeletionConfirmResult>;
-  authGetAccountDeletionStatus: () => Promise<DesktopAccountDeletionStatusResult>;
-  authClearAccountDeletionReceipt: () => Promise<void>;
-  authConsumeAccountDeletionRestoredNotice: () => Promise<boolean>;
   onAuthStateChange: (callback: (state: AuthStateChangePayload) => void) => () => void;
   onAuthSessionExpired: (callback: (state: AuthSessionExpiredPayload) => void) => () => void;
   onTapdbDailyActive: (callback: (payload: { date: string }) => void) => () => void;
@@ -1821,10 +1764,8 @@ interface ElectronAPI {
      * 选择性走哪些通知通道; 缺省 / 未传 → 兼容旧行为(仅桌面)。
      * renderer 侧 gate(localStorage notifications.enabled /
      * notifications.feishuEnabled)后填入。
-     * mobile = 手机推送:桌面侧无独立开关(手机端注册/注销 token 决定接收),
-     * 发送侧防打扰在 main 的 device-link 模块收口,renderer 恒传 true。
      */
-    channels?: { desktop?: boolean; feishu?: boolean; mobile?: boolean };
+    channels?: { desktop?: boolean; feishu?: boolean };
   }) => Promise<void>;
   /** Sync the renderer-owned global desktop-notification preference to main. */
   notificationSetDesktopEnabled?: (enabled: boolean) => Promise<{ ok: true }>;
@@ -1882,8 +1823,7 @@ interface ElectronAPI {
         | { type: 'session'; id: string; messageClientId?: string }
         | { type: 'project'; workingDir: string }
         | { type: 'new-session'; workingDir: string }
-        | { type: 'share-import'; filePath: string }
-        | { type: 'settings'; tab: 'voice-input' | 'providers' },
+        | { type: 'share-import'; filePath: string },
     ) => void,
   ) => () => void;
 
@@ -1898,7 +1838,6 @@ interface ElectronAPI {
     | { type: 'project'; workingDir: string }
     | { type: 'new-session'; workingDir: string }
     | { type: 'share-import'; filePath: string }
-    | { type: 'settings'; tab: 'voice-input' | 'providers' }
     | null
   >;
 
@@ -2433,7 +2372,7 @@ interface ElectronAPI {
   cleanupCachedImages: (urls: string[]) => Promise<void>;
 
   /**
-   * 媒体总仓存储管理(关于页存储空间卡片):占用统计 / 清理
+   * 媒体总仓存储管理(关于页存储空间卡片,迁移第 5 步):占用统计 / 清理
    * 预检(报数)/ 执行清理 / 对账体检。draftUrls 由 renderer 从
    * composerDraftStore 现场收集随参带上(草稿附件是合法零引用,防误删)。
    */
@@ -2789,10 +2728,6 @@ interface ElectronAPI {
     setEnabled: (
       enabled: boolean,
     ) => Promise<{ hook: import('../shared/hookControlIpc').SlackHookView }>;
-    setProviderEnabled: (
-      provider: 'telegram',
-      enabled: boolean,
-    ) => Promise<{ hook: import('../shared/hookControlIpc').SlackHookView }>;
     setWorkspaces: (
       workspaces: Record<string, string>,
     ) => Promise<{ hook: import('../shared/hookControlIpc').SlackHookView }>;
@@ -2807,12 +2742,6 @@ interface ElectronAPI {
       teamId: string,
     ) => Promise<{ hook: import('../shared/hookControlIpc').SlackHookView }>;
     cancelPendingBind: () => Promise<{ hook: import('../shared/hookControlIpc').SlackHookView }>;
-    providerBindStart: () => Promise<{ hook: import('../shared/hookControlIpc').SlackHookView }>;
-    providerBindCancel: () => Promise<{ hook: import('../shared/hookControlIpc').SlackHookView }>;
-    providerBindRevoke: () => Promise<{ hook: import('../shared/hookControlIpc').SlackHookView }>;
-    openTelegramAction: (
-      action: import('../shared/hookControlIpc').TelegramOpenAction,
-    ) => Promise<{ ok: true }>;
     getWorkspacePrefs: () => Promise<{
       prefs: import('../shared/hookControlIpc').HookPrefsView;
     }>;
@@ -2821,18 +2750,8 @@ interface ElectronAPI {
       patch: import('../shared/hookControlIpc').HookPrefsPatch,
       teamId?: string | null,
     ) => Promise<{ prefs: import('../shared/hookControlIpc').HookPrefsView }>;
-    getProviderWorkspacePrefs: () => Promise<{
-      prefs: import('../shared/hookControlIpc').ProviderPrefsView;
-    }>;
-    setProviderWorkspacePrefs: (
-      workspace: string,
-      patch: import('../shared/hookControlIpc').HookPrefsPatch,
-    ) => Promise<{ prefs: import('../shared/hookControlIpc').ProviderPrefsView }>;
     onPrefsChanged: (
       cb: (view: import('../shared/hookControlIpc').HookPrefsView) => void,
-    ) => () => void;
-    onProviderPrefsChanged: (
-      cb: (view: import('../shared/hookControlIpc').ProviderPrefsView) => void,
     ) => () => void;
     onStatusChanged: (
       cb: (view: import('../shared/hookControlIpc').SlackHookView) => void,
@@ -3220,9 +3139,6 @@ interface ElectronAPI {
           message: import('@/lib/ccAgent.types').Message;
         }) => void,
       ) => () => void;
-      onDeleted: (
-        callback: (payload: { sessionId: string; clientId: string }) => void,
-      ) => () => void;
       onErrorPersisted: (
         callback: (payload: { sessionId: string }) => void,
       ) => () => void;
@@ -3353,18 +3269,18 @@ interface ElectronAPI {
     ) => Promise<import('../shared/workflow-progress').WorkflowProgress | null>;
 
     // 模型供应商目录（只读）—— 内置目录元数据 + 各供应商实时连接状态。
-    listProviders: () => Promise<{ providers: import('@cindy/model-providers').ProviderView[] }>;
+    listProviders: () => Promise<{ providers: import('@lizi/model-providers').ProviderView[] }>;
 
     // 自定义供应商配置 CRUD（密钥另走通用 safeStorage IPC，不经这里）。
     createCustomProvider: (
-      config: import('@cindy/model-providers').CustomProviderConfig,
+      config: import('@lizi/model-providers').CustomProviderConfig,
     ) => Promise<{ ok: true }>;
     updateCustomProvider: (
-      config: import('@cindy/model-providers').CustomProviderConfig,
+      config: import('@lizi/model-providers').CustomProviderConfig,
     ) => Promise<{ ok: true }>;
     deleteCustomProvider: (providerId: string) => Promise<{ ok: true }>;
     /** 自定义供应商创建模板（目录 presets 段，纯 UI 模板数据）。 */
-    listProviderPresets: () => Promise<{ presets: import('@cindy/model-providers').ProviderPreset[] }>;
+    listProviderPresets: () => Promise<{ presets: import('@lizi/model-providers').ProviderPreset[] }>;
     /** 供应商「测试连接」—— 与真实会话同路由口径的最小探测请求（结构化结果，code 走 providerError.* i18n）。 */
     testProviderConnection: (
       input:
@@ -3434,7 +3350,6 @@ interface ElectronAPI {
       cb: (event: {
         agent: 'claude-code' | 'codex';
         providerId: string;
-        providerName?: string;
         code: import('../shared/providerErrors').ProviderErrorCode;
         retryable: boolean;
         status: number;
@@ -3658,8 +3573,6 @@ interface ElectronAPI {
         userName?: string;
         /** Codex renderer 队列路径需要“已接受或已拒绝”的语义,再决定是否落库。 */
         throwOnStartFailure?: boolean;
-        /** Direct Continue fallback:执行端在 dispatch 成功后确认旧中断。 */
-        ackInterruptedTurnOnDispatch?: boolean;
       },
     ) => Promise<{ accepted: true } | { accepted: false; reason?: string }>;
 
@@ -3694,15 +3607,10 @@ interface ElectronAPI {
         remoteHostId?: string;
         resumeSessionId?: string;
       },
-    ) => Promise<import('@cindy/maker-core').ContextUsageData>;
+    ) => Promise<import('@lizi/maker-core').ContextUsageData>;
 
     abortSession: (sessionId: string) => Promise<void>;
     closeSession: (sessionId: string, opts?: { preserveWorkspace?: boolean }) => Promise<void>;
-    /** 删除单条消息并让下一次发送从剩余本地历史重建 Agent 上下文。 */
-    deleteMessage: (
-      sessionId: string,
-      clientId: string,
-    ) => Promise<{ sessionId: string; clientId: string; clientIds: string[] }>;
     listActive: () => Promise<Array<{
       sessionId: string;
       agentKind: 'claude-code' | 'codex';
@@ -3746,7 +3654,6 @@ interface ElectronAPI {
         sessionId: string,
         clientId: string,
         newText: string,
-        sessionRefs?: import('../shared/agentInputQueue').AgentInputSessionRef[],
       ) => Promise<import('../shared/agentInputQueue').AgentInputProjection>;
       move: (
         sessionId: string,
@@ -3849,8 +3756,6 @@ interface ElectronAPI {
       isCustomized: boolean;
       customizedKeys: string[];
       defaults: { maker: boolean; claudeCode: boolean; codex: boolean };
-      /** true = Codex 正忙, 存活会话的软重启在任务结束后自动补做 (设置已生效) */
-      codexRestartDeferred: boolean;
     }>;
 
     /** Maker Memory 整库重置: 删 <userData>/maker-memory/ 全部 workdir 目录 */
@@ -3879,8 +3784,6 @@ interface ElectronAPI {
       isCustomized: boolean;
       customizedKeys: string[];
       defaults: { maker: boolean; claudeCode: boolean; codex: boolean };
-      /** true = Codex 正忙, 存活会话的软重启在任务结束后自动补做 (设置已生效) */
-      codexRestartDeferred: boolean;
     }>;
 
     /** IM 新会话默认 agent/model/effort/provider。仅影响新 IM session 和 Feishu `/new` */
@@ -3926,7 +3829,7 @@ interface ElectronAPI {
     /**
      * 智能通讯录(maker-contacts)— 设置页管理 UI 数据通道。
      * DTO 用 unknown 透传, renderer 在 lib/contactsService.ts 收敛为
-     * @cindy/maker-core 的 contacts 类型(type-only import)。
+     * @lizi/maker-core 的 contacts 类型(type-only import)。
      */
     contacts: {
       settingsGet: () => Promise<{ enabled: boolean; isCustomized: boolean }>;
@@ -4211,7 +4114,7 @@ interface ElectronAPI {
     };
 
     /* ── Scheduler (Phase 4 IPC, Phase 6 UI) ──
-     * payload 同 @cindy/maker-scheduler 的 Schedule / ScheduleRun / SchedulerEvent
+     * payload 同 @lizi/maker-scheduler 的 Schedule / ScheduleRun / SchedulerEvent
      * （为防 vite-env.d.ts 引入 import 副作用导致循环类型解析，这里用 unknown 兜底，
      * renderer 侧由 features/scheduler/lib 重新 narrow 成强类型）。
      */
@@ -4261,9 +4164,6 @@ interface ElectronAPI {
         description: string;
         scheduleName?: string;
         workingDir?: string;
-        providerId?: string;
-        agentKind?: 'claude-code' | 'codex';
-        model?: string;
         /** 绑定会话任务:workingDir 空时 main 按会话 meta.workDir 解析落盘/自测目录。 */
         targetSessionId?: string;
         currentCommand?: string;
@@ -4312,8 +4212,8 @@ interface ElectronAPI {
     plugins: {
       list: (workingDir?: string) => Promise<PluginListItem[]>;
       getState: (id: string, workingDir?: string) => Promise<PluginEnableState>;
-      setEnabled: (id: string, enabled: boolean) => Promise<PluginEnableUpdateResult>;
-      clearEnabled: (id: string) => Promise<PluginEnableUpdateResult>;
+      setEnabled: (id: string, enabled: boolean) => Promise<void>;
+      clearEnabled: (id: string) => Promise<void>;
       setProjectEnabled: (workingDir: string, id: string, enabled: boolean) => Promise<void>;
       clearProjectEnabled: (workingDir: string, id: string) => Promise<void>;
     };
@@ -4331,9 +4231,19 @@ interface ElectronAPI {
     computer: {
       status: (options?: ComputerDriverStatusOptions) => Promise<ComputerDriverStatus>;
       installDriver: () => Promise<ComputerDriverInstallResult>;
-      grantPermissions: () => Promise<ComputerDriverPermissionGrantResult>;
+      grantPermissions: (options?: {
+        showGuide?: boolean;
+        initialStatus?: ComputerDriverStatus;
+        openedPaneUrl?: string;
+      }) => Promise<ComputerDriverPermissionGrantResult>;
       driverIcon: () => Promise<{ iconDataUrl: string | null }>;
+      startPermissionAppDrag: (iconDataUrl: string) => void;
+      finishPermissionAppDrag: () => void;
       cancelPermissionGrant: () => Promise<{ cancelled: boolean }>;
+      onPermissionGuideCancelled: (callback: () => void) => () => void;
+      onPermissionGuideStatusChanged: (
+        callback: (status: ComputerDriverStatus) => void,
+      ) => () => void;
       checkUpdate: () => Promise<ComputerDriverUpdateCheck>;
       updateDriver: (opts?: { joinOnly?: boolean }) => Promise<ComputerDriverInstallResult>;
       onUpdateProgress: (

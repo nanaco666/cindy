@@ -98,10 +98,10 @@ describe('cindy-brain · ghostSecretsEndpoint(user 凭证只写通道,意识收�
       vault: memVault({ api_key: 'mivo_abcdefgh1234' }),
       ghostId: 'demo',
     };
-    const on = await handleGhostSecretsRequest({ ...base, getLoginEmail: () => ' a@example.com ' });
+    const on = await handleGhostSecretsRequest({ ...base, getLoginEmail: () => ' a@xd.com ' });
     expect(JSON.parse(on.body ?? '')).toEqual([
       { key: 'api_key', saved: true, tail: '1234' },
-      { key: 'pages_token', saved: true, identity: 'a@example.com' },
+      { key: 'pages_token', saved: true, identity: 'a@xd.com' },
     ]);
     const off = await handleGhostSecretsRequest({ ...base, getLoginEmail: () => null });
     expect(JSON.parse(off.body ?? '')).toEqual([
@@ -118,7 +118,7 @@ describe('cindy-brain · ghostSecretsEndpoint(user 凭证只写通道,意识收�
         readBodyText: () => Promise.resolve('{"value":"x"}'),
         userSecretKeys: [],
         identitySecretKeys: ['pages_token'],
-        getLoginEmail: () => 'a@example.com',
+        getLoginEmail: () => 'a@xd.com',
         vault: memVault(),
         ghostId: 'demo',
       });

@@ -1,5 +1,5 @@
 /**
- * rangeResponse.ts — cindy 系媒体协议的 Range/206 响应组装(视频播放支持)。
+ * rangeResponse.ts — cindy 系媒体协议的 Range/206 响应组装(C3c-5 视频补账)。
  * ---------------------------------------------------------------------------
  * <video>/<audio> 元素靠 Range 请求做分片加载与 seek:协议只回整段 200、
  * 不带 Accept-Ranges 时,Chromium 的媒体管线直接黑屏——这正是 cindy-media://

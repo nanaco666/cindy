@@ -3,4 +3,4 @@ export {
   type SessionComposerLayout,
   type SessionComposerLayoutInput,
   type SessionComposerPrimaryAction,
-} from '@cindy/maker-shared/session-operation';
+} from '@lizi/maker-shared/session-operation';

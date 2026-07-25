@@ -18,7 +18,6 @@ import type { ProviderErrorCode } from '../../shared/providerErrors';
 interface ProviderUpstreamErrorPayload {
   agent: 'claude-code' | 'codex';
   providerId: string;
-  providerName?: string;
   code: ProviderErrorCode;
   retryable: boolean;
   status: number;
@@ -31,7 +30,7 @@ export function handleProviderUpstreamError(payload: ProviderUpstreamErrorPayloa
     defaultValue: i18n.t('providerError.UNKNOWN'),
   });
   const text = i18n.t('providerError.upstreamToast', {
-    provider: payload.providerName ?? payload.providerId,
+    provider: payload.providerId,
     message,
   });
   if (payload.retryable) toast.warning(text);

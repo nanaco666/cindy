@@ -9,8 +9,6 @@ const managedEnvKeys = [
   'CINDY_CN_APP_STORE_ID',
   'CINDY_GLOBAL_APP_STORE_ID',
   'EAS_BUILD_PROFILE',
-  'EAS_OWNER',
-  'EAS_PROJECT_ID',
   'EXPO_PUBLIC_APP_VARIANT',
   'EXPO_PUBLIC_BETA_DEV',
   'EXPO_PUBLIC_CINDY_AUTH_REGION',
@@ -64,42 +62,10 @@ describe('mobile native app config', () => {
     expect(global.extra.cindy.authRegion).toBe('global');
 
     process.env.EXPO_PUBLIC_APP_VARIANT = 'beta';
-    process.env.EXPO_PUBLIC_BETA_DEV = 'carol';
+    process.env.EXPO_PUBLIC_BETA_DEV = 'dash';
     expect(buildConfig({ config: appJson.expo }).name).toBe(
-      'Cindy Beta (carol)',
+      'Cindy Beta (dash)',
     );
-  });
-
-  it('injects EAS owner / projectId / updates from env and omits them when unset', () => {
-    const appJson = JSON.parse(
-      readFileSync(resolve(process.cwd(), 'app.json'), 'utf8'),
-    );
-    const buildConfig = require(resolve(process.cwd(), 'app.config.js'));
-
-    // 仓库不带账号绑定:app.json 无 owner / updates / extra.eas。
-    expect(appJson.expo.owner).toBeUndefined();
-    expect(appJson.expo.updates).toBeUndefined();
-    expect(appJson.expo.extra?.eas).toBeUndefined();
-
-    // env 未设(dev / 外部 fork)→ resolved config 不带账号绑定。
-    const bare = buildConfig({ config: appJson.expo });
-    expect(bare.owner).toBeUndefined();
-    expect(bare.updates).toBeUndefined();
-    expect(bare.extra.eas).toBeUndefined();
-
-    // env 注入(官方发布路径)→ owner / projectId / updates.url 就位;
-    // 注回原值时 resolved config 逐字节不变,故不触发冷更(见 mobile-development.md)。
-    process.env.EAS_OWNER = 'acme-org';
-    process.env.EAS_PROJECT_ID = '11111111-2222-3333-4444-555555555555';
-    const injected = buildConfig({ config: appJson.expo });
-    expect(injected.owner).toBe('acme-org');
-    expect(injected.extra.eas).toEqual({
-      projectId: '11111111-2222-3333-4444-555555555555',
-    });
-    expect(injected.updates).toEqual({
-      url: 'https://u.expo.dev/11111111-2222-3333-4444-555555555555',
-      enabled: true,
-    });
   });
 
   it('self-host builds use endpoint-driven OTA without baking the update server URL', () => {
@@ -109,8 +75,7 @@ describe('mobile native app config', () => {
     const buildConfig = require(resolve(process.cwd(), 'app.config.js'));
 
     const regular = buildConfig({ config: appJson.expo });
-    // 账号绑定改为 env 注入后,app.json 不再带 updates;env 未设 → 无 OTA 配置。
-    expect(regular.updates).toBeUndefined();
+    expect(regular.updates).toEqual(appJson.expo.updates);
 
     const configDir = mkdtempSync(join(tmpdir(), 'cindy-selfhost-regions-'));
     temporaryDirs.push(configDir);
@@ -231,7 +196,7 @@ describe('mobile native app config', () => {
     expect(cn.extra.cindy.regionConfigSource).toBe('self-host-regions');
     expect(cn.extra.cindy.tapdb.clientId).toBe('cn-json-id');
     expect(cn.extra.cindy).not.toHaveProperty('google');
-    expect(cn.updates).toBeUndefined();
+    expect(cn.updates).toEqual(appJson.expo.updates);
     expect(cn.plugins).not.toContainEqual(
       expect.arrayContaining(['@react-native-google-signin/google-signin']),
     );
@@ -246,98 +211,7 @@ describe('mobile native app config', () => {
       '@react-native-google-signin/google-signin',
       { iosUrlScheme: 'com.googleusercontent.apps.local-ios' },
     ]);
-    expect(global.updates).toBeUndefined();
-  });
-
-  it('local builds tolerate empty TapDB/Google config while self-host release stays strict', () => {
-    const appJson = JSON.parse(
-      readFileSync(resolve(process.cwd(), 'app.json'), 'utf8'),
-    );
-    const buildConfig = require(resolve(process.cwd(), 'app.config.js'));
-    const configDir = mkdtempSync(join(tmpdir(), 'cindy-local-regions-notapdb-'));
-    temporaryDirs.push(configDir);
-    const regionsPath = join(configDir, 'regions.json');
-    writeFileSync(regionsPath, JSON.stringify({
-      cn: {
-        iosBundleId: 'com.local.cindycn',
-        androidPackage: 'com.local.cindycn',
-        tapdb: { clientId: '', clientToken: '' },
-      },
-      global: {
-        iosBundleId: 'com.local.cindy',
-        androidPackage: 'com.local.cindy',
-        google: { webClientId: '', iosClientId: '', iosUrlScheme: '' },
-        tapdb: { clientId: '', clientToken: '' },
-      },
-    }));
-    process.env.CINDY_SELF_HOST_REGIONS_FILE = regionsPath;
-    process.env.CINDY_USE_LOCAL_REGION_CONFIG = '1';
-
-    // 本地构建:TapDB 留空 → 正常构建,extra.cindy 不烘焙 tapdb 键(运行时统计 no-op)。
-    const cn = buildConfig({ config: appJson.expo });
-    expect(cn.ios.bundleIdentifier).toBe('com.local.cindycn');
-    expect(cn.extra.cindy.regionConfigSource).toBe('self-host-regions');
-    expect(cn.extra.cindy).not.toHaveProperty('tapdb');
-
-    // 本地 global:google 全空 → 跳过 Google 登录插件,不报错。
-    process.env.EXPO_PUBLIC_CINDY_AUTH_REGION = 'global';
-    const globalLocal = buildConfig({ config: appJson.expo });
-    expect(globalLocal.extra.cindy).not.toHaveProperty('google');
-    expect(globalLocal.plugins).not.toContainEqual(
-      expect.arrayContaining(['@react-native-google-signin/google-signin']),
-    );
-
-    // google 部分填写 → 明确报错,不静默丢弃。
-    writeFileSync(regionsPath, JSON.stringify({
-      cn: {
-        iosBundleId: 'com.local.cindycn',
-        androidPackage: 'com.local.cindycn',
-        tapdb: { clientId: '', clientToken: '' },
-      },
-      global: {
-        iosBundleId: 'com.local.cindy',
-        androidPackage: 'com.local.cindy',
-        google: {
-          webClientId: 'w.apps.googleusercontent.com',
-          iosClientId: '',
-          iosUrlScheme: '',
-        },
-        tapdb: { clientId: '', clientToken: '' },
-      },
-    }));
-    expect(() => buildConfig({ config: appJson.expo })).toThrow(/global\.google 三个字段/);
-
-    // 自建发布线:TapDB 留空必须 fail-closed,防止静默发出无统计的正式包。
-    delete process.env.CINDY_USE_LOCAL_REGION_CONFIG;
-    delete process.env.EXPO_PUBLIC_CINDY_AUTH_REGION;
-    process.env.EXPO_PUBLIC_XDT_OTA_SELFHOST = '1';
-    expect(() => buildConfig({ config: appJson.expo })).toThrow(/tapdb\.clientId\/clientToken/);
-  });
-
-  it('local builds fall back to the blank template with built-in identity when the regions file is missing', () => {
-    const appJson = JSON.parse(
-      readFileSync(resolve(process.cwd(), 'app.json'), 'utf8'),
-    );
-    const buildConfig = require(resolve(process.cwd(), 'app.config.js'));
-    // 指向一个不存在的文件:本地构建应回落仓内空白模板,不阻断。
-    process.env.CINDY_SELF_HOST_REGIONS_FILE = join(
-      tmpdir(),
-      `cindy-missing-${process.pid}`,
-      'regions.json',
-    );
-    process.env.CINDY_USE_LOCAL_REGION_CONFIG = '1';
-
-    const cn = buildConfig({ config: appJson.expo });
-    expect(cn.ios.bundleIdentifier).toBe('com.xd.cindycn');
-    expect(cn.android.package).toBe('com.xd.cindycn');
-    expect(cn.extra.cindy.regionConfigSource).toBe('self-host-regions');
-    expect(cn.extra.cindy).not.toHaveProperty('tapdb');
-    expect(cn.extra.cindy).not.toHaveProperty('google');
-
-    // 自建发布线缺文件仍硬报错。
-    delete process.env.CINDY_USE_LOCAL_REGION_CONFIG;
-    process.env.EXPO_PUBLIC_XDT_OTA_SELFHOST = '1';
-    expect(() => buildConfig({ config: appJson.expo })).toThrow(/缺少地区构建配置/);
+    expect(global.updates).toEqual(appJson.expo.updates);
   });
 
   it('fails closed when a store build lacks its regional App Store numeric ID', () => {

@@ -153,20 +153,6 @@ function applyCodexAccountUsageSnapshot(
   updateSnapshot(next);
 }
 
-/**
- * 主动催一次 Codex 账号用量刷新(chip 悬念期用: 倒计时归零等新快照时)。
- * main 侧 USAGE_ACCOUNT('codex') 即 cached-first + WHAM 后台刷新(10s 节流 +
- * in-flight 去重), 重复调用安全;新快照经 usage:codex-account-changed push 回流,
- * 这里不消费返回值。
- */
-export function requestCodexAccountRefresh(): void {
-  const api = readUsageApi();
-  if (!api?.getAccount) return;
-  void api.getAccount('codex').catch(() => {
-    /* Best-effort nudge; push 更新仍会刷新 chip。 */
-  });
-}
-
 export function useAccountUsage(
   sessionId: string | undefined,
   vendorKey: 'cc' | 'codex' | undefined,

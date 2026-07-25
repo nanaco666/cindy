@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type CSSProperties } from 'react';
-import { BRAND_NAME } from '@cindy/maker-shared/branding';
+import { BRAND_NAME } from '@lizi/maker-shared/branding';
 
 import headImageDark from '@/assets/head-image-dark.png';
 import headImageLight from '@/assets/head-image-light.png';

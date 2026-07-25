@@ -1,15 +1,15 @@
 import type { CindyProxyMediaBackendDeps } from './types.js';
 import type { CindyProxyMediaService, CindyProxyMediaServiceOptions } from './types.js';
-import { createGatewayImageClient } from './api/gatewayImageClient.js';
+import { createXdproxyImageClient } from './api/xdproxyImageClient.js';
 import { VideoProviderRegistry } from './video/registry.js';
 
 /**
- * 装配 XD Gateway 图像/视频后端(纯后端,无 MCP 工具面)。消费方:
+ * 装配 xdproxy 图像/视频后端(纯后端,无 MCP 工具面)。消费方:
  * - desktop cindy 槽(意识代办的 gen/edit image + video);
  * - desktop mivo 装配(复用 saveImage/resolveImageRef/saveVideo 存储适配)。
  */
 export function createCindyProxyMediaService(opts: CindyProxyMediaServiceOptions): CindyProxyMediaService {
-  const imageClient = createGatewayImageClient({
+  const imageClient = createXdproxyImageClient({
     getApiKey: opts.imageApi.getApiKey,
     proxy: opts.imageApi.proxy,
     fetchImplementation: opts.imageApi.fetchImplementation,

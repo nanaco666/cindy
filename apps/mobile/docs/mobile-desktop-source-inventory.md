@@ -1,4 +1,4 @@
-# Cindy Mobile Desktop Source Inventory
+# XDMaker Mobile Desktop Source Inventory
 
 > 日期: 2026-06-17
 > 目标: 从桌面版源码逐项反推手机版远程控制需要覆盖的界面、内容、状态和测试条件。

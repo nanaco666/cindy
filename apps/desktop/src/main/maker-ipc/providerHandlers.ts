@@ -14,7 +14,7 @@
  * handler body 可脱 Electron 用 IpcHarness + 内存 db 直接 invoke 单测（规则 14）。
  */
 
-import type { AgentKind, CustomProviderConfig, ProviderPreset, ProviderView } from '@cindy/model-providers';
+import type { AgentKind, CustomProviderConfig, ProviderPreset, ProviderView } from '@lizi/model-providers';
 
 import type { LocalCliDetection } from '../../shared/localCliDetect.js';
 

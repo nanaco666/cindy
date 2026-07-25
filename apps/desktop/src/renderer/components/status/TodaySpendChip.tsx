@@ -2,10 +2,9 @@
  * TodaySpendChip — 与 ContextCapacityRing 同行的极简用量指示器。
  *
  * 设计意图（用户拍板的方向）：
- *   - 不在 desktop 重做完整看板（点击 chip 跳到对应供应商的 web 用量看板）
+ *   - 不在 desktop 重做完整看板（Claude 走 web 看板 console.tapsvc.com/nova/#/ai-gateway）
  *   - 仅在右下角与 Context 同行显示"今日 $X/$Y · 本会话 $Z"
  *   - 点击 → 在系统默认浏览器打开对应 vendor 的用量看板
- *     (XD 网关 / 托管账号暂无看板可跳,点击无反应,详见 usageDashboardUrl)
  *
  * Claude / gateway 形态: 主 chip 固定显示 daily + session, monthly 进 tooltip。
  *   - daily: 今日跨客户端已用 / 软日限额 (maxBudget/30*4.5, 与 web 看板同公式)
@@ -45,17 +44,12 @@ import { useSessionSpend } from '@/hooks/useSessionSpend';
 import { useSessionEstimatedValue } from '@/hooks/useSessionEstimatedValue';
 import { useSessionTokens } from '@/hooks/useSessionTokens';
 import { useChatDisplaySnapshot } from '@/components/chat/ChatDisplaySnapshotContext';
-import {
-  requestCodexAccountRefresh,
-  useAccountUsage,
-  type RateLimitSnapshot,
-} from '@/hooks/useAccountUsage';
+import { useAccountUsage, type RateLimitSnapshot } from '@/hooks/useAccountUsage';
 import {
   useClaudeAccountUsage,
   type ClaudeAccountUsageSnapshot,
 } from '@/hooks/useClaudeAccountUsage';
 import {
-  requestClaudeSubscriptionRefresh,
   useClaudeSubscriptionUsage,
   type ClaudeSubscriptionUsageSnapshot,
 } from '@/hooks/useClaudeSubscriptionUsage';
@@ -69,21 +63,8 @@ import { makerChatStore, type ChatMessage } from '@/lib/makerChatStore';
 import { buildTurnUsageTooltipLines } from '@/lib/turnUsageTooltip';
 import type { TurnUsageDetails } from '../../../shared/turnUsageDetails';
 import { CHATGPT_MODEL_PREFIX, XAI_MODEL_PREFIX } from '../../../shared/subscriptionModels';
-import {
-  RESET_PENDING_MAX_MS,
-  computeCountdownTickDelayMs,
-  useQuotaResetRollup,
-  type ChipWindowSlot,
-} from './quotaResetRollup';
-import { QuotaResetConfetti } from './QuotaResetConfetti';
 
-// XD 网关 / 托管账号之前会跳到内部用量看板(内部域名)—— 开源前移除该硬编码。
-// 登录随凭据只下发 { endpoint, apiKey }(见 main/model-access/credentialsSync.ts),不含
-// 看板地址;推理 endpoint 与看板 console 不同源、无法从中推导。故网关账号暂无看板可跳
-// (点击无反应)。
-// TODO(后续): 若 model-access-server 在下发凭据时附带看板地址(按个人 / 企业租户区分的
-// usageDashboardUrl / consoleUrl),据此恢复网关账号的跳转 + tooltip 链接行
-// (i18n 文案 todaySpend.openProxyUsage 已保留待复用,勿当死 key 删)。
+const PROXY_USAGE_DASHBOARD_URL = 'https://console.tapsvc.com/nova/#/ai-gateway?tab=overview';
 const CODEX_USAGE_DASHBOARD_URL = 'https://chatgpt.com/codex/settings/usage';
 const XAI_ACCOUNT_URL = 'https://accounts.x.ai';
 const CLAUDE_USAGE_DASHBOARD_URL = 'https://claude.ai/settings/usage';
@@ -223,10 +204,9 @@ function formatResetAt(epochSeconds: number | null | undefined): string | null {
 
 /**
  * chip 主体用的紧凑剩余时长(距 reset 还有多久): 单级精度 + 向上取整 ——
- * 「7天」/「3小时」/「45分钟」/「41秒」。Codex 与 Claude 订阅两种形态统一用它当窗口
+ * 「7天」/「3小时」/「45分钟」。Codex 与 Claude 订阅两种形态统一用它当窗口
  * label(所有限额窗口都算给用户);无数据 / 已过期 → null, 调用方回退窗口名。
  * 天级向上取整与 Codex 既有 getDaysUntilReset 口径一致(剩 6天10小时 → 7天)。
- * 最后一分钟降到秒级, 配合秒级 tick(computeCountdownTickDelayMs)逐秒走动。
  */
 function formatCompactTimeUntilReset(
   epochSeconds: number | null | undefined,
@@ -244,48 +224,7 @@ function formatCompactTimeUntilReset(
   if (remainMs >= 60 * 60 * 1000) {
     return `${Math.ceil(remainMs / (60 * 60 * 1000))}${t('todaySpend.unit.hour')}`;
   }
-  if (remainMs >= 60_000) {
-    return `${Math.ceil(remainMs / 60_000)}${t('todaySpend.unit.minute')}`;
-  }
-  return `${Math.max(1, Math.ceil(remainMs / 1000))}${t('todaySpend.unit.second')}`;
-}
-
-/** epoch 秒 → ms;无效值 → null(重置滚动动画与 tick 节奏都以 ms 为准)。 */
-function toEpochMs(epochSeconds: number | null | undefined): number | null {
-  if (typeof epochSeconds !== 'number' || !Number.isFinite(epochSeconds) || epochSeconds <= 0) {
-    return null;
-  }
-  return epochSeconds * 1000;
-}
-
-/**
- * chip 上一个限额窗口段的素材: 倒计时 label + 数值化剩余百分比 + 窗口身份/reset
- * 时点(useQuotaResetRollup 检测重置并驱动 0% → 100% 滚动动画的输入)。
- * Codex 订阅与 Claude 订阅两种形态共用, 成品字符串在组件里统一格式化。
- */
-interface ChipWindowSegment extends ChipWindowSlot {
-  label: string;
-  /**
-   * 倒计时已过点、快照还停在上个周期 —— 悬念期: 段显示「重置中…」(呼吸省略号)
-   * 而不是僵住的旧百分比, 新快照落地时由重置滚动动画揭晓。
-   */
-  resetPending: boolean;
-}
-
-// 悬念期上限常量在 quotaResetRollup.ts(tick 节奏要踩着超时边界调度, 判定与
-// 调度共用同一 RESET_PENDING_MAX_MS)。超时回落旧值 + 窗口名展示后, 新快照
-// 到达时重置滚动动画照常触发。
-
-/**
- * 悬念期判定: 有 reset 时点且已过(未超时), 快照仍是过点前的旧周期数据。
- * 超时侧用严格小于 —— tick 调度会把一跳精确排在超时边界上
- * (computeCountdownTickDelayMs), 边界 tick 必须判定为「已超时」当场退出悬念,
- * 含等号会让它再等一轮慢 tick(多挂最长一分钟)。
- */
-function isResetPending(resetsAtMs: number | null, nowMs: number): boolean {
-  return typeof resetsAtMs === 'number'
-    && resetsAtMs <= nowMs
-    && nowMs - resetsAtMs < RESET_PENDING_MAX_MS;
+  return `${Math.max(1, Math.ceil(remainMs / 60_000))}${t('todaySpend.unit.minute')}`;
 }
 
 function formatWindowLabel(
@@ -351,59 +290,29 @@ function getCodexWindowUsages(
   snapshot: RateLimitSnapshot | null,
   t: TFunction,
   nowMs: number,
+  options?: { labelMode?: 'countdown' | 'windowName' },
 ): CodexWindowUsage[] {
   if (!snapshot) return [];
-  // tooltip 形态: 窗口名 + resetAt 精确时间(chip 段见 getCodexChipWindows)。
+  // countdown = chip 模式: 各窗口的 label 都换成距 reset 的剩余时长;
+  // windowName = tooltip 模式: 窗口名 + resetAt 精确时间, 保持既有形态。
+  const countdown = options?.labelMode === 'countdown';
   // 窗口名一律由服务端下发的 windowMinutes / resetsAt 动态派生,不对窗口构成做
   // 任何假设(OpenAI 会调整策略:2026-07 曾一度取消 5h 窗口,且可能随时恢复)。
   // 两项数据都缺时兜底中性「限额」,不猜具体窗口名。
   return [
     toCodexWindowUsage(
-      formatWindowLabel(snapshot.primary, t('todaySpend.codex.limitWindow'), t, nowMs),
+      formatWindowLabel(snapshot.primary, t('todaySpend.codex.limitWindow'), t, nowMs, {
+        preferResetCountdown: countdown,
+      }),
       snapshot.primary,
     ),
     toCodexWindowUsage(
-      formatWindowLabel(snapshot.secondary, t('todaySpend.codex.limitWindow'), t, nowMs),
+      formatWindowLabel(snapshot.secondary, t('todaySpend.codex.limitWindow'), t, nowMs, {
+        preferResetCountdown: countdown,
+      }),
       snapshot.secondary,
     ),
   ].filter((v): v is CodexWindowUsage => Boolean(v));
-}
-
-/** Codex 订阅 chip 的单个窗口段素材;窗口缺失 / 百分比不可解析 → null。 */
-function toCodexChipWindow(
-  slotKey: 'primary' | 'secondary',
-  window: RateLimitSnapshot['primary'],
-  t: TFunction,
-  nowMs: number,
-): ChipWindowSegment | null {
-  if (!window || typeof window.usedPercent !== 'number' || !Number.isFinite(window.usedPercent)) {
-    return null;
-  }
-  const resetsAtMs = toEpochMs(window.resetsAt);
-  return {
-    // 身份 key 带 windowMinutes: 上游调整窗口策略(如换掉 5h 窗)时视为新窗口,
-    // 只重置动画基线, 不误触重置滚动。
-    key: `codex-${slotKey}:${window.windowMinutes ?? 'na'}`,
-    label: formatWindowLabel(window, t('todaySpend.codex.limitWindow'), t, nowMs, {
-      preferResetCountdown: true,
-    }),
-    remainingPercent: 100 - clampPercent(window.usedPercent),
-    resetsAtMs,
-    resetPending: isResetPending(resetsAtMs, nowMs),
-  };
-}
-
-/** chip 段素材 (Codex 订阅): label 是距 reset 的倒计时(最后一分钟逐秒走动)。 */
-function getCodexChipWindows(
-  snapshot: RateLimitSnapshot | null,
-  t: TFunction,
-  nowMs: number,
-): ChipWindowSegment[] {
-  if (!snapshot) return [];
-  return [
-    toCodexChipWindow('primary', snapshot.primary, t, nowMs),
-    toCodexChipWindow('secondary', snapshot.secondary, t, nowMs),
-  ].filter((v): v is ChipWindowSegment => Boolean(v));
 }
 
 function isCodexWindowExhausted(window: RateLimitSnapshot['primary']): boolean {
@@ -414,6 +323,19 @@ function shouldShowCodexLimitReachedReason(snapshot: RateLimitSnapshot): boolean
   if (!snapshot.rateLimitReachedType) return false;
   if (snapshot.rateLimitReachedType.includes('credits_depleted')) return false;
   return isCodexWindowExhausted(snapshot.primary) || isCodexWindowExhausted(snapshot.secondary);
+}
+
+function getCodexChipSegments(
+  snapshot: RateLimitSnapshot | null,
+  t: TFunction,
+  nowMs: number,
+): string[] {
+  return getCodexWindowUsages(snapshot, t, nowMs, { labelMode: 'countdown' }).map((window) =>
+    t('todaySpend.codex.windowSegment', {
+      label: window.label,
+      remaining: window.remaining,
+    }),
+  );
 }
 
 function getGatewayChipSegments(slots: Record<MetricKey, MetricSlot>): string[] {
@@ -441,7 +363,7 @@ function buildCodexTooltipNode(
   sessionTokens: number | null,
   sessionValueUsd: number | null,
   t: TFunction,
-  usageDashboardLabel: string | null,
+  usageDashboardLabel: string,
   nowMs: number,
   latestTurnUsage: LatestTurnUsageSummary | null,
 ): React.ReactNode {
@@ -449,7 +371,8 @@ function buildCodexTooltipNode(
   if (!snapshot) {
     lines.push(t('todaySpend.codex.waitingDetail'));
     appendLatestTurnUsageLines(lines, latestTurnUsage, t);
-    pushDashboardLinkLine(lines, usageDashboardLabel);
+    lines.push('');
+    lines.push(usageDashboardLabel);
     return buildTooltipNode(lines);
   }
 
@@ -479,7 +402,7 @@ function buildCodexTooltipNode(
   }
   pushSessionValueLines(lines, sessionValueUsd, sessionTokens, t);
 
-  for (const window of getCodexWindowUsages(snapshot, t, nowMs)) {
+  for (const window of getCodexWindowUsages(snapshot, t, nowMs, { labelMode: 'windowName' })) {
     const base = t('todaySpend.codex.windowLine', {
       label: window.label,
       remaining: window.remaining,
@@ -504,7 +427,8 @@ function buildCodexTooltipNode(
     lines.push(t('todaySpend.codex.waitingDetail'));
   }
   appendLatestTurnUsageLines(lines, latestTurnUsage, t);
-  pushDashboardLinkLine(lines, usageDashboardLabel);
+  if (lines.length > 0) lines.push('');
+  lines.push(usageDashboardLabel);
   return buildTooltipNode(lines);
 }
 
@@ -573,52 +497,39 @@ function resolveClaudeWeeklyWindow(
 }
 
 /**
- * chip 段素材 (方案 B + 倒计时 label): 窗口 label 直接用距 reset 的剩余时长 ——
+ * chip 段 (方案 B + 倒计时 label): 窗口 label 直接用距 reset 的剩余时长 ——
  * 「3小时 剩余 45% · Fable 7天 剩余 78%」;scoped 命中时时长前带模型名标注口径。
  * 无 reset 数据回退窗口名 (5h / Fable 周限 / 周限), 绝不显示算不出的时间。
- * 剩余百分比留数值形态, 由组件经 useQuotaResetRollup(重置滚动动画)后再格式化。
  */
-function getClaudeChipWindows(
+function getClaudeChipSegments(
   snapshot: ClaudeSubscriptionUsageSnapshot | null,
   modelId: string | null | undefined,
   t: TFunction,
   nowMs: number,
-): ChipWindowSegment[] {
+): string[] {
   if (!snapshot) return [];
-  const windows: ChipWindowSegment[] = [];
-  const fiveHour = snapshot.fiveHour;
-  if (fiveHour && typeof fiveHour.utilization === 'number' && Number.isFinite(fiveHour.utilization)) {
-    const countdown = formatCompactTimeUntilReset(fiveHour.resetsAt, nowMs, t);
-    const resetsAtMs = toEpochMs(fiveHour.resetsAt);
-    windows.push({
-      key: 'claude-5h',
-      label: countdown ?? '5h',
-      remainingPercent: 100 - clampPercent(fiveHour.utilization),
-      resetsAtMs,
-      resetPending: isResetPending(resetsAtMs, nowMs),
-    });
+  const segments: string[] = [];
+  const fiveHour = toClaudeWindowUsage('5h', snapshot.fiveHour);
+  if (fiveHour) {
+    const countdown = formatCompactTimeUntilReset(snapshot.fiveHour?.resetsAt, nowMs, t);
+    segments.push(t('todaySpend.claude.windowSegment', {
+      label: countdown ?? fiveHour.label,
+      remaining: fiveHour.remaining,
+    }));
   }
   const weekly = resolveClaudeWeeklyWindow(snapshot, modelId, t);
-  if (
-    weekly
-    && typeof weekly.window.utilization === 'number'
-    && Number.isFinite(weekly.window.utilization)
-  ) {
+  const weeklyUsage = weekly ? toClaudeWindowUsage(weekly.label, weekly.window) : null;
+  if (weekly && weeklyUsage) {
     const countdown = formatCompactTimeUntilReset(weekly.window.resetsAt, nowMs, t);
     const label = countdown
       ? (weekly.modelDisplayName ? `${weekly.modelDisplayName} ${countdown}` : countdown)
-      : weekly.label;
-    const resetsAtMs = toEpochMs(weekly.window.resetsAt);
-    windows.push({
-      // 身份 key 区分总周限与各 scoped 周限: 切模型导致窗口切换时只重置动画基线。
-      key: weekly.modelDisplayName ? `claude-weekly:${weekly.modelDisplayName}` : 'claude-weekly:total',
+      : weeklyUsage.label;
+    segments.push(t('todaySpend.claude.windowSegment', {
       label,
-      remainingPercent: 100 - clampPercent(weekly.window.utilization),
-      resetsAtMs,
-      resetPending: isResetPending(resetsAtMs, nowMs),
-    });
+      remaining: weeklyUsage.remaining,
+    }));
   }
-  return windows;
+  return segments;
 }
 
 /**
@@ -647,14 +558,15 @@ function buildClaudeSubscriptionTooltipNode(
   modelId: string | null | undefined,
   sessionValueUsd: number | null,
   t: TFunction,
-  usageDashboardLabel: string | null,
+  usageDashboardLabel: string,
   latestTurnUsage: LatestTurnUsageSummary | null,
 ): React.ReactNode {
   const lines: string[] = [];
   if (!snapshot) {
     lines.push(t('todaySpend.claude.waitingDetail'));
     appendLatestTurnUsageLines(lines, latestTurnUsage, t);
-    pushDashboardLinkLine(lines, usageDashboardLabel);
+    lines.push('');
+    lines.push(usageDashboardLabel);
     return buildTooltipNode(lines);
   }
 
@@ -712,7 +624,8 @@ function buildClaudeSubscriptionTooltipNode(
     lines.push(t('todaySpend.claude.waitingDetail'));
   }
   appendLatestTurnUsageLines(lines, latestTurnUsage, t);
-  pushDashboardLinkLine(lines, usageDashboardLabel);
+  if (lines.length > 0) lines.push('');
+  lines.push(usageDashboardLabel);
   return buildTooltipNode(lines);
 }
 
@@ -812,16 +725,6 @@ function buildTooltipNode(lines: string[]): React.ReactNode {
   return <span className="whitespace-pre-line">{lines.join('\n')}</span>;
 }
 
-/**
- * 在 tooltip 末尾追加"打开看板"链接行(前置空行与正文隔开)。
- * label 为 null(如 XD 网关账号暂无看板可跳)时不追加任何内容。
- */
-function pushDashboardLinkLine(lines: string[], label: string | null): void {
-  if (!label) return;
-  if (lines.length > 0) lines.push('');
-  lines.push(label);
-}
-
 /** 「本会话价值 / token 累计」两行 —— codex 订阅与 xai bridge tooltip 共用(同 i18n key 同格式)。 */
 function pushSessionValueLines(
   lines: string[],
@@ -848,7 +751,7 @@ function buildXaiTooltipNode(
   sessionTokens: number | null,
   sessionValueUsd: number | null,
   t: TFunction,
-  usageDashboardLabel: string | null,
+  usageDashboardLabel: string,
   latestTurnUsage: LatestTurnUsageSummary | null,
 ): React.ReactNode {
   const lines: string[] = [];
@@ -869,11 +772,12 @@ function buildXaiTooltipNode(
     lines.push(t('todaySpend.xai.noQuotaDetail'));
   }
   appendLatestTurnUsageLines(lines, latestTurnUsage, t);
-  pushDashboardLinkLine(lines, usageDashboardLabel);
+  if (lines.length > 0) lines.push('');
+  lines.push(usageDashboardLabel);
   return buildTooltipNode(lines);
 }
 
-function renderSegmentedLabel(segments: React.ReactNode[]): React.ReactNode {
+function renderSegmentedLabel(segments: string[]): React.ReactNode {
   return segments.map((seg, i) => (
     <React.Fragment key={i}>
       {i > 0 && (
@@ -1027,141 +931,36 @@ export function TodaySpendChip({
   );
   const latestTurnUsage = useLatestTurnUsageSummary(sessionId);
   // codex-oauth / cc+chatgpt bridge → ChatGPT 用量看板; cc+xai bridge → xAI 账户页;
-  // cc Claude 订阅 → claude.ai 用量页; 其余(cc 网关 / codex-api)→ 暂无看板(null,见文件头 TODO)。
-  const usageDashboardUrl: string | null = usesXaiQuotaForm
+  // cc Claude 订阅 → claude.ai 用量页; 其余(cc 网关 / codex-api)→ XD Proxy (tapsvc) 看板。
+  const usageDashboardUrl = usesXaiQuotaForm
     ? XAI_ACCOUNT_URL
     : isCodexOauth || isChatgptBridge
       ? CODEX_USAGE_DASHBOARD_URL
       : isClaudeSubscription
         ? CLAUDE_USAGE_DASHBOARD_URL
-        : null;
-  // 看板链接行文案:与 usageDashboardUrl 一一对应;网关账号无看板 → null
-  // (tooltip 不显示"打开看板"行,chip 也不可点)。
-  const usageDashboardLabel: string | null = usesXaiQuotaForm
-    ? t('todaySpend.openXaiUsage')
-    : isCodexOauth || isChatgptBridge
-      ? t('todaySpend.openCodexUsage')
-      : isClaudeSubscription
-        ? t('todaySpend.openClaudeUsage')
-        : null;
+        : PROXY_USAGE_DASHBOARD_URL;
+  const usageDashboardLabel = t(
+    usesXaiQuotaForm
+      ? 'todaySpend.openXaiUsage'
+      : isCodexOauth || isChatgptBridge
+        ? 'todaySpend.openCodexUsage'
+        : isClaudeSubscription
+          ? 'todaySpend.openClaudeUsage'
+
+        : 'todaySpend.openProxyUsage',
+  );
   const [windowLabelNowMs, setWindowLabelNowMs] = React.useState(() => Date.now());
 
-  // 当前形态下 chip 展示的限额窗口段 (Codex 订阅 / Claude 订阅共用结构);
-  // 其它形态为空数组, 两个 rollup slot 空转。
-  const chipWindows: ChipWindowSegment[] = usesCodexQuotaForm
-    ? getCodexChipWindows(accountUsage, t, windowLabelNowMs)
-    : isClaudeSubscription
-      ? getClaudeChipWindows(claudeSubscriptionUsage, modelId, t, windowLabelNowMs)
-      : [];
-  // chip 最多两个窗口段, 固定两个 slot 无条件调 hook(Rules of Hooks)。
-  // 重置滚动: 快照刷新中同窗口剩余百分比大幅回升(典型: 窗口到点重置 0% → 100%)
-  // 时, 显示值从 0% 快速滚动到新值。
-  const windowSlotA = chipWindows[0] ?? null;
-  const windowSlotB = chipWindows[1] ?? null;
-  const rollupA = useQuotaResetRollup(windowSlotA);
-  const rollupB = useQuotaResetRollup(windowSlotB);
-  // 窗口段元素登记表(key → span): 撒花锚点用, 段消失时由 ref 回调置 null。
-  const segmentElsRef = React.useRef<Record<string, HTMLSpanElement | null>>({});
-  const windowSegments: React.ReactNode[] = chipWindows.map((window, index) => {
-    if (window.resetPending) {
-      // 悬念期: 倒计时已归零、新快照未落地 —— 旧百分比已失真, 换成「重置中…」,
-      // 呼吸省略号 (HTML span + opacity, 仅悬念期挂载; motion-safe = 尊重
-      // prefers-reduced-motion, 降级为静态省略号)。新快照落地时由重置滚动
-      // 动画从 0% 跳到新值揭晓。
-      return (
-        <React.Fragment key={window.key}>
-          {t('todaySpend.resetPendingSegment', { label: window.label })}
-          <span className="motion-safe:animate-pulse">…</span>
-        </React.Fragment>
-      );
-    }
-    const rollup = index === 0 ? rollupA : rollupB;
-    const text = t(
-      usesCodexQuotaForm ? 'todaySpend.codex.windowSegment' : 'todaySpend.claude.windowSegment',
-      {
-        label: window.label,
-        remaining: formatPercent(rollup?.percent ?? window.remainingPercent),
-      },
-    );
-    // 段落包一层 span 并登记元素: 撒花以「正在揭晓的这一段」的矩形为迸发范围
-    // (粒子沿整段文字宽度散布, 而非集中在 chip 中心一点)。
-    return (
-      <span
-        key={window.key}
-        ref={(el) => {
-          segmentElsRef.current[window.key] = el;
-        }}
-      >
-        {text}
-      </span>
-    );
-  });
-
-  // 揭晓仪式: 重置滚动动画启动的上升沿放一次撒花粒子(QuotaResetConfetti,
-  // DESIGN §14.4 sanctioned 豁免) —— 与 0%→100% 数字滚动同一瞬间开始,
-  // 锚点取正在揭晓的窗口段元素(兜底 chip 容器)。
-  const chipRef = React.useRef<HTMLDivElement | null>(null);
-  const celebratingKey = rollupA?.celebrating
-    ? windowSlotA?.key ?? null
-    : rollupB?.celebrating
-      ? windowSlotB?.key ?? null
-      : null;
-  const prevCelebratingRef = React.useRef(false);
-  const [confettiBurst, setConfettiBurst] = React.useState<
-    { nonce: number; anchor: HTMLElement } | null
-  >(null);
   React.useEffect(() => {
-    const celebrating = celebratingKey !== null;
-    if (celebrating && !prevCelebratingRef.current) {
-      const anchor = (celebratingKey ? segmentElsRef.current[celebratingKey] : null)
-        ?? chipRef.current;
-      if (anchor) {
-        setConfettiBurst((prev) => ({ nonce: (prev?.nonce ?? 0) + 1, anchor }));
-      }
-    }
-    prevCelebratingRef.current = celebrating;
-  }, [celebratingKey]);
-
-  // 窗口 reset 时点列表以值签名 memo —— chipWindows 数组身份每次渲染都变
-  // (含滚动动画的每一帧), 直接进 tick effect 依赖会让定时器反复重建。
-  const resetsAtSignature = chipWindows.map((window) => window.resetsAtMs ?? 'na').join(',');
-  const chipResetsAtMsList = React.useMemo(
-    () => chipWindows.map((window) => window.resetsAtMs),
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- resetsAtSignature 是 chipWindows reset 时点的值签名
-    [resetsAtSignature],
-  );
-
-  React.useEffect(() => {
-    // 订阅形态 (codex-oauth / cc+chatgpt bridge / claude 订阅) 的 reset 倒计时文案
-    // 需要随时间走动: 常态分钟级 tick 足够; 任一窗口进入最后一分钟切秒级 tick,
-    // 让「59秒 → 1秒」逐秒跳动。setTimeout 链每次 tick 后按最新窗口重估下一次延迟。
+    // 订阅形态 (codex-oauth / cc+chatgpt bridge / claude 订阅) 的 reset 时间文案需要随时间刷新。
     if (!usesCodexQuotaForm && !isClaudeSubscription) return undefined;
-    const delay = computeCountdownTickDelayMs(chipResetsAtMsList, Date.now());
-    const timer = window.setTimeout(() => {
+    const interval = window.setInterval(() => {
       setWindowLabelNowMs(Date.now());
-    }, delay);
-    return () => window.clearTimeout(timer);
-  }, [usesCodexQuotaForm, isClaudeSubscription, windowLabelNowMs, chipResetsAtMsList]);
+    }, 60_000);
+    return () => window.clearInterval(interval);
+  }, [usesCodexQuotaForm, isClaudeSubscription]);
 
-  // 悬念期主动催一次余量刷新, 让「重置揭晓」尽快到来 —— 两侧的 main read 都是
-  // cached-first + 节流(Claude 订阅端点 180s + 退避; Codex WHAM 10s + in-flight
-  // 去重), 每个 tick 重试一次是安全的; 新快照落地即结束悬念期。
-  // 分支优先级必须与上面 chipWindows 的形态选择一致(Codex 形态优先): cc 会话跑
-  // chatgpt/ bridge 模型时 usesCodexQuotaForm 与 isClaudeSubscription 可同时为真,
-  // 此时 chip 显示的是 ChatGPT 窗口, 催刷也必须走 Codex 通道。
-  const hasPendingResetWindow = chipWindows.some((window) => window.resetPending);
-  React.useEffect(() => {
-    if (!hasPendingResetWindow) return;
-    if (usesCodexQuotaForm) {
-      requestCodexAccountRefresh();
-    } else if (isClaudeSubscription) {
-      requestClaudeSubscriptionRefresh();
-    }
-  }, [hasPendingResetWindow, isClaudeSubscription, usesCodexQuotaForm, windowLabelNowMs]);
-
-  const isDashboardClickable = usageDashboardUrl !== null;
   const handleClick = () => {
-    if (!usageDashboardUrl) return; // 网关账号暂无看板:点击无反应
     void window.electronAPI.openExternal(usageDashboardUrl);
   };
 
@@ -1169,7 +968,7 @@ export function TodaySpendChip({
   let tooltipNode: React.ReactNode = usageDashboardLabel;
   if (usesCodexQuotaForm) {
     // codex-oauth 与 cc+chatgpt/ bridge 共用同一 ChatGPT 账户,复用同一套限额窗口 + 价值估算渲染。
-    const chipSegments = [...windowSegments];
+    const chipSegments = getCodexChipSegments(accountUsage, t, windowLabelNowMs);
     if (typeof sessionEstimatedValueUsd === 'number' && sessionEstimatedValueUsd > 0) {
       chipSegments.push(t('todaySpend.codex.sessionValueLabel', {
         cost: `$${sessionEstimatedValueUsd.toFixed(2)}`,
@@ -1208,8 +1007,8 @@ export function TodaySpendChip({
     );
   } else if (isClaudeSubscription) {
     // Claude 订阅形态 (方案 B): chip 显示「剩余时长 剩余%」倒计时段 + 本会话价值,
-    // 倒计时由 windowLabelNowMs 驱动 (常态 60s tick, 最后一分钟逐秒); tooltip 保留精确时间。
-    const chipSegments = [...windowSegments];
+    // 倒计时由 windowLabelNowMs 驱动 (60s interval 走动); tooltip 保留精确时间。
+    const chipSegments = getClaudeChipSegments(claudeSubscriptionUsage, modelId, t, windowLabelNowMs);
     if (typeof sessionEstimatedValueUsd === 'number' && sessionEstimatedValueUsd > 0) {
       chipSegments.push(t('todaySpend.claude.sessionValueLabel', {
         cost: `$${sessionEstimatedValueUsd.toFixed(2)}`,
@@ -1272,8 +1071,9 @@ export function TodaySpendChip({
           : 'todaySpend.codex.unavailableDetail',
       ));
     }
-    // 链接行在最底(用空行隔开);网关账号 label 为 null → 不追加(见 usageDashboardUrl)。
-    pushDashboardLinkLine(tooltipLines, usageDashboardLabel);
+    // 链接行始终在最底, 用空行隔开
+    if (tooltipLines.length > 0) tooltipLines.push('');
+    tooltipLines.push(usageDashboardLabel);
     tooltipNode = buildTooltipNode(tooltipLines);
 
     if (chipSegments.length === 0) {
@@ -1309,38 +1109,24 @@ export function TodaySpendChip({
     'text-[12px] font-medium leading-none tabular-nums',
     claudeSubscriptionAlerting
       ? 'text-[var(--error-fg)] hover:text-[var(--error-fg-strong)]'
-      // 不可点(网关账号)时不加 hover 变色,避免暗示可交互。
-      : cn('text-[var(--msg-tool-card-chevron)]', isDashboardClickable && 'hover:text-foreground'),
+      : 'text-[var(--msg-tool-card-chevron)] hover:text-foreground',
     'border-0 bg-transparent p-0 m-0',
     'transition-colors',
     'focus:outline-none',
   );
 
   return (
-    <div ref={chipRef} className="inline-flex h-5 shrink-0 items-center gap-3">
+    <div className="inline-flex h-5 shrink-0 items-center gap-3">
       <Tip text={tooltipNode}>
-        {isDashboardClickable ? (
-          <button
-            type="button"
-            onClick={handleClick}
-            className={buttonClass}
-            aria-label={usageDashboardLabel ?? undefined}
-          >
-            {labelNode}
-          </button>
-        ) : (
-          // 网关 / 托管账号暂无看板可跳(见 usageDashboardUrl):渲染为非交互文本,
-          // 点击无反应、不显示手型 / hover 态;用量指标与 tooltip 仍照常展示。
-          <span className={cn(buttonClass, 'cursor-default')}>{labelNode}</span>
-        )}
+        <button
+          type="button"
+          onClick={handleClick}
+          className={buttonClass}
+          aria-label={usageDashboardLabel}
+        >
+          {labelNode}
+        </button>
       </Tip>
-      {confettiBurst && (
-        <QuotaResetConfetti
-          key={confettiBurst.nonce}
-          anchor={confettiBurst.anchor}
-          onDone={() => setConfettiBurst(null)}
-        />
-      )}
     </div>
   );
 }

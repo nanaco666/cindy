@@ -12,10 +12,6 @@
 
 import { randomUUID } from 'node:crypto';
 
-import {
-  extractNonSecretErrorSignals,
-  redactSensitiveText,
-} from '@cindy/maker-shared/error-redaction';
 import type {
   Effort,
   PermissionMode,
@@ -53,90 +49,12 @@ export interface SessionOptions {
   capabilities: Capabilities;
   logger: Logger;
   /**
-   * 远端 SSH 主机的 alias (来自 `@cindy/maker-remote-ssh` ConnectionPool)。
+   * 远端 SSH 主机的 alias (来自 `@lizi/maker-remote-ssh` ConnectionPool)。
    * 非空 → 这个 session 实际跑在远端机器上, workDir 是远端机器上的路径。
    * 主进程的 send 路径用它判断 "local fs guard 应不应该跑" — 远端 workdir
    * 是不可能存在于本地 fs 的, 没必要也不该 stat。
    */
   remoteHostId?: string | null;
-}
-
-function redactEventForListeners(event: AgentEvent): AgentEvent {
-  if (!event.data || typeof event.data !== 'object') return event;
-
-  const data = event.data as Record<string, unknown>;
-  const safeData = { ...data };
-  let changed = false;
-  if (event.type === 'error' && typeof safeData.message === 'string') {
-    const signals = extractNonSecretErrorSignals(safeData.message);
-    if (safeData.errorStatus == null && signals.errorStatus !== undefined) {
-      safeData.errorStatus = signals.errorStatus;
-      changed = true;
-    }
-    if (safeData.usageLimit == null && signals.usageLimit) {
-      safeData.usageLimit = true;
-      changed = true;
-    }
-  }
-  const stringKeys = ['message', 'sdkError', 'summary'];
-  if (event.type === 'tool_result_full' && safeData.isError === true) {
-    stringKeys.push('fullText');
-  }
-  for (const key of stringKeys) {
-    if (typeof safeData[key] === 'string') {
-      const redacted = redactSensitiveText(safeData[key]);
-      if (redacted !== safeData[key]) {
-        safeData[key] = redacted;
-        changed = true;
-      }
-    }
-  }
-
-  if (
-    event.type === 'agent_task_update' &&
-    safeData.status === 'failed' &&
-    safeData.raw &&
-    typeof safeData.raw === 'object'
-  ) {
-    safeData.raw = redactNestedStrings(safeData.raw, () => {
-      changed = true;
-    });
-  }
-
-  if (event.type === 'done' && safeData.raw && typeof safeData.raw === 'object') {
-    const raw = { ...(safeData.raw as Record<string, unknown>) };
-    if (raw.error && typeof raw.error === 'object') {
-      raw.error = redactNestedStrings(raw.error, () => {
-        changed = true;
-      });
-    }
-    if (raw.status === 'failed' && Array.isArray(raw.items)) {
-      raw.items = redactNestedStrings(raw.items, () => {
-        changed = true;
-      });
-    }
-    safeData.raw = raw;
-  }
-
-  return changed ? ({ ...event, data: safeData } as AgentEvent) : event;
-}
-
-function redactNestedStrings(value: unknown, onChange: () => void): unknown {
-  if (typeof value === 'string') {
-    const redacted = redactSensitiveText(value);
-    if (redacted !== value) onChange();
-    return redacted;
-  }
-  if (Array.isArray(value)) {
-    return value.map((item) => redactNestedStrings(item, onChange));
-  }
-  if (!value || typeof value !== 'object') return value;
-
-  const copy: Record<string, unknown> = {};
-  for (const [key, child] of Object.entries(value)) {
-    copy[key] = redactNestedStrings(child, onChange);
-  }
-  return copy;
 }
 
 export interface SessionSendOptions extends SendOptions {
@@ -255,7 +173,7 @@ export class Session {
       // 不会污染下一个无 origin 的 turn。先存下当前值,handle.send 失败时**还原**而非
       // 清 null(见下方 finally 注释)。
       //
-      // 已知局限(PR #129 review Thread G,经产品确认接受):currentTurnOrigin 是单一
+      // 已知局限(PR #129 review Thread G,经 Dash 确认接受):currentTurnOrigin 是单一
       // session 级槽位,无法完美区分**重叠的 turn**。窄 race:turn1 在 handle 层已 idle
       // (isTurnRunning 翻 false)但其终止 done 尚未 fan-out 时,turn2 的 send **成功**会
       // 在此覆盖槽位、且 turnDispatched=true 不触发 finally 还原 → turn1 的 done 带上
@@ -652,9 +570,8 @@ export class Session {
         if (this.currentTurnOrigin && event.turnOrigin === undefined) {
           event.turnOrigin = this.currentTurnOrigin;
         }
-        const listenerEvent = redactEventForListeners(event);
         for (const listener of this.eventListeners) {
-          try { listener(listenerEvent); } catch (e) { this.logger.error('event listener threw', { error: String(e) }); }
+          try { listener(event); } catch (e) { this.logger.error('event listener threw', { error: String(e) }); }
         }
         // turn 真正结束后清 origin,下一轮无 origin 的 turn 不被污染。
         // 关键:**只**在 done / 终止型 error 上清,**不要**在 status(isRunning=false)

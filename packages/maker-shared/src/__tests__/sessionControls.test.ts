@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
   summarizeAccountRateLimits,
-  summarizeCodexRateLimitReset,
   summarizeContextUsage,
   summarizeSessionSpend,
 } from '../sessionControls.js';
@@ -40,80 +39,6 @@ describe('shared session usage summaries', () => {
       title: 'Context usage',
       detail: '90,000 / 200,000 tokens · 45%',
     });
-  });
-});
-
-describe('summarizeCodexRateLimitReset', () => {
-  const NOW_MS = Date.UTC(2026, 6, 12, 12, 0, 0);
-  const base = {
-    account: { email: 'pe***@example.com', accountId: '…456789', planType: 'plus' },
-    rateLimits: { primary: { usedPercent: 100, windowMinutes: 300 } },
-    rateLimitsByLimitId: null,
-    rateLimitResetCredits: {
-      availableCount: 2,
-      credits: [{
-        status: 'available' as const,
-        resetType: 'codexRateLimits' as const,
-        grantedAt: Math.floor(NOW_MS / 1000) - 100,
-        expiresAt: Math.floor(NOW_MS / 1000) + 3600,
-        title: 'Full reset',
-        description: null,
-      }],
-    },
-    resetOffer: {
-      idempotencyKey: '018f4ec7-c6d8-7f10-8d43-9f8791d33000',
-      expiresAt: Math.floor(NOW_MS / 1000) + 3600,
-      validUntil: NOW_MS + 60_000,
-    },
-  };
-
-  it('shows account, workspace, count and expiry when an exhausted window can reset', () => {
-    const summary = summarizeCodexRateLimitReset(base, NOW_MS);
-    expect(summary).toMatchObject({ availableCount: 2, shouldPrompt: true, canReset: true });
-    expect(summary?.rows.slice(0, 3)).toEqual([
-      { label: '账号', value: 'pe***@example.com' },
-      { label: 'Workspace', value: '…456789' },
-      { label: '可用重置', value: '2 次' },
-    ]);
-    expect(summary?.rows[3]).toMatchObject({ label: '最早过期' });
-    expect(summary?.rows[3].value).toMatch(/^\d{2}:\d{2}$/);
-  });
-
-  it('does not offer reset before exhaustion and leaves offer expiry to desktop', () => {
-    expect(summarizeCodexRateLimitReset({
-      ...base,
-      rateLimits: { primary: { usedPercent: 99.9 } },
-    }, NOW_MS)).toMatchObject({ shouldPrompt: false, canReset: false });
-    expect(summarizeCodexRateLimitReset({
-      ...base,
-      resetOffer: { ...base.resetOffer, validUntil: NOW_MS },
-    }, NOW_MS)).toMatchObject({ shouldPrompt: true, canReset: true });
-  });
-
-  it('shows exhausted-without-credit but ignores prepaid-credit depletion', () => {
-    expect(summarizeCodexRateLimitReset({
-      ...base,
-      rateLimitResetCredits: { availableCount: 0, credits: [] },
-      resetOffer: null,
-    }, NOW_MS)).toMatchObject({ availableCount: 0, shouldPrompt: true, canReset: false });
-    expect(summarizeCodexRateLimitReset({
-      ...base,
-      rateLimits: {
-        primary: { usedPercent: 100 },
-        rateLimitReachedType: 'workspace_owner_credits_depleted',
-      },
-    }, NOW_MS)).toMatchObject({ shouldPrompt: false, canReset: false });
-  });
-
-  it('omits the reset count when credit availability was not returned', () => {
-    const summary = summarizeCodexRateLimitReset({
-      ...base,
-      rateLimitResetCredits: null,
-      resetOffer: null,
-    }, NOW_MS);
-
-    expect(summary).toMatchObject({ availableCount: 0, shouldPrompt: true, canReset: false });
-    expect(summary?.rows).not.toContainEqual(expect.objectContaining({ label: '可用重置' }));
   });
 });
 

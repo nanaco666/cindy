@@ -1,7 +1,40 @@
 appId: ${APP_ID}
 ---
-# 手机语音只保留 Cindy 官方托管路径:BYOK Key 录入设置已删除,无需再进设置页。
 - runFlow: login_mock.yaml
+- tapOn:
+    id: "devices.settingsButton"
+- extendedWaitUntil:
+    visible:
+      id: "settings.screen"
+    timeout: 10000
+# 语音设置默认折叠,Key 表单(voiceLiteLlmKeyInput)仅在展开后挂载,先点开 disclosure。
+- scrollUntilVisible:
+    element:
+      id: "settings.voiceDisclose"
+    direction: DOWN
+    timeout: 10000
+- tapOn:
+    id: "settings.voiceDisclose"
+- scrollUntilVisible:
+    element:
+      id: "settings.voiceLiteLlmKeyInput"
+    direction: DOWN
+    timeout: 10000
+- tapOn:
+    id: "settings.voiceLiteLlmKeyInput"
+- inputText: "sk-mock-mobile-voice-key"
+- hideKeyboard
+- tapOn:
+    id: "settings.voiceLiteLlmSaveButton"
+- extendedWaitUntil:
+    visible: "LiteLLM Key 已保存。"
+    timeout: 5000
+- tapOn:
+    id: "settings.backButton"
+- extendedWaitUntil:
+    visible:
+      id: "devices.screen"
+    timeout: 10000
 - runFlow: open_session_no_launch.yaml
 - assertVisible:
     id: "session.composerInput"

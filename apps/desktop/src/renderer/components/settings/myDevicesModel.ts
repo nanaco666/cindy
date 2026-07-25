@@ -9,7 +9,7 @@
  *    受顶部「允许被控」总开关闸门约束:总开关关 → 置灰(黑名单状态仍保留)。
  */
 
-import { isMobilePlatform } from '@cindy/maker-shared/device-list';
+import { isMobilePlatform } from '@lizi/maker-shared/device-list';
 
 /**
  * 该平台的设备是否「可被控制」(能作为远程控制目标)。

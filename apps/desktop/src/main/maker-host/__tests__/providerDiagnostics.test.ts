@@ -11,7 +11,7 @@
 
 import { describe, it, expect, afterEach } from 'vitest';
 
-import { BUNDLED_CATALOG, buildUserProvider } from '@cindy/model-providers';
+import { buildUserProvider } from '@lizi/model-providers';
 
 import { classifyProviderError } from '../../../shared/providerErrors.js';
 import {
@@ -114,26 +114,6 @@ describe('buildProbeRequest', () => {
     const body = JSON.parse(String(init.body)) as { model: string; stream: boolean };
     expect(body.model).toBe('z-ai/glm-5.2');
     expect(body.stream).toBe(false);
-  });
-
-  it.each([
-    ['minimax-cn', 'https://api.minimaxi.com/v1/responses'],
-    ['minimax-global', 'https://api.minimax.io/v1/responses'],
-  ])('%s 预设拼出官方 Responses 端点', (presetId, expectedUrl) => {
-    const runtime = BUNDLED_CATALOG.presets?.find((preset) => preset.id === presetId)?.runtimes.codex;
-    expect(runtime).toBeDefined();
-    const { url, init } = buildProbeRequest({
-      agent: 'codex',
-      baseUrl: runtime!.baseUrl,
-      modelId: runtime!.models[0]!.id,
-      apiKey: 'sk-test',
-    });
-    expect(url).toBe(expectedUrl);
-    expect(JSON.parse(String(init.body))).toMatchObject({
-      model: 'MiniMax-M3',
-      stream: false,
-      store: false,
-    });
   });
 
   it('无 key 时不注入鉴权头（端点可能靠自定义 headers 鉴权）', () => {

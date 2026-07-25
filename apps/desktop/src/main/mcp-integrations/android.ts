@@ -19,14 +19,14 @@ import type {
   AndroidScreenState,
   AndroidStatusSummary,
   AndroidUiNode,
-} from '@cindy/mcps';
+} from 'lizi-mcps';
 import {
   readAndroidAutomationSettings,
   type AndroidAutomationSettings,
 } from '../android-automation-settings-store.js';
 import { createLogger } from '../logger.js';
 
-const logger = createLogger('mcp/cindy_android');
+const logger = createLogger('mcp/lizi_android');
 
 const ADB_COMMAND = 'adb';
 const BUNDLED_ANDROID_PLATFORM_TOOLS_RESOURCE_ROOT = ['tools', 'android-platform-tools'];
@@ -96,7 +96,7 @@ interface AndroidToolErr {
 type AndroidToolResult<T> = AndroidToolOk<T> | AndroidToolErr;
 
 export interface AndroidMcpDepsOptions {
-  isAndroidAutomationEnabled?: (context?: AndroidMcpCallContext) => boolean;
+  isAndroidAutomationEnabled?: () => boolean;
 }
 
 interface AdbCandidate {
@@ -1548,7 +1548,7 @@ export async function getAndroidStatusSummary(): Promise<AndroidToolResult<Andro
 export function getAndroidMcpDeps(options: AndroidMcpDepsOptions = {}): AndroidMcpDeps {
   return {
     callTool: async (name, args, context) => {
-      if (options.isAndroidAutomationEnabled && !options.isAndroidAutomationEnabled(context)) {
+      if (options.isAndroidAutomationEnabled && !options.isAndroidAutomationEnabled()) {
         return {
           ok: false,
           errorCode: 'ANDROID_DRIVER_ERROR',

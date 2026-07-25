@@ -6,9 +6,9 @@
  *  - variant="brand":官方彩色版——实心花形剪影填蓝紫渐变
  *    (#b1a7ff → #7a9dff → #3941ff),`>_` 为镂空透底(官方资产的白色圆角
  *    方底已去掉,内联场景透明底)。固定品牌色跨主题一致(语义豁免——同
- *    docs/design-rules/cindy-design-system.md Toast 三色逻辑);渐变 id 用 useId 派生防同屏多实例冲突。
+ *    DESIGN.md Toast 三色逻辑);渐变 id 用 useId 派生防同屏多实例冲突。
  *
- * 2026-07-20(产品):形状统一用 Codex CLI glyph(比旧 OpenAI 六瓣花结辨识度
+ * 2026-07-20(Dash):形状统一用 Codex CLI glyph(比旧 OpenAI 六瓣花结辨识度
  * 高);单色为默认,彩色按场景显式启用。两个 variant 来自同一官方 path 的拆分:
  * mono 把轮廓子路径改 fill=none + stroke,`>_` 子路径保持 fill——原资产里
  * dash 子路径是相对坐标(接在轮廓闭环终点 = 起点 9.064,3.344 之后),拆分时已

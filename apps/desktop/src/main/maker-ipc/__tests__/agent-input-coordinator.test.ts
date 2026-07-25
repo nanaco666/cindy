@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AgentInputCoordinator } from '../agent-input-coordinator.js';
 import type {
   AgentInputCoordinatorDeps,
@@ -9,10 +9,7 @@ import type {
   AgentInputProjection,
   AgentInputQueuedMessage,
 } from '../../../shared/agentInputQueue.js';
-import {
-  CONTINUE_AFTER_APP_EXIT_PROMPT,
-  CONTINUE_AFTER_ERROR_PROMPT,
-} from '../../../shared/interruptedTurn.js';
+import { CONTINUE_AFTER_ERROR_PROMPT } from '../../../shared/interruptedTurn.js';
 
 const mocks = vi.hoisted(() => {
   const logger = {
@@ -171,11 +168,7 @@ function createHarness() {
   const beforeDispatchUserTurn = vi.fn<NonNullable<AgentInputCoordinatorDeps['beforeDispatchUserTurn']>>(() => {});
   const onUndispatchedUserTurn = vi.fn<NonNullable<AgentInputCoordinatorDeps['onUndispatchedUserTurn']>>(() => {});
   const onAcceptedQueuedMessage = vi.fn<NonNullable<AgentInputCoordinatorDeps['onAcceptedQueuedMessage']>>(() => {});
-  const onDispatchedUserTurn = vi.fn<NonNullable<AgentInputCoordinatorDeps['onDispatchedUserTurn']>>(() => {});
   const noteSessionClearBoundary = vi.fn<NonNullable<AgentInputCoordinatorDeps['noteSessionClearBoundary']>>();
-  const resolveSessionReferences = vi.fn<
-    NonNullable<AgentInputCoordinatorDeps['resolveSessionReferences']>
-  >(async () => []);
   const emitProjection = vi.fn((projection: AgentInputProjection) => {
     projections.push(projection);
   });
@@ -212,9 +205,7 @@ function createHarness() {
     beforeDispatchUserTurn,
     onUndispatchedUserTurn,
     onAcceptedQueuedMessage,
-    onDispatchedUserTurn,
     noteSessionClearBoundary,
-    resolveSessionReferences,
     hasPendingCredentialSwitch: () => hasPendingCredentialSwitch?.() === true,
     screenUserMessage: (sessionId, item) =>
       screenUserMessage ? screenUserMessage(sessionId, item) : Promise.resolve({ action: 'allow' }),
@@ -238,9 +229,7 @@ function createHarness() {
     beforeDispatchUserTurn,
     onUndispatchedUserTurn,
     onAcceptedQueuedMessage,
-    onDispatchedUserTurn,
     noteSessionClearBoundary,
-    resolveSessionReferences,
     emitProjection,
     projections,
     setRunning(value: boolean) {
@@ -303,171 +292,6 @@ function latestWarnPayload() {
 
 beforeEach(() => {
   vi.clearAllMocks();
-});
-
-afterEach(() => {
-  vi.restoreAllMocks();
-});
-
-describe('AgentInputCoordinator trusted session reference snapshots', () => {
-  const trustedContext = {
-    sessionId: 'source-session',
-    source: 'device-link' as const,
-    deviceId: 'source-device',
-    messages: [{ role: 'user' as const, content: 'authoritative remote history' }],
-    range: 'recent' as const,
-    messageCount: 1,
-    truncated: false,
-  };
-
-  it('consumes the controller snapshot without re-resolving it on the controlled device', async () => {
-    const h = createHarness();
-    const item = makeItem('quoted-1', 'compare cindy://session/source-session', {
-      persistedContent: JSON.stringify({ text: 'compare cindy://session/source-session' }),
-      sessionRefs: [{ sessionId: 'source-session', deviceId: 'source-device' }],
-      trustedSessionReferenceContexts: [trustedContext],
-      sessionReferencesRequireTrustedSnapshot: true,
-    });
-
-    h.coordinator.enqueue('target-session', item);
-    await flush();
-
-    expect(h.resolveSessionReferences).not.toHaveBeenCalled();
-    expect(h.sendToAgent).toHaveBeenCalledTimes(1);
-    expect(JSON.stringify(h.sendToAgent.mock.calls[0]?.[1])).toContain('authoritative remote history');
-    expect(mocks.createMessage.mock.calls[0]?.[1]).toMatchObject({
-      content: expect.stringContaining('"sessionReferences"'),
-    });
-  });
-
-  it('fails closed instead of interpreting a controller ref against local SQLite', async () => {
-    const h = createHarness();
-    h.coordinator.enqueue('target-session', makeItem('quoted-2', 'compare cindy://session/source-session', {
-      sessionRefs: [{ sessionId: 'source-session', deviceId: 'source-device' }],
-      sessionReferencesRequireTrustedSnapshot: true,
-    }));
-    await flush();
-
-    expect(h.resolveSessionReferences).not.toHaveBeenCalled();
-    expect(h.sendToAgent).not.toHaveBeenCalled();
-    expect(latestProjection(h.projections).error).toContain('snapshot is missing');
-  });
-
-  it('does not expose quoted history bodies through renderer projections', () => {
-    const h = createHarness();
-    h.setRunning(true);
-    const projection = h.coordinator.enqueue('target-session', makeItem('quoted-3', 'queued quote', {
-      sessionRefs: [{ sessionId: 'source-session', deviceId: 'source-device' }],
-      trustedSessionReferenceContexts: [trustedContext],
-      sessionReferencesRequireTrustedSnapshot: true,
-    }));
-
-    expect(projection.pendingQueue[0]?.sessionRefs).toHaveLength(1);
-    expect(projection.pendingQueue[0]?.trustedSessionReferenceContexts).toBeUndefined();
-    expect(projection.pendingQueue[0]?.sessionReferencesRequireTrustedSnapshot).toBeUndefined();
-    expect(JSON.stringify(projection)).not.toContain('authoritative remote history');
-  });
-
-  it('uses the stored trusted snapshot when steering a projected queued item', async () => {
-    const h = createHarness();
-    const sid = 'target-session';
-    h.setRunning(true);
-    const projection = h.coordinator.enqueue(sid, makeItem('quoted-steer', 'queued quote', {
-      sessionRefs: [{ sessionId: 'source-session', deviceId: 'source-device' }],
-      trustedSessionReferenceContexts: [trustedContext],
-      sessionReferencesRequireTrustedSnapshot: true,
-    }));
-    const projectedItem = projection.pendingQueue[0];
-
-    expect(projectedItem?.trustedSessionReferenceContexts).toBeUndefined();
-    expect(projectedItem?.sessionReferencesRequireTrustedSnapshot).toBeUndefined();
-    await expect(h.coordinator.steer(sid, projectedItem!, { removeFromQueue: true })).resolves.toBe(true);
-
-    expect(h.resolveSessionReferences).not.toHaveBeenCalled();
-    expect(h.steerToAgent).toHaveBeenCalledTimes(1);
-    expect(JSON.stringify(h.steerToAgent.mock.calls[0]?.[1])).toContain('authoritative remote history');
-    expect(latestProjection(h.projections).pendingQueue).toHaveLength(0);
-  });
-
-  it('merges a fresh device-link snapshot into a restored marker-only queued steer', async () => {
-    const h = createHarness();
-    const sid = 'target-session';
-    h.setRunning(true);
-    const refs = [{ sessionId: 'source-session', deviceId: 'source-device' }];
-    h.coordinator.enqueue(sid, makeItem('quoted-restored', 'queued quote', {
-      sessionRefs: refs,
-      sessionReferencesRequireTrustedSnapshot: true,
-    }));
-
-    const incoming = makeItem('quoted-restored', 'queued quote', {
-      sessionRefs: refs,
-      trustedSessionReferenceContexts: [trustedContext],
-      sessionReferencesRequireTrustedSnapshot: true,
-    });
-    await expect(h.coordinator.steer(sid, incoming, { removeFromQueue: true })).resolves.toBe(true);
-
-    expect(h.resolveSessionReferences).not.toHaveBeenCalled();
-    expect(h.steerToAgent).toHaveBeenCalledTimes(1);
-    expect(JSON.stringify(h.steerToAgent.mock.calls[0]?.[1])).toContain('authoritative remote history');
-  });
-
-  it('does not pass trusted reference bodies to crash-recovery persistence', async () => {
-    const h = createHarness();
-    const sid = 'target-session';
-    await h.coordinator.ensureQueueRestored(sid);
-    h.setRunning(true);
-
-    h.coordinator.enqueue(sid, makeItem('quoted-persist', 'queued quote', {
-      sessionRefs: [{ sessionId: 'source-session', deviceId: 'source-device' }],
-      trustedSessionReferenceContexts: [trustedContext],
-      sessionReferencesRequireTrustedSnapshot: true,
-    }));
-    await flush();
-
-    const persisted = h.persistQueueSnapshot.mock.calls.at(-1)?.[1][0];
-    expect(persisted?.trustedSessionReferenceContexts).toBeUndefined();
-    expect(persisted?.sessionReferencesRequireTrustedSnapshot).toBe(true);
-    expect(JSON.stringify(persisted)).not.toContain('authoritative remote history');
-  });
-
-  it('releases a stale trusted snapshot when a Ghost rewrite changes the visible reference', async () => {
-    const h = createHarness();
-    h.setScreenUserMessage(async () => ({
-      action: 'rewrite',
-      text: 'compare cindy://session/replacement',
-      ghostId: 'ghost-1',
-      ghostName: 'rewrite-test',
-    }));
-    h.coordinator.enqueue('target-session', makeItem('quoted-4', 'compare cindy://session/source-session', {
-      sessionRefs: [{ sessionId: 'source-session', deviceId: 'source-device' }],
-      trustedSessionReferenceContexts: [trustedContext],
-      sessionReferencesRequireTrustedSnapshot: true,
-    }));
-    await flush();
-
-    expect(h.resolveSessionReferences).toHaveBeenCalledTimes(1);
-    expect(h.sendToAgent).toHaveBeenCalledTimes(1);
-    expect(latestProjection(h.projections).error).toBeNull();
-  });
-
-  it('clears a stale trusted snapshot on a full-content rewrite without refs', () => {
-    const h = createHarness();
-    const item = makeItem('quoted-content-rewrite', 'compare cindy://session/source-session', {
-      sessionRefs: [{ sessionId: 'source-session', deviceId: 'source-device' }],
-      trustedSessionReferenceContexts: [trustedContext],
-      sessionReferencesRequireTrustedSnapshot: true,
-    });
-    h.coordinator.enqueue('target-session', item);
-
-    h.coordinator.updateContent('target-session', item.clientId, makeItem(item.clientId, 'compare cindy://session/controller', {
-      sessionRefs: [],
-    }));
-
-    const updated = latestProjection(h.projections).pendingQueue[0];
-    expect(updated?.sessionRefs).toBeUndefined();
-    expect(updated?.trustedSessionReferenceContexts).toBeUndefined();
-    expect(updated?.sessionReferencesRequireTrustedSnapshot).toBeUndefined();
-  });
 });
 
 describe('AgentInputCoordinator send transaction', () => {
@@ -685,31 +509,6 @@ describe('AgentInputCoordinator send transaction', () => {
     expect(h.sendToAgent).toHaveBeenCalledTimes(1);
     projection = latestProjection(h.projections);
     expect(projection.credentialSwitchWait).toBeNull();
-  });
-
-  it('clears a displaced credential-switch wait when continue is prepended ahead of the waited head', async () => {
-    const h = createHarness();
-    const sid = 'send-credential-switch-continue-prepend';
-
-    h.sendToAgent.mockImplementation(async () =>
-      hostSendFailure('CREDENTIAL_SWITCH_BUSY', 'CREDENTIAL_SWITCH_BUSY: busy', {
-        busySessionIds: ['other-session'],
-      }));
-
-    h.coordinator.enqueue(sid, makeItem('q-1', 'first'));
-    await flush();
-    expect(latestProjection(h.projections).credentialSwitchWait).toEqual({
-      clientId: 'q-1',
-      blockedBySessionIds: ['other-session'],
-    });
-
-    h.coordinator.enqueue(sid, makeItem('q-continue', CONTINUE_AFTER_APP_EXIT_PROMPT));
-    await flush();
-
-    const projection = latestProjection(h.projections);
-    expect(projection.pendingQueue.map((q) => q.clientId)).toEqual(['q-continue', 'q-1']);
-    // 旧 wait 目标已被顶走；drain 会为新队首重建 wait（仍 busy）。
-    expect(projection.credentialSwitchWait?.clientId).toBe('q-continue');
   });
 
   it('retries a restored queue head when SESSION_RUNNING clears without a done event', async () => {
@@ -1504,7 +1303,7 @@ describe('AgentInputCoordinator send transaction', () => {
     const sid = 'compact-silent';
     const createOpts = makeItem('q-compact', 'ignored').createOpts;
 
-    await h.coordinator.compact(sid, createOpts, { userName: 'Carol' });
+    await h.coordinator.compact(sid, createOpts, { userName: 'Dash' });
     await flush();
 
     expect(h.sendToAgent).toHaveBeenCalledWith(
@@ -1512,7 +1311,7 @@ describe('AgentInputCoordinator send transaction', () => {
       { type: 'user', content: '/compact' },
       createOpts,
       expect.objectContaining({
-        userName: 'Carol',
+        userName: 'Dash',
         throwOnStartFailure: true,
       }),
     );
@@ -1553,7 +1352,7 @@ describe('AgentInputCoordinator send transaction', () => {
     const sid = 'compact-queued-during-active-turn';
     h.setRunning(true);
 
-    await h.coordinator.compact(sid, makeItem('q-compact', 'ignored').createOpts, { userName: 'Carol' });
+    await h.coordinator.compact(sid, makeItem('q-compact', 'ignored').createOpts, { userName: 'Dash' });
     await flush();
 
     expect(h.sendToAgent).not.toHaveBeenCalled();
@@ -1569,7 +1368,7 @@ describe('AgentInputCoordinator send transaction', () => {
       sid,
       { type: 'user', content: '/compact' },
       expect.anything(),
-      expect.objectContaining({ userName: 'Carol', throwOnStartFailure: true }),
+      expect.objectContaining({ userName: 'Dash', throwOnStartFailure: true }),
     );
     expect(h.sendToAgent.mock.calls[0]?.[3].persistUserMessage).toBeUndefined();
     expect(mocks.createMessage).not.toHaveBeenCalled();
@@ -1585,7 +1384,7 @@ describe('AgentInputCoordinator send transaction', () => {
       throw sessionRunningError();
     });
 
-    await h.coordinator.compact(sid, createOpts, { userName: 'Carol' });
+    await h.coordinator.compact(sid, createOpts, { userName: 'Dash' });
     await flush();
 
     let projection = latestProjection(h.projections);
@@ -1604,7 +1403,7 @@ describe('AgentInputCoordinator send transaction', () => {
       sid,
       { type: 'user', content: '/compact' },
       createOpts,
-      expect.objectContaining({ userName: 'Carol', throwOnStartFailure: true }),
+      expect.objectContaining({ userName: 'Dash', throwOnStartFailure: true }),
     );
     expect(h.sendToAgent.mock.calls[1]?.[3].persistUserMessage).toBeUndefined();
     expect(mocks.createMessage).not.toHaveBeenCalled();
@@ -1622,7 +1421,7 @@ describe('AgentInputCoordinator send transaction', () => {
       return hostSendFailure('SESSION_RUNNING', '[SESSION_RUNNING] Session is already running a turn');
     });
 
-    await h.coordinator.compact(sid, createOpts, { userName: 'Carol' });
+    await h.coordinator.compact(sid, createOpts, { userName: 'Dash' });
     await flush();
 
     let projection = latestProjection(h.projections);
@@ -1641,7 +1440,7 @@ describe('AgentInputCoordinator send transaction', () => {
       sid,
       { type: 'user', content: '/compact' },
       createOpts,
-      expect.objectContaining({ userName: 'Carol', throwOnStartFailure: true }),
+      expect.objectContaining({ userName: 'Dash', throwOnStartFailure: true }),
     );
     expect(h.sendToAgent.mock.calls[1]?.[3].persistUserMessage).toBeUndefined();
     expect(mocks.createMessage).not.toHaveBeenCalled();
@@ -1659,7 +1458,7 @@ describe('AgentInputCoordinator send transaction', () => {
       throw sessionRunningError();
     });
 
-    await h.coordinator.compact(sid, createOpts, { userName: 'Carol' });
+    await h.coordinator.compact(sid, createOpts, { userName: 'Dash' });
     await flush();
 
     let projection = latestProjection(h.projections);
@@ -1678,7 +1477,7 @@ describe('AgentInputCoordinator send transaction', () => {
       sid,
       { type: 'user', content: '/compact' },
       createOpts,
-      expect.objectContaining({ userName: 'Carol', throwOnStartFailure: true }),
+      expect.objectContaining({ userName: 'Dash', throwOnStartFailure: true }),
     );
     expect(h.sendToAgent.mock.calls[1]?.[3].persistUserMessage).toBeUndefined();
     expect(mocks.createMessage).not.toHaveBeenCalled();
@@ -1692,7 +1491,7 @@ describe('AgentInputCoordinator send transaction', () => {
     const createOpts = makeItem('q-compact', 'ignored').createOpts;
 
     h.setRunning(true);
-    await h.coordinator.compact(sid, createOpts, { userName: 'Carol' });
+    await h.coordinator.compact(sid, createOpts, { userName: 'Dash' });
     await flush();
 
     let projection = latestProjection(h.projections);
@@ -1711,7 +1510,7 @@ describe('AgentInputCoordinator send transaction', () => {
       sid,
       { type: 'user', content: '/compact' },
       createOpts,
-      expect.objectContaining({ userName: 'Carol', throwOnStartFailure: true }),
+      expect.objectContaining({ userName: 'Dash', throwOnStartFailure: true }),
     );
     expect(h.sendToAgent.mock.calls[0]?.[3].persistUserMessage).toBeUndefined();
     expect(mocks.createMessage).not.toHaveBeenCalled();
@@ -1727,7 +1526,7 @@ describe('AgentInputCoordinator send transaction', () => {
       const createOpts = makeItem('q-compact', 'ignored').createOpts;
 
       h.setRunning(true);
-      await h.coordinator.compact(sid, createOpts, { userName: 'Carol' });
+      await h.coordinator.compact(sid, createOpts, { userName: 'Dash' });
       await flush();
 
       let projection = latestProjection(h.projections);
@@ -1761,7 +1560,7 @@ describe('AgentInputCoordinator send transaction', () => {
       const createOpts = makeItem('q-compact', 'ignored').createOpts;
 
       h.setRunning(true);
-      await h.coordinator.compact(sid, createOpts, { userName: 'Carol' });
+      await h.coordinator.compact(sid, createOpts, { userName: 'Dash' });
       await flush();
 
       let projection = latestProjection(h.projections);
@@ -1795,7 +1594,7 @@ describe('AgentInputCoordinator send transaction', () => {
 
       h.coordinator.enqueue(sid, first);
       await flush();
-      await h.coordinator.compact(sid, createOpts, { userName: 'Carol' });
+      await h.coordinator.compact(sid, createOpts, { userName: 'Dash' });
       await flush();
 
       let projection = latestProjection(h.projections);
@@ -1818,7 +1617,7 @@ describe('AgentInputCoordinator send transaction', () => {
         sid,
         { type: 'user', content: '/compact' },
         createOpts,
-        expect.objectContaining({ userName: 'Carol', throwOnStartFailure: true }),
+        expect.objectContaining({ userName: 'Dash', throwOnStartFailure: true }),
       );
       expect(h.sendToAgent.mock.calls[1]?.[3].persistUserMessage).toBeUndefined();
       expect(mocks.createMessage).toHaveBeenCalledTimes(1);
@@ -1983,9 +1782,6 @@ describe('AgentInputCoordinator send transaction', () => {
     const persist = h.sendToAgent.mock.calls[1]?.[3]?.persistUserMessage;
     expect(persist?.content).toBe(CONTINUE_AFTER_ERROR_PROMPT);
     expect(h.sendToAgent.mock.calls[1]?.[2]?.planMode).toBe(false);
-    expect(h.onDispatchedUserTurn.mock.calls[1]?.[1]?.originalSyntheticTrigger).toBe(
-      'continue',
-    );
   });
 
   it('active-turn retry falls back to resending the original text when the turn produced nothing', async () => {
@@ -3488,8 +3284,8 @@ describe('AgentInputCoordinator steer transaction', () => {
     const sid = 'steer-ghost-block';
     const first = makeItem('q-1', 'first');
     const second = makeItem('q-2', 'second');
-    h.setScreenUserMessage(async (_sid, agentFacingText) =>
-      agentFacingText === 'second'
+    h.setScreenUserMessage(async (_sid, queued) =>
+      queued.clientId === 'q-2'
         ? { action: 'block', ghostId: 'g-1', ghostName: 'guard', reason: 'nope' }
         : { action: 'allow' },
     );
@@ -3521,8 +3317,8 @@ describe('AgentInputCoordinator steer transaction', () => {
     const sid = 'steer-ghost-rewrite';
     const first = makeItem('q-1', 'first');
     const second = makeItem('q-2', 'second');
-    h.setScreenUserMessage(async (_sid, agentFacingText) =>
-      agentFacingText === 'second'
+    h.setScreenUserMessage(async (_sid, queued) =>
+      queued.clientId === 'q-2'
         ? { action: 'rewrite', ghostId: 'g-1', ghostName: 'guard', text: 'rewritten text' }
         : { action: 'allow' },
     );
@@ -4087,45 +3883,6 @@ describe('AgentInputCoordinator steer transaction', () => {
     expect(projection.error).toBeNull();
   });
 
-  it('keeps a restored trusted snapshot when queued steer falls back to a normal turn', async () => {
-    const h = createHarness();
-    h.setAgentKind('codex');
-    const sid = 'steer-fallback-trusted-snapshot';
-    const first = makeItem('q-1', 'first');
-    const refs = [{ sessionId: 'source-session', deviceId: 'source-device' }];
-    const trustedContext = {
-      sessionId: 'source-session',
-      source: 'device-link' as const,
-      deviceId: 'source-device',
-      messages: [{ role: 'user' as const, content: 'authoritative remote history' }],
-      range: 'recent' as const,
-      messageCount: 1,
-      truncated: false,
-    };
-    const markerOnly = makeItem('q-2', 'queued quote', {
-      sessionRefs: refs,
-      sessionReferencesRequireTrustedSnapshot: true,
-    });
-    const incoming = makeItem('q-2', 'queued quote', {
-      sessionRefs: refs,
-      trustedSessionReferenceContexts: [trustedContext],
-      sessionReferencesRequireTrustedSnapshot: true,
-    });
-
-    h.coordinator.enqueue(sid, first);
-    await flush();
-    h.coordinator.enqueue(sid, markerOnly);
-    h.steerToAgent.mockRejectedValueOnce(new Error('[NO_ACTIVE_TURN] Session has no active turn'));
-    h.reconcileTurnIdle.mockImplementationOnce(() => h.setRunning(false));
-
-    await expect(h.coordinator.steer(sid, incoming, { removeFromQueue: true })).resolves.toBe(true);
-    await flush();
-
-    expect(h.resolveSessionReferences).not.toHaveBeenCalled();
-    expect(h.sendToAgent).toHaveBeenCalledTimes(2);
-    expect(JSON.stringify(h.sendToAgent.mock.calls[1]?.[1])).toContain('authoritative remote history');
-  });
-
   it('serializes steer attempts while a steer request is already in flight', async () => {
     const h = createHarness();
     h.setAgentKind('codex');
@@ -4341,29 +4098,7 @@ describe('AgentInputCoordinator queue mutations', () => {
       text: 'new text',
       images: [{ url: 'xdt-image://1' }],
       files: [],
-      slashCommandRanges: [],
     });
-  });
-
-  it('does not re-parse remote edits that omit trusted session refs', async () => {
-    const h = createHarness();
-    const sid = 'edit-remote-without-snapshot';
-    const item = makeItem('q-1', 'old text');
-    h.coordinator.enqueue(sid, item);
-    await flush();
-
-    h.coordinator.updateText(
-      sid,
-      item.clientId,
-      'see cindy://session/remote?message=client-1',
-      undefined,
-      undefined,
-      true,
-    );
-
-    const updated = latestProjection(h.projections).pendingQueue[0];
-    expect(updated?.sessionRefs).toBeUndefined();
-    expect(updated?.sessionReferencesRequireTrustedSnapshot).toBeUndefined();
   });
 
   it('replaces pending row content (text + files) in place while pinning identity fields', async () => {
@@ -4547,153 +4282,6 @@ describe('AgentInputCoordinator crash-recovery queue snapshots (issue #761)', ()
     expect(projection.pendingQueue.map((q) => q.clientId)).toEqual(['q-user']);
   });
 
-  it.each([
-    ['app-exit continuation', CONTINUE_AFTER_APP_EXIT_PROMPT],
-    ['error continuation', CONTINUE_AFTER_ERROR_PROMPT],
-  ])('dispatches %s before an existing restored queue', async (_label, prompt) => {
-    const h = createHarness();
-    const sid = `snapshot-restore-priority-${_label}`;
-    h.setLoadQueueSnapshot(async () => [
-      makeItem('r-1', 'queued first'),
-      makeItem('r-2', 'queued second'),
-    ]);
-
-    await h.coordinator.ensureQueueRestored(sid);
-    await flush();
-    expect(latestProjection(h.projections).queuePaused).toBe(true);
-
-    h.coordinator.enqueue(sid, makeItem('q-continue', prompt), {
-      resumeRestorePausedQueue: true,
-    });
-    await flush();
-
-    const projection = latestProjection(h.projections);
-    expect(projection.queuePaused).toBe(false);
-    expect(h.sendToAgent).toHaveBeenCalledTimes(1);
-    expect(h.sendToAgent.mock.calls[0]?.[1]).toEqual({ type: 'user', content: prompt });
-    expect(projection.pendingQueue.map((q) => q.clientId)).toEqual(['r-1', 'r-2']);
-  });
-
-  it('projects a continuation as in-flight after it leaves the queue until the turn settles', async () => {
-    const h = createHarness();
-    const sid = 'continue-in-flight-projection';
-
-    h.coordinator.enqueue(
-      sid,
-      makeItem('q-continue', CONTINUE_AFTER_APP_EXIT_PROMPT),
-      { resumeRestorePausedQueue: true },
-    );
-    await flush();
-
-    let projection = latestProjection(h.projections);
-    expect(projection.pendingQueue).toEqual([]);
-    expect(projection.continuationInFlightClientId).toBe('q-continue');
-
-    h.setRunning(false);
-    h.coordinator.onTurnEvent(sid, 'done');
-    await flush();
-
-    projection = latestProjection(h.projections);
-    expect(projection.continuationInFlightClientId).toBeNull();
-  });
-
-  it('does not retain an in-flight continuation marker when the user cancels it in the queue', async () => {
-    const h = createHarness();
-    const sid = 'continue-cancelled-while-queued';
-    h.setRunning(true);
-
-    h.coordinator.enqueue(
-      sid,
-      makeItem('q-continue', CONTINUE_AFTER_APP_EXIT_PROMPT),
-      { resumeRestorePausedQueue: true },
-    );
-    await flush();
-
-    let projection = latestProjection(h.projections);
-    expect(projection.pendingQueue.map((item) => item.clientId)).toEqual(['q-continue']);
-    expect(projection.continuationInFlightClientId).toBeNull();
-
-    h.coordinator.remove(sid, 'q-continue');
-    await flush();
-
-    projection = latestProjection(h.projections);
-    expect(projection.pendingQueue).toEqual([]);
-    expect(projection.continuationInFlightClientId).toBeNull();
-  });
-
-  it('preserves the original Continue intent when a Ghost rewrites the dispatch text', async () => {
-    const h = createHarness();
-    const sid = 'continue-ghost-rewrite';
-    h.setScreenUserMessage(async () => ({
-      action: 'rewrite',
-      ghostId: 'ghost-1',
-      ghostName: 'Guard',
-      text: 'Continue with the reviewed constraints.',
-    }));
-
-    h.coordinator.enqueue(
-      sid,
-      makeItem('q-continue', CONTINUE_AFTER_ERROR_PROMPT),
-      { resumeRestorePausedQueue: true },
-    );
-    await flush();
-
-    expect(h.sendToAgent).toHaveBeenCalledWith(
-      sid,
-      { type: 'user', content: 'Continue with the reviewed constraints.' },
-      expect.any(Object),
-      expect.any(Object),
-    );
-    expect(h.onDispatchedUserTurn).toHaveBeenCalledWith(
-      sid,
-      expect.objectContaining({
-        clientId: 'q-continue',
-        text: 'Continue with the reviewed constraints.',
-        originalSyntheticTrigger: 'continue',
-      }),
-      expect.any(Number),
-    );
-  });
-
-  it('recomputes original trigger intent instead of trusting a forged enqueue field', async () => {
-    const h = createHarness();
-    const sid = 'normal-message-forged-continue-intent';
-
-    h.coordinator.enqueue(
-      sid,
-      makeItem('q-normal', 'ordinary message', {
-        originalSyntheticTrigger: 'continue',
-      }),
-    );
-    await flush();
-
-    const dispatchedItem = h.onDispatchedUserTurn.mock.calls[0]?.[1];
-    expect(dispatchedItem?.originalSyntheticTrigger).toBeUndefined();
-    expect(latestProjection(h.projections).continuationInFlightClientId).toBeNull();
-  });
-
-  it('passes a pre-vendor timestamp to the irreversible dispatch hook', async () => {
-    const h = createHarness();
-    const sid = 'continue-dispatch-ack-timestamp';
-    vi.spyOn(Date, 'now').mockReturnValue(50_000);
-
-    const item = makeItem('q-continue', CONTINUE_AFTER_APP_EXIT_PROMPT);
-    h.coordinator.enqueue(sid, item, { resumeRestorePausedQueue: true });
-    await flush();
-
-    expect(h.onDispatchedUserTurn).toHaveBeenCalledWith(
-      sid,
-      expect.objectContaining({
-        clientId: item.clientId,
-        originalSyntheticTrigger: 'continue',
-      }),
-      49_999,
-    );
-    expect(h.onDispatchedUserTurn.mock.invocationCallOrder[0]).toBeGreaterThan(
-      h.sendToAgent.mock.invocationCallOrder[0]!,
-    );
-  });
-
   it('keeps a crash-restored paused queue when the enqueue lacks the explicit-input flag (orca path)', async () => {
     const h = createHarness();
     const sid = 'snapshot-restore-orca-keeps-paused';
@@ -4857,69 +4445,10 @@ describe('AgentInputCoordinator enqueue clientId 幂等去重(弱网重发防线
 });
 
 describe('AgentInputCoordinator 意识拦截钩(订阅槽①,will-user-message)', () => {
-  it('projects quote markers and structured references for Ghost, turn and steer', async () => {
-    const href = 'cindy://session/session-a?message=message-a';
-    const raw = `> <!-- cindy-composer-quote -->\n> selected\n\ninspect ${href}`;
-    const item = makeItem('semantic-turn', raw, {
-      persistedContent: JSON.stringify({ text: raw, quotesEncoded: true }),
-      agentReferences: [{
-        kind: 'message',
-        start: raw.indexOf(href),
-        end: raw.indexOf(href) + href.length,
-        href,
-        sessionId: 'session-a',
-        messageClientId: 'message-a',
-        text: 'Target message body',
-      }],
-      chatMessage: {
-        clientId: 'semantic-turn',
-        role: 'user',
-        content: raw,
-        quotesEncoded: true,
-      },
-    });
-
-    const turn = createHarness();
-    const turnScreen = vi.fn<NonNullable<AgentInputCoordinatorDeps['screenUserMessage']>>(
-      async () => ({ action: 'allow' }) as const,
-    );
-    turn.setScreenUserMessage(turnScreen);
-    turn.coordinator.enqueue('semantic-turn-session', item);
-    await flush();
-
-    const turnScreenText = turnScreen.mock.calls[0]?.[1];
-    expect(turnScreenText).not.toContain('cindy-composer-quote');
-    expect(turnScreenText).not.toContain(href);
-    expect(turnScreenText).toContain('Target message body');
-    const turnText = (turn.sendToAgent.mock.calls[0]?.[1] as { content: string }).content;
-    expect(turnText).toBe(turnScreenText);
-
-    const steer = createHarness();
-    steer.setRunning(true);
-    const steerScreen = vi.fn<NonNullable<AgentInputCoordinatorDeps['screenUserMessage']>>(
-      async () => ({ action: 'allow' }) as const,
-    );
-    steer.setScreenUserMessage(steerScreen);
-    const steerItem = {
-      ...item,
-      clientId: 'semantic-steer',
-      chatMessage: { ...item.chatMessage, clientId: 'semantic-steer' },
-    };
-    expect(await steer.coordinator.steer('semantic-steer-session', steerItem)).toBe(true);
-    await flush();
-
-    const steerScreenText = steerScreen.mock.calls[0]?.[1];
-    expect(steerScreenText).not.toContain('cindy-composer-quote');
-    expect(steerScreenText).not.toContain(href);
-    expect(steerScreenText).toContain('Target message body');
-    const steerText = (steer.steerToAgent.mock.calls[0]?.[1] as { content: string }).content;
-    expect(steerText).toBe(steerScreenText);
-  });
-
   it('block:丢弃排队项(不落库不派发),回调 onUserMessageBlocked,后续消息继续放行', async () => {
     const h = createHarness();
-    h.setScreenUserMessage(async (_sid, agentFacingText) =>
-      agentFacingText.includes('敏感')
+    h.setScreenUserMessage(async (_sid, item) =>
+      item.text.includes('敏感')
         ? { action: 'block', ghostId: 'g1', ghostName: '哨兵', reason: '含敏感词' }
         : { action: 'allow' },
     );
@@ -5043,53 +4572,9 @@ describe('AgentInputCoordinator 意识拦截钩(订阅槽①,will-user-message)'
     )?.[1] as { content: string };
     expect(JSON.parse(persisted.content)).toEqual({
       text: '> ordinary markdown after rewrite',
-      slashCommandRanges: [],
     });
     const rewrittenItem = h.onUserMessageRewritten.mock.calls[0]?.[1];
     expect(rewrittenItem?.chatMessage.quotesEncoded).toBeUndefined();
-  });
-
-  it('rewrite:clears stale Composer reference offsets from wire and Agent input', async () => {
-    const h = createHarness();
-    const href = 'cindy://session/session-a?message=message-a';
-    const original = `inspect ${href}`;
-    h.setScreenUserMessage(async () => ({
-      action: 'rewrite',
-      ghostId: 'g1',
-      ghostName: '哨兵',
-      text: `rewritten ${href}`,
-    }) as const);
-    const reference = {
-      kind: 'message' as const,
-      start: original.indexOf(href),
-      end: original.length,
-      href,
-      sessionId: 'session-a',
-      messageClientId: 'message-a',
-      text: 'Target message body',
-    };
-    h.coordinator.enqueue('s1', makeItem('c1', original, {
-      persistedContent: JSON.stringify({
-        text: original,
-        agentReferences: [reference],
-      }),
-      agentReferences: [reference],
-    }));
-
-    await flush();
-
-    expect(h.sendToAgent.mock.calls[0]?.[1]).toEqual({
-      type: 'user',
-      content: `rewritten ${href}`,
-    });
-    const persisted = mocks.createMessage.mock.calls.find(
-      (call) => (call[1] as { clientId?: string }).clientId === 'c1',
-    )?.[1] as { content: string };
-    expect(JSON.parse(persisted.content)).toEqual({
-      text: `rewritten ${href}`,
-      slashCommandRanges: [],
-    });
-    expect(h.onUserMessageRewritten.mock.calls[0]?.[1].agentReferences).toBeUndefined();
   });
 });
 

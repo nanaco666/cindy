@@ -12,7 +12,6 @@ const mocks = vi.hoisted(() => ({
     title: `Session ${sessionId}`,
     status: 'active',
   })),
-  resolveSessionMessageText: vi.fn(async () => 'Target message\nfull text'),
 }));
 
 vi.mock('react-router-dom', async (importOriginal) => {
@@ -28,9 +27,6 @@ vi.mock('@/features/device-link/remoteProjectsStore', () => ({
   useRemoteProjectSessions: () => [],
 }));
 vi.mock('@/lib/sessionService', () => ({ get: mocks.getSession }));
-vi.mock('@/lib/sessionMessageText', () => ({
-  resolveSessionMessageText: mocks.resolveSessionMessageText,
-}));
 vi.mock('@/lib/orcaSessionIdentity', () => ({
   resolveSessionRoute: mocks.resolveSessionRoute,
 }));
@@ -81,36 +77,9 @@ describe('sidebar-embedded session navigation boundary', () => {
     render(embedded(<SessionLinkChip href="xdt-maker://session/session-a" label="Session A" />));
 
     expect(screen.queryByRole('button')).toBeNull();
-    const chip = screen.getByText('Session A').closest('[data-inline-reference-chip]');
-    expect(chip).not.toBeNull();
-    expect(chip?.getAttribute('title')).toBeNull();
+    expect(screen.getByText('Session A').closest('span[title]')).not.toBeNull();
     expect(mocks.resolveSessionRoute).not.toHaveBeenCalled();
     expect(mocks.navigate).not.toHaveBeenCalled();
-  });
-
-  it('shows the persisted reference range summary without changing the link label', () => {
-    render(
-      embedded(
-        <SessionLinkChip
-          href="cindy://session/session-a?message=message-1"
-          label="Session A"
-          referenceMetadata={{
-            sessionId: 'session-a',
-            messageClientId: 'message-1',
-            range: 'around-anchor',
-            messageCount: 7,
-            truncated: true,
-          }}
-        />,
-      ),
-    );
-
-    expect(screen.getByText('Session A')).toBeTruthy();
-    expect(
-      screen.getByText(
-        'chat.userMessage.sessionReference.aroundAnchor · chat.userMessage.sessionReference.messageCount · chat.userMessage.sessionReference.truncated',
-      ),
-    ).toBeTruthy();
   });
 
   it('renders handoff cards as static content without resolving or navigating', () => {
@@ -135,11 +104,7 @@ describe('sidebar-embedded session navigation boundary', () => {
     render(
       embedded(
         <AutomationOriginBadge
-          automationOrigin={{
-            kind: 'scheduler',
-            scheduleId: 'schedule-1',
-            scheduleName: 'Nightly',
-          }}
+          automationOrigin={{ kind: 'scheduler', scheduleId: 'schedule-1', scheduleName: 'Nightly' }}
         />,
       ),
     );
@@ -171,55 +136,6 @@ describe('sidebar-embedded session navigation boundary', () => {
     expect(mocks.navigate).toHaveBeenCalledWith('/cc-agent/session-d', undefined);
   });
 
-  it('renders anchored links from message content and preserves jump navigation', async () => {
-    const { container } = render(
-      <SessionLinkChip
-        href="cindy://session/session-message?message=client-1"
-        label="Session Message"
-      />,
-    );
-
-    expect(await screen.findByText('Session Message')).toBeTruthy();
-    expect(mocks.resolveSessionMessageText).toHaveBeenCalledWith('session-message', 'client-1');
-    expect(
-      container
-        .querySelector('[data-session-message-link] [aria-label]')
-        ?.getAttribute('aria-label'),
-    ).toBe('Session Message');
-    expect(container.querySelector('svg.lucide-message-square-quote')).not.toBeNull();
-
-    fireEvent.click(screen.getByRole('button'));
-    await waitFor(() =>
-      expect(mocks.resolveSessionRoute).toHaveBeenCalledWith('session-message', null),
-    );
-    expect(mocks.navigate).toHaveBeenCalledWith('/cc-agent/session-message', {
-      state: {
-        searchJump: {
-          kind: 'conversation-search',
-          sessionId: 'session-message',
-          messageId: 'client-1',
-          messageIdKind: 'clientId',
-          messageClientId: 'client-1',
-        },
-      },
-    });
-  });
-
-  it('caps anchored message labels before mounting them in the DOM', async () => {
-    const longMessage = `  ${'x'.repeat(320)}  `;
-    mocks.resolveSessionMessageText.mockResolvedValueOnce(longMessage);
-    const { container } = render(
-      <SessionLinkChip href="cindy://session/session-message?message=client-long" />,
-    );
-
-    await waitFor(() =>
-      expect(
-        container.querySelector('button[data-session-message-link]')?.getAttribute('aria-label'),
-      ).toBe(`${'x'.repeat(239)}…`),
-    );
-    expect(container.textContent).not.toContain('x'.repeat(320));
-  });
-
   it('keeps route-owner handoff and automation actions interactive', async () => {
     const { unmount } = render(
       <SessionHandoffCard
@@ -230,9 +146,7 @@ describe('sidebar-embedded session navigation boundary', () => {
       />,
     );
     fireEvent.click(screen.getByRole('button'));
-    await waitFor(() =>
-      expect(mocks.navigate).toHaveBeenCalledWith('/cc-agent/session-e', { state: undefined }),
-    );
+    await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith('/cc-agent/session-e', { state: undefined }));
     unmount();
 
     mocks.navigate.mockClear();

@@ -122,22 +122,22 @@ describe('agent island settings', () => {
   it('keeps built-in Agent Island sounds enabled by default', () => {
     expect(AGENT_ISLAND_SOUND_OPTIONS).toEqual([
       'none',
-      'startup-chime',
-      'ring-chime',
-      'item-found',
-      'gem-collect',
-      'item-fanfare',
-      'victory-fanfare',
-      'error-buzz',
-      'secret-chime',
+      'gameboy-startup',
+      'sonic-ring',
+      'pokemon-item-found',
+      'zelda-rupee',
+      'zelda-item-get',
+      'ff-victory',
+      'mario-incorrect',
+      'zelda-secret',
     ]);
     expect(DEFAULT_AGENT_ISLAND_SOUND_SETTINGS).toMatchObject({
       enabled: true,
       sounds: {
-        start: { type: 'builtin', id: 'startup-chime' },
-        attention: { type: 'builtin', id: 'secret-chime' },
-        complete: { type: 'builtin', id: 'gem-collect' },
-        error: { type: 'builtin', id: 'error-buzz' },
+        start: { type: 'builtin', id: 'gameboy-startup' },
+        attention: { type: 'builtin', id: 'zelda-secret' },
+        complete: { type: 'builtin', id: 'zelda-rupee' },
+        error: { type: 'builtin', id: 'mario-incorrect' },
         select: { type: 'builtin', id: 'none' },
       },
     });
@@ -147,41 +147,20 @@ describe('agent island settings', () => {
     localStorage.setItem('notifications.agentIslandSoundSettings', JSON.stringify({
       enabled: true,
       sounds: {
-        start: { type: 'builtin', id: 'startup-chime' },
-        attention: { type: 'builtin', id: 'secret-chime' },
-        complete: { type: 'builtin', id: 'gem-collect' },
-        error: { type: 'builtin', id: 'error-buzz' },
+        start: { type: 'builtin', id: 'gameboy-startup' },
+        attention: { type: 'builtin', id: 'zelda-secret' },
+        complete: { type: 'builtin', id: 'zelda-rupee' },
+        error: { type: 'builtin', id: 'mario-incorrect' },
         select: { type: 'builtin', id: 'none' },
       },
     }));
 
     expect(getAgentIslandSoundSettings().sounds).toMatchObject({
-      start: { type: 'builtin', id: 'startup-chime' },
-      attention: { type: 'builtin', id: 'secret-chime' },
-      complete: { type: 'builtin', id: 'gem-collect' },
-      error: { type: 'builtin', id: 'error-buzz' },
+      start: { type: 'builtin', id: 'gameboy-startup' },
+      attention: { type: 'builtin', id: 'zelda-secret' },
+      complete: { type: 'builtin', id: 'zelda-rupee' },
+      error: { type: 'builtin', id: 'mario-incorrect' },
       select: { type: 'builtin', id: 'none' },
-    });
-  });
-
-  it('migrates legacy branded built-in sound ids to the renamed neutral ids', () => {
-    localStorage.setItem('notifications.agentIslandSoundSettings', JSON.stringify({
-      enabled: true,
-      sounds: {
-        start: { type: 'builtin', id: 'sonic-ring' },
-        attention: { type: 'builtin', id: 'zelda-secret' },
-        complete: { type: 'builtin', id: 'ff-victory' },
-        error: { type: 'builtin', id: 'mario-incorrect' },
-        select: { type: 'builtin', id: 'pokemon-item-found' },
-      },
-    }));
-
-    expect(getAgentIslandSoundSettings().sounds).toEqual({
-      start: { type: 'builtin', id: 'ring-chime' },
-      attention: { type: 'builtin', id: 'secret-chime' },
-      complete: { type: 'builtin', id: 'victory-fanfare' },
-      error: { type: 'builtin', id: 'error-buzz' },
-      select: { type: 'builtin', id: 'item-found' },
     });
   });
 

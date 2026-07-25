@@ -25,12 +25,6 @@ describe('mobile env', () => {
         EXPO_PUBLIC_CINDY_AUTH_BASE_URL: 'ftp://auth.example.com',
       }).map((issue) => issue.key),
     ).toEqual(['EXPO_PUBLIC_CINDY_AUTH_BASE_URL']);
-    // 文案 key 化(SC-4):issue 只产出 loginMessages key,不携带裸文案
-    expect(
-      getMobileConfigIssues({
-        EXPO_PUBLIC_CINDY_AUTH_BASE_URL: 'ftp://auth.example.com',
-      }).map((issue) => issue.messageKey),
-    ).toEqual(['configIssueAuthBaseUrl']);
     expect(
       getMobileConfigIssues({
         EXPO_PUBLIC_CINDY_AUTH_BASE_URL: 'https://auth.example.com',

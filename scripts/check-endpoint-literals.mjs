@@ -33,6 +33,8 @@ const CONTROLLED_SOURCE_FILES = Object.freeze([
 ]);
 const CONTROLLED_APP_CONFIG_FILES = Object.freeze([
   'scripts/restart-desktop-remote.mjs',
+  'apps/desktop/scripts/release-macos.mjs',
+  'apps/desktop/scripts/release-windows.mjs',
   'apps/mobile/eas.json',
   'apps/mobile/app.json',
   'apps/mobile/app.config.js',
@@ -41,7 +43,7 @@ const ALLOWED_NON_PRODUCTION_ORIGINS = new Set([
   'http://localhost:3333',
   'http://localhost:3344',
   'http://localhost:3335',
-  // model-access-server 本地开发兜底(服务端仓,端口 3339)
+  // model-access-server 本地开发兜底(cindy-server 仓,端口 3339)
   'http://localhost:3339',
   'https://e.tapdb.com',
 ]);

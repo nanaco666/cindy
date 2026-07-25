@@ -13,12 +13,12 @@
 import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 
-import { app, ipcMain, BrowserWindow, shell, type IpcMainInvokeEvent } from 'electron';
+import { app, ipcMain, BrowserWindow, shell } from 'electron';
 
-import { isModelVisible, visibleModelUnion } from '@cindy/model-providers';
-import { BRAND_NAME } from '@cindy/maker-shared/branding';
+import { isModelVisible, visibleModelUnion } from '@lizi/model-providers';
+import { BRAND_NAME } from '@lizi/maker-shared/branding';
 
 import { createLogger } from '../logger.js';
 import { getMaker, restartCodexAfterAuthModeChange } from '../maker-host/index.js';
@@ -35,15 +35,11 @@ import {
 } from '../localDb/dialogueWorkspace.js';
 import * as authManager from '../authManager.js';
 import { getClientEndpoint } from '../clientEndpointsService.js';
-import { CURRENT_CINDY_REGION } from '../../shared/brandRegion.js';
-import { getAppCapabilities } from '../appCapabilities.js';
-import { ownerScopedUserDataPath } from '../appSessionState.js';
 import {
   HOOK_CONTROL_EVENT,
   HOOK_CONTROL_INVOKE,
   type HookPrefsPatch,
   type HookPrefsView,
-  type ProviderPrefsView,
   type SlackHookView,
 } from '../../shared/hookControlIpc.js';
 import {
@@ -63,10 +59,6 @@ import { createHookBindingStore } from './bindings.js';
 import { createHookDispatcher } from './dispatcher.js';
 import { createMakerHookSessionRunner } from './session-runner.js';
 import { resolveHookInteraction } from './interactions.js';
-import { listRecentHookSessions } from './recentSessions.js';
-import { validateTelegramExternalUrl } from './telegramDeepLink.js';
-import { isAppContentWindow } from '../windowFocusClassifier.js';
-import { assertTrustedAppRendererEvent } from '../security/trustedAppRenderer.js';
 
 const log = createLogger('hook-control');
 
@@ -79,40 +71,6 @@ let codexMcpRefreshRetryTimer: NodeJS.Timeout | null = null;
 let latestSlackToolProviderEnabled = false;
 
 const CODEX_MCP_REFRESH_RETRY_MS = 2_000;
-
-function hookControlAvailable(): boolean {
-  return getAppCapabilities().canUseCindyAccountServices;
-}
-
-function requireHookControl(): void {
-  if (!hookControlAvailable()) {
-    throwIpcError('PERMISSION_DENIED', 'Cindy IM bots require a Cindy account.');
-  }
-}
-
-/** Local/signed-out sessions must not observe a previous cloud owner's config. */
-function disabledHookView(): SlackHookView {
-  return {
-    enabled: false,
-    url: getClientEndpoint('slackHookWsUrl'),
-    workspaces: {},
-    status: 'disabled',
-    lastError: null,
-    binding: null,
-    bindings: [],
-    pendingBind: null,
-    serverMultiTeam: false,
-    telegram: {
-      enabled: false,
-      url: getClientEndpoint('telegramHookWsUrl'),
-      status: 'disabled',
-      lastError: null,
-      available: false,
-      capabilityPending: false,
-      binding: null,
-    },
-  };
-}
 
 /**
  * Slack 绑定态会改变 lizi_slack 是否出现在 Codex 的冻结 MCP 清单里。
@@ -167,36 +125,14 @@ async function drainCodexMcpRefreshForSlackAvailability(): Promise<void> {
 
 function broadcastStatus(view: SlackHookView): void {
   for (const w of BrowserWindow.getAllWindows()) {
-    if (!w.isDestroyed() && isAppContentWindow(w)) {
-      w.webContents.send(HOOK_CONTROL_EVENT.STATUS_CHANGED, view);
-    }
+    if (!w.isDestroyed()) w.webContents.send(HOOK_CONTROL_EVENT.STATUS_CHANGED, view);
   }
 }
 
 function broadcastPrefs(view: HookPrefsView): void {
   for (const w of BrowserWindow.getAllWindows()) {
-    if (!w.isDestroyed() && isAppContentWindow(w)) {
-      w.webContents.send(HOOK_CONTROL_EVENT.PREFS_CHANGED, view);
-    }
+    if (!w.isDestroyed()) w.webContents.send(HOOK_CONTROL_EVENT.PREFS_CHANGED, view);
   }
-}
-
-function broadcastProviderPrefs(view: ProviderPrefsView): void {
-  for (const w of BrowserWindow.getAllWindows()) {
-    if (!w.isDestroyed() && isAppContentWindow(w)) {
-      w.webContents.send(HOOK_CONTROL_EVENT.PROVIDER_PREFS_CHANGED, view);
-    }
-  }
-}
-
-/** Never persist raw account identity; region also isolates shared dev userData. */
-function currentAccountFingerprint(): string | null {
-  const userId = authManager.getCurrentUserId();
-  if (!userId) return null;
-  const fingerprintSource = `${CURRENT_CINDY_REGION}\0${userId}`;
-  // userId is a public account identifier used only for local namespacing, not a password.
-  // codeql[js/insufficient-password-hash]
-  return createHash('sha256').update(fingerprintSource).digest('base64url').slice(0, 22);
 }
 
 /** prefs 往返错误 -> IPC 错误码(规则 13)。 */
@@ -205,10 +141,7 @@ function throwHookPrefsError(err: unknown): never {
     throwIpcError('HOOK_NOT_CONNECTED', 'slack hook is not connected');
   }
   if (err instanceof HookPrefsTimeoutError) {
-    throwIpcError(
-      'HOOK_PREFS_TIMEOUT',
-      'hook server did not answer prefs request (server too old or stalled)',
-    );
+    throwIpcError('HOOK_PREFS_TIMEOUT', 'hook server did not answer prefs request (server too old or stalled)');
   }
   throw err;
 }
@@ -216,11 +149,10 @@ function throwHookPrefsError(err: unknown): never {
 function ensureInstances(): { store: SlackHookStore; manager: HookControlManager } {
   if (!store) {
     store = createSlackHookStore({
-      filePath: ownerScopedUserDataPath('slack-hook.json'),
-      legacyFilePath: ownerScopedUserDataPath('hook-connections.json'),
+      filePath: path.join(app.getPath('userData'), 'slack-hook.json'),
+      legacyFilePath: path.join(app.getPath('userData'), 'hook-connections.json'),
       // 无覆写时跟随运行期端点清单(清单全权,烘焙兜底已随 2026-07 端点重构退役)
       defaultUrl: () => getClientEndpoint('slackHookWsUrl'),
-      getAccountFingerprint: currentAccountFingerprint,
       // 旧多连接时代的 secret 加密文件按 id 清理(best-effort)
       cleanupLegacySecrets: (legacyIds) => {
         const dir = path.join(app.getPath('userData'), 'safe-storage');
@@ -237,24 +169,20 @@ function ensureInstances(): { store: SlackHookStore; manager: HookControlManager
   }
   if (!manager) {
     const dispatcher = createHookDispatcher({
-      // 两个 provider 复用 dispatcher，但连接身份和服务地址彼此隔离。
-      getConnection: (connectionId) => {
+      // 单连接形态: dispatcher 的 connectionId 维度保留, 配置固定映射
+      getConnection: () => {
         const config = store!.get();
-        const provider = connectionId.endsWith(':telegram') ? 'telegram' : 'slack';
         return {
-          id: connectionId,
-          name: `${BRAND_NAME} ${provider === 'telegram' ? 'Telegram' : 'Slack'}`,
-          url:
-            provider === 'telegram'
-              ? getClientEndpoint('telegramHookWsUrl')
-              : store!.effectiveUrl(),
-          enabled: provider === 'telegram' ? config.telegramEnabled : config.enabled,
+          id: 'slack',
+          name: `${BRAND_NAME} Slack`,
+          url: store!.effectiveUrl(),
+          enabled: config.enabled,
           workspaces: config.workspaces,
           createdAt: 0,
         };
       },
       bindings: createHookBindingStore({
-        filePath: ownerScopedUserDataPath('hook-bindings.json'),
+        filePath: path.join(app.getPath('userData'), 'hook-bindings.json'),
         log,
       }),
       runner: createMakerHookSessionRunner({ log }),
@@ -289,7 +217,7 @@ function ensureInstances(): { store: SlackHookStore; manager: HookControlManager
       },
       // 内置「对话」伪目录(chat): 与桌面端无项目对话同一套 app 托管目录
       dialogue: {
-        rootDir: dialogueWorkspaceRootDir,
+        rootDir: dialogueWorkspaceRootDir(),
         allocateDir: async (sessionId) => ensureDialogueWorkspaceDir(sessionId, Date.now()),
       },
       // task.cancel 的中断出口: 与用户手动 Stop 同一条 session.abort() 路径
@@ -303,17 +231,13 @@ function ensureInstances(): { store: SlackHookStore; manager: HookControlManager
       },
       // 交互卡按钮回流的配对出口(interaction.decision -> 挂起决策 resolve)
       resolveInteraction: resolveHookInteraction,
-      accountInitiallyActive: false,
       log,
     });
     manager = createHookControlManager({
       store,
-      isAvailable: hookControlAvailable,
       createTransport: createHookTransport,
-      getTelegramUrl: () => getClientEndpoint('telegramHookWsUrl'),
       // 与 device-link 同款 token 源: 现值优先, 缺失 refresh 一次
       getAuthToken: async () => {
-        if (!hookControlAvailable()) return null;
         const token = authManager.getAccessToken();
         if (token) return token;
         const ok = await authManager.refresh().catch(() => false);
@@ -321,8 +245,7 @@ function ensureInstances(): { store: SlackHookStore; manager: HookControlManager
       },
       // upgrade 401 表示现有 accessToken 已被服务端拒绝；强制走一次 refresh，
       // transport 自带单次预算，成功后立即用新 token 重连。
-      refreshAuthToken: () =>
-        hookControlAvailable() ? authManager.refresh().catch(() => false) : Promise.resolve(false),
+      refreshAuthToken: () => authManager.refresh().catch(() => false),
       deviceInfo: () => ({
         deviceId: authManager.getDeviceId(),
         deviceName: os.hostname(),
@@ -331,11 +254,7 @@ function ensureInstances(): { store: SlackHookStore; manager: HookControlManager
       notifyStatus: broadcastStatus,
       onSlackToolProviderEnabledChanged: requestCodexMcpRefreshForSlackAvailability,
       notifyPrefs: broadcastPrefs,
-      notifyProviderPrefs: broadcastProviderPrefs,
       dispatcher,
-      getAccountFingerprint: currentAccountFingerprint,
-      accountInitiallyActive: false,
-      listRecentSessions: () => listRecentHookSessions(store!.get().workspaces),
       // /model /effort 实时问答的数据源: 与会话内模型选择器**同一套规则**——
       // live providers(含自定义供应商 + 实时连接态)-> 仅已连接供应商 ->
       // 可见性过滤(renderer 镜像到 main 的 override + 目录 defaultEnabled,
@@ -346,10 +265,7 @@ function ensureInstances(): { store: SlackHookStore; manager: HookControlManager
         const providers = await getDesktopProviderService().listProviders();
         return (['claude-code', 'codex'] as const).map((agentKind) => {
           const models = visibleModelUnion(providers, agentKind, (providerId, m) =>
-            isModelVisible(
-              getModelVisibilityOverride(agentKind, providerId, m.id),
-              m.defaultEnabled,
-            ),
+            isModelVisible(getModelVisibilityOverride(agentKind, providerId, m.id), m.defaultEnabled),
           );
           return {
             agentKind,
@@ -372,38 +288,15 @@ function ensureInstances(): { store: SlackHookStore; manager: HookControlManager
       openExternalUrl: (url) => {
         void shell.openExternal(url);
       },
-      openTelegramUrl: (url) => {
-        const safeUrl = validateTelegramExternalUrl(url);
-        return shell.openExternal(safeUrl);
-      },
       log,
     });
     // Slack 网关工具桥: lizi_slack provider 经叶子注册表取用(不直接 import
     // 本模块, 避免 mcp-providers <-> ipc 的静态引用闭环)
     const m = manager;
     registerSlackToolBridge({
-      availability: () =>
-        hookControlAvailable()
-          ? m.getSlackToolAvailability()
-          : {
-              connected: false,
-              bound: false,
-              serverSupportsTools: false,
-              binding: null,
-              multiTeam: false,
-              bindings: [],
-            },
+      availability: () => m.getSlackToolAvailability(),
       // teamId: (multi-team)以哪个 workspace 身份执行(lizi_slack 工具入参透传)
-      callTool: (tool, args, teamId) =>
-        hookControlAvailable()
-          ? m.callSlackTool(tool, args, teamId)
-          : Promise.resolve({
-              ok: false as const,
-              error: {
-                code: 'PERMISSION_DENIED',
-                message: 'Slack Hook requires a Cindy account.',
-              },
-            }),
+      callTool: (tool, args, teamId) => m.callSlackTool(tool, args, teamId),
     });
   }
   return { store, manager };
@@ -421,34 +314,17 @@ function translateValidation<T>(fn: () => T): T {
   }
 }
 
-/** IPC is a privilege boundary: only Cindy-owned top-level renderer frames may call it. */
-function assertTrustedHookControlSender(event: IpcMainInvokeEvent): void {
-  assertTrustedAppRendererEvent(event);
-}
-
-type HookControlIpcHandler = (event: IpcMainInvokeEvent, ...args: unknown[]) => unknown;
-
-/** Register one fixed hook-control channel with the shared sender guard. */
-function registerTrustedHookControlHandler(channel: string, handler: HookControlIpcHandler): void {
-  ipcMain.handle(channel, (event, ...args) => {
-    assertTrustedHookControlSender(event);
-    return handler(event, ...args);
-  });
-}
-
 /** 注册 IPC 并按配置 + 登录态拉起连接。bootstrap 里调用一次。 */
 export function registerHookControlIpc(): void {
-  registerTrustedHookControlHandler(HOOK_CONTROL_INVOKE.GET, () => ({
-    hook: hookControlAvailable() ? ensureInstances().manager.snapshot() : disabledHookView(),
-  }));
+  const { store: s, manager: m } = ensureInstances();
+
+  ipcMain.handle(HOOK_CONTROL_INVOKE.GET, () => ({ hook: m.snapshot() }));
 
   // 开关即绑定(设置页 toggle 直接调, 无确认弹窗): 开 = 连接 + 置自动绑定意图
   // (连上后 main 自动发起 OIDC 弹浏览器); 关 = 解除绑定并断开(再开需重新
   // 浏览器授权)。取消"未安装 App"确认框也走关分支(作废 server 等安装登记)。
   // 编排全在 main(规则 9)。
-  registerTrustedHookControlHandler(HOOK_CONTROL_INVOKE.SET_ENABLED, (_e, payload) => {
-    requireHookControl();
-    const { manager: m } = ensureInstances();
+  ipcMain.handle(HOOK_CONTROL_INVOKE.SET_ENABLED, (_e, payload) => {
     const p = requireObject(payload);
     if (typeof p.enabled !== 'boolean') throwIpcError('INVALID_PARAMS', 'enabled must be boolean');
     if (p.enabled) {
@@ -456,76 +332,12 @@ export function registerHookControlIpc(): void {
     } else {
       m.revokeAndDisconnect();
     }
-    m.setProviderEnabled('slack', p.enabled);
+    s.setEnabled(p.enabled);
+    m.sync();
     return { hook: m.snapshot() };
   });
 
-  registerTrustedHookControlHandler(HOOK_CONTROL_INVOKE.SET_PROVIDER_ENABLED, (_e, payload) => {
-    requireHookControl();
-    const { manager: m } = ensureInstances();
-    const p = requireObject(payload);
-    if (p.provider !== 'telegram') {
-      throwIpcError('INVALID_PARAMS', 'provider must be telegram');
-    }
-    if (typeof p.enabled !== 'boolean') throwIpcError('INVALID_PARAMS', 'enabled must be boolean');
-    m.setProviderEnabled('telegram', p.enabled);
-    return { hook: m.snapshot() };
-  });
-
-  registerTrustedHookControlHandler(HOOK_CONTROL_INVOKE.PROVIDER_BIND_START, () => {
-    requireHookControl();
-    const { manager: m } = ensureInstances();
-    if (!m.providerBindStart('telegram')) {
-      throwIpcError('HOOK_NOT_CONNECTED', 'Telegram provider is not connected');
-    }
-    return { hook: m.snapshot() };
-  });
-
-  registerTrustedHookControlHandler(HOOK_CONTROL_INVOKE.PROVIDER_BIND_CANCEL, () => {
-    requireHookControl();
-    const { manager: m } = ensureInstances();
-    if (!m.providerBindCancel('telegram')) {
-      throwIpcError('HOOK_NOT_CONNECTED', 'Telegram binding attempt is not active');
-    }
-    return { hook: m.snapshot() };
-  });
-
-  registerTrustedHookControlHandler(HOOK_CONTROL_INVOKE.PROVIDER_BIND_REVOKE, () => {
-    requireHookControl();
-    const { manager: m } = ensureInstances();
-    if (!m.providerBindRevoke('telegram')) {
-      throwIpcError('HOOK_NOT_CONNECTED', 'Telegram binding is not connected');
-    }
-    return { hook: m.snapshot() };
-  });
-
-  registerTrustedHookControlHandler(
-    HOOK_CONTROL_INVOKE.TELEGRAM_OPEN_ACTION,
-    async (_e, payload) => {
-      requireHookControl();
-      const { manager: m } = ensureInstances();
-      const p = requireObject(payload);
-      const action = requireString(p.action, 'action');
-      if (action !== 'connect' && action !== 'provider' && action !== 'add-to-group') {
-        throwIpcError('INVALID_PARAMS', 'invalid Telegram open action');
-      }
-      try {
-        if (!(await m.openTelegramAction(action))) {
-          throwIpcError('INVALID_PARAMS', 'Telegram action is not available');
-        }
-      } catch (err) {
-        if (err instanceof Error && err.name === 'TelegramDeepLinkValidationError') {
-          throwIpcError('INVALID_PARAMS', err.message);
-        }
-        throw err;
-      }
-      return { ok: true as const };
-    },
-  );
-
-  registerTrustedHookControlHandler(HOOK_CONTROL_INVOKE.SET_WORKSPACES, (_e, payload) => {
-    requireHookControl();
-    const { store: s, manager: m } = ensureInstances();
+  ipcMain.handle(HOOK_CONTROL_INVOKE.SET_WORKSPACES, (_e, payload) => {
     const p = requireObject(payload);
     const workspaces = requireObject(p.workspaces) as Record<string, string>;
     translateValidation(() => s.setWorkspaces(workspaces));
@@ -538,17 +350,14 @@ export function registerHookControlIpc(): void {
 
   // 发起 Slack 账号绑定(SIWS OIDC): 经已连接的 WS 发 bind.start(无参); server
   // 回 bind.update(pending, authorizeUrl), main 打开系统浏览器并广播状态。
-  registerTrustedHookControlHandler(HOOK_CONTROL_INVOKE.BIND_START, () => {
-    requireHookControl();
-    const { manager: m } = ensureInstances();
+  ipcMain.handle(HOOK_CONTROL_INVOKE.BIND_START, () => {
     if (!m.bindStart()) {
       throwIpcError('HOOK_NOT_CONNECTED', 'slack hook is not connected');
     }
     return { ok: true as const };
   });
 
-  registerTrustedHookControlHandler(HOOK_CONTROL_INVOKE.BIND_REVOKE, () => {
-    requireHookControl();
+  ipcMain.handle(HOOK_CONTROL_INVOKE.BIND_REVOKE, () => {
     if (!ensureInstances().manager.bindRevoke()) {
       throwIpcError('HOOK_NOT_CONNECTED', 'slack hook is not connected');
     }
@@ -560,16 +369,10 @@ export function registerHookControlIpc(): void {
   // 这里是防御性兜底); 动作失败按「能力缺失 / 不在线」双码区分(规则 13)。
 
   /** 能力检查 + 动作执行的公共体: false 一律翻译为结构化 IPC 错误。 */
-  const runMultiTeamAction = (
-    action: (mgr: HookControlManager) => boolean,
-  ): { hook: SlackHookView } => {
-    requireHookControl();
+  const runMultiTeamAction = (action: (mgr: HookControlManager) => boolean): { hook: SlackHookView } => {
     const mgr = ensureInstances().manager;
     if (!mgr.snapshot().serverMultiTeam) {
-      throwIpcError(
-        'HOOK_MULTI_TEAM_UNSUPPORTED',
-        'hook server does not support multi-team binding',
-      );
+      throwIpcError('HOOK_MULTI_TEAM_UNSUPPORTED', 'hook server does not support multi-team binding');
     }
     if (!action(mgr)) {
       throwIpcError('HOOK_NOT_CONNECTED', 'slack hook is not connected');
@@ -577,18 +380,15 @@ export function registerHookControlIpc(): void {
     return { hook: mgr.snapshot() };
   };
 
-  registerTrustedHookControlHandler(HOOK_CONTROL_INVOKE.ADD_BINDING, () =>
-    runMultiTeamAction((mgr) => mgr.addBinding()),
-  );
+  ipcMain.handle(HOOK_CONTROL_INVOKE.ADD_BINDING, () => runMultiTeamAction((mgr) => mgr.addBinding()));
 
-  registerTrustedHookControlHandler(HOOK_CONTROL_INVOKE.REBIND_TEAM, (_e, payload) => {
+  ipcMain.handle(HOOK_CONTROL_INVOKE.REBIND_TEAM, (_e, payload) => {
     const p = requireObject(payload);
     const teamId = requireString(p.teamId, 'teamId');
     return runMultiTeamAction((mgr) => mgr.rebindTeam(teamId));
   });
 
-  registerTrustedHookControlHandler(HOOK_CONTROL_INVOKE.REVOKE_TEAM, (_e, payload) => {
-    requireHookControl();
+  ipcMain.handle(HOOK_CONTROL_INVOKE.REVOKE_TEAM, (_e, payload) => {
     const p = requireObject(payload);
     const teamId = requireString(p.teamId, 'teamId');
     // displaced 行的删除是纯本地操作, 离线也要能删 —— 不做 multi-team 能力
@@ -600,8 +400,7 @@ export function registerHookControlIpc(): void {
     return { hook: mgr.snapshot() };
   });
 
-  registerTrustedHookControlHandler(HOOK_CONTROL_INVOKE.CANCEL_PENDING_BIND, () => {
-    requireHookControl();
+  ipcMain.handle(HOOK_CONTROL_INVOKE.CANCEL_PENDING_BIND, () => {
     // 取消在途授权本地收口无条件成功(离线也能清), 不需要能力/在线检查
     const mgr = ensureInstances().manager;
     mgr.cancelPendingBind();
@@ -610,9 +409,7 @@ export function registerHookControlIpc(): void {
 
   // 目录偏好远程读写: 数据正本在 slack-hook-server 的 user_prefs(与 Slack
   // /model 卡同一份), 这里只是经 WS 往返的 adapter; 校验在协议层 + server。
-  registerTrustedHookControlHandler(HOOK_CONTROL_INVOKE.PREFS_GET, async () => {
-    requireHookControl();
-    const { manager: m } = ensureInstances();
+  ipcMain.handle(HOOK_CONTROL_INVOKE.PREFS_GET, async () => {
     try {
       return { prefs: await m.getWorkspacePrefs() };
     } catch (err) {
@@ -620,9 +417,7 @@ export function registerHookControlIpc(): void {
     }
   });
 
-  registerTrustedHookControlHandler(HOOK_CONTROL_INVOKE.PREFS_SET, async (_e, payload) => {
-    requireHookControl();
-    const { manager: m } = ensureInstances();
+  ipcMain.handle(HOOK_CONTROL_INVOKE.PREFS_SET, async (_e, payload) => {
     const p = requireObject(payload);
     const workspace = requireString(p.workspace, 'workspace');
     const rawPatch = requireObject(p.patch);
@@ -646,72 +441,15 @@ export function registerHookControlIpc(): void {
     }
   });
 
-  registerTrustedHookControlHandler(HOOK_CONTROL_INVOKE.PROVIDER_PREFS_GET, async () => {
-    requireHookControl();
-    const { manager: m } = ensureInstances();
-    try {
-      return { prefs: await m.getProviderWorkspacePrefs('telegram') };
-    } catch (err) {
-      throwHookPrefsError(err);
-    }
-  });
+  // 登录态联动: 登录后自动连(token 可用了), 登出即断(与 device-link 同模型)
+  disposeAuthListener = authManager.onAuthStateChange(() => m.sync());
 
-  registerTrustedHookControlHandler(HOOK_CONTROL_INVOKE.PROVIDER_PREFS_SET, async (_e, payload) => {
-    requireHookControl();
-    const { manager: m } = ensureInstances();
-    const p = requireObject(payload);
-    const workspace = requireString(p.workspace, 'workspace');
-    const rawPatch = requireObject(p.patch);
-    const patch: HookPrefsPatch = {};
-    for (const field of ['model', 'effort', 'agentKind', 'permissionMode'] as const) {
-      const value = rawPatch[field];
-      if (value === undefined) continue;
-      if (value !== null && typeof value !== 'string') {
-        throwIpcError('INVALID_PARAMS', `${field} must be a string or null`);
-      }
-      patch[field] = value as string | null;
-    }
-    try {
-      return { prefs: await m.setProviderWorkspacePrefs('telegram', workspace, patch) };
-    } catch (err) {
-      throwHookPrefsError(err);
-    }
-  });
-
-  // Account teardown is orchestrated before its DB closes. This listener is a
-  // fail-closed backstop for signed-out/local sessions; activation still waits
-  // for app:ready-for-bot after the next owner DB is ready.
-  disposeAuthListener = authManager.onAuthStateChange(() => {
-    if (!hookControlAvailable()) {
-      void stopHookControlAccount().catch((err: unknown) => {
-        log.warn(
-          `hook-control account deactivation failed (${err instanceof Error ? err.name : 'unknown'})`,
-        );
-      });
-    }
-  });
-
+  // 启动阶段按配置拉起(未登录时 transport 会以 not-logged-in 待命, 登录事件再恢复)
+  m.sync();
   log.info('hook-control ipc registered');
 }
 
-/** Called by app:ready-for-bot after the current account DB is ready. */
-export function startHookControlAccount(): void {
-  if (!hookControlAvailable()) return;
-  ensureInstances().manager.activateAccount();
-}
-
-/** Close hook ingress before the old account DB is disposed. */
-export async function stopHookControlAccount(): Promise<void> {
-  if (manager) await manager.deactivateAccount();
-}
-
-/** Stop and discard all state tied to the current data owner; IPC stays registered. */
-export function resetHookControlOwnerBoundary(): void {
-  unregisterSlackToolBridge();
-  manager?.dispose();
-  manager = null;
-  store = null;
-}
+/** App 退出清理(onQuit 钩子)。 */
 export function disposeHookControl(): void {
   codexMcpRefreshPending = false;
   if (codexMcpRefreshRetryTimer !== null) {
@@ -720,5 +458,7 @@ export function disposeHookControl(): void {
   }
   disposeAuthListener?.();
   disposeAuthListener = null;
-  resetHookControlOwnerBoundary();
+  unregisterSlackToolBridge();
+  manager?.dispose();
+  manager = null;
 }

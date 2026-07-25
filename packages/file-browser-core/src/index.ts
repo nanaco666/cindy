@@ -1,5 +1,5 @@
 /**
- * @cindy/file-browser-core — workdir 文件浏览的共享核心。
+ * @lizi/file-browser-core — workdir 文件浏览的共享核心。
  *
  * 同一份实现跑在两种宿主里:
  *   - desktop main:file-browser IPC 的 LocalBackend(本地会话)

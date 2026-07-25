@@ -1,4 +1,4 @@
-import type { Topic } from '@cindy/device-link';
+import type { Topic } from '@lizi/device-link';
 
 export interface RehydratePlan {
   deviceId: string;

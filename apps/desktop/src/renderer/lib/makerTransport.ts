@@ -14,10 +14,7 @@
  * 上层既有的 extractIpcError / decodeRemoteErrorMessage 继续解码,IPC 错误协议免改。
  */
 
-import {
-  getSessionDeviceId,
-  remoteProjectsStore,
-} from '@/features/device-link/remoteProjectsStore';
+import { getSessionDeviceId, remoteProjectsStore } from '@/features/device-link/remoteProjectsStore';
 import { getStickySessionDeviceId } from '@/features/device-link/stickySessionOrigin';
 import type { Message, Session } from '@/lib/ccAgent.types';
 import * as messageService from '@/lib/messageService';
@@ -39,7 +36,6 @@ export interface RoutableMaker {
   setPlanMode: FullMaker['setPlanMode'];
   resolveInteraction: FullMaker['resolveInteraction'];
   getPendingInteractions: FullMaker['getPendingInteractions'];
-  deleteMessage: FullMaker['deleteMessage'];
   // —— 完整对等:会话级功能(fork / rewind / context-usage / extra-dirs / close / orca)——
   // 本地分支返回完整 maker 天然带这些;远程分支在 remoteMakerApi 里逐一隧道映射。
   fork: FullMaker['fork'];
@@ -91,10 +87,7 @@ function remoteMakerApi(deviceId: string): RoutableMaker {
     setFastMode: t('maker:set-fast-mode') as FullMaker['setFastMode'],
     setPlanMode: t('maker:set-plan-mode') as FullMaker['setPlanMode'],
     resolveInteraction: t('maker:resolve-interaction') as FullMaker['resolveInteraction'],
-    getPendingInteractions: t(
-      'maker:get-pending-interactions',
-    ) as FullMaker['getPendingInteractions'],
-    deleteMessage: t('maker:message:delete') as FullMaker['deleteMessage'],
+    getPendingInteractions: t('maker:get-pending-interactions') as FullMaker['getPendingInteractions'],
     fork: t('maker:fork') as FullMaker['fork'],
     forkStripEncrypted: t('maker:fork-strip-encrypted') as FullMaker['forkStripEncrypted'],
     rewindPreview: t('maker:rewind:preview') as FullMaker['rewindPreview'],
@@ -112,9 +105,7 @@ function remoteMakerApi(deviceId: string): RoutableMaker {
       getProjection: t('maker:input:get-projection') as FullMaker['input']['getProjection'],
       setExpanded: t('maker:input:set-expanded') as FullMaker['input']['setExpanded'],
       resume: t('maker:input:resume') as FullMaker['input']['resume'],
-      setInteractionLock: t(
-        'maker:input:set-interaction-lock',
-      ) as FullMaker['input']['setInteractionLock'],
+      setInteractionLock: t('maker:input:set-interaction-lock') as FullMaker['input']['setInteractionLock'],
       setEditLock: t('maker:input:set-edit-lock') as FullMaker['input']['setEditLock'],
       move: t('maker:input:move') as FullMaker['input']['move'],
       remove: t('maker:input:remove') as FullMaker['input']['remove'],
@@ -123,16 +114,9 @@ function remoteMakerApi(deviceId: string): RoutableMaker {
       retryLastError: t('maker:input:retry-last-error') as FullMaker['input']['retryLastError'],
       clearSession: t('maker:input:clear-session') as FullMaker['input']['clearSession'],
       // device-link:auth error 重试失败/放弃时在被控端落库,经隧道路由到被控端 main。
-      persistTurnErrorDeferred: t(
-        'maker:persist-turn-error-deferred',
-      ) as FullMaker['input']['persistTurnErrorDeferred'],
+      persistTurnErrorDeferred: t('maker:persist-turn-error-deferred') as FullMaker['input']['persistTurnErrorDeferred'],
     },
   };
-}
-
-/** 已知稳定 deviceId 时直接返回远程 maker 适配器，不重新读取易失 session origin。 */
-export function makerApiForDevice(deviceId: string): RoutableMaker {
-  return remoteMakerApi(deviceId);
 }
 
 /**
@@ -142,7 +126,7 @@ export function makerApiForDevice(deviceId: string): RoutableMaker {
  */
 export function makerApiFor(sessionId: string): RoutableMaker {
   const deviceId = getSessionDeviceId(sessionId);
-  return deviceId ? makerApiForDevice(deviceId) : window.electronAPI.maker;
+  return deviceId ? remoteMakerApi(deviceId) : window.electronAPI.maker;
 }
 
 /** 是否远程(device-link)会话。 */
@@ -200,11 +184,7 @@ export function aroundMessagesFor(
 ): Promise<Message[]> {
   const deviceId = getSessionDeviceId(sessionId);
   if (!deviceId) return messageService.around(sessionId, messageId, opts);
-  return invokeRemote(deviceId, 'local-db:messages:around', [
-    sessionId,
-    messageId,
-    opts,
-  ]) as Promise<Message[]>;
+  return invokeRemote(deviceId, 'local-db:messages:around', [sessionId, messageId, opts]) as Promise<Message[]>;
 }
 
 /**
@@ -220,32 +200,10 @@ export function dismissErrorMessageFor(sessionId: string, clientId: string): Pro
   return invokeRemote(deviceId, 'local-db:messages:dismiss-error', [sessionId, clientId]);
 }
 
-/** 消息删除：user 只删目标行，assistant 删除所属整轮输出。 */
-export interface MessageDeletionResult {
-  sessionId: string;
-  clientId: string;
-  /** 老被控端只回 clientId；新 host 返回本次原子删除的完整范围。 */
-  clientIds?: string[];
-}
-
-export function deleteMessageFor(
-  sessionId: string,
-  clientId: string,
-): Promise<MessageDeletionResult> {
-  const deviceId = getSessionDeviceId(sessionId);
-  if (!deviceId) return window.electronAPI.maker.deleteMessage(sessionId, clientId);
-  return invokeRemote(
-    deviceId,
-    'maker:message:delete',
-    [sessionId, clientId],
-  ) as Promise<MessageDeletionResult>;
-}
-
-/** interrupted-turn-resume:中断提示「忽略」的显式确认(写一次 last_turn_ended_at),
+/** interrupted-turn-resume:中断提示「忽略」的确认(写一次 last_turn_ended_at),
  *  远程会话经隧道落被控端 DB;老被控端 CHANNEL_NOT_ALLOWED 由调用方吞错降级。
- *  「继续任务」主路径在执行端 main 的 onDispatchedUserTurn 里 durable ack
- *  （排队阶段不 ack，便于取消后恢复横幅）；session 行缺失走 direct-send 兜底时，
- *  ack 由执行端 maker:send 事务在 accepted 后完成，本函数只服务显式「忽略」。 */
+ *  「继续任务」**不走本函数**:续跑 turn 自身的 started/ended 演进是权威状态,
+ *  提前写 ack 会在续跑仅入队未派发时丢失重启提示(见 CCAgentSessionView 注释)。 */
 export function ackInterruptedTurnFor(sessionId: string): Promise<unknown> {
   const deviceId = getSessionDeviceId(sessionId);
   if (!deviceId) return window.electronAPI.localDb.sessions.ackInterrupted(sessionId);
@@ -260,11 +218,7 @@ export function aroundMessagesByClientIdFor(
 ): Promise<Message[]> {
   const deviceId = getSessionDeviceId(sessionId);
   if (!deviceId) return messageService.aroundClientId(sessionId, clientId, opts);
-  return invokeRemote(deviceId, 'local-db:messages:around-client-id', [
-    sessionId,
-    clientId,
-    opts,
-  ]) as Promise<Message[]>;
+  return invokeRemote(deviceId, 'local-db:messages:around-client-id', [sessionId, clientId, opts]) as Promise<Message[]>;
 }
 
 // ─── /goal:device-link 远程路由 ────────────────────────────────────────────────
@@ -307,8 +261,7 @@ export function goalApiFor(sessionId: string): RoutableGoal {
     resumeGoal: t('maker:goal:resume', localApi.resumeGoal) as FullMaker['resumeGoal'],
     updateGoal: ((sid: string, patch: unknown) => {
       const deviceId = resolve();
-      if (!deviceId)
-        return localApi.updateGoal(sid, patch as Parameters<FullMaker['updateGoal']>[1]);
+      if (!deviceId) return localApi.updateGoal(sid, patch as Parameters<FullMaker['updateGoal']>[1]);
       return invokeRemote(deviceId, 'maker:goal:update', [{ sessionId: sid, patch }]);
     }) as FullMaker['updateGoal'],
     getGoalStatus: t('maker:goal:get-status', localApi.getGoalStatus) as FullMaker['getGoalStatus'],
@@ -401,36 +354,24 @@ function remoteOrcaWorkflows(deviceId: string): RoutableOrcaWorkflows {
       invokeRemote(deviceId, channel, args);
   return {
     getByLeadSession: t('local-db:orca-workflows:get-by-lead') as FullOrca['getByLeadSession'],
-    getByWorkerSession: t(
-      'local-db:orca-workflows:get-by-worker-session',
-    ) as FullOrca['getByWorkerSession'],
-    listWorkersByLead: t(
-      'local-db:orca-workflows:list-workers-by-lead',
-    ) as FullOrca['listWorkersByLead'],
+    getByWorkerSession: t('local-db:orca-workflows:get-by-worker-session') as FullOrca['getByWorkerSession'],
+    listWorkersByLead: t('local-db:orca-workflows:list-workers-by-lead') as FullOrca['listWorkersByLead'],
     createWorker: t('maker:worker:create') as FullOrca['createWorker'],
     switchFocus: t('maker:worker:switch-focus') as FullOrca['switchFocus'],
     idleWorker: ((leadSessionId: string, workerId: string, expectedStatus?: 'done') => {
       if (expectedStatus === 'done') {
-        return invokeRemote(deviceId, 'maker:worker:acknowledge-done', [
-          { leadSessionId, workerId },
-        ]);
+        return invokeRemote(deviceId, 'maker:worker:acknowledge-done', [{ leadSessionId, workerId }]);
       }
-      return invokeRemote(deviceId, 'maker:worker:idle', [
-        {
-          leadSessionId,
-          workerId,
-          ...(expectedStatus ? { expectedStatus } : {}),
-        },
-      ]);
+      return invokeRemote(deviceId, 'maker:worker:idle', [{
+        leadSessionId,
+        workerId,
+        ...(expectedStatus ? { expectedStatus } : {}),
+      }]);
     }) as FullOrca['idleWorker'],
     archiveWorker: ((leadSessionId: string, workerId: string) =>
-      invokeRemote(deviceId, 'maker:worker:archive', [
-        { leadSessionId, workerId },
-      ])) as FullOrca['archiveWorker'],
+      invokeRemote(deviceId, 'maker:worker:archive', [{ leadSessionId, workerId }])) as FullOrca['archiveWorker'],
     endTeam: t('maker:team:end') as FullOrca['endTeam'],
-    getCollaborationSettings: t(
-      'maker:collaboration-settings:get',
-    ) as FullOrca['getCollaborationSettings'],
+    getCollaborationSettings: t('maker:collaboration-settings:get') as FullOrca['getCollaborationSettings'],
   };
 }
 

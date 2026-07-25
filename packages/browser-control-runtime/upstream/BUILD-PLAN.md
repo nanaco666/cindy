@@ -11,7 +11,7 @@ from dependency-closure analysis against upstream commit
 Product-facing neutrality: the upstream project name appears ONLY in this
 `upstream/` metadata directory and the sync script. Generated code keeps
 load-bearing internal identifiers but is never surfaced to users; package name,
-MCP tool name, and settings ids stay neutral (`browser` / `cindy_browser`).
+MCP tool name, and settings ids stay neutral (`browser` / `lizi_browser`).
 
 ## Layout
 
@@ -57,7 +57,7 @@ Leaf utility subpaths — port faithfully from tarball source:
 Host-coupled subpaths — minimal correct impl / host injection:
 - `logging-core` (createSubsystemLogger/redactSensitiveText/redactToolPayloadText) → console logger + faithful redact subset; NOT the 54-config-type tslog graph
 - `config-contracts` / `runtime-config-snapshot` / `config-mutation` / `plugin-config-runtime` / `core` → in-memory config provider seeded from host (browser profiles, ssrf policy, ports)
-- `media-runtime` / `media-mime` / `media-understanding-runtime` → host-injected image resize + describeImageFile callback (Cindy image-understanding infra); safe default = clear error
+- `media-runtime` / `media-mime` / `media-understanding-runtime` → host-injected image resize + describeImageFile callback (XDMaker image-understanding infra); safe default = clear error
 - `gateway-runtime` → only isLoopbackHost / resolveGatewayAuth / ensureGatewayStartupAuth needed on dispatcher path; loopback-only, host-token
 - `cli-runtime` / `channel-actions` / `agent-harness-runtime` / `plugin-entry` / `plugin-runtime` / `setup-tools` / `runtime-env` → thin stubs (dispatcher path only touches formatCliCommand, jsonResult, image helpers)
 

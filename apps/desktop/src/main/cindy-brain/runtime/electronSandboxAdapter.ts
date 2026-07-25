@@ -21,7 +21,7 @@ import {
 import type { SandboxHandle, SandboxHostAdapter } from './GhostRuntime.js';
 
 /**
- * Electron 沙箱宿主(docs/dev-rules/plugin-security-and-authoring.md):
+ * Electron 沙箱宿主(C3a,runtime-sandbox.md §3 方案 A 落地):
  * 每段干活中的芯片型意识 = 一个隐藏 BrowserWindow——
  *   sandbox: true(Chromium 系统级沙箱)+ nodeIntegration: false +
  *   contextIsolation: true + 独立内存 session 分区(不落盘、互不可见)。
@@ -68,13 +68,13 @@ export function isGhostSandboxWebContentsId(id: number): boolean {
   return ghostWebContentsIds.has(id);
 }
 
-/** 面板 webview 路径:把 guest webContents 登记为意识沙箱(崩溃豁免)。 */
+/** 面板 webview 路径(C3b):把 guest webContents 登记为意识沙箱(崩溃豁免)。 */
 export function registerGhostWebContents(id: number): void {
   ghostWebContentsIds.add(id);
 }
 
 /**
- * 电子脑逻辑页 webContents id → 意识 id 的绑定表(管子验身)。
+ * 电子脑逻辑页 webContents id → 意识 id 的绑定表(C3d 管子验身)。
  * ghost-pipe:* handler 按 event.sender.id 反查意识身份——意识无法自报家门
  * 冒充别人(结构隔离)。只有装了 ghostPreload 的离屏逻辑页在表内;面板
  * webview 不在(它零桥)。
@@ -111,7 +111,7 @@ const GHOST_PRELOAD_PATH = path.join(
 
 /**
  * 面板唤醒电子脑的回调(index.ts 注入,避免 adapter 反向依赖 runtime 单例)。
- * "确实有活才开门":电子脑按需拉起,面板菜单等自发
+ * runtime-sandbox.md §4"确实有活才开门":电子脑按需拉起,面板菜单等自发
  * 交互是合法的"有活"——面板零桥,唤醒只能走它自己的协议通道(/wake)。
  */
 let ghostWakeHandler: ((ghostId: string) => Promise<{ state: string }>) | null = null;
@@ -217,7 +217,7 @@ export function ensureGhostProtocolRegistered(ghost: InstalledGhost): void {
 
 /**
  * 意识页面(html 响应)统一佩戴的 CSP:脚本/样式/资源只许同源(= 自己的
- * 安装目录),img/media 额外放行 data:/blob:(生成图等内存产物使用)。
+ * 安装目录),img/media 额外放行 data:/blob:(生成图等内存产物,C3d 用)。
  * 与分区级断网(onBeforeRequest)构成双保险。
  */
 const GHOST_HTML_CSP =
@@ -232,7 +232,7 @@ function registerGhostProtocol(partition: string, ghost: InstalledGhost): void {
   const ghostId = ghost.manifest.id;
   const installDir = ghost.dir;
   const entry = ghost.manifest.entry;
-  // 分区级断网(docs/dev-rules/plugin-security-and-authoring.md 的"网络永远不直连"):本分区发出的一切
+  // 分区级断网(runtime-sandbox.md §3"网络永远不直连"):本分区发出的一切
   // 请求,只放行自己协议同 id 下的资源;http(s) / ws / 其它协议一律掐断。
   // 进程沙箱不管网络,这里才是"零网络"承诺的真正闸门;外部数据未来走
   // 主机代发(管子服务),不走这里。devtools 前端跑在自己的进程,不受影响。
@@ -245,7 +245,7 @@ function registerGhostProtocol(partition: string, ghost: InstalledGhost): void {
       const url = new URL(request.url);
       // 分区专属通道只认自己的 id,其它 host 一律 403(结构隔离的最后一道断言)。
       if (url.host !== ghostId) return new Response(null, { status: 403 });
-      // ── 意识面板供图接待员─────────────────────────────────────────
+      // ── 供图接待员(C3d;媒体总仓设计稿 §2.4/§5)──────────────────────
       // /media/<指纹>.<ext>:面板取自家产物。指纹只当查账钥匙(不拼路径),
       // 账本验归属(出生自本意识或挂本意识画廊),通过才从字节仓读——
       // 查无此账与不属于你统一 404,不给沙箱探测面。
@@ -424,7 +424,7 @@ async function serveGhostMedia(
   if (!(await ghostCanReadMedia(hash, ghostId))) return new Response(null, { status: 404 });
   try {
     const data = await fs.readFile(resolved.absPath);
-    // Range/206:面板 <video> 靠分片与 seek;图片无 Range 头走 200 不变。
+    // Range/206(C3c-5):面板 <video> 靠分片与 seek;图片无 Range 头走 200 不变。
     // 内容寻址:同地址内容永不变,面板画廊可长缓存。
     return buildRangedMediaResponse({
       buffer: data,
@@ -469,7 +469,7 @@ class ElectronSandboxHandle implements SandboxHandle {
     registerGhostProtocol(partition, ghost);
     this.win = new BrowserWindow({
       show: false,
-      // 逻辑页是恒隐藏的离屏工作台;可见面板由独立 webview 嵌入布局。
+      // 离屏工作台;C3b 面板可见化后再谈嵌入布局,C3a 恒隐藏。
       width: 480,
       height: 320,
       webPreferences: {
@@ -478,7 +478,7 @@ class ElectronSandboxHandle implements SandboxHandle {
         nodeIntegration: false,
         partition,
         // 管子桥(脑机接口)只接在电子脑逻辑页上;面板 webview 零桥
-        // (docs/dev-rules/plugin-security-and-authoring.md 的结构保证)。preload 在 sandbox
+        // (runtime-sandbox.md §5.5 铁则 4 的结构保证)。preload 在 sandbox
         // + contextIsolation 下只能经 contextBridge 暴露极小白名单面。
         preload: GHOST_PRELOAD_PATH,
         webSecurity: true,

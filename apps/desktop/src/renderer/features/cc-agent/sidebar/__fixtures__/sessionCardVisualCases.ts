@@ -20,7 +20,7 @@ function makeSession(overrides: Partial<Session> & Pick<Session, 'id' | 'title'>
     id,
     userId: 'visual-user',
     title,
-    workingDir: '/Users/dave/Documents/xdt-maker',
+    workingDir: '/Users/ficowang/Documents/xdt-maker',
     workspaceKind: 'project',
     model: 'claude-opus-4-8',
     effort: 'medium',
@@ -61,7 +61,7 @@ export const sessionCardVisualCases: SessionCardVisualCase[] = [
     session: makeSession({
       id: 'short-idle-cc',
       title: '部门QBR制作',
-      preview: '李雷, on it',
+      preview: '王飞, on it',
       agentKind: 'cc',
       updatedAt: '2026-06-29T05:59:00.000Z',
     }),
@@ -124,10 +124,10 @@ export const sessionCardVisualCases: SessionCardVisualCase[] = [
     }),
   },
   {
-    id: 'automation-timer',
-    label: '自动化生成 / Timer / 单行正文',
+    id: 'automation-clock',
+    label: '自动化生成 / Clock / 单行正文',
     session: makeSession({
-      id: 'automation-timer',
+      id: 'automation-clock',
       title: '自动化日报巡检',
       source: 'scheduler',
       preview: '自动运行结果摘要,正文只保留一行。',
@@ -137,13 +137,13 @@ export const sessionCardVisualCases: SessionCardVisualCase[] = [
   },
   {
     id: 'schedule-bound-active',
-    label: '绑定 schedule / Timer + 绑定态',
+    label: '绑定 schedule / Timer 优先',
     boundSchedule: 'active',
     session: makeSession({
       id: 'schedule-bound-active',
       title: '每小时核心指标监控',
       source: 'scheduler',
-      preview: '绑定任务沿用同一个 Timer，并额外承载绑定状态。',
+      preview: '绑定任务优先显示 Timer 徽章,不显示普通 Clock。',
       agentKind: 'cc',
       updatedAt: '2026-06-29T02:30:00.000Z',
     }),

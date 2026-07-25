@@ -34,8 +34,6 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { NEW_MAKER_DRAFT_KEY } from './newMakerDraftKeys';
-import { CreateWorkerPopover, type CreateWorkerForm } from './CreateWorkerPopover';
-import { createWorkerLabel } from './workerLabel';
 import { useNavigate, useOutletContext } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 
@@ -49,11 +47,6 @@ import {
   type FolderPickerSelectSource,
 } from '@/components/new-chat/FolderPickerPopover';
 import { RightSidebarToggle } from '@/components/layout/RightSidebarToggle';
-import {
-  AddRemoteProjectDialog,
-  type RemoteProjectTarget,
-} from '@/components/new-chat/AddRemoteProjectDialog';
-import { useHasAnyRemoteTarget } from '@/hooks/useHasAnyReadyRemoteHost';
 import { buildDeviceLinkCreateArgs } from './deviceLinkCreateArgs';
 import { VendorSegmentedSwitcher } from '@/components/new-chat/VendorSegmentedSwitcher';
 import { TopRightChipStack, TopRightChipStackProvider } from '@/components/chat/TopRightChipStack';
@@ -65,13 +58,11 @@ import {
   useNewMakerDraft,
   switchVendor,
   patchDraft,
-  patchCollab,
   patchCurrentVendorPrefs,
   getFastModeForModel,
   setFastModeForModel,
   setEffortForModel,
   type VendorPrefs,
-  type CollabDraft,
 } from '@/state/newMakerDraft';
 import {
   getProviderModelEffort,
@@ -86,7 +77,6 @@ import {
   plainTextToTiptapDoc,
   saveDraft as saveComposerDraft,
 } from '@/lib/composerDraftStore';
-import type { JSONContent } from '@tiptap/core';
 import { base64ToUint8Array } from '@/lib/fileTypeInference';
 import { showWorktreeError } from '@/lib/worktreeToast';
 import type { CreateWorktreeResp } from '@/lib/worktree.types';
@@ -114,8 +104,6 @@ import {
 } from 'lucide-react';
 import type { Effort, PermissionMode } from '@/lib/userPreferences.types';
 import type { AttachedFile, MentionedResource } from '@/lib/fileTypes';
-import type { PastedTextRange, SlashCommandRange } from '@/lib/imageRef';
-import type { AgentInputReference } from '@cindy/maker-shared/agent-input-projection';
 import { toast } from '@/lib/toast';
 import { cn } from '@/lib/utils';
 import { InvisibleWindowDragStrip } from '@/components/layout/windowDrag';
@@ -126,26 +114,15 @@ import {
 import { isGlobalDropIntercepted } from '@/lib/globalDropIntercept';
 import { createLogger } from '@/lib/logger';
 import { matchNavigationCommandName, tryHandleNavigationCommand } from '@/lib/navigationCommands';
-import {
-  useAgentCapabilities,
-  evictDeviceCapabilities,
-  prefetchDeviceCapabilities,
-  type AgentCapabilities,
-} from '@/hooks/useAgentCapabilities';
+import { useAgentCapabilities } from '@/hooks/useAgentCapabilities';
 import { useProviders } from '@/hooks/useProviders';
-import {
-  useDeviceProviders,
-  evictDeviceProviders,
-  prefetchDeviceProviders,
-} from '@/hooks/useDeviceProviders';
-import { evictDeviceGitSafetySettings } from '@/hooks/useGitSafetySettings';
+import { useDeviceProviders } from '@/hooks/useDeviceProviders';
 import {
   getProjectPickerDisplayName,
   useProjectPickerOptions,
 } from '@/hooks/useProjectPickerOptions';
-import { resolveFastSupported, deriveModelsFromProviders } from '@/lib/providerModels';
-import { effectiveSourceIdForModel, getModel, sessionModelSupportsFastMode, connectedProvidersForAgent } from '@cindy/model-providers';
-import { isSubscriptionDirectModel } from '../../../shared/subscriptionModels';
+import { resolveFastSupported } from '@/lib/providerModels';
+import { effectiveSourceIdForModel, getModel } from '@lizi/model-providers';
 import {
   resolveDeviceLinkDraftDefaults,
   type DeviceLinkDraftSelection,
@@ -172,19 +149,6 @@ function makeDraftSessionId(): string {
   return crypto.randomUUID();
 }
 
-function stripLocalMentionChips(node: JSONContent | null): JSONContent | null {
-  if (!node) return null;
-  if (node.type === 'mentionChip') {
-    const kind = (node.attrs as { kind?: string } | undefined)?.kind;
-    if (kind === 'file' || kind === 'dir' || kind === 'agent') return null;
-  }
-  if (!node.content) return node;
-  const filtered = node.content
-    .map((child) => stripLocalMentionChips(child))
-    .filter((c): c is JSONContent => c !== null);
-  return { ...node, content: filtered };
-}
-
 /**
  * 草稿态(还没建会话)使用的 composerDraftStore 键。让 ChatInput 的
  * 文本和 useAttachments 的附件都能在"切走再切回"时存活。
@@ -196,25 +160,6 @@ export { NEW_MAKER_DRAFT_KEY };
 
 /** 草稿命名空间图片缓存 URL 前缀(浏览器页面评论截图等草稿期缓存落这里)。 */
 const DRAFT_IMAGE_URL_PREFIX = `xdt-image://${NEW_MAKER_DRAFT_KEY}/`;
-
-/**
- * 由 draft.collab 拼出 createSession 后 enableOrca 的入参:与会话内 requestEnableCollab 同口径。
- * 有 workerConfig(用户在「开启协同」弹窗配过 role/model/…)则透传全量;否则只带 workerAgent 回退默认。
- */
-function draftEnableOrcaOptions(collab: CollabDraft) {
-  const workerAgent: 'claude-code' | 'codex' = collab.worker === 'codex' ? 'codex' : 'claude-code';
-  const cfg = collab.workerConfig;
-  if (!cfg) return { workerAgent };
-  return {
-    workerAgent,
-    role: cfg.role,
-    label: createWorkerLabel(cfg.role, []),
-    model: cfg.model,
-    effort: cfg.effort as 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | undefined,
-    fast: cfg.fast,
-    delegateTask: cfg.initialTask || undefined,
-  };
-}
 
 const createAgentQuickStarts = [
   {
@@ -324,27 +269,10 @@ export function NewMakerDraftRoute() {
   const { t } = useTranslation();
   const draft = useNewMakerDraft();
   const navigate = useNavigate();
-  // minWidth=640:自适应内容列在大屏封顶 1220(hook 内 MAX),小屏兜一个体面下限
-  // (与对话页的 max 对称);窄于下限时 hook 自动回落成"填满容器",不溢出。
-  const { containerRef, inputWidth } = useProportionalWidth(914, { minWidth: 640 });
-  // The available rail can shrink when either sidebar opens while the
-  // viewport itself remains wide. Keep the draft layout responsive to that
-  // actual content width rather than relying on viewport breakpoints.
-  const draftContentWidth = inputWidth ?? 800;
-  const isDraftNarrow = draftContentWidth < 560;
-  const isDraftMedium = draftContentWidth < 700;
-  // Keep the full vendor switcher while the composer still has room for it.
-  // Icon-only mode is reserved for the tighter toolbar state, not merely a
-  // moderately narrow content rail (for example, when attachments are present).
-  const isDraftToolbarNarrow = draftContentWidth < 600;
+  const { containerRef, inputWidth } = useProportionalWidth(914);
   const { createSession } = useCCSessions();
   const vendorAuthGate = useVendorAuthGate();
   const refreshWorktrees = useRefreshWorktrees();
-
-  // 「添加远程项目」入口:gate = 至少一台 ready SSH 主机 或 一台可控 device-link 设备。
-  // 入口渲染在 mode pill 的 FolderPickerPopover 里(Globe 项),点开下面这个弹窗。
-  const hasAnyRemoteTarget = useHasAnyRemoteTarget();
-  const [addRemoteProjectOpen, setAddRemoteProjectOpen] = useState(false);
   const outletContext = useOutletContext<{
     rightSidebarCollapsed?: boolean;
     onToggleRightSidebar?: () => void;
@@ -387,8 +315,6 @@ export function NewMakerDraftRoute() {
   // 首页「+」→「新建目标」弹窗开关 + 打开时输入框已有文字(作默认目标内容)。
   const [newGoalOpen, setNewGoalOpen] = useState(false);
   const [newGoalInitialObjective, setNewGoalInitialObjective] = useState('');
-  // 「开启协同」富弹窗(CreateWorkerPopover):与会话内同一控件,收集 role/agent/model/初始任务。
-  const [createWorkerOpen, setCreateWorkerOpen] = useState(false);
   const [wtEnabled, setWtEnabled] = useState(false);
   const [wtName, setWtName] = useState('');
   const [wtSourceBranch, setWtSourceBranch] = useState('');
@@ -468,11 +394,11 @@ export function NewMakerDraftRoute() {
 
   // device-link:在远程设备上新建会话时,能力 / 模型必须来自该被控端(草稿带 deviceLinkDeviceId);
   // 本地草稿 effectiveDeviceLinkDeviceId 为 undefined → 走本地能力(行为不变)。
-  const { capabilities, loading: capabilitiesLoading } = useAgentCapabilities(capabilityAgentKind, effectiveDeviceLinkDeviceId);
+  const { capabilities } = useAgentCapabilities(capabilityAgentKind, effectiveDeviceLinkDeviceId);
   // device-link「以被控端为准」:远程草稿用被控端经隧道带来的 providers(per-provider,含 fast 能力);
   // 本地草稿用本机 providers。fast 判定统一交给 resolveFastSupported(不在控制端另写远程逻辑)。
   const { providers: localProviders } = useProviders();
-  const { providers: deviceProviders, loading: deviceProvidersLoading } = useDeviceProviders(effectiveDeviceLinkDeviceId);
+  const { providers: deviceProviders } = useDeviceProviders(effectiveDeviceLinkDeviceId);
   const providers = effectiveDeviceLinkDeviceId ? deviceProviders : localProviders;
 
   // 草稿当前**生效来源 id**(= ModelSelector 高亮 / ChatInput effectiveSourceId 同口径):显式选中且
@@ -539,17 +465,11 @@ export function NewMakerDraftRoute() {
   }>({ loaded: false, value: null });
   const [dlSel, setDlSel] = useState<DeviceLinkDraftSelection | null>(null);
   const dlSeedKeyRef = useRef<string | null>(null);
-  const skipDefaultsRefetchRef = useRef(false);
 
   // 拉被控端当前草稿值(每次 deviceId / vendor 变化重拉;失败 / 旧版 → value=null 触发 fallback)。
   useEffect(() => {
     if (!isDeviceLinkDraft || !effectiveDeviceLinkDeviceId) {
       setRemoteDraftState({ loaded: false, value: null });
-      return;
-    }
-    // handoff 路径已 inline 拉取并 set 了 remoteDraftState,跳过本次 effect 重拉。
-    if (skipDefaultsRefetchRef.current) {
-      skipDefaultsRefetchRef.current = false;
       return;
     }
     let cancelled = false;
@@ -785,181 +705,6 @@ export function NewMakerDraftRoute() {
     ? (deviceLinkInitial?.providerId ?? null)
     : (chatPrefs.providerId ?? null);
 
-  // 弹窗确认添加后的落点:SSH 立即建会话 + navigate;device-link 把当前草稿指向被控端项目,
-  // 首条消息发出时走既有 create-on-send 链路(见下方 isDeviceLinkDraft 分支)。
-  const handleRemoteProjectAdded = useCallback(
-    async (target: RemoteProjectTarget) => {
-      // vendor 由外层 VendorSegmentedSwitcher (draft.vendor) 单一决策 —— dialog 不再让用户选。
-      const draftVendor: 'cc' | 'codex' = draft.vendor === 'codex' ? 'codex' : 'cc';
-
-      if (target.kind === 'device-link') {
-        // device-link:**不**像 SSH 立即建会话(会在被控端留空会话)。改为把当前草稿指向该被控
-        // 设备项目,用户发首条消息时走既有 device-link create-on-send 链路(与侧边栏「+新建」同款,
-        // 见本文件下方 isDeviceLinkDraft 分支)。我们已在 /cc-agent/new,无需 navigate。
-        //
-        // 打开远程草稿前先驱逐该设备的能力 / 供应商 / Git safety 缓存:这些是「订阅时拉一次、
-        // 无 TTL、只在设备下线才 evict」的快照,被控端在线期间改了模型目录或 Rewind safety
-        // 设置控制端不会自动刷新。evict 后显式 prefetch:若选的是同一 deviceId,hook 的
-        // useEffect 不会因 deps 不变重跑 fetch,只有 subscriber 通知路径能送达新数据。
-        // 验证设备可达:直接 invoke 能力 + 供应商(不走 swallow 的 prefetch)。
-        // 失败 throw → dialog 留 open,不破坏当前草稿状态。
-        const [freshCaps] = await Promise.all([
-          window.electronAPI.deviceLink.invoke(target.deviceId, 'maker:get-capabilities', [capabilityAgentKind]) as Promise<AgentCapabilities>,
-          window.electronAPI.deviceLink.invoke(target.deviceId, 'maker:provider:list', []),
-        ]);
-        // defaults 允许失败(旧版被控端无此 channel → capabilities 默认 fallback)。
-        const freshDefaults = await window.electronAPI.deviceLink
-          .invoke(target.deviceId, 'maker:get-new-maker-defaults', [capabilityAgentKind])
-          .then((v) => (v as RemoteDraftDefaults | null) ?? null)
-          .catch(() => null);
-        // 设备验证通过(direct invoke 成功)。在所有能 throw 的路径之后才 evict,
-        // 避免失败时破坏当前草稿的 hook 快照。evict + prefetch 刷新 hook 缓存;
-        // 即使 prefetch 内部 swallow error,send/goal 的 capabilitiesLoading/deviceProvidersLoading
-        // gate 会阻止在 hook 尚未就绪时发送。
-        evictDeviceCapabilities(target.deviceId);
-        evictDeviceProviders(target.deviceId);
-        evictDeviceGitSafetySettings(target.deviceId);
-        await Promise.all([
-          prefetchDeviceCapabilities(target.deviceId),
-          prefetchDeviceProviders(target.deviceId),
-        ]);
-        dlSeedKeyRef.current = `${target.deviceId}:${capabilityAgentKind}`;
-        setDlSel(resolveDeviceLinkDraftDefaults(freshCaps, freshDefaults, undefined, capabilityAgentKind));
-        setRemoteDraftState({ loaded: true, value: freshDefaults });
-        setWtEnabled(false);
-        setWtBaseRepo(null);
-        setWtSourceBranch('');
-        // patchDraft 会改 effectiveDeviceLinkDeviceId → 触发 defaults effect 重拉;
-        // 我们已 inline 拉取了 freshDefaults,跳过那次重拉避免覆盖。
-        // 清除草稿中基于本地/前设备文件系统的 @file/@dir mention chips。
-        const dlDraft = getComposerDraft(NEW_MAKER_DRAFT_KEY);
-        if (dlDraft?.text) {
-          saveComposerDraft(NEW_MAKER_DRAFT_KEY, {
-            ...dlDraft,
-            text: stripLocalMentionChips(dlDraft.text),
-          });
-        }
-        // 只有 deviceId 真正变化时 effect 才会重跑并消费 skip flag;同设备不设。
-        if (target.deviceId !== effectiveDeviceLinkDeviceId) {
-          skipDefaultsRefetchRef.current = true;
-        }
-        patchDraft({
-          workingDir: target.path,
-          remoteHostId: null,
-          deviceLinkDeviceId: target.deviceId,
-          deviceLinkDeviceName: target.deviceName,
-          extraDirs: [],
-        });
-        return;
-      }
-
-      // SSH:lazy-create(workspaceKind='project',第一条消息发出时 agent 进程才真正起),
-      // 立即建会话记录并 navigate 过去。建会话约定与本文件其它 createSession 路径一致
-      // (createSession + makerChatStore.setSessionRuntime + navigate)。
-      //
-      // SSH 始终取本地(controller)的 provider/fast/effort 上下文,不复用 device-link 派生值。
-      // providerId 只保留用户显式选中且仍有效的来源,否则 null(默认路由,不固化默认来源)。
-      // 使用 draftInitialModel(用户在 composer 里看到的模型),而不是 chatPrefs.model
-      // (当 device-link 草稿活跃时 chatPrefs.model 是旧的 controller-local 值)。
-      // bridge 模型(chatgpt/ / xai/)在远程模式不可用(不经本地 compat-proxy),需降级。
-      // 非 bridge 模型也必须在已连接的本地来源中存在,否则 SSH 会话首消息会被阻塞。
-      const sshConnected = connectedProvidersForAgent(localProviders, capabilityAgentKind);
-      const sshVisibleModels = deriveModelsFromProviders(sshConnected, capabilityAgentKind)
-        .filter((m) => !isSubscriptionDirectModel(m.id));
-      let sshModel = draftInitialModel;
-      if (isSubscriptionDirectModel(sshModel) || !sshVisibleModels.some((m) => m.id === sshModel)) {
-        if (!sshVisibleModels.length) {
-          throw new Error(t('ccAgent.draft.createSessionFailed'));
-        }
-        sshModel = sshVisibleModels[0].id;
-      }
-      // 使用 chatInitialProviderId(显示给用户的来源,device-link 活跃时取镜像值)而非
-      // chatPrefs.providerId(可能是旧的 controller-local 值)。
-      const rawProviderId = chatInitialProviderId ?? null;
-      const sshLocalSourceId = effectiveSourceIdForModel(
-        localProviders, rawProviderId, sshModel, capabilityAgentKind,
-      );
-      // 只有用户显式选中的来源在本地仍可用时才保留;否则 null = 走默认路由。
-      const sshProviderId = (rawProviderId && sshLocalSourceId === rawProviderId) ? rawProviderId : null;
-      // fast mode:来源不支持就关闭;支持时保留用户在 composer 里看到的 effectiveFastMode
-      // (device-link 草稿活跃时来自 dlSel/deviceLinkInitial,本地草稿来自 per-model 记忆)。
-      const sshSourceSupportsFast = sessionModelSupportsFastMode(localProviders, sshProviderId, sshModel, capabilityAgentKind);
-      const sshFastMode = sshSourceSupportsFast ? effectiveFastMode : false;
-      // effort: 用 draftInitialEffort(用户在 composer 里看到的值)作 currentEffort,
-      // 再由 resolveNewMakerDraftEffort 按本地 SSH model 支持的 levels 做 clamp。
-      const sshLocalProvider = sshLocalSourceId ? localProviders.find((p) => p.id === sshLocalSourceId) : undefined;
-      const sshLocalModelDesc = sshLocalProvider ? getModel(sshLocalProvider, sshModel, capabilityAgentKind) : undefined;
-      const sshEffort = resolveNewMakerDraftEffort({
-        currentEffort: draftInitialEffort,
-        presetEffort: sshLocalSourceId ? getProviderModelEffort(capabilityAgentKind, sshLocalSourceId, sshModel) : undefined,
-        efforts: sshLocalModelDesc?.efforts ?? [],
-        defaultEffort: sshLocalModelDesc?.defaultEffort ?? null,
-      });
-      try {
-        const newSession = await createSession({
-          agentKind: draftVendor,
-          workingDir: target.path,
-          workspaceKind: 'project',
-          permissionMode: chatInitialPermissionMode,
-          model: sshModel,
-          effort: sshEffort,
-          fastMode: sshFastMode,
-          planModeEnabled: effectivePlanMode,
-          remoteHostId: target.hostId,
-          providerId: sshProviderId,
-          extraDirs: [],
-        });
-        if (!newSession) {
-          throw new Error('createSession returned null');
-        }
-        if (effectivePlanMode) patchCurrentVendorPrefs({ planMode: false });
-        makerChatStore.setSessionRuntime(newSession.id, {
-          agentKind: draftVendor === 'codex' ? 'codex' : 'claude-code',
-          fastMode: sshFastMode,
-          planModeEnabled: effectivePlanMode,
-        });
-        // 把草稿页已输入的文本/附件移交到新会话,避免 navigate 后丢失。
-        // rehomeDraftAttachments 把 base64 和 xdt-image://__new_maker_draft__/ 迁移到
-        // 新 session 的 image cache,避免持久化孤立引用。browserComments 的 screenshot
-        // 也是 AttachedFile,同样需要 rehome。
-        const existingDraft = getComposerDraft(NEW_MAKER_DRAFT_KEY);
-        if (existingDraft) {
-          // SSH agent 无法读取控制端本地文件;只保留 image 类附件(可 rehome 到 cache URL),
-          // 丢弃 path-based 非 image 附件(PDF / text 等)。
-          const imageOnly = existingDraft.attachments.filter((f) => f.category === 'image');
-          const rehomedAttachments = await rehomeDraftAttachments(imageOnly, newSession.id);
-          let rehomedComments = existingDraft.browserComments;
-          if (rehomedComments && rehomedComments.length > 0) {
-            rehomedComments = await Promise.all(
-              rehomedComments.map(async (c) => {
-                const rehomed = await rehomeDraftAttachments([c.screenshot], newSession.id);
-                return rehomed?.[0] ? { ...c, screenshot: rehomed[0] } : c;
-              }),
-            );
-          }
-          // SSH 环境下本地 @file/@dir mention 无效,从 Tiptap 文档中剥离。
-          const strippedText = existingDraft.text
-            ? stripLocalMentionChips(existingDraft.text)
-            : existingDraft.text;
-          saveComposerDraft(newSession.id, {
-            ...existingDraft,
-            text: strippedText,
-            attachments: rehomedAttachments ?? [],
-            browserComments: rehomedComments,
-          });
-          clearComposerDraftAndNotify(NEW_MAKER_DRAFT_KEY);
-          attachmentState.clearFiles();
-        }
-        resetDraftWorkspaceAfterSend();
-        navigate(`/cc-agent/${newSession.id}`, { replace: true });
-      } catch (err) {
-        log.error('[add remote project]', err);
-        throw err;
-      }
-    },
-    [draft.vendor, chatPrefs, chatInitialPermissionMode, chatInitialProviderId, draftInitialModel, draftInitialEffort, effectiveFastMode, effectiveDeviceLinkDeviceId, localProviders, capabilityAgentKind, effectivePlanMode, attachmentState, createSession, navigate, t],
-  );
-
   // ─── 切 vendor ──────────────────────────────────────────────────────
   // 把"当前 vendor 的最新 prefs"落进 lastByVendor[oldVendor],然后切到新 vendor。
   // ChatInput 的 initial* 由父级传入,vendor 切换后 ChatInput 重新 mount(key 变化)
@@ -1154,19 +899,9 @@ export function NewMakerDraftRoute() {
       permissionMode: PermissionMode,
       files?: AttachedFile[],
       mentions?: MentionedResource[],
-      opts?: {
-        providerId?: string | null;
-        quotesEncoded?: boolean;
-        agentReferences?: AgentInputReference[];
-        pastedTextRanges?: PastedTextRange[];
-        slashCommandRanges?: SlashCommandRange[];
-        onAccepted?: () => void;
-      },
+      opts?: { providerId?: string | null; onAccepted?: () => void },
     ): boolean | undefined => {
       if (sendInFlightRef.current) return false;
-      // device-link 切设备后,capabilities/providers hook 可能还没 re-render 到新设备快照;
-      // 此时 effectiveFastMode / supportsFastMode / sendProviderId 仍基于旧设备。
-      if (isDeviceLinkDraft && (capabilitiesLoading || deviceProvidersLoading)) return false;
       // 草稿里选定的来源(供应商):ChatInput 在发送时把"仍连接的显式选择"经 opts 传上来
       // (未选 / 已断开 → null = 跟随默认路由)。透传给 createSession 落盘 sessions.provider_id,
       // 让新会话首个请求就走对来源,与"会话内切来源"行为一致。device-link 远程会话不支持(下方分支跳过)。
@@ -1303,19 +1038,7 @@ export function NewMakerDraftRoute() {
               remoteProjectsStore.setDeviceSessions(deviceId, deviceName, list as Session[]);
             }
             const rehydratedFiles = await rehomeDraftAttachments(files, remoteSessionId);
-            setPending(remoteSessionId, {
-              text: message,
-              files: rehydratedFiles,
-              mentions,
-              ...(opts?.quotesEncoded ? { quotesEncoded: true } : {}),
-              ...(opts?.agentReferences?.length ? { agentReferences: opts.agentReferences } : {}),
-              ...(opts?.pastedTextRanges?.length
-                ? { pastedTextRanges: opts.pastedTextRanges }
-                : {}),
-              ...(opts?.slashCommandRanges !== undefined
-                ? { slashCommandRanges: opts.slashCommandRanges }
-                : {}),
-            });
+            setPending(remoteSessionId, { text: message, files: rehydratedFiles, mentions });
             opts?.onAccepted?.();
             clearComposerDraftAndNotify(NEW_MAKER_DRAFT_KEY);
             attachmentState.clearFiles();
@@ -1490,10 +1213,11 @@ export function NewMakerDraftRoute() {
 
                 if (effectiveCollabEnabled) {
                   try {
-                    const result = await window.electronAPI.maker.enableOrca(
-                      newSession.id,
-                      draftEnableOrcaOptions(effectiveCollab),
-                    );
+                    const workerAgent =
+                      effectiveCollab.worker === 'codex' ? 'codex' : 'claude-code';
+                    const result = await window.electronAPI.maker.enableOrca(newSession.id, {
+                      workerAgent,
+                    });
                     // worktree 创建在后台完成,组件可能已经切走;这里读取当前 URL,
                     // 避免用 render 时捕获的旧路由误判。
                     if (getCurrentRoutePath() === `/cc-agent/${newSession.id}`) {
@@ -1522,18 +1246,6 @@ export function NewMakerDraftRoute() {
                   newDir,
                   rehomedFiles,
                   mentions,
-                  {
-                    ...(opts?.quotesEncoded ? { quotesEncoded: true } : {}),
-                    ...(opts?.agentReferences?.length
-                      ? { agentReferences: opts.agentReferences }
-                      : {}),
-                    ...(opts?.pastedTextRanges?.length
-                      ? { pastedTextRanges: opts.pastedTextRanges }
-                      : {}),
-                    ...(opts?.slashCommandRanges !== undefined
-                      ? { slashCommandRanges: opts.slashCommandRanges }
-                      : {}),
-                  },
                 );
                 if (accepted) opts?.onAccepted?.();
                 // sendMessage 会先同步 push user message,再异步返回 enqueue 是否接受。
@@ -1605,10 +1317,10 @@ export function NewMakerDraftRoute() {
           let orcaWorkersRevealState: { focusWorkerSessionId: string } | null = null;
           if (effectiveCollabEnabled) {
             try {
-              const result = await window.electronAPI.maker.enableOrca(
-                newSession.id,
-                draftEnableOrcaOptions(effectiveCollab),
-              );
+              const workerAgent = effectiveCollab.worker === 'codex' ? 'codex' : 'claude-code';
+              const result = await window.electronAPI.maker.enableOrca(newSession.id, {
+                workerAgent,
+              });
               orcaNavTarget = `/cc-agent/${newSession.id}`;
               orcaWorkersRevealState = { focusWorkerSessionId: result.workerSessionId };
             } catch (err) {
@@ -1626,12 +1338,6 @@ export function NewMakerDraftRoute() {
             text: message,
             files: rehydratedFiles,
             mentions,
-            ...(opts?.quotesEncoded ? { quotesEncoded: true } : {}),
-            ...(opts?.agentReferences?.length ? { agentReferences: opts.agentReferences } : {}),
-            ...(opts?.pastedTextRanges?.length ? { pastedTextRanges: opts.pastedTextRanges } : {}),
-            ...(opts?.slashCommandRanges !== undefined
-              ? { slashCommandRanges: opts.slashCommandRanges }
-              : {}),
           });
           opts?.onAccepted?.();
           // 草稿已经成功移交给新会话(setPending),清掉 NEW_MAKER_DRAFT_KEY
@@ -1669,8 +1375,6 @@ export function NewMakerDraftRoute() {
       effectiveRemoteHostId,
       isRemoteProjectDraft,
       isDeviceLinkDraft,
-      capabilitiesLoading,
-      deviceProvidersLoading,
       effectiveDeviceLinkDeviceId,
       effectiveDeviceLinkDeviceName,
       effectiveExtraDirs,
@@ -1683,9 +1387,6 @@ export function NewMakerDraftRoute() {
       patchActivePrefs,
       effectiveCollabEnabled,
       effectiveCollab.worker,
-      // workerConfig 也要进依赖:只改角色/模型/effort/初始任务(worker 类型不变)时,
-      // 少了它 handleSend 会闭包吃旧的 effectiveCollab,起 Worker 用错配置(codex P2)。
-      effectiveCollab.workerConfig,
       vendorAuthGate,
       createSession,
       navigate,
@@ -1703,9 +1404,6 @@ export function NewMakerDraftRoute() {
   // 失败抛错 → NewGoalDialog 内联报错并保持打开。
   const handleCreateGoal = useCallback(
     async (objective: string, limits: GoalLimitValues): Promise<void> => {
-      if (isDeviceLinkDraft && (capabilitiesLoading || deviceProvidersLoading)) {
-        throw new Error(t('ccAgent.draft.deviceStillLoading'));
-      }
       const { proceed } = await vendorAuthGate.checkAndConfirm(authVendor, {
         deviceId: effectiveDeviceLinkDeviceId,
       });
@@ -1809,25 +1507,6 @@ export function NewMakerDraftRoute() {
         const iso = new Date().toISOString();
         sessionsStore.patchLocal(newSession.id, { userSendAt: iso, updatedAt: iso });
       }
-      // 草稿开了协同 → 新建目标路径也要拉起 Worker(与 Send 路径同口径);否则用户开了协同
-      // 却走「新建目标」会得到一个没有 Worker 的 lead session(codex P2)。失败 toast + 降级
-      // 单会话,不阻断目标创建。仅本地项目 draft 可达(device-link 分支上面已 return)。
-      // reveal 不在此处直接 dispatch:当前路由还在 /cc-agent/new,分离侧栏控制器会因
-      // session 不匹配返回 stale-context(codex P2)——与 Send 路径同口径,把 reveal
-      // 塞进 navigate state,由 CCAgentSessionView mount 后消费。
-      let orcaWorkersRevealState: { focusWorkerSessionId: string } | null = null;
-      if (effectiveCollabEnabled) {
-        try {
-          const result = await window.electronAPI.maker.enableOrca(
-            newSession.id,
-            draftEnableOrcaOptions(effectiveCollab),
-          );
-          orcaWorkersRevealState = { focusWorkerSessionId: result.workerSessionId };
-        } catch (err) {
-          log.error('[draft goal] enableOrca failed (continuing as single session)', err);
-          toast.error(getCollaborationStartErrorMessage(err, t, { continueAsSingleSession: true }));
-        }
-      }
       // setGoal 内部 ensureSession(拉起 agent)+ 发首轮(带目标指令)。
       await window.electronAPI.maker.setGoal({ sessionId: newSession.id, objective, limits });
       // 自动起名:/goal 新建的会话不经普通发送路径,scheduleAutoName 漏触发 → 标题会停在默认。
@@ -1835,17 +1514,10 @@ export function NewMakerDraftRoute() {
       makerChatStore.autoNameSession(newSession.id, objective, capabilityAgentKind);
       clearComposerDraftAndNotify(NEW_MAKER_DRAFT_KEY);
       resetDraftWorkspaceAfterSend();
-      navigate(`/cc-agent/${newSession.id}`, {
-        replace: true,
-        state: orcaWorkersRevealState
-          ? { orcaWorkersReveal: orcaWorkersRevealState }
-          : undefined,
-      });
+      navigate(`/cc-agent/${newSession.id}`, { replace: true });
     },
     [
       isDeviceLinkDraft,
-      capabilitiesLoading,
-      deviceProvidersLoading,
       vendorAuthGate,
       authVendor,
       effectiveDeviceLinkDeviceId,
@@ -1860,8 +1532,6 @@ export function NewMakerDraftRoute() {
       effectiveRemoteHostId,
       effectiveExtraDirs,
       chatInitialProviderId,
-      effectiveCollabEnabled,
-      effectiveCollab,
       navigate,
       t,
     ],
@@ -2002,40 +1672,22 @@ export function NewMakerDraftRoute() {
             ))}
           <main
             data-testid="create-agent-main"
-            className={cn(
-              'relative flex h-full min-w-0 w-full flex-col items-center justify-start',
-              isDraftNarrow
-                ? 'px-4 pt-[calc(max(64px,18vh)_+_32px_-_var(--content-header-h,46px))]'
-                : 'px-8 pt-[calc(max(96px,28vh)_+_46px_-_var(--content-header-h,46px))]',
-            )}
+            className="relative flex h-full min-w-0 w-full flex-col items-center justify-start px-8 pt-[calc(max(96px,28vh)_+_46px_-_var(--content-header-h,46px))]"
           >
             <div
-              className="relative flex w-full flex-col items-start"
-              // 与进行中对话页同源:内容列宽度跟随 useProportionalWidth 算出的
-              // inputWidth(封顶 1220px),不再死锁 800——大屏自适应变宽,且发送后
-              // 同一个 ChatInput 无宽度跳变。inputWidth 由 useLayoutEffect 同步量出
-              // (paint 前已就绪);极端未量到(0)时回落旧默认 800,不放大到全宽。
-              style={{ maxWidth: inputWidth || 800 }}
+              className="relative flex w-full max-w-[800px] flex-col items-start"
+              style={{ maxWidth: Math.min(inputWidth ?? 800, 800) }}
             >
               {/* mode pill + worktree 高级入口同排(齿轮在 pill 右侧,对齐旧 F1-E 布局)。
                   2026-07-19 修复:488cb33 对齐 Figma 重排时把 WorktreeChipsRow 注入删丢,
                   branch/worktree 入口消失(wt* 状态与 send 管线一直健在),以 advancedOnly
                   变体接回。 */}
-              <div
-                className={cn(
-                  'inline-flex items-center gap-2',
-                  isDraftNarrow
-                    ? 'static order-2 mb-3 w-full flex-wrap justify-start'
-                    : 'absolute right-0 top-[22px] z-10',
-                )}
-              >
+              <div className="absolute right-0 top-[22px] z-10 inline-flex items-center gap-2">
                 <FolderPickerPopover
                   open={folderPickerOpen}
                   onOpenChange={handleFolderPickerOpenChange}
                   onSelect={handleModePickerSelect}
                   projectOptions={projectPickerOptions}
-                  // 仅在有可用远程目标时暴露「添加远程项目」入口(SSH ready 主机 / device-link 可控设备)。
-                  onAddRemoteProject={hasAnyRemoteTarget ? () => setAddRemoteProjectOpen(true) : undefined}
                   side="bottom"
                   align="end"
                   sideOffset={6}
@@ -2085,10 +1737,10 @@ export function NewMakerDraftRoute() {
               <ThemeBrandLockup
                 theme={activeColorTheme}
                 testId="create-agent-brand-lockup"
-                className={cn('mb-[15px]', isDraftNarrow && 'order-1')}
+                className="mb-[15px]"
               />
 
-              <div className={cn('flex w-full flex-col items-start gap-0', isDraftNarrow && 'order-3')}>
+              <div className="flex w-full flex-col items-start gap-0">
                 {/* device-link:为远程设备项目新建对话时的明显标识。让用户清楚这条对话会建在
                     被控设备上、属于那台机器的项目,而不是本机。 */}
                 {isDeviceLinkDraft && (
@@ -2116,8 +1768,7 @@ export function NewMakerDraftRoute() {
                     externalDragOver={pageDragOver}
                     visualVariant="create-agent"
                     compactToolbar
-                    // denseToolbar 去除(2026-07-22):hero 输入框够宽,协同 toggle 应显示「协同」文字
-                    // 与会话内主视图一致;窄窗口仍由 autoDenseToolbar 自动收成 icon-only。
+                    denseToolbar
                     placeholder="Hi Cindy!"
                     sessionId={undefined}
                     initialWorkingDir={effectiveWorkingDir}
@@ -2152,38 +1803,6 @@ export function NewMakerDraftRoute() {
                         disabled={wtCreating}
                       />
                     }
-                    // 协同 toggle(与对话界面同一控件):仅本地项目 draft 可用 —— 对话模式(无
-                    // workingDir)/ 远程 SSH / device-link 均不支持起 worker(state 层 normalize
-                    // + patchDraft 已强制 collab.enabled=false,这里同口径 gate 渲染)。Lead = 当前
-                    // vendor(上方 VendorSegmentedSwitcher)。onOpenDetails 打开「开启协同」富弹窗
-                    // (CreateWorkerPopover:role/agent/model/初始任务),与会话内完全一致;OFF 态点击
-                    // 走它而非简单 worker popover。ON 态点击 onChange(enabled:false) 关闭协同。
-                    // createSession 已在 effectiveCollabEnabled 时用 workerConfig 拉起 Worker。
-                    collaboration={
-                      effectiveWorkingDir != null &&
-                      effectiveRemoteHostId == null &&
-                      effectiveDeviceLinkDeviceId == null
-                        ? {
-                            enabled: effectiveCollab.enabled,
-                            worker: effectiveCollab.worker,
-                            onChange: (next) => patchCollab(next),
-                            onOpenDetails: () => setCreateWorkerOpen(true),
-                          }
-                        : undefined
-                    }
-                    compactMiddleToolbarSlot={
-                      <VendorSegmentedSwitcher
-                        value={draft.vendor}
-                        onChange={handleVendorChange}
-                        width={72}
-                        dense
-                        iconOnly
-                        visualVariant="create-agent"
-                        className="shrink-0"
-                        disabled={wtCreating}
-                      />
-                    }
-                    narrowToolbar={isDraftToolbarNarrow}
                     paletteMaxHeight={240}
                     attachmentState={attachmentState}
                     draftKey={NEW_MAKER_DRAFT_KEY}
@@ -2204,50 +1823,30 @@ export function NewMakerDraftRoute() {
                     }
                   />
                 </div>
-                {/* 输入框跟随 inputWidth 变宽后,快捷入口只有 4 项,若也铺满全宽
-                    会被撑成又宽又空的短卡。这里把卡片区封顶在 800px、左对齐(与输入框
-                    左缘齐),保持每张卡当前的紧凑比例;输入框仍独立用满可用宽度。 */}
-                <div
-                  data-testid="create-agent-quick-starts"
-                  className="mt-[42px] w-full"
-                  style={{ maxWidth: 800 }}
-                >
-                  {/* 标题字号 12→14px(DESIGN §3 Caption),与卡片间距 16→10px 收近
-                      (DESIGN §5 间距档)——用户改稿 2026-07-22。 */}
-                  <div className="mb-2.5 px-0.5">
-                    <div className="text-[14px] font-medium leading-[18px] text-[var(--text-secondary)]">
+                <div data-testid="create-agent-quick-starts" className="mt-[42px] w-full">
+                  <div className="mb-4 px-0.5">
+                    <div className="text-[12px] font-medium leading-[14px] text-[var(--text-secondary)]">
                       {t('newChat.createAgent.quickStart')}
                     </div>
                   </div>
-                  <div
-                    className={cn(
-                      'grid w-full gap-3',
-                      isDraftNarrow ? 'grid-cols-1' : isDraftMedium ? 'grid-cols-2' : 'grid-cols-4',
-                    )}
-                  >
+                  <div className="grid grid-cols-4 gap-3">
                     {createAgentQuickStarts.map(({ key, labelKey, icon: Icon }) => (
                       <button
                         key={key}
                         type="button"
                         onClick={() => handleQuickStart(labelKey)}
-                        // 圆角与输入框统一为 12px(DESIGN §5 容器档,rounded-xl);
-                        // 窄态横排 / 常态竖排自适应(#562)。
-                        className={cn(
-                          'group rounded-xl border border-[var(--create-agent-quick-card-border)] bg-[var(--create-agent-quick-card-bg)] text-left text-[var(--create-agent-quick-card-text)] transition-colors hover:bg-[var(--create-agent-quick-card-bg-hover)]',
-                          isDraftNarrow
-                            ? 'flex min-h-[84px] items-center gap-3 p-3'
-                            : 'flex min-h-[112px] flex-col items-start gap-3 p-4',
-                        )}
+                        className="flex h-20 items-start gap-[7px] rounded-[6px] border border-[var(--create-agent-quick-card-border)] bg-[var(--create-agent-quick-card-bg)] p-[7px] text-left text-[var(--create-agent-quick-card-text)] transition-colors hover:bg-[var(--create-agent-quick-card-bg-hover)]"
                       >
-                        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[var(--create-agent-quick-card-icon-bg)]">
+                        <span className="grid h-[30px] w-[30px] shrink-0 place-items-center rounded-full bg-[var(--create-agent-quick-card-icon-bg)]">
                           <Icon
-                            size={16}
+                            size={15}
                             strokeWidth={2}
                             className="text-[var(--create-agent-quick-card-icon)]"
                           />
                         </span>
-                        {/* 字号 13px 与左侧会话列表(text-13)一致——用户改稿 2026-07-22。 */}
-                        <span className="flex min-w-0 min-h-10 items-center text-13 font-semibold leading-[16px]">
+                        {/* min-h 对齐左侧 30px 图标圆:单行/两行文字都相对图标垂直居中,
+                            卡片整体仍 items-start 顶部对齐。 */}
+                        <span className="flex min-h-[30px] min-w-0 items-center text-[11px] font-semibold leading-[14px]">
                           {t(labelKey)}
                         </span>
                       </button>
@@ -2276,39 +1875,6 @@ export function NewMakerDraftRoute() {
           onOpenChange={crossAgentDialog.onOpenChange}
           onConfirm={crossAgentDialog.onConfirm}
           onCancel={crossAgentDialog.onCancel}
-        />
-
-        {/* 「开启协同」富弹窗:与会话内 CCAgentSessionView 同一组件/标题。草稿态没有 sessionId,
-            不立刻 enableOrca —— onCreate 把 Worker 富配置写进 draft.collab,createSession 后由
-            draftEnableOrcaOptions 透传给 enableOrca(见本文件 F-COLLAB 段)。deviceId 省略(协同仅本地)。 */}
-        <CreateWorkerPopover
-          open={createWorkerOpen}
-          onClose={() => setCreateWorkerOpen(false)}
-          onCreate={(form: CreateWorkerForm) => {
-            patchCollab({
-              enabled: true,
-              worker: form.agent === 'codex' ? 'codex' : 'cc',
-              workerConfig: {
-                role: form.role,
-                model: form.model,
-                effort: form.effort,
-                fast: form.fast,
-                initialTask: form.initialTask || undefined,
-              },
-            });
-            setCreateWorkerOpen(false);
-          }}
-          title={t('orca.createWorker.enableCollabTitle')}
-          submitLabel={t('orca.createWorker.enableCollabSubmit')}
-        />
-
-        {/* 添加远程项目弹窗 (入口在 mode pill 的 FolderPickerPopover 里, gate 走 hasAnyRemoteTarget =
-            SSH ready 主机 或 device-link 可控设备)。onProjectAdded 带 kind:SSH 立即建会话 + navigate;
-            device-link 把当前草稿指向被控设备项目,发首条消息时 create-on-send。 */}
-        <AddRemoteProjectDialog
-          open={addRemoteProjectOpen}
-          onOpenChange={setAddRemoteProjectOpen}
-          onProjectAdded={handleRemoteProjectAdded}
         />
       </div>
     </TopRightChipStackProvider>

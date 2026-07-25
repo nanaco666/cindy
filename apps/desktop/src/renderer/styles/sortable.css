@@ -4,7 +4,7 @@
  * 对标 Codex 桌面端：整行可拖；按住有微高亮；拖动时跟手悬浮卡（缩放+阴影+
  * 半透明），原位置留虚位 placeholder；其它行让位由 SortableJS animation 完成。
  *
- * 颜色严格走 docs/design-rules/cindy-design-system.md 黑白反色规范：stone 灰系 + 现有 sidebar-item-hover/active
+ * 颜色严格走 DESIGN.md 黑白反色规范：stone 灰系 + 现有 sidebar-item-hover/active
  * tokens，不引入彩色高亮。
  */
 
@@ -84,7 +84,7 @@
 }
 
 /* 右侧栏 tab strip 是面板 chrome,不继承普通 sidebar 行的浮卡背景 / 阴影。
-   clone 挂到 body 后补 panel 背景,保持与原 tab 同一视觉层;docs/design-rules/cindy-design-system.md 的 chrome
+   clone 挂到 body 后补 panel 背景,保持与原 tab 同一视觉层;DESIGN.md 的 chrome
    仍是纯平面,拖动只靠位置与原位 ghost 表达,不额外制造阴影。 */
 .right-sidebar-tab-sortable-row.xdt-sortable-drag {
   background-color: var(--panel-bg);

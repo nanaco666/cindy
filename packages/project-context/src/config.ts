@@ -140,7 +140,7 @@ export function mergeConfig(partial: Partial<ConfigFile>): ConfigFile {
 
 export function writeDefaultConfigIfMissing(configPath: string): boolean {
   if (fs.existsSync(configPath)) return false;
-  const sample = `# project-context configuration. See the @cindy/project-context README for the full schema.
+  const sample = `# project-context configuration. See docs/project-context.md §4.4 for full schema.
 #
 # module_roots: optional. Defaults to package-manager auto-discovery
 #   (pnpm-workspace.yaml / package.json workspaces).

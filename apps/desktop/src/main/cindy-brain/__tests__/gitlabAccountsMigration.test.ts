@@ -67,7 +67,7 @@ function makeDeps(overrides?: Partial<GitlabAccountsMigrationDeps>): GitlabAccou
     readLegacyToken: () => 'glpat_legacy_token',
     // 缺省与 readLegacyToken 一致地"在场";幂等留痕用例单独覆盖两种取值。
     legacyTokenExists: () => true,
-    readLegacyConnection: () => ({ baseUrl: 'https://gitlab.example.com', username: 'devuser' }),
+    readLegacyConnection: () => ({ baseUrl: 'https://git.tapsvc.com', username: 'lizi' }),
     manager: memoryManager(),
     ...overrides,
   };
@@ -84,9 +84,9 @@ describe('migrateGitlabAccounts', () => {
     expect(migrateGitlabAccounts(makeDeps({ manager }))).toBe(1);
     expect(manager.rows).toHaveLength(1);
     expect(manager.rows[0]).toMatchObject({
-      host: 'gitlab.example.com',
+      host: 'git.tapsvc.com',
       token: 'glpat_legacy_token',
-      label: 'devuser',
+      label: 'lizi',
     });
     expect(manager.defaultId).toBe(manager.rows[0].id);
   });
@@ -149,7 +149,7 @@ describe('migrateGitlabAccounts', () => {
       migrateGitlabAccounts(
         makeDeps({
           manager,
-          readLegacyConnection: () => ({ baseUrl: 'http://gitlab.internal.example', username: 'devuser' }),
+          readLegacyConnection: () => ({ baseUrl: 'http://gitlab.internal.example', username: 'lizi' }),
         }),
       ),
     ).toBe(0);
@@ -162,7 +162,7 @@ describe('migrateGitlabAccounts', () => {
       migrateGitlabAccounts(
         makeDeps({
           manager,
-          readLegacyConnection: () => ({ baseUrl: 'https://git.example.com:8443', username: 'devuser' }),
+          readLegacyConnection: () => ({ baseUrl: 'https://git.example.com:8443', username: 'lizi' }),
         }),
       ),
     ).toBe(0);
@@ -175,7 +175,7 @@ describe('migrateGitlabAccounts', () => {
       migrateGitlabAccounts(
         makeDeps({
           manager,
-          readLegacyConnection: () => ({ baseUrl: 'HTTPS://Git.X.com/', username: 'devuser' }),
+          readLegacyConnection: () => ({ baseUrl: 'HTTPS://Git.X.com/', username: 'lizi' }),
         }),
       ),
     ).toBe(1);
@@ -189,7 +189,7 @@ describe('migrateGitlabAccounts', () => {
       migrateGitlabAccounts(
         makeDeps({
           manager,
-          readLegacyConnection: () => ({ baseUrl: 'https://gitlab.example.com', username: null }),
+          readLegacyConnection: () => ({ baseUrl: 'https://git.tapsvc.com', username: null }),
         }),
       ),
     ).toBe(1);

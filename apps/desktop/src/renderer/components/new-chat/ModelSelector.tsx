@@ -42,9 +42,8 @@ import {
   providerOffersModel,
   resolveModelIconKind,
   sourcesForModel,
-  visibleModelUnion,
   type ProviderView,
-} from '@cindy/model-providers';
+} from '@lizi/model-providers';
 import { buildProviderSections } from './sourceSwitch';
 
 // 厂商分类 / 分组标题 key 表的纯逻辑在 ./sourceSwitch。这里 re-export 给 ChatInput
@@ -275,10 +274,6 @@ interface ModelSelectorProps {
   disabled?: boolean;
   /** 窄容器下把 trigger 字号/高度各压一档,默认 false。 */
   dense?: boolean;
-  /** 窄态工具栏的简略触发器:隐藏 effort / Fast 次要信息并限制模型名宽度。 */
-  compactToolbar?: boolean;
-  /** 极窄工具栏进一步隐藏模型文字，只保留模型图标和下拉箭头。 */
-  ultraCompactToolbar?: boolean;
   /** Trigger presentation: toolbar keeps the compact chat pill; field renders a settings input-like control. */
   triggerVariant?: 'toolbar' | 'field';
   /** CREATE AGENT 首页按 Figma 185:2724 使用独立私有 token。 */
@@ -502,6 +497,7 @@ export function ModelSelectorContent({
     };
     document.addEventListener('scroll', onAnyScroll, true);
     return () => document.removeEventListener('scroll', onAnyScroll, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editing]);
 
   useEffect(
@@ -689,25 +685,11 @@ export function ModelSelectorContent({
       browsing && agentKind
         ? visibleModels.filter((m) => sourcesForModel(providers, m.id, agentKind).length > 0)
         : visibleModels;
-    // 本地 flat 入口（子代理模型、Worker 等）没有 provider sections 帮忙过滤，必须显式复用
-    // 会话选择器 / IM `/model` 的同一套「已连接来源 × 用户可见模型」规则。否则设置页里
-    // 已忽略或仅由断开来源提供的目录项仍会被列出来，选中后没有可用路由。
-    // device-link 的目录来自被控端，不能叠加控制端本机的可见性偏好，保持原样。
-    const selectableIds = deviceId
-      ? null
-      : new Set(
-          (agentKind ? [agentKind] : (['claude-code', 'codex'] as const)).flatMap((agent) =>
-            visibleModelUnion(providers, agent, (providerId, model) =>
-              isModelEnabled(agent, providerId, model),
-            ).map((model) => model.id),
-          ),
-        );
-    const selectable = selectableIds ? base.filter((model) => selectableIds.has(model.id)) : base;
-    if (!q) return selectable;
-    return selectable.filter(
+    if (!q) return base;
+    return base.filter(
       (m) => m.displayName.toLowerCase().includes(q) || m.id.toLowerCase().includes(q),
     );
-  }, [sections, visibleModels, query, browsing, agentKind, providers, deviceId, visibilityVersion]);
+  }, [sections, visibleModels, query, browsing, agentKind, providers]);
 
   // 选中判定:flat 模式只比模型 id;分段模式还要比供应商(同模型多供应商下只高亮当前来源那行)。
   // 浏览目标引擎态恒 false:当前会话模型属于旧引擎,目标列表里同 id 行(如 gpt-5.5
@@ -913,11 +895,9 @@ export function ModelSelectorContent({
                 role="option"
                 aria-selected={selected}
                 className={cn(
-                  // 行内边距/圆角/hover 与选中底统一到 --model-item-hover(见 §Select 菜单行规约),
-                  // 与一级模型行、权限、+ 菜单一致;px-3 对齐其它菜单行的横向内边距。
-                  'flex w-full items-center justify-between rounded-[8px] px-3 py-2 text-left transition-colors duration-100',
+                  'flex w-full items-center justify-between rounded-[8px] px-2 py-2 text-left transition-colors duration-100',
                   'hover:bg-[var(--model-item-hover)]',
-                  selected && 'bg-[var(--model-item-hover)]',
+                  selected && 'bg-[var(--surface-chip)]',
                 )}
               >
                 <span
@@ -1185,7 +1165,7 @@ export function ModelSelectorContent({
             width={304}
             className="mx-auto"
             // 浮层内选中段用黑白反转强对比(default 的暗色 Card 凸起在浮层
-            // 表面上分不清"当前选的是哪家",2026-07-20 产品实测反馈)。
+            // 表面上分不清"当前选的是哪家",2026-07-20 Dash 实测反馈)。
             visualVariant="dropdown"
           />
           {browsing && (
@@ -1239,9 +1219,7 @@ export function ModelSelectorContent({
       {/* 模型列表 —— 单栏;分段(供应商)或 flat。 */}
       <div
         ref={listRef}
-        // -mr-2 把滚动条挪进面板右侧 8px 留白;scrollbar-gutter:stable 让无滚动时
-        // 行宽与有滚动时一致(否则行会比搜索框宽 8px);细滚动条见 globals.css
-        className="morph-panel-list-scroll -mr-2 flex max-h-[300px] flex-col gap-0.5 overflow-y-auto [scrollbar-gutter:stable]"
+        className="flex max-h-[300px] flex-col gap-0.5 overflow-y-auto"
         role="listbox"
         aria-label="Model list"
         onScroll={() => {
@@ -1304,8 +1282,6 @@ export function ModelSelector({
   switching = false,
   disabled = false,
   dense = false,
-  compactToolbar = false,
-  ultraCompactToolbar = false,
   triggerVariant = 'toolbar',
   visualVariant = 'default',
   useMorphPopover = false,
@@ -1467,11 +1443,7 @@ export function ModelSelector({
   const isBudget = modelId.startsWith('codex/');
   const isFieldTrigger = triggerVariant === 'field';
   const isCreateAgentVariant = visualVariant === 'create-agent';
-  const isCompactToolbar = compactToolbar && isCreateAgentVariant;
-  const isUltraCompactToolbar = ultraCompactToolbar && isCompactToolbar;
-  // 保留 useMorphPopover 作用域开关(仅 composer 工具条 opt-in;settings/CreateWorker 用 Radix 回退),
-  // 但去掉 !isCreateAgentVariant —— 新建对话框工具条也走脱身上浮 morph,与会话内统一(2026-07-22)。
-  const morphEnabled = useMorphPopover && !isFieldTrigger;
+  const morphEnabled = useMorphPopover && !isFieldTrigger && !isCreateAgentVariant;
   const budgetGradientStyle: CSSProperties | undefined = isBudget
     ? {
         background: 'var(--model-budget-gradient)',
@@ -1488,7 +1460,6 @@ export function ModelSelector({
           onClick={morphEnabled ? () => setOpen((prev) => (disabled ? false : !prev)) : undefined}
           aria-expanded={open && !disabled}
           aria-haspopup="listbox"
-          title={displayLabel}
           className={cn(
             'flex min-w-0 max-w-full items-center gap-1 transition-colors',
             isFieldTrigger
@@ -1499,13 +1470,23 @@ export function ModelSelector({
                 )
               : cn(
                   'rounded-full',
-                  // 裸态工具条(2026-07-22 用户定稿):默认无框,hover 才浮现胶囊外框。
-                  // create-agent(新建对话框)与会话内共用同一套裸态,不再分叉 —— 静息/hover 逐字一致。
-                  'h-[30px] min-w-[72px] max-w-full shrink overflow-hidden px-2.5',
-                  // 窄态工具条(#562):新建对话框空间不足时钳制触发器宽度,防与语音/发送重叠。
-                  isUltraCompactToolbar ? 'w-[64px]' : isCompactToolbar ? 'w-[148px]' : undefined,
-                  'border border-transparent bg-transparent',
-                  'hover:border-[var(--border-default)] hover:bg-[var(--composer-pill-bg,#FCFCFC)] dark:hover:bg-[var(--composer-pill-bg,#393838)]',
+                  isCreateAgentVariant
+                    ? [
+                        'h-[30px] min-w-[72px] max-w-full shrink overflow-hidden border border-[var(--create-agent-control-border)]',
+                        'bg-[var(--create-agent-control-bg)] px-2 text-[var(--create-agent-control-text)]',
+                        'hover:bg-[var(--create-agent-control-bg-hover)] active:bg-[var(--create-agent-control-bg-pressed)]',
+                        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--create-agent-focus-ring)]',
+                      ]
+                    : morphEnabled
+                      ? [
+                          'h-[30px] min-w-[72px] max-w-full shrink overflow-hidden px-2.5',
+                          'border border-transparent bg-transparent',
+                          'hover:border-[var(--border-default)] hover:bg-[var(--composer-pill-bg,#FCFCFC)] dark:hover:bg-[var(--composer-pill-bg,#393838)]',
+                        ]
+                      : [
+                          'h-[30px] min-w-[72px] max-w-full shrink overflow-hidden',
+                          'bg-[var(--composer-pill-bg,#FCFCFC)] dark:bg-[var(--composer-pill-bg,#393838)] px-2.5 border border-[var(--border-default)] hover:bg-[var(--model-trigger-hover)]',
+                        ],
                 ),
             // device-link 远程切换 in-flight:置灰 + 禁用点击(复用本文件 disabled 行的 opacity-50 习惯)。
             (switching || disabled) && 'pointer-events-none opacity-50',
@@ -1530,11 +1511,7 @@ export function ModelSelector({
                     ? 'text-[var(--create-agent-control-text)]'
                     : 'text-[var(--text-primary)]',
                   isCreateAgentVariant
-                    ? isUltraCompactToolbar
-                      ? 'hidden'
-                      : isCompactToolbar
-                        ? 'max-w-[108px] truncate'
-                        : 'truncate'
+                    ? 'truncate'
                     : cn('truncate', isFieldTrigger ? 'max-w-[260px]' : ''),
                   isCreateAgentVariant ? 'text-[12px]' : dense ? 'text-[12.5px]' : 'text-[13px]',
                 )}
@@ -1558,11 +1535,7 @@ export function ModelSelector({
                 className={cn(
                   'min-w-0 font-normal text-[var(--text-primary)]',
                   isCreateAgentVariant
-                    ? isUltraCompactToolbar
-                      ? 'hidden'
-                      : isCompactToolbar
-                        ? 'max-w-[108px] truncate'
-                        : 'truncate'
+                    ? 'truncate'
                     : isFieldTrigger
                       ? 'max-w-[260px] truncate'
                       : 'truncate',
@@ -1606,11 +1579,7 @@ export function ModelSelector({
                 className={cn(
                   'min-w-0 font-normal',
                   isCreateAgentVariant
-                    ? isUltraCompactToolbar
-                      ? 'hidden'
-                      : isCompactToolbar
-                        ? 'max-w-[108px] truncate'
-                        : 'truncate'
+                    ? 'truncate'
                     : isFieldTrigger
                       ? 'max-w-[260px] truncate'
                       : 'truncate',
@@ -1624,7 +1593,7 @@ export function ModelSelector({
               >
                 {displayLabel}
               </span>
-              {effortLabel && !isCompactToolbar && (
+              {effortLabel && (
                 <>
                   <span
                     className={cn(
@@ -1664,7 +1633,7 @@ export function ModelSelector({
                   </span>
                 </>
               )}
-              {triggerFastOn && !isCompactToolbar && (
+              {triggerFastOn && (
                 <Zap
                   size={isCreateAgentVariant ? 11 : dense ? 12 : 13}
                   className={cn(

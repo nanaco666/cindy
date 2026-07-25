@@ -29,7 +29,7 @@ import * as blobStore from '../cindy-media/blobStore';
 import * as ledger from '../cindy-media/ledger';
 import { buildRangedMediaResponse } from '../cindy-media/rangeResponse';
 import { remoteInvoke } from './index';
-import { DL_MEDIA_FETCH_CHANNEL } from '@cindy/device-link';
+import { DL_MEDIA_FETCH_CHANNEL } from '@lizi/device-link';
 import { downloadToBuffer, openMediaStream, removeRemote } from './mediaTransfer';
 import * as cache from './remoteMediaCacheStore';
 import type { RemoteMediaEntry, StreamEntry } from './remoteMediaCacheStore';

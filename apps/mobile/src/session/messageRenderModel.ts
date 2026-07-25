@@ -13,8 +13,8 @@ import {
   type MessageRenderToolMediaItem,
   type MessageRenderWorkChildItem,
   type MessageRenderWorkGroupItem,
-} from '@cindy/maker-shared/message-render';
-import type { AgentTaskUpdate } from '@cindy/maker-shared/agent-task';
+} from '@lizi/maker-shared/message-render';
+import type { AgentTaskUpdate } from '@lizi/maker-shared/agent-task';
 import { normalizeRemoteMessages, type NormalizedRemoteMessage } from '@/session/messageNormalize';
 import type { RemoteMessage } from '@/session/types';
 import {
@@ -123,12 +123,10 @@ export function markTurnFinalAssistants(
 ): void {
   const suppressTailFinalAssistant = isSessionStreaming && hasActiveLoadedTail(normalized);
   let lastCandidate: NormalizedRemoteMessage | null = null;
-  let sealedAnswerFound = false;
   for (const message of normalized) {
     if (message.kind === 'user' && message.label === 'user' && !isSubagentChildMessage(message)) {
-      if (!sealedAnswerFound && lastCandidate) lastCandidate.isTurnFinalAssistant = true;
+      if (lastCandidate) lastCandidate.isTurnFinalAssistant = true;
       lastCandidate = null;
-      sealedAnswerFound = false;
       continue;
     }
     if (
@@ -137,15 +135,9 @@ export function markTurnFinalAssistants(
       && !isSubagentChildMessage(message)
     ) {
       lastCandidate = message;
-      if (message.turnCompleted === true) {
-        message.isTurnFinalAssistant = true;
-        sealedAnswerFound = true;
-      }
     }
   }
-  if (!sealedAnswerFound && lastCandidate && !suppressTailFinalAssistant) {
-    lastCandidate.isTurnFinalAssistant = true;
-  }
+  if (lastCandidate && !suppressTailFinalAssistant) lastCandidate.isTurnFinalAssistant = true;
 }
 
 function hasActiveLoadedTail(normalized: readonly NormalizedRemoteMessage[]): boolean {

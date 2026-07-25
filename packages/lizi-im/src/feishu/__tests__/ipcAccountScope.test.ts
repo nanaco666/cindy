@@ -72,7 +72,7 @@ let accountToken = 1;
 let operationGate: Promise<void> | null = null;
 
 const host = {
-  paths: { feishuMediaDir: '/tmp/@cindy/im-feishu-test' },
+  paths: { feishuMediaDir: '/tmp/lizi-im-feishu-test' },
   secrets: {
     isAvailable: () => false,
     write: () => false,

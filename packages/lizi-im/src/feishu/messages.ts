@@ -17,7 +17,7 @@ export const messages = {
       '🎉 已绑定为本 bot 的 owner~\n之后只有你能跟我聊天。如需更换 owner，请到 desktop 的 Settings 页清除 bot 凭证后重新保存。',
   },
   // (inbound.skipped removed — orchestrator owns the wording for "pure
-  // unsupported" / "mixed unsupported" replies; @cindy/im just emits the raw
+  // unsupported" / "mixed unsupported" replies; lizi-im just emits the raw
   // entries via IMMessageEvent.unsupported.)
   /** Throttled streaming card placeholder texts. */
   streaming: {

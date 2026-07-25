@@ -6,7 +6,6 @@ import {
   buildNewSessionCreatePreview,
   buildRecentWorkspaceOptions,
   buildRemoteCreateSessionOptions,
-  filterRemoteDirectoryEntries,
   defaultPermissionModeForNewSessionAgent,
   normalizeCreateSessionResult,
   parseNewSessionDeviceOptions,
@@ -335,17 +334,6 @@ describe('new session default device follows the home device filter', () => {
 });
 
 describe('new session model', () => {
-  it('hides dot directories by default and restores them when enabled', () => {
-    const entries = [
-      { name: '.config', kind: 'dir' as const, path: '/Users/cindy/.config' },
-      { name: '.workspace', kind: 'symlink' as const, path: '/Users/cindy/.workspace' },
-      { name: 'Code', kind: 'dir' as const, path: '/Users/cindy/Code' },
-    ];
-
-    expect(filterRemoteDirectoryEntries(entries, false).map((entry) => entry.name)).toEqual(['Code']);
-    expect(filterRemoteDirectoryEntries(entries, true)).toEqual(entries);
-  });
-
   it('builds device-link create-session args with desktop remote-project semantics', () => {
     expect(buildRemoteCreateSessionOptions({
       ...DEFAULT_NEW_SESSION_DRAFT,
@@ -517,11 +505,11 @@ describe('new session model', () => {
       ...DEFAULT_NEW_SESSION_DRAFT,
       workingDir: '',
       firstMessage: '',
-    }, 'Carol Mac')).toMatchObject({
+    }, 'Dash Mac')).toMatchObject({
       title: '还不能创建',
       subtitle: '请输入电脑端项目路径。',
       details: [
-        '电脑: Carol Mac',
+        '电脑: Dash Mac',
         '位置: 未选择项目路径',
         '运行: Claude · claude-sonnet-4-6 · medium',
         '首条: 未填写',
@@ -534,11 +522,11 @@ describe('new session model', () => {
       workingDir: '',
       firstMessage: '请帮我总结这个项目，并给出下一步建议。',
       model: 'claude-sonnet-4-6',
-    }, 'Carol Mac')).toMatchObject({
+    }, 'Dash Mac')).toMatchObject({
       title: '准备创建并发送',
       subtitle: '确认后会在被控电脑创建会话，并把首条消息加入队列。',
       details: [
-        '电脑: Carol Mac',
+        '电脑: Dash Mac',
         '位置: 对话工作区',
         '运行: Claude · claude-sonnet-4-6 · medium',
         '首条: 请帮我总结这个项目，并给出下一步建议。',
@@ -549,10 +537,10 @@ describe('new session model', () => {
       ...DEFAULT_NEW_SESSION_DRAFT,
       workingDir: '/repo/xdt-maker',
       firstMessage: '',
-    }, 'Carol Mac', { attachmentCount: 2 })).toMatchObject({
+    }, 'Dash Mac', { attachmentCount: 2 })).toMatchObject({
       title: '准备创建并发送',
       details: [
-        '电脑: Carol Mac',
+        '电脑: Dash Mac',
         '位置: /repo/xdt-maker',
         '运行: Claude · claude-sonnet-4-6 · medium',
         '首条: 仅发送附件',
@@ -708,21 +696,11 @@ describe('new session model', () => {
 });
 
 describe('new session composer surface', () => {
-  it('does not double-apply the Android safe-area inset to the top navigation', () => {
-    const newSource = readFileSync(resolve(process.cwd(), 'app/sessions/new.tsx'), 'utf8');
-
-    expect(newSource).toContain(
-      "const NEW_SESSION_SCREEN_TOP_PADDING = Platform.OS === 'android' ? 0 : spacing.xl;",
-    );
-    expect(newSource).toContain('paddingTop: NEW_SESSION_SCREEN_TOP_PADDING,');
-  });
-
   it('uses the shared platform keyboard avoidance rule for the new-session composer', () => {
     const newSource = readFileSync(resolve(process.cwd(), 'app/sessions/new.tsx'), 'utf8');
-    const normalizedNewSource = newSource.replace(/\r\n/g, '\n');
 
     expect(newSource).toContain("import { keyboardAvoidingBehaviorForPlatform } from '@/session/mobileNativeShellLayout';");
-    expect(normalizedNewSource).toContain(`behavior={keyboardAvoidingBehaviorForPlatform(
+    expect(newSource).toContain(`behavior={keyboardAvoidingBehaviorForPlatform(
           Platform.OS === 'ios' ? 'ios' : Platform.OS === 'android' ? 'android' : 'web',
         )}`);
     expect(newSource).not.toContain("Platform.OS === 'ios' ? 'padding' : undefined");
@@ -768,16 +746,6 @@ describe('new session composer surface', () => {
     const selectDeviceStart = newSource.indexOf('const selectDevice = useCallback((option: NewSessionDeviceOption) => {');
     const selectDeviceEnd = newSource.indexOf('// 切 agent:', selectDeviceStart);
     const selectDeviceSource = newSource.slice(selectDeviceStart, selectDeviceEnd);
-    const selectWorkingDirStart = newSource.indexOf('const selectWorkingDir = useCallback((workingDir: string) => {');
-    const selectDialogueWorkspaceStart = newSource.indexOf('const selectDialogueWorkspace = useCallback(() => {');
-    const selectRecentProjectStart = newSource.indexOf('const selectRecentProject = useCallback((workingDir: string) => {');
-    const openProjectBrowseStart = newSource.indexOf('const openProjectBrowse = useCallback(() => {');
-    const selectWorkingDirSource = newSource.slice(selectWorkingDirStart, selectDialogueWorkspaceStart);
-    const selectDialogueWorkspaceSource = newSource.slice(selectDialogueWorkspaceStart, selectRecentProjectStart);
-    const selectRecentProjectSource = newSource.slice(selectRecentProjectStart, openProjectBrowseStart);
-    const browseHiddenToggleStyleStart = newSource.indexOf('browseHiddenToggle: {');
-    const browseHiddenToggleStyleEnd = newSource.indexOf('browseCheckbox: {', browseHiddenToggleStyleStart);
-    const browseHiddenToggleStyle = newSource.slice(browseHiddenToggleStyleStart, browseHiddenToggleStyleEnd);
     const createStart = newSource.indexOf('const create = useCallback(async () => {');
     const createEnd = newSource.indexOf('return (', createStart);
     const createSource = newSource.slice(createStart, createEnd);
@@ -874,18 +842,6 @@ describe('new session composer surface', () => {
     expect(newSource).toContain('if (!newSessionPreferencesLoaded) return;');
     expect(newSource).toContain('if (userTouchedDeviceRef.current) return;');
     expect(selectDeviceSource).toContain('userTouchedDeviceRef.current = true;');
-    expect(selectWorkingDirSource).toContain('setShowHiddenDirectories(false);');
-    expect(selectDialogueWorkspaceSource).toContain('setShowHiddenDirectories(false);');
-    expect(selectRecentProjectSource).toContain('setShowHiddenDirectories(false);');
-    expect(newSource).toContain("import { newSessionText } from '@/session/newSessionMessages';");
-    expect(newSource).toContain('accessibilityRole="checkbox"');
-    expect(newSource).toContain("accessibilityLabel={newSessionText('showHiddenDirectories')}");
-    expect(newSource).toContain('accessibilityState={{ checked: showHiddenDirectories, disabled: creating || undefined }}');
-    expect(newSource).toContain("{newSessionText('showHiddenDirectories')}");
-    expect(newSource).toContain("{newSessionText('emptyDirectory')}");
-    expect(newSource).not.toContain('显示隐藏文件夹');
-    expect(newSource).not.toContain('没有可显示的子目录。');
-    expect(browseHiddenToggleStyle).toContain('minHeight: 44');
     expect(storedAgentSource).toContain('if (selectedDeviceId) autoDefaultDeviceRef.current = selectedDeviceId;');
     expect(storedAgentSource).not.toContain('userTouchedRuntimeRef.current = true;');
     expect(newSource).toContain('void saveNewSessionPreferences({ agentKind: nextKind });');
@@ -919,20 +875,20 @@ describe('new session composer surface', () => {
     // Touch-down warm-up: the mic button prewarms the audio session + ASR
     // connection at pressIn, and voice startup claims that connection when fresh.
     expect(newSource).toContain('onPressIn={handleVoiceButtonPressIn}');
-    // 托管预热:凭登录态提前拿 voice-server 票据(BYOK/穿透路径已删除,
-    // 手机语音只保留 Cindy 官方托管路径)。
-    expect(newSource).toContain('prewarmMobileVoiceStart(selectedDeviceId, {');
+    // Service-mode aware prewarm: managed mode passes auth (voice-server
+    // tickets); explicit BYOK omits it so the user's own LiteLLM credential
+    // is resolved instead — the two planes never fall back into each other.
+    expect(newSource).toContain("prewarmMobileVoiceStart(selectedDeviceId, mode === 'byok' ? undefined : {");
     expect(newSource).toContain('getAccessToken: () => auth.getAccessToken(),');
     expect(newSource).toContain('refreshAccessToken: () => auth.refreshAccessToken(),');
     expect(newSource).toContain('apiFetch: auth.apiFetch,');
-    expect(newSource).toContain('const [prewarmedVoice, localVoiceInputHistory] = await Promise.all([');
+    expect(newSource).toContain('const [prewarmedVoice, localVoiceInputHistory, voiceServiceMode] = await Promise.all([');
     expect(newSource).toContain('takePrewarmedMobileVoiceAsr(selectedDeviceId) ?? Promise.resolve(null),');
-    expect(newSource).not.toContain('MobileVoiceServiceMode');
-    expect(newSource).not.toContain('LiteLlm');
-    expect(newSource).toContain('?? createMobileCindyVoiceCredential(selectedDeviceId);');
+    expect(newSource).toContain('getMobileVoiceServiceMode(),');
+    expect(newSource).toContain('? await resolveMobileVoiceCredentialFromLiteLlmSettings(selectedDeviceId)');
+    expect(newSource).toContain(': createMobileCindyVoiceCredential(selectedDeviceId));');
     expect(newSource).toContain('connectionProvider: (providerId: string) => voiceContext.createAsrConnection(providerId),');
     expect(newSource).toContain('voiceContext.createRefinerTarget(providerId, options),');
-    expect(newSource).toContain('voiceContext.warmRefiner(input),');
     expect(newSource).toContain('const composerVoicePlacement = resolveMobileComposerVoiceButtonPlacement({');
     expect(newSource).toContain('hasTrailingAction: composerShowCreateButton');
     expect(newSource).toContain('const voiceStatusVisible = Boolean(voiceError);');

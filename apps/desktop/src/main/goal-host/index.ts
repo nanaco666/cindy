@@ -8,19 +8,21 @@
 
 import { randomUUID } from 'node:crypto';
 
-import type { Maker } from '@cindy/maker-core';
+import type { Maker } from '@lizi/maker-core';
 
 import { createLogger } from '../logger.js';
 import {
   applyPendingAgentSwitchForDirectSend,
   isSessionInTurn,
+  wireSessionToIpc,
 } from '../maker-ipc/register.js';
 import { createMessage } from '../localDb/ipc/messages.js';
+import { getSessionRowSnapshot } from '../localDb/ipc/sessions.js';
 import { readGoalSettings, writeGoalSettings } from '../maker-host/goal-settings-store.js';
+import { hydrateSessionProvider } from '../maker-host/session-provider-store.js';
 import { readClaudeAccountUsageSnapshot } from '../usage/claudeAccountUsage.js';
 import { readCodexAccountUsageSnapshot } from '../usageBroadcaster.js';
 import { GoalController } from './controller';
-import { restoreSessionForGoal } from './sessionRestore.js';
 import { GoalStorage, type GoalDrizzleDb } from './storage';
 import type { GoalStatusUpdate, SessionLike } from './types';
 
@@ -44,11 +46,39 @@ export function startGoalController(deps: StartGoalControllerDeps): GoalControll
     getSession: (id): SessionLike | undefined => deps.maker.getSession(id),
     // 确保会话活着:已活直接返回;未活按存档 SessionMeta resume(spawn agent),
     // 仿 scheduler 心跳。修"开了对话没发消息 → goal 发不出第一轮"的根因。
-    ensureSession: (id): Promise<SessionLike | undefined> =>
-      restoreSessionForGoal(id, {
-        maker: deps.maker,
-        warn: (message, meta) => logger.warn(message, meta),
-      }),
+    ensureSession: async (id): Promise<SessionLike | undefined> => {
+      const live = deps.maker.getSession(id);
+      if (live) return live;
+      const meta = await deps.maker.getSessionMeta(id).catch(() => null);
+      if (!meta) {
+        logger.warn('[goal-host] cannot resume session (no meta)', { sessionId: id });
+        return undefined;
+      }
+      try {
+        const row = await getSessionRowSnapshot(id);
+        hydrateSessionProvider(id, row?.providerId ?? null);
+        const session = await deps.maker.createSession({
+          id,
+          agentKind: meta.agentKind,
+          workingDir: meta.workDir,
+          model: meta.model,
+          effort: meta.effort,
+          permissionMode: meta.permissionMode,
+          fastMode: meta.fastMode,
+          resumeSessionId: meta.sdkSessionId,
+          remoteHostId: meta.remoteHostId,
+          providerId: row?.providerId ?? undefined,
+        });
+        // 关键:把 resume 出来的会话事件接到 renderer 广播链路(同 scheduler runner.ts:370)。
+        // 不 wire → agent 在后台跑但 UI 收不到任何事件 → 表现为"设了 goal 却没反应"。
+        // wireSessionToIpc 按 session.id 幂等,重复调安全。
+        wireSessionToIpc(session);
+        return session;
+      } catch (err) {
+        logger.warn('[goal-host] ensureSession createSession failed', { sessionId: id, error: String(err) });
+        return undefined;
+      }
+    },
     applyPendingAgentSwitch: applyPendingAgentSwitchForDirectSend,
     isSessionInTurn,
     beforeDispatchUserTurn: deps.beforeDispatchUserTurn,

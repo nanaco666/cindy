@@ -35,7 +35,7 @@ export function registerSshHostStatusTool(
           statusChangedAt: new Date(s.statusChangedAt).toISOString(),
         });
       } catch (err) {
-        deps.logger?.error?.(`[cindy_ssh] ssh_host_status failed: ${String(err)}`);
+        deps.logger?.error?.(`[lizi_ssh] ssh_host_status failed: ${String(err)}`);
         return errorPayload('INTERNAL', `读取主机状态失败：${err instanceof Error ? err.message : String(err)}`);
       }
     },

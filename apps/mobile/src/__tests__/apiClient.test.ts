@@ -1,9 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import {
-  ApiError,
-  apiFetchRaw,
-  registerAccountUnavailableHandler,
-} from '@/api/client';
+import { ApiError, apiFetchRaw } from '@/api/client';
 
 describe('apiFetchRaw', () => {
   afterEach(() => {
@@ -119,41 +115,5 @@ describe('apiFetchRaw', () => {
       status: 403,
       message: 'remote disabled',
     });
-  });
-
-  it('notifies the terminal auth boundary for ACCOUNT_UNAVAILABLE', async () => {
-    const handler = vi.fn().mockResolvedValue(undefined);
-    const dispose = registerAccountUnavailableHandler(handler);
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(
-        async () =>
-          ({
-            ok: false,
-            status: 401,
-            json: async () => ({
-              error: {
-                code: 'ACCOUNT_UNAVAILABLE',
-                message: 'account unavailable',
-              },
-            }),
-          }) as Response,
-      ),
-    );
-
-    try {
-      await expect(
-        apiFetchRaw('/api/resource', {
-          baseUrl: 'https://resource.example.com',
-          token: 'access-token',
-        }),
-      ).rejects.toMatchObject({
-        code: 'ACCOUNT_UNAVAILABLE',
-        status: 401,
-      });
-      expect(handler).toHaveBeenCalledTimes(1);
-    } finally {
-      dispose();
-    }
   });
 });

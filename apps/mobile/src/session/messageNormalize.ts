@@ -9,8 +9,8 @@ import {
   sortMessagesByCreatedAt,
   type MessageNormalizeToolUse,
   type MessageToolResultPairing,
-} from '@cindy/maker-shared/message-normalize';
-import { isSyntheticTriggerText } from '@cindy/maker-shared/synthetic-trigger';
+} from '@lizi/maker-shared/message-normalize';
+import { isSyntheticTriggerText } from '@lizi/maker-shared/synthetic-trigger';
 import {
   buildPayloadToolDiff,
   extractPayloadToolResultMedia,
@@ -21,18 +21,6 @@ import {
   parseOrcaWorkerReport,
   type OrcaCollabCard,
 } from '@/session/orcaCollab';
-import {
-  parseMobilePersistedSessionReferenceMetadata,
-  type MobilePersistedSessionReferenceMetadata,
-} from '@/session/sessionReferences';
-import {
-  readSentPastedTextRanges,
-  readSentSlashCommandRanges,
-} from '@/session/sentMessageAtoms';
-import {
-  readAgentInputReferences,
-  type AgentInputReference,
-} from '@cindy/maker-shared/agent-input-projection';
 
 export type NormalizedRemoteMessageKind =
   | 'user'
@@ -52,25 +40,15 @@ export interface NormalizedRemoteMessage {
   body: string;
   /** user 消息正文包含产品引用编码；驱动跨端 marker/legacy 解析。 */
   quotesEncoded?: boolean;
-  /** user 长文本粘贴原子的精确 wire ranges；正文仍保留完整 Agent payload。 */
-  pastedTextRanges?: Array<{ start: number; end: number; display: string }>;
-  /** user Composer 确认过的 Slash ranges；空数组用于关闭历史启发式。 */
-  slashCommandRanges?: Array<{ start: number; end: number }>;
-  /** user Composer 的结构化语义引用；用于 fork / rewind 恢复同款 chip。 */
-  agentReferences?: AgentInputReference[];
   secondaryBody?: string;
   systemCardData?: Record<string, unknown>;
   systemCardType?: MobileSystemCardType;
   attachments?: NormalizedAttachment[];
-  /** user 专用：目标桌面落库的引用范围摘要，不含被引用消息正文。 */
-  sessionReferences?: MobilePersistedSessionReferenceMetadata[];
   media?: NormalizedToolMedia[];
   diff?: NormalizedToolDiff;
   align: 'user' | 'agent';
   createdAt: string;
   isStreaming?: boolean;
-  /** Host 在 SDK done 边界写入；后台自动续跑时每个 sealed assistant 都是正式回复。 */
-  turnCompleted?: boolean;
   turnCostUsd?: number;
   turnCostIsEstimate?: boolean;
   /** assistant 专用:本轮模型降级标记(agentMeta.modelMismatch,桌面 main 在 turn 结束检测命中时落库)。 */
@@ -83,8 +61,6 @@ export interface NormalizedRemoteMessage {
   isTurnFinalAssistant?: boolean;
   /** user 专用:scheduler 注入的消息来源(agentMeta.origin);驱动更紧的收起阈值与来源标签。 */
   automationOrigin?: NormalizedAutomationOrigin;
-  /** 共享 Cindy relay 派发的来源；用于移动端还原 Slack / Telegram 任务卡。 */
-  hookSource?: NormalizedHookSource;
   /**
    * user 专用:合成 UI 指令行(桌面「失败后继续 / 中断续跑」等隐藏 prompt,
    * `[UI_ACTION_TRIGGER]` 前缀,对齐桌面 makerChatStore 同名标记)。保留在
@@ -99,13 +75,6 @@ export interface NormalizedRemoteMessage {
 export interface NormalizedAutomationOrigin {
   scheduleId: string;
   scheduleName?: string;
-}
-
-export interface NormalizedHookSource {
-  im: 'slack' | 'telegram';
-  channelName?: string;
-  userText: string;
-  threadContext?: Array<{ author: string; text: string; isBot?: boolean }>;
 }
 
 export interface NormalizedAttachment {
@@ -333,9 +302,7 @@ export function normalizeRemoteMessages(messages: readonly RemoteMessage[]): Nor
       });
       continue;
     }
-    const rawBody = userContent ? userContent.text : contentToPreview(message.content);
-    const hookSource = message.role === 'user' ? readHookSource(message, rawBody) : undefined;
-    const body = hookSource?.userText ?? rawBody;
+    const body = userContent ? userContent.text : contentToPreview(message.content);
     result.push({
       key: messageNormalizeKey(message),
       source: message,
@@ -345,29 +312,12 @@ export function normalizeRemoteMessages(messages: readonly RemoteMessage[]): Nor
       body,
       attachments: userContent?.attachments,
       ...(userContent?.quotesEncoded === true ? { quotesEncoded: true } : {}),
-      sessionReferences: userContent?.sessionReferences,
-      ...(userContent?.pastedTextRanges?.length
-        ? { pastedTextRanges: userContent.pastedTextRanges }
-        : {}),
-      ...(userContent?.slashCommandRanges !== undefined
-        ? { slashCommandRanges: userContent.slashCommandRanges }
-        : {}),
-      ...(userContent?.agentReferences?.length
-        ? { agentReferences: userContent.agentReferences }
-        : {}),
-      align: message.role === 'user' && hookSource === undefined ? 'user' : 'agent',
+      align: message.role === 'user' ? 'user' : 'agent',
       createdAt: message.createdAt,
       isStreaming: readMessageStreaming(message) || undefined,
-      ...(message.role === 'assistant' && (
-        message.agentMeta?.turnCompleted === true ||
-        (readNumber(message.agentMeta?.turnCostUsd) ?? 0) > 0
-      )
-        ? { turnCompleted: true }
-        : {}),
       ...readTurnCost(message),
       ...readModelMismatch(message),
       ...(message.role === 'user' ? readAutomationOrigin(message) : {}),
-      ...(hookSource ? { hookSource } : {}),
     });
   }
 
@@ -394,35 +344,19 @@ function parseUserContent(content: unknown): {
   text: string;
   attachments: NormalizedAttachment[];
   quotesEncoded: boolean;
-  sessionReferences: MobilePersistedSessionReferenceMetadata[];
-  pastedTextRanges?: Array<{ start: number; end: number; display: string }>;
-  slashCommandRanges?: Array<{ start: number; end: number }>;
-  agentReferences?: AgentInputReference[];
 } {
   const parsed = parseMaybeJsonObject(content);
   if (!parsed) {
-    return {
-      text: contentToPreview(content),
-      attachments: [],
-      quotesEncoded: false,
-      sessionReferences: [],
-    };
+    return { text: contentToPreview(content), attachments: [], quotesEncoded: false };
   }
   const text = typeof parsed.text === 'string' ? parsed.text : contentToPreview(content);
-  const pastedTextRanges = readSentPastedTextRanges(parsed.pastedTextRanges, text);
-  const slashCommandRanges = readSentSlashCommandRanges(parsed.slashCommandRanges, text);
-  const agentReferences = readAgentInputReferences(parsed.agentReferences, text);
   return {
     text,
     quotesEncoded: parsed.quotesEncoded === true,
-    ...(pastedTextRanges ? { pastedTextRanges } : {}),
-    ...(slashCommandRanges !== undefined ? { slashCommandRanges } : {}),
-    ...(agentReferences.length > 0 ? { agentReferences } : {}),
     attachments: [
       ...readImageAttachments(parsed.images),
       ...readFileAttachments(parsed.files),
     ],
-    sessionReferences: parseMobilePersistedSessionReferenceMetadata(parsed.sessionReferences),
   };
 }
 
@@ -710,30 +644,6 @@ function readAutomationOrigin(message: RemoteMessage): Pick<NormalizedRemoteMess
       scheduleId,
       ...(scheduleName ? { scheduleName } : {}),
     },
-  };
-}
-
-/** Fail closed on unknown providers and bound all server-controlled display fields. */
-function readHookSource(message: RemoteMessage, fallbackBody: string): NormalizedHookSource | undefined {
-  const source = readRecord(message.agentMeta?.hookSource);
-  if (!source || (source.im !== 'slack' && source.im !== 'telegram')) return undefined;
-  const userText = (
-    typeof source.userText === 'string' ? source.userText : fallbackBody
-  ).slice(0, 20_000);
-  const channelName = readString(source.channelName)?.slice(0, 160);
-  const rawContext = Array.isArray(source.threadContext) ? source.threadContext.slice(0, 20) : [];
-  const threadContext = rawContext.flatMap((value) => {
-    const entry = readRecord(value);
-    const author = readString(entry?.author)?.slice(0, 128);
-    const text = readString(entry?.text)?.slice(0, 4_000);
-    if (!author || text == null) return [];
-    return [{ author, text, ...(entry?.isBot === true ? { isBot: true } : {}) }];
-  });
-  return {
-    im: source.im,
-    userText,
-    ...(channelName ? { channelName } : {}),
-    ...(threadContext.length > 0 ? { threadContext } : {}),
   };
 }
 

@@ -10,7 +10,6 @@ import {
   getDraft,
   getDraftPresence,
   saveDraft,
-  setComposerDraftOwner,
   subscribeDraft,
   subscribeDraftPresence,
   type ComposerDraft,
@@ -88,23 +87,6 @@ describe('draftHasContent', () => {
         }),
       ),
     ).toBe(true);
-  });
-});
-
-describe('owner isolation', () => {
-  it('does not expose a New Maker draft across data-owner switches', () => {
-    const key = '__new_maker_draft__';
-    setComposerDraftOwner('owner-a');
-    saveDraft(key, draft({ text: textDoc }));
-    expect(getDraft(key)).toBeDefined();
-
-    setComposerDraftOwner('local-v1');
-    expect(getDraft(key)).toBeUndefined();
-
-    setComposerDraftOwner('owner-a');
-    expect(getDraft(key)).toBeDefined();
-    clearDraft(key);
-    setComposerDraftOwner(null);
   });
 });
 

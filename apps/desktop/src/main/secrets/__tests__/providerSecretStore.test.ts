@@ -1,10 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const sessionState = vi.hoisted(() => ({
-  mode: 'signed-out' as 'signed-out' | 'local' | 'cloud',
-  dataOwnerId: null as string | null,
-}));
-
 // providerSecretStore 顶层 `import { app, safeStorage } from 'electron'` —— 这些测试
 // 注入自己的 SecretStorageIo,不会走默认 electronSecretIo,因此 electron mock 只为
 // 让 import 链在 node 测试环境下可加载(app.getPath 给个 tmp 目录即可)。
@@ -26,16 +21,9 @@ vi.mock('../../logger', () => ({
   }),
 }));
 
-vi.mock('../../appSessionState', () => ({
-  getActiveAppSession: () => ({ ...sessionState, generation: 0 }),
-  dataOwnerStorageKey: (ownerId: string) => ownerId,
-  LOCAL_DATA_OWNER_ID: 'local-v1',
-}));
-
 import {
   createProviderSecretStore,
   readGhostSecretTailFromIo,
-  setProviderSecretsClearedListener,
   type SecretStorageIo,
 } from '../providerSecretStore';
 import {
@@ -139,7 +127,6 @@ describe('providerSecretStore', () => {
 
   beforeEach(() => {
     io = createMemoryIo();
-    setProviderSecretsClearedListener(() => {});
   });
 
   it('set then get round-trips by provider id, keyed by storage name', () => {
@@ -202,7 +189,6 @@ describe('readGhostSecretTailFromIo(尾指纹读取 + 老键懒回填)', () => {
 
   beforeEach(() => {
     io = createMemoryIo();
-    setProviderSecretsClearedListener(() => {});
   });
 
   it('已有预截指纹时直接回,不碰密文', () => {
@@ -249,7 +235,6 @@ describe('providerSecretStore account boundary (clearAll + reconcileOwner)', () 
 
   beforeEach(() => {
     io = createMemoryIo();
-    setProviderSecretsClearedListener(() => {});
   });
 
   it('clearAll removes every registered provider secret', () => {
@@ -338,27 +323,5 @@ describe('providerSecretStore account boundary (clearAll + reconcileOwner)', () 
     expect(store.get('xd')).toBeNull();
     expect(store.get('mivo')).toBeNull();
     expect(store.getOwnerUserId()).toBe('user-B');
-  });
-
-  it('owner-scoped reconcile invalidates memory caches once per committed owner without clearing files', () => {
-    sessionState.mode = 'cloud';
-    sessionState.dataOwnerId = 'user-A';
-    const listener = vi.fn();
-    setProviderSecretsClearedListener(listener);
-    const ownerScopedIo = { ...io, ownerScoped: true };
-    const store = createProviderSecretStore(ownerScopedIo);
-
-    expect(store.reconcileOwner('user-A')).toEqual({ cleared: false });
-    expect(listener).toHaveBeenCalledTimes(1);
-    expect(store.reconcileOwner('user-A')).toEqual({ cleared: false });
-    expect(listener).toHaveBeenCalledTimes(1);
-
-    sessionState.dataOwnerId = 'user-B';
-    io.store.set('owner_user-A_provider_oauth_acme', 'token-A');
-    io.store.set('owner_user-B_provider_oauth_acme', 'token-B');
-    expect(store.reconcileOwner('user-B')).toEqual({ cleared: false });
-    expect(listener).toHaveBeenCalledTimes(2);
-    expect(io.store.get('owner_user-A_provider_oauth_acme')).toBe('token-A');
-    expect(io.store.get('owner_user-B_provider_oauth_acme')).toBe('token-B');
   });
 });

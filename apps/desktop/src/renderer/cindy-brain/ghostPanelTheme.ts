@@ -1,5 +1,5 @@
 /**
- * 意识面板主题下发:把主机当前主题的一组
+ * 意识面板主题下发(C3b,runtime-sandbox.md §8):把主机当前主题的一组
  * 白名单 token 值编成一段 CSS,经 webview.insertCSS 灌进意识沙箱页——
  * 意识内容用与主机同名的 var(--xxx) 就能拿到主题色,主题切换时重灌。
  *
@@ -49,7 +49,7 @@ const GHOST_THEME_TOKENS = [
   '--settings-theme-card-bg',
 ] as const;
 
-/** docs/design-rules/cindy-design-system.md §3 的字体栈(意识面板与主机同字)。 */
+/** DESIGN.md §3 的字体栈(意识面板与主机同字)。 */
 const GHOST_FONT_STACK = `Inter, system-ui, -apple-system, "Segoe UI", sans-serif`;
 
 /**

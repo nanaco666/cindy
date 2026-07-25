@@ -5,7 +5,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import type { Schedule } from '@cindy/maker-scheduler';
+import type { Schedule } from '@lizi/maker-scheduler';
 
 import { makeFormFromSchedule } from '../useScheduleForm';
 

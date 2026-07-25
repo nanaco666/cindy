@@ -1,4 +1,4 @@
-import type { BrowserControlRequest, BrowserControlResult } from '@cindy/browser-control-runtime';
+import type { BrowserControlRequest, BrowserControlResult } from '@lizi/browser-control-runtime';
 import { describe, expect, it } from 'vitest';
 
 import type { Recipe } from './recipe-loader.js';

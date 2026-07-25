@@ -55,9 +55,7 @@ export interface CcMeta {
     cacheCreationInputTokens?: number;
   };
 
-  // result / host turn 边界
-  /** Host 在 done 边界写到该 SDK turn 最后一条 assistant 上的持久化收尾标记。 */
-  turnCompleted?: boolean;
+  // result 专属
   numTurns?: number;
   durationMs?: number;
   durationApiMs?: number;
@@ -246,7 +244,7 @@ export interface Session {
    */
   extraDirs: string[];
   /**
-   * Remote codex (P2): 远端 SSH host alias (`@cindy/maker-remote-ssh`
+   * Remote codex (P2): 远端 SSH host alias (`@lizi/maker-remote-ssh`
    * ConnectionPool 里的 id)。设置后 codex agent 跑在远端机器, workingDir
    * 是远端路径。null/undefined = 本地。仅 Codex 支持。
    */

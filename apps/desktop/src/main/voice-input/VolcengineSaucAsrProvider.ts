@@ -1,7 +1,7 @@
 import WebSocket from 'ws';
 import { gzipSync, gunzipSync } from 'node:zlib';
 import type { ClientRequest, IncomingMessage } from 'node:http';
-import type { AsrEvent, AsrProvider, AudioTrace } from '@cindy/voice-input-core';
+import type { AsrEvent, AsrProvider, AudioTrace } from '@lizi/voice-input-core';
 import { createLogger } from '../logger.js';
 import { resamplePcm16 } from './RealtimeAsrWebSocketProvider.js';
 import { mergeRecoveredTranscript } from './transcriptMerge.js';

@@ -1,5 +1,5 @@
 /**
- * EmbeddingClient — OpenAI /v1/embeddings 兼容客户端 (XD Gateway)。
+ * EmbeddingClient — OpenAI /v1/embeddings 兼容客户端 (xdproxy 网关)。
  *
  * 设计:
  *   - 零运行依赖, 仅用全局 fetch (Node 18+ / Electron 28+)
@@ -111,7 +111,7 @@ export class EmbeddingClient {
       return { embeddings: result, modelUsed: req.model, tokensUsed: 0, cacheHits };
     }
 
-    // 2. 调 XD Gateway
+    // 2. 调 xdproxy
     const apiKey = this.getApiKey();
     if (!apiKey) {
       throw new EmbeddingError(
@@ -125,7 +125,7 @@ export class EmbeddingClient {
     // 3. 写回结果 + 缓存
     if (apiResponse.data.length !== missTexts.length) {
       throw new EmbeddingError(
-        `XD Gateway returned ${apiResponse.data.length} embeddings, expected ${missTexts.length}`,
+        `xdproxy returned ${apiResponse.data.length} embeddings, expected ${missTexts.length}`,
         'SERVER_ERROR',
       );
     }
@@ -135,7 +135,7 @@ export class EmbeddingClient {
       const vec = byIndex.get(j) ?? apiResponse.data[j]?.embedding;
       if (!vec) {
         throw new EmbeddingError(
-          `XD Gateway response missing embedding for input index ${j}`,
+          `xdproxy response missing embedding for input index ${j}`,
           'SERVER_ERROR',
         );
       }
@@ -238,7 +238,7 @@ export class EmbeddingClient {
       }
       const code = mapStatusToCode(res.status);
       throw new EmbeddingError(
-        `XD Gateway /v1/embeddings ${res.status}: ${parsedMsg || text || res.statusText}`,
+        `xdproxy /v1/embeddings ${res.status}: ${parsedMsg || text || res.statusText}`,
         code,
         res.status,
         text,

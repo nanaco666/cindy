@@ -5,6 +5,7 @@
  * Supports single-select (click to advance), multi-select (checkbox + Next),
  * Back navigation, Skip, and slide animation between steps.
  *
+ * Design reference: doc/design_docs/cc-agent-view.pen — AskUserQuestion frames
  *
  * Answer encoding (F7.5):
  *   - Single-select: label string (e.g. "Option A")

@@ -1,28 +1,31 @@
 ---
 id: attachments
 title: Attaching files and images, and referencing code
-summary: Paste / drag images, @-mention files, and add extra reference directories from the composer.
+summary: Paste / drag images, @-mention files or directories, and add extra reference directories from the composer.
+status: draft
 ---
 You can give the agent more than plain text.
 
 **Images:**
 
 - **Paste** an image from the clipboard, or **drag** image files onto the composer.
-- Accepted formats: **PNG, JPEG, WEBP, and GIF**.
+- Accepted formats: **PNG, JPEG, WEBP** (GIF is not supported — you'll see a toast if you try).
+- Per-image size cap: **5 MB** (after the app's internal transcode).
+- Per-message attachment cap: **9 images**. Excess files are dropped with a toast telling you how many were skipped.
 - Thumbnails appear above the input; click one to open a full-screen lightbox preview (remove from there, or ESC to close).
 
 **`@`-mention to reference files / directories / agents:**
 
 - Type `@` to open the picker. It shows files, directories, and registered agents in one flat list.
-- Scope: the picker scans your session's **working directory** (extra reference directories are given to the agent as context but aren't part of the `@` picker's file scan).
+- Scope: your session's working directory **plus** any extra reference directories you've added (below).
 - Matching is fuzzy, with a boost for prefix matches on the filename.
 
 **Extra reference directories (read-only context for the agent):**
 
-- Open the composer's **+** menu (to the left of the permission selector — it also hosts New Goal, Plan Mode, and Plugins) and add a directory from the OS folder dialog.
-- Per-session; up to **10** extra directories. This section shows for **Claude Code** sessions (Codex ignores extra directories).
-- Directories that are subdirectories of the current working directory are silently skipped (already covered). Parent / ancestor directories are flagged with a warning.
-- The agent gets read-only context for these directories — it can grep / read them, but writes still go to the working directory.
+- Click the folder-list button to the right of the permission selector in the composer to add a directory; pick it from the OS folder dialog.
+- Per-session; up to **10** extra directories per session.
+- Directories that are subdirectories of the current working directory are silently skipped (already covered). Parent directories are flagged with a warning.
+- The agent gets read-only access to these directories — it can grep / read but writes go to the working directory.
 
 **Notes:**
 

@@ -57,22 +57,7 @@ function isWorkspaceTsSourcePackage(originModulePath) {
   ));
 }
 
-// 登录 scenario fixtures 的生产空 stub(implementation-plan Step 0 WHAT4 生产
-// 排除双保险之 build-time 层;仅此一条 fixtures 排除条件)。expo export(release)
-// 以 NODE_ENV=production 跑 Metro → 整模块替换为 stub;dev(metro dev server /
-// expo export --dev)保留真模块。check-login-production-guard.mjs 以 sentinel
-// 双断言校验本条生效。
-const loginFixturesModule = '@cindy/auth-client/fixtures';
-const loginFixturesStub = path.join(
-  workspaceRoot,
-  'packages/auth-client/fixtures/loginScenarios.production-stub.ts',
-);
-
 config.resolver.resolveRequest = (context, moduleName, platform) => {
-  if (moduleName === loginFixturesModule && process.env.NODE_ENV === 'production') {
-    return { type: 'sourceFile', filePath: loginFixturesStub };
-  }
-
   if (moduleName === rnDevToolsSettingsManager) {
     const nativePlatform = platform === 'android' ? 'android' : 'ios';
     return context.resolveRequest(context, `${moduleName}.${nativePlatform}.js`, platform);

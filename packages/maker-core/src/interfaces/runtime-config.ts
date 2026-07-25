@@ -5,6 +5,8 @@
  * - AuthAdapter 只管"真鉴权"（API key / OAuth credentials home 等）
  * - AgentRuntimeConfig 装"接入端点"（proxy URL）+ host 侧业务行为配置
  * - 这样 CLI host 可以一行配置切换不走 proxy；业务 flag 也能交给用户 settings 调
+ *
+ * 详见 apps/desktop/doc/agent/xdt-maker-architecture.md §6.5
  */
 
 export interface AgentRuntimeConfig {

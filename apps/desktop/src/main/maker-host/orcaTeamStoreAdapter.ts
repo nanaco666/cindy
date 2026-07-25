@@ -1,4 +1,4 @@
-import type { OrcaBridgeMcpDeps, OrcaWorkerLink } from '@cindy/orca-workflow';
+import type { OrcaBridgeMcpDeps, OrcaWorkerLink } from '@fmfsaisai/orca-workflow';
 
 import type { OrcaWorkerLinkRecord, OrcaWorkerStatus } from '../localDb/orcaTeamStore.js';
 

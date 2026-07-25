@@ -20,15 +20,13 @@
 //              缺省 = 版本无关打包:占位版本 0.0.0,包不参与热更新
 //              (updateService 对 0.0.0 短路),开源社区拉仓即可打;
 //              bump 关键字会只读拉一次 CDN manifest 取基线——这是打包阶段
-//              仅存的 CDN 依赖,显式 x.y.z 则不再碰 CDN manifest。
-//              (agent 侧车二进制走缓存优先的 ensureBinary:已就位且版本
-//              匹配 pin 时跳过下载;首次打包仍需网络拉一次,之后可离线。)
+//              仅存的 CDN 依赖,显式 x.y.z 则完全离线。
 //   --skip-smoke                    跳过 packaged smoke test(调试用)
-//   --allow-unsigned                有版本打包放行无签名(win 缺 CINDY_WIN_SIGN_CMD /
+//   --allow-unsigned                有版本打包放行无签名(win 缺 NPKG_TOKEN /
 //                                   mac 缺 APPLE_APP_PASSWORD 时降级 ad-hoc)
-//   --no-sign                       主动跳过签名(即使签名配置在手;隐含 --allow-unsigned)。
-//                                   外部签名命令依赖发布方自己的环境,不具备
-//                                   该环境的机器打版本无关包时用它
+//   --no-sign                       主动跳过签名(即使凭证在手;隐含 --allow-unsigned)。
+//                                   npkg 签名产物下载要求内网,非内网机器打
+//                                   版本无关包时用它
 //
 // 产物: release/artifacts/<region>/<version|unversioned>/<platform-arch>/
 //   cindy-<version|unversioned>-Setup.exe / -<arch>.dmg / .deb   安装包
@@ -36,7 +34,7 @@
 //   build-info.json                                      发布侧唯一输入
 // =============================================================================
 
-import { execFileSync, execSync } from 'node:child_process';
+import { execSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -158,41 +156,14 @@ function runForgeMake({ platform, arch, region, version, noSign }) {
   for (const key of Object.keys(forgeEnv)) {
     if (key.toLowerCase() === 'nodefaultcurrentdirectoryinexepath') delete forgeEnv[key];
   }
-  // --no-sign:摘掉 CINDY_WIN_SIGN_CMD,让 forge postPackage 的内部 exe 签名一并
-  // 跳过(forge.config.ts 只认这个 env;不摘的话外部签名命令失败会挂整个 make)。
-  if (noSign) delete forgeEnv.CINDY_WIN_SIGN_CMD;
+  // --no-sign:摘掉 NPKG_TOKEN,让 forge postPackage 的内部 exe 签名一并跳过
+  // (它只认这个 env;不摘的话非内网机器会在签名产物下载 403 上挂整个 make)。
+  if (noSign) delete forgeEnv.NPKG_TOKEN;
   execSync(`npx electron-forge make --platform ${platform} --arch ${arch}`, {
     cwd: DESKTOP_ROOT,
     stdio: 'inherit',
     env: forgeEnv,
   });
-}
-
-/** PowerShell 单引号字面量转义:内嵌 ' 双写,防路径含单引号时命令截断。 */
-function psq(value) {
-  return String(value).replaceAll("'", "''");
-}
-
-/** 物理 ARM64 mac 检测(即使当前进程跑在 Rosetta 下也返回 true;Intel 无该 oid)。 */
-function isPhysicalArm64Mac() {
-  try {
-    return execSync('sysctl -in hw.optional.arm64', { encoding: 'utf8' }).trim() === '1';
-  } catch {
-    return false;
-  }
-}
-
-/** 跳过 smoke 启动前,用 lipo 确认 packaged 主二进制确实是目标架构。 */
-function verifyMacBinaryArch(appName, arch) {
-  const exePath = path.join(
-    DESKTOP_ROOT, 'out', `${appName}-darwin-${arch}`, `${appName}.app`, 'Contents', 'MacOS', appName,
-  );
-  const archInfo = execFileSync('lipo', ['-archs', exePath], { encoding: 'utf8' }).trim();
-  const want = arch === 'arm64' ? 'arm64' : 'x86_64';
-  if (!archInfo.includes(want)) {
-    console.error(`ERROR: expected ${want} binary but lipo reports "${archInfo}" (${exePath})`);
-    process.exit(1);
-  }
 }
 
 function fileEntry(role, filePath) {
@@ -225,98 +196,54 @@ function findSetupExe(makeBaseDir) {
 
 async function finishWindows({ artifactDir, baseName, appName, versionless, allowUnsigned, noSign }) {
   const makeBaseDir = path.join(DESKTOP_ROOT, 'out', 'make');
-  const packagedDir = path.join(DESKTOP_ROOT, 'out', `${appName}-win32-x64`);
   const setupExe = findSetupExe(makeBaseDir);
   if (!setupExe) {
     console.error(`ERROR: No Setup.exe found under ${makeBaseDir}`);
     process.exit(1);
   }
 
+  const installerPath = path.join(artifactDir, `${baseName}-Setup.exe`);
+  fs.copyFileSync(setupExe, installerPath);
+
   // 签名已全部在 forge make 阶段完成,这里不再后置补签:
-  //   - 包内 exe(Cindy/cindy-updater/loudness/node-pty/adb/rg)由
+  //   - 包内 exe(Cindy/cindy-updater/xdt-helper/loudness/node-pty/adb/rg)由
   //     forge.config.ts 的 postPackage signPackagedExes 签;
   //   - 安装器 Setup.exe + 卸载器 Uninstall <App>.exe 由 NSIS maker 的
   //     win.sign(customSign)签(Issue #998)。
-  // 两处都经 forge.config.ts 的 CINDY_WIN_SIGN_CMD 可插拔外部签名命令(发布方
-  // 在构建环境注入,仓库不绑定任何签名实现)。
-  // 门禁在拷贝进 release/artifacts 之前跑:失败时产物目录不留「看起来能用」
-  // 的未签名 Setup.exe。校验对象是 make 产出的源文件。
-  const winSignCmd = noSign ? undefined : process.env.CINDY_WIN_SIGN_CMD;
+  // 复制过来的 Setup.exe 已带签名,再走一遍 sign.py 只会与 make 阶段双签。
+  // 这里只保留「有版本必须能签」门禁 + 记录签名状态(依据 token 是否在手)。
+  const npkgToken = noSign ? undefined : process.env.NPKG_TOKEN;
   let installerSigned = false;
   if (noSign) {
     console.log('==> --no-sign: installer / uninstaller / internal exes are UNSIGNED');
-  } else if (winSignCmd) {
-    // make 阶段用同一签名命令已签全部 exe + installer + uninstaller;签名命令
-    // 失败会让 make 直接挂掉(forge fail closed)。这里再验一道「产物确实带
-    // Authenticode 签名块」,防外部命令被误配成 no-op(退出 0 但没签)时
-    // build-info 记下假阳性签名状态。只验签名存在,不验证书链——构建机不一定
-    // 信任发布证书,按 Valid 判定会误伤。
-    // 坏状态清单:NotSigned(没签)与 HashMismatch(签名后文件被改/签名损坏)
-    // 一票否决;UnknownError / NotTrusted 属「构建机不信任证书链」的正常状态,
-    // 放行——这正是不按 Valid 判定的原因。
-    const badSigStatuses = ['NotSigned', 'HashMismatch'];
-    // execFileSync 数组传参:不经 cmd.exe,路径里的 % ^ & 等元字符不会被外层
-    // shell 展开;psq 只需管 PowerShell 单引号字面量这一层。
-    const sigStatus = execFileSync(
-      'powershell',
-      ['-NoProfile', '-Command', `(Get-AuthenticodeSignature '${psq(setupExe)}').Status`],
-      { encoding: 'utf8' },
-    ).trim();
-    if (badSigStatuses.includes(sigStatus)) {
-      console.error(`ERROR: CINDY_WIN_SIGN_CMD 已设置且 make 成功,但 Setup.exe 签名状态为 ${sigStatus}。`);
-      console.error('       外部签名命令疑似 no-op 或签名后文件被改动,请检查 CINDY_WIN_SIGN_CMD 配置与构建流程。');
-      process.exit(1);
-    }
-    // 再全量扫一遍 packaged 目录:internalExesSigned 不能只凭签名命令在手就记
-    // true——forge 的固定清单/递归范围若漏了某个包内 exe(热更 ZIP 正是从这个
-    // 目录打的),这里兜底抓出来 fail closed,漏签 exe 在严格策略机器上会被拦。
-    const badExes = execFileSync(
-      'powershell',
-      [
-        '-NoProfile',
-        '-Command',
-        `Get-ChildItem -Path '${psq(packagedDir)}' -Recurse -Filter *.exe | Get-AuthenticodeSignature | Where-Object { $_.Status -eq 'NotSigned' -or $_.Status -eq 'HashMismatch' } | ForEach-Object { $_.Status.ToString() + ' ' + $_.Path }`,
-      ],
-      { encoding: 'utf8' },
-    ).trim();
-    if (badExes) {
-      console.error('ERROR: packaged 目录内以下 exe 签名不可用(未签 / 签名后被改动;forge 签名清单可能有遗漏):');
-      console.error(badExes);
-      process.exit(1);
-    }
+  } else if (npkgToken) {
+    // make 阶段用同一 token 已签全部 exe + installer + uninstaller。
     installerSigned = true;
   } else if (!versionless && !allowUnsigned) {
-    console.error('ERROR: 有版本的 Windows 打包要求 CINDY_WIN_SIGN_CMD(安装包 / 卸载器 / 内部 exe 均在 forge make 阶段签名)。');
+    console.error('ERROR: 有版本的 Windows 打包要求 NPKG_TOKEN(安装包 / 卸载器 / 内部 exe 均在 forge make 阶段签名)。');
     console.error('       缺签名的包在严格策略 Windows 机器上热更/启动/卸载会被拦。');
     console.error('       确要产出未签名包时加 --allow-unsigned。');
     process.exit(1);
   } else {
-    console.log('==> CINDY_WIN_SIGN_CMD not set — installer / uninstaller / internal exes are UNSIGNED');
+    console.log('==> NPKG_TOKEN not set — installer / uninstaller / internal exes are UNSIGNED');
   }
-
-  const installerPath = path.join(artifactDir, `${baseName}-Setup.exe`);
-  fs.copyFileSync(setupExe, installerPath);
 
   const files = [fileEntry('installer', installerPath)];
 
   // 热更 ZIP 只对有版本的包有意义(版本无关包不参与热更新)。
   if (!versionless) {
+    const packagedDir = path.join(DESKTOP_ROOT, 'out', `${appName}-win32-x64`);
     const hotfixZipPath = path.join(artifactDir, `${baseName}-hotfix.zip`);
     console.log('==> Creating hotfix ZIP from packaged app...');
     if (fs.existsSync(hotfixZipPath)) fs.unlinkSync(hotfixZipPath);
-    execFileSync(
-      'powershell',
-      [
-        '-NoProfile',
-        '-Command',
-        `Compress-Archive -Path '${psq(packagedDir)}\\*' -DestinationPath '${psq(hotfixZipPath)}'`,
-      ],
+    execSync(
+      `powershell -NoProfile -Command "Compress-Archive -Path '${packagedDir}\\*' -DestinationPath '${hotfixZipPath}'"`,
       { stdio: 'inherit' },
     );
     files.push(fileEntry('hotfix', hotfixZipPath));
   }
 
-  return { files, signing: { installerSigned, internalExesSigned: Boolean(winSignCmd) } };
+  return { files, signing: { installerSigned, internalExesSigned: Boolean(npkgToken) } };
 }
 
 async function finishDarwin({ artifactDir, baseName, appName, arch, versionless, allowUnsigned, noSign }) {
@@ -407,10 +334,8 @@ async function main() {
   // ensureBinary 的 CDN fallback 按此 region 选择清单基址；必须早于二进制准备。
   process.env.CINDY_AUTH_REGION = region;
   // mac 签名身份按区域从 release-regions.json 注入(文件缺失时静默跳过,
-  // 届时签名要求身份齐备,由 resolveAppleIdentity fail closed)。只在 darwin
-  // 且未显式跳签时加载:appPasswordEnv 声明即承诺(指向空 env 会抛错),
-  // 不该拦住 win/linux 或 --no-sign 的打包。
-  if (platform === 'darwin' && !noSign) applyMacSigningConfigToEnv(region);
+  // 届时签名要求身份齐备,由 resolveAppleIdentity fail closed)。
+  applyMacSigningConfigToEnv(region);
 
   if (platform !== process.platform) {
     console.error(`ERROR: 不支持交叉打包(当前 ${process.platform},目标 ${platform});请在目标平台机器上执行。`);
@@ -429,17 +354,16 @@ async function main() {
   console.log(`    version:  ${versionless ? `(版本无关,占位 ${version},不参与热更新)` : version}`);
   console.log('='.repeat(60));
 
-  // Linux 只校验 sqlite-vec 等原生运行资产。Claude/Codex 各平台都不进安装包
-  // (forge extraResource 不含它们),由 packaged runtime 首启时复用系统 CLI 或
-  // 安装到 userData/agent-runtime,打包阶段无需预下载。ripgrep 是唯一进包的
-  // agent 二进制,这里按 pin 预 ensure(缓存命中即跳过),在昂贵的 forge make
-  // 之前尽早失败;forge prePackage 的 stageRipgrep 仍会兜底校验。
+  // Linux 只校验 sqlite-vec 等原生运行资产；Claude/Codex 由 packaged
+  // runtime 在首启时复用系统 CLI 或安装到 userData/agent-runtime。
   if (platform === 'linux') {
     await ensureLinuxRuntimeAssets();
     logLinuxPackagingRequirements();
   } else {
     for (const platformKey of archs.map((a) => `${platform}-${a}`)) {
-      await ensureBinary('ripgrep', platformKey);
+      for (const kind of ['claude', 'codex', 'ripgrep']) {
+        await ensureBinary(kind, platformKey);
+      }
     }
   }
 
@@ -461,14 +385,6 @@ async function main() {
   for (const arch of archs) {
     const platformKey = `${platform}-${arch}`;
 
-    // 本轮目标产物目录构建前先清:构建失败时不能给同一路径留上一轮的旧
-    // build-info.json / 安装包(看起来像可发布结果,易被人工分发或发布侧误取)。
-    const artifactDir = path.join(
-      RELEASE_DIR,
-      ...artifactRelDir({ region, version, versionless, platformKey }).split('/'),
-    );
-    fs.rmSync(artifactDir, { recursive: true, force: true });
-
     cleanOutDir();
     runForgeMake({ platform, arch, region, version, noSign });
 
@@ -481,52 +397,44 @@ async function main() {
 
     if (skipSmoke) {
       console.log('==> Skipping packaged smoke test (--skip-smoke)');
-    } else if (platform === 'darwin' && arch === 'arm64' && !isPhysicalArm64Mac()) {
-      // Intel mac 缺省双架构连打时,arm64 产物在 x64 硬件上起不来(smoke 脚本只
-      // 处理了「arm64 宿主打 x64 包」的镜像场景)。lipo 验完二进制架构即跳过启动。
-      verifyMacBinaryArch(appName, arch);
-      console.log('==> Skipping smoke: arm64 artifact not runnable on Intel host (binary arch verified)');
     } else {
       runSmokeTest(platform, arch, region);
     }
 
-    // 产物目录(本轮开始前已清空)
+    // 产物目录
+    const artifactDir = path.join(
+      RELEASE_DIR,
+      ...artifactRelDir({ region, version, versionless, platformKey }).split('/'),
+    );
+    fs.rmSync(artifactDir, { recursive: true, force: true });
     fs.mkdirSync(artifactDir, { recursive: true });
 
-    // 归集途中(如 DMG/hotfix ZIP 制作)失败时清掉本轮产物目录:安装器已拷入
-    // 而 build-info.json 未写的半成品目录看起来像可发布结果,不能留。
-    let files, signing, buildInfoPath;
-    try {
-      ({ files, signing } = await finishers[platform]({
-        artifactDir,
-        baseName,
-        appName,
-        arch,
-        version,
-        versionless,
-        allowUnsigned,
-        noSign,
-      }));
+    const { files, signing } = await finishers[platform]({
+      artifactDir,
+      baseName,
+      appName,
+      arch,
+      version,
+      versionless,
+      allowUnsigned,
+      noSign,
+    });
 
-      const buildInfo = buildBuildInfo({
-        version,
-        versionless,
-        region,
-        platform,
-        arch,
-        commitSha: meta.commitSha,
-        electronVersion: meta.electronVersion,
-        schemaVersionMax: meta.schemaVersionMax,
-        migrationFiles: meta.migrationFiles,
-        files,
-        signing,
-      });
-      buildInfoPath = path.join(artifactDir, 'build-info.json');
-      fs.writeFileSync(buildInfoPath, JSON.stringify(buildInfo, null, 2) + '\n');
-    } catch (err) {
-      fs.rmSync(artifactDir, { recursive: true, force: true });
-      throw err;
-    }
+    const buildInfo = buildBuildInfo({
+      version,
+      versionless,
+      region,
+      platform,
+      arch,
+      commitSha: meta.commitSha,
+      electronVersion: meta.electronVersion,
+      schemaVersionMax: meta.schemaVersionMax,
+      migrationFiles: meta.migrationFiles,
+      files,
+      signing,
+    });
+    const buildInfoPath = path.join(artifactDir, 'build-info.json');
+    fs.writeFileSync(buildInfoPath, JSON.stringify(buildInfo, null, 2) + '\n');
 
     results.push({ platformKey, artifactDir, files, buildInfoPath });
   }

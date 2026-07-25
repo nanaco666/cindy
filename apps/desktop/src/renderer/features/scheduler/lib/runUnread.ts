@@ -1,4 +1,4 @@
-import type { ScheduleRun } from '@cindy/maker-scheduler';
+import type { ScheduleRun } from '@lizi/maker-scheduler';
 
 type RunUnreadFields = Pick<ScheduleRun, 'readAt' | 'status'>;
 

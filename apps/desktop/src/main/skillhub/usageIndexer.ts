@@ -3,7 +3,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import type Database from 'better-sqlite3';
-import { brandUserDataDirName } from '@cindy/maker-shared/brand-identity';
+import { brandUserDataDirName } from '@lizi/maker-shared/brand-identity';
 import { CURRENT_CINDY_REGION } from '../../shared/brandRegion.js';
 
 import { getRawDb } from '../localDb';

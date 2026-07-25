@@ -6,21 +6,21 @@ const callTool = (name: string, args: Record<string, unknown> = {}) => ({
   toolParams: { name, args },
 });
 
-describe("cindy_contacts Codex approval policy", () => {
+describe("lizi_contacts Codex approval policy", () => {
   it("auto-approves discovery, reads, and ordinary local writes", () => {
     expect(
       canAutoApproveContactsMcpTool({ toolName: "list_tools", toolParams: {} }),
     ).toBe(true);
     expect(
       canAutoApproveContactsMcpTool(
-        callTool("contacts_search", { query: "Carol" }),
+        callTool("contacts_search", { query: "Dash" }),
       ),
     ).toBe(true);
     expect(
       canAutoApproveContactsMcpTool(
         callTool("contacts_create", {
           kind: "person",
-          display_name: "Carol",
+          display_name: "Dash",
         }),
       ),
     ).toBe(true);

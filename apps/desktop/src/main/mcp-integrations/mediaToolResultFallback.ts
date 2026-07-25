@@ -16,7 +16,7 @@
  * 不依赖 session 归属。
  */
 
-import type { MediaToolResultPayload } from '@cindy/mcps';
+import type { MediaToolResultPayload } from 'lizi-mcps';
 import { createLogger } from '../logger.js';
 
 const log = createLogger('mediaToolResultFallback');
@@ -39,7 +39,7 @@ function sweep(): void {
   while (pending.length > MAX_ENTRIES) pending.shift();
 }
 
-/** @cindy/mcps `onMediaToolResult` dep 的实现。永不 throw。 */
+/** lizi-mcps `onMediaToolResult` dep 的实现。永不 throw。 */
 export function recordMediaToolResult(payload: MediaToolResultPayload): void {
   try {
     sweep();

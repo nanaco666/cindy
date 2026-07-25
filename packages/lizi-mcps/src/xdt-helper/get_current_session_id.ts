@@ -1,4 +1,4 @@
-import { BRAND_NAME } from '@cindy/maker-shared/branding';
+import { BRAND_NAME } from '@lizi/maker-shared/branding';
 import type { XdtHelperToolRegistry } from '../lizi_xdtHelperToolRegistry.js';
 import { errorPayload, okPayload } from './_payload.js';
 

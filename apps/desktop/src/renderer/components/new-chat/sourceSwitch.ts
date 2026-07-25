@@ -16,7 +16,7 @@ import {
   sourcesForModel,
   type AgentKind,
   type ProviderView,
-} from '@cindy/model-providers';
+} from '@lizi/model-providers';
 import { CHATGPT_MODEL_PREFIX, XAI_MODEL_PREFIX } from '../../../shared/subscriptionModels';
 
 // 仅用于二级菜单分组展示, 不参与持久化或 onModelChange 数据流。
@@ -197,9 +197,9 @@ export function resolveSourceSwitch(args: {
 }
 
 // resolveEffort / resolveProviderSwitchEffort(切模型 / 同模型切来源的落档优先级)已下沉到共享包
-// `@cindy/model-providers`(手机版模型选择列表要用同一套口径)。这里 re-export 保持 renderer
+// `@lizi/model-providers`(手机版模型选择列表要用同一套口径)。这里 re-export 保持 renderer
 // 既有 import 路径不变,语义与历史版本逐字一致。
-export { resolveEffort, resolveProviderSwitchEffort } from '@cindy/model-providers';
+export { resolveEffort, resolveProviderSwitchEffort } from '@lizi/model-providers';
 
 /**
  * 「显式选中的来源已断开」判定 —— 纯函数。会话把来源(providerId)持久化在 DB 里,
@@ -225,7 +225,7 @@ export function isSelectedSourceDisconnected(args: {
   return !sources.some((p) => p.id === selectedProviderId);
 }
 
-// 「按供应商分段」的列表派生 + 类型已下沉到共享包 `@cindy/model-providers`(让 main 侧 IM /model
+// 「按供应商分段」的列表派生 + 类型已下沉到共享包 `@lizi/model-providers`(让 main 侧 IM /model
 // 复用同一份逻辑,两端模型列表口径一致)。这里 re-export 保持 renderer 既有 import 路径不变。
-export { buildProviderSections } from '@cindy/model-providers';
-export type { SectionModel, ProviderSection } from '@cindy/model-providers';
+export { buildProviderSections } from '@lizi/model-providers';
+export type { SectionModel, ProviderSection } from '@lizi/model-providers';

@@ -1,5 +1,5 @@
 /**
- * 远程文件浏览(网格为主视图,对标 iOS Files)。
+ * 远程文件浏览(网格为主视图,对标 iOS Files;设计稿 docs/design_docs/mobile-file-browser.pen F1/F2/F3/F7/F9)。
  *
  * 数据链路:被控端 `file-browser:remote-op` 聚合通道(与桌面 workdir-browse 同源),
  * workdir 相对路径语义,浏览范围收敛在会话工作目录内(被控端 workdir guard 决定)。
@@ -8,7 +8,7 @@
  */
 import * as Clipboard from 'expo-clipboard';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
-import { fsWatchTopic } from '@cindy/device-link';
+import { fsWatchTopic } from '@lizi/device-link';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowDownAZ,
@@ -417,11 +417,7 @@ export default function RemoteFileBrowserScreen() {
         queueComposerAttachment(sessionId, attachment);
         router.navigate({
           pathname: '/sessions/[sessionId]',
-          params: {
-            sessionId,
-            deviceId,
-            focusComposerRequestKey: String(Date.now()),
-          },
+          params: { sessionId, deviceId },
         });
         return;
       }
@@ -429,12 +425,7 @@ export default function RemoteFileBrowserScreen() {
     const merged = mergePathIntoComposerDraft(sessionId, item.relPath, item.kind);
     router.navigate({
       pathname: '/sessions/[sessionId]',
-      params: {
-        sessionId,
-        deviceId,
-        draft: merged,
-        focusComposerRequestKey: String(Date.now()),
-      },
+      params: { sessionId, deviceId, draft: merged },
     });
   }, [absolutePathOf, deviceId, router, sessionId]);
 
@@ -527,11 +518,7 @@ export default function RemoteFileBrowserScreen() {
       setLightbox(null);
       router.navigate({
         pathname: '/sessions/[sessionId]',
-        params: {
-          sessionId,
-          deviceId,
-          focusComposerRequestKey: String(Date.now()),
-        },
+        params: { sessionId, deviceId },
       });
     },
   }), [deviceId, router, sessionId]);
@@ -548,12 +535,7 @@ export default function RemoteFileBrowserScreen() {
     const merged = mergePathIntoComposerDraft(sessionId, relPath, 'dir');
     router.navigate({
       pathname: '/sessions/[sessionId]',
-      params: {
-        sessionId,
-        deviceId,
-        draft: merged,
-        focusComposerRequestKey: String(Date.now()),
-      },
+      params: { sessionId, deviceId, draft: merged },
     });
   }, [deviceId, relPath, router, sessionId]);
 

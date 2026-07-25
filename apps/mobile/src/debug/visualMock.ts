@@ -1,5 +1,5 @@
-import { SHARED_REMOTE_CONTROL_FIXTURE } from '@cindy/maker-shared/fixtures';
-import type { DeviceView, LinkAcceptPayload } from '@cindy/device-link';
+import { SHARED_REMOTE_CONTROL_FIXTURE } from '@lizi/maker-shared/fixtures';
+import type { DeviceView, LinkAcceptPayload } from '@lizi/device-link';
 import type { MobileUser } from '@/auth/AuthContext';
 import { MOBILE_VISUAL_MOCK_REALDATA_URL } from '@/config/env';
 import type { DeviceLinkContextValue } from '@/device-link/DeviceLinkContext';

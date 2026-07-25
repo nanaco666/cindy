@@ -14,7 +14,6 @@ const VALID_MANIFEST = {
   oauthBrokerApiBaseUrl: 'https://oauth.example.com',
   ossApiBaseUrl: 'https://oss.example.com',
   heartbeatUrl: 'https://heartbeat.example.com',
-  telegramHookWsUrl: 'wss://telegram-hook.example.com',
   slackHookWsUrl: 'wss://slack-hook.example.com',
   websiteUrl: 'https://www.example.com',
   modelAccessApiBaseUrl: 'https://model-access.example.com',
@@ -164,7 +163,6 @@ describe('allowHttp 宽松模式(仅 dev 本地文件路径)', () => {
     apiBaseUrl: 'http://localhost:3333',
     authApiBaseUrl: 'http://localhost:3344',
     deviceLinkApiBaseUrl: 'http://localhost:3335',
-    telegramHookWsUrl: 'ws://localhost:3347',
     slackHookWsUrl: 'ws://localhost:3346',
   };
 

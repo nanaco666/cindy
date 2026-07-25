@@ -3,7 +3,7 @@
  * 关键外部契约, 防止重构 / 加渠道时静默漂移:
  *   - session id 格式 `feishu_{botAppId}_{openId}`(决定老用户能否续上历史会话)
  *   - sessions 表渠道专属列(feishuBotAppId / feishuOpenId)与 source='feishu'
- *   - vendorOptions { feishuChatId, source:'feishu' }(决定 cindy_feishu_bot
+ *   - vendorOptions { feishuChatId, source:'feishu' }(决定 lizi_feishu_bot
  *     MCP 注入, 见 lizi-mcps providers.ts isEnabled 门控)
  *   - 默认 title / ack emoji
  */
@@ -12,26 +12,13 @@ import { describe, expect, it, vi } from 'vitest';
 import os from 'node:os';
 import path from 'node:path';
 
-const scopeMocks = vi.hoisted(() => ({
-  owner: 'cloud-a',
-  root: '',
-  join: null as unknown as (...parts: string[]) => string,
-  claimLegacy: vi.fn(),
-}));
-
 vi.mock('electron', () => ({
   app: {
     getPath: vi.fn(() => path.join(os.tmpdir(), 'xdt-feishu-adapter-test')),
   },
 }));
 
-vi.mock('../../ownerScopedStorage', () => ({
-  ownerScopedImUserDataPath: (...parts: string[]) =>
-    scopeMocks.join(scopeMocks.root, 'owners', scopeMocks.owner, ...parts),
-  claimLegacyImPath: scopeMocks.claimLegacy,
-}));
-
-import type { FeishuIM } from '@cindy/im';
+import type { FeishuIM } from 'lizi-im';
 import { buildFeishuAdapter } from '../adapter';
 
 const fakeIm = {} as unknown as FeishuIM;
@@ -44,8 +31,6 @@ const CONFIG = {
 
 describe('feishu ImChannelAdapter characterization', () => {
   const adapter = buildFeishuAdapter(fakeIm, CONFIG);
-  scopeMocks.root = path.join(os.tmpdir(), 'xdt-feishu-adapter-test');
-  scopeMocks.join = path.join;
 
   it('channel / source 恒为 feishu', () => {
     expect(adapter.channel).toBe('feishu');
@@ -53,7 +38,9 @@ describe('feishu ImChannelAdapter characterization', () => {
   });
 
   it('session id 格式 feishu_{botAppId}_{openId} — 跨重启稳定, 老用户续上历史', () => {
-    expect(adapter.sessions.sessionIdFor('cli_abc', 'ou_xyz')).toBe('feishu_cli_abc_ou_xyz');
+    expect(adapter.sessions.sessionIdFor('cli_abc', 'ou_xyz')).toBe(
+      'feishu_cli_abc_ou_xyz',
+    );
   });
 
   it('渠道专属插入列为 feishuBotAppId / feishuOpenId', () => {
@@ -63,7 +50,7 @@ describe('feishu ImChannelAdapter characterization', () => {
     });
   });
 
-  it('vendorOptions 注入 feishuChatId + source=feishu(cindy_feishu_bot MCP 门控)', () => {
+  it('vendorOptions 注入 feishuChatId + source=feishu(lizi_feishu_bot MCP 门控)', () => {
     expect(adapter.buildVendorOptions('ou_xyz')).toEqual({
       feishuChatId: 'ou_xyz',
       source: 'feishu',
@@ -83,18 +70,7 @@ describe('feishu ImChannelAdapter characterization', () => {
   it('workingDir = userData/im-working-dir/{botAppId}(同 bot 共享)', () => {
     const dir = adapter.sessions.ensureWorkingDir('cli_abc');
     expect(dir).toBe(
-      path.join(
-        os.tmpdir(),
-        'xdt-feishu-adapter-test',
-        'owners',
-        'cloud-a',
-        'im-working-dir',
-        'cli_abc',
-      ),
-    );
-    expect(scopeMocks.claimLegacy).toHaveBeenCalledWith(
       path.join(os.tmpdir(), 'xdt-feishu-adapter-test', 'im-working-dir', 'cli_abc'),
-      dir,
     );
   });
 });

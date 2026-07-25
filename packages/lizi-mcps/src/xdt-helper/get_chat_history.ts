@@ -12,7 +12,7 @@
  *  - 默认排除 rewindAt IS NOT NULL 的软删消息, includeRewound=true 时全量返
  */
 
-import { BRAND_NAME } from '@cindy/maker-shared/branding';
+import { BRAND_NAME } from '@lizi/maker-shared/branding';
 import { z } from 'zod';
 
 import type { XdtHelperToolRegistry } from '../lizi_xdtHelperToolRegistry.js';
@@ -48,9 +48,6 @@ const DEFAULT_WORKDIR_WINDOW_DAYS = 180;
 const DEFAULT_WORKDIR_WINDOW_MS = DEFAULT_WORKDIR_WINDOW_DAYS * 24 * 60 * 60 * 1000;
 
 const DESCRIPTION = [
-  'Cross-device read-only history accepts exactly one session_id in the form deviceId::sessionId.',
-  'The source device must be online with an active authorized device-link; remote ids cannot be mixed with local or other remote ids.',
-  'Remote reads preserve the same filters, ordering, and cursor pagination. If a payload is too large, retry with a smaller limit.',
   '拉取本地数据库里的原始 message 数据 (raw role + JSON.parse 后的 content + agentMeta),',
   '按 session_ids / workdir / 时间段 / agent_kind / roles 任意组合过滤。',
   '',
@@ -96,7 +93,6 @@ export function registerGetChatHistoryTool(
     category: 'history',
     description: DESCRIPTION,
     inputShape: {
-      // device-link hosts may use one `deviceId::sessionId`; the host enforces the trusted route.
       session_ids: z
         .array(z.string().min(1))
         .max(50)
@@ -206,7 +202,6 @@ export function registerGetChatHistoryTool(
         toMs,
         agentKind: agent_kind ?? null,
         roles: effectiveRoles,
-        rolesDefaulted: roles === undefined,
         includeRewound: include_rewound,
         limit,
         cursor: cursorObj,
@@ -219,7 +214,7 @@ export function registerGetChatHistoryTool(
             `${BRAND_NAME} 本地数据库尚未就绪(典型: app 仍在启动或用户未登录), 请告知用户稍等几秒后重试。`,
           );
         }
-        return errorPayload(result.errorCode, result.message);
+        return errorPayload('INTERNAL', result.message);
       }
       const { page } = result;
       // Token 优化: session 元数据 (workingDir / agentKind / title) 对同一 sessionId

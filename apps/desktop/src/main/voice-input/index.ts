@@ -17,13 +17,9 @@ import {
   type TextModelClient,
   type VoiceInputRendererEvent,
   type VoiceTimelineEvent,
-} from '@cindy/voice-input-core';
+} from '@lizi/voice-input-core';
 import { createLogger } from '../logger.js';
-import { getAppCapabilities } from '../appCapabilities.js';
-import {
-  desktopCodexAuthAdapter,
-  readOwnerScopedXdGatewayKey,
-} from '../maker-host/auth-adapters.js';
+import { desktopCodexAuthAdapter, readClaudeApiKey } from '../maker-host/auth-adapters.js';
 import { claudeUpstreamEndpoint } from '../maker-host/runtime-configs.js';
 import { throwIpcError } from '../utils/ipcValidate.js';
 import {
@@ -42,7 +38,6 @@ import {
 } from './LiteLlmTranscriptionProvider.js';
 import {
   LiteLlmTextModelClient,
-  makeRefinerPromptCacheKey,
   prewarmLiteLlmRefinerEndpoint,
 } from './LiteLlmTextModelClient.js';
 import {
@@ -52,7 +47,6 @@ import {
 } from './RealtimeAsrWebSocketProvider.js';
 import { VolcengineSaucAsrProvider } from './VolcengineSaucAsrProvider.js';
 import {
-  CINDY_MANAGED_REFINER_PROVIDER,
   CindyVoiceRunContext,
   isCindyVoiceServiceReady,
 } from './CindyVoiceSessionClient.js';
@@ -99,7 +93,6 @@ import {
 import {
   getVoiceInputModelSelection,
   getVoiceInputModelSelectionConfigPath,
-  effectiveVoiceInputServiceMode,
   reloadVoiceInputModelSelection,
   setVoiceInputModelSelection,
   voiceInputModelSelectionSignature,
@@ -108,7 +101,6 @@ import {
   type VoiceInputServiceMode,
 } from './VoiceInputModelSelection.js';
 import {
-  DEFAULT_VOICE_INPUT_REFINER_PROVIDER_KIND,
   getVoiceInputRefinerProfile,
   getVoiceInputRefinerProfiles,
   resolveVoiceInputRefinerProviderKindAlias,
@@ -143,11 +135,7 @@ function isManagedVoiceAsrProfile(profile: VoiceInputAsrProfile): boolean {
  * not fall back into each other in either direction.
  */
 function isVoiceInputByokMode(): boolean {
-  const selection = readActiveVoiceInputModelSelection('service-mode');
-  return effectiveVoiceInputServiceMode(
-    selection.serviceMode,
-    getAppCapabilities().canUseCindyAccountServices,
-  ) === 'byok';
+  return readActiveVoiceInputModelSelection('service-mode').serviceMode === 'byok';
 }
 
 type StartResult =
@@ -267,13 +255,8 @@ const VOICE_INPUT_REFINEMENT_CACHE_SCOPE = 'voice-input-refinement';
 // IDLE watchdog (re-armed on every stream chunk), so a long refinement that
 // keeps emitting tokens never times out — only a stalled connection does.
 // Combined with FallbackTextModelClient's 2-attempt cap the worst case before
-// falling back to the already-displayed raw ASR text is ~8s. BYOK only.
+// falling back to the already-displayed raw ASR text is ~8s.
 const VOICE_INPUT_REFINER_IDLE_TIMEOUT_MS = 4_000;
-// Managed mode sends a single request and voice-server runs the model
-// failover internally (up to ~3 candidates x 3.5s first-byte budget before
-// its first chunk arrives), so the client-side watchdog must cover the whole
-// server-side chain, not one attempt.
-const VOICE_INPUT_MANAGED_REFINER_IDLE_TIMEOUT_MS = 12_000;
 // Dev builds keep full dictionary-learning text/reason logs so we can inspect
 // why a user correction did or did not become a dictionary entry. Packaged
 // builds must not log user dictation text by default.
@@ -670,21 +653,14 @@ async function resolveVoiceInputRefinerChainForRuntime(
   useCindyVoiceService = false,
 ): Promise<VoiceInputRefinerChainRuntimeResolution> {
   const selection = readActiveVoiceInputModelSelection('resolve-refiner-chain-runtime');
-  if (useCindyVoiceService) {
-    // Managed mode delegates model choice and failover to voice-server, so
-    // there is no client-side chain, no health ordering and no cooldown: a
-    // single profile remains only as the local display/pricing label.
-    const managedProfile = getVoiceInputRefinerProfile(DEFAULT_VOICE_INPUT_REFINER_PROVIDER_KIND);
-    const managedReadiness = await getVoiceInputRefinerReadiness(managedProfile, true);
-    return {
-      refinerChainProfiles: [managedProfile],
-      refinerReadinessList: [managedReadiness],
-      readyRefinerProfiles: managedReadiness.ok ? [managedProfile] : [],
-    };
-  }
-  const configuredProfiles = resolveVoiceInputRefinerChainProfiles(selection);
+  // Gateway mode routes by allowlisted provider id and intentionally ignores
+  // the legacy arbitrary model override. Keep the canonical client profile in
+  // sync with the server-side provider -> model mapping and usage reporting.
+  const configuredProfiles = useCindyVoiceService
+    ? selection.refinerProviderChain.map((kind) => getVoiceInputRefinerProfile(kind))
+    : resolveVoiceInputRefinerChainProfiles(selection);
   const configuredReadinessList = await Promise.all(
-    configuredProfiles.map((profile) => getVoiceInputRefinerReadiness(profile, false)),
+    configuredProfiles.map((profile) => getVoiceInputRefinerReadiness(profile, useCindyVoiceService)),
   );
   const profilesByProvider = new Map(
     configuredProfiles.map((profile) => [profile.id as VoiceInputRefinerProviderKind, profile]),
@@ -695,10 +671,16 @@ async function resolveVoiceInputRefinerChainForRuntime(
   const orderedProviders = orderVoiceInputRefinerChainForRuntime(selection, configuredReadinessList);
   const refinerChainProfiles: VoiceInputRefinerProfile[] = [];
   const refinerReadinessList: VoiceInputRefinerReadiness[] = [];
+  const gatewayModels = new Set<string>();
   for (const provider of orderedProviders) {
     const profile = profilesByProvider.get(provider);
     const readiness = readinessByProvider.get(provider);
     if (!profile || !readiness) continue;
+    // In GatewayProvider mode Codex-GPT and LiteLLM-GPT both resolve to the
+    // same server-side project model. Do not spend the two-attempt budget on
+    // an identical retry; keep the next distinct model as the real fallback.
+    if (useCindyVoiceService && gatewayModels.has(profile.model)) continue;
+    if (useCindyVoiceService) gatewayModels.add(profile.model);
     refinerChainProfiles.push(profile);
     refinerReadinessList.push(readiness);
   }
@@ -727,9 +709,7 @@ function readElevenLabsBaseUrl(): string | undefined {
 
 function readLiteLlmProxyConfig(): { proxyApiKey: string | null; proxyBaseUrl: string } {
   return {
-    // Local mode disables Cindy gateway capabilities, but BYOK voice still
-    // needs the active owner's explicitly saved gateway key.
-    proxyApiKey: readOwnerScopedXdGatewayKey(),
+    proxyApiKey: readClaudeApiKey(),
     // Voice input talks to XD LiteLLM endpoints directly, including WebSocket
     // passthrough routes. Do not reuse getClaudeEndpoint(): when Claude compat
     // mode is enabled it returns a local HTTP-only anthropic-compat proxy,
@@ -789,25 +769,16 @@ async function getVoiceInputRefinerReadiness(
 function createVoiceInputTextModelClient(
   profile: VoiceInputRefinerProfile,
   options?: {
-    onUsage?: (usage: {
-      promptTokens?: number;
-      completionTokens?: number;
-      cachedTokens?: number;
-      /** Upstream-reported model (managed failover may differ from the request). */
-      servedModel?: string;
-    }) => void;
+    onUsage?: (usage: { promptTokens?: number; completionTokens?: number; cachedTokens?: number }) => void;
     /** Idle watchdog per attempt; both clients re-arm it on every stream chunk. */
     timeoutMs?: number;
     voiceContext?: CindyVoiceRunContext;
   },
 ): TextModelClient {
   if (options?.voiceContext) {
-    // Managed mode: voice-server owns model choice and failover, so the
-    // target always carries the 'auto' marker regardless of the local
-    // profile used for display/usage labeling.
     return new LiteLlmTextModelClient({
       requestTargetProvider: (targetOptions) => options.voiceContext!.createRefinerTarget(
-        CINDY_MANAGED_REFINER_PROVIDER,
+        profile.id,
         targetOptions,
       ),
       onUsage: options.onUsage,
@@ -838,67 +809,6 @@ function createVoiceInputTextModelClient(
   }
 
   throw new Error(`Unsupported voice input refiner transport ${profile.transport}`);
-}
-
-/**
- * Maps the model name reported by the gateway SSE stream back to a local
- * refiner provider id for usage/cost attribution. Kept local to the managed
- * voice path on purpose: the shared provider alias resolver also parses
- * user-facing configuration, where a bare model name must NOT silently pick a
- * credential plane. Profiles are matched by their model string, preferring
- * the LiteLLM flavor since managed refinement is served through the gateway.
- */
-function resolveServedRefinerProviderForUsage(
-  servedModel: string,
-): VoiceInputRefinerProviderKind | null {
-  const normalized = servedModel.trim().toLowerCase();
-  if (!normalized) return null;
-  const profiles = getVoiceInputRefinerProfiles();
-  const match = profiles.find(
-    (profile) => profile.transport === 'litellm-chat-completions' && profile.model.toLowerCase() === normalized,
-  ) ?? profiles.find((profile) => profile.model.toLowerCase() === normalized);
-  return match ? (match.id as VoiceInputRefinerProviderKind) : null;
-}
-
-/**
- * Managed-mode prompt cache warmup: sends a request sharing the exact prompt
- * prefix of the upcoming refinement (system prompt + context, empty
- * dictationText) to voice-server's warmup endpoint. Fire-and-forget — the
- * dictation flow must never wait on or fail because of warmup.
- */
-function warmManagedRefinerPromptCache(
-  voiceContext: CindyVoiceRunContext,
-  refiner: DictationRefiner,
-  cacheScope: string,
-): void {
-  try {
-    const request = refiner.buildWarmupRequest();
-    const promptCacheKey = makeRefinerPromptCacheKey({
-      model: CINDY_MANAGED_REFINER_PROVIDER,
-      schemaName: 'dictation_refinement',
-      promptVersion: request.promptVersion,
-      system: request.system,
-      scope: cacheScope,
-    });
-    void voiceContext
-      .warmRefiner({
-        system: request.system,
-        user: { schemaName: 'dictation_refinement', input: request.user },
-        promptCacheKey,
-      })
-      .then(() => {
-        log.debug('managed refiner prompt cache warmed', { promptCacheKey });
-      })
-      .catch((error) => {
-        log.debug('managed refiner warmup failed (non-fatal)', {
-          error: error instanceof Error ? error.message : String(error),
-        });
-      });
-  } catch (error) {
-    log.debug('managed refiner warmup skipped', {
-      error: error instanceof Error ? error.message : String(error),
-    });
-  }
 }
 
 // In managed mode voice-server refinement sessions are created lazily
@@ -1290,29 +1200,7 @@ function voiceInputModelSelectionPatchFromIpc(payload: unknown): VoiceInputModel
   if (Object.prototype.hasOwnProperty.call(source, 'refinerModel')) {
     patch.refinerModel = normalizeRefinerModelFromIpc(source.refinerModel);
   }
-  if (Object.prototype.hasOwnProperty.call(source, 'refinerProviderChain')) {
-    patch.refinerProviderChain = resolveRefinerProviderChainFromIpc(source.refinerProviderChain);
-  }
   return patch;
-}
-
-function resolveRefinerProviderChainFromIpc(value: unknown): VoiceInputRefinerProviderKind[] | null {
-  if (value === null || value === undefined) return null;
-  if (!Array.isArray(value)) {
-    throwIpcError('INVALID_PARAMS', 'refinerProviderChain must be an array of provider ids');
-  }
-  const resolved: VoiceInputRefinerProviderKind[] = [];
-  for (const entry of value) {
-    if (typeof entry !== 'string') {
-      throwIpcError('INVALID_PARAMS', 'refinerProviderChain entries must be strings');
-    }
-    const normalized = entry.trim();
-    if (!normalized) continue;
-    const kind = resolveVoiceInputRefinerProviderKindAlias(normalized);
-    if (!kind) throwIpcError('INVALID_PARAMS', `unknown voice input refiner provider: ${normalized}`);
-    if (!resolved.includes(kind)) resolved.push(kind);
-  }
-  return resolved.length > 0 ? resolved : null;
 }
 
 function resolveServiceModeFromIpc(value: unknown): VoiceInputServiceMode | null {
@@ -1354,14 +1242,7 @@ function normalizeRefinerModelFromIpc(value: unknown): string | null {
 async function buildVoiceInputModelSelectionIpcResult(
   reason: string,
 ): Promise<VoiceInputModelSelectionIpcResult> {
-  const configuredSelection = readActiveVoiceInputModelSelection(`model-selection:${reason}`);
-  const effectiveServiceMode = effectiveVoiceInputServiceMode(
-    configuredSelection.serviceMode,
-    getAppCapabilities().canUseCindyAccountServices,
-  );
-  const selection = effectiveServiceMode === configuredSelection.serviceMode
-    ? configuredSelection
-    : { ...configuredSelection, serviceMode: effectiveServiceMode };
+  const selection = readActiveVoiceInputModelSelection(`model-selection:${reason}`);
   const readiness = await refreshVoiceInputReadinessCache(`model-selection:${reason}`);
   return {
     selection,
@@ -1756,10 +1637,7 @@ export function registerVoiceInputIpc(): void {
     const voiceContext = useCindyVoiceService && isCindyVoiceServiceReady()
       ? new CindyVoiceRunContext(
           asrLanguageHint,
-          // Managed refinement delegates model choice and failover to
-          // voice-server; the session is registered with the 'auto' marker
-          // instead of a concrete provider id.
-          canRefine ? CINDY_MANAGED_REFINER_PROVIDER : undefined,
+          canRefine ? effectiveRefinerProfile?.id : undefined,
         )
       : undefined;
     if (startableAsrChain.length === 0) {
@@ -1790,72 +1668,34 @@ export function registerVoiceInputIpc(): void {
       event.sender.send('voice-input:event', message);
     };
     let refiner: DictationRefiner | undefined;
-    let managedRefinerCacheScope: string | undefined;
     if (canRefine && effectiveRefinerProfile) {
       const customCacheScope = payload?.refinementCacheScope;
       try {
-        if (voiceContext) {
-          // Managed mode: one request, voice-server runs the model failover
-          // internally. No client-side fallback wrapper, no provider-health
-          // cooldown — both only make sense when the client owns multiple
-          // channels (BYOK below). The cache scope is provider-agnostic so
-          // the warmup fired at recording start and the refinement after
-          // stop always share one prompt_cache_key.
-          managedRefinerCacheScope = customCacheScope
-            ?? `${VOICE_INPUT_REFINEMENT_CACHE_SCOPE}:${CINDY_MANAGED_REFINER_PROVIDER}`;
-          refiner = new DictationRefiner({
-            client: createVoiceInputTextModelClient(effectiveRefinerProfile, {
-              timeoutMs: VOICE_INPUT_MANAGED_REFINER_IDLE_TIMEOUT_MS,
-              voiceContext,
-              onUsage: ({ servedModel, ...usage }) => {
-                if (!runId) return;
-                // Server-side failover may answer with any chain model; map
-                // the SSE-reported model back to a local provider id so the
-                // Settings usage/cost breakdown attributes tokens correctly.
-                const servedProvider = servedModel
-                  ? resolveServedRefinerProviderForUsage(servedModel)
-                  : null;
-                emit({
-                  type: 'usage',
-                  runId,
-                  refinement: {
-                    ...usage,
-                    refinerProvider: servedProvider ?? CINDY_MANAGED_REFINER_PROVIDER,
-                  },
-                });
-              },
-            }),
-            model: CINDY_MANAGED_REFINER_PROVIDER,
-            contextProvider: () => refinementContext,
-            promptCacheScope: customCacheScope
-              ?? `${VOICE_INPUT_REFINEMENT_CACHE_SCOPE}:${CINDY_MANAGED_REFINER_PROVIDER}`,
-          });
-        } else {
-          const refinerAttempts: FallbackTextModelAttempt[] = readyRefinerProfiles.map((profile) => ({
-            profileId: profile.id as VoiceInputRefinerProviderKind,
-            model: profile.model,
-            client: createVoiceInputTextModelClient(profile, {
-              timeoutMs: VOICE_INPUT_REFINER_IDLE_TIMEOUT_MS,
-              onUsage: (usage) => {
-                if (!runId) return;
-                emit({ type: 'usage', runId, refinement: { ...usage, refinerProvider: profile.id } });
-              },
-            }),
-            // A caller-supplied cache scope flows through unchanged for every
-            // attempt; the default per-profile scope keeps cache keys separate
-            // across providers.
-            promptCacheScope: customCacheScope
-              ? undefined
-              : `${VOICE_INPUT_REFINEMENT_CACHE_SCOPE}:${profile.id}`,
-          }));
-          refiner = new DictationRefiner({
-            client: new FallbackTextModelClient(refinerAttempts),
-            model: effectiveRefinerProfile.model,
-            contextProvider: () => refinementContext,
-            promptCacheScope: customCacheScope
-              ?? `${VOICE_INPUT_REFINEMENT_CACHE_SCOPE}:${effectiveRefinerProfile.id}`,
-          });
-        }
+        const refinerAttempts: FallbackTextModelAttempt[] = readyRefinerProfiles.map((profile) => ({
+          profileId: profile.id as VoiceInputRefinerProviderKind,
+          model: profile.model,
+          client: createVoiceInputTextModelClient(profile, {
+            timeoutMs: VOICE_INPUT_REFINER_IDLE_TIMEOUT_MS,
+            voiceContext,
+            onUsage: (usage) => {
+              if (!runId) return;
+              emit({ type: 'usage', runId, refinement: { ...usage, refinerProvider: profile.id } });
+            },
+          }),
+          // A caller-supplied cache scope flows through unchanged for every
+          // attempt; the default per-profile scope keeps cache keys separate
+          // across providers.
+          promptCacheScope: customCacheScope
+            ? undefined
+            : `${VOICE_INPUT_REFINEMENT_CACHE_SCOPE}:${profile.id}`,
+        }));
+        refiner = new DictationRefiner({
+          client: new FallbackTextModelClient(refinerAttempts),
+          model: effectiveRefinerProfile.model,
+          contextProvider: () => refinementContext,
+          promptCacheScope: customCacheScope
+            ?? `${VOICE_INPUT_REFINEMENT_CACHE_SCOPE}:${effectiveRefinerProfile.id}`,
+        });
       } catch (error) {
         log.warn('voice input refiner create failed, continuing with raw ASR text', {
           refinerProvider: effectiveRefinerProfile.id,
@@ -1875,8 +1715,8 @@ export function registerVoiceInputIpc(): void {
       refiner,
       logger,
       callbacks: {
-        onStateChanged: (state, outcome) => {
-          if (runId) emit({ type: 'state', runId, state, outcome });
+        onStateChanged: (state) => {
+          if (runId) emit({ type: 'state', runId, state });
         },
         onDraftChanged: (text, segment, source) => {
           if (runId) emit({ type: 'draft', runId, text, segment, source });
@@ -1906,20 +1746,14 @@ export function registerVoiceInputIpc(): void {
           });
           return true;
         },
-        onError: (message, code) => {
-          if (runId) emit({ type: 'error', runId, message, code });
+        onError: (message) => {
+          if (runId) emit({ type: 'error', runId, message });
         },
       },
     });
 
     try {
       runId = await controller.start();
-      // The ASR session now exists server-side; warm the refiner prompt
-      // cache in the background so the (large, mostly static) prompt prefix
-      // is hot by the time the user stops speaking. Best effort by design.
-      if (voiceContext && refiner && managedRefinerCacheScope) {
-        warmManagedRefinerPromptCache(voiceContext, refiner, managedRefinerCacheScope);
-      }
       if (refinerAuthErrorReason) {
         emit({
           type: 'auth-required',

@@ -1,7 +1,7 @@
 /**
  * unified-downloader — Public TypeScript types.
  * ---------------------------------------------------------------------------
- * Public contract: this module owns the downloader option, progress and error types.
+ * Tech spec: .sivi/docs/tech_specs/unified-downloader-frontend.md (M1)
  *
  * The downloader exposes ONLY a TS API (no IPC, no events emitter). All
  * progress / retry / resume signals flow through callbacks on `DownloadOptions`.

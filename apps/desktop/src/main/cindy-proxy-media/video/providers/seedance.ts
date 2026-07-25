@@ -2,7 +2,7 @@
  * art/video/providers/seedance.ts
  * ---------------------------------------------------------------------------
  * VideoProvider implementation for Volcengine ARK doubao-seedance-2-0,
- * routed through XD Gateway's `/volcengine/api/v3/contents/generations/tasks`
+ * routed through xdproxy's `/volcengine/api/v3/contents/generations/tasks`
  * passthrough.
  *
  * Two model tiers exposed:
@@ -27,10 +27,10 @@ import {
   joinProxyUrl,
   parseJsonResponse,
   requireApiKey,
-  GatewayHttpError,
-  type GatewayHttpAuth,
-} from '../../api/gatewayHttp.js';
-import type { LiziMcpLogger } from '@cindy/mcps';
+  XdproxyHttpError,
+  type XdproxyHttpAuth,
+} from '../../api/xdproxyHttp.js';
+import type { LiziMcpLogger } from 'lizi-mcps';
 import type {
   VideoGenerationRequest,
   VideoProvider,
@@ -46,7 +46,7 @@ export interface CreateSeedanceProviderOptions {
   /** Path template for poll, default `/volcengine/api/v3/contents/generations/tasks/{id}`.
    *  `{id}` is substituted with the task id. */
   pollPathTemplate?: string;
-  getApiKey: GatewayHttpAuth['getApiKey'];
+  getApiKey: XdproxyHttpAuth['getApiKey'];
   fetchImplementation?: typeof fetch;
   logger?: LiziMcpLogger;
 }
@@ -163,7 +163,7 @@ export function createSeedanceProvider(
   ): Promise<VideoTaskHandle> {
     const aliasInfo = CAPABILITIES.modelAliases.find((a) => a.alias === alias);
     if (!aliasInfo) {
-      throw new GatewayHttpError(
+      throw new XdproxyHttpError(
         `seedance: unknown alias '${alias}'`,
         400,
       );
@@ -184,7 +184,7 @@ export function createSeedanceProvider(
     });
     const parsed = await parseJsonResponse<{ id?: string }>(res, opts.logger);
     if (!parsed.id) {
-      throw new GatewayHttpError(
+      throw new XdproxyHttpError(
         'seedance submit response missing id',
         res.status,
         parsed,
@@ -261,7 +261,7 @@ export function createSeedanceProvider(
     // Seedance returns a 24h-signed TOS URL — plain GET, no auth header.
     const res = await doFetch(videoUrl, { method: 'GET', signal });
     if (!res.ok) {
-      throw new GatewayHttpError(
+      throw new XdproxyHttpError(
         `seedance download failed HTTP ${res.status}`,
         res.status,
       );

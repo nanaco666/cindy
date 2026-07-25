@@ -1,7 +1,7 @@
 /**
- * @cindy/im logger
+ * lizi-im logger
  * ---------------------------------------------------------------------------
- * Tiny logger interface; mirrors @cindy/mcps's LiziMcpLogger pattern. Hosts can
+ * Tiny logger interface; mirrors lizi-mcps's LiziMcpLogger pattern. Hosts can
  * provide their own implementation via `IMHost.createLogger`; otherwise we fall
  * back to a console logger that prefixes the scope.
  *

@@ -1,8 +1,7 @@
 /**
  * SessionLinkChip — 聊天正文里 `cindy://session/<id>[?message=<clientId>]`(历史 xdt-maker:// 同)
- * 深链的行内 chip 渲染:整段会话显示跳转图标 + 会话标题;带 `?message=`
- * 锚点时直接显示目标消息正文的单行摘要,hover 展开全文,点击后定位并高亮
- * 目标消息(复用会话搜索的 searchJump 机制)。
+ * 深链的行内 chip 渲染(图标 + 会话标题),点击跳转到对应会话;带 `?message=`
+ * 锚点时进一步定位并高亮目标消息(复用会话搜索的 searchJump 机制)。
  *
  * 标题解析三级降级:
  *   1. 作者显式给的 label(`[自定义文案](cindy://…)`)——作者意图优先,不查库;
@@ -18,54 +17,46 @@
 import { useEffect, useMemo, useState } from 'react';
 import { CornerDownRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { useTranslation } from 'react-i18next';
 
 import { cn } from '@/lib/utils';
 import { parseSessionDeepLinkHref } from '@/lib/deepLink';
 import { resolveSessionRoute } from '@/lib/orcaSessionIdentity';
 import { shortSessionId } from '@/lib/sessionId';
-import { resolveSessionMessageText } from '@/lib/sessionMessageText';
 import * as sessionService from '@/lib/sessionService';
 import { useRemoteProjectSessions } from '@/features/device-link/remoteProjectsStore';
 import { useSessionNavigationMode } from '@/features/cc-agent/embeddedSessionNavigation';
-import { InlineReferenceChip } from './InlineReferenceChip';
-import { QuoteChip } from './QuoteChip';
-import type { PersistedSessionReferenceMetadata } from '../../../shared/sessionReferenceMetadata';
 
-const MESSAGE_LINK_LABEL_MAX = 240;
+const chipClass = cn(
+  'inline-flex max-w-full items-center gap-[3px] px-[5px] py-[0.5px]',
+  'rounded-[4px] border',
+  'bg-[var(--chat-input-chip-bg)]',
+  'border-[var(--chat-input-chip-border)]',
+  'text-[var(--chat-input-chip-text)]',
+  'font-mono text-[13px] leading-[18px]',
+  'relative top-[-1px] align-middle -my-[1px]',
+);
 
 export interface SessionLinkChipProps {
   href: string;
   /** 作者显式链接文案(`[label](…)`,label ≠ href 时传入);有值则不查标题。 */
   label?: string;
-  /** Resolved, persisted range summary for this link. */
-  referenceMetadata?: PersistedSessionReferenceMetadata;
 }
 
-function compactMessageLinkLabel(text: string): string {
-  const compact = text.replace(/\s+/g, ' ').trim();
-  if (compact.length <= MESSAGE_LINK_LABEL_MAX) return compact;
-  return `${compact.slice(0, MESSAGE_LINK_LABEL_MAX - 1)}…`;
-}
-
-export function SessionLinkChip({ href, label, referenceMetadata }: SessionLinkChipProps) {
-  const { t } = useTranslation();
+export function SessionLinkChip({ href, label }: SessionLinkChipProps) {
   const navigate = useNavigate();
   const navigationMode = useSessionNavigationMode();
   const target = useMemo(() => parseSessionDeepLinkHref(href), [href]);
   const remoteSessions = useRemoteProjectSessions();
   const [fetchedTitle, setFetchedTitle] = useState<string | null>(null);
-  const [messageText, setMessageText] = useState<string | null>(null);
 
   const sessionId = target?.sessionId ?? null;
-  const messageClientId = target?.messageClientId ?? null;
   const explicitLabel = label?.trim() || null;
 
   useEffect(() => {
     // 先清旧值:同一实例被复用渲染另一个 href(虚拟列表 / 消息 patch)时,
     // 不能让上一个会话的标题串到新链接上(Codex review P2)。
     setFetchedTitle(null);
-    if (!sessionId || messageClientId || explicitLabel) return;
+    if (!sessionId || explicitLabel) return;
     let cancelled = false;
     sessionService
       .get(sessionId)
@@ -78,29 +69,29 @@ export function SessionLinkChip({ href, label, referenceMetadata }: SessionLinkC
     return () => {
       cancelled = true;
     };
-  }, [sessionId, messageClientId, explicitLabel]);
-
-  useEffect(() => {
-    setMessageText(null);
-    if (!sessionId || !messageClientId) return;
-    let cancelled = false;
-    resolveSessionMessageText(sessionId, messageClientId)
-      .then((text) => {
-        if (!cancelled && text) setMessageText(text);
-      })
-      .catch(() => {
-        // Missing/offline target: keep the compact client-id fallback.
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [sessionId, messageClientId]);
+  }, [sessionId, explicitLabel]);
 
   // 深链形状不合法(理论上被 tokenizer / 渲染分支挡住,防御性兜底)→ 纯文本。
   if (!target || !sessionId) return <span>{label ?? href}</span>;
 
   const remoteSession = remoteSessions.find((s) => s.id === sessionId) ?? null;
   const remoteTitle = fetchedTitle ? null : remoteSession?.title?.trim() || null;
+  const display = explicitLabel ?? fetchedTitle ?? remoteTitle ?? shortSessionId(sessionId);
+  const content = (
+    <>
+      <CornerDownRight size={12} className="shrink-0 text-[var(--chat-input-chip-icon)]" />
+      <span className="min-w-0 truncate">{display}</span>
+    </>
+  );
+
+  if (navigationMode === 'sidebar-embedded') {
+    return (
+      <span title={href} className={cn(chipClass, 'cursor-default')}>
+        {content}
+      </span>
+    );
+  }
+
   const handleClick = () => {
     // device-link 远程会话本地无 row,resolveSessionRoute 内部的 sessionService.get
     // 会 miss → 远程 Orca 会话被当普通会话路由,后续 redirect 会丢 searchJump 锚点。
@@ -124,86 +115,18 @@ export function SessionLinkChip({ href, label, referenceMetadata }: SessionLinkC
       );
     });
   };
-  const display = explicitLabel ?? fetchedTitle ?? remoteTitle ?? shortSessionId(sessionId);
-  const referenceDetails = referenceMetadata
-    ? [
-        t(
-          referenceMetadata.range === 'around-anchor'
-            ? 'chat.userMessage.sessionReference.aroundAnchor'
-            : 'chat.userMessage.sessionReference.recent',
-        ),
-        t('chat.userMessage.sessionReference.messageCount', {
-          count: referenceMetadata.messageCount,
-        }),
-        ...(referenceMetadata.truncated
-          ? [t('chat.userMessage.sessionReference.truncated')]
-          : []),
-      ]
-    : [];
-  const tooltip = referenceDetails.length > 0 ? `${display}\n${referenceDetails.join(' · ')}` : display;
-
-  if (messageClientId) {
-    const fullText = messageText ?? shortSessionId(messageClientId);
-    const messageLabel = compactMessageLinkLabel(fullText);
-    // An explicit markdown label is the author's chosen display text, even for
-    // anchored links; the resolved message remains the navigation target.
-    // A Markdown label is explicit author intent and must survive anchored
-    // links even when no persisted reference metadata is available yet.
-    const visibleMessageLabel = explicitLabel ?? messageLabel;
-    const messageContent = <QuoteChip quote={{ text: visibleMessageLabel }} />;
-    const referenceSummary = referenceDetails.length > 0 ? (
-      <span data-session-reference-summary="" className="ml-1 text-[11px] text-[var(--text-tertiary)]">
-        {referenceDetails.join(' · ')}
-      </span>
-    ) : null;
-    const messageClass = 'inline-flex max-w-[min(240px,55vw)] align-middle';
-    if (navigationMode === 'sidebar-embedded') {
-      return (
-        <span data-session-message-link="" title={tooltip} className={cn(messageClass, 'cursor-default')}>
-          {messageContent}
-          {referenceSummary}
-        </span>
-      );
-    }
-    return (
-      <button
-        type="button"
-        data-session-message-link=""
-        aria-label={
-          referenceDetails.length > 0
-            ? `${visibleMessageLabel} (${referenceDetails.join(' · ')})`
-            : visibleMessageLabel
-        }
-        title={tooltip}
-        onClick={handleClick}
-        className={cn(messageClass, 'cursor-pointer')}
-      >
-        {messageContent}
-        {referenceSummary}
-      </button>
-    );
-  }
-
-  if (navigationMode === 'sidebar-embedded') {
-    return (
-      <InlineReferenceChip
-        label={display}
-        icon={<CornerDownRight aria-hidden />}
-        tooltip={tooltip}
-        ariaLabel={display}
-        className="relative top-[-1px] -my-[1px] max-w-[min(240px,55vw)] cursor-default align-middle"
-      />
-    );
-  }
 
   return (
-    <InlineReferenceChip
-      label={display}
-      icon={<CornerDownRight aria-hidden />}
-      tooltip={tooltip}
-      ariaLabel={display}
+    <button
+      type="button"
       onClick={handleClick}
-      className="relative top-[-1px] -my-[1px] max-w-[min(240px,55vw)] align-middle"
-    />
+      title={href}
+      className={cn(
+        chipClass,
+        'cursor-pointer transition-colors hover:bg-[var(--cmd-palette-item-hover)]',
+      )}
+    >
+      {content}
+    </button>
   );
 }

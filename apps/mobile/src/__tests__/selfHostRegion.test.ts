@@ -89,47 +89,6 @@ describe('dev 第三目标(装载宽松、用时强校验)', () => {
   });
 });
 
-describe('local 模式(本地 Xcode / Simulator 构建装载宽松)', () => {
-  it('cn/global 叶子值全留空 → local 模式装载通过;release(默认)模式维持严格拒绝', () => {
-    const relaxed = clone();
-    relaxed.cn.iosBundleId = '';
-    relaxed.cn.tapdb = { clientId: '', clientToken: '' };
-    relaxed.global.tapdb = { clientId: '', clientToken: '' };
-    relaxed.global.google = { webClientId: '', iosClientId: '', iosUrlScheme: '' };
-    expect(() => validateSelfHostRegions(relaxed, { mode: 'local' })).not.toThrow();
-    expect(() => validateSelfHostRegions(relaxed)).toThrow(/iosBundleId 必须是非空字符串/);
-    expect(() => validateSelfHostRegions(relaxed, { mode: 'release' })).toThrow(/非空/);
-  });
-  it('local 模式 google 部分填写 → 抛错(要么全空要么全填且格式合法)', () => {
-    const partial = clone();
-    partial.global.google = {
-      webClientId: 'web.apps.googleusercontent.com',
-      iosClientId: '',
-      iosUrlScheme: '',
-    };
-    expect(() => validateSelfHostRegions(partial, { mode: 'local' }))
-      .toThrow(/global\.google\.iosClientId 必须是非空字符串/);
-  });
-  it('local 模式 google 全填 → 格式校验照常生效', () => {
-    const badFormat = clone();
-    badFormat.global.google = {
-      webClientId: 'not-a-google-id',
-      iosClientId: 'ios.apps.googleusercontent.com',
-      iosUrlScheme: 'com.googleusercontent.apps.ios',
-    };
-    expect(() => validateSelfHostRegions(badFormat, { mode: 'local' }))
-      .toThrow(/webClientId 必须是 Google OAuth client id/);
-  });
-  it('local 模式仍要求 authRegion 一致与块结构完整', () => {
-    const bad = clone();
-    bad.cn.authRegion = '';
-    expect(() => validateSelfHostRegions(bad, { mode: 'local' })).toThrow(/authRegion 必须等于/);
-    const noTapdb = clone();
-    delete noTapdb.cn.tapdb;
-    expect(() => validateSelfHostRegions(noTapdb, { mode: 'local' })).toThrow(/tapdb 必须是 object/);
-  });
-});
-
 describe('validateSelfHostRegions', () => {
   it('结构完整 → 返回冻结的 { cn, global }', () => {
     const r = validateSelfHostRegions(clone());

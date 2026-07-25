@@ -1,5 +1,5 @@
 {
-  "name": "@cindy/im",
+  "name": "lizi-im",
   "version": "0.0.0",
   "private": true,
   "description": "Reusable IM transport package: WebSocket-based IM channels (feishu, ...) with credential storage, conflict detection, attachment download, and unified outbound API. Pure transport layer; hosts inject storage/IPC/path adapters.",
@@ -15,8 +15,8 @@
     "lint": "eslint src/"
   },
   "author": {
-    "name": "X.D. Network Inc.",
-    "email": "feedback@cindy.app"
+    "name": "Lizi",
+    "email": "jiali@magiclizi.com"
   },
   "license": "Apache-2.0",
   "dependencies": {

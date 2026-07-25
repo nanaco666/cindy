@@ -10,7 +10,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type { Maker } from '@cindy/maker-core';
+import type { Maker } from '@lizi/maker-core';
 
 import {
   buildHookCommand,
@@ -179,27 +179,6 @@ describe('generateHookScript(编排)', () => {
     expect(result.command).toBe(`node ${shellQuote(result.filePath)}`);
     expect(existsSync(result.filePath)).toBe(true);
     expect(readFileSync(result.filePath, 'utf8')).toBe('process.exit(2)\n');
-  });
-
-  it('把任务 provider / agent / model 透传给 utility 请求', async () => {
-    let seen: Record<string, unknown> | undefined;
-    await generateHookScript(
-      {
-        maker: fakeMaker,
-        fallbackDir: path.join(dir, 'fb'),
-        requestText: async (_maker, _prompt, opts) => {
-          seen = opts;
-          return utilitySuccess('```js\nprocess.exit(0)\n```');
-        },
-      },
-      {
-        description: 'use custom provider',
-        providerId: 'tapsvc',
-        agentKind: 'codex',
-        model: 'custom-mini',
-      },
-    );
-    expect(seen).toMatchObject({ providerId: 'tapsvc', agentKind: 'codex', model: 'custom-mini' });
   });
 
   it('无 workingDir → 落 fallbackDir + 绝对路径命令', async () => {

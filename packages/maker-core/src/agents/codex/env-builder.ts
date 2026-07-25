@@ -61,10 +61,10 @@ export async function buildCodexEnv(
   applyPlainTextTerminalEnv(env);
 
   // 兜底: NO_PROXY 必须包含 127.0.0.1/localhost/::1, 否则 codex 子进程的 rmcp
-  // (Rust reqwest) 会把 Cindy MCP HTTP bridge 的 localhost 请求也走 HTTP_PROXY
+  // (Rust reqwest) 会把 lizi_mcp HTTP bridge 的 localhost 请求也走 HTTP_PROXY
   // (corp 网络 / PAC 常见现象), 上游代理不识别 localhost, 回 HTML 错误页 →
   // codex 端 MCP transport 全员 UnexpectedContentType 崩, 用户表现为"codex
-  // 看不到任何 Cindy MCP / orca worker 工具"。直接合并用户已有 NO_PROXY,
+  // 看不到任何 lizi_mcp / orca worker 工具"。直接合并用户已有 NO_PROXY,
   // 同时把小写 no_proxy 合并进来并删除, 防止大小写双份在 Rust/Go 系生态里
   // 互相覆盖。
   const existingNoProxy = [env.NO_PROXY, env.no_proxy]

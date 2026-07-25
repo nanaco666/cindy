@@ -15,7 +15,7 @@
  *    - 'handoff' : session 间 handoff 原语 (send_to_session),供 skill 跨会话路由
  *  - send_to_session 曾经直接顶层注册;现归入 handoff 类目走 call_tool,与改名工具
  *    隔离(不同 category),避免 LLM 在"改 session 名"意图下误选它(见 issue #287)。
- *  - 协同 team 工具(start_team / create_worker / …)已拆到独立的 `cindy_orca` server
+ *  - 协同 team 工具(start_team / create_worker / …)已拆到独立的 `lizi_orca` server
  *    (对应"协同模式"可关插件),本 server 不再承载。
  *
  * 为什么只读类工具走 list_tools/call_tool 入口而不直接注册:
@@ -24,7 +24,7 @@
  *    才被拉取,前置成本低(只两条入口工具进系统提示)
  */
 
-import { BRAND_NAME } from '@cindy/maker-shared/branding';
+import { BRAND_NAME } from '@lizi/maker-shared/branding';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { jsonObjectArg } from './json-object-arg.js';
@@ -76,9 +76,9 @@ const D_LIST_TOOLS =
   '(submit_github_issue,先与用户对话澄清细节,提交前会弹系统确认卡片);' +
   '传 category=handoff → 把消息投递到一个【已知 session】, 或为外部业务对象(issue / jira / pr)新建专属 session' +
   '(send_to_session, 供 skill 绑定业务对象路由用)。' +
-  '⚠️ 开协同 / 多 agent / 派 worker 干活 / 拉 agent review, 请用 cindy_orca 的 start_team / create_worker, 不要用 handoff(它不组队、不进协同分组)。' +
+  '⚠️ 开协同 / 多 agent / 派 worker 干活 / 拉 agent review, 请用 lizi_orca 的 start_team / create_worker, 不要用 handoff(它不组队、不进协同分组)。' +
   '获取工具名后用 call_tool({name, args}) 执行。' +
-  '(协同 team 工具 start_team / create_worker 等在 cindy_orca server 直接顶层注册, 不在本入口下。)';
+  '(协同 team 工具 start_team / create_worker 等在 lizi_orca server 直接顶层注册, 不在本入口下。)';
 
 const D_CALL_TOOL =
   '调用 cindy_helper 中的某个具体工具(如 get_capabilities / get_current_session_id / ' +
@@ -90,7 +90,7 @@ const D_CALL_TOOL =
   'history 类工具返回 hasMore=true 时用响应里的 nextCursor 再次调用本工具拿下一页, 不会丢信息。';
 
 // list_tools 入口类目: cindy(自省) / control(会话标题控制) / history(聊天历史) / feedback(官方反馈提交) / handoff(session 间 handoff)。
-// 协同 team 工具已拆到独立 cindy_orca server(插件开关 gate)。
+// 协同 team 工具已拆到独立 lizi_orca server(插件开关 gate)。
 const CATEGORY_ENUM = ['cindy', 'control', 'history', 'feedback', 'handoff'] as const;
 
 // ── Entry tool registration ──────────────────────────────────────────────────

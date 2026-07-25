@@ -18,7 +18,7 @@
  *    同一条阻断循环,文件缺失 / 非法同样弹框——配置错要炸出来,不静默猜测;
  *    仅本地文件路径放开 allowHttp(localhost 场景),CDN 路径校验零放松。
  *
- * 共享逻辑(schema / 非空 URL 校验 / 缺省字段归一)在 @cindy/maker-shared/client-endpoints;
+ * 共享逻辑(schema / 非空 URL 校验 / 缺省字段归一)在 @lizi/maker-shared/client-endpoints;
  * 本文件负责 desktop 侧 IO 与 renderer 消费(sendSync IPC,首帧同步可用)。
  *
  * 依赖方向(2026-07 重构后):manifestService(更新链)经 getClientEndpoint
@@ -35,7 +35,7 @@ import {
   resolveClientEndpointsStrict,
   type ClientEndpointKey,
   type ClientEndpointMap,
-} from '@cindy/maker-shared/client-endpoints';
+} from '@lizi/maker-shared/client-endpoints';
 
 import { createLogger } from './logger';
 import { ENDPOINT_MANIFEST_BASE_URL } from '../shared/endpoints';

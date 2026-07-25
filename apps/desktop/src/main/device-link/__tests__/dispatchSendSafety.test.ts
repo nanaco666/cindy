@@ -9,7 +9,7 @@
  * 只 mock electron(app)+ logger;subscriptions 用真实模块(注册控制端订阅)。
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { DeviceLinkError, MAX_FRAME_BYTES, PROTOCOL_VERSION, type InvokeResultPayload } from '@cindy/device-link';
+import { DeviceLinkError, MAX_FRAME_BYTES, PROTOCOL_VERSION, type InvokeResultPayload } from '@lizi/device-link';
 
 vi.mock('electron', () => ({
   app: {

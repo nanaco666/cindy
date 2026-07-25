@@ -22,12 +22,6 @@ let storeSetters: SyncSetters | null = null;
 let fullSyncRequestId = 0;
 let incrementalSyncRequestId = 0;
 
-/** Invalidate all in-flight requests when the active data owner changes. */
-export function invalidateSkillSyncRequests(): void {
-  fullSyncRequestId += 1;
-  incrementalSyncRequestId += 1;
-}
-
 export function registerSyncStoreSetters(setters: SyncSetters): void {
   storeSetters = setters;
 }
@@ -73,14 +67,13 @@ async function doSync(skills: SkillhubSkill[]): Promise<void> {
  * 每次 skills 列表引用变化都重新拉一次,即便本地 0 个 skill 也要打 sync。
  * 这里只同步本地 skill 对应的 Hub 详情状态；可获取列表单独走 listMarket。
  */
-export function useSkillSync(skills: SkillhubSkill[], enabled = true): void {
+export function useSkillSync(skills: SkillhubSkill[]): void {
   const skillsRef = useRef<SkillhubSkill[]>(skills);
   skillsRef.current = skills;
 
   useEffect(() => {
-    if (!enabled) return;
     void doSync(skillsRef.current);
-  }, [enabled, skills]);
+  }, [skills]);
 }
 
 /**

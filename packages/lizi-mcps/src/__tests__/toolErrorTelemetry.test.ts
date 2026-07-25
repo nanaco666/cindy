@@ -60,14 +60,14 @@ describe('logToolResultErrorCode', () => {
     const logger = makeLogger();
     logToolResultErrorCode({
       logger,
-      server: 'cindy_test',
+      server: 'lizi_test',
       tool: 'do_thing',
       result: textResult({ ok: false, errorCode: 'INVALID_ARGS' }, true),
       sessionId: 'sess-1',
     });
     expect(logger.warn).toHaveBeenCalledTimes(1);
     expect(logger.warn).toHaveBeenCalledWith('tool call returned errorCode', {
-      server: 'cindy_test',
+      server: 'lizi_test',
       tool: 'do_thing',
       errorCode: 'INVALID_ARGS',
       sessionId: 'sess-1',
@@ -78,13 +78,13 @@ describe('logToolResultErrorCode', () => {
     const logger = makeLogger();
     logToolResultErrorCode({
       logger,
-      server: 'cindy_test',
+      server: 'lizi_test',
       tool: 'do_thing',
       result: { content: [{ type: 'text', text: 'boom' }], isError: true },
     });
     expect(logger.warn).toHaveBeenCalledTimes(1);
     expect(logger.warn).toHaveBeenCalledWith('tool call returned errorCode', {
-      server: 'cindy_test',
+      server: 'lizi_test',
       tool: 'do_thing',
       errorCode: null,
     });
@@ -94,7 +94,7 @@ describe('logToolResultErrorCode', () => {
     const logger = makeLogger();
     logToolResultErrorCode({
       logger,
-      server: 'cindy_test',
+      server: 'lizi_test',
       tool: 'do_thing',
       result: textResult({ ok: true, data: {} }),
     });
@@ -102,7 +102,7 @@ describe('logToolResultErrorCode', () => {
     expect(() =>
       logToolResultErrorCode({
         logger: undefined,
-        server: 'cindy_test',
+        server: 'lizi_test',
         tool: 'do_thing',
         result: textResult({ ok: false, errorCode: 'X' }, true),
       }),
@@ -117,7 +117,7 @@ describe('logToolResultErrorCode', () => {
       // 没带的即使 text 里有 errorCode 也按成功结果对待,不解析、不记录。
       logToolResultErrorCode({
         logger,
-        server: 'cindy_test',
+        server: 'lizi_test',
         tool: 'do_thing',
         result: textResult({ ok: false, errorCode: 'NOT_FLAGGED' }),
       });
@@ -200,7 +200,7 @@ describe('computer call_tool errorCode telemetry', () => {
 
     expect(logger.warn).toHaveBeenCalledTimes(1);
     expect(logger.warn).toHaveBeenCalledWith('tool call returned errorCode', {
-      server: 'cindy_computer',
+      server: 'lizi_computer',
       tool: 'get_screen_size',
       errorCode: 'COMPUTER_DRIVER_ERROR',
       sessionId: 'sess-cua',
@@ -223,7 +223,7 @@ describe('computer call_tool errorCode telemetry', () => {
     });
     expect(logger.warn).toHaveBeenCalledTimes(1);
     expect(logger.warn).toHaveBeenCalledWith('tool call returned errorCode', {
-      server: 'cindy_computer',
+      server: 'lizi_computer',
       tool: 'get_screen_size',
       errorCode: 'INVALID_ARGS',
       sessionId: 'sess-cua',

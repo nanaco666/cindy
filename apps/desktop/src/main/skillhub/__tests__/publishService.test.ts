@@ -2,7 +2,6 @@ import fs from 'node:fs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const TEST_ROOT = '/tmp/xdt-publish-service-test';
-const authState = vi.hoisted(() => ({ ownerId: 'user-1' as string | null }));
 
 vi.mock('electron', () => ({
   app: {
@@ -70,12 +69,6 @@ vi.mock('../registry', () => ({
 
 vi.mock('../../authManager', () => ({
   getCurrentUserId: vi.fn(),
-  getCurrentDataOwnerId: vi.fn(() => authState.ownerId),
-}));
-
-vi.mock('../../appCapabilities.js', () => ({
-  getAppCapabilities: () => ({ canUseSkillHubCloud: true }),
-  requireAppCapability: vi.fn(),
 }));
 
 
@@ -87,7 +80,6 @@ function writeApiKeyFile() {
 
 describe('SkillPublishService', () => {
   beforeEach(() => {
-    authState.ownerId = 'user-1';
     vi.resetModules();
     vi.clearAllMocks();
     fs.rmSync(TEST_ROOT, { recursive: true, force: true });
@@ -554,99 +546,6 @@ describe('SkillPublishService', () => {
     );
   });
 
-  it('finishes local reconciliation when cancellation happens after commit is accepted', async () => {
-    writeApiKeyFile();
-    const skillPath = '/tmp/xdt-publish-service-test/skill';
-    fs.mkdirSync(skillPath, { recursive: true });
-    fs.writeFileSync(
-      `${skillPath}/SKILL.md`,
-      [
-        '---',
-        'name: lark-task',
-        'version: 0.9.0',
-        'description: Frontmatter description',
-        '---',
-        '',
-        '# Lark task',
-        '',
-      ].join('\n'),
-    );
-
-    const { serverApiFetch } = await import('../../serverApiClient');
-    const { computeFolderHash } = await import('../folderHash');
-    const { writeSnapshot } = await import('../snapshot');
-    const { pack } = await import('../zipPacker');
-    const { registryService } = await import('../registry');
-    const { getCurrentUserId } = await import('../../authManager');
-    const { net } = await import('electron');
-    const { SkillPublishService } = await import('../publishService');
-
-    vi.mocked(computeFolderHash).mockResolvedValue('folder-hash');
-    vi.mocked(writeSnapshot).mockResolvedValue(undefined);
-    vi.mocked(pack).mockResolvedValue({
-      buffer: Buffer.from('zip'),
-      size: 3,
-      sha256: 'zip-sha',
-      manifest: { files: [] },
-    });
-    vi.mocked(getCurrentUserId).mockReturnValue('user-1');
-    vi.mocked(registryService.getInstall).mockResolvedValue(null);
-    vi.mocked(net.fetch).mockResolvedValue({ ok: true, status: 200 } as Response);
-
-    let notifyCommitStarted!: () => void;
-    let releaseCommit!: () => void;
-    const commitStarted = new Promise<void>((resolve) => {
-      notifyCommitStarted = resolve;
-    });
-    const commitGate = new Promise<void>((resolve) => {
-      releaseCommit = resolve;
-    });
-    vi.mocked(serverApiFetch).mockImplementation(async (apiPath: string) => {
-      if (apiPath === '/api/skills-hub/skills/publish/init') {
-        return {
-          nextVersion: '1.0.0',
-          ossKey: 'skills/lark-task/v1.0.0.zip',
-          uploadUrl: 'https://oss.example.com/skills/lark-task.zip',
-        };
-      }
-      if (apiPath === '/api/skills-hub/skills/publish/commit') {
-        notifyCommitStarted();
-        await commitGate;
-        return { slug: 'lark-task', version: '1.0.0', status: 'scanning' };
-      }
-      throw new Error(`unexpected api path ${apiPath}`);
-    });
-
-    const events: Array<{ phase: string; errorCode?: string }> = [];
-    const service = new SkillPublishService();
-    const publishing = service.publish(
-      {
-        absolutePath: skillPath,
-        name: 'lark-task',
-        isFirstPublish: true,
-        version: '1.0.0',
-        displayName: 'Lark Task',
-        summary: 'Publish summary',
-        visibility: 'PUBLIC',
-        categoryMode: 'manual',
-        categories: ['productivity'],
-      },
-      (event) => events.push(event),
-    );
-
-    await commitStarted;
-    service.cancel();
-    releaseCommit();
-
-    await expect(publishing).resolves.toEqual({
-      success: true,
-      result: { name: 'lark-task', version: '1.0.0' },
-    });
-    expect(writeSnapshot).toHaveBeenCalledWith(skillPath, 'lark-task');
-    expect(events.at(-1)).toMatchObject({ phase: 'done' });
-    expect(events).not.toContainEqual(expect.objectContaining({ phase: 'failed' }));
-  });
-
   it('maps preserved Hub business error codes to actionable publish errors', async () => {
     writeApiKeyFile();
     fs.mkdirSync('/tmp/xdt-publish-service-test/skill', { recursive: true });
@@ -834,33 +733,6 @@ describe('SkillPublishService', () => {
       { phase: 'packing' },
       { phase: 'failed', name: 'lark-task', errorCode: 'CANCELLED', message: '已取消' },
     ]);
-  });
-
-  it('cancels an in-flight publish when the data owner changes', async () => {
-    fs.mkdirSync('/tmp/xdt-publish-service-test/skill', { recursive: true });
-    const { computeFolderHash } = await import('../folderHash');
-    const { pack } = await import('../zipPacker');
-    const { SkillPublishService } = await import('../publishService');
-
-    vi.mocked(computeFolderHash).mockResolvedValue('folder-hash');
-    vi.mocked(pack).mockImplementation(async () => {
-      authState.ownerId = 'user-2';
-      return {
-        buffer: Buffer.from('zip'),
-        size: 3,
-        sha256: 'zip-sha',
-        manifest: { files: [] },
-      };
-    });
-
-    const service = new SkillPublishService();
-    const result = await service.publish({
-      absolutePath: '/tmp/xdt-publish-service-test/skill',
-      name: 'lark-task',
-      isFirstPublish: false,
-    });
-
-    expect(result).toEqual({ success: false, errorCode: 'CANCELLED' });
   });
 
   it('treats blocked scan status as terminal when polling publish scan results', async () => {

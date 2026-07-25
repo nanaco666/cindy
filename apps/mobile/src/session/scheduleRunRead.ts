@@ -1,4 +1,4 @@
-import type { ScheduleEventProjection } from '@cindy/maker-shared/schedule-events';
+import type { ScheduleEventProjection } from '@lizi/maker-shared/schedule-events';
 import { isTransientRemoteError } from '@/device-link/remoteRetry';
 import type { MobileMakerTransport } from '@/device-link/mobileMakerTransport';
 import { loadSessionScheduleIndex } from '@/session/scheduleIndex';

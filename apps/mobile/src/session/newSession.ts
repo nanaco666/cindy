@@ -1,5 +1,5 @@
-import { stripTrailingPathSeparators } from '@cindy/maker-shared/path-text';
-import type { CreateSessionOptions, RemoteDirectoryEntry } from '@/device-link/mobileMakerTransport';
+import { stripTrailingPathSeparators } from '@lizi/maker-shared/path-text';
+import type { CreateSessionOptions } from '@/device-link/mobileMakerTransport';
 import { reconcileEffortForModel, type ProviderModelRow } from './providerModelSections';
 import type { RemoteSession } from './types';
 
@@ -210,15 +210,6 @@ export function buildNewSessionCreatePreview(
 
 export function parseExtraDirsInput(value: string): string[] {
   return normalizeExtraDirs(value.split(/[\n,]/));
-}
-
-/** 移动端项目目录浏览默认隐藏点号目录，用户显式开启后才完整展示。 */
-export function filterRemoteDirectoryEntries(
-  entries: readonly RemoteDirectoryEntry[],
-  showHiddenDirectories: boolean,
-): readonly RemoteDirectoryEntry[] {
-  if (showHiddenDirectories) return entries;
-  return entries.filter((entry) => !entry.name.startsWith('.'));
 }
 
 export function buildRecentWorkspaceOptions(

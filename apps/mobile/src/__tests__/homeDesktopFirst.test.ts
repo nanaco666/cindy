@@ -106,8 +106,6 @@ describe('mobile home desktop-first surface', () => {
   it('mirrors the desktop sidebar Agent identity slot and running treatment', () => {
     const homeSource = readSource('app/devices/index.tsx');
     const vendorIconSource = readSource('src/components/MobileVendorIcon.tsx');
-    const agentMarkSource = readSource('src/components/MobileAgentMark.tsx');
-    const providerMarkSource = readSource('src/session/MobileProviderMark.tsx');
     // 品牌 path 常量已抽到 vendorIconPaths.ts(供 MobileVendorIcon 与 MobileProviderMark 共用)。
     const vendorPathsSource = readSource('src/components/vendorIconPaths.ts');
     const desktopVendorIconSource = readSource(
@@ -117,7 +115,7 @@ describe('mobile home desktop-first surface', () => {
     expect(desktopVendorIconSource).toContain(
       'VendorIcon — sidebar session 行的 Agent 身份 + running 状态指示器',
     );
-    // 2026-07-20 双端 Agent mark 同步为 Claude Code 像素脸 / Codex CLI `>_` 花形。
+    // 2026-07-19 撤销 D4-1:双端恢复厂商 glyph(Claude AA 字标 / Codex 六瓣),按 vendor 分支渲染
     // ——箭头统一后依赖图标区分 agent 类型的场景(创建自动化 chips / 侧栏混排)全部失效。
     expect(desktopVendorIconSource).toContain('ClaudeMark');
     expect(desktopVendorIconSource).toContain('CodexMark');
@@ -127,20 +125,13 @@ describe('mobile home desktop-first surface', () => {
     expect(vendorIconSource).not.toContain('XD_SYMBOL_PATHS');
     expect(vendorIconSource).not.toContain('XD_INC_MARK_ASPECT_RATIO');
     expect(vendorIconSource).not.toContain('iconWidth');
-    expect(agentMarkSource).toContain('width={size}');
-    expect(agentMarkSource).toContain('height={size}');
-    expect(agentMarkSource).toContain('viewBox="0 0 24 24"');
-    expect(vendorPathsSource).toContain('CLAUDE_AGENT_PATH');
-    expect(vendorPathsSource).toContain('CODEX_AGENT_FLOWER_PATH');
-    expect(vendorPathsSource).toContain('CODEX_AGENT_PROMPT_PATH');
-    expect(agentMarkSource).not.toContain('ANTHROPIC_PROVIDER_PATH');
-    expect(agentMarkSource).not.toContain('OPENAI_PROVIDER_PATH');
-    expect(providerMarkSource).toContain('ANTHROPIC_PROVIDER_PATH');
-    expect(providerMarkSource).toContain('OPENAI_PROVIDER_PATH');
-    expect(providerMarkSource).not.toContain('CLAUDE_AGENT_PATH');
-    expect(providerMarkSource).not.toContain('CODEX_AGENT_FLOWER_PATH');
-    expect(vendorIconSource).toContain("import { MobileAgentMark } from './MobileAgentMark';");
-    expect(vendorIconSource).toContain("agentKind={vendor === 'codex' ? 'codex' : 'claude-code'}");
+    expect(vendorIconSource).toContain('width={size}');
+    expect(vendorIconSource).toContain('height={size}');
+    expect(vendorIconSource).toContain('viewBox="0 0 24 24"');
+    expect(vendorPathsSource).toContain('CLAUDE_PATH');
+    expect(vendorPathsSource).toContain('CODEX_PATH');
+    expect(vendorIconSource).toContain("import { CLAUDE_PATH, CODEX_PATH } from './vendorIconPaths';");
+    expect(vendorIconSource).toContain("vendor === 'codex' ? CODEX_PATH : CLAUDE_PATH");
     expect(vendorIconSource).not.toContain('viewBox="136 137 282 158"');
     expect(vendorIconSource).not.toContain('transform="translate(');
     expect(vendorIconSource).toContain('Easing.inOut(Easing.ease)');
@@ -184,7 +175,6 @@ describe('mobile home desktop-first surface', () => {
     expect(source).toContain('if (version === 0) {');
     expect(source).toContain('scheduleEventVersionsRef.current.delete(deviceId)');
     expect(source).toContain("projection?.refresh.sessionIndex !== true && projection?.runPatch.status !== 'running'");
-    expect(source).toContain('force: projection.refresh.scheduleList === true');
     expect(source).toContain('scheduleIndex,');
     expect(source).toContain('const attention = item.pendingInteractionCount > 0');
     expect(source).toContain('|| (item.scheduleInfo?.unreadCount ?? 0) > 0');
@@ -251,7 +241,6 @@ describe('mobile home desktop-first surface', () => {
 
   it('keeps project and session rows at desktop sidebar information density', () => {
     const source = readSource('app/devices/index.tsx');
-    const automationTimerSource = readSource('src/session/AutomationTimerIcon.tsx');
     const desktopProjectNode = readSource(
       '../../apps/desktop/src/renderer/features/cc-agent/sidebar/sections/ProjectNode.tsx',
     );
@@ -291,17 +280,6 @@ describe('mobile home desktop-first surface', () => {
     expect(sessionRowSource).toContain('item.scheduleInfo?.unreadCount');
     expect(sessionRowSource).toContain('item.session.pinnedAt');
     expect(sessionRowSource).toContain('styles.sessionTrailingIcons');
-    expect(sessionRowSource).toContain('<AutomationTimerIcon');
-    expect(sessionRowSource).toContain('paused={scheduleStopped}');
-    expect(sessionRowSource).toContain('item.scheduleInfo?.allSchedulesStopped === true');
-    expect(source).not.toContain('Clock,');
-    expect(automationTimerSource).toContain("import { Pause, Timer } from 'lucide-react-native';");
-    expect(automationTimerSource).toContain('<Timer color={colors.textTertiary}');
-    expect(automationTimerSource).toContain('<Pause color={colors.textTertiary}');
-    expect(automationTimerSource).not.toContain('opacity: 0.6');
-    expect(automationTimerSource).toContain('position: \'absolute\'');
-    expect(automationTimerSource).toContain('backgroundColor: colors.surfaceChip');
-    expect(automationTimerSource).toContain('borderColor: colors.border');
     expect(sessionRowSource).not.toContain('SessionBadge');
     expect(source).toContain('const HOME_SESSION_ROW_HEIGHT = 78;');
     expect(source).toContain('const CINDY_LIST_ROW_HEIGHT = 60;');

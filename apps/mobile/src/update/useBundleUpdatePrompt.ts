@@ -1,6 +1,6 @@
 // 整包更新发现 hook:拉 /latest → 比对 runtimeVersion → 弹窗引导打开正常安装入口。
 //
-// 用在两处:
+// 用在两处(见 docs/self-hosted-ios-build-and-ota.md A6):
 // - 启动时自动检查(app/_layout.tsx);
 // - 设置页统一"检查更新"入口先手动触发整包检查(返回 checkNow 的明确结果)。
 // 判定逻辑全在纯函数 evaluateBundleUpdate 里,本 hook 只管 IO + 交互。

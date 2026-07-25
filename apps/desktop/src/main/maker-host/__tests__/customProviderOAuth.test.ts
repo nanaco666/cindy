@@ -7,7 +7,7 @@
 
 import { describe, it, expect } from 'vitest';
 
-import { buildUserProvider, type CustomProviderConfig } from '@cindy/model-providers';
+import { buildUserProvider, type CustomProviderConfig } from '@lizi/model-providers';
 
 import { mergeDiscoveredModelsIntoConfig, validateCustomProviderConfig } from '../custom-provider-store.js';
 import { createProviderService } from '../provider-service.js';

@@ -5,27 +5,19 @@ import type {
   RemoteMessage,
   RemoteSession,
 } from '@/session/types';
-import type {
-  MobileSessionReference,
-  MobileSessionReferenceContext,
-} from '@/session/sessionReferences';
 import {
   DEVICE_LINK_MEDIA_FETCH_CHANNEL,
   DEVICE_LINK_VOICE_DICTIONARY_LEARNING_CHANNEL,
   DEVICE_LINK_VOICE_TRANSCRIBE_CHANNEL,
   MOBILE_REMOTE_INVOKE_CHANNELS,
-} from '@cindy/maker-shared/device-link-contract';
+} from '@lizi/maker-shared/device-link-contract';
 import type {
   MobileGoalLimitsInput,
   MobileGoalStatusPayload,
-  MobileCodexRateLimitResetResult,
-  MobileCodexRateLimitsResult,
-  MobileSessionAgentSwitchIntent,
-  MobileSessionAgentSwitchResult,
   MobileVoiceDictionaryLearningRequest,
   MobileVoiceDictionaryLearningResult,
-} from '@cindy/maker-shared/device-link-contract';
-import type { ProviderView } from '@cindy/model-providers/registry';
+} from '@lizi/maker-shared/device-link-contract';
+import type { ProviderView } from '@lizi/model-providers/registry';
 import type { RewindPreviewPayload } from '@/session/rewindPreview';
 import type { MobileRemoteMediaFetchResult } from '@/session/remoteMedia';
 import type {
@@ -345,17 +337,6 @@ export interface MobileMakerTransport {
    * 不传 providerId = 老 2 参语义,不动会话当前来源选择。
    */
   setModel(sessionId: string, model: string, providerId?: string): Promise<void>;
-  /** 登记跨 Agent 切换意图；真正切换在下一条消息发送时由 desktop main 执行。 */
-  switchSessionAgent(
-    sessionId: string,
-    targetAgentKind: MobileAgentKind,
-    model: string,
-    providerId: string | null,
-    effort?: string,
-    fastMode?: boolean,
-  ): Promise<MobileSessionAgentSwitchResult>;
-  /** 读取 desktop main 的权威 pending intent，用于重连 / 重进页面恢复。 */
-  getSessionAgentSwitchIntent(sessionId: string): Promise<MobileSessionAgentSwitchIntent | null>;
   setEffort(sessionId: string, effort: string): Promise<void>;
   setPermissionMode(sessionId: string, mode: string): Promise<void>;
   /** 计划模式一级开关(#494 新协议,capabilities.planMode.supported 时可用);
@@ -371,10 +352,6 @@ export interface MobileMakerTransport {
    * 网关配额。老被控端 CHANNEL_NOT_ALLOWED → 调用方隐藏限额区块。
    */
   getAccountUsage(agentKind: MobileAgentKind): Promise<unknown>;
-  /** Codex app-server authoritative windows plus banked reset credits and a bound reset offer. */
-  getCodexRateLimits(): Promise<MobileCodexRateLimitsResult>;
-  /** Consume the desktop-issued offer; retries must pass the same idempotency key. */
-  resetCodexRateLimits(idempotencyKey: string): Promise<MobileCodexRateLimitResetResult>;
   /** 网关 API key presence-only 探测(只回 boolean;老被控端 → 调用方按 unknown 处理)。 */
   getApiKeyPresent(): Promise<{ present: boolean }>;
   /** 会话「非选中模型」effort/fast 写穿(老被控端 → 调用方吞掉降级)。 */
@@ -400,10 +377,6 @@ export interface MobileMakerTransport {
   fork(sourceSessionId: string, messageClientId: string): Promise<RemoteSession>;
   rewindPreview(sessionId: string, clientId: string): Promise<RewindPreviewPayload>;
   rewindCommit(sessionId: string, clientId: string): Promise<RemoteSession>;
-  deleteMessage(
-    sessionId: string,
-    clientId: string,
-  ): Promise<{ sessionId: string; clientId: string; clientIds?: string[] }>;
   closeSession(sessionId: string): Promise<void>;
   /**
    * 会话未读已读回执:手机端真实展示会话内容后,清掉被控端该会话的未读态
@@ -459,13 +432,7 @@ export interface MobileMakerTransport {
     retryLastError(sessionId: string): Promise<InputProjection>;
     clearError(sessionId: string): Promise<InputProjection>;
     remove(sessionId: string, clientId: string): Promise<InputProjection>;
-    updateText(
-      sessionId: string,
-      clientId: string,
-      newText: string,
-      sessionRefs?: MobileSessionReference[],
-      trustedContexts?: MobileSessionReferenceContext[],
-    ): Promise<InputProjection>;
+    updateText(sessionId: string, clientId: string, newText: string): Promise<InputProjection>;
     /** 整条内容替换(文本+附件),排队消息复用 composer 编辑的保存入口;老桌面端无此通道会抛 CHANNEL_NOT_ALLOWED。 */
     updateContent(sessionId: string, clientId: string, item: QueuedRemoteMessage): Promise<InputProjection>;
     move(sessionId: string, clientId: string, targetIndex: number): Promise<InputProjection>;
@@ -532,23 +499,6 @@ export function createMobileMakerTransport({
     listActiveSessions: () => call('maker:list-active'),
     setModel: (sessionId, model, providerId) =>
       call('maker:set-model', providerId ? [sessionId, model, providerId] : [sessionId, model]),
-    switchSessionAgent: (
-      sessionId,
-      targetAgentKind,
-      model,
-      providerId,
-      effort,
-      fastMode,
-    ) => call('maker:switch-session-agent', [
-      sessionId,
-      targetAgentKind,
-      model,
-      providerId,
-      effort,
-      fastMode,
-    ]),
-    getSessionAgentSwitchIntent: (sessionId) =>
-      call('maker:get-session-agent-switch-intent', [sessionId]),
     setEffort: (sessionId, effort) => call('maker:set-effort', [sessionId, effort]),
     setPermissionMode: (sessionId, mode) => call('maker:set-permission-mode', [sessionId, mode]),
     setPlanMode: (sessionId, enabled) => call('maker:set-plan-mode', [sessionId, enabled]),
@@ -556,10 +506,6 @@ export function createMobileMakerTransport({
     setExtraDirs: (sessionId, dirs) => call('maker:set-extra-dirs', [sessionId, dirs]),
     getModelPricing: () => call('maker:usage:model-pricing'),
     getAccountUsage: (agentKind) => call('maker:usage:account', [agentKind]),
-    getCodexRateLimits: () => call('maker:usage:codex-rate-limits'),
-    resetCodexRateLimits: (idempotencyKey) => (
-      call('maker:usage:codex-rate-limit-reset', [idempotencyKey])
-    ),
     getApiKeyPresent: () => call('maker:api-key:present'),
     setSessionModelPref: (pref) => call('maker:set-session-model-pref', [pref]),
     applyNewMakerDraftPref: (pref) => call('maker:apply-new-maker-draft-pref', [pref]),
@@ -590,7 +536,6 @@ export function createMobileMakerTransport({
       call('maker:fork', [sourceSessionId, messageClientId]),
     rewindPreview: (sessionId, clientId) => call('maker:rewind:preview', [sessionId, clientId]),
     rewindCommit: (sessionId, clientId) => call('maker:rewind:commit', [sessionId, clientId]),
-    deleteMessage: (sessionId, clientId) => call('maker:message:delete', [sessionId, clientId]),
     closeSession: (sessionId) => call('maker:close-session', [sessionId]),
     clearSessionAttention: (sessionId, intent) =>
       call('notification:clear-session-attention', [sessionId, intent]),
@@ -633,13 +578,8 @@ export function createMobileMakerTransport({
       retryLastError: (sessionId) => call('maker:input:retry-last-error', [sessionId]),
       clearError: (sessionId) => call('maker:input:clear-error', [sessionId]),
       remove: (sessionId, clientId) => call('maker:input:remove', [sessionId, clientId]),
-      updateText: (sessionId, clientId, newText, sessionRefs, trustedContexts) =>
-        call(
-          'maker:input:update-text',
-          sessionRefs
-            ? [sessionId, clientId, newText, sessionRefs, trustedContexts]
-            : [sessionId, clientId, newText],
-        ),
+      updateText: (sessionId, clientId, newText) =>
+        call('maker:input:update-text', [sessionId, clientId, newText]),
       updateContent: (sessionId, clientId, item) =>
         call('maker:input:update-content', [sessionId, clientId, item]),
       move: (sessionId, clientId, targetIndex) =>

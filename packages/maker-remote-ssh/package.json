@@ -1,5 +1,5 @@
 {
-  "name": "@cindy/maker-remote-ssh",
+  "name": "@lizi/maker-remote-ssh",
   "version": "0.0.0",
   "private": true,
   "description": "xdt-maker SSH remote: connection pool, ~/.ssh/config IO, credential resolver. Zero Electron deps. Phase A — host management only (no agent-on-remote yet).",
@@ -15,8 +15,8 @@
     "test:watch": "vitest"
   },
   "author": {
-    "name": "X.D. Network Inc.",
-    "email": "feedback@cindy.app"
+    "name": "Lizi",
+    "email": "jiali@magiclizi.com"
   },
   "license": "Apache-2.0",
   "dependencies": {

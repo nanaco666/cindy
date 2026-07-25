@@ -6,7 +6,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from 'react';
-import type { VoiceInputState } from '@cindy/voice-input-core';
+import type { VoiceInputState } from '@lizi/voice-input-core';
 
 import { VoiceInputPointerHint } from './VoiceInputPointerHint';
 

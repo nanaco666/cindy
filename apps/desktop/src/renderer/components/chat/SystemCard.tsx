@@ -10,7 +10,6 @@ import { ArrowLeftRight, ChevronRight, Layers, RefreshCw, Target } from 'lucide-
 import { useTranslation } from 'react-i18next';
 
 import { cn } from '@/lib/utils';
-import { Collapse } from '@/components/ui/collapse';
 import { LearnStatusCard } from '@/features/learn/LearnStatusCard';
 
 interface SystemCardProps {
@@ -307,7 +306,7 @@ function ContextCard({ data }: { data?: Record<string, unknown> }) {
         ))}
       </div>
 
-      <Collapse open={expanded}>
+      {expanded && (
         <div className="mt-2">
           {usage.model && (
             <div className="mb-2 truncate text-[12px] leading-[1.3] text-[var(--msg-tool-text)]">
@@ -411,7 +410,7 @@ function ContextCard({ data }: { data?: Record<string, unknown> }) {
             </div>
           )}
         </div>
-      </Collapse>
+      )}
     </div>
   );
 }
@@ -752,7 +751,7 @@ function AutoResumeCard() {
  * session-agent-switch 边界分隔条:复用 CompactBoundaryCard 的"分隔线 + 居中
  * chip"语言标记"此处引擎从 X 切换到 Y"。chip 可点展开交接内容面板(发给新引擎
  * 的上下文摘要全文)——默认不打扰,想看时可核查我们替用户做了什么交接。
- * 全灰度(docs/design-rules/cindy-design-system.md §4),无 chromatic 色;展开面板复用 msg-tool 系 token。
+ * 全灰度(DESIGN.md §4),无 chromatic 色;展开面板复用 msg-tool 系 token。
  */
 function AgentSwitchCard({ data }: { data?: Record<string, unknown> }) {
   const { t } = useTranslation();
@@ -803,23 +802,21 @@ function AgentSwitchCard({ data }: { data?: Record<string, unknown> }) {
         </button>
         <div className="h-px flex-1 bg-[var(--msg-tool-card-border)]" />
       </div>
-      <Collapse open={expanded && !!handoff}>
-        {handoff ? (
-          <div
-            className={cn(
-              'mx-auto mt-2 max-w-full rounded-[10px] border border-[var(--msg-tool-card-border)]',
-              'bg-[var(--msg-tool-card-bg)] px-4 py-3 select-text',
-            )}
-          >
-            <div className="mb-1.5 text-[11px] font-medium text-muted-foreground">
-              {t('chat.systemCard.agentSwitch.handoffTitle')}
-            </div>
-            <pre className="max-h-64 overflow-y-auto whitespace-pre-wrap break-words font-mono text-[12px] leading-[1.55] text-[var(--msg-tool-text)]">
-              {handoff}
-            </pre>
+      {expanded && handoff && (
+        <div
+          className={cn(
+            'mx-auto mt-2 max-w-full rounded-[10px] border border-[var(--msg-tool-card-border)]',
+            'bg-[var(--msg-tool-card-bg)] px-4 py-3 select-text',
+          )}
+        >
+          <div className="mb-1.5 text-[11px] font-medium text-muted-foreground">
+            {t('chat.systemCard.agentSwitch.handoffTitle')}
           </div>
-        ) : null}
-      </Collapse>
+          <pre className="max-h-64 overflow-y-auto whitespace-pre-wrap break-words font-mono text-[12px] leading-[1.55] text-[var(--msg-tool-text)]">
+            {handoff}
+          </pre>
+        </div>
+      )}
     </div>
   );
 }
@@ -856,7 +853,7 @@ export function SystemCard({ cardType, data, sessionId }: SystemCardProps) {
 }
 
 // ── CmdCard ──────────────────────────────────────────────────────────────
-// /cmd shell 执行结果 —— 终端风格, 严格遵守 docs/design-rules/cindy-design-system.md 的"全灰度"规则:
+// /cmd shell 执行结果 —— 终端风格, 严格遵守 DESIGN.md 的"全灰度"规则:
 //   - 不允许任何 chromatic 色 (无绿/红/橙)
 //   - 状态/cmdLine/输出全部走 msg-* 灰度 token
 //   - exit 0 / exit !=0 / TIMEOUT 通过文案区分, 不通过颜色
@@ -873,7 +870,7 @@ function CmdCard({ data }: { data?: Record<string, unknown> }) {
   const timedOut = Boolean(data?.timedOut);
   const spawnError = data?.spawnError as string | undefined;
 
-  // 状态 chip —— 全灰度, pill 形状 (docs/design-rules/cindy-design-system.md §4 Chip & Button Neutrals)。
+  // 状态 chip —— 全灰度, pill 形状 (DESIGN.md §4 Chip & Button Neutrals)。
   // 文案区分 ok / timeout / spawn-err / exit code。
   const statusText = timedOut ? 'timeout' : spawnError ? 'spawn err' : `exit ${exitCode}`;
   const statusChip = (
@@ -889,7 +886,7 @@ function CmdCard({ data }: { data?: Record<string, unknown> }) {
   );
 
   // cmdLine + 各种输出块共用同一个等宽 + 灰度 Card-tone block (12px radius 是
-  // docs/design-rules/cindy-design-system.md §5 内置容器圆角)。stderr 和 stdout 视觉一致, 仅靠上方 label 区分,
+  // DESIGN.md §5 内置容器圆角)。stderr 和 stdout 视觉一致, 仅靠上方 label 区分,
   // 不用红色 (违反 §2 grayscale 硬规则)。
   const blockClass = cn(
     'mt-1 max-h-[320px] overflow-auto whitespace-pre-wrap break-words',

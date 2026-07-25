@@ -24,19 +24,12 @@ import { extractIpcError } from '@/utils/ipcError';
 import {
   createCustomProvider,
   readCustomProviderKey,
-  replaceCustomProviderModelId,
   updateCustomProvider,
   type RuntimeKeys,
 } from '@/lib/customProviders';
-import { uniqueCustomProviderId } from '@/lib/customProviderId';
 
-import { sortPresetsForLocale } from '@cindy/model-providers';
-import type {
-  AgentKind,
-  CustomProviderConfig,
-  ProviderPreset,
-  ProviderRuntimeModelConfig,
-} from '@cindy/model-providers';
+import { sortPresetsForLocale } from '@lizi/model-providers';
+import type { AgentKind, CustomProviderConfig, ProviderPreset } from '@lizi/model-providers';
 
 const AGENTS: AgentKind[] = ['claude-code', 'codex'];
 
@@ -63,7 +56,10 @@ interface CustomProviderDialogProps {
   onClose: () => void;
 }
 
-type ModelRow = ProviderRuntimeModelConfig;
+interface ModelRow {
+  id: string;
+  name: string;
+}
 interface HeaderRow {
   name: string;
   value: string;
@@ -118,6 +114,22 @@ function initRuntimes(initial?: CustomProviderConfig): Record<AgentKind, Runtime
     }
   }
   return out;
+}
+
+function slugify(name: string): string {
+  const s = name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .replace(/-+/g, '-');
+  return s || 'provider';
+}
+function uniqueId(name: string, existing: ReadonlySet<string>): string {
+  const base = slugify(name);
+  if (!existing.has(base)) return base;
+  let i = 2;
+  while (existing.has(`${base}-${i}`)) i += 1;
+  return `${base}-${i}`;
 }
 
 // ── 小组件 ──────────────────────────────────────────────────────────────────
@@ -492,30 +504,16 @@ export function CustomProviderDialog({ initial, existingIds, onSaved, onClose }:
       if (result.ok && result.models && result.models.length > 0) {
         // 用**响应到达时**的最新表单行构建弹层（rtRef），不是请求发出时的 rf 快照。
         const current = rtRef.current[agent].models
-          .map((m) => ({
-            id: m.id.trim(),
-            name: m.name.trim(),
-            ...(m.contextWindow !== undefined ? { contextWindow: m.contextWindow } : {}),
-            ...(m.defaultEnabled === false ? { defaultEnabled: false } : {}),
-          }))
+          .map((m) => ({ id: m.id.trim(), name: m.name.trim() }))
           .filter((m) => m.id.length > 0);
         const currentById = new Map(current.map((m) => [m.id, m]));
         const fetchedIds = new Set(result.models.map((m) => m.id));
         // 行集合 = 表单已填但不在拉取结果里的（置顶保留）+ 拉取结果（撞 id 时保留用户显示名）。
         const rows: ModelRow[] = [
-          ...current
-            .filter((m) => !fetchedIds.has(m.id))
-            .map((m) => ({ ...m, name: m.name || m.id })),
+          ...current.filter((m) => !fetchedIds.has(m.id)).map((m) => ({ id: m.id, name: m.name || m.id })),
           ...result.models.map((m) => {
             const cur = currentById.get(m.id);
-            return {
-              id: m.id,
-              name: cur?.name || m.name,
-              ...(cur?.contextWindow !== undefined
-                ? { contextWindow: cur.contextWindow }
-                : {}),
-              ...(cur?.defaultEnabled === false ? { defaultEnabled: false } : {}),
-            };
+            return { id: m.id, name: cur?.name || m.name };
           }),
         ];
         setPicker({ agent, models: rows, selected: new Set(currentById.keys()), query: '' });
@@ -554,24 +552,12 @@ export function CustomProviderDialog({ initial, existingIds, onSaved, onClose }:
       }
       const merged: ModelRow[] = chosen.map((m) => {
         const latest = latestById.get(m.id);
-        const contextWindow = latest?.contextWindow ?? m.contextWindow;
-        const defaultEnabled = latest?.defaultEnabled ?? m.defaultEnabled;
-        return {
-          id: m.id,
-          name: latest?.name.trim() ? latest.name.trim() : m.name,
-          ...(contextWindow !== undefined ? { contextWindow } : {}),
-          ...(defaultEnabled === false ? { defaultEnabled: false } : {}),
-        };
+        return { id: m.id, name: latest?.name.trim() ? latest.name.trim() : m.name };
       });
       for (const m of x.models) {
         const id = m.id.trim();
         if (id && !pickerIds.has(id) && !merged.some((r) => r.id === id)) {
-          merged.push({
-            id,
-            name: m.name.trim() || id,
-            ...(m.contextWindow !== undefined ? { contextWindow: m.contextWindow } : {}),
-            ...(m.defaultEnabled === false ? { defaultEnabled: false } : {}),
-          });
+          merged.push({ id, name: m.name.trim() || id });
         }
       }
       return { ...x, models: merged };
@@ -604,12 +590,7 @@ export function CustomProviderDialog({ initial, existingIds, onSaved, onClose }:
         return;
       }
       const models = rf.models
-        .map((m) => ({
-          id: m.id.trim(),
-          name: m.name.trim(),
-          ...(m.contextWindow !== undefined ? { contextWindow: m.contextWindow } : {}),
-          ...(m.defaultEnabled === false ? { defaultEnabled: false } : {}),
-        }))
+        .map((m) => ({ id: m.id.trim(), name: m.name.trim() }))
         .filter((m) => m.id && m.name);
       // OAuth 形态模型可留空——授权成功后自动发现并持久化（与内置订阅统一）。
       if (models.length === 0 && authMode !== 'oauth') {
@@ -657,10 +638,7 @@ export function CustomProviderDialog({ initial, existingIds, onSaved, onClose }:
       }
       auth = { method: 'oauth', oauth: o };
     }
-    const id =
-      editing && initial
-        ? initial.id
-        : uniqueCustomProviderId(trimmedName, new Set(existingIds ?? []));
+    const id = editing && initial ? initial.id : uniqueId(trimmedName, new Set(existingIds ?? []));
     const config: CustomProviderConfig = { id, name: trimmedName, ...(auth ? { auth } : {}), runtimes };
     setSaving(true);
     try {
@@ -690,7 +668,7 @@ export function CustomProviderDialog({ initial, existingIds, onSaved, onClose }:
       <div
         className={cn(
           'flex max-h-[88vh] w-[600px] flex-col rounded-[16px]',
-          'border border-[var(--border-default)] bg-[var(--surface-elevated)]',
+          'border border-[var(--login-card-border)] bg-[var(--login-card-bg)]',
           'shadow-[var(--shadow-menu)]',
         )}
       >
@@ -937,9 +915,7 @@ export function CustomProviderDialog({ initial, existingIds, onSaved, onClose }:
                       onChange={(v) =>
                         patch(activeTab, (x) => ({
                           ...x,
-                          models: x.models.map((y, j) => (
-                            j === i ? replaceCustomProviderModelId(y, v) : y
-                          )),
+                          models: x.models.map((y, j) => (j === i ? { ...y, id: v } : y)),
                         }))
                       }
                       placeholder={t('settings.providers.custom.fields.modelIdPlaceholder')}
@@ -1173,7 +1149,7 @@ function ModelPickerOverlay({
       <div
         className={cn(
           'flex max-h-[72vh] w-[460px] flex-col rounded-[16px]',
-          'border border-[var(--border-default)] bg-[var(--surface-elevated)]',
+          'border border-[var(--login-card-border)] bg-[var(--login-card-bg)]',
           'shadow-[var(--shadow-menu)]',
         )}
       >

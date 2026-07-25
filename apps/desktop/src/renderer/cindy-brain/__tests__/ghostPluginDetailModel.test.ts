@@ -16,8 +16,8 @@ describe('ghostPluginDetailModel', () => {
       '生成图片、视频和音乐。支持更多高级设置。',
     );
     expect(
-      ghostPluginSummary('访问  aigc.example.com\n生成图片。支持更多高级设置。', 'xd-mivo'),
-    ).toBe('访问 aigc.example.com 生成图片。支持更多高级设置。');
+      ghostPluginSummary('访问  aigc.xindong.com\n生成图片。支持更多高级设置。', 'xd-mivo'),
+    ).toBe('访问 aigc.xindong.com 生成图片。支持更多高级设置。');
     expect(ghostPluginSummary('   ', 'xd-mivo')).toBe('xd-mivo');
   });
 });

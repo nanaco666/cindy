@@ -7,10 +7,6 @@ const registerSource = readFileSync(
   resolve(__dirname, '..', 'maker-ipc', 'register.ts'),
   'utf8',
 );
-const makerHostSource = readFileSync(
-  resolve(__dirname, '..', 'maker-host', 'index.ts'),
-  'utf8',
-);
 
 describe('maker Orca role marking IPC boundary', () => {
   it('exposes explicit markOrcaRole IPC for post-addWorker marking', () => {
@@ -31,16 +27,6 @@ describe('maker Orca role marking IPC boundary', () => {
 
     expect(roleMarkingSource).toContain("if (orcaRole === 'worker') {");
     expectOrder(roleMarkingSource, 'markKnownOrcaWorkerSession(sessionId);', 'clearSuppressedOrcaWorkerAgentIslandSession(sessionId);');
-  });
-
-  it('registers rehydrated worker sessions as known before Maker publishes them', () => {
-    const successHookSource = makerHostSource.slice(
-      makerHostSource.indexOf('onStartSucceeded:'),
-      makerHostSource.indexOf('getCodexHistoryHasProductPrompt:'),
-    );
-
-    expect(successHookSource).toContain("if (createOpts.orcaRole === 'worker') {");
-    expect(successHookSource).toContain('markKnownOrcaWorkerSession(sessionId);');
   });
 });
 

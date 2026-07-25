@@ -2,13 +2,10 @@ import { describe, expect, it } from 'vitest';
 
 import {
   GHOST_CARD_ACTION_ID_RE,
-  deriveGhostSessionContext,
   diffGhostPermissionItems,
   ghostContentKeys,
   ghostNetworkHostMatches,
   ghostPanelKind,
-  ghostPreviewUrlAllowed,
-  parseGhostNodeChildToHostMessage,
   ghostPartition,
   ghostPermissionItems,
   ghostWebviewEntryPaths,
@@ -37,7 +34,7 @@ function goodManifest(): Record<string, unknown> {
   };
 }
 
-/** 一份全绿的芯片型清单基底。 */
+/** 一份全绿的芯片型清单基底(C3a)。 */
 function goodChipManifest(): Record<string, unknown> {
   return {
     schemaVersion: 2,
@@ -219,7 +216,7 @@ describe('ghost · 清单校验', () => {
   });
 });
 
-describe('ghost · 芯片型清单(schemaVersion 2)', () => {
+describe('ghost · 芯片型清单(schemaVersion 2,C3a)', () => {
   it('全字段合法芯片清单通过', () => {
     const v = validateGhostManifest(goodChipManifest());
     expect(v.ok).toBe(true);
@@ -240,7 +237,7 @@ describe('ghost · 芯片型清单(schemaVersion 2)', () => {
     expect(validateGhostManifest({ ...goodChipManifest(), entry: 'src/main.js' }).ok).toBe(true);
   });
 
-  it('slots 必填非空、只认已知卡槽、不许重复', () => {
+  it('slots 必填非空、只认六卡槽、不许重复', () => {
     expect(validateGhostManifest({ ...goodChipManifest(), slots: undefined }).ok).toBe(false);
     expect(validateGhostManifest({ ...goodChipManifest(), slots: [] }).ok).toBe(false);
     expect(validateGhostManifest({ ...goodChipManifest(), slots: ['panel', 'filesystem'] }).ok).toBe(false);
@@ -250,122 +247,6 @@ describe('ghost · 芯片型清单(schemaVersion 2)', () => {
     noPanel.tools = [{ name: 'do_thing', description: '做点事' }];
     delete noPanel.panel;
     expect(validateGhostManifest(noPanel).ok).toBe(true);
-  });
-
-  it('agent 槽默认只允许真人点击；background 是单独的高风险加档', () => {
-    const userActionOnly = validateGhostManifest({
-      ...goodChipManifest(),
-      slots: ['panel', 'agent'],
-    });
-    expect(userActionOnly.ok).toBe(true);
-    if (!userActionOnly.ok) return;
-    expect(userActionOnly.manifest.agent).toBeUndefined();
-    expect(ghostContentKeys(userActionOnly.manifest)).toContain('slotAgent');
-    expect(ghostPermissionItems(userActionOnly.manifest)).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          key: 'agent:user-action',
-          kind: 'agent',
-          labelKey: 'agentUserAction',
-          detailKey: 'agentUserActionDetail',
-        }),
-      ]),
-    );
-
-    const background = validateGhostManifest({
-      ...goodChipManifest(),
-      slots: ['panel', 'agent'],
-      agent: { background: true },
-    });
-    expect(background.ok).toBe(true);
-    if (!background.ok) return;
-    expect(background.manifest.agent).toEqual({ background: true });
-    expect(ghostPermissionItems(background.manifest).map((item) => item.key)).toEqual(
-      expect.arrayContaining(['agent:user-action', 'agent:background']),
-    );
-
-    const diff = diffGhostPermissionItems(userActionOnly.manifest, background.manifest);
-    expect(diff.added.map((item) => item.key)).toEqual(['agent:background']);
-    expect(diff.removed).toHaveLength(0);
-  });
-
-  it('agent 详单必须与槽成对，且目前只接受 background: true', () => {
-    expect(
-      validateGhostManifest({
-        ...goodChipManifest(),
-        agent: { background: true },
-      }).ok,
-    ).toBe(false);
-    expect(
-      validateGhostManifest({
-        ...goodChipManifest(),
-        slots: ['panel', 'agent'],
-        agent: { background: false },
-      }).ok,
-    ).toBe(false);
-    expect(
-      validateGhostManifest({
-        ...goodChipManifest(),
-        slots: ['panel', 'agent'],
-        agent: 'background',
-      }).ok,
-    ).toBe(false);
-    expect(
-      validateGhostManifest({
-        ...goodChipManifest(),
-        slots: ['panel', 'agent'],
-        agent: { background: true, command: 'hidden' },
-      }).ok,
-    ).toBe(false);
-  });
-
-  it('node 槽只允许包内入口与固定 stdio 协议，并如实生成高风险权限项', () => {
-    const raw = {
-      ...goodChipManifest(),
-      slots: ['panel', 'node'],
-      node: {
-        entry: 'node/worker.cjs',
-        protocol: 'mcp-stdio',
-        lifecycle: 'resident',
-      },
-    };
-    const result = validateGhostManifest(raw);
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(result.manifest.node).toEqual(raw.node);
-    expect(ghostContentKeys(result.manifest)).toContain('slotNode');
-    expect(ghostPermissionItems(result.manifest)).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ key: 'node:execute', kind: 'node', labelKey: 'nodeMcp' }),
-        expect.objectContaining({ key: 'node:resident', kind: 'node', labelKey: 'nodeResident' }),
-      ]),
-    );
-  });
-
-  it('node 清单拒绝任意命令字段、越界配置和槽/详单不成对', () => {
-    const withNode = (node: unknown, slots: string[] = ['panel', 'node']) =>
-      validateGhostManifest({ ...goodChipManifest(), slots, node });
-    expect(withNode({ entry: 'node/a.cjs', protocol: 'json-rpc-stdio' }).ok).toBe(true);
-    expect(withNode({ entry: '../a.cjs', protocol: 'json-rpc-stdio' }).ok).toBe(false);
-    expect(withNode({ entry: 'node/a.txt', protocol: 'json-rpc-stdio' }).ok).toBe(false);
-    expect(withNode({ entry: 'node/a.mjs', protocol: 'json-rpc-stdio' }).ok).toBe(false);
-    expect(withNode({ entry: 'node/a.cjs', protocol: 'stdio' }).ok).toBe(false);
-    expect(
-      withNode({ entry: 'node/a.cjs', protocol: 'json-rpc-stdio', command: 'node' }).ok,
-    ).toBe(false);
-    expect(
-      withNode({ entry: 'node/a.cjs', protocol: 'json-rpc-stdio', args: ['--x'] }).ok,
-    ).toBe(false);
-    expect(
-      withNode({
-        entry: 'node/a.cjs',
-        protocol: 'json-rpc-stdio',
-        lifecycle: 'resident',
-        idleTimeoutSeconds: 60,
-      }).ok,
-    ).toBe(false);
-    expect(withNode({ entry: 'node/a.cjs', protocol: 'json-rpc-stdio' }, ['panel']).ok).toBe(false);
-    expect(validateGhostManifest({ ...goodChipManifest(), slots: ['panel', 'node'] }).ok).toBe(false);
   });
 
   it('工具声明(卡槽②)与 tool 槽成对;名/描述/条数校验', () => {
@@ -717,7 +598,7 @@ describe('ghost · whenToUse(语义召回线索)', () => {
   });
 });
 
-describe('ghost · cindy 详单 video 类目', () => {
+describe('ghost · cindy 详单 video 类目(C3c-5)', () => {
   const withCindy = (cindy: unknown): Record<string, unknown> => ({
     ...goodChipManifest(),
     slots: ['panel', 'cindy'],
@@ -759,7 +640,7 @@ describe('ghost · cindy 详单 video 类目', () => {
 
 });
 
-describe('ghost · 逐项权限清单', () => {
+describe('ghost · 逐项权限清单(C3c-1)', () => {
   /** 全能力芯片清单:cindy 两动作 + 两工具 + 指令 + 左停面板。 */
   const fullChip = (): GhostManifest => ({
     schemaVersion: 2,
@@ -1046,7 +927,7 @@ describe('ghost · 官方保留 id 前缀(cindy-)', () => {
   });
 });
 
-describe('ghost · network 域名条目格式与匹配', () => {
+describe('ghost · network 域名条目格式与匹配(C4)', () => {
   it('合法条目:小写域名至少两段,通配只允许最左一段', () => {
     for (const p of ['api.example.com', 'example.com', '*.weather.com', 'a-b.c1.io']) {
       expect(isValidGhostNetworkHostPattern(p), p).toBe(true);
@@ -1074,7 +955,7 @@ describe('ghost · network 域名条目格式与匹配', () => {
   });
 });
 
-describe('ghost · network 详单校验', () => {
+describe('ghost · network 详单校验(C4)', () => {
   const withNet = (network: unknown, extra: Record<string, unknown> = {}) => ({
     ...goodManifest(),
     slots: ['panel', 'network'],
@@ -1552,7 +1433,7 @@ describe('ghost · 交互卡 action id 形状(v2)', () => {
   });
 });
 
-describe('ghost · settingsHtml 自绘设置区 + settingsHeight', () => {
+describe('ghost · settingsHtml 自绘设置区 + settingsHeight(C3b 收尾)', () => {
   it('settingsHtml 合法相对路径通过并透传;非法路径拒', () => {
     const ok = validateGhostManifest({ ...goodManifest(), settingsHtml: 'ui/settings.html' });
     expect(ok.ok && ok.manifest.settingsHtml).toBe('ui/settings.html');
@@ -1704,226 +1585,5 @@ describe('ghost · 权限清单凭证分档(知情同意面不许说过头话)',
     expect(items.find((i) => i.key === 'network:secret:pages_token')?.detailKey).toBe(
       'networkSecretIdentityDetail',
     );
-  });
-});
-
-describe('ghost · 2026-07-23 通用能力四件套(session-context / pick / preview / node 多入口)', () => {
-  const nodeBase = {
-    entry: 'node/worker.cjs',
-    protocol: 'json-rpc-stdio',
-  };
-  const withNode = (node: unknown, slots: string[] = ['panel', 'node']) =>
-    validateGhostManifest({ ...goodChipManifest(), slots, node });
-
-  it('node.entries:合法申报被原样收录', () => {
-    const r = withNode({ ...nodeBase, entries: ['node/build.cjs', 'node/sync.js'] });
-    expect(r.ok).toBe(true);
-    if (r.ok) expect(r.manifest.node?.entries).toEqual(['node/build.cjs', 'node/sync.js']);
-  });
-
-  it('node.entries:超条数/重复/撞主入口/撞浏览器 entry/非 CJS/越界路径 一律拒', () => {
-    expect(withNode({ ...nodeBase, entries: [] }).ok).toBe(false);
-    expect(
-      withNode({ ...nodeBase, entries: ['a.cjs', 'b.cjs', 'c.cjs', 'd.cjs', 'e.cjs'] }).ok,
-    ).toBe(false);
-    expect(withNode({ ...nodeBase, entries: ['node/a.cjs', 'node/a.cjs'] }).ok).toBe(false);
-    expect(withNode({ ...nodeBase, entries: ['node/worker.cjs'] }).ok).toBe(false);
-    expect(withNode({ ...nodeBase, entries: ['main.js'] }).ok).toBe(false);
-    expect(withNode({ ...nodeBase, entries: ['node/a.mjs'] }).ok).toBe(false);
-    expect(withNode({ ...nodeBase, entries: ['../evil.cjs'] }).ok).toBe(false);
-  });
-
-  it('preview 槽与详单严格成对;hosts 语法同 network 白名单', () => {
-    const base = goodChipManifest();
-    // 有槽必有详单
-    expect(validateGhostManifest({ ...base, slots: ['panel', 'preview'] }).ok).toBe(false);
-    // 有详单必有槽
-    expect(
-      validateGhostManifest({ ...base, preview: { hosts: ['example.com'] } }).ok,
-    ).toBe(false);
-    const good = validateGhostManifest({
-      ...base,
-      slots: ['panel', 'preview'],
-      preview: { hosts: ['*.example.dev', 'localhost'] },
-    });
-    expect(good.ok).toBe(true);
-    if (good.ok) expect(good.manifest.preview?.hosts).toEqual(['*.example.dev', 'localhost']);
-    // 非法模式 / 超条数 / 重复 / 自造字段
-    const withPreview = (preview: unknown) =>
-      validateGhostManifest({ ...base, slots: ['panel', 'preview'], preview });
-    expect(withPreview({ hosts: [] }).ok).toBe(false);
-    expect(withPreview({ hosts: ['UPPER.example.com'] }).ok).toBe(false);
-    expect(withPreview({ hosts: ['a.com', 'b.com', 'c.com', 'd.com', 'e.com'] }).ok).toBe(false);
-    expect(withPreview({ hosts: ['a.example.com', 'a.example.com'] }).ok).toBe(false);
-    expect(withPreview({ hosts: ['a.example.com'], extra: 1 }).ok).toBe(false);
-  });
-
-  it('session-context / pick 槽:纯槽声明即可装入,并生成对应权限项', () => {
-    const r = validateGhostManifest({
-      ...goodChipManifest(),
-      slots: ['panel', 'session-context', 'pick', 'preview'],
-      preview: { hosts: ['example.com'] },
-    });
-    expect(r.ok).toBe(true);
-    if (!r.ok) return;
-    const items = ghostPermissionItems(r.manifest);
-    expect(items).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ key: 'pick', kind: 'pick', labelKey: 'pick' }),
-        expect.objectContaining({
-          key: 'session-context',
-          kind: 'session-context',
-          labelKey: 'sessionContext',
-        }),
-        expect.objectContaining({
-          key: 'preview',
-          kind: 'preview',
-          labelKey: 'preview',
-          detail: 'example.com',
-        }),
-      ]),
-    );
-  });
-
-  it('ghostPreviewUrlAllowed:https + 白名单命中放行;http 仅 loopback;凭证/越界/畸形拒', () => {
-    const r = validateGhostManifest({
-      ...goodChipManifest(),
-      slots: ['panel', 'preview'],
-      preview: { hosts: ['*.example.dev', 'localhost'] },
-    });
-    expect(r.ok).toBe(true);
-    if (!r.ok) return;
-    const m = r.manifest;
-    expect(ghostPreviewUrlAllowed(m, 'https://demo.example.dev/x?y=1')).toBe(true);
-    expect(ghostPreviewUrlAllowed(m, 'http://localhost:5173/preview')).toBe(true);
-    // http 非 loopback 域名拒(即便命中白名单模式)
-    expect(ghostPreviewUrlAllowed(m, 'http://demo.example.dev/')).toBe(false);
-    // 白名单外 / 多级子域越界(*. 只放一层由 ghostNetworkHostMatches 决定,这里至少验非白名单域)
-    expect(ghostPreviewUrlAllowed(m, 'https://evil.com/')).toBe(false);
-    // URL 内嵌凭证拒
-    expect(ghostPreviewUrlAllowed(m, 'https://a:b@demo.example.dev/')).toBe(false);
-    // 畸形 / 超长 / 空
-    expect(ghostPreviewUrlAllowed(m, 'not-a-url')).toBe(false);
-    expect(ghostPreviewUrlAllowed(m, '')).toBe(false);
-    expect(ghostPreviewUrlAllowed(m, `https://demo.example.dev/${'x'.repeat(3000)}`)).toBe(false);
-    // 未声明详单的清单恒拒
-    const none = validateGhostManifest(goodChipManifest());
-    expect(none.ok).toBe(true);
-    if (none.ok) expect(ghostPreviewUrlAllowed(none.manifest, 'https://demo.example.dev/')).toBe(false);
-  });
-
-  it('deriveGhostSessionContext:证明不了本地就 fail closed', () => {
-    // 无 sessionId 语境:回落 ALS workdir,恒不可当本地
-    expect(deriveGhostSessionContext(null, '/als/dir', null)).toEqual({
-      session_id: null,
-      workdir: '/als/dir',
-      workdir_is_local: false,
-    });
-    // 有 sessionId 但查无会话:同样不可当本地
-    expect(deriveGhostSessionContext('s1', '/als/dir', null)).toEqual({
-      session_id: 's1',
-      workdir: '/als/dir',
-      workdir_is_local: false,
-    });
-    // 本地会话:workdir 取会话真身,可当本地
-    expect(
-      deriveGhostSessionContext('s1', null, { workingDir: '/proj', remoteHostId: null }),
-    ).toEqual({ session_id: 's1', workdir: '/proj', workdir_is_local: true });
-    // SSH 远程会话:路径给(远端事实),但绝不许当本地
-    expect(
-      deriveGhostSessionContext('s1', null, { workingDir: '/remote/proj', remoteHostId: 'h1' }),
-    ).toEqual({ session_id: 's1', workdir: '/remote/proj', workdir_is_local: false });
-    // 会话存在但没 workdir:没有可当本地的对象
-    expect(
-      deriveGhostSessionContext('s1', null, { workingDir: null, remoteHostId: null }),
-    ).toEqual({ session_id: 's1', workdir: null, workdir_is_local: false });
-  });
-});
-
-describe('ghost · 宿主代启子进程(node.childSpawn,2026-07-23)', () => {
-  const withNode = (node: unknown) =>
-    validateGhostManifest({ ...goodChipManifest(), slots: ['panel', 'node'], node });
-
-  it('childSpawn 布尔开关:合法收录;非布尔拒', () => {
-    const good = withNode({ entry: 'node/a.cjs', protocol: 'json-rpc-stdio', childSpawn: true });
-    expect(good.ok).toBe(true);
-    if (good.ok) expect(good.manifest.node?.childSpawn).toBe(true);
-    expect(
-      withNode({ entry: 'node/a.cjs', protocol: 'json-rpc-stdio', childSpawn: 'yes' }).ok,
-    ).toBe(false);
-  });
-
-  it('childSpawn 开启时装入确认框单列一行(kind=node)', () => {
-    const r = withNode({ entry: 'node/a.cjs', protocol: 'json-rpc-stdio', childSpawn: true });
-    expect(r.ok).toBe(true);
-    if (!r.ok) return;
-    expect(ghostPermissionItems(r.manifest)).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          key: 'node:child-spawn',
-          kind: 'node',
-          labelKey: 'nodeChildSpawn',
-        }),
-      ]),
-    );
-    // 不声明就没有这一行
-    const off = withNode({ entry: 'node/a.cjs', protocol: 'json-rpc-stdio' });
-    expect(off.ok).toBe(true);
-    if (off.ok) {
-      expect(
-        ghostPermissionItems(off.manifest).some((i) => i.key === 'node:child-spawn'),
-      ).toBe(false);
-    }
-  });
-
-  it('parseGhostNodeChildToHostMessage:合法帧收,超限/畸形一律 null', () => {
-    expect(
-      parseGhostNodeChildToHostMessage({
-        type: 'spawn-child',
-        reqId: 'r1',
-        entry: 'node/maker.cjs',
-        args: ['__maker-proxy'],
-      }),
-    ).toEqual({ type: 'spawn-child', reqId: 'r1', entry: 'node/maker.cjs', args: ['__maker-proxy'] });
-    expect(
-      parseGhostNodeChildToHostMessage({ type: 'child-stdin', childId: 'c1', b64: 'aGk=' }),
-    ).toEqual({ type: 'child-stdin', childId: 'c1', b64: 'aGk=' });
-    expect(parseGhostNodeChildToHostMessage({ type: 'child-kill', childId: 'c1' })).toEqual({
-      type: 'child-kill',
-      childId: 'c1',
-    });
-    expect(parseGhostNodeChildToHostMessage({ type: 'child-stdin-end', childId: 'c1' })).toEqual({
-      type: 'child-stdin-end',
-      childId: 'c1',
-    });
-    // 畸形:类型不认 / id 形状不对 / args 超条数 / 单参超长 / b64 超帧
-    expect(parseGhostNodeChildToHostMessage(null)).toBeNull();
-    expect(parseGhostNodeChildToHostMessage({ type: 'evil' })).toBeNull();
-    expect(
-      parseGhostNodeChildToHostMessage({ type: 'child-kill', childId: 'bad id!' }),
-    ).toBeNull();
-    expect(
-      parseGhostNodeChildToHostMessage({
-        type: 'spawn-child',
-        reqId: 'r1',
-        entry: 'e.cjs',
-        args: Array.from({ length: 17 }, () => 'x'),
-      }),
-    ).toBeNull();
-    expect(
-      parseGhostNodeChildToHostMessage({
-        type: 'spawn-child',
-        reqId: 'r1',
-        entry: 'e.cjs',
-        args: ['y'.repeat(2049)],
-      }),
-    ).toBeNull();
-    expect(
-      parseGhostNodeChildToHostMessage({
-        type: 'child-stdin',
-        childId: 'c1',
-        b64: 'a'.repeat(1024 * 1024 + 1),
-      }),
-    ).toBeNull();
   });
 });

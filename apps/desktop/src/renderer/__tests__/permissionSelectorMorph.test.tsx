@@ -6,7 +6,7 @@
  * - 选项点击回调 onPermissionModeChange 并收合
  * - Esc / outside pointerdown 关闭
  * - 形变期间 trigger wrapper 隐形,收合后复形(「不是盖一层」的核心语义)
- * jsdom 无布局引擎(rect 全 0),几何/丝滑度不在此测——那部分靠 docs/design-rules/cindy-design-system.md
+ * jsdom 无布局引擎(rect 全 0),几何/丝滑度不在此测——那部分靠 DESIGN.md
  * §14.4 的实测要求与人工走查兜底。
  */
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -41,7 +41,12 @@ afterEach(() => {
 function renderSelector(overrides: Partial<Parameters<typeof PermissionSelector>[0]> = {}) {
   const onChange = vi.fn();
   const utils = render(
-    <PermissionSelector permissionMode="ask" onPermissionModeChange={onChange} {...overrides} />,
+    <PermissionSelector
+      permissionMode="ask"
+      onPermissionModeChange={onChange}
+      useMorphPopover
+      {...overrides}
+    />,
   );
   return { onChange, ...utils };
 }
@@ -51,8 +56,13 @@ function getTrigger(): HTMLElement {
 }
 
 describe('PermissionSelector (MorphPopover pilot)', () => {
-  // 2026-07-22:PermissionSelector 只在 composer 使用,已统一为「恒走脱身上浮 morph」——
-  // 移除 origin/main 的 useMorphPopover opt-in/Radix 回退开关,故删去原「默认用 Radix」用例。
+  it('默认仍使用 Radix，只有 composer 显式 opt-in 才启用形变', async () => {
+    renderSelector({ useMorphPopover: false });
+    fireEvent.click(getTrigger());
+    await screen.findByRole('listbox');
+    expect(screen.queryByRole('group', { name: 'newChat.permissionSelector.listAria' })).toBeNull();
+  });
+
   it('点击 trigger 打开 listbox,四档选项齐全,aria-expanded 同步', async () => {
     renderSelector();
     const trigger = getTrigger();
@@ -63,7 +73,7 @@ describe('PermissionSelector (MorphPopover pilot)', () => {
     expect(listbox).toBeTruthy();
     expect(screen.getAllByRole('option')).toHaveLength(4);
     expect(trigger.getAttribute('aria-expanded')).toBe('true');
-    // 选中档正确标记(焦点策略 2026-07-23 改回落首个可交互项,恢复键盘可达性,见 codex review)
+    // 选中档正确标记(焦点策略:落面板容器,不落行 —— 行外包 Tip,聚焦行会误弹描述 tooltip)
     const selected = screen
       .getAllByRole('option')
       .find((o) => o.getAttribute('aria-selected') === 'true');
@@ -94,7 +104,7 @@ describe('PermissionSelector (MorphPopover pilot)', () => {
     await waitFor(() => expect(screen.queryByRole('listbox')).toBeNull(), { timeout: 1500 });
   });
 
-  it('脱身上浮:trigger 全程可见,再点 trigger 即关闭(toggle)', async () => {
+  it('形变期间 trigger wrapper 隐形(面板承接视觉),收合后复形', async () => {
     renderSelector();
     const trigger = getTrigger();
     const wrap = trigger.closest('span.relative') as HTMLElement;
@@ -102,12 +112,10 @@ describe('PermissionSelector (MorphPopover pilot)', () => {
 
     fireEvent.click(trigger);
     await screen.findByRole('listbox');
-    // 脱身上浮语义(2026-07-22 定稿):chip 不隐藏,保住「原地再点一下收起」
-    expect(wrap.style.visibility).not.toBe('hidden');
+    expect(wrap.style.visibility).toBe('hidden');
 
-    fireEvent.click(trigger);
-    await waitFor(() => expect(screen.queryByRole('listbox')).toBeNull(), { timeout: 1500 });
-    expect(trigger.getAttribute('aria-expanded')).toBe('false');
+    fireEvent.keyDown(document, { key: 'Escape' });
+    await waitFor(() => expect(wrap.style.visibility).toBe(''), { timeout: 1500 });
   });
 
   it('disabled 时点击不打开', () => {

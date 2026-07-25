@@ -304,72 +304,11 @@ function dispatchTx(readyDb, payload) {
       return sessionsSetStatus(readyDb, request.args);
     case 'session.agentSwitchFallback':
       return sessionAgentSwitchFallback(readyDb, request.args);
-    case 'message.delete':
-      return messageDelete(readyDb, request.args);
-    case 'im.deleteBindings':
-      return imDeleteBindings(readyDb, request.args);
-    case 'im.replaceBinding':
-      return imReplaceBinding(readyDb, request.args);
     case 'session.importShare':
       return sessionImportShare(readyDb, request.args);
     default:
       throw Object.assign(new Error('unknown tx: ' + name), { code: 'UNKNOWN_TX' });
   }
-}
-
-// ⚠️ 与 worker/opHandlers/tx.ts 的 imDeleteBindings 保持一致。
-function imDeleteBindings(readyDb, args) {
-  const payload = asRecord(args, 'im.deleteBindings args');
-  const identities = expectArray(payload.identities, 'identities').map((raw, index) => {
-    const identity = asRecord(raw, 'identities.' + index);
-    return {
-      channel: expectString(identity.channel, 'identities.' + index + '.channel'),
-      botContextId: expectString(identity.botContextId, 'identities.' + index + '.botContextId'),
-      userId: expectString(identity.userId, 'identities.' + index + '.userId'),
-      scopeKey: expectString(identity.scopeKey, 'identities.' + index + '.scopeKey'),
-    };
-  });
-  const deleteBinding = readyDb.prepare(
-    'DELETE FROM im_bindings WHERE channel = ? AND bot_context_id = ? AND user_id = ? AND scope_key = ?',
-  );
-  return readyDb.transaction(() => {
-    for (const identity of identities) {
-      deleteBinding.run(
-        identity.channel,
-        identity.botContextId,
-        identity.userId,
-        identity.scopeKey,
-      );
-    }
-  })();
-}
-
-// ⚠️ 与 worker/opHandlers/tx.ts 的 imReplaceBinding 保持一致。
-function imReplaceBinding(readyDb, args) {
-  const payload = asRecord(args, 'im.replaceBinding args');
-  const channel = expectString(payload.channel, 'channel');
-  const botContextId = expectString(payload.botContextId, 'botContextId');
-  const userId = expectString(payload.userId, 'userId');
-  const scopeKey = expectString(payload.scopeKey, 'scopeKey');
-  const targetSessionId = expectString(payload.targetSessionId, 'targetSessionId');
-  const attachedAt = expectNumber(payload.attachedAt, 'attachedAt');
-  const attachedViaCardMessageId = nullableString(payload.attachedViaCardMessageId);
-  return readyDb.transaction(() => {
-    readyDb.prepare(
-      'DELETE FROM im_bindings WHERE target_session_id = ? OR (channel = ? AND bot_context_id = ? AND user_id = ? AND scope_key = ?)',
-    ).run(targetSessionId, channel, botContextId, userId, scopeKey);
-    readyDb.prepare(
-      'INSERT INTO im_bindings (channel, bot_context_id, user_id, scope_key, target_session_id, attached_at, attached_via_card_message_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
-    ).run(
-      channel,
-      botContextId,
-      userId,
-      scopeKey,
-      targetSessionId,
-      attachedAt,
-      attachedViaCardMessageId,
-    );
-  })();
 }
 
 // ⚠️ 与 worker/opHandlers/tx.ts 的同名事务保持一致。
@@ -394,96 +333,6 @@ function sessionAgentSwitchFallback(readyDb, args) {
         code: 'NOT_FOUND',
       });
     }
-  })();
-}
-
-// ⚠️ 与 worker/opHandlers/tx.ts 的同名事务保持一致。
-function messageDelete(readyDb, args) {
-  const payload = asRecord(args, 'message.delete args');
-  const sessionId = expectString(payload.sessionId, 'sessionId');
-  const clientIds = [...new Set(
-    expectArray(payload.clientIds, 'clientIds').map((value) =>
-      expectString(value, 'clientId'),
-    ),
-  )];
-  if (clientIds.length === 0) {
-    throw Object.assign(new Error('message.delete requires at least one clientId'), {
-      code: 'INVALID_ARGS',
-    });
-  }
-  const marker = asRecord(payload.contextMarker, 'contextMarker');
-  const markerId = expectString(marker.id, 'contextMarker.id');
-  const markerClientId = expectString(marker.clientId, 'contextMarker.clientId');
-  const markerContent = expectString(marker.content, 'contextMarker.content');
-  const markerCreatedAt = expectNumber(marker.createdAt, 'contextMarker.createdAt');
-  const updatedAt = expectNumber(payload.updatedAt, 'updatedAt');
-
-  return readyDb.transaction(() => {
-    const selectTarget = readyDb.prepare(
-      "SELECT id, client_id AS clientId FROM messages WHERE session_id = ? AND client_id = ? AND role IN ('user', 'assistant', 'tool_use', 'tool_result', 'ask_user', 'plan_review', 'thinking', 'error') AND rewind_at IS NULL LIMIT 1",
-    );
-    const targets = clientIds.map((clientId) => {
-      const target = selectTarget.get(sessionId, clientId);
-      if (!target) {
-        throw Object.assign(new Error('Message 不存在或不可删除: ' + clientId), {
-          code: 'NOT_FOUND',
-        });
-      }
-      return target;
-    });
-
-    for (const target of targets) {
-      // 向量只保存语义而非原文，但也属于该消息的本地派生数据；先按 job 记录
-      // 清各 vec 表，再删 job。缺失的旧 vec 表按已经清理处理，不能反向阻断正文删除。
-      const jobs = readyDb.prepare(
-        "SELECT rowid, vec_table AS vecTable FROM embedding_jobs WHERE source = 'chat' AND source_id = ?",
-      ).all(target.id);
-      const deleteVecByTable = new Map();
-      for (const job of jobs) {
-        assertIdentifier(job.vecTable);
-        if (!readyDb.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(job.vecTable)) {
-          continue;
-        }
-        let stmt = deleteVecByTable.get(job.vecTable);
-        if (!stmt) {
-          stmt = readyDb.prepare('DELETE FROM "' + job.vecTable + '" WHERE rowid = ?');
-          deleteVecByTable.set(job.vecTable, stmt);
-        }
-        stmt.run(job.rowid);
-      }
-      readyDb.prepare("DELETE FROM embedding_jobs WHERE source = 'chat' AND source_id = ?").run(target.id);
-    }
-
-    readyDb.prepare("DELETE FROM messages WHERE role = 'context_rebuild' AND session_id = ?").run(sessionId);
-    // 保留不含正文/元数据的最小 tombstone，阻止外部 Claude/Codex transcript
-    // importer 下次 messages:list 时把同一 clientId 重新导入；本地有效记录中
-    // 消息内容已物理清空，普通历史读取因 rewind_at 非空完全不可见。
-    const scrubTarget = readyDb.prepare(
-      "UPDATE messages SET role = 'message_tombstone', content = 'null', tool_use_id = NULL, agent_meta = NULL, agent_kind = NULL, rewind_at = ? WHERE id = ? AND session_id = ? AND client_id = ? AND role IN ('user', 'assistant', 'tool_use', 'tool_result', 'ask_user', 'plan_review', 'thinking', 'error') AND rewind_at IS NULL",
-    );
-    for (const target of targets) {
-      const scrubbed = scrubTarget.run(updatedAt, target.id, sessionId, target.clientId);
-      if (scrubbed.changes !== 1) {
-        throw Object.assign(new Error('Message 删除竞态: ' + target.clientId), {
-          code: 'PRECONDITION_FAILED',
-        });
-      }
-    }
-    const sessionResult = readyDb.prepare(
-      'UPDATE sessions SET sdk_session_id = NULL, updated_at = ? WHERE id = ?',
-    ).run(updatedAt, sessionId);
-    if (sessionResult.changes !== 1) {
-      throw Object.assign(new Error('Session 不存在: ' + sessionId), { code: 'NOT_FOUND' });
-    }
-    readyDb.prepare(
-      "INSERT INTO messages (id, client_id, session_id, role, content, created_at, rewind_at) VALUES (?, ?, ?, 'context_rebuild', ?, ?, ?)",
-    ).run(markerId, markerClientId, sessionId, markerContent, markerCreatedAt, markerCreatedAt);
-    return {
-      messages: targets.map((target) => ({
-        messageId: target.id,
-        clientId: target.clientId,
-      })),
-    };
   })();
 }
 
@@ -816,14 +665,10 @@ function codexImportMessages(readyDb, args) {
       agent_meta = excluded.agent_meta,
       created_at = excluded.created_at
     WHERE
-      messages.role != 'message_tombstone' AND
-      messages.rewind_at IS NULL AND
-      (
-        messages.role IS NOT excluded.role OR
-        messages.content IS NOT excluded.content OR
-        messages.agent_meta IS NOT excluded.agent_meta OR
-        messages.created_at IS NOT excluded.created_at
-      )
+      messages.role IS NOT excluded.role OR
+      messages.content IS NOT excluded.content OR
+      messages.agent_meta IS NOT excluded.agent_meta OR
+      messages.created_at IS NOT excluded.created_at
   \`);
   const changed = readyDb.transaction(() => {
     let count = 0;
@@ -868,15 +713,11 @@ function claudeImportMessages(readyDb, args) {
       agent_meta = excluded.agent_meta,
       created_at = excluded.created_at
     WHERE
-      messages.role != 'message_tombstone' AND
-      messages.rewind_at IS NULL AND
-      (
-        messages.role IS NOT excluded.role OR
-        messages.content IS NOT excluded.content OR
-        messages.tool_use_id IS NOT excluded.tool_use_id OR
-        messages.agent_meta IS NOT excluded.agent_meta OR
-        messages.created_at IS NOT excluded.created_at
-      )
+      messages.role IS NOT excluded.role OR
+      messages.content IS NOT excluded.content OR
+      messages.tool_use_id IS NOT excluded.tool_use_id OR
+      messages.agent_meta IS NOT excluded.agent_meta OR
+      messages.created_at IS NOT excluded.created_at
   \`);
   const changed = readyDb.transaction(() => {
     let count = 0;
@@ -1003,19 +844,15 @@ function parseAgentMeta(raw) {
 function forkSession(readyDb, args) {
   const payload = asRecord(args, 'fork.session args');
   const sourceSessionId = expectString(payload.sourceSessionId, 'sourceSessionId');
-  const sourceClearedAt = nullableNumber(payload.sourceClearedAt);
   const targetCreatedAt = expectNumber(payload.targetCreatedAt, 'targetCreatedAt');
-  const targetRowid = nullableNumber(payload.targetRowid);
   const newSession = asRecord(payload.newSession, 'newSession');
   const uuidMap = normalizeUuidMap(payload.uuidMap);
   const legacyTranscriptParentUuids = normalizeStringSet(payload.legacyTranscriptParentUuids, 'legacyTranscriptParentUuids');
   const toolParentUuids = normalizeStringSet(payload.toolParentUuids, 'toolParentUuids');
-  const detachAgentSwitchSessions = payload.detachAgentSwitchSessions === true;
-  const resetHandoffBoundaryClientId = nullableString(payload.resetHandoffBoundaryClientId);
   const newMessageIds = normalizeNewMessageIds(payload.newMessageIds);
   const sourceMessages = readyDb.prepare(
-    'SELECT client_id, role, content, tool_use_id, agent_meta, agent_kind, created_at FROM messages WHERE session_id = ? AND (? IS NULL OR created_at > ?) AND (created_at < ? OR (? IS NOT NULL AND created_at = ? AND rowid < ?)) AND rewind_at IS NULL ORDER BY created_at ASC, rowid ASC',
-  ).all(sourceSessionId, sourceClearedAt, sourceClearedAt, targetCreatedAt, targetRowid, targetCreatedAt, targetRowid);
+    'SELECT role, content, tool_use_id, agent_meta, agent_kind, created_at FROM messages WHERE session_id = ? AND created_at < ? AND rewind_at IS NULL ORDER BY created_at ASC',
+  ).all(sourceSessionId, targetCreatedAt);
   if (newMessageIds.length !== sourceMessages.length) {
     throw invalidArgs('newMessageIds length mismatch: expected ' + sourceMessages.length + ', got ' + newMessageIds.length);
   }
@@ -1054,26 +891,10 @@ function forkSession(readyDb, args) {
     for (let i = 0; i < sourceMessages.length; i += 1) {
       const message = sourceMessages[i];
       const ids = newMessageIds[i];
-      insertMessage.run(ids.id, ids.clientId, expectString(newSession.id, 'newSession.id'), message.role, sanitizeForkedMessageContent(message, { detachAgentSwitchSessions, resetHandoffBoundaryClientId }), message.tool_use_id, remapAgentMetaUuid(message.agent_meta, uuidMap, legacyTranscriptParentUuids, toolParentUuids), message.agent_kind, message.created_at);
+      insertMessage.run(ids.id, ids.clientId, expectString(newSession.id, 'newSession.id'), message.role, message.content, message.tool_use_id, remapAgentMetaUuid(message.agent_meta, uuidMap, legacyTranscriptParentUuids, toolParentUuids), message.agent_kind, message.created_at);
     }
   })();
   return { messageCount: sourceMessages.length };
-}
-
-function sanitizeForkedMessageContent(message, opts) {
-  const resetConsumed = message.client_id === opts.resetHandoffBoundaryClientId;
-  if (message.role !== 'agent_switch' || (!opts.detachAgentSwitchSessions && !resetConsumed)) return message.content;
-  try {
-    const parsed = JSON.parse(message.content);
-    if (!isRecord(parsed)) return message.content;
-    return JSON.stringify({
-      ...parsed,
-      ...(opts.detachAgentSwitchSessions ? { fromSdkSessionId: null } : {}),
-      ...(resetConsumed ? { consumed: false } : {}),
-    });
-  } catch (_) {
-    return message.content;
-  }
 }
 
 function embeddingMarkDone(readyDb, args) {
@@ -1119,12 +940,9 @@ function embeddingCommit(readyDb, args) {
       if (!(item.embedding instanceof Float32Array)) throw invalidArgs('item.embedding must be Float32Array');
       const vecTable = expectString(item.vecTable, 'item.vecTable');
       const rowidBig = BigInt(rowid);
-      // 与 file worker 同语义：job 可能被消息删除事务并发清掉；不存在时只清
-      // 孤立 vec，不允许飞行中的 embedding 结果把已删除消息的派生数据写回来。
-      const updated = updateStmt.run(rowid);
       getDeleteStmt(vecTable).run(rowidBig);
-      if (updated.changes !== 1) continue;
       getInsertStmt(vecTable).run(rowidBig, item.embedding);
+      updateStmt.run(rowid);
     }
   })();
 }
@@ -1446,16 +1264,6 @@ interface PendingRpc {
   sentAtMs: number;
 }
 
-interface QueuedRpc {
-  req: RpcRequest;
-  transferList: unknown[];
-  resolve: (value: unknown) => void;
-  reject: (err: Error) => void;
-  /** RPC 总预算从进入 transport 开始计,而不是等 dispatch 后才开始。 */
-  budgetStartedAtMs: number;
-  queueTimeout?: ReturnType<typeof setTimeout>;
-}
-
 /**
  * 睡眠判定余量:超时定时器实际触发时刻比预算晚出这么多,只可能是进程被整体
  * 挂起过(系统睡眠 / dark wake 间隙),不是事件循环正常的毫秒级调度延迟。
@@ -1502,26 +1310,16 @@ export interface WorkerThreadTransportOptions {
   workerScriptPath?: string;
   /** 临时回滚口：跳过真实 worker 文件，走旧 inline worker。 */
   useInlineWorker?: boolean;
-  /** DB worker 同时在途 RPC 上限。默认值覆盖正常 burst，测试可缩小。 */
-  maxInFlightRpcs?: number;
-  /** 背压等待队列上限；超出后快速拒绝，避免异常生产者耗尽主进程内存。 */
-  maxQueuedRpcs?: number;
-  /** 单个 RPC 从入队到完成的总预算；生产默认 30s，测试可缩短。 */
-  rpcTimeoutMs?: number;
 }
 
 export class WorkerThreadTransport implements DbTransport {
   private static readonly RPC_TIMEOUT_MS = 30_000;
-  private static readonly DEFAULT_MAX_IN_FLIGHT_RPCS = 128;
-  private static readonly DEFAULT_MAX_QUEUED_RPCS = 512;
 
   private worker: Worker;
   private nextId = 1;
   private closed = false;
-  private closing = false;
   private vecLoaded = false;
   private readonly pending = new Map<number, PendingRpc>();
-  private readonly queued: QueuedRpc[] = [];
   private readonly eventListeners = new Map<EventName, Set<(payload: unknown) => void>>();
   private readonly terminatedListeners = new Set<(info: DbTransportTerminationInfo) => void>();
   private readonly opts: WorkerThreadTransportOptions;
@@ -1532,34 +1330,55 @@ export class WorkerThreadTransport implements DbTransport {
   }
 
   send<R = unknown>(op: string, args?: unknown, transferList?: unknown[]): Promise<R> {
-    if (this.closed || this.closing) {
+    if (this.closed) {
       return Promise.reject(new Error('db worker transport is closed'));
     }
     const id = this.nextId++;
     const req: RpcRequest = { id, op, args };
     return new Promise<R>((resolve, reject) => {
-      const queued: QueuedRpc = {
-        req,
-        transferList: transferList ?? [],
-        resolve: resolve as (value: unknown) => void,
-        reject,
-        budgetStartedAtMs: Date.now(),
-      };
-      if (this.pending.size < this.maxInFlightRpcs) {
-        this.dispatch(queued);
-        return;
-      }
-      if (this.queued.length >= this.maxQueuedRpcs) {
-        reject(
+      const onTimeout = (): void => {
+        const pending = this.pending.get(id);
+        if (!pending) return;
+        const verdict = evaluateRpcTimeout(
+          pending.sentAtMs,
+          Date.now(),
+          WorkerThreadTransport.RPC_TIMEOUT_MS,
+        );
+        if (verdict.kind === 'rearm') {
+          // 跨睡眠假超时:重置预算续等,请求在唤醒后照常完成或在真超时时拒绝。
+          this.emitClientLog('warn', {
+            event: 'rpc.timeout.rearmedAfterSleep',
+            op,
+            id,
+            wallElapsedMs: verdict.wallElapsedMs,
+          });
+          pending.sentAtMs = Date.now();
+          pending.timeout = setTimeout(onTimeout, WorkerThreadTransport.RPC_TIMEOUT_MS);
+          return;
+        }
+        this.pending.delete(id);
+        pending.reject(
           new Error(
-            `db worker RPC queue overloaded: op="${op}" inFlight=${this.pending.size}` +
-              ` queued=${this.queued.length}`,
+            `db worker RPC timeout: op="${op}" id=${id} exceeded ${WorkerThreadTransport.RPC_TIMEOUT_MS / 1000}s` +
+              ` wallElapsedMs=${verdict.wallElapsedMs}`,
           ),
         );
-        return;
+      };
+      const timeout = setTimeout(onTimeout, WorkerThreadTransport.RPC_TIMEOUT_MS);
+      this.pending.set(id, {
+        resolve: resolve as (value: unknown) => void,
+        reject,
+        timeout,
+        sentAtMs: Date.now(),
+      });
+      try {
+        this.worker.postMessage(req, (transferList ?? []) as never);
+      } catch (err) {
+        const pending = this.pending.get(id);
+        if (pending) clearTimeout(pending.timeout);
+        this.pending.delete(id);
+        reject(err instanceof Error ? err : new Error(String(err)));
       }
-      this.queued.push(queued);
-      this.armQueuedTimeout(queued);
     });
   }
 
@@ -1581,14 +1400,9 @@ export class WorkerThreadTransport implements DbTransport {
   }
 
   async close(): Promise<void> {
-    if (this.closed || this.closing) return;
-    const canCloseGracefully = this.pending.size === 0 && this.queued.length === 0;
-    const gracefulClose = canCloseGracefully ? this.send('closeDb') : null;
-    // closeDb 仅在 transport 空闲时直发。已有 backlog 时不再把关闭请求排到队尾,
-    // 直接拒绝遗留工作并 terminate,避免登出 / 退出被慢 RPC 拖住。
-    this.closing = true;
+    if (this.closed) return;
     try {
-      await gracefulClose;
+      await this.send('closeDb');
     } catch {
       // Worker may already be down; terminate below still releases resources.
     } finally {
@@ -1604,105 +1418,6 @@ export class WorkerThreadTransport implements DbTransport {
 
   get isVecAvailable(): boolean {
     return this.vecLoaded;
-  }
-
-  private get maxInFlightRpcs(): number {
-    return this.opts.maxInFlightRpcs ?? WorkerThreadTransport.DEFAULT_MAX_IN_FLIGHT_RPCS;
-  }
-
-  private get maxQueuedRpcs(): number {
-    return this.opts.maxQueuedRpcs ?? WorkerThreadTransport.DEFAULT_MAX_QUEUED_RPCS;
-  }
-
-  private get rpcTimeoutMs(): number {
-    return this.opts.rpcTimeoutMs ?? WorkerThreadTransport.RPC_TIMEOUT_MS;
-  }
-
-  private armQueuedTimeout(item: QueuedRpc): void {
-    const onTimeout = (): void => {
-      const index = this.queued.indexOf(item);
-      if (index < 0) return;
-      const verdict = evaluateRpcTimeout(
-        item.budgetStartedAtMs,
-        Date.now(),
-        this.rpcTimeoutMs,
-      );
-      if (verdict.kind === 'rearm') {
-        item.budgetStartedAtMs = Date.now();
-        item.queueTimeout = setTimeout(onTimeout, this.rpcTimeoutMs);
-        return;
-      }
-      this.queued.splice(index, 1);
-      item.reject(
-        new Error(
-          `db worker RPC queue timeout: op="${item.req.op}" id=${item.req.id}` +
-            ` exceeded ${this.rpcTimeoutMs / 1000}s total budget`,
-        ),
-      );
-    };
-    item.queueTimeout = setTimeout(onTimeout, this.rpcTimeoutMs);
-  }
-
-  private dispatch(item: QueuedRpc): void {
-    const { id, op } = item.req;
-    if (item.queueTimeout) clearTimeout(item.queueTimeout);
-    const onTimeout = (): void => {
-      const pending = this.pending.get(id);
-      if (!pending) return;
-      const verdict = evaluateRpcTimeout(
-        pending.sentAtMs,
-        Date.now(),
-        this.rpcTimeoutMs,
-      );
-      if (verdict.kind === 'rearm') {
-        // 跨睡眠假超时:重置预算续等,请求在唤醒后照常完成或在真超时时拒绝。
-        this.emitClientLog('warn', {
-          event: 'rpc.timeout.rearmedAfterSleep',
-          op,
-          id,
-          wallElapsedMs: verdict.wallElapsedMs,
-        });
-        pending.sentAtMs = Date.now();
-        pending.timeout = setTimeout(onTimeout, this.rpcTimeoutMs);
-        return;
-      }
-      this.pending.delete(id);
-      pending.reject(
-        new Error(
-          `db worker RPC timeout: op="${op}" id=${id} exceeded ${this.rpcTimeoutMs / 1000}s` +
-            ` wallElapsedMs=${verdict.wallElapsedMs}`,
-        ),
-      );
-      this.drainQueue();
-    };
-    const budgetElapsedMs = Date.now() - item.budgetStartedAtMs;
-    const remainingBudgetMs = Math.max(
-      1,
-      this.rpcTimeoutMs - budgetElapsedMs,
-    );
-    const timeout = setTimeout(onTimeout, remainingBudgetMs);
-    this.pending.set(id, {
-      resolve: item.resolve,
-      reject: item.reject,
-      timeout,
-      sentAtMs: item.budgetStartedAtMs,
-    });
-    try {
-      this.worker.postMessage(item.req, item.transferList as never);
-    } catch (err) {
-      clearTimeout(timeout);
-      this.pending.delete(id);
-      item.reject(toError(err));
-      this.drainQueue();
-    }
-  }
-
-  private drainQueue(): void {
-    while (!this.closed && this.pending.size < this.maxInFlightRpcs) {
-      const next = this.queued.shift();
-      if (!next) return;
-      this.dispatch(next);
-    }
   }
 
   private spawnWorker(): Worker {
@@ -1768,7 +1483,6 @@ export class WorkerThreadTransport implements DbTransport {
         });
         pending.reject(err);
       }
-      this.drainQueue();
       return;
     }
 
@@ -1795,10 +1509,6 @@ export class WorkerThreadTransport implements DbTransport {
       pending.reject(err);
     }
     this.pending.clear();
-    for (const queued of this.queued.splice(0)) {
-      if (queued.queueTimeout) clearTimeout(queued.queueTimeout);
-      queued.reject(err);
-    }
   }
 
   private emitTerminated(info: DbTransportTerminationInfo): void {

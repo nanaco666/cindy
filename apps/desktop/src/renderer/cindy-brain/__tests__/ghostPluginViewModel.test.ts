@@ -7,12 +7,15 @@ import { describe, expect, it } from 'vitest';
 
 import type { GhostManifest, InstalledGhost } from '../../../shared/ghost';
 import {
+  countGhostPluginOrigins,
   filterGhostPluginItems,
   ghostFallbackIconKind,
   sortGhostPluginItemsByRecentUse,
   toGhostPluginDetail,
   toGhostPluginListItem,
+  toRestorableGhostPluginDetail,
   type GhostPluginListItem,
+  type GhostPluginOrigin,
 } from '../../features/plugin/lib/ghostPluginViewModel';
 
 function manifest(overrides: Partial<GhostManifest> = {}): GhostManifest {
@@ -32,7 +35,7 @@ function manifest(overrides: Partial<GhostManifest> = {}): GhostManifest {
       { name: 'download_file', description: 'Download a file.' },
     ],
     network: {
-      hosts: ['aigc.example.com'],
+      hosts: ['aigc.xindong.com'],
       secrets: [
         {
           key: 'mivo_api_key',
@@ -64,13 +67,14 @@ describe('ghostPluginViewModel', () => {
     expect(ghostFallbackIconKind('Local Weather', 'local-weather')).toBe('generic');
   });
 
-  it('matches search text against name, description, and id', () => {
+  it('keeps source tab counts aligned with the search-matched result set', () => {
     const items = [
       {
         id: 'xd-mivo',
         name: 'XD Mivo',
         description: 'media',
         version: '1',
+        origin: 'enterprise',
         enabled: true,
         canUse: true,
       },
@@ -79,6 +83,7 @@ describe('ghostPluginViewModel', () => {
         name: 'Lizi Mivo',
         description: 'media',
         version: '1',
+        origin: 'external',
         enabled: true,
         canUse: true,
       },
@@ -87,6 +92,7 @@ describe('ghostPluginViewModel', () => {
         name: 'Cindy Slack',
         description: 'messages',
         version: '1',
+        origin: 'builtin',
         enabled: true,
         canUse: true,
       },
@@ -94,7 +100,13 @@ describe('ghostPluginViewModel', () => {
 
     const searched = filterGhostPluginItems(items, 'miv');
 
-    expect(searched.map((item) => item.id)).toEqual(['xd-mivo', 'lizi-mivo']);
+    expect(searched).toHaveLength(2);
+    expect(countGhostPluginOrigins(searched)).toEqual({
+      builtin: 0,
+      enterprise: 1,
+      external: 1,
+    });
+    expect(filterGhostPluginItems(searched, '', 'enterprise')).toHaveLength(1);
   });
 
   it('sorts used Plugins newest-first and keeps untouched Plugins stable', () => {
@@ -105,20 +117,24 @@ describe('ghostPluginViewModel', () => {
     ).toEqual(['third', 'first', 'second', 'fourth']);
   });
 
-  it('maps install-record facts onto the list item', () => {
-    const item = toGhostPluginListItem(installed());
+  it.each<GhostPluginOrigin>(['builtin', 'enterprise', 'external'])(
+    'preserves the host source group: %s',
+    (origin) => {
+      const item = toGhostPluginListItem(installed(), origin);
 
-    expect(item).toMatchObject({
-      id: 'xd-mivo',
-      name: 'XD Mivo',
-      enabled: true,
-      canUse: true,
-      version: '1.5.10',
-    });
-  });
+      expect(item).toMatchObject({
+        id: 'xd-mivo',
+        name: 'XD Mivo',
+        origin,
+        enabled: true,
+        canUse: true,
+        version: '1.5.10',
+      });
+    },
+  );
 
   it('keeps disabled state and does not invent marketplace fields', () => {
-    const item = toGhostPluginListItem(installed({ enabled: false }));
+    const item = toGhostPluginListItem(installed({ enabled: false }), 'enterprise');
 
     expect(item.enabled).toBe(false);
     expect(item).not.toHaveProperty('installCount');
@@ -128,7 +144,7 @@ describe('ghostPluginViewModel', () => {
   });
 
   it('derives detail permissions and runtime declarations from the manifest', () => {
-    const detail = toGhostPluginDetail(installed());
+    const detail = toGhostPluginDetail(installed(), 'enterprise');
 
     expect(detail.contents).toEqual(['code', 'slotTool', 'slotNetwork', 'slotCard']);
     expect(detail.tools.map((tool) => tool.name)).toEqual(['submit_gen_image', 'download_file']);
@@ -147,6 +163,36 @@ describe('ghostPluginViewModel', () => {
     ]);
   });
 
+  it('keeps seed manifest facts when a builtin Plugin is uninstalled', () => {
+    const detail = toRestorableGhostPluginDetail({
+      id: 'xd-mivo',
+      name: 'XD Mivo',
+      description: 'Generate media assets.',
+      version: '1.5.10',
+      manifest: manifest({
+        settingsHtml: 'settings.html',
+        cindy: { image: ['generate'] },
+        slots: ['tool', 'network', 'card', 'cindy'],
+      }),
+      tier: 'enterprise',
+    });
+
+    expect(detail).toMatchObject({
+      id: 'xd-mivo',
+      installed: false,
+      enabled: false,
+      origin: 'enterprise',
+    });
+    expect(detail.tools.map((tool) => tool.name)).toEqual(['submit_gen_image', 'download_file']);
+    expect(detail.permissions.length).toBeGreaterThan(0);
+    expect(detail.contents).toContain('settingsUi');
+    expect(detail.hasSettingsUi).toBe(true);
+    expect(detail.cindyCapabilities).toEqual(['image.generate']);
+    expect(detail.installDir).toBeNull();
+    expect(detail.canUse).toBe(false);
+    expect(detail).not.toHaveProperty('source');
+  });
+
   it('does not render absent optional capabilities as empty fake sections', () => {
     const detail = toGhostPluginDetail(
       installed({
@@ -159,6 +205,7 @@ describe('ghostPluginViewModel', () => {
           slots: ['tool'],
         }),
       }),
+      'external',
     );
 
     expect(detail.author).toBeNull();
@@ -177,6 +224,7 @@ describe('ghostPluginViewModel', () => {
           cindy: { image: ['generate', 'edit'], video: ['generate'] },
         }),
       }),
+      'builtin',
     );
 
     expect(detail.panelMinWidth).toBe(360);

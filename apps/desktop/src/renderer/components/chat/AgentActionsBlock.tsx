@@ -28,11 +28,10 @@
  */
 
 import { useCallback, useMemo } from 'react';
-import { Bot, ChevronRight } from 'lucide-react';
+import { Bot, ChevronDown, ChevronRight } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { cn } from '@/lib/utils';
-import { Collapse } from '@/components/ui/collapse';
 import { Spinner } from '@/components/ui/spinner';
 import type { ChatMessage } from '@/lib/makerChatStore';
 import {
@@ -129,17 +128,20 @@ export function AgentActionsBlock({
             {summaryText}
           </span>
           <div className="flex-1" />
-          <ChevronRight
-            size={14}
-            className={cn(
-              'shrink-0 text-[var(--msg-tool-card-chevron)]',
-              'transition-transform duration-[var(--motion-fast,150ms)]',
-              expanded && 'rotate-90',
-            )}
-          />
+          {expanded ? (
+            <ChevronDown
+              size={14}
+              className="shrink-0 text-[var(--msg-tool-card-chevron)]"
+            />
+          ) : (
+            <ChevronRight
+              size={14}
+              className="shrink-0 text-[var(--msg-tool-card-chevron)]"
+            />
+          )}
         </button>
 
-        <Collapse open={expanded}>
+        {expanded && (
           <div
             className={cn(
               'mt-1 pl-3 py-[2px]',
@@ -156,7 +158,7 @@ export function AgentActionsBlock({
               />
             ))}
           </div>
-        </Collapse>
+        )}
       </div>
     </div>
   );

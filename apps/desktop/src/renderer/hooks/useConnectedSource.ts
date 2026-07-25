@@ -16,7 +16,7 @@
 
 import { useMemo } from 'react';
 
-import { connectedProvidersForAgent, sourcesForModel, type AgentKind } from '@cindy/model-providers';
+import { connectedProvidersForAgent, sourcesForModel, type AgentKind } from '@lizi/model-providers';
 
 import { useProviders } from './useProviders';
 

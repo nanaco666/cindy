@@ -24,13 +24,10 @@
  */
 
 import { app, ipcMain, nativeImage, Notification, type BrowserWindow } from 'electron';
-import type { FeishuIM } from '@cindy/im';
+import type { FeishuIM } from 'lizi-im';
 import * as path from 'node:path';
 
 import { markSessionNeedsAttention } from './appBadgeService';
-import { getMobileNotifyGeneration, sendMobileSessionNotify } from './device-link';
-import { latestMessageText } from './localDb/latestMessageText';
-import { drainPersistQueue } from './messagePersistBroadcaster';
 import { createLogger } from './logger';
 
 const log = createLogger('notificationService');
@@ -72,10 +69,8 @@ interface ShowSessionEventPayload {
    * 渠道偏好。renderer 侧 gate 后填入,缺省时按"仅桌面"兼容,防御漏传——
    * 当前唯一 invoke 调用方 CCAgentSidebarUpper.tsx 总是显式传 channels,
    * 这层 default 仅为新增调用方留兜底。
-   * mobile 通道没有桌面侧开关:是否收到由手机端自行注册/注销推送 token 决定,
-   * 发送侧的防打扰(远程正在看该会话 / 短窗去重)在 device-link 模块内收口。
    */
-  channels?: { desktop?: boolean; feishu?: boolean; mobile?: boolean };
+  channels?: { desktop?: boolean; feishu?: boolean };
 }
 
 /**
@@ -174,11 +169,6 @@ export function initNotificationService(deps: NotificationServiceDeps): void {
   ipcMain.handle(
     'notification:show-session-event',
     async (_event, payload: ShowSessionEventPayload): Promise<void> => {
-      // renderer payload 不可信:mobile 通道会把 title/kind 送出本机(经 relay/APNs),
-      // main 必须做运行时形状校验,TS 类型不算(electron-security 规则)。正文摘要
-      // 不来自 renderer(main 侧读库),relay 有 per-user 频控、main 侧另有 5s
-      // 去重与「被远程观看则不推」收口。
-      assertValidSessionEventPayload(payload);
       const { sessionId, title, kind, channels } = payload;
       // 兜底：title 为空（极早期 session 还没生成标题）也别炸，用 sessionId 前 8 位顶上。
       const safeTitle = title?.trim() || sessionId.slice(0, 8);
@@ -195,67 +185,11 @@ export function initNotificationService(deps: NotificationServiceDeps): void {
         markSessionNeedsAttention(sessionId);
       }
 
-      if (channels?.mobile === true) {
-        // fire-and-forget;离线 / 老 relay / 正被远程观看 / 短窗重复时静默跳过。
-        // 整段放进独立 async 块不 await:persist 队列是全会话共享且无超时的,
-        // 在这里同步等它会让别的会话的慢写入拖延本次飞书分支;半死 socket 的
-        // ws.send 同步 throw 也一并落到 catch,不 reject 整个 invoke。
-        // 代次在 await 之前捕获:等待期间发生登出/换号,发送侧按代次不一致丢弃,
-        // 旧账号的会话标题不会经新账号的链路推出去。
-        const generation = getMobileNotifyGeneration();
-        void (async () => {
-          // 体验优先(2026-07 产品决策):正文带该会话最近一条 assistant 内容,
-          // 用户不打开 App 也能看到结果/提问。error 终态没有可靠的错误正文来源,
-          // 回退终态短文案。先 drain 持久化队列:turn-done 时本轮 assistant 块
-          // 可能仍在 writeChain 里,立刻读库会拿到上一轮文本(与摘要生成同口径)。
-          const detail =
-            kind === 'error'
-              ? undefined
-              : await drainPersistQueue()
-                  .then(() => latestMessageText(sessionId, 'assistant'))
-                  .catch(() => '');
-          sendMobileSessionNotify({
-            sessionId,
-            title: safeTitle,
-            kind,
-            generation,
-            ...(detail ? { detail } : {}),
-          });
-        })().catch((err) => {
-          log.warn('[notification] mobile push failed (non-fatal)', err);
-        });
-      }
-
       if (wantFeishu) {
         await sendFeishuMessage(feishuIm, safeTitle, kind);
       }
     },
   );
-}
-
-const SESSION_EVENT_KINDS: ReadonlySet<string> = new Set(['done', 'error', 'needs-reply']);
-const SESSION_ID_MAX_LENGTH = 256;
-const SESSION_TITLE_MAX_LENGTH = 1024;
-
-/** show-session-event 的运行时校验:非法直接抛(invoke reject),不进任何通知通道。 */
-function assertValidSessionEventPayload(
-  payload: unknown,
-): asserts payload is ShowSessionEventPayload {
-  const p = payload as Partial<ShowSessionEventPayload> | null;
-  if (
-    !p ||
-    typeof p !== 'object' ||
-    typeof p.sessionId !== 'string' ||
-    p.sessionId.length === 0 ||
-    p.sessionId.length > SESSION_ID_MAX_LENGTH ||
-    typeof p.title !== 'string' ||
-    p.title.length > SESSION_TITLE_MAX_LENGTH ||
-    typeof p.kind !== 'string' ||
-    !SESSION_EVENT_KINDS.has(p.kind) ||
-    (p.channels !== undefined && (typeof p.channels !== 'object' || p.channels === null))
-  ) {
-    throw new TypeError('invalid session event payload');
-  }
 }
 
 /** 桌面 toast 分支 — 原实现保持不变,只是拆出来便于 channels 选择性执行。 */

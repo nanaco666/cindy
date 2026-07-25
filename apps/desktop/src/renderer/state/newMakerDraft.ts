@@ -26,11 +26,6 @@ import { getManagedWorktreeBasePath } from '../../shared/managedWorktreePaths';
 
 const STORAGE_KEY = 'xdt:newMakerDraft:v1';
 const DEFAULT_CODEX_DRAFT_MODEL = 'gpt-5.4';
-let activeDataOwnerId: string | null = null;
-
-function storageKey(): string {
-  return activeDataOwnerId ? `${STORAGE_KEY}:${encodeURIComponent(activeDataOwnerId)}` : STORAGE_KEY;
-}
 
 export interface VendorPrefs {
   model: string;
@@ -61,24 +56,9 @@ export interface VendorPrefs {
  *   - workingDir == null 时 collab 入口被隐藏,enabled 应保持 false
  *   - collab.enabled = true 时 picker 隐藏"对话"入口,workingDir 不会变 null
  */
-/**
- * 「开启协同」弹窗(CreateWorkerPopover)收集的 Worker 详细配置。
- * 草稿态没有 sessionId 无法立刻起 worker,故把富配置存进 draft,createSession 后透传给 enableOrca
- * (与会话内 requestEnableCollab 同口径)。老 draft / 未配置时为 undefined,createSession 回退默认。
- */
-export interface CollabWorkerConfig {
-  role: string;
-  model: string;
-  effort?: Effort;
-  fast?: boolean;
-  /** 首条派工任务。一次性,故意不跨重启持久化(sanitize 加载时丢弃,见下方解析)。 */
-  initialTask?: string;
-}
-
 export interface CollabDraft {
   enabled: boolean;
   worker: 'cc' | 'codex';
-  workerConfig?: CollabWorkerConfig;
 }
 
 export interface NewMakerDraft {
@@ -246,24 +226,7 @@ function sanitize(raw: unknown): NewMakerDraft {
   // remote 项目也禁用协同(同 patchDraft 兜底):worker 创建只带 workingDir、拿不到
   // remoteHostId,会起一个指向远端路径的本地 worker。远程协同是独立特性,未落地前一律 OFF。
   const collabEnabled = collabRaw?.enabled === true && workingDir != null && remoteHostId == null;
-  // workerConfig 防御性解析:model 缺失/为空则整块丢弃(不存半截配置),createSession 回退默认。
-  const workerConfig: CollabWorkerConfig | undefined = (() => {
-    const wc = collabRaw?.workerConfig;
-    if (!wc || typeof wc !== 'object') return undefined;
-    const model = typeof wc.model === 'string' && wc.model.trim() ? wc.model : undefined;
-    if (!model) return undefined;
-    const role = typeof wc.role === 'string' && wc.role.trim() ? wc.role.trim() : 'developer';
-    return {
-      role,
-      model,
-      effort: typeof wc.effort === 'string' ? (wc.effort as Effort) : undefined,
-      fast: typeof wc.fast === 'boolean' ? wc.fast : undefined,
-      // initialTask 是一次性任务,**故意不跨重启持久化**(同 deviceLinkDeviceId 先例):
-      // 重启后 Send/New Goal 会静默把过期任务当 delegateTask 发出去,而收起态 pill
-      // 无从看见/编辑(codex P2)。耐久保留的只有 role/model/effort/fast。
-    };
-  })();
-  const collab: CollabDraft = { enabled: collabEnabled, worker: collabWorker, workerConfig };
+  const collab: CollabDraft = { enabled: collabEnabled, worker: collabWorker };
   const sanitizeVendorPrefs = (p: Partial<VendorPrefs> | undefined, v: MakerVendor): VendorPrefs => {
     const fallback = defaultVendorPrefs(v);
     if (!p || typeof p !== 'object') return fallback;
@@ -316,7 +279,7 @@ function sanitize(raw: unknown): NewMakerDraft {
 function loadFromStorage(): NewMakerDraft {
   if (typeof window === 'undefined') return makeDefault();
   try {
-    const raw = window.localStorage.getItem(storageKey());
+    const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) return makeDefault();
     return sanitize(JSON.parse(raw));
   } catch {
@@ -331,7 +294,7 @@ function loadFromStorage(): NewMakerDraft {
 function scheduleWrite(snapshot: NewMakerDraft) {
   if (typeof window === 'undefined') return;
   try {
-    window.localStorage.setItem(storageKey(), JSON.stringify(snapshot));
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
   } catch {
     // localStorage 满 / 私密窗口禁写——忽略,不影响内存状态。
   }
@@ -346,15 +309,6 @@ function emit() {
 
 export function getDraft(): NewMakerDraft {
   return currentDraft;
-}
-
-/** Switch the persistent draft namespace together with the active data owner. */
-export function setNewMakerDraftOwner(ownerId: string | null): void {
-  const normalized = typeof ownerId === 'string' && ownerId.trim().length > 0 ? ownerId : null;
-  if (activeDataOwnerId === normalized) return;
-  activeDataOwnerId = normalized;
-  currentDraft = loadFromStorage();
-  emit();
 }
 
 export function patchDraft(patch: Partial<NewMakerDraft>): void {
@@ -572,7 +526,7 @@ export function getCurrentVendorPrefs(): VendorPrefs {
 export function getPersistedVendorModel(vendor: MakerVendor): string {
   if (typeof window === 'undefined') return '';
   try {
-    const raw = window.localStorage.getItem(storageKey());
+    const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) return '';
     const parsed = JSON.parse(raw) as Partial<NewMakerDraft> | null;
     if (parsed?.modelChosenByVendor?.[vendor] !== true) return '';
@@ -586,7 +540,6 @@ export function getPersistedVendorModel(vendor: MakerVendor): string {
 /** 测试用 —— 重置 store + 清 localStorage(其它代码不应调用)。 */
 export function __resetForTest(): void {
   currentDraft = makeDefault();
-  activeDataOwnerId = null;
   if (typeof window !== 'undefined') {
     try {
       window.localStorage.removeItem(STORAGE_KEY);

@@ -1,5 +1,5 @@
 /**
- * pending 上下文交接注册表的进程级单例。
+ * session-agent-switch:pending 交接注册表的进程级单例。
  *
  * 为什么要单例:交接注入必须覆盖**所有**把消息送进 agent 的入口——renderer 发送
  * 事务(makerSendTransaction)之外,scheduler runner / IM(飞书)turnRunner /
@@ -18,8 +18,8 @@
  */
 
 import {
-  findPendingAgentHandoff,
-  markLatestAgentHandoffConsumed,
+  findPendingAgentSwitchHandoff,
+  markLatestAgentSwitchConsumed,
 } from '../localDb/ipc/messages.js';
 import { createLogger } from '../logger.js';
 import { createAgentHandoffPendingRegistry } from './agentHandoff.js';
@@ -30,9 +30,9 @@ const log = createLogger('agent-handoff-pending');
 // 本导出,模块求值期直接引用会让所有传递 import 本单例的 suite 崩在 mock 缺口上;
 // 调用期访问失败则落进 registry.peek 的 try/catch(按无 pending 处理),两全。
 export const agentHandoffPending = createAgentHandoffPendingRegistry((sessionId) =>
-  findPendingAgentHandoff(sessionId),
+  findPendingAgentSwitchHandoff(sessionId),
   (sessionId) => {
-    void markLatestAgentHandoffConsumed(sessionId).catch((err) => {
+    void markLatestAgentSwitchConsumed(sessionId).catch((err) => {
       // accepted 已跨不可逆边界,持久标记失败不能把这次 send 改判失败；内存态
       // 仍已消费,日志用于定位极少见的重启后重复注入风险。
       log.warn('mark consumed failed', {

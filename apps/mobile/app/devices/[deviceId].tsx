@@ -207,28 +207,19 @@ export default function DeviceDetailScreen() {
     if (scheduleEventSnapshot.sessionIndexVersion > 0) void loadSessions();
   }, [loadSessions, scheduleEventSnapshot.sessionIndexVersion]);
 
-  // schedule 列表变化(changed,含 pause / resume / 改绑)与 read / all-read 都 force
-  // 刷新节流缓存——否则 30s TTL 内会继续显示旧 Pause / 未读状态。依赖专用 version
-  // 计数而非 lastProjection 引用:后者每个事件都换新,会让 fired / deferred 等无关事件
-  // 也重跑本 effect(review P1)。
+  // read / all-read(清除未读的权威信号)force 刷新节流缓存——否则 30s TTL 内命中陈旧
+  // 结果,徽标清不掉(review P1)。依赖专用 unreadClearVersion 计数而非 lastProjection
+  // 引用:后者每个事件都换新,会让 fired / deferred 等无关事件也重跑本 effect(review P1)。
   // 上方 loadSessions effect 随 sessionIndexVersion 同步触发,其内部 throttled 调用会
   // 单飞复用本次 force 拉起的在途 promise,不产生第二次全量拉取。
   useEffect(() => {
-    if (
-      scheduleEventSnapshot.scheduleListVersion === 0
-      && scheduleEventSnapshot.unreadClearVersion === 0
-    ) return;
+    if (scheduleEventSnapshot.unreadClearVersion === 0) return;
     void loadSessionScheduleIndexThrottled(deviceId, () => loadSessionScheduleIndex(maker), { force: true })
       .then(setScheduleIndex)
       .catch(() => {
         // 失败保留旧徽标,与整页 load 的容错口径一致。
       });
-  }, [
-    deviceId,
-    maker,
-    scheduleEventSnapshot.scheduleListVersion,
-    scheduleEventSnapshot.unreadClearVersion,
-  ]);
+  }, [deviceId, maker, scheduleEventSnapshot.unreadClearVersion]);
 
   // 派生索引依赖全局 messageVersion / storeVersion,逐 emit 重建出内容相同的新 Map;
   // useStableValue 在内容未变时保留旧引用,阻断 sections 派生链的无谓全量重建

@@ -3,7 +3,7 @@
  *
  * 复用模型选择面板同一套浮动面板组件(ContextSheet → SheetSurface:同款
  * grabber / header / 半屏吸附 / 遮罩关闭),不另造菜单容器,保证全 app 面板
- * 观感一致(产品 2026-07-05 要求)。动作行走 ContextSheetGroup / ContextSheetRow
+ * 观感一致(Dash 2026-07-05 要求)。动作行走 ContextSheetGroup / ContextSheetRow
  * (自带分组卡片、hairline 分隔、busy spinner)。
  *
  * 动作语义对齐桌面 chip 右键菜单(useFileChipContextMenu)的手机等价物:

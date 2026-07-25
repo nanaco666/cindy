@@ -72,7 +72,7 @@ describe('mentionRefFormat', () => {
     expect(extractMentionRefs(line)).toEqual(['参考 文档.md', 'src/App.tsx']);
   });
 
-  it('email 形态不受影响（@example.com 仍按裸 token 切出，由调用方前缀空白判定）', () => {
-    expect(extractMentionRefs('user@example.com')).toEqual(['example.com']);
+  it('email 形态不受影响（@xd.com 仍按裸 token 切出，由调用方前缀空白判定）', () => {
+    expect(extractMentionRefs('user@xd.com')).toEqual(['xd.com']);
   });
 });

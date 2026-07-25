@@ -4,10 +4,4 @@
  * ipc(Electron 组装)。
  */
 
-export {
-  registerHookControlIpc,
-  startHookControlAccount,
-  stopHookControlAccount,
-  resetHookControlOwnerBoundary,
-  disposeHookControl,
-} from './ipc.js';
+export { registerHookControlIpc, disposeHookControl } from './ipc.js';

@@ -1,7 +1,7 @@
 /**
  * unified-downloader — M2: HTTP transport + resumable download.
  * ---------------------------------------------------------------------------
- * This module owns one resumable HTTP attempt; retry policy lives in retry.ts.
+ * Tech spec: .sivi/docs/tech_specs/unified-downloader-frontend.md (M2)
  *
  * Single-attempt execution. The retry/backoff loop lives in retry.ts. This
  * file is responsible for ONE network round-trip:

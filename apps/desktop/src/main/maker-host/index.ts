@@ -15,7 +15,7 @@ import {
   ClaudeCodeAgent,
   CodexAgent,
   configureDefaultImageResizer,
-} from '@cindy/maker-core';
+} from '@lizi/maker-core';
 import {
   getActiveCatalog,
   setActiveCatalogChangedListener,
@@ -25,8 +25,8 @@ import { maybeBackfillCodexModels } from './codex-model-backfill.js';
 import {
   createOrcaWorkerBridgeMcpProvider,
   type OrcaBridgeMcpDeps,
-} from '@cindy/orca-workflow';
-import { LspServerPool } from '@cindy/mcps';
+} from '@fmfsaisai/orca-workflow';
+import { LspServerPool } from 'lizi-mcps';
 
 import { createMessage } from '../localDb/ipc/messages.js';
 import {
@@ -37,13 +37,9 @@ import { cleanupSessionTempAttachments } from '../maker-ipc/normalizeAttachments
 import {
   markKnownOrcaWorkerSession,
 } from '../maker-ipc/orcaManualInterrupt.js';
-import { markOrcaMcpHydratedIfNeeded } from '../maker-ipc/orcaMcpHydrationCache.js';
-import { preparePersistedOrcaSessionStart } from '../maker-ipc/orcaSessionStartOptions.js';
-import type { MakerSessionCreateOpts } from '../maker-ipc/sessionRequest.js';
 import { dispatchInterAgentMessage, isSessionInTurn, wireSessionToIpc } from '../maker-ipc/register.js';
 import { MAKER_PUSH } from '../maker-ipc/channels.js';
 import { tapWindowBroadcast } from '../device-link/broadcast-tap.js';
-import { remoteInvoke } from '../device-link/index.js';
 import { WorktreePool } from '../worktree/index.js';
 import { getReadyBinaryPath, getCachedBinaryStatus } from '../agent-binaries/index.js';
 import {
@@ -101,7 +97,6 @@ import {
   registerCodexMcpThreadContext,
   unregisterCodexMcpThreadContext,
 } from '../mcp-integrations/codexEnvironment.js';
-import { CODEX_DISABLED_BUILTIN_PLUGIN_IDS_KEY } from '../mcp-integrations/codexBuiltinToolPolicy.js';
 import { buildCodexProxySpawnArgs } from './codex-gateway-config.js';
 import {
   createDesktopMakerMemoryManager,
@@ -157,7 +152,7 @@ setActiveCatalogChangedListener((revision) => {
   }
 });
 
-/** Re-project provider/model availability after the Cindy auth session changes. */
+/** Re-project provider/model availability after the Cindy membership changes. */
 export function refreshProviderAccessAfterAuthChange(): void {
   try {
     refreshSelectableModelsAndBroadcast({});
@@ -176,18 +171,6 @@ let _codexAgent: CodexAgent | null = null;
 let _initialCustomMcpRefresh: Promise<void> | undefined;
 type CodexLocalCredentialChangeGuard = Awaited<ReturnType<CodexAgent['beginLocalHostCredentialChange']>>;
 let _codexCredentialChangeGuard: CodexLocalCredentialChangeGuard | null = null;
-
-/**
- * 本地 Codex 会话加入 shared host 前的回调(maker-ipc 注入,见
- * DeferredCodexRestartService.flushBeforeLocalCodexSessionStart):延迟记忆重启
- * pending 时先尝试兑现,让新会话直接在新状态的 fresh host 上起跑。依赖方向:
- * maker-ipc → maker-host,故用 setter 注入而非反向 import。回调自身不抛错、
- * busy 时立即返回,不会卡住会话创建。
- */
-let _beforeLocalCodexSessionStartHook: (() => Promise<void>) | null = null;
-export function setBeforeLocalCodexSessionStartHook(hook: (() => Promise<void>) | null): void {
-  _beforeLocalCodexSessionStartHook = hook;
-}
 
 export async function readCodexRuntimeRoute(): Promise<{
   authInjection: 'oauth-bearer' | 'env-key' | 'provider-oauth';
@@ -236,7 +219,7 @@ export function getPluginRegistry() {
  * 获取 Maker 单例。第一次调用时构造（要求 localDb 已 ensureReady, 且 splash
  * 阶段已完成 claude/codex binary provisioning —— 否则 binaryPath 拿不到, 直接抛错）。
  *
- * MCP 由 @cindy/mcps 包提供 server/tool 定义，desktop main 在这里注入 token、
+ * MCP 由 lizi-mcps 包提供 server/tool 定义，desktop main 在这里注入 token、
  * OAuth、缓存、bot 发送等宿主能力，再交给 maker-core 的 ClaudeCodeAgent。
  */
 export function getMaker(): Maker {
@@ -275,7 +258,6 @@ export function getMaker(): Maker {
       getMakerMemoryManager: () => makerMemoryManager,
       lspPool: getLspPool(),
       pluginRegistry,
-      invokeRemote: remoteInvoke,
     };
     const orcaTeamStoreAdapter = createDesktopOrcaTeamStoreAdapter({
       getWorkerLink,
@@ -415,7 +397,7 @@ export function getMaker(): Maker {
       runtimeConfig: desktopCodexRuntimeConfig,
       binaryPath: codexPath,
       logger: desktopMakerLogger,
-      // Codex 也接 Cindy MCP providers (跟 claude 共享同一份 provider instances);
+      // Codex 也接 lizi_mcp providers (跟 claude 共享同一份 feishu/google instance);
       // codex 子进程没法消费 in-process JS instance, prepareCodexExtraSpawnConfig
       // 起 streamable-HTTP bridge 把 instance 通过 -c 'mcp_servers...=...' 注入。
       mcpProviders: codexMcpProviders,
@@ -504,32 +486,28 @@ export function getMaker(): Maker {
           codexProxyActive: ready,
         };
       },
-      registerCodexMcpThreadContext: ({ threadId, sessionId, workingDir, vendorOptions }) => {
-        // Codex shares one app-server across sessions. Freeze the effective
-        // ordinary-tool policy at thread creation so later Settings changes do
-        // not mutate a runtime that is already running.
-        const disabledPluginIds = getPluginRegistry().getDisabledRuntimePluginIds(workingDir);
+      registerCodexMcpThreadContext: ({ threadId, sessionId, workingDir, vendorOptions }) =>
         registerCodexMcpThreadContext(threadId, {
           agentKind: 'codex',
           sessionId,
           workingDir,
-          vendorOptions: {
-            ...vendorOptions,
-            [CODEX_DISABLED_BUILTIN_PLUGIN_IDS_KEY]: disabledPluginIds,
-          },
-        });
-      },
+          vendorOptions,
+        }),
       unregisterCodexMcpThreadContext,
       prepareCodexResumeSession: prepareExternalCodexSessionForResume,
       registerCodexSystemPromptForThread: ({ sessionId, threadId, text }) =>
         registerCodexProxyComposed(sessionId, threadId, text),
-      // host 自家、用户已通过 OAuth/账号授权过且完成权限 review 的 MCP server,
-      // 按精确 server name 自动通过 Codex MCP elicitation，避免每次可信写操作都弹
-      // PermissionPrompt。`cindy_` 只是 namespace，不构成信任边界；新 provider
-      // 默认仍弹审批，必须显式加入 allowlist。
-      // 例外:`cindy_ssh` 显式排除——它的 ssh_exec 在远端机器上执行任意命令,
-      // 属于跨机器写操作,必须保留 Codex MCP elicitation 审批(PR #874 review)。
-      // cindy_contacts 是渐进式 list_tools/call_tool server：不能按 serverName
+      // host 自家、用户已通过 OAuth/账号授权过的可信 MCP server,自动通过 codex
+      // 的 MCP elicitation 审批,避免每次写操作(lizi_feishu send / cindy_scheduler
+      // create / cindy_memory write 等)都弹 PermissionPrompt。
+      // 多数命名仍是历史前缀 `lizi_*`(lizi_feishu / ...)，
+      // scheduler 已迁为 `cindy_scheduler`；`<平台>_lizi` 显式白名单(PR #501)已清空——`github_lizi` /
+      // `gitlab_lizi` 先后于 2026-07-14 退役,迁入内置意识 cindy-github /
+      // cindy-gitlab。
+      // 例外:`lizi_ssh` 显式排除——它的 ssh_exec 在远端机器上执行任意命令,
+      // 属于跨机器写操作,必须保留 Codex MCP elicitation 审批,不能随 lizi_ 前缀
+      // 自动放行(PR #874 review)。
+      // lizi_contacts 是渐进式 list_tools/call_tool server：不能按 serverName
       // 粗粒度信任，否则 delete/merge/系统回写/文件覆盖都会被 outer call_tool
       // 一并放行。Codex metadata 带 outer tool params，可在执行前解析 inner tool；
       // 未知或高风险 action 逐次弹卡且禁止“本会话允许”。
@@ -653,16 +631,7 @@ export function getMaker(): Maker {
       // Desktop-specific session 生命周期副作用钩子。maker-core 不知道文件系统细节，
       // 启动前的 Skill 共享与关闭后的清理都由 desktop host 注入。
       lifecycleHooks: {
-        prepareStartOptions: async (sessionId, opts) => {
-          await preparePersistedOrcaSessionStart(sessionId, opts as MakerSessionCreateOpts);
-        },
         onBeforeStart: async ({ agentKind, workingDir, remoteHostId }) => {
-          // 延迟记忆重启 pending 时,本地 Codex 新会话加入 shared host 前先尝试
-          // 兑现(其它会话全空闲才会真的重启;仍 busy 则放行,残余窗口见
-          // deferredCodexRestart.ts 模块注释)。
-          if (agentKind === 'codex' && !remoteHostId) {
-            await _beforeLocalCodexSessionStartHook?.();
-          }
           // SSH remote 的 workingDir 属于远端文件系统，本机不能为它创建兼容链接。
           if (remoteHostId || !workingDir) return;
           const result = await prepareSharedProjectSkillLinks({ workingDir });
@@ -676,13 +645,6 @@ export function getMaker(): Maker {
           // startSession 前失效缓存，确保首个 session 就能使用刚共享的 Skill。
           if (agentKind === 'codex' && result.changed) {
             await codexAgent.listAgentSkills({ workingDir, forceReload: true });
-          }
-        },
-        onStartSucceeded: (sessionId, opts) => {
-          const createOpts = opts as MakerSessionCreateOpts;
-          markOrcaMcpHydratedIfNeeded(sessionId, createOpts);
-          if (createOpts.orcaRole === 'worker') {
-            markKnownOrcaWorkerSession(sessionId);
           }
         },
         getCodexHistoryHasProductPrompt: (sessionId) =>

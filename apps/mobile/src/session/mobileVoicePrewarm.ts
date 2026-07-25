@@ -1,18 +1,18 @@
-import type { AsrProvider } from '@cindy/voice-input-core';
+import type { AsrProvider } from '@lizi/voice-input-core';
 import type { ApiFetchOptions } from '@/api/client';
 import type { StoredMobileVoiceCredential } from '@/session/mobileVoiceCredentialStore';
 import { createMobileAsrProvider } from '@/session/mobileRealtimeAsrProvider';
 import { prewarmMobileRealtimeAudio } from '@/session/mobileRealtimeAudio';
 import {
-  CINDY_MANAGED_REFINER_PROVIDER,
   createMobileCindyVoiceCredential,
   MobileCindyVoiceRunContext,
 } from '@/session/mobileCindyVoiceSession';
+import { resolveMobileVoiceCredentialFromLiteLlmSettings } from '@/session/mobileVoiceLiteLlmSettings';
 
 export type PrewarmedMobileVoiceAsr = {
   credential: StoredMobileVoiceCredential;
   asr: AsrProvider;
-  voiceContext: MobileCindyVoiceRunContext;
+  voiceContext?: MobileCindyVoiceRunContext;
 };
 
 type PendingPrewarm = {
@@ -112,25 +112,27 @@ async function buildPrewarm(
     apiFetch: <T>(path: string, options: Omit<ApiFetchOptions, 'token'>) => Promise<T>;
   },
 ): Promise<PrewarmedMobileVoiceAsr | null> {
-  // 手机语音只保留 Cindy 官方托管路径:没有登录态(auth)就没有可预热的连接。
-  if (!auth) return null;
   try {
-    const credential = createMobileCindyVoiceCredential(deviceId);
-    const voiceContext = new MobileCindyVoiceRunContext(
-      auth.getAccessToken,
-      auth.refreshAccessToken,
-      auth.apiFetch,
-      credential.settings?.language,
-      CINDY_MANAGED_REFINER_PROVIDER,
-    );
-    const provider = createMobileAsrProvider(credential, {
-      connectionProvider: (providerId) => voiceContext.createAsrConnection(providerId),
-    });
+    const credential = auth
+      ? createMobileCindyVoiceCredential(deviceId)
+      : await resolveMobileVoiceCredentialFromLiteLlmSettings(deviceId);
+    const voiceContext = auth
+      ? new MobileCindyVoiceRunContext(
+        auth.getAccessToken,
+        auth.refreshAccessToken,
+        auth.apiFetch,
+        credential.settings?.language,
+        credential.refiner.provider,
+      )
+      : undefined;
+    const provider = createMobileAsrProvider(credential, voiceContext
+      ? { connectionProvider: (providerId) => voiceContext.createAsrConnection(providerId) }
+      : {});
     const startPromise = provider.start();
     // Parked until claimed: don't let a failed speculative connect become an
     // unhandled rejection. The claiming run re-observes the outcome via start().
     startPromise.catch(() => undefined);
-    return { credential, voiceContext, asr: withPrewarmedStart(provider, startPromise) };
+    return { credential, ...(voiceContext ? { voiceContext } : {}), asr: withPrewarmedStart(provider, startPromise) };
   } catch {
     return null;
   }

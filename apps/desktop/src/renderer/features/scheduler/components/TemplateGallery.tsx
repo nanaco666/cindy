@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import type { ScheduleTemplate } from '@cindy/maker-scheduler';
+import type { ScheduleTemplate } from '@lizi/maker-scheduler';
 
 import { TemplateCard } from './TemplateCard';
 import { useTemplates } from '../hooks/useTemplates';

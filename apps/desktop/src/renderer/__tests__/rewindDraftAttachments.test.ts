@@ -23,8 +23,8 @@ describe('buildRewindDraftAttachments', () => {
         },
       ],
       files: [
-        { name: 'notes.txt', path: '/Users/sam/Desktop/notes.txt' },
-        { name: 'spec.pdf', path: 'C:\\Users\\sam\\Documents\\spec.pdf' },
+        { name: 'notes.txt', path: '/Users/lizi/Desktop/notes.txt' },
+        { name: 'spec.pdf', path: 'C:\\Users\\lizi\\Documents\\spec.pdf' },
       ],
     });
 
@@ -41,14 +41,14 @@ describe('buildRewindDraftAttachments', () => {
     });
     expect(attachments[1]).toMatchObject({
       name: 'notes.txt',
-      path: '/Users/sam/Desktop/notes.txt',
+      path: '/Users/lizi/Desktop/notes.txt',
       ext: '.txt',
       category: 'text',
       mimeType: 'text/plain',
     });
     expect(attachments[2]).toMatchObject({
       name: 'spec.pdf',
-      path: 'C:\\Users\\sam\\Documents\\spec.pdf',
+      path: 'C:\\Users\\lizi\\Documents\\spec.pdf',
       ext: '.pdf',
       category: 'pdf',
       mimeType: 'application/pdf',

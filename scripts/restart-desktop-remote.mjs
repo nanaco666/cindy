@@ -440,18 +440,12 @@ function darwinEnvPrefix() {
   return `export PATH=${shellSingleQuote([...new Set(preferredPathParts)].join(path.delimiter))}:"$PATH":${shellSingleQuote([...new Set(fallbackPathParts)].join(path.delimiter))}; `;
 }
 
-export function devEnvPrefix(env = process.env, platform = process.platform) {
+export function devEnvPrefix(env = process.env) {
   const envEntries = [
     // --region 经 CINDY_AUTH_REGION 注入 dev-remote-env / Forge / Vite，同一个值
     // 同时决定区域身份与 --endpoints-cdn 的自举 CDN 基址。
     ['CINDY_AUTH_REGION', env.CINDY_AUTH_REGION],
     ['XDT_VOICE_INPUT_RECORD', env.XDT_VOICE_INPUT_RECORD],
-    // 登录 scenario harness(dev-only 状态遍历,implementation-plan Step 0):
-    // XDT_LOGIN_SCENARIO 由 authManager 消费(附录 A 值域);
-    // VITE_SPLASH_PHASE_FIXTURE 由 renderer useSplash fixture 读取点消费
-    // (Vite 会把进程级 VITE_* 暴露进 import.meta.env,dev-only)。
-    ['XDT_LOGIN_SCENARIO', env.XDT_LOGIN_SCENARIO],
-    ['VITE_SPLASH_PHASE_FIXTURE', env.VITE_SPLASH_PHASE_FIXTURE],
     ['XDT_USER_DATA_DIR', env.XDT_USER_DATA_DIR],
     ['XDT_DEVICE_ID_OVERRIDE', env.XDT_DEVICE_ID_OVERRIDE],
     ['XDT_SCHEDULER_PASSIVE', env.XDT_SCHEDULER_PASSIVE],
@@ -469,7 +463,7 @@ export function devEnvPrefix(env = process.env, platform = process.platform) {
   ].filter(([, value]) => value);
   if (envEntries.length === 0) return '';
 
-  if (platform === 'win32') {
+  if (process.platform === 'win32') {
     return envEntries
       .map(([key, value]) => `set "${key}=${String(value).replaceAll('"', '')}" && `)
       .join('');

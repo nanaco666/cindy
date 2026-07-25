@@ -1,7 +1,7 @@
-# Cindy 手机版设计指南
+# XDMaker 手机版设计指南
 
 > 状态:权威设计规范。新增 / 修改任何 UI 前先读本文。
-> 定位:这是 `docs/design-rules/cindy-design-system.md` 的**轻量移动版**——同一套 Ollama 视觉语言,但不照搬桌面的 351-token ColorRegistry 重型架构。手机端用一套 light/dark 双色板 + 收敛阶梯 + RN 主题 hook。
+> 定位:这是桌面 `DESIGN.md`(根目录)的**轻量移动版**——同一套 Ollama 视觉语言,但不照搬桌面的 351-token ColorRegistry 重型架构。手机端用一套 light/dark 双色板 + 收敛阶梯 + RN 主题 hook。
 > 色值与桌面 Ollama Light / Dark **保持一致**,保证跨端观感统一。
 
 ---
@@ -51,7 +51,7 @@
 - **语义不变色**(`statusReady` / `statusAccent`)跨 light / dark 一致——它们是状态语义,不随主题漂移。
 - **CTA 在 dark 反相为白**:`cta` 白底 + `ctaText` 深字。注意别让白 pill 看起来像 disabled——新增主操作 / 选中态后在 dark 下目检。
 - **Home 对话列表用 base token**:列表背景 / 分隔 / 文字使用 `surface` / `border` / `text*`,菜单选中用 `surfaceChip`,不另起暗色调色板;菜单 / FAB 只用 1px `border` 分层、零阴影,保持桌面「单一 flat Surface + 1px Board」哲学。
-- 不要在组件里硬编码 hex / rgba;找不到合适 token 时跟维护者确认是否新增,而不是写死。
+- 不要在组件里硬编码 hex / rgba;找不到合适 token 时跟 Lizi/Dash 确认是否新增,而不是写死。
 
 ---
 
@@ -155,14 +155,13 @@ function Foo() {
 - 库:**lucide-react-native**(统一,不混用其它图标库)。
 - **图标选择必须与桌面版保持一致**:同一动作 / 语义,手机和桌面用**同一个** lucide 图标。新增图标前先去桌面对应组件确认它用的是哪个(如权限模式用 `Hand`/`CodeXml`/`ClipboardList`/`Sparkles`/`TriangleAlert`,见桌面 `new-chat/PermissionSelector.tsx`),**不要**另选近似图标(如别用 `Shield` 系列代替)。这样跨端心智模型一致。
   - 已沉淀的对齐映射:权限模式的图标 + 语义色见 `src/session/permissionPresentation.ts`(严格对照桌面 PermissionSelector:`auto`→`permAutoAccent`、`bypassPermissions`→`statusAccent`,其余中性)。
-  - **模型下拉对齐桌面 provider-aware 结构**:同一 model 可挂多家「供应商(来源)」,选行 = 选「来源 + 模型」,选择经 device-link 把 `model + providerId` 路由到被控端。**复用 `@cindy/model-providers` 的 `buildProviderSections` 作分段唯一真相**(`src/session/providerModelSections.ts`),被控端供应商目录经隧道 `maker:provider:list` 取(`src/device-link/useDeviceProviders.ts`);0 供应商 / 旧被控端回退 capabilities 扁平列表。**来源 mark 与桌面同源**:三个内置供应商(Claude / Codex / XD)用官方单色 SVG mark(path 常量在 `src/components/vendorIconPaths.ts`,与桌面 ClaudeMark / CodexMark / XDIncMark 逐字同源),自定义供应商回退首字母 monogram(`MobileProviderMark`)。早期「手机故意不搬品牌 SVG、全用 monogram」的决策已在「模型选择列表与桌面完全对齐」改造(2026-07)中推翻:react-native-svg 本就在依赖里,复制 path 常量零成本,而跨端一眼可辨的来源图标价值更高。唯一保留差异:monogram 容器用 pill 圆角(桌面 4px 方盒)——圆角遵守手机二元规则,不引入中间值。
-  - **Agent 身份与厂牌分槽**:`MobileAgentMark` / `MobileVendorIcon` 只表示运行时 Agent，使用 Claude Code 像素脸或 Codex CLI `>_` 多瓣花；Anthropic / OpenAI 来源与模型品牌继续由 `MobileProviderMark` / `MobileModelIconMark` 表示。两类 mark 即使名称相近也不得互换。
+  - **模型下拉对齐桌面 provider-aware 结构**:同一 model 可挂多家「供应商(来源)」,选行 = 选「来源 + 模型」,选择经 device-link 把 `model + providerId` 路由到被控端。**复用 `@lizi/model-providers` 的 `buildProviderSections` 作分段唯一真相**(`src/session/providerModelSections.ts`),被控端供应商目录经隧道 `maker:provider:list` 取(`src/device-link/useDeviceProviders.ts`);0 供应商 / 旧被控端回退 capabilities 扁平列表。**来源 mark 与桌面同源**:三个内置供应商(Claude / Codex / XD)用官方单色 SVG mark(path 常量在 `src/components/vendorIconPaths.ts`,与桌面 ClaudeMark / CodexMark / XDIncMark 逐字同源),自定义供应商回退首字母 monogram(`MobileProviderMark`)。早期「手机故意不搬品牌 SVG、全用 monogram」的决策已在「模型选择列表与桌面完全对齐」改造(2026-07)中推翻:react-native-svg 本就在依赖里,复制 path 常量零成本,而跨端一眼可辨的来源图标价值更高。唯一保留差异:monogram 容器用 pill 圆角(桌面 4px 方盒)——圆角遵守手机二元规则,不引入中间值。
 - **设备「已撤销访问权限」状态**:控制端(手机)被某台被控电脑撤销访问时,设备 chip 用 `Lock` 图标(`colors.textSecondary`)替代状态圆点 —— 与「离线 / 未开启远控」的灰圆点明确区分,读作「被锁在外」,且不引入非调色板色(遵守 §1 灰度 + teal/orange 约束)。**无桌面对端**:桌面是被控方(管理「允许哪些控制器」),没有「控制器被撤销」这一侧视图,故此处不套用「与桌面同图标」规则。点按该 chip 弹 `RevokedAccessTip`(说明 + 「重试访问」),重试复用 device-link 探测路径(成功经 `withAccessRevokedHandling` 清除本地撤销标记);重连 / 回前台也会静默重试自愈。
 - 移动端可以比桌面**更省**:紧凑工具栏里的触发器只放图标、不带文字标签(桌面 PermissionSelector 是图标+文字,手机为省空间只留图标);但展开后的下拉面板仍按桌面给出图标 + 文字 + 选中态的完整选项。
 - 尺寸走 `iconSize`:`xs 12 · sm 14 · md 16 · lg 18 · xl 22 · xxl 26`(`md`/`lg` 最常用)。避免 17 个散乱尺寸。
 - `strokeWidth` 统一约 2。
 - 颜色走 token(`colors.textPrimary` / `textSecondary` / `statusAccent` / `permAutoAccent` 等),不写死。
-- 会话 Agent 身份图标走 `MobileVendorIcon`；provider / model 厂牌图标分别走 `MobileProviderMark` / `MobileModelIconMark`。
+- 品牌厂商图标走 `MobileVendorIcon`。
 - **底部浮窗统一走 SheetSurface 模式**:可拖动底部浮窗(把手 half/full/下拉 dismiss)的「面板表面」抽在 `src/session/SheetSurface.tsx`(grabber + header + pinnedTop/footer 插槽 + 滚动区 + `useContextSheetDrag` 拖动编排,snap 受控)。单层浮窗 = Modal + backdrop + 一层 Surface(`ContextSheet` 即此薄壳);需要「浮窗上再叠一层」时**不要嵌套 Modal**(iOS 同级双 Modal 第二个不显示、Android 每个 Modal 是独立原生 Dialog、返回键派发不可控),在**同一个 Modal 里叠第二层 Surface**(translateY 滑入 + 自带加深 backdrop + 返回两段式),先例见 `ModelPickerSheet`(模型列表一级 + 模型选项/权限二级,视图状态机在 `modelPickerSheetModel.ts` 可单测)。新浮窗一律复用 SheetSurface,不再手写 sheet 结构。
 
 ---
@@ -207,4 +206,4 @@ function Foo() {
 
 ---
 
-**交叉引用**:桌面 `docs/design-rules/cindy-design-system.md` §2(颜色)/ §3(排版)/ §10(token 架构)。本文是其轻量移动版,色值跟随桌面 Ollama Light / Dark。
+**交叉引用**:桌面 `DESIGN.md` §2(颜色)/ §3(排版)/ §10(token 架构)。本文是其轻量移动版,色值跟随桌面 Ollama Light / Dark。

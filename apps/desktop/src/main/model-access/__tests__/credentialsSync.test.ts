@@ -79,31 +79,6 @@ function makeHarness(overrides: Partial<CredentialsSyncDeps> = {}): Harness {
 }
 
 describe('credentialsSync', () => {
-  it('owner switch reloads endpoint metadata from the new owner namespace', () => {
-    let owner = 'user-a';
-    const contents = new Map<string, string>();
-    const store = createModelAccessCredentialsStore(
-      {
-        read: () => contents.get(owner) ?? null,
-        write: (text) => {
-          contents.set(owner, text);
-        },
-        remove: () => {
-          contents.delete(owner);
-        },
-      },
-      () => owner,
-    );
-
-    store.setServerCredentials('https://tenant-a.test.invalid/');
-    owner = 'user-b';
-    expect(store.getServerEndpoint()).toBeNull();
-
-    store.setServerCredentials('https://tenant-b.test.invalid/');
-    owner = 'user-a';
-    expect(store.getServerEndpoint()).toBe('https://tenant-a.test.invalid');
-  });
-
   it('成功:写 key + 记录 server endpoint,状态 syncing → ok', async () => {
     const h = makeHarness();
     h.fetchMock.mockResolvedValue({ endpoint: 'https://laxa.test.invalid/', apiKey: 'sk-u1' });

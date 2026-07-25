@@ -5,13 +5,13 @@
  *  - cache 按 sessionId 分桶(Map<sessionId, TabBucket>),跨 session 互不串。
  *  - 首次访问某 sessionId 调用 `ensureHydrated(sessionId)` 触发 IPC list 拉取并 hydrate。
  *  - 操作(addTab / closeTab / setActiveTab / patchTabState / reorderTabs)走"乐观更新 cache
- *    + IPC 写"的模式:乐观本地改,IPC 写失败回滚 cache + rethrow。
- *  - 高频 patchTabState 走全局单飞队列:同 tab 等待中的写只保留最后一份,
- *    避免 webview 导航 / title / favicon 事件无界灌入 DB worker。
+ *    + IPC 写"的模式:乐观本地改,IPC 同步写,写失败回滚 cache + rethrow。
  *  - subscribe(listener) 接收 sessionId-aware 通知;消费方(RightSidebarShell)通过
  *    React 的 useSyncExternalStore 订阅当前 sessionId 的桶变化。
  *
- * 错误暴露走 caller 的 catch + console.error;Phase 7 加 toast 统一暴露。
+ * Phase 2 简化(后续优化):
+ *  - 所有写都立即调用 IPC,无 debounce。Phase 3/5 真有高频 patch(浏览器 url 等)再加 debounce。
+ *  - 错误暴露走 caller 的 catch + console.error;Phase 7 加 toast 统一暴露。
  *
  * 模块单例 → RightSidebar 整树 unmount/remount(session 切换时 MainLayout L553 条件渲染)也不丢数据。
  */
@@ -41,39 +41,6 @@ const inflight = new Map<string, Promise<void>>();
 const listeners = new Set<Listener>();
 const memoryOnlySessions = new Set<string>();
 const closeInterceptors = new Map<string, TabCloseInterceptor>();
-const patchRevisions = new Map<string, number>();
-const persistedStateBaselines = new Map<string, unknown>();
-const STATE_WRITE_OVERLOAD_RETRY_DELAYS_MS = [25, 75, 150] as const;
-
-interface TabStateWriteInput {
-  id: string;
-  sessionId: string;
-  kind: string;
-  position: number;
-  state: unknown;
-}
-
-interface PendingTabStateWrite {
-  input: TabStateWriteInput;
-  revision: number;
-  generation: number;
-  overloadRetries: number;
-  promise: Promise<void>;
-  resolve: () => void;
-  reject: (err: unknown) => void;
-}
-
-/**
- * patchTabState 的有界持久化队列:
- * - 全局最多 1 个 right-sidebar upsert 在途,不给 DB worker 制造并发洪峰。
- * - 每个 tab 最多 1 个等待槽,后来的 state 覆盖旧 payload(last-write-wins)。
- * 因 session 最多 20 tabs,等待 payload 数量也天然有界。
- */
-const pendingStateWrites = new Map<string, PendingTabStateWrite>();
-const pendingStateWriteOrder: string[] = [];
-const activeStateWrites = new Map<string, PendingTabStateWrite>();
-let stateWritePumpRunning = false;
-let storeGeneration = 0;
 
 interface RightSidebarTabsListResult {
   tabs: Array<{ id: string; kind: string; state: unknown }>;
@@ -107,174 +74,6 @@ function ipcApi() {
 function makeTabId(): string {
   // Phase 2 简易 id;不引入 nanoid 依赖。冲突概率 ~10^-12,实际不可能。
   return `t_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
-}
-
-function tabStateWriteKey(sessionId: string, tabId: string): string {
-  return `${sessionId}\0${tabId}`;
-}
-
-function rollbackTabStateWrite(key: string, item: PendingTabStateWrite): void {
-  if (patchRevisions.get(key) !== item.revision) return;
-  const baseline = persistedStateBaselines.get(key);
-  const bucket = getBucket(item.input.sessionId);
-  const idx = bucket.tabs.findIndex((tab) => tab.id === item.input.id);
-  if (idx < 0) return;
-  const tabs = [...bucket.tabs];
-  tabs[idx] = { ...tabs[idx], state: baseline };
-  setBucket(item.input.sessionId, { tabs });
-}
-
-function isDbWorkerQueueOverloadedError(err: unknown): boolean {
-  return err instanceof Error && err.message.includes('db worker RPC queue overloaded');
-}
-
-function wait(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function resetStateWriteQueue(): void {
-  storeGeneration += 1;
-  for (const item of activeStateWrites.values()) item.resolve();
-  for (const item of pendingStateWrites.values()) item.resolve();
-  activeStateWrites.clear();
-  pendingStateWrites.clear();
-  pendingStateWriteOrder.length = 0;
-  patchRevisions.clear();
-  persistedStateBaselines.clear();
-}
-
-async function drainStateWrites(): Promise<void> {
-  if (stateWritePumpRunning) return;
-  stateWritePumpRunning = true;
-  try {
-    while (pendingStateWriteOrder.length > 0) {
-      const key = pendingStateWriteOrder.shift();
-      if (!key) continue;
-      const item = pendingStateWrites.get(key);
-      if (!item) continue;
-      pendingStateWrites.delete(key);
-      if (item.generation !== storeGeneration) {
-        item.resolve();
-        continue;
-      }
-      activeStateWrites.set(key, item);
-      try {
-        const ipc = ipcApi();
-        if (ipc && shouldPersist(item.input.sessionId)) {
-          await ipc.upsert(item.input);
-          if (item.generation !== storeGeneration) {
-            item.resolve();
-            continue;
-          }
-          persistedStateBaselines.set(key, item.input.state);
-        }
-        item.resolve();
-      } catch (err) {
-        if (item.generation !== storeGeneration) {
-          item.resolve();
-          continue;
-        }
-        if (isMissingSessionPersistenceError(err)) {
-          markMemoryOnlySession(item.input.sessionId);
-          item.resolve();
-          continue;
-        }
-        if (
-          isDbWorkerQueueOverloadedError(err) &&
-          item.overloadRetries < STATE_WRITE_OVERLOAD_RETRY_DELAYS_MS.length
-        ) {
-          const delayMs = STATE_WRITE_OVERLOAD_RETRY_DELAYS_MS[item.overloadRetries];
-          item.overloadRetries += 1;
-          await wait(delayMs);
-          if (item.generation !== storeGeneration) {
-            item.resolve();
-            continue;
-          }
-          // 等待期间若同 tab 已有更新的 state 入队,由最新写负责最终持久化;
-          // 旧 promise 可直接完成,避免重试旧 payload 覆盖新状态。
-          if (pendingStateWrites.has(key)) {
-            item.resolve();
-            continue;
-          }
-          pendingStateWrites.set(key, item);
-          pendingStateWriteOrder.push(key);
-          continue;
-        }
-        rollbackTabStateWrite(key, item);
-        log.error('patchTabState IPC failed; rolling back cache', {
-          sessionId: item.input.sessionId,
-          tabId: item.input.id,
-          err,
-        });
-        item.reject(err);
-      } finally {
-        if (activeStateWrites.get(key) === item) activeStateWrites.delete(key);
-      }
-    }
-  } finally {
-    stateWritePumpRunning = false;
-    // finally 与新 enqueue 可能交错;若尾部又有写,重新启动 pump。
-    if (pendingStateWriteOrder.length > 0) void drainStateWrites();
-  }
-}
-
-function enqueueTabStateWrite(
-  key: string,
-  input: TabStateWriteInput,
-  revision: number,
-): Promise<void> {
-  const existing = pendingStateWrites.get(key);
-  if (existing) {
-    existing.input = input;
-    existing.revision = revision;
-    return existing.promise;
-  }
-  let resolve!: () => void;
-  let reject!: (err: unknown) => void;
-  const promise = new Promise<void>((res, rej) => {
-    resolve = res;
-    reject = rej;
-  });
-  pendingStateWrites.set(key, {
-    input,
-    revision,
-    generation: storeGeneration,
-    overloadRetries: 0,
-    promise,
-    resolve,
-    reject,
-  });
-  pendingStateWriteOrder.push(key);
-  void drainStateWrites();
-  return promise;
-}
-
-async function settleTabStateWrites(sessionId: string, tabId: string): Promise<void> {
-  const key = tabStateWriteKey(sessionId, tabId);
-  // 终止性不变量:调用方 closeTab 已先把 tab 移出 cache,patchTabState 找不到该
-  // tab 后只会 noop,所以不会再有新写进入这个 key。等待 active 与 pending
-  // 两代写全部落定后再 DELETE,避免队列中的 UPSERT 在 close 之后把 tab 行复活。
-  while (true) {
-    const writes = [activeStateWrites.get(key)?.promise, pendingStateWrites.get(key)?.promise]
-      .filter((promise): promise is Promise<void> => promise != null);
-    if (writes.length === 0) return;
-    await Promise.allSettled(writes);
-  }
-}
-
-async function settleCurrentSessionStateWrites(sessionId: string): Promise<void> {
-  const prefix = `${sessionId}\0`;
-  // 只等待调用瞬间已经存在的旧 position 写。reorder 已先更新 cache,之后新入队的
-  // patch 会携带新 position,即使与 reorder IPC 交错也不会把顺序改回去。
-  const writes = [
-    ...[...activeStateWrites.entries()]
-      .filter(([key]) => key.startsWith(prefix))
-      .map(([, item]) => item.promise),
-    ...[...pendingStateWrites.entries()]
-      .filter(([key]) => key.startsWith(prefix))
-      .map(([, item]) => item.promise),
-  ];
-  await Promise.allSettled(writes);
 }
 
 function setBucket(sessionId: string, next: Partial<TabBucket>): TabBucket {
@@ -499,7 +298,6 @@ export async function closeTab(
 
   setBucket(sessionId, { tabs: nextTabs, activeTabId: nextActiveId });
   try {
-    await settleTabStateWrites(sessionId, tabId);
     const ipc = ipcApi();
     if (ipc && shouldPersist(sessionId)) {
       await ipc.close({ id: tabId });
@@ -507,9 +305,6 @@ export async function closeTab(
         await ipc.setActive({ sessionId, id: nextActiveId });
       }
     }
-    const key = tabStateWriteKey(sessionId, tabId);
-    patchRevisions.delete(key);
-    persistedStateBaselines.delete(key);
   } catch (err) {
     log.error('closeTab IPC failed; rolling back cache', { sessionId, tabId, err });
     setBucket(sessionId, { tabs: prev.tabs, activeTabId: prev.activeTabId });
@@ -548,44 +343,42 @@ export async function setActiveTab(
 }
 
 /** patch 单个 tab 的 state(plugin 改 URL / 文件选中等用)。失败回滚。 */
-export function patchTabState(
+export async function patchTabState(
   sessionId: string,
   tabId: string,
   patch: (current: unknown) => unknown,
 ): Promise<void> {
   const prev = getBucket(sessionId);
   const idx = prev.tabs.findIndex((t) => t.id === tabId);
-  if (idx < 0) return Promise.resolve();
+  if (idx < 0) return;
   const oldTab = prev.tabs[idx];
   const newState = patch(oldTab.state);
   if (!shouldPersist(sessionId)) {
-    try {
-      validateMemoryOnlyStateSize(newState);
-    } catch (err) {
-      return Promise.reject(err);
-    }
+    validateMemoryOnlyStateSize(newState);
   }
   const nextTabs = [...prev.tabs];
   nextTabs[idx] = { ...oldTab, state: newState };
   setBucket(sessionId, { tabs: nextTabs });
-  if (!shouldPersist(sessionId)) return Promise.resolve();
-  const key = tabStateWriteKey(sessionId, tabId);
-  if (!persistedStateBaselines.has(key)) {
-    persistedStateBaselines.set(key, oldTab.state);
+  try {
+    const ipc = ipcApi();
+    if (ipc && shouldPersist(sessionId)) {
+      await ipc.upsert({
+        id: tabId,
+        sessionId,
+        kind: oldTab.kind,
+        position: idx,
+        state: newState,
+      });
+    }
+  } catch (err) {
+    if (isMissingSessionPersistenceError(err)) {
+      markMemoryOnlySession(sessionId);
+      return;
+    }
+    log.error('patchTabState IPC failed; rolling back cache', { sessionId, tabId, err });
+    setBucket(sessionId, { tabs: prev.tabs });
+    throw err;
   }
-  const revision = (patchRevisions.get(key) ?? 0) + 1;
-  patchRevisions.set(key, revision);
-  return enqueueTabStateWrite(
-    key,
-    {
-      id: tabId,
-      sessionId,
-      kind: oldTab.kind,
-      position: idx,
-      state: newState,
-    },
-    revision,
-  );
 }
 
 /** 重排序 tab,orderedIds 必须包含 same session 当前**全部** tab id。失败回滚。 */
@@ -604,7 +397,6 @@ export async function reorderTabs(
   }
   setBucket(sessionId, { tabs: nextTabs });
   try {
-    await settleCurrentSessionStateWrites(sessionId);
     const ipc = ipcApi();
     if (ipc && shouldPersist(sessionId)) await ipc.reorder({ sessionId, orderedIds });
   } catch (err) {
@@ -629,8 +421,6 @@ export function invalidateSessionCaches(): void {
   const sessionIds = [...cache.keys()];
   cache.clear();
   inflight.clear();
-  // 宿主迁移不等于登出:已入队写仍应继续落库。这里不能像 _resetStore 一样
-  // resolve 后丢弃,否则新 renderer 会 hydrate 到旧 URL / title / reveal state。
   for (const sessionId of sessionIds) notify(sessionId);
 }
 
@@ -648,6 +438,5 @@ export function _resetStore(): void {
   inflight.clear();
   memoryOnlySessions.clear();
   closeInterceptors.clear();
-  resetStateWriteQueue();
   listeners.clear();
 }

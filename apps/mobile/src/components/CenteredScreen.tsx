@@ -1,21 +1,25 @@
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Image, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
 import { Text } from '@/components/AppText';
-import { MobileLoginHandoffStage } from '@/components/MobileLoginHandoffStage';
 import { fontWeight, useTheme, useThemedStyles, type ThemeColors } from '@/theme';
 import { spacing, typeScale } from '@/theme/tokens';
 
-/**
- * CenteredScreen —— 启动期全屏占位屏。
- *
- * splash 变体(PR4a 白底体系重写,implementation-plan Step 5 WHAT1):
- * 复用 MobileLoginHandoffStage 唯一品牌宿主(主题 surface 底 + wave4 双红渐变 +
- * 立绘/SLOGAN/字标静态品牌,750 stage 几何)。旧红底 splash 体系(brandSplash
- * 主题族铺底 + assets/splash/ 下 fade 立绘·白版字标·script 资产的 375×812 画布
- * 几何)已随 wave4 改判整体退役:渲染层不再 require 任何旧 splash 资产,
- * 文件暂留原目录待后续清理批次统一处置(splashPreview.test 校验其存在性)。
- *
- * default 变体保持原样(通用 loading/占位)。
- */
+const splashIllustration = require('../../assets/splash/cindy-splash-illustration-fade.webp');
+const splashWordmark = require('../../assets/splash/cindy-splash-wordmark-white.png');
+const splashScript = require('../../assets/splash/cindy-splash-script-white.png');
+
+const SPLASH_CANVAS_WIDTH = 375;
+const SPLASH_CANVAS_HEIGHT = 812;
+const SPLASH_ILLUSTRATION_TOP = 125.5;
+const SPLASH_ILLUSTRATION_SIZE = 354;
+const SPLASH_WORDMARK_TOP = 442.5;
+const SPLASH_WORDMARK_WIDTH = 217;
+const SPLASH_WORDMARK_HEIGHT = 74;
+const SPLASH_SCRIPT_TOP = 530.5;
+const SPLASH_SCRIPT_LEFT = 182.5;
+const SPLASH_SCRIPT_WIDTH = 175.5;
+const SPLASH_SCRIPT_HEIGHT = 50;
+
 export function CenteredScreen({
   title,
   subtitle,
@@ -27,13 +31,67 @@ export function CenteredScreen({
 }) {
   const styles = useThemedStyles(makeStyles);
   const { colors } = useTheme();
+  const { height, width } = useWindowDimensions();
 
   if (variant === 'splash') {
+    const scale = Math.min(width / SPLASH_CANVAS_WIDTH, height / SPLASH_CANVAS_HEIGHT);
+    const stageWidth = SPLASH_CANVAS_WIDTH * scale;
+    const stageHeight = SPLASH_CANVAS_HEIGHT * scale;
+    const stageTop = (height - stageHeight) / 2;
+    const stageLeft = (width - stageWidth) / 2;
+    const illustrationSize = SPLASH_ILLUSTRATION_SIZE * scale;
+    const wordmarkWidth = SPLASH_WORDMARK_WIDTH * scale;
+    const scriptWidth = SPLASH_SCRIPT_WIDTH * scale;
     return (
-      <MobileLoginHandoffStage
+      <View
         accessibilityLabel={title}
+        style={styles.splashRoot}
         testID="startup.splash"
-      />
+      >
+        <StatusBar style="light" />
+        <Image
+          accessibilityIgnoresInvertColors
+          resizeMode="contain"
+          source={splashIllustration}
+          style={[
+            styles.splashIllustration,
+            {
+              height: illustrationSize,
+              left: stageLeft + ((SPLASH_CANVAS_WIDTH * scale) - illustrationSize) / 2,
+              top: stageTop + SPLASH_ILLUSTRATION_TOP * scale,
+              width: illustrationSize,
+            },
+          ]}
+        />
+        <Image
+          accessibilityIgnoresInvertColors
+          resizeMode="contain"
+          source={splashWordmark}
+          style={[
+            styles.splashWordmark,
+            {
+              height: SPLASH_WORDMARK_HEIGHT * scale,
+              left: stageLeft + ((SPLASH_CANVAS_WIDTH * scale) - wordmarkWidth) / 2,
+              top: stageTop + SPLASH_WORDMARK_TOP * scale,
+              width: wordmarkWidth,
+            },
+          ]}
+        />
+        <Image
+          accessibilityIgnoresInvertColors
+          resizeMode="contain"
+          source={splashScript}
+          style={[
+            styles.splashScript,
+            {
+              height: SPLASH_SCRIPT_HEIGHT * scale,
+              left: stageLeft + SPLASH_SCRIPT_LEFT * scale,
+              top: stageTop + SPLASH_SCRIPT_TOP * scale,
+              width: scriptWidth,
+            },
+          ]}
+        />
+      </View>
     );
   }
 
@@ -54,6 +112,20 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     gap: spacing.sm,
     justifyContent: 'center',
     padding: spacing.xl,
+  },
+  splashRoot: {
+    backgroundColor: colors.brandSplashBackground,
+    flex: 1,
+    overflow: 'hidden',
+  },
+  splashIllustration: {
+    position: 'absolute',
+  },
+  splashWordmark: {
+    position: 'absolute',
+  },
+  splashScript: {
+    position: 'absolute',
   },
   title: {
     color: colors.textPrimary,

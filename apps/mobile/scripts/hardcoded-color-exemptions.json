@@ -9,7 +9,7 @@
   "entries": [
     {
       "category": "mediaLightboxChrome",
-      "reason": "全屏媒体查看器常黑沉浸语境的黑白系铬(图标/文字/背板/遮罩),不随主题反相,对齐桌面 docs/design-rules/cindy-design-system.md lightbox/overlay 豁免;designTokenDiscipline.test.ts COLOR_EXEMPT 已放行。CINDY 接管后保持黑白,不迁 token(避免塞进会反相的 cta/ctaText)。",
+      "reason": "全屏媒体查看器常黑沉浸语境的黑白系铬(图标/文字/背板/遮罩),不随主题反相,对齐桌面 DESIGN.md lightbox/overlay 豁免;designTokenDiscipline.test.ts COLOR_EXEMPT 已放行。CINDY 接管后保持黑白,不迁 token(避免塞进会反相的 cta/ctaText)。",
       "owner": "skin/cindy-mobile-palette",
       "locations": [
         { "file": "apps/mobile/src/session/ImageLightbox.tsx", "line": 486, "literal": "#ffffff", "use": "lightbox 顶栏关闭 X 图标" },

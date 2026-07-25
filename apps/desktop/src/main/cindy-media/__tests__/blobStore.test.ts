@@ -31,11 +31,6 @@ afterAll(() => {
 });
 
 describe('writeBlob(内容寻址写入)', () => {
-  it('支持 Telegram voice 使用的 Ogg/Opus 容器 MIME', () => {
-    expect(blobStore.supportedMime('audio/ogg')).toBe(true);
-    expect(blobStore.mimeForExt('.ogg')).toBe('audio/ogg');
-  });
-
   it('按指纹分桶落盘,返回稳定 URL', async () => {
     const written = await blobStore.writeBlob({ buffer: PNG_BYTES, mimeType: 'image/png' });
     expect(written.hash).toBe(PNG_HASH);

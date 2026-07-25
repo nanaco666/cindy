@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { ProviderView } from '@cindy/model-providers/registry';
+import type { ProviderView } from '@lizi/model-providers/registry';
 import { agentAuthGateHint, agentAuthGateVerdict } from '@/session/agentAuthGate';
 
 function provider(patch: Partial<ProviderView> & Pick<ProviderView, 'id' | 'agents' | 'connected'>): ProviderView {

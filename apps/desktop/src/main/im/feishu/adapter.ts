@@ -4,7 +4,7 @@
  * 飞书渠道的 ImChannelAdapter — im/shared 编排层所需的全部渠道差异在此收敛:
  *   - session 行策略: id `feishu_{botAppId}_{openId}` / source='feishu' /
  *     feishu 专属列 / im-working-dir/{botAppId} 共享工作目录
- *   - vendorOptions: { feishuChatId, source:'feishu' } → 注入 cindy_feishu_bot
+ *   - vendorOptions: { feishuChatId, source:'feishu' } → 注入 lizi_feishu_bot
  *     MCP (send_file_to_user)
  *   - ack emoji: REACTION_PROCESSING
  */
@@ -12,10 +12,9 @@
 import path from 'node:path';
 import fs from 'node:fs';
 import { app } from 'electron';
-import type { FeishuIM } from '@cindy/im';
+import type { FeishuIM } from 'lizi-im';
 
 import type { ImChannelAdapter, ImOrchestratorConfig } from '../shared/types';
-import { claimLegacyImPath, ownerScopedImUserDataPath } from '../ownerScopedStorage';
 import { ui, REACTION_PROCESSING } from './uiText';
 
 /**
@@ -27,8 +26,7 @@ import { ui, REACTION_PROCESSING } from './uiText';
  * 在 owner 私聊场景下共享更符合直觉。
  */
 function ensureWorkingDir(botAppId: string): string {
-  const dir = ownerScopedImUserDataPath('im-working-dir', botAppId);
-  claimLegacyImPath(path.join(app.getPath('userData'), 'im-working-dir', botAppId), dir);
+  const dir = path.join(app.getPath('userData'), 'im-working-dir', botAppId);
   fs.mkdirSync(dir, { recursive: true });
   return dir;
 }

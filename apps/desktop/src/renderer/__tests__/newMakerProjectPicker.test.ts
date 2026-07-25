@@ -148,16 +148,13 @@ describe('Shared create project picker', () => {
     );
   });
 
-  it('wires the remote project entry into the CREATE AGENT mode-pill picker', () => {
-    // 2026-07-22 恢复「添加远程项目」入口(用户裁决,488cb33 对齐 Figma 时删除,声称移到
-    // 应用外壳/共享弹窗但该新家从未落地 → 入口整套变孤儿死代码)。与 2026-07-19 worktree
-    // 高级入口的恢复同款处理:入口就在 mode pill 的 FolderPickerPopover 里(Globe 项),
-    // gate 走 hasAnyRemoteTarget(SSH ready 主机 或 device-link 可控设备),不新绘 sidebar chrome。
-    expect(newMakerDraftRouteSource).toContain('import { useHasAnyRemoteTarget }');
-    expect(newMakerDraftRouteSource).toContain(
+  it('keeps remote project entry UI out of the CREATE AGENT route body', () => {
+    // device-link / SSH 入口属于应用外壳或共享弹窗,CREATE AGENT 路由不能再内绘入口。
+    expect(newMakerDraftRouteSource).not.toContain('import { useHasAnyRemoteTarget }');
+    expect(newMakerDraftRouteSource).not.toContain(
       'const hasAnyRemoteTarget = useHasAnyRemoteTarget()',
     );
-    expect(newMakerDraftRouteSource).toContain('onAddRemoteProject={hasAnyRemoteTarget ?');
+    expect(newMakerDraftRouteSource).not.toContain('onAddRemoteProject={hasAnyRemoteTarget ?');
     // 弹窗统一两类来源:SSH ready hosts + device-link 可控设备(optgroup 区分)。
     expect(addRemoteProjectDialogSource).toContain("res.hosts.filter((h) => h.status === 'ready')");
     expect(addRemoteProjectDialogSource).toContain('useControllableDevices()');

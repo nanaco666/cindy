@@ -49,10 +49,6 @@ vi.mock('electron', () => ({
   },
 }));
 
-vi.mock('../../appCapabilities.js', () => ({
-  getAppCapabilities: () => ({ canUseCindyGateway: true }),
-}));
-
 vi.mock('../../logger.js', () => ({
   createLogger: () => mockState.logger,
   getLogLevel: () => 'debug',
@@ -78,7 +74,7 @@ vi.mock('../../model-access/effectiveEndpoint.js', async () => {
   return { effectiveXdGatewayBaseUrl: () => TEST_XD_GATEWAY_BASE_URL };
 });
 
-vi.mock('@cindy/anthropic-compat-proxy', () => ({
+vi.mock('@lizi/anthropic-compat-proxy', () => ({
   createAnthropicCompatProxy: mockState.createAnthropicCompatProxy,
   createInstructionsInjectionTransform: mockState.createInstructionsInjectionTransform,
   createActiveStripTransform: () => (() => null),
@@ -117,10 +113,10 @@ describe('codex gateway config', () => {
 
     const args = buildCodexProxySpawnArgs('http://127.0.0.1:12345', 'oauth-bearer');
 
-    expect(args).toContain('model_providers.cindy_gateway.base_url="http://127.0.0.1:12345"');
-    expect(args).toContain('model_providers.cindy_gateway.requires_openai_auth=true');
-    expect(args).not.toContain('model_providers.cindy_gateway.env_key="XDT_CODEX_API_KEY"');
-    expect(args).toContain('model_providers.cindy_gateway.supports_websockets=false');
+    expect(args).toContain('model_providers.tapsvc.base_url="http://127.0.0.1:12345"');
+    expect(args).toContain('model_providers.tapsvc.requires_openai_auth=true');
+    expect(args).not.toContain('model_providers.tapsvc.env_key="XDT_CODEX_API_KEY"');
+    expect(args).toContain('model_providers.tapsvc.supports_websockets=false');
   });
 
   it('env-key 模式: env_key=XDT_CODEX_API_KEY, 不带 requires_openai_auth', async () => {
@@ -128,9 +124,9 @@ describe('codex gateway config', () => {
 
     const args = buildCodexProxySpawnArgs('http://127.0.0.1:12345', 'env-key');
 
-    expect(args).toContain('model_providers.cindy_gateway.env_key="XDT_CODEX_API_KEY"');
-    expect(args).not.toContain('model_providers.cindy_gateway.requires_openai_auth=true');
-    expect(args).toContain('model_providers.cindy_gateway.supports_websockets=false');
+    expect(args).toContain('model_providers.tapsvc.env_key="XDT_CODEX_API_KEY"');
+    expect(args).not.toContain('model_providers.tapsvc.requires_openai_auth=true');
+    expect(args).toContain('model_providers.tapsvc.supports_websockets=false');
   });
 
   it('provider-oauth 模式: 仍用 env_key 占位,由 proxy 覆盖供应商 OAuth token', async () => {
@@ -138,9 +134,9 @@ describe('codex gateway config', () => {
 
     const args = buildCodexProxySpawnArgs('http://127.0.0.1:12345', 'provider-oauth');
 
-    expect(args).toContain('model_providers.cindy_gateway.env_key="XDT_CODEX_API_KEY"');
-    expect(args).not.toContain('model_providers.cindy_gateway.requires_openai_auth=true');
-    expect(args).toContain('model_providers.cindy_gateway.supports_websockets=false');
+    expect(args).toContain('model_providers.tapsvc.env_key="XDT_CODEX_API_KEY"');
+    expect(args).not.toContain('model_providers.tapsvc.requires_openai_auth=true');
+    expect(args).toContain('model_providers.tapsvc.supports_websockets=false');
   });
 });
 
@@ -361,8 +357,8 @@ describe('codex proxy host', () => {
         // upstream 是函数形态(每请求现取,model-access 下发可运行期换 endpoint);
         // 断言其当前求值 = 网关 base + /v1
         upstream: expect.any(Function),
-        // [encrypted activeStrip, image generation activeStrip, instructions 注入, xAI Responses 兼容, MiniMax effort 兼容, provider model rewrite, stripNonAnthropicFields]
-        transformRequest: [expect.any(Function), expect.any(Function), expect.any(Function), expect.any(Function), expect.any(Function), expect.any(Function), mockState.stripNonAnthropicFields],
+        // [encrypted activeStrip, image generation activeStrip, instructions 注入, xAI Responses 兼容, provider model rewrite, stripNonAnthropicFields]
+        transformRequest: [expect.any(Function), expect.any(Function), expect.any(Function), expect.any(Function), expect.any(Function), mockState.stripNonAnthropicFields],
         routingTransform: expect.any(Function),
         recoveryRules: expect.arrayContaining([
           expect.objectContaining({ id: 'encrypted_content' }),
@@ -431,39 +427,6 @@ describe('codex proxy host', () => {
         { type: 'reasoning', id: 'rs_1', encrypted_content: 'gAAA' },
         { type: 'reasoning', id: 'rs_empty' },
         { type: 'image_generation_call', id: 'ig_1', result: 'data:image/png;base64,xxx' },
-        {
-          type: 'custom_tool_call',
-          id: 'ctc_1',
-          status: 'completed',
-          call_id: 'call_exec_1',
-          name: 'exec',
-          input: 'console.log(1)',
-        },
-        {
-          type: 'custom_tool_call_output',
-          call_id: 'call_exec_1',
-          output: [
-            { type: 'input_text', text: 'Script completed' },
-            { type: 'input_text', text: 'ok' },
-          ],
-        },
-        {
-          type: 'function_call_output',
-          call_id: 'call_wait_1',
-          output: [{ type: 'input_text', text: '{"done":true}' }],
-        },
-        {
-          type: 'function_call',
-          call_id: 'call_invalid_args_1',
-          name: 'legacy_tool',
-          arguments: 'raw legacy input',
-        },
-        {
-          type: 'function_call',
-          call_id: 'call_valid_args_1',
-          name: 'structured_tool',
-          arguments: '{"path":"README.md"}',
-        },
         { role: 'user', content: 'hello' },
       ],
     };
@@ -485,90 +448,12 @@ describe('codex proxy host', () => {
         { type: 'web_search', filters: { allowed_domains: ['docs.x.ai'] }, enable_image_search: true },
       ],
       input: [
-        { type: 'message', role: 'system', content: 'BASE_PROMPT\n\nPRODUCT_PROMPT' },
+        { role: 'system', content: 'BASE_PROMPT\n\nPRODUCT_PROMPT' },
         { type: 'reasoning', id: 'rs_1', encrypted_content: 'gAAA' },
-        {
-          type: 'function_call',
-          id: 'ctc_1',
-          name: 'exec',
-          arguments: '{"input":"console.log(1)"}',
-          call_id: 'call_exec_1',
-        },
-        {
-          type: 'function_call_output',
-          call_id: 'call_exec_1',
-          output: 'Script completed\nok',
-        },
-        {
-          type: 'function_call_output',
-          call_id: 'call_wait_1',
-          output: '{"done":true}',
-        },
-        {
-          type: 'function_call',
-          call_id: 'call_invalid_args_1',
-          name: 'legacy_tool',
-          arguments: '{"input":"raw legacy input"}',
-        },
-        {
-          type: 'function_call',
-          call_id: 'call_valid_args_1',
-          name: 'structured_tool',
-          arguments: '{"path":"README.md"}',
-        },
-        { type: 'message', role: 'user', content: 'hello' },
+        { role: 'user', content: 'hello' },
       ],
     });
     clearSessionProvider('session-xai');
-  });
-
-  it('leaves custom_tool_call history untouched for non-xAI requests', async () => {
-    const host = await freshCodexProxyHost();
-    const { setSessionProvider, clearSessionProvider } = await import('../session-provider-store.js');
-    mockState.createAnthropicCompatProxy.mockResolvedValueOnce({
-      url: 'http://127.0.0.1:43210',
-      dispose: vi.fn(async () => undefined),
-    });
-    await host.ensureCodexProxyReady();
-    host.registerComposed('session-openai-custom-tool', 'thread-openai-custom-tool', 'PRODUCT_PROMPT');
-    setSessionProvider('session-openai-custom-tool', 'openai');
-
-    const transforms = mockState.createAnthropicCompatProxy.mock.calls[0]?.[0]?.transformRequest ?? [];
-    const originalInput = [
-      {
-        type: 'custom_tool_call',
-        id: 'ctc_1',
-        status: 'completed',
-        call_id: 'call_exec_1',
-        name: 'exec',
-        input: 'console.log(1)',
-      },
-      {
-        type: 'custom_tool_call_output',
-        call_id: 'call_exec_1',
-        output: [{ type: 'input_text', text: 'ok' }],
-      },
-      { role: 'user', content: 'hello' },
-    ];
-    let current: unknown = {
-      model: 'gpt-5.4',
-      input: originalInput,
-    };
-    const ctx = {
-      method: 'POST',
-      url: '/responses',
-      headers: { 'thread-id': 'thread-openai-custom-tool' },
-    };
-    for (const transform of transforms) {
-      const next = transform(current, ctx);
-      if (next !== null && next !== undefined) current = next;
-    }
-
-    expect(current).toEqual({
-      model: 'gpt-5.4',
-      input: originalInput,
-    });
-    clearSessionProvider('session-openai-custom-tool');
   });
 
   it('keeps Codex namespace tools for non-xAI requests', async () => {
@@ -622,121 +507,6 @@ describe('codex proxy host', () => {
     clearSessionProvider('session-openai');
   });
 
-  it.each([
-    'https://api.minimaxi.com/v1',
-    'https://api.minimax.io/v1/',
-  ])('clamps MiniMax Responses xhigh effort to high for %s', async (baseUrl) => {
-    const host = await freshCodexProxyHost();
-    const { buildUserProvider } = await import('@cindy/model-providers');
-    const { setCustomProviders } = await import('../active-catalog.js');
-    const { setSessionProvider, clearSessionProvider } = await import('../session-provider-store.js');
-    setCustomProviders([
-      buildUserProvider({
-        id: 'renamed-minimax',
-        name: 'My MiniMax',
-        runtimes: {
-          codex: {
-            baseUrl,
-            models: [{ id: 'MiniMax-M3', name: 'MiniMax M3' }],
-          },
-        },
-      }),
-    ]);
-    mockState.createAnthropicCompatProxy.mockResolvedValueOnce({
-      url: 'http://127.0.0.1:43210',
-      dispose: vi.fn(async () => undefined),
-    });
-    await host.ensureCodexProxyReady();
-    host.registerComposed('session-minimax', 'thread-minimax', 'PRODUCT_PROMPT');
-    setSessionProvider('session-minimax', 'renamed-minimax');
-
-    const transforms = mockState.createAnthropicCompatProxy.mock.calls[0]?.[0]?.transformRequest ?? [];
-    let current: unknown = {
-      model: 'MiniMax-M3',
-      reasoning: { effort: 'xhigh', summary: 'auto' },
-      input: [{ role: 'user', content: 'hello' }],
-    };
-    const ctx = {
-      method: 'POST',
-      url: '/responses',
-      headers: { 'thread-id': 'thread-minimax' },
-    };
-    for (const transform of transforms) {
-      const next = transform(current, ctx);
-      if (next !== null && next !== undefined) current = next;
-    }
-
-    expect(current).toEqual({
-      model: 'MiniMax-M3',
-      reasoning: { effort: 'high' },
-      input: [{ role: 'user', content: 'hello' }],
-    });
-
-    let supportedEffort: unknown = {
-      model: 'MiniMax-M3',
-      reasoning: { effort: 'high', summary: 'auto' },
-      input: [{ role: 'user', content: 'hello' }],
-    };
-    for (const transform of transforms) {
-      const next = transform(supportedEffort, ctx);
-      if (next !== null && next !== undefined) supportedEffort = next;
-    }
-    expect(supportedEffort).toEqual({
-      model: 'MiniMax-M3',
-      reasoning: { effort: 'high' },
-      input: [{ role: 'user', content: 'hello' }],
-    });
-    clearSessionProvider('session-minimax');
-    setCustomProviders([]);
-  });
-
-  it('keeps xhigh effort for non-MiniMax custom Responses providers', async () => {
-    const host = await freshCodexProxyHost();
-    const { buildUserProvider } = await import('@cindy/model-providers');
-    const { setCustomProviders } = await import('../active-catalog.js');
-    const { setSessionProvider, clearSessionProvider } = await import('../session-provider-store.js');
-    setCustomProviders([
-      buildUserProvider({
-        id: 'custom-responses',
-        name: 'Custom Responses',
-        runtimes: {
-          codex: {
-            baseUrl: 'https://example.com/v1',
-            models: [{ id: 'custom-model', name: 'Custom Model' }],
-          },
-        },
-      }),
-    ]);
-    mockState.createAnthropicCompatProxy.mockResolvedValueOnce({
-      url: 'http://127.0.0.1:43210',
-      dispose: vi.fn(async () => undefined),
-    });
-    await host.ensureCodexProxyReady();
-    host.registerComposed('session-custom', 'thread-custom', 'PRODUCT_PROMPT');
-    setSessionProvider('session-custom', 'custom-responses');
-
-    const transforms = mockState.createAnthropicCompatProxy.mock.calls[0]?.[0]?.transformRequest ?? [];
-    const original = {
-      model: 'custom-model',
-      reasoning: { effort: 'xhigh', summary: 'auto' },
-      input: [{ role: 'user', content: 'hello' }],
-    };
-    let current: unknown = original;
-    const ctx = {
-      method: 'POST',
-      url: '/responses',
-      headers: { 'thread-id': 'thread-custom' },
-    };
-    for (const transform of transforms) {
-      const next = transform(current, ctx);
-      if (next !== null && next !== undefined) current = next;
-    }
-
-    expect(current).toEqual(original);
-    clearSessionProvider('session-custom');
-    setCustomProviders([]);
-  });
-
   it('strips reasoning for xAI Codex models that do not support reasoning', async () => {
     const host = await freshCodexProxyHost();
     const { setSessionProvider, clearSessionProvider } = await import('../session-provider-store.js');
@@ -771,8 +541,8 @@ describe('codex proxy host', () => {
     expect(current).toEqual({
       model: 'grok-code-fast',
       input: [
-        { type: 'message', role: 'system', content: 'BASE_PROMPT\n\nPRODUCT_PROMPT' },
-        { type: 'message', role: 'user', content: 'hello' },
+        { role: 'system', content: 'BASE_PROMPT\n\nPRODUCT_PROMPT' },
+        { role: 'user', content: 'hello' },
       ],
     });
     clearSessionProvider('session-xai-fast');
@@ -812,8 +582,8 @@ describe('codex proxy host', () => {
     expect(current).toEqual({
       model: 'grok-future',
       input: [
-        { type: 'message', role: 'system', content: 'BASE_PROMPT\n\nPRODUCT_PROMPT' },
-        { type: 'message', role: 'user', content: 'hello' },
+        { role: 'system', content: 'BASE_PROMPT\n\nPRODUCT_PROMPT' },
+        { role: 'user', content: 'hello' },
       ],
     });
     clearSessionProvider('session-xai-unknown');
@@ -853,8 +623,8 @@ describe('codex proxy host', () => {
     expect(current).toEqual({
       model: 'grok-code-fast',
       input: [
-        { type: 'message', role: 'system', content: 'BASE_PROMPT\n\nPRODUCT_PROMPT' },
-        { type: 'message', role: 'user', content: 'hello' },
+        { role: 'system', content: 'BASE_PROMPT\n\nPRODUCT_PROMPT' },
+        { role: 'user', content: 'hello' },
       ],
     });
   });
@@ -917,7 +687,7 @@ describe('codex proxy host', () => {
     await host.ensureCodexProxyReady();
 
     const transforms = mockState.createAnthropicCompatProxy.mock.calls[0]?.[0]?.transformRequest ?? [];
-    expect(transforms).toHaveLength(8); // encrypted activeStrip, image generation activeStrip, instructions 注入, xAI Responses 兼容, MiniMax effort 兼容, provider model rewrite, stripNonAnthropicFields, dump
+    expect(transforms).toHaveLength(7); // encrypted activeStrip, image generation activeStrip, instructions 注入, xAI Responses 兼容, provider model rewrite, stripNonAnthropicFields, dump
     const ctx = {
       method: 'POST',
       url: '/v1/responses',

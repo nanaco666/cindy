@@ -4,7 +4,7 @@ import {
   LiteLlmTranscriptionProvider,
   transcribeLiteLlmAudioFile,
 } from '../LiteLlmTranscriptionProvider.js';
-import type { AsrEvent } from '@cindy/voice-input-core';
+import type { AsrEvent } from '@lizi/voice-input-core';
 
 describe('LiteLlmTranscriptionProvider', () => {
   afterEach(() => {

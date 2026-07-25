@@ -12,7 +12,7 @@
  * active-catalog 统一持有；连接状态每次实时读（凭证变化要立即反映）。
  */
 
-import { buildRegistry, type Catalog, type ConnectionState, type ProviderView } from '@cindy/model-providers';
+import { buildRegistry, type Catalog, type ConnectionState, type ProviderView } from '@lizi/model-providers';
 
 /** 内置三家供应商「是否已连接」的判定器（由 host 注入，读各自凭证存储）。 */
 export interface ProviderConnectionReaders {

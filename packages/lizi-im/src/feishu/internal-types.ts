@@ -2,7 +2,7 @@
  * feishu/internal-types.ts
  * ---------------------------------------------------------------------------
  * Types used internally inside the feishu channel that aren't part of the
- * @cindy/im public API. Keep public-facing types (IMHost, IMMessageEvent, ...)
+ * lizi-im public API. Keep public-facing types (IMHost, IMMessageEvent, ...)
  * in `src/types.ts`.
  */
 

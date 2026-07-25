@@ -21,8 +21,6 @@ export interface MobileAgentCapabilities {
   hasFastMode: boolean;
   /** 计划模式一级开关能力(maker-core Capabilities.planMode.supported,#494 起替代 permissionMode='plan')。 */
   planModeSupported: boolean;
-  /** desktop host 是否支持同一会话 Claude Code / Codex pending-intent 切换；旧 host 缺省 false。 */
-  supportsSessionAgentSwitch?: boolean;
 }
 
 export interface MobileSessionRuntimeOptions {
@@ -49,7 +47,7 @@ export type MobileModelCategory = 'anthropic' | 'gpt' | 'gpt-budget' | 'google' 
 export const MOBILE_MODEL_CATEGORY_LABEL: Record<MobileModelCategory, string> = {
   anthropic: 'Anthropic',
   gpt: 'GPT',
-  'gpt-budget': 'GPT（立省 85%）',
+  'gpt-budget': '骨折GPT',
   google: 'Google',
   china: 'China',
 };
@@ -114,7 +112,6 @@ export function normalizeMobileAgentCapabilities(value: unknown): MobileAgentCap
     permissionModes,
     hasFastMode: value.hasFastMode === true,
     planModeSupported: isRecord(value.planMode) && value.planMode.supported === true,
-    supportsSessionAgentSwitch: value.supportsSessionAgentSwitch === true,
   };
 }
 

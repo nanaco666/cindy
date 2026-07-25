@@ -1,6 +1,6 @@
 import { Alert, type AlertButton, type AlertOptions } from 'react-native';
 import { getLocales } from 'expo-localization';
-import { requiresFullAccessConfirmation } from '@cindy/maker-shared/permission-mode';
+import { requiresFullAccessConfirmation } from '@lizi/maker-shared/permission-mode';
 
 export type FullAccessConfirmationCopy = Readonly<{
   title: string;

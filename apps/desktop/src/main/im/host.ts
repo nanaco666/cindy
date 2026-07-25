@@ -5,15 +5,16 @@
  * (secrets / ipc / paths) and instantiate one FeishuIM. Other channels would
  * be added to the `createIM([...])` array.
  *
- * @cindy/im is electron-free; this file is the *only* place that translates
+ * lizi-im is electron-free; this file is the *only* place that translates
  * between Electron APIs (safeStorage / ipcMain / BrowserWindow / app.getPath)
  * and the IMHost contract.
  */
 
 import path from 'node:path';
-import { app, ipcMain, BrowserWindow, net } from 'electron';
+import fs from 'node:fs';
+import { app, safeStorage, ipcMain, BrowserWindow, net } from 'electron';
 
-import { createIM, createDiscordIM, createFeishuIM, type IMHost } from '@cindy/im';
+import { createIM, createDiscordIM, createFeishuIM, type IMHost } from 'lizi-im';
 
 import { createLogger } from '../logger';
 import { resolveSafe as resolveXdtImageUrl } from '../imageCacheStore';
@@ -27,11 +28,12 @@ import { pinBlob } from '../cindy-media/ledger';
 import { t } from '../i18n';
 import { discordUiText } from './discord/uiText';
 import { imHostAccountScope } from './accountScopeBridge';
-import { ownerScopedImSecrets } from './ownerScopedStorage';
+
+const SAFE_STORAGE_DIR = (): string => path.join(app.getPath('userData'), 'safe-storage');
 
 const log = createLogger('im/host');
 
-/** IM 托管媒体 URL → 绝对路径:媒体总仓 cindy-media 与历史 xdt-image 双协议。 */
+/** IM 托管媒体 URL → 绝对路径:新世界 cindy-media 与老 xdt-image 双协议。 */
 function resolveManagedImageAbsPath(url: string): string {
   return url.startsWith('cindy-media://')
     ? resolveCindyMediaUrl(url).absPath
@@ -44,7 +46,7 @@ const host: IMHost = {
     feishuMediaDir: path.join(app.getPath('userData'), 'cc-agent', 'feishu-media'),
     discordMediaDir: path.join(app.getPath('userData'), 'cc-agent', 'discord-media'),
   },
-  // cindy-media 媒体总仓回调(规则 25):IM 入站图片按平台 token
+  // cindy-media 媒体总仓回调(迁移第 3 步,规则 25):IM 入站图片按平台 token
   // 免重下、内容寻址去重、isCache=true 吃缓存回收策略;包侧只摸字节和字符串。
   media: {
     cacheImage: async ({ integration, token, buffer, mimeType }) => {
@@ -86,7 +88,41 @@ const host: IMHost = {
       }
     },
   },
-  secrets: ownerScopedImSecrets,
+  secrets: {
+    isAvailable: () => safeStorage.isEncryptionAvailable(),
+    write(name, plaintext) {
+      try {
+        if (!safeStorage.isEncryptionAvailable()) return false;
+        const dir = SAFE_STORAGE_DIR();
+        fs.mkdirSync(dir, { recursive: true });
+        fs.writeFileSync(
+          path.join(dir, `${name}.enc`),
+          safeStorage.encryptString(plaintext).toString('base64'),
+          'utf-8',
+        );
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    read(name) {
+      try {
+        if (!safeStorage.isEncryptionAvailable()) return null;
+        const fp = path.join(SAFE_STORAGE_DIR(), `${name}.enc`);
+        if (!fs.existsSync(fp)) return null;
+        return safeStorage.decryptString(Buffer.from(fs.readFileSync(fp, 'utf-8'), 'base64'));
+      } catch {
+        return null;
+      }
+    },
+    remove(name) {
+      try {
+        fs.unlinkSync(path.join(SAFE_STORAGE_DIR(), `${name}.enc`));
+      } catch {
+        /* ENOENT ok */
+      }
+    },
+  },
   ipc: {
     handle(channel, handler) {
       ipcMain.handle(channel, (_e, payload) => handler(payload));

@@ -63,7 +63,7 @@ const PLATFORMS = [
 function ghHeaders() {
   const headers = {
     'Accept': 'application/vnd.github+json',
-    'User-Agent': 'cindy-ripgrep-update',
+    'User-Agent': 'xdt-maker-ripgrep-update',
   };
   if (process.env.GITHUB_TOKEN) headers.Authorization = `Bearer ${process.env.GITHUB_TOKEN}`;
   return headers;

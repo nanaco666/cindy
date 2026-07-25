@@ -45,7 +45,7 @@ log.debug(`[fix-path] after PATH=${process.env.PATH ?? ''}`);
 //
 // 这里同步 import 不走动态 import,确保 strip 在任何 module top-level 代码读
 // process.env 之前执行。
-import { stripSensitiveAnthropicEnv } from '@cindy/maker-core';
+import { stripSensitiveAnthropicEnv } from '@lizi/maker-core';
 
 // device-link 远程控制:必须在任何 ipcMain.handle 调用之前 monkey-patch,
 // 才能捕获到全量 channel → handler 映射(供被控端 dispatch 远程 invoke)。
@@ -144,25 +144,17 @@ if (devFlags.needsIsolatedDeviceId) {
   stderr.write(`[cindy] dev isolated deviceId → ${isolatedDeviceId}\n`);
 }
 
-// 实例注册表对 dev 与 packaged 一律登记:dev/release 按 flavor 分锁域、共享同一
-// userData 双开是受支持的工作流(bootstrap-electron 单例锁注释),owner-namespace
-// 迁移的独占检查靠本注册表发现「还有谁共享这份 userData」——packaged 不登记的话,
-// dev 实例会在 release 实例仍存活时误判独占并搬走 legacy 配置。
-{
-  const rootDir = app.isPackaged
-    ? path.resolve(app.getAppPath())
-    : path.resolve(app.getAppPath(), '..', '..');
+if (!app.isPackaged) {
+  const rootDir = path.resolve(app.getAppPath(), '..', '..');
   let commit: string | null = null;
-  if (!app.isPackaged) {
-    try {
-      commit = execFileSync('git', ['rev-parse', 'HEAD'], {
-        cwd: rootDir,
-        encoding: 'utf8',
-        stdio: ['ignore', 'pipe', 'ignore'],
-      }).trim() || null;
-    } catch {
-      // Source provenance remains useful without a commit in exported/unusual checkouts.
-    }
+  try {
+    commit = execFileSync('git', ['rev-parse', 'HEAD'], {
+      cwd: rootDir,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim() || null;
+  } catch {
+    // Source provenance remains useful without a commit in exported/unusual checkouts.
   }
   const declaredMode = process.env.XDT_DESKTOP_DEV_MODE;
   const mode: DesktopDevMode = declaredMode === 'remote' || declaredMode === 'local'

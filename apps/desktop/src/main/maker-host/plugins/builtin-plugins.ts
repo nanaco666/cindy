@@ -5,18 +5,19 @@
  * **Plugin ID 是稳定的用户可见契约**，用于：
  *   - 项目设置：.claude/settings.json → xdtMaker.builtinTools.{id}
  *
- * 所有 ID 都使用短且一致的名字，不带 `cindy_` 前缀：
+ * 所有 ID 都使用短且一致的名字，不带 `lizi_` 前缀：
  *   android | browser | computer | feishu_bot |
- *   scheduler | ssh | memory | contacts | xdt_helper | collab(→ cindy_orca) | lsp
+ *   scheduler | ssh | memory | contacts | xdt_helper | collab(→ lizi_orca) | lsp
  *
- * @cindy/mcps/providers.ts 里的现役 MCP provider `name` 使用 `cindy_` 前缀；
- * 用户配置仍使用稳定的短 plugin id。映射关系由 PROVIDER_NAME_TO_PLUGIN_ID 定义，
+ * lizi-mcps/providers.ts 里的 MCP provider `name` 通常使用 `lizi_` 前缀
+ * (例如 provider name 'lizi_feishu' → plugin id 'feishu')；Cindy 自有能力
+ * 使用 `cindy_` 前缀。映射关系由 PROVIDER_NAME_TO_PLUGIN_ID 定义，
  * mcp-providers.ts 包装 isEnabled gate 时消费。
  */
 
 import type { Plugin, PluginId } from './types.js';
 import { ESSENTIAL_PLUGIN_IDS } from './types.js';
-import type { LiziMcpId } from '@cindy/mcps';
+import type { LiziMcpId } from 'lizi-mcps';
 
 interface BuiltinPluginMeta {
   id: PluginId;
@@ -49,7 +50,7 @@ const BUILTIN_META: BuiltinPluginMeta[] = [
   // (老 PAT 由 githubAccountsMigration 无感搬账),不再是 MCP 插件。
   // gitlab 已于 2026-07-14 退役:GitLab 能力整体迁入内置意识 cindy-gitlab
   // (老 PAT + 实例地址由 gitlabAccountsMigration 无感搬账),不再是 MCP 插件。
-  // slack 插件 2026-07-19 回归(cindy_slack): Slack 能力并轨 hook 通道 ——
+  // slack 插件 2026-07-19 回归(lizi_slack): Slack 能力并轨 hook 通道 ——
   // slack-hook-server 以 bind v2 托管的 user token 调 Slack 官方 MCP,
   // 桌面侧经 tool.request 帧透传; cindy-slack 意识同日退役。
   // feishu 已于 2026-07-16 摘壳:飞书 OpenAPI 能力(44 精品 + 123 只读直通)
@@ -63,27 +64,28 @@ const BUILTIN_META: BuiltinPluginMeta[] = [
 ];
 
 /**
- * @cindy/mcps/providers.ts 里的已知 MCP provider name。
+ * lizi-mcps/providers.ts 里的已知 MCP provider name。
  * 每个内置 provider 都必须在 PROVIDER_NAME_TO_PLUGIN_ID 里有映射。
  */
 export type KnownProviderName =
-  | 'cindy_android'
-  | 'cindy_browser'
-  | 'cindy_computer'
-  | 'cindy_feishu_bot'
-  | 'cindy_slack'
+  | 'lizi_android'
+  | 'lizi_browser'
+  | 'lizi_computer'
+  | 'lizi_feishu_bot'
+  | 'lizi_slack'
   | 'cindy_scheduler'
-  | 'cindy_ssh'
+  | 'lizi_ssh'
   | 'cindy_memory'
-  | 'cindy_contacts'
+  | 'lizi_contacts'
   | 'cindy_helper'
-  | 'cindy_orca'
-  | 'cindy_lsp';
+  | 'lizi_orca'
+  | 'lizi_lsp';
 
 /**
- * MCP provider `name`(@cindy/mcps/providers.ts) → 用户可见 plugin id 的映射。
+ * MCP provider `name`(lizi-mcps/providers.ts) → 用户可见 plugin id 的映射。
  *
- * 现役 provider name 使用 `cindy_` 前缀；用户配置使用短 id('feishu'、'memory')。
+ * lizi-mcps 会给多数 provider name 加 `lizi_` 前缀(如 'lizi_feishu')，
+ * Cindy 自有 provider 使用 `cindy_` 前缀；用户配置使用短 id('feishu'、'memory')。
  * 这张表桥接两者，让 mcp-providers.ts
  * 可以调用：
  *
@@ -95,31 +97,26 @@ export type KnownProviderName =
  * 派生后校验，防止新增 provider 漏映射。
  */
 export const PROVIDER_NAME_TO_PLUGIN_ID: Record<KnownProviderName, PluginId> = {
-  cindy_android: 'android',
-  cindy_browser: 'browser',
-  cindy_computer: 'computer',
-  cindy_feishu_bot: 'feishu_bot',
-  cindy_slack: 'slack',
+  lizi_android: 'android',
+  lizi_browser: 'browser',
+  lizi_computer: 'computer',
+  lizi_feishu_bot: 'feishu_bot',
+  lizi_slack: 'slack',
   cindy_scheduler: 'scheduler',
-  cindy_ssh: 'ssh',
+  lizi_ssh: 'ssh',
   cindy_memory: 'memory',
-  cindy_contacts: 'contacts',
+  lizi_contacts: 'contacts',
   cindy_helper: 'xdt_helper',
-  cindy_orca: 'collab',
-  cindy_lsp: 'lsp',
+  lizi_orca: 'collab',
+  lizi_lsp: 'lsp',
 };
 
 /**
- * 把 @cindy/mcps 的 MCP provider name 解析成用户可见 plugin id。
+ * 把 lizi-mcps 的 MCP provider name 解析成用户可见 plugin id。
  * 未知 name 原样透传；registry 会按 fail-open 处理为默认启用。
  */
 export function pluginIdForProviderName(name: string): PluginId {
   return PROVIDER_NAME_TO_PLUGIN_ID[name as KnownProviderName] ?? name;
-}
-
-/** Resolve only first-party built-in providers; custom MCP ids must never inherit this policy. */
-export function pluginIdForKnownProviderName(name: string): PluginId | null {
-  return PROVIDER_NAME_TO_PLUGIN_ID[name as KnownProviderName] ?? null;
 }
 
 /** 从静态 metadata 列表构造 Plugin descriptor。
@@ -153,15 +150,15 @@ const PLUGIN_ID_TO_MCP_ID: Record<PluginId, LiziMcpId | undefined> = {
   android: 'android',
   browser: 'browser',
   computer: 'computer',
-  feishu_bot: 'cindy_feishu_bot',
-  slack: 'cindy_slack',
+  feishu_bot: 'lizi_feishu_bot',
+  slack: 'lizi_slack',
   scheduler: 'cindy_scheduler',
-  ssh: 'cindy_ssh',
+  ssh: 'lizi_ssh',
   memory: 'cindy_memory',
-  contacts: 'cindy_contacts',
+  contacts: 'lizi_contacts',
   xdt_helper: 'cindy_helper',
-  collab: 'cindy_orca',
-  lsp: 'cindy_lsp',
+  collab: 'lizi_orca',
+  lsp: 'lizi_lsp',
 };
 
 /** createLiziMcpProviders `enabled` 数组使用的有序 LiziMcpId。模块加载时计算一次，运行期不变。 */

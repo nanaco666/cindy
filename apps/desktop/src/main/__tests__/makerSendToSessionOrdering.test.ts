@@ -270,10 +270,7 @@ describe('sendToSession ordering', () => {
     expect(helperBlock).toContain('onAccepted: async () => {');
     expect(helperBlock).toContain('await opts.onAccepted?.();');
     expect(helperBlock).toContain('await gitSnapshotCoordinator.onTurnStart(session.id);');
-    expect(helperBlock).toContain('const pendingHandoff = await agentHandoffPending.peek(session.id);');
-    expect(helperBlock).toContain('prependHandoffToUserMessage({ type: \'user\', content: message }, pendingHandoff)');
-    expect(helperBlock).toContain('const sendResult = await session.send(outgoingMessage, {');
-    expect(helperBlock).toContain('agentHandoffPending.consume(session.id);');
+    expect(helperBlock).toContain("const sendResult = await session.send({ type: 'user', content: message }, {");
     expect(helperBlock).toContain('if (baselineStarted && !sendResult.accepted) {');
     expect(helperBlock).toContain('gitSnapshotCoordinator?.onTurnAbort(session.id);');
     expectOrder(
@@ -297,9 +294,8 @@ describe('sendToSession ordering', () => {
     expect(createBranch).toContain('onAccepted: async () => {');
     expect(createBranch).toContain('const sendResult = await sendUserMessageWithAwaitedGitBaseline(session, message, {');
     expect(createBranch).toContain('planMode: false,');
-    expectOrder(createBranch, 'onAccepted: async () => {', 'notifyAgentIslandUserPrompt(session, persistedContent ?? message, {');
-    expectOrder(createBranch, 'notifyAgentIslandUserPrompt(session, persistedContent ?? message, {', 'await createDbMessage(session.id, {');
-    expect(createBranch).toContain('content: persistedContent ?? message,');
+    expectOrder(createBranch, 'onAccepted: async () => {', 'notifyAgentIslandUserPrompt(session, message, {');
+    expectOrder(createBranch, 'notifyAgentIslandUserPrompt(session, message, {', 'await createDbMessage(session.id, {');
     expect(createBranch).not.toContain('persist user message failed (non-fatal)');
     expect(createBranch).toContain('if (isSessionRunningError(err))');
     expect(createBranch).toContain("errorCode: 'BUSY'");
@@ -323,9 +319,9 @@ describe('sendToSession ordering', () => {
     );
 
     expect(acceptedBlock).toContain('await createDbMessage(session.id, {');
-    expect(acceptedBlock).toContain('notifyAgentIslandUserPrompt(session, persistedContent ?? message, {');
+    expect(acceptedBlock).toContain('notifyAgentIslandUserPrompt(session, message, {');
     expect(acceptedBlock).toContain('broadcastSessionCreated(session.id);');
-    expectOrder(acceptedBlock, 'notifyAgentIslandUserPrompt(session, persistedContent ?? message, {', 'await createDbMessage(session.id, {');
+    expectOrder(acceptedBlock, 'notifyAgentIslandUserPrompt(session, message, {', 'await createDbMessage(session.id, {');
     expectOrder(acceptedBlock, 'await createDbMessage(session.id, {', 'broadcastSessionCreated(session.id);');
     expect(afterSendResolves).not.toContain('broadcastSessionCreated(session.id);');
     expect(countOccurrences(createBranch, 'broadcastSessionCreated(session.id);')).toBe(1);

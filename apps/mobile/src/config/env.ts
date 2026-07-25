@@ -1,8 +1,6 @@
 import Constants from 'expo-constants';
 
-import { parseClientEndpointManifest } from '@cindy/maker-shared/client-endpoints';
-
-import type { LoginMessageKey } from '@/auth/loginMessages';
+import { parseClientEndpointManifest } from '@lizi/maker-shared/client-endpoints';
 
 export type CindyAuthRegion = 'cn' | 'global' | 'dev';
 
@@ -72,16 +70,15 @@ export const DEFAULT_DEVICE_LINK_API_BASE_URL =
   configuredValue('EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL') ||
   DEV_MANIFEST.deviceLinkApiBaseUrl ||
   '';
-// 语音网关(litellm)地址仅剩本地 e2e / dev 显式覆写与测试 fixture 用途:手机
-// 语音输入已只保留 Cindy 官方托管路径(VOICE_API_BASE_URL + 一次性票据),桌面
-// device-link 凭据同步与 BYOK 直连均已删除,生产不再消费本值。
+// 语音网关(litellm)地址不再有清单默认值(2026-07-17 退役 xdGatewayBaseUrl):
+// 正常链路由桌面端经 device-link 凭据同步下发 proxyBaseUrl(desktop 侧来自
+// model-access server 下发的 endpoint);本值仅供本地 e2e / dev 显式覆写。
 export const DEFAULT_MOBILE_VOICE_LITELLM_BASE_URL =
   configuredValue('EXPO_PUBLIC_XDT_MOBILE_VOICE_LITELLM_BASE_URL') || '';
 
 export interface MobileConfigIssue {
   key: string;
-  /** 展示文案走 loginMessages 5 语 catalog,本层只产出 key(文案 key 化,SC-4)。 */
-  messageKey: LoginMessageKey;
+  message: string;
 }
 
 export function normalizeBaseUrlWithDefault(value: string | undefined, fallback: string): string {
@@ -129,7 +126,7 @@ export function getMobileConfigIssues(
   if (explicitBaseUrl && !isHttpUrl(explicitBaseUrl)) {
     issues.push({
       key: 'EXPO_PUBLIC_CINDY_AUTH_BASE_URL',
-      messageKey: 'configIssueAuthBaseUrl',
+      message: '登录服务地址必须是 http(s) URL。',
     });
   }
   return issues;
@@ -259,7 +256,7 @@ export let REVIEW_MODE = isReviewModeActive(
 );
 
 // 非 live binding(清单不再承载语音网关地址,启动闸门无覆写路径):env 覆写为空时
-// 即空串。生产语音输入走 VOICE_API_BASE_URL 的托管路径,本值仅供本地 e2e / dev。
+// 即空串,真实地址走桌面端凭据同步(mobileVoiceCredentialStore 的 proxyBaseUrl)。
 export const MOBILE_VOICE_LITELLM_BASE_URL = DEFAULT_MOBILE_VOICE_LITELLM_BASE_URL
   ? normalizeBaseUrlWithDefault(DEFAULT_MOBILE_VOICE_LITELLM_BASE_URL, '')
   : '';
@@ -331,7 +328,7 @@ export let OTA_SERVER_BASE_URL = '';
 // 是否自建变体 —— 必须与 app.config.js 的构建门控读同一个 EXPO_PUBLIC_XDT_OTA_SELFHOST 标志。
 // 真实更新地址只来自 endpoint 清单,不能拿它反推包身份,否则会破坏 EAS / 自建两条线隔离。
 // EXPO_PUBLIC_ 前缀保证该标志会被 inline 进 JS bundle,
-// 与包的真实身份严格对齐。
+// 与包的真实身份严格对齐。详见 docs/self-hosted-ios-build-and-ota.md。
 export const IS_OTA_SELFHOST = process.env.EXPO_PUBLIC_XDT_OTA_SELFHOST === '1';
 
 // 二级版本号:本次自建线打包所配对的桌面产品线版本(如 `0.0.147`)。仅自建线发版脚本

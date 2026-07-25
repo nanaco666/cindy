@@ -5,7 +5,7 @@
  * 空闲时,由 CCAgentSessionView 渲染(与 live ErrorBanner / CredentialSwitchWaitBanner
  * 互斥;此时消息流内不再重复渲染 ErrorMessageCard,由本处独家承载)。
  *
- * 两种语义、两个组件(2026-07-05 产品决策统一:所有尾部错误都要有可操作按钮):
+ * 两种语义、两个组件(2026-07-05 Dash 拍板统一:所有尾部错误都要有可操作按钮):
  *  - InterruptedTurnBanner:app 退出中断标记行(reason='app-exit-interrupted')。
  *    文案固定,「继续任务」+「忽略」。
  *  - ErrorTailErrorBanner:普通 turn 失败行(process exited / turn-failed 等,

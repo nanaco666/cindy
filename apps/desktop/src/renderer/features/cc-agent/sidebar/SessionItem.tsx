@@ -6,8 +6,8 @@
  *   - 双击或 Pencil 图标进入重命名；Enter 提交、Escape 取消、Blur 提交
  *   - 左侧 status zone 直接渲染 vendor mark（Claude=AA / Codex=六瓣）—— 同一 icon
  *     承担 vendor 标识 + 运行状态：idle 灰、running 切 Thinking Orange + 呼吸、
- *     需关注时叠右上红点、archived 改 Archive icon。**Pin 入口走右键菜单**
- *     （避免与会话菜单内 Pin/Unpin 重复）
+ *     需关注时叠右上红点、archived 改 Archive icon。设计参考 cc-agent-view.pen 节点
+ *     ugsrn (方案 C)。**Pin 入口走右键菜单**（避免与 F-PJ-9 菜单内 Pin/Unpin 重复）
  *   - 右键(contextmenu) 弹出 DropdownMenu —— 与 ProjectNode 同款 coordinate-anchored
  *     pattern（fixed-position 隐形 trigger 锚定到鼠标坐标）。
  *     菜单内容按状态分支（F-PJ-9：标准 Pin/Rename/Archived；Pinned Unpin/Rename/Archived；
@@ -24,14 +24,15 @@
  *   - indented=true（ProjectNode 内子 session）：`pl-[22px]`(2026-07 用户定稿,
  *     tech_spec ADR 原 18px 基础上 +4px 加深层级)。
  *   - indented=false（Pinned / Unclassified / Dialogue 顶层 session）：`pl-3`。
- *   2026-07 用户定稿的文字列对齐:状态图标包在 15px 定宽槽内;普通会话行使用
- *   gap-2.5(10px),与顶部导航行 / 项目行同构。自动任务行因中间还有 Timer,
- *   Agent → Timer 沿用原 Clock 的 gap-1.5(6px),Timer → 标题同为 6px。
+ *   2026-07 用户定稿的文字列对齐:状态图标包在 15px 定宽槽内 + 行 gap-2.5(10px),
+ *   与顶部导航行(图标 15 + gap 10)、项目行(文件夹 15 + gap 10)同构 ——
+ *   顶层会话标题与「新建/自动化/项目名」同一文字列(x=49),项目内会话标题
+ *   再右移一档(x=59),层级靠缩进表达(对齐 Codex)。
  */
 
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import type { MouseEvent as ReactMouseEvent, ReactNode } from 'react';
-import { Archive, ChevronRight, EllipsisVertical, Play, Undo } from 'lucide-react';
+import { Archive, ChevronRight, Clock, EllipsisVertical, Play, Undo } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 
@@ -86,7 +87,6 @@ import { useSessionAttentionKind } from '@/lib/sessionAttentionStore';
 import { useSessionAttentionUrgency } from '../contexts/SessionAttentionUrgencyContext';
 import { useRemoteSessionActivity } from '@/features/device-link/remoteSessionActivityStore';
 import { resolveSidebarRightStatus } from './sidebarRightStatus';
-import { AutomationTimerIcon } from './AutomationTimerIcon';
 
 // Module-level dedup cache for loadScheduleSidebarIndexRuns.
 // When many ungrouped automation rows mount simultaneously they all need the
@@ -205,7 +205,7 @@ export const SessionItem = memo(function SessionItem({
   //   1. error(出错终止 / 定时任务失败未读)→ 红点   —— 红专职表示"坏了"
   //   2. awaiting(等待回复/权限/计划审阅)→ TapTap 蓝点 —— "在等你",邀请而非告警
   //   3. isRunning → spinner(中性灰,running 的橙色语义由左侧 vendor mark 呼吸表达,
-  //      右槽 spinner 保持低调不抢色 —— 2026-07 产品决策不染橙)
+  //      右槽 spinner 保持低调不抢色 —— 2026-07 Dash 拍板不染橙)
   //   4. attention 完成未读(done / 未读定时任务)→ 绿点
   //   5. else → 时间文字
   //
@@ -256,9 +256,8 @@ export const SessionItem = memo(function SessionItem({
   // heartbeat schedule 绑定标识(targetSessionId 指向本会话);schedule 删除/过期后
   // schedulesStore 'changed' 刷新 → 列表为空 → 徽章消失。
   const boundSchedules = useSessionBoundSchedules(session.id);
-  const hasAutomationMeta = boundSchedules.length > 0 || isAutomationGenerated;
   const navigate = useNavigate();
-  // 自动化创建(非绑定)会话的 Timer 点击:scheduleId 不在 Session 上,点击时查
+  // 自动化创建(非绑定)会话的 Clock 点击:scheduleId 不在 Session 上,点击时查
   // sidebar index runs(sessionId → scheduleId)再跳;查不到(run 已删等)退化为
   // 直接打开自动化页。一次性点击查询,不在渲染路径上常驻拉数据。
   const handleAutomationIconClick = useCallback(async () => {
@@ -616,11 +615,10 @@ export const SessionItem = memo(function SessionItem({
         setMenuPos({ x: e.clientX, y: e.clientY });
       }}
       className={cn(
-        // 基础几何：高 32 / 圆角 8。普通会话的 Agent → 标题保持 10px;
-        // 自动任务行 Agent → Timer 延续原 Clock 的 6px,Timer → 标题也为 6px。
+        // 基础几何：高 32 / 圆角 8 / 横向间距与设计稿对齐
+        // gap-2.5(10px)与顶部导航行 / 项目行的图标-文字间距同款(2026-07 用户定稿)。
         // rounded-full:hover/active 底与顶部导航行、项目行同款药丸形。
-        'group relative flex h-8 w-full items-center rounded-full',
-        !isEditing && hasAutomationMeta ? 'gap-1.5' : 'gap-2.5',
+        'group relative flex h-8 w-full items-center gap-2.5 rounded-full',
         'select-none',
         // 缩进 + padding(见文件头注释的文字列对齐口径):
         //   indented=true → 左 22px（Project Sessions 缩进,比顶层深一档;
@@ -633,10 +631,8 @@ export const SessionItem = memo(function SessionItem({
         // 跑完 150ms 渐变才褪掉,视觉上像是"旧行仍然选中,延迟才切到新行"。
         // 用 ProjectAction 同款瞬时反馈,跟 Cursor / Codex sidebar 的体感一致。
         'text-sm font-medium text-left cursor-pointer',
-        // active 描边必须画在盒内且不参与布局。真实 border 会让固定宽高的
-        // border-box 内容区四边各缩 1px,导致选中行的左侧 icon / 标题整体右移。
         isActive
-          ? 'bg-sidebar-item-active text-sidebar-item-active-foreground shadow-[inset_0_0_0_1px_var(--sidebar-item-active-border)]'
+          ? 'bg-sidebar-item-active text-sidebar-item-active-foreground border border-[var(--sidebar-item-active-border)]'
           : isSelected
             ? 'bg-[var(--chat-input-chip-bg)] text-foreground'
             : 'text-foreground hover:bg-sidebar-item-hover',
@@ -646,7 +642,7 @@ export const SessionItem = memo(function SessionItem({
       aria-pressed={isSelected || undefined}
     >
       {/* 左侧状态图标(vendor mark + 运行/需关注/草稿)——与置顶卡片共用 SessionStatusIcon,
-          保证两处完全一致。
+          保证两处完全一致。设计参考 cc-agent-view.pen 节点 ugsrn(方案 C)。
           外包 15px 定宽槽:状态图标本体 12px,槽宽与顶部导航/文件夹图标(15)一致,
           让会话标题与其它行落在同一文字列(见文件头注释)。 */}
       <span className="flex w-[15px] shrink-0 items-center justify-center">
@@ -683,14 +679,18 @@ export const SessionItem = memo(function SessionItem({
         // 远程项目 icon 跟项目标题同口径:直接贴在标题右侧。标题过长时标题截断,
         // icon shrink-0 保持可见;右侧槽位只保留 worktree + 时间 + hover action。
         <span className="min-w-0 flex flex-1 items-center gap-1.5">
-          {/* 绑定徽章优先于普通自动化 Timer:persistentSession 会话两者皆真,
-              主图标统一为 Timer，绑定态额外承载频率/暂停信息。 */}
+          {/* 绑定徽章优先于"自动化创建"Clock:persistentSession 会话两者皆真,
+              只显示信息量更大的绑定徽章,避免双图标挤占 title 宽度。 */}
           {boundSchedules.length > 0 ? (
             <ScheduleBindingBadge schedules={boundSchedules} activeForeground={isActive} />
           ) : isAutomationGenerated ? (
             <button
               type="button"
-              className="inline-flex shrink-0 cursor-pointer focus:outline-none"
+              className={cn(
+                'shrink-0',
+                isActive ? 'text-[var(--sidebar-item-active-foreground)]' : 'text-[var(--cmd-palette-item-meta)] hover:text-foreground',
+                'cursor-pointer transition-colors focus:outline-none',
+              )}
               aria-label={t('ccAgent.sidebar.scheduleBinding.viewTask')}
               title={t('ccAgent.sidebar.automationGenerated')}
               onClick={(e) => {
@@ -699,7 +699,7 @@ export const SessionItem = memo(function SessionItem({
               }}
               onPointerDown={(e) => e.stopPropagation()}
             >
-              <AutomationTimerIcon size={10} activeForeground={isActive} />
+              <Clock size={10} strokeWidth={1.75} aria-hidden />
             </button>
           ) : null}
           <span className="min-w-0 truncate">
@@ -871,7 +871,7 @@ export const SessionItem = memo(function SessionItem({
               {/* 自动化会话专属 Run 直点按钮:仅顶层散落(insideAutomationGroup
                   为 false)的 automation-generated 会话可见 —— 分组内 (SessionEntryList
                   展开的子行) 组头已经暴露过同链路操作,再挂一份纯属视觉噪音。其它硬边界:
-                  未归档 + 非 draft + 非远程只读。Edit 与左侧 Timer chip 同链路,不再重复
+                  未归档 + 非 draft + 非远程只读。Edit 与左侧 Clock chip 同链路,不再重复
                   暴露;Run 走 main.maker.schedule.runNow,与 AutomationSessionGroupItem
                   组头 [Run ▶️][More ⋮] 保持高频直点、低频收纳的同构。 */}
               {isAutomationGenerated && !insideAutomationGroup && !isArchived && !isEmpty && !remoteWritesBlocked && effectiveScheduleId && (

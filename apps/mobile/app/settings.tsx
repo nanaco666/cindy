@@ -11,15 +11,13 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  Switch,
   View,
 } from 'react-native';
 import { Text, TextInput } from '@/components/AppText';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ChevronDown, ChevronRight, X } from 'lucide-react-native';
-import type { DeviceView } from '@cindy/device-link';
+import type { DeviceView } from '@lizi/device-link';
 import { useAuth } from '@/auth/AuthContext';
-import { loginText } from '@/auth/loginMessages';
 import { goBackGuarded } from '@/utils/backGuard';
 import { configureCollapseAnimation } from '@/utils/collapseAnimation';
 import {
@@ -37,12 +35,15 @@ import {
   type MobileSettingsRow,
 } from '@/settings/mobileSettings';
 import {
-  isPushSupported,
-  markPendingUnregister,
-  readPushEnabled,
-  syncPushRegistration,
-  writePushEnabled,
-} from '@/notifications/pushNotifications';
+  clearMobileVoiceLiteLlmSettings,
+  hasMobileVoiceLiteLlmSettings,
+  saveMobileVoiceLiteLlmSettings,
+} from '@/session/mobileVoiceLiteLlmSettings';
+import {
+  getMobileVoiceServiceMode,
+  setMobileVoiceServiceMode,
+  type MobileVoiceServiceMode,
+} from '@/session/mobileVoiceServiceMode';
 import { buildMobileUpdateInfoRows, currentMobileOtaVersion } from '@/settings/updateInfo';
 import { runManualUpdateCheck } from '@/update/manualUpdateCheck';
 import { useBundleUpdatePrompt } from '@/update/useBundleUpdatePrompt';
@@ -57,7 +58,7 @@ type SelfDeviceNameQueuedWrite =
   | { kind: 'reset' };
 const SETTINGS_DEVICE_TIMEOUT_MS = 12_000;
 const PRIVACY_POLICY_URL = AUTH_REGION === 'cn'
-  ? 'https://cindy.cn/privacy/'
+  ? 'https://cindy.com.cn/privacy/'
   : 'https://cindy.app/privacy/';
 
 export default function SettingsScreen() {
@@ -68,14 +69,15 @@ export default function SettingsScreen() {
   const { status } = useDeviceLink();
   const [copiedRowId, setCopiedRowId] = useState<string | null>(null);
   const [loggingOut, setLoggingOut] = useState(false);
-  const [accountDeletionAvailable, setAccountDeletionAvailable] =
-    useState(false);
   const [debugExpanded, setDebugExpanded] = useState(false);
+  const [voiceExpanded, setVoiceExpanded] = useState(false);
+  const [voiceServiceMode, setVoiceServiceModeState] = useState<MobileVoiceServiceMode>('cindy');
+  const [voiceLiteLlmConfigured, setVoiceLiteLlmConfigured] = useState(false);
+  const [voiceLiteLlmDraft, setVoiceLiteLlmDraft] = useState('');
+  const [voiceSettingsBusy, setVoiceSettingsBusy] = useState(false);
+  const [voiceSettingsMessage, setVoiceSettingsMessage] = useState<string | null>(null);
   const [updatePhase, setUpdatePhase] = useState<UpdatePhase>('idle');
   const [updateMessage, setUpdateMessage] = useState<string | null>(null);
-  const [pushEnabled, setPushEnabled] = useState(false);
-  const [pushBusy, setPushBusy] = useState(false);
-  const [pushMessage, setPushMessage] = useState<string | null>(null);
   const updateCheckInFlightRef = useRef(false);
   const [selfDeviceName, setSelfDeviceName] = useState<string | null>(null);
   const [selfDeviceNameDraft, setSelfDeviceNameDraft] = useState('');
@@ -151,28 +153,6 @@ export default function SettingsScreen() {
     };
   }, [auth]);
 
-  useEffect(() => {
-    if (!auth.isAuthenticated) {
-      setAccountDeletionAvailable(false);
-      return;
-    }
-    let cancelled = false;
-    setAccountDeletionAvailable(false);
-    void auth
-      .getAccountDeletionAvailability()
-      .then((availability) => {
-        if (!cancelled) {
-          setAccountDeletionAvailable(availability.available);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) setAccountDeletionAvailable(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [auth.getAccountDeletionAvailability, auth.isAuthenticated]);
-
   const copyRow = useCallback(async (row: MobileSettingsRow) => {
     if (!row.copyValue) return;
     await Clipboard.setStringAsync(row.copyValue);
@@ -219,6 +199,66 @@ export default function SettingsScreen() {
       updateCheckInFlightRef.current = false;
     }
   }, [checkBundleUpdate, updateCheckEnabled, updatesEnabled]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void Promise.all([hasMobileVoiceLiteLlmSettings(), getMobileVoiceServiceMode()])
+      .then(([configured, mode]) => {
+        if (cancelled) return;
+        setVoiceLiteLlmConfigured(configured);
+        setVoiceServiceModeState(mode);
+      })
+      .catch(() => {
+        if (!cancelled) setVoiceLiteLlmConfigured(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const selectVoiceServiceMode = useCallback(async (mode: MobileVoiceServiceMode) => {
+    if (voiceSettingsBusy || mode === voiceServiceMode) return;
+    setVoiceSettingsBusy(true);
+    setVoiceSettingsMessage(null);
+    try {
+      await setMobileVoiceServiceMode(mode);
+      setVoiceServiceModeState(mode);
+    } catch (err) {
+      setVoiceSettingsMessage(err instanceof Error ? err.message : String(err));
+    } finally {
+      setVoiceSettingsBusy(false);
+    }
+  }, [voiceServiceMode, voiceSettingsBusy]);
+
+  const saveVoiceLiteLlmKey = useCallback(async () => {
+    if (voiceSettingsBusy) return;
+    setVoiceSettingsBusy(true);
+    setVoiceSettingsMessage(null);
+    try {
+      await saveMobileVoiceLiteLlmSettings({ proxyApiKey: voiceLiteLlmDraft });
+      setVoiceLiteLlmDraft('');
+      setVoiceLiteLlmConfigured(true);
+      setVoiceSettingsMessage('LiteLLM Key 已保存。');
+    } catch (err) {
+      setVoiceSettingsMessage(err instanceof Error ? err.message : String(err));
+    } finally {
+      setVoiceSettingsBusy(false);
+    }
+  }, [voiceLiteLlmDraft, voiceSettingsBusy]);
+
+  const clearVoiceLiteLlmKey = useCallback(async () => {
+    if (voiceSettingsBusy) return;
+    setVoiceSettingsBusy(true);
+    setVoiceSettingsMessage(null);
+    try {
+      await clearMobileVoiceLiteLlmSettings();
+      setVoiceLiteLlmDraft('');
+      setVoiceLiteLlmConfigured(false);
+      setVoiceSettingsMessage('LiteLLM Key 已清除。');
+    } finally {
+      setVoiceSettingsBusy(false);
+    }
+  }, [voiceSettingsBusy]);
 
   const updateSelfDeviceNameDraft = useCallback((value: string) => {
     selfDeviceNameDraftRef.current = value;
@@ -395,58 +435,14 @@ export default function SettingsScreen() {
     }
   }, [auth, loggingOut, router]);
 
-  const openAccountDeletion = useCallback(() => {
-    router.push('/account-deletion');
-  }, [router]);
-
-  // 任务完成通知开关:开 → 请求系统权限 + 注册 APNs token 到 device-link server;
-  // 关 → 注销 token。开关状态本机持久化,server 注册表是唯一发送依据。
-  useEffect(() => {
-    let cancelled = false;
-    void readPushEnabled().then((enabled) => {
-      if (!cancelled) setPushEnabled(enabled);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const togglePushNotifications = useCallback(async () => {
-    if (pushBusy) return;
-    setPushBusy(true);
-    setPushMessage(null);
-    const next = !pushEnabled;
-    try {
-      if (!next) {
-        // 关闭是用户明确的 opt-out:先落盘生效(离线也不允许开关弹回),
-        // 注销请求失败则排队补偿,下次联网启动自动补上。
-        await writePushEnabled(false);
-        setPushEnabled(false);
-        try {
-          await syncPushRegistration({ enabled: false, apiFetch: auth.apiFetch });
-        } catch {
-          await markPendingUnregister().catch(() => undefined);
-          setPushMessage('已关闭。当前网络下注销未完成,将在下次联网时自动补上。');
-        }
-        return;
-      }
-      const result = await syncPushRegistration({ enabled: true, apiFetch: auth.apiFetch });
-      if (result === 'permission-denied') {
-        setPushMessage('系统通知权限未开启。请到 iOS「设置 → 通知 → Cindy」允许通知后重试。');
-        return; // 权限被拒:开关保持关闭,不落盘
-      }
-      await writePushEnabled(true);
-      setPushEnabled(true);
-    } catch (error) {
-      setPushMessage(formatRemoteError(error));
-    } finally {
-      setPushBusy(false);
-    }
-  }, [auth.apiFetch, pushBusy, pushEnabled]);
-
   const toggleDebug = useCallback(() => {
     configureCollapseAnimation();
     setDebugExpanded((value) => !value);
+  }, []);
+
+  const toggleVoice = useCallback(() => {
+    configureCollapseAnimation();
+    setVoiceExpanded((value) => !value);
   }, []);
 
   const avatarLabel = (overview.header.name.trim()[0] ?? '?').toUpperCase();
@@ -538,32 +534,107 @@ export default function SettingsScreen() {
           ]}
         </SettingsGroup>
 
-        {/* 通知:任务完成推送(仅 iOS;Android 待 FCM/厂商通道) */}
-        {isPushSupported() ? (
-          <SettingsGroup title="通知">
-            {[
-              <View key="push-toggle" style={styles.switchRow} testID="settings.pushToggleRow">
-                <View style={styles.switchTexts}>
-                  <Text style={styles.rowLabel}>任务完成通知</Text>
-                  <Text style={styles.hint}>
-                    电脑上的任务完成、出错或需要你回复时,推送到这台手机;完成或需要回复时附带最新回复内容。
-                  </Text>
-                  {pushMessage ? (
-                    <Text style={styles.hint} testID="settings.pushMessage">{pushMessage}</Text>
-                  ) : null}
-                </View>
-                <Switch
-                  accessibilityLabel="任务完成通知"
-                  disabled={pushBusy}
-                  onValueChange={() => void togglePushNotifications()}
-                  testID="settings.pushToggle"
-                  trackColor={{ true: colors.inputCaret }}
-                  value={pushEnabled}
+        {/* 语音输入:默认 Cindy 官方服务(登录态授权,零配置);可切换为自己的
+            LiteLLM Key(BYOK,Key 只保存在这台手机)。两种来源互不回退。 */}
+        <SettingsGroup title="语音输入">
+          {[
+            <Pressable
+              key="voice-header"
+              accessibilityRole="button"
+              accessibilityState={{ expanded: voiceExpanded }}
+              onPress={toggleVoice}
+              style={({ pressed }) => [styles.discloseRow, pressed && styles.pressed]}
+              testID="settings.voiceDisclose"
+            >
+              <Text style={styles.rowLabel}>实时语音</Text>
+              <Text style={styles.discloseStatus} numberOfLines={1} testID="settings.voiceServiceModeStatus">
+                {voiceServiceMode === 'cindy'
+                  ? 'Cindy 官方服务'
+                  : (voiceLiteLlmConfigured ? '自己的 Key · 已配置' : '自己的 Key · 未配置')}
+              </Text>
+              {voiceExpanded
+                ? <ChevronDown color={colors.textTertiary} size={iconSize.action} strokeWidth={iconStroke.regular} />
+                : <ChevronRight color={colors.textTertiary} size={iconSize.action} strokeWidth={iconStroke.regular} />}
+            </Pressable>,
+            voiceExpanded ? (
+              <View key="voice-body" style={styles.voiceBody} testID="settings.voiceServiceCard">
+                <Text style={styles.hint}>
+                  默认使用 Cindy 提供的语音服务，无需配置任何 Key；也可以切换为自己的 LiteLLM Key，费用计入你的账户。
+                </Text>
+                <MainWindowActionGroup
+                  density="compact"
+                  primaryActions={[
+                    {
+                      accessibilityLabel: '使用 Cindy 官方语音服务',
+                      disabled: voiceSettingsBusy,
+                      label: 'Cindy 官方服务',
+                      onPress: () => void selectVoiceServiceMode('cindy'),
+                      testID: 'settings.voiceModeCindyButton',
+                      tone: voiceServiceMode === 'cindy' ? 'primary' : undefined,
+                    },
+                    {
+                      accessibilityLabel: '使用自己的 Key 提供语音服务',
+                      disabled: voiceSettingsBusy,
+                      label: '自己的 Key',
+                      onPress: () => void selectVoiceServiceMode('byok'),
+                      testID: 'settings.voiceModeByokButton',
+                      tone: voiceServiceMode === 'byok' ? 'primary' : undefined,
+                    },
+                  ]}
+                  testID="settings.voiceModeActions"
                 />
-              </View>,
-            ]}
-          </SettingsGroup>
-        ) : null}
+                {voiceServiceMode === 'byok' ? (
+                  <View style={styles.voiceBodyInner} testID="settings.voiceLiteLlmCard">
+                    <Text style={styles.hint}>
+                      手机端实时 ASR 和润色都通过 LiteLLM 网关。Key 只保存在这台手机，不从被控电脑同步。
+                    </Text>
+                    <TextInput
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      importantForAutofill="no"
+                      onChangeText={setVoiceLiteLlmDraft}
+                      placeholder={voiceLiteLlmConfigured ? '已保存，输入新 Key 可替换' : '输入 LiteLLM Key'}
+                      placeholderTextColor={colors.textTertiary}
+                      secureTextEntry
+                      spellCheck={false}
+                      style={styles.secretInput}
+                      testID="settings.voiceLiteLlmKeyInput"
+                      textContentType="password"
+                      value={voiceLiteLlmDraft}
+                    />
+                    <MainWindowActionGroup
+                      density="compact"
+                      primaryActions={[
+                        {
+                          accessibilityLabel: voiceSettingsBusy ? '正在保存 LiteLLM Key' : '保存 LiteLLM Key',
+                          busy: voiceSettingsBusy,
+                          disabled: voiceSettingsBusy || voiceLiteLlmDraft.trim().length === 0,
+                          label: voiceSettingsBusy ? '保存中' : '保存',
+                          onPress: () => void saveVoiceLiteLlmKey(),
+                          testID: 'settings.voiceLiteLlmSaveButton',
+                          tone: 'primary',
+                        },
+                      ]}
+                      secondaryActions={[
+                        {
+                          accessibilityLabel: '清除 LiteLLM Key',
+                          disabled: voiceSettingsBusy || !voiceLiteLlmConfigured,
+                          label: '清除',
+                          onPress: () => void clearVoiceLiteLlmKey(),
+                          testID: 'settings.voiceLiteLlmClearButton',
+                        },
+                      ]}
+                      testID="settings.voiceLiteLlmActions"
+                    />
+                  </View>
+                ) : null}
+                {voiceSettingsMessage ? (
+                  <Text style={styles.hint} testID="settings.voiceSettingsMessage">{voiceSettingsMessage}</Text>
+                ) : null}
+              </View>
+            ) : null,
+          ]}
+        </SettingsGroup>
 
         {/* 关于这台手机 */}
         {aboutSection ? (
@@ -631,7 +702,7 @@ export default function SettingsScreen() {
           ) : null}
         </SettingsGroup>
 
-        {/* 账号操作:退出保持明确；注销账号仅保留低调的次要文字入口。 */}
+        {/* 账号操作:低调置底 */}
         <View style={styles.dangerArea} testID="settings.accountActions">
           <Text style={styles.dangerHint}>
             退出只会清除这台手机上的登录态和本地远程镜像，不会影响电脑端会话。
@@ -650,22 +721,6 @@ export default function SettingsScreen() {
             ]}
             testID="settings.logoutActions"
           />
-          {accountDeletionAvailable ? (
-            <Pressable
-              accessibilityLabel={loginText('accountDeletionSettingsAction')}
-              accessibilityRole="button"
-              onPress={openAccountDeletion}
-              style={({ pressed }) => [
-                styles.accountDeletionLink,
-                pressed && styles.pressed,
-              ]}
-              testID="settings.deleteAccountButton"
-            >
-              <Text style={styles.accountDeletionLinkText}>
-                {loginText('accountDeletionSettingsAction')}
-              </Text>
-            </Pressable>
-          ) : null}
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -940,16 +995,32 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   rowLabel: { color: colors.textSecondary, flexShrink: 0, fontSize: typeScale.code },
   rowValue: { color: colors.textPrimary, flex: 1, fontSize: typeScale.code, textAlign: 'right' },
   rowDetail: { color: colors.textTertiary, fontSize: typeScale.caption, lineHeight: lineHeight.caption },
-  switchRow: {
+  // —— 披露行(语音 / 折叠) ——
+  discloseRow: {
     alignItems: 'center',
     flexDirection: 'row',
-    gap: spacing.md,
+    gap: spacing.sm,
     minHeight: 52,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
   },
-  switchTexts: { flex: 1, gap: spacing.xs },
+  discloseStatus: { color: colors.textTertiary, flex: 1, fontSize: typeScale.code, textAlign: 'right' },
+  // —— 语音输入 ——
+  voiceBody: { gap: spacing.md, paddingBottom: spacing.lg, paddingHorizontal: spacing.lg, paddingTop: spacing.sm },
+  voiceBodyInner: { gap: spacing.md },
   hint: { color: colors.textSecondary, fontSize: typeScale.caption, lineHeight: lineHeight.caption },
+  secretInput: {
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: radius.pill,
+    borderWidth: StyleSheet.hairlineWidth,
+    color: colors.textPrimary,
+    fontSize: typeScale.body,
+    lineHeight: lineHeight.body,
+    minHeight: 48,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+  },
   // —— 版本行 ——
   versionRow: {
     alignItems: 'center',
@@ -978,18 +1049,6 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   // —— 退出 ——
   dangerArea: { gap: spacing.md, paddingTop: spacing.sm },
   dangerHint: { color: colors.textSecondary, fontSize: typeScale.caption, lineHeight: lineHeight.caption, paddingHorizontal: spacing.md },
-  accountDeletionLink: {
-    alignItems: 'center',
-    alignSelf: 'center',
-    justifyContent: 'center',
-    minHeight: 44,
-    paddingHorizontal: spacing.md,
-  },
-  accountDeletionLinkText: {
-    color: colors.textTertiary,
-    fontSize: typeScale.caption,
-    lineHeight: lineHeight.caption,
-  },
   nameEditorContent: {
     gap: spacing.sm,
     paddingHorizontal: spacing.lg,

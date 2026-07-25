@@ -32,14 +32,14 @@ import type {
 import { Session, generateSessionId } from './session.js';
 import type { BaseAgent, StartSessionOptions, OneShotOptions } from './agents/base-agent.js';
 import type { MemoryStatus, MemorySetResult, MemoryResetResult } from './types/memory.js';
-import type { ConsumeAccountRateLimitResetCreditParams } from './types/account-rate-limits.js';
 import type { SessionStorage, SessionMeta } from './interfaces/session-storage.js';
 import type { Logger } from './interfaces/logger.js';
 import type { MakerMemoryManager } from './memory/manager.js';
 
 /**
- * Session 生命周期钩子 —— host 层声明 session 启动 / 成功发布 / 关闭时的副作用。
- * Maker 不知道 hook 内部干什么 (持久化上下文 / worktree / temp 文件 / metric / ...)。
+ * Session 生命周期钩子 —— host 层声明 "session 关闭时该跑哪些副作用"。
+ * Maker 不知道 hook 内部干什么 (worktree / temp 文件 / image cache / metric / ...),
+ * 只在 session.status 变 'closed' 时调一次。fire-and-forget,异常不阻塞。
  *
  * 设计动机: 把 desktop-specific 的 cleanup (worktree / OS temp 文件) 集中在 host
  * 一处声明,避免散落在各个 IPC handler 的 post-hook 里; maker-core 抽象保持干净
@@ -52,15 +52,8 @@ export interface SessionBeforeStartContext {
 }
 
 export interface SessionLifecycleHooks {
-  /**
-   * Agent 启动前补齐 start options。该步骤属于正确启动的前置条件，失败会阻断创建。
-   * 允许直接修改 options；Maker 会把同一个对象传给 agent 和成功钩子。
-   */
-  prepareStartOptions?: (sessionId: string, options: CreateSessionOptions) => void | Promise<void>;
   /** Agent 启动前的 host 准备动作。失败只记日志，不阻断 session 创建。 */
   onBeforeStart?: (context: SessionBeforeStartContext) => void | Promise<void>;
-  /** Agent 和 Session 均创建成功后、对外发布前调用。失败只记日志，不阻断创建。 */
-  onStartSucceeded?: (sessionId: string, options: CreateSessionOptions) => void | Promise<void>;
   /** session 关闭时 (Maker.closeSession 主动 / 内部异常 / handle 自然结束)。 */
   onClose?: (sessionId: string) => void | Promise<void>;
   /**
@@ -140,15 +133,6 @@ export class Maker {
   protected readonly activeSessions = new Map<string, Session>();
   protected readonly listeners = new Set<MakerEventListener>();
   /**
-   * 同一 business session 的启动必须 singleflight。activeSessions 只在所有异步
-   * startup / storage 步骤完成后写入；没有这层占位时，并发恢复会各自 spawn SDK
-   * handle，Codex 同 thread 的后一个 subscriber 会覆盖前一个并让前一个 send 永久悬挂。
-   */
-  private readonly inFlightSessionCreations = new Map<
-    string,
-    { promise: Promise<Session> }
-  >();
-  /**
    * 同一 business session 的 vendor id 写入必须串行。invalid-resume CAS 只有排在
    * 已在途的 session_id update 之后执行，才能保证旧写入不会在清空后反向覆盖。
    */
@@ -178,35 +162,18 @@ export class Maker {
    * 创建一个新会话。
    *
    * 幂等性: 若 opts.id 已在 storage 命中, 跳过 storage.create 改用现有 meta;
-   * 同 id 已有 active Session 或正在创建时直接复用 —— 适配"用户切回老 session
-   * 继续聊"以及多个后台入口同时恢复同一会话的场景。
+   * 同 id 但已有 active Session(进程内)直接 return 复用 —— 适配"用户切回老 session
+   * 继续聊"的场景。
    */
   async createSession(opts: CreateSessionOptions): Promise<Session> {
-    if (!opts.id) {
-      return this.createSessionOnce(opts);
-    }
-
-    // 进程内已经活着或正在启动的 session, 直接复用 (避免 spawn 第二个 SDK)。
-    const existing = this.activeSessions.get(opts.id);
-    if (existing) return existing;
-
-    const inFlight = this.inFlightSessionCreations.get(opts.id);
-    if (inFlight) return inFlight.promise;
-
-    const creation = { promise: this.createSessionOnce(opts) };
-    this.inFlightSessionCreations.set(opts.id, creation);
-    try {
-      return await creation.promise;
-    } finally {
-      // entry 身份比较防御未来替换 / 重试逻辑误删更新的占位。
-      if (this.inFlightSessionCreations.get(opts.id) === creation) {
-        this.inFlightSessionCreations.delete(opts.id);
+    // 进程内已经活着的 session, 直接复用 (避免 spawn 第二个 SDK)
+    if (opts.id) {
+      const existing = this.activeSessions.get(opts.id);
+      if (existing) {
+        return existing;
       }
     }
-  }
 
-  /** 执行一次真实 session startup；带 id 的并发去重由 createSession 统一负责。 */
-  private async createSessionOnce(opts: CreateSessionOptions): Promise<Session> {
     const agent = this.requireAgent(opts.agentKind);
     const id = opts.id ?? generateSessionId();
 
@@ -227,9 +194,6 @@ export class Maker {
 
     const startedAt = Date.now();
     const startOpts: CreateSessionOptions = { ...opts };
-    if (this.lifecycleHooks.prepareStartOptions) {
-      await this.lifecycleHooks.prepareStartOptions(id, startOpts);
-    }
     if (this.lifecycleHooks.onBeforeStart) {
       try {
         await this.lifecycleHooks.onBeforeStart({
@@ -271,12 +235,8 @@ export class Maker {
       sessionId: id,
       // 强制由 Maker 注入持久化 CAS，不能信任外部 CreateSessionOptions 自带回调。
       // Claude adapter 只在精确识别 invalid-resume 时调用；Codex 不消费该字段。
-      // 对所有 claude-code 会话装配(不止 resume):全新会话也可能在首个 turn 崩溃前
-      // 就把 SDK 回填、已落库的 sdk_session_id 变成幽灵 id(见 claude-code/index.ts
-      // 的 fresh-session self-reference 恢复),需要同一把 CAS 才能把它清掉,否则下一次
-      // send 会 resume 同一个不存在的会话反复失败。
       onInvalidResumeSession:
-        opts.agentKind === 'claude-code'
+        opts.agentKind === 'claude-code' && opts.resumeSessionId
           ? (expectedSdkSessionId) =>
               this.invalidateAndClearSdkSessionId(id, expectedSdkSessionId)
           : undefined,
@@ -375,17 +335,6 @@ export class Maker {
         }
       }
     });
-
-    if (this.lifecycleHooks.onStartSucceeded) {
-      try {
-        await this.lifecycleHooks.onStartSucceeded(id, startOpts);
-      } catch (err) {
-        this.logger.warn('lifecycleHooks.onStartSucceeded threw; continuing session publish', {
-          sessionId: id,
-          error: String(err),
-        });
-      }
-    }
 
     this.activeSessions.set(meta.id, session);
     this.emit({ type: 'session:created', session });
@@ -668,19 +617,6 @@ export class Maker {
   /** 刷新指定 agent 的本机运行时模型清单；不支持或结果已过期时返回 false。 */
   async refreshAgentLocalModels(agentKind: AgentKind): Promise<boolean> {
     return this.requireAgent(agentKind).refreshLocalModels();
-  }
-
-  /** Read account quota and banked reset credits through the selected agent runtime. */
-  async readAgentAccountRateLimits(agentKind: AgentKind) {
-    return this.requireAgent(agentKind).readAccountRateLimits();
-  }
-
-  /** Consume one banked account reset credit through the selected agent runtime. */
-  async consumeAgentAccountRateLimitResetCredit(
-    agentKind: AgentKind,
-    params: ConsumeAccountRateLimitResetCreditParams,
-  ) {
-    return this.requireAgent(agentKind).consumeAccountRateLimitResetCredit(params);
   }
 
   /** Codex 浏览器登录中途取消; Claude 之类同步弹窗式登录调到底层 no-op。 */

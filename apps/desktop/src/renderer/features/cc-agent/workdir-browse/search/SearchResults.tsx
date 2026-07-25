@@ -1,5 +1,5 @@
 /**
- * SearchResults — 文件搜索结果树
+ * SearchResults — 1:1 对设计稿 work-md-show.pen 的 "Results Tree"
  *
  * Specs:
  *   FileGroup container: layout vertical (无 gap)

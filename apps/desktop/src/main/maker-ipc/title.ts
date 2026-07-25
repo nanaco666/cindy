@@ -17,8 +17,8 @@
 import { ipcMain } from 'electron';
 import { eq } from 'drizzle-orm';
 
-import { connectedProvidersForAgent, type ProviderView } from '@cindy/model-providers';
-import type { AgentKind } from '@cindy/maker-core';
+import { connectedProvidersForAgent, type ProviderView } from '@lizi/model-providers';
+import type { AgentKind } from '@lizi/maker-core';
 
 import { getDbClient } from '../localDb/client/current.js';
 import { sessions } from '../localDb/schema.js';

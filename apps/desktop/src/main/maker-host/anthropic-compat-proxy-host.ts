@@ -19,18 +19,16 @@
 import {
   createAnthropicCompatProxy,
   createActiveStripTransform,
-  createEmptyTextRecoveryRule,
   createEmptyThinkingRecoveryRule,
   createEncryptedContentRecoveryRule,
   createToolUseProviderSpecificFieldsRecoveryRule,
-  stripEmptyTextFromBody,
   stripEmptyThinkingFromBody,
   stripEncryptedContentFromBody,
   stripNonAnthropicFields,
   stripToolUseProviderSpecificFields,
   type ProxyHandle,
   type RoutingTransform,
-} from '@cindy/anthropic-compat-proxy';
+} from '@lizi/anthropic-compat-proxy';
 
 import { ANTHROPIC_DIRECT_UPSTREAM, anthropicCatalogModelIds, isAnthropicWireModel } from './claude-gateway-config.js';
 import { getActiveCatalog } from './active-catalog.js';
@@ -50,11 +48,7 @@ import {
 } from './provider-route.js';
 import { createProviderUpstreamErrorObserver } from './provider-upstream-error-observer.js';
 import { createClaudeAutoClassifierFailureObserver } from './claude-auto-permission-fallback.js';
-import {
-  emptyTextStripController,
-  emptyThinkingStripController,
-  encryptedStripController,
-} from './thread-strip-controllers.js';
+import { emptyThinkingStripController, encryptedStripController } from './thread-strip-controllers.js';
 import { createMakerLogger } from './logger-adapter.js';
 import {
   createClaudeFastModeRequestTransform,
@@ -250,8 +244,8 @@ export async function ensureAnthropicCompatProxyReady(): Promise<void> {
       //   - fast mode 链路核验:tee SSE 抽上游 usage.speed(debug-gated);
       //   - 订阅余量旁路:读 anthropic-ratelimit-unified-* headers(仅订阅直连响应,
       //     同步读 header、零 body 开销),交 usageBroadcaster 落库 + 广播;
-      //   - Auto 权限分类器错误检测(status≥400,含 4xx/5xx):只在错误路径解析 request
-      //     body,通知 session coordinator 降级到 ask;不 tee/改写响应;
+      //   - Auto 权限分类器 429/5xx 检测:只在错误路径解析 request body,通知 session
+      //     coordinator 降级到 ask;不 tee/改写响应;
       //   - 自定义供应商上游错误分类广播(status≥400 且会话路由到 user 供应商时才 tee,
       //     成功路径零开销;30s 节流,见 provider-upstream-error-observer)。
       responseObserver: composeResponseObservers(
@@ -272,8 +266,6 @@ export async function ensureAnthropicCompatProxyReady(): Promise<void> {
             const sessionId = sdkSessionId && _resolveCcSessionId ? _resolveCcSessionId(sdkSessionId) : null;
             return sessionId ? getUserProviderIdForSession(sessionId) : null;
           },
-          resolveUserProviderName: (providerId) =>
-            getActiveCatalog().providers.find((provider) => provider.id === providerId)?.name ?? null,
         }),
       ),
       transformRequest: [
@@ -292,13 +284,6 @@ export async function ensureAnthropicCompatProxyReady(): Promise<void> {
           enabled: () => true,
           strip: stripEmptyThinkingFromBody,
         }),
-        // 空 text 块主动剥离 —— always-on,独立 controller(bridge 修复前落进历史的空
-        // text 块,切回真 Anthropic 模型时 400 "text content blocks must be non-empty")。
-        createActiveStripTransform({
-          controller: emptyTextStripController,
-          enabled: () => true,
-          strip: stripEmptyTextFromBody,
-        }),
         // LiteLLM/provider adapter 可能把 provider_specific_fields(null) 挂到 tool_use 上，
         // 严格 Anthropic 入站 schema 不接受该扩展字段。
         stripToolUseProviderSpecificFields,
@@ -313,11 +298,6 @@ export async function ensureAnthropicCompatProxyReady(): Promise<void> {
         createEmptyThinkingRecoveryRule({
           enabled: () => true,
           onRetry: (threadId, model) => emptyThinkingStripController.markActive(threadId, model),
-        }),
-        // 空 text 块 400 → 剥空块重发,always-on(同上,救 bridge 修复前污染的存量会话)。
-        createEmptyTextRecoveryRule({
-          enabled: () => true,
-          onRetry: (threadId, model) => emptyTextStripController.markActive(threadId, model),
         }),
         createToolUseProviderSpecificFieldsRecoveryRule(),
       ],

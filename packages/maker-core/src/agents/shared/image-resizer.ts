@@ -30,7 +30,7 @@ import path from 'node:path';
 
 // sharp 是可选 peerDep。host 没装时 import 会失败,我们整体降级为 noop
 // (toClaudeSdkContent / toAppServerInput 仍能工作,只是不缩图)。
-type SharpModule = (typeof import('sharp'))['default'];
+type SharpModule = typeof import('sharp');
 let sharpInstance: SharpModule | null = null;
 let sharpLoadAttempted = false;
 function loadSharp(): SharpModule | null {

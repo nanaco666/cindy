@@ -17,7 +17,7 @@ test('提交的 EAS build profiles 不包含生产端点 env（含 extends）', 
     assert.equal(env.EXPO_PUBLIC_XDT_MOBILE_VOICE_LITELLM_BASE_URL, undefined, profileName);
     assert.equal(env.EXPO_PUBLIC_ENDPOINT_MANIFEST_BASE_URL, undefined, profileName);
   }
-  assert.equal(resolveEasBuildProfileEnv(eas.build, 'testflight').EXPO_PUBLIC_CINDY_AUTH_REGION, 'cn');
+  assert.equal(resolveEasBuildProfileEnv(eas.build, 'beta-dash').EXPO_PUBLIC_BETA_DEV, 'dash');
 });
 
 test('EAS extends 解析支持子级覆盖，并拒绝缺失父级与循环', () => {
@@ -39,12 +39,4 @@ test('EAS extends 解析支持子级覆盖，并拒绝缺失父级与循环', ()
     () => resolveEasBuildProfileEnv({ a: { extends: 'b' }, b: { extends: 'a' } }, 'a'),
     /extends 循环/,
   );
-});
-
-test('dev endpoint 模板保留 Telegram 字段但默认不启用', () => {
-  const manifest = JSON.parse(
-    fs.readFileSync(new URL('../../config/endpoint.dev.json.example', import.meta.url), 'utf8'),
-  );
-
-  assert.equal(manifest.telegramHookWsUrl, '');
 });

@@ -4,7 +4,7 @@
  * Tiny helpers shared by every scheduler tool handler:
  *
  *  - `buildJsonResult(payload, isError?)` — wrap a JSON payload as a single-text
- *    SchedulerToolResult; identical shape to cindy_feishuBotMcpServer's
+ *    SchedulerToolResult; identical shape to lizi_feishuBotMcpServer's
  *    `buildJsonResult` so the model sees consistent envelopes.
  *
  *  - `withScheduler(deps, fn)` — guard every tool entry with try/catch:
@@ -14,12 +14,12 @@
  *    `classifySchedulerError` and return a structured `{ok:false, code, message}`
  *    so the model can retry or prompt the user instead of crashing the tool.
  *
- *    MCP contract: tool result error codes reuse
+ *    Phase 5 hard rule (plan §C.6): MCP tool result error codes MUST reuse
  *    IPC layer's NOT_FOUND / INVALID_PARAMS / INTERNAL + new SCHEDULER_NOT_READY.
- *    Implemented in errors.ts.
+ *    Implemented in errors.ts; Phase 7 will抽 shared util.
  */
 
-import { parseCron, type Scheduler } from '@cindy/maker-scheduler';
+import { parseCron, type Scheduler } from '@lizi/maker-scheduler';
 
 import type { SchedulerToolResult } from '../cindy_schedulerToolRegistry.js';
 import type { SchedulerMcpDeps } from '../types.js';

@@ -1,12 +1,12 @@
 /**
- * ccAgentWriteGuard.test.ts — 历史媒体目录防回潮守门(规则 25)。
+ * ccAgentWriteGuard.test.ts — 防回潮守门(媒体总仓迁移第 4 步,规则 25)。
  * ---------------------------------------------------------------------------
- * `userData/cc-agent/` 是冻结的历史兼容层:历史协议只读服务历史地址,存量写入点已
+ * `userData/cc-agent/` 是冻结的老世界:老协议只读服务历史地址,存量写入点已
  * 按迁移计划切到 cindy-media,**不许再有新增代码路径拼 cc-agent 目录**。
  *
  * 守门方式:静态扫描 main 源码里的 `'cc-agent'` 字符串字面量,持有文件必须
  * ⊆ 下面的白名单。新文件想引用 cc-agent(哪怕只读)会让本测试红灯——这是
- * 有意的摩擦:先读 docs/dev-rules/media-storage-and-protocols.md,确认属于豁免场景
+ * 有意的摩擦:先读 AGENTS.md 规则 25 与 media-store.md,确认属于豁免场景
  * (老地址只读服务 / 声明过的存量遗留)再把文件加进白名单,并在 PR 里说明。
  *
  * 白名单条目的存在理由(删掉某文件的 cc-agent 引用后应同步移出):
@@ -19,7 +19,7 @@
  *      历史附件只读路径都留在 imageCacheStore)
  *   - session-share/sessionShareExport.ts / sessionShareImport.ts:读老地址打包 +
  *     非媒体散件/回落的老目录;
- *   - cindy-media/legacyDeadDirs.ts:死目录清退——对历史兼容层的唯一
+ *   - cindy-media/legacyDeadDirs.ts:死目录清退(第 5 步)——对老世界的唯一
  *     允许删除操作,只认三个死目录名单,不新增任何写入;
  */
 
@@ -73,8 +73,8 @@ describe('cc-agent 写入防回潮守门(规则 25)', () => {
     }
     expect(
       offenders,
-      `以下文件新引用了冻结的 cc-agent 历史目录。新媒体写入必须走 cindy-media 总仓` +
-        `(docs/dev-rules/media-storage-and-protocols.md);` +
+      `以下文件新引用了冻结的 cc-agent 老世界目录。新媒体写入必须走 cindy-media 总仓` +
+        `(AGENTS.md 规则 25 / docs/Cindy架构设计/媒体总仓/media-store.md);` +
         `确属只读服务老地址等豁免场景时,把文件加进本测试白名单并在 PR 里说明:\n  ` +
         offenders.join('\n  '),
     ).toEqual([]);

@@ -22,14 +22,14 @@ import type {
   Maker,
   Session,
   SessionSendResult,
-} from '@cindy/maker-core';
+} from '@lizi/maker-core';
 import type {
   FireContext,
   Logger,
   Notifier,
   Schedule,
   ScheduleRun,
-} from '@cindy/maker-scheduler';
+} from '@lizi/maker-scheduler';
 
 const mocks = vi.hoisted(() => ({
   createMessage: vi.fn(),
@@ -240,11 +240,6 @@ function createQueueHarness(opts: {
 function createRunnerHarness(
   session: Session,
   schedulerQueue: SchedulerQueueDeps,
-  opts: {
-    availableModels?: Array<{ id: string; efforts?: readonly string[]; defaultEffort?: string | null }>;
-    /** 绑定会话 meta 里的 effort(= 排队路径的 baseline.effort);默认 undefined。 */
-    metaEffort?: string;
-  } = {},
 ) {
   const logger = createLogger();
   const notifier: Notifier & { notify: ReturnType<typeof vi.fn> } = {
@@ -258,13 +253,10 @@ function createRunnerHarness(
       agentKind: 'claude-code',
       workDir: '/tmp/bound',
       model: 'claude-opus-4-6',
-      effort: opts.metaEffort,
       sdkSessionId: 'sdk-1',
     })),
     isSessionAlive: vi.fn(() => true),
     closeSession: vi.fn(async () => undefined),
-    // issue #456:排队派发路径也按所选模型 efforts reconcile effort;测试经 availableModels 注入能力。
-    getCapabilities: vi.fn((_agent: string) => ({ availableModels: opts.availableModels ?? [] })),
   } as unknown as Maker;
   const runner = new MakerScheduleRunner({
     maker,
@@ -524,180 +516,6 @@ describe('MakerScheduleRunner queued dispatch (busy bound session)', () => {
     (harness.session as unknown as { model: string }).model = 'claude-sonnet-5';
     await queue.accept();
     expect(harness.setModel).toHaveBeenCalledWith('claude-opus-4-6');
-
-    harness.emit({ type: 'done', data: {}, source: 'claude-code' });
-    await expect(firePromise).resolves.toMatchObject({ sessionId: SESSION_ID });
-  });
-
-  it('clamps the queued heartbeat effort to model capability before setEffort / backfill (issue #456)', async () => {
-    // 忙会话最常走的排队分支:schedule.effort=max 但绑定模型仅到 xhigh → 派发时刻
-    // 必须 clamp 到 xhigh 再 setEffort,不把模型不支持的档透给上游(直发路径的 reconcile
-    // 在此分支之前 return、覆盖不到,#456 回归点)。
-    const harness = createSessionHarness(async () => ({ accepted: true }));
-    const queue = createQueueHarness({ busy: true });
-    const { runner } = createRunnerHarness(harness.session, queue.deps, {
-      availableModels: [
-        { id: 'claude-opus-4-6', efforts: ['low', 'medium', 'high', 'xhigh'], defaultEffort: 'high' },
-      ],
-    });
-
-    // model 与 baseline(meta.model=claude-opus-4-6)相同 → 不触发 setModel,隔离 effort 断言。
-    const firePromise = runner.fire(
-      heartbeatSchedule({ model: 'claude-opus-4-6', effort: 'max' }),
-      createFireContext(),
-    );
-    await vi.waitFor(() => expect(queue.enqueueCalls.length).toBe(1));
-    await queue.accept();
-
-    expect(harness.setEffort).toHaveBeenCalledWith('xhigh');
-    expect(harness.setEffort).not.toHaveBeenCalledWith('max');
-    expect(mocks.backfillSessionMeta).toHaveBeenCalledWith(
-      expect.anything(),
-      SESSION_ID,
-      expect.objectContaining({ effort: 'xhigh' }),
-      expect.anything(),
-    );
-
-    harness.emit({ type: 'done', data: {}, source: 'claude-code' });
-    await expect(firePromise).resolves.toMatchObject({ sessionId: SESSION_ID });
-  });
-
-  it('keeps a supported queued heartbeat effort unchanged (no downgrade, #352)', async () => {
-    const harness = createSessionHarness(async () => ({ accepted: true }));
-    const queue = createQueueHarness({ busy: true });
-    const { runner } = createRunnerHarness(harness.session, queue.deps, {
-      availableModels: [
-        { id: 'claude-opus-4-6', efforts: ['low', 'medium', 'high', 'xhigh'], defaultEffort: 'high' },
-      ],
-    });
-
-    const firePromise = runner.fire(
-      heartbeatSchedule({ model: 'claude-opus-4-6', effort: 'high' }),
-      createFireContext(),
-    );
-    await vi.waitFor(() => expect(queue.enqueueCalls.length).toBe(1));
-    await queue.accept();
-
-    // high 受支持 → 原样下发,不被 clamp 改动。
-    expect(harness.setEffort).toHaveBeenCalledWith('high');
-
-    harness.emit({ type: 'done', data: {}, source: 'claude-code' });
-    await expect(firePromise).resolves.toMatchObject({ sessionId: SESSION_ID });
-  });
-
-  it('clamps queued effort to the running model when setModel fails (PR #479 review)', async () => {
-    // 排队派发时 setModel 被拒 → turn 仍停在 live.model(claude-opus-4-6,桩里支持 max);
-    // effort 必须按 live.model clamp = max,而不是按没切成功的 targetModel(仅到 xhigh)。
-    const harness = createSessionHarness(async () => ({ accepted: true }));
-    harness.setModel.mockRejectedValue(new Error('switchModel rejected'));
-    const queue = createQueueHarness({ busy: true });
-    const { runner } = createRunnerHarness(harness.session, queue.deps, {
-      availableModels: [
-        { id: 'claude-opus-4-6', efforts: ['low', 'medium', 'high', 'xhigh', 'max'], defaultEffort: 'high' },
-        { id: 'capped-xhigh-model', efforts: ['low', 'medium', 'high', 'xhigh'], defaultEffort: 'high' },
-      ],
-    });
-
-    const firePromise = runner.fire(
-      heartbeatSchedule({ model: 'capped-xhigh-model', effort: 'max' }),
-      createFireContext(),
-    );
-    await vi.waitFor(() => expect(queue.enqueueCalls.length).toBe(1));
-    await queue.accept();
-
-    expect(harness.setModel).toHaveBeenCalledWith('capped-xhigh-model'); // 尝试切(被拒)
-    // live.model 仍是 claude-opus-4-6(支持 max)→ effort 按它 clamp = max,不套用 targetModel 的 xhigh。
-    expect(harness.setEffort).toHaveBeenCalledWith('max');
-    expect(harness.setEffort).not.toHaveBeenCalledWith('xhigh');
-
-    harness.emit({ type: 'done', data: {}, source: 'claude-code' });
-    await expect(firePromise).resolves.toMatchObject({ sessionId: SESSION_ID });
-  });
-
-  it('clamps follow-session queued effort to the drifted live model, not the stale baseline (PR #479 review)', async () => {
-    // follow-session:schedule 无显式 model(沿用会话模型)但覆盖 effort=max。排队等待期间用户
-    // 把会话切到只到 xhigh 的模型 → 本轮不 setModel、turn 跑在 live.model。effort 必须按 live.model
-    // clamp(=xhigh),而不是按 enqueue 时的陈旧 baseline 模型(仍支持 max)—— 否则 max 透给已 capped
-    // 的实际运行模型被上游拒。
-    const harness = createSessionHarness(async () => ({ accepted: true }));
-    const queue = createQueueHarness({ busy: true });
-    const { runner } = createRunnerHarness(harness.session, queue.deps, {
-      availableModels: [
-        { id: 'claude-opus-4-6', efforts: ['low', 'medium', 'high', 'xhigh', 'max'], defaultEffort: 'high' },
-        { id: 'capped-xhigh-model', efforts: ['low', 'medium', 'high', 'xhigh'], defaultEffort: 'high' },
-      ],
-    });
-
-    // 无显式 model(follow-session),仅覆盖 effort=max。
-    const firePromise = runner.fire(heartbeatSchedule({ effort: 'max' }), createFireContext());
-    await vi.waitFor(() => expect(queue.enqueueCalls.length).toBe(1));
-    // 排队期间用户把会话切到 capped 模型。
-    (harness.session as unknown as { model: string }).model = 'capped-xhigh-model';
-    await queue.accept();
-
-    expect(harness.setModel).not.toHaveBeenCalled(); // 无显式 model → 不切
-    // runtimeModel 取 live.model(capped-xhigh-model)→ max clamp 到 xhigh,不套用陈旧 baseline 的 max。
-    expect(harness.setEffort).toHaveBeenCalledWith('xhigh');
-    expect(harness.setEffort).not.toHaveBeenCalledWith('max');
-
-    harness.emit({ type: 'done', data: {}, source: 'claude-code' });
-    await expect(firePromise).resolves.toMatchObject({ sessionId: SESSION_ID });
-  });
-
-  it('does not clamp/apply a followed effort from the stale enqueue-time baseline (PR #479 review)', async () => {
-    // follow-effort(schedule.effort 留空)+ 显式换 model 到 capped:排队路径不能拿 enqueue 时刻的
-    // baseline.effort(可能已被用户在等待期改过)去 clamp 后 setEffort —— 会覆盖用户的新选择。
-    // 无 live effort getter 拿不到当前真实值 → 遵循「follow 且当前值不可知 → 不动 effort」→ 不 setEffort。
-    const harness = createSessionHarness(async () => ({ accepted: true }));
-    const queue = createQueueHarness({ busy: true });
-    const { runner } = createRunnerHarness(harness.session, queue.deps, {
-      metaEffort: 'max', // enqueue 时刻 baseline.effort = max(陈旧)
-      availableModels: [
-        { id: 'claude-opus-4-6', efforts: ['low', 'medium', 'high', 'xhigh', 'max'], defaultEffort: 'high' },
-        { id: 'capped-xhigh-model', efforts: ['low', 'medium', 'high', 'xhigh'], defaultEffort: 'high' },
-      ],
-    });
-
-    // 换 model(显式)到 capped,但 effort 留空(follow)。
-    const firePromise = runner.fire(
-      heartbeatSchedule({ model: 'capped-xhigh-model' }),
-      createFireContext(),
-    );
-    await vi.waitFor(() => expect(queue.enqueueCalls.length).toBe(1));
-    await queue.accept();
-
-    expect(harness.setModel).toHaveBeenCalledWith('capped-xhigh-model'); // 显式 model 照常切
-    // effort 留空(follow)→ 不拿陈旧 baseline(max)clamp 出 xhigh 硬塞给会话,setEffort 完全不调。
-    expect(harness.setEffort).not.toHaveBeenCalled();
-
-    harness.emit({ type: 'done', data: {}, source: 'claude-code' });
-    await expect(firePromise).resolves.toMatchObject({ sessionId: SESSION_ID });
-  });
-
-  it('reapplies explicit queued effort even when the clamp equals the stale baseline (PR #479 review)', async () => {
-    // 显式 effort=max 在 capped 模型上 clamp 成 xhigh,恰好 == 上一次 fire 已 backfill 的 baseline.effort。
-    // 不能因「== baseline」就 skip:baseline 是 enqueue 时刻快照,用户可能在排队期把 live effort 调低;
-    // 显式档必须每次派发都重申(setEffort 幂等),否则这一 turn 会跑用户的低档而非 schedule 的显式档。
-    const harness = createSessionHarness(async () => ({ accepted: true }));
-    const queue = createQueueHarness({ busy: true });
-    const { runner } = createRunnerHarness(harness.session, queue.deps, {
-      metaEffort: 'xhigh', // baseline.effort = 上次 fire backfill 的 clamp 值
-      availableModels: [
-        { id: 'claude-opus-4-6', efforts: ['low', 'medium', 'high', 'xhigh', 'max'], defaultEffort: 'high' },
-        { id: 'capped-xhigh-model', efforts: ['low', 'medium', 'high', 'xhigh'], defaultEffort: 'high' },
-      ],
-    });
-
-    const firePromise = runner.fire(
-      heartbeatSchedule({ model: 'capped-xhigh-model', effort: 'max' }), // 显式 model + 显式 effort
-      createFireContext(),
-    );
-    await vi.waitFor(() => expect(queue.enqueueCalls.length).toBe(1));
-    await queue.accept();
-
-    expect(harness.setModel).toHaveBeenCalledWith('capped-xhigh-model');
-    // 显式 effort clamp 成 xhigh,即便 == baseline 也重申一遍,不被陈旧比较 skip。
-    expect(harness.setEffort).toHaveBeenCalledWith('xhigh');
 
     harness.emit({ type: 'done', data: {}, source: 'claude-code' });
     await expect(firePromise).resolves.toMatchObject({ sessionId: SESSION_ID });

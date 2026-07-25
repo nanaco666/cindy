@@ -84,12 +84,13 @@ export interface TodoCardPresentation {
 
 export type MessageActionBarAlignment = 'left' | 'right';
 
-export type MessageActionBarItemId = 'copy' | 'cost' | 'more' | 'streaming' | 'time';
+export type MessageActionBarItemId = 'copy' | 'cost' | 'fork' | 'rewind' | 'streaming' | 'time';
 
 export interface MessageActionBarPresentationInput {
   align: 'agent' | 'user';
   canCopy: boolean;
-  hasMoreActions?: boolean;
+  canFork: boolean;
+  canRewind: boolean;
   hasTime: boolean;
   hasTurnCost: boolean;
   isStreaming: boolean;
@@ -337,14 +338,15 @@ export function buildMessageActionBarPresentation(
 
   const agentItems: Array<MessageActionBarItemId | null> = [
       input.canCopy ? 'copy' : null,
-      input.hasMoreActions ? 'more' : null,
+      input.canFork ? 'fork' : null,
       input.hasTime ? 'time' : null,
       input.hasTurnCost ? 'cost' : null,
     ];
   const userItems: Array<MessageActionBarItemId | null> = [
       input.hasTime ? 'time' : null,
       input.canCopy ? 'copy' : null,
-      input.hasMoreActions ? 'more' : null,
+      input.canRewind ? 'rewind' : null,
+      input.canFork ? 'fork' : null,
     ];
   const items = (input.align === 'agent' ? agentItems : userItems).filter(isMessageActionBarItemId);
 

@@ -15,6 +15,13 @@ appId: ${APP_ID}
     id: "settings.version"
 - scrollUntilVisible:
     element:
+      id: "settings.voiceDisclose"
+    direction: DOWN
+    timeout: 10000
+- assertVisible:
+    id: "settings.voiceDisclose"
+- scrollUntilVisible:
+    element:
       id: "settings.logoutButton"
     direction: DOWN
     timeout: 10000

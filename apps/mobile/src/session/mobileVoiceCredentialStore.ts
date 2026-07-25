@@ -1,50 +1,102 @@
-import { deleteSecureItem, getSecureItem } from '@/auth/secureStorage';
-import { listMobileVoiceHistoryHosts } from '@/session/mobileVoiceHistoryStore';
-import type { MobileVoiceCredentialSyncResult } from '@cindy/maker-shared/device-link-contract';
+import { deleteSecureItem, getSecureItem, setSecureItem } from '@/auth/secureStorage';
+import type { MobileVoiceCredentialSyncResult } from '@lizi/maker-shared/device-link-contract';
 import { redactMobileVoiceCredentialValue } from '@/session/mobileVoiceCredentialRedaction';
 
 const STORAGE_KEY_PREFIX = 'xdt.mobileVoiceCredential.v1';
 const STORAGE_INDEX_KEY = `${STORAGE_KEY_PREFIX}.hosts`;
 const STORAGE_VERSION = 1;
-/** 旧版「语音服务模式(cindy/byok)」存储键,功能已删除,仅存量清理用。 */
-const LEGACY_SERVICE_MODE_STORAGE_KEY = 'xdt.mobileVoiceServiceMode.v1';
-/** 旧版 BYOK LiteLLM key 存储键,功能已删除,仅存量清理用。 */
-const LEGACY_LITELLM_SETTINGS_STORAGE_KEY = 'xdt.mobileVoiceLiteLlmSettings.v1';
+const LITELLM_REALTIME_TRANSCRIPTION_PATH = '/openai/passthrough/v1/realtime?intent=transcription';
+const LITELLM_CHAT_COMPLETIONS_PATH = '/v1/chat/completions';
 
-/**
- * 手机语音输入的内部配置图形状。历史上它是桌面经 device-link 同步下来并落
- * secure storage 的凭据;穿透与 BYOK 删除后不再持久化任何推理 key,类型只作为
- * ASR/refiner provider 图的内存形状复用(见 mobileCindyVoiceSession)。
- */
 export type StoredMobileVoiceCredential = MobileVoiceCredentialSyncResult & {
   hostDeviceId: string;
   storageVersion: typeof STORAGE_VERSION;
   syncedAt: string;
 };
 
+export type SyncMobileVoiceCredential = () => Promise<MobileVoiceCredentialSyncResult>;
+
+export interface ResolveMobileVoiceCredentialOptions {
+  refreshedHosts?: Set<string>;
+  forceRefresh?: boolean;
+  allowStoredFallback?: boolean;
+}
+
 /**
- * 存量清理:删掉历史版本落在 secure storage 的桌面穿透凭据(逐 host 键 + 索引
- * 键)、服务模式开关和 BYOK LiteLLM key。登出与 App 启动(auth 初始化)各调一
- * 次,防止旧版本留下的桌面 key 继续躺在手机里。
+ * Legacy credential storage helper.
+ *
+ * Runtime mobile voice input now stores the user's LiteLLM key once in mobile
+ * settings, then derives a per-host executable credential from that local key.
+ * These helpers remain for old diagnostics and for clearing stale per-host
+ * credentials during logout.
  */
+export async function saveMobileVoiceCredentialForHost(
+  hostDeviceId: string,
+  credential: MobileVoiceCredentialSyncResult,
+): Promise<StoredMobileVoiceCredential> {
+  const normalizedHost = normalizeHostDeviceId(hostDeviceId);
+  assertCredentialShape(credential);
+  const executableCredential = normalizeMobileVoiceCredentialForStorage(credential);
+  assertCredentialShape(executableCredential);
+  const stored: StoredMobileVoiceCredential = {
+    ...executableCredential,
+    hostDeviceId: normalizedHost,
+    storageVersion: STORAGE_VERSION,
+    syncedAt: new Date().toISOString(),
+  };
+  await setSecureItem(storageKeyForHostDevice(normalizedHost), JSON.stringify(stored));
+  await addHostToCredentialIndex(normalizedHost);
+  return stored;
+}
+
+export async function getMobileVoiceCredentialForHost(
+  hostDeviceId: string,
+): Promise<StoredMobileVoiceCredential | null> {
+  const normalizedHost = normalizeHostDeviceId(hostDeviceId);
+  const parsed = parseStoredCredential(await getSecureItem(storageKeyForHostDevice(normalizedHost)));
+  return parsed?.hostDeviceId === normalizedHost ? parsed : null;
+}
+
+export async function deleteMobileVoiceCredentialForHost(hostDeviceId: string): Promise<void> {
+  const normalizedHost = normalizeHostDeviceId(hostDeviceId);
+  await deleteSecureItem(storageKeyForHostDevice(normalizedHost));
+  await removeHostFromCredentialIndex(normalizedHost);
+}
+
 export async function clearAllMobileVoiceCredentials(): Promise<void> {
-  // SecureStore 无法枚举键,只能从可推导的 host 集合尽力清理。旧版本在写入逐
-  // host 凭据后、更新凭据索引前退出会留下孤立键,因此并集第二个来源——语音
-  // 历史的 host 索引(用过语音输入的 host 一定同步过凭据)。两个索引都缺失的
-  // 极端残余在 SecureStore API 限制下无法枚举,属已知边界。
-  const [credentialHosts, historyHosts] = await Promise.all([
-    readCredentialHostIndex(),
-    listMobileVoiceHistoryHosts().catch(() => [] as string[]),
-  ]);
-  const hosts = [...new Set([...credentialHosts, ...historyHosts])];
+  const hosts = await readCredentialHostIndex();
   await Promise.all(
     hosts.map((hostDeviceId) =>
       deleteSecureItem(storageKeyForHostDevice(hostDeviceId)).catch(() => undefined),
     ),
   );
   await deleteSecureItem(STORAGE_INDEX_KEY).catch(() => undefined);
-  await deleteSecureItem(LEGACY_SERVICE_MODE_STORAGE_KEY).catch(() => undefined);
-  await deleteSecureItem(LEGACY_LITELLM_SETTINGS_STORAGE_KEY).catch(() => undefined);
+}
+
+export async function resolveMobileVoiceCredentialForHost(
+  hostDeviceId: string,
+  sync: SyncMobileVoiceCredential,
+  options: ResolveMobileVoiceCredentialOptions = {},
+): Promise<StoredMobileVoiceCredential> {
+  const normalizedHost = normalizeHostDeviceId(hostDeviceId);
+  const storedCredential = await getMobileVoiceCredentialForHost(normalizedHost);
+  const refreshedHosts = options.refreshedHosts;
+  const shouldRefresh = options.forceRefresh
+    || !storedCredential
+    || !refreshedHosts?.has(normalizedHost);
+
+  if (shouldRefresh) {
+    try {
+      const synced = await saveMobileVoiceCredentialForHost(normalizedHost, await sync());
+      refreshedHosts?.add(normalizedHost);
+      return synced;
+    } catch (err) {
+      if (storedCredential && options.allowStoredFallback !== false) return storedCredential;
+      throw err;
+    }
+  }
+
+  return storedCredential;
 }
 
 export function redactMobileVoiceCredentialForLog<T extends { proxyApiKey?: unknown }>(
@@ -53,8 +105,7 @@ export function redactMobileVoiceCredentialForLog<T extends { proxyApiKey?: unkn
   return redactMobileVoiceCredentialValue(credential);
 }
 
-/** 纯函数:校验 provider 图形状(托管路径构造后自检用,防手滑改坏常量图)。 */
-export function assertMobileVoiceCredentialShape(credential: MobileVoiceCredentialSyncResult): void {
+function assertCredentialShape(credential: MobileVoiceCredentialSyncResult): void {
   if (!credential || typeof credential !== 'object') throw new Error('voice credential is required');
   if (credential.temporary !== true || credential.credentialVersion !== 1) {
     throw new Error('unsupported voice credential version');
@@ -127,9 +178,128 @@ export function assertMobileVoiceCredentialShape(credential: MobileVoiceCredenti
   }
 }
 
+function parseStoredCredential(raw: string | null): StoredMobileVoiceCredential | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as Partial<StoredMobileVoiceCredential>;
+    if (parsed.storageVersion !== STORAGE_VERSION) return null;
+    if (!readNonEmptyString(parsed.hostDeviceId) || !readNonEmptyString(parsed.syncedAt)) return null;
+    assertCredentialShape(parsed as MobileVoiceCredentialSyncResult);
+    const executableCredential = normalizeMobileVoiceCredentialForStorage(parsed as MobileVoiceCredentialSyncResult);
+    assertCredentialShape(executableCredential);
+    return {
+      ...parsed,
+      ...executableCredential,
+    } as StoredMobileVoiceCredential;
+  } catch {
+    return null;
+  }
+}
+
+function normalizeMobileVoiceCredentialForStorage(
+  credential: MobileVoiceCredentialSyncResult,
+): MobileVoiceCredentialSyncResult {
+  return {
+    ...credential,
+    asr: normalizeMobileAsrCredential(credential),
+    asrProviderChain: normalizeMobileAsrCredentialChain(credential),
+    refiner: normalizeMobileRefinerCredential(credential),
+    refinerProviderChain: normalizeMobileRefinerCredentialChain(credential),
+  };
+}
+
+function normalizeMobileAsrCredential(
+  credential: MobileVoiceCredentialSyncResult,
+): MobileVoiceCredentialSyncResult['asr'] {
+  const asr = credential.asr;
+  if (
+    asr.auth === 'codex'
+    && asr.mode === 'realtime-websocket'
+    && asr.protocolProfile === 'openai-transcription-manual'
+  ) {
+    return {
+      ...asr,
+      auth: 'api-key',
+      endpointPath: asr.endpointPath ?? LITELLM_REALTIME_TRANSCRIPTION_PATH,
+      litellmHeaderModel: asr.litellmHeaderModel ?? asr.model,
+    };
+  }
+  return asr;
+}
+
+function normalizeMobileAsrCredentialChain(
+  credential: MobileVoiceCredentialSyncResult,
+): MobileVoiceCredentialSyncResult['asrProviderChain'] {
+  const chain = credential.asrProviderChain?.length ? credential.asrProviderChain : [credential.asr];
+  const seen = new Set<string>();
+  const normalized: NonNullable<MobileVoiceCredentialSyncResult['asrProviderChain']> = [];
+  for (const asr of chain) {
+    const item = normalizeMobileAsrCredential({ ...credential, asr });
+    if (seen.has(item.provider)) continue;
+    seen.add(item.provider);
+    normalized.push(item);
+  }
+  return normalized;
+}
+
+function normalizeMobileRefinerCredential(
+  credential: MobileVoiceCredentialSyncResult,
+): MobileVoiceCredentialSyncResult['refiner'] {
+  const refiner = credential.refiner;
+  if (refiner.transport === 'codex-responses') {
+    return {
+      ...refiner,
+      auth: 'api-key',
+      transport: 'litellm-chat-completions',
+      endpointPath: refiner.endpointPath ?? LITELLM_CHAT_COMPLETIONS_PATH,
+    };
+  }
+  if (refiner.transport === 'litellm-chat-completions' && !refiner.endpointPath) {
+    return {
+      ...refiner,
+      endpointPath: LITELLM_CHAT_COMPLETIONS_PATH,
+    };
+  }
+  return refiner;
+}
+
+function normalizeMobileRefinerCredentialChain(
+  credential: MobileVoiceCredentialSyncResult,
+): MobileVoiceCredentialSyncResult['refinerProviderChain'] {
+  const chain = credential.refinerProviderChain?.length ? credential.refinerProviderChain : [credential.refiner];
+  const seen = new Set<string>();
+  const normalized: NonNullable<MobileVoiceCredentialSyncResult['refinerProviderChain']> = [];
+  for (const refiner of chain) {
+    const item = normalizeMobileRefinerCredential({ ...credential, refiner });
+    if (seen.has(item.provider)) continue;
+    seen.add(item.provider);
+    normalized.push(item);
+  }
+  return normalized;
+}
+
+function normalizeHostDeviceId(hostDeviceId: string): string {
+  const normalized = hostDeviceId.trim();
+  if (!normalized) throw new Error('host device id is required');
+  return normalized;
+}
+
 function storageKeyForHostDevice(hostDeviceId: string): string {
   const safePrefix = hostDeviceId.replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 40) || 'host';
   return `${STORAGE_KEY_PREFIX}.${safePrefix}.${fnv1a(hostDeviceId)}`;
+}
+
+async function addHostToCredentialIndex(hostDeviceId: string): Promise<void> {
+  const hosts = await readCredentialHostIndex();
+  if (hosts.includes(hostDeviceId)) return;
+  await writeCredentialHostIndex([...hosts, hostDeviceId]);
+}
+
+async function removeHostFromCredentialIndex(hostDeviceId: string): Promise<void> {
+  const hosts = await readCredentialHostIndex();
+  const next = hosts.filter((item) => item !== hostDeviceId);
+  if (next.length === hosts.length) return;
+  await writeCredentialHostIndex(next);
 }
 
 async function readCredentialHostIndex(): Promise<string[]> {
@@ -150,6 +320,17 @@ async function readCredentialHostIndex(): Promise<string[]> {
   }
 }
 
+async function writeCredentialHostIndex(hosts: string[]): Promise<void> {
+  const normalizedHosts = hosts
+    .map((host) => host.trim())
+    .filter((host, index, list) => host && list.indexOf(host) === index);
+  if (normalizedHosts.length === 0) {
+    await deleteSecureItem(STORAGE_INDEX_KEY);
+    return;
+  }
+  await setSecureItem(STORAGE_INDEX_KEY, JSON.stringify(normalizedHosts));
+}
+
 function fnv1a(value: string): string {
   let hash = 0x811c9dc5;
   for (let i = 0; i < value.length; i += 1) {
@@ -166,9 +347,9 @@ function readNonEmptyString(value: unknown): string | null {
 }
 
 export const __testing = {
+  normalizeMobileVoiceCredentialForStorage,
+  parseStoredCredential,
   readCredentialHostIndex,
   storageIndexKey: STORAGE_INDEX_KEY,
   storageKeyForHostDevice,
-  legacyServiceModeStorageKey: LEGACY_SERVICE_MODE_STORAGE_KEY,
-  legacyLiteLlmSettingsStorageKey: LEGACY_LITELLM_SETTINGS_STORAGE_KEY,
 };

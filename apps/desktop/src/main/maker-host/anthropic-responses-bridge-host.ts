@@ -3,7 +3,7 @@
  *
  * 组装订阅直连 handler(**不是独立 server**):compat-proxy 的 routingTransform 在命中订阅
  * 前缀 model 时,把请求经 `RoutingDecision.localHandler` 直接交给本 handler(请求/响应双向
- * 协议翻译在 @cindy/anthropic-responses-bridge 内完成),消息流不多跳、无独立进程内服务。
+ * 协议翻译在 @lizi/anthropic-responses-bridge 内完成),消息流不多跳、无独立进程内服务。
  * 会话态(effort / Fast)由 routingTransform 在决策点闭包传入。
  *
  * 与独立 Codex CLI 授权链路的关系(硬约束:不得影响它):
@@ -22,7 +22,7 @@ import { app } from 'electron';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 
-import { createResponsesHandler, type BridgeProviderConfig, type ResponsesBridgeHandler } from '@cindy/anthropic-responses-bridge';
+import { createResponsesHandler, type BridgeProviderConfig, type ResponsesBridgeHandler } from '@lizi/anthropic-responses-bridge';
 
 import { createMakerLogger } from './logger-adapter.js';
 import { getGrokAccessToken } from './grok-oauth-login.js';
@@ -216,7 +216,7 @@ const invalidateChatgptBridgeAuth = createChatgptBridgeAuthInvalidator({
 });
 
 /** 经 adapter 判连接态 → 读 codex-home/auth.json → 必要时刷新 → 返回 token 与可选 account id。 */
-export async function getChatgptBridgeAuth(): Promise<{ accessToken: string; accountId: string | null }> {
+async function getBridgeAuth(): Promise<{ accessToken: string; accountId: string | null }> {
   const now = Date.now();
   if (_authCache && now - _authCache.readAt < AUTH_CACHE_TTL_MS && !isExpired(_authCache.accessToken)) {
     return _authCache;
@@ -258,7 +258,7 @@ function codexProviderConfig(): BridgeProviderConfig {
     fastServiceTier: 'priority',
     // codex 后端不支持 max_output_tokens(会 400),保持默认 false。
     buildHeaders: async ({ sessionId }) => {
-      const { accessToken, accountId } = await getChatgptBridgeAuth();
+      const { accessToken, accountId } = await getBridgeAuth();
       return buildChatgptBridgeHeaders({ accessToken, accountId, sessionId });
     },
     onUpstreamError: async ({ status, body, requestHeaders }) => {

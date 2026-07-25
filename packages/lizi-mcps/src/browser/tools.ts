@@ -1,4 +1,4 @@
-import type { BrowserControlRequest, BrowserControlRuntime } from '@cindy/browser-control-runtime';
+import type { BrowserControlRequest, BrowserControlRuntime } from '@lizi/browser-control-runtime';
 import { z } from 'zod';
 
 import type { BrowserMcpDeps } from '../types.js';

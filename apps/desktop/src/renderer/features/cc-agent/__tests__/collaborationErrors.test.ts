@@ -6,12 +6,7 @@ import { getCollaborationStartErrorMessage } from '../collaborationErrors';
 const t = ((key: string) => key) as unknown as TFunction;
 
 describe('getCollaborationStartErrorMessage', () => {
-  it.each([
-    'INVALID_PARAMS',
-    'NO_PROVIDER_FOR_AGENT',
-    'PROVIDER_ROUTE_UNAVAILABLE',
-    'BUDGET_MODEL_REQUIRES_API_MODE',
-  ])(
+  it.each(['INVALID_PARAMS', 'NO_PROVIDER_FOR_AGENT', 'BUDGET_MODEL_REQUIRES_API_MODE'])(
     'maps %s to a controlled-device action when the Lead is remote',
     (code) => {
       expect(

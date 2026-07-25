@@ -1,5 +1,5 @@
 /**
- * rangeResponse.test.ts — cindy 系媒体协议 Range/206 组装(视频播放支持)。
+ * rangeResponse.test.ts — cindy 系媒体协议 Range/206 组装(C3c-5 视频补账)。
  * 锁死三态:无 Range 头 → 200 全量 + Accept-Ranges(<video> 才知道能 seek);
  * 合法 Range → 206 精确分片;越界 → 416 带总长。图片路径(无 Range 头)行为
  * 与修复前一致由 200 分支保证。

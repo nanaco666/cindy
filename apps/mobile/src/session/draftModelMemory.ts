@@ -16,7 +16,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSyncExternalStore } from 'react';
 
-import type { AgentKind } from '@cindy/model-providers/types';
+import type { AgentKind } from '@lizi/model-providers/types';
 
 const STORAGE_KEY = 'xdtm:draftModelMemory:v1';
 

@@ -8,13 +8,11 @@
  */
 import { serverApiFetch, type ApiFetchOptions } from '../serverApiClient';
 import { getClientEndpoint } from '../clientEndpointsService';
-import { requireAppCapability } from '../appCapabilities.js';
 
 export function skillhubApiFetch<T>(
   apiPath: string,
   opts: Omit<ApiFetchOptions, 'baseUrl'> = {},
 ): Promise<T> {
-  requireAppCapability('canUseSkillHubCloud', 'SkillHub cloud requires a Cindy account.');
   return serverApiFetch<T>(apiPath, {
     ...opts,
     baseUrl: getClientEndpoint('skillhubApiBaseUrl'),

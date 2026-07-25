@@ -2,11 +2,9 @@ import { describe, expect, it } from 'vitest';
 
 import {
   createAuthBrowserAuthorizationSlot,
-  createAuthLoopbackDevBridgeSlot,
   parseAuthLoopbackCallback,
   raceAuthBrowserCancellation,
   renderAuthLoopbackPage,
-  type AuthLoopbackResult,
 } from '../authLoopbackCallback';
 
 describe('auth loopback callback', () => {
@@ -71,8 +69,7 @@ describe('auth loopback callback page', () => {
     });
     expect(html).toContain('class="detail"');
     expect(html).toContain('&lt;script&gt;alert(1)&lt;/script&gt;');
-    // 新品牌卡带合法的 U-10 内联缩放脚本,断言收敛为「注入载荷绝不以原文出现」
-    expect(html).not.toContain('<script>alert(1)</script>');
+    expect(html).not.toContain('<script>');
   });
 });
 
@@ -118,110 +115,5 @@ describe('auth browser authorization cancellation slot', () => {
     completeExchange('late-token');
     await Promise.resolve();
     expect(controller.signal.aborted).toBe(true);
-  });
-});
-
-// ── PR3:desktop-login 品牌卡接线 + dev-only loopback bridge seam(v6.13)──────
-
-describe('auth loopback page brand wiring (PR3)', () => {
-  it('routes the login callback page to the wave4 brand card with acceptance labels', () => {
-    const html = renderAuthLoopbackPage({
-      htmlLang: 'zh-CN',
-      variant: 'success',
-      title: '登录成功',
-      body: '你可以关闭此页面，回到 Cindy 继续。',
-    });
-    expect(html).toContain('data-cindy-oauth-visual="success"');
-    expect(html).toContain('data-cindy-oauth-copy="login.browserCallback"');
-    expect(html).toContain('width:680px;height:680px');
-  });
-});
-
-describe('auth loopback dev bridge seam (v6.13)', () => {
-  const renderError = (result: AuthLoopbackResult) =>
-    renderAuthLoopbackPage({
-      htmlLang: 'en',
-      variant: 'error' in result ? 'error' : 'success',
-      title: 'Sign-in not completed',
-      body: 'Please return to Cindy and sign in again.',
-      detail: 'error' in result ? result.error : undefined,
-    });
-
-  it('renders the real error page HTML through the shared path when the fixture triggers', () => {
-    const slot = createAuthLoopbackDevBridgeSlot(() => false);
-    let trigger: ((result: AuthLoopbackResult) => void) | null = null;
-    const htmls: string[] = [];
-    expect(
-      slot.register({
-        onCallbackReady: (next) => {
-          trigger = next;
-        },
-        onCallbackHtml: (html) => htmls.push(html),
-      }),
-    ).toBe(true);
-    const finished: AuthLoopbackResult[] = [];
-    slot.attach((result) => finished.push(result), renderError);
-    expect(trigger).not.toBeNull();
-    trigger!({ error: 'SOCIAL_EXCHANGE_FAILED' });
-    expect(finished).toEqual([{ error: 'SOCIAL_EXCHANGE_FAILED' }]);
-    expect(htmls).toHaveLength(1);
-    // ①真实 error 页壳(非 mock 字符串):品牌卡 + error variant + 原始错误码 detail
-    expect(htmls[0]).toContain('data-cindy-oauth-result="error"');
-    expect(htmls[0]).toContain('data-cindy-oauth-visual="failure"');
-    expect(htmls[0]).toContain('SOCIAL_EXCHANGE_FAILED');
-  });
-
-  it('never exposes the anti-CSRF state through any bridge surface', () => {
-    const secretState = 'anti-csrf-state-9f2c1a';
-    const slot = createAuthLoopbackDevBridgeSlot(() => false);
-    let trigger: ((result: AuthLoopbackResult) => void) | null = null;
-    const fixtureSeen: string[] = [];
-    slot.register({
-      onCallbackReady: (next) => {
-        trigger = next;
-      },
-      onCallbackHtml: (html) => fixtureSeen.push(html),
-    });
-    // renderError 闭包持有 state(模拟 authManager 业务段),但渲染输入不含 state,
-    // bridge 面上只有 result 与 HTML——state 仅进程内内存传递,不经 fixture 落盘。
-    slot.attach(
-      () => {
-        expect(secretState).toBeTruthy(); // state 停留在宿主闭包
-      },
-      (result) => renderError(result),
-    );
-    trigger!({ error: 'PROVIDER_DENIED' });
-    slot.notifyHtml(renderError({ error: 'PROVIDER_DENIED' }));
-    expect(fixtureSeen.length).toBeGreaterThan(0);
-    for (const html of fixtureSeen) {
-      expect(html).not.toContain(secretState);
-    }
-  });
-
-  it('is unreachable in packaged builds (register refused, attach/notify no-op)', () => {
-    const slot = createAuthLoopbackDevBridgeSlot(() => true);
-    let readyCalls = 0;
-    let htmlCalls = 0;
-    expect(
-      slot.register({
-        onCallbackReady: () => {
-          readyCalls += 1;
-        },
-        onCallbackHtml: () => {
-          htmlCalls += 1;
-        },
-      }),
-    ).toBe(false);
-    let finished = 0;
-    slot.attach(
-      () => {
-        finished += 1;
-      },
-      () => 'unused',
-    );
-    slot.notifyHtml('unused');
-    expect(readyCalls).toBe(0);
-    expect(htmlCalls).toBe(0);
-    expect(finished).toBe(0);
   });
 });

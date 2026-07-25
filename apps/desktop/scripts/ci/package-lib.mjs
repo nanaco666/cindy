@@ -62,9 +62,8 @@ export function parsePackageArgs(argv, defaults = {}) {
       case '--version': out.versionSpec = takeValue(a, i); i++; break;
       case '--skip-smoke': out.skipSmoke = true; break;
       case '--allow-unsigned': out.allowUnsigned = true; break;
-      // 主动跳过签名(即使签名配置在手)。外部签名命令依赖发布方自己的构建
-      // 环境,不具备该环境的机器打版本无关包时用它;与 --allow-unsigned
-      // (放行"缺配置")语义互补。
+      // 主动跳过签名(即使凭证在手)。npkg 签名产物下载要求内网,非内网机器
+      // 打版本无关包时用它;与 --allow-unsigned(放行"缺凭证")语义互补。
       case '--no-sign': out.noSign = true; out.allowUnsigned = true; break;
       default:
         throw new Error(`未知参数: ${a}(支持 --platform/--arch/--region/--version/--skip-smoke/--allow-unsigned/--no-sign)`);

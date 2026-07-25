@@ -8,21 +8,18 @@ import {
   type DictationRefinementContext,
   type EditableRange,
   type RefinementResult,
-  type VoiceInputErrorCode,
   type VoiceInputDraftSource,
   type VoiceInputState,
   type VoiceTimelineEvent,
-} from '@cindy/voice-input-core';
+} from '@lizi/voice-input-core';
 import type { StoredMobileVoiceCredential } from '@/session/mobileVoiceCredentialStore';
 import { redactMobileVoiceCredentialText } from '@/session/mobileVoiceCredentialRedaction';
 import { createMobileAsrProvider } from '@/session/mobileRealtimeAsrProvider';
-import { CINDY_MANAGED_REFINER_PROVIDER } from '@/session/mobileCindyVoiceSession';
 import {
   appendVoiceTranscriptDraftWithRange,
+  buildMobileRefinerAttempts,
   buildMobileVoiceRefinementContext,
-  makeMobileRefinerPromptCacheKey,
-  MobileLiteLlmTextModelClient,
-  MOBILE_VOICE_EMPTY_TRANSCRIPT_ERROR,
+  createMobileRefinerTextModelClient,
   type MobileVoiceDraftInsertion,
 } from '@/session/mobileVoiceInput';
 import { startMobileRealtimeAudio } from '@/session/mobileRealtimeAudio';
@@ -64,12 +61,6 @@ type MobileVoiceControllerOptions = {
     url: string;
     authorization: string;
   }>;
-  /** 托管润色 prompt cache 预热(voice-server refine-warmup);ASR 就绪后 fire-and-forget。 */
-  warmRefiner?: (input: {
-    system: string;
-    user: unknown;
-    promptCacheKey: string;
-  }) => Promise<void>;
   startAudio?: StartRealtimeAudio;
   readCurrentDraft?: () => string;
   onDraftChanged: (draft: string) => void;
@@ -119,37 +110,6 @@ export function createMobileVoiceControllerSession(
       refinerTargetProvider: options.refinerTargetProvider,
     })
     : options.refiner ?? undefined;
-  // 托管 prompt cache 预热:发一个与真实润色共享 prompt 前缀(dictationText 为空)
-  // 的请求到 voice-server warmup 端点。fire-and-forget——听写主流程绝不等待或
-  // 因预热失败而失败;promptCacheKey 派生必须与真实润色请求逐字节一致。
-  const warmManagedRefinerPromptCache = (): void => {
-    if (!options.warmRefiner || !(refiner instanceof DictationRefiner)) return;
-    try {
-      const request = refiner.buildWarmupRequest();
-      const promptCacheKey = makeMobileRefinerPromptCacheKey({
-        model: CINDY_MANAGED_REFINER_PROVIDER,
-        schemaName: 'dictation_refinement',
-        promptVersion: request.promptVersion,
-        system: request.system,
-        scope: mobileRefinerPromptCacheScope(options.credential),
-      });
-      void options.warmRefiner({
-        system: request.system,
-        user: { schemaName: 'dictation_refinement', input: request.user },
-        promptCacheKey,
-      }).catch((error) => {
-        console.warn(
-          '[mobile-voice] refiner warmup failed (non-fatal):',
-          error instanceof Error ? error.message : String(error),
-        );
-      });
-    } catch (error) {
-      console.warn(
-        '[mobile-voice] refiner warmup skipped:',
-        error instanceof Error ? error.message : String(error),
-      );
-    }
-  };
   const baseDraft = options.initialDraft;
   let latestDraft = baseDraft;
   let lastPublishedDraft = baseDraft;
@@ -157,7 +117,6 @@ export function createMobileVoiceControllerSession(
   let draftPublishThrottleTimer: ReturnType<typeof setTimeout> | null = null;
   let stopAudio: (() => Promise<void>) | null = null;
   let state: VoiceInputState = 'idle';
-  let controllerError: Error | null = null;
   // Run lifecycle as an explicit phase machine instead of a set of overlapping
   // boolean flags. Legal transitions:
   //   idle → running                     (start())
@@ -384,12 +343,8 @@ export function createMobileVoiceControllerSession(
           && range.segmentIds.every((id, index) => voiceInsertionSegmentIds[index] === id);
         return sameRange && !isInsertionIntact(readCurrentDraft(), voiceInsertion);
       },
-      onError(message, code: VoiceInputErrorCode | undefined) {
-        const localizedMessage = code === 'empty_transcript'
-          ? MOBILE_VOICE_EMPTY_TRANSCRIPT_ERROR
-          : redactMobileVoiceCredentialText(message, options.credential);
-        controllerError = new Error(localizedMessage);
-        options.onError?.(localizedMessage);
+      onError(message) {
+        options.onError?.(redactMobileVoiceCredentialText(message, options.credential));
       },
     },
   });
@@ -405,7 +360,6 @@ export function createMobileVoiceControllerSession(
       runPhase = 'running';
       asrStartError = null;
       audioFailureError = null;
-      controllerError = null;
       // Connect the ASR socket and open the mic CONCURRENTLY instead of serially.
       // The shared controller sets 'listening' synchronously, so the mic goes live
       // immediately instead of waiting for the ~2.4s WebSocket connect + session
@@ -480,9 +434,6 @@ export function createMobileVoiceControllerSession(
         // error, so return quietly without announcing a successful start.
         return;
       }
-      // ASR 会话已建立(refine session 同步就绪),此刻预热润色 prompt cache,
-      // 让缓存赶在用户停止说话前热起来。
-      warmManagedRefinerPromptCache();
       notifyReadyForStartCue();
     },
     async stop() {
@@ -518,10 +469,6 @@ export function createMobileVoiceControllerSession(
       }
       notifyReadyForEndCue();
       await controller.stop();
-      if (state === 'error' || controllerError) {
-        runPhase = 'failed';
-        throw controllerError ?? new Error('语音输入未完成，请重试。');
-      }
       if (state === 'submitting' || state === 'refining') await waitForDone(doneWaiters);
       if (runPhase === 'stopping') runPhase = 'idle';
       return latestDraft;
@@ -637,10 +584,6 @@ function redactMobileVoiceError(error: unknown, credential: StoredMobileVoiceCre
   return redacted;
 }
 
-function mobileRefinerPromptCacheScope(credential: StoredMobileVoiceCredential): string {
-  return `mobile-voice:${credential.hostDeviceId}`;
-}
-
 function createMobileRefiner(
   credential: StoredMobileVoiceCredential,
   options: {
@@ -651,21 +594,26 @@ function createMobileRefiner(
       authorization: string;
     }>;
   },
-): DictationRefiner | undefined {
+): MobileDictationRefiner | undefined {
   if (credential.settings?.refinementEnabled === false) return undefined;
-  const refinerTargetProvider = options.refinerTargetProvider;
-  if (!refinerTargetProvider) {
-    throw new Error('手机版语音润色需要 Cindy 语音会话(缺少 refinerTargetProvider)。');
+  if (
+    credential.refiner.transport !== 'litellm-chat-completions'
+    && credential.refiner.transport !== 'codex-responses'
+  ) {
+    throw new Error(`手机版语音润色暂不支持 ${credential.refiner.transport}。`);
   }
-  // 托管单请求:模型选择与 failover 在 voice-server(provider/model 都传 'auto',
-  // 服务端按自己配置的模型链覆盖),客户端不再做多 provider fallback。
+  // Production injects a voice-server request target. The credential object
+  // keeps the legacy per-host shape so the shared ASR/refiner pipeline and
+  // historical diagnostic fixtures stay reusable without persisting a real key.
+  const refinerAttempts = buildMobileRefinerAttempts(
+    credential,
+    undefined,
+    options.refinerTargetProvider,
+  );
   return new DictationRefiner({
-    client: new MobileLiteLlmTextModelClient({
-      requestTargetProvider: (requestOptions) =>
-        refinerTargetProvider(CINDY_MANAGED_REFINER_PROVIDER, requestOptions),
-    }),
-    model: CINDY_MANAGED_REFINER_PROVIDER,
-    promptCacheScope: mobileRefinerPromptCacheScope(credential),
+    client: createMobileRefinerTextModelClient(refinerAttempts),
+    model: refinerAttempts[0]?.model ?? credential.refiner.model,
+    promptCacheScope: refinerAttempts[0]?.promptCacheScope ?? `mobile-voice:${credential.hostDeviceId}`,
     contextProvider: () => buildMobileVoiceRefinementContext(credential, {
       refinementContext: options.refinementContext,
       localVoiceInputHistory: options.localVoiceInputHistory,

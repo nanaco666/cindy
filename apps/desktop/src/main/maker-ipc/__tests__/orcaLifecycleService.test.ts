@@ -1,4 +1,4 @@
-import type { AgentKind } from '@cindy/maker-core';
+import type { AgentKind } from '@lizi/maker-core';
 import { describe, expect, it, vi } from 'vitest';
 
 import {
@@ -21,7 +21,6 @@ function createdWorker(overrides: Partial<Extract<OrcaWorkerCreationResult, { ok
       model: 'gpt-5.5',
       effort: 'medium',
       fastMode: false,
-      providerId: null,
       role: 'reviewer',
       label: 'reviewer',
     },
@@ -46,7 +45,6 @@ function createDeps(overrides: Partial<OrcaLifecycleDeps> = {}) {
           model: params.model ?? 'gpt-5.5',
           effort: params.effort ?? 'medium',
           fastMode: params.fast ?? false,
-          providerId: null,
           role: params.role,
           label: params.label,
         },

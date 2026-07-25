@@ -11,7 +11,7 @@
  * 另含 anthropic 权威清单 setter 的同款语义单测。
  */
 import { afterEach, describe, expect, it } from 'vitest';
-import { BUNDLED_CATALOG, type CatalogModel } from '@cindy/model-providers';
+import { BUNDLED_CATALOG, type CatalogModel } from '@lizi/model-providers';
 
 import {
   getActiveCatalog,

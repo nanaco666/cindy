@@ -231,25 +231,12 @@ export function findMissingSubmoduleWorkspaceFiles(root = ROOT) {
 }
 
 function ensureSubmoduleWorkspaces() {
-  // `.gitmodules` 的 URL 会随仓库迁移变化，但 Git 会把已初始化 submodule 的旧 URL
-  // 缓存在本地 `.git/config`。每次依赖检查先同步一次（纯本地操作），确保老 checkout
-  // 在 pull 后也改从当前公开仓拉取，而不是继续访问已经退役的旧组织仓库。
-  const syncResult = spawnSync('git', ['submodule', 'sync', '--', 'cindy-protocol'], {
-    cwd: ROOT,
-    stdio: 'inherit',
-  });
-  if (syncResult.error || syncResult.status !== 0) {
-    warn('协议 submodule URL 同步失败；将继续使用当前 checkout，缺失时初始化仍会 fail closed');
-  }
-
   const missing = findMissingSubmoduleWorkspaceFiles();
   if (missing.length === 0) return;
 
   warn(`协议 workspace 缺失：${missing.join(', ')}`);
-  // 只初始化协议 submodule（pnpm workspace 依赖它）。内建插件不再作为 submodule
-  // 随客户端源码分发，插件通过 SkillHub 或手动安装。
-  log('运行 git submodule update --init cindy-protocol ...');
-  const result = spawnSync('git', ['submodule', 'update', '--init', '--recursive', '--', 'cindy-protocol'], {
+  log('运行 git submodule update --init --recursive ...');
+  const result = spawnSync('git', ['submodule', 'update', '--init', '--recursive'], {
     cwd: ROOT,
     stdio: 'inherit',
   });

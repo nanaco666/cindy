@@ -19,7 +19,7 @@
  */
 
 import { useCallback } from 'react';
-import { CirclePlus, Plug, Timer } from 'lucide-react';
+import { CirclePlus, Clock, Plug } from 'lucide-react';
 import { useNavigate, useMatch } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 
@@ -37,7 +37,7 @@ const ROW_CLASS =
  *  灰 chip,顶部导航选中态与对话选中样式统一)。hover:bg-sidebar-item-active 抵消
  *  ROW_CLASS 的半透明 hover(cn/twMerge last-wins),避免选中胶囊 hover 时闪回半透明。 */
 const ROW_ACTIVE_CLASS =
-  'bg-sidebar-item-active font-medium text-sidebar-item-active-foreground shadow-[inset_0_0_0_1px_var(--sidebar-item-active-border)] hover:bg-sidebar-item-active';
+  'bg-sidebar-item-active font-medium text-sidebar-item-active-foreground border border-[var(--sidebar-item-active-border)] hover:bg-sidebar-item-active';
 
 export function SidebarTopNav(): React.ReactElement {
   const { t } = useTranslation();
@@ -81,7 +81,7 @@ export function SidebarTopNav(): React.ReactElement {
         aria-label={t('ccAgent.layout.automations')}
         aria-current={onScheduleMatch ? 'page' : undefined}
       >
-        <Timer
+        <Clock
           size={15}
           strokeWidth={1.8}
           className={cn(

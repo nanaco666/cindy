@@ -70,7 +70,7 @@ const PLATFORMS = [
 // ── Helpers ────────────────────────────────────────────────────────────────
 
 function ghHeaders() {
-  const headers = { 'User-Agent': 'cindy-codex-update' };
+  const headers = { 'User-Agent': 'xdt-maker-codex-update' };
   if (process.env.GITHUB_TOKEN) headers.Authorization = `Bearer ${process.env.GITHUB_TOKEN}`;
   return headers;
 }

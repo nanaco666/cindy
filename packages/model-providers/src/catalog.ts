@@ -5,7 +5,7 @@
  * `catalog/providers.json`(v2)只承载 xai 静态清单 + presets 模板——它仍是
  * ① OSS `cfg/providers.json` 的发布物 ② dev 直读的仓库文件。anthropic/openai/xd
  * 的模型清单运行时动态注入(见 apps/desktop maker-host active-catalog),不再进目录文件。
- * 目录文件顶层另有 `cindyModelMeta` 段:那是服务端 model-access-server 消费的
+ * 目录文件顶层另有 `cindyModelMeta` 段:那是 cindy-server model-access-server 消费的
  * 网关模型元数据覆盖表(与客户端目录共用一份 OSS 文件)。客户端侧 parseCatalog 不校验
  * 内容、随目录透传(见 types.ts Catalog.cindyModelMeta);客户端消费点见 types.ts 注释
  * (anthropic 发现条目的展示元数据基线 + dev 模式 XD 元数据覆盖)。
@@ -138,7 +138,7 @@ function validateProvider(p: Provider): void {
       assert(known, `provider '${p.id}' titleModel '${p.titleModel}' not found in any agent's models`);
     }
   }
-  // 媒体模型清单与默认选型(图像/视频同一套规则):
+  // 媒体模型清单与默认选型(图像/视频同一套规则,C3c-5 起两类目):
   // 清单 id/name 非空、id 不重复,不参与 agent/routing 约束(媒体模型不经
   // agent runtime);默认选型必须与清单配套且每个值指向在册 id。
   validateMediaModels(p.id, 'imageModels', p.imageModels, 'imageDefaults', p.imageDefaults);
@@ -238,10 +238,6 @@ function isValidPreset(v: unknown): v is ProviderPreset {
       const mm = m as Record<string, unknown>;
       if (typeof mm.id !== 'string' || mm.id.length === 0) return false;
       if (typeof mm.name !== 'string' || mm.name.length === 0) return false;
-      if (
-        mm.contextWindow !== undefined
-        && (typeof mm.contextWindow !== 'number' || !Number.isFinite(mm.contextWindow) || mm.contextWindow <= 0)
-      ) return false;
     }
     if (r.headers !== undefined) {
       if (!r.headers || typeof r.headers !== 'object' || Array.isArray(r.headers)) return false;

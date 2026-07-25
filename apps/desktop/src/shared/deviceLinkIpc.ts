@@ -85,17 +85,17 @@ export interface ControlledByDevice {
   name: string;
 }
 
-/** 本机 relay 连接状态(同 @cindy/device-link 的 DeviceLinkStatus) */
+/** 本机 relay 连接状态(同 @lizi/device-link 的 DeviceLinkStatus) */
 export type DeviceLinkStatus = 'stopped' | 'connecting' | 'online';
 
-/** 连接问题分类(同 @cindy/device-link 的 DeviceLinkConnectionIssueKind) */
+/** 连接问题分类(同 @lizi/device-link 的 DeviceLinkConnectionIssueKind) */
 export type DeviceLinkConnectionIssueKind =
   | 'auth-failed'
   | 'replaced'
   | 'too-many-connections'
   | 'version-mismatch';
 
-/** 连接问题(同 @cindy/device-link 的 DeviceLinkConnectionIssue) */
+/** 连接问题(同 @lizi/device-link 的 DeviceLinkConnectionIssue) */
 export interface DeviceLinkConnectionIssue {
   kind: DeviceLinkConnectionIssueKind;
   closeCode?: number;

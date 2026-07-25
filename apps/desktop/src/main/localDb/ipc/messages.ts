@@ -7,7 +7,7 @@
  */
 
 import { ipcMain, BrowserWindow } from 'electron';
-import { and, asc, count, eq, lt, gt, desc, isNull, or, sql, type SQL } from 'drizzle-orm';
+import { and, asc, eq, lt, gt, desc, isNull, or, sql, type SQL } from 'drizzle-orm';
 import { createId } from '@paralleldrive/cuid2';
 
 import { getDbClient } from '../client/current';
@@ -16,25 +16,19 @@ import {
   messageToCamel,
   messageCreateToRow,
   safeStringify,
-  extractMessagePreview,
 } from '../mapper';
 import { throwIpcError, requireString } from '../../utils/ipcValidate';
 import { tapWindowBroadcast } from '../../device-link/broadcast-tap';
 import { createLogger } from '../../logger';
 import { commitMessageMediaRefs } from '../../cindy-media/chatAttachments';
-import { removeRefs as removeMediaRefs } from '../../cindy-media/ledger';
 import { importExternalCodexMessagesForSession } from '../../maker-host/codex-local-sessions';
 import { importExternalClaudeCodeMessagesForSession } from '../../maker-host/claude-local-sessions';
 import { isDeviceLinkInvoke } from '../../device-link/invoke-context';
 import { onMessageCreated as onChatMessageCreatedForEmbedding } from '../../embedders/chat-history-embedder';
-import { recomputePrRefsForSession, recordPrRefsForMessage } from '../../git-context/prRefsStore';
-import {
-  isSyntheticTriggerText,
-  mergeDismissedIntoErrorContent,
-} from '../../../shared/interruptedTurn.js';
+import { recordPrRefsForMessage } from '../../git-context/prRefsStore';
+import { mergeDismissedIntoErrorContent } from '../../../shared/interruptedTurn.js';
 import { resolveStaleCodexSubscriptionValueEstimate } from '../../../shared/codexSubscriptionValue.js';
 import { normalizeTurnUsageDetails } from '../../../shared/turnUsageDetails.js';
-import { capReferenceMessageRows } from './history.js';
 import type {
   Message,
   MessageRole,
@@ -45,7 +39,6 @@ const log = createLogger('localDb/messages');
 
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 100;
-const MESSAGE_DELETION_USER_BOUNDARY_PAGE_SIZE = 32;
 const messageRowid = sql<number>`rowid`;
 type MessageRow = typeof messages.$inferSelect;
 type MessageRowWithRowid = MessageRow & { rowid: number };
@@ -233,9 +226,7 @@ export function registerMessageIpc(): void {
     async (_e, sessionId: unknown, clientId: unknown, opts: unknown) => {
       const sid = requireString(sessionId, 'sessionId');
       const cid = requireString(clientId, 'clientId');
-      const aroundOpts = opts as { radius?: unknown; contentCharLimit?: unknown } | undefined;
-      const radius = clampAroundRadius(aroundOpts?.radius);
-      const contentCharLimit = requireReferenceContentCharLimit(aroundOpts?.contentCharLimit);
+      const radius = clampAroundRadius((opts as { radius?: unknown } | undefined)?.radius);
       const db = getDbClient().drizzle;
 
       const [sessionRow] = await db
@@ -306,8 +297,7 @@ export function registerMessageIpc(): void {
         .orderBy(asc(messages.createdAt), asc(messageRowid))
         .limit(radius);
 
-      const rows = await hydrateLegacyUserTurnCosts([...before.reverse(), anchor, ...after].map(messageToCamelWithRowid));
-      return capReferenceMessageRows(rows, contentCharLimit);
+      return hydrateLegacyUserTurnCosts([...before.reverse(), anchor, ...after].map(messageToCamelWithRowid));
     },
   );
 
@@ -526,296 +516,6 @@ function broadcastMessageRow(sessionId: string, msg: Message): void {
   }
 }
 
-export interface MessageDeletedPayload {
-  sessionId: string;
-  /** 兼容旧控制端：至少移除用户实际点击的目标行。 */
-  clientId: string;
-  /** 新控制端一次性移除本动作覆盖的整轮记录。 */
-  clientIds?: string[];
-}
-
-/**
- * assistant 删除覆盖的 Agent 产出角色。agent_switch 是用户主动切换形成的会话
- * 边界，不属于被删除的 AI 输出；autoResume user 行则由下方单独识别并纳入同轮。
- */
-const AI_TURN_DELETION_ROLES = new Set([
-  'assistant',
-  'tool_use',
-  'tool_result',
-  'ask_user',
-  'plan_review',
-  'thinking',
-  'error',
-]);
-
-/**
- * 消息菜单删除前解析本次动作的完整范围。user 仍只删除自己；assistant 以相邻
- * 真实 user 行为边界，返回整轮 AI 产出，并跳过 autoResume 这类隐藏 user 行。
- * 真正删除由 message.delete 原子事务完成，避免在 renderer / IPC adapter 里拼业务判断。
- */
-export async function getMessageDeletionTarget(
-  sessionId: string,
-  clientId: string,
-): Promise<{
-  id: string;
-  role: 'user' | 'assistant';
-  deletedClientIds: string[];
-} | null> {
-  const db = getDbClient().drizzle;
-  const [session] = await db
-    .select({ clearedAt: sessions.clearedAt })
-    .from(sessions)
-    .where(eq(sessions.id, sessionId))
-    .limit(1);
-  if (!session) return null;
-  const afterClear = session.clearedAt === null
-    ? undefined
-    : gt(messages.createdAt, session.clearedAt);
-  const [row] = await db
-    .select({
-      id: messages.id,
-      role: messages.role,
-      createdAt: messages.createdAt,
-      rowid: messageRowid,
-    })
-    .from(messages)
-    .where(
-      and(
-        eq(messages.sessionId, sessionId),
-        eq(messages.clientId, clientId),
-        isNull(messages.rewindAt),
-        afterClear,
-      ),
-    )
-    .limit(1);
-  if (!row || (row.role !== 'user' && row.role !== 'assistant')) return null;
-  if (row.role === 'user') {
-    return { id: row.id, role: row.role, deletedClientIds: [clientId] };
-  }
-
-  const beforeTarget = or(
-    lt(messages.createdAt, row.createdAt),
-    and(eq(messages.createdAt, row.createdAt), lt(messageRowid, row.rowid)),
-  );
-  const afterTarget = or(
-    gt(messages.createdAt, row.createdAt),
-    and(eq(messages.createdAt, row.createdAt), gt(messageRowid, row.rowid)),
-  );
-  const visibleUser = and(
-    eq(messages.sessionId, sessionId),
-    eq(messages.role, 'user'),
-    isNull(messages.rewindAt),
-    afterClear,
-  );
-  type UserBoundaryRow = {
-    createdAt: number;
-    rowid: number;
-    agentMeta: string | null;
-    content: string;
-  };
-  const scanRealUserBoundary = async (
-    direction: 'prior' | 'next',
-  ): Promise<UserBoundaryRow | undefined> => {
-    let cursor: SQL<unknown> | undefined = direction === 'prior'
-      ? beforeTarget
-      : afterTarget;
-    while (cursor) {
-      const candidates = await db
-        .select({
-          createdAt: messages.createdAt,
-          rowid: messageRowid,
-          agentMeta: messages.agentMeta,
-          content: messages.content,
-        })
-        .from(messages)
-        .where(and(visibleUser, cursor))
-        .orderBy(
-          direction === 'prior' ? desc(messages.createdAt) : asc(messages.createdAt),
-          direction === 'prior' ? desc(messageRowid) : asc(messageRowid),
-        )
-        .limit(MESSAGE_DELETION_USER_BOUNDARY_PAGE_SIZE);
-      const boundary = candidates.find((candidate) =>
-        !isHiddenContinuationUserMessage(candidate.agentMeta, candidate.content),
-      );
-      if (boundary) return boundary;
-      const last = candidates.at(-1);
-      if (!last || candidates.length < MESSAGE_DELETION_USER_BOUNDARY_PAGE_SIZE) return undefined;
-      cursor = direction === 'prior'
-        ? or(
-            lt(messages.createdAt, last.createdAt),
-            and(eq(messages.createdAt, last.createdAt), lt(messageRowid, last.rowid)),
-          )
-        : or(
-            gt(messages.createdAt, last.createdAt),
-            and(eq(messages.createdAt, last.createdAt), gt(messageRowid, last.rowid)),
-          );
-    }
-    return undefined;
-  };
-  const [priorUser, nextUser] = await Promise.all([
-    scanRealUserBoundary('prior'),
-    scanRealUserBoundary('next'),
-  ]);
-  const afterPriorUser = priorUser
-    ? or(
-        gt(messages.createdAt, priorUser.createdAt),
-        and(eq(messages.createdAt, priorUser.createdAt), gt(messageRowid, priorUser.rowid)),
-      )
-    : undefined;
-  const beforeNextUser = nextUser
-    ? or(
-        lt(messages.createdAt, nextUser.createdAt),
-        and(eq(messages.createdAt, nextUser.createdAt), lt(messageRowid, nextUser.rowid)),
-      )
-    : undefined;
-  const roundRows = await db
-    .select({
-      clientId: messages.clientId,
-      role: messages.role,
-      agentMeta: messages.agentMeta,
-      content: messages.content,
-    })
-    .from(messages)
-    .where(
-      and(
-        eq(messages.sessionId, sessionId),
-        isNull(messages.rewindAt),
-        afterClear,
-        afterPriorUser,
-        beforeNextUser,
-      ),
-    )
-    .orderBy(asc(messages.createdAt), asc(messageRowid));
-  const deletedClientIds = roundRows.flatMap((candidate) => {
-    if (AI_TURN_DELETION_ROLES.has(candidate.role)) return [candidate.clientId];
-    if (
-      candidate.role === 'user' &&
-      isHiddenContinuationUserMessage(candidate.agentMeta, candidate.content)
-    ) {
-      return [candidate.clientId];
-    }
-    return [];
-  });
-  if (!deletedClientIds.includes(clientId)) return null;
-  return { id: row.id, role: row.role, deletedClientIds };
-}
-
-/**
- * 原子清除一次删除动作覆盖的全部正文/元数据，并让 session 不再 resume 旧原生 transcript。最小
- * tombstone 只保留身份与排序字段，防外部历史重新导入；context_rebuild 行
- * 固定带 rewind_at，普通列表/搜索/导出不可见，只承担重启后的 pending handoff
- * 恢复。媒体引用只通过 cindy-media ledger 释放，不直接碰字节文件。
- */
-export async function commitMessageDeletion(
-  sessionId: string,
-  clientIds: string[],
-  handoff: string,
-): Promise<{
-  sessionId: string;
-  deletedClientIds: string[];
-  updatedAt: number;
-  preview: string | null;
-  messageCount: number;
-}> {
-  const now = Date.now();
-  const result = await getDbClient().tx('message.delete', {
-    sessionId,
-    clientIds,
-    contextMarker: {
-      id: createId(),
-      clientId: `context-rebuild:${createId()}`,
-      content: JSON.stringify({ handoff, consumed: false, reason: 'message-deletion' }),
-      createdAt: now,
-    },
-    updatedAt: now,
-  });
-
-  // 当前生产聊天附件主要是 session-attachment 粗粒度引用，不能因删除一轮
-  // 误删同 session 其它气泡仍在用的 blob。这里只释放明确以消息 id/clientId
-  // 登记的 message refs；零引用 blob 由 recycler 统一回收。
-  const mediaRefIds = [...new Set(
-    result.messages.flatMap((message) => [message.messageId, message.clientId]),
-  )];
-  const mediaCleanup = await Promise.allSettled(
-    mediaRefIds.map((refId) => removeMediaRefs({ refKind: 'message', refId })),
-  );
-  for (const [index, cleanup] of mediaCleanup.entries()) {
-    if (cleanup.status === 'fulfilled') continue;
-    log.warn('message media ref cleanup failed', {
-      sessionId,
-      deletedClientIds: clientIds,
-      refId: mediaRefIds[index],
-      error: cleanup.reason instanceof Error ? cleanup.reason.message : String(cleanup.reason),
-    });
-  }
-  void recomputePrRefsForSession(sessionId).catch(() => undefined);
-
-  // sessions:patched 的消费者只做 shallow merge，不会主动重拉。删除后同步带出
-  // canonical session-list projection，避免其它窗口 / device-link 控制端继续显示
-  // 已删除的末条消息预览或旧 _count。count 口径与 sessions:list / preview 的可见消息保持一致。
-  let preview: string | null = null;
-  let messageCount = 0;
-  try {
-    const db = getDbClient().drizzle;
-    const [sessionRow] = await db
-      .select({ clearedAt: sessions.clearedAt })
-      .from(sessions)
-      .where(eq(sessions.id, sessionId))
-      .limit(1);
-    const visibleAfterClear = sessionRow?.clearedAt == null
-      ? undefined
-      : gt(messages.createdAt, sessionRow.clearedAt);
-    const visibleMessageProjection = and(
-      eq(messages.sessionId, sessionId),
-      sql`${messages.role} IN ('user', 'assistant')`,
-      isNull(messages.rewindAt),
-      sql`(${messages.agentMeta} IS NULL OR json_extract(${messages.agentMeta}, '$.autoResume') IS NOT 1)`,
-      visibleAfterClear,
-    );
-    const [[countRow], [latestRow]] = await Promise.all([
-      db
-        .select({ messageCount: count(messages.id) })
-        .from(messages)
-        .where(visibleMessageProjection),
-      db
-        .select({ content: messages.content, role: messages.role })
-        .from(messages)
-        .where(visibleMessageProjection)
-        .orderBy(desc(messages.createdAt), desc(messageRowid))
-        .limit(1),
-    ]);
-    preview = extractMessagePreview(latestRow?.content, latestRow?.role);
-    messageCount = countRow?.messageCount ?? 0;
-  } catch (error) {
-    // 删除已经原子提交；投影查询失败不能把成功操作伪装成失败。广播保守空值，
-    // 后续 sessions:list / reseed 会按 DB 真相收敛。
-    log.warn('message delete session projection refresh failed', {
-      sessionId,
-      deletedClientIds: clientIds,
-      error: error instanceof Error ? error.message : String(error),
-    });
-  }
-  return {
-    sessionId,
-    deletedClientIds: result.messages.map((message) => message.clientId),
-    updatedAt: now,
-    preview,
-    messageCount,
-  };
-}
-
-export function broadcastMessageDeleted(payload: MessageDeletedPayload): void {
-  tapWindowBroadcast('local-db:messages:deleted', payload);
-  for (const win of BrowserWindow.getAllWindows()) {
-    if (win.isDestroyed()) continue;
-    try {
-      win.webContents.send('local-db:messages:deleted', payload);
-    } catch {
-      /* swallow per-window broadcast failures */
-    }
-  }
-}
-
 export async function dismissErrorMessage(
   sessionId: string,
   clientId: string,
@@ -895,14 +595,6 @@ function clampAroundRadius(raw: unknown): number {
   const n = typeof raw === 'number' ? raw : Number(raw);
   if (!Number.isFinite(n) || n < 0) return 60;
   return Math.min(Math.max(Math.floor(n), 0), 200);
-}
-
-function requireReferenceContentCharLimit(raw: unknown): number | null {
-  if (raw === undefined || raw === null) return null;
-  if (typeof raw !== 'number' || !Number.isInteger(raw) || raw < 1 || raw > 8_000) {
-    throwIpcError('INVALID_PARAMS', 'contentCharLimit must be an integer between 1 and 8000 or null');
-  }
-  return raw;
 }
 
 /**
@@ -1008,7 +700,7 @@ export async function createMessage(
   const [row] = await db.select().from(messages).where(eq(messages.id, id));
   if (!row) throw new Error('Message 创建后查询失败');
   const msg = messageToCamel(row);
-  // 媒体总仓挂账钩子(规则 25):消息落库是"blob 归属本会话"的
+  // 媒体总仓挂账钩子(规则 25,迁移第 2 步):消息落库是"blob 归属本会话"的
   // 确定时点,覆盖所有落库来源(renderer IPC / hook / im / agent echo / 合成
   // tool_result)。生成产物(art/mivo/codex)入仓时零引用,在这里补挂
   // session-attachment 引用;用户附件已在发送链路 commit 过,hasRef 幂等跳过。
@@ -1141,29 +833,6 @@ export async function patchMessageAgentMeta(
   patch: Record<string, unknown>,
 ): Promise<boolean> {
   return (await patchMessageAgentMetaWithResult(sessionId, clientId, patch)) !== null;
-}
-
-/**
- * agent_meta patch 后把权威完整行复用 messages:created 通道广播。现有 renderer 与
- * device-link reducer 都按 clientId merge，因此不需要新增 IPC channel。
- */
-export async function broadcastMessageAgentMetaUpdate(
-  sessionId: string,
-  clientId: string,
-): Promise<boolean> {
-  const db = getDbClient().drizzle;
-  const [row] = await db
-    .select()
-    .from(messages)
-    .where(and(
-      eq(messages.sessionId, sessionId),
-      eq(messages.clientId, clientId),
-      isNull(messages.rewindAt),
-    ))
-    .limit(1);
-  if (!row) return false;
-  broadcastMessageRow(sessionId, messageToCamel(row));
-  return true;
 }
 
 /**
@@ -1357,32 +1026,6 @@ function isAutoResumeUserMessage(agentMeta: string | null): boolean {
   return parseAgentMetaRecord(agentMeta)?.autoResume === true;
 }
 
-/** DB content 可为 JSON string、含 text 的对象，或迁移前遗留的裸文本。 */
-function readMessageText(content: string): string {
-  try {
-    const parsed = JSON.parse(content) as unknown;
-    if (typeof parsed === 'string') return parsed;
-    if (
-      parsed &&
-      typeof parsed === 'object' &&
-      !Array.isArray(parsed) &&
-      typeof (parsed as Record<string, unknown>).text === 'string'
-    ) {
-      return (parsed as Record<string, unknown>).text as string;
-    }
-  } catch {
-    // 裸文本按原值识别，兼容迁移前记录。
-  }
-  return content;
-}
-
-function isHiddenContinuationUserMessage(agentMeta: string | null, content: string): boolean {
-  return (
-    isAutoResumeUserMessage(agentMeta) ||
-    isSyntheticTriggerText(readMessageText(content))
-  );
-}
-
 function parseAgentMetaRecord(agentMeta: string | null): Record<string, unknown> | null {
   if (!agentMeta) return null;
   try {
@@ -1396,15 +1039,13 @@ function parseAgentMetaRecord(agentMeta: string | null): Record<string, unknown>
 }
 
 /**
- * 查是否有尚未随首条 user 消息发送的内部 handoff。
+ * session-agent-switch:查"切换后是否还没发过第一条 user 消息"。
  * 判定规则(确定性,重启后可从 DB 重建 pending 状态):
- *   - agent_switch:未 rewind 的边界行；
- *   - context_rebuild:消息删除事务写入、刻意用 rewind_at 隐藏的内部行。
- * 两类取晚于 /clear 的最新一条，以 content.consumed 为真源。只有缺 consumed
- * 字段的 v1 agent_switch 老行才回落“边界后是否已有 user 行”的启发式。
+ *   最新一条未被 rewind、且晚于 /clear 边界的 agent_switch 行之后,
+ *   不存在 user 行 ⟺ 交接注入仍 pending,返回其 content.handoff;否则 null。
  * 同毫秒并列用 rowid 决序(与 messages list 的 tie-break 口径一致)。
  */
-export async function findPendingAgentHandoff(
+export async function findPendingAgentSwitchHandoff(
   sessionId: string,
 ): Promise<string | null> {
   const db = getDbClient().drizzle;
@@ -1415,10 +1056,9 @@ export async function findPendingAgentHandoff(
     .limit(1);
   const clearedAt = sessRow?.clearedAt ?? null;
   const afterClear = clearedAt === null ? undefined : gt(messages.createdAt, clearedAt);
-  const [boundary] = await db
+  const [sw] = await db
     .select({
       rowid: messageRowid,
-      role: messages.role,
       content: messages.content,
       createdAt: messages.createdAt,
     })
@@ -1426,19 +1066,17 @@ export async function findPendingAgentHandoff(
     .where(
       and(
         eq(messages.sessionId, sessionId),
-        or(
-          and(eq(messages.role, 'agent_switch'), isNull(messages.rewindAt)),
-          eq(messages.role, 'context_rebuild'),
-        ),
+        eq(messages.role, 'agent_switch'),
+        isNull(messages.rewindAt),
         afterClear,
       ),
     )
     .orderBy(desc(messages.createdAt), desc(messageRowid))
     .limit(1);
-  if (!boundary) return null;
+  if (!sw) return null;
   let parsed: { handoff?: unknown; consumed?: unknown };
   try {
-    parsed = JSON.parse(boundary.content) as typeof parsed;
+    parsed = JSON.parse(sw.content) as typeof parsed;
   } catch {
     return null;
   }
@@ -1449,7 +1087,6 @@ export async function findPendingAgentHandoff(
   // v2 边界以持久消费位为真源:失败首发可能已先落 user 行；只要 vendor 尚未
   // accepted,重启后仍必须恢复交接。缺字段的 v1 老行才走 user-row 启发式。
   if (parsed.consumed === false) return handoff;
-  if (boundary.role === 'context_rebuild') return handoff;
   const [userAfter] = await db
     .select({ id: messages.id })
     .from(messages)
@@ -1459,8 +1096,8 @@ export async function findPendingAgentHandoff(
         eq(messages.role, 'user'),
         isNull(messages.rewindAt),
         or(
-          gt(messages.createdAt, boundary.createdAt),
-          and(eq(messages.createdAt, boundary.createdAt), gt(messageRowid, boundary.rowid)),
+          gt(messages.createdAt, sw.createdAt),
+          and(eq(messages.createdAt, sw.createdAt), gt(messageRowid, sw.rowid)),
         ),
       ),
     )
@@ -1474,14 +1111,14 @@ export async function findPendingAgentHandoff(
  * 最近 limit 行(时间正序返回),只取交接需要的最小投影。
  *
  * `after`(Phase 2 增量交接):只取严格晚于该水位线(createdAt + rowid 决序,
- * 与 findPendingAgentHandoff 同 tie-break 口径)的行——即目标引擎停泊
+ * 与 findPendingAgentSwitchHandoff 同 tie-break 口径)的行——即目标引擎停泊
  * 边界行之后、它"离开期间"的进展。
  */
 export async function listMessagesForAgentHandoff(
   sessionId: string,
   limit = 400,
   after?: { createdAt: number; rowid: number },
-): Promise<Array<{ clientId: string; role: string; content: unknown; createdAt: number }>> {
+): Promise<Array<{ role: string; content: unknown; createdAt: number }>> {
   const db = getDbClient().drizzle;
   const [sessRow] = await db
     .select({ clearedAt: sessions.clearedAt })
@@ -1500,7 +1137,6 @@ export async function listMessagesForAgentHandoff(
   const rows = await db
     .select({
       rowid: messageRowid,
-      clientId: messages.clientId,
       role: messages.role,
       content: messages.content,
       createdAt: messages.createdAt,
@@ -1519,7 +1155,7 @@ export async function listMessagesForAgentHandoff(
     } catch {
       // 与 messageToCamel 同口径:非法 JSON 保留原字符串
     }
-    return { clientId: r.clientId, role: r.role, content, createdAt: r.createdAt };
+    return { role: r.role, content, createdAt: r.createdAt };
   });
 }
 
@@ -1542,8 +1178,6 @@ export interface ParkedEngineSession {
  * 只认"该引擎最近一次离场"那一行:fromSdkSessionId 为空(该引擎上次在场期间
  * 从未真正 spawn)→ 按无绑定处理,不回退更早的行——更早快照对应的原生会话
  * 已被后来的全新会话取代,续接它会让引擎拿到与消息流矛盾的记忆。
- * 消息删除写入的 context_rebuild 行会使它之前的全部停泊绑定失效；否则
- * 用户稍后切回旧引擎时仍会 resume 含被删消息的 transcript，绕过本次上下文重建。
  * content 是 JSON,无法在 SQL 里按字段过滤,取有界条数(边界行数量 = 切换次数,
  * 天然很小)在 JS 里扫。
  */
@@ -1559,16 +1193,6 @@ export async function findParkedEngineSession(
     .limit(1);
   const clearedAt = sessRow?.clearedAt ?? null;
   const afterClear = clearedAt === null ? undefined : gt(messages.createdAt, clearedAt);
-  const [contextRebuild] = await db
-    .select({ rowid: messageRowid, createdAt: messages.createdAt })
-    .from(messages)
-    .where(and(
-      eq(messages.sessionId, sessionId),
-      eq(messages.role, 'context_rebuild'),
-      afterClear,
-    ))
-    .orderBy(desc(messages.createdAt), desc(messageRowid))
-    .limit(1);
   const rows = await db
     .select({
       rowid: messageRowid,
@@ -1594,13 +1218,6 @@ export async function findParkedEngineSession(
       continue;
     }
     if (parsed.fromAgentKind !== targetDbKind) continue;
-    if (
-      contextRebuild &&
-      (contextRebuild.createdAt > row.createdAt ||
-        (contextRebuild.createdAt === row.createdAt && contextRebuild.rowid > row.rowid))
-    ) {
-      return null;
-    }
     // 命中"该引擎最近一次离场":快照为空即无绑定,不再往更早找。
     if (typeof parsed.fromSdkSessionId !== 'string' || parsed.fromSdkSessionId.length === 0) {
       return null;
@@ -1630,8 +1247,8 @@ export async function updateAgentSwitchBoundaryContent(
   return true;
 }
 
-/** vendor accepted 后持久化最新 handoff 消费位；内存 registry 不等待这笔辅助写。 */
-export async function markLatestAgentHandoffConsumed(sessionId: string): Promise<void> {
+/** vendor accepted 后持久化消费位；内存 registry 的 consume 不等待这笔辅助写。 */
+export async function markLatestAgentSwitchConsumed(sessionId: string): Promise<void> {
   const db = getDbClient().drizzle;
   const [sessRow] = await db
     .select({ clearedAt: sessions.clearedAt })
@@ -1641,14 +1258,12 @@ export async function markLatestAgentHandoffConsumed(sessionId: string): Promise
   const clearedAt = sessRow?.clearedAt ?? null;
   const afterClear = clearedAt === null ? undefined : gt(messages.createdAt, clearedAt);
   const [boundary] = await db
-    .select({ clientId: messages.clientId, role: messages.role, content: messages.content })
+    .select({ clientId: messages.clientId, content: messages.content })
     .from(messages)
     .where(and(
       eq(messages.sessionId, sessionId),
-      or(
-        and(eq(messages.role, 'agent_switch'), isNull(messages.rewindAt)),
-        eq(messages.role, 'context_rebuild'),
-      ),
+      eq(messages.role, 'agent_switch'),
+      isNull(messages.rewindAt),
       afterClear,
     ))
     .orderBy(desc(messages.createdAt), desc(messageRowid))
@@ -1663,19 +1278,10 @@ export async function markLatestAgentHandoffConsumed(sessionId: string): Promise
     return;
   }
   if (parsed.consumed === true) return;
-  const nextContent = { ...parsed, consumed: true };
-  if (boundary.role === 'agent_switch') {
-    await updateAgentSwitchBoundaryContent(sessionId, boundary.clientId, nextContent);
-    return;
-  }
-  await getDbClient().drizzle
-    .update(messages)
-    .set({ content: safeStringify(nextContent) })
-    .where(and(
-      eq(messages.sessionId, sessionId),
-      eq(messages.clientId, boundary.clientId),
-      eq(messages.role, 'context_rebuild'),
-    ));
+  await updateAgentSwitchBoundaryContent(sessionId, boundary.clientId, {
+    ...parsed,
+    consumed: true,
+  });
 }
 
 /** 原子事务提交后只读并广播边界新行，不做第二次写入。 */

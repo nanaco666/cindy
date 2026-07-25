@@ -13,7 +13,7 @@
  *
  * Styling mirrors AskUserQuestionBubble for visual cohesion: same 12px radius,
  * 1px Board border, 20px padding, ask-card tokens (the bubble is a neutral
- * info surface, not a primary action). All colors are grayscale per docs/design-rules/cindy-design-system.md.
+ * info surface, not a primary action). All colors are grayscale per DESIGN.md.
  */
 
 import { useState } from 'react';

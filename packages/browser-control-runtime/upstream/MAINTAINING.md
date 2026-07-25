@@ -5,9 +5,9 @@
 
 ## 1. 这是什么
 
-给 agent(Claude Code / Codex)用的浏览器自动化能力,对外是 `cindy_browser` MCP 工具。核心运行时是**vendored 上游(代号见 `sync.mjs`)的浏览器内核**——不是重写,以便跟随上游更新。产品可见的任何地方都**不出现上游名 / 🦞**(见 §6)。
+给 agent(Claude Code / Codex)用的浏览器自动化能力,对外是 `lizi_browser` MCP 工具。核心运行时是**vendored 上游(代号见 `sync.mjs`)的浏览器内核**——不是重写,以便跟随上游更新。产品可见的任何地方都**不出现上游名 / 🦞**(见 §6)。
 
-默认行为:启动**一个专属、持久、headed 的自动化浏览器**(profile 名 "Cindy"),登录态长期保留,与用户日常 Chrome 互不影响。
+默认行为:启动**一个专属、持久、headed 的自动化浏览器**(profile 名 "XDMaker"),登录态长期保留,与用户日常 Chrome 互不影响。
 
 ## 2. 三层架构 + 文件清单
 
@@ -16,7 +16,7 @@ agent 调 browser 工具
   │  Claude Code: 进程内 SDK MCP server 直连
   │  Codex(本地): codex HTTP bridge → 同一个进程内 server   ← 远端 Codex 拿不到, 见 §7
   ▼
-[Layer 2] cindy_browser MCP 面   packages/lizi-mcps/src/browser/
+[Layer 2] lizi_browser MCP 面   packages/lizi-mcps/src/browser/
   │  createBrowserMcpServer(deps).deps.getRuntime()
   ▼
 [Layer 3] desktop host          apps/desktop/src/main/mcp-integrations/browser.ts
@@ -25,18 +25,18 @@ agent 调 browser 工具
 [Layer 1] vendored runtime      packages/browser-control-runtime/
   │  runtime.call(request) → _generated/ 里的 vendored dispatcher
   ▼
-playwright-core → 托管 Chrome(Cindy profile, 持久 user-data-dir)
+playwright-core → 托管 Chrome(XDMaker profile, 持久 user-data-dir)
 ```
 
 | 层 | 路径 | 职责 / 关键文件 |
 |---|---|---|
 | **L1 vendored runtime** | `packages/browser-control-runtime/` | `src/types.ts`(中性契约 `BrowserControlRuntime` / `BrowserRuntimeConfig` / Request / Result)、`src/runtime.ts`(`createBrowserControlRuntime` 把 vendored dispatcher 包到契约后面)、`src/unavailable.ts`(未配置时的安全 stub)、`src/shim/**`(手写替换上游 plugin-sdk 面,见 `shim-spec.md`)、`_generated/**`(**生成物,禁止手改**) |
-| **L2 MCP 面** | `packages/lizi-mcps/src/browser/` | `tools.ts`(唯一一个 `browser` 工具,17 个 action,`rules:['browser-workflow']`)、`server.ts`(`list_tools`/`call_tool` + 把 rules 打进响应)、`tool-registry.ts`、`index.ts`(`createBrowserMcpServer`)、`prompts/rules/browser-workflow.md`(**喂给 agent 的用法规则**)。在 `packages/lizi-mcps/src/providers.ts` 注册成 `cindy_browser` provider |
+| **L2 MCP 面** | `packages/lizi-mcps/src/browser/` | `tools.ts`(唯一一个 `browser` 工具,17 个 action,`rules:['browser-workflow']`)、`server.ts`(`list_tools`/`call_tool` + 把 rules 打进响应)、`tool-registry.ts`、`index.ts`(`createBrowserMcpServer`)、`prompts/rules/browser-workflow.md`(**喂给 agent 的用法规则**)。在 `packages/lizi-mcps/src/providers.ts` 注册成 `lizi_browser` provider |
 | **L3 desktop host** | `apps/desktop/src/main/mcp-integrations/` | `browser-runtime-env.ts`(**import 前置副作用**,见坑 #2)、`browser.ts`(托管 config + runtime 单例 + `getBrowserMcpDeps`/`getBrowserAvailability`/`openBrowserForLogin`)、`browser-availability.ts`(status → UI 数据)。IPC:`maker-ipc/{channels,register}.ts` 的 `BROWSER_STATUS` + `BROWSER_OPEN_FOR_LOGIN`。UI:`renderer/components/settings/ComputerUseSection.tsx`(设置 →「自动操作」)+ 4 语言 i18n。开关 gate:`maker-host/plugins/plugin-registry.ts`(plugin id `browser`) |
 
 ## 3. 配置流(以及那个静默 bug)
 
-host 在 `browser.ts` 用 `buildManagedConfig()` 造出 `{ browser: { enabled, defaultProfile:'Cindy', headless:false, profiles:{ Cindy:{ driver:'openclaw', color, cdpPort } } } }`,在模块求值时 `createBrowserControlRuntime({ config })` 注入。runtime 内部把它存进 in-memory 配置快照;vendored dispatcher 每次请求经
+host 在 `browser.ts` 用 `buildManagedConfig()` 造出 `{ browser: { enabled, defaultProfile:'XDMaker', headless:false, profiles:{ XDMaker:{ driver:'openclaw', color, cdpPort } } } }`,在模块求值时 `createBrowserControlRuntime({ config })` 注入。runtime 内部把它存进 in-memory 配置快照;vendored dispatcher 每次请求经
 `getRuntimeConfigSourceSnapshot() ?? getRuntimeConfig()` 再取 `.browser` 拿到它。
 
 > ⚠️ **不变量(踩过的最大的坑):** `src/shim/runtime-config-snapshot.ts` 的 `getRuntimeConfigSourceSnapshot()` **必须返回 `OpenClawConfig | null`**(默认 `return null`)。它一旦返回 `{config, source}` 这种 wrapper,上面的 `?? getRuntimeConfig()` 永远短路、`.browser` 取到 `undefined`,**host 注入的整份 config 被静默丢弃、runtime 跑纯 vendored 默认值**(于是 profile 显示成上游默认名、颜色/目录全不对)。由 `src/__tests__/runtime-config-application.test.ts` 守护——别删那条测试。
@@ -68,23 +68,23 @@ host 在 `browser.ts` 用 `buildManagedConfig()` 造出 `{ browser: { enabled, d
 
 ## 7. agent 暴露面(Claude / Codex)
 
-- **Claude Code**:`cindy_browser` provider 经 `toClaudeSdkConfig` 直接以进程内 SDK McpServer 暴露。
-- **本地 Codex**:`apps/desktop/src/main/mcp-integrations/codexEnvironment.ts` 把所有 lizi provider(含 browser)架到一个 HTTP bridge,`-c mcp_servers.cindy_browser.url=...` 注入。调同一个进程内 server / 同一个 runtime / **同一份持久 profile**——Claude 登录过的站,Codex 也是登录态。⚠️ 但 provider 的 `isEnabled` gate 在首次 spawn 时用空 `workingDir` 一次性求值并冻结,所以**项目级浏览器开关对本地 Codex 不生效**(见 §5 的已知限制)。
+- **Claude Code**:`lizi_browser` provider 经 `toClaudeSdkConfig` 直接以进程内 SDK McpServer 暴露。
+- **本地 Codex**:`apps/desktop/src/main/mcp-integrations/codexEnvironment.ts` 把所有 lizi provider(含 browser)架到一个 HTTP bridge,`-c mcp_servers.lizi_browser.url=...` 注入。调同一个进程内 server / 同一个 runtime / **同一份持久 profile**——Claude 登录过的站,Codex 也是登录态。⚠️ 但 provider 的 `isEnabled` gate 在首次 spawn 时用空 `workingDir` 一次性求值并冻结,所以**项目级浏览器开关对本地 Codex 不生效**(见 §5 的已知限制)。
 - **远端 Codex**:`packages/maker-core/src/agents/codex/index.ts` 明确不支持 lizi MCP 桥接,远端只用 codex 自带 + 远端用户配置的 MCP。浏览器(及所有 `lizi_*`)拿不到。
 
 ## 8. 跟随上游更新
 
 ```bash
 pnpm sync:browser-runtime                 # = node scripts/browser-runtime/sync.mjs
-pnpm --filter @cindy/browser-control-runtime build   # tsc --noEmit, 暴露 shim 缺口
-pnpm --filter @cindy/browser-control-runtime test    # 契约 + SSRF guard
+pnpm --filter @lizi/browser-control-runtime build   # tsc --noEmit, 暴露 shim 缺口
+pnpm --filter @lizi/browser-control-runtime test    # 契约 + SSRF guard
 ```
 
 - 版本锁:`upstream/browser-runtime.lock.json`(pinned commit + fs-safe 版本 + content hash)。
 - `_generated/**` 整体重生成,**永不手改**;要改行为改 `src/shim/*` 或 `sync.mjs`(vendor 集合 / import 重写)。
 - shim 导出契约在 `upstream/shim-spec.md`;sync 后若多出新的 `openclaw/plugin-sdk/*` import,补对应 shim。
 - 安全:SSRF / 路径包含的**决策逻辑是 vendored 的**,`src/shim/ssrf-runtime.ts` 只重写了组合这些原语的 fetch 外壳;`ssrf-guard.test.ts` 断言拦截 cloud-metadata / 私网 IP 的"牙齿"还在,削弱会挂 CI。
-- 同步后回归一遍 §4 的坑(尤其 #1 配置应用、#3 cdpPort),再跑 `runtime-config-application.test.ts` + @cindy/mcps browser 测试 + desktop `browserAvailability` 测试。
+- 同步后回归一遍 §4 的坑(尤其 #1 配置应用、#3 cdpPort),再跑 `runtime-config-application.test.ts` + lizi-mcps browser 测试 + desktop `browserAvailability` 测试。
 
 ## 9. 提效能力(network / extract / recipe / sitemap)
 
@@ -94,7 +94,7 @@ pnpm --filter @cindy/browser-control-runtime test    # 契约 + SSRF guard
 - **`extract`(L2 MCP,`extract.ts`)**:纯组合现有 `act:evaluate`。`buildExtractFnSource(spec)` 是**纯函数**,把字段 schema 编译成注入 JS(选择器一律 `JSON.stringify` 注入,防注入),handler 改写成 `act:{kind:'evaluate',fn}`。不碰 runtime 包。**报错教模型(对齐上游 `SELECTOR_UNSUPPORTED_MESSAGE` 范式)**:生成的 fn 给 `querySelector` 包 try/catch,非法选择器 → 返回 `{ok:false, error, hint}`(`EXTRACT_FIELD_HINT` 教正确字段格式);handler 跑前用 `collectSelectors` 预检 selector 含 `@`(观察到模型爱写 `h3 a@title`)→ 直接返回教学报错,不空跑。**不加 `@attr` 语法糖**(上游无此约定)。
 - **`recipe` / `siteguide`(L2 MCP)**:`recipe-loader.ts`(`parseRecipes`/`parseSiteGuides` 纯函数 + `loadRecipes`/`loadSiteGuides` 用 `import.meta.glob('./recipes/*/{recipe,siteguide}.json',{query:'?raw',eager:true})` 打包)+ `recipe-runner.ts`(`runRecipe(recipe,inputs,{call})` 纯执行器,注入 `call` 可单测)。数据在 `packages/lizi-mcps/src/browser/recipes/<site>/`。**交互步(click/type/select)直接用稳定 CSS `selector`**——vendored `act` 对 `SELECTOR_ALLOWED_KINDS`(click/type/select/hover/wait)支持 selector 直传,**无需 snapshot→ref**,所以配方不写死 ref、跨会话不腐烂(`fill` 是 ref-only,配方用 `type` 输入文本)。registry 懒加载(首次 recipe/siteguide 调用才解析,坏配方不拖垮整个工具)。`siteguide` **按需 action 拉取**,不进常驻 rules,保持缓存前缀小。**命名 `siteguide` 而非 `sitemap`**:避免和网站自己的 `/sitemap.xml` 撞概念(实测中模型会把 `sitemap` 误解成去抓 sitemap.xml)。
 - **配方分层 + 自我成长(L1 内置 + L2 用户,rule 20)**:配方/指南是"可成长"的——内置 L1(随 app 版本发布)+ 用户本地 L2(`userData/browser-recipes/<site>/`)按 **recipe id / siteguide site 整条覆盖**合并,provenance 三态 `builtin`/`user`/`overridden`(`recipe-loader.ts` 的纯函数 `mergeRecipes`/`mergeSiteGuides`)。**恢复默认 = 删 L2 该站文件**(回落 L1,不写快照)。
-  - **解耦**:`@cindy/mcps` 不碰 fs/electron;host 经 `BrowserMcpDeps.getUserRecipes?`(读)/`saveUserRecipe?`(写)注入。host 侧在 `apps/desktop/src/main/browser-recipes/{loader,writer}.ts`(蓝本 `local-themes/{loader,writer}`),loader 扫盘 + 调 @cindy/mcps `parseRecipes` + 算 `version` 内容指纹。
+  - **解耦**:`lizi-mcps` 不碰 fs/electron;host 经 `BrowserMcpDeps.getUserRecipes?`(读)/`saveUserRecipe?`(写)注入。host 侧在 `apps/desktop/src/main/browser-recipes/{loader,writer}.ts`(蓝本 `local-themes/{loader,writer}`),loader 扫盘 + 调 lizi-mcps `parseRecipes` + 算 `version` 内容指纹。
   - **缓存失效靠 version**:`tools.ts` 的 registry 按 L2 `version`(内容指纹)缓存;`saveRecipe` 写盘后内容变 → version 变 → 下次任意会话重新 merge(跨 per-session server 实例也一致)。
   - **`saveRecipe` action**:agent/用户把配方写进 L2(先 `RecipeSchema` 代码校验 draft,坏的 teach-via-error)。配套 **`recipe-author.md`**(按需 rule)教 agent 用我们 schema 写配方(recon→选策略→发现接口→鉴权→snapshot 验选择器→跑一遍验证→saveRecipe)。
   - **`evaluate` 配方步(取数策略)**:`RecipeStepSchema` 的 `evaluate` 跑一段页面内函数表达式源码(可 async,Playwright 路径会 await,见 `pw-tools-core.interactions.ts` 的 `result.then` 分支),映射到 `act:evaluate`、返回值在 `result.data.result`。这是 agent 本就能用 `act:evaluate` 直接做的事,配方只是能表达它了——**无新增能力面/风险**。两类取数:**public** = `navigate` 到接口 URL + `extract {body}`(公开 GET,如 HN/SO/devto/arxiv/wikipedia);**cookie/反爬** = `navigate` 到主域 + `evaluate` 内同源 `fetch(path,{credentials:'include'})`(带登录 cookie、不被反爬挡,如 Reddit)。

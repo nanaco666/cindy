@@ -7,23 +7,13 @@ interface UseLoginReturn {
   isLoading: boolean;
   errorCode: string | null;
   loginState: ReturnType<typeof useAuth>['loginState'];
-  hasAccountDeletionReceipt: boolean;
-  getAccountDeletionStatus: ReturnType<typeof useAuth>['getAccountDeletionStatus'];
-  clearAccountDeletionReceipt: ReturnType<typeof useAuth>['clearAccountDeletionReceipt'];
   dispatch: (action: DesktopLoginAction) => Promise<boolean>;
   clearError: () => void;
 }
 
 /** Coordinates presentation state while all credentials and tickets stay in main. */
 export function useLogin(): UseLoginReturn {
-  const {
-    loginState,
-    loadLoginState,
-    dispatchLoginAction,
-    hasAccountDeletionReceipt,
-    getAccountDeletionStatus,
-    clearAccountDeletionReceipt,
-  } = useAuth();
+  const { loginState, loadLoginState, dispatchLoginAction } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [errorCode, setErrorCode] = useState<string | null>(null);
   const loadingRef = useRef(false);
@@ -71,9 +61,6 @@ export function useLogin(): UseLoginReturn {
     isLoading,
     errorCode,
     loginState,
-    hasAccountDeletionReceipt,
-    getAccountDeletionStatus,
-    clearAccountDeletionReceipt,
     dispatch,
     clearError: () => setErrorCode(null),
   };

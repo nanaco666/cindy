@@ -13,7 +13,7 @@ import {
   Timer,
   type LucideProps,
 } from 'lucide-react';
-import type { ScheduleTemplate } from '@cindy/maker-scheduler';
+import type { ScheduleTemplate } from '@lizi/maker-scheduler';
 
 import { cn } from '@/lib/utils';
 import { cronToHuman } from '../lib/cronToHuman';

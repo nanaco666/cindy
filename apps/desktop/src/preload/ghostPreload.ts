@@ -1,13 +1,13 @@
 import { contextBridge, ipcRenderer } from 'electron';
 
 /**
- * 意识电子脑的最小管子桥(脑机接口;docs/dev-rules/plugin-security-and-authoring.md)。
+ * 意识电子脑的管子桥(脑机接口,C3d-1;runtime-sandbox.md §3/§5.5)。
  *
  * 只注入**离屏逻辑页**(电子脑);面板页零桥零特权(面板与逻辑页走同源
  * BroadcastChannel,主机零中转)。身份不自报:main 侧按 sender webContents
  * 与意识 id 的绑定表验身,冒名调用直接拒(结构隔离,见 electronSandboxAdapter)。
  *
- * 暴露面刻意极小(管子三口 + network 一口):
+ * 暴露面刻意极小(C3d-1 三口 + C4 一口):
  * - ping():握手/自检,回自己的意识 id;
  * - onHostMessage(cb):订阅主机下行(工具调用派发等,后续切片投递);
  * - send(payload):上行投递(工具结果/面板推送申请等;主机按 slots 白名单
@@ -19,14 +19,6 @@ import { contextBridge, ipcRenderer } from 'electron';
  *   …req}) 的语法糖,零新通道零新权限(白名单/凭证注入全在主机侧守门)。
  * - fs(req):fs 槽代写文件的便捷口——send({type:'fs-request', …req}) 的
  *   语法糖,同样零新通道零新权限(三档守门全在主机侧 fsSlot)。
- * - agent.run(req):Agent 新回合的便捷口——send({type:'agent-request',
- *   …req}) 的语法糖；一次性用户票、后台权限和会话归属由主机校验。
- * - node.request(req):随包 Node / stdio MCP 的便捷口。Node 只能经本管子与
- *   main.js 收发 JSON-RPC，不能直接拿到 Cindy API。
- * - pick(req):pick 槽的便捷口——send({type:'pick-request', …req}) 的语法糖;
- *   系统选文件夹窗口由主机弹,用户亲选即授权,守门全在主机侧 pickSlot。
- * - preview(req):preview 槽的便捷口——send({type:'preview-request', …req})
- *   的语法糖;URL 白名单守门在主机侧 previewSlot。
  */
 
 type HostMessageListener = (payload: unknown) => void;
@@ -48,16 +40,4 @@ contextBridge.exposeInMainWorld('cindy', {
     ipcRenderer.invoke('ghost-pipe:send', { ...req, type: 'fetch-request' }),
   fs: (req: Record<string, unknown>): Promise<unknown> =>
     ipcRenderer.invoke('ghost-pipe:send', { ...req, type: 'fs-request' }),
-  agent: {
-    run: (req: Record<string, unknown>): Promise<unknown> =>
-      ipcRenderer.invoke('ghost-pipe:send', { ...req, type: 'agent-request' }),
-  },
-  node: {
-    request: (req: Record<string, unknown>): Promise<unknown> =>
-      ipcRenderer.invoke('ghost-pipe:send', { ...req, type: 'node-request' }),
-  },
-  pick: (req: Record<string, unknown>): Promise<unknown> =>
-    ipcRenderer.invoke('ghost-pipe:send', { ...req, type: 'pick-request' }),
-  preview: (req: Record<string, unknown>): Promise<unknown> =>
-    ipcRenderer.invoke('ghost-pipe:send', { ...req, type: 'preview-request' }),
 });

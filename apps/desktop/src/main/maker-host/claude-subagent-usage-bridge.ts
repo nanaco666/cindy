@@ -6,7 +6,7 @@
  * 匹配子代理请求，并把真实统计留在 host 内存中供 maker-core 同步读取。
  */
 
-import type { RequestTransform, ResponseObserver } from '@cindy/anthropic-compat-proxy';
+import type { RequestTransform, ResponseObserver } from '@lizi/anthropic-compat-proxy';
 import { Buffer } from 'node:buffer';
 
 import {

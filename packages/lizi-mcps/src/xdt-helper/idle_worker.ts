@@ -3,7 +3,7 @@
  * Idle worker 不占用 SDK 进程内存, 可被后台 idle watcher 自动释放或手动唤醒。
  */
 
-import { BRAND_NAME } from '@cindy/maker-shared/branding';
+import { BRAND_NAME } from '@lizi/maker-shared/branding';
 import { z } from 'zod';
 
 import type { XdtHelperToolRegistry } from '../lizi_xdtHelperToolRegistry.js';

@@ -1,6 +1,6 @@
 import type { ChildProcess } from 'node:child_process';
 
-import type { AuthState } from '@cindy/maker-core';
+import type { AuthState } from '@lizi/maker-core';
 
 /** 平台化的 Codex 登录子进程终止方案。 */
 export type CodexLoginTerminationPlan =

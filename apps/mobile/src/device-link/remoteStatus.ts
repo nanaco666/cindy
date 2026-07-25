@@ -5,7 +5,6 @@ export {
   describeRemoteError,
   formatRemoteError,
   humanizeRemoteError,
-  isPreconditionFailedRemoteError,
   relayStatusHint,
   relayStatusLabel,
-} from '@cindy/maker-shared/device-link-contract';
+} from '@lizi/maker-shared/device-link-contract';

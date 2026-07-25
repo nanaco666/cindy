@@ -15,10 +15,10 @@
  * 故意同名, 下拉里给骨折版加「(骨折GPT)」后缀(复用桌面模型选择器的分组
  * 文案), 否则出现两个一模一样的 GPT-5.5(线上实撞)。
  *
- * 数据正本在 IM hook server 的 provider prefs 表：Slack 与 Telegram 按
- * provider 隔离；每个 provider 内与其 /model 卡使用同一份数据。hook 经
- * provider 对应的 IPC 走 WS 往返读写，命令卡改动经 provider 状态推送实时
- * 同步。**可选模型清单与会话内模型选择器同一套规则**(visibleModelUnion:
+ * 数据正本在 slack-hook-server 的 user_prefs 表 —— 与 Slack /model 卡是
+ * **同一份数据**: useHookWorkspacePrefs 经 hookControl.getWorkspacePrefs /
+ * setWorkspacePrefs 走 WS 往返读写, /model 卡的改动经 onPrefsChanged 推送
+ * 实时同步。**可选模型清单与会话内模型选择器同一套规则**(visibleModelUnion:
  * live providers -> 已连接供应商 -> 用户可见性开关过滤), 与 Slack /model 卡
  * 的清单(main 侧同函数派生后经 query.response 上报)逐模型一致; effort /
  * 权限档等元数据仍取本机 capabilities; 联动校准逻辑在 hookWorkspacePrefsLogic.ts。
@@ -35,7 +35,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ChevronDown } from 'lucide-react';
 
-import { visibleModelUnion, type AgentKind, type CatalogModel } from '@cindy/model-providers';
+import { visibleModelUnion, type AgentKind, type CatalogModel } from '@lizi/model-providers';
 
 import {
   DropdownMenu,
@@ -52,7 +52,6 @@ import type {
   HookPrefsPatch,
   HookPrefsView,
   HookWorkspacePrefs,
-  ProviderPrefsView,
   SlackHookView,
 } from '../../../shared/hookControlIpc';
 import type { ImDefaultSettingsState } from '../../../shared/imDefaultSettings';
@@ -107,161 +106,75 @@ export interface HookWorkspacePrefsState {
   showTeamChip: boolean;
 }
 
-export type HookPrefsProvider = 'slack' | 'telegram';
-
-function isProviderPrefsView(view: HookPrefsView | ProviderPrefsView): view is ProviderPrefsView {
-  return 'provider' in view;
-}
-
 /**
  * 目录偏好共享状态(单订阅): 拉取/写入/推送同步 + 禁用态归纳。
  * hook 传 null 时(数据未就绪)一切禁用无提示。
  */
-export function useHookWorkspacePrefs(
-  hook: SlackHookView | null,
-  provider: HookPrefsProvider = 'slack',
-): HookWorkspacePrefsState {
+export function useHookWorkspacePrefs(hook: SlackHookView | null): HookWorkspacePrefsState {
   const { t } = useTranslation();
-  const [prefsView, setPrefsView] = useState<HookPrefsView | ProviderPrefsView | null>(null);
+  const [prefsView, setPrefsView] = useState<HookPrefsView | null>(null);
   /** 'unavailable' = 快照读不到(server 太旧 / 通道缺失 / 内部错), 提示 + 重试。 */
   const [loadError, setLoadError] = useState<'unavailable' | null>(null);
   const [pendingWs, setPendingWs] = useState<string | null>(null);
   const [imDefaults, setImDefaults] = useState<ImDefaultsLike | null>(null);
-  const telegramBindingId =
-    provider === 'telegram' && hook?.telegram.binding?.state === 'confirmed'
-      ? hook.telegram.binding.bindingId
-      : null;
-  const connected =
-    provider === 'telegram'
-      ? hook?.telegram.enabled === true &&
-        hook.telegram.available &&
-        hook.telegram.status === 'connected'
-      : hook?.enabled === true && hook.status === 'connected';
-  const providerBindingConfirmed =
-    provider !== 'telegram' || hook?.telegram.binding?.state === 'confirmed';
-  const readyIdentity =
-    connected && providerBindingConfirmed
-      ? provider === 'telegram'
-        ? telegramBindingId === null
-          ? null
-          : `telegram:${telegramBindingId}`
-        : 'slack'
-      : null;
-  const lastReadyIdentityRef = useRef<string | null>(readyIdentity);
-  const fetchRevisionRef = useRef(0);
-  const mutationRevisionRef = useRef(0);
-  const telegramBindingIdRef = useRef<string | null>(telegramBindingId);
-  telegramBindingIdRef.current = telegramBindingId;
+  const lastStatusRef = useRef<SlackHookView['status'] | null>(null);
 
   const fetchPrefs = useCallback(async () => {
-    const revision = ++fetchRevisionRef.current;
     try {
-      const res =
-        provider === 'telegram'
-          ? await window.electronAPI.hookControl.getProviderWorkspacePrefs()
-          : await window.electronAPI.hookControl.getWorkspacePrefs();
-      if (revision !== fetchRevisionRef.current) return;
-      const nextPrefs: HookPrefsView | ProviderPrefsView = res.prefs;
-      if (
-        provider === 'telegram' &&
-        (!isProviderPrefsView(nextPrefs) ||
-          nextPrefs.provider !== 'telegram' ||
-          nextPrefs.bindingId !== telegramBindingIdRef.current)
-      ) {
-        return;
-      }
-      if (provider === 'slack' && isProviderPrefsView(nextPrefs)) return;
-      setPrefsView(nextPrefs);
+      const res = await window.electronAPI.hookControl.getWorkspacePrefs();
+      setPrefsView(res.prefs);
       setLoadError(null);
     } catch (err) {
-      if (revision !== fetchRevisionRef.current) return;
       const code = extractIpcError(err)?.code;
       // HOOK_NOT_CONNECTED 静默(连接态提示由 requireConnected 分支呈现);
       // 其余一律进 unavailable —— 绝不让下拉无解释地死着(超时 = server 太旧,
       // 通道不存在 = 桌面端 main 未重启到新版, 都给同一句提示 + 重试)
       if (code !== 'HOOK_NOT_CONNECTED') setLoadError('unavailable');
     }
-  }, [provider]);
+  }, []);
 
   useEffect(() => {
-    let active = true;
-    const applyIncoming = (view: HookPrefsView | ProviderPrefsView) => {
-      if (provider === 'telegram') {
-        if (
-          !isProviderPrefsView(view) ||
-          view.provider !== 'telegram' ||
-          view.bindingId !== telegramBindingIdRef.current
-        ) {
-          return;
-        }
-      } else if (isProviderPrefsView(view)) {
-        return;
-      }
+    const offPrefs = window.electronAPI.hookControl.onPrefsChanged((view) => {
       // /model 卡改动 / 其它窗口写入的实时同步(全量快照 latest-wins)
-      fetchRevisionRef.current += 1;
       setPrefsView(view);
       setLoadError(null);
-    };
-    const offPrefs =
-      provider === 'telegram'
-        ? window.electronAPI.hookControl.onProviderPrefsChanged((view) => {
-            if (view.provider === 'telegram') applyIncoming(view);
-          })
-        : window.electronAPI.hookControl.onPrefsChanged(applyIncoming);
+    });
     void fetchPrefs();
     // 桌面新会话默认设置: 未显式设置字段的生效值解析源, 面板打开时取一次即可
     void window.electronAPI.maker
       .imDefaultSettingsGet()
-      .then((state: ImDefaultSettingsState) => {
-        if (active) setImDefaults({ agentKind: state.agentKind, agents: state.agents });
-      })
+      .then((state: ImDefaultSettingsState) =>
+        setImDefaults({ agentKind: state.agentKind, agents: state.agents }),
+      )
       .catch(() => {});
-    return () => {
-      active = false;
-      fetchRevisionRef.current += 1;
-      mutationRevisionRef.current += 1;
-      offPrefs();
-    };
-  }, [fetchPrefs, provider]);
+    return offPrefs;
+  }, [fetchPrefs]);
 
-  // 断线 -> 重连成功或 Telegram 绑定身份变化：自动重拉对应 provider 快照。
-  // 只看布尔 ready 会让 A 换绑 B 时继续展示 A 的偏好。
+  // 断线 -> 重连成功: 自动重拉快照(掉线期间 Slack 侧可能改过)
+  const status = hook?.status ?? null;
   useEffect(() => {
-    if (readyIdentity !== null && readyIdentity !== lastReadyIdentityRef.current) {
-      void fetchPrefs();
-    }
-    lastReadyIdentityRef.current = readyIdentity;
-  }, [readyIdentity, fetchPrefs]);
+    if (status === 'connected' && lastStatusRef.current !== 'connected') void fetchPrefs();
+    lastStatusRef.current = status;
+  }, [status, fetchPrefs]);
 
   // (multi-team)偏好归属 team: 可选清单 = 未 displaced 的绑定; 选中项失效
   // (解绑/被顶)时自动回落首个, 不留悬空选择
-  const multiTeam = provider === 'slack' && hook?.serverMultiTeam === true;
+  const multiTeam = hook?.serverMultiTeam === true;
   const teams = useMemo(
     () =>
-      (provider === 'slack' ? (hook?.bindings ?? []) : [])
+      (hook?.bindings ?? [])
         .filter((b) => !b.displaced)
         .map((b) => ({ teamId: b.teamId, teamName: b.teamName })),
-    [hook, provider],
+    [hook],
   );
   const [selectedTeamRaw, setSelectedTeamRaw] = useState<string | null>(null);
   const selectedTeamId = teams.some((tm) => tm.teamId === selectedTeamRaw)
     ? selectedTeamRaw
     : (teams[0]?.teamId ?? null);
-  const activePrefsView: HookPrefsView | ProviderPrefsView | null =
-    provider === 'telegram'
-      ? prefsView !== null &&
-        isProviderPrefsView(prefsView) &&
-        prefsView.provider === 'telegram' &&
-        prefsView.bindingId === telegramBindingId
-        ? prefsView
-        : null
-      : prefsView !== null && !isProviderPrefsView(prefsView)
-        ? prefsView
-        : null;
 
   const prefsFor = useCallback(
     (alias: string): HookWorkspacePrefs => {
-      const entries = activePrefsView?.prefs ?? [];
+      const entries = prefsView?.prefs ?? [];
       if (multiTeam && selectedTeamId !== null) {
         // 精确 team 匹配优先; 老 server 存量行(无 teamId)宽松兜底
         return (
@@ -272,68 +185,39 @@ export function useHookWorkspacePrefs(
       }
       return entries.find((e) => e.workspace === alias) ?? emptyPrefs(alias);
     },
-    [activePrefsView, multiTeam, selectedTeamId],
+    [prefsView, multiTeam, selectedTeamId],
   );
 
   const applyPatch = useCallback(
     (workspace: string, patch: HookPrefsPatch) => {
-      // A server push, binding change, retry, or newer mutation must win over
-      // this response. Otherwise a delayed set reply can roll the UI back to
-      // an older provider snapshot and clear another mutation's pending state.
-      const revision = ++fetchRevisionRef.current;
-      const mutationRevision = ++mutationRevisionRef.current;
       setPendingWs(workspace);
-      const request =
-        provider === 'telegram'
-          ? window.electronAPI.hookControl.setProviderWorkspacePrefs(workspace, patch)
-          : window.electronAPI.hookControl.setWorkspacePrefs(
-              workspace,
-              patch,
-              multiTeam ? selectedTeamId : undefined,
-            );
-      void request
+      void window.electronAPI.hookControl
+        // multi-team 下写偏好必须带归属 team(server 拒绝猜测); 单绑定/老
+        // server 缺省, 帧面与既有行为一致
+        .setWorkspacePrefs(workspace, patch, multiTeam ? selectedTeamId : undefined)
         .then((res) => {
-          if (revision !== fetchRevisionRef.current) return;
-          const nextPrefs: HookPrefsView | ProviderPrefsView = res.prefs;
-          if (
-            provider === 'telegram' &&
-            (!isProviderPrefsView(nextPrefs) ||
-              nextPrefs.provider !== 'telegram' ||
-              nextPrefs.bindingId !== telegramBindingIdRef.current)
-          ) {
-            return;
-          }
-          if (provider === 'slack' && isProviderPrefsView(nextPrefs)) return;
-          fetchRevisionRef.current += 1;
-          setPrefsView(nextPrefs);
+          setPrefsView(res.prefs);
           setLoadError(null);
         })
         .catch((err: unknown) => {
-          if (revision !== fetchRevisionRef.current) return;
           const ipcErr = extractIpcError(err);
           if (ipcErr?.code === 'HOOK_PREFS_TIMEOUT') setLoadError('unavailable');
           toast.error(ipcErr?.message ?? t('settings.tina.prefs.toast.saveFailed'));
           void fetchPrefs();
         })
-        .finally(() => {
-          if (mutationRevision === mutationRevisionRef.current) setPendingWs(null);
-        });
+        .finally(() => setPendingWs(null));
     },
-    [fetchPrefs, t, multiTeam, provider, selectedTeamId],
+    [fetchPrefs, t, multiTeam, selectedTeamId],
   );
 
-  const bound = providerBindingConfirmed && activePrefsView?.bound === true;
-  const providerLabel = t(
-    provider === 'telegram'
-      ? 'settings.tina.prefs.providerTelegram'
-      : 'settings.tina.prefs.providerSlack',
-  );
+  const connected = hook?.enabled === true && hook.status === 'connected';
+  const bound = prefsView?.bound === true;
   const hint = !connected
-    ? t('settings.tina.prefs.requireConnected', { provider: providerLabel })
+    ? t('settings.tina.prefs.requireConnected')
     : loadError === 'unavailable'
       ? t('settings.tina.prefs.serverUnsupported')
-      : !providerBindingConfirmed || (activePrefsView !== null && !bound)
-        ? t('settings.tina.prefs.requireBinding', { provider: providerLabel })
+      : prefsView !== null && !bound
+        ? t('settings.tina.prefs.requireBinding')
         : null;
 
   return {

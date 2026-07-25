@@ -8,7 +8,7 @@
  *   - 每个用户选中的 agent 生成一份 `api-key-header` 路由（upstream = baseUrl，带用户自定义
  *     headers）；**API key 不在此注入**——它存 safeStorage，由 host 在路由 resolve 时按
  *     `provider_key_<id>` 读出并写进鉴权头，绝不进 catalog（防经 listProviders 泄漏给 renderer）。
- *   - 用户模型可携带预设确认的 contextWindow；缺省时补保守默认，effort 使用 runtime 默认。
+ *   - 用户只填 model id + 显示名；其余元数据补保守默认（contextWindow / 无 effort 切换）。
  */
 
 import type {
@@ -17,7 +17,6 @@ import type {
   CustomProviderConfig,
   Effort,
   Provider,
-  ProviderRuntimeModelConfig,
   RoutingDescriptor,
 } from './types.js';
 
@@ -44,7 +43,7 @@ const AGENT_ORDER: readonly AgentKind[] = ['claude-code', 'codex'];
 
 /** 单个用户填写的模型 → CatalogModel（补默认元数据；effort 按所属 agent 参考内置默认）。 */
 function toCatalogModel(
-  m: ProviderRuntimeModelConfig,
+  m: { id: string; name: string },
   providerId: string,
   agent: AgentKind,
 ): CatalogModel {
@@ -52,13 +51,13 @@ function toCatalogModel(
   return {
     id: m.id,
     name: m.name,
-    contextWindow: m.contextWindow ?? DEFAULT_CUSTOM_CONTEXT_WINDOW,
+    contextWindow: DEFAULT_CUSTOM_CONTEXT_WINDOW,
     efforts,
     defaultEffort: efforts.length > 0 ? DEFAULT_CUSTOM_EFFORT : null,
     // 选择器右栏按 group 聚合：同一自定义来源的模型聚成一组（渲染层用 provider 名兜底标签）。
     group: `custom:${providerId}`,
-    // 手填模型保持历史默认可见；刷新发现的模型可显式声明默认隐藏。
-    defaultEnabled: m.defaultEnabled ?? true,
+    // 默认显示（用户可在设置页逐个关）。
+    defaultEnabled: true,
   };
 }
 

@@ -1,7 +1,7 @@
 /**
- * @cindy/im public types
+ * lizi-im public types
  * ---------------------------------------------------------------------------
- * The transport-layer contract between @cindy/im (pure package) and the host
+ * The transport-layer contract between lizi-im (pure package) and the host
  * (apps/desktop). Keep this file electron-free; host adapters fulfil the
  * `IMHost` shape using whatever Electron / Node / browser APIs they need.
  */
@@ -28,7 +28,7 @@ export interface IMHost {
 
   /** IPC bridge (replaces electron.ipcMain + BrowserWindow). */
   ipc: {
-    /** Register an `invoke` handler. @cindy/im owns channel names. */
+    /** Register an `invoke` handler. lizi-im owns channel names. */
     handle(
       channel: string,
       handler: (payload?: unknown) => Promise<unknown> | unknown,
@@ -61,7 +61,7 @@ export interface IMHost {
   };
 
   /**
-   * host 托管的媒体缓存(cindy-media 媒体总仓)。可选——注入后
+   * host 托管的媒体缓存(cindy-media 媒体总仓,迁移第 3 步)。可选——注入后
    * 入站**图片**改走 host 内容寻址仓(按 token 免重下、全局去重、吃缓存回收
    * 策略);缺省时回落 `paths.*MediaDir` 的老目录写盘。非图片文件始终走老
    * 目录(host 侧规则 25 边界:非媒体不进字节仓)。包侧只摸字节和字符串,
@@ -138,7 +138,7 @@ export interface IMMessageEvent {
    *     a "🙏 这条消息我没法处理" notice; do NOT invoke the agent
    *   - mixed (text/attachments + unsupported) → ack the user that some bits
    *     were skipped, then run the agent with the clean text/attachments
-   * @cindy/im does not auto-format these into the user prompt — that would
+   * lizi-im does not auto-format these into the user prompt — that would
    * pollute the model's input.
    */
   unsupported: IMUnsupportedEntry[];
@@ -201,7 +201,7 @@ export interface InteractiveCardSpec {
 /** Handle returned by `startStreamingText`; allows throttled append + finalise. */
 export interface StreamingTextHandle {
   readonly messageId: string;
-  /** Append delta text (@cindy/im throttles internally). */
+  /** Append delta text (lizi-im throttles internally). */
   append(delta: string): void;
   /**
    * Replace the displayed text wholesale (still throttled). Use when the
@@ -216,7 +216,7 @@ export interface StreamingTextHandle {
   /**
    * 投递一张"工具结果带过来的"图片到本 card, 让 finalize 时跟原文里 xdt-image
    * markdown 链接一起 upload + 拼图。absPath 必须是已经被 host 主进程解析好的
-   * OS 绝对路径 (@cindy/im 包不参与 host-specific xdt-image:// namespace 解析,
+   * OS 绝对路径 (lizi-im 包不参与 host-specific xdt-image:// namespace 解析,
    * 那段路由 desktop main 用 imageCacheStore.resolveSafe 自己做)。
    *
    * 可选 — 不实现也合法 (e.g. 单纯 patch markdown 的轻量 handle 不支持图片)。

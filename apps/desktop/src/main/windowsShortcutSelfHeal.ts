@@ -29,7 +29,7 @@
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import { app, shell } from 'electron';
-import { brandExecutableName } from '@cindy/maker-shared/brand-identity';
+import { brandExecutableName } from '@lizi/maker-shared/brand-identity';
 import { CURRENT_APP_ID, CURRENT_CINDY_REGION } from '../shared/brandRegion.js';
 import { createLogger } from './logger';
 

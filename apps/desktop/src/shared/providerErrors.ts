@@ -12,8 +12,6 @@
  */
 
 /** 结构化错误码 —— renderer 按 `providerError.<code>` 取 i18n 文案。 */
-import { redactSensitiveText } from '@cindy/maker-shared/error-redaction';
-
 export type ProviderErrorCode =
   /** 401：key 无效 / OAuth token 失效。 */
   | 'AUTH_INVALID'
@@ -95,7 +93,7 @@ const AUTH_RE = /invalid.{0,10}(api.?key|token)|authentication_error|unauthorize
 export function classifyProviderError(input: ProviderErrorInput): ProviderErrorClassification {
   const { status, networkErrorCode } = input;
   const body = (input.bodyText ?? '').slice(0, 4096);
-  const detail = body ? redactSensitiveText(body.slice(0, 500)) : undefined;
+  const detail = body ? body.slice(0, 500) : undefined;
 
   if (networkErrorCode) {
     if (TIMEOUT_CODES.has(networkErrorCode)) return { code: 'TIMEOUT', retryable: true, detail: networkErrorCode };

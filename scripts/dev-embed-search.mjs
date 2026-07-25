@@ -12,7 +12,7 @@
  *   pnpm dev:embed:search "embedding" --workdir "/Users/me/projects/cindy"
  *
  * 数据来源:
- *   - 嵌入: XD Gateway /v1/embeddings (model=voyage/voyage-4, 直接 HTTP, 不走 EmbeddingClient
+ *   - 嵌入: xdproxy /v1/embeddings (model=voyage/voyage-4, 直接 HTTP, 不走 EmbeddingClient
  *     的 LRU 缓存 — CLI 调用频率低, 每次 query 都打一次 fresh API 是 ok 的)
  *   - 数据库: <userData>/cindy-<userId>.db (与 desktop dev 同一份文件; WAL 模式
  *     下并发读取安全, 不影响 desktop 实时写入)
@@ -96,7 +96,7 @@ Options:
 
 环境变量:
   ANTHROPIC_API_KEY  必填 — 与 desktop 同一个 LiteLLM bearer token
-  VITE_XD_GATEWAY_BASE_URL 必填 — embedding gateway base URL
+  VITE_XDPROXY_BASE_URL 必填 — embedding gateway base URL
   XDT_USER_ID        可选 — 多账号时指定要查的 user
 `);
 }
@@ -112,7 +112,7 @@ function fail(msg) {
  * Electron app.getPath('userData') 在不同平台的等价路径 — 与
  * apps/desktop/src/main/localDb/index.ts 中 dbPath() 的拼接逻辑一致。
  * userData 子目录名来自 productName(2026-07-17 身份翻转后为 'Cindy',
- * 与 @cindy/maker-shared/brand-identity 的 userDataDirName 同源;本脚本是
+ * 与 @lizi/maker-shared/brand-identity 的 userDataDirName 同源;本脚本是
  * 零依赖 dev CLI,不 import TS 包,字面量与之保持一致)。
  */
 const USER_DATA_DIR_NAME = 'Cindy';
@@ -191,14 +191,14 @@ function resolveVec0Path() {
   return p;
 }
 
-// ── XD Gateway embed call (内联, 不走 EmbeddingClient 的 LRU) ──────────────────
+// ── xdproxy embed call (内联, 不走 EmbeddingClient 的 LRU) ──────────────────
 
 const MODEL_ID = 'voyage/voyage-4';
 
 async function embedQuery(text) {
-  const baseUrl = process.env.VITE_XD_GATEWAY_BASE_URL?.trim();
+  const baseUrl = process.env.VITE_XDPROXY_BASE_URL?.trim();
   if (!baseUrl) {
-    fail('VITE_XD_GATEWAY_BASE_URL 必须设置 (embedding dev CLI 不再读取生产端点私有配置)');
+    fail('VITE_XDPROXY_BASE_URL 必须设置 (embedding dev CLI 不再读取生产端点私有配置)');
   }
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
@@ -214,12 +214,12 @@ async function embedQuery(text) {
   });
   if (!res.ok) {
     const body = await res.text().catch(() => '<no body>');
-    fail(`XD Gateway /v1/embeddings ${res.status}: ${body.slice(0, 500)}`);
+    fail(`xdproxy /v1/embeddings ${res.status}: ${body.slice(0, 500)}`);
   }
   const data = await res.json();
   const vec = data?.data?.[0]?.embedding;
   if (!Array.isArray(vec)) {
-    fail(`XD Gateway response missing embedding: ${JSON.stringify(data).slice(0, 300)}`);
+    fail(`xdproxy response missing embedding: ${JSON.stringify(data).slice(0, 300)}`);
   }
   return vec;
 }

@@ -19,7 +19,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { HOOK_CHAT_WORKSPACE_ALIAS, HOOK_WORKSPACE_ALIAS_RE } from '../../shared/hookControlIpc.js';
+import {
+  HOOK_CHAT_WORKSPACE_ALIAS,
+  HOOK_WORKSPACE_ALIAS_RE,
+} from '../../shared/hookControlIpc.js';
 
 /**
  * (multi-team)本地绑定缓存条目 —— bind.state 快照的持久化影子(含 displaced
@@ -34,28 +37,15 @@ export interface HookBindingCacheEntry {
   slackUserName: string | null;
 }
 
-/** Telegram confirmed binding 的无凭证本地影子，用于关闭 provider 后稳定展示。 */
-export interface TelegramBindingCacheEntry {
-  bindingId: string;
-  principalId: string;
-  principalName: string | null;
-  scopeId: string;
-  scopeName: string;
-}
-
 /** 持久化的单配置(不含任何凭证)。 */
 export interface SlackHookConfigState {
-  /** Slack provider 开关（保留旧字段名，避免旧消费点变更）。 */
   enabled: boolean;
-  /** Telegram provider 独立开关。 */
-  telegramEnabled: boolean;
   /** 服务器地址覆写(高级/调试用, 无 UI 入口); null = 跟随内置默认。 */
   urlOverride: string | null;
   /** 别名 -> 本地绝对路径。 */
   workspaces: Record<string, string>;
   /** (multi-team)本地绑定缓存; 老 server / 从未多绑定时恒空数组。 */
   bindingsCache: HookBindingCacheEntry[];
-  telegramBindingCache: TelegramBindingCacheEntry | null;
 }
 
 export interface SlackHookStoreDeps {
@@ -66,8 +56,6 @@ export interface SlackHookStoreDeps {
   cleanupLegacySecrets?: (legacyIds: string[]) => void;
   /** 无覆写时的默认服务器地址(生产注入运行期端点清单读取;烘焙常量已退役)。 */
   defaultUrl: () => string;
-  /** 当前 Cindy 账号的不可逆指纹；null 表示尚未登录。 */
-  getAccountFingerprint?: () => string | null;
   log: { info(msg: string): void; warn(msg: string): void };
 }
 
@@ -88,22 +76,6 @@ export interface HookConnectionConfig {
 }
 
 const MAX_WORKSPACES = 32;
-const OBJECT_META_KEYS = new Set(['__proto__', 'prototype', 'constructor']);
-const ACCOUNT_FINGERPRINT_RE = /^[A-Za-z0-9_-]{8,64}$/;
-
-function isSafeWorkspaceAlias(alias: string): boolean {
-  return (
-    HOOK_WORKSPACE_ALIAS_RE.test(alias) &&
-    alias !== HOOK_CHAT_WORKSPACE_ALIAS &&
-    !OBJECT_META_KEYS.has(alias)
-  );
-}
-
-function parseAccountFingerprint(raw: unknown): string | null {
-  return typeof raw === 'string' && ACCOUNT_FINGERPRINT_RE.test(raw) && !OBJECT_META_KEYS.has(raw)
-    ? raw
-    : null;
-}
 
 /** 校验工作目录清单(别名格式 / 路径绝对), 返回规整副本。 */
 export function validateWorkspaces(input: Record<string, string>): Record<string, string> {
@@ -117,9 +89,6 @@ export function validateWorkspaces(input: Record<string, string>): Record<string
       throw new HookConnectionValidationError(
         `workspace alias "${alias}" must match ${HOOK_WORKSPACE_ALIAS_RE.source}`,
       );
-    }
-    if (OBJECT_META_KEYS.has(alias)) {
-      throw new HookConnectionValidationError(`workspace alias "${alias}" is reserved`);
     }
     // 保留别名: 内置「对话」伪目录占用, 真实目录不许撞名(撞了会被枚举/派发
     // 侧的保留名优先规则遮蔽, 用户还以为绑到了自己的目录)
@@ -143,36 +112,15 @@ export interface SlackHookStore {
   /** 实际生效的服务器地址(覆写优先, 否则内置默认)。 */
   effectiveUrl(): string;
   setEnabled(enabled: boolean): SlackHookConfigState;
-  setProviderEnabled(provider: 'slack' | 'telegram', enabled: boolean): SlackHookConfigState;
-  anyProviderEnabled(): boolean;
   setWorkspaces(workspaces: Record<string, string>): SlackHookConfigState;
   /** (multi-team)覆写本地绑定缓存(bind.state / 绑定行变化后由 manager 调用)。 */
   setBindingsCache(entries: HookBindingCacheEntry[]): SlackHookConfigState;
-  setTelegramBindingCache(entry: TelegramBindingCacheEntry | null): SlackHookConfigState;
 }
 
 export function createSlackHookStore(deps: SlackHookStoreDeps): SlackHookStore {
   const { filePath, legacyFilePath, cleanupLegacySecrets, log } = deps;
 
-  interface AccountState {
-    slack: { enabled: boolean; bindingsCache: HookBindingCacheEntry[] };
-    telegram: { enabled: boolean; bindingCache: TelegramBindingCacheEntry | null };
-  }
-
-  interface StoredDocument {
-    version: 2;
-    urlOverride: string | null;
-    workspaces: Record<string, string>;
-    accounts: Record<string, AccountState>;
-    /** v1 配置在首次拿到账号指纹前暂存于此，防登出期写配置丢迁移源。 */
-    legacyAccount?: AccountState;
-  }
-
-  /** Account IDs are dynamic object keys, so never inherit Object prototype keys. */
-  const EMPTY_ACCOUNTS = (): Record<string, AccountState> =>
-    Object.create(null) as Record<string, AccountState>;
-
-  function writeDocument(state: StoredDocument): void {
+  function write(state: SlackHookConfigState): void {
     fs.mkdirSync(path.dirname(filePath), { recursive: true });
     const tmp = `${filePath}.tmp`;
     fs.writeFileSync(tmp, JSON.stringify(state, null, 2), 'utf-8');
@@ -189,14 +137,17 @@ export function createSlackHookStore(deps: SlackHookStoreDeps): SlackHookStore {
         .filter((r): r is Record<string, unknown> => !!r && typeof r === 'object')
         .sort((a, b) => (Number(a.createdAt) || 0) - (Number(b.createdAt) || 0));
       const source = rows.find((r) => r.enabled === true) ?? rows[0] ?? null;
-      const workspaces = parseWorkspaces(source?.workspaces);
+      const workspaces: Record<string, string> = {};
+      if (source?.workspaces && typeof source.workspaces === 'object' && !Array.isArray(source.workspaces)) {
+        for (const [k, v] of Object.entries(source.workspaces as Record<string, unknown>)) {
+          if (typeof v === 'string' && HOOK_WORKSPACE_ALIAS_RE.test(k)) workspaces[k] = v;
+        }
+      }
       const migrated: SlackHookConfigState = {
         enabled: source?.enabled === true,
-        telegramEnabled: false,
         urlOverride: null, // 旧 url 是自部署地址, 不迁移 —— 新形态用内置中心服务器
         workspaces,
         bindingsCache: [], // 旧多连接时代没有绑定缓存概念
-        telegramBindingCache: null,
       };
       // 清理旧文件与旧 secret(best-effort, 失败只记日志)
       const legacyIds = rows.map((r) => (typeof r.id === 'string' ? r.id : '')).filter(Boolean);
@@ -213,17 +164,17 @@ export function createSlackHookStore(deps: SlackHookStoreDeps): SlackHookStore {
       log.info(`migrated legacy hook-connections (${rows.length} rows) to slack-hook.json`);
       return migrated;
     } catch (err) {
-      log.warn(
-        `legacy hook-connections migration failed: ${err instanceof Error ? err.message : String(err)}`,
-      );
+      log.warn(`legacy hook-connections migration failed: ${err instanceof Error ? err.message : String(err)}`);
       return null;
     }
   }
 
-  const EMPTY_ACCOUNT = (): AccountState => ({
-    slack: { enabled: false, bindingsCache: [] },
-    telegram: { enabled: false, bindingCache: null },
-  });
+  const EMPTY_STATE: SlackHookConfigState = {
+    enabled: false,
+    urlOverride: null,
+    workspaces: {},
+    bindingsCache: [],
+  };
 
   /** 绑定缓存条目形状校验(坏条目静默丢弃 —— 缓存是可再生数据, 不值得报错)。 */
   function parseBindingsCache(raw: unknown): HookBindingCacheEntry[] {
@@ -244,186 +195,40 @@ export function createSlackHookStore(deps: SlackHookStoreDeps): SlackHookStore {
     return entries;
   }
 
-  function parseTelegramBindingCache(raw: unknown): TelegramBindingCacheEntry | null {
-    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
-    const row = raw as Record<string, unknown>;
-    if (
-      typeof row.bindingId !== 'string' ||
-      !row.bindingId ||
-      typeof row.principalId !== 'string' ||
-      !row.principalId ||
-      typeof row.scopeId !== 'string' ||
-      !row.scopeId ||
-      typeof row.scopeName !== 'string' ||
-      !row.scopeName
-    ) {
-      return null;
-    }
-    return {
-      bindingId: row.bindingId,
-      principalId: row.principalId,
-      principalName: typeof row.principalName === 'string' ? row.principalName : null,
-      scopeId: row.scopeId,
-      scopeName: row.scopeName,
-    };
-  }
-
-  function parseAccount(raw: unknown): AccountState {
-    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return EMPTY_ACCOUNT();
-    const row = raw as Record<string, unknown>;
-    const slack =
-      row.slack && typeof row.slack === 'object' && !Array.isArray(row.slack)
-        ? (row.slack as Record<string, unknown>)
-        : {};
-    const telegram =
-      row.telegram && typeof row.telegram === 'object' && !Array.isArray(row.telegram)
-        ? (row.telegram as Record<string, unknown>)
-        : {};
-    return {
-      slack: {
-        enabled: slack.enabled === true,
-        bindingsCache: parseBindingsCache(slack.bindingsCache),
-      },
-      telegram: {
-        enabled: telegram.enabled === true,
-        bindingCache: parseTelegramBindingCache(telegram.bindingCache),
-      },
-    };
-  }
-
-  function parseWorkspaces(raw: unknown): Record<string, string> {
-    const workspaces: Record<string, string> = {};
-    if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
-      for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
-        if (Object.keys(workspaces).length === MAX_WORKSPACES) break;
-        if (!isSafeWorkspaceAlias(k) || typeof v !== 'string') continue;
-        const trimmed = v.trim();
-        if (trimmed && path.isAbsolute(trimmed)) workspaces[k] = trimmed;
-      }
-    }
-    return workspaces;
-  }
-
-  function fromLegacyState(state: SlackHookConfigState): StoredDocument {
-    return {
-      version: 2,
-      urlOverride: state.urlOverride,
-      workspaces: { ...state.workspaces },
-      accounts: EMPTY_ACCOUNTS(),
-      legacyAccount: {
-        slack: {
-          enabled: state.enabled,
-          bindingsCache: state.bindingsCache.map((e) => ({ ...e })),
-        },
-        telegram: { enabled: false, bindingCache: null },
-      },
-    };
-  }
-
-  function readDocument(): StoredDocument {
+  function read(): SlackHookConfigState {
     try {
       if (!fs.existsSync(filePath)) {
         const migrated = migrateLegacy();
         if (migrated) {
-          const document = fromLegacyState(migrated);
-          writeDocument(document);
-          return document;
+          write(migrated);
+          return migrated;
         }
-        return { version: 2, urlOverride: null, workspaces: {}, accounts: EMPTY_ACCOUNTS() };
+        return { ...EMPTY_STATE };
       }
       const raw = JSON.parse(fs.readFileSync(filePath, 'utf-8')) as unknown;
       if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
-        return { version: 2, urlOverride: null, workspaces: {}, accounts: EMPTY_ACCOUNTS() };
+        return { ...EMPTY_STATE };
       }
       const row = raw as Record<string, unknown>;
-      const urlOverride =
-        typeof row.urlOverride === 'string' && /^wss?:\/\/.+/.test(row.urlOverride)
-          ? row.urlOverride
-          : null;
-      const workspaces = parseWorkspaces(row.workspaces);
-      if (row.version === 2) {
-        const accounts = EMPTY_ACCOUNTS();
-        if (row.accounts && typeof row.accounts === 'object' && !Array.isArray(row.accounts)) {
-          for (const [fingerprint, account] of Object.entries(
-            row.accounts as Record<string, unknown>,
-          )) {
-            if (parseAccountFingerprint(fingerprint) !== null)
-              accounts[fingerprint] = parseAccount(account);
-          }
+      const workspaces: Record<string, string> = {};
+      if (row.workspaces && typeof row.workspaces === 'object' && !Array.isArray(row.workspaces)) {
+        for (const [k, v] of Object.entries(row.workspaces as Record<string, unknown>)) {
+          if (typeof v === 'string') workspaces[k] = v;
         }
-        return {
-          version: 2,
-          urlOverride,
-          workspaces,
-          accounts,
-          ...(row.legacyAccount !== undefined
-            ? { legacyAccount: parseAccount(row.legacyAccount) }
-            : {}),
-        };
       }
-      // v1 slack-hook.json: provider 状态在首次登录时只归入那个 Cindy 账号。
-      return fromLegacyState({
+      return {
         enabled: row.enabled === true,
-        telegramEnabled: false,
-        urlOverride,
+        urlOverride:
+          typeof row.urlOverride === 'string' && /^wss?:\/\/.+/.test(row.urlOverride)
+            ? row.urlOverride
+            : null,
         workspaces,
         bindingsCache: parseBindingsCache(row.bindingsCache),
-        telegramBindingCache: null,
-      });
+      };
     } catch (err) {
-      log.warn(
-        `read slack-hook config failed: ${err instanceof Error ? err.message : String(err)}`,
-      );
-      return { version: 2, urlOverride: null, workspaces: {}, accounts: EMPTY_ACCOUNTS() };
+      log.warn(`read slack-hook config failed: ${err instanceof Error ? err.message : String(err)}`);
+      return { ...EMPTY_STATE };
     }
-  }
-
-  /** Claim v1 state only after a concrete authenticated-account fingerprint exists. */
-  function currentDocument(): {
-    document: StoredDocument;
-    fingerprint: string | null;
-    changed: boolean;
-  } {
-    const document = readDocument();
-    const fingerprint = parseAccountFingerprint(deps.getAccountFingerprint?.() ?? null);
-    let changed = false;
-    if (fingerprint && document.legacyAccount) {
-      document.accounts[fingerprint] ??= document.legacyAccount;
-      delete document.legacyAccount;
-      changed = true;
-    }
-    return { document, fingerprint, changed };
-  }
-
-  function viewOf(document: StoredDocument, fingerprint: string | null): SlackHookConfigState {
-    const account = fingerprint
-      ? (document.accounts[fingerprint] ?? EMPTY_ACCOUNT())
-      : EMPTY_ACCOUNT();
-    return {
-      enabled: account.slack.enabled,
-      telegramEnabled: account.telegram.enabled,
-      urlOverride: document.urlOverride,
-      workspaces: { ...document.workspaces },
-      bindingsCache: account.slack.bindingsCache.map((entry) => ({ ...entry })),
-      telegramBindingCache: account.telegram.bindingCache
-        ? { ...account.telegram.bindingCache }
-        : null,
-    };
-  }
-
-  function read(): SlackHookConfigState {
-    const current = currentDocument();
-    if (current.changed) writeDocument(current.document);
-    return viewOf(current.document, current.fingerprint);
-  }
-
-  function mutateAccount(mutator: (account: AccountState) => void): SlackHookConfigState {
-    const current = currentDocument();
-    if (!current.fingerprint) return viewOf(current.document, null);
-    const account = (current.document.accounts[current.fingerprint] ??= EMPTY_ACCOUNT());
-    mutator(account);
-    writeDocument(current.document);
-    return viewOf(current.document, current.fingerprint);
   }
 
   return {
@@ -432,35 +237,20 @@ export function createSlackHookStore(deps: SlackHookStoreDeps): SlackHookStore {
       return read().urlOverride ?? deps.defaultUrl();
     },
     setEnabled(enabled) {
-      return mutateAccount((account) => {
-        account.slack.enabled = enabled;
-      });
-    },
-    setProviderEnabled(provider, enabled) {
-      return mutateAccount((account) => {
-        account[provider].enabled = enabled;
-      });
-    },
-    anyProviderEnabled() {
-      const state = read();
-      return state.enabled || state.telegramEnabled;
+      const next = { ...read(), enabled };
+      write(next);
+      return next;
     },
     setWorkspaces(workspaces) {
-      const current = currentDocument();
-      current.document.workspaces = validateWorkspaces(workspaces);
-      writeDocument(current.document);
-      return viewOf(current.document, current.fingerprint);
+      const next = { ...read(), workspaces: validateWorkspaces(workspaces) };
+      write(next);
+      return next;
     },
     setBindingsCache(entries) {
       // 缓存条目由 manager 从协议帧生成(形状可信), 这里只做浅拷贝防外部改动
-      return mutateAccount((account) => {
-        account.slack.bindingsCache = entries.map((e) => ({ ...e }));
-      });
-    },
-    setTelegramBindingCache(entry) {
-      return mutateAccount((account) => {
-        account.telegram.bindingCache = entry ? { ...entry } : null;
-      });
+      const next = { ...read(), bindingsCache: entries.map((e) => ({ ...e })) };
+      write(next);
+      return next;
     },
   };
 }

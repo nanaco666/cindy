@@ -6,11 +6,9 @@ import type {
   RefinementResult,
   SpeechSegment,
   VoiceInputCallbacks,
-  VoiceInputErrorCode,
   VoiceInputDraftReason,
   VoiceInputDraftSource,
   VoiceInputState,
-  VoiceInputTerminalOutcome,
 } from './types';
 import { VoiceTimelineLogger } from './VoiceTimelineLogger';
 
@@ -69,7 +67,6 @@ const ASR_NETWORK_RECOVERY_MAX_ATTEMPTS = 3;
 // speakers. Hardcoded for now; a per-mic adaptive baseline would be the
 // next refinement if false positives ever bite.
 const ASR_VOICED_RMS_THRESHOLD = 300;
-const EMPTY_TRANSCRIPT_ERROR = 'Voice input detected speech but returned no transcript. Please try again.';
 
 /**
  * VoiceInputController owns click-to-dictate state.
@@ -92,10 +89,6 @@ export class VoiceInputController {
   private latestStable = '';
   private firstPartialSeen = false;
   private firstAudioChunkSeen = false;
-  // Run-level speech activity separates an intentional silent stop from an
-  // ASR/provider failure that returned no transcript. This is deliberately
-  // independent from the stall watchdog's rolling window counters.
-  private speechActivitySeen = false;
   private pendingStableResolvers: Array<(text: string | undefined) => void> = [];
   // Set by cancel(); read by the in-flight refine() to short-circuit before
   // emitting more timeline events, calling applyRefinement, or clobbering the
@@ -148,7 +141,6 @@ export class VoiceInputController {
     this.latestStable = '';
     this.firstPartialSeen = false;
     this.firstAudioChunkSeen = false;
-    this.speechActivitySeen = false;
     this.currentRunCancelled = false;
     this.lastAsrSignalAt = performance.now();
     this.audioMsSinceLastSignal = 0;
@@ -181,11 +173,9 @@ export class VoiceInputController {
         elapsedMs: performance.now() - this.startedAt,
       });
     }
-    const voiced = isChunkVoiced(chunk);
-    if (voiced) this.speechActivitySeen = true;
     if (typeof trace?.durationMs === 'number') {
       this.audioMsSinceLastSignal += trace.durationMs;
-      if (voiced) {
+      if (isChunkVoiced(chunk)) {
         this.voicedAudioMsSinceLastSignal += trace.durationMs;
       }
     }
@@ -216,11 +206,7 @@ export class VoiceInputController {
 
     if (!text) {
       this.discardRefinement(runId, optimisticRefinement, 'no_submitted_text');
-      if (this.speechActivitySeen) {
-        this.fail(EMPTY_TRANSCRIPT_ERROR, 'empty_transcript');
-      } else {
-        this.setState('done', 'no_speech');
-      }
+      this.setState('done');
       return;
     }
 
@@ -261,7 +247,7 @@ export class VoiceInputController {
     // transports emit a final `disconnected` while their socket is intentionally
     // closed; if we remain in `listening`, that normal teardown is indistinguishable
     // from a network drop and surfaces a false "connection interrupted" error.
-    this.setState('done', 'cancelled');
+    this.setState('done');
     await this.asr.stop();
   }
 
@@ -545,14 +531,12 @@ export class VoiceInputController {
     });
   }
 
-  private setState(state: VoiceInputState, outcome?: VoiceInputTerminalOutcome): void {
+  private setState(state: VoiceInputState): void {
     this.state = state;
-    const terminalOutcome = outcome
-      ?? (state === 'error' ? 'failed' : state === 'done' ? 'success' : undefined);
-    this.callbacks.onStateChanged?.(state, terminalOutcome);
+    this.callbacks.onStateChanged?.(state);
   }
 
-  private fail(message: string, code?: VoiceInputErrorCode): void {
+  private fail(message: string): void {
     // Idempotent: a recover() race can plausibly produce two fail() calls in
     // the same tick (one from a stale 'disconnected' event, one from
     // recovery_failed). Without this guard the renderer toasts both, which
@@ -563,8 +547,8 @@ export class VoiceInputController {
     }
     this.stopStallWatchdog();
     this.pendingStableResolvers.splice(0).forEach((resolve) => resolve(undefined));
-    this.setState('error', 'failed');
-    this.callbacks.onError?.(message, code);
+    this.setState('error');
+    this.callbacks.onError?.(message);
   }
 
   private resetStallCounters(): void {

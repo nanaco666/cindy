@@ -16,7 +16,7 @@ import { useTranslation } from 'react-i18next';
 
 import { cn } from '@/lib/utils';
 import { normalizeWorkingDir } from '@/features/cc-agent/lib/projectGrouping';
-import type { Schedule, SchedulerRuntimeSnapshot } from '@cindy/maker-scheduler';
+import type { Schedule, SchedulerRuntimeSnapshot } from '@lizi/maker-scheduler';
 
 import { TaskListCell } from './TaskListCell';
 import { TaskListFilterPopover, type StatusFilter } from './TaskListFilterPopover';

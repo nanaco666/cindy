@@ -8,8 +8,8 @@
  * of flooding the card with raw stream events.
  */
 
-import { summarizeToolUseText } from '@cindy/maker-shared/message-presentation';
-import { tokenizeThinkingText } from '@cindy/maker-shared/thinking-text';
+import { summarizeToolUseText } from '@lizi/maker-shared/message-presentation';
+import { tokenizeThinkingText } from '@lizi/maker-shared/thinking-text';
 
 /** Keep parity with the desktop/mobile running work preview. */
 export const MAX_VISIBLE_STEPS = 5;

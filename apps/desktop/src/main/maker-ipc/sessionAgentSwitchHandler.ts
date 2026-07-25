@@ -26,7 +26,7 @@
  * turn 进行中登记 pending 推迟到下一条消息发送时刻执行。
  */
 
-import type { AgentKind } from '@cindy/maker-core';
+import type { AgentKind } from '@lizi/maker-core';
 
 import { MAKER_INVOKE } from './channels.js';
 import type { IpcHandlerRegistry } from './ipcHandlerRegistry.js';
@@ -157,11 +157,6 @@ export interface MakerSessionAgentSwitchHandlerDeps {
    * SESSION_RUNNING 的旧语义。
    */
   pendingSwitches?: PendingAgentSwitchRegistry;
-  /** pending intent 变化后广播给本机窗口与 device-link 控制端。 */
-  onPendingSwitchChanged?(
-    sessionId: string,
-    intent: PublicAgentSwitchIntent | null,
-  ): void;
   log: {
     info(message: string, fields?: Record<string, unknown>): void;
     warn(message: string, fields?: Record<string, unknown>): void;
@@ -199,15 +194,6 @@ export interface PendingAgentSwitchIntent {
   };
 }
 
-/** 控制端可见的 pending intent 投影；刻意排除 main 内部恢复载荷。 */
-export interface PublicAgentSwitchIntent {
-  targetAgentKind: AgentKind;
-  model: string;
-  providerId: string | null;
-  effort?: string;
-  fastMode?: boolean;
-}
-
 /**
  * pending 切换意图注册表(内存;重启丢失可接受——与凭证 deferred 同级的轻量意图,
  * 用户重开后重新选择即可)。同 session 重复登记 = 覆盖(用户改主意);SET_MODEL /
@@ -217,20 +203,6 @@ export interface PendingAgentSwitchRegistry {
   set(sessionId: string, intent: PendingAgentSwitchIntent): void;
   get(sessionId: string): PendingAgentSwitchIntent | undefined;
   clear(sessionId: string): void;
-}
-
-/** 将 main 内部 intent 收窄成可跨 IPC / device-link 暴露的只读投影。 */
-export function projectPendingAgentSwitchIntent(
-  intent: PendingAgentSwitchIntent | undefined,
-): PublicAgentSwitchIntent | null {
-  if (!intent) return null;
-  return {
-    targetAgentKind: intent.targetAgentKind,
-    model: intent.model,
-    providerId: intent.providerId ?? null,
-    ...(intent.effort ? { effort: intent.effort } : {}),
-    ...(typeof intent.fastMode === 'boolean' ? { fastMode: intent.fastMode } : {}),
-  };
 }
 
 export function createPendingAgentSwitchRegistry(): PendingAgentSwitchRegistry {
@@ -273,7 +245,7 @@ export async function performSessionAgentSwitch(
      */
     skipBootstrap?: boolean;
     /**
-     * 意图制(2026-07-20 产品反馈"切换应以消息实际发出为准"):外部调用(IPC)
+     * 意图制(2026-07-20 Dash 反馈"切换应以消息实际发出为准"):外部调用(IPC)
      * 一律只登记意图立即返回 deferred——用户在选择器里反复改选零成本,不反复
      * 关引擎/建交接/插边界行;真正的切换事务只在下一条消息发送时刻由
      * applyPendingAgentSwitchIfIdle 以 applyNow=true 执行一次。
@@ -308,7 +280,7 @@ export async function performSessionAgentSwitch(
     throwIpcError('UNSUPPORTED_CAPABILITY', 'agent switch is not supported for remote sessions');
   }
   if (row.orcaRole) {
-    // Orca lead/worker:协同运行时对 agent 形态有独立契约(docs/dev-rules/orca-team-architecture.md),不掺和。
+    // Orca lead/worker:协同运行时对 agent 形态有独立契约(docs/orca-team-architecture.md),不掺和。
     throwIpcError('UNSUPPORTED_CAPABILITY', 'agent switch is not supported for Orca sessions');
   }
 
@@ -318,7 +290,6 @@ export async function performSessionAgentSwitch(
     // 同引擎 = 纯模型切换,调用方应走 SET_MODEL;这里按 no-op 成功返回。
     // 顺带清 pending:用户先登记了跨引擎切换、又选回当前引擎 = 改主意取消。
     deps.pendingSwitches?.clear(sessionId);
-    deps.onPendingSwitchChanged?.(sessionId, null);
     return { switched: false, agentKind: targetAgentKind, model, engineReady: true };
   }
 
@@ -326,15 +297,13 @@ export async function performSessionAgentSwitch(
   // 用户反复改选零成本;renderer 乐观显示意图,真切换在下一条消息发送时刻执行。
   // 重复登记 = 覆盖(同一意图的最新表达)。
   if (!params.applyNow && deps.pendingSwitches) {
-    const intent: PendingAgentSwitchIntent = {
+    deps.pendingSwitches.set(sessionId, {
       targetAgentKind,
       model,
       providerId: providerId as string | null | undefined,
       ...(typeof params.effort === 'string' && params.effort ? { effort: params.effort } : {}),
       ...(typeof params.fastMode === 'boolean' ? { fastMode: params.fastMode } : {}),
-    };
-    deps.pendingSwitches.set(sessionId, intent);
-    deps.onPendingSwitchChanged?.(sessionId, projectPendingAgentSwitchIntent(intent));
+    });
     deps.log.info('agent-switch: intent registered (applies on next send)', {
       sessionId,
       targetAgentKind,
@@ -585,7 +554,6 @@ export function applyPendingAgentSwitchIfIdle(
         deps.setPendingHandoff(sessionId, recovery.handoff);
         if (deps.pendingSwitches?.get(sessionId) === intent) {
           deps.pendingSwitches.clear(sessionId);
-          deps.onPendingSwitchChanged?.(sessionId, null);
         }
         return;
       }
@@ -606,7 +574,6 @@ export function applyPendingAgentSwitchIfIdle(
       // CAS 语义:执行期间用户可能又选了另一个目标,不能把新意图一起清掉。
       if (!result.retryPending && deps.pendingSwitches?.get(sessionId) === intent) {
         deps.pendingSwitches.clear(sessionId);
-        deps.onPendingSwitchChanged?.(sessionId, null);
       }
       // Once the switch has committed, the intent has been consumed even if
       // cancellation arrived during the final bootstrap step.  The caller's
@@ -652,14 +619,5 @@ export function registerMakerSessionAgentSwitchHandler(
         effort,
         fastMode,
       }),
-  );
-  registry.handle(
-    MAKER_INVOKE.GET_SESSION_AGENT_SWITCH_INTENT,
-    (_e, sessionId: unknown) => {
-      if (typeof sessionId !== 'string' || sessionId.length === 0) {
-        throwIpcError('INVALID_PARAMS', 'sessionId required');
-      }
-      return projectPendingAgentSwitchIntent(deps.pendingSwitches?.get(sessionId));
-    },
   );
 }

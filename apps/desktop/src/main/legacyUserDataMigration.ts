@@ -18,10 +18,8 @@
  *  - 老目录不存在(全新用户):静默写 marker 返回,不弹窗打扰。
  *  - 老目录存在:推送 confirm 态给 renderer 弹确认窗,await 用户确认(IPC
  *    `legacy-migration:confirm`)后才开始复制。
- *  - dev userData 覆写(--isolated 沙箱 / XDT_USER_DATA_DIR)下整个迁移跳过,
- *    不探测不弹窗(见 shouldSkipLegacyMigrationForDevSandbox)。
  *
- * 可测试性(docs/dev-rules/engineering-conventions.md):核心流程 `runLegacyUserDataMigration` 全部依赖
+ * 可测试性(AGENTS.md 规则 14):核心流程 `runLegacyUserDataMigration` 全部依赖
  * 经 `LegacyUserDataMigrationDeps` 注入(fs / 时钟 / 日志 / UI 桥),单测用内存
  * fs 假体直接驱动;electron 依赖只出现在默认实现的静态 import 里(main 禁运行时
  * 动态 import)。
@@ -30,7 +28,7 @@
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { app, BrowserWindow, ipcMain } from 'electron';
-import { BRAND_IDENTITY } from '@cindy/maker-shared/brand-identity';
+import { BRAND_IDENTITY } from '@lizi/maker-shared/brand-identity';
 import { CURRENT_CINDY_REGION } from '../shared/brandRegion.js';
 
 import { createLogger } from './logger';
@@ -46,12 +44,6 @@ const CINDY_MEDIA_DIR_NAME = 'cindy-media';
  * 与 localDb/dialogueWorkspace.ts、localDb/dialogueWorkdirSelfHeal.ts 一致)。
  */
 const DIALOGUES_DIR_NAME = 'dialogues';
-
-/**
- * dialogue 工作目录里的依赖树可由包管理器重建，且 pnpm 会在其中创建大量目录符号链接。
- * 搬迁这些内容既没有必要，也会让 copyFile 在 macOS 上对目录链接报 ENOTSUP。
- */
-const DIALOGUE_SKIP_DIR_NAMES: ReadonlySet<string> = new Set(['node_modules']);
 
 /**
  * agent 浏览器登录态的搬运路径:老 `<legacy>/browser-runtime/browser/XDMaker` →
@@ -93,13 +85,8 @@ export interface LegacyMigrationFsDeps {
   pathExists(p: string): Promise<boolean>;
   /** 列目录文件名;目录不存在返回 []。 */
   listDir(dir: string): Promise<string[]>;
-  /**
-   * 列目录条目,区分真实子目录与符号链接/junction;目录不存在返回 []。
-   * 符号链接不允许落入 copyFile 分支,否则目录链接在 macOS 上会报 ENOTSUP。
-   */
-  listDirEntries(
-    dir: string,
-  ): Promise<Array<{ name: string; isDirectory: boolean; isSymbolicLink: boolean }>>;
+  /** 列目录条目(区分子目录);目录不存在返回 []。media merge 用。 */
+  listDirEntries(dir: string): Promise<Array<{ name: string; isDirectory: boolean }>>;
   /** 文件 mtime(ms);用于「扫最新源库」。 */
   statMtimeMs(p: string): Promise<number>;
   /** 文件字节数;media merge 的"已存在但截断"检测用。 */
@@ -223,9 +210,6 @@ async function mergeCopyDir(
   for (const entry of await fs.listDirEntries(srcDir)) {
     const src = path.join(srcDir, entry.name);
     const dest = path.join(destDir, entry.name);
-    // 不解引用符号链接/junction:目标可能位于老 userData 之外或形成环；pnpm 的目录链接
-    // 也不能交给 copyFile。迁移只搬真实目录与普通文件。
-    if (entry.isSymbolicLink) continue;
     if (entry.isDirectory) {
       if (skip?.dirNames?.has(entry.name)) continue;
       await mergeCopyDir(fs, src, dest, skip);
@@ -391,7 +375,6 @@ export async function runLegacyUserDataMigration(
           deps.fs,
           legacyDialoguesDir,
           path.join(deps.userDataDir, DIALOGUES_DIR_NAME),
-          { dirNames: DIALOGUE_SKIP_DIR_NAMES },
         );
         dialoguesCopied = true;
       }
@@ -492,38 +475,7 @@ const realFsDeps: LegacyMigrationFsDeps = {
   listDirEntries: async (dir) => {
     try {
       const entries = await fsp.readdir(dir, { withFileTypes: true });
-      return await Promise.all(
-        entries.map(async (entry) => {
-          const reportedSymbolicLink = entry.isSymbolicLink();
-          if (reportedSymbolicLink || !entry.isDirectory()) {
-            return {
-              name: entry.name,
-              isDirectory: entry.isDirectory(),
-              isSymbolicLink: reportedSymbolicLink,
-            };
-          }
-
-          // 某些 Node/libuv 组合会把 Windows junction 报成普通目录；只对目录做
-          // lstat 二次核验，避免对工作区里的海量普通文件增加一次额外系统调用。
-          const entryPath = path.join(dir, entry.name);
-          try {
-            const isSymbolicLink = (await fsp.lstat(entryPath)).isSymbolicLink();
-            return {
-              name: entry.name,
-              isDirectory: !isSymbolicLink,
-              isSymbolicLink,
-            };
-          } catch (err) {
-            // 条目在 readdir 与 lstat 之间消失或不可读时 fail-closed，不递归进入未知目标。
-            log.warn(
-              'legacy userData migration: failed to lstat directory entry, skipping %s: %s',
-              entryPath,
-              err instanceof Error ? err.message : String(err),
-            );
-            return { name: entry.name, isDirectory: false, isSymbolicLink: true };
-          }
-        }),
-      );
+      return entries.map((e) => ({ name: e.name, isDirectory: e.isDirectory() }));
     } catch {
       return [];
     }
@@ -571,24 +523,6 @@ export function registerLegacyMigrationIpc(): void {
 }
 
 /**
- * dev userData 覆写(--isolated 沙箱 / 手动 XDT_USER_DATA_DIR)下必须跳过首登迁移。
- *
- * 沙箱目录(如 <userData>-dev)与真实 userData 同级,首次登录时沙箱里没有 mToc
- * marker,探测会命中同级的真实老 xdt-maker 目录 → 弹确认窗并把用户真实主库 /
- * cindy-media / dialogues / 浏览器 profile 整套复制进临时沙箱。这既不是沙箱的
- * 语义(隔离、不动正式数据),也会产生 GB 级无意义复制。isolated 的 argv 与 env
- * 两条声明通道最终都会把生效目录同步进 XDT_USER_DATA_DIR(main/index.ts),
- * 因此这里以该 env 为唯一检测面。packaged 永不跳过(线上升级迁移不受影响)。
- * 纯函数、零 electron 依赖,便于单测。
- */
-export function shouldSkipLegacyMigrationForDevSandbox(input: {
-  isPackaged: boolean;
-  envUserDataDir: string | undefined;
-}): boolean {
-  return !input.isPackaged && Boolean(input.envUserDataDir?.trim());
-}
-
-/**
  * bootstrap 挂载点:首次登录成功后、ensureReady 打开 db 前调用。
  * 幂等 + 防重入;marker 已写时零开销。绝不 throw。
  */
@@ -597,16 +531,6 @@ export async function runLegacyUserDataMigrationForUser(userId: string): Promise
   // global 构建(同机双装)是全新身份,把 cn 的历史数据导进 global 库会
   // 跨区域串台(两边 auth 后端不同,会话 / 凭证对不上)。
   if (CURRENT_CINDY_REGION !== 'cn') return;
-  // dev 沙箱 / userData 覆写:不探测、不弹窗、不写 marker,纯跳过(见上方谓词注释)。
-  if (
-    shouldSkipLegacyMigrationForDevSandbox({
-      isPackaged: app.isPackaged,
-      envUserDataDir: process.env.XDT_USER_DATA_DIR,
-    })
-  ) {
-    log.info('legacy userData migration: dev userData override active, skipped');
-    return;
-  }
   if (inFlight != null) {
     await inFlight;
     return;

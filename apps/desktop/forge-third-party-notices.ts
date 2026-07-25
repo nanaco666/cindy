@@ -47,7 +47,7 @@ export function packagedResourcesPath(buildPath: string, platform: ForgePlatform
 export function stagePackagedThirdPartyNotices(
   buildPath: string,
   platform: ForgePlatform,
-  noticesRoot = path.join(__dirname, '..', '..', 'docs', 'legal', 'notices'),
+  noticesRoot = path.join(__dirname, '..', '..', 'notices'),
 ): string {
   const noticeName = desktopNoticeNameForPlatform(platform);
   const resourcesDir = packagedResourcesPath(buildPath, platform);

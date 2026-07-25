@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import type { ResponseObserverCtx } from '@cindy/anthropic-compat-proxy';
-import type { PermissionMode } from '@cindy/maker-core';
+import type { ResponseObserverCtx } from '@lizi/anthropic-compat-proxy';
+import type { PermissionMode } from '@lizi/maker-core';
 
 import {
   createClaudeAutoClassifierFailureObserver,
@@ -97,9 +97,7 @@ describe('Claude Auto classifier request detection', () => {
 });
 
 describe('createClaudeAutoClassifierFailureObserver', () => {
-  it('reports classifier failures across 4xx and 5xx with the resolved business session id', () => {
-    // 任何错误响应都意味着分类器没给 verdict、CLI 会 fail-closed——4xx(模型/参数/鉴权
-    // 不可用)与 5xx(限流/服务故障)都必须触发降级,不再限于 429/5xx。
+  it('reports classifier 429 and 5xx with the resolved business session id', () => {
     const signals: unknown[] = [];
     setClaudeAutoClassifierUnavailableListener((signal) => signals.push(signal));
     const observer = createClaudeAutoClassifierFailureObserver((sdkId) =>
@@ -107,9 +105,6 @@ describe('createClaudeAutoClassifierFailureObserver', () => {
     );
 
     expect(observer(ctx({ status: 429 }))).toBeUndefined();
-    expect(observer(ctx({ status: 400 }))).toBeUndefined();
-    expect(observer(ctx({ status: 401 }))).toBeUndefined();
-    expect(observer(ctx({ status: 404 }))).toBeUndefined();
     expect(
       observer(
         ctx({
@@ -120,24 +115,20 @@ describe('createClaudeAutoClassifierFailureObserver', () => {
     ).toBeUndefined();
     expect(signals).toEqual([
       { sessionId: 'session-1', status: 429 },
-      { sessionId: 'session-1', status: 400 },
-      { sessionId: 'session-1', status: 401 },
-      { sessionId: 'session-1', status: 404 },
       { sessionId: 'session-1', status: 503 },
     ]);
   });
 
-  it('does not parse/report success, redirects, non-classifier bodies, or unresolved sessions', () => {
+  it('does not parse/report success, 4xx, ordinary errors, or unresolved sessions', () => {
     const listener = vi.fn();
     setClaudeAutoClassifierUnavailableListener(listener);
     const resolved = createClaudeAutoClassifierFailureObserver(() => 'session-1');
     const unresolved = createClaudeAutoClassifierFailureObserver(() => null);
 
-    resolved(ctx({ status: 200, requestBody: Buffer.from('{bad json') })); // 成功响应不解析
-    resolved(ctx({ status: 302 })); // 3xx 重定向:非错误,短路
-    // 即便状态码现在落在 4xx 触发区间,非分类器 body(前缀不匹配)仍不得上报。
-    resolved(ctx({ status: 400, requestBody: requestBody({ system: 'ordinary assistant' }) }));
-    unresolved(ctx()); // 无法反解会话 id
+    resolved(ctx({ status: 200, requestBody: Buffer.from('{bad json') }));
+    resolved(ctx({ status: 400 }));
+    resolved(ctx({ status: 429, requestBody: requestBody({ system: 'ordinary assistant' }) }));
+    unresolved(ctx());
     expect(listener).not.toHaveBeenCalled();
   });
 });

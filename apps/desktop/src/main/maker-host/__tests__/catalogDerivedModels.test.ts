@@ -12,9 +12,9 @@
 
 import { describe, it, expect } from 'vitest';
 
-import { BUNDLED_CATALOG } from '@cindy/model-providers';
-import type { Catalog, CatalogModel } from '@cindy/model-providers';
-import type { ModelDescriptor } from '@cindy/maker-core';
+import { BUNDLED_CATALOG } from '@lizi/model-providers';
+import type { Catalog, CatalogModel } from '@lizi/model-providers';
+import type { ModelDescriptor } from '@lizi/maker-core';
 
 import { deriveAvailableModels, refreshCatalogDerivedModels } from '../catalog-to-descriptors.js';
 

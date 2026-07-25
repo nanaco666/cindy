@@ -122,56 +122,6 @@ function credential(overrides: Partial<StoredMobileVoiceCredential> = {}): Store
   };
 }
 
-// 托管票据建连:direct-dial(credential key 直拨上游)已删除,测试用一个从
-// credential 派生等价 URL/token 的 connectionProvider 模拟 voice-server 票据。
-function managedWsUrl(cred: StoredMobileVoiceCredential): string {
-  const base = new URL(cred.proxyBaseUrl);
-  const endpoint = new URL(cred.asr.endpointPath ?? '', 'https://placeholder.invalid');
-  base.pathname = `${base.pathname.replace(/\/+$/, '')}${endpoint.pathname}`;
-  base.search = endpoint.search;
-  base.protocol = base.protocol === 'http:' ? 'ws:' : 'wss:';
-  return base.toString();
-}
-
-function managedConnection(cred: StoredMobileVoiceCredential): () => Promise<{
-  websocketUrl: string;
-  authorizationToken: string;
-}> {
-  return async () => ({
-    websocketUrl: managedWsUrl(cred),
-    authorizationToken: cred.proxyApiKey,
-  });
-}
-
-function managedChainConnection(cred: StoredMobileVoiceCredential): (providerId: string) => Promise<{
-  websocketUrl: string;
-  authorizationToken: string;
-}> {
-  return async (providerId: string) => {
-    const asr = (cred.asrProviderChain ?? [cred.asr]).find((item) => item.provider === providerId) ?? cred.asr;
-    return {
-      websocketUrl: managedWsUrl({ ...cred, asr }),
-      authorizationToken: cred.proxyApiKey,
-    };
-  };
-}
-
-type RealtimeProviderOptions = ConstructorParameters<typeof MobileRealtimeAsrProvider>[0];
-function realtimeProvider(options: RealtimeProviderOptions): MobileRealtimeAsrProvider {
-  return new MobileRealtimeAsrProvider({
-    connectionProvider: managedConnection(options.credential),
-    ...options,
-  });
-}
-
-type VolcengineProviderOptions = ConstructorParameters<typeof MobileVolcengineSaucAsrProvider>[0];
-function volcengineProvider(options: VolcengineProviderOptions): MobileVolcengineSaucAsrProvider {
-  return new MobileVolcengineSaucAsrProvider({
-    connectionProvider: managedConnection(options.credential),
-    ...options,
-  });
-}
-
 describe('mobileRealtimeAsrProvider', () => {
   it('cancels an in-flight fallback candidate before it can open a managed socket', async () => {
     FakeSocket.instances = [];
@@ -190,7 +140,6 @@ describe('mobileRealtimeAsrProvider', () => {
     });
 
     const started = provider.start();
-    await waitForFakeSocketCount(1);
     await Promise.resolve();
     expect(connectionProvider).toHaveBeenCalledTimes(1);
 
@@ -248,7 +197,7 @@ describe('mobileRealtimeAsrProvider', () => {
   it('streams PCM chunks into OpenAI-compatible realtime ASR and emits draft/stable text', async () => {
     FakeSocket.instances = [];
     const events: string[] = [];
-    const provider = realtimeProvider({
+    const provider = new MobileRealtimeAsrProvider({
       credential: credential(),
       websocketFactory: FakeSocket,
       flushTimeoutMs: 10,
@@ -260,7 +209,6 @@ describe('mobileRealtimeAsrProvider', () => {
     });
 
     const started = provider.start();
-    await waitForFakeSocketCount(1);
     const socket = FakeSocket.instances[0];
     socket.open();
     socket.message({ type: 'session.updated' });
@@ -269,6 +217,7 @@ describe('mobileRealtimeAsrProvider', () => {
     expect(socket.url).toBe(`${GW_PROXY_WSS}/openai/passthrough/v1/realtime?intent=transcription`);
     expect(socket.options?.headers).toEqual({
       Authorization: 'Bearer sk-mobile-voice',
+      'x-litellm-model': 'gpt-realtime-whisper',
     });
     expect(socket.sent[0]).toMatchObject({
       type: 'session.update',
@@ -310,7 +259,7 @@ describe('mobileRealtimeAsrProvider', () => {
 
   it('queues OpenAI-compatible PCM chunks until the realtime session is ready', async () => {
     FakeSocket.instances = [];
-    const provider = realtimeProvider({
+    const provider = new MobileRealtimeAsrProvider({
       credential: credential(),
       websocketFactory: FakeSocket,
       flushTimeoutMs: 10,
@@ -318,7 +267,6 @@ describe('mobileRealtimeAsrProvider', () => {
     provider.onEvent(() => {});
 
     const started = provider.start();
-    await waitForFakeSocketCount(1);
     const socket = FakeSocket.instances[0];
     socket.open();
     provider.appendAudio(new Uint8Array([1, 2, 3, 4]).buffer, {
@@ -341,7 +289,7 @@ describe('mobileRealtimeAsrProvider', () => {
 
   it('stops OpenAI-compatible realtime ASR immediately while connect is waiting for session readiness', async () => {
     FakeSocket.instances = [];
-    const provider = realtimeProvider({
+    const provider = new MobileRealtimeAsrProvider({
       credential: credential(),
       websocketFactory: FakeSocket,
       flushTimeoutMs: 10,
@@ -349,7 +297,6 @@ describe('mobileRealtimeAsrProvider', () => {
     provider.onEvent(() => {});
 
     const started = provider.start();
-    await waitForFakeSocketCount(1);
     const socket = FakeSocket.instances[0];
     socket.open();
     expect(socket.sent[0]).toMatchObject({ type: 'session.update' });
@@ -364,7 +311,7 @@ describe('mobileRealtimeAsrProvider', () => {
   it('does not open managed realtime ASR after stop while session allocation is pending', async () => {
     FakeSocket.instances = [];
     let resolveConnection!: (connection: { websocketUrl: string; authorizationToken: string }) => void;
-    const provider = realtimeProvider({
+    const provider = new MobileRealtimeAsrProvider({
       credential: credential(),
       websocketFactory: FakeSocket,
       connectionProvider: () => new Promise((resolve) => { resolveConnection = resolve; }),
@@ -372,7 +319,6 @@ describe('mobileRealtimeAsrProvider', () => {
     provider.onEvent(() => {});
 
     const started = provider.start();
-    await waitForFakeSocketCount(1);
     await provider.stop();
     resolveConnection({ websocketUrl: 'wss://voice.example.com/asr', authorizationToken: 'ticket' });
 
@@ -382,7 +328,7 @@ describe('mobileRealtimeAsrProvider', () => {
 
   it('recovers OpenAI-compatible realtime ASR by replaying unconfirmed audio', async () => {
     FakeSocket.instances = [];
-    const provider = realtimeProvider({
+    const provider = new MobileRealtimeAsrProvider({
       credential: credential(),
       websocketFactory: FakeSocket,
       flushTimeoutMs: 10,
@@ -390,7 +336,6 @@ describe('mobileRealtimeAsrProvider', () => {
     provider.onEvent(() => {});
 
     const started = provider.start();
-    await waitForFakeSocketCount(1);
     const firstSocket = FakeSocket.instances[0];
     firstSocket.open();
     firstSocket.message({ type: 'session.updated' });
@@ -435,7 +380,7 @@ describe('mobileRealtimeAsrProvider', () => {
 
   it('rejects OpenAI-compatible recovery when replay audio cannot be sent', async () => {
     FakeSocket.instances = [];
-    const provider = realtimeProvider({
+    const provider = new MobileRealtimeAsrProvider({
       credential: credential(),
       websocketFactory: FakeSocket,
       flushTimeoutMs: 10,
@@ -443,7 +388,6 @@ describe('mobileRealtimeAsrProvider', () => {
     provider.onEvent(() => {});
 
     const started = provider.start();
-    await waitForFakeSocketCount(1);
     const firstSocket = FakeSocket.instances[0];
     firstSocket.open();
     firstSocket.message({ type: 'session.updated' });
@@ -469,7 +413,7 @@ describe('mobileRealtimeAsrProvider', () => {
   it('lets recovered OpenAI-compatible replay replace the interrupted partial item', async () => {
     FakeSocket.instances = [];
     const events: string[] = [];
-    const provider = realtimeProvider({
+    const provider = new MobileRealtimeAsrProvider({
       credential: credential(),
       websocketFactory: FakeSocket,
       flushTimeoutMs: 10,
@@ -479,7 +423,6 @@ describe('mobileRealtimeAsrProvider', () => {
     });
 
     const started = provider.start();
-    await waitForFakeSocketCount(1);
     const firstSocket = FakeSocket.instances[0];
     firstSocket.open();
     firstSocket.message({ type: 'session.updated' });
@@ -517,7 +460,7 @@ describe('mobileRealtimeAsrProvider', () => {
     try {
       vi.setSystemTime(new Date('2026-06-28T00:00:00.000Z'));
       FakeSocket.instances = [];
-      const provider = realtimeProvider({
+      const provider = new MobileRealtimeAsrProvider({
         credential: credential(),
         websocketFactory: FakeSocket,
         flushTimeoutMs: 10,
@@ -525,7 +468,6 @@ describe('mobileRealtimeAsrProvider', () => {
       provider.onEvent(() => {});
 
       const started = provider.start();
-      await waitForFakeSocketCount(1);
       const firstSocket = FakeSocket.instances[0];
       firstSocket.open();
       firstSocket.message({ type: 'session.updated' });
@@ -568,7 +510,7 @@ describe('mobileRealtimeAsrProvider', () => {
     try {
       vi.setSystemTime(new Date('2026-06-28T00:00:00.000Z'));
       FakeSocket.instances = [];
-      const provider = realtimeProvider({
+      const provider = new MobileRealtimeAsrProvider({
         credential: credential(),
         websocketFactory: FakeSocket,
         flushTimeoutMs: 10,
@@ -576,7 +518,6 @@ describe('mobileRealtimeAsrProvider', () => {
       provider.onEvent(() => {});
 
       const started = provider.start();
-      await waitForFakeSocketCount(1);
       const firstSocket = FakeSocket.instances[0];
       firstSocket.open();
       firstSocket.message({ type: 'session.updated' });
@@ -627,7 +568,7 @@ describe('mobileRealtimeAsrProvider', () => {
 
   it('drops finalized OpenAI-compatible audio before recovery replay', async () => {
     FakeSocket.instances = [];
-    const provider = realtimeProvider({
+    const provider = new MobileRealtimeAsrProvider({
       credential: credential(),
       websocketFactory: FakeSocket,
       flushTimeoutMs: 10,
@@ -635,7 +576,6 @@ describe('mobileRealtimeAsrProvider', () => {
     provider.onEvent(() => {});
 
     const started = provider.start();
-    await waitForFakeSocketCount(1);
     const firstSocket = FakeSocket.instances[0];
     firstSocket.open();
     firstSocket.message({ type: 'session.updated' });
@@ -669,7 +609,7 @@ describe('mobileRealtimeAsrProvider', () => {
 
   it('keeps later unfinalized OpenAI-compatible commits in the replay buffer', async () => {
     FakeSocket.instances = [];
-    const provider = realtimeProvider({
+    const provider = new MobileRealtimeAsrProvider({
       credential: credential(),
       websocketFactory: FakeSocket,
       flushTimeoutMs: 10,
@@ -677,7 +617,6 @@ describe('mobileRealtimeAsrProvider', () => {
     provider.onEvent(() => {});
 
     const started = provider.start();
-    await waitForFakeSocketCount(1);
     const firstSocket = FakeSocket.instances[0];
     firstSocket.open();
     firstSocket.message({ type: 'session.updated' });
@@ -733,7 +672,7 @@ describe('mobileRealtimeAsrProvider', () => {
 
   it('does not reject OpenAI-compatible flush when stop cancels an in-flight recovery', async () => {
     FakeSocket.instances = [];
-    const provider = realtimeProvider({
+    const provider = new MobileRealtimeAsrProvider({
       credential: credential(),
       websocketFactory: FakeSocket,
       flushTimeoutMs: 10,
@@ -741,7 +680,6 @@ describe('mobileRealtimeAsrProvider', () => {
     provider.onEvent(() => {});
 
     const started = provider.start();
-    await waitForFakeSocketCount(1);
     const firstSocket = FakeSocket.instances[0];
     firstSocket.open();
     firstSocket.message({ type: 'session.updated' });
@@ -760,7 +698,7 @@ describe('mobileRealtimeAsrProvider', () => {
   it('redacts the synced voice key from OpenAI-compatible realtime ASR errors', async () => {
     FakeSocket.instances = [];
     const errors: string[] = [];
-    const provider = realtimeProvider({
+    const provider = new MobileRealtimeAsrProvider({
       credential: credential(),
       websocketFactory: FakeSocket,
       flushTimeoutMs: 10,
@@ -770,7 +708,6 @@ describe('mobileRealtimeAsrProvider', () => {
     });
 
     const started = provider.start();
-    await waitForFakeSocketCount(1);
     const socket = FakeSocket.instances[0];
     socket.open();
     socket.message({ type: 'session.updated' });
@@ -786,7 +723,7 @@ describe('mobileRealtimeAsrProvider', () => {
 
   it('falls back to the next synced desktop ASR provider when the primary cannot start', async () => {
     FakeSocket.instances = [];
-    const fallbackCredential = credential({
+    const provider = createMobileAsrProvider(credential({
       asr: {
         provider: 'litellm-gpt-realtime-whisper',
         model: 'gpt-realtime-whisper',
@@ -818,9 +755,7 @@ describe('mobileRealtimeAsrProvider', () => {
           protocolProfile: 'qwen-asr-server-vad',
         },
       ],
-    });
-    const provider = createMobileAsrProvider(fallbackCredential, {
-      connectionProvider: managedChainConnection(fallbackCredential),
+    }), {
       websocketFactory: FakeSocket,
       flushTimeoutMs: 10,
     });
@@ -830,7 +765,6 @@ describe('mobileRealtimeAsrProvider', () => {
     });
 
     const started = provider.start();
-    await waitForFakeSocketCount(1);
     const primarySocket = FakeSocket.instances[0];
     primarySocket.onerror?.({ message: 'primary unavailable' });
     await waitForFakeSocketCount(2);
@@ -858,7 +792,7 @@ describe('mobileRealtimeAsrProvider', () => {
 
   it('uses the websocket close status when a generic RN connect error is followed by 403', async () => {
     FakeSocket.instances = [];
-    const provider = realtimeProvider({
+    const provider = new MobileRealtimeAsrProvider({
       credential: credential(),
       websocketFactory: FakeSocket,
       flushTimeoutMs: 10,
@@ -866,7 +800,6 @@ describe('mobileRealtimeAsrProvider', () => {
     provider.onEvent(() => {});
 
     const started = provider.start();
-    await waitForFakeSocketCount(1);
     const socket = FakeSocket.instances[0];
     socket.onerror?.({});
     socket.onclose?.({
@@ -874,12 +807,12 @@ describe('mobileRealtimeAsrProvider', () => {
       reason: 'Received bad response code from server: 403.',
     });
 
-    await expect(started).rejects.toThrow('Cindy 语音会话已失效或没有权限（WebSocket 403）。请确认登录状态后重试。');
+    await expect(started).rejects.toThrow('LiteLLM Key 无效或没有语音识别权限（WebSocket 403）。请在设置里更新 LiteLLM Key 后重试。');
   });
 
   it('redacts the synced voice key from Volcengine websocket errors', async () => {
     FakeSocket.instances = [];
-    const volcCredential = credential({
+    const provider = createMobileAsrProvider(credential({
       asr: {
         provider: 'litellm-volcengine-sauc-asr',
         model: 'volcengine-sauc-asr',
@@ -890,9 +823,7 @@ describe('mobileRealtimeAsrProvider', () => {
         protocolProfile: 'volcengine-sauc-duration',
         resourceId: 'volc.seedasr.sauc.duration',
       },
-    });
-    const provider = createMobileAsrProvider(volcCredential, {
-      connectionProvider: managedChainConnection(volcCredential),
+    }), {
       websocketFactory: FakeSocket,
       flushTimeoutMs: 10,
     });
@@ -902,7 +833,6 @@ describe('mobileRealtimeAsrProvider', () => {
     });
 
     const started = provider.start();
-    await waitForFakeSocketCount(1);
     const socket = FakeSocket.instances[0];
     socket.open();
     await started;
@@ -913,7 +843,7 @@ describe('mobileRealtimeAsrProvider', () => {
 
   it('uses server-VAD session.finish for Qwen realtime ASR profiles', async () => {
     FakeSocket.instances = [];
-    const provider = realtimeProvider({
+    const provider = new MobileRealtimeAsrProvider({
       credential: credential({
         asr: {
           provider: 'litellm-qwen3-asr-flash-realtime',
@@ -931,7 +861,6 @@ describe('mobileRealtimeAsrProvider', () => {
     provider.onEvent(() => {});
 
     const started = provider.start();
-    await waitForFakeSocketCount(1);
     const socket = FakeSocket.instances[0];
     socket.open();
     socket.message({ type: 'session.updated' });
@@ -963,7 +892,7 @@ describe('mobileRealtimeAsrProvider', () => {
     try {
       vi.setSystemTime(new Date('2026-06-28T00:00:00.000Z'));
       FakeSocket.instances = [];
-      const provider = realtimeProvider({
+      const provider = new MobileRealtimeAsrProvider({
         credential: credential({
           asr: {
             provider: 'litellm-qwen3-asr-flash-realtime',
@@ -981,7 +910,6 @@ describe('mobileRealtimeAsrProvider', () => {
       provider.onEvent(() => {});
 
       const started = provider.start();
-      await waitForFakeSocketCount(1);
       const firstSocket = FakeSocket.instances[0];
       firstSocket.open();
       firstSocket.message({ type: 'session.updated' });
@@ -1036,7 +964,7 @@ describe('mobileRealtimeAsrProvider', () => {
     try {
       vi.setSystemTime(new Date('2026-06-28T00:00:00.000Z'));
       FakeSocket.instances = [];
-      const provider = realtimeProvider({
+      const provider = new MobileRealtimeAsrProvider({
         credential: credential({
           asr: {
             provider: 'litellm-qwen3-asr-flash-realtime',
@@ -1054,7 +982,6 @@ describe('mobileRealtimeAsrProvider', () => {
       provider.onEvent(() => {});
 
       const started = provider.start();
-      await waitForFakeSocketCount(1);
       const firstSocket = FakeSocket.instances[0];
       firstSocket.open();
       firstSocket.message({ type: 'session.updated' });
@@ -1108,7 +1035,7 @@ describe('mobileRealtimeAsrProvider', () => {
     try {
       vi.setSystemTime(new Date('2026-06-28T00:00:00.000Z'));
       FakeSocket.instances = [];
-      const provider = realtimeProvider({
+      const provider = new MobileRealtimeAsrProvider({
         credential: credential({
           asr: {
             provider: 'litellm-qwen3-asr-flash-realtime',
@@ -1126,7 +1053,6 @@ describe('mobileRealtimeAsrProvider', () => {
       provider.onEvent(() => {});
 
       const started = provider.start();
-      await waitForFakeSocketCount(1);
       const firstSocket = FakeSocket.instances[0];
       firstSocket.open();
       firstSocket.message({ type: 'session.updated' });
@@ -1188,7 +1114,7 @@ describe('mobileRealtimeAsrProvider', () => {
     try {
       vi.setSystemTime(new Date('2026-06-28T00:00:00.000Z'));
       FakeSocket.instances = [];
-      const provider = realtimeProvider({
+      const provider = new MobileRealtimeAsrProvider({
         credential: credential({
           asr: {
             provider: 'litellm-qwen3-asr-flash-realtime',
@@ -1206,7 +1132,6 @@ describe('mobileRealtimeAsrProvider', () => {
       provider.onEvent(() => {});
 
       const started = provider.start();
-      await waitForFakeSocketCount(1);
       const firstSocket = FakeSocket.instances[0];
       firstSocket.open();
       firstSocket.message({ type: 'session.updated' });
@@ -1248,7 +1173,7 @@ describe('mobileRealtimeAsrProvider', () => {
 
   it('creates a Volcengine provider for the desktop default provider-native ASR profile', async () => {
     FakeSocket.instances = [];
-    const volcCredential = credential({
+    const provider = createMobileAsrProvider(credential({
       asr: {
         provider: 'litellm-volcengine-sauc-asr',
         model: 'volcengine-sauc-asr',
@@ -1259,16 +1184,13 @@ describe('mobileRealtimeAsrProvider', () => {
         protocolProfile: 'volcengine-sauc-duration',
         resourceId: 'volc.seedasr.sauc.duration',
       },
-    });
-    const provider = createMobileAsrProvider(volcCredential, {
-      connectionProvider: managedChainConnection(volcCredential),
+    }), {
       websocketFactory: FakeSocket,
       flushTimeoutMs: 10,
     });
     provider.onEvent(() => {});
 
     const started = provider.start();
-    await waitForFakeSocketCount(1);
     const socket = FakeSocket.instances[0];
     socket.open();
     await started;
@@ -1284,7 +1206,7 @@ describe('mobileRealtimeAsrProvider', () => {
 
   it('stops Volcengine ASR immediately while connect is pending', async () => {
     FakeSocket.instances = [];
-    const provider = volcengineProvider({
+    const provider = new MobileVolcengineSaucAsrProvider({
       credential: credential({
         asr: {
           provider: 'litellm-volcengine-sauc-asr',
@@ -1303,7 +1225,6 @@ describe('mobileRealtimeAsrProvider', () => {
     provider.onEvent(() => {});
 
     const started = provider.start();
-    await waitForFakeSocketCount(1);
     const socket = FakeSocket.instances[0];
     const startRejection = expect(started).rejects.toThrow('Volcengine SAUC ASR connection stopped.');
     await provider.stop();
@@ -1314,7 +1235,7 @@ describe('mobileRealtimeAsrProvider', () => {
 
   it('does not reject Volcengine flush when stop cancels an in-flight recovery', async () => {
     FakeSocket.instances = [];
-    const provider = volcengineProvider({
+    const provider = new MobileVolcengineSaucAsrProvider({
       credential: credential({
         asr: {
           provider: 'litellm-volcengine-sauc-asr',
@@ -1333,7 +1254,6 @@ describe('mobileRealtimeAsrProvider', () => {
     provider.onEvent(() => {});
 
     const started = provider.start();
-    await waitForFakeSocketCount(1);
     const firstSocket = FakeSocket.instances[0];
     firstSocket.open();
     await started;
@@ -1351,7 +1271,7 @@ describe('mobileRealtimeAsrProvider', () => {
   it('recovers Volcengine ASR by replaying audio and preserving the finalized transcript prefix', async () => {
     FakeSocket.instances = [];
     const events: string[] = [];
-    const provider = volcengineProvider({
+    const provider = new MobileVolcengineSaucAsrProvider({
       credential: credential({
         asr: {
           provider: 'litellm-volcengine-sauc-asr',
@@ -1372,7 +1292,6 @@ describe('mobileRealtimeAsrProvider', () => {
     });
 
     const started = provider.start();
-    await waitForFakeSocketCount(1);
     const firstSocket = FakeSocket.instances[0];
     firstSocket.open();
     await started;
@@ -1396,7 +1315,7 @@ describe('mobileRealtimeAsrProvider', () => {
 
   it('drops definite Volcengine audio before recovery replay', async () => {
     FakeSocket.instances = [];
-    const provider = volcengineProvider({
+    const provider = new MobileVolcengineSaucAsrProvider({
       credential: credential({
         asr: {
           provider: 'litellm-volcengine-sauc-asr',
@@ -1415,7 +1334,6 @@ describe('mobileRealtimeAsrProvider', () => {
     provider.onEvent(() => {});
 
     const started = provider.start();
-    await waitForFakeSocketCount(1);
     const firstSocket = FakeSocket.instances[0];
     firstSocket.open();
     await started;
@@ -1441,7 +1359,7 @@ describe('mobileRealtimeAsrProvider', () => {
         if (FakeSocket.instances[1] === this && this.sent.length === 2) this.close();
       }
     }
-    const provider = volcengineProvider({
+    const provider = new MobileVolcengineSaucAsrProvider({
       credential: credential({
         asr: {
           provider: 'litellm-volcengine-sauc-asr',
@@ -1460,7 +1378,6 @@ describe('mobileRealtimeAsrProvider', () => {
     provider.onEvent(() => {});
 
     const started = provider.start();
-    await waitForFakeSocketCount(1);
     const firstSocket = FakeSocket.instances[0];
     firstSocket.open();
     await started;
@@ -1480,7 +1397,7 @@ describe('mobileRealtimeAsrProvider', () => {
     try {
       vi.setSystemTime(new Date('2026-06-28T00:00:00.000Z'));
       FakeSocket.instances = [];
-      const provider = volcengineProvider({
+      const provider = new MobileVolcengineSaucAsrProvider({
         credential: credential({
           asr: {
             provider: 'litellm-volcengine-sauc-asr',
@@ -1499,7 +1416,6 @@ describe('mobileRealtimeAsrProvider', () => {
       provider.onEvent(() => {});
 
       const started = provider.start();
-      await waitForFakeSocketCount(1);
       const firstSocket = FakeSocket.instances[0];
       firstSocket.open();
       await started;
@@ -1527,7 +1443,7 @@ describe('mobileRealtimeAsrProvider', () => {
     try {
       vi.setSystemTime(new Date('2026-06-28T00:00:00.000Z'));
       FakeSocket.instances = [];
-      const provider = volcengineProvider({
+      const provider = new MobileVolcengineSaucAsrProvider({
         credential: credential({
           asr: {
             provider: 'litellm-volcengine-sauc-asr',
@@ -1546,7 +1462,6 @@ describe('mobileRealtimeAsrProvider', () => {
       provider.onEvent(() => {});
 
       const started = provider.start();
-      await waitForFakeSocketCount(1);
       const firstSocket = FakeSocket.instances[0];
       firstSocket.open();
       await started;
@@ -1574,7 +1489,7 @@ describe('mobileRealtimeAsrProvider', () => {
     try {
       vi.setSystemTime(new Date('2026-06-28T00:00:00.000Z'));
       FakeSocket.instances = [];
-      const provider = volcengineProvider({
+      const provider = new MobileVolcengineSaucAsrProvider({
         credential: credential({
           asr: {
             provider: 'litellm-volcengine-sauc-asr',
@@ -1593,7 +1508,6 @@ describe('mobileRealtimeAsrProvider', () => {
       provider.onEvent(() => {});
 
       const started = provider.start();
-      await waitForFakeSocketCount(1);
       const firstSocket = FakeSocket.instances[0];
       firstSocket.open();
       await started;
@@ -1623,7 +1537,7 @@ describe('mobileRealtimeAsrProvider', () => {
   it('lets recovered Volcengine replay replace partial-only transcript prefixes', async () => {
     FakeSocket.instances = [];
     const events: string[] = [];
-    const provider = volcengineProvider({
+    const provider = new MobileVolcengineSaucAsrProvider({
       credential: credential({
         asr: {
           provider: 'litellm-volcengine-sauc-asr',
@@ -1644,7 +1558,6 @@ describe('mobileRealtimeAsrProvider', () => {
     });
 
     const started = provider.start();
-    await waitForFakeSocketCount(1);
     const firstSocket = FakeSocket.instances[0];
     firstSocket.open();
     await started;
@@ -1666,7 +1579,7 @@ describe('mobileRealtimeAsrProvider', () => {
   it('deduplicates single-character overlap in recovered Volcengine transcripts', async () => {
     FakeSocket.instances = [];
     const events: string[] = [];
-    const provider = volcengineProvider({
+    const provider = new MobileVolcengineSaucAsrProvider({
       credential: credential({
         asr: {
           provider: 'litellm-volcengine-sauc-asr',
@@ -1687,7 +1600,6 @@ describe('mobileRealtimeAsrProvider', () => {
     });
 
     const started = provider.start();
-    await waitForFakeSocketCount(1);
     const firstSocket = FakeSocket.instances[0];
     firstSocket.open();
     await started;
@@ -1712,7 +1624,7 @@ describe('mobileRealtimeAsrProvider', () => {
     ): Promise<void> => {
       FakeSocket.instances = [];
       const events: string[] = [];
-      const provider = volcengineProvider({
+      const provider = new MobileVolcengineSaucAsrProvider({
         credential: credential({
           asr: {
             provider: 'litellm-volcengine-sauc-asr',
@@ -1733,7 +1645,6 @@ describe('mobileRealtimeAsrProvider', () => {
       });
 
       const started = provider.start();
-      await waitForFakeSocketCount(1);
       const firstSocket = FakeSocket.instances[0];
       firstSocket.open();
       await started;

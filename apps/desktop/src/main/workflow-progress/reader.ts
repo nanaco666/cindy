@@ -32,8 +32,8 @@ export type {
 /**
  * 复现 Claude Code 的 project-slug 规则:工作目录里每个非字母数字字符 → '-'
  * (含前导 '/')。实测:
- *   /Users/alice/Library/Application Support/xdt-maker/dialogues/2026-07-01/<id>
- *   → -Users-alice-Library-Application-Support-xdt-maker-dialogues-2026-07-01-<id>
+ *   /Users/dash/Library/Application Support/xdt-maker/dialogues/2026-07-01/<id>
+ *   → -Users-dash-Library-Application-Support-xdt-maker-dialogues-2026-07-01-<id>
  * 返回该 session 的 workflows 目录绝对路径。
  */
 export function deriveWorkflowsDir(

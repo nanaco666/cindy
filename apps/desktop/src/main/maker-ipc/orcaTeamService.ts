@@ -1,4 +1,4 @@
-import type { AgentKind } from '@cindy/maker-core';
+import type { AgentKind } from '@lizi/maker-core';
 
 import type { AgentInputQueuedMessage } from '../../shared/agentInputQueue.js';
 import { createHostSendFailure } from '../maker-host/send-outcome.js';
@@ -12,7 +12,7 @@ import { rebuildQueuedOrcaLeadMessage } from './orcaInterAgentDispatcher.js';
 /**
  * OrcaTeamService 只接管已存在 worker 的派活、释放、归档与 auto-bridge。
  * 普通 worker 创建由 OrcaWorkerCreationService 处理；开启协同的 team 生命周期编排由 OrcaLifecycleService 处理。
- * 契约锚点：accepted/rollback 与 terminal auto-bridge 不变量见 docs/dev-rules/orca-team-architecture.md「协同运行时行为契约」。
+ * 契约锚点：accepted/rollback 与 terminal auto-bridge 不变量见 docs/orca-team-architecture.md「协同运行时行为契约」。
  */
 export type OrcaWorkerStatus = 'idle' | 'running' | 'done' | 'error';
 export type OrcaWorkerEffort = 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultra';
@@ -141,7 +141,7 @@ export type WorkerQueuedMessageFailureCode =
 
 /**
  * worker 队列里单条排队消息的 lead 可见投影。口径是「看得全、只能动自己的」
- * (2026-07-21 产品决策):三种来源的条目都回传正文(lead 条目取
+ * (2026-07-21 Dash 拍板):三种来源的条目都回传正文(lead 条目取
  * origin.displayText 原始正文,用户手打 / scheduler 条目取排队正文),让 lead
  * 能基于完整队列内容做编排决策;但修改 / 撤回仍只对 lead 自己的 orca 条目开放。
  */

@@ -13,8 +13,8 @@ import { Check } from 'lucide-react-native';
 
 import type { MobileAgentCapabilities } from '@/session/agentCapabilities';
 import type { MobileModelPricingMap } from '@/device-link/mobileMakerTransport';
-import type { ProviderView } from '@cindy/model-providers/registry';
-import type { AgentKind } from '@cindy/model-providers/types';
+import type { ProviderView } from '@lizi/model-providers/registry';
+import type { AgentKind } from '@lizi/model-providers/types';
 import type { MobileModelMemoryAccessors } from '@/session/draftModelMemory';
 import { useDraftModelMemoryVersion } from '@/session/draftModelMemory';
 import { useSessionModelMirrorVersion } from '@/session/sessionModelMirror';

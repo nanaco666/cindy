@@ -17,10 +17,22 @@ import { useMemo } from 'react';
 import { FolderOpen } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
+import { cn } from '@/lib/utils';
 import { parseProjectDeepLinkHref, projectDisplayName } from '@/lib/deepLink';
 import { useSessionNavigationMode } from '@/features/cc-agent/embeddedSessionNavigation';
 import { requestProjectFocus } from '@/state/pendingProjectFocus';
-import { InlineReferenceChip } from './InlineReferenceChip';
+
+const chipClass = cn(
+  'inline-flex max-w-full items-center gap-[3px] px-[5px] py-[0.5px]',
+  'rounded-[4px] border',
+  'bg-[var(--chat-input-chip-bg)]',
+  'border-[var(--chat-input-chip-border)]',
+  'text-[var(--chat-input-chip-text)]',
+  'font-mono text-[13px] leading-[18px]',
+  'relative top-[-1px] align-middle -my-[1px]',
+  'cursor-pointer transition-colors',
+  'hover:bg-[var(--cmd-palette-item-hover)]',
+);
 
 export interface ProjectLinkChipProps {
   href: string;
@@ -38,19 +50,21 @@ export function ProjectLinkChip({ href, label }: ProjectLinkChipProps) {
   if (!target) return <span>{label ?? href}</span>;
 
   const display = label?.trim() || projectDisplayName(target.workingDir);
+  const content = (
+    <>
+      <FolderOpen size={12} className="shrink-0 text-[var(--chat-input-chip-icon)]" />
+      <span className="min-w-0 truncate">{display}</span>
+    </>
+  );
 
   // embedded 会话面板(Orca worker 等)不拥有宿主路由:navigate('/cc-agent')
   // 会把宿主页面整个切走、把用户拽出嵌入上下文——与 SessionLinkChip 同口径,
   // 渲染为不可点的静态 chip(review P2)。
   if (navigationMode === 'sidebar-embedded') {
     return (
-      <InlineReferenceChip
-        label={display}
-        icon={<FolderOpen aria-hidden />}
-        tooltip={display}
-        ariaLabel={display}
-        className="relative top-[-1px] -my-[1px] max-w-[min(240px,55vw)] cursor-default align-middle"
-      />
+      <span title={target.workingDir} className={cn(chipClass, 'cursor-default')}>
+        {content}
+      </span>
     );
   }
 
@@ -65,13 +79,8 @@ export function ProjectLinkChip({ href, label }: ProjectLinkChipProps) {
   };
 
   return (
-    <InlineReferenceChip
-      label={display}
-      icon={<FolderOpen aria-hidden />}
-      tooltip={display}
-      ariaLabel={display}
-      onClick={handleClick}
-      className="relative top-[-1px] -my-[1px] max-w-[min(240px,55vw)] align-middle"
-    />
+    <button type="button" onClick={handleClick} title={target.workingDir} className={chipClass}>
+      {content}
+    </button>
   );
 }

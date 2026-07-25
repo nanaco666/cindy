@@ -12,6 +12,7 @@
  *   有未发送内容(草稿/暂停队列)且未选中:右下叠铅笔。
  * idle 时图标照常显示——让用户一眼看出"这是哪一个 agent"。
  *
+ * 设计参考 doc/design_docs/cc-agent-view.pen 节点 ugsrn(方案 C)。
  */
 
 import { Archive, Pencil, RadioTower, UsersRound } from 'lucide-react';

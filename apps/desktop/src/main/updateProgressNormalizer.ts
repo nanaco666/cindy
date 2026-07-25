@@ -1,7 +1,7 @@
 /**
  * updateProgressNormalizer — AU-M2 (caller-side progress normalization).
  * ---------------------------------------------------------------------------
- * Caller-side progress normalization contract.
+ * Tech spec: .sivi/docs/tech_specs/app-update-system-frontend.md (AU-M2)
  *
  * The unified-downloader emits RAW progress events (loaded, total, percent —
  * any of which may be null / out of range / jittery on resume). The renderer

@@ -15,7 +15,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 
 import { shell } from 'electron';
-import type { Recipe, SiteGuide } from '@cindy/mcps';
+import type { Recipe, SiteGuide } from 'lizi-mcps';
 
 import { createLogger } from '../logger.js';
 import { userRecipesDir } from './loader.js';

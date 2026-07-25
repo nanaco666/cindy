@@ -6,7 +6,7 @@
  * 每个渠道各自硬编码默认值。
  */
 
-import type { AgentKind, Effort, PermissionMode } from '@cindy/maker-core';
+import type { AgentKind, Effort, PermissionMode } from '@lizi/maker-core';
 import {
   connectedProvidersForAgent,
   getModel,
@@ -14,7 +14,7 @@ import {
   providerOffersModel,
   sourcesForModel,
   type ProviderView,
-} from '@cindy/model-providers';
+} from '@lizi/model-providers';
 
 import {
   IM_DEFAULT_EFFORT_OVERRIDES,

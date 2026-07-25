@@ -13,8 +13,6 @@ beforeEach(() => {
 
 function stubElectron() {
   const makerSpies = {
-    setModel: vi.fn(),
-    setEffort: vi.fn(),
     fork: vi.fn(),
     forkStripEncrypted: vi.fn(),
     rewindPreview: vi.fn(),
@@ -67,11 +65,7 @@ describe('makerApiFor 路由(完整对等会话级操作)', () => {
     api.closeSession('rs');
     api.enableOrca('rs', { workerAgent: 'codex' });
     api.disableOrca('rs');
-    api.input.compact(
-      'rs',
-      { agentKind: 'claude-code', workingDir: '/w', model: 'm' },
-      { userName: 'Carol' },
-    );
+    api.input.compact('rs', { agentKind: 'claude-code', workingDir: '/w', model: 'm' }, { userName: 'Dash' });
     api.input.clearSession('rs');
 
     expect(invoke).toHaveBeenCalledWith('dev-1', 'maker:fork', ['rs', 'msg']);
@@ -92,23 +86,9 @@ describe('makerApiFor 路由(完整对等会话级操作)', () => {
     expect(invoke).toHaveBeenCalledWith('dev-1', 'maker:input:compact', [
       'rs',
       { agentKind: 'claude-code', workingDir: '/w', model: 'm' },
-      { userName: 'Carol' },
+      { userName: 'Dash' },
     ]);
     expect(invoke).toHaveBeenCalledWith('dev-1', 'maker:input:clear-session', ['rs']);
-  });
-
-  it('已捕获的 deviceId 在 session origin 暂时消失后仍固定走远程隧道', async () => {
-    const { makerSpies, invoke } = stubElectron();
-    const { makerApiForDevice } = await import('@/lib/makerTransport');
-
-    const api = makerApiForDevice('dev-sticky');
-    await api.setModel('rs', 'claude-fable-5');
-    await api.setEffort('rs', 'xhigh');
-
-    expect(invoke).toHaveBeenCalledWith('dev-sticky', 'maker:set-model', ['rs', 'claude-fable-5']);
-    expect(invoke).toHaveBeenCalledWith('dev-sticky', 'maker:set-effort', ['rs', 'xhigh']);
-    expect(makerSpies.setModel).not.toHaveBeenCalled();
-    expect(makerSpies.setEffort).not.toHaveBeenCalled();
   });
 
   it('远程会话 patchMeta(删/归档/改名/置顶)经隧道 local-db:sessions:patch-meta', async () => {
@@ -183,7 +163,7 @@ describe('drift 守卫:makerTransport 隧道的每个 channel 都在 REMOTE_INVO
   it('适配器里 t(...) / invokeRemote(deviceId, ...) 的 channel 串无一逃出 allowlist', async () => {
     const { readFileSync } = await import('node:fs');
     const { resolve } = await import('node:path');
-    const { REMOTE_INVOKE_ALLOWLIST } = await import('@cindy/device-link');
+    const { REMOTE_INVOKE_ALLOWLIST } = await import('@lizi/device-link');
     const src = readFileSync(resolve(__dirname, '..', 'lib', 'makerTransport.ts'), 'utf8');
     // 抓两种隧道写法的字面量 channel:通用 t('<ch>') 与手动打包的 invokeRemote(deviceId, '<ch>', ...)。
     const channels = new Set<string>();

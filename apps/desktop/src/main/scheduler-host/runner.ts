@@ -1,7 +1,7 @@
 /**
  * Phase 3: MakerScheduleRunner
  *
- * 实现 `ScheduleRunner` 接口（来自 @cindy/maker-scheduler）。
+ * 实现 `ScheduleRunner` 接口（来自 @lizi/maker-scheduler）。
  *
  * 一次 fire 的工作流：
  *   1. effort 白名单校验 — 防止 user-input 把非法 effort 透传给 maker.createSession
@@ -31,9 +31,8 @@
 
 import { randomUUID } from 'node:crypto';
 
-import { isTerminalAgentErrorEvent } from '@cindy/maker-core';
-import type { Maker, AgentEvent, AgentKind, Effort, PermissionMode } from '@cindy/maker-core';
-import { clampEffortToSupported } from '@cindy/model-providers';
+import { isTerminalAgentErrorEvent } from '@lizi/maker-core';
+import type { Maker, AgentEvent, AgentKind, Effort, PermissionMode } from '@lizi/maker-core';
 import type {
   Schedule,
   ScheduleRun,
@@ -43,7 +42,7 @@ import type {
   FireContext,
   FireResult,
   Scheduler,
-} from '@cindy/maker-scheduler';
+} from '@lizi/maker-scheduler';
 
 import { createMessage } from '../localDb/ipc/messages.js';
 import { getSessionRowSnapshot, touchUserSendInDb } from '../localDb/ipc/sessions.js';
@@ -565,17 +564,6 @@ export class MakerScheduleRunner implements ScheduleRunner {
         : undefined;
     const explicitProviderId = schedule.providerId?.trim() ? schedule.providerId.trim() : null;
     const createProviderId = explicitProviderId ?? (isHeartbeat ? heartbeatProviderId : null);
-    // issue #456:未门控入口(定时任务 fire)按所选模型自报的 supported efforts 把 effort
-    // clamp 到最高兼容档,避免把模型不支持的档(如 gpt-5.5 + max/ultra)透给上游被拒。
-    // 模型已声明支持的档原样保留(不降级 —— 保 #352 交互式口径);schedule 配置本身不回写,
-    // 只影响本次 fire 的运行值(该模型日后支持该档时自动生效)。直发 / 排队两路径共用
-    // reconcileEffortForModel(见其注释),口径一致;lookup 失败不阻断 headless 运行。
-    const reconciledEffort = this.reconcileEffortForModel(
-      effectiveAgentKind,
-      model,
-      schedule.effort,
-      schedule.id,
-    );
     // 复用判定必须在 createSession 之前取：之后 session 必然在 activeSessions 里,
     // 区分不出"本来就活着(复用, opts 被忽略)"还是"这次 fire 才 spawn(opts 已生效)"。
     // TOCTOU 窗口(判定后、createSession 前 session 恰好关闭)只会把 fresh spawn 误判
@@ -644,7 +632,7 @@ export class MakerScheduleRunner implements ScheduleRunner {
         agentKind: effectiveAgentKind,
         workingDir,
         model,
-        effort: reconciledEffort,
+        effort: schedule.effort as Effort | undefined,
         fastMode,
         permissionMode,
         title: isHeartbeat ? undefined : `[Schedule] ${schedule.name}`,
@@ -683,45 +671,15 @@ export class MakerScheduleRunner implements ScheduleRunner {
         this.deps.logger.warn?.('[runner] heartbeat setModel failed (non-fatal)', err);
       }
     }
-    // runtimeModel:本次实际会运行的模型 —— effort 必须按它 clamp。**复用会话一律以 live
-    // `session.model`(handle 值)为准**,而非 getSessionMeta 快照:
-    //  · setModel 成功 → handle 已是新模型;
-    //  · setModel 失败(Claude 未改)→ handle 仍是旧模型 = 仍在跑的模型;
-    //  · Codex setModel 在 await 前就先改了 handle.model,"失败"时其实已在新模型上 —— 只有读
-    //    handle 才拿到真相(PR #479 review「Use the actual live model after failed Codex switches」);
-    //  · follow-model(schedule.model 留空,不 setModel)→ handle 是用户在聊天里最新切到的模型。
-    // 快照(model / heartbeatModel)在以上任一场景都可能与实际在跑的模型不符,故复用一律用
-    // session.model。fresh spawn 无既有 handle,用本次 createSession 的 model。
-    const runtimeModel = reusedLiveSession ? session.model : model;
-    // follow-effort:schedule.effort 留空 = "沿用会话当前 effort"。此时待落档的**输入**是会话
-    // 当前 effort(heartbeatEffort)而非 undefined —— 否则「只换 model、不改 effort」换到不支持
-    // 当前档的模型时,reconcile(undefined) 返回 undefined、heartbeatEffortChanged=false,会话仍带
-    // 旧的 max 跑到新的 capped 模型被上游拒(PR #479 review「Clamp followed effort when switching models」)。
-    const desiredEffort = schedule.effort ? schedule.effort : heartbeatEffort;
-    // runtimeModel===model 且未走 follow(desiredEffort===schedule.effort)时直接复用上方
-    // createSession 已算好的 reconciledEffort,不重复 lookup / 不重复打 reconcile 日志。
-    const runtimeReconciledEffort =
-      runtimeModel === model && desiredEffort === schedule.effort
-        ? reconciledEffort
-        : this.reconcileEffortForModel(effectiveAgentKind, runtimeModel, desiredEffort, schedule.id);
-    // heartbeatEffort 为对比基线:仅当 clamp 结果与会话当前档不同才 setEffort(follow-effort 且模型
-    // 支持当前档 → 相等 → 不动;换到 capped 模型 → clamp 出更低档 → 触发同步)。
+    // effort 与 model 同理；schedule.effort 留空表示"沿用 session 当前值",不同步。
     const heartbeatEffortChanged =
-      isHeartbeat && !!runtimeReconciledEffort && runtimeReconciledEffort !== heartbeatEffort;
+      isHeartbeat && !!schedule.effort && schedule.effort !== heartbeatEffort;
     let effortSwitchApplied = true;
     if (heartbeatEffortChanged) {
       try {
-        await session.setEffort(runtimeReconciledEffort as Effort);
+        await session.setEffort(schedule.effort as Effort);
       } catch (err) {
-        // setEffort 失败时是否跳过落库,取决于它是不是本次「唯一生效通道」:
-        //  · 复用会话:createSession 忽略 opts,setEffort 是唯一通道;
-        //  · 冷 resume / fresh 但 follow-effort:createSession 收到的是 reconciledEffort(基于
-        //    schedule.effort,follow 时为空 → undefined),真正要落的 runtimeReconciledEffort 是沿用
-        //    并 clamp 后的值,与 createSession 拿到的不同 → 也只能靠 setEffort 落地。
-        // 这两种情况失败 = 没生效,必须跳过落库让下次 fire 重试;否则 DB 记了没生效的档、下次判定
-        // "已同步"不再重试(PR #479 review「Skip persisting followed effort when fresh sync fails」)。
-        // 仅当 fresh 且要落的档 == createSession 已应用的档时,setEffort 只是幂等兜底,失败可照常落库。
-        if (reusedLiveSession || runtimeReconciledEffort !== reconciledEffort) effortSwitchApplied = false;
+        if (reusedLiveSession) effortSwitchApplied = false;
         this.deps.logger.warn?.('[runner] heartbeat setEffort failed (non-fatal)', err);
       }
     }
@@ -783,9 +741,7 @@ export class MakerScheduleRunner implements ScheduleRunner {
       {
         // 复用路径 setEffort 失败时跳过落库 —— 保留旧 meta.effort, 下次 fire
         // heartbeatEffortChanged 仍为 true 会重试同步（4.4.1 注释的固化问题）。
-        // 落 runtimeReconciledEffort（按实际运行模型 clamp 后的值),session 行 effort 反映真跑的档,
-        // 不落超额的原始配置,也不落「为一个没切成功的模型 clamp 出来的」错档(PR #479 review)。
-        effort: effortSwitchApplied ? runtimeReconciledEffort : undefined,
+        effort: effortSwitchApplied ? schedule.effort : undefined,
         // heartbeat 模型被 schedule.model 覆盖时落库 —— chat UI picker 与
         // 下次 fire 读到的 meta.model 必须跟实际运行一致（4.4.1 已 setModel）。
         // 同 effort: 复用路径 setModel 失败时跳过, 留给下次 fire 重试。
@@ -864,7 +820,7 @@ export class MakerScheduleRunner implements ScheduleRunner {
       // 落库放在 onAccepted(dispatch 前)是**刻意**的:落库失败即判 send 失败
       // (SchedulerOnAcceptedError → failed run),且错误信息脱敏(不泄露 prompt 原文),
       // 不让 agent 在"用户消息没存下"的情况下空跑。
-      // 已知取舍(PR #129 review Thread F,经产品确认接受):在
+      // 已知取舍(PR #129 review Thread F,经 Dash 确认接受):在
       // 「session.ts:137 isTurnRunning 检查时 turn 未跑、紧接着 handle.send 又 reject
       // SESSION_RUNNING」这个 µs 级竞态窗口里,onAccepted 已落库但本轮被顺延,会留下
       // 一条 agent 实际没收到的孤儿 scheduler 消息(顺延重试再落一条)。触发面极窄——
@@ -1035,46 +991,6 @@ export class MakerScheduleRunner implements ScheduleRunner {
     );
     await this.notifyFailureSilent(schedule, ctx, errMsg);
     throw new Error(errMsg);
-  }
-
-  /**
-   * issue #456:按所选模型自报的 supported efforts 把 effort clamp 到最高兼容档 ——
-   * 定时任务 fire 的**直发 / 排队两条路径共用**,未门控入口在发到运行时前做与交互式
-   * 同口径的 reconcile。模型已声明支持的档原样保留(不降级 —— 保 #352);efforts / effort
-   * 空则透传;capability lookup 失败回退原 effort、不阻断无人值守运行。
-   *
-   * 口径依据:agent 运行时自身也用 `capabilities.availableModels.find(m => m.id === model)`
-   * 解析 effort(见 claude-code sdkEffortForModel),这里查的是同一张按 model id 去重的能力
-   * 表(base-agent mergeCapabilityList 对同 id 只留一条),clamp 结果与运行时实际门控一致 ——
-   * provider / 来源不改变某 model id 的 effort 阶梯,故按 model id 查即可。
-   */
-  private reconcileEffortForModel(
-    agentKind: AgentKind,
-    model: string,
-    effort: string | null | undefined,
-    scheduleId: string,
-  ): Effort | undefined {
-    let reconciled = (effort ?? undefined) as Effort | undefined;
-    try {
-      const descriptor = this.deps.maker
-        .getCapabilities(agentKind)
-        .availableModels.find((m) => m.id === model);
-      reconciled = (clampEffortToSupported(effort, descriptor?.efforts) ?? undefined) as
-        | Effort
-        | undefined;
-      if (effort && reconciled !== effort) {
-        this.deps.logger.info?.('[runner] effort reconciled to model capability', {
-          scheduleId,
-          model,
-          agent: agentKind,
-          from: effort,
-          to: reconciled,
-        });
-      }
-    } catch (err) {
-      this.deps.logger.warn?.('[runner] effort reconcile skipped (non-fatal)', err);
-    }
-    return reconciled;
   }
 
   private async fireHeartbeatViaQueue(
@@ -1325,36 +1241,11 @@ export class MakerScheduleRunner implements ScheduleRunner {
         this.deps.logger.warn?.('[runner] queued heartbeat setModel failed (non-fatal)', err);
       }
     }
-    // issue #456:排队派发路径与直发路径同口径 —— 按**实际会运行的模型**能力把 effort clamp
-    // 到最高兼容档再 setEffort / 落库。忙会话(心跳撞正在跑的 turn)最常走这条排队分支,而
-    // 直发路径的 reconcile 在 fireHeartbeatViaQueue return 之后才执行、覆盖不到这里;不 clamp
-    // 就会把模型不支持的档(gpt-5.5 + max/ultra)原样透给上游被拒 —— 正是 #456 要消除的回归。
-    // runtimeModel:只有「显式改 model 且 setModel 成功」时 turn 才跑在 targetModel;follow-session
-    // (无显式 model,不调 setModel)或 setModel 失败时都跑在 live.model —— 后者在排队等待期间可能
-    // 已被用户在聊天里改过,必须按它 clamp,否则用 enqueue 时的陈旧 targetModel 会张冠李戴
-    // (PR #479 review:follow-session 用 live.model / setModel 失败用 live.model 两条)。
-    const runtimeModel = modelChanged && modelApplied ? targetModel : live.model;
-    // 只 reconcile schedule **显式配置**的 effort。follow-effort(schedule.effort 留空)不在排队路径
-    // clamp:baseline.effort 是 enqueue 时刻的快照,排队等待期间用户可能已在聊天里改过 effort,拿旧
-    // 快照 clamp 后 setEffort 会覆盖用户的新选择;而运行时无 live effort getter、拿不到当前真实值 ——
-    // 遵循「follow 且当前值不可知 → 不动 effort」(PR #479 review「Re-read effort before following
-    // queued sessions」)。显式 effort 才是权威意图,按实际运行模型 clamp 后下发。
-    const reconciledEffort = this.reconcileEffortForModel(
-      live.agentKind,
-      runtimeModel,
-      schedule.effort,
-      schedule.id,
-    );
-    // 显式 effort 存在即下发,不靠 `!== baseline.effort` 判断:baseline.effort 是 enqueue 时刻快照,
-    // 且上一次 fire 可能已把它 backfill 成 clamp 后的值 —— 若据此判"未变"而 skip,当用户在排队期间
-    // 把 live effort 调低时,这一 turn 会跑用户的低档而非 schedule 的显式档。setEffort 幂等,显式档
-    // 每次派发都重申一遍无害(PR #479 review「Reapply explicit queued effort after clamping」)。
-    // follow-effort 时 reconciledEffort 为 undefined(上面只喂 schedule.effort),自然 skip。
-    const effortChanged = !!reconciledEffort;
+    const effortChanged = !!schedule.effort && schedule.effort !== baseline.effort;
     let effortApplied = true;
     if (effortChanged) {
       try {
-        await live.setEffort(reconciledEffort as Effort);
+        await live.setEffort(schedule.effort as Effort);
       } catch (err) {
         effortApplied = false;
         this.deps.logger.warn?.('[runner] queued heartbeat setEffort failed (non-fatal)', err);
@@ -1369,7 +1260,7 @@ export class MakerScheduleRunner implements ScheduleRunner {
         live.id,
         {
           model: modelChanged && modelApplied ? targetModel : undefined,
-          effort: effortChanged && effortApplied ? reconciledEffort : undefined,
+          effort: effortChanged && effortApplied ? schedule.effort : undefined,
           providerId: explicitProviderId ?? undefined,
         },
         this.deps.logger,

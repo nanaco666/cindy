@@ -20,11 +20,6 @@ export const MAKER_INVOKE = {
   SESSION_ENABLE_ORCA: 'maker:session:enable-orca',
   SESSION_DISABLE_ORCA: 'maker:session:disable-orca',
   CLOSE_SESSION: 'maker:close-session',
-  /**
-   * 单条 user / assistant 消息本地内容删除。保留后续可见消息，但清当前原生
-   * session 绑定；下一次发送以删除后的本地历史重建上下文。
-   */
-  DELETE_MESSAGE: 'maker:message:delete',
   ABORT_SESSION: 'maker:abort-session',
   SEND: 'maker:send',
   STEER: 'maker:steer',
@@ -146,11 +141,6 @@ export const MAKER_INVOKE = {
    * 与 SET_MODEL 的边界:同引擎换模型走 SET_MODEL,跨引擎必须走本 channel。
    */
   SWITCH_SESSION_AGENT: 'maker:switch-session-agent',
-  /**
-   * 只读查询下一条消息发送时才会应用的跨 Agent 切换意图。
-   * device-link 控制端用它在重连 / 重进会话后恢复权威展示。
-   */
-  GET_SESSION_AGENT_SWITCH_INTENT: 'maker:get-session-agent-switch-intent',
   SET_EFFORT: 'maker:set-effort',
   SET_PERMISSION_MODE: 'maker:set-permission-mode',
   SET_FAST_MODE: 'maker:set-fast-mode',
@@ -207,9 +197,6 @@ export const MAKER_INVOKE = {
   // Agent 今日累计 (取代老 codex:usage:today) —— 走 host 的 readAgentTodayUsage
   USAGE_TODAY: 'maker:usage:today',
   USAGE_ACCOUNT: 'maker:usage:account',
-  // Codex app-server 官方控制面:完整额度/reset 次数读取 + desktop 预签发幂等 offer 消耗。
-  USAGE_CODEX_RATE_LIMITS: 'maker:usage:codex-rate-limits',
-  USAGE_CODEX_RATE_LIMIT_RESET: 'maker:usage:codex-rate-limit-reset',
   // Claude 订阅账号余量 (oauth/usage 端点 + unified headers 双源, cached-first) — 状态栏 chip 用
   USAGE_CLAUDE_SUBSCRIPTION: 'maker:usage:claude-subscription',
   // 模型单价表 (LiteLLM /model_group/info, main 端内存 + 磁盘缓存, 启动预热) — 模型选择器 hover tooltip 用
@@ -288,7 +275,7 @@ export const MAKER_INVOKE = {
   /**
    * 智能通讯录(maker-contacts) ——
    *  - SETTINGS_GET/SET: 功能开关(<userData>/contacts-settings.json), 只 gate agent 侧
-   *    cindy_contacts MCP(新 session 生效); 下面的数据 CRUD 通道不受 gate, 设置页
+   *    lizi_contacts MCP(新 session 生效); 下面的数据 CRUD 通道不受 gate, 设置页
    *    管理 UI 关着开关也能浏览/清理。
    *  - 数据通道: 实体/身份/事件/分组 CRUD + resolve/search/stats, 直达全局
    *    MakerContactsManager(maker-core), 与 session 无关。
@@ -349,7 +336,7 @@ export const MAKER_INVOKE = {
   XAI_OAUTH_LOGOUT: 'maker:xai-oauth:logout',
   XAI_OAUTH_CANCEL: 'maker:xai-oauth:cancel',
   /**
-   * 模型供应商目录（@cindy/model-providers）—— 只读聚合：内置目录元数据 + 各供应商
+   * 模型供应商目录（@lizi/model-providers）—— 只读聚合：内置目录元数据 + 各供应商
    * 实时连接状态（XD=gateway key / Anthropic=Claude.ai OAuth / OpenAI=Codex OAuth）。
    * 供应商的「连接 / 断开」复用各 agent 已有的鉴权通道（CLAUDE_OAUTH_* / AUTH_* / 登录托管），
    * 不另立重复通道。
@@ -495,7 +482,7 @@ export const MAKER_INVOKE = {
   COMPUTER_UPDATE_DRIVER: 'maker:computer:update-driver',
   // macOS: launch CuaDriver permission flow (Accessibility + Screen Recording).
   COMPUTER_GRANT_PERMISSIONS: 'maker:computer:grant-permissions',
-  // macOS: CuaDriver.app 的真实安装图标(授权引导弹窗里给用户当识别参照)。
+  // macOS: companion bundle（Cindy Computer Use.app）的真实图标(授权引导弹窗里给用户当识别参照)。
   COMPUTER_DRIVER_ICON: 'maker:computer:driver-icon',
   // macOS: 取消在途的 CuaDriver 授权流程(引导弹窗「取消」时收割 grant 子进程)。
   COMPUTER_CANCEL_PERMISSION_GRANT: 'maker:computer:cancel-permission-grant',
@@ -546,6 +533,13 @@ export const MAKER_INVOKE = {
  */
 export const MAKER_SEND = {
   /**
+   * macOS permission coach: begin/end a native drag of the real Computer Use
+   * app bundle into System Settings. Main validates that the sender is the
+   * dedicated guide window before acting.
+   */
+  COMPUTER_PERMISSION_APP_DRAG_START: 'maker:computer:permission-app-drag-start',
+  COMPUTER_PERMISSION_APP_DRAG_END: 'maker:computer:permission-app-drag-end',
+  /**
    * 把 renderer `newMakerDraft` 的关键子集 (lastByVendor / fastModeByModel /
    * effortByModel) 同步给 main 缓存 (newMakerDefaultsCache)。collab mode spawn
    * worker (enableOrcaInternal / orca-bridge.create_worker) 读这份缓存决定 worker
@@ -580,6 +574,10 @@ export const MAKER_SEND = {
 export const MAKER_PUSH = {
   EVENT: 'maker:event',
   STATUS_CHANGED: 'maker:status-changed',
+  /** 用户从独立 Computer Use 授权引导浮窗主动取消。 */
+  COMPUTER_PERMISSION_GUIDE_CANCELLED: 'maker:computer:permission-guide-cancelled',
+  /** Native Computer Use onboarding status changed while System Settings is open. */
+  COMPUTER_PERMISSION_GUIDE_STATUS_CHANGED: 'maker:computer:permission-guide-status-changed',
   INPUT_PROJECTION: 'maker:input:projection',
   /** New interaction request (permission / ask_user_question / plan_review) */
   INTERACTION_REQUEST: 'maker:interaction-request',

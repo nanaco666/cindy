@@ -13,7 +13,7 @@ import { cn } from '@/lib/utils';
 import { InvisibleWindowDragStrip } from '@/components/layout/windowDrag';
 import { useRegisterCCAgentSidebar } from '@/features/cc-agent/useRegisterCCAgentSidebar';
 
-const GITHUB_ISSUES_URL = 'https://github.com/makecindy/cindy/issues';
+const GITHUB_ISSUES_URL = 'https://github.com/xindong/XDMaker/issues';
 
 export function IssueTrackerFeatureLayout() {
   const { t } = useTranslation();

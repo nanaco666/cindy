@@ -8,19 +8,12 @@ vi.mock('electron', () => ({
 }));
 
 import {
-  effectiveVoiceInputServiceMode,
   resolveVoiceInputModelSelectionValues,
   voiceInputModelSelectionSignature,
 } from '../VoiceInputModelSelection.js';
 
 describe('VoiceInputModelSelection', () => {
   describe('serviceMode', () => {
-    it('forces BYOK when account services are unavailable', () => {
-      expect(effectiveVoiceInputServiceMode('cindy', false)).toBe('byok');
-      expect(effectiveVoiceInputServiceMode('byok', false)).toBe('byok');
-      expect(effectiveVoiceInputServiceMode('cindy', true)).toBe('cindy');
-    });
-
     it('defaults to the managed cindy mode when unset', () => {
       const result = resolveVoiceInputModelSelectionValues({});
       expect(result.values.serviceMode).toBe('cindy');
@@ -92,9 +85,13 @@ describe('VoiceInputModelSelection', () => {
         'litellm-volcengine-sauc-asr',
         'litellm-qwen3-asr-flash-realtime',
       ],
-      // BYOK refiner fallback is explicit opt-in: no configured chain means
-      // the selected primary runs alone.
-      refinerProviderChain: ['litellm-qwen3.6-plus'],
+      refinerProviderChain: [
+        'litellm-qwen3.6-plus',
+        'codex-gpt-5.4-mini',
+        'litellm-gpt-5.4-mini',
+        'litellm-kimi-k2.6',
+        'litellm-deepseek-v4-flash',
+      ],
       refinerProviderChainSource: 'default',
     });
     expect(result.warnings).toEqual([]);
@@ -143,7 +140,12 @@ describe('VoiceInputModelSelection', () => {
         'litellm-qwen3-asr-flash-realtime',
         'litellm-gpt-realtime-whisper',
       ],
-      refinerProviderChain: ['codex-gpt-5.4-mini'],
+      refinerProviderChain: [
+        'codex-gpt-5.4-mini',
+        'litellm-gpt-5.4-mini',
+        'litellm-kimi-k2.6',
+        'litellm-deepseek-v4-flash',
+      ],
       refinerProviderChainSource: 'default',
     });
     expect(result.warnings).toEqual([]);
@@ -190,7 +192,7 @@ describe('VoiceInputModelSelection', () => {
       .toBe('litellm-kimi-k2.6');
   });
 
-  it('builds the default ASR chain but keeps the refiner primary alone without explicit fallback', () => {
+  it('builds default fallback chains headed by the selected providers', () => {
     const result = resolveVoiceInputModelSelectionValues({});
 
     expect(result.values.asrProviderChain).toEqual([
@@ -198,9 +200,12 @@ describe('VoiceInputModelSelection', () => {
       'litellm-qwen3-asr-flash-realtime',
       'litellm-gpt-realtime-whisper',
     ]);
-    // BYOK refiner fallback is explicit opt-in (product decision 2026-07-23):
-    // without a configured chain there is no built-in default tail.
-    expect(result.values.refinerProviderChain).toEqual(['codex-gpt-5.4-mini']);
+    expect(result.values.refinerProviderChain).toEqual([
+      'codex-gpt-5.4-mini',
+      'litellm-gpt-5.4-mini',
+      'litellm-kimi-k2.6',
+      'litellm-deepseek-v4-flash',
+    ]);
   });
 
   it('uses explicit chain config as the fallback tail, keeping the selected primary as head', () => {

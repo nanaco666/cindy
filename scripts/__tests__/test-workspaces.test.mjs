@@ -73,7 +73,7 @@ test("help groups copyable desktop, binary, and Mobile workflows", async () => {
 	const output = lines.join("\n");
 	const rootScripts = Object.keys(readRootScripts());
 	const documentedWorkflowScripts = rootScripts.filter((name) =>
-		/^(mobile:xcode|mobile:sim:|mobile:build:(ios|android))/.test(name) ||
+		/^(mobile:xcode|mobile:sim:|mobile:release:(ios|android):)/.test(name) ||
 		/^(install:(agent-binaries|claude|codex|ripgrep)|update:(vendors|claude|codex|ripgrep))$/.test(name) ||
 		/^release:(claude-code|codex|ripgrep)(:arm64|:x64|:win)?$/.test(name),
 	);
@@ -85,12 +85,26 @@ test("help groups copyable desktop, binary, and Mobile workflows", async () => {
 
 	for (const command of [
 		"pnpm dev:desktop:remote --region=global",
+		"pnpm package:desktop --region cn --version patch",
+		"pnpm package:desktop --region dev",
 		"pnpm install:agent-binaries",
-		"pnpm mobile:build:ios -- --region cn --execute",
-		"pnpm mobile:build:android -- --region cn --execute",
+		"pnpm release:claude-code -- --dry-run",
+		"pnpm release:codex -- --platform linux-x64",
+		"pnpm release:ripgrep:win",
+		"pnpm release:package --region cn --version patch",
+		"pnpm release:canary -- --region cn --version 0.2.3 --execute",
+		"pnpm release:promote:mac -- --yes",
+		"pnpm release:promote:win -- --yes",
+		"pnpm mobile:release:ios:local -- --region cn --execute",
+		"pnpm mobile:release:ios:local -- --region global --execute",
+		"pnpm mobile:release:ios:local -- --region dev --execute",
+		"pnpm mobile:release:android:local -- --region cn --execute",
+		"pnpm mobile:release:android:local -- --region global --execute",
+		"pnpm mobile:release:android:local -- --region dev --execute",
 	]) {
 		assert.match(output, new RegExp(command.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
 	}
+	assert.match(output, /没有“只 promote 某个二进制”的命令/);
 	assert.match(output, /pnpm test:guard/);
 });
 
@@ -128,7 +142,7 @@ test("validateManifestCoverage fails when a pnpm workspace is missing", () => {
 test("discoverTestFiles ignores generated and nested non-workspace directories", () => {
 	const files = [
 		"packages/orca-workflow/src/__tests__/orca-bridge-mcp.test.ts",
-		"packages/orca-workflow/node_modules/@cindy/maker-core/src/session.test.ts",
+		"packages/orca-workflow/node_modules/@lizi/maker-core/src/session.test.ts",
 		"apps/server/release/src/__tests__/ignored.test.ts",
 		"apps/desktop/cindy-updater/src/__tests__/ignored.test.ts",
 		"apps/server/src/__tests__/services/oss.spec.ts",
@@ -562,14 +576,14 @@ test("parseCliOptions supports workspace include and exclude selectors", () => {
 			"--workspace",
 			"desktop,apps/server",
 			"--workspace",
-			"@cindy/maker-core",
+			"@lizi/maker-core",
 			"--exclude-workspace",
 			"packages/orca-workflow",
 		]),
 		{
 			all: false,
 			tier: "unit",
-			workspaces: ["desktop", "apps/server", "@cindy/maker-core"],
+			workspaces: ["desktop", "apps/server", "@lizi/maker-core"],
 			excludeWorkspaces: ["packages/orca-workflow"],
 		},
 	);

@@ -2,6 +2,7 @@
 id: getting-started
 title: Getting started with Cindy
 summary: Create a session, choose an agent and working directory, send your first prompt, and iterate.
+status: draft
 ---
 Cindy is a desktop app that runs AI coding agents (Claude Code and Codex) for you.
 

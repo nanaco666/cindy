@@ -4,13 +4,9 @@ import {
   applyPendingAgentSwitchIfIdle,
   applySetModelThenCancelAgentSwitchIntent,
   performSessionAgentSwitch,
-  registerMakerSessionAgentSwitchHandler,
   type AgentSwitchSessionRow,
   type MakerSessionAgentSwitchHandlerDeps,
-  type PendingAgentSwitchIntent,
 } from '../sessionAgentSwitchHandler';
-import { MAKER_INVOKE } from '../channels';
-import { IpcHarness } from './helpers/ipcHarness';
 
 function makeRow(overrides: Partial<AgentSwitchSessionRow> = {}): AgentSwitchSessionRow {
   return {
@@ -225,8 +221,7 @@ describe('deferred switch (turn running)', () => {
   });
 
   it('意图制:空闲时外部调用同样只登记意图(不关引擎/不建交接/不插边界行)', async () => {
-    const onPendingSwitchChanged = vi.fn();
-    const { deps, calls, store } = makeDepsWithPending({ onPendingSwitchChanged });
+    const { deps, calls, store } = makeDepsWithPending();
     const result = await performSessionAgentSwitch(deps, {
       ...validParams,
       effort: 'xhigh',
@@ -236,13 +231,6 @@ describe('deferred switch (turn running)', () => {
     expect(calls).toEqual([]);
     expect(deps.listMessagesForHandoff).not.toHaveBeenCalled();
     expect(store.get('s1')).toEqual({
-      targetAgentKind: 'codex',
-      model: 'gpt-5.5',
-      providerId: null,
-      effort: 'xhigh',
-      fastMode: true,
-    });
-    expect(onPendingSwitchChanged).toHaveBeenCalledWith('s1', {
       targetAgentKind: 'codex',
       model: 'gpt-5.5',
       providerId: null,
@@ -295,8 +283,7 @@ describe('deferred switch (turn running)', () => {
   });
 
   it('applyPendingAgentSwitchIfIdle:空闲时清 pending 并执行切换(skipBootstrap)', async () => {
-    const onPendingSwitchChanged = vi.fn();
-    const { deps, calls, store } = makeDepsWithPending({ onPendingSwitchChanged });
+    const { deps, calls, store } = makeDepsWithPending();
     store.set('s1', { targetAgentKind: 'codex', model: 'gpt-5.5', providerId: 'openai' });
     await applyPendingAgentSwitchIfIdle(deps, 's1');
     expect(store.has('s1')).toBe(false);
@@ -308,48 +295,6 @@ describe('deferred switch (turn running)', () => {
       providerId: 'openai',
       sdkSessionId: null,
     });
-    expect(onPendingSwitchChanged).toHaveBeenLastCalledWith('s1', null);
-  });
-
-  it('只读查询返回公开 intent 投影，不泄露 resume recovery payload', async () => {
-    const store = new Map<string, PendingAgentSwitchIntent>();
-    store.set('s1', {
-      targetAgentKind: 'codex',
-      model: 'gpt-5.5',
-      providerId: 'openai',
-      effort: 'high',
-      fastMode: true,
-      resumeFallbackRecovery: {
-        boundaryClientId: 'boundary-1',
-        boundaryContent: {
-          fromAgentKind: 'cc',
-          toAgentKind: 'codex',
-          fromModel: 'claude-fable-5',
-          toModel: 'gpt-5.5',
-          fromSdkSessionId: 'sdk-old',
-          handoff: 'private recovery handoff',
-        },
-        handoff: 'private recovery handoff',
-      },
-    });
-    const { deps } = makeDeps({
-      pendingSwitches: {
-        set: (id, intent) => void store.set(id, intent),
-        get: (id) => store.get(id),
-        clear: (id) => void store.delete(id),
-      },
-    });
-    const ipc = new IpcHarness();
-    registerMakerSessionAgentSwitchHandler(ipc, deps);
-
-    await expect(ipc.invoke(MAKER_INVOKE.GET_SESSION_AGENT_SWITCH_INTENT, 's1')).resolves.toEqual({
-      targetAgentKind: 'codex',
-      model: 'gpt-5.5',
-      providerId: 'openai',
-      effort: 'high',
-      fastMode: true,
-    });
-    await expect(ipc.invoke(MAKER_INVOKE.GET_SESSION_AGENT_SWITCH_INTENT, '')).rejects.toThrow(/INVALID_PARAMS/);
   });
 
   it('applyPendingAgentSwitchIfIdle:直发路径可要求切换后同步 bootstrap', async () => {

@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils';
 interface SendButtonProps {
   disabled: boolean;
   onClick: () => void;
-  /** When true, renders the streaming Stop variant. */
+  /** When true, renders as Stop button per cc-agent-view.pen Streaming variant */
   isStreaming?: boolean;
   /** Highlighted while voice long-press is hovering over this button as a release target. */
   highlighted?: boolean;
@@ -30,7 +30,7 @@ function CreateAgentSendIcon() {
 }
 
 /**
- * Send / Stop button
+ * Send / Stop button — 对标 cc-agent-view.pen
  *
  * Send (idle): 28×28 圆形（9999）, bg #262626/#fff, arrow-up icon 白/黑
  * Stop (streaming):复用 Send 壳样式,仅把内容换成 10×10 圆角 1.5 的停止方块
@@ -47,39 +47,51 @@ export const SendButton = forwardRef<HTMLButtonElement, SendButtonProps>(functio
       disabled={disabled}
       onClick={onClick}
       className={cn(
-        // transform 进过渡集:承载 active 按压缩放(DESIGN.md §14.4 按压原型)。
-        'flex shrink-0 items-center justify-center rounded-full transition-[color,background-color,transform]',
-        !disabled && 'active:scale-[0.98]',
-        // create-agent(新建对话框)send 与会话内共用 send-btn-* token,三态(hover/pressed/disabled)一致;
-        // 仅尺寸随所在工具条密度不同(新建对话框行高 30px,会话内 28px)。
+        'flex shrink-0 items-center justify-center transition-colors',
         isCreateAgentVariant ? 'h-[30px] w-[30px]' : 'h-7 w-7',
-        'bg-[var(--send-btn-bg)] text-[var(--send-btn-icon)]',
-        !disabled && 'hover:bg-[var(--send-btn-hover-bg)] active:bg-[var(--send-btn-pressed-bg)]',
+        isStreaming
+          ? isCreateAgentVariant
+            ? [
+                'rounded-full bg-[var(--create-agent-send-bg)] text-[var(--create-agent-send-icon)]',
+                !disabled && 'hover:bg-[var(--create-agent-send-bg-hover)] active:bg-[var(--create-agent-send-bg-pressed)]',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--create-agent-focus-ring)]',
+              ]
+            : [
+                'rounded-full bg-[var(--send-btn-bg)] text-[var(--send-btn-icon)]',
+                !disabled && 'hover:bg-[var(--send-btn-hover-bg)] active:bg-[var(--send-btn-pressed-bg)]',
+              ]
+          : isCreateAgentVariant
+            ? [
+                'rounded-full bg-[var(--create-agent-send-bg)] text-[var(--create-agent-send-icon)]',
+                !disabled && 'hover:bg-[var(--create-agent-send-bg-hover)] active:bg-[var(--create-agent-send-bg-pressed)]',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--create-agent-focus-ring)]',
+              ]
+            : [
+                'rounded-full bg-[var(--send-btn-bg)] text-[var(--send-btn-icon)]',
+                !disabled && 'hover:bg-[var(--send-btn-hover-bg)] active:bg-[var(--send-btn-pressed-bg)]',
+              ],
         highlighted && !disabled && !isStreaming && 'opacity-85',
-        disabled && !isStreaming && 'cursor-not-allowed opacity-40',
+        disabled &&
+          !isStreaming &&
+          (isCreateAgentVariant
+            ? 'cursor-not-allowed bg-[var(--create-agent-send-bg)] text-[var(--create-agent-send-icon)] opacity-40'
+            : 'cursor-not-allowed bg-[var(--send-btn-bg)] text-[var(--send-btn-icon)] opacity-40'),
       )}
       aria-label={ariaLabel ?? (isStreaming ? t('newChat.sendButton.stop') : t('newChat.sendButton.send'))}
     >
-      {/* send / stop 两态图标叠放同格交叉淡切(150ms,opacity+scale,
-          compositor-only),替代条件渲染的瞬间硬换。 */}
-      <span className="relative grid h-3.5 w-3.5 place-items-center" aria-hidden>
+      {isStreaming ? (
         <span
           className={cn(
-            'col-start-1 row-start-1 flex items-center justify-center',
-            'transition-[opacity,transform] duration-[var(--motion-fast,150ms)] ease-[var(--motion-ease-out)]',
-            isStreaming ? 'scale-75 opacity-0' : 'scale-100 opacity-100',
+            'block h-[10px] w-[10px] rounded-[1.5px]',
+            isCreateAgentVariant
+              ? 'bg-[var(--create-agent-send-icon)]'
+              : 'bg-[var(--send-btn-icon)]',
           )}
-        >
-          <CreateAgentSendIcon />
-        </span>
-        <span
-          className={cn(
-            'col-start-1 row-start-1 block h-[10px] w-[10px] rounded-[1.5px] bg-[var(--send-btn-icon)]',
-            'transition-[opacity,transform] duration-[var(--motion-fast,150ms)] ease-[var(--motion-ease-out)]',
-            isStreaming ? 'scale-100 opacity-100' : 'scale-75 opacity-0',
-          )}
+          aria-hidden
         />
-      </span>
+      ) : (
+        <CreateAgentSendIcon />
+      )}
     </button>
   );
 });

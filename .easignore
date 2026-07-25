@@ -15,17 +15,8 @@ node_modules
 .claude
 # 项目元数据目录（带斜杠限定目录，避免误伤 *.cindy ghost 包文件）
 .cindy/
+agent-use
 docs
-!docs/
-docs/*
-!docs/legal/
-docs/legal/*
-!docs/legal/notices/
-docs/legal/notices/*
-!docs/legal/notices/mobile-ios.txt
-!docs/legal/notices/mobile-ios-restricted.txt
-!docs/legal/notices/mobile-android.txt
-!docs/legal/notices/mobile-android-restricted.txt
 scripts/*
 !scripts/ensure-agent-binaries.mjs
 !scripts/agent-binary-cdn-fallback.mjs
@@ -33,6 +24,7 @@ scripts/*
 # app.config.js 在 EAS 云端求值时同步读取 region 端点清单的构建适配器。
 !scripts/shared
 !scripts/shared/client-endpoint-build-env.cjs
+THIRD-PARTY-NOTICES.txt
 .gitlab-ci*
 
 apps/*
@@ -62,5 +54,7 @@ packages/*
 !cindy-protocol/**
 
 tools/*
+!tools/codex-platform-stub
+!tools/codex-platform-stub/**
 !tools/shared
 !tools/shared/fetch-with-timeout.mjs

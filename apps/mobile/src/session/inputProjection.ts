@@ -2,25 +2,10 @@ import {
   buildAttachmentPersistFileRefs,
   buildAttachmentPersistImageRefs,
 } from '@/session/attachments';
-import { stripChatQuoteMarkerLines } from '@cindy/maker-shared/chat-quotes';
-import {
-  readAgentInputReferences,
-  type AgentInputReference,
-} from '@cindy/maker-shared/agent-input-projection';
+import { stripChatQuoteMarkerLines } from '@lizi/maker-shared/chat-quotes';
 import type { InputProjection, QueuedRemoteMessage, RemoteImageRef, RemoteSession } from '@/session/types';
 import type { RemoteSerializedAttachment } from '@/session/types';
-import { permissionModeOrAsk } from '@cindy/maker-shared/permission-mode';
-import {
-  composerDocumentsEqual,
-  composerDocumentFromSerializedMessage,
-  composerDocumentProjectedText,
-  serializeComposerDocument,
-  type ComposerDocument,
-} from '@/session/composerDocument';
-import {
-  readSentPastedTextRanges,
-  readSentSlashCommandRanges,
-} from '@/session/sentMessageAtoms';
+import { permissionModeOrAsk } from '@lizi/maker-shared/permission-mode';
 export {
   buildQueuePanelSummary,
   buildQueueRowPresentation,
@@ -31,7 +16,7 @@ export {
   type QueueRowActionId,
   type QueueRowActionPresentation,
   type QueueRowPresentation,
-} from '@cindy/maker-shared/queue';
+} from '@lizi/maker-shared/queue';
 
 export const EMPTY_INPUT_PROJECTION: InputProjection = Object.freeze({
   sessionId: '',
@@ -89,9 +74,6 @@ export function buildQueuedTextMessage(
   options: {
     attachments?: readonly RemoteSerializedAttachment[];
     quotesEncoded?: boolean;
-    agentReferences?: AgentInputReference[];
-    pastedTextRanges?: Array<{ start: number; end: number; display: string }>;
-    slashCommandRanges?: Array<{ start: number; end: number }>;
   } = {},
 ): QueuedRemoteMessage {
   const trimmed = text.trim();
@@ -107,9 +89,6 @@ export function buildQueuedTextMessage(
     persistedImageRefs,
     persistedFileRefs,
     options.quotesEncoded === true,
-    options.pastedTextRanges,
-    options.slashCommandRanges,
-    options.agentReferences,
   );
   const createdAt = now.toISOString();
 
@@ -118,7 +97,6 @@ export function buildQueuedTextMessage(
     text: trimmed,
     persistedContent,
     ...(attachments.length > 0 ? { files: [...attachments] } : {}),
-    ...(options.agentReferences?.length ? { agentReferences: options.agentReferences } : {}),
     model: session.model,
     effort,
     permissionMode,
@@ -130,8 +108,6 @@ export function buildQueuedTextMessage(
       ...(persistedImageRefs.length > 0 ? { images: persistedImageRefs } : {}),
       ...(persistedFileRefs.length > 0 ? { files: persistedFileRefs } : {}),
       ...(options.quotesEncoded === true ? { quotesEncoded: true } : {}),
-      ...(options.pastedTextRanges?.length ? { pastedTextRanges: options.pastedTextRanges } : {}),
-      ...(options.slashCommandRanges !== undefined ? { slashCommandRanges: options.slashCommandRanges } : {}),
       isStreaming: false,
       createdAt,
     },
@@ -161,18 +137,12 @@ function stringifyUserContent(
   images: RemoteImageRef[] = [],
   files: Array<{ name: string; path: string }> = [],
   quotesEncoded = false,
-  pastedTextRanges: Array<{ start: number; end: number; display: string }> = [],
-  slashCommandRanges?: Array<{ start: number; end: number }>,
-  agentReferences: AgentInputReference[] = [],
 ): string {
   return JSON.stringify({
     text,
     images,
     files,
     ...(quotesEncoded ? { quotesEncoded: true } : {}),
-    ...(pastedTextRanges.length > 0 ? { pastedTextRanges } : {}),
-    ...(slashCommandRanges !== undefined ? { slashCommandRanges } : {}),
-    ...(agentReferences.length > 0 ? { agentReferences } : {}),
   });
 }
 
@@ -192,101 +162,39 @@ export interface QueueEditTextState {
   visibleText: string;
   encodedText: string;
   quotesEncoded: boolean;
-  document: ComposerDocument;
-  pastedTextRanges: Array<{ start: number; end: number; display: string }>;
-  slashCommandRanges: Array<{ start: number; end: number }> | undefined;
-  agentReferences: AgentInputReference[];
 }
 
 export function createQueueEditTextState(
   message: Pick<QueuedRemoteMessage, 'text' | 'persistedContent'>,
 ): QueueEditTextState {
   const quotesEncoded = queuedMessageHasEncodedQuotes(message);
-  const metadata = readQueuedTextMetadata(message.persistedContent, message.text);
-  const document = composerDocumentFromSerializedMessage(message.text, {
-    quotesEncoded,
-    agentReferences: metadata.agentReferences,
-    pastedTextRanges: metadata.pastedTextRanges,
-    slashCommandRanges: metadata.slashCommandRanges,
-  });
   return {
-    visibleText: composerDocumentProjectedText(document),
+    visibleText: quotesEncoded ? stripChatQuoteMarkerLines(message.text) : message.text,
     encodedText: message.text,
     quotesEncoded,
-    document,
-    pastedTextRanges: metadata.pastedTextRanges,
-    slashCommandRanges: metadata.slashCommandRanges,
-    agentReferences: metadata.agentReferences,
   };
 }
 
 /**
- * 文档未改时复用原持久化正文与 metadata；修改后从结构化文档重新序列化，
- * 保留仍存在的引用 / 粘贴文本 / Slash atom，删除的 atom 则自然退出 metadata。
+ * 引用消息可见文本未改时复用原 marked body；一旦用户编辑 markerless 文本，
+ * 就同步移除 quotesEncoded，避免普通 Markdown blockquote 被误还原成产品引用。
  */
 export function resolveQueueEditTextSubmission(
   state: QueueEditTextState,
-  document: ComposerDocument,
-): {
-  text: string;
-  quotesEncoded: boolean;
-  pastedTextRanges?: Array<{ start: number; end: number; display: string }>;
-  slashCommandRanges?: Array<{ start: number; end: number }>;
-  agentReferences: AgentInputReference[];
-} {
-  const documentUnchanged = composerDocumentsEqual(document, state.document);
-  if (!documentUnchanged) {
-    const serialized = serializeComposerDocument(document);
-    return {
-      text: serialized.text,
-      quotesEncoded: serialized.quotesEncoded,
-      agentReferences: serialized.agentReferences,
-      ...(serialized.pastedTextRanges.length > 0
-        ? { pastedTextRanges: serialized.pastedTextRanges }
-        : {}),
-      slashCommandRanges: serialized.slashCommandRanges,
-    };
-  }
+  visibleText: string,
+): { text: string; quotesEncoded: boolean } {
+  const preserveEncodedBody = state.quotesEncoded && visibleText === state.visibleText;
   return {
-    text: state.encodedText,
-    quotesEncoded: state.quotesEncoded,
-    agentReferences: state.agentReferences,
-    ...(state.pastedTextRanges.length > 0
-      ? { pastedTextRanges: state.pastedTextRanges }
-      : {}),
-    ...(state.slashCommandRanges !== undefined
-      ? { slashCommandRanges: state.slashCommandRanges }
-      : {}),
+    text: preserveEncodedBody ? state.encodedText : visibleText.trim(),
+    quotesEncoded: preserveEncodedBody,
   };
-}
-
-function readQueuedTextMetadata(persistedContent: string, text: string): {
-  pastedTextRanges: Array<{ start: number; end: number; display: string }>;
-  slashCommandRanges: Array<{ start: number; end: number }> | undefined;
-  agentReferences: AgentInputReference[];
-} {
-  try {
-    const record = readRecord(JSON.parse(persistedContent));
-    const pastedTextRanges = readSentPastedTextRanges(record?.pastedTextRanges, text) ?? [];
-    const slashCommandRanges = readSentSlashCommandRanges(record?.slashCommandRanges, text);
-    const agentReferences = readAgentInputReferences(record?.agentReferences, text);
-    return { pastedTextRanges, slashCommandRanges, agentReferences };
-  } catch {
-    return { pastedTextRanges: [], slashCommandRanges: undefined, agentReferences: [] };
-  }
 }
 
 function readQueuedMessages(value: unknown): QueuedRemoteMessage[] {
   if (!Array.isArray(value)) return [];
   const out: QueuedRemoteMessage[] = [];
   for (const item of value) {
-    if (!isQueuedRemoteMessage(item)) continue;
-    // projection 只服务展示/交互，永远不携带引用历史正文。即使本地乐观队列或
-    // 异常旧被控端回包夹带可信字段，也在进入 mobile store 前统一剥离。
-    const projected = { ...(item as QueuedRemoteMessage) };
-    delete projected.trustedSessionReferenceContexts;
-    delete projected.sessionReferencesRequireTrustedSnapshot;
-    out.push(projected);
+    if (isQueuedRemoteMessage(item)) out.push(item as QueuedRemoteMessage);
   }
   return out;
 }

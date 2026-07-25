@@ -8,13 +8,13 @@
  *   - call_tool 入口：透传到 SchedulerToolRegistry；正确分发 handler
  *   - 真 Scheduler（InMemoryStorage + mock runner）的 create / list / get /
  *     run_now / list_runs 行为透传给 MCP 调用方时形态正确
- *   - MCP 错误码翻译契约：
+ *   - 错误码翻译（plan §C.6 硬规则）：
  *       * UNKNOWN_TOOL — 调不存在的 tool
  *       * INVALID_ARGS — zod schema 校验失败（带 schema 自纠 payload）
  *       * NOT_FOUND    — Scheduler 抛 'schedule {id} not found'
  *       * SCHEDULER_NOT_READY — getScheduler() 抛 'scheduler not started'
  *
- * 不 cover 的边界（仍需在 desktop 端到端验证）：
+ * 不 cover 的边界（plan §Phase 5 验收 user 仍需在 desktop 上跑）：
  *   - cc / codex agent 把 cindy_scheduler provider 拼进 mcpServers config 的 spawn 链
  *   - 真 LLM 模型在对话里能 discovery 并调用这些 tool
  *   - GUI 列表 onEvent 推送实时刷新
@@ -24,15 +24,15 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 
-import { Scheduler } from '@cindy/maker-scheduler';
+import { Scheduler } from '@lizi/maker-scheduler';
 import type {
   CreateScheduleInput,
   ListFilter,
   Schedule,
   ScheduleRun,
-} from '@cindy/maker-scheduler';
-import type { ScheduleStorage } from '@cindy/maker-scheduler';
-import type { FireContext, ScheduleRunner } from '@cindy/maker-scheduler';
+} from '@lizi/maker-scheduler';
+import type { ScheduleStorage } from '@lizi/maker-scheduler';
+import type { FireContext, ScheduleRunner } from '@lizi/maker-scheduler';
 
 import { createSchedulerMcpServer } from '../cindy_schedulerMcpServer.js';
 import { SchedulerToolRegistry } from '../cindy_schedulerToolRegistry.js';
@@ -280,7 +280,7 @@ describe('cindy_scheduler MCP server (in-process smoke)', () => {
     expect(createdData.notify).toEqual({ desktop: true, feishu: false });
     expect(typeof createdData.nextFireAt).toBe('number');
 
-    // schedule_list — verify the same payload shape as scheduler.list().
+    // schedule_list — verify same shape as scheduler.list() (plan §C.6 hard rule)
     const listed = await h.client.callTool({
       name: 'call_tool',
       arguments: { name: 'schedule_list', args: {} },
@@ -1252,9 +1252,6 @@ describe('schedule_set_pre_run_hook — 统一安装通道', () => {
     scheduleName?: string;
     workingDir?: string;
     currentCommand?: string;
-    providerId?: string;
-    agentKind?: 'codex' | 'claude-code';
-    model?: string;
   }
 
   function setup(opts: {
@@ -1338,9 +1335,6 @@ describe('schedule_set_pre_run_hook — 统一安装通道', () => {
         id: 'sch-1',
         name: 'PR 巡检',
         workingDir: '/repo',
-        providerId: 'custom-claude',
-        agentKind: 'claude-code',
-        model: 'claude-connect-4-6',
         preRunHook: { command: 'node scripts/schedule-checks/old.mjs' },
       },
     });
@@ -1354,9 +1348,6 @@ describe('schedule_set_pre_run_hook — 统一安装通道', () => {
       scheduleName: 'PR 巡检',
       workingDir: '/repo',
       currentCommand: 'node scripts/schedule-checks/old.mjs',
-      providerId: 'custom-claude',
-      agentKind: 'claude-code',
-      model: 'claude-connect-4-6',
     });
     expect(updates).toEqual([
       {

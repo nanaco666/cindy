@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { DeviceLinkError, type DeviceView } from '@cindy/device-link';
+import { DeviceLinkError, type DeviceView } from '@lizi/device-link';
 import { createMobileMakerTransport, type RemoteInvoke } from '@/device-link/mobileMakerTransport';
 import { toDeviceListItems } from '@/device-link/devices';
 import { formatRemoteError, describeRemoteError } from '@/device-link/remoteStatus';
@@ -51,7 +51,7 @@ const SESSION_ID = 'smoke-session-1';
 function device(patch: Partial<DeviceView> = {}): DeviceView {
   return {
     deviceId: DEVICE_ID,
-    name: 'CaroldeMacBook-Pro.local',
+    name: 'DashdeMacBook-Pro.local',
     platform: 'darwin',
     appVersion: '0.0.0-test',
     lastSeenAt: '2026-06-16T10:00:00.000Z',
@@ -405,11 +405,11 @@ describe('mobile remote-control headless UI flow smoke', () => {
       }
       if (channel === 'fs:list-dir') {
         return {
-          resolvedPath: '/Users/alice/Code',
-          parent: '/Users/alice',
+          resolvedPath: '/Users/dash/Code',
+          parent: '/Users/dash',
           entries: [
-            { name: 'xdt-maker', kind: 'dir', path: '/Users/alice/Code/xdt-maker' },
-            { name: 'shared', kind: 'symlink', path: '/Users/alice/Code/shared' },
+            { name: 'xdt-maker', kind: 'dir', path: '/Users/dash/Code/xdt-maker' },
+            { name: 'shared', kind: 'symlink', path: '/Users/dash/Code/shared' },
           ],
         };
       }
@@ -525,7 +525,7 @@ describe('mobile remote-control headless UI flow smoke', () => {
         'active',
         { includePinned: true },
       ]);
-      remoteSessionStore.setDeviceSessions(DEVICE_ID, 'CaroldeMacBook-Pro.local', sessions);
+      remoteSessionStore.setDeviceSessions(DEVICE_ID, 'DashdeMacBook-Pro.local', sessions);
     });
     const firstDeviceSync = syncDevice.run();
     const secondDeviceSync = syncDevice.run();
@@ -598,16 +598,16 @@ describe('mobile remote-control headless UI flow smoke', () => {
     });
 
     await expect(maker.fs.listDir('~')).resolves.toMatchObject({
-      resolvedPath: '/Users/alice/Code',
-      parent: '/Users/alice',
+      resolvedPath: '/Users/dash/Code',
+      parent: '/Users/dash',
       entries: [
-        { name: 'xdt-maker', kind: 'dir', path: '/Users/alice/Code/xdt-maker' },
-        { name: 'shared', kind: 'symlink', path: '/Users/alice/Code/shared' },
+        { name: 'xdt-maker', kind: 'dir', path: '/Users/dash/Code/xdt-maker' },
+        { name: 'shared', kind: 'symlink', path: '/Users/dash/Code/shared' },
       ],
     });
-    await expect(maker.fs.statPath('/Users/alice/Code/xdt-maker')).resolves.toMatchObject({
+    await expect(maker.fs.statPath('/Users/dash/Code/xdt-maker')).resolves.toMatchObject({
       kind: 'dir',
-      resolvedPath: '/Users/alice/Code/xdt-maker',
+      resolvedPath: '/Users/dash/Code/xdt-maker',
     });
     await expect(maker.fs.statPath('/repo/xdt-maker/spec.pdf')).resolves.toMatchObject({
       kind: 'file',
@@ -678,7 +678,7 @@ describe('mobile remote-control headless UI flow smoke', () => {
       workDir: '/repo/xdt-maker',
     });
     const createdSession = await maker.getSession(created!.sessionId);
-    remoteSessionStore.upsertDeviceSession(DEVICE_ID, 'CaroldeMacBook-Pro.local', createdSession);
+    remoteSessionStore.upsertDeviceSession(DEVICE_ID, 'DashdeMacBook-Pro.local', createdSession);
     const createdAttachment = buildMobileRemoteFileAttachment('/repo/xdt-maker/spec.pdf', { id: 'mobile-created-file-1' });
     expect(createdAttachment).not.toBeNull();
     remoteSessionStore.setInputProjection(
@@ -775,13 +775,13 @@ describe('mobile remote-control headless UI flow smoke', () => {
     expect(normalizeScheduleList(await maker.schedule.list())).toEqual([]);
     remoteSessionStore.upsertDeviceSession(
       DEVICE_ID,
-      'CaroldeMacBook-Pro.local',
+      'DashdeMacBook-Pro.local',
       await maker.getSession(SESSION_ID),
     );
     expect(remoteSessionStore.getSessions().some((item) => item.id === SESSION_ID)).toBe(true);
 
     const forked = await maker.fork(SESSION_ID, 'm2');
-    remoteSessionStore.upsertDeviceSession(DEVICE_ID, 'CaroldeMacBook-Pro.local', forked);
+    remoteSessionStore.upsertDeviceSession(DEVICE_ID, 'DashdeMacBook-Pro.local', forked);
     expect(remoteSessionStore.getSessions().map((item) => item.id).slice(0, 3)).toEqual([
       'forked-session',
       SESSION_ID,

@@ -1,7 +1,7 @@
 /**
  * previewGate.ts — 意识面板「点图看大图」的主机闸口(产物 lightbox 预览)。
  *
- * 面板 webview 是零桥沙箱(docs/dev-rules/plugin-security-and-authoring.md),不给它开任何
+ * 面板 webview 是零桥沙箱(runtime-sandbox.md §5.5 铁则 4),不给它开任何
  * JS API;预览走**声明式链接拦截**:面板作者把 <img> 包进
  * `<a href="cindy-ghost://<id>/preview/<指纹><后缀>">`,导航被主机的
  * will-navigate 闸(webview-security)拦下、翻译成"在主窗口弹 ImageLightbox"。
@@ -34,7 +34,7 @@ const HASH_RE = /^[0-9a-f]{64}$/;
 
 /** 图片后缀白名单(账本 mime 才是权威判定,这里是形状预筛)。 */
 const IMAGE_EXTS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp']);
-/** 视频后缀白名单(视频产物入画廊后,预览闸随渲染链路就绪放行)。 */
+/** 视频后缀白名单(C3c-5 视频产物入画廊后,预览闸随渲染链路就绪放行)。 */
 const VIDEO_EXTS = new Set(['.mp4', '.webm']);
 /** 预览放行的全部媒体后缀(图片 lightbox / 视频播放器各走各的,kind 随结果回传)。 */
 const PREVIEW_MEDIA_EXTS = new Set([...IMAGE_EXTS, ...VIDEO_EXTS]);
@@ -294,7 +294,7 @@ export class GhostPreviewGate {
       return { ok: false, reason: 'not-owned' };
     }
     // ext/mime 以账本为准(URL 后缀只是预筛):图片/视频各归各的 lightbox
-    // (视频渲染链路就绪后放行),其余类型待各自链路就绪再逐类放行。
+    // (C3c-5 视频渲染链路就绪后放行),其余类型待各自链路就绪再逐类放行。
     const info = await this.deps.getBlobInfo(parsed.hash);
     const kind = !info
       ? null

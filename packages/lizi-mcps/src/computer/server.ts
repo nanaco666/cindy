@@ -2,12 +2,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { jsonObjectArg } from '../json-object-arg.js';
 import { resolvePathInsideRoot, PathBoundaryError } from '../shared/assertInsidePath.js';
-import type {
-  ComputerMcpCallContext,
-  ComputerMcpDeps,
-  ComputerMcpToolName,
-  LiziMcpSessionContext,
-} from '../types.js';
+import type { ComputerMcpDeps, ComputerMcpToolName, LiziMcpSessionContext } from '../types.js';
 import {
   callComputerTool,
   COMPUTER_TOOLS,
@@ -217,27 +212,15 @@ function withSessionArg(
   };
 }
 
-function readCallContext(options: ComputerMcpServerOptions): ComputerMcpCallContext | undefined {
-  const sessionContext = options.getSessionContext?.();
-  const sessionId = sessionContext?.sessionId ?? options.sessionId;
-  const agentKind = sessionContext?.agentKind;
-  return sessionId || agentKind
-    ? {
-        ...(sessionId ? { sessionId } : {}),
-        ...(agentKind ? { agentKind } : {}),
-      }
-    : undefined;
-}
-
 function readSessionId(options: ComputerMcpServerOptions): string | undefined {
-  return readCallContext(options)?.sessionId;
+  return options.getSessionContext?.().sessionId ?? options.sessionId;
 }
 
 export function createComputerMcpServer(
   deps: ComputerMcpDeps,
   options: ComputerMcpServerOptions = {},
 ): McpServer {
-  const server = new McpServer({ name: 'cindy_computer', version: '0.1.0' });
+  const server = new McpServer({ name: 'lizi_computer', version: '0.1.0' });
   // 快照代际状态。claude 路径下每 session 一个 server 实例;codex HTTP bridge 下
   // 单实例跨 session 共享,所以 tracker 内部按 sessionId 分键。
   const snapshotTracker = new WindowSnapshotTracker();
@@ -269,7 +252,7 @@ export function createComputerMcpServer(
       // 模型自纠之前在这里落一条日志(见 tool-error-telemetry.ts)。
       logToolResultErrorCode({
         logger: deps.logger,
-        server: 'cindy_computer',
+        server: 'lizi_computer',
         tool: name,
         result,
         sessionId: readSessionId(options),
@@ -293,8 +276,7 @@ export function createComputerMcpServer(
     if (!parsed.success) {
       return validationError(name, schema, parsed.error);
     }
-    const callContext = readCallContext(options);
-    const sessionId = callContext?.sessionId;
+    const sessionId = readSessionId(options);
     const parsedData = parsed.data as Record<string, unknown>;
 
     // 快照代际护栏:element_index 指向"某次 get_window_state 的第几项",观察和
@@ -321,7 +303,7 @@ export function createComputerMcpServer(
         deps,
         name as ComputerMcpToolName,
         parsedArgs,
-        callContext,
+        sessionId ? { sessionId } : undefined,
       );
       const snapshotId = recordWindowSnapshot(name as ComputerMcpToolName, parsedData, data, sessionId);
       return textResult({
@@ -418,7 +400,7 @@ export function createComputerMcpServer(
       // 过渡兼容:老调用方 / 未升级的 agent 不带 snapshot_id,放行但留痕,
       // 后续可据此评估何时收紧为强制。
       deps.logger?.warn('element_index action without snapshot_id', {
-        server: 'cindy_computer',
+        server: 'lizi_computer',
         tool: name,
         ...(sessionId ? { sessionId } : {}),
       });

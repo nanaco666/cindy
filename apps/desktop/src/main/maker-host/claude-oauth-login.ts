@@ -15,7 +15,7 @@ import { createServer, type Server, type IncomingMessage, type ServerResponse } 
 import type { AddressInfo } from 'node:net';
 import { shell } from 'electron';
 
-import { BRAND_NAME } from '@cindy/maker-shared/branding';
+import { BRAND_NAME } from '@lizi/maker-shared/branding';
 
 import {
   buildOAuthReturnAction,
@@ -27,7 +27,6 @@ import {
 } from '../oauthResultPage.js';
 import { desktopMakerLogger } from './logger-adapter.js';
 import { writeClaudeAiOAuth } from './claude-credentials-store.js';
-import { bindNativeProviderAuth } from './nativeProviderAuthBinding.js';
 import { backfillClaudeSubscriptionProfile } from './claude-oauth-refresh.js';
 
 const log = desktopMakerLogger.child('claude-oauth-login');
@@ -352,7 +351,6 @@ export async function runClaudeOAuthLogin(opts?: {
       subscriptionType: null,
       rateLimitTier: null,
     });
-    bindNativeProviderAuth('anthropic');
     void backfillClaudeSubscriptionProfile(tokens.access_token).catch((e) =>
       log.warn('post-login subscription profile backfill failed', {
         error: e instanceof Error ? e.message : String(e),

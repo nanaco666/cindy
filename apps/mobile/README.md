@@ -17,11 +17,18 @@ pnpm --filter mobile start -- --host localhost --port 8081
 
 For current-source iOS Simulator debugging, use the development-client loop in
 the [simulator debugging guide](./docs/simulator-debugging.md). Do not use
-Expo Go or an installed distribution build as proof that local source changes are running.
+Expo Go or TestFlight as proof that local source changes are running.
 
 Required Expo public env:
 
-- `EXPO_PUBLIC_ENDPOINT_MANIFEST_BASE_URL`: endpoint manifest bootstrap base (per-region hotfix CDN). Runtime business endpoints (auth / device-link / gateway) are resolved from `<base>/endpoint.json` at startup; in dev they default to the repo's `config/endpoint.json` and can still be overridden with explicit `EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL` / `EXPO_PUBLIC_CINDY_AUTH_BASE_URL`. Set `EXPO_PUBLIC_ENDPOINTS_CDN=1` to make dev fetch the online manifest used by packaged clients.
+- `EXPO_PUBLIC_ENDPOINT_MANIFEST_BASE_URL`: endpoint manifest bootstrap base (per-region hotfix CDN). Runtime business endpoints (auth / device-link / gateway) are resolved from `<base>/endpoint.json` at startup; in dev they default to the repo's `config/endpoint.json` and can still be overridden with explicit `EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL` / `EXPO_PUBLIC_CINDY_AUTH_BASE_URL`. Set `EXPO_PUBLIC_ENDPOINTS_CDN=1` to make dev fetch the online manifest like production.
+- EAS/TestFlight reads TapDB analytics from `EXPO_PUBLIC_TAPTAP_CLIENT_ID` and `EXPO_PUBLIC_TAPTAP_CLIENT_TOKEN`. Self-hosted builds read the same public values from the selected region's `scripts/self-host-regions.json` `tapdb` block instead. Optional EAS `EXPO_PUBLIC_TAPDB_CHANNEL` overrides the default `AppStore` / `NPKG` channel; optional `EXPO_PUBLIC_TAPDB_REGION` defaults to `cn`.
+
+Release env:
+
+- Do not commit the TapTap client token to `eas.json`.
+- Configure `EXPO_PUBLIC_TAPTAP_CLIENT_ID` and `EXPO_PUBLIC_TAPTAP_CLIENT_TOKEN` in EAS project environments for both `production` and `preview`, so cloud builds can bundle TapDB. Configure optional `EXPO_PUBLIC_TAPDB_CHANNEL` / `EXPO_PUBLIC_TAPDB_REGION` there too when they need to differ from defaults.
+- Run releases through the fixed root `pnpm mobile:release:*` scripts. They automatically wrap the underlying release command with the matching EAS environment and only allow the TapDB public env keys through.
 
 The mobile redirect URI is region-specific: `cindycn://auth` for CN and
 `cindy://auth` for Global. Cindy Auth and native social login callbacks must
@@ -88,7 +95,7 @@ For the iOS-first runtime gate, let the runner launch the local server, Expo/Met
 pnpm --filter mobile test:e2e:local:ios
 ```
 
-To browse real local Cindy session/message data through the same mobile flow, use the real-DB fixture. This keeps the host protocol mocked but reads the desktop SQLite `sessions` and `messages` tables:
+To browse real local XDMaker session/message data through the same mobile flow, use the real-DB fixture. This keeps the host protocol mocked but reads the desktop SQLite `sessions` and `messages` tables:
 
 ```bash
 pnpm --filter mobile test:e2e:local:real-db:ios
@@ -146,26 +153,71 @@ pnpm --filter mobile test:e2e:reconnect:local
 
 The package script starts the local server fixture automatically; pass `-- --dry-run` to inspect the host/controller IDs and server command.
 
-Runtime mobile voice input uses the Cindy login access token to create a short-lived voice session. ASR frames and refinement go through `voice-server`; the dedicated inference project key never reaches the app and no LiteLLM key is required in mobile Settings. The old desktop-key relay path (`device-link:voice:credential-sync`) has been removed: desktop now rejects that channel with `VOICE_CREDENTIAL_SYNC_REMOVED`, the mock host mirrors the same rejection, and the legacy credential export/fetch/relay/doctor scripts are gone.
+Runtime mobile voice input uses the Cindy login access token to create a short-lived voice session. ASR frames and refinement go through `voice-server`; the dedicated inference project key never reaches the app and no LiteLLM key is required in mobile Settings.
 
-For headless endpoint validation, the ASR/refine preflight remains. It is config-driven: point it at an ASR/refine proxy through `XDT_MOBILE_VOICE_PROXY_BASE_URL` / `XDT_MOBILE_VOICE_PROXY_API_KEY` (or a local credential JSON fixture via `XDT_MOBILE_VOICE_CREDENTIAL_JSON` / `--credential-file`), then add `--run` to actually call the endpoints:
+The credential helpers below are legacy diagnostics for the old desktop-key relay path. Keep them only for local investigation of historical credential fixtures; do not treat them as the mobile runtime contract and do not use them for production mobile voice input.
 
-```bash
-XDT_MOBILE_VOICE_PROXY_BASE_URL=http://localhost:3345 XDT_MOBILE_VOICE_PROXY_API_KEY=sk-mock-mobile-voice-key \
-  pnpm --filter mobile test:voice-cloud:preflight:run
-```
-
-For the usual local iOS smoke, the runner starts the local mock voice proxy and can run the same preflight against it first:
+When you only need to validate the local desktop `safeStorage` key and voice model files without restarting an existing desktop dev window, export the same mobile credential shape directly from the app's userData and run preflight:
 
 ```bash
-pnpm --filter mobile test:e2e:local:voice:ios -- --voice-cloud-preflight --no-mock-audio
+pnpm --filter mobile voice:credential:local-desktop -- --list-user-data
+pnpm --filter mobile voice:credential:local-desktop -- --preflight --user-data-dir "$HOME/Library/Application Support/xdt-maker"
 ```
 
-Add `--voice-cloud-all-candidates` to that smoke when you want the local mock voice proxy to exercise every ASR/refine fallback candidate before Maestro starts.
+This helper starts a short-lived Electron process only to decrypt `safe-storage/api_key.enc`, writes the temporary credential file with `0600`, runs the same cloud ASR/refine preflight, and deletes the file by default. It does not open or restart desktop and does not prove the device-link relay path; use the local desktop gate below for that.
 
-The Maestro voice flow remains a stable UI/controller regression and may use mock output, because real ASR text depends on microphone input and should not be asserted as a fixed string.
+To prove the same local desktop credential can travel through the real local device-link relay without starting or restarting desktop, run the relay smoke. It exports the local desktop credential, starts a protocol mock host that serves it over `device-link:voice:credential-sync`, fetches it through the relay, then calls the real ASR/refine preflight:
+
+```bash
+pnpm --filter mobile test:voice-cloud:local-desktop-relay -- --user-data-dir "$HOME/Library/Application Support/xdt-maker" --all-candidates
+```
+
+This is still not a replacement for the real desktop gate because the host process is a fixture. It proves the local `safeStorage` key, mobile credential shape, relay fetch path, cloud provider chain, redaction, and temporary-file cleanup together.
+
+For the local desktop gate, keep the server and desktop as separate long-lived processes, then run the headless mobile gate:
+
+```bash
+# Terminal 1: local API relay used by both desktop and mobile smoke.
+XDT_DEV_AUTH_ENABLED=1 pnpm --filter server dev
+
+# Terminal 2: start a desktop client against http://localhost:3333.
+# This restart command stops existing XDMaker desktop dev processes.
+pnpm restart:desktop:local
+
+# Terminal 3: inspect the controllable desktop, then run the real cloud gate.
+pnpm --filter mobile test:voice-cloud:doctor -- --start-server --api-base http://localhost:3333 --fetch-credential
+pnpm --filter mobile test:voice-cloud:device -- --list-devices --api-base http://localhost:3333
+pnpm --filter mobile test:voice-cloud:device:run -- --api-base http://localhost:3333 --target-device-id <desktop-device-id>
+```
+
+The doctor never starts or restarts desktop. With `--start-server` it can start only the local API relay and clean it up after the check; with `--fetch-credential` it proves that `device-link:voice:credential-sync` works without printing the key. The full gate fetches the credential through the same narrow channel, writes a temporary `0600` credential file, calls ASR/refine, and deletes the file unless `--keep-credential-file` is passed.
+By default it calls only the primary mobile runtime candidate. Add `--all-candidates` to call every synced ASR/refine provider candidate when validating desktop fallback configuration:
+
+```bash
+pnpm --filter mobile test:voice-cloud:device:run -- --api-base http://localhost:3333 --target-device-id <desktop-device-id> --all-candidates
+```
+
+For lower-level debugging, split the fetch and cloud preflight:
+
+```bash
+pnpm --filter mobile voice:credential:fetch -- --output /tmp/xdt-mobile-voice-credential.json
+pnpm --filter mobile test:voice-cloud:preflight:run -- --credential-file /tmp/xdt-mobile-voice-credential.json
+```
+
+For the usual local iOS smoke, the runner can fetch the credential first and pass it into the mock host automatically:
+
+```bash
+pnpm --filter mobile test:e2e:local:voice:ios -- --voice-credential-from-device --voice-cloud-preflight --no-mock-audio
+```
+
+Add `--voice-cloud-all-candidates` to that smoke when you want the local mock voice proxy to exercise every synced ASR/refine fallback candidate before Maestro starts.
+
+The Maestro voice flow remains a stable UI/controller regression and may use mock output, because real ASR text depends on microphone input and should not be asserted as a fixed string. Use the headless real-cloud gate above for the real desktop credential and cloud endpoint proof.
 
 Mobile voice input keeps the same provider-neutral fallback order as desktop: Volcengine SAUC first, then Qwen realtime, then OpenAI-compatible realtime. Every candidate/recovery obtains a fresh one-shot ticket from `voice-server`; refinement keeps its two-model fallback and falls back to raw ASR text if both fail.
+
+The fetch helper writes the file with `0600` permissions and never prints `proxyApiKey`. It remains only as a legacy fixture diagnostic; production voice uses Cindy login plus `voice-server`.
+For a non-local relay, provide a controller/mobile token through `XDT_MOBILE_AUTH_ACCESS_TOKEN_FILE`; do not use the controlled desktop's own token, because that would replace its device-link connection.
 
 The default app id is `com.xd.lizcn`. Override when testing Expo Go or a custom dev build:
 

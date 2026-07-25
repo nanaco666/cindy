@@ -1,7 +1,7 @@
 /**
  * VendorIcon — sidebar session 行的 Agent 身份 + running 状态指示器
  * ---------------------------------------------------------------------------
- * 2026-07-21(产品语义纠偏):Agent 身份保留 Claude Code 像素脸 / Codex CLI
+ * 2026-07-21(Dash 语义纠偏):Agent 身份保留 Claude Code 像素脸 / Codex CLI
  * 花形+`>_` glyph;模型厂牌另用 AnthropicMark / OpenAIMark。
  * 2026-07-19(用户拍板,撤销 D4-1):恢复按 Agent 类型区分的 glyph。
  *   D4-1 曾统一替换为品牌箭头(BrandArrow),实测后发现依赖图标区分 agent 类型的
@@ -11,6 +11,7 @@
  *   - idle (默认)   : Stone 灰 #737373 / dark #a3a3a3
  *   - running=true  : Thinking Orange(--warning-accent,全主题同值)+ session-breathing 呼吸;选中态同样橙(用户拍板 2026-07-20)
  *
+ * 设计参考:doc/design_docs/cc-agent-view.pen 节点 ugsrn (方案 C)。
  */
 
 import { cn } from '@/lib/utils';

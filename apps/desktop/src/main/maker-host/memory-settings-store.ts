@@ -27,7 +27,6 @@ import {
   createOverrideSettingsFile,
   type OverrideSettingsState,
 } from './override-settings-file.js';
-import { getActiveAppSession, ownerScopedUserDataPath } from '../appSessionState.js';
 
 const log = desktopMakerLogger.child('memory-settings-store');
 
@@ -43,8 +42,8 @@ const DEFAULTS: MemorySettings = {
   codex: true,
 };
 
-function settingsFilePath(rootPath?: string): string {
-  return path.join(rootPath ?? app.getPath('userData'), 'memory-settings.json');
+function settingsFilePath(): string {
+  return path.join(app.getPath('userData'), 'memory-settings.json');
 }
 
 function normalize(raw: unknown): MemorySettings {
@@ -57,35 +56,24 @@ function normalize(raw: unknown): MemorySettings {
   };
 }
 
-const stores = new Map<string, ReturnType<typeof createOverrideSettingsFile<MemorySettings>>>();
-
-function currentStore(rootPath?: string) {
-  const ownerRoot = rootPath ?? (getActiveAppSession().dataOwnerId ? ownerScopedUserDataPath() : null);
-  const key = ownerRoot ?? '<global>';
-  let current = stores.get(key);
-  if (!current) {
-    current = createOverrideSettingsFile<MemorySettings>({
-      filePath: () => settingsFilePath(ownerRoot ?? undefined),
-      defaults: DEFAULTS,
-      normalize,
-      log,
-      label: 'memory',
-    });
-    stores.set(key, current);
-  }
-  return current;
-}
+const store = createOverrideSettingsFile<MemorySettings>({
+  filePath: settingsFilePath,
+  defaults: DEFAULTS,
+  normalize,
+  log,
+  label: 'memory',
+});
 
 /**
  * 同步读取持久化设置. 第一次调用时从磁盘读, 后续调用走内存 cache.
  * IPC handler / runtime-configs.ts module load 都直接用同步读, 不引入 async race。
  */
-export function readMemorySettings(options?: { rootPath?: string }): MemorySettings {
-  return currentStore(options?.rootPath).read();
+export function readMemorySettings(): MemorySettings {
+  return store.read();
 }
 
 export function readMemorySettingsState(): OverrideSettingsState<MemorySettings> {
-  return currentStore().readState();
+  return store.readState();
 }
 
 /**
@@ -96,11 +84,11 @@ export function writeMemorySetting<K extends keyof MemorySettings>(
   value: MemorySettings[K],
   options?: { preserveDefault?: boolean },
 ): OverrideSettingsState<MemorySettings> {
-  currentStore().writePatch({ [key]: value } as Partial<MemorySettings>, {
+  store.writePatch({ [key]: value } as Partial<MemorySettings>, {
     preserveDefaults: options?.preserveDefault === true,
   });
   log.info('memory setting written', { key, value });
-  return currentStore().readState();
+  return store.readState();
 }
 
 /**
@@ -116,7 +104,7 @@ export function writeMemorySetting<K extends keyof MemorySettings>(
 export function preserveLegacyMakerMemoryDisabled(
   legacyRendererValue: boolean | null,
 ): MemorySettings {
-  const state = currentStore().readState();
+  const state = store.readState();
   if (state.customizedKeys.includes('maker')) return state.value;
   if (legacyRendererValue === true) {
     // The new default is true, so keep an explicit legacy opt-in durable.
@@ -129,5 +117,5 @@ export function preserveLegacyMakerMemoryDisabled(
 }
 
 export function resetMemorySettings(): MemorySettings {
-  return currentStore().reset();
+  return store.reset();
 }

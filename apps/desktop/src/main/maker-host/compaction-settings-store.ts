@@ -11,6 +11,7 @@
  * read 失败 (corrupt JSON / 文件不存在) → 走默认值, 同时清掉坏文件避免反复报错。
  */
 
+import { app } from 'electron';
 import path from 'node:path';
 
 import { desktopMakerLogger } from './logger-adapter.js';
@@ -18,7 +19,6 @@ import {
   createOverrideSettingsFile,
   type OverrideSettingsState,
 } from './override-settings-file.js';
-import { getActiveAppSession, ownerScopedUserDataPath } from '../appSessionState.js';
 
 const log = desktopMakerLogger.child('compaction-settings-store');
 
@@ -30,8 +30,8 @@ interface CompactionSettings {
   claudeCodeAutoCompactPct: number;
 }
 
-function settingsFilePath(rootPath?: string): string {
-  return path.join(rootPath ?? ownerScopedUserDataPath(), 'compaction-settings.json');
+function settingsFilePath(): string {
+  return path.join(app.getPath('userData'), 'compaction-settings.json');
 }
 
 function clampPct(value: unknown): number {
@@ -49,32 +49,21 @@ function normalize(raw: unknown): CompactionSettings {
   };
 }
 
-const stores = new Map<string, ReturnType<typeof createOverrideSettingsFile<CompactionSettings>>>();
-
-function currentStore() {
-  const ownerRoot = getActiveAppSession().dataOwnerId ? ownerScopedUserDataPath() : null;
-  const key = ownerRoot ?? '<no-session>';
-  let store = stores.get(key);
-  if (!store) {
-    store = createOverrideSettingsFile<CompactionSettings>({
-      filePath: () => settingsFilePath(ownerRoot ?? undefined),
-      defaults: { claudeCodeAutoCompactPct: DEFAULT_PCT },
-      normalize,
-      log,
-      label: 'compaction',
-    });
-    stores.set(key, store);
-  }
-  return store;
-}
+const store = createOverrideSettingsFile<CompactionSettings>({
+  filePath: settingsFilePath,
+  defaults: { claudeCodeAutoCompactPct: DEFAULT_PCT },
+  normalize,
+  log,
+  label: 'compaction',
+});
 
 /** 同步读取 Claude Code 自动压缩百分比。第一次从磁盘读, 后续走内存 cache。 */
 export function readCompactionPct(): number {
-  return currentStore().read().claudeCodeAutoCompactPct;
+  return store.read().claudeCodeAutoCompactPct;
 }
 
 export function readCompactionState(): OverrideSettingsState<CompactionSettings> {
-  return currentStore().readState();
+  return store.readState();
 }
 
 /** 写入 Claude Code 自动压缩百分比, 落盘 + 更新 cache。 */
@@ -82,10 +71,10 @@ export function writeCompactionPct(value: number): void {
   const next: CompactionSettings = {
     claudeCodeAutoCompactPct: clampPct(value),
   };
-  currentStore().writePatch(next);
+  store.writePatch(next);
   log.info('compaction setting written', { pct: next.claudeCodeAutoCompactPct });
 }
 
 export function resetCompactionPct(): number {
-  return currentStore().reset().claudeCodeAutoCompactPct;
+  return store.reset().claudeCodeAutoCompactPct;
 }

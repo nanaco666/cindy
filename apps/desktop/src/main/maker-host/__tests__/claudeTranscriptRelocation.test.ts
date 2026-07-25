@@ -21,7 +21,7 @@ const h = vi.hoisted(() => ({
   warn: vi.fn(),
 }));
 
-vi.mock('@cindy/maker-core', () => ({
+vi.mock('@lizi/maker-core', () => ({
   relocateClaudeSessionTranscripts: h.relocate,
 }));
 vi.mock('../../localDb/client/current.js', () => ({

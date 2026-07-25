@@ -1,5 +1,4 @@
-import type { BrowserControlRuntime } from '@cindy/browser-control-runtime';
-import type { AgentKind } from '@cindy/maker-core';
+import type { BrowserControlRuntime } from '@lizi/browser-control-runtime';
 
 import type { Recipe, SiteGuide } from './browser/recipe-loader.js';
 
@@ -125,7 +124,7 @@ export interface FeishuBotMcpHostDeps {
   logger?: LiziMcpLogger;
 }
 
-// ── cindy_slack(Slack 网关工具, 2026-07 并轨 hook 通道) ──────────────────────
+// ── lizi_slack(Slack 网关工具, 2026-07 并轨 hook 通道) ──────────────────────
 
 /** Slack 网关工具的结构化错误(hook-control manager 定义的同构形状)。 */
 export interface SlackToolBridgeError {
@@ -161,7 +160,7 @@ export interface SlackToolBridgeLike {
 }
 
 /**
- * cindy_slack 的 host 依赖: getBridge 每次现取(hook-control 未初始化 / 已
+ * lizi_slack 的 host 依赖: getBridge 每次现取(hook-control 未初始化 / 已
  * dispose 时为 null, 工具 fail-closed); workingDir 由 provider 从 ctx 绑定
  * (大结果落盘的钳制根)。
  */
@@ -179,12 +178,12 @@ export interface SlackHookMcpDeps {
  * fresh; reset-window calls throw `'scheduler not started'` which the MCP
  * server translates to `SCHEDULER_NOT_READY` (see scheduler/errors.ts).
  *
- * Type imported from `@cindy/maker-scheduler` is **type-only** — runtime
- * coupling stays one-way (@cindy/mcps → @cindy/maker-scheduler types only;
- * @cindy/maker-scheduler still has zero runtime deps per Phase 1).
+ * Type imported from `@lizi/maker-scheduler` is **type-only** — runtime
+ * coupling stays one-way (lizi-mcps → @lizi/maker-scheduler types only;
+ * @lizi/maker-scheduler still has zero runtime deps per Phase 1).
  */
 export interface SchedulerMcpDeps {
-  getScheduler(): import('@cindy/maker-scheduler').Scheduler;
+  getScheduler(): import('@lizi/maker-scheduler').Scheduler;
   /**
    * 前置检查脚本(preRunHook)统一安装服务(host 注入,desktop 实现为
    * scheduler-host/hook-script-generator.installHookScript):落盘路径规范、
@@ -218,18 +217,12 @@ export interface SchedulerHookScriptService {
     workingDir?: string;
     /** 修改流:现有命令,host 识别出旧脚本路径时覆写同一文件。 */
     currentCommand?: string;
-    /** 任务显式选择的供应商；由 MCP 从目标 schedule 透传。 */
-    providerId?: string;
-    /** 任务使用的 agent runtime；由 MCP 从目标 schedule 透传。 */
-    agentKind?: AgentKind;
-    /** 任务显式选择的模型；由 MCP 从目标 schedule 透传。 */
-    model?: string;
   }): Promise<{
     command: string;
     filePath: string;
     content: string;
     /** 落盘后立即执行一次的自测结果。 */
-    test: import('@cindy/maker-scheduler').PreRunHookRunResult;
+    test: import('@lizi/maker-scheduler').PreRunHookRunResult;
   }>;
 }
 
@@ -249,11 +242,11 @@ export interface SchedulerHookScriptService {
  *    虚拟表), maker-core 不可达 — 必须 host 注入。可选: host 没接 messages_fts 时
  *    缺省, session_search tool 注册时跳过。
  *
- * 依赖 @cindy/maker-core 的类型与少量 runtime 实现(ContactsError / import 管道 /
- * vCard 序列化, workspace dep 已声明), 依赖方向仍单向 @cindy/mcps → maker-core。
+ * 依赖 @lizi/maker-core 的类型与少量 runtime 实现(ContactsError / import 管道 /
+ * vCard 序列化, workspace dep 已声明), 依赖方向仍单向 lizi-mcps → maker-core。
  */
 export interface MemoryMcpDeps {
-  getManager(): import('@cindy/maker-core').MakerMemoryManager;
+  getManager(): import('@lizi/maker-core').MakerMemoryManager;
   workdir: string;
   getSessionContext?: () => LiziMcpSessionContext;
   /**
@@ -270,10 +263,10 @@ export interface LspMcpDeps {
   logger?: LiziMcpLogger;
 }
 
-// ── cindy_ssh MCP deps ───────────────────────────────────────────────────────
+// ── lizi_ssh MCP deps ───────────────────────────────────────────────────────
 //
-// 结构化鸭子类型镜像 @cindy/maker-remote-ssh 的 HostSnapshot / RemoteHost /
-// ConnectionPool 子集——不 import 那个包（连 type-only 也不要）：@cindy/mcps 是纯
+// 结构化鸭子类型镜像 @lizi/maker-remote-ssh 的 HostSnapshot / RemoteHost /
+// ConnectionPool 子集——不 import 那个包（连 type-only 也不要）：lizi-mcps 是纯
 // 工具注册层，SSH 连接生命周期归 desktop main 管，这里只消费注入的能力面。
 // 字段语义以 packages/maker-remote-ssh/src/types.ts 为准。
 
@@ -328,7 +321,7 @@ export interface SshPoolLike {
 }
 
 /**
- * cindy_ssh MCP server 工厂参数。
+ * lizi_ssh MCP server 工厂参数。
  *
  *  - getPool / ensureReady 都是 async：desktop 侧必须 lazy `await import()`
  *    remote-ssh 模块（静态 import 会形成 mcp-providers → remote-ssh →
@@ -354,32 +347,32 @@ export interface SshMcpDeps {
 }
 
 /**
- * cindy_contacts(智能通讯录)MCP server 工厂参数。
+ * lizi_contacts(智能通讯录)MCP server 工厂参数。
  *
  * 与 memory 的差异: 通讯录是全局单库(人不属于 workdir), 不需要 workdir /
  * getSessionContext。开关由 host 设置层注入 isEnabled — provider 注册门控 +
  * withContacts 工具级双重拦截(Codex host 长生命周期下 server 可能已 spawn,
  * 运行期关闭靠工具级拦截兜底, 跟 memory 的 MAKER_MEMORY_NOT_READY 同模式)。
  *
- * 依赖 @cindy/maker-core 的类型与少量 runtime 实现(ContactsError / import 管道 /
- * vCard 序列化, workspace dep 已声明), 依赖方向仍单向 @cindy/mcps → maker-core。
+ * 依赖 @lizi/maker-core 的类型与少量 runtime 实现(ContactsError / import 管道 /
+ * vCard 序列化, workspace dep 已声明), 依赖方向仍单向 lizi-mcps → maker-core。
  */
 export interface ContactsMcpDeps {
-  getManager(): import('@cindy/maker-core').MakerContactsManager;
+  getManager(): import('@lizi/maker-core').MakerContactsManager;
   /** host 设置层的功能开关. 缺省视为常开(测试/独立复用场景) */
   isEnabled?: () => boolean;
   /**
    * 系统通讯录只读拉取(macOS 由 host 注入 JXA 读取器; 其它平台缺省)。
    * 缺省时 contacts_import_system 工具不注册(跟 memory 的 session_search 同模式)。
    */
-  readSystemContacts?: () => Promise<import('@cindy/maker-core').ImportContactRecord[]>;
+  readSystemContacts?: () => Promise<import('@lizi/maker-core').ImportContactRecord[]>;
   /**
    * 系统通讯录回写(macOS host 注入)。缺省时 contacts_export_system 不注册。
    * 语义: 只增/改结构化字段, 系统侧永不删除。
    */
   writeSystemContacts?: (
-    items: import('@cindy/maker-core').SystemContactWriteItem[],
-  ) => Promise<import('@cindy/maker-core').SystemContactWriteResult[]>;
+    items: import('@lizi/maker-core').SystemContactWriteItem[],
+  ) => Promise<import('@lizi/maker-core').SystemContactWriteResult[]>;
   /**
    * write/manage 类工具成功后的变更通知(host 注入, 用于广播 renderer 刷新)。
    * MCP 直写同进程 store 不经 IPC 层, 没有这个回调 UI 就收不到 agent 侧变更。
@@ -417,27 +410,27 @@ export type SessionSearchFn = (
 // 'feishu' 已于 2026-07-16 摘壳(能力迁内置意识 xd-feishu;后端留任给
 // scheduler capability broker,见 providers.ts 注释),不再是可注册 MCP id。
 // 'lizi_slack_bot' 已于 2026-07-17 随老 SlackIM relay 渠道退役(apiBaseUrl 清理)。
-// 'cindy_slack'(与老 lizi_slack_bot 无关)2026-07-19 上线: Slack 网关工具,
+// 'lizi_slack'(与老 lizi_slack_bot 无关)2026-07-19 上线: Slack 网关工具,
 // 经 hook 通道由 slack-hook-server 以托管 user token 调 Slack 官方 MCP,
 // 接替退役的 cindy-slack 意识。
 export type LiziMcpId =
   | 'android'
   | 'browser'
   | 'computer'
-  | 'cindy_feishu_bot'
-  | 'cindy_slack'
+  | 'lizi_feishu_bot'
+  | 'lizi_slack'
   | 'cindy_scheduler'
-  | 'cindy_ssh'
+  | 'lizi_ssh'
   | 'cindy_memory'
-  | 'cindy_contacts'
+  | 'lizi_contacts'
   | 'cindy_helper'
-  | 'cindy_orca'
-  | 'cindy_lsp';
+  | 'lizi_orca'
+  | 'lizi_lsp';
 
 // ── Host-callback Result pattern ────────────────────────────────────────────
 //
 // Several MCP tools delegate to host-side business code via injected callbacks
-// (e.g. cindy_helper's sendToSession, cindy_orca's team tools, history
+// (e.g. cindy_helper's sendToSession, lizi_orca's team tools, history
 // readers). Those callbacks return a Result variant rather than throw — host
 // can use `HOST_NOT_READY` to express "service still bootstrapping" and the
 // tool handler maps it to a business errorCode + LLM hint, instead of bubbling
@@ -462,7 +455,7 @@ export type ControlResult<T extends object = object, E extends string = never> =
 
 /**
  * Worker agent literal — kept as a string literal union (not imported from
- * `@cindy/maker-core`) to avoid a runtime dependency from @cindy/mcps → maker-core.
+ * `@lizi/maker-core`) to avoid a runtime dependency from lizi-mcps → maker-core.
  * **Keep in sync with `AgentKind` in `packages/maker-core/src/types/common.ts`** —
  * adding a new vendor (e.g. 'gemini') without updating this union will cause
  * LLM tool calls to fail zod enum validation.
@@ -475,8 +468,8 @@ export interface BrowserMcpDeps {
   logger?: LiziMcpLogger;
   /**
    * Optional L2 (user-local) recipe layer. The host scans userData, parses with
-   * the @cindy/mcps `parseRecipes`/`parseSiteGuides` pure fns, and returns the
-   * resolved maps plus a `version` content fingerprint. @cindy/mcps stays free of
+   * the lizi-mcps `parseRecipes`/`parseSiteGuides` pure fns, and returns the
+   * resolved maps plus a `version` content fingerprint. lizi-mcps stays free of
    * electron/fs. Absent → only the bundled L1 catalog is used (== current behavior).
    */
   getUserRecipes?(): Promise<{
@@ -556,8 +549,6 @@ export interface ComputerDriverPermissionState {
 
 export interface ComputerMcpCallContext {
   sessionId?: string;
-  /** Identifies the agent runtime whose MCP server dispatched this call. */
-  agentKind?: string;
 }
 
 export interface ComputerMcpDeps {
@@ -685,8 +676,6 @@ export interface AndroidDeviceStateResult {
 
 export interface AndroidMcpCallContext {
   sessionId?: string;
-  /** Identifies the agent runtime whose MCP server dispatched this call. */
-  agentKind?: string;
 }
 
 export interface AndroidMcpDeps {

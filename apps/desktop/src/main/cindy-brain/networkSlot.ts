@@ -1,5 +1,5 @@
 /**
- * networkSlot.ts — network 槽代理 fetch(docs/dev-rules/plugin-security-and-authoring.md)。
+ * networkSlot.ts — network 槽代理 fetch(C4,capability-permissions.md §7)。
  * ---------------------------------------------------------------------------
  * 意识自带服务的出网通道。沙箱本身保持零直连(electronSandboxAdapter 的
  * onBeforeRequest 断网闸不放开),意识想访问自己声明的域名只能经管子上行:

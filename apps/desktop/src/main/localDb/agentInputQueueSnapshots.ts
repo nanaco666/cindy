@@ -16,10 +16,7 @@ import { eq } from 'drizzle-orm';
 import { getDbClient } from './client/current';
 import { agentInputQueueSnapshots } from './schema';
 import { createLogger } from '../logger';
-import {
-  sanitizeQueuedMessageForPersistence,
-  type AgentInputQueuedMessage,
-} from '../../shared/agentInputQueue.js';
+import type { AgentInputQueuedMessage } from '../../shared/agentInputQueue.js';
 
 const log = createLogger('agent-input-queue-snapshots');
 
@@ -76,10 +73,9 @@ export function saveAgentInputQueueSnapshot(
           .where(eq(agentInputQueueSnapshots.sessionId, sessionId));
         return;
       }
-      const persistableItems = items.map(sanitizeQueuedMessageForPersistence);
-      let payload = JSON.stringify(persistableItems);
+      let payload = JSON.stringify(items);
       if (payload.length > MAX_PAYLOAD_BYTES) {
-        payload = JSON.stringify(stripInlineBase64(persistableItems));
+        payload = JSON.stringify(stripInlineBase64(items));
         if (payload.length > MAX_PAYLOAD_BYTES) {
           log.warn('queue snapshot too large even after stripping inline base64; keeping previous snapshot', {
             sessionId,
@@ -112,7 +108,7 @@ export function saveAgentInputQueueSnapshot(
 }
 
 /**
- * 媒体回收器活引用取证(recycler.ts 的崩溃恢复暂存区):全量快照 payload 原文。
+ * 媒体回收器活引用取证(media-store.md §4 暂存区 (3)):全量快照 payload 原文。
  * 不解析形状——回收器只按文本正则抽取 cindy-media 指纹,坏 JSON 也能扫,
  * 比逐条恢复更保守(宁可多保护,不可漏保护)。
  */
@@ -164,21 +160,13 @@ export async function loadAgentInputQueueSnapshot(
     void saveAgentInputQueueSnapshot(sessionId, []).catch(() => undefined);
     return [];
   }
-  const validItems = parsed.filter(isRestorableQueuedMessage);
-  const items = validItems.map(sanitizeQueuedMessageForPersistence);
+  const items = parsed.filter(isRestorableQueuedMessage);
   if (items.length !== parsed.length) {
     log.warn('dropped malformed rows from queue snapshot', {
       sessionId,
       kept: items.length,
       dropped: parsed.length - items.length,
     });
-  }
-  if (items.some((item, index) => item !== validItems[index])) {
-    log.warn('stripped trusted session reference bodies from legacy queue snapshot', {
-      sessionId,
-      items: items.length,
-    });
-    void saveAgentInputQueueSnapshot(sessionId, items).catch(() => undefined);
   }
   return items;
 }

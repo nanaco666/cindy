@@ -8,7 +8,7 @@
  */
 import { describe, it, expect } from 'vitest';
 
-import { buildRegistry, type Catalog, type ProviderView } from '@cindy/model-providers';
+import { buildRegistry, type Catalog, type ProviderView } from '@lizi/model-providers';
 
 import { resolveFastSupported } from '@/lib/providerModels';
 import type { AgentCapabilities } from '@/hooks/useAgentCapabilities';

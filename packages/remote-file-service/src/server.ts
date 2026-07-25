@@ -8,7 +8,7 @@
  * 并发模型:每条请求独立 async 处理,响应完成即写回(乱序,靠 id 配对)。
  * 文件 IO 都是短操作,不做并发上限;搜索(P3)是流式子进程,经 event 帧推送。
  *
- * 安全:路径校验完全复用 @cindy/file-browser-core 的 scanner 层
+ * 安全:路径校验完全复用 @lizi/file-browser-core 的 scanner 层
  * (assertInsideWorkdir + realpath symlink 检查)——daemon 以 SSH 登录用户的
  * 权限跑,workdir 语义与本地版逐字节一致。
  *
@@ -33,7 +33,7 @@ import {
   writeFile,
   type CoreLogger,
   type SearchEvent,
-} from '@cindy/file-browser-core';
+} from '@lizi/file-browser-core';
 
 import { NdjsonLineDecoder, encodeNdjsonFrame } from './codec.js';
 import { WorkdirWatchManager } from './watch.js';

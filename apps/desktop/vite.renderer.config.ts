@@ -148,14 +148,14 @@ function pdfjsAssetsPlugin(): Plugin {
  *
  * 排除后这些包走正常 transform 管线(它们的 exports 本就指向 ./src 原始 TS),不再有过期预打包。
  * 但仅排除还不够:这些模块经 node_modules **软链路径**进入模块图(见 renderer 报错 URL
- * `/@fs/.../node_modules/@cindy/xxx/src/index.ts`),而 Vite watcher 默认忽略 node_modules 目录,
+ * `/@fs/.../node_modules/@lizi/xxx/src/index.ts`),而 Vite watcher 默认忽略 node_modules 目录,
  * 源码变更(git pull / 合 PR / 本地编辑)不会失效 transform 缓存——引用方组件热更成引用新导出的
  * 版本后,被引用包仍是旧模块 → `does not provide an export named X` → 白屏且刷新无效。因此下方
  * `server.watch.ignored` 用反向 glob 把这些包从默认忽略里豁免,变更即时失效 + HMR,运行中的实例
  * 无需重启。这里**自动扫描** `packages/<package>` 而非手写名单:未来新增的纯内部包会被自动覆盖,不会漏。
  *
  * 「是不是内部包」按**位置**判定(`pnpm-workspace.yaml` 声明 packages 下的包即 workspace 包),
- * 而非按包名前缀(`@cindy/`)——后者会漏掉 `@cindy/im` / `@cindy/mcps` / `@cindy/*` 这类不带该
+ * 而非按包名前缀(`@lizi/`)——后者会漏掉 `lizi-im` / `lizi-mcps` / `@fmfsaisai/*` 这类不带该
  * scope 的内部包。位置是权威信号,包名 scope 不是。
  *
  * 只排除 deps 为空的「纯源码包」——它们没有(可能是 CJS 的)第三方子依赖,排除 100% 安全、也不会
@@ -214,7 +214,7 @@ const { specifiers: INTERNAL_PURE_PACKAGE_EXCLUDES, names: INTERNAL_PURE_PACKAGE
  * 预打包(见上方注释:排除它们会把 CJS 子依赖拖出预打包,不安全)。但 Vite 的预打包缓存失效
  * 判据不含软链包的源码内容 —— 这些包的源码变了(git pull / 本地编辑)后,冷启动仍会被服务旧
  * 缓存,renderer 在模块求值期抛 `does not provide an export named X`,整窗黑屏且主进程日志
- * 零痕迹(docs/dev-rules/development-workflow.md「stale prebundle 白屏陷阱」)。
+ * 零痕迹(AGENTS.md「stale prebundle 白屏陷阱」)。
  *
  * 这里在 dev server 启动前对这些包的源码做一次轻量指纹(相对路径 + mtime + size,不读内容,
  * 跳过 node_modules / dist / .git),与上次启动留在 cache 目录里的 marker 比对:变了就直接删掉
@@ -301,24 +301,7 @@ function invalidateStalePrebundleCache(): void {
 
 export default defineConfig(({ command }) => {
   if (command === 'serve') invalidateStalePrebundleCache();
-  if (command !== 'build') return rendererConfig;
-  // 仅 fixtures 生产排除条件(implementation-plan v6.17 允许范围):renderer 现状
-  // 不 import 登录 scenario fixtures,此 alias 为防御性兜底——未来任何 renderer
-  // 代码引用 '@cindy/auth-client/fixtures',生产构建也只会拿到空 stub
-  // (check-login-production-guard.mjs 以 sentinel 扫描产物兜底)。
-  return {
-    ...rendererConfig,
-    resolve: {
-      ...rendererConfig.resolve,
-      alias: {
-        ...rendererConfig.resolve.alias,
-        '@cindy/auth-client/fixtures': path.resolve(
-          __dirname,
-          '../../packages/auth-client/fixtures/loginScenarios.production-stub.ts',
-        ),
-      },
-    },
-  };
+  return rendererConfig;
 });
 
 const rendererConfig = {

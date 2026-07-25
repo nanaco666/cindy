@@ -56,7 +56,7 @@ const contentRules = [
       'DEVICE_LINK_VOICE_TRANSCRIBE_CHANNEL',
       'device-link:voice:transcribe',
     ],
-    reason: 'Mobile voice composer must use the realtime controller + managed Cindy voice service, not the legacy desktop transcription channel.',
+    reason: 'Mobile voice composer must use realtime controller + local LiteLLM settings, not the legacy desktop transcription channel.',
   },
 ];
 

@@ -88,12 +88,12 @@ const XD_PROVIDER: Provider = {
   titleModel: 'gpt-5.4-mini',
   imageModels: [
     { id: 'gpt-image-2', name: 'GPT Image 2' },
-    { id: 'gemini-3-pro-image', name: 'Gemini 3 Pro Image' },
-    { id: 'gemini-3.1-flash-image', name: 'Gemini 3.1 Flash Image' },
+    { id: 'gemini-3-pro-image-preview', name: 'Gemini 3 Pro Image' },
+    { id: 'gemini-3.1-flash-image-preview', name: 'Gemini 3.1 Flash Image' },
   ],
   imageDefaults: {
     standard: 'gpt-image-2',
-    draft: 'gemini-3.1-flash-image',
+    draft: 'gemini-3.1-flash-image-preview',
   },
   videoModels: [
     { id: 'seedance-fast', name: 'Seedance 快速' },
@@ -104,17 +104,13 @@ const XD_PROVIDER: Provider = {
     standard: 'seedance-fast',
     best: 'seedance-pro',
   },
-  // XD 网关真实推理入口运行时由 model-access server 随凭据成对下发
-  // (见 main/model-access/effectiveEndpoint.ts;端点清单/静态值已退役)。
-  // gateway-key 路由只换鉴权头、不 override upstream,故此处 upstream 不参与路由,
-  // 仅为满足类型的占位(不写内部域名);品牌按 provider id 判定,不读此值。
   routing: {
     'claude-code': {
-      upstream: 'https://xd-gateway.invalid',
+      upstream: 'https://llm-proxy.tapsvc.com',
       authStrategy: 'gateway-key',
     },
     codex: {
-      upstream: 'https://xd-gateway.invalid/v1',
+      upstream: 'https://llm-proxy.tapsvc.com/v1',
       authStrategy: 'gateway-key',
     },
   },

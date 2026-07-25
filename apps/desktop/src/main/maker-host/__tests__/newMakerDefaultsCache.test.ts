@@ -79,7 +79,7 @@ describe('getRemoteNewMakerDefaults (device-link 远程草稿镜像)', () => {
     expect(getRemoteNewMakerDefaults('codex').providerModelMemory).toBeDefined();
   });
 
-  it('collab worker 默认读取会保留 model/effort/fast/provider 路由组合', () => {
+  it('不破坏 collab worker 默认读取(getWorkerDefaultsFromNewMaker 仍只回 model/effort/fast)', () => {
     seed({
       lastByVendor: { cc: { model: 'claude-opus-4-8', effort: 'high', permissionMode: 'acceptEdits', providerId: 'xd' } },
       fastModeByModel: { 'claude-opus-4-8': true },
@@ -89,7 +89,6 @@ describe('getRemoteNewMakerDefaults (device-link 远程草稿镜像)', () => {
       model: 'claude-opus-4-8',
       effort: 'high',
       fastMode: true,
-      providerId: 'xd',
     });
   });
 });

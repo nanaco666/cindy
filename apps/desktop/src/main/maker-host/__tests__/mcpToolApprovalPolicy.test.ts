@@ -13,7 +13,7 @@ describe('desktop Claude read-only allowlist', () => {
       'mcp__cindy__ghost_list',
       'mcp__cindy__ghost_forge_guide',
       'mcp__cindy_helper__list_tools',
-      'mcp__cindy_slack__slack_status',
+      'mcp__lizi_slack__slack_status',
     ]));
     expect(tools).not.toEqual(expect.arrayContaining([
       'Bash',
@@ -27,7 +27,7 @@ describe('desktop Claude read-only allowlist', () => {
       'WebFetch',
       'mcp__cindy__ghost_call',
       'mcp__cindy_helper__call_tool',
-      'mcp__cindy_slack__slack_list_tools',
+      'mcp__lizi_slack__slack_list_tools',
     ]));
     expect(tools.every((tool) => !tool.includes('*'))).toBe(true);
     expect(tools.every((tool) => !tool.endsWith('__call_tool'))).toBe(true);
@@ -44,8 +44,8 @@ describe('desktop MCP approval policy', () => {
   it('keeps known safe contacts calls trusted', () => {
     expect(
       getDesktopMcpToolApprovalPolicy({
-        serverName: 'cindy_contacts',
-        toolParams: { name: 'contacts_search', args: { query: 'Carol' } },
+        serverName: 'lizi_contacts',
+        toolParams: { name: 'contacts_search', args: { query: 'Dash' } },
       }),
     ).toBe('auto-approve');
   });
@@ -53,36 +53,22 @@ describe('desktop MCP approval policy', () => {
   it('prompts each time for destructive and malformed contacts calls', () => {
     expect(
       getDesktopMcpToolApprovalPolicy({
-        serverName: 'cindy_contacts',
+        serverName: 'lizi_contacts',
         toolParams: { name: 'contacts_merge', args: { target_id: 'a', source_id: 'b' } },
       }),
     ).toBe('prompt-each-time');
-    expect(getDesktopMcpToolApprovalPolicy({ serverName: 'cindy_contacts' })).toBe(
+    expect(getDesktopMcpToolApprovalPolicy({ serverName: 'lizi_contacts' })).toBe(
       'prompt-each-time',
     );
   });
 
-  it('auto-approves only explicitly reviewed builtin servers', () => {
-    for (const serverName of [
-      'cindy_android',
-      'cindy_browser',
-      'cindy_computer',
-      'cindy_feishu_bot',
-      'cindy_slack',
-      'cindy_scheduler',
-      'cindy_memory',
-      'cindy_helper',
-      'cindy_orca',
-      'cindy_lsp',
-    ]) {
-      expect(getDesktopMcpToolApprovalPolicy({ serverName })).toBe('auto-approve');
-    }
-
+  it('preserves the existing built-in allowlist and lizi_ssh exception', () => {
+    expect(getDesktopMcpToolApprovalPolicy({ serverName: 'cindy_memory' })).toBe('auto-approve');
+    expect(getDesktopMcpToolApprovalPolicy({ serverName: 'cindy_scheduler' })).toBe('auto-approve');
     // gitlab_lizi 已于 2026-07-14 退役(迁入内置意识 cindy-gitlab):
     // `<平台>_lizi` 显式白名单清空后,该名字回落到默认 prompt,不再自动放行。
     expect(getDesktopMcpToolApprovalPolicy({ serverName: 'gitlab_lizi' })).toBe('prompt');
-    expect(getDesktopMcpToolApprovalPolicy({ serverName: 'cindy_ssh' })).toBe('prompt');
-    expect(getDesktopMcpToolApprovalPolicy({ serverName: 'cindy_future_tool' })).toBe('prompt');
+    expect(getDesktopMcpToolApprovalPolicy({ serverName: 'lizi_ssh' })).toBe('prompt');
     expect(getDesktopMcpToolApprovalPolicy({ serverName: 'third_party' })).toBe('prompt');
   });
 });

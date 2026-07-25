@@ -42,8 +42,9 @@ describe('memorySettingsStore', () => {
         throw new Error('blocked');
       },
     });
-    const { getMakerMemoryEnabled, setMakerMemoryEnabled } =
-      await import('@/lib/memorySettingsStore');
+    const { getMakerMemoryEnabled, setMakerMemoryEnabled } = await import(
+      '@/lib/memorySettingsStore'
+    );
 
     expect(getMakerMemoryEnabled()).toBe(true);
     setMakerMemoryEnabled(false);
@@ -69,9 +70,9 @@ describe('memorySettingsStore', () => {
         },
       },
     });
-    const { bootstrapMemorySettingsFromMain, getMakerMemoryEnabled, setMemorySettingsOwner } =
-      await import('@/lib/memorySettingsStore');
-    setMemorySettingsOwner('cloud-user');
+    const { bootstrapMemorySettingsFromMain, getMakerMemoryEnabled } = await import(
+      '@/lib/memorySettingsStore'
+    );
 
     await bootstrapMemorySettingsFromMain();
 
@@ -99,38 +100,14 @@ describe('memorySettingsStore', () => {
         },
       },
     });
-    const { bootstrapMemorySettingsFromMain, getMakerMemoryEnabled, setMemorySettingsOwner } =
-      await import('@/lib/memorySettingsStore');
-    setMemorySettingsOwner('cloud-user');
+    const { bootstrapMemorySettingsFromMain, getMakerMemoryEnabled } = await import(
+      '@/lib/memorySettingsStore'
+    );
 
     await bootstrapMemorySettingsFromMain();
 
     expect(preserveLegacy).toHaveBeenCalledWith(null);
     expect(getMakerMemoryEnabled()).toBe(true);
-  });
-
-  it('does not import the legacy cloud setting into local mode', async () => {
-    vi.stubGlobal('localStorage', createStorage(false));
-    vi.stubGlobal('window', {
-      electronAPI: {
-        maker: {
-          memoryGetSettings: vi.fn().mockResolvedValue({
-            maker: true,
-            claudeCode: true,
-            codex: true,
-          }),
-          memoryPreserveLegacyMakerDisabled: vi.fn(),
-        },
-      },
-    });
-    const { bootstrapMemorySettingsFromMain, getMakerMemoryEnabled, setMemorySettingsOwner } =
-      await import('@/lib/memorySettingsStore');
-    setMemorySettingsOwner('local-v1');
-
-    await bootstrapMemorySettingsFromMain();
-
-    expect(getMakerMemoryEnabled()).toBe(true);
-    expect(window.electronAPI.maker.memoryPreserveLegacyMakerDisabled).not.toHaveBeenCalled();
   });
 
   it('persists a legacy renderer opt-in before native opt-out migration can run', async () => {
@@ -153,9 +130,9 @@ describe('memorySettingsStore', () => {
         },
       },
     });
-    const { bootstrapMemorySettingsFromMain, getMakerMemoryEnabled, setMemorySettingsOwner } =
-      await import('@/lib/memorySettingsStore');
-    setMemorySettingsOwner('cloud-user');
+    const { bootstrapMemorySettingsFromMain, getMakerMemoryEnabled } = await import(
+      '@/lib/memorySettingsStore'
+    );
 
     await bootstrapMemorySettingsFromMain();
 
@@ -181,9 +158,7 @@ describe('memorySettingsStore', () => {
         },
       },
     });
-    const { bootstrapMemorySettingsFromMain, setMemorySettingsOwner } =
-      await import('@/lib/memorySettingsStore');
-    setMemorySettingsOwner('cloud-user');
+    const { bootstrapMemorySettingsFromMain } = await import('@/lib/memorySettingsStore');
 
     await bootstrapMemorySettingsFromMain();
 
@@ -205,9 +180,9 @@ describe('memorySettingsStore', () => {
         },
       },
     });
-    const { bootstrapMemorySettingsFromMain, getMakerMemoryEnabled, setMemorySettingsOwner } =
-      await import('@/lib/memorySettingsStore');
-    setMemorySettingsOwner('cloud-user');
+    const { bootstrapMemorySettingsFromMain, getMakerMemoryEnabled } = await import(
+      '@/lib/memorySettingsStore'
+    );
 
     await bootstrapMemorySettingsFromMain();
 
@@ -237,8 +212,11 @@ describe('memorySettingsStore', () => {
         },
       },
     });
-    const { bootstrapMemorySettingsFromMain, getMakerMemoryEnabled, setMakerMemoryEnabled } =
-      await import('@/lib/memorySettingsStore');
+    const {
+      bootstrapMemorySettingsFromMain,
+      getMakerMemoryEnabled,
+      setMakerMemoryEnabled,
+    } = await import('@/lib/memorySettingsStore');
 
     const bootstrap = bootstrapMemorySettingsFromMain();
     setMakerMemoryEnabled(false);
@@ -258,15 +236,15 @@ describe('memorySettingsStore', () => {
             claudeCode: false,
             codex: true,
           }),
-          memoryPreserveLegacyMakerDisabled: vi
-            .fn()
-            .mockRejectedValue(Object.assign(new Error('disk full'), { code: 'INTERNAL' })),
+          memoryPreserveLegacyMakerDisabled: vi.fn().mockRejectedValue(
+            Object.assign(new Error('disk full'), { code: 'INTERNAL' }),
+          ),
         },
       },
     });
-    const { bootstrapMemorySettingsFromMain, getMakerMemoryEnabled, setMemorySettingsOwner } =
-      await import('@/lib/memorySettingsStore');
-    setMemorySettingsOwner('cloud-user');
+    const { bootstrapMemorySettingsFromMain, getMakerMemoryEnabled } = await import(
+      '@/lib/memorySettingsStore'
+    );
 
     await expect(bootstrapMemorySettingsFromMain()).resolves.toBeUndefined();
     expect(getMakerMemoryEnabled()).toBe(false);

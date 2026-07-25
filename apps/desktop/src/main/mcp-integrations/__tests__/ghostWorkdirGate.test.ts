@@ -19,9 +19,6 @@ const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'ghost-workdir-gate-')
 const prefsFile = () => path.join(tmpUserData, 'ghost-workdir-prefs.json');
 
 vi.mock('electron', () => ({ app: { getPath: () => tmpUserData } }));
-vi.mock('../../appSessionState.js', () => ({
-  ownerScopedUserDataPath: (...parts: string[]) => path.join(tmpUserData, ...parts),
-}));
 vi.mock('../../maker-host/logger-adapter.js', () => ({
   desktopMakerLogger: { child: () => ({ info: () => {}, warn: () => {}, error: () => {} }) },
 }));
@@ -29,7 +26,7 @@ vi.mock('../../logger.js', () => ({
   createLogger: () => ({ info: () => {}, warn: () => {}, error: () => {}, debug: () => {} }),
 }));
 // ALS 语境:恒缺省 → resolveSessionContext 走建线闭包 ctx(claude 路径同款)。
-vi.mock('@cindy/mcps', () => ({ getLiziMcpSessionContext: () => undefined }));
+vi.mock('lizi-mcps', () => ({ getLiziMcpSessionContext: () => undefined }));
 
 const listMock = vi.fn<() => unknown[]>(() => []);
 const dispatchMock = vi.fn(async () => ({ ok: true as const, result: 'done' }));
@@ -37,7 +34,6 @@ vi.mock('../../cindy-brain/index.js', () => ({
   getGhostManager: () => ({ list: listMock }),
   getGhostPipeDispatcher: () => ({ callGhostTool: dispatchMock }),
   getGhostCardService: () => ({ registerCall: () => {}, finalizeCall: () => null }),
-  isGhostAvailableForActiveSession: () => true,
 }));
 // 以下依赖在本测试路径上不会被触达,但 import 副作用重,一律断开。
 vi.mock('../../cindy-brain/attachmentGrant.js', () => ({
@@ -65,7 +61,7 @@ vi.mock('../ghostAttachmentResolve.js', () => ({ resolveGhostAttachmentUrl: vi.f
 const { getCindyGhostsMcpDeps } = await import('../ghost');
 const { setGhostDisabledForWorkdir, listDisabledGhostIdsForWorkdir, isGhostDisabledForWorkdir } =
   await import('../../cindy-brain/ghostWorkdirPrefs');
-import type { LiziMcpSessionContext } from '@cindy/mcps';
+import type { LiziMcpSessionContext } from 'lizi-mcps';
 
 const WORKDIR = '/proj/alpha';
 

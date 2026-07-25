@@ -71,8 +71,8 @@ describe('sanitizeGhostCardHtml', () => {
     expect(out2).toContain('background:none');
   });
 
-  it('未知标签拆壳留子(<article> 丢壳留文字)', () => {
-    const out = ok('<article><marquee>点我</marquee></article>');
+  it('未知标签拆壳留子(<a> 丢壳留文字)', () => {
+    const out = ok('<a href="https://evil.com">点我</a>');
     expect(out).toBe('点我');
   });
 
@@ -404,73 +404,5 @@ describe('sanitizeGhostCardHtml · 卡内音频播放器插槽(data-ghost-audio)
     const out = ok(`<div data-ghost-audio="${mp3}" data-ghost-action="U1">x</div>`);
     expect(out).toContain('data-ghost-audio=');
     expect(out).not.toContain('data-ghost-action');
-  });
-});
-
-describe('sanitizeGhostCardHtml · 卡内外链声明(v3,data-ghost-link)', () => {
-  it('<a href> 转写为 data-ghost-link,真实 href 永不落地', () => {
-    const out = ok('<a href="https://example.com/x?a=1&b=2">官网</a>');
-    expect(out).toBe('<a data-ghost-link="https://example.com/x?a=1&amp;b=2">官网</a>');
-    expect(out).not.toContain('href=');
-  });
-
-  it('data-ghost-link 可挂任意允许标签(span/div/img)', () => {
-    expect(ok('<span data-ghost-link="http://a.com/">x</span>')).toBe(
-      '<span data-ghost-link="http://a.com/">x</span>',
-    );
-    const img = ok(`<img src="${GOOD_IMG}" data-ghost-link="https://a.com/p">`);
-    expect(img).toContain('data-ghost-link="https://a.com/p"');
-  });
-
-  it('显式 data-ghost-link 优先于 <a> 的 href', () => {
-    const out = ok('<a href="https://evil.com" data-ghost-link="https://good.com">x</a>');
-    expect(out).toBe('<a data-ghost-link="https://good.com">x</a>');
-  });
-
-  it('非 http/https 协议整属性丢(元素与文字保留)', () => {
-    for (const bad of [
-      'javascript:alert(1)',
-      'data:text/html,x',
-      'ftp://a.com/f',
-      'file:///etc/passwd',
-      `cindy-media://blobs/${HASH}.png`,
-      'https//missing-colon.com',
-      '//protocol-relative.com',
-    ]) {
-      const o = ok(`<a href="${bad}">点我</a>`);
-      expect(o, bad).toBe('<a>点我</a>');
-    }
-  });
-
-  it('值内出现空白/控制字符即拒(URL 构造器会剥 TAB/CR/LF,原文校验防混淆)', () => {
-    for (const bad of ['https://a.com/\npath', 'https://a.com/ path', 'https://a.\tcom/']) {
-      const o = ok(`<span data-ghost-link="${bad}">x</span>`);
-      expect(o, JSON.stringify(bad)).toBe('<span>x</span>');
-    }
-  });
-
-  it('超长(>2048)整属性丢', () => {
-    const long = `https://a.com/${'x'.repeat(2048)}`;
-    expect(ok(`<a href="${long}">x</a>`)).toBe('<a>x</a>');
-  });
-
-  it('与合法 data-ghost-action 同挂时动作优先,链接声明被忽略', () => {
-    const out = ok('<button data-ghost-action="U1" data-ghost-link="https://a.com/">x</button>');
-    expect(out).toContain('data-ghost-action="U1"');
-    expect(out).not.toContain('data-ghost-link');
-  });
-
-  it('音频插槽上的 data-ghost-link 被忽略(插槽由宿主整体接管)', () => {
-    const mp3 = `cindy-media://blobs/${'c'.repeat(64)}.mp3`;
-    const out = ok(`<div data-ghost-audio="${mp3}" data-ghost-link="https://a.com/">x</div>`);
-    expect(out).toContain('data-ghost-audio=');
-    expect(out).not.toContain('data-ghost-link');
-  });
-
-  it('<a> 的其它属性(target/rel/onclick/download)一律剥除', () => {
-    const out = ok(
-      '<a href="https://a.com/" target="_blank" rel="opener" onclick="x()" download>x</a>',
-    );
-    expect(out).toBe('<a data-ghost-link="https://a.com/">x</a>');
   });
 });

@@ -14,16 +14,9 @@
 /** turn error 的 data 是否表示"账号用量/限流"。 */
 export function classifyTurnUsageLimit(data: unknown): boolean {
   if (!data || typeof data !== 'object') return false;
-  const d = data as {
-    sdkError?: unknown;
-    message?: unknown;
-    errorStatus?: unknown;
-    usageLimit?: unknown;
-  };
+  const d = data as { sdkError?: unknown; message?: unknown };
   // Claude:结构化 tag(权威)。
   if (d.sdkError === 'rate_limit') return true;
-  if (d.usageLimit === true) return true;
-  if (d.errorStatus === 429 || d.errorStatus === 529) return true;
   // Codex / 兜底:文本匹配。
   const msg = typeof d.message === 'string' ? d.message : '';
   return /rate.?limit|usage.?limit|quota|too\s*many\s*requests/i.test(msg);

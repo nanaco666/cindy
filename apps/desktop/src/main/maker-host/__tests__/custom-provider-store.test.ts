@@ -17,7 +17,7 @@ import {
   updateCustomProvider,
   validateCustomProviderConfig,
 } from '../custom-provider-store.js';
-import type { CustomProviderConfig } from '@cindy/model-providers';
+import type { CustomProviderConfig } from '@lizi/model-providers';
 
 const CREATE_SQL = `
   CREATE TABLE custom_providers (
@@ -110,28 +110,6 @@ describe('validateCustomProviderConfig (per-runtime)', () => {
         runtimes: { codex: { baseUrl: 'https://x/v1', models: [{ id: '', name: 'y' }] } },
       }).ok,
     ).toBe(false);
-    expect(
-      validateCustomProviderConfig({
-        ...valid,
-        runtimes: {
-          codex: {
-            baseUrl: 'https://x/v1',
-            models: [{ id: 'm', name: 'M', defaultEnabled: 'false' }],
-          },
-        },
-      }).ok,
-    ).toBe(false);
-    expect(
-      validateCustomProviderConfig({
-        ...valid,
-        runtimes: {
-          codex: {
-            baseUrl: 'https://x/v1',
-            models: [{ id: 'm', name: 'M', contextWindow: 0 }],
-          },
-        },
-      }).ok,
-    ).toBe(false);
   });
 });
 
@@ -175,19 +153,15 @@ describe('custom-provider-store CRUD (per-runtime)', () => {
         codex: {
           baseUrl: 'https://openrouter.ai/api/v1',
           models: [
-            { id: 'a', name: 'A', contextWindow: 1_000_000 },
+            { id: 'a', name: 'A' },
             { id: 'a', name: 'A dup' },
-            { id: 'hidden', name: 'Hidden', defaultEnabled: false },
           ],
           headers: { 'X-Org': 'acme' },
         },
       },
     });
     const got = await getCustomProvider('openrouter');
-    expect(got?.runtimes.codex?.models).toEqual([
-      { id: 'a', name: 'A', contextWindow: 1_000_000 },
-      { id: 'hidden', name: 'Hidden', defaultEnabled: false },
-    ]);
+    expect(got?.runtimes.codex?.models).toEqual([{ id: 'a', name: 'A' }]);
     expect(got?.runtimes.codex?.headers).toEqual({ 'X-Org': 'acme' });
   });
 

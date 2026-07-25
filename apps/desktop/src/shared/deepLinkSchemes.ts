@@ -1,7 +1,7 @@
 /**
  * deepLinkSchemes — 深链 scheme 的 main / renderer 共用单点。
  *
- * scheme 事实源在 `@cindy/maker-shared/brand-identity`(`BRAND_IDENTITY.primaryScheme`
+ * scheme 事实源在 `@lizi/maker-shared/brand-identity`(`BRAND_IDENTITY.primaryScheme`
  * + `legacySchemes`,2026-07 品牌翻转后为 cindy 主 + xdt-maker 历史);本模块把它
  * 派生成解析 / 生成两侧需要的形态,双端(src/main、src/renderer)只从这里取值,
  * 不再各自硬编码字面量:
@@ -14,7 +14,7 @@
  * 无关,不从这里派生。
  */
 
-import { BRAND_IDENTITY, allDeepLinkSchemes } from '@cindy/maker-shared/brand-identity';
+import { BRAND_IDENTITY, allDeepLinkSchemes } from '@lizi/maker-shared/brand-identity';
 
 /** 深链主 scheme(生成侧唯一使用的 scheme)。 */
 export const DEEP_LINK_PRIMARY_SCHEME: string = BRAND_IDENTITY.primaryScheme;

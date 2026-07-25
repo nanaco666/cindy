@@ -15,7 +15,6 @@ import {
 } from '../linux-runtime-fallback';
 
 const tempDirs: string[] = [];
-const describeOnLinuxFileSystem = process.platform === 'win32' ? describe.skip : describe;
 
 afterEach(() => {
   for (const dir of tempDirs.splice(0)) fs.rmSync(dir, { recursive: true, force: true });
@@ -50,26 +49,24 @@ describe('runtimeVersionMatchesPin', () => {
   });
 });
 
-describeOnLinuxFileSystem('install path helpers', () => {
+describe('install path helpers', () => {
   it('places pinned private binaries under userData/agent-runtime/<kind>/bin', () => {
-    expect(runtimeInstallRoot('/userdata', 'codex')).toBe(path.join('/userdata', 'agent-runtime', 'codex'));
-    expect(runtimeInstallRoot('/userdata', 'claude-code')).toBe(
-      path.join('/userdata', 'agent-runtime', 'claude-code'),
-    );
+    expect(runtimeInstallRoot('/userdata', 'codex')).toBe('/userdata/agent-runtime/codex');
+    expect(runtimeInstallRoot('/userdata', 'claude-code')).toBe('/userdata/agent-runtime/claude-code');
     expect(privateBinaryPath('/userdata', 'codex')).toBe(
-      path.join('/userdata', 'agent-runtime', 'codex', 'bin', 'codex'),
+      '/userdata/agent-runtime/codex/bin/codex',
     );
     expect(privateBinaryPath('/userdata', 'claude-code')).toBe(
-      path.join('/userdata', 'agent-runtime', 'claude-code', 'bin', 'claude'),
+      '/userdata/agent-runtime/claude-code/bin/claude',
     );
   });
 
   it('resolves the exact legacy CDN cache path for migration', () => {
     expect(legacyManagedBinaryPath('/userdata', 'claude-code')).toBe(
-      path.join('/userdata', 'claude-code', '2.1.215', 'claude'),
+      '/userdata/claude-code/2.1.215/claude',
     );
     expect(legacyManagedBinaryPath('/userdata', 'codex')).toBe(
-      path.join('/userdata', 'codex', '0.144.6', 'codex'),
+      '/userdata/codex/0.144.6/codex',
     );
   });
 
@@ -113,7 +110,7 @@ describe('official asset descriptors', () => {
   });
 });
 
-describeOnLinuxFileSystem('extractCodexBinaryFromTarGz', () => {
+describe('extractCodexBinaryFromTarGz', () => {
   it('extracts the verified archive binary without a system tar dependency', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cindy-codex-tar-'));
     tempDirs.push(dir);
@@ -127,8 +124,6 @@ describeOnLinuxFileSystem('extractCodexBinaryFromTarGz', () => {
     await extractCodexBinaryFromTarGz(archivePath, destinationPath);
 
     expect(fs.readFileSync(destinationPath, 'utf8')).toBe('codex-binary');
-    if (process.platform !== 'win32') {
-      expect(fs.statSync(destinationPath).mode & 0o111).not.toBe(0);
-    }
+    expect(fs.statSync(destinationPath).mode & 0o111).not.toBe(0);
   });
 });

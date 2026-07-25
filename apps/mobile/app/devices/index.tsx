@@ -19,12 +19,13 @@ import {
   type ViewStyle,
 } from 'react-native';
 import { Text, TextInput } from '@/components/AppText';
-import { DeviceLinkError, type DeviceView, type PresenceSnapshot } from '@cindy/device-link';
+import { DeviceLinkError, type DeviceView, type PresenceSnapshot } from '@lizi/device-link';
 import {
   Archive,
   Check,
   ChevronDown,
   ChevronRight,
+  Clock,
   Folder,
   FolderOpen,
   LoaderCircle,
@@ -122,7 +123,6 @@ import {
 } from '@/session/scheduleIndex';
 import { createScheduleIndexDeferRegistry } from '@/session/scheduleIndexDefer';
 import { resolveMobileSessionRightStatus } from '@/session/sessionRightStatus';
-import { AutomationTimerIcon } from '@/session/AutomationTimerIcon';
 import { SessionActionSheet } from '@/session/SessionActionSheet';
 import { SwipeableSessionRow, type SessionSwipeControls } from '@/session/SwipeableSessionRow';
 import {
@@ -525,13 +525,10 @@ export default function HomeScreen() {
         remoteSessionStore.requestReseed(deviceId);
         continue;
       }
-      // schedule 列表变化(changed,含 pause / resume / 改绑)与 read / all-read 都是低频
-      // 权威信号,force 穿透节流保证状态即时更新;fired / running 等高频事件照常吃 TTL
-      // (全量 force 会把 listRuns 风暴请回来)。
+      // read / all-read 是用户操作驱动的低频权威信号,force 穿透节流保证徽标即时清除;
+      // fired / running 等高频事件照常吃 TTL(全量 force 会把 listRuns 风暴请回来)。
       refreshDeviceScheduleIndex(deviceId, sessionIds, {
-        force: projection.refresh.scheduleList === true
-          || projection.unreadImpact === 'may-clear-schedule'
-          || projection.unreadImpact === 'clear-all',
+        force: projection.unreadImpact === 'may-clear-schedule' || projection.unreadImpact === 'clear-all',
       });
     }
   }), [refreshDeviceScheduleIndex]);
@@ -895,7 +892,7 @@ export default function HomeScreen() {
   // 优先,与 openSession 同口径);本地更新按物理 shard 路由(被认领的 stale 会话物理仍在
   // 旧 shard),与设备详情页 executeBulkAction 的写法一致。
   //
-  // 乐观更新写序契约(2026-07-07 产品要求即点即变;并发覆盖问题为 review 必改):
+  // 乐观更新写序契约(2026-07-07 Dash 要求即点即变;并发覆盖问题为 review 必改):
   //  1. begin:每笔写先在 LatestWriteGuard 按**字段**登记最新写(review P1:title 与
   //     pinnedAt 等无交集字段的写互不取代),再乐观 applySessionPatch(行立即消失/重排/
   //     改标题),然后经 sessionMetaWriteQueue 串行出网(同会话至多一笔在途,发出序 = 操作序,
@@ -918,11 +915,6 @@ export default function HomeScreen() {
     const fields = Object.keys(patch);
     // 写序登记:delete 终态取代全字段(pending 重命名/置顶让位);其余按 patch 字段。
     const write = sessionMetaWriteGuard.begin(session.id, writeGuardFields(patch));
-    // 行将被乐观移出(归档/删除)或重排(置顶):下一次布局提交走统一收展动画,
-    // 兄弟行平滑补位,不瞬间跳变(§14.4;title 等不改布局的字段不触发)。
-    if (patch.status !== undefined || patch.pinnedAt !== undefined) {
-      configureCollapseAnimation();
-    }
     remoteSessionStore.applySessionPatch(shardId, session.id, patch);
     // 在途写登记:settle 前被控端广播的同字段 push(旧写回流)会被
     // sessionPendingWrites.filterPatch 遮蔽,不得滚回本机乐观意图(review P2)。
@@ -973,8 +965,6 @@ export default function HomeScreen() {
             .find((s) => s.deviceLinkDeviceId === shardId)?.deviceLinkDeviceName
             ?? session.deviceLinkDeviceName
             ?? shardId;
-          // 失败回滚插回行,同样走收展动画,与乐观移出对称。
-          configureCollapseAnimation();
           remoteSessionStore.upsertDeviceSession(shardId, shardName, session);
           // 行被乐观移出期间,并行道已落地的无交集写(如重命名成功)对账/push 都是
           // no-op,上面的旧快照插回会把它们的结果吞掉——reseed 向被控端收敛(review
@@ -1024,7 +1014,7 @@ export default function HomeScreen() {
     setActionSheetSession(null);
     if (!session) return;
     if (action === 'delete') {
-      // 菜单不再展示会话标题(2026-07-07 产品反馈),删除确认在这里带上标题作上下文。
+      // 菜单不再展示会话标题(2026-07-07 Dash 反馈),删除确认在这里带上标题作上下文。
       const title = session.title?.trim() || '未命名对话';
       Alert.alert('删除对话？', `将删除「${title}」，删除后不可恢复。`, [
         { style: 'cancel', text: '取消' },
@@ -1078,7 +1068,7 @@ export default function HomeScreen() {
   }, []);
 
   // 滑动控制 bundle:稳定引用向嵌套渲染路径(项目组子行 / 自动化组子行)透传,
-  // 让这些行与顶层普通会话行拥有同一套左右滑操作(2026-07-09 产品需求)。
+  // 让这些行与顶层普通会话行拥有同一套左右滑操作(2026-07-09 Dash 需求)。
   const sessionSwipeControls = useMemo<SessionSwipeControls>(() => ({
     onArchive: archiveSession,
     onShowOptions: showSessionOptions,
@@ -2171,9 +2161,6 @@ function HomeSessionRowInner({
     || readBooleanField(item.session, 'hasPausedQueue')
     || readBooleanField(item.session, 'composerDraft');
   const showSchedule = !!item.scheduleInfo || item.session.source === 'scheduler';
-  // 对齐桌面多绑定语义:只有同一会话的所有 schedule 都 paused / expired，
-  // 才在 Timer 固定槽位叠 Pause 角标；任一 active 绑定仍保留普通 Timer。
-  const scheduleStopped = item.scheduleInfo?.allSchedulesStopped === true;
   const showPinned = !!item.session.pinnedAt;
   // 自动化组行:同一任务的多次运行折叠而成(共享层 groupAutomationListItems 产出)。
   // 没接展开回调的调用点退化为普通行为(点击打开 primary 会话)。
@@ -2315,16 +2302,10 @@ function HomeSessionRowInner({
               {preview}
             </Text>
             {showSchedule || showPinned ? (
-              // 组行与单次自动化会话行同款标记:Timer 放右下(时间下方的尾部图标位),
+              // 组行与单次自动化会话行同款标记:Clock 放右下(时间下方的尾部图标位),
               // 行首保留正常的会话状态图标(primary 运行的 vendor / 运行态)。
               <View style={[styles.sessionTrailingIcons, cindyList && styles.sessionTrailingIconsCindy]}>
-                {showSchedule ? (
-                  <AutomationTimerIcon
-                    paused={scheduleStopped}
-                    size={cindyList ? iconSize.xs : iconSize.lg}
-                    testID={`home.sessionAutomationTimer.${item.session.id}`}
-                  />
-                ) : null}
+                {showSchedule ? <Clock color={colors.textTertiary} size={cindyList ? iconSize.xs : iconSize.lg} strokeWidth={iconStroke.thin} /> : null}
                 {showPinned ? <Pin color={colors.textTertiary} size={cindyList ? iconSize.xs : iconSize.lg} strokeWidth={iconStroke.thin} /> : null}
               </View>
             ) : null}
@@ -3172,7 +3153,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   // 右侧状态槽(替代时间位):18×18 定位槽把点与 spinner 居中到同一锚点;
   // 点 10px(桌面 size-2=8px,手机屏幕密度高、观看距离远,放大一档保证可辨识,
-  // 2026-07 产品模拟器实测拍板)。
+  // 2026-07 Dash 模拟器实测拍板)。
   sessionRightStatusCell: {
     alignItems: 'center',
     flexShrink: 0,

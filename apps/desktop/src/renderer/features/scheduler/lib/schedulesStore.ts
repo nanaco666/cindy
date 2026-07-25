@@ -41,7 +41,7 @@
  */
 
 import { useSyncExternalStore } from 'react';
-import type { Schedule, SchedulerEvent } from '@cindy/maker-scheduler';
+import type { Schedule, SchedulerEvent } from '@lizi/maker-scheduler';
 
 let cache: Schedule[] | null = null;
 let inflight: Promise<Schedule[]> | null = null;
@@ -55,7 +55,7 @@ let wasReset = false;
  * 切账号 generation。logout 时自增,使**登出前已发起、登出后才返回**的 in-flight
  * list 请求作废 —— fetchAndStore 在发起时捕获当前 epoch,回写 cache/lastError 前
  * 校验 epoch 未变。否则会发生跨账号串库:账号 A 的 list 请求在 logout 后才返回,
- * 把 A 的任务列表写进账号 B 的 cache(review [阻断] 项)。
+ * 把 A 的任务列表写进账号 B 的 cache(MR !152 review [阻断] 项)。
  * 清 cache/inflight 只断引用,断不掉已 await 在途的 promise,必须靠 epoch 失效回写。
  */
 let epoch = 0;

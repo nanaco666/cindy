@@ -59,7 +59,7 @@ export function resolveSelfHostRegionsPath(filePath = process.env.CINDY_SELF_HOS
 
 /**
  * 读取并校验打包机本地的 self-host-regions.json。返回冻结的 { cn, global }。
- * @param {{ filePath?: string, mode?: 'release' | 'local' }} [options]
+ * @param {{ filePath?: string }} [options]
  */
 export function loadSelfHostRegions(options = {}) {
   const configPath = resolveSelfHostRegionsPath(options.filePath);
@@ -80,23 +80,17 @@ export function loadSelfHostRegions(options = {}) {
   } catch {
     throw new Error(`自建线地区配置不是合法 JSON: ${configPath}`);
   }
-  return validateSelfHostRegions(parsed, { source: configPath, mode: options.mode });
+  return validateSelfHostRegions(parsed, { source: configPath });
 }
 
 /**
- * 校验 { cn, global } 结构。mode 决定叶子值的严格程度:
- *  - 'release'(默认,自建发布线):身份字段、TapDB 公开配置与 global Google 公开配置
- *    严格非空——漏填 TapDB 会静默发出无统计的正式包,必须在装载时拦下。
- *  - 'local'(本地 Xcode / Simulator 构建):叶子值允许留空。选中 region 缺身份字段由
- *    app.config.js 构建时按需报错;TapDB 留空 = 运行时统计 no-op(mobileTapdb.ts),
- *    global.google 留空 = 跳过 Google 登录,外部开发者无需这些账号即可本地构建。
- * 两种 mode 下 oss/signing 叶子值都允许空(--execute 用时再校验)。
+ * 校验 { cn, global } 结构。身份字段、TapDB 公开配置与 global Google 公开配置严格非空;
+ * oss/signing 叶子值允许空(用时再校验)。
  * @param {unknown} value
- * @param {{ source?: string, mode?: 'release' | 'local' }} [options]
+ * @param {{ source?: string }} [options]
  */
 export function validateSelfHostRegions(value, options = {}) {
   const source = options.source ?? 'self-host regions';
-  const mode = options.mode ?? 'release';
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new Error(`${source} 必须是 JSON object`);
   }
@@ -110,7 +104,7 @@ export function validateSelfHostRegions(value, options = {}) {
       throw new Error(`${source} 的 ${region}.authRegion 必须等于 "${region}"`);
     }
     // dev 块允许身份留空(装载即校验会拖垮 cn/global 打包;发 dev 时用时强校验)。
-    const requireFilled = region !== 'dev' && mode !== 'local';
+    const requireFilled = region !== 'dev';
     for (const key of REQUIRED_IDENTITY_FIELDS) {
       if (typeof block[key] !== 'string' || (requireFilled && !block[key].trim())) {
         throw new Error(`${source} 的 ${region}.${key} 必须是${requireFilled ? '非空' : ''}字符串`);
@@ -148,33 +142,26 @@ export function validateSelfHostRegions(value, options = {}) {
       if (!google || typeof google !== 'object' || Array.isArray(google)) {
         throw new Error(`${source} 的 global.google 必须是 object`);
       }
-      // local 模式允许 google 整体留空(跳过 Google 登录);只要填了任意一个字段,
-      // 三个字段与格式就全量强校验,防止部分填写被静默丢弃。
-      const googleFilled = REQUIRED_GOOGLE_KEYS.some(
-        (key) => typeof google[key] === 'string' && google[key].trim(),
-      );
       for (const key of REQUIRED_GOOGLE_KEYS) {
-        if (typeof google[key] !== 'string' || ((requireFilled || googleFilled) && !google[key].trim())) {
+        if (typeof google[key] !== 'string' || !google[key].trim()) {
           throw new Error(`${source} 的 global.google.${key} 必须是非空字符串`);
         }
       }
-      if (requireFilled || googleFilled) {
-        const webClientId = google.webClientId.trim();
-        const iosClientId = google.iosClientId.trim();
-        const iosUrlScheme = google.iosUrlScheme.trim();
-        const clientIdSuffix = '.apps.googleusercontent.com';
-        if (!webClientId.endsWith(clientIdSuffix)) {
-          throw new Error(`${source} 的 global.google.webClientId 必须是 Google OAuth client id`);
-        }
-        if (!iosClientId.endsWith(clientIdSuffix)) {
-          throw new Error(`${source} 的 global.google.iosClientId 必须是 Google OAuth client id`);
-        }
-        const expectedScheme = `com.googleusercontent.apps.${iosClientId.slice(0, -clientIdSuffix.length)}`;
-        if (iosUrlScheme !== expectedScheme) {
-          throw new Error(
-            `${source} 的 global.google.iosUrlScheme 必须由 iosClientId 反写为 ${expectedScheme}`,
-          );
-        }
+      const webClientId = google.webClientId.trim();
+      const iosClientId = google.iosClientId.trim();
+      const iosUrlScheme = google.iosUrlScheme.trim();
+      const clientIdSuffix = '.apps.googleusercontent.com';
+      if (!webClientId.endsWith(clientIdSuffix)) {
+        throw new Error(`${source} 的 global.google.webClientId 必须是 Google OAuth client id`);
+      }
+      if (!iosClientId.endsWith(clientIdSuffix)) {
+        throw new Error(`${source} 的 global.google.iosClientId 必须是 Google OAuth client id`);
+      }
+      const expectedScheme = `com.googleusercontent.apps.${iosClientId.slice(0, -clientIdSuffix.length)}`;
+      if (iosUrlScheme !== expectedScheme) {
+        throw new Error(
+          `${source} 的 global.google.iosUrlScheme 必须由 iosClientId 反写为 ${expectedScheme}`,
+        );
       }
     }
     // oss 子对象必须存在且含全部键(叶子值允许空,--execute 应用 OSS 时再强校验非空)。
@@ -224,7 +211,7 @@ export function resolveSelfHostRegion(args, options = {}) {
   const raw = args?.region;
   if (typeof raw !== 'string' || !raw.trim()) {
     throw new Error(
-      '自建线出包必须显式指定 --region cn|global|dev(不提供默认值);例:pnpm mobile:build:ios -- --region global',
+      '自建线出包必须显式指定 --region cn|global|dev(不提供默认值);例:pnpm mobile:release:ios:local -- --region global',
     );
   }
   const region = raw.trim();

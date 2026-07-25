@@ -32,7 +32,6 @@ import { readClaudeApiKey } from '../maker-host/auth-adapters';
 import { claudeUpstreamEndpoint } from '../maker-host/runtime-configs';
 import { CODEX_SUBSCRIPTION_VALUE_PRICING } from '../../shared/codexSubscriptionValue.js';
 import { providerSecretStorageKey } from '../../shared/providerSecrets';
-import { resolveOwnerScopedSecretStorageKey } from '../secrets/providerSecretStore.js';
 import { CHATGPT_MODEL_PREFIX } from '../../shared/subscriptionModels';
 // codex/ 预算折扣系数与判据归一在 turnCostCalculator (零 host 依赖纯模块), 这里
 // import 用于把折扣折进价表, 并 re-export 维持既有 import 路径 ('../modelPricing')。
@@ -127,9 +126,7 @@ function currentBaseUrl(): string {
 
 function currentKeyCacheIdentity(): string | null {
   try {
-    const physicalKey = resolveOwnerScopedSecretStorageKey(providerSecretStorageKey('xd'));
-    if (!physicalKey) return null;
-    const file = path.join(app.getPath('userData'), 'safe-storage', `${physicalKey}.enc`);
+    const file = path.join(app.getPath('userData'), 'safe-storage', `${providerSecretStorageKey('xd')}.enc`);
     const stat = statSync(file, { bigint: true });
     return `file=${stat.dev}:${stat.ino}:${stat.size}:${stat.mtimeNs}:${stat.ctimeNs}`;
   } catch {

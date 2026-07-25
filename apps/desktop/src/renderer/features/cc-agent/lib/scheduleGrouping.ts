@@ -9,7 +9,7 @@
  *   - 组间按"组内任意 schedule 的最近 nextFireAt"升序（active 优先到顶）
  */
 
-import type { Schedule } from '@cindy/maker-scheduler/types';
+import type { Schedule } from '@lizi/maker-scheduler/types';
 import {
   extractDisplayName,
   normalizeWorkingDir,

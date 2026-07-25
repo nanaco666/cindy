@@ -13,8 +13,6 @@
 import { describe, expect, it } from 'vitest';
 import { Schema, type Node as PMNode } from '@tiptap/pm/model';
 import { EditorState } from '@tiptap/pm/state';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 
 import {
   createGhostCommandPlugin,
@@ -22,8 +20,6 @@ import {
   ghostPillAttrs,
 } from '../components/new-chat/GhostCommandDecoration';
 import type { GhostManifest, InstalledGhost } from '../../shared/ghost';
-
-const globalsSource = readFileSync(resolve(__dirname, '..', 'styles', 'globals.css'), 'utf8');
 
 const schema = new Schema({
   nodes: {
@@ -132,10 +128,7 @@ describe('findGhostCommandMatch — 位置语义与发送期同源', () => {
 describe('createGhostCommandPlugin — roster meta 与 decoration 生命周期', () => {
   const META_KEY = 'ghostCommandDecoration';
 
-  function decorationSpecs(
-    plugin: ReturnType<typeof createGhostCommandPlugin>,
-    state: EditorState,
-  ) {
+  function decorationSpecs(plugin: ReturnType<typeof createGhostCommandPlugin>, state: EditorState) {
     const set = plugin.getState(state)?.decorations;
     return (set?.find() ?? []).map((d) => ({ from: d.from, to: d.to }));
   }
@@ -198,34 +191,5 @@ describe('createGhostCommandPlugin — roster meta 与 decoration 生命周期',
       class: 'ghost-cmd-pill',
       'data-ghost-cmd': 'ghost-画图',
     });
-  });
-});
-
-describe('ghost command pill visual contract', () => {
-  it('matches the shared inline reference chip geometry and color tokens', () => {
-    const pillRule = globalsSource.match(/\.ProseMirror \.ghost-cmd-pill \{([\s\S]*?)\n\}/)?.[1];
-    const iconRule = globalsSource.match(
-      /\.ProseMirror \.ghost-cmd-pill::before \{([\s\S]*?)\n\}/,
-    )?.[1];
-    const joinedLeftRule = globalsSource.match(
-      /\.ProseMirror \.ghost-cmd-pill:has\(\+ \.ghost-cmd-pill\) \{([\s\S]*?)\n\}/,
-    )?.[1];
-    const joinedRightRule = globalsSource.match(
-      /\.ProseMirror \.ghost-cmd-pill \+ \.ghost-cmd-pill \{([\s\S]*?)\n\}/,
-    )?.[1];
-
-    expect(pillRule).toContain('background: var(--surface-chip)');
-    expect(pillRule).toContain('border: 1px solid var(--border-default)');
-    expect(pillRule).toContain('border-radius: 9999px');
-    expect(pillRule).toContain('padding: 2px 8px');
-    expect(pillRule).toContain('color: var(--text-primary)');
-    expect(pillRule).toContain('font-size: 12px');
-    expect(pillRule).toContain('font-weight: 400');
-    expect(pillRule).toContain('line-height: 20px');
-    expect(iconRule).toContain('width: 14px');
-    expect(iconRule).toContain('height: 14px');
-    expect(iconRule).toContain('margin-right: 6px');
-    expect(joinedLeftRule).toContain('margin-right: 0');
-    expect(joinedRightRule).toContain('margin-left: 0');
   });
 });

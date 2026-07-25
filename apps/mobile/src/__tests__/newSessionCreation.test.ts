@@ -24,7 +24,7 @@ import {
   type NewSessionCreationParams,
 } from '@/session/newSessionCreation';
 import { remoteSessionStore } from '@/session/remoteSessionStore';
-import { sessionFromCreateResult, type NewSessionDraft } from '@/session/newSession';
+import type { NewSessionDraft } from '@/session/newSession';
 
 const DRAFT: NewSessionDraft = {
   agentKind: 'claude-code',
@@ -103,7 +103,7 @@ describe('newSessionCreation pipeline', () => {
   beforeEach(() => {
     remoteSessionStore.clear();
     // 清残留 task(上个用例失败态)。
-    for (const id of ['s1', 's2', 's3', 's4', 's5', 's6', 's7', 's8', 's9', 's10', 's11', 's12']) dismissNewSessionCreation(id);
+    for (const id of ['s1', 's2', 's3', 's4', 's5', 's6', 's7', 's8', 's9', 's10', 's11']) dismissNewSessionCreation(id);
   });
 
   it('start 同步段即入 store:合成行带 pendingLocalCreation,首条消息以排队气泡上屏', () => {
@@ -138,58 +138,6 @@ describe('newSessionCreation pipeline', () => {
     // fresh getSession 失败(makeMaker 默认抛 NOT_FOUND)时权威覆盖没发生,管线
     // 收口前必须主动清 pendingLocalCreation 禁发标(codex P2)。
     expect(remoteSessionStore.getSessions().find((s) => s.id === 's2')?.pendingLocalCreation).toBe(false);
-  });
-
-  it('首条消息 enqueue 前应用手机控制端准备的可信引用快照', async () => {
-    const maker = makeMaker();
-    remoteSessionStore.upsertDeviceSession(
-      'dev-source',
-      'Source Mac',
-      sessionFromCreateResult({ sessionId: 'source' }, DRAFT),
-    );
-    const prepareQueuedMessage = vi.fn(async (item) => ({
-      ...item,
-      trustedSessionReferenceContexts: [{
-        sessionId: 'source',
-        source: 'device-link' as const,
-        deviceId: 'dev-source',
-        messages: [{ role: 'user' as const, content: 'trusted source' }],
-        range: 'recent' as const,
-        messageCount: 1,
-        truncated: false,
-      }],
-    }));
-    startNewSessionCreation(makeParams('s12', maker, {
-      draft: { ...DRAFT, firstMessage: 'review cindy://session/source' },
-      transport: {
-        maker: maker as unknown as MobileMakerTransport,
-        openLink: vi.fn(async () => undefined),
-        subscribe: vi.fn(async () => undefined),
-        prepareQueuedMessage,
-      },
-    }));
-
-    expect(remoteSessionStore.getInputProjection('s12').pendingQueue[0]?.sessionRefs)
-      .toEqual([{ sessionId: 'source', deviceId: 'dev-source' }]);
-    remoteSessionStore.setDeviceSessions('dev-source', 'Source Mac', []);
-
-    await flushPipeline();
-
-    expect(prepareQueuedMessage).toHaveBeenCalledTimes(1);
-    expect(prepareQueuedMessage).toHaveBeenCalledWith(expect.objectContaining({
-      sessionRefs: [{ sessionId: 'source', deviceId: 'dev-source' }],
-    }));
-    expect(maker.input.enqueue).toHaveBeenCalledWith(
-      's12',
-      expect.objectContaining({
-        sessionRefs: [{ sessionId: 'source', deviceId: 'dev-source' }],
-        trustedSessionReferenceContexts: [expect.objectContaining({
-          sessionId: 'source',
-          deviceId: 'dev-source',
-        })],
-      }),
-      expect.anything(),
-    );
   });
 
   it('权威 getSession 落地后、enqueue 落定前禁发标保持(弱网窗口不提前解禁,防抢发插队)', async () => {

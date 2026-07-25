@@ -15,7 +15,7 @@ import { useCallback, useSyncExternalStore } from 'react';
 import {
   parseChatQuoteSegments,
   type ChatQuote,
-} from '@cindy/maker-shared/chat-quotes';
+} from '@lizi/maker-shared/chat-quotes';
 
 export type { ChatQuote };
 

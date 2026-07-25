@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { BrowserWindow } from 'electron';
-import { SESSION_ACTIVITY_CHANNEL } from '@cindy/device-link';
-import type { AgentEvent, InteractionRequest } from '@cindy/maker-core';
-import { BRAND_NAME } from '@cindy/maker-shared/branding';
+import { SESSION_ACTIVITY_CHANNEL } from '@lizi/device-link';
+import type { AgentEvent, InteractionRequest } from '@lizi/maker-core';
+import { BRAND_NAME } from '@lizi/maker-shared/branding';
 
 import { computeAgentIslandWindowBounds, type AgentIslandLayoutPreference } from '../geometry.js';
 import {
@@ -1085,7 +1085,7 @@ describe('AgentIslandService native publishing', () => {
       status: 'active',
       title: 'New Maker',
       userSendAt: null,
-      workingDir: '/Users/alice/Library/Application Support/xdt-maker/dialogues/2026-06-16/14ad7035-b7aa-4f5d-bc9f-6e39cffdd9ea',
+      workingDir: '/Users/dash/Library/Application Support/xdt-maker/dialogues/2026-06-16/14ad7035-b7aa-4f5d-bc9f-6e39cffdd9ea',
       workspaceKind: 'dialogue',
     });
     const service = new AgentIslandService({
@@ -1098,7 +1098,7 @@ describe('AgentIslandService native publishing', () => {
       {
         sessionId: 's1',
         agentKind: 'codex',
-        workingDir: '/Users/alice/Library/Application Support/xdt-maker/dialogues/2026-06-16/14ad7035-b7aa-4f5d-bc9f-6e39cffdd9ea',
+        workingDir: '/Users/dash/Library/Application Support/xdt-maker/dialogues/2026-06-16/14ad7035-b7aa-4f5d-bc9f-6e39cffdd9ea',
         workspaceKind: 'dialogue',
       },
       '/goal 测试一下是不是支持目标模式',
@@ -1117,7 +1117,7 @@ describe('AgentIslandService native publishing', () => {
 
     service.handleSessionMetadataPatch('s1', {
       title: '目标模式测试',
-      workingDir: '/Users/alice/Library/Application Support/xdt-maker/dialogues/2026-06-16/14ad7035-b7aa-4f5d-bc9f-6e39cffdd9ea',
+      workingDir: '/Users/dash/Library/Application Support/xdt-maker/dialogues/2026-06-16/14ad7035-b7aa-4f5d-bc9f-6e39cffdd9ea',
       workspaceKind: 'dialogue',
     });
 
@@ -1649,7 +1649,7 @@ describe('AgentIslandService native publishing', () => {
 
     await registeredIpcHandler(AGENT_ISLAND_PREVIEW_SOUND_CHANNEL)(null, 'none');
     await registeredIpcHandler(AGENT_ISLAND_PREVIEW_SOUND_CHANNEL)(null, 'not-a-sound');
-    await registeredIpcHandler(AGENT_ISLAND_PREVIEW_SOUND_CHANNEL)(null, 'startup-chime');
+    await registeredIpcHandler(AGENT_ISLAND_PREVIEW_SOUND_CHANNEL)(null, 'gameboy-startup');
     await registeredIpcHandler(AGENT_ISLAND_PREVIEW_SOUND_CHANNEL)(null, {
       type: 'custom',
       path: '/tmp/agent-island.wav',
@@ -1657,7 +1657,7 @@ describe('AgentIslandService native publishing', () => {
     });
 
     expect(playSound).toHaveBeenCalledTimes(2);
-    expect(playSound).toHaveBeenNthCalledWith(1, { type: 'builtin', id: 'startup-chime' });
+    expect(playSound).toHaveBeenNthCalledWith(1, { type: 'builtin', id: 'gameboy-startup' });
     expect(playSound).toHaveBeenNthCalledWith(2, {
       type: 'custom',
       path: '/tmp/agent-island.wav',

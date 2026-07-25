@@ -18,7 +18,7 @@ import {
   type AgentKind,
   type CatalogModel,
   type ProviderView,
-} from '@cindy/model-providers';
+} from '@lizi/model-providers';
 
 // 用 renderer 自己的 ModelDescriptor（Effort=string，宽松）—— 与 capabilities.availableModels
 // 同型，picker 现有代码（effortDisplayNames 按 string 索引等）零改动即可消费。

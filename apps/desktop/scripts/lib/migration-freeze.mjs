@@ -1,11 +1,10 @@
 /**
  * SQLite migration 冻结校验。
  *
- * 从旧仓迁入的 migration SQL，以及迁仓首个 commit 已存在的 companion TS，
- * 由 drizzle/migration-baseline.json 固定内容 hash，不再依赖 notice 或旧仓
- * Git 历史。之后进入新仓 main 的 migration 继续用 Git tree 做增量冻结，
- * 因此只允许追加新 migration，不允许改写或删除历史 SQL，也不允许增删或
- * 改写已经发布的 companion TS runtime script。
+ * 从旧仓迁入的 migration 由 drizzle/migration-baseline.json 固定内容 hash，
+ * 不再依赖 notice 或旧仓 Git 历史。新仓 main 中已经存在的 migration 继续用
+ * Git tree 做增量冻结，因此只允许追加新 migration，不允许改写或删除历史 SQL，
+ * 也不允许增删或改写已经发布的 companion TS runtime script。
  */
 /* global process */
 
@@ -16,8 +15,12 @@ import { spawnSync } from 'node:child_process';
 
 const MIGRATION_PATH_RE = /^apps\/desktop\/drizzle\/\d{4}_.+\.sql$/;
 const MIGRATION_SCRIPT_PATH_RE = /^apps\/desktop\/drizzle\/scripts\/\d{4}_.+\.ts$/;
-const BASELINE_GIT_PATH = 'apps/desktop/drizzle/migration-baseline.json';
-const BASELINE_FILE = path.join('apps', 'desktop', 'drizzle', 'migration-baseline.json');
+const BASELINE_FILE = path.join(
+  'apps',
+  'desktop',
+  'drizzle',
+  'migration-baseline.json',
+);
 
 function runGit(repoRoot, args) {
   const result = spawnSync('git', args, {
@@ -48,19 +51,14 @@ export function readMigrationBaseline(repoRoot) {
     );
   }
   if (
-    baseline?.version !== 2 ||
+    baseline?.version !== 1 ||
     baseline.algorithm !== 'sha256' ||
     baseline.lineEndings !== 'lf' ||
     typeof baseline.sourceCommit !== 'string' ||
     !/^[0-9a-f]{40}$/i.test(baseline.sourceCommit) ||
-    typeof baseline.runtimeSourceCommit !== 'string' ||
-    !/^[0-9a-f]{40}$/i.test(baseline.runtimeSourceCommit) ||
     !baseline.migrations ||
     typeof baseline.migrations !== 'object' ||
-    Array.isArray(baseline.migrations) ||
-    !baseline.runtimeScripts ||
-    typeof baseline.runtimeScripts !== 'object' ||
-    Array.isArray(baseline.runtimeScripts)
+    Array.isArray(baseline.migrations)
   ) {
     throw new Error(`${BASELINE_FILE} 格式不合法`);
   }
@@ -68,57 +66,8 @@ export function readMigrationBaseline(repoRoot) {
   if (entries.length === 0) throw new Error(`${BASELINE_FILE} 没有 migration 条目`);
   for (const [fileName, hash] of entries) {
     const gitPath = `apps/desktop/drizzle/${fileName}`;
-    if (
-      !MIGRATION_PATH_RE.test(gitPath) ||
-      typeof hash !== 'string' ||
-      !/^[0-9a-f]{64}$/i.test(hash)
-    ) {
+    if (!MIGRATION_PATH_RE.test(gitPath) || typeof hash !== 'string' || !/^[0-9a-f]{64}$/i.test(hash)) {
       throw new Error(`${BASELINE_FILE} 条目不合法: ${fileName}`);
-    }
-  }
-  const runtimeEntries = Object.entries(baseline.runtimeScripts);
-  if (runtimeEntries.length === 0) throw new Error(`${BASELINE_FILE} 没有 runtime script 条目`);
-  for (const [fileName, hash] of runtimeEntries) {
-    const gitPath = `apps/desktop/drizzle/scripts/${fileName}`;
-    const sqlFileName = fileName.replace(/\.ts$/, '.sql');
-    if (
-      !MIGRATION_SCRIPT_PATH_RE.test(gitPath) ||
-      typeof hash !== 'string' ||
-      !/^[0-9a-f]{64}$/i.test(hash) ||
-      !(sqlFileName in baseline.migrations)
-    ) {
-      throw new Error(`${BASELINE_FILE} runtime script 条目不合法: ${fileName}`);
-    }
-  }
-  const runtimeSourceCommit = resolveCommit(repoRoot, baseline.runtimeSourceCommit);
-  const sourceScriptPaths = runGit(repoRoot, [
-    'ls-tree',
-    '-r',
-    '--name-only',
-    runtimeSourceCommit,
-    '--',
-    'apps/desktop/drizzle/scripts',
-  ])
-    .split(/\r?\n/)
-    .filter((gitPath) => MIGRATION_SCRIPT_PATH_RE.test(gitPath))
-    .sort();
-  const declaredScriptPaths = runtimeEntries
-    .map(([fileName]) => `apps/desktop/drizzle/scripts/${fileName}`)
-    .sort();
-  if (JSON.stringify(sourceScriptPaths) !== JSON.stringify(declaredScriptPaths)) {
-    throw new Error(
-      `${BASELINE_FILE} runtime script 集合与 ${runtimeSourceCommit.slice(0, 10)} 不一致`,
-    );
-  }
-  for (const [fileName, expectedHash] of runtimeEntries) {
-    const gitPath = `apps/desktop/drizzle/scripts/${fileName}`;
-    const sourceHash = normalizedSha256(
-      runGit(repoRoot, ['show', `${runtimeSourceCommit}:${gitPath}`]),
-    );
-    if (sourceHash !== expectedHash) {
-      throw new Error(
-        `${BASELINE_FILE} runtime script 指纹与 ${runtimeSourceCommit.slice(0, 10)} 不一致: ${fileName}`,
-      );
     }
   }
   return baseline;
@@ -140,26 +89,9 @@ export function findBaselineMigrationChanges(repoRoot) {
       violations.push({ path: gitPath, kind: 'modified' });
     }
   }
-  const runtimeScriptPaths = [];
-  for (const [fileName, expectedHash] of Object.entries(baseline.runtimeScripts)) {
-    const gitPath = `apps/desktop/drizzle/scripts/${fileName}`;
-    runtimeScriptPaths.push(gitPath);
-    const currentPath = path.join(repoRoot, ...gitPath.split('/'));
-    if (!fs.existsSync(currentPath)) {
-      violations.push({ path: gitPath, kind: 'deleted' });
-      continue;
-    }
-    const currentHash = normalizedSha256(fs.readFileSync(currentPath, 'utf-8'));
-    if (currentHash !== expectedHash) {
-      violations.push({ path: gitPath, kind: 'modified' });
-    }
-  }
   return {
     sourceCommit: baseline.sourceCommit,
-    runtimeSourceCommit: baseline.runtimeSourceCommit,
     migrationCount: Object.keys(baseline.migrations).length,
-    runtimeScriptCount: runtimeScriptPaths.length,
-    runtimeScriptPaths,
     violations,
   };
 }
@@ -175,13 +107,8 @@ function companionScriptPath(sqlPath) {
   return `apps/desktop/drizzle/scripts/${fileName}`;
 }
 
-/**
- * 比较某个新仓 commit 中已有的 migration SQL + companion TS 与当前工作树。
- *
- * 从迁仓首个 commit 起就存在的 companion 由固定基线保护；这里跳过这些路径，
- * 避免 main 曾误改历史脚本后，正确恢复反而被错误的 main tree 阻断。
- */
-export function findFrozenMigrationChanges(repoRoot, ref, authoritativeRuntimePaths = new Set()) {
+/** 比较某个新仓 commit 中已有的 migration SQL + companion TS 与当前工作树。 */
+export function findFrozenMigrationChanges(repoRoot, ref) {
   const commit = resolveCommit(repoRoot, ref);
   const treePaths = runGit(repoRoot, [
     'ls-tree',
@@ -199,33 +126,6 @@ export function findFrozenMigrationChanges(repoRoot, ref, authoritativeRuntimePa
   );
 
   const violations = [];
-  try {
-    const frozenBaseline = JSON.parse(runGit(repoRoot, ['show', `${commit}:${BASELINE_GIT_PATH}`]));
-    if (frozenBaseline.version >= 2) {
-      const currentBaseline = JSON.parse(
-        fs.readFileSync(path.join(repoRoot, BASELINE_FILE), 'utf-8'),
-      );
-      const frozenRuntimeBaseline = {
-        version: frozenBaseline.version,
-        runtimeSourceCommit: frozenBaseline.runtimeSourceCommit,
-        runtimeScripts: frozenBaseline.runtimeScripts,
-      };
-      const currentRuntimeBaseline = {
-        version: currentBaseline.version,
-        runtimeSourceCommit: currentBaseline.runtimeSourceCommit,
-        runtimeScripts: currentBaseline.runtimeScripts,
-      };
-      if (JSON.stringify(frozenRuntimeBaseline) !== JSON.stringify(currentRuntimeBaseline)) {
-        violations.push({ path: BASELINE_GIT_PATH, kind: 'modified-runtime-baseline' });
-      }
-    }
-  } catch (error) {
-    throw new Error(
-      `无法核对 ${commit.slice(0, 10)} 的 runtime baseline: ${
-        error instanceof Error ? error.message : String(error)
-      }`,
-    );
-  }
   for (const gitPath of migrationPaths) {
     const currentPath = path.join(repoRoot, ...gitPath.split('/'));
     if (!fs.existsSync(currentPath)) {
@@ -239,7 +139,6 @@ export function findFrozenMigrationChanges(repoRoot, ref, authoritativeRuntimePa
     }
 
     const scriptPath = companionScriptPath(gitPath);
-    if (authoritativeRuntimePaths.has(scriptPath)) continue;
     const scriptExistsAtBaseline = frozenScriptPaths.has(scriptPath);
     const currentScriptPath = path.join(repoRoot, ...scriptPath.split('/'));
     const scriptExistsNow = fs.existsSync(currentScriptPath);
@@ -301,7 +200,7 @@ export function validateMigrationFreeze(repoRoot, env = process.env) {
   const fixedCheck = findBaselineMigrationChanges(repoRoot);
   const baseline = resolveMainBaseline(repoRoot, env);
   const mainCheck = baseline
-    ? findFrozenMigrationChanges(repoRoot, baseline.commit, new Set(fixedCheck.runtimeScriptPaths))
+    ? findFrozenMigrationChanges(repoRoot, baseline.commit)
     : null;
   return { fixedCheck, baseline, mainCheck };
 }

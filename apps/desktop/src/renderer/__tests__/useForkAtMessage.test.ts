@@ -15,7 +15,6 @@ const emitRefresh = vi.hoisted(() => vi.fn());
 const toastError = vi.hoisted(() => vi.fn());
 const getSessionDeviceId = vi.hoisted(() => vi.fn());
 const refreshRemoteDeviceSessions = vi.hoisted(() => vi.fn());
-const confirm = vi.hoisted(() => vi.fn());
 
 vi.mock('react-router-dom', () => ({
   useNavigate: () => navigate,
@@ -71,10 +70,6 @@ vi.mock('@/features/device-link/refreshRemoteSessions', () => ({
   refreshRemoteDeviceSessions,
 }));
 
-vi.mock('@/components/ui/confirm-dialog-provider', () => ({
-  useConfirmDialog: () => ({ confirm }),
-}));
-
 import { useForkAtMessage } from '../components/chat/useForkAtMessage';
 import { SessionNavigationModeProvider } from '../features/cc-agent/embeddedSessionNavigation';
 import { ApiError } from '@/lib/httpClient';
@@ -84,7 +79,6 @@ describe('useForkAtMessage', () => {
     vi.clearAllMocks();
     forkAtMessage.mockResolvedValue({ id: 'forked-session' });
     getSessionDeviceId.mockReturnValue(undefined);
-    confirm.mockResolvedValue(true);
   });
 
   it('forks when the target history message is stable', async () => {

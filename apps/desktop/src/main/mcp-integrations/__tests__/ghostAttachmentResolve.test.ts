@@ -24,7 +24,7 @@ vi.mock('electron', () => ({
   },
 }));
 
-const { configureDefaultImageResizer } = await import('@cindy/maker-core');
+const { configureDefaultImageResizer } = await import('@lizi/maker-core');
 const { resolveGhostAttachmentUrl } = await import('../ghostAttachmentResolve');
 
 const cacheRoot = path.join(userDataDir, 'cc-agent', 'images');

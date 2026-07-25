@@ -4,7 +4,8 @@ import path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.setConfig({ testTimeout: process.platform === 'win32' ? 60_000 : 30_000 });
+// Windows 上 git 子进程明显更慢(每次 spawn 数百毫秒),多步 git 编排用例会超默认 5s。
+vi.setConfig({ testTimeout: 30_000 });
 
 import { readDiffs, readFileDiff } from '../diffReader';
 import { runGit } from '../gitRunner';

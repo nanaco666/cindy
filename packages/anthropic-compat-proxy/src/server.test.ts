@@ -4,14 +4,11 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { createAnthropicCompatProxy, isFetchBlockedPort } from './server.js';
 import {
-  createActiveStripTransform,
   createEmptyThinkingRecoveryRule,
   createEncryptedContentRecoveryRule,
   createImageGenerationIdRecoveryRule,
   createToolUseProviderSpecificFieldsRecoveryRule,
-  stripEncryptedContentFromBody,
 } from './transform.js';
-import { createThreadStripController } from './thread-strip-controller.js';
 import type { ProxyHandle } from './types.js';
 
 function startFakeUpstream(
@@ -51,11 +48,6 @@ function startFakeUpstream(
 
 const ENC_ERROR_BODY = JSON.stringify({
   error: { message: 'Encrypted content gAAA... could not be decrypted or parsed.', code: 'invalid_encrypted_content' },
-});
-
-const XAI_ENC_ERROR_BODY = JSON.stringify({
-  code: 'invalid-argument',
-  error: 'Could not decrypt the provided encrypted_content. Ensure the value is the unmodified encrypted_content from a previous response.',
 });
 
 const IMAGE_GENERATION_ID_ERROR_BODY = JSON.stringify({
@@ -215,83 +207,6 @@ describe('anthropic-compat-proxy encrypted content retry', () => {
     expect(upstream.bodies[0]).toContain('encrypted_content');
     expect(upstream.bodies[1]).not.toContain('encrypted_content');
     expect(marked).toEqual({ threadId: 'thread-a', model: 'gpt-5.5' });
-  });
-
-  it('retries xAI encrypted_content decrypt failures on 422', async () => {
-    const upstream = await startFakeUpstream((idx, _body, res) => {
-      if (idx === 0) {
-        res.writeHead(422, { 'content-type': 'application/json' });
-        res.end(XAI_ENC_ERROR_BODY);
-      } else {
-        res.writeHead(200, { 'content-type': 'application/json' });
-        res.end(JSON.stringify({ ok: true, attempt: idx }));
-      }
-    });
-    upstreamClose = upstream.close;
-    proxy = await createAnthropicCompatProxy({
-      upstream: upstream.url,
-      transformRequest: [],
-      recoveryRules: [createEncryptedContentRecoveryRule({ enabled: () => true })],
-    });
-
-    const r = await post(proxy.url, { model: 'grok-4.5', input: [{ type: 'reasoning', encrypted_content: 'gAAAsecret' }] });
-
-    expect(r.status).toBe(200);
-    expect(JSON.parse(r.text)).toMatchObject({ ok: true });
-    expect(upstream.bodies).toHaveLength(2);
-    expect(upstream.bodies[0]).toContain('encrypted_content');
-    expect(upstream.bodies[1]).not.toContain('encrypted_content');
-  });
-
-  it('keeps proactive stripping active when a provider transform rewrites the model id', async () => {
-    const upstream = await startFakeUpstream((_idx, body, res) => {
-      if (body.includes('encrypted_content')) {
-        res.writeHead(422, { 'content-type': 'application/json' });
-        res.end(XAI_ENC_ERROR_BODY);
-      } else {
-        res.writeHead(200, { 'content-type': 'application/json' });
-        res.end(JSON.stringify({ ok: true }));
-      }
-    });
-    upstreamClose = upstream.close;
-    const controller = createThreadStripController();
-    proxy = await createAnthropicCompatProxy({
-      upstream: upstream.url,
-      transformRequest: [
-        createActiveStripTransform({
-          controller,
-          enabled: () => true,
-          strip: stripEncryptedContentFromBody,
-        }),
-        (body) => {
-          const request = body as { model?: unknown };
-          if (typeof request.model !== 'string' || !request.model.startsWith('xai/')) return null;
-          return { ...request, model: request.model.slice('xai/'.length) };
-        },
-      ],
-      recoveryRules: [createEncryptedContentRecoveryRule({
-        enabled: () => true,
-        onRetry: (threadId, model) => controller.markActive(threadId, model),
-      })],
-    });
-    const body = {
-      model: 'xai/grok-4.5',
-      input: [{ type: 'reasoning', encrypted_content: 'gAAAsecret' }],
-    };
-
-    expect((await post(proxy.url, body)).status).toBe(200);
-    expect(upstream.bodies).toHaveLength(2);
-    expect((await post(proxy.url, body)).status).toBe(200);
-
-    // 第二轮应在发上游前主动剥离，只新增一次请求；若 marker 错记成改写后的
-    // grok-4.5，会被入站 xai/grok-4.5 reconcile 清掉，再次产生 422 + retry。
-    expect(upstream.bodies).toHaveLength(3);
-    expect(upstream.bodies[2]).not.toContain('encrypted_content');
-    expect(upstream.bodies.map((requestBody) => JSON.parse(requestBody).model)).toEqual([
-      'grok-4.5',
-      'grok-4.5',
-      'grok-4.5',
-    ]);
   });
 
   it('returns invalid_encrypted_content 400 without retry when disabled', async () => {
@@ -1191,11 +1106,7 @@ describe('anthropic-compat-proxy request body limit(超限回可读 413,不斩�
       upstream: gateway.url,
       transformRequest: [],
       maxRequestBodyBytes: 1024,
-      logger: {
-        warn: (msg, ctx) => {
-          if (msg === '✖ request body exceeds proxy limit → 413') warns.push(ctx ?? {});
-        },
-      },
+      logger: { warn: (_msg, ctx) => { warns.push(ctx ?? {}); } },
     });
     const body = JSON.stringify({ model: 'gpt-5.5', input: 'x'.repeat(4096) });
     const res = await fetch(`${proxy.url}/v1/responses`, {
@@ -1225,11 +1136,7 @@ describe('anthropic-compat-proxy request body limit(超限回可读 413,不斩�
       upstream: gateway.url,
       transformRequest: [],
       maxRequestBodyBytes: 256 * 1024,
-      logger: {
-        warn: (msg, ctx) => {
-          if (msg === '✖ request body exceeds proxy limit → 413') warns.push(ctx ?? {});
-        },
-      },
+      logger: { warn: (_msg, ctx) => { warns.push(ctx ?? {}); } },
     });
     const chunk = new Uint8Array(64 * 1024).fill(0x78);
     const stream = new ReadableStream<Uint8Array>({

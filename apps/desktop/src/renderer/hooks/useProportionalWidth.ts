@@ -47,13 +47,6 @@ const DEFAULT_INPUT_PAD = Math.max(0, DEFAULT_MESSAGE_PAD - INPUT_OUTSET / 2);
 export interface UseProportionalWidthOptions {
   /** 紧凑模式 (workdir-browse rail / 主会话右栏打开等窄容器场景),两侧 padding 由 50→20。 */
   compact?: boolean;
-  /**
-   * 内容宽度下限(px)。给"填满可用宽 + 封顶 1200"的自适应再补一个地板:容器
-   * 足够宽时 inputWidth 不低于该值。为避免窄窗溢出,地板本身再夹到实测容器宽
-   * 以内——窄于地板时回落成"填满容器",绝不撑出去。默认不传 = 无地板(旧行为)。
-   * 新建对话页用它保证大屏之外也有一个体面的最小宽度(与对话页同源的 max 对称)。
-   */
-  minWidth?: number;
 }
 
 export function useProportionalWidth(
@@ -84,17 +77,12 @@ export function useProportionalWidth(
       const nextInputPad = Math.max(0, messagePad - INPUT_OUTSET / 2);
       const messageAvailable = Math.max(0, containerWidth - messagePad * 2);
       const nextMessage = Math.min(MAX_MESSAGE_WIDTH, messageAvailable);
-      let nextInput = nextMessage + INPUT_OUTSET;
-      if (opts.minWidth && opts.minWidth > nextInput) {
-        // 地板夹到实测容器宽以内:窄窗仍是"填满容器",不会溢出/裁切。
-        nextInput = Math.min(opts.minWidth, containerWidth);
-      }
       setMessageWidth(nextMessage);
-      setInputWidth(nextInput);
+      setInputWidth(nextMessage + INPUT_OUTSET);
       setInputPad(nextInputPad);
       setIsCompact(useCompact);
     },
-    [opts.compact, opts.minWidth],
+    [opts.compact],
   );
 
   // useLayoutEffect + 同步量一次:消除 mount 第一帧 width=0 的视觉跳变。

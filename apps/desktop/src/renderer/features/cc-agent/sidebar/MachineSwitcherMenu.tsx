@@ -5,7 +5,7 @@
  * SidebarTopNav(新建 / 自动任务 / Skill / 搜索)列表的末行常驻,位于置顶段上方、
  * 滚动容器之外,不随会话列表滚动;不再挂在「项目」段头 / 日期分组头(2026-07 用户定稿)。
  * 下拉 **hover 自动展开**(移上即开、移开即收,点击也可开且不误关,见 useHoverOpenMenu;
- * 2026-07-12 产品定稿恢复,推翻 d5a8d77c9 按 Codex P2 改的「点击展开」)。
+ * 2026-07-12 Dash 定稿恢复,推翻 d5a8d77c9 按 Codex P2 改的「点击展开」)。
  *
  * 仅当本机有 ≥1 台相关远程机器(已连接 / 连接中 / 被拒)时显示;否则 return null。
  *
@@ -74,7 +74,7 @@ export function MachineSwitcherMenu(): ReactNode {
   const navigate = useNavigate();
   const { devices, selectedDeviceId, hasRemote, select, toggle } = useMachineSwitcher();
   // 「鼠标移上去就展开」:hover 触发行即开、移开即关(受控开合,详见 useHoverOpenMenu;
-  // 2026-07-12 产品确认要 hover 展开,恢复 d5a8d77c9 之前的交互)。
+  // 2026-07-12 Dash 确认要 hover 展开,恢复 d5a8d77c9 之前的交互)。
   const { open, onOpenChange, triggerRef, triggerProps, contentProps } = useHoverOpenMenu();
   // 本行随 SidebarTopNav 在所有非 rail 视图常驻,但机器过滤只作用于会话列表侧栏——
   // 选机器后必须让过滤结果可见(Codex P2):
@@ -124,7 +124,7 @@ export function MachineSwitcherMenu(): ReactNode {
     }
   }
 
-  // hover 自动展开(2026-07-12 产品定稿,推翻早前 Codex P2 的「点击展开」):鼠标移到
+  // hover 自动展开(2026-07-12 Dash 定稿,推翻早前 Codex P2 的「点击展开」):鼠标移到
   // 本行短延迟即弹机器菜单、移开即收,点击仍可打开且不误关(useHoverOpenMenu)。
   // modal={false} 双重必要:hover 展开时模态的 body pointer-events:none 会让 trigger
   // 不可命中,形成 mouseleave/enter 开关闪烁循环;同时保证展开时复选框的 pointer

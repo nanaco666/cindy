@@ -93,146 +93,6 @@ describe('Claude Code translator is_error result guard', () => {
     expect(events.some((e) => e.type === 'text'), 'error detail must NOT be duplicated as a text event').toBe(false);
   });
 
-  it('redacts credentials from Claude API error envelopes and terminal results', async () => {
-    const tracker = new UsageTracker();
-    const queue = createAsyncQueue<AgentEvent>();
-    const ctx = createCtx(tracker);
-
-    translateSdkMessage(
-      {
-        type: 'assistant',
-        error: 'authentication_failed',
-        message: {
-          content: [
-            {
-              type: 'text',
-              text: 'Invalid proxy server token; Received API Key = sk-live-123456789; Key Hash (Token) = hash-abc',
-            },
-          ],
-        },
-      },
-      queue,
-      ctx,
-    );
-    translateSdkMessage(
-      {
-        type: 'result',
-        is_error: true,
-        result: 'Authorization: Bearer secret-token',
-        stop_reason: 'end_turn',
-        total_cost_usd: 0,
-        usage: { input_tokens: 1, output_tokens: 1 },
-        modelUsage: { 'codex/gpt-5.5': { inputTokens: 1, outputTokens: 1, costUSD: 0, contextWindow: 272_000 } },
-      },
-      queue,
-      ctx,
-    );
-
-    const events = await drain(queue);
-    const error = events.find((event) => event.type === 'error');
-    const serialized = JSON.stringify(error);
-    expect(serialized).not.toContain('sk-live-123456789');
-    expect(serialized).not.toContain('secret-token');
-    expect(serialized).not.toContain('hash-abc');
-    expect(serialized).toContain('[REDACTED]');
-    expect(JSON.stringify(ctx.log.debug.mock.calls)).not.toContain('secret-token');
-    expect(JSON.stringify(ctx.log.warn.mock.calls)).not.toContain('secret-token');
-    expect(ctx.log.warn).toHaveBeenCalledWith(
-      'SDK ◀ turn ended with error',
-      expect.objectContaining({ output: 'Authorization: [REDACTED]' }),
-    );
-  });
-
-  it('preserves non-secret status and quota signals from a redacted terminal result', async () => {
-    const tracker = new UsageTracker();
-    const queue = createAsyncQueue<AgentEvent>();
-    const ctx = createCtx(tracker);
-
-    translateSdkMessage(
-      {
-        type: 'result',
-        is_error: true,
-        result: 'Authorization: Bearer secret-token, status=429, quota exhausted',
-        stop_reason: 'end_turn',
-        total_cost_usd: 0,
-        usage: { input_tokens: 1, output_tokens: 1 },
-        modelUsage: {
-          'codex/gpt-5.5': {
-            inputTokens: 1,
-            outputTokens: 1,
-            costUSD: 0,
-            contextWindow: 272_000,
-          },
-        },
-      },
-      queue,
-      ctx,
-    );
-
-    const events = await drain(queue);
-    const error = events.find((event) => event.type === 'error');
-    expect(error?.data).toMatchObject({
-      message: 'Authorization: [REDACTED]',
-      errorStatus: 429,
-      usageLimit: true,
-      isTerminal: true,
-    });
-    expect(JSON.stringify(events)).not.toContain('secret-token');
-  });
-
-  it('preserves non-secret signals from an error envelope when the terminal result is empty', async () => {
-    const tracker = new UsageTracker();
-    const queue = createAsyncQueue<AgentEvent>();
-    const ctx = createCtx(tracker);
-
-    translateSdkMessage(
-      {
-        type: 'assistant',
-        error: 'rate_limit',
-        message: {
-          content: [
-            {
-              type: 'text',
-              text: 'Authorization: Bearer secret-token, status=429, quota exhausted',
-            },
-          ],
-        },
-      },
-      queue,
-      ctx,
-    );
-    translateSdkMessage(
-      {
-        type: 'result',
-        is_error: true,
-        result: '',
-        stop_reason: 'end_turn',
-        total_cost_usd: 0,
-        usage: { input_tokens: 1, output_tokens: 0 },
-        modelUsage: {
-          'codex/gpt-5.5': {
-            inputTokens: 1,
-            outputTokens: 0,
-            costUSD: 0,
-            contextWindow: 272_000,
-          },
-        },
-      },
-      queue,
-      ctx,
-    );
-
-    const events = await drain(queue);
-    const error = events.find((event) => event.type === 'error');
-    expect(error?.data).toMatchObject({
-      message: 'Authorization: [REDACTED]',
-      errorStatus: 429,
-      usageLimit: true,
-      isTerminal: true,
-    });
-    expect(JSON.stringify(events)).not.toContain('secret-token');
-  });
-
   it('falls back to reason=turn-failed when is_error carries no result text', async () => {
     const tracker = new UsageTracker();
     const queue = createAsyncQueue<AgentEvent>();
@@ -353,22 +213,9 @@ describe('Claude Code translator is_error result guard', () => {
     expect(queue.pending, 'envelope alone is provisional').toBe(pendingBeforeEnvelope);
     translateSdkMessage(
       {
-        type: 'system',
-        subtype: 'api_retry',
-        attempt: 1,
-        max_retries: 3,
-        retry_delay_ms: 1_000,
-        error_status: 500,
-        error: 'server_error',
-      },
-      queue,
-      ctx,
-    );
-    translateSdkMessage(
-      {
         type: 'result',
         is_error: true,
-        result: 'Rate limited — retry later. Authorization: Basic dXNlcjpwYXNz; status=429',
+        result: 'Rate limited — retry later.',
         stop_reason: 'end_turn',
         total_cost_usd: 0,
         usage: { input_tokens: 100, output_tokens: 2 },
@@ -384,14 +231,9 @@ describe('Claude Code translator is_error result guard', () => {
     expect(errors[0]?.data).toMatchObject({
       message: 'Rate limited — retry later.',
       sdkError: 'rate_limit',
-      errorStatus: 429,
       isTerminal: true,
     });
-    const done = events.find((e) => e.type === 'done');
-    expect(done, 'done tail preserved for envelope-closed turns').toBeDefined();
-    expect((done?.data as { result?: string }).result).toBe(
-      'Rate limited — retry later. Authorization: [REDACTED]; status=429',
-    );
+    expect(events.some((e) => e.type === 'done'), 'done tail preserved for envelope-closed turns').toBe(true);
   });
 
   it('keeps api_retry details when the final failure has no assistant error envelope', async () => {

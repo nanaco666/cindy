@@ -13,7 +13,7 @@
  *   - 切账号: localDb closeDb 时务必先 stopEmbeddingHost (避免 Worker tick 撞 'not ready')
  */
 
-import { EmbeddingClient, type EmbeddingClientOptions } from '@cindy/embedding-client';
+import { EmbeddingClient, type EmbeddingClientOptions } from '@lizi/embedding-client';
 
 import type { createLogger } from '../logger';
 import type { DbClient } from '../localDb/client/DbClient';
@@ -28,10 +28,10 @@ export interface StartEmbeddingHostDeps {
   isVecAvailable: () => boolean;
   getApiKey: () => string | null | undefined;
   /**
-   * XD Gateway base URL(生产接线注入 effectiveXdGatewayBaseUrl,见 bootstrap-electron);
+   * xdproxy base URL(生产接线注入 effectiveXdGatewayBaseUrl,见 bootstrap-electron);
    * 函数形态 = 每次请求现取(model-access 下发的 endpoint 运行期可变)。
    */
-  gatewayBaseUrl: string | (() => string);
+  xdproxyBaseUrl: string | (() => string);
   log: ReturnType<typeof createLogger>;
   /** 可选: 注入 fetch (测试用) */
   fetchImpl?: typeof fetch;
@@ -46,7 +46,7 @@ export function startEmbeddingHost(deps: StartEmbeddingHostDeps): EmbeddingServi
     return _service;
   }
   const clientOpts: EmbeddingClientOptions = {
-    baseUrl: deps.gatewayBaseUrl,
+    baseUrl: deps.xdproxyBaseUrl,
     getApiKey: deps.getApiKey,
     fetchImpl: deps.fetchImpl,
     logger: {
@@ -68,7 +68,7 @@ export function startEmbeddingHost(deps: StartEmbeddingHostDeps): EmbeddingServi
     JSON.stringify({
       event: 'embeddingHost.started',
       sqliteVecAvailable: deps.isVecAvailable(),
-      gatewayBaseUrl: clientOpts.baseUrl,
+      xdproxyBaseUrl: clientOpts.baseUrl,
     }),
   );
   return _service;

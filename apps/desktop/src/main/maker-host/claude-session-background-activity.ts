@@ -26,7 +26,7 @@
  * 不在本期范围。
  */
 
-import type { ResponseObserver } from '@cindy/anthropic-compat-proxy';
+import type { ResponseObserver } from '@lizi/anthropic-compat-proxy';
 import { createLogger } from '../logger.js';
 
 const log = createLogger('claude-bg-activity');

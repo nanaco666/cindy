@@ -21,7 +21,6 @@ import {
   resolveLocalPath,
   resolveLocalPathSmart,
   resolveLocalPathSmartCached,
-  resolveToolFilePath,
   toFileUrl,
   toLocalFileUrl,
 } from '@/lib/localPathResolver';
@@ -113,7 +112,7 @@ describe('classifyMarkdownHref', () => {
     expect(classifyMarkdownHref('file:///C:/Users/')).toBe('directory');
   });
 
-  // Regression: in-document anchors and our internal deep-link schemes
+  // Regression (MR !124): in-document anchors and our internal deep-link schemes
   // must NOT classify as a local-file kind. classifyMarkdownLinkTarget already
   // peels these off upstream, so this is defensive — it keeps classifyMarkdownHref
   // correct in isolation and guards any direct caller.
@@ -203,46 +202,6 @@ describe('resolveLocalPath', () => {
   it('trims trailing separator on cwd before joining', () => {
     expect(resolveLocalPath('a.txt', '/home/user/')).toBe('/home/user/a.txt');
     expect(resolveLocalPath('a.txt', 'C:\\proj\\')).toBe('C:\\proj\\a.txt');
-  });
-
-  it('returns UNC share href as-is instead of joining it onto the cwd', () => {
-    expect(resolveLocalPath('\\\\server\\share\\a.ts', 'C:\\proj')).toBe('\\\\server\\share\\a.ts');
-  });
-});
-
-describe('resolveToolFilePath (agent tool-input path absolutizer)', () => {
-  // Regression: a model (e.g. Kimi K3) may emit a RELATIVE Read file_path;
-  // the runtime resolves it against the session cwd and the Read succeeds,
-  // but the preview/reveal IPCs require absolute paths — the chip click used
-  // to fail with "Path must be absolute".
-
-  it('joins a relative tool path onto a Windows workingDir', () => {
-    expect(
-      resolveToolFilePath('packages\\maker-core\\src\\env-builder.ts', 'E:\\github_code\\cindy'),
-    ).toBe('E:\\github_code\\cindy\\packages\\maker-core\\src\\env-builder.ts');
-  });
-
-  it('joins a relative tool path onto a POSIX workingDir', () => {
-    expect(resolveToolFilePath('src/a.ts', '/home/user/proj')).toBe('/home/user/proj/src/a.ts');
-  });
-
-  it('normalizes forward slashes in the tool path when workingDir is Windows-style', () => {
-    expect(resolveToolFilePath('packages/maker-core/a.ts', 'E:\\repo')).toBe(
-      'E:\\repo\\packages\\maker-core\\a.ts',
-    );
-  });
-
-  it('passes absolute paths through untouched (POSIX / drive-letter / UNC)', () => {
-    expect(resolveToolFilePath('/abs/x.ts', 'C:\\proj')).toBe('/abs/x.ts');
-    expect(resolveToolFilePath('C:\\x\\a.ts', '/cwd')).toBe('C:\\x\\a.ts');
-    expect(resolveToolFilePath('\\\\server\\share\\a.ts', 'C:\\proj')).toBe(
-      '\\\\server\\share\\a.ts',
-    );
-  });
-
-  it('returns the raw path unchanged when workingDir is empty (outside chat stream)', () => {
-    expect(resolveToolFilePath('src/a.ts', '')).toBe('src/a.ts');
-    expect(resolveToolFilePath('', 'C:\\proj')).toBe('');
   });
 });
 

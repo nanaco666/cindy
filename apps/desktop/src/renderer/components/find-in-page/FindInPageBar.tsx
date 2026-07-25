@@ -109,9 +109,6 @@ export function FindInPageBar() {
         'shadow-lg',
         'px-2 py-1.5',
         'min-w-[280px]',
-        // mount-only 入场:Cmd+F 呼出时从右上角(标题栏方向)轻长出;
-        // 关闭走 unmount 直接消失(查找栏关闭要"立即让路",不做 exit)。
-        'origin-top-right animate-float-in',
       )}
       role="dialog"
       aria-label={t('findInPage.dialogAriaLabel')}

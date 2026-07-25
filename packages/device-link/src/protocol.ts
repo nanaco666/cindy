@@ -6,42 +6,25 @@
  */
 import {
   MAX_FRAME_BYTES,
-  NOTIFY_BODY_MAX_LENGTH,
-  NOTIFY_COLLAPSE_ID_MAX_LENGTH,
-  NOTIFY_DEEP_LINK_MAX_LENGTH,
-  NOTIFY_TITLE_MAX_LENGTH,
   PROTOCOL_VERSION,
-  SERVER_CAPABILITY_NOTIFY,
   type DeviceInfo,
   type Envelope,
   type EnvelopeKind,
   type HelloAckPayload,
   type HelloPayload,
-  type NotifyCategory,
-  type NotifyPayload,
   type PresenceSetPayload,
   type PresenceSnapshot,
   type RelayErrorCode,
   type RelayErrorPayload,
 } from '@cindy/device-link-protocol';
 
-export {
-  MAX_FRAME_BYTES,
-  NOTIFY_BODY_MAX_LENGTH,
-  NOTIFY_COLLAPSE_ID_MAX_LENGTH,
-  NOTIFY_DEEP_LINK_MAX_LENGTH,
-  NOTIFY_TITLE_MAX_LENGTH,
-  PROTOCOL_VERSION,
-  SERVER_CAPABILITY_NOTIFY,
-};
+export { MAX_FRAME_BYTES, PROTOCOL_VERSION };
 export type {
   DeviceInfo,
   Envelope,
   EnvelopeKind,
   HelloAckPayload,
   HelloPayload,
-  NotifyCategory,
-  NotifyPayload,
   PresenceSetPayload,
   PresenceSnapshot,
   RelayErrorCode,
@@ -62,8 +45,7 @@ export type DeviceLinkErrorCode = RelayErrorCode
   | 'NOT_CONNECTED' // 本端尚未连上 relay
   | 'MEDIA_FETCH_FAILED' // 入方向媒体取件失败(被控端解析本机媒体 / 上传 OSS 中转出错)
   | 'VOICE_TRANSCRIBE_FAILED' // 出方向手机语音转写失败(被控端下载音频 / ASR 出错)
-  | 'VOICE_CREDENTIAL_SYNC_FAILED' // 手机语音云端 ASR/refine 临时 credential 同步失败(历史,新桌面已不再返回)
-  | 'VOICE_CREDENTIAL_SYNC_REMOVED' // 穿透 credential 同步能力已下线:手机语音改走 Cindy 官方托管服务,旧手机据此提示升级
+  | 'VOICE_CREDENTIAL_SYNC_FAILED' // 手机语音云端 ASR/refine 临时 credential 同步失败
   | 'VOICE_DICTIONARY_LEARNING_FAILED'; // 手机语音词典学习 evidence 回写失败
 
 /** 带结构化错误码的异常,贯穿 client / host 两层 */

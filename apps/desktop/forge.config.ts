@@ -18,7 +18,7 @@ import {
   brandBundleIdPrefix,
   brandExecutableName,
   resolveCindyRegion,
-} from '@cindy/maker-shared/brand-identity';
+} from '@lizi/maker-shared/brand-identity';
 import { stagePackagedThirdPartyNotices } from './forge-third-party-notices';
 
 const _require = createRequire(__filename);
@@ -124,7 +124,7 @@ const NATIVE_RUNTIME_DEPS = [
   // app 带。bufferutil / utf-8-validate 是可选 native 加速依赖, 缺失自动 fallback
   // 纯 JS, 故不强带。
   'ws',
-  // playwright-core (@cindy/browser-control-runtime 的运行时依赖): vendored 浏览器
+  // playwright-core (@lizi/browser-control-runtime 的运行时依赖): vendored 浏览器
   // runtime 通过 `require('playwright-core')` 加载它来驱动 act / snapshot / 截图 /
   // 交互等 Playwright 路径。vite externalize 后, packaged app 的 node_modules 只含
   // 本表的包 —— 不带它则打包版任何 Playwright 路径 `Cannot find module 'playwright-core'`
@@ -143,7 +143,7 @@ const NATIVE_RUNTIME_DEPS = [
   // 会 Cannot find module 直接炸 (better-sqlite3 不踩是因为它用 bindings 而非 node-addon-api)。
   // header-only, rebuild 后即无用但体积极小, 随包带无妨。
   'node-addon-api',
-  // undici (同 @cindy/browser-control-runtime 运行时依赖): vendored runtime 的
+  // undici (同 @lizi/browser-control-runtime 运行时依赖): vendored runtime 的
   // CDP 网络层 (_generated/leaf/src/infra/net/undici-runtime.ts) 通过
   // `createRequire(...).require('undici')` 懒加载它建 pinned dispatcher —— 任何
   // CDP 路径 (navigate/snapshot/act 等托管 Chrome 起来后) 都会用到。和
@@ -542,23 +542,24 @@ function collectExeFilesRecursively(dir: string): string[] {
 }
 
 /**
- * 用外部签名命令签单个 exe。命令模板来自 CINDY_WIN_SIGN_CMD 环境变量,其中的
- * `{file}` 占位符会被替换为目标 exe 的绝对路径(发布方在自己的构建环境注入,
- * 例如接 signtool 或自建签名服务;仓库本身不绑定任何签名实现)。
- * postPackage 的包内 exe 循环 与 NSIS maker 的 customSign
+ * 用公司 npkg 签名服务签单个 exe（复用 publish-windows.mjs 给 Setup.exe 用的
+ * 同一份 sign.py）。postPackage 的包内 exe 循环 与 NSIS maker 的 customSign
  * (installer + uninstaller) 共用这一处,签名逻辑单点、不 fork。
  * 失败即抛（调用方 postPackage / customSign 会让整个 make 失败,避免发出漏签包）。
  */
-function signOneExeWithExternalCommand(exePath: string, commandTemplate: string): void {
-  const command = commandTemplate.replaceAll('{file}', `"${exePath}"`);
+function signOneExeWithNpkg(exePath: string, token: string): void {
+  const signScript = path.join(__dirname, 'scripts', 'sign.py');
+  if (!fs.existsSync(signScript)) {
+    throw new Error(`[forge:sign] sign.py missing at ${signScript}`);
+  }
   console.log(`[forge:sign] signing ${path.basename(exePath)}...`);
-  const r = spawnSync(command, { stdio: 'inherit', shell: true });
-  if (r.error) throw new Error(`[forge:sign] sign command spawn failed: ${r.error.message}`);
-  if (r.status !== 0) throw new Error(`[forge:sign] sign command exited ${r.status} for ${exePath}`);
+  const r = spawnSync('python', [signScript, exePath, token], { stdio: 'inherit' });
+  if (r.error) throw new Error(`[forge:sign] sign.py spawn failed: ${r.error.message}`);
+  if (r.status !== 0) throw new Error(`[forge:sign] sign.py exited ${r.status} for ${exePath}`);
 }
 
 /**
- * 把 packaged 目录内的所有 .exe 都用外部签名命令签一遍。
+ * 把 packaged 目录内的所有 .exe 都用公司 npkg 签名服务签一遍。
  * 触发时机：electron-forge 的 postPackage（package 完、makers 跑前），所以
  * NSIS Setup.exe 拿到的、以及 publish 阶段从 packagedDir 打的热更 ZIP 拿到的，
  * 都是已签名版本——彻底解决 hot-update 后 spawn updater EACCES 的问题
@@ -566,15 +567,15 @@ function signOneExeWithExternalCommand(exePath: string, commandTemplate: string)
  *
  * NSIS 安装器自身(Setup.exe)与卸载器(Uninstall <App>.exe)不在这里签——它们由
  * makers 阶段生成,由 getAppBuilderConfig 的 win.sign(customSign)统一签,同样走
- * signOneExeWithExternalCommand。见 makers 定义处注释。
+ * signOneExeWithNpkg。见 makers 定义处注释。
  *
- * 没有 CINDY_WIN_SIGN_CMD 时静默跳过，不影响本地 dev / 无签名环境的 packaging。
+ * 没有 NPKG_TOKEN 时静默跳过，不影响本地 dev / 无密钥环境的 packaging。
  */
 function signPackagedExes(buildPath: string): void {
   if (process.platform !== 'win32') return;
-  const signCmd = process.env.CINDY_WIN_SIGN_CMD;
-  if (!signCmd) {
-    console.log('[forge:postPackage] CINDY_WIN_SIGN_CMD not set — skipping exe signing');
+  const token = process.env.NPKG_TOKEN;
+  if (!token) {
+    console.log('[forge:postPackage] NPKG_TOKEN not set — skipping internal exe signing');
     return;
   }
 
@@ -589,6 +590,7 @@ function signPackagedExes(buildPath: string): void {
   const exes = [
     path.join(buildPath, `${CINDY_EXE}.exe`),
     path.join(buildPath, 'resources', UPDATER_EXE),
+    path.join(buildPath, 'resources', 'xdt-helper.exe'),
     path.join(
       buildPath,
       'resources',
@@ -624,7 +626,7 @@ function signPackagedExes(buildPath: string): void {
       console.warn(`[forge:postPackage] skip (missing): ${exe}`);
       continue;
     }
-    signOneExeWithExternalCommand(exe, signCmd);
+    signOneExeWithNpkg(exe, token);
   }
 }
 
@@ -653,7 +655,7 @@ function signPackagedExes(buildPath: string): void {
  * 对 cn 是冗余兜底;2026-07-18 双装支持后 global 构建的 packager name 是
  * 'CindyGlobal'(.app 目录名 / 标识符层),本步骤把 Dock 名、Cmd+Tab、
  * 系统通知的**显示层**统一拉回 Cindy(BRAND_NAME 各区共用)——对
- * global/dev 不再冗余,是显示名的唯一来源。正式签名/公证(外部发布流程)
+ * global/dev 不再冗余,是显示名的唯一来源。正式签名/公证在 release-macos.mjs 里
  * 发生在 postPackage 之后,本改动会被签名一起封印,不存在破坏签名问题。
  */
 function applyMacPackagedDisplayName(buildPath: string, platform: string): void {
@@ -676,6 +678,53 @@ function applyMacPackagedDisplayName(buildPath: string, platform: string): void 
       }
     }
     console.log(`[forge:postPackage] mac display name → Cindy (${appDir}/Contents/Info.plist)`);
+  }
+}
+
+/**
+ * 打包后清掉内置意识种子里的「仓库元信息」——种子源来自两个 submodule 仓
+ * (official / xd),extraResource 把整目录原样拷进包,连带把每个种子根下的
+ * `.tests/`(插件行为测试)、`.git`(submodule gitlink 指针文件)、`README.md`
+ * 也带了进来。这些对运行时播种毫无用处(播种器本就按点前缀跳过 `.tests`/`.git`),
+ * 纯属无谓分发物 —— 打完包在这里删掉,让安装包只含真正的种子内容
+ * (各插件目录 + provisioning.json)。
+ *
+ * 规则:对每个种子根(official / xd),删除所有点开头条目(覆盖 `.git`/`.tests`
+ * 及未来任何 `.foo`)与 `README.md`;插件目录与 provisioning.json 一律保留。
+ * best-effort:目录缺失 / 删除失败只 warn,不让打包失败(种子内容完整性由
+ * prePackage 的 assertGhostSeedSubmodules 兜底)。
+ */
+function prunePackagedGhostSeedMeta(buildPath: string, platform: string): void {
+  const resourcesDir =
+    platform === 'darwin' || platform === 'mas'
+      ? (() => {
+          const app = fs.readdirSync(buildPath).find((n) => n.endsWith('.app'));
+          return app ? path.join(buildPath, app, 'Contents', 'Resources') : null;
+        })()
+      : path.join(buildPath, 'resources');
+  if (!resourcesDir) return;
+
+  const seedBase = path.join(resourcesDir, 'builtin-ghosts');
+  for (const root of ['official', 'xd']) {
+    const rootDir = path.join(seedBase, root);
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(rootDir, { withFileTypes: true });
+    } catch {
+      continue; // 根不存在(理论上 prePackage 已拦)——跳过
+    }
+    for (const entry of entries) {
+      if (!entry.name.startsWith('.') && entry.name !== 'README.md') continue;
+      const target = path.join(rootDir, entry.name);
+      try {
+        fs.rmSync(target, { recursive: true, force: true });
+        console.log(`[forge:postPackage] pruned seed repo-meta: builtin-ghosts/${root}/${entry.name}`);
+      } catch (err) {
+        console.warn(
+          `[forge:postPackage] failed to prune ${target}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
   }
 }
 
@@ -738,6 +787,59 @@ function stageRipgrep(targetPlatform: string, targetArch: string): void {
   console.log(`[forge:prePackage] ripgrep ${key} -> ${dest} (${sizeMb} MB)`);
 }
 
+/**
+ * macOS 打包时断言 cua-driver 二进制 payload 已就位。
+ *
+ * cua-driver 不进 git/LFS，由 tools/cua-driver/latest.json pin 版本并通过
+ * ensure-agent-binaries.mjs 按需下载到 apps/cua-driver-bin/<platformKey>/。
+ * 打包时若裸二进制缺失，会静默产出一个无法启动 companion daemon 的包——必须在这里硬报错。
+ *
+ * 仅在 macOS 打包时调用（companion app 是 macOS-only）；Windows/Linux 打包时 cua-driver 不参与。
+ */
+function assertCuaDriverPayload(targetPlatform: string, targetArch: string): void {
+  if (targetPlatform !== 'darwin') return;
+
+  const key = targetPlatformKey(targetPlatform, targetArch);
+  const ensureScript = path.join(__dirname, '..', '..', 'scripts', 'ensure-agent-binaries.mjs');
+  console.log(`[forge:prePackage] ensuring pinned cua-driver ${key} via ${ensureScript}...`);
+  const r = spawnSync(process.execPath, [ensureScript, '--kinds=cua-driver', `--platform=${key}`], {
+    stdio: 'inherit',
+  });
+  if (r.status !== 0) {
+    throw new Error(
+      `[forge] failed to ensure pinned cua-driver ${key}; run "pnpm install:cua-driver" before packaging`,
+    );
+  }
+
+  const binPath = path.join(__dirname, '..', 'cua-driver-bin', key, 'cua-driver');
+  if (!fs.existsSync(binPath)) {
+    throw new Error(
+      `[forge] cua-driver binary still missing at ${binPath} after ensure. ` +
+        `Run "pnpm install:cua-driver" or "pnpm update:cua-driver" before packaging.`,
+    );
+  }
+  const sizeMb = (fs.statSync(binPath).size / (1024 * 1024)).toFixed(2);
+  console.log(`[forge:prePackage] cua-driver ${key} payload ok (binary ${sizeMb} MB)`);
+}
+
+/**
+ * 内置意识种子 submodule 就位断言(2026-07-22 种子源拆为 official / xd 两个
+ * submodule 仓,挂载在 resources/builtin-ghosts 下):任一根缺 provisioning.json
+ * 说明 submodule 没 checkout,继续打包会静默产出一个没有内置插件的安装包 ——
+ * 必须让打包在这里失败。
+ */
+function assertGhostSeedSubmodules(): void {
+  for (const root of ['official', 'xd']) {
+    const marker = path.join(__dirname, 'resources', 'builtin-ghosts', root, 'provisioning.json');
+    if (!fs.existsSync(marker)) {
+      throw new Error(
+        `[forge] builtin-ghosts/${root} seed missing (${marker}). ` +
+          'Run "git submodule update --init" at the repo root before packaging.',
+      );
+    }
+  }
+}
+
 function extraResourcesForTarget(targetPlatform: string): string[] {
   const base = [
     'resources/icon.png',
@@ -746,8 +848,9 @@ function extraResourcesForTarget(targetPlatform: string): string[] {
     'resources/cc-manager',
     'resources/anthropic-compat-proxy',
     'resources/remote-file-service',
-    // .cindy 发布者/审核 Ed25519 公钥信任表(私钥永不进客户端)。
-    'resources/ghost-trust.json',
+    // 内置意识种子(源码目录形态,启动时由 builtinGhostProvisioner 播种到
+    // userData/cindy-brain;「永远以最新包为准」的内容指纹对账)。
+    'resources/builtin-ghosts',
     // 第三方开源声明,由 scripts/generate-third-party-notices.mjs 生成
     // (pnpm licenses:generate),随安装包分发以满足各开源协议的署名义务。
     'resources/THIRD-PARTY-NOTICES.txt',
@@ -756,7 +859,7 @@ function extraResourcesForTarget(targetPlatform: string): string[] {
   ];
 
   if (targetPlatform === 'win32') {
-    base.unshift(`resources/${UPDATER_EXE}`);
+    base.unshift('resources/xdt-helper.exe', `resources/${UPDATER_EXE}`);
   }
 
   return base;
@@ -964,6 +1067,59 @@ function buildMacAgentIslandHelper(platform: ForgePlatform, arch: ForgeArch): vo
   console.log(`[forge:prePackage] macOS agent island helper (${swiftArchLabel(arch, MACOS_AGENT_ISLAND_HELPER_DEPLOYMENT_TARGET)}) -> ${dest} (${sizeMb} MB)`);
 }
 
+/**
+ * 构建 Cindy Computer Use.app companion bundle(darwin only)。
+ *
+ * 调用 apps/desktop/scripts/build-computer-use-companion.mjs 脚本:
+ *   - 引擎 payload 从 apps/cua-driver-bin/<platformKey>/ 整体 stage 进 bundle;
+ *   - 按源码+引擎版本指纹缓存,内容不变跳过重建(保护 cdhash/TCC 稳定);
+ *   - ad-hoc codesign。
+ *
+ * forge 打包时在 assertCuaDriverPayload 之后调用,确保引擎 payload 已就位。
+ */
+function buildMacComputerUseCompanion(platform: ForgePlatform, arch: ForgeArch): void {
+  if (process.platform !== 'darwin' || !isMacForgePlatform(platform)) return;
+
+  const buildScript = path.join(__dirname, 'scripts', 'build-computer-use-companion.mjs');
+  if (!fs.existsSync(buildScript)) {
+    throw new Error(`[forge] computer-use-companion build script missing at ${buildScript}`);
+  }
+
+  // 将 forge arch 映射为 platform key(对齐 cua-driver-bin 目录名)
+  // universal 不支持:assertCuaDriverPayload 遇 darwin-universal 本来就会失败(pin 工具只认
+  // darwin-arm64/darwin-x64);静默降级为 arm64 不可达且会掩盖错误调用
+  if (arch === 'universal') {
+    throw new Error(
+      '[forge] Cindy Computer Use.app does not support universal arch — ' +
+        'build separately for darwin-arm64 and darwin-x64',
+    );
+  }
+  const platformKey = `darwin-${arch}`;
+
+  console.log(`[forge:prePackage] building Cindy Computer Use.app (${platformKey})...`);
+  const r = spawnSync(process.execPath, [buildScript, `--platform-key=${platformKey}`], {
+    stdio: 'inherit',
+  });
+  if (r.error) {
+    throw new Error(`[forge] companion build script spawn failed: ${r.error.message}`);
+  }
+  if (r.status !== 0) {
+    throw new Error(`[forge] companion build script failed with exit ${r.status}`);
+  }
+
+  const bundlePath = path.join(
+    __dirname,
+    'resources',
+    'tools',
+    'computer-use-companion',
+    'Cindy Computer Use.app',
+  );
+  if (!fs.existsSync(bundlePath)) {
+    throw new Error(`[forge] Cindy Computer Use.app still missing after build: ${bundlePath}`);
+  }
+  console.log(`[forge:prePackage] Cindy Computer Use.app -> ${bundlePath}`);
+}
+
 // MakerNSIS is Windows-only (native dependency), conditionally require to
 // avoid import errors on macOS / Linux.
 const makers: ForgeConfig['makers'] = [
@@ -974,7 +1130,7 @@ const makers: ForgeConfig['makers'] = [
       icon: path.join(__dirname, 'resources', 'icon.png'),
       // 双 scheme:cindy 主 + xdt-maker 兼容(老分享链接不死)。
       mimeType: allDeepLinkSchemes().map((s) => `x-scheme-handler/${s}`),
-      maintainer: 'Lizi <feedback@cindy.app>',
+      maintainer: 'Lizi <jiali@magiclizi.com>',
       // deb 包名规范要求小写;跟随区域 exe 名(cn cindy / global cindyglobal)。
       name: CINDY_EXE.toLowerCase(),
       bin: CINDY_EXE,
@@ -992,22 +1148,22 @@ if (isWin) {
         // 这是签卸载器的唯一入口(Issue #998):uninstaller 由 NSIS 编译期两遍生成后
         // 嵌入 installer,postPackage 阶段还不存在、也没有独立成品文件可事后补签,
         // 只能让 electron-builder 在生成时对 installer + uninstaller 都回调 win.sign。
-        // 复用包内 exe 同一条外部签名通道(signOneExeWithExternalCommand),逻辑单点;
-        // 无 CINDY_WIN_SIGN_CMD(dev / 无签名环境)时跳过,与 postPackage 一致。
+        // 复用包内 exe 同一条 npkg 通道(signOneExeWithNpkg → sign.py),逻辑单点;
+        // 无 NPKG_TOKEN(dev / 版本无关 / --no-sign 已删 token)时跳过,与 postPackage 一致。
         win: {
           // 只用 sha256:不设时 electron-builder 默认 ['sha1','sha256'],会对 installer +
           // uninstaller 各回调 customSign 两趟(sha1 一趟 + sha256 一趟)= 每个文件两次
-          // 签名往返,sha1 那趟纯浪费(Windows 早已弃信 sha1 Authenticode)。收敛到单
-          // sha256:一趟往返、少一半瞬时失败面。customSign 忽略 hash 参数,签名实现用
-          // 自身证书签,与此列表无关——只影响回调次数。
+          // npkg 往返,sha1 那趟纯浪费(Windows 早已弃信 sha1 Authenticode)。收敛到单
+          // sha256:一趟往返、少一半瞬时失败面。customSign 忽略 hash 参数,npkg 用自身
+          // 证书签,与此列表无关——只影响回调次数。
           signingHashAlgorithms: ['sha256'],
           sign: async (cfg: { path: string }) => {
-            const signCmd = process.env.CINDY_WIN_SIGN_CMD;
-            if (!signCmd) {
-              console.log(`[forge:nsis:sign] CINDY_WIN_SIGN_CMD not set — skipping ${path.basename(cfg.path)}`);
+            const t = process.env.NPKG_TOKEN;
+            if (!t) {
+              console.log(`[forge:nsis:sign] NPKG_TOKEN not set — skipping ${path.basename(cfg.path)}`);
               return;
             }
-            signOneExeWithExternalCommand(cfg.path, signCmd);
+            signOneExeWithNpkg(cfg.path, t);
           },
         },
         // appId 决定 NSIS 写到 Start Menu 快捷方式上的 System.AppUserModel.ID 属性。
@@ -1113,7 +1269,7 @@ const config: ForgeConfig = {
           LSItemContentTypes: ['public.folder'],
         },
         // Cindy 卡带 (.cindy):Finder 双击 → open-file 事件 → 装入 + 停靠
-        // (卡带系统;Windows 半边走注册表自注册,见 brain/fileAssociation.ts)。
+        // (卡带系统 C2c;Windows 半边走注册表自注册,见 brain/fileAssociation.ts)。
         // LSItemContentTypes 指向下方 UTExportedTypeDeclarations 声明的自有 UTI
         // (UTI 里带扩展名 + MIME 映射);CFBundleTypeExtensions 保留作旧系统
         // 兜底(LSItemContentTypes 存在时会被忽略)。Owner 表示本 app 是该类型
@@ -1194,6 +1350,7 @@ const config: ForgeConfig = {
     // Builds cindy-updater.exe before electron-packager copies resources/ into
     // the package — guarantees the shipped updater matches HEAD.
     prePackage: async (_forgeConfig, platform, arch) => {
+      assertGhostSeedSubmodules();
       const targetPlatform = requestedTargetPlatform();
       const targetArch = requestedTargetArch();
       if (targetPlatform === 'win32') {
@@ -1201,6 +1358,8 @@ const config: ForgeConfig = {
       }
       stageRipgrep(targetPlatform, targetArch);
       stageAndroidPlatformTools(targetPlatform, targetArch);
+      assertCuaDriverPayload(targetPlatform, targetArch);
+      buildMacComputerUseCompanion(platform, arch);
       buildMacVoiceInputTextInsertionHelper(platform, arch);
       buildMacVoiceInputModifierShortcutListener(platform, arch);
       buildMacAgentIslandHelper(platform, arch);
@@ -1212,6 +1371,7 @@ const config: ForgeConfig = {
       for (const buildPath of opts.outputPaths) {
         const noticeName = stagePackagedThirdPartyNotices(buildPath, opts.platform);
         console.log(`[forge:postPackage] staged ${noticeName} + restricted component disclosure`);
+        prunePackagedGhostSeedMeta(buildPath, opts.platform);
         signPackagedExes(buildPath);
         applyMacPackagedDisplayName(buildPath, opts.platform);
       }
@@ -1241,13 +1401,6 @@ const config: ForgeConfig = {
           config: 'vite.watcher-host.config.ts',
           // 同 dbWorker:借 preload target 出 CJS 单文件；运行时是 Electron
           // utilityProcess（@parcel/watcher 的 native 崩溃隔离，见 watcher-host/）。
-          target: 'preload',
-        },
-        {
-          entry: 'src/main/cindy-brain/nodeRuntimeWorkerProcess.ts',
-          config: 'vite.preload.config.ts',
-          // 正式包关闭 RunAsNode fuse；随包插件改由 Electron utilityProcess
-          // 承载。独立 CJS entry 与 main bundle 同目录，dev / packaged 同路径。
           target: 'preload',
         },
         {

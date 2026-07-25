@@ -5,7 +5,7 @@
  *  - findSimilar(store 调): 给一份"将要创建的档案", 找出疑似同人的既有档案
  *      - identity 级: (platform, value) 精确命中 → 就是同一个人(最高置信)
  *      - name 级: 显示名/别名归一化后 相等 / 互为子串(CJK) / token 包含(拉丁)
- *  - namesSimilar: 纯函数启发式, "Remy" vs "Remy Kim"、"周子墨" vs "子墨" 都算相似
+ *  - namesSimilar: 纯函数启发式, "Kros" vs "Kros Dai"、"赵宇尧" vs "宇尧" 都算相似
  *  - scanDuplicatePairs: 全库两两扫描疑似重复对(维护工具/待确认队列消费)
  *
  * 边界: name 级只做"疑似"提示(同名不代表同人), 不自动合并; 自动归并只发生在
@@ -63,7 +63,7 @@ function normFacetsSimilar(a: NormFacet, b: NormFacet): boolean {
   if (a.norm === b.norm) return true;
   if (a.cjk || b.cjk) {
     const [short, long] = a.norm.length <= b.norm.length ? [a, b] : [b, a];
-    // 子串匹配只在短边含 CJK 时生效("子墨"⊂"周子墨");短边纯拉丁落回整词
+    // 子串匹配只在短边含 CJK 时生效("宇尧"⊂"赵宇尧");短边纯拉丁落回整词
     // token 对比 — 否则 "XD" 这种两字母别名会误命中 "XDMaker..." 任意包含串
     if (short.cjk) return short.norm.length >= 2 && long.norm.includes(short.norm);
   }
@@ -78,8 +78,8 @@ function normFacetsSimilar(a: NormFacet, b: NormFacet): boolean {
 /**
  * 两个名字是否"疑似同人":
  *  - 归一化后相等
- *  - CJK: 一方是另一方的子串(长度 ≥2, 防单字误伤) — "子墨" ⊂ "周子墨"
- *  - 拉丁: 一方的 token 集是另一方的子集 — "Remy" ⊆ "Remy Kim"
+ *  - CJK: 一方是另一方的子串(长度 ≥2, 防单字误伤) — "宇尧" ⊂ "赵宇尧"
+ *  - 拉丁: 一方的 token 集是另一方的子集 — "Kros" ⊆ "Kros Dai"
  */
 export function namesSimilar(a: string, b: string): boolean {
   return normFacetsSimilar(buildNormFacet(a), buildNormFacet(b));

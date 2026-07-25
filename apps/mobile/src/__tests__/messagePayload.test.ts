@@ -179,21 +179,6 @@ describe('messagePayload', () => {
       body: '/repo/spec.md',
       sourcePath: '/repo/spec.md',
     });
-
-    expect(buildAttachmentPayload({
-      kind: 'file',
-      name: 'voice.ogg',
-      path: 'cindy-media://blobs/aa11bb22.ogg',
-      mimeType: 'audio/ogg',
-      previewable: false,
-    })).toMatchObject({
-      kind: 'media',
-      media: {
-        kind: 'audio',
-        previewable: false,
-        url: 'cindy-media://blobs/aa11bb22.ogg',
-      },
-    });
   });
 
   it('surfaces desktop media actions as read-only mobile guidance', () => {

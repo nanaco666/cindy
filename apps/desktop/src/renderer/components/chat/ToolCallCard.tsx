@@ -9,13 +9,11 @@
  */
 
 import { useRef, useState } from 'react';
-import { ChevronRight, FileText } from 'lucide-react';
+import { ChevronRight, ChevronDown, FileText } from 'lucide-react';
 
 import { cn, basename } from '@/lib/utils';
 import { shouldOpenTextLightboxForOrigin } from '@/lib/filePreview';
-import { resolveToolFilePath } from '@/lib/localPathResolver';
 import { useChatSessionFile } from './ChatSessionFileContext';
-import { Collapse } from '@/components/ui/collapse';
 import { Tip } from '@/components/ui/tooltip';
 import { DiffView } from './DiffView';
 import { TextLightbox } from './TextLightbox';
@@ -27,9 +25,7 @@ const TEXT_LIGHTBOX_TOOLS = new Set(['Read', 'Write', 'Edit', 'MultiEdit']);
 /**
  * text-lightbox F1: extract the file_path(s) from a tool input. Read/Write/
  * Edit each have a single `file_path`; MultiEdit also has a single `file_path`
- * (the edits array shares one target file). Returns the path verbatim as the
- * model emitted it — may be RELATIVE (resolved against the session workingDir
- * at the click site via resolveToolFilePath).
+ * (the edits array shares one target file). Returns absolute path strings.
  *
  * Currently the extraction logic is identical for all four tools (`file_path`
  * key on the input record), so we don't branch on toolName — but the caller
@@ -125,14 +121,11 @@ export function ToolCallCard({ toolName, toolInput, summary, toolResult }: ToolC
             'hover:opacity-80 transition-opacity',
           )}
         >
-          <ChevronRight
-            size={14}
-            className={cn(
-              'shrink-0 text-[var(--msg-tool-card-chevron)]',
-              'transition-transform duration-[var(--motion-fast,150ms)]',
-              expanded && 'rotate-90',
-            )}
-          />
+          {expanded ? (
+            <ChevronDown size={14} className="shrink-0 text-[var(--msg-tool-card-chevron)]" />
+          ) : (
+            <ChevronRight size={14} className="shrink-0 text-[var(--msg-tool-card-chevron)]" />
+          )}
           <span className="text-13 leading-normal">🔧</span>
           <span
             className={cn(
@@ -146,7 +139,7 @@ export function ToolCallCard({ toolName, toolInput, summary, toolResult }: ToolC
         </button>
 
         {/* Expanded content */}
-        <Collapse open={expanded}>
+        {expanded && (
           <div className="border-t border-[var(--msg-tool-card-border)] px-[14px] py-[10px]">
             {/* text-lightbox F1/F2: Chip-Row preview entry — only for the 4
                 supported tools. Click → open TextLightbox. */}
@@ -159,14 +152,11 @@ export function ToolCallCard({ toolName, toolInput, summary, toolResult }: ToolC
                       onClick={async (e) => {
                         e.stopPropagation();
                         const btn = e.currentTarget;
-                        // 模型可能给相对 file_path(见 AgentActionRow onActivate
-                        // 注释)—— 先按会话 workingDir 补成绝对路径再预览。
-                        const abs = resolveToolFilePath(p, fileCtx.workingDir);
-                        if (!(await shouldOpenTextLightboxForOrigin(fileCtx, abs))) return;
+                        if (!(await shouldOpenTextLightboxForOrigin(fileCtx, p))) return;
                         // F6 focus return: stash the clicked chip so the
                         // lightbox can restore focus on close.
                         activeChipRef.current = btn;
-                        setPreviewPath(abs);
+                        setPreviewPath(p);
                       }}
                       className={cn(
                         'inline-flex items-center gap-1.5',
@@ -248,7 +238,7 @@ export function ToolCallCard({ toolName, toolInput, summary, toolResult }: ToolC
               </div>
             )}
           </div>
-        </Collapse>
+        )}
       </div>
       {/* text-lightbox F3/F6 — Lightbox is mounted via Portal so its position
           is independent of the card's transform/overflow. */}

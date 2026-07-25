@@ -68,9 +68,9 @@ describe('runtime-configs', () => {
       codex: true,
     };
 
-    expect(claudeConfig.memoryEnabled).toBe(true);
+    expect(claudeConfig.memoryEnabled).toBe(false);
     expect(claudeConfig.makerMemoryEnabled).toBe(false);
-    expect(desktopCodexRuntimeConfig.memoryEnabled).toBe(true);
+    expect(desktopCodexRuntimeConfig.memoryEnabled).toBe(false);
     expect(desktopCodexRuntimeConfig.makerMemoryEnabled).toBe(false);
   });
 });

@@ -125,34 +125,10 @@ export class MakerMemoryManager {
    *
    * 已经在跑的 session 不会 hot-reload, 改完下次 startSession 生效。
    */
-  async enable(opts?: { skipAgentSync?: boolean }): Promise<SetEnabledResult> {
+  async enable(): Promise<SetEnabledResult> {
     this.enabled = true;
-    if (opts?.skipAgentSync) {
-      // 状态先行、原生联动延迟:host 的「延迟生效」路径(Codex 会话在 turn 内)
-      // 需要 enabled 立刻翻转(新 session 的 memory 注入按新值走),但 native
-      // setMemory 的 live-host RPC 热更新不能打进正在跑的 turn —— 由 host 在
-      // 会话空闲后自行调 syncNativeAgentsOff() 补齐。
-      this.logger.info('maker memory enabled (agent sync deferred by caller)');
-      return { effective: 'next-session' };
-    }
-    const affected = await this.syncNativeAgentsOff();
-    this.logger.info('maker memory enabled', { affectedAgents: affected });
-    return { effective: 'next-session', affectedAgents: affected };
-  }
-
-  /**
-   * enable 的原生联动步骤:把各 agent 的原生 memory 关掉(setMemory(false),
-   * maker memory 接管)。CodexAgent.setMemory 会立即 RPC 热更新所有 live host,
-   * 因此单独暴露 —— enable({skipAgentSync:true}) 的调用方在会话空闲后再补这一步。
-   * kinds 可选:只同步指定 agent(Claude 的 setMemory 是纯内存覆盖、不碰
-   * shared host,调用方可以立即同步 Claude、只把 Codex 延迟到空闲后)。
-   */
-  async syncNativeAgentsOff(
-    kinds?: AgentKind[],
-  ): Promise<NonNullable<SetEnabledResult['affectedAgents']>> {
     const affected: NonNullable<SetEnabledResult['affectedAgents']> = [];
     for (const [kind, agent] of Object.entries(this.deps.agents) as Array<[AgentKind, BaseAgent]>) {
-      if (kinds && !kinds.includes(kind)) continue;
       try {
         const r = await agent.setMemory(false);
         affected.push({ kind, effective: r.effective });
@@ -164,7 +140,8 @@ export class MakerMemoryManager {
         }
       }
     }
-    return affected;
+    this.logger.info('maker memory enabled', { affectedAgents: affected });
+    return { effective: 'next-session', affectedAgents: affected };
   }
 
   /**

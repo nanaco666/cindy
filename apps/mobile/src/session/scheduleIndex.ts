@@ -117,7 +117,6 @@ function scheduleInfoEqual(a: RemoteSessionScheduleInfo, b: RemoteSessionSchedul
     && a.running === b.running
     && a.latestRunAt === b.latestRunAt
     && a.scheduleStatus === b.scheduleStatus
-    && a.allSchedulesStopped === b.allSchedulesStopped
     && stringListsEqual(a.unreadRunIds, b.unreadRunIds);
 }
 

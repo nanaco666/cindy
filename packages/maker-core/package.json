@@ -1,5 +1,5 @@
 {
-  "name": "@cindy/maker-core",
+  "name": "@lizi/maker-core",
   "version": "0.0.0",
   "private": true,
   "description": "Cindy core: agent abstractions, session orchestration, zero Electron deps",
@@ -15,14 +15,13 @@
     "lint": "eslint src/"
   },
   "author": {
-    "name": "X.D. Network Inc.",
-    "email": "feedback@cindy.app"
+    "name": "Lizi",
+    "email": "jiali@magiclizi.com"
   },
   "license": "Apache-2.0",
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "0.2.112",
     "@anthropic-ai/sdk": "^0.91.1",
-    "@cindy/maker-shared": "workspace:*",
     "gray-matter": "^4.0.3"
   },
   "peerDependencies": {

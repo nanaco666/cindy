@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DeviceLinkError } from '@cindy/device-link';
+import { DeviceLinkError } from '@lizi/device-link';
 import {
   describeRemoteError,
   formatRemoteError,

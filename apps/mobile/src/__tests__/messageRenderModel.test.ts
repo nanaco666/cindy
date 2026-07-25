@@ -7,8 +7,8 @@ import {
   type MobileMessageRenderItem,
 } from '@/session/messageRenderModel';
 import { reconcileMobileMessageRenderItems } from '@/session/messageRenderReconcile';
-import { buildAgentTaskCardModel, type AgentTaskUpdate } from '@cindy/maker-shared/agent-task';
-import { CONTINUE_AFTER_ERROR_PROMPT } from '@cindy/maker-shared/synthetic-trigger';
+import { buildAgentTaskCardModel, type AgentTaskUpdate } from '@lizi/maker-shared/agent-task';
+import { CONTINUE_AFTER_ERROR_PROMPT } from '@lizi/maker-shared/synthetic-trigger';
 import type { RemoteMessage, RemoteMessageRole } from '@/session/types';
 
 function message(
@@ -473,37 +473,6 @@ describe('messageRenderModel', () => {
       ]);
 
       expect(turnFinalKeys(items)).toEqual(['a1-final', 'a2-final']);
-    });
-
-    it('marks every sealed SDK turn when a background task auto-continues the user request', () => {
-      const items = buildMobileMessageRenderItems([
-        message({ id: 'u1', role: 'user', content: { text: 'q' }, createdAt: at(1) }),
-        toolUse('main-work', 'Read', { file_path: '/repo/a.ts' }, 2),
-        message({
-          id: 'main-summary',
-          role: 'assistant',
-          content: '正式总结',
-          agentMeta: { turnCompleted: true },
-          createdAt: at(3),
-        }),
-        toolUse('gate', 'Bash', { command: 'check gate' }, 4),
-        message({
-          id: 'gate-followup',
-          role: 'assistant',
-          content: '后台门禁已通过',
-          agentMeta: { turnCompleted: true },
-          createdAt: at(5),
-        }),
-      ]);
-
-      expect(turnFinalKeys(items)).toEqual(['main-summary', 'gate-followup']);
-      expect(items.map((item) => item.type)).toEqual([
-        'message',
-        'work_group',
-        'message',
-        'work_group',
-        'message',
-      ]);
     });
 
     it('does not mark the tail turn when the loaded tail is actively streaming', () => {

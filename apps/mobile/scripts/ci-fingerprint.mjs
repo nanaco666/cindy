@@ -152,12 +152,12 @@ export function renderGuardComment(comparison) {
       lines.push(`| ${row.platform} | \`${row.baseHash ?? 'unknown'}\` | \`${row.currentHash ?? 'unknown'}\` | ${status} |`);
     }
     lines.push('');
-    lines.push('**含义**:合并后 production / beta 的下一次发版对已安装包无法 OTA,必须冷更出包(`COLD_BUILD_REQUIRED`,iOS 需 bump `buildNumber` 并重走 TestFlight / 自建重签分发)。');
+    lines.push('**含义**:合并后 production / beta 的下一次发版对已安装包无法 OTA,必须冷更出包(`COLD_BUILD_REQUIRED`,iOS 需 bump `buildNumber` 并重走 TestFlight / NPKG)。');
     lines.push('');
     lines.push('- 如果这是**有意的原生变更**(升原生依赖、改 plugin、动 `app.json` / `eas.json` production 段):没问题,但请在 PR Description 里写明,发版同学好安排冷更节奏。');
     lines.push('- 如果你**只想改 JS/UI**:请检查是否误碰了 fingerprint 输入,常见踩点:`apps/mobile/package.json` 的 `scripts` 字段、`app.json`、`eas.json` 非 beta 段、原生相关依赖版本。');
     lines.push('');
-    lines.push('> 哈希由仓库内 `@expo/fingerprint` 在 CI 同一环境下对 base / 合并结果各算一次,只用于判断 runtime fingerprint 是否变化。');
+    lines.push('> 哈希由仓库内 `@expo/fingerprint` 在 CI 同一环境下对 base / 合并结果各算一次,只用于判断"变没变";发版判定仍以 `pnpm mobile:release:check` 为准。详见 `apps/mobile/docs/dev-and-release-workflow.md`。');
   } else {
     lines.push('### ✅ 最新提交已不再改变 mobile runtime fingerprint');
     lines.push('');

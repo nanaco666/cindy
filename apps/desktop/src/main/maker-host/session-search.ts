@@ -16,7 +16,7 @@
  *  - FTS5 query 语法错 → 静默返空, 让 LLM 改写 query 重试 (跟 memory_search 同策略)
  */
 
-import type { SessionSearchOptions, SessionSearchHit, SessionSearchFn } from '@cindy/mcps';
+import type { SessionSearchOptions, SessionSearchHit, SessionSearchFn } from 'lizi-mcps';
 
 import { getDbClient } from '../localDb/client/current.js';
 import { createLogger } from '../logger.js';

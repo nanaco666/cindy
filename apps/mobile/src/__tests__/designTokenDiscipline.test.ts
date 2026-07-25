@@ -15,7 +15,7 @@ import { iconSize, iconStroke, radius } from '@/theme/tokens';
  *
  * 同时守护颜色纪律:.tsx 组件里禁止字面 hex / rgba 色(必须走 useTheme().colors 或 token);
  * WebView HTML 生成器(*Html.ts,CSS-in-template,theme 由调用方注入、fallback 引 lightColors)
- * 与 ImageLightbox(常黑沉浸语境的黑白系豁免,对齐桌面 docs/design-rules/cindy-design-system.md overlay/lightbox 豁免)除外。
+ * 与 ImageLightbox(常黑沉浸语境的黑白系豁免,对齐桌面 DESIGN.md overlay/lightbox 豁免)除外。
  */
 
 const ROOT = process.cwd();

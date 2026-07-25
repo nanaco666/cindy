@@ -1,7 +1,7 @@
 /**
  * messagePersistBroadcaster — 把 agent 消息的持久化从 renderer 收口到 main 单点。
  * ---------------------------------------------------------------------------
- * 背景(post-merge 数据正确性 HIGH bug):多窗下每个 renderer 各用各自随机
+ * 背景(MR !165 post-merge 数据正确性 HIGH bug):多窗下每个 renderer 各用各自随机
  * clientId 各落一份 assistant/tool 消息 → DB 重复行 + UI 重复 + 重开历史翻倍。根因
  * 是消息持久化留在 per-window 的 makerChatStore reducer 里。main 的 session.onEvent
  * 每会话只触发一次(Maker 是进程级单例)→ 把落库搬进 main = 天然单写,根除重复。
@@ -33,9 +33,7 @@ import { BrowserWindow } from 'electron';
 import { desc, eq } from 'drizzle-orm';
 
 import {
-  broadcastMessageAgentMetaUpdate,
   createMessage as createDbMessage,
-  patchMessageAgentMetaWithResult,
   updateMessageContent as updateDbMessageContent,
 } from './localDb/ipc/messages.js';
 import { getDbClient } from './localDb/client/current.js';
@@ -43,7 +41,6 @@ import { messages as messagesTable } from './localDb/schema.js';
 import { createLogger } from './logger.js';
 import { tapWindowBroadcast } from './device-link/broadcast-tap.js';
 import { takeMediaToolResult } from './mcp-integrations/mediaToolResultFallback.js';
-import { redactSensitiveText } from '@cindy/maker-shared/error-redaction';
 import type { AgentMeta } from '../renderer/lib/ccAgent.types';
 
 const log = createLogger('messagePersistBroadcaster');
@@ -220,25 +217,6 @@ export function consumeLastAssistantPersistId(sessionId: string): string | undef
   const id = lastAssistantPersistIdBySession.get(sessionId);
   lastAssistantPersistIdBySession.delete(sessionId);
   return id;
-}
-
-/**
- * SDK done 是比 user 消息更细的真实 turn 边界。把它盖到本 turn 的收尾 assistant
- * 上，供 Desktop / Mobile 在后台任务自动续跑新 SDK turn 时分别保留两轮正式回复。
- * 返回 false 表示本轮没有 assistant 文本；调用方无需广播。
- */
-export function markAssistantTurnCompleted(
-  sessionId: string,
-  clientId: string | undefined,
-): Promise<boolean> {
-  if (!sessionId || !clientId) return Promise.resolve(false);
-  return enqueueDurableWrite(`turn-completed:${sessionId}:${clientId}`, async () => {
-    const patched = await patchMessageAgentMetaWithResult(sessionId, clientId, {
-      turnCompleted: true,
-    });
-    if (!patched) return false;
-    return broadcastMessageAgentMetaUpdate(sessionId, clientId);
-  });
 }
 
 /**
@@ -1036,7 +1014,7 @@ export function onTurnErrorEvent(
   data: { message?: unknown; reason?: unknown; sdkError?: unknown } | null | undefined,
   agentMeta: AgentMeta | null = null,
 ): string | undefined {
-  const message = typeof data?.message === 'string' ? redactSensitiveText(data.message) : '';
+  const message = typeof data?.message === 'string' ? data.message : '';
   if (!message) return undefined;
   const capturedAt = Date.now();
   const recordedTurnStartedAt =
@@ -1079,9 +1057,7 @@ export function onTurnErrorEvent(
   const persistId = createId();
   const content: Record<string, unknown> = { message };
   if (typeof data?.reason === 'string' && data.reason) content.reason = data.reason;
-  if (typeof data?.sdkError === 'string' && data.sdkError) {
-    content.sdkError = redactSensitiveText(data.sdkError);
-  }
+  if (typeof data?.sdkError === 'string' && data.sdkError) content.sdkError = data.sdkError;
   const meta = agentMeta ?? lastAgentMetaBySession.get(sessionId) ?? null;
   const dbAgentKindSnapshot = getSessionDbAgentKind(sessionId) ?? undefined;
   enqueueWrite(`turn_error:${sessionId}:${persistId}`, async () => {

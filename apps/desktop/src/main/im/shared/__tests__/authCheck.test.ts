@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import type { AgentKind } from '@cindy/maker-core';
-import type { ProviderView } from '@cindy/model-providers';
+import type { AgentKind } from '@lizi/maker-core';
+import type { ProviderView } from '@lizi/model-providers';
 
 import { ui as discordUi } from '../../discord/uiText';
 import { ui as feishuUi } from '../../feishu/uiText';
@@ -16,7 +16,7 @@ type AuthRow = Parameters<typeof checkImRouteAuth>[0];
 
 function deps(overrides: Partial<ImAuthCheckDeps> = {}): ImAuthCheckDeps {
   return {
-    readXdGatewayApiKey: vi.fn(() => null),
+    readXdProxyApiKey: vi.fn(() => null),
     hasCustomProviderKey: vi.fn(() => false),
     getAgentAuthState: vi.fn(async () => ({ authenticated: false })),
     listProviders: vi.fn(async () => []),
@@ -217,7 +217,7 @@ describe('checkImRouteAuth', () => {
 
   it('passes gateway-key routes when XD key is present', async () => {
     const providerSnapshot = [provider({ id: 'xd', strategy: 'gateway-key' })];
-    const authDeps = deps({ readXdGatewayApiKey: vi.fn(() => 'xd-key') });
+    const authDeps = deps({ readXdProxyApiKey: vi.fn(() => 'xd-key') });
 
     await expect(checkImRouteAuth(row(), providerSnapshot, authDeps)).resolves.toEqual({
       ok: true,

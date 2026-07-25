@@ -11,7 +11,7 @@ import { gzipSync } from 'node:zlib';
 
 import { describe, it, expect, afterEach } from 'vitest';
 
-import type { ResponseObserverCtx } from '@cindy/anthropic-compat-proxy';
+import type { ResponseObserverCtx } from '@lizi/anthropic-compat-proxy';
 
 import {
   createProviderUpstreamErrorObserver,
@@ -69,23 +69,16 @@ describe('createProviderUpstreamErrorObserver', () => {
     const observer = createProviderUpstreamErrorObserver({
       agent: 'claude-code',
       resolveUserProviderId: () => 'my-relay',
-      resolveUserProviderName: () => '测试网关',
     });
-    drive(
-      observer,
-      ctx({ status: 401 }),
-      Buffer.from('{"error":{"type":"authentication_error"},"Received API Key":"sk-live-123456789"}'),
-    );
+    drive(observer, ctx({ status: 401 }), Buffer.from('{"error":{"type":"authentication_error"}}'));
     expect(events).toHaveLength(1);
     expect(events[0]).toMatchObject({
       agent: 'claude-code',
       providerId: 'my-relay',
-      providerName: '测试网关',
       code: 'AUTH_INVALID',
       retryable: false,
       status: 401,
     });
-    expect(events[0]?.detail).not.toContain('sk-live-123456789');
   });
 
   it('同 (providerId, code) 30s 内节流；不同 code / 不同 provider 不压制', () => {

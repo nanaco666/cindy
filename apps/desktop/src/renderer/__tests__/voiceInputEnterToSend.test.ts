@@ -106,8 +106,6 @@ describe('ChatInput voice input Enter-to-send contract', () => {
     expect(handleClickSendBlock).toContain('voiceInput.isBusy');
     expect(handleClickSendBlock).toContain('voiceInputStopAndSendPromiseRef.current = stopAndSend;');
     expect(handleClickSendBlock).toContain("await handleVoiceInputStop({ waitForRefinement: true });");
-    expect(handleClickSendBlock).toContain('Do not send the pre-existing draft/attachments');
-    expect(handleClickSendBlock).toContain('catch {\n            // Voice stop failures');
     expect(handleClickSendBlock).toContain('await dispatchSend(deliveryMode);');
     expect(handleClickSendBlock).toContain('!voiceInput.isListening && !currentCanSend');
 
@@ -170,16 +168,10 @@ describe('ChatInput voice input Enter-to-send contract', () => {
       'const stop = useCallback(async (options?: VoiceInputStopOptions) => {',
       'const cancel = useCallback(async () => {',
     );
-    expect(stopBlock).toContain("if (stateRef.current === 'error')");
-    expect(stopBlock).toContain("throw new Error(lastErrorRef.current ?? 'Voice input failed.')");
-    expect(stopBlock).toContain('const stopWithGate = useCallback(async (options?: VoiceInputStopOptions) => {');
-    expect(stopBlock).toContain('if (stopInFlightPromiseRef.current) return stopInFlightPromiseRef.current;');
-    expect(voiceInputSource).toContain('const stopInFlightPromiseRef = useRef<Promise<void> | null>(null);');
-    expect(stopBlock).toContain('throw new Error(startResult.error);');
     const startFailureBlock = extractBetween(
       stopBlock,
       'if (!startResult.ok) {',
-      'throw new Error(startResult.error);\n        }\n        runId = startResult.runId;',
+      'return;\n        }\n        runId = startResult.runId;',
     );
     expect(startFailureBlock).toContain('resolveStopCompletion();');
     const noStartBlock = extractBetween(
@@ -193,10 +185,8 @@ describe('ChatInput voice input Enter-to-send contract', () => {
   it('waits for refinement before finishing a plain voice stop', () => {
     expect(chatInputSource).toContain('const handleVoiceInputPlainStop = useCallback(() => (');
     expect(chatInputSource).toContain('handleVoiceInputStop({ waitForRefinement: true })');
-    expect(chatInputSource).toContain('handleVoiceInputStop({ waitForRefinement: true }).catch(() => undefined)');
     expect(chatInputSource).toContain('const handleVoiceInputStopWithRefinement = useCallback((options?: { waitForRefinement?: boolean }) => (');
     expect(chatInputSource).toContain('handleVoiceInputStop({ waitForRefinement: options?.waitForRefinement ?? true })');
-    expect(chatInputSource).toContain('handleVoiceInputStop({ waitForRefinement: options?.waitForRefinement ?? true }).catch(() => undefined)');
     expect(chatInputSource).toContain('const voiceInputStopRef = useRef(handleVoiceInputStopWithRefinement);');
     expect(chatInputSource).toContain('voiceInputStopRef.current = handleVoiceInputStopWithRefinement;');
     expect(chatInputSource).toContain('await voiceInputStopRef.current({ waitForRefinement: true });');

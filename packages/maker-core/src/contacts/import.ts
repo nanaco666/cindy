@@ -165,7 +165,7 @@ export function importContacts(
           let orgId = orgCache.get(key);
           if (!orgId) {
             // 组织归并必须精确(显示名/别名等值命中), 不能用模糊 namesSimilar —
-            // "云岚" 撞 "云岚网络" 会把成员静默挂错公司; 也不能用 identity 优先的
+            // "心动" 撞 "心动网络" 会把成员静默挂错公司; 也不能用 identity 优先的
             // resolve — 某人的 handle 恰好同值公司名时 tier-1 短路, 名字层的真
             // org 命中永远到不了(重复建 org / 挂错对象)
             const orgHits = store.findByExactName(orgName, { kind: 'org' });

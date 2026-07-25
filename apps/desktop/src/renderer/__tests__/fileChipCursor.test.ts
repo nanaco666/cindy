@@ -46,10 +46,10 @@ describe('File chip cursor — points, not zooms (symptom #2)', () => {
   });
 
   it('ToolCallCard preview chip uses cursor-pointer (not cursor-zoom-in)', () => {
-    // The ToolCallCard chip is the one that calls `setPreviewPath(abs)` —
+    // The ToolCallCard chip is the one that calls `setPreviewPath(p)` —
     // anchor the slice on that handler so the assertion is robust to other
     // unrelated code in the file.
-    const idx = toolCallCard.indexOf('setPreviewPath(abs)');
+    const idx = toolCallCard.indexOf('setPreviewPath(p)');
     expect(idx).toBeGreaterThan(-1);
     const blockEnd = toolCallCard.indexOf('</button>', idx);
     const block = toolCallCard.slice(idx, blockEnd);

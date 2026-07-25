@@ -8,7 +8,8 @@
 // 3 条 anti-pattern grep + 3 条 ESLint 反向依赖（lint 在 maker-scheduler /
 // maker-core 的 eslint.config.mjs 里 no-restricted-imports 落地）。
 //
-// 守门规则与解耦边界以本脚本、maker-scheduler 和 maker-core 的 ESLint 配置为准。
+// 设计文档：apps/desktop/doc/agent/xdt-maker-scheduler-plan.md §Phase 7
+// RFC：apps/desktop/doc/agent/xdt-maker-scheduler.md §6 解耦自检清单
 
 import { spawnSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
@@ -82,14 +83,14 @@ const schedSrc = collectSourceFiles(path.join(ROOT, 'packages/maker-scheduler/sr
 {
   const electronHits = grepAcross(schedSrc, /from\s+['"]electron['"]/);
   const drizzleHits = grepAcross(schedSrc, /from\s+['"]drizzle/);
-  const makerCoreHits = grepAcross(schedSrc, /from\s+['"]@cindy\/maker-core['"]/, { excludeTypeOnly: true });
-  const liziImHits = grepAcross(schedSrc, /from\s+['"]@cindy\/im['"]/);
-  const liziMcpsHits = grepAcross(schedSrc, /from\s+['"]@cindy\/mcps['"]/);
+  const makerCoreHits = grepAcross(schedSrc, /from\s+['"]@lizi\/maker-core['"]/, { excludeTypeOnly: true });
+  const liziImHits = grepAcross(schedSrc, /from\s+['"]@?lizi[-/]im['"]/);
+  const liziMcpsHits = grepAcross(schedSrc, /from\s+['"]@?lizi[-/]?mcps['"]/);
   const allHits = [...electronHits, ...drizzleHits, ...makerCoreHits, ...liziImHits, ...liziMcpsHits];
   if (allHits.length) {
     failure(
       '#1 scheduler-pure',
-      `packages/maker-scheduler/src 不能 import host 类（electron / drizzle / maker-core[非 type-only] / @cindy/im / @cindy/mcps）。\n命中：\n` +
+      `packages/maker-scheduler/src 不能 import host 类（electron / drizzle / maker-core[非 type-only] / lizi-im / lizi-mcps）。\n命中：\n` +
         allHits.map((h) => '  ' + h).join('\n'),
     );
   } else {
@@ -146,7 +147,7 @@ const schedSrc = collectSourceFiles(path.join(ROOT, 'packages/maker-scheduler/sr
 // Anti-pattern grep #4 — scheduler renderer 色值白名单
 //
 // Phase 7 plan 原文用 WARN，本守门按用户硬规则升级到 ERROR + exit 1。
-// 白名单来自 Phase 6 changelog L1601（docs/design-rules/cindy-design-system.md §2 / §9 全部允许色 + #3b82f6 焦点环）。
+// 白名单来自 Phase 6 changelog L1601（DESIGN.md §2 / §9 全部允许色 + #3b82f6 焦点环）。
 // ---------------------------------------------------------------------------
 
 {
@@ -155,7 +156,7 @@ const schedSrc = collectSourceFiles(path.join(ROOT, 'packages/maker-scheduler/sr
     '#1f1f1e',
     '#262626',
     '#2c2c2a',
-    '#3b82f6', // 焦点环唯一允许 chromatic（docs/design-rules/cindy-design-system.md §2）
+    '#3b82f6', // 焦点环唯一允许 chromatic（DESIGN.md §2）
     '#3c3c3a',
     '#404040',
     '#525252',
@@ -203,18 +204,18 @@ const schedSrc = collectSourceFiles(path.join(ROOT, 'packages/maker-scheduler/sr
   if (violations.length) {
     failure(
       '#4 color-whitelist',
-      'apps/desktop/src/renderer/features/scheduler/ 出现 docs/design-rules/cindy-design-system.md §2 白名单外的色值。\n' +
+      'apps/desktop/src/renderer/features/scheduler/ 出现 DESIGN.md §2 白名单外的色值。\n' +
         '允许色见 scripts/scheduler-ci-guard.mjs 的 ALLOWED 常量；' +
         '若是有意豁免（如 ConfirmDialog Danger 变体）请在该行末尾追加 `// allow-color` 注释。\n命中：\n' +
         violations.map((v) => '  ' + v).join('\n'),
     );
   } else {
-    ok('#4 color-whitelist', `scheduler renderer 全部色值在 docs/design-rules/cindy-design-system.md 白名单（${ALLOWED.size} 色）`);
+    ok('#4 color-whitelist', `scheduler renderer 全部色值在 DESIGN.md 白名单（${ALLOWED.size} 色）`);
   }
 }
 
 // ---------------------------------------------------------------------------
-// 反向依赖 grep —— maker-core 不能 import @cindy/maker-scheduler
+// 反向依赖 grep —— maker-core 不能 import @lizi/maker-scheduler
 // （ESLint 配置 packages/maker-core/eslint.config.mjs 的 no-restricted-imports
 //   是开发者本地的 first-line 兜底；CI 用 grep 防止无关 pre-existing lint error
 //   干扰守门信号）
@@ -222,16 +223,16 @@ const schedSrc = collectSourceFiles(path.join(ROOT, 'packages/maker-scheduler/sr
 
 {
   const coreSrc = collectSourceFiles(path.join(ROOT, 'packages/maker-core/src'));
-  const hits = grepAcross(coreSrc, /from\s+['"]@cindy\/maker-scheduler(?:\/[^'"]*)?['"]/);
+  const hits = grepAcross(coreSrc, /from\s+['"]@lizi\/maker-scheduler(?:\/[^'"]*)?['"]/);
   if (hits.length) {
     failure(
       '#6 core-no-scheduler',
-      'packages/maker-core 不能 import @cindy/maker-scheduler（反向依赖）。\n' +
+      'packages/maker-core 不能 import @lizi/maker-scheduler（反向依赖）。\n' +
         '调度在 host 层（apps/desktop/src/main/scheduler-host/）组装并消费 maker-core，maker-core 不感知调度。\n命中：\n' +
         hits.map((h) => '  ' + h).join('\n'),
     );
   } else {
-    ok('#6 core-no-scheduler', 'maker-core 0 处 import @cindy/maker-scheduler');
+    ok('#6 core-no-scheduler', 'maker-core 0 处 import @lizi/maker-scheduler');
   }
 }
 
@@ -240,7 +241,7 @@ const schedSrc = collectSourceFiles(path.join(ROOT, 'packages/maker-scheduler/sr
 // ---------------------------------------------------------------------------
 
 {
-  const r = spawnSync('pnpm', ['--filter', '@cindy/maker-scheduler', 'lint'], {
+  const r = spawnSync('pnpm', ['--filter', '@lizi/maker-scheduler', 'lint'], {
     cwd: ROOT,
     encoding: 'utf8',
     shell: process.platform === 'win32',
@@ -248,30 +249,30 @@ const schedSrc = collectSourceFiles(path.join(ROOT, 'packages/maker-scheduler/sr
   });
   if (r.status !== 0) {
     failure(
-      'lint:@cindy/maker-scheduler',
+      'lint:@lizi/maker-scheduler',
       `maker-scheduler lint 失败 (exit ${r.status})\nSTDOUT:\n${r.stdout}\nSTDERR:\n${r.stderr}`,
     );
   } else {
-    ok('lint:@cindy/maker-scheduler', '@cindy/maker-scheduler eslint 通过（含 no-restricted-imports 反向依赖规则）');
+    ok('lint:@lizi/maker-scheduler', '@lizi/maker-scheduler eslint 通过（含 no-restricted-imports 反向依赖规则）');
   }
 }
 
 // ---------------------------------------------------------------------------
-// 反向依赖 grep —— @cindy/mcps 不能 deep-import @cindy/maker-scheduler/engine/*
-// （@cindy/mcps 没有独立 ESLint 配置，用 grep 兜底；同 RFC §6 self-check）
+// 反向依赖 grep —— lizi-mcps 不能 deep-import @lizi/maker-scheduler/engine/*
+// （lizi-mcps 没有独立 ESLint 配置，用 grep 兜底；同 RFC §6 self-check）
 // ---------------------------------------------------------------------------
 
 {
   const mcpsSrc = collectSourceFiles(path.join(ROOT, 'packages/lizi-mcps/src'));
-  const hits = grepAcross(mcpsSrc, /from\s+['"]@cindy\/maker-scheduler\/engine[^'"]*['"]/);
+  const hits = grepAcross(mcpsSrc, /from\s+['"]@lizi\/maker-scheduler\/engine[^'"]*['"]/);
   if (hits.length) {
     failure(
       '#5 mcps-no-engine-deepimport',
-      'packages/lizi-mcps 不能深入 import @cindy/maker-scheduler/engine/*；只允许从顶层 `@cindy/maker-scheduler` 拿 type。\n命中：\n' +
+      'packages/lizi-mcps 不能深入 import @lizi/maker-scheduler/engine/*；只允许从顶层 `@lizi/maker-scheduler` 拿 type。\n命中：\n' +
         hits.map((h) => '  ' + h).join('\n'),
     );
   } else {
-    ok('#5 mcps-no-engine-deepimport', '@cindy/mcps 全部 import 走顶层 @cindy/maker-scheduler');
+    ok('#5 mcps-no-engine-deepimport', 'lizi-mcps 全部 import 走顶层 @lizi/maker-scheduler');
   }
 }
 

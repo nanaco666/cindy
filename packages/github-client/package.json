@@ -1,5 +1,5 @@
 {
-  "name": "@cindy/github-client",
+  "name": "@lizi/github-client",
   "version": "0.0.0",
   "private": true,
   "description": "GitHub REST API v3 client for xdt-maker, zero runtime deps",
@@ -14,8 +14,8 @@
     "build": "tsc --noEmit"
   },
   "author": {
-    "name": "X.D. Network Inc.",
-    "email": "feedback@cindy.app"
+    "name": "Lizi",
+    "email": "jiali@magiclizi.com"
   },
   "license": "Apache-2.0",
   "devDependencies": {

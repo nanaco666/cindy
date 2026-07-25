@@ -739,10 +739,10 @@ describe('fetchGhostOauthIdentity', () => {
       displayTemplate: '{team} · {user}',
       accessToken: 'at-1',
       fetchImpl: vi.fn(async () =>
-        jsonResponse({ ok: true, team: 'acme', user: 'devuser', user_id: 'U0EXAMPLE1' }),
+        jsonResponse({ ok: true, team: 'xindong', user: 'lizi', user_id: 'U9ZC94EDR' }),
       ) as unknown as typeof fetch,
     });
-    expect(identity).toEqual({ label: 'U0EXAMPLE1', display: 'acme · devuser', avatarUrl: null });
+    expect(identity).toEqual({ label: 'U9ZC94EDR', display: 'xindong · lizi', avatarUrl: null });
   });
 
   it('模板任一占位符取不到值 → display 降级 null,label 不受影响', async () => {
@@ -751,9 +751,9 @@ describe('fetchGhostOauthIdentity', () => {
       labelPath: 'user_id',
       displayTemplate: '{team} · {user}',
       accessToken: 'at-1',
-      fetchImpl: vi.fn(async () => jsonResponse({ ok: true, user_id: 'U0EXAMPLE1', team: 42 })) as unknown as typeof fetch,
+      fetchImpl: vi.fn(async () => jsonResponse({ ok: true, user_id: 'U9ZC94EDR', team: 42 })) as unknown as typeof fetch,
     });
-    expect(identity).toEqual({ label: 'U0EXAMPLE1', display: null, avatarUrl: null });
+    expect(identity).toEqual({ label: 'U9ZC94EDR', display: null, avatarUrl: null });
   });
 
   it('路径不存在 / 非字符串 / 非 https / 请求失败 → 双 null(纯展示,不阻断)', async () => {

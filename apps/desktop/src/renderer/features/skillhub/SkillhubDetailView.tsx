@@ -1837,7 +1837,7 @@ export function SkillhubDetailView() {
       }}
     >
       {/* ─── Top toolbar ─────────────────────────────────────────
-          Detail Top Bar 规格:
+          1:1 对齐 skillhub.pen 设计稿 Detail Top Bar:
             height: 72  → h-[72px]
             padding: [0,24,0,16] → pl-4 pr-6
             gap: 16 → gap-4

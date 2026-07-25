@@ -27,12 +27,10 @@ describe('NewMakerDraftRoute Orca worker create order', () => {
     expect(source).not.toContain('markOrcaRole(worker.sessionId');
   });
 
-  it('uses the shared collaboration error i18n mapper for all three draft enable paths', () => {
-    // 三条草稿起 Worker 路径都走同一个错误映射器:Send 普通、Send worktree、以及新建目标
-    // (2026-07-23 新增 New Goal 路径也 honor 协同,codex P2)。
+  it('uses the shared collaboration error i18n mapper for both draft enable paths', () => {
     const mappedFallbacks = source.match(/getCollaborationStartErrorMessage\(err, t, \{ continueAsSingleSession: true \}\)/g) ?? [];
 
-    expect(mappedFallbacks).toHaveLength(3);
+    expect(mappedFallbacks).toHaveLength(2);
     expect(source).not.toContain("toast.error(t('newChat.collaboration.startFailed'");
   });
 });

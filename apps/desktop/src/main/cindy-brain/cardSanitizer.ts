@@ -1,5 +1,5 @@
 /**
- * cardSanitizer.ts — 意识聊天卡片 HTML 净化器(卡槽③海报模式)。
+ * cardSanitizer.ts — 意识聊天卡片 HTML 净化器(卡槽③海报模式,C3d')。
  *
  * 设计原则:**白名单重建**,不是黑名单删除——输入只当 token 流读,输出由
  * 本文件重新序列化,凡不认识的标签/属性/URL 一概不落地。这样解析差异
@@ -17,13 +17,10 @@ import {
   GHOST_CARD_ACTION_ID_RE,
   GHOST_CARD_HTML_MAX_BYTES,
   GHOST_CARD_PROMPT_PLACEHOLDER_MAX_LEN,
-  isGhostCardLinkAllowed,
 } from '../../shared/ghost.js';
 
 /** 允许保留(含子树)的标签。仅结构/排版/图片 + 交互按钮(v2,零脚本:
- *  点击由宿主受信桥委托,见 GhostToolCard.attachClickBridge);无脚本载体。
- *  外链只以声明式属性存在(data-ghost-link,<a href> 被转写、真实 href 永不
- *  落地),点击经宿主确认框才 openExternal——卡内无可导航链接。 */
+ *  点击由宿主受信桥委托,见 GhostToolCard.attachClickBridge);无外链、无脚本载体。 */
 const ALLOWED_TAGS = new Set([
   'div', 'span', 'p', 'h1', 'h2', 'h3', 'h4',
   'ul', 'ol', 'li',
@@ -35,7 +32,6 @@ const ALLOWED_TAGS = new Set([
   'section', 'header', 'footer',
   'style',
   'button',
-  'a',
 ]);
 
 /** 无内容自闭合标签。 */
@@ -200,18 +196,6 @@ interface ParsedAttrs {
   [key: string]: string;
 }
 
-/** Decode the five standard HTML character references so parsed attribute values
- *  reflect their logical content before re-escaping. &amp; is decoded LAST to
- *  prevent double-unescaping (e.g. &amp;lt; must not become < in two steps). */
-function decodeAttrEntities(s: string): string {
-  return s
-    .replace(/&lt;/gi, '<')
-    .replace(/&gt;/gi, '>')
-    .replace(/&quot;/gi, '"')
-    .replace(/&#39;|&apos;/gi, "'")
-    .replace(/&amp;/gi, '&');
-}
-
 /** 解析开始标签的属性段(引号感知);畸形输入尽量吞掉不抛。 */
 function parseAttrs(raw: string): ParsedAttrs {
   const attrs: ParsedAttrs = {};
@@ -225,7 +209,7 @@ function parseAttrs(raw: string): ParsedAttrs {
       else if (m[4] !== undefined) value = m[4];
       else value = m[2];
     }
-    if (!(name in attrs)) attrs[name] = decodeAttrEntities(value);
+    if (!(name in attrs)) attrs[name] = value;
   }
   return attrs;
 }
@@ -277,8 +261,7 @@ function sanitizeAttrs(tag: string, attrs: ParsedAttrs, opts: CssOpts): string |
   // 值过 GHOST_CARD_ACTION_ID_RE 才落地——不合法只丢这条属性(元素与文字
   // 保留,只是点不动),不牵连整个元素。点击由宿主受信桥委托回传,卡内零脚本。
   const action = audioSlot ? '' : (attrs['data-ghost-action'] ?? '').trim();
-  const actionValid = GHOST_CARD_ACTION_ID_RE.test(action);
-  if (actionValid) {
+  if (GHOST_CARD_ACTION_ID_RE.test(action)) {
     parts.push(` data-ghost-action="${escapeAttr(action)}"`);
     // data-ghost-prompt:该动作需要用户输入文字(宿主点击时弹输入框收集,
     // 文字随 card-action 的 prompt 字段回传)。属性值 = 输入框占位文案
@@ -286,17 +269,6 @@ function sanitizeAttrs(tag: string, attrs: ParsedAttrs, opts: CssOpts): string |
     const promptDecl = attrs['data-ghost-prompt'];
     if (typeof promptDecl === 'string' && promptDecl.length <= GHOST_CARD_PROMPT_PLACEHOLDER_MAX_LEN) {
       parts.push(` data-ghost-prompt="${escapeAttr(promptDecl)}"`);
-    }
-  }
-  // 卡内外链(v3):data-ghost-link 声明"点击经宿主确认框后 openExternal"。
-  // <a href> 转写为同一声明——真实 href 不落地(无脚本 iframe 里点真链接会把
-  // 外部页面导航进卡片画布)。一元素一行为:合法动作/音频插槽在场即忽略;
-  // 值必须整串 http/https(isGhostCardLinkAllowed),不合法只丢属性。
-  if (!audioSlot && !actionValid) {
-    const explicit = (attrs['data-ghost-link'] ?? '').trim();
-    const linkDecl = explicit !== '' || tag !== 'a' ? explicit : (attrs['href'] ?? '').trim();
-    if (isGhostCardLinkAllowed(linkDecl)) {
-      parts.push(` data-ghost-link="${escapeAttr(linkDecl)}"`);
     }
   }
   if (tag === 'button') {

@@ -28,7 +28,6 @@ import {
 } from '../../shared/learnTypes';
 import type { FileChange } from '../skillhub/snapshot';
 import { getSkillInstallLockOwner, tryAcquireSkillInstallLock } from '../skillhub/installLock';
-import { prependHandoffToUserMessage } from '../maker-ipc/agentHandoff';
 import type { EvidenceSearchFn } from './evidence';
 import { collectEvidence } from './evidence';
 import { extractKeywords } from './evidence.pure';
@@ -133,12 +132,10 @@ export interface LearnControllerDeps {
   backfillSessionMeta(sessionId: string): Promise<void>;
   beforeDispatchUserTurn?: (sessionId: string) => void | Promise<void>;
   onUndispatchedUserTurn?: (sessionId: string) => void;
-  peekPendingHandoff?: (sessionId: string) => Promise<string | null>;
-  consumePendingHandoff?: (sessionId: string) => void;
   /** 应用当前语言(shared/locale SupportedLocale)—— 蒸馏自述语言跟随系统语言配置。 */
   getAppLocale(): string;
-  /** 当前 data owner id(run 归属标记 + 按 owner 过滤;未登录返回 null)。 */
-  getCurrentDataOwnerId(): string | null;
+  /** 当前登录账号 id(run 归属标记 + 按 owner 过滤;未登录返回 null)。 */
+  getCurrentUserId(): string | null;
   /** learn-host 启动期 resume+sweep 完成门:防新 run staging 被启动 sweep 误删。 */
   waitForStartupSweep?(): Promise<void>;
   /** 用户画像收集(profile.ts;originWorkdir=触发会话的 workdir,无则 null)。 */
@@ -266,19 +263,19 @@ export class LearnController {
 
   async listRuns(): Promise<LearnRunPublic[]> {
     await this.deps.store.load();
-    return this.deps.store.list().filter((r) => this.ownedByCurrentDataOwner(r));
+    return this.deps.store.list().filter((r) => this.ownedByCurrentUser(r));
   }
 
-  /** runs.json 已按 data owner 分文件;字段校验再防旧文件/测试数据混入。 */
-  private ownedByCurrentDataOwner(run: LearnRunPublic): boolean {
-    const runOwnerId = run.dataOwnerId ?? run.ownerUserId;
-    if (!runOwnerId) return true;
-    return runOwnerId === this.deps.getCurrentDataOwnerId();
+  /** runs.json 是 per-profile 文件:其它账号的 run 不可见不可操作(缺 owner 的
+   *  历史数据不过滤)。resume/sweep 的 keep 集仍看全量,不误删别账号的 staging。 */
+  private ownedByCurrentUser(run: LearnRunPublic): boolean {
+    if (!run.ownerUserId) return true;
+    return run.ownerUserId === this.deps.getCurrentUserId();
   }
 
   private mustGet(runId: string): LearnRunPublic {
     const run = this.deps.store.get(runId);
-    if (!run || !this.ownedByCurrentDataOwner(run)) {
+    if (!run || !this.ownedByCurrentUser(run)) {
       throw new LearnError('NOT_FOUND', `learn run ${runId} not found`);
     }
     return run;
@@ -330,22 +327,18 @@ export class LearnController {
     // 活跃管线并发 1:有 run 在 collecting/distilling 就拒绝(awaiting-review 不占额度)。
     const inFlight = this.deps.store
       .list()
-      .find(
-        (r) =>
-          this.ownedByCurrentDataOwner(r) &&
-          (r.status === 'collecting' || r.status === 'distilling'),
-      );
+      .find((r) => r.status === 'collecting' || r.status === 'distilling');
     if (inFlight) {
       throw new LearnError('LEARN_BUSY', `learn run ${inFlight.runId} is already in progress`);
     }
 
     const runId = randomUUID();
-    const dataOwnerId = this.deps.getCurrentDataOwnerId();
+    const ownerUserId = this.deps.getCurrentUserId();
     const run: LearnRunPublic = {
       runId,
       status: 'collecting',
       sourceKind: req.sourceKind,
-      ...(dataOwnerId ? { dataOwnerId } : {}),
+      ...(ownerUserId ? { ownerUserId } : {}),
       input,
       ...(req.hubSlug ? { hubSlug: req.hubSlug } : {}),
       ...(req.originSessionId ? { originSessionId: req.originSessionId } : {}),
@@ -557,12 +550,8 @@ export class LearnController {
 
     let baselineStarted = false;
     try {
-      const pendingHandoff = await this.deps.peekPendingHandoff?.(session.id) ?? null;
-      const outgoingMessage = pendingHandoff
-        ? (prependHandoffToUserMessage({ type: 'user', content: prompt }, pendingHandoff) as { type: 'user'; content: string })
-        : { type: 'user' as const, content: prompt };
       const sendResult = await session.send(
-        outgoingMessage,
+        { type: 'user', content: prompt },
         {
           onAccepted: async () => {
             await this.deps.persistUserMessage(session.id, cleanMessage).catch((err) => {
@@ -581,9 +570,6 @@ export class LearnController {
           baselineStarted = false;
         }
         throw new Error(`distillation send was not accepted${sendResult.reason ? `: ${sendResult.reason}` : ''}`);
-      }
-      if (pendingHandoff) {
-        this.deps.consumePendingHandoff?.(session.id);
       }
       baselineStarted = false;
       await Promise.race([turnFinished, timedOut]);

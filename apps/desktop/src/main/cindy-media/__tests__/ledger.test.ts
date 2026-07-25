@@ -200,7 +200,7 @@ describe('ghostCanRead(供图归属校验)', () => {
     await expect(ledger.ghostCanRead(HASH_A, 'art', db)).resolves.toBe(true);
   });
 
-  it('用户显式引渡(ghost-grant)→ 放行本意识,别的意识仍拒', async () => {
+  it('用户显式引渡(ghost-grant)→ 放行本意识,别的意识仍拒(C3c-4)', async () => {
     await seedBlob(HASH_A);
     await ledger.addRef(
       { hash: HASH_A, refKind: 'ghost-grant', refId: 'art', originKind: 'user' },

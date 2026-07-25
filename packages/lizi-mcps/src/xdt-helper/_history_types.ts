@@ -2,7 +2,7 @@
  * xdt-helper/_history_types.ts —— history 类工具的 host-injected deps 类型契约。
  *
  * 与 apps/desktop/src/main/localDb/chatHistoryReader.ts 的返回值形态 1:1 对齐;
- * @cindy/mcps 不能反向 import desktop, 所以在这里独立定义 (host 注入时把 reader
+ * lizi-mcps 不能反向 import desktop, 所以在这里独立定义 (host 注入时把 reader
  * 结果适配到这层类型即可)。
  */
 
@@ -10,20 +10,6 @@ import type { ControlResult } from '../types.js';
 
 export type HistoryAgentKind = 'cc' | 'codex';
 export type HistoryOrder = 'asc' | 'desc';
-
-/** Stable business errors exposed by cross-device history readers. */
-export type HistoryReadErrorCode =
-  | 'INVALID_ARGS'
-  | 'NOT_FOUND'
-  | 'REMOTE_UNSUPPORTED_QUERY'
-  | 'REMOTE_DEVICE_OFFLINE'
-  | 'REMOTE_LINK_REQUIRED'
-  | 'DEVICE_LINK_NOT_READY'
-  | 'REMOTE_DISABLED'
-  | 'REMOTE_ACCESS_REVOKED'
-  | 'REMOTE_UNSUPPORTED'
-  | 'REMOTE_TIMEOUT'
-  | 'REMOTE_PAYLOAD_TOO_LARGE';
 
 export type HistoryRole =
   | 'user'
@@ -38,8 +24,6 @@ export interface HistoryCursor {
   /** unix ms */
   createdAt: number;
   id: string;
-  /** SQLite insertion-order tie-breaker for message history cursors. */
-  rowid?: number;
 }
 
 export interface HistoryPage<T> {
@@ -113,8 +97,6 @@ export interface GetMessagesArgs {
   toMs: number | null;
   agentKind: HistoryAgentKind | null;
   roles: HistoryRole[] | null;
-  /** Whether roles were filled from get_chat_history's default role set. */
-  rolesDefaulted?: boolean;
   includeRewound: boolean;
   limit: number;
   cursor: HistoryCursor | null;
@@ -207,9 +189,7 @@ export interface SearchChatHistoryResult {
 export interface XdtHelperHistoryDeps {
   listWorkdirs: (args: ListWorkdirsArgs) => Promise<ControlResult<{ page: HistoryPage<HistoryWorkdir> }>>;
   listSessions: (args: ListSessionsArgs) => Promise<ControlResult<{ page: HistoryPage<HistorySession> }>>;
-  getMessages: (
-    args: GetMessagesArgs,
-  ) => Promise<ControlResult<{ page: HistoryPage<HistoryMessage> }, HistoryReadErrorCode>>;
+  getMessages: (args: GetMessagesArgs) => Promise<ControlResult<{ page: HistoryPage<HistoryMessage> }>>;
   searchChatHistory: (
     args: SearchChatHistoryArgs,
   ) => Promise<ControlResult<{ result: SearchChatHistoryResult }>>;

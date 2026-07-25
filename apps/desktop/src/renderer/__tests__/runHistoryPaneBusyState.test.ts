@@ -4,7 +4,7 @@ import { createElement, type ReactNode } from 'react';
 import { render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import type { Schedule } from '@cindy/maker-scheduler';
+import type { Schedule } from '@lizi/maker-scheduler';
 import { RunHistoryPane } from '@/features/scheduler/components/RunHistoryPane';
 
 vi.mock('react-i18next', () => ({

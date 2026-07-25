@@ -47,8 +47,6 @@ export interface MessageRenderNormalizedMessage<
   secondaryBody?: string;
   createdAt: string;
   isStreaming?: boolean;
-  /** Host 在 SDK done 边界写入；每个 true 都是一条不应折入工作过程的正式回复。 */
-  turnCompleted?: boolean;
   /** tool 消息专用:配对 tool_result 提取出的产出媒体(驱动 tool_media 独立渲染项)。 */
   media?: readonly MessageRenderToolMediaLike[];
 }
@@ -835,14 +833,6 @@ function groupAnsweredTurnItems<
   items: MessageRenderItem<TMessage>[];
   handled: boolean;
 } {
-  const sealedAnswers = new Set<number>();
-  for (let index = 0; index < items.length; index++) {
-    const item = items[index];
-    if (isAssistantAnswerCandidate(item) && isCompletedAssistantMessage(item.message)) {
-      sealedAnswers.add(index);
-    }
-  }
-
   let lastAnswerIndex = -1;
   for (let index = items.length - 1; index >= 0; index--) {
     if (isAssistantAnswerCandidate(items[index])) {
@@ -852,54 +842,26 @@ function groupAnsweredTurnItems<
   }
   if (lastAnswerIndex < 0) return { items: [...items], handled: false };
 
-  // 新数据按 SDK done seal 分段；旧数据没有 seal 时保持原有 last-answer 兼容行为。
-  if (sealedAnswers.size > 0) {
-    let segmentStartIndex = 0;
-    for (const sealedIndex of [...sealedAnswers]) {
-      let lastWorkActivityIndex = -1;
-      for (let index = sealedIndex - 1; index >= segmentStartIndex; index--) {
-        if (isWorkActivityItem(items[index])) {
-          lastWorkActivityIndex = index;
-          break;
-        }
-      }
-      let answerStartIndex = sealedIndex;
-      while (
-        answerStartIndex > lastWorkActivityIndex + 1
-        && answerStartIndex > segmentStartIndex
-        && isAssistantAnswerCandidate(items[answerStartIndex - 1])
-      ) {
-        answerStartIndex--;
-      }
-      for (let index = answerStartIndex; index <= sealedIndex; index++) {
-        if (isAssistantAnswerCandidate(items[index])) sealedAnswers.add(index);
-      }
-      segmentStartIndex = sealedIndex + 1;
-    }
-  } else {
-    const hasWorkAfterLastAnswer = items.some(
-      (item, index) => index > lastAnswerIndex && isWorkActivityItem(item),
-    );
-    if (hasWorkAfterLastAnswer) return { items: [...items], handled: false };
+  const hasWorkAfterLastAnswer = items.some(
+    (item, index) => index > lastAnswerIndex && isWorkActivityItem(item),
+  );
+  if (hasWorkAfterLastAnswer) return { items: [...items], handled: false };
 
-    let lastWorkActivityIndex = -1;
-    for (let index = lastAnswerIndex - 1; index >= 0; index--) {
-      if (isWorkActivityItem(items[index])) {
-        lastWorkActivityIndex = index;
-        break;
-      }
+  let lastWorkActivityIndex = -1;
+  for (let index = lastAnswerIndex - 1; index >= 0; index--) {
+    if (isWorkActivityItem(items[index])) {
+      lastWorkActivityIndex = index;
+      break;
     }
-    let finalAnswerStartIndex = lastAnswerIndex;
-    if (lastWorkActivityIndex >= 0) {
-      while (
-        finalAnswerStartIndex > lastWorkActivityIndex + 1
-        && isAssistantAnswerCandidate(items[finalAnswerStartIndex - 1])
-      ) {
-        finalAnswerStartIndex--;
-      }
-    }
-    for (let index = finalAnswerStartIndex; index <= lastAnswerIndex; index++) {
-      if (isAssistantAnswerCandidate(items[index])) sealedAnswers.add(index);
+  }
+
+  let finalAnswerStartIndex = lastAnswerIndex;
+  if (lastWorkActivityIndex >= 0) {
+    while (
+      finalAnswerStartIndex > lastWorkActivityIndex + 1
+      && isAssistantAnswerCandidate(items[finalAnswerStartIndex - 1])
+    ) {
+      finalAnswerStartIndex--;
     }
   }
 
@@ -913,7 +875,11 @@ function groupAnsweredTurnItems<
 
   for (let index = 0; index < items.length; index++) {
     const item = items[index];
-    if (!sealedAnswers.has(index) && !isRunningAgentTaskItem(item) && isWorkChild(item)) {
+    const isFinalAnswer =
+      index >= finalAnswerStartIndex
+      && index <= lastAnswerIndex
+      && isAssistantAnswerCandidate(item);
+    if (!isFinalAnswer && !isRunningAgentTaskItem(item) && isWorkChild(item)) {
       run.push(item);
     } else {
       flushRun(item);
@@ -994,10 +960,6 @@ function isRunningAgentTaskItem<
   if (item.type !== 'agent_task') return false;
   const status = item.update?.status ?? (item.toolCall?.secondaryBody ? 'completed' : 'running');
   return status === 'running';
-}
-
-function isCompletedAssistantMessage(message: MessageRenderNormalizedMessage): boolean {
-  return message.turnCompleted === true;
 }
 
 function isAssistantAnswerCandidate<

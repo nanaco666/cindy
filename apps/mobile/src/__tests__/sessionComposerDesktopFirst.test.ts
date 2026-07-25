@@ -18,7 +18,7 @@ describe('mobile session composer desktop-first surface', () => {
     const sharedSource = readTextLf(resolve(process.cwd(), 'src/session/MobileComposerInputRow.tsx'), 'utf8');
     const attachmentTraySource = readTextLf(resolve(process.cwd(), 'src/session/ComposerAttachmentTray.tsx'), 'utf8');
     const composerInputStart = source.indexOf('<MobileComposerInputRow');
-    const composerInputEnd = source.indexOf('/>', source.indexOf('value={draft}', composerInputStart)) + 2;
+    const composerInputEnd = source.indexOf('/>', composerInputStart) + 2;
     const composerInputSource = source.slice(composerInputStart, composerInputEnd);
     const attachmentButtonStart = source.indexOf('const renderComposerAttachmentButton = () => (');
     const attachmentButtonEnd = source.indexOf('const renderComposerTrailingActions = () => (', attachmentButtonStart);
@@ -115,7 +115,7 @@ describe('mobile session composer desktop-first surface', () => {
     expect(source).toContain('onPress={toggleComposerModelPicker}');
     // 选行 fast 写穿只按值变化,不做 fastEditable 门控:切到不支持 fast 的模型时必须把
     // 服务端残留的 fastMode=true 清零(review P1 回归锚)。
-    expect(source).toContain('if (next.fastMode !== modelSheetSelection.fastMode)');
+    expect(source).toContain('if (next.fastMode !== currentSession.fastMode)');
     expect(source).not.toContain('fastEditable && next.fastMode');
     // + 号打开可拖动 Context 面板(附件 / 计划模式 / 目标模式收在面板内)。
     expect(source).toContain('testID="session.contextSheet"');
@@ -196,9 +196,6 @@ describe('mobile session composer desktop-first surface', () => {
     expect(source).not.toContain('renderComposerTextInput(false)');
     expect(source).not.toContain('const renderComposerTextInput = () => (');
     expect(composerInputSource).toContain('<MobileComposerInputRow');
-    expect(composerInputSource).toContain('<ComposerRichInput');
-    expect(composerInputSource).toContain('document={composerDocument}');
-    expect(composerInputSource).toContain('inputElement={(');
     expect(source).toContain("import { DEVICE_LINK_API_BASE_URL, MOBILE_VISUAL_MOCK_ENABLED } from '@/config/env';");
     expect(source).toContain("const visualFocusComposer = MOBILE_VISUAL_MOCK_ENABLED && readRouteParam(params.visualFocusComposer) === '1';");
     expect(source).toContain("const visualOpenSearch = MOBILE_VISUAL_MOCK_ENABLED && readRouteParam(params.visualOpenSearch) === '1';");
@@ -283,12 +280,10 @@ describe('mobile session composer desktop-first surface', () => {
     expect(source).toContain('const COMPOSER_CONTROL_HIT_SLOP = { bottom: 8, left: 8, right: 8, top: 8 };');
     expect(source.match(/hitSlop={COMPOSER_CONTROL_HIT_SLOP}/g)?.length ?? 0).toBeGreaterThanOrEqual(3);
     expect(source).toContain('const composerHasText = draft.trim().length > 0;');
-    expect(source).toContain('const composerQuoteCount = composerDocumentQuotes(composerDocument).length;');
+    expect(source).toContain('const composerQuoteCount = queueEditing ? 0 : quotes.length;');
     expect(source).toContain('const composerHasPayload = composerHasText || attachments.length > 0 || pendingUploads.length > 0 || composerQuoteCount > 0;');
     expect(source).toContain('const composerShowSendButton = composerLayout.send.visible && (!voiceIsListening || composerHasPayload);');
-    expect(source).toContain('const latestDocument = latestDraft.trim()');
-    expect(source).toContain('reconcileComposerProjectedText(documentBeforeStop, latestDraft)');
-    expect(source).toContain('if (options.sendAfterTranscribe && (composerDocumentHasContent(latestDocument) || attachments.length > 0))');
+    expect(source).toContain('if (options.sendAfterTranscribe && (latestDraft.trim() || attachments.length > 0 || getQuotes(sessionId).length > 0))');
     expect(source).toContain('const currentTurnStreaming = useMemo(');
     expect(source).toContain('const canStopCurrentRun = (remoteSessionRunning || currentTurnStreaming)');
     expect(source).toContain('const canStopComposer = canStopQueue || canStopCurrentRun;');
@@ -306,14 +301,13 @@ describe('mobile session composer desktop-first surface', () => {
     expect(voiceStatusIndex).toBeLessThan(composerScrollIndex);
     expect(source).toContain('testID="session.voiceMicCaret"');
     expect(sharedSource).toContain('export function VoiceMicWaveCaret');
-    expect(source).toContain('const composerInputRef = useRef<ComposerRichInputHandle | null>(null);');
+    expect(source).toContain('const composerInputRef = useRef<NativeTextInput>(null);');
     expect(source).toContain('const voiceDraftScrollRef = useRef<ScrollView>(null);');
-    expect(composerInputSource).toContain('ref={composerInputRef}');
-    expect(composerInputSource).not.toContain('inputRef={composerInputRef}');
+    expect(composerInputSource).toContain('inputRef={composerInputRef}');
     expect(sharedSource).toContain('ref={inputRef as never}');
     expect(source).toContain('ref={voiceDraftScrollRef}');
     expect(source).toContain('contentContainerStyle={styles.voiceDraftOverlayContent}');
-    expect(source).toContain('composerInputRef.current?.setSelectionToEnd();');
+    expect(source).toContain('composerInputRef.current?.setNativeProps({ selection: { start: end, end } });');
     expect(source).toContain('voiceDraftScrollRef.current?.scrollToEnd({ animated: false });');
     expect(source).toContain('caretHidden={voiceIsListening}');
     expect(source).toContain('const handleComposerInputPressIn = useCallback(() => {');
@@ -437,48 +431,40 @@ describe('mobile session composer desktop-first surface', () => {
     expect(source).toContain('const composerSendSlotIsStop');
     expect(source).toContain('messageListFollowLatestRequestKey');
     expect(source).toContain('requestMessageListFollowLatest();');
-    expect(source).toContain('documentOverride?: ComposerDocument;');
-    expect(source).toContain('const documentBeforeStop = composerDocumentRef.current;');
-    expect(source).toContain('await sendLatest({ documentOverride: latestDocument });');
+    expect(source).toContain('const sendLatestRef = useRef<((options?: { draftOverride?: string }) => Promise<void>) | null>(null);');
+    expect(source).toContain('await sendLatest({ draftOverride: latestDraft });');
     expect(source).toContain('sendLatestRef.current = send;');
-    expect(source).toContain('if (options.documentOverride) applyComposerDocument(options.documentOverride);');
-    expect(source).toContain('flushComposerDraftWrites,');
-    expect(source).toContain('readComposerDocumentDraft,');
-    expect(source).toContain('readComposerDocumentDraftSync,');
-    expect(source).toContain('saveComposerDocumentDraft,');
-    expect(source).toContain('saveComposerDocumentDraft(sessionId, value);');
-    expect(source).toContain('saveComposerDraft(sessionId, projected);');
+    expect(source).toContain('if (!canUseComposer) {\n      if (options.draftOverride !== undefined) setComposerDraft(options.draftOverride);\n      return;\n    }');
+    expect(source).toContain('flushComposerDraftWrites, readComposerDraft, readComposerDraftSync, saveComposerDraft');
+    expect(source).toContain('saveComposerDraft(sessionId, value)');
     expect(source).toContain('void flushComposerDraftWrites(sessionId);');
     expect(source).toContain('readComposerDraftSync(sessionId)');
-    expect(source).toContain('const immediateDocumentSnapshot = immediateDocument;');
-    expect(source).toContain('const quoteHydration = immediateQuotes.length > 0');
-    expect(source).toContain(': hydrateQuotes(sessionId);');
-    expect(source).toContain('quoteHydration,');
-    expect(source).toContain('!composerDocumentsEqual(composerDocumentRef.current, immediateDocumentSnapshot)');
+    expect(source).toContain('draftRef.current !== immediateDraft');
     expect(source).toContain('if (canUseComposer) return;');
     expect(source).toContain('setModelSheetOpen(false);');
-    expect(source).toContain('if (!canUseComposer || !currentSession || !modelSheetSelection) return;');
+    expect(source).toContain('if (!canUseComposer) return;');
     expect(source).toContain('modelSheetOpen && canUseComposer');
     expect(source).toContain('disabled={controlBusy || !canUseComposer}');
     expect(source).toContain('createMobileCindyVoiceCredential');
     // Voice startup claims the pressIn-prewarmed ASR connection when one is
     // fresh (credential already resolved, WebSocket already connecting) and
-    // falls back to building the managed credential itself otherwise. 手机语音
-    // 只保留 Cindy 官方托管路径:BYOK/穿透已删除。
-    expect(source).toContain('const [prewarmedVoice, localVoiceInputHistory] = await Promise.all([');
+    // falls back to resolving the credential itself otherwise. Service-mode
+    // aware: managed mode uses the cindy credential + voice-server tickets;
+    // explicit BYOK resolves the user's own LiteLLM credential and never
+    // constructs a managed run context.
+    expect(source).toContain('const [prewarmedVoice, localVoiceInputHistory, voiceServiceMode] = await Promise.all([');
     expect(source).toContain('takePrewarmedMobileVoiceAsr(deviceId) ?? Promise.resolve(null),');
-    expect(source).not.toContain('MobileVoiceServiceMode');
-    expect(source).not.toContain('LiteLlm');
-    expect(source).toContain('?? createMobileCindyVoiceCredential(deviceId);');
+    expect(source).toContain('getMobileVoiceServiceMode(),');
+    expect(source).toContain('? await resolveMobileVoiceCredentialFromLiteLlmSettings(deviceId)');
+    expect(source).toContain(': createMobileCindyVoiceCredential(deviceId));');
     expect(source).toContain('onPressIn={handleVoiceButtonPressIn}');
-    expect(source).toContain(`prewarmMobileVoiceStart(deviceId, {
-      getAccessToken: () => auth.getAccessToken(),
-      refreshAccessToken: () => auth.refreshAccessToken(),
-      apiFetch: auth.apiFetch,
-    });`);
+    expect(source).toContain(`prewarmMobileVoiceStart(deviceId, mode === 'byok' ? undefined : {
+        getAccessToken: () => auth.getAccessToken(),
+        refreshAccessToken: () => auth.refreshAccessToken(),
+        apiFetch: auth.apiFetch,
+      });`);
     expect(source).toContain('connectionProvider: (providerId: string) => voiceContext.createAsrConnection(providerId),');
     expect(source).toContain('voiceContext.createRefinerTarget(providerId, options),');
-    expect(source).toContain('voiceContext.warmRefiner(input),');
     expect(source).toContain('getMobileVoiceInputHistoryForHost(deviceId),');
     // Device link is opened non-blocking (not awaited): dictation goes through the
     // cloud ASR proxy and does not need the link, so it must not gate mic start.
@@ -545,7 +531,7 @@ describe('mobile session composer desktop-first surface', () => {
     const voiceEnd = source.indexOf('const removeRemoteFileAttachment = useCallback', voiceStart);
     const voiceSource = source.slice(voiceStart, voiceEnd);
     const composerInputStart = source.indexOf('<MobileComposerInputRow');
-    const composerInputEnd = source.indexOf('/>', source.indexOf('value={draft}', composerInputStart)) + 2;
+    const composerInputEnd = source.indexOf('/>', composerInputStart) + 2;
     const composerInputSource = source.slice(composerInputStart, composerInputEnd);
 
     expect(voiceSource).toContain('readCurrentDraft: () => draftRef.current');
@@ -562,16 +548,16 @@ describe('mobile session composer desktop-first surface', () => {
       voiceSource.indexOf('requestRecordingPermissionsAsync()'),
     );
     expect(voiceSource).toContain('MOBILE_VOICE_REALTIME_AUDIO_UNAVAILABLE_ERROR');
-    expect(voiceSource).toContain('const documentBeforeStop = composerDocumentRef.current;');
     expect(voiceSource).toContain('const latestDraft = await controller.stop();');
-    expect(voiceSource).toContain('await sendLatest({ documentOverride: latestDocument });');
+    expect(voiceSource).toContain('await sendLatest({ draftOverride: latestDraft });');
     expect(composerInputSource).toContain('inputTestID="session.composerInput"');
     expect(sharedSource).toContain('testID={inputTestID}');
     expect(composerInputSource).toContain('value={draft}');
     expect(composerInputSource).toContain('onChangeText={setComposerDraft}');
     expect(source).toContain('testID="session.voiceStatus"');
     expect(source).not.toContain('mobileVoiceStateLabel(voiceState)');
-    expect(source).toContain('const canOpenVoiceSettings = isMobileVoiceMicPermissionError(voiceError);');
+    expect(source).toContain('const canOpenAppVoiceSettings = isMobileVoiceLiteLlmSettingsError(voiceError);');
+    expect(source).toContain("router.push('/settings');");
     expect(source).not.toContain('voiceDuration');
     expect(source).not.toContain('recordingDuration');
     expect(source).not.toContain('formatVoiceDuration');

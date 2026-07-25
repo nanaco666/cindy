@@ -10,7 +10,7 @@
  * 根因：ChatInput.tsx 内部维护了 local override state，与 props 派生值形成"两条独立的
  *       状态轨道"。
  * 修复：删除 local state，改为直接从 props 派生 active 值；handler 持久化成功后调
- *       onXxxDidChange 上抛，由父组件 merge 精确值让 props 重新流下来——单一可信源。
+ *       onXxxDidChange 上抛，由父组件刷新让 props 重新流下来——单一可信源，永不分歧。
  *
  * 二、draft-effort-server-coupling(2026-07-17):
  * 现象：登录令牌失效(401)后,草稿(未创建会话)里推理强度点了没反应。
@@ -79,7 +79,7 @@ interface HandlerDeps {
   ipcUpdatePerm?: (id: string, mode: PermissionMode) => Promise<void>;
   currentPermissionMode?: PermissionMode;
   onModelDidChange?: (id: string) => void;
-  onEffortDidChange?: (eff: Effort, sourceSessionId?: string) => void;
+  onEffortDidChange?: (eff: Effort) => void;
   onPermissionModeDidChange?: (mode: PermissionMode) => void;
 }
 
@@ -87,8 +87,8 @@ async function handleEffortChange(deps: HandlerDeps, newEffort: Effort): Promise
   try {
     if (deps.sessionId) {
       await deps.sessionUpdate(deps.sessionId, { effort: newEffort });
-      await deps.ipcSetEffort?.(deps.sessionId, newEffort).catch(() => {});
-      deps.onEffortDidChange?.(newEffort, deps.sessionId);
+      deps.ipcSetEffort?.(deps.sessionId, newEffort).catch(() => {});
+      deps.onEffortDidChange?.(newEffort);
       return;
     }
 
@@ -131,7 +131,7 @@ async function handleModelChange(
       await deps.sessionUpdate(deps.sessionId, { model: newModelId, effort: newEffort });
       deps.ipcSetModel?.(deps.sessionId, newModelId).catch(() => {});
       deps.onModelDidChange?.(newModelId);
-      deps.onEffortDidChange?.(newEffort, deps.sessionId);
+      deps.onEffortDidChange?.(newEffort);
       return;
     }
 
@@ -203,8 +203,8 @@ describe('SSoT derive: activeXxx 永远从 props + 本地草稿兜底派生', ()
 // 2. handler 契约：本地持久化成功 → 上抛回调；失败 → 静默不抛;全程无服务端调用
 // ===========================================================================
 
-describe('handleEffortChange: 上抛 onEffortDidChange 给父组件同步 SSoT', () => {
-  it('会话态 high → xhigh：本地 sessionUpdate 通过 → 上抛精确的 xhigh', async () => {
+describe('handleEffortChange: 上抛 onEffortDidChange 给父组件 refresh', () => {
+  it('会话态成功路径：本地 sessionUpdate 通过 → 上抛 onEffortDidChange(xhigh)', async () => {
     const sessionUpdate = vi.fn().mockResolvedValue(undefined);
     const ipcSetEffort = vi.fn().mockResolvedValue(undefined);
     const onEffortDidChange = vi.fn();
@@ -213,7 +213,7 @@ describe('handleEffortChange: 上抛 onEffortDidChange 给父组件同步 SSoT',
       'xhigh',
     );
     expect(sessionUpdate).toHaveBeenCalledWith('sess-1', { effort: 'xhigh' });
-    expect(onEffortDidChange).toHaveBeenCalledWith('xhigh', 'sess-1');
+    expect(onEffortDidChange).toHaveBeenCalledWith('xhigh');
     expect(onEffortDidChange).toHaveBeenCalledTimes(1);
   });
 
@@ -325,7 +325,7 @@ describe('handleModelChange: 同时上抛 onModelDidChange + onEffortDidChange',
       () => 'high',
     );
     expect(onModelDidChange).toHaveBeenCalledWith('claude-sonnet-4-6');
-    expect(onEffortDidChange).toHaveBeenCalledWith('high', 'sess-1');
+    expect(onEffortDidChange).toHaveBeenCalledWith('high');
   });
 
   it('Haiku 无 effort 段：computeNextEffort 返回 low，依然走对称化上抛', async () => {
@@ -342,7 +342,7 @@ describe('handleModelChange: 同时上抛 onModelDidChange + onEffortDidChange',
       () => 'low',
     );
     expect(onModelDidChange).toHaveBeenCalledWith('claude-haiku-4-5');
-    expect(onEffortDidChange).toHaveBeenCalledWith('low', 'sess-1');
+    expect(onEffortDidChange).toHaveBeenCalledWith('low');
   });
 
   it('失败路径：sessionUpdate 抛错 → 两个 callback 都不调（UI 保持旧状态）', async () => {
@@ -378,37 +378,36 @@ describe('handleModelChange: 同时上抛 onModelDidChange + onEffortDidChange',
 });
 
 // ===========================================================================
-// 3. 端到端的 SSoT 闭环：handler → callback → 父组件 merge → props 流回
+// 3. 端到端的 SSoT 闭环：handler → callback → 父组件 refresh → props 流回
 // ===========================================================================
 
-describe('SSoT 闭环：模拟父组件 merge 后，下次 derive 拿到新值', () => {
-  it('会话态:Fable 5 + high → 点 xhigh：父收到精确值后 session.effort 立刻变 xhigh', async () => {
-    let serverSessionEffort: Effort = 'high';
-    const mergeSessionEffort = vi.fn().mockImplementation((effort: Effort) => {
-      serverSessionEffort = effort;
+describe('SSoT 闭环：模拟父组件 refresh 后，下次 derive 拿到新值', () => {
+  it('会话态:Opus 4.7 + medium → 点 xhigh：父收到回调后 session.effort 变 xhigh，下次 derive 立刻是 xhigh', async () => {
+    let serverSessionEffort: Effort = 'medium';
+    const refreshServerSession = vi.fn().mockImplementation(() => {
+      serverSessionEffort = 'xhigh';
     });
     const localVendorDefaults: DraftVendorPrefs = {
-      model: 'claude-fable-5',
-      effort: 'high',
+      model: 'claude-opus-4-7',
+      effort: 'medium',
       permissionMode: 'auto',
     };
 
     let derived = deriveActive({ initialEffort: serverSessionEffort, localVendorDefaults });
-    expect(derived.activeEffort).toBe('high');
+    expect(derived.activeEffort).toBe('medium');
 
     await handleEffortChange(
       {
         sessionId: 'sess-1',
         sessionUpdate: vi.fn().mockResolvedValue(undefined),
-        onEffortDidChange: mergeSessionEffort,
+        onEffortDidChange: refreshServerSession,
       },
       'xhigh',
     );
 
     derived = deriveActive({ initialEffort: serverSessionEffort, localVendorDefaults });
     expect(derived.activeEffort).toBe('xhigh');
-    expect(mergeSessionEffort).toHaveBeenCalledWith('xhigh', 'sess-1');
-    expect(mergeSessionEffort).toHaveBeenCalledTimes(1);
+    expect(refreshServerSession).toHaveBeenCalledTimes(1);
   });
 
   it('草稿态:点档位 → 父组件 patchVendorPrefs 更新 lastByVendor → props 流回新值(全程零网络)', async () => {
@@ -422,10 +421,7 @@ describe('SSoT 闭环：模拟父组件 merge 后，下次 derive 拿到新值',
       draftPrefs.effort = eff;
     });
 
-    await handleEffortChange(
-      { sessionUpdate: vi.fn(), onEffortDidChange: patchActivePrefs },
-      'xhigh',
-    );
+    await handleEffortChange({ sessionUpdate: vi.fn(), onEffortDidChange: patchActivePrefs }, 'xhigh');
 
     const derived = deriveActive({
       initialModel: draftPrefs.model,

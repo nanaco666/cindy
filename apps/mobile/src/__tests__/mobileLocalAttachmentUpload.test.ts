@@ -81,7 +81,7 @@ describe('isCameraUnavailableOnSimulator', () => {
   it('iOS 模拟器沙盒路径(含 /CoreSimulator/)→ 拦截;真机路径 / Android → 放行', () => {
     expect(isCameraUnavailableOnSimulator(
       'ios',
-      'file:///Users/alice/Library/Developer/CoreSimulator/Devices/AAAA/data/Containers/Data/Application/BBBB/Documents/',
+      'file:///Users/dash/Library/Developer/CoreSimulator/Devices/AAAA/data/Containers/Data/Application/BBBB/Documents/',
     )).toBe(true);
     expect(isCameraUnavailableOnSimulator(
       'ios',

@@ -11,5 +11,5 @@
     "noEmit": true,
     "lib": ["ES2022", "DOM"]
   },
-  "include": ["src/**/*", "fixtures/**/*"]
+  "include": ["src/**/*"]
 }

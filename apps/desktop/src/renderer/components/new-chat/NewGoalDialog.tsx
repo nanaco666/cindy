@@ -14,7 +14,6 @@ import { useTranslation } from 'react-i18next';
 
 import { goalApiFor } from '@/lib/makerTransport';
 import { GoalAdvancedLimits, DEFAULT_GOAL_LIMITS, type GoalLimitValues } from './GoalAdvancedLimits';
-import { ListComposerTextarea } from './ListComposerTextarea';
 
 interface NewGoalDialogProps {
   /** 会话态:有 sessionId → 直接 setGoal。首页草稿态:不传 sessionId,改走 onCreate。 */
@@ -97,7 +96,7 @@ export function NewGoalDialog({ sessionId, open, onOpenChange, onCreate, initial
           <AlertDialog.Description className="text-[12px] leading-5" style={{ color: 'var(--confirm-desc)' }}>
             {t('goal.newGoalDialog.description')}
           </AlertDialog.Description>
-          <ListComposerTextarea
+          <textarea
             ref={textareaRef}
             value={objective}
             placeholder={t('goal.newGoalDialog.placeholder')}

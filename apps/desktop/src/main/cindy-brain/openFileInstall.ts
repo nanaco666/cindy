@@ -5,7 +5,7 @@ import { BrowserWindow } from 'electron';
 import { createLogger } from '../logger.js';
 
 /**
- * 双击 .cindy 文件的转交通道。
+ * 双击 .cindy 文件的转交通道(意识系统 C2c)。
  *
  * 主进程**不在这里装、也不在这里弹窗**:三个装入入口(设置页 / 拖入 / 双击)
  * 统一走 renderer 的同一套编排(installFlow:inspect 验明正身 → 应用内确认

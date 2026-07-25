@@ -1,1 +1,1 @@
-export type * from '@cindy/maker-shared/schedule-types';
+export type * from '@lizi/maker-shared/schedule-types';

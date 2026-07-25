@@ -18,7 +18,6 @@ import { Lightbulb } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { cn } from '@/lib/utils';
-import { useAuth } from '@/contexts/AuthContext';
 import { DiscordBotSection } from './DiscordBotSection';
 import { FeishuBotSection } from './FeishuBotSection';
 import { FeishuBotNotificationSection } from './FeishuBotNotificationSection';
@@ -30,7 +29,6 @@ export type ImBotSettingsGroup = 'cindy' | 'personal';
 
 /** 分栏 tab 的固定顺序(Cindy 在前为默认)。 */
 export const IM_BOT_SETTINGS_GROUPS: readonly ImBotSettingsGroup[] = ['cindy', 'personal'];
-const LOCAL_IM_BOT_SETTINGS_GROUPS: readonly ImBotSettingsGroup[] = ['personal'];
 
 /** 分栏标题的 i18n key(tab 文案)。 */
 export const IM_BOT_GROUP_LABEL_KEY: Record<ImBotSettingsGroup, string> = {
@@ -79,9 +77,6 @@ export function ImBotSection({
   onGroupChange: (group: ImBotSettingsGroup) => void;
 }) {
   const { t } = useTranslation();
-  const { mode, dataOwnerId } = useAuth();
-  const availableGroups = mode === 'local' ? LOCAL_IM_BOT_SETTINGS_GROUPS : IM_BOT_SETTINGS_GROUPS;
-  const effectiveGroup = mode === 'local' ? 'personal' : group;
 
   return (
     <div className="flex flex-col gap-2 px-1">
@@ -100,8 +95,8 @@ export function ImBotSection({
         role="tablist"
         aria-label={t('settings.sections.imBot')}
       >
-        {availableGroups.map((g) => {
-          const active = g === effectiveGroup;
+        {IM_BOT_SETTINGS_GROUPS.map((g) => {
+          const active = g === group;
           return (
             <button
               key={g}
@@ -131,18 +126,17 @@ export function ImBotSection({
       <div className="mt-2 flex items-start gap-2 rounded-lg bg-[var(--surface-chip)] px-3.5 py-2.5">
         <Lightbulb size={14} className="mt-[2px] shrink-0 text-[var(--text-tertiary)]" />
         <p className="text-[12.5px] leading-[1.6] text-[var(--text-secondary)]">
-          {t(IM_BOT_GROUP_TIP_KEY[effectiveGroup])}
+          {t(IM_BOT_GROUP_TIP_KEY[group])}
         </p>
       </div>
 
       <div
-        key={`${mode}:${dataOwnerId ?? 'none'}`}
         role="tabpanel"
-        id={`im-bot-group-panel-${effectiveGroup}`}
-        aria-labelledby={`im-bot-group-tab-${effectiveGroup}`}
+        id={`im-bot-group-panel-${group}`}
+        aria-labelledby={`im-bot-group-tab-${group}`}
         className="mt-4 flex flex-col gap-8"
       >
-        {effectiveGroup === 'cindy' ? (
+        {group === 'cindy' ? (
           <HookConnectionsSection />
         ) : (
           <>

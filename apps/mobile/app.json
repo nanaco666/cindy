@@ -10,13 +10,14 @@
     "runtimeVersion": {
       "policy": "fingerprint"
     },
+    "updates": {
+      "url": "https://u.expo.dev/a7286e46-6144-494c-bf03-dddd2fe4fbfd",
+      "enabled": true
+    },
     "ios": {
       "bundleIdentifier": "com.xd.cindycn",
       "usesAppleSignIn": true,
-      "buildNumber": "2026072301",
-      "entitlements": {
-        "aps-environment": "production"
-      },
+      "buildNumber": "2026072104",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "UISupportedInterfaceOrientations": [
@@ -55,14 +56,6 @@
       "./plugins/with-wechat-opensdk-modulemap",
       "./plugins/with-android-splash-no-icon",
       [
-        "expo-build-properties",
-        {
-          "ios": {
-            "buildReactNativeFromSource": true
-          }
-        }
-      ],
-      [
         "expo-splash-screen",
         {
           "backgroundColor": "#DF0C27",
@@ -73,7 +66,6 @@
       ],
       "expo-router",
       "expo-apple-authentication",
-      "expo-notifications",
       "expo-secure-store",
       "expo-web-browser",
       [
@@ -132,7 +124,11 @@
       ]
     ],
     "extra": {
-      "router": {}
-    }
+      "router": {},
+      "eas": {
+        "projectId": "a7286e46-6144-494c-bf03-dddd2fe4fbfd"
+      }
+    },
+    "owner": "dashhuang"
   }
 }

@@ -41,7 +41,6 @@ import {
   mapAnthropicHttpModels,
   noteAnthropicSdkSupportedModels,
   loadAnthropicModelsFromDiskCache,
-  refreshAnthropicModelsFromHttp,
   clearAnthropicDiscoveredModels,
   resetAnthropicDiscoveryForTest,
   waitForAnthropicDiscoveryIdleForTest,
@@ -81,7 +80,7 @@ describe('mapAnthropicSdkModels', () => {
       },
     ]);
     expect(out).toHaveLength(2);
-    expect(out[0]).toMatchObject({ hasEffortInfo: true, hasFastModeInfo: true });
+    expect(out[0].hasCapabilityInfo).toBe(true);
     expect(out[0].model).toMatchObject({
       id: 'claude-opus-4-8',
       name: 'Opus 4.8',
@@ -93,7 +92,7 @@ describe('mapAnthropicSdkModels', () => {
       supportsFastMode: true,
     });
     // supportsEffort=false → 不可调;fast 缺省 false;haiku → 200k + 默认收起。
-    expect(out[1]).toMatchObject({ hasEffortInfo: true, hasFastModeInfo: false });
+    expect(out[1].hasCapabilityInfo).toBe(true);
     expect(out[1].model).toMatchObject({
       id: 'claude-haiku-4-5',
       contextWindow: 200_000,
@@ -104,37 +103,26 @@ describe('mapAnthropicSdkModels', () => {
     });
   });
 
-  it('能力字段全缺席 = 未知:目录基线优先,两项来源都为 false', () => {
+  it('能力字段全缺席 = 未知:按确定性默认合成(3 档,haiku 0 档),hasCapabilityInfo=false', () => {
     const out = mapAnthropicSdkModels([
       { value: 'claude-opus-4-8', displayName: 'Opus 4.8' },
       { value: 'claude-haiku-4-5', displayName: 'Haiku 4.5' },
     ]);
-    expect(out[0]).toMatchObject({ hasEffortInfo: false, hasFastModeInfo: false });
+    expect(out[0].hasCapabilityInfo).toBe(false);
     expect(out[0].model).toMatchObject({
-      efforts: ['low', 'medium', 'high', 'xhigh', 'max'],
+      efforts: ['low', 'medium', 'high'],
       defaultEffort: 'high',
       supportsFastMode: false,
     });
     expect(out[1].model).toMatchObject({ efforts: [], defaultEnabled: false });
   });
 
-  it('supportsEffort=true 但缺档位清单:使用目录基线,不解读为不可调', () => {
+  it('supportsEffort=true 但缺档位清单:合成默认档,不解读为不可调', () => {
     const out = mapAnthropicSdkModels([
       { value: 'claude-opus-4-8', displayName: 'Opus', supportsEffort: true },
     ]);
-    expect(out[0]).toMatchObject({ hasEffortInfo: true, hasFastModeInfo: false });
-    expect(out[0].model.efforts).toEqual(['low', 'medium', 'high', 'xhigh', 'max']);
-  });
-
-  it('只声明 fastMode 时 effort 仍使用目录基线,两项来源独立', () => {
-    const out = mapAnthropicSdkModels([
-      { value: 'claude-opus-4-8', displayName: 'Opus', supportsFastMode: true },
-    ]);
-    expect(out[0]).toMatchObject({ hasEffortInfo: false, hasFastModeInfo: true });
-    expect(out[0].model).toMatchObject({
-      efforts: ['low', 'medium', 'high', 'xhigh', 'max'],
-      supportsFastMode: true,
-    });
+    expect(out[0].hasCapabilityInfo).toBe(true);
+    expect(out[0].model.efforts).toEqual(['low', 'medium', 'high']);
   });
 
   it('过滤别名与非 claude id(规则 10:禁止裸别名进目录);dated id 归一去重', () => {
@@ -162,17 +150,17 @@ describe('mapAnthropicSdkModels', () => {
 });
 
 describe('mapAnthropicHttpModels', () => {
-  it('无能力信息 → 使用目录基线(两项来源都为 false);haiku 仍为 0 档 + 默认收起', () => {
+  it('无能力信息 → 合成 3 档(hasCapabilityInfo=false);haiku 例外 0 档 + 默认收起', () => {
     const out = mapAnthropicHttpModels([
       { id: 'claude-opus-4-8-20260401', display_name: 'Opus 4.8', type: 'model' },
       { id: 'claude-haiku-4-5-20251001', display_name: 'Haiku 4.5', type: 'model' },
     ]);
-    expect(out[0]).toMatchObject({ hasEffortInfo: false, hasFastModeInfo: false });
+    expect(out[0].hasCapabilityInfo).toBe(false);
     expect(out[0].explicitContextWindow).toBeNull();
     expect(out[0].model).toMatchObject({
       id: 'claude-opus-4-8',
       contextWindow: 1_000_000,
-      efforts: ['low', 'medium', 'high', 'xhigh', 'max'],
+      efforts: ['low', 'medium', 'high'],
       defaultEffort: 'high',
       supportsFastMode: false,
     });
@@ -184,7 +172,7 @@ describe('mapAnthropicHttpModels', () => {
     });
   });
 
-  it('响应带完整能力信息时逐项标记来源,explicitContextWindow 单独记账', () => {
+  it('响应带能力信息时按响应为准(hasCapabilityInfo=true,explicitContextWindow 记账)', () => {
     const out = mapAnthropicHttpModels([
       {
         id: 'claude-opus-4-8',
@@ -193,26 +181,11 @@ describe('mapAnthropicHttpModels', () => {
         capabilities: { efforts: ['low', 'high', 'max'], fast_mode: true },
       },
     ]);
-    expect(out[0]).toMatchObject({ hasEffortInfo: true, hasFastModeInfo: true });
+    expect(out[0].hasCapabilityInfo).toBe(true);
     expect(out[0].explicitContextWindow).toBe(900_000);
     expect(out[0].model).toMatchObject({
       contextWindow: 900_000, // max_input_tokens 优先于 1M 规则
       efforts: ['low', 'high', 'max'],
-      supportsFastMode: true,
-    });
-  });
-
-  it('HTTP 只声明 fast_mode 时不把目录 effort 基线标成明确能力', () => {
-    const out = mapAnthropicHttpModels([
-      {
-        id: 'claude-opus-4-8',
-        display_name: 'Opus 4.8',
-        capabilities: { fast_mode: true },
-      },
-    ]);
-    expect(out[0]).toMatchObject({ hasEffortInfo: false, hasFastModeInfo: true });
-    expect(out[0].model).toMatchObject({
-      efforts: ['low', 'medium', 'high', 'xhigh', 'max'],
       supportsFastMode: true,
     });
   });
@@ -325,8 +298,6 @@ describe('noteAnthropicSdkSupportedModels(登录态门控 + 合并纪律)', () =
     resetAnthropicDiscoveryForTest();
     setAnthropicDiscoveredModels([]);
     authState.loggedIn = true;
-    oauthRefreshMock.getValidClaudeAiOAuth.mockReset();
-    oauthRefreshMock.getValidClaudeAiOAuth.mockResolvedValue(null);
   });
 
   afterEach(async () => {
@@ -334,7 +305,6 @@ describe('noteAnthropicSdkSupportedModels(登录态门控 + 合并纪律)', () =
     await waitForAnthropicDiscoveryIdleForTest();
     resetAnthropicDiscoveryForTest();
     setAnthropicDiscoveredModels([]);
-    vi.unstubAllGlobals();
     await fsp.rm(TEST_USER_DATA, { recursive: true, force: true });
   });
 
@@ -400,7 +370,7 @@ describe('noteAnthropicSdkSupportedModels(登录态门控 + 合并纪律)', () =
     }
   });
 
-  it('退化捕获只合并同 id 能力、不缩减清单;正常演进照常生效', () => {
+  it('退化捕获(骤减到单条)不覆盖现值;正常演进照常生效(2026-07-21 事故回归)', () => {
     noteAnthropicSdkSupportedModels([
       { value: 'claude-fable-5', displayName: 'Fable 5' },
       { value: 'claude-opus-4-8', displayName: 'Opus 4.8' },
@@ -408,53 +378,11 @@ describe('noteAnthropicSdkSupportedModels(登录态门控 + 合并纪律)', () =
       { value: 'claude-haiku-4-5', displayName: 'Haiku 4.5' },
     ]);
     expect(anthropicIds()).toHaveLength(4);
-    // cc 只回当前模型一条:清单不塌,且只声明 fast 时不能清空已有 effort 基线。
+    // 上游抽风只回一条家族级条目:清单不塌,保留 4 条现值,并主动请 HTTP 权威通道仲裁。
     oauthRefreshMock.getValidClaudeAiOAuth.mockClear();
-    noteAnthropicSdkSupportedModels([
-      {
-        value: 'claude-fable-5',
-        displayName: 'Fable',
-        supportsFastMode: true,
-      },
-    ]);
-    expect(anthropicIds()).toHaveLength(4);
-    expect(anthropicModel('claude-fable-5')).toMatchObject({
-      efforts: ['low', 'medium', 'high', 'xhigh', 'max'],
-      defaultEffort: 'high',
-      supportsFastMode: true,
-    });
-    // 后续 effort-only 补丁只精化档位,不能把刚明确的 fastMode 打回 false。
-    noteAnthropicSdkSupportedModels([
-      {
-        value: 'claude-fable-5',
-        displayName: 'Fable',
-        supportsEffort: true,
-        supportedEffortLevels: ['low', 'medium', 'high', 'xhigh'],
-      },
-    ]);
-    expect(anthropicIds()).toHaveLength(4);
-    expect(anthropicModel('claude-fable-5')).toMatchObject({
-      efforts: ['low', 'medium', 'high', 'xhigh'],
-      defaultEffort: 'high',
-      supportsFastMode: true,
-    });
-    expect(anthropicModel('claude-opus-4-8')?.efforts).toEqual([
-      'low',
-      'medium',
-      'high',
-      'xhigh',
-      'max',
-    ]);
-    expect(oauthRefreshMock.getValidClaudeAiOAuth).toHaveBeenCalled();
-    // 后续单条若不带能力字段,未知不能把刚精化的 xhigh 擦掉。
     noteAnthropicSdkSupportedModels([{ value: 'claude-fable-5', displayName: 'Fable' }]);
     expect(anthropicIds()).toHaveLength(4);
-    expect(anthropicModel('claude-fable-5')?.efforts).toEqual([
-      'low',
-      'medium',
-      'high',
-      'xhigh',
-    ]);
+    expect(oauthRefreshMock.getValidClaudeAiOAuth).toHaveBeenCalled();
     // 逐个下架(4→3)是合法演进,照常生效。
     noteAnthropicSdkSupportedModels([
       { value: 'claude-fable-5', displayName: 'Fable 5' },
@@ -462,12 +390,6 @@ describe('noteAnthropicSdkSupportedModels(登录态门控 + 合并纪律)', () =
       { value: 'claude-sonnet-5', displayName: 'Sonnet 5' },
     ]);
     expect(anthropicIds()).toHaveLength(3);
-    expect(anthropicModel('claude-fable-5')?.efforts).toEqual([
-      'low',
-      'medium',
-      'high',
-      'xhigh',
-    ]);
   });
 
   it('无能力信息的捕获不打回已精化条目的档位 / fast(合并纪律)', () => {
@@ -487,129 +409,6 @@ describe('noteAnthropicSdkSupportedModels(登录态门控 + 合并纪律)', () =
       defaultEffort: 'high',
       supportsFastMode: true,
     });
-  });
-
-  it('HTTP 刷新用当前目录基线替换旧版缓存的三档合成值', async () => {
-    const cacheDir = path.join(TEST_USER_DATA, 'model-discovery');
-    const cacheFile = path.join(cacheDir, 'anthropic-models.json');
-    await fsp.mkdir(cacheDir, { recursive: true });
-    await fsp.writeFile(
-      cacheFile,
-      JSON.stringify({
-        fetchedAt: '2026-07-22T00:00:00.000Z',
-        models: [
-          {
-            id: 'claude-fable-5',
-            name: 'Fable 5',
-            group: 'anthropic',
-            sortOrder: 0,
-            contextWindow: 1_000_000,
-            efforts: ['low', 'medium', 'high'],
-            defaultEffort: 'high',
-            supportsFastMode: false,
-            status: 'active',
-          },
-        ],
-        // 旧整模型来源字段有歧义,不能据此把历史三档当成明确 effort。
-        explicitCapabilityModelIds: ['claude-fable-5'],
-      }),
-      'utf-8',
-    );
-    await loadAnthropicModelsFromDiskCache();
-    expect(anthropicModel('claude-fable-5')?.efforts).toEqual(['low', 'medium', 'high']);
-
-    oauthRefreshMock.getValidClaudeAiOAuth.mockResolvedValue({ accessToken: 'test-token' });
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async () => ({
-        ok: true,
-        json: async () => ({
-          data: [{ id: 'claude-fable-5', display_name: 'Fable 5', type: 'model' }],
-          has_more: false,
-        }),
-      })),
-    );
-    await refreshAnthropicModelsFromHttp();
-
-    expect(anthropicModel('claude-fable-5')).toMatchObject({
-      efforts: ['low', 'medium', 'high', 'xhigh', 'max'],
-      defaultEffort: 'high',
-    });
-    const persisted = JSON.parse(await fsp.readFile(cacheFile, 'utf-8')) as {
-      explicitEffortModelIds?: unknown;
-      explicitFastModeModelIds?: unknown;
-      models: Array<{ id: string; efforts: string[] }>;
-    };
-    expect(persisted.models.find((model) => model.id === 'claude-fable-5')?.efforts).toEqual([
-      'low',
-      'medium',
-      'high',
-      'xhigh',
-      'max',
-    ]);
-    expect(persisted.explicitEffortModelIds).toEqual([]);
-    expect(persisted.explicitFastModeModelIds).toEqual([]);
-  });
-
-  it('HTTP fast-only 响应跨重启只更新 fast,保留已持久化的明确 effort', async () => {
-    const cacheDir = path.join(TEST_USER_DATA, 'model-discovery');
-    const cacheFile = path.join(cacheDir, 'anthropic-models.json');
-    await fsp.mkdir(cacheDir, { recursive: true });
-    await fsp.writeFile(
-      cacheFile,
-      JSON.stringify({
-        fetchedAt: '2026-07-22T00:00:00.000Z',
-        models: [
-          {
-            id: 'claude-fable-5',
-            name: 'Fable from SDK',
-            group: 'anthropic',
-            sortOrder: 0,
-            contextWindow: 1_000_000,
-            efforts: ['low', 'medium', 'high', 'xhigh'],
-            defaultEffort: 'high',
-            supportsFastMode: true,
-            status: 'active',
-          },
-        ],
-        explicitEffortModelIds: ['claude-fable-5', 'claude-removed-model'],
-        explicitFastModeModelIds: ['claude-fable-5', 'claude-removed-model'],
-      }),
-      'utf-8',
-    );
-    await loadAnthropicModelsFromDiskCache();
-
-    oauthRefreshMock.getValidClaudeAiOAuth.mockResolvedValue({ accessToken: 'test-token' });
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async () => ({
-        ok: true,
-        json: async () => ({
-          data: [
-            {
-              id: 'claude-fable-5',
-              display_name: 'Fable 5',
-              type: 'model',
-              capabilities: { fast_mode: false },
-            },
-          ],
-          has_more: false,
-        }),
-      })),
-    );
-    await refreshAnthropicModelsFromHttp();
-
-    expect(anthropicModel('claude-fable-5')).toMatchObject({
-      name: 'Fable 5',
-      efforts: ['low', 'medium', 'high', 'xhigh'],
-      supportsFastMode: false,
-    });
-    const persisted = JSON.parse(await fsp.readFile(cacheFile, 'utf-8')) as {
-      explicitEffortModelIds?: unknown;
-      explicitFastModeModelIds?: unknown;
-    };
-    expect(persisted.explicitEffortModelIds).toEqual(['claude-fable-5']);
-    expect(persisted.explicitFastModeModelIds).toEqual(['claude-fable-5']);
   });
 
   it('磁盘缓存恢复 explicitWindows:重启后 SDK 捕获不把 HTTP 明说窗口打回猜测值(review P2 回归)', async () => {

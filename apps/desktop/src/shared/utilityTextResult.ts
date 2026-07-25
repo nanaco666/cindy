@@ -4,7 +4,6 @@ import type { UtilityModelTransport } from './utilityModelProfiles';
 export type UtilityTextAttemptReason =
   | 'unsupported_transport'
   | 'agent_unavailable'
-  | 'model_unavailable'
   | 'not_authenticated'
   | 'auth_probe_failed'
   | 'api_key_missing'

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildMessageRenderItems } from '@cindy/maker-shared/message-render';
+import { buildMessageRenderItems } from '@lizi/maker-shared/message-render';
 import { normalizeRemoteMessages } from '@/session/messageNormalize';
 import {
   buildMobileMessageRenderItems,

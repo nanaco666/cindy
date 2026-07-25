@@ -647,8 +647,8 @@ export function WorkdirBrowseSidebar({
         </button>
       </div>
 
-      {/* Workdir title row — 在搜索态的 "Search Section Title" 与普通态的
-          "Workdir Section Title" 之间切换:
+      {/* Workdir title row — 1:1 对设计稿 work-md-show.pen 的 "Search Section
+          Title" / 普通 "Workdir Section Title" 切换:
           padding: [8, 12, 4, 24]
           tree 模式: <displayName> 14/600 #262626 + [search, collapse, refresh] 14×14 #737373 gap:6
           search 模式: "Search" 14/600 + <displayName> 11/normal #737373 gap:8

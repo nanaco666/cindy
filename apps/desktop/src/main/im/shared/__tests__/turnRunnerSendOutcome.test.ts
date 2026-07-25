@@ -10,8 +10,8 @@ import type {
   MakerEvent,
   Session,
   SessionSendResult,
-} from '@cindy/maker-core';
-import type { ChannelIM } from '@cindy/im';
+} from '@lizi/maker-core';
+import type { ChannelIM } from 'lizi-im';
 
 const mocks = vi.hoisted(() => ({
   logger: {
@@ -33,7 +33,7 @@ const mocks = vi.hoisted(() => ({
   getMaker: vi.fn(),
   listProviders: vi.fn(),
   hasCustomProviderKey: vi.fn(),
-  readXdGatewayApiKey: vi.fn(),
+  readXdProxyApiKey: vi.fn(),
   bindingGet: vi.fn(),
   bindingDetach: vi.fn(),
   findActiveSession: vi.fn(),
@@ -128,7 +128,7 @@ vi.mock('../../../destructiveGuard', () => ({
 }));
 
 vi.mock('../apiKey', () => ({
-  readXdGatewayApiKey: mocks.readXdGatewayApiKey,
+  readXdProxyApiKey: mocks.readXdProxyApiKey,
 }));
 
 vi.mock('../fbotTitle', () => ({
@@ -404,7 +404,7 @@ describe('turnRunner send outcome policy (feishu adapter characterization)', () 
   beforeEach(() => {
     vi.clearAllMocks();
     makerEventListeners = [];
-    mocks.readXdGatewayApiKey.mockReturnValue('xd-gateway-key');
+    mocks.readXdProxyApiKey.mockReturnValue('xd-proxy-key');
     mocks.hasCustomProviderKey.mockReturnValue(false);
     mocks.listProviders.mockResolvedValue([
       {
@@ -1033,7 +1033,7 @@ describe('turnRunner send outcome policy (feishu adapter characterization)', () 
   });
 
   it('allows Claude Code IM sessions explicitly routed to an authenticated Anthropic provider without XD key', async () => {
-    mocks.readXdGatewayApiKey.mockReturnValue(null);
+    mocks.readXdProxyApiKey.mockReturnValue(null);
     mocks.listProviders.mockResolvedValue([
       {
         id: 'anthropic',
@@ -1179,7 +1179,7 @@ describe('turnRunner send outcome policy (feishu adapter characterization)', () 
   });
 
   it('does not create a sticky default session when the selected agent is unauthenticated', async () => {
-    mocks.readXdGatewayApiKey.mockReturnValue(null);
+    mocks.readXdProxyApiKey.mockReturnValue(null);
     mocks.findActiveSession.mockResolvedValue(null);
     mocks.createSession.mockResolvedValue({
       id: 'feishu-new-session',
@@ -1211,7 +1211,7 @@ describe('turnRunner send outcome policy (feishu adapter characterization)', () 
   });
 
   it('does not create a route target for config commands when the default route is unauthenticated', async () => {
-    mocks.readXdGatewayApiKey.mockReturnValue(null);
+    mocks.readXdProxyApiKey.mockReturnValue(null);
     mocks.findActiveSession.mockResolvedValue(null);
     mocks.createSession.mockResolvedValue({
       id: 'feishu-new-session',

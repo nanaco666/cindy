@@ -1,10 +1,14 @@
 /**
- * Desktop AgentRuntimeConfig 实现。
- * endpoint、行为开关与宿主资源路径由 desktop host 在这里统一注入,
- * maker-core 只消费抽象配置,不依赖 Electron 或部署环境。
+ * Desktop AgentRuntimeConfig 实现 ——
+ * 把 vendor/{claude,codex}/authAdapter.ts:getProcessEnv() 里 hardcoded 的 endpoint + behavior flag 提取到这里。
+ *
+ * 详见 doc/agent/xdt-maker-architecture.md §6.5 的迁移映射表。
+ *
+ * 注意：本轮 (stage-1) 这些值实际未被消费 —— ClaudeCodeAgent adapter 仍走 claudeRuntime
+ * 内部的老 env 路径，runtimeConfig 接口仅为下一轮迁移预留。
  */
 
-import type { AgentRuntimeConfig } from '@cindy/maker-core';
+import type { AgentRuntimeConfig } from '@lizi/maker-core';
 import { app } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -71,6 +75,8 @@ export function getRipgrepBinaryPath(): string {
 // memorySettings 在 main 启动期已 ready (userData 同步可访问)。
 // 原生 auto-memory 与 Maker Memory 都从持久化 store 读, 重启后用户上次设置 100% 恢复。
 // 默认值由 memory-settings-store.ts 维护 (maker=false / claudeCode=true / codex=true)。
+const memorySettings = readMemorySettings();
+
 function readMakerMemoryEnabled(): boolean {
   return readMemorySettings().maker;
 }
@@ -78,7 +84,7 @@ function readMakerMemoryEnabled(): boolean {
 const staticClaudeBehaviorFlags = {
   CLAUDE_CODE_SKIP_FAST_MODE_NETWORK_ERRORS: '1',
   CLAUDE_CODE_ATTRIBUTION_HEADER: '0',
-  // 网关 upstream 透传 tool_reference 块, 显式开启 ToolSearch
+  // llm-proxy.tapsvc.com 透传 tool_reference 块, 显式开启 ToolSearch
   // 否则 CC 看到非 first-party host 默认 disable, 每次请求都全量塞工具定义。
   ENABLE_TOOL_SEARCH: 'auto',
 };
@@ -130,9 +136,7 @@ export function buildDesktopClaudeRuntimeConfig(endpointFn: () => string): Agent
     systemPrompt: composeHostPrompt(claudeSystemPrompt),
     // Maker Memory 需要的 user-data 绝对路径 (maker-core 没 Electron 依赖, 必须 host 注入)。
     userDataPath: app.getPath('userData'),
-    get memoryEnabled() {
-      return readMemorySettings().claudeCode;
-    },
+    memoryEnabled: memorySettings.claudeCode,
     // main-side session starts can omit per-session makerMemoryEnabled. Keep the fallback live
     // so settings changed after app startup apply without requiring a restart.
     get makerMemoryEnabled() {
@@ -175,9 +179,7 @@ export const desktopCodexRuntimeConfig: AgentRuntimeConfig = {
   systemPrompt: composeHostPrompt(codexSystemPrompt),
   pathPrepends: [bundledRipgrepDir()],
   userDataPath: app.getPath('userData'),
-  get memoryEnabled() {
-    return readMemorySettings().codex;
-  },
+  memoryEnabled: memorySettings.codex,
   // Keep this fallback live for main-side session starts that do not pass CreateOpts.makerMemoryEnabled.
   get makerMemoryEnabled() {
     return readMakerMemoryEnabled();

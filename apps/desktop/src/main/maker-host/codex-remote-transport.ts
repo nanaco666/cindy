@@ -32,7 +32,7 @@ import { randomBytes, createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 
-import type { RemoteHost, ExecStreamHandle } from '@cindy/maker-remote-ssh';
+import type { RemoteHost, ExecStreamHandle } from '@lizi/maker-remote-ssh';
 
 // ws lib doesn't export Receiver / Sender from its main entry — they live as
 // internal classes under ws/lib/. The package's `exports` field also
@@ -92,7 +92,7 @@ import type {
   CodexAppServerStderrHandler as StderrHandler,
   CodexAppServerTransport as Transport,
   CodexAppServerCloseInfo as TransportCloseInfo,
-} from '@cindy/maker-core';
+} from '@lizi/maker-core';
 
 /** Minimal Logger surface we need (matches maker-core's interface shape). */
 interface Logger {

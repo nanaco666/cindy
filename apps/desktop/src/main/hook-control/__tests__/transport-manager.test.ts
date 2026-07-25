@@ -1,5 +1,5 @@
 /**
- * transport + manager 集成测试(provider 独立连接 + JWT 形态): 对真实 ws server
+ * transport + manager 集成测试(单连接 + JWT 形态): 对真实 ws server
  * (WebSocketServer, 端口 0)跑完整行为 —— 登录 token 鉴权头、hello 自报
  * 别名、welcome 后状态 connected、ping 自动回 pong、dispatch 的 stub ack、
  * 未登录不发起连接、setEnabled(false) 停线。依赖全部注入, 不需要 Electron。
@@ -10,22 +10,15 @@ import { once } from 'node:events';
 import type { Duplex } from 'node:stream';
 
 import { WebSocketServer, type WebSocket as ServerSocket } from 'ws';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 
 import {
   HOOK_FEATURE_MULTI_TEAM,
-  HOOK_FEATURE_PROVIDER_BIND,
-  HOOK_FEATURE_PROVIDER_PREFS,
-  HOOK_FEATURE_PROVIDER_TELEGRAM,
-  HOOK_FEATURE_SESSION_PICKER,
   HOOK_FEATURE_SLACK_TOOLS,
   makeBindState,
   makeBindUpdate,
   makePing,
   makePrefsState,
-  makeProviderBindState,
-  makeProviderBindUpdate,
-  makeProviderPrefsState,
   makeQueryRequest,
   makeTaskDispatch,
   makeToolResponse,
@@ -33,15 +26,12 @@ import {
   parseHookMessage,
   serializeHookMessage,
   type HookMessage,
-  type ProviderBindStatusPayload,
 } from '@cindy/slack-hook-protocol';
 
 import {
   createHookControlManager,
   HookNotConnectedError,
   HookPrefsTimeoutError,
-  providerForExternalKey,
-  providerForTaskDispatch,
   type HookControlManagerDeps,
 } from '../manager';
 import { createHookTransport, type HookTransportOpts } from '../transport';
@@ -53,30 +43,20 @@ const noopLog = { info: () => {}, warn: () => {} };
 function memoryStore(initial: Partial<SlackHookConfigState> & { url: string }): SlackHookStore {
   let state: SlackHookConfigState = {
     enabled: initial.enabled ?? true,
-    telegramEnabled: initial.telegramEnabled ?? false,
     urlOverride: initial.url,
     workspaces: initial.workspaces ?? {},
     bindingsCache: initial.bindingsCache ?? [],
-    telegramBindingCache: initial.telegramBindingCache ?? null,
   };
   return {
     get: () => ({
       ...state,
       workspaces: { ...state.workspaces },
       bindingsCache: state.bindingsCache.map((e) => ({ ...e })),
-      telegramBindingCache: state.telegramBindingCache ? { ...state.telegramBindingCache } : null,
     }),
     effectiveUrl: () => state.urlOverride ?? 'wss://unused.example',
     setEnabled(enabled) {
       state = { ...state, enabled };
       return state;
-    },
-    setProviderEnabled(provider, enabled) {
-      state = provider === 'slack' ? { ...state, enabled } : { ...state, telegramEnabled: enabled };
-      return state;
-    },
-    anyProviderEnabled() {
-      return state.enabled || state.telegramEnabled;
     },
     setWorkspaces(workspaces) {
       state = { ...state, workspaces };
@@ -84,10 +64,6 @@ function memoryStore(initial: Partial<SlackHookConfigState> & { url: string }): 
     },
     setBindingsCache(entries) {
       state = { ...state, bindingsCache: entries.map((e) => ({ ...e })) };
-      return state;
-    },
-    setTelegramBindingCache(entry) {
-      state = { ...state, telegramBindingCache: entry ? { ...entry } : null };
       return state;
     },
   };
@@ -100,7 +76,6 @@ function makeManager(
   return createHookControlManager({
     store,
     createTransport: createHookTransport,
-    getTelegramUrl: () => store.effectiveUrl(),
     getAuthToken: async () => 'jwt-token-1',
     refreshAuthToken: async () => false,
     deviceInfo: () => ({ deviceId: 'dev-1', deviceName: 'TestBox' }),
@@ -138,27 +113,6 @@ afterEach(() => {
   cleanups = [];
 });
 
-describe('hook-control runtime capability gate', () => {
-  it('keeps an enabled cloud preference disconnected when the capability is unavailable', () => {
-    const createTransport = vi.fn(() => {
-      throw new Error('transport must not start');
-    }) as unknown as HookControlManagerDeps['createTransport'];
-    const manager = makeManager(
-      memoryStore({
-        url: 'wss://hook.example',
-        enabled: true,
-        telegramEnabled: true,
-      }),
-      { isAvailable: () => false, createTransport },
-    );
-
-    manager.sync();
-
-    expect(createTransport).not.toHaveBeenCalled();
-    manager.dispose();
-  });
-});
-
 async function startServer(): Promise<{ wss: WebSocketServer; url: string }> {
   const wss = new WebSocketServer({ host: '127.0.0.1', port: 0 });
   await once(wss, 'listening');
@@ -183,7 +137,10 @@ async function startUpgradeServer(
   return { url: `ws://127.0.0.1:${addr.port}` };
 }
 
-function transportOpts(url: string, overrides: Partial<HookTransportOpts> = {}): HookTransportOpts {
+function transportOpts(
+  url: string,
+  overrides: Partial<HookTransportOpts> = {},
+): HookTransportOpts {
   return {
     url,
     getAuthToken: async () => 'jwt-token-1',
@@ -260,10 +217,8 @@ describe('hook-control transport handshake recovery', () => {
     await new Promise((resolve) => setTimeout(resolve, 80));
     expect(connections).toBe(1);
     await expect.poll(() => connections, { timeout: 3000 }).toBe(2);
-    await expect
-      .poll(() => statuses.filter((status) => status === 'standby').length, { timeout: 3000 })
-      .toBe(2);
     expect(statuses.at(-1)).toBe('standby');
+    expect(statuses.filter((status) => status === 'standby')).toHaveLength(2);
   });
 
   it('upgrade 503 保持 error 并按退避重连，不误判 standby', async () => {
@@ -285,64 +240,7 @@ describe('hook-control transport handshake recovery', () => {
   });
 });
 
-const WORKSPACES = { xdmaker: 'E:\\AIWork\\Lizi', blog: 'D:\\repos\\blog' };
-
-describe('provider dispatch boundary', () => {
-  it('keeps source-less legacy traffic on Slack and requires Telegram source/key agreement', () => {
-    expect(providerForTaskDispatch({ externalKey: 'T1:C1:1.1' })).toBe('slack');
-    expect(providerForTaskDispatch({ externalKey: 'dm:U1:g2' })).toBe('slack');
-    expect(providerForTaskDispatch({ externalKey: 'dm:T1:U1:g2' })).toBe('slack');
-    expect(
-      providerForTaskDispatch({
-        externalKey: 'dm:U1:g2',
-        source: { im: 'telegram' },
-      }),
-    ).toBeNull();
-    expect(
-      providerForTaskDispatch({
-        externalKey: 'telegram:dm:bot-1:user-1:g0',
-        source: { im: 'telegram' },
-      }),
-    ).toBe('telegram');
-    expect(
-      providerForTaskDispatch({
-        externalKey: 'telegram:dm:bot-1:user-1:g0',
-        source: { im: 'slack' },
-      }),
-    ).toBeNull();
-    expect(
-      providerForTaskDispatch({
-        externalKey: 'T1:C1:1.1',
-        source: { im: 'telegram' },
-      }),
-    ).toBeNull();
-    expect(
-      providerForTaskDispatch({
-        externalKey: 'discord:channel-1',
-        source: { im: 'discord' },
-      }),
-    ).toBeNull();
-    expect(
-      providerForTaskDispatch({
-        externalKey: 'discord:channel-1',
-        source: { im: 'slack' },
-      }),
-    ).toBeNull();
-    expect(providerForTaskDispatch({ externalKey: 'arbitrary-provider:key' })).toBeNull();
-    expect(providerForTaskDispatch({ externalKey: 'telegram:dm:bot-1:user-1:g0' })).toBeNull();
-  });
-
-  it('routes only known provider lane keys for session archive', () => {
-    expect(providerForExternalKey('slack:dm:T1:U1:g2')).toBe('slack');
-    expect(providerForExternalKey('dm:U1:g2')).toBe('slack');
-    expect(providerForExternalKey('dm:T1:U1:g2')).toBe('slack');
-    expect(providerForExternalKey('team-slack:C1:1.1')).toBe('slack');
-    expect(providerForExternalKey('T1:C1:1.1')).toBe('slack');
-    expect(providerForExternalKey('telegram:dm:bot:user:g2')).toBe('telegram');
-    expect(providerForExternalKey('discord:channel-1')).toBeNull();
-    expect(providerForExternalKey('arbitrary')).toBeNull();
-  });
-});
+const WORKSPACES = { xdmaker: 'E:\\AIWork\\XDMaker', blog: 'D:\\repos\\blog' };
 
 describe('hook-control transport + manager(真实 ws server)', () => {
   it('JWT 鉴权头 + hello 自报别名 + welcome 后 connected + pong + stub 拒绝 dispatch', async () => {
@@ -369,12 +267,6 @@ describe('hook-control transport + manager(真实 ws server)', () => {
     // 内置「对话」伪目录 chat 恒在清单第一位, 真实别名跟在后面
     expect(hello.payload.workspaces[0]).toBe('chat');
     expect([...hello.payload.workspaces].sort()).toEqual(['blog', 'chat', 'xdmaker']);
-    expect(hello.payload.features).toEqual(
-      expect.arrayContaining([HOOK_FEATURE_MULTI_TEAM, HOOK_FEATURE_SESSION_PICKER]),
-    );
-    expect(hello.payload.features).not.toContain(HOOK_FEATURE_PROVIDER_BIND);
-    expect(hello.payload.features).not.toContain(HOOK_FEATURE_PROVIDER_PREFS);
-    expect(hello.payload.features).not.toContain(HOOK_FEATURE_PROVIDER_TELEGRAM);
     expect(JSON.stringify(hello)).not.toContain('AIWork');
 
     // welcome -> connected
@@ -465,30 +357,16 @@ describe('hook-control transport + manager(真实 ws server)', () => {
     const authorizeUrl = 'https://slack.example.com/openid/connect/authorize?state=abc';
     sock.send(
       serializeHookMessage(
-        makeBindUpdate({
-          state: 'pending',
-          slackUserId: null,
-          slackUserName: null,
-          message: null,
-          authorizeUrl,
-        }),
+        makeBindUpdate({ state: 'pending', slackUserId: null, slackUserName: null, message: null, authorizeUrl }),
       ),
     );
-    await expect
-      .poll(() => manager.snapshot().binding?.authorizeUrl, { timeout: 3000 })
-      .toBe(authorizeUrl);
+    await expect.poll(() => manager.snapshot().binding?.authorizeUrl, { timeout: 3000 }).toBe(authorizeUrl);
     expect(opened).toEqual([authorizeUrl]);
 
     // 重连时的 pending 回放不重复弹浏览器(一次性置位)
     sock.send(
       serializeHookMessage(
-        makeBindUpdate({
-          state: 'pending',
-          slackUserId: null,
-          slackUserName: null,
-          message: null,
-          authorizeUrl,
-        }),
+        makeBindUpdate({ state: 'pending', slackUserId: null, slackUserName: null, message: null, authorizeUrl }),
       ),
     );
     await new Promise((r) => setTimeout(r, 30));
@@ -638,12 +516,7 @@ describe('hook-control transport + manager(真实 ws server)', () => {
     // 用户装完 App → server 自动补完绑定推 confirmed → 正常已绑定
     sock.send(
       serializeHookMessage(
-        makeBindUpdate({
-          state: 'confirmed',
-          slackUserId: 'U1',
-          slackUserName: 'devuser',
-          message: null,
-        }),
+        makeBindUpdate({ state: 'confirmed', slackUserId: 'U1', slackUserName: 'lizi', message: null }),
       ),
     );
     await expect.poll(() => manager.snapshot().binding?.state, { timeout: 3000 }).toBe('confirmed');
@@ -710,13 +583,7 @@ describe('hook-control transport + manager(真实 ws server)', () => {
     const authorizeUrl = 'https://slack.example.com/openid/connect/authorize?state=z';
     sock.send(
       serializeHookMessage(
-        makeBindUpdate({
-          state: 'pending',
-          slackUserId: null,
-          slackUserName: null,
-          message: null,
-          authorizeUrl,
-        }),
+        makeBindUpdate({ state: 'pending', slackUserId: null, slackUserName: null, message: null, authorizeUrl }),
       ),
     );
     await expect.poll(() => opened, { timeout: 3000 }).toEqual([authorizeUrl]);
@@ -743,9 +610,9 @@ describe('hook-control transport + manager(真实 ws server)', () => {
         makeBindUpdate({
           state: 'confirmed',
           slackUserId: 'U1',
-          slackUserName: 'devuser',
+          slackUserName: 'lizi',
           message: null,
-          teamName: 'acme',
+          teamName: 'xindong',
         }),
       ),
     );
@@ -754,10 +621,10 @@ describe('hook-control transport + manager(真实 ws server)', () => {
     expect(server.frames.some((f) => f.type === 'bind.start')).toBe(false);
     expect(opened).toEqual([]);
     // workspace 名透传进绑定快照(状态行「已绑定 <team> @<name>」数据源)
-    expect(manager.snapshot().binding?.teamName).toBe('acme');
+    expect(manager.snapshot().binding?.teamName).toBe('xindong');
   });
 
-  it('cindy_slack provider gate 跟随绑定与 server capability，断线抖动不重复刷新', async () => {
+  it('lizi_slack provider gate 跟随绑定与 server capability，断线抖动不重复刷新', async () => {
     const { wss, url } = await startServer();
     const store = memoryStore({ url });
     const changes: boolean[] = [];
@@ -778,7 +645,7 @@ describe('hook-control transport + manager(真实 ws server)', () => {
     const confirmed = makeBindUpdate({
       state: 'confirmed',
       slackUserId: 'U1',
-      slackUserName: 'devuser',
+      slackUserName: 'lizi',
       message: null,
     });
     sock.send(serializeHookMessage(confirmed));
@@ -825,41 +692,6 @@ describe('hook-control transport + manager(真实 ws server)', () => {
 
     manager.revokeAndDisconnect();
     expect(changes).toEqual([true, false, true, false]);
-  });
-
-  it('账号停用会立即关闭 cindy_slack provider gate', async () => {
-    const { wss, url } = await startServer();
-    const store = memoryStore({ url });
-    const changes: boolean[] = [];
-    const manager = makeManager(store, {
-      onSlackToolProviderEnabledChanged: (enabled) => changes.push(enabled),
-    });
-    cleanups.push(() => manager.dispose());
-
-    const connPromise = once(wss, 'connection') as Promise<[ServerSocket]>;
-    manager.sync();
-    const [sock] = await connPromise;
-    const server = collectFrames(sock);
-    await server.waitFor('hello');
-    sock.send(
-      serializeHookMessage(
-        makeWelcome({ serverName: 'mock', features: [HOOK_FEATURE_SLACK_TOOLS] }),
-      ),
-    );
-    sock.send(
-      serializeHookMessage(
-        makeBindUpdate({
-          state: 'confirmed',
-          slackUserId: 'U1',
-          slackUserName: 'devuser',
-          message: null,
-        }),
-      ),
-    );
-    await expect.poll(() => changes, { timeout: 3000 }).toEqual([true]);
-
-    await manager.deactivateAccount();
-    expect(changes).toEqual([true, false]);
   });
 
   it('armAutoBind: 重开 toggle 撞上 server 回放的旧 pending → 重新发起并弹新链接', async () => {
@@ -941,12 +773,7 @@ describe('hook-control transport + manager(真实 ws server)', () => {
     manager.sync();
     const opts = transportOpts[0];
     opts.onStatus('connected', null);
-    const none = makeBindUpdate({
-      state: 'none',
-      slackUserId: null,
-      slackUserName: null,
-      message: null,
-    });
+    const none = makeBindUpdate({ state: 'none', slackUserId: null, slackUserName: null, message: null });
     if (none.type !== 'bind.update') throw new Error('unreachable');
 
     // 第一帧 none: send 失败(掉线瞬间)→ 不 auto-disable, 意图保留
@@ -1029,12 +856,7 @@ describe('hook-control transport + manager(真实 ws server)', () => {
     await server.waitFor('bind.start');
     sock.send(
       serializeHookMessage(
-        makeBindUpdate({
-          state: 'confirmed',
-          slackUserId: 'U1',
-          slackUserName: 'devuser',
-          message: null,
-        }),
+        makeBindUpdate({ state: 'confirmed', slackUserId: 'U1', slackUserName: 'lizi', message: null }),
       ),
     );
     await expect.poll(() => manager.snapshot().binding?.state, { timeout: 3000 }).toBe('confirmed');
@@ -1060,12 +882,7 @@ describe('hook-control transport + manager(真实 ws server)', () => {
     await expect.poll(() => manager.snapshot().status, { timeout: 3000 }).toBe('connected');
     sock.send(
       serializeHookMessage(
-        makeBindUpdate({
-          state: 'confirmed',
-          slackUserId: 'U1',
-          slackUserName: 'devuser',
-          message: null,
-        }),
+        makeBindUpdate({ state: 'confirmed', slackUserId: 'U1', slackUserName: 'lizi', message: null }),
       ),
     );
     await expect.poll(() => manager.snapshot().binding?.state, { timeout: 3000 }).toBe('confirmed');
@@ -1087,1333 +904,13 @@ describe('hook-control transport + manager(真实 ws server)', () => {
     const manager = makeManager(store);
     manager.sync();
     await expect
-      .poll(
-        () => {
-          const s = manager.snapshot().status;
-          return s === 'error' || s === 'connecting';
-        },
-        { timeout: 5000 },
-      )
+      .poll(() => {
+        const s = manager.snapshot().status;
+        return s === 'error' || s === 'connecting';
+      }, { timeout: 5000 })
       .toBe(true);
     // dispose 后所有 timer/socket 释放 —— 测试进程能自然退出即证明无泄漏
     manager.dispose();
-  });
-});
-
-const TELEGRAM_FEATURES = [
-  HOOK_FEATURE_PROVIDER_BIND,
-  HOOK_FEATURE_PROVIDER_PREFS,
-  HOOK_FEATURE_PROVIDER_TELEGRAM,
-  HOOK_FEATURE_SESSION_PICKER,
-];
-
-const TELEGRAM_PENDING: ProviderBindStatusPayload = {
-  provider: 'telegram' as const,
-  replyTo: null,
-  state: 'pending' as const,
-  attemptId: 'attempt-telegram-1',
-  bindingId: null,
-  principalId: null,
-  principalName: null,
-  scopeId: 'bot-1',
-  scopeName: 'cindy_example_bot',
-  connectUrl: 'https://t.me/cindy_example_bot?start=abcdefghijklmnopqrstuvwxyz_0123456789-ABCDE',
-  expiresAt: Date.now() + 60_000,
-  reason: null,
-  remediationUrl: null,
-  actions: ['open_connect_url', 'copy_connect_url', 'cancel'],
-};
-
-const TELEGRAM_CONFIRMED: ProviderBindStatusPayload = {
-  provider: 'telegram' as const,
-  replyTo: null,
-  state: 'confirmed' as const,
-  attemptId: null,
-  bindingId: 'binding-telegram-1',
-  principalId: 'telegram-user-1',
-  principalName: 'Cindy User',
-  scopeId: 'bot-1',
-  scopeName: 'cindy_example_bot',
-  connectUrl: null,
-  expiresAt: null,
-  reason: null,
-  remediationUrl: 'https://t.me/cindy_example_bot',
-  actions: ['revoke', 'open_provider', 'add_to_group'],
-};
-
-describe('Telegram provider capability, binding and prefs', () => {
-  it('冷启动与账号重激活都从缓存恢复 Telegram actions', async () => {
-    const store = memoryStore({
-      url: 'wss://unused.example',
-      enabled: false,
-      telegramEnabled: false,
-      telegramBindingCache: {
-        bindingId: 'binding-telegram-1',
-        principalId: 'telegram-user-1',
-        principalName: 'Cindy User',
-        scopeId: 'bot-1',
-        scopeName: 'cindy_example_bot',
-      },
-    });
-    const manager = makeManager(store);
-    cleanups.push(() => manager.dispose());
-
-    expect(manager.snapshot().telegram.binding?.actions).toEqual([
-      'revoke',
-      'open_provider',
-      'add_to_group',
-    ]);
-    await manager.deactivateAccount();
-    manager.activateAccount();
-    expect(manager.snapshot().telegram.binding?.actions).toEqual([
-      'revoke',
-      'open_provider',
-      'add_to_group',
-    ]);
-  });
-
-  it('显式开启会等待服务端权威状态，缓存误报 confirmed 时仍自动发起绑定', async () => {
-    const { wss, url } = await startServer();
-    const store = memoryStore({
-      url,
-      enabled: false,
-      telegramEnabled: false,
-      telegramBindingCache: {
-        bindingId: 'stale-binding',
-        principalId: 'stale-principal',
-        principalName: 'Old User',
-        scopeId: 'bot-1',
-        scopeName: 'cindy_example_bot',
-      },
-    });
-    const manager = makeManager(store);
-    cleanups.push(() => manager.dispose());
-
-    const connPromise = once(wss, 'connection') as Promise<[ServerSocket]>;
-    manager.setProviderEnabled('telegram', true);
-    const [sock] = await connPromise;
-    const server = collectFrames(sock);
-    await server.waitFor('hello');
-    sock.send(
-      serializeHookMessage(
-        makeWelcome({ serverName: 'telegram-server', features: TELEGRAM_FEATURES }),
-      ),
-    );
-    await expect
-      .poll(() => manager.snapshot().telegram.status, { timeout: 3000 })
-      .toBe('connected');
-
-    sock.send(
-      serializeHookMessage(
-        makeProviderBindState({
-          ...TELEGRAM_PENDING,
-          state: 'none',
-          attemptId: null,
-          scopeId: null,
-          scopeName: null,
-          connectUrl: null,
-          expiresAt: null,
-          actions: [],
-        }),
-      ),
-    );
-
-    const start = await server.waitFor('provider.bind.start');
-    expect(start.type === 'provider.bind.start' ? start.payload.provider : null).toBe('telegram');
-    expect(manager.snapshot().telegram.binding).toMatchObject({ state: 'pending' });
-  });
-
-  it('账号切换会丢弃上一账号尚未消费的 Telegram 自动绑定意图', async () => {
-    const { wss, url } = await startServer();
-    const store = memoryStore({ url, enabled: false, telegramEnabled: false });
-    const manager = makeManager(store);
-    cleanups.push(() => manager.dispose());
-
-    const connections: Array<{
-      sock: ServerSocket;
-      server: ReturnType<typeof collectFrames>;
-    }> = [];
-    wss.on('connection', (sock) => connections.push({ sock, server: collectFrames(sock) }));
-
-    manager.setProviderEnabled('telegram', true);
-    await expect.poll(() => connections.length, { timeout: 3000 }).toBe(1);
-    await connections[0].server.waitFor('hello');
-
-    await manager.deactivateAccount();
-    manager.activateAccount();
-    await expect.poll(() => connections.length, { timeout: 3000 }).toBe(2);
-
-    const nextAccount = connections[1];
-    await nextAccount.server.waitFor('hello');
-    nextAccount.sock.send(
-      serializeHookMessage(
-        makeWelcome({ serverName: 'telegram-server', features: TELEGRAM_FEATURES }),
-      ),
-    );
-    await expect
-      .poll(() => manager.snapshot().telegram.status, { timeout: 3000 })
-      .toBe('connected');
-    nextAccount.sock.send(
-      serializeHookMessage(
-        makeProviderBindState({
-          ...TELEGRAM_PENDING,
-          state: 'none',
-          attemptId: null,
-          scopeId: null,
-          scopeName: null,
-          connectUrl: null,
-          expiresAt: null,
-          actions: [],
-        }),
-      ),
-    );
-    await new Promise((resolve) => setTimeout(resolve, 30));
-
-    expect(
-      nextAccount.server.frames.filter((frame) => frame.type === 'provider.bind.start'),
-    ).toEqual([]);
-  });
-
-  it('未配置 Telegram 独立端点时明确报错，不回退或误连 Slack URL', () => {
-    const store = memoryStore({
-      url: 'wss://slack-hook.example.test',
-      enabled: false,
-      telegramEnabled: false,
-    });
-    const manager = makeManager(store, {
-      getTelegramUrl: () => '',
-      createTransport: () => {
-        throw new Error('transport must not be created without a Telegram endpoint');
-      },
-    });
-    cleanups.push(() => manager.dispose());
-
-    manager.setProviderEnabled('telegram', true);
-
-    expect(manager.snapshot()).toMatchObject({
-      status: 'disabled',
-      telegram: {
-        enabled: true,
-        url: '',
-        status: 'error',
-        available: false,
-        capabilityPending: false,
-        lastError: 'Telegram service endpoint is not configured',
-      },
-    });
-  });
-
-  it('账号 drain 等待 recent-session 查询，并丢弃旧代 query.response', async () => {
-    const { wss, url } = await startServer();
-    const store = memoryStore({ url, enabled: false, telegramEnabled: true });
-    let resolveSessions: ((sessions: []) => void) | undefined;
-    const listRecentSessions = () =>
-      new Promise<[]>((resolve) => {
-        resolveSessions = resolve;
-      });
-    const manager = makeManager(store, { listRecentSessions });
-    cleanups.push(() => manager.dispose());
-
-    const connPromise = once(wss, 'connection') as Promise<[ServerSocket]>;
-    manager.sync();
-    const [sock] = await connPromise;
-    const server = collectFrames(sock);
-    await server.waitFor('hello');
-    sock.send(
-      serializeHookMessage(
-        makeWelcome({ serverName: 'telegram-server', features: TELEGRAM_FEATURES }),
-      ),
-    );
-    await expect
-      .poll(() => manager.snapshot().telegram.status, { timeout: 3000 })
-      .toBe('connected');
-    sock.send(
-      serializeHookMessage(makeQueryRequest({ queryId: 'sessions-old', kind: 'sessions' })),
-    );
-    await expect.poll(() => resolveSessions).toBeTypeOf('function');
-
-    let drained = false;
-    const draining = manager.deactivateAccount().then(() => {
-      drained = true;
-    });
-    await Promise.resolve();
-    expect(drained).toBe(false);
-    resolveSessions?.([]);
-    await draining;
-
-    expect(server.frames.some((frame) => frame.type === 'query.response')).toBe(false);
-  });
-
-  it('更新的账号 teardown 会取消 drain 期间排队的重新激活', async () => {
-    const { wss, url } = await startServer();
-    const store = memoryStore({ url, enabled: false, telegramEnabled: true });
-    let resolveSessions: ((sessions: []) => void) | undefined;
-    const manager = makeManager(store, {
-      listRecentSessions: () =>
-        new Promise<[]>((resolve) => {
-          resolveSessions = resolve;
-        }),
-    });
-    cleanups.push(() => manager.dispose());
-
-    let connectionCount = 0;
-    wss.on('connection', () => {
-      connectionCount += 1;
-    });
-    const connPromise = once(wss, 'connection') as Promise<[ServerSocket]>;
-    manager.sync();
-    const [sock] = await connPromise;
-    const server = collectFrames(sock);
-    await server.waitFor('hello');
-    sock.send(
-      serializeHookMessage(
-        makeWelcome({ serverName: 'telegram-server', features: TELEGRAM_FEATURES }),
-      ),
-    );
-    await expect
-      .poll(() => manager.snapshot().telegram.status, { timeout: 3000 })
-      .toBe('connected');
-    sock.send(
-      serializeHookMessage(makeQueryRequest({ queryId: 'keep-drain-open', kind: 'sessions' })),
-    );
-    await expect.poll(() => resolveSessions).toBeTypeOf('function');
-
-    const firstTeardown = manager.deactivateAccount();
-    manager.activateAccount();
-    const newerTeardown = manager.deactivateAccount();
-    resolveSessions?.([]);
-    await Promise.all([firstTeardown, newerTeardown]);
-    await new Promise((resolve) => setTimeout(resolve, 50));
-
-    expect(connectionCount).toBe(1);
-  });
-
-  it('Telegram 在线时打开 Slack 会新建独立连接，并由 Slack 状态回放发起绑定', async () => {
-    const { wss, url } = await startServer();
-    const store = memoryStore({ url, enabled: false, telegramEnabled: true });
-    const manager = makeManager(store);
-    cleanups.push(() => manager.dispose());
-
-    const connections: Array<{
-      sock: ServerSocket;
-      server: ReturnType<typeof collectFrames>;
-    }> = [];
-    wss.on('connection', (sock) => connections.push({ sock, server: collectFrames(sock) }));
-    manager.sync();
-    await expect.poll(() => connections.length, { timeout: 3000 }).toBe(1);
-    const telegram = connections[0];
-    const telegramHello = await telegram.server.waitFor('hello');
-    if (telegramHello.type !== 'hello') throw new Error('unreachable');
-    expect(telegramHello.payload.features).toContain(HOOK_FEATURE_PROVIDER_BIND);
-    expect(telegramHello.payload.features).not.toContain(HOOK_FEATURE_MULTI_TEAM);
-    telegram.sock.send(
-      serializeHookMessage(
-        makeWelcome({ serverName: 'telegram-server', features: TELEGRAM_FEATURES }),
-      ),
-    );
-    await expect
-      .poll(() => manager.snapshot().telegram.status, { timeout: 3000 })
-      .toBe('connected');
-    expect(manager.snapshot().status).toBe('disabled');
-
-    manager.armAutoBind();
-    manager.setProviderEnabled('slack', true);
-    await expect.poll(() => connections.length, { timeout: 3000 }).toBe(2);
-    const slack = connections[1];
-    const slackHello = await slack.server.waitFor('hello');
-    if (slackHello.type !== 'hello') throw new Error('unreachable');
-    expect(slackHello.payload.features).toContain(HOOK_FEATURE_MULTI_TEAM);
-    expect(slackHello.payload.features).not.toContain(HOOK_FEATURE_PROVIDER_BIND);
-    slack.sock.send(
-      serializeHookMessage(makeWelcome({ serverName: 'slack-server', features: [] })),
-    );
-    slack.sock.send(
-      serializeHookMessage(
-        makeBindUpdate({ state: 'none', slackUserId: null, slackUserName: null, message: null }),
-      ),
-    );
-    const start = await slack.server.waitFor('bind.start');
-    expect(start.type).toBe('bind.start');
-    expect(store.get()).toMatchObject({ enabled: true, telegramEnabled: true });
-    expect(manager.snapshot().binding?.state).toBe('pending');
-    expect(manager.snapshot().telegram.status).toBe('connected');
-  });
-
-  it('Telegram 服务能力不匹配时保留用户开关，Slack 连接与帧边界保持独立', async () => {
-    const { wss, url } = await startServer();
-    const store = memoryStore({ url, enabled: true, telegramEnabled: true });
-    const listAgentModels = vi.fn(() => []);
-    const listRecentSessions = vi.fn(async () => []);
-    const manager = makeManager(store, { listAgentModels, listRecentSessions });
-    cleanups.push(() => manager.dispose());
-
-    const connections: Array<{
-      sock: ServerSocket;
-      server: ReturnType<typeof collectFrames>;
-      hello?: HookMessage;
-    }> = [];
-    wss.on('connection', (sock) => connections.push({ sock, server: collectFrames(sock) }));
-    manager.sync();
-    await expect.poll(() => connections.length, { timeout: 3000 }).toBe(2);
-    for (const connection of connections)
-      connection.hello = await connection.server.waitFor('hello');
-    const telegram = connections.find((connection) => {
-      const hello = connection.hello;
-      return (
-        hello?.type === 'hello' &&
-        hello.payload.features?.includes(HOOK_FEATURE_PROVIDER_BIND) === true
-      );
-    });
-    const slack = connections.find((connection) => connection !== telegram);
-    if (!telegram || !slack) throw new Error('provider connections not found');
-
-    slack.sock.send(
-      serializeHookMessage(makeWelcome({ serverName: 'slack-server', features: [] })),
-    );
-    telegram.sock.send(
-      serializeHookMessage(makeWelcome({ serverName: 'old-telegram-server', features: [] })),
-    );
-
-    await expect.poll(() => manager.snapshot().status, { timeout: 3000 }).toBe('connected');
-    await expect
-      .poll(() => manager.snapshot().telegram.status, { timeout: 3000 })
-      .toBe('connected');
-    expect(store.get()).toMatchObject({ enabled: true, telegramEnabled: true });
-    expect(manager.snapshot().telegram).toMatchObject({
-      available: false,
-      capabilityPending: false,
-      enabled: true,
-      status: 'connected',
-    });
-    expect(slack.sock.readyState).toBe(slack.sock.OPEN);
-    expect(telegram.sock.readyState).toBe(telegram.sock.OPEN);
-
-    // An old node has not established a Telegram business capability boundary:
-    // even request/response frames must not expose local project/model/session
-    // metadata before the negotiated feature set says this is Telegram.
-    for (const kind of ['workspaces', 'models', 'sessions'] as const) {
-      telegram.sock.send(
-        serializeHookMessage(makeQueryRequest({ queryId: `old-node-${kind}`, kind })),
-      );
-    }
-    await expect
-      .poll(
-        () => telegram.server.frames.filter((frame) => frame.type === 'query.response').length,
-        { timeout: 3000 },
-      )
-      .toBe(3);
-    const oldNodeResponses = telegram.server.frames.filter(
-      (frame) => frame.type === 'query.response',
-    );
-    expect(oldNodeResponses.map((frame) => frame.payload)).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ queryId: 'old-node-workspaces', ok: false }),
-        expect.objectContaining({ queryId: 'old-node-models', ok: false }),
-        expect.objectContaining({ queryId: 'old-node-sessions', ok: false }),
-      ]),
-    );
-    expect(listAgentModels).not.toHaveBeenCalled();
-    expect(listRecentSessions).not.toHaveBeenCalled();
-
-    // Provider-neutral bind frames arriving on Slack are rejected at the
-    // physical transport boundary, even if their payload says Telegram.
-    slack.sock.send(serializeHookMessage(makeProviderBindState(TELEGRAM_CONFIRMED)));
-    await new Promise((resolve) => setTimeout(resolve, 30));
-    expect(manager.snapshot().telegram.binding).toBeNull();
-
-    slack.sock.send(
-      serializeHookMessage(
-        makeTaskDispatch({
-          requestId: 'wrong-transport-telegram-task',
-          externalKey: 'telegram:dm:bot-1:user-1:g0',
-          workspace: 'chat',
-          prompt: 'must not cross the Slack service boundary',
-          source: { im: 'telegram' },
-        }),
-      ),
-    );
-    const ack = await slack.server.waitFor('task.ack');
-    expect(ack.type === 'task.ack' ? ack.payload : null).toMatchObject({
-      requestId: 'wrong-transport-telegram-task',
-      result: 'rejected',
-      reason: 'invalid',
-    });
-  });
-
-  it('Telegram 连接到旧节点时保留开关，并在重连到新节点后自动恢复', async () => {
-    const { wss, url } = await startServer();
-    const store = memoryStore({ url, enabled: false, telegramEnabled: false });
-    const manager = makeManager(store, {
-      createTransport: (opts) =>
-        createHookTransport({
-          ...opts,
-          timing: { backoffBaseMs: 10, backoffMaxMs: 20, standbyRetryMs: 200 },
-        }),
-    });
-    cleanups.push(() => manager.dispose());
-
-    const connections: Array<{
-      sock: ServerSocket;
-      server: ReturnType<typeof collectFrames>;
-    }> = [];
-    wss.on('connection', (sock) => connections.push({ sock, server: collectFrames(sock) }));
-    manager.setProviderEnabled('telegram', true);
-    await expect.poll(() => connections.length, { timeout: 3000 }).toBe(1);
-    await connections[0].server.waitFor('hello');
-    connections[0].sock.send(
-      serializeHookMessage(makeWelcome({ serverName: 'old-server', features: [] })),
-    );
-
-    await expect
-      .poll(() => manager.snapshot().telegram.status, { timeout: 3000 })
-      .toBe('connected');
-    expect(manager.snapshot().telegram).toMatchObject({
-      available: false,
-      capabilityPending: false,
-      enabled: true,
-    });
-    expect(store.get()).toMatchObject({ enabled: false, telegramEnabled: true });
-
-    connections[0].sock.terminate();
-    await expect.poll(() => connections.length, { timeout: 3000 }).toBe(2);
-    await connections[1].server.waitFor('hello');
-    connections[1].sock.send(
-      serializeHookMessage(
-        makeWelcome({ serverName: 'telegram-server', features: TELEGRAM_FEATURES }),
-      ),
-    );
-
-    await expect.poll(() => manager.snapshot().telegram.available, { timeout: 3000 }).toBe(true);
-    expect(manager.snapshot().telegram).toMatchObject({
-      enabled: true,
-      status: 'connected',
-    });
-    expect(store.get().telegramEnabled).toBe(true);
-
-    connections[1].sock.send(
-      serializeHookMessage(
-        makeProviderBindState({
-          ...TELEGRAM_PENDING,
-          state: 'none',
-          attemptId: null,
-          scopeId: null,
-          scopeName: null,
-          connectUrl: null,
-          expiresAt: null,
-          actions: [],
-        }),
-      ),
-    );
-    const start = await connections[1].server.waitFor('provider.bind.start');
-    expect(start.type === 'provider.bind.start' ? start.payload.provider : null).toBe('telegram');
-  });
-
-  it('Telegram 重连时不会沿用上一节点能力在新 welcome 前泄露本机查询数据', async () => {
-    const { wss, url } = await startServer();
-    const store = memoryStore({ url, enabled: false, telegramEnabled: true });
-    const listAgentModels = vi.fn(() => []);
-    const manager = makeManager(store, {
-      listAgentModels,
-      createTransport: (opts) =>
-        createHookTransport({
-          ...opts,
-          timing: { backoffBaseMs: 10, backoffMaxMs: 20, standbyRetryMs: 200 },
-        }),
-    });
-    cleanups.push(() => manager.dispose());
-
-    const connections: Array<{
-      sock: ServerSocket;
-      server: ReturnType<typeof collectFrames>;
-    }> = [];
-    wss.on('connection', (sock) => connections.push({ sock, server: collectFrames(sock) }));
-    manager.sync();
-    await expect.poll(() => connections.length, { timeout: 3000 }).toBe(1);
-    await connections[0].server.waitFor('hello');
-    connections[0].sock.send(
-      serializeHookMessage(
-        makeWelcome({ serverName: 'telegram-server', features: TELEGRAM_FEATURES }),
-      ),
-    );
-    await expect.poll(() => manager.snapshot().telegram.available, { timeout: 3000 }).toBe(true);
-
-    connections[0].sock.terminate();
-    await expect.poll(() => connections.length, { timeout: 3000 }).toBe(2);
-    const reconnect = connections[1];
-    await reconnect.server.waitFor('hello');
-    reconnect.sock.send(
-      serializeHookMessage(makeQueryRequest({ queryId: 'before-new-welcome', kind: 'models' })),
-    );
-
-    const response = await reconnect.server.waitFor('query.response');
-    expect(response.type === 'query.response' ? response.payload : null).toMatchObject({
-      queryId: 'before-new-welcome',
-      ok: false,
-    });
-    expect(listAgentModels).not.toHaveBeenCalled();
-  });
-
-  it('Telegram transport 停止时清理已协商能力', async () => {
-    const { wss, url } = await startServer();
-    const store = memoryStore({ url, enabled: false, telegramEnabled: true });
-    const manager = makeManager(store);
-    cleanups.push(() => manager.dispose());
-
-    const connPromise = once(wss, 'connection') as Promise<[ServerSocket]>;
-    manager.sync();
-    const [sock] = await connPromise;
-    const server = collectFrames(sock);
-    await server.waitFor('hello');
-    sock.send(
-      serializeHookMessage(
-        makeWelcome({ serverName: 'telegram-server', features: TELEGRAM_FEATURES }),
-      ),
-    );
-    await expect.poll(() => manager.snapshot().telegram.available, { timeout: 3000 }).toBe(true);
-
-    manager.setProviderEnabled('telegram', false);
-
-    await expect.poll(() => sock.readyState, { timeout: 3000 }).toBe(sock.CLOSED);
-    expect(manager.snapshot().telegram).toMatchObject({
-      available: false,
-      capabilityPending: false,
-      enabled: false,
-      status: 'disabled',
-    });
-  });
-
-  it('Telegram-only 开关建连，none 后发起绑定，且只打开当前请求的一次性 deep link', async () => {
-    const { wss, url } = await startServer();
-    const store = memoryStore({ url, enabled: false, telegramEnabled: false });
-    const opened: string[] = [];
-    const manager = makeManager(store, {
-      openTelegramUrl: (value) => {
-        opened.push(value);
-      },
-    });
-    cleanups.push(() => manager.dispose());
-
-    const connPromise = once(wss, 'connection') as Promise<[ServerSocket]>;
-    manager.setProviderEnabled('telegram', true);
-    const [sock] = await connPromise;
-    const server = collectFrames(sock);
-    await server.waitFor('hello');
-    sock.send(
-      serializeHookMessage(
-        makeWelcome({ serverName: 'telegram-server', features: TELEGRAM_FEATURES }),
-      ),
-    );
-    await expect
-      .poll(() => manager.snapshot().telegram.status, { timeout: 3000 })
-      .toBe('connected');
-
-    sock.send(
-      serializeHookMessage(
-        makeProviderBindState({
-          ...TELEGRAM_PENDING,
-          state: 'none',
-          attemptId: null,
-          scopeId: null,
-          scopeName: null,
-          connectUrl: null,
-          expiresAt: null,
-          actions: [],
-        }),
-      ),
-    );
-    const start = await server.waitFor('provider.bind.start');
-    if (start.type !== 'provider.bind.start') throw new Error('unreachable');
-    expect(start.payload.provider).toBe('telegram');
-
-    const pending = { ...TELEGRAM_PENDING, replyTo: start.payload.requestId };
-    sock.send(serializeHookMessage(makeProviderBindUpdate(pending)));
-    await expect.poll(() => opened, { timeout: 3000 }).toEqual([pending.connectUrl]);
-    expect(manager.snapshot().telegram.binding).toMatchObject({
-      state: 'pending',
-      attemptId: 'attempt-telegram-1',
-      scopeName: 'cindy_example_bot',
-    });
-
-    // Reconnect/state replay has no replyTo and must never reopen a one-time link.
-    sock.send(serializeHookMessage(makeProviderBindState(TELEGRAM_PENDING)));
-    await new Promise((resolve) => setTimeout(resolve, 30));
-    expect(opened).toEqual([pending.connectUrl]);
-
-    expect(manager.providerBindCancel('telegram')).toBe(true);
-    await expect
-      .poll(() => server.frames.some((frame) => frame.type === 'provider.bind.cancel'), {
-        timeout: 3000,
-      })
-      .toBe(true);
-    expect(manager.snapshot().telegram.binding).toMatchObject({
-      state: 'failed',
-      reason: 'cancelled',
-    });
-    expect(store.get()).toMatchObject({ enabled: false, telegramEnabled: true });
-  });
-
-  it('拒绝把非规范或冒充其它 bot 的绑定链接暴露给 renderer', async () => {
-    const { wss, url } = await startServer();
-    const store = memoryStore({ url, enabled: false, telegramEnabled: false });
-    const opened: string[] = [];
-    const manager = makeManager(store, {
-      openTelegramUrl: (value) => {
-        opened.push(value);
-      },
-    });
-    cleanups.push(() => manager.dispose());
-
-    const connPromise = once(wss, 'connection') as Promise<[ServerSocket]>;
-    manager.setProviderEnabled('telegram', true);
-    const [sock] = await connPromise;
-    const server = collectFrames(sock);
-    await server.waitFor('hello');
-    sock.send(
-      serializeHookMessage(
-        makeWelcome({ serverName: 'telegram-server', features: TELEGRAM_FEATURES }),
-      ),
-    );
-    await expect
-      .poll(() => manager.snapshot().telegram.status, { timeout: 3000 })
-      .toBe('connected');
-    sock.send(
-      serializeHookMessage(
-        makeProviderBindState({
-          ...TELEGRAM_PENDING,
-          state: 'none',
-          attemptId: null,
-          scopeId: null,
-          scopeName: null,
-          connectUrl: null,
-          expiresAt: null,
-          actions: [],
-        }),
-      ),
-    );
-    const start = await server.waitFor('provider.bind.start');
-    if (start.type !== 'provider.bind.start') throw new Error('unreachable');
-
-    sock.send(
-      serializeHookMessage(
-        makeProviderBindUpdate({
-          ...TELEGRAM_PENDING,
-          replyTo: start.payload.requestId,
-          connectUrl: `https://example.com/cindy_example_bot?start=${'a'.repeat(43)}`,
-        }),
-      ),
-    );
-
-    await expect
-      .poll(() => manager.snapshot().telegram.binding?.reason, { timeout: 3000 })
-      .toBe('invalid-connect-url');
-    expect(manager.snapshot().telegram.binding).toMatchObject({
-      state: 'failed',
-      connectUrl: null,
-      actions: ['retry'],
-    });
-    expect(opened).toEqual([]);
-  });
-
-  it('welcome 后先到的实时确认不会被迟到的初始 none 快照回滚', async () => {
-    const { wss, url } = await startServer();
-    const store = memoryStore({ url, enabled: false, telegramEnabled: true });
-    const manager = makeManager(store);
-    cleanups.push(() => manager.dispose());
-
-    const connPromise = once(wss, 'connection') as Promise<[ServerSocket]>;
-    manager.sync();
-    const [sock] = await connPromise;
-    const server = collectFrames(sock);
-    await server.waitFor('hello');
-    sock.send(
-      serializeHookMessage(
-        makeWelcome({ serverName: 'telegram-server', features: TELEGRAM_FEATURES }),
-      ),
-    );
-    await expect
-      .poll(() => manager.snapshot().telegram.status, { timeout: 3000 })
-      .toBe('connected');
-
-    sock.send(serializeHookMessage(makeProviderBindUpdate(TELEGRAM_CONFIRMED)));
-    await expect
-      .poll(() => manager.snapshot().telegram.binding?.state, { timeout: 3000 })
-      .toBe('confirmed');
-    sock.send(
-      serializeHookMessage(
-        makeProviderBindState({
-          ...TELEGRAM_PENDING,
-          state: 'none',
-          attemptId: null,
-          scopeId: null,
-          scopeName: null,
-          connectUrl: null,
-          expiresAt: null,
-          actions: [],
-        }),
-      ),
-    );
-    await new Promise((resolve) => setTimeout(resolve, 30));
-
-    expect(manager.snapshot().telegram.binding).toMatchObject({
-      state: 'confirmed',
-      bindingId: 'binding-telegram-1',
-    });
-    expect(store.get().telegramBindingCache).toMatchObject({
-      bindingId: 'binding-telegram-1',
-    });
-  });
-
-  it('本地绑定缓存写失败时仍保留并广播服务端确认态', async () => {
-    const { wss, url } = await startServer();
-    const store = memoryStore({ url, enabled: false, telegramEnabled: true });
-    store.setTelegramBindingCache = () => {
-      throw new Error('disk full');
-    };
-    const warnings: string[] = [];
-    const manager = makeManager(store, {
-      log: { info: () => {}, warn: (message) => warnings.push(message) },
-    });
-    cleanups.push(() => manager.dispose());
-
-    const connPromise = once(wss, 'connection') as Promise<[ServerSocket]>;
-    manager.sync();
-    const [sock] = await connPromise;
-    const server = collectFrames(sock);
-    await server.waitFor('hello');
-    sock.send(
-      serializeHookMessage(
-        makeWelcome({ serverName: 'telegram-server', features: TELEGRAM_FEATURES }),
-      ),
-    );
-    await expect
-      .poll(() => manager.snapshot().telegram.status, { timeout: 3000 })
-      .toBe('connected');
-
-    sock.send(serializeHookMessage(makeProviderBindUpdate(TELEGRAM_CONFIRMED)));
-
-    await expect
-      .poll(() => manager.snapshot().telegram.binding?.state, { timeout: 3000 })
-      .toBe('confirmed');
-    expect(manager.snapshot().telegram.binding).toMatchObject({
-      bindingId: 'binding-telegram-1',
-      principalId: 'telegram-user-1',
-    });
-    expect(warnings).toContain('persist Telegram binding cache failed (Error)');
-  });
-
-  it('丢弃旧 start/cancel/revoke 与旧 binding 状态，不覆盖最新 Telegram 绑定', async () => {
-    const { wss, url } = await startServer();
-    const store = memoryStore({ url, enabled: false, telegramEnabled: false });
-    const opened: string[] = [];
-    const manager = makeManager(store, {
-      openTelegramUrl: (value) => {
-        opened.push(value);
-      },
-    });
-    cleanups.push(() => manager.dispose());
-
-    const connPromise = once(wss, 'connection') as Promise<[ServerSocket]>;
-    manager.setProviderEnabled('telegram', true);
-    const [sock] = await connPromise;
-    const server = collectFrames(sock);
-    await server.waitFor('hello');
-    sock.send(
-      serializeHookMessage(
-        makeWelcome({ serverName: 'telegram-server', features: TELEGRAM_FEATURES }),
-      ),
-    );
-    await expect
-      .poll(() => manager.snapshot().telegram.status, { timeout: 3000 })
-      .toBe('connected');
-    sock.send(
-      serializeHookMessage(
-        makeProviderBindState({
-          ...TELEGRAM_PENDING,
-          state: 'none',
-          attemptId: null,
-          scopeId: null,
-          scopeName: null,
-          connectUrl: null,
-          expiresAt: null,
-          actions: [],
-        }),
-      ),
-    );
-    await expect
-      .poll(() => server.frames.filter((frame) => frame.type === 'provider.bind.start').length)
-      .toBe(1);
-    const firstStart = server.frames.find((frame) => frame.type === 'provider.bind.start');
-    if (firstStart?.type !== 'provider.bind.start') throw new Error('unreachable');
-
-    expect(manager.providerBindStart('telegram')).toBe(true);
-    await expect
-      .poll(() => server.frames.filter((frame) => frame.type === 'provider.bind.start').length)
-      .toBe(2);
-    const secondStart = server.frames.filter((frame) => frame.type === 'provider.bind.start')[1];
-    if (secondStart?.type !== 'provider.bind.start') throw new Error('unreachable');
-
-    sock.send(
-      serializeHookMessage(
-        makeProviderBindUpdate({
-          ...TELEGRAM_PENDING,
-          replyTo: firstStart.payload.requestId,
-          attemptId: 'attempt-old-start',
-        }),
-      ),
-    );
-    await new Promise((resolve) => setTimeout(resolve, 30));
-    expect(manager.snapshot().telegram.binding).toMatchObject({
-      state: 'pending',
-      attemptId: null,
-    });
-    expect(opened).toEqual([]);
-
-    sock.send(
-      serializeHookMessage(
-        makeProviderBindUpdate({
-          ...TELEGRAM_PENDING,
-          replyTo: secondStart.payload.requestId,
-          attemptId: 'attempt-current',
-        }),
-      ),
-    );
-    await expect
-      .poll(() => manager.snapshot().telegram.binding?.attemptId, { timeout: 3000 })
-      .toBe('attempt-current');
-    expect(opened).toHaveLength(1);
-
-    expect(manager.providerBindCancel('telegram')).toBe(true);
-    await expect
-      .poll(() => server.frames.filter((frame) => frame.type === 'provider.bind.cancel').length)
-      .toBe(1);
-    const cancel = server.frames.find((frame) => frame.type === 'provider.bind.cancel');
-    if (cancel?.type !== 'provider.bind.cancel') throw new Error('unreachable');
-    expect(manager.providerBindStart('telegram')).toBe(true);
-    await expect
-      .poll(() => server.frames.filter((frame) => frame.type === 'provider.bind.start').length)
-      .toBe(3);
-    const retry = server.frames.filter((frame) => frame.type === 'provider.bind.start')[2];
-    if (retry?.type !== 'provider.bind.start') throw new Error('unreachable');
-
-    sock.send(
-      serializeHookMessage(
-        makeProviderBindUpdate({
-          ...TELEGRAM_PENDING,
-          replyTo: cancel.payload.requestId,
-          state: 'failed',
-          attemptId: 'attempt-current',
-          connectUrl: null,
-          expiresAt: null,
-          reason: 'cancelled',
-          actions: ['retry'],
-        }),
-      ),
-    );
-    await new Promise((resolve) => setTimeout(resolve, 30));
-    expect(manager.snapshot().telegram.binding).toMatchObject({
-      state: 'pending',
-      attemptId: null,
-    });
-
-    sock.send(
-      serializeHookMessage(
-        makeProviderBindUpdate({
-          ...TELEGRAM_PENDING,
-          replyTo: retry.payload.requestId,
-          attemptId: 'attempt-retry',
-        }),
-      ),
-    );
-    await expect
-      .poll(() => manager.snapshot().telegram.binding?.attemptId, { timeout: 3000 })
-      .toBe('attempt-retry');
-
-    const confirmed = {
-      ...TELEGRAM_CONFIRMED,
-      bindingId: 'binding-current',
-      principalId: 'telegram-user-current',
-    };
-    sock.send(serializeHookMessage(makeProviderBindUpdate(confirmed)));
-    await expect
-      .poll(() => manager.snapshot().telegram.binding?.bindingId, { timeout: 3000 })
-      .toBe('binding-current');
-
-    sock.send(
-      serializeHookMessage(
-        makeProviderBindUpdate({
-          ...confirmed,
-          state: 'revoked',
-          bindingId: 'binding-old',
-          reason: 'user-revoked',
-          actions: ['retry'],
-        }),
-      ),
-    );
-    sock.send(
-      serializeHookMessage(
-        makeProviderBindState({
-          ...TELEGRAM_PENDING,
-          state: 'none',
-          attemptId: null,
-          scopeId: null,
-          scopeName: null,
-          connectUrl: null,
-          expiresAt: null,
-          actions: [],
-        }),
-      ),
-    );
-    sock.send(
-      serializeHookMessage(
-        makeProviderBindUpdate({ ...TELEGRAM_CONFIRMED, bindingId: 'binding-old' }),
-      ),
-    );
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    expect(manager.snapshot().telegram.binding).toMatchObject({
-      state: 'confirmed',
-      bindingId: 'binding-current',
-      principalId: 'telegram-user-current',
-    });
-    expect(store.get().telegramBindingCache).toMatchObject({ bindingId: 'binding-current' });
-
-    expect(manager.providerBindRevoke('telegram')).toBe(true);
-    await expect
-      .poll(() => server.frames.filter((frame) => frame.type === 'provider.bind.revoke').length)
-      .toBe(1);
-    const revoke = server.frames.find((frame) => frame.type === 'provider.bind.revoke');
-    if (revoke?.type !== 'provider.bind.revoke') throw new Error('unreachable');
-    sock.send(
-      serializeHookMessage(
-        makeProviderBindUpdate({
-          ...TELEGRAM_PENDING,
-          replyTo: revoke.payload.requestId,
-          state: 'failed',
-          attemptId: revoke.payload.requestId,
-          connectUrl: null,
-          expiresAt: null,
-          reason: 'binding-not-found',
-          actions: ['retry'],
-        }),
-      ),
-    );
-    await new Promise((resolve) => setTimeout(resolve, 30));
-    expect(manager.snapshot().telegram.binding).toMatchObject({
-      state: 'confirmed',
-      bindingId: 'binding-current',
-    });
-  });
-
-  it('confirmed 绑定持久化、provider 偏好隔离读写，并可显式解绑', async () => {
-    const { wss, url } = await startServer();
-    const store = memoryStore({ url, enabled: false, telegramEnabled: true });
-    const notified: unknown[] = [];
-    const opened: string[] = [];
-    let rejectOpen = false;
-    const manager = makeManager(store, {
-      notifyProviderPrefs: (view) => notified.push(view),
-      openTelegramUrl: async (value) => {
-        if (rejectOpen) throw new Error('no system URL handler');
-        opened.push(value);
-      },
-    });
-    cleanups.push(() => manager.dispose());
-
-    const connPromise = once(wss, 'connection') as Promise<[ServerSocket]>;
-    manager.sync();
-    const [sock] = await connPromise;
-    const server = collectFrames(sock);
-    await server.waitFor('hello');
-    sock.send(
-      serializeHookMessage(
-        makeWelcome({ serverName: 'telegram-server', features: TELEGRAM_FEATURES }),
-      ),
-    );
-    await expect
-      .poll(() => manager.snapshot().telegram.status, { timeout: 3000 })
-      .toBe('connected');
-    sock.send(serializeHookMessage(makeProviderBindState(TELEGRAM_CONFIRMED)));
-    await expect
-      .poll(() => manager.snapshot().telegram.binding?.state, { timeout: 3000 })
-      .toBe('confirmed');
-    const startsBeforeDuplicate = server.frames.filter(
-      (frame) => frame.type === 'provider.bind.start',
-    ).length;
-    expect(manager.providerBindStart('telegram')).toBe(false);
-    expect(server.frames.filter((frame) => frame.type === 'provider.bind.start')).toHaveLength(
-      startsBeforeDuplicate,
-    );
-    expect(store.get().telegramBindingCache).toMatchObject({
-      bindingId: 'binding-telegram-1',
-      principalId: 'telegram-user-1',
-      scopeId: 'bot-1',
-    });
-    await expect(manager.openTelegramAction('connect')).resolves.toBe(false);
-    await expect(manager.openTelegramAction('provider')).resolves.toBe(true);
-    await expect(manager.openTelegramAction('add-to-group')).resolves.toBe(true);
-    expect(opened).toEqual([
-      'https://t.me/cindy_example_bot',
-      'https://t.me/cindy_example_bot?startgroup=true',
-    ]);
-    rejectOpen = true;
-    await expect(manager.openTelegramAction('provider')).rejects.toThrow('no system URL handler');
-
-    const prefs = {
-      provider: 'telegram' as const,
-      bindingId: 'binding-telegram-1',
-      scopeId: null,
-      bound: true,
-      prefs: [
-        {
-          workspace: 'xdmaker',
-          model: 'gpt-5.6',
-          effort: 'high',
-          agentKind: 'codex',
-          permissionMode: 'full-access',
-        },
-      ],
-    };
-    const readPromise = manager.getProviderWorkspacePrefs('telegram');
-    const get = await server.waitFor('provider.prefs.get');
-    if (get.type !== 'provider.prefs.get') throw new Error('unreachable');
-    expect(get.payload).toMatchObject({
-      provider: 'telegram',
-      bindingId: 'binding-telegram-1',
-      scopeId: null,
-    });
-    sock.send(
-      serializeHookMessage(makeProviderPrefsState({ ...prefs, replyTo: get.payload.requestId })),
-    );
-    await expect(readPromise).resolves.toEqual(prefs);
-
-    const writePromise = manager.setProviderWorkspacePrefs('telegram', 'xdmaker', {
-      effort: 'low',
-      permissionMode: null,
-    });
-    const set = await server.waitFor('provider.prefs.set');
-    if (set.type !== 'provider.prefs.set') throw new Error('unreachable');
-    expect(set.payload).toMatchObject({
-      provider: 'telegram',
-      bindingId: 'binding-telegram-1',
-      scopeId: null,
-      workspace: 'xdmaker',
-      effort: 'low',
-      permissionMode: null,
-    });
-    expect('model' in set.payload).toBe(false);
-    sock.send(
-      serializeHookMessage(makeProviderPrefsState({ ...prefs, replyTo: set.payload.requestId })),
-    );
-    await expect(writePromise).resolves.toEqual(prefs);
-    expect(notified).toEqual([prefs, prefs]);
-
-    expect(manager.providerBindRevoke('telegram')).toBe(true);
-    await expect
-      .poll(() => server.frames.some((frame) => frame.type === 'provider.bind.revoke'), {
-        timeout: 3000,
-      })
-      .toBe(true);
-    const revoke = server.frames.find((frame) => frame.type === 'provider.bind.revoke');
-    if (revoke?.type !== 'provider.bind.revoke') throw new Error('unreachable');
-    expect(revoke.payload).toMatchObject({
-      provider: 'telegram',
-      bindingId: 'binding-telegram-1',
-    });
-  });
-
-  it('provider prefs 回执 bindingId 不匹配时立即拒绝，旧绑定迟到帧不能串入', async () => {
-    const { wss, url } = await startServer();
-    const store = memoryStore({ url, enabled: false, telegramEnabled: true });
-    const notified: unknown[] = [];
-    const manager = makeManager(store, {
-      prefsTimeoutMs: 60_000,
-      notifyProviderPrefs: (view) => notified.push(view),
-    });
-    cleanups.push(() => manager.dispose());
-
-    const connPromise = once(wss, 'connection') as Promise<[ServerSocket]>;
-    manager.sync();
-    const [sock] = await connPromise;
-    const server = collectFrames(sock);
-    await server.waitFor('hello');
-    sock.send(
-      serializeHookMessage(
-        makeWelcome({ serverName: 'telegram-server', features: TELEGRAM_FEATURES }),
-      ),
-    );
-    await expect
-      .poll(() => manager.snapshot().telegram.status, { timeout: 3000 })
-      .toBe('connected');
-    sock.send(serializeHookMessage(makeProviderBindState(TELEGRAM_CONFIRMED)));
-    await expect
-      .poll(() => manager.snapshot().telegram.binding?.state, { timeout: 3000 })
-      .toBe('confirmed');
-
-    const promise = manager.getProviderWorkspacePrefs('telegram');
-    const get = await server.waitFor('provider.prefs.get');
-    if (get.type !== 'provider.prefs.get') throw new Error('unreachable');
-    sock.send(
-      serializeHookMessage(
-        makeProviderPrefsState({
-          provider: 'telegram',
-          bindingId: 'binding-from-old-generation',
-          scopeId: null,
-          replyTo: get.payload.requestId,
-          bound: true,
-          prefs: [],
-        }),
-      ),
-    );
-    await expect(promise).rejects.toBeInstanceOf(HookNotConnectedError);
-    expect(notified).toEqual([]);
-
-    // 同一 binding 的回执若已超时，也属于未知旧请求，不能重新广播进设置页。
-    sock.send(
-      serializeHookMessage(
-        makeProviderPrefsState({
-          provider: 'telegram',
-          bindingId: 'binding-telegram-1',
-          scopeId: null,
-          replyTo: get.payload.requestId,
-          bound: true,
-          prefs: [],
-        }),
-      ),
-    );
-    await new Promise((resolve) => setTimeout(resolve, 30));
-    expect(notified).toEqual([]);
-  });
-
-  it('provider prefs 请求期间绑定被替换时，旧绑定回执立即拒绝且不广播', async () => {
-    const { wss, url } = await startServer();
-    const store = memoryStore({ url, enabled: false, telegramEnabled: true });
-    const notified: unknown[] = [];
-    const manager = makeManager(store, {
-      prefsTimeoutMs: 60_000,
-      notifyProviderPrefs: (view) => notified.push(view),
-    });
-    cleanups.push(() => manager.dispose());
-
-    const connPromise = once(wss, 'connection') as Promise<[ServerSocket]>;
-    manager.sync();
-    const [sock] = await connPromise;
-    const server = collectFrames(sock);
-    await server.waitFor('hello');
-    sock.send(
-      serializeHookMessage(
-        makeWelcome({ serverName: 'telegram-server', features: TELEGRAM_FEATURES }),
-      ),
-    );
-    await expect
-      .poll(() => manager.snapshot().telegram.status, { timeout: 3000 })
-      .toBe('connected');
-    sock.send(serializeHookMessage(makeProviderBindState(TELEGRAM_CONFIRMED)));
-    await expect
-      .poll(() => manager.snapshot().telegram.binding?.bindingId, { timeout: 3000 })
-      .toBe('binding-telegram-1');
-
-    const promise = manager.getProviderWorkspacePrefs('telegram');
-    const rejection = promise.catch((error: unknown) => error);
-    const get = await server.waitFor('provider.prefs.get');
-    if (get.type !== 'provider.prefs.get') throw new Error('unreachable');
-
-    // A fresh welcome makes its first state snapshot authoritative. This
-    // models a reconnect discovering that the principal now belongs to B.
-    sock.send(
-      serializeHookMessage(
-        makeWelcome({ serverName: 'telegram-server-2', features: TELEGRAM_FEATURES }),
-      ),
-    );
-    sock.send(
-      serializeHookMessage(
-        makeProviderBindState({
-          ...TELEGRAM_CONFIRMED,
-          bindingId: 'binding-telegram-2',
-          principalId: 'telegram-user-2',
-          principalName: 'New User',
-        }),
-      ),
-    );
-    await expect
-      .poll(() => manager.snapshot().telegram.binding?.bindingId, { timeout: 3000 })
-      .toBe('binding-telegram-2');
-    expect(await rejection).toBeInstanceOf(HookNotConnectedError);
-
-    sock.send(
-      serializeHookMessage(
-        makeProviderPrefsState({
-          provider: 'telegram',
-          bindingId: 'binding-telegram-1',
-          scopeId: null,
-          replyTo: get.payload.requestId,
-          bound: true,
-          prefs: [],
-        }),
-      ),
-    );
-    await new Promise((resolve) => setTimeout(resolve, 10));
-    expect(notified).toEqual([]);
-  });
-
-  it('sessions 查询只在 session-picker-v1 协商后读取最小化数据源', async () => {
-    const { wss, url } = await startServer();
-    const store = memoryStore({ url, enabled: true });
-    const rows = [
-      {
-        id: 'session-1',
-        title: 'Release task',
-        workspace: 'xdmaker',
-        lastActiveAt: 1_800_000_000_000,
-      },
-    ];
-    let reads = 0;
-    const manager = makeManager(store, {
-      listRecentSessions: () => {
-        reads += 1;
-        return rows;
-      },
-    });
-    cleanups.push(() => manager.dispose());
-
-    const connPromise = once(wss, 'connection') as Promise<[ServerSocket]>;
-    manager.sync();
-    const [sock] = await connPromise;
-    const server = collectFrames(sock);
-    await server.waitFor('hello');
-    sock.send(serializeHookMessage(makeWelcome({ serverName: 'old-server', features: [] })));
-    await expect.poll(() => manager.snapshot().status, { timeout: 3000 }).toBe('connected');
-
-    sock.send(
-      serializeHookMessage(makeQueryRequest({ queryId: 'sessions-old', kind: 'sessions' })),
-    );
-    await expect
-      .poll(
-        () =>
-          server.frames.find(
-            (frame) => frame.type === 'query.response' && frame.payload.queryId === 'sessions-old',
-          ),
-        { timeout: 3000 },
-      )
-      .toMatchObject({ payload: { ok: false } });
-    expect(reads).toBe(0);
-
-    sock.send(
-      serializeHookMessage(
-        makeWelcome({ serverName: 'new-server', features: [HOOK_FEATURE_SESSION_PICKER] }),
-      ),
-    );
-    sock.send(
-      serializeHookMessage(makeQueryRequest({ queryId: 'sessions-new', kind: 'sessions' })),
-    );
-    await expect
-      .poll(
-        () =>
-          server.frames.find(
-            (frame) => frame.type === 'query.response' && frame.payload.queryId === 'sessions-new',
-          ),
-        { timeout: 3000 },
-      )
-      .toMatchObject({ payload: { ok: true, sessions: rows } });
-    expect(reads).toBe(1);
   });
 });
 
@@ -2458,7 +955,9 @@ describe('目录偏好远程读写(prefs.get / prefs.set / prefs.state 往返)',
     if (get.type !== 'prefs.get') throw new Error('unreachable');
     expect(get.payload.requestId.length).toBeGreaterThan(0);
     sock.send(
-      serializeHookMessage(makePrefsState({ replyTo: get.payload.requestId, ...PREFS_VIEW })),
+      serializeHookMessage(
+        makePrefsState({ replyTo: get.payload.requestId, ...PREFS_VIEW }),
+      ),
     );
     await expect(promise).resolves.toEqual(PREFS_VIEW);
     expect(notified).toEqual([PREFS_VIEW]); // 回执同样广播(多窗口同步)
@@ -2479,9 +978,7 @@ describe('目录偏好远程读写(prefs.get / prefs.set / prefs.state 往返)',
     expect(set.payload.permissionMode).toBeNull();
     expect('model' in set.payload).toBe(false);
     expect('agentKind' in set.payload).toBe(false);
-    sock.send(
-      serializeHookMessage(makePrefsState({ replyTo: set.payload.requestId, ...PREFS_VIEW })),
-    );
+    sock.send(serializeHookMessage(makePrefsState({ replyTo: set.payload.requestId, ...PREFS_VIEW })));
     await expect(promise).resolves.toEqual(PREFS_VIEW);
   });
 
@@ -2506,10 +1003,7 @@ describe('目录偏好远程读写(prefs.get / prefs.set / prefs.state 往返)',
     const { wss, url } = await startServer();
     const store = memoryStore({ url });
     const notified: unknown[] = [];
-    const manager = makeManager(store, {
-      notifyPrefs: (v) => notified.push(v),
-      prefsTimeoutMs: 300,
-    });
+    const manager = makeManager(store, { notifyPrefs: (v) => notified.push(v), prefsTimeoutMs: 300 });
     cleanups.push(() => manager.dispose());
     const { sock, server } = await connect(manager, wss);
 
@@ -2538,7 +1032,7 @@ describe('目录偏好远程读写(prefs.get / prefs.set / prefs.state 往返)',
 describe('refreshHello(工作目录变更在线重报, 不重建连接)', () => {
   it('已连接: 原连接上重发 hello 携带最新别名清单; 连接不断', async () => {
     const { wss, url } = await startServer();
-    const store = memoryStore({ url, workspaces: { xdmaker: 'E:\\AIWork\\Lizi' } });
+    const store = memoryStore({ url, workspaces: { xdmaker: 'E:\AIWork\XDMaker' } });
     const manager = makeManager(store);
     cleanups.push(() => manager.dispose());
 
@@ -2551,11 +1045,14 @@ describe('refreshHello(工作目录变更在线重报, 不重建连接)', () => 
 
     let closed = false;
     sock.on('close', () => (closed = true));
-    store.setWorkspaces({ xdmaker: 'E:\\AIWork\\Lizi', blog: 'D:\\repos\\blog' });
+    store.setWorkspaces({ xdmaker: 'E:\AIWork\XDMaker', blog: 'D:\repos\blog' });
     expect(manager.refreshHello()).toBe(true);
 
     await expect
-      .poll(() => server.frames.filter((f) => f.type === 'hello').length, { timeout: 3000 })
+      .poll(
+        () => server.frames.filter((f) => f.type === 'hello').length,
+        { timeout: 3000 },
+      )
       .toBe(2);
     const second = server.frames.filter((f) => f.type === 'hello').at(-1);
     if (second?.type !== 'hello') throw new Error('unreachable');
@@ -2713,9 +1210,7 @@ describe('Slack 网关工具代理(tool.request/tool.response)', () => {
     if (!r.ok) expect(r.error.code).toBe('TIMEOUT');
     // 迟到帧: 不抛不炸(replyTo 已无配对)
     sock.send(
-      serializeHookMessage(
-        makeToolResponse({ replyTo: req.payload.requestId, ok: true, result: 1 }),
-      ),
+      serializeHookMessage(makeToolResponse({ replyTo: req.payload.requestId, ok: true, result: 1 })),
     );
     await new Promise((resolve) => setTimeout(resolve, 50));
   });
@@ -2738,7 +1233,7 @@ describe('Slack 网关工具代理(tool.request/tool.response)', () => {
 });
 
 describe('多 workspace 绑定(multi-team)', () => {
-  const T1 = { teamId: 'T1', teamName: 'acme', slackUserId: 'U1', slackUserName: 'devuser' };
+  const T1 = { teamId: 'T1', teamName: 'xindong', slackUserId: 'U1', slackUserName: 'lizi' };
   const T2 = { teamId: 'T2', teamName: 'sideproj', slackUserId: 'U2', slackUserName: 'lizi2' };
 
   /** 建连到 connected 的 multi-team 起手(welcome 宣告 multi-team [+ 可选 slack-tools])。 */
@@ -2785,7 +1280,7 @@ describe('多 workspace 绑定(multi-team)', () => {
     expect(snap.binding).toMatchObject({
       state: 'confirmed',
       slackUserId: 'U1',
-      teamName: 'acme',
+      teamName: 'xindong',
     });
     // 本地缓存随快照落盘
     expect(store.get().bindingsCache).toEqual([T1, T2]);
@@ -2808,13 +1303,7 @@ describe('多 workspace 绑定(multi-team)', () => {
     const authorizeUrl = 'https://slack.example.com/authorize?state=add';
     sock.send(
       serializeHookMessage(
-        makeBindUpdate({
-          state: 'pending',
-          slackUserId: null,
-          slackUserName: null,
-          message: null,
-          authorizeUrl,
-        }),
+        makeBindUpdate({ state: 'pending', slackUserId: null, slackUserName: null, message: null, authorizeUrl }),
       ),
     );
     await expect
@@ -2887,13 +1376,7 @@ describe('多 workspace 绑定(multi-team)', () => {
     await expect.poll(() => manager.snapshot().bindings.length, { timeout: 3000 }).toBe(2);
     sock.send(
       serializeHookMessage(
-        makeBindUpdate({
-          state: 'revoked',
-          slackUserId: null,
-          slackUserName: null,
-          message: null,
-          teamId: 'T1',
-        }),
+        makeBindUpdate({ state: 'revoked', slackUserId: null, slackUserName: null, message: null, teamId: 'T1' }),
       ),
     );
     await expect.poll(() => manager.snapshot().bindings.length, { timeout: 3000 }).toBe(1);
@@ -2957,23 +1440,15 @@ describe('多 workspace 绑定(multi-team)', () => {
   });
 
   it('关开关(multi-team): 不发全量 bind.revoke, 绑定保留, 重开秒恢复', async () => {
-    const gateChanges: boolean[] = [];
-    const { manager, store, sock, server } = await connectMulti({
-      features: [HOOK_FEATURE_MULTI_TEAM, HOOK_FEATURE_SLACK_TOOLS],
-      managerOverrides: {
-        onSlackToolProviderEnabledChanged: (enabled) => gateChanges.push(enabled),
-      },
-    });
+    const { manager, store, sock, server } = await connectMulti();
     sock.send(serializeHookMessage(makeBindState({ bindings: [T1, T2] })));
     await expect.poll(() => manager.snapshot().bindings.length, { timeout: 3000 }).toBe(2);
-    expect(gateChanges).toEqual([true]);
 
-    // ipc SET_ENABLED(false) 的真实编排: revokeAndDisconnect -> setProviderEnabled.
-    // revoke 时 store 仍是 enabled，必须在 enabled 位翻转后再关闭工具 gate。
+    // ipc SET_ENABLED(false) 的编排: revokeAndDisconnect -> setEnabled -> sync
     manager.revokeAndDisconnect();
-    manager.setProviderEnabled('slack', false);
+    store.setEnabled(false);
+    manager.sync();
     await expect.poll(() => manager.snapshot().status, { timeout: 3000 }).toBe('disabled');
-    expect(gateChanges).toEqual([true, false]);
     // 没有任何 bind.revoke 帧(无在途授权时连 pendingOnly 也不发)
     expect(server.frames.some((f) => f.type === 'bind.revoke')).toBe(false);
     // 绑定与缓存保留 —— 「已关闭 · N 个绑定已保留」的数据源
@@ -2995,9 +1470,7 @@ describe('多 workspace 绑定(multi-team)', () => {
     const server = collectFrames(sock);
     await server.waitFor('hello');
     sock.send(
-      serializeHookMessage(
-        makeWelcome({ serverName: 'mock', features: [HOOK_FEATURE_MULTI_TEAM] }),
-      ),
+      serializeHookMessage(makeWelcome({ serverName: 'mock', features: [HOOK_FEATURE_MULTI_TEAM] })),
     );
     await expect.poll(() => manager.snapshot().status, { timeout: 3000 }).toBe('connected');
 
@@ -3010,12 +1483,7 @@ describe('多 workspace 绑定(multi-team)', () => {
       .toBe(true);
     expect(manager.snapshot().bindings.find((b) => b.teamId === 'T2')?.displaced).toBe(false);
     // displaced 行的 team 信息留在缓存(重启后仍能显示与重绑)
-    expect(
-      store
-        .get()
-        .bindingsCache.map((b) => b.teamId)
-        .sort(),
-    ).toEqual(['T1', 'T2']);
+    expect(store.get().bindingsCache.map((b) => b.teamId).sort()).toEqual(['T1', 'T2']);
   });
 
   it('老 server 回落: welcome 无 multi-team 时清掉缓存行, 多绑定动作全部拒绝', async () => {
@@ -3055,13 +1523,7 @@ describe('多 workspace 绑定(multi-team)', () => {
     const authorizeUrl = 'https://slack.example.com/authorize?state=first';
     sock.send(
       serializeHookMessage(
-        makeBindUpdate({
-          state: 'pending',
-          slackUserId: null,
-          slackUserName: null,
-          message: null,
-          authorizeUrl,
-        }),
+        makeBindUpdate({ state: 'pending', slackUserId: null, slackUserName: null, message: null, authorizeUrl }),
       ),
     );
     await expect.poll(() => opened, { timeout: 3000 }).toEqual([authorizeUrl]);
@@ -3091,13 +1553,7 @@ describe('多 workspace 绑定(multi-team)', () => {
     const freshUrl = 'https://slack.example.com/authorize?state=fresh';
     sock.send(
       serializeHookMessage(
-        makeBindUpdate({
-          state: 'pending',
-          slackUserId: null,
-          slackUserName: null,
-          message: null,
-          authorizeUrl: freshUrl,
-        }),
+        makeBindUpdate({ state: 'pending', slackUserId: null, slackUserName: null, message: null, authorizeUrl: freshUrl }),
       ),
     );
     await expect.poll(() => opened, { timeout: 3000 }).toEqual([freshUrl]);
@@ -3122,9 +1578,7 @@ describe('多 workspace 绑定(multi-team)', () => {
         }),
       ),
     );
-    await expect
-      .poll(() => manager.snapshot().pendingBind?.state, { timeout: 3000 })
-      .toBe('pending');
+    await expect.poll(() => manager.snapshot().pendingBind?.state, { timeout: 3000 }).toBe('pending');
     // 用户在授权页点取消 → server 推 denied → 首绑(0 绑定)自动关开关,
     // 但终止态必须留在快照里 —— 渲染层靠它显示失败原因与重试提示,
     // 否则用户只看到开关静默弹回(review P1)
@@ -3152,10 +1606,10 @@ describe('多 workspace 绑定(multi-team)', () => {
         makeBindUpdate({
           state: 'confirmed',
           slackUserId: 'U1',
-          slackUserName: 'devuser',
+          slackUserName: 'lizi',
           message: null,
           teamId: 'T1',
-          teamName: 'acme',
+          teamName: 'xindong',
         }),
       ),
     );
@@ -3178,10 +1632,10 @@ describe('多 workspace 绑定(multi-team)', () => {
         makeBindUpdate({
           state: 'confirmed',
           slackUserId: 'U1',
-          slackUserName: 'devuser',
+          slackUserName: 'lizi',
           message: null,
           teamId: 'T1',
-          teamName: 'acme',
+          teamName: 'xindong',
         }),
       ),
     );
@@ -3199,7 +1653,7 @@ describe('多 workspace 绑定(multi-team)', () => {
       bound: true,
       multiTeam: true,
       bindings: [
-        { teamId: 'T1', teamName: 'acme' },
+        { teamId: 'T1', teamName: 'xindong' },
         { teamId: 'T2', teamName: 'sideproj' },
       ],
     });
@@ -3209,9 +1663,7 @@ describe('多 workspace 绑定(multi-team)', () => {
     if (req.type !== 'tool.request') throw new Error('unreachable');
     expect(req.payload.teamId).toBe('T2');
     sock.send(
-      serializeHookMessage(
-        makeToolResponse({ replyTo: req.payload.requestId, ok: true, result: 1 }),
-      ),
+      serializeHookMessage(makeToolResponse({ replyTo: req.payload.requestId, ok: true, result: 1 })),
     );
     expect(await pending).toEqual({ ok: true, result: 1 });
 
@@ -3228,9 +1680,7 @@ describe('多 workspace 绑定(multi-team)', () => {
     if (req2.type !== 'tool.request') throw new Error('unreachable');
     expect('teamId' in req2.payload).toBe(false);
     sock.send(
-      serializeHookMessage(
-        makeToolResponse({ replyTo: req2.payload.requestId, ok: true, result: 2 }),
-      ),
+      serializeHookMessage(makeToolResponse({ replyTo: req2.payload.requestId, ok: true, result: 2 })),
     );
     expect(await pending2).toEqual({ ok: true, result: 2 });
   });

@@ -1,4 +1,4 @@
-import { createThreadStripController } from '@cindy/anthropic-compat-proxy';
+import { createThreadStripController } from '@lizi/anthropic-compat-proxy';
 
 /**
  * 主动剥离 controller 单例。**每个剥离条件一个独立实例** —— 共用会交叉污染
@@ -13,7 +13,3 @@ export const imageGenerationStripController = createThreadStripController();
 
 // 空 thinking 块主动剥离 —— always-on(删空块零成本)。必须与上面是独立实例。
 export const emptyThinkingStripController = createThreadStripController();
-
-// 空 text 块主动剥离 —— always-on(bridge 修复前落进历史的 `{type:'text',text:''}`
-// 空块,切回真 Anthropic 模型时 400)。必须与上面是独立实例。
-export const emptyTextStripController = createThreadStripController();

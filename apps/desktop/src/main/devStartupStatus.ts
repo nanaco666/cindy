@@ -5,16 +5,7 @@ import path from 'node:path';
 export type DesktopDevMode = 'remote' | 'local' | 'unknown';
 export type DesktopDevInstanceState = 'starting' | 'ready' | 'failed';
 
-/**
- * Runtime provenance persisted under the effective userData directory.
- * Written by dev AND packaged instances: dev/release share a userData with
- * per-flavor single-instance lock scopes, and the owner-namespace migration's
- * exclusivity guard discovers concurrent instances through this registry, so
- * packaged instances must register too. Dev tooling (desktop:whoami, startup
- * status) still only drives the dev-specific fields; a packaged record keeps
- * state 'starting' because the dev ready/failed reporting hooks are dev-only,
- * and no consumer depends on a packaged record reaching 'ready'.
- */
+/** Dev-only runtime provenance persisted under the effective userData directory. */
 export interface DesktopDevInstanceRecord {
   schemaVersion: 1;
   instanceId: string;

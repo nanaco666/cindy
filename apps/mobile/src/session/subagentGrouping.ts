@@ -11,7 +11,7 @@
 import {
   buildMessageRenderItems,
   type MessageRenderOptions,
-} from '@cindy/maker-shared/message-render';
+} from '@lizi/maker-shared/message-render';
 import type { NormalizedRemoteMessage } from '@/session/messageNormalize';
 import type { RemoteMessage } from '@/session/types';
 import type { MobileMessageRenderItem, MobileSubagentGroupItem } from '@/session/messageRenderModel';

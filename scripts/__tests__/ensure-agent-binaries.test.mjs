@@ -126,6 +126,28 @@ test('listSiblingWorktreeRoots: returns [] outside a git repository', () => {
   assert.deepEqual(listSiblingWorktreeRoots(tmpDir('not-a-repo-')), []);
 });
 
+// ── cua-driver platform filter ────────────────────────────────────────────────
+// ensure-agent-binaries の KINDS['cua-driver'] に platformFilter が設定されており、
+// darwin のみ通過し、非 darwin は静默スキップされることを確認する。
+
+import { ensureBinary } from '../ensure-agent-binaries.mjs';
+
+// KINDS は内部実装だが、ensureBinary の動作を通じてフィルタを間接テストする。
+// cua-driver は darwin-* のみ対象；非 darwin での ensureBinary は undefined を返して終了する。
+// (実際の download は行われないため latest.json は参照されない——ただし readPinnedVersion を
+//  呼ぶ前にフィルタが適用されるはず。テストでは非 darwin パスのみ確認。)
+
+test('ensureBinary: cua-driver silently skips non-darwin platforms (returns undefined)', async () => {
+  // linux-x64 で呼び出しても download や import エラーが出ないことを確認
+  const result = await ensureBinary('cua-driver', 'linux-x64');
+  assert.equal(result, undefined);
+});
+
+test('ensureBinary: cua-driver silently skips win32-x64 platforms', async () => {
+  const result = await ensureBinary('cua-driver', 'win32-x64');
+  assert.equal(result, undefined);
+});
+
 test('listSiblingWorktreeRoots: lists other worktrees of the same repo, excluding self', () => {
   const repo = tmpDir('reuse-repo-');
   const git = (...args) =>

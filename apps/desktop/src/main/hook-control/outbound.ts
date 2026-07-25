@@ -5,7 +5,7 @@
  * 旁路图片(session-runner 收集的 absPath)读盘、编码 base64、施加限额, 产出
  * 协议 TaskAttachment[] 与"引用已剥离/替换"的正文。
  *
- * 引用语义与 IM 渠道收口(@cindy/im slack/streamingText.doFinalize)一致:
+ * 引用语义与 IM 渠道收口(lizi-im slack/streamingText.doFinalize)一致:
  *   - 图片引用 `![alt](xdt-image://...)` → 附件, 正文替换成"已作为附件发送"提示
  *   - 文件引用 `[name](xdt-file:///abs/path)` → 附件, 正文整体剥离
  * (正则与 packages/lizi-im/src/xdtRefs.ts 对齐 —— 该包未导出这些工具,
@@ -14,7 +14,7 @@
  * 限额(protocol 单帧 48MiB 的安全水位): 单图 5MiB(与入站一致)、单文件
  * 10MiB、总数 8、总字节 30MiB(base64 膨胀 4/3 后约 40MiB)。xdt-file
  * 来源是模型最终文本, 必须先落在 allowedFileRoots 内才允许读盘; 超限 /
- * 越界跳过并计入 skipped, 收集器同时在最终正文附加明确的失败提示。
+ * 越界跳过并计入 skipped, 由调用方决定是否在文本里注明。
  *
  * 纯逻辑 + 注入式 IO(readFile / resolveImageUrl), 单测不碰真盘(规则 14)。
  */
@@ -24,7 +24,7 @@ import { promises as fsp } from 'node:fs';
 
 import type { TaskAttachment } from '@cindy/slack-hook-protocol';
 
-// 双协议:老 xdt-image + 新 cindy-media(媒体总仓),与 @cindy/im/xdtRefs.ts 对齐
+// 双协议:老 xdt-image + 新 cindy-media(媒体总仓),与 lizi-im/xdtRefs.ts 对齐
 const XDT_IMAGE_REGEX = /!\[([^\]]*)\]\(((?:xdt-image|cindy-media):\/\/[^)]+)\)/g;
 const XDT_FILE_REGEX = /\[([^\]]*)\]\((xdt-file:\/\/[^)]+)\)/g;
 
@@ -37,79 +37,44 @@ const MAX_OUT_TOTAL_BYTES = 30 * 1024 * 1024;
  * hook 派发 turn 时附在用户消息末尾的渠道说明(session-runner 消费)。
  * 本收集器的出站契约只认最终回复文本里的 xdt-file / xdt-image 引用,但
  * 没有任何提示教模型这个约定 —— 实踩(2026-07-16)里模型两次把「把文件
- * 发给我」路由到 cindy_feishu_bot(hook 会话里唯一可见的推送工具)并失败。
+ * 发给我」路由到 lizi_feishu_bot(hook 会话里唯一可见的推送工具)并失败。
  * 固定文本、逐 turn 追加,保证行为确定(规则 9);修改措辞时同步
  * collectOutboundAttachments 的实际语义,别让说明和收集器漂移。
  */
-export function buildHookPromptNote(im: string | undefined): string {
-  const platform = im === 'telegram' ? 'Telegram' : 'Slack';
-  const attachmentNote =
-    `[渠道说明] 本会话来自 ${platform}。要把文件发给用户:在最终回复文本里写 ` +
-    '`[文件名](xdt-file:///绝对路径)`;图片直接引用其地址 ' +
-    '`![说明](cindy-media://… 或 xdt-image://…)`,无需复制文件。' +
-    `系统会在回复结束后自动把它们作为 ${platform} 附件发回,无需调用任何工具;` +
-    'xdt-file 文件必须位于当前工作目录内;无法读取、超限或目录外的附件不会发送,' +
-    '最终回复会明确显示附件发送不完整。' +
-    '不要用 cindy_feishu_bot 发送,除非用户明确要求发到飞书。';
-  if (im !== 'telegram') return attachmentNote;
-  return (
-    `${attachmentNote}\n` +
-    '[Telegram 回复格式] 最终回复使用 GitHub Flavored Markdown 的常用结构' +
-    '(短段落、标题、列表、引用、链接、表格和 fenced code block)。' +
-    '不要输出原始 HTML 或 Telegram 专用标签;工具调用和思考进度由系统单独呈现,' +
-    '不要在最终正文中复述过程。'
-  );
-}
+export const SLACK_HOOK_PROMPT_NOTE =
+  '[渠道说明] 本会话来自 Slack。要把文件发给用户:在最终回复文本里写 ' +
+  '`[文件名](xdt-file:///绝对路径)`;图片直接引用其地址 ' +
+  '`![说明](cindy-media://… 或 xdt-image://…)`,无需复制文件。' +
+  '系统会在回复结束后自动把它们作为 Slack 附件发回,无需调用任何工具;' +
+  'xdt-file 文件必须位于当前工作目录内(目录外的引用会被静默丢弃)。' +
+  '不要用 lizi_feishu_bot 发送,除非用户明确要求发到飞书。';
 
-/** Slack compatibility export for existing tests and downstream consumers. */
-export const SLACK_HOOK_PROMPT_NOTE = buildHookPromptNote('slack');
-
-/** Extension-derived MIME keeps Telegram on its native media send methods. */
-const MIME_BY_EXT: Record<string, string> = {
+/** 扩展名 -> 图片 MIME(agent 产图只有这几种; 其它按二进制流)。 */
+const IMAGE_MIME_BY_EXT: Record<string, string> = {
   '.png': 'image/png',
   '.jpg': 'image/jpeg',
   '.jpeg': 'image/jpeg',
   '.gif': 'image/gif',
   '.webp': 'image/webp',
-  '.mp4': 'video/mp4',
-  '.mov': 'video/quicktime',
-  '.webm': 'video/webm',
-  '.ogg': 'audio/ogg',
-  '.opus': 'audio/opus',
-  '.mp3': 'audio/mpeg',
-  '.m4a': 'audio/mp4',
-  '.wav': 'audio/wav',
-  '.aac': 'audio/aac',
-  '.flac': 'audio/flac',
-  '.pdf': 'application/pdf',
-  '.txt': 'text/plain',
-  '.md': 'text/markdown',
-  '.json': 'application/json',
-  '.csv': 'text/csv',
-  '.zip': 'application/zip',
 };
 
 export function xdtFileUrlToAbsPath(url: string): string {
-  if (!url.startsWith('xdt-file://')) {
-    throw new Error('not an xdt-file URL');
+  const raw = url.replace(/^xdt-file:\/\//, '');
+  let decoded: string;
+  try {
+    decoded = decodeURIComponent(raw);
+  } catch {
+    decoded = raw;
   }
-  const raw = url.slice('xdt-file://'.length);
-  const decoded = decodeURIComponent(raw);
   // 约定写法 xdt-file:///<绝对路径>:Unix 下剥掉协议后的首个 `/` 就是根;
   // Windows 盘符路径剥完协议剩 `/C:\...`(或 /C:/...),多余的前导 `/` 会让
   // allowedFileRoots 比对必失败 → 附件静默丢失(2026-07-16 实踩,规则 15),
-  // 这里剥掉。hook 会把该路径用于自动读盘，因而比只做文案重写的
-  // @cindy/im/xdtRefs.ts 多一道“必须是绝对路径”的安全约束。
-  const absPath = decoded.replace(/^\/+([A-Za-z]:[\\/])/, '$1');
-  const isWindowsAbsolute = /^[A-Za-z]:[\\/]/.test(absPath) || /^\\\\[^\\]/.test(absPath);
-  if (absPath.includes('\0') || (!path.isAbsolute(absPath) && !isWindowsAbsolute)) {
-    throw new Error('xdt-file URL must contain an absolute path');
-  }
-  return absPath;
+  // 这里剥掉。与 lizi-im/xdtRefs.ts 同步修改。
+  return decoded.replace(/^\/+([A-Za-z]:[\\/])/, '$1');
 }
 
 export function guessMime(absPath: string): string {
-  return MIME_BY_EXT[path.extname(absPath).toLowerCase()] ?? 'application/octet-stream';
+  return IMAGE_MIME_BY_EXT[path.extname(absPath).toLowerCase()] ?? 'application/octet-stream';
 }
 
 /** target 是否落在 base 目录内(含相等)。Windows 大小写不敏感(规则 15)。 */
@@ -147,7 +112,9 @@ export function hasOutboundRefs(text: string): boolean {
   // 双协议:老 xdt-image + 媒体总仓 cindy-media(XDT_IMAGE_REGEX 同口径)——
   // 漏了 cindy-media 会让只含总仓图的回帖跳过附件收集,图静默丢失。
   return (
-    text.includes('xdt-image://') || text.includes('cindy-media://') || text.includes('xdt-file://')
+    text.includes('xdt-image://') ||
+    text.includes('cindy-media://') ||
+    text.includes('xdt-file://')
   );
 }
 
@@ -163,16 +130,13 @@ export async function collectOutboundAttachments(
   const readFile = deps.readFile ?? ((p: string) => fsp.readFile(p));
   const realpath = deps.realpath ?? ((p: string) => fsp.realpath(p));
   const attachments: TaskAttachment[] = [];
-  const sentImageAbsPaths = new Set<string>();
-  const sentFileAbsPaths = new Set<string>();
-  const imageAbsPathByUrl = new Map<string, string>();
-  const fileAbsPathByUrl = new Map<string, string | null>();
   let totalBytes = 0;
   let skipped = 0;
 
   const isAllowedFilePath = async (absPath: string): Promise<boolean> => {
-    const roots =
-      deps.allowedFileRoots?.map((root) => root.trim()).filter((root) => root.length > 0) ?? [];
+    const roots = deps.allowedFileRoots
+      ?.map((root) => root.trim())
+      .filter((root) => root.length > 0) ?? [];
     if (roots.length === 0) {
       deps.log.warn(`outbound file attachment skipped without allowed roots (${absPath})`);
       return false;
@@ -183,7 +147,10 @@ export async function collectOutboundAttachments(
       const rootAbs = path.resolve(root);
       if (!isPathWithin(rootAbs, targetAbs)) continue;
       try {
-        const [rootReal, targetReal] = await Promise.all([realpath(rootAbs), realpath(targetAbs)]);
+        const [rootReal, targetReal] = await Promise.all([
+          realpath(rootAbs),
+          realpath(targetAbs),
+        ]);
         if (isPathWithin(rootReal, targetReal)) return true;
       } catch (err) {
         deps.log.warn(
@@ -197,14 +164,10 @@ export async function collectOutboundAttachments(
     return false;
   };
 
-  const push = async (
-    absPath: string,
-    maxBytes: number,
-    mimeOverride?: string,
-  ): Promise<boolean> => {
+  const push = async (absPath: string, maxBytes: number, mimeOverride?: string): Promise<void> => {
     if (attachments.length >= MAX_OUT_ATTACHMENTS) {
       skipped += 1;
-      return false;
+      return;
     }
     let bytes: Buffer;
     try {
@@ -214,16 +177,12 @@ export async function collectOutboundAttachments(
       deps.log.warn(
         `outbound attachment read failed (${absPath}): ${err instanceof Error ? err.message : String(err)}`,
       );
-      return false;
+      return;
     }
-    if (
-      bytes.length === 0 ||
-      bytes.length > maxBytes ||
-      totalBytes + bytes.length > MAX_OUT_TOTAL_BYTES
-    ) {
+    if (bytes.length === 0 || bytes.length > maxBytes || totalBytes + bytes.length > MAX_OUT_TOTAL_BYTES) {
       skipped += 1;
       deps.log.warn(`outbound attachment skipped by size (${absPath}: ${bytes.length} bytes)`);
-      return false;
+      return;
     }
     totalBytes += bytes.length;
     attachments.push({
@@ -231,7 +190,6 @@ export async function collectOutboundAttachments(
       mimeType: mimeOverride ?? guessMime(absPath),
       dataBase64: bytes.toString('base64'),
     });
-    return true;
   };
 
   // 1. 图片: 文本引用 + tool_result 旁路, 按 absPath 去重(模型常重复引用)
@@ -240,7 +198,6 @@ export async function collectOutboundAttachments(
   for (const m of finalText.matchAll(XDT_IMAGE_REGEX)) {
     try {
       const { absPath } = deps.resolveImageUrl(m[2]);
-      imageAbsPathByUrl.set(m[2], absPath);
       if (!seenImage.has(absPath)) {
         seenImage.add(absPath);
         imageAbsPaths.push(absPath);
@@ -259,56 +216,28 @@ export async function collectOutboundAttachments(
     }
   }
   for (const absPath of imageAbsPaths) {
-    if (await push(absPath, MAX_OUT_IMAGE_BYTES)) sentImageAbsPaths.add(absPath);
+    await push(absPath, MAX_OUT_IMAGE_BYTES);
   }
 
   // 2. 文件引用(去重同上)
   const seenFile = new Set<string>();
   for (const m of finalText.matchAll(XDT_FILE_REGEX)) {
-    const url = m[2];
-    if (fileAbsPathByUrl.has(url)) continue;
-    let absPath: string;
-    try {
-      absPath = xdtFileUrlToAbsPath(url);
-      fileAbsPathByUrl.set(url, absPath);
-    } catch {
-      fileAbsPathByUrl.set(url, null);
-      skipped += 1;
-      deps.log.warn('outbound file attachment skipped because xdt-file URL was invalid');
-      continue;
-    }
+    const absPath = xdtFileUrlToAbsPath(m[2]);
     if (seenFile.has(absPath)) continue;
     seenFile.add(absPath);
     if (!(await isAllowedFilePath(absPath))) {
       skipped += 1;
       continue;
     }
-    if (await push(absPath, MAX_OUT_FILE_BYTES)) sentFileAbsPaths.add(absPath);
+    await push(absPath, MAX_OUT_FILE_BYTES);
   }
 
-  // 3. 正文变换: 只有确实收集成功的引用才声称已发送。失败项保留可读标签，
-  // 并在末尾附加显式警告，避免“正文剥掉了、附件也没到”的静默丢失。
-  const transformed = finalText
-    .replace(XDT_IMAGE_REGEX, (_m, alt: string, url: string) => {
-      const absPath = imageAbsPathByUrl.get(url);
-      if (absPath !== undefined && sentImageAbsPaths.has(absPath)) {
-        return alt ? `🖼️ _${alt}(已作为附件发送)_` : '';
-      }
-      return alt ? `🖼️ _${alt}_` : '';
-    })
-    .replace(XDT_FILE_REGEX, (_m, label: string, url: string) => {
-      const absPath = fileAbsPathByUrl.get(url);
-      return absPath !== null && absPath !== undefined && sentFileAbsPaths.has(absPath)
-        ? ''
-        : label;
-    });
-  const warning =
-    skipped > 0
-      ? `⚠️ Attachment delivery incomplete: ${skipped} item${skipped === 1 ? '' : 's'} could not be sent.`
-      : '';
-  const text = warning
-    ? `${transformed.trimEnd()}${transformed.trim().length > 0 ? '\n\n' : ''}${warning}`
-    : transformed;
+  // 3. 正文变换(与 IM 收口一致): file 链接剥离, image 引用换成提示
+  const text = finalText
+    .replace(XDT_IMAGE_REGEX, (_m, alt: string) =>
+      alt ? `🖼️ _${alt}(已作为附件发送)_` : '',
+    )
+    .replace(XDT_FILE_REGEX, '');
 
   return { text, attachments, skipped };
 }

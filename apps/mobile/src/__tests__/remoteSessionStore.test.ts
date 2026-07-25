@@ -165,34 +165,6 @@ describe('remoteSessionStore', () => {
     ]);
   });
 
-  it('preserves the main-memory Agent switch intent across SQLite session snapshots', () => {
-    const intent = {
-      targetAgentKind: 'codex' as const,
-      model: 'gpt-5.5',
-      providerId: 'openai',
-      effort: 'high',
-      fastMode: true,
-    };
-    remoteSessionStore.setDeviceSessions('dev-1', 'Mac', [session('s1')]);
-    remoteSessionStore.applySessionPatch('dev-1', 's1', { agentSwitchIntent: intent });
-
-    remoteSessionStore.setDeviceSessions('dev-1', 'Mac', [session('s1', { title: 'Fresh list' })]);
-    expect(remoteSessionStore.getSessions()[0]).toMatchObject({
-      title: 'Fresh list',
-      agentSwitchIntent: intent,
-    });
-
-    remoteSessionStore.upsertDeviceSession('dev-1', 'Mac', session('s1', { title: 'Fresh detail' }));
-    expect(remoteSessionStore.getSessions()[0]).toMatchObject({
-      title: 'Fresh detail',
-      agentSwitchIntent: intent,
-    });
-
-    remoteSessionStore.applySessionPatch('dev-1', 's1', { agentSwitchIntent: null });
-    remoteSessionStore.setDeviceSessions('dev-1', 'Mac', [session('s1', { title: 'After cancel' })]);
-    expect(remoteSessionStore.getSessions()[0].agentSwitchIntent).toBeNull();
-  });
-
   it('dedupes an unchanged message push by id or client id', () => {
     remoteSessionStore.setMessages('s1', [message('m1', 's1')]);
     const versionAfterSet = remoteSessionStore.getMessageVersion();
@@ -217,48 +189,6 @@ describe('remoteSessionStore', () => {
     expect(remoteSessionStore.getMessages('s1')).toHaveLength(1);
     expect(remoteSessionStore.getMessages('s1')[0].content).toBe('updated');
     expect(remoteSessionStore.getMessageVersion()).toBeGreaterThan(versionAfterCreate);
-  });
-
-  it('removes a deleted AI round from the device-link transcript mirror', () => {
-    remoteSessionStore.setMessages('s1', [
-      message('m1', 's1'),
-      message('m2', 's1'),
-      message('m3', 's1'),
-    ]);
-    remoteSessionStore.markSessionMessagesSynced('s1', {
-      _count: { messages: 3 },
-      updatedAt: '2026-01-01T00:00:00.000Z',
-    });
-    pushMakerTaskUpdate('s1', 'm1');
-    expect(remoteSessionStore.getSessionTaskUpdates('s1').size).toBeGreaterThan(0);
-
-    remoteSessionStore.applyRemotePush('dev-1', 'local-db:messages:deleted', {
-      sessionId: 's1',
-      clientId: 'm1',
-      clientIds: ['m1', 'm2'],
-    });
-
-    expect(remoteSessionStore.getMessages('s1').map((item) => item.clientId)).toEqual(['m3']);
-    expect(remoteSessionStore.getSessionTaskUpdates('s1').size).toBe(0);
-    expect(remoteSessionStore.isSessionMessageWindowSynced('s1', {
-      _count: { messages: 3 },
-      updatedAt: '2026-01-01T00:00:00.000Z',
-    })).toBe(false);
-  });
-
-  it('removes an orphan task update even when its deleted message is not cached', () => {
-    remoteSessionStore.setMessages('s1', [message('m1', 's1')]);
-    pushMakerTaskUpdate('s1', 'orphan-task');
-    expect(remoteSessionStore.getSessionTaskUpdates('s1').size).toBeGreaterThan(0);
-
-    remoteSessionStore.applyRemotePush('dev-1', 'local-db:messages:deleted', {
-      sessionId: 's1',
-      clientId: 'orphan-task',
-      clientIds: ['orphan-task'],
-    });
-
-    expect(remoteSessionStore.getMessages('s1').map((item) => item.clientId)).toEqual(['m1']);
-    expect(remoteSessionStore.getSessionTaskUpdates('s1').size).toBe(0);
   });
 
   it('batches maker text deltas into one streaming assistant row', () => {

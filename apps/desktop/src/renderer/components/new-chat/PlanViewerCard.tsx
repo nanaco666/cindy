@@ -12,6 +12,7 @@
  * All four come from the same card frame (1px Board border, 12px radius,
  * 914px wide) so state transitions are a matter of swapping the body.
  *
+ * Design reference: doc/design_docs/cc-agent-view.pen
  *   8uwcT / Nmmx1 (expanded), L2Fjs / YVYJZ (half),
  *   f74q2 / Dmac1 (minimized), MkFae / CB8j8 (edit)
  */

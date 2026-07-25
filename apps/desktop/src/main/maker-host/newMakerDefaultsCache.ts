@@ -5,8 +5,8 @@
  * 时全量 push 一次, 此后每次 draft 变化都增量 push, main 端只是一份内存镜像。
  *
  * 用途: collab mode spawn worker 时 (enableOrcaInternal / orca-bridge.create_worker)
- * 不再用 hardcode 默认值,优先读这份缓存 —— worker 实际启动参数 = "用户在 New Maker
- * 面板里该 vendor 当前的选择";旧 renderer 未推 providerId 时,创建服务才回退 Lead 来源。
+ * 不再用 hardcode 默认值, 也不再继承 Lead session DB row, 改读这份缓存 ——
+ * worker 实际启动参数 = "用户在 New Maker 面板里该 vendor 当前的选择"。
  *
  * Vendor 名称差异: renderer 用 'cc' / 'codex' / 'orca'; worker spawn 路径用
  * 'claude-code' / 'codex'。getWorkerDefaultsFromNewMaker 内部做映射。
@@ -17,8 +17,8 @@ interface VendorPrefsSnapshot {
   model?: string;
   effort?: string;
   /**
-   * 该 vendor 当前草稿的权限档 / 来源(供应商)。device-link 远程草稿镜像需要完整
-   * 镜像;collab worker 权限固定,但必须携带来源,避免模型与凭证路由脱钩。
+   * 该 vendor 当前草稿的权限档 / 来源(供应商)。device-link 远程草稿镜像需要(全量
+   * 镜像被控端当前草稿);collab worker spawn 不消费这两项(worker 权限固定、来源走默认)。
    * 老版本 renderer 不推这两项 → undefined,消费方按自己的兜底处理。
    */
   permissionMode?: string;
@@ -59,7 +59,6 @@ export interface WorkerDefaultsFromNewMaker {
   model?: string;
   effort?: string;
   fastMode?: boolean;
-  providerId?: string | null;
 }
 
 /**
@@ -78,7 +77,7 @@ export function getWorkerDefaultsFromNewMaker(
   const effort = cache.effortByModel[model] ?? prefs.effort;
   // fastModeByModel 缺省按 false 兜底 (用户没显式开过就是关)。
   const fastMode = cache.fastModeByModel[model] === true;
-  return { model, effort, fastMode, providerId: prefs.providerId };
+  return { model, effort, fastMode };
 }
 
 /**

@@ -104,24 +104,6 @@ describe('mobile session main layer desktop-first noise budget', () => {
     expect(source).not.toContain('presenceVersion');
   });
 
-  it('drops stale Codex reset alerts after the active session changes during refresh', () => {
-    const source = readFileSync(resolve(process.cwd(), 'app/sessions/[sessionId].tsx'), 'utf8');
-    const resetStart = source.indexOf('const resetCodexRateLimits');
-    const resetEnd = source.indexOf('const loadExtraDirBrowsePath', resetStart);
-    const resetSource = source.slice(resetStart, resetEnd);
-    const staleOfferStart = resetSource.indexOf('if (!offer');
-    const refresh = resetSource.indexOf('await refreshAccountUsage();', staleOfferStart);
-    const sessionGuard = resetSource.indexOf(
-      'if (contextUsageSessionRef.current !== sessionId) return;',
-      refresh,
-    );
-    const alert = resetSource.indexOf("Alert.alert('请重新确认', '重置凭证已过期", refresh);
-
-    expect(refresh).toBeGreaterThan(-1);
-    expect(sessionGuard).toBeGreaterThan(refresh);
-    expect(alert).toBeGreaterThan(sessionGuard);
-  });
-
   it('keeps session sheets titled by user-facing desktop concepts only', () => {
     const source = readFileSync(resolve(process.cwd(), 'app/sessions/[sessionId].tsx'), 'utf8');
 
@@ -132,20 +114,6 @@ describe('mobile session main layer desktop-first noise budget', () => {
     expect(source).not.toContain('MESSAGE SEARCH');
     expect(source).not.toContain('queueSheetEyebrow');
     expect(source).not.toContain('searchSheetEyebrow');
-  });
-
-  it('mirrors the complete grouped deletion returned by the desktop host', () => {
-    const source = readFileSync(resolve(process.cwd(), 'app/sessions/[sessionId].tsx'), 'utf8');
-    const deleteStart = source.indexOf('const deleteMessage = useCallback');
-    const deleteEnd = source.indexOf('const confirmRewind', deleteStart);
-    const deleteSource = source.slice(deleteStart, deleteEnd);
-
-    expect(deleteSource).toContain("Alert.alert('删除本条对话？'");
-    expect(deleteSource).toContain('用户消息只删除本条；AI 消息会删除上一次用户输入之后产生的整轮输出。');
-    expect(deleteSource).toContain('const result = await maker.deleteMessage(sessionId, clientId);');
-    expect(deleteSource).toContain('Array.isArray(result.clientIds)');
-    expect(deleteSource).toContain('remoteSessionStore.removeMessages(');
-    expect(deleteSource).toContain('returnedClientIds.length > 0 ? returnedClientIds : [clientId]');
   });
 
   it('renders system cards by their desktop title without a generic debug eyebrow', () => {

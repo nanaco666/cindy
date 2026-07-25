@@ -9,8 +9,6 @@ export {
   iconStroke,
   lightColors,
   lineHeight,
-  motionDuration,
-  motionEasing,
   palettes,
   radius,
   spacing,

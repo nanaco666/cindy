@@ -39,12 +39,6 @@ function statusColor(s: FeishuBotStatus): string {
   }
 }
 
-function statusTextColor(s: FeishuBotStatus): string {
-  return s === 'connected'
-    ? 'var(--settings-badge-connected-text)'
-    : statusColor(s);
-}
-
 function maskTail(value: string): string {
   if (value.length <= 8) return value;
   return `${value.slice(0, 8)}••••${value.slice(-4)}`;
@@ -105,7 +99,7 @@ export function FeishuBotSection() {
             'border border-[var(--settings-badge-border)]',
             'text-12 font-medium tracking-[0.12px]',
           )}
-          style={{ letterSpacing: '0.12px', color: statusTextColor(status) }}
+          style={{ letterSpacing: '0.12px', color: statusColor(status) }}
           role="status"
           aria-live="polite"
           aria-label={t('settings.feishuBot.statusAria', { status: t(statusKey[status]) })}

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createElement } from 'react';
 
@@ -129,7 +129,7 @@ function clickGroup(label: string) {
 }
 
 describe('WorkGroupBlock — running latest-five preview', () => {
-  it('keeps the latest five tools/reasoning rows in chronological order and drops empty thinking', async () => {
+  it('keeps the latest five tools/reasoning rows in chronological order and drops empty thinking', () => {
     const children: WorkGroupChild[] = [
       tools('seg-1', [mkTool('t1'), mkTool('t2')]),
       thinking(mkThinking('th1', 'first reasoning summary')),
@@ -151,16 +151,9 @@ describe('WorkGroupBlock — running latest-five preview', () => {
     );
     expect(document.querySelectorAll('[data-live-work-activity]')).toHaveLength(5);
     clickGroup('chat.workGroup.working');
-    expect(document.querySelectorAll('[data-live-work-activity]')).toHaveLength(6);
-    expect(screen.getAllByTestId('direct-tool')[0].textContent).toBe('t1');
+    expect(document.querySelectorAll('[data-live-work-activity]')).toHaveLength(0);
     clickGroup('chat.workGroup.working');
-    // 收起是一次性 200ms 高度动画,展开体在动画结束后卸载(jsdom 无
-    // transitionend,由 Collapse 的兜底定时器卸载)——等待卸载完成再断言。
-    // 契约不变:收起后的内容不留在 DOM。
-    await waitFor(() =>
-      expect(document.querySelectorAll('[data-live-work-activity]')).toHaveLength(5),
-    );
-    expect(screen.queryByText('t1')).toBeNull();
+    expect(screen.getAllByTestId('direct-tool')[0].textContent).toBe('t1');
   });
 
   it('renders one reasoning row that updates in place as the same block receives deltas', () => {
@@ -240,15 +233,20 @@ describe('WorkGroupBlock — running latest-five preview', () => {
       screen.getByText('chat.workGroup.working').closest('button')?.getAttribute('aria-expanded'),
     ).toBe('true');
 
-    // The first click replaces the compact latest-five window with full details.
+    // The automatic latest-five preview is visibly open, so the first click
+    // must collapse it completely instead of replacing it with full details.
     clickGroup('chat.workGroup.working');
     expect(document.querySelector('[data-live-work-preview="true"]')).toBeNull();
-    expect(screen.getByTestId('direct-tool').textContent).toBe('git status');
-    expect(screen.getByText('checking the current state')).toBeTruthy();
+    expect(screen.queryByTestId('direct-tool')).toBeNull();
+    expect(screen.queryByText('checking the current state')).toBeNull();
     expect(
       screen.getByText('chat.workGroup.working').closest('button')?.getAttribute('aria-expanded'),
-    ).toBe('true');
+    ).toBe('false');
+
+    clickGroup('chat.workGroup.working');
+    expect(screen.getByTestId('direct-tool').textContent).toBe('git status');
     expect(screen.getByTestId('direct-tool').getAttribute('data-show-raw')).toBe('true');
+    expect(screen.getByText('checking the current state')).toBeTruthy();
 
     rerender(
       createElement(WorkGroupBlock, {
@@ -263,17 +261,8 @@ describe('WorkGroupBlock — running latest-five preview', () => {
     expect(screen.getByText('checking the current state')).toBeTruthy();
   });
 
-  it('keeps full details across remounts and collapses back to latest five', async () => {
-    const childItems = [
-      tools('seg-1', [
-        mkTool('t1'),
-        mkTool('t2'),
-        mkTool('t3'),
-        mkTool('t4'),
-        mkTool('t5'),
-        mkTool('t6'),
-      ]),
-    ];
+  it('keeps a running group fully collapsed across remounts', () => {
+    const childItems = [tools('seg-1', [mkTool('t1', 'git status')])];
     const first = render(
       createElement(WorkGroupBlock, {
         blockId: 'work:t1',
@@ -283,7 +272,7 @@ describe('WorkGroupBlock — running latest-five preview', () => {
     );
 
     clickGroup('chat.workGroup.working');
-    expect(screen.getAllByTestId('direct-tool')).toHaveLength(6);
+    expect(screen.queryByTestId('direct-tool')).toBeNull();
     first.unmount();
 
     render(
@@ -293,41 +282,27 @@ describe('WorkGroupBlock — running latest-five preview', () => {
         childItems,
       }),
     );
-    expect(screen.getAllByTestId('direct-tool')).toHaveLength(6);
+    expect(screen.queryByTestId('direct-tool')).toBeNull();
+    expect(document.querySelector('[data-live-work-preview="true"]')).toBeNull();
 
     clickGroup('chat.workGroup.working');
-    // 收起是 200ms 高度动画,展开行以退场冻结帧存续到动画结束后卸载
-    // (jsdom 走兜底定时器)——等待卸载后断言只剩 latest-five 预览。
-    await waitFor(() => expect(screen.getAllByTestId('direct-tool')).toHaveLength(5));
-    expect(screen.queryByText('t1')).toBeNull();
-    expect(document.querySelector('[data-live-work-preview="true"]')).toBeTruthy();
+    expect(screen.getByTestId('direct-tool').textContent).toBe('git status');
   });
 
-  it('falls back to live preview when collapsing restored full details', async () => {
+  it('does not fall back to live preview when collapsing restored full details', () => {
     expandMemory.setExpanded('work:t1', true);
     render(
       createElement(WorkGroupBlock, {
         blockId: 'work:t1',
         isStreaming: true,
-        childItems: [
-          tools('seg-1', [
-            mkTool('t1'),
-            mkTool('t2'),
-            mkTool('t3'),
-            mkTool('t4'),
-            mkTool('t5'),
-            mkTool('t6'),
-          ]),
-        ],
+        childItems: [tools('seg-1', [mkTool('t1', 'git status')])],
       }),
     );
 
-    expect(screen.getAllByTestId('direct-tool')).toHaveLength(6);
+    expect(screen.getByTestId('direct-tool').textContent).toBe('git status');
     clickGroup('chat.workGroup.working');
-    // 同上:退场冻结帧在动画结束后卸载,等待后断言回落到 latest-five。
-    await waitFor(() => expect(screen.getAllByTestId('direct-tool')).toHaveLength(5));
-    expect(screen.queryByText('t1')).toBeNull();
-    expect(document.querySelector('[data-live-work-preview="true"]')).toBeTruthy();
+    expect(screen.queryByTestId('direct-tool')).toBeNull();
+    expect(document.querySelector('[data-live-work-preview="true"]')).toBeNull();
   });
 
   it('keeps outer assistant text visible while nested actions need one more expansion', () => {

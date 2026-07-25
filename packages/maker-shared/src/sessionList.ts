@@ -106,8 +106,6 @@ export interface RemoteSessionScheduleInfo {
   scheduleId: string;
   scheduleName: string;
   scheduleStatus?: RemoteSchedule['status'];
-  /** 同一会话的所有已知 schedule 绑定都已 paused / expired 时为 true；缺失按 false。 */
-  allSchedulesStopped?: boolean;
   unreadRunIds: string[];
   unreadCount: number;
   running: boolean;
@@ -555,37 +553,11 @@ export function buildSessionScheduleIndex(
   runsBySchedule: ReadonlyMap<string, readonly RemoteScheduleRun[]>,
 ): Map<string, RemoteSessionScheduleInfo> {
   const schedulesById = new Map(schedules.map((schedule) => [schedule.id, schedule]));
-  const scheduleIdsBySession = new Map<string, Set<string>>();
   const index = new Map<string, RemoteSessionScheduleInfo>();
-  const recordScheduleBinding = (sessionId: string, scheduleId: string) => {
-    const scheduleIds = scheduleIdsBySession.get(sessionId) ?? new Set<string>();
-    scheduleIds.add(scheduleId);
-    scheduleIdsBySession.set(sessionId, scheduleIds);
-  };
-  for (const schedule of schedules) {
-    if (!schedule.targetSessionId) continue;
-    recordScheduleBinding(schedule.targetSessionId, schedule.id);
-    if (!index.has(schedule.targetSessionId)) {
-      index.set(schedule.targetSessionId, {
-        scheduleId: schedule.id,
-        scheduleName: schedule.name || schedule.id,
-        scheduleStatus: schedule.status,
-        allSchedulesStopped: false,
-        unreadRunIds: [],
-        unreadCount: 0,
-        running: false,
-        latestRunAt: 0,
-      });
-    }
-  }
   for (const [scheduleId, runs] of runsBySchedule) {
     const schedule = schedulesById.get(scheduleId);
     for (const run of runs) {
       if (!run.sessionId) continue;
-      // targetSessionId 是当前持久绑定的权威来源。schedule 改绑后，历史 run 仍保留旧
-      // sessionId；继续把它们算作当前绑定会污染旧会话的聚合状态与未读信息。
-      if (schedule?.targetSessionId && run.sessionId !== schedule.targetSessionId) continue;
-      recordScheduleBinding(run.sessionId, scheduleId);
       const firedAt = toMillis(run.firedAt);
       const existing = index.get(run.sessionId);
       const unreadRunIds = existing ? [...existing.unreadRunIds] : [];
@@ -596,21 +568,12 @@ export function buildSessionScheduleIndex(
         scheduleId: isLatest ? scheduleId : existing.scheduleId,
         scheduleName: isLatest ? (schedule?.name || scheduleId) : existing.scheduleName,
         scheduleStatus: isLatest ? schedule?.status : existing.scheduleStatus,
-        allSchedulesStopped: false,
         unreadRunIds,
         unreadCount: unreadRunIds.length,
         running,
         latestRunAt: Math.max(existing?.latestRunAt ?? 0, firedAt),
       });
     }
-  }
-  for (const [sessionId, info] of index) {
-    const scheduleIds = scheduleIdsBySession.get(sessionId) ?? new Set<string>();
-    const allSchedulesStopped = scheduleIds.size > 0 && Array.from(scheduleIds).every((scheduleId) => {
-      const status = schedulesById.get(scheduleId)?.status;
-      return status === 'paused' || status === 'expired';
-    });
-    index.set(sessionId, { ...info, allSchedulesStopped });
   }
   return index;
 }
@@ -750,7 +713,6 @@ function fallbackScheduleInfo(session: RemoteSession): RemoteSessionScheduleInfo
   return {
     scheduleId: '',
     scheduleName: title,
-    allSchedulesStopped: false,
     unreadRunIds: [],
     unreadCount: 0,
     running: false,
@@ -889,7 +851,6 @@ function mergeScheduleInfo(group: readonly RemoteSessionListItem[]): RemoteSessi
   const unreadRunIds = Array.from(new Set(group.flatMap((item) => item.scheduleInfo?.unreadRunIds ?? [])));
   return {
     ...base,
-    allSchedulesStopped: group.every((item) => item.scheduleInfo?.allSchedulesStopped === true),
     unreadRunIds,
     unreadCount: unreadRunIds.length,
     running: group.some((item) => item.scheduleInfo?.running),

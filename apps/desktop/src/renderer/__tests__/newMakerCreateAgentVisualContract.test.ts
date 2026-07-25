@@ -56,14 +56,8 @@ describe('NewMakerDraftRoute CREATE AGENT visual contract', () => {
     // 比例调参:25.5%→28%(用户实机拍板 2026-07-21)。
     expect(source).toContain('pt-[calc(max(96px,28vh)_+_46px_-_var(--content-header-h,46px))]');
     expect(source).not.toContain('pt-[clamp(96px,25.5vh,268px)]');
-    // 内容列宽度从死锁 800px 改为跟随 useProportionalWidth 的 inputWidth(与进行中
-    // 对话页同源,封顶 1220px):大屏自适应变宽、发送后同一 ChatInput 无宽度跳变。
-    expect(source).toContain('relative flex w-full flex-col items-start');
-    expect(source).toContain('style={{ maxWidth: inputWidth || 800 }}');
-    expect(source).not.toContain('max-w-[800px]');
+    expect(source).toContain('relative flex w-full max-w-[800px] flex-col items-start');
     expect(source).toContain('absolute right-0 top-[22px]');
-    // 快捷入口只有 4 项,不随内容列铺满全宽——封顶 800px 左对齐,保持卡片紧凑比例。
-    expect(source).toMatch(/data-testid="create-agent-quick-starts"[\s\S]*?style=\{\{ maxWidth: 800 \}\}/);
   });
 
   it('preserves New Maker behavior-critical props on ChatInput', () => {
@@ -167,27 +161,26 @@ describe('NewMakerDraftRoute CREATE AGENT visual contract', () => {
     expect(middleToolbarSlotIndex).toBeGreaterThan(permissionSelectorIndex);
     expect(middleToolbarSlotIndex).toBeLessThan(modelSelectorIndex);
 
-    // 发送按钮已统一到 send-btn-*(create-agent 与会话内共用,2026-07-22),SendButton 不再消费
-    // create-agent-send-* 私有 token;send-btn-* 的正向断言见下方「keeps default composer send buttons」。
-    expect(sendButtonSource).not.toContain('create-agent-send-bg');
-    expect(sendButtonSource).not.toContain('create-agent-send-icon');
-    expect(sendButtonSource).not.toContain('create-agent-focus-ring');
+    expect(sendButtonSource).toContain('bg-[var(--create-agent-send-bg)]');
+    expect(sendButtonSource).toContain('text-[var(--create-agent-send-icon)]');
+    expect(sendButtonSource).not.toContain('create-agent-send-border');
+    expect(sendButtonSource).toContain('hover:bg-[var(--create-agent-send-bg-hover)]');
+    expect(sendButtonSource).toContain('active:bg-[var(--create-agent-send-bg-pressed)]');
+    expect(sendButtonSource).toContain('bg-[var(--create-agent-send-icon)]');
     expect(sendButtonSource).toContain('function CreateAgentSendIcon');
     expect(sendButtonSource).toContain('fill="currentColor"');
+    expect(sendButtonSource).toContain("'cursor-not-allowed bg-[var(--create-agent-send-bg)] text-[var(--create-agent-send-icon)] opacity-40'");
+    expect(sendButtonSource).not.toContain('bg-[var(--create-agent-send-disabled-bg)]');
+    expect(sendButtonSource).not.toContain('text-[var(--create-agent-send-disabled-icon)]');
 
-    // Claude|Codex 分段切换是新建对话框独有控件,不在统一范围,仍用 create-agent 分段 token
     expect(vendorSwitcherSource).toContain('bg-[var(--create-agent-segment-track-bg)]');
     expect(vendorSwitcherSource).toContain('text-[var(--create-agent-segment-inactive-text)]');
     expect(vendorSwitcherSource).toContain('border-[var(--create-agent-control-border)]');
 
-    // 权限/模型 trigger 已统一为裸态无框(create-agent 与会话内共用同一套),不再用 create-agent-control 边框
-    expect(permissionSelectorSource).not.toContain('border-[var(--create-agent-control-border)]');
-    expect(permissionSelectorSource).toContain('border border-transparent bg-transparent');
-    expect(permissionSelectorSource).toContain('hover:border-[var(--border-default)]');
-    expect(permissionSelectorSource).toContain('min-w-[72px] max-w-full shrink');
+    expect(permissionSelectorSource).toContain('border-[var(--create-agent-control-border)]');
+    expect(permissionSelectorSource).toContain('min-w-[52px] max-w-full shrink');
     expect(permissionSelectorSource).toContain("'truncate'");
-    expect(modelSelectorSource).not.toContain('border-[var(--create-agent-control-border)]');
-    expect(modelSelectorSource).toContain('border border-transparent bg-transparent');
+    expect(modelSelectorSource).toContain('border-[var(--create-agent-control-border)]');
     expect(modelSelectorSource).toContain('min-w-[72px] max-w-full shrink overflow-hidden');
     expect(modelSelectorSource).not.toContain('w-[206px] min-w-[160px] max-w-[206px] shrink');
     expect(modelSelectorSource).not.toContain('max-w-[180px] truncate');
@@ -229,15 +222,11 @@ describe('NewMakerDraftRoute CREATE AGENT visual contract', () => {
     expect(chatInputSource).not.toContain("'flex min-w-0 flex-1 flex-wrap items-center justify-end gap-2'");
     expect(source).toContain('className="shrink-0"');
     expect(extraDirsButtonSource).toContain("'flex shrink-0 items-center rounded-full transition-colors'");
-    expect(permissionSelectorSource).toContain("'h-[30px] min-w-[72px] max-w-full shrink px-2.5'");
+    expect(permissionSelectorSource).toContain("'h-[30px] min-w-[52px] max-w-full shrink");
     expect(permissionSelectorSource).not.toContain("'h-[30px] min-w-[90px] max-w-none shrink-0");
     expect(permissionSelectorSource).not.toContain("'h-[30px] min-w-[72px] max-w-full shrink border border-[var(--create-agent-control-border)]");
     expect(permissionSelectorSource).not.toContain("'h-[30px] min-w-max shrink-0 px-2.5");
-    // 2026-07 动效统一:过渡集扩为 color/background-color/transform,承载
-    // active 按压缩放(DESIGN.md §14.4 按压原型);rounded-full 收进骨架(统一 send-btn-* 后壳形恒定)。
-    expect(sendButtonSource).toContain(
-      "'flex shrink-0 items-center justify-center rounded-full transition-[color,background-color,transform]'",
-    );
+    expect(sendButtonSource).toContain("'flex shrink-0 items-center justify-center transition-colors'");
     expect(modelSelectorSource).toContain("'h-[30px] min-w-[72px] max-w-full shrink overflow-hidden");
     expect(modelSelectorSource).not.toContain("'h-[30px] min-w-max shrink-0");
     expect(modelSelectorSource).not.toContain("'h-[30px] w-[206px] min-w-[160px] max-w-[206px]");
@@ -245,9 +234,7 @@ describe('NewMakerDraftRoute CREATE AGENT visual contract', () => {
     expect(modelSelectorSource).toContain("? 'truncate'");
     expect(modelSelectorSource).toContain('<ChevronDown');
     expect(modelSelectorSource).toContain("'shrink-0'");
-    expect(chatInputSource).toContain(
-      "className={isCreateAgentVariant && !useNarrowToolbar ? 'ml-[7px]' : undefined}",
-    );
+    expect(chatInputSource).toContain("className={isCreateAgentVariant ? 'ml-[7px]' : undefined}");
   });
 
   it('keeps the worktree checkmark readable in both themes', () => {
@@ -289,8 +276,7 @@ describe('NewMakerDraftRoute CREATE AGENT visual contract', () => {
     expect(sendButtonSource).toContain('hover:bg-[var(--send-btn-hover-bg)]');
     expect(sendButtonSource).toContain('active:bg-[var(--send-btn-pressed-bg)]');
     expect(sendButtonSource).toContain('bg-[var(--send-btn-icon)]');
-    // bg/text 已无条件设 send-btn-*(create-agent 与会话内共用),disabled 仅叠 opacity-40(见上方 267 行)
-    expect(sendButtonSource).toContain("'cursor-not-allowed opacity-40'");
+    expect(sendButtonSource).toContain("'cursor-not-allowed bg-[var(--send-btn-bg)] text-[var(--send-btn-icon)] opacity-40'");
     expect(sendButtonSource).not.toContain('stop-btn-bg');
     expect(sendButtonSource).not.toContain('stop-btn-icon');
     expect(sendButtonSource).not.toContain('hover:opacity-85');

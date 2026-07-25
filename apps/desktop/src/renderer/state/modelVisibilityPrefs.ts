@@ -31,7 +31,7 @@
 
 import { useSyncExternalStore } from 'react';
 
-import { isModelVisible } from '@cindy/model-providers';
+import { isModelVisible } from '@lizi/model-providers';
 
 import type { AgentKind } from '@/hooks/useAgentCapabilities';
 
@@ -124,7 +124,7 @@ function getVersion(): number {
 /**
  * 该 (agent, 来源, 模型) 当前是否应显示:用户 override 优先,否则跟随目录默认值。
  * model 至少需带 id + 可选 defaultEnabled(直接传 CatalogModel 即可)。
- * 决策走共享包 `isModelVisible`(与 main 侧 IM /model 同一套口径,见 @cindy/model-providers)。
+ * 决策走共享包 `isModelVisible`(与 main 侧 IM /model 同一套口径,见 @lizi/model-providers)。
  */
 export function isModelEnabled(
   agent: AgentKind,

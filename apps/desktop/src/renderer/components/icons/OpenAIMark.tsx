@@ -1,7 +1,7 @@
 /**
  * OpenAIMark —— OpenAI 官方六瓣花结,单色 currentColor。
  * 模型厂牌 mark,与 Agent 身份的 ClaudeMark/CodexMark 区分
- * (2026-07-21 产品语义纠偏)。
+ * (2026-07-21 Dash 语义纠偏)。
  */
 
 interface OpenAIMarkProps {

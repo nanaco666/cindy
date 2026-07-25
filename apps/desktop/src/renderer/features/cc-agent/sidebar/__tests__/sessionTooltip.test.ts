@@ -28,10 +28,10 @@ afterEach(() => {
 const prRef: SessionPrRef = {
   id: 'pr-ref-1',
   sessionId: 'session-1',
-  owner: 'makecindy',
+  owner: 'xindong',
   repo: 'xdmaker',
   prNumber: 337,
-  url: 'https://github.com/makecindy/cindy/pull/337',
+  url: 'https://github.com/xindong/xdmaker/pull/337',
   firstSeenAt: 0,
   lastSeenAt: 0,
 };
@@ -58,7 +58,7 @@ describe('SessionTooltip', () => {
 
     fireEvent.focus(screen.getByText('Session row'));
 
-    expect(screen.queryByText('makecindy/cindy#337')).toBeNull();
+    expect(screen.queryByText('xindong/xdmaker#337')).toBeNull();
   });
 
   it('does not open the source variant from focus restored to the sidebar row', () => {

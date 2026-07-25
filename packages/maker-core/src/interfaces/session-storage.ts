@@ -23,7 +23,7 @@ export interface SessionMeta {
   sdkSessionId?: string;
   parentSessionId?: string;
   /**
-   * 远端目标 host id (`@cindy/maker-remote-ssh` ConnectionPool 里的 alias)。
+   * 远端目标 host id (`@lizi/maker-remote-ssh` ConnectionPool 里的 alias)。
    * 不为空 = 这个 session 跑在远端机器上 (codex agent 进程在远端、workDir 是远端路径)。
    * 落地后, 应用重启 / session 切换都能记住该 session 的远端目标。
    * 仅 Codex 支持; Claude 暂忽略此字段。

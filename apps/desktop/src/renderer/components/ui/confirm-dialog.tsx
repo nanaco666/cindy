@@ -36,10 +36,6 @@ export interface ConfirmDialogProps {
    * 把这个开关打开,让默认焦点落到主按钮,避免取消按钮天然带 focus ring。
    */
   autoFocusConfirm?: boolean;
-  /** Disable the primary action until caller-owned validation has passed. */
-  confirmDisabled?: boolean;
-  /** Destructive actions use the semantic destructive theme tokens. */
-  confirmVariant?: 'default' | 'destructive';
   /**
    * 进入"操作进行中"态:主按钮内容换成 spinner、所有按钮禁用,
    * 同时 ESC 和点击外部都不再关弹框。典型场景:用户点了确认后触发的
@@ -67,8 +63,6 @@ export function ConfirmDialog({
   tertiaryText,
   dontShowAgainLabel,
   autoFocusConfirm,
-  confirmDisabled = false,
-  confirmVariant = 'default',
   loading = false,
   onConfirm,
   onCancel,
@@ -98,7 +92,7 @@ export function ConfirmDialog({
         <AlertDialog.Content
           className={cn(
             'fixed left-1/2 top-1/2 z-[10000] -translate-x-1/2 -translate-y-1/2',
-            'w-full select-none rounded-xl p-4',
+            'w-full rounded-xl p-4',
             'bg-[var(--confirm-bg)] shadow-[var(--confirm-shadow)]',
             'data-[state=open]:animate-confirm-content-in',
             'data-[state=closed]:animate-confirm-content-out',
@@ -152,22 +146,16 @@ export function ConfirmDialog({
             <AlertDialog.Action asChild>
               <button
                 ref={confirmBtnRef}
-                disabled={loading || confirmDisabled}
+                disabled={loading}
                 onClick={() => onConfirm?.({ dontShowAgain })}
                 className={cn(
                   'inline-flex min-w-[96px] items-center justify-center rounded-full px-6 py-2.5 text-13 font-medium',
                   'transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2',
                   'active:scale-[0.98]',
-                  confirmVariant === 'destructive'
-                    ? 'bg-[hsl(var(--destructive))] text-[var(--accent-pure-cta-fg)] hover:opacity-90 focus-visible:ring-[var(--focus-ring)]'
-                    : 'bg-[var(--confirm-btn-primary-bg)] text-[var(--confirm-btn-primary-text)] hover:bg-[var(--confirm-btn-primary-hover)] focus-visible:ring-[var(--confirm-btn-primary-bg)]',
-                  loading &&
-                    confirmVariant === 'default' &&
-                    'cursor-default opacity-80 active:scale-100 hover:bg-[var(--confirm-btn-primary-bg)]',
-                  loading &&
-                    confirmVariant === 'destructive' &&
-                    'cursor-default opacity-80 active:scale-100 hover:opacity-80',
-                  confirmDisabled && 'cursor-not-allowed opacity-50 active:scale-100',
+                  'bg-[var(--confirm-btn-primary-bg)] text-[var(--confirm-btn-primary-text)]',
+                  'hover:bg-[var(--confirm-btn-primary-hover)]',
+                  'focus-visible:ring-[var(--confirm-btn-primary-bg)]',
+                  loading && 'cursor-default opacity-80 active:scale-100 hover:bg-[var(--confirm-btn-primary-bg)]',
                 )}
               >
                 {loading ? (

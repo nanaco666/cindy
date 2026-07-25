@@ -1,11 +1,13 @@
 /**
  * hook-control/manager.ts
  * ---------------------------------------------------------------------------
- * Cindy IM relay 连接编排(同一产品、多 provider): Slack 与 Telegram 各自
- * 持有独立 transport 与服务能力快照，任务执行链和本机目录配置继续共享。
+ * Slack Hook 连接编排(单连接形态): 持有唯一 transport 的生命周期与运行时
+ * 状态(连接态 / 最新绑定态), 供 IPC 快照与状态推送。
  *
- * 两个服务都由公司中心部署、地址内置、鉴权走登录 JWT(token 源注入)，但
- * 部署和故障域彼此独立；dispatcher 以 provider 命名空间复用同一 session runner。
+ * 与多连接旧版的差异: 服务器是公司中心部署的唯一实例, 地址内置、鉴权走
+ * 登录 JWT(token 源注入), 不再有连接列表 / per 连接 secret。dispatcher 与
+ * bindings 的 connectionId 维度保留(键固定为 SLACK_HOOK_CONNECTION_ID),
+ * 其实现不感知单/多连接差异。
  *
  * 依赖全部注入(store / transport 工厂 / token 源 / 设备信息 / 状态回调),
  * 测试用内存 harness 直接驱动(规则 14); Electron 绑定在 ipc.ts 组装。
@@ -15,30 +17,18 @@ import { randomUUID } from 'node:crypto';
 
 import {
   HOOK_FEATURE_MULTI_TEAM,
-  HOOK_FEATURE_PROVIDER_BIND,
-  HOOK_FEATURE_PROVIDER_PREFS,
-  HOOK_FEATURE_PROVIDER_TELEGRAM,
-  HOOK_FEATURE_SESSION_PICKER,
   HOOK_FEATURE_SLACK_TOOLS,
   makeBindRevoke,
   makeBindStart,
   makeHello,
   makePrefsGet,
   makePrefsSet,
-  makeProviderBindCancel,
-  makeProviderBindRevoke,
-  makeProviderBindStart,
-  makeProviderPrefsGet,
-  makeProviderPrefsSet,
   makeQueryResponse,
   makeTaskAck,
   makeToolRequest,
   type BindUpdatePayload,
   type HelloInput,
   type HookMessage,
-  type HookProvider,
-  type ProviderBindStatusPayload,
-  type QuerySessionEntry,
 } from '@cindy/slack-hook-protocol';
 
 import {
@@ -53,76 +43,21 @@ import type {
   HookPendingBindView,
   HookPrefsPatch,
   HookPrefsView,
-  ProviderBindingView,
-  ProviderPrefsView,
   HookTeamBindingView,
   SlackHookView,
 } from '../../shared/hookControlIpc.js';
 import type { SlackHookStore } from './store.js';
 import type { HookDispatcher } from './dispatcher.js';
 import { buildQueryResponse, type AgentModelSource } from './queryResponder.js';
-import { parseTelegramConnectUrl } from './telegramDeepLink.js';
 import type { HookTransport, HookTransportOpts, HookTransportStatus } from './transport.js';
 
-/** dispatcher / bindings 的 connectionId 基础键；运行时追加账号与 provider。 */
+/** dispatcher / bindings 的 connectionId 固定键(单连接形态)。 */
 export const SLACK_HOOK_CONNECTION_ID = 'slack';
-
-/** Legacy Slack channel lane used before provider-prefixed external keys. */
-function isLegacySlackExternalKey(externalKey: string): boolean {
-  return /^[A-Z][A-Z0-9]*:[A-Z][A-Z0-9]*:\d+(?:\.\d+)?$/.test(externalKey);
-}
-
-/** Pre-provider-prefix Slack DM lane accepted only for source-less/Slack traffic. */
-function isLegacySlackDmExternalKey(externalKey: string): boolean {
-  return /^dm:(?:[A-Z][A-Z0-9]*:){1,2}g\d+$/.test(externalKey);
-}
-
-/**
- * Route only the two providers implemented by this client.  Missing source is
- * retained solely for legacy Slack servers; Telegram always has both an
- * explicit source and the provider-prefixed lane key from its wire contract.
- * A source/key disagreement fails closed instead of letting a future or
- * compromised provider inherit Slack permissions and prompt semantics.
- */
-export function providerForTaskDispatch(
-  payload: Pick<import('@cindy/slack-hook-protocol').TaskDispatchPayload, 'externalKey' | 'source'>,
-): HookProvider | null {
-  const telegramKey = payload.externalKey.startsWith('telegram:');
-  const slackKey =
-    payload.externalKey.startsWith('slack:') ||
-    payload.externalKey.startsWith('team-slack:') ||
-    // Pre-prefix Slack channel lane: <team>:<channel>:<message timestamp>.
-    isLegacySlackExternalKey(payload.externalKey) ||
-    isLegacySlackDmExternalKey(payload.externalKey);
-  const source = payload.source?.im;
-  if (source === undefined) return slackKey ? 'slack' : null;
-  if (source === 'telegram') return telegramKey ? 'telegram' : null;
-  if (source === 'slack') return slackKey ? 'slack' : null;
-  return null;
-}
-
-/** Route archive frames only for lane-key formats owned by implemented providers. */
-export function providerForExternalKey(externalKey: string): HookProvider | null {
-  if (externalKey.startsWith('telegram:')) return 'telegram';
-  if (
-    externalKey.startsWith('slack:') ||
-    externalKey.startsWith('team-slack:') ||
-    isLegacySlackExternalKey(externalKey) ||
-    isLegacySlackDmExternalKey(externalKey)
-  ) {
-    return 'slack';
-  }
-  return null;
-}
 
 export interface HookControlManagerDeps {
   store: SlackHookStore;
-  /** Runtime capability gate; false stops the transport without changing user prefs/bindings. */
-  isAvailable?: () => boolean;
   /** transport 工厂 —— 生产为 createHookTransport, 测试可注入假实现。 */
   createTransport: (opts: HookTransportOpts) => HookTransport;
-  /** Telegram 平级服务端点；空字符串表示当前环境尚未部署该服务。 */
-  getTelegramUrl: () => string;
   /** 登录 accessToken 源(transport 每次建连实时取; null = 未登录)。 */
   getAuthToken: () => Promise<string | null>;
   /** upgrade 401 后强制刷新一次登录凭证；成功后 transport 立即重连。 */
@@ -134,7 +69,7 @@ export interface HookControlManagerDeps {
   /** 状态变化推送(IPC 层广播到所有窗口)。 */
   notifyStatus: (view: SlackHookView) => void;
   /**
-   * cindy_slack provider 的构建期可用性(bound + server capability)翻转通知。
+   * lizi_slack provider 的构建期可用性(bound + server capability)翻转通知。
    *
    * Claude 每个 session 启动时都会重新评估 provider；Codex 会把 MCP server
    * 清单冻结在共享 app-server / bridge 中，host 用这个出口失效其缓存。只在
@@ -144,7 +79,6 @@ export interface HookControlManagerDeps {
   onSlackToolProviderEnabledChanged?: (enabled: boolean) => void;
   /** 目录偏好快照推送(prefs.state 到达时广播; 含请求回执与 /model 卡主动推)。 */
   notifyPrefs?: (view: HookPrefsView) => void;
-  notifyProviderPrefs?: (view: ProviderPrefsView) => void;
   /** prefs 读写往返超时(默认 10s; 测试注短)。 */
   prefsTimeoutMs?: number;
   /** Slack 网关工具往返超时(默认 60s —— 搜索/长查询比 prefs 慢得多; 测试注短)。 */
@@ -161,23 +95,12 @@ export interface HookControlManagerDeps {
   dispatcher?: HookDispatcher;
   /** query.request(models)的数据源(与会话选择器同规则实时派生, 允许异步); 不注入回空清单。 */
   listAgentModels?: () => AgentModelSource[] | Promise<AgentModelSource[]>;
-  /** session-picker-v1 的 privacy-minimised 当前账号数据源。 */
-  listRecentSessions?: () => QuerySessionEntry[] | Promise<QuerySessionEntry[]>;
-  /** dispatcher/store 命名空间使用的当前 Cindy 账号不可逆指纹。 */
-  getAccountFingerprint?: () => string | null;
-  /** Production opens this only after the current account DB is ready. */
-  accountInitiallyActive?: boolean;
   /**
    * 打开系统浏览器(SIWS OIDC 授权链接)。生产注入 electron shell.openExternal,
    * 测试注入假实现 —— 避免 manager 顶层 import electron(vitest 环境无 electron)。
    * 不注入时为 no-op(纯连接层测试)。
    */
   openExternalUrl?: (url: string) => void;
-  /**
-   * Telegram URL 的 main 安全边界；实现必须在 shell 前严格校验，并让
-   * renderer 主动触发的打开动作能等待系统 shell 的真实结果。
-   */
-  openTelegramUrl?: (url: string) => void | Promise<void>;
   log: { info(msg: string): void; warn(msg: string): void };
 }
 
@@ -240,7 +163,7 @@ export interface HookControlManager {
     args?: Record<string, unknown>,
     teamId?: string | null,
   ): Promise<HookSlackToolResult>;
-  /** Slack 工具可用性快照(cindy_slack provider 的 isEnabled / slack_status 数据源)。 */
+  /** Slack 工具可用性快照(lizi_slack provider 的 isEnabled / slack_status 数据源)。 */
   getSlackToolAvailability(): HookSlackToolAvailability;
   /**
    * 拉取绑定用户的全部目录偏好快照(prefs.get -> prefs.state 往返)。
@@ -257,21 +180,6 @@ export interface HookControlManager {
     patch: HookPrefsPatch,
     teamId?: string | null,
   ): Promise<HookPrefsView>;
-  setProviderEnabled(provider: HookProvider, enabled: boolean): void;
-  providerBindStart(provider: 'telegram'): boolean;
-  providerBindCancel(provider: 'telegram'): boolean;
-  providerBindRevoke(provider: 'telegram'): boolean;
-  openTelegramAction(action: 'connect' | 'provider' | 'add-to-group'): Promise<boolean>;
-  getProviderWorkspacePrefs(provider: 'telegram'): Promise<ProviderPrefsView>;
-  setProviderWorkspacePrefs(
-    provider: 'telegram',
-    workspace: string,
-    patch: HookPrefsPatch,
-  ): Promise<ProviderPrefsView>;
-  /** 登录/切账号后重新打开 account ingress。 */
-  activateAccount(): void;
-  /** 同步关闭 ingress、取消/中止旧账号任务并等它们越过最终异步边界。 */
-  deactivateAccount(): Promise<void>;
   dispose(): void;
 }
 
@@ -288,7 +196,8 @@ export interface HookSlackToolError {
 
 /** callSlackTool 的结构化结果(永不 throw)。 */
 export type HookSlackToolResult =
-  { ok: true; result: unknown } | { ok: false; error: HookSlackToolError };
+  | { ok: true; result: unknown }
+  | { ok: false; error: HookSlackToolError };
 
 /** Slack 工具可用性快照。 */
 export interface HookSlackToolAvailability {
@@ -340,9 +249,6 @@ const DEFAULT_BIND_PENDING_TIMEOUT_MS = 180_000;
  */
 const DEFAULT_INSTALL_WAIT_TIMEOUT_MS = 600_000;
 
-/** Provider attempts are server-defined as ten-minute leases; clamp hostile/skewed timestamps. */
-const DEFAULT_PROVIDER_BIND_TIMEOUT_MS = 600_000;
-
 /**
  * (multi-team)自动首绑的延迟窗口: 空 bind.state 后等这么久没有任何
  * bind.update(pending 回放)到达才发起首绑。server 的 hello 同步帧背靠背
@@ -368,18 +274,10 @@ function toViewStatus(s: HookTransportStatus | null, enabled: boolean): HookConn
   }
 }
 
-/** Latest local Telegram binding mutation used to reject superseded wire replies. */
-type TelegramBindRequest =
-  | { kind: 'start'; requestId: string }
-  | { kind: 'cancel'; requestId: string; attemptId: string }
-  | { kind: 'revoke'; requestId: string; bindingId: string };
-
 export function createHookControlManager(deps: HookControlManagerDeps): HookControlManager {
   const {
     store,
-    isAvailable = () => true,
     createTransport,
-    getTelegramUrl,
     getAuthToken,
     refreshAuthToken,
     deviceInfo,
@@ -393,22 +291,14 @@ export function createHookControlManager(deps: HookControlManagerDeps): HookCont
     installWaitTimeoutMs,
     dispatcher,
     listAgentModels,
-    listRecentSessions,
-    getAccountFingerprint,
-    accountInitiallyActive,
     openExternalUrl,
-    openTelegramUrl,
     log,
   } = deps;
   const id = SLACK_HOOK_CONNECTION_ID;
 
-  /** Slack 与 Telegram 是平级部署，不能共享 transport 或连接状态。 */
   let transport: HookTransport | null = null;
   let status: HookTransportStatus | null = null;
   let lastError: string | null = null;
-  let telegramTransport: HookTransport | null = null;
-  let telegramStatus: HookTransportStatus | null = null;
-  let telegramLastError: string | null = null;
   /**
    * server 推送的最新绑定状态(bind.update); 未推送过为 null。
    * 仅老 server(单绑定)路径维护 —— multi-team 模式下对外的 legacy binding
@@ -425,39 +315,6 @@ export function createHookControlManager(deps: HookControlManagerDeps): HookCont
     .bindingsCache.map((e) => ({ ...e, displaced: false }));
   /** (multi-team)在途授权状态(添加/重绑 workspace 的 pending 与其终止态)。 */
   let pendingBind: HookPendingBindView | null = null;
-
-  /** 从当前账号缓存恢复 confirmed Telegram 视图，供构造期与账号重激活共用。 */
-  function restoreCachedTelegramBinding(): ProviderBindingView | null {
-    const cached = store.get().telegramBindingCache;
-    if (cached === null) return null;
-    return {
-      provider: 'telegram',
-      state: 'confirmed',
-      attemptId: null,
-      bindingId: cached.bindingId,
-      principalId: cached.principalId,
-      principalName: cached.principalName,
-      scopeId: cached.scopeId,
-      scopeName: cached.scopeName,
-      connectUrl: null,
-      expiresAt: null,
-      reason: null,
-      remediationUrl: `https://t.me/${cached.scopeName}`,
-      actions: ['revoke', 'open_provider', 'add_to_group'],
-    };
-  }
-
-  /** Telegram provider-neutral state; confirmed cache survives provider disable/restart. */
-  let telegramBinding: ProviderBindingView | null = restoreCachedTelegramBinding();
-  /** Toggle-on waits for welcome + authoritative state before starting a new attempt. */
-  let telegramAutoBindIntent = false;
-  /** Only a locally initiated attempt may automatically open Telegram once. */
-  let telegramOpenRequestId: string | null = null;
-  /** Only the newest local mutation may consume a provider.bind.update reply. */
-  let telegramBindRequest: TelegramBindRequest | null = null;
-  /** The first state frame after each welcome may replace a persisted offline cache. */
-  let telegramAwaitingStateSnapshot = false;
-  let telegramBindWatchdog: NodeJS.Timeout | null = null;
   /**
    * (multi-team)自动首绑的延迟触发器: 空 bind.state + autoBindIntent 时不能
    * 立即发 bind.start —— server 的 hello 同步可能紧跟一帧 pending 回放(旧
@@ -494,15 +351,6 @@ export function createHookControlManager(deps: HookControlManagerDeps): HookCont
     string,
     { resolve: (v: HookPrefsView) => void; reject: (e: Error) => void; timer: NodeJS.Timeout }
   >();
-  const pendingProviderPrefs = new Map<
-    string,
-    {
-      bindingId: string;
-      resolve: (v: ProviderPrefsView) => void;
-      reject: (e: Error) => void;
-      timer: NodeJS.Timeout;
-    }
-  >();
   /** 在途的 Slack 工具往返(requestId -> resolve; tool.response.replyTo 配对)。 */
   const pendingTools = new Map<
     string,
@@ -513,59 +361,13 @@ export function createHookControlManager(deps: HookControlManagerDeps): HookCont
    * 清单随网络抖动反复重建；重连后的新 welcome 会整组覆盖并触发 gate 复算。
    */
   let serverFeatures: string[] = [];
-  /** Distinguish a negotiated old Slack server with features=[] from no welcome yet. */
-  let serverWelcomeReceived = false;
-  /** Telegram service has its own capability negotiation and rollout lifecycle. */
-  let telegramServerFeatures: string[] = [];
-  let telegramServerWelcomeReceived = false;
-  /** cindy_slack provider 的构建期 gate 当前值；初始未绑定 = false。 */
+  /** lizi_slack provider 的构建期 gate 当前值；初始未绑定 = false。 */
   let slackToolProviderEnabled = false;
   let disposed = false;
-  /** Account ingress is synchronously closed before the old account DB is released. */
-  let accountActive = accountInitiallyActive ?? true;
-  let accountGeneration = 0;
-  /** Account-bound async reads (notably recent sessions) must drain before DB teardown. */
-  const pendingAccountOps = new Set<Promise<void>>();
-  /** Coalesce auth-listener and teardown requests onto the same DB-safe drain. */
-  let accountDeactivation: Promise<void> | null = null;
-
-  function trackAccountOp(operation: Promise<void>): void {
-    const settled = operation.catch((err: unknown) => {
-      log.warn(
-        `account-bound hook operation failed (${err instanceof Error ? err.name : 'unknown'})`,
-      );
-    });
-    pendingAccountOps.add(settled);
-    void settled.finally(() => pendingAccountOps.delete(settled));
-  }
 
   /** server 是否宣告 multi-team 能力(最近一次成功 welcome 快照)。 */
   function serverMultiTeam(): boolean {
     return serverFeatures.includes(HOOK_FEATURE_MULTI_TEAM);
-  }
-
-  function serverTelegram(): boolean {
-    return (
-      telegramServerFeatures.includes(HOOK_FEATURE_PROVIDER_BIND) &&
-      telegramServerFeatures.includes(HOOK_FEATURE_PROVIDER_PREFS) &&
-      telegramServerFeatures.includes(HOOK_FEATURE_SESSION_PICKER) &&
-      telegramServerFeatures.includes(HOOK_FEATURE_PROVIDER_TELEGRAM)
-    );
-  }
-
-  function dispatchId(provider: HookProvider): string {
-    const account = getAccountFingerprint?.() ?? 'no-account';
-    return `${id}:${account}:${provider}`;
-  }
-
-  function activateCurrentAccount(): void {
-    if (accountActive || disposed) return;
-    accountActive = true;
-    dispatcher?.activateAccount();
-    multiBindings = store.get().bindingsCache.map((entry) => ({ ...entry, displaced: false }));
-    telegramBinding = restoreCachedTelegramBinding();
-    startEnabledProviders();
-    notifyStatus(toView());
   }
 
   /** multi-team 视图是否生效: server 宣告能力, 或本地缓存里有多绑定行(冷启动/
@@ -602,15 +404,6 @@ export function createHookControlManager(deps: HookControlManagerDeps): HookCont
     pendingPrefs.clear();
   }
 
-  /** Telegram 断线不应让 Slack prefs 请求失败，反之亦然。 */
-  function drainPendingProviderPrefs(): void {
-    for (const [, pending] of pendingProviderPrefs) {
-      clearTimeout(pending.timer);
-      pending.reject(new HookNotConnectedError());
-    }
-    pendingProviderPrefs.clear();
-  }
-
   /** 断线/重建时在途工具请求快速失败(resolve 结构化错误, 语义与 prefs 对齐)。 */
   function drainPendingTools(): void {
     for (const [, pending] of pendingTools) {
@@ -642,35 +435,6 @@ export function createHookControlManager(deps: HookControlManagerDeps): HookCont
       }, prefsTimeoutMs ?? DEFAULT_PREFS_TIMEOUT_MS);
       timer.unref?.();
       pendingPrefs.set(requestId, { resolve, reject, timer });
-    });
-  }
-
-  function sendProviderPrefsRequest(
-    build: (requestId: string, bindingId: string) => HookMessage,
-  ): Promise<ProviderPrefsView> {
-    const t = telegramTransport;
-    const bindingId = telegramBinding?.state === 'confirmed' ? telegramBinding.bindingId : null;
-    if (
-      t === null ||
-      telegramStatus !== 'connected' ||
-      !serverTelegram() ||
-      !store.get().telegramEnabled ||
-      bindingId === null
-    ) {
-      return Promise.reject(new HookNotConnectedError());
-    }
-    const requestId = randomUUID();
-    return new Promise<ProviderPrefsView>((resolve, reject) => {
-      if (!t.send(build(requestId, bindingId))) {
-        reject(new HookNotConnectedError());
-        return;
-      }
-      const timer = setTimeout(() => {
-        pendingProviderPrefs.delete(requestId);
-        reject(new HookPrefsTimeoutError());
-      }, prefsTimeoutMs ?? DEFAULT_PREFS_TIMEOUT_MS);
-      timer.unref?.();
-      pendingProviderPrefs.set(requestId, { bindingId, resolve, reject, timer });
     });
   }
 
@@ -720,7 +484,6 @@ export function createHookControlManager(deps: HookControlManagerDeps): HookCont
 
   function toView(): SlackHookView {
     const config = store.get();
-    const telegramUrl = getTelegramUrl().trim();
     return {
       enabled: config.enabled,
       url: store.effectiveUrl(),
@@ -731,27 +494,6 @@ export function createHookControlManager(deps: HookControlManagerDeps): HookCont
       bindings: multiBindings.map((b) => ({ ...b })),
       pendingBind: pendingBind !== null ? { ...pendingBind } : null,
       serverMultiTeam: serverMultiTeam(),
-      telegram: {
-        enabled: config.telegramEnabled,
-        url: telegramUrl,
-        status:
-          config.telegramEnabled && telegramUrl.length === 0
-            ? 'error'
-            : toViewStatus(telegramStatus, config.telegramEnabled),
-        lastError:
-          config.telegramEnabled && telegramUrl.length === 0
-            ? 'Telegram service endpoint is not configured'
-            : config.telegramEnabled
-              ? telegramLastError
-              : null,
-        available: serverTelegram(),
-        capabilityPending:
-          config.telegramEnabled && telegramUrl.length > 0 && !telegramServerWelcomeReceived,
-        binding:
-          telegramBinding === null
-            ? null
-            : { ...telegramBinding, actions: [...telegramBinding.actions] },
-      },
     };
   }
 
@@ -768,9 +510,7 @@ export function createHookControlManager(deps: HookControlManagerDeps): HookCont
       );
     } catch (err) {
       // 缓存是体验增强(冷启动显示/diff), 写失败不影响运行时状态
-      log.warn(
-        `persist bindings cache failed: ${err instanceof Error ? err.message : String(err)}`,
-      );
+      log.warn(`persist bindings cache failed: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 
@@ -806,329 +546,6 @@ export function createHookControlManager(deps: HookControlManagerDeps): HookCont
     }
   }
 
-  function clearTelegramBindWatchdog(): void {
-    if (telegramBindWatchdog !== null) {
-      clearTimeout(telegramBindWatchdog);
-      telegramBindWatchdog = null;
-    }
-  }
-
-  function armTelegramBindWatchdog(expiresAt: number): void {
-    clearTelegramBindWatchdog();
-    const delay = Math.min(DEFAULT_PROVIDER_BIND_TIMEOUT_MS, Math.max(0, expiresAt - Date.now()));
-    telegramBindWatchdog = setTimeout(() => {
-      telegramBindWatchdog = null;
-      if (
-        telegramBinding?.state !== 'pending' &&
-        telegramBinding?.state !== 'awaiting_confirmation'
-      ) {
-        return;
-      }
-      telegramBinding = {
-        ...telegramBinding,
-        state: 'expired',
-        connectUrl: null,
-        expiresAt: null,
-        reason: 'expired',
-        actions: ['retry'],
-      };
-      notifyStatus(toView());
-    }, delay);
-    telegramBindWatchdog.unref?.();
-  }
-
-  function providerBindingView(payload: ProviderBindStatusPayload): ProviderBindingView {
-    return {
-      provider: payload.provider,
-      state: payload.state,
-      attemptId: payload.attemptId,
-      bindingId: payload.bindingId,
-      principalId: payload.principalId,
-      principalName: payload.principalName,
-      scopeId: payload.scopeId,
-      scopeName: payload.scopeName,
-      connectUrl: payload.connectUrl,
-      expiresAt: payload.expiresAt,
-      reason: payload.reason,
-      remediationUrl: payload.remediationUrl,
-      actions: [...payload.actions],
-    };
-  }
-
-  function persistTelegramBinding(view: ProviderBindingView): void {
-    try {
-      if (
-        view.state === 'confirmed' &&
-        view.bindingId &&
-        view.principalId &&
-        view.scopeId &&
-        view.scopeName
-      ) {
-        store.setTelegramBindingCache({
-          bindingId: view.bindingId,
-          principalId: view.principalId,
-          principalName: view.principalName,
-          scopeId: view.scopeId,
-          scopeName: view.scopeName,
-        });
-      } else if (view.state === 'revoked' || view.state === 'none' || view.state === 'superseded') {
-        store.setTelegramBindingCache(null);
-      }
-    } catch (err) {
-      // The server owns binding truth; a read-only/full local disk may reduce
-      // restart convenience but must not suppress the live confirmed state.
-      log.warn(
-        `persist Telegram binding cache failed (${err instanceof Error ? err.name : 'unknown'})`,
-      );
-    }
-  }
-
-  function isProviderAttemptState(state: ProviderBindStatusPayload['state']): boolean {
-    return (
-      state === 'pending' ||
-      state === 'awaiting_confirmation' ||
-      state === 'denied' ||
-      state === 'expired' ||
-      state === 'failed'
-    );
-  }
-
-  /**
-   * Bind replies are not globally ordered with Telegram callbacks. Keep the
-   * local state monotonic by accepting only the newest request reply and only
-   * events that name the current attempt/binding. The first state snapshot
-   * after a welcome is the sole exception: it is authoritative and may clear
-   * an offline persisted cache, unless a newer local mutation already began.
-   */
-  function shouldApplyProviderBindStatus(
-    payload: ProviderBindStatusPayload,
-    isStateSnapshot: boolean,
-  ): boolean {
-    if (payload.replyTo !== null) {
-      const request = telegramBindRequest;
-      if (request === null || request.requestId !== payload.replyTo) {
-        log.warn('stale Telegram bind reply dropped');
-        return false;
-      }
-      // One request has one reply. Clear before validating its identity so a
-      // malformed response cannot keep blocking later unsolicited truth.
-      telegramBindRequest = null;
-      if (request.kind === 'start') {
-        return payload.state !== 'revoked' && payload.state !== 'superseded';
-      }
-      if (request.kind === 'cancel') {
-        const ownsCurrentAttempt = telegramBinding?.attemptId === request.attemptId;
-        if (payload.state === 'confirmed') return ownsCurrentAttempt;
-        return ownsCurrentAttempt && payload.attemptId === request.attemptId;
-      }
-      // A failed revoke must not replace the durable confirmed binding with an
-      // attempt-shaped error. The server can retry/reconcile from its snapshot.
-      if (isProviderAttemptState(payload.state)) {
-        log.warn('Telegram revoke failure kept the confirmed binding');
-        return false;
-      }
-      return (
-        telegramBinding?.bindingId === request.bindingId && payload.bindingId === request.bindingId
-      );
-    }
-
-    if (isStateSnapshot && telegramAwaitingStateSnapshot) {
-      telegramAwaitingStateSnapshot = false;
-      telegramBindRequest = null;
-      return true;
-    }
-
-    const current = telegramBinding;
-    if (current === null) {
-      return (
-        payload.state === 'none' ||
-        payload.state === 'pending' ||
-        payload.state === 'awaiting_confirmation' ||
-        payload.state === 'confirmed'
-      );
-    }
-    if (payload.state === 'none') {
-      return (
-        current.state === 'none' ||
-        current.state === 'denied' ||
-        current.state === 'expired' ||
-        current.state === 'failed'
-      );
-    }
-    if (isProviderAttemptState(payload.state)) {
-      if (telegramBindRequest?.kind === 'cancel') return false;
-      return payload.attemptId !== null && current.attemptId === payload.attemptId;
-    }
-    if (payload.state === 'confirmed') {
-      if (current.state === 'confirmed') return current.bindingId === payload.bindingId;
-      // A confirmation that wins a cancel race is durable server truth. A
-      // start still waiting for its direct pending reply has no attempt id and
-      // deliberately rejects confirmations from an older attempt.
-      return current.state === 'none' || current.attemptId !== null;
-    }
-    if (payload.state === 'revoked' || payload.state === 'superseded') {
-      return current.bindingId !== null && current.bindingId === payload.bindingId;
-    }
-    return false;
-  }
-
-  function initiateProviderBind(provider: 'telegram'): boolean {
-    if (
-      provider !== 'telegram' ||
-      telegramTransport === null ||
-      telegramStatus !== 'connected' ||
-      !serverTelegram() ||
-      !store.get().telegramEnabled
-    ) {
-      return false;
-    }
-    // Pending/awaiting flows deliberately allow an explicit retry so a stale
-    // one-time link can be superseded. A durable confirmed binding must never
-    // be replaced by a duplicate/stale renderer invocation.
-    if (telegramBinding?.state === 'confirmed') return false;
-    const requestId = randomUUID();
-    if (!telegramTransport.send(makeProviderBindStart({ requestId, provider }))) return false;
-    telegramAwaitingStateSnapshot = false;
-    telegramBindRequest = { kind: 'start', requestId };
-    telegramOpenRequestId = requestId;
-    telegramBinding = {
-      provider,
-      state: 'pending',
-      attemptId: null,
-      bindingId: null,
-      principalId: null,
-      principalName: null,
-      scopeId: null,
-      scopeName: null,
-      connectUrl: null,
-      expiresAt: null,
-      reason: null,
-      remediationUrl: null,
-      actions: [],
-    };
-    notifyStatus(toView());
-    return true;
-  }
-
-  function handleProviderBindStatus(
-    payload: ProviderBindStatusPayload,
-    isStateSnapshot: boolean,
-  ): void {
-    if (payload.provider !== 'telegram' || !serverTelegram()) {
-      log.warn('provider bind state dropped before Telegram capability negotiation');
-      return;
-    }
-    if (!shouldApplyProviderBindStatus(payload, isStateSnapshot)) {
-      if (payload.replyTo !== null && payload.replyTo === telegramOpenRequestId) {
-        telegramOpenRequestId = null;
-      }
-      return;
-    }
-    let acceptedPayload = payload;
-    if (payload.state === 'pending') {
-      try {
-        const connectLink = parseTelegramConnectUrl(payload.connectUrl ?? '');
-        if (
-          payload.scopeName !== null &&
-          connectLink.botUsername.toLowerCase() !== payload.scopeName.toLowerCase()
-        ) {
-          throw new Error('Telegram binding bot does not match the negotiated scope');
-        }
-        acceptedPayload = {
-          ...payload,
-          scopeName: payload.scopeName ?? connectLink.botUsername,
-          connectUrl: connectLink.url,
-        };
-      } catch {
-        // The renderer can copy a bind link without crossing shell.openExternal,
-        // so validate the server value before it enters any renderer-visible
-        // snapshot. Keep the token and rejected URL out of logs.
-        telegramOpenRequestId = null;
-        telegramAutoBindIntent = false;
-        clearTelegramBindWatchdog();
-        telegramBinding = {
-          provider: 'telegram',
-          state: 'failed',
-          attemptId: payload.attemptId,
-          bindingId: null,
-          principalId: null,
-          principalName: null,
-          scopeId: payload.scopeId,
-          scopeName: payload.scopeName,
-          connectUrl: null,
-          expiresAt: null,
-          reason: 'invalid-connect-url',
-          remediationUrl: null,
-          actions: ['retry'],
-        };
-        log.warn('invalid Telegram binding URL dropped');
-        notifyStatus(toView());
-        return;
-      }
-    }
-    // An update accepted after welcome is newer than the still-in-flight
-    // initial snapshot; do not let that older snapshot roll it back.
-    if (!isStateSnapshot) telegramAwaitingStateSnapshot = false;
-    const previousBindingId =
-      telegramBinding?.state === 'confirmed' ? telegramBinding.bindingId : null;
-    const view = providerBindingView(acceptedPayload);
-    telegramBinding = view;
-    const currentBindingId = view.state === 'confirmed' ? view.bindingId : null;
-    if (previousBindingId !== null && previousBindingId !== currentBindingId) {
-      // Binding identity is the prefs isolation key. Fail every old request
-      // immediately instead of leaving the editor pending until a stale reply
-      // or the generic timeout happens to arrive.
-      drainPendingProviderPrefs();
-    }
-    persistTelegramBinding(view);
-    if (
-      (view.state === 'pending' || view.state === 'awaiting_confirmation') &&
-      view.expiresAt !== null
-    ) {
-      armTelegramBindWatchdog(view.expiresAt);
-    } else {
-      clearTelegramBindWatchdog();
-    }
-    if (
-      telegramOpenRequestId !== null &&
-      acceptedPayload.replyTo === telegramOpenRequestId &&
-      view.state === 'pending' &&
-      view.connectUrl &&
-      view.actions.includes('open_connect_url')
-    ) {
-      telegramOpenRequestId = null;
-      // Auto-open is best-effort. The link remains in the view so
-      // remote-control users can copy it when the local shell rejects.
-      void Promise.resolve()
-        .then(() => openTelegramUrl?.(view.connectUrl!))
-        .catch((err: unknown) => {
-          log.warn(
-            `open Telegram binding URL failed (${err instanceof Error ? err.name : 'unknown'})`,
-          );
-        });
-    }
-    if (view.state !== 'pending' && view.state !== 'none') telegramOpenRequestId = null;
-    if (
-      view.state === 'confirmed' ||
-      view.state === 'revoked' ||
-      view.state === 'superseded' ||
-      view.state === 'none'
-    ) {
-      telegramBindRequest = null;
-    }
-    if (
-      telegramAutoBindIntent &&
-      view.state === 'none' &&
-      store.get().telegramEnabled &&
-      initiateProviderBind('telegram')
-    ) {
-      telegramAutoBindIntent = false;
-      return;
-    }
-    telegramAutoBindIntent = false;
-    notifyStatus(toView());
-  }
-
   /**
    * 起安装看门狗: "等安装"期到点仍未收到 confirmed(用户没装 / 装到了别的
    * workspace / 放弃)则弹回 toggle 并断开; binding 保留 not-installed 供 UI
@@ -1142,10 +559,7 @@ export function createHookControlManager(deps: HookControlManagerDeps): HookCont
       if (multiTeamKnown()) {
         // multi-team: "等安装"挂在 pendingBind 上。已有可用绑定时只作废这次
         // 添加尝试(连接与其它绑定不受影响); 首绑(0 可用绑定)保持老语义弹回。
-        if (
-          pendingBind?.state !== 'failed' ||
-          pendingBind.reason !== HOOK_BIND_REASON_NOT_INSTALLED
-        ) {
+        if (pendingBind?.state !== 'failed' || pendingBind.reason !== HOOK_BIND_REASON_NOT_INSTALLED) {
           return;
         }
         autoBindIntent = false;
@@ -1159,7 +573,7 @@ export function createHookControlManager(deps: HookControlManagerDeps): HookCont
           log.info('multi-team add-binding install wait timed out, pending cleared');
         } else {
           store.setEnabled(false);
-          stopSlack();
+          stop();
           notifyStatus(toView());
           log.info('slack hook auto-disabled: app install not completed in time (multi-team)');
         }
@@ -1169,7 +583,7 @@ export function createHookControlManager(deps: HookControlManagerDeps): HookCont
       autoBindIntent = false;
       openAuthorizeOnNextPending = false;
       store.setEnabled(false);
-      stopSlack();
+      stop();
       notifyStatus(toView());
       log.info('slack hook auto-disabled: app install not completed in time');
     }, installWaitTimeoutMs ?? DEFAULT_INSTALL_WAIT_TIMEOUT_MS);
@@ -1202,7 +616,7 @@ export function createHookControlManager(deps: HookControlManagerDeps): HookCont
           // 首绑超时: 与单绑定同语义 —— 本地判 expired, toggle 弹回
           pendingBind = { ...pendingBind, state: 'expired', authorizeUrl: null };
           store.setEnabled(false);
-          stopSlack();
+          stop();
           notifyStatus(toView());
           log.info('slack hook auto-disabled: first authorize timed out (multi-team)');
         }
@@ -1222,7 +636,7 @@ export function createHookControlManager(deps: HookControlManagerDeps): HookCont
         teamName: null,
       };
       store.setEnabled(false);
-      stopSlack();
+      stop();
       notifyStatus(toView());
       log.info('slack hook auto-disabled: authorize timed out (browser closed or idle)');
     }, bindPendingTimeoutMs ?? DEFAULT_BIND_PENDING_TIMEOUT_MS);
@@ -1284,21 +698,20 @@ export function createHookControlManager(deps: HookControlManagerDeps): HookCont
     }
   }
 
-  function buildHello(provider: HookProvider): HelloInput {
+  function buildHello(): HelloInput {
     // 每次连接成功都重读配置 —— 别名映射变更后重连即生效
     const device = deviceInfo();
     return {
       deviceId: device.deviceId,
       deviceName: device.deviceName,
       // 内置「对话」伪目录恒在清单第一位(与真实目录同级; Set 去重防存量撞名)
-      workspaces: [...new Set([HOOK_CHAT_WORKSPACE_ALIAS, ...Object.keys(store.get().workspaces)])],
+      workspaces: [
+        ...new Set([HOOK_CHAT_WORKSPACE_ALIAS, ...Object.keys(store.get().workspaces)]),
+      ],
       agents,
-      // 每条连接只声明其服务会实际使用的能力，避免把 Telegram wire 误投到
-      // Slack 服务，也保持老 Slack hello 的兼容面最小。
-      features:
-        provider === 'telegram'
-          ? [HOOK_FEATURE_PROVIDER_BIND, HOOK_FEATURE_PROVIDER_PREFS, HOOK_FEATURE_SESSION_PICKER]
-          : [HOOK_FEATURE_MULTI_TEAM, HOOK_FEATURE_SESSION_PICKER],
+      // 能力声明: 会消费 bind.state 快照与按 team 定位的帧(multi-team)。
+      // 老 server 校验器只查已知字段, 本字段安全透传。
+      features: [HOOK_FEATURE_MULTI_TEAM],
     };
   }
 
@@ -1448,79 +861,15 @@ export function createHookControlManager(deps: HookControlManagerDeps): HookCont
       clearAutoBindDefer();
       if (activeBindings().length === 0 && store.get().enabled) {
         store.setEnabled(false);
-        stopSlack();
+        stop();
         log.info(`slack hook auto-disabled on first-bind ${state} (multi-team)`);
       }
     }
     notifyStatus(toView());
   }
 
-  /**
-   * 业务帧处理(v2 帧 + 任务派发)。expectedProvider 来自物理 transport，而非
-   * 不可信 payload；平台专属帧一旦走错服务立即丢弃。
-   */
-  function handleBusinessMessage(
-    expectedProvider: HookProvider,
-    msg: HookMessage,
-    send: (m: HookMessage) => boolean,
-  ): void {
-    if (!accountActive) {
-      log.info(`hook frame dropped after account ingress closed: ${msg.type}`);
-      return;
-    }
-    const telegramOnly =
-      msg.type === 'provider.bind.update' ||
-      msg.type === 'provider.bind.state' ||
-      msg.type === 'provider.prefs.state';
-    const slackOnly =
-      msg.type === 'bind.state' ||
-      msg.type === 'bind.update' ||
-      msg.type === 'prefs.state' ||
-      msg.type === 'tool.response';
-    if (
-      (expectedProvider === 'slack' && telegramOnly) ||
-      (expectedProvider === 'telegram' && slackOnly)
-    ) {
-      log.warn(`${msg.type} dropped on wrong ${expectedProvider} transport`);
-      return;
-    }
-    const transportReady =
-      expectedProvider === 'slack'
-        ? status === 'connected'
-        : telegramStatus === 'connected' && serverTelegram();
-    if (!transportReady) {
-      // A socket before welcome, or Telegram reaching an old/partially
-      // rolled-out node, is not an authenticated business channel. Fail closed
-      // before any local workspace/model/session data source or dispatcher is
-      // touched, while still returning terminal replies for request/ack-shaped
-      // frames so the server does not leave an operation hanging.
-      if (msg.type === 'query.request') {
-        send(
-          makeQueryResponse({
-            queryId: msg.payload.queryId,
-            kind: msg.payload.kind,
-            ok: false,
-            error: `${expectedProvider} transport handshake required`,
-          }),
-        );
-      } else if (msg.type === 'task.dispatch') {
-        send(
-          makeTaskAck({
-            requestId: msg.payload.requestId,
-            result: 'rejected',
-            reason: 'invalid',
-            sessionId: null,
-            queuePosition: null,
-          }),
-        );
-      }
-      log.warn(`${msg.type} dropped before ${expectedProvider} transport handshake`);
-      return;
-    }
-    if (msg.type === 'provider.bind.update' || msg.type === 'provider.bind.state') {
-      handleProviderBindStatus(msg.payload, msg.type === 'provider.bind.state');
-      return;
-    }
+  /** 业务帧处理(v2 帧 + 任务派发)。 */
+  function handleBusinessMessage(msg: HookMessage, send: (m: HookMessage) => boolean): void {
     if (msg.type === 'bind.state') {
       // (multi-team)绑定全量快照(权威列表): 整体替换活跃行; 本地已知(缓存/
       // 上一轮)但快照缺失的 team 保留为 displaced 行 —— 覆盖「绑定在本机
@@ -1574,10 +923,7 @@ export function createHookControlManager(deps: HookControlManagerDeps): HookCont
         pending.resolve({ ok: true, result: msg.payload.result });
       } else {
         // parse 层已强制 ok=false 必带非空 error, 这里只是类型收窄兜底
-        const err = msg.payload.error ?? {
-          code: 'INTERNAL',
-          message: 'server returned no error detail',
-        };
+        const err = msg.payload.error ?? { code: 'INTERNAL', message: 'server returned no error detail' };
         pending.resolve({ ok: false, error: { code: err.code, message: err.message } });
       }
       return;
@@ -1598,54 +944,6 @@ export function createHookControlManager(deps: HookControlManagerDeps): HookCont
         }
       }
       notifyPrefs?.(view);
-      return;
-    }
-    if (msg.type === 'provider.prefs.state') {
-      if (msg.payload.provider !== 'telegram' || !serverTelegram()) {
-        log.warn('provider prefs state dropped before Telegram capability negotiation');
-        return;
-      }
-      const view: ProviderPrefsView = {
-        provider: msg.payload.provider,
-        bindingId: msg.payload.bindingId,
-        scopeId: msg.payload.scopeId,
-        bound: msg.payload.bound,
-        prefs: msg.payload.prefs.map((pref) => ({ ...pref })),
-      };
-      if (msg.payload.replyTo !== null) {
-        const pending = pendingProviderPrefs.get(msg.payload.replyTo);
-        if (pending === undefined) {
-          log.warn('provider prefs state for unknown requestId, dropped (late?)');
-          return;
-        }
-        if (msg.payload.bindingId !== pending.bindingId) {
-          pendingProviderPrefs.delete(msg.payload.replyTo);
-          clearTimeout(pending.timer);
-          pending.reject(new HookNotConnectedError());
-          log.warn('provider prefs state bindingId mismatch, dropped');
-          return;
-        }
-        const currentBindingId =
-          telegramBinding?.state === 'confirmed' ? telegramBinding.bindingId : null;
-        if (msg.payload.bindingId !== currentBindingId) {
-          pendingProviderPrefs.delete(msg.payload.replyTo);
-          clearTimeout(pending.timer);
-          pending.reject(new HookNotConnectedError());
-          log.warn('provider prefs reply for a superseded binding, dropped');
-          return;
-        }
-        pendingProviderPrefs.delete(msg.payload.replyTo);
-        clearTimeout(pending.timer);
-        pending.resolve(view);
-      } else {
-        const currentBindingId =
-          telegramBinding?.state === 'confirmed' ? telegramBinding.bindingId : null;
-        if (msg.payload.bindingId !== currentBindingId) {
-          log.warn('stale provider prefs push for a different binding, dropped');
-          return;
-        }
-      }
-      deps.notifyProviderPrefs?.(view);
       return;
     }
     if (msg.type === 'bind.update') {
@@ -1714,9 +1012,7 @@ export function createHookControlManager(deps: HookControlManagerDeps): HookCont
           // 发不出 bind.start = 连接恰在本帧处理中掉线: 保留意图等重连回放
           // bind.update 时重试, 且不落入下方 autoDisable(none 会把用户刚打开
           // 的开关静默弹回, 表现为"点了开关没弹浏览器又自己关了")
-          log.info(
-            'bind.start send failed mid-frame, keeping auto-bind intent for reconnect replay',
-          );
+          log.info('bind.start send failed mid-frame, keeping auto-bind intent for reconnect replay');
           notifyStatus(toView());
           return;
         }
@@ -1741,7 +1037,7 @@ export function createHookControlManager(deps: HookControlManagerDeps): HookCont
       if (autoDisable && store.get().enabled) {
         autoBindIntent = false;
         store.setEnabled(false);
-        stopSlack();
+        stop();
         log.info(`slack hook auto-disabled on bind.update=${msg.payload.state}`);
       }
       notifyStatus(toView());
@@ -1754,49 +1050,30 @@ export function createHookControlManager(deps: HookControlManagerDeps): HookCont
       log.info(`query.request received: kind=${msg.payload.kind} queryId=${msg.payload.queryId}`);
       // buildQueryResponse 现为异步(models 数据源要实时读 listProviders);
       // 内部已捕获数据源错误(回 ok:false), 这里不会 reject。
-      const admittedGeneration = accountGeneration;
-      trackAccountOp(
-        buildQueryResponse(
-          {
-            listWorkspaces: () => [
-              ...new Set([HOOK_CHAT_WORKSPACE_ALIAS, ...Object.keys(store.get().workspaces)]),
-            ],
-            listAgentModels: () => listAgentModels?.() ?? [],
-            listSessions: () =>
-              (expectedProvider === 'telegram' ? telegramServerFeatures : serverFeatures).includes(
-                HOOK_FEATURE_SESSION_PICKER,
-              )
-                ? (listRecentSessions?.() ?? [])
-                : Promise.reject(new Error('session-picker-v1 was not negotiated')),
-          },
-          msg.payload,
-        ).then((response) => {
-          if (!accountActive || admittedGeneration !== accountGeneration) return;
-          send(makeQueryResponse(response));
-        }),
-      );
+      void buildQueryResponse(
+        {
+          listWorkspaces: () => [
+            ...new Set([HOOK_CHAT_WORKSPACE_ALIAS, ...Object.keys(store.get().workspaces)]),
+          ],
+          listAgentModels: () => listAgentModels?.() ?? [],
+        },
+        msg.payload,
+      ).then((response) => send(makeQueryResponse(response)));
       return;
     }
     if (msg.type === 'task.cancel') {
       log.info(`task.cancel received: requestId=${msg.payload.requestId}`);
       if (dispatcher) {
-        dispatcher.cancel(dispatchId(expectedProvider), msg.payload.requestId);
+        dispatcher.cancel(id, msg.payload.requestId);
       } else {
         log.warn('task.cancel ignored (no dispatcher)');
       }
       return;
     }
     if (msg.type === 'session.archive') {
-      // Provider lane /new 换代 -> 归档旧代会话(幂等, 无绑定即 no-op)
+      // Slack 私聊 /new 换代 -> 归档旧代会话(幂等, 无绑定即 no-op)
       if (dispatcher) {
-        const provider = providerForExternalKey(msg.payload.externalKey);
-        if (provider !== expectedProvider || (provider === 'telegram' && !serverTelegram())) {
-          log.warn(
-            `session.archive ignored for unsupported or mismatched provider: ${provider ?? 'unknown'}`,
-          );
-          return;
-        }
-        dispatcher.handleSessionArchive(dispatchId(provider), msg.payload.externalKey);
+        dispatcher.handleSessionArchive(id, msg.payload.externalKey);
       } else {
         log.warn('session.archive ignored (no dispatcher)');
       }
@@ -1808,37 +1085,20 @@ export function createHookControlManager(deps: HookControlManagerDeps): HookCont
         `interaction.decision received: interactionId=${msg.payload.interactionId} button=${msg.payload.buttonId}`,
       );
       if (dispatcher) {
-        dispatcher.handleInteractionDecision(dispatchId(expectedProvider), msg.payload);
+        dispatcher.handleInteractionDecision(id, msg.payload);
       } else {
         log.warn('interaction.decision ignored (no dispatcher)');
       }
       return;
     }
     if (msg.type === 'task.dispatch') {
-      const provider = providerForTaskDispatch(msg.payload);
       // 接收日志: 复用已有会话的派发在 dispatcher 里是静默路径(只有新建才留
-      // worktree 痕迹), 没有这条就无法区分「没收到」和「静默复用」。lane
-      // key 含 IM 用户/聊天标识，不写日志。
+      // worktree 痕迹), 没有这条就无法区分「没收到」和「静默复用」。
       log.info(
-        `task.dispatch received: requestId=${msg.payload.requestId} provider=${provider ?? 'unknown'} sessionId=${msg.payload.sessionId ?? '(new/bound)'}`,
+        `task.dispatch received: requestId=${msg.payload.requestId} externalKey=${msg.payload.externalKey} sessionId=${msg.payload.sessionId ?? '(new/bound)'}`,
       );
-      if (provider !== expectedProvider || (provider === 'telegram' && !serverTelegram())) {
-        log.warn(
-          `task.dispatch rejected for unsupported or mismatched provider: requestId=${msg.payload.requestId}`,
-        );
-        send(
-          makeTaskAck({
-            requestId: msg.payload.requestId,
-            result: 'rejected',
-            reason: 'invalid',
-            sessionId: null,
-            queuePosition: null,
-          }),
-        );
-        return;
-      }
       if (dispatcher) {
-        dispatcher.handleDispatch(dispatchId(provider), msg.payload, send);
+        dispatcher.handleDispatch(id, msg.payload, send);
         return;
       }
       log.info(`dispatch received (requestId=${msg.payload.requestId}) — no dispatcher, rejecting`);
@@ -1857,8 +1117,8 @@ export function createHookControlManager(deps: HookControlManagerDeps): HookCont
     log.warn(`unexpected message type=${msg.type}, ignored`);
   }
 
-  function stopSlack(): void {
-    // Slack 看门狗只随 Slack 连接停止，不能打断 Telegram 绑定流程。
+  function stop(): void {
+    // 看门狗随连接停止一并撤(dispose / 关 toggle / sync 重建都不该留残余计时器)
     clearBindWatchdog();
     clearInstallWatchdog();
     clearAutoBindDefer();
@@ -1867,46 +1127,12 @@ export function createHookControlManager(deps: HookControlManagerDeps): HookCont
     transport = null;
     status = null;
     lastError = null;
-    dispatcher?.onDisconnected(dispatchId('slack'));
     drainPendingPrefs();
     drainPendingTools();
     t.dispose();
   }
 
-  function stopTelegram(): void {
-    clearTelegramBindWatchdog();
-    telegramOpenRequestId = null;
-    telegramBindRequest = null;
-    telegramAwaitingStateSnapshot = false;
-    const t = telegramTransport;
-    telegramTransport = null;
-    telegramStatus = null;
-    telegramLastError = null;
-    dispatcher?.onDisconnected(dispatchId('telegram'));
-    // Capability state belongs to this transport lifecycle. Keeping a previous
-    // welcome after disable/sync makes the stopped provider look available and
-    // can let a later enable act on stale rollout information.
-    telegramServerFeatures = [];
-    telegramServerWelcomeReceived = false;
-    drainPendingProviderPrefs();
-    t?.dispose();
-  }
-
-  function stopAll(): void {
-    stopSlack();
-    stopTelegram();
-  }
-
-  function startSlack(): void {
-    if (
-      !accountActive ||
-      disposed ||
-      !isAvailable() ||
-      !store.get().enabled ||
-      transport !== null
-    ) {
-      return;
-    }
+  function start(): void {
     // created 先声明后赋值: transport 工厂同步触发首个 onStatus(connecting),
     // 此时按"未注册"丢弃(status 随后统一置 connecting, 不丢信息)
     let created: HookTransport | null = null;
@@ -1914,13 +1140,12 @@ export function createHookControlManager(deps: HookControlManagerDeps): HookCont
       url: store.effectiveUrl(),
       getAuthToken,
       refreshAuthToken,
-      buildHello: () => buildHello('slack'),
-      onMessage: (msg, send) => handleBusinessMessage('slack', msg, send),
+      buildHello,
+      onMessage: handleBusinessMessage,
       onWelcome: (payload) => {
         if (created === null || transport !== created) return;
         // server 能力集以最新一次握手为准(重连可能落到另一版本实例)
         serverFeatures = [...payload.features];
-        serverWelcomeReceived = true;
         // 落回老 server(无 multi-team): 多绑定列表与缓存作废 —— 老 server 是
         // 单绑定权威(它会经 bind.update 推现状), 残留的多绑定行会让 toView
         // 误走 multi 映射、渲染层误开列表 UI。pendingBind 无条件清: 滚动发布
@@ -1933,7 +1158,6 @@ export function createHookControlManager(deps: HookControlManagerDeps): HookCont
           }
         }
         notifySlackToolProviderEnabledIfChanged();
-        notifyStatus(toView());
       },
       onStatus: (s, err) => {
         // 构造期 / dispose / 重建后的尾随回调不再处理
@@ -1942,14 +1166,13 @@ export function createHookControlManager(deps: HookControlManagerDeps): HookCont
         lastError = err;
         // 掉线(含退避重连中): 在途往返快速失败, 不让调用方挂满超时
         if (s !== 'connected') {
-          dispatcher?.onDisconnected(dispatchId('slack'));
           drainPendingPrefs();
           drainPendingTools();
         }
         // 握手完成 → dispatcher 刷新发送函数并补发离线积压的 turn.end
         if (s === 'connected') {
           const t = created;
-          dispatcher?.onConnected(dispatchId('slack'), (m) => t.send(m));
+          dispatcher?.onConnected(id, (m) => t.send(m));
           // 阶段 4 起绑定走 SIWS OIDC, 由用户点「连接 Slack」显式发起(需开浏览器),
           // 不再随连接就绪自动绑 —— 抢占式绑定若自动补绑会让两台设备互相顶。
         }
@@ -1961,94 +1184,11 @@ export function createHookControlManager(deps: HookControlManagerDeps): HookCont
     status = 'connecting';
   }
 
-  function startTelegram(): void {
-    if (
-      !accountActive ||
-      disposed ||
-      !isAvailable() ||
-      !store.get().telegramEnabled ||
-      telegramTransport !== null
-    ) {
-      return;
-    }
-    const url = getTelegramUrl().trim();
-    if (url.length === 0) {
-      telegramServerFeatures = [];
-      telegramServerWelcomeReceived = true;
-      telegramStatus = 'error';
-      telegramLastError = 'Telegram service endpoint is not configured';
-      notifyStatus(toView());
-      return;
-    }
-    telegramServerWelcomeReceived = false;
-    let created: HookTransport | null = null;
-    created = createTransport({
-      url,
-      getAuthToken,
-      refreshAuthToken,
-      buildHello: () => buildHello('telegram'),
-      onMessage: (msg, send) => handleBusinessMessage('telegram', msg, send),
-      onWelcome: (payload) => {
-        if (created === null || telegramTransport !== created) return;
-        telegramServerFeatures = [...payload.features];
-        telegramServerWelcomeReceived = true;
-        const telegramSupported = serverTelegram();
-        telegramAwaitingStateSnapshot = telegramSupported;
-        if (!telegramSupported) {
-          // A rolling deployment may briefly route this enabled client to an
-          // older node. Preserve the user's explicit preference and keep the
-          // transport alive so a later reconnect can negotiate capabilities
-          // again. The auto-bind intent is also preserved: a toggle-on that
-          // landed on an old node should complete after rollout without a
-          // second user action. Only clear wire attempts tied to this node.
-          telegramOpenRequestId = null;
-          telegramBindRequest = null;
-          clearTelegramBindWatchdog();
-          drainPendingProviderPrefs();
-          dispatcher?.onDisconnected(dispatchId('telegram'));
-          log.warn(
-            'Telegram provider unavailable because Telegram service capability negotiation failed',
-          );
-        } else if (telegramStatus === 'connected') {
-          // refreshHello() can upgrade an already-open socket after a rolling
-          // deploy without another status transition.
-          const t = created;
-          dispatcher?.onConnected(dispatchId('telegram'), (m) => t.send(m));
-        }
-        notifyStatus(toView());
-      },
-      onStatus: (s, err) => {
-        if (created === null || telegramTransport !== created) return;
-        telegramStatus = s;
-        telegramLastError = err;
-        if (s !== 'connected' || !serverTelegram()) {
-          dispatcher?.onDisconnected(dispatchId('telegram'));
-          drainPendingProviderPrefs();
-        }
-        if (s === 'connected' && serverTelegram()) {
-          const t = created;
-          dispatcher?.onConnected(dispatchId('telegram'), (m) => t.send(m));
-        }
-        notifyStatus(toView());
-      },
-      log,
-    });
-    telegramTransport = created;
-    telegramStatus = 'connecting';
-    telegramLastError = null;
-  }
-
-  function startEnabledProviders(): void {
-    if (!accountActive || disposed) return;
-    if (store.get().enabled) startSlack();
-    if (store.get().telegramEnabled) startTelegram();
-  }
-
   return {
     sync() {
-      // 两条连接各自重建；一个 provider 的端点/故障不影响另一个。
-      stopAll();
-      startEnabledProviders();
+      // 统一策略: 停旧建新 —— url/别名/登录态变更全部经重建生效, 不做增量 diff
+      stop();
+      if (store.get().enabled && !disposed) start();
       // multi-team 的 gate 含 enabled 因子(关开关不再清绑定), setEnabled 后的
       // sync 是它唯一的重算点; 老路径下本调用是幂等 no-op
       notifySlackToolProviderEnabledIfChanged();
@@ -2056,17 +1196,8 @@ export function createHookControlManager(deps: HookControlManagerDeps): HookCont
     },
     snapshot: () => toView(),
     refreshHello() {
-      let attempted = false;
-      let sent = true;
-      if (transport !== null && status === 'connected') {
-        attempted = true;
-        sent = transport.send(makeHello(buildHello('slack'))) && sent;
-      }
-      if (telegramTransport !== null && telegramStatus === 'connected') {
-        attempted = true;
-        sent = telegramTransport.send(makeHello(buildHello('telegram'))) && sent;
-      }
-      return attempted && sent;
+      if (transport === null || status !== 'connected') return false;
+      return transport.send(makeHello(buildHello()));
     },
     bindStart() {
       return initiateBind();
@@ -2140,7 +1271,9 @@ export function createHookControlManager(deps: HookControlManagerDeps): HookCont
       if (t === null || status !== 'connected') {
         return fail('HOOK_NOT_CONNECTED', 'Slack 连接不在线, 请检查 设置 → Slack 开关与网络');
       }
-      const bound = multiTeamKnown() ? activeBindings().length > 0 : binding?.state === 'confirmed';
+      const bound = multiTeamKnown()
+        ? activeBindings().length > 0
+        : binding?.state === 'confirmed';
       if (!bound) {
         return fail('NOT_BOUND', '本设备未绑定 Slack, 请先到 设置 → Slack 完成绑定');
       }
@@ -2154,12 +1287,7 @@ export function createHookControlManager(deps: HookControlManagerDeps): HookCont
       return new Promise<HookSlackToolResult>((resolve) => {
         if (
           !t.send(
-            makeToolRequest({
-              requestId,
-              tool,
-              ...(args !== undefined ? { args } : {}),
-              ...withTeam,
-            }),
+            makeToolRequest({ requestId, tool, ...(args !== undefined ? { args } : {}), ...withTeam }),
           )
         ) {
           resolve({
@@ -2184,7 +1312,7 @@ export function createHookControlManager(deps: HookControlManagerDeps): HookCont
       return {
         connected: status === 'connected',
         // multi-team 关开关不清绑定, bound 必须叠 enabled 因子 —— 否则 Slack
-        // 已关的设备上 cindy_slack 工具面仍会挂进新会话(老路径关开关会把
+        // 已关的设备上 lizi_slack 工具面仍会挂进新会话(老路径关开关会把
         // binding 归零, confirmed 判据自足)
         bound: multi
           ? store.get().enabled && activeBindings().length > 0
@@ -2214,207 +1342,6 @@ export function createHookControlManager(deps: HookControlManagerDeps): HookCont
         }),
       );
     },
-    setProviderEnabled(provider, enabled) {
-      if (provider === 'slack') {
-        store.setEnabled(enabled);
-        if (!enabled) {
-          // multi-team keeps durable bindings while the toggle is off, so the
-          // build-time cindy_slack gate must be recomputed after the enabled
-          // bit flips rather than relying on revokeAndDisconnect().
-          notifySlackToolProviderEnabledIfChanged();
-          stopSlack();
-        } else if (transport === null) startSlack();
-        else if (status === 'connected' && serverWelcomeReceived) {
-          // 幂等重复开启已连接的 Slack 时不会收到新的状态回放，直接消费
-          // armAutoBind 意图；首次开启走上面的 startSlack + 服务端回放路径。
-          if (serverMultiTeam()) {
-            if (activeBindings().length > 0) autoBindIntent = false;
-            else if (initiateMultiBind(null)) autoBindIntent = false;
-          } else if (binding?.state === 'confirmed') {
-            autoBindIntent = false;
-          } else if (initiateBind()) {
-            autoBindIntent = false;
-          }
-        }
-        notifyStatus(toView());
-        return;
-      }
-      store.setProviderEnabled('telegram', enabled);
-      if (!enabled) {
-        telegramAutoBindIntent = false;
-        telegramOpenRequestId = null;
-        telegramBindRequest = null;
-        clearTelegramBindWatchdog();
-        const attemptId = telegramBinding?.attemptId;
-        if (
-          attemptId &&
-          telegramTransport !== null &&
-          telegramStatus === 'connected' &&
-          serverTelegram()
-        ) {
-          telegramTransport.send(
-            makeProviderBindCancel({ requestId: randomUUID(), provider: 'telegram', attemptId }),
-          );
-        }
-        stopTelegram();
-        notifyStatus(toView());
-        return;
-      }
-      // Cached state is presentation-only until the server's authoritative
-      // snapshot arrives. Always arm explicit enable; a confirmed snapshot
-      // clears the intent, while none/revoked starts a fresh one-time bind.
-      telegramAutoBindIntent = true;
-      if (telegramTransport === null) {
-        startTelegram();
-      } else if (telegramStatus === 'connected' && serverTelegram()) {
-        if (telegramBinding?.state === 'confirmed') telegramAutoBindIntent = false;
-        else if (initiateProviderBind('telegram')) telegramAutoBindIntent = false;
-      }
-      notifyStatus(toView());
-    },
-    providerBindStart(provider) {
-      telegramAutoBindIntent = false;
-      return initiateProviderBind(provider);
-    },
-    providerBindCancel(provider) {
-      const current = telegramBinding;
-      const attemptId = current?.attemptId;
-      if (
-        provider !== 'telegram' ||
-        current === null ||
-        !attemptId ||
-        !current.actions.includes('cancel') ||
-        telegramTransport === null ||
-        telegramStatus !== 'connected' ||
-        !serverTelegram()
-      ) {
-        return false;
-      }
-      const requestId = randomUUID();
-      const sent = telegramTransport.send(
-        makeProviderBindCancel({ requestId, provider, attemptId }),
-      );
-      if (sent) {
-        telegramBindRequest = { kind: 'cancel', requestId, attemptId };
-        clearTelegramBindWatchdog();
-        telegramOpenRequestId = null;
-        telegramBinding = {
-          ...current,
-          state: 'failed',
-          connectUrl: null,
-          expiresAt: null,
-          reason: 'cancelled',
-          actions: ['retry'],
-        };
-        notifyStatus(toView());
-      }
-      return sent;
-    },
-    providerBindRevoke(provider) {
-      const bindingId = telegramBinding?.state === 'confirmed' ? telegramBinding.bindingId : null;
-      if (
-        provider !== 'telegram' ||
-        !bindingId ||
-        !telegramBinding?.actions.includes('revoke') ||
-        telegramTransport === null ||
-        telegramStatus !== 'connected' ||
-        !serverTelegram()
-      ) {
-        return false;
-      }
-      const requestId = randomUUID();
-      const sent = telegramTransport.send(
-        makeProviderBindRevoke({ requestId, provider, bindingId }),
-      );
-      if (sent) telegramBindRequest = { kind: 'revoke', requestId, bindingId };
-      return sent;
-    },
-    async openTelegramAction(action) {
-      if (!openTelegramUrl || telegramBinding === null) return false;
-      let url: string | null = null;
-      if (action === 'connect' && telegramBinding.actions.includes('open_connect_url')) {
-        url = telegramBinding.connectUrl;
-      } else if (telegramBinding.scopeName) {
-        if (action === 'add-to-group' && telegramBinding.actions.includes('add_to_group')) {
-          url = `https://t.me/${telegramBinding.scopeName}?startgroup=true`;
-        } else if (action === 'provider' && telegramBinding.actions.includes('open_provider')) {
-          url = `https://t.me/${telegramBinding.scopeName}`;
-        }
-      }
-      if (!url) return false;
-      await openTelegramUrl(url);
-      return true;
-    },
-    getProviderWorkspacePrefs(provider) {
-      return sendProviderPrefsRequest((requestId, bindingId) =>
-        makeProviderPrefsGet({
-          requestId,
-          provider,
-          bindingId,
-          scopeId: null,
-        }),
-      );
-    },
-    setProviderWorkspacePrefs(provider, workspace, patch) {
-      return sendProviderPrefsRequest((requestId, bindingId) =>
-        makeProviderPrefsSet({
-          requestId,
-          provider,
-          bindingId,
-          scopeId: null,
-          workspace,
-          ...(patch.model !== undefined ? { model: patch.model } : {}),
-          ...(patch.effort !== undefined ? { effort: patch.effort } : {}),
-          ...(patch.agentKind !== undefined ? { agentKind: patch.agentKind } : {}),
-          ...(patch.permissionMode !== undefined ? { permissionMode: patch.permissionMode } : {}),
-        }),
-      );
-    },
-    activateAccount() {
-      if (accountDeactivation !== null) {
-        const generation = accountGeneration;
-        void accountDeactivation.then(() => {
-          if (generation === accountGeneration) activateCurrentAccount();
-        });
-        return;
-      }
-      activateCurrentAccount();
-    },
-    async deactivateAccount() {
-      // Invalidate deferred activation and all account-bound async work even
-      // when another caller is already waiting on the same physical drain.
-      accountActive = false;
-      accountGeneration += 1;
-      telegramOpenRequestId = null;
-      telegramBindRequest = null;
-      telegramAutoBindIntent = false;
-      if (accountDeactivation !== null) {
-        await accountDeactivation;
-        return;
-      }
-      stopAll();
-      const drain = (async (): Promise<void> => {
-        const dispatcherDrain = dispatcher?.deactivateAccount();
-        await Promise.allSettled([
-          ...(dispatcherDrain ? [dispatcherDrain] : []),
-          ...pendingAccountOps,
-        ]);
-        binding = null;
-        multiBindings = [];
-        pendingBind = null;
-        telegramBinding = null;
-        serverFeatures = [];
-        serverWelcomeReceived = false;
-        telegramServerFeatures = [];
-        telegramServerWelcomeReceived = false;
-        notifySlackToolProviderEnabledIfChanged();
-        notifyStatus(toView());
-      })();
-      accountDeactivation = drain.finally(() => {
-        accountDeactivation = null;
-      });
-      await accountDeactivation;
-    },
     revokeAndDisconnect() {
       if (serverMultiTeam()) {
         // (multi-team)关 toggle = 只断开, **不再发全量 bind.revoke** —— 绑定
@@ -2426,9 +1353,8 @@ export function createHookControlManager(deps: HookControlManagerDeps): HookCont
         autoBindIntent = false;
         openAuthorizeOnNextPending = false;
         pendingBind = null;
-        stopSlack();
-        // setProviderEnabled(false) flips the durable bit and recomputes the
-        // gate immediately after this pre-disable disconnect step.
+        stop();
+        // gate 的 enabled 因子在 ipc 层 setEnabled(false) + sync() 后重算
         notifySlackToolProviderEnabledIfChanged();
         return;
       }
@@ -2456,11 +1382,11 @@ export function createHookControlManager(deps: HookControlManagerDeps): HookCont
         teamName: null,
       };
       notifySlackToolProviderEnabledIfChanged();
-      stopSlack();
+      stop();
     },
     dispose() {
       disposed = true;
-      stopAll();
+      stop();
     },
   };
 }

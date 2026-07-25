@@ -1,7 +1,7 @@
 /**
  * useRightSidebarResize — 右侧边栏宽度读取(比例语义,布局树全局持久化)
  * ---------------------------------------------------------------------------
- * 本 hook 已不再承担拖拽:拖宽把手统一为**引擎分割线**(LayoutRoot 的
+ * C1c 起本 hook 已不再承担拖拽:拖宽把手统一为**引擎分割线**(LayoutRoot 的
  * RootDivider,拖动经 transferSplitFraction 写树),RSB 的私有把手已拆除。
  * 保留职责:
  * - **width 兜底**:fraction × 可用宽的像素换算(RSB 优先消费引擎

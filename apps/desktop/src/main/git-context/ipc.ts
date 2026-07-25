@@ -19,7 +19,7 @@
  */
 
 import { BrowserWindow, ipcMain } from 'electron';
-import { GithubClient } from '@cindy/github-client';
+import { GithubClient } from '@lizi/github-client';
 
 import { createLogger } from '../logger.js';
 import { getCurrentDbClientUserId } from '../localDb/client/current';

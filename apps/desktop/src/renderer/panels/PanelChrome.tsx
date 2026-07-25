@@ -1,7 +1,7 @@
 import type { CSSProperties, ReactNode } from 'react';
 
 /**
- * PanelChrome —— 面板标准头。
+ * PanelChrome —— 面板标准头(§6.0,布局树 C1a)。
  *
  * 任何顶级面板(尤其未来意识面板)都应以本组件作为顶带,拿到三件事:
  *   1. 统一视觉:36px 行高、下边框、panel-bg —— 与工具面板 TabBar 同规格族,
@@ -10,8 +10,8 @@ import type { CSSProperties, ReactNode } from 'react';
  *      PanelDragController 识别;窗口拖动走 46px 顶带,见 B3 口径);
  *   3. 左标题 / 右 actions 槽:标题给面板身份,actions 给面板自定义控件。
  *
- * 右端两颗系统按钮(独立窗口 / 撑满页面)**暂缺**:对应的引擎级能力
- * (任意面板 detach / maximize)还没泛化,能力落地时由本组件统一
+ * §6.0 规定的右端两颗系统按钮(独立窗口 / 撑满页面)**暂缺**:对应的引擎级
+ * 能力(任意面板 detach / maximize)还没泛化,能力落地时(C2+)由本组件统一
  * 长出,面板作者无感 —— 这正是"标准头由引擎提供"的意义。
  *
  * 视觉走主题 token(规则 16);组件自身无文案(标题由调用方传入并自行 i18n)。

@@ -2,7 +2,7 @@
  * seedanceProvider.test.ts
  * ---------------------------------------------------------------------------
  * Locks in the seedance provider's translation between the vendor-agnostic
- * VideoProvider interface and the concrete XD Gateway / volcengine ARK calls.
+ * VideoProvider interface and the concrete xdproxy / volcengine ARK calls.
  *
  * What we DON'T test:
  *   - The polling loop (lives in mcpServer.ts handler, not the provider).

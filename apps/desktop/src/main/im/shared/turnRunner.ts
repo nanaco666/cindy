@@ -51,7 +51,7 @@ import { createLogger } from '../../logger';
 import { resolveSafe as resolveXdtImageUrl } from '../../imageCacheStore';
 import { resolveSafe as resolveCindyMediaUrl } from '../../cindy-media/blobStore';
 
-import { isTerminalAgentErrorEvent } from '@cindy/maker-core';
+import { isTerminalAgentErrorEvent } from '@lizi/maker-core';
 import type {
   AgentEvent,
   AgentKind,
@@ -59,12 +59,11 @@ import type {
   InteractionRequest,
   Session as MakerSession,
   UserMessage,
-} from '@cindy/maker-core';
-import type { IMAttachment, InteractiveCardSpec, StreamingTextHandle } from '@cindy/im';
+} from '@lizi/maker-core';
+import type { IMAttachment, InteractiveCardSpec, StreamingTextHandle } from 'lizi-im';
 
 import { persistUserMessage } from '../messagePersistence';
 import { bindingStore } from '../binding';
-import { buildImUserMessage } from './inboundMessage';
 import {
   wireSessionToIpcExternal,
   installDesktopInteractionListener,
@@ -77,7 +76,7 @@ import { agentHandoffPending } from '../../maker-ipc/agentHandoffPendingSingleto
 import { prependHandoffToUserMessage } from '../../maker-ipc/agentHandoff';
 import { registerPending, registerPendingExternal, rejectAllPending } from './pendingInteractions';
 import { checkDestructiveToolCall } from '../../destructiveGuard';
-import { readXdGatewayApiKey } from './apiKey';
+import { readXdProxyApiKey } from './apiKey';
 import {
   hasAuthForImRoute,
   checkImRouteAuthDetailed,
@@ -165,8 +164,6 @@ interface QueuedSend {
   notified: boolean;
 }
 
-type DetachDrainOutcome = 'rewire' | 'cancelled';
-
 interface SessionState {
   /** Maker session (in-process). */
   makerSession: MakerSession;
@@ -182,13 +179,6 @@ interface SessionState {
   dispatchRetryTimer: ReturnType<typeof setTimeout> | null;
   /** Cleanup fns from session.onEvent / setInteractionListener. */
   unsubscribers: Array<() => void>;
-  /**
-   * Replacement detach waits for the current IM-owned turn to finish before
-   * removing its event listener. New wiring for the same channel/session waits
-   * on this promise instead of reusing the retiring state.
-   */
-  detachDrainPromise: Promise<DetachDrainOutcome> | null;
-  resolveDetachDrain: ((outcome: DetachDrainOutcome) => void) | null;
   /**
    * true = 这个 session 是 desktop 那个 row 被本渠道接管 (C 状态);
    * false = 渠道默认 session (B' 状态)。
@@ -572,7 +562,7 @@ export function createTurnRunner(
 
     const item: QueuedSend = {
       turn,
-      userMessage: buildImUserMessage(text, attachments, target.attached),
+      userMessage: buildUserMessage(text, attachments),
       rowId: row.id,
       text,
       attachments,
@@ -683,11 +673,6 @@ export function createTurnRunner(
       if (normalized.reason === 'SESSION_RUNNING') {
         const i = state.queue.indexOf(item.turn);
         if (i >= 0) state.queue.splice(i, 1);
-        if (state.detachDrainPromise) {
-          await completeTurnCallbackAfterAck(item.turn);
-          finishDeferredDetachIfIdle(state);
-          return;
-        }
         state.sendQueue.unshift(item);
         log.info(
           `SESSION_RUNNING race for session=${rowId.slice(-8)} — requeued at head (pendingSends=${state.sendQueue.length})`,
@@ -821,16 +806,7 @@ export function createTurnRunner(
 
   async function ensureSessionWired(target: RouteTarget, userId: string): Promise<SessionState> {
     const existing = sessionStates.get(target.row.id);
-    if (existing) {
-      if (existing.detachDrainPromise) {
-        const outcome = await existing.detachDrainPromise;
-        if (outcome === 'cancelled') {
-          throw new Error(`session wiring cancelled during cleanup: ${target.row.id}`);
-        }
-        return ensureSessionWired(target, userId);
-      }
-      return existing;
-    }
+    if (existing) return existing;
     const inFlight = wiringInFlight.get(target.row.id);
     if (inFlight) return inFlight;
 
@@ -900,7 +876,7 @@ export function createTurnRunner(
 
   function authCheckDeps(): ImAuthCheckDeps {
     return {
-      readXdGatewayApiKey,
+      readXdProxyApiKey,
       hasCustomProviderKey,
       getAgentAuthState: (agentKind) => getMaker().getAgentAuthState(agentKind),
       listProviders: () => getDesktopProviderService().listProviders(),
@@ -973,8 +949,6 @@ export function createTurnRunner(
       sendQueue: [],
       dispatchRetryTimer: null,
       unsubscribers: [],
-      detachDrainPromise: null,
-      resolveDetachDrain: null,
       attached,
       scheduledTranspond: null,
     };
@@ -1246,6 +1220,22 @@ export function createTurnRunner(
     }
   }
 
+  function buildUserMessage(text: string, attachments: IMAttachment[]): UserMessage {
+    if (attachments.length === 0) {
+      return { type: 'user', content: text };
+    }
+    const blocks: import('@lizi/maker-core').UserContentBlock[] = [];
+    if (text) blocks.push({ type: 'text', text });
+    for (const att of attachments) {
+      blocks.push({
+        type: att.kind === 'image' ? 'image' : 'file',
+        path: att.absPath,
+        mimeType: att.mimeType,
+      });
+    }
+    return { type: 'user', content: blocks };
+  }
+
   // ── event routing ───────────────────────────────────────────────────────────
 
   function handleEventFor(localSessionId: string, userId: string) {
@@ -1339,7 +1329,7 @@ export function createTurnRunner(
       return [];
     }
     if (parsed._xdt_render_image === false) return [];
-    // 双协议:历史 xdt-image + 当前 cindy-media
+    // 双协议:老 xdt-image(历史/未迁移工具)+ 新 cindy-media(迁移第 2 步起
     // art/mivo/codex 生成图的地址形态;只认老协议会让 IM 端"画了图看不到")。
     const isManagedImageUrl = (u: string): boolean =>
       u.startsWith('xdt-image://') || u.startsWith('cindy-media://');
@@ -1676,7 +1666,6 @@ export function createTurnRunner(
     } catch {
       /* 忽略失败：派发失败提示不能再阻塞收口。 */
     }
-    if (finishDeferredDetachIfIdle(state)) return;
     // 一条 pre-dispatch failure 不能卡死后面的排队消息 — 继续放行。
     maybeDispatchNextQueued(state, userId);
   }
@@ -1869,7 +1858,6 @@ export function createTurnRunner(
     log.info(
       `turn done for session=...${(state.makerSession.id ?? '').slice(-8)}, queueDepth=${state.queue.length}`,
     );
-    if (finishDeferredDetachIfIdle(state)) return;
     // 收口完成(最终卡片已 finalize)后再派发下一条排队消息 — IM 时间线保持
     // "上一轮输出 → 下一条开始流式"的自然顺序。
     maybeDispatchNextQueued(state, userId);
@@ -1904,7 +1892,6 @@ export function createTurnRunner(
         /* swallow */
       }
     }
-    if (finishDeferredDetachIfIdle(state)) return;
     // error 收口同样要继续放行排队消息 — 一条失败不能卡死后面的队列。
     maybeDispatchNextQueued(state, userId);
   }
@@ -2100,42 +2087,21 @@ export function createTurnRunner(
   function detachFromSession(sessionId: string): void {
     const state = sessionStates.get(sessionId);
     if (!state?.attached) return;
-    if (state.queue.length > 0) {
-      clearPendingSends(state);
-      if (!state.detachDrainPromise) {
-        state.detachDrainPromise = new Promise<DetachDrainOutcome>((resolve) => {
-          state.resolveDetachDrain = resolve;
-        });
+    clearPendingSends(state);
+    clearQueuedTurnTimers(state);
+    for (const u of state.unsubscribers) {
+      try {
+        u();
+      } catch {
+        /* swallow */
       }
-      log.info(
-        `deferring ${channel} detach until active turn drains session=${sessionId.slice(-8)}`,
-      );
-      return;
     }
-    detachSessionStateNow(sessionId, state);
-  }
-
-  function finishDeferredDetachIfIdle(state: SessionState): boolean {
-    if (!state.detachDrainPromise || state.queue.length > 0) return false;
-    detachSessionStateNow(state.makerSession.id, state);
-    return true;
-  }
-
-  function detachSessionStateNow(sessionId: string, state: SessionState): void {
-    sessionStates.delete(sessionId);
-    cleanupSessionState(state);
+    state.unsubscribers = [];
     // 还原 desktop 版 interaction listener — 接管期间被本渠道版覆盖了,
     // 不还原 desktop renderer 永远收不到 permission 弹窗。
     installDesktopInteractionListener(state.makerSession);
-    settleDetachDrain(state, 'rewire');
+    sessionStates.delete(sessionId);
     log.info(`detached ${channel} hook from session=${sessionId.slice(-8)}`);
-  }
-
-  function settleDetachDrain(state: SessionState, outcome: DetachDrainOutcome): void {
-    const resolveDetachDrain = state.resolveDetachDrain;
-    state.detachDrainPromise = null;
-    state.resolveDetachDrain = null;
-    resolveDetachDrain?.(outcome);
   }
 
   function disposeAllSessions(): Promise<void> {
@@ -2146,7 +2112,6 @@ export function createTurnRunner(
       // queue stays empty; logout must not abort that desktop-owned work.
       const hasImTurnInFlight = state.queue.length > 0;
       cleanupSessionState(state);
-      settleDetachDrain(state, 'cancelled');
       if (hasImTurnInFlight) {
         aborts.push(
           state.makerSession.abort().catch((err) => {
@@ -2207,7 +2172,6 @@ export function createTurnRunner(
     if (!state) return;
     sessionStates.delete(sessionId);
     cleanupSessionState(state);
-    settleDetachDrain(state, 'cancelled');
     try {
       await state.makerSession.close();
     } catch (err) {
@@ -2221,7 +2185,6 @@ export function createTurnRunner(
     if (!state) return;
     sessionStates.delete(sessionId);
     cleanupSessionState(state);
-    settleDetachDrain(state, 'cancelled');
     log.info(`forgot cached ${channel} session=${sessionId.slice(-8)} after ${reason}`);
   }
 

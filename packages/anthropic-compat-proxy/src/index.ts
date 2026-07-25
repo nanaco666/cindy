@@ -1,5 +1,5 @@
 /**
- * @cindy/anthropic-compat-proxy
+ * @lizi/anthropic-compat-proxy
  *
  * Loopback HTTP 反向代理: 让 Claude Code SDK 能通过 Anthropic-compatible gateway
  * (litellm / 自建 LLM proxy 等) 调用第三方模型 (gpt-5.4 / kimi-k2 / glm-5.1 ...) 时,
@@ -20,12 +20,10 @@ export {
 } from './instructions-injection.js';
 export {
   createActiveStripTransform,
-  createEmptyTextRecoveryRule,
   createEmptyThinkingRecoveryRule,
   createEncryptedContentRecoveryRule,
   createImageGenerationIdRecoveryRule,
   createToolUseProviderSpecificFieldsRecoveryRule,
-  stripEmptyTextFromBody,
   stripEmptyThinkingFromBody,
   stripEncryptedContentFromBody,
   stripImageGenerationItemsWithoutIdFromBody,

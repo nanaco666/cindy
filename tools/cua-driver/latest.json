@@ -1,0 +1,21 @@
+{
+  "version": "0.12.3",
+  "tag_name": "cua-driver-rs-v0.12.3",
+  "name": "cua-driver-rs-v0.12.3",
+  "html_url": "https://github.com/trycua/cua/releases/tag/cua-driver-rs-v0.12.3",
+  "prerelease": true,
+  "draft": false,
+  "published_at": "2026-07-23T14:38:12Z",
+  "runtimeAssets": {
+    "darwin-arm64": {
+      "url": "https://github.com/trycua/cua/releases/download/cua-driver-rs-v0.12.3/cua-driver-rs-0.12.3-darwin-arm64.tar.gz",
+      "sha256": "f57254e10dd110ac737c1b3e41aa0bb745f08a0f0c90d49f52c82a71c1b95f3a",
+      "size": 51232238
+    },
+    "darwin-x64": {
+      "url": "https://github.com/trycua/cua/releases/download/cua-driver-rs-v0.12.3/cua-driver-rs-0.12.3-darwin-x86_64.tar.gz",
+      "sha256": "d5c1740e3d1cd15406f7716a555af80eaf7fab159318c396d8a9f04de2d41727",
+      "size": 51232232
+    }
+  }
+}

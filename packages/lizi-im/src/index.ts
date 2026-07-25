@@ -1,5 +1,5 @@
 /**
- * @cindy/im
+ * lizi-im
  *
  * Pure IM transport package. Provides the BaseIM abstraction and one or more
  * channel implementations (currently feishu). Hosts inject storage / IPC /

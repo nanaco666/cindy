@@ -3,33 +3,6 @@ import { describe, expect, it } from 'vitest';
 import { normalizeLocalThemeColors } from '../themes/local-themes-normalize';
 
 describe('normalizeLocalThemeColors', () => {
-  it('迁移旧 connected badge override 并保留原中性色给文字 token', () => {
-    const out = normalizeLocalThemeColors({
-      surface: '#111',
-      'settings-badge-connected': 'var(--text-primary)',
-    });
-    expect(out['settings-badge-connected']).toBe('var(--card-status-done)');
-    expect(out['settings-badge-connected-text']).toBe('var(--text-primary)');
-    expect(out['surface']).toBe('#111');
-  });
-
-  it('已迁移 connected badge token 时保持幂等', () => {
-    const input = {
-      'settings-badge-connected': 'var(--card-status-done)',
-      'settings-badge-connected-text': 'var(--text-primary)',
-    };
-    const out = normalizeLocalThemeColors(input);
-    expect(out).toBe(input);
-  });
-
-  it('保留旧快照中的自定义 connected badge 覆盖', () => {
-    const input = {
-      'settings-badge-connected': '#22c55e',
-    };
-    const out = normalizeLocalThemeColors(input);
-    expect(out).toBe(input);
-  });
-
   it('从 settings-input-placeholder 播种 text-placeholder 并丢弃 4 个旧 per-surface key', () => {
     const out = normalizeLocalThemeColors({
       surface: '#111',

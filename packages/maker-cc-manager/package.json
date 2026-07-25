@@ -1,5 +1,5 @@
 {
-  "name": "@cindy/maker-cc-manager",
+  "name": "@lizi/maker-cc-manager",
   "version": "0.0.0",
   "private": true,
   "description": "Cindy cc-remote: NDJSON RPC daemon spawned on remote SSH machine. Wraps @anthropic-ai/claude-agent-sdk Query, exposes session/control RPC to local desktop client. Multi-session + detach/reattach + ring buffer / disk log. Zero Electron deps.",
@@ -19,8 +19,8 @@
     "test:watch": "vitest"
   },
   "author": {
-    "name": "X.D. Network Inc.",
-    "email": "feedback@cindy.app"
+    "name": "Lizi",
+    "email": "jiali@magiclizi.com"
   },
   "license": "Apache-2.0",
   "dependencies": {

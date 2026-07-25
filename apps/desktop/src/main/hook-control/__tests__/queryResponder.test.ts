@@ -11,9 +11,6 @@ import { buildQueryResponse, type QueryResponderDeps } from '../queryResponder';
 
 const DEPS: QueryResponderDeps = {
   listWorkspaces: () => ['xdmaker', 'blog'],
-  listSessions: () => [
-    { id: 's1', title: 'Fix login', workspace: 'xdmaker', lastActiveAt: 10 },
-  ],
   listAgentModels: () => [
     {
       agentKind: 'claude-code',
@@ -75,27 +72,6 @@ describe('buildQueryResponse', () => {
       { id: 'ask', label: 'Default permissions' },
       { id: 'bypassPermissions', label: 'Full access' },
     ]);
-  });
-
-  it('sessions: 只透传隐私最小化字段并在 responder 再次限制为 20 条', async () => {
-    const sessions = Array.from({ length: 25 }, (_, index) => ({
-      id: `s-${index}`,
-      title: `Session ${index}`,
-      workspace: 'xdmaker',
-      lastActiveAt: index + 1,
-    }));
-    const res = await buildQueryResponse(
-      { ...DEPS, listSessions: () => sessions },
-      { queryId: 'q-sessions', kind: 'sessions' },
-    );
-    expect(res).toEqual({
-      queryId: 'q-sessions',
-      kind: 'sessions',
-      ok: true,
-      error: null,
-      sessions: sessions.slice(0, 20),
-    });
-    expect(JSON.stringify(res)).not.toContain('workingDir');
   });
 
   it('数据源抛错: ok=false + 原因, 不炸调用方', async () => {

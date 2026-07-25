@@ -1,7 +1,7 @@
 /**
  * main/im/shared/cardBuilders.ts
  * ---------------------------------------------------------------------------
- * Pure functions: InteractionRequest → @cindy/im InteractiveCardSpec。按钮的
+ * Pure functions: InteractionRequest → lizi-im InteractiveCardSpec。按钮的
  * payload 带 `requestId` 与 kind 专属数据, cardActionHandler 据此构造
  * InteractionDecision。
  *
@@ -21,10 +21,10 @@ import type {
   AskUserQuestionItem,
   Effort,
   PermissionModeDescriptor,
-} from '@cindy/maker-core';
-import type { ProviderSection } from '@cindy/model-providers';
-import type { Schedule, ScheduleRun } from '@cindy/maker-scheduler';
-import type { InteractiveCardSpec } from '@cindy/im';
+} from '@lizi/maker-core';
+import type { ProviderSection } from '@lizi/model-providers';
+import type { Schedule, ScheduleRun } from '@lizi/maker-scheduler';
+import type { InteractiveCardSpec } from 'lizi-im';
 
 import type { ImUiTextPack } from './types';
 import type { ControlProject, ControlSession } from './controlProjects';

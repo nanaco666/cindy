@@ -10,33 +10,22 @@ import {
   isValidGhostId,
   validateGhostManifest,
   type GhostManifest,
-  type GhostTrustInfo,
   type InstalledGhost,
 } from '../../shared/ghost.js';
-import {
-  verifyGhostZipSignatures,
-  type GhostTrustRegistry,
-} from './ghostSignature.js';
 
-/** 普通沙箱插件维持小包上限；随包 Node/CLI 允许更大的预打包产物。 */
-const MAX_BASIC_CINDY_FILE_BYTES = 8 * 1024 * 1024;
-const MAX_NODE_CINDY_FILE_BYTES = 128 * 1024 * 1024;
-/** 身份卡本身只应是小 JSON；先限流读取，避免在识别包类型前被单文件撑爆内存。 */
-const MAX_GHOST_MANIFEST_BYTES = 256 * 1024;
+/** .cindy 压缩包体积上限(声明卡 v1;芯片卡时代再放宽)。 */
+const MAX_CINDY_FILE_BYTES = 8 * 1024 * 1024; // 8 MB
 /**
  * icon 文件大小上限。icon 以 data URL 形态随 ghosts:list(sendSync)下发,
  * 上限同时保护装载与首帧同步 IPC 的载荷体积。
  */
 const MAX_GHOST_ICON_BYTES = 512 * 1024; // 512 KB
-/** 解压后总大小/条目数上限；Node 包允许携带已打包 CLI，但仍有硬闸。 */
-const MAX_BASIC_UNCOMPRESSED_BYTES = 32 * 1024 * 1024;
-const MAX_NODE_UNCOMPRESSED_BYTES = 256 * 1024 * 1024;
-const MAX_BASIC_ZIP_ENTRIES = 256;
-const MAX_NODE_ZIP_ENTRIES = 2_048;
+/** 解压后总大小上限。 */
+const MAX_UNCOMPRESSED_BYTES = 32 * 1024 * 1024; // 32 MB
+/** zip 条目数上限。 */
+const MAX_ZIP_ENTRIES = 256;
 /** 停用标记文件名(安装目录内;存在即停用)。 */
 const DISABLED_MARKER_FILE = '.disabled';
-/** 安装时已验证的信任结果快照(作者包不能提供，staging 阶段由主机写)。 */
-const TRUST_METADATA_FILE = '.cindy-trust.json';
 
 /** 注入式日志接口 —— manager 不直接依赖 main/logger,单测零 electron。 */
 export interface GhostManagerLogger {
@@ -49,8 +38,6 @@ export interface GhostManagerOptions {
   getRootDir: () => string;
   /** 装/卸成功后通知(index.ts 用它广播 ghosts:changed 到所有窗口)。 */
   onChanged?: (ghosts: InstalledGhost[]) => void;
-  /** Cindy 维护的发布者/审核公钥表；缺省为空，签名仍验完整性但不抬身份等级。 */
-  trustRegistry?: GhostTrustRegistry;
   log?: GhostManagerLogger;
 }
 
@@ -125,12 +112,10 @@ export class GhostManager {
       }
       // icon 读失败只降级为无图标(warn),不影响意识本体可用。
       const iconDataUrl = this.readInstalledIconDataUrl(dir, v.manifest);
-      const trust = this.readInstalledTrust(dir);
       result.push({
         manifest: v.manifest,
         dir,
         enabled: !fs.existsSync(path.join(dir, DISABLED_MARKER_FILE)),
-        ...(trust ? { trust } : {}),
         ...(iconDataUrl !== null ? { iconDataUrl } : {}),
       });
     }
@@ -185,24 +170,6 @@ export class GhostManager {
     }
   }
 
-  /** 读取主机安装时写下的签名验证快照；坏文件只降级未显示，不信作者自报。 */
-  private readInstalledTrust(dir: string): GhostTrustInfo | null {
-    try {
-      const raw = JSON.parse(fs.readFileSync(path.join(dir, TRUST_METADATA_FILE), 'utf8')) as GhostTrustInfo;
-      if (
-        !raw ||
-        typeof raw !== 'object' ||
-        !['cindy-official', 'reviewed', 'verified-publisher', 'unverified'].includes(raw.level) ||
-        typeof raw.publisherSigned !== 'boolean' ||
-        typeof raw.publisherVerified !== 'boolean' ||
-        typeof raw.reviewed !== 'boolean'
-      ) return null;
-      return raw;
-    } catch {
-      return null;
-    }
-  }
-
   /**
    * 只验不装:读 .cindy → 解包 → 校验清单,返回清单(含 icon data URL),
    * 零副作用。「装意识前弹确认」(README 安全原则)的数据来源 —— 三个装入
@@ -210,21 +177,11 @@ export class GhostManager {
    */
   async inspect(
     lizFilePath: string,
-  ): Promise<
-    | {
-        manifest: GhostManifest;
-        trust: GhostTrustInfo;
-        packageSha256: string;
-        iconDataUrl?: string;
-      }
-    | { rejection: InstallRejection }
-  > {
+  ): Promise<{ manifest: GhostManifest; iconDataUrl?: string } | { rejection: InstallRejection }> {
     const parsed = await this.parse(lizFilePath);
     if ('rejection' in parsed) return parsed;
     return {
       manifest: parsed.manifest,
-      trust: parsed.trust,
-      packageSha256: parsed.packageSha256,
       ...(parsed.iconDataUrl !== undefined ? { iconDataUrl: parsed.iconDataUrl } : {}),
     };
   }
@@ -233,14 +190,7 @@ export class GhostManager {
   private async parse(
     lizFilePath: string,
   ): Promise<
-    | {
-        manifest: GhostManifest;
-        trust: GhostTrustInfo;
-        packageSha256: string;
-        iconDataUrl?: string;
-        allEntries: JSZip.JSZipObject[];
-        prefix: string;
-      }
+    | { manifest: GhostManifest; iconDataUrl?: string; allEntries: JSZip.JSZipObject[]; prefix: string }
     | { rejection: InstallRejection }
   > {
     // 1) 读源文件(带体积上限)
@@ -250,9 +200,9 @@ export class GhostManager {
       if (!stat.isFile()) {
         return { rejection: { code: 'source-not-found', reason: '路径不是文件' } };
       }
-      if (stat.size > MAX_NODE_CINDY_FILE_BYTES) {
+      if (stat.size > MAX_CINDY_FILE_BYTES) {
         return {
-          rejection: { code: 'file-invalid', reason: `文件过大:${stat.size} 字节(上限 ${MAX_NODE_CINDY_FILE_BYTES})` },
+          rejection: { code: 'file-invalid', reason: `文件过大:${stat.size} 字节(上限 ${MAX_CINDY_FILE_BYTES})` },
         };
       }
       buf = await fs.promises.readFile(lizFilePath);
@@ -274,38 +224,13 @@ export class GhostManager {
     if (allEntries.length === 0) {
       return { rejection: { code: 'file-invalid', reason: '压缩包是空的' } };
     }
-    if (allEntries.length > MAX_NODE_ZIP_ENTRIES) {
+    if (allEntries.length > MAX_ZIP_ENTRIES) {
       return {
-        rejection: { code: 'file-invalid', reason: `压缩包条目过多:${allEntries.length}(上限 ${MAX_NODE_ZIP_ENTRIES})` },
-      };
-    }
-    // 检查/签名/保留文件对账都按原始条目名,解压却按 canonical 路径落盘;
-    // 若二者可指向不同文件,恶意包就能「检查一份清单、装入另一份」
-    // (如根部放无害 ghost.json,再用 x/../ghost.json 在 staging 里盖掉它)。
-    // 读清单之前一刀切拒绝非规范路径,让后续所有按名对账都可信。
-    const nonCanonicalEntry = allEntries.find((entry) => hasNonCanonicalZipPath(entry.name));
-    if (nonCanonicalEntry) {
-      return {
-        rejection: { code: 'file-invalid', reason: `压缩包内有非法路径:${nonCanonicalEntry.name}` },
+        rejection: { code: 'file-invalid', reason: `压缩包条目过多:${allEntries.length}(上限 ${MAX_ZIP_ENTRIES})` },
       };
     }
 
     const prefix = detectSingleTopFolderPrefix(allEntries.map((e) => e.name));
-    // 这两个点文件只属于主机：包若能自带它们，就可伪造停用状态或覆盖
-    // 签名信任快照。大小写也折叠检查，避免在 Windows/macOS 上撞同一文件。
-    const reservedHostFile = allEntries.find((entry) => {
-      if (entry.dir || !entry.name.startsWith(prefix)) return false;
-      const rel = entry.name.slice(prefix.length).toLowerCase();
-      return rel === DISABLED_MARKER_FILE || rel === TRUST_METADATA_FILE;
-    });
-    if (reservedHostFile) {
-      return {
-        rejection: {
-          code: 'file-invalid',
-          reason: `压缩包不能包含主机保留文件:${reservedHostFile.name.slice(prefix.length)}`,
-        },
-      };
-    }
     const manifestEntry = zip.file(`${prefix}${GHOST_MANIFEST_FILE}`);
     if (!manifestEntry) {
       return { rejection: { code: 'file-invalid', reason: `压缩包根部缺少 ${GHOST_MANIFEST_FILE}` } };
@@ -314,68 +239,13 @@ export class GhostManager {
     // 3) 校验清单
     let manifestRaw: unknown;
     try {
-      manifestRaw = JSON.parse(
-        (await readZipEntryBufferWithLimit(
-          manifestEntry,
-          MAX_GHOST_MANIFEST_BYTES,
-          GHOST_MANIFEST_FILE,
-        )).toString('utf8'),
-      );
+      manifestRaw = JSON.parse(await manifestEntry.async('text'));
     } catch {
       return { rejection: { code: 'file-invalid', reason: `${GHOST_MANIFEST_FILE} 不是合法 JSON` } };
     }
     const v = validateGhostManifest(manifestRaw);
     if (!v.ok) {
       return { rejection: { code: 'file-invalid', reason: `清单不合格:${v.reason}` } };
-    }
-    if (!v.manifest.node && buf.byteLength > MAX_BASIC_CINDY_FILE_BYTES) {
-      return {
-        rejection: {
-          code: 'file-invalid',
-          reason: `普通沙箱插件文件过大:${buf.byteLength} 字节(上限 ${MAX_BASIC_CINDY_FILE_BYTES})`,
-        },
-      };
-    }
-    const maxEntries = v.manifest.node ? MAX_NODE_ZIP_ENTRIES : MAX_BASIC_ZIP_ENTRIES;
-    if (allEntries.length > maxEntries) {
-      return {
-        rejection: { code: 'file-invalid', reason: `压缩包条目过多:${allEntries.length}(上限 ${maxEntries})` },
-      };
-    }
-    if (v.manifest.node && !zip.file(`${prefix}${v.manifest.node.entry}`)) {
-      return {
-        rejection: {
-          code: 'file-invalid',
-          reason: `清单声明了 node.entry,但压缩包内缺少 ${v.manifest.node.entry}`,
-        },
-      };
-    }
-    const maxUncompressedBytes = v.manifest.node
-      ? MAX_NODE_UNCOMPRESSED_BYTES
-      : MAX_BASIC_UNCOMPRESSED_BYTES;
-    try {
-      // inspect 阶段先用流式解压把总量算清。这样恶意压缩包不能等到确认后，
-      // 或借签名/图标读取，在“检查上限之前”先撑出一个超大内存块。
-      await assertZipUncompressedLimit(allEntries, maxUncompressedBytes);
-    } catch (err) {
-      return {
-        rejection: {
-          code: 'file-invalid',
-          reason: err instanceof Error ? err.message : String(err),
-        },
-      };
-    }
-
-    // 5) 签名是包级完整性闸：无签名允许但标未验证；一旦带了签名却对不上
-    // 任一文件/版本/公钥，直接拒装，不能静默降级成“无签名”。
-    const signature = await verifyGhostZipSignatures(
-      zip,
-      prefix,
-      v.manifest,
-      this.options.trustRegistry,
-    );
-    if (!signature.ok) {
-      return { rejection: { code: 'file-invalid', reason: `签名验证失败:${signature.reason}` } };
     }
 
     // 4) 清单声明了 icon → 包内必须真有,且不超限(装入前就把账算清,
@@ -388,18 +258,12 @@ export class GhostManager {
           rejection: { code: 'file-invalid', reason: `清单声明了 icon,但压缩包内缺少 ${v.manifest.icon}` },
         };
       }
-      let iconData: Buffer;
-      try {
-        iconData = await readZipEntryBufferWithLimit(
-          iconEntry,
-          MAX_GHOST_ICON_BYTES,
-          'icon',
-        );
-      } catch {
+      const iconData = await iconEntry.async('nodebuffer');
+      if (iconData.byteLength > MAX_GHOST_ICON_BYTES) {
         return {
           rejection: {
             code: 'file-invalid',
-            reason: `icon 过大(上限 ${MAX_GHOST_ICON_BYTES} 字节)`,
+            reason: `icon 过大:${iconData.byteLength} 字节(上限 ${MAX_GHOST_ICON_BYTES})`,
           },
         };
       }
@@ -408,8 +272,6 @@ export class GhostManager {
 
     return {
       manifest: v.manifest,
-      trust: signature.trust,
-      packageSha256: crypto.createHash('sha256').update(buf).digest('hex'),
       ...(iconDataUrl !== undefined ? { iconDataUrl } : {}),
       allEntries,
       prefix,
@@ -418,7 +280,7 @@ export class GhostManager {
 
   async install(
     lizFilePath: string,
-    opts?: { initiallyEnabled?: boolean; expectedPackageSha256?: string },
+    opts?: { initiallyEnabled?: boolean },
   ): Promise<{ ghost: InstalledGhost } | { rejection: InstallRejection }> {
     // 装入初始启用态由 UI 层决定(装入确认框勾选,默认沉睡);缺省 true
     // 保持既有调用方(测试等)语义不变。
@@ -426,18 +288,7 @@ export class GhostManager {
     // 1–3) 读文件 / 解包 / 校验清单(与 inspect 共用)
     const parsed = await this.parse(lizFilePath);
     if ('rejection' in parsed) return parsed;
-    if (
-      opts?.expectedPackageSha256 !== undefined &&
-      parsed.packageSha256 !== opts.expectedPackageSha256
-    ) {
-      return {
-        rejection: {
-          code: 'file-invalid',
-          reason: '插件文件在确认后发生了变化，请重新选择并确认',
-        },
-      };
-    }
-    const { manifest, trust, iconDataUrl, allEntries, prefix } = parsed;
+    const { manifest, iconDataUrl, allEntries, prefix } = parsed;
 
     // 4) 目标目录冲突检查
     const root = this.options.getRootDir();
@@ -469,13 +320,7 @@ export class GhostManager {
     try {
       // 初始沉睡:标记在 staging 阶段就位,rename 后首个广播即沉睡态,
       // 不存在"先启用一帧再熄灯"的跳变(规则 7)。
-      await this.extractToStaging(allEntries, prefix, stagingDir, {
-        disabled: !initiallyEnabled,
-        maxUncompressedBytes: manifest.node
-          ? MAX_NODE_UNCOMPRESSED_BYTES
-          : MAX_BASIC_UNCOMPRESSED_BYTES,
-        trust,
-      });
+      await this.extractToStaging(allEntries, prefix, stagingDir, { disabled: !initiallyEnabled });
       await fs.promises.rename(stagingDir, finalDir);
     } catch (err) {
       await fs.promises.rm(stagingDir, { recursive: true, force: true }).catch(() => {});
@@ -489,7 +334,6 @@ export class GhostManager {
       manifest,
       dir: finalDir,
       enabled: initiallyEnabled,
-      trust,
       ...(iconDataUrl !== undefined ? { iconDataUrl } : {}),
     };
     this.options.log?.info('ghost installed', { id: manifest.id, version: manifest.version });
@@ -506,24 +350,10 @@ export class GhostManager {
    * - 布局位置天然保留(panelKind 由 id 决定,id 未变)。
    * 调用方(IPC 层)负责先熄灯沙箱,更新后由下一次派活/渲染拉起新代码。
    */
-  async update(
-    lizFilePath: string,
-    opts?: { expectedPackageSha256?: string },
-  ): Promise<{ ghost: InstalledGhost } | { rejection: InstallRejection }> {
+  async update(lizFilePath: string): Promise<{ ghost: InstalledGhost } | { rejection: InstallRejection }> {
     const parsed = await this.parse(lizFilePath);
     if ('rejection' in parsed) return parsed;
-    if (
-      opts?.expectedPackageSha256 !== undefined &&
-      parsed.packageSha256 !== opts.expectedPackageSha256
-    ) {
-      return {
-        rejection: {
-          code: 'file-invalid',
-          reason: '插件文件在确认后发生了变化，请重新选择并确认',
-        },
-      };
-    }
-    const { manifest, trust, iconDataUrl, allEntries, prefix } = parsed;
+    const { manifest, iconDataUrl, allEntries, prefix } = parsed;
 
     const root = this.options.getRootDir();
     const finalDir = path.join(root, manifest.id);
@@ -556,13 +386,7 @@ export class GhostManager {
     const stagingDir = path.join(root, `.cindy-installing-${manifest.id}-${rand}`);
     const backupDir = path.join(root, `.cindy-updating-${manifest.id}-${rand}`);
     try {
-      await this.extractToStaging(allEntries, prefix, stagingDir, {
-        disabled: !enabled,
-        maxUncompressedBytes: manifest.node
-          ? MAX_NODE_UNCOMPRESSED_BYTES
-          : MAX_BASIC_UNCOMPRESSED_BYTES,
-        trust,
-      });
+      await this.extractToStaging(allEntries, prefix, stagingDir, { disabled: !enabled });
     } catch (err) {
       await fs.promises.rm(stagingDir, { recursive: true, force: true }).catch(() => {});
       if (err instanceof InstallExtractError) {
@@ -591,7 +415,6 @@ export class GhostManager {
       manifest,
       dir: finalDir,
       enabled,
-      trust,
       ...(iconDataUrl !== undefined ? { iconDataUrl } : {}),
     };
     this.options.log?.info('ghost updated', { id: manifest.id, version: manifest.version });
@@ -604,7 +427,7 @@ export class GhostManager {
     allEntries: JSZip.JSZipObject[],
     prefix: string,
     stagingDir: string,
-    opts: { disabled: boolean; maxUncompressedBytes: number; trust: GhostTrustInfo },
+    opts: { disabled: boolean },
   ): Promise<void> {
     await fs.promises.mkdir(stagingDir, { recursive: true });
     let totalBytes = 0;
@@ -619,8 +442,8 @@ export class GhostManager {
       }
       const data = await entry.async('nodebuffer');
       totalBytes += data.byteLength;
-      if (totalBytes > opts.maxUncompressedBytes) {
-        throw new InstallExtractError(`解压后总大小超过上限(${opts.maxUncompressedBytes} 字节)`);
+      if (totalBytes > MAX_UNCOMPRESSED_BYTES) {
+        throw new InstallExtractError(`解压后总大小超过上限(${MAX_UNCOMPRESSED_BYTES} 字节)`);
       }
       await fs.promises.mkdir(path.dirname(dest), { recursive: true });
       await fs.promises.writeFile(dest, data);
@@ -628,10 +451,6 @@ export class GhostManager {
     if (opts.disabled) {
       await fs.promises.writeFile(path.join(stagingDir, DISABLED_MARKER_FILE), '');
     }
-    await fs.promises.writeFile(
-      path.join(stagingDir, TRUST_METADATA_FILE),
-      `${JSON.stringify(opts.trust, null, 2)}\n`,
-    );
   }
 
   /**
@@ -670,73 +489,6 @@ export class GhostManager {
 /** staging 期的"内容不合格"错误(与环境 IO 错误区分,映射 file-invalid)。 */
 class InstallExtractError extends Error {}
 
-/** 流式读取 zip 单条目；超过上限立刻停流，不先分配整个恶意条目。 */
-async function readZipEntryBufferWithLimit(
-  entry: JSZip.JSZipObject,
-  maxBytes: number,
-  label: string,
-): Promise<Buffer> {
-  const chunks: Buffer[] = [];
-  let total = 0;
-  await consumeZipEntry(entry, (chunk, stream) => {
-    total += chunk.byteLength;
-    if (total > maxBytes) {
-      stream.destroy();
-      throw new InstallExtractError(`${label} 超过上限(${maxBytes} 字节)`);
-    }
-    chunks.push(chunk);
-  });
-  return Buffer.concat(chunks, total);
-}
-
-/** 流式核对整个包的真实解压总量；JSZip 同时会校验声明大小与真实输出一致。 */
-async function assertZipUncompressedLimit(
-  entries: JSZip.JSZipObject[],
-  maxBytes: number,
-): Promise<void> {
-  let total = 0;
-  for (const entry of entries) {
-    if (entry.dir) continue;
-    await consumeZipEntry(entry, (chunk, stream) => {
-      total += chunk.byteLength;
-      if (total > maxBytes) {
-        stream.destroy();
-        throw new InstallExtractError(`解压后总大小超过上限(${maxBytes} 字节)`);
-      }
-    });
-  }
-}
-
-/** 把 JSZip 的 Node 流收成 Promise，并保证回调抛错时终止继续解压。 */
-async function consumeZipEntry(
-  entry: JSZip.JSZipObject,
-  onChunk: (chunk: Buffer, stream: NodeJS.ReadableStream & { destroy(): void }) => void,
-): Promise<void> {
-  await new Promise<void>((resolve, reject) => {
-    const stream = entry.nodeStream() as NodeJS.ReadableStream & { destroy(): void };
-    let settled = false;
-    const fail = (err: unknown) => {
-      if (settled) return;
-      settled = true;
-      reject(err instanceof Error ? err : new Error(String(err)));
-    };
-    stream.on('data', (value) => {
-      if (settled) return;
-      try {
-        onChunk(Buffer.isBuffer(value) ? value : Buffer.from(value), stream);
-      } catch (err) {
-        fail(err);
-      }
-    });
-    stream.on('error', fail);
-    stream.on('end', () => {
-      if (settled) return;
-      settled = true;
-      resolve();
-    });
-  });
-}
-
 /** icon 字节 → data URL(扩展名白名单已由清单校验保证,mime 不命中返回 null 兜底)。 */
 function buildIconDataUrl(iconPath: string, data: Buffer): string | null {
   const mime = ghostIconMimeType(iconPath);
@@ -768,20 +520,6 @@ function detectSingleTopFolderPrefix(names: string[]): string {
     else if (top !== first) return '';
   }
   return top === null ? '' : `${top}/`;
-}
-
-/**
- * 非规范 zip 条目路径:绝对路径、盘符、`.`/`..` 段或空段(`a//b`)。
- * 这些名字解析(canonical)后可与原始名指向不同文件,必须整包拒绝。
- * 目录条目的尾部 `/` 是 zip 的合法形态,不算空段。
- */
-function hasNonCanonicalZipPath(name: string): boolean {
-  const normalized = name.replace(/\\/g, '/');
-  if (normalized.startsWith('/') || /^[a-zA-Z]:/.test(normalized)) return true;
-  const segments = normalized.split('/');
-  return segments.some(
-    (seg, i) => seg === '.' || seg === '..' || (seg === '' && i !== segments.length - 1),
-  );
 }
 
 /** 防 zip-slip:解压目标必须严格落在 dest 内部(不含 dest 本身),越界返回 null。 */

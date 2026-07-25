@@ -708,7 +708,7 @@ describe('RsbWebviewBackend — per-action automation pin', () => {
 });
 
 describe('RsbWebviewBackend — MCP session id injection', () => {
-  // The @cindy/mcps `cindy_browser` provider injects `__mcpSessionId` on every
+  // The lizi-mcps `lizi_browser` provider injects `__mcpSessionId` on every
   // request so the backend operates against the AGENT'S session, not the
   // UI's current focus. This is the fix for: user submits a prompt in
   // session A → switches to B → agent (running in A) calls backend → backend

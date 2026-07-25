@@ -8,7 +8,7 @@
  *
  * 引用形态(与 legacy feishuBot/replyClient.ts 对齐):
  *   图片  `![alt](xdt-image://...)` 或 `![alt](cindy-media://...)`(媒体总仓
- *         当前地址,生成图与集成图片均为此形态)
+ *         新地址,迁移第 2/3 步起生成图与集成图片均为此形态)
  *   文件  `[name](xdt-file:///abs/path)`
  */
 

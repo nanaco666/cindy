@@ -2,8 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   CONTINUE_AFTER_ERROR_PROMPT,
   UI_ACTION_TRIGGER_PREFIX,
-} from '@cindy/maker-shared/synthetic-trigger';
-import { composerDocumentFromSerializedMessage } from '@/session/composerDocument';
+} from '@lizi/maker-shared/synthetic-trigger';
 import { normalizeRemoteMessages } from '@/session/messageNormalize';
 import type { RemoteMessage } from '@/session/types';
 
@@ -106,14 +105,7 @@ describe('normalizeRemoteMessages', () => {
             { url: 'https://example.com/a.png', originalName: 'a.png', mimeType: 'image/png' },
             { url: 'xdt-image://local/b.png', originalName: 'b.png', mimeType: 'image/png' },
           ],
-          files: [
-            { name: 'spec.md', path: '/repo/spec.md' },
-            {
-              name: 'voice.ogg',
-              path: 'cindy-media://blobs/aa11bb22.ogg',
-              mimeType: 'audio/ogg',
-            },
-          ],
+          files: [{ name: 'spec.md', path: '/repo/spec.md' }],
         }),
       }),
     ]);
@@ -141,13 +133,6 @@ describe('normalizeRemoteMessages', () => {
         mimeType: undefined,
         previewable: false,
       },
-      {
-        kind: 'file',
-        name: 'voice.ogg',
-        path: 'cindy-media://blobs/aa11bb22.ogg',
-        mimeType: 'audio/ogg',
-        previewable: false,
-      },
     ]);
   });
 
@@ -169,133 +154,6 @@ describe('normalizeRemoteMessages', () => {
       kind: 'user',
       quotesEncoded: true,
     });
-  });
-
-  it('keeps only display-safe persisted session-reference metadata', () => {
-    const [valid, invalid] = normalizeRemoteMessages([
-      message({
-        id: 'valid-reference',
-        role: 'user',
-        content: JSON.stringify({
-          text: 'cindy://session/source?message=anchor',
-          images: [],
-          files: [],
-          sessionReferences: [{
-            sessionId: 'source',
-            messageClientId: 'anchor',
-            range: 'around-anchor',
-            messageCount: 3,
-            truncated: true,
-          }],
-        }),
-      }),
-      message({
-        id: 'invalid-reference',
-        role: 'user',
-        createdAt: '2026-01-01T00:00:01.000Z',
-        content: JSON.stringify({
-          text: 'cindy://session/source',
-          sessionReferences: [{
-            sessionId: 'source',
-            range: 'recent',
-            messageCount: 999,
-            truncated: false,
-            messages: [{ role: 'user', content: 'must never enter UI metadata' }],
-          }],
-        }),
-      }),
-    ]);
-
-    expect(valid.sessionReferences).toEqual([{
-      sessionId: 'source',
-      messageClientId: 'anchor',
-      range: 'around-anchor',
-      messageCount: 3,
-      truncated: true,
-    }]);
-    expect(invalid.sessionReferences).toEqual([]);
-  });
-
-  it('preserves valid pasted-text and exact slash presentation ranges', () => {
-    const text = '/help before long text after';
-    const [item] = normalizeRemoteMessages([
-      message({
-        id: 'atomic-user',
-        role: 'user',
-        content: JSON.stringify({
-          text,
-          images: [],
-          files: [],
-          pastedTextRanges: [{ start: 13, end: 22, display: 'Pasted text (1 line)' }],
-          slashCommandRanges: [{ start: 0, end: 5 }],
-        }),
-      }),
-    ]);
-
-    expect(item).toMatchObject({
-      pastedTextRanges: [{ start: 13, end: 22, display: 'Pasted text (1 line)' }],
-      slashCommandRanges: [{ start: 0, end: 5 }],
-    });
-  });
-
-  it('preserves message reference semantics when fork or rewind rebuilds the composer', () => {
-    const href = 'cindy://session/session-a?message=message-a';
-    const text = `inspect ${href}`;
-    const reference = {
-      kind: 'message' as const,
-      start: text.indexOf(href),
-      end: text.length,
-      href,
-      sessionId: 'session-a',
-      messageClientId: 'message-a',
-      text: 'Target message body',
-    };
-    const [item] = normalizeRemoteMessages([
-      message({
-        id: 'referenced-user',
-        role: 'user',
-        content: JSON.stringify({
-          text,
-          images: [],
-          files: [],
-          agentReferences: [reference],
-        }),
-      }),
-    ]);
-
-    expect(item.agentReferences).toEqual([reference]);
-    expect(composerDocumentFromSerializedMessage(item.body, {
-      agentReferences: item.agentReferences,
-    }).nodes).toEqual([
-      { type: 'text', text: 'inspect ' },
-      {
-        type: 'session-link',
-        href,
-        label: 'Target message body',
-        messageClientId: 'message-a',
-        titled: true,
-        agentText: 'Target message body',
-      },
-    ]);
-  });
-
-  it('drops malformed atom ranges as whole sets while preserving explicit empty slash metadata', () => {
-    const [item] = normalizeRemoteMessages([
-      message({
-        id: 'malformed-atomic-user',
-        role: 'user',
-        content: {
-          text: 'abcdef',
-          images: [],
-          files: [],
-          pastedTextRanges: [{ start: 1, end: 4, display: 'first' }, { start: 3, end: 5, display: 'overlap' }],
-          slashCommandRanges: [],
-        },
-      }),
-    ]);
-
-    expect(item.pastedTextRanges).toBeUndefined();
-    expect(item.slashCommandRanges).toEqual([]);
   });
 
   it('summarizes tool_use, attaches matching tool_result, and hides standalone tool_result', () => {
@@ -803,68 +661,6 @@ describe('normalizeRemoteMessages', () => {
     ]);
   });
 
-  it('normalizes Telegram hook source into a left-aligned Cindy card payload', () => {
-    const [item, unknown] = normalizeRemoteMessages([
-      message({
-        id: 'telegram-hook',
-        role: 'user',
-        content: 'internal prompt with thread instructions',
-        agentMeta: {
-          hookSource: {
-            im: 'telegram',
-            channelName: 'Release topic',
-            userText: 'Please ship the release',
-            threadContext: [
-              { author: 'Chris', text: 'Use the staging checklist' },
-              { author: 'Cindy', text: 'Ready', isBot: true },
-            ],
-          },
-        },
-      }),
-      message({
-        id: 'unknown-hook',
-        role: 'user',
-        content: 'plain message',
-        agentMeta: { hookSource: { im: 'untrusted-provider', userText: 'spoofed' } },
-      }),
-    ]);
-
-    expect(item).toMatchObject({
-      body: 'Please ship the release',
-      align: 'agent',
-      hookSource: {
-        im: 'telegram',
-        channelName: 'Release topic',
-        userText: 'Please ship the release',
-        threadContext: [
-          { author: 'Chris', text: 'Use the staging checklist' },
-          { author: 'Cindy', text: 'Ready', isBot: true },
-        ],
-      },
-    });
-    expect(unknown).toMatchObject({ body: 'plain message', align: 'user' });
-    expect(unknown.hookSource).toBeUndefined();
-  });
-
-  it('bounds the fallback hook body when an older source omits userText', () => {
-    const [item] = normalizeRemoteMessages([
-      message({
-        id: 'telegram-hook-without-user-text',
-        role: 'user',
-        content: 'x'.repeat(20_100),
-        agentMeta: {
-          hookSource: {
-            im: 'telegram',
-            channelName: 'Release topic',
-          },
-        },
-      }),
-    ]);
-
-    expect(item.body).toHaveLength(20_000);
-    expect(item.hookSource?.userText).toHaveLength(20_000);
-  });
-
   it('marks synthetic trigger user rows (hidden continuation prompts) with an empty body', () => {
     // 桌面「失败后继续」发出的隐藏续跑 prompt:保留为 turn 边界(label='user'),
     // 但打标 + body 置空,渲染层据此剔除,用户永远看不到裸英文指令。
@@ -897,26 +693,6 @@ describe('normalizeRemoteMessages', () => {
     // turn 边界语义:仍是 kind='user' + label='user'(markTurnFinalAssistants 依赖)
     expect(items[0].kind).toBe('user');
     expect(items[0].label).toBe('user');
-  });
-
-  it('projects the host SDK-turn seal onto assistant messages only', () => {
-    const items = normalizeRemoteMessages([
-      message({
-        id: 'assistant-sealed',
-        role: 'assistant',
-        content: '正式总结',
-        agentMeta: { turnCompleted: true },
-      }),
-      message({
-        id: 'user-ignored',
-        role: 'user',
-        content: '继续',
-        agentMeta: { turnCompleted: true },
-      }),
-    ]);
-
-    expect(items[0].turnCompleted).toBe(true);
-    expect(items[1].turnCompleted).toBeUndefined();
   });
 
   it('renders silent-stop auto-resume rows as system cards instead of user bubbles', () => {

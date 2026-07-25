@@ -28,7 +28,7 @@ import type {
   ScriptExecutionConfig,
   ScriptCapability,
   PreRunHookRunResult,
-} from '@cindy/maker-scheduler';
+} from '@lizi/maker-scheduler';
 import { normalizeSessionSource } from '../../shared/sessionSource.js';
 import { normalizeWorkingDirForStorage } from '../../shared/workingDir.js';
 import { isSyntheticTriggerText } from '../../shared/interruptedTurn.js';

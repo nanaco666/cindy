@@ -1,7 +1,8 @@
 /**
  * textLightboxLineScroll.test.ts
  * ---------------------------------------------------------------------------
- * Behaviour coverage for the `path:line` jump (markdown target rendering). When a chat file reference like `foo.ts:42` is opened,
+ * Behaviour coverage for the `path:line` jump introduced in MR !115 (markdown
+ * target rendering). When a chat file reference like `foo.ts:42` is opened,
  * TextLightbox scrolls the preview to that line.
  *
  * Markdown scroll touches layout (getBoundingClientRect / scrollTop), which

@@ -1,7 +1,7 @@
 /**
  * TodoListCard
  * ---------------------------------------------------------------------------
- * TodoChecklistCard · Showcase visual contract
+ * Design ref: cc-agent-view.pen → "TodoChecklistCard · Showcase"
  *
  * Card with border, collapsible (default expanded).
  * Uses the same color tokens as ToolCallCard for consistency:
@@ -28,7 +28,7 @@ import {
   CircleDashed,
   Circle,
 } from 'lucide-react';
-import type { MessageRenderTodoItem } from '@cindy/maker-shared/message-render';
+import type { MessageRenderTodoItem } from '@lizi/maker-shared/message-render';
 
 import { cn } from '@/lib/utils';
 import { Spinner } from '@/components/ui/spinner';

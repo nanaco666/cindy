@@ -22,7 +22,7 @@
 
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 
-import type { Schedule } from '@cindy/maker-scheduler';
+import type { Schedule } from '@lizi/maker-scheduler';
 
 import {
   schedulesStore,
@@ -363,7 +363,7 @@ describe('handleAuthStateChange', () => {
     expect(notifySpy).not.toHaveBeenCalled();
   });
 
-  it('cross-account: 账号 A 的 in-flight list 晚到,绝不能覆盖账号 B 的 cache ([阻断])', async () => {
+  it('cross-account: 账号 A 的 in-flight list 晚到,绝不能覆盖账号 B 的 cache (MR !152 [阻断])', async () => {
     // 这是 review bot 标阻断的跨账号串库竞态:logout 只断引用,断不掉已 await 在途
     // 的 promise;A 的 list 在 logout 后才返回,旧实现会把 A 的数据写进 B 的 cache。
     // epoch 机制让晚到的 A 请求在回写时校验失败 → 丢弃。

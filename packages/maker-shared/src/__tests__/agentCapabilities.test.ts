@@ -61,11 +61,6 @@ describe('agent capabilities shared model', () => {
       'acceptEdits',
       'plan',
     ]);
-    expect(capabilities?.supportsSessionAgentSwitch).toBe(false);
-    expect(normalizeMobileAgentCapabilities({
-      ...desktopCapabilitiesPayload,
-      supportsSessionAgentSwitch: true,
-    })?.supportsSessionAgentSwitch).toBe(true);
   });
 
   it('uses the current model efforts and model-specific labels', () => {

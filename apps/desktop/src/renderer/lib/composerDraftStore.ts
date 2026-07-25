@@ -70,24 +70,6 @@ export interface ComposerDraft {
 }
 
 const drafts = new Map<string, ComposerDraft>();
-let activeDataOwnerId: string | null = null;
-
-/**
- * Composer keys are process-local, so a renderer owner switch must not reuse
- * the previous owner's in-flight draft (especially the global New Maker slot).
- * Keep the raw session id at call sites while namespacing the backing store.
- */
-function ownerPrefix(): string {
-  return `owner:${encodeURIComponent(activeDataOwnerId ?? 'signed-out')}:`;
-}
-
-function draftKey(sessionId: string): string {
-  return `${ownerPrefix()}${sessionId}`;
-}
-
-export function setComposerDraftOwner(ownerId: string | null): void {
-  activeDataOwnerId = ownerId;
-}
 
 /**
  * External-write subscription: when an outside source (e.g. rewind) calls
@@ -166,13 +148,12 @@ export function draftHasContent(draft: ComposerDraft | undefined): boolean {
  * `silent` flag — `silent` only gates the content `listeners` above.
  */
 function recomputeDraftPresence(sessionId: string): void {
-  const key = draftKey(sessionId);
-  const next = draftHasContent(drafts.get(key));
-  const prev = presenceCache.get(key) ?? false;
+  const next = draftHasContent(drafts.get(sessionId));
+  const prev = presenceCache.get(sessionId) ?? false;
   if (next === prev) return;
-  if (next) presenceCache.set(key, true);
-  else presenceCache.delete(key);
-  const set = presenceListeners.get(key);
+  if (next) presenceCache.set(sessionId, true);
+  else presenceCache.delete(sessionId);
+  const set = presenceListeners.get(sessionId);
   if (set) for (const fn of set) {
     try { fn(); } catch (err) {
       log.warn('presence listener threw:', err);
@@ -186,7 +167,7 @@ function recomputeDraftPresence(sessionId: string): void {
  * composer".
  */
 export function getDraft(sessionId: string): ComposerDraft | undefined {
-  return drafts.get(draftKey(sessionId));
+  return drafts.get(sessionId);
 }
 
 /**
@@ -197,7 +178,7 @@ export function getDraft(sessionId: string): ComposerDraft | undefined {
  * of re-render when unchanged.
  */
 export function getDraftPresence(sessionId: string): boolean {
-  return draftHasContent(drafts.get(draftKey(sessionId)));
+  return draftHasContent(drafts.get(sessionId));
 }
 
 /**
@@ -209,18 +190,17 @@ export function subscribeDraftPresence(
   sessionId: string,
   handler: DraftListener,
 ): () => void {
-  const key = draftKey(sessionId);
-  let set = presenceListeners.get(key);
+  let set = presenceListeners.get(sessionId);
   if (!set) {
     set = new Set();
-    presenceListeners.set(key, set);
+    presenceListeners.set(sessionId, set);
   }
   set.add(handler);
   return () => {
-    const s = presenceListeners.get(key);
+    const s = presenceListeners.get(sessionId);
     if (!s) return;
     s.delete(handler);
-    if (s.size === 0) presenceListeners.delete(key);
+    if (s.size === 0) presenceListeners.delete(sessionId);
   };
 }
 
@@ -240,7 +220,6 @@ export function saveDraft(
   draft: ComposerDraft,
   opts?: { silent?: boolean },
 ): void {
-  const key = draftKey(sessionId);
   const normalized = draft.quotes && draft.quotes.length > 0
     ? {
         ...draft,
@@ -248,9 +227,9 @@ export function saveDraft(
         quotes: [],
       }
     : draft;
-  drafts.set(key, normalized);
+  drafts.set(sessionId, normalized);
   if (!opts?.silent) {
-    const set = listeners.get(key);
+    const set = listeners.get(sessionId);
     if (set) for (const fn of set) {
       try { fn(); } catch (err) {
         log.warn('listener threw:', err);
@@ -271,7 +250,7 @@ export function saveDraft(
  * - When a session is deleted or archived (avoid Map leak).
  */
 export function clearDraft(sessionId: string): void {
-  drafts.delete(draftKey(sessionId));
+  drafts.delete(sessionId);
   recomputeDraftPresence(sessionId);
   syncDraftUrlsToMain();
 }
@@ -294,25 +273,24 @@ export function clearDraft(sessionId: string): void {
  * has no entry, so it skips the re-save.
  */
 export function clearDraftAndNotify(sessionId: string): void {
-  const key = draftKey(sessionId);
-  const set = listeners.get(key);
+  const set = listeners.get(sessionId);
   if (set && set.size > 0) {
     // Stage an explicit empty draft, then notify: the subscriber reads
     // `getDraft` (must be present) and, seeing falsy text, clears its editor.
-    drafts.set(key, { text: null, attachments: [] });
+    drafts.set(sessionId, { text: null, attachments: [] });
     for (const fn of set) {
       try { fn(); } catch (err) {
         log.warn('clearDraftAndNotify listener threw:', err);
       }
     }
   }
-  drafts.delete(key);
+  drafts.delete(sessionId);
   recomputeDraftPresence(sessionId);
   syncDraftUrlsToMain();
 }
 
 /**
- * 媒体回收器活引用取证(recycler.ts 的输入框草稿暂存区):全部会话草稿附件的
+ * 媒体回收器活引用取证(media-store.md §4 暂存区 (1)):全部会话草稿附件的
  * URL。草稿附件是合法的零引用 blob(粘贴=草稿、发送才挂引用),而本 Map 是
  * renderer 内存、main 读不到——存储清理由设置页发起时把这份清单随 IPC 带给
  * main,回收器把它们当活引用豁免。宁可多报(混着老 xdt-image 地址也没关系,
@@ -320,9 +298,7 @@ export function clearDraftAndNotify(sessionId: string): void {
  */
 export function getAllDraftAttachmentUrls(): string[] {
   const urls: string[] = [];
-  const prefix = ownerPrefix();
-  for (const [key, draft] of drafts) {
-    if (!key.startsWith(prefix)) continue;
+  for (const draft of drafts.values()) {
     for (const att of draft.attachments) {
       if (att.url) urls.push(att.url);
     }
@@ -354,7 +330,7 @@ function syncDraftUrlsToMain(): void {
  * ChatInput 立即刷新正文并把光标放到引用右侧)。
  */
 export function appendQuoteToDraft(sessionId: string, quote: ChatQuote): void {
-  const existing = getDraft(sessionId);
+  const existing = drafts.get(sessionId);
   const currentDocument = prependLegacyQuotesToComposerDocument(
     existing?.text,
     existing?.quotes ?? [],
@@ -377,7 +353,7 @@ export function appendBrowserCommentToDraft(
   sessionId: string,
   item: BrowserCommentDraftItem,
 ): void {
-  const existing = getDraft(sessionId);
+  const existing = drafts.get(sessionId);
   saveDraft(sessionId, {
     text: existing?.text ?? null,
     attachments: existing?.attachments ?? [],
@@ -417,17 +393,16 @@ export function subscribeDraft(
   sessionId: string,
   handler: DraftListener,
 ): () => void {
-  const key = draftKey(sessionId);
-  let set = listeners.get(key);
+  let set = listeners.get(sessionId);
   if (!set) {
     set = new Set();
-    listeners.set(key, set);
+    listeners.set(sessionId, set);
   }
   set.add(handler);
   return () => {
-    const s = listeners.get(key);
+    const s = listeners.get(sessionId);
     if (!s) return;
     s.delete(handler);
-    if (s.size === 0) listeners.delete(key);
+    if (s.size === 0) listeners.delete(sessionId);
   };
 }

@@ -2,7 +2,7 @@
  * device-link host —— 跨设备远程控制的 main 进程接线层。
  *
  * 职责(对齐 heartbeatService 的纯 host 风格):
- *  - 把 @cindy/device-link 的 DeviceLinkClient 接入 authManager / ws / 系统信息
+ *  - 把 @lizi/device-link 的 DeviceLinkClient 接入 authManager / ws / 系统信息
  *  - 登录后自动连 relay,登出即断;token 取现值,过期由 getToken 内部 refresh
  *  - presence / 连接状态变化广播给 renderer(设置页实时刷新)
  *  - 「允许被控」开关的读写入口(落盘 + 实时 presence-set)
@@ -28,7 +28,7 @@ import {
   type Envelope,
   type PushPayload,
   INVOKE_TIMEOUT_OVERRIDES_MS,
-} from '@cindy/device-link';
+} from '@lizi/device-link';
 import * as authManager from '../authManager';
 import { createLogger } from '../logger';
 import { onQuit } from '../lifecycle';
@@ -54,12 +54,6 @@ import {
 } from './dispatch';
 import { setBusyProbe, helloBusy, pollBusyChange, resetBusyDedupe } from './busyReporter';
 import { resetAll as resetSubscriptionRefs, snapshotSubscriptions } from './subscriptionRefcount';
-import { getControllersForTopic } from './subscriptions';
-import {
-  MobileNotifyDeduper,
-  buildSessionNotifyPayload,
-  type MobileSessionEventKind,
-} from './mobileNotify';
 import { getClientEndpoint } from '../clientEndpointsService';
 
 // register.ts 从 device-link/index 导入 setBusyProbe;改用 busyReporter 后在此 re-export 保持其导入不变。
@@ -99,58 +93,6 @@ let appliedKeepAwake: boolean | null = null;
 let pendingQuitOwnershipRelease: Promise<void> | null = null;
 const openLinkInFlight = new Map<string, Promise<LinkAcceptPayload>>();
 const presenceAvailableByDevice = new Map<string, boolean>();
-
-/**
- * relay 连续报 auth-failed 时,两次主动 refresh 之间的最小间隔。
- * refresh 是 token-rotating 端点,不节流会在「refresh 成功但 relay 仍拒」的
- * 异常态下每 30s 轮换一次 token(重连退避上限),白烧凭证。
- */
-const RELAY_AUTH_RECOVERY_MIN_INTERVAL_MS = 60_000;
-let lastRelayAuthRecoveryAt = 0;
-/**
- * 节流窗内又来了 auth-failed 时补排的延迟自救 timer。
- * client 的 setConnectionIssue 对同类 issue 去重、不重复通知订阅者——节流窗内
- * 直接 return 而不补排的话,窗口过后再没有任何入口重新进入自救,退回无限 401。
- */
-let relayAuthRecoveryRetryTimer: ReturnType<typeof setTimeout> | null = null;
-
-/**
- * relay 明确拒绝鉴权(401 / TOKEN_EXPIRED)时的自救:getToken 在内存 access token
- * 未清时不会触发 refresh,会一直拿过期 token 重连死循环(日志里刷 401 而用户无感知)。
- * 这里主动 refresh 一次:成功则下一轮重连拿到新 token 自愈;确定性失效则由
- * refresh 路径自己走会话过期出口(清会话 + 弹重登),auth 监听随后会停掉本服务。
- */
-function recoverFromRelayAuthFailure(): void {
-  const now = Date.now();
-  const elapsed = now - lastRelayAuthRecoveryAt;
-  if (elapsed < RELAY_AUTH_RECOVERY_MIN_INTERVAL_MS) {
-    // 节流窗内:补排剩余窗口后的延迟自救(只留一个 timer),否则同类 issue 去重
-    // 会让自救在首次尝试后永久停摆。
-    if (relayAuthRecoveryRetryTimer === null) {
-      relayAuthRecoveryRetryTimer = setTimeout(() => {
-        relayAuthRecoveryRetryTimer = null;
-        // 延迟期间可能已自愈(issue 清除),避免一次多余的 token 轮换。
-        if (client?.getConnectionIssue()?.kind !== 'auth-failed') return;
-        recoverFromRelayAuthFailure();
-      }, RELAY_AUTH_RECOVERY_MIN_INTERVAL_MS - elapsed);
-      relayAuthRecoveryRetryTimer.unref?.();
-    }
-    return;
-  }
-  lastRelayAuthRecoveryAt = now;
-  void authManager
-    .refresh()
-    .then((ok) => {
-      // refresh 在途期间持有权可能已被另一个共享 userData 实例夺走
-      // (onDemote → teardownActiveLink 已停掉 client):此时 connectNow 会把
-      // 已停的 client 拉活、绕过仲裁重连,重新制造双连接 / last-wins 互踢。
-      // 重连前重新确认本实例仍是持有者。
-      if (ok && arbiter?.isOwner()) client?.connectNow('relay-auth-recovered');
-    })
-    .catch((err) => {
-      log.warn('relay auth recovery refresh threw (non-fatal)', err);
-    });
-}
 
 /** Windows 历史主机名可能带尾部空白/全大写,统一 trim;空值兜底 'Unknown Device' */
 function deviceName(): string {
@@ -241,8 +183,6 @@ export function initDeviceLinkService(): void {
       );
     }
     broadcast(DEVICE_LINK_PUSH.CONNECTION_ISSUE, { issue });
-    // 鉴权失效不能只在设置页可见:主动 refresh,把「被顶下线」汇入全局会话过期出口。
-    if (issue?.kind === 'auth-failed') recoverFromRelayAuthFailure();
   });
   client.onPresenceChanged((snap: PresenceSnapshot) => {
     const wasAvailable = presenceAvailableByDevice.get(snap.deviceId);
@@ -407,18 +347,6 @@ export async function releaseDeviceLinkOwnershipBeforeLogout(): Promise<void> {
 let linkTornDown = false;
 
 /**
- * 链路代次:每次 teardown(登出 / 失去持有权)递增。跨 await 的通知任务在发起时
- * 捕获、发送时校验 —— 期间发生过账号边界,任务即过期丢弃,防止旧账号触发的
- * 通知经新账号重连后的 client 发到新账号的手机。
- */
-let mobileNotifyGeneration = 0;
-
-/** 当前链路代次。异步取通知正文前捕获,随 payload 传回 sendMobileSessionNotify。 */
-export function getMobileNotifyGeneration(): number {
-  return mobileNotifyGeneration;
-}
-
-/**
  * 停下本实例的 relay 连接并拆掉被控状态(登出与失去持有权共用;幂等,重复调用
  * 直接跳过,不对已关闭的连接重复跑清理)。
  * 必须先拆被控状态再断连:否则 dispatch 里的 broadcast-tap 监听 + activeControllers
@@ -428,11 +356,6 @@ export function getMobileNotifyGeneration(): number {
 function teardownActiveLink(): void {
   if (!client || linkTornDown) return;
   linkTornDown = true;
-  mobileNotifyGeneration += 1;
-  if (relayAuthRecoveryRetryTimer !== null) {
-    clearTimeout(relayAuthRecoveryRetryTimer);
-    relayAuthRecoveryRetryTimer = null;
-  }
   dropAllControllers(client, 'shutdown');
   presenceAvailableByDevice.clear();
   resetSubscriptionRefs();
@@ -699,63 +622,6 @@ export async function remoteUnsubscribe(
   assertNotStandby();
   if (!client) throw new Error('[DEVICE_LINK_NOT_CONNECTED] device-link client not initialized');
   return client.invoke(deviceId, { channel: DL_UNSUBSCRIBE_CHANNEL, args: [{ topics }] });
-}
-
-// ─── 手机推送(notify 帧,经 relay 下发 APNs)───────────────────────────────────
-
-const mobileNotifyDeduper = new MobileNotifyDeduper();
-
-/**
- * 会话终态时给本账号已注册推送 token 的手机发系统推送(fire-and-forget)。
- * 静默跳过的场景(返回 false):
- *  - relay 未连接 / server 未声明 notify capability(老 relay,黑洞防护)
- *  - 有控制端正订阅该会话的实时流(session:<id> topic)——人已经在手机上看着这
- *    个会话,系统推送只会重复打扰
- *  - 同 session + kind 5s 短窗去重
- * 手机端是否收得到由手机侧开关决定(注册/注销 token),桌面端不再设第二个开关。
- */
-export function sendMobileSessionNotify(payload: {
-  sessionId: string;
-  title: string;
-  kind: MobileSessionEventKind;
-  /** 内容摘要(最近一条 assistant 内容 / 定时任务结果),缺省回退终态短文案 */
-  detail?: string;
-  /**
-   * 发起时捕获的 getMobileNotifyGeneration()。调用路径里有 await(取正文/等
-   * 其它通道)时必传:与当前代次不一致说明期间发生过登出/失去持有权,任务
-   * 过期丢弃,不得把旧账号的通知发进新账号的链路。
-   */
-  generation?: number;
-}): boolean {
-  if (!client) return false;
-  if (payload.generation !== undefined && payload.generation !== mobileNotifyGeneration) {
-    log.debug(
-      `mobile notify dropped: link generation changed (account/ownership boundary), session=${payload.sessionId.slice(0, 8)}`,
-    );
-    return false;
-  }
-  const selfDeviceId = client.getSelfDeviceId();
-  if (!selfDeviceId) return false;
-  if (getControllersForTopic(`session:${payload.sessionId}`).length > 0) {
-    log.debug(
-      `mobile notify skipped: session ${payload.sessionId.slice(0, 8)} is being watched remotely`,
-    );
-    return false;
-  }
-  if (!mobileNotifyDeduper.shouldSend(payload.sessionId, payload.kind)) return false;
-  const sent = client.sendNotify(
-    buildSessionNotifyPayload({
-      sessionId: payload.sessionId,
-      title: payload.title,
-      kind: payload.kind,
-      selfDeviceId,
-      detail: payload.detail,
-    }),
-  );
-  if (sent) {
-    log.debug(`mobile notify sent: session=${payload.sessionId.slice(0, 8)} kind=${payload.kind}`);
-  }
-  return sent;
 }
 
 export function broadcast(channel: string, payload: unknown): void {

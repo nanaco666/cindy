@@ -1,7 +1,7 @@
 /**
  * i18nBrandPlaceholder.test.ts —— {{appName}} 品牌插值的运行时断言。
  *
- * 品牌展示名收敛分两层校验:
+ * 品牌展示名收敛(docs/branding-rename-checklist.md)分两层校验:
  *  - 静态层:locale JSON 不得硬编码品牌名 → scripts/brand-terminology-guard.mjs
  *    (PR #767 建立的品牌治理 CI 入口,错拼检查与 locale 占位符检查同脚本);
  *  - 运行时层(本文件):i18next 的 interpolation.defaultVariables 真的把
@@ -10,7 +10,7 @@
  */
 import { describe, it, expect } from 'vitest';
 
-import { BRAND_NAME } from '@cindy/maker-shared/branding';
+import { BRAND_NAME } from '@lizi/maker-shared/branding';
 import { i18n } from '../i18n';
 
 describe('locale 品牌名插值', () => {

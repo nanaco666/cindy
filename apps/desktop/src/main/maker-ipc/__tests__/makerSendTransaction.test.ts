@@ -1,4 +1,4 @@
-import type { AgentKind, SessionSendResult, UserMessage } from '@cindy/maker-core';
+import type { AgentKind, SessionSendResult, UserMessage } from '@lizi/maker-core';
 import { describe, expect, it, vi } from 'vitest';
 import {
   createMakerSendTransaction,
@@ -251,95 +251,6 @@ describe('maker SEND transaction', () => {
 
     expect(beforeDispatchDirectUserTurn).toHaveBeenCalledWith('session-1');
     expect(onUndispatchedDirectUserTurn).toHaveBeenCalledWith('session-1');
-  });
-
-  it('acks an interrupted turn with the executor clock only after direct dispatch is accepted', async () => {
-    const ackInterruptedTurnDispatched = vi.fn(async () => {});
-    const session = createSession({
-      send: vi.fn(async () => {
-        expect(ackInterruptedTurnDispatched).not.toHaveBeenCalled();
-        return { accepted: true } satisfies SessionSendResult;
-      }),
-    });
-    const { deps } = createDeps({
-      getSession: vi.fn(() => session),
-      ackInterruptedTurnDispatched,
-    });
-    const now = vi.spyOn(Date, 'now').mockReturnValue(50_000);
-    const transaction = createMakerSendTransaction(deps);
-
-    try {
-      await expect(
-        transaction.sendToAgentAccepted('session-1', 'continue', undefined, {
-          ackInterruptedTurnOnDispatch: true,
-        }),
-      ).resolves.toMatchObject({ accepted: true });
-    } finally {
-      now.mockRestore();
-    }
-
-    expect(ackInterruptedTurnDispatched).toHaveBeenCalledWith('session-1', 49_999);
-    expect(vi.mocked(session.send).mock.invocationCallOrder[0]).toBeLessThan(
-      ackInterruptedTurnDispatched.mock.invocationCallOrder[0]!,
-    );
-  });
-
-  it('does not ack an interrupted turn when direct dispatch is rejected', async () => {
-    const ackInterruptedTurnDispatched = vi.fn(async () => {});
-    const session = createSession({
-      send: vi.fn(async () => (
-        { accepted: false, reason: 'cancelled-before-dispatch' } satisfies SessionSendResult
-      )),
-    });
-    const { deps } = createDeps({
-      getSession: vi.fn(() => session),
-      ackInterruptedTurnDispatched,
-    });
-    const transaction = createMakerSendTransaction(deps);
-
-    await expect(
-      transaction.sendToAgentAccepted('session-1', 'continue', undefined, {
-        ackInterruptedTurnOnDispatch: true,
-      }),
-    ).resolves.toMatchObject({ accepted: false });
-
-    expect(ackInterruptedTurnDispatched).not.toHaveBeenCalled();
-  });
-
-  it('keeps an accepted direct dispatch successful when interrupted-turn ack persistence fails', async () => {
-    const ackError = new Error('ack write failed');
-    const ackInterruptedTurnDispatched = vi.fn(async () => {
-      throw ackError;
-    });
-    const { deps } = createDeps({ ackInterruptedTurnDispatched });
-    const transaction = createMakerSendTransaction(deps);
-
-    await expect(
-      transaction.sendToAgentAccepted('session-1', 'continue', undefined, {
-        ackInterruptedTurnOnDispatch: true,
-      }),
-    ).resolves.toMatchObject({ accepted: true });
-
-    expect(deps.log.warn).toHaveBeenCalledWith(
-      'send: interrupted-turn dispatch ack failed',
-      expect.objectContaining({
-        sessionId: 'session-1',
-        err: ackError.message,
-      }),
-    );
-  });
-
-  it('rejects a non-boolean interrupted-turn dispatch ack option before vendor dispatch', async () => {
-    const { deps, session } = createDeps();
-    const transaction = createMakerSendTransaction(deps);
-
-    await expect(
-      transaction.sendToAgentAccepted('session-1', 'continue', undefined, {
-        ackInterruptedTurnOnDispatch: 'yes',
-      }),
-    ).rejects.toMatchObject({ code: 'INVALID_PARAMS' });
-
-    expect(session.send).not.toHaveBeenCalled();
   });
 
   it('rolls back the prompt preview if accepted persistence fails before dispatch', async () => {

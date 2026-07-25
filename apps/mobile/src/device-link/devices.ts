@@ -1,1 +1,1 @@
-export * from '@cindy/maker-shared/device-list';
+export * from '@lizi/maker-shared/device-list';
