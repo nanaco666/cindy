@@ -1,26 +1,36 @@
-# Cindy 多 Harness 自定义供应商原型
+# Cindy `CustomProviderDialog` 增量原型
 
-这是一个纯客户端设计原型，不包含真实 IPC、数据库或 safeStorage 写入。它用 Cindy 当前设计系统的 token、圆角、按钮和设置页语言，演示以下产品决策：
+这是基于当前 Cindy Desktop 真实 `CustomProviderDialog` 外壳的纯客户端原型，不是重新设计一套设置页。
 
-- 创建时先选择要应用的 Harness 范围；
-- 来源协议不兼容的 Harness 保留可见，但明确禁选原因；
-- 只填写一套公共配置，再预览每个 runtime 的独立快照；
-- 保存后允许进入单个 Harness 的高级配置覆盖端点、模型、请求头和凭证；
-- 任一 runtime 保存失败时，用户看到的是“全部回滚”，而不是半成功状态。
+原型保留现有界面与功能位置：
+
+- 600px 弹窗、标题栏、关闭按钮和底部取消 / 保存；
+- 预设模板、显示名称、API 密钥 / OAuth 鉴权切换；
+- Claude Code / Codex runtime Tab；
+- Base URL、API Key、模型行、请求头、测试连接、获取模型列表；
+- 现有表单的字段尺寸、圆角、主题 token 和层级。
+
+本轮只增加一个局部模块：
+
+- “应用到其他 Harness”选择区；
+- 不兼容协议明确禁选；
+- 来源配置 / 独立副本状态提示；
+- 保存失败后的整体回滚提示。
 
 ## 预览
 
-直接打开 `index.html` 即可操作。为了快速查看评审状态，可使用：
+直接打开 [index.html](./index.html)。它是自包含单文件，样式和交互脚本已内联，适合手机端远程预览。
 
-- `index.html?screen=scope`：应用范围选择；
-- `index.html?screen=review`：确认快照与回滚演示；
-- `index.html?screen=scope&protocol=openai`：切换到 OpenAI Responses，观察 Codex 兼容性。
+可用查询参数查看状态：
 
-主题切换在右上角，原型覆盖 Light / Dark 两套界面。
+- `?protocol=openai`：切换到 OpenAI Responses，观察 Codex 兼容性；
+- `?runtime=codex&protocol=openai`：查看 Codex 独立副本状态；
+- `?failure=1`：查看保存失败后的原子回滚状态。
 
-## 目录
+顶部的主题按钮只属于原型预览控制，不是产品新增控件。
 
-- `index.html`：可交互的 Cindy 设置页原型；
-- `styles.css`：对齐 `DESIGN.md` 的单色 token、三档圆角和 pill 控件；
-- `app.js`：协议切换、Harness 勾选、单 runtime 覆盖提示、保存失败回滚等交互；
-- `assets/runtime-snapshot-concept.png`：由 `imagegen` 生成的概念图，只用于设计文档与原型侧栏，不作为功能依赖。
+## 真实实现边界
+
+当前仓库真实 `AgentKind` 只有 `claude-code` 与 `codex`，因此原型不会把 Pi 当作当前可用 Tab。Pi 需要在正式实现中通过 runtime capability manifest 接入后，再自然出现在同一选择区。
+
+`app.js` 与 `styles.css` 已不再作为预览依赖；保留的图片只用于设计文档和概念说明。

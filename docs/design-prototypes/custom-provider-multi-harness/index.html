@@ -3,223 +3,615 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Cindy · 多 Harness 自定义供应商</title>
-    <link rel="stylesheet" href="./styles.css" />
+    <title>Cindy · CustomProviderDialog 增量设计</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --surface: #f6f6f4;
+        --surface-elevated: #ffffff;
+        --surface-hover: #eeeeeb;
+        --surface-chip: #e9e9e6;
+        --overlay-modal: rgba(0, 0, 0, 0.46);
+        --text-primary: #161615;
+        --text-secondary: #5b5b57;
+        --text-tertiary: #8a8a84;
+        --text-placeholder: #b6b6b0;
+        --border-default: #d9d9d5;
+        --border-strong: #252524;
+        --input-bg: #ffffff;
+        --input-border: #d4d4d0;
+        --input-focus: #191918;
+        --success: #347a54;
+        --success-bg: #e9f1eb;
+        --danger: #8f493b;
+        --danger-bg: #f5e9e6;
+        --primary-bg: #171716;
+        --primary-text: #ffffff;
+        --secondary-bg: #ffffff;
+        --secondary-hover: #eeeeeb;
+        --shadow-modal: 0 22px 60px rgba(0, 0, 0, 0.22);
+        --focus-ring: rgba(35, 91, 158, 0.44);
+      }
+
+      html[data-theme='dark'] {
+        color-scheme: dark;
+        --surface: #1f1f1e;
+        --surface-elevated: #2c2c2a;
+        --surface-hover: #373735;
+        --surface-chip: #41413e;
+        --overlay-modal: rgba(0, 0, 0, 0.62);
+        --text-primary: #f7f7f3;
+        --text-secondary: #d0d0ca;
+        --text-tertiary: #a0a09a;
+        --text-placeholder: #6d6d67;
+        --border-default: #4b4b47;
+        --border-strong: #f7f7f3;
+        --input-bg: #252523;
+        --input-border: #565650;
+        --input-focus: #f7f7f3;
+        --success: #8ed2a6;
+        --success-bg: #26372c;
+        --danger: #efb2a5;
+        --danger-bg: #4a302b;
+        --primary-bg: #f7f7f3;
+        --primary-text: #1f1f1e;
+        --secondary-bg: #2c2c2a;
+        --secondary-hover: #3a3a37;
+        --shadow-modal: 0 22px 60px rgba(0, 0, 0, 0.44);
+        --focus-ring: rgba(126, 176, 239, 0.56);
+      }
+
+      * { box-sizing: border-box; }
+      [hidden] { display: none !important; }
+      body {
+        min-height: 100vh;
+        margin: 0;
+        padding: 24px;
+        background: var(--surface);
+        color: var(--text-primary);
+        font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        font-size: 14px;
+        line-height: 1.45;
+      }
+      button, input { font: inherit; }
+      button { cursor: pointer; }
+      button:focus-visible, input:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+
+      .preview-toolbar {
+        position: fixed;
+        top: 14px;
+        left: 50%;
+        z-index: 10;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        transform: translateX(-50%);
+        color: var(--text-tertiary);
+        font-size: 11px;
+        letter-spacing: 0.02em;
+      }
+      .preview-toolbar button {
+        border: 1px solid var(--border-default);
+        border-radius: 999px;
+        padding: 5px 10px;
+        background: var(--surface-elevated);
+        color: var(--text-secondary);
+      }
+      .preview-toolbar button:hover { background: var(--surface-hover); color: var(--text-primary); }
+
+      .modal-backdrop {
+        position: fixed;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        padding: 64px 18px 18px;
+        background: var(--overlay-modal);
+      }
+      .dialog {
+        display: flex;
+        width: min(600px, 100%);
+        max-height: 88vh;
+        flex-direction: column;
+        overflow: hidden;
+        border: 1px solid var(--border-default);
+        border-radius: 16px;
+        background: var(--surface-elevated);
+        box-shadow: var(--shadow-modal);
+      }
+      .dialog-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 12px 12px 12px 20px;
+      }
+      .dialog-title-wrap { display: flex; align-items: center; gap: 10px; }
+      .sparkle { color: var(--text-secondary); font-size: 18px; line-height: 1; }
+      h1, h2, h3, p { margin: 0; }
+      h1 { font-size: 18px; font-weight: 650; letter-spacing: -0.02em; }
+      h2 { font-size: 15px; font-weight: 650; letter-spacing: -0.015em; }
+      .icon-button {
+        display: grid;
+        width: 32px;
+        height: 32px;
+        place-items: center;
+        border: 0;
+        border-radius: 9px;
+        background: transparent;
+        color: var(--text-tertiary);
+        font-size: 21px;
+        line-height: 1;
+      }
+      .icon-button:hover { background: var(--surface-hover); color: var(--text-primary); }
+
+      .dialog-body { display: flex; flex-direction: column; gap: 18px; overflow-y: auto; padding: 4px 24px 8px; }
+      .dialog-description { color: var(--text-tertiary); font-size: 13px; line-height: 1.55; }
+      .field { display: flex; flex-direction: column; gap: 7px; }
+      .field-label { color: var(--text-primary); font-size: 13px; font-weight: 600; }
+      .field-help { color: var(--text-tertiary); font-size: 12px; line-height: 1.45; }
+      .input, .select-button {
+        width: 100%;
+        height: 40px;
+        border: 1px solid var(--input-border);
+        border-radius: 10px;
+        padding: 0 12px;
+        background: var(--input-bg);
+        color: var(--text-primary);
+        outline: none;
+        transition: border-color 140ms ease, background 140ms ease;
+      }
+      .input::placeholder { color: var(--text-placeholder); }
+      .input:focus, .select-button:focus { border-color: var(--input-focus); }
+      .input.mono { font-family: "SFMono-Regular", Menlo, Consolas, monospace; font-size: 12px; }
+      .select-button { display: flex; align-items: center; justify-content: space-between; text-align: left; }
+      .select-button:hover { background: var(--surface-hover); }
+      .select-button .muted { color: var(--text-tertiary); }
+
+      .pill-row { display: flex; flex-wrap: wrap; gap: 6px; }
+      .pill {
+        border: 1px solid var(--input-border);
+        border-radius: 999px;
+        padding: 6px 12px;
+        background: transparent;
+        color: var(--text-secondary);
+        font-size: 12px;
+        font-weight: 600;
+      }
+      .pill:hover { background: var(--surface-hover); color: var(--text-primary); }
+      .pill.active { border-color: var(--input-focus); background: var(--surface-elevated); color: var(--text-primary); }
+
+      .apply-card {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        border: 1px solid var(--border-default);
+        border-radius: 12px;
+        padding: 13px 14px 12px;
+        background: var(--surface);
+      }
+      .field-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+      .field-heading .field-help { text-align: right; }
+      .apply-summary { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+      .apply-summary strong { font-size: 13px; font-weight: 650; }
+      .count-pill, .state-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        border-radius: 999px;
+        padding: 4px 8px;
+        background: var(--surface-chip);
+        color: var(--text-secondary);
+        font-size: 11px;
+        white-space: nowrap;
+      }
+      .runtime-options { display: flex; flex-direction: column; gap: 6px; }
+      .runtime-option {
+        display: grid;
+        grid-template-columns: 20px 28px minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 9px;
+        min-height: 48px;
+        border: 1px solid var(--border-default);
+        border-radius: 10px;
+        padding: 8px 10px;
+        background: var(--surface-elevated);
+        color: var(--text-primary);
+        text-align: left;
+      }
+      .runtime-option:hover:not(:disabled) { border-color: var(--border-strong); }
+      .runtime-option:disabled { cursor: not-allowed; opacity: .56; }
+      .runtime-option.selected { border-color: var(--border-strong); }
+      .runtime-option input { position: absolute; opacity: 0; pointer-events: none; }
+      .check-box { display: grid; width: 17px; height: 17px; place-items: center; border: 1px solid var(--input-border); border-radius: 5px; color: transparent; font-size: 11px; }
+      .runtime-option.selected .check-box { border-color: var(--border-strong); background: var(--border-strong); color: var(--surface-elevated); }
+      .runtime-mark { display: grid; width: 28px; height: 28px; place-items: center; border: 1px solid var(--border-default); border-radius: 9px; font-size: 13px; }
+      .runtime-copy { display: flex; min-width: 0; flex-direction: column; gap: 1px; }
+      .runtime-copy strong { overflow: hidden; font-size: 12px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+      .runtime-copy small { overflow: hidden; color: var(--text-tertiary); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+      .runtime-reason { color: var(--text-tertiary); font-size: 10px; white-space: nowrap; }
+      .runtime-reason.ok { color: var(--success); }
+      .apply-note { color: var(--text-tertiary); font-size: 11px; }
+      .apply-note strong { color: var(--text-secondary); font-weight: 600; }
+
+      .tab-label { color: var(--text-primary); font-size: 13px; font-weight: 600; }
+      .tabs { display: flex; height: 36px; align-items: center; gap: 3px; border-radius: 999px; padding: 3px; background: var(--surface-chip); }
+      .tab { display: flex; height: 30px; flex: 1; align-items: center; justify-content: center; gap: 6px; border: 1px solid transparent; border-radius: 999px; background: transparent; color: var(--text-secondary); font-size: 13px; }
+      .tab:hover { color: var(--text-primary); }
+      .tab.active { border-color: var(--border-default); background: var(--surface-elevated); color: var(--text-primary); font-weight: 650; }
+      .configured-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--success); }
+      .tab-help { color: var(--text-tertiary); font-size: 12px; }
+
+      .runtime-panel { display: flex; flex-direction: column; gap: 16px; border: 1px solid var(--border-default); border-radius: 12px; padding: 15px; background: var(--surface); }
+      .runtime-panel-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+      .runtime-panel-head p { margin-top: 3px; color: var(--text-tertiary); font-size: 11px; }
+      .source-badge { display: inline-flex; align-items: center; border-radius: 999px; padding: 4px 8px; background: var(--surface-chip); color: var(--text-secondary); font-size: 11px; white-space: nowrap; }
+      .source-badge.override { background: var(--success-bg); color: var(--success); }
+      .password-wrap { position: relative; }
+      .password-wrap .input { padding-right: 42px; }
+      .password-button { position: absolute; top: 5px; right: 5px; width: 30px; height: 30px; border: 0; border-radius: 7px; background: transparent; color: var(--text-tertiary); }
+      .password-button:hover { background: var(--surface-hover); color: var(--text-primary); }
+      .row-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 34px; gap: 8px; align-items: center; }
+      .row-grid + .row-grid { margin-top: 8px; }
+      .remove-button { width: 34px; height: 34px; border: 0; border-radius: 8px; background: transparent; color: var(--text-tertiary); font-size: 18px; }
+      .remove-button:hover { background: var(--surface-hover); color: var(--text-primary); }
+      .add-button, .link-button { align-self: flex-start; border: 0; padding: 0; background: transparent; color: var(--text-primary); font-size: 13px; font-weight: 600; }
+      .add-button:hover, .link-button:hover { text-decoration: underline; }
+      .section-divider { height: 1px; background: var(--border-default); }
+      .advanced-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--text-primary); font-size: 13px; font-weight: 650; }
+      .advanced-title span:last-child { color: var(--text-tertiary); font-size: 11px; font-weight: 400; }
+      .action-row { display: flex; min-height: 32px; flex-wrap: wrap; align-items: center; gap: 9px; }
+      .action-button { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--input-border); border-radius: 999px; padding: 6px 12px; background: transparent; color: var(--text-primary); font-size: 12px; font-weight: 600; }
+      .action-button:hover { background: var(--surface-hover); }
+      .test-result { color: var(--success); font-size: 12px; }
+      .test-result.fail { color: var(--danger); }
+      .copy-note { display: flex; align-items: flex-start; gap: 8px; color: var(--text-tertiary); font-size: 11px; line-height: 1.45; }
+      .copy-note strong { color: var(--text-secondary); font-weight: 600; }
+      .copy-note .note-icon { display: grid; width: 17px; height: 17px; flex: 0 0 auto; place-items: center; border: 1px solid var(--border-default); border-radius: 50%; font-size: 10px; }
+      .rollback { display: flex; gap: 9px; align-items: flex-start; border: 1px solid var(--danger); border-radius: 10px; padding: 11px 12px; background: var(--danger-bg); color: var(--danger); font-size: 12px; }
+      .rollback strong { display: block; margin-bottom: 3px; font-weight: 650; }
+
+      .dialog-footer { display: flex; justify-content: flex-end; gap: 10px; padding: 16px 24px 18px; }
+      .footer-button { min-width: 94px; border-radius: 999px; padding: 9px 18px; font-size: 13px; font-weight: 650; }
+      .footer-button.secondary { border: 1px solid var(--border-default); background: var(--secondary-bg); color: var(--text-secondary); }
+      .footer-button.secondary:hover { background: var(--secondary-hover); color: var(--text-primary); }
+      .footer-button.primary { border: 1px solid var(--primary-bg); background: var(--primary-bg); color: var(--primary-text); }
+      .footer-button.primary:hover { opacity: .84; }
+
+      @media (max-width: 640px) {
+        body { padding: 0; }
+        .preview-toolbar { top: 8px; font-size: 10px; }
+        .modal-backdrop { padding: 42px 0 0; place-items: start center; overflow-y: auto; }
+        .dialog { min-height: calc(100vh - 42px); max-height: none; border-radius: 16px 16px 0 0; }
+        .dialog-body { padding-right: 16px; padding-left: 16px; }
+        .dialog-footer { padding-right: 16px; padding-left: 16px; }
+        .field-heading .field-help { display: none; }
+        .runtime-option { grid-template-columns: 20px 28px minmax(0, 1fr); }
+        .runtime-reason { grid-column: 3; }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        *, *::before, *::after { transition: none !important; }
+      }
+    </style>
   </head>
   <body>
-    <div class="app-shell">
-      <aside class="sidebar" aria-label="Cindy 设置导航">
-        <div class="brand-lockup">
-          <div class="brand-mark">C</div>
-          <span>Cindy</span>
-        </div>
-        <div class="sidebar-caption">SETTINGS</div>
-        <nav class="sidebar-nav">
-          <a href="#" class="nav-item">账户</a>
-          <a href="#" class="nav-item active">模型供应商</a>
-          <a href="#" class="nav-item">外观</a>
-          <a href="#" class="nav-item">工作区</a>
-          <a href="#" class="nav-item">通知</a>
-        </nav>
-        <div class="sidebar-footer">
-          <span class="status-dot"></span>
-          <span>本机配置 · 未同步</span>
-        </div>
-      </aside>
-
-      <main class="settings-stage">
-        <header class="stage-header">
-          <div>
-            <div class="eyebrow">设置 / 模型供应商</div>
-            <h1>添加自定义供应商</h1>
-            <p>一次填写公共连接信息，再为每个 Harness 保存独立快照。</p>
-          </div>
-          <button id="theme-toggle" class="icon-button" type="button" aria-label="切换主题">
-            <span class="theme-icon">◐</span>
-            <span id="theme-label">Dark</span>
-          </button>
-        </header>
-
-        <section class="dialog-frame" aria-labelledby="dialog-title">
-          <div class="dialog-topline">
-            <button id="back-to-settings" class="back-link" type="button">← 返回供应商</button>
-            <span class="draft-pill"><span class="draft-dot"></span> Draft · 还未保存</span>
-          </div>
-
-          <div class="dialog-heading">
-            <div>
-              <h2 id="dialog-title">连接一次，保持 runtime 隔离</h2>
-              <p>把一套来源配置复制成目标 Harness 的独立副本；复制之后，任何修改都只影响当前副本。</p>
-            </div>
-            <div class="heading-mark" aria-hidden="true">
-              <span class="heading-ring ring-one"></span>
-              <span class="heading-ring ring-two"></span>
-              <span class="heading-core"></span>
-            </div>
-          </div>
-
-          <ol class="stepper" aria-label="创建步骤">
-            <li class="step current" data-step-label="1">
-              <span class="step-index">1</span><span>应用范围</span>
-            </li>
-            <li class="step" data-step-label="2">
-              <span class="step-index">2</span><span>来源配置</span>
-            </li>
-            <li class="step" data-step-label="3">
-              <span class="step-index">3</span><span>确认快照</span>
-            </li>
-          </ol>
-
-          <div class="step-panel" data-panel="scope">
-            <div class="section-block">
-              <label class="field-label" for="provider-name">供应商名称</label>
-              <input id="provider-name" class="text-input" type="text" value="Nebula Gateway" />
-              <p class="field-help">名称只用于在 Cindy 中识别这组连接，不会成为共享密钥的引用。</p>
-            </div>
-
-            <div class="section-block">
-              <div class="field-label-row">
-                <span class="field-label">来源协议</span>
-                <span class="micro-note">决定哪些 Harness 可以复制</span>
-              </div>
-              <div class="segmented-control" role="radiogroup" aria-label="来源协议">
-                <button type="button" class="segment selected" data-protocol="anthropic" role="radio" aria-checked="true">
-                  Anthropic Messages
-                </button>
-                <button type="button" class="segment" data-protocol="openai" role="radio" aria-checked="false">
-                  OpenAI Responses
-                </button>
-              </div>
-              <p id="protocol-help" class="field-help">Claude Code 与 Pi 当前接受 Anthropic Messages 配置。</p>
-            </div>
-
-            <div class="section-block">
-              <div class="field-label-row">
-                <span class="field-label">应用到以下 Harness</span>
-                <span id="selection-count" class="count-pill">2 个已选择</span>
-              </div>
-              <div class="harness-grid" id="harness-grid">
-                <button class="harness-card selected" type="button" data-harness="claude-code" aria-pressed="true">
-                  <span class="harness-check">✓</span>
-                  <span class="harness-icon claude">C</span>
-                  <span class="harness-copy"><strong>Claude Code</strong><small>Anthropic Messages</small></span>
-                  <span class="compatibility compatible">兼容</span>
-                </button>
-                <button class="harness-card" type="button" data-harness="codex" aria-pressed="false" disabled>
-                  <span class="harness-check">✓</span>
-                  <span class="harness-icon codex">✦</span>
-                  <span class="harness-copy"><strong>Codex</strong><small>OpenAI Responses</small></span>
-                  <span class="compatibility blocked">协议不兼容</span>
-                </button>
-                <button class="harness-card selected" type="button" data-harness="pi" aria-pressed="true">
-                  <span class="harness-check">✓</span>
-                  <span class="harness-icon pi">π</span>
-                  <span class="harness-copy"><strong>Pi</strong><small>Anthropic Messages</small></span>
-                  <span class="compatibility compatible">兼容</span>
-                </button>
-              </div>
-              <p class="field-help">不兼容的 Harness 会保留在列表中，但不能被静默复制。</p>
-            </div>
-
-            <div class="callout quiet">
-              <span class="callout-icon">i</span>
-              <div><strong>复制的是配置，不是共享引用</strong><p>保存后会生成 2 份 runtime 配置和 2 条独立的 safeStorage 密钥记录。</p></div>
-            </div>
-          </div>
-
-          <div class="step-panel hidden" data-panel="source">
-            <div class="source-layout">
-              <div class="source-form">
-                <div class="source-form-topline">
-                  <div><span class="eyebrow">SOURCE CONFIG</span><h3>公共来源配置</h3></div>
-                  <span class="source-badge">复制到 <strong id="source-target-count">2</strong> 个 Harness</span>
-                </div>
-
-                <div class="section-block compact">
-                  <label class="field-label" for="base-url">Base URL</label>
-                  <input id="base-url" class="text-input mono" type="text" value="https://api.nebula.example" />
-                </div>
-                <div class="form-row">
-                  <div class="section-block compact">
-                    <label class="field-label" for="request-path">Request path</label>
-                    <input id="request-path" class="text-input mono" type="text" value="/v1/messages" />
-                  </div>
-                  <div class="section-block compact">
-                    <label class="field-label" for="api-key">API Key</label>
-                    <div class="password-wrap"><input id="api-key" class="text-input mono" type="password" value="sk-nebula-••••••••" /><button class="field-icon" id="reveal-key" type="button" aria-label="显示 API Key">◉</button></div>
-                  </div>
-                </div>
-
-                <div class="section-block compact">
-                  <div class="field-label-row"><label class="field-label">模型</label><button id="fetch-models" class="text-button" type="button">↻ 获取模型列表</button></div>
-                  <div id="model-list" class="model-list">
-                    <span class="model-chip"><span>nebula-3.2</span><button type="button" aria-label="移除模型">×</button></span>
-                    <span class="model-chip"><span>nebula-3.2-fast</span><button type="button" aria-label="移除模型">×</button></span>
-                    <button id="add-model" class="add-chip" type="button">＋ 添加模型</button>
-                  </div>
-                </div>
-
-                <details class="advanced-block" open>
-                  <summary><span>高级请求头</span><span class="summary-note">可选 · 仍按 runtime 保存</span></summary>
-                  <div class="header-row"><input class="text-input mono" value="x-tenant-id" aria-label="请求头名称" /><input class="text-input mono" value="team-cindy" aria-label="请求头值" /><button class="field-icon" type="button" aria-label="移除请求头">×</button></div>
-                  <button id="add-header" class="text-button" type="button">＋ 添加请求头</button>
-                </details>
-
-                <div class="section-block compact action-row">
-                  <button id="test-connection" class="secondary-button" type="button">⌁ 测试连接</button>
-                  <span id="test-result" class="test-result" hidden>✓ 312 ms · 连接可用</span>
-                </div>
-              </div>
-
-              <div class="snapshot-column">
-                <div class="snapshot-header"><div><span class="eyebrow">AFTER SAVE</span><h3>独立快照</h3></div><span class="micro-note">互不联动</span></div>
-                <div id="snapshot-list" class="snapshot-list">
-                  <article class="snapshot-card selected" data-snapshot="claude-code">
-                    <div class="snapshot-main"><span class="harness-icon claude">C</span><div><strong>Claude Code</strong><span>Anthropic Messages</span></div><span class="snapshot-state">将创建</span></div>
-                    <div class="snapshot-meta"><span>Base URL · /v1/messages</span><span>2 个模型 · key 独立</span></div>
-                    <button class="snapshot-edit" type="button">编辑此副本</button>
-                  </article>
-                  <article class="snapshot-card selected" data-snapshot="pi">
-                    <div class="snapshot-main"><span class="harness-icon pi">π</span><div><strong>Pi</strong><span>Anthropic Messages</span></div><span class="snapshot-state">将创建</span></div>
-                    <div class="snapshot-meta"><span>Base URL · /v1/messages</span><span>2 个模型 · key 独立</span></div>
-                    <button class="snapshot-edit" type="button">编辑此副本</button>
-                  </article>
-                </div>
-                <div class="callout quiet small"><span class="callout-icon">↳</span><div><strong id="override-title">要改不同端点？</strong><p id="override-copy">保存后进入任一 Harness 的高级配置即可单独覆盖。</p></div></div>
-                <img class="concept-thumb" src="./assets/runtime-snapshot-concept.png" alt="单一来源配置分裂为三个独立 runtime 快照的黑白概念图" />
-              </div>
-            </div>
-          </div>
-
-          <div class="step-panel hidden" data-panel="review">
-            <div class="review-layout">
-              <div>
-                <div class="eyebrow">READY TO SAVE</div>
-                <h3>确认这次连接</h3>
-                <p class="review-lede">Cindy 会把来源配置复制成独立 runtime 快照。之后改一个 Harness，不会改到其他 Harness。</p>
-                <div class="review-table" id="review-table"></div>
-                <div class="callout warning" id="rollback-callout" hidden><span class="callout-icon">!</span><div><strong>保存未完成，已回滚</strong><p>Pi runtime 写入失败，Claude Code 的暂存结果也已撤回；当前没有半成品配置。</p></div></div>
-              </div>
-              <aside class="review-aside">
-                <div class="review-aside-title">安全边界</div>
-                <ul class="safety-list"><li>API Key 仅在内存中用于本次提交</li><li>每个 runtime 写入独立 safeStorage 记录</li><li>日志与远程投影只展示脱敏状态</li><li>失败时维持原子回滚</li></ul>
-                <button id="simulate-failure" class="text-button danger-text" type="button">模拟一次保存失败</button>
-              </aside>
-            </div>
-          </div>
-
-          <footer class="dialog-footer">
-            <button id="secondary-action" class="secondary-button" type="button">取消</button>
-            <div class="footer-right">
-              <button id="back-step" class="secondary-button hidden" type="button">← 上一步</button>
-              <button id="primary-action" class="primary-button" type="button">继续配置</button>
-            </div>
-          </footer>
-        </section>
-      </main>
+    <div class="preview-toolbar" aria-label="原型预览控制">
+      <span>真实 CustomProviderDialog 增量原型</span>
+      <button id="theme-toggle" type="button">切换 Dark</button>
     </div>
 
-    <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
-    <script src="./app.js"></script>
+    <main class="modal-backdrop">
+      <section class="dialog" aria-labelledby="dialog-title">
+        <header class="dialog-header">
+          <div class="dialog-title-wrap">
+            <span class="sparkle" aria-hidden="true">✦</span>
+            <h1 id="dialog-title">添加自定义供应商</h1>
+          </div>
+          <button class="icon-button" type="button" aria-label="关闭" data-action="close">×</button>
+        </header>
+
+        <div class="dialog-body">
+          <p class="dialog-description">为当前 Harness 配置自定义模型供应商。每个 runtime 的端点、模型、请求头和凭证都独立保存。</p>
+
+          <div class="field">
+            <label class="field-label" for="preset">预设模板</label>
+            <button class="select-button" id="preset" type="button" data-action="preset">
+              <span>选择一个供应商预设</span><span class="muted">⌄</span>
+            </button>
+          </div>
+
+          <div class="field">
+            <label class="field-label" for="provider-name">显示名称</label>
+            <input class="input" id="provider-name" value="Nebula Gateway" placeholder="例如：我的自托管网关" />
+          </div>
+
+          <div class="field">
+            <span class="field-label">鉴权方式</span>
+            <div class="pill-row" role="radiogroup" aria-label="鉴权方式">
+              <button class="pill active" type="button" data-auth="apiKey">API 密钥</button>
+              <button class="pill" type="button" data-auth="oauth">OAuth 订阅授权</button>
+            </div>
+          </div>
+
+          <section class="apply-card" aria-labelledby="apply-title">
+            <div class="apply-summary">
+              <div>
+                <strong id="apply-title">应用到其他 Harness</strong>
+                <div class="field-help">先填写当前 Tab，再复制为独立副本</div>
+              </div>
+              <span class="count-pill" id="selection-count">1 个已选择</span>
+            </div>
+
+            <div class="runtime-options" id="runtime-options">
+              <button class="runtime-option selected" type="button" data-runtime="claude-code" aria-pressed="true">
+                <span class="check-box" aria-hidden="true">✓</span>
+                <span class="runtime-mark" aria-hidden="true">C</span>
+                <span class="runtime-copy"><strong>Claude Code</strong><small>Anthropic Messages · 当前来源</small></span>
+                <span class="runtime-reason ok">来源</span>
+              </button>
+              <button class="runtime-option" type="button" data-runtime="codex" aria-pressed="false">
+                <span class="check-box" aria-hidden="true">✓</span>
+                <span class="runtime-mark" aria-hidden="true">✦</span>
+                <span class="runtime-copy"><strong>Codex</strong><small>OpenAI Responses · 需要兼容协议</small></span>
+                <span class="runtime-reason" id="codex-reason">协议不兼容</span>
+              </button>
+              <button class="runtime-option" type="button" data-runtime="pi" aria-pressed="false" disabled>
+                <span class="check-box" aria-hidden="true">✓</span>
+                <span class="runtime-mark" aria-hidden="true">π</span>
+                <span class="runtime-copy"><strong>Pi</strong><small>当前构建尚未提供 runtime capability</small></span>
+                <span class="runtime-reason">暂不可用</span>
+              </button>
+            </div>
+
+            <p class="apply-note"><strong>保存形态：</strong>每个选中的 Harness 生成独立配置和独立 safeStorage 密钥；复制后修改不会联动。</p>
+          </section>
+
+          <div class="field">
+            <span class="tab-label">协议与 Harness</span>
+            <div class="tabs" role="tablist" aria-label="协议与 Harness">
+              <button class="tab active" type="button" role="tab" data-tab="claude-code" aria-selected="true"><span>Claude Code</span><span class="configured-dot" aria-hidden="true"></span></button>
+              <button class="tab" type="button" role="tab" data-tab="codex" aria-selected="false"><span>Codex</span><span class="configured-dot" aria-hidden="true"></span></button>
+            </div>
+            <span class="tab-help" id="tab-help">Claude Code 使用当前来源配置；选择其他 Harness 后，这里仍可单独覆盖。</span>
+          </div>
+
+          <section class="runtime-panel" aria-labelledby="runtime-panel-title">
+            <div class="runtime-panel-head">
+              <div>
+                <h2 id="runtime-panel-title">Claude Code 配置</h2>
+                <p id="runtime-panel-subtitle">当前为来源配置，保存时可复制给兼容的 Harness。</p>
+              </div>
+              <span class="source-badge" id="runtime-badge">来源配置</span>
+            </div>
+
+            <div class="field">
+              <label class="field-label" for="base-url">基础 URL</label>
+              <input class="input mono" id="base-url" value="https://api.nebula.example" placeholder="https://api.example.com" />
+            </div>
+
+            <div class="field" id="api-key-field">
+              <div class="field-heading"><label class="field-label" for="api-key">API 密钥</label><span class="field-help">只在本机安全存储，不进入日志或远程投影</span></div>
+              <div class="password-wrap">
+                <input class="input mono" id="api-key" type="password" value="sk-nebula-demo-123456" placeholder="输入 API 密钥" />
+                <button class="password-button" id="toggle-key" type="button" aria-label="显示 API 密钥">◉</button>
+              </div>
+            </div>
+
+            <div class="field">
+              <div class="field-heading"><span class="field-label">模型</span><button class="link-button" type="button" data-action="fetch">↻ 获取模型列表</button></div>
+              <div id="model-rows">
+                <div class="row-grid"><input class="input mono" value="nebula-3.2" aria-label="模型 ID" /><input class="input" value="Nebula 3.2" aria-label="模型名称" /><button class="remove-button" type="button" aria-label="移除模型">×</button></div>
+                <div class="row-grid"><input class="input mono" value="nebula-3.2-fast" aria-label="模型 ID" /><input class="input" value="Nebula 3.2 Fast" aria-label="模型名称" /><button class="remove-button" type="button" aria-label="移除模型">×</button></div>
+              </div>
+              <button class="add-button" id="add-model" type="button">＋ 添加模型</button>
+            </div>
+
+            <div class="section-divider"></div>
+
+            <div class="field">
+              <div class="advanced-title"><span>高级请求头</span><span>可选 · 按 runtime 独立保存</span></div>
+              <div id="header-rows">
+                <div class="row-grid"><input class="input mono" value="x-tenant-id" aria-label="请求头名称" /><input class="input mono" value="team-cindy" aria-label="请求头值" /><button class="remove-button" type="button" aria-label="移除请求头">×</button></div>
+              </div>
+              <button class="add-button" id="add-header" type="button">＋ 添加请求头</button>
+            </div>
+
+            <div class="action-row">
+              <button class="action-button" type="button" data-action="test">⌁ 测试连接</button>
+              <button class="action-button" type="button" data-action="fetch">↻ 获取模型列表</button>
+              <span class="test-result" id="test-result" hidden>✓ 312 ms · 连接可用</span>
+            </div>
+
+            <div class="copy-note"><span class="note-icon" aria-hidden="true">i</span><span id="copy-note"><strong>来源快照。</strong> 选中兼容 Harness 后，保存会把当前值复制成它们各自的独立配置。</span></div>
+            <div class="rollback" id="rollback" hidden><span aria-hidden="true">!</span><div><strong>保存未完成，已回滚</strong><span id="rollback-copy">Codex runtime 写入失败，已撤回本次全部配置与密钥变更。</span></div></div>
+          </section>
+        </div>
+
+        <footer class="dialog-footer">
+          <button class="footer-button secondary" type="button" data-action="close">取消</button>
+          <button class="footer-button primary" type="button" id="save">保存</button>
+        </footer>
+      </section>
+    </main>
+
+    <script>
+      const state = {
+        protocol: 'anthropic',
+        selected: new Set(['claude-code']),
+        activeTab: 'claude-code',
+        auth: 'apiKey',
+      };
+      const $ = (selector) => document.querySelector(selector);
+      const $$ = (selector) => [...document.querySelectorAll(selector)];
+      const compatibility = {
+        anthropic: { 'claude-code': true, codex: false },
+        openai: { 'claude-code': false, codex: true },
+      };
+      function compatibilityFor(protocol) {
+        // `compat=multi` is a design-review mode for a future manifest that declares
+        // both current runtimes compatible. The default remains the real current matrix.
+        return new URLSearchParams(location.search).get('compat') === 'multi'
+          ? { 'claude-code': true, codex: true }
+          : compatibility[protocol];
+      }
+      const labels = { 'claude-code': 'Claude Code', codex: 'Codex' };
+      const protocolNames = { anthropic: 'Anthropic Messages', openai: 'OpenAI Responses' };
+
+      function toast(message) {
+        const node = document.createElement('div');
+        node.textContent = message;
+        Object.assign(node.style, {
+          position: 'fixed', bottom: '18px', left: '50%', transform: 'translateX(-50%)', zIndex: 20,
+          padding: '9px 13px', border: '1px solid var(--border-default)', borderRadius: '999px',
+          background: 'var(--surface-elevated)', color: 'var(--text-primary)', fontSize: '12px',
+        });
+        document.body.append(node);
+        setTimeout(() => node.remove(), 2200);
+      }
+
+      function renderSelection() {
+        const map = compatibilityFor(state.protocol);
+        $$('.runtime-option').forEach((option) => {
+          const runtime = option.dataset.runtime;
+          if (runtime === 'pi') return;
+          const compatible = map[runtime];
+          option.disabled = !compatible;
+          const selected = compatible && state.selected.has(runtime);
+          option.classList.toggle('selected', selected);
+          option.setAttribute('aria-pressed', String(selected));
+          option.querySelector('.check-box').textContent = selected ? '✓' : '';
+          const reason = option.querySelector('.runtime-reason');
+          if (runtime === 'claude-code') {
+            reason.textContent = selected && state.activeTab === runtime ? '来源' : compatible ? '兼容' : '协议不兼容';
+            reason.className = `runtime-reason ${compatible ? 'ok' : ''}`;
+          } else {
+            reason.textContent = compatible ? (selected ? '已选择' : '兼容') : '协议不兼容';
+            reason.className = `runtime-reason ${compatible ? 'ok' : ''}`;
+          }
+        });
+        $('#selection-count').textContent = `${state.selected.size} 个已选择`;
+      }
+
+      function renderTabs() {
+        $$('.tab').forEach((tab) => {
+          const active = tab.dataset.tab === state.activeTab;
+          tab.classList.toggle('active', active);
+          tab.setAttribute('aria-selected', String(active));
+        });
+        const label = labels[state.activeTab];
+        $('#runtime-panel-title').textContent = `${label} 配置`;
+        const isSource = state.activeTab === 'claude-code';
+        $('#runtime-panel-subtitle').textContent = isSource
+          ? '当前为来源配置，保存时可复制给兼容的 Harness。'
+          : '当前为独立副本，修改只写入 Codex，不会回写 Claude Code。';
+        $('#runtime-badge').textContent = isSource ? '来源配置' : '独立副本';
+        $('#runtime-badge').classList.toggle('override', !isSource);
+        $('#tab-help').textContent = `${label} 使用 ${protocolNames[state.protocol]}；选择其他 Harness 后，这里仍可单独覆盖。`;
+        $('#copy-note').innerHTML = isSource
+          ? '<strong>来源快照。</strong> 选中兼容 Harness 后，保存会把当前值复制成它们各自的独立配置。'
+          : '<strong>副本隔离。</strong> 当前修改只会写入 Codex；来源配置和其他 Harness 不会被隐式改变。';
+      }
+
+      function renderProtocol() {
+        const map = compatibilityFor(state.protocol);
+        for (const runtime of [...state.selected]) if (!map[runtime]) state.selected.delete(runtime);
+        if (!state.selected.size) state.selected.add(state.protocol === 'anthropic' ? 'claude-code' : 'codex');
+        $('#codex-reason').textContent = map.codex ? '兼容' : '协议不兼容';
+        renderSelection();
+        renderTabs();
+      }
+
+      function setProtocol(protocol) {
+        state.protocol = protocol;
+        renderProtocol();
+        toast(`${protocolNames[protocol]} 已启用；不兼容 Harness 已禁选`);
+      }
+
+      function addRow(containerId, placeholders) {
+        const row = document.createElement('div');
+        row.className = 'row-grid';
+        row.innerHTML = `<input class="input mono" placeholder="${placeholders[0]}" aria-label="${placeholders[0]}" /><input class="input" placeholder="${placeholders[1]}" aria-label="${placeholders[1]}" /><button class="remove-button" type="button" aria-label="移除行">×</button>`;
+        row.querySelector('button').addEventListener('click', () => row.remove());
+        $(containerId).append(row);
+      }
+
+      function bindRemoveRows() {
+        $$('.remove-button').forEach((button) => button.addEventListener('click', () => button.closest('.row-grid')?.remove()));
+      }
+
+      $$('.runtime-option').forEach((option) => option.addEventListener('click', () => {
+        const runtime = option.dataset.runtime;
+        if (option.disabled) return;
+        if (runtime === 'claude-code') {
+          state.selected.add(runtime);
+          state.activeTab = runtime;
+        } else if (state.selected.has(runtime)) {
+          if (state.selected.size === 1) return toast('至少保留一个 Harness');
+          state.selected.delete(runtime);
+          if (state.activeTab === runtime) state.activeTab = 'claude-code';
+        } else {
+          state.selected.add(runtime);
+          state.activeTab = runtime;
+        }
+        renderSelection();
+        renderTabs();
+      }));
+      $$('.tab').forEach((tab) => tab.addEventListener('click', () => {
+        state.activeTab = tab.dataset.tab;
+        if (state.activeTab === 'codex' && !compatibilityFor(state.protocol).codex) {
+          toast('当前协议不兼容 Codex；请先切换协议或保留当前来源');
+          return;
+        }
+        renderSelection();
+        renderTabs();
+      }));
+      $$('.pill').forEach((pill) => pill.addEventListener('click', () => {
+        state.auth = pill.dataset.auth;
+        $$('.pill').forEach((item) => item.classList.toggle('active', item === pill));
+        $('#api-key-field').hidden = state.auth !== 'apiKey';
+        toast(state.auth === 'apiKey' ? '已切换到 API 密钥' : 'OAuth 字段沿用当前真实表单的授权区');
+      }));
+      $('#theme-toggle').addEventListener('click', () => {
+        const dark = document.documentElement.dataset.theme !== 'dark';
+        document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+        $('#theme-toggle').textContent = dark ? '切换 Light' : '切换 Dark';
+      });
+      $('#toggle-key').addEventListener('click', () => {
+        const input = $('#api-key');
+        input.type = input.type === 'password' ? 'text' : 'password';
+      });
+      $('#add-model').addEventListener('click', () => addRow('#model-rows', ['模型 ID', '模型名称']));
+      $('#add-header').addEventListener('click', () => addRow('#header-rows', ['请求头名称', '请求头值']));
+      $$('[data-action="fetch"]').forEach((button) => button.addEventListener('click', () => toast('已调用现有“获取模型列表”流程，结果在当前 runtime 的模型行中确认')));
+      $$('[data-action="test"]').forEach((button) => button.addEventListener('click', () => { $('#test-result').hidden = false; toast('已调用现有“测试连接”流程'); }));
+      $$('[data-action="preset"]').forEach((button) => button.addEventListener('click', () => toast('这里保留现有预设下拉，不新增第二套预设逻辑')));
+      $$('[data-action="close"]').forEach((button) => button.addEventListener('click', () => toast('原有取消 / 关闭行为保持不变')));
+      $('#save').addEventListener('click', () => {
+        if (new URLSearchParams(location.search).get('failure') === '1') {
+          $('#rollback').hidden = false;
+          toast('Codex 写入失败，已回滚全部 runtime');
+          return;
+        }
+        toast(`已创建 ${state.selected.size} 个独立 runtime 配置`);
+      });
+      bindRemoveRows();
+      renderProtocol();
+
+      const params = new URLSearchParams(location.search);
+      if (params.get('theme') === 'dark') {
+        document.documentElement.dataset.theme = 'dark';
+        $('#theme-toggle').textContent = '切换 Light';
+      }
+      if (params.get('compat') === 'multi') {
+        state.selected = new Set(['claude-code', 'codex']);
+      }
+      if (params.get('protocol') === 'openai') setProtocol('openai');
+      if (params.get('runtime') === 'codex') {
+        state.activeTab = 'codex';
+        state.selected.add('codex');
+        renderTabs();
+      }
+      if (params.get('failure') === '1') $('#rollback').hidden = false;
+      renderProtocol();
+    </script>
   </body>
 </html>

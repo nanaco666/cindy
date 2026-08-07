@@ -8,7 +8,7 @@
 
 设计原则：**一次输入，复制快照，之后隔离。**
 
-![范围选择：Anthropic Messages 仅允许 Claude Code 与 Pi](../design-prototypes/custom-provider-multi-harness/assets/scope-light.png)
+![基于真实 CustomProviderDialog 的应用范围增量区域](../design-prototypes/custom-provider-multi-harness/assets/scope-light.png)
 
 ## 2. 用户问题
 
@@ -53,83 +53,68 @@
 
 ## 4. 交互设计
 
-### 4.1 入口
+### 4.1 真实界面基线
 
-入口保持“设置 → 模型供应商 → 添加供应商 → 自定义供应商”。新建态进入三步向导；编辑已有供应商仍进入 per-runtime 编辑表单，不出现“应用到其他 Harness”的隐式联动。
+入口保持“设置 → 模型供应商 → 添加供应商 → 自定义供应商”。这不是新建一套页面，而是在现有 `CustomProviderDialog` 上增加一个局部模块。
 
-### 4.2 第一步：应用范围
+当前真实外壳必须保留：
 
-字段顺序：
+- 600px 弹窗、标题栏、关闭按钮和底部取消 / 保存；
+- 预设模板、显示名称、API 密钥 / OAuth 鉴权切换；
+- Claude Code / Codex runtime Tab；
+- Base URL、API Key、模型行、请求头、测试连接、获取模型列表。
 
-1. 供应商名称；
-2. 来源协议；
-3. “应用到以下 Harness”多选；
-4. 快照隔离说明。
+编辑已有供应商继续使用原来的 per-runtime 编辑流程；“应用到其他 Harness”只在创建态显示，不产生隐式联动。
 
-协议选择驱动兼容性：
+### 4.2 增量模块：应用到其他 Harness
 
-| 来源协议 | Claude Code | Codex | Pi |
-|---|---|---|---|
-| Anthropic Messages | 兼容 | 禁选 | 由 capability manifest 决定；原型为兼容 |
-| OpenAI Responses | 禁选 | 兼容 | 由 capability manifest 决定；原型为禁选 |
+新增区域放在鉴权方式之后、现有 runtime Tab 之前，使用当前设置页相同的卡片、边框、输入高度和 pill 语言：
 
-兼容性必须来自 runtime capability manifest，不允许通过模型 ID、厂商名或 UI Tab 猜测。禁选卡仍保留可见，并展示“协议不兼容”；用户因此知道它不是漏掉，而是有确定边界。
+1. 标题“应用到其他 Harness”；
+2. 说明“先填写当前 Tab，再复制为独立副本”；
+3. 显示当前来源 runtime；
+4. 列出可选目标 runtime；
+5. 兼容项可勾选，不兼容项保留可见但禁选并解释原因；
+6. 固定说明“每个选中的 Harness 生成独立配置和独立 safeStorage 密钥”。
 
-![OpenAI Responses 仅允许 Codex](../design-prototypes/custom-provider-multi-harness/assets/protocol-openai-light.png)
+当前仓库的真实 runtime 只有 Claude Code 与 Codex。Pi 不在当前 Tab 中显示，只有在 capability manifest、runtime adapter 和 provider 配置契约真正落地后才加入这一区域。
 
-默认选择策略：
+兼容性必须来自 runtime capability manifest，不允许通过模型 ID、厂商名或 UI Tab 猜测。原型中的 Codex 禁选状态只是当前 `Anthropic Messages` 来源下的真实兼容性示例；切换 `OpenAI Responses` 后，原有 Tab 和字段仍然保留，只更新兼容提示。
 
-- 从预设进入：默认勾选预设声明兼容且有 runtime 模板的 Harness；
-- 完全自定义：默认只勾选当前协议的首选 Harness，用户主动扩选；
-- 只有一个兼容 Harness 时，保留选择区但压缩说明，不额外制造一步。
+![基于真实弹窗的应用范围区域](../design-prototypes/custom-provider-multi-harness/assets/scope-light.png)
 
-### 4.3 第二步：填写来源配置
+### 4.3 来源与独立副本
 
-主栏只出现一套来源配置：
+现有 runtime Tab 继续承担配置编辑，不引入第二套向导：
 
-- Base URL；
-- Request Path / 协议端点；
-- API Key 或 OAuth；
-- 模型列表；
-- 高级请求头；
-- 测试连接、获取模型列表。
+- 当前来源 Tab 显示“来源配置”徽标；
+- 选择兼容目标后，目标 Tab 显示“独立副本”；
+- 目标 Tab 的 Base URL、模型、请求头和凭证字段仍可直接编辑；
+- 编辑目标时明确提示“修改只写入当前 runtime，不会回写来源”；
+- 保存时由 draft 物化为现有 per-runtime 配置，不持久化“共享来源”实体。
 
-右栏实时预览将生成的 runtime 快照，明确显示：
+这样用户看到的是熟悉的真实表单，只增加了批量复制和隔离状态，不需要学习一套新的三步向导。
 
-- Harness 名称和协议；
-- 端点摘要；
-- 模型数量；
-- “key 独立”；
-- “编辑此副本”。
+### 4.4 现有操作保持原位置
 
-点“编辑此副本”进入当前步骤内的 runtime override 状态。只覆盖用户修改过的字段；未修改字段继续使用这次提交的来源快照。它是创建前的差异编辑，不是建立永久继承链。
+以下能力不重画、不迁移：
 
-### 4.4 第三步：确认快照
-
-确认页逐 runtime 展示：
-
-- 协议；
-- 来源配置或单独覆盖；
-- 保存形态为“独立配置 + 独立密钥”。
-
-侧栏固定说明安全边界：
-
-- Key 仅在本次提交内存中存在；
-- 每个 runtime 写入独立 safeStorage 记录；
-- 日志与远程投影只显示脱敏状态；
-- 失败时整体回滚。
-
-![Dark 模式确认页](../design-prototypes/custom-provider-multi-harness/assets/review-dark.png)
+- 预设下拉仍使用现有 Popover；
+- API Key 显示 / 隐藏仍使用现有眼睛按钮；
+- 模型和请求头仍使用现有增删行；
+- 测试连接、获取模型列表仍是当前 runtime 的原有按钮；
+- 底部保存按钮继续触发现有保存链路。
 
 ### 4.5 保存失败
 
 任一 runtime 保存失败时：
 
-- 不关闭向导；
+- 不关闭现有弹窗；
 - 不显示部分成功；
-- 回滚本次新建的全部 runtime 配置与密钥变更；
-- 保留用户表单，定位失败 runtime；
-- 文案为“保存未完成，已回滚”，并说明哪个 runtime 失败。
+- 在当前表单内显示“保存未完成，已回滚”；
+- 定位失败 runtime；
+- 保留用户已填写内容，允许修正后重试；
+- 回滚本次新建的全部 runtime 配置与密钥变更。
 
 ![原子回滚状态](../design-prototypes/custom-provider-multi-harness/assets/rollback-dark.png)
 
@@ -263,7 +248,7 @@ main 进程流程：
 
 | 层 | 建议改动 |
 |---|---|
-| Renderer | `CustomProviderDialog.tsx` 或拆出 `CustomProviderCreateWizard.tsx`；新增范围选择、source draft、runtime override、确认页 |
+| Renderer | 在现有 `CustomProviderDialog.tsx` 内增加范围选择、source draft、runtime override 状态；不新增第二套设置页 |
 | Renderer helper | `lib/customProviders.ts` 改为调用 batch IPC；读取/删除保持 per-runtime |
 | Shared types | `packages/model-providers/src/types.ts` 增加协议枚举与 runtime capability；Pi 准备完成后扩展 `AgentKind` |
 | Main IPC | `providerHandlers.ts` 增加 batch create/update handler 与 main-side compatibility validation |
@@ -284,9 +269,9 @@ main 进程流程：
 - localDb + secret 补偿回滚测试；
 - 敏感数据脱敏测试。
 
-### PR 2：创建向导 UI
+### PR 2：真实弹窗增量 UI
 
-- 应用范围、来源配置、快照确认；
+- 在现有 `CustomProviderDialog` 中增加应用范围与来源 / 副本状态；
 - 单 runtime override；
 - Light/Dark；
 - i18n、键盘与焦点管理；
@@ -302,7 +287,7 @@ Pi 不应被夹在 UI PR 中作为假入口，否则会出现“能选但不能�
 
 ## 11. 验收映射
 
-- [ ] 可一次选择多个兼容 Harness 并只输入一次公共配置：范围页 + source draft。
+- [ ] 可一次选择多个兼容 Harness 并只输入一次公共配置：真实弹窗内的范围模块 + source draft。
 - [ ] 保存后生成独立 per-runtime 配置和密钥记录：materialize + batch IPC。
 - [ ] 不兼容协议不能被静默复制：manifest 双端校验 + 禁选原因。
 - [ ] 每个 Harness 可单独覆盖端点、模型和凭证：runtime override 与保存后 per-runtime 编辑。
@@ -312,7 +297,7 @@ Pi 不应被夹在 UI PR 中作为假入口，否则会出现“能选但不能�
 
 ## 12. 原型与视觉资产
 
-- 可交互原型：`docs/design-prototypes/custom-provider-multi-harness/index.html`
+- 可交互原型：`docs/design-prototypes/custom-provider-multi-harness/index.html`（自包含单文件，基于真实弹窗外壳）
 - 范围选择图：`assets/scope-light.png`
 - 协议禁选图：`assets/protocol-openai-light.png`
 - Dark 确认图：`assets/review-dark.png`
