@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Cindy · 多 Harness 自定义供应商</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="Cindy 设置导航">
+        <div class="brand-lockup">
+          <div class="brand-mark">C</div>
+          <span>Cindy</span>
+        </div>
+        <div class="sidebar-caption">SETTINGS</div>
+        <nav class="sidebar-nav">
+          <a href="#" class="nav-item">账户</a>
+          <a href="#" class="nav-item active">模型供应商</a>
+          <a href="#" class="nav-item">外观</a>
+          <a href="#" class="nav-item">工作区</a>
+          <a href="#" class="nav-item">通知</a>
+        </nav>
+        <div class="sidebar-footer">
+          <span class="status-dot"></span>
+          <span>本机配置 · 未同步</span>
+        </div>
+      </aside>
+
+      <main class="settings-stage">
+        <header class="stage-header">
+          <div>
+            <div class="eyebrow">设置 / 模型供应商</div>
+            <h1>添加自定义供应商</h1>
+            <p>一次填写公共连接信息，再为每个 Harness 保存独立快照。</p>
+          </div>
+          <button id="theme-toggle" class="icon-button" type="button" aria-label="切换主题">
+            <span class="theme-icon">◐</span>
+            <span id="theme-label">Dark</span>
+          </button>
+        </header>
+
+        <section class="dialog-frame" aria-labelledby="dialog-title">
+          <div class="dialog-topline">
+            <button id="back-to-settings" class="back-link" type="button">← 返回供应商</button>
+            <span class="draft-pill"><span class="draft-dot"></span> Draft · 还未保存</span>
+          </div>
+
+          <div class="dialog-heading">
+            <div>
+              <h2 id="dialog-title">连接一次，保持 runtime 隔离</h2>
+              <p>把一套来源配置复制成目标 Harness 的独立副本；复制之后，任何修改都只影响当前副本。</p>
+            </div>
+            <div class="heading-mark" aria-hidden="true">
+              <span class="heading-ring ring-one"></span>
+              <span class="heading-ring ring-two"></span>
+              <span class="heading-core"></span>
+            </div>
+          </div>
+
+          <ol class="stepper" aria-label="创建步骤">
+            <li class="step current" data-step-label="1">
+              <span class="step-index">1</span><span>应用范围</span>
+            </li>
+            <li class="step" data-step-label="2">
+              <span class="step-index">2</span><span>来源配置</span>
+            </li>
+            <li class="step" data-step-label="3">
+              <span class="step-index">3</span><span>确认快照</span>
+            </li>
+          </ol>
+
+          <div class="step-panel" data-panel="scope">
+            <div class="section-block">
+              <label class="field-label" for="provider-name">供应商名称</label>
+              <input id="provider-name" class="text-input" type="text" value="Nebula Gateway" />
+              <p class="field-help">名称只用于在 Cindy 中识别这组连接，不会成为共享密钥的引用。</p>
+            </div>
+
+            <div class="section-block">
+              <div class="field-label-row">
+                <span class="field-label">来源协议</span>
+                <span class="micro-note">决定哪些 Harness 可以复制</span>
+              </div>
+              <div class="segmented-control" role="radiogroup" aria-label="来源协议">
+                <button type="button" class="segment selected" data-protocol="anthropic" role="radio" aria-checked="true">
+                  Anthropic Messages
+                </button>
+                <button type="button" class="segment" data-protocol="openai" role="radio" aria-checked="false">
+                  OpenAI Responses
+                </button>
+              </div>
+              <p id="protocol-help" class="field-help">Claude Code 与 Pi 当前接受 Anthropic Messages 配置。</p>
+            </div>
+
+            <div class="section-block">
+              <div class="field-label-row">
+                <span class="field-label">应用到以下 Harness</span>
+                <span id="selection-count" class="count-pill">2 个已选择</span>
+              </div>
+              <div class="harness-grid" id="harness-grid">
+                <button class="harness-card selected" type="button" data-harness="claude-code" aria-pressed="true">
+                  <span class="harness-check">✓</span>
+                  <span class="harness-icon claude">C</span>
+                  <span class="harness-copy"><strong>Claude Code</strong><small>Anthropic Messages</small></span>
+                  <span class="compatibility compatible">兼容</span>
+                </button>
+                <button class="harness-card" type="button" data-harness="codex" aria-pressed="false" disabled>
+                  <span class="harness-check">✓</span>
+                  <span class="harness-icon codex">✦</span>
+                  <span class="harness-copy"><strong>Codex</strong><small>OpenAI Responses</small></span>
+                  <span class="compatibility blocked">协议不兼容</span>
+                </button>
+                <button class="harness-card selected" type="button" data-harness="pi" aria-pressed="true">
+                  <span class="harness-check">✓</span>
+                  <span class="harness-icon pi">π</span>
+                  <span class="harness-copy"><strong>Pi</strong><small>Anthropic Messages</small></span>
+                  <span class="compatibility compatible">兼容</span>
+                </button>
+              </div>
+              <p class="field-help">不兼容的 Harness 会保留在列表中，但不能被静默复制。</p>
+            </div>
+
+            <div class="callout quiet">
+              <span class="callout-icon">i</span>
+              <div><strong>复制的是配置，不是共享引用</strong><p>保存后会生成 2 份 runtime 配置和 2 条独立的 safeStorage 密钥记录。</p></div>
+            </div>
+          </div>
+
+          <div class="step-panel hidden" data-panel="source">
+            <div class="source-layout">
+              <div class="source-form">
+                <div class="source-form-topline">
+                  <div><span class="eyebrow">SOURCE CONFIG</span><h3>公共来源配置</h3></div>
+                  <span class="source-badge">复制到 <strong id="source-target-count">2</strong> 个 Harness</span>
+                </div>
+
+                <div class="section-block compact">
+                  <label class="field-label" for="base-url">Base URL</label>
+                  <input id="base-url" class="text-input mono" type="text" value="https://api.nebula.example" />
+                </div>
+                <div class="form-row">
+                  <div class="section-block compact">
+                    <label class="field-label" for="request-path">Request path</label>
+                    <input id="request-path" class="text-input mono" type="text" value="/v1/messages" />
+                  </div>
+                  <div class="section-block compact">
+                    <label class="field-label" for="api-key">API Key</label>
+                    <div class="password-wrap"><input id="api-key" class="text-input mono" type="password" value="sk-nebula-••••••••" /><button class="field-icon" id="reveal-key" type="button" aria-label="显示 API Key">◉</button></div>
+                  </div>
+                </div>
+
+                <div class="section-block compact">
+                  <div class="field-label-row"><label class="field-label">模型</label><button id="fetch-models" class="text-button" type="button">↻ 获取模型列表</button></div>
+                  <div id="model-list" class="model-list">
+                    <span class="model-chip"><span>nebula-3.2</span><button type="button" aria-label="移除模型">×</button></span>
+                    <span class="model-chip"><span>nebula-3.2-fast</span><button type="button" aria-label="移除模型">×</button></span>
+                    <button id="add-model" class="add-chip" type="button">＋ 添加模型</button>
+                  </div>
+                </div>
+
+                <details class="advanced-block" open>
+                  <summary><span>高级请求头</span><span class="summary-note">可选 · 仍按 runtime 保存</span></summary>
+                  <div class="header-row"><input class="text-input mono" value="x-tenant-id" aria-label="请求头名称" /><input class="text-input mono" value="team-cindy" aria-label="请求头值" /><button class="field-icon" type="button" aria-label="移除请求头">×</button></div>
+                  <button id="add-header" class="text-button" type="button">＋ 添加请求头</button>
+                </details>
+
+                <div class="section-block compact action-row">
+                  <button id="test-connection" class="secondary-button" type="button">⌁ 测试连接</button>
+                  <span id="test-result" class="test-result" hidden>✓ 312 ms · 连接可用</span>
+                </div>
+              </div>
+
+              <div class="snapshot-column">
+                <div class="snapshot-header"><div><span class="eyebrow">AFTER SAVE</span><h3>独立快照</h3></div><span class="micro-note">互不联动</span></div>
+                <div id="snapshot-list" class="snapshot-list">
+                  <article class="snapshot-card selected" data-snapshot="claude-code">
+                    <div class="snapshot-main"><span class="harness-icon claude">C</span><div><strong>Claude Code</strong><span>Anthropic Messages</span></div><span class="snapshot-state">将创建</span></div>
+                    <div class="snapshot-meta"><span>Base URL · /v1/messages</span><span>2 个模型 · key 独立</span></div>
+                    <button class="snapshot-edit" type="button">编辑此副本</button>
+                  </article>
+                  <article class="snapshot-card selected" data-snapshot="pi">
+                    <div class="snapshot-main"><span class="harness-icon pi">π</span><div><strong>Pi</strong><span>Anthropic Messages</span></div><span class="snapshot-state">将创建</span></div>
+                    <div class="snapshot-meta"><span>Base URL · /v1/messages</span><span>2 个模型 · key 独立</span></div>
+                    <button class="snapshot-edit" type="button">编辑此副本</button>
+                  </article>
+                </div>
+                <div class="callout quiet small"><span class="callout-icon">↳</span><div><strong id="override-title">要改不同端点？</strong><p id="override-copy">保存后进入任一 Harness 的高级配置即可单独覆盖。</p></div></div>
+                <img class="concept-thumb" src="./assets/runtime-snapshot-concept.png" alt="单一来源配置分裂为三个独立 runtime 快照的黑白概念图" />
+              </div>
+            </div>
+          </div>
+
+          <div class="step-panel hidden" data-panel="review">
+            <div class="review-layout">
+              <div>
+                <div class="eyebrow">READY TO SAVE</div>
+                <h3>确认这次连接</h3>
+                <p class="review-lede">Cindy 会把来源配置复制成独立 runtime 快照。之后改一个 Harness，不会改到其他 Harness。</p>
+                <div class="review-table" id="review-table"></div>
+                <div class="callout warning" id="rollback-callout" hidden><span class="callout-icon">!</span><div><strong>保存未完成，已回滚</strong><p>Pi runtime 写入失败，Claude Code 的暂存结果也已撤回；当前没有半成品配置。</p></div></div>
+              </div>
+              <aside class="review-aside">
+                <div class="review-aside-title">安全边界</div>
+                <ul class="safety-list"><li>API Key 仅在内存中用于本次提交</li><li>每个 runtime 写入独立 safeStorage 记录</li><li>日志与远程投影只展示脱敏状态</li><li>失败时维持原子回滚</li></ul>
+                <button id="simulate-failure" class="text-button danger-text" type="button">模拟一次保存失败</button>
+              </aside>
+            </div>
+          </div>
+
+          <footer class="dialog-footer">
+            <button id="secondary-action" class="secondary-button" type="button">取消</button>
+            <div class="footer-right">
+              <button id="back-step" class="secondary-button hidden" type="button">← 上一步</button>
+              <button id="primary-action" class="primary-button" type="button">继续配置</button>
+            </div>
+          </footer>
+        </section>
+      </main>
+    </div>
+
+    <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+    <script src="./app.js"></script>
+  </body>
+</html>
