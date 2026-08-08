@@ -1203,6 +1203,56 @@
         },
         "advanced": {
           "label": "Advanced (models / headers)"
+        },
+        "runtimeFill": {
+          "action": "Fill other runtimes",
+          "reviewTitle": "Fill other runtimes",
+          "reviewSubtitle": "Review field differences first. Each runtime remains independently saved.",
+          "confirmTitle": "Confirm overwrites",
+          "confirmSubtitle": "Choose the fields to copy from {{source}}.",
+          "source": "Source",
+          "columns": {
+            "field": "Field",
+            "source": "Source value",
+            "target": "Current value"
+          },
+          "fields": {
+            "baseUrl": "Base URL",
+            "apiKey": "API key",
+            "models": "Models",
+            "headers": "Advanced headers",
+            "modelsUrl": "Model list endpoint"
+          },
+          "values": {
+            "empty": "Empty",
+            "default": "Default / inferred",
+            "configured": "Configured",
+            "secretSet": "Set (value hidden)",
+            "models_one": "{{count}} model",
+            "models_other": "{{count}} models",
+            "headers_one": "{{count}} header",
+            "headers_other": "{{count}} headers"
+          },
+          "targetConflict_one": "{{count}} existing field differs",
+          "targetConflict_other": "{{count}} existing fields differ",
+          "targetReady_one": "{{count}} field can be filled",
+          "targetReady_other": "{{count}} fields can be filled",
+          "status": {
+            "needsConfirm": "Needs confirmation",
+            "ready": "Ready to fill"
+          },
+          "secretIndependent": "Copy to {{target}}'s separate local key",
+          "overwriteCurrent": "Replaces the current value",
+          "fillEmpty": "Fills the currently empty field",
+          "protocolNote": "{{target}} keeps its own runtime protocol. Confirm that the endpoint and models support it.",
+          "independentNote": "This is a one-time fill. Later edits never sync between runtime tabs. API keys continue to use separate safeStorage records.",
+          "continue": "Review overwrites",
+          "apply": "Confirm fill",
+          "applyOverwrite": "Overwrite and fill",
+          "back": "Back to differences",
+          "nothingToFill": "Fill in reusable fields for the current runtime first",
+          "alreadySame": "The fillable fields already match in the other runtimes",
+          "filledToast": "Filled {{targets}}; each runtime remains independent"
         }
       },
       "models": {

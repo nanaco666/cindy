@@ -34,13 +34,13 @@
 
 ### 3.1 目标
 
-1. 用户可从选中的 runtime Tab 一次触发对其他兼容 runtime 的填充。
+1. 用户可从选中的 runtime Tab 一次触发对其他已呈现 runtime 的填充。
 2. 公共配置只填写一次。
 3. 保存结果仍是独立 per-runtime 配置、模型清单、请求头和密钥记录。
 4. 目标已有值时先展示差异，再进入字段级覆盖确认。
-5. 不兼容协议不能被静默复制，并要说明原因。
+5. 目标始终保留自己的 runtime 协议，界面在填充前明确提示用户确认端点和模型兼容性。
 6. 复制后任一 Harness 可单独覆盖端点、模型、请求头和凭证。
-7. 维持现有原子提交/回滚、安全存储、日志脱敏和远程投影边界。
+7. 不扩大现有持久化边界；API Key 仍通过已有 per-runtime safeStorage 记录保存，差异层不展示秘密。
 8. 单 Harness 创建与现有编辑流程不退化。
 
 ### 3.2 非目标
@@ -78,7 +78,7 @@
 
 真实仓库当前 `AgentKind` 只有 `claude-code` 与 `codex`，所以原型只呈现这两个 Tab；Pi 只有在 capability manifest、runtime adapter 和 provider 配置契约真正落地后才加入同一 Tab 列表。
 
-兼容性必须来自 runtime capability manifest，不允许通过模型 ID、厂商名或 UI Tab 猜测。目标 runtime 不兼容时，在差异提示层中明确列为“不可填充”并给出原因；不能直接复制后再让运行时失败。
+当前本地基线没有 runtime capability manifest，也没有可供 Renderer 判断“协议兼容”的共享事实。本轮不伪造兼容矩阵：只对真实界面已经呈现的 runtime 提供一次性填充，并在每个目标下提示“仍使用自己的 runtime 协议，请确认端点和模型支持该协议”。正式的禁选与原因说明需要 capability manifest 和 main-side 校验后再补。
 
 ![真实弹窗表单卡内的轻量入口](../design-prototypes/custom-provider-multi-harness/assets/runtime-header-sync-dark.png)
 
@@ -106,7 +106,7 @@
 
 ### 4.5 保存失败
 
-任一 runtime 保存失败时：
+目标状态（当前基线尚未实现）是任一 runtime 保存失败时：
 
 - 不关闭现有弹窗；
 - 不显示部分成功；
@@ -139,9 +139,9 @@ interface RuntimeSyncDraft {
 }
 ```
 
-同步候选字段是 `baseUrl`、`models`、`modelsUrl`、`headers` 和 API Key。协议不是 `CustomProviderRuntimeConfig` 的任意字段，而是由 runtime capability / routing descriptor 判断；不兼容时目标不可填充。供应商 `name`、全局 `auth` / OAuth descriptor 不在同步范围。
+同步候选字段是 `baseUrl`、`models`、`modelsUrl`、`headers` 和 API Key。协议不是可复制字段。供应商 `name`、全局 `auth` / OAuth descriptor 不在同步范围；OAuth 模式下 API Key 也不进入同步候选。
 
-提交前执行纯函数物化：
+本轮在 Renderer 草稿中执行纯函数物化：
 
 ```ts
 materializeRuntimeSnapshot(sourceDraft, targetDraft, overwriteByTarget[target])
@@ -156,7 +156,7 @@ RuntimeKeys[runtime]
 
 `source` 与 `overrides` 只存在于 Renderer 草稿状态；保存后不落库、不进入 catalog、不进入远程投影。
 
-## 6. 协议兼容性
+## 6. 协议兼容性后续项
 
 建议新增共享、可测试的 runtime manifest，而不是在 `CustomProviderDialog` 内写条件分支：
 
@@ -194,9 +194,9 @@ UI 根据 code 展示本地化原因，不展示内部异常文本。
 
 ### 7.1 提交边界
 
-一键填充本身只更新当前表单里的目标 runtime draft，不直接写数据库，也不直接写 safeStorage。用户点击底部“保存”后，继续沿用现有 per-runtime 配置提交、密钥写入和原子回滚语义；本轮设计不引入共享密钥引用。
+一键填充本身只更新当前表单里的目标 runtime draft，不直接写数据库，也不直接写 safeStorage。用户点击底部“保存”后，继续沿用现有 per-runtime 配置提交与密钥写入；本轮不引入共享密钥引用。
 
-如果正式实现需要一次提交多个目标 runtime，批量编排必须放在 main 进程，并复用现有原子提交 / 补偿回滚能力，不能由 Renderer 循环调用多个独立保存接口后宣称原子。
+当前本地基线是 Renderer 先通过 maker IPC 保存配置，再逐个写 safeStorage 密钥，事实上没有完整的跨数据库/密钥原子回滚。因此本轮只交付“填充草稿”能力，不把现有保存链路称为原子。若要满足验收中的整体回滚，批量编排必须放在 main 进程，并新增补偿回滚测试。
 
 ### 7.2 建议 IPC
 
@@ -246,9 +246,9 @@ main 进程流程（仅在现有保存链路需要扩展批量提交时）：
 |---|---|
 | Renderer | 在现有 `CustomProviderDialog.tsx` 的 runtime 配置卡右上角增加低对比度入口、差异提示层和字段级覆盖状态；不新增第二套设置页 |
 | Renderer helper | 复用现有 custom provider 保存链路；同步动作只合并当前 draft，读取/删除保持 per-runtime |
-| Shared types | `packages/model-providers/src/types.ts` 增加协议枚举与 runtime capability；Pi 准备完成后扩展 `AgentKind` |
-| Main IPC | `providerHandlers.ts` 增加 batch create/update handler 与 main-side compatibility validation |
-| Storage | `custom-provider-store.ts` 提供 transaction/restore primitive；secret store 提供批量写与补偿回滚 |
+| Shared types（后续） | 增加协议枚举与 runtime capability；Pi 准备完成后扩展 `AgentKind` |
+| Main IPC（后续） | 增加 batch create/update handler 与 main-side compatibility validation |
+| Storage（后续） | 提供 transaction/restore primitive；secret store 提供批量写与补偿回滚 |
 | Catalog | `buildUserProvider` 继续只消费物化后的 per-runtime 快照，不引入 source/inheritance |
 | i18n | 新增范围、兼容原因、快照、回滚、安全说明文案，覆盖 zh-CN/en |
 | Tests | draft materialize、compatibility matrix、batch rollback、redaction、单 Harness 回归、Light/Dark visual contract |
@@ -257,7 +257,7 @@ main 进程流程（仅在现有保存链路需要扩展批量提交时）：
 
 ## 10. 交付拆分
 
-### PR 1：能力与原子提交基础
+### 后续 PR：能力与原子提交基础
 
 - Provider protocol / runtime capability manifest；
 - main-side compatibility validation；
@@ -265,15 +265,15 @@ main 进程流程（仅在现有保存链路需要扩展批量提交时）：
 - localDb + secret 补偿回滚测试；
 - 敏感数据脱敏测试。
 
-### PR 2：真实弹窗增量 UI
+### 本轮：真实弹窗增量 UI
 
 - 在现有 `CustomProviderDialog` 配置卡右上角增加“一键填充其他 runtime”；
-- 差异提示、字段级覆盖确认、来源 / 独立副本状态；
+- 差异提示、字段级覆盖确认；
 - Light/Dark；
 - i18n、键盘与焦点管理；
 - 单 Harness 回归。
 
-### PR 3：Pi 接入（仅当 Pi runtime provider contract 已落地）
+### 后续 PR：Pi 接入（仅当 Pi runtime provider contract 已落地）
 
 - 扩展 `AgentKind` 与所有固定 agent 枚举；
 - 增加 Pi capability manifest、路由、diagnostics 与 secret key；
@@ -283,13 +283,13 @@ Pi 不应被夹在 UI PR 中作为假入口，否则会出现“能选但不能�
 
 ## 11. 验收映射
 
-- [ ] 可从选中的 runtime Tab 一次触发对其他兼容 runtime 的填充，并只输入一次公共配置：表单卡右上角轻入口 + 同步 draft。
-- [ ] 保存后生成独立 per-runtime 配置和密钥记录：物化现有 `runtimes` + per-runtime safeStorage。
-- [ ] 不兼容协议不能被静默复制：manifest 双端校验 + 差异层原因提示。
-- [ ] 每个 Harness 可单独覆盖端点、模型和凭证：字段级覆盖确认 + 保存后 per-runtime 编辑。
-- [ ] 单 Harness 创建与现有供应商编辑流程无回归：不点击入口时表单结构和行为保持不变。
-- [ ] 任一 runtime 保存失败时维持原子回滚语义：复用现有保存链路，批量扩展时补充 main 侧回滚测试。
-- [ ] Renderer、日志和远程投影不暴露 API Key 或敏感 Header：secret-only IPC path + redaction tests。
+- [x] 可从选中的 runtime Tab 一次触发对其他已呈现 runtime 的填充，并只输入一次公共配置：Base URL 标题行轻入口 + 同步 draft。
+- [x] 保存后仍生成独立 per-runtime 配置和密钥记录：填充只物化草稿，继续复用现有 `runtimes` + per-runtime safeStorage。
+- [~] 不兼容协议不能被静默复制：本轮已有协议提醒，但缺少 capability manifest 的禁选与 main-side 校验。
+- [x] 每个 Harness 可单独覆盖端点、模型和凭证：字段级覆盖确认 + 保存后 per-runtime 编辑。
+- [x] 单 Harness 创建与现有供应商编辑流程无回归：不点击入口时表单结构和行为保持不变，并有 Renderer 回归用例。
+- [ ] 任一 runtime 保存失败时维持原子回滚语义：当前基线未满足，需 main 侧批量保存与补偿回滚。
+- [x] Renderer 差异层不暴露 API Key 或敏感 Header 值：API Key 只显示“已填写”，请求头只显示数量，并有回归用例。
 
 ## 12. 原型与视觉资产
 

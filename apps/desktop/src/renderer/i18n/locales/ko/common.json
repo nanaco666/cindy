@@ -1203,6 +1203,56 @@
         },
         "advanced": {
           "label": "고급 설정 (모델 / 요청 헤더)"
+        },
+        "runtimeFill": {
+          "action": "다른 runtime 한 번에 채우기",
+          "reviewTitle": "다른 runtime 채우기",
+          "reviewSubtitle": "필드 차이를 먼저 확인합니다. 각 runtime은 계속 독립적으로 저장됩니다.",
+          "confirmTitle": "덮어쓰기 확인",
+          "confirmSubtitle": "{{source}}에서 채울 필드를 선택하세요.",
+          "source": "원본",
+          "columns": {
+            "field": "필드",
+            "source": "원본 값",
+            "target": "현재 값"
+          },
+          "fields": {
+            "baseUrl": "기본 URL",
+            "apiKey": "API 키",
+            "models": "모델",
+            "headers": "고급 요청 헤더",
+            "modelsUrl": "모델 목록 엔드포인트"
+          },
+          "values": {
+            "empty": "비어 있음",
+            "default": "기본값으로 추론",
+            "configured": "입력됨",
+            "secretSet": "입력됨(값 숨김)",
+            "models_one": "모델 {{count}}개",
+            "models_other": "모델 {{count}}개",
+            "headers_one": "헤더 {{count}}개",
+            "headers_other": "헤더 {{count}}개"
+          },
+          "targetConflict_one": "기존 설정 {{count}}개가 다릅니다",
+          "targetConflict_other": "기존 설정 {{count}}개가 다릅니다",
+          "targetReady_one": "필드 {{count}}개를 채울 수 있습니다",
+          "targetReady_other": "필드 {{count}}개를 채울 수 있습니다",
+          "status": {
+            "needsConfirm": "확인 필요",
+            "ready": "채울 수 있음"
+          },
+          "secretIndependent": "{{target}}의 독립 로컬 키로 복사합니다",
+          "overwriteCurrent": "현재 값을 덮어씁니다",
+          "fillEmpty": "현재 빈 필드를 채웁니다",
+          "protocolNote": "{{target}}은 자체 runtime 프로토콜을 계속 사용합니다. 엔드포인트와 모델이 해당 프로토콜을 지원하는지 확인하세요.",
+          "independentNote": "이번 한 번만 채웁니다. 이후 변경 사항은 runtime 탭 사이에 동기화되지 않습니다. API 키도 각자의 safeStorage 레코드에 저장됩니다.",
+          "continue": "덮어쓸 항목 확인",
+          "apply": "채우기 확인",
+          "applyOverwrite": "덮어쓰고 채우기",
+          "back": "차이로 돌아가기",
+          "nothingToFill": "먼저 현재 runtime에 복사할 수 있는 설정을 입력하세요",
+          "alreadySame": "다른 runtime의 채울 수 있는 필드가 이미 같습니다",
+          "filledToast": "{{targets}}을(를) 채웠습니다. 각 runtime은 계속 독립적입니다"
         }
       },
       "models": {

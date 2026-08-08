@@ -20,6 +20,10 @@ import { Spinner } from '@/components/ui/spinner';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { ClaudeMark } from '@/components/icons/ClaudeMark';
 import { CodexMark } from '@/components/icons/CodexMark';
+import {
+  CustomProviderRuntimeFillOverlay,
+  type RuntimeFillDialogState,
+} from '@/components/settings/CustomProviderRuntimeFillOverlay';
 import { extractIpcError } from '@/utils/ipcError';
 import {
   createCustomProvider,
@@ -28,6 +32,12 @@ import {
   updateCustomProvider,
   type RuntimeKeys,
 } from '@/lib/customProviders';
+import {
+  applyRuntimeFillFields,
+  buildRuntimeFillDiffs,
+  type RuntimeFillDraft,
+  type RuntimeFillField,
+} from '@/lib/customProviderRuntimeFill';
 
 import { sortPresetsForLocale } from '@cindy/model-providers';
 import type {
@@ -63,18 +73,7 @@ interface CustomProviderDialogProps {
 }
 
 type ModelRow = ProviderRuntimeModelConfig;
-interface HeaderRow {
-  name: string;
-  value: string;
-}
-interface RuntimeFields {
-  baseUrl: string;
-  apiKey: string;
-  models: ModelRow[];
-  headers: HeaderRow[];
-  /** 隐藏字段：列模型端点（预设 / 已存配置快照进来），「获取模型列表」用；不在表单展示。 */
-  modelsUrl: string;
-}
+type RuntimeFields = RuntimeFillDraft;
 
 /** 每个 runtime Tab 的「测试连接」状态（idle → testing → ok/fail）。 */
 interface TestState {
@@ -314,6 +313,7 @@ export function CustomProviderDialog({ initial, existingIds, onSaved, onClose }:
     selected: Set<string>;
     query: string;
   } | null>(null);
+  const [runtimeFill, setRuntimeFill] = useState<RuntimeFillDialogState | null>(null);
   // 最新 runtime 表单状态镜像：拉取响应到达时据此构建弹层行/预勾选，而不是用请求发出时的
   // 闭包快照——在途期间被用户删除的行不得复活。镜像在每个 setRt updater 内**同步**更新
   // （见 setRtSynced），不用被动 useEffect——effect 在 commit 后才跑，IPC 响应若落在
@@ -419,6 +419,98 @@ export function CustomProviderDialog({ initial, existingIds, onSaved, onClose }:
   );
 
   const f = rt[activeTab];
+
+  const openRuntimeFill = useCallback(() => {
+    const source = activeTab;
+    const targets = VISIBLE_AGENTS.filter((agent) => agent !== source)
+      .map((agent) => ({
+        agent,
+        diffs: buildRuntimeFillDiffs(rt[source], rt[agent], {
+          includeApiKey: authMode === 'apiKey',
+        }),
+      }))
+      .filter((target) => target.diffs.length > 0);
+
+    if (targets.length === 0) {
+      toast.info(t('settings.providers.custom.runtimeFill.nothingToFill'));
+      return;
+    }
+    if (targets.every((target) => target.diffs.every((diff) => diff.targetState === 'same'))) {
+      toast.info(t('settings.providers.custom.runtimeFill.alreadySame'));
+      return;
+    }
+
+    const changedTargets = targets.filter((target) =>
+      target.diffs.some((diff) => diff.targetState !== 'same'),
+    );
+
+    const selected: Partial<Record<AgentKind, RuntimeFillField[]>> = {};
+    for (const target of changedTargets) {
+      selected[target.agent] = target.diffs
+        .filter((diff) => diff.targetState !== 'same')
+        .map((diff) => diff.field);
+    }
+    setRuntimeFill({ source, stage: 'review', targets: changedTargets, selected });
+  }, [activeTab, authMode, rt, t]);
+
+  const applyRuntimeFill = useCallback(() => {
+    if (!runtimeFill) return;
+    const changedTargets = runtimeFill.targets.filter(
+      (target) => (runtimeFill.selected[target.agent]?.length ?? 0) > 0,
+    );
+    if (changedTargets.length === 0) return;
+
+    setRtSynced((prev) => {
+      const next = { ...prev };
+      const source = prev[runtimeFill.source];
+      for (const target of changedTargets) {
+        next[target.agent] = applyRuntimeFillFields(
+          prev[target.agent],
+          source,
+          runtimeFill.selected[target.agent] ?? [],
+        );
+      }
+      return next;
+    });
+    setTest((prev) => {
+      const next = { ...prev };
+      for (const target of changedTargets) next[target.agent] = IDLE_TEST;
+      return next;
+    });
+    toast.success(
+      t('settings.providers.custom.runtimeFill.filledToast', {
+        targets: changedTargets.map((target) => t(TAB_META[target.agent].labelKey)).join('、'),
+      }),
+    );
+    setRuntimeFill(null);
+  }, [runtimeFill, setRtSynced, t]);
+
+  const continueRuntimeFill = useCallback(() => {
+    if (!runtimeFill) return;
+    const hasOverwrite = runtimeFill.targets.some((target) =>
+      target.diffs.some(
+        (diff) =>
+          diff.targetState === 'conflict' &&
+          (runtimeFill.selected[target.agent]?.includes(diff.field) ?? false),
+      ),
+    );
+    if (hasOverwrite) {
+      setRuntimeFill((prev) => (prev ? { ...prev, stage: 'confirm' } : prev));
+      return;
+    }
+    applyRuntimeFill();
+  }, [applyRuntimeFill, runtimeFill]);
+
+  const toggleRuntimeFillField = useCallback((agent: AgentKind, field: RuntimeFillField) => {
+    setRuntimeFill((prev) => {
+      if (!prev) return prev;
+      const current = prev.selected[agent] ?? [];
+      const nextFields = current.includes(field)
+        ? current.filter((candidate) => candidate !== field)
+        : [...current, field];
+      return { ...prev, selected: { ...prev.selected, [agent]: nextFields } };
+    });
+  }, []);
 
   /** 测试当前 Tab 的表单值（未保存也能测；key 仅内存透传给 main，不落盘）。 */
   const handleTest = useCallback(async () => {
@@ -690,6 +782,10 @@ export function CustomProviderDialog({ initial, existingIds, onSaved, onClose }:
   const keyPlaceholder = hasKey[activeTab]
     ? t('settings.providers.custom.fields.apiKeyEditPlaceholder')
     : t('settings.providers.custom.fields.apiKeyPlaceholder');
+  const runtimeNames: Record<AgentKind, string> = {
+    'claude-code': t(TAB_META['claude-code'].labelKey),
+    codex: t(TAB_META.codex.labelKey),
+  };
 
   return (
     <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-[var(--overlay-modal)]">
@@ -860,7 +956,19 @@ export function CustomProviderDialog({ initial, existingIds, onSaved, onClose }:
           >
             {/* 基础 URL */}
             <div className="flex flex-col gap-[7px]">
-              <FieldLabel>{t('settings.providers.custom.fields.baseUrl')}</FieldLabel>
+              <div className="flex items-center justify-between gap-3">
+                <FieldLabel>{t('settings.providers.custom.fields.baseUrl')}</FieldLabel>
+                <button
+                  type="button"
+                  onClick={openRuntimeFill}
+                  className={cn(
+                    'shrink-0 py-0.5 text-11 font-medium transition-colors',
+                    'text-[var(--text-tertiary)] hover:text-[var(--settings-section-title)] hover:underline',
+                  )}
+                >
+                  {t('settings.providers.custom.runtimeFill.action')}
+                </button>
+              </div>
               <TextInput
                 value={f.baseUrl}
                 onChange={(v) => patch(activeTab, (x) => ({ ...x, baseUrl: v }))}
@@ -1041,62 +1149,61 @@ export function CustomProviderDialog({ initial, existingIds, onSaved, onClose }:
             {/* 测试连接：用当前 Tab 表单值发最小探测请求（与真实会话同路由口径，未保存也能测）。
                 OAuth 形态隐藏——登录前无凭证可测，保存并授权后可在供应商行验证。 */}
             {authMode === 'apiKey' && (
-            <div className="flex min-h-[32px] flex-wrap items-center gap-2.5">
-              <button
-                type="button"
-                onClick={() => void handleTest()}
-                disabled={test[activeTab].status === 'testing'}
-                className={cn(
-                  'inline-flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-12 font-medium transition-colors active:scale-[0.98]',
-                  'border-[var(--settings-input-border)] text-[var(--settings-section-title)] hover:bg-[var(--surface-hover)]',
-                  test[activeTab].status === 'testing' && 'cursor-not-allowed opacity-60',
-                )}
-              >
-                {test[activeTab].status === 'testing' ? (
-                  <Spinner size={13} />
-                ) : (
-                  <Plug size={13} />
-                )}
-                {test[activeTab].status === 'testing'
-                  ? t('settings.providers.custom.test.testing')
-                  : t('settings.providers.custom.test.button')}
-              </button>
-              {/* 获取模型列表：GET 该供应商的列模型端点，成功后开勾选弹层填进上方模型行。
+              <div className="flex min-h-[32px] flex-wrap items-center gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => void handleTest()}
+                  disabled={test[activeTab].status === 'testing'}
+                  className={cn(
+                    'inline-flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-12 font-medium transition-colors active:scale-[0.98]',
+                    'border-[var(--settings-input-border)] text-[var(--settings-section-title)] hover:bg-[var(--surface-hover)]',
+                    test[activeTab].status === 'testing' && 'cursor-not-allowed opacity-60',
+                  )}
+                >
+                  {test[activeTab].status === 'testing' ? (
+                    <Spinner size={13} />
+                  ) : (
+                    <Plug size={13} />
+                  )}
+                  {test[activeTab].status === 'testing'
+                    ? t('settings.providers.custom.test.testing')
+                    : t('settings.providers.custom.test.button')}
+                </button>
+                {/* 获取模型列表：GET 该供应商的列模型端点，成功后开勾选弹层填进上方模型行。
                   disabled 用 anyFetching（单飞）：另一 Tab 在途时本 Tab 也不许发起。 */}
-              <button
-                type="button"
-                onClick={() => void handleFetchModels()}
-                disabled={anyFetching}
-                className={cn(
-                  'inline-flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-12 font-medium transition-colors active:scale-[0.98]',
-                  'border-[var(--settings-input-border)] text-[var(--settings-section-title)] hover:bg-[var(--surface-hover)]',
-                  anyFetching && 'cursor-not-allowed opacity-60',
+                <button
+                  type="button"
+                  onClick={() => void handleFetchModels()}
+                  disabled={anyFetching}
+                  className={cn(
+                    'inline-flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-12 font-medium transition-colors active:scale-[0.98]',
+                    'border-[var(--settings-input-border)] text-[var(--settings-section-title)] hover:bg-[var(--surface-hover)]',
+                    anyFetching && 'cursor-not-allowed opacity-60',
+                  )}
+                >
+                  {fetchingModels[activeTab] ? (
+                    <Spinner size={13} />
+                  ) : (
+                    <RefreshCw size={13} />
+                  )}
+                  {fetchingModels[activeTab]
+                    ? t('settings.providers.custom.fetch.fetching')
+                    : t('settings.providers.custom.fetch.button')}
+                </button>
+                {test[activeTab].status === 'ok' && (
+                  <span className="flex items-center gap-1 text-12" style={{ color: 'var(--remote-status-ready)' }}>
+                    <Check size={13} strokeWidth={2.5} />
+                    {t('settings.providers.custom.test.ok', { ms: test[activeTab].latencyMs ?? 0 })}
+                  </span>
                 )}
-              >
-                {fetchingModels[activeTab] ? (
-                  <Spinner size={13} />
-                ) : (
-                  <RefreshCw size={13} />
+                {test[activeTab].status === 'fail' && (
+                  <span className="text-12 text-[var(--error-fg)]">
+                    {t(`providerError.${test[activeTab].code ?? 'UNKNOWN'}`)}
+                  </span>
                 )}
-                {fetchingModels[activeTab]
-                  ? t('settings.providers.custom.fetch.fetching')
-                  : t('settings.providers.custom.fetch.button')}
-              </button>
-              {test[activeTab].status === 'ok' && (
-                <span className="flex items-center gap-1 text-12" style={{ color: 'var(--remote-status-ready)' }}>
-                  <Check size={13} strokeWidth={2.5} />
-                  {t('settings.providers.custom.test.ok', { ms: test[activeTab].latencyMs ?? 0 })}
-                </span>
-              )}
-              {test[activeTab].status === 'fail' && (
-                <span className="text-12 text-[var(--error-fg)]">
-                  {t(`providerError.${test[activeTab].code ?? 'UNKNOWN'}`)}
-                </span>
-              )}
-            </div>
+              </div>
             )}
           </div>
-
         </div>
 
         {/* Footer */}
@@ -1135,6 +1242,18 @@ export function CustomProviderDialog({ initial, existingIds, onSaved, onClose }:
           onChange={setPicker}
           onConfirm={applyPicker}
           onClose={() => setPicker(null)}
+        />
+      )}
+      {runtimeFill && (
+        <CustomProviderRuntimeFillOverlay
+          state={runtimeFill}
+          drafts={rt}
+          runtimeNames={runtimeNames}
+          onClose={() => setRuntimeFill(null)}
+          onContinue={continueRuntimeFill}
+          onBack={() => setRuntimeFill((prev) => (prev ? { ...prev, stage: 'review' } : prev))}
+          onToggleField={toggleRuntimeFillField}
+          onApply={applyRuntimeFill}
         />
       )}
     </div>

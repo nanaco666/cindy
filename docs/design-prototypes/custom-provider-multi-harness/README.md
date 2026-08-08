@@ -6,7 +6,7 @@
 
 - 600px 弹窗、标题栏、关闭按钮和底部取消 / 保存；
 - 预设模板、显示名称、API 密钥 / OAuth 鉴权切换；
-- Runtime Tab（Claude Code / Codex；Pi 作为不可用状态保留视觉位置）；
+- Runtime Tab（当前真实源码中的 Claude Code / Codex）；
 - Base URL、API Key、模型行、请求头、测试连接、获取模型列表；
 - 现有表单的字段尺寸、圆角、主题 token 和层级。
 
@@ -32,7 +32,7 @@
 
 ## 真实实现边界
 
-当前仓库真实 `AgentKind` 只有 `claude-code` 与 `codex`，所以原型里的 Pi 只作为真实界面中的不可用 Tab 位置，不可点击、不可写入。正式实现 Pi 前，仍需先通过 runtime capability manifest 接入。
+当前仓库真实 `AgentKind` 只有 `claude-code` 与 `codex`，因此原型和本轮实现都只呈现这两个 runtime。Pi 只有在真实 provider contract 落地后才应进入同一界面，不放不可用占位。
 
 ## 交互与实现契约
 
@@ -40,11 +40,11 @@
 
 1. 展示目标 runtime 的当前值和可同步字段差异；
 2. 对已有值进入字段级覆盖确认，默认勾选发生差异的字段；
-3. 用户确认后，把选中的字段写入目标 runtime 的独立配置和独立 safeStorage 密钥；
+3. 用户确认后，把选中的字段填入目标 runtime 的独立 Renderer 草稿；点击原有“保存”后，再沿用现有 per-runtime 配置与 safeStorage 密钥记录；
 4. 复制完成后，目标 Tab 仍可单独修改，后续不会建立共享引用。
 
 运行时复制候选字段是 `baseUrl`、`models`、`modelsUrl`、`headers` 和 API Key。供应商名称、全局鉴权模式、OAuth descriptor 不属于 runtime 复制范围；协议只在目标 runtime capability 兼容时复制，不能从模型 ID 相同推断能力相同。
 
-保存继续沿用现有 per-runtime 原子提交 / 回滚语义：任一目标 runtime 写入失败，撤回本次已写入的配置和密钥；Renderer、日志和远程投影不得暴露 API Key 或敏感 Header。
+本轮没有扩大保存链路：填充动作本身不落库，Renderer、差异层和测试不展示 API Key 或敏感 Header 值。当前本地基线的配置写入与 safeStorage 密钥写入并非一个完整跨介质原子事务；若要满足“任一 runtime 失败即整体回滚”，需要另做 main 侧批量保存与补偿回滚。
 
 `app.js` 与 `styles.css` 已不再作为预览依赖；保留的图片只用于设计文档和概念说明。

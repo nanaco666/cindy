@@ -1203,6 +1203,56 @@
         },
         "advanced": {
           "label": "詳細設定（モデル / リクエストヘッダー）"
+        },
+        "runtimeFill": {
+          "action": "他の runtime に一括入力",
+          "reviewTitle": "他の runtime に入力",
+          "reviewSubtitle": "項目の差分を確認してから入力します。各 runtime は引き続き個別に保存されます。",
+          "confirmTitle": "上書きを確認",
+          "confirmSubtitle": "{{source}} から入力する項目を選択してください。",
+          "source": "入力元",
+          "columns": {
+            "field": "項目",
+            "source": "入力元の値",
+            "target": "現在の値"
+          },
+          "fields": {
+            "baseUrl": "ベース URL",
+            "apiKey": "API キー",
+            "models": "モデル",
+            "headers": "詳細リクエストヘッダー",
+            "modelsUrl": "モデル一覧エンドポイント"
+          },
+          "values": {
+            "empty": "未入力",
+            "default": "既定値から推定",
+            "configured": "入力済み",
+            "secretSet": "入力済み（値は非表示）",
+            "models_one": "{{count}} モデル",
+            "models_other": "{{count}} モデル",
+            "headers_one": "{{count}} ヘッダー",
+            "headers_other": "{{count}} ヘッダー"
+          },
+          "targetConflict_one": "既存設定 {{count}} 項目に差分があります",
+          "targetConflict_other": "既存設定 {{count}} 項目に差分があります",
+          "targetReady_one": "{{count}} 項目を入力できます",
+          "targetReady_other": "{{count}} 項目を入力できます",
+          "status": {
+            "needsConfirm": "確認が必要",
+            "ready": "入力可能"
+          },
+          "secretIndependent": "{{target}} の個別ローカルキーとしてコピーします",
+          "overwriteCurrent": "現在の値を上書きします",
+          "fillEmpty": "現在空の項目に入力します",
+          "protocolNote": "{{target}} は固有の runtime プロトコルを引き続き使用します。エンドポイントとモデルが対応していることを確認してください。",
+          "independentNote": "入力は今回の一度だけです。以後、runtime タブ間で変更が同期されることはありません。API キーも個別の safeStorage レコードに保存されます。",
+          "continue": "上書き項目を確認",
+          "apply": "入力を確定",
+          "applyOverwrite": "上書きして入力",
+          "back": "差分に戻る",
+          "nothingToFill": "先に現在の runtime にコピー可能な設定を入力してください",
+          "alreadySame": "他の runtime の入力可能な項目はすでに一致しています",
+          "filledToast": "{{targets}} に入力しました。各 runtime は引き続き独立しています"
         }
       },
       "models": {
