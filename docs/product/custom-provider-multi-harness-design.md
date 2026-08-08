@@ -1,14 +1,14 @@
-# 自定义供应商一次配置、多 Harness 独立快照
+# 自定义供应商：一键填充其他 runtime（独立配置）
 
 ## 1. 结论
 
-这是 Desktop Settings 的纯客户端体验优化。创建自定义供应商时，允许用户先选择多个协议兼容的 Harness，只填写一套来源配置，再把它复制为各 runtime 的独立配置与独立凭证记录。
+这是 Desktop Settings 的纯客户端体验优化：用户在当前 runtime Tab 填好配置后，在配置卡右上角点击一个低对比度的“一键填充其他 runtime”入口，再按提示把可同步字段复制到其他 runtime。
 
-它不改变 runtime 协议、不建立共享密钥引用，也不让后续编辑产生跨 Harness 联动。
+这不是新的应用范围向导，也不把多个 runtime 改成共享配置。复制完成后仍保存为现有的 per-runtime 独立配置与独立凭证记录，后续修改互不联动。
 
-设计原则：**一次输入，复制快照，之后隔离。**
+设计原则：**入口轻量，差异先看，覆盖要确认，复制后隔离。**
 
-![基于真实 CustomProviderDialog 的应用范围增量区域](../design-prototypes/custom-provider-multi-harness/assets/scope-light.png)
+![真实 CustomProviderDialog 右上角的一键填充入口](../design-prototypes/custom-provider-multi-harness/assets/top-right-sync-dark.png)
 
 ## 2. 用户问题
 
@@ -34,13 +34,14 @@
 
 ### 3.1 目标
 
-1. 用户可一次选择多个兼容 Harness。
+1. 用户可从当前 runtime 一次触发对其他兼容 runtime 的填充。
 2. 公共配置只填写一次。
 3. 保存结果仍是独立 per-runtime 配置、模型清单、请求头和密钥记录。
-4. 不兼容协议在选择阶段明确禁选并解释原因。
-5. 复制后任一 Harness 可单独覆盖端点、路径、协议、模型、请求头和凭证。
-6. 维持现有原子提交/回滚、安全存储、日志脱敏和远程投影边界。
-7. 单 Harness 创建与现有编辑流程不退化。
+4. 目标已有值时先展示差异，再进入字段级覆盖确认。
+5. 不兼容协议不能被静默复制，并要说明原因。
+6. 复制后任一 Harness 可单独覆盖端点、模型、请求头和凭证。
+7. 维持现有原子提交/回滚、安全存储、日志脱敏和远程投影边界。
+8. 单 Harness 创建与现有编辑流程不退化。
 
 ### 3.2 非目标
 
@@ -64,36 +65,35 @@
 - Claude Code / Codex runtime Tab；
 - Base URL、API Key、模型行、请求头、测试连接、获取模型列表。
 
-编辑已有供应商继续使用原来的 per-runtime 编辑流程；“应用到其他 Harness”只在创建态显示，不产生隐式联动。
+编辑已有供应商继续使用原来的 per-runtime 编辑流程；一键填充是同一表单内的显式动作，不产生隐式联动。
 
-### 4.2 增量模块：应用到其他 Harness
+### 4.2 增量模块：配置卡右上角的轻入口
 
-新增区域放在鉴权方式之后、现有 runtime Tab 之前，使用当前设置页相同的卡片、边框、输入高度和 pill 语言：
+不增加新的主表单行，也不把复制动作做成第三套向导。当前 runtime 配置卡标题右侧并列放置：
 
-1. 标题“应用到其他 Harness”；
-2. 说明“先填写当前 Tab，再复制为独立副本”；
-3. 显示当前来源 runtime；
-4. 列出可选目标 runtime；
-5. 兼容项可勾选，不兼容项保留可见但禁选并解释原因；
-6. 固定说明“每个选中的 Harness 生成独立配置和独立 safeStorage 密钥”。
+1. 低对比度文字按钮“一键填充其他 runtime”；
+2. 现有的“当前 runtime / 已有独立配置”状态徽标。
 
-当前仓库的真实 runtime 只有 Claude Code 与 Codex。Pi 不在当前 Tab 中显示，只有在 capability manifest、runtime adapter 和 provider 配置契约真正落地后才加入这一区域。
+按钮只承担“开始一次复制”的动作，不展示密钥、不改变当前字段值。点击后才打开差异提示层。
 
-兼容性必须来自 runtime capability manifest，不允许通过模型 ID、厂商名或 UI Tab 猜测。原型中的 Codex 禁选状态只是当前 `Anthropic Messages` 来源下的真实兼容性示例；切换 `OpenAI Responses` 后，原有 Tab 和字段仍然保留，只更新兼容提示。
+真实仓库当前 `AgentKind` 只有 `claude-code` 与 `codex`，所以原型只呈现这两个 Tab；Pi 只有在 capability manifest、runtime adapter 和 provider 配置契约真正落地后才加入同一 Tab 列表。
 
-![基于真实弹窗的应用范围区域](../design-prototypes/custom-provider-multi-harness/assets/scope-light.png)
+兼容性必须来自 runtime capability manifest，不允许通过模型 ID、厂商名或 UI Tab 猜测。目标 runtime 不兼容时，在差异提示层中明确列为“不可填充”并给出原因；不能直接复制后再让运行时失败。
+
+![真实弹窗中的轻量入口](../design-prototypes/custom-provider-multi-harness/assets/top-right-sync-dark.png)
 
 ### 4.3 来源与独立副本
 
-现有 runtime Tab 继续承担配置编辑，不引入第二套向导：
+现有 runtime Tab 继续承担配置编辑，复制动作只产生一次性的目标 draft：
 
-- 当前来源 Tab 显示“来源配置”徽标；
-- 选择兼容目标后，目标 Tab 显示“独立副本”；
-- 目标 Tab 的 Base URL、模型、请求头和凭证字段仍可直接编辑；
-- 编辑目标时明确提示“修改只写入当前 runtime，不会回写来源”；
-- 保存时由 draft 物化为现有 per-runtime 配置，不持久化“共享来源”实体。
+- 当前编辑的 Tab 显示“当前 runtime”徽标；
+- 另一个已存在配置的 Tab 显示“已有独立配置”；
+- 目标已有值时先列出 Base URL、API Key、模型、请求头和模型端点的差异；
+- 用户在覆盖确认层逐项选择要覆盖的字段；
+- 覆盖后目标 Tab 仍可直接编辑，并提示“修改只写入当前 runtime，不会回写来源”；
+- 保存时只物化为现有 per-runtime 配置，不持久化“共享来源”或继承关系。
 
-这样用户看到的是熟悉的真实表单，只增加了批量复制和隔离状态，不需要学习一套新的三步向导。
+这样用户看到的仍是熟悉的真实表单，复制入口只在需要时出现，不需要学习新的创建向导。
 
 ### 4.4 现有操作保持原位置
 
@@ -120,35 +120,32 @@
 
 ## 5. 状态模型
 
-Renderer 使用一次性的 draft，不把“公共配置”持久化为第四种配置实体：
+Renderer 保留当前表单的 per-runtime draft，并为一次填充动作增加短生命周期的同步状态；不把“公共配置”持久化为第四种配置实体：
 
 ```ts
-type ProviderProtocol = 'anthropic-messages' | 'openai-responses';
-
-interface CustomProviderCreateDraft {
-  id: string;
-  name: string;
-  authMode: 'apiKey' | 'oauth';
-  source: RuntimeDraftFields;
-  selectedRuntimes: AgentKind[];
-  overrides: Partial<Record<AgentKind, Partial<RuntimeDraftFields>>>;
-}
-
-interface RuntimeDraftFields {
-  protocol: ProviderProtocol;
+interface RuntimeDraft {
   baseUrl: string;
-  requestPath?: string;
-  modelsUrl?: string;
   models: ProviderRuntimeModelConfig[];
-  headers: HeaderDraft[];
+  headers?: Record<string, string>;
+  modelsUrl?: string;
+  // API key 只存在于当前表单内存，提交时走 safeStorage，不进 config。
   apiKey?: string;
 }
+
+interface RuntimeSyncDraft {
+  source: AgentKind;
+  targets: AgentKind[];
+  diffByTarget: Partial<Record<AgentKind, SyncFieldDiff[]>>;
+  overwriteByTarget: Partial<Record<AgentKind, SyncFieldKey[]>>;
+}
 ```
+
+同步候选字段是 `baseUrl`、`models`、`modelsUrl`、`headers` 和 API Key。协议不是 `CustomProviderRuntimeConfig` 的任意字段，而是由 runtime capability / routing descriptor 判断；不兼容时目标不可填充。供应商 `name`、全局 `auth` / OAuth descriptor 不在同步范围。
 
 提交前执行纯函数物化：
 
 ```ts
-materializeRuntimeDraft(source, overrides[runtime])
+materializeRuntimeSnapshot(sourceDraft, targetDraft, overwriteByTarget[target])
 ```
 
 产出仍是现有 per-runtime 结构：
@@ -196,11 +193,11 @@ UI 根据 code 展示本地化原因，不展示内部异常文本。
 
 ## 7. 保存与回滚
 
-### 7.1 现状风险
+### 7.1 提交边界
 
-当前 Renderer helper 的顺序是“先写 localDb 配置，再逐 runtime 写 safeStorage”。这不是真正的跨存储原子事务：配置写成功、后续某条密钥写失败时，可能出现部分状态。
+一键填充本身只更新当前表单里的目标 runtime draft，不直接写数据库，也不直接写 safeStorage。用户点击底部“保存”后，继续沿用现有 per-runtime 配置提交、密钥写入和原子回滚语义；本轮设计不引入共享密钥引用。
 
-用户给出的验收标准要求“任一 runtime 保存失败时维持现有原子回滚语义”，正式实现应把批量提交编排收回 main 进程，不能只在 UI 循环调用多个现有 helper。
+如果正式实现需要一次提交多个目标 runtime，批量编排必须放在 main 进程，并复用现有原子提交 / 补偿回滚能力，不能由 Renderer 循环调用多个独立保存接口后宣称原子。
 
 ### 7.2 建议 IPC
 
@@ -211,10 +208,10 @@ createCustomProviderBatch(input: {
 }): Promise<{ ok: true }>;
 ```
 
-main 进程流程：
+main 进程流程（仅在现有保存链路需要扩展批量提交时）：
 
 1. 校验 provider id、runtime manifest 兼容性、URL、模型和 headers；
-2. 在内存中读取将被覆盖的旧配置与旧密钥（新建通常为空）；
+2. 在内存中读取将被覆盖的旧配置与旧密钥；
 3. 开启 localDb transaction，写入完整 `CustomProviderConfig`；
 4. 为每个 runtime 写独立临时加密 secret，再原子替换正式 secret；
 5. 任一步失败：恢复旧 secret，回滚数据库 transaction；
@@ -248,8 +245,8 @@ main 进程流程：
 
 | 层 | 建议改动 |
 |---|---|
-| Renderer | 在现有 `CustomProviderDialog.tsx` 内增加范围选择、source draft、runtime override 状态；不新增第二套设置页 |
-| Renderer helper | `lib/customProviders.ts` 改为调用 batch IPC；读取/删除保持 per-runtime |
+| Renderer | 在现有 `CustomProviderDialog.tsx` 的 runtime 配置卡右上角增加低对比度入口、差异提示层和字段级覆盖状态；不新增第二套设置页 |
+| Renderer helper | 复用现有 custom provider 保存链路；同步动作只合并当前 draft，读取/删除保持 per-runtime |
 | Shared types | `packages/model-providers/src/types.ts` 增加协议枚举与 runtime capability；Pi 准备完成后扩展 `AgentKind` |
 | Main IPC | `providerHandlers.ts` 增加 batch create/update handler 与 main-side compatibility validation |
 | Storage | `custom-provider-store.ts` 提供 transaction/restore primitive；secret store 提供批量写与补偿回滚 |
@@ -271,8 +268,8 @@ main 进程流程：
 
 ### PR 2：真实弹窗增量 UI
 
-- 在现有 `CustomProviderDialog` 中增加应用范围与来源 / 副本状态；
-- 单 runtime override；
+- 在现有 `CustomProviderDialog` 配置卡右上角增加“一键填充其他 runtime”；
+- 差异提示、字段级覆盖确认、来源 / 独立副本状态；
 - Light/Dark；
 - i18n、键盘与焦点管理；
 - 单 Harness 回归。
@@ -287,21 +284,21 @@ Pi 不应被夹在 UI PR 中作为假入口，否则会出现“能选但不能�
 
 ## 11. 验收映射
 
-- [ ] 可一次选择多个兼容 Harness 并只输入一次公共配置：真实弹窗内的范围模块 + source draft。
-- [ ] 保存后生成独立 per-runtime 配置和密钥记录：materialize + batch IPC。
-- [ ] 不兼容协议不能被静默复制：manifest 双端校验 + 禁选原因。
-- [ ] 每个 Harness 可单独覆盖端点、模型和凭证：runtime override 与保存后 per-runtime 编辑。
-- [ ] 单 Harness 创建与现有供应商编辑流程无回归：单选仍可继续；编辑仍用独立 Tab/详情。
-- [ ] 任一 runtime 保存失败时维持原子回滚语义：main 批量编排与补偿回滚测试。
+- [ ] 可从当前 runtime 一次触发对其他兼容 runtime 的填充，并只输入一次公共配置：配置卡右上角轻入口 + 同步 draft。
+- [ ] 保存后生成独立 per-runtime 配置和密钥记录：物化现有 `runtimes` + per-runtime safeStorage。
+- [ ] 不兼容协议不能被静默复制：manifest 双端校验 + 差异层原因提示。
+- [ ] 每个 Harness 可单独覆盖端点、模型和凭证：字段级覆盖确认 + 保存后 per-runtime 编辑。
+- [ ] 单 Harness 创建与现有供应商编辑流程无回归：不点击入口时表单结构和行为保持不变。
+- [ ] 任一 runtime 保存失败时维持原子回滚语义：复用现有保存链路，批量扩展时补充 main 侧回滚测试。
 - [ ] Renderer、日志和远程投影不暴露 API Key 或敏感 Header：secret-only IPC path + redaction tests。
 
 ## 12. 原型与视觉资产
 
 - 可交互原型：`docs/design-prototypes/custom-provider-multi-harness/index.html`（自包含单文件，基于真实弹窗外壳）
-- 范围选择图：`assets/scope-light.png`
-- 协议禁选图：`assets/protocol-openai-light.png`
-- Dark 确认图：`assets/review-dark.png`
+- 右上角入口视觉参考（imagegen）：`assets/top-right-sync-dark.png`
+- 差异提示图：`assets/protocol-openai-light.png`
+- Dark 覆盖确认图：`assets/review-dark.png`
 - 回滚图：`assets/rollback-dark.png`
-- imagegen 概念图：`assets/runtime-snapshot-concept.png`
+- 非主流程隔离语义概念图：`assets/runtime-snapshot-concept.png`
 
-概念图使用的最终 prompt：黑白线稿，一份中央来源配置分裂到三个完全独立的 runtime tile；不含文字、Logo、颜色、渐变或共享容器，用来表达 copy-once、isolate-after-copy。
+主流程以真实 `CustomProviderDialog` 原型和右上角入口视觉参考为准；概念图只用于解释“复制后隔离”，不代表最终界面。

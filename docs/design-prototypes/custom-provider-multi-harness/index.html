@@ -179,58 +179,8 @@
       .pill:hover { background: var(--surface-hover); color: var(--text-primary); }
       .pill.active { border-color: var(--input-focus); background: var(--surface-elevated); color: var(--text-primary); }
 
-      .apply-card {
-        display: flex;
-        flex-direction: column;
-        gap: 10px;
-        border: 1px solid var(--border-default);
-        border-radius: 12px;
-        padding: 13px 14px 12px;
-        background: var(--surface);
-      }
       .field-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
       .field-heading .field-help { text-align: right; }
-      .apply-summary { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-      .apply-summary strong { font-size: 13px; font-weight: 650; }
-      .count-pill, .state-pill {
-        display: inline-flex;
-        align-items: center;
-        gap: 5px;
-        border-radius: 999px;
-        padding: 4px 8px;
-        background: var(--surface-chip);
-        color: var(--text-secondary);
-        font-size: 11px;
-        white-space: nowrap;
-      }
-      .runtime-options { display: flex; flex-direction: column; gap: 6px; }
-      .runtime-option {
-        display: grid;
-        grid-template-columns: 20px 28px minmax(0, 1fr) auto;
-        align-items: center;
-        gap: 9px;
-        min-height: 48px;
-        border: 1px solid var(--border-default);
-        border-radius: 10px;
-        padding: 8px 10px;
-        background: var(--surface-elevated);
-        color: var(--text-primary);
-        text-align: left;
-      }
-      .runtime-option:hover:not(:disabled) { border-color: var(--border-strong); }
-      .runtime-option:disabled { cursor: not-allowed; opacity: .56; }
-      .runtime-option.selected { border-color: var(--border-strong); }
-      .runtime-option input { position: absolute; opacity: 0; pointer-events: none; }
-      .check-box { display: grid; width: 17px; height: 17px; place-items: center; border: 1px solid var(--input-border); border-radius: 5px; color: transparent; font-size: 11px; }
-      .runtime-option.selected .check-box { border-color: var(--border-strong); background: var(--border-strong); color: var(--surface-elevated); }
-      .runtime-mark { display: grid; width: 28px; height: 28px; place-items: center; border: 1px solid var(--border-default); border-radius: 9px; font-size: 13px; }
-      .runtime-copy { display: flex; min-width: 0; flex-direction: column; gap: 1px; }
-      .runtime-copy strong { overflow: hidden; font-size: 12px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
-      .runtime-copy small { overflow: hidden; color: var(--text-tertiary); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
-      .runtime-reason { color: var(--text-tertiary); font-size: 10px; white-space: nowrap; }
-      .runtime-reason.ok { color: var(--success); }
-      .apply-note { color: var(--text-tertiary); font-size: 11px; }
-      .apply-note strong { color: var(--text-secondary); font-weight: 600; }
 
       .tab-label { color: var(--text-primary); font-size: 13px; font-weight: 600; }
       .tabs { display: flex; height: 36px; align-items: center; gap: 3px; border-radius: 999px; padding: 3px; background: var(--surface-chip); }
@@ -243,8 +193,11 @@
       .runtime-panel { display: flex; flex-direction: column; gap: 16px; border: 1px solid var(--border-default); border-radius: 12px; padding: 15px; background: var(--surface); }
       .runtime-panel-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
       .runtime-panel-head p { margin-top: 3px; color: var(--text-tertiary); font-size: 11px; }
+      .runtime-panel-head-actions { display: flex; min-width: 0; align-items: center; justify-content: flex-end; gap: 9px; flex-wrap: wrap; }
       .source-badge { display: inline-flex; align-items: center; border-radius: 999px; padding: 4px 8px; background: var(--surface-chip); color: var(--text-secondary); font-size: 11px; white-space: nowrap; }
       .source-badge.override { background: var(--success-bg); color: var(--success); }
+      .quiet-sync-button { border: 0; border-radius: 6px; padding: 3px 0; background: transparent; color: var(--text-tertiary); font-size: 11px; font-weight: 600; white-space: nowrap; }
+      .quiet-sync-button:hover { color: var(--text-primary); text-decoration: underline; }
       .password-wrap { position: relative; }
       .password-wrap .input { padding-right: 42px; }
       .password-button { position: absolute; top: 5px; right: 5px; width: 30px; height: 30px; border: 0; border-radius: 7px; background: transparent; color: var(--text-tertiary); }
@@ -269,6 +222,32 @@
       .rollback { display: flex; gap: 9px; align-items: flex-start; border: 1px solid var(--danger); border-radius: 10px; padding: 11px 12px; background: var(--danger-bg); color: var(--danger); font-size: 12px; }
       .rollback strong { display: block; margin-bottom: 3px; font-weight: 650; }
 
+      .overlay { position: fixed; inset: 0; z-index: 15; display: grid; place-items: center; padding: 18px; background: var(--overlay-modal); }
+      .overlay-card { display: flex; width: min(460px, 100%); max-height: 82vh; flex-direction: column; overflow: hidden; border: 1px solid var(--border-default); border-radius: 16px; background: var(--surface-elevated); box-shadow: var(--shadow-modal); }
+      .overlay-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 18px 18px 8px; }
+      .overlay-header h2 { font-size: 16px; }
+      .overlay-header p { margin-top: 4px; color: var(--text-tertiary); font-size: 12px; }
+      .overlay-body { display: flex; flex-direction: column; gap: 12px; overflow-y: auto; padding: 8px 18px 16px; }
+      .sync-source { display: flex; align-items: center; justify-content: space-between; gap: 10px; border-radius: 10px; padding: 10px 11px; background: var(--surface); color: var(--text-secondary); font-size: 12px; }
+      .sync-source strong { color: var(--text-primary); font-weight: 650; }
+      .target-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; border: 1px solid var(--border-strong); border-radius: 10px; padding: 10px 11px; background: var(--surface-elevated); }
+      .target-copy { display: flex; min-width: 0; flex-direction: column; gap: 2px; }
+      .target-copy strong { font-size: 12px; font-weight: 650; }
+      .target-copy span { color: var(--text-tertiary); font-size: 11px; }
+      .target-status { border-radius: 999px; padding: 4px 8px; background: var(--danger-bg); color: var(--danger); font-size: 11px; white-space: nowrap; }
+      .target-status.clean { background: var(--success-bg); color: var(--success); }
+      .diff-table { overflow: hidden; border: 1px solid var(--border-default); border-radius: 10px; }
+      .diff-row { display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1fr) minmax(0, 1fr); gap: 8px; align-items: center; padding: 9px 10px; border-top: 1px solid var(--border-default); font-size: 11px; }
+      .diff-row:first-child { border-top: 0; background: var(--surface); color: var(--text-tertiary); font-size: 10px; }
+      .diff-row span:nth-child(2), .diff-row span:nth-child(3) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .diff-row .changed { color: var(--danger); font-weight: 650; }
+      .diff-row .same { color: var(--success); }
+      .sync-note { color: var(--text-tertiary); font-size: 11px; line-height: 1.5; }
+      .conflict-list { display: flex; flex-direction: column; gap: 6px; }
+      .conflict-item { display: flex; align-items: center; gap: 8px; border: 1px solid var(--border-default); border-radius: 9px; padding: 8px 10px; font-size: 12px; }
+      .conflict-item input { accent-color: var(--text-primary); }
+      .overlay-footer { display: flex; justify-content: flex-end; gap: 8px; padding: 13px 18px 16px; }
+
       .dialog-footer { display: flex; justify-content: flex-end; gap: 10px; padding: 16px 24px 18px; }
       .footer-button { min-width: 94px; border-radius: 999px; padding: 9px 18px; font-size: 13px; font-weight: 650; }
       .footer-button.secondary { border: 1px solid var(--border-default); background: var(--secondary-bg); color: var(--text-secondary); }
@@ -284,8 +263,8 @@
         .dialog-body { padding-right: 16px; padding-left: 16px; }
         .dialog-footer { padding-right: 16px; padding-left: 16px; }
         .field-heading .field-help { display: none; }
-        .runtime-option { grid-template-columns: 20px 28px minmax(0, 1fr); }
-        .runtime-reason { grid-column: 3; }
+        .runtime-panel-head { flex-direction: column; align-items: stretch; }
+        .runtime-panel-head-actions { width: 100%; max-width: none; align-items: center; justify-content: flex-start; }
       }
 
       @media (prefers-reduced-motion: reduce) {
@@ -332,39 +311,6 @@
             </div>
           </div>
 
-          <section class="apply-card" aria-labelledby="apply-title">
-            <div class="apply-summary">
-              <div>
-                <strong id="apply-title">应用到其他 Harness</strong>
-                <div class="field-help">先填写当前 Tab，再复制为独立副本</div>
-              </div>
-              <span class="count-pill" id="selection-count">1 个已选择</span>
-            </div>
-
-            <div class="runtime-options" id="runtime-options">
-              <button class="runtime-option selected" type="button" data-runtime="claude-code" aria-pressed="true">
-                <span class="check-box" aria-hidden="true">✓</span>
-                <span class="runtime-mark" aria-hidden="true">C</span>
-                <span class="runtime-copy"><strong>Claude Code</strong><small>Anthropic Messages · 当前来源</small></span>
-                <span class="runtime-reason ok">来源</span>
-              </button>
-              <button class="runtime-option" type="button" data-runtime="codex" aria-pressed="false">
-                <span class="check-box" aria-hidden="true">✓</span>
-                <span class="runtime-mark" aria-hidden="true">✦</span>
-                <span class="runtime-copy"><strong>Codex</strong><small>OpenAI Responses · 需要兼容协议</small></span>
-                <span class="runtime-reason" id="codex-reason">协议不兼容</span>
-              </button>
-              <button class="runtime-option" type="button" data-runtime="pi" aria-pressed="false" disabled>
-                <span class="check-box" aria-hidden="true">✓</span>
-                <span class="runtime-mark" aria-hidden="true">π</span>
-                <span class="runtime-copy"><strong>Pi</strong><small>当前构建尚未提供 runtime capability</small></span>
-                <span class="runtime-reason">暂不可用</span>
-              </button>
-            </div>
-
-            <p class="apply-note"><strong>保存形态：</strong>每个选中的 Harness 生成独立配置和独立 safeStorage 密钥；复制后修改不会联动。</p>
-          </section>
-
           <div class="field">
             <span class="tab-label">协议与 Harness</span>
             <div class="tabs" role="tablist" aria-label="协议与 Harness">
@@ -378,9 +324,12 @@
             <div class="runtime-panel-head">
               <div>
                 <h2 id="runtime-panel-title">Claude Code 配置</h2>
-                <p id="runtime-panel-subtitle">当前为来源配置，保存时可复制给兼容的 Harness。</p>
+                <p id="runtime-panel-subtitle">当前编辑 Claude Code，修改只写入当前 runtime。</p>
               </div>
-              <span class="source-badge" id="runtime-badge">来源配置</span>
+              <div class="runtime-panel-head-actions">
+                <button class="quiet-sync-button" id="sync-open" type="button">一键填充其他 runtime</button>
+                <span class="source-badge" id="runtime-badge">当前 runtime</span>
+              </div>
             </div>
 
             <div class="field">
@@ -421,7 +370,7 @@
               <span class="test-result" id="test-result" hidden>✓ 312 ms · 连接可用</span>
             </div>
 
-            <div class="copy-note"><span class="note-icon" aria-hidden="true">i</span><span id="copy-note"><strong>来源快照。</strong> 选中兼容 Harness 后，保存会把当前值复制成它们各自的独立配置。</span></div>
+            <div class="copy-note"><span class="note-icon" aria-hidden="true">i</span><span id="copy-note"><strong>runtime 仍然独立。</strong> 填充只是一次性复制；后续修改不会联动其他 Tab。</span></div>
             <div class="rollback" id="rollback" hidden><span aria-hidden="true">!</span><div><strong>保存未完成，已回滚</strong><span id="rollback-copy">Codex runtime 写入失败，已撤回本次全部配置与密钥变更。</span></div></div>
           </section>
         </div>
@@ -433,28 +382,49 @@
       </section>
     </main>
 
+    <div class="overlay" id="sync-overlay" hidden>
+      <section class="overlay-card" aria-labelledby="sync-title">
+        <header class="overlay-header"><div><h2 id="sync-title">填充到其他 runtime</h2><p>只复制一次，目标仍保留独立配置</p></div><button class="icon-button" type="button" data-close-overlay="sync-overlay" aria-label="关闭">×</button></header>
+        <div class="overlay-body">
+          <div class="sync-source"><span>来源</span><strong id="sync-source-label">Claude Code</strong></div>
+          <div class="target-row"><div class="target-copy"><strong id="sync-target-name">Codex</strong><span id="sync-target-summary">当前已有配置，检测到 4 项不同</span></div><span class="target-status" id="sync-target-status">需要确认覆盖</span></div>
+          <div class="diff-table" aria-label="可同步字段差异">
+            <div class="diff-row"><span>字段</span><span>当前来源</span><span>Codex 当前值</span></div>
+            <div class="diff-row"><span>Base URL</span><span class="changed">api.nebula.example</span><span class="changed">api.nebula.example/v1</span></div>
+            <div class="diff-row"><span>API Key</span><span class="same">已填写</span><span class="same">已保存</span></div>
+            <div class="diff-row"><span>模型</span><span class="changed">2 个模型</span><span class="changed">1 个模型</span></div>
+            <div class="diff-row"><span>请求头</span><span class="changed">1 个</span><span class="changed">2 个</span></div>
+            <div class="diff-row"><span>模型端点</span><span class="same">默认推导</span><span class="same">默认推导</span></div>
+          </div>
+          <p class="sync-note">能同步的字段会全部列出；已有值不会被静默覆盖。继续后可逐项选择是否覆盖，API Key 会写入 Codex 独立 safeStorage 记录。</p>
+        </div>
+        <footer class="overlay-footer"><button class="footer-button secondary" type="button" data-close-overlay="sync-overlay">取消</button><button class="footer-button primary" type="button" id="sync-continue">查看覆盖项</button></footer>
+      </section>
+    </div>
+
+    <div class="overlay" id="conflict-overlay" hidden>
+      <section class="overlay-card" aria-labelledby="conflict-title">
+        <header class="overlay-header"><div><h2 id="conflict-title">确认覆盖 Codex 配置</h2><p>选择要从 Claude Code 填充的字段</p></div><button class="icon-button" type="button" data-close-overlay="conflict-overlay" aria-label="关闭">×</button></header>
+        <div class="overlay-body">
+          <div class="target-row"><div class="target-copy"><strong id="conflict-target-name">Codex · 独立副本</strong><span>覆盖后仍可单独继续编辑</span></div><span class="target-status">4 项不同</span></div>
+          <div class="conflict-list">
+            <label class="conflict-item"><input type="checkbox" checked /> Base URL <span class="runtime-reason">api.nebula.example → api.nebula.example/v1</span></label>
+            <label class="conflict-item"><input type="checkbox" checked /> API Key <span class="runtime-reason">复制为 Codex 独立密钥</span></label>
+            <label class="conflict-item"><input type="checkbox" checked /> 模型与模型端点 <span class="runtime-reason">2 个模型</span></label>
+            <label class="conflict-item"><input type="checkbox" checked /> 高级请求头 <span class="runtime-reason">1 个请求头</span></label>
+          </div>
+          <p class="sync-note">这次覆盖只影响 Codex。之后再修改 Claude Code，不会继续同步到 Codex。</p>
+        </div>
+        <footer class="overlay-footer"><button class="footer-button secondary" type="button" id="conflict-back">返回差异</button><button class="footer-button primary" type="button" id="conflict-apply">覆盖并填充</button></footer>
+      </section>
+    </div>
+
     <script>
-      const state = {
-        protocol: 'anthropic',
-        selected: new Set(['claude-code']),
-        activeTab: 'claude-code',
-        auth: 'apiKey',
-      };
+      const state = { activeTab: 'claude-code', auth: 'apiKey' };
       const $ = (selector) => document.querySelector(selector);
       const $$ = (selector) => [...document.querySelectorAll(selector)];
-      const compatibility = {
-        anthropic: { 'claude-code': true, codex: false },
-        openai: { 'claude-code': false, codex: true },
-      };
-      function compatibilityFor(protocol) {
-        // `compat=multi` is a design-review mode for a future manifest that declares
-        // both current runtimes compatible. The default remains the real current matrix.
-        return new URLSearchParams(location.search).get('compat') === 'multi'
-          ? { 'claude-code': true, codex: true }
-          : compatibility[protocol];
-      }
       const labels = { 'claude-code': 'Claude Code', codex: 'Codex' };
-      const protocolNames = { anthropic: 'Anthropic Messages', openai: 'OpenAI Responses' };
+      const protocols = { 'claude-code': 'Anthropic Messages', codex: 'OpenAI Responses' };
 
       function toast(message) {
         const node = document.createElement('div');
@@ -468,63 +438,28 @@
         setTimeout(() => node.remove(), 2200);
       }
 
-      function renderSelection() {
-        const map = compatibilityFor(state.protocol);
-        $$('.runtime-option').forEach((option) => {
-          const runtime = option.dataset.runtime;
-          if (runtime === 'pi') return;
-          const compatible = map[runtime];
-          option.disabled = !compatible;
-          const selected = compatible && state.selected.has(runtime);
-          option.classList.toggle('selected', selected);
-          option.setAttribute('aria-pressed', String(selected));
-          option.querySelector('.check-box').textContent = selected ? '✓' : '';
-          const reason = option.querySelector('.runtime-reason');
-          if (runtime === 'claude-code') {
-            reason.textContent = selected && state.activeTab === runtime ? '来源' : compatible ? '兼容' : '协议不兼容';
-            reason.className = `runtime-reason ${compatible ? 'ok' : ''}`;
-          } else {
-            reason.textContent = compatible ? (selected ? '已选择' : '兼容') : '协议不兼容';
-            reason.className = `runtime-reason ${compatible ? 'ok' : ''}`;
-          }
-        });
-        $('#selection-count').textContent = `${state.selected.size} 个已选择`;
-      }
-
       function renderTabs() {
+        const label = labels[state.activeTab];
+        const target = state.activeTab === 'claude-code' ? 'Codex' : 'Claude Code';
         $$('.tab').forEach((tab) => {
           const active = tab.dataset.tab === state.activeTab;
           tab.classList.toggle('active', active);
           tab.setAttribute('aria-selected', String(active));
         });
-        const label = labels[state.activeTab];
         $('#runtime-panel-title').textContent = `${label} 配置`;
-        const isSource = state.activeTab === 'claude-code';
-        $('#runtime-panel-subtitle').textContent = isSource
-          ? '当前为来源配置，保存时可复制给兼容的 Harness。'
-          : '当前为独立副本，修改只写入 Codex，不会回写 Claude Code。';
-        $('#runtime-badge').textContent = isSource ? '来源配置' : '独立副本';
-        $('#runtime-badge').classList.toggle('override', !isSource);
-        $('#tab-help').textContent = `${label} 使用 ${protocolNames[state.protocol]}；选择其他 Harness 后，这里仍可单独覆盖。`;
-        $('#copy-note').innerHTML = isSource
-          ? '<strong>来源快照。</strong> 选中兼容 Harness 后，保存会把当前值复制成它们各自的独立配置。'
-          : '<strong>副本隔离。</strong> 当前修改只会写入 Codex；来源配置和其他 Harness 不会被隐式改变。';
+        $('#runtime-panel-subtitle').textContent = `当前编辑 ${label}，修改只写入当前 runtime。`;
+        $('#runtime-badge').textContent = state.activeTab === 'claude-code' ? '当前 runtime' : '已有独立配置';
+        $('#runtime-badge').classList.toggle('override', state.activeTab !== 'claude-code');
+        $('#tab-help').textContent = `${label} 使用 ${protocols[state.activeTab]}；两个 Tab 的端点、模型、请求头和密钥互相独立。`;
+        $('#copy-note').innerHTML = `<strong>填充不会建立共享引用。</strong> 当前 Tab 的值只会被复制一次到 ${target}，之后修改不会联动。`;
+        $('#sync-source-label').textContent = label;
+        $('#sync-target-name').textContent = target;
+        $('#sync-target-summary').textContent = `当前已有配置，检测到 4 项不同`;
+        $('#conflict-target-name').textContent = `${target} · 独立配置`;
       }
 
-      function renderProtocol() {
-        const map = compatibilityFor(state.protocol);
-        for (const runtime of [...state.selected]) if (!map[runtime]) state.selected.delete(runtime);
-        if (!state.selected.size) state.selected.add(state.protocol === 'anthropic' ? 'claude-code' : 'codex');
-        $('#codex-reason').textContent = map.codex ? '兼容' : '协议不兼容';
-        renderSelection();
-        renderTabs();
-      }
-
-      function setProtocol(protocol) {
-        state.protocol = protocol;
-        renderProtocol();
-        toast(`${protocolNames[protocol]} 已启用；不兼容 Harness 已禁选`);
-      }
+      function showOverlay(id) { $(`#${id}`).hidden = false; }
+      function hideOverlay(id) { $(`#${id}`).hidden = true; }
 
       function addRow(containerId, placeholders) {
         const row = document.createElement('div');
@@ -534,34 +469,8 @@
         $(containerId).append(row);
       }
 
-      function bindRemoveRows() {
-        $$('.remove-button').forEach((button) => button.addEventListener('click', () => button.closest('.row-grid')?.remove()));
-      }
-
-      $$('.runtime-option').forEach((option) => option.addEventListener('click', () => {
-        const runtime = option.dataset.runtime;
-        if (option.disabled) return;
-        if (runtime === 'claude-code') {
-          state.selected.add(runtime);
-          state.activeTab = runtime;
-        } else if (state.selected.has(runtime)) {
-          if (state.selected.size === 1) return toast('至少保留一个 Harness');
-          state.selected.delete(runtime);
-          if (state.activeTab === runtime) state.activeTab = 'claude-code';
-        } else {
-          state.selected.add(runtime);
-          state.activeTab = runtime;
-        }
-        renderSelection();
-        renderTabs();
-      }));
       $$('.tab').forEach((tab) => tab.addEventListener('click', () => {
         state.activeTab = tab.dataset.tab;
-        if (state.activeTab === 'codex' && !compatibilityFor(state.protocol).codex) {
-          toast('当前协议不兼容 Codex；请先切换协议或保留当前来源');
-          return;
-        }
-        renderSelection();
         renderTabs();
       }));
       $$('.pill').forEach((pill) => pill.addEventListener('click', () => {
@@ -581,37 +490,38 @@
       });
       $('#add-model').addEventListener('click', () => addRow('#model-rows', ['模型 ID', '模型名称']));
       $('#add-header').addEventListener('click', () => addRow('#header-rows', ['请求头名称', '请求头值']));
-      $$('[data-action="fetch"]').forEach((button) => button.addEventListener('click', () => toast('已调用现有“获取模型列表”流程，结果在当前 runtime 的模型行中确认')));
+      $$('[data-action="fetch"]').forEach((button) => button.addEventListener('click', () => toast('已调用现有“获取模型列表”流程，结果仍写入当前 runtime')));
       $$('[data-action="test"]').forEach((button) => button.addEventListener('click', () => { $('#test-result').hidden = false; toast('已调用现有“测试连接”流程'); }));
-      $$('[data-action="preset"]').forEach((button) => button.addEventListener('click', () => toast('这里保留现有预设下拉，不新增第二套预设逻辑')));
+      $$('[data-action="preset"]').forEach((button) => button.addEventListener('click', () => toast('现有预设下拉保持不变')));
       $$('[data-action="close"]').forEach((button) => button.addEventListener('click', () => toast('原有取消 / 关闭行为保持不变')));
+      $$('.remove-button').forEach((button) => button.addEventListener('click', () => button.closest('.row-grid')?.remove()));
+      $$('#sync-open').forEach((button) => button.addEventListener('click', () => showOverlay('sync-overlay')));
+      $$('[data-close-overlay]').forEach((button) => button.addEventListener('click', () => hideOverlay(button.dataset.closeOverlay)));
+      $('#sync-continue').addEventListener('click', () => { hideOverlay('sync-overlay'); showOverlay('conflict-overlay'); });
+      $('#conflict-back').addEventListener('click', () => { hideOverlay('conflict-overlay'); showOverlay('sync-overlay'); });
+      $('#conflict-apply').addEventListener('click', () => {
+        hideOverlay('conflict-overlay');
+        toast(`${state.activeTab === 'claude-code' ? 'Codex' : 'Claude Code'} 已填充，仍保留独立配置`);
+      });
       $('#save').addEventListener('click', () => {
         if (new URLSearchParams(location.search).get('failure') === '1') {
           $('#rollback').hidden = false;
-          toast('Codex 写入失败，已回滚全部 runtime');
+          toast('runtime 写入失败，已回滚全部配置');
           return;
         }
-        toast(`已创建 ${state.selected.size} 个独立 runtime 配置`);
+        toast('现有保存流程保持不变');
       });
-      bindRemoveRows();
-      renderProtocol();
 
       const params = new URLSearchParams(location.search);
       if (params.get('theme') === 'dark') {
         document.documentElement.dataset.theme = 'dark';
         $('#theme-toggle').textContent = '切换 Light';
       }
-      if (params.get('compat') === 'multi') {
-        state.selected = new Set(['claude-code', 'codex']);
-      }
-      if (params.get('protocol') === 'openai') setProtocol('openai');
-      if (params.get('runtime') === 'codex') {
-        state.activeTab = 'codex';
-        state.selected.add('codex');
-        renderTabs();
-      }
+      if (params.get('runtime') === 'codex') state.activeTab = 'codex';
+      if (params.get('sync') === '1') showOverlay('sync-overlay');
+      if (params.get('conflict') === '1') showOverlay('conflict-overlay');
       if (params.get('failure') === '1') $('#rollback').hidden = false;
-      renderProtocol();
+      renderTabs();
     </script>
   </body>
 </html>
