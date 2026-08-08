@@ -182,27 +182,25 @@
       .field-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
       .field-heading .field-help { text-align: right; }
 
+      .runtime-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
       .tab-label { color: var(--text-primary); font-size: 13px; font-weight: 600; }
       .tabs { display: flex; height: 36px; align-items: center; gap: 3px; border-radius: 999px; padding: 3px; background: var(--surface-chip); }
       .tab { display: flex; height: 30px; flex: 1; align-items: center; justify-content: center; gap: 6px; border: 1px solid transparent; border-radius: 999px; background: transparent; color: var(--text-secondary); font-size: 13px; }
       .tab:hover { color: var(--text-primary); }
+      .tab:disabled { cursor: not-allowed; opacity: .46; }
       .tab.active { border-color: var(--border-default); background: var(--surface-elevated); color: var(--text-primary); font-weight: 650; }
       .configured-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--success); }
       .tab-help { color: var(--text-tertiary); font-size: 12px; }
 
       .runtime-panel { display: flex; flex-direction: column; gap: 16px; border: 1px solid var(--border-default); border-radius: 12px; padding: 15px; background: var(--surface); }
-      .runtime-panel-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
-      .runtime-panel-head p { margin-top: 3px; color: var(--text-tertiary); font-size: 11px; }
-      .runtime-panel-head-actions { display: flex; min-width: 0; align-items: center; justify-content: flex-end; gap: 9px; flex-wrap: wrap; }
-      .source-badge { display: inline-flex; align-items: center; border-radius: 999px; padding: 4px 8px; background: var(--surface-chip); color: var(--text-secondary); font-size: 11px; white-space: nowrap; }
-      .source-badge.override { background: var(--success-bg); color: var(--success); }
       .quiet-sync-button { border: 0; border-radius: 6px; padding: 3px 0; background: transparent; color: var(--text-tertiary); font-size: 11px; font-weight: 600; white-space: nowrap; }
       .quiet-sync-button:hover { color: var(--text-primary); text-decoration: underline; }
       .password-wrap { position: relative; }
       .password-wrap .input { padding-right: 42px; }
       .password-button { position: absolute; top: 5px; right: 5px; width: 30px; height: 30px; border: 0; border-radius: 7px; background: transparent; color: var(--text-tertiary); }
       .password-button:hover { background: var(--surface-hover); color: var(--text-primary); }
-      .row-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 34px; gap: 8px; align-items: center; }
+      .row-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) 34px; gap: 8px; align-items: center; }
+      .row-grid.header-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 34px; }
       .row-grid + .row-grid { margin-top: 8px; }
       .remove-button { width: 34px; height: 34px; border: 0; border-radius: 8px; background: transparent; color: var(--text-tertiary); font-size: 18px; }
       .remove-button:hover { background: var(--surface-hover); color: var(--text-primary); }
@@ -263,8 +261,8 @@
         .dialog-body { padding-right: 16px; padding-left: 16px; }
         .dialog-footer { padding-right: 16px; padding-left: 16px; }
         .field-heading .field-help { display: none; }
-        .runtime-panel-head { flex-direction: column; align-items: stretch; }
-        .runtime-panel-head-actions { width: 100%; max-width: none; align-items: center; justify-content: flex-start; }
+        .runtime-heading { align-items: baseline; }
+        .runtime-heading .quiet-sync-button { font-size: 10px; }
       }
 
       @media (prefers-reduced-motion: reduce) {
@@ -312,29 +310,28 @@
           </div>
 
           <div class="field">
-            <span class="tab-label">协议与 Harness</span>
+            <div class="runtime-heading">
+              <span class="tab-label">Runtime</span>
+              <button class="quiet-sync-button" id="sync-open" type="button">一键填充其他 runtime</button>
+            </div>
             <div class="tabs" role="tablist" aria-label="协议与 Harness">
               <button class="tab active" type="button" role="tab" data-tab="claude-code" aria-selected="true"><span>Claude Code</span><span class="configured-dot" aria-hidden="true"></span></button>
               <button class="tab" type="button" role="tab" data-tab="codex" aria-selected="false"><span>Codex</span><span class="configured-dot" aria-hidden="true"></span></button>
+              <button class="tab" type="button" role="tab" aria-selected="false" disabled><span>Pi</span></button>
             </div>
-            <span class="tab-help" id="tab-help">Claude Code 使用当前来源配置；选择其他 Harness 后，这里仍可单独覆盖。</span>
+            <span class="tab-help" id="tab-help">Claude Code 遵循 Anthropic 协议（用 x-api-key 鉴权）。填进去的来源用于 Claude Code 的 baseURL、密钥与模型，留空则此来源不提供 Claude Code。</span>
           </div>
 
-          <section class="runtime-panel" aria-labelledby="runtime-panel-title">
-            <div class="runtime-panel-head">
-              <div>
-                <h2 id="runtime-panel-title">Claude Code 配置</h2>
-                <p id="runtime-panel-subtitle">当前编辑 Claude Code，修改只写入当前 runtime。</p>
-              </div>
-              <div class="runtime-panel-head-actions">
-                <button class="quiet-sync-button" id="sync-open" type="button">一键填充其他 runtime</button>
-                <span class="source-badge" id="runtime-badge">当前 runtime</span>
-              </div>
-            </div>
-
+          <section class="runtime-panel" aria-label="Runtime 配置">
             <div class="field">
               <label class="field-label" for="base-url">基础 URL</label>
               <input class="input mono" id="base-url" value="https://api.nebula.example" placeholder="https://api.example.com" />
+            </div>
+
+            <div class="field">
+              <label class="field-label" for="request-path">精确请求路径（可选）</label>
+              <input class="input mono" id="request-path" value="/v1/messages" placeholder="/v1/messages" />
+              <span class="field-help">留空会使用所选协议的标准路径。只有供应商使用非标准推理接口时，才填写以 / 开头的路径。</span>
             </div>
 
             <div class="field" id="api-key-field">
@@ -348,8 +345,8 @@
             <div class="field">
               <div class="field-heading"><span class="field-label">模型</span><button class="link-button" type="button" data-action="fetch">↻ 获取模型列表</button></div>
               <div id="model-rows">
-                <div class="row-grid"><input class="input mono" value="nebula-3.2" aria-label="模型 ID" /><input class="input" value="Nebula 3.2" aria-label="模型名称" /><button class="remove-button" type="button" aria-label="移除模型">×</button></div>
-                <div class="row-grid"><input class="input mono" value="nebula-3.2-fast" aria-label="模型 ID" /><input class="input" value="Nebula 3.2 Fast" aria-label="模型名称" /><button class="remove-button" type="button" aria-label="移除模型">×</button></div>
+                <div class="row-grid"><input class="input mono" value="nebula-3.2" aria-label="模型 ID" /><input class="input" value="Nebula 3.2" aria-label="模型名称" /><input class="input" value="200000" aria-label="上下文窗口" /><button class="remove-button" type="button" aria-label="移除模型">×</button></div>
+                <div class="row-grid"><input class="input mono" value="nebula-3.2-fast" aria-label="模型 ID" /><input class="input" value="Nebula 3.2 Fast" aria-label="模型名称" /><input class="input" value="128000" aria-label="上下文窗口" /><button class="remove-button" type="button" aria-label="移除模型">×</button></div>
               </div>
               <button class="add-button" id="add-model" type="button">＋ 添加模型</button>
             </div>
@@ -359,7 +356,7 @@
             <div class="field">
               <div class="advanced-title"><span>高级请求头</span><span>可选 · 按 runtime 独立保存</span></div>
               <div id="header-rows">
-                <div class="row-grid"><input class="input mono" value="x-tenant-id" aria-label="请求头名称" /><input class="input mono" value="team-cindy" aria-label="请求头值" /><button class="remove-button" type="button" aria-label="移除请求头">×</button></div>
+                <div class="row-grid header-row"><input class="input mono" value="x-tenant-id" aria-label="请求头名称" /><input class="input mono" value="team-cindy" aria-label="请求头值" /><button class="remove-button" type="button" aria-label="移除请求头">×</button></div>
               </div>
               <button class="add-button" id="add-header" type="button">＋ 添加请求头</button>
             </div>
@@ -424,7 +421,6 @@
       const $ = (selector) => document.querySelector(selector);
       const $$ = (selector) => [...document.querySelectorAll(selector)];
       const labels = { 'claude-code': 'Claude Code', codex: 'Codex' };
-      const protocols = { 'claude-code': 'Anthropic Messages', codex: 'OpenAI Responses' };
 
       function toast(message) {
         const node = document.createElement('div');
@@ -446,11 +442,9 @@
           tab.classList.toggle('active', active);
           tab.setAttribute('aria-selected', String(active));
         });
-        $('#runtime-panel-title').textContent = `${label} 配置`;
-        $('#runtime-panel-subtitle').textContent = `当前编辑 ${label}，修改只写入当前 runtime。`;
-        $('#runtime-badge').textContent = state.activeTab === 'claude-code' ? '当前 runtime' : '已有独立配置';
-        $('#runtime-badge').classList.toggle('override', state.activeTab !== 'claude-code');
-        $('#tab-help').textContent = `${label} 使用 ${protocols[state.activeTab]}；两个 Tab 的端点、模型、请求头和密钥互相独立。`;
+        $('#tab-help').textContent = state.activeTab === 'claude-code'
+          ? 'Claude Code 遵循 Anthropic 协议（用 x-api-key 鉴权）。填进去的来源用于 Claude Code 的 baseURL、密钥与模型，留空则此来源不提供 Claude Code。'
+          : 'Codex 遵循 OpenAI Responses 协议。填进去的来源用于 Codex 的 baseURL、密钥与模型，留空则此来源不提供 Codex。';
         $('#copy-note').innerHTML = `<strong>填充不会建立共享引用。</strong> 当前 Tab 的值只会被复制一次到 ${target}，之后修改不会联动。`;
         $('#sync-source-label').textContent = label;
         $('#sync-target-name').textContent = target;
@@ -463,8 +457,11 @@
 
       function addRow(containerId, placeholders) {
         const row = document.createElement('div');
-        row.className = 'row-grid';
-        row.innerHTML = `<input class="input mono" placeholder="${placeholders[0]}" aria-label="${placeholders[0]}" /><input class="input" placeholder="${placeholders[1]}" aria-label="${placeholders[1]}" /><button class="remove-button" type="button" aria-label="移除行">×</button>`;
+        const modelRow = containerId === '#model-rows';
+        row.className = `row-grid${modelRow ? '' : ' header-row'}`;
+        row.innerHTML = modelRow
+          ? `<input class="input mono" placeholder="${placeholders[0]}" aria-label="${placeholders[0]}" /><input class="input" placeholder="${placeholders[1]}" aria-label="${placeholders[1]}" /><input class="input" placeholder="${placeholders[2]}" aria-label="${placeholders[2]}" /><button class="remove-button" type="button" aria-label="移除行">×</button>`
+          : `<input class="input mono" placeholder="${placeholders[0]}" aria-label="${placeholders[0]}" /><input class="input" placeholder="${placeholders[1]}" aria-label="${placeholders[1]}" /><button class="remove-button" type="button" aria-label="移除行">×</button>`;
         row.querySelector('button').addEventListener('click', () => row.remove());
         $(containerId).append(row);
       }
@@ -488,9 +485,9 @@
         const input = $('#api-key');
         input.type = input.type === 'password' ? 'text' : 'password';
       });
-      $('#add-model').addEventListener('click', () => addRow('#model-rows', ['模型 ID', '模型名称']));
+      $('#add-model').addEventListener('click', () => addRow('#model-rows', ['模型 ID', '模型名称', '上下文(token)']));
       $('#add-header').addEventListener('click', () => addRow('#header-rows', ['请求头名称', '请求头值']));
-      $$('[data-action="fetch"]').forEach((button) => button.addEventListener('click', () => toast('已调用现有“获取模型列表”流程，结果仍写入当前 runtime')));
+      $$('[data-action="fetch"]').forEach((button) => button.addEventListener('click', () => toast('已调用现有“获取模型列表”流程，结果仍写入所选 Tab')));
       $$('[data-action="test"]').forEach((button) => button.addEventListener('click', () => { $('#test-result').hidden = false; toast('已调用现有“测试连接”流程'); }));
       $$('[data-action="preset"]').forEach((button) => button.addEventListener('click', () => toast('现有预设下拉保持不变')));
       $$('[data-action="close"]').forEach((button) => button.addEventListener('click', () => toast('原有取消 / 关闭行为保持不变')));

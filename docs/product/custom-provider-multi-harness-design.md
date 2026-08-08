@@ -2,13 +2,13 @@
 
 ## 1. 结论
 
-这是 Desktop Settings 的纯客户端体验优化：用户在当前 runtime Tab 填好配置后，在配置卡右上角点击一个低对比度的“一键填充其他 runtime”入口，再按提示把可同步字段复制到其他 runtime。
+这是 Desktop Settings 的纯客户端体验优化：用户在选中的 runtime Tab 填好配置后，在 `Runtime` 标题行右侧点击一个低对比度的“一键填充其他 runtime”入口，再按提示把可同步字段复制到其他 runtime。
 
 这不是新的应用范围向导，也不把多个 runtime 改成共享配置。复制完成后仍保存为现有的 per-runtime 独立配置与独立凭证记录，后续修改互不联动。
 
 设计原则：**入口轻量，差异先看，覆盖要确认，复制后隔离。**
 
-![真实 CustomProviderDialog 右上角的一键填充入口](../design-prototypes/custom-provider-multi-harness/assets/top-right-sync-dark.png)
+![真实 CustomProviderDialog Runtime 标题行的一键填充入口](../design-prototypes/custom-provider-multi-harness/assets/runtime-header-sync-dark.png)
 
 ## 2. 用户问题
 
@@ -34,7 +34,7 @@
 
 ### 3.1 目标
 
-1. 用户可从当前 runtime 一次触发对其他兼容 runtime 的填充。
+1. 用户可从选中的 runtime Tab 一次触发对其他兼容 runtime 的填充。
 2. 公共配置只填写一次。
 3. 保存结果仍是独立 per-runtime 配置、模型清单、请求头和密钥记录。
 4. 目标已有值时先展示差异，再进入字段级覆盖确认。
@@ -69,10 +69,10 @@
 
 ### 4.2 增量模块：配置卡右上角的轻入口
 
-不增加新的主表单行，也不把复制动作做成第三套向导。当前 runtime 配置卡标题右侧并列放置：
+不增加新的主表单行，也不把复制动作做成第三套向导。在现有 `Runtime` 标题这一行右侧放置：
 
 1. 低对比度文字按钮“一键填充其他 runtime”；
-2. 现有的“当前 runtime / 已有独立配置”状态徽标。
+2. 不新增状态徽标，选中的 Tab 本身就是正在编辑的 runtime。
 
 按钮只承担“开始一次复制”的动作，不展示密钥、不改变当前字段值。点击后才打开差异提示层。
 
@@ -80,14 +80,13 @@
 
 兼容性必须来自 runtime capability manifest，不允许通过模型 ID、厂商名或 UI Tab 猜测。目标 runtime 不兼容时，在差异提示层中明确列为“不可填充”并给出原因；不能直接复制后再让运行时失败。
 
-![真实弹窗中的轻量入口](../design-prototypes/custom-provider-multi-harness/assets/top-right-sync-dark.png)
+![真实弹窗 Runtime 标题行中的轻量入口](../design-prototypes/custom-provider-multi-harness/assets/runtime-header-sync-dark.png)
 
 ### 4.3 来源与独立副本
 
 现有 runtime Tab 继续承担配置编辑，复制动作只产生一次性的目标 draft：
 
-- 当前编辑的 Tab 显示“当前 runtime”徽标；
-- 另一个已存在配置的 Tab 显示“已有独立配置”；
+- 选中的 Tab 本身表达正在编辑的 runtime；已配置的其他 Tab 沿用现有小圆点状态；
 - 目标已有值时先列出 Base URL、API Key、模型、请求头和模型端点的差异；
 - 用户在覆盖确认层逐项选择要覆盖的字段；
 - 覆盖后目标 Tab 仍可直接编辑，并提示“修改只写入当前 runtime，不会回写来源”；
@@ -284,7 +283,7 @@ Pi 不应被夹在 UI PR 中作为假入口，否则会出现“能选但不能�
 
 ## 11. 验收映射
 
-- [ ] 可从当前 runtime 一次触发对其他兼容 runtime 的填充，并只输入一次公共配置：配置卡右上角轻入口 + 同步 draft。
+- [ ] 可从选中的 runtime Tab 一次触发对其他兼容 runtime 的填充，并只输入一次公共配置：`Runtime` 标题行轻入口 + 同步 draft。
 - [ ] 保存后生成独立 per-runtime 配置和密钥记录：物化现有 `runtimes` + per-runtime safeStorage。
 - [ ] 不兼容协议不能被静默复制：manifest 双端校验 + 差异层原因提示。
 - [ ] 每个 Harness 可单独覆盖端点、模型和凭证：字段级覆盖确认 + 保存后 per-runtime 编辑。
@@ -295,7 +294,7 @@ Pi 不应被夹在 UI PR 中作为假入口，否则会出现“能选但不能�
 ## 12. 原型与视觉资产
 
 - 可交互原型：`docs/design-prototypes/custom-provider-multi-harness/index.html`（自包含单文件，基于真实弹窗外壳）
-- 右上角入口视觉参考（imagegen）：`assets/top-right-sync-dark.png`
+- Runtime 标题行入口视觉参考（imagegen）：`assets/runtime-header-sync-dark.png`
 - 差异提示图：`assets/protocol-openai-light.png`
 - Dark 覆盖确认图：`assets/review-dark.png`
 - 回滚图：`assets/rollback-dark.png`

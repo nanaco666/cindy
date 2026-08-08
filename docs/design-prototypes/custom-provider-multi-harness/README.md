@@ -6,13 +6,13 @@
 
 - 600px 弹窗、标题栏、关闭按钮和底部取消 / 保存；
 - 预设模板、显示名称、API 密钥 / OAuth 鉴权切换；
-- Claude Code / Codex runtime Tab；
+- Runtime Tab（Claude Code / Codex；Pi 作为不可用状态保留视觉位置）；
 - Base URL、API Key、模型行、请求头、测试连接、获取模型列表；
 - 现有表单的字段尺寸、圆角、主题 token 和层级。
 
 本轮只增加一个局部模块：
 
-- 当前配置卡右上角的低对比度“一键填充其他 runtime”入口；
+- 现有 `Runtime` 标题行右侧的低对比度“一键填充其他 runtime”入口；
 - 点击后查看目标 runtime 的当前值与字段差异；
 - 进入字段级覆盖确认，不兼容协议不能静默复制；
 - 保存失败后的整体回滚提示。
@@ -32,11 +32,11 @@
 
 ## 真实实现边界
 
-当前仓库真实 `AgentKind` 只有 `claude-code` 与 `codex`，因此原型不会把 Pi 当作当前可用 Tab。Pi 需要在正式实现中通过 runtime capability manifest 接入后，再自然出现在同一 Tab 列表。
+当前仓库真实 `AgentKind` 只有 `claude-code` 与 `codex`，所以原型里的 Pi 只作为真实界面中的不可用 Tab 位置，不可点击、不可写入。正式实现 Pi 前，仍需先通过 runtime capability manifest 接入。
 
 ## 交互与实现契约
 
-用户先在当前 runtime Tab 填写配置，再点击配置卡右上角的“一键填充其他 runtime”。入口保持弱提示，不占用新的表单行，也不改变现有弹窗外壳。点击后按以下顺序处理：
+用户先在当前选中的 runtime Tab 填写配置，再点击 `Runtime` 标题行右侧的“一键填充其他 runtime”。选中的 Tab 已经表达当前 runtime，不再额外显示“当前 runtime”徽标。入口保持弱提示，不占用新的表单行，也不改变现有弹窗外壳。点击后按以下顺序处理：
 
 1. 展示目标 runtime 的当前值和可同步字段差异；
 2. 对已有值进入字段级覆盖确认，默认勾选发生差异的字段；
