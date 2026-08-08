@@ -182,7 +182,6 @@
       .field-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
       .field-heading .field-help { text-align: right; }
 
-      .runtime-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
       .tab-label { color: var(--text-primary); font-size: 13px; font-weight: 600; }
       .tabs { display: flex; height: 36px; align-items: center; gap: 3px; border-radius: 999px; padding: 3px; background: var(--surface-chip); }
       .tab { display: flex; height: 30px; flex: 1; align-items: center; justify-content: center; gap: 6px; border: 1px solid transparent; border-radius: 999px; background: transparent; color: var(--text-secondary); font-size: 13px; }
@@ -192,7 +191,9 @@
       .configured-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--success); }
       .tab-help { color: var(--text-tertiary); font-size: 12px; }
 
-      .runtime-panel { display: flex; flex-direction: column; gap: 16px; border: 1px solid var(--border-default); border-radius: 12px; padding: 15px; background: var(--surface); }
+      .runtime-panel { position: relative; display: flex; flex-direction: column; gap: 16px; border: 1px solid var(--border-default); border-radius: 12px; padding: 15px; background: var(--surface); }
+      .runtime-panel > .field:first-of-type .field-label { padding-right: 132px; }
+      .runtime-form-action { position: absolute; top: 12px; right: 15px; z-index: 1; }
       .quiet-sync-button { border: 0; border-radius: 6px; padding: 3px 0; background: transparent; color: var(--text-tertiary); font-size: 11px; font-weight: 600; white-space: nowrap; }
       .quiet-sync-button:hover { color: var(--text-primary); text-decoration: underline; }
       .password-wrap { position: relative; }
@@ -261,8 +262,7 @@
         .dialog-body { padding-right: 16px; padding-left: 16px; }
         .dialog-footer { padding-right: 16px; padding-left: 16px; }
         .field-heading .field-help { display: none; }
-        .runtime-heading { align-items: baseline; }
-        .runtime-heading .quiet-sync-button { font-size: 10px; }
+        .runtime-form-action .quiet-sync-button { font-size: 10px; }
       }
 
       @media (prefers-reduced-motion: reduce) {
@@ -310,10 +310,7 @@
           </div>
 
           <div class="field">
-            <div class="runtime-heading">
-              <span class="tab-label">Runtime</span>
-              <button class="quiet-sync-button" id="sync-open" type="button">一键填充其他 runtime</button>
-            </div>
+            <span class="tab-label">Runtime</span>
             <div class="tabs" role="tablist" aria-label="协议与 Harness">
               <button class="tab active" type="button" role="tab" data-tab="claude-code" aria-selected="true"><span>Claude Code</span><span class="configured-dot" aria-hidden="true"></span></button>
               <button class="tab" type="button" role="tab" data-tab="codex" aria-selected="false"><span>Codex</span><span class="configured-dot" aria-hidden="true"></span></button>
@@ -323,6 +320,9 @@
           </div>
 
           <section class="runtime-panel" aria-label="Runtime 配置">
+            <div class="runtime-form-action">
+              <button class="quiet-sync-button" id="sync-open" type="button">一键填充其他 runtime</button>
+            </div>
             <div class="field">
               <label class="field-label" for="base-url">基础 URL</label>
               <input class="input mono" id="base-url" value="https://api.nebula.example" placeholder="https://api.example.com" />
