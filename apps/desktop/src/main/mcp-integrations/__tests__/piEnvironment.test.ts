@@ -23,6 +23,10 @@ import {
   invalidatePiEnvironment,
   shutdownPiEnvironment,
 } from '../piEnvironment.js';
+import {
+  clearPluginEnabledAndRefresh,
+  setPluginEnabledAndRefresh,
+} from '../../maker-ipc/pluginEnablementHandlers.js';
 
 function noopLogger(): Logger {
   const logger: Logger = {
@@ -363,6 +367,65 @@ describe('piEnvironment per-session identity', () => {
 
     oldConfig!.disposeSessionCtx!();
     newConfig!.disposeSessionCtx!();
+  });
+
+  it('applies machine-wide Computer Use changes to new Pi generations while old leases keep their provider snapshot', async () => {
+    let computerEnabled = false;
+    const alwaysOnProvider = makeProvider('always_on');
+    const computerProvider: McpProvider = {
+      ...makeProvider('cindy_computer'),
+      isEnabled: () => computerEnabled,
+    };
+    const providers = [alwaysOnProvider, computerProvider];
+    const registry = {
+      setEnabled: async (id: string, enabled: boolean) => {
+        expect(id).toBe('computer');
+        computerEnabled = enabled;
+        return true;
+      },
+      clearEnabled: async (id: string) => {
+        expect(id).toBe('computer');
+        computerEnabled = false;
+        return true;
+      },
+    };
+    const deps = {
+      getPluginRegistry: () => registry,
+      invalidatePiEnvironment,
+      // A busy Codex host may defer independently; Pi still needs immediate
+      // generation invalidation after the preference is durable.
+      refreshCodexMcpEnvironment: async () => ({ codexMcpRefreshed: false }),
+      rejectEssentialPlugin: (id: string): never => {
+        throw new Error(`unexpected essential plugin: ${id}`);
+      },
+    };
+
+    const disabledLease = await getPiExtraSpawnConfig(providers, noopLogger());
+    expect(disabledLease!.mcpBridge!.servers.map((server) => server.name)).toEqual(['always_on']);
+
+    await expect(setPluginEnabledAndRefresh('computer', true, deps)).resolves.toEqual({
+      codexMcpRefreshed: false,
+    });
+    const enabledLease = await getPiExtraSpawnConfig(providers, noopLogger());
+    expect(enabledLease!.mcpBridge!.servers.map((server) => server.name)).toEqual([
+      'always_on',
+      'cindy_computer',
+    ]);
+    expect(disabledLease!.mcpBridge!.servers.map((server) => server.name)).toEqual(['always_on']);
+
+    await expect(clearPluginEnabledAndRefresh('computer', deps)).resolves.toEqual({
+      codexMcpRefreshed: false,
+    });
+    const clearedLease = await getPiExtraSpawnConfig(providers, noopLogger());
+    expect(clearedLease!.mcpBridge!.servers.map((server) => server.name)).toEqual(['always_on']);
+    expect(enabledLease!.mcpBridge!.servers.map((server) => server.name)).toEqual([
+      'always_on',
+      'cindy_computer',
+    ]);
+
+    disabledLease!.disposeSessionCtx!();
+    enabledLease!.disposeSessionCtx!();
+    clearedLease!.disposeSessionCtx!();
   });
 
   it('assembles authenticated remote HTTP MCPs with env references and no secret values in the descriptor or logs', async () => {

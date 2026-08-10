@@ -318,7 +318,6 @@ import {
   type MemorySettings,
   writeMemorySetting,
 } from '../maker-host/memory-settings-store.js';
-import { GLOBAL_PLUGIN_IDS } from '../maker-host/plugins/types.js';
 import {
   assertCollabProjectEnabled,
   resolveLocalCollabPolicyWorkingDir,
@@ -515,6 +514,10 @@ import type { CollabDispatchOutcome } from './collabSendOutcome.js';
 import { runAcceptedCallback } from './acceptedCallbackRunner.js';
 import { createElectronIpcHandlerRegistry } from './electronIpcRegistry.js';
 import { refreshCodexMcpEnvironment } from './codexMcpRefresh.js';
+import {
+  clearPluginEnabledAndRefresh,
+  setPluginEnabledAndRefresh,
+} from './pluginEnablementHandlers.js';
 import { broadcastSchedulerChanged } from './schedule.js';
 import { validateExtraDirs } from './extraDirsValidator.js';
 import {
@@ -13159,26 +13162,19 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions)
     if (typeof id !== 'string' || typeof enabled !== 'boolean') {
       throwIpcError('INVALID_PARAMS', 'id (string) + enabled (boolean) required');
     }
-    const ok = await getPluginRegistry().setEnabled(id, enabled);
-    if (!ok) {
-      throwIpcError('PERMISSION_DENIED', `Cannot modify essential plugin: ${id}`);
-    }
-    // Ordinary plugins are user defaults: existing sessions keep their frozen
-    // policy and only new sessions observe changes, so no shared environment
-    // refresh is needed.
-    if (!GLOBAL_PLUGIN_IDS.has(id) && id !== 'browser') {
-      return { codexMcpRefreshed: true };
-    }
-    // Machine-wide tools keep their existing lifecycle. The preference is
-    // already durable at this point, so refresh best-effort; a busy turn must
-    // keep using the existing bridge and must not turn a successful save into
-    // an IPC failure. Renderer surfaces the deferred state explicitly.
-    return refreshCodexMcpEnvironment({
-      restartCodex: restartCodexAfterAuthModeChange,
-      shutdownCodexEnvironment,
-      onDeferred: () =>
-        deferredCodexRestartHolder?.schedule('Codex Browser capability routing changed'),
-      logger: log,
+    return setPluginEnabledAndRefresh(id, enabled, {
+      getPluginRegistry,
+      invalidatePiEnvironment,
+      refreshCodexMcpEnvironment: () =>
+        refreshCodexMcpEnvironment({
+          restartCodex: restartCodexAfterAuthModeChange,
+          shutdownCodexEnvironment,
+          onDeferred: () =>
+            deferredCodexRestartHolder?.schedule('Codex Browser capability routing changed'),
+          logger: log,
+        }),
+      rejectEssentialPlugin: (pluginId) =>
+        throwIpcError('PERMISSION_DENIED', `Cannot modify essential plugin: ${pluginId}`),
     });
   });
 
@@ -13186,19 +13182,19 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions)
     if (typeof id !== 'string') {
       throwIpcError('INVALID_PARAMS', 'id (string) required');
     }
-    const ok = await getPluginRegistry().clearEnabled(id);
-    if (!ok) {
-      throwIpcError('PERMISSION_DENIED', `Cannot modify essential plugin: ${id}`);
-    }
-    if (!GLOBAL_PLUGIN_IDS.has(id) && id !== 'browser') {
-      return { codexMcpRefreshed: true };
-    }
-    return refreshCodexMcpEnvironment({
-      restartCodex: restartCodexAfterAuthModeChange,
-      shutdownCodexEnvironment,
-      onDeferred: () =>
-        deferredCodexRestartHolder?.schedule('Codex Browser capability routing changed'),
-      logger: log,
+    return clearPluginEnabledAndRefresh(id, {
+      getPluginRegistry,
+      invalidatePiEnvironment,
+      refreshCodexMcpEnvironment: () =>
+        refreshCodexMcpEnvironment({
+          restartCodex: restartCodexAfterAuthModeChange,
+          shutdownCodexEnvironment,
+          onDeferred: () =>
+            deferredCodexRestartHolder?.schedule('Codex Browser capability routing changed'),
+          logger: log,
+        }),
+      rejectEssentialPlugin: (pluginId) =>
+        throwIpcError('PERMISSION_DENIED', `Cannot modify essential plugin: ${pluginId}`),
     });
   });
 

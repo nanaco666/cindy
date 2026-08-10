@@ -3,6 +3,10 @@ import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 
 import { refreshCodexMcpEnvironment } from '../maker-ipc/codexMcpRefresh.js';
+import {
+  clearPluginEnabledAndRefresh,
+  setPluginEnabledAndRefresh,
+} from '../maker-ipc/pluginEnablementHandlers.js';
 
 describe('computer use plugin IPC invariants', () => {
   it('stops the shared Codex host before shutting down its MCP bridge', async () => {
@@ -78,7 +82,76 @@ describe('computer use plugin IPC invariants', () => {
     expect(onDeferred).toHaveBeenCalledOnce();
   });
 
-  it('returns the non-blocking refresh result after global plugin persistence', () => {
+  it.each([
+    {
+      name: 'set override',
+      run: (deps: Parameters<typeof setPluginEnabledAndRefresh>[2]) =>
+        setPluginEnabledAndRefresh('computer', true, deps),
+      persisted: 'set:computer:true',
+    },
+    {
+      name: 'clear override',
+      run: (deps: Parameters<typeof clearPluginEnabledAndRefresh>[1]) =>
+        clearPluginEnabledAndRefresh('computer', deps),
+      persisted: 'clear:computer',
+    },
+  ])(
+    'invalidates Pi after $name persistence even when Codex refresh is deferred',
+    async ({ run, persisted }) => {
+      const calls: string[] = [];
+      const deps = {
+        getPluginRegistry: () => ({
+          setEnabled: async (id: string, enabled: boolean) => {
+            calls.push(`set:${id}:${enabled}`);
+            return true;
+          },
+          clearEnabled: async (id: string) => {
+            calls.push(`clear:${id}`);
+            return true;
+          },
+        }),
+        invalidatePiEnvironment: () => {
+          calls.push('invalidate-pi');
+        },
+        refreshCodexMcpEnvironment: async () => {
+          calls.push('refresh-codex');
+          return { codexMcpRefreshed: false };
+        },
+        rejectEssentialPlugin: (id: string): never => {
+          throw new Error(`unexpected essential plugin: ${id}`);
+        },
+      };
+
+      await expect(run(deps)).resolves.toEqual({ codexMcpRefreshed: false });
+      expect(calls).toEqual([persisted, 'invalidate-pi', 'refresh-codex']);
+    },
+  );
+
+  it('preserves ordinary and browser plugin refresh semantics', async () => {
+    const invalidatePiEnvironment = vi.fn();
+    const refreshCodex = vi.fn(async () => ({ codexMcpRefreshed: true }));
+    const deps = {
+      getPluginRegistry: () => ({
+        setEnabled: async () => true,
+        clearEnabled: async () => true,
+      }),
+      invalidatePiEnvironment,
+      refreshCodexMcpEnvironment: refreshCodex,
+      rejectEssentialPlugin: (): never => {
+        throw new Error('unexpected essential plugin');
+      },
+    };
+
+    await setPluginEnabledAndRefresh('jira', true, deps);
+    expect(invalidatePiEnvironment).not.toHaveBeenCalled();
+    expect(refreshCodex).not.toHaveBeenCalled();
+
+    await setPluginEnabledAndRefresh('browser', true, deps);
+    expect(invalidatePiEnvironment).not.toHaveBeenCalled();
+    expect(refreshCodex).toHaveBeenCalledOnce();
+  });
+
+  it('wires both IPC mutations through the tested enablement handlers', () => {
     const registerSource = fs.readFileSync(
       path.resolve(__dirname, '../maker-ipc/register.ts'),
       'utf-8',
@@ -101,19 +174,10 @@ describe('computer use plugin IPC invariants', () => {
     const clearEnabledBody = registerSource.slice(clearEnabledStart, clearEnabledEnd);
 
     for (const body of [setEnabledBody, clearEnabledBody]) {
-      expect(body).toContain('GLOBAL_PLUGIN_IDS.has(id)');
-      expect(body).toContain("id !== 'browser'");
-      expect(body).toContain('await getPluginRegistry()');
-      expect(body).toContain('return { codexMcpRefreshed: true };');
-      expect(body).toContain('return refreshCodexMcpEnvironment({');
-      expect(body.indexOf('await getPluginRegistry()')).toBeLessThan(
-        body.indexOf('GLOBAL_PLUGIN_IDS.has(id)'),
-      );
-      expect(body.indexOf('GLOBAL_PLUGIN_IDS.has(id)')).toBeLessThan(
-        body.indexOf('return refreshCodexMcpEnvironment({'),
-      );
       expect(body).not.toContain('await shutdownCodexEnvironment();');
     }
+    expect(setEnabledBody).toContain('return setPluginEnabledAndRefresh(id, enabled, {');
+    expect(clearEnabledBody).toContain('return clearPluginEnabledAndRefresh(id, {');
   });
 
   it('preserves the live Codex bridge plugin gate while refresh is deferred', () => {
