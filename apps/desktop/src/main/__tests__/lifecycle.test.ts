@@ -160,6 +160,20 @@ describe('runQuitDisposers', () => {
     expect(elapsed).toBeLessThan(200);
   });
 
+  it('bounds a hanging Computer Use exit cleanup and still reaches post-async', async () => {
+    const { onQuit, runQuitDisposers } = await freshLifecycle();
+    const cleanupComputerUse = vi.fn(() => new Promise<void>(() => {}));
+    const closeDatabase = vi.fn();
+
+    onQuit('computer-use', cleanupComputerUse, 'async');
+    onQuit('local-db-close', closeDatabase, 'post-async');
+
+    await runQuitDisposers(20);
+
+    expect(cleanupComputerUse).toHaveBeenCalledOnce();
+    expect(closeDatabase).toHaveBeenCalledOnce();
+  });
+
   it('post-async disposer that never resolves is bounded by timeout — later post-async still runs', async () => {
     const { onQuit, runQuitDisposers } = await freshLifecycle();
     let laterRan = false;

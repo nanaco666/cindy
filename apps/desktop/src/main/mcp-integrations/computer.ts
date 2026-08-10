@@ -770,6 +770,29 @@ function killInstallTree(child: { pid?: number; kill: (signal?: NodeJS.Signals) 
   }
 }
 
+// Every installer is started by Cindy and may hold the upstream install lock.
+// Keep only live roots here so app shutdown can reuse killInstallTree instead of
+// leaving a detached script/curl subtree behind.
+const activeInstallProcesses = new Set<{
+  pid?: number;
+  kill: (signal?: NodeJS.Signals) => boolean;
+}>();
+
+function stopActiveInstallProcesses(): void {
+  const children = Array.from(activeInstallProcesses);
+  activeInstallProcesses.clear();
+  for (const child of children) {
+    try {
+      killInstallTree(child);
+    } catch (err) {
+      logger.warn('failed to stop cua-driver installer during cleanup', {
+        pid: child.pid,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+}
+
 export interface ActivityTimeoutOptions {
   idleTimeoutMs: number;
   hardTimeoutMs: number;
@@ -807,6 +830,7 @@ export function runProcessWithActivityTimeout(
         ...options.extraEnv,
       },
     });
+    activeInstallProcesses.add(child);
     options.onSpawn?.(child.pid);
     let stdout = '';
     let stderr = '';
@@ -825,6 +849,7 @@ export function runProcessWithActivityTimeout(
       if (settled) return;
       settled = true;
       cleanupTimers();
+      activeInstallProcesses.delete(child);
       killInstallTree(child);
       reject(new ComputerDriverError(message));
     };
@@ -869,6 +894,7 @@ export function runProcessWithActivityTimeout(
       if (settled) return;
       settled = true;
       cleanupTimers();
+      activeInstallProcesses.delete(child);
       reject(err);
     });
     child.stdout?.on('data', (chunk: Buffer) => {
@@ -883,6 +909,7 @@ export function runProcessWithActivityTimeout(
       if (settled) return;
       settled = true;
       cleanupTimers();
+      activeInstallProcesses.delete(child);
       resolve({ stdout, stderr, exitCode, signal });
     });
   });
@@ -3444,6 +3471,7 @@ async function cleanupActiveComputerDriverSessions(): Promise<void> {
 
 export async function cleanupAllComputerDriverSessions(): Promise<void> {
   stopPermissionGrantFlow('cleanup');
+  stopActiveInstallProcesses();
   clearProcessSnapshotCache();
   await cleanupActiveComputerDriverSessions();
   cuaDriverSessionGenerations.clear();

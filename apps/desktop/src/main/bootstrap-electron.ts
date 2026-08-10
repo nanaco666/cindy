@@ -37,6 +37,7 @@ import {
   markDesktopDevWindowReady,
 } from './devStartupStatus';
 import { prewarmMacComputerPermissionGuideHelper } from './computer-permission-guide/MacComputerPermissionGuideNativeHost.js';
+import { cleanupComputerUseForExit } from './computer-use-exit-cleanup.js';
 import { handleOpenChatGPTApp } from './chatgpt-app.js';
 import {
   waitForTurnChangeSetActions,
@@ -6975,6 +6976,9 @@ onQuit('anthropic-compat-proxy', () => disposeAnthropicCompatProxy(), 'async');
 // browser + locked user-data-dir would otherwise survive quit and force a stale
 // SingletonLock recovery next launch). `stop` is idempotent / no-op if never started.
 onQuit('browser-runtime', () => disposeBrowserRuntime(), 'async');
+// Computer Use cleanup owns only Cindy's temporary flows. In particular it
+// does not stop the shared cua-driver daemon or change the enabled preference.
+onQuit('computer-use', cleanupComputerUseForExit, 'async');
 onQuit('codex-proxy', () => disposeCodexProxy(), 'async');
 // Remote file-service clients: 先于 pool 关闭, 挂断远端 daemon 的 exec channel。
 onQuit('remote-file-browser', () => disposeRemoteFileBrowser(), 'async');

@@ -150,19 +150,18 @@ function mockDriverSpawn(options: MockSpawnOptions) {
 }
 
 function mockNeverSettlingSpawn() {
-  spawnMock.mockImplementationOnce(() => {
-    const child = new EventEmitter() as EventEmitter & {
-      stdout: EventEmitter;
-      stderr: EventEmitter;
-      kill: ReturnType<typeof vi.fn>;
-      unref: ReturnType<typeof vi.fn>;
-    };
-    child.stdout = new EventEmitter();
-    child.stderr = new EventEmitter();
-    child.kill = vi.fn();
-    child.unref = vi.fn();
-    return child;
-  });
+  const child = new EventEmitter() as EventEmitter & {
+    stdout: EventEmitter;
+    stderr: EventEmitter;
+    kill: ReturnType<typeof vi.fn>;
+    unref: ReturnType<typeof vi.fn>;
+  };
+  child.stdout = new EventEmitter();
+  child.stderr = new EventEmitter();
+  child.kill = vi.fn();
+  child.unref = vi.fn();
+  spawnMock.mockImplementationOnce(() => child);
+  return child;
 }
 
 function mockProcessSnapshotSpawn(processes: Array<{
@@ -3261,6 +3260,26 @@ describe('computer mcp integration', () => {
     expect(grantSpawns).toHaveLength(2);
   });
 
+  it('kills the in-flight grant child once during idempotent app cleanup', async () => {
+    if (process.platform !== 'darwin') return;
+
+    const grantChild = mockNeverSettlingSpawn();
+    mockDriverSpawn({ stdout: 'cua-driver 0.7.0\n' });
+    mockDriverSpawn({ stdout: 'Cua Driver daemon is running\n' });
+    mockDriverSpawn({
+      stdout:
+        '{"accessibility":false,"screen_recording":false,"screen_recording_capturable":false,"source":{"attribution":"driver-daemon"}}\n',
+    });
+    await expect(grantComputerDriverPermissions()).resolves.toMatchObject({ ok: false });
+
+    await cleanupAllComputerDriverSessions();
+    await cleanupAllComputerDriverSessions();
+
+    expect(grantChild.kill).toHaveBeenCalledOnce();
+    expect(spawnMock.mock.calls.some((call) => call[1]?.[0] === 'stop')).toBe(false);
+    grantChild.emit('close', null, 'SIGTERM');
+  });
+
   it('restarts a stale macOS permission grant flow so users do not need to restart the app', async () => {
     if (process.platform !== 'darwin') return;
 
@@ -3723,7 +3742,7 @@ describe('computer driver update check', () => {
     await checkComputerDriverUpdate(fetchImpl as unknown as typeof fetch);
 
     // 安装脚本挂起 → updateComputerDriver 处于 in-flight
-    mockNeverSettlingSpawn();
+    const installChild = mockNeverSettlingSpawn();
     const updatePromise = updateComputerDriver(undefined, {
       fetchImpl: fetchImpl as unknown as typeof fetch,
     });
@@ -3736,7 +3755,10 @@ describe('computer driver update check', () => {
     // 更新进行中不应触发后台刷新
     expect(hangingFetch).not.toHaveBeenCalled();
 
-    // 收尾:让挂起的安装超时路径不影响其它测试 —— 直接重置状态
+    // 收尾:应用清理会收割挂起的安装树;更新 promise 随进程 close 自然结束。
+    await cleanupAllComputerDriverSessions();
+    expect(installChild.kill).toHaveBeenCalledOnce();
+    installChild.emit('close', null, 'SIGTERM');
     resetComputerDriverUpdateStateForTests();
     void updatePromise.catch(() => {});
   });
@@ -3779,6 +3801,24 @@ describe('install activity timeout and stale lock preflight', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('kills each tracked install tree once during idempotent app cleanup', async () => {
+    const child = mockLongRunningInstallSpawn();
+    const run = runProcessWithActivityTimeout('/bin/bash', ['-c', 'install'], {
+      idleTimeoutMs: 180_000,
+      hardTimeoutMs: 1_800_000,
+      pollIntervalMs: 15_000,
+      sampleTree: async () => null,
+    });
+
+    await cleanupAllComputerDriverSessions();
+    await cleanupAllComputerDriverSessions();
+
+    expect(child.kill).toHaveBeenCalledOnce();
+    expect(spawnMock.mock.calls.some((call) => call[1]?.[0] === 'stop')).toBe(false);
+    child.emit('close', null, 'SIGTERM');
+    await expect(run).resolves.toMatchObject({ signal: 'SIGTERM' });
   });
 
   it('treats stdout/stderr output as progress and resets the idle window', async () => {
