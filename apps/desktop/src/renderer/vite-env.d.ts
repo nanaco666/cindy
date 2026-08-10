@@ -347,6 +347,11 @@ interface ComputerDriverStatusOptions {
   passivePermissionProbeOnly?: boolean;
 }
 
+type ComputerUseSetupStartRequest =
+  import('../shared/computerUseSetup').ComputerUseSetupStartRequest;
+type ComputerUseSetupSnapshot =
+  import('../shared/computerUseSetup').ComputerUseSetupSnapshot<ComputerDriverStatus>;
+
 type ComputerDriverPermissionPlatform = 'macos' | 'windows' | 'linux' | 'unsupported';
 type ComputerDriverPermissionStatus = 'granted' | 'missing' | 'unknown' | 'not_required';
 type ComputerDriverPermissionGrant = 'granted' | 'missing' | 'unknown' | 'not_required';
@@ -5849,6 +5854,10 @@ interface ElectronAPI {
     computer: {
       status: (options?: ComputerDriverStatusOptions) => Promise<ComputerDriverStatus>;
       installDriver: () => Promise<ComputerDriverInstallResult>;
+      getSetupStatus: () => Promise<ComputerUseSetupSnapshot>;
+      startSetup: (request: ComputerUseSetupStartRequest) => Promise<ComputerUseSetupSnapshot>;
+      cancelSetup: () => Promise<ComputerUseSetupSnapshot>;
+      onSetupStatusChanged: (callback: (snapshot: ComputerUseSetupSnapshot) => void) => () => void;
       grantPermissions: (options?: {
         showGuide?: boolean;
         openedPaneUrl?: string;

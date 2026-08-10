@@ -629,6 +629,11 @@ export const MAKER_INVOKE = {
   AT_CONTEXT_LIST: 'maker:at-context:list',
   // cua-driver installer for direct computer control.
   COMPUTER_INSTALL_DRIVER: 'maker:computer:install-driver',
+  // Main-owned install + permission + enable operation. Renderer pages only
+  // start/join, read, cancel explicitly, or subscribe to its snapshot.
+  COMPUTER_SETUP_STATUS: 'maker:computer:setup-status',
+  COMPUTER_SETUP_START: 'maker:computer:setup-start',
+  COMPUTER_SETUP_CANCEL: 'maker:computer:setup-cancel',
   // Quiet cua-driver update check (Settings-open triggered only, never polls).
   COMPUTER_CHECK_UPDATE: 'maker:computer:check-update',
   // Run the cua-driver updater. In-flight is owned by main so it survives the
@@ -754,6 +759,8 @@ export const MAKER_PUSH = {
   COMPUTER_PERMISSION_GUIDE_CANCELLED: 'maker:computer:permission-guide-cancelled',
   /** Native Computer Use onboarding status changed while System Settings is open. */
   COMPUTER_PERMISSION_GUIDE_STATUS_CHANGED: 'maker:computer:permission-guide-status-changed',
+  /** Main-owned Computer Use setup operation snapshot changed. */
+  COMPUTER_SETUP_STATUS_CHANGED: 'maker:computer:setup-status-changed',
   INPUT_PROJECTION: 'maker:input:projection',
   /** New interaction request (permission / ask_user_question / plan_review) */
   INTERACTION_REQUEST: 'maker:interaction-request',

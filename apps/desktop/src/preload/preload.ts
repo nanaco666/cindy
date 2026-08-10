@@ -385,6 +385,7 @@ const fanOutComputerPermissionGuideCancelled = createIpcFanOut(
 const fanOutComputerPermissionGuideStatusChanged = createIpcFanOut(
   'maker:computer:permission-guide-status-changed',
 );
+const fanOutComputerSetupStatusChanged = createIpcFanOut('maker:computer:setup-status-changed');
 const fanOutAppUpdateProgress = createIpcFanOut('app-update-progress');
 // worktree 回收(归档/删除后的异步链)真正跑完 —— renderer 据此重拉 worktree 快照,
 // 否则徽标会停在回收前的旧条目上。只在本机窗口内广播。
@@ -776,6 +777,11 @@ interface ComputerDriverStatusOptions {
   bypassPermissionProbeCache?: boolean;
   passivePermissionProbeOnly?: boolean;
 }
+
+type ComputerUseSetupStartRequest =
+  import('../shared/computerUseSetup').ComputerUseSetupStartRequest;
+type ComputerUseSetupSnapshot =
+  import('../shared/computerUseSetup').ComputerUseSetupSnapshot<ComputerDriverStatus>;
 
 type ComputerDriverPermissionPlatform = 'macos' | 'windows' | 'linux' | 'unsupported';
 type ComputerDriverPermissionStatus = 'granted' | 'missing' | 'unknown' | 'not_required';
@@ -6347,6 +6353,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.invoke('maker:computer:status', options),
       installDriver: (): Promise<ComputerDriverInstallResult> =>
         ipcRenderer.invoke('maker:computer:install-driver'),
+      getSetupStatus: (): Promise<ComputerUseSetupSnapshot> =>
+        ipcRenderer.invoke('maker:computer:setup-status'),
+      startSetup: (request: ComputerUseSetupStartRequest): Promise<ComputerUseSetupSnapshot> =>
+        ipcRenderer.invoke('maker:computer:setup-start', request),
+      cancelSetup: (): Promise<ComputerUseSetupSnapshot> =>
+        ipcRenderer.invoke('maker:computer:setup-cancel'),
+      onSetupStatusChanged: (
+        callback: (snapshot: ComputerUseSetupSnapshot) => void,
+      ): (() => void) =>
+        fanOutComputerSetupStatusChanged((data: unknown) =>
+          callback(data as ComputerUseSetupSnapshot),
+        ),
       grantPermissions: (options?: {
         showGuide?: boolean;
         openedPaneUrl?: string;

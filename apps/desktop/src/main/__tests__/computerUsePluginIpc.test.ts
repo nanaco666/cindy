@@ -83,6 +83,7 @@ describe('computer use plugin IPC invariants', () => {
       path.resolve(__dirname, '../maker-ipc/register.ts'),
       'utf-8',
     );
+    const helperStart = registerSource.indexOf('const setPluginEnabled = async');
     const setEnabledStart = registerSource.indexOf(
       'ipcMain.handle(MAKER_INVOKE.PLUGINS_SET_ENABLED',
     );
@@ -92,6 +93,7 @@ describe('computer use plugin IPC invariants', () => {
     expect(setEnabledStart).toBeGreaterThanOrEqual(0);
     expect(clearEnabledStart).toBeGreaterThan(setEnabledStart);
 
+    const helperBody = registerSource.slice(helperStart, setEnabledStart);
     const setEnabledBody = registerSource.slice(setEnabledStart, clearEnabledStart);
     const clearEnabledEnd = registerSource.indexOf(
       'registerProjectPluginPolicyHandlers',
@@ -100,7 +102,9 @@ describe('computer use plugin IPC invariants', () => {
     expect(clearEnabledEnd).toBeGreaterThan(clearEnabledStart);
     const clearEnabledBody = registerSource.slice(clearEnabledStart, clearEnabledEnd);
 
-    for (const body of [setEnabledBody, clearEnabledBody]) {
+    expect(helperStart).toBeGreaterThanOrEqual(0);
+    expect(setEnabledBody).toContain('return setPluginEnabled(id, enabled)');
+    for (const body of [helperBody, clearEnabledBody]) {
       expect(body).toContain('GLOBAL_PLUGIN_IDS.has(id)');
       expect(body).toContain("id !== 'browser'");
       expect(body).toContain('await getPluginRegistry()');
@@ -135,9 +139,7 @@ describe('computer use plugin IPC invariants', () => {
       path.resolve(__dirname, '../maker-ipc/register.ts'),
       'utf-8',
     );
-    const handlerStart = registerSource.indexOf(
-      'ipcMain.handle(MAKER_INVOKE.AT_CONTEXT_LIST',
-    );
+    const handlerStart = registerSource.indexOf('ipcMain.handle(MAKER_INVOKE.AT_CONTEXT_LIST');
     const handlerEnd = registerSource.indexOf(
       'ipcMain.handle(MAKER_INVOKE.LIST_CUSTOMIZATIONS',
       handlerStart,
@@ -175,8 +177,28 @@ describe('computer use plugin IPC invariants', () => {
     expect(handlerBody).toContain('bypassPermissionProbeCache: true');
     expect(handlerBody).not.toContain('options?.initialStatus');
     expect(handlerBody.indexOf('getComputerDriverStatus({')).toBeLessThan(
-      handlerBody.indexOf('openComputerPermissionPaneForStatus(initialStatus)'),
+      handlerBody.indexOf('requestComputerPermissions({'),
     );
+  });
+
+  it('validates and guards the Main-owned setup operation IPC', () => {
+    const registerSource = fs.readFileSync(
+      path.resolve(__dirname, '../maker-ipc/register.ts'),
+      'utf-8',
+    );
+    const handlerStart = registerSource.indexOf('ipcMain.handle(MAKER_INVOKE.COMPUTER_SETUP_START');
+    const handlerEnd = registerSource.indexOf(
+      'ipcMain.handle(MAKER_INVOKE.COMPUTER_SETUP_CANCEL',
+      handlerStart,
+    );
+    const handlerBody = registerSource.slice(handlerStart, handlerEnd);
+
+    expect(handlerStart).toBeGreaterThanOrEqual(0);
+    expect(handlerEnd).toBeGreaterThan(handlerStart);
+    expect(handlerBody).toContain('assertTrustedAppRendererEvent(_event)');
+    expect(handlerBody).toContain('parseComputerUseSetupStartRequest(payload)');
+    expect(handlerBody).toContain("throwIpcError('INVALID_PARAMS'");
+    expect(handlerBody).toContain('computerUseSetup.start(');
   });
 
   it('guards Computer Use guide cancellation before mutating Main state', () => {
@@ -195,9 +217,7 @@ describe('computer use plugin IPC invariants', () => {
 
     expect(handlerStart).toBeGreaterThanOrEqual(0);
     expect(handlerEnd).toBeGreaterThan(handlerStart);
-    expect(handlerBody).toContain(
-      'isComputerPermissionGuideWebContents(_event.sender)',
-    );
+    expect(handlerBody).toContain('isComputerPermissionGuideWebContents(_event.sender)');
     expect(handlerBody).toContain('assertTrustedAppRendererEvent(_event)');
     expect(handlerBody.indexOf('assertTrustedAppRendererEvent(_event)')).toBeLessThan(
       handlerBody.indexOf('cancelComputerDriverPermissionGrant()'),
@@ -221,45 +241,40 @@ describe('computer use UI feedback invariants', () => {
 
     const toggleAndroidBody = sectionSource.slice(toggleAndroidStart, toggleComputerStart);
     const successToast = toggleAndroidBody.indexOf('toast.success(');
-    const deferredWarning = toggleAndroidBody.indexOf(
-      'if (result.codexMcpRefreshed === false)',
-    );
+    const deferredWarning = toggleAndroidBody.indexOf('if (result.codexMcpRefreshed === false)');
     expect(successToast).toBeGreaterThanOrEqual(0);
     expect(deferredWarning).toBeGreaterThan(successToast);
   });
 
-  it('keeps a live permission poll for legacy CLI-only grants', () => {
+  it('moves the legacy CLI-only permission poll into the Main-owned service', () => {
     const sectionSource = fs.readFileSync(
       path.resolve(__dirname, '../../renderer/components/settings/ComputerUseSection.tsx'),
       'utf-8',
     );
+    const serviceSource = fs.readFileSync(
+      path.resolve(__dirname, '../maker-ipc/computerUseSetupService.ts'),
+      'utf-8',
+    );
 
-    expect(sectionSource).toContain("refreshComputerPermissionStatus('permission-poll'");
-    expect(sectionSource).toContain('bypassCache: true');
-    expect(sectionSource).toContain('computerPermissionGrantInProgressRef.current');
-    expect(sectionSource).toContain('COMPUTER_PERMISSION_POLL_TIMEOUT_MS');
+    expect(sectionSource).not.toContain("refreshComputerPermissionStatus('permission-poll'");
+    expect(serviceSource).toContain('waitForPermissions(operationId, status)');
+    expect(serviceSource).toContain('bypassPermissionProbeCache: true');
+    expect(serviceSource).toContain('DEFAULT_PERMISSION_POLL_TIMEOUT_MS');
   });
 
   it('refreshes mutable macOS permission state before enabling Computer Use', () => {
-    const sectionSource = fs.readFileSync(
-      path.resolve(__dirname, '../../renderer/components/settings/ComputerUseSection.tsx'),
+    const serviceSource = fs.readFileSync(
+      path.resolve(__dirname, '../maker-ipc/computerUseSetupService.ts'),
       'utf-8',
     );
-    const toggleStart = sectionSource.indexOf(
-      'const handleToggleComputer',
-    );
-    const enableCall = sectionSource.indexOf(
-      'await persistComputerEnabled(next)',
-      toggleStart,
-    );
+    const freshProbe = serviceSource.indexOf('freshPermissionProbe: true');
+    const enableCall = serviceSource.indexOf('await this.deps.setEnabled(true)');
 
-    expect(toggleStart).toBeGreaterThanOrEqual(0);
-    expect(sectionSource.slice(toggleStart, enableCall)).toContain(
-      "refreshComputerPermissionStatus('toggle-fresh-preflight'",
+    expect(freshProbe).toBeGreaterThanOrEqual(0);
+    expect(enableCall).toBeGreaterThan(freshProbe);
+    expect(serviceSource.slice(freshProbe, enableCall)).toContain(
+      'bypassPermissionProbeCache: true',
     );
-    expect(sectionSource.slice(toggleStart, enableCall)).toContain('fresh: true');
-    expect(sectionSource.slice(toggleStart, enableCall)).toContain('bypassCache: true');
-    expect(enableCall).toBeGreaterThan(toggleStart);
   });
 
   it('preserves the deferred Codex refresh warning after native onboarding', () => {
@@ -267,55 +282,37 @@ describe('computer use UI feedback invariants', () => {
       path.resolve(__dirname, '../../renderer/components/settings/ComputerUseSection.tsx'),
       'utf-8',
     );
-    const listenerStart = sectionSource.indexOf(
-      'onPermissionGuideStatusChanged((status)',
-    );
-    const listenerEnd = sectionSource.indexOf(
-      'const refreshComputerPermissionStatus',
-      listenerStart,
-    );
-    const listenerBody = sectionSource.slice(listenerStart, listenerEnd);
+    const toggleStart = sectionSource.indexOf('const handleToggleComputer');
+    const toggleEnd = sectionSource.indexOf('const handleDownload', toggleStart);
+    const toggleBody = sectionSource.slice(toggleStart, toggleEnd);
 
-    expect(listenerStart).toBeGreaterThanOrEqual(0);
-    expect(listenerEnd).toBeGreaterThan(listenerStart);
-    expect(listenerBody).toContain('result.codexMcpRefreshed === false');
-    expect(listenerBody).toContain("toast.warning(t('settings.computerUse.codexRefreshDeferred'))");
+    expect(toggleStart).toBeGreaterThanOrEqual(0);
+    expect(toggleEnd).toBeGreaterThan(toggleStart);
+    expect(toggleBody).toContain('result.codexMcpRefreshed === false');
+    expect(toggleBody).toContain("toast.warning(t('settings.computerUse.codexRefreshDeferred'))");
   });
 
-  it('invalidates the whole Computer Use enable attempt when Settings unmounts', () => {
+  it('only detaches the setup observer when Settings unmounts', () => {
     const sectionSource = fs.readFileSync(
       path.resolve(__dirname, '../../renderer/components/settings/ComputerUseSection.tsx'),
       'utf-8',
     );
-    const cleanupStart = sectionSource.indexOf(
-      '// Leaving Settings / Plugin detail invalidates the whole enable attempt',
-    );
-    const cleanupEnd = sectionSource.indexOf(
-      '// 引导弹窗的取消',
-      cleanupStart,
-    );
+    const cleanupStart = sectionSource.indexOf('// Renderer lifetime only owns this observer.');
+    const cleanupEnd = sectionSource.indexOf('const openComputerPermissionSettings', cleanupStart);
     const toggleStart = sectionSource.indexOf('const handleToggleComputer');
-    const toggleEnd = sectionSource.indexOf(
-      'const handleOpenComputerPermission',
-      toggleStart,
-    );
+    const toggleEnd = sectionSource.indexOf('const handleOpenComputerPermission', toggleStart);
     const cleanupBody = sectionSource.slice(cleanupStart, cleanupEnd);
     const toggleBody = sectionSource.slice(toggleStart, toggleEnd);
 
     expect(cleanupStart).toBeGreaterThanOrEqual(0);
     expect(cleanupBody).toContain('computerUseSectionMountedRef.current = false');
-    expect(cleanupBody).toContain('computerPermissionFlowSeqRef.current += 1');
-    expect(cleanupBody).toContain('computerTogglePendingRef.current');
-    expect(cleanupBody).toContain('cancelNativeComputerPermissionGrant()');
+    expect(cleanupBody).toContain('unsubscribe()');
+    expect(cleanupBody).not.toContain('cancelPermissionGrant');
+    expect(cleanupBody).not.toContain('cancelSetup');
     expect(toggleStart).toBeGreaterThanOrEqual(0);
-    expect(toggleBody).toContain('const flowSeq = computerPermissionFlowSeqRef.current');
-    expect(toggleBody).toContain('if (!isCurrentFlow()) return');
-    expect(toggleBody.indexOf('const flowSeq')).toBeLessThan(
-      toggleBody.indexOf('await window.electronAPI.maker.computer.installDriver()'),
-    );
-    expect(toggleBody.indexOf('if (!isCurrentFlow()) return')).toBeLessThan(
-      toggleBody.indexOf("requestComputerPermissionGrant('toggle')"),
-    );
+    expect(toggleBody).toContain("startSetup({ intent: 'enable' })");
+    expect(toggleBody).not.toContain('installDriver()');
+    expect(toggleBody).not.toContain('grantPermissions(');
   });
 });
 

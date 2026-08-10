@@ -56,6 +56,7 @@ import {
 } from '../../shared/agentInputQueue.js';
 import { getManagedWorktreeBasePath } from '../../shared/managedWorktreePaths.js';
 import { normalizeWorkingDirForProjectSettings } from '../../shared/workingDir.js';
+import { parseComputerUseSetupStartRequest } from '../../shared/computerUseSetup.js';
 import { buildTurnUsageDetails } from '../../shared/turnUsageDetails.js';
 import type { DesktopCommandContext } from '../commands/index.js';
 import { getDesktopCommandRegistry } from '../commands/index.js';
@@ -134,7 +135,11 @@ import {
   showComputerPermissionGuideWindow,
   startComputerPermissionAppDrag,
 } from '../computer-permission-guide/window.js';
-import { parseComputerPermissionGrantRequest } from '../computer-permission-guide/request.js';
+import {
+  MAC_ACCESSIBILITY_SETTINGS_URL,
+  MAC_SCREEN_RECORDING_SETTINGS_URL,
+  parseComputerPermissionGrantRequest,
+} from '../computer-permission-guide/request.js';
 import { shouldUseComputerPermissionGuide } from './computerPermissionGuideEligibility.js';
 import {
   listAtBrowserTabs,
@@ -523,6 +528,7 @@ import {
 } from './handoffWorktree.js';
 import { validateHandoffWorkingDir } from './handoffWorkingDir.js';
 import { registerProjectPluginPolicyHandlers } from './projectPluginPolicyHandlers.js';
+import { ComputerUseSetupService } from './computerUseSetupService.js';
 import {
   TURN_CHANGE_SET_DETAIL_ID_LIMIT,
   TurnChangeSetActionError,
@@ -13155,10 +13161,7 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions)
     },
   );
 
-  ipcMain.handle(MAKER_INVOKE.PLUGINS_SET_ENABLED, async (_e, id: unknown, enabled: unknown) => {
-    if (typeof id !== 'string' || typeof enabled !== 'boolean') {
-      throwIpcError('INVALID_PARAMS', 'id (string) + enabled (boolean) required');
-    }
+  const setPluginEnabled = async (id: string, enabled: boolean) => {
     const ok = await getPluginRegistry().setEnabled(id, enabled);
     if (!ok) {
       throwIpcError('PERMISSION_DENIED', `Cannot modify essential plugin: ${id}`);
@@ -13180,6 +13183,13 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions)
         deferredCodexRestartHolder?.schedule('Codex Browser capability routing changed'),
       logger: log,
     });
+  };
+
+  ipcMain.handle(MAKER_INVOKE.PLUGINS_SET_ENABLED, async (_e, id: unknown, enabled: unknown) => {
+    if (typeof id !== 'string' || typeof enabled !== 'boolean') {
+      throwIpcError('INVALID_PARAMS', 'id (string) + enabled (boolean) required');
+    }
+    return setPluginEnabled(id, enabled);
   });
 
   ipcMain.handle(MAKER_INVOKE.PLUGINS_CLEAR_ENABLED, async (_e, id: unknown) => {
@@ -13236,6 +13246,63 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions)
   });
 
   // ── Local desktop computer-use (Settings →「电脑使用」) ─────────────────
+  const readComputerStatus = async (options?: Parameters<typeof getComputerDriverStatus>[0]) => {
+    const status = await getComputerDriverStatus(options);
+    if (options?.forcePermissionProbe === true || options?.freshPermissionProbe === true) {
+      refreshComputerPermissionGuideWindow(status);
+    }
+    return status;
+  };
+  const requestComputerPermissions = async (options: {
+    status: Awaited<ReturnType<typeof getComputerDriverStatus>>;
+    showGuide: boolean;
+    openedPaneUrl?: string;
+    ownerWindow: BrowserWindow | null;
+    isCancelled?: () => boolean;
+  }) => {
+    const shouldShowGuide = shouldUseComputerPermissionGuide({
+      platform: process.platform,
+      showGuide: options.showGuide,
+      appBundlePath: getComputerDriverAppBundlePath(),
+    });
+    if (shouldShowGuide) {
+      if (options.openedPaneUrl) seedOpenedPermissionPane(options.openedPaneUrl);
+      await openComputerPermissionPaneForStatus(options.status);
+      await pauseComputerDriverPermissionProbe();
+      await showComputerPermissionGuideWindow(options.ownerWindow, options.status);
+    }
+    if (options.isCancelled?.()) {
+      return { ok: false, stdout: '', stderr: '', status: options.status };
+    }
+    return grantComputerDriverPermissions(shouldShowGuide ? options.status : undefined);
+  };
+  const computerUseSetup = new ComputerUseSetupService({
+    getStatus: readComputerStatus,
+    installDriver: () => installComputerDriver(),
+    requestPermissions: async ({ status, openedPane, ownerWindow, isCancelled }) =>
+      requestComputerPermissions({
+        status,
+        showGuide: true,
+        ownerWindow,
+        isCancelled,
+        ...(openedPane === 'accessibility'
+          ? { openedPaneUrl: MAC_ACCESSIBILITY_SETTINGS_URL }
+          : openedPane === 'screen-recording'
+            ? { openedPaneUrl: MAC_SCREEN_RECORDING_SETTINGS_URL }
+            : {}),
+      }),
+    setEnabled: (enabled) => setPluginEnabled('computer', enabled),
+    cancelPermissionGrant: cancelComputerDriverPermissionGrant,
+    closePermissionGuide: closeComputerPermissionGuideWindow,
+    onStatusChanged: (snapshot) => {
+      for (const win of BrowserWindow.getAllWindows()) {
+        if (!win.isDestroyed()) {
+          win.webContents.send(MAKER_PUSH.COMPUTER_SETUP_STATUS_CHANGED, snapshot);
+        }
+      }
+    },
+  });
+
   // Probe the installed CuaDriver used by the phase-one Computer Use runtime.
   ipcMain.handle(
     MAKER_INVOKE.COMPUTER_STATUS,
@@ -13251,23 +13318,50 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions)
       },
     ) => {
       try {
-        const status = await getComputerDriverStatus(options);
-        if (options?.forcePermissionProbe === true || options?.freshPermissionProbe === true) {
-          refreshComputerPermissionGuideWindow(status);
-        }
-        return status;
+        return await readComputerStatus(options);
       } catch (err) {
         throwIpcError('INTERNAL', err instanceof Error ? err.message : String(err));
       }
     },
   );
 
-  ipcMain.handle(MAKER_INVOKE.COMPUTER_INSTALL_DRIVER, async () => {
+  ipcMain.handle(MAKER_INVOKE.COMPUTER_INSTALL_DRIVER, async (_event, opts?: unknown) => {
+    assertTrustedAppRendererEvent(_event);
+    if (
+      opts !== undefined &&
+      (!opts ||
+        typeof opts !== 'object' ||
+        Array.isArray(opts) ||
+        Object.keys(opts).some((key) => key !== 'joinOnly') ||
+        ('joinOnly' in opts && typeof opts.joinOnly !== 'boolean'))
+    ) {
+      throwIpcError('INVALID_PARAMS', 'Invalid Computer Use install request');
+    }
     try {
-      return await installComputerDriver();
+      const joinOnly = Boolean((opts as { joinOnly?: boolean } | undefined)?.joinOnly);
+      return await installComputerDriver(undefined, undefined, { joinOnly });
     } catch (err) {
       throwIpcError('INTERNAL', err instanceof Error ? err.message : String(err));
     }
+  });
+
+  ipcMain.handle(MAKER_INVOKE.COMPUTER_SETUP_STATUS, (_event) => {
+    assertTrustedAppRendererEvent(_event);
+    return computerUseSetup.getSnapshot();
+  });
+
+  ipcMain.handle(MAKER_INVOKE.COMPUTER_SETUP_START, async (_event, payload: unknown) => {
+    assertTrustedAppRendererEvent(_event);
+    const request = parseComputerUseSetupStartRequest(payload);
+    if (!request) {
+      throwIpcError('INVALID_PARAMS', 'Invalid Computer Use setup request');
+    }
+    return computerUseSetup.start(request, BrowserWindow.fromWebContents(_event.sender));
+  });
+
+  ipcMain.handle(MAKER_INVOKE.COMPUTER_SETUP_CANCEL, (_event) => {
+    assertTrustedAppRendererEvent(_event);
+    return computerUseSetup.cancel();
   });
 
   ipcMain.handle(MAKER_INVOKE.COMPUTER_GRANT_PERMISSIONS, async (_event, payload?: unknown) => {
@@ -13292,24 +13386,16 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions)
             bypassPermissionProbeCache: true,
           })
         : undefined;
-      if (shouldShowGuide) {
-        if (!initialStatus) throw new Error('Computer Use permission guide status unavailable');
-        if (options.openedPaneUrl) {
-          seedOpenedPermissionPane(options.openedPaneUrl);
-        }
-        await openComputerPermissionPaneForStatus(initialStatus);
-        // Phase one keeps CuaDriver as the real permission/runtime identity.
-        // The new guide wraps its existing grant flow without introducing a
-        // second Computer Use.app entry in macOS privacy settings.
-        await pauseComputerDriverPermissionProbe();
-        await showComputerPermissionGuideWindow(
-          BrowserWindow.fromWebContents(_event.sender),
-          initialStatus,
-        );
+      if (shouldShowGuide && !initialStatus) {
+        throw new Error('Computer Use permission guide status unavailable');
       }
-      return await grantComputerDriverPermissions(initialStatus);
+      return await requestComputerPermissions({
+        status: initialStatus ?? (await getComputerDriverStatus({ skipPermissionProbe: true })),
+        showGuide: options.showGuide,
+        ownerWindow: BrowserWindow.fromWebContents(_event.sender),
+        ...(options.openedPaneUrl ? { openedPaneUrl: options.openedPaneUrl } : {}),
+      });
     } catch (err) {
-      if (shouldShowGuide) closeComputerPermissionGuideWindow();
       throwIpcError('INTERNAL', err instanceof Error ? err.message : String(err));
     }
   });
@@ -13357,8 +13443,13 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions)
     if (!cancelledFromGuide) {
       assertTrustedAppRendererEvent(_event);
     }
-    cancelComputerDriverPermissionGrant();
-    closeComputerPermissionGuideWindow();
+    const setupSnapshot = computerUseSetup.getSnapshot();
+    if (setupSnapshot.active || setupSnapshot.phase === 'error') {
+      computerUseSetup.cancel();
+    } else {
+      cancelComputerDriverPermissionGrant();
+      closeComputerPermissionGuideWindow();
+    }
     if (cancelledFromGuide) {
       for (const win of BrowserWindow.getAllWindows()) {
         if (!win.isDestroyed()) {

@@ -2564,23 +2564,43 @@ export async function getComputerDriverStatus(
   }
 }
 
+let driverInstallInFlight: Promise<ComputerDriverInstallResult> | null = null;
+
+/**
+ * Install is a Main-owned singleton operation. Settings may disappear and
+ * reconnect while the installer keeps running; joinOnly is the reconnect path
+ * and never starts a second installer after the original operation finished.
+ */
 export async function installComputerDriver(
   onSpawn?: (pid: number | undefined) => void,
   targetVersion?: string,
+  opts?: { joinOnly?: boolean },
 ): Promise<ComputerDriverInstallResult> {
-  const res = await runInstallCommand(onSpawn, targetVersion);
-  const status = await getComputerDriverStatus();
-  if (res.exitCode !== 0 || !status.installed) {
-    throw new ComputerDriverError(
-      res.stderr.trim() || res.stdout.trim() || `cua-driver installer exited ${res.exitCode}`,
-    );
+  if (!driverInstallInFlight && opts?.joinOnly) {
+    const status = await getComputerDriverStatus();
+    return { ok: true, stdout: '', stderr: '', status };
   }
-  return {
-    ok: true,
-    stdout: res.stdout,
-    stderr: res.stderr,
-    status,
-  };
+  if (!driverInstallInFlight) {
+    const run = (async () => {
+      const res = await runInstallCommand(onSpawn, targetVersion);
+      const status = await getComputerDriverStatus();
+      if (res.exitCode !== 0 || !status.installed) {
+        throw new ComputerDriverError(
+          res.stderr.trim() || res.stdout.trim() || `cua-driver installer exited ${res.exitCode}`,
+        );
+      }
+      return {
+        ok: true as const,
+        stdout: res.stdout,
+        stderr: res.stderr,
+        status,
+      };
+    })().finally(() => {
+      if (driverInstallInFlight === run) driverInstallInFlight = null;
+    });
+    driverInstallInFlight = run;
+  }
+  return driverInstallInFlight;
 }
 
 /**
@@ -2796,6 +2816,7 @@ let driverUpdateCheckLastFetchAt = 0;
 
 /** 测试隔离用:清空更新检查缓存与 in-flight 状态。 */
 export function resetComputerDriverUpdateStateForTests(): void {
+  driverInstallInFlight = null;
   cachedDriverUpdateCheck = null;
   driverUpdateCheckInFlight = null;
   driverUpdateInstallInFlight = null;

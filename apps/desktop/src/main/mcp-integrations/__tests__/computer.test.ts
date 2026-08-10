@@ -2583,6 +2583,48 @@ describe('computer mcp integration', () => {
     expect(spawnMock.mock.calls[0]?.[0]).toMatch(process.platform === 'win32' ? /powershell/i : '/bin/bash');
   });
 
+  it('joins concurrent driver install requests instead of spawning twice', async () => {
+    mockDriverSpawn({ stdout: 'installed\n' });
+    mockDriverSpawn({ stdout: 'cua-driver 0.5.8\n' });
+    mockDriverSpawn({ stdout: 'Cua Driver daemon is running\n' });
+    if (process.platform === 'darwin') {
+      mockDriverSpawn({
+        stdout:
+          '{"accessibility":true,"screen_recording":true,"screen_recording_capturable":true,"source":{"attribution":"driver-daemon"}}\n',
+      });
+    }
+
+    const [first, second] = await Promise.all([
+      installComputerDriver(),
+      installComputerDriver(),
+    ]);
+
+    expect(first.status.version).toBe('cua-driver 0.5.8');
+    expect(second).toEqual(first);
+    const installerRuns = spawnMock.mock.calls.filter((call) =>
+      String(call[0]).match(/bash|powershell/i),
+    ).length;
+    expect(installerRuns).toBe(1);
+  });
+
+  it('join-only driver install reads status without starting an installer', async () => {
+    mockDriverSpawn({ stdout: 'cua-driver 0.5.8\n' });
+    mockDriverSpawn({ stdout: 'Cua Driver daemon is running\n' });
+    if (process.platform === 'darwin') {
+      mockDriverSpawn({
+        stdout:
+          '{"accessibility":true,"screen_recording":true,"screen_recording_capturable":true,"source":{"attribution":"driver-daemon"}}\n',
+      });
+    }
+
+    const result = await installComputerDriver(undefined, undefined, { joinOnly: true });
+
+    expect(result.status.installed).toBe(true);
+    expect(spawnMock.mock.calls.some((call) =>
+      String(call[0]).match(/bash|powershell/i),
+    )).toBe(false);
+  });
+
   it('keeps macOS status checks side-effect-free when the daemon is stopped', async () => {
     if (process.platform !== 'darwin') return;
 
