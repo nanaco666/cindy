@@ -48,9 +48,12 @@ function healthTone(status: BotHealthReport['status']): string {
 export function BotLifecycleSettings({
   bot,
   onOpenSession,
+  onRenew,
 }: {
   bot: BotProfile;
   onOpenSession: (sessionId: string, searchJump?: ConversationSearchJump) => void;
+  /** 立刻翻篇。省略时不渲染那颗按钮 —— 不摆一个点了没反应的入口。 */
+  onRenew?: () => Promise<boolean>;
 }) {
   const { t } = useTranslation();
   const { confirm } = useConfirmDialog();
@@ -72,6 +75,7 @@ export function BotLifecycleSettings({
     (bot.capabilities as unknown as { renewal?: unknown }).renewal,
   );
   const [savingRenewal, setSavingRenewal] = useState(false);
+  const [renewingNow, setRenewingNow] = useState(false);
   const saveRenewal = async (next: BotRenewalPolicy): Promise<void> => {
     setSavingRenewal(true);
     try {
@@ -298,6 +302,37 @@ export function BotLifecycleSettings({
             </span>
           </label>
         </div>
+        {onRenew ? (
+          <div className="mt-3 flex items-center justify-between gap-3 border-t border-[var(--border-subtle)] pt-3">
+            <p className="min-w-0 text-11 leading-5 text-[var(--text-tertiary)]">
+              {t('bots.renewal.nowDescription')}
+            </p>
+            <button
+              type="button"
+              disabled={renewingNow || isArchived || isPaused}
+              onClick={() => {
+                void (async () => {
+                  const ok = await confirm({
+                    title: t('bots.renewal.nowConfirmTitle'),
+                    description: t('bots.renewal.nowConfirmDescription'),
+                    confirmText: t('bots.renewal.now'),
+                  });
+                  if (!ok) return;
+                  setRenewingNow(true);
+                  try {
+                    await onRenew();
+                  } finally {
+                    setRenewingNow(false);
+                  }
+                })();
+              }}
+              className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-[var(--border-default)] px-3 text-11 font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] disabled:opacity-50"
+            >
+              <RotateCcw size={13} />
+              {renewingNow ? t('bots.lifecycle.working') : t('bots.renewal.now')}
+            </button>
+          </div>
+        ) : null}
         {renewal.mode !== 'none' && (
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <label className="text-11 text-[var(--text-secondary)]" htmlFor="bot-renewal-hour">

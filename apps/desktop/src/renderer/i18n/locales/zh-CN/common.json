@@ -6253,7 +6253,11 @@
       "onDescription": "开着。每天{{hour}}点之后第一次说话，会从新的一段开始——记忆和本事都还在，只是不带昨天的上下文。",
       "toggle": "每天重新开始",
       "hourLabel": "几点",
-      "hourOption": "{{hour}} 点"
+      "hourOption": "{{hour}} 点",
+      "now": "现在就重新开始",
+      "nowDescription": "当前这段对话会归档，可以随时回看。",
+      "nowConfirmTitle": "这就翻篇？",
+      "nowConfirmDescription": "当前这段对话会归档、随时能回看。新的一段里记忆和本事都还在，只是不带这一段的上下文。"
     },
     "sidebar": {
       "newTaskWith": "和{{name}}开个新任务"

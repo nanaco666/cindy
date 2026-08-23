@@ -6255,7 +6255,11 @@
       "onDescription": "On. The first time you talk after {{hour}}:00, a new stretch begins — memory and skills carry over, yesterday’s context does not.",
       "toggle": "Start fresh daily",
       "hourLabel": "At",
-      "hourOption": "{{hour}}:00"
+      "hourOption": "{{hour}}:00",
+      "now": "Start fresh now",
+      "nowDescription": "The current stretch is archived and stays readable.",
+      "nowConfirmTitle": "Start a fresh stretch?",
+      "nowConfirmDescription": "The current conversation is archived and stays readable. Memory and skills carry over; this stretch’s context does not."
     },
     "sidebar": {
       "newTaskWith": "Start a task with {{name}}"

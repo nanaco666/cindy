@@ -6253,7 +6253,11 @@
       "onDescription": "オン。{{hour}}時以降に最初に話しかけると、新しい会話が始まります——記憶とスキルはそのまま、昨日の文脈だけが外れます。",
       "toggle": "毎日リセット",
       "hourLabel": "時刻",
-      "hourOption": "{{hour}}時"
+      "hourOption": "{{hour}}時",
+      "now": "今すぐ新しく始める",
+      "nowDescription": "今の会話はアーカイブされ、いつでも読み返せます。",
+      "nowConfirmTitle": "ここで区切りますか？",
+      "nowConfirmDescription": "今の会話はアーカイブされ、いつでも読み返せます。記憶とスキルはそのまま、この会話の文脈だけが外れます。"
     },
     "sidebar": {
       "newTaskWith": "{{name}}と新しいタスクを始める"

@@ -555,7 +555,7 @@ export function BotSettings({
               ) : null}
             </div>
           </header>
-          <BotLifecycleSettings bot={bot} onOpenSession={onOpenSession} />
+          <BotLifecycleSettings bot={bot} onOpenSession={onOpenSession} onRenew={onRenew} />
           <BotEventInboxSettings bot={bot} />
         </div>
       </main>
@@ -1058,7 +1058,7 @@ export function BotSettings({
                   </p>
                 </section>
 
-                <BotLifecycleSettings bot={bot} onOpenSession={onOpenSession} />
+                <BotLifecycleSettings bot={bot} onOpenSession={onOpenSession} onRenew={onRenew} />
 
                 <section className="rounded-xl border border-[var(--border-default)] bg-[var(--surface-elevated)] p-5">
                   <div className="flex items-center gap-2 text-14 font-medium text-[var(--text-primary)]">
