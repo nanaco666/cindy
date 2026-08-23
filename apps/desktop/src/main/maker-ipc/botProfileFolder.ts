@@ -58,6 +58,9 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 
+/** 原子写的临时文件序号,进程内自增 —— 见 writeTextAtomic 里的并发说明。 */
+let writeSeq = 0;
+
 /** 单个文本槽的上限。灵魂与画像是「说明」,不是知识库。 */
 export const BOT_PROFILE_TEXT_MAX_BYTES = 64 * 1024;
 
@@ -143,9 +146,21 @@ async function writeTextAtomic(absPath: string, content: string): Promise<void> 
     );
   }
   await fs.mkdir(path.dirname(absPath), { recursive: true });
-  const tmp = `${absPath}.tmp-${process.pid}`;
+  /*
+    临时文件名要**每次都不同**。只带 pid 的话,同一进程里两处并发写同一个槽
+    (设置页保存 + 开新任务时的对账派生)会用同一个临时名:后写的内容可能在前一个
+    rename 之前把临时文件覆盖掉,于是「先保存的那次」落盘的其实是另一次的内容。
+    文件不会损坏,但会静默丢一次保存。
+  */
+  const tmp = `${absPath}.tmp-${process.pid}-${(writeSeq += 1)}`;
   await fs.writeFile(tmp, content, 'utf8');
-  await fs.rename(tmp, absPath);
+  try {
+    await fs.rename(tmp, absPath);
+  } catch (cause) {
+    // rename 失败时别把临时文件留在伙伴的家里 —— 那是用户会打开看的目录。
+    await fs.rm(tmp, { force: true }).catch(() => {});
+    throw cause;
+  }
 }
 
 /** 一份摊开的伙伴档案。 */
