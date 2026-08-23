@@ -9,11 +9,9 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  buildBotFolderIndex,
   buildBotSkillIndex,
   buildBotStableTier,
   buildBotSystemPrompt,
-  buildBotTodoSection,
   buildBotVolatileTier,
   type BotSystemPromptInput,
 } from '../botSystemPrompt';
@@ -132,10 +130,17 @@ describe('三层顺序', () => {
 });
 
 /*
-  家里那几样进提示词。索引口径与技能索引一致(照搬 Hermes):**只报名字,正文按需读** ——
-  看得见名字才知道自己有这份东西,全文塞进去则是每轮都付一次钱带一堆多半用不上的字。
+  伙伴的家怎么进提示词。
+
+  这是整个文件夹化的理由:Hermes 的 agent 改得动自己的 SOUL.md —— 它为此写了跨
+  profile 的写入保护,也处理了「灵魂被改」导致的提示词前缀失配,都是给真实场景写
+  的代码。而 Hermes **从不把家里的文件名列进提示词**,它只让 agent 知道路径。
+
+  早前这里锁的是反过来的行为(把 knowledge/preferences 的文件名列成索引),那是
+  照着目录清单自己发明的,而且只给名字不给路径 —— 模型照着读只会拿到一串打不开。
+  现在锁的是:给了路径就说,没给就一个字不提(远端会话够不到本机 userData)。
 */
-describe('家里摊开的那几样', () => {
+describe('伙伴的家', () => {
   const base = {
     displayName: '小柴',
     identity: '你是小柴。',
@@ -157,28 +162,28 @@ describe('家里摊开的那几样', () => {
     );
   });
 
-  it('知识与偏好只进索引', () => {
-    const volatile = buildBotVolatileTier({
+  it('给了路径才说,而且说的是路径不是文件清单', () => {
+    const stable = buildBotStableTier({ ...base, homeDir: '/data/bots/bot-a' });
+    expect(stable).toContain('## 你有个自己的文件夹');
+    expect(stable).toContain('/data/bots/bot-a');
+    // 固定成员讲清楚,改灵魂的规矩讲清楚。
+    expect(stable).toContain('SOUL.md');
+    expect(stable).toContain('memories/USER.md');
+  });
+
+  it('没有家就一个字都不提 —— 远端会话够不到本机目录', () => {
+    const stable = buildBotStableTier(base);
+    expect(stable).not.toContain('你有个自己的文件夹');
+    expect(buildBotStableTier({ ...base, homeDir: '   ' })).toBe(stable);
+  });
+
+  it('用户整段自己写提示词时,这段跟其它能力说明一起让位', () => {
+    const stable = buildBotStableTier({
       ...base,
-      knowledgeFiles: ['报价口径.md', '客户名单.md'],
-      preferenceFiles: ['写作风格.md'],
+      homeDir: '/data/bots/bot-a',
+      systemPromptOverride: '你只回一个字。',
     });
-    expect(volatile).toContain('## 你自己整理的知识');
-    expect(volatile).toContain('- 报价口径.md');
-    expect(volatile).toContain('## 你记下的偏好');
-    expect(volatile).toContain('- 写作风格.md');
-  });
-
-  it('空目录一个字都不提', () => {
-    expect(buildBotFolderIndex({ knowledgeFiles: [], preferenceFiles: [] })).toBe('');
-    expect(buildBotTodoSection([])).toBe('');
-    expect(buildBotTodoSection(undefined)).toBe('');
-  });
-
-  it('待办只列还没做完的', () => {
-    expect(buildBotTodoSection(['写周报', '订机票'])).toContain('- 写周报');
-    const volatile = buildBotVolatileTier({ ...base, openTodos: ['写周报'] });
-    expect(volatile).toContain('## 你还欠着的事');
+    expect(stable).toBe('你只回一个字。');
   });
 });
 

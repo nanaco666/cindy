@@ -45,9 +45,6 @@ describe('伙伴的家', () => {
       userContextSource: '',
       systemPromptOverride: '',
       config: {},
-      todo: [],
-      knowledge: [],
-      preferences: [],
     });
   });
 
@@ -57,7 +54,6 @@ describe('伙伴的家', () => {
       userContextSource: SEED.userContextSource,
       systemPromptOverride: '整段覆盖',
       config: SEED.config,
-      todo: [{ text: '买菜' }],
     });
     const home = botProfileDir(root, 'bot-a');
     // 路径与 Hermes 对齐 —— 用户拿编辑器打开时看到的是同一套名字。
@@ -71,7 +67,6 @@ describe('伙伴的家', () => {
     expect(content.userContextSource).toBe(SEED.userContextSource);
     expect(content.systemPromptOverride).toBe('整段覆盖');
     expect(content.config).toEqual(SEED.config);
-    expect(content.todo).toEqual([{ text: '买菜' }]);
   });
 
   it('只写传进来的那几项,没传的原样不动', async () => {
@@ -91,13 +86,28 @@ describe('伙伴的家', () => {
     expect(content.identitySource).toBe('在');
   });
 
-  it('知识与偏好只认 .md,按名字排序', async () => {
+  /*
+    伙伴或用户自己往家里放的东西,这个模块不认也不碰 —— 它只读有代码消费的那
+    几个槽。早前这里会把 `knowledge/` 的文件名列出来送进提示词,那是照着 Hermes
+    的目录清单自己发明的机制(Hermes 从不这么做),而且只给名字不给路径,模型照着
+    去读只会拿到一串打不开。现在改成告诉伙伴家在哪,它自己去翻。
+  */
+  it('家里的其它文件原样躺着,不被这个模块读走也不被它动', async () => {
     const home = botProfileDir(root, 'bot-a');
+    await writeBotProfileFolder(root, 'bot-a', { identitySource: '在' });
     await fs.mkdir(path.join(home, 'knowledge'), { recursive: true });
-    await fs.writeFile(path.join(home, 'knowledge', 'b.md'), '', 'utf8');
-    await fs.writeFile(path.join(home, 'knowledge', 'a.md'), '', 'utf8');
-    await fs.writeFile(path.join(home, 'knowledge', 'notes.txt'), '', 'utf8');
-    expect((await readBotProfileFolder(root, 'bot-a')).knowledge).toEqual(['a.md', 'b.md']);
+    await fs.writeFile(path.join(home, 'knowledge', '报价口径.md'), '按人天', 'utf8');
+
+    const content = await readBotProfileFolder(root, 'bot-a');
+    expect(content.identitySource).toBe('在');
+    expect(Object.keys(content).sort()).toEqual([
+      'config',
+      'identitySource',
+      'systemPromptOverride',
+      'userContextSource',
+    ]);
+    // 文件还在原地,内容一个字没动。
+    expect(await fs.readFile(path.join(home, 'knowledge', '报价口径.md'), 'utf8')).toBe('按人天');
   });
 
   it('写完不留临时文件 —— 断电只会是旧的或新的,不会是半截', async () => {

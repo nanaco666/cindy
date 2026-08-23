@@ -21,9 +21,6 @@ function folder(overrides: Partial<BotProfileFolderContent> = {}): BotProfileFol
     userContextSource: 'Chris 住在上海。',
     systemPromptOverride: '',
     config: { model: 'claude-sonnet-4-6', harness: 'claude' },
-    todo: [],
-    knowledge: [],
-    preferences: [],
     ...overrides,
   };
 }

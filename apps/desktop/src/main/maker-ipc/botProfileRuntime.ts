@@ -135,19 +135,19 @@ export interface BotProfileRuntimeDeps {
     remoteHostId?: string;
   }) => Promise<string>;
   /**
-   * 伙伴家里那些摊开的文件(`botProfileFolder.ts`)。
+   * 伙伴的家(`botProfileFolder.ts`):它在磁盘上的位置,以及整段提示词覆盖。
    *
-   * 只取**提示词要用的那几样**:整段覆盖、知识与偏好的条目名、还没做完的事。
    * 身份与用户画像不走这里 —— 它们已经由对账收进冻结快照,运行时认的是快照,
    * 从文件再读一遍会让同一轮里出现两个版本的身份。
+   *
+   * `homeDir` 有两个去处,缺一不可:进提示词(伙伴才知道自己有个家)、进
+   * `extraDirs`(文件工具才够得到)。只给其中一个就是开空头支票。
    *
    * 远端会话拿不到本机路径,由调用方自行不注入。
    */
   readProfileFolder?: (input: { botId: string }) => Promise<{
+    homeDir: string;
     systemPromptOverride: string;
-    knowledge: string[];
-    preferences: string[];
-    todo: unknown[];
   }>;
 }
 
@@ -283,25 +283,23 @@ export function buildBotCapabilityContextPrompt(): string {
 }
 
 /**
- * `todo.json` → 提示词里的一行行文字。
+ * 把伙伴的家补进会话的可达目录。
  *
- * 容两种写法:纯字符串,或 `{ text, done }` 这样的对象(已完成的不进提示词 ——
- * 那是干扰,不是待办)。认不出的条目直接丢掉,不猜。
+ * 这是「伙伴改得动自己的灵魂」唯一的技术前提 —— 两个 harness 默认都只让文件
+ * 工具看见 cwd,而家在 userData 底下,不挂就是完全够不到。
+ *
+ * 追加而不是覆盖:`extraDirs` 是用户自己在会话里加的引用目录,权威在数据库;这里
+ * 只在它后面补一个系统派生的路径,并按字符串去重,免得重复挂载。挂的是**这一个
+ * 伙伴的目录**,不是 userData 根 —— 家的隔壁就是凭证。
  */
-export function readOpenTodos(items: readonly unknown[]): string[] {
-  const out: string[] = [];
-  for (const item of items) {
-    if (typeof item === 'string') {
-      if (item.trim()) out.push(item.trim());
-      continue;
-    }
-    if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
-    const row = item as Record<string, unknown>;
-    if (row.done === true || row.completed === true) continue;
-    const text = typeof row.text === 'string' ? row.text : typeof row.title === 'string' ? row.title : '';
-    if (text.trim()) out.push(text.trim());
-  }
-  return out.slice(0, 50);
+export function withBotHomeDir(
+  existing: readonly string[] | undefined,
+  homeDir: string,
+): string[] | undefined {
+  const home = homeDir.trim();
+  const current = Array.isArray(existing) ? [...existing] : [];
+  if (!home) return existing === undefined ? undefined : current;
+  return current.includes(home) ? current : [...current, home];
 }
 
 export function buildBotUserProfilePrompt(userContextSource: string): string {
@@ -739,20 +737,19 @@ export async function hydrateBotProfileRuntime(
     ownSkillsEnabled: ownSkillPluginRoot !== null,
   };
   /*
-    家里那几样进提示词。读失败一律当"没有" —— 一个读不动的 knowledge 目录不该
-    让整个伙伴起不来。整段覆盖只有真的写了才生效。
+    伙伴的家。读失败一律当"没有" —— 一次读不动不该让整个伙伴起不来,只是这一轮
+    它不知道自己有个家(工具面也不会多出这个目录,两边同时缺,不会出现"提示词说有、
+    工具够不到"的错位)。整段覆盖只有真的写了才生效。
   */
-  let folderPrompt: {
-    systemPromptOverride: string;
-    knowledge: string[];
-    preferences: string[];
-    todo: unknown[];
-  } | null = null;
+  let folderPrompt: { homeDir: string; systemPromptOverride: string } | null = null;
   if (deps.readProfileFolder) {
     folderPrompt = await deps
       .readProfileFolder({ botId: row.botId })
       .catch(() => null);
   }
+  const botHomeDir = folderPrompt?.homeDir.trim() ?? '';
+  // 提示词与工具面必须同进同退 —— 只给其中一个就是开一张打不开的空头支票。
+  if (botHomeDir) opts.extraDirs = withBotHomeDir(opts.extraDirs, botHomeDir);
   const promptInput: BotSystemPromptInput = {
     displayName: profile.displayName,
     identity,
@@ -764,9 +761,7 @@ export async function hydrateBotProfileRuntime(
     ...(folderPrompt?.systemPromptOverride.trim()
       ? { systemPromptOverride: folderPrompt.systemPromptOverride }
       : {}),
-    ...(folderPrompt?.knowledge.length ? { knowledgeFiles: folderPrompt.knowledge } : {}),
-    ...(folderPrompt?.preferences.length ? { preferenceFiles: folderPrompt.preferences } : {}),
-    ...(folderPrompt?.todo.length ? { openTodos: readOpenTodos(folderPrompt.todo) } : {}),
+    ...(botHomeDir ? { homeDir: botHomeDir } : {}),
     contextSections: [
       buildBotProfileContextPrompt(profile.displayName),
       buildBotSessionControlContext(sessionControlMode),

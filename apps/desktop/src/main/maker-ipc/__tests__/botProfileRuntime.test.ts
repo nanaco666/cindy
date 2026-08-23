@@ -7,6 +7,7 @@ import {
   resolveBotMcpReferences,
   resolveBotSkillReferences,
   resolveBotToolsetReferences,
+  withBotHomeDir,
 } from '../botProfileRuntime';
 import { buildDefaultBotIdentity } from '../../../shared/botProfileDefaults';
 import { BOT_TEMPLATES } from '../../../renderer/features/bots/botTemplates';
@@ -167,5 +168,41 @@ describe('Bot Profile runtime prompt', () => {
       unavailable: ['contacts', 'missing'],
       disabled: ['contacts', 'calendar'],
     });
+  });
+});
+
+/*
+  伙伴够不够得到自己的家。
+
+  这是文件夹化那句理由(「伙伴自己也读得到、改得动自己的灵魂」)的技术前提。它
+  曾经整条断在这里:提示词里列了家里的文件名,可路径没给、目录也没挂进工具面 ——
+  伙伴看得见名字,一个都打不开。锁死两件事:家一定会被挂上去,而且不会踩掉用户
+  自己加的引用目录。
+*/
+describe('伙伴的家进不进工具面', () => {
+  const HOME = '/data/bots/bot-a';
+
+  it('用户没加过引用目录时,家就是唯一那一个', () => {
+    expect(withBotHomeDir(undefined, HOME)).toEqual([HOME]);
+    expect(withBotHomeDir([], HOME)).toEqual([HOME]);
+  });
+
+  it('用户自己加的目录原样保留,家补在后面', () => {
+    expect(withBotHomeDir(['/work/design', '/work/docs'], HOME)).toEqual([
+      '/work/design',
+      '/work/docs',
+      HOME,
+    ]);
+  });
+
+  it('重复挂载去重 —— 同一轮里补两次不会挂出两份', () => {
+    const once = withBotHomeDir(['/work/design'], HOME)!;
+    expect(withBotHomeDir(once, HOME)).toEqual(once);
+  });
+
+  it('没有家(远端会话)时不动用户的设置,也不凭空造出一个空数组', () => {
+    expect(withBotHomeDir(undefined, '')).toBeUndefined();
+    expect(withBotHomeDir(undefined, '   ')).toBeUndefined();
+    expect(withBotHomeDir(['/work/design'], '')).toEqual(['/work/design']);
   });
 });

@@ -36,12 +36,28 @@
  *   memories/USER.md            ← 用户画像。Hermes 同路径
  *   system_prompt.md            ← 整段提示词覆盖(有内容才生效)
  *   config.json                 ← 能力位 + 展示元数据
- *   todo.json                   ← 待办
- *   knowledge/*.md              ← 知识
- *   preferences/*.md            ← 偏好
  *   .claude-plugin/plugin.json  ← 让整个目录能被 Claude Code 当本地 plugin 挂载
  *   skills/<slug>/SKILL.md      ← 技能。pi 直接 `--skill <这个目录>`
  * ```
+ *
+ * 这个模块只认上面这几样**有代码消费**的槽。用户或伙伴自己在家里放的其它文件
+ * (Hermes 的 `knowledge/`、`preferences/` 之类)照样躺在那儿、照样跟着导出走,
+ * 但不由这里建、不由这里读 —— 伙伴知道家在哪、有文件工具,要用就自己去看。
+ *
+ * ## 一条抄歪了又抄回来的教训
+ *
+ * 早前这里还有过 `todo.json` 槽和「把 `knowledge/` / `preferences/` 的文件名列进
+ * 提示词」的机制,理由写的是「对齐 Hermes」。复核后两条都不成立:
+ *
+ *   - `todo.json` 在 Hermes 的 agent 代码里**一个字都没有**,它只出现在导出白名单
+ *     和迁移工具里 —— 那是旧 OpenClaw 工作区的**遗留状态文件**,是要被清理的东西。
+ *     当时是从一份「历史遗留清单」上抄了个文件名,当成了功能。
+ *   - `knowledge/` / `preferences/` 在 Hermes 里同样从不进提示词。列名字不给路径,
+ *     等于开一张模型打不开的空头支票 —— 跟 botProfileRuntime 里那条
+ *     「Project Memory 这些条目打不开」的注释是同一种病。
+ *
+ * Hermes 的真做法只有一条:**让 agent 知道自己家在哪,给它文件工具,剩下的它自己
+ * 会翻**。所以现在提示词里给的是路径,不是清单。
  *
  * `skills/` 与 `.claude-plugin/` 是从 `<userData>/bot-skills/<botId>/` 整体搬过来
  * 的(见 `migrateBotProfileFolder`)—— 一个伙伴一个家,不该散在两处。技能内容与
@@ -102,13 +118,6 @@ const SLOT = {
   userContext: path.join('memories', 'USER.md'),
   systemPrompt: 'system_prompt.md',
   config: 'config.json',
-  todo: 'todo.json',
-} as const;
-
-/** 目录型槽位。列目录时只认 `.md`。 */
-const DIR_SLOT = {
-  knowledge: 'knowledge',
-  preferences: 'preferences',
 } as const;
 
 /** 解析并断言目标仍在这个伙伴的家里面 —— 路径穿越在这里止步。 */
@@ -173,24 +182,6 @@ export interface BotProfileFolderContent {
   systemPromptOverride: string;
   /** 能力位与展示元数据(config.json)。解析不出来时是空对象。 */
   config: Record<string, unknown>;
-  /** 待办(todo.json)。解析不出来时是空数组。 */
-  todo: unknown[];
-  /** 知识条目的文件名(不含目录),按名字排序。 */
-  knowledge: string[];
-  /** 偏好条目的文件名,同上。 */
-  preferences: string[];
-}
-
-async function listMarkdown(dir: string): Promise<string[]> {
-  try {
-    const entries = await fs.readdir(dir, { withFileTypes: true });
-    return entries
-      .filter((entry) => entry.isFile() && entry.name.toLowerCase().endsWith('.md'))
-      .map((entry) => entry.name)
-      .sort((a, b) => a.localeCompare(b));
-  } catch {
-    return [];
-  }
 }
 
 function parseJsonOr<T>(raw: string, fallback: T, accept: (value: unknown) => boolean): T {
@@ -210,17 +201,11 @@ export async function readBotProfileFolder(
   botId: string,
 ): Promise<BotProfileFolderContent> {
   const at = (relative: string) => resolveInside(userDataDir, botId, relative);
-  const [identitySource, userContextSource, systemPromptOverride, configRaw, todoRaw] =
-    await Promise.all([
-      readTextSlot(at(SLOT.soul)),
-      readTextSlot(at(SLOT.userContext)),
-      readTextSlot(at(SLOT.systemPrompt)),
-      readTextSlot(at(SLOT.config)),
-      readTextSlot(at(SLOT.todo)),
-    ]);
-  const [knowledge, preferences] = await Promise.all([
-    listMarkdown(at(DIR_SLOT.knowledge)),
-    listMarkdown(at(DIR_SLOT.preferences)),
+  const [identitySource, userContextSource, systemPromptOverride, configRaw] = await Promise.all([
+    readTextSlot(at(SLOT.soul)),
+    readTextSlot(at(SLOT.userContext)),
+    readTextSlot(at(SLOT.systemPrompt)),
+    readTextSlot(at(SLOT.config)),
   ]);
   return {
     identitySource,
@@ -231,9 +216,6 @@ export async function readBotProfileFolder(
       {},
       (value) => !!value && typeof value === 'object' && !Array.isArray(value),
     ),
-    todo: parseJsonOr<unknown[]>(todoRaw, [], (value) => Array.isArray(value)),
-    knowledge,
-    preferences,
   };
 }
 
@@ -243,7 +225,6 @@ export interface BotProfileFolderPatch {
   userContextSource?: string;
   systemPromptOverride?: string;
   config?: Record<string, unknown>;
-  todo?: unknown[];
 }
 
 export async function writeBotProfileFolder(
@@ -264,9 +245,6 @@ export async function writeBotProfileFolder(
   }
   if (patch.config !== undefined) {
     writes.push(writeTextAtomic(at(SLOT.config), `${JSON.stringify(patch.config, null, 2)}\n`));
-  }
-  if (patch.todo !== undefined) {
-    writes.push(writeTextAtomic(at(SLOT.todo), `${JSON.stringify(patch.todo, null, 2)}\n`));
   }
   await Promise.all(writes);
 }

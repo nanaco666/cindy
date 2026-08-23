@@ -59,11 +59,11 @@ export interface BotSystemPromptInput {
    * 不是又一个可以叠加的段落 —— 叠加只会让两套说法在同一份上下文里打架。
    */
   systemPromptOverride?: string;
-  /** 伙伴家里 `knowledge/` 与 `preferences/` 的条目名。只进索引,正文按需读。 */
-  knowledgeFiles?: readonly string[];
-  preferenceFiles?: readonly string[];
-  /** `todo.json` 里还没做完的事。 */
-  openTodos?: readonly string[];
+  /**
+   * 伙伴自己那个文件夹的绝对路径。给了才会告诉它「你有个家」——
+   * 远端会话没有本机 userData,这时不给,也就一个字都不提。
+   */
+  homeDir?: string;
 }
 
 /**
@@ -155,6 +155,33 @@ const SCHEDULE_GUIDANCE = [
   '排之前先把「做什么」和「什么时候」跟用户确认清楚,不要替他假定频率。',
 ].join('\n');
 
+/**
+ * 「你有个家」—— 照抄 Hermes 唯一真做的那件事。
+ *
+ * Hermes 从不把家里的文件列进提示词,它只是让 agent 知道 `~/.hermes` 在哪、
+ * 手上有文件工具,剩下自己翻。而 agent 会**改自己的 SOUL.md** 不是理论可能:
+ * Hermes 为此写了跨 profile 的写入保护(容器里写到镜像副本上会被拦),提示词
+ * 缓存也专门处理「SOUL.md 被改了」导致的前缀失配 —— 都是给真实场景写的。
+ *
+ * 所以这里给的是**路径**,不是清单。清单会开出模型打不开的空头支票,路径不会。
+ */
+function buildHomeGuidance(homeDir: string): string {
+  return [
+    '## 你有个自己的文件夹',
+    `\`${homeDir}\` 是你的家,你读得到也改得动。里面几样是固定的:`,
+    '- `SOUL.md` —— 你是谁。用户要调整你的性格、说话方式、做事风格,就改这一份。',
+    '- `memories/USER.md` —— 你对用户的了解。',
+    '- `skills/` —— 你会的本事,一样一个目录。',
+    '- `system_prompt.md` —— 用户想整段自己写你的提示词时放这里。',
+    '',
+    '其余想放什么放什么:整理好的资料、常用的模板、给自己记的规矩,都可以摊在这个',
+    '文件夹里,下次开新对话它们还在。用户也能直接用编辑器打开来改。',
+    '',
+    '改 `SOUL.md` 是改你自己:动手前先跟用户讲清楚要改成什么样,他点头了再写。',
+    '写完当前这轮对话仍然按旧的走,下一轮才换成新的 —— 这是正常的,照实告诉他。',
+  ].join('\n');
+}
+
 /** 作品集:所有能给用户看的产物都在这里,不只文档。 */
 const PORTFOLIO_GUIDANCE = [
   '## 你做出来的东西会进作品集',
@@ -183,6 +210,9 @@ export function buildBotStableTier(input: BotSystemPromptInput): string {
   // 能力说明按「这个伙伴真的挂了什么」注入 —— 没挂的能力一个字都不提,
   // 免得模型去调一个不存在的工具(Hermes 同款 valid_tool_names 门)。
   const capabilityParts: string[] = [];
+  // 家排在最前:它不是某个工具的用法,是「你有身份、有积累、能改自己」这件事本身。
+  const homeDir = input.homeDir?.trim();
+  if (homeDir) capabilityParts.push(buildHomeGuidance(homeDir));
   if (has(input.capabilities, 'docs')) capabilityParts.push(DOCS_GUIDANCE);
   if (input.capabilities.memoryEnabled) capabilityParts.push(MEMORY_GUIDANCE);
   // 历史检索住在 cindy_helper 里(essential 插件、恒挂),判据与委派同一个 —— 
@@ -223,48 +253,10 @@ export function buildBotSkillIndex(entries: readonly BotPromptSkillIndexEntry[])
  * 易变层:技能索引在最前(它随会话内的 save_bot_skill 变),记忆与用户档案随后。
  * 放在整份提示词末尾,变化时只从这里往后重新计算。
  */
-/**
- * 家里那两个目录的索引:只报名字,正文让模型自己按需读。
- *
- * 与技能索引同一条理由(照搬 Hermes):**看得见名字才知道自己有这份东西**;
- * 全文塞进提示词则是每轮都付一次钱去带一堆多半用不上的字。
- */
-export function buildBotFolderIndex(input: {
-  knowledgeFiles?: readonly string[];
-  preferenceFiles?: readonly string[];
-  homeDir?: string;
-}): string {
-  const sections: string[] = [];
-  const list = (title: string, files: readonly string[] | undefined) => {
-    const rows = (files ?? []).map((name) => `- ${name}`);
-    if (rows.length > 0) sections.push([title, ...rows].join('\n'));
-  };
-  list('## 你自己整理的知识', input.knowledgeFiles);
-  list('## 你记下的偏好', input.preferenceFiles);
-  if (sections.length === 0) return '';
-  if (input.homeDir) {
-    sections.push(`这些文件在 \`${input.homeDir}\` 下,要用哪份就自己读哪份。`);
-  }
-  return sections.join('\n\n');
-}
-
-/** 还没做完的事。空的时候一个字都不提。 */
-export function buildBotTodoSection(openTodos: readonly string[] | undefined): string {
-  const rows = (openTodos ?? []).map((text) => text.trim()).filter(Boolean).map((t) => `- ${t}`);
-  return rows.length > 0 ? ['## 你还欠着的事', ...rows].join('\n') : '';
-}
-
 export function buildBotVolatileTier(input: BotSystemPromptInput): string {
   const parts: string[] = [];
   const skillIndex = buildBotSkillIndex(input.skillIndex);
   if (skillIndex) parts.push(skillIndex);
-  const folderIndex = buildBotFolderIndex({
-    ...(input.knowledgeFiles ? { knowledgeFiles: input.knowledgeFiles } : {}),
-    ...(input.preferenceFiles ? { preferenceFiles: input.preferenceFiles } : {}),
-  });
-  if (folderIndex) parts.push(folderIndex);
-  const todos = buildBotTodoSection(input.openTodos);
-  if (todos) parts.push(todos);
   const memory = input.memorySnapshot?.trim();
   if (memory) parts.push(memory);
   const userProfile = input.userProfile?.trim();

@@ -52,7 +52,7 @@ import {
   type BotProfileRuntimeSnapshot,
 } from '../maker-ipc/botProfileRuntime.js';
 import { collectBotOwnSkillMounts } from '../maker-ipc/botSkillService.js';
-import { readBotProfileFolder } from '../maker-ipc/botProfileFolder.js';
+import { botProfileDir, readBotProfileFolder } from '../maker-ipc/botProfileFolder.js';
 import { prepareBotWorkspaceRuntime } from '../maker-ipc/botWorkspaceRuntime.js';
 import type { MakerSessionCreateOpts } from '../maker-ipc/sessionRequest.js';
 import {
@@ -2161,15 +2161,14 @@ export function getMaker(): Maker {
       },
       // 伙伴自己沉淀的技能(本机 userData);remote 会话由 hydrate 侧跳过。
       listOwnSkills: async ({ botId }) => collectBotOwnSkillMounts(botId),
-      // 伙伴家里摊开的那几样(同上,本机 userData)。身份与用户画像不走这里 ——
-      // 它们已经由对账收进冻结快照,运行时认快照。
+      // 伙伴的家在哪(本机 userData),外加整段提示词覆盖。身份与用户画像不走
+      // 这里 —— 它们已经由对账收进冻结快照,运行时认快照。
       readProfileFolder: async ({ botId }) => {
-        const folder = await readBotProfileFolder(app.getPath('userData'), botId);
+        const userDataDir = app.getPath('userData');
+        const folder = await readBotProfileFolder(userDataDir, botId);
         return {
+          homeDir: botProfileDir(userDataDir, botId),
           systemPromptOverride: folder.systemPromptOverride,
-          knowledge: folder.knowledge,
-          preferences: folder.preferences,
-          todo: folder.todo,
         };
       },
       readMemoryIndex: async (scopeKey) =>
