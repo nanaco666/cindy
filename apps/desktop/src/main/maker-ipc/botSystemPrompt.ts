@@ -111,6 +111,28 @@ const MEMORY_GUIDANCE = [
   '记下一件事后,在回复末尾轻描淡写地带一句,让用户知道你记住了什么。',
 ].join('\n');
 
+/**
+ * 回看历史。
+ *
+ * 这一段补的是一个真实缺口:伙伴的主对话会翻篇(到点换代 / 用户手动),旧的那段
+ * 归档后只读 —— 而**伙伴手上一直有翻回去查的工具**,提示词里却一个字都没提。
+ * 于是用户说「上次那个方案」时,它只能顺着当前上下文猜,或者干脆说不记得了。
+ *
+ * 对齐 Hermes 的做法:它把长期对话召回做成一个 agent 随时能用的工具(搜 / 翻 /
+ * 读 / 浏览四种用法,零模型开销,直接读数据库),而不是给用户一个「恢复那段对话」
+ * 的按钮。**能自己回去查的 agent,不需要用户替它搬运上下文。**
+ *
+ * 与记忆的分工要讲清楚,否则模型会把两者混着用:记忆是**已经提炼过的结论**,
+ * 历史是**原始记录**。想不起细节就去翻历史,而不是硬从记忆里挤。
+ */
+const HISTORY_GUIDANCE = [
+  '## 你能翻回去查',
+  '你和用户以前的对话都还在,包括已经翻篇归档的那些。用户提到「上次」「之前」「我们聊过」,或者你需要某件事的原始经过时,去查,不要凭印象答、更不要说自己不记得了。',
+  '按内容找用 `search_chat_history`(不确定在哪次聊的时候用它);知道大概是哪段时间、哪个目录,先 `list_sessions` 缩小范围再 `get_chat_history` 取原文。这些工具在 `cindy_helper` 的 history 类目里,用 `list_tools` 就能看到它们当前的参数。',
+  '这跟你的记忆是两回事:记忆是你提炼过的结论,历史是原始记录。细节想不起来就去翻原文,别硬从记忆里挤。',
+  '翻到之后把有用的那部分讲出来,不要把整段记录复述给用户。',
+].join('\n');
+
 /** 自有技能:与记忆的分工是「做法」vs「事实」。 */
 const OWN_SKILLS_GUIDANCE = [
   '## 你能把做法沉淀成本事',
@@ -163,6 +185,9 @@ export function buildBotStableTier(input: BotSystemPromptInput): string {
   const capabilityParts: string[] = [];
   if (has(input.capabilities, 'docs')) capabilityParts.push(DOCS_GUIDANCE);
   if (input.capabilities.memoryEnabled) capabilityParts.push(MEMORY_GUIDANCE);
+  // 历史检索住在 cindy_helper 里(essential 插件、恒挂),判据与委派同一个 —— 
+  // 工具面里有它,才说得出「你能翻回去查」。
+  if (input.capabilities.delegationEnabled) capabilityParts.push(HISTORY_GUIDANCE);
   if (input.capabilities.ownSkillsEnabled) capabilityParts.push(OWN_SKILLS_GUIDANCE);
   if (input.capabilities.delegationEnabled) capabilityParts.push(DELEGATION_GUIDANCE);
   if (has(input.capabilities, 'scheduler')) capabilityParts.push(SCHEDULE_GUIDANCE);

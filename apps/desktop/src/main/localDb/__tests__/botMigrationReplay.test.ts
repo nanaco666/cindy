@@ -7,7 +7,27 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { createBetterSqliteDatabase } from '../betterSqliteFactory';
 import { listMigrations, runMigrationReplay } from '../migrationRunner';
 
-const MIGRATIONS = ['0093_bots_runtime_foundation.sql'] as const;
+/**
+ * 伙伴那批表落在哪个迁移里 —— **按内容找,不写死文件名**。
+ *
+ * 写死过一次,代价是这组用例整个失效:合主干时迁移撞号,按规矩重新生成之后文件从
+ * `0093_bots_runtime_foundation.sql` 变成了另一个名字,而这里还指着那个已经不存在
+ * 的文件 —— 四条用例全部 ENOENT,伙伴迁移链的回归保护静默归零。
+ *
+ * 撞号重排是这个仓库的常态(迁移号先到先得),所以判据得跟着内容走:含 `bot_profiles`
+ * 建表语句的那一个就是它。找不到直接抛,不静默跳过 —— 那等于又回到没有保护的状态。
+ */
+function findBotMigrations(drizzleDir: string): string[] {
+  const found = listMigrations(drizzleDir)
+    .filter((migration) => readFileSync(migration.sqlPath, 'utf8').includes('CREATE TABLE `bot_profiles`'))
+    .map((migration) => migration.fileName);
+  if (found.length === 0) {
+    throw new Error('找不到建 bot_profiles 的迁移 —— 伙伴迁移链的回归用例失去依据');
+  }
+  return found;
+}
+
+const MIGRATIONS = findBotMigrations(path.resolve(__dirname, '../../../..', 'drizzle'));
 const cleanups: Array<() => void> = [];
 const canReplayPublishedLineage = process.platform === 'darwin' || process.platform === 'win32';
 const lineageIt = canReplayPublishedLineage ? it : it.skip;

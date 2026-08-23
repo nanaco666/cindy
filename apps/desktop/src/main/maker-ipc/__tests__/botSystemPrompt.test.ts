@@ -181,3 +181,76 @@ describe('家里摊开的那几样', () => {
     expect(volatile).toContain('## 你还欠着的事');
   });
 });
+
+/*
+  「你能翻回去查」。
+
+  盯的是一个真实缺口:伙伴的主对话会翻篇,旧的那段归档后只读 —— 而伙伴手上一直
+  有翻回去查的工具,提示词里却一个字都没提。于是用户说「上次那个方案」时,它只能
+  顺着当前上下文猜,或者说自己不记得了。
+
+  对齐 Hermes:它把长期对话召回做成 agent 随时能用的工具,而不是给用户一个
+  「恢复那段对话」的按钮 —— 能自己回去查的 agent,不需要用户替它搬运上下文。
+*/
+describe('回看历史', () => {
+  const base = {
+    displayName: '小柴',
+    identity: '你是小柴。',
+    skillIndex: [],
+  };
+
+  it('工具面里有 helper 才说得出「你能翻回去查」', () => {
+    const withHelper = buildBotStableTier({
+      ...base,
+      capabilities: {
+        toolsets: ['xdt_helper'],
+        memoryEnabled: false,
+        delegationEnabled: true,
+        ownSkillsEnabled: false,
+      },
+    });
+    expect(withHelper).toContain('你能翻回去查');
+    expect(withHelper).toContain('search_chat_history');
+  });
+
+  it('没有 helper 就一个字都不提 —— 不让它去调一个不存在的工具', () => {
+    const without = buildBotStableTier({
+      ...base,
+      capabilities: {
+        toolsets: [],
+        memoryEnabled: false,
+        delegationEnabled: false,
+        ownSkillsEnabled: false,
+      },
+    });
+    expect(without).not.toContain('你能翻回去查');
+    expect(without).not.toContain('search_chat_history');
+  });
+
+  it('讲清楚历史与记忆的分工 —— 否则模型会把两者混着用', () => {
+    const prompt = buildBotStableTier({
+      ...base,
+      capabilities: {
+        toolsets: ['xdt_helper'],
+        memoryEnabled: true,
+        delegationEnabled: true,
+        ownSkillsEnabled: false,
+      },
+    });
+    // 记忆是提炼过的结论,历史是原始记录:想不起细节该去翻原文,不该硬从记忆里挤。
+    expect(prompt).toContain('记忆是你提炼过的结论,历史是原始记录');
+  });
+
+  it('明说归档的那些也还在 —— 换代之后用户最可能问的正是那部分', () => {
+    const prompt = buildBotStableTier({
+      ...base,
+      capabilities: {
+        toolsets: ['xdt_helper'],
+        memoryEnabled: false,
+        delegationEnabled: true,
+        ownSkillsEnabled: false,
+      },
+    });
+    expect(prompt).toContain('包括已经翻篇归档的那些');
+  });
+});
