@@ -93,6 +93,7 @@ import { resolveVisionBackendRoute, setVisionGatewayKeyReader } from './provider
 import { resolveSessionCcDebugFile } from '../logger.js';
 import { resetProviderModelAutoRefreshCooldowns } from './provider-model-auto-refresh.js';
 import { getThinkingEnabledFromMemory } from './newMakerDefaultsCache.js';
+import { getSessionFastMode } from './session-effort-store.js';
 import { createSshDaemonTransport } from './codex-remote-transport.js';
 import { getRemoteSshPool, broadcastSilentInstallStatus } from '../remote-ssh/index.js';
 import {
@@ -2232,6 +2233,10 @@ export function getMaker(): Maker {
             );
             if (thinkingEnabled !== undefined) opts.thinkingEnabled = thinkingEnabled;
           }
+          // 主干新增:pi 的价格档跟随会话 Fast 开关。
+          if (opts.agentKind === 'pi') {
+            opts.getPriceVariant = () => (getSessionFastMode(sessionId) ? 'priority' : 'standard');
+          }
           const createOpts = opts as MakerSessionCreateOpts;
           createOpts.id ??= sessionId;
           await prepareBotWorkspaceRuntime(createOpts);
@@ -2248,6 +2253,9 @@ export function getMaker(): Maker {
               });
             }
           }
+          // 主干那半还有一段「codex 专用」的 disabledPluginIds 设置,这里**有意不取**:
+          // 下面那段是它的超集(不限 agentKind,且把伙伴的 disabledToolsets 也并进去),
+          // 取了会先写一次再被覆盖,平白多一次赋值和一条读不懂的重复逻辑。
           const botRuntimeSnapshot = await hydrateBotProfileRuntime(
             createOpts,
             buildBotRuntimeDeps(skillLinksChanged),

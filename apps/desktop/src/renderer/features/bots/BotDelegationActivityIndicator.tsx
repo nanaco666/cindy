@@ -32,7 +32,12 @@ function formatDuration(start: number, end: number): string {
 interface Props {
   sessionId: string;
   /** 与消息流同宽，让状态条对齐正文而不是撑满整个聊天区。 */
-  maxWidth?: number;
+  /**
+   * 与消息流同宽。主干 2026-08 起把它从数字改成了 CSS 变量字符串
+   * (`var(--cindy-message-width)`,由 ResizeObserver 直接更新,避免 React 每帧
+   * 重渲染),所以这里两种都收 —— 值原样进 `style`,CSS 自己会算。
+   */
+  maxWidth?: number | string;
 }
 
 /**
