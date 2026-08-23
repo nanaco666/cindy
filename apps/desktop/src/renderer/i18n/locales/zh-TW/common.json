@@ -6178,6 +6178,9 @@
     }
   },
   "bots": {
+    "sidebar": {
+      "newTaskWith": "和{{name}}開個新任務"
+    },
     "eyebrow": "長期助理",
     "title": "夥伴",
     "subtitle": "將每個助理的身分、技能、訊息通道與主任務集中管理。",

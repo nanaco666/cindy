@@ -3691,6 +3691,8 @@ function ExpandedView({
                 unclassified={visibleUnclassified}
                 projects={visibleProjectsWithVendor}
                 dialogues={visibleDialogues}
+                bots={groups.bots}
+                onOpenBot={(botId) => navigate(`/bots/${botId}`)}
                 allKnownProjects={visibleProjectUniverse}
                 dialogueCount={allGroups.dialogues.length}
                 allProjectKeysForOrder={gcProjectKeys}

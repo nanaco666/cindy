@@ -6180,6 +6180,9 @@
     }
   },
   "bots": {
+    "sidebar": {
+      "newTaskWith": "Start a task with {{name}}"
+    },
     "eyebrow": "Persistent assistants",
     "title": "Teammates",
     "subtitle": "Keep each assistant's identity, skills, message channels, and canonical task together.",

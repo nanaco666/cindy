@@ -6178,6 +6178,9 @@
     }
   },
   "bots": {
+    "sidebar": {
+      "newTaskWith": "和{{name}}开个新任务"
+    },
     "eyebrow": "长期助手",
     "title": "伙伴",
     "subtitle": "把每个助手的身份、技能、消息通道和主任务放在一起管理。",
