@@ -46,6 +46,7 @@ import {
   writeBotProfileFolder,
 } from '../../maker-ipc/botProfileFolder.js';
 import { syncBotProfileFromFolder } from '../../maker-ipc/botProfileFolderSync.js';
+import { renewBotSessionIfDue } from '../../maker-ipc/botRenewalService.js';
 import { createLogger } from '../../logger.js';
 
 const log = createLogger('bots');
@@ -1819,6 +1820,93 @@ export function registerBotIpc(): void {
       expectedCanonicalSessionId,
       expectedProfileVersion: Number(body.expectedProfileVersion),
       recoverMissingOnly: body.recoverMissingOnly === true,
+    });
+  });
+
+  /*
+    到点换代。触发时机是**打开伙伴主对话**的那一下 —— 点开就是要用,正是「新一轮」
+    的起点;刻意不挂后台定时器,那会在半夜给每个伙伴凭空建一堆空对话。
+
+    判定与接线分别在 shared/botRenewalPolicy.ts 与 maker-ipc/botRenewalService.ts,
+    这里只把它接到真实数据上。整条链任何一步出错都返回「没换」,不让用户连伙伴
+    都打不开。
+  */
+  ipcMain.handle('local-db:bots:renew-if-due', async (event, raw: unknown) => {
+    assertTrustedAppRendererEvent(event);
+    const body =
+      raw && typeof raw === 'object' && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
+    const botId = readText(body.botId, 'botId', 128, true);
+    const db = getDbClient().drizzle;
+    return renewBotSessionIfDue(botId, {
+      readSnapshot: async (id) => {
+        const [profile] = await db
+          .select({
+            canonicalSessionId: botProfiles.canonicalSessionId,
+            currentVersion: botProfiles.currentVersion,
+            status: botProfiles.status,
+          })
+          .from(botProfiles)
+          .where(eq(botProfiles.id, id))
+          .limit(1);
+        if (!profile) return null;
+        const [version] = await db
+          .select({ capabilitiesJson: botProfileVersions.capabilitiesJson })
+          .from(botProfileVersions)
+          .where(
+            and(
+              eq(botProfileVersions.botId, id),
+              eq(botProfileVersions.version, profile.currentVersion),
+            ),
+          )
+          .limit(1);
+        return {
+          botId: id,
+          renewal: parseJson(version?.capabilitiesJson ?? '{}').renewal,
+          canonicalSessionId: profile.canonicalSessionId ?? null,
+          currentVersion: profile.currentVersion,
+          status: profile.status,
+        };
+      },
+      readLastActivityAt: async (sessionId) => {
+        const [row] = await db
+          .select({ userSendAt: sessions.userSendAt, updatedAt: sessions.updatedAt })
+          .from(sessions)
+          .where(eq(sessions.id, sessionId))
+          .limit(1);
+        if (!row) return 0;
+        // userSendAt 是「用户最后一次说话」,比 updatedAt 更贴近「这段对话还活着吗」——
+        // 后者会被后台写入(标题、快照)顶新,据它判断会一直觉得刚聊过。
+        return row.userSendAt ?? row.updatedAt ?? 0;
+      },
+      hasActiveWork: async (id) => {
+        const [row] = await db
+          .select({ id: botDelegations.id })
+          .from(botDelegations)
+          .where(
+            and(
+              eq(botDelegations.requestingBotId, id),
+              inArray(botDelegations.status, ['queued', 'waiting', 'running']),
+            ),
+          )
+          .limit(1);
+        return !!row;
+      },
+      renew: async (input) =>
+        createBotCanonicalSession({
+          botId: input.botId,
+          expectedCanonicalSessionId: input.expectedCanonicalSessionId,
+          expectedProfileVersion: input.expectedProfileVersion,
+        }),
+      recordEvent: async (input) => {
+        await db.insert(botLifecycleEvents).values({
+          id: randomUUID(),
+          botId: input.botId,
+          sessionId: input.to,
+          eventType: 'renewed',
+          payloadJson: safeJson({ reason: input.reason, from: input.from, to: input.to }),
+          createdAt: Date.now(),
+        });
+      },
     });
   });
 

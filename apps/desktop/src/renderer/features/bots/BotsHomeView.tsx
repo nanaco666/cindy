@@ -35,6 +35,7 @@ import {
   setCanonicalBotSession,
   updateBotProfile,
   upsertBotChannel,
+  refreshBotProfiles,
   useBotProfiles,
   defaultBotModel,
   exportBotBundle,
@@ -1459,6 +1460,42 @@ export function BotsHomeView() {
       });
   }, [navigate, searchParams, setSearchParams, t]);
 
+  /*
+    到点换代:打开伙伴主对话之前先问一次「该翻篇了吗」。
+
+    放在导航**之前**而不是之后 —— 换代成功会换一条主对话,后问的话用户会先被
+    送进昨天那段、再被拽到新的一段,白闪一下。判定是本地一次 SQLite 查询,
+    这点等待换不来任何可感知的延迟。
+
+    每个伙伴每次打开只问一次:问完把 id 记下来,否则换代后 store 刷新触发
+    effect 重跑,又会对着刚建好的新对话再问一遍。
+    整条链失败一律当「没换」——换代是锦上添花,不该让人连伙伴都打不开。
+  */
+  const [renewCheckedBotId, setRenewCheckedBotId] = useState<string | null>(null);
+  useEffect(() => {
+    if (
+      !selectedBot ||
+      shouldDeferCanonicalBotSessionNavigation({ settingsOpen, addRequested }) ||
+      selectedBot.status !== 'active' ||
+      renewCheckedBotId === selectedBot.id
+    )
+      return;
+    let cancelled = false;
+    void window.electronAPI.localDb.bots
+      .renewIfDue({ botId: selectedBot.id })
+      .catch(() => null)
+      .then((result) => {
+        if (cancelled) return;
+        // 换代了就让 store 重取 —— 下面那个 effect 会读到新的 canonicalSessionId
+        // 并把用户送过去,不需要在这里再写一次导航。
+        if (result?.renewed) refreshBotProfiles();
+        setRenewCheckedBotId(selectedBot.id);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedBot, settingsOpen, addRequested, renewCheckedBotId]);
+
   useEffect(() => {
     if (
       !selectedBot ||
@@ -1469,6 +1506,9 @@ export function BotsHomeView() {
       navigate(`/bots/${selectedBot.id}?settings=1`, { replace: true });
       return;
     }
+
+    // 换代检查没落地就先别导航 —— 否则会先进旧对话再被换代拽走。
+    if (renewCheckedBotId !== selectedBot.id) return;
 
     const canonicalSessionId = selectedBot.canonicalSessionId;
     let cancelled = false;

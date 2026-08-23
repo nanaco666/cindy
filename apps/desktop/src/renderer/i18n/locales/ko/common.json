@@ -6247,6 +6247,14 @@
     }
   },
   "bots": {
+    "renewal": {
+      "title": "매일 새로 시작",
+      "offDescription": "꺼짐. 이 대화는 계속 이어지며 점점 길어집니다.",
+      "onDescription": "켜짐. {{hour}}시 이후 처음 말을 걸면 새로운 대화가 시작됩니다 — 기억과 기술은 그대로, 어제의 맥락만 빠집니다.",
+      "toggle": "매일 새로 시작",
+      "hourLabel": "시각",
+      "hourOption": "{{hour}}시"
+    },
     "sidebar": {
       "newTaskWith": "{{name}}와(과) 새 작업 시작"
     },

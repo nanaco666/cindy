@@ -4360,6 +4360,19 @@ interface ElectronAPI {
         canonicalSessionId: string;
         session: import('@/lib/ccAgent.types').Session;
       }>;
+      /**
+       * 到点换代:打开主对话时问一次「该翻篇了吗」。
+       *
+       * 没到点(或伙伴暂停 / 还有活儿在跑 / 用户关了换代)就原样返回当前主对话,
+       * `renewed: false`。换代成功时 `canonicalSessionId` 是**新**那条,调用方
+       * 要跟着跳过去。`notify` 说明该不该告诉用户这件事。
+       */
+      renewIfDue: (body: { botId: string }) => Promise<{
+        renewed: boolean;
+        reason?: 'daily' | 'idle';
+        canonicalSessionId: string | null;
+        notify: boolean;
+      }>;
       linkSession: (body: unknown) => Promise<unknown>;
       history: (botId: string) => Promise<unknown[]>;
       /** 每伙伴「交付物仓库」的只读投影(委派产物 + 会话产出文件 + 消息附件)。 */

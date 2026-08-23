@@ -6247,6 +6247,14 @@
     }
   },
   "bots": {
+    "renewal": {
+      "title": "每天重新開始",
+      "offDescription": "關著。這段對話會一直接下去，越來越長。",
+      "onDescription": "開著。每天{{hour}}點之後第一次說話，會從新的一段開始——記憶和本事都還在，只是不帶昨天的脈絡。",
+      "toggle": "每天重新開始",
+      "hourLabel": "幾點",
+      "hourOption": "{{hour}} 點"
+    },
     "sidebar": {
       "newTaskWith": "和{{name}}開個新任務"
     },

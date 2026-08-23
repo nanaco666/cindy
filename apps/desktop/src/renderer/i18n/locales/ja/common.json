@@ -6247,6 +6247,14 @@
     }
   },
   "bots": {
+    "renewal": {
+      "title": "毎日リセット",
+      "offDescription": "オフ。この会話はずっと続き、どんどん長くなります。",
+      "onDescription": "オン。{{hour}}時以降に最初に話しかけると、新しい会話が始まります——記憶とスキルはそのまま、昨日の文脈だけが外れます。",
+      "toggle": "毎日リセット",
+      "hourLabel": "時刻",
+      "hourOption": "{{hour}}時"
+    },
     "sidebar": {
       "newTaskWith": "{{name}}と新しいタスクを始める"
     },

@@ -6249,6 +6249,14 @@
     }
   },
   "bots": {
+    "renewal": {
+      "title": "Start fresh each day",
+      "offDescription": "Off. This conversation keeps going, and keeps growing.",
+      "onDescription": "On. The first time you talk after {{hour}}:00, a new stretch begins — memory and skills carry over, yesterday’s context does not.",
+      "toggle": "Start fresh daily",
+      "hourLabel": "At",
+      "hourOption": "{{hour}}:00"
+    },
     "sidebar": {
       "newTaskWith": "Start a task with {{name}}"
     },
