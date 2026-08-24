@@ -10,6 +10,7 @@ import type { BotInboxItemView } from '../../../shared/botSessionEvents';
 import { BotAvatar } from './BotAvatar';
 import {
   botListSubtitle,
+  botListTimestampAt,
   formatBotListTimestamp,
   formatBotUnreadBadge,
 } from './botListDisplay';
@@ -222,7 +223,13 @@ function BotsSidebarContent() {
                 : subtitle.kind === 'placeholder'
                   ? t('bots.list.startChat')
                   : subtitle.text;
-              const timestamp = formatBotListTimestamp(bot.lastMessageAt, now);
+              // 正在干活时取此刻 —— 委派/定时任务跑着不产生消息,只看
+              // lastMessageAt 会让一个正忙的伙伴显示成「20 分钟前」,
+              // 和第二行的「正在输入…」自相矛盾。见 botListTimestampAt。
+              const timestamp = formatBotListTimestamp(
+                botListTimestampAt({ lastMessageAt: bot.lastMessageAt, working: typing }, now),
+                now,
+              );
               // The selected pill is a light/dark gray fill, not an inverse one,
               // so muted text on it would sit at a far lower contrast than on
               // the sidebar background. Dim by opacity there, use the sidebar's
