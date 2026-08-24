@@ -2165,7 +2165,7 @@ export function getMaker(): Maker {
       },
       // 伙伴自己沉淀的技能(本机 userData);remote 会话由 hydrate 侧跳过。
       listOwnSkills: async ({ botId }) => collectBotOwnSkillMounts(botId),
-      // 伙伴的家在哪(本机 userData),外加整段提示词覆盖。身份与用户画像不走
+      // 伙伴的家在哪(本机 userData),外加用户维护的 prompt overlay。身份与用户画像不走
       // 这里 —— 它们已经由对账收进冻结快照,运行时认快照。
       readProfileFolder: async ({ botId }) => {
         const userDataDir = app.getPath('userData');

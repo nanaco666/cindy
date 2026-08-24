@@ -156,7 +156,7 @@ export interface BotProfileRuntimeDeps {
     remoteHostId?: string;
   }) => Promise<string>;
   /**
-   * 伙伴的家(`botProfileFolder.ts`):它在磁盘上的位置,以及整段提示词覆盖。
+   * 伙伴的家(`botProfileFolder.ts`):它在磁盘上的位置,以及用户维护的 prompt overlay。
    *
    * 身份与用户画像不走这里 —— 它们已经由对账收进冻结快照,运行时认的是快照,
    * 从文件再读一遍会让同一轮里出现两个版本的身份。
@@ -798,11 +798,12 @@ export async function hydrateBotProfileRuntime(
     // 不是会话控制模式(那管的是"观察别的任务",另一件事)。
     delegationEnabled: resolvedToolsets.includes('xdt_helper'),
     ownSkillsEnabled: ownSkillPluginRoot !== null,
+    botModeEnabled: row.role === 'canonical',
   };
   /*
     伙伴的家。读失败一律当"没有" —— 一次读不动不该让整个伙伴起不来,只是这一轮
     它不知道自己有个家(工具面也不会多出这个目录,两边同时缺,不会出现"提示词说有、
-    工具够不到"的错位)。整段覆盖只有真的写了才生效。
+    工具够不到"的错位)。overlay 只有真的写了才生效,且不能取代 Cindy 核心协议。
   */
   let folderPrompt: { homeDir: string; systemPromptOverride: string } | null = null;
   if (deps.readProfileFolder) {
@@ -834,7 +835,9 @@ export async function hydrateBotProfileRuntime(
     名单,是纯粹的上下文浪费。查失败当作「没有队友」,绝不拦住会话启动。
   */
   const teammates =
-    promptCapabilities.delegationEnabled && deps.listTeammates
+    promptCapabilities.botModeEnabled
+      && promptCapabilities.delegationEnabled
+      && deps.listTeammates
       ? await deps.listTeammates({ excludeBotId: row.botId }).catch(() => [])
       : [];
   const promptInput: BotSystemPromptInput = {

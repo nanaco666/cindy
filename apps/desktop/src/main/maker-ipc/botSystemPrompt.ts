@@ -30,6 +30,8 @@ export interface BotPromptCapabilitySignals {
   delegationEnabled: boolean;
   /** 伙伴自有技能是否可写入(save_bot_skill 是否在工具面里)。 */
   ownSkillsEnabled: boolean;
+  /** 是否为 Bot 的 canonical Chat；Bot Mode 协议只在这里生效。 */
+  botModeEnabled?: boolean;
 }
 
 /** 技能索引的一行:名字 + 一句话描述(描述缺省时只列名字)。 */
@@ -54,11 +56,8 @@ export interface BotSystemPromptInput {
   /** 会话控制说明等由调用方给的上下文段。 */
   contextSections?: readonly string[];
   /**
-   * `system_prompt.md` 的整段覆盖。有内容时**取代**默认组装出来的稳定层
-   * (身份 + 纪律 + 能力说明),空则完全不影响。
-   *
-   * 与 Hermes 同义:那是给「我要完全自己写这个 agent 的提示词」准备的逃生口,
-   * 不是又一个可以叠加的段落 —— 叠加只会让两套说法在同一份上下文里打架。
+   * 用户维护的 `system_prompt.md` overlay。它是独立上下文段，不能替换
+   * SOUL、Cindy 核心协议或按真实工具装配出的能力说明。
    */
   systemPromptOverride?: string;
   /**
@@ -244,11 +243,10 @@ function has(signals: BotPromptCapabilitySignals, toolset: string): boolean {
  * 这一层在整个会话里逐字节不变,前缀缓存靠它。
  */
 export function buildBotStableTier(input: BotSystemPromptInput): string {
-  // 整段覆盖:用户自己写了 system_prompt.md 就完全听他的,不在后面偷偷再叠
-  // 一份我们的说法 —— 两套说法在同一份上下文里只会打架。
-  const override = input.systemPromptOverride?.trim();
-  if (override) return override;
   const parts: string[] = [];
+  // Omitted by older callers means the canonical Bot prompt path. Runtime
+  // hydration passes false explicitly for route/worker sessions.
+  const botModeEnabled = input.capabilities.botModeEnabled !== false;
   const identity = input.identity.trim();
   if (identity) parts.push(identity);
   parts.push(TASK_COMPLETION_GUIDANCE);
@@ -263,9 +261,13 @@ export function buildBotStableTier(input: BotSystemPromptInput): string {
   if (input.capabilities.memoryEnabled) capabilityParts.push(MEMORY_GUIDANCE);
   // 历史检索住在 cindy_helper 里(essential 插件、恒挂),判据与委派同一个 —— 
   // 工具面里有它,才说得出「你能翻回去查」。
-  if (input.capabilities.delegationEnabled) capabilityParts.push(HISTORY_GUIDANCE);
+  if (botModeEnabled && input.capabilities.delegationEnabled) {
+    capabilityParts.push(HISTORY_GUIDANCE);
+  }
   if (input.capabilities.ownSkillsEnabled) capabilityParts.push(OWN_SKILLS_GUIDANCE);
-  if (input.capabilities.delegationEnabled) capabilityParts.push(DELEGATION_GUIDANCE);
+  if (botModeEnabled && input.capabilities.delegationEnabled) {
+    capabilityParts.push(DELEGATION_GUIDANCE);
+  }
   if (has(input.capabilities, 'scheduler')) capabilityParts.push(SCHEDULE_GUIDANCE);
   // 作品集不依赖某个 toolset:只要能产出文件/图片/视频就成立,而任何伙伴
   // 都可能产出图片(出图能力在别处),所以恒挂。
@@ -304,7 +306,9 @@ export function buildBotVolatileTier(input: BotSystemPromptInput): string {
   const skillIndex = buildBotSkillIndex(input.skillIndex);
   if (skillIndex) parts.push(skillIndex);
   // 队友名册随「有哪些伙伴 / 谁改了名」变,所以在易变层 —— 与技能索引同理。
-  const teammates = buildBotTeammateRoster(input.teammates ?? []);
+  const teammates = input.capabilities.botModeEnabled !== false
+    ? buildBotTeammateRoster(input.teammates ?? [])
+    : '';
   if (teammates) parts.push(teammates);
   const memory = input.memorySnapshot?.trim();
   if (memory) parts.push(memory);
@@ -356,7 +360,10 @@ export function buildBotRenewalHandoff(input: {
 
 /** 上下文层:调用方给的会话级段落(会话控制模式等)。 */
 export function buildBotContextTier(input: BotSystemPromptInput): string {
-  return (input.contextSections ?? []).map((s) => s.trim()).filter(Boolean).join('\n\n');
+  const sections = (input.contextSections ?? []).map((s) => s.trim()).filter(Boolean);
+  const overlay = input.systemPromptOverride?.trim();
+  if (overlay) sections.push(overlay);
+  return sections.join('\n\n');
 }
 
 /**

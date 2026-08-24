@@ -150,15 +150,15 @@ describe('伙伴的家', () => {
     skillIndex: [],
   };
 
-  it('写了 system_prompt.md 就完全听它的,不在后面偷偷再叠一份我们的说法', () => {
-    const stable = buildBotStableTier({ ...base, systemPromptOverride: '  我自己写的全部  ' });
-    expect(stable).toBe('我自己写的全部');
-    // 默认组装里的东西一样都不该漏进来。
-    expect(stable).not.toContain('你是小柴。');
-    expect(stable).not.toContain('# 你会做什么');
+  it('写了 system_prompt.md 也不能覆盖 SOUL 与 Cindy 核心协议', () => {
+    const prompt = buildBotSystemPrompt({ ...base, systemPromptOverride: '  用户自己的补充  ' });
+    expect(prompt.stable).toContain('你是小柴。');
+    expect(prompt.stable).toContain('# 把活干完');
+    expect(prompt.context).toContain('用户自己的补充');
+    expect(prompt.full.indexOf('你是小柴。')).toBeLessThan(prompt.full.indexOf('用户自己的补充'));
   });
 
-  it('没写覆盖时行为逐字不变', () => {
+  it('没有 overlay 时行为逐字不变', () => {
     expect(buildBotStableTier({ ...base, systemPromptOverride: '   ' })).toBe(
       buildBotStableTier(base),
     );
@@ -179,13 +179,49 @@ describe('伙伴的家', () => {
     expect(buildBotStableTier({ ...base, homeDir: '   ' })).toBe(stable);
   });
 
-  it('用户整段自己写提示词时,这段跟其它能力说明一起让位', () => {
-    const stable = buildBotStableTier({
+  it('overlay 位于上下文层,不会把 Bot Mode 核心协议挤掉', () => {
+    const prompt = buildBotSystemPrompt({
       ...base,
       homeDir: '/data/bots/bot-a',
       systemPromptOverride: '你只回一个字。',
     });
-    expect(stable).toBe('你只回一个字。');
+    expect(prompt.stable).toContain('## 你有个自己的文件夹');
+    expect(prompt.context).toBe('你只回一个字。');
+  });
+});
+
+describe('Bot Mode 的角色边界', () => {
+  const base = {
+    displayName: '小柴',
+    identity: '你是小柴。',
+    skillIndex: [],
+  };
+
+  it('只有 canonical Chat 才注入委派与历史导航', () => {
+    const canonical = buildBotStableTier({
+      ...base,
+      capabilities: {
+        toolsets: ['xdt_helper'],
+        memoryEnabled: false,
+        delegationEnabled: true,
+        ownSkillsEnabled: false,
+        botModeEnabled: true,
+      },
+    });
+    const worker = buildBotStableTier({
+      ...base,
+      capabilities: {
+        toolsets: ['xdt_helper'],
+        memoryEnabled: false,
+        delegationEnabled: true,
+        ownSkillsEnabled: false,
+        botModeEnabled: false,
+      },
+    });
+    expect(canonical).toContain('你可以叫别的伙伴帮忙');
+    expect(canonical).toContain('你能翻回去查');
+    expect(worker).not.toContain('你可以叫别的伙伴帮忙');
+    expect(worker).not.toContain('你能翻回去查');
   });
 });
 

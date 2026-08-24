@@ -34,7 +34,7 @@
  * <userData>/bots/<botId>/
  *   SOUL.md                     ← 身份。Hermes 同名同义
  *   memories/USER.md            ← 用户画像。Hermes 同路径
- *   system_prompt.md            ← 整段提示词覆盖(有内容才生效)
+ *   system_prompt.md            ← 用户维护的 prompt overlay(有内容才生效,不取代核心协议)
  *   config.json                 ← 能力位 + 展示元数据
  *   .claude-plugin/plugin.json  ← 让整个目录能被 Claude Code 当本地 plugin 挂载
  *   skills/<slug>/SKILL.md      ← 技能。pi 直接 `--skill <这个目录>`
