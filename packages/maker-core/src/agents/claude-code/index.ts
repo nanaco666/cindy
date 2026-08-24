@@ -119,9 +119,11 @@ import {
 } from './env-builder.js';
 import { buildClaudeFlagSettings } from './flag-settings.js';
 import {
+  buildClaudeAskUserQuestionCallerProvenanceHooks,
   buildClaudeOrcaCallerProvenanceHooks,
   buildClaudeLocalToolGuardHooks,
   buildClaudeRemoteOrcaCallerGuards,
+  buildClaudeRemoteRootOnlyToolGuards,
   buildClaudeRemoteToolGuards,
   mergeClaudeHookSets,
 } from './capability-routing.js';
@@ -1672,6 +1674,7 @@ export class ClaudeCodeAgent extends BaseAgent {
           // rely on their observable order. The exact-match Orca provenance guard
           // still runs for send_to_lead after those hooks and denies descendants.
           buildClaudeOrcaCallerProvenanceHooks(),
+          buildClaudeAskUserQuestionCallerProvenanceHooks(),
           this.deps.claudeHooks,
         );
     const deniedCapabilityRoute = (toolName: string) => {
@@ -2970,6 +2973,7 @@ export class ClaudeCodeAgent extends BaseAgent {
         sdkInPlanMode = remotePermissionMode === 'plan';
         const remoteToolGuards = [
           ...buildClaudeRemoteToolGuards(this.deps.capabilityRouting),
+          ...buildClaudeRemoteRootOnlyToolGuards(),
           ...buildClaudeRemoteOrcaCallerGuards(vo.orcaRole === 'worker'),
         ];
 
@@ -4654,6 +4658,7 @@ export class ClaudeCodeAgent extends BaseAgent {
               turn: turnState,
               log,
               getModel: () => mutableModel,
+              getProviderId: () => mutableProviderId,
               getModelContextWindow: () => resolveModelContextWindow(mutableModel),
               getEffort: () => mutableEffort,
               getPermissionMode: () => mutablePermissionMode,

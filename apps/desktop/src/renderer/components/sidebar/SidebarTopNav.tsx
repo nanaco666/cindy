@@ -31,6 +31,7 @@ import { GhostPanelRestoreEntry } from '@/cindy-brain/GhostPanelRestoreEntry';
 import { useActiveMainView } from '@/hooks/useActiveMainView';
 import { SidebarInlineSearch } from '@/features/cc-agent/sidebar/SidebarInlineSearch';
 import { useConversationSearchContext } from '@/features/cc-agent/sidebar/conversationSearchContext';
+import { GhostMainViewNavEntries } from './GhostMainViewNavEntries';
 
 /** 列表行通用样式 —— 各行同款 pill 行。 */
 const ROW_CLASS =
@@ -146,6 +147,7 @@ export function SidebarTopNav({
       <span className="leading-none">{t('sidebar.tabs.bots')}</span>
     </button>
   ) : null;
+  const mainViewRows = showScrollable ? <GhostMainViewNavEntries variant="row" /> : null;
   const restoreRow = showScrollable ? (
     <GhostPanelRestoreEntry variant="row" className={ROW_CLASS} />
   ) : null;
@@ -167,6 +169,7 @@ export function SidebarTopNav({
           {automationsRow}
           {pluginsRow}
           {botsRow}
+          {mainViewRows}
           {restoreRow}
         </div>
         <div
@@ -208,6 +211,7 @@ export function SidebarTopNav({
       {automationsRow}
       {pluginsRow}
       {botsRow}
+      {mainViewRows}
       {restoreRow}
       {searchRow}
     </div>

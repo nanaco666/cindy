@@ -19,6 +19,8 @@ import type { AgentEvent, AgentTaskStatus, AgentTaskUsage, AgentTaskUpdateEventD
 import { normalizeWorkflowProgressEntries } from '@cindy/maker-shared/agent-task';
 import {
   extractNonSecretErrorSignals,
+  GATEWAY_PROXY_TOKEN_INVALID_REASON,
+  isCindyGatewayProxyTokenInvalidError,
   redactSensitiveText,
 } from '@cindy/maker-shared/error-redaction';
 import {
@@ -176,6 +178,8 @@ export interface RuntimeState {
    * 发出可见正文，不能看整轮 `uiEmittedText`，也不能跨 text block 复用。
    */
   streamStopTokenByKey: Map<string, StandaloneStopTokenHold>;
+  /** Current message_start.message.id for each parent stream, used before the full envelope arrives. */
+  streamRequestIdByParent: Map<string, string>;
   /** Per-parent active provider request used to merge message_start + message_delta usage. */
   activeUsageSegmentByParent: Map<string, string>;
   /** Price variant frozen for the active request of each parent stream. */
@@ -200,6 +204,7 @@ export function newRuntimeState(): RuntimeState {
     lastAssistantMeta: null,
     lastResultUsageAggregate: null,
     streamStopTokenByKey: new Map(),
+    streamRequestIdByParent: new Map(),
     activeUsageSegmentByParent: new Map(),
     activeUsagePriceVariantByParent: new Map(),
     pendingUsagePriceVariantByParent: new Map(),
@@ -530,6 +535,8 @@ interface TranslateContext {
    * 不会因为闭包捕获 startSession 时的初始值而打陈旧数据。
    */
   getModel: () => string;
+  /** 当前 turn 的 provider 路由；null = 兼容旧会话的隐式默认来源。 */
+  getProviderId?: () => string | null;
   /**
    * Maker capabilities 中当前模型的 contextWindow。
    * Claude Code SDK 对未知第三方模型会回 200K 默认值; maker 侧配置更准时用它覆盖。
@@ -1285,6 +1292,16 @@ function handleAssistant(
   const parentToolUseId = typeof msg.parent_tool_use_id === 'string' && msg.parent_tool_use_id
     ? msg.parent_tool_use_id
     : undefined;
+  const parentStreamKey = parentToolUseId ?? '__main__';
+  const assistantRequestId = typeof assistantMeta.requestId === 'string'
+    ? assistantMeta.requestId
+    : undefined;
+  if (
+    assistantRequestId &&
+    ctx.rt.streamRequestIdByParent.get(parentStreamKey) === assistantRequestId
+  ) {
+    ctx.rt.streamRequestIdByParent.delete(parentStreamKey);
+  }
   // 子代理完整 assistant 没有 message_delta 时，result.usage 仍含其子输出，
   // 而父级 Agent 工具区间已从分母排除。与 message_delta 路径同样 fail-closed。
   if (parentToolUseId) markClaudeGenerationUnreliable(ctx.rt.generation);
@@ -1342,7 +1359,6 @@ function handleAssistant(
   for (const blockRaw of content) {
     const block = blockRaw as { type?: string; text?: string; name?: string; id?: string; input?: unknown; thinking?: string; signature?: string };
     if (block.type === 'text' && typeof block.text === 'string') {
-      const parentStreamKey = parentToolUseId ?? '__main__';
       const prefix = `${parentStreamKey}:`;
       for (const key of ctx.rt.streamStopTokenByKey.keys()) {
         if (key === parentStreamKey || key.startsWith(prefix)) {
@@ -1452,7 +1468,7 @@ function handleStreamEvent(
     index?: number;
     delta?: Record<string, unknown>;
     usage?: Record<string, number>;
-    message?: { model?: string; usage?: Record<string, number> };
+    message?: { id?: string; model?: string; usage?: Record<string, number> };
     content_block?: { type?: string; id?: string; name?: string; input?: unknown };
   } | undefined;
   if (!event) return;
@@ -1490,21 +1506,33 @@ function handleStreamEvent(
   if (typeof eventModel === 'string' && eventModel) {
     ctx.rt.streamModelByParentToolUseId.set(parentStreamKey, eventModel);
   }
+  const eventRequestId = event.message?.id;
+  if (typeof eventRequestId === 'string' && eventRequestId) {
+    ctx.rt.streamRequestIdByParent.set(parentStreamKey, eventRequestId);
+  }
   const streamModel = typeof eventModel === 'string' && eventModel
     ? eventModel
     : ctx.rt.streamModelByParentToolUseId.get(parentStreamKey);
+  const streamRequestId = typeof eventRequestId === 'string' && eventRequestId
+    ? eventRequestId
+    : ctx.rt.streamRequestIdByParent.get(parentStreamKey);
   const fallbackMeta: Record<string, unknown> | undefined = parentToolUseId
     ? {
         parentUuid: parentToolUseId,
         ...(streamModel ? { model: streamModel } : {}),
+        ...(streamRequestId ? { requestId: streamRequestId } : {}),
       }
     : ctx.rt.lastAssistantMeta
       ? {
           ...ctx.rt.lastAssistantMeta,
           ...(streamModel ? { model: streamModel } : {}),
+          ...(streamRequestId ? { requestId: streamRequestId } : {}),
         }
-      : streamModel
-        ? { model: streamModel }
+      : streamModel || streamRequestId
+        ? {
+            ...(streamModel ? { model: streamModel } : {}),
+            ...(streamRequestId ? { requestId: streamRequestId } : {}),
+          }
         : undefined;
 
   if (event.type === 'content_block_delta') {
@@ -2122,7 +2150,14 @@ function handleResult(
     // 上下文超限带稳定 reason key(判定在上方 endTurn 前已算好): renderer 靠它
     // 隐藏必败的 Retry(原样重发必然再撞同一个 4xx)并给出压缩 / 新开会话入口;
     // 文案匹配仅作历史持久化错误行的兜底(overload reason 同款分层)。
-    const overflowReason = isContextOverflowTurn ? { reason: CONTEXT_OVERFLOW_REASON } : {};
+    const classifiedReason = isContextOverflowTurn
+      ? { reason: CONTEXT_OVERFLOW_REASON }
+      : isCindyGatewayProxyTokenInvalidError({
+            providerId: ctx.getProviderId?.() ?? null,
+            message: [errorMessage, errDetail, pendingApiError?.message].filter(Boolean).join('\n'),
+          })
+        ? { reason: GATEWAY_PROXY_TOKEN_INVALID_REASON }
+        : {};
     queue.push({
       type: 'error',
       data: pendingApiError
@@ -2130,7 +2165,7 @@ function handleResult(
             message: errorMessage,
             sdkError: pendingApiError.sdkError,
             isTerminal: true,
-            ...overflowReason,
+            ...classifiedReason,
             ...(errorStatus !== undefined ? { errorStatus } : {}),
             ...(usageLimit ? { usageLimit: true } : {}),
             ...(pendingApiError.retryAttempt !== undefined
@@ -2144,7 +2179,7 @@ function handleResult(
         ? {
             message: errDetail,
             isTerminal: true,
-            ...overflowReason,
+            ...classifiedReason,
             ...(errorStatus !== undefined ? { errorStatus } : {}),
             ...(usageLimit ? { usageLimit: true } : {}),
           }

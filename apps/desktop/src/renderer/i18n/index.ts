@@ -23,6 +23,7 @@ import jaCommon from './locales/ja/common.json';
 import jaAiRename from './locales/ja/aiRename.json';
 import koCommon from './locales/ko/common.json';
 import koAiRename from './locales/ko/aiRename.json';
+import { GHOST_OFFICIAL_ID_PREFIXES } from '../../shared/ghost';
 import { DEFAULT_LOCALE } from '../../shared/locale';
 
 export {
@@ -59,7 +60,13 @@ void i18n.use(initReactI18next).init({
     // 裁决:不用「TA」)。真值由各视图按当前伙伴传入(botPronounFor);这里给一个
     // 通用兜底,保证**任何**漏传的位置都渲染成一句人话,而不是把 `{{pronoun}}`
     // 原样显示给用户。
-    defaultVariables: { appName: BRAND_NAME, pronoun: '这位伙伴' },
+    // 保留前缀同样只读 shared/ghost.ts 的正本。错误文案不各自枚举,
+    // 新增前缀后所有装入入口会自动展示完整列表。
+    defaultVariables: {
+      appName: BRAND_NAME,
+      pronoun: '这位伙伴',
+      reservedGhostIdPrefixes: GHOST_OFFICIAL_ID_PREFIXES.join(' / '),
+    },
   },
   returnNull: false,
 });
