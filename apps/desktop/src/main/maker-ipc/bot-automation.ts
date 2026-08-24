@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
 import { BrowserWindow, ipcMain } from 'electron';
-import { and, desc, eq, inArray } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull } from 'drizzle-orm';
 import type { AgentKind } from '@cindy/maker-core';
 import type {
   CreateScheduleInput,
@@ -35,6 +35,7 @@ import {
   botProfiles,
   botProjectBindings,
   botRoutes,
+  botSessionLinks,
   botWorkspaceLeases,
   scheduleRuns,
   schedules,
@@ -695,7 +696,6 @@ export function registerBotAutomationHandlers(deps: BotAutomationHandlerDeps): v
       const [activeProfile] = await db
         .select({
           status: botProfiles.status,
-          canonicalSessionId: botProfiles.canonicalSessionId,
         })
         .from(botProfiles)
         .where(eq(botProfiles.id, link.botId))
@@ -779,7 +779,18 @@ export function registerBotAutomationHandlers(deps: BotAutomationHandlerDeps): v
             ownerGeneration: route.ownerGeneration,
           };
         } else {
-          if (activeProfile.canonicalSessionId !== expectedTargetSessionId) {
+          const [canonicalLink] = await db
+            .select({ sessionId: botSessionLinks.sessionId })
+            .from(botSessionLinks)
+            .where(
+              and(
+                eq(botSessionLinks.botId, link.botId),
+                eq(botSessionLinks.role, 'canonical'),
+                isNull(botSessionLinks.archivedAt),
+              ),
+            )
+            .limit(1);
+          if (canonicalLink?.sessionId !== expectedTargetSessionId) {
             throwIpcError(
               'PRECONDITION_FAILED',
               'The Bot canonical task changed; the old result will not be redirected',

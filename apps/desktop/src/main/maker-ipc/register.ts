@@ -10179,9 +10179,17 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions)
       }
 
       const [fallback] = await getDbClient()
-        .drizzle.select({ canonicalSessionId: botProfiles.canonicalSessionId })
-        .from(botProfiles)
-        .where(eq(botProfiles.id, fallbackBotId))
+        .drizzle.select({ canonicalSessionId: botSessionLinks.sessionId })
+        .from(botSessionLinks)
+        .innerJoin(botProfiles, eq(botProfiles.id, botSessionLinks.botId))
+        .where(
+          and(
+            eq(botSessionLinks.botId, fallbackBotId),
+            eq(botSessionLinks.role, 'canonical'),
+            isNull(botSessionLinks.archivedAt),
+            eq(botProfiles.status, 'active'),
+          ),
+        )
         .limit(1);
       const candidates = [...new Set([targetSessionId, fallback?.canonicalSessionId].filter(
         (value): value is string => typeof value === 'string' && value.length > 0,

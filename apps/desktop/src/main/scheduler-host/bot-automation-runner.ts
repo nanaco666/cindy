@@ -235,7 +235,7 @@ async function buildAutomationExecutionPlan(input: {
     botId: input.profile.id,
     durableNoteNamespace: input.durableNoteNamespace,
     profile: capabilitySnapshot({
-      profileVersion: input.profile.currentVersion,
+      profileVersion: input.version.version,
       capabilitiesJson: input.version.capabilitiesJson,
       identitySource: input.version.identitySource,
     }),
@@ -267,11 +267,14 @@ async function validateAutomationExecutionPlan(
     .from(botProfiles)
     .where(eq(botProfiles.id, plan.botId))
     .limit(1);
-  if (
-    !profile
-    || profile.status !== 'active'
-    || profile.currentVersion !== plan.profile.profileVersion
-  ) {
+  const canonicalLink = plan.delivery.targetRouteId
+    ? null
+    : await resolveCanonicalSessionLink(db, plan.botId);
+  const profileVersionStillOwned = canonicalLink
+    ? canonicalLink.sessionId === plan.delivery.targetSessionId
+      && canonicalLink.profileVersion === plan.profile.profileVersion
+    : profile?.currentVersion === plan.profile.profileVersion;
+  if (!profile || profile.status !== 'active' || !profileVersionStillOwned) {
     throw new Error('Bot automation Profile changed after this run was claimed');
   }
   const [version] = await db
@@ -433,6 +436,38 @@ function isAbort(error: unknown, signal: AbortSignal): boolean {
     || message.includes('abort');
 }
 
+async function resolveCanonicalSessionLink(
+  db: SchedulerDrizzleDb,
+  botId: string,
+): Promise<{ sessionId: string; profileVersion: number } | null> {
+  const [link] = await db
+    .select({
+      sessionId: botSessionLinks.sessionId,
+      profileVersion: botSessionLinks.profileVersion,
+    })
+    .from(botSessionLinks)
+    .where(
+      and(
+        eq(botSessionLinks.botId, botId),
+        eq(botSessionLinks.role, 'canonical'),
+        isNull(botSessionLinks.archivedAt),
+      ),
+    )
+    .limit(1);
+  return link ?? null;
+}
+
+/** Same-profile routines are Hermes-style canonical Chat turns. */
+export function isCanonicalBotRoutine(input: {
+  targetRouteId: string | null;
+  canonicalSessionId: string | null;
+  targetSessionId: string | null | undefined;
+}): boolean {
+  return !input.targetRouteId
+    && !!input.canonicalSessionId
+    && input.targetSessionId === input.canonicalSessionId;
+}
+
 export interface BotAutomationScheduleRunnerDeps {
   delegate: ScheduleRunner;
   maker: Maker;
@@ -491,7 +526,6 @@ async function resolveBotAutomationDeliveryTarget(
   }
   const [profile] = await db
     .select({
-      canonicalSessionId: botProfiles.canonicalSessionId,
       status: botProfiles.status,
     })
     .from(botProfiles)
@@ -506,6 +540,7 @@ async function resolveBotAutomationDeliveryTarget(
       error: 'Bot automation delivery task snapshot is unavailable; completion was not redirected',
     };
   }
+  const canonicalSessionId = (await resolveCanonicalSessionLink(db, botId))?.sessionId ?? null;
   if (targetRouteId) {
     const [route] = await db
       .select({
@@ -550,7 +585,7 @@ async function resolveBotAutomationDeliveryTarget(
         : 'Target route no longer exists',
     };
   }
-  if (profile.canonicalSessionId !== expectedSessionId) {
+  if (canonicalSessionId !== expectedSessionId) {
     return {
       ok: false,
       error: 'Bot canonical task changed while the automation was running',
@@ -558,9 +593,9 @@ async function resolveBotAutomationDeliveryTarget(
   }
   return {
     ok: true,
-    target: profile.canonicalSessionId
+    target: canonicalSessionId
       ? {
-          sessionId: profile.canonicalSessionId,
+          sessionId: canonicalSessionId,
           channelId: null,
           routeId: null,
           ownerGeneration: 0,
@@ -613,13 +648,20 @@ export class BotAutomationScheduleRunner implements ScheduleRunner {
         .where(and(eq(botProfiles.id, link.botId), eq(botProfiles.status, 'active')))
         .limit(1);
       if (!profile) throw new Error('Bot automation profile is unavailable');
+      const canonicalLink = link.targetRouteId
+        ? null
+        : await resolveCanonicalSessionLink(db, profile.id);
+      if (!link.targetRouteId && !canonicalLink) {
+        throw new Error('Bot canonical Session link is unavailable');
+      }
+      const executionProfileVersion = canonicalLink?.profileVersion ?? profile.currentVersion;
       const [version] = await db
         .select()
         .from(botProfileVersions)
         .where(
           and(
             eq(botProfileVersions.botId, profile.id),
-            eq(botProfileVersions.version, profile.currentVersion),
+            eq(botProfileVersions.version, executionProfileVersion),
           ),
         )
         .limit(1);
@@ -667,7 +709,7 @@ export class BotAutomationScheduleRunner implements ScheduleRunner {
       }
 
       let targetRouteOwnerGenerationSnapshot: number | null = null;
-      let targetSessionIdSnapshot = profile.canonicalSessionId;
+      let targetSessionIdSnapshot: string | null = null;
       if (link.targetRouteId) {
         const [targetRoute] = await db
           .select({
@@ -689,6 +731,8 @@ export class BotAutomationScheduleRunner implements ScheduleRunner {
         }
         targetRouteOwnerGenerationSnapshot = targetRoute.ownerGeneration;
         targetSessionIdSnapshot = targetRoute.currentSessionId;
+      } else {
+        targetSessionIdSnapshot = canonicalLink!.sessionId;
       }
 
       const createdAt = Date.now();
@@ -719,7 +763,7 @@ export class BotAutomationScheduleRunner implements ScheduleRunner {
           scheduleRunId: ctx.runId,
           sessionId: null,
           workspaceLeaseId: null,
-          profileVersion: profile.currentVersion,
+          profileVersion: executionPlan.profile.profileVersion,
           projectBindingIdSnapshot: binding?.id ?? null,
           targetRouteIdSnapshot: link.targetRouteId,
           targetRouteOwnerGenerationSnapshot,
@@ -818,87 +862,111 @@ export class BotAutomationScheduleRunner implements ScheduleRunner {
       throw error;
     }
 
-    const sessionId = randomUUID();
-    const workspaceKind = binding ? 'project' : 'dialogue';
-    const workingDir = binding?.workingDir ?? ensureDialogueWorkspaceDir(sessionId, createdAt);
+    const canonicalSessionId = executionPlan.delivery.targetSessionId ?? null;
+    const canonicalRoutine = isCanonicalBotRoutine({
+      targetRouteId: executionPlan.delivery.targetRouteId,
+      canonicalSessionId,
+      targetSessionId: canonicalSessionId,
+    });
+    const sessionId = canonicalRoutine ? canonicalSessionId! : randomUUID();
+    const workspaceKind = canonicalRoutine
+      ? undefined
+      : binding
+        ? 'project'
+        : 'dialogue';
+    const workingDir = canonicalRoutine
+      ? undefined
+      : binding?.workingDir ?? ensureDialogueWorkspaceDir(sessionId, createdAt);
     const agentKind: AgentKind = executionPlan.profile.agentKind === 'cc'
       ? 'claude-code'
       : executionPlan.profile.agentKind;
     const model = executionPlan.profile.model;
     const localChannelId = `${profile.id}:local`;
-    try {
-      await ensureProjectGitInitialized({
-        workingDir,
-        workspaceKind,
-        remoteHostId: binding?.remoteHostId ?? null,
-        sessionId,
-        autoSnapshotEnabled: readGitSafetySettings().autoSnapshotEnabled,
-        source: 'bot-automation',
-      });
-      const sessionRow = {
-        ...sessionCreateToRow(
+    if (canonicalRoutine) {
+      await db
+        .update(botAutomationRuns)
+        .set({
           sessionId,
-          {
-            workspaceKind,
-            workingDir,
-            model,
-            agentKind: agentKind === 'claude-code' ? 'cc' : agentKind,
-            permissionMode: 'bypassPermissions',
-            remoteHostId: binding?.remoteHostId ?? undefined,
-            source: 'bot',
+          workingDirSnapshot: null,
+          remoteHostIdSnapshot: null,
+          updatedAt: Date.now(),
+        })
+        .where(eq(botAutomationRuns.id, automationRunId));
+    } else {
+      try {
+        await ensureProjectGitInitialized({
+          workingDir: workingDir!,
+          workspaceKind: workspaceKind!,
+          remoteHostId: binding?.remoteHostId ?? null,
+          sessionId,
+          autoSnapshotEnabled: readGitSafetySettings().autoSnapshotEnabled,
+          source: 'bot-automation',
+        });
+        const sessionRow = {
+          ...sessionCreateToRow(
+            sessionId,
+            {
+              workspaceKind: workspaceKind!,
+              workingDir: workingDir!,
+              model,
+              agentKind: agentKind === 'claude-code' ? 'cc' : agentKind,
+              permissionMode: 'bypassPermissions',
+              remoteHostId: binding?.remoteHostId ?? undefined,
+              source: 'bot',
+            },
+            createdAt,
+          ),
+          title: `${profile.displayName} · ${schedule.name}`.slice(0, 120),
+        };
+        await getDbClient().tx('bots.createAutomationSession', {
+          automationRunId,
+          botId: profile.id,
+          localChannelId,
+          profileVersion: executionPlan.profile.profileVersion,
+          routeKey: `automation:${ctx.runId}`,
+          workingDirSnapshot: workingDir!,
+          remoteHostIdSnapshot: binding?.remoteHostId ?? null,
+          session: {
+            id: sessionRow.id,
+            title: sessionRow.title,
+            workingDir: sessionRow.workingDir ?? null,
+            workspaceKind: sessionRow.workspaceKind,
+            model: sessionRow.model,
+            effort: sessionRow.effort,
+            permissionMode: sessionRow.permissionMode,
+            agentKind: sessionRow.agentKind,
+            remoteHostId: sessionRow.remoteHostId ?? null,
+            providerId: sessionRow.providerId ?? null,
+            extraDirs: sessionRow.extraDirs,
+            source: sessionRow.source,
+            createdAt: sessionRow.createdAt,
+            updatedAt: sessionRow.updatedAt,
           },
-          createdAt,
-        ),
-        title: `${profile.displayName} · ${schedule.name}`.slice(0, 120),
-      };
-      await getDbClient().tx('bots.createAutomationSession', {
-        automationRunId,
-        botId: profile.id,
-        localChannelId,
-        profileVersion: profile.currentVersion,
-        routeKey: `automation:${ctx.runId}`,
-        workingDirSnapshot: workingDir,
-        remoteHostIdSnapshot: binding?.remoteHostId ?? null,
-        session: {
-          id: sessionRow.id,
-          title: sessionRow.title,
-          workingDir: sessionRow.workingDir ?? null,
-          workspaceKind: sessionRow.workspaceKind,
-          model: sessionRow.model,
-          effort: sessionRow.effort,
-          permissionMode: sessionRow.permissionMode,
-          agentKind: sessionRow.agentKind,
-          remoteHostId: sessionRow.remoteHostId ?? null,
-          providerId: sessionRow.providerId ?? null,
-          extraDirs: sessionRow.extraDirs,
-          source: sessionRow.source,
-          createdAt: sessionRow.createdAt,
-          updatedAt: sessionRow.updatedAt,
-        },
-        now: Date.now(),
-      });
-    } catch (error) {
-      // Only reclaim the exact app-owned dialogue directory allocated above.
-      // A project binding is user-owned and must never be failure-cleaned here.
-      if (workspaceKind === 'dialogue') {
-        await fs.rm(workingDir, { recursive: true, force: true }).catch(() => undefined);
+          now: Date.now(),
+        });
+      } catch (error) {
+        // Only reclaim the exact app-owned dialogue directory allocated above.
+        // A project binding is user-owned and must never be failure-cleaned here.
+        if (workspaceKind === 'dialogue') {
+          await fs.rm(workingDir!, { recursive: true, force: true }).catch(() => undefined);
+        }
+        await this.finalizeClaimOnly(
+          automationRunId,
+          isAbort(error, ctx.signal) ? 'aborted' : 'failed',
+        );
+        throw error;
       }
-      await this.finalizeClaimOnly(
-        automationRunId,
-        isAbort(error, ctx.signal) ? 'aborted' : 'failed',
-      );
-      throw error;
-    }
-    this.deps.onSessionCreated?.(sessionId);
-    try {
-      await ctx.onSessionBound?.(sessionId);
-    } catch (error) {
-      this.deps.logger?.warn?.('[bot-automation] session bind broadcast failed (non-fatal)', {
-        scheduleId: schedule.id,
-        runId: ctx.runId,
-        sessionId,
-        error: errorText(error),
-      });
+      this.deps.onSessionCreated?.(sessionId);
+      try {
+        await ctx.onSessionBound?.(sessionId);
+      } catch (error) {
+        this.deps.logger?.warn?.('[bot-automation] session bind broadcast failed (non-fatal)', {
+          scheduleId: schedule.id,
+          runId: ctx.runId,
+          sessionId,
+          error: errorText(error),
+        });
+      }
     }
 
     const runStartedAt = Date.now();
@@ -907,7 +975,7 @@ export class BotAutomationScheduleRunner implements ScheduleRunner {
       .set({ status: 'running', updatedAt: runStartedAt })
       .where(eq(botAutomationRuns.id, automationRunId));
 
-    const delegatedSchedule: Schedule = {
+    const delegatedSchedule = ({
       ...schedule,
       /*
         定时任务的提示词只前置**一行**:告诉伙伴这是哪条例行任务在跑(不是用户
@@ -925,19 +993,36 @@ export class BotAutomationScheduleRunner implements ScheduleRunner {
 
         运行编号仍然照常记在 botAutomationRuns 表里 —— 那才是它该待的地方。
       */
-      prompt: [`Cindy Bot automation: ${schedule.name}`, schedule.prompt].join('\n\n'),
+      // Hermes runs a same-profile routine as the user's original instruction
+      // in the permanent canonical Chat.  IM routes and cross-profile workers
+      // retain the existing human-readable wrapper.
+      prompt: canonicalRoutine
+        ? schedule.prompt
+        : [`Cindy Bot automation: ${schedule.name}`, schedule.prompt].join('\n\n'),
       targetSessionId: sessionId,
       persistentSession: false,
-      agentKind,
-      model,
-      providerId: typeof config.providerId === 'string' ? config.providerId : undefined,
-      effort: typeof config.effort === 'string' ? config.effort : schedule.effort,
-      fastMode: typeof config.fastMode === 'boolean' ? config.fastMode : schedule.fastMode,
-      workspaceKind,
-      workingDir,
+      agentKind: canonicalRoutine ? schedule.agentKind : agentKind,
+      model: canonicalRoutine ? undefined : model,
+      providerId: canonicalRoutine
+        ? undefined
+        : typeof config.providerId === 'string'
+          ? config.providerId
+          : undefined,
+      effort: canonicalRoutine
+        ? undefined
+        : typeof config.effort === 'string'
+          ? config.effort
+          : schedule.effort,
+      fastMode: canonicalRoutine
+        ? undefined
+        : typeof config.fastMode === 'boolean'
+          ? config.fastMode
+          : schedule.fastMode,
+      workspaceKind: canonicalRoutine ? schedule.workspaceKind : workspaceKind!,
+      workingDir: canonicalRoutine ? undefined : workingDir,
       useWorktree: false,
       preRunHook: undefined,
-    };
+    } satisfies Schedule);
 
     let result: FireResult;
     let deadlineExpired = false;
@@ -952,19 +1037,21 @@ export class BotAutomationScheduleRunner implements ScheduleRunner {
     }, remainingMs);
     deadlineTimer.unref?.();
     try {
-      await this.deps.maker.createSession({
-        id: sessionId,
-        agentKind,
-        workingDir,
-        model,
-        effort: configuredEffort(config.effort, schedule.effort),
-        fastMode: typeof config.fastMode === 'boolean' ? config.fastMode : schedule.fastMode,
-        permissionMode: 'bypassPermissions',
-        providerId: typeof config.providerId === 'string' ? config.providerId : undefined,
-        remoteHostId: binding?.remoteHostId ?? undefined,
-        title: `${profile.displayName} · ${schedule.name}`.slice(0, 120),
-        vendorOptions: { source: 'scheduler' },
-      });
+      if (!canonicalRoutine) {
+        await this.deps.maker.createSession({
+          id: sessionId,
+          agentKind,
+          workingDir: workingDir!,
+          model,
+          effort: configuredEffort(config.effort, schedule.effort),
+          fastMode: typeof config.fastMode === 'boolean' ? config.fastMode : schedule.fastMode,
+          permissionMode: 'bypassPermissions',
+          providerId: typeof config.providerId === 'string' ? config.providerId : undefined,
+          remoteHostId: binding?.remoteHostId ?? undefined,
+          title: `${profile.displayName} · ${schedule.name}`.slice(0, 120),
+          vendorOptions: { source: 'scheduler' },
+        });
+      }
       if (runAbort.signal.aborted) {
         throw runAbort.signal.reason ?? new Error('Bot automation aborted during runtime startup');
       }
@@ -1032,7 +1119,7 @@ export class BotAutomationScheduleRunner implements ScheduleRunner {
       targetRouteOwnerGenerationSnapshot,
       executionPlan.delivery.targetSessionId,
     );
-    if (deliveryTarget.ok && deliveryTarget.target && this.deps.enqueueDelivery) {
+    if (!canonicalRoutine && deliveryTarget.ok && deliveryTarget.target && this.deps.enqueueDelivery) {
       const text = [
         `[Cindy Bot automation ${schedule.name} completed]`,
         resultTextSnapshot ? `Result:\n${resultTextSnapshot}` : '',
@@ -1128,6 +1215,18 @@ export class BotAutomationScheduleRunner implements ScheduleRunner {
   }): Promise<void> {
     const db = this.deps.getDb();
     const finishedAt = Date.now();
+    const [canonicalLink] = await db
+      .select({ id: botSessionLinks.id })
+      .from(botSessionLinks)
+      .where(
+        and(
+          eq(botSessionLinks.sessionId, input.sessionId),
+          eq(botSessionLinks.role, 'canonical'),
+          isNull(botSessionLinks.archivedAt),
+        ),
+      )
+      .limit(1);
+    const preserveCanonicalSession = !!canonicalLink;
     const [attachment] = await db
       .select({
         leaseId: botWorkspaceAttachments.leaseId,
@@ -1152,25 +1251,28 @@ export class BotAutomationScheduleRunner implements ScheduleRunner {
         : input.errorMessage?.slice(0, 4_000) ?? null,
       workspaceLeaseId: attachment?.leaseId ?? null,
       worktreePathSnapshot: attachment?.worktreePath ?? null,
+      preserveSessionLink: preserveCanonicalSession,
       finishedAt,
     });
-    await (this.deps.archiveSession?.(input.sessionId) ?? db
-      .update(sessions)
-      .set({ status: 'archived', updatedAt: finishedAt })
-      .where(eq(sessions.id, input.sessionId))
-      .then(() => undefined)).catch((error) => {
-      this.deps.logger?.warn?.('[bot-automation] task archive failed; startup reconcile will retry', {
-        sessionId: input.sessionId,
-        error: errorText(error),
+    if (!preserveCanonicalSession) {
+      await (this.deps.archiveSession?.(input.sessionId) ?? db
+        .update(sessions)
+        .set({ status: 'archived', updatedAt: finishedAt })
+        .where(eq(sessions.id, input.sessionId))
+        .then(() => undefined)).catch((error) => {
+        this.deps.logger?.warn?.('[bot-automation] task archive failed; startup reconcile will retry', {
+          sessionId: input.sessionId,
+          error: errorText(error),
+        });
       });
-    });
-    await this.deps.maker.closeSession(input.sessionId).catch((error) => {
-      this.deps.logger?.warn?.('[bot-automation] runtime close failed (non-fatal)', {
-        sessionId: input.sessionId,
-        error: errorText(error),
+      await this.deps.maker.closeSession(input.sessionId).catch((error) => {
+        this.deps.logger?.warn?.('[bot-automation] runtime close failed (non-fatal)', {
+          sessionId: input.sessionId,
+          error: errorText(error),
+        });
       });
-    });
-    schedulePerTaskWorkspaceReclaim(input.sessionId);
+      schedulePerTaskWorkspaceReclaim(input.sessionId);
+    }
   }
 
   private async resolveDeliveryTarget(
@@ -1261,6 +1363,12 @@ export async function reconcileBotAutomationRuns(
     } else if (row.status === 'completing') {
       terminalStatus = 'success';
       terminalAt = now;
+      const executionPlan = parseBotAutomationExecutionPlan(row.executionPlanJson);
+      const canonicalRoutine = isCanonicalBotRoutine({
+        targetRouteId: row.targetRouteIdSnapshot,
+        canonicalSessionId: executionPlan?.delivery.targetSessionId ?? null,
+        targetSessionId: row.sessionId,
+      });
       if (row.scheduleRunId) {
         await db
           .update(scheduleRuns)
@@ -1272,14 +1380,14 @@ export async function reconcileBotAutomationRuns(
           })
           .where(eq(scheduleRuns.id, row.scheduleRunId));
       }
-      if (!row.deliveryOutboxId && row.deliveryStatus === 'not-requested' && row.sessionId) {
+      if (!canonicalRoutine && !row.deliveryOutboxId && row.deliveryStatus === 'not-requested' && row.sessionId) {
         const deliveryTarget = await resolveBotAutomationDeliveryTarget(
           db,
           row.automationLinkId,
           row.targetRouteIdSnapshot,
           row.botId,
           row.targetRouteOwnerGenerationSnapshot,
-          parseBotAutomationExecutionPlan(row.executionPlanJson)?.delivery.targetSessionId,
+          executionPlan?.delivery.targetSessionId,
         );
         if (deliveryTarget.ok && deliveryTarget.target && deps.enqueueDelivery) {
           const stableRunIdentity = row.scheduleRunId ?? row.id;
@@ -1367,7 +1475,13 @@ export async function reconcileBotAutomationRuns(
         .set({ status: terminalStatus, updatedAt: now, finishedAt: terminalAt })
         .where(eq(botAutomationRuns.id, row.id));
     }
-    if (row.sessionId) {
+    const completedPlan = parseBotAutomationExecutionPlan(row.executionPlanJson);
+    const canonicalRoutine = isCanonicalBotRoutine({
+      targetRouteId: row.targetRouteIdSnapshot,
+      canonicalSessionId: completedPlan?.delivery.targetSessionId ?? null,
+      targetSessionId: row.sessionId,
+    });
+    if (row.sessionId && !canonicalRoutine) {
       await db
         .update(botSessionLinks)
         .set({ role: 'history', channelId: null, routeKey: null, archivedAt: terminalAt })

@@ -638,6 +638,8 @@ export interface BotsFinalizeAutomationRunArgs {
   errorMessage: string | null;
   workspaceLeaseId: string | null;
   worktreePathSnapshot: string | null;
+  /** Same-profile Hermes routine keeps the canonical link and runtime alive. */
+  preserveSessionLink?: boolean;
   finishedAt: number;
 }
 

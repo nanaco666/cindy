@@ -648,9 +648,11 @@ function botsFinalizeAutomationRun(db: Database.Database, args: unknown): void {
     if (write.changes !== 1) {
       throw Object.assign(new Error('Bot Automation run is unavailable'), { code: 'NOT_FOUND' });
     }
-    db.prepare(`UPDATE bot_session_links SET role = 'history', channel_id = NULL,
-      route_key = NULL, archived_at = ? WHERE session_id = ?`)
-      .run(finishedAt, expectString(p.sessionId, 'sessionId'));
+    if (p.preserveSessionLink !== true) {
+      db.prepare(`UPDATE bot_session_links SET role = 'history', channel_id = NULL,
+        route_key = NULL, archived_at = ? WHERE session_id = ?`)
+        .run(finishedAt, expectString(p.sessionId, 'sessionId'));
+    }
   })();
 }
 
