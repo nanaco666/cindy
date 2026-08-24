@@ -6409,6 +6409,7 @@
     "skillsDescription": "這裡只儲存已安裝 Skill 的參照；執行時仍由原生 Skill 機制解析與載入。",
     "skillCatalogLoading": "正在讀取目前 Harness 可用的 Skills…",
     "skillCatalogError": "Skills 讀取失敗，已儲存的選擇會繼續保留。",
+    "skillAllowlistFrozenHint": "只用固定的這幾項。以後新增的技能不會自動加進來 —— 想讓它跟著更新,把上面切成「跟隨全域」。",
     "skillCatalogEmpty": "目前 Harness 與專案中沒有可用的 Skill。",
     "skillConfiguredUnavailable": "目前無法使用 · 點按移除",
     "close": "關閉",

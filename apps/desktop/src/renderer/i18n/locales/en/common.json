@@ -6411,6 +6411,7 @@
     "skillsDescription": "Stores references to installed Skills; the native Skill mechanism resolves and loads them at runtime.",
     "skillCatalogLoading": "Loading the Skills available to this Harness…",
     "skillCatalogError": "Skills could not be loaded. Saved selections are preserved.",
+    "skillAllowlistFrozenHint": "Pinned to exactly these. Skills added later will not reach this teammate — switch the selector above to “Follow global” to keep it up to date.",
     "skillCatalogEmpty": "No available Skills were found for this Harness and project.",
     "skillConfiguredUnavailable": "Unavailable — select to remove",
     "close": "Close",

@@ -6409,6 +6409,7 @@
     "skillsDescription": "설치된 Skill의 참조만 저장하며, 런타임 해석과 로드는 네이티브 Skill 메커니즘이 담당합니다.",
     "skillCatalogLoading": "이 Harness에서 사용할 수 있는 Skill을 불러오는 중…",
     "skillCatalogError": "Skill을 불러오지 못했습니다. 저장된 선택은 유지됩니다.",
+    "skillAllowlistFrozenHint": "여기에 고정되어 있습니다. 앞으로 추가되는 스킬은 자동으로 들어오지 않습니다. 최신 상태를 따르게 하려면 위 선택기를 '전체 설정 따르기'로 바꾸세요.",
     "skillCatalogEmpty": "이 Harness와 프로젝트에서 사용할 수 있는 Skill이 없습니다.",
     "skillConfiguredUnavailable": "현재 사용할 수 없음 — 선택하여 제거",
     "close": "닫기",

@@ -6409,6 +6409,7 @@
     "skillsDescription": "インストール済み Skill の参照だけを保存し、実行時の解決と読み込みはネイティブ機構が行います。",
     "skillCatalogLoading": "この Harness で利用できる Skill を読み込んでいます…",
     "skillCatalogError": "Skill を読み込めませんでした。保存済みの選択は保持されます。",
+    "skillAllowlistFrozenHint": "ここに固定されています。今後追加されるスキルは自動では入りません。最新に追いつかせるには、上のセレクターを「全体に従う」に切り替えてください。",
     "skillCatalogEmpty": "この Harness とプロジェクトで利用できる Skill はありません。",
     "skillConfiguredUnavailable": "現在利用不可 — 選択して削除",
     "close": "閉じる",

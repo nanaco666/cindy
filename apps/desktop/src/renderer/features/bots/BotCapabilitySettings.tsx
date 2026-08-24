@@ -251,6 +251,22 @@ export function BotCapabilitySettings({
             }}
           />
         </div>
+        {/*
+          白名单模式是「钉死这几项」—— 以后新增的技能不会进来。这本身是合法选择,
+          但用户看不出自己处在这个状态:界面上它和「跟随全局」长得一模一样,只是
+          某几个格子没亮。
+
+          存量里还有一批伙伴是被旧的勾选逻辑**误切**进来的(取消勾选任何一项都会
+          把当下目录快照成白名单),他们从没打算钉死任何东西。这里不做静默的数据
+          迁移 —— 落盘的配置分不出「用户存心只要这三项」和「用户只是关掉了一项」,
+          猜错就是替用户改主意。改成把状态说出来,并指向那个本来就在的出口。
+
+          同 Hermes 的 routineFilterHint(plugin.js 10150+):存储里明明有东西却什么
+          都没显示时,说清楚为什么、以及怎么办,而不是留一个让人发呆的空态。
+        */}
+        {capabilities.skillMode === 'allowlist' && skillState === 'ready' ? (
+          <p className="text-[var(--text-tertiary)]">{t('bots.skillAllowlistFrozenHint')}</p>
+        ) : null}
         {skillState !== 'ready' || skillCatalog.length === 0 ? (
           <p className="rounded-xl border border-dashed border-[var(--border-default)] px-3 py-3 text-[var(--text-tertiary)]">
             {catalogMessage(skillState, 'bots.skillCatalogEmpty')}
