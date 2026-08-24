@@ -797,7 +797,10 @@ export function registerBotIpc(): void {
     const outputPath = picked.filePath.endsWith(CINDY_BOT_BUNDLE_EXTENSION)
       ? picked.filePath
       : `${picked.filePath}${CINDY_BOT_BUNDLE_EXTENSION}`;
-    return { canceled: false, ...(await exportBotBehaviorBundle(botId, outputPath)) };
+    return {
+      canceled: false,
+      ...(await exportBotBehaviorBundle(botId, outputPath, app.getPath('userData'))),
+    };
   });
 
   ipcMain.handle('local-db:bots:import', async (event) => {

@@ -6,6 +6,7 @@ import { randomUUID } from 'node:crypto';
 import { and, eq, inArray } from 'drizzle-orm';
 import * as tar from 'tar';
 
+import { listBotSkills } from '../maker-ipc/botSkillStore.js';
 import { redactSensitive } from '../learn-host/redaction.js';
 import { getDbClient } from './client/current.js';
 import {
@@ -105,7 +106,12 @@ function redactJsonObject(value: Record<string, unknown>): {
   }
 }
 
-export async function exportBotBehaviorBundle(botId: string, outputPath: string): Promise<{
+export async function exportBotBehaviorBundle(
+  botId: string,
+  outputPath: string,
+  /** 自学技能存在这里(见下方 learnedSkills)。不传就跳过那条提示。 */
+  userDataDir?: string,
+): Promise<{
   filePath: string;
   redactionCount: number;
   warnings: string[];
@@ -226,10 +232,37 @@ export async function exportBotBehaviorBundle(botId: string, outputPath: string)
   } finally {
     await fs.rm(stagingDir, { recursive: true, force: true });
   }
+  /*
+    这个伙伴自己学会的技能**不随包走**。
+
+    包是「行为配置」:它带走灵魂、用户画像、能力开关、渠道需求、自动化定义 ——
+    都是几十行 JSON 和两个 markdown。自学技能是伙伴写在自己家里的**内容**
+    (`<userData>/bots/<botId>/skills/<slug>/SKILL.md`),不在这个范围里。
+
+    问题是包里带着技能的**名字**(capabilities.skills)。对面导入后拿到一串
+    对不上的名字,而界面不会说任何话 —— 一个学了三个月的伙伴导出去,新主人
+    看到的是三个空壳。所以这里明说。
+
+    Hermes 的导出白名单是整个目录(skills / memories / knowledge / preferences /
+    cron / scripts / sessions 全带,见 hermes_cli/profiles.py 的
+    _DEFAULT_EXPORT_INCLUDE_ROOT)。要对齐它得改包格式,而导入侧有严格的文件
+    白名单 —— 新包在旧版 Cindy 上会被整包拒收。那是一次需要跨版本兼容矩阵的
+    改动,单独做。在那之前,先不骗人。
+  */
+  const learnedSkills = userDataDir
+    ? await listBotSkills(userDataDir, botId).catch(() => [])
+    : [];
+  const warnings: string[] = [];
+  if (redactionCount > 0) warnings.push('导出内容已自动移除可能的凭证、身份信息或本机路径');
+  if (learnedSkills.length > 0) {
+    warnings.push(
+      `TA 自己学会的 ${learnedSkills.length} 项技能没有随包带走 —— 导入方需要让新伙伴重新学一遍`,
+    );
+  }
   return {
     filePath: outputPath,
     redactionCount,
-    warnings: redactionCount > 0 ? ['导出内容已自动移除可能的凭证、身份信息或本机路径'] : [],
+    warnings,
   };
 }
 
