@@ -9,6 +9,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  buildBotRenewalHandoff,
   buildBotSkillIndex,
   buildBotStableTier,
   buildBotSystemPrompt,
@@ -257,5 +258,41 @@ describe('回看历史', () => {
       },
     });
     expect(prompt).toContain('包括已经翻篇归档的那些');
+  });
+});
+
+/**
+ * 换代之后的历史交接。
+ *
+ * 伙伴的主对话每天早上六点换代。新会话是干净的,不知道昨天聊过什么 —— 用户第二天
+ * 说「上次那个方案」,伙伴要么顺着当前上下文猜,要么说自己不记得,两种都不对:那段
+ * 记录明明还在,只是它不知道去哪儿找。换代那一刻上一个会话 id 是现成的,不交出去
+ * 就白丢了。
+ *
+ * 判据照抄 Hermes(gateway/session.py 1010–1046):有上一段、且那一段**真的聊过**,
+ * 才值得让伙伴专门去翻。
+ */
+describe('buildBotRenewalHandoff', () => {
+  it('把上一段的会话 id 明着交出去', () => {
+    const section = buildBotRenewalHandoff({ previousSessionId: 'sess-昨天', hadActivity: true });
+    expect(section).toContain('sess-昨天');
+    expect(section).toContain('search_chat_history');
+    expect(section).toContain('get_chat_history');
+  });
+
+  it('空对话不值得让伙伴专门去翻一趟', () => {
+    expect(buildBotRenewalHandoff({ previousSessionId: 'sess-空', hadActivity: false })).toBe('');
+  });
+
+  it('还没换过代就一个字都不提', () => {
+    expect(buildBotRenewalHandoff({ previousSessionId: null, hadActivity: true })).toBe('');
+    expect(buildBotRenewalHandoff({ previousSessionId: '   ', hadActivity: true })).toBe('');
+    expect(buildBotRenewalHandoff({})).toBe('');
+  });
+
+  it('明确要求不要拿不相干的近期对话顶替,也不许说不记得', () => {
+    const section = buildBotRenewalHandoff({ previousSessionId: 'sess-1', hadActivity: true });
+    expect(section).toContain('不相干');
+    expect(section).toContain('不记得');
   });
 });

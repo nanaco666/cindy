@@ -12,6 +12,7 @@ import {
 import { normalizeBotAutomation } from '../../shared/botAutomationCapability.js';
 import {
   buildBotContextTier,
+  buildBotRenewalHandoff,
   buildBotStableTier,
   buildBotVolatileTier,
   type BotPromptCapabilitySignals,
@@ -105,6 +106,17 @@ export interface BotProfileRuntimeDeps {
     remoteHostId?: string;
   }) => Promise<BotToolsetCatalogItem[]>;
   readMemoryIndex?: (scopeKey: string) => Promise<string>;
+  /**
+   * 这个伙伴上一段已经翻篇的主对话 —— 换代时被降级成 history 的那一条。
+   *
+   * 只在**主对话**用:换代之后新会话是干净的,不知道昨天聊过什么。把上一段的
+   * 会话 id 交给它,用户说「上次那个」时它知道去哪儿翻(见 buildBotRenewalHandoff)。
+   * 返回 null 表示这个伙伴还没换过代,或者上一段是空的。
+   */
+  readPreviousCanonicalSession?: (input: {
+    botId: string;
+    currentSessionId: string;
+  }) => Promise<{ sessionId: string; hasMessages: boolean } | null>;
   /**
    * 全局 Maker Memory 引擎是否可用(host 注入 `makerMemory.isEnabled()`)。
    *
@@ -792,6 +804,22 @@ export async function hydrateBotProfileRuntime(
   const botHomeDir = folderPrompt?.homeDir.trim() ?? '';
   // 提示词与工具面必须同进同退 —— 只给其中一个就是开一张打不开的空头支票。
   if (botHomeDir) opts.extraDirs = withBotHomeDir(opts.extraDirs, botHomeDir);
+  /*
+    换代交接:上一段主对话的 id。查失败一律当作「没有上一段」——
+    这一段是锦上添花,绝不能让它拦住会话启动。
+  */
+  let renewalHandoff = '';
+  if (deps.readPreviousCanonicalSession && opts.id && row.role === 'canonical') {
+    const previous = await deps
+      .readPreviousCanonicalSession({ botId: row.botId, currentSessionId: opts.id })
+      .catch(() => null);
+    if (previous) {
+      renewalHandoff = buildBotRenewalHandoff({
+        previousSessionId: previous.sessionId,
+        hadActivity: previous.hasMessages,
+      });
+    }
+  }
   const promptInput: BotSystemPromptInput = {
     displayName: profile.displayName,
     identity,
@@ -807,6 +835,7 @@ export async function hydrateBotProfileRuntime(
     contextSections: [
       buildBotProfileContextPrompt(profile.displayName),
       buildBotSessionControlContext(sessionControlMode),
+      renewalHandoff,
     ],
   };
   opts.botProfileContextPrompt = [

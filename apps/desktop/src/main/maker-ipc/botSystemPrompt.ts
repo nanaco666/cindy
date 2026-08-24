@@ -264,6 +264,47 @@ export function buildBotVolatileTier(input: BotSystemPromptInput): string {
   return parts.join('\n\n');
 }
 
+/**
+ * 换代之后,把**上一段对话的会话 id** 直接交到伙伴手里。
+ *
+ * 为什么需要:伙伴的主对话每天早上六点换代(用户也能手动重开)。新会话是干净的,
+ * 它不知道昨天聊过什么。用户第二天说「上次那个方案」,伙伴要么顺着当前上下文猜,
+ * 要么说自己不记得 —— 两种都不对,因为那段记录明明还在,只是它不知道去哪儿找。
+ *
+ * 「你能翻回去查」那段讲的是**有这个能力**;这一段讲的是**具体去查哪一段**。
+ * 换代那一刻上一个会话 id 是现成的,不交出去就白丢了。
+ *
+ * 抄的是 Hermes 的换代提示(hermes-agent gateway/session.py 1010–1046):
+ *
+ *   [System note: This channel had an earlier Hermes session (session_id: …) that
+ *    was auto-reset. If the user refers to earlier work here, or the request depends
+ *    on this channel's history, use the session_search tool to recall that prior
+ *    session before acting — **do not assume an unrelated recent session is the
+ *    right context**.]
+ *
+ * 它的前提条件照抄:**那次换代确实有过真实对话**、上一个会话 id 已知。
+ * 零额外查询、零模型开销 —— 换代时本来就知道这两样。
+ *
+ * 一处适配:Hermes 那段只对 Slack / Discord 这类长命频道生效(它的主对话永不换代,
+ * `/new` 会被改写成 `/compact`)。Cindy 是全体伙伴每天换代,所以对所有伙伴主对话
+ * 生效。这是适配,不是照抄。
+ */
+export function buildBotRenewalHandoff(input: {
+  previousSessionId?: string | null;
+  /** 上一段有没有真的聊过。空会话不值得让伙伴专门去翻。 */
+  hadActivity?: boolean;
+}): string {
+  const previous = input.previousSessionId?.trim();
+  if (!previous || !input.hadActivity) return '';
+  return [
+    '## 你们之前那段对话',
+    `你和用户之前有一段对话(会话 id \`${previous}\`),已经翻篇了 —— 记录都还在,只是不在你眼前。`,
+    '他要是提到「上次」「之前」「我们聊过」,或者这次的请求依赖那段历史,**先把那段找回来再动手**:',
+    '按内容找用 `search_chat_history`;已经知道是哪一段就用 `get_chat_history` 取原文。',
+    '不要拿一段不相干的近期对话当上下文,也不要说自己不记得了。',
+  ].join('\n');
+}
+
 /** 上下文层:调用方给的会话级段落(会话控制模式等)。 */
 export function buildBotContextTier(input: BotSystemPromptInput): string {
   return (input.contextSections ?? []).map((s) => s.trim()).filter(Boolean).join('\n\n');
