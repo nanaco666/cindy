@@ -23,10 +23,15 @@ describe('Bot unified task-state source contract', () => {
   it('keeps Bots as a consumer of the control-plane transition source', () => {
     const contract = source('../../../shared/botSessionEvents.ts');
     const service = source('../botSessionEventService.ts');
+    const projection = source('../sessionActivityProjection.ts');
+    const register = source('../register.ts');
 
     expect(contract).toContain('interface BotSessionStateTransitionSource');
     expect(contract).not.toMatch(/export function publish/i);
     expect(service).toContain('stateTransitionSource?: BotSessionStateTransitionSource');
     expect(service).toContain('bindStateTransitionSource');
+    expect(projection).toContain('subscribeSessionActivity');
+    expect(projection).toContain('readCanonicalSessionActivity');
+    expect(register).toContain('stateTransitionSource: createDefaultBotSessionStateTransitionSource()');
   });
 });

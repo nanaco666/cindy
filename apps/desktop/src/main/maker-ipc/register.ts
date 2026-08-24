@@ -177,7 +177,10 @@ import {
   createSessionControlService,
   sessionQueueOriginForDispatcher,
 } from './sessionControlService.js';
-import { readCanonicalSessionActivity } from './sessionActivityProjection.js';
+import {
+  createDefaultBotSessionStateTransitionSource,
+  readCanonicalSessionActivity,
+} from './sessionActivityProjection.js';
 import {
   listAtBrowserTabs,
   parseAtContextCatalogRequest,
@@ -10586,6 +10589,7 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions)
       return outbox.enqueue(params);
     },
     onChanged: (payload) => broadcastToAllWindows(MAKER_PUSH.BOT_INBOX_CHANGED, payload),
+    stateTransitionSource: createDefaultBotSessionStateTransitionSource(),
   });
   registerBotLifecycleHandlers({
     maker,

@@ -1,7 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { projectSessionActivity } from '@cindy/maker-shared/session-activity';
 import {
+  projectSessionActivity,
+  type SessionActivityTransition,
+} from '@cindy/maker-shared/session-activity';
+import {
+  createBotSessionStateTransitionSource,
   createSessionActivityReader,
   type PersistedSessionActivityFacts,
 } from '../sessionActivityProjection.js';
@@ -137,5 +141,245 @@ describe('canonical session activity reader', () => {
       phase: 'idle',
       source: 'fallback',
     });
+  });
+});
+
+describe('Bot session activity transition adapter', () => {
+  function live(
+    sessionId: string,
+    patch: Partial<ReturnType<typeof projectSessionActivity>> = {},
+  ) {
+    return {
+      ...projectSessionActivity({
+        sessionId,
+        recordStatus: 'active',
+        source: 'live',
+        livePhase: 'running',
+        startedAtMs: 100,
+        lastActivityAtMs: 120,
+      }),
+      ...patch,
+    };
+  }
+
+  function setupTransitionSource(options?: {
+    readSnapshot?: (sessionId: string) => Promise<ReturnType<typeof projectSessionActivity>>;
+    readMetadata?: (sessionId: string) => Promise<{
+      title: string;
+      source: string;
+      workingDir: string | null;
+    } | null>;
+  }) {
+    let sourceListener: ((transition: SessionActivityTransition) => void) | null = null;
+    const unsubscribe = vi.fn();
+    const onError = vi.fn();
+    const source = createBotSessionStateTransitionSource({
+      subscribeSessionActivity: (listener) => {
+        sourceListener = listener;
+        return unsubscribe;
+      },
+      readSnapshot: options?.readSnapshot ?? (async (sessionId) => live(sessionId)),
+      readMetadata: options?.readMetadata ?? (async () => ({
+        title: '实现功能 · 待验收',
+        source: 'desktop',
+        workingDir: '/repo/cindy',
+      })),
+      onError,
+    });
+    return {
+      source,
+      unsubscribe,
+      onError,
+      emit: (transition: SessionActivityTransition) => sourceListener?.(transition),
+    };
+  }
+
+  it('maps the authoritative completion edge and task metadata without persisting another state', async () => {
+    const harness = setupTransitionSource();
+    const listener = vi.fn();
+    harness.source.subscribe(listener);
+
+    const previous = live('task-1');
+    const current = live('task-1', {
+      phase: 'completed',
+      currentTurnActive: false,
+      lastActivityAtMs: 200,
+    });
+    harness.emit({ sessionId: 'task-1', previous, current, changedAtMs: 210 });
+
+    await vi.waitFor(() => expect(listener).toHaveBeenCalledTimes(1));
+    expect(listener).toHaveBeenCalledWith({
+      transitionId: expect.any(String),
+      sessionId: 'task-1',
+      occurredAt: 210,
+      title: '实现功能 · 待验收',
+      source: 'desktop',
+      workingDir: '/repo/cindy',
+      previous: expect.objectContaining({ execution: 'running' }),
+      current: expect.objectContaining({ execution: 'normal-ended' }),
+      changedFacets: ['execution'],
+    });
+  });
+
+  it('turns a null entry into an idle baseline so decision states are not missed', async () => {
+    const harness = setupTransitionSource();
+    const listener = vi.fn();
+    harness.source.subscribe(listener);
+
+    harness.emit({
+      sessionId: 'task-1',
+      previous: null,
+      current: live('task-1', {
+        phase: 'needs-interaction',
+        currentTurnActive: false,
+        workflow: {
+          key: 'awaiting-user-decision',
+          label: '等拍板',
+          source: 'title',
+          waitingOn: 'user',
+        },
+      }),
+      changedAtMs: 150,
+    });
+
+    await vi.waitFor(() => expect(listener).toHaveBeenCalledTimes(1));
+    expect(listener.mock.calls[0]?.[0]).toMatchObject({
+      previous: { execution: 'idle', attention: null, workflow: null },
+      current: {
+        execution: 'needs-interaction',
+        attention: 'needs-user',
+        workflow: { key: 'awaiting-user-decision', label: '等拍板', waitingOn: 'user' },
+      },
+      changedFacets: ['execution', 'attention', 'workflow'],
+    });
+  });
+
+  it('resolves a null exit from the canonical durable reader and keeps ids stable on replay', async () => {
+    const durable = live('task-1', {
+      phase: 'error',
+      currentTurnActive: false,
+      source: 'persisted',
+      lastActivityAtMs: 300,
+    });
+    const harness = setupTransitionSource({ readSnapshot: async () => durable });
+    const listener = vi.fn();
+    harness.source.subscribe(listener);
+    const edge = {
+      sessionId: 'task-1',
+      previous: live('task-1'),
+      current: null,
+      changedAtMs: 310,
+    } satisfies SessionActivityTransition;
+
+    harness.emit(edge);
+    harness.emit({ ...edge, previous: null });
+
+    await vi.waitFor(() => expect(listener).toHaveBeenCalledTimes(2));
+    expect(listener.mock.calls[0]?.[0]).toMatchObject({
+      previous: { execution: 'running' },
+      current: { execution: 'error-ended' },
+      changedFacets: ['execution'],
+    });
+    expect(listener.mock.calls[0]?.[0].transitionId).toBe(
+      listener.mock.calls[1]?.[0].transitionId,
+    );
+  });
+
+  it('does not deduplicate a later occurrence that reaches the same state again', async () => {
+    const harness = setupTransitionSource();
+    const listener = vi.fn();
+    harness.source.subscribe(listener);
+    const previous = live('task-1');
+    const current = live('task-1', {
+      phase: 'completed',
+      currentTurnActive: false,
+      lastActivityAtMs: 200,
+    });
+
+    harness.emit({ sessionId: 'task-1', previous, current, changedAtMs: 210 });
+    harness.emit({ sessionId: 'task-1', previous, current, changedAtMs: 410 });
+
+    await vi.waitFor(() => expect(listener).toHaveBeenCalledTimes(2));
+    expect(listener.mock.calls[0]?.[0].transitionId).not.toBe(
+      listener.mock.calls[1]?.[0].transitionId,
+    );
+  });
+
+  it('fails closed when metadata cannot be read', async () => {
+    const harness = setupTransitionSource({
+      readMetadata: async () => {
+        throw new Error('database unavailable');
+      },
+    });
+    const listener = vi.fn();
+    harness.source.subscribe(listener);
+    harness.emit({
+      sessionId: 'task-1',
+      previous: live('task-1'),
+      current: live('task-1', { phase: 'completed', currentTurnActive: false }),
+      changedAtMs: 200,
+    });
+
+    await vi.waitFor(() => expect(harness.onError).toHaveBeenCalledTimes(1));
+    expect(listener).not.toHaveBeenCalled();
+  });
+
+  it('unsubscribes and drops an in-flight transition after disposal', async () => {
+    let resolveMetadata!: (value: {
+      title: string;
+      source: string;
+      workingDir: string | null;
+    }) => void;
+    const metadataPromise = new Promise<{
+      title: string;
+      source: string;
+      workingDir: string | null;
+    }>((resolve) => {
+      resolveMetadata = resolve;
+    });
+    const harness = setupTransitionSource({
+      readMetadata: () => metadataPromise,
+    });
+    const listener = vi.fn();
+    const dispose = harness.source.subscribe(listener);
+    harness.emit({
+      sessionId: 'task-1',
+      previous: live('task-1'),
+      current: live('task-1', { phase: 'completed', currentTurnActive: false }),
+      changedAtMs: 200,
+    });
+
+    dispose();
+    resolveMetadata({ title: '任务', source: 'desktop', workingDir: '/repo/cindy' });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(harness.unsubscribe).toHaveBeenCalledTimes(1);
+    expect(listener).not.toHaveBeenCalled();
+  });
+
+  it('maps canonical snapshots for the zero-token guardian and rejects missing fallback rows', async () => {
+    const harness = setupTransitionSource({
+      readSnapshot: async (sessionId) =>
+        sessionId === 'missing'
+          ? projectSessionActivity({ sessionId, source: 'fallback' })
+          : live(sessionId, {
+              phase: 'needs-interaction',
+              workflow: {
+                key: 'awaiting-user-decision',
+                label: '等拍板',
+                source: 'title',
+                waitingOn: 'user',
+              },
+            }),
+    });
+
+    await expect(harness.source.readSnapshot?.('task-1')).resolves.toMatchObject({
+      lifecycle: 'active',
+      execution: 'needs-interaction',
+      attention: 'needs-user',
+      workflow: { key: 'awaiting-user-decision', waitingOn: 'user' },
+    });
+    await expect(harness.source.readSnapshot?.('missing')).resolves.toBeNull();
   });
 });

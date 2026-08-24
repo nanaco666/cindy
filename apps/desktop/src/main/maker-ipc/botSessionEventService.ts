@@ -72,7 +72,8 @@ export interface BotSessionEventServiceDeps {
   onChanged?: (payload: { botId: string; inboxItemId?: string }) => void;
   /**
    * Authoritative transition feed owned by the unified session-control state
-   * model. Optional until the control-plane Draft lands before this PR.
+   * model. Optional only for isolated service tests; production always injects
+   * the SessionActivity adapter.
    */
   stateTransitionSource?: BotSessionStateTransitionSource;
   /** Open relationship resolver; watch-list ownership can be added upstream. */

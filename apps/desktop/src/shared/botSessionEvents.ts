@@ -6,10 +6,9 @@
  * subscriptions, persists matched transitions, and optionally activates a Bot
  * turn. There is deliberately no producer/publish API in this module.
  *
- * `BotObservedSessionState` mirrors the four open facets currently reserved by
- * the control-plane Draft. Before this PR can become Ready it must be aliased or
- * adapted to the final exported control-plane type rather than becoming a
- * second source of task truth.
+ * `BotObservedSessionState` is the Bot consumer view produced by the thin
+ * SessionActivity adapter in main. It is never persisted as another task-state
+ * authority and never publishes transitions of its own.
  */
 export interface BotObservedSessionState {
   lifecycle: string;
@@ -45,7 +44,7 @@ export interface BotSessionStateTransitionSource {
   subscribe(listener: (transition: BotSessionStateTransition) => void): () => void;
   /**
    * Canonical point-in-time read from the same control-plane model. Optional
-   * only until the control-plane dependency is merged and wired.
+   * for isolated inbox tests; the production adapter always provides it.
    */
   readSnapshot?(sessionId: string): Promise<BotObservedSessionState | null>;
 }
