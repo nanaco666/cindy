@@ -107,6 +107,15 @@ export interface BotProfileRuntimeDeps {
   }) => Promise<BotToolsetCatalogItem[]>;
   readMemoryIndex?: (scopeKey: string) => Promise<string>;
   /**
+   * 这个伙伴的队友们(除它自己之外、还启用着的伙伴)。
+   *
+   * 委派能力开着却不告诉它队友是谁,那条能力基本不会被触发 —— 见
+   * buildBotTeammateRoster 的说明。返回空数组表示「就它一个」。
+   */
+  listTeammates?: (input: { excludeBotId: string }) => Promise<
+    { id: string; name: string; description?: string | null }[]
+  >;
+  /**
    * 这个伙伴上一段已经翻篇的主对话 —— 换代时被降级成 history 的那一条。
    *
    * 只在**主对话**用:换代之后新会话是干净的,不知道昨天聊过什么。把上一段的
@@ -820,6 +829,14 @@ export async function hydrateBotProfileRuntime(
       });
     }
   }
+  /*
+    队友名册。只在委派能力真的开着时才查 —— 关着委派的伙伴看见一份自己用不上的
+    名单,是纯粹的上下文浪费。查失败当作「没有队友」,绝不拦住会话启动。
+  */
+  const teammates =
+    promptCapabilities.delegationEnabled && deps.listTeammates
+      ? await deps.listTeammates({ excludeBotId: row.botId }).catch(() => [])
+      : [];
   const promptInput: BotSystemPromptInput = {
     displayName: profile.displayName,
     identity,
@@ -832,6 +849,7 @@ export async function hydrateBotProfileRuntime(
       ? { systemPromptOverride: folderPrompt.systemPromptOverride }
       : {}),
     ...(botHomeDir ? { homeDir: botHomeDir } : {}),
+    ...(teammates.length > 0 ? { teammates } : {}),
     contextSections: [
       buildBotProfileContextPrompt(profile.displayName),
       buildBotSessionControlContext(sessionControlMode),

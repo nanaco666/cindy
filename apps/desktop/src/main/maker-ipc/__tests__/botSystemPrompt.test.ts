@@ -10,6 +10,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   buildBotRenewalHandoff,
+  buildBotTeammateRoster,
   buildBotSkillIndex,
   buildBotStableTier,
   buildBotSystemPrompt,
@@ -294,5 +295,60 @@ describe('buildBotRenewalHandoff', () => {
     const section = buildBotRenewalHandoff({ previousSessionId: 'sess-1', hadActivity: true });
     expect(section).toContain('不相干');
     expect(section).toContain('不记得');
+  });
+});
+
+/**
+ * 队友名册。
+ *
+ * 提示词里原先只有「你可以叫别的伙伴帮忙」,却从不说队友是谁。工具面里确实有
+ * list_bots 能查,但模型得先想到去查 —— 而它没有任何理由想到,因为提示词里一个
+ * 队友的名字都没出现过。结果是这条能力挂着基本不触发,或者瞎猜一个名字然后失败。
+ *
+ * 抄 Hermes 的 _roster_lines(tools/bot_mode_probe.py):名字 + 角色进系统提示词,
+ * 「这样 bot 在挑收件人之前就知道谁管什么」。
+ */
+describe('buildBotTeammateRoster', () => {
+  it('每个队友一行,带上委派工具真正认的那个 id', () => {
+    const roster = buildBotTeammateRoster([
+      { id: 'bot-fin', name: '财务助理', description: '管账、对账、报销' },
+      { id: 'bot-doc', name: '文档助手', description: '写方案和周报' },
+    ]);
+    expect(roster).toContain('财务助理');
+    expect(roster).toContain('bot-fin');
+    expect(roster).toContain('管账、对账、报销');
+    expect(roster).toContain('文档助手');
+    expect(roster).toContain('bot-doc');
+  });
+
+  it('没写描述的队友只列名字,不编一个角色出来', () => {
+    const roster = buildBotTeammateRoster([{ id: 'bot-x', name: '小助手' }]);
+    expect(roster).toContain('小助手');
+    expect(roster).toContain('bot-x');
+    expect(roster).not.toContain('——');
+  });
+
+  it('就它一个的时候一个字都不提', () => {
+    expect(buildBotTeammateRoster([])).toBe('');
+  });
+
+  it('名字或 id 缺一不可 —— 拼不出可用的目标就不列这一行', () => {
+    expect(buildBotTeammateRoster([{ id: '', name: '没有 id' }])).toBe('');
+    expect(buildBotTeammateRoster([{ id: 'bot-y', name: '   ' }])).toBe('');
+  });
+
+  it('描述压成单行并截断 —— 名册是索引,不是简介', () => {
+    const roster = buildBotTeammateRoster([
+      { id: 'bot-z', name: '话痨', description: `第一行\n第二行   还有   很多空格${'长'.repeat(400)}` },
+    ]);
+    expect(roster).not.toContain('\n第二行');
+    expect(roster).toContain('第一行 第二行 还有 很多空格');
+    const line = roster.split('\n').find((row) => row.includes('话痨')) ?? '';
+    expect(line.length).toBeLessThan(260);
+  });
+
+  it('明确告诉伙伴不确定就别猜', () => {
+    const roster = buildBotTeammateRoster([{ id: 'bot-a', name: 'A' }]);
+    expect(roster).toContain('别猜');
   });
 });

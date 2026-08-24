@@ -86,3 +86,36 @@ export async function readPreviousCanonicalBotSession(input: {
   if (!row) return null;
   return { sessionId: row.sessionId, hasMessages: row.hasMessages === 1 };
 }
+
+/**
+ * 这个伙伴的队友们 —— 除它自己之外、还启用着的伙伴。
+ *
+ * 给提示词里的队友名册用(见 buildBotTeammateRoster):委派能力开着却不告诉伙伴
+ * 队友是谁,那条能力基本不会被触发 —— 模型没有任何理由想到去调 `list_bots`,
+ * 因为提示词里一个队友的名字都没出现过。
+ *
+ * 只列 active 的:归档/停用的伙伴委派过去也跑不起来,列出来就是空头支票。
+ * 按名字排序,让同一批伙伴在不同会话里渲染出**逐字节相同**的名册 —— 名册在
+ * 易变层,顺序抖动会平白打断前缀缓存。
+ */
+export async function listBotTeammates(input: {
+  excludeBotId: string;
+}): Promise<{ id: string; name: string; description?: string | null }[]> {
+  const rows = await getDbClient().query<{
+    id: string;
+    name: string;
+    description: string | null;
+  }>(
+    `SELECT id, display_name AS name, description
+       FROM bot_profiles
+      WHERE id <> ?
+        AND status = 'active'
+      ORDER BY display_name ASC`,
+    [input.excludeBotId],
+  );
+  return rows.map((row) => ({
+    id: row.id,
+    name: row.name,
+    description: row.description,
+  }));
+}

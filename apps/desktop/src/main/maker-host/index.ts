@@ -53,7 +53,10 @@ import {
 } from '../maker-ipc/botProfileRuntime.js';
 import { collectBotOwnSkillMounts } from '../maker-ipc/botSkillService.js';
 import { botProfileDir, readBotProfileFolder } from '../maker-ipc/botProfileFolder.js';
-import { readPreviousCanonicalBotSession } from '../localDb/botHistoryScope.js';
+import {
+  listBotTeammates,
+  readPreviousCanonicalBotSession,
+} from '../localDb/botHistoryScope.js';
 import { prepareBotWorkspaceRuntime } from '../maker-ipc/botWorkspaceRuntime.js';
 import type { MakerSessionCreateOpts } from '../maker-ipc/sessionRequest.js';
 import {
@@ -2174,6 +2177,8 @@ export function getMaker(): Maker {
       },
       readMemoryIndex: async (scopeKey) =>
         (await makerMemoryManager.getStore(scopeKey)).getIndex(),
+      // 队友名册进提示词(见 buildBotTeammateRoster)。
+      listTeammates: (input) => listBotTeammates(input),
       // 换代之后把上一段主对话的 id 交给伙伴(见 buildBotRenewalHandoff)。
       readPreviousCanonicalSession: (input) => readPreviousCanonicalBotSession(input),
       // Bot 的 memory 能力位只能收窄到引擎现状 (见 BotProfileRuntimeDeps)。

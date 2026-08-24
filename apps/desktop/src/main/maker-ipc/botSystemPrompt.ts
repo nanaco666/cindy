@@ -45,6 +45,8 @@ export interface BotSystemPromptInput {
   capabilities: BotPromptCapabilitySignals;
   /** 伙伴自有技能索引(全部,不截断)。 */
   skillIndex: readonly BotPromptSkillIndexEntry[];
+  /** 队友名册(见 buildBotTeammateRoster)。没有队友时不传。 */
+  teammates?: readonly { id: string; name: string; description?: string | null }[];
   /** 用户档案(USER.md 对应物)。 */
   userProfile?: string;
   /** 记忆快照正文。 */
@@ -147,6 +149,50 @@ const DELEGATION_GUIDANCE = [
   '遇到别人更擅长的一段活,可以把它交出去:说清楚要什么、给足背景,对方做完结果会自动回到这个对话里。你不需要守着等,也不要反复去催。',
   '这是把一段有边界的活交出去并拿回结果,不是命令对方、也不会改变对方是谁。用户如果要求"让某个伙伴听话",说明这条边界,然后直接给出可以协作的做法。',
 ].join('\n');
+
+/**
+ * 队友名册 —— 这个伙伴的同事都是谁、各自干什么。
+ *
+ * 为什么必须进提示词:`DELEGATION_GUIDANCE` 告诉伙伴「你可以叫别的伙伴帮忙」,
+ * 却从不说**队友是谁**。工具面里确实有 `list_bots` 能查,但模型得先想到去查 ——
+ * 而它没有任何理由想到:提示词里一个队友的名字都没出现过。结果就是这条能力
+ * 挂在那儿基本不触发,或者伙伴瞎猜一个名字然后失败。
+ *
+ * 抄的是 Hermes(hermes-agent tools/bot_mode_probe.py 的 `_roster_lines`)。
+ * 它的原话:队友名册 —— **名字与角色**,取自各自档案的 title/description ——
+ * 是每个 Bot Chat 系统提示词的一部分,**这样 bot 在挑收件人之前就知道谁管什么**。
+ *
+ * 一处必须适配:Hermes 的 `message_agent` 认句柄(`@researcher`),Cindy 的
+ * `delegate_to_bot` 认的是**稳定 id**(`target_bot_id`)。所以名册行必须把 id 带上 ——
+ * 否则伙伴看见的是一串它无法转成参数的名字,又得回去调 `list_bots`,等于白写。
+ * 「写进去的串,恰好就是工具认的串」是 Hermes 反复强调的一条(见群房间 @ 补全)。
+ *
+ * 角色取伙伴的描述,压成单行并截断 —— 名册是「谁管什么」的索引,不是简介。
+ */
+const TEAMMATE_ROLE_MAX_CHARS = 160;
+
+export function buildBotTeammateRoster(
+  entries: readonly { id: string; name: string; description?: string | null }[],
+): string {
+  const rows = entries
+    .map((entry) => {
+      const name = entry.name.trim();
+      const id = entry.id.trim();
+      if (!name || !id) return '';
+      const role = (entry.description ?? '').replace(/\s+/g, ' ').trim().slice(
+        0,
+        TEAMMATE_ROLE_MAX_CHARS,
+      );
+      return `- ${name}(id \`${id}\`)${role ? ` —— ${role}` : ''}`;
+    })
+    .filter(Boolean);
+  if (rows.length === 0) return '';
+  return [
+    '## 你的队友',
+    ...rows,
+    '把活交出去时用上面那个 id 当目标。不确定谁合适就别猜,问用户一句。',
+  ].join('\n');
+}
 
 /** 日程/自动化。 */
 const SCHEDULE_GUIDANCE = [
@@ -257,6 +303,9 @@ export function buildBotVolatileTier(input: BotSystemPromptInput): string {
   const parts: string[] = [];
   const skillIndex = buildBotSkillIndex(input.skillIndex);
   if (skillIndex) parts.push(skillIndex);
+  // 队友名册随「有哪些伙伴 / 谁改了名」变,所以在易变层 —— 与技能索引同理。
+  const teammates = buildBotTeammateRoster(input.teammates ?? []);
+  if (teammates) parts.push(teammates);
   const memory = input.memorySnapshot?.trim();
   if (memory) parts.push(memory);
   const userProfile = input.userProfile?.trim();
