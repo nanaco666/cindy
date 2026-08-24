@@ -909,11 +909,23 @@ export class BotAutomationScheduleRunner implements ScheduleRunner {
 
     const delegatedSchedule: Schedule = {
       ...schedule,
-      prompt: [
-        `Cindy Bot automation: ${schedule.name}`,
-        `Automation run: ${ctx.runId}`,
-        schedule.prompt,
-      ].join('\n\n'),
+      /*
+        定时任务的提示词只前置**一行**:告诉伙伴这是哪条例行任务在跑(不是用户
+        此刻在说话)。这一行有用 —— 伙伴交付时会说「每日简报做完了」。
+
+        原先还有一行 `Automation run: <uuid>`。那个 id 全仓没有任何一处回读,
+        也没有任何工具收它 —— 纯粹是调度机器的内部标识漏进了模型上下文。
+        每一条定时任务、每一次执行都白付一次钱,还给模型一个它无法处置的
+        不透明串。
+
+        判据来自 Hermes 的例行任务(hermes-agent plugin.js 10189 routinePrompt):
+        **跑在自己身上时,提示词一个包装字都不加**,直接就是用户写的指令;
+        只有跨伙伴委派时才包一层,而那一层包的也是「以那个 agent 的身份执行」
+        这种模型真的要照办的话,不是运行编号。
+
+        运行编号仍然照常记在 botAutomationRuns 表里 —— 那才是它该待的地方。
+      */
+      prompt: [`Cindy Bot automation: ${schedule.name}`, schedule.prompt].join('\n\n'),
       targetSessionId: sessionId,
       persistentSession: false,
       agentKind,
