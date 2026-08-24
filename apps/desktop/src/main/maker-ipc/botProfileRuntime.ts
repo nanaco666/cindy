@@ -852,6 +852,10 @@ export async function hydrateBotProfileRuntime(
     ...(teammates.length > 0 ? { teammates } : {}),
     contextSections: [
       buildBotProfileContextPrompt(profile.displayName),
+      // Hermes-style Bot Mode is a property of the permanent Bot Chat only.
+      // IM routes, automation workers, and delegation children keep Cindy's
+      // normal Session prompt plus their narrow task context.
+      ...(row.role === 'canonical' ? [buildBotCapabilityContextPrompt()] : []),
       buildBotSessionControlContext(sessionControlMode),
       renewalHandoff,
     ],

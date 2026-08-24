@@ -44,6 +44,10 @@ const h = vi.hoisted(() => ({
   remove: vi.fn(async () => undefined),
   ensureGit: vi.fn(async () => undefined),
   closeSession: vi.fn(async () => undefined),
+  getSession: vi.fn(() => null as {
+    capabilities?: { manualCompact?: { supported?: boolean } };
+    compactSession: (instructions?: string) => Promise<unknown>;
+  } | null),
   ensureDialogue: vi.fn((sessionId: string) => `/tmp/cindy-bot-test/${sessionId}`),
   searchConversations: vi.fn(),
 }));
@@ -82,7 +86,11 @@ vi.mock('../../../maker-host/git-safety-settings-store.js', () => ({
   readGitSafetySettings: () => ({ autoSnapshotEnabled: true }),
 }));
 vi.mock('../../../maker-host/index.js', () => ({
-  getMakerIfReady: () => ({ isSessionAlive: h.isSessionAlive, closeSession: h.closeSession }),
+  getMakerIfReady: () => ({
+    isSessionAlive: h.isSessionAlive,
+    closeSession: h.closeSession,
+    getSession: h.getSession,
+  }),
 }));
 vi.mock('../../../worktree/index.js', () => ({
   WorktreeManager: {
@@ -481,6 +489,8 @@ beforeEach(async () => {
   h.isSessionAlive.mockReturnValue(false);
   h.ensureGit.mockResolvedValue(undefined);
   h.closeSession.mockClear();
+  h.getSession.mockReset();
+  h.getSession.mockReturnValue(null);
   h.searchConversations.mockResolvedValue({
     query: '',
     results: [],
@@ -1430,7 +1440,7 @@ describe('Bot canonical Session lifecycle', () => {
     expect(row.failureJson).not.toContain('private prompt contents');
   });
 
-  it('keeps the pinned ProfileVersion across resume and adopts the new version only after Renew', async () => {
+  it('keeps the pinned ProfileVersion across resume and adopts the new version after in-place compact', async () => {
     await invoke('local-db:bots:create-canonical-session', {
       botId: 'bot-1',
       expectedCanonicalSessionId: null,
@@ -1456,14 +1466,16 @@ describe('Bot canonical Session lifecycle', () => {
     expect(resumedOpts.botProfilePrompt).toContain('You are Release Bot');
     expect(resumedOpts.botProfilePrompt).not.toContain('version two identity');
 
-    await invoke('local-db:bots:create-canonical-session', {
+    h.getSession.mockReturnValue({
+      capabilities: { manualCompact: { supported: true } },
+      compactSession: vi.fn(async () => ({})),
+    });
+    await invoke('local-db:bots:compact-canonical-session', {
       botId: 'bot-1',
       expectedCanonicalSessionId: 'session-1',
-      expectedProfileVersion: 2,
     });
     const renewedOpts: MakerSessionCreateOpts = {
       ...resumedOpts,
-      id: 'session-2',
       resumeSessionId: undefined,
       botProfilePrompt: undefined,
       botProfileContextPrompt: undefined,
@@ -1758,7 +1770,7 @@ describe('Bot canonical Session lifecycle', () => {
     ).toBe('released');
   });
 
-  it('keeps one reuse lease across canonical Renew and attaches both Sessions', async () => {
+  it('keeps one reuse lease when a deleted canonical Session is recovered', async () => {
     await invoke('local-db:bots:project-binding-upsert', {
       botId: 'bot-1',
       workingDir: '/repo/product',
@@ -1801,6 +1813,7 @@ describe('Bot canonical Session lifecycle', () => {
       deleteWorktreeForSession,
     });
 
+    h.sqlite!.prepare("UPDATE sessions SET status = 'deleted' WHERE id = 'session-1'").run();
     await invoke('local-db:bots:create-canonical-session', {
       botId: 'bot-1',
       expectedCanonicalSessionId: 'session-1',
@@ -1843,7 +1856,7 @@ describe('Bot canonical Session lifecycle', () => {
     ).toEqual([{ sessionId: 'session-1' }, { sessionId: 'session-2' }]);
   });
 
-  it('creates and reuses a remote Bot worktree without registering a local worktree', async () => {
+  it('creates and reuses a remote Bot worktree when the canonical Session is recovered', async () => {
     await invoke('local-db:bots:project-binding-upsert', {
       botId: 'bot-1',
       workingDir: '/remote/repo',
@@ -1885,6 +1898,7 @@ describe('Bot canonical Session lifecycle', () => {
     });
     expect(h.worktrees).toEqual([]);
 
+    h.sqlite!.prepare("UPDATE sessions SET status = 'deleted' WHERE id = 'session-1'").run();
     await invoke('local-db:bots:create-canonical-session', {
       botId: 'bot-1',
       expectedCanonicalSessionId: 'session-1',
@@ -2299,6 +2313,37 @@ describe('Bot canonical Session lifecycle', () => {
     ).toBe(1);
   });
 
+  it('compacts the canonical Chat in place instead of replacing its real Session', async () => {
+    const created = await invoke('local-db:bots:create-canonical-session', {
+      botId: 'bot-1',
+      expectedCanonicalSessionId: null,
+      expectedProfileVersion: 1,
+    });
+    const compactSession = vi.fn(async (instructions?: string) => ({
+      tokensBefore: 100,
+      estimatedTokensAfter: 20,
+      instructions,
+    }));
+    h.getSession.mockReturnValue({
+      capabilities: { manualCompact: { supported: true } },
+      compactSession,
+    });
+
+    const result = await invoke('local-db:bots:compact-canonical-session', {
+      botId: 'bot-1',
+      expectedCanonicalSessionId: created.session.id,
+      instructions: 'Keep the durable Bot identity and active commitments.',
+    });
+    expect(result).toMatchObject({ compacted: true, canonicalSessionId: created.session.id });
+    expect(compactSession).toHaveBeenCalledWith(
+      'Keep the durable Bot identity and active commitments.',
+    );
+    expect(h.sqlite!.prepare("SELECT COUNT(*) FROM bot_session_links WHERE role = 'canonical'").pluck().get())
+      .toBe(1);
+    expect(h.sqlite!.prepare("SELECT COUNT(*) FROM bot_session_links WHERE role = 'history'").pluck().get())
+      .toBe(0);
+  });
+
   it('returns the winner and removes the unused workspace when a stale create loses the CAS', async () => {
     await invoke('local-db:bots:create-canonical-session', {
       botId: 'bot-1',
@@ -2346,22 +2391,21 @@ describe('Bot canonical Session lifecycle', () => {
     expect(h.remove).not.toHaveBeenCalled();
   });
 
-  it('archives the previous Bot Session and promotes exactly one replacement on Renew', async () => {
+  it('keeps the permanent canonical Chat when a normal create request repeats', async () => {
     await invoke('local-db:bots:create-canonical-session', {
       botId: 'bot-1',
       expectedCanonicalSessionId: null,
       expectedProfileVersion: 1,
     });
-    const renewed = await invoke('local-db:bots:create-canonical-session', {
+    const repeated = await invoke('local-db:bots:create-canonical-session', {
       botId: 'bot-1',
       expectedCanonicalSessionId: 'session-1',
       expectedProfileVersion: 1,
     });
 
-    expect(renewed).toMatchObject({ created: true, canonicalSessionId: 'session-2' });
+    expect(repeated).toMatchObject({ created: false, canonicalSessionId: 'session-1' });
     expect(h.sqlite!.prepare('SELECT id, status FROM sessions ORDER BY id').all()).toEqual([
-      { id: 'session-1', status: 'archived' },
-      { id: 'session-2', status: 'active' },
+      { id: 'session-1', status: 'active' },
     ]);
     expect(
       h
@@ -2370,10 +2414,9 @@ describe('Bot canonical Session lifecycle', () => {
         )
         .all(),
     ).toEqual([
-      { sessionId: 'session-1', role: 'history' },
-      { sessionId: 'session-2', role: 'canonical' },
+      { sessionId: 'session-1', role: 'canonical' },
     ]);
-    expect(h.closeSession).toHaveBeenCalledWith('session-1');
+    expect(h.closeSession).not.toHaveBeenCalled();
   });
 
   it('recovers a soft-deleted canonical without resurrecting the deleted Session', async () => {
@@ -2502,10 +2545,10 @@ describe('Bot canonical Session lifecycle', () => {
         h.sqlite!.prepare('SELECT canonical_session_id FROM bot_profiles WHERE id = ?').pluck().get(
           'bot-2',
         ),
-      ).toBe('session-4');
+      ).toBe('session-2');
       expect(
         h.sqlite!.prepare('SELECT status FROM sessions WHERE id = ?').pluck().get('session-2'),
-      ).toBe('archived');
+      ).toBe('active');
 
       h.sqlite!.prepare('UPDATE sessions SET total_token_usage = 900 WHERE id = ?').run(
         'session-3',
@@ -2941,7 +2984,7 @@ describe('Bot canonical Session lifecycle', () => {
     }
   });
 
-  it('cancels active delegation descendants when the parent Bot task is renewed', async () => {
+  it('cancels active delegation descendants when the parent canonical Session is recovered', async () => {
     await invoke('local-db:bots:create-canonical-session', {
       botId: 'bot-1',
       expectedCanonicalSessionId: null,
@@ -2971,6 +3014,7 @@ describe('Bot canonical Session lifecycle', () => {
           objective: 'Remain bounded to this parent task.',
         }),
       ).resolves.toMatchObject({ ok: true, childSessionId: 'session-3' });
+      h.sqlite!.prepare("UPDATE sessions SET status = 'deleted' WHERE id = 'session-1'").run();
       await invoke('local-db:bots:create-canonical-session', {
         botId: 'bot-1',
         expectedCanonicalSessionId: 'session-1',

@@ -38,27 +38,16 @@ function harness(over: Partial<BotRenewalDeps> & { snapshot?: unknown } = {}) {
 }
 
 describe('到点换代', () => {
-  it('昨晚聊的,今早点开 → 换代,并留痕', async () => {
+  it('旧的每天换代策略不再替换永久 canonical Chat', async () => {
     const h = harness();
     const out = await renewBotSessionIfDue('bot-a', h.deps);
     expect(out).toEqual({
-      renewed: true,
-      reason: 'daily',
-      canonicalSessionId: 's-new',
-      notify: true,
+      renewed: false,
+      canonicalSessionId: 's-old',
+      notify: false,
     });
-    // CAS:必须带上旧对话与版本号,否则并发下会建出两条主对话。
-    expect(h.renew).toHaveBeenCalledWith({
-      botId: 'bot-a',
-      expectedCanonicalSessionId: 's-old',
-      expectedProfileVersion: 3,
-    });
-    expect(h.recordEvent).toHaveBeenCalledWith({
-      botId: 'bot-a',
-      reason: 'daily',
-      from: 's-old',
-      to: 's-new',
-    });
+    expect(h.renew).not.toHaveBeenCalled();
+    expect(h.recordEvent).not.toHaveBeenCalled();
   });
 
   it('今天已经聊过就不换', async () => {
@@ -129,14 +118,14 @@ describe('到点换代', () => {
     expect(h.recordEvent).not.toHaveBeenCalled();
   });
 
-  it('留痕失败不影响换代结果本身', async () => {
+  it('兼容入口不会因为旧策略配置而写换代事件', async () => {
     const h = harness({ recordEvent: async () => { throw new Error('db down'); } });
     const out = await renewBotSessionIfDue('bot-a', h.deps);
-    expect(out.renewed).toBe(true);
-    expect(out.canonicalSessionId).toBe('s-new');
+    expect(out.renewed).toBe(false);
+    expect(out.canonicalSessionId).toBe('s-old');
   });
 
-  it('自定义时刻:设成 0 点,昨晚 22 点的对话今早就该翻篇', async () => {
+  it('自定义时刻配置也不会改变永久 canonical Chat', async () => {
     const h = harness({
       snapshot: {
         botId: 'bot-a',
@@ -146,10 +135,10 @@ describe('到点换代', () => {
         status: 'active',
       },
     });
-    expect((await renewBotSessionIfDue('bot-a', h.deps)).reason).toBe('daily');
+    expect((await renewBotSessionIfDue('bot-a', h.deps)).renewed).toBe(false);
   });
 
-  it('关掉通知时仍然换代,只是不说话', async () => {
+  it('旧的 notify 配置不会制造换代提示', async () => {
     const h = harness({
       snapshot: {
         botId: 'bot-a',
@@ -160,7 +149,7 @@ describe('到点换代', () => {
       },
     });
     const out = await renewBotSessionIfDue('bot-a', h.deps);
-    expect(out.renewed).toBe(true);
+    expect(out.renewed).toBe(false);
     expect(out.notify).toBe(false);
   });
 });

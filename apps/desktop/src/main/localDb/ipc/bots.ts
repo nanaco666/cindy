@@ -160,6 +160,11 @@ type CreateBotCanonicalSessionResult = {
   session: ReturnType<typeof sessionToCamel>;
 };
 
+type CanonicalLinkReconciliation = {
+  status: 'unchanged' | 'repaired-mirror' | 'migrated' | 'missing-pointer' | 'missing-session' | 'conflict';
+  canonicalSessionId: string | null;
+};
+
 let createBotCanonicalSessionImpl:
   | ((input: CreateBotCanonicalSessionInput) => Promise<CreateBotCanonicalSessionResult>)
   | null = null;
@@ -172,6 +177,25 @@ export async function createBotCanonicalSession(
     throwIpcError('PRECONDITION_FAILED', 'Bot 数据服务尚未初始化');
   }
   return createBotCanonicalSessionImpl(input);
+}
+
+/**
+ * Canonical identity is owned by bot_session_links(role=canonical). The
+ * bot_profiles.canonical_session_id column is retained only as a compatibility
+ * mirror while old databases are being brought forward.
+ */
+async function reconcileCanonicalLink(botId: string): Promise<CanonicalLinkReconciliation> {
+  try {
+    return await getDbClient().tx<CanonicalLinkReconciliation>('bots.reconcileCanonicalLink', {
+      botId,
+      now: Date.now(),
+    });
+  } catch (error) {
+    // A failed reconciliation must never make us guess a Session. Consumers
+    // treat this as a closed recovery state and surface health/repair UI.
+    log.warn('canonical link reconciliation failed closed', { botId, error: String(error) });
+    return { status: 'conflict', canonicalSessionId: null };
+  }
 }
 
 /**
@@ -391,6 +415,8 @@ async function readProfile(
 ) {
   const [profile] = await db.select().from(botProfiles).where(eq(botProfiles.id, botId)).limit(1);
   if (!profile) throwIpcError('NOT_FOUND', 'Bot 不存在');
+  const canonicalResolution = await reconcileCanonicalLink(botId);
+  const canonicalSessionId = canonicalResolution.canonicalSessionId;
   const channels = await db.select().from(botChannels).where(eq(botChannels.botId, botId));
   const links = await db
     .select()
@@ -450,15 +476,15 @@ async function readProfile(
     .from(botRoutes)
     .where(eq(botRoutes.botId, botId))
     .orderBy(desc(botRoutes.updatedAt));
-  const canonicalClearedAt = byId.get(profile.canonicalSessionId ?? '')?.clearedAt ?? null;
+  const canonicalClearedAt = byId.get(canonicalSessionId ?? '')?.clearedAt ?? null;
   const latestMessage = await readCanonicalChatPreview(
     db,
-    profile.canonicalSessionId ?? null,
+    canonicalSessionId,
     canonicalClearedAt,
   );
   const unreadCount = await countCanonicalUnread(
     db,
-    profile.canonicalSessionId ?? null,
+    canonicalSessionId,
     canonicalClearedAt,
     lastReadAt,
   );
@@ -477,7 +503,7 @@ async function readProfile(
     enabled: profile.status === 'active',
     status: profile.status,
     currentVersion: profile.currentVersion,
-    canonicalSessionId: profile.canonicalSessionId ?? undefined,
+    canonicalSessionId: canonicalSessionId ?? undefined,
     /*
       伙伴的家在磁盘上的位置。文件夹化的全部用户价值就是「能用编辑器改、能备份、
       能复制一份」—— 而在这之前界面上没有一处告诉用户它在哪。
@@ -665,13 +691,14 @@ async function readRemoteBotProfile(
     .where(eq(botProfiles.id, botId))
     .limit(1);
   if (!profile) throwIpcError('NOT_FOUND', 'Bot 不存在');
+  const canonicalResolution = await reconcileCanonicalLink(botId);
   const channels = await db
     .select({ kind: botChannels.kind, enabled: botChannels.enabled })
     .from(botChannels)
     .where(eq(botChannels.botId, botId));
   return {
     ...profile,
-    canonicalSessionId: profile.canonicalSessionId ?? undefined,
+    canonicalSessionId: canonicalResolution.canonicalSessionId ?? undefined,
     channels: channels.map((channel) => ({
       kind: channel.kind,
       enabled: !!channel.enabled,
@@ -834,7 +861,7 @@ export function registerBotIpc(): void {
     const db = getDbClient().drizzle;
     const [profile] = await db.select().from(botProfiles).where(eq(botProfiles.id, botId)).limit(1);
     if (!profile) throwIpcError('NOT_FOUND', 'Bot 不存在');
-    const canonicalSessionId = profile.canonicalSessionId ?? null;
+    const canonicalSessionId = (await reconcileCanonicalLink(botId)).canonicalSessionId;
     const [canonicalSession, canonicalLink, runtimeSnapshots, routes, automations, deliveries, leases] =
       await Promise.all([
         canonicalSessionId
@@ -1622,16 +1649,27 @@ export function registerBotIpc(): void {
     if (profile.status !== 'active' && profile.status !== 'paused') {
       throwIpcError('PRECONDITION_FAILED', `Bot 当前状态为 ${profile.status}`);
     }
+    const canonicalResolution = await reconcileCanonicalLink(botId);
+    const authoritativeCanonicalSessionId = canonicalResolution.canonicalSessionId;
     if (input.recoverMissingOnly) {
-      if (!expectedCanonicalSessionId || profile.canonicalSessionId !== expectedCanonicalSessionId) {
+      const recoverableCompatibilityMirror =
+        canonicalResolution.status === 'missing-session'
+        && profile.canonicalSessionId === expectedCanonicalSessionId;
+      if (
+        !expectedCanonicalSessionId
+        || (
+          authoritativeCanonicalSessionId !== expectedCanonicalSessionId
+          && !recoverableCompatibilityMirror
+        )
+      ) {
         throwIpcError('PRECONDITION_FAILED', 'Bot 主任务已变化，请刷新后重试');
       }
       const [existingCanonical] = await db
-        .select({ id: sessions.id })
+        .select({ id: sessions.id, status: sessions.status })
         .from(sessions)
         .where(eq(sessions.id, expectedCanonicalSessionId))
         .limit(1);
-      if (existingCanonical) {
+      if (existingCanonical && existingCanonical.status !== 'deleted') {
         throwIpcError('PRECONDITION_FAILED', 'Bot 主任务仍然存在，不能按丢失任务恢复');
       }
     }
@@ -1806,6 +1844,10 @@ export function registerBotIpc(): void {
       要保护的东西不重叠。失败已在内部吞掉并记一笔,最坏是这一轮还用旧身份。
     */
     await reconcileBotProfileFolder(input.botId);
+    // Bring legacy pointer-only profiles into the link registry before any
+    // create/replace CAS. Once a canonical link exists, the worker transaction
+    // compares against that link rather than trusting the compatibility mirror.
+    await reconcileCanonicalLink(input.botId);
     const previousSessionId = input.expectedCanonicalSessionId;
     if (!previousSessionId) return createBotCanonicalSessionUnlocked(input);
     return coordinateBotCanonicalReplacement(
@@ -1840,6 +1882,84 @@ export function registerBotIpc(): void {
     });
   });
 
+  ipcMain.handle('local-db:bots:compact-canonical-session', async (event, raw: unknown) => {
+    assertTrustedAppRendererEvent(event);
+    const body =
+      raw && typeof raw === 'object' && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
+    const botId = readText(body.botId, 'botId', 128, true);
+    const expectedCanonicalSessionId = readText(
+      body.expectedCanonicalSessionId,
+      'expectedCanonicalSessionId',
+      128,
+      true,
+    );
+    const instructions =
+      body.instructions === undefined
+        ? undefined
+        : readText(body.instructions, 'instructions', 12_000);
+    const canonicalSessionId = (await reconcileCanonicalLink(botId)).canonicalSessionId;
+    if (!canonicalSessionId) {
+      throwIpcError('PRECONDITION_FAILED', 'Bot 没有可用的 canonical Chat，请先修复主任务');
+    }
+    if (canonicalSessionId !== expectedCanonicalSessionId) {
+      throwIpcError('PRECONDITION_FAILED', 'Bot canonical Chat 已变化，请刷新后重试');
+    }
+    const [{ getMakerIfReady }, db] = await Promise.all([
+      import('../../maker-host/index.js'),
+      Promise.resolve(getDbClient().drizzle),
+    ]);
+    const maker = getMakerIfReady();
+    const live = maker?.getSession(canonicalSessionId) as
+      | {
+          capabilities?: { manualCompact?: { supported?: boolean } };
+          compactSession: (value?: string) => Promise<unknown>;
+        }
+      | undefined;
+    if (!live) {
+      return { compacted: false, canonicalSessionId, reason: 'not-running' as const };
+    }
+    if (live.capabilities?.manualCompact?.supported !== true) {
+      return { compacted: false, canonicalSessionId, reason: 'unsupported' as const };
+    }
+    const [profile] = await db
+      .select({ currentVersion: botProfiles.currentVersion })
+      .from(botProfiles)
+      .where(eq(botProfiles.id, botId))
+      .limit(1);
+    if (!profile) throwIpcError('NOT_FOUND', 'Bot 不存在');
+    const result = await live.compactSession(instructions);
+    const [updatedLink] = await db
+      .update(botSessionLinks)
+      .set({ profileVersion: profile.currentVersion })
+      .where(
+        and(
+          eq(botSessionLinks.botId, botId),
+          eq(botSessionLinks.sessionId, canonicalSessionId),
+          eq(botSessionLinks.role, 'canonical'),
+        ),
+      )
+      .returning({ id: botSessionLinks.id });
+    if (!updatedLink) {
+      throwIpcError('PRECONDITION_FAILED', 'Bot canonical Chat 已变化，请刷新后重试');
+    }
+    // Reopen the same real Session on the next turn so Cindy's normal Session
+    // bootstrap can mount the newly selected Profile version, tools and
+    // memories. The transcript/link identity never changes.
+    await maker?.closeSession(canonicalSessionId).catch(() => undefined);
+    await db.insert(botLifecycleEvents).values({
+      id: randomUUID(),
+      botId,
+      sessionId: canonicalSessionId,
+      eventType: 'canonical-compacted',
+      payloadJson: safeJson({
+        instructionsProvided: instructions !== undefined,
+        profileVersion: profile.currentVersion,
+      }),
+      createdAt: Date.now(),
+    });
+    return { compacted: true, canonicalSessionId, result };
+  });
+
   /*
     到点换代。触发时机是**打开伙伴主对话**的那一下 —— 点开就是要用,正是「新一轮」
     的起点;刻意不挂后台定时器,那会在半夜给每个伙伴凭空建一堆空对话。
@@ -1858,7 +1978,6 @@ export function registerBotIpc(): void {
       readSnapshot: async (id) => {
         const [profile] = await db
           .select({
-            canonicalSessionId: botProfiles.canonicalSessionId,
             currentVersion: botProfiles.currentVersion,
             status: botProfiles.status,
           })
@@ -1866,6 +1985,7 @@ export function registerBotIpc(): void {
           .where(eq(botProfiles.id, id))
           .limit(1);
         if (!profile) return null;
+        const canonicalResolution = await reconcileCanonicalLink(id);
         const [version] = await db
           .select({ capabilitiesJson: botProfileVersions.capabilitiesJson })
           .from(botProfileVersions)
@@ -1879,7 +1999,7 @@ export function registerBotIpc(): void {
         return {
           botId: id,
           renewal: parseJson(version?.capabilitiesJson ?? '{}').renewal,
-          canonicalSessionId: profile.canonicalSessionId ?? null,
+          canonicalSessionId: canonicalResolution.canonicalSessionId,
           currentVersion: profile.currentVersion,
           status: profile.status,
         };
@@ -1982,10 +2102,11 @@ export function registerBotIpc(): void {
     if (existing[0] && existing[0].botId !== botId) {
       throwIpcError('PRECONDITION_FAILED', 'Session 已绑定到另一个 Bot');
     }
-    if (role === 'history' && bot.canonicalSessionId === sessionId) {
+    const canonicalSessionId = (await reconcileCanonicalLink(botId)).canonicalSessionId;
+    if (role === 'history' && canonicalSessionId === sessionId) {
       throwIpcError('PRECONDITION_FAILED', 'canonical Session 必须通过 Renew 原子替换');
     }
-    if (role === 'route' && bot.canonicalSessionId === sessionId) {
+    if (role === 'route' && canonicalSessionId === sessionId) {
       throwIpcError('PRECONDITION_FAILED', 'canonical Session 不能同时作为 route Session');
     }
     const now = Date.now();

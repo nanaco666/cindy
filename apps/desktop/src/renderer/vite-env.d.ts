@@ -4360,6 +4360,16 @@ interface ElectronAPI {
         canonicalSessionId: string;
         session: import('@/lib/ccAgent.types').Session;
       }>;
+      compactCanonicalSession: (body: {
+        botId: string;
+        expectedCanonicalSessionId: string;
+        instructions?: string;
+      }) => Promise<{
+        compacted: boolean;
+        canonicalSessionId: string;
+        reason?: 'not-running' | 'unsupported';
+        result?: unknown;
+      }>;
       /**
        * 到点换代:打开主对话时问一次「该翻篇了吗」。
        *

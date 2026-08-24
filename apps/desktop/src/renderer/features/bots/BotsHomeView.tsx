@@ -1405,9 +1405,15 @@ export function BotsHomeView() {
     async (bot: BotProfile): Promise<boolean> => {
       setIsCreatingSession(true);
       try {
-        const next = await createCanonicalSession(bot);
-        if (!next) return false;
-        navigate(`/bots/${bot.id}/session/${next.id}`, { replace: true });
+        const canonicalSessionId = bot.canonicalSessionId;
+        if (!canonicalSessionId) return false;
+        const result = await window.electronAPI.localDb.bots.compactCanonicalSession({
+          botId: bot.id,
+          expectedCanonicalSessionId: canonicalSessionId,
+          instructions: 'Keep the Bot identity, durable memory, and active commitments while compacting this Chat.',
+        });
+        if (!result.compacted) return false;
+        navigate(`/bots/${bot.id}/session/${canonicalSessionId}`, { replace: true });
         return true;
       } catch {
         // The settings view remains mounted and can surface a localized error.
@@ -1518,20 +1524,10 @@ export function BotsHomeView() {
       renewCheckedBotId === selectedBot.id
     )
       return;
-    let cancelled = false;
-    void window.electronAPI.localDb.bots
-      .renewIfDue({ botId: selectedBot.id })
-      .catch(() => null)
-      .then((result) => {
-        if (cancelled) return;
-        // 换代了就让 store 重取 —— 下面那个 effect 会读到新的 canonicalSessionId
-        // 并把用户送过去,不需要在这里再写一次导航。
-        if (result?.renewed) refreshBotProfiles();
-        setRenewCheckedBotId(selectedBot.id);
-      });
-    return () => {
-      cancelled = true;
-    };
+    // Hermes semantics: opening a Bot never silently swaps its canonical Chat.
+    // Context compaction is explicit through the Bot lifecycle action; this
+    // guard only keeps the navigation effect deterministic during hydration.
+    setRenewCheckedBotId(selectedBot.id);
   }, [selectedBot, settingsOpen, addRequested, renewCheckedBotId]);
 
   useEffect(() => {

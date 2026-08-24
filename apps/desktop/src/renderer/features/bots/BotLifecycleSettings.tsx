@@ -17,11 +17,6 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 
-import {
-  normalizeBotRenewalPolicy,
-  type BotRenewalPolicy,
-} from '../../../shared/botRenewalPolicy';
-
 import { useConfirmDialog } from '@/components/ui/confirm-dialog-provider';
 import type { ConversationSearchJump } from '../../../shared/conversationSearchJump';
 import type { BotDeliveryView } from '../../../shared/botDelivery';
@@ -31,7 +26,7 @@ import type {
 } from '../../../shared/botLifecycle';
 import type { ConversationSearchResponse } from '../../../shared/conversationSearch';
 import type { BotProfile } from './botStore';
-import { runBotLifecycleAction, updateBotProfile } from './botStore';
+import { runBotLifecycleAction } from './botStore';
 
 function healthIcon(status: BotHealthReport['status']) {
   if (status === 'healthy') return <CheckCircle2 size={16} className="text-[var(--status-success)]" />;
@@ -67,27 +62,7 @@ export function BotLifecycleSettings({
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState(false);
   const [searchResult, setSearchResult] = useState<ConversationSearchResponse | null>(null);
-  /*
-    换代策略。存在 capabilities.renewal 里 —— 它跟着档案一起版本化,换代这件事
-    本身就属于「这个伙伴怎么运转」的一部分。
-  */
-  const renewal = normalizeBotRenewalPolicy(
-    (bot.capabilities as unknown as { renewal?: unknown }).renewal,
-  );
-  const [savingRenewal, setSavingRenewal] = useState(false);
   const [renewingNow, setRenewingNow] = useState(false);
-  const saveRenewal = async (next: BotRenewalPolicy): Promise<void> => {
-    setSavingRenewal(true);
-    try {
-      await updateBotProfile(bot.id, {
-        capabilities: { ...bot.capabilities, renewal: next } as typeof bot.capabilities,
-      });
-    } catch {
-      // 保存失败时开关会跟着 profile 弹回原值 —— 那本身就是最诚实的反馈。
-    } finally {
-      setSavingRenewal(false);
-    }
-  };
   const [actionBusy, setActionBusy] = useState<
     'pause' | 'resume' | 'archive' | 'restore' | 'delete' | null
   >(null);
@@ -267,40 +242,16 @@ export function BotLifecycleSettings({
         </button>
       </div>
 
-      {/*
-        换代:每天到点开一段新的对话。默认早上 6 点开着 —— 一条永不断的主对话越用
-        越长,而「翻篇」跟「压缩」是两件事:压缩是装不下了把记录压短、继续同一段;
-        换代是新的一天从头说起,灵魂与记忆都在,只是不带昨天的上下文。
-
-        只提供日界不提供空闲:空闲换代最容易让人意外(吃个饭回来上下文没了),
-        日界发生在凌晨,感知最小。
-      */}
       <div className="mt-4 rounded-xl border border-[var(--border-default)] p-4">
-        <div className="flex items-start justify-between gap-3">
+        <div className="flex items-start gap-3">
           <div className="min-w-0">
             <p className="text-12 font-medium text-[var(--text-primary)]">
-              {t('bots.renewal.title')}
+              {t('bots.renewal.permanentTitle')}
             </p>
             <p className="mt-1 text-11 leading-5 text-[var(--text-tertiary)]">
-              {renewal.mode === 'none'
-                ? t('bots.renewal.offDescription')
-                : t('bots.renewal.onDescription', { hour: renewal.atHour })}
+              {t('bots.renewal.permanentDescription')}
             </p>
           </div>
-          <label className="inline-flex shrink-0 cursor-pointer items-center gap-2">
-            <input
-              type="checkbox"
-              className="size-4 accent-[var(--accent-cta-bg)]"
-              checked={renewal.mode !== 'none'}
-              disabled={savingRenewal || isArchived}
-              onChange={(e) =>
-                void saveRenewal({ ...renewal, mode: e.target.checked ? 'daily' : 'none' })
-              }
-            />
-            <span className="text-11 text-[var(--text-secondary)]">
-              {t('bots.renewal.toggle')}
-            </span>
-          </label>
         </div>
         {onRenew ? (
           <div className="mt-3 flex items-center justify-between gap-3 border-t border-[var(--border-subtle)] pt-3">
@@ -333,26 +284,6 @@ export function BotLifecycleSettings({
             </button>
           </div>
         ) : null}
-        {renewal.mode !== 'none' && (
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            <label className="text-11 text-[var(--text-secondary)]" htmlFor="bot-renewal-hour">
-              {t('bots.renewal.hourLabel')}
-            </label>
-            <select
-              id="bot-renewal-hour"
-              value={renewal.atHour}
-              disabled={savingRenewal || isArchived}
-              onChange={(e) => void saveRenewal({ ...renewal, atHour: Number(e.target.value) })}
-              className="h-8 rounded-lg border border-[var(--border-default)] bg-[var(--surface-elevated)] px-2 text-12 text-[var(--text-primary)] disabled:opacity-50"
-            >
-              {Array.from({ length: 24 }, (_, hour) => (
-                <option key={hour} value={hour}>
-                  {t('bots.renewal.hourOption', { hour })}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
       </div>
 
       <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--border-default)] p-4">

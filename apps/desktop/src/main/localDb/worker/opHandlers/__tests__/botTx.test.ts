@@ -58,7 +58,7 @@ describe('Bot named worker transactions', () => {
 
   afterEach(() => db.close());
 
-  it('creates a local-first profile and atomically installs and renews canonical sessions', () => {
+  it('creates a local-first profile and keeps one permanent canonical Session', () => {
     tx(db, { name: 'bots.createProfile', args: {
       id: 'bot-1', displayName: 'Hermes', description: '', avatar: '🤖', avatarColor: 'violet',
       identitySource: 'identity', capabilitiesJson: '{}',
@@ -87,12 +87,13 @@ describe('Bot named worker transactions', () => {
       botId: 'bot-1', expectedCanonicalSessionId: 'session-1', expectedProfileVersion: 1,
       session: session('session-2', 3), now: 3,
     } })).toEqual({
-      created: true, canonicalSessionId: 'session-2', archivedCanonicalSessionId: 'session-1',
+      created: false, canonicalSessionId: 'session-1', archivedCanonicalSessionId: null,
     });
     expect(db.prepare('SELECT status FROM sessions WHERE id = ?').pluck().get('session-1'))
-      .toBe('archived');
+      .toBe('active');
     expect(db.prepare("SELECT session_id FROM bot_session_links WHERE role = 'canonical'").pluck().get())
-      .toBe('session-2');
+      .toBe('session-1');
+    expect(db.prepare('SELECT COUNT(*) FROM sessions').pluck().get()).toBe(1);
   });
 
   it('does not insert a losing canonical CAS session', () => {
@@ -110,5 +111,91 @@ describe('Bot named worker transactions', () => {
     } });
     expect(result).toEqual({ created: false, canonicalSessionId: null, archivedCanonicalSessionId: null });
     expect(db.prepare('SELECT COUNT(*) FROM sessions').pluck().get()).toBe(0);
+  });
+
+  it('treats the canonical link as authority and repairs only the compatibility mirror', () => {
+    tx(db, { name: 'bots.createProfile', args: {
+      id: 'bot-1', displayName: 'Hermes', description: '', avatar: '🤖', avatarColor: 'violet',
+      identitySource: 'identity', capabilitiesJson: '{}', now: 1,
+    } });
+    db.prepare(`INSERT INTO sessions
+      (id, title, workspace_kind, model, effort, permission_mode, status, total_token_usage,
+       total_cost_usd, context_tokens, context_window, fast_mode, plan_mode_enabled, agent_kind,
+       extra_dirs, source, created_at, updated_at)
+      VALUES ('canonical', 'Hermes', 'dialogue', 'claude-sonnet-4-6', 'high', 'ask', 'active',
+       0, 0, 0, 0, 0, 0, 'cc', '[]', 'bot', 2, 2)`).run();
+    db.prepare(`INSERT INTO bot_session_links
+      (id, bot_id, session_id, profile_version, role, created_at)
+      VALUES ('link-canonical', 'bot-1', 'canonical', 1, 'canonical', 2)`).run();
+    db.prepare(`INSERT INTO sessions
+      (id, title, workspace_kind, model, effort, permission_mode, status, total_token_usage,
+       total_cost_usd, context_tokens, context_window, fast_mode, plan_mode_enabled, agent_kind,
+       extra_dirs, source, created_at, updated_at)
+      VALUES ('stale', 'Old', 'dialogue', 'claude-sonnet-4-6', 'high', 'ask', 'archived',
+       0, 0, 0, 0, 0, 0, 'cc', '[]', 'bot', 2, 2)`).run();
+    db.prepare("UPDATE bot_profiles SET canonical_session_id = 'stale' WHERE id = 'bot-1'").run();
+
+    expect(tx(db, { name: 'bots.reconcileCanonicalLink', args: { botId: 'bot-1', now: 3 } }))
+      .toEqual({ status: 'repaired-mirror', canonicalSessionId: 'canonical' });
+    expect(db.prepare('SELECT canonical_session_id FROM bot_profiles WHERE id = ?').pluck().get('bot-1'))
+      .toBe('canonical');
+    expect(tx(db, { name: 'bots.reconcileCanonicalLink', args: { botId: 'bot-1', now: 4 } }))
+      .toEqual({ status: 'unchanged', canonicalSessionId: 'canonical' });
+  });
+
+  it('migrates a valid legacy pointer into the canonical link exactly once', () => {
+    tx(db, { name: 'bots.createProfile', args: {
+      id: 'bot-1', displayName: 'Hermes', description: '', avatar: '🤖', avatarColor: 'violet',
+      identitySource: 'identity', capabilitiesJson: '{}', now: 1,
+    } });
+    db.prepare(`INSERT INTO sessions
+      (id, title, workspace_kind, model, effort, permission_mode, status, total_token_usage,
+       total_cost_usd, context_tokens, context_window, fast_mode, plan_mode_enabled, agent_kind,
+       extra_dirs, source, created_at, updated_at)
+      VALUES ('legacy', 'Hermes', 'dialogue', 'claude-sonnet-4-6', 'high', 'ask', 'active',
+       0, 0, 0, 0, 0, 0, 'cc', '[]', 'bot', 2, 2)`).run();
+    db.prepare("UPDATE bot_profiles SET canonical_session_id = 'legacy' WHERE id = 'bot-1'").run();
+
+    expect(tx(db, { name: 'bots.reconcileCanonicalLink', args: { botId: 'bot-1', now: 3 } }))
+      .toEqual({ status: 'migrated', canonicalSessionId: 'legacy' });
+    expect(db.prepare("SELECT role, session_id FROM bot_session_links WHERE bot_id = 'bot-1'").get())
+      .toEqual({ role: 'canonical', session_id: 'legacy' });
+    expect(tx(db, { name: 'bots.reconcileCanonicalLink', args: { botId: 'bot-1', now: 4 } }))
+      .toEqual({ status: 'unchanged', canonicalSessionId: 'legacy' });
+    expect(db.prepare("SELECT COUNT(*) FROM bot_session_links WHERE bot_id = 'bot-1'").pluck().get())
+      .toBe(1);
+  });
+
+  it('fails closed when the legacy pointer is missing or points at an existing non-canonical link', () => {
+    tx(db, { name: 'bots.createProfile', args: {
+      id: 'bot-1', displayName: 'Hermes', description: '', avatar: '🤖', avatarColor: 'violet',
+      identitySource: 'identity', capabilitiesJson: '{}', now: 1,
+    } });
+    db.prepare(`INSERT INTO sessions
+      (id, title, workspace_kind, model, effort, permission_mode, status, total_token_usage,
+       total_cost_usd, context_tokens, context_window, fast_mode, plan_mode_enabled, agent_kind,
+       extra_dirs, source, created_at, updated_at)
+      VALUES ('gone', 'Gone', 'dialogue', 'claude-sonnet-4-6', 'high', 'ask', 'deleted',
+       0, 0, 0, 0, 0, 0, 'cc', '[]', 'bot', 2, 2)`).run();
+    db.prepare("UPDATE bot_profiles SET canonical_session_id = 'gone' WHERE id = 'bot-1'").run();
+    expect(tx(db, { name: 'bots.reconcileCanonicalLink', args: { botId: 'bot-1', now: 2 } }))
+      .toEqual({ status: 'missing-session', canonicalSessionId: null });
+    expect(db.prepare("SELECT COUNT(*) FROM bot_session_links WHERE bot_id = 'bot-1'").pluck().get())
+      .toBe(0);
+
+    db.prepare(`INSERT INTO sessions
+      (id, title, workspace_kind, model, effort, permission_mode, status, total_token_usage,
+       total_cost_usd, context_tokens, context_window, fast_mode, plan_mode_enabled, agent_kind,
+       extra_dirs, source, created_at, updated_at)
+      VALUES ('route-session', 'Hermes', 'dialogue', 'claude-sonnet-4-6', 'high', 'ask', 'active',
+       0, 0, 0, 0, 0, 0, 'cc', '[]', 'bot', 3, 3)`).run();
+    db.prepare("UPDATE bot_profiles SET canonical_session_id = 'route-session' WHERE id = 'bot-1'").run();
+    db.prepare(`INSERT INTO bot_session_links
+      (id, bot_id, session_id, profile_version, role, created_at)
+      VALUES ('link-route', 'bot-1', 'route-session', 1, 'route', 3)`).run();
+    expect(tx(db, { name: 'bots.reconcileCanonicalLink', args: { botId: 'bot-1', now: 4 } }))
+      .toEqual({ status: 'conflict', canonicalSessionId: null });
+    expect(db.prepare("SELECT role FROM bot_session_links WHERE bot_id = 'bot-1'").pluck().get())
+      .toBe('route');
   });
 });

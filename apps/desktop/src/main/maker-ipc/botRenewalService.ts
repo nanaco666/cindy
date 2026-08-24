@@ -25,11 +25,7 @@
  * 写 lifecycle 事件,并让调用方把「我还记得你,只是这一段重新开始」讲给用户听。
  */
 
-import {
-  normalizeBotRenewalPolicy,
-  shouldRenewBotSession,
-  type BotRenewalReason,
-} from '../../shared/botRenewalPolicy.js';
+import type { BotRenewalReason } from '../../shared/botRenewalPolicy.js';
 
 export interface BotRenewalSnapshot {
   botId: string;
@@ -74,48 +70,21 @@ const NOT_RENEWED = (canonicalSessionId: string | null, notify = false): BotRene
 });
 
 /**
- * 到点就换,没到就原样返回。
+ * 兼容入口：canonical Bot Chat 永久存在，不再按日换代。
  *
- * 任何一步出错都返回「没换」而不是抛 —— 换代是锦上添花,不该让用户连伙伴都打不开。
+ * 旧版本仍可能调用这个 IPC/服务入口，因此保留返回形状，但不再执行旧的
+ * canonical Session replacement。普通 IM route、Automation worker 的生命周期
+ * 由各自服务管理；canonical 的 /new、/reset 和手动 Renew 走原地 compact。
  */
 export async function renewBotSessionIfDue(
   botId: string,
   deps: BotRenewalDeps,
 ): Promise<BotRenewalOutcome> {
-  const now = deps.now?.() ?? Date.now();
   const snapshot = await deps.readSnapshot(botId);
   if (!snapshot) return NOT_RENEWED(null);
   // 暂停 / 归档 / 正在删除的伙伴不该被动起来。
   if (snapshot.status !== 'active') return NOT_RENEWED(snapshot.canonicalSessionId);
   // 还没有主对话 —— 那是「首次创建」的事,不是换代。
   if (!snapshot.canonicalSessionId) return NOT_RENEWED(null);
-
-  const policy = normalizeBotRenewalPolicy(snapshot.renewal);
-  if (policy.mode === 'none') return NOT_RENEWED(snapshot.canonicalSessionId);
-
-  const lastActivityAt = await deps.readLastActivityAt(snapshot.canonicalSessionId);
-  const hasActiveWork = await deps.hasActiveWork(botId);
-  const reason = shouldRenewBotSession({ policy, lastActivityAt, now, hasActiveWork });
-  if (!reason) return NOT_RENEWED(snapshot.canonicalSessionId, policy.notify);
-
-  const previous = snapshot.canonicalSessionId;
-  const result = await deps.renew({
-    botId,
-    expectedCanonicalSessionId: previous,
-    expectedProfileVersion: snapshot.currentVersion,
-  });
-  // 没真的换成(CAS 失败 / 底座判定不需要换)时不谎报,也不让用户看到一句
-  // 「我们重新开始了」却还在老对话里。
-  if (!result.canonicalSessionId || result.canonicalSessionId === previous) {
-    return NOT_RENEWED(previous, policy.notify);
-  }
-  await deps
-    .recordEvent?.({ botId, reason, from: previous, to: result.canonicalSessionId })
-    .catch(() => {});
-  return {
-    renewed: true,
-    reason,
-    canonicalSessionId: result.canonicalSessionId,
-    notify: policy.notify,
-  };
+  return NOT_RENEWED(snapshot.canonicalSessionId);
 }

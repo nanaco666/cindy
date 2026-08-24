@@ -4851,6 +4851,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.invoke('local-db:bots:workspace-lease-release', body),
       createCanonicalSession: (body: unknown): Promise<unknown> =>
         ipcRenderer.invoke('local-db:bots:create-canonical-session', body),
+      compactCanonicalSession: (body: unknown): Promise<unknown> =>
+        ipcRenderer.invoke('local-db:bots:compact-canonical-session', body),
       /** 到点换代:打开主对话时问一次「该翻篇了吗」。没到点就原样返回。 */
       renewIfDue: (body: { botId: string }): Promise<{
         renewed: boolean;

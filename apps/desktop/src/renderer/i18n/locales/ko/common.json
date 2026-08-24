@@ -6248,16 +6248,18 @@
   },
   "bots": {
     "renewal": {
+      "permanentTitle": "영구 Bot Chat",
+      "permanentDescription": "Bot Chat은 같은 실제 Cindy Session을 계속 사용합니다. 수동 Renew는 현재 자리에서 컨텍스트를 압축하며 다른 작업으로 몰래 바꾸지 않습니다.",
       "title": "매일 새로 시작",
       "offDescription": "꺼짐. 이 대화는 계속 이어지며 점점 길어집니다.",
-      "onDescription": "켜짐. {{hour}}시 이후 처음 말을 걸면 새로운 대화가 시작됩니다 — 기억과 기술은 그대로, 어제의 맥락만 빠집니다.",
+      "onDescription": "켜짐. {{hour}}시 이후 처음 말을 걸면 새로운 대화가 시작됩니다 — 기억과 스킬은 그대로, 어제의 맥락만 빠집니다.",
       "toggle": "매일 새로 시작",
       "hourLabel": "시각",
       "hourOption": "{{hour}}시",
       "now": "지금 새로 시작",
       "nowDescription": "현재 대화는 보관되며 언제든 다시 볼 수 있습니다.",
       "nowConfirmTitle": "여기서 새로 시작할까요?",
-      "nowConfirmDescription": "현재 대화는 보관되어 언제든 다시 볼 수 있습니다. 기억과 기술은 그대로, 이 대화의 맥락만 빠집니다."
+      "nowConfirmDescription": "현재 대화는 보관되어 언제든 다시 볼 수 있습니다. 기억과 스킬은 그대로, 이 대화의 맥락만 빠집니다."
     },
     "sidebar": {
       "newTaskWith": "{{name}}와(과) 새 작업 시작"

@@ -6250,6 +6250,8 @@
   },
   "bots": {
     "renewal": {
+      "permanentTitle": "Permanent Bot Chat",
+      "permanentDescription": "The Bot Chat stays on the same real Cindy Session. Manual Renew compacts it in place instead of silently switching to another task.",
       "title": "Start fresh each day",
       "offDescription": "Off. This conversation keeps going, and keeps growing.",
       "onDescription": "On. The first time you talk after {{hour}}:00, a new stretch begins — memory and skills carry over, yesterday’s context does not.",

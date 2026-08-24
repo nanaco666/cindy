@@ -6248,6 +6248,8 @@
   },
   "bots": {
     "renewal": {
+      "permanentTitle": "永続 Bot Chat",
+      "permanentDescription": "Bot Chat は同じ実体の Cindy Session を使い続けます。手動 Renew はその場でコンテキストを圧縮し、別のタスクへ勝手に切り替えません。",
       "title": "毎日リセット",
       "offDescription": "オフ。この会話はずっと続き、どんどん長くなります。",
       "onDescription": "オン。{{hour}}時以降に最初に話しかけると、新しい会話が始まります——記憶とスキルはそのまま、昨日の文脈だけが外れます。",

@@ -6248,6 +6248,8 @@
   },
   "bots": {
     "renewal": {
+      "permanentTitle": "永久主任务",
+      "permanentDescription": "Bot 主任务始终使用同一条真实 Session。手动 Renew 会在原地压缩上下文，不会偷偷换一条任务。",
       "title": "每天重新开始",
       "offDescription": "关着。这段对话会一直接下去，越来越长。",
       "onDescription": "开着。每天{{hour}}点之后第一次说话，会从新的一段开始——记忆和本事都还在，只是不带昨天的上下文。",
@@ -6414,7 +6416,7 @@
     "skillsDescription": "这里只保存已安装 Skill 的引用；运行时仍由原生 Skill 机制解析和加载。",
     "skillCatalogLoading": "正在读取当前 Harness 可用的 Skills…",
     "skillCatalogError": "Skills 读取失败，已保存的选择会继续保留。",
-    "skillAllowlistFrozenHint": "只用固定的这几项。以后新增的技能不会自动加进来 —— 想让它跟着更新,把上面切成「跟随全局」。",
+    "skillAllowlistFrozenHint": "只用固定的这几项。以后新增的技能不会自动加进来 —— 想让它跟着更新，把上面切成「跟随全局」。",
     "skillCatalogEmpty": "当前 Harness 和项目中没有可用的 Skill。",
     "skillConfiguredUnavailable": "当前不可用 · 点按移除",
     "close": "关闭",

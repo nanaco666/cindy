@@ -89,6 +89,8 @@ export function tx(db: Database.Database, args: unknown): unknown {
       return botsCreateProfile(db, txArgs);
     case 'bots.updateProfile':
       return botsUpdateProfile(db, txArgs);
+    case 'bots.reconcileCanonicalLink':
+      return botsReconcileCanonicalLink(db, txArgs);
     case 'bots.replaceCanonicalSession':
       return botsReplaceCanonicalSession(db, txArgs);
     case 'bots.createRouteSession':
@@ -267,12 +269,15 @@ function botsReplaceCanonicalSession(
   const s = asRecord(p.session, 'session');
   const now = expectNumber(p.now, 'now');
   return db.transaction(() => {
-    const bot = db.prepare(`SELECT canonical_session_id AS canonicalSessionId,
+    const bot = db.prepare(`SELECT canonical_session_id AS mirrorCanonicalSessionId,
       current_version AS currentVersion FROM bot_profiles WHERE id = ?`).get(botId) as
-      | { canonicalSessionId: string | null; currentVersion: number } | undefined;
+      | { mirrorCanonicalSessionId: string | null; currentVersion: number } | undefined;
     if (!bot) throw Object.assign(new Error('Bot 不存在'), { code: 'NOT_FOUND' });
-    if (bot.canonicalSessionId !== expectedCanonical) {
-      return { created: false, canonicalSessionId: bot.canonicalSessionId, archivedCanonicalSessionId: null };
+    const canonicalLink = db.prepare(`SELECT session_id AS sessionId FROM bot_session_links
+      WHERE bot_id = ? AND role = 'canonical'`).get(botId) as { sessionId: string } | undefined;
+    const canonicalSessionId = canonicalLink?.sessionId ?? bot.mirrorCanonicalSessionId;
+    if (canonicalSessionId !== expectedCanonical) {
+      return { created: false, canonicalSessionId, archivedCanonicalSessionId: null };
     }
     if (bot.currentVersion !== expectedVersion) {
       throw Object.assign(new Error('Bot Profile 已更新，请刷新后再 Renew'), { code: 'PRECONDITION_FAILED' });
@@ -281,6 +286,17 @@ function botsReplaceCanonicalSession(
       .get(botId, bot.currentVersion) as { version: number } | undefined;
     if (!version) throw Object.assign(new Error('Bot 当前 Profile 版本不存在'), { code: 'PRECONDITION_FAILED' });
     const sessionId = expectString(s.id, 'session.id');
+    // The canonical Bot Chat is a permanent real Session. A normal create
+    // request must never rotate an existing live canonical link; only a
+    // missing/deleted Session may be recovered with a new row. Explicit
+    // /new, /reset, and manual Renew use the in-place compact path instead.
+    if (canonicalSessionId) {
+      const previous = db.prepare('SELECT status FROM sessions WHERE id = ?')
+        .get(canonicalSessionId) as { status: string } | undefined;
+      if (previous && previous.status !== 'deleted') {
+        return { created: false, canonicalSessionId, archivedCanonicalSessionId: null };
+      }
+    }
     db.prepare(`INSERT INTO sessions
       (id, title, working_dir, workspace_kind, model, effort, permission_mode, status,
        sdk_session_id, total_token_usage, total_cost_usd, context_tokens, context_window,
@@ -298,17 +314,21 @@ function botsReplaceCanonicalSession(
         expectNumber(s.createdAt, 'session.createdAt'), expectNumber(s.updatedAt, 'session.updatedAt'));
     let archived: string | null = null;
     let missingCanonicalSessionId: string | null = null;
-    if (bot.canonicalSessionId) {
+    if (canonicalSessionId) {
       const previous = db.prepare('SELECT source, status FROM sessions WHERE id = ?')
-        .get(bot.canonicalSessionId) as { source: string; status: string } | undefined;
-      if (!previous) missingCanonicalSessionId = bot.canonicalSessionId;
+        .get(canonicalSessionId) as { source: string; status: string } | undefined;
+      if (!previous) missingCanonicalSessionId = canonicalSessionId;
       db.prepare(`UPDATE bot_session_links SET role = 'history', archived_at = ?
         WHERE bot_id = ? AND session_id = ? AND role = 'canonical'`)
-        .run(now, botId, bot.canonicalSessionId);
-      if (previous?.source === 'bot' && previous.status !== 'deleted') {
-        db.prepare("UPDATE sessions SET status = 'archived', updated_at = ? WHERE id = ?")
-          .run(now, bot.canonicalSessionId);
-        archived = bot.canonicalSessionId;
+        .run(now, botId, canonicalSessionId);
+      if (previous?.source === 'bot') {
+        if (previous.status !== 'deleted') {
+          db.prepare("UPDATE sessions SET status = 'archived', updated_at = ? WHERE id = ?")
+            .run(now, canonicalSessionId);
+        }
+        // Even a soft-deleted canonical Session can own queued descendants;
+        // hand them the same terminal cleanup path during recovery.
+        archived = canonicalSessionId;
       }
     }
     db.prepare(`INSERT INTO bot_session_links
@@ -322,15 +342,108 @@ function botsReplaceCanonicalSession(
       .run(`${botId}:canonical-created:${sessionId}`, botId, sessionId,
         missingCanonicalSessionId
           ? 'canonical-recovered'
-          : bot.canonicalSessionId
+          : canonicalSessionId
             ? 'canonical-renewed'
             : 'canonical-created',
         JSON.stringify({
-          previousCanonicalSessionId: bot.canonicalSessionId,
+          previousCanonicalSessionId: canonicalSessionId,
           missingCanonicalSessionId,
           profileVersion: version.version,
         }), now);
     return { created: true, canonicalSessionId: sessionId, archivedCanonicalSessionId: archived };
+  })();
+}
+
+function botsReconcileCanonicalLink(
+  db: Database.Database,
+  args: unknown,
+): {
+  status: 'unchanged' | 'repaired-mirror' | 'migrated' | 'missing-pointer' | 'missing-session' | 'conflict';
+  canonicalSessionId: string | null;
+} {
+  const p = asRecord(args, 'bots.reconcileCanonicalLink args');
+  const botId = expectString(p.botId, 'botId');
+  const now = expectNumber(p.now, 'now');
+  return db.transaction(() => {
+    const bot = db.prepare(`SELECT canonical_session_id AS canonicalSessionId,
+      current_version AS currentVersion FROM bot_profiles WHERE id = ?`).get(botId) as
+      | { canonicalSessionId: string | null; currentVersion: number } | undefined;
+    if (!bot) throw Object.assign(new Error('Bot 不存在'), { code: 'NOT_FOUND' });
+
+    const links = db.prepare(`SELECT id, session_id AS sessionId, profile_version AS profileVersion
+      FROM bot_session_links WHERE bot_id = ? AND role = 'canonical'`).all(botId) as Array<{
+      id: string;
+      sessionId: string;
+      profileVersion: number;
+    }>;
+    if (links.length > 1) {
+      throw Object.assign(new Error('Bot 存在多个 canonical link，拒绝自动选择'), {
+        code: 'PRECONDITION_FAILED',
+      });
+    }
+
+    const authoritative = links[0]?.sessionId ?? null;
+    if (authoritative) {
+      const session = db.prepare('SELECT status FROM sessions WHERE id = ?').get(authoritative) as
+        | { status: string } | undefined;
+      if (!session || session.status === 'deleted') {
+        return { status: 'missing-session' as const, canonicalSessionId: null };
+      }
+      if (bot.canonicalSessionId === authoritative) {
+        return { status: 'unchanged' as const, canonicalSessionId: authoritative };
+      }
+      db.prepare('UPDATE bot_profiles SET canonical_session_id = ?, updated_at = ? WHERE id = ?')
+        .run(authoritative, now, botId);
+      db.prepare(`INSERT INTO bot_lifecycle_events
+        (id, bot_id, session_id, event_type, payload_json, created_at)
+        VALUES (?, ?, ?, 'canonical-mirror-repaired', ?, ?)`).run(
+          `${botId}:canonical-mirror-repaired:${authoritative}:${now}`,
+          botId,
+          authoritative,
+          JSON.stringify({ previousCanonicalSessionId: bot.canonicalSessionId }),
+          now,
+        );
+      return { status: 'repaired-mirror' as const, canonicalSessionId: authoritative };
+    }
+
+    if (!bot.canonicalSessionId) {
+      return { status: 'missing-pointer' as const, canonicalSessionId: null };
+    }
+
+    const legacySession = db.prepare(`SELECT source, status FROM sessions WHERE id = ?`)
+      .get(bot.canonicalSessionId) as { source: string; status: string } | undefined;
+    if (!legacySession || legacySession.status === 'deleted') {
+      return { status: 'missing-session' as const, canonicalSessionId: null };
+    }
+    if (legacySession.source !== 'bot') {
+      return { status: 'conflict' as const, canonicalSessionId: null };
+    }
+    const existingLink = db.prepare(`SELECT bot_id AS botId, role FROM bot_session_links
+      WHERE session_id = ?`).get(bot.canonicalSessionId) as
+      | { botId: string; role: string } | undefined;
+    if (existingLink) {
+      return { status: 'conflict' as const, canonicalSessionId: null };
+    }
+
+    db.prepare(`INSERT INTO bot_session_links
+      (id, bot_id, session_id, profile_version, role, channel_id, route_key, created_at, archived_at)
+      VALUES (?, ?, ?, ?, 'canonical', NULL, NULL, ?, NULL)`).run(
+        `${botId}:${bot.canonicalSessionId}`,
+        botId,
+        bot.canonicalSessionId,
+        bot.currentVersion,
+        now,
+      );
+    db.prepare(`INSERT INTO bot_lifecycle_events
+      (id, bot_id, session_id, event_type, payload_json, created_at)
+      VALUES (?, ?, ?, 'canonical-migrated', ?, ?)`).run(
+        `${botId}:canonical-migrated:${bot.canonicalSessionId}:${now}`,
+        botId,
+        bot.canonicalSessionId,
+        JSON.stringify({ profileVersion: bot.currentVersion }),
+        now,
+      );
+    return { status: 'migrated' as const, canonicalSessionId: bot.canonicalSessionId };
   })();
 }
 
@@ -846,12 +959,15 @@ function botsLinkSession(
   const now = expectNumber(p.now, 'now');
   const eventId = expectString(p.eventId, 'eventId');
   return db.transaction(() => {
-    const bot = db.prepare('SELECT current_version AS currentVersion, canonical_session_id AS canonicalSessionId FROM bot_profiles WHERE id = ?')
-      .get(botId) as { currentVersion: number; canonicalSessionId: string | null } | undefined;
+    const bot = db.prepare('SELECT current_version AS currentVersion, canonical_session_id AS mirrorCanonicalSessionId FROM bot_profiles WHERE id = ?')
+      .get(botId) as { currentVersion: number; mirrorCanonicalSessionId: string | null } | undefined;
     const session = db.prepare('SELECT source FROM sessions WHERE id = ?').get(sessionId) as
       | { source: string }
       | undefined;
     if (!bot || !session) throw Object.assign(new Error('Bot 或 Session 不存在'), { code: 'NOT_FOUND' });
+    const canonicalLink = db.prepare(`SELECT session_id AS sessionId FROM bot_session_links
+      WHERE bot_id = ? AND role = 'canonical'`).get(botId) as { sessionId: string } | undefined;
+    const canonicalSessionId = canonicalLink?.sessionId ?? bot.mirrorCanonicalSessionId;
     if (session.source !== 'bot') throw Object.assign(
       new Error('只有 source=bot 的 Session 才能绑定到 Bot'),
       { code: 'INVALID_PARAMS' },
@@ -876,16 +992,16 @@ function botsLinkSession(
       new Error('Session 已绑定到另一个 Bot'),
       { code: 'PRECONDITION_FAILED' },
     );
-    if (role === 'history' && bot.canonicalSessionId === sessionId) throw Object.assign(
+    if (role === 'history' && canonicalSessionId === sessionId) throw Object.assign(
       new Error('canonical Session 必须通过 Renew 原子替换'),
       { code: 'PRECONDITION_FAILED' },
     );
-    if (role === 'route' && bot.canonicalSessionId === sessionId) throw Object.assign(
+    if (role === 'route' && canonicalSessionId === sessionId) throw Object.assign(
       new Error('canonical Session 不能同时作为 route Session'),
       { code: 'PRECONDITION_FAILED' },
     );
     if (role === 'canonical' && p.hasExpectedCanonical
-      && bot.canonicalSessionId !== expectedCanonicalSessionId) throw Object.assign(
+      && canonicalSessionId !== expectedCanonicalSessionId) throw Object.assign(
       new Error('Bot 主任务已被另一处操作更新，请刷新后重试'),
       { code: 'PRECONDITION_FAILED' },
     );
@@ -907,6 +1023,14 @@ function botsLinkSession(
         | { id: string; sessionId: string }
         | undefined;
       if (old && old.sessionId !== sessionId) {
+        const oldSession = db.prepare('SELECT status FROM sessions WHERE id = ?').get(old.sessionId) as
+          | { status: string }
+          | undefined;
+        if (oldSession && oldSession.status !== 'deleted') {
+          throw Object.assign(new Error('永久 canonical Chat 不能通过 link-session 换代'), {
+            code: 'PRECONDITION_FAILED',
+          });
+        }
         db.prepare("UPDATE bot_session_links SET role = 'history', archived_at = ? WHERE id = ?")
           .run(now, old.id);
         db.prepare("UPDATE sessions SET status = 'archived', updated_at = ? WHERE id = ? AND source = 'bot'")

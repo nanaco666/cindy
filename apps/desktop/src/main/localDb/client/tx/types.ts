@@ -26,6 +26,7 @@ export type DbTxName =
   | 'im.replaceBinding'
   | 'bots.createProfile'
   | 'bots.updateProfile'
+  | 'bots.reconcileCanonicalLink'
   | 'bots.replaceCanonicalSession'
   | 'bots.createRouteSession'
   | 'bots.setRouteStatus'
@@ -550,6 +551,16 @@ export interface BotsReplaceCanonicalSessionArgs {
   now: number;
 }
 
+export interface BotsReconcileCanonicalLinkArgs {
+  botId: string;
+  now: number;
+}
+
+export interface BotsReconcileCanonicalLinkResult {
+  status: 'unchanged' | 'repaired-mirror' | 'migrated' | 'missing-pointer' | 'missing-session' | 'conflict';
+  canonicalSessionId: string | null;
+}
+
 export interface BotsReplaceCanonicalSessionResult {
   created: boolean;
   canonicalSessionId: string | null;
@@ -1061,6 +1072,7 @@ export type DbTxArgsByName = {
   'im.replaceBinding': ImReplaceBindingArgs;
   'bots.createProfile': BotsCreateProfileArgs;
   'bots.updateProfile': BotsUpdateProfileArgs;
+  'bots.reconcileCanonicalLink': BotsReconcileCanonicalLinkArgs;
   'bots.replaceCanonicalSession': BotsReplaceCanonicalSessionArgs;
   'bots.createRouteSession': BotsCreateRouteSessionArgs;
   'bots.setRouteStatus': BotsSetRouteStatusArgs;
@@ -1132,6 +1144,7 @@ export type DbTxResultByName = {
   'im.replaceBinding': undefined;
   'bots.createProfile': undefined;
   'bots.updateProfile': { currentVersion: number };
+  'bots.reconcileCanonicalLink': BotsReconcileCanonicalLinkResult;
   'bots.replaceCanonicalSession': BotsReplaceCanonicalSessionResult;
   'bots.createRouteSession': BotsCreateRouteSessionResult;
   'bots.setRouteStatus': undefined;
