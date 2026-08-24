@@ -528,9 +528,9 @@ function formatReference(reference: AgentInputReference): string {
       '[Referenced Cindy Bot]',
       `Name: ${quotedMetadata(oneLine(reference.name))}`,
       `Bot ID: ${quotedMetadata(reference.botId)}`,
-      'Intent: the user explicitly selected this Bot as a delegation or handoff target.',
-      'Action: discover the current Bot capabilities, then use the available Bot delegation flow when the request calls for work by this Bot.',
-      'Boundary: delegation transfers a bounded task and returns its result; it does not change either Bot identity or require obedience.',
+      'Intent: the user explicitly selected this Bot for direct Bot-to-Bot communication.',
+      'Action: resolve this selected Bot from the live roster, compose the message yourself, and use message_agent when that capability is available.',
+      'Boundary: Do not blindly forward the surrounding user text. A direct message coordinates; delegate_to_bot remains the separate flow for bounded work and result return.',
       '[/Referenced Cindy Bot]',
     ].join('\n');
   }

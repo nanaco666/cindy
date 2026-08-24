@@ -73,6 +73,8 @@ describe('稳定层:能力必须写进提示词', () => {
     expect(all).toContain('你记得住事');
     expect(all).toContain('save_bot_skill');
     expect(all).toContain('叫别的伙伴帮忙');
+    expect(all).toContain('直接跟对方说一声');
+    expect(all).toContain('list_tools');
     expect(all).toContain('定时干活');
 
     const none = buildBotStableTier(input());
@@ -219,8 +221,10 @@ describe('Bot Mode 的角色边界', () => {
       },
     });
     expect(canonical).toContain('你可以叫别的伙伴帮忙');
+    expect(canonical).toContain('直接跟对方说一声');
     expect(canonical).toContain('你能翻回去查');
     expect(worker).not.toContain('你可以叫别的伙伴帮忙');
+    expect(worker).not.toContain('直接跟对方说一声');
     expect(worker).not.toContain('你能翻回去查');
   });
 });
@@ -345,7 +349,7 @@ describe('buildBotRenewalHandoff', () => {
  * 「这样 bot 在挑收件人之前就知道谁管什么」。
  */
 describe('buildBotTeammateRoster', () => {
-  it('每个队友一行,带上委派工具真正认的那个 id', () => {
+  it('每个队友一行,带上直接消息和委派工具真正认的那个 id', () => {
     const roster = buildBotTeammateRoster([
       { id: 'bot-fin', name: '财务助理', description: '管账、对账、报销' },
       { id: 'bot-doc', name: '文档助手', description: '写方案和周报' },
@@ -386,5 +390,8 @@ describe('buildBotTeammateRoster', () => {
   it('明确告诉伙伴不确定就别猜', () => {
     const roster = buildBotTeammateRoster([{ id: 'bot-a', name: 'A' }]);
     expect(roster).toContain('别猜');
+    expect(roster).toContain('list_tools');
+    expect(roster).toContain('直接联系');
+    expect(roster).toContain('交活');
   });
 });

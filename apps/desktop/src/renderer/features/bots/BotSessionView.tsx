@@ -92,19 +92,18 @@ export function BotSessionView() {
         }
         const sessions = (bot as { sessions?: unknown }).sessions;
         const profileStatus = (bot as { status?: unknown }).status;
-        const found =
-          profileStatus === 'active' &&
-          Array.isArray(sessions) &&
-          sessions.some((row) => {
-            if (!row || typeof row !== 'object') return false;
-            const projection = row as { id?: unknown; kind?: unknown; status?: unknown };
-            return (
-              projection.id === sessionId &&
-              (projection.kind === 'chat' || projection.kind === 'route') &&
-              projection.status === 'active'
-            );
-          });
-        if (!found) {
+        const activeProjection = Array.isArray(sessions)
+          ? sessions.find((row): row is { role?: unknown } => {
+              if (!row || typeof row !== 'object') return false;
+              const projection = row as { id?: unknown; kind?: unknown; status?: unknown };
+              return (
+                projection.id === sessionId &&
+                (projection.kind === 'chat' || projection.kind === 'route') &&
+                projection.status === 'active'
+              );
+            })
+          : undefined;
+        if (profileStatus !== 'active' || !activeProjection) {
           setGate({ kind: 'unavailable' });
           return;
         }
@@ -112,7 +111,7 @@ export function BotSessionView() {
           kind: 'ready',
           // 欢迎语只属于主任务:渠道路由任务是「别处的对话被接进来」,
           // 在那里冒出一句自我介绍是插话,不是打招呼。
-          isCanonical: (bot as { canonicalSessionId?: unknown }).canonicalSessionId === sessionId,
+          isCanonical: activeProjection?.role === 'canonical',
           identity: readBotChatIdentity(bot, botId),
           mentions: Array.isArray(bots)
             ? bots

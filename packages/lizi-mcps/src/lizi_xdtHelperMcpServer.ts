@@ -61,6 +61,10 @@ import {
   type BotDelegationCallbacks,
 } from './xdt-helper/bot_delegation.js';
 import {
+  registerBotMessagingTools,
+  type BotMessagingCallbacks,
+} from './xdt-helper/bot_messaging.js';
+import {
   registerBotDurableNoteTools,
   type BotDurableNoteCallbacks,
 } from './xdt-helper/bot_durable_notes.js';
@@ -258,6 +262,8 @@ export interface XdtHelperMcpDeps {
   sendToSession?: SendToSessionCallback;
   /** Cindy Bot-only collaboration surface. Host validates the caller Session. */
   botDelegation?: BotDelegationCallbacks;
+  /** Hermes-style direct Bot DM over the target's canonical Cindy Session. */
+  botMessaging?: BotMessagingCallbacks;
   /** Cindy Bot-only durable notepad. Host resolves Bot ownership from the caller Session. */
   botDurableNotes?: BotDurableNoteCallbacks;
   /**
@@ -386,6 +392,12 @@ export function createXdtHelperMcpServer(
     registerBotDelegationTools(registry, {
       getSessionContext: () => resolveLiziMcpSessionContext(sessionCtx),
       callbacks: deps.botDelegation,
+    });
+  }
+  if (deps.botMessaging) {
+    registerBotMessagingTools(registry, {
+      getSessionContext: () => resolveLiziMcpSessionContext(sessionCtx),
+      callbacks: deps.botMessaging,
     });
   }
   if (deps.botDurableNotes) {

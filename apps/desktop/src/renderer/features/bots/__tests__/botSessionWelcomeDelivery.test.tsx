@@ -67,8 +67,9 @@ const readyBot = {
   status: 'active',
   enabled: true,
   // 打招呼只发生在主任务上——通道路由任务里冒一句自我介绍是插话。
-  canonicalSessionId: 'session-1',
-  sessions: [{ id: 'session-1', kind: 'chat', status: 'active' }],
+  // 兼容镜像故意写错：canonical 身份必须以 link 投影的 role 为准。
+  canonicalSessionId: 'stale-mirror',
+  sessions: [{ id: 'session-1', kind: 'chat', role: 'canonical', status: 'active' }],
 };
 
 let created: Array<{ sessionId: string; content: string }> = [];

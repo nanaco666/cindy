@@ -185,6 +185,58 @@ describe("cindy_helper MCP server", () => {
     }
   });
 
+  it("discovers and calls message_agent with the host-bound caller task", async () => {
+    const messageAgent = vi.fn(async () => ({
+      ok: true as const,
+      targetBotId: "bot-b",
+      targetBotName: "Dash Bot",
+      targetSessionId: "bot-b-main",
+      wakeKind: "queued" as const,
+    }));
+    const server = createXdtHelperMcpServer(
+      { botMessaging: { messageAgent } },
+      {
+        agentKind: "claude-code",
+        workingDir: "/repo",
+        sessionId: "bot-a-main",
+      },
+    );
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: "cindy-bot-message-agent-test", version: "0.0.0" });
+
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+    try {
+      const discovered = parsePayload(
+        await client.callTool({ name: "list_tools", arguments: { category: "bots" } }),
+      );
+      expect((discovered.tools as Array<{ name: string }>).map((tool) => tool.name)).toContain(
+        "message_agent",
+      );
+
+      const sent = await client.callTool({
+        name: "call_tool",
+        arguments: {
+          name: "message_agent",
+          args: { target_bot_id: "bot-b", message: "请同步发布风险。" },
+        },
+      });
+      expect(parsePayload(sent)).toMatchObject({
+        ok: true,
+        target_bot_id: "bot-b",
+        target_session_id: "bot-b-main",
+        wake_kind: "queued",
+      });
+      expect(messageAgent).toHaveBeenCalledWith({
+        callerSessionId: "bot-a-main",
+        targetBotId: "bot-b",
+        message: "请同步发布风险。",
+      });
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
   it("discovers and calls the arbitrary session queue tool through the entry tools", async () => {
     const listSessionQueue = vi.fn(async () => ({
       ok: true as const,

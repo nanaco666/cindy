@@ -374,6 +374,10 @@ import {
   type BotDelegationService,
 } from './botDelegationService.js';
 import {
+  createBotDirectMessageService,
+  type BotDirectMessageService,
+} from './botDirectMessageService.js';
+import {
   createBotDeliveryOutboxService,
   type EnqueueBotDeliveryInput,
   type RecordUnknownBotDeliveryInput,
@@ -1935,6 +1939,7 @@ interface EnableOrcaOptions {
 
 let orcaCollabServiceHolder: OrcaCollabService | null = null;
 let botDelegationServiceHolder: BotDelegationService | null = null;
+let botDirectMessageServiceHolder: BotDirectMessageService | null = null;
 let botDeliveryOutboxServiceHolder: BotDeliveryOutboxService | null = null;
 let botSessionEventServiceHolder: BotSessionEventService | null = null;
 
@@ -2151,6 +2156,10 @@ export function tryGetOrcaCollabService(): OrcaCollabService | null {
 
 export function tryGetBotDelegationService(): BotDelegationService | null {
   return botDelegationServiceHolder;
+}
+
+export function tryGetBotDirectMessageService(): BotDirectMessageService | null {
+  return botDirectMessageServiceHolder;
 }
 
 function createBridgeWorkerLabel(task: string): string {
@@ -10063,6 +10072,11 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions)
     }
     return sendToSessionInternal(params);
   };
+
+  botDirectMessageServiceHolder = createBotDirectMessageService({
+    dispatch: ({ targetSessionId, message, persistedContent, clientId }) =>
+      dispatchBotSessionMessage({ targetSessionId, message, persistedContent, clientId }),
+  });
 
   botDeliveryOutboxServiceHolder?.dispose();
   botDeliveryOutboxServiceHolder = createBotDeliveryOutboxService({

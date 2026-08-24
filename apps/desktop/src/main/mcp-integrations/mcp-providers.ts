@@ -28,7 +28,11 @@ import { getScheduler } from '../scheduler-host/index.js';
 import { stabilizeHookCommand } from '../scheduler-host/hook-script-generator.js';
 import { searchSessionsFn } from '../maker-host/session-search.js';
 import { readLspModeSettings } from '../maker-host/lsp-mode-store.js';
-import { tryGetBotDelegationService, tryGetOrcaCollabService } from '../maker-ipc/register.js';
+import {
+  tryGetBotDelegationService,
+  tryGetBotDirectMessageService,
+  tryGetOrcaCollabService,
+} from '../maker-ipc/register.js';
 import { submitGithubIssueForSession } from '../github-issue/index.js';
 import {
   listWorkdirsForHistory,
@@ -500,6 +504,27 @@ export function createDesktopMcpProviders(deps: DesktopMcpProvidersDeps): LiziMc
             };
           }
           return svc.interjectDelegation(callerSessionId, delegationId, text, idempotencyKey);
+        },
+      },
+      botMessaging: {
+        messageAgent: async (params) => {
+          const svc = tryGetBotDirectMessageService();
+          if (!svc) {
+            return {
+              ok: false,
+              errorCode: 'HOST_NOT_READY',
+              message: 'Bot direct message service not initialized',
+            };
+          }
+          try {
+            return await svc.messageAgent(params);
+          } catch (err) {
+            return {
+              ok: false,
+              errorCode: 'INTERNAL',
+              message: err instanceof Error ? err.message : String(err),
+            };
+          }
         },
       },
       botDurableNotes: {

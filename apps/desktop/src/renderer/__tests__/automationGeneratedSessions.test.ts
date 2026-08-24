@@ -103,12 +103,10 @@ describe('automation-generated sessions', () => {
   it('keeps scheduler sessions in the desktop-visible source contract', () => {
     // 所有会生成本地会话的 IM 渠道均进入 desktop sidebar。
     // (feishu 2026-07-16 起以「对话」分组回归, 见 sessionSource.ts 注释)。
-    // bot 2026-08-23 起进入:伙伴的任务**按伙伴名单独成组**混排进主列表。
-    // 早前它整个被挡在外面,结果是伙伴干的活在主列表里完全看不见 —— 用户不知道
-    // 它在哪、有没有在跑。分组实现见 projectGrouping 的 BotGroupNode。
+    // Bot-owned Session 仍是真实 Cindy 任务，但只由 Bots 面板投影；普通任务列表
+    // 不再重复展示同一批主对话、渠道与 worker。
     expect(DESKTOP_VISIBLE_SESSION_SOURCES).toEqual([
       'desktop',
-      'bot',
       'feishu',
       'slack',
       'telegram',
@@ -129,6 +127,7 @@ describe('automation-generated sessions', () => {
     expect(DESKTOP_VISIBLE_SESSION_SOURCES).toContain('dingtalk');
     expect(DESKTOP_VISIBLE_SESSION_SOURCES).toContain('review');
     expect(DESKTOP_VISIBLE_SESSION_SOURCES).toContain('plugin');
+    expect(DESKTOP_VISIBLE_SESSION_SOURCES).not.toContain('bot');
 
     expect(normalizeSessionSource('desktop')).toBe('desktop');
     expect(normalizeSessionSource('scheduler')).toBe('scheduler');

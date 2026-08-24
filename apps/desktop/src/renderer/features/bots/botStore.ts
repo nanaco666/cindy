@@ -103,6 +103,7 @@ export interface BotSessionProjection {
   channel: BotChannel;
   updatedAt: number;
   status?: 'active' | 'archived' | 'deleted';
+  role?: 'canonical' | 'route' | 'history';
   profileVersion?: number;
   runtimeSnapshot?: {
     profileVersion: number;
