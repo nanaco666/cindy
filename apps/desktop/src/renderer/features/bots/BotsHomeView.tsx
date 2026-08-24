@@ -1018,6 +1018,44 @@ export function BotSettings({
                   同属一件事。渠道错误也不再在这里重复,它已经长在「TA 会的」里。
                 */}
 
+                {/*
+                  伙伴的家 —— 直接打开它在磁盘上的那个文件夹。
+
+                  档案落盘为权威(botProfileFolder.ts)的全部用户价值就是「能用编辑器
+                  改、能备份、能复制一份改改就是新伙伴」。在这之前界面上**没有一处**
+                  告诉用户它在哪,那份价值等于不存在。
+
+                  Hermes 不需要这个入口:它是命令行,用户本来就站在文件系统里
+                  (`~/.hermes/profiles/<名字>/`,见 bot-mode.md 的 CLI parity 表)。
+                  Cindy 是桌面应用,不给入口就等于没有。**这一条是 Cindy 自己的产品
+                  判断,不是抄来的。**
+
+                  远端伙伴没有本机路径,那时 homeDir 为空,整块不渲染。
+                */}
+                {bot.homeDir ? (
+                  <section className="rounded-xl border border-[var(--border-default)] bg-[var(--surface-elevated)] p-4">
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="min-w-0">
+                        <div className="text-13 font-medium text-[var(--text-primary)]">
+                          {t('bots.homeFolder.title')}
+                        </div>
+                        <div className="mt-1 truncate text-12 text-[var(--text-tertiary)]">
+                          {t('bots.homeFolder.description')}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void window.electronAPI.openPath(bot.homeDir as string);
+                        }}
+                        className="shrink-0 rounded-lg border border-[var(--border-default)] px-3 py-1.5 text-12 text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]"
+                      >
+                        {t('bots.homeFolder.open')}
+                      </button>
+                    </div>
+                  </section>
+                ) : null}
+
                 <BotRouteSettings bot={bot} onOpenTask={onOpenSession} />
 
                 <BotProjectSettings bot={bot} />

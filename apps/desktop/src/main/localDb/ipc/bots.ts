@@ -41,6 +41,7 @@ import { ensureDialogueWorkspaceDir } from '../dialogueWorkspace.js';
 import { extractMessagePreview, sessionCreateToRow, sessionToCamel } from '../mapper.js';
 import { botProfileContentChanged, mergeBotProfileCapabilities } from './botProfileVersioning.js';
 import {
+  botProfileDir,
   migrateBotProfileFolder,
   readBotProfileFolder,
   writeBotProfileFolder,
@@ -477,6 +478,15 @@ async function readProfile(
     status: profile.status,
     currentVersion: profile.currentVersion,
     canonicalSessionId: profile.canonicalSessionId ?? undefined,
+    /*
+      伙伴的家在磁盘上的位置。文件夹化的全部用户价值就是「能用编辑器改、能备份、
+      能复制一份」—— 而在这之前界面上没有一处告诉用户它在哪。
+
+      Hermes 不需要这个:它是命令行,用户本来就站在文件系统里(`~/.hermes/profiles/<名字>/`,
+      见 bot-mode.md 的 CLI parity 表)。Cindy 是桌面应用,不给入口就等于没有。
+      这一条是 Cindy 自己的产品判断,不是抄来的。
+    */
+    homeDir: botProfileDir(app.getPath('userData'), profile.id),
     lastMessagePreview: latestMessage.preview,
     lastMessageAt: latestMessage.createdAt,
     lastMessageRole: latestMessage.role,

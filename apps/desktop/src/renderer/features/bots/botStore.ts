@@ -142,6 +142,8 @@ export interface BotProfile {
    * Plain-text preview of the latest visible message in the canonical chat,
    * projected main-side (read-only). Null when the conversation is still empty.
    */
+  /** 伙伴的家在磁盘上的位置(主进程投影)。远端会话没有本机路径时为空。 */
+  homeDir?: string | null;
   lastMessagePreview?: string | null;
   /** Timestamp of that message (unix ms), null when there is none. */
   lastMessageAt?: number | null;
@@ -474,6 +476,7 @@ function normalizeDbProfile(value: unknown): BotProfile | null {
     },
     canonicalSessionId:
       typeof item.canonicalSessionId === 'string' ? item.canonicalSessionId : undefined,
+    homeDir: typeof item.homeDir === 'string' && item.homeDir ? item.homeDir : null,
     lastMessagePreview:
       typeof item.lastMessagePreview === 'string' && item.lastMessagePreview
         ? item.lastMessagePreview

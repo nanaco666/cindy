@@ -6392,6 +6392,11 @@
         }
       }
     },
+    "homeFolder": {
+      "title": "Its folder",
+      "description": "Soul, user profile and self-taught skills all live here as plain files — edit them in any editor, back the folder up, or copy it to start another teammate.",
+      "open": "Open"
+    },
     "portability": {
       "title": "Export",
       "description": "Export shareable behavior configuration without credentials, IM accounts, task history, memory, self-taught skills, project paths, or runtime state. Importing a teammate lives in Settings › Teammates.",
