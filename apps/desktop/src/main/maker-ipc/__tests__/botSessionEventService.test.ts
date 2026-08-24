@@ -42,6 +42,8 @@ function createDatabase(): Database.Database {
       id TEXT PRIMARY KEY,
       display_name TEXT NOT NULL,
       status TEXT NOT NULL,
+      attention_reason TEXT,
+      attention_at INTEGER,
       canonical_session_id TEXT,
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL
@@ -69,7 +71,8 @@ function createDatabase(): Database.Database {
       bot_id TEXT NOT NULL,
       session_id TEXT NOT NULL UNIQUE,
       role TEXT NOT NULL,
-      created_at INTEGER NOT NULL
+      created_at INTEGER NOT NULL,
+      archived_at INTEGER
     );
     CREATE TABLE bot_session_event_ledger (
       id TEXT PRIMARY KEY,
@@ -120,11 +123,15 @@ function createDatabase(): Database.Database {
 
     INSERT INTO sessions VALUES
       ('control-session', '总控 Bot', '/repo/cindy', 'active', 'bot', NULL, NULL, 1),
+      ('paused-session', '暂停 Bot', '/repo/cindy', 'active', 'bot', NULL, NULL, 1),
       ('task-1', '实现功能', '/repo/cindy', 'active', 'desktop', 5, 10, 10),
       ('telegram-session', 'Telegram route', '/repo/cindy', 'active', 'bot', NULL, NULL, 1);
     INSERT INTO bot_profiles VALUES
-      ('control-bot', '总控', 'active', 'control-session', 1, 1),
-      ('paused-bot', '暂停 Bot', 'paused', 'control-session', 1, 1);
+      ('control-bot', '总控', 'active', NULL, NULL, 'control-session', 1, 1),
+      ('paused-bot', '暂停 Bot', 'paused', NULL, NULL, 'paused-session', 1, 1);
+    INSERT INTO bot_session_links VALUES
+      ('control-canonical', 'control-bot', 'control-session', 'canonical', 1, NULL),
+      ('paused-canonical', 'paused-bot', 'paused-session', 'canonical', 1, NULL);
     INSERT INTO bot_channels VALUES
       ('telegram-channel', 'control-bot', 'telegram', 1, 1, 1);
     INSERT INTO bot_routes VALUES
@@ -172,6 +179,8 @@ describe('Bot task-state transition inbox service', () => {
   let accepted: (() => void | Promise<void>) | undefined;
   let dispatch: ReturnType<typeof vi.fn>;
   let enqueueDelivery: ReturnType<typeof vi.fn>;
+  let noteAttention: ReturnType<typeof vi.fn>;
+  let clearAttention: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     sqlite = createDatabase();
@@ -183,6 +192,8 @@ describe('Bot task-state transition inbox service', () => {
       return { ok: true as const, targetSessionId: 'control-session', wakeKind: 'queued' as const };
     });
     enqueueDelivery = vi.fn(async () => ({ id: 'delivery-1' }));
+    noteAttention = vi.fn(async () => ({ reason: 'unknown' as const, changed: false }));
+    clearAttention = vi.fn(async () => ({ reason: null, changed: true }));
   });
 
   function service(overrides: Partial<Parameters<typeof createBotSessionEventService>[0]> = {}) {
@@ -191,6 +202,8 @@ describe('Bot task-state transition inbox service', () => {
       enqueueDelivery,
       now: () => 100,
       createId: () => `generated-${++ids}`,
+      noteAttention,
+      clearAttention,
       ...overrides,
     });
   }
@@ -219,6 +232,37 @@ describe('Bot task-state transition inbox service', () => {
     expect(sqlite.prepare('SELECT bot_id FROM bot_inbox_items').get()).toEqual({
       bot_id: 'control-bot',
     });
+  });
+
+  it('projects Bot-owned task attention from the unified state transition', async () => {
+    sqlite.prepare(`INSERT INTO bot_session_links VALUES
+      ('control-worker', 'control-bot', 'task-1', 'worker', 2, NULL)`).run();
+    const noteAttention = vi.fn(async () => ({ reason: 'agent_blocked' as const, changed: true }));
+    const clearAttention = vi.fn(async () => ({ reason: null, changed: true }));
+    const events = service({ noteAttention, clearAttention });
+
+    await events.recordStateTransition({
+      ...transition('state-transition-blocked'),
+      current: {
+        lifecycle: 'active',
+        execution: 'needs-interaction',
+        attention: 'needs-user',
+        workflow: { key: 'awaiting-controller', label: '待总控' },
+      },
+      changedFacets: ['execution', 'attention', 'workflow'],
+    });
+    expect(noteAttention).toHaveBeenCalledWith({
+      botId: 'control-bot',
+      failure: { reason: 'agent_blocked' },
+      observedAt: 20,
+    });
+
+    await events.recordStateTransition(transition('state-transition-success'));
+    expect(clearAttention).toHaveBeenCalledWith({
+      botId: 'control-bot',
+      successfulAt: 20,
+    });
+    events.dispose();
   });
 
   it('does not settle a heartbeat activation before the Bot turn is accepted', async () => {
@@ -252,6 +296,7 @@ describe('Bot task-state transition inbox service', () => {
       status: 'handled',
       result_text: '任务已完成，可以继续发布。',
     });
+    expect(clearAttention).toHaveBeenCalledWith({ botId: 'control-bot', successfulAt: 100 });
   });
 
   it('consumes a workflow-state transition and sends only the Bot result to Telegram', async () => {

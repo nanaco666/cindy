@@ -386,7 +386,22 @@
     "noDescription": "설명 없음",
     "openA11y": "동료 {{name}}의 기본 작업 열기",
     "unavailableA11y": "동료 {{name}}을 열 수 없음: {{status}}",
-    "status": { "active": "활성", "paused": "일시 중지됨", "error": "확인 필요", "archived": "보관됨", "deleting": "삭제 중", "needsDesktop": "데스크톱에서 초기화 필요" }
+    "status": { "active": "활성", "paused": "일시 중지됨", "error": "확인 필요", "archived": "보관됨", "deleting": "삭제 중", "needsDesktop": "데스크톱에서 초기화 필요" },
+    "groups": {
+      "title": "동료 그룹 채팅", "copy": "동료가 함께 논의하고 작업을 넘기며 서로 보완합니다", "openA11y": "동료 그룹 채팅 열기",
+      "subtitle": "{{deviceName}}의 그룹 채팅", "create": "그룹 채팅 만들기", "creating": "만드는 중…",
+      "defaultName": "새 동료 그룹", "nameLabel": "그룹 이름", "namePlaceholder": "예: 릴리스 작전실",
+      "membersLabel": "동료 2~6명 선택({{count}}명 선택)", "memberCount": "동료 {{count}}명", "manage": "관리", "manageTitle": "그룹 채팅 설정", "manageDescription": "그룹의 이름과 아이콘을 바꾸거나 읽기 전용 기록으로 보관할 수 있습니다.", "avatarLabel": "그룹 아이콘", "archive": "그룹 채팅 보관", "archiveTitle": "이 그룹 채팅을 보관할까요?", "archiveDescription": "{{name}}은 읽기 전용이 됩니다. 실제 Cindy 작업과 메시지는 기록으로 남습니다.", "saving": "저장 중…",
+      "emptyTitle": "아직 동료 그룹 채팅이 없습니다", "emptyCopy": "동료를 두 명 이상 선택해 만드세요.", "openRoomA11y": "그룹 채팅 {{name}} 열기",
+      "roomTitle": "동료 그룹", "roomEmptyTitle": "메시지로 시작하기", "roomEmptyCopy": "이름을 부르지 않으면 모두가 봅니다. @이름으로 특정 동료만 부를 수 있습니다.",
+      "responding": "동료들이 논의 중…", "placeholder": "이 그룹에 메시지 보내기…",
+      "replyThread": "이 논의 계속하기", "replyingThread": "이 논의에 답장 중",
+      "interactionStale": "이 요청은 이미 처리되었거나 더 이상 사용할 수 없습니다.",
+      "missingTitle": "이 그룹 채팅을 사용할 수 없습니다", "missingCopy": "보관되었거나 삭제되었을 수 있습니다. 그룹 목록으로 돌아가세요.",
+      "unsupportedTitle": "이 데스크톱 버전은 원격 동료 그룹을 지원하지 않습니다", "unsupportedCopy": "이 컴퓨터의 Cindy를 업데이트하세요. 기존 동료와 작업에는 영향이 없습니다.",
+      "invalidResponse": "데스크톱에서 이 버전이 이해할 수 없는 그룹 데이터를 반환했습니다.",
+      "state": { "idle": "대기 중", "running": "논의 중", "needsUser": "사용자 확인 필요", "error": "오류", "archived": "보관됨" }
+    }
   },
   "automations": {
     "heading": {

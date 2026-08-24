@@ -63,6 +63,10 @@ describe('topicForPush', () => {
     ).toBe('session:s9');
   });
 
+  it('Bot 群聊变化 → sessions（移动端 Bots 列表级投影）', () => {
+    expect(topicForPush('maker:bots:group-changed', { roomId: 'room-1' })).toBe('sessions');
+  });
+
   it('会话非选中模型 pref 变更 → session:<sessionId>(带 sessionId,走默认路由)', () => {
     expect(
       topicForPush('maker:session-model-pref:changed', {

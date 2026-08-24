@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { ChevronRight, RefreshCw } from 'lucide-react-native';
+import { ChevronRight, MessagesSquare, RefreshCw } from 'lucide-react-native';
 import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
@@ -122,6 +122,24 @@ export default function RemoteBotsScreen() {
           />
         ) : (
           <View style={styles.list}>
+            <MainWindowRowButton
+              accessibilityLabel={t('devices.bots.groups.openA11y')}
+              onPress={() => guardedPush({
+                pathname: '/bot-groups/[deviceId]',
+                params: { deviceId, deviceName },
+              })}
+              style={styles.groupRow}
+              testID="remoteBots.groups"
+            >
+              <View style={styles.groupIcon}>
+                <MessagesSquare color={colors.textSecondary} size={iconSize.md} strokeWidth={iconStroke.regular} />
+              </View>
+              <View style={styles.rowText}>
+                <Text style={styles.name}>{t('devices.bots.groups.title')}</Text>
+                <Text numberOfLines={2} style={styles.description}>{t('devices.bots.groups.copy')}</Text>
+              </View>
+              <ChevronRight color={colors.textTertiary} size={iconSize.md} strokeWidth={iconStroke.regular} />
+            </MainWindowRowButton>
             {bots.map((bot) => {
               const openable = remoteBotCanOpen(bot);
               const channelKinds = bot.channels.filter((channel) => channel.enabled).map((channel) => channel.kind);
@@ -190,6 +208,16 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     minHeight: 92,
     paddingHorizontal: spacing.md,
   },
+  groupRow: {
+    alignItems: 'center',
+    borderTopColor: colors.border,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    flexDirection: 'row',
+    gap: spacing.md,
+    minHeight: 76,
+    paddingHorizontal: spacing.md,
+  },
+  groupIcon: { alignItems: 'center', backgroundColor: colors.surfaceElevated, borderRadius: radius.pill, height: 44, justifyContent: 'center', width: 44 },
   avatar: { alignItems: 'center', backgroundColor: colors.surfaceElevated, borderRadius: radius.pill, height: 44, justifyContent: 'center', width: 44 },
   avatarText: { fontSize: typeScale.title },
   rowText: { flex: 1, gap: spacing.xs, minWidth: 0 },

@@ -38,6 +38,7 @@ import { createLogger } from '../logger.js';
 import { resolveBusinessSessionId } from '../sessionIds.js';
 import { registerBotDelegationParentCancellation } from './botDelegationLifecycle.js';
 import { classifyBotDelegationDispatchFailure } from './botDelegationDispatchOutcome.js';
+import { resolveBotCanonicalSession } from './botCanonicalSessionRegistry.js';
 import type {
   BotCapabilityCatalogEntry,
   BotDelegationChangedPayload,
@@ -683,10 +684,12 @@ export function createBotDelegationService(deps: BotDelegationServiceDeps) {
   const ensureTargetCanonicalSession = async (target: {
     id: string;
     currentVersion: number;
-    canonicalSessionId: string | null;
   }): Promise<BotDelegationResult<{ sessionId: string }>> => {
     const db = getDbClient().drizzle;
-    let expectedCanonicalSessionId = target.canonicalSessionId;
+    const registered = await resolveBotCanonicalSession(target.id);
+    let expectedCanonicalSessionId = registered.status === 'resolved'
+      ? registered.sessionId
+      : null;
     for (let attempt = 0; attempt < 3; attempt += 1) {
       if (expectedCanonicalSessionId) {
         const [current] = await db
@@ -1729,7 +1732,6 @@ export function createBotDelegationService(deps: BotDelegationServiceDeps) {
         name: botProfiles.displayName,
         description: botProfiles.description,
         currentVersion: botProfiles.currentVersion,
-        canonicalSessionId: botProfiles.canonicalSessionId,
         status: botProfiles.status,
       })
       .from(botProfiles)
@@ -1742,7 +1744,7 @@ export function createBotDelegationService(deps: BotDelegationServiceDeps) {
     if (rows.length === 0) return { ok: true, bots: [] };
 
     const botIds = rows.map((row) => row.id);
-    const [versions, runtimes, bindings, delegations, automations] = await Promise.all([
+    const [versions, runtimes, bindings, delegations, automations, canonicalLinks] = await Promise.all([
       db
         .select({
           botId: botProfileVersions.botId,
@@ -1782,7 +1784,18 @@ export function createBotDelegationService(deps: BotDelegationServiceDeps) {
             eq(botAutomationLinks.status, 'active'),
           ),
         ),
+      db
+        .select({ botId: botSessionLinks.botId, sessionId: botSessionLinks.sessionId })
+        .from(botSessionLinks)
+        .where(
+          and(
+            inArray(botSessionLinks.botId, botIds),
+            eq(botSessionLinks.role, 'canonical'),
+          ),
+        ),
     ]);
+
+    const canonicalByBot = new Map(canonicalLinks.map((row) => [row.botId, row.sessionId]));
 
     const versionByBot = new Map(
       versions
@@ -1808,7 +1821,7 @@ export function createBotDelegationService(deps: BotDelegationServiceDeps) {
         && isBotRuntimeSnapshotForCapabilityTarget({
           runtimeSessionId: runtime.sessionId,
           runtimeWorkingDir: runtime.workingDir,
-          canonicalSessionId: profile.canonicalSessionId,
+          canonicalSessionId: canonicalByBot.get(profile.id) ?? null,
           automationWorkingDir: automationWorkspace?.workingDir,
         })
         && !runtimeByBot.has(runtime.botId)
@@ -1915,7 +1928,7 @@ export function createBotDelegationService(deps: BotDelegationServiceDeps) {
         name: row.name,
         description: row.description,
         currentVersion: row.currentVersion,
-        canonicalSessionId: row.canonicalSessionId,
+        canonicalSessionId: canonicalByBot.get(row.id) ?? null,
         isCurrent: row.id === caller.botId,
         configured,
         runtime: {

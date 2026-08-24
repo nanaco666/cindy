@@ -23,6 +23,7 @@ describe('Bot named worker transactions', () => {
       CREATE TABLE bot_profiles (
         id TEXT PRIMARY KEY, display_name TEXT NOT NULL, description TEXT NOT NULL, avatar TEXT NOT NULL,
         avatar_color TEXT NOT NULL, status TEXT NOT NULL, current_version INTEGER NOT NULL,
+        hidden_at INTEGER, pinned_at INTEGER, attention_reason TEXT, attention_at INTEGER,
         canonical_session_id TEXT REFERENCES sessions(id) ON DELETE SET NULL,
         created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
       );
@@ -57,6 +58,67 @@ describe('Bot named worker transactions', () => {
   });
 
   afterEach(() => db.close());
+
+  it('keeps durable Bot attention monotonic and lets only a later success clear it', () => {
+    tx(db, { name: 'bots.createProfile', args: {
+      id: 'bot-1', displayName: 'Hermes', description: '', avatar: '🤖', avatarColor: 'violet',
+      identitySource: 'identity', capabilitiesJson: '{}', now: 1,
+    } });
+
+    expect(tx(db, { name: 'bots.updateAttention', args: {
+      botId: 'bot-1', reason: 'provider_auth_or_access', observedAt: 20,
+    } })).toEqual({ changed: true });
+    expect(
+      db.prepare('SELECT attention_reason AS reason, attention_at AS at FROM bot_profiles WHERE id = ?')
+        .get('bot-1'),
+    ).toEqual({ reason: 'provider_auth_or_access', at: 20 });
+
+    expect(tx(db, { name: 'bots.updateAttention', args: {
+      botId: 'bot-1', reason: null, observedAt: 19,
+    } })).toEqual({ changed: false });
+    expect(tx(db, { name: 'bots.updateAttention', args: {
+      botId: 'bot-1', reason: 'provider_quota_limit', observedAt: 18,
+    } })).toEqual({ changed: false });
+    expect(
+      db.prepare('SELECT attention_reason AS reason, attention_at AS at FROM bot_profiles WHERE id = ?')
+        .get('bot-1'),
+    ).toEqual({ reason: 'provider_auth_or_access', at: 20 });
+
+    expect(tx(db, { name: 'bots.updateAttention', args: {
+      botId: 'bot-1', reason: null, observedAt: 20,
+    } })).toEqual({ changed: true });
+    expect(
+      db.prepare('SELECT attention_reason AS reason, attention_at AS at FROM bot_profiles WHERE id = ?')
+        .get('bot-1'),
+    ).toEqual({ reason: null, at: null });
+  });
+
+  it('updates roster-only hidden and pinned state without minting a ProfileVersion', () => {
+    tx(db, { name: 'bots.createProfile', args: {
+      id: 'bot-1', displayName: 'Hermes', description: '', avatar: '🤖', avatarColor: 'violet',
+      identitySource: 'identity', capabilitiesJson: '{}', now: 1,
+    } });
+
+    expect(tx(db, { name: 'bots.updateProfile', args: {
+      id: 'bot-1', hiddenAt: 2, pinnedAt: 3,
+      identitySource: 'identity', capabilitiesJson: '{}', profileContentChanged: false,
+      expectedCurrentVersion: 1, now: 3,
+    } })).toEqual({ currentVersion: 1 });
+    expect(
+      db.prepare('SELECT hidden_at AS hiddenAt, pinned_at AS pinnedAt, current_version AS version FROM bot_profiles WHERE id = ?')
+        .get('bot-1'),
+    ).toEqual({ hiddenAt: 2, pinnedAt: 3, version: 1 });
+
+    expect(tx(db, { name: 'bots.updateProfile', args: {
+      id: 'bot-1', hiddenAt: null, pinnedAt: null,
+      identitySource: 'identity', capabilitiesJson: '{}', profileContentChanged: false,
+      expectedCurrentVersion: 1, now: 4,
+    } })).toEqual({ currentVersion: 1 });
+    expect(
+      db.prepare('SELECT hidden_at AS hiddenAt, pinned_at AS pinnedAt FROM bot_profiles WHERE id = ?')
+        .get('bot-1'),
+    ).toEqual({ hiddenAt: null, pinnedAt: null });
+  });
 
   it('creates a local-first profile and keeps one permanent canonical Session', () => {
     tx(db, { name: 'bots.createProfile', args: {

@@ -386,7 +386,22 @@
     "noDescription": "尚無描述",
     "openA11y": "開啟夥伴 {{name}} 的主工作階段",
     "unavailableA11y": "夥伴 {{name}} 暫時無法開啟：{{status}}",
-    "status": { "active": "使用中", "paused": "已暫停", "error": "需要處理", "archived": "已封存", "deleting": "正在刪除", "needsDesktop": "需在桌面端初始化" }
+    "status": { "active": "使用中", "paused": "已暫停", "error": "需要處理", "archived": "已封存", "deleting": "正在刪除", "needsDesktop": "需在桌面端初始化" },
+    "groups": {
+      "title": "夥伴群聊", "copy": "讓幾位夥伴一起討論、接力與補位", "openA11y": "開啟夥伴群聊",
+      "subtitle": "{{deviceName}} 上的夥伴群聊", "create": "建立群聊", "creating": "正在建立…",
+      "defaultName": "新的夥伴群聊", "nameLabel": "群聊名稱", "namePlaceholder": "例如：發布作戰室",
+      "membersLabel": "選擇 2–6 位夥伴（已選 {{count}} 位）", "memberCount": "{{count}} 位夥伴", "manage": "管理", "manageTitle": "群聊設定", "manageDescription": "修改群聊身分，或將它封存為唯讀歷史。", "avatarLabel": "群聊頭像", "archive": "封存群聊", "archiveTitle": "封存這個群聊？", "archiveDescription": "{{name}} 將變為唯讀；真正的 Cindy 任務與訊息仍會保留為歷史。", "saving": "正在儲存…",
+      "emptyTitle": "還沒有夥伴群聊", "emptyCopy": "選擇至少兩位夥伴建立一個群聊。", "openRoomA11y": "開啟群聊 {{name}}",
+      "roomTitle": "夥伴群聊", "roomEmptyTitle": "從一則訊息開始", "roomEmptyCopy": "不點名時所有夥伴都會看到；輸入 @夥伴名 可以只叫其中幾位。",
+      "responding": "夥伴們正在討論…", "placeholder": "傳訊息給這個群聊…",
+      "replyThread": "繼續這段討論", "replyingThread": "正在回覆這段討論",
+      "interactionStale": "這項請求已處理，或已無法使用。",
+      "missingTitle": "這個群聊已不可用", "missingCopy": "它可能已封存或刪除。返回群聊列表繼續使用其他房間。",
+      "unsupportedTitle": "桌面端版本不支援遠端夥伴群聊", "unsupportedCopy": "請更新這台電腦上的 Cindy。現有夥伴與任務不會受到影響。",
+      "invalidResponse": "桌面端傳回了無法辨識的群聊資料。",
+      "state": { "idle": "閒置", "running": "討論中", "needsUser": "需要你", "error": "發生錯誤", "archived": "已封存" }
+    }
   },
   "automations": {
     "heading": {

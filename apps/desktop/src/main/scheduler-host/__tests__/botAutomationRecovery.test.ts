@@ -44,6 +44,10 @@ function createDb() {
       avatar_color TEXT NOT NULL DEFAULT 'violet',
       canonical_session_id TEXT,
       status TEXT NOT NULL DEFAULT 'active',
+      hidden_at INTEGER,
+      pinned_at INTEGER,
+      attention_reason TEXT,
+      attention_at INTEGER,
       current_version INTEGER NOT NULL DEFAULT 1,
       created_at INTEGER NOT NULL DEFAULT 0,
       updated_at INTEGER NOT NULL DEFAULT 0
@@ -280,6 +284,7 @@ describe('Bot automation restart recovery', () => {
     const createSession = vi.fn();
     const closeSession = vi.fn(async () => undefined);
     const enqueueDelivery = vi.fn(async () => ({ id: 'outbox-should-not-exist' }));
+    const clearAttention = vi.fn(async () => ({ reason: null, changed: true }));
     const delegateFire = vi.fn<ScheduleRunner['fire']>(async (delegatedSchedule) => ({
       sessionId: delegatedSchedule.targetSessionId ?? '',
       resultText: 'Routine result',
@@ -289,6 +294,7 @@ describe('Bot automation restart recovery', () => {
       maker: { createSession, closeSession } as unknown as Maker,
       getDb: () => db,
       enqueueDelivery,
+      clearAttention,
     });
     const schedule: Schedule = {
       id: 'schedule-1',
@@ -322,6 +328,10 @@ describe('Bot automation restart recovery', () => {
     });
 
     expect(createSession).not.toHaveBeenCalled();
+    expect(clearAttention).toHaveBeenCalledWith({
+      botId: 'bot-1',
+      successfulAt: expect.any(Number),
+    });
     expect(delegateFire).toHaveBeenCalledWith(
       expect.objectContaining({
         prompt: 'Summarize the current project.',
@@ -398,6 +408,46 @@ describe('Bot automation restart recovery', () => {
     await expect(
       requireStrictAutomationRuntime(db, 'automation-session', plan),
     ).resolves.toBeUndefined();
+    sqlite.close();
+  });
+
+  it('projects an actionable failure when a claimed run fails before creating a task', async () => {
+    const { sqlite, db } = createDb();
+    sqlite.prepare("INSERT INTO bot_profiles (id) VALUES ('bot-1')").run();
+    sqlite.prepare("INSERT INTO schedules (id, name) VALUES ('schedule-1', 'Daily report')").run();
+    sqlite.prepare("INSERT INTO bot_automation_links (id, bot_id, schedule_id) VALUES ('automation-1', 'bot-1', 'schedule-1')").run();
+    sqlite.prepare(`
+      INSERT INTO bot_automation_runs (id, automation_link_id, status, updated_at)
+      VALUES ('automation-run-1', 'automation-1', 'claimed', 10)
+    `).run();
+    const noteAttention = vi.fn(async () => ({
+      reason: 'missing_config' as const,
+      changed: true,
+    }));
+    const runner = new BotAutomationScheduleRunner({
+      delegate: { fire: vi.fn() },
+      maker: {} as Maker,
+      getDb: () => db,
+      noteAttention,
+    });
+
+    await (runner as unknown as {
+      finalizeClaimOnly: (
+        automationRunId: string,
+        status: 'failed',
+        failure: unknown,
+      ) => Promise<void>;
+    }).finalizeClaimOnly(
+      'automation-run-1',
+      'failed',
+      new Error('No LLM provider configured'),
+    );
+
+    expect(noteAttention).toHaveBeenCalledWith({
+      botId: 'bot-1',
+      failure: expect.objectContaining({ message: 'No LLM provider configured' }),
+      observedAt: expect.any(Number),
+    });
     sqlite.close();
   });
 
@@ -828,6 +878,39 @@ describe('Bot automation restart recovery', () => {
       .toEqual({ status: 'success' });
     expect(db.select({ status: sessions.status }).from(sessions).get())
       .toEqual({ status: 'archived' });
+    sqlite.close();
+  });
+
+  it('projects a recovered failed run through the shared attention service', async () => {
+    const { sqlite, db } = createDb();
+    sqlite.prepare("INSERT INTO bot_profiles (id) VALUES ('bot-1')").run();
+    sqlite.prepare("INSERT INTO schedules (id, name) VALUES ('schedule-1', 'Daily report')").run();
+    sqlite.prepare("INSERT INTO schedule_runs (id, schedule_id, status, finished_at) VALUES ('schedule-run-1', 'schedule-1', 'failed', 20)").run();
+    sqlite.prepare("INSERT INTO bot_automation_links (id, bot_id, schedule_id) VALUES ('automation-1', 'bot-1', 'schedule-1')").run();
+    sqlite.prepare(`
+      INSERT INTO bot_automation_runs (
+        id, automation_link_id, schedule_run_id, error_message, status, updated_at
+      ) VALUES (
+        'automation-run-1', 'automation-1', 'schedule-run-1',
+        'Error code: 403 - invalid API key', 'running', 10
+      )
+    `).run();
+    const noteAttention = vi.fn(async () => ({
+      reason: 'provider_auth_or_access' as const,
+      changed: true,
+    }));
+
+    await reconcileBotAutomationRuns({
+      getDb: () => db,
+      maker: { closeSession: vi.fn(async () => undefined) } as unknown as Maker,
+      noteAttention,
+    });
+
+    expect(noteAttention).toHaveBeenCalledWith({
+      botId: 'bot-1',
+      failure: 'Error code: 403 - invalid API key',
+      observedAt: 20,
+    });
     sqlite.close();
   });
 

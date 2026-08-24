@@ -89,6 +89,8 @@ export function tx(db: Database.Database, args: unknown): unknown {
       return botsCreateProfile(db, txArgs);
     case 'bots.updateProfile':
       return botsUpdateProfile(db, txArgs);
+    case 'bots.updateAttention':
+      return botsUpdateAttention(db, txArgs);
     case 'bots.reconcileCanonicalLink':
       return botsReconcileCanonicalLink(db, txArgs);
     case 'bots.replaceCanonicalSession':
@@ -137,6 +139,12 @@ export function tx(db: Database.Database, args: unknown): unknown {
       return botsApplyImMigration(db, txArgs);
     case 'bots.beginImMigrationRollback':
       return botsBeginImMigrationRollback(db, txArgs);
+    case 'bots.createGroupRoom':
+      return botsCreateGroupRoom(db, txArgs);
+    case 'bots.updateGroupRoomIdentity':
+      return botsUpdateGroupRoomIdentity(db, txArgs);
+    case 'bots.archiveGroupRoom':
+      return botsArchiveGroupRoom(db, txArgs);
     case 'wechatActivateBindingEpoch':
       return wechatActivateBindingEpoch(db, txArgs);
     case 'wechatCommitPollBatch':
@@ -215,6 +223,244 @@ function botsCreateProfile(db: Database.Database, args: unknown): void {
   })();
 }
 
+function botsCreateGroupRoom(
+  db: Database.Database,
+  args: unknown,
+): {
+  created: boolean;
+  roomSessionId: string;
+  members: Array<{ botId: string; sessionId: string; rosterOrder: number }>;
+} {
+  const p = asRecord(args, 'bots.createGroupRoom args');
+  const room = asRecord(p.room, 'room');
+  const roomId = expectString(room.id, 'room.id');
+  const displayName = expectString(room.displayName, 'room.displayName');
+  const roomSession = asRecord(room.roomSession, 'room.roomSession');
+  const roomSessionId = expectString(roomSession.id, 'room.roomSession.id');
+  const createdAt = expectNumber(room.createdAt, 'room.createdAt');
+  const members = expectArray(p.members, 'members').map((raw, index) => {
+    const member = asRecord(raw, `members.${index}`);
+    return {
+      id: expectString(member.id, `members.${index}.id`),
+      botId: expectString(member.botId, `members.${index}.botId`),
+      expectedCanonicalSessionId: expectString(
+        member.expectedCanonicalSessionId,
+        `members.${index}.expectedCanonicalSessionId`,
+      ),
+      profileVersion: expectNumber(member.profileVersion, `members.${index}.profileVersion`),
+      rosterOrder: expectNumber(member.rosterOrder, `members.${index}.rosterOrder`),
+      session: asRecord(member.session, `members.${index}.session`),
+    };
+  });
+
+  if (members.length < 2 || members.length > 6) {
+    throw Object.assign(new Error('Bot group room requires 2-6 members'), {
+      code: 'INVALID_PARAMS',
+    });
+  }
+  if (new Set(members.map((member) => member.botId)).size !== members.length) {
+    throw Object.assign(new Error('Bot group room members must be unique'), {
+      code: 'INVALID_PARAMS',
+    });
+  }
+
+  const insertSession = (session: Record<string, unknown>): void => {
+    db.prepare(`INSERT INTO sessions
+      (id, title, working_dir, workspace_kind, model, effort, permission_mode, status,
+       sdk_session_id, total_token_usage, total_cost_usd, context_tokens, context_window,
+       fast_mode, plan_mode_enabled, cleared_at, pinned_at, user_send_at, agent_kind,
+       orca_role, parent_session_id, forked_at_message_id, worktree_path, extra_dirs,
+       remote_host_id, provider_id, source, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 'active', NULL, 0, 0, 0, 0, ?, 0, NULL, NULL, NULL,
+       ?, NULL, NULL, NULL, ?, ?, ?, ?, 'bot', ?, ?)`).run(
+      expectString(session.id, 'session.id'),
+      expectString(session.title, 'session.title'),
+      nullableString(session.workingDir),
+      expectString(session.workspaceKind, 'session.workspaceKind'),
+      expectString(session.model, 'session.model'),
+      expectString(session.effort, 'session.effort'),
+      expectString(session.permissionMode, 'session.permissionMode'),
+      session.fastMode === true ? 1 : 0,
+      expectString(session.agentKind, 'session.agentKind'),
+      nullableString(session.worktreePath),
+      expectString(session.extraDirs, 'session.extraDirs'),
+      nullableString(session.remoteHostId),
+      nullableString(session.providerId),
+      expectNumber(session.createdAt, 'session.createdAt'),
+      expectNumber(session.updatedAt, 'session.updatedAt'),
+    );
+  };
+
+  return db.transaction(() => {
+    const existing = db.prepare(`SELECT display_name AS displayName,
+      room_session_id AS roomSessionId FROM bot_group_rooms WHERE id = ?`).get(roomId) as
+      | { displayName: string; roomSessionId: string }
+      | undefined;
+    if (existing) {
+      const existingMembers = db.prepare(`SELECT bot_id AS botId,
+        member_session_id AS sessionId, roster_order AS rosterOrder
+        FROM bot_group_members WHERE room_id = ? ORDER BY roster_order`).all(roomId) as Array<{
+          botId: string;
+          sessionId: string;
+          rosterOrder: number;
+        }>;
+      const expectedMembers = members.map((member) => ({
+        botId: member.botId,
+        sessionId: expectString(member.session.id, 'member.session.id'),
+        rosterOrder: member.rosterOrder,
+      }));
+      if (
+        existing.displayName !== displayName
+        || existing.roomSessionId !== roomSessionId
+        || JSON.stringify(existingMembers) !== JSON.stringify(expectedMembers)
+      ) {
+        throw Object.assign(new Error('Bot group room id already belongs to another room'), {
+          code: 'PRECONDITION_FAILED',
+        });
+      }
+      return { created: false, roomSessionId, members: existingMembers };
+    }
+
+    for (const member of members) {
+      const canonical = db.prepare(`SELECT p.status, p.current_version AS profileVersion,
+        l.session_id AS sessionId, l.archived_at AS archivedAt, s.status AS sessionStatus,
+        s.source AS sessionSource
+        FROM bot_profiles AS p
+        JOIN bot_session_links AS l ON l.bot_id = p.id AND l.role = 'canonical'
+        JOIN sessions AS s ON s.id = l.session_id
+        WHERE p.id = ?`).get(member.botId) as
+        | {
+            status: string;
+            profileVersion: number;
+            sessionId: string;
+            archivedAt: number | null;
+            sessionStatus: string;
+            sessionSource: string;
+          }
+        | undefined;
+      if (
+        !canonical
+        || canonical.status !== 'active'
+        || canonical.profileVersion !== member.profileVersion
+        || canonical.sessionId !== member.expectedCanonicalSessionId
+        || canonical.archivedAt !== null
+        || canonical.sessionStatus !== 'active'
+        || canonical.sessionSource !== 'bot'
+      ) {
+        throw Object.assign(new Error(`Bot ${member.botId} canonical link changed or is unavailable`), {
+          code: 'PRECONDITION_FAILED',
+        });
+      }
+    }
+
+    insertSession(roomSession);
+    db.prepare(`INSERT INTO bot_group_rooms
+      (id, display_name, room_session_id, status, epoch, running, needs_user, created_at, updated_at)
+      VALUES (?, ?, ?, 'active', 0, 0, 0, ?, ?)`)
+      .run(roomId, displayName, roomSessionId, createdAt, createdAt);
+
+    const resultMembers: Array<{ botId: string; sessionId: string; rosterOrder: number }> = [];
+    for (const member of members) {
+      insertSession(member.session);
+      const memberSessionId = expectString(member.session.id, 'member.session.id');
+      db.prepare(`INSERT INTO bot_session_links
+        (id, bot_id, session_id, profile_version, role, channel_id, route_key, created_at, archived_at)
+        VALUES (?, ?, ?, ?, 'group', NULL, ?, ?, NULL)`)
+        .run(`${member.botId}:${memberSessionId}`, member.botId, memberSessionId,
+          member.profileVersion, `group:${roomId}`, createdAt);
+      db.prepare(`INSERT INTO bot_group_members
+        (id, room_id, bot_id, member_session_id, roster_order, watermark, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, 0, ?, ?)`)
+        .run(member.id, roomId, member.botId, memberSessionId, member.rosterOrder,
+          createdAt, createdAt);
+      resultMembers.push({
+        botId: member.botId,
+        sessionId: memberSessionId,
+        rosterOrder: member.rosterOrder,
+      });
+    }
+    return { created: true, roomSessionId, members: resultMembers };
+  })();
+}
+
+function botsArchiveGroupRoom(
+  db: Database.Database,
+  args: unknown,
+): { archived: boolean } {
+  const p = asRecord(args, 'bots.archiveGroupRoom args');
+  const roomId = expectString(p.roomId, 'roomId');
+  const at = expectNumber(p.at, 'at');
+  return db.transaction(() => {
+    const room = db.prepare(`SELECT status, room_session_id AS roomSessionId
+      FROM bot_group_rooms WHERE id = ?`).get(roomId) as
+      | { status: string; roomSessionId: string }
+      | undefined;
+    if (!room) {
+      throw Object.assign(new Error('Bot group room not found'), { code: 'NOT_FOUND' });
+    }
+    if (room.status === 'archived') return { archived: false };
+    if (room.status !== 'active' && room.status !== 'error') {
+      throw Object.assign(new Error('Bot group room is unavailable'), {
+        code: 'PRECONDITION_FAILED',
+      });
+    }
+
+    db.prepare(`UPDATE bot_group_rooms SET status = 'archived', epoch = epoch + 1,
+      running = 0, needs_user = 0, updated_at = MAX(updated_at, ?) WHERE id = ?`)
+      .run(at, roomId);
+    db.prepare(`UPDATE sessions SET status = 'archived', updated_at = MAX(updated_at, ?)
+      WHERE source = 'bot' AND (id = ? OR id IN (
+        SELECT member_session_id FROM bot_group_members WHERE room_id = ?
+      ))`).run(at, room.roomSessionId, roomId);
+    db.prepare(`UPDATE bot_session_links SET archived_at = COALESCE(archived_at, ?)
+      WHERE role = 'group' AND route_key = ?`).run(at, `group:${roomId}`);
+    return { archived: true };
+  })();
+}
+
+function botsUpdateGroupRoomIdentity(db: Database.Database, args: unknown): void {
+  const p = asRecord(args, 'bots.updateGroupRoomIdentity args');
+  const roomId = expectString(p.roomId, 'roomId');
+  const at = expectNumber(p.at, 'at');
+  const name = p.name === undefined ? undefined : expectString(p.name, 'name').trim();
+  const avatar = p.avatar === undefined ? undefined : expectString(p.avatar, 'avatar').trim();
+  if (name === undefined && avatar === undefined) {
+    throw Object.assign(new Error('Bot group room identity patch is empty'), {
+      code: 'INVALID_PARAMS',
+    });
+  }
+  return db.transaction(() => {
+    const room = db.prepare(`SELECT status, room_session_id AS roomSessionId
+      FROM bot_group_rooms WHERE id = ?`).get(roomId) as
+      | { status: string; roomSessionId: string }
+      | undefined;
+    if (!room) {
+      throw Object.assign(new Error('Bot group room not found'), { code: 'NOT_FOUND' });
+    }
+    if (room.status !== 'active') {
+      throw Object.assign(new Error('Bot group room is archived or unavailable'), {
+        code: 'PRECONDITION_FAILED',
+      });
+    }
+    const fields = ['updated_at = MAX(updated_at, ?)'];
+    const values: unknown[] = [at];
+    if (name !== undefined) {
+      fields.push('display_name = ?');
+      values.push(name);
+    }
+    if (avatar !== undefined) {
+      fields.push('avatar = ?');
+      values.push(avatar);
+    }
+    values.push(roomId);
+    db.prepare(`UPDATE bot_group_rooms SET ${fields.join(', ')} WHERE id = ?`).run(...values);
+    if (name !== undefined) {
+      db.prepare(`UPDATE sessions SET title = ?, updated_at = MAX(updated_at, ?)
+        WHERE id = ? AND source = 'bot'`).run(`Group: ${name}`, at, room.roomSessionId);
+    }
+  })();
+}
+
 function botsUpdateProfile(db: Database.Database, args: unknown): { currentVersion: number } {
   const p = asRecord(args, 'bots.updateProfile args');
   const id = expectString(p.id, 'id');
@@ -238,6 +484,14 @@ function botsUpdateProfile(db: Database.Database, args: unknown): { currentVersi
         values.push(expectString(p[key], key));
       }
     }
+    for (const [key, column] of [
+      ['hiddenAt', 'hidden_at'], ['pinnedAt', 'pinned_at'],
+    ] as const) {
+      if (p[key] !== undefined) {
+        fields.push(`${column} = ?`);
+        values.push(p[key] === null ? null : expectNumber(p[key], key));
+      }
+    }
     const changed = p.profileContentChanged === true;
     const nextVersion = changed ? expectedVersion + 1 : expectedVersion;
     if (changed) {
@@ -252,9 +506,49 @@ function botsUpdateProfile(db: Database.Database, args: unknown): { currentVersi
         VALUES (?, ?, ?, ?, ?, ?)`)
         .run(`${id}:v${nextVersion}`, id, nextVersion, expectString(p.identitySource, 'identitySource'),
           expectString(p.capabilitiesJson, 'capabilitiesJson'), now);
+      // Hermes capability epoch: the permanent canonical Chat follows the
+      // latest Profile on its next runtime bootstrap. Route/group/worker links
+      // remain pinned to the version they were created with.
+      db.prepare(`UPDATE bot_session_links SET profile_version = ?
+        WHERE bot_id = ? AND role = 'canonical' AND archived_at IS NULL`)
+        .run(nextVersion, id);
     }
     return { currentVersion: nextVersion };
   })();
+}
+
+const BOT_DURABLE_ATTENTION_REASONS = new Set([
+  'agent_blocked',
+  'missing_config',
+  'provider_auth_or_access',
+  'provider_quota_limit',
+]);
+
+/**
+ * Profile-level attention follows a single monotonic clock. A delayed success
+ * or failure from an older Session must never overwrite a newer observation.
+ */
+function botsUpdateAttention(
+  db: Database.Database,
+  args: unknown,
+): { changed: boolean } {
+  const p = asRecord(args, 'bots.updateAttention args');
+  const botId = expectString(p.botId, 'botId');
+  const observedAt = expectNumber(p.observedAt, 'observedAt');
+  const reason = p.reason === null ? null : expectString(p.reason, 'reason');
+  if (reason !== null && !BOT_DURABLE_ATTENTION_REASONS.has(reason)) {
+    throw Object.assign(new Error('unsupported Bot attention reason'), { code: 'INVALID_PARAMS' });
+  }
+  const result = reason === null
+    ? db.prepare(`UPDATE bot_profiles
+        SET attention_reason = NULL, attention_at = NULL
+        WHERE id = ? AND attention_at IS NOT NULL AND attention_at <= ?`)
+        .run(botId, observedAt)
+    : db.prepare(`UPDATE bot_profiles
+        SET attention_reason = ?, attention_at = ?
+        WHERE id = ? AND (attention_at IS NULL OR attention_at <= ?)`)
+        .run(reason, observedAt, botId, observedAt);
+  return { changed: result.changes > 0 };
 }
 
 function botsReplaceCanonicalSession(
@@ -265,17 +559,26 @@ function botsReplaceCanonicalSession(
   const botId = expectString(p.botId, 'botId');
   const expectedCanonical = p.expectedCanonicalSessionId === null
     ? null : expectString(p.expectedCanonicalSessionId, 'expectedCanonicalSessionId');
+  const compatibilityMissingCanonicalSessionId = p.compatibilityMissingCanonicalSessionId == null
+    ? null
+    : expectString(
+        p.compatibilityMissingCanonicalSessionId,
+        'compatibilityMissingCanonicalSessionId',
+      );
   const expectedVersion = expectNumber(p.expectedProfileVersion, 'expectedProfileVersion');
   const s = asRecord(p.session, 'session');
   const now = expectNumber(p.now, 'now');
   return db.transaction(() => {
-    const bot = db.prepare(`SELECT canonical_session_id AS mirrorCanonicalSessionId,
-      current_version AS currentVersion FROM bot_profiles WHERE id = ?`).get(botId) as
-      | { mirrorCanonicalSessionId: string | null; currentVersion: number } | undefined;
+    const bot = db.prepare(`SELECT current_version AS currentVersion
+      FROM bot_profiles WHERE id = ?`).get(botId) as
+      | { currentVersion: number } | undefined;
     if (!bot) throw Object.assign(new Error('Bot 不存在'), { code: 'NOT_FOUND' });
     const canonicalLink = db.prepare(`SELECT session_id AS sessionId FROM bot_session_links
       WHERE bot_id = ? AND role = 'canonical'`).get(botId) as { sessionId: string } | undefined;
-    const canonicalSessionId = canonicalLink?.sessionId ?? bot.mirrorCanonicalSessionId;
+    // The compatibility mirror is never runtime authority. Legacy rows are
+    // promoted into bot_session_links by bots.reconcileCanonicalLink before
+    // this transaction is called; without a link we fail the caller's CAS.
+    const canonicalSessionId = canonicalLink?.sessionId ?? null;
     if (canonicalSessionId !== expectedCanonical) {
       return { created: false, canonicalSessionId, archivedCanonicalSessionId: null };
     }
@@ -313,7 +616,7 @@ function botsReplaceCanonicalSession(
         nullableString(s.remoteHostId), nullableString(s.providerId), expectString(s.source, 'session.source'),
         expectNumber(s.createdAt, 'session.createdAt'), expectNumber(s.updatedAt, 'session.updatedAt'));
     let archived: string | null = null;
-    let missingCanonicalSessionId: string | null = null;
+    let missingCanonicalSessionId: string | null = compatibilityMissingCanonicalSessionId;
     if (canonicalSessionId) {
       const previous = db.prepare('SELECT source, status FROM sessions WHERE id = ?')
         .get(canonicalSessionId) as { source: string; status: string } | undefined;
@@ -952,7 +1255,7 @@ function botsLinkSession(
   const botId = expectString(p.botId, 'botId');
   const sessionId = expectString(p.sessionId, 'sessionId');
   const role = expectString(p.role, 'role');
-  const allowedRoles = new Set(['canonical', 'route', 'history', 'automation', 'delegation']);
+  const allowedRoles = new Set(['canonical', 'route', 'history', 'automation', 'delegation', 'group']);
   if (!allowedRoles.has(role)) throw Object.assign(new Error('invalid Bot Session role'), { code: 'INVALID_PARAMS' });
   const channelId = nullableString(p.channelId);
   const routeKey = nullableString(p.routeKey);
@@ -961,15 +1264,17 @@ function botsLinkSession(
   const now = expectNumber(p.now, 'now');
   const eventId = expectString(p.eventId, 'eventId');
   return db.transaction(() => {
-    const bot = db.prepare('SELECT current_version AS currentVersion, canonical_session_id AS mirrorCanonicalSessionId FROM bot_profiles WHERE id = ?')
-      .get(botId) as { currentVersion: number; mirrorCanonicalSessionId: string | null } | undefined;
+    const bot = db.prepare('SELECT current_version AS currentVersion FROM bot_profiles WHERE id = ?')
+      .get(botId) as { currentVersion: number } | undefined;
     const session = db.prepare('SELECT source FROM sessions WHERE id = ?').get(sessionId) as
       | { source: string }
       | undefined;
     if (!bot || !session) throw Object.assign(new Error('Bot 或 Session 不存在'), { code: 'NOT_FOUND' });
     const canonicalLink = db.prepare(`SELECT session_id AS sessionId FROM bot_session_links
       WHERE bot_id = ? AND role = 'canonical'`).get(botId) as { sessionId: string } | undefined;
-    const canonicalSessionId = canonicalLink?.sessionId ?? bot.mirrorCanonicalSessionId;
+    // Runtime ownership is registered by the canonical link. The profile
+    // column is migration output only and must not reclaim a Session here.
+    const canonicalSessionId = canonicalLink?.sessionId ?? null;
     if (session.source !== 'bot') throw Object.assign(
       new Error('只有 source=bot 的 Session 才能绑定到 Bot'),
       { code: 'INVALID_PARAMS' },

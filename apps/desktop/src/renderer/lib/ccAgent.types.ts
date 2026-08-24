@@ -183,6 +183,19 @@ export interface CcMeta {
   botCollaboration?: import('../../shared/botCollaboration').BotCollaborationMeta;
 
   /**
+   * Host-side marker for a Hermes-style Bot group room message. The text still
+   * lives in Cindy's normal messages table; this metadata only identifies who
+   * spoke so the room renderer can label it without parsing display text.
+   */
+  botGroup?: {
+    roomId: string;
+    threadId: string;
+    senderKind: 'user' | 'bot';
+    botId?: string;
+    name: string;
+  };
+
+  /**
    * Host-side marker:这条 user 消息是一个 /goal 目标的设定 / 更新(goal-host 在新建或
    * 编辑目标时持久化的目标文案)。renderer 据此在该气泡上方渲一个「目标 / 目标已更新」徽标,
    * 让对话里看得出这条是目标。不进 prompt。

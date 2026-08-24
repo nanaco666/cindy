@@ -27,6 +27,7 @@ import {
 import type { LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useBotProfiles } from '@/features/bots/botStore';
+import { findBotProfileForSession } from '@/features/bots/botSessionOwners';
 import type { TabKindId, TabKindMenuMeta } from './types';
 
 const DROPDOWN_WIDTH = 220;
@@ -131,14 +132,7 @@ export function AddTabDropdown({
 }: AddTabDropdownProps) {
   const { t } = useTranslation();
   const bots = useBotProfiles();
-  const isBotSession = Boolean(
-    sessionId
-    && bots.some(
-      (bot) =>
-        bot.canonicalSessionId === sessionId
-        || bot.sessions.some((session) => session.id === sessionId),
-    ),
-  );
+  const isBotSession = Boolean(sessionId && findBotProfileForSession(bots, sessionId));
   const ref = useRef<HTMLDivElement | null>(null);
   // 定位:portal 到 body + fixed,按 anchor rect 摆位。原实现是「+」wrapper 内的
   // absolute 元素,RSB 面板窄于 220px 时向左展开的部分会被 Shell 根容器的

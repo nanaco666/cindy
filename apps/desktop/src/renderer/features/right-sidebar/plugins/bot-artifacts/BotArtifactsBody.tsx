@@ -33,6 +33,7 @@ import {
 import { useArtifactThumbnail, useArtifactTimeText } from '@/features/bots/BotArtifactCard';
 import { useBotArtifactOpen } from '@/features/bots/useBotArtifactOpen';
 import { useBotProfiles } from '@/features/bots/botStore';
+import { findBotProfileForSession } from '@/features/bots/botSessionOwners';
 import type { BotArtifactCategory, BotArtifactItem } from '../../../../../shared/botArtifact';
 import type { TabKindHostContext } from '../../types';
 import type { BotArtifactsState } from './index';
@@ -186,11 +187,7 @@ export function BotArtifactsBody({ state, ctx, active = true, shellVisible = tru
   // 在那种时候指谁并不明确。认不出归属(极端竞态)才退回不带名字的说法。
   const profiles = useBotProfiles();
   const ownerName = useMemo(() => {
-    const owner = profiles.find(
-      (bot) =>
-        bot.canonicalSessionId === ctx.sessionId
-        || bot.sessions.some((session) => session.id === ctx.sessionId),
-    );
+    const owner = findBotProfileForSession(profiles, ctx.sessionId);
     return owner?.name ?? null;
   }, [ctx.sessionId, profiles]);
 

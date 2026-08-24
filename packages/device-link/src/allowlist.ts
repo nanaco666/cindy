@@ -251,6 +251,15 @@ const CORE_INVOKE_CHANNELS: readonly string[] = [
   // 必须先读 profile 才能找到真实任务；写入/管理入口仍只允许本机 renderer。
   'local-db:bots:list',
   'local-db:bots:get',
+  // Bot 群聊的权威正文仍在真实 Cindy Session/messages；这四个窄口径业务
+  // handler 只读/创建房间并投递用户消息，不开放 Bot/Session 的裸数据库写。
+  'maker:bots:group-list',
+  'maker:bots:group-get',
+  'maker:bots:group-create',
+  'maker:bots:group-update',
+  'maker:bots:group-archive',
+  'maker:bots:group-send',
+  'maker:bots:group-resolve-interaction',
   'local-db:sessions:get',
   // Read-only indexed task search for the remote Composer @ palette and the
   // controller sidebar task search. Older controlled clients reject this
@@ -568,6 +577,7 @@ export const PUSH_FORWARD_ALLOWLIST: ReadonlySet<string> = new Set([
   // 状态推给控制端语义存疑),是死条目,已移除避免误导。真要转发需先想清控制端如何路由。
   'maker:schedule:event',
   'maker:project-automation:event',
+  'maker:bots:group-changed',
   'maker:orca:worker-changed',
   // goal 状态变化(payload 顶层 sessionId → 路由到 session:<id> topic,打开该会话的控制端可见)
   'maker:goal:status-changed',

@@ -26,6 +26,7 @@ export type DbTxName =
   | 'im.replaceBinding'
   | 'bots.createProfile'
   | 'bots.updateProfile'
+  | 'bots.updateAttention'
   | 'bots.reconcileCanonicalLink'
   | 'bots.replaceCanonicalSession'
   | 'bots.createRouteSession'
@@ -50,6 +51,9 @@ export type DbTxName =
   | 'bots.importBehaviorBundle'
   | 'bots.applyImMigration'
   | 'bots.beginImMigrationRollback'
+  | 'bots.createGroupRoom'
+  | 'bots.updateGroupRoomIdentity'
+  | 'bots.archiveGroupRoom'
   | 'wechatActivateBindingEpoch'
   | 'wechatCommitPollBatch'
   | 'wechatLeaseNextTask'
@@ -520,6 +524,8 @@ export interface BotsUpdateProfileArgs {
   avatar?: string;
   avatarColor?: string;
   status?: string;
+  hiddenAt?: number | null;
+  pinnedAt?: number | null;
   identitySource: string;
   capabilitiesJson: string;
   profileContentChanged: boolean;
@@ -527,9 +533,18 @@ export interface BotsUpdateProfileArgs {
   now: number;
 }
 
+export interface BotsUpdateAttentionArgs {
+  botId: string;
+  /** Null means a successful observation is clearing prior attention. */
+  reason: string | null;
+  observedAt: number;
+}
+
 export interface BotsReplaceCanonicalSessionArgs {
   botId: string;
   expectedCanonicalSessionId: string | null;
+  /** One-time compatibility evidence already validated by reconcileCanonicalLink. */
+  compatibilityMissingCanonicalSessionId?: string | null;
   expectedProfileVersion: number;
   session: {
     id: string;
@@ -697,13 +712,52 @@ export interface BotsDeleteProfileArgs {
 export interface BotsLinkSessionArgs {
   botId: string;
   sessionId: string;
-  role: 'canonical' | 'route' | 'history' | 'automation' | 'delegation';
+  role: 'canonical' | 'route' | 'history' | 'automation' | 'delegation' | 'group';
   channelId: string | null;
   routeKey: string | null;
   hasExpectedCanonical: boolean;
   expectedCanonicalSessionId: string | null;
   now: number;
   eventId: string;
+}
+
+export interface BotsCreateGroupRoomArgs {
+  room: {
+    id: string;
+    displayName: string;
+    roomSession: BotsReplaceCanonicalSessionArgs['session'] & { worktreePath?: string | null };
+    createdAt: number;
+  };
+  members: Array<{
+    id: string;
+    botId: string;
+    expectedCanonicalSessionId: string;
+    profileVersion: number;
+    rosterOrder: number;
+    session: BotsReplaceCanonicalSessionArgs['session'] & { worktreePath?: string | null };
+  }>;
+}
+
+export interface BotsCreateGroupRoomResult {
+  created: boolean;
+  roomSessionId: string;
+  members: Array<{ botId: string; sessionId: string; rosterOrder: number }>;
+}
+
+export interface BotsArchiveGroupRoomArgs {
+  roomId: string;
+  at: number;
+}
+
+export interface BotsUpdateGroupRoomIdentityArgs {
+  roomId: string;
+  name?: string;
+  avatar?: string;
+  at: number;
+}
+
+export interface BotsArchiveGroupRoomResult {
+  archived: boolean;
 }
 export interface BotsUpsertProjectBindingArgs {
   id: string;
@@ -1074,6 +1128,7 @@ export type DbTxArgsByName = {
   'im.replaceBinding': ImReplaceBindingArgs;
   'bots.createProfile': BotsCreateProfileArgs;
   'bots.updateProfile': BotsUpdateProfileArgs;
+  'bots.updateAttention': BotsUpdateAttentionArgs;
   'bots.reconcileCanonicalLink': BotsReconcileCanonicalLinkArgs;
   'bots.replaceCanonicalSession': BotsReplaceCanonicalSessionArgs;
   'bots.createRouteSession': BotsCreateRouteSessionArgs;
@@ -1098,6 +1153,9 @@ export type DbTxArgsByName = {
   'bots.importBehaviorBundle': BotsImportBehaviorBundleArgs;
   'bots.applyImMigration': BotsApplyImMigrationArgs;
   'bots.beginImMigrationRollback': BotsBeginImMigrationRollbackArgs;
+  'bots.createGroupRoom': BotsCreateGroupRoomArgs;
+  'bots.updateGroupRoomIdentity': BotsUpdateGroupRoomIdentityArgs;
+  'bots.archiveGroupRoom': BotsArchiveGroupRoomArgs;
   wechatActivateBindingEpoch: WechatActivateBindingEpochArgs;
   wechatCommitPollBatch: WechatCommitPollBatchArgs;
   wechatLeaseNextTask: WechatLeaseNextTaskArgs;
@@ -1146,6 +1204,7 @@ export type DbTxResultByName = {
   'im.replaceBinding': undefined;
   'bots.createProfile': undefined;
   'bots.updateProfile': { currentVersion: number };
+  'bots.updateAttention': { changed: boolean };
   'bots.reconcileCanonicalLink': BotsReconcileCanonicalLinkResult;
   'bots.replaceCanonicalSession': BotsReplaceCanonicalSessionResult;
   'bots.createRouteSession': BotsCreateRouteSessionResult;
@@ -1170,6 +1229,9 @@ export type DbTxResultByName = {
   'bots.importBehaviorBundle': undefined;
   'bots.applyImMigration': { routeId: string };
   'bots.beginImMigrationRollback': undefined;
+  'bots.createGroupRoom': BotsCreateGroupRoomResult;
+  'bots.updateGroupRoomIdentity': undefined;
+  'bots.archiveGroupRoom': BotsArchiveGroupRoomResult;
   wechatActivateBindingEpoch: WechatActivateBindingEpochResult;
   wechatCommitPollBatch: WechatCommitPollBatchResult;
   wechatLeaseNextTask: WechatLeasedTask | null;

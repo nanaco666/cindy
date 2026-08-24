@@ -90,6 +90,28 @@ describe('压缩之后伙伴的身份被重新注入', () => {
   });
 });
 
+describe('Hermes capability epoch', () => {
+  const register = read('apps/desktop/src/main/maker-ipc/register.ts');
+  const runtime = read('apps/desktop/src/main/maker-ipc/botProfileRuntime.ts');
+
+  it('每次发送前探测 canonical Chat 的档案、Skill、MCP、Toolset 与队友名册指纹', () => {
+    expect(register).toContain('refreshBotCapabilityEpochBeforeSend');
+    expect(register.match(/refreshBotCapabilityEpochBeforeSend\(compactedRuntime\)/g)).toHaveLength(2);
+    expect(runtime).toContain('runtimeEpochSha256');
+    expect(runtime).toContain('contextPrompt: opts.botProfileContextPrompt');
+  });
+
+  it('只有指纹变化才复用安全的原地 runtime 重建，不换 canonical Session id', () => {
+    expect(register).toContain('if (!snapshot?.runtimeEpochChanged) return');
+    expect(register).toContain('botCompactRuntimeRefreshCoordinator.noteBoundary(live)');
+    expect(register).toContain('maker.getSession(expectedSession.id) === expectedSession');
+  });
+
+  it('后台 epoch 刷新失败会被主进程收口，不产生未处理的 Promise 拒绝', () => {
+    expect(register).toContain('Bot runtime capability epoch refresh failed');
+  });
+});
+
 describe('压缩不换会话', () => {
   it('重建用的是同一条会话 id —— 侧栏、作品集、右栏都不会因为压缩而断掉', () => {
     // 这一条是「不抄 Hermes 续接链」的立身之本:换 id 才需要链。

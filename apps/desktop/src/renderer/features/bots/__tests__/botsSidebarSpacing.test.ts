@@ -40,16 +40,16 @@ const code = source
 /** 可点行本体(头像 + 两行文字)的类名串。 */
 const ROW_BUTTON_CLASS =
   'flex min-w-0 flex-1 items-center gap-2.5 rounded-xl px-2.5 py-2 text-left';
+const ROW_CONTAINER_CLASS =
+  'group relative flex w-full items-center rounded-xl transition-colors';
 
 describe('伙伴行的间距基线', () => {
   it('行容器不带内边距,也不再给行尾留占位列', () => {
     // 容器只负责选中态背景与圆角;任何 padding / gap 落在这里都会变成
     // 「左边 12+x、右边 x」的不对称。
-    expect(source).toContain(
-      "'group relative flex w-full items-center rounded-xl transition-colors',",
-    );
-    // 行尾那一列(齿轮 / 状态图标 / 待办点)已经整体下线,连同它的 `pr-2`。
-    expect(code).not.toContain('pr-2');
+    expect(source).toContain(`'${ROW_CONTAINER_CLASS}',`);
+    // 伙伴行容器不为行尾操作按钮预留 padding；其它控件可以按自身需要使用 pr-*。
+    expect(ROW_CONTAINER_CLASS).not.toMatch(/\bp[rxe]-/);
     expect(code).not.toMatch(/<span className="flex shrink-0 items-center gap-1/);
   });
 

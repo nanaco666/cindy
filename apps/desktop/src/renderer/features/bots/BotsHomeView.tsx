@@ -32,6 +32,7 @@ import {
   listBotImMigrations,
   planBotImMigration,
   rollbackBotImMigration,
+  canonicalBotSessionId,
   setCanonicalBotSession,
   updateBotProfile,
   upsertBotChannel,
@@ -200,11 +201,6 @@ export function BotSettings({
   const [migrationPlan, setMigrationPlan] = useState<BotImMigrationPlan | null>(null);
   const [migrationRecords, setMigrationRecords] = useState<BotImMigrationRecord[]>([]);
   const [rollbackRecord, setRollbackRecord] = useState<BotImMigrationRecord | null>(null);
-  const [profileApplyPrompt, setProfileApplyPrompt] = useState<{
-    currentVersion: number;
-    activeVersion: number;
-  } | null>(null);
-  const [profileApplyError, setProfileApplyError] = useState<string | null>(null);
   const [portabilityBusy, setPortabilityBusy] = useState(false);
   const [portabilityNotice, setPortabilityNotice] = useState<string | null>(null);
   const { availableVendors, loaded: availableAgentsLoaded } = useAvailableAgents();
@@ -299,28 +295,9 @@ export function BotSettings({
     };
   }, [bot.id, t]);
 
-  // 自动保存不再走「点保存」的显式提交,但 Profile 版本落后于当前对话时的
-  // 「应用到当前对话」提示仍要给。判定逻辑与手动保存时完全一致,只把**呈现时机**
-  // 推到用户离开设置页那一刻(= 他原来会去点保存的那一刻):后台自动保存中途弹模态
-  // 会打断正在打字的人,那正是本次要消灭的那类体验。
-  const pendingApplyRef = useRef<{ currentVersion: number; activeVersion: number } | null>(null);
-  const activeVersionRef = useRef<number | undefined>(canonicalProjection?.profileVersion);
-  activeVersionRef.current = canonicalProjection?.profileVersion;
-
   const commitProfile = useCallback(
     async (payload: BotSettingsPayload) => {
-      const updated = await updateBotProfile(bot.id, payload);
-      const activeVersion = activeVersionRef.current;
-      if (
-        updated.currentVersion !== undefined &&
-        activeVersion !== undefined &&
-        updated.currentVersion > activeVersion
-      ) {
-        pendingApplyRef.current = {
-          currentVersion: updated.currentVersion,
-          activeVersion,
-        };
-      }
+      await updateBotProfile(bot.id, payload);
     },
     [bot.id],
   );
@@ -358,15 +335,8 @@ export function BotSettings({
   };
 
   const handleBack = () => {
-    setProfileApplyError(null);
     void autosave.flush().then(() => {
       if (autosave.isDirty()) return; // 保存失败:留在页面,状态条给出重试入口
-      const pendingApply = pendingApplyRef.current;
-      if (pendingApply) {
-        pendingApplyRef.current = null;
-        setProfileApplyPrompt(pendingApply);
-        return;
-      }
       onBack();
     });
   };
@@ -374,8 +344,7 @@ export function BotSettings({
   /*
     存完性格回对话。放在 effect 里跑，是为了让这一步发生在「新 identitySource 已经
     进了 autosave 载荷 ref」之后 —— 在 onSave 里同步 flush 会保存到旧值。
-    handleBack 而不是直接 onBack：保存失败要留在页面，profile 需要重新应用时
-    那张确认框也不能被跳过。
+    handleBack 而不是直接 onBack：保存失败要留在页面。
   */
   useEffect(() => {
     if (personaSavedAt === null) return;
@@ -386,11 +355,8 @@ export function BotSettings({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [personaSavedAt]);
 
-  const renewAndApplyProfile = () => {
-    setProfileApplyError(null);
-    void onRenew().then((renewed) => {
-      if (!renewed) setProfileApplyError(t('bots.profileApply.renewFailed'));
-    });
+  const compactCanonicalChat = () => {
+    void onRenew();
   };
 
   const visibleChannelConnections = useMemo(() => {
@@ -634,10 +600,6 @@ export function BotSettings({
                 >
                   {t('bots.autosave.retry')}
                 </button>
-              </p>
-            ) : profileApplyError ? (
-              <p className="mt-1 text-11 text-[var(--text-danger)]" role="alert">
-                {profileApplyError}
               </p>
             ) : null}
           </div>
@@ -1069,8 +1031,8 @@ export function BotSettings({
                         <p className="text-13 font-medium text-[var(--text-primary)]">
                           {t('bots.sessionLifecycleTitle')}
                         </p>
-                        {/* 「当前跑着的任务用的是哪一版 Profile」——它回答的正是这颗
-                            Renew 按钮要不要按,所以贴着按钮放,而不是挂在别处。 */}
+                        {/* 这里表达运行时解析结果；Profile 更新会在下一轮自动刷新，
+                            不再把版本差异伪装成需要用户 Renew 的动作。 */}
                         <span className="rounded-full bg-[var(--surface-chip)] px-2.5 py-1 text-10 text-[var(--text-secondary)]">
                           {t(`bots.runtimeState.${runtimeState}`)}
                         </span>
@@ -1081,7 +1043,7 @@ export function BotSettings({
                     </div>
                     <button
                       type="button"
-                      onClick={renewAndApplyProfile}
+                      onClick={compactCanonicalChat}
                       disabled={renewing}
                       className="inline-flex h-8 shrink-0 items-center gap-2 rounded-lg border border-[var(--border-default)] px-3 text-12 font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] disabled:opacity-50"
                     >
@@ -1089,8 +1051,6 @@ export function BotSettings({
                       {renewing ? t('bots.renewing') : t('bots.renew')}
                     </button>
                   </div>
-                  {/* 「改了要 Renew 才生效」——这句解释的就是上面那颗状态药丸与这颗
-                      按钮之间的关系,原来却挂在一张只剩开关的芯片墙里。 */}
                   <p className="mt-3 rounded-lg bg-[var(--surface-chip)] px-3 py-2 text-11 leading-5 text-[var(--text-secondary)]">
                     {t('bots.capabilitiesDeferred')}
                   </p>
@@ -1301,56 +1261,6 @@ export function BotSettings({
         </Dialog.Portal>
       </Dialog.Root>
 
-      <Dialog.Root
-        open={profileApplyPrompt !== null}
-        onOpenChange={(open) => {
-          if (!open && !renewing) setProfileApplyPrompt(null);
-        }}
-      >
-        <Dialog.Portal>
-          <Dialog.Overlay className="fixed inset-0 z-50 bg-[var(--overlay-modal)]" />
-          <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[min(480px,calc(100vw-32px))] -translate-x-1/2 -translate-y-1/2 rounded-xl border border-[var(--border-default)] bg-[var(--surface-elevated)] p-5 outline-none">
-            <Dialog.Title className="text-16 font-medium text-[var(--text-primary)]">
-              {t('bots.profileApply.title')}
-            </Dialog.Title>
-            <Dialog.Description className="mt-2 text-12 leading-5 text-[var(--text-secondary)]">
-              {profileApplyPrompt
-                ? t('bots.profileApply.description', {
-                    currentVersion: profileApplyPrompt.currentVersion,
-                    activeVersion: profileApplyPrompt.activeVersion,
-                  })
-                : null}
-            </Dialog.Description>
-            {profileApplyError ? (
-              <p className="mt-3 text-12 text-[var(--text-danger)]" role="alert">
-                {profileApplyError}
-              </p>
-            ) : null}
-            <div className="mt-5 flex justify-end gap-2">
-              <button
-                type="button"
-                disabled={renewing}
-                onClick={() => {
-                  setProfileApplyPrompt(null);
-                  onBack();
-                }}
-                className="h-8 rounded-lg px-3 text-12 text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] disabled:opacity-50"
-              >
-                {t('bots.profileApply.keepCurrent')}
-              </button>
-              <button
-                type="button"
-                disabled={renewing}
-                onClick={renewAndApplyProfile}
-                className="inline-flex h-8 items-center gap-2 rounded-lg bg-[var(--accent-cta-bg)] px-3 text-12 font-medium text-[var(--accent-pure-cta-fg)] hover:opacity-90 disabled:opacity-50"
-              >
-                <RefreshCcw size={14} className={renewing ? 'animate-spin' : undefined} />
-                {renewing ? t('bots.renewing') : t('bots.profileApply.renewAndApply')}
-              </button>
-            </div>
-          </Dialog.Content>
-        </Dialog.Portal>
-      </Dialog.Root>
     </main>
   );
 }
@@ -1375,7 +1285,7 @@ export function BotsHomeView() {
   const createCanonicalSession = useCallback(
     async (
       bot: BotProfile,
-      expectedCanonicalSessionId: string | null = bot.canonicalSessionId ?? null,
+      expectedCanonicalSessionId: string | null = canonicalBotSessionId(bot) ?? null,
       recoverMissingOnly = false,
     ): Promise<import('@/lib/ccAgent.types').Session> => {
       try {
@@ -1405,7 +1315,7 @@ export function BotsHomeView() {
     async (bot: BotProfile): Promise<boolean> => {
       setIsCreatingSession(true);
       try {
-        const canonicalSessionId = bot.canonicalSessionId;
+        const canonicalSessionId = canonicalBotSessionId(bot);
         if (!canonicalSessionId) return false;
         const result = await window.electronAPI.localDb.bots.compactCanonicalSession({
           botId: bot.id,
@@ -1544,7 +1454,7 @@ export function BotsHomeView() {
     // 换代检查没落地就先别导航 —— 否则会先进旧对话再被换代拽走。
     if (renewCheckedBotId !== selectedBot.id) return;
 
-    const canonicalSessionId = selectedBot.canonicalSessionId;
+    const canonicalSessionId = canonicalBotSessionId(selectedBot);
     let cancelled = false;
     if (canonicalSessionId) {
       setIsCreatingSession(false);

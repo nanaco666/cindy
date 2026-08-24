@@ -48,6 +48,7 @@ import {
 } from '../../maker-ipc/botProfileFolder.js';
 import { syncBotProfileFromFolder } from '../../maker-ipc/botProfileFolderSync.js';
 import { renewBotSessionIfDue } from '../../maker-ipc/botRenewalService.js';
+import { requestBotRuntimeEpochRefresh } from '../../maker-ipc/botRuntimeEpochRefreshSignal.js';
 import { createLogger } from '../../logger.js';
 
 const log = createLogger('bots');
@@ -111,6 +112,11 @@ import type {
 } from '../../../shared/botLifecycle.js';
 import { CINDY_BOT_BUNDLE_EXTENSION } from '../../../shared/botPortability.js';
 import {
+  BOT_FAILURE_REASONS,
+  isBotFailureAttentionWorthy,
+  type BotFailureReason,
+} from '../../../shared/botFailureReason.js';
+import {
   exportBotBehaviorBundle,
   importBotBehaviorBundle,
 } from '../botPortabilityService.js';
@@ -169,7 +175,7 @@ let createBotCanonicalSessionImpl:
   | ((input: CreateBotCanonicalSessionInput) => Promise<CreateBotCanonicalSessionResult>)
   | null = null;
 
-/** Main-side canonical creator shared by Renew, restore and repair. */
+/** Main-side canonical creator shared by first creation, restore and missing-task repair. */
 export async function createBotCanonicalSession(
   input: CreateBotCanonicalSessionInput,
 ): Promise<CreateBotCanonicalSessionResult> {
@@ -489,6 +495,12 @@ async function readProfile(
     lastReadAt,
   );
   const config = parseJson(version?.capabilitiesJson ?? '{}');
+  const failureReason = BOT_FAILURE_REASONS.includes(profile.attentionReason as BotFailureReason)
+    ? profile.attentionReason as BotFailureReason
+    : null;
+  const needsAttention = profile.attentionAt !== null
+    && failureReason !== null
+    && isBotFailureAttentionWorthy(failureReason);
   return {
     id: profile.id,
     name: profile.displayName,
@@ -501,6 +513,10 @@ async function readProfile(
     avatar: profile.avatar,
     avatarColor: profile.avatarColor,
     enabled: profile.status === 'active',
+    hiddenAt: profile.hiddenAt,
+    pinnedAt: profile.pinnedAt,
+    failureReason,
+    needsAttention,
     status: profile.status,
     currentVersion: profile.currentVersion,
     canonicalSessionId: canonicalSessionId ?? undefined,
@@ -637,7 +653,14 @@ async function readProfile(
         {
           id: row.id,
           title: row.title,
-          kind: link.role === 'canonical' ? 'chat' : link.role === 'route' ? 'route' : 'history',
+          kind:
+            link.role === 'canonical'
+              ? 'chat'
+              : link.role === 'route'
+                ? 'route'
+                : link.role === 'group'
+                  ? 'worker'
+                  : 'history',
           channel: (channels.find((channel) => channel.id === link.channelId)?.kind ??
             'local') as ChannelKind,
           updatedAt: row.updatedAt,
@@ -938,6 +961,13 @@ export function registerBotIpc(): void {
     if (errorWorkspaceLeases > 0) {
       issues.push({ code: 'workspace-error', count: errorWorkspaceLeases });
     }
+    const failureReason = BOT_FAILURE_REASONS.includes(profile.attentionReason as BotFailureReason)
+      ? profile.attentionReason as BotFailureReason
+      : null;
+    const needsAttention = profile.attentionAt !== null
+      && failureReason !== null
+      && isBotFailureAttentionWorthy(failureReason);
+    if (needsAttention) issues.push({ code: 'durable-attention' });
 
     const recoveringCodes = new Set([
       'missing-canonical',
@@ -957,6 +987,8 @@ export function registerBotIpc(): void {
       botId,
       status,
       checkedAt: Date.now(),
+      failureReason,
+      needsAttention,
       canonical: {
         sessionId: canonicalSessionId,
         sessionStatus: canonicalSessionId
@@ -1200,6 +1232,20 @@ export function registerBotIpc(): void {
         throwIpcError('INVALID_PARAMS', 'enabled 必须是 boolean');
       patch.status = body.enabled ? 'active' : 'paused';
     }
+    const hiddenAt = body.hidden === undefined
+      ? undefined
+      : body.hidden === true
+        ? now
+        : body.hidden === false
+          ? null
+          : throwIpcError('INVALID_PARAMS', 'hidden 必须是 boolean');
+    const pinnedAt = body.pinned === undefined
+      ? undefined
+      : body.pinned === true
+        ? now
+        : body.pinned === false
+          ? null
+          : throwIpcError('INVALID_PARAMS', 'pinned 必须是 boolean');
     const [version] = await db
       .select()
       .from(botProfileVersions)
@@ -1250,6 +1296,8 @@ export function registerBotIpc(): void {
       ...(patch.avatar !== undefined ? { avatar: patch.avatar } : {}),
       ...(patch.avatarColor !== undefined ? { avatarColor: patch.avatarColor } : {}),
       ...(patch.status !== undefined ? { status: patch.status } : {}),
+      ...(hiddenAt !== undefined ? { hiddenAt } : {}),
+      ...(pinnedAt !== undefined ? { pinnedAt } : {}),
       identitySource: nextIdentitySource,
       capabilitiesJson: safeJson(nextConfig),
       profileContentChanged,
@@ -1257,6 +1305,20 @@ export function registerBotIpc(): void {
       now,
     });
     await syncBotProfileFolder(id, nextIdentitySource, nextConfig);
+    if (profileContentChanged) {
+      const [canonical] = await db
+        .select({ sessionId: botSessionLinks.sessionId })
+        .from(botSessionLinks)
+        .where(
+          and(
+            eq(botSessionLinks.botId, id),
+            eq(botSessionLinks.role, 'canonical'),
+            isNull(botSessionLinks.archivedAt),
+          ),
+        )
+        .limit(1);
+      if (canonical) requestBotRuntimeEpochRefresh(canonical.sessionId, 'profile');
+    }
     return readProfile(db, id);
   });
 
@@ -1651,10 +1713,11 @@ export function registerBotIpc(): void {
     }
     const canonicalResolution = await reconcileCanonicalLink(botId);
     const authoritativeCanonicalSessionId = canonicalResolution.canonicalSessionId;
+    const recoverableCompatibilityMirror =
+      input.recoverMissingOnly === true
+      && canonicalResolution.status === 'missing-session'
+      && profile.canonicalSessionId === expectedCanonicalSessionId;
     if (input.recoverMissingOnly) {
-      const recoverableCompatibilityMirror =
-        canonicalResolution.status === 'missing-session'
-        && profile.canonicalSessionId === expectedCanonicalSessionId;
       if (
         !expectedCanonicalSessionId
         || (
@@ -1759,7 +1822,12 @@ export function registerBotIpc(): void {
       const result = await getDbClient().tx<BotsReplaceCanonicalSessionResult>(
         'bots.replaceCanonicalSession', {
         botId,
-        expectedCanonicalSessionId,
+        expectedCanonicalSessionId: recoverableCompatibilityMirror
+          ? null
+          : expectedCanonicalSessionId,
+        compatibilityMissingCanonicalSessionId: recoverableCompatibilityMirror
+          ? expectedCanonicalSessionId
+          : null,
         expectedProfileVersion,
         session: {
           id: insertRow.id,
@@ -1805,7 +1873,7 @@ export function registerBotIpc(): void {
     if (archivedCanonicalSessionId) {
       await cancelBotDelegationChildren(
         archivedCanonicalSessionId,
-        'Parent Bot task was replaced by Renew.',
+        'Parent Bot task was recovered after its canonical task disappeared.',
       );
       const [{ getMakerIfReady }, workspaceRuntime] = await Promise.all([
         import('../../maker-host/index.js'),
@@ -1960,14 +2028,7 @@ export function registerBotIpc(): void {
     return { compacted: true, canonicalSessionId, result };
   });
 
-  /*
-    到点换代。触发时机是**打开伙伴主对话**的那一下 —— 点开就是要用,正是「新一轮」
-    的起点;刻意不挂后台定时器,那会在半夜给每个伙伴凭空建一堆空对话。
-
-    判定与接线分别在 shared/botRenewalPolicy.ts 与 maker-ipc/botRenewalService.ts,
-    这里只把它接到真实数据上。整条链任何一步出错都返回「没换」,不让用户连伙伴
-    都打不开。
-  */
+  // 旧客户端兼容入口。永久 canonical Chat 不再按日替换；只返回当前注册表指向。
   ipcMain.handle('local-db:bots:renew-if-due', async (event, raw: unknown) => {
     assertTrustedAppRendererEvent(event);
     const body =
@@ -2104,7 +2165,7 @@ export function registerBotIpc(): void {
     }
     const canonicalSessionId = (await reconcileCanonicalLink(botId)).canonicalSessionId;
     if (role === 'history' && canonicalSessionId === sessionId) {
-      throwIpcError('PRECONDITION_FAILED', 'canonical Session 必须通过 Renew 原子替换');
+      throwIpcError('PRECONDITION_FAILED', 'canonical Chat 不能降为历史；需要清理上下文请原地压缩');
     }
     if (role === 'route' && canonicalSessionId === sessionId) {
       throwIpcError('PRECONDITION_FAILED', 'canonical Session 不能同时作为 route Session');

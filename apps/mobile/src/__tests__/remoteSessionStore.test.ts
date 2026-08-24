@@ -2789,6 +2789,32 @@ describe('remoteSessionStore', () => {
     expect(detail).toHaveBeenCalledTimes(2);
   });
 
+  it('routes Bot group changes only to Bot group reseed handlers', () => {
+    const sessionListReseed = vi.fn();
+    const groupListReseed = vi.fn();
+    const roomReseed = vi.fn();
+    remoteSessionStore.registerReseedHandler('dev-1', sessionListReseed);
+    const unregisterGroupList = remoteSessionStore.registerBotGroupReseedHandler(
+      'dev-1',
+      groupListReseed,
+    );
+    remoteSessionStore.registerBotGroupReseedHandler('dev-1', roomReseed);
+
+    remoteSessionStore.applyRemotePush('dev-1', 'maker:bots:group-changed', {
+      roomId: 'room-1',
+    });
+    expect(sessionListReseed).not.toHaveBeenCalled();
+    expect(groupListReseed).toHaveBeenCalledTimes(1);
+    expect(roomReseed).toHaveBeenCalledTimes(1);
+
+    unregisterGroupList();
+    remoteSessionStore.applyRemotePush('dev-1', 'maker:bots:group-changed', {
+      roomId: 'room-2',
+    });
+    expect(groupListReseed).toHaveBeenCalledTimes(1);
+    expect(roomReseed).toHaveBeenCalledTimes(2);
+  });
+
   it('keeps cached messages but invalidates sync marker and marks pendingRefresh on local-db:session:error-persisted push', () => {
     remoteSessionStore.setMessages('s1', [message('m1', 's1')]);
     remoteSessionStore.markSessionMessagesSynced('s1', { _count: { messages: 1 }, updatedAt: '2026-01-01T00:00:00.000Z' });

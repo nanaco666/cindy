@@ -265,6 +265,14 @@ export const botProfiles = sqliteTable(
     status: text('status', { enum: ['active', 'paused', 'error', 'archived', 'deleting'] })
       .notNull()
       .default('active'),
+    /** Roster display only; hidden Bots continue running and remain addressable. */
+    hiddenAt: integer('hidden_at'),
+    /** Roster ordering only; canonical Session ownership is unchanged. */
+    pinnedAt: integer('pinned_at'),
+    /** Latest durable, user-actionable failure observed for this Bot. */
+    attentionReason: text('attention_reason'),
+    /** Monotonic observation time used to stop stale successes clearing newer failures. */
+    attentionAt: integer('attention_at'),
     currentVersion: integer('current_version').notNull().default(1),
     canonicalSessionId: text('canonical_session_id').references(() => sessions.id, {
       onDelete: 'set null',
@@ -342,7 +350,7 @@ export const botSessionLinks = sqliteTable(
       .references(() => sessions.id, { onDelete: 'cascade' }),
     /** ProfileVersion pinned when this Session became canonical/route. */
     profileVersion: integer('profile_version').notNull().default(1),
-    role: text('role', { enum: ['canonical', 'route', 'history'] }).notNull(),
+    role: text('role', { enum: ['canonical', 'route', 'history', 'group'] }).notNull(),
     channelId: text('channel_id').references(() => botChannels.id, { onDelete: 'set null' }),
     routeKey: text('route_key'),
     createdAt: integer('created_at').notNull(),
@@ -357,6 +365,104 @@ export const botSessionLinks = sqliteTable(
     uniqRoute: uniqueIndex('uniq_bot_session_links_route')
       .on(t.channelId, t.routeKey)
       .where(sql`${t.role} = 'route' AND ${t.channelId} IS NOT NULL AND ${t.routeKey} IS NOT NULL`),
+  }),
+);
+
+/**
+ * Hermes-style multi-Bot room metadata.
+ *
+ * The room transcript deliberately does not live here: roomSessionId points at
+ * one real Cindy Session and every room message stays in the shared messages
+ * table. This table only owns orchestration state that a Session cannot express.
+ */
+export const botGroupRooms = sqliteTable(
+  'bot_group_rooms',
+  {
+    id: text('id').primaryKey(),
+    displayName: text('display_name').notNull(),
+    avatar: text('avatar').notNull().default('👥'),
+    roomSessionId: text('room_session_id')
+      .notNull()
+      .references(() => sessions.id, { onDelete: 'cascade' }),
+    status: text('status', { enum: ['active', 'archived', 'error'] })
+      .notNull()
+      .default('active'),
+    epoch: integer('epoch').notNull().default(0),
+    running: integer('running', { mode: 'boolean' }).notNull().default(false),
+    needsUser: integer('needs_user', { mode: 'boolean' }).notNull().default(false),
+    createdAt: integer('created_at').notNull(),
+    updatedAt: integer('updated_at').notNull(),
+  },
+  (t) => ({
+    uniqRoomSession: uniqueIndex('uniq_bot_group_rooms_session').on(t.roomSessionId),
+    idxStatusUpdated: index('idx_bot_group_rooms_status_updated').on(t.status, t.updatedAt),
+  }),
+);
+
+/** One persistent real Cindy Session and one watermark per room participant. */
+export const botGroupMembers = sqliteTable(
+  'bot_group_members',
+  {
+    id: text('id').primaryKey(),
+    roomId: text('room_id')
+      .notNull()
+      .references(() => botGroupRooms.id, { onDelete: 'cascade' }),
+    botId: text('bot_id')
+      .notNull()
+      .references(() => botProfiles.id, { onDelete: 'cascade' }),
+    memberSessionId: text('member_session_id')
+      .notNull()
+      .references(() => sessions.id, { onDelete: 'cascade' }),
+    rosterOrder: integer('roster_order').notNull(),
+    /** Deprecated compatibility mirror; thread-scoped rows below are authoritative. */
+    watermark: integer('watermark').notNull().default(0),
+    holdAt: integer('hold_at'),
+    holdMessageId: text('hold_message_id'),
+    holdThreadId: text('hold_thread_id'),
+    holdNoted: integer('hold_noted', { mode: 'boolean' }).notNull().default(false),
+    strandedBeforeSequence: integer('stranded_before_sequence'),
+    strandedThreadId: text('stranded_thread_id'),
+    strandedStartedAt: integer('stranded_started_at'),
+    createdAt: integer('created_at').notNull(),
+    updatedAt: integer('updated_at').notNull(),
+  },
+  (t) => ({
+    uniqRoomBot: uniqueIndex('uniq_bot_group_members_room_bot').on(t.roomId, t.botId),
+    uniqRoomOrder: uniqueIndex('uniq_bot_group_members_room_order').on(
+      t.roomId,
+      t.rosterOrder,
+    ),
+    uniqMemberSession: uniqueIndex('uniq_bot_group_members_session').on(t.memberSessionId),
+    idxBotRoom: index('idx_bot_group_members_bot_room').on(t.botId, t.roomId),
+  }),
+);
+
+/** Thread-scoped delivery cursor; separate topics must never consume each other. */
+export const botGroupMemberWatermarks = sqliteTable(
+  'bot_group_member_watermarks',
+  {
+    id: text('id').primaryKey(),
+    roomId: text('room_id')
+      .notNull()
+      .references(() => botGroupRooms.id, { onDelete: 'cascade' }),
+    botId: text('bot_id')
+      .notNull()
+      .references(() => botProfiles.id, { onDelete: 'cascade' }),
+    threadId: text('thread_id').notNull(),
+    sequence: integer('sequence').notNull().default(0),
+    createdAt: integer('created_at').notNull(),
+    updatedAt: integer('updated_at').notNull(),
+  },
+  (t) => ({
+    uniqRoomBotThread: uniqueIndex('uniq_bot_group_member_watermarks_room_bot_thread').on(
+      t.roomId,
+      t.botId,
+      t.threadId,
+    ),
+    idxRoomThread: index('idx_bot_group_member_watermarks_room_thread').on(
+      t.roomId,
+      t.threadId,
+    ),
   }),
 );
 

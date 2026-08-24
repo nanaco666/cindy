@@ -41,6 +41,10 @@ function createDatabase(): Database.Database {
       avatar TEXT NOT NULL DEFAULT '🤖',
       avatar_color TEXT NOT NULL DEFAULT 'violet',
       status TEXT NOT NULL DEFAULT 'active',
+      hidden_at INTEGER,
+      pinned_at INTEGER,
+      attention_reason TEXT,
+      attention_at INTEGER,
       current_version INTEGER NOT NULL DEFAULT 1,
       canonical_session_id TEXT,
       created_at INTEGER NOT NULL,
@@ -98,7 +102,10 @@ function createDatabase(): Database.Database {
       payload_json TEXT NOT NULL DEFAULT '{}',
       created_at INTEGER NOT NULL
     );
-    INSERT INTO bot_profiles VALUES (
+    INSERT INTO bot_profiles (
+      id, display_name, description, avatar, avatar_color, status,
+      current_version, canonical_session_id, created_at, updated_at
+    ) VALUES (
       'bot-1', 'Helper', '', '🤖', 'violet', 'active', 1, 'canonical', 1, 1
     );
     INSERT INTO bot_routes VALUES
@@ -218,6 +225,37 @@ describe('Bot lifecycle coordinator', () => {
       status: 'paused',
       affected: { routes: 1, automations: 1, delegations: 2, deliveries: 3, sessions: 2 },
     });
+  });
+
+  it('uses the canonical registry even when the compatibility mirror disagrees', async () => {
+    sqlite.prepare(
+      "UPDATE bot_profiles SET canonical_session_id = 'stale-mirror' WHERE id = 'bot-1'",
+    ).run();
+
+    await service().run({ botId: 'bot-1', action: 'pause' });
+
+    expect(
+      sqlite.prepare(
+        "SELECT session_id FROM bot_lifecycle_events WHERE event_type = 'pause-requested'",
+      ).get(),
+    ).toEqual({ session_id: 'canonical' });
+    expect(closeSession).toHaveBeenCalledWith('canonical');
+    expect(closeSession).not.toHaveBeenCalledWith('stale-mirror');
+  });
+
+  it('does not reclaim a mirror-only Session when the canonical registry is missing', async () => {
+    sqlite.prepare(
+      "DELETE FROM bot_session_links WHERE bot_id = 'bot-1' AND role = 'canonical'",
+    ).run();
+
+    await service().run({ botId: 'bot-1', action: 'pause' });
+
+    expect(
+      sqlite.prepare(
+        "SELECT session_id FROM bot_lifecycle_events WHERE event_type = 'pause-requested'",
+      ).get(),
+    ).toEqual({ session_id: null });
+    expect(closeSession).not.toHaveBeenCalledWith('canonical');
   });
 
   it('restores only resources suspended by the Bot lifecycle', async () => {

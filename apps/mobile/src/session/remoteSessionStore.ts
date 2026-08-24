@@ -611,6 +611,10 @@ const sessionDeviceIndex = new Map<string, string>();
 // 检测到自身 sessionId 被加入时调 load() 触发整窗刷新(含 error 行),避免先清空导致空白帧。
 const pendingRefreshSessions = new Set<string>();
 const reseedHandlers = new Map<string, Set<() => void>>();
+// Bot 群聊属于设备级投影，但不应复用普通任务列表的 reseed：成员每次活动都会发
+// maker:bots:group-changed，如果借 sessions:list 的 handler 会把群聊流量放大成整表重拉。
+// 仍复用同一 device-link push 消费入口，只把失效通知分流给真正打开群聊页面的 owner。
+const botGroupReseedHandlers = new Map<string, Set<() => void>>();
 const subs = new Set<() => void>();
 const emptyMessages: RemoteMessage[] = [];
 const emptyPendingInteractions: PendingInteraction[] = [];
@@ -3561,6 +3565,10 @@ export const remoteSessionStore = {
       reseedHandlers.get(deviceId)?.forEach((handler) => handler());
       return;
     }
+    if (channel === 'maker:bots:group-changed') {
+      botGroupReseedHandlers.get(deviceId)?.forEach((handler) => handler());
+      return;
+    }
     if (channel === 'maker:session-model-pref:changed') {
       // 被控端会话「非选中模型」effort/fast 变更(被控端本地改 / 应用了任一控制端写穿)→
       // 刷新会话模型列表镜像(payload 自带 sessionId,镜像按会话隔离,非法 payload 静默忽略)。
@@ -4223,6 +4231,7 @@ export const remoteSessionStore = {
     const hadShard = shards.delete(deviceId);
     const hadWorktreePreference = newMakerWorktreePreferences.delete(deviceId);
     const hadWorktreeBranchPreferences = newMakerWorktreeBranchPreferences.delete(deviceId);
+    botGroupReseedHandlers.delete(deviceId);
     // A maker event may precede the session list, so transport-owned batches, host anchors,
     // and streaming identities are also authoritative ownership evidence. Sweep their sessions
     // even when no shard or sessionDeviceIndex entry exists yet; otherwise the 32ms timer can
@@ -4335,6 +4344,7 @@ export const remoteSessionStore = {
     nextSessionAccessOrder = 0;
     sessionDeviceIndex.clear();
     reseedHandlers.clear();
+    botGroupReseedHandlers.clear();
     pendingTitlePreview.clear();
     mergedSessions = [];
     deviceList = null;
@@ -4362,6 +4372,21 @@ export const remoteSessionStore = {
 
   requestReseed(deviceId: string): void {
     reseedHandlers.get(deviceId)?.forEach((handler) => handler());
+  },
+
+  registerBotGroupReseedHandler(deviceId: string, handler: () => void): () => void {
+    let set = botGroupReseedHandlers.get(deviceId);
+    if (!set) {
+      set = new Set();
+      botGroupReseedHandlers.set(deviceId, set);
+    }
+    set.add(handler);
+    return () => {
+      const current = botGroupReseedHandlers.get(deviceId);
+      if (!current) return;
+      current.delete(handler);
+      if (current.size === 0) botGroupReseedHandlers.delete(deviceId);
+    };
   },
 
   getSessionDeviceId(sessionId: string): string | undefined {

@@ -47,7 +47,7 @@ export function BotLifecycleSettings({
 }: {
   bot: BotProfile;
   onOpenSession: (sessionId: string, searchJump?: ConversationSearchJump) => void;
-  /** 立刻翻篇。省略时不渲染那颗按钮 —— 不摆一个点了没反应的入口。 */
+  /** 原地压缩 canonical Chat。省略时不渲染按钮。 */
   onRenew?: () => Promise<boolean>;
 }) {
   const { t } = useTranslation();
@@ -396,6 +396,11 @@ export function BotLifecycleSettings({
               ))}
             </ul>
           )}
+          {health.needsAttention && health.failureReason ? (
+            <p className="mt-2 text-11 leading-5 text-[var(--warning-fg)]">
+              {t(`bots.lifecycle.attentionReasons.${health.failureReason}`)}
+            </p>
+          ) : null}
           <div className="mt-3 grid gap-2 text-10 text-[var(--text-tertiary)] sm:grid-cols-2">
             <span>{t('bots.lifecycle.routesCount', { count: health.counts.routes })}</span>
             <span>{t('bots.lifecycle.automationsCount', { count: health.counts.automations })}</span>

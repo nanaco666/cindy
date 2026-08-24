@@ -12,7 +12,7 @@ import { describe, expect, it } from 'vitest';
 
 import { groupSessions } from '@/features/cc-agent/lib/projectGrouping';
 import type { Session } from '@/lib/ccAgent.types';
-import { buildBotSessionOwners } from '../botSessionOwners';
+import { buildBotSessionOwners, findBotProfileForSession } from '../botSessionOwners';
 import type { BotProfile } from '../botStore';
 
 function session(id: string, over: Partial<Session> = {}): Session {
@@ -40,9 +40,9 @@ function profile(over: Partial<BotProfile> = {}): BotProfile {
     avatarColor: 'violet',
     canonicalSessionId: 's-main',
     sessions: [
-      { id: 's-main' },
-      { id: 's-telegram' },
-      { id: 's-old' },
+      { id: 's-main', role: 'canonical' },
+      { id: 's-telegram', role: 'route' },
+      { id: 's-old', role: 'history' },
     ],
     ...over,
   } as unknown as BotProfile;
@@ -60,9 +60,16 @@ describe('伙伴归属表', () => {
     });
   });
 
-  it('没有会话投影时至少认得主对话', () => {
+  it('没有注册表投影时不使用兼容镜像认领任务', () => {
     const owners = buildBotSessionOwners([profile({ sessions: [] })]);
-    expect(owners.get('s-main')?.botId).toBe('bot-a');
+    expect(owners.has('s-main')).toBe(false);
+    expect(findBotProfileForSession([profile({ sessions: [] })], 's-main')).toBeUndefined();
+  });
+
+  it('右侧栏等单任务入口也只认注册表投影', () => {
+    const bot = profile({ canonicalSessionId: 'stale-mirror' });
+    expect(findBotProfileForSession([bot], 's-main')).toBe(bot);
+    expect(findBotProfileForSession([bot], 'stale-mirror')).toBeUndefined();
   });
 });
 

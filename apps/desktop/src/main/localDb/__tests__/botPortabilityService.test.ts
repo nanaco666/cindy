@@ -38,6 +38,10 @@ describe('Bot behavior bundle round trip', () => {
         avatar TEXT NOT NULL DEFAULT '🤖',
         avatar_color TEXT NOT NULL DEFAULT 'violet',
         status TEXT NOT NULL DEFAULT 'active',
+        hidden_at INTEGER,
+        pinned_at INTEGER,
+        attention_reason TEXT,
+        attention_at INTEGER,
         current_version INTEGER NOT NULL DEFAULT 1,
         canonical_session_id TEXT,
         created_at INTEGER NOT NULL,
@@ -130,7 +134,10 @@ describe('Bot behavior bundle round trip', () => {
     h.db = db;
     h.tx = async (name, args) => runWorkerTx(sqlite, { name: name as never, args } as never);
     sqlite.exec(`
-      INSERT INTO bot_profiles VALUES
+      INSERT INTO bot_profiles (
+        id, display_name, description, avatar, avatar_color, status,
+        current_version, canonical_session_id, created_at, updated_at
+      ) VALUES
         ('bot-source', 'Release Bot', 'Ships releases', '🚀', 'blue', 'active', 1, NULL, 1, 1);
       INSERT INTO bot_profile_versions VALUES
         ('bot-source:v1', 'bot-source', 1,

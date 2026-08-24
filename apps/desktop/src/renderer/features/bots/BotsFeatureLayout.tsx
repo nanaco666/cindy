@@ -3,13 +3,22 @@ import { Outlet, useOutletContext } from 'react-router-dom';
 
 import { useOwnTopNavScrollableRows } from '../feature-context';
 import { BotsSidebar } from './BotsSidebar';
+import { refreshBotGroupRooms } from './botGroupStore';
 import { refreshBotProfiles } from './botStore';
 
 export function BotsFeatureLayout() {
   useOwnTopNavScrollableRows(false);
   useEffect(() => {
     refreshBotProfiles();
-    return window.electronAPI.maker.onBotLifecycleChanged(() => refreshBotProfiles());
+    void refreshBotGroupRooms();
+    const unsubscribeLifecycle = window.electronAPI.maker.onBotLifecycleChanged(() => refreshBotProfiles());
+    const unsubscribeGroups = window.electronAPI.maker.botGroups.onChanged(() => {
+      void refreshBotGroupRooms();
+    });
+    return () => {
+      unsubscribeLifecycle();
+      unsubscribeGroups();
+    };
   }, []);
   const shellContext = useOutletContext<{
     sidebarWidth?: number;

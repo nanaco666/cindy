@@ -38,6 +38,7 @@ import { RightSidebarDetach } from '@/components/layout/RightSidebarDetach';
 import { RightSidebarMaximize } from '@/components/layout/RightSidebarMaximize';
 import { RightSidebarToggle } from '@/components/layout/RightSidebarToggle';
 import { CHROME_ACTIONS_GEOMETRY } from '@/components/layout/chromeActionsGeometry';
+import { findBotProfileForSession } from '@/features/bots/botSessionOwners';
 import { TabBar, TabStrip } from './TabBar';
 import { EmptyState } from './EmptyState';
 import { getTabKind, hydrateTabState } from './registry';
@@ -164,13 +165,7 @@ export function RightSidebarShell({
   // 当前会话属于哪个伙伴。以前这里只留了一个 boolean,右侧栏那几处「{{pronoun}}
   // 的协同 / 的作品」就永远拿不到性别,一律落到兜底词上(实测)。伙伴本体本来就
   // 在手边,取出来供进 context,子树里的 useBotTranslation 直接就有「她 / 他」。
-  const sessionBot = sessionId
-    ? bots.find(
-        (bot) =>
-          bot.canonicalSessionId === sessionId
-          || bot.sessions.some((session) => session.id === sessionId),
-      )
-    : undefined;
+  const sessionBot = sessionId ? findBotProfileForSession(bots, sessionId) : undefined;
   const isBotSession = Boolean(sessionBot);
   const chromeActionsLeft =
     isMac && !isFullscreen

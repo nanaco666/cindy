@@ -22,16 +22,16 @@ function at(y: number, m: number, d: number, h: number, min = 0): number {
 }
 
 function policy(over: Partial<BotRenewalPolicy> = {}): BotRenewalPolicy {
-  return { ...DEFAULT_BOT_RENEWAL_POLICY, ...over };
+  return { ...DEFAULT_BOT_RENEWAL_POLICY, mode: 'daily', notify: true, ...over };
 }
 
 describe('默认策略', () => {
-  it('每天早上 6 点,通知用户,不看空闲', () => {
+  it('永久 canonical Chat 默认永不换代', () => {
     expect(DEFAULT_BOT_RENEWAL_POLICY).toEqual({
-      mode: 'daily',
+      mode: 'none',
       atHour: 6,
       idleMinutes: 1440,
-      notify: true,
+      notify: false,
     });
   });
 });

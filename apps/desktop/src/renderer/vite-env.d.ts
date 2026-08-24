@@ -4884,6 +4884,42 @@ interface ElectronAPI {
         ) => void,
       ) => () => void;
     };
+    botGroups: {
+      list: (
+        botId?: string,
+      ) => Promise<import('../shared/botGroupChat').BotGroupRoomProjection[]>;
+      get: (
+        roomId: string,
+      ) => Promise<import('../shared/botGroupChat').BotGroupRoomProjection | null>;
+      create: (input: {
+        id?: string;
+        name: string;
+        memberBotIds: string[];
+      }) => Promise<import('../shared/botGroupChat').BotGroupRoomProjection>;
+      update: (
+        roomId: string,
+        patch: import('../shared/botGroupChat').BotGroupRoomIdentityPatch,
+      ) => Promise<import('../shared/botGroupChat').BotGroupRoomProjection>;
+      archive: (
+        roomId: string,
+      ) => Promise<import('../shared/botGroupChat').BotGroupRoomProjection>;
+      send: (
+        roomId: string,
+        text: string,
+        options?: import('../shared/botGroupChat').BotGroupRoomSendOptions,
+      ) => Promise<import('../shared/botGroupChat').BotGroupRoomSendReceipt>;
+      resolveInteraction: (
+        roomId: string,
+        requestId: string,
+        decision: import('../shared/botGroupChat').BotGroupInteractionDecision,
+      ) => Promise<void>;
+      onChanged: (
+        cb: (
+          payload: import('../shared/botGroupChat').BotGroupChangedPayload,
+          ownerStamp?: import('../shared/dataOwnerPush').DataOwnerPushStamp,
+        ) => void,
+      ) => () => void;
+    };
     botAutomations: {
       list: (botId: string) => Promise<import('../shared/botAutomation').BotAutomation[]>;
       create: (

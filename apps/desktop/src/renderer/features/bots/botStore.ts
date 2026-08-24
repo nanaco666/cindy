@@ -13,6 +13,10 @@ import type { BotImMigrationPlan, BotImMigrationRecord } from '../../../shared/b
 import type { BotBundleExportResult, BotBundleImportResult } from '../../../shared/botPortability';
 import type { BotHealthReport } from '../../../shared/botLifecycle';
 import {
+  BOT_FAILURE_REASONS,
+  type BotFailureReason,
+} from '../../../shared/botFailureReason';
+import {
   normalizeBotSessionControlMode,
   type BotSessionControlMode,
 } from '../../../shared/botSessionControl';
@@ -99,11 +103,11 @@ function normalizeStringList(value: unknown): string[] {
 export interface BotSessionProjection {
   id: string;
   title: string;
-  kind: 'chat' | 'route' | 'history';
+  kind: 'chat' | 'route' | 'worker' | 'history';
   channel: BotChannel;
   updatedAt: number;
   status?: 'active' | 'archived' | 'deleted';
-  role?: 'canonical' | 'route' | 'history';
+  role?: 'canonical' | 'route' | 'group' | 'history';
   profileVersion?: number;
   runtimeSnapshot?: {
     profileVersion: number;
@@ -133,6 +137,13 @@ export interface BotProfile {
   avatar: string;
   avatarColor: string;
   enabled: boolean;
+  /** Roster-only visibility; hidden Bots keep running and remain mentionable. */
+  hiddenAt?: number | null;
+  /** Roster pin; does not pin or replace the canonical Cindy Session. */
+  pinnedAt?: number | null;
+  /** Latest durable Hermes-style failure projected by main. */
+  failureReason?: BotFailureReason | null;
+  needsAttention?: boolean;
   status?: import('../../../shared/botLifecycle').BotProfileLifecycleStatus;
   currentVersion?: number;
   skills: string[];
@@ -161,6 +172,19 @@ export interface BotProfile {
   projectBindings?: BotProjectBinding[];
   workspaceLeases?: BotWorkspaceLease[];
   routes?: BotRoute[];
+}
+
+/**
+ * Resolve canonical ownership from the projected bot_session_links registry.
+ * The top-level canonicalSessionId remains a migration/output mirror only.
+ */
+export function canonicalBotSession(bot: BotProfile): BotSessionProjection | undefined {
+  const matches = bot.sessions.filter((session) => session.role === 'canonical');
+  return matches.length === 1 ? matches[0] : undefined;
+}
+
+export function canonicalBotSessionId(bot: BotProfile): string | undefined {
+  return canonicalBotSession(bot)?.id;
 }
 
 export interface BotProjectBinding {
@@ -435,6 +459,14 @@ function normalizeDbProfile(value: unknown): BotProfile | null {
     avatar: typeof item.avatar === 'string' ? item.avatar : '🤖',
     avatarColor: typeof item.avatarColor === 'string' ? item.avatarColor : 'violet',
     enabled: item.enabled !== false,
+    hiddenAt:
+      typeof item.hiddenAt === 'number' && Number.isFinite(item.hiddenAt) ? item.hiddenAt : null,
+    pinnedAt:
+      typeof item.pinnedAt === 'number' && Number.isFinite(item.pinnedAt) ? item.pinnedAt : null,
+    failureReason: BOT_FAILURE_REASONS.includes(item.failureReason as BotFailureReason)
+      ? item.failureReason as BotFailureReason
+      : null,
+    needsAttention: item.needsAttention === true,
     status:
       item.status === 'active' ||
       item.status === 'paused' ||
@@ -810,6 +842,65 @@ export function updateBotProfile(
     });
 }
 
+async function setBotRosterFlag(
+  id: string,
+  flag: 'hidden' | 'pinned',
+  value: boolean,
+): Promise<BotProfile> {
+  const api = botsApi();
+  if (!api) throw new Error('Bot storage is not ready');
+  const next = normalizeDbProfile(await api.update({ id, [flag]: value }));
+  if (!next) throw new Error('Bot profile update returned invalid data');
+  profiles = profiles.map((bot) => (bot.id === id ? next : bot));
+  persist();
+  return next;
+}
+
+/** Hide only changes the Bots roster. Runtime, @ mentions, groups and channels stay live. */
+export function setBotHidden(id: string, hidden: boolean): Promise<BotProfile> {
+  return setBotRosterFlag(id, 'hidden', hidden);
+}
+
+/** Pin only changes roster ordering; it never mutates the canonical Session pin. */
+export function setBotPinned(id: string, pinned: boolean): Promise<BotProfile> {
+  return setBotRosterFlag(id, 'pinned', pinned);
+}
+
+function duplicateBotName(sourceName: string): string {
+  const names = new Set(profiles.map((bot) => bot.name.trim().toLocaleLowerCase()));
+  for (let number = 2; number < 100; number += 1) {
+    const suffix = `-${number}`;
+    const candidate = `${sourceName.slice(0, Math.max(1, 200 - suffix.length))}${suffix}`;
+    if (!names.has(candidate.toLocaleLowerCase())) return candidate;
+  }
+  throw new Error('No free name for the duplicate Bot');
+}
+
+/**
+ * Hermes duplicate semantics: copy the Profile and look, but not creation time,
+ * roster flags, channel mounts, canonical ownership, or transcript.
+ */
+export async function duplicateBotProfile(id: string): Promise<BotProfile> {
+  const source = profiles.find((bot) => bot.id === id);
+  if (!source) throw new Error('Bot not found');
+  return addBotProfileAndWait({
+    name: duplicateBotName(source.name),
+    description: source.description,
+    identitySource: source.identitySource,
+    userContextSource: source.userContextSource,
+    ...(source.gender ? { gender: source.gender } : {}),
+    avatar: source.avatar,
+    avatarColor: source.avatarColor,
+    skills: [...source.skills],
+    capabilities: {
+      ...source.capabilities,
+      skillsExcluded: [...source.capabilities.skillsExcluded],
+      toolsets: [...source.capabilities.toolsets],
+      mcpServers: [...source.capabilities.mcpServers],
+    },
+  });
+}
+
 /** Mount or update a message surface without changing the Bot identity. */
 export async function upsertBotChannel(
   botId: string,
@@ -991,7 +1082,7 @@ export function setCanonicalBotSession(
 ): void {
   profiles = profiles.map((bot) => {
     if (bot.id !== botId) return bot;
-    const previousId = bot.canonicalSessionId;
+    const previousId = canonicalBotSessionId(bot);
     const current = bot.sessions.find((item) => item.id === session.id);
     if (
       previousId === session.id &&
@@ -1019,6 +1110,7 @@ export function setCanonicalBotSession(
           channel: bot.channel,
           updatedAt: session.updatedAt,
           status: 'active' as const,
+          role: 'canonical' as const,
         },
         ...history,
       ],
@@ -1038,7 +1130,13 @@ export function markBotSessionArchived(
           ...bot,
           sessions: bot.sessions.map((item) =>
             item.id === sessionId
-              ? { ...item, kind: 'history' as const, status: 'archived' as const, updatedAt }
+              ? {
+                  ...item,
+                  kind: 'history' as const,
+                  role: 'history' as const,
+                  status: 'archived' as const,
+                  updatedAt,
+                }
               : item,
           ),
         }

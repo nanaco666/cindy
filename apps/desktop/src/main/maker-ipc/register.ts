@@ -40,6 +40,7 @@ import {
   normalizeBotMemorySeedEntries,
   selectMissingBotMemorySeedEntries,
 } from '../../shared/botMemorySeed.js';
+import { parseBotGroupInteractionDecision } from '../../shared/botGroupChat.js';
 import {
   defaultBotPersonaGenerationDeps,
   generateBotPersonaDraft,
@@ -378,6 +379,10 @@ import {
   type BotDirectMessageService,
 } from './botDirectMessageService.js';
 import {
+  createBotGroupChatService,
+  type BotGroupChatService,
+} from './botGroupChatService.js';
+import {
   createBotDeliveryOutboxService,
   type EnqueueBotDeliveryInput,
   type RecordUnknownBotDeliveryInput,
@@ -399,6 +404,7 @@ import {
 import { isBotCanonicalReplacementBusy } from './botCanonicalReplacementGuard.js';
 import { configureBotCanonicalReplacementCoordinator } from './botCanonicalReplacementCoordinator.js';
 import { botSessionInputBlockReason } from './botSessionInputGuard.js';
+import { configureBotRuntimeEpochRefreshRequest } from './botRuntimeEpochRefreshSignal.js';
 import { createGitSnapshotCoordinator } from '../maker-host/git-snapshot-host.js';
 import {
   cancelCodexAuthModeChange,
@@ -1940,6 +1946,7 @@ interface EnableOrcaOptions {
 let orcaCollabServiceHolder: OrcaCollabService | null = null;
 let botDelegationServiceHolder: BotDelegationService | null = null;
 let botDirectMessageServiceHolder: BotDirectMessageService | null = null;
+let botGroupChatServiceHolder: BotGroupChatService | null = null;
 let botDeliveryOutboxServiceHolder: BotDeliveryOutboxService | null = null;
 let botSessionEventServiceHolder: BotSessionEventService | null = null;
 
@@ -2160,6 +2167,10 @@ export function tryGetBotDelegationService(): BotDelegationService | null {
 
 export function tryGetBotDirectMessageService(): BotDirectMessageService | null {
   return botDirectMessageServiceHolder;
+}
+
+export function tryGetBotGroupChatService(): BotGroupChatService | null {
+  return botGroupChatServiceHolder;
 }
 
 function createBridgeWorkerLabel(task: string): string {
@@ -2458,6 +2469,18 @@ function getPendingInteractionsForSession(sessionId: string): PendingInteraction
     ...ghostGrantConfirmBridge.pendingSnapshots(sessionId).map(({ request }) => ({ request })),
     ...ghostSetupInteractionBridge.pendingSnapshots(sessionId).map(({ request }) => ({ request })),
   );
+  return out;
+}
+
+/** Group rooms mirror only the three Agent-owned interaction kinds. */
+function getPendingBotGroupInteractionsForSession(
+  sessionId: string,
+): Array<{ request: InteractionRequest; persistId?: string }> {
+  const out: Array<{ request: InteractionRequest; persistId?: string }> = [];
+  for (const entry of pendingInteractionResolvers.values()) {
+    if (entry.sessionId !== sessionId) continue;
+    out.push({ request: entry.request, ...(entry.persistId ? { persistId: entry.persistId } : {}) });
+  }
   return out;
 }
 
@@ -3751,6 +3774,10 @@ export function installDesktopInteractionListener(session: {
       // 必须先登记 pending,再广播。否则 renderer / device-link 回得太快会打到
       // 「no pending resolver」,确认卡看起来没反应,Codex 最终却记成用户拒绝。
       pendingInteractionResolvers.set(req.requestId, entry);
+      // Group-member turns use the same interaction resolver as every Cindy
+      // Session. A visible question/approval is active waiting, not a stalled
+      // turn, so keep the bounded group turn alive while the user can answer.
+      botGroupChatServiceHolder?.noteMemberActivity(session.id);
       broadcastToAllWindows(MAKER_PUSH.INTERACTION_REQUEST, {
         sessionId: session.id,
         request: req,
@@ -4176,6 +4203,46 @@ export function wireSessionToIpc(session: ReturnType<Maker['getSession']>): void
       let shouldMarkTurnTerminalIdleAfterBroadcast = false;
       let completedTurnWallClockMs: number | undefined;
       const isContinuationBoundary = isTurnContinuationBoundaryEvent(event);
+      const isBotGroupTerminal =
+        !isContinuationBoundary
+        && event.turnScope !== 'background'
+        && (
+          (event.type === 'done'
+            && (event.data as { silentStop?: unknown } | null | undefined)?.silentStop !== true)
+          || isTerminalTurnErrorEvent(event)
+        );
+      const isBotGroupActivity =
+        event.turnScope !== 'background'
+        && (
+          event.type === 'text'
+          || event.type === 'thinking'
+          || event.type === 'tool_use'
+          || event.type === 'tool_result'
+          || event.type === 'tool_result_full'
+          || event.type === 'image'
+          || (
+            event.type === 'status'
+            && (event.data as { isRunning?: unknown } | null | undefined)?.isRunning === true
+          )
+        );
+      if (isBotGroupActivity) {
+        botGroupChatServiceHolder?.noteMemberActivity(session.id);
+      }
+      if (isBotGroupTerminal) {
+        const doneResult = event.type === 'done'
+          ? (event.data as { result?: unknown } | null | undefined)?.result
+          : null;
+        void botGroupChatServiceHolder?.handleMemberTerminal({
+          sessionId: session.id,
+          result: typeof doneResult === 'string' ? doneResult : null,
+          failed: event.type !== 'done',
+        }).catch((error) => {
+          log.warn('Bot group member terminal handling failed', {
+            sessionId: session.id,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        });
+      }
       // 探针:continuation 边界命中会跳过 status idle / ended 写 / tracker idle,
       // 若 claim 悬挂会导致 UI 永久「正在生成」。区分「claim 悬挂」与「done 未到达」。
       if (isContinuationBoundary && (event.type === 'done' || event.type === 'status')) {
@@ -7919,8 +7986,9 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions)
         // old process and its resume ownership untouched.
         await withRehydrateCloseSuppressed(expectedSession.id, async () => {
           const refreshed = await replaceBotRuntimeAfterPreflight({
-            preflight: () =>
-              preflightBotRuntimeResources(createOpts as MakerSessionCreateOpts),
+            preflight: async () => {
+              await preflightBotRuntimeResources(createOpts as MakerSessionCreateOpts);
+            },
             isCurrentOwner: () => maker.getSession(expectedSession.id) === expectedSession,
             close: () => maker.closeSession(expectedSession.id, 'runtime-refresh'),
             bootstrap: async () => (await bootstrapSession(createOpts)).session,
@@ -7952,6 +8020,110 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions)
       }
     });
   };
+
+  configureBotRuntimeEpochRefreshRequest((sessionId, reason) => {
+    const live = getMakerIfReady()?.getSession(sessionId) as WiredSession | undefined;
+    if (!live) return;
+    botCompactRuntimeRefreshCoordinator.noteBoundary(live);
+    void botCompactRuntimeRefreshCoordinator.attempt(live).then((outcome) => {
+      if (outcome === 'refreshed') {
+        log.info('Bot runtime capability epoch refreshed', { sessionId, reason });
+      }
+    }).catch((error) => {
+      // Profile/resource writes must not create an unhandled rejection. The
+      // refresh coordinator preflights before close, so the current healthy
+      // runtime stays alive and the next send retries the same epoch check.
+      log.warn('Bot runtime capability epoch refresh failed', {
+        sessionId,
+        reason,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
+  });
+
+  async function refreshBotCapabilityEpochBeforeSend(
+    live: WiredSession,
+  ): Promise<void> {
+    if (botCompactRuntimeRefreshCoordinator.hasPending(live.id)) {
+      await botCompactRuntimeRefreshCoordinator.attempt(live);
+      if (botCompactRuntimeRefreshCoordinator.hasPending(live.id)) {
+        throwIpcError(
+          'PRECONDITION_FAILED',
+          '伙伴能力正在刷新，请稍后再发送',
+        );
+      }
+      return;
+    }
+
+    const db = getDbClient().drizzle;
+    const [row] = await db
+      .select({
+        role: botSessionLinks.role,
+        source: sessions.source,
+        status: sessions.status,
+        title: sessions.title,
+        workingDir: sessions.workingDir,
+        workspaceKind: sessions.workspaceKind,
+        agentKind: sessions.agentKind,
+        model: sessions.model,
+        providerId: sessions.providerId,
+        effort: sessions.effort,
+        fastMode: sessions.fastMode,
+        permissionMode: sessions.permissionMode,
+        planModeEnabled: sessions.planModeEnabled,
+        sdkSessionId: sessions.sdkSessionId,
+        remoteHostId: sessions.remoteHostId,
+        orcaRole: sessions.orcaRole,
+        codexHistoryHasProductPrompt: sessions.codexHistoryHasProductPrompt,
+      })
+      .from(sessions)
+      .innerJoin(botSessionLinks, eq(botSessionLinks.sessionId, sessions.id))
+      .where(eq(sessions.id, live.id))
+      .limit(1);
+    if (
+      !row
+      || row.role !== 'canonical'
+      || row.source !== 'bot'
+      || row.status !== 'active'
+      || !row.workingDir
+    ) {
+      return;
+    }
+
+    const createOpts = buildCreateOptsWithStderr({
+      id: live.id,
+      agentKind: dbToMakerAgentKind(row.agentKind),
+      workingDir: row.workingDir,
+      workspaceKind: row.workspaceKind,
+      model: row.model ?? undefined,
+      providerId: row.providerId,
+      effort: (row.effort ?? undefined) as CreateOpts['effort'],
+      fastMode: !!row.fastMode,
+      permissionMode: permissionModeOrAsk(row.permissionMode),
+      planMode: !!row.planModeEnabled,
+      title: row.title ?? undefined,
+      resumeSessionId: row.sdkSessionId ?? undefined,
+      remoteHostId: row.remoteHostId ?? undefined,
+      orcaRole: row.orcaRole as CreateOpts['orcaRole'],
+      codexHistoryHasProductPrompt: row.codexHistoryHasProductPrompt ?? undefined,
+    });
+    await synthesizeOrcaVendorOptionsFromDb(live.id, createOpts);
+    const extraDirs = await readSessionExtraDirsFromDb(live.id).catch(() => []);
+    if (extraDirs.length > 0) createOpts.extraDirs = extraDirs;
+    const snapshot = await preflightBotRuntimeResources(
+      createOpts as MakerSessionCreateOpts,
+    );
+    if (!snapshot?.runtimeEpochChanged) return;
+
+    botCompactRuntimeRefreshCoordinator.noteBoundary(live);
+    await botCompactRuntimeRefreshCoordinator.attempt(live);
+    if (botCompactRuntimeRefreshCoordinator.hasPending(live.id)) {
+      throwIpcError(
+        'PRECONDITION_FAILED',
+        '伙伴能力正在刷新，请稍后再发送',
+      );
+    }
+  }
 
   // switchFocus 和 sendToWorker 都可能唤醒 idle worker；统一走这里才能保留 extraDirs。
   async function resumeOrcaWorkerSessionIfMissing(target: {
@@ -9415,9 +9587,7 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions)
         };
       }
       const compactedRuntime = maker.getSession(targetSessionId);
-      if (compactedRuntime && botCompactRuntimeRefreshCoordinator.hasPending(targetSessionId)) {
-        await botCompactRuntimeRefreshCoordinator.attempt(compactedRuntime);
-      }
+      if (compactedRuntime) await refreshBotCapabilityEpochBeforeSend(compactedRuntime);
     }
 
     // ── create 分支 ──────────────────────────────────────────────────────────
@@ -10048,6 +10218,7 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions)
     message: string;
     persistedContent?: string;
     clientId?: string;
+    files?: AgentInputQueuedMessage['files'];
     onAccepted?: () => void | Promise<void>;
   }) => {
     if (params.clientId) {
@@ -10070,12 +10241,66 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions)
         };
       }
     }
+    if (params.files?.length) {
+      const [meta, dbRow] = await Promise.all([
+        maker.getSessionMeta(params.targetSessionId).catch(() => null),
+        getSessionRowSnapshot(params.targetSessionId),
+      ]);
+      if (!meta || !dbRow || dbRow.status === 'deleted') {
+        return {
+          ok: false as const,
+          errorCode: 'NOT_FOUND' as const,
+          message: `session ${params.targetSessionId} not found`,
+        };
+      }
+      if (dbRow.status === 'archived') {
+        return {
+          ok: false as const,
+          errorCode: 'ARCHIVED' as const,
+          message: `session ${params.targetSessionId} is archived`,
+        };
+      }
+      const clientId = params.clientId ?? createId();
+      await inputCoordinator.ensureQueueRestored(params.targetSessionId).catch(() => undefined);
+      const queued = await buildSessionControlInputItem({
+        targetSessionId: params.targetSessionId,
+        message: params.message,
+        persistedContent: params.persistedContent ?? params.message,
+        clientId,
+        meta,
+        files: params.files,
+      });
+      inputCoordinator.enqueue(params.targetSessionId, queued, {
+        resumeRestorePausedQueue: true,
+      });
+      await params.onAccepted?.();
+      return {
+        ok: true as const,
+        targetSessionId: params.targetSessionId,
+        wakeKind: 'queued' as const,
+        queuedMessageId: clientId,
+      };
+    }
     return sendToSessionInternal(params);
   };
 
   botDirectMessageServiceHolder = createBotDirectMessageService({
     dispatch: ({ targetSessionId, message, persistedContent, clientId }) =>
       dispatchBotSessionMessage({ targetSessionId, message, persistedContent, clientId }),
+  });
+  botGroupChatServiceHolder?.dispose();
+  botGroupChatServiceHolder = createBotGroupChatService({
+    dispatch: ({ targetSessionId, message, persistedContent, clientId, files }) =>
+      dispatchBotSessionMessage({ targetSessionId, message, persistedContent, clientId, files }),
+    getPendingInteractions: getPendingBotGroupInteractionsForSession,
+    resolveInteraction: (_sessionId, requestId, decision) =>
+      resolvePendingInteraction(requestId, decision as InteractionDecision),
+    onChanged: (payload) => broadcastToAllWindows(MAKER_PUSH.BOT_GROUP_CHANGED, payload),
+  });
+  void botGroupChatServiceHolder.restore().catch((error) => {
+    log.warn('Bot group stranded-turn restore failed', {
+      error: error instanceof Error ? error.message : String(error),
+    });
   });
 
   botDeliveryOutboxServiceHolder?.dispose();
@@ -10371,6 +10596,28 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions)
     },
   );
   ipcMain.handle(
+    MAKER_INVOKE.BOT_GROUP_RESOLVE_INTERACTION,
+    async (event, roomId: unknown, requestId: unknown, decision: unknown) => {
+      if (!isDeviceLinkInvoke()) assertTrustedAppRendererEvent(event);
+      if (typeof roomId !== 'string' || !roomId.trim()) {
+        throwIpcError('INVALID_PARAMS', 'roomId required');
+      }
+      if (typeof requestId !== 'string' || !requestId.trim()) {
+        throwIpcError('INVALID_PARAMS', 'requestId required');
+      }
+      const parsed = parseBotGroupInteractionDecision(decision);
+      if (!parsed) throwIpcError('INVALID_PARAMS', 'invalid Bot group interaction decision');
+      const resolved = await botGroupChatServiceHolder!.resolveInteraction(
+        roomId,
+        requestId,
+        parsed,
+      );
+      if (!resolved) {
+        throwIpcError('PRECONDITION_FAILED', 'Bot group interaction is no longer pending');
+      }
+    },
+  );
+  ipcMain.handle(
     MAKER_INVOKE.BOT_DELEGATION_CANCEL,
     async (event, parentSessionId: unknown, delegationId: unknown) => {
       assertTrustedAppRendererEvent(event);
@@ -10535,6 +10782,142 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions)
         throwIpcError('INVALID_PARAMS', 'botId + inboxItemId required');
       }
       await sessionEventsForRestore.retryInboxItem(botId, inboxItemId);
+    },
+  );
+  ipcMain.handle(MAKER_INVOKE.BOT_GROUP_LIST, async (event, botId?: unknown) => {
+    if (!isDeviceLinkInvoke()) assertTrustedAppRendererEvent(event);
+    if (botId !== undefined && (typeof botId !== 'string' || !botId.trim())) {
+      throwIpcError('INVALID_PARAMS', 'botId must be a non-empty string');
+    }
+    return botGroupChatServiceHolder!.listRooms(
+      typeof botId === 'string' ? botId : undefined,
+    );
+  });
+  ipcMain.handle(MAKER_INVOKE.BOT_GROUP_GET, async (event, roomId: unknown) => {
+    if (!isDeviceLinkInvoke()) assertTrustedAppRendererEvent(event);
+    if (typeof roomId !== 'string' || !roomId.trim()) {
+      throwIpcError('INVALID_PARAMS', 'roomId required');
+    }
+    return botGroupChatServiceHolder!.loadRoom(roomId);
+  });
+  ipcMain.handle(MAKER_INVOKE.BOT_GROUP_CREATE, async (event, input: unknown) => {
+    if (!isDeviceLinkInvoke()) assertTrustedAppRendererEvent(event);
+    if (!input || typeof input !== 'object' || Array.isArray(input)) {
+      throwIpcError('INVALID_PARAMS', 'group input must be an object');
+    }
+    const value = input as Record<string, unknown>;
+    if (typeof value.name !== 'string' || !value.name.trim()) {
+      throwIpcError('INVALID_PARAMS', 'group name required');
+    }
+    if (
+      !Array.isArray(value.memberBotIds)
+      || value.memberBotIds.length < 2
+      || value.memberBotIds.length > 6
+      || value.memberBotIds.some((item) => typeof item !== 'string' || !item.trim())
+      || new Set(value.memberBotIds).size !== value.memberBotIds.length
+    ) {
+      throwIpcError('INVALID_PARAMS', 'group requires 2-6 unique Bot ids');
+    }
+    if (value.id !== undefined && (typeof value.id !== 'string' || !value.id.trim())) {
+      throwIpcError('INVALID_PARAMS', 'group id must be a non-empty string');
+    }
+    return botGroupChatServiceHolder!.createRoom({
+      ...(typeof value.id === 'string' ? { id: value.id } : {}),
+      name: value.name,
+      memberBotIds: value.memberBotIds as string[],
+    });
+  });
+  ipcMain.handle(
+    MAKER_INVOKE.BOT_GROUP_UPDATE,
+    async (event, roomId: unknown, patch: unknown) => {
+      if (!isDeviceLinkInvoke()) assertTrustedAppRendererEvent(event);
+      if (typeof roomId !== 'string' || !roomId.trim()) {
+        throwIpcError('INVALID_PARAMS', 'roomId required');
+      }
+      if (!patch || typeof patch !== 'object' || Array.isArray(patch)) {
+        throwIpcError('INVALID_PARAMS', 'group identity patch must be an object');
+      }
+      const value = patch as Record<string, unknown>;
+      if (value.name === undefined && value.avatar === undefined) {
+        throwIpcError('INVALID_PARAMS', 'group identity patch is empty');
+      }
+      if (
+        value.name !== undefined
+        && (typeof value.name !== 'string' || !value.name.trim() || value.name.trim().length > 120)
+      ) {
+        throwIpcError('INVALID_PARAMS', 'group name must be 1-120 characters');
+      }
+      if (
+        value.avatar !== undefined
+        && (typeof value.avatar !== 'string' || !value.avatar.trim() || value.avatar.trim().length > 16)
+      ) {
+        throwIpcError('INVALID_PARAMS', 'group avatar must be 1-16 characters');
+      }
+      return botGroupChatServiceHolder!.updateRoomIdentity(roomId, {
+        ...(typeof value.name === 'string' ? { name: value.name } : {}),
+        ...(typeof value.avatar === 'string' ? { avatar: value.avatar } : {}),
+      });
+    },
+  );
+  ipcMain.handle(MAKER_INVOKE.BOT_GROUP_ARCHIVE, async (event, roomId: unknown) => {
+    if (!isDeviceLinkInvoke()) assertTrustedAppRendererEvent(event);
+    if (typeof roomId !== 'string' || !roomId.trim()) {
+      throwIpcError('INVALID_PARAMS', 'roomId required');
+    }
+    return botGroupChatServiceHolder!.archiveRoom(roomId);
+  });
+  ipcMain.handle(
+    MAKER_INVOKE.BOT_GROUP_SEND,
+    async (event, roomId: unknown, text: unknown, rawOptions?: unknown) => {
+      if (!isDeviceLinkInvoke()) assertTrustedAppRendererEvent(event);
+      if (typeof roomId !== 'string' || !roomId.trim()) {
+        throwIpcError('INVALID_PARAMS', 'roomId required');
+      }
+      if (typeof text !== 'string') throwIpcError('INVALID_PARAMS', 'text required');
+      if (rawOptions !== undefined && (!rawOptions || typeof rawOptions !== 'object' || Array.isArray(rawOptions))) {
+        throwIpcError('INVALID_PARAMS', 'Bot group send options must be an object');
+      }
+      const options = (rawOptions ?? {}) as {
+        threadId?: unknown;
+        files?: unknown;
+      };
+      if (
+        options.threadId !== undefined
+        && (typeof options.threadId !== 'string' || !options.threadId.trim() || options.threadId.length > 256)
+      ) {
+        throwIpcError('INVALID_PARAMS', 'invalid Bot group thread id');
+      }
+      if (options.files !== undefined && !Array.isArray(options.files)) {
+        throwIpcError('INVALID_PARAMS', 'Bot group files must be an array');
+      }
+      if (Array.isArray(options.files) && options.files.length > 20) {
+        throwIpcError('INVALID_PARAMS', 'too many Bot group files');
+      }
+      if (isDeviceLinkInvoke() && Array.isArray(options.files) && options.files.length > 0) {
+        throwIpcError('UNSUPPORTED_CAPABILITY', 'Remote Bot group attachments require media transfer support');
+      }
+      const files = Array.isArray(options.files)
+        ? options.files.filter((file): file is NonNullable<AgentInputQueuedMessage['files']>[number] =>
+            Boolean(
+              file
+              && typeof file === 'object'
+              && typeof (file as { id?: unknown }).id === 'string'
+              && typeof (file as { name?: unknown }).name === 'string'
+              && typeof (file as { path?: unknown }).path === 'string'
+              && typeof (file as { category?: unknown }).category === 'string'
+              && typeof (file as { mimeType?: unknown }).mimeType === 'string',
+            ))
+        : undefined;
+      if (Array.isArray(options.files) && files?.length !== options.files.length) {
+        throwIpcError('INVALID_PARAMS', 'invalid Bot group file');
+      }
+      if (!text.trim() && !files?.length) {
+        throwIpcError('INVALID_PARAMS', 'text or files required');
+      }
+      return botGroupChatServiceHolder!.postUserMessage(roomId, text, {
+        ...(typeof options.threadId === 'string' ? { threadId: options.threadId } : {}),
+        ...(files?.length ? { files } : {}),
+      });
     },
   );
 
@@ -10860,23 +11243,55 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions)
     persistedContent: string;
     clientId: string;
     meta: NonNullable<Awaited<ReturnType<typeof maker.getSessionMeta>>>;
+    files?: AgentInputQueuedMessage['files'];
     origin?: AgentInputQueuedMessage['origin'];
   }): Promise<AgentInputQueuedMessage> {
     const createOpts = await buildCreateOptsForQueuedSession(params.targetSessionId, params.meta);
+    const imageAttachments: NonNullable<AgentInputQueuedMessage['chatMessage']['images']> = [];
+    for (const file of params.files ?? []) {
+      if (file.category !== 'image') continue;
+      if (file.url) {
+        imageAttachments.push({
+          url: file.url,
+          mimeType: file.mimeType,
+          originalName: file.originalName ?? file.name,
+        });
+        continue;
+      }
+      if (file.base64) {
+        imageAttachments.push({
+          base64: file.base64,
+          mimeType: file.mimeType,
+          originalName: file.originalName ?? file.name,
+        });
+      }
+    }
+    const fileAttachments = params.files?.flatMap((file) =>
+      file.category !== 'image' && file.path ? [{ name: file.name, path: file.path }] : []);
+    const persistedContent = params.files?.length
+      ? JSON.stringify({
+          text: params.persistedContent,
+          images: imageAttachments.filter((image) => 'url' in image),
+          files: fileAttachments,
+        })
+      : params.persistedContent;
     return {
       clientId: params.clientId,
       text: params.message,
-      persistedContent: params.persistedContent,
+      persistedContent,
       model: createOpts.model,
       effort: createOpts.effort ?? '',
       permissionMode: permissionModeOrAsk(createOpts.permissionMode),
       workingDir: createOpts.workingDir,
       vendorOptions: createOpts.vendorOptions,
+      ...(params.files?.length ? { files: params.files } : {}),
       chatMessage: {
         clientId: params.clientId,
         role: 'user',
         content: params.persistedContent,
         createdAt: new Date().toISOString(),
+        ...(imageAttachments.length ? { images: imageAttachments } : {}),
+        ...(fileAttachments?.length ? { files: fileAttachments } : {}),
       },
       createOpts,
       ...(params.origin ? { origin: params.origin } : {}),
@@ -12241,9 +12656,7 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions)
     if (typeof sessionId !== 'string') return await sendToAgentAcceptedUnlocked(...args);
     await assertReviewExternalInputAllowed(sessionId);
     const compactedRuntime = maker.getSession(sessionId);
-    if (compactedRuntime && botCompactRuntimeRefreshCoordinator.hasPending(sessionId)) {
-      await botCompactRuntimeRefreshCoordinator.attempt(compactedRuntime);
-    }
+    if (compactedRuntime) await refreshBotCapabilityEpochBeforeSend(compactedRuntime);
     return await withSendToSessionLock(sessionId, async () => {
       const [botInput] = await getDbClient()
         .drizzle.select({

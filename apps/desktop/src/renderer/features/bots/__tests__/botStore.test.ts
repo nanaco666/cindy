@@ -3,9 +3,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   addBotProfile,
   addBotProfileAndWait,
+  duplicateBotProfile,
   getBotProfiles,
   removeBotProfile,
   setCanonicalBotSession,
+  setBotHidden,
+  setBotPinned,
   updateBotProfile,
 } from '../botStore';
 import { getDefaultModelForVendor } from '@/lib/modelDefinitions';
@@ -57,6 +60,105 @@ describe('bot profile store', () => {
     // 产品裁决 2026-08-18:默认放手做;记忆恒开。
     expect(bot.capabilities.permissions).toBe('trusted');
     expect(bot.capabilities.memory).toBe(true);
+  });
+
+  it('persists Hide and Pin as roster metadata without changing lifecycle status', async () => {
+    const original = addBotProfile({ name: 'Roster Bot', channel: 'local', description: '' });
+    createdIds.push(original.id);
+    let persisted = { ...original, status: 'active' as const, hiddenAt: null as number | null, pinnedAt: null as number | null };
+    const update = vi.fn(async (input: { id: string; hidden?: boolean; pinned?: boolean }) => {
+      persisted = {
+        ...persisted,
+        ...(input.hidden !== undefined ? { hiddenAt: input.hidden ? 20 : null } : {}),
+        ...(input.pinned !== undefined ? { pinnedAt: input.pinned ? 30 : null } : {}),
+      };
+      return persisted;
+    });
+    const storage = new Map<string, string>();
+    vi.stubGlobal('window', {
+      electronAPI: { localDb: { bots: { update } } },
+      localStorage: {
+        getItem: (key: string) => storage.get(key) ?? null,
+        setItem: (key: string, value: string) => storage.set(key, value),
+        removeItem: (key: string) => storage.delete(key),
+      },
+    });
+    try {
+      await setBotHidden(original.id, true);
+      await setBotPinned(original.id, true);
+      expect(update).toHaveBeenNthCalledWith(1, { id: original.id, hidden: true });
+      expect(update).toHaveBeenNthCalledWith(2, { id: original.id, pinned: true });
+      expect(getBotProfiles().find((item) => item.id === original.id)).toMatchObject({
+        status: 'active',
+        hiddenAt: 20,
+        pinnedAt: 30,
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('duplicates identity, capabilities, Skills, and appearance without copying chat ownership', async () => {
+    const source = addBotProfile({
+      name: 'Researcher',
+      channel: 'local',
+      description: 'Find evidence',
+      identitySource: '# SOUL\nResearch carefully.',
+      userContextSource: '# USER\nChris',
+      avatar: '🔎',
+      avatarColor: 'blue',
+      skills: ['web-research'],
+      capabilities: { automation: true },
+    });
+    source.hiddenAt = 10;
+    source.pinnedAt = 11;
+    source.canonicalSessionId = 'source-chat';
+    source.sessions = [{
+      id: 'source-chat', title: 'Researcher', kind: 'chat', channel: 'local', updatedAt: 12,
+    }];
+    createdIds.push(source.id);
+    const create = vi.fn(async (input: Record<string, unknown>) => ({
+      ...source,
+      id: String(input.id),
+      name: String(input.name),
+      hiddenAt: null,
+      pinnedAt: null,
+      canonicalSessionId: undefined,
+      sessions: [],
+    }));
+    const storage = new Map<string, string>();
+    vi.stubGlobal('window', {
+      electronAPI: { localDb: { bots: { create } } },
+      localStorage: {
+        getItem: (key: string) => storage.get(key) ?? null,
+        setItem: (key: string, value: string) => storage.set(key, value),
+        removeItem: (key: string) => storage.delete(key),
+      },
+    });
+    try {
+      const copy = await duplicateBotProfile(source.id);
+      createdIds.push(copy.id);
+      expect(copy).toMatchObject({
+        name: 'Researcher-2',
+        description: 'Find evidence',
+        identitySource: '# SOUL\nResearch carefully.',
+        userContextSource: '# USER\nChris',
+        avatar: '🔎',
+        avatarColor: 'blue',
+        skills: ['web-research'],
+        hiddenAt: null,
+        pinnedAt: null,
+        sessions: [],
+      });
+      expect(copy.canonicalSessionId).toBeUndefined();
+      expect(create).toHaveBeenCalledWith(expect.objectContaining({
+        name: 'Researcher-2',
+        identitySource: '# SOUL\nResearch carefully.',
+        capabilities: expect.objectContaining({ automation: true }),
+      }));
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it('replaces the optimistic Bot with the authoritative profile returned by main', async () => {

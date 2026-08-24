@@ -116,6 +116,7 @@ export function InteractionPanel({
   onPlanViewerStateChange,
   onError,
   readOnlyReason,
+  resolveDecision,
 }: {
   safeAreaBottomInset?: number;
   /**
@@ -139,6 +140,8 @@ export function InteractionPanel({
   planViewerState?: MobilePlanViewerState;
   onPlanViewerStateChange?(state: MobilePlanViewerState): void;
   readOnlyReason?: string | null;
+  /** Reuse the existing interaction UI against a non-session projection. */
+  resolveDecision?(requestId: string, decision: Record<string, unknown>): Promise<void>;
   onError(message: string | null): void;
 }) {
   const styles = useThemedStyles(makeStyles);
@@ -306,6 +309,7 @@ export function InteractionPanel({
         planViewerState={planViewerState}
         onPlanViewerStateChange={onPlanViewerStateChange}
         onError={onError}
+        resolveDecision={resolveDecision}
         touchLayout={touchLayout}
       />
     </View>
@@ -424,6 +428,7 @@ function InteractionItem({
   planViewerState,
   onPlanViewerStateChange,
   onError,
+  resolveDecision,
   touchLayout,
 }: {
   deviceId: string;
@@ -432,6 +437,7 @@ function InteractionItem({
   planViewerState?: MobilePlanViewerState;
   onPlanViewerStateChange?(state: MobilePlanViewerState): void;
   onError(message: string | null): void;
+  resolveDecision?(requestId: string, decision: Record<string, unknown>): Promise<void>;
   touchLayout: InteractionTouchLayout;
 }) {
   const { t } = useTranslation();
@@ -461,13 +467,19 @@ function InteractionItem({
     // 登记在途抑制,防权威快照 / push 重放在被控端确认前把同卡灌回闪回;保留
     // item 快照,真失败时原卡复原供重试。
     const itemSnapshot = item;
-    if (optimisticDismiss) remoteSessionStore.beginOptimisticInteractionDismiss(sessionId, currentRequestId);
+    if (!resolveDecision && optimisticDismiss) {
+      remoteSessionStore.beginOptimisticInteractionDismiss(sessionId, currentRequestId);
+    }
     try {
-      await resolveInteractionResilient(maker, sessionId, currentRequestId, decision);
+      if (resolveDecision) {
+        await resolveDecision(currentRequestId, decision);
+      } else {
+        await resolveInteractionResilient(maker, sessionId, currentRequestId, decision);
+      }
       if (kind === 'plan_review') clearPlanReviewDraft(currentRequestId);
-      if (optimisticDismiss) {
+      if (!resolveDecision && optimisticDismiss) {
         remoteSessionStore.settleOptimisticInteractionDismiss(sessionId, currentRequestId, { kind: 'confirmed' });
-      } else if (options.resolvedRevision !== undefined) {
+      } else if (!resolveDecision && options.resolvedRevision !== undefined) {
         // 非乐观路径也必须挡「早发晚到」:提交前发出的慢快照仍带着这张卡,dismiss
         // push 先到时它会把已取消的卡写回来(#530 review P1)。这里只把 revision
         // 下限抬过本次决定作用的那份 —— 决定没生效时被控端会推更高 revision,
@@ -481,7 +493,7 @@ function InteractionItem({
     } catch (err) {
       // resolveInteractionResilient 已带弱网重试 + pending 列表权威分辨,走到
       // 这里就是决定确未生效:复原卡片 + 报错。
-      if (optimisticDismiss) {
+      if (!resolveDecision && optimisticDismiss) {
         remoteSessionStore.settleOptimisticInteractionDismiss(sessionId, currentRequestId, {
           kind: 'restore',
           item: itemSnapshot,

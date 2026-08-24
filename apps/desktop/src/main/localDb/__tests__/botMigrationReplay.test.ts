@@ -19,7 +19,12 @@ import { listMigrations, runMigrationReplay } from '../migrationRunner';
  */
 function findBotMigrations(drizzleDir: string): string[] {
   const found = listMigrations(drizzleDir)
-    .filter((migration) => readFileSync(migration.sqlPath, 'utf8').includes('CREATE TABLE `bot_profiles`'))
+    .filter((migration) => {
+      const sql = readFileSync(migration.sqlPath, 'utf8');
+      return sql.includes('CREATE TABLE `bot_profiles`')
+        || sql.includes('CREATE TABLE `bot_group_rooms`')
+        || sql.includes('ALTER TABLE `bot_profiles` ADD `attention_reason`');
+    })
     .map((migration) => migration.fileName);
   if (found.length === 0) {
     throw new Error('找不到建 bot_profiles 的迁移 —— 伙伴迁移链的回归用例失去依据');
@@ -28,6 +33,9 @@ function findBotMigrations(drizzleDir: string): string[] {
 }
 
 const MIGRATIONS = findBotMigrations(path.resolve(__dirname, '../../../..', 'drizzle'));
+const BOT_PRODUCTIZATION_START = listMigrations(path.resolve(__dirname, '../../../..', 'drizzle'))
+  .find((migration) => readFileSync(migration.sqlPath, 'utf8').includes('CREATE TABLE `bot_group_rooms`'))
+  ?.seq;
 const cleanups: Array<() => void> = [];
 const canReplayPublishedLineage = process.platform === 'darwin' || process.platform === 'win32';
 const lineageIt = canReplayPublishedLineage ? it : it.skip;
@@ -126,6 +134,32 @@ function runBotMigrations(db: ReturnType<typeof createBetterSqliteDatabase>): vo
   }
 }
 
+function runPublishedMigrationsBeforeBotProductization(
+  db: ReturnType<typeof createBetterSqliteDatabase>,
+): void {
+  if (BOT_PRODUCTIZATION_START == null) {
+    throw new Error('找不到 Bot 产品化迁移 —— 旧库兼容回放失去边界');
+  }
+  const desktopRoot = path.resolve(__dirname, '../../../..');
+  const stagedDir = mkdtempSync(path.join(tmpdir(), 'cindy-bot-pre-productization-'));
+  try {
+    for (const migration of listMigrations(path.join(desktopRoot, 'drizzle'))) {
+      if (migration.seq < 92 || migration.seq >= BOT_PRODUCTIZATION_START) continue;
+      copyFileSync(migration.sqlPath, path.join(stagedDir, migration.fileName));
+      if (migration.tsScriptPath) {
+        mkdirSync(path.join(stagedDir, 'scripts'), { recursive: true });
+        copyFileSync(
+          migration.tsScriptPath,
+          path.join(stagedDir, 'scripts', path.basename(migration.tsScriptPath)),
+        );
+      }
+    }
+    runMigrationReplay(db, { drizzleDir: stagedDir });
+  } finally {
+    rmSync(stagedDir, { recursive: true, force: true });
+  }
+}
+
 function columns(db: ReturnType<typeof createBetterSqliteDatabase>, table: string): string[] {
   return db
     .prepare(`PRAGMA table_info('${table}')`)
@@ -198,11 +232,65 @@ describe('Bot release migrations', () => {
     ).toEqual(['legacy-telegram']);
   });
 
-  it('keeps 0092 and 0093 additive so an older IM reader sees no legacy table rewrite', () => {
+  lineageIt('upgrades a pre-productization Bot database idempotently without changing its real task', () => {
+    const db = createPublishedV91Db();
+    runPublishedMigrationsBeforeBotProductization(db);
+    db.exec(`
+      INSERT INTO sessions
+        (id, title, working_dir, status, source, extra_dirs, created_at, updated_at)
+      VALUES ('canonical-old', 'Release Bot', '/repo/release', 'active', 'bot', '[]', 30, 31);
+      INSERT INTO bot_profiles
+        (id, display_name, canonical_session_id, created_at, updated_at)
+      VALUES ('bot-old', 'Release Bot', 'canonical-old', 32, 33);
+      INSERT INTO bot_session_links
+        (id, bot_id, session_id, profile_version, role, created_at)
+      VALUES ('canonical-link-old', 'bot-old', 'canonical-old', 1, 'canonical', 34);
+      INSERT INTO messages
+        (id, client_id, session_id, role, content, agent_kind, created_at)
+      VALUES ('message-old', 'client-old', 'canonical-old', 'user', 'keep this task', 'cc', 35);
+    `);
+    const before = {
+      profile: db.prepare(`SELECT * FROM bot_profiles WHERE id = 'bot-old'`).get(),
+      link: db.prepare(`SELECT * FROM bot_session_links WHERE id = 'canonical-link-old'`).get(),
+      session: db.prepare(`SELECT * FROM sessions WHERE id = 'canonical-old'`).get(),
+      message: db.prepare(`SELECT * FROM messages WHERE id = 'message-old'`).get(),
+    };
+    const desktopRoot = path.resolve(__dirname, '../../../..');
+
+    runMigrationReplay(db, { drizzleDir: path.join(desktopRoot, 'drizzle') });
+    const afterFirstUpgrade = {
+      profile: db.prepare(`SELECT * FROM bot_profiles WHERE id = 'bot-old'`).get(),
+      link: db.prepare(`SELECT * FROM bot_session_links WHERE id = 'canonical-link-old'`).get(),
+      session: db.prepare(`SELECT * FROM sessions WHERE id = 'canonical-old'`).get(),
+      message: db.prepare(`SELECT * FROM messages WHERE id = 'message-old'`).get(),
+    };
+    expect(afterFirstUpgrade.link).toEqual(before.link);
+    expect(afterFirstUpgrade.session).toEqual(before.session);
+    expect(afterFirstUpgrade.message).toEqual(before.message);
+    expect(afterFirstUpgrade.profile).toMatchObject(before.profile as Record<string, unknown>);
+    expect(afterFirstUpgrade.profile).toMatchObject({
+      hidden_at: null,
+      pinned_at: null,
+      attention_reason: null,
+      attention_at: null,
+    });
+
+    runMigrationReplay(db, { drizzleDir: path.join(desktopRoot, 'drizzle') });
+    expect({
+      profile: db.prepare(`SELECT * FROM bot_profiles WHERE id = 'bot-old'`).get(),
+      link: db.prepare(`SELECT * FROM bot_session_links WHERE id = 'canonical-link-old'`).get(),
+      session: db.prepare(`SELECT * FROM sessions WHERE id = 'canonical-old'`).get(),
+      message: db.prepare(`SELECT * FROM messages WHERE id = 'message-old'`).get(),
+    }).toEqual(afterFirstUpgrade);
+  });
+
+  it('keeps every Bot migration additive so an older IM reader sees no legacy table rewrite', () => {
     const desktopRoot = path.resolve(__dirname, '../../../..');
     for (const migration of MIGRATIONS) {
       const sql = readFileSync(path.join(desktopRoot, 'drizzle', migration), 'utf-8');
-      expect(sql).not.toMatch(/^\s*(?:ALTER|DROP|UPDATE|DELETE)\b/im);
+      expect(sql).not.toMatch(/^\s*(?:DROP|UPDATE|DELETE)\b/im);
+      expect(sql).not.toMatch(/^\s*ALTER TABLE `(?!bot_)[^`]+`\b/im);
+      expect(sql).not.toMatch(/^\s*ALTER TABLE `bot_[^`]+` (?!ADD\b)/im);
     }
   });
 
@@ -225,6 +313,18 @@ describe('Bot release migrations', () => {
       expect.arrayContaining(['subscription_id', 'processing_session_id', 'result_delivery_status']),
     );
     expect(indexExists(db, 'uniq_bot_session_links_route')).toBe(true);
+    expect(columns(db, 'bot_group_rooms')).toEqual(
+      expect.arrayContaining(['avatar', 'room_session_id', 'epoch', 'running', 'needs_user']),
+    );
+    expect(columns(db, 'bot_group_members')).toEqual(
+      expect.arrayContaining(['member_session_id', 'roster_order', 'watermark']),
+    );
+    expect(indexExists(db, 'uniq_bot_group_rooms_session')).toBe(true);
+    expect(indexExists(db, 'uniq_bot_group_members_room_bot')).toBe(true);
+    expect(indexExists(db, 'uniq_bot_group_members_session')).toBe(true);
+    expect(columns(db, 'bot_profiles')).toEqual(
+      expect.arrayContaining(['hidden_at', 'pinned_at', 'attention_reason', 'attention_at']),
+    );
     expect(indexExists(db, 'uniq_bot_workspace_leases_active_binding_key')).toBe(true);
     expect(indexExists(db, 'uniq_bot_inbox_subscription_event')).toBe(true);
     expect(indexExists(db, 'uniq_bot_session_event_ledger_key')).toBe(true);

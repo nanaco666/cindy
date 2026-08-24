@@ -50,6 +50,7 @@ const h = vi.hoisted(() => ({
   } | null),
   ensureDialogue: vi.fn((sessionId: string) => `/tmp/cindy-bot-test/${sessionId}`),
   searchConversations: vi.fn(),
+  requestRuntimeRefresh: vi.fn(),
 }));
 
 vi.mock('node:fs/promises', () => ({ default: { rm: h.remove } }));
@@ -114,6 +115,9 @@ vi.mock('../../../maker-ipc/botRemoteWorkspaceService.js', () => ({
 }));
 vi.mock('../../conversationSearch.js', () => ({
   searchConversations: h.searchConversations,
+}));
+vi.mock('../../../maker-ipc/botRuntimeEpochRefreshSignal.js', () => ({
+  requestBotRuntimeEpochRefresh: h.requestRuntimeRefresh,
 }));
 
 import { registerBotIpc } from '../bots';
@@ -228,6 +232,10 @@ function createDb(): void {
       avatar TEXT DEFAULT '🤖' NOT NULL,
       avatar_color TEXT DEFAULT 'violet' NOT NULL,
       status TEXT DEFAULT 'active' NOT NULL,
+      hidden_at INTEGER,
+      pinned_at INTEGER,
+      attention_reason TEXT,
+      attention_at INTEGER,
       current_version INTEGER DEFAULT 1 NOT NULL,
       canonical_session_id TEXT REFERENCES sessions(id) ON DELETE SET NULL,
       created_at INTEGER NOT NULL,
@@ -699,6 +707,31 @@ describe('Bot canonical Session lifecycle', () => {
     });
   });
 
+  it('projects durable typed attention into Bot list and health', async () => {
+    await invoke('local-db:bots:create-canonical-session', {
+      botId: 'bot-1',
+      expectedCanonicalSessionId: null,
+      expectedProfileVersion: 1,
+    });
+    h.sqlite!.prepare(`UPDATE bot_profiles
+      SET attention_reason = 'provider_quota_limit', attention_at = 42
+      WHERE id = 'bot-1'`).run();
+
+    const [profile] = await invoke('local-db:bots:list', undefined);
+    expect(profile).toMatchObject({
+      id: 'bot-1',
+      failureReason: 'provider_quota_limit',
+      needsAttention: true,
+    });
+    const health = await invoke('local-db:bots:health', 'bot-1');
+    expect(health).toMatchObject({
+      failureReason: 'provider_quota_limit',
+      needsAttention: true,
+      status: 'attention',
+      issues: expect.arrayContaining([{ code: 'durable-attention' }]),
+    });
+  });
+
   it('resolves Bot history ids in main and never accepts a renderer-owned search scope', async () => {
     const created = await invoke('local-db:bots:create-canonical-session', {
       botId: 'bot-1',
@@ -786,6 +819,10 @@ describe('Bot canonical Session lifecycle', () => {
         { event_type: 'runtime-applied' },
       ]),
     );
+    expect(
+      h.sqlite!.prepare('SELECT attention_reason, attention_at FROM bot_profiles WHERE id = ?')
+        .get('bot-1'),
+    ).toEqual({ attention_reason: null, attention_at: null });
   });
 
   it('freezes Bot, project, and USER memory references into the exact runtime snapshot', async () => {
@@ -1083,7 +1120,7 @@ describe('Bot canonical Session lifecycle', () => {
     });
   });
 
-  it('freezes Skill content for a task and requires Renew when the resource changes', async () => {
+  it('refreshes canonical Skill resources in place when their fingerprint changes', async () => {
     await invoke('local-db:bots:update', {
       id: 'bot-1',
       capabilities: { skills: ['release'], skillMode: 'allowlist' },
@@ -1118,6 +1155,7 @@ describe('Bot canonical Session lifecycle', () => {
       listSkills,
       readSkillSource: async () => '# Release\nVersion one',
     });
+    expect(resumed?.runtimeEpochChanged).toBe(false);
     expect(resumed?.resolvedSkillEntries).toEqual([
       expect.objectContaining({
         runtimeCommandName: 'skill:release',
@@ -1125,10 +1163,21 @@ describe('Bot canonical Session lifecycle', () => {
       }),
     ]);
 
-    await expect(hydrateBotProfileRuntime(makeOpts(), {
+    const refreshed = await hydrateBotProfileRuntime(makeOpts(), {
       listSkills,
       readSkillSource: async () => '# Release\nVersion two',
-    })).rejects.toMatchObject({ code: 'BOT_RUNTIME_RESOURCE_DRIFT' });
+    });
+    expect(refreshed?.sessionId).toBe(created.session.id);
+    expect(refreshed?.resolvedSkillEntries).toEqual([
+      expect.objectContaining({
+        runtimeCommandName: 'skill:release',
+        contentSha256: expect.stringMatching(/^[a-f0-9]{64}$/),
+      }),
+    ]);
+    expect(refreshed?.resolvedSkillEntries[0]?.contentSha256).not.toBe(
+      resumed?.resolvedSkillEntries[0]?.contentSha256,
+    );
+    expect(refreshed?.runtimeEpochChanged).toBe(true);
   });
 
   /*
@@ -1320,7 +1369,7 @@ describe('Bot canonical Session lifecycle', () => {
     });
   });
 
-  it('freezes secret-free MCP generations and Toolset versions for a task', async () => {
+  it('refreshes canonical MCP generations and Toolset versions in place', async () => {
     await invoke('local-db:bots:update', {
       id: 'bot-1',
       capabilities: {
@@ -1364,12 +1413,17 @@ describe('Bot canonical Session lifecycle', () => {
     await expect(hydrate('http:1000', '1.0.0')).resolves.toMatchObject({
       resolvedMcpServers: ['docs'],
       resolvedToolsets: ['contacts'],
+      runtimeEpochChanged: false,
     });
-    await expect(hydrate('http:1001', '1.0.0')).rejects.toMatchObject({
-      code: 'BOT_RUNTIME_RESOURCE_DRIFT',
+    await expect(hydrate('http:1001', '1.0.0')).resolves.toMatchObject({
+      sessionId: created.session.id,
+      resolvedMcpServers: ['docs'],
+      runtimeEpochChanged: true,
     });
-    await expect(hydrate('http:1000', '2.0.0')).rejects.toMatchObject({
-      code: 'BOT_RUNTIME_RESOURCE_DRIFT',
+    await expect(hydrate('http:1000', '2.0.0')).resolves.toMatchObject({
+      sessionId: created.session.id,
+      resolvedToolsets: ['contacts'],
+      runtimeEpochChanged: true,
     });
   });
 
@@ -1440,12 +1494,46 @@ describe('Bot canonical Session lifecycle', () => {
     expect(row.failureJson).not.toContain('private prompt contents');
   });
 
-  it('keeps the pinned ProfileVersion across resume and adopts the new version after in-place compact', async () => {
+  it('projects a user-actionable runtime failure onto the Bot Profile', async () => {
+    const created = await invoke('local-db:bots:create-canonical-session', {
+      botId: 'bot-1',
+      expectedCanonicalSessionId: null,
+      expectedProfileVersion: 1,
+    });
+    const snapshot = await hydrateBotProfileRuntime({
+      id: created.session.id,
+      agentKind: 'pi',
+      workingDir: created.session.workingDir,
+      workspaceKind: 'dialogue',
+      model: 'grok-4.5',
+      permissionMode: 'bypassPermissions',
+    });
+
+    await expect(markBotProfileRuntimeFailed(snapshot!, {
+      stage: 'agent-start',
+      error: new Error('Error code: 403 - invalid API key'),
+    })).resolves.toBe(true);
+    expect(
+      h.sqlite!.prepare('SELECT attention_reason AS reason, attention_at AS at FROM bot_profiles WHERE id = ?')
+        .get('bot-1'),
+    ).toEqual({ reason: 'provider_auth_or_access', at: expect.any(Number) });
+  });
+
+  it('advances only the canonical link and adopts the new ProfileVersion without replacing the Chat', async () => {
     await invoke('local-db:bots:create-canonical-session', {
       botId: 'bot-1',
       expectedCanonicalSessionId: null,
       expectedProfileVersion: 1,
     });
+    const initialSnapshot = await hydrateBotProfileRuntime({
+      id: 'session-1',
+      agentKind: 'pi',
+      workingDir: '/tmp/cindy-bot-test/session-1',
+      workspaceKind: 'dialogue',
+      model: 'grok-4.5',
+      permissionMode: 'bypassPermissions',
+    });
+    await markBotProfileRuntimeApplied(initialSnapshot!);
     await invoke('local-db:bots:update', {
       id: 'bot-1',
       identitySource: 'You are the version two identity.',
@@ -1461,30 +1549,75 @@ describe('Bot canonical Session lifecycle', () => {
       resumeSessionId: '/tmp/pi-session.jsonl',
     };
 
+    expect(
+      h.sqlite!
+        .prepare("SELECT profile_version FROM bot_session_links WHERE bot_id = 'bot-1' AND role = 'canonical'")
+        .pluck()
+        .get(),
+    ).toBe(2);
     const resumedSnapshot = await hydrateBotProfileRuntime(resumedOpts);
-    expect(resumedSnapshot?.profileVersion).toBe(1);
-    expect(resumedOpts.botProfilePrompt).toContain('You are Release Bot');
-    expect(resumedOpts.botProfilePrompt).not.toContain('version two identity');
+    expect(resumedSnapshot?.sessionId).toBe('session-1');
+    expect(resumedSnapshot?.profileVersion).toBe(2);
+    expect(resumedSnapshot?.runtimeEpochChanged).toBe(true);
+    expect(resumedOpts.botProfilePrompt).toBe('You are the version two identity.');
+    expect(resumedOpts.makerMemoryEnabled).toBe(false);
+    expect(h.requestRuntimeRefresh).toHaveBeenCalledWith('session-1', 'profile');
+  });
 
-    h.getSession.mockReturnValue({
-      capabilities: { manualCompact: { supported: true } },
-      compactSession: vi.fn(async () => ({})),
-    });
-    await invoke('local-db:bots:compact-canonical-session', {
+  it('keeps route and group Sessions pinned when the canonical capability epoch advances', async () => {
+    await invoke('local-db:bots:create-canonical-session', {
       botId: 'bot-1',
-      expectedCanonicalSessionId: 'session-1',
+      expectedCanonicalSessionId: null,
+      expectedProfileVersion: 1,
     });
-    const renewedOpts: MakerSessionCreateOpts = {
-      ...resumedOpts,
-      resumeSessionId: undefined,
-      botProfilePrompt: undefined,
-      botProfileContextPrompt: undefined,
-      botRuntimeProfile: undefined,
-    };
-    const renewedSnapshot = await hydrateBotProfileRuntime(renewedOpts);
-    expect(renewedSnapshot?.profileVersion).toBe(2);
-    expect(renewedOpts.botProfilePrompt).toBe('You are the version two identity.');
-    expect(renewedOpts.makerMemoryEnabled).toBe(false);
+    for (const [sessionId, role] of [
+      ['route-session', 'route'],
+      ['group-session', 'group'],
+    ] as const) {
+      h.sqlite!.prepare(`INSERT INTO sessions
+        (id, title, working_dir, workspace_kind, model, effort, permission_mode, status,
+         agent_kind, extra_dirs, source, created_at, updated_at)
+        VALUES (?, ?, '/tmp/cindy-bot-test', 'dialogue', 'grok-4.5', 'high',
+          'bypassPermissions', 'active', 'pi', '[]', 'bot', 1, 1)`)
+        .run(sessionId, sessionId);
+      h.sqlite!.prepare(`INSERT INTO bot_session_links
+        (id, bot_id, session_id, profile_version, role, route_key, created_at)
+        VALUES (?, 'bot-1', ?, 1, ?, ?, 1)`)
+        .run(`bot-1:${sessionId}`, sessionId, role, `${role}:fixture`);
+    }
+
+    await invoke('local-db:bots:update', {
+      id: 'bot-1',
+      identitySource: 'You are the version two identity.',
+      capabilities: { memory: false },
+    });
+
+    const links = h.sqlite!.prepare(`SELECT session_id AS sessionId,
+      profile_version AS profileVersion FROM bot_session_links
+      WHERE bot_id = 'bot-1' ORDER BY session_id`).all() as Array<{
+      sessionId: string;
+      profileVersion: number;
+    }>;
+    expect(links).toEqual([
+      { sessionId: 'group-session', profileVersion: 1 },
+      { sessionId: 'route-session', profileVersion: 1 },
+      { sessionId: 'session-1', profileVersion: 2 },
+    ]);
+
+    for (const sessionId of ['route-session', 'group-session']) {
+      const opts: MakerSessionCreateOpts = {
+        id: sessionId,
+        agentKind: 'pi',
+        workingDir: '/tmp/cindy-bot-test',
+        workspaceKind: 'dialogue',
+        model: 'grok-4.5',
+        permissionMode: 'bypassPermissions',
+      };
+      const snapshot = await hydrateBotProfileRuntime(opts);
+      expect(snapshot?.profileVersion).toBe(1);
+      expect(opts.botProfilePrompt).toContain('You are Release Bot');
+      expect(opts.botProfilePrompt).not.toContain('version two identity');
+    }
   });
 
   it('persists a default SOUL in the first ProfileVersion', () => {
@@ -3411,10 +3544,14 @@ describe('Bot canonical Session lifecycle', () => {
         ok: true as const,
         receipt: { channel: 'telegram', messageId: 'message-42' },
       });
+    const noteAttention = vi.fn(async () => ({ reason: 'runtime_offline' as const, changed: false }));
+    const clearAttention = vi.fn(async () => ({ reason: null, changed: true }));
     const service = createBotDeliveryOutboxService({
       deliver,
       now: () => currentTime,
       createId: () => `outbox-${++nextId}`,
+      noteAttention,
+      clearAttention,
     });
     try {
       const input = {
@@ -3433,6 +3570,11 @@ describe('Bot canonical Session lifecycle', () => {
       expect(duplicate).toEqual(first);
 
       await service.drain();
+      expect(noteAttention).toHaveBeenCalledWith({
+        botId: 'bot-1',
+        failure: { errorCode: 'AGENT_NOT_READY', message: 'temporarily offline' },
+        observedAt: 4_000,
+      });
       expect(
         h
           .sqlite!.prepare(
@@ -3443,6 +3585,7 @@ describe('Bot canonical Session lifecycle', () => {
 
       currentTime = 5_000;
       await service.drain();
+      expect(clearAttention).toHaveBeenCalledWith({ botId: 'bot-1', successfulAt: 5_000 });
       expect(
         h
           .sqlite!.prepare(

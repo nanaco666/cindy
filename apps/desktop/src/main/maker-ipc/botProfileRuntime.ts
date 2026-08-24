@@ -12,7 +12,6 @@ import {
 import { normalizeBotAutomation } from '../../shared/botAutomationCapability.js';
 import {
   buildBotContextTier,
-  buildBotRenewalHandoff,
   buildBotStableTier,
   buildBotVolatileTier,
   type BotPromptCapabilitySignals,
@@ -27,6 +26,10 @@ import {
   botSessionLinks,
   sessions,
 } from '../localDb/schema.js';
+import { clearBotAttention, noteBotAttention } from './botAttentionService.js';
+import { createLogger } from '../logger.js';
+
+const log = createLogger('maker-ipc:bot-profile-runtime');
 
 interface BotSkillCatalogItem {
   name: string;
@@ -76,6 +79,8 @@ export interface BotProfileRuntimeSnapshot {
   toolsetMode: 'inherit' | 'allowlist';
   sessionControlMode: BotSessionControlMode;
   memoryRefs: BotMemoryRuntimeRef[];
+  /** True when the permanent canonical Chat must rebuild its live runtime. */
+  runtimeEpochChanged: boolean;
 }
 
 export interface BotMemoryRuntimeRef {
@@ -115,17 +120,6 @@ export interface BotProfileRuntimeDeps {
   listTeammates?: (input: { excludeBotId: string }) => Promise<
     { id: string; name: string; description?: string | null }[]
   >;
-  /**
-   * 这个伙伴上一段已经翻篇的主对话 —— 换代时被降级成 history 的那一条。
-   *
-   * 只在**主对话**用:换代之后新会话是干净的,不知道昨天聊过什么。把上一段的
-   * 会话 id 交给它,用户说「上次那个」时它知道去哪儿翻(见 buildBotRenewalHandoff)。
-   * 返回 null 表示这个伙伴还没换过代,或者上一段是空的。
-   */
-  readPreviousCanonicalSession?: (input: {
-    botId: string;
-    currentSessionId: string;
-  }) => Promise<{ sessionId: string; hasMessages: boolean } | null>;
   /**
    * 全局 Maker Memory 引擎是否可用(host 注入 `makerMemory.isEnabled()`)。
    *
@@ -190,7 +184,7 @@ export async function markBotProfileRuntimeApplied(
   snapshot: BotProfileRuntimeSnapshot,
 ): Promise<boolean> {
   const appliedAt = Date.now();
-  return getDbClient().tx<boolean>('bots.finishRuntime', {
+  const transitioned = await getDbClient().tx<boolean>('bots.finishRuntime', {
     snapshotId: snapshot.snapshotId,
     botId: snapshot.botId,
     sessionId: snapshot.sessionId,
@@ -208,6 +202,15 @@ export async function markBotProfileRuntimeApplied(
         unavailableToolsets: snapshot.unavailableToolsets,
       }),
   });
+  if (transitioned) {
+    await clearBotAttention({ botId: snapshot.botId, successfulAt: appliedAt }).catch((error) => {
+      log.warn('Bot runtime attention clear failed', {
+        botId: snapshot.botId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
+  }
+  return transitioned;
 }
 
 export async function markBotProfileRuntimeFailed(
@@ -216,7 +219,7 @@ export async function markBotProfileRuntimeFailed(
 ): Promise<boolean> {
   const failedAt = Date.now();
   const failure = runtimeFailureMetadata(input.stage, input.error);
-  return getDbClient().tx<boolean>('bots.finishRuntime', {
+  const transitioned = await getDbClient().tx<boolean>('bots.finishRuntime', {
     snapshotId: snapshot.snapshotId,
     botId: snapshot.botId,
     sessionId: snapshot.sessionId,
@@ -231,6 +234,19 @@ export async function markBotProfileRuntimeFailed(
         ...failure,
       }),
   });
+  if (transitioned) {
+    await noteBotAttention({
+      botId: snapshot.botId,
+      failure: input.error,
+      observedAt: failedAt,
+    }).catch((error) => {
+      log.warn('Bot runtime attention update failed', {
+        botId: snapshot.botId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
+  }
+  return transitioned;
 }
 
 function parseObject(value: string | null | undefined): Record<string, unknown> {
@@ -490,7 +506,7 @@ export async function hydrateBotProfileRuntime(
     .innerJoin(sessions, eq(sessions.id, botSessionLinks.sessionId))
     .where(and(eq(botSessionLinks.sessionId, opts.id), eq(sessions.source, 'bot')))
     .limit(1);
-  if (!row || (row.role !== 'canonical' && row.role !== 'route')) return null;
+  if (!row || !['canonical', 'route', 'group'].includes(row.role)) return null;
   const [profile] = await db
     .select()
     .from(botProfiles)
@@ -815,22 +831,6 @@ export async function hydrateBotProfileRuntime(
   // 提示词与工具面必须同进同退 —— 只给其中一个就是开一张打不开的空头支票。
   if (botHomeDir) opts.extraDirs = withBotHomeDir(opts.extraDirs, botHomeDir);
   /*
-    换代交接:上一段主对话的 id。查失败一律当作「没有上一段」——
-    这一段是锦上添花,绝不能让它拦住会话启动。
-  */
-  let renewalHandoff = '';
-  if (deps.readPreviousCanonicalSession && opts.id && row.role === 'canonical') {
-    const previous = await deps
-      .readPreviousCanonicalSession({ botId: row.botId, currentSessionId: opts.id })
-      .catch(() => null);
-    if (previous) {
-      renewalHandoff = buildBotRenewalHandoff({
-        previousSessionId: previous.sessionId,
-        hadActivity: previous.hasMessages,
-      });
-    }
-  }
-  /*
     队友名册。只在委派能力真的开着时才查 —— 关着委派的伙伴看见一份自己用不上的
     名单,是纯粹的上下文浪费。查失败当作「没有队友」,绝不拦住会话启动。
   */
@@ -860,7 +860,6 @@ export async function hydrateBotProfileRuntime(
       // normal Session prompt plus their narrow task context.
       ...(row.role === 'canonical' ? [buildBotCapabilityContextPrompt()] : []),
       buildBotSessionControlContext(sessionControlMode),
-      renewalHandoff,
     ],
   };
   opts.botProfileContextPrompt = [
@@ -948,6 +947,26 @@ export async function hydrateBotProfileRuntime(
     toolsets: configuredToolsets,
     sessionControlMode,
   });
+  const runtimeEpochSha256 = createHash('sha256').update(JSON.stringify({
+    profileVersion: row.profileVersion,
+    profilePrompt: opts.botProfilePrompt ?? '',
+    contextPrompt: opts.botProfileContextPrompt ?? '',
+    userProfilePrompt: opts.botUserProfilePrompt ?? '',
+    skillResources: resolvedSkillEntries.map((entry) => ({
+      name: entry.runtimeCommandName?.trim() || entry.name.trim(),
+      path: entry.path?.trim() || null,
+      sha256: entry.contentSha256 ?? null,
+    })),
+    botOwnSkillResources: ownSkills.map((entry) => ({ name: entry.name, path: entry.path })),
+    mcpResources: resolvedMcpServers.map((name) => {
+      const entry = mcpCatalog.find((item) => item.name === name);
+      return { name, generation: entry?.generation ?? null };
+    }),
+    toolsetResources: resolvedToolsets.map((id) => {
+      const entry = toolsetCatalog.find((item) => item.id === id);
+      return { id, version: entry?.version ?? null };
+    }),
+  }), 'utf8').digest('hex');
   const resolvedJson = JSON.stringify({
     schemaVersion: 1,
     profile: profileProvenance,
@@ -979,21 +998,43 @@ export async function hydrateBotProfileRuntime(
       const entry = toolsetCatalog.find((item) => item.id === id);
       return { id, version: entry?.version ?? null };
     }),
+    runtimeEpoch: { sha256: runtimeEpochSha256 },
   });
   const [previousSnapshot] = await db
-    .select({ resolvedJson: botRuntimeSnapshots.resolvedJson })
+    .select({
+      profileVersion: botRuntimeSnapshots.profileVersion,
+      resolvedJson: botRuntimeSnapshots.resolvedJson,
+    })
     .from(botRuntimeSnapshots)
     .where(
       and(
         eq(botRuntimeSnapshots.sessionId, opts.id),
-        eq(botRuntimeSnapshots.profileVersion, row.profileVersion),
         inArray(botRuntimeSnapshots.status, ['applied', 'degraded']),
       ),
     )
     .orderBy(desc(botRuntimeSnapshots.preparedAt))
     .limit(1);
-  if (previousSnapshot) {
-    const previousResolved = parseObject(previousSnapshot.resolvedJson);
+  const previousResolved = previousSnapshot
+    ? parseObject(previousSnapshot.resolvedJson)
+    : null;
+  const previousRuntimeEpoch = previousResolved
+    ? parseObject(
+        typeof previousResolved.runtimeEpoch === 'string'
+          ? previousResolved.runtimeEpoch
+          : JSON.stringify(previousResolved.runtimeEpoch ?? {}),
+      )
+    : null;
+  const runtimeEpochChanged = row.role === 'canonical' && previousSnapshot !== undefined
+    ? previousSnapshot.profileVersion !== row.profileVersion
+      || previousRuntimeEpoch?.sha256 !== runtimeEpochSha256
+    : false;
+  if (previousSnapshot && row.role !== 'canonical') {
+    if (!previousResolved) {
+      throw Object.assign(
+        new Error('Bot runtime snapshot is invalid'),
+        { code: 'BOT_RUNTIME_SNAPSHOT_INVALID' },
+      );
+    }
     const currentResolved = parseObject(resolvedJson);
     for (const key of ['skillResources', 'mcpResources', 'toolsetResources'] as const) {
       if (Array.isArray(previousResolved[key])) {
@@ -1001,7 +1042,7 @@ export async function hydrateBotProfileRuntime(
         const currentFingerprint = JSON.stringify(currentResolved[key]);
         if (previousFingerprint === currentFingerprint) continue;
         throw Object.assign(
-          new Error('Bot runtime resources changed after this task was frozen; Renew the Bot task to apply the new versions'),
+          new Error('Bot runtime resources changed after this task was frozen'),
           { code: 'BOT_RUNTIME_RESOURCE_DRIFT' },
         );
       }
@@ -1059,5 +1100,6 @@ export async function hydrateBotProfileRuntime(
     toolsetMode,
     sessionControlMode,
     memoryRefs,
+    runtimeEpochChanged,
   };
 }

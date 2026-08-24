@@ -924,10 +924,10 @@ describe('TA 的日程 — schedule embedded without an automation precondition'
 
   /*
     芯片墙拆掉时,它身上两条与开关无关的信息不能跟着消失 —— 它们讲的是
-    「Profile 版本 vs 正在跑的任务」,和 Renew 按钮同属一件事,所以搬到了
+    「Profile 运行态 vs 正在跑的任务」,和上下文压缩同属一件事,所以搬到了
     「任务生命周期」。
   */
-  it('keeps the runtime-state pill and the "Renew to apply" note next to the Renew button', () => {
+  it('keeps the runtime-state pill and automatic next-turn refresh note by compaction', () => {
     renderSettings();
     fireEvent.click(screen.getByRole('button', { name: 'bots.advancedLinkLabel' }));
     const lifecycle = screen.getByText('bots.sessionLifecycleTitle').closest('section')!;
@@ -1192,10 +1192,9 @@ describe('Bot settings autosave', () => {
     expect(view.onBack).toHaveBeenCalledTimes(1);
   });
 
-  it('defers the "apply to current task" prompt to the moment the user leaves', async () => {
-    // The canonical chat is on v1 while the save produces v2: the pre-existing
-    // renew prompt still fires — but only at the exit boundary, so a background
-    // autosave never throws a modal over someone who is mid-sentence.
+  it('leaves settings directly after saving because capability epochs refresh automatically', async () => {
+    // The permanent canonical Chat keeps its Session id. Saving v2 must not
+    // make the user create another task or dismiss a Renew modal.
     mocks.updateBotProfile.mockImplementationOnce(async (_id, patch) => ({
       id: 'bot-1',
       currentVersion: 2,
@@ -1212,7 +1211,7 @@ describe('Bot settings autosave', () => {
     fireEvent.click(screen.getByRole('button', { name: 'bots.backToChat' }));
     await advance(0);
 
-    expect(screen.getByText('bots.profileApply.title')).toBeTruthy();
-    expect(view.onBack).not.toHaveBeenCalled();
+    expect(screen.queryByText('bots.profileApply.title')).toBeNull();
+    expect(view.onBack).toHaveBeenCalledTimes(1);
   });
 });

@@ -672,6 +672,7 @@ const fanOutBotAutomationChanged = createIpcFanOut('maker:bot-automation:changed
 const fanOutBotLifecycleChanged = createIpcFanOut('maker:bot-lifecycle:changed');
 const fanOutBotDeliveryChanged = createIpcFanOut('maker:bot-delivery:changed');
 const fanOutBotInboxChanged = createIpcFanOut('maker:bot-inbox:changed');
+const fanOutBotGroupChanged = createIpcFanOut('maker:bots:group-changed');
 const fanOutMakerPiPackagesChanged = createIpcFanOut('maker:pi-packages:changed');
 const fanOutMakerUsageTodaySpend = createIpcFanOut('usage:today-spend-changed'); // Claude USD
 const fanOutMakerUsageTodayTokens = createIpcFanOut('usage:today-tokens-changed'); // Codex token
@@ -5257,6 +5258,43 @@ contextBridge.exposeInMainWorld('electronAPI', {
       retry: (botId: string, inboxItemId: string): Promise<void> =>
         ipcRenderer.invoke('maker:bot-inbox:retry', botId, inboxItemId),
       onChanged: fanOutBotInboxChanged,
+    },
+    botGroups: {
+      list: (botId?: string): Promise<import('../shared/botGroupChat').BotGroupRoomProjection[]> =>
+        ipcRenderer.invoke('maker:bots:group-list', botId),
+      get: (roomId: string): Promise<import('../shared/botGroupChat').BotGroupRoomProjection | null> =>
+        ipcRenderer.invoke('maker:bots:group-get', roomId),
+      create: (input: {
+        id?: string;
+        name: string;
+        memberBotIds: string[];
+      }): Promise<import('../shared/botGroupChat').BotGroupRoomProjection> =>
+        ipcRenderer.invoke('maker:bots:group-create', input),
+      update: (
+        roomId: string,
+        patch: import('../shared/botGroupChat').BotGroupRoomIdentityPatch,
+      ): Promise<import('../shared/botGroupChat').BotGroupRoomProjection> =>
+        ipcRenderer.invoke('maker:bots:group-update', roomId, patch),
+      archive: (roomId: string): Promise<import('../shared/botGroupChat').BotGroupRoomProjection> =>
+        ipcRenderer.invoke('maker:bots:group-archive', roomId),
+      send: (
+        roomId: string,
+        text: string,
+        options?: import('../shared/botGroupChat').BotGroupRoomSendOptions,
+      ): Promise<import('../shared/botGroupChat').BotGroupRoomSendReceipt> =>
+        ipcRenderer.invoke('maker:bots:group-send', roomId, text, options),
+      resolveInteraction: (
+        roomId: string,
+        requestId: string,
+        decision: import('../shared/botGroupChat').BotGroupInteractionDecision,
+      ): Promise<void> =>
+        ipcRenderer.invoke(
+          'maker:bots:group-resolve-interaction',
+          roomId,
+          requestId,
+          decision,
+        ),
+      onChanged: fanOutBotGroupChanged,
     },
     botAutomations: {
       list: (botId: string): Promise<import('../shared/botAutomation').BotAutomation[]> =>

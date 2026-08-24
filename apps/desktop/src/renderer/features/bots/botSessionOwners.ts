@@ -12,6 +12,21 @@
 import type { BotSessionOwner } from '@/features/cc-agent/lib/projectGrouping';
 import type { BotProfile } from './botStore';
 
+/**
+ * Find the Bot that owns a real Cindy Session through the projected
+ * `bot_session_links` registry. The compatibility mirror on BotProfile is
+ * deliberately ignored: a stale mirror must never grant Bot-only UI or tools
+ * to an unrelated Session.
+ */
+export function findBotProfileForSession(
+  profiles: readonly BotProfile[],
+  sessionId: string,
+): BotProfile | undefined {
+  return profiles.find((profile) =>
+    profile.sessions.some((session) => session.id === sessionId),
+  );
+}
+
 export function buildBotSessionOwners(
   profiles: readonly BotProfile[],
 ): Map<string, BotSessionOwner> {
@@ -23,9 +38,8 @@ export function buildBotSessionOwners(
       avatar: profile.avatar,
       avatarColor: profile.avatarColor,
     };
-    // canonicalSessionId 与 sessions[] 通常重合,但投影迟到时前者可能先到 ——
-    // 两个都收,以先写入的为准(同一个伙伴,内容一样)。
-    if (profile.canonicalSessionId) map.set(profile.canonicalSessionId, owner);
+    // 归属只认 bot_session_links 的 sessions[] 投影。顶层
+    // canonicalSessionId 是旧数据迁移镜像，投影缺失时不能用它抢占一条普通任务。
     for (const session of profile.sessions) {
       if (session.id) map.set(session.id, owner);
     }

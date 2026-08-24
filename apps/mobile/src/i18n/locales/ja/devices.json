@@ -386,7 +386,22 @@
     "noDescription": "説明はまだありません",
     "openA11y": "仲間 {{name}} のメインタスクを開く",
     "unavailableA11y": "仲間 {{name}} は開けません：{{status}}",
-    "status": { "active": "稼働中", "paused": "一時停止中", "error": "対応が必要", "archived": "アーカイブ済み", "deleting": "削除中", "needsDesktop": "デスクトップで初期設定が必要" }
+    "status": { "active": "稼働中", "paused": "一時停止中", "error": "対応が必要", "archived": "アーカイブ済み", "deleting": "削除中", "needsDesktop": "デスクトップで初期設定が必要" },
+    "groups": {
+      "title": "仲間のグループチャット", "copy": "仲間同士で話し合い、仕事を引き継ぎ、補い合います", "openA11y": "仲間のグループチャットを開く",
+      "subtitle": "{{deviceName}} のグループチャット", "create": "グループを作成", "creating": "作成中…",
+      "defaultName": "新しい仲間グループ", "nameLabel": "グループ名", "namePlaceholder": "例：リリース作戦室",
+      "membersLabel": "2〜6 人を選択（{{count}} 人選択）", "memberCount": "{{count}} 人の仲間", "manage": "管理", "manageTitle": "グループチャット設定", "manageDescription": "グループの名前とアイコンを変更したり、読み取り専用の履歴としてアーカイブしたりできます。", "avatarLabel": "グループアイコン", "archive": "グループをアーカイブ", "archiveTitle": "このグループをアーカイブしますか？", "archiveDescription": "{{name}} は読み取り専用になります。実際の Cindy タスクとメッセージは履歴として残ります。", "saving": "保存中…",
+      "emptyTitle": "グループチャットはまだありません", "emptyCopy": "仲間を 2 人以上選んで作成してください。", "openRoomA11y": "グループチャット {{name}} を開く",
+      "roomTitle": "仲間のグループ", "roomEmptyTitle": "メッセージから始める", "roomEmptyCopy": "指名しないメッセージは全員に届きます。@名前 で特定の仲間だけを呼べます。",
+      "responding": "仲間が話し合っています…", "placeholder": "このグループにメッセージ…",
+      "replyThread": "この話題を続ける", "replyingThread": "この話題に返信中",
+      "interactionStale": "このリクエストは処理済みか、利用できなくなりました。",
+      "missingTitle": "このグループチャットは利用できません", "missingCopy": "アーカイブまたは削除された可能性があります。グループ一覧に戻ってください。",
+      "unsupportedTitle": "このデスクトップ版は遠隔グループチャットに対応していません", "unsupportedCopy": "このパソコンの Cindy を更新してください。既存の仲間とタスクには影響しません。",
+      "invalidResponse": "デスクトップから認識できないグループデータが返されました。",
+      "state": { "idle": "待機中", "running": "話し合い中", "needsUser": "確認が必要", "error": "エラー", "archived": "アーカイブ済み" }
+    }
   },
   "automations": {
     "heading": {

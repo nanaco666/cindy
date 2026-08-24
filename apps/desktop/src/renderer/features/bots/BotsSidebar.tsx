@@ -1,9 +1,16 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Archive, Bot, Plus } from 'lucide-react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { AlertTriangle, Archive, Bot, Copy, Eye, EyeOff, MessageCircleMore, MoreHorizontal, Pin, Plus, Search } from 'lucide-react';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 
 import { cn } from '@/lib/utils';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { useAgentIslandActivityMap } from '@/state/agentIslandActivity';
 import { useSidebarCollapsedState, useRegisterSidebarUpper } from '../feature-context';
 import type { BotInboxItemView } from '../../../shared/botSessionEvents';
@@ -15,7 +22,19 @@ import {
   formatBotUnreadBadge,
 } from './botListDisplay';
 import { subscribeBotReadState } from './botReadState';
-import { refreshBotProfiles, useBotProfiles, useBotUnreadCounts } from './botStore';
+import { botGroupRoomState } from './botGroupChatPresentation';
+import { useBotGroupRooms } from './botGroupStore';
+import { isBotActiveNow, partitionBotRoster } from './botRosterDisplay';
+import {
+  canonicalBotSessionId,
+  duplicateBotProfile,
+  refreshBotProfiles,
+  setBotHidden,
+  setBotPinned,
+  useBotProfiles,
+  useBotUnreadCounts,
+  type BotProfile,
+} from './botStore';
 
 /** Debounce for message-driven refreshes: one turn writes many rows. */
 const MESSAGE_REFRESH_DEBOUNCE_MS = 800;
@@ -32,14 +51,18 @@ const UNREAD_BADGE_CLASS =
 function BotsSidebarContent() {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const location = useLocation();
   const { botId } = useParams();
   const bots = useBotProfiles();
+  const groups = useBotGroupRooms();
   const unreadByBotId = useBotUnreadCounts();
-  const activeBots = bots.filter((bot) => bot.status !== 'archived');
+  const rosterBots = bots.filter((bot) => bot.status !== 'archived');
   const archivedBots = bots.filter((bot) => bot.status === 'archived');
   const collapsed = useSidebarCollapsedState();
   const [attentionByBotId, setAttentionByBotId] = useState<Record<string, number>>({});
-  const now = Date.now();
+  const [query, setQuery] = useState('');
+  const [showHidden, setShowHidden] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
 
   /*
     「正在输入…」的信号来源：灵动岛活动镜像(state/agentIslandActivity)。
@@ -58,14 +81,26 @@ function BotsSidebarContent() {
     通知的状态机，在这里再挂一份会把那些副作用发两遍。
   */
   const islandActivity = useAgentIslandActivityMap();
-  const isBotWorking = (bot: { canonicalSessionId?: string | null; sessions: Array<{ id: string }> }): boolean => {
+  const isBotWorking = (bot: BotProfile): boolean => {
     // 委派干活发生在子任务,不在主任务。只看 canonical 的话,目标伙伴侧栏会一直是
     // 静默的,发起方却在等 —— 这正是「目标侧执行过程黑洞」在列表上的样子。
-    if (bot.canonicalSessionId && islandActivity.get(bot.canonicalSessionId)?.phase === 'running') {
+    const canonicalSessionId = canonicalBotSessionId(bot);
+    if (canonicalSessionId && islandActivity.get(canonicalSessionId)?.phase === 'running') {
       return true;
     }
     return bot.sessions.some((session) => islandActivity.get(session.id)?.phase === 'running');
   };
+  const roster = partitionBotRoster(rosterBots, { query, showHidden });
+  const activeNowBots = roster.visible.filter((bot) =>
+    isBotActiveNow(bot, { working: isBotWorking(bot), now }),
+  );
+  const showSearch = rosterBots.length >= 8 || query.trim().length > 0;
+
+  useEffect(() => {
+    if (activeNowBots.length === 0) return;
+    const timer = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(timer);
+  }, [activeNowBots.length]);
 
   // 曾经这里还按 bot 逐个拉 `getBotHealth` 只为在行尾画一个状态图标。图标下线之后
   // 这一轮 N 次 IPC 也一起下线——列表不再为一个不显示的东西查询。
@@ -111,7 +146,6 @@ function BotsSidebarContent() {
   useEffect(() => {
     const botSessionIds = new Set<string>();
     for (const bot of bots) {
-      if (bot.canonicalSessionId) botSessionIds.add(bot.canonicalSessionId);
       for (const session of bot.sessions) botSessionIds.add(session.id);
     }
     if (botSessionIds.size === 0) return;
@@ -171,6 +205,14 @@ function BotsSidebarContent() {
         >
           <Plus size={16} />
         </button>
+        <button
+          type="button"
+          onClick={() => navigate('/bots/groups')}
+          className="flex h-8 w-8 items-center justify-center rounded-full text-[var(--sidebar-nav-text)] hover:bg-sidebar-item-hover"
+          aria-label={t('bots.groups.title')}
+        >
+          <MessageCircleMore size={16} />
+        </button>
       </div>
     );
   }
@@ -183,20 +225,72 @@ function BotsSidebarContent() {
           <Bot size={14} />
           <span>{t('bots.title')}</span>
         </div>
-        {/* 小节头只留「加一个」。导入下沉到创建面板的文字链与「设置 › 伙伴」——
-            它一年用一次,不该常年占着这行最贵的位置。 */}
-        <button
-          type="button"
-          onClick={() => navigate('/bots/roster')}
-          className="flex h-7 w-7 items-center justify-center rounded-lg text-[var(--sidebar-list-muted)] transition-colors hover:bg-sidebar-item-hover hover:text-[var(--sidebar-nav-text)]"
-          aria-label={t('bots.add')}
-        >
-          <Plus size={15} />
-        </button>
+        <span className="flex items-center gap-0.5">
+          {roster.showHiddenSection ? (
+            <button
+              type="button"
+              onClick={() => setShowHidden((value) => !value)}
+              className="flex h-7 w-7 items-center justify-center rounded-lg text-[var(--sidebar-list-muted)] transition-colors hover:bg-sidebar-item-hover hover:text-[var(--sidebar-nav-text)]"
+              aria-label={t(showHidden ? 'bots.list.hideHidden' : 'bots.list.showHidden')}
+            >
+              {showHidden ? <EyeOff size={15} /> : <Eye size={15} />}
+            </button>
+          ) : null}
+          <button
+            type="button"
+            onClick={() => navigate('/bots/roster')}
+            className="flex h-7 w-7 items-center justify-center rounded-lg text-[var(--sidebar-list-muted)] transition-colors hover:bg-sidebar-item-hover hover:text-[var(--sidebar-nav-text)]"
+            aria-label={t('bots.add')}
+          >
+            <Plus size={15} />
+          </button>
+        </span>
       </div>
 
+      {activeNowBots.length > 0 ? (
+        <div
+          role="status"
+          aria-live="polite"
+          aria-label={t('bots.list.activeNow')}
+          className="flex flex-wrap items-center gap-1.5 px-2.5 pb-2"
+        >
+          <span className="text-10 font-medium uppercase tracking-wide text-[var(--sidebar-list-muted)]">
+            {t('bots.list.activeNow')}
+          </span>
+          {activeNowBots.map((bot) => (
+            <button
+              key={bot.id}
+              type="button"
+              onClick={() => navigate(`/bots/${bot.id}`)}
+              className="flex min-w-0 items-center gap-1.5 rounded-lg bg-sidebar-item-hover px-1.5 py-1 text-left"
+              aria-label={t('bots.list.openActive', { name: bot.name })}
+            >
+              <BotAvatar bot={bot} size="xs" />
+              <span className="max-w-24 truncate text-11 font-medium">{bot.name}</span>
+            </button>
+          ))}
+        </div>
+      ) : null}
+
+      {showSearch ? (
+        <label className="relative mb-2 block px-2.5">
+          <Search
+            size={13}
+            aria-hidden="true"
+            className="pointer-events-none absolute left-5 top-1/2 -translate-y-1/2 text-[var(--sidebar-list-muted)]"
+          />
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder={t('bots.list.searchPlaceholder')}
+            aria-label={t('bots.list.search')}
+            className="h-7 w-full rounded-lg border border-[var(--border-default)] bg-transparent pl-7 pr-2 text-11 text-[var(--sidebar-nav-text)] outline-none placeholder:text-[var(--sidebar-list-muted)] focus:border-[var(--border-strong)]"
+          />
+        </label>
+      ) : null}
+
       <div className="min-h-0 flex-1 overflow-y-auto pb-3">
-        {activeBots.length === 0 && archivedBots.length === 0 ? (
+        {roster.visible.length === 0 && roster.hidden.length === 0 && archivedBots.length === 0 ? (
           <button
             type="button"
             onClick={() => navigate('/bots/roster')}
@@ -209,7 +303,7 @@ function BotsSidebarContent() {
           </button>
         ) : (
           <div className="flex flex-col gap-1">
-            {activeBots.map((bot) => {
+            {roster.visible.map((bot) => {
               const selected = bot.id === botId;
               const attention = attentionByBotId[bot.id] ?? 0;
               const unread = unreadByBotId[bot.id] ?? 0;
@@ -260,6 +354,13 @@ function BotsSidebarContent() {
                     <BotAvatar bot={bot} size="md" />
                     <span className="flex min-w-0 flex-1 flex-col gap-0.5">
                       <span className="flex items-baseline gap-2">
+                        {bot.pinnedAt ? (
+                          <Pin
+                            size={11}
+                            aria-label={t('bots.list.pinned')}
+                            className="shrink-0 text-[var(--sidebar-list-muted)]"
+                          />
+                        ) : null}
                         <span
                           className={cn(
                             'min-w-0 flex-1 truncate text-14 leading-5',
@@ -269,8 +370,15 @@ function BotsSidebarContent() {
                         >
                           {bot.name}
                         </span>
-                        {/* 产品裁决 2026-08-18:侧栏行不挂「放手做」⚠。伙伴列表是
-                            聊天列表,不是权限看板;风险表达留在设置里的能力陈列。 */}
+                        {/* 权限模式仍不在聊天列表挂警告；这里仅显示 Hermes 风格、
+                            已持久化且需要用户处理的运行失败。 */}
+                        {bot.needsAttention ? (
+                          <AlertTriangle
+                            size={13}
+                            className="shrink-0 text-[var(--warning-fg)]"
+                            aria-label={t('bots.list.needsAttention')}
+                          />
+                        ) : null}
                         {timestamp ? (
                           <span className={cn('shrink-0 text-11', mutedClass)}>
                             {timestamp}
@@ -329,15 +437,85 @@ function BotsSidebarContent() {
                       </span>
                     </span>
                   </button>
-                  {/* 行内不再挂 health 图标(recovering / attention / paused)。一行
-                      右侧同时出现「未读数 + 待办点 + 状态图标」时,三处右对齐元素
-                      互相抢注意力,而这一行本来只该回答「有没有新消息」。异常态仍有
-                      出口:待办点(收件箱)与 TA 的设置页「健康与历史」。
-                      行内也不再挂齿轮:进设置的入口收敛到对话顶栏(伙伴名字 / 头像,
-                      以及顶栏右侧的齿轮)。一个功能一个入口。 */}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button
+                        type="button"
+                        className="mr-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-[var(--sidebar-list-muted)] opacity-0 transition-opacity hover:bg-sidebar-item-hover group-hover:opacity-100 focus:opacity-100 data-[state=open]:opacity-100"
+                        aria-label={t('bots.list.moreActions', { name: bot.name })}
+                      >
+                        <MoreHorizontal size={14} />
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="min-w-40">
+                      <DropdownMenuItem onSelect={() => void setBotPinned(bot.id, !bot.pinnedAt)}>
+                        <Pin size={14} className="mr-2" />
+                        {t(bot.pinnedAt ? 'bots.list.unpin' : 'bots.list.pin')}
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onSelect={() => {
+                          void setBotHidden(bot.id, true).then(() => {
+                            if (!selected) return;
+                            const fallback = roster.visible.find((candidate) => candidate.id !== bot.id);
+                            navigate(fallback ? `/bots/${fallback.id}` : '/bots');
+                          });
+                        }}
+                      >
+                        <EyeOff size={14} className="mr-2" />
+                        {t('bots.list.hide')}
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        onSelect={() => {
+                          void duplicateBotProfile(bot.id).then((copy) => navigate(`/bots/${copy.id}`));
+                        }}
+                      >
+                        <Copy size={14} className="mr-2" />
+                        {t('bots.list.duplicate')}
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
               );
             })}
+            {roster.showHiddenSection ? (
+              <div className="mt-3 border-t border-[var(--border-default)] pt-3">
+                <button
+                  type="button"
+                  onClick={() => setShowHidden((value) => !value)}
+                  className="mb-1 flex w-full items-center gap-2 px-2.5 text-left text-10 font-medium text-[var(--sidebar-list-muted)]"
+                  aria-expanded={roster.showHiddenRows}
+                >
+                  {roster.showHiddenRows ? <EyeOff size={12} /> : <Eye size={12} />}
+                  <span>{t('bots.list.hidden', { count: roster.hidden.length })}</span>
+                </button>
+                {roster.showHiddenRows
+                  ? roster.hidden.map((bot) => (
+                      <div
+                        key={bot.id}
+                        className="group flex w-full items-center rounded-xl text-[var(--sidebar-list-muted)] hover:bg-sidebar-item-hover"
+                      >
+                        <button
+                          type="button"
+                          onClick={() => navigate(`/bots/${bot.id}`)}
+                          className="flex min-w-0 flex-1 items-center gap-2.5 rounded-xl px-2.5 py-2 text-left opacity-60"
+                        >
+                          <BotAvatar bot={bot} size="sm" />
+                          <span className="min-w-0 flex-1 truncate text-13 font-medium">{bot.name}</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void setBotHidden(bot.id, false)}
+                          className="mr-1 flex h-7 w-7 items-center justify-center rounded-lg hover:bg-[var(--surface-hover)]"
+                          aria-label={t('bots.list.unhideNamed', { name: bot.name })}
+                        >
+                          <Eye size={14} />
+                        </button>
+                      </div>
+                    ))
+                  : null}
+              </div>
+            ) : null}
             {archivedBots.length > 0 ? (
               <div className="mt-3 border-t border-[var(--border-default)] pt-3">
                 <div className="mb-1 flex items-center gap-2 px-2.5 text-10 font-medium text-[var(--sidebar-list-muted)]">
@@ -367,6 +545,58 @@ function BotsSidebarContent() {
                 })}
               </div>
             ) : null}
+            <div className="mt-3 border-t border-[var(--border-default)] pt-3">
+              <div className="mb-1 flex items-center justify-between gap-2 px-2.5 text-10 font-medium text-[var(--sidebar-list-muted)]">
+                <span className="flex items-center gap-2">
+                  <MessageCircleMore size={12} />
+                  {t('bots.groups.sidebarTitle')}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => navigate('/bots/groups')}
+                  className="rounded p-1 hover:bg-sidebar-item-hover"
+                  aria-label={t('bots.groups.create')}
+                >
+                  <Plus size={12} />
+                </button>
+              </div>
+              {groups.map((room) => {
+                const selected = location.pathname === `/bots/groups/${room.id}`;
+                const roomState = botGroupRoomState(room);
+                return (
+                  <button
+                    key={room.id}
+                    type="button"
+                    onClick={() => navigate(`/bots/groups/${room.id}`)}
+                    className={cn(
+                      'flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left transition-colors',
+                      selected
+                        ? 'bg-sidebar-item-active text-sidebar-item-active-foreground'
+                        : 'text-[var(--sidebar-nav-text)] hover:bg-sidebar-item-hover',
+                    )}
+                  >
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--surface-elevated)] text-[var(--text-secondary)]">
+                      <MessageCircleMore size={15} />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-13 font-medium">{room.name}</span>
+                      <span className="block truncate text-11 text-[var(--sidebar-list-muted)]">
+                        {t(`bots.groups.state.${roomState}`)}
+                      </span>
+                    </span>
+                  </button>
+                );
+              })}
+              {groups.length === 0 ? (
+                <button
+                  type="button"
+                  onClick={() => navigate('/bots/groups')}
+                  className="w-full rounded-lg px-2.5 py-2 text-left text-11 text-[var(--sidebar-list-muted)] hover:bg-sidebar-item-hover"
+                >
+                  {t('bots.groups.sidebarEmpty')}
+                </button>
+              ) : null}
+            </div>
           </div>
         )}
       </div>

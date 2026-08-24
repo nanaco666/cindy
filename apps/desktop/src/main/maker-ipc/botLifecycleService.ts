@@ -30,6 +30,7 @@ import {
   releaseAllBotWorkspaceLeases,
   retainBotWorkspaceLeases,
 } from './botWorkspaceLeaseLifecycle.js';
+import { resolveBotCanonicalSession } from './botCanonicalSessionRegistry.js';
 
 const log = createLogger('maker-ipc:bot-lifecycle');
 
@@ -154,6 +155,11 @@ export function createBotLifecycleService(deps: BotLifecycleServiceDeps) {
     return profile;
   };
 
+  const readCanonicalSessionId = async (botId: string): Promise<string | null> => {
+    const canonical = await resolveBotCanonicalSession(botId);
+    return canonical.status === 'resolved' ? canonical.sessionId : null;
+  };
+
   const closeBotSessions = async (botId: string): Promise<{ count: number; warnings: string[] }> => {
     const links = await getDbClient()
       .drizzle.select({ sessionId: botSessionLinks.sessionId })
@@ -171,6 +177,7 @@ export function createBotLifecycleService(deps: BotLifecycleServiceDeps) {
 
   const pause = async (botId: string): Promise<BotLifecycleActionResult> => {
     const profile = await readProfile(botId);
+    const canonicalSessionId = await readCanonicalSessionId(botId);
     if (profile.status === 'archived' || profile.status === 'deleting') {
       throwIpcError('PRECONDITION_FAILED', `Bot 当前状态为 ${profile.status}`);
     }
@@ -188,7 +195,7 @@ export function createBotLifecycleService(deps: BotLifecycleServiceDeps) {
       'bots.pauseLifecycle',
       {
         botId,
-        canonicalSessionId: profile.canonicalSessionId,
+        canonicalSessionId,
         expectedProfileStatus: profile.status,
         at,
         eventId: randomUUID(),
@@ -215,7 +222,7 @@ export function createBotLifecycleService(deps: BotLifecycleServiceDeps) {
       await db.insert(botLifecycleEvents).values({
         id: randomUUID(),
         botId,
-        sessionId: profile.canonicalSessionId,
+        sessionId: canonicalSessionId,
         eventType: 'pause-failed',
         payloadJson: JSON.stringify({ warnings }),
         createdAt: now(),
@@ -240,7 +247,7 @@ export function createBotLifecycleService(deps: BotLifecycleServiceDeps) {
     await db.insert(botLifecycleEvents).values({
       id: randomUUID(),
       botId,
-      sessionId: profile.canonicalSessionId,
+      sessionId: canonicalSessionId,
       eventType: warnings.length > 0 ? 'paused-with-warnings' : 'paused',
       payloadJson: JSON.stringify({ warnings }),
       createdAt: completedAt,
@@ -264,6 +271,7 @@ export function createBotLifecycleService(deps: BotLifecycleServiceDeps) {
 
   const resume = async (botId: string): Promise<BotLifecycleActionResult> => {
     const profile = await readProfile(botId);
+    const canonicalSessionId = await readCanonicalSessionId(botId);
     if (profile.status === 'archived' || profile.status === 'deleting') {
       throwIpcError('PRECONDITION_FAILED', `Bot 当前状态为 ${profile.status}`);
     }
@@ -302,7 +310,7 @@ export function createBotLifecycleService(deps: BotLifecycleServiceDeps) {
       await db.insert(botLifecycleEvents).values({
         id: randomUUID(),
         botId,
-        sessionId: profile.canonicalSessionId,
+        sessionId: canonicalSessionId,
         eventType: 'resume-failed',
         payloadJson: JSON.stringify({ warnings: failures }),
         createdAt: now(),
@@ -315,7 +323,7 @@ export function createBotLifecycleService(deps: BotLifecycleServiceDeps) {
       'bots.resumeLifecycle',
       {
         botId,
-        canonicalSessionId: profile.canonicalSessionId,
+        canonicalSessionId,
         expectedProfileStatus: profile.status,
         at,
         eventId: randomUUID(),
@@ -349,6 +357,7 @@ export function createBotLifecycleService(deps: BotLifecycleServiceDeps) {
     }
 
     const db = getDbClient().drizzle;
+    const canonicalSessionId = await readCanonicalSessionId(request.botId);
     const [links, routes, automations] = await Promise.all([
       db
         .select({ sessionId: botSessionLinks.sessionId })
@@ -364,7 +373,7 @@ export function createBotLifecycleService(deps: BotLifecycleServiceDeps) {
     const at = now();
     const archived = await getDbClient().tx<{ sessions: number }>('bots.archiveLifecycle', {
       botId: request.botId,
-      canonicalSessionId: profile.canonicalSessionId,
+      canonicalSessionId,
       expectedProfileStatus: profile.status,
       worktreeDisposition: request.worktreeDisposition ?? 'retain',
       at,
@@ -405,14 +414,18 @@ export function createBotLifecycleService(deps: BotLifecycleServiceDeps) {
     if (profile.status !== 'archived') {
       throwIpcError('PRECONDITION_FAILED', `Bot 当前状态为 ${profile.status}`);
     }
-    if (profile.canonicalSessionId) {
+    const canonical = await resolveBotCanonicalSession(botId);
+    if (canonical.status !== 'missing') {
       throwIpcError('PRECONDITION_FAILED', '已归档 Bot 不应保留主任务指针');
     }
     const db = getDbClient().drizzle;
     const at = now();
     const [claimed] = await db
       .update(botProfiles)
-      .set({ status: 'paused', updatedAt: at })
+      // The compatibility mirror is not authority. Clear any stale value while
+      // claiming restore so the canonical creator cannot revive it as legacy
+      // ownership after the registry has already said "missing".
+      .set({ status: 'paused', canonicalSessionId: null, updatedAt: at })
       .where(and(eq(botProfiles.id, botId), eq(botProfiles.status, 'archived')))
       .returning({ id: botProfiles.id });
     if (!claimed) throwIpcError('PRECONDITION_FAILED', 'Bot 生命周期已被另一处操作更新');

@@ -16,6 +16,9 @@ const mocks = vi.hoisted(() => ({
   health: new Map<string, string>(),
   unread: {} as Record<string, number>,
   refreshBotProfiles: vi.fn(),
+  setBotHidden: vi.fn(async () => undefined),
+  setBotPinned: vi.fn(async () => undefined),
+  duplicateBotProfile: vi.fn(async () => ({ id: 'copy' })),
   registered: { node: null as ReactNode },
   /** 灵动岛活动镜像:sessionId -> phase。侧栏据此显示「正在输入…」。 */
   islandActivity: new Map<string, { sessionId: string; phase: string }>(),
@@ -27,6 +30,7 @@ vi.mock('@/state/agentIslandActivity', () => ({
 
 vi.mock('react-router-dom', () => ({
   useNavigate: () => mocks.navigate,
+  useLocation: () => ({ pathname: '/bots' }),
   useParams: () => ({}),
 }));
 vi.mock('../../feature-context', () => ({
@@ -38,8 +42,15 @@ vi.mock('../../feature-context', () => ({
 vi.mock('../botStore', () => ({
   useBotProfiles: () => mocks.profiles,
   useBotUnreadCounts: () => mocks.unread,
-  getBotHealth: async (botId: string) => ({ status: mocks.health.get(botId) ?? 'healthy' }),
   refreshBotProfiles: mocks.refreshBotProfiles,
+  setBotHidden: mocks.setBotHidden,
+  setBotPinned: mocks.setBotPinned,
+  duplicateBotProfile: mocks.duplicateBotProfile,
+  canonicalBotSessionId: (bot: { sessions?: Array<{ id: string; role?: string; kind?: string }> }) =>
+    bot.sessions?.find((session) => session.role === 'canonical' || session.kind === 'chat')?.id,
+}));
+vi.mock('../botGroupStore', () => ({
+  useBotGroupRooms: () => [],
 }));
 
 import type { BotInboxItemView } from '../../../../shared/botSessionEvents';
@@ -52,6 +63,7 @@ interface BotFixture {
   description?: string;
   lastMessagePreview?: string | null;
   lastMessageAt?: number | null;
+  needsAttention?: boolean;
 }
 
 function bot(fixture: BotFixture) {
@@ -88,6 +100,12 @@ beforeEach(() => {
   resetBotReadStateForTests();
   mocks.navigate.mockReset();
   mocks.refreshBotProfiles.mockReset();
+  mocks.setBotHidden.mockReset();
+  mocks.setBotPinned.mockReset();
+  mocks.duplicateBotProfile.mockReset();
+  mocks.setBotHidden.mockResolvedValue(undefined);
+  mocks.setBotPinned.mockResolvedValue(undefined);
+  mocks.duplicateBotProfile.mockResolvedValue({ id: 'copy' });
   mocks.health = new Map();
   mocks.unread = {};
   mocks.profiles = [];
@@ -191,6 +209,45 @@ describe('BotsSidebar 「正在输入…」', () => {
 });
 
 describe('BotsSidebar rows', () => {
+  it('shows durable Hermes attention without reviving the permissions badge', async () => {
+    mocks.profiles = [bot({ id: 'bot-1', name: 'Needs help', needsAttention: true })];
+
+    await renderSidebar();
+
+    expect(screen.getByLabelText('bots.list.needsAttention')).toBeTruthy();
+  });
+  it('shows visible recent Bots in Active now and opens their canonical chat', async () => {
+    mocks.profiles = [
+      bot({ id: 'bot-1', name: 'Active steward', lastMessageAt: Date.now() }),
+    ];
+
+    await renderSidebar();
+
+    const chip = screen.getByLabelText('bots.list.openActive:{"name":"Active steward"}');
+    expect(chip).toBeTruthy();
+    fireEvent.click(chip);
+    expect(mocks.navigate).toHaveBeenCalledWith('/bots/bot-1');
+  });
+
+  it('keeps hidden Bots recoverable and reveals a match automatically while searching', async () => {
+    mocks.profiles = [
+      bot({ id: 'visible', name: 'Visible' }),
+      { ...bot({ id: 'hidden', name: 'Hidden release steward' }), hiddenAt: 2 },
+      { ...bot({ id: 'other', name: 'Other hidden' }), hiddenAt: 3 },
+      bot({ id: 'v2', name: 'V2' }),
+      bot({ id: 'v3', name: 'V3' }),
+      bot({ id: 'v4', name: 'V4' }),
+      bot({ id: 'v5', name: 'V5' }),
+      bot({ id: 'v6', name: 'V6' }),
+    ];
+
+    await renderSidebar();
+    expect(screen.queryByText('Hidden release steward')).toBeNull();
+    fireEvent.change(screen.getByLabelText('bots.list.search'), { target: { value: 'release' } });
+    expect(screen.getByText('Hidden release steward')).toBeTruthy();
+    expect(screen.queryByText('Other hidden')).toBeNull();
+  });
+
   it('shows the latest message and its time instead of a channel label', async () => {
     const at = new Date();
     at.setHours(9, 7, 0, 0);

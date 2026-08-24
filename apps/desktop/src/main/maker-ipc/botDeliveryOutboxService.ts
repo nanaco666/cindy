@@ -6,6 +6,11 @@ import { getDbClient } from '../localDb/client/current.js';
 import { botChannels, botDeliveryOutbox, botProfiles, botRoutes } from '../localDb/schema.js';
 import type { BotDeliveryView } from '../../shared/botDelivery.js';
 import { parseBotDeliveryDiagnostic } from '../../shared/botDeliveryDiagnostic.js';
+import { resolveBotCanonicalSession } from './botCanonicalSessionRegistry.js';
+import { clearBotAttention, noteBotAttention } from './botAttentionService.js';
+import { createLogger } from '../logger.js';
+
+const log = createLogger('maker-ipc:bot-delivery-outbox');
 
 const RETRYABLE_STATUSES = ['pending', 'failed'] as const;
 const DEFAULT_MAX_ATTEMPTS = 8;
@@ -63,6 +68,8 @@ export interface BotDeliveryOutboxServiceDeps {
     row: Pick<BotDeliveryRow, 'id' | 'botId' | 'idempotencyKey'>,
     payload: BotDeliveryEnvelope,
   ) => Promise<void>;
+  noteAttention?: typeof noteBotAttention;
+  clearAttention?: typeof clearBotAttention;
 }
 
 export interface EnqueueBotDeliveryInput {
@@ -115,6 +122,8 @@ export function createBotDeliveryOutboxService(deps: BotDeliveryOutboxServiceDep
   const createId = deps.createId ?? randomUUID;
   const maxAttempts = Math.max(1, deps.maxAttempts ?? DEFAULT_MAX_ATTEMPTS);
   const sendingLeaseMs = Math.max(1_000, deps.sendingLeaseMs ?? DEFAULT_SENDING_LEASE_MS);
+  const noteAttention = deps.noteAttention ?? noteBotAttention;
+  const clearAttention = deps.clearAttention ?? clearBotAttention;
   let timer: ReturnType<typeof setTimeout> | null = null;
   let drainPromise: Promise<void> | null = null;
   let disposed = false;
@@ -172,6 +181,15 @@ export function createBotDeliveryOutboxService(deps: BotDeliveryOutboxServiceDep
       .returning({ botId: botDeliveryOutbox.botId });
     if (updated) {
       emitChanged(updated.botId, id);
+      if (status === 'delivered') {
+        await clearAttention({ botId: updated.botId, successfulAt: at }).catch((error) => {
+          log.warn('Bot delivery attention clear failed', {
+            botId: updated.botId,
+            deliveryId: id,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        });
+      }
       if ((status === 'delivered' || status === 'cancelled') && current) {
         const payload = parseEnvelope(current.payloadRefJson);
         if (payload) {
@@ -207,7 +225,20 @@ export function createBotDeliveryOutboxService(deps: BotDeliveryOutboxServiceDep
       })
       .where(and(eq(botDeliveryOutbox.id, row.id), eq(botDeliveryOutbox.status, 'sending')))
       .returning({ botId: botDeliveryOutbox.botId });
-    if (updated) emitChanged(updated.botId, row.id);
+    if (updated) {
+      emitChanged(updated.botId, row.id);
+      await noteAttention({
+        botId: updated.botId,
+        failure: { errorCode: result.errorCode, message: result.message },
+        observedAt: at,
+      }).catch((error) => {
+        log.warn('Bot delivery attention update failed', {
+          botId: updated.botId,
+          deliveryId: row.id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
+    }
   };
 
   const validateRouteOwnership = async (row: BotDeliveryRow): Promise<boolean> => {
@@ -617,7 +648,6 @@ export function createBotDeliveryOutboxService(deps: BotDeliveryOutboxServiceDep
     }
     const [profile] = await db
       .select({
-        canonicalSessionId: botProfiles.canonicalSessionId,
         status: botProfiles.status,
       })
       .from(botProfiles)
@@ -626,6 +656,7 @@ export function createBotDeliveryOutboxService(deps: BotDeliveryOutboxServiceDep
     if (!profile || profile.status !== 'active') {
       throw new Error('Restore the Bot before retrying this delivery');
     }
+    const canonical = await resolveBotCanonicalSession(botId);
     const priorReceipt = parseReceipt(row.deliveryReceiptJson);
     const priorDispatch = priorReceipt.externalDispatch;
     const duplicateRisk = priorDispatch
@@ -658,7 +689,10 @@ export function createBotDeliveryOutboxService(deps: BotDeliveryOutboxServiceDep
       if (route.ownerGeneration !== row.ownerGeneration) {
         throw new Error('Bot delivery route ownership changed; create a new delivery instead');
       }
-    } else if (row.sessionId && profile.canonicalSessionId !== row.sessionId) {
+    } else if (
+      row.sessionId
+      && (canonical.status !== 'resolved' || canonical.sessionId !== row.sessionId)
+    ) {
       throw new Error('Bot canonical task changed; create a new delivery instead');
     }
     const at = now();

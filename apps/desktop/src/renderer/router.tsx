@@ -29,6 +29,8 @@ import { BotsHomeView } from '@/features/bots/BotsHomeView';
 import { BotHistorySessionView } from '@/features/bots/BotHistorySessionView';
 import { BotRosterView } from '@/features/bots/BotRosterView';
 import { BotSessionView } from '@/features/bots/BotSessionView';
+import { BotGroupRoomsHome } from '@/features/bots/BotGroupRoomsHome';
+import { BotGroupRoomView } from '@/features/bots/BotGroupRoomView';
 
 /**
  * 三层路由架构：
@@ -122,6 +124,8 @@ export const router = createHashRouter([
                       // 之前(React Router 也按静态优先定级),所以 /bots/roster 不会
                       // 被当成一个叫 "roster" 的伙伴。
                       { path: 'roster', element: <BotRosterView /> },
+                      { path: 'groups', element: <BotGroupRoomsHome /> },
+                      { path: 'groups/:roomId', element: <BotGroupRoomView /> },
                       { path: ':botId', element: <BotsHomeView /> },
                       { path: ':botId/session/:sessionId', element: <BotSessionView /> },
                       { path: ':botId/history/:sessionId', element: <BotHistorySessionView /> },

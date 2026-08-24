@@ -152,6 +152,7 @@ const ACCOUNT_CHANNELS: ReadonlySet<string> = new Set([
   'maker:provider:changed',
   'maker:schedule:event',
   'maker:project-automation:event',
+  'maker:bots:group-changed',
   // 被控端「当前 New Maker 草稿」全量变更:账号 / 全局级(无 sessionId),并入 `sessions` topic
   // 随设备列表订阅一起走(控制端打开远程项目草稿时据此实时刷新),不另开一档 topic。
   'maker:new-maker-draft:changed',

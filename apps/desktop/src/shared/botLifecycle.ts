@@ -1,4 +1,5 @@
 import type { ConversationSearchResponse } from './conversationSearch';
+import type { BotFailureReason } from './botFailureReason';
 
 export type BotHealthStatus = 'healthy' | 'attention' | 'recovering' | 'paused';
 
@@ -56,6 +57,7 @@ export type BotHealthIssueCode =
   | 'delivery-failed'
   | 'delivery-dead-letter'
   | 'workspace-error'
+  | 'durable-attention'
   | 'lifecycle-incomplete';
 
 export interface BotHealthIssue {
@@ -67,6 +69,8 @@ export interface BotHealthReport {
   botId: string;
   status: BotHealthStatus;
   checkedAt: number;
+  failureReason: BotFailureReason | null;
+  needsAttention: boolean;
   canonical: {
     sessionId: string | null;
     sessionStatus: 'active' | 'archived' | 'deleted' | 'missing' | null;

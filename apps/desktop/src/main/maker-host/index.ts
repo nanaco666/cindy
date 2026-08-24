@@ -55,7 +55,6 @@ import { collectBotOwnSkillMounts } from '../maker-ipc/botSkillService.js';
 import { botProfileDir, readBotProfileFolder } from '../maker-ipc/botProfileFolder.js';
 import {
   listBotTeammates,
-  readPreviousCanonicalBotSession,
 } from '../localDb/botHistoryScope.js';
 import { prepareBotWorkspaceRuntime } from '../maker-ipc/botWorkspaceRuntime.js';
 import type { MakerSessionCreateOpts } from '../maker-ipc/sessionRequest.js';
@@ -296,7 +295,7 @@ let _maker: Maker | null = null;
 /** Prepared Bot runtime records waiting for the matching Maker startup result. */
 const pendingBotRuntimeSnapshots = new Map<string, BotProfileRuntimeSnapshot>();
 let botRuntimeResourcePreflight:
-  | ((opts: MakerSessionCreateOpts) => Promise<void>)
+  | ((opts: MakerSessionCreateOpts) => Promise<BotProfileRuntimeSnapshot | null>)
   | null = null;
 /** 视觉桥实例（层 A/B/C 共用），在 resetMaker 时释放缓存。 */
 let _visionBridgeInstance: ReturnType<typeof createVisionBridge> | null = null;
@@ -2179,8 +2178,6 @@ export function getMaker(): Maker {
         (await makerMemoryManager.getStore(scopeKey)).getIndex(),
       // 队友名册进提示词(见 buildBotTeammateRoster)。
       listTeammates: (input) => listBotTeammates(input),
-      // 换代之后把上一段主对话的 id 交给伙伴(见 buildBotRenewalHandoff)。
-      readPreviousCanonicalSession: (input) => readPreviousCanonicalBotSession(input),
       // Bot 的 memory 能力位只能收窄到引擎现状 (见 BotProfileRuntimeDeps)。
       isMemoryEngineEnabled: () => makerMemoryManager.isEnabled(),
       readSkillSource: async ({ path: skillPath, remoteHostId }) => {
@@ -2386,7 +2383,7 @@ export function getMaker(): Maker {
     });
     botRuntimeResourcePreflight = async (opts) => {
       const preflightOpts = { ...opts };
-      await hydrateBotProfileRuntime(preflightOpts, buildBotRuntimeDeps(), {
+      return hydrateBotProfileRuntime(preflightOpts, buildBotRuntimeDeps(), {
         persistSnapshot: false,
       });
     };
@@ -2460,11 +2457,11 @@ export function getMakerIfReady(): Maker | null {
  */
 export async function preflightBotRuntimeResources(
   opts: MakerSessionCreateOpts,
-): Promise<void> {
+): Promise<BotProfileRuntimeSnapshot | null> {
   if (!botRuntimeResourcePreflight) {
     throw new Error('Bot runtime resource preflight is unavailable before Maker initialization');
   }
-  await botRuntimeResourcePreflight(opts);
+  return botRuntimeResourcePreflight(opts);
 }
 
 /**

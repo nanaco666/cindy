@@ -7,7 +7,12 @@ import * as sessionService from '@/lib/sessionService';
 import { cn } from '@/lib/utils';
 import { isBotToolsetAvailableOnTarget } from '../../../shared/botRemoteCapabilities';
 
-import type { BotCapabilities, BotProfile, BotSessionProjection } from './botStore';
+import {
+  canonicalBotSessionId,
+  type BotCapabilities,
+  type BotProfile,
+  type BotSessionProjection,
+} from './botStore';
 
 interface BotSkillOption {
   name: string;
@@ -102,9 +107,10 @@ export function BotCapabilitySettings({
     setToolsetState('loading');
     setMcpState('loading');
     void (async () => {
-      const workingDir = bot.canonicalSessionId
+      const canonicalSessionId = canonicalBotSessionId(bot);
+      const workingDir = canonicalSessionId
         ? await sessionService
-            .get(bot.canonicalSessionId)
+            .get(canonicalSessionId)
             .then((session) => session.workingDir ?? undefined)
             .catch(() => undefined)
         : undefined;
@@ -159,7 +165,7 @@ export function BotCapabilitySettings({
     return () => {
       cancelled = true;
     };
-  }, [bot.canonicalSessionId, capabilities.harness, remoteHostId]);
+  }, [bot.sessions, capabilities.harness, remoteHostId]);
 
   const resolved = runtimeSnapshot?.resolved;
   const appliedSkills = useMemo(() => new Set(readStringList(resolved?.skills)), [resolved]);

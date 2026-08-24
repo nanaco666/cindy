@@ -1,38 +1,12 @@
 /**
- * 伙伴主对话的**换代**判定 —— 什么时候该开一段新的对话。
+ * 旧版伙伴换代策略的兼容解析。
  *
- * ## 为什么需要它
- *
- * 伙伴的主对话是一条永不断的线:它没有「新建任务」这个动作(那会毁掉伙伴的身份
- * 连续性),于是越用越长。在这之前 Cindy 完全没有换代机制,上下文全靠各 harness
- * 自己的压缩顶着,而用户既看不到它在哪,也没有任何主动重开的手段 —— 除非归档
- * 整个伙伴。
- *
- * ## 与压缩的分工(这两件事常被混为一谈)
- *
- *   - **压缩**:上下文满了,把长记录压短,**继续同一段对话**。身份、待办、刚才
- *     说到哪都还在。管的是「装不下了」。
- *   - **换代**:开一段新的对话,旧的归档。上下文清空,**只有灵魂与记忆留下来**。
- *     管的是「该翻篇了」。
- *
- * 所以换代不是压缩的替代品,它更像每天早上重新开始工作 —— 昨天的细节不必带着,
- * 但你还是你、该记得的还记得。
- *
- * ## 默认每天早上 6 点,只看日界不看空闲
- *
- * Hermes 的同款策略同时提供 idle(空闲 N 分钟就换)与 daily(每天某点换)。这里
- * **只默认开 daily**:空闲换代最容易让人意外 —— 吃个饭回来发现上下文没了;而
- * 日界发生在凌晨,用户感知最小。idle 仍然可配,但默认关。
- *
- * 一条来自 Hermes 的教训写在这里:它的默认值曾经是「24 小时空闲 + 每天 4 点」,
- * 2026 年 7 月改成了「永不换代」,源码注释的原因是 "surprised users who expected
- * their conversations to persist"。所以这里的换代**必须通知用户**,而且换代后
- * 那句话要说清「我还记得你,只是这一段重新开始」。
- *
- * 纯函数,不碰时区库:用本地墙钟(用户说「早上 6 点」指的是他所在时区的 6 点)。
+ * canonical Bot Chat 已采用 Hermes 的永久 Chat 语义，生产入口不会再用这里替换
+ * Session；`/new`、`/reset` 与手动操作统一原地 compact。保留纯函数只为稳定读取旧
+ * Profile 配置，并确保旧调用方默认也不会重新打开每日换代。
  */
 
-/** 换代策略。与 Hermes 的 `session_reset` 同构。 */
+/** 旧配置形状；新 canonical Chat 只接受默认 `none` 语义。 */
 export interface BotRenewalPolicy {
   /** `daily` = 每天到点;`idle` = 空闲够久;`both` = 谁先到算谁;`none` = 从不。 */
   mode: 'none' | 'daily' | 'idle' | 'both';
@@ -44,17 +18,12 @@ export interface BotRenewalPolicy {
   notify: boolean;
 }
 
-/**
- * 默认:每天早上 6 点,通知用户。
- *
- * 6 点而不是 Hermes 的 4 点 —— 4 点还有人在干活,6 点是绝大多数人一天真正的
- * 起点。空闲换代默认关(理由见文件头)。
- */
+/** 永久 canonical Chat 的兼容默认；其它字段只为旧配置解析保留。 */
 export const DEFAULT_BOT_RENEWAL_POLICY: BotRenewalPolicy = {
-  mode: 'daily',
+  mode: 'none',
   atHour: 6,
   idleMinutes: 1440,
-  notify: true,
+  notify: false,
 };
 
 export type BotRenewalReason = 'daily' | 'idle';

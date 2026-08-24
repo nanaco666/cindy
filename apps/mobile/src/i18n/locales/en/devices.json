@@ -386,7 +386,22 @@
     "noDescription": "No description yet",
     "openA11y": "Open the primary task for teammate {{name}}",
     "unavailableA11y": "Teammate {{name}} cannot be opened: {{status}}",
-    "status": { "active": "Active", "paused": "Paused", "error": "Needs attention", "archived": "Archived", "deleting": "Deleting", "needsDesktop": "Set up on Desktop" }
+    "status": { "active": "Active", "paused": "Paused", "error": "Needs attention", "archived": "Archived", "deleting": "Deleting", "needsDesktop": "Set up on Desktop" },
+    "groups": {
+      "title": "Teammate group chats", "copy": "Let teammates discuss, hand work across, and fill each other's gaps", "openA11y": "Open teammate group chats",
+      "subtitle": "Group chats on {{deviceName}}", "create": "Create group chat", "creating": "Creating…",
+      "defaultName": "New teammate group", "nameLabel": "Group name", "namePlaceholder": "e.g. Release room",
+      "membersLabel": "Choose 2–6 teammates ({{count}} selected)", "memberCount": "{{count}} teammates", "manage": "Manage", "manageTitle": "Group chat settings", "manageDescription": "Update this group chat's identity or archive it as read-only history.", "avatarLabel": "Group avatar", "archive": "Archive group chat", "archiveTitle": "Archive this group chat?", "archiveDescription": "{{name}} becomes read-only. Its real Cindy tasks and messages remain available as history.", "saving": "Saving…",
+      "emptyTitle": "No teammate group chats yet", "emptyCopy": "Choose at least two teammates to create one.", "openRoomA11y": "Open group chat {{name}}",
+      "roomTitle": "Teammate group", "roomEmptyTitle": "Start with a message", "roomEmptyCopy": "Everyone sees an unaddressed message. Type @name to call only selected teammates.",
+      "responding": "Teammates are discussing…", "placeholder": "Message this group…",
+      "replyThread": "Continue this thread", "replyingThread": "Replying in this thread",
+      "interactionStale": "This request was already handled or is no longer available.",
+      "missingTitle": "This group chat is unavailable", "missingCopy": "It may have been archived or deleted. Return to the group list to continue elsewhere.",
+      "unsupportedTitle": "This Desktop version does not support remote teammate groups", "unsupportedCopy": "Update Cindy on this computer. Existing teammates and tasks are unaffected.",
+      "invalidResponse": "Desktop returned group data this version could not understand.",
+      "state": { "idle": "Idle", "running": "Discussing", "needsUser": "Needs you", "error": "Error", "archived": "Archived" }
+    }
   },
   "automations": {
     "heading": {

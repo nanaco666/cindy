@@ -35,6 +35,8 @@ import {
   selectBotGuardianTargetBatch,
   type BotGuardianSupervisionTarget,
 } from './botGuardianHeartbeat.js';
+import { resolveBotCanonicalSession } from './botCanonicalSessionRegistry.js';
+import { clearBotAttention, noteBotAttention } from './botAttentionService.js';
 
 const log = createLogger('maker-ipc:bot-session-events');
 const MAX_RESULT_CHARS = 16_000;
@@ -86,6 +88,10 @@ export interface BotSessionEventServiceDeps {
   };
   now?: () => number;
   createId?: () => string;
+  /** Injectable only for deterministic lifecycle tests. */
+  noteAttention?: typeof noteBotAttention;
+  /** Injectable only for deterministic lifecycle tests. */
+  clearAttention?: typeof clearBotAttention;
 }
 
 function parseRecord(value: string): Record<string, unknown> {
@@ -163,6 +169,8 @@ function buildInboxPrompt(itemId: string, event: BotSessionEventPayload): string
 export function createBotSessionEventService(deps: BotSessionEventServiceDeps) {
   const now = deps.now ?? Date.now;
   const createId = deps.createId ?? randomUUID;
+  const noteAttention = deps.noteAttention ?? noteBotAttention;
+  const clearAttention = deps.clearAttention ?? clearBotAttention;
   const scheduleGuardianTick =
     deps.scheduleGuardianTick ??
     ((run, delayMs) => {
@@ -384,17 +392,19 @@ export function createBotSessionEventService(deps: BotSessionEventServiceDeps) {
     if (!row) return;
     const at = now();
     if (input.outcome === 'failed') {
+      const failure = input.error ?? 'Bot event processing failed';
       await db
         .update(botInboxItems)
         .set({
           status: 'failed',
-          lastError: (input.error ?? 'Bot event processing failed').slice(0, MAX_ERROR_CHARS),
+          lastError: failure.slice(0, MAX_ERROR_CHARS),
           processingSessionId: null,
           startedAt: null,
           updatedAt: at,
         })
         .where(and(eq(botInboxItems.id, row.inbox.id), eq(botInboxItems.status, 'processing')));
       emitChanged(row.inbox.botId, row.inbox.id);
+      await noteAttention({ botId: row.inbox.botId, failure, observedAt: at });
       return;
     }
     const resultText =
@@ -414,6 +424,11 @@ export function createBotSessionEventService(deps: BotSessionEventServiceDeps) {
         })
         .where(and(eq(botInboxItems.id, row.inbox.id), eq(botInboxItems.status, 'processing')));
       emitChanged(row.inbox.botId, row.inbox.id);
+      await noteAttention({
+        botId: row.inbox.botId,
+        failure: 'Bot event turn completed without a recoverable assistant result',
+        observedAt: at,
+      });
       return;
     }
     const delivery = await enqueueResultDeliveries(
@@ -435,6 +450,7 @@ export function createBotSessionEventService(deps: BotSessionEventServiceDeps) {
       })
       .where(and(eq(botInboxItems.id, row.inbox.id), eq(botInboxItems.status, 'processing')));
     emitChanged(row.inbox.botId, row.inbox.id);
+    await clearAttention({ botId: row.inbox.botId, successfulAt: at });
     void drainBot(row.inbox.botId);
   };
 
@@ -444,11 +460,13 @@ export function createBotSessionEventService(deps: BotSessionEventServiceDeps) {
     try {
       const db = getDbClient().drizzle;
       const [profile] = await db
-        .select({ status: botProfiles.status, canonicalSessionId: botProfiles.canonicalSessionId })
+        .select({ status: botProfiles.status })
         .from(botProfiles)
         .where(eq(botProfiles.id, botId))
         .limit(1);
-      if (!profile || profile.status !== 'active' || !profile.canonicalSessionId) return;
+      if (!profile || profile.status !== 'active') return;
+      const canonical = await resolveBotCanonicalSession(botId);
+      if (canonical.status !== 'resolved') return;
       const [running] = await db
         .select({ id: botInboxItems.id })
         .from(botInboxItems)
@@ -479,7 +497,7 @@ export function createBotSessionEventService(deps: BotSessionEventServiceDeps) {
         .update(botInboxItems)
         .set({
           status: 'processing',
-          processingSessionId: profile.canonicalSessionId,
+          processingSessionId: canonical.sessionId,
           attempts: candidate.inbox.attempts + 1,
           lastError: null,
           startedAt: null,
@@ -495,7 +513,7 @@ export function createBotSessionEventService(deps: BotSessionEventServiceDeps) {
       if (!claimed) return;
       const event = parseRecord(candidate.payloadJson) as unknown as BotSessionEventPayload;
       const dispatched = await deps.dispatch({
-        targetSessionId: profile.canonicalSessionId,
+        targetSessionId: canonical.sessionId,
         message: buildInboxPrompt(candidate.inbox.id, event),
         persistedContent: `Task state transition: ${event.title || event.sessionId}`,
         clientId: `bot-inbox:${candidate.inbox.id}`,
@@ -510,17 +528,19 @@ export function createBotSessionEventService(deps: BotSessionEventServiceDeps) {
         },
       });
       if (!dispatched.ok) {
+        const failure = `${dispatched.errorCode}: ${dispatched.message}`;
         await db
           .update(botInboxItems)
           .set({
             status: 'failed',
             processingSessionId: null,
             startedAt: null,
-            lastError: `${dispatched.errorCode}: ${dispatched.message}`.slice(0, MAX_ERROR_CHARS),
+            lastError: failure.slice(0, MAX_ERROR_CHARS),
             updatedAt: now(),
           })
           .where(eq(botInboxItems.id, candidate.inbox.id));
         emitChanged(botId, candidate.inbox.id);
+        await noteAttention({ botId, failure, observedAt: now() });
       }
     } catch (error) {
       log.warn('Bot inbox drain failed', { botId, error: boundedError(error) });
@@ -757,6 +777,24 @@ export function createBotSessionEventService(deps: BotSessionEventServiceDeps) {
       transitionId: transition.transitionId,
       sessionId: transition.sessionId,
     });
+    if (!origin?.botId) return;
+    if (
+      transition.current.execution === 'needs-interaction'
+      || transition.current.attention !== null
+    ) {
+      await noteAttention({
+        botId: origin.botId,
+        failure: { reason: 'agent_blocked' },
+        observedAt: transition.occurredAt,
+      });
+      return;
+    }
+    if (transition.current.execution === 'normal-ended') {
+      await clearAttention({
+        botId: origin.botId,
+        successfulAt: transition.occurredAt,
+      });
+    }
   };
 
   const listGuardianTargets = async (): Promise<BotGuardianSupervisionTarget[]> => {

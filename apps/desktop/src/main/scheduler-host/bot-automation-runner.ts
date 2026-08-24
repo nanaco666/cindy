@@ -33,6 +33,7 @@ import {
 } from '../localDb/schema.js';
 import { readGitSafetySettings } from '../maker-host/git-safety-settings-store.js';
 import { withBotAutomationMutationLock } from '../maker-ipc/botAutomationMutationLock.js';
+import { clearBotAttention, noteBotAttention } from '../maker-ipc/botAttentionService.js';
 import {
   buildSkipResultText,
   executePreRunHook,
@@ -492,6 +493,8 @@ export interface BotAutomationScheduleRunnerDeps {
       persistedContent: string;
     };
   }) => Promise<{ id: string }>;
+  noteAttention?: typeof noteBotAttention;
+  clearAttention?: typeof clearBotAttention;
 }
 
 type BotAutomationDeliveryTarget = {
@@ -848,6 +851,7 @@ export class BotAutomationScheduleRunner implements ScheduleRunner {
       await this.finalizeClaimOnly(
         automationRunId,
         isAbort(error, ctx.signal) ? 'aborted' : 'failed',
+        error,
       );
       throw error;
     }
@@ -858,6 +862,7 @@ export class BotAutomationScheduleRunner implements ScheduleRunner {
       await this.finalizeClaimOnly(
         automationRunId,
         isAbort(error, ctx.signal) ? 'aborted' : 'failed',
+        error,
       );
       throw error;
     }
@@ -953,6 +958,7 @@ export class BotAutomationScheduleRunner implements ScheduleRunner {
         await this.finalizeClaimOnly(
           automationRunId,
           isAbort(error, ctx.signal) ? 'aborted' : 'failed',
+          error,
         );
         throw error;
       }
@@ -1198,13 +1204,41 @@ export class BotAutomationScheduleRunner implements ScheduleRunner {
   private async finalizeClaimOnly(
     automationRunId: string,
     status: 'failed' | 'aborted' | 'skipped',
+    failure?: unknown,
   ): Promise<void> {
     const finishedAt = Date.now();
-    await this.deps
-      .getDb()
+    const db = this.deps.getDb();
+    await db
       .update(botAutomationRuns)
-      .set({ status, updatedAt: finishedAt, finishedAt })
+      .set({
+        status,
+        errorMessage: status === 'failed' ? errorText(failure).slice(0, 4_000) : null,
+        updatedAt: finishedAt,
+        finishedAt,
+      })
       .where(eq(botAutomationRuns.id, automationRunId));
+    if (status !== 'failed') return;
+    const [owner] = await db
+      .select({ botId: botAutomationLinks.botId })
+      .from(botAutomationRuns)
+      .innerJoin(
+        botAutomationLinks,
+        eq(botAutomationLinks.id, botAutomationRuns.automationLinkId),
+      )
+      .where(eq(botAutomationRuns.id, automationRunId))
+      .limit(1);
+    if (!owner?.botId) return;
+    await (this.deps.noteAttention ?? noteBotAttention)({
+      botId: owner.botId,
+      failure,
+      observedAt: finishedAt,
+    }).catch((error) => {
+      this.deps.logger?.warn?.('[bot-automation] claimed-run attention projection failed', {
+        botId: owner.botId,
+        automationRunId,
+        error: errorText(error),
+      });
+    });
   }
 
   private async finalizeRun(input: {
@@ -1215,18 +1249,17 @@ export class BotAutomationScheduleRunner implements ScheduleRunner {
   }): Promise<void> {
     const db = this.deps.getDb();
     const finishedAt = Date.now();
-    const [canonicalLink] = await db
-      .select({ id: botSessionLinks.id })
+    const [sessionLink] = await db
+      .select({ botId: botSessionLinks.botId, role: botSessionLinks.role })
       .from(botSessionLinks)
       .where(
         and(
           eq(botSessionLinks.sessionId, input.sessionId),
-          eq(botSessionLinks.role, 'canonical'),
           isNull(botSessionLinks.archivedAt),
         ),
       )
       .limit(1);
-    const preserveCanonicalSession = !!canonicalLink;
+    const preserveCanonicalSession = sessionLink?.role === 'canonical';
     const [attachment] = await db
       .select({
         leaseId: botWorkspaceAttachments.leaseId,
@@ -1254,6 +1287,25 @@ export class BotAutomationScheduleRunner implements ScheduleRunner {
       preserveSessionLink: preserveCanonicalSession,
       finishedAt,
     });
+    if (sessionLink?.botId) {
+      const attentionWrite = input.status === 'success'
+        ? (this.deps.clearAttention ?? clearBotAttention)({
+            botId: sessionLink.botId,
+            successfulAt: finishedAt,
+          })
+        : (this.deps.noteAttention ?? noteBotAttention)({
+            botId: sessionLink.botId,
+            failure: input.errorMessage ?? input.status,
+            observedAt: finishedAt,
+          });
+      await attentionWrite.catch((error) => {
+        this.deps.logger?.warn?.('[bot-automation] attention projection failed', {
+          botId: sessionLink.botId,
+          automationRunId: input.automationRunId,
+          error: errorText(error),
+        });
+      });
+    }
     if (!preserveCanonicalSession) {
       await (this.deps.archiveSession?.(input.sessionId) ?? db
         .update(sessions)
@@ -1300,6 +1352,8 @@ export async function reconcileBotAutomationRuns(
     logger?: Logger;
     archiveSession?: (sessionId: string) => Promise<void>;
     enqueueDelivery?: BotAutomationScheduleRunnerDeps['enqueueDelivery'];
+    noteAttention?: typeof noteBotAttention;
+    clearAttention?: typeof clearBotAttention;
   },
 ): Promise<void> {
   const db = deps.getDb();
@@ -1316,6 +1370,7 @@ export async function reconcileBotAutomationRuns(
       targetRouteOwnerGenerationSnapshot: botAutomationRuns.targetRouteOwnerGenerationSnapshot,
       deliveryOutboxId: botAutomationRuns.deliveryOutboxId,
       deliveryStatus: botAutomationRuns.deliveryStatus,
+      errorMessage: botAutomationRuns.errorMessage,
       executionPlanJson: botAutomationRuns.executionPlanJson,
       botId: botAutomationLinks.botId,
       scheduleName: schedules.name,
@@ -1480,6 +1535,23 @@ export async function reconcileBotAutomationRuns(
       targetRouteId: row.targetRouteIdSnapshot,
       canonicalSessionId: completedPlan?.delivery.targetSessionId ?? null,
       targetSessionId: row.sessionId,
+    });
+    const attentionWrite = terminalStatus === 'success'
+      ? (deps.clearAttention ?? clearBotAttention)({
+          botId: row.botId,
+          successfulAt: terminalAt,
+        })
+      : (deps.noteAttention ?? noteBotAttention)({
+          botId: row.botId,
+          failure: row.errorMessage ?? terminalStatus,
+          observedAt: terminalAt,
+        });
+    await attentionWrite.catch((error) => {
+      deps.logger?.warn?.('[bot-automation] reconcile attention projection failed', {
+        botId: row.botId,
+        automationRunId: row.id,
+        error: errorText(error),
+      });
     });
     if (row.sessionId && !canonicalRoutine) {
       await db
