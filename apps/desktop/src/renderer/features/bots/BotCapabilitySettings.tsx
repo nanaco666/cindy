@@ -186,9 +186,23 @@ export function BotCapabilitySettings({
 
   const toggleSkill = (reference: string) => {
     if (capabilities.skillMode === 'inherit') {
-      const inherited = skillCatalog.map((skill) => skill.runtimeCommandName?.trim() || skill.name);
-      updateCapability('skillMode', 'allowlist');
-      onSelectedSkillsChange(inherited.filter((item) => item !== reference));
+      /*
+        跟随全局时关掉一项 —— 记的是**排除项**,不是把此刻的清单快照成白名单。
+
+        原先这里会切成 allowlist 并把今天的目录整个写死。用户的心理动作只是
+        「我不想要这一个」,系统实际做的却是「把这个伙伴的能力面永久冻结在今天」:
+        以后 Cindy 内置新技能、用户装新插件、加新 MCP,这个伙伴一个都吃不到,
+        而且没有任何提示。
+
+        抄 Hermes 的存法(plugin.js 8949+):技能面存 disabled 而不是 enabled。
+      */
+      const excluded = capabilities.skillsExcluded;
+      updateCapability(
+        'skillsExcluded',
+        excluded.includes(reference)
+          ? excluded.filter((item) => item !== reference)
+          : [...excluded, reference],
+      );
       return;
     }
     onSelectedSkillsChange(
@@ -245,8 +259,11 @@ export function BotCapabilitySettings({
           <div className="grid gap-2 md:grid-cols-2">
             {skillCatalog.map((skill) => {
               const reference = skill.runtimeCommandName?.trim() || skill.name;
+              // 跟随全局时默认全亮,被明确关掉的那几项熄灭;白名单模式仍按选中集算。
               const selected =
-                capabilities.skillMode === 'inherit' || selectedSkills.includes(reference);
+                capabilities.skillMode === 'inherit'
+                  ? !capabilities.skillsExcluded.includes(reference)
+                  : selectedSkills.includes(reference);
               return (
                 <button
                   type="button"

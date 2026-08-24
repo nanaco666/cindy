@@ -196,6 +196,7 @@ function capabilities(overrides: Partial<BotCapabilities> = {}): BotCapabilities
     fastMode: false,
     harness: 'claude',
     skillMode: 'inherit',
+    skillsExcluded: [],
     toolsetMode: 'inherit',
     toolsets: [],
     mcpMode: 'inherit',

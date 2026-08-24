@@ -6,6 +6,7 @@ import {
   buildBotProfilePrompt,
   resolveBotMcpReferences,
   resolveBotSkillReferences,
+  resolveInheritedBotSkills,
   resolveBotToolsetReferences,
   withBotHomeDir,
 } from '../botProfileRuntime';
@@ -204,5 +205,61 @@ describe('伙伴的家进不进工具面', () => {
     expect(withBotHomeDir(undefined, '')).toBeUndefined();
     expect(withBotHomeDir(undefined, '   ')).toBeUndefined();
     expect(withBotHomeDir(['/work/design'], '')).toEqual(['/work/design']);
+  });
+});
+
+/**
+ * 关掉一个技能,不等于把这个伙伴的能力面冻结在今天。
+ *
+ * 原先设置页里取消勾选任何一项,都会把 skillMode 切成 allowlist 并把**当下的目录整个
+ * 快照**写死。用户的心理动作只是「我不想要这一个」,系统实际做的却是「以后 Cindy 内置
+ * 新技能、用户装新插件,这个伙伴一个都吃不到」,而且没有任何提示。
+ *
+ * 改成存排除项(Hermes 的 disabled_skills 存法)之后,减法每次都对着**当时**的目录做,
+ * 所以新技能自动进得来。
+ */
+describe('跟随全局时关掉某几项技能', () => {
+  const item = (name: string, extra: Record<string, unknown> = {}) =>
+    ({ name, runtimeCommandName: name, ...extra }) as never;
+
+  it('只关掉点名的那一项,其余照常', () => {
+    const catalog = [item('写周报'), item('查天气'), item('订会议室')];
+    const resolved = resolveInheritedBotSkills(catalog, new Set(['查天气']));
+    expect(resolved.map((entry) => entry.name)).toEqual(['写周报', '订会议室']);
+  });
+
+  it('关掉一项之后,后来新增的技能仍然进得来', () => {
+    const excluded = new Set(['查天气']);
+    const before = resolveInheritedBotSkills([item('写周报'), item('查天气')], excluded);
+    expect(before.map((entry) => entry.name)).toEqual(['写周报']);
+
+    // 用户装了个新插件 —— 目录长出一项,伙伴的配置一个字没改。
+    const after = resolveInheritedBotSkills(
+      [item('写周报'), item('查天气'), item('刚装的新技能')],
+      excluded,
+    );
+    expect(after.map((entry) => entry.name)).toEqual(['写周报', '刚装的新技能']);
+  });
+
+  it('排除项用 name 或 runtimeCommandName 写都认', () => {
+    const catalog = [item('周报', { runtimeCommandName: 'weekly-report' })];
+    expect(resolveInheritedBotSkills(catalog, new Set(['周报']))).toHaveLength(0);
+    expect(resolveInheritedBotSkills(catalog, new Set(['weekly-report']))).toHaveLength(0);
+  });
+
+  it('禁用与加载失败的技能本来就不进,与排除项无关', () => {
+    const catalog = [
+      item('关着的', { enabled: false }),
+      item('坏了的', { runtimeStatus: 'failed' }),
+      item('好的'),
+    ];
+    expect(resolveInheritedBotSkills(catalog, new Set()).map((entry) => entry.name)).toEqual([
+      '好的',
+    ]);
+  });
+
+  it('没有排除项时就是目录里可用的全部', () => {
+    const catalog = [item('a'), item('b')];
+    expect(resolveInheritedBotSkills(catalog, new Set())).toHaveLength(2);
   });
 });

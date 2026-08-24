@@ -330,6 +330,30 @@ function formatMemorySnapshot(title: string, content: string, note?: string): st
   return note ? `## ${title}\n${note}\n\n${body}` : `## ${title}\n${body}`;
 }
 
+/**
+ * 「跟随全局」模式下这个伙伴实际拿到的技能:目录里可用的全部,减去它自己关掉的那几项。
+ *
+ * 为什么是**减法**而不是把清单快照成白名单 —— 白名单会把能力面冻在今天:以后 Cindy
+ * 内置新技能、用户装新插件,这个伙伴一个都吃不到,而且没有任何提示。用户的心理动作
+ * 只是「我不想要这一个」,不该换来「这个伙伴永久定格」。抄的是 Hermes 的 disabled_skills
+ * 存法(hermes-agent plugin.js 8949+)。
+ *
+ * 排除项两种写法都比对:目录里 runtimeCommandName 与 name 谁是稳定标识随 harness 而变,
+ * 存进来的可能是任一种。
+ */
+export function resolveInheritedBotSkills(
+  catalog: readonly BotSkillCatalogItem[],
+  excluded: ReadonlySet<string>,
+): BotSkillCatalogItem[] {
+  return catalog.filter(
+    (item) =>
+      item.enabled !== false
+      && item.runtimeStatus !== 'failed'
+      && !excluded.has(item.runtimeCommandName?.trim() || '')
+      && !excluded.has(item.name.trim()),
+  );
+}
+
 export function resolveBotSkillReferences(
   configuredSkills: string[],
   catalog: BotSkillCatalogItem[],
@@ -475,6 +499,26 @@ export async function hydrateBotProfileRuntime(
         : configuredSkills.length > 0
           ? 'allowlist'
           : 'inherit';
+  /*
+    「跟随全局,但这几项关掉」—— 存**排除项**而不是把当下的清单快照成白名单。
+
+    差别在将来:白名单是把今天的目录冻住,以后 Cindy 内置新技能、用户装新插件,
+    这个伙伴一个都吃不到,而且没有任何提示。用户的心理动作只是「我不想要这一个」,
+    不该换来「这个伙伴的能力面永久定格在今天」。
+
+    抄的是 Hermes 的存法(hermes-agent plugin.js 8949+):技能面存 `disabled_skills`
+    而不是 enabled —— 关掉一个就只关那一个,将来的新技能照样进。
+
+    刻意**不**给 skillMode 加第三个枚举值:那个枚举在 BotDelegationCapabilitySnapshot
+    里是跨端线协议的一部分,加值要走协议兼容那一套。排除项只影响本机解析出来的
+    resolvedSkills,快照形态一个字节都没变。
+  */
+  const excludedSkills = new Set(
+    (Array.isArray(config.skillsExcluded) ? config.skillsExcluded : [])
+      .filter((item): item is string => typeof item === 'string')
+      .map((item) => item.trim())
+      .filter(Boolean),
+  );
   const configuredMcpServers = readStringList(config.mcpServers);
   const mcpMode =
     config.mcpMode === 'allowlist'
@@ -560,9 +604,7 @@ export async function hydrateBotProfileRuntime(
         remoteHostId: opts.remoteHostId,
       });
       if (skillMode === 'inherit') {
-        resolvedSkillEntries = catalog.filter(
-          (item) => item.enabled !== false && item.runtimeStatus !== 'failed',
-        );
+        resolvedSkillEntries = resolveInheritedBotSkills(catalog, excludedSkills);
         resolvedSkills = resolvedSkillEntries.map(
           (item) => item.runtimeCommandName?.trim() || item.name.trim(),
         );

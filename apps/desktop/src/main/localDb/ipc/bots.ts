@@ -505,6 +505,10 @@ async function readProfile(
             : Array.isArray(config.skills) && config.skills.length > 0
               ? 'allowlist'
               : 'inherit',
+      // 跟随全局时被单独关掉的那几项(见 botProfileRuntime 的 excludedSkills)。
+      skillsExcluded: Array.isArray(config.skillsExcluded)
+        ? config.skillsExcluded.filter((item): item is string => typeof item === 'string')
+        : [],
       toolsetMode:
         config.toolsetMode === 'allowlist'
           ? 'allowlist'

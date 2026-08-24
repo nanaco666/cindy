@@ -39,6 +39,13 @@ export interface BotCapabilities {
   fastMode: boolean;
   harness: 'claude' | 'codex' | 'pi';
   skillMode: 'inherit' | 'allowlist';
+  /**
+   * 「跟随全局,但这几项关掉」的排除项。只在 skillMode==='inherit' 时有意义。
+   *
+   * 存排除项而不是把当下清单快照成白名单 —— 白名单会把能力面冻在今天,以后
+   * 新增的技能这个伙伴一个都吃不到。抄 Hermes 的 disabled_skills 存法。
+   */
+  skillsExcluded: string[];
   toolsetMode: 'inherit' | 'allowlist';
   toolsets: string[];
   mcpMode: 'inherit' | 'allowlist';
@@ -241,6 +248,7 @@ function defaultCapabilities(harness: BotCapabilities['harness'] = 'claude'): Bo
     fastMode: getDraft().fastModeByModel[model] === true,
     harness,
     skillMode: 'inherit',
+    skillsExcluded: [],
     toolsetMode: 'inherit',
     toolsets: [],
     mcpMode: 'inherit',
@@ -341,6 +349,7 @@ function readProfiles(): BotProfile[] {
             sessionControlMode: normalizeBotSessionControlMode(capabilities.sessionControlMode),
             permissions: normalizeBotPermissions(capabilities.permissions),
             skillMode: normalizeSkillMode(capabilities.skillMode, value.skills),
+            skillsExcluded: normalizeStringList(capabilities.skillsExcluded),
             model: normalizeBotModel(capabilities.model, harness),
             toolsetMode: normalizeCapabilityMode(capabilities.toolsetMode, toolsets),
             toolsets,
@@ -456,6 +465,7 @@ function normalizeDbProfile(value: unknown): BotProfile | null {
       sessionControlMode: normalizeBotSessionControlMode(rawCapabilities?.sessionControlMode),
       permissions: normalizeBotPermissions(rawCapabilities?.permissions),
       skillMode: normalizeSkillMode(item.capabilities?.skillMode, item.skills),
+      skillsExcluded: normalizeStringList(rawCapabilities?.skillsExcluded),
       model: normalizeBotModel(item.capabilities?.model, harness),
       toolsetMode: normalizeCapabilityMode(rawCapabilities?.toolsetMode, toolsets),
       toolsets,
