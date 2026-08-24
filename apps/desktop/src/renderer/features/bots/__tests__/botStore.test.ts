@@ -173,3 +173,119 @@ describe('bot profile store', () => {
     expect(getBotProfiles().some((bot) => bot.id === second.id)).toBe(true);
   });
 });
+
+/**
+ * 保存失败时的回滚边界。
+ *
+ * 原先 updateBotProfile 的 catch 是 `profiles = previous` —— 拿**整张列表**在
+ * 乐观写之前的快照覆盖回去。于是从乐观写到失败之间落地的任何其它写入都被静默
+ * 撤销。三个并发写入方是真实存在的(生命周期设置、伙伴设置页、对话界面的模型
+ * 回写),其中模型回写是即发即忘、失败无声的,它的回滚会把用户刚在设置页保存的
+ * 修改一起抹掉;而伙伴列表只在进入伙伴页时重新投影,所以界面会一直显示被还原的
+ * 旧值,直到用户离开再进来。
+ */
+describe('保存失败只回滚自己那一行', () => {
+  const createdIds: string[] = [];
+  let restoreApi: (() => void) | null = null;
+
+  afterEach(() => {
+    restoreApi?.();
+    restoreApi = null;
+    for (const id of createdIds.splice(0)) removeBotProfile(id);
+  });
+
+  /**
+   * 让 localDb.bots.update 交出每次调用的 reject,由用例决定何时失败。
+   *
+   * 这个文件跑在 node 环境(没有 window),而 botsApi() 与 persist() 都以
+   * `typeof window !== 'undefined'` 为闸 —— 所以要连 localStorage 一起补齐,
+   * 否则 persist() 会在写入时炸。用例结束后整个 window 移除,回到原状。
+   */
+  function stubDeferredUpdates(): (id: string) => (error: unknown) => void {
+    // 同一个伙伴可能有多次写在飞 —— 按调用顺序排队,不能后来的覆盖先来的。
+    const rejectors = new Map<string, Array<(error: unknown) => void>>();
+    const store = new Map<string, string>();
+    const globalScope = globalThis as unknown as { window?: Record<string, unknown> };
+    const hadWindow = 'window' in globalThis;
+    const previousWindow = globalScope.window;
+    globalScope.window = {
+      ...(previousWindow ?? {}),
+      localStorage: {
+        getItem: (key: string) => store.get(key) ?? null,
+        setItem: (key: string, value: string) => void store.set(key, value),
+        removeItem: (key: string) => void store.delete(key),
+      },
+      electronAPI: {
+        localDb: {
+          bots: {
+            update: (input: { id: string }) =>
+              new Promise((_resolve, reject) => {
+                const queue = rejectors.get(input.id) ?? [];
+                queue.push(reject);
+                rejectors.set(input.id, queue);
+              }),
+          },
+        },
+      },
+    };
+    restoreApi = () => {
+      if (hadWindow) globalScope.window = previousWindow;
+      else delete globalScope.window;
+    };
+    /** 取该伙伴**最早**那次还没结算的写并让它失败。 */
+    return (id: string) =>
+      (error: unknown) => {
+        const next = rejectors.get(id)?.shift();
+        if (!next) throw new Error(`no pending update for ${id}`);
+        next(error);
+      };
+  }
+
+  it('另一个伙伴在同期保存的修改不被撤销', async () => {
+    const failing = addBotProfile({ name: 'Failing', channel: 'local', description: '' });
+    const other = addBotProfile({ name: 'Other', channel: 'local', description: '' });
+    createdIds.push(failing.id, other.id);
+
+    const rejectorFor = stubDeferredUpdates();
+
+    const pendingFailure = updateBotProfile(failing.id, { description: '这次会失败' }).catch(
+      () => undefined,
+    );
+    // 在上面那次还在飞的时候,另一个伙伴也写了一笔。
+    const pendingOther = updateBotProfile(other.id, { description: '另一个伙伴改的' }).catch(
+      () => undefined,
+    );
+
+    rejectorFor(failing.id)(new Error('write failed'));
+    await pendingFailure;
+
+    expect(getBotProfiles().find((bot) => bot.id === other.id)?.description).toBe(
+      '另一个伙伴改的',
+    );
+    // 失败的那一行照常回滚。
+    expect(getBotProfiles().find((bot) => bot.id === failing.id)?.description).toBe('');
+
+    rejectorFor(other.id)(new Error('cleanup'));
+    await pendingOther;
+  });
+
+  it('同一个伙伴上更新的那次写赢过落后的回滚', async () => {
+    const bot = addBotProfile({ name: 'Same row', channel: 'local', description: '' });
+    createdIds.push(bot.id);
+
+    const rejectorFor = stubDeferredUpdates();
+
+    const firstWrite = updateBotProfile(bot.id, { description: '第一次' }).catch(() => undefined);
+    // 第二次写覆盖了同一行,并且代际更新。
+    const secondWrite = updateBotProfile(bot.id, { description: '第二次' }).catch(() => undefined);
+
+    // 第一次失败:它已经不是最新那次写,不许把界面拽回「第一次」之前的值。
+    rejectorFor(bot.id)(new Error('stale write failed'));
+    await firstWrite;
+
+    expect(getBotProfiles().find((item) => item.id === bot.id)?.description).toBe('第二次');
+
+    rejectorFor(bot.id)(new Error('cleanup'));
+    await secondWrite;
+  });
+});

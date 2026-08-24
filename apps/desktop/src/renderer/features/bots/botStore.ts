@@ -363,6 +363,8 @@ function readProfiles(): BotProfile[] {
 let profiles = readProfiles();
 const listeners = new Set<() => void>();
 let hydrated = false;
+/** 每个伙伴各自的写入代际 —— 见 updateBotProfile 里的 isLatestWrite。 */
+const profileWriteGenerations = new Map<string, number>();
 
 function emit(): void {
   for (const listener of listeners) listener();
@@ -749,11 +751,16 @@ export function updateBotProfile(
     >
   >,
 ): Promise<BotProfile> {
-  const previous = profiles;
+  const before = profiles.find((bot) => bot.id === id);
+  if (!before) return Promise.reject(new Error('Bot not found'));
+  // 这一行的写入代际。回填与回滚都要求「我仍然是这一行最新的那次写」——
+  // 落后的响应一律丢弃,不许覆盖更新的状态(见下面两处 isLatestWrite)。
+  const generation = (profileWriteGenerations.get(id) ?? 0) + 1;
+  profileWriteGenerations.set(id, generation);
+  const isLatestWrite = () => profileWriteGenerations.get(id) === generation;
   profiles = profiles.map((bot) => (bot.id === id ? { ...bot, ...patch } : bot));
   persist();
-  const optimistic = profiles.find((bot) => bot.id === id);
-  if (!optimistic) return Promise.reject(new Error('Bot not found'));
+  const optimistic = profiles.find((bot) => bot.id === id) ?? { ...before, ...patch };
   const api = botsApi();
   if (!api) return Promise.resolve(optimistic);
   return api
@@ -761,13 +768,30 @@ export function updateBotProfile(
     .then((value) => {
       const next = normalizeDbProfile(value);
       if (!next) throw new Error('Bot profile update returned invalid data');
+      // 同一行已经有更新的写在飞:那次的乐观值更接近用户此刻的意图,
+      // 让它赢。调用方仍然拿到自己这次的服务端结果。
+      if (!isLatestWrite()) return next;
       profiles = profiles.map((bot) => (bot.id === id ? next : bot));
       persist();
       return next;
     })
     .catch((error) => {
-      profiles = previous;
-      persist();
+      /*
+        只回滚**这一行**,而且只在自己仍是最新那次写的时候回滚。
+
+        原先这里是 `profiles = previous`,拿整张列表的旧快照覆盖回去 ——
+        从乐观写到失败之间落地的任何其它写入都被静默撤销。三个并发写入方
+        是真实存在的(生命周期设置、伙伴设置页、对话界面的模型回写),
+        其中模型回写是 `void … .catch(() => {})` 即发即忘、失败无声,
+        它的回滚会把用户刚在设置页保存的修改一起抹掉。
+
+        而且不会自愈:伙伴列表只在进入伙伴页时重新投影(hydrateFromDatabase
+        有 hydrated 闸),所以数据库里是对的,界面上却一直显示被还原的旧值。
+      */
+      if (isLatestWrite()) {
+        profiles = profiles.map((bot) => (bot.id === id ? before : bot));
+        persist();
+      }
       throw error;
     });
 }
