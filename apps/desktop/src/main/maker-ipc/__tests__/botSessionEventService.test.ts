@@ -1,4 +1,5 @@
 import Database from 'better-sqlite3';
+import { createHash } from 'node:crypto';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -232,6 +233,73 @@ describe('Bot task-state transition inbox service', () => {
     expect(sqlite.prepare('SELECT bot_id FROM bot_inbox_items').get()).toEqual({
       bot_id: 'control-bot',
     });
+  });
+
+  it('repairs Inbox fan-out when the ledger row already exists', async () => {
+    const events = service();
+    await events.upsertSubscription({
+      id: 'subscription-control',
+      botId: 'control-bot',
+      name: '总控订阅',
+      rule: DEFAULT_CONTROL_BOT_EVENT_RULE,
+    });
+    const key = createHash('sha256')
+      .update(JSON.stringify({
+        transitionId: 'state-transition-replay',
+        sessionId: 'task-1',
+        title: '实现功能',
+        changedFacets: ['execution'],
+      }))
+      .digest('hex');
+    sqlite.prepare(`INSERT INTO bot_session_event_ledger
+      (id, event_key, session_id, event_type, payload_json, created_at)
+      VALUES (?, ?, ?, ?, ?, ?)`)
+      .run(
+        'existing-event',
+        key,
+        'task-1',
+        'state-transition',
+        JSON.stringify({ ...transition('state-transition-replay') }),
+        20,
+      );
+
+    await events.recordStateTransition(transition('state-transition-replay'));
+
+    expect(count(sqlite, 'bot_session_event_ledger')).toBe(1);
+    expect(count(sqlite, 'bot_inbox_items')).toBe(1);
+  });
+
+  it('records a title-only state transition', async () => {
+    const events = service();
+    await events.upsertSubscription({
+      id: 'subscription-control',
+      botId: 'control-bot',
+      name: '总控订阅',
+      rule: DEFAULT_CONTROL_BOT_EVENT_RULE,
+    });
+
+    await events.recordStateTransition({
+      ...transition('title-transition', {
+        execution: 'running',
+      }),
+      title: '待总控',
+      previous: {
+        lifecycle: 'active',
+        execution: 'running',
+        attention: null,
+        workflow: null,
+      },
+      current: {
+        lifecycle: 'active',
+        execution: 'running',
+        attention: null,
+        workflow: null,
+      },
+      changedFacets: ['title'],
+    });
+
+    expect(count(sqlite, 'bot_session_event_ledger')).toBe(1);
+    expect(count(sqlite, 'bot_inbox_items')).toBe(1);
   });
 
   it('projects Bot-owned task attention from the unified state transition', async () => {
@@ -639,6 +707,18 @@ describe('Bot task-state transition inbox service', () => {
     sqlite
       .prepare(`UPDATE bot_delegations SET status = 'completed' WHERE id = 'delegation-1'`)
       .run();
+    sqlite.prepare(`INSERT INTO bot_session_event_ledger
+      (id, event_key, session_id, event_type, payload_json, created_at)
+      VALUES ('terminal-receipt', 'terminal-receipt-key', 'task-1', 'session.state.transition', ?, 100)`)
+      .run(JSON.stringify({ currentState: { execution: 'normal-ended' } }));
+    sqlite.prepare(`INSERT INTO bot_event_subscriptions
+      (id, bot_id, name, status, rule_json, created_at, updated_at)
+      VALUES ('bot-guardian:control-bot', 'control-bot', 'Cindy guardian heartbeat', 'active', ?, 1, 1)`)
+      .run(JSON.stringify({ activationMode: 'heartbeat-turn' }));
+    sqlite.prepare(`INSERT INTO bot_inbox_items
+      (id, bot_id, subscription_id, event_id, status, attempts, result_delivery_status, received_at, updated_at)
+      VALUES ('terminal-inbox', 'control-bot', 'bot-guardian:control-bot', 'terminal-receipt', 'handled', 1, 'none', 100, 100)`)
+      .run();
     await events.refreshGuardian();
     expect(cancel).toHaveBeenCalled();
     expect(scheduleGuardianTick).toHaveBeenCalledTimes(1);
@@ -676,6 +756,18 @@ describe('Bot task-state transition inbox service', () => {
     });
     await snapshotStarted;
     sqlite.prepare(`UPDATE bot_delegations SET status = 'completed' WHERE id = 'delegation-1'`).run();
+    sqlite.prepare(`INSERT INTO bot_session_event_ledger
+      (id, event_key, session_id, event_type, payload_json, created_at)
+      VALUES ('terminal-receipt', 'terminal-receipt-key', 'task-1', 'session.state.transition', ?, 100)`)
+      .run(JSON.stringify({ currentState: { execution: 'normal-ended' } }));
+    sqlite.prepare(`INSERT INTO bot_event_subscriptions
+      (id, bot_id, name, status, rule_json, created_at, updated_at)
+      VALUES ('bot-guardian:control-bot', 'control-bot', 'Cindy guardian heartbeat', 'active', ?, 1, 1)`)
+      .run(JSON.stringify({ activationMode: 'heartbeat-turn' }));
+    sqlite.prepare(`INSERT INTO bot_inbox_items
+      (id, bot_id, subscription_id, event_id, status, attempts, result_delivery_status, received_at, updated_at)
+      VALUES ('terminal-inbox', 'control-bot', 'bot-guardian:control-bot', 'terminal-receipt', 'handled', 1, 'none', 100, 100)`)
+      .run();
     const refreshed = events.refreshGuardian();
     releaseSnapshot();
     await refreshed;

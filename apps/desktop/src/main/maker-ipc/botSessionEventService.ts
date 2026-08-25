@@ -181,6 +181,7 @@ export function createBotSessionEventService(deps: BotSessionEventServiceDeps) {
     });
   const drainingBots = new Set<string>();
   const guardianCursorByBot = new Map<string, string>();
+  const transitionTailsBySession = new Map<string, Promise<void>>();
   let disposed = false;
   let stateTransitionUnsubscribe: (() => void) | null = null;
   let boundStateTransitionSource: BotSessionStateTransitionSource | null = null;
@@ -461,7 +462,7 @@ export function createBotSessionEventService(deps: BotSessionEventServiceDeps) {
     try {
       const db = getDbClient().drizzle;
       const [profile] = await db
-        .select({ status: botProfiles.status })
+        .select({ status: botProfiles.status, updatedAt: botProfiles.updatedAt })
         .from(botProfiles)
         .where(eq(botProfiles.id, botId))
         .limit(1);
@@ -508,10 +509,31 @@ export function createBotSessionEventService(deps: BotSessionEventServiceDeps) {
           and(
             eq(botInboxItems.id, candidate.inbox.id),
             inArray(botInboxItems.status, ['pending', 'failed']),
+            sql`EXISTS (
+              SELECT 1 FROM bot_profiles
+              WHERE id = ${botId} AND status = 'active' AND updated_at = ${profile.updatedAt}
+            )`,
           ),
         )
         .returning({ id: botInboxItems.id });
       if (!claimed) return;
+      const [stillActive] = await db
+        .select({ id: botProfiles.id })
+        .from(botProfiles)
+        .where(and(eq(botProfiles.id, botId), eq(botProfiles.status, 'active')))
+        .limit(1);
+      if (!stillActive) {
+        await db
+          .update(botInboxItems)
+          .set({
+            status: 'pending',
+            processingSessionId: null,
+            startedAt: null,
+            updatedAt: now(),
+          })
+          .where(and(eq(botInboxItems.id, candidate.inbox.id), eq(botInboxItems.status, 'processing')));
+        return;
+      }
       const event = parseRecord(candidate.payloadJson) as unknown as BotSessionEventPayload;
       const dispatched = await deps.dispatch({
         targetSessionId: canonical.sessionId,
@@ -655,7 +677,11 @@ export function createBotSessionEventService(deps: BotSessionEventServiceDeps) {
       .from(botSessionEventLedger)
       .where(eq(botSessionEventLedger.eventKey, key))
       .limit(1);
-    if (!eventRow || eventRow.id !== id) return;
+    // The ledger insert is idempotent, but fan-out must also be idempotent and
+    // repeatable. If a previous process died after writing the ledger and before
+    // creating Inbox rows, a retry with the same event key must repair the fan-out
+    // instead of treating the existing ledger row as a completed delivery.
+    if (!eventRow) return;
     const subscriptions = directSubscriptions
       ? directSubscriptions
       : (
@@ -743,7 +769,11 @@ export function createBotSessionEventService(deps: BotSessionEventServiceDeps) {
 
   const recordStateTransition = async (transition: BotSessionStateTransition): Promise<void> => {
     if (!transition.transitionId.trim() || !transition.sessionId.trim()) return;
-    if (JSON.stringify(transition.previous) === JSON.stringify(transition.current)) return;
+    if (
+      JSON.stringify(transition.previous) === JSON.stringify(transition.current)
+      && transition.changedFacets.length === 0
+    )
+      return;
     const [[origin], processing] = await Promise.all([
       getDbClient()
         .drizzle.select({ botId: botSessionLinks.botId })
@@ -777,6 +807,8 @@ export function createBotSessionEventService(deps: BotSessionEventServiceDeps) {
     await recordEvent(payload, {
       transitionId: transition.transitionId,
       sessionId: transition.sessionId,
+      title: transition.title,
+      changedFacets: [...new Set(transition.changedFacets)],
     });
     if (!origin?.botId) return;
     if (
@@ -805,6 +837,7 @@ export function createBotSessionEventService(deps: BotSessionEventServiceDeps) {
         .select({
           botId: botDelegations.requestingBotId,
           sessionId: botDelegations.childSessionId,
+          status: botDelegations.status,
           supervisedAt: botDelegations.createdAt,
           title: sessions.title,
           source: sessions.source,
@@ -816,8 +849,15 @@ export function createBotSessionEventService(deps: BotSessionEventServiceDeps) {
         .where(
           and(
             eq(botProfiles.status, 'active'),
-            eq(sessions.status, 'active'),
-            inArray(botDelegations.status, ['queued', 'running', 'waiting']),
+            inArray(botDelegations.status, [
+              'queued',
+              'running',
+              'waiting',
+              'completed',
+              'failed',
+              'cancelled',
+              'timed-out',
+            ]),
           ),
         ),
       db
@@ -870,7 +910,9 @@ export function createBotSessionEventService(deps: BotSessionEventServiceDeps) {
       add({
         botId: row.botId,
         sessionId: row.sessionId,
-        relation: 'delegated-by-bot',
+        relation: ['completed', 'failed', 'cancelled', 'timed-out'].includes(row.status)
+          ? 'delegated-by-bot-terminal'
+          : 'delegated-by-bot',
         supervisedAt: row.supervisedAt,
         expectsTerminalEvent: true,
         title: row.title,
@@ -1013,7 +1055,7 @@ export function createBotSessionEventService(deps: BotSessionEventServiceDeps) {
         if (disposed || !reader) return result;
         try {
           const targets = await listGuardianTargets();
-          result = { targetCount: targets.length, runningCount: 0 };
+          result = { targetCount: 0, runningCount: 0 };
           if (targets.length === 0) {
             guardianCursorByBot.clear();
             continue;
@@ -1035,7 +1077,13 @@ export function createBotSessionEventService(deps: BotSessionEventServiceDeps) {
               botId,
               batch.targets.map((target) => target.sessionId),
             );
-            for (const target of batch.targets) {
+            const targetsToCheck = batch.targets.filter((target) => {
+              if (!target.relation.includes('delegated-by-bot-terminal')) return true;
+              const receiptAt = receipts.latestStateReceiptAt.get(target.sessionId) ?? null;
+              return receiptAt === null || receiptAt < target.supervisedAt;
+            });
+            result.targetCount += targetsToCheck.length;
+            for (const target of targetsToCheck) {
               let state: BotObservedSessionState | null;
               try {
                 state = await reader(target.sessionId);
@@ -1062,7 +1110,7 @@ export function createBotSessionEventService(deps: BotSessionEventServiceDeps) {
               }
             }
           }
-          if (!guardianRefreshRequested) {
+          if (!guardianRefreshRequested && result.targetCount > 0) {
             scheduleNextGuardianTick(botGuardianIntervalMs(result));
           }
         } catch (error) {
@@ -1099,13 +1147,23 @@ export function createBotSessionEventService(deps: BotSessionEventServiceDeps) {
     stateTransitionUnsubscribe?.();
     boundStateTransitionSource = source;
     stateTransitionUnsubscribe = source.subscribe((transition) => {
-      void recordStateTransition(transition).catch((error) => {
-        log.warn('Bot state-transition persistence failed', {
-          sessionId: transition.sessionId,
-          transitionId: transition.transitionId,
-          error: boundedError(error),
+      const previous = transitionTailsBySession.get(transition.sessionId) ?? Promise.resolve();
+      const next = previous
+        .catch(() => undefined)
+        .then(() => recordStateTransition(transition))
+        .catch((error) => {
+          log.warn('Bot state-transition persistence failed', {
+            sessionId: transition.sessionId,
+            transitionId: transition.transitionId,
+            error: boundedError(error),
+          });
+        })
+        .finally(() => {
+          if (transitionTailsBySession.get(transition.sessionId) === next) {
+            transitionTailsBySession.delete(transition.sessionId);
+          }
         });
-      });
+      transitionTailsBySession.set(transition.sessionId, next);
     });
     void refreshGuardian();
   };
@@ -1192,6 +1250,7 @@ export function createBotSessionEventService(deps: BotSessionEventServiceDeps) {
     guardianRefreshRequested = false;
     drainingBots.clear();
     guardianCursorByBot.clear();
+    transitionTailsBySession.clear();
   };
 
   if (deps.stateTransitionSource) bindStateTransitionSource(deps.stateTransitionSource);

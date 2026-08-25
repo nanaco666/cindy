@@ -108,6 +108,8 @@ export interface BotEventSubscriptionRule {
   executionStates?: string[];
   attentionStates?: string[];
   workflowStates?: string[];
+  /** Match task-title changes, including title-only transitions. */
+  titleChanged?: boolean;
   /** Optional task metadata constraints, evaluated after the logical relation. */
   sources?: string[];
   workingDirPrefixes?: string[];
@@ -191,6 +193,7 @@ export function normalizeBotEventSubscriptionRule(
       ? { attentionStates: uniqueStrings(input?.attentionStates) }
       : {}),
     ...(workflowStates.length > 0 ? { workflowStates } : {}),
+    ...(input?.titleChanged === true ? { titleChanged: true } : {}),
     ...(uniqueStrings(input?.sources).length > 0 ? { sources: uniqueStrings(input?.sources) } : {}),
     ...(uniqueStrings(input?.workingDirPrefixes).length > 0
       ? { workingDirPrefixes: uniqueStrings(input?.workingDirPrefixes) }
@@ -246,6 +249,7 @@ export function matchesBotEventSubscription(
         state === currentState.workflow?.key || state === currentState.workflow?.label)
       && facetChanged(previousState.workflow, currentState.workflow),
     ),
+    Boolean(rule.titleChanged && event.changedFacets?.includes('title')),
   ];
   if (
     (rule.executionStates?.length || rule.attentionStates?.length || rule.workflowStates?.length)
@@ -260,6 +264,7 @@ export const DEFAULT_CONTROL_BOT_EVENT_RULE: BotEventSubscriptionRule = {
   sessionRelations: ['all-local'],
   executionStates: ['normal-ended', 'error-ended'],
   workflowStates: ['等拍板', '待验收', '待总控'],
+  titleChanged: true,
   excludeOwnBotSessions: true,
   activationMode: 'heartbeat-turn',
   resultDelivery: 'all-active-routes',
