@@ -1954,8 +1954,9 @@ export async function deleteBotProfileAndDetachSessionsInDb(
     ? await withSessionRouteLocks(ids, commitDeletion)
     : await commitDeletion();
   const status = committed.status;
+  const committedSessionIds = [...new Set(committed.sessionIds)];
 
-  for (const id of ids) {
+  for (const id of committedSessionIds) {
     notifyAgentIslandSessionPatch(id, { status });
     broadcastSessionPatched(id, { status, source: 'desktop' }, ownerScope);
     notifyGhostSessionStatusChange(id, status, null);

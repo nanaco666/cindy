@@ -417,6 +417,38 @@ describe('Bot task-state transition inbox service', () => {
     expect(JSON.stringify(enqueueDelivery.mock.calls)).not.toContain('实现功能 · 待总控');
   });
 
+  it('keeps an IM event result on its originating route lane', async () => {
+    sqlite.prepare(`INSERT INTO bot_channels VALUES
+      ('telegram-channel-2', 'control-bot', 'telegram', 1, 1, 1)`).run();
+    sqlite.prepare(`INSERT INTO bot_routes VALUES
+      ('telegram-route-2', 'control-bot', 'telegram-channel-2', 'other-telegram-session', 4, 'active', 1, 1)`).run();
+    const events = service();
+    await events.upsertSubscription({
+      id: 'subscription-control',
+      botId: 'control-bot',
+      name: '总控订阅',
+      rule: DEFAULT_CONTROL_BOT_EVENT_RULE,
+    });
+
+    await events.recordStateTransition({
+      ...transition('telegram-transition'),
+      sessionId: 'telegram-session',
+    });
+    await vi.waitFor(() => expect(dispatch).toHaveBeenCalledTimes(1));
+    await accepted?.();
+    await events.settleProcessingForSession({
+      sessionId: 'control-session',
+      outcome: 'completed',
+      resultText: '只应回到原 Telegram 会话。',
+    });
+
+    expect(enqueueDelivery).toHaveBeenCalledTimes(1);
+    expect(enqueueDelivery).toHaveBeenCalledWith(
+      expect.objectContaining({ routeId: 'telegram-route', sessionId: 'telegram-session' }),
+    );
+    expect(enqueueDelivery.mock.calls.flat()).not.toContain('telegram-route-2');
+  });
+
   it('binds the control-plane transition source and resolves logical relationships at match time', async () => {
     const listeners: Array<(value: BotSessionStateTransition) => void> = [];
     const unsubscribe = vi.fn();

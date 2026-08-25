@@ -1,6 +1,5 @@
 import { randomUUID } from 'node:crypto';
 
-import type { AgentKind } from '@cindy/maker-core';
 import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
 
 import {
@@ -21,8 +20,6 @@ import {
 } from '../localDb/schema.js';
 import type { BotGroupRoomRuntime } from './botGroupChatCoordinator.js';
 import { createBotGroupSessionMessageStore } from './botGroupSessionMessages.js';
-import { getActiveCatalog } from '../maker-host/active-catalog.js';
-import { deriveAvailableModels } from '../maker-host/catalog-to-descriptors.js';
 
 interface BotGroupChatStoreDeps {
   createId?: () => string;
@@ -48,17 +45,6 @@ type CanonicalSeed = {
   remoteHostId: string | null;
   providerId: string | null;
 };
-
-function catalogDefaultSessionConfig(
-  agentKind: string,
-  catalog = getActiveCatalog(),
-): { model: string; effort: string | null } {
-  const agent: AgentKind = agentKind === 'codex' ? 'codex' : agentKind === 'pi' ? 'pi' : 'claude-code';
-  const models = deriveAvailableModels(catalog, agent);
-  const model = models.find((candidate) => candidate.newSessionDefault?.includes(agent))
-    ?? models[0];
-  return { model: model?.id ?? '', effort: model?.defaultEffort ?? null };
-}
 
 export function createBotGroupChatStore(deps: BotGroupChatStoreDeps = {}) {
   const createId = deps.createId ?? randomUUID;
@@ -239,10 +225,11 @@ export function createBotGroupChatStore(deps: BotGroupChatStoreDeps = {}) {
     const at = now();
     const roomSessionId = createId();
     const first = seeds[0]!;
-    const catalog = getActiveCatalog();
-    const firstDefaults = catalogDefaultSessionConfig(first.agentKind, catalog);
-    const roomModel = firstDefaults.model || first.model;
-    const roomEffort = firstDefaults.effort ?? first.effort;
+    // Group workers inherit each Bot's canonical route exactly. Re-resolving a
+    // catalog default here silently changed models/providers (and could route a
+    // mixed Claude/Codex/Pi room through the first member's configuration).
+    const roomModel = first.model;
+    const roomEffort = first.effort;
     const roomSession = {
       id: roomSessionId,
       title: `Group: ${name}`,
@@ -263,7 +250,6 @@ export function createBotGroupChatStore(deps: BotGroupChatStoreDeps = {}) {
     };
     const members = seeds.map((seed, rosterOrder) => {
       const sessionId = createId();
-      const defaults = catalogDefaultSessionConfig(seed.agentKind, catalog);
       return {
         id: createId(),
         botId: seed.botId,
@@ -275,15 +261,15 @@ export function createBotGroupChatStore(deps: BotGroupChatStoreDeps = {}) {
           title: `Group: ${roomId}`,
           workingDir: seed.workingDir,
           workspaceKind: seed.workspaceKind,
-          model: defaults.model || seed.model,
-          effort: defaults.effort ?? seed.effort,
+          model: seed.model,
+          effort: seed.effort,
           permissionMode: seed.permissionMode,
           fastMode: seed.fastMode,
           agentKind: seed.agentKind,
           worktreePath: seed.worktreePath,
           extraDirs: seed.extraDirs,
           remoteHostId: seed.remoteHostId,
-          providerId: null,
+          providerId: seed.providerId,
           source: 'bot',
           createdAt: at,
           updatedAt: at,

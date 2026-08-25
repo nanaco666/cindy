@@ -66,6 +66,8 @@ export interface BotGroupChatServiceDeps {
     clientId: string;
     files?: BotGroupRoomMessage['files'];
   }) => Promise<DispatchResult>;
+  /** Stop member/room runtimes after an archive invalidates the room epoch. */
+  stopSession?: (sessionId: string) => Promise<void>;
   createId?: () => string;
   turnTimeoutMs?: number;
   turnHardTimeoutMs?: number;
@@ -498,7 +500,17 @@ export function createBotGroupChatService(deps: BotGroupChatServiceDeps) {
   };
 
   const archiveRoom = async (roomId: string) => {
+    const beforeArchive = await store.loadRoom(roomId);
     const room = await store.archiveRoom(roomId);
+    if (beforeArchive) {
+      const sessionIds = [
+        beforeArchive.roomSessionId,
+        ...beforeArchive.members.map((member) => member.sessionId),
+      ];
+      await Promise.allSettled(
+        [...new Set(sessionIds)].map((sessionId) => deps.stopSession?.(sessionId)),
+      );
+    }
     deps.onChanged?.({ roomId });
     return projectInteractions(room);
   };

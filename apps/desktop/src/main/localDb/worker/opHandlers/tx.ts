@@ -1178,9 +1178,31 @@ function botsArchiveLifecycle(db: Database.Database, args: unknown): { sessions:
   const botId = expectString(p.botId, 'botId');
   const at = expectNumber(p.at, 'at');
   return db.transaction(() => {
-    const sessions = db.prepare(`UPDATE sessions SET status = 'archived', updated_at = ?
-      WHERE source = 'bot' AND id IN (SELECT session_id FROM bot_session_links WHERE bot_id = ?)`)
-      .run(at, botId).changes;
+    const hasGroupTables = Boolean(db.prepare(
+      "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'bot_group_rooms'",
+    ).get());
+    // Group room tasks are not owned by a single canonical link. Archive the
+    // room projection and its room task explicitly, otherwise archiving one
+    // member Bot leaves an active room that still dispatches through a dead
+    // member.
+    if (hasGroupTables) {
+      db.prepare(`UPDATE bot_group_rooms SET status = 'archived', epoch = epoch + 1,
+        running = 0, needs_user = 0, updated_at = ?
+        WHERE status IN ('active', 'error') AND id IN (
+          SELECT room_id FROM bot_group_members WHERE bot_id = ?
+        )`).run(at, botId);
+    }
+    const sessions = hasGroupTables
+      ? db.prepare(`UPDATE sessions SET status = 'archived', updated_at = ?
+          WHERE source = 'bot' AND (
+            id IN (SELECT session_id FROM bot_session_links WHERE bot_id = ?)
+            OR id IN (SELECT room_session_id FROM bot_group_rooms WHERE id IN (
+              SELECT room_id FROM bot_group_members WHERE bot_id = ?
+            ))
+          )`).run(at, botId, botId).changes
+      : db.prepare(`UPDATE sessions SET status = 'archived', updated_at = ?
+          WHERE source = 'bot' AND id IN (SELECT session_id FROM bot_session_links WHERE bot_id = ?)`)
+        .run(at, botId).changes;
     db.prepare("UPDATE bot_session_links SET role = 'history', archived_at = ? WHERE bot_id = ?")
       .run(at, botId);
     const profile = db.prepare(`UPDATE bot_profiles SET status = 'archived', canonical_session_id = NULL,
@@ -1221,6 +1243,16 @@ function botsDeleteProfile(
       { code: 'PRECONDITION_FAILED' },
     );
 
+    const hasGroupTables = Boolean(db.prepare(
+      "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'bot_group_rooms'",
+    ).get());
+    const groupRoomSessionIds = hasGroupTables
+      ? (db.prepare(`SELECT DISTINCT room_session_id AS id
+          FROM bot_group_rooms WHERE id IN (
+            SELECT room_id FROM bot_group_members WHERE bot_id = ?
+          )`).all(botId) as Array<{ id: string }>).map((row) => row.id)
+      : [];
+    const allSessionIds = [...new Set([...sessionIds, ...groupRoomSessionIds])];
     if (sessionIds.length > 0) {
       const placeholders = sessionIds.map(() => '?').join(',');
       const owned = db.prepare(`SELECT DISTINCT sessions.id
@@ -1237,6 +1269,18 @@ function botsDeleteProfile(
         WHERE source = 'bot' AND id IN (${placeholders})`)
         .run(status, at, ...sessionIds);
     }
+    if (groupRoomSessionIds.length > 0) {
+      const placeholders = groupRoomSessionIds.map(() => '?').join(',');
+      db.prepare(`UPDATE sessions SET source = 'desktop', status = ?, updated_at = ?
+        WHERE source = 'bot' AND id IN (${placeholders})`)
+        .run(status, at, ...groupRoomSessionIds);
+      if (hasGroupTables) {
+        db.prepare(`UPDATE bot_group_rooms SET status = 'archived', epoch = epoch + 1,
+          running = 0, needs_user = 0, updated_at = ?
+          WHERE id IN (SELECT room_id FROM bot_group_members WHERE bot_id = ?)`)
+          .run(at, botId);
+      }
+    }
 
     const deleted = db.prepare("DELETE FROM bot_profiles WHERE id = ? AND status = 'archived'")
       .run(botId);
@@ -1244,7 +1288,7 @@ function botsDeleteProfile(
       new Error('Bot 生命周期已被另一处操作更新'),
       { code: 'PRECONDITION_FAILED' },
     );
-    return { sessionIds, status };
+    return { sessionIds: allSessionIds, status };
   })();
 }
 

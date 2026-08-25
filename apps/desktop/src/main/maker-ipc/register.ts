@@ -10539,6 +10539,7 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions)
   botGroupChatServiceHolder = createBotGroupChatService({
     dispatch: ({ targetSessionId, message, persistedContent, clientId, files }) =>
       dispatchBotSessionMessage({ targetSessionId, message, persistedContent, clientId, files }),
+    stopSession: (sessionId) => maker.closeSession(sessionId),
     getPendingInteractions: getPendingBotGroupInteractionsForSession,
     resolveInteraction: (_sessionId, requestId, decision) =>
       resolvePendingInteraction(requestId, decision as InteractionDecision),

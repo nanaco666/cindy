@@ -3605,6 +3605,53 @@ describe('Bot canonical Session lifecycle', () => {
     }
   });
 
+  it('preserves external dispatch receipts across pause/resume and emits one change', async () => {
+    const changed = vi.fn();
+    const service = createBotDeliveryOutboxService({
+      deliver: vi.fn(async () => ({ ok: true as const })),
+      onChanged: changed,
+      now: () => 6_000,
+    });
+    const payload = JSON.stringify({
+      version: 1,
+      kind: 'session-message',
+      targetSessionId: 'session-1',
+      message: 'possibly delivered',
+    });
+    const receipt = JSON.stringify({
+      externalDispatch: { retrySafe: false, transport: 'telegram-local', startedAt: 5_000 },
+      progress: { messageId: 'tg-1' },
+    });
+    h.sqlite!.prepare(`
+      INSERT INTO bot_delivery_outbox (
+        id, bot_id, session_id, idempotency_key, payload_ref_json,
+        owner_generation, status, attempts, next_attempt_at, delivery_receipt_json,
+        created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, 0, 'sending', 1, NULL, ?, ?, ?)
+    `).run('outbox-pause-receipt', 'bot-1', null, 'pause-receipt', payload, receipt, 5_000, 5_000);
+    try {
+      await expect(service.suspendForBot('bot-1')).resolves.toBe(1);
+      expect(h.sqlite!.prepare(
+        'SELECT status, delivery_receipt_json AS receipt FROM bot_delivery_outbox WHERE id = ?',
+      ).get('outbox-pause-receipt')).toEqual({ status: 'suspended', receipt });
+
+      changed.mockClear();
+      await expect(service.resumeForBot('bot-1')).resolves.toBe(1);
+      expect(h.sqlite!.prepare(
+        'SELECT status, delivery_receipt_json AS receipt, last_error AS lastError FROM bot_delivery_outbox WHERE id = ?',
+      ).get('outbox-pause-receipt')).toEqual({
+        status: 'dead-letter',
+        receipt,
+        lastError:
+          'DELIVERY_OUTCOME_UNKNOWN: Bot was paused after external dispatch; automatic retry was suppressed to prevent a duplicate',
+      });
+      expect(changed).toHaveBeenCalledTimes(1);
+      expect(changed).toHaveBeenCalledWith({ botId: 'bot-1' });
+    } finally {
+      service.dispose();
+    }
+  });
+
   it('keeps multipart progress and the original dispatch time in the final receipt', async () => {
     let currentTime = 5_500;
     const service = createBotDeliveryOutboxService({

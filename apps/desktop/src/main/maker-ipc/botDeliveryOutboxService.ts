@@ -782,9 +782,7 @@ export function createBotDeliveryOutboxService(deps: BotDeliveryOutboxServiceDep
         status: 'suspended',
         nextAttemptAt: null,
         lastError: 'BOT_PAUSED: delivery is suspended until the Bot resumes',
-        deliveryReceiptJson: null,
         updatedAt: at,
-        deliveredAt: null,
       })
       .where(
         and(
@@ -799,28 +797,43 @@ export function createBotDeliveryOutboxService(deps: BotDeliveryOutboxServiceDep
 
   const resumeForBot = async (botId: string): Promise<number> => {
     const at = now();
-    const rows = await getDbClient()
-      .drizzle.update(botDeliveryOutbox)
-      .set({
-        status: 'pending',
-        nextAttemptAt: at,
-        lastError: null,
-        deliveryReceiptJson: null,
-        updatedAt: at,
-        deliveredAt: null,
-      })
-      .where(
-        and(
-          eq(botDeliveryOutbox.botId, botId),
-          eq(botDeliveryOutbox.status, 'suspended'),
-        ),
-      )
-      .returning({ id: botDeliveryOutbox.id });
+    const db = getDbClient().drizzle;
+    const suspended = await db
+      .select({ id: botDeliveryOutbox.id, deliveryReceiptJson: botDeliveryOutbox.deliveryReceiptJson })
+      .from(botDeliveryOutbox)
+      .where(and(eq(botDeliveryOutbox.botId, botId), eq(botDeliveryOutbox.status, 'suspended')));
+    const rows = [] as Array<{ id: string }>;
+    for (const row of suspended) {
+      const receipt = parseReceipt(row.deliveryReceiptJson);
+      const dispatch = receipt.externalDispatch;
+      const duplicateRisk = dispatch
+        && typeof dispatch === 'object'
+        && !Array.isArray(dispatch)
+        && (dispatch as Record<string, unknown>).retrySafe === false;
+      const [updated] = await db
+        .update(botDeliveryOutbox)
+        .set(duplicateRisk
+          ? {
+              status: 'dead-letter',
+              nextAttemptAt: null,
+              lastError:
+                'DELIVERY_OUTCOME_UNKNOWN: Bot was paused after external dispatch; automatic retry was suppressed to prevent a duplicate',
+              updatedAt: at,
+            }
+          : {
+              status: 'pending',
+              nextAttemptAt: at,
+              lastError: null,
+              updatedAt: at,
+            })
+        .where(and(eq(botDeliveryOutbox.id, row.id), eq(botDeliveryOutbox.status, 'suspended')))
+        .returning({ id: botDeliveryOutbox.id });
+      if (updated) rows.push(updated);
+    }
     if (rows.length > 0) {
       scheduleDrain(0);
       emitChanged(botId);
     }
-    if (rows.length > 0) emitChanged(botId);
     return rows.length;
   };
 

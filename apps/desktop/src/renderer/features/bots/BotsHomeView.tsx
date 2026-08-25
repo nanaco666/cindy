@@ -331,7 +331,13 @@ export function BotSettings({
   });
 
   const updateCapability = <K extends keyof BotCapabilities>(key: K, value: BotCapabilities[K]) => {
-    setCapabilities((current) => ({ ...current, [key]: value }));
+    setCapabilities((current) => ({
+      ...current,
+      [key]: value,
+      ...(key === 'fastMode' && current.modelOverride
+        ? { modelOverride: { ...current.modelOverride, fastMode: value === true } }
+        : {}),
+    }));
     autosave.onEdit('instant');
   };
   // 子编辑器(能力面板)的回写入口。它一次交互可能同时改 capabilities 与 skills,

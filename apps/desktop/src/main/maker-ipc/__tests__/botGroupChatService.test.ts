@@ -35,6 +35,7 @@ function harness(
   const onChanged = vi.fn();
   const noteAttention = vi.fn(async () => ({ reason: 'unknown' as const, changed: false }));
   const clearAttention = vi.fn(async () => ({ reason: null, changed: true }));
+  const stopSession = vi.fn(async () => undefined);
   const roomProjection = (): BotGroupRoomProjection => ({
     id: 'room-1',
     name: 'Core',
@@ -109,6 +110,7 @@ function harness(
     resolveInteraction,
     createId: () => 'turn-1',
     onChanged,
+    stopSession,
     noteAttention,
     clearAttention,
   });
@@ -123,6 +125,7 @@ function harness(
     recoveredReplies,
     noteAttention,
     clearAttention,
+    stopSession,
   };
 }
 
@@ -342,6 +345,9 @@ describe('botGroupChatService', () => {
         status: 'archived',
       });
       expect(h.store.archiveRoom).toHaveBeenCalledWith('room-1');
+      expect(h.stopSession).toHaveBeenCalledWith('room-session');
+      expect(h.stopSession).toHaveBeenCalledWith('member-a');
+      expect(h.stopSession).toHaveBeenCalledWith('member-b');
       await vi.advanceTimersByTimeAsync(11);
       await sent.completion;
       await h.service.handleMemberTerminal({ sessionId: 'member-a', result: 'Late result.' });

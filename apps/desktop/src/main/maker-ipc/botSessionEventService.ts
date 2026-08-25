@@ -318,6 +318,7 @@ export function createBotSessionEventService(deps: BotSessionEventServiceDeps) {
     botId: string,
     resultText: string,
     rule: BotEventSubscriptionRule,
+    eventSessionId?: string | null,
   ): Promise<{ status: 'none' | 'queued' | 'partial' | 'failed'; error: string | null }> => {
     if (rule.resultDelivery === 'none') return { status: 'none', error: null };
     const routes = await getDbClient()
@@ -338,9 +339,19 @@ export function createBotSessionEventService(deps: BotSessionEventServiceDeps) {
           isNotNull(botRoutes.currentSessionId),
         ),
       );
+    // An IM transition already belongs to one concrete route lane. Prefer that
+    // route over broadcasting the result to every DM/group mounted on the Bot;
+    // route.currentSessionId is the durable binding for principal/thread scope.
+    // Non-IM task events have no mounted route, so retain the explicit
+    // all-active-routes behavior for control Bots that intentionally report
+    // arbitrary local tasks to every configured channel.
+    const eventRoutes = eventSessionId
+      ? routes.filter((route) => route.sessionId === eventSessionId)
+      : [];
+    const scopedRoutes = eventRoutes.length > 0 ? eventRoutes : routes;
     const filtered = rule.deliveryChannelKinds?.length
-      ? routes.filter((route) => rule.deliveryChannelKinds!.includes(route.channelKind))
-      : routes;
+      ? scopedRoutes.filter((route) => rule.deliveryChannelKinds!.includes(route.channelKind))
+      : scopedRoutes;
     if (filtered.length === 0) return { status: 'none', error: null };
     const settled = await Promise.allSettled(
       filtered.map((route) =>
@@ -378,9 +389,11 @@ export function createBotSessionEventService(deps: BotSessionEventServiceDeps) {
     const [row] = await db
       .select({
         inbox: botInboxItems,
+        eventSessionId: botSessionEventLedger.sessionId,
         ruleJson: botEventSubscriptions.ruleJson,
       })
       .from(botInboxItems)
+      .innerJoin(botSessionEventLedger, eq(botSessionEventLedger.id, botInboxItems.eventId))
       .innerJoin(botEventSubscriptions, eq(botEventSubscriptions.id, botInboxItems.subscriptionId))
       .where(
         and(
@@ -438,6 +451,7 @@ export function createBotSessionEventService(deps: BotSessionEventServiceDeps) {
       row.inbox.botId,
       resultText,
       parseRule(row.ruleJson),
+      row.eventSessionId,
     );
     await db
       .update(botInboxItems)
