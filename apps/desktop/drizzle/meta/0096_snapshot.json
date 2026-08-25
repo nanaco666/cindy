@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "e10e62b2-3098-4f53-af84-883772346d55",
-  "prevId": "1baa0e46-a3b5-4710-a2a2-dea53dc20e03",
+  "id": "90c444c4-ae63-484b-af83-6a7e9d674b77",
+  "prevId": "90063e36-1470-45d3-84d6-4bb6139dd4a5",
   "tables": {
     "account_usage_snapshots": {
       "name": "account_usage_snapshots",
@@ -1538,6 +1538,14 @@
           "notNull": true,
           "autoincrement": false
         },
+        "avatar": {
+          "name": "avatar",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'👥'"
+        },
         "room_session_id": {
           "name": "room_session_id",
           "type": "text",
@@ -2374,6 +2382,34 @@
           "notNull": true,
           "autoincrement": false,
           "default": "'active'"
+        },
+        "hidden_at": {
+          "name": "hidden_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "pinned_at": {
+          "name": "pinned_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "attention_reason": {
+          "name": "attention_reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "attention_at": {
+          "name": "attention_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         },
         "current_version": {
           "name": "current_version",

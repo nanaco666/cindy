@@ -1948,6 +1948,7 @@
     },
     "betaChannel": {
       "title": "Beta 測試管道",
+      "badge": "Beta",
       "description": "加入 Beta 測試管道，提前接收即將發布的客戶端更新。開啟後需重新啟動客戶端生效。",
       "toggleAria": "Beta 測試管道開關",
       "restartTitle": "重新啟動客戶端",
@@ -2693,7 +2694,7 @@
     "chatEmbedding": {
       "cell": {
         "label": "啟用對話記錄語義索引",
-        "description": "新訊息嵌入到本地向量庫 (voyage-4) 供未來語義搜尋，僅本機訪問，不外傳。開啟時機起的訊息才被索引，歷史不補。"
+        "description": "新訊息和語義搜尋查詢會傳送給向量模型（voyage-4）產生向量；訊息向量儲存在本機索引中。僅索引啟用後的訊息，不會為既有對話記錄補建索引。"
       },
       "toggleAria": "切換對話記錄語義索引",
       "toast": {
@@ -3159,6 +3160,18 @@
         "enabled": "已開啟靜默加密內容重試。",
         "disabled": "已關閉靜默加密內容重試。",
         "toggleFailed": "切換靜默加密內容重試失敗"
+      }
+    },
+    "sessionRuntimeFallback": {
+      "cell": {
+        "label": "任務模型自動降級",
+        "description": "連線或容量故障連續發生時，先切換到同名模型的其他已連線來源，再嘗試目前 Agent 明確推薦的模型；不會切換 Agent，也不會改掉你儲存的選擇。預設關閉。"
+      },
+      "toggleAria": "切換任務模型自動降級",
+      "toast": {
+        "enabled": "已開啟任務模型自動降級。",
+        "disabled": "已關閉任務模型自動降級。",
+        "toggleFailed": "切換任務模型自動降級失敗"
       }
     },
     "remoteControl": {
@@ -4342,6 +4355,16 @@
         "expandDescription": "展開完整介紹",
         "collapseDescription": "收起介紹"
       },
+      "forgeOidcInstallConfirm": {
+        "title": "確認企業身份自測",
+        "description": "安裝後，這個插件可以使用你目前的企業身份，向下列網域請求 Connection JWT。請確認這是你剛剛建置的插件。",
+        "pluginNameLabel": "插件",
+        "pluginIdLabel": "插件 id",
+        "hostsLabel": "企業身分請求域名",
+        "typedIdLabel": "輸入插件 id <strong>{{id}}</strong> 以確認",
+        "confirm": "安裝並允許自測",
+        "cancel": "取消"
+      },
       "trust": {
         "official": "Cindy 官方插件",
         "officialDetail": "由 Cindy 隨應用提供。",
@@ -5471,6 +5494,7 @@
   },
   "contentHeader": {
     "toggleSidebar": "切換側邊欄",
+    "exitFullscreen": "退出全螢幕",
     "collapseSidebar": "收起側邊欄",
     "expandSidebar": "展開側邊欄",
     "collapsePanel": "收起",
@@ -6404,6 +6428,7 @@
     },
     "user": {
       "settingsLink": "設定，當前使用者：{{name}}",
+      "settingsLinkBeta": "設定，當前使用者：{{name}}，Beta 測試管道已開啟",
       "canaryBadge": "灰度使用者",
       "regionCodeCn": "CN",
       "regionCodeDev": "Dev",
@@ -11787,6 +11812,11 @@
       "count": "{{count}} 筆",
       "incomplete": "訂單記錄較多，當前僅顯示最近的 {{count}} 筆。",
       "orderId": "NO. {{id}}",
+      "copy": {
+        "action": "複製訂單 ID {{id}}",
+        "success": "訂單 ID 已複製",
+        "failed": "複製訂單 ID 失敗，請再試一次"
+      },
       "states": {
         "completed": "已完成",
         "awaitingPayment": "待支付",

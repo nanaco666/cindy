@@ -1948,6 +1948,7 @@
     },
     "betaChannel": {
       "title": "Beta 测试渠道",
+      "badge": "Beta",
       "description": "加入 Beta 测试渠道，提前接收即将发布的客户端更新。开启后需重启客户端生效。",
       "toggleAria": "Beta 测试渠道开关",
       "restartTitle": "重启客户端",
@@ -2693,7 +2694,7 @@
     "chatEmbedding": {
       "cell": {
         "label": "启用对话记录语义索引",
-        "description": "新消息嵌入到本地向量库 (voyage-4) 供未来语义搜索，仅本机访问，不外传。开启时机起的消息才被索引，历史不补。"
+        "description": "新消息和语义搜索查询会发送给向量模型（voyage-4）生成向量；消息向量保存在本机索引中。仅索引启用后的消息，不会为既有对话记录补建索引。"
       },
       "toggleAria": "切换对话记录语义索引",
       "toast": {
@@ -3159,6 +3160,18 @@
         "enabled": "已开启静默加密内容重试。",
         "disabled": "已关闭静默加密内容重试。",
         "toggleFailed": "切换静默加密内容重试失败"
+      }
+    },
+    "sessionRuntimeFallback": {
+      "cell": {
+        "label": "任务模型自动降级",
+        "description": "连接或容量故障连续发生时，先切换到同名模型的其他已连接来源，再尝试当前 Agent 明确推荐的模型；不会切换 Agent，也不会改掉你保存的选择。默认关闭。"
+      },
+      "toggleAria": "切换任务模型自动降级",
+      "toast": {
+        "enabled": "已开启任务模型自动降级。",
+        "disabled": "已关闭任务模型自动降级。",
+        "toggleFailed": "切换任务模型自动降级失败"
       }
     },
     "remoteControl": {
@@ -4342,6 +4355,16 @@
         "expandDescription": "展开完整介绍",
         "collapseDescription": "收起介绍"
       },
+      "forgeOidcInstallConfirm": {
+        "title": "确认企业身份自测",
+        "description": "安装后，这个插件可以使用你当前的企业身份，向下列域名请求 Connection JWT。请确认这是你刚刚构建的插件。",
+        "pluginNameLabel": "插件",
+        "pluginIdLabel": "插件 id",
+        "hostsLabel": "企业身份请求域名",
+        "typedIdLabel": "输入插件 id <strong>{{id}}</strong> 以确认",
+        "confirm": "安装并允许自测",
+        "cancel": "取消"
+      },
       "trust": {
         "official": "Cindy 官方插件",
         "officialDetail": "由 Cindy 随应用提供。",
@@ -5471,6 +5494,7 @@
   },
   "contentHeader": {
     "toggleSidebar": "切换侧边栏",
+    "exitFullscreen": "退出全屏",
     "collapseSidebar": "收起侧边栏",
     "expandSidebar": "展开侧边栏",
     "collapsePanel": "收起",
@@ -6404,6 +6428,7 @@
     },
     "user": {
       "settingsLink": "设置，当前用户：{{name}}",
+      "settingsLinkBeta": "设置，当前用户：{{name}}，Beta 测试渠道已开启",
       "canaryBadge": "灰度用户",
       "regionCodeCn": "CN",
       "regionCodeDev": "Dev",
@@ -11787,6 +11812,11 @@
       "count": "{{count}} 笔",
       "incomplete": "订单记录较多，当前仅显示最近的 {{count}} 笔。",
       "orderId": "NO. {{id}}",
+      "copy": {
+        "action": "复制订单 ID {{id}}",
+        "success": "订单 ID 已复制",
+        "failed": "复制订单 ID 失败，请重试"
+      },
       "states": {
         "completed": "已完成",
         "awaitingPayment": "待支付",

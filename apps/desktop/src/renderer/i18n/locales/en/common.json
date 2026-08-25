@@ -1957,6 +1957,7 @@
     },
     "betaChannel": {
       "title": "Beta channel",
+      "badge": "Beta",
       "description": "Join the beta channel to receive upcoming client updates early. Takes effect after restart.",
       "toggleAria": "Beta channel toggle",
       "restartTitle": "Restart Cindy",
@@ -2702,7 +2703,7 @@
     "chatEmbedding": {
       "cell": {
         "label": "Enable chat semantic indexing",
-        "description": "New chat messages are embedded into a local vector store (voyage-4) for future semantic search. Stays on this device. Only messages after enabling are indexed; existing history is not backfilled."
+        "description": "New messages and semantic search queries are sent to the vector model (voyage-4) to create vectors. Message vectors are stored in a local index. Only messages created after this setting is enabled are indexed; existing chat history is not backfilled."
       },
       "toggleAria": "Toggle chat semantic indexing",
       "toast": {
@@ -3168,6 +3169,18 @@
         "enabled": "Silent encrypted-content retry is on.",
         "disabled": "Silent encrypted-content retry is off.",
         "toggleFailed": "Failed to switch silent encrypted-content retry"
+      }
+    },
+    "sessionRuntimeFallback": {
+      "cell": {
+        "label": "Automatic task model fallback",
+        "description": "After repeated connection or capacity failures, try another connected source for the same model, then a model explicitly recommended for the current agent. It never switches agents or changes your saved selection. Off by default."
+      },
+      "toggleAria": "Toggle automatic task model fallback",
+      "toast": {
+        "enabled": "Automatic task model fallback is on.",
+        "disabled": "Automatic task model fallback is off.",
+        "toggleFailed": "Failed to change automatic task model fallback"
       }
     },
     "remoteControl": {
@@ -4351,6 +4364,16 @@
         "expandDescription": "Show Full Description",
         "collapseDescription": "Hide Full Description"
       },
+      "forgeOidcInstallConfirm": {
+        "title": "Confirm organization identity testing",
+        "description": "After installation, this plugin can use your current organization identity to request Connection JWTs for the hosts below. Confirm that this is the plugin you just built.",
+        "pluginNameLabel": "Plugin",
+        "pluginIdLabel": "Plugin id",
+        "hostsLabel": "Organization identity request hosts",
+        "typedIdLabel": "Enter the plugin id <strong>{{id}}</strong> to confirm",
+        "confirm": "Install and allow testing",
+        "cancel": "Cancel"
+      },
       "trust": {
         "official": "Official Cindy plugin",
         "officialDetail": "Bundled with Cindy.",
@@ -5481,6 +5504,7 @@
   },
   "contentHeader": {
     "toggleSidebar": "Toggle sidebar",
+    "exitFullscreen": "Exit full screen",
     "collapseSidebar": "Collapse Sidebar",
     "expandSidebar": "Expand Sidebar",
     "collapsePanel": "Collapse",
@@ -6414,6 +6438,7 @@
     },
     "user": {
       "settingsLink": "Settings, current user: {{name}}",
+      "settingsLinkBeta": "Settings, current user: {{name}}, Beta channel enabled",
       "canaryBadge": "Canary user",
       "regionCodeCn": "CN",
       "regionCodeDev": "Dev",
@@ -11809,6 +11834,11 @@
       "count": "{{count}} orders",
       "incomplete": "There are many order records. Only the latest {{count}} are shown.",
       "orderId": "NO. {{id}}",
+      "copy": {
+        "action": "Copy Order ID {{id}}",
+        "success": "Order ID copied",
+        "failed": "Order ID wasn’t copied — try again"
+      },
       "states": {
         "completed": "Completed",
         "awaitingPayment": "Awaiting payment",
